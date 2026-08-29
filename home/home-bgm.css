@@ -1,0 +1,94 @@
+/* =========================================================
+   YOUTUBE BGM
+========================================================== */
+
+.music-button {
+  position: fixed;
+
+  top:
+    max(
+      16px,
+      env(safe-area-inset-top)
+    );
+
+  right:
+    max(
+      16px,
+      env(safe-area-inset-right)
+    );
+
+  width: 28px;
+  height: 28px;
+
+  padding: 0;
+
+  border: 0;
+
+  background:
+    transparent;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 13px;
+
+  color: #cfcfcf;
+
+  cursor: pointer;
+
+  z-index: 230;
+
+  transition:
+    transform 0.22s ease,
+    opacity 0.22s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.music-button:hover {
+  color:
+    #aaaaaa;
+}
+
+
+/* =========================================================
+   YouTube 영상 숨김
+========================================================== */
+
+.youtube-player-shell {
+  position: fixed;
+
+  left: -9999px;
+  top: -9999px;
+
+  width: 1px;
+  height: 1px;
+
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+
+  overflow: hidden;
+}
+
+
+.youtube-player-shell.open {
+  opacity: 0;
+  visibility: hidden;
+
+  pointer-events: none;
+}
+
+
+.youtube-player-shell iframe {
+  display: block;
+
+  width: 1px;
+  height: 1px;
+
+  border: 0;
+}

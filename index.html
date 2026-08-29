@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
+
+  <title>-ˋˏ ♡ ˎˊ-</title>
+
+
+  <link
+    rel="icon"
+    type="image/png"
+    href="./images/favicon.png"
+  >
+
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
+
+  <!--
+    본문 폰트 선택지 중 "나눔명조"용(quote 프리셋의 bodyFont
+    설정 — posts/style/posts-style-render.js 참고).
+  -->
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+
+
+  <!-- =========================================================
+       3D MODEL VIEWER
+  ========================================================== -->
+
+  <script
+    type="module"
+    src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
+  ></script>
+
+
+
+  <!-- =========================================================
+       SUPABASE
+  ========================================================== -->
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+  ></script>
+
+
+
+  <!-- =========================================================
+       PRETENDARD
+  ========================================================== -->
+
+  <link
+    rel="stylesheet"
+    as="style"
+    crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
+  >
+
+
+
+  <!-- =========================================================
+       CSS
+  ========================================================== -->
+
+  <link
+    rel="stylesheet"
+    href="./home/home-base.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./home/home-bgm.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./home/home-love-event.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./home/home-profile.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./posts/posts-base.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./posts/posts-list-detail.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./posts/posts-editor.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./posts/posts-preview-export.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./posts/posts-mobile.css"
+  >
+
+</head>
+
+
+<body>
+
+
+
+  <!-- =========================================================
+       MENU
+  ========================================================== -->
+
+  <button
+    class="menu-button"
+    id="menuButton"
+    aria-label="메뉴 열기"
+    aria-expanded="false"
+  >
+
+    <span class="triangle"></span>
+
+  </button>
+
+
+
+  <nav
+    class="menu-panel"
+    id="menuPanel"
+  >
+
+    <div
+      class="dynamic-menu-links"
+      id="categoryMenuLinks"
+    ></div>
+
+  </nav>
+
+
+
+  <!-- =========================================================
+       MAIN
+  ========================================================== -->
+
+  <main
+    class="viewer-area"
+    id="viewerArea"
+  >
+
+
+    <div
+      class="heart-group"
+      id="heartGroup"
+    >
+
+
+      <div
+        class="heart-stage"
+        id="heartStage"
+      >
+
+
+
+        <!-- ===================================================
+             3D HEART
+        ==================================================== -->
+
+        <model-viewer
+          id="heartViewer"
+          src="./models/heart.glb"
+          camera-controls
+          disable-zoom
+          disable-pan
+          touch-action="none"
+          camera-orbit="0deg 90deg auto"
+          min-camera-orbit="auto 90deg auto"
+          max-camera-orbit="auto 90deg auto"
+          orbit-sensitivity="2.2"
+          auto-rotate
+          auto-rotate-delay="0"
+          rotation-per-second="14deg"
+          shadow-intensity="0"
+          environment-image="neutral"
+          exposure="0.75"
+          interaction-prompt="none"
+          alt="3D heart"
+        >
+
+          <div slot="progress-bar"></div>
+
+        </model-viewer>
+
+
+
+        <!-- ===================================================
+             PROFILE
+        ==================================================== -->
+
+        <div
+          class="profile"
+          id="profile"
+        >
+
+
+
+          <!-- =================================================
+               PROFILE PAGE 1
+          ================================================== -->
+
+          <div
+            class="profile-page active"
+            id="profilePage1"
+          >
+
+            <div class="profile-name">
+              @sentbys_a
+            </div>
+
+
+            <p class="profile-text">
+
+              Arch Vibe ♡ archive
+
+              <br>
+
+              and... little pieces of my heart
+
+            </p>
+
+
+            <button
+              class="profile-nav"
+              id="moreButton"
+              type="button"
+            >
+              more
+            </button>
+
+          </div>
+
+
+
+          <!-- =================================================
+               PROFILE PAGE 2
+          ================================================== -->
+
+          <div
+            class="profile-page"
+            id="profilePage2"
+          >
+
+
+
+            <!-- ABOUT -->
+
+            <div class="more-section">
+
+              <div class="more-title">
+                ABOUT
+              </div>
+
+
+              <p
+                class="more-text"
+                id="aboutText"
+              >
+
+                ¹ 성인 여성, 일상과 덕질로 채워가는 계정
+
+                <br>
+
+                ⇢♡ Arch Vibe 90% + etc. 10%
+
+                <br><br>
+
+
+                ² 좋아하는 것들이 많아 다양하게 언급합니다.
+
+                <br>
+
+                ⇢♡ Nintendo · anime · novel · J-pop · idol
+
+                <br><br>
+
+
+                ³ CBC 오픈, 드림 지우기X 외에 특별한 배려 요하지 않습니다.
+
+                <br>
+
+                ⇢♡ 온리 성향 분은 메인 기준 1T1D, 겹드림 연결 ok♡
+
+              </p>
+
+            </div>
+
+
+
+            <!-- NOTICE -->
+
+            <div class="more-section">
+
+              <div class="more-title">
+                NOTICE
+              </div>
+
+
+              <p
+                class="more-text"
+                id="noticeText"
+              >
+
+                ¹ AI 이미지 생성•소비합니다. (학습 X)
+
+                <br>
+
+                ⇢♡ 뽑아드린 에셋은 편히 써주세요!
+
+                <br><br>
+
+
+                ² 좋지 않은 이슈에 굳이 말 얹지 말자 주의입니다.
+
+                <br>
+
+                ⇢♡ 그럴 수 있지 하고 넘기는 편이나 주관이 없지는 않습니다.
+
+                <br><br>
+
+
+                ³ 무던한 성향이라 수용 범위가 넓습니다.
+
+                <br>
+
+                ⇢♡ 기존 트친분들은 대화할 때 제 신상 관련 언급만 피해주세요~
+
+              </p>
+
+            </div>
+
+
+
+            <!-- NG -->
+
+            <div class="more-section">
+
+              <div class="more-title">
+                NG
+              </div>
+
+
+              <p
+                class="more-text"
+                id="ngText"
+              >
+                미성년자 · 남성 · 공계에서의 R18 전시
+              </p>
+
+            </div>
+
+
+
+            <button
+              class="profile-nav"
+              id="backButton"
+              type="button"
+            >
+              back
+            </button>
+
+
+          </div>
+
+
+        </div>
+
+
+      </div>
+
+
+
+      <!-- =====================================================
+           HINT
+      ====================================================== -->
+
+      <div class="hint">
+        click or spin ♡
+      </div>
+
+
+    </div>
+
+
+  </main>
+
+
+
+  <!-- =========================================================
+       POSTS MOUNT
+
+       posts.html 내용이 여기에 자동으로 들어옴.
+  ========================================================== -->
+
+  <div id="postsMount"></div>
+
+
+
+  <!-- =========================================================
+       LOVE EVENT
+  ========================================================== -->
+
+  <div
+    class="love-event"
+    id="loveEvent"
+    aria-hidden="true"
+  >
+
+    <div
+      class="love-rain"
+      id="loveRain"
+    ></div>
+
+
+    <div
+      class="love-message"
+      id="loveMessage"
+    ></div>
+
+  </div>
+
+
+
+  <!-- =========================================================
+       FOOTER
+  ========================================================== -->
+
+  <footer class="site-footer">
+
+
+    <div
+      class="today-count"
+      id="todayCount"
+      data-site-today-count
+    ></div>
+
+
+    <div
+      class="copyright"
+      data-site-copyright
+    ></div>
+
+
+  </footer>
+
+
+
+  <!-- =========================================================
+       YOUTUBE BGM
+  ========================================================== -->
+
+  <button
+    class="music-button"
+    id="musicButton"
+    type="button"
+    aria-label="배경음악 재생/일시정지"
+  >
+    ♫
+  </button>
+
+
+  <div
+    class="youtube-player-shell"
+    id="youtubePlayerShell"
+    aria-hidden="true"
+  >
+
+    <div id="youtubePlayer"></div>
+
+  </div>
+
+
+
+  <!-- =========================================================
+       MAIN JS
+  ========================================================== -->
+
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+  <script src="./home/home-content.js"></script>
+
+  <script src="./home/home-bgm.js"></script>
+
+  <script src="./home/home-love-event.js"></script>
+
+  <script src="./home/home-profile.js"></script>
+
+  <script src="./site-footer.js"></script>
+
+
+
+  <!-- =========================================================
+       POSTS LOADER
+
+       1. posts.html 불러오기
+       2. #postsMount 안에 삽입
+       3. 그 다음 posts.js 실행
+
+       순서 중요!
+  ========================================================== -->
+
+  <script>
+
+    async function loadPostsModule() {
+
+      /*
+        ★ 모바일 브라우저(특히 인앱 웹뷰)가 posts.html/*.js를
+        너무 적극적으로 캐싱해서, 새로 배포해도 예전 코드가
+        계속 실행되는 문제가 있었다. 매 로드마다 값이 바뀌는
+        쿼리스트링을 붙여서 항상 최신 파일을 받아오게 한다.
+      */
+
+      const cacheBuster =
+        Date.now();
+
+
+      const postsMount =
+        document.getElementById(
+          "postsMount"
+        );
+
+
+      if (!postsMount) {
+        return;
+      }
+
+
+      try {
+
+        /* ---------------------------------------------
+           POSTS HTML 불러오기
+        ---------------------------------------------- */
+
+        const response =
+          await fetch(
+            `./posts/posts.html?v=${cacheBuster}`
+          );
+
+
+        if (!response.ok) {
+
+          throw new Error(
+            `posts.html load failed: ${response.status}`
+          );
+
+        }
+
+
+        const postsHTML =
+          await response.text();
+
+
+        /* ---------------------------------------------
+           POSTS HTML 삽입
+        ---------------------------------------------- */
+
+        postsMount.innerHTML =
+          postsHTML;
+
+
+        /*
+          posts.html 안의 footer(오늘 방문자/copyright)도
+          site-footer.js가 이미 알고 있는 값으로 채움.
+        */
+
+        if (
+          typeof refreshSiteFooterMarkers ===
+          "function"
+        ) {
+
+          refreshSiteFooterMarkers();
+
+        }
+
+
+        /* ---------------------------------------------
+           POSTS JS 실행
+
+           HTML이 전부 들어온 다음에만 실행한다.
+
+           posts-sanitize.js는 posts.js가 쓰는
+           HTML 정화 함수들이 들어있어서
+           posts.js보다 먼저 로드되어야 한다.
+        ---------------------------------------------- */
+
+        const postsDependencyScripts =
+          [
+            "./posts/posts-sanitize.js",
+            "./posts/posts-format.js",
+            "./posts/posts-reader-scale.js",
+            "./posts/style/posts-style-preset.js",
+            "./posts/style/posts-style-dialogue.js",
+            "./posts/style/posts-style-render.js",
+            "./posts/editor/format/posts-editor.js",
+            "./posts/editor/format/posts-editor-highlight.js",
+            "./posts/editor/format/posts-editor-mode.js",
+            "./posts/preview/posts-preview-settings.js",
+            "./posts/preview/posts-preview-css-vars.js",
+            "./posts/preview/posts-preview.js",
+            "./posts/preview/posts-preview-paginate.js",
+            "./posts/export/posts-preview-export-capture.js",
+            "./posts/export/posts-preview-export-section.js",
+            "./posts/export/posts-preview-export.js",
+            "./posts/preview/posts-preview-mobile.js",
+            "./posts/posts-view-html-fit.js",
+
+            /*
+              옛 posts-view.js(2200줄+)를 기능별로 쪼갠 파일들.
+              전부 함수 정의뿐이고 즉시 실행되는 코드가 없어서
+              posts/editor/posts-refs.js보다 먼저 로드돼도 상관없음
+              (실제 호출은 다 나중에, 모든 스크립트가 로드된 뒤
+              posts-router-init.js가 실행될 때 일어남).
+            */
+
+            "./posts/view/posts-view-transition.js",
+            "./posts/view/posts-view-list.js",
+            "./posts/view/posts-view-list-select.js",
+            "./posts/view/posts-view-banner.js",
+            "./posts/view/posts-view-banner-form.js",
+            "./posts/view/posts-view-detail.js",
+            "./posts/view/posts-view-secret-gate.js",
+            "./posts/view/posts-view-editor-load.js",
+
+            /*
+              옛 posts.js(3200줄+)를 기능별로 쪼갠 파일들.
+              posts-refs.js가 DOM 참조/상태를 담고 있어서
+              반드시 이 그룹의 맨 처음, posts-router-init.js가
+              startPostRouter() 등 실제 실행부라 반드시
+              맨 마지막이어야 함.
+            */
+
+            "./posts/editor/posts-refs.js",
+            "./posts/editor/posts-state.js",
+            "./posts/editor/posts-list-detail-nav.js",
+            "./posts/editor/posts-richtext-events.js",
+            "./posts/editor/posts-editor-undo.js",
+            "./posts/editor/posts-highlight-toolbar.js",
+            "./posts/editor/posts-toolbar-toggles.js",
+            "./posts/editor/posts-save.js",
+            "./posts/editor/posts-router-init.js"
+          ];
+
+
+        for (
+          const src of postsDependencyScripts
+        ) {
+
+          const dependencyScript =
+            document.createElement(
+              "script"
+            );
+
+
+          dependencyScript.src =
+            `${src}?v=${cacheBuster}`;
+
+
+          await new Promise(
+            (resolve, reject) => {
+
+              dependencyScript.onload =
+                resolve;
+
+
+              dependencyScript.onerror =
+                reject;
+
+
+              document.body.appendChild(
+                dependencyScript
+              );
+
+            }
+          );
+
+        }
+
+
+        console.log(
+          "posts module loaded"
+        );
+
+      }
+
+
+      catch (error) {
+
+        console.error(
+          "posts module load failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    loadPostsModule();
+
+  </script>
+
+
+</body>
+
+</html>

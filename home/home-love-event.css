@@ -1,0 +1,598 @@
+/* =========================================================
+   하트 그룹
+========================================================== */
+
+.heart-group {
+  display: flex;
+  flex-direction: column;
+
+  align-items: center;
+  justify-content: center;
+
+  transform:
+    translateY(
+      var(--heart-group-y)
+    );
+}
+
+
+/* =========================================================
+   하트 + 프로필 영역
+========================================================== */
+
+.heart-stage {
+  position: relative;
+
+  width:
+    var(--heart-size);
+
+  height:
+    var(--heart-size);
+
+  max-width:
+    var(--heart-max-size);
+
+  max-height:
+    var(--heart-max-size);
+
+  overflow: visible;
+
+  isolation: isolate;
+}
+
+
+/* =========================================================
+   하트 뒤 핑크 GLOW
+
+   예전엔 하트를 돌리는 속도에 따라 진하기(rgba 마지막 값)가
+   JS(script.js)로 실시간 변했는데, 그 회전 반응 애니메이션은
+   제거하고 항상 이 고정값(예전 기본 강도와 동일)만 쓰도록
+   바꿈 — 배경 자체는 그대로 유지.
+========================================================== */
+
+.heart-stage::before {
+  content: "";
+
+  position: absolute;
+
+  left: 50%;
+  top: 50%;
+
+  width: 118%;
+  height: 118%;
+
+  transform:
+    translate(-50%, -50%);
+
+  border-radius: 50%;
+
+  background:
+    radial-gradient(
+      circle,
+
+      rgba(
+        255,
+        155,
+        197,
+        0.58
+      )
+      0%,
+
+      rgba(
+        255,
+        180,
+        211,
+        0.38
+      )
+      30%,
+
+      rgba(
+        255,
+        206,
+        226,
+        0.20
+      )
+      54%,
+
+      rgba(
+        255,
+        228,
+        239,
+        0.08
+      )
+      70%,
+
+      rgba(
+        255,
+        244,
+        249,
+        0.025
+      )
+      82%,
+
+      rgba(
+        255,
+        255,
+        255,
+        0
+      )
+      100%
+    );
+
+  filter:
+    blur(14px);
+
+  pointer-events: none;
+
+  z-index: 0;
+}
+
+
+/* =========================================================
+   3D 하트
+========================================================== */
+
+model-viewer {
+  position: relative;
+
+  z-index: 1;
+
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  background:
+    transparent;
+
+  --poster-color:
+    transparent;
+
+  cursor:
+    grab;
+
+  transition:
+    opacity 0.45s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+model-viewer:active {
+  cursor:
+    grabbing;
+}
+
+
+.heart-group.profile-open model-viewer {
+  opacity:
+    var(--heart-open-opacity);
+
+  pointer-events:
+    none;
+}
+
+
+/* =========================================================
+   click ♡
+========================================================== */
+
+.hint {
+  margin-top:
+    var(--hint-gap);
+
+  font-size:
+    11px;
+
+  letter-spacing:
+    0.1em;
+
+  color:
+    #999999;
+
+  user-select:
+    none;
+
+  -webkit-user-select:
+    none;
+
+  pointer-events:
+    none;
+
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+}
+
+
+.heart-group.profile-open .hint {
+  opacity: 0;
+
+  transform:
+    translateY(-4px);
+}
+
+
+/* =========================================================
+   100회전 LOVE EVENT
+========================================================== */
+
+.love-event {
+  position: fixed;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+
+  pointer-events: none;
+
+  opacity: 0;
+  visibility: hidden;
+
+  z-index: 1000;
+}
+
+
+.love-event.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+
+/* =========================================================
+   하트비 영역
+========================================================== */
+
+.love-rain {
+  position: absolute;
+
+  inset: 0;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+
+  pointer-events: none;
+}
+
+
+/* =========================================================
+   떨어지는 ♡ / ୨୧
+========================================================== */
+
+.love-drop {
+  position: absolute;
+
+  top: -32px;
+
+  display: block;
+
+  color:
+    #ee9fbd;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-weight: 400;
+
+  line-height: 1;
+
+  white-space: nowrap;
+
+  pointer-events: none;
+
+  user-select: none;
+
+  -webkit-user-select: none;
+
+  text-shadow:
+    0 0 6px
+    rgba(
+      255,
+      174,
+      207,
+      0.20
+    );
+
+  animation-name:
+    loveFall;
+
+  animation-timing-function:
+    linear;
+
+  animation-fill-mode:
+    both;
+
+  will-change:
+    transform;
+}
+
+
+/* =========================================================
+   하트비 낙하
+========================================================== */
+
+@keyframes loveFall {
+
+  0% {
+
+    transform:
+      translate3d(
+        0,
+        -40px,
+        0
+      )
+      rotate(0deg);
+
+  }
+
+
+  28% {
+
+    transform:
+      translate3d(
+        calc(
+          var(--love-drift)
+          * 0.28
+        ),
+        32dvh,
+        0
+      )
+      rotate(
+        calc(
+          var(--love-rotate)
+          * 0.28
+        )
+      );
+
+  }
+
+
+  58% {
+
+    transform:
+      translate3d(
+        calc(
+          var(--love-drift)
+          * 0.58
+        ),
+        68dvh,
+        0
+      )
+      rotate(
+        calc(
+          var(--love-rotate)
+          * 0.58
+        )
+      );
+
+  }
+
+
+  100% {
+
+    transform:
+      translate3d(
+        var(--love-drift),
+        112dvh,
+        0
+      )
+      rotate(
+        var(--love-rotate)
+      );
+
+  }
+
+}
+
+
+/* =========================================================
+   중앙 문구
+========================================================== */
+
+.love-message {
+  position: absolute;
+
+  left: 50%;
+top:
+  calc(
+    50%
+    +
+    var(--heart-group-y)
+    +
+    min(30vw, 210px)
+    +
+    -8px
+  );
+
+  width:
+    calc(
+      100%
+      -
+      48px
+    );
+
+  max-width:
+    440px;
+
+  transform:
+    translate(-50%, -50%)
+    translateY(8px);
+
+  text-align: center;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 13px;
+
+  font-weight: 400;
+
+  line-height: 1.6;
+
+  letter-spacing:
+    0.08em;
+
+  color:
+    #e893b4;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+
+.love-event.show
+.love-message {
+
+  animation:
+    loveMessageShow
+    3.4s
+    ease
+    forwards;
+
+}
+
+
+/* =========================================================
+   문구 등장 / 퇴장
+========================================================== */
+
+@keyframes loveMessageShow {
+
+  0% {
+
+    opacity: 0;
+
+    transform:
+      translate(-50%, -50%)
+      translateY(8px);
+
+  }
+
+
+  10% {
+
+    opacity: 1;
+
+    transform:
+      translate(-50%, -50%)
+      translateY(0);
+
+  }
+
+
+  72% {
+
+    opacity: 1;
+
+    transform:
+      translate(-50%, -50%)
+      translateY(0);
+
+  }
+
+
+  100% {
+
+    opacity: 0;
+
+    transform:
+      translate(-50%, -50%)
+      translateY(-4px);
+
+  }
+
+}
+
+
+/* =========================================================
+   모바일 (하트 3D / LOVE EVENT)
+
+   원래 style.css 맨 끝의 하나의 @media(max-width:600px)
+   블록이었음. 역할별로 나누면서 profile/menu 관련 부분은
+   home-profile.css의 @media 블록으로 옮기고, 여기에는
+   하트/LOVE EVENT 관련 부분만 남김. --detail-top 변수는
+   여기서 재정의되지만 실제로는 home-profile.css의
+   .heart-group.detail-open .profile 모바일 규칙에서 쓰임
+   (CSS 커스텀 프로퍼티는 상속으로 전달되므로 파일이 달라도
+   문제없음 — index.html에서 home-base.css가 가장 먼저
+   로드되어 있어야 함).
+========================================================== */
+
+@media (max-width: 600px) {
+
+  :root {
+
+    --heart-max-size:
+      none;
+
+    --detail-top:
+      120px;
+
+  }
+
+
+  .heart-stage {
+
+    max-width:
+      none;
+
+    max-height:
+      none;
+
+  }
+
+
+  .heart-group,
+  .heart-group.profile-open,
+  .heart-group.profile-open.detail-open {
+
+    transform:
+      translateY(
+        var(--heart-group-y)
+      );
+
+  }
+
+
+  /* LOVE EVENT 모바일 */
+
+  .love-message {
+
+    width:
+      calc(
+        100%
+        -
+        34px
+      );
+
+    font-size:
+      12px;
+
+    letter-spacing:
+      0.055em;
+
+  }
+
+
+  .love-drop {
+
+    text-shadow:
+      0 0 4px
+      rgba(
+        255,
+        174,
+        207,
+        0.16
+      );
+
+  }
+}
