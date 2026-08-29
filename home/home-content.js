@@ -3,28 +3,12 @@
 
    script.js에서 분리됨.
 
-   여기서 만드는 supabaseClient는 같은 페이지의 다른 스크립트
-   (home-bgm.js, site-footer.js 등)에서도 전역으로 그대로
-   사용하므로, 이 파일이 가장 먼저 로드되어야 함
-   (index.html 순서 참고).
+   supabaseClient / SUPABASE_URL / SUPABASE_KEY는
+   core/lib/supabase-client.js에서 전역으로 만들어짐
+   (index.html에서 이 파일보다 먼저 로드됨). 같은 페이지의
+   다른 스크립트(home-bgm.js, site-footer.js 등)도 그 전역을
+   그대로 사용함.
 ========================================================== */
-
-/* =========================================================
-   SUPABASE 연결
-========================================================== */
-
-const SUPABASE_URL =
-  "https://iokdgqzfprtggsnrusez.supabase.co";
-
-const SUPABASE_KEY =
-  "sb_publishable_N9mPjBMUQJEhKYPo9ZMlZg_9i7GEsYp";
-
-const supabaseClient =
-  window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_KEY
-  );
-
 
 /* =========================================================
    사이트 내용 불러오기

@@ -4,27 +4,11 @@
    이 파일도 커져서(960줄+), 세션/로그인 확인 로직은
    admin-session.js로 옮겼음 — 그 파일은 이 파일보다
    나중에 로드되어야 함(admin/index.html 순서 참고).
+
+   supabaseClient / SUPABASE_URL / SUPABASE_KEY는
+   core/lib/supabase-client.js에서 전역으로 만들어짐
+   (admin/index.html에서 이 파일보다 먼저 로드됨).
 ========================================================== */
-
-
-/* =========================================================
-   SUPABASE
-========================================================== */
-
-const SUPABASE_URL =
-  "https://iokdgqzfprtggsnrusez.supabase.co";
-
-
-const SUPABASE_KEY =
-  "sb_publishable_N9mPjBMUQJEhKYPo9ZMlZg_9i7GEsYp";
-
-
-const supabaseClient =
-  supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_KEY
-  );
-
 
 
 /* =========================================================
