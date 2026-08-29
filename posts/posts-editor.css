@@ -1,0 +1,690 @@
+/* =========================================================
+   POST EDITOR
+========================================================== */
+
+.post-editor {
+  width: 100%;
+}
+
+
+.post-editor[hidden] {
+  display: none;
+}
+
+
+/* =========================================================
+   EDITOR FIELD
+========================================================== */
+
+.post-editor-field {
+  width: 100%;
+
+  margin-bottom: 24px;
+}
+
+
+.post-editor-field > label {
+  display: block;
+
+  margin-bottom: 8px;
+
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.10em;
+
+  color: #999999;
+}
+
+/* =========================================================
+   INPUT / SELECT
+========================================================== */
+
+.post-editor-input {
+  width: 100%;
+
+  min-height: 38px;
+
+  padding:
+    8px
+    10px;
+
+  border:
+    1px solid #eeeeee;
+
+  border-radius: 0;
+
+  outline: none;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 12px;
+  font-weight: 400;
+
+  line-height: 1.5;
+
+  letter-spacing: 0.025em;
+
+  color: #555555;
+
+  transition:
+    border-color 0.2s ease;
+}
+
+
+.post-editor-input:focus {
+  border-color: #e6bdcc;
+}
+
+
+/* =========================================================
+   EDITOR TOOLBAR
+========================================================== */
+
+.post-editor-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+
+  gap:
+    8px
+    18px;
+
+  width: 100%;
+
+  margin-bottom: 9px;
+
+  padding:
+    8px
+    10px;
+
+  border:
+    1px solid #eeeeee;
+
+  background:
+    rgba(
+      250,
+      250,
+      250,
+      0.55
+    );
+}
+
+
+.post-editor-tool-group {
+  display: flex;
+  align-items: center;
+
+  gap: 7px;
+
+  min-height: 24px;
+}
+
+
+.post-editor-tool-label {
+  margin-right: 2px;
+
+  font-size: 8px;
+  font-weight: 500;
+
+  line-height: 1;
+
+  letter-spacing: 0.10em;
+
+  color: #b3b3b3;
+
+  user-select: none;
+}
+
+
+/* =========================================================
+   TOOL BUTTON
+========================================================== */
+
+.post-editor-tool-button {
+  padding:
+    4px
+    6px;
+
+  border: 0;
+
+  background: transparent;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  line-height: 1;
+
+  letter-spacing: 0.025em;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-editor-tool-button:hover {
+  color: #555555;
+}
+
+
+.post-editor-tool-button.active,
+.post-editor-tool-button[aria-pressed="true"] {
+  color: #d980a2;
+
+  background:
+    #fff5f8;
+}
+
+
+/* =========================================================
+   PRESET SELECT
+========================================================== */
+
+.post-editor-preset-select {
+  padding:
+    3px
+    6px;
+
+  border:
+    1px solid
+    #e5e5e5;
+
+  border-radius: 6px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.025em;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  max-width: 120px;
+}
+
+
+.post-editor-tool-button.clear {
+  color: #bbbbbb;
+}
+
+
+.post-editor-tool-button.clear:hover {
+  color: #888888;
+}
+
+
+
+/* =========================================================
+   HIGHLIGHT / POINT COLOR CONTROL
+
+   ★ 예전엔 preset(원클릭 적용) + custom(컬러피커) 두 버튼이
+   있었는데, 하나로 합쳐서 이 스와치 자체가 컬러피커 트리거가
+   됐다 — 초기 색은 QUOTE PRESET 값을 따름(posts-style-preset.js
+   updatePresetHighlightSwatch/updatePresetPointColorSwatch).
+   버튼이 하나뿐이라 텍스트 라벨 없이 스와치만 남았고, 대신
+   눈에 잘 띄도록 테두리를 줬다.
+========================================================== */
+
+.post-highlight-custom-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 24px;
+  height: 24px;
+
+  padding: 0;
+
+  border:
+    1px solid
+    #e5e5e5;
+
+  border-radius: 50%;
+
+  background: transparent;
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.18s ease,
+    transform 0.16s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-highlight-custom-control:hover {
+  border-color: #d5d5d5;
+
+  transform:
+    scale(1.06);
+}
+
+
+/* =========================================================
+   HIGHLIGHT SWATCH
+========================================================== */
+
+.post-highlight-swatch {
+  display: block;
+
+  width: 15px;
+  height: 15px;
+
+  flex:
+    0
+    0
+    15px;
+
+  border:
+    1px solid
+    rgba(
+      0,
+      0,
+      0,
+      0.07
+    );
+
+  border-radius: 50%;
+
+  background:
+    #f4dce6;
+}
+
+
+/* =========================================================
+   CUSTOM COLOR INPUT
+
+   실제 input은 숨기고
+   label을 누르면 컬러피커가 열림.
+========================================================== */
+
+.post-highlight-color-input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  padding: 0;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+/* =========================================================
+   MOBILE FLOATING HIGHLIGHT MENU
+
+   본문에서 텍스트를 선택했을 때 그 근처에 뜨는
+   작은 메뉴. 상단 고정 툴바까지 갈 필요가 없게 해준다.
+   위치는 JS(positionEditorFloatingMenu)가 매번 계산해서
+   top/left 인라인 스타일로 지정한다.
+========================================================== */
+
+.post-editor-floating-menu {
+  position: fixed;
+
+  z-index: 500;
+
+  display: flex;
+  align-items: center;
+
+  gap: 4px;
+
+  padding: 4px 8px;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  border-radius: 999px;
+
+  background: #ffffff;
+
+  box-shadow:
+    0
+    6px
+    24px
+    rgba(
+      0,
+      0,
+      0,
+      0.14
+    );
+}
+
+
+.post-editor-floating-menu[hidden] {
+  display: none;
+}
+
+
+/*
+  ★ 예전엔 이 안의 스와치만 동그라미 대신 둥근 네모로 바꿔서
+  "네모 안에 또 네모" 처럼 보였다 — 고정 툴바와 똑같이 원형
+  그대로 두고(위 .post-highlight-custom-control/.post-highlight-swatch
+  기본값이 이미 둥근 원), 여기서 따로 각지게 덮어쓰지 않는다.
+*/
+
+/* =========================================================
+   RICH TEXT EDITOR
+========================================================== */
+
+.post-editor-html-textarea[hidden] {
+  display: none;
+}
+
+
+.post-editor-richtext,
+.post-editor-html-textarea {
+  display: block;
+
+  width: 100%;
+  min-height: 420px;
+  max-height: 60vh;
+
+  overflow-y: auto;
+
+  padding:
+    12px
+    10px;
+
+  border:
+    1px solid #eeeeee;
+
+  border-radius: 0;
+
+  outline: none;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  /*
+    작성 중 글씨는 저장 후 뷰어/프리뷰에 적용되는 프리셋
+    스타일과 별개 — 여기서 크게 보일 필요가 없어서 작게
+    유지한다(모바일은 iOS 자동 확대 방지 때문에 16px 고정,
+    posts-mobile.css 참고).
+  */
+
+  font-size: 11px;
+  font-weight: 400;
+
+  line-height: 1.8;
+
+  letter-spacing: 0.015em;
+
+  color: #555555;
+
+  white-space: pre-wrap;
+
+  word-break: keep-all;
+  overflow-wrap: break-word;
+
+  caret-color: #555555;
+
+  transition:
+    border-color 0.2s ease;
+}
+
+
+.post-editor-richtext:focus {
+  border-color: #e6bdcc;
+}
+
+
+.post-editor-richtext:empty::before {
+  content: attr(data-placeholder);
+
+  color: #c5c5c5;
+
+  pointer-events: none;
+}
+
+
+.post-editor-richtext > div,
+.post-editor-richtext > p {
+  margin: 0;
+}
+
+
+/* 하이라이트는 편집창에서도 바로 보임 */
+
+.post-editor-richtext
+.post-inline-highlight {
+  padding:
+    0
+    0.12em;
+
+  border-radius: 2px;
+
+  box-decoration-break: clone;
+
+  -webkit-box-decoration-break: clone;
+}
+
+
+/* 드래그 선택 표시 */
+
+.post-editor-richtext::selection,
+.post-editor-richtext *::selection {
+  background:
+    rgba(
+      238,
+      159,
+      189,
+      0.22
+    );
+}
+
+
+.post-editor-field > label,
+.post-editor-content-label {
+  display: block;
+
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.10em;
+
+  color: #999999;
+}
+
+
+.post-editor-field > label {
+  margin-bottom: 8px;
+}
+
+
+/* CONTENT + 안내문 */
+
+.post-editor-content-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+
+  width: 100%;
+
+  margin-bottom: 8px;
+}
+
+
+.post-editor-content-label {
+  flex: 0 0 auto;
+}
+
+
+/*
+  OOC / HTML 토글 버튼이 나란히 놓이는 줄.
+*/
+
+.post-editor-ooc-html-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 8px;
+}
+
+
+/*
+  CONTENT 옆의 "HTML" 모드 전환 버튼.
+  누르면 리치텍스트 에디터 대신 raw HTML textarea로 바뀐다.
+*/
+
+.post-editor-content-mode-toggle,
+.post-editor-ooc-toggle {
+  padding:
+    4px 10px;
+
+  border:
+    1px solid
+    #e5e5e5;
+
+  border-radius: 999px;
+
+  background: transparent;
+
+  color: #bbbbbb;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.08em;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+
+.post-editor-content-mode-toggle[aria-pressed="true"] {
+  border-color: #f0d3de;
+
+  background: #fff5f8;
+
+  color: #d980a2;
+}
+
+
+/*
+  HTML로 직접 작성하는 textarea.
+  코드처럼 보이게 monospace + 줄바꿈 유지.
+*/
+
+.post-editor-html-textarea {
+  font-family:
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    monospace;
+
+  font-size: 11px;
+
+  line-height: 1.6;
+
+  white-space: pre;
+
+  resize: vertical;
+}
+
+
+/* =========================================================
+   OOC
+
+   독자에게는 보이지 않는 메모. 본문과 구분되게
+   살짝 다른(옅은 노란빛) 배경을 쓴다.
+========================================================== */
+
+.post-editor-ooc-field {
+  margin-bottom: 16px;
+}
+
+
+.post-editor-ooc-toggle[aria-expanded="true"] {
+  border-color: #f0d3de;
+
+  background: #fff5f8;
+
+  color: #d980a2;
+}
+
+
+.post-editor-ooc-textarea {
+  margin-top: 8px;
+
+  min-height: 90px;
+
+  background: #fffdf5;
+
+  resize: vertical;
+}
+
+
+/*
+  비밀글 비밀번호 입력창. OOC와 겹치지 않게 살짝 다른
+  (옅은 분홍빛) 배경으로 구분.
+*/
+
+.post-editor-secret-password-input {
+  margin-top: 8px;
+
+  background: #fff8fa;
+}
+
+
+.post-editor-message {
+  min-width: 0;
+
+  margin:
+    10px
+    0
+    0;
+
+  text-align: center;
+
+  font-size: 10px;
+
+  line-height: 1.4;
+
+  letter-spacing: 0.03em;
+
+  color: #df8eac;
+}
+

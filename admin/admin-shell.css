@@ -1,0 +1,473 @@
+/* =========================================================
+   기본
+========================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+
+body {
+  min-height: 100vh;
+
+  background: #ffffff;
+
+  color: #333333;
+
+  font-family:
+    Arial,
+    sans-serif;
+}
+
+
+button,
+textarea,
+input,
+select {
+  font: inherit;
+}
+
+
+button {
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+[hidden] {
+  display: none !important;
+}
+
+
+
+/* =========================================================
+   전체
+========================================================== */
+
+.admin-page {
+  width:
+    calc(
+      100%
+      -
+      40px
+    );
+
+  max-width: 620px;
+
+  margin:
+    0 auto;
+
+  padding:
+    70px 0
+    90px;
+
+  transition:
+    max-width 0.2s ease;
+}
+
+
+.admin-page.quote-mode {
+  max-width: 920px;
+}
+
+
+
+/* =========================================================
+   로그인
+========================================================== */
+
+.login-box h1,
+.admin-header h1 {
+  margin:
+    0 0 8px;
+
+  font-size: 20px;
+
+  font-weight: 500;
+}
+
+
+.login-desc {
+  margin:
+    0 0 30px;
+
+  font-size: 12px;
+
+  color: #aaaaaa;
+}
+
+
+.google-login-button {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  gap: 10px;
+
+  width: 100%;
+
+  min-height: 46px;
+
+  padding:
+    0 16px;
+
+  border:
+    1px solid
+    #e8e8e8;
+
+  border-radius: 8px;
+
+  background: #ffffff;
+
+  color: #444444;
+
+  font-size: 13px;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+
+.google-login-button:hover {
+  background: #fafafa;
+
+  border-color: #dddddd;
+}
+
+
+.google-login-button:disabled {
+  opacity: 0.6;
+
+  cursor: default;
+}
+
+
+.google-icon {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  width: 20px;
+  height: 20px;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  border-radius: 50%;
+
+  font-size: 11px;
+
+  font-weight: 600;
+
+  color: #777777;
+}
+
+
+.login-message {
+  min-height: 20px;
+
+  margin:
+    14px 0 0;
+
+  font-size: 11px;
+
+  line-height: 1.6;
+
+  color: #c66f8e;
+}
+
+
+
+/* =========================================================
+   공통 헤더
+========================================================== */
+
+.admin-header {
+  display: flex;
+
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  padding-bottom: 22px;
+
+  border-bottom:
+    1px solid
+    #eeeeee;
+}
+
+
+.user-email {
+  margin: 0;
+
+  font-size: 11px;
+
+  color: #aaaaaa;
+
+  word-break: break-all;
+}
+
+
+.logout-button {
+  padding:
+    6px 9px;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  border-radius: 5px;
+
+  background: #ffffff;
+
+  color: #999999;
+
+  font-size: 10px;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+
+.logout-button:hover {
+  background: #fafafa;
+
+  color: #666666;
+}
+
+
+
+/* =========================================================
+   화면 공통
+========================================================== */
+
+.admin-view {
+  width: 100%;
+
+  padding-top: 34px;
+}
+
+
+
+/* =========================================================
+   ADMIN HOME
+========================================================== */
+
+.home-intro {
+  margin-bottom: 30px;
+}
+
+
+.home-title {
+  margin:
+    0 0 6px;
+
+  font-size: 13px;
+
+  color: #555555;
+}
+
+
+.home-desc {
+  margin: 0;
+
+  font-size: 11px;
+
+  color: #aaaaaa;
+}
+
+
+
+/* =========================================================
+   메인 메뉴
+========================================================== */
+
+.admin-menu {
+  border-top:
+    1px solid
+    #eeeeee;
+}
+
+
+.admin-menu-item {
+  display: grid;
+
+  grid-template-columns:
+    34px
+    1fr
+    auto;
+
+  align-items: center;
+
+  gap: 14px;
+
+  width: 100%;
+
+  min-height: 86px;
+
+  padding:
+    18px 4px;
+
+  border: 0;
+
+  border-bottom:
+    1px solid
+    #eeeeee;
+
+  background: transparent;
+
+  color: #444444;
+
+  text-align: left;
+
+  cursor: pointer;
+
+  transition:
+    background 0.2s ease;
+}
+
+
+.admin-menu-item:hover {
+  background: #fafafa;
+}
+
+
+.menu-number {
+  align-self: start;
+
+  padding-top: 2px;
+
+  font-size: 9px;
+
+  color: #c9c9c9;
+
+  letter-spacing: 0.08em;
+}
+
+
+.menu-copy {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 6px;
+}
+
+
+.menu-copy strong {
+  font-size: 13px;
+
+  font-weight: 500;
+
+  letter-spacing: 0.08em;
+}
+
+
+.menu-copy small {
+  font-size: 10px;
+
+  font-weight: 400;
+
+  color: #aaaaaa;
+
+  letter-spacing: 0.03em;
+}
+
+
+.menu-arrow {
+  padding-right: 8px;
+
+  font-size: 14px;
+
+  color: #bbbbbb;
+
+  transition:
+    transform 0.2s ease,
+    color 0.2s ease;
+}
+
+
+.admin-menu-item:hover
+.menu-arrow {
+  transform:
+    translateX(3px);
+
+  color: #e39ab5;
+}
+
+
+
+/* =========================================================
+   서브 페이지 상단
+========================================================== */
+
+.view-top {
+  margin-bottom: 32px;
+}
+
+
+.back-button {
+  padding: 0;
+
+  margin:
+    0 0 24px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: #aaaaaa;
+
+  font-size: 10px;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease;
+}
+
+
+.back-button:hover {
+  color: #e39ab5;
+}
+
+
+.view-heading h2 {
+  margin:
+    0 0 6px;
+
+  font-size: 15px;
+
+  font-weight: 500;
+
+  letter-spacing: 0.08em;
+}
+
+
+.view-heading p {
+  margin: 0;
+
+  font-size: 10px;
+
+  color: #aaaaaa;
+}
+
+
+

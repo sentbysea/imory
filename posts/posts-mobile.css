@@ -1,0 +1,657 @@
+/* =========================================================
+   POSTS MOBILE STYLES
+   posts.css 에서 분리한 모바일 전용(@media max-width:600px) 스타일.
+   레이아웃/배치 담당. 캔버스 내부(font-size 등)는 여기서 재정의하지 않는 것을 원칙으로 함.
+========================================================== */
+
+/* =========================================================
+   MOBILE
+========================================================== */
+
+@media (max-width: 600px) {
+
+  .post-area {
+    padding:
+      68px
+      22px
+      86px;
+  }
+
+
+  .post-container {
+    max-width: 100%;
+  }
+
+
+  .post-header {
+    margin-bottom: 28px;
+  }
+
+
+  .post-page-title {
+    font-size: 14px;
+  }
+
+
+  .post-list-item {
+    padding:
+      11px
+      0;
+  }
+
+
+  .post-list-title {
+    font-size: 11px;
+  }
+
+
+  .post-list-date {
+    font-size: 9px;
+  }
+
+
+  .post-detail-title {
+    font-size: 15px;
+  }
+
+
+  .post-detail-content {
+    font-size: 11.5px;
+
+    line-height: 1.9;
+  }
+
+
+  .post-detail-heading {
+    gap: 12px;
+  }
+
+
+  .post-detail-actions {
+    gap: 7px;
+
+    padding-top: 4px;
+  }
+
+
+  .post-action-button {
+    font-size: 9px;
+  }
+
+
+  .post-related {
+    margin-top: 46px;
+
+    padding-top: 20px;
+  }
+
+
+  .post-related-title {
+    font-size: 9.5px;
+  }
+
+
+  .post-related-item {
+    padding:
+      8px
+      0;
+  }
+
+
+  .post-related-item-title {
+    font-size: 10px;
+  }
+
+
+  .post-related-item-date {
+    font-size: 8.5px;
+  }
+
+
+  /* =======================================================
+     MOBILE EDITOR
+  ======================================================== */
+
+  .post-editor-field {
+    margin-bottom: 20px;
+  }
+
+
+  /*
+    iOS Safari는 포커스되는 입력 요소의 font-size가
+    16px보다 작으면 페이지를 강제로 확대한다. viewport
+    meta로 막는 방식(maximum-scale=1 등)은 pinch zoom
+    자체를 죽여버리므로 쓰지 않고, 대신 여기서 실제
+    입력 요소의 font-size를 16px로 올려서 확대가 애초에
+    발동하지 않게 한다. 프리뷰/실제 게시글 출력 쪽은
+    별도 클래스(post-editor-preview-*, post-detail-*)라
+    영향 없음.
+  */
+
+  .post-editor-input {
+    min-height: 40px;
+
+    font-size: 16px;
+  }
+
+
+  .post-editor-toolbar {
+    gap:
+      7px
+      12px;
+
+    padding:
+      8px;
+  }
+
+
+  .post-editor-tool-group {
+    gap: 5px;
+  }
+
+
+  .post-editor-tool-label {
+    font-size: 7.5px;
+  }
+
+
+  .post-editor-tool-button {
+    font-size: 8.5px;
+  }
+
+
+  .post-editor-preset-select {
+    max-width: 84px;
+
+    font-size: 8.5px;
+  }
+
+
+  .post-highlight-swatch {
+    width: 12px;
+    height: 12px;
+
+    flex-basis: 12px;
+  }
+
+
+  .post-editor-richtext,
+  .post-editor-html-textarea {
+    min-height:
+      calc(
+        100dvh
+        -
+        330px
+      );
+
+    max-height:
+      calc(
+        100dvh
+        -
+        330px
+      );
+
+    overflow-y: auto;
+
+    /*
+      iOS Safari 자동 확대 방지용 최소값(위 .post-editor-input
+      주석 참고). line-height를 데스크톱(1.8)보다 살짝 좁혀서
+      16px 글자가 세로로 과하게 커 보이지 않도록 보정.
+    */
+
+    font-size: 16px;
+
+    line-height: 1.55;
+  }
+
+
+  /* =======================================================
+     MOBILE PREVIEW BUTTON
+
+     에디터 화면 아래쪽에 표시.
+  ======================================================== */
+
+  .post-editor-preview-toggle {
+    position: sticky;
+    bottom: 10px;
+
+    z-index: 72;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    gap: 8px;
+
+    width: max-content;
+
+    min-width: 92px;
+
+    margin:
+      18px
+      auto
+      0;
+
+    padding:
+      8px
+      12px;
+
+    border:
+      1px solid
+      #e8e8e8;
+
+    border-radius:
+      999px;
+
+    background:
+      rgba(
+        255,
+        255,
+        255,
+        0.94
+      );
+
+    backdrop-filter:
+      blur(5px);
+
+    -webkit-backdrop-filter:
+      blur(5px);
+
+    box-shadow:
+      0 3px 14px
+      rgba(
+        0,
+        0,
+        0,
+        0.045
+      );
+
+    color: #999999;
+
+    font-family:
+      "Pretendard",
+      sans-serif;
+
+    font-size: 8.5px;
+    font-weight: 400;
+
+    letter-spacing: 0.08em;
+
+    cursor: pointer;
+
+    -webkit-tap-highlight-color:
+      transparent;
+  }
+
+
+  .post-editor-preview-toggle-icon {
+    font-size: 10px;
+
+    color: #c3a2af;
+  }
+
+
+  /* =======================================================
+     MOBILE PREVIEW PANEL
+
+     더 이상 전체 화면을 덮는 overlay가 아니라,
+     PREVIEW 버튼 바로 아래에 카드 형태로 그냥 "추가되는"
+     블록. 뒤쪽 에디터를 가리지 않고, 페이지 스크롤에
+     자연스럽게 같이 따라옴(고정 안 됨).
+  ======================================================== */
+
+  .post-editor-preview-section {
+    display: none;
+
+    width: 100%;
+
+    margin-top: 16px;
+  }
+
+
+  /*
+    JS가 .is-open을 붙이면 표시.
+  */
+
+  .post-editor-preview-section.is-open {
+    display: block;
+  }
+
+
+  /*
+    더 이상 overlay가 아니므로 배경을 덮는
+    backdrop은 필요 없음.
+  */
+
+  .post-editor-preview-backdrop {
+    display: none;
+  }
+
+
+  /* =======================================================
+     PREVIEW CARD
+
+     처음 열릴 때 70dvh, 드래그 핸들로 30dvh~90dvh 사이
+     조절 가능(JS가 height를 px로 직접 설정).
+     header / stage / pagination을 세로로 쌓고,
+     stage만 남는 공간을 차지해서 그 안에서
+     핀치 줌 + 드래그 이동이 일어남.
+  ======================================================== */
+
+  .post-editor-preview-sheet {
+    width: 100%;
+
+    height: 70dvh;
+
+    max-height: 90dvh;
+
+    display: flex;
+    flex-direction: column;
+
+    padding:
+      4px
+      20px
+      calc(
+        14px
+        +
+        env(
+          safe-area-inset-bottom
+        )
+      );
+
+    background: #ffffff;
+
+    border:
+      1px solid
+      #ededed;
+
+    border-radius: 16px;
+
+    box-shadow:
+      0
+      4px
+      20px
+      rgba(
+        0,
+        0,
+        0,
+        0.05
+      );
+
+    overflow: hidden;
+
+    animation:
+      mobilePreviewFadeIn
+      0.22s
+      ease;
+  }
+
+
+  @keyframes mobilePreviewFadeIn {
+
+    from {
+      opacity: 0;
+
+      transform:
+        translateY(-8px);
+    }
+
+
+    to {
+      opacity: 1;
+
+      transform:
+        translateY(0);
+    }
+
+  }
+
+
+  /* =======================================================
+     DRAG HANDLE (리사이즈)
+  ======================================================== */
+
+  .post-editor-preview-drag-handle {
+    flex: 0 0 auto;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    width: 100%;
+    height: 26px;
+
+    margin-top: 2px;
+
+    cursor: grab;
+
+    touch-action: none;
+
+    -webkit-tap-highlight-color:
+      transparent;
+  }
+
+
+  .post-editor-preview-drag-handle::before {
+    content: "";
+
+    width: 34px;
+    height: 3px;
+
+    border-radius:
+      999px;
+
+    background:
+      #dedede;
+  }
+
+
+  .post-editor-preview-drag-handle:active {
+    cursor: grabbing;
+  }
+
+
+  /* =======================================================
+     MOBILE PREVIEW HEADER
+  ======================================================== */
+
+  .post-editor-preview-header {
+    flex: 0 0 auto;
+
+    margin-bottom: 6px;
+  }
+
+
+  .post-editor-preview-visibility-controls {
+    flex: 0 0 auto;
+
+    margin-bottom: 10px;
+
+    padding:
+      0
+      0
+      10px;
+  }
+
+
+  .post-editor-preview-label {
+    font-size: 9px;
+  }
+
+
+  .post-editor-preview-visibility-toggle {
+    padding:
+      2px
+      7px;
+
+    font-size: 8px;
+  }
+
+
+  .post-editor-preview-subrow {
+    flex: 0 0 auto;
+
+    gap: 5px;
+
+    margin-top: 6px;
+    margin-bottom: 8px;
+  }
+
+
+  .post-editor-preview-subrow-label {
+    font-size: 8px;
+  }
+
+
+  .post-editor-preview-select {
+    padding:
+      2px
+      5px;
+
+    font-size: 8px;
+  }
+
+
+  .post-editor-preview-ratio-controls {
+    /*
+      ★ flex:0 0 auto만 있으면 이 줄 자체의 너비가 자기
+      내용물(버튼 6개 + custom 너비/높이 입력칸)을 한 줄로
+      전부 펼친 "필요한 만큼"으로 정해져서, flex-wrap: wrap이
+      있어도 감쌀 기준 너비 자체가 없어 화면 밖으로 그냥
+      넘쳐버렸다. 부모 줄 폭에 맞춰 100%로 고정해야 실제로
+      다음 줄로 줄바꿈된다.
+    */
+
+    flex:
+      0
+      0
+      100%;
+
+    width: 100%;
+
+    row-gap: 6px;
+    column-gap: 5px;
+
+    margin-top: 6px;
+    margin-bottom: 8px;
+  }
+
+
+  .post-editor-preview-ratio-button {
+    padding:
+      2px
+      6px;
+
+    font-size: 8px;
+  }
+
+
+  .post-editor-preview-ratio-custom-input {
+    width: 30px;
+
+    font-size: 8px;
+  }
+
+
+  .post-editor-preview-close {
+    display: block;
+  }
+
+
+  /* =======================================================
+     MOBILE PREVIEW STAGE
+
+     핀치 줌 + 드래그 이동이 일어나는 뷰포트.
+     남는 세로 공간을 전부 차지하고, 넘치는 캔버스는
+     transform(scale/translate)으로 잘라서 보여줌.
+  ======================================================== */
+
+.post-editor-preview-stage {
+  flex: 1 1 auto;
+
+  min-height: 0;
+
+  /*
+    확대/이동 기준점(transform-origin: center center)과
+    실제 배치 기준을 맞추기 위해 세로도 중앙 정렬.
+    (기본값인 flex-start를 쓰면 패널을 작게 줄였을 때
+    캔버스가 뷰포트 위로 밀려나 안 보이는 문제가 있었음)
+  */
+
+  align-items: center;
+
+  padding:
+    6px
+    0
+    4px;
+
+  touch-action: none;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-editor-preview-pagination {
+  bottom:
+    max(
+      10px,
+      env(safe-area-inset-bottom)
+    );
+
+  gap: 8px;
+}
+
+
+/*
+  핀치 줌으로 배율을 바꾸므로
+  데스크톱 전용 +/- 버튼은 불필요.
+*/
+
+.post-editor-preview-zoom {
+  display: none;
+}
+
+
+.post-editor-preview-page-button {
+  width: 34px;
+  height: 34px;
+
+  font-size: 17px;
+}
+
+
+.post-editor-preview-page-indicator {
+  font-size: 8.5px;
+}
+
+  /* =======================================================
+     MOBILE EDITOR ACTIONS
+  ======================================================== */
+
+  .post-editor-actions {
+    margin-top: 18px;
+  }
+
+
+  .post-editor-button {
+    min-width: 52px;
+
+    font-size: 9px;
+  }
+
+}
+
+@media (max-width: 600px) {
+
+  .post-site-footer {
+    margin-top: 54px;
+
+    padding-bottom:
+      max(
+        14px,
+        env(safe-area-inset-bottom)
+      );
+  }
+
+}

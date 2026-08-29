@@ -1,0 +1,1777 @@
+      <!-- ===================================================
+           QUOTE PRESET
+      ==================================================== -->
+
+      <section
+        class="admin-view"
+        id="quotePanel"
+        hidden
+      >
+
+        <div class="view-top">
+
+          <button
+            class="back-button"
+            id="quoteBackButton"
+            type="button"
+          >
+            ← back
+          </button>
+
+
+          <div class="view-heading">
+
+            <h2>
+              QUOTE PRESET
+            </h2>
+
+            <p>
+              image style
+            </p>
+
+          </div>
+
+        </div>
+
+
+
+        <div class="quote-workspace">
+
+
+          <!-- =================================================
+               LEFT
+          ================================================== -->
+
+          <section class="quote-controls">
+
+
+            <!-- ===============================================
+                 MOBILE TAB BAR
+
+                 데스크톱에선 CSS로 완전히 숨김(display:none) —
+                 좌측 7개 아코디언을 그대로 씀. 모바일에선
+                 .quote-controls 자체가 화면 하단에 고정되는
+                 시트가 되고, 이 탭바가 그 시트의 맨 위에
+                 붙어서(position:sticky) 항상 보인다. 탭을
+                 누르면 admin-quote-mobile-tabs.js가
+                 data-quote-mobile-tab 값이 일치하는 아코디언
+                 섹션만 보여주고 나머지는 숨긴다(개별 섹션의
+                 +/- 아코디언 접기 상태와는 무관하게 항상 펼친
+                 것처럼 보여줌 — 탭 전환 자체가 이미 필터링
+                 역할을 하기 때문).
+            ================================================ -->
+
+            <div class="quote-mobile-tabbar-wrap">
+
+              <div
+                class="quote-mobile-tabbar"
+                id="quoteMobileTabbar"
+                role="tablist"
+              >
+
+                <button
+                  class="quote-mobile-tab"
+                  type="button"
+                  data-quote-mobile-tab-target="content"
+                  aria-pressed="true"
+                >
+                  CONTENT
+                </button>
+
+                <button
+                  class="quote-mobile-tab"
+                  type="button"
+                  data-quote-mobile-tab-target="canvas"
+                  aria-pressed="false"
+                >
+                  CANVAS
+                </button>
+
+                <button
+                  class="quote-mobile-tab"
+                  type="button"
+                  data-quote-mobile-tab-target="title-source"
+                  aria-pressed="false"
+                >
+                  TITLE·SOURCE
+                </button>
+
+                <button
+                  class="quote-mobile-tab"
+                  type="button"
+                  data-quote-mobile-tab-target="body"
+                  aria-pressed="false"
+                >
+                  BODY
+                </button>
+
+                <button
+                  class="quote-mobile-tab"
+                  type="button"
+                  data-quote-mobile-tab-target="preset"
+                  aria-pressed="false"
+                >
+                  PRESET
+                </button>
+
+              </div>
+
+            </div>
+
+
+            <!-- ===============================================
+                 TEST CONTENT
+            ================================================ -->
+
+            <section
+              class="quote-accordion is-open"
+              data-quote-section
+              data-quote-mobile-tab="content"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  TEST CONTENT
+                </span>
+
+                <small>
+                  preview text
+                </small>
+
+                <span class="quote-accordion-icon">
+                  −
+                </span>
+
+              </button>
+
+
+              <div class="quote-accordion-content">
+
+
+                <div class="quote-test-field">
+
+                  <label for="quoteTestTitle">
+                    TITLE
+                  </label>
+
+                  <input
+                    id="quoteTestTitle"
+                    class="quote-text-input"
+                    type="text"
+                    value="발췌 테스트"
+                    autocomplete="off"
+                  >
+
+                </div>
+
+
+                <div class="quote-test-field">
+
+                  <label for="quoteTestBody">
+                    BODY
+                  </label>
+
+                  <textarea
+                    id="quoteTestBody"
+                    class="quote-test-textarea"
+                  >*창가 자리에 앉은 그는 오래 식은 커피를 앞에 두고 창밖을 바라보고 있었다.*
+
+거리에는 늦은 오후의 햇빛이 ==비스듬히== 내려앉았고, 지나가는 사람들의 그림자가 유리창 위로 길게 늘어졌다. 그는 그 그림자들을 하나씩 세다가, 문득 손끝으로 테이블 위에 놓인 낡은 편지를 만지작거렸다.
+
+"아직도 그 편지를 가지고 다녀?"
+
+*맞은편에 앉은 그녀가 물었다.* 그는 대답 대신 옅게 웃었다. 편지의 접힌 자국은 이미 ^해질 대로 해져^ 있었지만, 그는 그것을 버릴 생각이 없어 보였다.
+
+"버리면 편할 텐데."
+
+"아직은, 아니야."
+
+그가 짧게 대답했다. 창밖으로는 여전히 사람들이 오갔고, 카페 안의 낮은 음악 소리와 함께 시간은 ==아무 일도 없었다는 듯== 흘러갔다. 그녀는 더 묻지 않았다. 대신 그의 손 위에 자신의 손을 가만히 포갰다.
+
+*그렇게 둘은 한참을 말없이 앉아 있었다.* 이윽고 해가 완전히 저물었을 때, 그는 마침내 ^작은 목소리로^ 입을 열었다.
+
+"고마워, 기다려줘서."</textarea>
+
+                </div>
+
+
+              </div>
+
+            </section>
+
+
+
+            <!-- ===============================================
+                 CANVAS
+            ================================================ -->
+
+            <section
+              class="quote-accordion is-open"
+              data-quote-section
+              data-quote-mobile-tab="canvas"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  CANVAS
+                </span>
+
+                <small>
+                  image
+                </small>
+
+                <span class="quote-accordion-icon">
+                  −
+                </span>
+
+              </button>
+
+
+              <div class="quote-accordion-content">
+
+
+                <div class="quote-setting-block">
+
+                  <div class="quote-setting-label">
+                    RATIO
+                  </div>
+
+
+                  <div
+                    class="quote-ratio-buttons"
+                    id="quoteRatioButtons"
+                  >
+
+                    <button
+                      class="quote-ratio-button active"
+                      type="button"
+                      data-ratio="1:1"
+                    >
+                      1:1
+                    </button>
+
+                    <button
+                      class="quote-ratio-button"
+                      type="button"
+                      data-ratio="4:5"
+                    >
+                      4:5
+                    </button>
+
+                    <button
+                      class="quote-ratio-button"
+                      type="button"
+                      data-ratio="3:4"
+                    >
+                      3:4
+                    </button>
+
+                    <button
+                      class="quote-ratio-button"
+                      type="button"
+                      data-ratio="9:16"
+                    >
+                      9:16
+                    </button>
+
+                    <button
+                      class="quote-ratio-button"
+                      type="button"
+                      data-ratio="auto"
+                    >
+                      AUTO
+                    </button>
+
+                    <button
+                      class="quote-ratio-button"
+                      type="button"
+                      data-ratio="custom"
+                    >
+                      CUSTOM
+                    </button>
+
+                  </div>
+
+                </div>
+
+
+
+                <div
+                  class="quote-custom-ratio"
+                  id="quoteCustomRatioFields"
+                  hidden
+                >
+
+                  <div class="quote-pair-grid">
+
+                    <div class="quote-pair-field">
+
+                      <label for="quoteRatioWidth">
+                        RATIO WIDTH
+                      </label>
+
+                      <input
+                        id="quoteRatioWidth"
+                        class="quote-number-input"
+                        type="number"
+                        min="1"
+                        max="100"
+                        value="4"
+                      >
+
+                    </div>
+
+
+                    <div class="quote-pair-field">
+
+                      <label for="quoteRatioHeight">
+                        RATIO HEIGHT
+                      </label>
+
+                      <input
+                        id="quoteRatioHeight"
+                        class="quote-number-input"
+                        type="number"
+                        min="1"
+                        max="100"
+                        value="5"
+                      >
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteWidth">
+                    EXPORT WIDTH
+                  </label>
+
+                  <div class="quote-input-with-unit">
+
+                    <input
+                      id="quoteWidth"
+                      class="quote-number-input"
+                      type="number"
+                      min="320"
+                      max="3000"
+                      value="1080"
+                    >
+
+                    <span class="quote-unit">
+                      px
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteBackground">
+                    BACKGROUND
+                  </label>
+
+                  <input
+                    id="quoteBackground"
+                    class="quote-color-input"
+                    type="color"
+                    value="#ffffff"
+                  >
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quotePadding">
+                    PADDING
+                  </label>
+
+                  <div class="quote-input-with-unit">
+
+                    <input
+                      id="quotePadding"
+                      class="quote-number-input"
+                      type="number"
+                      min="0"
+                      max="500"
+                      value="48"
+                    >
+
+                    <span class="quote-unit">
+                      px
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-pair-grid">
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteVerticalPadding">
+                      VERTICAL EXTRA
+                    </label>
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteVerticalPadding"
+                        class="quote-number-input"
+                        type="number"
+                        min="0"
+                        max="500"
+                        value="0"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
+
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteHorizontalPadding">
+                      HORIZONTAL EXTRA
+                    </label>
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteHorizontalPadding"
+                        class="quote-number-input"
+                        type="number"
+                        min="0"
+                        max="500"
+                        value="0"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+
+              </div>
+
+            </section>
+
+
+
+            <!-- ===============================================
+                 GENERAL
+
+                 title/body/source 전체에 공통으로 적용되는
+                 설정. 폰트를 여기로 옮겨서 하나만 바꾸면
+                 셋 다 같이 바뀌게 함(admin-quote-preview-update.js
+                 참고 — 예전엔 body 폰트만 반영되고 title/source는
+                 export 안정성 때문에 Pretendard로 고정돼 있었음).
+            ================================================ -->
+
+            <section
+              class="quote-accordion is-open"
+              data-quote-section
+              data-quote-mobile-tab="body"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  GENERAL
+                </span>
+
+                <small>
+                  font
+                </small>
+
+                <span class="quote-accordion-icon">
+                  −
+                </span>
+
+              </button>
+
+
+              <div class="quote-accordion-content">
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteBodyFont">
+                    FONT
+                  </label>
+
+                  <select
+                    id="quoteBodyFont"
+                    class="quote-select-input"
+                  >
+
+                    <option
+                      value="pretendard"
+                      selected
+                    >
+                      Pretendard
+                    </option>
+
+                    <option value="nanummyeongjo">
+                      나눔명조
+                    </option>
+
+                  </select>
+
+                </div>
+
+
+              </div>
+
+            </section>
+
+
+
+            <!-- ===============================================
+                 TITLE
+            ================================================ -->
+
+            <section
+              class="quote-accordion"
+              data-quote-section
+              data-quote-mobile-tab="title-source"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  TITLE
+                </span>
+
+                <small>
+                  typography
+                </small>
+
+                <span class="quote-accordion-icon">
+                  +
+                </span>
+
+              </button>
+
+
+              <div
+                class="quote-accordion-content"
+                hidden
+              >
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteTitleEnabled">
+                    DISPLAY
+                  </label>
+
+                  <input
+                    id="quoteTitleEnabled"
+                    class="quote-check-input"
+                    type="checkbox"
+                    checked
+                  >
+
+                </div>
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteTitleColor">
+                    COLOR
+                  </label>
+
+                  <input
+                    id="quoteTitleColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#222222"
+                  >
+
+                </div>
+
+
+
+                <div class="quote-pair-grid">
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteTitleSize">
+                      FONT SIZE
+                    </label>
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteTitleSize"
+                        class="quote-number-input"
+                        type="number"
+                        min="10"
+                        max="120"
+                        value="24"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
+
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteTitleWeight">
+                      WEIGHT
+                    </label>
+
+                    <select
+                      id="quoteTitleWeight"
+                      class="quote-select-input"
+                    >
+
+                      <option value="300">
+                        light
+                      </option>
+
+                      <option
+                        value="400"
+                        selected
+                      >
+                        regular
+                      </option>
+
+                      <option value="500">
+                        medium
+                      </option>
+
+                      <option value="600">
+                        semibold
+                      </option>
+
+                      <option value="700">
+                        bold
+                      </option>
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteTitleAlign">
+                    ALIGN
+                  </label>
+
+                  <select
+                    id="quoteTitleAlign"
+                    class="quote-select-input"
+                  >
+
+                    <option
+                      value="left"
+                      selected
+                    >
+                      left
+                    </option>
+
+                    <option value="center">
+                      center
+                    </option>
+
+                    <option value="right">
+                      right
+                    </option>
+
+                  </select>
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteTitleLetterSpacing">
+                    LETTER SPACING
+                  </label>
+
+                  <div class="quote-input-with-unit">
+
+                    <input
+                      id="quoteTitleLetterSpacing"
+                      class="quote-number-input"
+                      type="number"
+                      min="-10"
+                      max="30"
+                      step="0.1"
+                      value="0"
+                    >
+
+                    <span class="quote-unit">
+                      px
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteTitleSpacing">
+                    BOTTOM SPACE
+                  </label>
+
+                  <div class="quote-input-with-unit">
+
+                    <input
+                      id="quoteTitleSpacing"
+                      class="quote-number-input"
+                      type="number"
+                      min="0"
+                      max="300"
+                      value="28"
+                    >
+
+                    <span class="quote-unit">
+                      px
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+              </div>
+
+            </section>
+
+
+
+            <!-- ===============================================
+                 BODY
+            ================================================ -->
+
+            <section
+              class="quote-accordion"
+              data-quote-section
+              data-quote-mobile-tab="body"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  BODY
+                </span>
+
+                <small>
+                  text
+                </small>
+
+                <span class="quote-accordion-icon">
+                  +
+                </span>
+
+              </button>
+
+
+              <div
+                class="quote-accordion-content"
+                hidden
+              >
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteTextColor">
+                    COLOR
+                  </label>
+
+                  <input
+                    id="quoteTextColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#333333"
+                  >
+
+                </div>
+
+
+
+                <!-- ===========================================
+                     HIGHLIGHT / POINT COLOR
+                     에디터 PRESET 하이라이트 · 포인트 컬러에서 사용
+                ============================================ -->
+
+                <div class="quote-pair-grid">
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteHighlightColor">
+                      HIGHLIGHT
+                    </label>
+
+                    <input
+                      id="quoteHighlightColor"
+                      class="quote-color-input"
+                      type="color"
+                      value="#f4dce6"
+                    >
+
+                  </div>
+
+
+                  <div class="quote-pair-field">
+
+                    <label for="quotePointColor">
+                      POINT COLOR
+                    </label>
+
+                    <input
+                      id="quotePointColor"
+                      class="quote-color-input"
+                      type="color"
+                      value="#5c7cfa"
+                    >
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-pair-grid">
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteFontSize">
+                      FONT SIZE
+                    </label>
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteFontSize"
+                        class="quote-number-input"
+                        type="number"
+                        min="8"
+                        max="100"
+                        value="16"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
+
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteBodyWeight">
+                      WEIGHT
+                    </label>
+
+                    <select
+                      id="quoteBodyWeight"
+                      class="quote-select-input"
+                    >
+
+                      <option value="300">
+                        light
+                      </option>
+
+                      <option value="400">
+                        regular
+                      </option>
+
+                      <option
+                        value="500"
+                        selected
+                      >
+                        medium
+                      </option>
+
+                      <option value="600">
+                        semibold
+                      </option>
+
+                      <option value="700">
+                        bold
+                      </option>
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteLineHeight">
+                    LINE HEIGHT
+                  </label>
+
+                  <input
+                    id="quoteLineHeight"
+                    class="quote-number-input"
+                    type="number"
+                    min="1"
+                    max="3"
+                    step="0.1"
+                    value="1.8"
+                  >
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteLetterSpacing">
+                    LETTER SPACING
+                  </label>
+
+                  <div class="quote-input-with-unit">
+
+                    <input
+                      id="quoteLetterSpacing"
+                      class="quote-number-input"
+                      type="number"
+                      min="-5"
+                      max="20"
+                      step="0.1"
+                      value="0"
+                    >
+
+                    <span class="quote-unit">
+                      px
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteParagraphSpacing">
+                    PARAGRAPH
+                  </label>
+
+                  <div class="quote-input-with-unit">
+
+                    <input
+                      id="quoteParagraphSpacing"
+                      class="quote-number-input"
+                      type="number"
+                      min="0"
+                      max="200"
+                      value="14"
+                    >
+
+                    <span class="quote-unit">
+                      px
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-pair-grid">
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteBodyAlign">
+                      HORIZONTAL
+                    </label>
+
+                    <select
+                      id="quoteBodyAlign"
+                      class="quote-select-input"
+                    >
+
+                      <option
+                        value="left"
+                        selected
+                      >
+                        left
+                      </option>
+
+                      <option value="center">
+                        center
+                      </option>
+
+                      <option value="right">
+                        right
+                      </option>
+
+                      <option value="justify">
+                        justify
+                      </option>
+
+                    </select>
+
+                  </div>
+
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteVerticalAlign">
+                      VERTICAL
+                    </label>
+
+                    <select
+                      id="quoteVerticalAlign"
+                      class="quote-select-input"
+                    >
+
+                      <option
+                        value="top"
+                        selected
+                      >
+                        top
+                      </option>
+
+                      <option value="center">
+                        center
+                      </option>
+
+                      <option value="bottom">
+                        bottom
+                      </option>
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-pair-grid">
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteLineBreak">
+                      LINE BREAK
+                    </label>
+
+                    <select
+                      id="quoteLineBreak"
+                      class="quote-select-input"
+                    >
+
+                      <option
+                        value="keep"
+                        selected
+                      >
+                        keep
+                      </option>
+
+                      <option value="word">
+                        word
+                      </option>
+
+                      <option value="char">
+                        char
+                      </option>
+
+                    </select>
+
+                  </div>
+
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteIndent">
+                      FIRST INDENT
+                    </label>
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteIndent"
+                        class="quote-number-input"
+                        type="number"
+                        min="0"
+                        max="200"
+                        value="0"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+
+
+                <!-- ===========================================
+                     ACTION / DIALOGUE
+                ============================================ -->
+
+                <div class="quote-special-grid">
+
+
+                  <div class="quote-special-column">
+
+                    <div class="quote-special-heading">
+
+                      <span>
+                        ACTION
+                      </span>
+
+                      <small>
+                        *text*
+                      </small>
+
+                    </div>
+
+
+                    <div class="quote-special-field">
+
+                      <label for="quoteActionColor">
+                        COLOR
+                      </label>
+
+                      <input
+                        id="quoteActionColor"
+                        class="quote-color-input"
+                        type="color"
+                        value="#888888"
+                      >
+
+                    </div>
+
+
+                    <div class="quote-special-field">
+
+                      <label for="quoteActionWeight">
+                        WEIGHT
+                      </label>
+
+                      <select
+                        id="quoteActionWeight"
+                        class="quote-select-input"
+                      >
+
+                        <option value="300">
+                          light
+                        </option>
+
+                        <option
+                          value="400"
+                          selected
+                        >
+                          regular
+                        </option>
+
+                        <option value="500">
+                          medium
+                        </option>
+
+                        <option value="600">
+                          semibold
+                        </option>
+
+                        <option value="700">
+                          bold
+                        </option>
+
+                      </select>
+
+                    </div>
+
+                  </div>
+
+
+
+                  <div class="quote-special-column">
+
+                    <div class="quote-special-heading">
+
+                      <span>
+                        DIALOGUE
+                      </span>
+
+                      <small>
+                        "text"
+                      </small>
+
+                    </div>
+
+
+                    <div class="quote-special-field">
+
+                      <label for="quoteDialogueColor">
+                        COLOR
+                      </label>
+
+                      <input
+                        id="quoteDialogueColor"
+                        class="quote-color-input"
+                        type="color"
+                        value="#333333"
+                      >
+
+                    </div>
+
+
+                    <div class="quote-special-field">
+
+                      <label for="quoteDialogueWeight">
+                        WEIGHT
+                      </label>
+
+                      <select
+                        id="quoteDialogueWeight"
+                        class="quote-select-input"
+                      >
+
+                        <option value="300">
+                          light
+                        </option>
+
+                        <option value="400">
+                          regular
+                        </option>
+
+                        <option
+                          value="500"
+                          selected
+                        >
+                          medium
+                        </option>
+
+                        <option value="600">
+                          semibold
+                        </option>
+
+                        <option value="700">
+                          bold
+                        </option>
+
+                      </select>
+
+                    </div>
+
+                  </div>
+
+
+                </div>
+
+
+              </div>
+
+            </section>
+
+
+
+            <!-- ===============================================
+                 SOURCE
+            ================================================ -->
+
+            <section
+              class="quote-accordion"
+              data-quote-section
+              data-quote-mobile-tab="title-source"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  SOURCE
+                </span>
+
+                <small>
+                  footer
+                </small>
+
+                <span class="quote-accordion-icon">
+                  +
+                </span>
+
+              </button>
+
+
+              <div
+                class="quote-accordion-content"
+                hidden
+              >
+
+
+                <div class="quote-test-field">
+
+                  <label for="quoteTestSource">
+                    SOURCE TEXT
+                  </label>
+
+                  <input
+                    id="quoteTestSource"
+                    class="quote-text-input"
+                    type="text"
+                    value="@hongcha"
+                    autocomplete="off"
+                  >
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteSourceEnabled">
+                    DISPLAY
+                  </label>
+
+                  <input
+                    id="quoteSourceEnabled"
+                    class="quote-check-input"
+                    type="checkbox"
+                    checked
+                  >
+
+                </div>
+
+
+
+                <!-- ===========================================
+                     BOTTOM MARGIN
+                     source는 항상 캔버스 맨 아래 고정(패딩
+                     침범 안 함, marginTop:auto 방식 — 실제
+                     글쓰기 에디터 프리뷰와 동일한 메커니즘).
+                     이 값은 그 고정 위치에서 캔버스 맨 아래로부터
+                     추가로 얼마나 띄울지(marginBottom)를 정한다.
+                ============================================ -->
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteSourceBottomOffset">
+                    BOTTOM MARGIN
+                  </label>
+
+                  <div class="quote-input-with-unit">
+
+                    <input
+                      id="quoteSourceBottomOffset"
+                      class="quote-number-input"
+                      type="number"
+                      min="0"
+                      max="500"
+                      value="0"
+                    >
+
+                    <span class="quote-unit">
+                      px
+                    </span>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteSourceColor">
+                    COLOR
+                  </label>
+
+                  <input
+                    id="quoteSourceColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#999999"
+                  >
+
+                </div>
+
+
+
+                <div class="quote-pair-grid">
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteSourceSize">
+                      FONT SIZE
+                    </label>
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteSourceSize"
+                        class="quote-number-input"
+                        type="number"
+                        min="8"
+                        max="60"
+                        value="11"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
+
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteSourceWeight">
+                      WEIGHT
+                    </label>
+
+                    <select
+                      id="quoteSourceWeight"
+                      class="quote-select-input"
+                    >
+
+                      <option
+                        value="300"
+                        selected
+                      >
+                        light
+                      </option>
+
+                      <option value="400">
+                        regular
+                      </option>
+
+                      <option value="500">
+                        medium
+                      </option>
+
+                    </select>
+
+                  </div>
+
+                </div>
+
+
+
+                <div class="quote-pair-grid">
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteSourceAlign">
+                      ALIGN
+                    </label>
+
+                    <select
+                      id="quoteSourceAlign"
+                      class="quote-select-input"
+                    >
+
+                      <option value="left">
+                        left
+                      </option>
+
+                      <option value="center">
+                        center
+                      </option>
+
+                      <option
+                        value="right"
+                        selected
+                      >
+                        right
+                      </option>
+
+                    </select>
+
+                  </div>
+
+
+                  <div class="quote-pair-field">
+
+                    <label for="quoteSourceSpacing">
+                      TOP SPACE
+                    </label>
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteSourceSpacing"
+                        class="quote-number-input"
+                        type="number"
+                        min="0"
+                        max="300"
+                        value="28"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
+
+                </div>
+
+
+              </div>
+
+            </section>
+
+
+
+            <!-- ===============================================
+                 PRESET
+            ================================================ -->
+
+            <section
+              class="quote-accordion is-open"
+              data-quote-section
+              data-quote-mobile-tab="preset"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  PRESET
+                </span>
+
+                <small>
+                  save
+                </small>
+
+                <span class="quote-accordion-icon">
+                  −
+                </span>
+
+              </button>
+
+
+              <div class="quote-accordion-content">
+
+
+                <div class="quote-preset-save-row">
+
+
+                  <div class="quote-preset-name-field">
+
+                    <label for="quotePresetName">
+                      PRESET NAME
+                    </label>
+
+                    <input
+                      id="quotePresetName"
+                      class="quote-text-input"
+                      type="text"
+                      autocomplete="off"
+                      placeholder="예: 홍차 기본 발췌"
+                    >
+
+                  </div>
+
+
+                  <div class="quote-preset-save-buttons">
+
+                    <button
+                      class="save-button quote-preset-new-button"
+                      id="quoteNewButton"
+                      type="button"
+                      title="목록에 새 프리셋으로 추가"
+                    >
+                      new
+                    </button>
+
+                    <button
+                      class="save-button quote-preset-save-button"
+                      id="quoteSaveButton"
+                      type="button"
+                      title="현재 선택된 프리셋에 덮어쓰기"
+                      disabled
+                    >
+                      save
+                    </button>
+
+                  </div>
+
+
+                </div>
+
+
+                <p
+                  class="save-message quote-preset-message"
+                  id="quoteSaveMessage"
+                ></p>
+
+
+                <div class="quote-preset-list-wrap">
+
+                  <div class="quote-setting-label">
+                    SAVED PRESETS
+                  </div>
+
+                  <div
+                    class="quote-preset-list"
+                    id="quotePresetList"
+                  ></div>
+
+                </div>
+
+
+              </div>
+
+            </section>
+
+
+          </section>
+
+
+
+          <!-- =================================================
+               RIGHT : PREVIEW
+          ================================================== -->
+
+          <section class="quote-preview-panel">
+
+            <div class="quote-preview-heading">
+
+              <span>
+                PREVIEW
+              </span>
+
+              <small
+                id="quotePreviewSize"
+              >
+                1080 × 1080
+              </small>
+
+            </div>
+
+
+            <!--
+              배율 조정은 핀치 확대/축소, 리셋은 더블탭으로만
+              한다(admin-quote-preview-gesture.js) — 예전엔
+              여기에 −/%/+/FIT 툴바가 stage 위에 겹쳐 떠 있었지만
+              캔버스를 가리기만 해서 없앴다. wrap은 아래
+              .quote-preview-help 위치 기준점으로만 쓰임.
+            -->
+
+            <div class="quote-preview-stage-wrap">
+
+            <div
+              class="quote-preview-stage"
+              id="quotePreviewStage"
+            >
+
+              <div
+                class="quote-preview-canvas"
+                id="quotePreviewCanvas"
+              >
+
+
+                <div
+                  class="quote-preview-title"
+                  id="quotePreviewTitle"
+                >
+                  비 오는 날
+                </div>
+
+
+                <div
+                  class="quote-preview-text"
+                  id="quotePreviewText"
+                >
+
+                  <p>
+                    홍지원은 창밖을 바라봤다.
+                  </p>
+
+                </div>
+
+
+                <div
+                  class="quote-preview-source"
+                  id="quotePreviewSource"
+                >
+                  @hongcha
+                </div>
+
+
+              </div>
+
+            </div>
+
+
+            <p
+              class="quote-preview-help"
+              id="quotePreviewHelp"
+            >
+              두 손가락으로 확대·축소, 두 번 탭하면 전체 보기
+            </p>
+
+            </div>
+
+          </section>
+
+
+        </div>
+
+      </section>

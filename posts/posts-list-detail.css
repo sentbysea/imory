@@ -1,0 +1,1177 @@
+/* =========================================================
+   POST LIST
+========================================================== */
+
+.post-list {
+  width: 100%;
+}
+
+
+.post-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  width: 100%;
+
+  padding:
+    12px
+    2px;
+
+  border-bottom:
+    1px solid #f1f1f1;
+
+  color: #555555;
+
+  text-decoration: none;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    padding-left 0.2s ease;
+}
+
+
+.post-list-item:hover {
+  color: #ee9fbd;
+
+  padding-left: 5px;
+}
+
+
+.post-list-title {
+  min-width: 0;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  font-size: 13px;
+
+  letter-spacing: 0.03em;
+}
+
+
+/*
+  비밀글/비공개 제목 앞 자물쇠 아이콘. 이모지 글자 자체의
+  줄높이가 본문 글자보다 커서 그냥 텍스트로 붙이면 그 줄만
+  세로로 도드라져 보였음(post-list-item 등 줄 높이가 늘어남)
+  — 폰트 크기를 줄이고 line-height를 1로 눌러서 옆 텍스트
+  세로폭과 맞춘다. post-list/post-related-item/post-detail
+  제목 전부 공용으로 씀(posts-format.js의
+  applyPostVisibilityTitle).
+*/
+
+.post-visibility-icon {
+  display: inline-block;
+
+  margin-right: 3px;
+
+  font-size: 0.75em;
+  line-height: 1;
+
+  vertical-align: -0.05em;
+}
+
+
+.post-list-date {
+  flex: 0 0 auto;
+
+  font-size: 11px;
+
+  letter-spacing: 0.05em;
+
+  color: #bbbbbb;
+}
+
+
+/*
+  글 목록 편집(선택 삭제) 모드. posts-view-list-select.js
+  참고 — 이 모드에서는 .post-list-item이 <a>가 아니라
+  <div>로 그려짐(눌러도 글로 안 들어가고 선택만 됨).
+*/
+
+.post-list-item-checkbox {
+  flex: 0 0 auto;
+
+  width: 16px;
+  height: 16px;
+
+  accent-color: #ee9fbd;
+
+  cursor: pointer;
+}
+
+
+.post-list-select-bar {
+  position: sticky;
+  bottom: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+
+  margin-top: 10px;
+
+  padding: 10px 12px;
+
+  border: 1px solid #f0d3de;
+
+  background: #fff8fa;
+}
+
+
+.post-list-select-bar[hidden] {
+  display: none;
+}
+
+
+.post-list-select-count {
+  font-size: 10px;
+
+  letter-spacing: 0.04em;
+
+  color: #d980a2;
+}
+
+
+.post-list-select-delete {
+  padding: 6px 14px;
+
+  border: 1px solid #ee9fbd;
+  border-radius: 999px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 10px;
+  font-weight: 500;
+
+  color: #ee9fbd;
+
+  cursor: pointer;
+}
+
+
+.post-list-select-delete:disabled {
+  opacity: 0.35;
+
+  cursor: default;
+}
+
+
+.post-list-select-delete:not(:disabled):hover {
+  background: #ee9fbd;
+
+  color: #ffffff;
+}
+
+
+.post-empty {
+  padding-top: 30px;
+
+  text-align: center;
+
+  font-size: 10px;
+
+  letter-spacing: 0.05em;
+
+  color: #bbbbbb;
+}
+
+
+/* =========================================================
+   BANNER 카테고리
+
+   글이 아니라 지인/사이트 배너 모음. posts-view-banner.js
+   참고. 항상 가운데 정렬, 모바일 기준 적당한 크기로
+   보이도록 min/max 폭을 카드에 직접 건다.
+========================================================== */
+
+.banner-grid {
+  display: flex;
+  flex-wrap: wrap;
+
+  justify-content: center;
+  align-items: flex-start;
+
+  gap: 14px;
+
+  width: 100%;
+}
+
+
+.banner-grid[hidden] {
+  display: none;
+}
+
+
+.banner-card {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  width: 100%;
+  max-width: 220px;
+
+  text-decoration: none;
+
+  cursor: pointer;
+}
+
+
+.banner-card-image {
+  display: block;
+
+  width: 100%;
+  height: auto;
+
+  /*
+    가로폭만 카드에 맞추고 세로는 이미지 원본 비율 그대로
+    (auto) — 강제로 3:1 등에 잘라 넣지 않음.
+  */
+
+  border: 1px solid #eeeeee;
+
+  background: #f6f6f6;
+}
+
+
+.banner-card-name {
+  margin-top: 8px;
+
+  font-size: 11px;
+
+  letter-spacing: 0.03em;
+
+  color: #777777;
+
+  text-align: center;
+}
+
+
+.banner-card:hover .banner-card-name {
+  color: #ee9fbd;
+}
+
+
+/*
+  edit 모드일 때만 보이는 카드 위 컨트롤(수정/삭제/순서).
+  일반 열람 상태에선 카드를 눌러도 그냥 url이 새 탭으로
+  열려야 하므로, 이 버튼들은 카드 앵커 태그 밖으로 뺄 수
+  없어서 stopPropagation으로 클릭 버블링만 막는다
+  (posts-view-banner.js).
+*/
+
+.banner-card-controls {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+
+  display: flex;
+
+  gap: 3px;
+}
+
+
+.banner-card-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 20px;
+  height: 20px;
+
+  padding: 0;
+
+  border: 1px solid #eeeeee;
+  border-radius: 999px;
+
+  background: #ffffff;
+
+  font-size: 9px;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.banner-card-control:hover {
+  color: #ee9fbd;
+
+  border-color: #f0d3de;
+}
+
+
+.banner-card-control:disabled {
+  opacity: 0.3;
+
+  cursor: default;
+}
+
+
+/* =========================================================
+   BANNER EDITOR (add / edit 폼)
+========================================================== */
+
+.banner-editor {
+  display: flex;
+  flex-direction: column;
+
+  gap: 14px;
+
+  width: 100%;
+  max-width: 320px;
+
+  margin: 0 auto;
+
+  padding: 24px 0;
+}
+
+
+.banner-editor[hidden] {
+  display: none;
+}
+
+
+.banner-editor-heading {
+  font-size: 11px;
+  font-weight: 500;
+
+  letter-spacing: 0.08em;
+
+  color: #999999;
+
+  text-align: center;
+}
+
+
+.banner-editor-field {
+  display: flex;
+  flex-direction: column;
+
+  gap: 6px;
+}
+
+
+.banner-editor-field label {
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.08em;
+
+  color: #bbbbbb;
+}
+
+
+.banner-editor-field input {
+  width: 100%;
+
+  padding: 9px 10px;
+
+  border: 1px solid #eeeeee;
+
+  outline: none;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 16px;
+
+  color: #555555;
+
+  transition: border-color 0.2s ease;
+}
+
+
+.banner-editor-field input:focus {
+  border-color: #e6bdcc;
+}
+
+
+.banner-editor-image-row {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+}
+
+
+.banner-editor-preview {
+  display: block;
+
+  width: 96px;
+  height: auto;
+
+  border: 1px solid #eeeeee;
+
+  background: #f6f6f6;
+}
+
+
+.banner-editor-preview[hidden] {
+  display: none;
+}
+
+
+.banner-editor-preview-empty {
+  width: 96px;
+
+  padding: 12px 6px;
+
+  border: 1px dashed #eeeeee;
+
+  font-size: 8.5px;
+
+  letter-spacing: 0.02em;
+
+  line-height: 1.4;
+
+  color: #bbbbbb;
+
+  text-align: center;
+}
+
+
+.banner-editor-preview-empty[hidden] {
+  display: none;
+}
+
+
+.banner-editor-change-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 30px;
+
+  padding: 6px 14px;
+
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+
+  background: transparent;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 10px;
+  font-weight: 500;
+
+  letter-spacing: 0.03em;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+
+.banner-editor-change-button:hover {
+  border-color: #f0d3de;
+
+  background: #fff5f8;
+
+  color: #d980a2;
+}
+
+
+.banner-editor-upload-message {
+  margin: 6px 0 0;
+
+  font-size: 9px;
+
+  letter-spacing: 0.02em;
+
+  color: #d980a2;
+
+  min-height: 11px;
+}
+
+
+.banner-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 8px;
+}
+
+
+.banner-editor-delete {
+  margin-right: auto;
+
+  padding: 8px 14px;
+
+  border: 1px solid #eeeeee;
+  border-radius: 999px;
+
+  background: transparent;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 10px;
+
+  color: #cccccc;
+
+  cursor: pointer;
+}
+
+
+.banner-editor-delete:hover {
+  color: #ee9fbd;
+
+  border-color: #f0d3de;
+}
+
+
+.banner-editor-cancel,
+.banner-editor-save {
+  padding: 8px 16px;
+
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+
+  background: transparent;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 10px;
+  font-weight: 500;
+
+  color: #999999;
+
+  cursor: pointer;
+}
+
+
+.banner-editor-save:hover {
+  border-color: #f0d3de;
+
+  background: #fff5f8;
+
+  color: #d980a2;
+}
+
+
+.banner-editor-message {
+  min-height: 12px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.02em;
+
+  color: #d98080;
+
+  text-align: center;
+}
+
+
+/* =========================================================
+   POST DETAIL
+========================================================== */
+
+.post-detail {
+  width: 100%;
+}
+
+
+.post-detail[hidden] {
+  display: none;
+}
+
+
+.post-detail-title {
+  margin:
+    0
+    0
+    10px;
+
+  font-size: 18px;
+  font-weight: 500;
+
+  line-height: 1.5;
+
+  letter-spacing: 0.03em;
+
+  color: #444444;
+}
+
+
+.post-detail-date {
+  margin-bottom: 36px;
+
+  font-size: 11px;
+
+  letter-spacing: 0.05em;
+
+  color: #bbbbbb;
+}
+
+
+.post-detail-content-wrap {
+  display: flex;
+  justify-content: center;
+
+  overflow: hidden;
+}
+
+
+.post-detail-content-wrap[hidden] {
+  display: none;
+}
+
+
+.post-detail-content {
+  padding-bottom: 60px;
+
+  font-size: 13px;
+
+  line-height: 1.9;
+
+  letter-spacing: 0.025em;
+
+  color: #555555;
+
+  white-space: normal;
+
+  word-break: keep-all;
+}
+
+
+/*
+  HTML 모드 글이 화면보다 넓을 때 posts-view.js가
+  transform: scale()로 축소한다.
+
+  origin을 top left로 하면 축소된 결과물이 원본 박스의
+  왼쪽 위 구석에 붙어버려서, wrap의 justify-content:center가
+  그 "원본 크기 박스"를 중앙에 둬도 실제 보이는 이미지는
+  왼쪽으로 치우쳐 보인다. top center로 축소축을 잡아야
+  결과물의 중심이 박스 중심(=wrap 중심)과 일치해서
+  진짜 가운데 정렬이 된다.
+*/
+
+.post-detail-content.is-html-content {
+  transform-origin: top center;
+}
+
+
+/* =========================================================
+   SECRET GATE
+
+   비밀글을 주인이 아닌 사람이 열었을 때 본문 대신 보이는
+   비밀번호 입력 폼.
+========================================================== */
+
+.post-secret-gate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  gap: 10px;
+
+  padding:
+    70px
+    20px
+    90px;
+
+  text-align: center;
+}
+
+
+.post-secret-gate[hidden] {
+  display: none;
+}
+
+
+.post-secret-gate-icon {
+  font-size: 22px;
+
+  opacity: 0.55;
+}
+
+
+.post-secret-gate-label {
+  margin-bottom: 6px;
+
+  font-size: 11px;
+  font-weight: 500;
+
+  letter-spacing: 0.04em;
+
+  color: #999999;
+}
+
+
+.post-secret-gate-input {
+  width: 100%;
+  max-width: 220px;
+
+  padding: 9px 12px;
+
+  border: 1px solid #eeeeee;
+  border-radius: 0;
+
+  outline: none;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 16px;
+
+  text-align: center;
+
+  color: #555555;
+
+  transition: border-color 0.2s ease;
+}
+
+
+.post-secret-gate-input:focus {
+  border-color: #e6bdcc;
+}
+
+
+.post-secret-gate-button {
+  margin-top: 4px;
+
+  padding: 8px 22px;
+
+  border: 1px solid #e5e5e5;
+  border-radius: 999px;
+
+  background: transparent;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 11px;
+  font-weight: 500;
+
+  letter-spacing: 0.05em;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+
+.post-secret-gate-button:hover {
+  border-color: #f0d3de;
+
+  background: #fff5f8;
+
+  color: #d980a2;
+}
+
+
+.post-secret-gate-message {
+  min-height: 12px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.02em;
+
+  color: #d98080;
+}
+
+
+/* =========================================================
+   POST MODE
+========================================================== */
+
+body.post-mode #loveEvent {
+  display: none;
+}
+
+
+body.post-mode #viewerArea {
+  pointer-events: none;
+}
+
+body.post-mode .site-footer {
+  display: none;
+}
+
+body.post-mode .menu-button,
+body.post-mode .menu-panel,
+body.post-mode .music-button {
+  z-index: 100;
+}
+
+
+/* =========================================================
+   POST BODY STYLE
+========================================================== */
+
+.post-body-paragraph {
+  white-space: pre-wrap;
+}
+
+
+.post-body-paragraph:last-child {
+  margin-bottom: 0 !important;
+}
+
+
+.post-action,
+.post-dialogue {
+  font-size: inherit;
+
+  line-height: inherit;
+
+  letter-spacing: inherit;
+}
+
+
+/* =========================================================
+   INLINE EDITOR STYLES
+   실제 글 + 미리보기 공용
+========================================================== */
+
+
+.post-inline-highlight {
+  padding:
+    0
+    0.12em;
+
+  border-radius:
+    2px;
+
+  box-decoration-break:
+    clone;
+
+  -webkit-box-decoration-break:
+    clone;
+}
+
+
+/* =========================================================
+   POST DETAIL HEADING
+========================================================== */
+
+.post-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  width: 100%;
+
+  margin-bottom: 10px;
+}
+
+
+.post-detail-heading
+.post-detail-title {
+  flex: 1;
+
+  min-width: 0;
+
+  margin: 0;
+}
+
+
+/* =========================================================
+   EDIT / DELETE
+========================================================== */
+
+.post-detail-actions {
+  flex: 0 0 auto;
+
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  padding-top: 5px;
+}
+
+
+.post-detail-actions[hidden] {
+  display: none;
+}
+
+
+.post-action-button {
+  padding: 0;
+
+  border: 0;
+
+  background: transparent;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.05em;
+
+  color: #bbbbbb;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-action-button:hover {
+  color: #777777;
+}
+
+
+.post-delete-button:hover {
+  color: #ee9fbd;
+}
+
+
+/* =========================================================
+   FONT SCALE (독자용 글자 크기 +/-)
+
+   프리셋이 정한 기준 크기에 곱해서 쓰는 방식이라
+   프리셋 자체는 안 건드림. posts-reader-scale.js 참고.
+========================================================== */
+
+.post-detail-font-scale {
+  display: flex;
+  align-items: center;
+
+  gap: 2px;
+
+  flex-shrink: 0;
+}
+
+
+.post-detail-font-scale[hidden] {
+  display: none;
+}
+
+
+.post-detail-font-scale-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 20px;
+  height: 20px;
+
+  padding: 0;
+
+  border: 1px solid #eeeeee;
+  border-radius: 999px;
+
+  background: transparent;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 11px;
+  font-weight: 500;
+
+  line-height: 1;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-detail-font-scale-button:hover {
+  border-color: #f0d3de;
+
+  background: #fff5f8;
+
+  color: #d980a2;
+}
+
+
+.post-detail-font-scale-button:disabled {
+  opacity: 0.35;
+
+  cursor: default;
+}
+
+
+/* =========================================================
+   RELATED POSTS
+========================================================== */
+
+.post-related {
+  width: 100%;
+
+  margin-top: 56px;
+
+  padding-top: 24px;
+
+  border-top:
+    1px solid #eeeeee;
+}
+
+
+.post-related-title {
+  margin-bottom: 12px;
+
+  font-size: 10px;
+  font-weight: 500;
+
+  line-height: 1.4;
+
+  letter-spacing: 0.10em;
+
+  color: #999999;
+}
+
+
+.post-related-list {
+  width: 100%;
+}
+
+
+.post-related-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 18px;
+
+  width: 100%;
+
+  padding:
+    8px
+    1px;
+
+  color: #777777;
+
+  text-decoration: none;
+
+  border-bottom:
+    1px solid #f5f5f5;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    padding-left 0.2s ease;
+}
+
+
+.post-related-item:hover {
+  padding-left: 4px;
+
+  color: #ee9fbd;
+}
+
+
+.post-related-item-title {
+  min-width: 0;
+
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  font-size: 10.5px;
+
+  line-height: 1.5;
+
+  letter-spacing: 0.025em;
+}
+
+
+.post-related-item-date {
+  flex: 0 0 auto;
+
+  font-size: 9px;
+
+  letter-spacing: 0.04em;
+
+  color: #c2c2c2;
+}
+
+
+.post-related-item.current {
+  color: #c5c5c5;
+
+  cursor: default;
+
+  pointer-events: none;
+}
+
+
+.post-related-item.current
+.post-related-item-title::before {
+  content: "♡";
+
+  margin-right: 6px;
+
+  color: #e7b3c7;
+}
+
+
+.post-related-empty {
+  padding:
+    8px
+    0;
+
+  font-size: 9px;
+
+  letter-spacing: 0.04em;
+
+  color: #c0c0c0;
+}
+
+

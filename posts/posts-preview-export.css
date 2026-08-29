@@ -1,0 +1,1124 @@
+/* =========================================================
+   PREVIEW TOGGLE
+   데스크톱에서는 숨김.
+========================================================== */
+
+.post-editor-preview-toggle {
+  display: none;
+}
+
+
+/* =========================================================
+   PREVIEW SECTION
+   DESKTOP
+========================================================== */
+
+.post-editor-preview-section {
+  width: 100%;
+
+  margin-top: 38px;
+
+  padding-top: 20px;
+
+  border-top:
+    1px solid #eeeeee;
+}
+
+
+/*
+  데스크톱에서는 overlay 필요 없음.
+*/
+
+.post-editor-preview-backdrop {
+  display: none;
+}
+
+
+.post-editor-preview-drag-handle {
+  display: none;
+}
+
+
+.post-editor-preview-sheet {
+  width: 100%;
+}
+
+
+/* =========================================================
+   PREVIEW HEADER
+========================================================== */
+
+.post-editor-preview-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+
+  margin-bottom: 8px;
+}
+
+
+.post-editor-preview-label {
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.10em;
+
+  color: #999999;
+}
+
+
+/* =========================================================
+   TITLE / SOURCE VISIBILITY TOGGLE
+
+   프리뷰(및 export)에서 제목/출처를 잠깐 껐다 켜서
+   확인해볼 수 있는 세션 한정 스위치.
+   실제 QUOTE 프리셋 설정은 건드리지 않음.
+========================================================== */
+
+.post-editor-preview-visibility-controls {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  margin-bottom: 12px;
+}
+
+
+/*
+  한 줄에 해당하는 컨트롤 묶음(title/align/body, ratio,
+  source 순서). 예전에는 이 전부가 하나의 flex-wrap 줄에
+  뒤섞여 있었는데, 특히 ratio가 다른 컨트롤들 사이에 끼어
+  모바일에서 지저분해 보여서 줄 단위로 분리했다.
+*/
+
+.post-editor-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.post-editor-preview-visibility-toggle {
+  padding: 3px 9px;
+
+  border:
+    1px solid
+    #e5e5e5;
+
+  border-radius: 4px;
+
+  background: transparent;
+
+  color: #bbbbbb;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.04em;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-editor-preview-visibility-toggle[aria-pressed="true"] {
+  border-color: #f0d3de;
+
+  background: #fff5f8;
+
+  color: #d980a2;
+}
+
+
+.post-editor-preview-visibility-toggle[aria-pressed="false"] {
+  color: #cccccc;
+
+  text-decoration: line-through;
+}
+
+
+/*
+  ratio 트리거는 on/off가 아니라 "펼침/접힘"이라
+  취소선을 쓰지 않음(꺼짐 = 그냥 접힌 상태).
+*/
+
+.post-editor-preview-ratio-trigger[aria-pressed="false"] {
+  color: #bbbbbb;
+
+  text-decoration: none;
+}
+
+
+/* =========================================================
+   SUBROW (source position 등, 조건부로 펼쳐지는 한 줄)
+========================================================== */
+
+.post-editor-preview-subrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.post-editor-preview-subrow[hidden] {
+  display: none;
+}
+
+
+.post-editor-preview-subrow-label {
+  color: #cccccc;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+
+  letter-spacing: 0.04em;
+}
+
+
+/*
+  ★ align/body align/source position — 옵션이 여러 개(3~4개)로
+  늘어나면서 버튼을 줄줄이 늘어놓으면 가독성이 떨어져서
+  드롭다운 하나로 묶었다. title/source 표시 토글, ratio는
+  자주 누르는 on/off라 버튼으로 남겨둠.
+*/
+
+.post-editor-preview-select {
+  padding: 3px 6px;
+
+  border:
+    1px solid
+    #e5e5e5;
+
+  border-radius: 4px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.025em;
+
+  color: #999999;
+
+  cursor: pointer;
+}
+
+
+/* =========================================================
+   RATIO CONTROLS
+========================================================== */
+
+.post-editor-preview-ratio-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.post-editor-preview-ratio-controls[hidden] {
+  display: none;
+}
+
+
+.post-editor-preview-ratio-button {
+  padding: 3px 9px;
+
+  border:
+    1px solid
+    #e5e5e5;
+
+  border-radius: 4px;
+
+  background: transparent;
+
+  color: #bbbbbb;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.04em;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-editor-preview-ratio-button[aria-pressed="true"] {
+  border-color: #f0d3de;
+
+  background: #fff5f8;
+
+  color: #d980a2;
+}
+
+
+.post-editor-preview-ratio-custom-inputs {
+  display: flex;
+  align-items: center;
+
+  gap: 4px;
+}
+
+
+.post-editor-preview-ratio-custom-input {
+  width: 34px;
+
+  padding: 3px 4px;
+
+  border:
+    1px solid
+    #e5e5e5;
+
+  border-radius: 6px;
+
+  background: #ffffff;
+
+  color: #666666;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+
+  text-align: center;
+}
+
+
+.post-editor-preview-ratio-custom-sep {
+  color: #cccccc;
+
+  font-size: 9px;
+}
+
+
+.post-editor-preview-close {
+  display: none;
+
+  padding: 2px 4px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: #aaaaaa;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 15px;
+
+  cursor: pointer;
+}
+
+
+/* =========================================================
+   PREVIEW STAGE
+========================================================== */
+
+.post-editor-preview-stage {
+  position: relative;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  width: 100%;
+
+  /*
+    ★ 높이를 JS가 캔버스 크기에 맞춰 계속 늘려주던 방식은
+    세로로 긴 비율/AUTO에서 뷰포트보다 큰 stage를 만들어
+    캔버스 아랫부분이 화면 밖으로 잘려 보이는 문제가 있었다
+    (admin/admin.css의 .quote-preview-stage에서 이미 같은
+    이유로 고친 적 있음). stage 자체는 고정 높이로 두고,
+    캔버스는 JS(posts-preview-settings.js의
+    applyEditorPreviewScale)가 이 상자의 width/height를 모두
+    고려해 안에 통째로 들어오도록 scale()한다 —
+    object-fit: contain과 같은 개념.
+  */
+
+  height:
+    clamp(
+      440px,
+      55vh,
+      620px
+    );
+
+  padding:
+    10px
+    0
+    6px;
+
+  overflow: hidden;
+}
+
+
+/*
+  JS가 실제 Vibe 프리셋을 읽어서
+  아래 CSS 변수들을 넣어줄 예정.
+
+  예:
+  --post-preview-aspect: 4 / 5
+  --post-preview-page-width: 1080
+  --post-preview-page-height: 1350
+
+  여기서는 비율을 결정하지 않음.
+*/
+
+.post-editor-preview-pages {
+  width: 100%;
+
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+
+/* =========================================================
+   PREVIEW PAGE
+========================================================== */
+
+.post-editor-preview-page {
+  position: relative;
+
+  box-sizing: border-box;
+
+  /*
+    페이지 나누기 계산이 PC/모바일에서 항상 동일하도록
+    실제 레이아웃 너비는 화면 크기와 무관하게 항상 520px로 고정.
+    좁은 화면에서는 JS(applyEditorPreviewScale)가
+    이 520px 캔버스를 통째로 축소해서 보여줌.
+  */
+
+  width: 520px;
+
+  aspect-ratio:
+    var(
+      --post-preview-aspect,
+      4 / 5
+    );
+
+-webkit-text-size-adjust: 100%;
+text-size-adjust: 100%;
+
+  min-height: 0;
+
+  padding:
+    var(
+      --post-preview-padding-y,
+      34px
+    )
+    var(
+      --post-preview-padding-x,
+      30px
+    );
+
+  border:
+    1px solid #eeeeee;
+
+  background: #ffffff;
+
+  overflow: hidden;
+
+  box-shadow:
+    0
+    4px
+    20px
+    rgba(
+      0,
+      0,
+      0,
+      0.035
+    );
+
+      flex: 0 0 auto;
+  flex-shrink: 0;
+}
+
+.post-editor-preview-page[hidden] {
+  display: none !important;
+}
+
+
+/* =========================================================
+   PREVIEW TITLE
+========================================================== */
+
+.post-editor-preview-title {
+  margin-bottom:
+    var(
+      --post-preview-title-gap,
+      22px
+    );
+
+  font-size: 16px;
+  font-weight: 500;
+
+  line-height: 1.5;
+
+  letter-spacing: 0.03em;
+
+  color: #444444;
+
+  word-break: keep-all;
+}
+
+
+/* =========================================================
+   PREVIEW CONTENT
+========================================================== */
+
+.post-editor-preview-content {
+  width: 100%;
+
+  font-size: 13px;
+  font-weight: 400;
+
+  line-height: 1.9;
+
+  letter-spacing: 0.025em;
+
+  color: #555555;
+
+  white-space: normal;
+
+  word-break: keep-all;
+}
+
+
+.post-editor-preview-content
+.post-body-paragraph {
+  white-space: pre-wrap;
+}
+
+
+/*
+  자동 페이지 계산할 때
+  한 페이지 밖 내용이 절대로 삐져나오지 않게.
+*/
+
+.post-editor-preview-page {
+  contain: layout paint;
+}
+
+/* =========================================================
+   PAGE BREAK BUTTON
+========================================================== */
+
+.post-editor-undo-group {
+  margin-left: auto;
+}
+
+
+.post-editor-tool-button.page-break {
+  color: #a9a9a9;
+}
+
+
+.post-editor-tool-button.page-break:hover {
+  color: #d980a2;
+
+  background: #fff5f8;
+}
+
+
+.post-editor-tool-button.undo {
+  color: #a9a9a9;
+}
+
+
+.post-editor-tool-button.undo:hover {
+  color: #d980a2;
+
+  background: #fff5f8;
+}
+
+
+.post-editor-tool-button.undo:disabled {
+  color: #dddddd;
+
+  cursor: default;
+}
+
+
+.post-editor-tool-button.undo:disabled:hover {
+  background: transparent;
+}
+
+
+/* =========================================================
+   PAGE BREAK MARKER
+   에디터 안에서만 보이는 구분선
+========================================================== */
+
+.post-editor-page-break {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+
+  width: 100%;
+
+  margin:
+    18px
+    0;
+
+  color: #c4a6b2;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 8px;
+
+  line-height: 1;
+
+  letter-spacing: 0.10em;
+
+  user-select: none;
+}
+
+
+.post-editor-page-break::before,
+.post-editor-page-break::after {
+  content: "";
+
+  flex: 1;
+
+  height: 1px;
+
+  background: #eeeeee;
+}
+
+
+.post-editor-page-break::before {
+  margin-right: 8px;
+}
+
+
+.post-editor-page-break::after {
+  margin-left: 8px;
+}
+
+
+/* =========================================================
+   PREVIEW PAGINATION
+
+   더 이상 캔버스 아래 흰 바탕 위에 얹힌 툴바가 아니라,
+   stage(캔버스 뷰포트) 안쪽 하단에 가볍게 떠 있는
+   반투명 오버레이. 캔버스를 가리지 않도록 배경은
+   최소한만 쓰고, 화살표는 원형 버튼으로 분리.
+
+   ★ 카드 배경만 옅게(0.35) 하고 opacity는 안 건드림 —
+   컨테이너 전체에 opacity를 주면 화살표/페이지 숫자
+   글자까지 같이 흐려져서 오히려 안 보이게 된다. 평소엔
+   배경 카드가 은은하게 비치다가, 마우스를 올리면(조작하기
+   편하도록) 카드가 또렷해진다.
+========================================================== */
+
+.post-editor-preview-pagination {
+  position: absolute;
+
+  left: 50%;
+  bottom: 10px;
+
+  transform:
+    translateX(-50%);
+
+  z-index: 4;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 6px;
+
+  padding: 3px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.35
+    );
+
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+
+  box-shadow:
+    0
+    2px
+    10px
+    rgba(
+      0,
+      0,
+      0,
+      0.04
+    );
+
+  transition:
+    background 0.2s ease;
+
+  pointer-events: none;
+}
+
+
+.post-editor-preview-pagination:hover,
+.post-editor-preview-pagination:focus-within {
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.8
+    );
+}
+
+
+.post-editor-preview-pagination > * {
+  pointer-events: auto;
+}
+
+
+.post-editor-preview-pagination[hidden] {
+  display: none;
+}
+
+
+.post-editor-preview-page-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 30px;
+  height: 30px;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 50%;
+
+  background:
+    rgba(
+      0,
+      0,
+      0,
+      0.05
+    );
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 16px;
+  font-weight: 300;
+
+  line-height: 1;
+
+  color: #888888;
+
+  cursor: pointer;
+
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-editor-preview-page-button:hover {
+  color: #df8eac;
+
+  background:
+    rgba(
+      223,
+      142,
+      172,
+      0.12
+    );
+}
+
+
+.post-editor-preview-page-button:disabled {
+  color: #cccccc;
+
+  background:
+    rgba(
+      0,
+      0,
+      0,
+      0.03
+    );
+
+  cursor: default;
+}
+
+
+/* =========================================================
+   PREVIEW DESKTOP ZOOM CONTROL
+
+   모바일은 핀치 줌이 있어서 이 버튼이 필요 없음
+   (posts-mobile.css에서 숨김).
+========================================================== */
+
+.post-editor-preview-zoom {
+  position: absolute;
+
+  top: 10px;
+  right: 10px;
+
+  z-index: 4;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  gap: 4px;
+
+  padding: 3px;
+
+  border-radius: 999px;
+
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.35
+    );
+
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+
+  box-shadow:
+    0
+    2px
+    10px
+    rgba(
+      0,
+      0,
+      0,
+      0.04
+    );
+
+  transition:
+    background 0.2s ease;
+}
+
+
+.post-editor-preview-zoom:hover,
+.post-editor-preview-zoom:focus-within {
+  background:
+    rgba(
+      255,
+      255,
+      255,
+      0.8
+    );
+}
+
+
+.post-editor-preview-zoom-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 22px;
+  height: 22px;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 50%;
+
+  background:
+    rgba(
+      0,
+      0,
+      0,
+      0.05
+    );
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 13px;
+  font-weight: 300;
+
+  line-height: 1;
+
+  color: #888888;
+
+  cursor: pointer;
+
+  transition:
+    color 0.18s ease,
+    background 0.18s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-editor-preview-zoom-button:hover {
+  color: #df8eac;
+
+  background:
+    rgba(
+      223,
+      142,
+      172,
+      0.12
+    );
+}
+
+
+.post-editor-preview-zoom-button:disabled {
+  color: #cccccc;
+
+  background:
+    rgba(
+      0,
+      0,
+      0,
+      0.03
+    );
+
+  cursor: default;
+}
+
+
+.post-editor-preview-zoom-level {
+  min-width: 30px;
+
+  text-align: center;
+
+  font-size: 8.5px;
+  font-weight: 500;
+
+  color: #999999;
+}
+
+
+.post-editor-preview-page-indicator {
+  min-width: 36px;
+
+  text-align: center;
+
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.06em;
+
+  color: #888888;
+}
+
+/* =========================================================
+   PREVIEW ACTION / DIALOGUE
+========================================================== */
+
+.post-editor-preview-content
+.post-action {
+  color: #888888;
+}
+
+
+.post-editor-preview-content
+.post-dialogue {
+  color: inherit;
+}
+
+
+/* =========================================================
+   EDITOR BUTTONS
+========================================================== */
+
+.post-editor-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 8px;
+
+  margin-top: 22px;
+}
+
+
+.post-editor-button {
+  min-width: 54px;
+
+  padding:
+    7px
+    10px;
+
+  border:
+    1px solid #e8e8e8;
+
+  border-radius: 0;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.06em;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-editor-button:hover {
+  color: #666666;
+
+  border-color: #dddddd;
+}
+
+
+.post-editor-button.save:hover {
+  color: #d985a5;
+
+  border-color: #e8c1d0;
+
+  background: #fffafb;
+}
+
+.post-editor-button.export,
+.post-editor-button.copy {
+  color: #888888;
+}
+
+
+.post-editor-button.export:hover,
+.post-editor-button.copy:hover {
+  color: #ee9fbd;
+
+  border-color: #e8c1d0;
+
+  background: #fffafb;
+}
+
+.post-editor-button:disabled {
+  opacity: 0.5;
+
+  cursor: default;
+}
+
+
+
+/* =========================================================
+   EDITOR MODE
+========================================================== */
+
+body.post-editor-mode
+.post-header {
+  margin-bottom: 30px;
+}
+
+
+/* =========================================================
+   POSTS FOOTER
+   게시글/카테고리/에디터 맨 마지막
+========================================================== */
+
+.post-site-footer {
+  flex: 0 0 auto;
+
+  width: 100%;
+
+  margin:
+    auto
+    auto
+    0;
+
+  padding:
+    70px
+    0
+    max(
+      8px,
+      env(safe-area-inset-bottom)
+    );
+
+  text-align: center;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  color: #c7c7c7;
+}
+
+.post-today-count {
+  margin-bottom: 5px;
+
+  font-size: 9px;
+
+  letter-spacing: 0.08em;
+}
+
+
+.post-copyright {
+  font-size: 8px;
+
+  letter-spacing: 0.07em;
+
+  color: #d0d0d0;
+}
+
+

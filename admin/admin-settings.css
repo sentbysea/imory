@@ -1,0 +1,659 @@
+/* =========================================================
+   SETTINGS 그룹
+========================================================== */
+
+.settings-group {
+  width: 100%;
+}
+
+
+.settings-group-title {
+  display: flex;
+
+  align-items: baseline;
+  justify-content: space-between;
+
+  gap: 20px;
+
+  margin-bottom: 26px;
+
+  padding-bottom: 10px;
+
+  border-bottom:
+    1px solid
+    #eeeeee;
+}
+
+
+.settings-group-title span {
+  font-size: 11px;
+
+  letter-spacing: 0.08em;
+
+  color: #555555;
+}
+
+
+.settings-group-title small {
+  font-size: 9px;
+
+  color: #b5b5b5;
+}
+
+
+
+/* =========================================================
+   PROFILE 편집창
+========================================================== */
+
+.editor-block {
+  margin-bottom: 26px;
+
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+
+.editor-block label {
+  display: block;
+
+  margin-bottom: 8px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.08em;
+
+  color: #777777;
+}
+
+
+.editor-block textarea {
+  display: block;
+
+  width: 100%;
+
+  min-height: 105px;
+
+  padding:
+    12px 14px;
+
+  resize: vertical;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  border-radius: 6px;
+
+  outline: none;
+
+  background: #ffffff;
+
+  color: #444444;
+
+  font-size: 12px;
+
+  line-height: 1.65;
+
+  transition:
+    border-color 0.2s ease;
+}
+
+
+.editor-block textarea:focus {
+  border-color: #e0bdca;
+}
+
+
+
+/* =========================================================
+   저장 버튼
+========================================================== */
+
+.save-button {
+  display: block;
+
+  min-width: 58px;
+
+  min-height: 30px;
+
+  margin-left: auto;
+
+  margin-right: 14px;
+
+  padding:
+    6px 12px;
+
+  border:
+    1px solid
+    #e8e8e8;
+
+  border-radius: 2px;
+
+  background: #ffffff;
+
+  color: #777777;
+
+  font-size: 10px;
+
+  letter-spacing: 0.06em;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+
+.save-button:hover {
+  color: #e39ab5;
+
+  border-color: #e7c7d3;
+
+  background: #fffafb;
+}
+
+
+.save-button:disabled {
+  opacity: 0.5;
+
+  cursor: default;
+}
+
+
+.save-message {
+  min-height: 20px;
+
+  margin:
+    8px 0 0;
+
+  text-align: right;
+
+  font-size: 10px;
+
+  color: #c66f8e;
+}
+
+
+
+/* =========================================================
+   BGM
+========================================================== */
+
+.bgm-group {
+  margin-top: 0;
+}
+
+
+.setting-line {
+  margin-bottom: 14px;
+
+  padding-left: 14px;
+  padding-right: 14px;
+}
+
+
+.setting-line label {
+  display: block;
+
+  margin-bottom: 8px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.08em;
+
+  color: #777777;
+}
+
+
+.setting-input {
+  display: block;
+
+  width: 100%;
+
+  height: 38px;
+
+  padding:
+    0 12px;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  border-radius: 4px;
+
+  outline: none;
+
+  background: #ffffff;
+
+  color: #444444;
+
+  font-size: 13px;
+
+  transition:
+    border-color 0.2s ease;
+}
+
+
+.setting-input:focus {
+  border-color: #e0bdca;
+}
+
+
+
+/* =========================================================
+   MY BANNER
+
+   admin-my-banner.js 참고.
+========================================================== */
+
+.my-banner-group {
+  margin-top: 0;
+}
+
+
+.my-banner-preview-row {
+  display: flex;
+  align-items: center;
+
+  gap: 12px;
+
+  padding: 0 14px 14px;
+}
+
+
+.my-banner-preview {
+  display: block;
+
+  width: 160px;
+  height: auto;
+
+  border: 1px solid #eeeeee;
+
+  background: #f6f6f6;
+}
+
+
+.my-banner-preview[hidden] {
+  display: none;
+}
+
+
+.my-banner-preview-empty {
+  width: 160px;
+
+  padding: 18px 8px;
+
+  border: 1px dashed #eeeeee;
+
+  font-size: 9px;
+
+  letter-spacing: 0.03em;
+
+  line-height: 1.5;
+
+  color: #bbbbbb;
+
+  text-align: center;
+}
+
+
+.my-banner-preview-empty[hidden] {
+  display: none;
+}
+
+
+.my-banner-change-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 30px;
+
+  padding: 6px 14px;
+
+  border: 1px solid #e8e8e8;
+  border-radius: 2px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 10px;
+  font-weight: 500;
+
+  letter-spacing: 0.03em;
+
+  color: #777777;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+
+.my-banner-change-button:hover {
+  border-color: #e0bdca;
+
+  color: #d980a2;
+}
+
+
+.my-banner-upload-message {
+  margin: 0 0 14px;
+
+  padding: 0 14px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.03em;
+
+  color: #d980a2;
+
+  min-height: 12px;
+}
+
+
+.my-banner-copy-row {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 8px;
+}
+
+
+.my-banner-copy-row .setting-input {
+  flex: 1;
+
+  min-width: 0;
+}
+
+
+.my-banner-copy-button {
+  flex: 0 0 auto;
+
+  min-height: 38px;
+
+  padding: 0 12px;
+
+  border: 1px solid #e8e8e8;
+  border-radius: 4px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.03em;
+
+  color: #777777;
+
+  cursor: pointer;
+
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+
+.my-banner-copy-button:hover {
+  border-color: #e0bdca;
+
+  color: #d980a2;
+}
+
+
+
+/* =========================================================
+   CATEGORIES
+========================================================== */
+
+.categories-group {
+  margin-top: 0;
+}
+
+
+.category-list {
+  margin-bottom: 14px;
+
+  padding:
+    0 14px;
+}
+
+
+.category-item {
+  display: grid;
+
+  grid-template-columns:
+    1fr
+    auto
+    auto;
+
+  align-items: center;
+
+  gap: 12px;
+
+  min-height: 42px;
+
+  border-bottom:
+    1px solid
+    #f1f1f1;
+}
+
+
+.category-type-select {
+  padding: 5px 6px;
+
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+
+  outline: none;
+
+  background: #ffffff;
+
+  color: #888888;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 10px;
+
+  cursor: pointer;
+}
+
+
+.category-name-input {
+  width: 100%;
+
+  min-width: 0;
+
+  padding:
+    8px 0;
+
+  border: 0;
+
+  outline: none;
+
+  background: transparent;
+
+  color: #444444;
+
+  font-size: 13px;
+
+  letter-spacing: 0.04em;
+}
+
+
+.category-name-input:focus {
+  color: #e39ab5;
+}
+
+
+.category-actions {
+  display: flex;
+
+  align-items: center;
+
+  gap: 3px;
+}
+
+
+.category-action {
+  width: 25px;
+
+  height: 25px;
+
+  padding: 0;
+
+  border: 0;
+
+  background: transparent;
+
+  color: #bbbbbb;
+
+  font-size: 10px;
+
+  cursor: pointer;
+}
+
+
+.category-action:hover {
+  color: #e39ab5;
+}
+
+
+.add-category-button {
+  display: block;
+
+  margin:
+    10px 14px
+    20px;
+
+  padding:
+    4px 0;
+
+  border: 0;
+
+  background: transparent;
+
+  color: #aaaaaa;
+
+  font-size: 10px;
+
+  cursor: pointer;
+}
+
+
+
+/* =========================================================
+   SETTINGS 내부 탭
+========================================================== */
+
+.settings-heading-row {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 18px;
+}
+
+
+.settings-tabs {
+  display: flex;
+
+  align-items: center;
+
+  gap: 7px;
+}
+
+
+.settings-tab {
+  padding: 0;
+
+  border: 0;
+
+  border-radius: 0;
+
+  background: transparent;
+
+  color: #b8b8b8;
+
+  font-size: 9px;
+
+  font-weight: 400;
+
+  letter-spacing: 0.08em;
+
+  cursor: pointer;
+
+  appearance: none;
+
+  -webkit-appearance: none;
+
+  transition:
+    color 0.2s ease;
+}
+
+
+.settings-tab:hover {
+  color: #e39ab5;
+}
+
+
+.settings-tab.active {
+  color: #555555;
+}
+
+
+.settings-tab-divider {
+  color: #dddddd;
+
+  font-size: 9px;
+
+  user-select: none;
+}
+
+
+.settings-subpanel {
+  margin-top: 0;
+}
+
+
+
+/* =========================================================
+   COMING SOON
+   (CUSTOMIZE / INQUIRY 준비 화면)
+========================================================== */
+
+.coming-soon {
+  padding:
+    60px 4px;
+
+  text-align: center;
+}
+
+
+.coming-soon-text {
+  margin: 0;
+
+  color: #bbbbbb;
+
+  font-size: 11px;
+
+  letter-spacing: 0.1em;
+}
+
+
+

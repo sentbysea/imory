@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>admin</title>
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
+
+  <!--
+    본문 폰트 선택지 중 "나눔명조"용. Pretendard는 웹폰트로
+    안 불러오고 시스템 sans-serif로 fallback시키는 방식이라
+    (posts/style/posts-style-render.js 참고) 여기 안 넣음.
+  -->
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./admin-shell.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./admin-settings.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./admin-quote.css"
+  >
+
+</head>
+
+
+<body>
+
+  <main class="admin-page">
+
+
+    <!-- =====================================================
+         로그인 전
+    ====================================================== -->
+
+    <section
+      class="login-box"
+      id="loginBox"
+    >
+
+      <h1>
+        admin
+      </h1>
+
+      <p class="login-desc">
+        sign in to continue ♡
+      </p>
+
+      <button
+        class="google-login-button"
+        id="googleLoginButton"
+        type="button"
+      >
+
+        <span class="google-icon">
+          G
+        </span>
+
+        <span>
+          Sign in with Google
+        </span>
+
+      </button>
+
+      <p
+        class="login-message"
+        id="loginMessage"
+      ></p>
+
+    </section>
+
+
+
+    <!-- =====================================================
+         로그인 후
+    ====================================================== -->
+
+    <section
+      class="admin-dashboard"
+      id="adminDashboard"
+      hidden
+    >
+
+
+      <!-- ===================================================
+           공통 상단
+      ==================================================== -->
+
+      <header class="admin-header">
+
+        <div>
+
+          <h1>
+            admin
+          </h1>
+
+          <p
+            class="user-email"
+            id="userEmail"
+          ></p>
+
+        </div>
+
+
+        <button
+          class="logout-button"
+          id="logoutButton"
+          type="button"
+        >
+          logout
+        </button>
+
+      </header>
+
+
+
+      <!-- ===================================================
+           ADMIN HOME
+      ==================================================== -->
+
+      <section
+        class="admin-view"
+        id="adminHome"
+      >
+
+        <div class="admin-menu">
+
+
+          <button
+            class="admin-menu-item"
+            id="openSettingsButton"
+            type="button"
+          >
+
+            <span class="menu-number">
+              01
+            </span>
+
+            <span class="menu-copy">
+
+              <strong>
+                SETTINGS
+              </strong>
+
+            </span>
+
+            <span class="menu-arrow">
+              →
+            </span>
+
+          </button>
+
+
+
+          <button
+            class="admin-menu-item"
+            id="openQuoteButton"
+            type="button"
+          >
+
+            <span class="menu-number">
+              02
+            </span>
+
+            <span class="menu-copy">
+
+              <strong>
+                QUOTE PRESET
+              </strong>
+
+              <small>
+                image style
+              </small>
+
+            </span>
+
+            <span class="menu-arrow">
+              →
+            </span>
+
+          </button>
+
+
+
+          <button
+            class="admin-menu-item"
+            id="openCustomizeButton"
+            type="button"
+          >
+
+            <span class="menu-number">
+              03
+            </span>
+
+            <span class="menu-copy">
+
+              <strong>
+                CUSTOMIZE
+              </strong>
+
+              <small>
+                coming soon
+              </small>
+
+            </span>
+
+            <span class="menu-arrow">
+              →
+            </span>
+
+          </button>
+
+
+
+          <button
+            class="admin-menu-item"
+            id="openInquiryButton"
+            type="button"
+          >
+
+            <span class="menu-number">
+              04
+            </span>
+
+            <span class="menu-copy">
+
+              <strong>
+                INQUIRY
+              </strong>
+
+            </span>
+
+            <span class="menu-arrow">
+              →
+            </span>
+
+          </button>
+
+
+        </div>
+
+      </section>
+
+
+
+      <!-- ===================================================
+           QUOTE PRESET
+
+           admin-quote-panel.html 내용이 여기 자동으로 들어옴.
+           (admin-quote-load.js가 fetch로 주입)
+      ==================================================== -->
+
+      <div id="quotePanelMount"></div>
+
+
+
+      <!-- ===================================================
+           SETTINGS
+      ==================================================== -->
+
+      <section
+        class="admin-view"
+        id="settingsPanel"
+        hidden
+      >
+
+        <div class="view-top">
+
+          <button
+            class="back-button"
+            id="settingsBackButton"
+            type="button"
+          >
+            ← back
+          </button>
+
+
+          <div class="settings-heading-row">
+
+            <div class="view-heading">
+
+              <h2>
+                SETTINGS
+              </h2>
+
+            </div>
+
+
+            <nav
+              class="settings-tabs"
+              aria-label="settings"
+            >
+
+              <button
+                class="settings-tab active"
+                id="profileTabButton"
+                type="button"
+              >
+                PROFILE
+              </button>
+
+              <span class="settings-tab-divider">
+                |
+              </span>
+
+              <button
+                class="settings-tab"
+                id="categoryTabButton"
+                type="button"
+              >
+                CATEGORY
+              </button>
+
+              <span class="settings-tab-divider">
+                |
+              </span>
+
+              <button
+                class="settings-tab"
+                id="bgmTabButton"
+                type="button"
+              >
+                BGM
+              </button>
+
+              <span class="settings-tab-divider">
+                |
+              </span>
+
+              <button
+                class="settings-tab"
+                id="myBannerTabButton"
+                type="button"
+              >
+                MY BANNER
+              </button>
+
+            </nav>
+
+          </div>
+
+        </div>
+
+
+
+        <section
+          class="settings-group settings-subpanel"
+          id="profileSettingsPanel"
+        >
+
+          <div class="settings-group-title">
+
+            <span>
+              PROFILE
+            </span>
+
+            <small>
+              about · notice · ng
+            </small>
+
+          </div>
+
+
+          <div class="editor-block">
+
+            <label for="aboutInput">
+              ABOUT
+            </label>
+
+            <textarea
+              id="aboutInput"
+              placeholder="ABOUT 내용을 입력하세요."
+            ></textarea>
+
+          </div>
+
+
+          <div class="editor-block">
+
+            <label for="noticeInput">
+              NOTICE
+            </label>
+
+            <textarea
+              id="noticeInput"
+              placeholder="NOTICE 내용을 입력하세요."
+            ></textarea>
+
+          </div>
+
+
+          <div class="editor-block">
+
+            <label for="ngInput">
+              NG
+            </label>
+
+            <textarea
+              id="ngInput"
+              placeholder="NG 내용을 입력하세요."
+            ></textarea>
+
+          </div>
+
+
+          <button
+            class="save-button"
+            id="saveButton"
+            type="button"
+          >
+            save
+          </button>
+
+
+          <p
+            class="save-message"
+            id="saveMessage"
+          ></p>
+
+        </section>
+
+
+
+        <section
+          class="settings-group categories-group settings-subpanel"
+          id="categorySettingsPanel"
+          hidden
+        >
+
+          <div class="settings-group-title">
+
+            <span>
+              CATEGORIES
+            </span>
+
+            <small>
+              menu
+            </small>
+
+          </div>
+
+
+          <div
+            class="category-list"
+            id="categoryList"
+          ></div>
+
+
+          <button
+            class="add-category-button"
+            id="addCategoryButton"
+            type="button"
+          >
+            + add category
+          </button>
+
+
+          <button
+            class="save-button"
+            id="categorySaveButton"
+            type="button"
+          >
+            save
+          </button>
+
+
+          <p
+            class="save-message"
+            id="categorySaveMessage"
+          ></p>
+
+        </section>
+
+
+
+        <section
+          class="settings-group bgm-group settings-subpanel"
+          id="bgmSettingsPanel"
+          hidden
+        >
+
+          <div class="settings-group-title">
+
+            <span>
+              BGM
+            </span>
+
+            <small>
+              youtube
+            </small>
+
+          </div>
+
+
+          <div class="setting-line">
+
+            <label for="bgmUrlInput">
+              YouTube URL
+            </label>
+
+            <input
+              id="bgmUrlInput"
+              class="setting-input"
+              type="url"
+              placeholder="https://www.youtube.com/watch?v=..."
+            >
+
+          </div>
+
+
+          <button
+            class="save-button"
+            id="bgmSaveButton"
+            type="button"
+          >
+            save
+          </button>
+
+
+          <p
+            class="save-message"
+            id="bgmSaveMessage"
+          ></p>
+
+        </section>
+
+
+
+        <!-- =================================================
+             MY BANNER
+
+             다른 사람들이 자기 사이트에 내 배너를 심어두면,
+             내가 나중에 이미지를 바꿔도 그쪽 코드는 안 건드려도
+             자동으로 새 이미지가 보이게 하는 기능
+             (admin-my-banner.js 참고). 이미지는 Supabase
+             Storage의 항상 같은 경로에 덮어쓰기(upsert)됨.
+        ================================================== -->
+
+        <section
+          class="settings-group my-banner-group settings-subpanel"
+          id="myBannerSettingsPanel"
+          hidden
+        >
+
+          <div class="settings-group-title">
+
+            <span>
+              MY BANNER
+            </span>
+
+            <small>
+              friends link
+            </small>
+
+          </div>
+
+
+          <div class="my-banner-preview-row">
+
+            <img
+              class="my-banner-preview"
+              id="myBannerPreview"
+              alt="배너 미리보기"
+              hidden
+            >
+
+            <div
+              class="my-banner-preview-empty"
+              id="myBannerPreviewEmpty"
+            >
+              아직 배너 이미지가 없습니다
+            </div>
+
+
+            <label
+              class="my-banner-change-button"
+              for="myBannerFileInput"
+            >
+              change
+            </label>
+
+            <input
+              class="my-banner-file-input"
+              id="myBannerFileInput"
+              type="file"
+              accept="image/*"
+              hidden
+            >
+
+          </div>
+
+
+          <p
+            class="my-banner-upload-message"
+            id="myBannerUploadMessage"
+          ></p>
+
+
+          <div class="setting-line">
+
+            <label for="myBannerUrlInput">
+              배너 클릭 시 이동할 URL
+            </label>
+
+            <input
+              id="myBannerUrlInput"
+              class="setting-input"
+              type="url"
+              placeholder="https://바이브.me"
+            >
+
+          </div>
+
+
+          <div class="setting-line">
+
+            <label for="myBannerImageUrlDisplay">
+              고정 IMAGE URL
+            </label>
+
+            <div class="my-banner-copy-row">
+
+              <input
+                id="myBannerImageUrlDisplay"
+                class="setting-input"
+                type="text"
+                readonly
+              >
+
+              <button
+                class="my-banner-copy-button"
+                id="myBannerCopyImageUrlButton"
+                type="button"
+              >
+                copy image url
+              </button>
+
+            </div>
+
+          </div>
+
+
+          <button
+            class="save-button"
+            id="myBannerSaveButton"
+            type="button"
+          >
+            save
+          </button>
+
+
+          <p
+            class="save-message"
+            id="myBannerSaveMessage"
+          ></p>
+
+        </section>
+
+
+      </section>
+
+
+
+      <!-- ===================================================
+           CUSTOMIZE
+
+           준비 화면만 표시. 배경색/포인트 컬러/홈 화면·설명란
+           편집/요소 배치/PC·모바일 미리보기 등은 추후 구현 예정.
+      ==================================================== -->
+
+      <section
+        class="admin-view"
+        id="customizePanel"
+        hidden
+      >
+
+        <div class="view-top">
+
+          <button
+            class="back-button"
+            id="customizeBackButton"
+            type="button"
+          >
+            ← back
+          </button>
+
+          <div class="view-heading">
+
+            <h2>
+              CUSTOMIZE
+            </h2>
+
+          </div>
+
+        </div>
+
+
+        <section class="coming-soon">
+
+          <p class="coming-soon-text">
+            coming soon
+          </p>
+
+        </section>
+
+      </section>
+
+
+
+      <!-- ===================================================
+           INQUIRY
+
+           운영자가 받는 Inbox가 아니라, 사용자가 imory 운영자에게
+           문의하는 화면. 준비 화면만 표시.
+      ==================================================== -->
+
+      <section
+        class="admin-view"
+        id="inquiryPanel"
+        hidden
+      >
+
+        <div class="view-top">
+
+          <button
+            class="back-button"
+            id="inquiryBackButton"
+            type="button"
+          >
+            ← back
+          </button>
+
+          <div class="view-heading">
+
+            <h2>
+              INQUIRY
+            </h2>
+
+          </div>
+
+        </div>
+
+
+        <section class="coming-soon">
+
+          <p class="coming-soon-text">
+            coming soon
+          </p>
+
+        </section>
+
+      </section>
+
+
+    </section>
+
+  </main>
+
+
+
+  <footer class="admin-site-footer">
+
+    <div
+      class="admin-today-count"
+      data-site-today-count
+    ></div>
+
+    <div
+      class="admin-copyright"
+      data-site-copyright
+    ></div>
+
+  </footer>
+
+
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+  ></script>
+
+  <!-- =========================================================
+       ADMIN QUOTE PANEL LOADER
+
+       admin.js가 최상위 스코프에서 곧바로
+       document.getElementById("quotePanel")과
+       document.getElementById("quoteBackButton") 등을 참조하고
+       (quote/admin-quote-refs.js 이하 전부 동일 — quotePanel
+       내부 요소들을 최상위에서 즉시 참조), admin-session.js도
+       quoteBackButton에 최상위에서 바로 addEventListener를 건다.
+
+       quotePanel 마크업을 admin-quote-panel.html로 분리해
+       fetch로 비동기 주입하게 되면서, 이 스크립트들이 그 주입보다
+       먼저 실행되면 quotePanel/quoteBackButton 등이 아직 DOM에
+       없어 즉시 에러가 난다. 그래서 admin.js부터 site-footer.js
+       까지 전부, 마크업 주입이 끝난 뒤 순서대로 동적 <script>
+       태그로 로드한다(순서는 원래 정적 태그 순서와 동일하게 유지
+       — posts.html 로더와 같은 방식, setTimeout 등 임의 지연 없음).
+  ========================================================== -->
+
+  <script>
+
+    async function loadAdminQuoteModule() {
+
+      const cacheBuster =
+        Date.now();
+
+
+      const quotePanelMount =
+        document.getElementById(
+          "quotePanelMount"
+        );
+
+
+      if (!quotePanelMount) {
+        return;
+      }
+
+
+      try {
+
+        /* ---------------------------------------------
+           QUOTE PANEL HTML 불러오기
+        ---------------------------------------------- */
+
+        const response =
+          await fetch(
+            `./quote/admin-quote-panel.html?v=${cacheBuster}`
+          );
+
+
+        if (!response.ok) {
+
+          throw new Error(
+            `admin-quote-panel.html load failed: ${response.status}`
+          );
+
+        }
+
+
+        const quotePanelHTML =
+          await response.text();
+
+
+        /* ---------------------------------------------
+           QUOTE PANEL HTML 삽입
+        ---------------------------------------------- */
+
+        quotePanelMount.innerHTML =
+          quotePanelHTML;
+
+
+        /* ---------------------------------------------
+           ADMIN JS 실행
+
+           HTML이 전부 들어온 다음에만 실행한다.
+
+           admin.js가 최상위에서 quotePanel을,
+           admin-session.js가 최상위에서 quoteBackButton을
+           바로 참조하므로 반드시 이 순서.
+        ---------------------------------------------- */
+
+        const adminDependencyScripts =
+          [
+            "./admin.js",
+            "./admin-session.js",
+            "./settings/admin-settings-load.js",
+            "./settings/admin-my-banner.js",
+            "./settings/admin-settings-save.js",
+
+            /*
+              옛 admin-quote.js(2900줄+)를 기능별로 쪼갠 파일들.
+              admin-quote-refs.js가 DOM 참조/상태를 담고 있어서
+              반드시 이 그룹의 맨 처음, admin-quote-preset-crud.js가
+              실제 초기 실행부라 반드시 맨 마지막이어야 함.
+            */
+
+            "./quote/admin-quote-refs.js",
+            "./quote/admin-quote-accordion.js",
+            "./quote/admin-quote-ratio-parser.js",
+            "./quote/admin-quote-preview-update.js",
+            "./quote/admin-quote-live-inputs.js",
+            "./quote/admin-quote-apply-preset.js",
+            "./quote/admin-quote-preset-list.js",
+            "./quote/admin-quote-preset-crud.js",
+
+            /*
+              restoreQuoteAccordionState()(preset-crud.js 맨 끝에서
+              실행)가 localStorage에 저장된 개별 아코디언
+              open/close 상태를 되돌리는데, 모바일 탭 필터가
+              그보다 먼저 적용돼 있으면 그 상태에 덮어써질 수
+              있어서 반드시 이 파일이 맨 마지막에 로드돼야 함.
+            */
+
+            "./quote/admin-quote-mobile-tabs.js",
+            "./quote/admin-quote-preview-gesture.js",
+
+            "../site-footer.js"
+          ];
+
+
+        for (
+          const src of adminDependencyScripts
+        ) {
+
+          const dependencyScript =
+            document.createElement(
+              "script"
+            );
+
+
+          dependencyScript.src =
+            `${src}?v=${cacheBuster}`;
+
+
+          await new Promise(
+            (resolve, reject) => {
+
+              dependencyScript.onload =
+                resolve;
+
+
+              dependencyScript.onerror =
+                reject;
+
+
+              document.body.appendChild(
+                dependencyScript
+              );
+
+            }
+          );
+
+        }
+
+
+        /* ---------------------------------------------
+           checkSession() 보정
+
+           admin-session.js가 최상위에서
+           window.addEventListener("load", checkSession)로
+           checkSession을 건다. 원래는 admin-session.js가
+           정적 <script> 태그라 페이지 파싱 중에 곧바로 로드돼서
+           이 등록이 실제 "load" 이벤트보다 항상 먼저 끝났는데,
+           이제 admin-session.js 자체가 quotePanel fetch 이후에
+           동적으로 로드되면서, 그 사이 로딩 시간 때문에 이 등록이
+           실제 "load" 이벤트보다 늦어질 수 있다 — "load"는 한
+           번만 발생하는 이벤트라 이러면 리스너가 영영 안
+           불려서 checkSession()이 실행되지 않고, 그 안에서
+           호출되는 loadAdminSettings()(카테고리/BGM/소개글/
+           MY BANNER 로딩)도 같이 실행되지 않는다.
+
+           document.readyState는 "load" 이벤트가 발생하기
+           직전에 "complete"로 바뀌므로, 이 시점에 이미
+           "complete"라면 그 리스너가 놓친 것이므로 지금 한 번
+           직접 호출해서 보정한다. 아직 "complete"가 아니라면
+           (느린 스타일시트 등) 원래 리스너가 나중에 정상적으로
+           불릴 것이므로 아무 것도 하지 않는다(중복 호출 방지).
+        ---------------------------------------------- */
+
+        if (
+          document.readyState === "complete" &&
+          typeof checkSession === "function"
+        ) {
+
+          checkSession();
+
+        }
+
+
+        console.log(
+          "admin quote module loaded"
+        );
+
+      }
+
+
+      catch (error) {
+
+        console.error(
+          "admin quote module load failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    loadAdminQuoteModule();
+
+  </script>
+
+
+</body>
+
+</html>

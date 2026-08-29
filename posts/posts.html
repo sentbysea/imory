@@ -1,0 +1,1503 @@
+<!-- =========================================================
+     POSTS
+========================================================== -->
+
+<section
+  class="post-area"
+  id="postArea"
+  hidden
+>
+
+  <div class="post-container">
+
+
+    <!-- =====================================================
+         POST HEADER
+    ====================================================== -->
+
+    <header class="post-header">
+
+      <button
+        class="post-back-button"
+        id="postBackButton"
+        type="button"
+        aria-label="뒤로 가기"
+      >
+        ←
+      </button>
+
+
+      <h1
+        class="post-page-title"
+        id="postPageTitle"
+      ></h1>
+
+
+      <button
+        class="list-edit-toggle-button"
+        id="bannerEditToggleButton"
+        type="button"
+        aria-label="배너 편집"
+        hidden
+      >
+        edit
+      </button>
+
+
+      <button
+        class="list-edit-toggle-button"
+        id="postListEditToggleButton"
+        type="button"
+        aria-label="글 목록 편집"
+        hidden
+      >
+        edit
+      </button>
+
+
+      <button
+        class="post-add-button"
+        id="postAddButton"
+        type="button"
+        aria-label="글 추가"
+        hidden
+      >
+        ＋
+      </button>
+
+    </header>
+
+
+
+    <!-- =====================================================
+         CATEGORY POST LIST
+    ====================================================== -->
+
+    <div
+      class="post-list"
+      id="postList"
+    ></div>
+
+
+    <!-- =====================================================
+         글 목록 편집 모드: 선택 삭제
+
+         edit 모드에서만 보임(posts-view-list-select.js).
+    ====================================================== -->
+
+    <div
+      class="post-list-select-bar"
+      id="postListSelectBar"
+      hidden
+    >
+
+      <span
+        class="post-list-select-count"
+        id="postListSelectCount"
+      >
+        0개 선택됨
+      </span>
+
+      <button
+        class="post-list-select-delete"
+        id="postListSelectDeleteButton"
+        type="button"
+        disabled
+      >
+        delete
+      </button>
+
+    </div>
+
+
+    <!-- =====================================================
+         BANNER 카테고리
+
+         posts-view-banner.js 참고. 글 목록 대신 이게 보임.
+    ====================================================== -->
+
+    <div
+      class="banner-grid"
+      id="bannerGrid"
+      hidden
+    ></div>
+
+
+    <form
+      class="banner-editor"
+      id="bannerEditor"
+      hidden
+    >
+
+      <div class="banner-editor-heading">
+        <span id="bannerEditorHeading">
+          ADD BANNER
+        </span>
+      </div>
+
+      <div class="banner-editor-field">
+        <label for="bannerEditorName">
+          NAME
+        </label>
+        <input
+          id="bannerEditorName"
+          type="text"
+          autocomplete="off"
+          placeholder="사이트/지인 이름"
+        >
+      </div>
+
+      <div class="banner-editor-field">
+        <label for="bannerEditorUrl">
+          URL
+        </label>
+        <input
+          id="bannerEditorUrl"
+          type="url"
+          autocomplete="off"
+          placeholder="https://..."
+        >
+      </div>
+
+      <!--
+        배너 이미지는 URL을 직접 입력받지 않고 Storage에
+        업로드함(친구가 이미지를 지우거나 옮기면 우리 목록도
+        깨지는 문제 방지) — posts-view-banner-form.js 참고.
+      -->
+
+      <div class="banner-editor-field">
+
+        <label for="bannerEditorFileInput">
+          BANNER IMAGE
+        </label>
+
+        <div class="banner-editor-image-row">
+
+          <img
+            class="banner-editor-preview"
+            id="bannerEditorPreview"
+            alt=""
+            hidden
+          >
+
+          <div
+            class="banner-editor-preview-empty"
+            id="bannerEditorPreviewEmpty"
+          >
+            이미지 없음
+          </div>
+
+          <label
+            class="banner-editor-change-button"
+            for="bannerEditorFileInput"
+          >
+            change
+          </label>
+
+          <input
+            class="banner-editor-file-input"
+            id="bannerEditorFileInput"
+            type="file"
+            accept="image/*"
+            hidden
+          >
+
+        </div>
+
+        <p
+          class="banner-editor-upload-message"
+          id="bannerEditorUploadMessage"
+        ></p>
+
+      </div>
+
+      <div class="banner-editor-actions">
+
+        <button
+          type="button"
+          class="banner-editor-delete"
+          id="bannerEditorDelete"
+          hidden
+        >
+          delete
+        </button>
+
+        <button
+          type="button"
+          class="banner-editor-cancel"
+          id="bannerEditorCancel"
+        >
+          cancel
+        </button>
+
+        <button
+          type="submit"
+          class="banner-editor-save"
+          id="bannerEditorSave"
+        >
+          save
+        </button>
+
+      </div>
+
+      <div
+        class="banner-editor-message"
+        id="bannerEditorMessage"
+      ></div>
+
+    </form>
+
+
+
+    <!-- =====================================================
+         POST DETAIL
+    ====================================================== -->
+
+    <article
+      class="post-detail"
+      id="postDetail"
+      hidden
+    >
+
+      <div class="post-detail-heading">
+
+        <h1
+          class="post-detail-title"
+          id="postDetailTitle"
+        ></h1>
+
+
+        <div
+          class="post-detail-font-scale"
+          id="postDetailFontScale"
+          hidden
+        >
+
+          <button
+            class="post-detail-font-scale-button"
+            id="postDetailFontScaleDown"
+            type="button"
+            aria-label="글자 크기 작게"
+          >
+            -
+          </button>
+
+          <button
+            class="post-detail-font-scale-button"
+            id="postDetailFontScaleUp"
+            type="button"
+            aria-label="글자 크기 크게"
+          >
+            +
+          </button>
+
+        </div>
+
+
+        <div
+          class="post-detail-actions"
+          id="postDetailActions"
+          hidden
+        >
+
+          <button
+            class="post-action-button"
+            id="postEditButton"
+            type="button"
+          >
+            edit
+          </button>
+
+
+          <button
+            class="post-action-button post-delete-button"
+            id="postDeleteButton"
+            type="button"
+          >
+            delete
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <div
+        class="post-detail-date"
+        id="postDetailDate"
+      ></div>
+
+
+      <!--
+        HTML 모드 글은 폭이 고정된 마크업(카톡 대화창 재현 등)일
+        때가 많아서, 화면보다 넓으면 postDetailContent 전체를
+        축소(scale)해서 화면 안에 들어오게 한다(posts-view.js의
+        fitHtmlPostContentToViewport). wrap은 그 축소된 실제
+        높이만큼만 자리를 차지하게 하는 용도.
+      -->
+
+      <div
+        class="post-detail-content-wrap"
+        id="postDetailContentWrap"
+      >
+
+        <div
+          class="post-detail-content"
+          id="postDetailContent"
+        ></div>
+
+      </div>
+
+
+      <!-- ===================================================
+           SECRET GATE
+
+           비밀글을 주인이 아닌 사람이 열었을 때, 본문
+           대신 이게 보임. 비밀번호는 get_secret_post_content
+           RPC로 DB에서만 대조된다(posts-view.js).
+      ==================================================== -->
+
+      <form
+        class="post-secret-gate"
+        id="postSecretGate"
+        hidden
+      >
+
+        <div class="post-secret-gate-icon">
+          🔒
+        </div>
+
+        <div class="post-secret-gate-label">
+          비밀글입니다
+        </div>
+
+        <input
+          class="post-secret-gate-input"
+          id="postSecretGateInput"
+          type="password"
+          inputmode="text"
+          autocomplete="off"
+          placeholder="비밀번호"
+        >
+
+        <button
+          class="post-secret-gate-button"
+          id="postSecretGateSubmit"
+          type="submit"
+        >
+          확인
+        </button>
+
+        <div
+          class="post-secret-gate-message"
+          id="postSecretGateMessage"
+        ></div>
+
+      </form>
+
+
+
+      <!-- ===================================================
+           RELATED POSTS
+      ==================================================== -->
+
+      <section
+        class="post-related"
+        id="postRelated"
+      >
+
+        <div
+          class="post-related-title"
+          id="postRelatedTitle"
+        ></div>
+
+
+        <div
+          class="post-related-list"
+          id="postRelatedList"
+        ></div>
+
+      </section>
+
+    </article>
+
+
+
+    <!-- =====================================================
+         POST EDITOR
+    ====================================================== -->
+
+    <section
+      class="post-editor"
+      id="postEditor"
+      hidden
+    >
+
+
+      <!-- ===================================================
+           CATEGORY
+      ==================================================== -->
+
+      <div class="post-editor-field">
+
+        <label
+          for="postEditorCategory"
+        >
+          CATEGORY
+        </label>
+
+
+        <select
+          id="postEditorCategory"
+          class="post-editor-input"
+        ></select>
+
+      </div>
+
+
+
+      <!-- ===================================================
+           TITLE
+      ==================================================== -->
+
+      <div class="post-editor-field">
+
+        <label
+          for="postEditorTitle"
+        >
+          TITLE
+        </label>
+
+
+        <input
+          id="postEditorTitle"
+          class="post-editor-input"
+          type="text"
+          autocomplete="off"
+        >
+
+      </div>
+
+
+
+      <!-- ===================================================
+           OOC + HTML MODE
+
+           OOC: 독자에게는 보이지 않는 메모/설정 노트.
+           본문과 완전히 분리된 별도 필드(ooc_content)로
+           저장되어서, 뷰어 쪽에서 아예 안 가져오면
+           절대 노출되지 않는다.
+
+           HTML: 누르면 아래 CONTENT의 리치텍스트 에디터가
+           통째로 사라지고 raw HTML textarea만 나온다.
+      ==================================================== -->
+
+      <div class="post-editor-field post-editor-ooc-field">
+
+        <div class="post-editor-ooc-html-row">
+
+          <button
+            type="button"
+            class="post-editor-ooc-toggle"
+            id="postEditorOOCToggle"
+            aria-expanded="false"
+            aria-controls="postEditorOOC"
+          >
+            OOC
+          </button>
+
+
+          <button
+            type="button"
+            class="post-editor-content-mode-toggle"
+            id="postEditorHtmlModeToggle"
+            aria-pressed="false"
+            title="HTML로 직접 작성 (뷰어에서 그대로 출력됨)"
+          >
+            HTML
+          </button>
+
+
+          <button
+            type="button"
+            class="post-editor-content-mode-toggle post-editor-visibility-toggle"
+            id="postEditorSecretToggle"
+            aria-pressed="false"
+            aria-controls="postEditorSecretPassword"
+            title="비밀글: 목록엔 제목만 보이고, 비밀번호를 맞혀야 본문이 열립니다"
+          >
+            🔒 비밀글
+          </button>
+
+
+          <button
+            type="button"
+            class="post-editor-content-mode-toggle post-editor-visibility-toggle"
+            id="postEditorPrivateToggle"
+            aria-pressed="false"
+            title="비공개: 목록에도 보이지 않고, 나만 볼 수 있습니다"
+          >
+            🙈 비공개
+          </button>
+
+        </div>
+
+
+        <textarea
+          id="postEditorOOC"
+          class="post-editor-input post-editor-ooc-textarea"
+          placeholder="독자에게는 보이지 않는 메모입니다."
+          hidden
+        ></textarea>
+
+
+        <input
+          id="postEditorSecretPassword"
+          class="post-editor-input post-editor-secret-password-input"
+          type="text"
+          inputmode="text"
+          autocomplete="off"
+          placeholder="비밀글 비밀번호 (4자 이상 · 비워두면 기존 비밀번호 유지)"
+          hidden
+        >
+
+      </div>
+
+
+
+      <!-- ===================================================
+           CONTENT
+      ==================================================== -->
+
+      <div class="post-editor-field">
+
+
+        <!-- CONTENT -->
+
+        <div class="post-editor-content-heading">
+
+          <div class="post-editor-content-label">
+            CONTENT
+          </div>
+
+        </div>
+
+
+
+        <!-- =================================================
+             HTML MODE
+
+             켜면 리치텍스트 에디터 대신 이 textarea에
+             HTML을 직접 작성. 저장 시 그대로(sanitize 없이)
+             content에 들어가고, 뷰어에서도 그대로 출력된다.
+             이 모드에서는 발췌 프리뷰/export가 의미 없으므로
+             (posts.js에서) 그 버튼들도 함께 숨긴다.
+        ================================================== -->
+
+        <textarea
+          id="postEditorHtmlContent"
+          class="post-editor-input post-editor-html-textarea"
+          placeholder="여기에 HTML을 직접 작성하세요."
+          spellcheck="false"
+          hidden
+        ></textarea>
+
+
+
+        <!-- =================================================
+             RICHTEXT MODE (기존 툴바 + 리치텍스트 에디터)
+        ================================================== -->
+
+        <div id="postEditorRichtextMode">
+
+
+        <!-- =================================================
+             TOOLBAR
+        ================================================== -->
+
+        <div
+          class="post-editor-toolbar"
+          id="postEditorToolbar"
+        >
+
+
+          <!-- =================================================
+               PAGE BREAK
+          ================================================== -->
+
+          <div class="post-editor-tool-group">
+
+            <span class="post-editor-tool-label">
+              PAGE
+            </span>
+
+
+            <button
+              class="post-editor-tool-button page-break"
+              id="postEditorPageBreak"
+              type="button"
+              title="현재 위치에서 다음 페이지로 넘기기"
+            >
+              break
+            </button>
+
+          </div>
+
+
+
+          <!-- =================================================
+               HIGHLIGHT
+          ================================================== -->
+
+          <div class="post-editor-tool-group">
+
+            <span class="post-editor-tool-label">
+              HIGHLIGHT
+            </span>
+
+
+            <!--
+              단일 컨트롤. 초기 색은 QUOTE PRESET의 하이라이트
+              색(getPresetHighlightColor)을 따르고, 누르면
+              컬러피커가 열려서 바로 조정할 수 있다
+              (updatePresetHighlightSwatch — posts-style-preset.js).
+            -->
+
+            <label
+              class="post-highlight-custom-control"
+              for="postEditorCustomColor"
+              title="highlight color"
+            >
+
+              <span
+                class="post-highlight-swatch"
+                id="postEditorCustomSwatch"
+              ></span>
+
+            </label>
+
+
+            <input
+              id="postEditorCustomColor"
+              class="post-highlight-color-input"
+              type="color"
+              value="#f4dce6"
+              aria-label="하이라이트 색상 선택"
+            >
+
+          </div>
+
+
+
+          <!-- =================================================
+               POINT COLOR
+          ================================================== -->
+
+          <div class="post-editor-tool-group">
+
+            <span class="post-editor-tool-label">
+              POINT COLOR
+            </span>
+
+
+            <!--
+              단일 컨트롤. 초기 색은 QUOTE PRESET의 포인트 컬러
+              (getPresetPointColor)를 따르고, 누르면 컬러피커가
+              열려서 바로 조정할 수 있다.
+            -->
+
+            <label
+              class="post-highlight-custom-control"
+              for="postEditorCustomPointColor"
+              title="point color"
+            >
+
+              <span
+                class="post-highlight-swatch"
+                id="postEditorCustomPointSwatch"
+              ></span>
+
+            </label>
+
+
+            <input
+              id="postEditorCustomPointColor"
+              class="post-highlight-color-input"
+              type="color"
+              value="#5c7cfa"
+              aria-label="포인트 컬러 선택"
+            >
+
+          </div>
+
+
+
+          <!-- =================================================
+               CLEAR
+          ================================================== -->
+
+          <div class="post-editor-tool-group">
+
+            <button
+              class="post-editor-tool-button clear"
+              id="postEditorClearStyle"
+              type="button"
+            >
+              clear
+            </button>
+
+          </div>
+
+
+
+          <!-- =================================================
+               PRESET
+
+               저장해둔 QUOTE 프리셋을 골라서
+               프리뷰/export 서식을 바꿔 끼움
+               (본문 내용은 그대로).
+          ================================================== -->
+
+          <div class="post-editor-tool-group">
+
+            <span class="post-editor-tool-label">
+              PRESET
+            </span>
+
+
+            <select
+              class="post-editor-preset-select"
+              id="postEditorPresetSelect"
+            ></select>
+
+          </div>
+
+
+
+          <!-- =================================================
+               UNDO
+
+               데스크톱은 Ctrl/Cmd+Z(posts-editor-undo.js)로도
+               되는데, 모바일은 키보드 단축키가 없으니 버튼도
+               같이 둠 — 예전 PAGE BREAK가 있던 오른쪽 끝 자리.
+          ================================================== -->
+
+          <div class="post-editor-tool-group post-editor-undo-group">
+
+            <button
+              class="post-editor-tool-button undo"
+              id="postEditorUndoButton"
+              type="button"
+              title="되돌리기 (Ctrl/Cmd+Z)"
+            >
+              undo
+            </button>
+
+          </div>
+
+        </div>
+
+
+
+        <!-- =================================================
+             RICH TEXT EDITOR
+        ================================================== -->
+
+        <div
+          id="postEditorContent"
+          class="post-editor-richtext"
+          contenteditable="true"
+          role="textbox"
+          aria-multiline="true"
+          aria-label="본문 입력"
+          spellcheck="false"
+          data-placeholder="본문을 입력하세요."
+        ></div>
+
+
+        <!-- =================================================
+             MOBILE: 텍스트 선택 시 근처에 뜨는
+             하이라이트 메뉴 (긴 상단 툴바를 안 봐도 되게)
+        ================================================== -->
+
+        <div
+          class="post-editor-floating-menu"
+          id="postEditorFloatingMenu"
+          hidden
+        >
+
+          <label
+            class="post-highlight-custom-control"
+            for="postEditorFloatingCustomColor"
+            title="highlight color"
+          >
+
+            <span
+              class="post-highlight-swatch"
+              id="postEditorFloatingCustomSwatch"
+            ></span>
+
+          </label>
+
+
+          <input
+            id="postEditorFloatingCustomColor"
+            class="post-highlight-color-input"
+            type="color"
+            value="#f4dce6"
+            aria-label="하이라이트 색상 선택"
+          >
+
+
+          <label
+            class="post-highlight-custom-control"
+            for="postEditorFloatingCustomPointColor"
+            title="point color"
+          >
+
+            <span
+              class="post-highlight-swatch"
+              id="postEditorFloatingCustomPointSwatch"
+            ></span>
+
+          </label>
+
+
+          <input
+            id="postEditorFloatingCustomPointColor"
+            class="post-highlight-color-input"
+            type="color"
+            value="#5c7cfa"
+            aria-label="포인트 컬러 선택"
+          >
+
+        </div>
+
+        </div>
+        <!-- /#postEditorRichtextMode -->
+
+      </div>
+
+
+
+      <!-- ===================================================
+           MOBILE PREVIEW BUTTON
+      ==================================================== -->
+
+      <button
+        class="post-editor-preview-toggle"
+        id="postEditorPreviewToggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="postEditorPreviewSection"
+      >
+
+        <span>
+          PREVIEW
+        </span>
+
+        <span
+          class="post-editor-preview-toggle-icon"
+          id="postEditorPreviewToggleIcon"
+        >
+          ↑
+        </span>
+
+      </button>
+
+
+
+      <!-- ===================================================
+           PREVIEW
+      ==================================================== -->
+
+      <section
+        class="post-editor-preview-section"
+        id="postEditorPreviewSection"
+        aria-hidden="true"
+      >
+
+
+        <!-- 모바일 배경 -->
+
+        <button
+          class="post-editor-preview-backdrop"
+          id="postEditorPreviewBackdrop"
+          type="button"
+          aria-label="미리보기 닫기"
+        ></button>
+
+
+
+        <!-- =================================================
+             PREVIEW SHEET
+        ================================================== -->
+
+        <div
+          class="post-editor-preview-sheet"
+          id="postEditorPreviewSheet"
+        >
+
+
+          <!-- DRAG HANDLE (resize) -->
+
+          <div
+            class="post-editor-preview-drag-handle"
+            id="postEditorPreviewDragHandle"
+            aria-hidden="true"
+          ></div>
+
+
+
+          <!-- HEADER -->
+
+          <div class="post-editor-preview-header">
+
+            <span class="post-editor-preview-label">
+              PREVIEW
+            </span>
+
+
+            <button
+              class="post-editor-preview-close"
+              id="postEditorPreviewClose"
+              type="button"
+              aria-label="미리보기 닫기"
+            >
+              ×
+            </button>
+
+          </div>
+
+
+          <!-- ===================================================
+               PREVIEW CONTROLS
+
+               title/align/body → ratio → source 순서로 한 줄씩
+               (PREVIEW 라벨이 자리를 차지하지 않도록 헤더에서
+               분리해서 여기 따로 둠).
+          ==================================================== -->
+
+          <div class="post-editor-preview-visibility-controls">
+
+            <div class="post-editor-preview-row">
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewTitleToggle"
+                type="button"
+                aria-pressed="true"
+              >
+                title
+              </button>
+
+
+              <!-- =============================================
+                   VERTICAL ALIGN (세션 한정 — "preset"이면
+                   QUOTE 프리셋 값을 그대로 따름. 이 글에서만
+                   잠깐 위/가운데로 바꿔보고 싶을 때 사용)
+              ============================================== -->
+
+              <div class="post-editor-preview-subrow">
+
+                <span class="post-editor-preview-subrow-label">
+                  align
+                </span>
+
+
+                <select
+                  class="post-editor-preview-select"
+                  id="postEditorPreviewAlignSelect"
+                >
+
+                  <option value="">
+                    preset
+                  </option>
+
+                  <option value="top">
+                    top
+                  </option>
+
+                  <option value="center">
+                    center
+                  </option>
+
+                </select>
+
+              </div>
+
+
+
+              <!-- =============================================
+                   BODY ALIGN (세션 한정 — "preset"이면 QUOTE
+                   프리셋 값을 그대로 따름)
+              ============================================== -->
+
+              <div class="post-editor-preview-subrow">
+
+                <span class="post-editor-preview-subrow-label">
+                  body
+                </span>
+
+
+                <select
+                  class="post-editor-preview-select"
+                  id="postEditorPreviewBodyAlignSelect"
+                >
+
+                  <option value="">
+                    preset
+                  </option>
+
+                  <option value="left">
+                    left
+                  </option>
+
+                  <option value="center">
+                    center
+                  </option>
+
+                  <option value="right">
+                    right
+                  </option>
+
+                  <option value="justify">
+                    justify
+                  </option>
+
+                </select>
+
+              </div>
+
+            </div>
+
+
+            <div class="post-editor-preview-row">
+
+              <button
+                class="post-editor-preview-visibility-toggle post-editor-preview-ratio-trigger"
+                id="postEditorPreviewRatioTrigger"
+                type="button"
+                aria-pressed="false"
+                aria-expanded="false"
+                aria-controls="postEditorPreviewRatioControls"
+              >
+                ratio
+              </button>
+
+
+              <!-- =============================================
+                   RATIO ("ratio" 버튼을 눌러야 그 옆에 펼쳐짐)
+              ============================================== -->
+
+              <div
+                class="post-editor-preview-ratio-controls"
+                id="postEditorPreviewRatioControls"
+                hidden
+              >
+
+                <button
+                  class="post-editor-preview-ratio-button"
+                  type="button"
+                  data-ratio="4:5"
+                  aria-pressed="false"
+                >
+                  4:5
+                </button>
+
+
+                <button
+                  class="post-editor-preview-ratio-button"
+                  type="button"
+                  data-ratio="4:6"
+                  aria-pressed="false"
+                >
+                  4:6
+                </button>
+
+
+                <button
+                  class="post-editor-preview-ratio-button"
+                  type="button"
+                  data-ratio="1:1"
+                  aria-pressed="false"
+                >
+                  1:1
+                </button>
+
+
+                <button
+                  class="post-editor-preview-ratio-button"
+                  type="button"
+                  data-ratio="4:3"
+                  aria-pressed="false"
+                >
+                  4:3
+                </button>
+
+
+                <button
+                  class="post-editor-preview-ratio-button"
+                  type="button"
+                  data-ratio="auto"
+                  aria-pressed="false"
+                >
+                  auto
+                </button>
+
+
+                <button
+                  class="post-editor-preview-ratio-button"
+                  type="button"
+                  data-ratio="custom"
+                  aria-pressed="false"
+                >
+                  custom
+                </button>
+
+
+                <div
+                  class="post-editor-preview-ratio-custom-inputs"
+                  id="postEditorPreviewRatioCustomInputs"
+                  hidden
+                >
+
+                  <input
+                    class="post-editor-preview-ratio-custom-input"
+                    id="postEditorPreviewRatioCustomWidth"
+                    type="number"
+                    inputmode="numeric"
+                    min="1"
+                    value="4"
+                    aria-label="가로 비율"
+                  >
+
+                  <span class="post-editor-preview-ratio-custom-sep">
+                    :
+                  </span>
+
+                  <input
+                    class="post-editor-preview-ratio-custom-input"
+                    id="postEditorPreviewRatioCustomHeight"
+                    type="number"
+                    inputmode="numeric"
+                    min="1"
+                    value="5"
+                    aria-label="세로 비율"
+                  >
+
+                </div>
+
+              </div>
+
+            </div>
+
+
+            <div class="post-editor-preview-row">
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewSourceToggle"
+                type="button"
+                aria-pressed="true"
+              >
+                source
+              </button>
+
+
+              <!-- =============================================
+                   SOURCE BOTTOM MARGIN (세션 한정 — ratio가
+                   AUTO가 아닐 때만 표시. source는 캔버스 맨
+                   아래에 고정되므로, 그 위치에서 위로 얼마나
+                   띄울지 조절)
+              ============================================== -->
+
+              <div
+                class="post-editor-preview-subrow"
+                id="postEditorPreviewSourceBottomOffsetRow"
+              >
+
+                <span class="post-editor-preview-subrow-label">
+                  margin
+                </span>
+
+
+                <input
+                  class="post-editor-preview-ratio-custom-input"
+                  id="postEditorPreviewSourceBottomOffset"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  max="500"
+                  aria-label="출처 하단 여백"
+                >
+
+              </div>
+
+
+              <!-- =============================================
+                   SOURCE GAP (세션 한정 — ratio가 AUTO일 때만
+                   표시. AUTO는 source가 캔버스 맨 아래 고정이
+                   아니라 본문 바로 아래로 흘러가므로, 대신
+                   title/body 묶음과의 간격을 조절)
+              ============================================== -->
+
+              <div
+                class="post-editor-preview-subrow"
+                id="postEditorPreviewSourceSpacingRow"
+                hidden
+              >
+
+                <span class="post-editor-preview-subrow-label">
+                  gap
+                </span>
+
+
+                <input
+                  class="post-editor-preview-ratio-custom-input"
+                  id="postEditorPreviewSourceSpacing"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  max="300"
+                  aria-label="출처 간격"
+                >
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+
+          <!-- =================================================
+               CANVAS VIEWPORT
+
+               앞으로 이 안에
+               4:5 페이지가 한 장씩 표시됨.
+          ================================================== -->
+
+          <div
+            class="post-editor-preview-stage"
+            id="postEditorPreviewStage"
+          >
+
+
+            <!-- ===============================================
+                 DESKTOP ZOOM CONTROL
+
+                 모바일은 핀치 줌으로 배율을 바꾸지만
+                 데스크톱은 그 제스처가 없으므로, 캔버스
+                 우측 상단에 소형 +/- 버튼을 대신 둔다.
+                 (posts-toolbar-toggles.js에서 동작 연결)
+            ================================================ -->
+
+            <div
+              class="post-editor-preview-zoom"
+              id="postEditorPreviewZoom"
+            >
+
+
+              <button
+                class="post-editor-preview-zoom-button"
+                id="postEditorPreviewZoomOut"
+                type="button"
+                aria-label="축소"
+              >
+                −
+              </button>
+
+
+              <span
+                class="post-editor-preview-zoom-level"
+                id="postEditorPreviewZoomLevel"
+              >
+                100%
+              </span>
+
+
+              <button
+                class="post-editor-preview-zoom-button"
+                id="postEditorPreviewZoomIn"
+                type="button"
+                aria-label="확대"
+              >
+                +
+              </button>
+
+
+            </div>
+
+
+            <div
+              class="post-editor-preview-pages"
+              id="postEditorPreviewPages"
+            >
+
+
+              <!-- =============================================
+                   PAGE 1
+
+                   JS에서 내용이 넘치면
+                   같은 구조의 PAGE 2, 3... 자동 생성 예정.
+              ============================================== -->
+
+              <article
+                class="post-editor-preview post-editor-preview-page"
+                id="postEditorPreview"
+                data-page-index="0"
+              >
+
+
+                <div
+                  class="post-editor-preview-title"
+                  id="postEditorPreviewTitle"
+                ></div>
+
+
+                <div
+                  class="post-editor-preview-content"
+                  id="postEditorPreviewContent"
+                ></div>
+
+
+              </article>
+
+
+            </div>
+
+
+            <!-- ===============================================
+                 PAGE NAVIGATION
+
+                 캔버스(stage) 안쪽에 떠 있는 오버레이.
+                 stage는 핀치 줌/이동 뷰포트라
+                 실제 캔버스 위치는 변할 수 있으므로,
+                 캔버스 모서리가 아니라 stage 하단 중앙에
+                 고정해 항상 같은 자리에 보이게 함.
+            ================================================ -->
+
+            <div
+              class="post-editor-preview-pagination"
+              id="postEditorPreviewPagination"
+              hidden
+            >
+
+
+              <button
+                class="post-editor-preview-page-button"
+                id="postEditorPreviewPrev"
+                type="button"
+                aria-label="이전 페이지"
+              >
+                ‹
+              </button>
+
+
+              <span
+                class="post-editor-preview-page-indicator"
+                id="postEditorPreviewPageIndicator"
+              >
+                1 / 1
+              </span>
+
+
+              <button
+                class="post-editor-preview-page-button"
+                id="postEditorPreviewNext"
+                type="button"
+                aria-label="다음 페이지"
+              >
+                ›
+              </button>
+
+
+            </div>
+
+          </div>
+
+
+        </div>
+
+      </section>
+
+
+
+      <!-- ===================================================
+           EDITOR BUTTONS
+      ==================================================== -->
+
+<div class="post-editor-actions">
+
+  <button
+    id="postEditorCancelButton"
+    class="post-editor-button"
+    type="button"
+  >
+    cancel
+  </button>
+
+  <button
+    id="postEditorCopyButton"
+    class="post-editor-button copy"
+    type="button"
+  >
+    copy
+  </button>
+
+  <button
+    id="postEditorExportButton"
+    class="post-editor-button export"
+    type="button"
+  >
+    export
+  </button>
+
+  <button
+    id="postEditorSaveButton"
+    class="post-editor-button save"
+    type="button"
+  >
+    save
+  </button>
+
+</div>
+
+
+<!--
+  cancel/export/save 버튼 바로 아래.
+  버튼 위(CONTENT 옆)에 있으면 스크롤해서 안 보이는 경우가
+  많아서, 방금 누른 버튼과 같은 화면에 항상 보이는 여기로 옮김.
+-->
+
+<div
+  class="post-editor-message"
+  id="postEditorMessage"
+></div>
+
+
+    </section>
+
+
+  </div>
+
+      <!-- =========================================================
+     POSTS FOOTER
+========================================================== -->
+
+<footer class="post-site-footer">
+
+  <div
+    class="post-today-count"
+    data-site-today-count
+  ></div>
+
+  <div
+    class="post-copyright"
+    data-site-copyright
+  ></div>
+
+</footer>
+
+</section>
