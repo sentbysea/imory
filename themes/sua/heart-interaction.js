@@ -7,24 +7,25 @@
    bgmVideoId/bgmPlaying/playBgm은 home/bgm.js에 있음 —
    이 파일보다 먼저 로드되어야 함.
 
-   openProfile()은 이 파일의 pointerup 리스너 안에서
-   호출되지만 실제 정의는 themes/sua/cover-profile.js에
-   있음. 클릭 시점(모든 스크립트 로드가 끝난 뒤)에만
-   호출되므로 이 파일이 cover-profile.js보다 먼저 로드돼도
-   문제없음(index.html 순서 참고).
+   cover/profile 현재 상태는 core/view-controller.js가
+   소유한다. 이 파일은 더 이상 profileOpen을 직접 갖지 않고,
+   core가 제공하는 getCurrentView()/VIEW_PROFILE로 현재
+   상태를 읽고, 하트 클릭(pointerup)에서는 core의
+   openProfileView()를 호출해 상태 전환만 요청한다.
+   core/view-controller.js가 이 파일보다 먼저 로드되어야 함
+   (index.html 순서 참고).
 
    menuButton/menuPanel 요소 선언, 메뉴 열기/닫기, 상단 고정
    버튼 스크롤 숨김 로직은 테마와 무관한 imory 공통 기능이라
    home/menu.js로 옮겼음. viewerArea/heartViewer/heartGroup/
-   heartStage/page1/page2/moreButton/backButton 요소 선언과
-   profileOpen 상태는 그대로 이 파일에 남아 있고,
-   openProfile/closeProfile 등 실제 프로필 열기/닫기 동작은
-   themes/sua/cover-profile.js로 옮겼음 — cover-profile.js가
-   이 요소들과 profileOpen, stopInertia(),
+   heartStage/page1/page2/moreButton/backButton 요소 선언은
+   그대로 이 파일에 남아 있고, openProfile/closeProfile 등
+   실제 프로필 열기/닫기 연출은 themes/sua/cover-profile.js가
+   core의 "viewchange" 이벤트를 구독해서 수행함 —
+   cover-profile.js가 이 요소들과 stopInertia(),
    stopRotationTracking()을 전역으로 그대로 참조하므로 이
    파일이 그 파일보다 먼저 로드되어야 함(index.html 순서
-   참고). profileOpen의 소유권(선언 위치)은 이번 단계에서
-   바꾸지 않음 — core/view-controller 분리는 다음 단계.
+   참고).
 ========================================================== */
 
 /* =========================================================
@@ -540,7 +541,6 @@ let lastTime = 0;
 let velocityX = 0;
 
 let moved = false;
-let profileOpen = false;
 
 let inertiaFrame = null;
 
@@ -699,7 +699,7 @@ heartViewer.addEventListener(
       }
 
 
-      openProfile();
+      openProfileView();
 
 
       return;
@@ -720,7 +720,7 @@ heartViewer.addEventListener(
 
     stopRotationTracking();
 
-    if (!profileOpen) {
+    if (getCurrentView() !== VIEW_PROFILE) {
 
       heartViewer.autoRotate =
         true;
@@ -761,7 +761,7 @@ function startInertia() {
       stopRotationTracking();
 
 
-      if (!profileOpen) {
+      if (getCurrentView() !== VIEW_PROFILE) {
 
         heartViewer.autoRotate =
           true;

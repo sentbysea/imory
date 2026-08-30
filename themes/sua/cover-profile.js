@@ -4,31 +4,53 @@
    home-profile.js에서 이동(themes/sua 분리).
 
    viewerArea/heartViewer/heartGroup/heartStage/page1/page2/
-   moreButton/backButton 요소와 profileOpen, stopInertia(),
+   moreButton/backButton 요소와 stopInertia(),
    stopRotationTracking()은 themes/sua/heart-interaction.js에
    있음 — 이 파일은 그 파일보다 나중에 로드되어야 함
    (index.html 순서 참고).
 
    메뉴 열기/닫기(menuButton/menuPanel)는 테마와 무관한
-   imory 공통 기능이라 home/menu.js로 옮겼음. profileOpen /
-   openProfile / closeProfile / heartGroup.profile-open
-   강결합은 다음 단계에서 core/view-controller로 분리하기
-   전까지 지금 이대로 sua 테마 안에 그대로 유지함.
+   imory 공통 기능이라 home/menu.js로 옮겼음.
+
+   cover/profile 현재 상태는 core/view-controller.js가
+   소유한다. 이 파일은 상태를 직접 갖거나 대입하지 않고,
+   core가 발행하는 "viewchange" 이벤트를 구독해서 sua 전용
+   연출(관성 정지, autoRotate, profile-open 클래스, 페이지
+   복원 등)만 수행한다. 바깥 클릭으로 닫을 때도 core의
+   closeProfileView()를 호출할 뿐, 상태 전환 자체는 core가
+   담당한다.
 ========================================================== */
 
 /* =========================================================
-   프로필
+   core view change 구독 → sua 전용 연출
 ========================================================== */
 
-function openProfile() {
+window.addEventListener(
+  "viewchange",
+  (event) => {
+
+    if (
+      event.detail.view
+      === VIEW_PROFILE
+    ) {
+
+      handleProfileOpen();
+
+    } else {
+
+      handleProfileClose();
+
+    }
+
+  }
+);
+
+
+function handleProfileOpen() {
 
   stopInertia();
 
   stopRotationTracking();
-
-
-  profileOpen =
-    true;
 
 
   heartViewer.autoRotate =
@@ -45,11 +67,7 @@ function openProfile() {
 }
 
 
-function closeProfile() {
-
-  profileOpen =
-    false;
-
+function handleProfileClose() {
 
   heartGroup.classList.remove(
     "profile-open"
@@ -157,7 +175,10 @@ viewerArea.addEventListener(
   "click",
   (event) => {
 
-    if (!profileOpen) {
+    if (
+      getCurrentView()
+      !== VIEW_PROFILE
+    ) {
       return;
     }
 
@@ -171,7 +192,7 @@ viewerArea.addEventListener(
     }
 
 
-    closeProfile();
+    closeProfileView();
 
   }
 );
