@@ -662,3 +662,115 @@ openInquiryButton
 
 
 
+/* =========================================================
+   QUOTE MODE - 모바일 바깥 페이지 스크롤 잠금
+
+   quote-mode는 showQuotePanel(추가)과 showLogin/showAdminHome/
+   showSettingsPanel/showCustomizePanel/showInquiryPanel(제거)까지
+   총 6곳에서 각각 adminPage.classList를 건드린다. 그 6곳 전부에
+   잠금/해제 호출을 나눠 넣는 대신, adminPage의 class 변화 자체를
+   MutationObserver로 지켜보다가 quote-mode 유무에 맞춰 body를
+   잠그고 풀어준다 — 호출부를 하나도 안 건드려도 항상 정확히
+   동기화됨.
+
+   position:fixed로 body를 통째로 고정하는 이유: .quote-controls
+   내부 스크롤이 끝(맨 위/아래)에 닿은 뒤에도 계속 끌면, 그 여세가
+   상위 스크롤 컨테이너(body)로 그대로 이어져(스크롤 체이닝) 배경
+   페이지가 같이 살짝 끌리며 튕기는(iOS 고무줄) 문제가 있었다 —
+   admin-quote.css의 overscroll-behavior가 체이닝 자체는 막아주지만,
+   구형 WebKit 등 지원이 엇갈리는 환경까지 확실히 막으려면 body를
+   아예 스크롤 불가능한 위치로 빼놓는 게 가장 확실하다. 대신
+   position:fixed는 시각적 스크롤 위치를 0으로 날려버리므로, 잠글 때
+   scrollY를 기억해서 top으로 상쇄하고 풀 때 되돌려야 화면이 안 튄다.
+
+   실제 position:fixed 적용은 admin-quote.css의
+   body.quote-scroll-locked가 @media(max-width:600px) 안에서만
+   담당하므로, 데스크톱에서는 이 클래스가 붙어도 시각적으로 아무
+   변화가 없다(아래 top 인라인 스타일도 position:static인 채로는
+   무의미).
+========================================================== */
+
+let quoteScrollLockY = 0;
+
+function lockAdminBodyScroll() {
+
+  quoteScrollLockY =
+    window.scrollY;
+
+
+  document.body.style.top =
+    `-${quoteScrollLockY}px`;
+
+
+  document.body.classList.add(
+    "quote-scroll-locked"
+  );
+
+}
+
+
+function unlockAdminBodyScroll() {
+
+  document.body.classList.remove(
+    "quote-scroll-locked"
+  );
+
+
+  document.body.style.top =
+    "";
+
+
+  window.scrollTo(
+    0,
+    quoteScrollLockY
+  );
+
+}
+
+
+new MutationObserver(
+  () => {
+
+    const isQuoteMode =
+      adminPage.classList.contains(
+        "quote-mode"
+      );
+
+
+    const isLocked =
+      document.body.classList.contains(
+        "quote-scroll-locked"
+      );
+
+
+    if (
+      isQuoteMode &&
+      !isLocked
+    ) {
+
+      lockAdminBodyScroll();
+
+    }
+
+
+    else if (
+      !isQuoteMode &&
+      isLocked
+    ) {
+
+      unlockAdminBodyScroll();
+
+    }
+
+  }
+)
+  .observe(
+    adminPage,
+    {
+      attributes: true,
+      attributeFilter: ["class"]
+    }
+  );
+
+
+
