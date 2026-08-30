@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>customize renderer test harness</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+  }
+  #reportList {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    max-width: 720px;
+  }
+  #reportList li.pass {
+    color: #2f9e44;
+  }
+  #reportList li.fail {
+    color: #e03131;
+    font-weight: bold;
+  }
+  #defaultMount,
+  #kitchenSinkMount {
+    border: 1px dashed #999;
+    padding: 16px;
+    max-width: 480px;
+    margin-bottom: 16px;
+    background: var(--theme-bg, #fff);
+  }
+</style>
+</head>
+<body>
+
+  <h1>customize renderer test harness</h1>
+  <p>
+    기존 public home/sua와 완전히 격리된 테스트 페이지.
+    index.html의 sua loading 경로는 이 파일과 무관함.
+  </p>
+
+  <h2>1. DEFAULT_LAYOUT</h2>
+  <div id="defaultMount"></div>
+
+  <h2>2. kitchen-sink layout (6 block types + nested container + invalid input)</h2>
+  <div id="kitchenSinkMount"></div>
+
+  <h2>검증 결과</h2>
+  <ul id="reportList"></ul>
+
+  <!-- renderer 스크립트 로드 순서 중요 -->
+  <script src="./block-defaults.js"></script>
+  <script src="./theme-tokens.js"></script>
+  <script src="./validate-layout.js"></script>
+  <script src="./render-layout.js"></script>
+  <script src="./default-layout.js"></script>
+
+  <script>
+
+    const reportList =
+      document.getElementById("reportList");
+
+    function report(name, passed, detail) {
+
+      const item =
+        document.createElement("li");
+
+      item.className =
+        passed ? "pass" : "fail";
+
+      item.textContent =
+        `[${passed ? "PASS" : "FAIL"}] ${name}` +
+        (detail ? ` — ${detail}` : "");
+
+      reportList.appendChild(item);
+
+      console[passed ? "log" : "error"](
+        `[${passed ? "PASS" : "FAIL"}] ${name}`,
+        detail || ""
+      );
+
+    }
+
+    function assert(name, condition, detail) {
+
+      report(name, !!condition, detail);
+
+    }
+
+
+    /* =====================================================
+       1. DEFAULT_LAYOUT render
+    ===================================================== */
+
+    const defaultMount =
+      document.getElementById("defaultMount");
+
+    const defaultValidation =
+      validateCustomizeLayout(DEFAULT_LAYOUT);
+
+    assert(
+      "DEFAULT_LAYOUT validates cleanly",
+      defaultValidation.valid === true,
+      JSON.stringify(defaultValidation.errors)
+    );
+
+    const defaultHandle =
+      renderCustomizeLayout({
+        container: defaultMount,
+        blocks: defaultValidation.layout.blocks,
+        theme: defaultValidation.layout.theme,
+        mode: "view",
+        actions: {
+          openProfile: () => {
+            report("DEFAULT_LAYOUT openProfile callback fired", true);
+          }
+        }
+      });
+
+    assert(
+      "DEFAULT_LAYOUT renders all top-level blocks",
+      defaultMount.querySelectorAll("[data-block-id]").length > 0
+    );
+
+    const defaultButton =
+      defaultMount.querySelector('button[data-block-type="button"]');
+
+    assert(
+      "DEFAULT_LAYOUT button block present",
+      !!defaultButton
+    );
+
+    if (defaultButton) {
+
+      defaultButton.click();
+
+    }
+
+
+    /* =====================================================
+       2. kitchen-sink: 6 block types, nested container,
+          invalid props, unknown block, depth 초과, unsafe URL
+    ===================================================== */
+
+    const rawKitchenSink =
+      {
+        version: 1,
+        theme: { background: "#101014", point: "#ff6b6b" },
+        blocks: [
+
+          { type: "text", props: { content: "hello", size: "bogus-size", align: "center" } },
+
+          { type: "image", props: { src: "https://placehold.co/600x400", alt: "safe" } },
+
+          { type: "image", props: { src: "javascript:alert(1)", alt: "unsafe" } },
+
+          {
+            type: "container",
+            props: { direction: "row", gap: "sm" },
+            children: [
+              { type: "text", props: { content: "nested depth 2" } },
+              {
+                type: "container",
+                props: { direction: "column" },
+                children: [
+                  { type: "text", props: { content: "nested depth 3 (allowed)" } },
+                  {
+                    type: "container",
+                    props: {},
+                    children: [
+                      { type: "text", props: { content: "depth 4 (must be dropped)" } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+
+          { type: "button", props: { variant: "action", label: "call action", actionName: "openProfile" } },
+
+          { type: "button", props: { variant: "external", label: "unsafe link", href: "http://not-https.example" } },
+
+          { type: "button", props: { variant: "external", label: "safe link", href: "https://example.com" } },
+
+          { type: "spacer", props: { size: "lg" } },
+
+          { type: "divider", props: { style: "dashed" } },
+
+          { type: "totally-unknown-type", props: {} },
+
+          { type: "text", children: [{ type: "text", props: { content: "children not allowed here" } }] }
+
+        ]
+      };
+
+    const originalKitchenSinkJSON =
+      JSON.stringify(rawKitchenSink);
+
+    const kitchenValidation =
+      validateCustomizeLayout(rawKitchenSink);
+
+    assert(
+      "input object not mutated by validateCustomizeLayout",
+      JSON.stringify(rawKitchenSink) === originalKitchenSinkJSON
+    );
+
+    assert(
+      "kitchen-sink reports errors (invalid props / unsafe url / unknown type / depth)",
+      kitchenValidation.errors.length >= 5,
+      `errors=${kitchenValidation.errors.length}`
+    );
+
+    assert(
+      "unknown block type dropped",
+      kitchenValidation.errors.some(e => e.code === "unknown-block-type")
+    );
+
+    assert(
+      "depth-exceeded reported",
+      kitchenValidation.errors.some(e => e.code === "depth-exceeded")
+    );
+
+    assert(
+      "unsafe-url reported",
+      kitchenValidation.errors.some(e => e.code === "unsafe-url")
+    );
+
+    assert(
+      "invalid-prop (bad enum) reported",
+      kitchenValidation.errors.some(e => e.code === "invalid-prop")
+    );
+
+    assert(
+      "children-not-allowed reported for non-container",
+      kitchenValidation.errors.some(e => e.code === "children-not-allowed")
+    );
+
+    assert(
+      "depth-4 branch content absent from normalized layout",
+      JSON.stringify(kitchenValidation.layout).includes("depth 4 (must be dropped)") === false
+    );
+
+    assert(
+      "depth-3 branch content present (allowed depth)",
+      JSON.stringify(kitchenValidation.layout).includes("nested depth 3 (allowed)") === true
+    );
+
+    let openProfileCalled =
+      false;
+
+    const kitchenSinkMount =
+      document.getElementById("kitchenSinkMount");
+
+    const kitchenHandle =
+      renderCustomizeLayout({
+        container: kitchenSinkMount,
+        blocks: kitchenValidation.layout.blocks,
+        theme: kitchenValidation.layout.theme,
+        mode: "view",
+        actions: {
+          openProfile: () => { openProfileCalled = true; }
+        }
+      });
+
+    const allSixTypesRendered =
+      ["text", "image", "container", "button", "spacer", "divider"].every(
+        type => kitchenSinkMount.querySelector(`[data-block-type="${type}"]`)
+      );
+
+    assert(
+      "all 6 block types rendered in DOM",
+      allSixTypesRendered
+    );
+
+    assert(
+      "unsafe image (javascript:) not rendered as <img>",
+      kitchenSinkMount.querySelectorAll('img[src^="javascript:"]').length === 0
+    );
+
+    assert(
+      "unsafe external button (http) not rendered as <a>",
+      Array.from(kitchenSinkMount.querySelectorAll("a")).every(
+        a => !a.href.startsWith("http://")
+      )
+    );
+
+    const actionButton =
+      Array.from(kitchenSinkMount.querySelectorAll('button[data-block-type="button"]'))
+        .find(b => b.textContent === "call action");
+
+    if (actionButton) {
+
+      actionButton.click();
+
+    }
+
+    assert(
+      "openProfile action callback invoked via actions[] (not core/view-controller)",
+      openProfileCalled === true
+    );
+
+    assert(
+      "text content rendered via textContent (no HTML injection)",
+      (() => {
+
+        const withHtmlContent =
+          validateCustomizeLayout({
+            version: 1,
+            blocks: [
+              { type: "text", props: { content: "<img src=x onerror=alert(1)>" } }
+            ]
+          });
+
+        const tempMount =
+          document.createElement("div");
+
+        const tempHandle =
+          renderCustomizeLayout({
+            container: tempMount,
+            blocks: withHtmlContent.layout.blocks,
+            theme: withHtmlContent.layout.theme,
+            mode: "view",
+            actions: {}
+          });
+
+        const noInjectedImg =
+          tempMount.querySelectorAll("img").length === 0;
+
+        const rawTagPreserved =
+          tempMount.querySelector('[data-block-type="text"]').textContent
+            === "<img src=x onerror=alert(1)>";
+
+        tempHandle.destroy();
+
+        return noInjectedImg && rawTagPreserved;
+
+      })()
+    );
+
+
+    /* =====================================================
+       update() / destroy()
+    ===================================================== */
+
+    const updateTestMount =
+      document.createElement("div");
+
+    document.body.appendChild(updateTestMount);
+
+    const updateHandle =
+      renderCustomizeLayout({
+        container: updateTestMount,
+        blocks: [{ id: "8f14e45f-ceea-467e-add1-00000000aa01", type: "text", props: { content: "before" } }],
+        theme: { background: "#ffffff", point: "#5c7cfa" },
+        mode: "view",
+        actions: {}
+      });
+
+    assert(
+      "initial render shows 'before'",
+      updateTestMount.textContent.includes("before")
+    );
+
+    updateHandle.update(
+      [{ id: "8f14e45f-ceea-467e-add1-00000000aa02", type: "text", props: { content: "after" } }],
+      { background: "#000000", point: "#00ff00" }
+    );
+
+    assert(
+      "update() replaces content with 'after'",
+      updateTestMount.textContent.includes("after") &&
+      !updateTestMount.textContent.includes("before")
+    );
+
+    assert(
+      "update() re-applies theme tokens",
+      updateTestMount.style.getPropertyValue("--theme-bg").trim() === "#000000"
+    );
+
+    updateHandle.destroy();
+
+    assert(
+      "destroy() empties mount",
+      updateTestMount.children.length === 0
+    );
+
+    assert(
+      "destroy() clears theme tokens",
+      updateTestMount.style.getPropertyValue("--theme-bg").trim() === ""
+    );
+
+    updateTestMount.remove();
+
+
+    /* =====================================================
+       theme-tokens purity
+    ===================================================== */
+
+    const themeInputA =
+      { background: "#111111", point: "#5c7cfa" };
+
+    const themeInputAJSON =
+      JSON.stringify(themeInputA);
+
+    const tokensA1 =
+      computeCustomizeThemeTokens(themeInputA);
+
+    const tokensA2 =
+      computeCustomizeThemeTokens(themeInputA);
+
+    assert(
+      "computeCustomizeThemeTokens does not mutate input",
+      JSON.stringify(themeInputA) === themeInputAJSON
+    );
+
+    assert(
+      "computeCustomizeThemeTokens is deterministic (pure)",
+      JSON.stringify(tokensA1) === JSON.stringify(tokensA2)
+    );
+
+    assert(
+      "dark background produces light text",
+      computeCustomizeThemeTokens({ background: "#0a0a0a", point: "#5c7cfa" })["--theme-text"] === "#ffffff"
+    );
+
+    assert(
+      "light background produces dark text",
+      computeCustomizeThemeTokens({ background: "#ffffff", point: "#5c7cfa" })["--theme-text"] === "#000000"
+    );
+
+    console.log("customize renderer test harness finished");
+
+  </script>
+
+</body>
+</html>
