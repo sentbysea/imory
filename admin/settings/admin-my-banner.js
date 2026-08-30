@@ -11,9 +11,10 @@
    (user-banners/{user_id}/banner, 확장자 없음)에 upsert로
    덮어써서 공개 URL 자체가 절대 안 바뀌게 한다.
 
-   배너 클릭 시 이동할 URL은 site_content 테이블에
-   section='banner_url'로 저장(소개글/공지 등과 같은 테이블,
-   supabase/migrations/*_my_banner_storage.sql 참고).
+   배너 클릭 시 이동할 URL은 site_settings 테이블에
+   key='banner_url'로 저장(bgm_url과 같은 (user_id,key)
+   upsert 패턴, Phase 0-5에서 site_content로부터 이관됨 —
+   .claude/plans/inherited-brewing-raccoon.md 참고).
 ========================================================== */
 
 const MY_BANNER_BUCKET =
@@ -199,13 +200,13 @@ async function loadMyBanner(
   } =
     await supabaseClient
       .from(
-        "site_content"
+        "site_settings"
       )
       .select(
-        "content"
+        "value"
       )
       .eq(
-        "section",
+        "key",
         "banner_url"
       )
       .eq(
@@ -238,7 +239,7 @@ async function loadMyBanner(
   if (myBannerUrlInput) {
 
     myBannerUrlInput.value =
-      data?.content ||
+      data?.value ||
       "";
 
   }
@@ -457,24 +458,30 @@ myBannerSaveButton
       } =
         await supabaseClient
           .from(
-            "site_content"
+            "site_settings"
           )
-          .update({
+          .upsert(
+            {
 
-            content:
-              myBannerUrlInput
-                ?.value
-                .trim() ||
-              ""
+              user_id:
+                user.id,
 
-          })
-          .eq(
-            "section",
-            "banner_url"
-          )
-          .eq(
-            "user_id",
-            user.id
+              key:
+                "banner_url",
+
+              value:
+                myBannerUrlInput
+                  ?.value
+                  .trim() ||
+                ""
+
+            },
+            {
+
+              onConflict:
+                "user_id,key"
+
+            }
           );
 
 

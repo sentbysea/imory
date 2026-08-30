@@ -1,9 +1,9 @@
 /* =========================================================
    SUPABASE CLIENT (공통)
 
-   home/site-content.js, admin/admin.js에 각각 있던 동일한
-   SUPABASE_URL / SUPABASE_KEY / createClient 선언을
-   여기 하나로 모음.
+   home/categories.js(구 home/site-content.js), admin/admin.js에
+   각각 있던 동일한 SUPABASE_URL / SUPABASE_KEY / createClient
+   선언을 여기 하나로 모음.
 
    이 파일은 @supabase/supabase-js CDN 스크립트보다 뒤에,
    그리고 supabaseClient를 쓰는 다른 모든 스크립트보다
@@ -14,10 +14,10 @@
 ========================================================== */
 
 const SUPABASE_URL =
-  "https://iokdgqzfprtggsnrusez.supabase.co";
+  "https://vtwcuvouyipohfonfukj.supabase.co";
 
 const SUPABASE_KEY =
-  "sb_publishable_N9mPjBMUQJEhKYPo9ZMlZg_9i7GEsYp";
+  "sb_publishable_9KQkblZdg92IPiB-p5_g0w_tG7HsMuG";
 
 const supabaseClient =
   window.supabase.createClient(

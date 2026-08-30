@@ -422,7 +422,7 @@ function showSettingsPanel(
   ) {
 
     showSettingsSection(
-      "profile"
+      "category"
     );
 
   }

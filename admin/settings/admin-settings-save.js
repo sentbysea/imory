@@ -4,8 +4,8 @@
    admin-settings.js 분할본 중 마지막. DOM 참조는
    admin-settings-load.js에 있음(반드시 먼저 로드돼야 함).
 
-   내용: 로그인한 유저의 설정 전체 불러오기, 소개글/BGM/
-   카테고리 저장.
+   내용: 로그인한 유저의 설정 전체 불러오기, BGM/카테고리 저장.
+   (about/notice/ng PROFILE 저장은 Phase 0-5에서 레거시 제거됨)
 ========================================================== */
 
 
@@ -16,11 +16,6 @@
 async function loadAdminSettings(
   user
 ) {
-
-  await loadContent(
-    user
-  );
-
 
   await loadBgm(
     user
@@ -36,145 +31,6 @@ async function loadAdminSettings(
   );
 
 }
-
-
-
-/* =========================================================
-   PROFILE 저장
-========================================================== */
-
-saveButton
-  .addEventListener(
-    "click",
-    async () => {
-
-      const {
-        data:
-        userData,
-
-        error:
-        userError
-      } =
-        await supabaseClient
-          .auth
-          .getUser();
-
-
-      if (
-        userError ||
-        !userData.user
-      ) {
-
-        saveMessage.textContent =
-          "로그인이 필요합니다.";
-
-
-        return;
-
-      }
-
-
-      const user =
-        userData.user;
-
-
-      saveButton.disabled =
-        true;
-
-
-      saveMessage.textContent =
-        "저장 중...";
-
-
-      const updates = [
-
-        {
-          section:
-            "about",
-
-          content:
-            aboutInput.value
-        },
-
-        {
-          section:
-            "notice",
-
-          content:
-            noticeInput.value
-        },
-
-        {
-          section:
-            "ng",
-
-          content:
-            ngInput.value
-        }
-
-      ];
-
-
-      for (
-        const item
-        of updates
-      ) {
-
-        const {
-          error
-        } =
-          await supabaseClient
-            .from(
-              "site_content"
-            )
-            .update({
-
-              content:
-                item.content
-
-            })
-            .eq(
-              "section",
-              item.section
-            )
-            .eq(
-              "user_id",
-              user.id
-            );
-
-
-        if (error) {
-
-          console.error(
-            "save error:",
-            error
-          );
-
-
-          saveMessage.textContent =
-            "저장에 실패했습니다.";
-
-
-          saveButton.disabled =
-            false;
-
-
-          return;
-
-        }
-
-      }
-
-
-      saveMessage.textContent =
-        "saved ♡";
-
-
-      saveButton.disabled =
-        false;
-
-    }
-  );
 
 
 

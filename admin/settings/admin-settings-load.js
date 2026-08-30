@@ -6,44 +6,15 @@
    참조를 공유해서 쓰므로 반드시 이 파일이 먼저
    로드돼야 함(admin/index.html 순서 참고).
 
-   내용: DOM 요소 참조, 설정 탭 전환, 소개글/BGM/카테고리
-   목록 불러오기 및 렌더링, 카테고리 순서변경/삭제/추가.
+   내용: DOM 요소 참조, 설정 탭 전환, BGM/카테고리 목록
+   불러오기 및 렌더링, 카테고리 순서변경/삭제/추가.
+   (about/notice/ng PROFILE 탭은 Phase 0-5에서 레거시 제거됨)
 ========================================================== */
 
 
 /* =========================================================
    SETTINGS 요소
 ========================================================== */
-
-const aboutInput =
-  document.getElementById(
-    "aboutInput"
-  );
-
-
-const noticeInput =
-  document.getElementById(
-    "noticeInput"
-  );
-
-
-const ngInput =
-  document.getElementById(
-    "ngInput"
-  );
-
-
-const saveButton =
-  document.getElementById(
-    "saveButton"
-  );
-
-
-const saveMessage =
-  document.getElementById(
-    "saveMessage"
-  );
-
 
 const bgmUrlInput =
   document.getElementById(
@@ -62,12 +33,6 @@ const bgmSaveMessage =
     "bgmSaveMessage"
   );
 
-  const profileTabButton =
-  document.getElementById(
-    "profileTabButton"
-  );
-
-
 const categoryTabButton =
   document.getElementById(
     "categoryTabButton"
@@ -77,12 +42,6 @@ const categoryTabButton =
 const bgmTabButton =
   document.getElementById(
     "bgmTabButton"
-  );
-
-
-const profileSettingsPanel =
-  document.getElementById(
-    "profileSettingsPanel"
   );
 
 
@@ -141,20 +100,12 @@ let deletedCategoryIds =
   [];
 
 /* =========================================================
-   PROFILE 불러오기
-========================================================== */
-
-/* =========================================================
    SETTINGS 내부 탭
 ========================================================== */
 
 function showSettingsSection(
   section
 ) {
-
-  profileSettingsPanel.hidden =
-    section !== "profile";
-
 
   categorySettingsPanel.hidden =
     section !== "category";
@@ -166,12 +117,6 @@ function showSettingsSection(
 
   myBannerSettingsPanel.hidden =
     section !== "mybanner";
-
-
-  profileTabButton.classList.toggle(
-    "active",
-    section === "profile"
-  );
 
 
   categoryTabButton.classList.toggle(
@@ -192,18 +137,6 @@ function showSettingsSection(
   );
 
 }
-
-
-profileTabButton.addEventListener(
-  "click",
-  () => {
-
-    showSettingsSection(
-      "profile"
-    );
-
-  }
-);
 
 
 categoryTabButton.addEventListener(
@@ -240,75 +173,6 @@ myBannerTabButton.addEventListener(
 
   }
 );
-
-async function loadContent(
-  user
-) {
-
-  const {
-    data,
-    error
-  } =
-    await supabaseClient
-      .from(
-        "site_content"
-      )
-      .select(
-        "section, content"
-      )
-      .eq(
-        "user_id",
-        user.id
-      );
-
-
-  if (error) {
-
-    console.error(
-      "load content error:",
-      error
-    );
-
-
-    saveMessage.textContent =
-      "내용을 불러오지 못했습니다.";
-
-
-    return;
-
-  }
-
-
-  const contentMap =
-    {};
-
-
-  data.forEach(
-    row => {
-
-      contentMap[
-        row.section
-      ] =
-        row.content || "";
-
-    }
-  );
-
-
-  aboutInput.value =
-    contentMap.about || "";
-
-
-  noticeInput.value =
-    contentMap.notice || "";
-
-
-  ngInput.value =
-    contentMap.ng || "";
-
-}
-
-
 
 /* =========================================================
    BGM 불러오기
