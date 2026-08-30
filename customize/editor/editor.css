@@ -1,0 +1,601 @@
+/* =========================================================
+   CUSTOMIZE EDITOR SHELL (1단계)
+
+   admin의 디자인 톤(흰색 중심 / 옅은 분홍 포인트 / 각진 사각형 /
+   얇은 border / 그림자·gradient 최소화)을 따르되, admin css에
+   의존하지 않는 독립 페이지로 작성한다.
+========================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+
+  height: 100%;
+}
+
+
+body {
+  background: #ffffff;
+
+  color: #333333;
+
+  font-family:
+    Arial,
+    sans-serif;
+}
+
+
+button,
+input {
+  font: inherit;
+}
+
+
+button {
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+[hidden] {
+  display: none !important;
+}
+
+
+
+/* =========================================================
+   전체 shell
+
+   데스크톱: 좌우 2컬럼.
+   모바일(아래 media query): preview가 위, panel이 아래로
+   내려가는 세로 구조로 전환.
+========================================================== */
+
+.customize-editor-shell {
+  display: flex;
+
+  height: 100vh;
+
+  overflow: hidden;
+}
+
+
+
+/* =========================================================
+   LEFT: editor panel
+========================================================== */
+
+.customize-editor-panel {
+  display: flex;
+
+  flex-direction: column;
+
+  flex: 0 0 340px;
+
+  width: 340px;
+
+  border-right:
+    1px solid
+    #eeeeee;
+
+  overflow: hidden;
+}
+
+
+.customize-editor-panel-scroll {
+  flex: 1;
+
+  overflow-y: auto;
+
+  padding: 20px 0 24px;
+}
+
+
+.customize-editor-panel-footer {
+  flex-shrink: 0;
+
+  padding: 12px 14px;
+
+  border-top:
+    1px solid
+    #eeeeee;
+
+  display: flex;
+
+  justify-content: flex-end;
+}
+
+
+
+/* =========================================================
+   panel 헤더
+========================================================== */
+
+.customize-editor-panel-header {
+  display: flex;
+
+  flex-direction: column;
+
+  gap: 4px;
+
+  padding: 0 18px;
+
+  margin-bottom: 20px;
+}
+
+
+.customize-editor-title {
+  font-size: 13px;
+
+  font-weight: 700;
+
+  letter-spacing: 0.08em;
+
+  color: #333333;
+}
+
+
+.customize-editor-subtitle {
+  font-size: 9px;
+
+  color: #b5b5b5;
+
+  letter-spacing: 0.03em;
+}
+
+
+
+/* =========================================================
+   COVER / PROFILE 탭
+========================================================== */
+
+.customize-page-tabs {
+  display: flex;
+
+  gap: 6px;
+
+  padding: 0 18px;
+
+  margin-bottom: 16px;
+}
+
+
+.customize-page-tab {
+  flex: 1;
+
+  padding: 8px 0;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  border-radius: 2px;
+
+  background: #ffffff;
+
+  color: #999999;
+
+  font-size: 10px;
+
+  letter-spacing: 0.08em;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+
+.customize-page-tab:hover {
+  color: #e39ab5;
+
+  border-color: #e7c7d3;
+}
+
+
+.customize-page-tab.active {
+  color: #c66f8e;
+
+  border-color: #e39ab5;
+
+  background: #fff5f8;
+}
+
+
+
+/* =========================================================
+   Elements / Settings 탭
+========================================================== */
+
+.customize-panel-tabs {
+  display: flex;
+
+  align-items: center;
+
+  gap: 7px;
+
+  padding: 0 18px;
+
+  margin-bottom: 14px;
+}
+
+
+.customize-panel-tab {
+  padding: 0;
+
+  border: 0;
+
+  background: transparent;
+
+  color: #b8b8b8;
+
+  font-size: 9px;
+
+  letter-spacing: 0.08em;
+
+  cursor: pointer;
+
+  transition: color 0.2s ease;
+}
+
+
+.customize-panel-tab:hover {
+  color: #e39ab5;
+}
+
+
+.customize-panel-tab.active {
+  color: #555555;
+}
+
+
+.customize-panel-tab-divider {
+  color: #dddddd;
+
+  font-size: 9px;
+
+  user-select: none;
+}
+
+
+
+/* =========================================================
+   panel section 공통
+========================================================== */
+
+.customize-panel-section {
+  padding: 0 18px;
+}
+
+
+.customize-panel-hint {
+  margin: 0 0 14px;
+
+  font-size: 9px;
+
+  line-height: 1.6;
+
+  color: #b5b5b5;
+}
+
+
+
+/* =========================================================
+   Elements 목록
+========================================================== */
+
+.customize-elements-list {
+  list-style: none;
+
+  margin: 0;
+  padding: 0;
+
+  border-top:
+    1px solid
+    #eeeeee;
+}
+
+
+.customize-element-item {
+  display: flex;
+
+  align-items: baseline;
+
+  gap: 8px;
+
+  padding: 10px 4px;
+
+  border-bottom:
+    1px solid
+    #eeeeee;
+
+  cursor: pointer;
+
+  transition: background 0.2s ease;
+}
+
+
+.customize-element-item:hover {
+  background: #fafafa;
+}
+
+
+.customize-element-item.selected {
+  background: #fff5f8;
+}
+
+
+.customize-element-type {
+  flex-shrink: 0;
+
+  font-size: 8px;
+
+  letter-spacing: 0.06em;
+
+  text-transform: uppercase;
+
+  color: #cccccc;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  border-radius: 2px;
+
+  padding: 2px 5px;
+}
+
+
+.customize-element-item.selected
+.customize-element-type {
+  color: #c66f8e;
+
+  border-color: #e7c7d3;
+}
+
+
+.customize-element-label {
+  overflow: hidden;
+
+  text-overflow: ellipsis;
+
+  white-space: nowrap;
+
+  font-size: 11px;
+
+  color: #555555;
+}
+
+
+.customize-elements-empty {
+  padding: 14px 4px;
+
+  font-size: 10px;
+
+  color: #b5b5b5;
+}
+
+
+
+/* =========================================================
+   Settings — color input
+========================================================== */
+
+.customize-setting-line {
+  margin-bottom: 20px;
+}
+
+
+.customize-setting-line label {
+  display: block;
+
+  margin-bottom: 8px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.06em;
+
+  color: #777777;
+}
+
+
+.customize-color-input-row {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+}
+
+
+.customize-color-input-row input[type="color"] {
+  width: 34px;
+  height: 30px;
+
+  padding: 2px;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  border-radius: 2px;
+
+  background: #ffffff;
+
+  cursor: pointer;
+}
+
+
+.customize-color-value {
+  font-size: 10px;
+
+  letter-spacing: 0.04em;
+
+  color: #999999;
+}
+
+
+
+/* =========================================================
+   save 버튼
+
+   admin .save-button과 동일한 톤(각진 사각형 / 얇은 border /
+   호버 시 분홍).
+========================================================== */
+
+.customize-save-button {
+  min-width: 58px;
+
+  min-height: 30px;
+
+  padding: 6px 12px;
+
+  border:
+    1px solid
+    #e8e8e8;
+
+  border-radius: 2px;
+
+  background: #ffffff;
+
+  color: #777777;
+
+  font-size: 10px;
+
+  letter-spacing: 0.06em;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+
+.customize-save-button:hover:not(:disabled) {
+  color: #e39ab5;
+
+  border-color: #e7c7d3;
+
+  background: #fffafb;
+}
+
+
+.customize-save-button:disabled {
+  opacity: 0.5;
+
+  cursor: default;
+}
+
+
+
+/* =========================================================
+   RIGHT: preview
+
+   public-like preview 영역 — editor 전용 컨트롤을 preview
+   내부(customize-preview-mount)에 넣지 않는다.
+========================================================== */
+
+.customize-editor-preview {
+  flex: 1;
+
+  overflow-y: auto;
+
+  padding: 40px 24px;
+
+  background: #fafafa;
+
+  display: flex;
+
+  justify-content: center;
+}
+
+
+.customize-preview-mount {
+  width: 100%;
+  max-width: 480px;
+
+  height: fit-content;
+
+  min-height: 480px;
+
+  padding: 24px;
+
+  border:
+    1px solid
+    #eeeeee;
+
+  background: var(--theme-bg, #ffffff);
+}
+
+
+/*
+  renderer가 만든 block 노드 자체에 붙는 선택 표시.
+  editor.js가 이미 존재하는 [data-block-id] element에
+  클래스만 토글한다 — 새 DOM을 삽입하지 않는다.
+*/
+
+.customize-preview-mount
+[data-block-id].customize-editor-block-selected {
+  outline:
+    2px solid
+    #e39ab5;
+
+  outline-offset: 2px;
+}
+
+
+
+/* =========================================================
+   모바일 responsive shell
+
+   완성형 모바일 editor는 이번 단계 범위 밖 — preview가 위로
+   오고 panel이 아래로 내려가는 최소 구조만 보장한다.
+========================================================== */
+
+@media (max-width: 900px) {
+
+  .customize-editor-shell {
+    flex-direction: column;
+
+    height: auto;
+
+    min-height: 100vh;
+  }
+
+
+  .customize-editor-preview {
+    order: 1;
+
+    flex: none;
+
+    padding: 20px 16px;
+  }
+
+
+  .customize-editor-panel {
+    order: 2;
+
+    flex: none;
+
+    width: 100%;
+
+    max-height: 60vh;
+
+    border-right: 0;
+
+    border-top:
+      1px solid
+      #eeeeee;
+  }
+
+}

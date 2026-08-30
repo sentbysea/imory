@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>customize editor</title>
+
+  <link
+    rel="stylesheet"
+    href="./editor.css"
+  >
+
+</head>
+
+
+<body>
+
+  <!-- =========================================================
+       CUSTOMIZE EDITOR SHELL (1단계)
+
+       왼쪽 editor panel + 오른쪽 실제 renderCustomizeLayout()
+       preview. 아직 Supabase 연동/drag/property editor 없음 —
+       구조만 잡는 단계.
+  ========================================================== -->
+
+  <div class="customize-editor-shell">
+
+
+    <!-- ===================================================
+         LEFT: editor panel
+    ==================================================== -->
+
+    <aside class="customize-editor-panel">
+
+      <div class="customize-editor-panel-scroll">
+
+        <div class="customize-editor-panel-header">
+
+          <span class="customize-editor-title">
+            CUSTOMIZE
+          </span>
+
+          <span class="customize-editor-subtitle">
+            editor (1단계 · preview only)
+          </span>
+
+        </div>
+
+
+        <!-- =============================================
+             COVER / PROFILE 전환
+        ============================================== -->
+
+        <nav
+          class="customize-page-tabs"
+          aria-label="편집 대상 페이지"
+        >
+
+          <button
+            class="customize-page-tab active"
+            id="pageTabCoverButton"
+            type="button"
+          >
+            COVER
+          </button>
+
+          <button
+            class="customize-page-tab"
+            id="pageTabProfileButton"
+            type="button"
+          >
+            PROFILE
+          </button>
+
+        </nav>
+
+
+        <!-- =============================================
+             Elements / Settings 탭
+        ============================================== -->
+
+        <nav
+          class="customize-panel-tabs"
+          aria-label="편집 패널"
+        >
+
+          <button
+            class="customize-panel-tab active"
+            id="panelTabElementsButton"
+            type="button"
+          >
+            Elements
+          </button>
+
+          <span class="customize-panel-tab-divider">
+            |
+          </span>
+
+          <button
+            class="customize-panel-tab"
+            id="panelTabSettingsButton"
+            type="button"
+          >
+            Settings
+          </button>
+
+        </nav>
+
+
+        <!-- =============================================
+             Elements 패널
+        ============================================== -->
+
+        <section
+          class="customize-panel-section"
+          id="elementsPanel"
+        >
+
+          <p class="customize-panel-hint">
+            block을 클릭하면 오른쪽 preview에서도 선택 표시됩니다.
+            (아직 순서 변경/추가/삭제는 지원하지 않습니다.)
+          </p>
+
+          <ul
+            class="customize-elements-list"
+            id="elementsList"
+          ></ul>
+
+        </section>
+
+
+        <!-- =============================================
+             Settings 패널
+        ============================================== -->
+
+        <section
+          class="customize-panel-section"
+          id="settingsPanel"
+          hidden
+        >
+
+          <p class="customize-panel-hint">
+            Background / Point Color는 이 CUSTOMIZE 홈에만
+            적용됩니다. 저장은 아직 지원하지 않습니다.
+          </p>
+
+          <div class="customize-setting-line">
+
+            <label for="backgroundColorInput">
+              Background Color
+            </label>
+
+            <div class="customize-color-input-row">
+
+              <input
+                type="color"
+                id="backgroundColorInput"
+              >
+
+              <span
+                class="customize-color-value"
+                id="backgroundColorValue"
+              ></span>
+
+            </div>
+
+          </div>
+
+
+          <div class="customize-setting-line">
+
+            <label for="pointColorInput">
+              Point Color
+            </label>
+
+            <div class="customize-color-input-row">
+
+              <input
+                type="color"
+                id="pointColorInput"
+              >
+
+              <span
+                class="customize-color-value"
+                id="pointColorValue"
+              ></span>
+
+            </div>
+
+          </div>
+
+        </section>
+
+      </div>
+
+
+      <!-- =============================================
+           SAVE (1단계에서는 동작 없음)
+      ============================================== -->
+
+      <div class="customize-editor-panel-footer">
+
+        <button
+          class="customize-save-button"
+          id="customizeSaveButton"
+          type="button"
+          disabled
+          title="저장은 다음 단계에서 구현됩니다"
+        >
+          save
+        </button>
+
+      </div>
+
+    </aside>
+
+
+
+    <!-- ===================================================
+         RIGHT: renderCustomizeLayout() preview
+
+         editor 전용 버튼/드래그 handle을 이 안에 넣지 않는다 —
+         renderCustomizeLayout()가 만든 DOM 구조를 그대로 둔다.
+    ==================================================== -->
+
+    <main class="customize-editor-preview">
+
+      <div
+        class="customize-preview-mount"
+        id="customizePreviewMount"
+      ></div>
+
+    </main>
+
+
+  </div>
+
+
+  <!-- =========================================================
+       renderer 스크립트 로드 순서 중요
+       (customize/renderer/renderer-test.html과 동일 순서)
+  ========================================================== -->
+
+  <script src="../renderer/block-defaults.js"></script>
+  <script src="../renderer/theme-tokens.js"></script>
+  <script src="../renderer/validate-layout.js"></script>
+  <script src="../renderer/render-layout.js"></script>
+  <script src="../renderer/default-layout.js"></script>
+
+  <script src="./editor.js"></script>
+
+</body>
+
+</html>
