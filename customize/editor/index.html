@@ -12,6 +12,19 @@
 
   <title>커스터마이즈 편집기</title>
 
+  <!--
+    PRETENDARD — admin과 동일한 공통 UI 폰트. 이 문서는 admin
+    iframe 안에서 독립된 browsing context로 로드되므로 admin의
+    <link>를 상속받지 않는다 — 따로 불러와야 함.
+  -->
+
+  <link
+    rel="stylesheet"
+    as="style"
+    crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
+  >
+
   <link
     rel="stylesheet"
     href="./editor.css"
@@ -41,11 +54,13 @@
 
       <div class="customize-editor-panel-scroll">
 
-        <div class="customize-editor-panel-header">
+        <!--
+             바깥 admin(customizePanel)에 이미 "CUSTOMIZE" 제목이
+             있으므로 여기서는 굵은 제목을 반복하지 않는다 — 이
+             패널이 무엇인지만 작은 규칙 텍스트로 짚어준다.
+        -->
 
-          <span class="customize-editor-title">
-            CUSTOMIZE
-          </span>
+        <div class="customize-editor-panel-header">
 
           <span class="customize-editor-subtitle">
             홈 화면 편집기
@@ -71,7 +86,12 @@
 
 
         <!-- =============================================
-             Elements / Settings 탭
+             페이지 설정 / 요소 추가 / 요소 설정 탭
+
+             기본 진입 탭 = 페이지 설정(updateCustomizePanelTabUI
+             참고). preview에서 빈 배경을 클릭하면 페이지 설정으로,
+             block을 클릭하면 요소 설정으로 자동 전환된다
+             (handleCustomizePreviewClick/selectCustomizeBlock).
         ============================================== -->
 
         <nav
@@ -81,10 +101,10 @@
 
           <button
             class="customize-panel-tab active"
-            id="panelTabElementsButton"
+            id="panelTabPageButton"
             type="button"
           >
-            요소
+            페이지 설정
           </button>
 
           <span class="customize-panel-tab-divider">
@@ -93,28 +113,491 @@
 
           <button
             class="customize-panel-tab"
-            id="panelTabSettingsButton"
+            id="panelTabAddButton"
             type="button"
           >
-            설정
+            요소 추가
+          </button>
+
+          <span class="customize-panel-tab-divider">
+            |
+          </span>
+
+          <button
+            class="customize-panel-tab"
+            id="panelTabElementButton"
+            type="button"
+          >
+            요소 설정
           </button>
 
         </nav>
 
 
         <!-- =============================================
-             Elements 패널
+             페이지 설정 패널 — 배경/Content Area(사이트+페이지
+             단위 설정). block 선택 여부와 무관하게 항상 이 내용
+             그대로 보인다. QUOTE PRESET 아코디언 패턴을 따른다
+             (initCustomizeAccordions 참고).
         ============================================== -->
 
         <section
           class="customize-panel-section"
-          id="elementsPanel"
+          id="pageSettingsPanel"
+        >
+
+          <!-- 1. 디자인 -->
+
+          <div class="customize-accordion">
+
+            <button
+              type="button"
+              class="customize-accordion-toggle"
+              aria-expanded="true"
+            >
+              <span class="customize-accordion-title">
+                디자인
+              </span>
+              <span class="customize-accordion-icon">
+                &minus;
+              </span>
+            </button>
+
+            <div class="customize-accordion-content">
+
+              <div class="customize-trio-grid">
+
+                <div class="customize-compact-field">
+
+                  <label for="fontSelect">
+                    글꼴
+                  </label>
+
+                  <select
+                    class="customize-field-select"
+                    id="fontSelect"
+                  ></select>
+
+                </div>
+
+                <div class="customize-compact-field">
+
+                  <label for="textColorInput">
+                    글자색
+                  </label>
+
+                  <div class="customize-color-input-row">
+
+                    <input
+                      type="color"
+                      id="textColorInput"
+                    >
+
+                    <span
+                      class="customize-color-value"
+                      id="textColorValue"
+                    ></span>
+
+                  </div>
+
+                </div>
+
+                <div class="customize-compact-field">
+
+                  <label for="pointColorInput">
+                    포인트색
+                  </label>
+
+                  <div class="customize-color-input-row">
+
+                    <input
+                      type="color"
+                      id="pointColorInput"
+                    >
+
+                    <span
+                      class="customize-color-value"
+                      id="pointColorValue"
+                    ></span>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <!-- 2. 배경 -->
+
+          <div class="customize-accordion">
+
+            <button
+              type="button"
+              class="customize-accordion-toggle"
+              aria-expanded="true"
+            >
+              <span class="customize-accordion-title">
+                배경
+              </span>
+              <span class="customize-accordion-icon">
+                &minus;
+              </span>
+            </button>
+
+            <div class="customize-accordion-content">
+
+              <div
+                class="customize-toggle-buttons"
+                id="backgroundTypeToggle"
+              >
+
+                <button
+                  type="button"
+                  class="customize-toggle-button"
+                  id="backgroundTypeSolidButton"
+                >
+                  단색
+                </button>
+
+                <button
+                  type="button"
+                  class="customize-toggle-button"
+                  id="backgroundTypeImageButton"
+                >
+                  이미지
+                </button>
+
+              </div>
+
+
+              <!-- 단색: 배경색 + 패턴(패턴은 단색에서만 사용) -->
+
+              <div id="backgroundSolidFields">
+
+                <div class="customize-pair-grid">
+
+                  <div class="customize-compact-field">
+
+                    <label for="backgroundColorInput">
+                      배경색
+                    </label>
+
+                    <div class="customize-color-input-row">
+
+                      <input
+                        type="color"
+                        id="backgroundColorInput"
+                      >
+
+                      <span
+                        class="customize-color-value"
+                        id="backgroundColorValue"
+                      ></span>
+
+                    </div>
+
+                  </div>
+
+                  <div class="customize-compact-field">
+
+                    <label for="backgroundPatternTypeSelect">
+                      패턴
+                    </label>
+
+                    <select
+                      class="customize-field-select"
+                      id="backgroundPatternTypeSelect"
+                    ></select>
+
+                  </div>
+
+                </div>
+
+                <div
+                  class="customize-compact-field"
+                  id="backgroundPatternDetailRow"
+                >
+
+                  <label for="backgroundPatternColorInput">
+                    패턴 색상
+                  </label>
+
+                  <div class="customize-color-input-row">
+
+                    <input
+                      type="color"
+                      id="backgroundPatternColorInput"
+                    >
+
+                    <label class="customize-auto-toggle-row">
+
+                      <input
+                        type="checkbox"
+                        id="backgroundPatternColorInheritCheckbox"
+                      >
+
+                      상속
+
+                    </label>
+
+                  </div>
+
+                </div>
+
+                <div class="customize-pair-grid">
+
+                  <div
+                    class="customize-compact-field"
+                    id="backgroundPatternOpacityRow"
+                  >
+
+                    <label for="backgroundPatternOpacityInput">
+                      불투명도(%)
+                    </label>
+
+                    <input
+                      type="number"
+                      class="customize-field-input"
+                      id="backgroundPatternOpacityInput"
+                      min="0"
+                      max="100"
+                      step="1"
+                    >
+
+                  </div>
+
+                  <div
+                    class="customize-compact-field"
+                    id="backgroundPatternSizeRow"
+                  >
+
+                    <label for="backgroundPatternSizeInput">
+                      간격(px)
+                    </label>
+
+                    <input
+                      type="number"
+                      class="customize-field-input"
+                      id="backgroundPatternSizeInput"
+                      min="4"
+                      max="120"
+                      step="1"
+                    >
+
+                  </div>
+
+                </div>
+
+              </div>
+
+
+              <!-- 이미지: URL + 불투명도 + 맞춤 -->
+
+              <div
+                id="backgroundImageFields"
+                hidden
+              >
+
+                <div class="customize-compact-field">
+
+                  <label for="backgroundImageSrcInput">
+                    이미지 URL (https만 허용)
+                  </label>
+
+                  <input
+                    type="text"
+                    class="customize-field-input"
+                    id="backgroundImageSrcInput"
+                    placeholder="https://..."
+                  >
+
+                </div>
+
+                <div class="customize-pair-grid">
+
+                  <div class="customize-compact-field">
+
+                    <label for="backgroundImageOpacityInput">
+                      불투명도(%)
+                    </label>
+
+                    <input
+                      type="number"
+                      class="customize-field-input"
+                      id="backgroundImageOpacityInput"
+                      min="0"
+                      max="100"
+                      step="1"
+                    >
+
+                  </div>
+
+                  <div class="customize-compact-field">
+
+                    <label for="backgroundImageFitSelect">
+                      맞춤
+                    </label>
+
+                    <select
+                      class="customize-field-select"
+                      id="backgroundImageFitSelect"
+                    ></select>
+
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <!-- 3. 콘텐츠 영역 -->
+
+          <div class="customize-accordion">
+
+            <button
+              type="button"
+              class="customize-accordion-toggle"
+              aria-expanded="true"
+            >
+              <span class="customize-accordion-title">
+                콘텐츠 영역
+              </span>
+              <span class="customize-accordion-icon">
+                &minus;
+              </span>
+            </button>
+
+            <div class="customize-accordion-content">
+
+              <div class="customize-compact-field">
+
+                <label for="contentAreaMaxWidthInput">
+                  최대 너비(px)
+                </label>
+
+                <div class="customize-input-with-toggle">
+
+                  <input
+                    type="number"
+                    class="customize-field-input"
+                    id="contentAreaMaxWidthInput"
+                    min="280"
+                    max="1200"
+                    step="10"
+                  >
+
+                  <label class="customize-auto-toggle-row">
+
+                    <input
+                      type="checkbox"
+                      id="contentAreaMaxWidthUnlimitedCheckbox"
+                    >
+
+                    제한 없음
+
+                  </label>
+
+                </div>
+
+              </div>
+
+              <div class="customize-pair-grid">
+
+                <div class="customize-compact-field">
+
+                  <label for="contentAreaPaddingXInput">
+                    좌우 여백(px)
+                  </label>
+
+                  <input
+                    type="number"
+                    class="customize-field-input"
+                    id="contentAreaPaddingXInput"
+                    min="0"
+                    max="120"
+                    step="1"
+                  >
+
+                </div>
+
+                <div class="customize-compact-field">
+
+                  <label for="contentAreaPaddingYInput">
+                    위아래 여백(px)
+                  </label>
+
+                  <input
+                    type="number"
+                    class="customize-field-input"
+                    id="contentAreaPaddingYInput"
+                    min="0"
+                    max="120"
+                    step="1"
+                  >
+
+                </div>
+
+              </div>
+
+              <div class="customize-pair-grid">
+
+                <div class="customize-compact-field">
+
+                  <label for="contentAreaAlignSelect">
+                    좌우 정렬
+                  </label>
+
+                  <select
+                    class="customize-field-select"
+                    id="contentAreaAlignSelect"
+                  ></select>
+
+                </div>
+
+                <div class="customize-compact-field">
+
+                  <label for="contentAreaVerticalAlignSelect">
+                    수직 정렬
+                  </label>
+
+                  <select
+                    class="customize-field-select"
+                    id="contentAreaVerticalAlignSelect"
+                  ></select>
+
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+        </section>
+
+
+        <!-- =============================================
+             요소 추가 패널 — text/image/container 등 새 block을
+             현재 선택 위치 뒤에 추가하는 버튼만 모아둔다(구조
+             둘러보기/속성 편집은 "요소 설정" 탭 담당).
+        ============================================== -->
+
+        <section
+          class="customize-panel-section"
+          id="addElementPanel"
+          hidden
         >
 
           <p class="customize-panel-hint">
-            요소를 클릭하면 오른쪽 미리보기에서도 선택 표시되고
-            설정 탭으로 이동합니다. (순서 변경/드래그는 아직
-            지원하지 않습니다.)
+            추가된 요소는 바로 선택되어 "요소 설정" 탭에 나타납니다.
           </p>
 
           <div
@@ -122,28 +605,33 @@
             id="addElementRow"
           ></div>
 
+        </section>
+
+
+        <!-- =============================================
+             요소 설정 패널 — 요소 목록(직접 선택용) + 선택된
+             요소의 props 편집. preview에서 block을 클릭해도 이
+             탭으로 자동 전환된다(selectCustomizeBlock 참고).
+        ============================================== -->
+
+        <section
+          class="customize-panel-section"
+          id="elementSettingsPanel"
+          hidden
+        >
+
           <ul
             class="customize-elements-list"
             id="elementsList"
           ></ul>
 
-        </section>
-
-
-        <!-- =============================================
-             Settings 패널
-        ============================================== -->
-
-        <section
-          class="customize-panel-section"
-          id="settingsPanel"
-          hidden
-        >
-
-          <!-- =========================================
-               선택된 block의 props 편집
-               (selectedBlockId가 있을 때만 표시)
-          ========================================== -->
+          <p
+            class="customize-panel-hint"
+            id="elementSettingsEmptyHint"
+          >
+            왼쪽 미리보기 또는 위 목록에서 요소를 선택하면 여기에
+            설정이 나타납니다.
+          </p>
 
           <div
             id="blockSettingsSection"
@@ -182,374 +670,6 @@
             </div>
 
             <div id="blockPropsFields"></div>
-
-          </div>
-
-
-          <!-- =========================================
-               페이지 theme 설정
-               (선택된 block이 없을 때 표시)
-          ========================================== -->
-
-          <div id="themeSettingsSection">
-
-            <p class="customize-panel-hint">
-              배경색 / 배경 이미지 / 배경 패턴 / 글자색 / 포인트
-              색상 / 글꼴은 사이트 전체 공통 설정입니다(모든
-              페이지가 같은 배경을 공유). 저장은 아직 지원하지
-              않습니다.
-            </p>
-
-            <div class="customize-setting-line">
-
-              <label for="backgroundColorInput">
-                배경색
-              </label>
-
-              <div class="customize-color-input-row">
-
-                <input
-                  type="color"
-                  id="backgroundColorInput"
-                >
-
-                <span
-                  class="customize-color-value"
-                  id="backgroundColorValue"
-                ></span>
-
-              </div>
-
-            </div>
-
-
-            <div class="customize-setting-line">
-
-              <label for="textColorInput">
-                글자색
-              </label>
-
-              <div class="customize-color-input-row">
-
-                <input
-                  type="color"
-                  id="textColorInput"
-                >
-
-                <span
-                  class="customize-color-value"
-                  id="textColorValue"
-                ></span>
-
-              </div>
-
-            </div>
-
-
-            <div class="customize-setting-line">
-
-              <label for="pointColorInput">
-                포인트 색상
-              </label>
-
-              <div class="customize-color-input-row">
-
-                <input
-                  type="color"
-                  id="pointColorInput"
-                >
-
-                <span
-                  class="customize-color-value"
-                  id="pointColorValue"
-                ></span>
-
-              </div>
-
-            </div>
-
-
-            <div class="customize-setting-line">
-
-              <label for="fontSelect">
-                글꼴
-              </label>
-
-              <select
-                class="customize-field-select"
-                id="fontSelect"
-              ></select>
-
-            </div>
-
-
-            <!-- =====================================
-                 배경 이미지 (사이트 공통, v3 후속)
-            ====================================== -->
-
-            <div class="customize-setting-line">
-
-              <label for="backgroundImageSrcInput">
-                배경 이미지 URL (https만 허용)
-              </label>
-
-              <input
-                type="text"
-                class="customize-field-input"
-                id="backgroundImageSrcInput"
-                placeholder="https://..."
-              >
-
-            </div>
-
-            <div class="customize-setting-line">
-
-              <label for="backgroundImageOpacityInput">
-                배경 이미지 불투명도(%)
-              </label>
-
-              <input
-                type="number"
-                class="customize-field-input"
-                id="backgroundImageOpacityInput"
-                min="0"
-                max="100"
-                step="1"
-              >
-
-            </div>
-
-            <div class="customize-setting-line">
-
-              <label for="backgroundImageFitSelect">
-                배경 이미지 맞춤
-              </label>
-
-              <select
-                class="customize-field-select"
-                id="backgroundImageFitSelect"
-              ></select>
-
-            </div>
-
-
-            <!-- =====================================
-                 배경 패턴 (사이트 공통, v3 후속)
-            ====================================== -->
-
-            <div class="customize-setting-line">
-
-              <label for="backgroundPatternTypeSelect">
-                배경 패턴
-              </label>
-
-              <select
-                class="customize-field-select"
-                id="backgroundPatternTypeSelect"
-              ></select>
-
-            </div>
-
-            <div
-              class="customize-setting-line"
-              id="backgroundPatternDetailRow"
-            >
-
-              <label for="backgroundPatternColorInput">
-                패턴 색상
-              </label>
-
-              <div class="customize-color-input-row">
-
-                <input
-                  type="color"
-                  id="backgroundPatternColorInput"
-                >
-
-                <label class="customize-auto-toggle-row">
-
-                  <input
-                    type="checkbox"
-                    id="backgroundPatternColorInheritCheckbox"
-                  >
-
-                  테마 상속
-
-                </label>
-
-              </div>
-
-            </div>
-
-            <div
-              class="customize-setting-line"
-              id="backgroundPatternOpacityRow"
-            >
-
-              <label for="backgroundPatternOpacityInput">
-                패턴 불투명도(%)
-              </label>
-
-              <input
-                type="number"
-                class="customize-field-input"
-                id="backgroundPatternOpacityInput"
-                min="0"
-                max="100"
-                step="1"
-              >
-
-            </div>
-
-            <div
-              class="customize-setting-line"
-              id="backgroundPatternSizeRow"
-            >
-
-              <label for="backgroundPatternSizeInput">
-                패턴 간격(px)
-              </label>
-
-              <input
-                type="number"
-                class="customize-field-input"
-                id="backgroundPatternSizeInput"
-                min="4"
-                max="120"
-                step="1"
-              >
-
-            </div>
-
-
-          </div>
-
-
-          <!-- =========================================
-               페이지별 Content Area 설정
-               (선택된 block이 없을 때, theme 설정과 함께 표시)
-
-               theme(사이트 공통)과 달리 페이지마다 따로
-               저장된다 — 페이지 탭을 바꾸면 이 값들도 바뀐다.
-          ========================================== -->
-
-          <div id="contentAreaSettingsSection">
-
-            <p class="customize-panel-hint">
-              콘텐츠 폭 / 여백 / 좌우 정렬 / 화면 맞춤은 현재
-              선택된 페이지에만 적용됩니다.
-            </p>
-
-            <div class="customize-setting-line">
-
-              <label for="contentAreaPaddingYInput">
-                위아래 여백(px)
-              </label>
-
-              <input
-                type="number"
-                class="customize-field-input"
-                id="contentAreaPaddingYInput"
-                min="0"
-                max="120"
-                step="1"
-              >
-
-            </div>
-
-
-            <div class="customize-setting-line">
-
-              <label for="contentAreaPaddingXInput">
-                좌우 여백(px)
-              </label>
-
-              <input
-                type="number"
-                class="customize-field-input"
-                id="contentAreaPaddingXInput"
-                min="0"
-                max="120"
-                step="1"
-              >
-
-            </div>
-
-
-            <div class="customize-setting-line">
-
-              <label for="contentAreaMaxWidthInput">
-                최대 너비(px)
-              </label>
-
-              <input
-                type="number"
-                class="customize-field-input"
-                id="contentAreaMaxWidthInput"
-                min="280"
-                max="1200"
-                step="10"
-              >
-
-              <label class="customize-auto-toggle-row">
-
-                <input
-                  type="checkbox"
-                  id="contentAreaMaxWidthUnlimitedCheckbox"
-                >
-
-                제한 없음(화면 폭 그대로)
-
-              </label>
-
-            </div>
-
-
-            <div class="customize-setting-line">
-
-              <label for="contentAreaAlignSelect">
-                좌우 정렬
-              </label>
-
-              <select
-                class="customize-field-select"
-                id="contentAreaAlignSelect"
-              ></select>
-
-            </div>
-
-
-            <div class="customize-setting-line">
-
-              <label class="customize-auto-toggle-row">
-
-                <input
-                  type="checkbox"
-                  id="contentAreaFitViewportCheckbox"
-                >
-
-                화면 높이에 맞추기(fitViewport)
-
-              </label>
-
-            </div>
-
-
-            <div
-              class="customize-setting-line"
-              id="contentAreaVerticalAlignRow"
-            >
-
-              <label for="contentAreaVerticalAlignSelect">
-                위아래 배치
-              </label>
-
-              <select
-                class="customize-field-select"
-                id="contentAreaVerticalAlignSelect"
-              ></select>
-
-            </div>
 
           </div>
 

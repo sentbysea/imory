@@ -159,7 +159,7 @@ const CUSTOMIZE_ACTION_TYPE_LABELS_KO =
 const customizeEditorState =
   {
     currentPage: CUSTOMIZE_PAGE_DEFS[0].id,
-    activeTab: "elements",
+    activeTab: "page",
     selectedBlockId: null,
     theme: null,
     pages: Object.fromEntries(
@@ -197,29 +197,35 @@ const customizePreviewFrame =
 const customizePageTabs =
   document.getElementById("customizePageTabs");
 
-const panelTabElementsButton =
-  document.getElementById("panelTabElementsButton");
+const panelTabPageButton =
+  document.getElementById("panelTabPageButton");
 
-const panelTabSettingsButton =
-  document.getElementById("panelTabSettingsButton");
+const panelTabAddButton =
+  document.getElementById("panelTabAddButton");
 
-const elementsPanel =
-  document.getElementById("elementsPanel");
+const panelTabElementButton =
+  document.getElementById("panelTabElementButton");
 
-const settingsPanel =
-  document.getElementById("settingsPanel");
+const pageSettingsPanel =
+  document.getElementById("pageSettingsPanel");
+
+const addElementPanel =
+  document.getElementById("addElementPanel");
+
+const elementSettingsPanel =
+  document.getElementById("elementSettingsPanel");
 
 const elementsList =
   document.getElementById("elementsList");
+
+const elementSettingsEmptyHint =
+  document.getElementById("elementSettingsEmptyHint");
 
 const addElementRow =
   document.getElementById("addElementRow");
 
 const blockSettingsSection =
   document.getElementById("blockSettingsSection");
-
-const themeSettingsSection =
-  document.getElementById("themeSettingsSection");
 
 const blockSettingsTypeLabel =
   document.getElementById("blockSettingsTypeLabel");
@@ -254,9 +260,6 @@ const pointColorValue =
 const fontSelect =
   document.getElementById("fontSelect");
 
-const contentAreaSettingsSection =
-  document.getElementById("contentAreaSettingsSection");
-
 const contentAreaPaddingYInput =
   document.getElementById("contentAreaPaddingYInput");
 
@@ -272,14 +275,20 @@ const contentAreaMaxWidthUnlimitedCheckbox =
 const contentAreaAlignSelect =
   document.getElementById("contentAreaAlignSelect");
 
-const contentAreaFitViewportCheckbox =
-  document.getElementById("contentAreaFitViewportCheckbox");
-
-const contentAreaVerticalAlignRow =
-  document.getElementById("contentAreaVerticalAlignRow");
-
 const contentAreaVerticalAlignSelect =
   document.getElementById("contentAreaVerticalAlignSelect");
+
+const backgroundTypeSolidButton =
+  document.getElementById("backgroundTypeSolidButton");
+
+const backgroundTypeImageButton =
+  document.getElementById("backgroundTypeImageButton");
+
+const backgroundSolidFields =
+  document.getElementById("backgroundSolidFields");
+
+const backgroundImageFields =
+  document.getElementById("backgroundImageFields");
 
 const backgroundImageSrcInput =
   document.getElementById("backgroundImageSrcInput");
@@ -755,7 +764,37 @@ function selectCustomizeBlock(
 
   renderCustomizeSettingsPanel();
 
-  switchCustomizeEditorPanelTab("settings");
+  switchCustomizeEditorPanelTab("element");
+
+}
+
+
+/*
+  preview에서 block이 아닌 빈 배경/페이지 영역을 클릭했을 때 —
+  현재 선택을 해제하고 "페이지 설정" 탭으로 돌아간다(handleCustomize
+  PreviewClick의 else 분기에서 호출됨).
+*/
+
+function deselectCustomizeBlockToPageSettings() {
+
+  if (!customizeEditorState.selectedBlockId) {
+
+    switchCustomizeEditorPanelTab("page");
+
+    return;
+
+  }
+
+  customizeEditorState.selectedBlockId =
+    null;
+
+  applyCustomizeEditorSelectionHighlight();
+
+  renderCustomizeElementsList();
+
+  renderCustomizeSettingsPanel();
+
+  switchCustomizeEditorPanelTab("page");
 
 }
 
@@ -808,7 +847,11 @@ function handleCustomizePreviewClick(
     event.target.closest("[data-block-id]");
 
   if (!blockElement) {
+
+    deselectCustomizeBlockToPageSettings();
+
     return;
+
   }
 
   selectCustomizeBlock(
@@ -1700,7 +1743,12 @@ function updateCustomizePageTabUI() {
 
 
 /* =========================================================
-   요소 / 설정 탭 전환
+   페이지 설정 / 요소 추가 / 요소 설정 탭 전환
+
+   3-way 탭 — "page"(기본 진입 탭) / "add" / "element". block을
+   선택하면 selectCustomizeBlock()이 "element"로, preview의 빈
+   배경을 클릭하면 handleCustomizePreviewClick()이 "page"로
+   자동 전환한다.
 ========================================================== */
 
 function switchCustomizeEditorPanelTab(
@@ -1717,24 +1765,32 @@ function switchCustomizeEditorPanelTab(
 
 function updateCustomizePanelTabUI() {
 
-  const isElementsTab =
-    customizeEditorState.activeTab === "elements";
+  const activeTab =
+    customizeEditorState.activeTab;
 
-  panelTabElementsButton.classList.toggle(
+  panelTabPageButton.classList.toggle(
     "active",
-    isElementsTab
+    activeTab === "page"
   );
 
-  panelTabSettingsButton.classList.toggle(
+  panelTabAddButton.classList.toggle(
     "active",
-    !isElementsTab
+    activeTab === "add"
   );
 
-  elementsPanel.hidden =
-    !isElementsTab;
+  panelTabElementButton.classList.toggle(
+    "active",
+    activeTab === "element"
+  );
 
-  settingsPanel.hidden =
-    isElementsTab;
+  pageSettingsPanel.hidden =
+    activeTab !== "page";
+
+  addElementPanel.hidden =
+    activeTab !== "add";
+
+  elementSettingsPanel.hidden =
+    activeTab !== "element";
 
 }
 
@@ -2907,11 +2963,14 @@ function renderCustomizeBlockPropsFields(
 
 
 /* =========================================================
-   Settings panel — block props 편집 / theme 설정 전환
+   "요소 설정" 탭 내부 갱신 + 페이지 설정(Content Area) 필드 갱신
 
-   selectedBlockId가 있으면 blockSettingsSection(선택된 요소의
-   props + 복제/삭제)을, 없으면 themeSettingsSection(페이지
-   theme)을 보여준다.
+   blockSettingsSection(선택된 요소의 props + 복제/삭제)/
+   elementSettingsEmptyHint는 selectedBlockId 유무로 서로 반대로
+   토글된다. "페이지 설정" 탭(배경/Content Area)은 블록 선택
+   여부와 무관하게 그 탭 자체가 항상 그대로 보이므로 여기서
+   따로 숨기지 않고, Content Area 필드만 최신값으로 갱신한다
+   (페이지 전환 시에도 이 함수가 호출되므로 자연히 갱신됨).
 ========================================================== */
 
 function renderCustomizeSettingsPanel() {
@@ -2927,10 +2986,7 @@ function renderCustomizeSettingsPanel() {
   blockSettingsSection.hidden =
     !selectedBlock;
 
-  themeSettingsSection.hidden =
-    !!selectedBlock;
-
-  contentAreaSettingsSection.hidden =
+  elementSettingsEmptyHint.hidden =
     !!selectedBlock;
 
   if (selectedBlock) {
@@ -2943,11 +2999,9 @@ function renderCustomizeSettingsPanel() {
       selectedBlock
     );
 
-  } else {
-
-    populateCustomizeContentAreaFields();
-
   }
+
+  populateCustomizeContentAreaFields();
 
 }
 
@@ -3075,10 +3129,51 @@ function handleCustomizeThemeInputChange() {
 }
 
 
+/*
+  "배경 유형"(단색/이미지) 토글은 순수 편집 UI 상태다 — theme
+  스키마에 새 필드를 추가하지 않고, 어느 필드 묶음을 보여줄지만
+  결정한다. 초기값은 backgroundImage.src 유무로 추정하고(populate
+  Customize BackgroundFields에서 한 번만), 이후로는 오직 버튼
+  클릭으로만 바뀐다 — 데이터는 건드리지 않으므로 이미지→단색으로
+  돌아가도 입력해둔 이미지 URL은 지워지지 않는다.
+*/
+
+function setCustomizeBackgroundTypeUI(
+  type
+) {
+
+  const isImage =
+    type === "image";
+
+  backgroundTypeSolidButton.classList.toggle(
+    "active",
+    !isImage
+  );
+
+  backgroundTypeImageButton.classList.toggle(
+    "active",
+    isImage
+  );
+
+  backgroundSolidFields.hidden =
+    isImage;
+
+  backgroundImageFields.hidden =
+    !isImage;
+
+}
+
+
 function populateCustomizeBackgroundFields() {
 
   const theme =
     customizeEditorState.theme;
+
+  setCustomizeBackgroundTypeUI(
+    theme.backgroundImage.src.trim() !== ""
+      ? "image"
+      : "solid"
+  );
 
   backgroundImageSrcInput.value =
     theme.backgroundImage.src;
@@ -3132,9 +3227,8 @@ function updateCustomizeColorValueLabels() {
    Settings — Content Area(v3, 페이지별)
 
    theme과 달리 페이지를 바꿀 때마다 이 값들도 다시 그려야
-   하므로, renderCustomizeSettingsPanel()이 themeSettingsSection과
-   함께 이 populate 함수도 호출한다(아래 renderCustomizeSettingsPanel
-   참고).
+   하므로, renderCustomizeSettingsPanel()이 매번 이 populate
+   함수도 함께 호출한다(위 renderCustomizeSettingsPanel 참고).
 ========================================================== */
 
 function populateCustomizeContentAreaFields() {
@@ -3165,17 +3259,18 @@ function populateCustomizeContentAreaFields() {
   contentAreaAlignSelect.value =
     contentArea.align;
 
-  contentAreaFitViewportCheckbox.checked =
-    contentArea.fitViewport;
-
-  contentAreaVerticalAlignRow.hidden =
-    !contentArea.fitViewport;
-
   contentAreaVerticalAlignSelect.value =
     contentArea.verticalAlign;
 
 }
 
+
+/*
+  fitViewport는 이제 항상 true로 저장한다(UI에서 끌 수 있는
+  체크박스 자체를 없앴다 — 짧은 페이지는 화면 높이를 채우고,
+  긴 페이지는 renderer의 min-height:100dvh + 자연스러운 스크롤로
+  그대로 길어진다).
+*/
 
 function handleCustomizeContentAreaInputChange() {
 
@@ -3184,9 +3279,6 @@ function handleCustomizeContentAreaInputChange() {
 
   contentAreaMaxWidthInput.disabled =
     isMaxWidthUnlimited;
-
-  contentAreaVerticalAlignRow.hidden =
-    !contentAreaFitViewportCheckbox.checked;
 
   customizeEditorState.pages[customizeEditorState.currentPage].contentArea =
     {
@@ -3197,11 +3289,57 @@ function handleCustomizeContentAreaInputChange() {
           ? ""
           : Number(contentAreaMaxWidthInput.value),
       align: contentAreaAlignSelect.value,
-      fitViewport: contentAreaFitViewportCheckbox.checked,
+      fitViewport: true,
       verticalAlign: contentAreaVerticalAlignSelect.value
     };
 
   refreshCustomizePreview();
+
+}
+
+
+
+/* =========================================================
+   페이지 설정 — 아코디언 접기/펼치기(QUOTE PRESET과 동일한
+   상호작용, 다만 이 문서는 admin-quote.css를 공유하지 않으므로
+   여기서 직접 구현한다). 셋 다 기본으로 펼쳐진 채 시작한다.
+========================================================== */
+
+function initCustomizeAccordions() {
+
+  document
+    .querySelectorAll(".customize-accordion-toggle")
+    .forEach(
+      (toggle) => {
+
+        toggle.addEventListener(
+          "click",
+          () => {
+
+            const content =
+              toggle.nextElementSibling;
+
+            const isExpanded =
+              toggle.getAttribute("aria-expanded") === "true";
+
+            toggle.setAttribute(
+              "aria-expanded",
+              String(!isExpanded)
+            );
+
+            content.hidden =
+              isExpanded;
+
+            toggle.querySelector(".customize-accordion-icon").textContent =
+              isExpanded
+                ? "+"
+                : "−";
+
+          }
+        );
+
+      }
+    );
 
 }
 
@@ -3234,11 +3372,17 @@ function initCustomizeEditor() {
 
       /*
         contentArea(v3)는 theme과 달리 페이지마다 따로 유지한다 —
-        모든 페이지에서 각자 저장.
+        모든 페이지에서 각자 저장. fitViewport는 에디터 UI에서
+        더 이상 끌 수 없으므로(항상 true), 저장된/기본 레이아웃이
+        false를 갖고 있더라도 불러오는 시점에 true로 맞춘다 —
+        renderer 기본값(block-defaults.js)은 건드리지 않는다.
       */
 
       customizeEditorState.pages[pageDef.id].contentArea =
-        validation.layout.contentArea;
+        {
+          ...validation.layout.contentArea,
+          fitViewport: true
+        };
 
       if (index === 0) {
 
@@ -3310,42 +3454,65 @@ function initCustomizeEditor() {
     preview-frame.html(iframe)의 문서다 — iframe이 load된 뒤에만
     가능하므로 load 리스너 안에서 한 번만 초기화한다(device
     전환은 이 iframe을 다시 로드하지 않고 폭/scale만 바꾼다).
+
+    ★ addEventListener("load", ...)만 걸어두면 놓칠 수 있는
+    race가 있다 — 이 <script>는 body 맨 아래에서 실행되는데,
+    그 사이 iframe은 이미 파싱되어 자기 문서(및 그 안의 renderer
+    스크립트 4개)를 다 로드하고 load 이벤트를 먼저 쏴버릴 수
+    있다(특히 파일들이 캐시돼 있을 때). 그러면 이 시점 이후에
+    거는 리스너는 이미 지나간 이벤트를 영원히 못 받아 preview가
+    완전히 빈 채로 남는다 — 그래서 등록 전에 이미 로드가 끝나
+    있는지 먼저 확인하고, 끝나 있으면 바로 초기화한다.
   */
 
-  customizePreviewFrame.addEventListener(
-    "load",
-    () => {
+  function initializeCustomizePreviewFrame() {
 
-      const frameWindow =
-        customizePreviewFrame.contentWindow;
+    const frameWindow =
+      customizePreviewFrame.contentWindow;
 
-      customizePreviewFrameDocument =
-        frameWindow.document;
+    customizePreviewFrameDocument =
+      frameWindow.document;
 
-      customizePreviewHandle =
-        frameWindow.renderCustomizeLayout({
-          container: customizePreviewFrameDocument.getElementById("previewMount"),
-          blocks: getCurrentCustomizePageBlocks(),
-          theme: customizeEditorState.theme,
-          contentArea: customizeEditorState.pages[customizeEditorState.currentPage].contentArea,
-          mode: "edit",
-          actions: {}
-        });
+    customizePreviewHandle =
+      frameWindow.renderCustomizeLayout({
+        container: customizePreviewFrameDocument.getElementById("previewMount"),
+        blocks: getCurrentCustomizePageBlocks(),
+        theme: customizeEditorState.theme,
+        contentArea: customizeEditorState.pages[customizeEditorState.currentPage].contentArea,
+        mode: "edit",
+        actions: {}
+      });
 
-      customizePreviewFrameDocument.addEventListener(
-        "click",
-        handleCustomizePreviewClick
-      );
+    customizePreviewFrameDocument.addEventListener(
+      "click",
+      handleCustomizePreviewClick
+    );
 
-      customizePreviewFrameDocument.addEventListener(
-        "pointerdown",
-        handleCustomizeDragPointerDown
-      );
+    customizePreviewFrameDocument.addEventListener(
+      "pointerdown",
+      handleCustomizeDragPointerDown
+    );
 
-      applyCustomizeDeviceSize();
+    applyCustomizeDeviceSize();
 
-    }
-  );
+  }
+
+  const isPreviewFrameAlreadyLoaded =
+    customizePreviewFrame.contentDocument?.readyState === "complete"
+      && typeof customizePreviewFrame.contentWindow.renderCustomizeLayout === "function";
+
+  if (isPreviewFrameAlreadyLoaded) {
+
+    initializeCustomizePreviewFrame();
+
+  } else {
+
+    customizePreviewFrame.addEventListener(
+      "load",
+      initializeCustomizePreviewFrame
+    );
+
+  }
 
   window.addEventListener(
     "resize",
@@ -3357,14 +3524,29 @@ function initCustomizeEditor() {
     직접 만들 때 이미 붙인다(위에서 호출됨) — 여기서 따로 안 함.
   */
 
-  panelTabElementsButton.addEventListener(
+  panelTabPageButton.addEventListener(
     "click",
-    () => switchCustomizeEditorPanelTab("elements")
+    () => switchCustomizeEditorPanelTab("page")
   );
 
-  panelTabSettingsButton.addEventListener(
+  panelTabAddButton.addEventListener(
     "click",
-    () => switchCustomizeEditorPanelTab("settings")
+    () => switchCustomizeEditorPanelTab("add")
+  );
+
+  panelTabElementButton.addEventListener(
+    "click",
+    () => switchCustomizeEditorPanelTab("element")
+  );
+
+  backgroundTypeSolidButton.addEventListener(
+    "click",
+    () => setCustomizeBackgroundTypeUI("solid")
+  );
+
+  backgroundTypeImageButton.addEventListener(
+    "click",
+    () => setCustomizeBackgroundTypeUI("image")
   );
 
   backgroundColorInput.addEventListener(
@@ -3452,11 +3634,6 @@ function initCustomizeEditor() {
     handleCustomizeContentAreaInputChange
   );
 
-  contentAreaFitViewportCheckbox.addEventListener(
-    "change",
-    handleCustomizeContentAreaInputChange
-  );
-
   contentAreaVerticalAlignSelect.addEventListener(
     "change",
     handleCustomizeContentAreaInputChange
@@ -3478,6 +3655,7 @@ function initCustomizeEditor() {
   renderCustomizeAddElementRow();
   renderCustomizeElementsList();
   renderCustomizeSettingsPanel();
+  initCustomizeAccordions();
 
 }
 

@@ -24,14 +24,27 @@
   >
 
   <!--
-    본문 폰트 선택지 중 "나눔명조"용. Pretendard는 웹폰트로
-    안 불러오고 시스템 sans-serif로 fallback시키는 방식이라
-    (posts/style/posts-style-render.js 참고) 여기 안 넣음.
+    본문 폰트 선택지 중 "나눔명조"용(posts/style/posts-style-render.js
+    참고 — quote 미리보기 텍스트에서만 쓰임).
   -->
 
   <link
     href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap"
     rel="stylesheet"
+  >
+
+  <!--
+    PRETENDARD — admin 전체 공통 UI 폰트. (루트 index.html과 달리
+    admin은 canvas capture/export를 하지 않으므로 posts-preview-
+    export-capture.js의 clone 폰트 로딩 레이스 문제가 없다 — 그냥
+    불러와서 바로 써도 안전함.)
+  -->
+
+  <link
+    rel="stylesheet"
+    as="style"
+    crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
   >
 
   <link
