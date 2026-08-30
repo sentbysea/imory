@@ -181,246 +181,13 @@
   >
 
 
-    <div
-      class="heart-group"
-      id="heartGroup"
-    >
-
-
-      <div
-        class="heart-stage"
-        id="heartStage"
-      >
-
-
-
-        <!-- ===================================================
-             3D HEART
-        ==================================================== -->
-
-        <model-viewer
-          id="heartViewer"
-          src="./models/heart.glb"
-          camera-controls
-          disable-zoom
-          disable-pan
-          touch-action="none"
-          camera-orbit="0deg 90deg auto"
-          min-camera-orbit="auto 90deg auto"
-          max-camera-orbit="auto 90deg auto"
-          orbit-sensitivity="2.2"
-          auto-rotate
-          auto-rotate-delay="0"
-          rotation-per-second="14deg"
-          shadow-intensity="0"
-          environment-image="neutral"
-          exposure="0.75"
-          interaction-prompt="none"
-          alt="3D heart"
-        >
-
-          <div slot="progress-bar"></div>
-
-        </model-viewer>
-
-
-
-        <!-- ===================================================
-             PROFILE
-        ==================================================== -->
-
-        <div
-          class="profile"
-          id="profile"
-        >
-
-
-
-          <!-- =================================================
-               PROFILE PAGE 1
-          ================================================== -->
-
-          <div
-            class="profile-page active"
-            id="profilePage1"
-          >
-
-            <div class="profile-name">
-              @sentbys_a
-            </div>
-
-
-            <p class="profile-text">
-
-              Arch Vibe ♡ archive
-
-              <br>
-
-              and... little pieces of my heart
-
-            </p>
-
-
-            <button
-              class="profile-nav"
-              id="moreButton"
-              type="button"
-            >
-              more
-            </button>
-
-          </div>
-
-
-
-          <!-- =================================================
-               PROFILE PAGE 2
-          ================================================== -->
-
-          <div
-            class="profile-page"
-            id="profilePage2"
-          >
-
-
-
-            <!-- ABOUT -->
-
-            <div class="more-section">
-
-              <div class="more-title">
-                ABOUT
-              </div>
-
-
-              <p
-                class="more-text"
-                id="aboutText"
-              >
-
-                ¹ 성인 여성, 일상과 덕질로 채워가는 계정
-
-                <br>
-
-                ⇢♡ Arch Vibe 90% + etc. 10%
-
-                <br><br>
-
-
-                ² 좋아하는 것들이 많아 다양하게 언급합니다.
-
-                <br>
-
-                ⇢♡ Nintendo · anime · novel · J-pop · idol
-
-                <br><br>
-
-
-                ³ CBC 오픈, 드림 지우기X 외에 특별한 배려 요하지 않습니다.
-
-                <br>
-
-                ⇢♡ 온리 성향 분은 메인 기준 1T1D, 겹드림 연결 ok♡
-
-              </p>
-
-            </div>
-
-
-
-            <!-- NOTICE -->
-
-            <div class="more-section">
-
-              <div class="more-title">
-                NOTICE
-              </div>
-
-
-              <p
-                class="more-text"
-                id="noticeText"
-              >
-
-                ¹ AI 이미지 생성•소비합니다. (학습 X)
-
-                <br>
-
-                ⇢♡ 뽑아드린 에셋은 편히 써주세요!
-
-                <br><br>
-
-
-                ² 좋지 않은 이슈에 굳이 말 얹지 말자 주의입니다.
-
-                <br>
-
-                ⇢♡ 그럴 수 있지 하고 넘기는 편이나 주관이 없지는 않습니다.
-
-                <br><br>
-
-
-                ³ 무던한 성향이라 수용 범위가 넓습니다.
-
-                <br>
-
-                ⇢♡ 기존 트친분들은 대화할 때 제 신상 관련 언급만 피해주세요~
-
-              </p>
-
-            </div>
-
-
-
-            <!-- NG -->
-
-            <div class="more-section">
-
-              <div class="more-title">
-                NG
-              </div>
-
-
-              <p
-                class="more-text"
-                id="ngText"
-              >
-                미성년자 · 남성 · 공계에서의 R18 전시
-              </p>
-
-            </div>
-
-
-
-            <button
-              class="profile-nav"
-              id="backButton"
-              type="button"
-            >
-              back
-            </button>
-
-
-          </div>
-
-
-        </div>
-
-
-      </div>
-
-
-
-      <!-- =====================================================
-           HINT
-      ====================================================== -->
-
-      <div class="hint">
-        click or spin ♡
-      </div>
-
-
-    </div>
+    <!--
+      sua 전용 heart-group(3D heart/profile/hint) DOM은
+      themes/sua/sua-home.html로 이동. index.html의 인라인
+      loader(loadSuaTheme)가 fetch해서 이 자리에 주입한다.
+    -->
+
+    <div id="themeMount"></div>
 
 
   </main>
@@ -437,28 +204,13 @@
 
 
 
-  <!-- =========================================================
-       LOVE EVENT
-  ========================================================== -->
+  <!--
+    sua 전용 love-event(LOVE EVENT) DOM은
+    themes/sua/sua-home.html로 이동. loadSuaTheme이 fetch해서
+    이 자리에 주입한다.
+  -->
 
-  <div
-    class="love-event"
-    id="loveEvent"
-    aria-hidden="true"
-  >
-
-    <div
-      class="love-rain"
-      id="loveRain"
-    ></div>
-
-
-    <div
-      class="love-message"
-      id="loveMessage"
-    ></div>
-
-  </div>
+  <div id="themeLoveMount"></div>
 
 
 
@@ -526,9 +278,175 @@
 
   <script src="./core/view-controller.js"></script>
 
-  <script src="./themes/sua/heart-interaction.js"></script>
+  <!-- =========================================================
+       SUA THEME LOADER
 
-  <script src="./themes/sua/cover-profile.js"></script>
+       1. themes/sua/sua-home.html 불러오기
+       2. #themeMount / #themeLoveMount 안에 삽입
+       3. 그 다음 heart-interaction.js → cover-profile.js 실행
+
+       순서 중요! (두 스크립트 모두 sua DOM이 이미 붙어있다고
+       가정하고 즉시 getElementById/addEventListener 함)
+  ========================================================== -->
+
+  <script>
+
+    async function loadSuaTheme() {
+
+      const cacheBuster =
+        Date.now();
+
+
+      const themeMount =
+        document.getElementById(
+          "themeMount"
+        );
+
+      const themeLoveMount =
+        document.getElementById(
+          "themeLoveMount"
+        );
+
+
+      if (
+        !themeMount ||
+        !themeLoveMount
+      ) {
+        return;
+      }
+
+
+      try {
+
+        const response =
+          await fetch(
+            `./themes/sua/sua-home.html?v=${cacheBuster}`
+          );
+
+
+        if (!response.ok) {
+
+          throw new Error(
+            `sua-home.html load failed: ${response.status}`
+          );
+
+        }
+
+
+        const suaHTML =
+          await response.text();
+
+
+        const template =
+          document.createElement(
+            "template"
+          );
+
+        template.innerHTML =
+          suaHTML;
+
+
+        const heartGroup =
+          template.content.getElementById(
+            "heartGroup"
+          );
+
+        const loveEvent =
+          template.content.getElementById(
+            "loveEvent"
+          );
+
+
+        if (heartGroup) {
+
+          themeMount.replaceWith(
+            heartGroup
+          );
+
+        }
+
+
+        if (loveEvent) {
+
+          themeLoveMount.replaceWith(
+            loveEvent
+          );
+
+        }
+
+
+        /*
+          sua DOM 주입이 끝난 뒤에만 실행돼야 함 —
+          heart-interaction.js와 cover-profile.js는 둘 다
+          모듈이 아니라 로드 즉시 getElementById/
+          addEventListener를 호출하는 스크립트라, DOM보다
+          먼저/늦게 실행되면 회귀가 생긴다.
+        */
+
+        const suaScripts =
+          [
+            "./themes/sua/heart-interaction.js",
+            "./themes/sua/cover-profile.js"
+          ];
+
+
+        for (
+          const src of suaScripts
+        ) {
+
+          const suaScript =
+            document.createElement(
+              "script"
+            );
+
+
+          suaScript.src =
+            `${src}?v=${cacheBuster}`;
+
+
+          await new Promise(
+            (resolve, reject) => {
+
+              suaScript.onload =
+                resolve;
+
+
+              suaScript.onerror =
+                reject;
+
+
+              document.body.appendChild(
+                suaScript
+              );
+
+            }
+          );
+
+        }
+
+
+        console.log(
+          "sua theme loaded"
+        );
+
+      }
+
+
+      catch (error) {
+
+        console.error(
+          "sua theme load failed:",
+          error
+        );
+
+      }
+
+    }
+
+
+    loadSuaTheme();
+
+  </script>
 
   <script src="./site-footer.js"></script>
 
