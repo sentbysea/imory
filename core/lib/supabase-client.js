@@ -1,7 +1,7 @@
 /* =========================================================
    SUPABASE CLIENT (공통)
 
-   home/home-content.js, admin/admin.js에 각각 있던 동일한
+   home/site-content.js, admin/admin.js에 각각 있던 동일한
    SUPABASE_URL / SUPABASE_KEY / createClient 선언을
    여기 하나로 모음.
 

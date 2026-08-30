@@ -1,85 +1,10 @@
 /* =========================================================
-   메뉴 패널
+   SUA THEME - 프로필 (하트 커버)
+
+   home-profile.css에서 이동(themes/sua 분리). 메뉴 패널
+   스타일(.menu-panel 등)은 테마와 무관한 imory 공통 기능이라
+   home/menu.css로 옮겼음.
 ========================================================== */
-
-.menu-panel {
-  position: fixed;
-
-  top:
-    calc(
-      max(
-        16px,
-        env(safe-area-inset-top)
-      )
-      + 46px
-    );
-
-  left:
-    max(
-      16px,
-      env(safe-area-inset-left)
-    );
-
-  width: 120px;
-
-  padding:
-    4px 0;
-
-  background:
-    rgba(255, 255, 255, 0.94);
-
-  border:
-    1px solid #eeeeee;
-
-  opacity: 0;
-  visibility: hidden;
-
-  transform:
-    translateY(-8px);
-
-  transition:
-    opacity 0.2s ease,
-    transform 0.2s ease,
-    visibility 0.2s;
-
-  z-index: 99;
-}
-
-
-.menu-panel.open {
-  opacity: 1;
-  visibility: visible;
-
-  transform:
-    translateY(0);
-}
-
-
-.menu-panel a {
-  display: block;
-
-  padding:
-    8px 10px;
-
-  color: #333333;
-
-  text-decoration: none;
-
-  font-size: 11px;
-
-  letter-spacing:
-    0.04em;
-}
-
-
-.menu-panel a:hover {
-  background:
-    #f6f6f6;
-
-  color:
-    #aaaaaa;
-}
-
 
 /* =========================================================
    프로필
@@ -294,15 +219,17 @@
 
 
 /* =========================================================
-   모바일 (프로필 / 메뉴)
+   모바일 (프로필)
 
    원래 style.css 맨 끝의 하나의 @media(max-width:600px)
    블록이었음. 하트/LOVE EVENT 관련 부분은
-   home-love-event.css의 @media 블록으로 옮기고, 여기에는
-   프로필/메뉴 관련 부분만 남김. --detail-top 변수는
-   home-love-event.css의 @media 블록에서 정의됨(같은 페이지에
-   home-base.css → home-love-event.css → home-profile.css
-   순서로 로드되어 있으면 문제없이 상속됨).
+   themes/sua/heart-interaction.css의 @media 블록으로 옮기고,
+   여기에는 프로필 관련 부분만 남김. --detail-top 변수는
+   themes/sua/heart-interaction.css의 @media 블록에서
+   정의됨(같은 페이지에 home-base.css →
+   themes/sua/heart-interaction.css →
+   themes/sua/cover-profile.css 순서로 로드되어 있으면
+   문제없이 상속됨).
 ========================================================== */
 
 @media (max-width: 600px) {

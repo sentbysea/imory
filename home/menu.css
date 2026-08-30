@@ -1,0 +1,176 @@
+/* =========================================================
+   HOME - 메뉴 (imory 공통)
+
+   home-base.css(.menu-button 등)와 home-profile.css
+   (.menu-panel 등)에서 분리됨 — 둘 다 테마와 무관한 메뉴
+   shell이라 이 파일 하나로 모음.
+========================================================== */
+
+/* =========================================================
+   메뉴 버튼
+========================================================== */
+
+.menu-button {
+  position: fixed;
+
+  top:
+    max(
+      16px,
+      env(safe-area-inset-top)
+    );
+
+  left:
+    max(
+      16px,
+      env(safe-area-inset-left)
+    );
+
+  width: 38px;
+  height: 38px;
+
+  padding: 0;
+
+  border:
+    1px solid #f2f2f2;
+
+  background:
+    rgba(255, 255, 255, 0.55);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  cursor: pointer;
+
+  z-index: 100;
+
+  transition:
+    transform 0.22s ease,
+    opacity 0.22s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+/*
+  스크롤 중일 때 메뉴/음악 버튼을 잠깐 숨겨서
+  글 내용을 가리지 않게 함(home/menu.js에서 토글).
+*/
+
+.menu-button.is-scroll-hidden,
+.music-button.is-scroll-hidden {
+  transform:
+    translateY(-140%);
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+
+.triangle {
+  width: 0;
+  height: 0;
+
+  border-left:
+    5px solid transparent;
+
+  border-right:
+    5px solid transparent;
+
+  border-top:
+    6px solid #222222;
+
+  transition:
+    transform 0.25s ease;
+}
+
+
+.menu-button.open .triangle {
+  transform:
+    rotate(180deg);
+}
+
+
+/* =========================================================
+   메뉴 패널
+========================================================== */
+
+.menu-panel {
+  position: fixed;
+
+  top:
+    calc(
+      max(
+        16px,
+        env(safe-area-inset-top)
+      )
+      + 46px
+    );
+
+  left:
+    max(
+      16px,
+      env(safe-area-inset-left)
+    );
+
+  width: 120px;
+
+  padding:
+    4px 0;
+
+  background:
+    rgba(255, 255, 255, 0.94);
+
+  border:
+    1px solid #eeeeee;
+
+  opacity: 0;
+  visibility: hidden;
+
+  transform:
+    translateY(-8px);
+
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease,
+    visibility 0.2s;
+
+  z-index: 99;
+}
+
+
+.menu-panel.open {
+  opacity: 1;
+  visibility: visible;
+
+  transform:
+    translateY(0);
+}
+
+
+.menu-panel a {
+  display: block;
+
+  padding:
+    8px 10px;
+
+  color: #333333;
+
+  text-decoration: none;
+
+  font-size: 11px;
+
+  letter-spacing:
+    0.04em;
+}
+
+
+.menu-panel a:hover {
+  background:
+    #f6f6f6;
+
+  color:
+    #aaaaaa;
+}

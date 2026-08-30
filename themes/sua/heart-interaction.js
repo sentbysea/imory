@@ -1,24 +1,30 @@
 /* =========================================================
-   HOME - 하트 3D / LOVE EVENT
+   SUA THEME - 하트 3D / LOVE EVENT
 
-   script.js에서 분리됨.
+   home-love-event.js에서 이동(themes/sua 분리).
 
-   musicButton(상단 고정 버튼 스크롤 숨김에서 참조)과
-   bgmVideoId/bgmPlaying/playBgm(하트 드래그 종료 시 BGM
-   자동재생에서 참조)은 home-bgm.js에 있음 — 이 파일보다
-   먼저 로드되어야 함.
+   musicButton(하트 드래그 종료 시 BGM 자동재생에서 참조)과
+   bgmVideoId/bgmPlaying/playBgm은 home/bgm.js에 있음 —
+   이 파일보다 먼저 로드되어야 함.
 
    openProfile()은 이 파일의 pointerup 리스너 안에서
-   호출되지만 실제 정의는 home-profile.js에 있음. 클릭 시점
-   (모든 스크립트 로드가 끝난 뒤)에만 호출되므로 이 파일이
-   home-profile.js보다 먼저 로드돼도 문제없음(index.html
-   순서 참고).
+   호출되지만 실제 정의는 themes/sua/cover-profile.js에
+   있음. 클릭 시점(모든 스크립트 로드가 끝난 뒤)에만
+   호출되므로 이 파일이 cover-profile.js보다 먼저 로드돼도
+   문제없음(index.html 순서 참고).
 
-   menuButton/menuPanel 요소 선언은 원래 이 파일의 "요소"
-   블록과 함께 있었지만, 실제 메뉴 열기/닫기 동작은
-   home-profile.js로 옮겼음(메뉴+프로필을 한 파일로 묶음).
-   두 요소는 여기서 선언되는 전역 상수이며 home-profile.js가
-   이 파일보다 나중에 로드되므로 그대로 참조 가능함.
+   menuButton/menuPanel 요소 선언, 메뉴 열기/닫기, 상단 고정
+   버튼 스크롤 숨김 로직은 테마와 무관한 imory 공통 기능이라
+   home/menu.js로 옮겼음. viewerArea/heartViewer/heartGroup/
+   heartStage/page1/page2/moreButton/backButton 요소 선언과
+   profileOpen 상태는 그대로 이 파일에 남아 있고,
+   openProfile/closeProfile 등 실제 프로필 열기/닫기 동작은
+   themes/sua/cover-profile.js로 옮겼음 — cover-profile.js가
+   이 요소들과 profileOpen, stopInertia(),
+   stopRotationTracking()을 전역으로 그대로 참조하므로 이
+   파일이 그 파일보다 먼저 로드되어야 함(index.html 순서
+   참고). profileOpen의 소유권(선언 위치)은 이번 단계에서
+   바꾸지 않음 — core/view-controller 분리는 다음 단계.
 ========================================================== */
 
 /* =========================================================
@@ -35,16 +41,6 @@ const INERTIA_FRICTION =
 /* =========================================================
    요소
 ========================================================== */
-
-const menuButton =
-  document.getElementById(
-    "menuButton"
-  );
-
-const menuPanel =
-  document.getElementById(
-    "menuPanel"
-  );
 
 const viewerArea =
   document.getElementById(
@@ -98,66 +94,6 @@ const loveRain =
   document.getElementById(
     "loveRain"
   );
-
-
-/* =========================================================
-   상단 고정 버튼(메뉴/음악) 스크롤 시 숨김
-
-   글을 읽을 때 텍스트를 가리지 않도록 아래로 스크롤하면
-   숨기고, 위로 스크롤하거나 맨 위 근처로 오면 다시 보여준다.
-   posts.js도 글 읽기 화면(#postArea)의 자체 스크롤에서
-   이 함수를 그대로 호출한다(전역 함수로 공유).
-========================================================== */
-
-let lastFixedButtonScrollTop =
-  0;
-
-function updateFixedButtonsOnScroll(
-  scrollTop
-) {
-
-  const scrollingDown =
-    scrollTop >
-    lastFixedButtonScrollTop;
-
-  const pastThreshold =
-    scrollTop > 24;
-
-  const shouldHide =
-    scrollingDown &&
-    pastThreshold;
-
-
-  menuButton?.classList.toggle(
-    "is-scroll-hidden",
-    shouldHide
-  );
-
-  musicButton?.classList.toggle(
-    "is-scroll-hidden",
-    shouldHide
-  );
-
-
-  lastFixedButtonScrollTop =
-    scrollTop;
-
-}
-
-
-window.addEventListener(
-  "scroll",
-  () => {
-
-    updateFixedButtonsOnScroll(
-      window.scrollY
-    );
-
-  },
-  {
-    passive: true
-  }
-);
 
 
 /* =========================================================

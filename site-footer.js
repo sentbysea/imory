@@ -8,7 +8,7 @@
    footer라면 페이지에 몇 개가 있든 전부 같은 내용으로 채움.
 
    이 스크립트보다 먼저 supabaseClient가 선언되어 있어야 함
-   (홈/글은 home/home-content.js, 어드민은 admin.js).
+   (홈/글은 home/site-content.js, 어드민은 admin.js).
 ========================================================== */
 
 const SITE_COPYRIGHT_TEXT =

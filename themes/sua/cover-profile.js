@@ -1,104 +1,20 @@
 /* =========================================================
-   HOME - 프로필 패널 / 메뉴
+   SUA THEME - 프로필 패널 (하트 커버)
 
-   script.js에서 분리됨.
+   home-profile.js에서 이동(themes/sua 분리).
 
-   menuButton/menuPanel/viewerArea/heartGroup/heartStage/
-   page1/page2/moreButton/backButton 요소와 profileOpen,
-   stopInertia(), stopRotationTracking()은 home-love-event.js
-   에 있음 — 이 파일은 그 파일보다 나중에 로드되어야 함
+   viewerArea/heartViewer/heartGroup/heartStage/page1/page2/
+   moreButton/backButton 요소와 profileOpen, stopInertia(),
+   stopRotationTracking()은 themes/sua/heart-interaction.js에
+   있음 — 이 파일은 그 파일보다 나중에 로드되어야 함
    (index.html 순서 참고).
+
+   메뉴 열기/닫기(menuButton/menuPanel)는 테마와 무관한
+   imory 공통 기능이라 home/menu.js로 옮겼음. profileOpen /
+   openProfile / closeProfile / heartGroup.profile-open
+   강결합은 다음 단계에서 core/view-controller로 분리하기
+   전까지 지금 이대로 sua 테마 안에 그대로 유지함.
 ========================================================== */
-
-/* =========================================================
-   메뉴
-========================================================== */
-
-menuButton.addEventListener(
-  "click",
-  (event) => {
-
-    event.stopPropagation();
-
-    const isOpen =
-      menuPanel.classList.toggle(
-        "open"
-      );
-
-    menuButton.classList.toggle(
-      "open",
-      isOpen
-    );
-
-    menuButton.setAttribute(
-      "aria-expanded",
-      isOpen
-    );
-
-  }
-);
-
-
-menuPanel.addEventListener(
-  "click",
-  (event) => {
-
-    event.stopPropagation();
-
-  }
-);
-
-
-/*
-  메뉴가 열려 있는 상태에서 메뉴/버튼 바깥을 클릭하면
-  자연스럽게 닫힘.
-*/
-
-document.addEventListener(
-  "click",
-  (event) => {
-
-    if (
-      !menuPanel.classList.contains(
-        "open"
-      )
-    ) {
-
-      return;
-
-    }
-
-
-    if (
-      menuPanel.contains(
-        event.target
-      ) ||
-      menuButton.contains(
-        event.target
-      )
-    ) {
-
-      return;
-
-    }
-
-
-    menuPanel.classList.remove(
-      "open"
-    );
-
-    menuButton.classList.remove(
-      "open"
-    );
-
-    menuButton.setAttribute(
-      "aria-expanded",
-      "false"
-    );
-
-  }
-);
-
 
 /* =========================================================
    프로필

@@ -1,11 +1,7 @@
-:root {
-  --heart-size: 60vw;
-  --heart-group-y: -50px;
-  --hint-gap: 20px;
-  --heart-max-size: 420px;
-  --heart-open-opacity: 0.22;
-}
-
+/*
+  --heart-* 커스텀 프로퍼티는 sua 전용(하트/프로필 전용
+  값)이라 themes/sua/heart-interaction.css로 옮김.
+*/
 
 * {
   box-sizing: border-box;
@@ -32,94 +28,9 @@ body {
 
 
 /* =========================================================
-   메뉴 버튼
-========================================================== */
-
-.menu-button {
-  position: fixed;
-
-  top:
-    max(
-      16px,
-      env(safe-area-inset-top)
-    );
-
-  left:
-    max(
-      16px,
-      env(safe-area-inset-left)
-    );
-
-  width: 38px;
-  height: 38px;
-
-  padding: 0;
-
-  border:
-    1px solid #f2f2f2;
-
-  background:
-    rgba(255, 255, 255, 0.55);
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  cursor: pointer;
-
-  z-index: 100;
-
-  transition:
-    transform 0.22s ease,
-    opacity 0.22s ease;
-
-  -webkit-tap-highlight-color:
-    transparent;
-}
-
-
-/*
-  스크롤 중일 때 메뉴/음악 버튼을 잠깐 숨겨서
-  글 내용을 가리지 않게 함(home-love-event.js에서 토글).
-*/
-
-.menu-button.is-scroll-hidden,
-.music-button.is-scroll-hidden {
-  transform:
-    translateY(-140%);
-
-  opacity: 0;
-
-  pointer-events: none;
-}
-
-
-.triangle {
-  width: 0;
-  height: 0;
-
-  border-left:
-    5px solid transparent;
-
-  border-right:
-    5px solid transparent;
-
-  border-top:
-    6px solid #222222;
-
-  transition:
-    transform 0.25s ease;
-}
-
-
-.menu-button.open .triangle {
-  transform:
-    rotate(180deg);
-}
-
-
-/* =========================================================
    화면 중앙
+
+   메뉴 버튼/패널 관련 스타일은 home/menu.css로 옮김.
 ========================================================== */
 
 .viewer-area {

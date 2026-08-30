@@ -1,4 +1,25 @@
 /* =========================================================
+   SUA THEME - 하트 3D / LOVE EVENT
+
+   home-love-event.css에서 이동(themes/sua 분리).
+
+   --heart-* 커스텀 프로퍼티는 원래 home-base.css의 :root에
+   있었지만 sua(하트/프로필)에서만 쓰여서 여기로 옮김. sua
+   테마 CSS 중 가장 먼저 로드되는 이 파일에 둠으로써
+   themes/sua/cover-profile.css(모바일 @media 블록에서
+   --heart-max-size 참고)에서도 그대로 상속됨.
+========================================================== */
+
+:root {
+  --heart-size: 60vw;
+  --heart-group-y: -50px;
+  --hint-gap: 20px;
+  --heart-max-size: 420px;
+  --heart-open-opacity: 0.22;
+}
+
+
+/* =========================================================
    하트 그룹
 ========================================================== */
 
@@ -518,9 +539,10 @@ top:
 
    원래 style.css 맨 끝의 하나의 @media(max-width:600px)
    블록이었음. 역할별로 나누면서 profile/menu 관련 부분은
-   home-profile.css의 @media 블록으로 옮기고, 여기에는
-   하트/LOVE EVENT 관련 부분만 남김. --detail-top 변수는
-   여기서 재정의되지만 실제로는 home-profile.css의
+   themes/sua/cover-profile.css의 @media 블록으로 옮기고,
+   여기에는 하트/LOVE EVENT 관련 부분만 남김. --detail-top
+   변수는 여기서 재정의되지만 실제로는
+   themes/sua/cover-profile.css의
    .heart-group.detail-open .profile 모바일 규칙에서 쓰임
    (CSS 커스텀 프로퍼티는 상속으로 전달되므로 파일이 달라도
    문제없음 — index.html에서 home-base.css가 가장 먼저

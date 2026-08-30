@@ -1,13 +1,14 @@
 /* =========================================================
-   HOME - YOUTUBE BGM
+   HOME - YOUTUBE BGM (imory 공통)
 
-   script.js에서 분리됨.
+   home-bgm.js에서 이동(파일명만 변경, 내용은 그대로).
 
-   supabaseClient는 home-content.js에 있음(같은 페이지에서
+   supabaseClient는 home/site-content.js에 있음(같은 페이지에서
    먼저 로드되어야 함). musicButton은 상단 고정 버튼 스크롤
-   숨김(home-love-event.js)과 하트 드래그(pointerup, 역시
-   home-love-event.js)에서도 전역으로 참조하므로, 이 파일이
-   그 파일들보다 먼저 로드되어야 함(index.html 순서 참고).
+   숨김(home/menu.js)과 하트 드래그(pointerup,
+   themes/sua/heart-interaction.js)에서도 전역으로 참조하므로,
+   이 파일이 그 파일들보다 먼저 로드되어야 함(index.html
+   순서 참고).
 ========================================================== */
 
 /* =========================================================
