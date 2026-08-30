@@ -10,7 +10,7 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>customize editor</title>
+  <title>커스터마이즈 편집기</title>
 
   <link
     rel="stylesheet"
@@ -48,38 +48,26 @@
           </span>
 
           <span class="customize-editor-subtitle">
-            editor (1단계 · preview only)
+            홈 화면 편집기
           </span>
 
         </div>
 
 
         <!-- =============================================
-             COVER / PROFILE 전환
+             페이지 전환 (커버/프로필 등)
+
+             버튼은 하드코딩하지 않고, editor.js가
+             CUSTOMIZE_PAGE_DEFS를 순회하며 이 nav 안에 동적으로
+             그려 넣는다(renderCustomizePageTabs 참고) — 페이지가
+             늘어나도 이 파일은 그대로 둬도 됨.
         ============================================== -->
 
         <nav
           class="customize-page-tabs"
+          id="customizePageTabs"
           aria-label="편집 대상 페이지"
-        >
-
-          <button
-            class="customize-page-tab active"
-            id="pageTabCoverButton"
-            type="button"
-          >
-            COVER
-          </button>
-
-          <button
-            class="customize-page-tab"
-            id="pageTabProfileButton"
-            type="button"
-          >
-            PROFILE
-          </button>
-
-        </nav>
+        ></nav>
 
 
         <!-- =============================================
@@ -96,7 +84,7 @@
             id="panelTabElementsButton"
             type="button"
           >
-            Elements
+            요소
           </button>
 
           <span class="customize-panel-tab-divider">
@@ -108,7 +96,7 @@
             id="panelTabSettingsButton"
             type="button"
           >
-            Settings
+            설정
           </button>
 
         </nav>
@@ -124,9 +112,15 @@
         >
 
           <p class="customize-panel-hint">
-            block을 클릭하면 오른쪽 preview에서도 선택 표시됩니다.
-            (아직 순서 변경/추가/삭제는 지원하지 않습니다.)
+            요소를 클릭하면 오른쪽 미리보기에서도 선택 표시되고
+            설정 탭으로 이동합니다. (순서 변경/드래그는 아직
+            지원하지 않습니다.)
           </p>
+
+          <div
+            class="customize-add-element-row"
+            id="addElementRow"
+          ></div>
 
           <ul
             class="customize-elements-list"
@@ -146,51 +140,414 @@
           hidden
         >
 
-          <p class="customize-panel-hint">
-            Background / Point Color는 이 CUSTOMIZE 홈에만
-            적용됩니다. 저장은 아직 지원하지 않습니다.
-          </p>
+          <!-- =========================================
+               선택된 block의 props 편집
+               (selectedBlockId가 있을 때만 표시)
+          ========================================== -->
 
-          <div class="customize-setting-line">
+          <div
+            id="blockSettingsSection"
+            hidden
+          >
 
-            <label for="backgroundColorInput">
-              Background Color
-            </label>
-
-            <div class="customize-color-input-row">
-
-              <input
-                type="color"
-                id="backgroundColorInput"
-              >
+            <div class="customize-block-settings-header">
 
               <span
-                class="customize-color-value"
-                id="backgroundColorValue"
+                class="customize-block-settings-type"
+                id="blockSettingsTypeLabel"
               ></span>
 
+              <div class="customize-block-settings-actions">
+
+                <button
+                  type="button"
+                  class="customize-icon-button"
+                  id="duplicateBlockButton"
+                  title="이 요소 복제"
+                >
+                  복제
+                </button>
+
+                <button
+                  type="button"
+                  class="customize-icon-button customize-icon-button-danger"
+                  id="deleteBlockButton"
+                  title="이 요소 삭제"
+                >
+                  삭제
+                </button>
+
+              </div>
+
             </div>
+
+            <div id="blockPropsFields"></div>
 
           </div>
 
 
-          <div class="customize-setting-line">
+          <!-- =========================================
+               페이지 theme 설정
+               (선택된 block이 없을 때 표시)
+          ========================================== -->
 
-            <label for="pointColorInput">
-              Point Color
-            </label>
+          <div id="themeSettingsSection">
 
-            <div class="customize-color-input-row">
+            <p class="customize-panel-hint">
+              배경색 / 배경 이미지 / 배경 패턴 / 글자색 / 포인트
+              색상 / 글꼴은 사이트 전체 공통 설정입니다(모든
+              페이지가 같은 배경을 공유). 저장은 아직 지원하지
+              않습니다.
+            </p>
+
+            <div class="customize-setting-line">
+
+              <label for="backgroundColorInput">
+                배경색
+              </label>
+
+              <div class="customize-color-input-row">
+
+                <input
+                  type="color"
+                  id="backgroundColorInput"
+                >
+
+                <span
+                  class="customize-color-value"
+                  id="backgroundColorValue"
+                ></span>
+
+              </div>
+
+            </div>
+
+
+            <div class="customize-setting-line">
+
+              <label for="textColorInput">
+                글자색
+              </label>
+
+              <div class="customize-color-input-row">
+
+                <input
+                  type="color"
+                  id="textColorInput"
+                >
+
+                <span
+                  class="customize-color-value"
+                  id="textColorValue"
+                ></span>
+
+              </div>
+
+            </div>
+
+
+            <div class="customize-setting-line">
+
+              <label for="pointColorInput">
+                포인트 색상
+              </label>
+
+              <div class="customize-color-input-row">
+
+                <input
+                  type="color"
+                  id="pointColorInput"
+                >
+
+                <span
+                  class="customize-color-value"
+                  id="pointColorValue"
+                ></span>
+
+              </div>
+
+            </div>
+
+
+            <div class="customize-setting-line">
+
+              <label for="fontSelect">
+                글꼴
+              </label>
+
+              <select
+                class="customize-field-select"
+                id="fontSelect"
+              ></select>
+
+            </div>
+
+
+            <!-- =====================================
+                 배경 이미지 (사이트 공통, v3 후속)
+            ====================================== -->
+
+            <div class="customize-setting-line">
+
+              <label for="backgroundImageSrcInput">
+                배경 이미지 URL (https만 허용)
+              </label>
 
               <input
-                type="color"
-                id="pointColorInput"
+                type="text"
+                class="customize-field-input"
+                id="backgroundImageSrcInput"
+                placeholder="https://..."
               >
 
-              <span
-                class="customize-color-value"
-                id="pointColorValue"
-              ></span>
+            </div>
+
+            <div class="customize-setting-line">
+
+              <label for="backgroundImageOpacityInput">
+                배경 이미지 불투명도(%)
+              </label>
+
+              <input
+                type="number"
+                class="customize-field-input"
+                id="backgroundImageOpacityInput"
+                min="0"
+                max="100"
+                step="1"
+              >
+
+            </div>
+
+            <div class="customize-setting-line">
+
+              <label for="backgroundImageFitSelect">
+                배경 이미지 맞춤
+              </label>
+
+              <select
+                class="customize-field-select"
+                id="backgroundImageFitSelect"
+              ></select>
+
+            </div>
+
+
+            <!-- =====================================
+                 배경 패턴 (사이트 공통, v3 후속)
+            ====================================== -->
+
+            <div class="customize-setting-line">
+
+              <label for="backgroundPatternTypeSelect">
+                배경 패턴
+              </label>
+
+              <select
+                class="customize-field-select"
+                id="backgroundPatternTypeSelect"
+              ></select>
+
+            </div>
+
+            <div
+              class="customize-setting-line"
+              id="backgroundPatternDetailRow"
+            >
+
+              <label for="backgroundPatternColorInput">
+                패턴 색상
+              </label>
+
+              <div class="customize-color-input-row">
+
+                <input
+                  type="color"
+                  id="backgroundPatternColorInput"
+                >
+
+                <label class="customize-auto-toggle-row">
+
+                  <input
+                    type="checkbox"
+                    id="backgroundPatternColorInheritCheckbox"
+                  >
+
+                  테마 상속
+
+                </label>
+
+              </div>
+
+            </div>
+
+            <div
+              class="customize-setting-line"
+              id="backgroundPatternOpacityRow"
+            >
+
+              <label for="backgroundPatternOpacityInput">
+                패턴 불투명도(%)
+              </label>
+
+              <input
+                type="number"
+                class="customize-field-input"
+                id="backgroundPatternOpacityInput"
+                min="0"
+                max="100"
+                step="1"
+              >
+
+            </div>
+
+            <div
+              class="customize-setting-line"
+              id="backgroundPatternSizeRow"
+            >
+
+              <label for="backgroundPatternSizeInput">
+                패턴 간격(px)
+              </label>
+
+              <input
+                type="number"
+                class="customize-field-input"
+                id="backgroundPatternSizeInput"
+                min="4"
+                max="120"
+                step="1"
+              >
+
+            </div>
+
+
+          </div>
+
+
+          <!-- =========================================
+               페이지별 Content Area 설정
+               (선택된 block이 없을 때, theme 설정과 함께 표시)
+
+               theme(사이트 공통)과 달리 페이지마다 따로
+               저장된다 — 페이지 탭을 바꾸면 이 값들도 바뀐다.
+          ========================================== -->
+
+          <div id="contentAreaSettingsSection">
+
+            <p class="customize-panel-hint">
+              콘텐츠 폭 / 여백 / 좌우 정렬 / 화면 맞춤은 현재
+              선택된 페이지에만 적용됩니다.
+            </p>
+
+            <div class="customize-setting-line">
+
+              <label for="contentAreaPaddingYInput">
+                위아래 여백(px)
+              </label>
+
+              <input
+                type="number"
+                class="customize-field-input"
+                id="contentAreaPaddingYInput"
+                min="0"
+                max="120"
+                step="1"
+              >
+
+            </div>
+
+
+            <div class="customize-setting-line">
+
+              <label for="contentAreaPaddingXInput">
+                좌우 여백(px)
+              </label>
+
+              <input
+                type="number"
+                class="customize-field-input"
+                id="contentAreaPaddingXInput"
+                min="0"
+                max="120"
+                step="1"
+              >
+
+            </div>
+
+
+            <div class="customize-setting-line">
+
+              <label for="contentAreaMaxWidthInput">
+                최대 너비(px)
+              </label>
+
+              <input
+                type="number"
+                class="customize-field-input"
+                id="contentAreaMaxWidthInput"
+                min="280"
+                max="1200"
+                step="10"
+              >
+
+              <label class="customize-auto-toggle-row">
+
+                <input
+                  type="checkbox"
+                  id="contentAreaMaxWidthUnlimitedCheckbox"
+                >
+
+                제한 없음(화면 폭 그대로)
+
+              </label>
+
+            </div>
+
+
+            <div class="customize-setting-line">
+
+              <label for="contentAreaAlignSelect">
+                좌우 정렬
+              </label>
+
+              <select
+                class="customize-field-select"
+                id="contentAreaAlignSelect"
+              ></select>
+
+            </div>
+
+
+            <div class="customize-setting-line">
+
+              <label class="customize-auto-toggle-row">
+
+                <input
+                  type="checkbox"
+                  id="contentAreaFitViewportCheckbox"
+                >
+
+                화면 높이에 맞추기(fitViewport)
+
+              </label>
+
+            </div>
+
+
+            <div
+              class="customize-setting-line"
+              id="contentAreaVerticalAlignRow"
+            >
+
+              <label for="contentAreaVerticalAlignSelect">
+                위아래 배치
+              </label>
+
+              <select
+                class="customize-field-select"
+                id="contentAreaVerticalAlignSelect"
+              ></select>
 
             </div>
 
@@ -224,18 +581,52 @@
 
 
     <!-- ===================================================
-         RIGHT: renderCustomizeLayout() preview
+         RIGHT: device preview
 
-         editor 전용 버튼/드래그 handle을 이 안에 넣지 않는다 —
-         renderCustomizeLayout()가 만든 DOM 구조를 그대로 둔다.
+         renderCustomizeLayout()는 이 안의 iframe(preview-frame.html)
+         문서 안에서 호출된다 — iframe은 그 자체로 독립된 browsing
+         context라 iframe.style.width를 실제 device 폭으로 지정하면
+         내부 문서가 진짜 그 폭의 화면인 것처럼 렌더된다(부모 문서
+         폭을 CSS로 줄이는 것과는 다름 — 이게 media query 등 실제
+         반응형 동작이 그대로 걸리는 이유).
     ==================================================== -->
 
     <main class="customize-editor-preview">
 
       <div
-        class="customize-preview-mount"
-        id="customizePreviewMount"
+        class="customize-device-toolbar"
+        id="deviceToolbar"
+        role="tablist"
+        aria-label="미리보기 디바이스"
       ></div>
+
+      <div
+        class="customize-device-stage"
+        id="deviceStage"
+      >
+
+        <div
+          class="customize-device-scale-box"
+          id="deviceScaleBox"
+        >
+
+          <div
+            class="customize-device-frame-wrapper"
+            id="deviceFrameWrapper"
+          >
+
+            <iframe
+              class="customize-device-frame"
+              id="customizePreviewFrame"
+              src="./preview-frame.html"
+              title="홈 미리보기"
+            ></iframe>
+
+          </div>
+
+        </div>
+
+      </div>
 
     </main>
 

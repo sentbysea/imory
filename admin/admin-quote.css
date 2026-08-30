@@ -882,27 +882,17 @@
 
   /*
     ★ 바깥(body) 스크롤 잠금 — quote-mode 진입 중엔 admin.js의
-    MutationObserver가 이 클래스를 body에 붙인다. .admin-page 자체는
-    이미 100dvh + overflow:hidden으로 넘치는 콘텐츠를 안 보이게
-    막고 있었지만, 그것만으로는 iOS Safari의 고무줄 스크롤을 못
-    막는다 — .quote-controls를 끝까지 내린 채로 계속 끌면 그 여세가
-    body로 체이닝돼서 배경 페이지가 같이 끌리며 아래 흰 여백/footer가
-    잠깐 드러나 보였다(스크롤 bleed). body를 position:fixed로 뷰포트에
-    아예 고정해버리면 애초에 끌 대상이 없어져서 확실히 막힌다.
-    top은 admin.js가 잠글 때의 scrollY를 상쇄하도록 인라인으로 넣어줌
-    (안 그러면 시각적으로 맨 위로 튐).
+    MutationObserver가 body.admin-fullscreen-editor-scroll-locked
+    클래스를 붙인다. 실제 position:fixed 규칙은 CUSTOMIZE와
+    공용이라 admin-shell.css로 옮겼다(이 파일은 quote-mode 전용
+    규칙만 남김). .admin-page 자체는 이미 100dvh + overflow:hidden
+    으로 넘치는 콘텐츠를 안 보이게 막고 있었지만, 그것만으로는
+    iOS Safari의 고무줄 스크롤을 못 막는다 — .quote-controls를
+    끝까지 내린 채로 계속 끌면 그 여세가 body로 체이닝돼서 배경
+    페이지가 같이 끌리며 아래 흰 여백/footer가 잠깐 드러나 보였다
+    (스크롤 bleed). body를 position:fixed로 뷰포트에 아예 고정해버리면
+    애초에 끌 대상이 없어져서 확실히 막힌다.
   */
-
-  body.quote-scroll-locked {
-    position: fixed;
-
-    left: 0;
-    right: 0;
-
-    width: 100%;
-
-    overflow: hidden;
-  }
 
 
   /*
@@ -1158,7 +1148,8 @@
       ★ 맨 위/아래까지 스크롤한 뒤에도 계속 끌면, 그 여세가
       상위 스크롤 컨테이너(body)로 넘어가 배경 페이지가 같이
       끌리는 현상(스크롤 체이닝)을 막는다 — admin.js의 body
-      잠금(.quote-scroll-locked)과 짝을 이루는 1차 방어선.
+      잠금(.admin-fullscreen-editor-scroll-locked, admin-shell.css)과
+      짝을 이루는 1차 방어선.
     */
 
     overscroll-behavior-y: contain;

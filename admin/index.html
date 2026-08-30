@@ -226,10 +226,6 @@
                 CUSTOMIZE
               </strong>
 
-              <small>
-                coming soon
-              </small>
-
             </span>
 
             <span class="menu-arrow">
@@ -602,8 +598,11 @@
       <!-- ===================================================
            CUSTOMIZE
 
-           준비 화면만 표시. 배경색/포인트 컬러/홈 화면·설명란
-           편집/요소 배치/PC·모바일 미리보기 등은 추후 구현 예정.
+           customize/editor/index.html을 그대로 iframe으로 embed한다
+           (admin.js/editor.js가 서로 다른 document라 id 충돌이
+           없고, admin DOM/CSS를 건드리지 않음). Supabase save/load,
+           drag/drop, 모바일 편집 UI는 아직 customize/editor 쪽에도
+           없음 — 여기서는 "연결"만 담당.
       ==================================================== -->
 
       <section
@@ -633,13 +632,16 @@
         </div>
 
 
-        <section class="coming-soon">
+        <div class="customize-embed">
 
-          <p class="coming-soon-text">
-            coming soon
-          </p>
+          <iframe
+            class="customize-embed-frame"
+            id="customizeEditorFrame"
+            src="../customize/editor/index.html"
+            title="CUSTOMIZE editor"
+          ></iframe>
 
-        </section>
+        </div>
 
       </section>
 

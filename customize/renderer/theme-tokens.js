@@ -103,44 +103,17 @@ function mixCustomizeColor(
 }
 
 
-/* WCAG relative luminance (0 = 검정, 1 = 흰색) */
-
-function getCustomizeRelativeLuminance(
-  rgb
-) {
-
-  const toLinear =
-    (channel) => {
-
-      const normalized =
-        channel / 255;
-
-      return (
-        normalized <= 0.03928
-          ? normalized / 12.92
-          : Math.pow(
-              (normalized + 0.055) / 1.055,
-              2.4
-            )
-      );
-
-    };
-
-  return (
-    0.2126 * toLinear(rgb.r) +
-    0.7152 * toLinear(rgb.g) +
-    0.0722 * toLinear(rgb.b)
-  );
-
-}
-
-
 /* =========================================================
    computeCustomizeThemeTokens
 
-   입력: { background, point } ("#rrggbb" 문자열, 둘 다 옵션 —
-   빠지거나 잘못된 값이면 CUSTOMIZE_DEFAULT_THEME과 동일한
-   fallback을 씀).
+   입력: { background, textColor, point } ("#rrggbb" 문자열,
+   전부 옵션 — 빠지거나 잘못된 값이면 CUSTOMIZE_DEFAULT_THEME과
+   동일한 fallback을 씀).
+
+   textColor는 luminance로 자동판별하지 않는다 — 사용자가 저장한
+   명시값을 그대로 텍스트색으로 쓰고, surface/surface-hover/border는
+   "background를 textColor 쪽으로 6%/12%/18% 섞기"로 계산한다
+   (배경이 밝든 어둡든 textColor와 대비되는 방향으로 자연히 섞임).
 
    출력: { "--theme-bg": "#...", ... } 7개 키를 가진 새 객체.
    순수 함수 — 입력 객체를 변형하지 않고, 매 호출 새 객체를 반환.
@@ -153,6 +126,9 @@ function computeCustomizeThemeTokens(
   const FALLBACK_BACKGROUND =
     "#ffffff";
 
+  const FALLBACK_TEXT_COLOR =
+    "#1a1a1a";
+
   const FALLBACK_POINT =
     "#5c7cfa";
 
@@ -160,6 +136,11 @@ function computeCustomizeThemeTokens(
     isValidCustomizeHexColor(input?.background)
       ? input.background
       : FALLBACK_BACKGROUND;
+
+  const textColorHex =
+    isValidCustomizeHexColor(input?.textColor)
+      ? input.textColor
+      : FALLBACK_TEXT_COLOR;
 
   const pointHex =
     isValidCustomizeHexColor(input?.point)
@@ -170,44 +151,28 @@ function computeCustomizeThemeTokens(
   const backgroundRgb =
     parseCustomizeHexColor(backgroundHex);
 
-  const luminance =
-    getCustomizeRelativeLuminance(backgroundRgb);
-
-  const isDarkBackground =
-    luminance < 0.5;
-
-
-  const white =
-    { r: 255, g: 255, b: 255 };
-
-  const black =
-    { r: 0, g: 0, b: 0 };
-
   const textRgb =
-    isDarkBackground ? white : black;
-
-  const surfaceMixTarget =
-    isDarkBackground ? white : black;
+    parseCustomizeHexColor(textColorHex);
 
 
   const surfaceRgb =
     mixCustomizeColor(
       backgroundRgb,
-      surfaceMixTarget,
+      textRgb,
       0.06
     );
 
   const surfaceHoverRgb =
     mixCustomizeColor(
       backgroundRgb,
-      surfaceMixTarget,
+      textRgb,
       0.12
     );
 
   const borderRgb =
     mixCustomizeColor(
       backgroundRgb,
-      surfaceMixTarget,
+      textRgb,
       0.18
     );
 
@@ -223,7 +188,7 @@ function computeCustomizeThemeTokens(
     "--theme-bg": backgroundHex,
     "--theme-surface": toCustomizeHexColor(surfaceRgb),
     "--theme-surface-hover": toCustomizeHexColor(surfaceHoverRgb),
-    "--theme-text": toCustomizeHexColor(textRgb),
+    "--theme-text": textColorHex,
     "--theme-text-muted": toCustomizeHexColor(textMutedRgb),
     "--theme-accent": pointHex,
     "--theme-border": toCustomizeHexColor(borderRgb)

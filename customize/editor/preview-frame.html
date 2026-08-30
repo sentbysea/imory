@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <title>customize preview</title>
+
+  <!--
+    editor.js가 이 문서를 부모(customize/editor/index.html)에서
+    실제 device 폭(390px/1280px)으로 iframe.style.width를 지정해서
+    보여준다 — 이 문서 안에서는 폭을 신경 쓸 필요가 없고, 그냥
+    실제 홈페이지처럼 root에 blocks를 렌더하기만 하면 된다.
+    (render-layout.js는 document-agnostic이라 이 문서 안에서
+    호출돼도 그대로 동작함 — 이 파일 자체에는 로직이 없음.)
+  -->
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: #ffffff;
+    }
+
+    /*
+      renderer가 만든 block 노드 자체에 붙는 선택 표시.
+      editor.js가 이미 존재하는 [data-block-id] element에
+      클래스만 토글한다 — 새 DOM을 삽입하지 않는다. 이 문서
+      (iframe) 안에서 토글되므로 스타일도 여기 있어야 한다 —
+      부모 문서(editor.css)의 CSS는 이 iframe 안에 적용되지 않음.
+    */
+
+    [data-block-id].customize-editor-block-selected {
+      outline: 2px solid #e39ab5;
+      outline-offset: 2px;
+    }
+
+    /*
+      editor.js의 drag & drop(같은 레벨 순서 변경 / root↔container
+      이동 / container 내부 재배치)이 쓰는 시각 요소. 로직은 전부
+      editor.js에 있고, 여기는 그 로직이 토글하는 클래스의 모양만
+      정의한다(이 문서 자체에는 로직 없음 — 위 주석 참고).
+    */
+
+    .customize-editor-drag-source {
+      opacity: 0.4;
+    }
+
+    .customize-editor-drop-indicator {
+      position: fixed;
+      height: 3px;
+      border-radius: 2px;
+      background: #e39ab5;
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    .customize-editor-drop-inside {
+      outline: 2px dashed #e39ab5;
+      outline-offset: -2px;
+    }
+
+    body.customize-editor-dragging-active {
+      cursor: grabbing;
+      user-select: none;
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+  <div id="previewMount"></div>
+
+  <!-- renderer 스크립트 로드 순서 중요 -->
+  <script src="../renderer/block-defaults.js"></script>
+  <script src="../renderer/theme-tokens.js"></script>
+  <script src="../renderer/validate-layout.js"></script>
+  <script src="../renderer/render-layout.js"></script>
+
+</body>
+
+</html>

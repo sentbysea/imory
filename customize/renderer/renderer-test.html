@@ -48,7 +48,7 @@
   <h2>1. DEFAULT_LAYOUT</h2>
   <div id="defaultMount"></div>
 
-  <h2>2. kitchen-sink layout (6 block types + nested container + invalid input)</h2>
+  <h2>2. kitchen-sink layout (6 block types + nested container + invalid input + v2 numeric/action)</h2>
   <div id="kitchenSinkMount"></div>
 
   <h2>검증 결과</h2>
@@ -115,13 +115,19 @@
         container: defaultMount,
         blocks: defaultValidation.layout.blocks,
         theme: defaultValidation.layout.theme,
+        contentArea: defaultValidation.layout.contentArea,
         mode: "view",
         actions: {
-          openProfile: () => {
-            report("DEFAULT_LAYOUT openProfile callback fired", true);
+          profile: () => {
+            report("DEFAULT_LAYOUT profile-navigate callback fired", true);
           }
         }
       });
+
+    assert(
+      "DEFAULT_LAYOUT의 .customize-content-area가 CUSTOMIZE_DEFAULT_CONTENT_AREA.maxWidth(600px)로 렌더됨",
+      defaultMount.querySelector(".customize-content-area").style.maxWidth === "600px"
+    );
 
     assert(
       "DEFAULT_LAYOUT renders all top-level blocks",
@@ -145,24 +151,71 @@
 
     /* =====================================================
        2. kitchen-sink: 6 block types, nested container,
-          invalid props, unknown block, depth 초과, unsafe URL
+          invalid props(enum/숫자/색상/action), unknown block,
+          depth 초과, unsafe URL
     ===================================================== */
 
     const rawKitchenSink =
       {
-        version: 1,
+        version: CUSTOMIZE_LAYOUT_VERSION,
         theme: { background: "#101014", point: "#ff6b6b" },
         blocks: [
 
-          { type: "text", props: { content: "hello", size: "bogus-size", align: "center" } },
+          {
+            type: "text",
+            props: {
+              content: "hello",
+              fontSize: "not-a-number",
+              color: "not-a-color",
+              fontWeight: 400,
+              align: "center-ish",
+              letterSpacing: 999,
+              lineHeight: 1.4
+            }
+          },
 
-          { type: "image", props: { src: "https://placehold.co/600x400", alt: "safe" } },
+          {
+            type: "image",
+            props: {
+              src: "https://placehold.co/600x400",
+              alt: "safe",
+              width: 300,
+              height: 200,
+              objectFit: "cover",
+              action: { type: "link", href: "https://example.com/target" }
+            }
+          },
 
           { type: "image", props: { src: "javascript:alert(1)", alt: "unsafe" } },
 
           {
+            type: "image",
+            props: {
+              src: "https://placehold.co/100x100",
+              alt: "internal action image",
+              action: { type: "internal", targetPageId: "profile" }
+            }
+          },
+
+          {
+            type: "text",
+            props: {
+              content: "more",
+              action: { type: "internal", targetPageId: "profile" }
+            }
+          },
+
+          {
+            type: "text",
+            props: {
+              content: "external more",
+              action: { type: "link", href: "https://example.com/more" }
+            }
+          },
+
+          {
             type: "container",
-            props: { direction: "row", gap: "sm" },
+            props: { direction: "row", gap: 8, borderWidth: 2, borderStyle: "solid", background: "#ff0000", backgroundOpacity: 50, borderRadius: 12 },
             children: [
               { type: "text", props: { content: "nested depth 2" } },
               {
@@ -182,15 +235,15 @@
             ]
           },
 
-          { type: "button", props: { variant: "action", label: "call action", actionName: "openProfile" } },
+          { type: "button", props: { variant: "action", label: "call action", action: { type: "internal", targetPageId: "profile" } } },
 
-          { type: "button", props: { variant: "external", label: "unsafe link", href: "http://not-https.example" } },
+          { type: "button", props: { variant: "external", label: "unsafe link", action: { type: "link", href: "http://not-https.example" } } },
 
-          { type: "button", props: { variant: "external", label: "safe link", href: "https://example.com" } },
+          { type: "button", props: { variant: "external", label: "safe link", action: { type: "link", href: "https://example.com" } } },
 
-          { type: "spacer", props: { size: "lg" } },
+          { type: "spacer", props: { height: 9999 } },
 
-          { type: "divider", props: { style: "dashed" } },
+          { type: "divider", props: { style: "dashed", thickness: 1, widthPercent: 100 } },
 
           { type: "totally-unknown-type", props: {} },
 
@@ -211,7 +264,7 @@
     );
 
     assert(
-      "kitchen-sink reports errors (invalid props / unsafe url / unknown type / depth)",
+      "kitchen-sink reports errors (invalid enum/number/url/type/depth)",
       kitchenValidation.errors.length >= 5,
       `errors=${kitchenValidation.errors.length}`
     );
@@ -237,6 +290,21 @@
     );
 
     assert(
+      "invalid-number reported for non-numeric fontSize",
+      kitchenValidation.errors.some(e => e.code === "invalid-number" && e.path.includes("fontSize"))
+    );
+
+    assert(
+      "number-clamped reported for out-of-range letterSpacing/height",
+      kitchenValidation.errors.some(e => e.code === "number-clamped")
+    );
+
+    assert(
+      "invalid optional color falls back to '' (theme 상속)",
+      kitchenValidation.layout.blocks[0].props.color === ""
+    );
+
+    assert(
       "children-not-allowed reported for non-container",
       kitchenValidation.errors.some(e => e.code === "children-not-allowed")
     );
@@ -251,8 +319,8 @@
       JSON.stringify(kitchenValidation.layout).includes("nested depth 3 (allowed)") === true
     );
 
-    let openProfileCalled =
-      false;
+    let profileNavigateCallCount =
+      0;
 
     const kitchenSinkMount =
       document.getElementById("kitchenSinkMount");
@@ -264,7 +332,7 @@
         theme: kitchenValidation.layout.theme,
         mode: "view",
         actions: {
-          openProfile: () => { openProfileCalled = true; }
+          profile: () => { profileNavigateCallCount += 1; }
         }
       });
 
@@ -276,6 +344,19 @@
     assert(
       "all 6 block types rendered in DOM",
       allSixTypesRendered
+    );
+
+    const kitchenSinkContainerEl =
+      kitchenSinkMount.querySelector('[data-block-type="container"]');
+
+    assert(
+      "container.borderRadius=12이 borderRadius style에 반영됨(v3)",
+      kitchenSinkContainerEl.style.borderRadius === "12px"
+    );
+
+    assert(
+      "container.background+backgroundOpacity=50이 rgba(..., 0.5)로 렌더됨(v3)",
+      kitchenSinkContainerEl.style.background === "rgba(255, 0, 0, 0.5)"
     );
 
     assert(
@@ -301,9 +382,99 @@
     }
 
     assert(
-      "openProfile action callback invoked via actions[] (not core/view-controller)",
-      openProfileCalled === true
+      "targetPageId action callback invoked via actions[] (not core/view-controller)",
+      profileNavigateCallCount === 1
     );
+
+    const linkableImage =
+      kitchenSinkMount.querySelector('a[data-block-type="image"]');
+
+    assert(
+      "image with action.type=link renders as <a href> (v2)",
+      !!linkableImage && linkableImage.href === "https://example.com/target"
+    );
+
+    const internalActionImage =
+      kitchenSinkMount.querySelector('[data-block-type="image"][role="button"]');
+
+    assert(
+      "image with action.type=internal renders as clickable role=button element (v2)",
+      !!internalActionImage
+    );
+
+    const linkableText =
+      Array.from(kitchenSinkMount.querySelectorAll('a[data-block-type="text"]'))
+        .find(a => a.textContent === "external more");
+
+    assert(
+      "text with action.type=link renders as <a href> (text action)",
+      !!linkableText && linkableText.href === "https://example.com/more"
+    );
+
+    const internalActionText =
+      Array.from(kitchenSinkMount.querySelectorAll('[data-block-type="text"][role="button"]'))
+        .find(el => el.textContent === "more");
+
+    assert(
+      "text with action.type=internal renders as clickable role=button element (text action)",
+      !!internalActionText
+    );
+
+    if (internalActionText) {
+      internalActionText.click();
+    }
+
+    assert(
+      "clicking a text with action.type=internal fires the actions[] callback too (text action)",
+      profileNavigateCallCount === 2
+    );
+
+    const noActionText =
+      Array.from(kitchenSinkMount.querySelectorAll('[data-block-type="text"]'))
+        .find(el => el.textContent === "hello");
+
+    assert(
+      "text with action.type=none stays a plain <p> (no role=button, no href)",
+      !!noActionText &&
+      noActionText.tagName === "P" &&
+      !noActionText.hasAttribute("role")
+    );
+
+    const imageActionMount =
+      document.createElement("div");
+
+    document.body.appendChild(imageActionMount);
+
+    let imageActionCalled2 =
+      false;
+
+    const imageActionHandle2 =
+      renderCustomizeLayout({
+        container: imageActionMount,
+        blocks: [{
+          id: "8f14e45f-ceea-467e-add1-00000000ia02",
+          type: "image",
+          props: { src: "https://placehold.co/50x50", alt: "x", action: { type: "internal", targetPageId: "profile" } }
+        }],
+        theme: CUSTOMIZE_DEFAULT_THEME,
+        mode: "view",
+        actions: { profile: () => { imageActionCalled2 = true; } }
+      });
+
+    const clickableImageNode =
+      imageActionMount.querySelector('[role="button"]');
+
+    if (clickableImageNode) {
+      clickableImageNode.click();
+    }
+
+    assert(
+      "clicking an image with action.type=internal fires the actions[] callback",
+      imageActionCalled2 === true
+    );
+
+    imageActionHandle2.destroy();
+    imageActionMount.remove();
 
     assert(
       "text content rendered via textContent (no HTML injection)",
@@ -311,7 +482,7 @@
 
         const withHtmlContent =
           validateCustomizeLayout({
-            version: 1,
+            version: CUSTOMIZE_LAYOUT_VERSION,
             blocks: [
               { type: "text", props: { content: "<img src=x onerror=alert(1)>" } }
             ]
@@ -345,6 +516,524 @@
 
 
     /* =====================================================
+       3. theme fields (textColor / point / font, v3 — contentWidth
+          제거됨) + contentArea(v3, 신규)
+    ===================================================== */
+
+    const legacyShapeValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        theme: { background: "#ffffff", point: "#5c7cfa" },
+        blocks: []
+      });
+
+    assert(
+      "theme에 신규 필드 없어도 errors 없이 정규화됨",
+      legacyShapeValidation.valid === true,
+      JSON.stringify(legacyShapeValidation.errors)
+    );
+
+    assert(
+      "누락된 textColor/font가 기본값으로 채워짐",
+      legacyShapeValidation.layout.theme.textColor === CUSTOMIZE_DEFAULT_THEME.textColor &&
+      legacyShapeValidation.layout.theme.font === CUSTOMIZE_DEFAULT_THEME.font
+    );
+
+    assert(
+      "theme.contentWidth는 v3에서 더 이상 존재하지 않음(contentArea.maxWidth로 이동)",
+      legacyShapeValidation.layout.theme.contentWidth === undefined
+    );
+
+    assert(
+      "contentArea가 누락되면 CUSTOMIZE_DEFAULT_CONTENT_AREA로 채워짐",
+      Object.keys(CUSTOMIZE_DEFAULT_CONTENT_AREA).every(
+        key => legacyShapeValidation.layout.contentArea[key] === CUSTOMIZE_DEFAULT_CONTENT_AREA[key]
+      )
+    );
+
+
+    /* 3-2. textColor는 luminance 자동판별이 아니라 명시값 그대로 --theme-text가 됨 */
+
+    const explicitTextColorTokens =
+      computeCustomizeThemeTokens({
+        background: "#ffffff",
+        textColor: "#ff0000",
+        point: "#5c7cfa"
+      });
+
+    assert(
+      "밝은 배경이어도 textColor 명시값(#ff0000)이 그대로 --theme-text로 쓰임",
+      explicitTextColorTokens["--theme-text"] === "#ff0000"
+    );
+
+
+    /* 3-3. font invalid 값은 기본값으로 대체 + errors 기록 */
+
+    const invalidThemeEnumValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        theme: { font: "comic-sans" },
+        blocks: []
+      });
+
+    assert(
+      "잘못된 font가 기본값으로 대체되고 errors에 기록됨",
+      invalidThemeEnumValidation.layout.theme.font === CUSTOMIZE_DEFAULT_THEME.font &&
+      invalidThemeEnumValidation.errors.filter(e => e.path === "theme.font").length === 1
+    );
+
+
+    /* 3-4. contentArea — 잘못된 enum/숫자/boolean 값이 기본값으로 대체 + errors 기록 */
+
+    const invalidContentAreaValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        contentArea: { align: "diagonal", verticalAlign: "middle-ish", paddingY: "not-a-number", fitViewport: "yes" },
+        blocks: []
+      });
+
+    assert(
+      "잘못된 contentArea.align/verticalAlign이 기본값으로 대체됨",
+      invalidContentAreaValidation.layout.contentArea.align === CUSTOMIZE_DEFAULT_CONTENT_AREA.align &&
+      invalidContentAreaValidation.layout.contentArea.verticalAlign === CUSTOMIZE_DEFAULT_CONTENT_AREA.verticalAlign
+    );
+
+    assert(
+      "파싱 불가능한 contentArea.paddingY는 기본값으로 폴백(invalid-number)",
+      invalidContentAreaValidation.layout.contentArea.paddingY === CUSTOMIZE_DEFAULT_CONTENT_AREA.paddingY &&
+      invalidContentAreaValidation.errors.some(e => e.code === "invalid-number" && e.path === "contentArea.paddingY")
+    );
+
+    assert(
+      "boolean이 아닌 contentArea.fitViewport는 기본값(false)으로 대체되고 에러 기록됨",
+      invalidContentAreaValidation.layout.contentArea.fitViewport === false &&
+      invalidContentAreaValidation.errors.some(e => e.path === "contentArea.fitViewport")
+    );
+
+
+    /* 3-5. contentArea.maxWidth — allowEmpty(""=제한 없음) 정상 동작 */
+
+    const unlimitedMaxWidthValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        contentArea: { maxWidth: "" },
+        blocks: []
+      });
+
+    assert(
+      "contentArea.maxWidth=''는 제한 없음으로 그대로 유지됨",
+      unlimitedMaxWidthValidation.layout.contentArea.maxWidth === ""
+    );
+
+
+    /* 3-6. font/contentArea가 실제 렌더된 DOM style에 반영됨(root vs content-area 분리) */
+
+    const themeStyleMount =
+      document.createElement("div");
+
+    document.body.appendChild(themeStyleMount);
+
+    const themeStyleHandle =
+      renderCustomizeLayout({
+        container: themeStyleMount,
+        blocks: [],
+        theme: { background: "#ffffff", textColor: "#111111", point: "#5c7cfa", font: "mono" },
+        contentArea: { paddingY: 24, paddingX: 16, maxWidth: 420, align: "center", fitViewport: false, verticalAlign: "start" },
+        mode: "view",
+        actions: {}
+      });
+
+    const themeStyleRoot =
+      themeStyleMount.querySelector(".customize-layout");
+
+    const themeStyleContentArea =
+      themeStyleMount.querySelector(".customize-content-area");
+
+    assert(
+      "font=mono가 root fontFamily에 반영됨",
+      themeStyleRoot.style.fontFamily.includes("monospace")
+    );
+
+    assert(
+      "theme.background(#ffffff)이 root의 background-color로 직접 칠해짐(v3 후속 — 이전엔 어디에도 안 칠해지던 결함)",
+      themeStyleRoot.style.backgroundColor === "rgb(255, 255, 255)"
+    );
+
+    assert(
+      ".customize-content-area가 root의 자식으로 존재함(DOM 분리)",
+      !!themeStyleContentArea &&
+      themeStyleContentArea.parentElement === themeStyleRoot
+    );
+
+    assert(
+      "root(.customize-layout)에는 maxWidth가 걸리지 않음(전체 폭/배경 레이어)",
+      themeStyleRoot.style.maxWidth === ""
+    );
+
+    assert(
+      "contentArea.maxWidth=420이 root가 아니라 content-area의 maxWidth에 반영됨",
+      themeStyleContentArea.style.maxWidth === "420px"
+    );
+
+    assert(
+      "contentArea.paddingY/paddingX가 content-area의 padding에 반영됨",
+      themeStyleContentArea.style.paddingTop === "24px" &&
+      themeStyleContentArea.style.paddingLeft === "16px"
+    );
+
+    themeStyleHandle.update(
+      [],
+      { background: "#ffffff", textColor: "#111111", point: "#5c7cfa", font: "serif" },
+      { paddingY: 24, paddingX: 16, maxWidth: "", align: "center", fitViewport: false, verticalAlign: "start" }
+    );
+
+    assert(
+      "update()로 font/contentArea 변경 시 root/content-area style도 갱신됨(maxWidth=''→none)",
+      themeStyleRoot.style.fontFamily.includes("serif") &&
+      !themeStyleRoot.style.fontFamily.includes("monospace") &&
+      themeStyleContentArea.style.maxWidth === "none"
+    );
+
+    themeStyleHandle.destroy();
+    themeStyleMount.remove();
+
+
+    /* 3-7. fitViewport/verticalAlign — root가 담당(min-height:100dvh + flex justify-content) */
+
+    const fitViewportMount =
+      document.createElement("div");
+
+    document.body.appendChild(fitViewportMount);
+
+    const fitViewportHandle =
+      renderCustomizeLayout({
+        container: fitViewportMount,
+        blocks: [],
+        theme: CUSTOMIZE_DEFAULT_THEME,
+        contentArea: { paddingY: 0, paddingX: 0, maxWidth: 600, align: "center", fitViewport: true, verticalAlign: "center" },
+        mode: "view",
+        actions: {}
+      });
+
+    const fitViewportRoot =
+      fitViewportMount.querySelector(".customize-layout");
+
+    assert(
+      "fitViewport=true면 root에 min-height:100dvh가 걸림",
+      fitViewportRoot.style.minHeight === "100dvh"
+    );
+
+    assert(
+      "verticalAlign=center가 root의 justify-content:center로 매핑됨",
+      fitViewportRoot.style.display === "flex" &&
+      fitViewportRoot.style.justifyContent === "center"
+    );
+
+    fitViewportHandle.update(
+      [],
+      undefined,
+      { paddingY: 0, paddingX: 0, maxWidth: 600, align: "center", fitViewport: false, verticalAlign: "center" }
+    );
+
+    assert(
+      "fitViewport=false로 바뀌면 root의 min-height/display가 리셋됨",
+      fitViewportRoot.style.minHeight === "" &&
+      fitViewportRoot.style.display === ""
+    );
+
+    fitViewportHandle.destroy();
+    fitViewportMount.remove();
+
+
+    /* 3-8. theme.backgroundImage/backgroundPattern 정규화(v3 후속, 사이트 공통) */
+
+    const missingBackgroundLayersValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        theme: { background: "#ffffff" },
+        blocks: []
+      });
+
+    assert(
+      "backgroundImage/backgroundPattern이 통째로 없으면 errors 없이 기본값으로 채워짐",
+      missingBackgroundLayersValidation.valid === true &&
+      JSON.stringify(missingBackgroundLayersValidation.layout.theme.backgroundImage) === JSON.stringify(CUSTOMIZE_DEFAULT_BACKGROUND_IMAGE) &&
+      JSON.stringify(missingBackgroundLayersValidation.layout.theme.backgroundPattern) === JSON.stringify(CUSTOMIZE_DEFAULT_BACKGROUND_PATTERN),
+      JSON.stringify(missingBackgroundLayersValidation.errors)
+    );
+
+    const invalidBackgroundLayersValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        theme: {
+          backgroundImage: { src: "http://not-https.example/x.png", opacity: "nope", fit: "stretch" },
+          backgroundPattern: { type: "stripes", opacity: 9999, size: "big" }
+        },
+        blocks: []
+      });
+
+    assert(
+      "backgroundImage.src가 http면 제거되고 unsafe-url 기록됨",
+      invalidBackgroundLayersValidation.layout.theme.backgroundImage.src === "" &&
+      invalidBackgroundLayersValidation.errors.some(e => e.code === "unsafe-url" && e.path === "theme.backgroundImage.src")
+    );
+
+    assert(
+      "backgroundImage.opacity 파싱 실패 시 기본값(100)으로 폴백",
+      invalidBackgroundLayersValidation.layout.theme.backgroundImage.opacity === 100 &&
+      invalidBackgroundLayersValidation.errors.some(e => e.code === "invalid-number" && e.path === "theme.backgroundImage.opacity")
+    );
+
+    assert(
+      "backgroundImage.fit 잘못된 값은 기본값(cover)으로 대체",
+      invalidBackgroundLayersValidation.layout.theme.backgroundImage.fit === "cover"
+    );
+
+    assert(
+      "backgroundPattern.type 잘못된 값은 기본값(none)으로 대체",
+      invalidBackgroundLayersValidation.layout.theme.backgroundPattern.type === "none"
+    );
+
+    assert(
+      "backgroundPattern.opacity 범위 초과는 max(100)로 clamp",
+      invalidBackgroundLayersValidation.layout.theme.backgroundPattern.opacity === 100
+    );
+
+    assert(
+      "backgroundPattern.size 파싱 실패 시 기본값(24)으로 폴백",
+      invalidBackgroundLayersValidation.layout.theme.backgroundPattern.size === 24
+    );
+
+
+    /* 3-9. backgroundImage/backgroundPattern이 독립된 레이어 엘리먼트로 렌더됨(각자 다른 opacity) */
+
+    const backgroundLayerMount =
+      document.createElement("div");
+
+    document.body.appendChild(backgroundLayerMount);
+
+    const backgroundLayerHandle =
+      renderCustomizeLayout({
+        container: backgroundLayerMount,
+        blocks: [],
+        theme: {
+          background: "#111111",
+          backgroundImage: { src: "https://placehold.co/800x600", opacity: 40, fit: "contain" },
+          backgroundPattern: { type: "dot", color: "#ff0000", opacity: 15, size: 32 }
+        },
+        contentArea: CUSTOMIZE_DEFAULT_CONTENT_AREA,
+        mode: "view",
+        actions: {}
+      });
+
+    const backgroundLayerRoot =
+      backgroundLayerMount.querySelector(".customize-layout");
+
+    const backgroundImageLayerEl =
+      backgroundLayerMount.querySelector(".customize-background-image");
+
+    const backgroundPatternLayerEl =
+      backgroundLayerMount.querySelector(".customize-background-pattern");
+
+    assert(
+      ".customize-background-image / .customize-background-pattern이 root의 자식으로 존재함",
+      !!backgroundImageLayerEl && !!backgroundPatternLayerEl &&
+      backgroundImageLayerEl.parentElement === backgroundLayerRoot &&
+      backgroundPatternLayerEl.parentElement === backgroundLayerRoot
+    );
+
+    assert(
+      "이미지 레이어가 배경 이미지 URL을 담고 opacity=0.4로 렌더됨(패턴과 독립적)",
+      backgroundImageLayerEl.style.backgroundImage.includes("placehold.co/800x600") &&
+      backgroundImageLayerEl.style.opacity === "0.4"
+    );
+
+    assert(
+      "패턴 레이어가 dot gradient를 담고 opacity=0.15로 렌더됨(이미지와 독립적)",
+      backgroundPatternLayerEl.style.backgroundImage.includes("radial-gradient") &&
+      backgroundPatternLayerEl.style.opacity === "0.15"
+    );
+
+    assert(
+      "content-area가 배경 레이어보다 위(z-index)에 렌더됨",
+      backgroundLayerMount.querySelector(".customize-content-area").style.zIndex === "1"
+    );
+
+    backgroundLayerHandle.update(
+      [],
+      {
+        background: "#111111",
+        backgroundImage: { src: "", opacity: 40, fit: "contain" },
+        backgroundPattern: { type: "none", color: "#ff0000", opacity: 15, size: 32 }
+      }
+    );
+
+    assert(
+      "update()로 image.src=''/pattern.type='none'이 되면 두 레이어 모두 backgroundImage:none으로 리셋됨",
+      backgroundImageLayerEl.style.backgroundImage === "none" &&
+      backgroundPatternLayerEl.style.backgroundImage === "none"
+    );
+
+    backgroundLayerHandle.destroy();
+    backgroundLayerMount.remove();
+
+
+    /* =====================================================
+       4. v2 숫자/optional-color/action 필드 검증(단위 테스트 성격 —
+          DOM 없이 validateCustomizeLayout만 직접 검사)
+    ===================================================== */
+
+    /* 4-1. 숫자 clamp: 범위 초과는 기본값이 아니라 max로 clamp */
+
+    const clampHighValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        blocks: [{ type: "text", props: { fontSize: 5000 } }]
+      });
+
+    assert(
+      "fontSize가 범위를 넘으면 기본값이 아니라 max(96)로 clamp됨",
+      clampHighValidation.layout.blocks[0].props.fontSize === 96
+    );
+
+    assert(
+      "clamp는 number-clamped 코드로 기록됨(reset 아님)",
+      clampHighValidation.errors.some(e => e.code === "number-clamped" && e.path.includes("fontSize"))
+    );
+
+
+    /* 4-2. 파싱 자체가 안 되는 숫자는 기본값 폴백(invalid-number) */
+
+    const invalidNumberValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        blocks: [{ type: "text", props: { fontSize: "not-a-number" } }]
+      });
+
+    assert(
+      "파싱 불가능한 fontSize는 기본값(16)으로 폴백",
+      invalidNumberValidation.layout.blocks[0].props.fontSize === 16
+    );
+
+    assert(
+      "폴백은 invalid-number 코드로 기록됨(clamp 아님)",
+      invalidNumberValidation.errors.some(e => e.code === "invalid-number" && e.path.includes("fontSize"))
+    );
+
+
+    /* 4-3. allowEmpty 숫자 필드 — ""는 그대로 유지, 값이 있으면 clamp */
+
+    const allowEmptyValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        blocks: [
+          { type: "image", props: { src: "", width: "" } },
+          { type: "image", props: { src: "", width: 9999 } }
+        ]
+      });
+
+    assert(
+      "image.width가 빈 문자열이면 그대로 유지됨(auto)",
+      allowEmptyValidation.layout.blocks[0].props.width === ""
+    );
+
+    assert(
+      "image.width에 값이 있으면 여전히 clamp 대상(max 1200)",
+      allowEmptyValidation.layout.blocks[1].props.width === 1200
+    );
+
+
+    /* 4-4. optional color — 생략/빈 값은 상속("") 유지, 잘못된 값은 ""+에러 */
+
+    const optionalColorValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        blocks: [
+          { type: "text", props: {} },
+          { type: "text", props: { color: "#ff0000" } },
+          { type: "text", props: { color: "not-a-hex" } }
+        ]
+      });
+
+    assert(
+      "color 생략 시 빈 문자열(테마 상속)로 정규화됨",
+      optionalColorValidation.layout.blocks[0].props.color === ""
+    );
+
+    assert(
+      "유효한 hex color는 그대로 유지됨",
+      optionalColorValidation.layout.blocks[1].props.color === "#ff0000"
+    );
+
+    assert(
+      "유효하지 않은 color는 빈 문자열로 되돌아가고 에러 기록됨",
+      optionalColorValidation.layout.blocks[2].props.color === "" &&
+      optionalColorValidation.errors.some(e => e.path.includes("blocks[2].props.color"))
+    );
+
+
+    /* 4-5. action 정규화 — type별로 관련 필드만 검증 */
+
+    const actionValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        blocks: [
+          { type: "image", props: { src: "", action: { type: "link", href: "https://example.com" } } },
+          { type: "image", props: { src: "", action: { type: "link", href: "http://not-https.example" } } },
+          { type: "image", props: { src: "", action: { type: "internal", targetPageId: "profile" } } },
+          { type: "image", props: { src: "", action: { type: "internal", targetPageId: "not-a-real-page" } } },
+          { type: "image", props: { src: "", align: "center", objectFit: "cover", action: { type: "none", href: "https://ignored.example", targetPageId: "profile" } } }
+        ]
+      });
+
+    assert(
+      "action.type=link + 안전한 https href는 그대로 유지됨",
+      actionValidation.layout.blocks[0].props.action.href === "https://example.com"
+    );
+
+    assert(
+      "action.type=link + http href는 제거되고 unsafe-url 기록됨",
+      actionValidation.layout.blocks[1].props.action.href === "" &&
+      actionValidation.errors.some(e => e.code === "unsafe-url" && e.path.includes("blocks[1]"))
+    );
+
+    assert(
+      "action.type=internal + 허용된 targetPageId는 그대로 유지됨",
+      actionValidation.layout.blocks[2].props.action.targetPageId === "profile"
+    );
+
+    assert(
+      "action.type=internal + 허용되지 않은 targetPageId는 기본값으로 대체되고 에러 기록됨",
+      actionValidation.layout.blocks[3].props.action.targetPageId === "profile" &&
+      actionValidation.errors.some(e => e.code === "invalid-prop" && e.path.includes("blocks[3]") && e.path.includes("targetPageId"))
+    );
+
+    assert(
+      "action.type=none이면 href/targetPageId는 검증 없이 기본값으로 무시됨(에러 없음)",
+      actionValidation.layout.blocks[4].props.action.href === "" &&
+      actionValidation.layout.blocks[4].props.action.targetPageId === "profile" &&
+      !actionValidation.errors.some(e => e.path.includes("blocks[4]") && e.path.includes("action"))
+    );
+
+
+    /* 4-6. button.variant는 v2에서도 그대로 유지되는 독립 enum(action과 무관) */
+
+    const buttonVariantValidation =
+      validateCustomizeLayout({
+        version: CUSTOMIZE_LAYOUT_VERSION,
+        blocks: [
+          { type: "button", props: { variant: "bogus-variant", label: "x" } }
+        ]
+      });
+
+    assert(
+      "button.variant는 v2에서도 여전히 독립적으로 검증되는 enum(기본값 action)",
+      buttonVariantValidation.layout.blocks[0].props.variant === "action" &&
+      buttonVariantValidation.errors.some(e => e.code === "invalid-prop" && e.path.includes("variant"))
+    );
+
+
+    /* =====================================================
        update() / destroy()
     ===================================================== */
 
@@ -356,7 +1045,11 @@
     const updateHandle =
       renderCustomizeLayout({
         container: updateTestMount,
-        blocks: [{ id: "8f14e45f-ceea-467e-add1-00000000aa01", type: "text", props: { content: "before" } }],
+        blocks: [{
+          id: "8f14e45f-ceea-467e-add1-00000000aa01",
+          type: "text",
+          props: { content: "before", fontSize: 16, color: "", fontWeight: 400, align: "left", letterSpacing: 0, lineHeight: 1.5 }
+        }],
         theme: { background: "#ffffff", point: "#5c7cfa" },
         mode: "view",
         actions: {}
@@ -368,7 +1061,11 @@
     );
 
     updateHandle.update(
-      [{ id: "8f14e45f-ceea-467e-add1-00000000aa02", type: "text", props: { content: "after" } }],
+      [{
+        id: "8f14e45f-ceea-467e-add1-00000000aa02",
+        type: "text",
+        props: { content: "after", fontSize: 16, color: "", fontWeight: 400, align: "left", letterSpacing: 0, lineHeight: 1.5 }
+      }],
       { background: "#000000", point: "#00ff00" }
     );
 
@@ -425,13 +1122,15 @@
     );
 
     assert(
-      "dark background produces light text",
-      computeCustomizeThemeTokens({ background: "#0a0a0a", point: "#5c7cfa" })["--theme-text"] === "#ffffff"
+      "textColor 생략 시 배경 밝기와 무관하게 fallback 텍스트색이 쓰임(자동판별 제거됨)",
+      computeCustomizeThemeTokens({ background: "#0a0a0a", point: "#5c7cfa" })["--theme-text"] ===
+        computeCustomizeThemeTokens({ background: "#ffffff", point: "#5c7cfa" })["--theme-text"]
     );
 
     assert(
-      "light background produces dark text",
-      computeCustomizeThemeTokens({ background: "#ffffff", point: "#5c7cfa" })["--theme-text"] === "#000000"
+      "textColor를 명시하면 배경 밝기와 무관하게 그 값이 --theme-text로 쓰임",
+      computeCustomizeThemeTokens({ background: "#0a0a0a", textColor: "#00ff00", point: "#5c7cfa" })["--theme-text"] === "#00ff00" &&
+      computeCustomizeThemeTokens({ background: "#ffffff", textColor: "#00ff00", point: "#5c7cfa" })["--theme-text"] === "#00ff00"
     );
 
     console.log("customize renderer test harness finished");
