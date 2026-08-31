@@ -761,7 +761,40 @@
 
   <script>
 
-    async function loadPostsModule() {
+    /*
+      loadPostsModule()을 두 곳(idle prewarm, 혹시 모를 재호출)
+      에서 불러도 posts.html/스크립트를 두 번 fetch하지 않도록
+      Promise를 캐싱한다 — 이미 호출됐으면(성공/실패 무관, 진행
+      중이든 끝났든) 그 Promise를 그대로 돌려준다.
+    */
+
+    let postsModulePromise =
+      null;
+
+
+    function loadPostsModule() {
+
+      if (postsModulePromise) {
+
+        return postsModulePromise;
+
+      }
+
+
+      postsModulePromise =
+        runLoadPostsModule();
+
+
+      return postsModulePromise;
+
+    }
+
+
+    async function runLoadPostsModule() {
+
+      const loadStartedAt =
+        performance.now();
+
 
       /*
         ★ 모바일 브라우저(특히 인앱 웹뷰)가 posts.html/*.js를
@@ -937,7 +970,7 @@
 
 
         console.log(
-          "posts module loaded"
+          `posts module loaded (${Math.round(performance.now() - loadStartedAt)}ms)`
         );
 
       }
@@ -955,7 +988,47 @@
     }
 
 
-    loadPostsModule();
+    /* =========================================================
+       POSTS 모듈 IDLE PREWARM
+
+       예전엔 loadPostsModule()을 여기서 바로(동기적으로) 호출해서
+       홈 렌더용 리소스(폰트/3D 모델/sua 테마/Supabase 조회 등)와
+       네트워크를 두고 경쟁했다 — 카테고리를 처음 클릭했을 때만
+       느린 것도 이 경쟁 때문에 posts.html + 30여 개 스크립트의
+       순차 로딩이 밀려서였다. 홈이 그릴 걸 다 그리고 브라우저가
+       한가해지는 시점(requestIdleCallback)까지 미뤄서 먼저 홈을
+       그리게 하고, 그 직후 미리 posts 모듈을 받아둔다. 실제로
+       카테고리/글을 클릭할 때는 이 프리워밍이 이미 끝났거나
+       진행 중이라 loadPostsModule()의 Promise 캐시를 그대로
+       재사용할 뿐 다시 fetch하지 않는다.
+
+       requestIdleCallback 미지원 브라우저(Safari 등)는 짧은
+       setTimeout으로 대체.
+    ========================================================== */
+
+    if (
+      typeof requestIdleCallback ===
+      "function"
+    ) {
+
+      requestIdleCallback(
+        loadPostsModule,
+        {
+          timeout: 2000
+        }
+      );
+
+    }
+
+
+    else {
+
+      setTimeout(
+        loadPostsModule,
+        200
+      );
+
+    }
 
   </script>
 
