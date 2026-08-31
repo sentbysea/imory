@@ -70,9 +70,7 @@ async function checkSession() {
     data,
     error
   } =
-    await supabaseClient
-      .auth
-      .getSession();
+    await authGetSession();
 
 
   if (
@@ -166,27 +164,15 @@ googleLoginButton
 
 
       const redirectUrl =
-        `${window.location.origin}/admin/`;
+        `${window.location.origin}/auth/`;
 
 
       const {
         error
       } =
-        await supabaseClient
-          .auth
-          .signInWithOAuth({
-
-            provider:
-              "google",
-
-            options: {
-
-              redirectTo:
-                redirectUrl
-
-            }
-
-          });
+        await authSignInWithGoogle(
+          redirectUrl
+        );
 
 
       if (
@@ -235,9 +221,7 @@ logoutButton
       const {
         error
       } =
-        await supabaseClient
-          .auth
-          .signOut();
+        await authSignOut();
 
 
       if (

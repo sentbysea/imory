@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Imory</title>
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
+
+  <link
+    rel="stylesheet"
+    as="style"
+    crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../admin/admin-shell.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../admin/admin-settings.css"
+  >
+
+</head>
+
+
+<body>
+
+  <main class="admin-page">
+
+    <section class="login-box">
+
+      <h1>
+        Imory
+      </h1>
+
+      <p class="login-desc">
+        공개 홈페이지 주소를 정해주세요 ♡
+      </p>
+
+
+      <div
+        class="settings-group"
+        style="width: 100%; text-align: left; margin-top: 30px;"
+      >
+
+        <div class="setting-line">
+
+          <label for="onboardingNicknameInput">
+            닉네임
+          </label>
+
+          <input
+            id="onboardingNicknameInput"
+            class="setting-input"
+            type="text"
+            maxlength="30"
+            placeholder="홍지원"
+          >
+
+        </div>
+
+
+        <div class="setting-line">
+
+          <label for="onboardingSlugInput">
+            공개 홈페이지 주소 (imory.me/이 값)
+          </label>
+
+          <input
+            id="onboardingSlugInput"
+            class="setting-input"
+            type="text"
+            maxlength="30"
+            placeholder="예: hongjiwon"
+          >
+
+          <p
+            class="save-message"
+            id="onboardingSlugMessage"
+          ></p>
+
+        </div>
+
+
+        <div class="setting-line">
+
+          <label for="onboardingBioInput">
+            자기소개 (선택)
+          </label>
+
+          <textarea
+            id="onboardingBioInput"
+            class="setting-input"
+            rows="3"
+            maxlength="200"
+          ></textarea>
+
+        </div>
+
+
+        <button
+          class="save-button"
+          id="onboardingSubmitButton"
+          type="button"
+        >
+          시작하기
+        </button>
+
+
+        <p
+          class="save-message"
+          id="onboardingSubmitMessage"
+        ></p>
+
+      </div>
+
+    </section>
+
+  </main>
+
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+  ></script>
+
+  <script src="../core/lib/supabase-client.js"></script>
+
+  <script src="../core/lib/auth-shared.js"></script>
+
+  <script src="../core/lib/reserved-slugs.js"></script>
+
+  <script src="./onboarding.js"></script>
+
+</body>
+
+</html>
