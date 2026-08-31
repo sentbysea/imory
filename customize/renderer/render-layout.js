@@ -228,6 +228,21 @@ function applyCustomizeContentAreaStyle(
   contentAreaEl.style.boxSizing =
     "border-box";
 
+  /*
+    root(.customize-layout)가 display:flex; flex-direction:column이라
+    content-area는 그 flex item이다 — margin-left/right:auto로
+    가운데 정렬을 하는 아래 로직과 결합하면, cross-axis margin이
+    auto인 flex item은 stretch가 무시되고 콘텐츠 크기로 shrink-to-fit
+    된다(플렉스박스 스펙 규정. align이 left/right여도 한쪽 margin은
+    항상 auto라 마찬가지로 발생). width를 명시적으로 100%로 줘서
+    "가용 폭 100%, 단 maxWidth까지"가 stretch 여부와 무관하게 항상
+    성립하게 한다 — margin auto는 그대로 둬서 (그 다음에 적용되는)
+    max-width가 실제로 폭을 줄였을 때의 좌우 정렬은 그대로 유지된다.
+  */
+
+  contentAreaEl.style.width =
+    "100%";
+
   contentAreaEl.style.maxWidth =
     isCustomizeNumberSet(contentArea?.maxWidth)
       ? `${contentArea.maxWidth}px`
@@ -842,7 +857,7 @@ function createCustomizeButtonBlockNode(
     link.textContent =
       label;
 
-    styleCustomizeButtonNode(link);
+    styleCustomizeButtonNode(link, block);
 
     return link;
 
@@ -860,7 +875,7 @@ function createCustomizeButtonBlockNode(
   button.textContent =
     label;
 
-  styleCustomizeButtonNode(button);
+  styleCustomizeButtonNode(button, block);
 
   button.addEventListener(
     "click",
@@ -887,8 +902,12 @@ function createCustomizeButtonBlockNode(
 
 
 function styleCustomizeButtonNode(
-  element
+  element,
+  block
 ) {
+
+  const props =
+    block.props;
 
   element.style.display =
     "inline-block";
@@ -905,9 +924,6 @@ function styleCustomizeButtonNode(
   element.style.background =
     "var(--theme-accent)";
 
-  element.style.color =
-    "var(--theme-bg)";
-
   element.style.textDecoration =
     "none";
 
@@ -916,6 +932,28 @@ function styleCustomizeButtonNode(
 
   element.style.font =
     "inherit";
+
+  /*
+    text block과 동일한 필드 4개(fontSize/fontWeight/color/align)만
+    노출한다 — color만 fallback이 다르다(text는 var(--theme-text),
+    button은 accent 배경 위 라벨이라 기존처럼 var(--theme-bg)로
+    대비를 유지). letterSpacing/lineHeight/padding은 이번 범위에
+    포함하지 않아 기존 버튼 외형 그대로 유지.
+  */
+
+  element.style.fontSize =
+    `${props.fontSize}px`;
+
+  element.style.fontWeight =
+    String(props.fontWeight);
+
+  element.style.color =
+    props.color
+      || "var(--theme-bg)";
+
+  element.style.textAlign =
+    props.align
+      || "center";
 
 }
 
@@ -1075,6 +1113,335 @@ function createCustomizeContainerBlockNode(
 }
 
 
+/*
+  mobileLayout:"stack"인 columns를 좁은 화면에서 세로로 쌓는
+  media query. inline style(대부분의 다른 props)과 달리 이것만
+  CSS로 두는 이유: "화면 폭"이라는 조건 자체가 JS 쪽에 별도
+  리사이즈 감지 로직 없이도 이미 media query가 가장 정확하게
+  아는 정보이기 때문(editor의 device-width iframe이든 실제
+  방문자 브라우저든 동일하게 동작). doc당 한 번만 넣으면 되므로
+  id로 중복 삽입을 막는다 — update()가 매번 root를 다시 그려도
+  <head>의 이 태그는 그대로 남아 있어 다시 넣을 필요가 없다.
+*/
+
+const CUSTOMIZE_COLUMNS_RESPONSIVE_STYLE_ID =
+  "customize-columns-responsive-style";
+
+function ensureCustomizeColumnsResponsiveStyle(
+  doc
+) {
+
+  if (doc.getElementById(CUSTOMIZE_COLUMNS_RESPONSIVE_STYLE_ID)) {
+    return;
+  }
+
+  const styleEl =
+    doc.createElement("style");
+
+  styleEl.id =
+    CUSTOMIZE_COLUMNS_RESPONSIVE_STYLE_ID;
+
+  styleEl.textContent =
+    `
+    @media (max-width: 480px) {
+      .customize-columns[data-mobile-layout="stack"] {
+        flex-direction: column;
+      }
+      .customize-columns[data-mobile-layout="stack"] > .customize-column-slot {
+        flex: 0 0 auto !important;
+        width: 100%;
+      }
+      .customize-columns[data-mobile-layout="stack"] > .customize-columns-divider {
+        display: none;
+      }
+    }
+    `;
+
+  (doc.head || doc.body).appendChild(
+    styleEl
+  );
+
+}
+
+
+const CUSTOMIZE_VERTICAL_ALIGN_TO_JUSTIFY_CONTENT =
+  {
+    start: "flex-start",
+    center: "center",
+    end: "flex-end"
+  };
+
+/*
+  divider의 실제 보이는 선(2px)보다 넓게 잡는 "잡기 쉬운" hit
+  area — position:absolute라 이 너비가 커져도 슬롯 폭/gap 계산에는
+  전혀 영향을 주지 않는다.
+*/
+
+const CUSTOMIZE_COLUMNS_DIVIDER_HIT_WIDTH_PX =
+  20;
+
+function createCustomizeColumnsBlockNode(
+  doc,
+  block,
+  depth,
+  mode,
+  actions
+) {
+
+  const row =
+    doc.createElement("div");
+
+  row.className =
+    "customize-columns";
+
+  row.dataset.mobileLayout =
+    block.props.mobileLayout;
+
+  row.style.display =
+    "flex";
+
+  row.style.width =
+    "100%";
+
+  row.style.gap =
+    `${block.props.gap}px`;
+
+  row.style.alignItems =
+    "stretch";
+
+  const slots =
+    block.columns || [];
+
+  const ratio =
+    block.props.ratio
+      || CUSTOMIZE_COLUMN_DEFAULT_RATIO;
+
+  slots.forEach(
+    (slot, index) => {
+
+      const slotEl =
+        doc.createElement("div");
+
+      slotEl.className =
+        "customize-column-slot";
+
+      /*
+        block이 아니므로 data-block-id는 붙이지 않는다(editor.js
+        drag/drop이 "이 element는 block이 아니라 슬롯"이라고
+        구분할 수 있어야 함 — data-columns-block-id/data-slot-index로
+        식별한다).
+      */
+
+      slotEl.dataset.columnsBlockId =
+        block.id;
+
+      slotEl.dataset.slotIndex =
+        String(index);
+
+      /*
+        "0 0 {ratio}%"(flex-shrink:0)는 버그였다 — 슬롯 두 개(합 100%)에
+        divider(8px)와 gap(양쪽 2번)까지 더해지면 항상 100%를
+        넘겨서 overflow가 생기고, 실제 화면 비율도 ratio와 어긋났다.
+        flex-basis를 0으로 두고 grow/shrink를 ratio 값 자체로 주면
+        divider/gap을 뺀 "남는 공간"을 정확히 ratio 비율로 나눠
+        가지므로 50:50/30:70이 실제 폭 비율과 일치한다.
+      */
+
+      const slotRatio =
+        ratio[index]
+          ?? CUSTOMIZE_COLUMN_DEFAULT_RATIO[index];
+
+      slotEl.style.flex =
+        `${slotRatio} 1 0%`;
+
+      slotEl.style.minWidth =
+        "0";
+
+      slotEl.style.display =
+        "flex";
+
+      slotEl.style.flexDirection =
+        "column";
+
+      slotEl.style.gap =
+        `${block.props.gap}px`;
+
+      slotEl.style.justifyContent =
+        CUSTOMIZE_VERTICAL_ALIGN_TO_JUSTIFY_CONTENT[block.props.verticalAlign]
+          || "flex-start";
+
+      /*
+        editor mode에서만: 슬롯 경계를 항상 점선으로 보여주고
+        (비어 있든 아니든 — "빈 columns block을 추가하는 순간부터
+        2 slot이 시각적으로 분명히 보여야 함") 최소 높이를 준다.
+        divider가 align-self:stretch로 row 높이만큼 늘어나는데,
+        슬롯이 비어 있으면 row 자체 높이가 0이 돼서 divider도
+        보이지 않았던 게 "divider가 안 보이는" 근본 원인 중
+        하나였다 — 이 min-height가 그 바닥을 만들어준다. 공개
+        홈(mode:"view")에는 이 class 자체를 안 붙이므로 CSS가
+        전혀 적용되지 않는다.
+      */
+
+      if (mode === "edit") {
+
+        slotEl.classList.add(
+          "customize-column-slot--edit"
+        );
+
+      }
+
+      const children =
+        slot.children || [];
+
+      children.forEach(
+        (childBlock) => {
+
+          const childNode =
+            renderCustomizeBlockNode(
+              doc,
+              childBlock,
+              depth + 1,
+              mode,
+              actions
+            );
+
+          if (childNode) {
+
+            slotEl.appendChild(
+              childNode
+            );
+
+          }
+
+        }
+      );
+
+      /*
+        빈 슬롯 placeholder — editor mode 전용(공개 홈에는 생성
+        자체를 안 함). "여기에 요소를 끌어다 놓으세요"만 보여주는
+        순수 안내문이라 drag hit-test에 끼어들지 않게
+        pointer-events:none을 준다(그래도 closest()가 부모
+        슬롯까지 타고 올라가므로 드롭 인식 자체는 그대로 된다).
+      */
+
+      if (mode === "edit" && children.length === 0) {
+
+        const placeholder =
+          doc.createElement("div");
+
+        placeholder.className =
+          "customize-column-empty-placeholder";
+
+        placeholder.textContent =
+          "여기에 요소를 끌어다 놓으세요";
+
+        slotEl.appendChild(
+          placeholder
+        );
+
+      }
+
+      row.appendChild(
+        slotEl
+      );
+
+    }
+  );
+
+  /*
+    divider는 editor mode에서만 만든다 — 공개 홈(mode:"view")에는
+    아예 DOM에 생성하지 않는다(숨김 처리가 아니라 생성 자체를 안 함).
+
+    이전엔 divider를 슬롯 사이의 세 번째 flex item으로 넣었는데,
+    그러면 걔 자신의 너비(8px)와 그 양옆의 gap까지 두 번(슬롯0↔divider,
+    divider↔슬롯1) 더해져서 "column 사이 실제 여백은 gap만 담당"이
+    깨지고(레이아웃 폭을 갉아먹음) ratio 계산도 그만큼 어긋났다.
+    지금은 position:absolute로 flow 밖에 띄워서 폭/ratio 계산에는
+    전혀 관여하지 않는 순수 overlay handle이고, 위치는 슬롯 두 개의
+    flex-grow 비율(ratio)과 gap만으로 계산되는 "두 슬롯 사이 경계"에
+    맞춰 CSS calc()로 고정한다 — resize 중 실시간으로 옮기는 건
+    slot의 flex 값이지 이 handle이 아니므로, JS가 매 프레임 위치를
+    다시 계산할 필요도 없다(Moveable/GrapesJS류가 흔히 쓰는 "실제
+    레이아웃과 별개로 얹는 handle overlay" 패턴).
+  */
+
+  if (mode === "edit") {
+
+    row.style.position =
+      "relative";
+
+    const ratio0 =
+      ratio[0]
+        ?? CUSTOMIZE_COLUMN_DEFAULT_RATIO[0];
+
+    const gapPx =
+      block.props.gap;
+
+    /*
+      두 슬롯 경계까지의 거리 = 슬롯0 너비 + gap/2.
+      슬롯0 너비는 flex-grow 비율로 정해지므로 "(전체 폭 - gap) * r0"
+      (r0 = ratio0/100) — 이를 "전체 폭에 대한 %" + "고정 px" 합으로
+      풀어 쓰면 calc(ratio0% + gap*(0.5 - r0)px)가 된다. row 자체
+      너비가 나중에 바뀌어도(리사이즈 등) 이 calc 식 하나로 항상
+      정확한 위치를 유지한다.
+    */
+
+    const r0 =
+      ratio0 / 100;
+
+    const dividerOffsetPx =
+      gapPx * (0.5 - r0);
+
+    const divider =
+      doc.createElement("div");
+
+    divider.className =
+      "customize-columns-divider";
+
+    divider.dataset.columnsDivider =
+      "true";
+
+    divider.dataset.columnsBlockId =
+      block.id;
+
+    divider.style.position =
+      "absolute";
+
+    divider.style.top =
+      "0";
+
+    divider.style.bottom =
+      "0";
+
+    divider.style.left =
+      `calc(${ratio0}% + ${dividerOffsetPx.toFixed(3)}px)`;
+
+    divider.style.width =
+      `${CUSTOMIZE_COLUMNS_DIVIDER_HIT_WIDTH_PX}px`;
+
+    divider.style.transform =
+      "translateX(-50%)";
+
+    divider.style.cursor =
+      "col-resize";
+
+    divider.style.touchAction =
+      "none";
+
+    divider.style.zIndex =
+      "2";
+
+    row.appendChild(
+      divider
+    );
+
+  }
+
+  return row;
+
+}
+
+
 /* =========================================================
    block type registry
 
@@ -1100,7 +1467,9 @@ const CUSTOMIZE_BLOCK_RENDERERS =
     spacer: (doc, block) =>
       createCustomizeSpacerBlockNode(doc, block),
     divider: (doc, block) =>
-      createCustomizeDividerBlockNode(doc, block)
+      createCustomizeDividerBlockNode(doc, block),
+    columns: (doc, block, depth, mode, actions) =>
+      createCustomizeColumnsBlockNode(doc, block, depth, mode, actions)
   };
 
 
@@ -1178,6 +1547,10 @@ function renderCustomizeLayout(
   const doc =
     container.ownerDocument
       || document;
+
+  ensureCustomizeColumnsResponsiveStyle(
+    doc
+  );
 
   const root =
     doc.createElement("div");

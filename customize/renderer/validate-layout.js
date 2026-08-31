@@ -446,6 +446,25 @@ function normalizeCustomizeBlockProps(
 
 
       /* --------------------------------------------------
+         ratio(columns 전용) — 숫자 배열이라 numeric 스펙(스칼라
+         전용)으로 다룰 수 없어 action처럼 별도 분기로 뺀다.
+      -------------------------------------------------- */
+
+      if (field === "ratio") {
+
+        normalized[field] =
+          normalizeCustomizeColumnsRatio(
+            rawValue,
+            `${path}.props.ratio`,
+            errors
+          );
+
+        return;
+
+      }
+
+
+      /* --------------------------------------------------
          enum 필드
       -------------------------------------------------- */
 
@@ -589,6 +608,162 @@ function normalizeCustomizeBlockProps(
 
 
 /* =========================================================
+   columns 전용 정규화 — ratio 배열 / 슬롯 배열
+
+   둘 다 CUSTOMIZE_COLUMN_COUNT(현재 2)에 결합돼 있어서 일반
+   numeric/children 경로로 처리하지 않고 여기서 전용으로 다룬다.
+========================================================== */
+
+function normalizeCustomizeColumnsRatio(
+  rawRatio,
+  path,
+  errors
+) {
+
+  const isValidShape =
+    Array.isArray(rawRatio) &&
+    rawRatio.length === CUSTOMIZE_COLUMN_COUNT &&
+    rawRatio.every(
+      (value) => typeof value === "number" && Number.isFinite(value)
+    );
+
+  if (!isValidShape) {
+
+    if (rawRatio !== undefined) {
+
+      pushCustomizeLayoutError(
+        errors,
+        path,
+        "invalid-prop",
+        `"ratio" 값이 올바르지 않아 기본값으로 대체됨`
+      );
+
+    }
+
+    return [...CUSTOMIZE_COLUMN_DEFAULT_RATIO];
+
+  }
+
+  const minPercent =
+    CUSTOMIZE_COLUMN_MIN_RATIO_PERCENT;
+
+  const clamped =
+    rawRatio.map(
+      (value) =>
+        Math.min(100 - minPercent, Math.max(minPercent, value))
+    );
+
+  const sum =
+    clamped.reduce((total, value) => total + value, 0);
+
+  if (sum <= 0) {
+    return [...CUSTOMIZE_COLUMN_DEFAULT_RATIO];
+  }
+
+  const rescaled =
+    clamped.map(
+      (value) => Math.round((value / sum) * 100)
+    );
+
+  /* 반올림 오차 보정 — 마지막 값에 몰아서 합이 정확히 100이 되게 함 */
+
+  const drift =
+    100 - rescaled.reduce((total, value) => total + value, 0);
+
+  rescaled[rescaled.length - 1] += drift;
+
+  return rescaled;
+
+}
+
+
+function normalizeCustomizeColumnsSlots(
+  rawColumns,
+  depth,
+  path,
+  errors
+) {
+
+  const rawArray =
+    Array.isArray(rawColumns)
+      ? rawColumns
+      : [];
+
+  if (
+    !Array.isArray(rawColumns) ||
+    rawColumns.length !== CUSTOMIZE_COLUMN_COUNT
+  ) {
+
+    pushCustomizeLayoutError(
+      errors,
+      path,
+      "invalid-columns",
+      `columns는 정확히 ${CUSTOMIZE_COLUMN_COUNT}개의 슬롯이어야 하므로 보정됨`
+    );
+
+  }
+
+  const slots =
+    [];
+
+  for (let index = 0; index < CUSTOMIZE_COLUMN_COUNT; index += 1) {
+
+    const rawSlot =
+      rawArray[index];
+
+    const slotPath =
+      `${path}[${index}]`;
+
+    const id =
+      isValidCustomizeBlockId(rawSlot?.id)
+        ? rawSlot.id
+        : generateCustomizeBlockId();
+
+    if (
+      rawSlot &&
+      rawSlot.children !== undefined &&
+      !Array.isArray(rawSlot.children)
+    ) {
+
+      pushCustomizeLayoutError(
+        errors,
+        `${slotPath}.children`,
+        "invalid-children",
+        "children이 배열이 아니어서 제거됨"
+      );
+
+    }
+
+    const rawChildren =
+      Array.isArray(rawSlot?.children)
+        ? rawSlot.children
+        : [];
+
+    const children =
+      rawChildren
+        .map(
+          (childBlock, childIndex) =>
+            normalizeCustomizeBlock(
+              childBlock,
+              depth + 1,
+              `${slotPath}.children[${childIndex}]`,
+              errors
+            )
+        )
+        .filter(
+          (childBlock) => childBlock !== null
+        );
+
+    slots.push({ id, children });
+
+  }
+
+  return slots;
+
+}
+
+
+/* =========================================================
    block 정규화(재귀)
 ========================================================== */
 
@@ -686,6 +861,27 @@ function normalizeCustomizeBlock(
       type: rawBlock.type,
       props
     };
+
+
+  /* --------------------------------------------------
+     columns — children이 아니라 최상위 columns:[](슬롯별
+     독립 children)를 씀. block-defaults.js
+     getCustomizeBlockChildLists 주석 참고.
+  -------------------------------------------------- */
+
+  if (rawBlock.type === "columns") {
+
+    normalizedBlock.columns =
+      normalizeCustomizeColumnsSlots(
+        rawBlock.columns,
+        depth,
+        `${path}.columns`,
+        errors
+      );
+
+    return normalizedBlock;
+
+  }
 
 
   /* --------------------------------------------------

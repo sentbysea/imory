@@ -41,8 +41,8 @@
     */
 
     [data-block-id].customize-editor-block-selected {
-      outline: 2px solid #e39ab5;
-      outline-offset: 2px;
+      outline: 1px solid rgba(227, 154, 181, 0.85);
+      outline-offset: 1px;
     }
 
     /*
@@ -73,6 +73,89 @@
     body.customize-editor-dragging-active {
       cursor: grabbing;
       user-select: none;
+    }
+
+    /*
+      columns divider(비율 조절 handle) — position/width/cursor/
+      touch-action은 render-layout.js가 이미 inline style로 잡아둔다
+      (position:absolute인 순수 overlay라 슬롯 폭/gap 계산에는 전혀
+      관여하지 않음 — createCustomizeColumnsBlockNode 주석 참고).
+      여기는 그 위에 얹는 "보이는 선"만 담당한다 — mode:"edit"일
+      때만 renderer가 이 element 자체를 만들기 때문에 공개 홈에는
+      이 CSS가 적용될 대상이 아예 없다.
+
+      평소엔 완전히 숨겨져 있다가(미니멀) 세 경우에만 옅게
+      드러난다: (1) 그 divider가 속한 columns block이 선택돼
+      있을 때 — editor.js applyCustomizeEditorSelectionHighlight가
+      토글하는 customize-columns-parent-selected 클래스, (2)
+      hit area 근처 hover — 순수 :hover라 JS 개입 없음, (3) 실제
+      드래그 중 — handleCustomizeColumnsDividerPointerDown/Up이
+      토글하는 customize-columns-divider--dragging(빠르게 움직이면
+      커서가 hit area를 벗어나 :hover가 끊길 수 있어서, 드래그
+      중엔 hover 여부와 무관하게 계속 보이게 함).
+    */
+
+    .customize-columns-divider::after {
+      content: "";
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 50%;
+      width: 2px;
+      transform: translateX(-50%);
+      background: transparent;
+      border-radius: 1px;
+      transition: background-color 0.15s ease;
+    }
+
+    .customize-columns-divider.customize-columns-parent-selected::after,
+    .customize-columns-divider.customize-columns-divider--dragging::after,
+    .customize-columns-divider:hover::after {
+      background: rgba(180, 180, 192, 0.7);
+    }
+
+    /*
+      columns 슬롯 — editor mode에서만 renderer가 이 class를 붙인다
+      (render-layout.js createCustomizeColumnsBlockNode 참고).
+      min-height는 항상 유지한다 — slot이 비어 있을 때 이게 없으면
+      높이가 0이 돼서 그 자리에 드롭 자체가 불가능해지기 때문에
+      순수 장식이 아니라 기능적으로 필요하다. 반면 점선 테두리는
+      순수 안내선이라 평소엔 숨기고(미니멀) divider와 동일하게
+      그 columns block이 선택돼 있을 때만 옅게 보여준다. border
+      두께 자체는 숨김/표시 상태와 무관하게 1px로 고정해서, 선택
+      전환 시 border 유무 때문에 레이아웃이 흔들리지 않게 한다.
+    */
+
+    .customize-column-slot--edit {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      min-height: 72px;
+      padding: 8px;
+      transition: border-color 0.15s ease, background-color 0.15s ease;
+    }
+
+    .customize-column-slot--edit.customize-columns-parent-selected {
+      border: 1px dashed rgba(180, 180, 192, 0.7);
+      background: rgba(180, 180, 192, 0.05);
+    }
+
+    /*
+      빈 slot placeholder — 선택 여부와 무관하게 항상 보이되(어느
+      slot이 비어 있는지는 언제든 알 수 있어야 하므로), 색은
+      "최대한 연하게"만 — 구조선(테두리/divider)과 달리 이건
+      순수 안내 문구라 숨김-표시 토글 대상이 아니다.
+    */
+
+    .customize-column-empty-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      min-height: 56px;
+      color: rgba(154, 154, 166, 0.55);
+      font-size: 13px;
+      text-align: center;
+      pointer-events: none;
     }
 
   </style>

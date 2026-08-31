@@ -99,7 +99,21 @@ const CUSTOMIZE_BLOCK_TYPE_LABELS_KO =
     container: "컨테이너",
     button: "버튼",
     spacer: "여백",
-    divider: "구분선"
+    divider: "구분선",
+    columns: "컬럼(2단)"
+  };
+
+const CUSTOMIZE_MOBILE_LAYOUT_LABELS_KO =
+  {
+    stack: "세로로 쌓기",
+    columns: "컬럼 유지"
+  };
+
+const CUSTOMIZE_VERTICAL_ALIGN_LABELS_KO =
+  {
+    start: "위",
+    center: "가운데",
+    end: "아래"
   };
 
 const CUSTOMIZE_ALIGN_LR_LABELS_KO =
@@ -586,11 +600,11 @@ function findCustomizeBlockById(
       return block;
     }
 
-    if (block.children) {
+    for (const childList of getCustomizeBlockChildLists(block)) {
 
       const found =
         findCustomizeBlockById(
-          block.children,
+          childList,
           blockId
         );
 
@@ -612,6 +626,11 @@ function findCustomizeBlockById(
   depth(root=1)까지 함께 반환한다 — duplicate/delete는 list에서
   splice해야 하고, add는 depth를 알아야 CUSTOMIZE_MAX_BLOCK_DEPTH를
   넘기지 않는지 판단할 수 있다.
+
+  columns의 두 슬롯도 getCustomizeBlockChildLists를 통해 그대로
+  순회된다 — 반환되는 list는 slot.children 배열 참조 그대로라
+  root/container/슬롯 사이 이동이 전부 동일한 splice 코드로 처리됨
+  (block-defaults.js getCustomizeBlockChildLists 주석 참고).
 */
 
 function findCustomizeBlockContext(
@@ -631,11 +650,11 @@ function findCustomizeBlockContext(
 
     }
 
-    if (block.children) {
+    for (const childList of getCustomizeBlockChildLists(block)) {
 
       const found =
         findCustomizeBlockContext(
-          block.children,
+          childList,
           blockId,
           depth + 1
         );
@@ -671,7 +690,22 @@ function deepCloneCustomizeBlockWithNewIds(
       props: structuredClone(block.props)
     };
 
-  if (block.children) {
+  if (block.type === "columns") {
+
+    cloned.columns =
+      (block.columns || []).map(
+        (slot) => (
+          {
+            id: crypto.randomUUID(),
+            children: (slot.children || []).map(
+              (childBlock) =>
+                deepCloneCustomizeBlockWithNewIds(childBlock)
+            )
+          }
+        )
+      );
+
+  } else if (block.children) {
 
     cloned.children =
       block.children.map(
@@ -700,7 +734,15 @@ function createNewCustomizeBlock(
       props: structuredClone(schema.props)
     };
 
-  if (schema.allowsChildren) {
+  if (type === "columns") {
+
+    newBlock.columns =
+      Array.from(
+        { length: CUSTOMIZE_COLUMN_COUNT },
+        () => ({ id: crypto.randomUUID(), children: [] })
+      );
+
+  } else if (schema.allowsChildren) {
 
     newBlock.children =
       [];
@@ -819,6 +861,29 @@ function applyCustomizeEditorSelectionHighlight() {
       }
     );
 
+  /*
+    columns의 slot outline/divider는 평소엔 숨겨져 있다가, 그
+    columns block 자신이 선택돼 있을 때만 옅게 드러난다(divider는
+    그 외에 hover로도 드러나지만 그건 preview-frame.html의 순수
+    :hover CSS로 처리 — 여기서는 "선택돼 있는가"만 다룬다). slot/
+    divider 둘 다 columns block이 아니라 그 자식이라 [data-block-id]
+    루프로는 안 잡히므로 data-columns-block-id로 따로 찾는다.
+  */
+
+  customizePreviewFrameDocument
+    .querySelectorAll("[data-columns-block-id]")
+    .forEach(
+      (element) => {
+
+        element.classList.toggle(
+          "customize-columns-parent-selected",
+          element.dataset.columnsBlockId
+            === customizeEditorState.selectedBlockId
+        );
+
+      }
+    );
+
 }
 
 
@@ -909,9 +974,12 @@ function isCustomizeBlockOrDescendant(
   }
 
   return (
-    (block.children || []).some(
-      (child) =>
-        isCustomizeBlockOrDescendant(child, targetId)
+    getCustomizeBlockChildLists(block).some(
+      (childList) =>
+        childList.some(
+          (child) =>
+            isCustomizeBlockOrDescendant(child, targetId)
+        )
     )
   );
 
@@ -920,27 +988,29 @@ function isCustomizeBlockOrDescendant(
 
 /*
   block 자신을 포함해 가장 깊은 자손까지의 depth 칸 수(leaf=1).
-  이동 후 depth 초과 여부를 미리 계산하는 데 쓴다 — container를
+  이동 후 depth 초과 여부를 미리 계산하는 데 쓴다 — container/columns를
   옮기면 그 밑에 매달린 자손들도 같이 내려가므로, 옮기는 대상이
   container 자신인지 leaf인지와 무관하게 이 높이만큼을 항상
-  더해서 검사해야 한다.
+  더해서 검사해야 한다. columns의 두 슬롯은 block이 아니라 depth를
+  소비하지 않으므로, 슬롯 안 자손들의 높이를 그대로(추가 +1 없이)
+  최댓값 계산에 합류시킨다.
 */
 
 function computeCustomizeBlockSubtreeHeight(
   block
 ) {
 
-  if (
-    !block.children ||
-    block.children.length === 0
-  ) {
+  const allChildren =
+    getCustomizeBlockChildLists(block).flat();
+
+  if (allChildren.length === 0) {
     return 1;
   }
 
   return (
     1 +
     Math.max(
-      ...block.children.map(
+      ...allChildren.map(
         computeCustomizeBlockSubtreeHeight
       )
     )
@@ -957,6 +1027,19 @@ function handleCustomizeDragPointerDown(
     customizeDragSession ||
     (event.button !== undefined && event.button !== 0)
   ) {
+    return;
+  }
+
+  /*
+    divider는 block move가 아니라 ratio 조절 전용 —
+    handleCustomizeColumnsDividerPointerDown이 따로 처리하므로
+    여기서는 건드리지 않는다(안 그러면 divider를 잡았을 때 그
+    부모인 columns block 전체가 같이 드래그되기 시작함 — divider
+    자신은 data-block-id가 없어 closest가 조상 row까지 올라가
+    버리기 때문).
+  */
+
+  if (event.target.closest("[data-columns-divider]")) {
     return;
   }
 
@@ -1037,6 +1120,122 @@ function beginCustomizeDragVisuals() {
 
 
 /*
+  hover 중인 element가 block([data-block-id])인지 columns의 빈
+  슬롯([data-slot-index], block이 아님)인지에 따라 분기한다 —
+  handleCustomizeDragPointerMove가 elementFromPoint 결과를 두
+  selector 모두로 찾아서 넘겨준다(더 안쪽/구체적인 쪽이 우선
+  매치됨 — closest()가 자기 자신부터 검사하므로).
+*/
+
+function computeCustomizeDropTarget(
+  hoveredElement,
+  pointerClientY
+) {
+
+  if (!hoveredElement) {
+    return null;
+  }
+
+  if (hoveredElement.dataset.slotIndex !== undefined) {
+
+    return computeCustomizeSlotDropTarget(
+      hoveredElement
+    );
+
+  }
+
+  return computeCustomizeBlockDropTarget(
+    hoveredElement,
+    pointerClientY
+  );
+
+}
+
+
+/*
+  columns의 빈 슬롯 영역(그 슬롯 안에 실제 자식 block이 없거나,
+  자식들 아래 빈 공간)에 hover 중일 때 — 항상 그 슬롯의 children
+  끝에 추가하는 "inside" 취급만 있고 before/after는 없다(슬롯
+  개수 자체를 늘리거나 순서를 바꾸는 기능은 이번 단계에 없음).
+  슬롯은 block이 아니라 depth를 소비하지 않으므로 baseDepth는
+  columns block 자신의 depth + 1(container의 children과 동일한
+  비용) — block-defaults.js getCustomizeBlockChildLists 주석 참고.
+*/
+
+function computeCustomizeSlotDropTarget(
+  slotElement
+) {
+
+  const columnsBlockId =
+    slotElement.dataset.columnsBlockId;
+
+  const slotIndex =
+    Number(slotElement.dataset.slotIndex);
+
+  const rootBlocks =
+    getCurrentCustomizePageBlocks();
+
+  const draggedContext =
+    findCustomizeBlockContext(
+      rootBlocks,
+      customizeDragSession.draggedBlockId,
+      1
+    );
+
+  if (!draggedContext) {
+    return null;
+  }
+
+  if (
+    isCustomizeBlockOrDescendant(
+      draggedContext.block,
+      columnsBlockId
+    )
+  ) {
+    return null;
+  }
+
+  const columnsContext =
+    findCustomizeBlockContext(
+      rootBlocks,
+      columnsBlockId,
+      1
+    );
+
+  const slot =
+    columnsContext?.block.columns?.[slotIndex];
+
+  if (!slot) {
+    return null;
+  }
+
+  const parentList =
+    slot.children;
+
+  const subtreeHeight =
+    computeCustomizeBlockSubtreeHeight(
+      draggedContext.block
+    );
+
+  if (
+    (columnsContext.depth + 1 + subtreeHeight - 1) > CUSTOMIZE_MAX_BLOCK_DEPTH
+  ) {
+    return null;
+  }
+
+  return {
+    mode: "inside",
+    parentList,
+    insertIndex: parentList.length,
+    hoveredBlockElement: slotElement,
+    hoveredContainerElement: slotElement,
+    rect: slotElement.getBoundingClientRect()
+  };
+
+}
+
+
+/*
   hover 중인 block element를 기준으로 어디에 놓일지 판정한다.
   container의 위/아래 25%는 형제로 끼워넣기(before/after),
   가운데 50%는 그 container의 children 끝에 추가(inside) —
@@ -1045,14 +1244,10 @@ function beginCustomizeDragVisuals() {
   처리된다(재귀적으로 다시 이 함수가 그 자식에 대해 호출됨).
 */
 
-function computeCustomizeDropTarget(
+function computeCustomizeBlockDropTarget(
   hoveredBlockElement,
   pointerClientY
 ) {
-
-  if (!hoveredBlockElement) {
-    return null;
-  }
 
   const hoveredBlockId =
     hoveredBlockElement.dataset.blockId;
@@ -1269,7 +1464,7 @@ function handleCustomizeDragPointerMove(
   const hoveredElement =
     customizePreviewFrameDocument
       .elementFromPoint(event.clientX, event.clientY)
-      ?.closest("[data-block-id]");
+      ?.closest("[data-block-id], [data-slot-index]");
 
   const dropTarget =
     computeCustomizeDropTarget(
@@ -1466,8 +1661,264 @@ document.addEventListener(
 
     }
 
+    if (customizeColumnsDividerSession) {
+
+      cleanupCustomizeColumnsDividerSession();
+
+      refreshCustomizePreview();
+
+    }
+
   }
 );
+
+
+
+/* =========================================================
+   DRAG & DROP - columns divider(비율 조절)
+
+   block move와 별개의 pointer 세션 — divider를 잡아 좌우로
+   끌면 두 슬롯의 ratio[0]/ratio[1]을 갱신한다(슬롯 자체를
+   옮기거나 순서를 바꾸는 게 아니므로 findCustomizeBlockContext/
+   performCustomizeBlockMove와는 무관). 드래그 중에는 즉각적인
+   반응성을 위해 슬롯 DOM에 style.flex만 라이브로 반영하고,
+   pointerup에서만 실제 state(columnsBlock.props.ratio)를 갱신한
+   뒤 refreshCustomizePreview()로 정식 재렌더한다 — "DOM만 옮기고
+   state를 안 건드리는 지름길은 쓰지 않는다"는 block drag와 동일한
+   원칙을 여기서도 지킨다.
+========================================================== */
+
+let customizeColumnsDividerSession =
+  null;
+
+function handleCustomizeColumnsDividerPointerDown(
+  event
+) {
+
+  if (
+    customizeColumnsDividerSession ||
+    customizeDragSession ||
+    (event.button !== undefined && event.button !== 0)
+  ) {
+    return;
+  }
+
+  const dividerElement =
+    event.target.closest("[data-columns-divider]");
+
+  if (!dividerElement) {
+    return;
+  }
+
+  const columnsBlockId =
+    dividerElement.dataset.columnsBlockId;
+
+  const columnsBlock =
+    findCustomizeBlockById(
+      getCurrentCustomizePageBlocks(),
+      columnsBlockId
+    );
+
+  if (!columnsBlock) {
+    return;
+  }
+
+  const rowElement =
+    dividerElement.parentElement;
+
+  const slotElements =
+    Array.from(
+      rowElement.querySelectorAll(":scope > .customize-column-slot")
+    );
+
+  if (slotElements.length !== CUSTOMIZE_COLUMN_COUNT) {
+    return;
+  }
+
+  customizeColumnsDividerSession =
+    {
+      pointerId: event.pointerId,
+      columnsBlockId,
+      dividerElement,
+      startClientX: event.clientX,
+      rowWidthPx: rowElement.getBoundingClientRect().width,
+      startRatio: [...columnsBlock.props.ratio],
+      currentRatio: [...columnsBlock.props.ratio],
+      slotElements
+    };
+
+  /*
+    빠르게 움직이면 커서가 hit area(20px)를 벗어나 :hover가
+    끊길 수 있어서, 드래그 중엔 hover와 무관하게 계속 보이도록
+    클래스로 고정한다(preview-frame.html
+    customize-columns-divider--dragging 참고).
+  */
+
+  dividerElement.classList.add(
+    "customize-columns-divider--dragging"
+  );
+
+  event.preventDefault();
+
+  customizePreviewFrameDocument.addEventListener(
+    "pointermove",
+    handleCustomizeColumnsDividerPointerMove
+  );
+
+  customizePreviewFrameDocument.addEventListener(
+    "pointerup",
+    handleCustomizeColumnsDividerPointerUp
+  );
+
+  customizePreviewFrameDocument.addEventListener(
+    "pointercancel",
+    handleCustomizeColumnsDividerPointerCancel
+  );
+
+}
+
+
+function handleCustomizeColumnsDividerPointerMove(
+  event
+) {
+
+  const session =
+    customizeColumnsDividerSession;
+
+  if (
+    !session ||
+    event.pointerId !== session.pointerId
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const deltaPercent =
+    ((event.clientX - session.startClientX) / session.rowWidthPx) * 100;
+
+  const minPercent =
+    CUSTOMIZE_COLUMN_MIN_RATIO_PERCENT;
+
+  const first =
+    Math.min(
+      100 - minPercent,
+      Math.max(minPercent, session.startRatio[0] + deltaPercent)
+    );
+
+  const second =
+    100 - first;
+
+  session.currentRatio =
+    [first, second];
+
+  session.slotElements[0].style.flex =
+    `0 0 ${first}%`;
+
+  session.slotElements[1].style.flex =
+    `0 0 ${second}%`;
+
+}
+
+
+function cleanupCustomizeColumnsDividerSession() {
+
+  if (!customizeColumnsDividerSession) {
+    return;
+  }
+
+  customizeColumnsDividerSession.dividerElement.classList.remove(
+    "customize-columns-divider--dragging"
+  );
+
+  customizePreviewFrameDocument.removeEventListener(
+    "pointermove",
+    handleCustomizeColumnsDividerPointerMove
+  );
+
+  customizePreviewFrameDocument.removeEventListener(
+    "pointerup",
+    handleCustomizeColumnsDividerPointerUp
+  );
+
+  customizePreviewFrameDocument.removeEventListener(
+    "pointercancel",
+    handleCustomizeColumnsDividerPointerCancel
+  );
+
+  customizeColumnsDividerSession =
+    null;
+
+}
+
+
+function handleCustomizeColumnsDividerPointerUp(
+  event
+) {
+
+  const session =
+    customizeColumnsDividerSession;
+
+  if (
+    !session ||
+    event.pointerId !== session.pointerId
+  ) {
+    return;
+  }
+
+  const columnsBlock =
+    findCustomizeBlockById(
+      getCurrentCustomizePageBlocks(),
+      session.columnsBlockId
+    );
+
+  cleanupCustomizeColumnsDividerSession();
+
+  if (columnsBlock) {
+
+    columnsBlock.props.ratio =
+      session.currentRatio;
+
+  }
+
+  refreshCustomizePreview();
+
+  /*
+    요소 목록의 라벨("컬럼(2단) · 50:50")이 ratio를 보여주므로
+    block move와 동일하게 여기서도 다시 그려야 한다 — 안 그러면
+    비율을 바꿔도 목록엔 옛 값이 그대로 남는다.
+  */
+
+  renderCustomizeElementsList();
+
+}
+
+
+function handleCustomizeColumnsDividerPointerCancel(
+  event
+) {
+
+  const session =
+    customizeColumnsDividerSession;
+
+  if (
+    !session ||
+    event.pointerId !== session.pointerId
+  ) {
+    return;
+  }
+
+  cleanupCustomizeColumnsDividerSession();
+
+  /*
+    취소된 경우 pointermove가 이미 슬롯 DOM에 라이브로 style.flex를
+    바꿔놨을 수 있으므로, 실제 state(변경 안 됨)에 맞춰 다시
+    그려서 되돌린다.
+  */
+
+  refreshCustomizePreview();
+
+}
 
 
 
@@ -1816,15 +2267,24 @@ function collectCustomizeBlocksFlat(
         { block, depth }
       );
 
-      if (block.children) {
+      /*
+        columns의 두 슬롯은 그 자체가 목록에 나오는 별도 행이
+        아니다(block이 아니므로 선택 대상도 아님) — 슬롯 안
+        children만 columns block보다 한 단계 더 들여써서 보여준다
+        (container 자식과 동일한 들여쓰기 폭).
+      */
 
-        collectCustomizeBlocksFlat(
-          block.children,
-          depth + 1,
-          out
-        );
+      getCustomizeBlockChildLists(block).forEach(
+        (childList) => {
 
-      }
+          collectCustomizeBlocksFlat(
+            childList,
+            depth + 1,
+            out
+          );
+
+        }
+      );
 
     }
   );
@@ -1881,6 +2341,15 @@ function describeCustomizeBlockLabel(
   if (block.type === "divider") {
 
     return `구분선 · ${block.props.thickness}px`;
+
+  }
+
+  if (block.type === "columns") {
+
+    const ratio =
+      block.props.ratio || CUSTOMIZE_COLUMN_DEFAULT_RATIO;
+
+    return `컬럼(2단) · ${ratio[0]}:${ratio[1]}`;
 
   }
 
@@ -2098,13 +2567,30 @@ const CUSTOMIZE_BLOCK_PROPS_FIELDS =
       }
     ],
 
+    /*
+      fontSize/fontWeight/color/align 4개만 노출한다(요청 범위 —
+      letterSpacing/lineHeight/padding 조절은 이번엔 안 함, 기존
+      버튼 외형 그대로 유지). text 필드 정의를 그대로 복붙한
+      값이라(라벨/min/max/step까지 동일) 컨트롤 자체(buildCustomize
+      NumberControl 등)가 이미 공용이라 이 배열에 field 정의만
+      추가하면 text와 완전히 같은 UI를 그대로 재사용하게 된다.
+    */
+
     button: [
       { field: "variant", label: "모양", control: "select", options: ["action", "external"], optionLabels: CUSTOMIZE_BUTTON_VARIANT_LABELS_KO, reRenderOnChange: true },
       { field: "label", label: "라벨", control: "text" },
       {
         field: "action.href", label: "링크 주소 (https만 허용)", control: "url",
         showIf: (props) => props.variant === "external"
-      }
+      },
+      {
+        field: "fontSize", label: "글자 크기", control: "number",
+        min: 10, max: 96, step: 1, unit: "px",
+        presets: [{ label: "작게", value: 14 }, { label: "보통", value: 16 }, { label: "크게", value: 22 }]
+      },
+      { field: "fontWeight", label: "굵기", control: "number", min: 100, max: 900, step: 100 },
+      { field: "color", label: "글자색", control: "color-optional" },
+      { field: "align", label: "정렬", control: "select", options: ["left", "center", "right"], optionLabels: CUSTOMIZE_ALIGN_LR_LABELS_KO }
     ],
 
     spacer: [
@@ -2120,6 +2606,21 @@ const CUSTOMIZE_BLOCK_PROPS_FIELDS =
       { field: "thickness", label: "두께", control: "number", min: 1, max: 20, step: 1, unit: "px" },
       { field: "color", label: "색", control: "color-optional" },
       { field: "widthPercent", label: "너비", control: "number", min: 10, max: 100, step: 5, unit: "%" }
+    ],
+
+    /*
+      ratio는 여기 없음 — 미리보기에서 divider를 직접 드래그해서만
+      바꾼다(숫자 입력 필드는 이번 단계 범위 밖).
+    */
+
+    columns: [
+      {
+        field: "gap", label: "간격", control: "number",
+        min: 0, max: 120, step: 1, unit: "px",
+        presets: [{ label: "작게", value: 8 }, { label: "보통", value: 16 }, { label: "크게", value: 24 }]
+      },
+      { field: "mobileLayout", label: "모바일에서", control: "select", options: ["stack", "columns"], optionLabels: CUSTOMIZE_MOBILE_LAYOUT_LABELS_KO },
+      { field: "verticalAlign", label: "세로 정렬", control: "select", options: ["start", "center", "end"], optionLabels: CUSTOMIZE_VERTICAL_ALIGN_LABELS_KO }
     ]
 
   };
@@ -3491,6 +3992,11 @@ function initCustomizeEditor() {
     customizePreviewFrameDocument.addEventListener(
       "pointerdown",
       handleCustomizeDragPointerDown
+    );
+
+    customizePreviewFrameDocument.addEventListener(
+      "pointerdown",
+      handleCustomizeColumnsDividerPointerDown
     );
 
     applyCustomizeDeviceSize();

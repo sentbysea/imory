@@ -40,11 +40,16 @@
    backgroundOpacity는 순수 필드 추가라 버전 정책상 그 자체로는
    bump가 필요 없지만, 같은 작업에서 함께 반영됐다.
 
-   v3 후속 결정(코드 없음): columns block(아직 없음, 별도 단계)의
-   모바일 stacking은 stackOnMobile:boolean이 아니라
-   mobileLayout:"stack"|"columns"로 표현하기로 함 — 모바일에서도
-   2-column을 유지하고 싶은 디자인을 막지 않기 위함. columns
-   block을 실제로 추가할 때 이 필드명을 그대로 쓸 것.
+   v3 후속: columns block 추가. 각 슬롯이 독립된 drop zone/children을
+   가져야 해서(왼쪽↔오른쪽 이동, container↔슬롯 이동을 서로 다른
+   배열 참조 간 splice로 다루기 위함) container처럼 children:[]
+   하나만 갖는 모양이 아니라, props와 별개로 최상위 columns:[]
+   (슬롯마다 독립된 {id, children}) 필드를 갖는 구조로 만들었다 —
+   자세한 모양은 CustomizeBlock JSDoc과 CUSTOMIZE_BLOCK_DEFAULTS.columns
+   참고. 새 block 타입 추가 + 새 필드 추가라 버전 정책상 bump 불필요.
+   모바일 stacking은 이전에 결정한 대로 stackOnMobile:boolean이 아니라
+   mobileLayout:"stack"|"columns"로 표현한다(모바일에서도 2-column을
+   유지하고 싶은 디자인을 막지 않기 위함).
 
    v3 후속: theme에 backgroundImage/backgroundPattern을 추가했다 —
    페이지별 override는 만들지 않고 사이트 전체가 항상 같은 배경을
@@ -81,6 +86,16 @@
  * @property {string} type - CUSTOMIZE_ALLOWED_BLOCK_TYPES 중 하나.
  * @property {Object} props - 타입별 props(CUSTOMIZE_BLOCK_DEFAULTS 참고).
  * @property {CustomizeBlock[]} [children] - container 타입만 허용.
+ * @property {CustomizeColumnSlot[]} [columns] - columns 타입만 허용
+ *   (children 대신 이 필드를 씀 — 정확히 CUSTOMIZE_COLUMN_COUNT개).
+ */
+
+/**
+ * @typedef {Object} CustomizeColumnSlot - columns block의 슬롯 하나.
+ *   block이 아니다(type/props 없음) — 왼쪽/오른쪽을 서로 다른
+ *   drop target/children 배열로 다루기 위한 순수 컨테이너.
+ * @property {string} id - 슬롯 자체의 id(block id와 별개 UUID 공간).
+ * @property {CustomizeBlock[]} children
  */
 
 /**
@@ -142,7 +157,8 @@ const CUSTOMIZE_ALLOWED_BLOCK_TYPES =
     "container",
     "button",
     "spacer",
-    "divider"
+    "divider",
+    "columns"
   ];
 
 
@@ -150,6 +166,57 @@ const CUSTOMIZE_ALLOWED_BLOCK_TYPES =
 
 const CUSTOMIZE_CONTAINER_BLOCK_TYPE =
   "container";
+
+
+/* =========================================================
+   COLUMNS BLOCK — 슬롯 개수/비율
+
+   지금 단계는 슬롯 추가/삭제(2단→3단 등)를 지원하지 않고 항상
+   정확히 2개로 고정한다 — validate-layout.js가 이 개수에 맞춰
+   부족/초과를 보정한다. ratio는 [슬롯0 비율, 슬롯1 비율](합 100,
+   각각 최소 CUSTOMIZE_COLUMN_MIN_RATIO_PERCENT% 이상) — divider
+   드래그가 이 배열 두 값만 갱신한다.
+========================================================== */
+
+const CUSTOMIZE_COLUMN_COUNT =
+  2;
+
+const CUSTOMIZE_COLUMN_DEFAULT_RATIO =
+  [50, 50];
+
+const CUSTOMIZE_COLUMN_MIN_RATIO_PERCENT =
+  20;
+
+
+/*
+  block(자신 포함) 바로 아래에서 실제로 순회해야 할 children
+  배열들을 반환한다 — 대부분의 타입은 배열 0개 또는 1개
+  (`.children`)뿐이지만, columns는 슬롯마다 독립된 배열을 가지므로
+  2개(왼쪽/오른쪽)를 반환한다. tree 탐색(find/자손 판정/subtree
+  height)이 타입을 몰라도 되게 하기 위한 공용 함수 — validate-layout.js/
+  editor.js가 함께 쓴다(이 파일이 그 두 파일보다 먼저 로드됨).
+*/
+
+function getCustomizeBlockChildLists(
+  block
+) {
+
+  if (block.type === "columns") {
+
+    return (
+      (block.columns || [])
+        .map((slot) => slot.children || [])
+    );
+
+  }
+
+  return (
+    block.children
+      ? [block.children]
+      : []
+  );
+
+}
 
 
 /* =========================================================
@@ -308,11 +375,21 @@ const CUSTOMIZE_BLOCK_DEFAULTS =
       props: {
         variant: "action",
         label: "",
-        action: { type: "internal", href: "", targetPageId: "profile" }
+        action: { type: "internal", href: "", targetPageId: "profile" },
+        fontSize: 16,
+        fontWeight: 600,
+        color: "",
+        align: "center"
       },
       enums: {
-        variant: ["action", "external"]
+        variant: ["action", "external"],
+        align: ["left", "center", "right"]
       },
+      numeric: {
+        fontSize: { min: 10, max: 96, default: 16, decimals: 0 },
+        fontWeight: { min: 100, max: 900, default: 600, decimals: 0 }
+      },
+      optionalColorFields: ["color"],
       contentFields: ["label"]
     },
 
@@ -341,6 +418,34 @@ const CUSTOMIZE_BLOCK_DEFAULTS =
         widthPercent: { min: 10, max: 100, default: 100, decimals: 0 }
       },
       optionalColorFields: ["color"],
+      contentFields: []
+    },
+
+    /*
+      allowsChildren을 일부러 안 씀 — columns는 children:[] 하나가
+      아니라 최상위 columns:[](슬롯별 독립 children)를 쓰기 때문에
+      container와 같은 취급을 받으면 안 된다(예: drag & drop의
+      "container 내부로 inside drop" 판정이 그대로 columns에 적용되면
+      안 되고, 반드시 슬롯 단위로만 drop 가능해야 함 — editor.js
+      computeCustomizeDropTarget 참고). ratio는 슬롯 개수와 결합된
+      값이라 numeric 스펙 대신 validate-layout.js의 전용 로직
+      (normalizeCustomizeColumnsRatio)이 배열 통째로 검증한다.
+    */
+
+    columns: {
+      props: {
+        ratio: [...CUSTOMIZE_COLUMN_DEFAULT_RATIO],
+        gap: 16,
+        mobileLayout: "stack",
+        verticalAlign: "start"
+      },
+      enums: {
+        mobileLayout: ["stack", "columns"],
+        verticalAlign: ["start", "center", "end"]
+      },
+      numeric: {
+        gap: { min: 0, max: 120, default: 16, decimals: 0 }
+      },
       contentFields: []
     }
 
