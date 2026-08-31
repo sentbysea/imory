@@ -171,6 +171,12 @@ function replaceDialogueTextNode(
       "400";
 
 
+    span.style.fontStyle =
+      settings.dialogueItalic
+        ? "italic"
+        : "normal";
+
+
     fragment.appendChild(
       span
     );
@@ -530,6 +536,12 @@ function makeActionSpan(
     "400";
 
 
+  span.style.fontStyle =
+    settings.actionItalic
+      ? "italic"
+      : "normal";
+
+
   span.textContent =
     text;
 
@@ -562,6 +574,12 @@ function wrapOpaqueNodeAsAction(
   span.style.fontWeight =
     settings.actionWeight ||
     "400";
+
+
+  span.style.fontStyle =
+    settings.actionItalic
+      ? "italic"
+      : "normal";
 
 
   node.replaceWith(

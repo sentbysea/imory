@@ -249,6 +249,11 @@ const quoteActionWeight =
     "quoteActionWeight"
   );
 
+const quoteActionItalic =
+  document.getElementById(
+    "quoteActionItalic"
+  );
+
 const quoteDialogueColor =
   document.getElementById(
     "quoteDialogueColor"
@@ -257,6 +262,11 @@ const quoteDialogueColor =
 const quoteDialogueWeight =
   document.getElementById(
     "quoteDialogueWeight"
+  );
+
+const quoteDialogueItalic =
+  document.getElementById(
+    "quoteDialogueItalic"
   );
 
 

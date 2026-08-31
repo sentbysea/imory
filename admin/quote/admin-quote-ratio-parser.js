@@ -247,6 +247,12 @@ function applySpecialQuoteStyles() {
           quoteActionWeight?.value ||
           "400";
 
+
+        element.style.fontStyle =
+          quoteActionItalic?.checked
+            ? "italic"
+            : "normal";
+
       }
     );
 
@@ -266,6 +272,12 @@ function applySpecialQuoteStyles() {
         element.style.fontWeight =
           quoteDialogueWeight?.value ||
           "500";
+
+
+        element.style.fontStyle =
+          quoteDialogueItalic?.checked
+            ? "italic"
+            : "normal";
 
       }
     );

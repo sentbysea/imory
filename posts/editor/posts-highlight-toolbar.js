@@ -25,6 +25,42 @@ postEditorFontToggle
   );
 
 /* =========================================================
+   BOLD / ITALIC / UNDERLINE
+========================================================== */
+
+postEditorBoldToggle
+  ?.addEventListener(
+    "click",
+    () => {
+
+      toggleEditorBold();
+
+    }
+  );
+
+
+postEditorItalicToggle
+  ?.addEventListener(
+    "click",
+    () => {
+
+      toggleEditorItalic();
+
+    }
+  );
+
+
+postEditorUnderlineToggle
+  ?.addEventListener(
+    "click",
+    () => {
+
+      toggleEditorUnderline();
+
+    }
+  );
+
+/* =========================================================
    PAGE BREAK
 ========================================================== */
 

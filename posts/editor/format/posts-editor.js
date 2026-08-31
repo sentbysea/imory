@@ -416,6 +416,46 @@ function closestRichStyle(
 }
 
 
+function closestRichTag(
+  node,
+  tagNames
+) {
+
+  let element =
+    node?.nodeType ===
+      Node.ELEMENT_NODE
+      ? node
+      : node?.parentElement;
+
+
+  while (
+    element &&
+    element !==
+      postEditorContent
+  ) {
+
+    if (
+      tagNames.includes(
+        element.tagName
+      )
+    ) {
+
+      return element;
+
+    }
+
+
+    element =
+      element.parentElement;
+
+  }
+
+
+  return null;
+
+}
+
+
 
 /* =========================================================
    FONT TOGGLE
@@ -521,6 +561,146 @@ function toggleEditorFont() {
   updateEditorPreview();
 
   updateEditorToolbarState();
+
+}
+
+
+
+/* =========================================================
+   BOLD / ITALIC / UNDERLINE TOGGLE
+
+   toggleEditorFont과 동일한 wrap/unwrap 패턴을 태그 기반으로
+   일반화. tagNames는 "이미 켜져 있다"고 판단할 조상 태그
+   목록(예: 볼드는 STRONG/B 둘 다 인정), insertTag는 새로
+   켤 때 실제로 삽입할 태그. b/strong/i/em/u는 이미 사이니타이저
+   화이트리스트에 있어 저장/프리뷰/뷰어에 그대로 반영된다
+   (posts-sanitize.js 참고). 서로 다른 태그끼리는 각자
+   독립적으로 감싸므로 자연히 중첩(Bold+Italic 등) 가능.
+========================================================== */
+
+function toggleEditorInlineTag(
+  tagNames,
+  insertTag
+) {
+
+  const range =
+    getEditorRange();
+
+
+  if (!range) {
+    return;
+  }
+
+
+  pushEditorUndoSnapshot(
+    true
+  );
+
+
+  const existing =
+    closestRichTag(
+      range.startContainer,
+      tagNames
+    );
+
+
+  if (
+    existing &&
+    existing.contains(
+      range.endContainer.nodeType ===
+        Node.ELEMENT_NODE
+        ? range.endContainer
+        : range.endContainer.parentElement
+    )
+  ) {
+
+    unwrapElement(
+      existing
+    );
+
+
+    savedEditorRange =
+      null;
+
+
+    postEditorContent.focus();
+
+
+    updateEditorPreview();
+
+    updateEditorToolbarState();
+
+    return;
+
+  }
+
+
+  const wrapper =
+    document.createElement(
+      insertTag
+    );
+
+
+  const fragment =
+    range.extractContents();
+
+
+  wrapper.appendChild(
+    fragment
+  );
+
+
+  range.insertNode(
+    wrapper
+  );
+
+
+  selectWrappedContent(
+    wrapper
+  );
+
+
+  updateEditorPreview();
+
+  updateEditorToolbarState();
+
+}
+
+
+function toggleEditorBold() {
+
+  toggleEditorInlineTag(
+    [
+      "STRONG",
+      "B"
+    ],
+    "strong"
+  );
+
+}
+
+
+function toggleEditorItalic() {
+
+  toggleEditorInlineTag(
+    [
+      "EM",
+      "I"
+    ],
+    "em"
+  );
+
+}
+
+
+function toggleEditorUnderline() {
+
+  toggleEditorInlineTag(
+    [
+      "U"
+    ],
+    "u"
+  );
 
 }
 

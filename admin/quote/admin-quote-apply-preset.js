@@ -330,6 +330,15 @@ function applyQuoteSettings(
   }
 
 
+  if (quoteActionItalic) {
+
+    quoteActionItalic.checked =
+      settings.actionItalic ??
+      false;
+
+  }
+
+
   /* DIALOGUE */
 
   if (quoteDialogueColor) {
@@ -346,6 +355,15 @@ function applyQuoteSettings(
     quoteDialogueWeight.value =
       settings.dialogueWeight ||
       "500";
+
+  }
+
+
+  if (quoteDialogueItalic) {
+
+    quoteDialogueItalic.checked =
+      settings.dialogueItalic ??
+      false;
 
   }
 

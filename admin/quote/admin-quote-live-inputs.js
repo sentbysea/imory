@@ -57,9 +57,11 @@ const quoteLiveInputs = [
 
   quoteActionColor,
   quoteActionWeight,
+  quoteActionItalic,
 
   quoteDialogueColor,
   quoteDialogueWeight,
+  quoteDialogueItalic,
 
   quoteSourceEnabled,
   quoteSourceColor,
@@ -262,6 +264,10 @@ function collectQuoteSettings() {
       quoteActionWeight?.value ||
       "400",
 
+    actionItalic:
+      quoteActionItalic?.checked ??
+      false,
+
 
     /* DIALOGUE */
 
@@ -272,6 +278,10 @@ function collectQuoteSettings() {
     dialogueWeight:
       quoteDialogueWeight?.value ||
       "500",
+
+    dialogueItalic:
+      quoteDialogueItalic?.checked ??
+      false,
 
 
     /* SOURCE */

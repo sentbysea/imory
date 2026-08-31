@@ -551,6 +551,69 @@ function updateEditorToolbarState() {
 
   }
 
+
+  const toggleStates =
+    [
+      [
+        postEditorBoldToggle,
+        [
+          "STRONG",
+          "B"
+        ]
+      ],
+      [
+        postEditorItalicToggle,
+        [
+          "EM",
+          "I"
+        ]
+      ],
+      [
+        postEditorUnderlineToggle,
+        [
+          "U"
+        ]
+      ]
+    ];
+
+
+  toggleStates.forEach(
+    ([
+      button,
+      tagNames
+    ]) => {
+
+      if (!button) {
+        return;
+      }
+
+
+      const active =
+        Boolean(
+          savedEditorRange &&
+          closestRichTag(
+            savedEditorRange.startContainer,
+            tagNames
+          )
+        );
+
+
+      button.classList.toggle(
+        "active",
+        active
+      );
+
+
+      button.setAttribute(
+        "aria-pressed",
+        active
+          ? "true"
+          : "false"
+      );
+
+    }
+  );
+
 }
 
 
