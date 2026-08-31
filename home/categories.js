@@ -92,8 +92,23 @@ async function loadCategories() {
       );
 
 
+    /*
+      href="#"였던 예전 코드는 index.html의 <base href="/"> 때문에
+      "/"(루트)로 풀린다 — 클릭 핸들러(posts/editor/
+      posts-list-detail-nav.js)가 아직 안 붙어있는 상태에서
+      클릭되면 그대로 루트 랜딩으로 튕겨나간다. 실제
+      /:slug/category/:id 경로를 넣어두면 핸들러가 이미 붙어있을
+      때는 기존처럼 preventDefault + openCategoryPage()로 처리되고,
+      혹시 아직 안 붙어있어도 브라우저 기본 이동이 올바른 경로로
+      간다. posts-refs.js의 buildPostRoute는 이 시점에 아직 로드
+      전이라 site-path.js의 공용 헬퍼를 직접 쓴다.
+    */
+
     link.href =
-      "#";
+      buildSitePath(
+        getSiteOwnerSlugFromPath(),
+        `/category/${category.id}`
+      );
 
 
     link.textContent =
