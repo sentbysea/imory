@@ -10,13 +10,13 @@
     content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   >
 
-  <title>-ˋˏ ♡ ˎˊ-</title>
+  <title>Imory</title>
 
 
   <link
     rel="icon"
-    type="image/png"
-    href="./images/favicon.png"
+    type="image/svg+xml"
+    href="./images/favicon.svg"
   >
 
 
@@ -63,6 +63,8 @@
   ></script>
 
   <script src="./core/lib/supabase-client.js"></script>
+
+  <script src="./home/site-owner.js"></script>
 
 
 
@@ -133,10 +135,90 @@
     href="./posts/posts-mobile.css"
   >
 
+
+  <!-- =========================================================
+       LANDING (개발 중 화면 — ?u= 없이 루트로 접속했을 때만)
+  ========================================================== -->
+
+  <style>
+
+    .landing-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: #ffffff;
+    }
+
+    /*
+      [hidden]과 위 .landing-screen{display:flex}는 명시도가
+      같아서 소스 순서상 이 규칙이 없으면 hidden 속성이 무시되고
+      계속 보인다 — JS가 hidden을 켜도 화면이 안 사라지는 버그였음.
+    */
+
+    .landing-screen[hidden] {
+      display: none;
+    }
+
+    /*
+      .viewer-area(home-base.css)/.menu-button(menu.css)도 자체
+      display:flex를 갖고 있어 같은 문제가 있다. id 선택자는
+      클래스 선택자보다 항상 명시도가 높아서, 소스 순서와
+      무관하게 hidden일 때 확실히 숨겨진다.
+    */
+
+    #viewerArea[hidden],
+    #menuButton[hidden] {
+      display: none;
+    }
+
+    .landing-title {
+      font-size: 28px;
+      letter-spacing: 0.04em;
+      color: #333333;
+    }
+
+    .landing-subtitle {
+      font-size: 14px;
+      color: #999999;
+    }
+
+  </style>
+
 </head>
 
 
 <body>
+
+
+
+  <!-- =========================================================
+       LANDING (개발 중 화면)
+
+       ?u=slug 없이 루트로 접속했을 때만 보이는 아주 단순한
+       placeholder. 아래 MAIN JS의 gateHomeByOwner()가 ?u=
+       존재 여부에 따라 이 화면과 실제 홈 UI(메뉴/뷰어/푸터/
+       BGM 등) 중 하나만 보이게 전환한다.
+  ========================================================== -->
+
+  <div
+    class="landing-screen"
+    id="landingScreen"
+  >
+
+    <div class="landing-title">
+      Imory
+    </div>
+
+    <div class="landing-subtitle">
+      개발 중입니다
+    </div>
+
+  </div>
 
 
 
@@ -149,6 +231,7 @@
     id="menuButton"
     aria-label="메뉴 열기"
     aria-expanded="false"
+    hidden
   >
 
     <span class="triangle"></span>
@@ -160,6 +243,7 @@
   <nav
     class="menu-panel"
     id="menuPanel"
+    hidden
   >
 
     <div
@@ -178,6 +262,7 @@
   <main
     class="viewer-area"
     id="viewerArea"
+    hidden
   >
 
 
@@ -200,7 +285,10 @@
        posts.html 내용이 여기에 자동으로 들어옴.
   ========================================================== -->
 
-  <div id="postsMount"></div>
+  <div
+    id="postsMount"
+    hidden
+  ></div>
 
 
 
@@ -218,7 +306,10 @@
        FOOTER
   ========================================================== -->
 
-  <footer class="site-footer">
+  <footer
+    class="site-footer"
+    hidden
+  >
 
 
     <div
@@ -247,6 +338,7 @@
     id="musicButton"
     type="button"
     aria-label="배경음악 재생/일시정지"
+    hidden
   >
     ♫
   </button>
@@ -256,6 +348,7 @@
     class="youtube-player-shell"
     id="youtubePlayerShell"
     aria-hidden="true"
+    hidden
   >
 
     <div id="youtubePlayer"></div>
@@ -270,13 +363,139 @@
 
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
-  <script src="./home/categories.js"></script>
 
-  <script src="./home/bgm.js"></script>
+  <!-- =========================================================
+       HOME 게이팅
 
-  <script src="./home/menu.js"></script>
+       루트(/)는 ?u=slug 없이 들어오면 위 LANDING 화면만 보여주고
+       sua 테마/카테고리/BGM/메뉴는 아예 불러오지 않는다.
+       ?u=slug가 있으면(유효 여부는 각 스크립트 내부의 owner
+       resolver가 판단) 기존 공개 홈 구조를 그대로 불러온다.
+       posts 모듈/site-footer.js는 이 게이팅과 무관하게 기존대로
+       그대로 로드한다(건드리지 않음) — 랜딩 화면에서는 어차피
+       위에서 hidden 처리되어 있어 화면에 보이지 않는다.
+  ========================================================== -->
 
-  <script src="./core/view-controller.js"></script>
+  <script>
+
+    (function gateHomeByOwner() {
+
+      const hasOwner =
+        Boolean(
+          new URLSearchParams(
+            window.location.search
+          ).get(
+            "u"
+          )
+        );
+
+
+      const landingScreen =
+        document.getElementById(
+          "landingScreen"
+        );
+
+
+      if (!hasOwner) {
+
+        if (landingScreen) {
+
+          landingScreen.hidden =
+            false;
+
+        }
+
+        return;
+
+      }
+
+
+      if (landingScreen) {
+
+        landingScreen.hidden =
+          true;
+
+      }
+
+
+      [
+        "menuButton",
+        "menuPanel",
+        "viewerArea",
+        "postsMount",
+        "musicButton",
+        "youtubePlayerShell"
+      ].forEach(
+        id => {
+
+          const el =
+            document.getElementById(
+              id
+            );
+
+
+          if (el) {
+
+            el.hidden =
+              false;
+
+          }
+
+        }
+      );
+
+
+      document
+        .querySelectorAll(
+          ".site-footer"
+        )
+        .forEach(
+          el => {
+
+            el.hidden =
+              false;
+
+          }
+        );
+
+
+      window.homeOwnerModeActive =
+        true;
+
+
+      [
+        "./home/categories.js",
+        "./home/bgm.js",
+        "./home/site-meta.js",
+        "./home/menu.js",
+        "./core/view-controller.js"
+      ].forEach(
+        src => {
+
+          const script =
+            document.createElement(
+              "script"
+            );
+
+
+          script.src =
+            src;
+
+
+          script.async =
+            false;
+
+
+          document.body.appendChild(
+            script
+          );
+
+        }
+      );
+
+    })();
+
+  </script>
 
   <!-- =========================================================
        SUA THEME LOADER
@@ -444,7 +663,13 @@
     }
 
 
-    loadSuaTheme();
+    if (
+      window.homeOwnerModeActive
+    ) {
+
+      loadSuaTheme();
+
+    }
 
   </script>
 

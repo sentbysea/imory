@@ -108,12 +108,43 @@ function getYouTubeVideoId(url) {
 
 async function loadBgmSetting() {
 
-  const { data, error } =
-    await supabaseClient
+  const owner =
+    await getSiteOwner();
+
+  if (
+    owner.scoped &&
+    !owner.ownerId
+  ) {
+
+    if (musicButton) {
+
+      musicButton.style.display =
+        "none";
+
+    }
+
+    return;
+
+  }
+
+  let bgmQuery =
+    supabaseClient
       .from("site_settings")
       .select("value")
-      .eq("key", "bgm_url")
-      .maybeSingle();
+      .eq("key", "bgm_url");
+
+  if (owner.scoped) {
+
+    bgmQuery =
+      bgmQuery.eq(
+        "user_id",
+        owner.ownerId
+      );
+
+  }
+
+  const { data, error } =
+    await bgmQuery.maybeSingle();
 
   if (error) {
 

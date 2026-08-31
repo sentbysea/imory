@@ -185,31 +185,73 @@ async function openPostPage(
   }
 
 
-  const {
-    data: post,
-    error
-  } =
-    await supabaseClient
-      .from(
-        "posts"
-      )
-      .select(
-        `
-        id,
-        category_id,
-        user_id,
-        title,
-        content_type,
-        visibility,
-        created_at,
-        quote_preset_id
-        `
-      )
-      .eq(
-        "id",
-        postId
-      )
-      .maybeSingle();
+  const owner =
+    await getSiteOwner();
+
+
+  let post =
+    null;
+
+  let error =
+    null;
+
+
+  if (
+    owner.scoped &&
+    !owner.ownerId
+  ) {
+
+    error = null;
+
+  }
+
+  else {
+
+    let postQuery =
+      supabaseClient
+        .from(
+          "posts"
+        )
+        .select(
+          `
+          id,
+          category_id,
+          user_id,
+          title,
+          content_type,
+          visibility,
+          created_at,
+          quote_preset_id
+          `
+        )
+        .eq(
+          "id",
+          postId
+        );
+
+
+    if (owner.scoped) {
+
+      postQuery =
+        postQuery.eq(
+          "user_id",
+          owner.ownerId
+        );
+
+    }
+
+
+    const result =
+      await postQuery.maybeSingle();
+
+
+    post =
+      result.data;
+
+    error =
+      result.error;
+
+  }
 
 
   if (

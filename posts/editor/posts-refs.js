@@ -46,8 +46,31 @@ function buildPostRoute(path = "/") {
       ? path
       : `/${path}`;
 
+
+  /*
+    ?u=slug(공개 홈페이지 owner 식별자, home/site-owner.js
+    참고)는 검색 파라미터라 pushState로 경로만 바꾸면 사라진다
+    — 여기서 항상 현재 값을 다시 붙여줘서, 이 함수를 거치는
+    모든 내부 네비게이션(히스토리 이동, 링크 생성, 404
+    redirect restore)에서 그대로 유지되게 한다.
+  */
+
+  const ownerSlug =
+    new URLSearchParams(
+      window.location.search
+    ).get(
+      "u"
+    );
+
+
+  const search =
+    ownerSlug
+      ? `?u=${encodeURIComponent(ownerSlug)}`
+      : "";
+
+
   return (
-    `${SITE_BASE_PATH}${normalizedPath}` ||
+    `${SITE_BASE_PATH}${normalizedPath}${search}` ||
     "/"
   );
 
@@ -415,6 +438,21 @@ const postEditorMessage =
 const postEditorFontToggle =
   document.getElementById(
     "postEditorFontToggle"
+  );
+
+const postEditorBoldToggle =
+  document.getElementById(
+    "postEditorBoldToggle"
+  );
+
+const postEditorItalicToggle =
+  document.getElementById(
+    "postEditorItalicToggle"
+  );
+
+const postEditorUnderlineToggle =
+  document.getElementById(
+    "postEditorUnderlineToggle"
   );
 
 const postEditorCustomColor =

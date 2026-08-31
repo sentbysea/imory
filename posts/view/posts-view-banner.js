@@ -58,11 +58,30 @@ async function renderBannerCategory(
     `;
 
 
-  const {
-    data,
-    error
-  } =
-    await supabaseClient
+  const owner =
+    await getSiteOwner();
+
+
+  if (
+    owner.scoped &&
+    !owner.ownerId
+  ) {
+
+    bannerGrid.innerHTML =
+      `
+        <div class="post-empty">
+          no banners yet
+        </div>
+      `;
+
+
+    return;
+
+  }
+
+
+  let bannersQuery =
+    supabaseClient
       .from(
         "banners"
       )
@@ -72,14 +91,31 @@ async function renderBannerCategory(
       .eq(
         "category_id",
         categoryId
-      )
-      .order(
-        "sort_order",
-        {
-          ascending:
-            true
-        }
       );
+
+
+  if (owner.scoped) {
+
+    bannersQuery =
+      bannersQuery.eq(
+        "user_id",
+        owner.ownerId
+      );
+
+  }
+
+
+  const {
+    data,
+    error
+  } =
+    await bannersQuery.order(
+      "sort_order",
+      {
+        ascending:
+          true
+      }
+    );
 
 
   if (error) {

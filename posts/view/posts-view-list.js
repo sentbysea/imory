@@ -74,11 +74,27 @@ function fetchCategoryPageData(
   const request =
     (async () => {
 
-      const {
-        data: category,
-        error: categoryError
-      } =
-        await supabaseClient
+      const owner =
+        await getSiteOwner();
+
+
+      if (
+        owner.scoped &&
+        !owner.ownerId
+      ) {
+
+        return {
+          category: null,
+          categoryError: null,
+          posts: null,
+          postsError: null
+        };
+
+      }
+
+
+      let categoryQuery =
+        supabaseClient
           .from(
             "categories"
           )
@@ -88,8 +104,25 @@ function fetchCategoryPageData(
           .eq(
             "id",
             categoryId
-          )
-          .maybeSingle();
+          );
+
+
+      if (owner.scoped) {
+
+        categoryQuery =
+          categoryQuery.eq(
+            "user_id",
+            owner.ownerId
+          );
+
+      }
+
+
+      const {
+        data: category,
+        error: categoryError
+      } =
+        await categoryQuery.maybeSingle();
 
 
       if (
@@ -127,11 +160,8 @@ function fetchCategoryPageData(
       }
 
 
-      const {
-        data: posts,
-        error: postsError
-      } =
-        await supabaseClient
+      let postsQuery =
+        supabaseClient
           .from(
             "posts"
           )
@@ -146,14 +176,31 @@ function fetchCategoryPageData(
           .eq(
             "category_id",
             categoryId
-          )
-          .order(
-            "created_at",
-            {
-              ascending:
-                false
-            }
           );
+
+
+      if (owner.scoped) {
+
+        postsQuery =
+          postsQuery.eq(
+            "user_id",
+            owner.ownerId
+          );
+
+      }
+
+
+      const {
+        data: posts,
+        error: postsError
+      } =
+        await postsQuery.order(
+          "created_at",
+          {
+            ascending:
+              false
+          }
+        );
 
 
       return {

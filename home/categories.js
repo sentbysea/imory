@@ -28,18 +28,45 @@ async function loadCategories() {
   }
 
 
-  const { data, error } =
-    await supabaseClient
+  const owner =
+    await getSiteOwner();
+
+  if (
+    owner.scoped &&
+    !owner.ownerId
+  ) {
+
+    categoryMenuLinks.innerHTML =
+      "";
+
+    return;
+
+  }
+
+  let categoriesQuery =
+    supabaseClient
       .from("categories")
       .select(
         "id, name, slug, sort_order"
-      )
-      .order(
-        "sort_order",
-        {
-          ascending: true
-        }
       );
+
+  if (owner.scoped) {
+
+    categoriesQuery =
+      categoriesQuery.eq(
+        "user_id",
+        owner.ownerId
+      );
+
+  }
+
+  const { data, error } =
+    await categoriesQuery.order(
+      "sort_order",
+      {
+        ascending: true
+      }
+    );
 
 
   if (error) {
