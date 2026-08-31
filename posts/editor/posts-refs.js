@@ -7,7 +7,8 @@
    반드시 이 파일이 제일 먼저 로드돼야 함(index.html의
    postsDependencyScripts 순서 참고).
 
-   내용: 라우팅(buildPostRoute 등), 에디터/툴바/프리뷰
+   내용: 라우팅(buildPostRoute 등 — slug 자체는
+   core/lib/site-path.js 공용 헬퍼에 위임), 에디터/툴바/프리뷰
    DOM 요소 참조(배너 관련 참조 포함).
 
    상태 변수(current* 등)와 날짜 포맷/메뉴/로그인 조회
@@ -24,54 +25,21 @@
 
 /* =========================================================
    ROUTING
+
+   SITE_BASE_PATH/getSitePath 등은 core/lib/site-path.js
+   (index.html에서 이 파일보다 먼저 로드됨)에 있음 — owner
+   slug(home/site-owner.js 참고)는 이제 검색 파라미터가 아니라
+   경로 첫 segment라 history.pushState로 경로를 바꿔도
+   사라지지 않지만, 이 함수를 거치는 모든 내부 네비게이션
+   (히스토리 이동, 링크 생성, 404 redirect restore)에서 여전히
+   현재 slug를 다시 읽어 그대로 유지시켜준다.
 ========================================================== */
-
-const SITE_BASE_PATH =
-  window.location.hostname.endsWith(".github.io")
-    ? (
-        "/" +
-        (
-          window.location.pathname
-            .split("/")
-            .filter(Boolean)[0] || ""
-        )
-      ).replace(/\/$/, "")
-    : "";
-
 
 function buildPostRoute(path = "/") {
 
-  const normalizedPath =
-    path.startsWith("/")
-      ? path
-      : `/${path}`;
-
-
-  /*
-    ?u=slug(공개 홈페이지 owner 식별자, home/site-owner.js
-    참고)는 검색 파라미터라 pushState로 경로만 바꾸면 사라진다
-    — 여기서 항상 현재 값을 다시 붙여줘서, 이 함수를 거치는
-    모든 내부 네비게이션(히스토리 이동, 링크 생성, 404
-    redirect restore)에서 그대로 유지되게 한다.
-  */
-
-  const ownerSlug =
-    new URLSearchParams(
-      window.location.search
-    ).get(
-      "u"
-    );
-
-
-  const search =
-    ownerSlug
-      ? `?u=${encodeURIComponent(ownerSlug)}`
-      : "";
-
-
-  return (
-    `${SITE_BASE_PATH}${normalizedPath}${search}` ||
-    "/"
+  return buildSitePath(
+    getSiteOwnerSlugFromPath(),
+    path
   );
 
 }
@@ -79,26 +47,7 @@ function buildPostRoute(path = "/") {
 
 function getPostRoutePath() {
 
-  let pathname =
-    window.location.pathname;
-
-
-  if (
-    SITE_BASE_PATH &&
-    pathname.startsWith(
-      SITE_BASE_PATH
-    )
-  ) {
-
-    pathname =
-      pathname.slice(
-        SITE_BASE_PATH.length
-      ) || "/";
-
-  }
-
-
-  return pathname;
+  return getSitePathAfterSlug();
 
 }
 
