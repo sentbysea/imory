@@ -39,9 +39,15 @@ const categoryTabButton =
   );
 
 
-const bgmTabButton =
+const homeTabButton =
   document.getElementById(
-    "bgmTabButton"
+    "homeTabButton"
+  );
+
+
+const dataTabButton =
+  document.getElementById(
+    "dataTabButton"
   );
 
 
@@ -51,20 +57,63 @@ const categorySettingsPanel =
   );
 
 
+const homeSettingsPanel =
+  document.getElementById(
+    "homeSettingsPanel"
+  );
+
+
+const dataSettingsPanel =
+  document.getElementById(
+    "dataSettingsPanel"
+  );
+
+
 const bgmSettingsPanel =
   document.getElementById(
     "bgmSettingsPanel"
   );
 
 
-const myBannerTabButton =
-  document.getElementById(
-    "myBannerTabButton"
-  );
-
 const myBannerSettingsPanel =
   document.getElementById(
     "myBannerSettingsPanel"
+  );
+
+
+const blogTitleInput =
+  document.getElementById(
+    "blogTitleInput"
+  );
+
+
+const blogTitleSaveButton =
+  document.getElementById(
+    "blogTitleSaveButton"
+  );
+
+
+const blogTitleSaveMessage =
+  document.getElementById(
+    "blogTitleSaveMessage"
+  );
+
+
+const cursorUrlInput =
+  document.getElementById(
+    "cursorUrlInput"
+  );
+
+
+const cursorSaveButton =
+  document.getElementById(
+    "cursorSaveButton"
+  );
+
+
+const cursorSaveMessage =
+  document.getElementById(
+    "cursorSaveMessage"
   );
 
 
@@ -111,12 +160,12 @@ function showSettingsSection(
     section !== "category";
 
 
-  bgmSettingsPanel.hidden =
-    section !== "bgm";
+  homeSettingsPanel.hidden =
+    section !== "home";
 
 
-  myBannerSettingsPanel.hidden =
-    section !== "mybanner";
+  dataSettingsPanel.hidden =
+    section !== "data";
 
 
   categoryTabButton.classList.toggle(
@@ -125,15 +174,15 @@ function showSettingsSection(
   );
 
 
-  bgmTabButton.classList.toggle(
+  homeTabButton.classList.toggle(
     "active",
-    section === "bgm"
+    section === "home"
   );
 
 
-  myBannerTabButton.classList.toggle(
+  dataTabButton.classList.toggle(
     "active",
-    section === "mybanner"
+    section === "data"
   );
 
 }
@@ -151,24 +200,24 @@ categoryTabButton.addEventListener(
 );
 
 
-bgmTabButton.addEventListener(
+homeTabButton.addEventListener(
   "click",
   () => {
 
     showSettingsSection(
-      "bgm"
+      "home"
     );
 
   }
 );
 
 
-myBannerTabButton.addEventListener(
+dataTabButton.addEventListener(
   "click",
   () => {
 
     showSettingsSection(
-      "mybanner"
+      "data"
     );
 
   }
@@ -222,6 +271,112 @@ async function loadBgm(
 
 
   bgmUrlInput.value =
+    data?.value || "";
+
+}
+
+
+/* =========================================================
+   블로그 제목 불러오기
+========================================================== */
+
+async function loadBlogTitle(
+  user
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from(
+        "site_settings"
+      )
+      .select(
+        "value"
+      )
+      .eq(
+        "key",
+        "blog_title"
+      )
+      .eq(
+        "user_id",
+        user.id
+      )
+      .maybeSingle();
+
+
+  if (error) {
+
+    console.error(
+      "load blog title error:",
+      error
+    );
+
+
+    blogTitleSaveMessage.textContent =
+      "블로그 제목을 불러오지 못했습니다.";
+
+
+    return;
+
+  }
+
+
+  blogTitleInput.value =
+    data?.value || "";
+
+}
+
+
+/* =========================================================
+   마우스 포인터 불러오기
+========================================================== */
+
+async function loadCursorSetting(
+  user
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from(
+        "site_settings"
+      )
+      .select(
+        "value"
+      )
+      .eq(
+        "key",
+        "cursor_url"
+      )
+      .eq(
+        "user_id",
+        user.id
+      )
+      .maybeSingle();
+
+
+  if (error) {
+
+    console.error(
+      "load cursor error:",
+      error
+    );
+
+
+    cursorSaveMessage.textContent =
+      "마우스 포인터 설정을 불러오지 못했습니다.";
+
+
+    return;
+
+  }
+
+
+  cursorUrlInput.value =
     data?.value || "";
 
 }

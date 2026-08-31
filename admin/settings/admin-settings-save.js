@@ -30,6 +30,16 @@ async function loadAdminSettings(
     user
   );
 
+
+  await loadBlogTitle(
+    user
+  );
+
+
+  await loadCursorSetting(
+    user
+  );
+
 }
 
 
@@ -142,6 +152,236 @@ bgmSaveButton
 
 
       bgmSaveButton.disabled =
+        false;
+
+    }
+  );
+
+
+
+/* =========================================================
+   블로그 제목 저장
+========================================================== */
+
+blogTitleSaveButton
+  ?.addEventListener(
+    "click",
+    async () => {
+
+      const {
+        data:
+        userData,
+
+        error:
+        userError
+      } =
+        await supabaseClient
+          .auth
+          .getUser();
+
+
+      if (
+        userError ||
+        !userData.user
+      ) {
+
+        blogTitleSaveMessage.textContent =
+          "로그인이 필요합니다.";
+
+
+        return;
+
+      }
+
+
+      const user =
+        userData.user;
+
+
+      const blogTitle =
+        blogTitleInput
+          .value
+          .trim();
+
+
+      blogTitleSaveButton.disabled =
+        true;
+
+
+      blogTitleSaveMessage.textContent =
+        "저장 중...";
+
+
+      const {
+        error
+      } =
+        await supabaseClient
+          .from(
+            "site_settings"
+          )
+          .upsert(
+            {
+
+              user_id:
+                user.id,
+
+              key:
+                "blog_title",
+
+              value:
+                blogTitle
+
+            },
+            {
+
+              onConflict:
+                "user_id,key"
+
+            }
+          );
+
+
+      if (error) {
+
+        console.error(
+          "blog title save error:",
+          error
+        );
+
+
+        blogTitleSaveMessage.textContent =
+          "저장에 실패했습니다.";
+
+
+        blogTitleSaveButton.disabled =
+          false;
+
+
+        return;
+
+      }
+
+
+      blogTitleSaveMessage.textContent =
+        "saved ♡";
+
+
+      blogTitleSaveButton.disabled =
+        false;
+
+    }
+  );
+
+
+
+/* =========================================================
+   마우스 포인터 저장
+========================================================== */
+
+cursorSaveButton
+  ?.addEventListener(
+    "click",
+    async () => {
+
+      const {
+        data:
+        userData,
+
+        error:
+        userError
+      } =
+        await supabaseClient
+          .auth
+          .getUser();
+
+
+      if (
+        userError ||
+        !userData.user
+      ) {
+
+        cursorSaveMessage.textContent =
+          "로그인이 필요합니다.";
+
+
+        return;
+
+      }
+
+
+      const user =
+        userData.user;
+
+
+      const cursorUrl =
+        cursorUrlInput
+          .value
+          .trim();
+
+
+      cursorSaveButton.disabled =
+        true;
+
+
+      cursorSaveMessage.textContent =
+        "저장 중...";
+
+
+      const {
+        error
+      } =
+        await supabaseClient
+          .from(
+            "site_settings"
+          )
+          .upsert(
+            {
+
+              user_id:
+                user.id,
+
+              key:
+                "cursor_url",
+
+              value:
+                cursorUrl
+
+            },
+            {
+
+              onConflict:
+                "user_id,key"
+
+            }
+          );
+
+
+      if (error) {
+
+        console.error(
+          "cursor save error:",
+          error
+        );
+
+
+        cursorSaveMessage.textContent =
+          "저장에 실패했습니다.";
+
+
+        cursorSaveButton.disabled =
+          false;
+
+
+        return;
+
+      }
+
+
+      cursorSaveMessage.textContent =
+        "saved ♡";
+
+
+      cursorSaveButton.disabled =
         false;
 
     }

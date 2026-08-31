@@ -333,7 +333,7 @@
                 id="categoryTabButton"
                 type="button"
               >
-                CATEGORY
+                카테고리
               </button>
 
               <span class="settings-tab-divider">
@@ -342,10 +342,10 @@
 
               <button
                 class="settings-tab"
-                id="bgmTabButton"
+                id="homeTabButton"
                 type="button"
               >
-                BGM
+                홈페이지
               </button>
 
               <span class="settings-tab-divider">
@@ -354,10 +354,10 @@
 
               <button
                 class="settings-tab"
-                id="myBannerTabButton"
+                id="dataTabButton"
                 type="button"
               >
-                MY BANNER
+                데이터
               </button>
 
             </nav>
@@ -421,9 +421,15 @@
 
 
         <section
-          class="settings-group bgm-group settings-subpanel"
-          id="bgmSettingsPanel"
+          class="settings-subpanel"
+          id="homeSettingsPanel"
           hidden
+        >
+
+
+        <section
+          class="settings-group bgm-group"
+          id="bgmSettingsPanel"
         >
 
           <div class="settings-group-title">
@@ -484,9 +490,8 @@
         ================================================== -->
 
         <section
-          class="settings-group my-banner-group settings-subpanel"
+          class="settings-group my-banner-group"
           id="myBannerSettingsPanel"
-          hidden
         >
 
           <div class="settings-group-title">
@@ -600,6 +605,173 @@
             class="save-message"
             id="myBannerSaveMessage"
           ></p>
+
+        </section>
+
+
+
+        <section
+          class="settings-group blog-title-group"
+          id="blogTitleSettingsPanel"
+        >
+
+          <div class="settings-group-title">
+
+            <span>
+              블로그 제목
+            </span>
+
+            <small>
+              browser tab
+            </small>
+
+          </div>
+
+
+          <div class="setting-line">
+
+            <label for="blogTitleInput">
+              제목
+            </label>
+
+            <input
+              id="blogTitleInput"
+              class="setting-input"
+              type="text"
+              placeholder="Imory"
+            >
+
+          </div>
+
+
+          <button
+            class="save-button"
+            id="blogTitleSaveButton"
+            type="button"
+          >
+            save
+          </button>
+
+
+          <p
+            class="save-message"
+            id="blogTitleSaveMessage"
+          ></p>
+
+        </section>
+
+
+
+        <section
+          class="settings-group cursor-group"
+          id="cursorSettingsPanel"
+        >
+
+          <div class="settings-group-title">
+
+            <span>
+              마우스 포인터
+            </span>
+
+            <small>
+              cursor image
+            </small>
+
+          </div>
+
+
+          <div class="setting-line">
+
+            <label for="cursorUrlInput">
+              커서 이미지 URL
+            </label>
+
+            <input
+              id="cursorUrlInput"
+              class="setting-input"
+              type="url"
+              placeholder="https://example.com/cursor.png"
+            >
+
+          </div>
+
+
+          <button
+            class="save-button"
+            id="cursorSaveButton"
+            type="button"
+          >
+            save
+          </button>
+
+
+          <p
+            class="save-message"
+            id="cursorSaveMessage"
+          ></p>
+
+        </section>
+
+
+        </section>
+
+
+
+        <!-- =================================================
+             DATA
+        ================================================== -->
+
+        <section
+          class="settings-subpanel"
+          id="dataSettingsPanel"
+          hidden
+        >
+
+          <div class="settings-group-title">
+
+            <span>
+              DATA
+            </span>
+
+            <small>
+              export / backup
+            </small>
+
+          </div>
+
+
+          <div class="setting-line">
+
+            <label>
+              스킨 내보내기
+            </label>
+
+            <button
+              class="save-button"
+              type="button"
+              disabled
+            >
+              준비 중
+            </button>
+
+          </div>
+
+
+          <div class="setting-line">
+
+            <label>
+              백업
+            </label>
+
+            <button
+              class="save-button"
+              type="button"
+              disabled
+            >
+              준비 중
+            </button>
+
+          </div>
 
         </section>
 
@@ -732,6 +904,8 @@
   ></script>
 
   <script src="../core/lib/supabase-client.js"></script>
+
+  <script src="../core/lib/auth-shared.js"></script>
 
   <!-- =========================================================
        ADMIN QUOTE PANEL LOADER

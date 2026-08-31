@@ -631,6 +631,17 @@
 }
 
 
+/*
+  홈페이지 탭 안에서는 BGM/MY BANNER/블로그 제목/마우스 포인터가
+  하나의 패널에 세로로 같이 나열되므로, 그룹 사이에 구분 여백을
+  준다(각 그룹 자체의 margin-top:0은 유지하고 인접할 때만 적용).
+*/
+
+#homeSettingsPanel .settings-group + .settings-group {
+  margin-top: 40px;
+}
+
+
 
 /* =========================================================
    COMING SOON
