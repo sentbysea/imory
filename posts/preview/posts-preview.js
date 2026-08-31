@@ -92,65 +92,12 @@ function applyPreviewTitleStyle(
 
 
 
-/* =========================================================
-   LINE BREAK MODE
-========================================================== */
-
-function applyPreviewLineBreakMode(
-  content,
-  settings = {}
-) {
-
-  if (!content) {
-    return;
-  }
-
-
-  const mode =
-    settings.lineBreak ||
-    "keep";
-
-
-  if (
-    mode === "char"
-  ) {
-
-    content.style.wordBreak =
-      "break-all";
-
-
-    content.style.overflowWrap =
-      "anywhere";
-
-  }
-
-
-  else if (
-    mode === "word"
-  ) {
-
-    content.style.wordBreak =
-      "normal";
-
-
-    content.style.overflowWrap =
-      "break-word";
-
-  }
-
-
-  else {
-
-    content.style.wordBreak =
-      "keep-all";
-
-
-    content.style.overflowWrap =
-      "break-word";
-
-  }
-
-}
+/*
+  ★ LINE BREAK MODE는 applyPostBodyStyles(posts-style-render.js)
+  안의 applyPostLineBreakMode로 통합됨 — preview/viewer가 항상
+  같은 결과를 갖도록. 아래에서 applyPostBodyStyles(content, ...)를
+  호출하면 자동으로 같이 적용된다.
+*/
 
 
 
@@ -461,12 +408,6 @@ function createEditorPreviewPage(
       previewBodyAlign;
 
   }
-
-
-  applyPreviewLineBreakMode(
-    content,
-    settings
-  );
 
 
   const source =

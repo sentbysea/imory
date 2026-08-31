@@ -216,20 +216,6 @@ postEditorSaveButton
       }
 
 
-      if (
-        secretPassword &&
-        secretPassword.length < 4
-      ) {
-
-        showPostEditorMessage(
-          "비밀번호는 4자 이상이어야 합니다."
-        );
-
-        return;
-
-      }
-
-
       postEditorSaveButton.disabled =
         true;
 

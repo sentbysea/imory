@@ -82,6 +82,86 @@ function applyPostBodyStyles(
     settings.bodyAlign ||
     "left";
 
+
+  applyPostLineBreakMode(
+    container,
+    settings
+  );
+
+}
+
+
+/*
+  ★ 예전에는 에디터 프리뷰(applyPreviewLineBreakMode, 지금은
+  이 함수로 통합됨)만 lineBreak 설정을 반영했고, 실제 발행된
+  글 화면(.post-detail-content)은 CSS에 word-break: keep-all이
+  고정돼 있어서 이 설정 자체를 못 읽었다 — "word"를 골라도
+  프리뷰와 뷰어가 다르게 보이던 원인. applyPostBodyStyles가
+  preview/viewer 양쪽에서 공통으로 호출되므로 여기서 같이
+  처리하면 두 화면이 항상 같은 CSS 결과를 갖는다.
+
+  구형 모바일 Safari는 overflow-wrap: anywhere 지원이
+  불안정해서 세 모드 모두 overflow-wrap은 널리 지원되는
+  break-word로 통일 — 필요할 때만(단어가 컨테이너보다 길 때)
+  줄바꿈하므로 영문 단어가 불필요하게 중간에서 끊기지 않는다.
+  한글의 글자 단위 자연스러운 줄바꿈은 word-break: normal일 때
+  브라우저 기본 UAX#14 규칙으로 이미 지원된다.
+*/
+
+function applyPostLineBreakMode(
+  container,
+  settings = {}
+) {
+
+  if (!container) {
+    return;
+  }
+
+
+  const mode =
+    settings.lineBreak ||
+    "keep";
+
+
+  if (
+    mode === "char"
+  ) {
+
+    container.style.wordBreak =
+      "break-all";
+
+
+    container.style.overflowWrap =
+      "break-word";
+
+  }
+
+
+  else if (
+    mode === "word"
+  ) {
+
+    container.style.wordBreak =
+      "normal";
+
+
+    container.style.overflowWrap =
+      "break-word";
+
+  }
+
+
+  else {
+
+    container.style.wordBreak =
+      "keep-all";
+
+
+    container.style.overflowWrap =
+      "break-word";
+
+  }
+
 }
 
 

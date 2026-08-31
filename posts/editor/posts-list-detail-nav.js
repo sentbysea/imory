@@ -30,7 +30,7 @@
    EDITOR PREVIEW ~ MOBILE PREVIEW
 
    getPostPreviewRatio, applyPostPreviewPresetVariables,
-   applyPreviewTitleStyle, applyPreviewLineBreakMode,
+   applyPreviewTitleStyle,
    createPreviewSource, createEditorPreviewPage,
    previewPageIsOverflowing, isEditorPageBreakNode,
    showEditorPreviewPage, renderEditorPreviewPages,
