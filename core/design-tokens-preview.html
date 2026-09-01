@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imory Design Tokens v0.1 — Preview</title>
+<link rel="stylesheet" href="./design-tokens.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard&family=Nanum+Myeongjo:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 40px 32px 120px;
+    background: var(--system-bg);
+    color: var(--system-text);
+    font-family: var(--system-font-family);
+    font-size: var(--imory-font-size-400);
+    line-height: var(--imory-line-height-base);
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text-strong);
+  }
+
+  .lede {
+    margin: 0 0 var(--imory-space-600);
+    color: var(--system-text-muted);
+    font-size: var(--imory-font-size-500);
+    max-width: 640px;
+  }
+
+  section {
+    margin-bottom: 56px;
+  }
+
+  section > h2 {
+    display: flex;
+    align-items: baseline;
+    gap: var(--imory-space-200);
+
+    margin: 0 0 var(--imory-space-100);
+    padding-bottom: var(--imory-space-200);
+    border-bottom: var(--imory-border-width) solid var(--system-border-strong);
+
+    font-size: var(--imory-font-size-600);
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text-strong);
+  }
+
+  section > h2 .index {
+    color: var(--system-accent);
+    font-weight: var(--imory-font-weight-regular);
+  }
+
+  section > p.note {
+    margin: 0 0 var(--imory-space-500);
+    color: var(--system-text-muted);
+    font-size: var(--imory-font-size-300);
+  }
+
+  h3.sub {
+    margin: var(--imory-space-600) 0 var(--imory-space-300);
+    font-size: var(--imory-font-size-500);
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text);
+  }
+
+  h3.sub .tag {
+    margin-left: var(--imory-space-200);
+    font-size: var(--imory-font-size-100);
+    font-weight: var(--imory-font-weight-regular);
+    color: var(--system-text-disabled);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ---- swatch grid ---- */
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+    gap: var(--imory-space-300);
+  }
+
+  .swatch {
+    border: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .swatch .fill {
+    height: 64px;
+    border-bottom: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .swatch .meta {
+    padding: var(--imory-space-200);
+    background: var(--system-bg);
+  }
+
+  .swatch .token {
+    display: block;
+    font-size: var(--imory-font-size-100);
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text);
+    word-break: break-all;
+  }
+
+  .swatch .value {
+    display: block;
+    margin-top: 2px;
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-muted);
+  }
+
+  .swatch .role {
+    display: inline-block;
+    margin-top: var(--imory-space-100);
+    padding: 2px 6px;
+    border: var(--imory-border-width) solid var(--system-border-strong);
+    font-size: 8px;
+    color: var(--system-text-muted);
+    letter-spacing: 0.03em;
+  }
+
+  .swatch.unassigned .role {
+    color: var(--system-text-disabled);
+    border-style: dashed;
+  }
+
+  /* ---- semantic compare panels ---- */
+
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--imory-space-500);
+  }
+
+  @media (max-width: 720px) {
+    .compare {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .panel {
+    border: var(--imory-border-width) solid var(--system-border-strong);
+    padding: var(--imory-space-500);
+  }
+
+  .panel h4 {
+    margin: 0 0 var(--imory-space-100);
+    font-size: var(--imory-font-size-200);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--system-text-disabled);
+  }
+
+  .panel-demo {
+    padding: var(--imory-space-500);
+    margin-bottom: var(--imory-space-300);
+  }
+
+  .panel-demo.system {
+    background: var(--system-surface);
+    border: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .panel-demo.theme {
+    background: var(--theme-surface);
+    border: var(--imory-border-width) solid var(--theme-border);
+  }
+
+  .panel-demo .heading {
+    margin: 0 0 4px;
+  }
+
+  .panel-demo.system .heading {
+    color: var(--system-text-strong);
+    font-weight: var(--imory-font-weight-medium);
+  }
+
+  .panel-demo.theme .heading {
+    color: var(--theme-text);
+    font-weight: var(--imory-font-weight-medium);
+  }
+
+  .panel-demo .body-text {
+    margin: 0 0 var(--imory-space-300);
+  }
+
+  .panel-demo.system .body-text {
+    color: var(--system-text);
+    font-size: var(--imory-font-size-400);
+  }
+
+  .panel-demo.theme .body-text {
+    color: var(--theme-text);
+    font-size: var(--imory-font-size-400);
+  }
+
+  .panel-demo .muted-text {
+    font-size: var(--imory-font-size-200);
+  }
+
+  .panel-demo.system .muted-text {
+    color: var(--system-text-muted);
+  }
+
+  .panel-demo.theme .muted-text {
+    color: var(--theme-text-muted);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: var(--imory-font-size-300);
+    font-weight: var(--imory-font-weight-medium);
+    padding: 8px 14px;
+    border-radius: var(--imory-radius-200);
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  }
+
+  /* system button: SETTINGS 화면 .save-button 기준 — 기본은 흰 배경 +
+     옅은 accent-border + accent 텍스트, hover에서만 한 단계 진해진다.
+     accent를 solid fill로 쓰지 않는다. */
+  .btn.system {
+    background: var(--imory-white);
+    border: var(--imory-border-width) solid var(--system-accent-border);
+    color: var(--system-accent);
+  }
+  .btn.system:hover {
+    background: var(--system-accent-soft);
+    border-color: var(--system-accent-hover);
+    color: var(--system-accent-hover);
+  }
+  .btn.system:focus-visible {
+    outline: none;
+    box-shadow: var(--system-shadow-focus-ring);
+  }
+
+  .btn.theme {
+    border: none;
+    background: var(--theme-accent);
+    color: var(--imory-white);
+  }
+  .btn.theme:hover {
+    background: var(--theme-accent-hover);
+  }
+
+  .chip {
+    display: inline-block;
+    margin-top: var(--imory-space-300);
+    padding: 4px 10px;
+    background: var(--system-accent-soft);
+    color: var(--system-accent-hover);
+    font-size: var(--imory-font-size-100);
+    border-radius: var(--imory-radius-pill);
+  }
+
+  .panel-demo.theme .chip {
+    background: var(--theme-accent-soft);
+    color: var(--theme-accent-hover);
+  }
+
+  code {
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    background: var(--system-surface);
+    padding: 1px 5px;
+    font-size: 0.9em;
+    color: var(--system-text);
+  }
+
+  /* ---- typography rows ---- */
+
+  .type-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--imory-space-500);
+    padding: var(--imory-space-300) 0;
+    border-bottom: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .type-row .label {
+    flex: 0 0 220px;
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-muted);
+  }
+
+  .type-row .sample {
+    color: var(--system-text);
+  }
+
+  /* ---- spacing bars ---- */
+
+  .space-row {
+    display: flex;
+    align-items: center;
+    gap: var(--imory-space-400);
+    margin-bottom: var(--imory-space-200);
+  }
+
+  .space-row .label {
+    flex: 0 0 220px;
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-muted);
+  }
+
+  .space-row .bar {
+    height: 16px;
+    background: var(--system-accent);
+  }
+
+  /* ---- radius boxes ---- */
+
+  .radius-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--imory-space-500);
+  }
+
+  .radius-item {
+    text-align: center;
+  }
+
+  .radius-item .box {
+    width: 72px;
+    height: 72px;
+    background: var(--system-accent-soft);
+    border: 2px solid var(--system-accent);
+    margin-bottom: var(--imory-space-200);
+  }
+
+  .radius-item .label {
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-muted);
+  }
+
+  /* ---- shadow demo ---- */
+
+  .shadow-demo {
+    display: flex;
+    gap: var(--imory-space-500);
+    align-items: center;
+  }
+
+  .shadow-demo input {
+    padding: 8px 10px;
+    border: var(--imory-border-width) solid var(--system-border-strong);
+    border-radius: var(--imory-radius-100);
+    font-family: inherit;
+    font-size: var(--imory-font-size-400);
+  }
+
+  .shadow-demo input:focus-visible {
+    outline: none;
+    box-shadow: var(--system-shadow-focus-ring);
+    border-color: var(--system-accent);
+  }
+
+  .danger-row {
+    display: flex;
+    gap: var(--imory-space-300);
+    align-items: center;
+    padding: var(--imory-space-300);
+    background: var(--imory-red-50);
+    border: var(--imory-border-width) solid var(--imory-red-200);
+    color: var(--imory-red-500);
+    font-size: var(--imory-font-size-300);
+    max-width: 420px;
+  }
+
+</style>
+</head>
+<body>
+
+<h1>Imory Design Tokens v0.1</h1>
+<p class="lede">
+  <code>core/design-tokens.css</code>를 그대로 불러와 실제 토큰 값을 보여주는 페이지입니다.
+  이 페이지의 스타일은 전부 CSS 변수(<code>var(--...)</code>)를 통해서만 값을 가져오므로,
+  토큰 파일이 바뀌면 이 페이지도 그대로 갱신됩니다. 기존 서비스 CSS는 아직 이 토큰을
+  참조하지 않습니다.
+</p>
+
+<!-- ============================================================
+     1. Color Primitive
+============================================================= -->
+<section>
+  <h2><span class="index">01</span> Color Primitive</h2>
+  <p class="note">실제 프로젝트 CSS에서 반복 확인된 값만 포함. 점선 태그가 붙은 항목은 아직 semantic 토큰에 연결되지 않은 primitive입니다.</p>
+
+  <h3 class="sub">Neutral <span class="tag">--imory-gray-*</span></h3>
+  <div class="grid" id="grid-gray"></div>
+
+  <h3 class="sub">Pink · system <span class="tag">--imory-pink-system*</span></h3>
+  <div class="grid" id="grid-pink-system"></div>
+
+  <h3 class="sub">Pink · theme <span class="tag">sua 테마 실사용값 · 커스터마이징 레이어용 예약</span></h3>
+  <div class="grid" id="grid-pink-theme"></div>
+
+  <h3 class="sub">Red · danger <span class="tag">--imory-red-*</span></h3>
+  <div class="grid" id="grid-red"></div>
+</section>
+
+<!-- ============================================================
+     2. Color Semantic
+============================================================= -->
+<section>
+  <h2><span class="index">02</span> Color Semantic — system vs theme</h2>
+  <p class="note">
+    system-accent는 버튼의 solid fill이 아니라 <strong>system UI의 포인트 컬러</strong>로 정의합니다 —
+    <code>admin/admin-settings.css</code>의 <code>.save-button</code> (SETTINGS 화면 저장 버튼)을 기준으로,
+    기본 상태는 흰 배경 + 옅은 accent-border + accent 텍스트, hover에서만 한 단계 진해집니다.<br>
+    <strong>아래 두 패널은 지금 단계에서 의도적으로 거의 동일하게 보입니다.</strong>
+    <code>--theme-*</code>는 나중에 사용자 스킨/AI 커스터마이징이 덮어쓸 수 있도록 네임스페이스만
+    분리해둔 것이고, 커스터마이징 레이어가 없는 지금은 <code>--theme-*</code> 기본값이
+    <code>--system-*</code>과 같은 primitive를 가리킵니다. (실제 sua 테마 CSS는 지금도
+    <code>#ee9fbd</code> 계열을 그대로 쓰고 있으며, 이 값은 primitive로 남아있지만 아직
+    semantic에는 연결하지 않았습니다 — 매핑표 참고)
+  </p>
+
+  <div class="compare">
+    <div class="panel">
+      <h4>system</h4>
+      <div class="panel-demo system">
+        <p class="heading">system-text-strong / system-text</p>
+        <p class="body-text">관리자 화면의 기본 UI 텍스트입니다. <span class="muted-text">system-text-muted는 이렇게 보입니다.</span></p>
+        <button class="btn system">system-accent 버튼</button>
+        <span class="chip">system-accent-soft 칩</span>
+      </div>
+      <div id="tokens-system"></div>
+    </div>
+
+    <div class="panel">
+      <h4>theme</h4>
+      <div class="panel-demo theme">
+        <p class="heading">theme-text</p>
+        <p class="body-text">방문자가 보는 홈페이지 콘텐츠 텍스트입니다. <span class="muted-text">theme-text-muted는 이렇게 보입니다.</span></p>
+        <button class="btn theme">theme-accent 버튼</button>
+        <span class="chip">theme-accent-soft 칩</span>
+      </div>
+      <div id="tokens-theme"></div>
+    </div>
+  </div>
+
+  <h3 class="sub">Danger <span class="tag">semantic 미배정, primitive만 존재</span></h3>
+  <div class="danger-row">이 테마를 삭제하면 되돌릴 수 없습니다. (imory-red-* 조합 예시)</div>
+</section>
+
+<!-- ============================================================
+     3. Typography
+============================================================= -->
+<section>
+  <h2><span class="index">03</span> Typography</h2>
+
+  <h3 class="sub">Font family</h3>
+  <div class="type-row">
+    <span class="label">--system-font-family / --theme-font-family</span>
+    <span class="sample" style="font-family: var(--system-font-family); font-size: 18px;">Pretendard — 관리자·UI 기본 텍스트 Aa 가나다</span>
+  </div>
+  <div class="type-row">
+    <span class="label">--theme-font-family-serif</span>
+    <span class="sample" style="font-family: var(--theme-font-family-serif); font-size: 18px;">Nanum Myeongjo — 사용자 선택형 콘텐츠 폰트 Aa 가나다</span>
+  </div>
+
+  <h3 class="sub">Font size</h3>
+  <div id="type-sizes"></div>
+
+  <h3 class="sub">Font weight</h3>
+  <div class="type-row">
+    <span class="label">--imory-font-weight-regular (400)</span>
+    <span class="sample" style="font-weight: var(--imory-font-weight-regular); font-size: 16px;">일기를 기록하는 가장 쉬운 방법</span>
+  </div>
+  <div class="type-row">
+    <span class="label">--imory-font-weight-medium (500)</span>
+    <span class="sample" style="font-weight: var(--imory-font-weight-medium); font-size: 16px;">일기를 기록하는 가장 쉬운 방법</span>
+  </div>
+
+  <h3 class="sub">Line height</h3>
+  <div id="type-leading"></div>
+</section>
+
+<!-- ============================================================
+     4. Spacing
+============================================================= -->
+<section>
+  <h2><span class="index">04</span> Spacing</h2>
+  <p class="note">Core로 지정한 6단계만 토큰화했습니다 (4 / 8 / 12 / 16 / 20 / 24px). 그 외 값은 기존 CSS에 literal로 남아 있습니다.</p>
+  <div id="space-bars"></div>
+</section>
+
+<!-- ============================================================
+     5. Radius
+============================================================= -->
+<section>
+  <h2><span class="index">05</span> Radius</h2>
+  <div class="radius-row" id="radius-boxes"></div>
+</section>
+
+<!-- ============================================================
+     6. Border / Shadow
+============================================================= -->
+<section>
+  <h2><span class="index">06</span> Border / Shadow</h2>
+  <p class="note">box-shadow는 프로젝트 전체에서 focus ring 1종만 확인되어, elevation(sm/md/lg) 시스템은 만들지 않았습니다. 아래 입력창을 클릭/탭해서 focus ring을 확인하세요.</p>
+  <div class="shadow-demo">
+    <input type="text" placeholder="--system-shadow-focus-ring 확인용 입력창">
+    <code>box-shadow: 0 0 0 1px var(--system-accent)</code>
+  </div>
+</section>
+
+<script>
+  const root = getComputedStyle(document.documentElement);
+  const val = (name) => root.getPropertyValue(name).trim();
+
+  function renderGrid(containerId, items) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = items.map(({ token, resolved, role, unassigned }) => `
+      <div class="swatch${unassigned ? ' unassigned' : ''}">
+        <div class="fill" style="background: var(${token});"></div>
+        <div class="meta">
+          <span class="token">${token}</span>
+          <span class="value">${resolved}</span>
+          <span class="role">${role}</span>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  renderGrid('grid-gray', [
+    { token: '--imory-white', role: 'core' },
+    { token: '--imory-gray-50', role: 'core' },
+    { token: '--imory-gray-100', role: 'core' },
+    { token: '--imory-gray-200', role: 'core' },
+    { token: '--imory-gray-300', role: 'core' },
+    { token: '--imory-gray-400', role: 'core' },
+    { token: '--imory-gray-500', role: 'core' },
+    { token: '--imory-gray-600', role: 'core' },
+    { token: '--imory-gray-700', role: 'core' },
+    { token: '--imory-gray-800', role: 'core' },
+    { token: '--imory-gray-900', role: 'core' },
+  ].map(t => ({ ...t, resolved: val(t.token) })));
+
+  renderGrid('grid-pink-system', [
+    { token: '--imory-pink-system-border', role: '→ system-accent-border' },
+    { token: '--imory-pink-system', role: '→ system/theme-accent' },
+    { token: '--imory-pink-25', role: '→ system/theme-accent-soft' },
+    { token: '--imory-pink-system-strong', role: '→ system/theme-accent-hover' },
+  ].map(t => ({ ...t, resolved: val(t.token) })));
+
+  renderGrid('grid-pink-theme', [
+    { token: '--imory-pink-theme-border', role: '미배정 · sua 실사용값', unassigned: true },
+    { token: '--imory-pink-theme', role: '미배정 · sua 실사용값', unassigned: true },
+    { token: '--imory-pink-50', role: '미배정 · sua 실사용값', unassigned: true },
+    { token: '--imory-pink-theme-strong', role: '미배정 · sua 실사용값', unassigned: true },
+  ].map(t => ({ ...t, resolved: val(t.token) })));
+
+  renderGrid('grid-red', [
+    { token: '--imory-red-50', role: 'unassigned', unassigned: true },
+    { token: '--imory-red-200', role: 'unassigned', unassigned: true },
+    { token: '--imory-red-500', role: 'unassigned', unassigned: true },
+  ].map(t => ({ ...t, resolved: val(t.token) })));
+
+  function renderTokenList(containerId, tokens) {
+    const el = document.getElementById(containerId);
+    el.innerHTML = '<div style="margin-top:12px; font-size:9px; color:var(--system-text-muted); line-height:1.9;">' +
+      tokens.map(t => `<code>${t}</code>: ${val(t)}`).join('<br>') +
+      '</div>';
+  }
+
+  renderTokenList('tokens-system', [
+    '--system-bg', '--system-surface', '--system-text', '--system-text-strong',
+    '--system-text-muted', '--system-text-disabled', '--system-border',
+    '--system-border-strong', '--system-accent', '--system-accent-border',
+    '--system-accent-hover', '--system-accent-soft',
+  ]);
+
+  renderTokenList('tokens-theme', [
+    '--theme-bg', '--theme-surface', '--theme-text', '--theme-text-muted',
+    '--theme-border', '--theme-accent', '--theme-accent-hover', '--theme-accent-soft',
+  ]);
+
+  const typeSizes = document.getElementById('type-sizes');
+  ['--imory-font-size-100','--imory-font-size-200','--imory-font-size-300','--imory-font-size-400','--imory-font-size-500','--imory-font-size-600','--imory-font-size-700']
+    .forEach(token => {
+      const row = document.createElement('div');
+      row.className = 'type-row';
+      row.innerHTML = `<span class="label">${token} (${val(token)})</span><span class="sample" style="font-size: var(${token});">일기를 기록하는 가장 쉬운 방법</span>`;
+      typeSizes.appendChild(row);
+    });
+
+  const typeLeading = document.getElementById('type-leading');
+  ['--imory-line-height-tight','--imory-line-height-snug','--imory-line-height-base','--imory-line-height-relaxed','--imory-line-height-loose']
+    .forEach(token => {
+      const row = document.createElement('div');
+      row.className = 'type-row';
+      row.innerHTML = `<span class="label">${token} (${val(token)})</span><span class="sample" style="line-height: var(${token}); max-width:420px; display:inline-block;">오늘 하루도 무사히 지나갔다. 별일은 없었지만 그래도 기록해두고 싶은 순간들이 있었다.</span>`;
+      typeLeading.appendChild(row);
+    });
+
+  const spaceBars = document.getElementById('space-bars');
+  ['--imory-space-100','--imory-space-200','--imory-space-300','--imory-space-400','--imory-space-500','--imory-space-600']
+    .forEach(token => {
+      const row = document.createElement('div');
+      row.className = 'space-row';
+      row.innerHTML = `<span class="label">${token} (${val(token)})</span><span class="bar" style="width: var(${token});"></span>`;
+      spaceBars.appendChild(row);
+    });
+
+  const radiusBoxes = document.getElementById('radius-boxes');
+  [
+    ['--imory-radius-100', 'xs'],
+    ['--imory-radius-200', 'sm'],
+    ['--imory-radius-300', 'md'],
+    ['--imory-radius-pill', 'pill'],
+    ['--imory-radius-circle', 'circle'],
+  ].forEach(([token, label]) => {
+    const item = document.createElement('div');
+    item.className = 'radius-item';
+    item.innerHTML = `<div class="box" style="border-radius: var(${token});"></div><div class="label">${label}<br>${token}<br>${val(token)}</div>`;
+    radiusBoxes.appendChild(item);
+  });
+</script>
+
+</body>
+</html>

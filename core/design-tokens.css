@@ -1,0 +1,168 @@
+/* =========================================================
+   Imory Design Tokens v0.1
+
+   이 파일은 기존 디자인을 바꾸지 않는다. imory 전역에서
+   실제로 반복 사용 중인 값만 토큰으로 정리한 것이며, 새로운
+   디자인 값은 만들지 않았다.
+
+   구조: Primitive(실제 값) → Semantic(역할/의미)
+   Semantic은 반드시 system(관리자/에디터 등 Imory 자체 UI)과
+   theme(사용자 홈페이지 스킨) 두 네임스페이스로 분리한다.
+
+   범위가 아닌 값(핵심 반복도가 낮은 근접값)은 의도적으로
+   토큰화하지 않았다 — 기존 CSS에는 계속 literal 값을 쓰고,
+   실제 필요성이 확인되면 v0.2 cleanup에서 추가한다.
+   (자세한 근거는 core/design-tokens-mapping.md 참고)
+========================================================== */
+
+:root {
+
+  /* =======================================================
+     1. Color Primitive
+  ======================================================== */
+
+  /* --- Neutral (Core만 포함, 근접값은 literal 유지) --- */
+  --imory-white: #ffffff;
+  --imory-gray-50: #fafafa;
+  --imory-gray-100: #eeeeee;
+  --imory-gray-200: #dddddd;
+  --imory-gray-300: #cccccc;
+  --imory-gray-400: #aaaaaa;
+  --imory-gray-500: #999999;
+  --imory-gray-600: #777777;
+  --imory-gray-700: #555555;
+  --imory-gray-800: #333333;
+  --imory-gray-900: #222222;
+
+  /* --- Pink (실제 서비스 CSS에는 system 쪽 e39ab5 계열과 theme(sua)
+     쪽 ee9fbd 계열 두 종류가 존재해서, 연속 numeric이 아니라 계열이
+     드러나는 이름을 쓴다. 다만 --theme-accent 기본값은 지금 단계에서
+     system과 통일하기로 해서 pink-system을 가리키고, pink-theme
+     계열은 향후 커스터마이징 레이어를 위해 남겨둔 상태다) --- */
+  --imory-pink-25: #fffafb;          /* save-button:hover 배경 (admin-settings.css, editor.css 동일) */
+  --imory-pink-50: #fff5f8;          /* posts-list-detail.css 등 실제 sua 테마가 쓰는 옅은 배경 (현재 semantic 미배정) */
+  --imory-pink-system-border: #e7c7d3;  /* save-button:hover border */
+  --imory-pink-theme-border: #f0d3de;   /* 실제 sua 테마가 쓰는 옅은 테두리 (현재 semantic 미배정) */
+  --imory-pink-system: #e39ab5;         /* save-button:hover text — system의 대표 포인트 컬러 */
+  --imory-pink-system-strong: #c66f8e;  /* .active 상태(customize-page-tab.active 등)에서 쓰는 한 단계 진한 톤 */
+  --imory-pink-theme: #ee9fbd;          /* 실제 sua 테마(하트/태그)가 쓰는 accent (현재 semantic 미배정 — theme-accent는 당분간 pink-system을 가리킴) */
+  --imory-pink-theme-strong: #d980a2;   /* pink-theme의 hover/active (현재 semantic 미배정) */
+
+  /* --- Red (삭제/경고 전용, editor.css에서만 사용) --- */
+  --imory-red-50: #fff5f5;
+  --imory-red-200: #e7bcbc;
+  --imory-red-500: #c65a5a;
+
+
+  /* =======================================================
+     2. Color Semantic — system (Imory 관리자/에디터 UI)
+  ======================================================== */
+
+  --system-bg: var(--imory-white);
+  --system-surface: var(--imory-gray-50);
+
+  --system-text: var(--imory-gray-800);
+  --system-text-strong: var(--imory-gray-900);
+  --system-text-muted: var(--imory-gray-500);
+  --system-text-disabled: var(--imory-gray-400);
+
+  --system-border: var(--imory-gray-100);
+  --system-border-strong: var(--imory-gray-200);
+
+  /* system-accent는 버튼의 solid fill이 아니라 "포인트 컬러" 그 자체를
+     가리킨다 — 기본 system button은 흰 배경 + accent-border + accent
+     텍스트로 조용하게, hover에서만 accent-soft 배경 + accent-hover로
+     한 단계 진해진다. 근거: admin-settings.css .save-button /
+     customize/editor/editor.css .customize-save-button (두 곳 동일 패턴) */
+  --system-accent: var(--imory-pink-system);
+  --system-accent-border: var(--imory-pink-system-border);
+  --system-accent-soft: var(--imory-pink-25);
+  --system-accent-hover: var(--imory-pink-system-strong);
+
+
+  /* =======================================================
+     3. Color Semantic — theme (사용자 홈페이지 스킨)
+
+     theme 네임스페이스는 나중에 사용자 커스터마이징(스킨/AI 편집)이
+     --theme-*만 덮어써서 홈 디자인을 바꿀 수 있도록 분리해둔 것이다.
+     지금 단계에서는 커스터마이징 레이어가 없으므로 system과 시각적으로
+     다를 이유가 없다 — 그래서 기본값은 theme 전용 primitive
+     (pink-theme, gray-700 등)가 아니라 system과 동일한 primitive를
+     가리키게 한다. pink-theme/gray-700 계열 primitive 자체는 실제
+     themes/sua/* CSS가 지금도 쓰고 있는 값이라 그대로 남겨두되,
+     semantic 기본값에서는 연결하지 않는다.
+  ======================================================== */
+
+  --theme-bg: var(--imory-white);
+  --theme-surface: var(--imory-gray-50);
+
+  --theme-text: var(--imory-gray-800);
+  --theme-text-muted: var(--imory-gray-500);
+
+  --theme-border: var(--imory-gray-100);
+
+  --theme-accent: var(--imory-pink-system);
+  --theme-accent-hover: var(--imory-pink-system-strong);
+  --theme-accent-soft: var(--imory-pink-25);
+
+
+  /* =======================================================
+     4. Typography
+  ======================================================== */
+
+  --system-font-family: "Pretendard", sans-serif;
+  --theme-font-family: "Pretendard", sans-serif;
+  --theme-font-family-serif: "Nanum Myeongjo", serif; /* 사용자가 선택 가능한 콘텐츠 폰트 */
+
+  --imory-font-size-100: 9px;
+  --imory-font-size-200: 10px;
+  --imory-font-size-300: 11px;
+  --imory-font-size-400: 12px;
+  --imory-font-size-500: 13px;
+  --imory-font-size-600: 14px;
+  --imory-font-size-700: 16px;
+
+  --imory-font-weight-regular: 400;
+  --imory-font-weight-medium: 500;
+
+  --imory-line-height-tight: 1;
+  --imory-line-height-snug: 1.4;
+  --imory-line-height-base: 1.5;
+  --imory-line-height-relaxed: 1.6;
+  --imory-line-height-loose: 1.9;
+
+
+  /* =======================================================
+     5. Spacing (Core: 4 / 8 / 12 / 16 / 20 / 24px)
+  ======================================================== */
+
+  --imory-space-100: 4px;
+  --imory-space-200: 8px;
+  --imory-space-300: 12px;
+  --imory-space-400: 16px;
+  --imory-space-500: 20px;
+  --imory-space-600: 24px;
+
+
+  /* =======================================================
+     6. Radius
+  ======================================================== */
+
+  --imory-radius-100: 2px;
+  --imory-radius-200: 4px;
+  --imory-radius-300: 6px;
+  --imory-radius-pill: 999px;
+  --imory-radius-circle: 50%;
+
+
+  /* =======================================================
+     7. Border / Shadow
+  ======================================================== */
+
+  --imory-border-width: 1px;
+
+  /* elevation shadow 없음(프로젝트 전체에 box-shadow 5회, 그중 3회는 none) —
+     focus ring 하나만 정의 */
+  --system-shadow-focus-ring: 0 0 0 1px var(--system-accent);
+
+}

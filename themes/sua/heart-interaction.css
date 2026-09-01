@@ -20,6 +20,25 @@
 
 
 /* =========================================================
+   theme token override — SUA 전용 (core/design-tokens.css v0.1)
+
+   --theme-*는 기본적으로 system과 같은 primitive를 가리키지만,
+   SUA는 실제로 다른 값(pink-theme/gray-600)을 쓰고 있어서
+   .heart-group / .love-event 범위 안에서만 override한다.
+   :root에 두지 않는 이유: index.html이 system 분류 CSS(home/menu.css
+   등)와 SUA를 같은 문서에서 로드하므로, :root override는 SUA 밖까지
+   샌다. 시험 목적: SUA 하위에서만 override가 적용되는지, system UI에는
+   영향이 없는지, literal → token 교체 후 외형이 동일한지 확인.
+========================================================== */
+
+.heart-group,
+.love-event {
+  --theme-accent: var(--imory-pink-theme);
+  --theme-text: var(--imory-gray-600);
+}
+
+
+/* =========================================================
    하트 그룹
 ========================================================== */
 
@@ -294,7 +313,7 @@ model-viewer:active {
   display: block;
 
   color:
-    #ee9fbd;
+    var(--theme-accent);
 
   font-family:
     "Pretendard",

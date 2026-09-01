@@ -114,7 +114,7 @@
   letter-spacing:
     0.06em;
 
-  color: #777777;
+  color: var(--theme-text);
 }
 
 
@@ -203,7 +203,7 @@
   letter-spacing:
     0.04em;
 
-  color: #777777;
+  color: var(--theme-text);
 }
 
 

@@ -160,6 +160,18 @@
        CSS
   ========================================================== -->
 
+  <!--
+    Imory Design Tokens (core/design-tokens.css) — :root 변수
+    선언만 있고 어떤 셀렉터도 스타일링하지 않으므로, 다른 CSS가
+    이 변수를 override/참조하기 전에 가장 먼저 로드되도록 CSS
+    섹션 맨 앞에 둔다. (core/design-tokens-mapping.md 참고)
+  -->
+
+  <link
+    rel="stylesheet"
+    href="./core/design-tokens.css"
+  >
+
   <link
     rel="stylesheet"
     href="./home/home-base.css"
