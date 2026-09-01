@@ -17,9 +17,9 @@ body {
 body {
   min-height: 100vh;
 
-  background: #ffffff;
+  background: var(--system-bg);
 
-  color: #333333;
+  color: var(--system-text);
 
   font-family:
     "Pretendard",
@@ -130,7 +130,7 @@ button {
 
   border-radius: 8px;
 
-  background: #ffffff;
+  background: var(--system-bg);
 
   color: #444444;
 
@@ -145,9 +145,9 @@ button {
 
 
 .google-login-button:hover {
-  background: #fafafa;
+  background: var(--system-surface);
 
-  border-color: #dddddd;
+  border-color: var(--system-border-strong);
 }
 
 
@@ -169,7 +169,7 @@ button {
 
   border:
     1px solid
-    #eeeeee;
+    var(--system-border);
 
   border-radius: 50%;
 
@@ -212,7 +212,7 @@ button {
 
   border-bottom:
     1px solid
-    #eeeeee;
+    var(--system-border);
 }
 
 
@@ -233,13 +233,13 @@ button {
 
   border:
     1px solid
-    #eeeeee;
+    var(--system-border);
 
   border-radius: 5px;
 
-  background: #ffffff;
+  background: var(--system-bg);
 
-  color: #999999;
+  color: var(--system-text-muted);
 
   font-size: 10px;
 
@@ -252,7 +252,7 @@ button {
 
 
 .logout-button:hover {
-  background: #fafafa;
+  background: var(--system-surface);
 
   color: #666666;
 }
@@ -284,7 +284,7 @@ button {
 .customize-embed {
   border:
     1px solid
-    #eeeeee;
+    var(--system-border);
 }
 
 
@@ -338,7 +338,7 @@ button {
 .admin-menu {
   border-top:
     1px solid
-    #eeeeee;
+    var(--system-border);
 }
 
 
@@ -365,7 +365,7 @@ button {
 
   border-bottom:
     1px solid
-    #eeeeee;
+    var(--system-border);
 
   background: transparent;
 
@@ -381,7 +381,7 @@ button {
 
 
 .admin-menu-item:hover {
-  background: #fafafa;
+  background: var(--system-surface);
 }
 
 

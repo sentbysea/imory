@@ -40,7 +40,7 @@
 | `#eeeeee` | `--imory-gray-100` (`--system-border`, `--theme-border`) | 기본 divider/border (가장 빈도 높음) |
 | `#dddddd` | `--imory-gray-200` (`--system-border-strong`) | 진한 border |
 | `#cccccc` | `--imory-gray-300` | border/disabled (아직 semantic 미배정) |
-| `#aaaaaa` | `--imory-gray-400` (`--system-text-disabled`) | 비활성 아이콘/텍스트 |
+| `#aaaaaa` | `--imory-gray-400` (`--system-text-disabled`) | 비활성 아이콘/텍스트 — ⚠️ 아래 "semantic 재검토 대상" 참고 |
 | `#999999` | `--imory-gray-500` (`--system-text-muted`, `--theme-text-muted`) | placeholder, 보조 텍스트 |
 | `#777777` | `--imory-gray-600` | 라벨/보조 텍스트 (아직 semantic 미배정) |
 | `#555555` | `--imory-gray-700` | 실제 `posts-list-detail.css`/`cover-profile.css` 본문 텍스트 리터럴 (현재 semantic 미배정 — `--theme-text`는 당분간 gray-800을 가리킴) |
@@ -149,9 +149,26 @@ elevation shadow(sm/md/lg)는 만들지 않음 — 프로젝트 전체에 box-sh
 
 ---
 
+## semantic 재검토 대상
+
+- **`#aaaaaa` (`--imory-gray-400`)** — `admin-shell.css`에서 6곳(`.login-desc`, `.user-email`, `.home-desc`, `.menu-copy small`, `.back-button`, `.view-heading p`)이 모두 이 값을 쓰는데, 실제 역할은 전부 **muted/secondary description text**이고 실제 비활성(disabled) 상태 요소는 하나도 없다. 값은 `--system-text-disabled`와 정확히 일치하지만 이름이 실제 역할과 맞지 않아, 이 6곳은 이번 admin-shell.css 치환에서 **literal로 유지**했다.
+- 반복도로 볼 때 별도 `--system-text-subtle` 같은 semantic token 신설이 합리적일 수 있으나, 지금 단계에서는 만들지 않는다 — 다른 파일(예: `admin-settings.css`, `admin-quote.css`)의 `#aaaaaa`/근접 muted-text 사용처를 더 확인한 뒤 v0.2에서 결정.
+
 ## 적용 현황 (실서비스 연결 시작)
 
-- `index.html`에 `core/design-tokens.css`를 CSS 섹션 맨 앞으로 `<link>` — 토큰이 처음으로 실제 서비스 페이지에 연결됨 (다른 HTML 진입점(`admin/index.html` 등)에는 아직 연결 안 함).
+- `index.html`에 `core/design-tokens.css`를 CSS 섹션 맨 앞으로 `<link>` — 토큰이 처음으로 실제 서비스 페이지에 연결됨.
+- `admin/index.html`에도 `core/design-tokens.css`를 CSS 섹션 맨 앞(`admin-shell.css`보다 먼저)으로 `<link>` 추가 — 기존 로드 순서(`admin-shell.css` → `admin-settings.css` → `admin-quote.css`)는 유지.
+- `admin-settings.css` literal → token 치환 (6곳):
+  - `.settings-group-title`(border-bottom), `.editor-block textarea`(border), `.setting-input`(border), `.my-banner-preview`(border), `.my-banner-preview-empty`(border) — `#eeeeee` → `var(--system-border)`
+  - `.settings-tab-divider`(color) — `#dddddd` → `var(--system-border-strong)`
+- `admin-shell.css` literal → token 치환 (15곳):
+  - `body`(background), `.google-login-button`(background), `.logout-button`(background) — `#ffffff` → `var(--system-bg)`
+  - `.google-login-button:hover`, `.logout-button:hover`, `.admin-menu-item:hover`(background) — `#fafafa` → `var(--system-surface)`
+  - `body`(color) — `#333333` → `var(--system-text)`
+  - `.logout-button`(color) — `#999999` → `var(--system-text-muted)`
+  - `.google-icon`, `.admin-header`, `.logout-button`, `.customize-embed`, `.admin-menu`, `.admin-menu-item`(border 계열, 6곳) — `#eeeeee` → `var(--system-border)`
+  - `.google-login-button:hover`(border-color) — `#dddddd` → `var(--system-border-strong)`
+  - `#aaaaaa` 6곳은 위 "semantic 재검토 대상" 사유로 literal 유지.
 - `themes/sua/heart-interaction.css`에 SUA 전용 override 추가:
   ```css
   .heart-group,
