@@ -26,11 +26,24 @@ async function loadPostStylePreset() {
     기존처럼 이름이 "Vibe"인 프리셋으로 폴백한다.
   */
 
-  const {
-    data: activeData,
-    error: activeError
-  } =
-    await supabaseClient
+  const owner =
+    await getSiteOwner();
+
+
+  if (
+    owner.scoped &&
+    !owner.ownerId
+  ) {
+
+    postStyleSettings = {};
+
+    return postStyleSettings;
+
+  }
+
+
+  let activeQuery =
+    supabaseClient
       .from(
         "quote_presets"
       )
@@ -40,7 +53,25 @@ async function loadPostStylePreset() {
       .eq(
         "is_active",
         true
-      )
+      );
+
+
+  if (owner.scoped) {
+
+    activeQuery =
+      activeQuery.eq(
+        "user_id",
+        owner.ownerId
+      );
+
+  }
+
+
+  const {
+    data: activeData,
+    error: activeError
+  } =
+    await activeQuery
       .maybeSingle();
 
 
@@ -65,11 +96,8 @@ async function loadPostStylePreset() {
   }
 
 
-  const {
-    data,
-    error
-  } =
-    await supabaseClient
+  let fallbackQuery =
+    supabaseClient
       .from(
         "quote_presets"
       )
@@ -79,7 +107,25 @@ async function loadPostStylePreset() {
       .eq(
         "name",
         "Vibe"
-      )
+      );
+
+
+  if (owner.scoped) {
+
+    fallbackQuery =
+      fallbackQuery.eq(
+        "user_id",
+        owner.ownerId
+      );
+
+  }
+
+
+  const {
+    data,
+    error
+  } =
+    await fallbackQuery
       .maybeSingle();
 
 
@@ -119,11 +165,24 @@ async function loadPostStylePresetById(
   presetId
 ) {
 
-  const {
-    data,
-    error
-  } =
-    await supabaseClient
+  const owner =
+    await getSiteOwner();
+
+
+  if (
+    owner.scoped &&
+    !owner.ownerId
+  ) {
+
+    postStyleSettings = {};
+
+    return postStyleSettings;
+
+  }
+
+
+  let presetQuery =
+    supabaseClient
       .from(
         "quote_presets"
       )
@@ -133,7 +192,25 @@ async function loadPostStylePresetById(
       .eq(
         "id",
         presetId
-      )
+      );
+
+
+  if (owner.scoped) {
+
+    presetQuery =
+      presetQuery.eq(
+        "user_id",
+        owner.ownerId
+      );
+
+  }
+
+
+  const {
+    data,
+    error
+  } =
+    await presetQuery
       .maybeSingle();
 
 
@@ -592,6 +669,5 @@ function updateCustomPointColorSwatch() {
   }
 
 }
-
 
 

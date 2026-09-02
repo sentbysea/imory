@@ -947,39 +947,54 @@
           ];
 
 
-        for (
-          const src of postsDependencyScripts
-        ) {
+        const dependencyLoads =
+          postsDependencyScripts.map(
+            src =>
+              new Promise(
+                (resolve, reject) => {
 
-          const dependencyScript =
-            document.createElement(
-              "script"
-            );
-
-
-          dependencyScript.src =
-            `${src}?v=${cacheBuster}`;
+                  const dependencyScript =
+                    document.createElement(
+                      "script"
+                    );
 
 
-          await new Promise(
-            (resolve, reject) => {
+                  /*
+                    동적 script는 기본적으로 async라 실행 순서가
+                    뒤섞일 수 있다. async=false면 목록 순서대로
+                    실행하면서도 파일 다운로드 자체는 동시에
+                    시작되어, 30여 번의 네트워크 왕복을 차례로
+                    기다리던 지연만 없앨 수 있다.
+                  */
 
-              dependencyScript.onload =
-                resolve;
+                  dependencyScript.async =
+                    false;
 
 
-              dependencyScript.onerror =
-                reject;
+                  dependencyScript.src =
+                    `${src}?v=${cacheBuster}`;
 
 
-              document.body.appendChild(
-                dependencyScript
-              );
+                  dependencyScript.onload =
+                    resolve;
 
-            }
+
+                  dependencyScript.onerror =
+                    reject;
+
+
+                  document.body.appendChild(
+                    dependencyScript
+                  );
+
+                }
+              )
           );
 
-        }
+
+        await Promise.all(
+          dependencyLoads
+        );
 
 
         console.log(
@@ -999,6 +1014,62 @@
       }
 
     }
+
+
+    /*
+      posts 모듈이 아직 준비되지 않은 첫 클릭도 브라우저의
+      기본 링크 이동(전체 새로고침)으로 보내지 않는다. 모듈
+      로딩이 끝나는 즉시 같은 카테고리를 SPA 화면으로 연다.
+      모듈 준비 후에는 posts-list-detail-nav.js의 정식 핸들러가
+      담당하므로 여기서는 아무것도 하지 않는다.
+    */
+
+    document
+      .getElementById(
+        "categoryMenuLinks"
+      )
+      ?.addEventListener(
+        "click",
+        async event => {
+
+          const link =
+            event.target.closest(
+              "a[data-category-id]"
+            );
+
+
+          if (
+            !link ||
+            typeof openCategoryPage ===
+              "function"
+          ) {
+            return;
+          }
+
+
+          event.preventDefault();
+
+
+          const categoryId =
+            link.dataset.categoryId;
+
+
+          await loadPostsModule();
+
+
+          if (
+            typeof openCategoryPage ===
+              "function"
+          ) {
+
+            await openCategoryPage(
+              categoryId
+            );
+
+          }
+
+        }
+      );
 
 
     /* =========================================================

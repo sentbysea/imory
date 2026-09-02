@@ -145,9 +145,6 @@ window.addEventListener(
 
 syncEditorPreviewMode();
 
-loadPostStylePreset();
-
 loadPostPresetOptions();
 
 startPostRouter();
-
