@@ -17,18 +17,9 @@ async function loadAdminSettings(
   user
 ) {
 
-  await loadBgm(
-    user
-  );
-
   await loadCategories(
   user
 );
-
-
-  await loadMyBanner(
-    user
-  );
 
 
   await loadBlogTitle(
@@ -36,7 +27,22 @@ async function loadAdminSettings(
   );
 
 
+  await loadFavicon(
+    user
+  );
+
+
   await loadCursorSetting(
+    user
+  );
+
+
+  await loadBgm(
+    user
+  );
+
+
+  await loadMyBanner(
     user
   );
 
@@ -383,6 +389,172 @@ cursorSaveButton
 
       cursorSaveButton.disabled =
         false;
+
+    }
+  );
+
+
+
+/* =========================================================
+   마우스 포인터 이미지 업로드
+
+   MY BANNER/FAVICON과 같은 패턴 — Supabase Storage의 항상 같은
+   경로(user-cursors/{user_id}/cursor, 확장자 없음)에 upsert로
+   덮어쓰고, 그 고정 URL을 cursorUrlInput에 채워 넣는다. 저장은
+   기존 save 버튼을 직접 눌러야 site_settings에 반영된다(업로드
+   즉시 자동저장 안 함).
+
+   ⚠️ "user-cursors" Storage 버킷도 user-banners/user-favicons와
+   마찬가지로 이 저장소 코드로 만들어지지 않는다 — Supabase
+   대시보드에서 미리 만들어둬야 업로드가 실제로 동작한다.
+========================================================== */
+
+const CURSOR_BUCKET =
+  "user-cursors";
+
+
+function buildCursorImageUrl(
+  userId
+) {
+
+  return (
+    `${SUPABASE_URL}/storage/v1/object/public/` +
+    `${CURSOR_BUCKET}/${userId}/cursor`
+  );
+
+}
+
+
+cursorFileInput
+  ?.addEventListener(
+    "change",
+    async event => {
+
+      const file =
+        event.target.files?.[0];
+
+
+      if (!file) {
+        return;
+      }
+
+
+      const {
+        data:
+        userData,
+
+        error:
+        userError
+      } =
+        await supabaseClient
+          .auth
+          .getUser();
+
+
+      if (
+        userError ||
+        !userData.user
+      ) {
+
+        if (
+          cursorUploadMessage
+        ) {
+
+          cursorUploadMessage.textContent =
+            "로그인이 필요합니다.";
+
+        }
+
+        return;
+
+      }
+
+
+      const user =
+        userData.user;
+
+
+      if (
+        cursorUploadMessage
+      ) {
+
+        cursorUploadMessage.textContent =
+          "업로드 중...";
+
+      }
+
+
+      const path =
+        `${user.id}/cursor`;
+
+
+      const {
+        error
+      } =
+        await supabaseClient
+          .storage
+          .from(
+            CURSOR_BUCKET
+          )
+          .upload(
+            path,
+            file,
+            {
+              upsert:
+                true,
+
+              contentType:
+                file.type,
+
+              cacheControl:
+                "60"
+            }
+          );
+
+
+      if (error) {
+
+        console.error(
+          error
+        );
+
+
+        if (
+          cursorUploadMessage
+        ) {
+
+          cursorUploadMessage.textContent =
+            "업로드하지 못했습니다.";
+
+        }
+
+        return;
+
+      }
+
+
+      cursorUrlInput.value =
+        buildCursorImageUrl(
+          user.id
+        );
+
+
+      if (
+        cursorUploadMessage
+      ) {
+
+        cursorUploadMessage.textContent =
+          "업로드 완료 — save를 눌러 저장하세요 ♡";
+
+      }
+
+
+      /*
+        같은 파일을 다시 골라도 change 이벤트가 뜨게 비워둠.
+      */
+
+      event.target.value =
+        "";
 
     }
   );

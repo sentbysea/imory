@@ -117,6 +117,18 @@ const cursorSaveMessage =
   );
 
 
+const cursorFileInput =
+  document.getElementById(
+    "cursorFileInput"
+  );
+
+
+const cursorUploadMessage =
+  document.getElementById(
+    "cursorUploadMessage"
+  );
+
+
 const categoryList =
   document.getElementById(
     "categoryList"

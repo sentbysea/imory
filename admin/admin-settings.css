@@ -12,6 +12,23 @@
    --divider가 담당한다(admin/index.html에서 class 부여). 여기는
    이 화면만의 span/small 색·크기만 남긴다. */
 
+/* SETTINGS 전용 local override: 아래 .setting-line/.category-list 등
+   콘텐츠가 이미 좌우 14px inset을 쓰고 있어(padding: 0 14px), 헤더
+   박스도 margin으로 동일하게 줄여 시작선을 맞춘다. padding이 아니라
+   margin을 쓴 이유: border-box에서 border-bottom은 박스 바깥 테두리를
+   따라가므로 padding만으로는 텍스트만 안으로 들어가고 구분선은 여전히
+   컨테이너 전체 폭으로 남아 텍스트와 선이 어긋난다 — margin으로 박스
+   자체를 줄여야 텍스트/구분선/아래 콘텐츠가 같은 좌우 경계를 공유한다.
+   14px은 이번에 spacing token으로 승격하지 않는다(다른 .setting-line
+   류와 같은 로컬 literal 유지) — core/patterns/section-header.css는
+   건드리지 않아 quote-preview-heading 등 다른 화면에는 영향 없음. */
+
+.settings-group-title {
+  margin-left: 14px;
+  margin-right: 14px;
+}
+
+
 .settings-group-title span {
   font-size: var(--imory-font-size-300);
 
@@ -283,6 +300,137 @@
 
   font-weight: 500;
   letter-spacing: 0.03em;
+}
+
+
+
+/* =========================================================
+   FAVICON
+
+   admin-favicon.js 참고. MY BANNER와 같은 preview/change 구조를
+   재사용하되(같은 톤), favicon은 작은 아이콘이라 미리보기 박스만
+   40px 정사각형으로 축소한다.
+========================================================== */
+
+.favicon-group {
+  margin-top: 0;
+}
+
+
+.favicon-preview-row {
+  display: flex;
+  align-items: center;
+
+  gap: 12px;
+
+  padding: 0 14px 14px;
+}
+
+
+.favicon-preview {
+  display: block;
+
+  width: 40px;
+  height: 40px;
+
+  border: 1px solid var(--system-border);
+
+  background: #f6f6f6;
+
+  object-fit: contain;
+}
+
+
+.favicon-preview[hidden] {
+  display: none;
+}
+
+
+.favicon-preview-empty {
+  width: 40px;
+  height: 40px;
+
+  border: 1px dashed var(--system-border);
+}
+
+
+.favicon-preview-empty[hidden] {
+  display: none;
+}
+
+
+/* 시각 스타일/상태는 my-banner-change-button과 완전히 동일한 톤을
+   따른다 — Core primary 버튼 + 이 화면만의 padding/font 값. */
+
+.favicon-change-button {
+  padding-inline: 14px;
+
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+
+.favicon-upload-message {
+  margin: 0 0 14px;
+
+  padding: 0 14px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.03em;
+
+  color: var(--system-accent-hover);
+
+  min-height: 12px;
+}
+
+
+
+/* =========================================================
+   CURSOR — upload row
+
+   cursorUrlInput 옆에 my-banner-copy-row와 같은 구조로 upload
+   버튼을 붙인다. 업로드하면 이 input의 값 자체가 채워지고(고정
+   Storage URL), 저장은 기존 save 버튼으로 별도 수행한다.
+========================================================== */
+
+.cursor-upload-row {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 8px;
+}
+
+
+.cursor-upload-row .setting-input {
+  flex: 1;
+
+  min-width: 0;
+}
+
+
+.cursor-upload-button {
+  flex: 0 0 auto;
+
+  min-height: 38px;
+
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+
+.cursor-upload-message {
+  margin: 0 0 14px;
+
+  padding: 0 14px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.03em;
+
+  color: var(--system-accent-hover);
+
+  min-height: 12px;
 }
 
 

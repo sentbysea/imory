@@ -368,7 +368,7 @@
                 id="categoryTabButton"
                 type="button"
               >
-                카테고리
+                CATEGORY
               </button>
 
               <span class="settings-tab-divider imory-tab-divider">
@@ -380,7 +380,7 @@
                 id="homeTabButton"
                 type="button"
               >
-                홈페이지
+                HOME
               </button>
 
               <span class="settings-tab-divider imory-tab-divider">
@@ -392,7 +392,7 @@
                 id="dataTabButton"
                 type="button"
               >
-                데이터
+                DATA
               </button>
 
             </nav>
@@ -464,6 +464,250 @@
           id="homeSettingsPanel"
           hidden
         >
+
+
+        <section
+          class="settings-group blog-title-group"
+          id="blogTitleSettingsPanel"
+        >
+
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
+
+            <span>
+              BLOG TITLE
+            </span>
+
+            <small>
+              browser tab
+            </small>
+
+          </div>
+
+
+          <div class="setting-line">
+
+            <label for="blogTitleInput" class="imory-label">
+              TITLE
+            </label>
+
+            <input
+              id="blogTitleInput"
+              class="setting-input imory-field imory-field--md"
+              type="text"
+              placeholder="Imory"
+            >
+
+          </div>
+
+
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="blogTitleSaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
+
+
+          <p
+            class="save-message"
+            id="blogTitleSaveMessage"
+          ></p>
+
+        </section>
+
+
+
+        <!-- =================================================
+             FAVICON
+
+             MY BANNER와 같은 패턴(admin-favicon.js 참고) — 이미지는
+             Supabase Storage의 항상 같은 경로(user-favicons/{user_id}/
+             favicon, 확장자 없음)에 업로드로 덮어쓰기(upsert)되고,
+             site_settings에 key='favicon_url'로 그 고정 URL(또는
+             직접 입력한 외부 URL)이 저장된다. 공개 홈페이지 쪽 반영은
+             home/site-meta.js의 applyFaviconSetting() 참고.
+        ================================================== -->
+
+        <section
+          class="settings-group favicon-group"
+          id="faviconSettingsPanel"
+        >
+
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
+
+            <span>
+              FAVICON
+            </span>
+
+            <small>
+              browser tab icon
+            </small>
+
+          </div>
+
+
+          <div class="favicon-preview-row">
+
+            <img
+              class="favicon-preview"
+              id="faviconPreview"
+              alt="favicon preview"
+              hidden
+            >
+
+            <div
+              class="favicon-preview-empty"
+              id="faviconPreviewEmpty"
+              aria-label="no favicon yet"
+            ></div>
+
+
+            <label
+              class="favicon-change-button imory-button imory-button--primary imory-button--md"
+              for="faviconFileInput"
+            >
+              change
+            </label>
+
+            <input
+              class="favicon-file-input"
+              id="faviconFileInput"
+              type="file"
+              accept="image/png,image/svg+xml,image/x-icon,image/vnd.microsoft.icon,.ico"
+              hidden
+            >
+
+          </div>
+
+
+          <p
+            class="favicon-upload-message"
+            id="faviconUploadMessage"
+          ></p>
+
+
+          <div class="setting-line">
+
+            <label for="faviconUrlInput" class="imory-label">
+              FAVICON URL
+            </label>
+
+            <input
+              id="faviconUrlInput"
+              class="setting-input imory-field imory-field--md"
+              type="url"
+              placeholder="https://example.com/favicon.png"
+            >
+
+          </div>
+
+
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="faviconSaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
+
+
+          <p
+            class="save-message"
+            id="faviconSaveMessage"
+          ></p>
+
+        </section>
+
+
+
+        <section
+          class="settings-group cursor-group"
+          id="cursorSettingsPanel"
+        >
+
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
+
+            <span>
+              CURSOR
+            </span>
+
+            <small>
+              cursor image
+            </small>
+
+          </div>
+
+
+          <div class="setting-line">
+
+            <label for="cursorUrlInput" class="imory-label">
+              CURSOR IMAGE URL
+            </label>
+
+            <div class="cursor-upload-row">
+
+              <input
+                id="cursorUrlInput"
+                class="setting-input imory-field imory-field--md"
+                type="url"
+                placeholder="https://example.com/cursor.png"
+              >
+
+              <label
+                class="cursor-upload-button imory-button imory-button--secondary imory-button--md"
+                for="cursorFileInput"
+              >
+                upload
+              </label>
+
+              <input
+                class="cursor-file-input"
+                id="cursorFileInput"
+                type="file"
+                accept="image/png,image/svg+xml,.cur"
+                hidden
+              >
+
+            </div>
+
+          </div>
+
+
+          <p
+            class="cursor-upload-message"
+            id="cursorUploadMessage"
+          ></p>
+
+
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="cursorSaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
+
+
+          <p
+            class="save-message"
+            id="cursorSaveMessage"
+          ></p>
+
+        </section>
+
 
 
         <section
@@ -651,118 +895,6 @@
           <p
             class="save-message"
             id="myBannerSaveMessage"
-          ></p>
-
-        </section>
-
-
-
-        <section
-          class="settings-group blog-title-group"
-          id="blogTitleSettingsPanel"
-        >
-
-          <div class="settings-group-title imory-section-header imory-section-header--divider">
-
-            <span>
-              블로그 제목
-            </span>
-
-            <small>
-              browser tab
-            </small>
-
-          </div>
-
-
-          <div class="setting-line">
-
-            <label for="blogTitleInput" class="imory-label">
-              제목
-            </label>
-
-            <input
-              id="blogTitleInput"
-              class="setting-input imory-field imory-field--md"
-              type="text"
-              placeholder="Imory"
-            >
-
-          </div>
-
-
-          <div class="imory-form-actions">
-
-            <button
-              class="save-button imory-button imory-button--primary imory-button--md"
-              id="blogTitleSaveButton"
-              type="button"
-            >
-              save
-            </button>
-
-          </div>
-
-
-          <p
-            class="save-message"
-            id="blogTitleSaveMessage"
-          ></p>
-
-        </section>
-
-
-
-        <section
-          class="settings-group cursor-group"
-          id="cursorSettingsPanel"
-        >
-
-          <div class="settings-group-title imory-section-header imory-section-header--divider">
-
-            <span>
-              마우스 포인터
-            </span>
-
-            <small>
-              cursor image
-            </small>
-
-          </div>
-
-
-          <div class="setting-line">
-
-            <label for="cursorUrlInput" class="imory-label">
-              커서 이미지 URL
-            </label>
-
-            <input
-              id="cursorUrlInput"
-              class="setting-input imory-field imory-field--md"
-              type="url"
-              placeholder="https://example.com/cursor.png"
-            >
-
-          </div>
-
-
-          <div class="imory-form-actions">
-
-            <button
-              class="save-button imory-button imory-button--primary imory-button--md"
-              id="cursorSaveButton"
-              type="button"
-            >
-              save
-            </button>
-
-          </div>
-
-
-          <p
-            class="save-message"
-            id="cursorSaveMessage"
           ></p>
 
         </section>
@@ -1049,6 +1181,7 @@
             "./admin-session.js",
             "./settings/admin-settings-load.js",
             "./settings/admin-my-banner.js",
+            "./settings/admin-favicon.js",
             "./settings/admin-settings-save.js",
 
             /*
