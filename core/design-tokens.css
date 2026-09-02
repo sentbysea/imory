@@ -184,3 +184,30 @@
   --system-shadow-focus-ring: 0 0 0 1px var(--system-accent);
 
 }
+
+
+/* =========================================================
+   8. Color Semantic — system dark mode override
+
+   <html data-theme="dark">일 때만 적용. 사용자 홈페이지 스킨용
+   --theme-*는 여기서 건드리지 않는다 — 다크모드는 Imory 시스템
+   UI(--system-*) 전용이며, 사용자가 꾸민 /:slug 홈은 이 속성과
+   무관하게 항상 라이트로 유지된다. 새 literal 색을 추가하지
+   않고 기존 gray/pink primitive만 재배정한다.
+========================================================== */
+
+:root[data-theme="dark"] {
+
+  --system-bg: var(--imory-gray-900);
+  --system-surface: var(--imory-gray-800);
+
+  --system-text: var(--imory-gray-100);
+  --system-text-strong: var(--imory-white);
+  --system-text-muted: var(--imory-gray-400);
+  --system-text-disabled: var(--imory-gray-600);
+  --system-text-faint: var(--imory-gray-600);
+
+  --system-border: var(--imory-gray-800);
+  --system-border-strong: var(--imory-gray-700);
+
+}

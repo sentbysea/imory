@@ -10,7 +10,50 @@
     content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   >
 
-  <title>Imory</title>
+
+  <!--
+    SYSTEM THEME INIT — light/dark 깜빡임(FOUC) 방지용. CSS
+    로드/본문 렌더링보다 먼저 실행되어야 하므로 head 맨 앞,
+    다른 어떤 스타일시트/스크립트 로드보다도 앞에 둔다. localStorage 저장값
+    → 없으면 OS prefers-color-scheme 순으로 판정해 <html>에
+    data-theme를 붙이기만 한다(다른 책임 없음 — core/theme-toggle.js
+    가 이후 토글 클릭을 처리).
+  -->
+
+  <script>
+
+    (function initSystemTheme() {
+
+      try {
+
+        var stored =
+          localStorage.getItem(
+            "imory_system_theme"
+          );
+
+        var theme =
+          stored === "light" || stored === "dark"
+            ? stored
+            : (
+                window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches
+                  ? "dark"
+                  : "light"
+              );
+
+        document.documentElement.setAttribute(
+          "data-theme",
+          theme
+        );
+
+      } catch (e) {}
+
+    })();
+
+  </script>
+
+
+  <title>imory</title>
 
 
   <!--
@@ -80,6 +123,8 @@
   <script src="./core/lib/reserved-slugs.js"></script>
 
   <script src="./core/lib/site-path.js"></script>
+
+  <script src="./core/lib/auth-shared.js"></script>
 
 
   <!-- =========================================================
@@ -239,6 +284,24 @@
       flex-direction: column;
       align-items: stretch;
       background: var(--system-bg);
+
+      /*
+        body는 home-base.css에서 height:100%; overflow:hidden이라
+        자체 스크롤이 안 된다 — .start-hero-block이 최소 100dvh라
+        about 섹션은 항상 스크롤해야 보인다. 이 화면 자체를 스크롤
+        컨테이너로 두고, "about imory" 클릭 시 자연스럽게 아래로
+        이동하도록 smooth 처리(reduced-motion에서는 즉시 이동).
+      */
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      .landing-screen {
+        scroll-behavior: auto;
+      }
+
     }
 
     /*
@@ -264,21 +327,22 @@
     }
 
     /*
-      공개 시작 페이지 헤더 — 로고만 존재하는 1단계 셸.
-      우측 라이트/다크·SIGN IN 버튼은 다음 단계에서 이 헤더
-      안에 .start-header-actions 컨테이너와 함께 추가된다(지금은
-      빈 컨테이너조차 두지 않는다 — 작동하지 않는 UI 자리 금지).
+      공개 시작 페이지 헤더 — 좌측 로고 + 우측
+      .start-header-actions(테마 토글 + SIGN IN)를 한 줄에 둔다.
     */
 
     .start-header {
       display: flex;
       align-items: center;
+      justify-content: space-between;
       flex-wrap: nowrap;
 
       padding-top: max(16px, env(safe-area-inset-top));
       padding-right: max(24px, env(safe-area-inset-right));
       padding-bottom: 16px;
       padding-left: max(24px, env(safe-area-inset-left));
+
+      border-bottom: 1px solid var(--system-border);
     }
 
     /*
@@ -319,6 +383,100 @@
       background: var(--imory-pink-system);
     }
 
+
+    /*
+      우측 액션 영역 — 테마 토글 + SIGN IN. naru.pub 상단바처럼
+      가벼운 navigation action으로, 큰 CTA 버튼 형태를 피한다.
+      기본은 조용한 gray, hover/focus에서만 pink accent.
+    */
+
+    .start-header-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--imory-space-400);
+      flex-shrink: 0;
+    }
+
+    .start-theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      width: 28px;
+      height: 28px;
+      padding: 0;
+
+      background: none;
+      border: none;
+      border-radius: var(--imory-radius-100);
+
+      color: var(--system-text-muted);
+
+      cursor: pointer;
+    }
+
+    .start-theme-toggle:hover,
+    .start-theme-toggle:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-theme-toggle:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    .start-theme-icon {
+      width: 15px;
+      height: 15px;
+    }
+
+    .start-theme-icon--moon {
+      display: none;
+    }
+
+    :root[data-theme="dark"] .start-theme-icon--sun {
+      display: none;
+    }
+
+    :root[data-theme="dark"] .start-theme-icon--moon {
+      display: inline-flex;
+    }
+
+    .start-sign-in {
+      display: inline-flex;
+      align-items: center;
+
+      padding: 6px 2px;
+
+      background: none;
+      border: none;
+
+      font-family: var(--system-font-family);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      color: var(--system-text-muted);
+
+      white-space: nowrap;
+
+      cursor: pointer;
+    }
+
+    .start-sign-in:hover,
+    .start-sign-in:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-sign-in:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    .start-sign-in:disabled {
+      color: var(--system-text-disabled);
+      cursor: default;
+    }
+
     @media (max-width: 600px) {
 
       .start-header {
@@ -330,6 +488,348 @@
 
       .start-logo {
         font-size: 26px;
+      }
+
+      .start-header-actions {
+        gap: var(--imory-space-300);
+      }
+
+    }
+
+
+    /*
+      HERO BLOCK — 메인 3줄(i + memory = ♡ / 헤드라인 / 설명) +
+      운영 안내 + about 진입점. 첫 화면을 채우도록 min-height를
+      최소 100dvh로 둬서(헤더 높이만큼 다음 화면으로 자연히
+      넘어감) about 섹션은 스크롤해야만 보인다. 화면 정중앙보다
+      살짝 위쪽에 놓이도록 padding-bottom을 padding-top보다 크게
+      줘서 중앙 정렬 박스 자체를 위로 밀었다("육안상 중앙이 아닌
+      느낌" 피드백 반영). 전부 .landing-screen 안에서만 존재해서
+      gateHomeByOwner()의 기존 hidden 전환을 그대로 따른다 —
+      별도 표시/숨김 로직 없음. --theme-*(사용자 홈페이지 스킨)는
+      쓰지 않고 --system-*만 사용해 현재 light/dark 토글에
+      자동으로 대응한다.
+    */
+
+    .start-hero-block {
+      min-height: 100dvh;
+
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-right: max(24px, env(safe-area-inset-right));
+      padding-bottom: max(180px, env(safe-area-inset-bottom));
+      padding-left: max(24px, env(safe-area-inset-left));
+
+      text-align: center;
+    }
+
+    .start-main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .start-main-mark {
+      margin: 0;
+
+      font-family: var(--system-font-family);
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--system-accent);
+    }
+
+    .start-main-title {
+      margin: var(--imory-space-300) 0 0;
+
+      font-family: var(--system-font-family);
+      font-size: 24px;
+      font-weight: 400;
+      line-height: var(--imory-line-height-snug);
+      color: var(--system-text-muted);
+    }
+
+    .start-main-desc {
+      margin: var(--imory-space-300) 0 0;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-600);
+      font-weight: 400;
+      line-height: var(--imory-line-height-relaxed);
+      color: var(--system-text-muted);
+    }
+
+    /*
+      메인 3줄과는 확실히 분리되도록 큰 margin-top으로 간격을 둔다.
+    */
+
+    .start-notice {
+      margin-top: 64px;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-400);
+      font-weight: 400;
+      line-height: var(--imory-line-height-relaxed);
+      color: var(--system-text-faint);
+    }
+
+    .start-notice p {
+      margin: 0;
+    }
+
+    .start-notice-contact {
+      margin-top: var(--imory-space-200);
+    }
+
+    .start-notice-link {
+      color: var(--system-text-faint);
+      text-decoration: none;
+    }
+
+    .start-notice-link:hover,
+    .start-notice-link:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-notice-link:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    /*
+      심플 하트 구분선 — 장식은 최소한으로, 얇은 선 2개 사이에
+      브랜드 하트(로고 라인의 ♡ 재사용) 하나만 둔다.
+    */
+
+    .start-about-divider {
+      display: flex;
+      align-items: center;
+      gap: var(--imory-space-200);
+
+      width: 100%;
+      max-width: 120px;
+      margin-top: 40px;
+    }
+
+    .start-about-divider-line {
+      flex: 1;
+      height: 1px;
+      background: var(--system-border);
+    }
+
+    .start-about-divider-heart {
+      font-size: 11px;
+      line-height: 1;
+      color: var(--system-accent);
+    }
+
+    .start-about-link {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--imory-space-100);
+
+      margin-top: var(--imory-space-400);
+      padding: 6px 2px;
+
+      background: none;
+      border: none;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-400);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      color: var(--system-text-muted);
+      text-decoration: none;
+
+      cursor: pointer;
+    }
+
+    .start-about-link:hover,
+    .start-about-link:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-about-link:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    .start-about-link-arrow {
+      font-size: 11px;
+    }
+
+    /*
+      ABOUT 섹션 — 실제 기능 소개가 들어갈 자리. 지금은 임시
+      문구가 담긴 직사각형 컨테이너 3개만 배치한다(내용은 후속
+      작업에서 채움). IntersectionObserver(아래 스크립트)가 이
+      영역이 뷰포트에 들어올 때 .is-visible을 붙여 순차적으로
+      나타나게 한다.
+
+      min-height를 hero block과 똑같이 최소 100dvh로 둔다 — 이
+      섹션 자체 콘텐츠(제목+박스 3개)는 이보다 훨씬 짧아서, 이
+      값이 없으면 스크롤 가능한 전체 길이가 부족해 "about imory"
+      클릭 시 이 섹션의 top을 화면 상단에 맞춰 스크롤하는 게
+      물리적으로 불가능했다(맨 아래까지 스크롤해도 섹션의 짧은
+      높이 때문에 화면 중간에 걸친 채로 멈춤). 최소 한 화면
+      높이를 확보해 "다음 화면"처럼 자연스럽게 전환되게 한다.
+    */
+
+    .start-about-section {
+      min-height: 100dvh;
+
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+
+      padding: 64px max(24px, env(safe-area-inset-right)) 64px
+        max(24px, env(safe-area-inset-left));
+
+      text-align: center;
+    }
+
+    .start-about-title {
+      margin: 0;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-700);
+      font-weight: 500;
+      color: var(--system-text-strong);
+    }
+
+    .start-about-boxes {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: var(--imory-space-400);
+
+      /*
+        .start-about-section이 flex-direction:column이라 이 요소는
+        cross-axis(가로) 기준 flex item이다 — margin-left/right:auto로
+        가운데 정렬하려면 width를 명시해야 한다(안 그러면 auto
+        margin이 stretch를 무시하고 콘텐츠 크기로 줄어들어, 카드
+        3개가 한 줄에 안 들어가고 세로로 쌓이는 문제가 있었음).
+      */
+      width: 100%;
+      max-width: 800px;
+      margin: var(--imory-space-600) auto 0;
+    }
+
+    .start-about-box {
+      flex: 1 1 200px;
+      max-width: 240px;
+
+      padding: 32px 20px;
+
+      background: var(--system-surface);
+      border: 1px solid var(--system-border);
+      border-radius: var(--imory-radius-200);
+
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+
+    .start-about-boxes.is-visible .start-about-box:nth-child(1) {
+      transition-delay: 0s;
+    }
+
+    .start-about-boxes.is-visible .start-about-box:nth-child(2) {
+      transition-delay: 0.1s;
+    }
+
+    .start-about-boxes.is-visible .start-about-box:nth-child(3) {
+      transition-delay: 0.2s;
+    }
+
+    .start-about-boxes.is-visible .start-about-box {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      .start-about-box {
+        transition: none;
+        opacity: 1;
+        transform: none;
+      }
+
+    }
+
+    .start-about-box-label {
+      margin: 0;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-600);
+      font-weight: 500;
+      color: var(--system-text-strong);
+    }
+
+    .start-about-box-placeholder {
+      margin: var(--imory-space-200) 0 0;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-400);
+      font-weight: 400;
+      color: var(--system-text-muted);
+    }
+
+    @media (max-width: 600px) {
+
+      .start-hero-block {
+        padding-right: max(16px, env(safe-area-inset-right));
+        padding-bottom: max(110px, env(safe-area-inset-bottom));
+        padding-left: max(16px, env(safe-area-inset-left));
+      }
+
+      .start-main-mark {
+        font-size: 17px;
+      }
+
+      .start-main-title {
+        margin-top: var(--imory-space-200);
+        font-size: 19px;
+      }
+
+      .start-main-desc {
+        margin-top: var(--imory-space-200);
+        font-size: var(--imory-font-size-500);
+      }
+
+      .start-notice {
+        margin-top: 40px;
+        font-size: var(--imory-font-size-300);
+      }
+
+      .start-about-divider {
+        margin-top: 28px;
+      }
+
+      .start-about-section {
+        padding-top: 48px;
+        padding-right: max(16px, env(safe-area-inset-right));
+        padding-bottom: 48px;
+        padding-left: max(16px, env(safe-area-inset-left));
+      }
+
+      .start-about-boxes {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .start-about-box {
+        /*
+          flex:1 1 200px(기본 규칙)는 가로 배치를 가정한
+          flex-basis라, 세로 배치(flex-direction:column)에서는
+          같은 200px가 "높이" 기준이 되어 박스가 불필요하게 커진다
+          — 세로 배치에서는 콘텐츠 높이에 맞게 flex-basis를 없앤다.
+        */
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 320px;
       }
 
     }
@@ -473,10 +973,8 @@
        JS의 gateHomeByOwner()가 첫 path segment(slug) 존재
        여부에 따라 이 화면과 실제 홈 UI(메뉴/뷰어/푸터/BGM 등)
        중 하나만 보이게 전환한다 — 이 블록 내부는 그 전환 로직과
-       무관하게 헤더/로고 마크업만 담당한다.
-
-       1단계(헤더+로고) 범위: 본문 소개/HERO는 아직 없음 — 헤더
-       아래는 의도적으로 빈 공간.
+       무관하게 헤더/메인 3줄/운영 안내/about 진입점 마크업만
+       담당한다.
   ========================================================== -->
 
   <div
@@ -491,9 +989,330 @@
         href="/"
       >imory</a>
 
+
+      <div class="start-header-actions">
+
+        <button
+          type="button"
+          class="start-theme-toggle"
+          id="startThemeToggle"
+          aria-label="다크 모드로 전환"
+        >
+
+          <svg
+            class="start-theme-icon start-theme-icon--sun"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="4"></circle>
+            <line x1="12" y1="2" x2="12" y2="4"></line>
+            <line x1="12" y1="20" x2="12" y2="22"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="2" y1="12" x2="4" y2="12"></line>
+            <line x1="20" y1="12" x2="22" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+
+          <svg
+            class="start-theme-icon start-theme-icon--moon"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path d="M20.354 15.354A9 9 0 0 1 8.646 3.646 9.003 9.003 0 1 0 20.354 15.354Z"></path>
+          </svg>
+
+        </button>
+
+
+        <button
+          type="button"
+          class="start-sign-in"
+          id="startSignIn"
+        >SIGN IN</button>
+
+      </div>
+
     </header>
 
+
+    <div class="start-hero-block">
+
+      <div class="start-main">
+
+        <p class="start-main-mark">i + memory = ♡</p>
+
+        <h1 class="start-main-title">기억하고 싶은 순간을 한 곳에</h1>
+
+        <p class="start-main-desc">글과 문장을 나만의 imory에 기록해 보세요.</p>
+
+      </div>
+
+
+      <div class="start-notice">
+
+        <p>imory는 개인이 취미로 운영하는 서비스입니다.</p>
+
+        <p>원활한 유지·보수를 위해 회원가입은 정해진 기간에만 열립니다.</p>
+
+        <p class="start-notice-contact">문의:
+          <a
+            class="start-notice-link"
+            href="https://x.com/imory_info"
+            target="_blank"
+            rel="noopener noreferrer"
+          >@imory_info</a> (X)
+        </p>
+
+      </div>
+
+
+      <div
+        class="start-about-divider"
+        aria-hidden="true"
+      >
+        <span class="start-about-divider-line"></span>
+        <span class="start-about-divider-heart">♡</span>
+        <span class="start-about-divider-line"></span>
+      </div>
+
+
+      <a
+        class="start-about-link"
+        href="#start-about"
+      >about imory<span class="start-about-link-arrow">⌄</span></a>
+
+    </div>
+
+
+    <section
+      class="start-about-section"
+      id="start-about"
+      aria-label="imory 기능 소개"
+    >
+
+      <h2 class="start-about-title">About imory</h2>
+
+      <div class="start-about-boxes">
+
+        <div class="start-about-box">
+          <p class="start-about-box-label">기능 01</p>
+          <p class="start-about-box-placeholder">내용 준비 중</p>
+        </div>
+
+        <div class="start-about-box">
+          <p class="start-about-box-label">기능 02</p>
+          <p class="start-about-box-placeholder">내용 준비 중</p>
+        </div>
+
+        <div class="start-about-box">
+          <p class="start-about-box-label">기능 03</p>
+          <p class="start-about-box-placeholder">내용 준비 중</p>
+        </div>
+
+      </div>
+
+    </section>
+
   </div>
+
+
+  <!--
+    START HEADER ACTIONS
+
+    theme toggle 클릭 로직은 core/theme-toggle.js(공용, FOUC 방지용
+    <head> 인라인 스크립트와 분리). SIGN IN은 이 페이지 전용이라
+    새 로그인 로직을 만들지 않고 core/lib/auth-shared.js의
+    authSignInWithGoogle()를 admin-session.js와 동일한 redirectTo
+    (`${origin}/auth/`)로 그대로 호출한다 — callback 분기/onboarding·
+    admin 이동 로직은 auth/auth-callback.js가 그대로 처리.
+  -->
+
+  <script src="./core/theme-toggle.js"></script>
+
+  <script>
+
+    (function initStartSignIn() {
+
+      const signInButton =
+        document.getElementById(
+          "startSignIn"
+        );
+
+      if (!signInButton) {
+        return;
+      }
+
+
+      signInButton.addEventListener(
+        "click",
+        async () => {
+
+          signInButton.disabled =
+            true;
+
+
+          const redirectUrl =
+            `${window.location.origin}/auth/`;
+
+
+          const {
+            error
+          } =
+            await authSignInWithGoogle(
+              redirectUrl
+            );
+
+
+          if (error) {
+
+            console.error(
+              "Google login error:",
+              error
+            );
+
+            signInButton.disabled =
+              false;
+
+          }
+
+        }
+      );
+
+    })();
+
+  </script>
+
+
+  <!--
+    ABOUT REVEAL
+
+    1. "about imory" 클릭 시 #start-about를 컨테이너(.landing-screen)
+       기준 상단에 맞춰 스크롤한다. 네이티브 해시 이동(href만)에
+       맡기면 대상이 폴드 바로 아래(첫 화면 min-height:100dvh
+       + padding-bottom 만큼만 벗어남)라 브라우저가 최소 이동만
+       하고 멈춰 섹션이 애매하게 걸치는 문제가 있어, scrollIntoView
+       (block:"start")로 명시한다 — JS 비활성 환경 대비 href는
+       유지(최소한 근처로는 이동).
+    2. 그 섹션이 실제로 화면에 들어올 때 3개 박스에 .is-visible만
+       붙여 순차 등장(transition-delay는 CSS)시킨다 —
+       IntersectionObserver 1회성 관찰이라 scroll 이벤트 폴링이
+       아니다.
+  -->
+
+  <script>
+
+    (function initAboutScroll() {
+
+      const aboutLink =
+        document.querySelector(
+          ".start-about-link"
+        );
+
+      const aboutSection =
+        document.getElementById(
+          "start-about"
+        );
+
+      if (
+        !aboutLink ||
+        !aboutSection
+      ) {
+        return;
+      }
+
+
+      const prefersReducedMotion =
+        window.matchMedia(
+          "(prefers-reduced-motion: reduce)"
+        ).matches;
+
+
+      aboutLink.addEventListener(
+        "click",
+        event => {
+
+          event.preventDefault();
+
+          aboutSection.scrollIntoView(
+            {
+              behavior:
+                prefersReducedMotion
+                  ? "auto"
+                  : "smooth",
+              block: "start"
+            }
+          );
+
+        }
+      );
+
+    })();
+
+
+    (function initAboutReveal() {
+
+      const boxes =
+        document.querySelector(
+          ".start-about-boxes"
+        );
+
+      if (!boxes) {
+        return;
+      }
+
+
+      if (!("IntersectionObserver" in window)) {
+
+        boxes.classList.add(
+          "is-visible"
+        );
+
+        return;
+
+      }
+
+
+      const observer =
+        new IntersectionObserver(
+          entries => {
+
+            entries.forEach(
+              entry => {
+
+                if (entry.isIntersecting) {
+
+                  boxes.classList.add(
+                    "is-visible"
+                  );
+
+                  observer.disconnect();
+
+                }
+
+              }
+            );
+
+          },
+          {
+            threshold: 0.2
+          }
+        );
+
+
+      observer.observe(
+        boxes
+      );
+
+    })();
+
+  </script>
 
 
 
