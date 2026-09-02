@@ -225,7 +225,7 @@
 
 
   <!-- =========================================================
-       LANDING (개발 중 화면 — /:slug 없이 루트("/")로
+       LANDING (공개 시작 페이지 — /:slug 없이 루트("/")로
        접속했을 때만)
   ========================================================== -->
 
@@ -237,10 +237,8 @@
       z-index: 9999;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      background: #ffffff;
+      align-items: stretch;
+      background: var(--system-bg);
     }
 
     /*
@@ -265,15 +263,75 @@
       display: none;
     }
 
-    .landing-title {
-      font-size: 28px;
-      letter-spacing: 0.04em;
-      color: #333333;
+    /*
+      공개 시작 페이지 헤더 — 로고만 존재하는 1단계 셸.
+      우측 라이트/다크·SIGN IN 버튼은 다음 단계에서 이 헤더
+      안에 .start-header-actions 컨테이너와 함께 추가된다(지금은
+      빈 컨테이너조차 두지 않는다 — 작동하지 않는 UI 자리 금지).
+    */
+
+    .start-header {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-right: max(24px, env(safe-area-inset-right));
+      padding-bottom: 16px;
+      padding-left: max(24px, env(safe-area-inset-left));
     }
 
-    .landing-subtitle {
-      font-size: 14px;
-      color: #999999;
+    /*
+      로고 폰트는 --theme-font-family-serif와 같은 Nanum Myeongjo를
+      직접 지정한다(새 폰트 로드 없음, 이미 <head>에서 로드된
+      Google Fonts 링크 재사용) — 이 화면은 --theme-*가 아니라
+      --system-* 영역이라 토큰 자체는 재사용하지 않는다.
+    */
+
+    .start-logo {
+      display: inline-flex;
+      align-items: center;
+
+      font-family: "Nanum Myeongjo", serif;
+      font-size: 30px;
+      font-weight: 400;
+      color: var(--system-text);
+
+      text-decoration: none;
+    }
+
+    /*
+      naru.pub 스타일 요청 반영 — 세로선을 로고 옆 장식용
+      구분선이 아니라 "imory" 마지막 y에 바짝 붙은 텍스트 입력
+      커서처럼 보이게 한다. margin-left 없이 2px 고정 간격만
+      두고, 높이도 글자 전체(1.05em)가 아니라 살짝 짧게(0.92em)
+      줄여 커서 느낌을 낸다.
+    */
+
+    .start-logo::after {
+      content: "";
+      display: inline-block;
+
+      width: 1px;
+      height: 0.92em;
+      margin-left: 2px;
+
+      background: var(--imory-pink-system);
+    }
+
+    @media (max-width: 600px) {
+
+      .start-header {
+        padding-top: max(12px, env(safe-area-inset-top));
+        padding-right: max(16px, env(safe-area-inset-right));
+        padding-bottom: 12px;
+        padding-left: max(16px, env(safe-area-inset-left));
+      }
+
+      .start-logo {
+        font-size: 26px;
+      }
+
     }
 
 
@@ -409,12 +467,16 @@
 
 
   <!-- =========================================================
-       LANDING (개발 중 화면)
+       LANDING (공개 시작 페이지)
 
-       /:slug 없이 루트로 접속했을 때만 보이는 아주 단순한
-       placeholder. 아래 MAIN JS의 gateHomeByOwner()가 첫 path
-       segment(slug) 존재 여부에 따라 이 화면과 실제 홈 UI
-       (메뉴/뷰어/푸터/BGM 등) 중 하나만 보이게 전환한다.
+       /:slug 없이 루트로 접속했을 때만 보이는 화면. 아래 MAIN
+       JS의 gateHomeByOwner()가 첫 path segment(slug) 존재
+       여부에 따라 이 화면과 실제 홈 UI(메뉴/뷰어/푸터/BGM 등)
+       중 하나만 보이게 전환한다 — 이 블록 내부는 그 전환 로직과
+       무관하게 헤더/로고 마크업만 담당한다.
+
+       1단계(헤더+로고) 범위: 본문 소개/HERO는 아직 없음 — 헤더
+       아래는 의도적으로 빈 공간.
   ========================================================== -->
 
   <div
@@ -422,13 +484,14 @@
     id="landingScreen"
   >
 
-    <div class="landing-title">
-      Imory
-    </div>
+    <header class="start-header">
 
-    <div class="landing-subtitle">
-      개발 중입니다
-    </div>
+      <a
+        class="start-logo"
+        href="/"
+      >imory</a>
+
+    </header>
 
   </div>
 
