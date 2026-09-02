@@ -983,16 +983,6 @@
         >
 
 
-          <!-- DRAG HANDLE (resize) -->
-
-          <div
-            class="post-editor-preview-drag-handle"
-            id="postEditorPreviewDragHandle"
-            aria-hidden="true"
-          ></div>
-
-
-
           <!-- HEADER -->
 
           <div class="post-editor-preview-header">
@@ -1024,17 +1014,16 @@
 
           <div class="post-editor-preview-visibility-controls">
 
+            <!-- =================================================
+                 align → body → title → source → margin/gap 순서
+                 (모바일에서 title/source 버튼을 각각 body preset/
+                 title 오른쪽으로 옮겨서 한 줄에 몰아둔 배치 —
+                 원래는 title이 맨 앞이었는데, align/body 드롭다운
+                 뒤로 옮기고 source도 title 바로 오른쪽(=이 줄
+                 맨 끝)으로 옮겼다).
+            ================================================== -->
+
             <div class="post-editor-preview-row">
-
-              <button
-                class="post-editor-preview-visibility-toggle"
-                id="postEditorPreviewTitleToggle"
-                type="button"
-                aria-pressed="true"
-              >
-                title
-              </button>
-
 
               <!-- =============================================
                    VERTICAL ALIGN (세션 한정 — "preset"이면
@@ -1110,6 +1099,87 @@
                   </option>
 
                 </select>
+
+              </div>
+
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewTitleToggle"
+                type="button"
+                aria-pressed="true"
+              >
+                title
+              </button>
+
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewSourceToggle"
+                type="button"
+                aria-pressed="true"
+              >
+                source
+              </button>
+
+
+              <!-- =============================================
+                   SOURCE BOTTOM MARGIN (세션 한정 — ratio가
+                   AUTO가 아닐 때만 표시. source는 캔버스 맨
+                   아래에 고정되므로, 그 위치에서 위로 얼마나
+                   띄울지 조절)
+              ============================================== -->
+
+              <div
+                class="post-editor-preview-subrow"
+                id="postEditorPreviewSourceBottomOffsetRow"
+              >
+
+                <span class="post-editor-preview-subrow-label">
+                  margin
+                </span>
+
+
+                <input
+                  class="post-editor-preview-ratio-custom-input"
+                  id="postEditorPreviewSourceBottomOffset"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  max="500"
+                  aria-label="출처 하단 여백"
+                >
+
+              </div>
+
+
+              <!-- =============================================
+                   SOURCE GAP (세션 한정 — ratio가 AUTO일 때만
+                   표시. AUTO는 source가 캔버스 맨 아래 고정이
+                   아니라 본문 바로 아래로 흘러가므로, 대신
+                   title/body 묶음과의 간격을 조절)
+              ============================================== -->
+
+              <div
+                class="post-editor-preview-subrow"
+                id="postEditorPreviewSourceSpacingRow"
+                hidden
+              >
+
+                <span class="post-editor-preview-subrow-label">
+                  gap
+                </span>
+
+
+                <input
+                  class="post-editor-preview-ratio-custom-input"
+                  id="postEditorPreviewSourceSpacing"
+                  type="number"
+                  inputmode="numeric"
+                  min="0"
+                  max="300"
+                  aria-label="출처 간격"
+                >
 
               </div>
 
@@ -1231,81 +1301,6 @@
                   >
 
                 </div>
-
-              </div>
-
-            </div>
-
-
-            <div class="post-editor-preview-row">
-
-              <button
-                class="post-editor-preview-visibility-toggle"
-                id="postEditorPreviewSourceToggle"
-                type="button"
-                aria-pressed="true"
-              >
-                source
-              </button>
-
-
-              <!-- =============================================
-                   SOURCE BOTTOM MARGIN (세션 한정 — ratio가
-                   AUTO가 아닐 때만 표시. source는 캔버스 맨
-                   아래에 고정되므로, 그 위치에서 위로 얼마나
-                   띄울지 조절)
-              ============================================== -->
-
-              <div
-                class="post-editor-preview-subrow"
-                id="postEditorPreviewSourceBottomOffsetRow"
-              >
-
-                <span class="post-editor-preview-subrow-label">
-                  margin
-                </span>
-
-
-                <input
-                  class="post-editor-preview-ratio-custom-input"
-                  id="postEditorPreviewSourceBottomOffset"
-                  type="number"
-                  inputmode="numeric"
-                  min="0"
-                  max="500"
-                  aria-label="출처 하단 여백"
-                >
-
-              </div>
-
-
-              <!-- =============================================
-                   SOURCE GAP (세션 한정 — ratio가 AUTO일 때만
-                   표시. AUTO는 source가 캔버스 맨 아래 고정이
-                   아니라 본문 바로 아래로 흘러가므로, 대신
-                   title/body 묶음과의 간격을 조절)
-              ============================================== -->
-
-              <div
-                class="post-editor-preview-subrow"
-                id="postEditorPreviewSourceSpacingRow"
-                hidden
-              >
-
-                <span class="post-editor-preview-subrow-label">
-                  gap
-                </span>
-
-
-                <input
-                  class="post-editor-preview-ratio-custom-input"
-                  id="postEditorPreviewSourceSpacing"
-                  type="number"
-                  inputmode="numeric"
-                  min="0"
-                  max="300"
-                  aria-label="출처 간격"
-                >
 
               </div>
 
@@ -1460,6 +1455,22 @@
             </div>
 
           </div>
+
+
+          <!--
+            DRAG HANDLE (resize) — 예전엔 시트 맨 위에 있었는데,
+            아래로 옮겨서 캔버스 바로 아래(시트 맨 끝)에 둔다.
+            드래그 델타 계산(handlePreviewDragPointerMove,
+            posts-preview-mobile.js)은 손잡이의 화면 위치가
+            아니라 pointerdown 이후의 y 이동량만 보므로, 위치를
+            옮겨도 동작은 그대로다.
+          -->
+
+          <div
+            class="post-editor-preview-drag-handle"
+            id="postEditorPreviewDragHandle"
+            aria-hidden="true"
+          ></div>
 
 
         </div>

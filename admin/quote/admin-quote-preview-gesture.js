@@ -97,6 +97,22 @@
 
     mode = "pinch";
 
+    /*
+      핀치를 시작했다는 건 이미 확대/축소 제스처를 아는
+      상태이므로, 우측 상단 안내 문구를 더 이상 보여줄
+      필요가 없다 — 서서히 페이드아웃(admin-quote.css의
+      .quote-preview-help.is-dimmed). 더블탭으로 전체 보기로
+      돌아가면(fitQuotePreview, admin-quote-preview-update.js)
+      다시 페이드인.
+    */
+
+    quotePreviewHelp
+      ?.classList
+      .add(
+        "is-dimmed"
+      );
+
+
     const [a, b] = points();
 
     pinchStartDist = distance(a, b);

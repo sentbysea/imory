@@ -332,17 +332,35 @@
     */
 
     .start-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: nowrap;
-
       padding-top: max(16px, env(safe-area-inset-top));
       padding-right: max(24px, env(safe-area-inset-right));
       padding-bottom: 16px;
       padding-left: max(24px, env(safe-area-inset-left));
 
       border-bottom: 1px solid var(--system-border);
+    }
+
+    /*
+      ★ 로고/액션 자체는 예전엔 폭 제한 없이 .start-header
+      바로 아래 flex 자식이라, 넓은 데스크톱 화면에서 뷰포트
+      양 끝에 그대로 붙어(끝과 끝) 보였다 — naru.pub 참고
+      이미지처럼 좌우 여백이 있는 좁은 헤더로 보이도록 이
+      안쪽 래퍼에만 max-width + auto margin을 줘서 가운데
+      정렬한다. border-bottom은 .start-header에 그대로 둬서
+      구분선 자체는 전체 폭을 유지한다(콘텐츠만 좁아짐).
+      화면이 900px보다 좁으면 max-width가 자연히 무시되고
+      기존 padding만 남는다.
+    */
+
+    .start-header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: nowrap;
+
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
     }
 
     /*
@@ -527,10 +545,70 @@
       text-align: center;
     }
 
+    /*
+      메인 3줄(i + memory = ♡ / 헤드라인 / 설명) + 운영 안내를
+      "텍스트 뭉치" 하나로 묶는 래퍼 — 핑크 GLOW(아래 ::before)를
+      이 둘을 합친 실제 텍스트 범위 정중앙에 맞추기 위해서다.
+      .start-main만 기준으로 뒀을 때는 그 아래 .start-notice까지
+      포함한 전체 텍스트 덩어리 중심과 어긋나 보였다 — 이 래퍼가
+      둘의 공통 부모가 되어야 position:absolute 중앙 정렬이 실제
+      텍스트 뭉치 전체 기준으로 계산된다.
+    */
+
+    .start-hero-text {
+      position: relative;
+
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
     .start-main {
       display: flex;
       flex-direction: column;
       align-items: center;
+    }
+
+    /*
+      텍스트 뭉치(.start-hero-text) 뒤에 까는 핑크 GLOW —
+      .home-notice--not-found::before와 완전히 동일한 그라데이션
+      (sua 테마 하트 뒤 GLOW를 그대로 재사용한 값, 색상 단계·
+      alpha·블러·크기 전부 같음)을 이 블록 뒤에도 재사용한다.
+      다만 저기는 뷰포트 중앙에 항상 고정돼야 해서 position:fixed였고,
+      여기는 스크롤하면 hero 블록과 함께 자연스럽게 같이 지나가야
+      하므로 position:absolute + .start-hero-text(position:relative)
+      기준으로 중앙에 둔다.
+    */
+
+    .start-hero-text::before {
+      content: "";
+
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+
+      width: min(54vw, 370px);
+      height: min(54vw, 370px);
+
+      border-radius: 50%;
+
+      background:
+        radial-gradient(
+          circle,
+          rgba(255, 155, 197, 0.35) 0%,
+          rgba(255, 180, 211, 0.23) 30%,
+          rgba(255, 206, 226, 0.12) 54%,
+          rgba(255, 228, 239, 0.05) 70%,
+          rgba(255, 244, 249, 0.015) 82%,
+          rgba(255, 255, 255, 0) 100%
+        );
+
+      filter: blur(20px);
+
+      pointer-events: none;
+
+      z-index: -1;
     }
 
     .start-main-mark {
@@ -549,7 +627,13 @@
       font-size: 24px;
       font-weight: 400;
       line-height: var(--imory-line-height-snug);
-      color: var(--system-text-muted);
+
+      /*
+        ★ 예전엔 --system-text-muted(옅은 회색)라 로고("imory",
+        --system-text)보다 훨씬 흐려 보였다 — 로고와 같은 톤으로
+        올려서 헤드라인/설명이 더 또렷하게 보이도록 함.
+      */
+      color: var(--system-text);
     }
 
     .start-main-desc {
@@ -559,7 +643,7 @@
       font-size: var(--imory-font-size-600);
       font-weight: 400;
       line-height: var(--imory-line-height-relaxed);
-      color: var(--system-text-muted);
+      color: var(--system-text);
     }
 
     /*
@@ -984,58 +1068,62 @@
 
     <header class="start-header">
 
-      <a
-        class="start-logo"
-        href="/"
-      >imory</a>
+      <div class="start-header-inner">
+
+        <a
+          class="start-logo"
+          href="/"
+        >imory</a>
 
 
-      <div class="start-header-actions">
+        <div class="start-header-actions">
 
-        <button
-          type="button"
-          class="start-theme-toggle"
-          id="startThemeToggle"
-          aria-label="다크 모드로 전환"
-        >
-
-          <svg
-            class="start-theme-icon start-theme-icon--sun"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            aria-hidden="true"
+          <button
+            type="button"
+            class="start-theme-toggle"
+            id="startThemeToggle"
+            aria-label="다크 모드로 전환"
           >
-            <circle cx="12" cy="12" r="4"></circle>
-            <line x1="12" y1="2" x2="12" y2="4"></line>
-            <line x1="12" y1="20" x2="12" y2="22"></line>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-            <line x1="2" y1="12" x2="4" y2="12"></line>
-            <line x1="20" y1="12" x2="22" y2="12"></line>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-          </svg>
 
-          <svg
-            class="start-theme-icon start-theme-icon--moon"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-          >
-            <path d="M20.354 15.354A9 9 0 0 1 8.646 3.646 9.003 9.003 0 1 0 20.354 15.354Z"></path>
-          </svg>
+            <svg
+              class="start-theme-icon start-theme-icon--sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <line x1="12" y1="2" x2="12" y2="4"></line>
+              <line x1="12" y1="20" x2="12" y2="22"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="2" y1="12" x2="4" y2="12"></line>
+              <line x1="20" y1="12" x2="22" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
 
-        </button>
+            <svg
+              class="start-theme-icon start-theme-icon--moon"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M20.354 15.354A9 9 0 0 1 8.646 3.646 9.003 9.003 0 1 0 20.354 15.354Z"></path>
+            </svg>
+
+          </button>
 
 
-        <button
-          type="button"
-          class="start-sign-in"
-          id="startSignIn"
-        >SIGN IN</button>
+          <button
+            type="button"
+            class="start-sign-in"
+            id="startSignIn"
+          >SIGN IN</button>
+
+        </div>
 
       </div>
 
@@ -1044,31 +1132,35 @@
 
     <div class="start-hero-block">
 
-      <div class="start-main">
+      <div class="start-hero-text">
 
-        <p class="start-main-mark">i + memory = ♡</p>
+        <div class="start-main">
 
-        <h1 class="start-main-title">기억하고 싶은 순간을 한 곳에</h1>
+          <p class="start-main-mark">i + memory = ♡</p>
 
-        <p class="start-main-desc">글과 문장을 나만의 imory에 기록해 보세요.</p>
+          <h1 class="start-main-title">기억하고 싶은 순간을 한 곳에</h1>
 
-      </div>
+          <p class="start-main-desc">글과 문장을 나만의 imory에 기록해 보세요.</p>
+
+        </div>
 
 
-      <div class="start-notice">
+        <div class="start-notice">
 
-        <p>imory는 개인이 취미로 운영하는 서비스입니다.</p>
+          <p>imory는 개인이 취미로 운영하는 서비스입니다.</p>
 
-        <p>원활한 유지·보수를 위해 회원가입은 정해진 기간에만 열립니다.</p>
+          <p>원활한 유지·보수를 위해 회원가입은 정해진 기간에만 열립니다.</p>
 
-        <p class="start-notice-contact">문의:
-          <a
-            class="start-notice-link"
-            href="https://x.com/imory_info"
-            target="_blank"
-            rel="noopener noreferrer"
-          >@imory_info</a> (X)
-        </p>
+          <p class="start-notice-contact">문의:
+            <a
+              class="start-notice-link"
+              href="https://x.com/imory_info"
+              target="_blank"
+              rel="noopener noreferrer"
+            >@imory_info</a> (X)
+          </p>
+
+        </div>
 
       </div>
 
