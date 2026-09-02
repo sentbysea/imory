@@ -1,0 +1,33 @@
+/* =========================================================
+   ONBOARDING — 이 화면 전용 오버라이드
+
+   admin-settings.css의 .setting-input은 시각 스타일을 전부
+   core/components/input.css의 .imory-field에 위임하고 레이아웃만
+   남긴다(admin/index.html과 공유). 온보딩만 실제 입력 텍스트를
+   한 단계 밝게 쓰고 싶어서, admin이 쓰는 Core 기본값
+   (--imory-gray-750, #444444)은 그대로 두고 여기서 ID로 좁혀
+   override한다.
+========================================================== */
+
+#onboardingNicknameInput,
+#onboardingSlugInput {
+  color: var(--imory-gray-700); /* #555555 — 온보딩 한정 */
+}
+
+
+
+/* =========================================================
+   SLUG PREVIEW
+
+   "공개 홈페이지 주소 (imory.me/…)" 라벨 안의 동적 부분.
+   실제 갱신은 onboarding.js가 textContent로 처리한다.
+========================================================== */
+
+.onboarding-slug-preview {
+  color: var(--system-accent);
+}
+
+
+.onboarding-slug-preview--placeholder {
+  color: var(--imory-gray-400);
+}

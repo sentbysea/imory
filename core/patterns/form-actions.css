@@ -1,0 +1,25 @@
+/* =========================================================
+   Imory Core Patterns — Form Actions v0.1
+
+   Button component가 아니라 별도 layout/pattern으로 분리한
+   "폼 안 primary action 우측 정렬" 규칙. Button v0.1 적용 후
+   .save-button의 display가 block → inline-flex로 바뀌면서,
+   기존에 부모가 flex가 아닌 곳에서 쓰던 margin-left:auto 트릭이
+   더 이상 동작하지 않는 회귀가 있었다 (inline-level box는
+   auto margin이 0으로 계산됨). 이 패턴은 그 근본 해결책이다 —
+   자식의 display 값과 무관하게 항상 안전하게 우측 정렬한다.
+
+   Button 자체에는 정렬 로직을 넣지 않는다 — 정렬은 이 버튼이
+   어떤 폼/화면에 놓이느냐에 따라 달라지는 배치 문제이지, 버튼
+   컴포넌트 고유의 시각 규칙이 아니기 때문.
+
+   사용법: primary action(과 필요하면 함께 놓이는 요소)을
+   .imory-form-actions로 감싼다. 이 파일은 core/design-tokens.css
+   유무와 무관하게 동작한다(토큰을 참조하지 않음).
+========================================================== */
+
+.imory-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}

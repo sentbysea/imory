@@ -1,0 +1,174 @@
+/* =========================================================
+   Imory Core Patterns — Tabs v0.1 (text + boxed)
+
+   조사 대상(text): admin/admin-settings.css .settings-tab(-divider) /
+   customize/editor/editor.css .customize-panel-tab(-divider).
+   두 selector가 시각적으로 거의 동일한 "테두리/배경 없는 텍스트 탭
+   목록 + '|' 문자 구분자" 패턴이라 공용 Pattern으로 승격했다.
+
+   조사 대상(boxed): customize/editor/editor.css .customize-page-tab /
+   admin/admin-quote.css .quote-ratio-button. 둘 다 "테두리 있는
+   박스형 탭"이지만 active 색 철학이 다르다 — customize-page-tab은
+   선택 후에도 accent를 유지하고, quote-ratio-button은 선택되면
+   accent에서 neutral gray로 가라앉는다. 그래서 base는 공통
+   구조(border/background/cursor/transition/hover)만 담당하고,
+   active 색은 --boxed-accent/--boxed-neutral 두 variant로 나눈다.
+   radius/width/padding/letter-spacing처럼 두 selector가 실제로
+   다른 값은 공통화하지 않고 각 화면 CSS에 로컬로 남겨둔다.
+
+   .quote-mobile-tab(모바일 전용 구조)은 boxed-accent에 편입 완료 —
+   기존 aria-pressed 기반 상태 로직은 그대로 두고, .active 클래스 대신
+   [aria-pressed="true"] 속성으로도 동일 상태를 인식하도록 셀렉터만
+   확장했다(아래 boxed-accent 참고). theme pink 3종(#f0d3de/#fff5f8/
+   #d980a2)은 제거되고 system-accent/-soft/-hover로 통일됨.
+
+   구조: .imory-tab(base)
+     + .imory-tab--text(형태)
+     + .imory-tab--boxed(형태) + --boxed-accent / --boxed-neutral(색 variant)
+
+   이 파일은 core/design-tokens.css가 먼저 로드되어 있다고 가정한다.
+========================================================== */
+
+.imory-tab {
+  border: 0;
+  border-radius: 0;
+
+  background: transparent;
+
+  cursor: pointer;
+
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+
+/* =========================================================
+   VARIANT — text
+
+   기존 두 selector 모두: 배경/테두리 없음, hover에서만 accent로
+   신호, active(지속 선택)는 accent가 아니라 진한 neutral gray로
+   표시한다 — Button primary와 달리 "선택됨"이 곧 "포인트 컬러"는
+   아니라는 게 이 화면들의 기존 규칙이다.
+========================================================== */
+
+.imory-tab--text {
+  padding: 0;
+
+  color: #b8b8b8; /* --system-text-faint(#aaaaaa)는 이미 신설됐지만
+    이 값(#b8b8b8)은 그와 정확히 일치하지 않는 outlier라 literal
+    유지 — design-tokens-mapping.md의 #b5b5b5/#bbbbbb류와 같은
+    "faint 후보" 군집. 흡수 여부는 드리프트를 의식적으로 받아들이는
+    별도 결정이 필요해 다음 단계로 미룬다. */
+
+  font-size: var(--imory-font-size-100); /* 9px */
+  font-weight: var(--imory-font-weight-regular);
+  letter-spacing: 0.08em; /* 프로젝트에 letter-spacing 토큰이 없어 literal 유지 */
+
+  transition: color 0.2s ease;
+}
+
+
+.imory-tab--text:hover {
+  color: var(--system-accent);
+}
+
+
+.imory-tab--text.active {
+  color: var(--imory-gray-700);
+}
+
+
+/* =========================================================
+   STATE — focus
+
+   Button/Input의 box-shadow ring·1px border 방식은 배경/테두리가
+   없는 텍스트 탭에는 무겁게 보여 새로 설계한다 — 텍스트 주변에
+   얇은 outline만 살짝 띄워서, 박스처럼 보이지 않으면서도 키보드
+   포커스 위치는 분명히 드러나게 한다.
+========================================================== */
+
+.imory-tab--text:focus-visible {
+  outline: 1px solid var(--system-accent);
+  outline-offset: 2px;
+}
+
+
+/* =========================================================
+   VARIANT — boxed
+
+   공통 구조(테두리 있는 박스, 배경, hover에서 accent 예고)만 base에
+   두고, active 색은 두 variant로 나눈다. radius/padding/width/
+   letter-spacing/font-size는 두 selector가 실제로 다른 값이라
+   여기서 정하지 않고 각 화면 CSS(.customize-page-tab/
+   .quote-ratio-button)에 로컬로 남긴다 — Input의 size modifier와
+   달리 "형태 자체가 다르다"고 판단해 억지로 통일하지 않았다.
+========================================================== */
+
+.imory-tab--boxed {
+  border: var(--imory-border-width) solid var(--system-border);
+
+  background: var(--system-bg);
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+
+.imory-tab--boxed:hover {
+  color: var(--system-accent);
+
+  border-color: var(--system-accent-border);
+}
+
+
+.imory-tab--boxed:focus-visible {
+  outline: 1px solid var(--system-accent);
+  outline-offset: 2px;
+}
+
+
+/* --- boxed-accent: 선택 후에도 accent 유지 (customize-page-tab 기준,
+   Button Core primary의 hover/active 레시피와 같은 결) --- */
+
+.imory-tab--boxed-accent.active,
+.imory-tab--boxed-accent[aria-pressed="true"] {
+  border-color: var(--system-accent);
+
+  color: var(--system-accent-hover);
+
+  background: var(--system-accent-soft);
+}
+
+
+/* --- boxed-neutral: hover는 accent로 예고하지만 선택되면 neutral
+   gray로 가라앉음 (quote-ratio-button 기준). border-color(#d9d9d9)는
+   --imory-gray-200(#dddddd)과 근접하지만 정확히 일치하지 않는
+   outlier라 이번엔 literal로 유지한다. --- */
+
+.imory-tab--boxed-neutral.active {
+  color: var(--imory-gray-700);
+
+  border-color: #d9d9d9;
+
+  background: var(--system-surface);
+}
+
+
+/* =========================================================
+   DIVIDER
+
+   탭 사이 "|" 문자 구분자. 별도 Divider component를 만들 정도로
+   재사용처가 넓지 않아 이 Pattern 안에 함께 둔다.
+========================================================== */
+
+.imory-tab-divider {
+  color: var(--system-border-strong);
+
+  font-size: var(--imory-font-size-100); /* 9px */
+
+  user-select: none;
+}

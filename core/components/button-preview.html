@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imory Core Components — Button v0.1 Preview</title>
+<link rel="stylesheet" href="../design-tokens.css">
+<link rel="stylesheet" href="./button.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard&display=swap" rel="stylesheet">
+<style>
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 40px 32px 120px;
+    background: var(--system-bg);
+    color: var(--system-text);
+    font-family: var(--system-font-family);
+    font-size: var(--imory-font-size-400);
+    line-height: var(--imory-line-height-base);
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text-strong);
+  }
+
+  .lede {
+    margin: 0 0 var(--imory-space-600);
+    color: var(--system-text-muted);
+    font-size: var(--imory-font-size-500);
+    max-width: 680px;
+  }
+
+  section {
+    margin-bottom: 56px;
+  }
+
+  section > h2 {
+    display: flex;
+    align-items: baseline;
+    gap: var(--imory-space-200);
+
+    margin: 0 0 var(--imory-space-100);
+    padding-bottom: var(--imory-space-200);
+    border-bottom: var(--imory-border-width) solid var(--system-border-strong);
+
+    font-size: var(--imory-font-size-600);
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text-strong);
+  }
+
+  section > h2 .index {
+    color: var(--system-accent);
+    font-weight: var(--imory-font-weight-regular);
+  }
+
+  section > p.note {
+    margin: 0 0 var(--imory-space-500);
+    color: var(--system-text-muted);
+    font-size: var(--imory-font-size-300);
+    max-width: 720px;
+  }
+
+  h3.sub {
+    margin: var(--imory-space-600) 0 var(--imory-space-300);
+    font-size: var(--imory-font-size-500);
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text);
+  }
+
+  code {
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    background: var(--system-surface);
+    padding: 1px 5px;
+    font-size: 0.9em;
+    color: var(--system-text);
+  }
+
+  /* ---- 1. variant x size matrix (실제 인터랙션 가능) ---- */
+
+  .variant-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--imory-space-500);
+    padding: var(--imory-space-400) 0;
+    border-bottom: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .variant-row .label {
+    flex: 0 0 160px;
+    font-size: var(--imory-font-size-200);
+    color: var(--system-text-muted);
+  }
+
+  .variant-row .buttons {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--imory-space-300);
+  }
+
+  .hint {
+    margin: var(--imory-space-300) 0 0;
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-muted);
+  }
+
+  /* ---- 2. state token reference table ---- */
+
+  table.state-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--imory-font-size-200);
+  }
+
+  table.state-table th,
+  table.state-table td {
+    padding: var(--imory-space-200) var(--imory-space-300);
+    border: var(--imory-border-width) solid var(--system-border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.state-table th {
+    background: var(--system-surface);
+    color: var(--system-text-strong);
+    font-weight: var(--imory-font-weight-medium);
+  }
+
+  table.state-table td code {
+    display: block;
+    margin-bottom: 2px;
+    white-space: nowrap;
+  }
+
+  /* ---- 3. before / after 비교 ---- */
+
+  .compare-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--imory-space-600);
+    padding: var(--imory-space-400) 0;
+    border-bottom: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .compare-row .label {
+    flex: 0 0 200px;
+    font-size: var(--imory-font-size-200);
+    color: var(--system-text-muted);
+  }
+
+  .compare-row .pair {
+    display: flex;
+    align-items: center;
+    gap: var(--imory-space-300);
+  }
+
+  .compare-row .pair .tag {
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-disabled);
+  }
+
+  /* ---- old literal 버전 재현 (button.css 미사용, 비교용) ----
+     admin-settings.css .save-button의 실제 literal 값을 그대로
+     복제. --sm은 실제 서비스에 없는 사이즈라 새 button.css의 sm
+     치수(26px / 4px 8px / 9px)만 빌려와 "만약 작은 사이즈가
+     있었다면"을 보여주는 가상 재현이다 — 표에서는 별도로 "N/A"
+     표기한다. */
+
+  .legacy-save-button {
+    display: inline-block;
+    box-sizing: border-box;
+    min-width: 58px;
+    min-height: 30px;
+    padding: 6px 12px;
+    border: 1px solid #e8e8e8;
+    border-radius: 2px;
+    background: #ffffff;
+    color: #777777;
+    font-family: var(--system-font-family);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+  }
+
+  .legacy-save-button--sm {
+    min-width: 0;
+    min-height: 26px;
+    padding: 4px 8px;
+    font-size: 9px;
+  }
+
+  .legacy-save-button:hover {
+    color: #e39ab5;
+    border-color: #e7c7d3;
+    background: #fffafb;
+  }
+
+  /* legacy에는 커스텀 :active 규칙이 실제로 없다 — 눌러도 hover
+     상태 그대로거나(마우스), 아무 변화가 없다(키보드 Enter). */
+
+  .legacy-save-button:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* ---- 색상칩 (state 비교표용) ---- */
+
+  .chip-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chip-row .swatch {
+    width: 14px;
+    height: 14px;
+    flex: 0 0 auto;
+    border: 1px solid var(--system-border-strong);
+  }
+
+  .chip-row code {
+    white-space: nowrap;
+  }
+
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--imory-font-size-200);
+    margin-bottom: var(--imory-space-500);
+  }
+
+  .compare-table th,
+  .compare-table td {
+    padding: var(--imory-space-200) var(--imory-space-300);
+    border: var(--imory-border-width) solid var(--system-border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .compare-table th {
+    background: var(--system-surface);
+    color: var(--system-text-strong);
+    font-weight: var(--imory-font-weight-medium);
+  }
+
+  .compare-table td.na {
+    color: var(--system-text-disabled);
+    font-style: italic;
+  }
+
+  .live-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: var(--imory-space-500);
+    margin-top: var(--imory-space-400);
+  }
+
+  .live-cell {
+    padding: var(--imory-space-400);
+    border: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .live-cell .cell-label {
+    display: block;
+    margin-bottom: var(--imory-space-300);
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-muted);
+  }
+
+  .live-cell .cell-buttons {
+    display: flex;
+    align-items: center;
+    gap: var(--imory-space-300);
+    flex-wrap: wrap;
+  }
+
+  /* ---- 4. 근거 조사 표 ---- */
+
+  table.survey-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--imory-font-size-200);
+  }
+
+  table.survey-table th,
+  table.survey-table td {
+    padding: var(--imory-space-200) var(--imory-space-300);
+    border: var(--imory-border-width) solid var(--system-border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.survey-table th {
+    background: var(--system-surface);
+    color: var(--system-text-strong);
+    font-weight: var(--imory-font-weight-medium);
+  }
+
+  .note-list {
+    margin: 0;
+    padding-left: 1.2em;
+    color: var(--system-text-muted);
+    font-size: var(--imory-font-size-300);
+  }
+
+  .note-list li {
+    margin-bottom: var(--imory-space-200);
+  }
+
+</style>
+</head>
+<body>
+
+<h1>Imory Core Components — Button v0.1</h1>
+<p class="lede">
+  <code>core/components/button.css</code> 설계 미리보기입니다. 아직 실제 서비스 버튼
+  (<code>.save-button</code>, <code>.logout-button</code>, <code>.back-button</code>,
+  <code>.customize-icon-button</code> 등)은 <code>.imory-button</code>으로 치환하지
+  않았습니다 — 이 페이지는 <code>core/design-tokens.css</code> + <code>button.css</code>만
+  불러와 독립적으로 렌더링됩니다.
+</p>
+
+<!-- ============================================================
+     0. 조사: 실제 버튼 비교
+============================================================= -->
+<section>
+  <h2><span class="index">00</span> 실서비스 버튼 조사</h2>
+  <p class="note">치환 전, 프로젝트 전체에서 버튼 역할을 하는 selector를 모두 찾아 비교했습니다. 정확히 네 그룹으로 갈렸습니다.</p>
+
+  <table class="survey-table">
+    <tr>
+      <th>그룹</th>
+      <th>실제 selector</th>
+      <th>기본 상태</th>
+      <th>hover</th>
+      <th>대응 variant</th>
+    </tr>
+    <tr>
+      <td>카드형</td>
+      <td><code>.save-button</code>(admin-settings.css)<br><code>.customize-save-button</code>(editor.css)<br>— 두 곳 완전히 동일</td>
+      <td>흰 배경 / border #e8e8e8 / text #777777</td>
+      <td>bg #fffafb / border #e7c7d3 / text #e39ab5</td>
+      <td><b>primary</b> (default→hover 동작 그대로 기준 패턴으로 승격 — active/focus-visible만 새로 추가)</td>
+    </tr>
+    <tr>
+      <td>중립형</td>
+      <td><code>.google-login-button</code><br><code>.logout-button</code>(admin-shell.css, 이미 system 토큰 사용 중)</td>
+      <td>system-bg / border #e8e8e8~system-border / text #444444~system-text-muted</td>
+      <td>system-surface bg, border 진해짐, text 살짝 진해짐</td>
+      <td><b>secondary</b></td>
+    </tr>
+    <tr>
+      <td>텍스트형</td>
+      <td><code>.back-button</code>(admin-shell.css)<br><code>.quote-preset-load</code>/<code>.quote-preset-delete</code>(admin-quote.css)</td>
+      <td>배경/테두리 없음 / text #aaaaaa~#bbbbbb</td>
+      <td>text만 #e39ab5로 (delete는 bg #fffafb 추가)</td>
+      <td><b>ghost</b></td>
+    </tr>
+    <tr>
+      <td>위험형</td>
+      <td><code>.customize-icon-button-danger</code>(editor.css) — 유일한 사례</td>
+      <td>기본은 회색(customize-icon-button과 동일), red는 hover에만 등장</td>
+      <td>bg #fff5f5 / border #e7bcbc / text #c65a5a</td>
+      <td><b>danger</b> (기본/hover 패턴 그대로 보존)</td>
+    </tr>
+  </table>
+
+  <p class="note" style="margin-top: var(--imory-space-400);">
+    <b>v0.1 방향 확정:</b> primary는 "항상 핑크인 버튼"이 아니라, <code>.save-button</code>의
+    실제 동작 그대로 <b>평소엔 회색, 상호작용(hover/focus) 시에만 pink accent가 드러나는
+    조용한 버튼</b>으로 정의합니다. (이전 라운드에서 검토했던 "기본부터 핑크" 안은 preview 확인 후
+    폐기했습니다 — 아래 03 섹션에 두 안의 비교가 남아 있습니다.)
+  </p>
+
+  <ul class="note-list">
+    <li>프로젝트 전체에서 버튼에 <code>:active</code>(눌림) 상태나 <code>:focus-visible</code> ring이 적용된 사례가 하나도 없었습니다 — 둘 다 이번에 새로 설계합니다.</li>
+    <li><code>#aaaaaa</code>, <code>#bbbbbb</code>, <code>#666666</code>, <code>#e5e5e5</code>, <code>#e8e8e8</code> 등 버튼마다 조금씩 다른 회색 outlier가 있습니다. 이번 컴포넌트는 기존 semantic 토큰만 참조하고, 이 outlier들을 그대로 흡수하지 않습니다.</li>
+    <li>danger는 실제 <code>.customize-icon-button-danger</code>와 동일하게 기본 상태를 중립(secondary와 같은 회색 계열)으로 두고, hover에서만 <code>--imory-red-50/200/500</code>로 전환합니다 — 평상시엔 다른 버튼과 구별되지 않다가 실제 삭제 행동에 가까워질 때만 경고 신호를 주는 실제 패턴을 그대로 보존한 것입니다.</li>
+  </ul>
+</section>
+
+<!-- ============================================================
+     1. Variant × Size (실제 인터랙션)
+============================================================= -->
+<section>
+  <h2><span class="index">01</span> Variant × Size</h2>
+  <p class="note">마우스를 올리거나(hover), 클릭한 채로(active), Tab으로 포커스를 이동해(focus) 실제 상태를 확인하세요.</p>
+
+  <div class="variant-row">
+    <span class="label">primary</span>
+    <div class="buttons">
+      <button class="imory-button imory-button--primary imory-button--md">저장</button>
+      <button class="imory-button imory-button--primary imory-button--sm">저장</button>
+      <button class="imory-button imory-button--primary imory-button--md" disabled>저장</button>
+    </div>
+  </div>
+
+  <div class="variant-row">
+    <span class="label">secondary</span>
+    <div class="buttons">
+      <button class="imory-button imory-button--secondary imory-button--md">로그아웃</button>
+      <button class="imory-button imory-button--secondary imory-button--sm">로그아웃</button>
+      <button class="imory-button imory-button--secondary imory-button--md" disabled>로그아웃</button>
+    </div>
+  </div>
+
+  <div class="variant-row">
+    <span class="label">danger</span>
+    <div class="buttons">
+      <button class="imory-button imory-button--danger imory-button--md">삭제</button>
+      <button class="imory-button imory-button--danger imory-button--sm">삭제</button>
+      <button class="imory-button imory-button--danger imory-button--md" disabled>삭제</button>
+    </div>
+  </div>
+
+  <div class="variant-row">
+    <span class="label">ghost</span>
+    <div class="buttons">
+      <button class="imory-button imory-button--ghost imory-button--md">&lt;&lt; back</button>
+      <button class="imory-button imory-button--ghost imory-button--sm">&lt;&lt; back</button>
+      <button class="imory-button imory-button--ghost imory-button--md" disabled>&lt;&lt; back</button>
+    </div>
+  </div>
+
+  <p class="hint">각 행: 기본 크기(md) · 작은 크기(sm) · disabled 순서.</p>
+</section>
+
+<!-- ============================================================
+     2. State → Token 대응표
+============================================================= -->
+<section>
+  <h2><span class="index">02</span> State → Token 대응표</h2>
+  <p class="note">실제 색은 위 버튼에 마우스를 올려 확인하고, 아래 표는 각 state가 정확히 어떤 토큰을 참조하는지 텍스트로 확인하는 용도입니다.</p>
+
+  <table class="state-table">
+    <tr>
+      <th>variant</th>
+      <th>default</th>
+      <th>hover / active</th>
+      <th>focus-visible</th>
+      <th>disabled</th>
+    </tr>
+    <tr>
+      <td>primary</td>
+      <td>
+        <code>bg: --system-bg</code>
+        <code>border: --system-border</code>
+        <code>text: --system-text-muted</code>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">(.save-button 기본과 동일 — 평소엔 회색)</span>
+      </td>
+      <td>
+        <b>hover = focus-visible 색 공유:</b>
+        <code>bg: --system-accent-soft</code>
+        <code>border: --system-accent</code>
+        <code>text: --system-accent</code>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">active(한 단계 더): bg --system-accent-border / border·text --system-accent-hover</span>
+      </td>
+      <td rowspan="4"><code>box-shadow: --system-shadow-focus-ring</code><br>(variant 공통 — 위 색 전환 위에 얹히는 ring)</td>
+      <td rowspan="4"><code>opacity: 0.5</code><br><code>pointer-events: none</code><br>(variant 공통)</td>
+    </tr>
+    <tr>
+      <td>secondary</td>
+      <td>
+        <code>bg: --system-bg</code>
+        <code>border: --system-border</code>
+        <code>text: --system-text-muted</code>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">(primary 기본과 동일한 톤 — 평소엔 구별 안 됨)</span>
+      </td>
+      <td>
+        <b>hover = focus-visible:</b>
+        <code>bg: --system-surface</code>
+        <code>border: --system-border-strong</code>
+        <code>text: --system-text</code>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">active(한 단계 더): bg --system-border / text --system-text-strong — hover에서도 gray 계열 유지, pink 없음</span>
+      </td>
+    </tr>
+    <tr>
+      <td>danger</td>
+      <td>
+        <code>bg: --system-bg</code>
+        <code>border: --system-border</code>
+        <code>text: --system-text-muted</code>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">(primary/secondary 기본과 동일 — 평상시 구별 안 됨)</span>
+      </td>
+      <td>
+        <b>hover = focus-visible:</b>
+        <code>bg: --imory-red-50</code>
+        <code>border: --imory-red-200</code>
+        <code>text: --imory-red-500</code>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">active(한 단계 더): border --imory-red-500 (text는 이미 최고 단계)</span>
+      </td>
+    </tr>
+    <tr>
+      <td>ghost</td>
+      <td>
+        <code>bg: transparent</code>
+        <code>border: transparent</code>
+        <code>text: --imory-gray-400</code>(primitive 직접 참조 — back-button 실제 색 보존)
+      </td>
+      <td>
+        <b>hover = focus-visible:</b> <code>text: --system-accent</code>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">active(한 단계 더): text --system-accent-hover</span>
+      </td>
+    </tr>
+  </table>
+
+  <p class="note" style="margin-top: var(--imory-space-400);">
+    공통 규칙: <b>모든 variant는 hover와 focus-visible이 같은 색을 공유</b>하고(키보드 사용자도
+    마우스 사용자와 동일한 신호를 봄), <b>active는 항상 hover보다 딱 한 단계만</b> 더 진해집니다 —
+    variant를 넘나드는 과장된 효과(그림자, 확대 등) 없이 border/text/배경 톤 이동만으로 표현합니다.
+  </p>
+</section>
+
+<!-- ============================================================
+     3. Before / After — 기존 save-button과 대조
+============================================================= -->
+<section>
+  <h2><span class="index">03</span> Before / After</h2>
+  <p class="note">
+    왼쪽은 <code>admin-settings.css</code>의 실제 <code>.save-button</code> literal 값을 그대로 재현한 것,
+    오른쪽은 새 <code>.imory-button--primary</code>입니다. 이 페이지에서만 비교용으로 재현했고,
+    실제 <code>.save-button</code> selector는 아직 건드리지 않았습니다.
+    <b>default/hover는 색이 사실상 동일</b>합니다(literal → token으로만 바뀜) — active/focus-visible이
+    이번에 새로 추가된 부분입니다.
+  </p>
+
+  <h3 class="sub">3-1. 상태별 색상 비교 (한눈에 보기)</h3>
+  <table class="compare-table">
+    <tr>
+      <th>state</th>
+      <th>Before — .save-button (기존)</th>
+      <th>After — .imory-button--primary (신규)</th>
+    </tr>
+    <tr>
+      <td>default</td>
+      <td>
+        <div class="chip-row"><span class="swatch" style="background:#ffffff;"></span><code>bg #ffffff</code></div>
+        <div class="chip-row"><span class="swatch" style="background:#e8e8e8;"></span><code>border #e8e8e8</code></div>
+        <div class="chip-row"><span class="swatch" style="background:#777777;"></span><code>text #777777</code></div>
+      </td>
+      <td>
+        <div class="chip-row"><span class="swatch" style="background:var(--system-bg);"></span><code>bg var(--system-bg)</code></div>
+        <div class="chip-row"><span class="swatch" style="background:var(--system-border);"></span><code>border var(--system-border)</code></div>
+        <div class="chip-row"><span class="swatch" style="background:var(--system-text-muted);"></span><code>text var(--system-text-muted)</code></div>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">거의 동일한 회색 — 정확히 같은 hex는 아니지만 가장 가까운 기존 토큰 사용</span>
+      </td>
+    </tr>
+    <tr>
+      <td>hover</td>
+      <td>
+        <div class="chip-row"><span class="swatch" style="background:#fffafb;"></span><code>bg #fffafb</code></div>
+        <div class="chip-row"><span class="swatch" style="background:#e7c7d3;"></span><code>border #e7c7d3</code></div>
+        <div class="chip-row"><span class="swatch" style="background:#e39ab5;"></span><code>text #e39ab5</code></div>
+      </td>
+      <td>
+        <div class="chip-row"><span class="swatch" style="background:var(--system-accent-soft);"></span><code>bg var(--system-accent-soft)</code></div>
+        <div class="chip-row"><span class="swatch" style="background:var(--system-accent);"></span><code>border var(--system-accent)</code></div>
+        <div class="chip-row"><span class="swatch" style="background:var(--system-accent);"></span><code>text var(--system-accent)</code></div>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">accent-soft(#fffafb)·accent(#e39ab5) 모두 literal과 정확히 동일한 값</span>
+      </td>
+    </tr>
+    <tr>
+      <td>active <span style="font-weight:normal; color:var(--system-text-disabled);">(신규)</span></td>
+      <td class="na">커스텀 :active 규칙 없음 — 마우스로 누르면 hover와 같은 색 그대로, 키보드 Enter로는 아무 변화 없음</td>
+      <td>
+        <div class="chip-row"><span class="swatch" style="background:var(--system-accent-border);"></span><code>bg var(--system-accent-border)</code></div>
+        <div class="chip-row"><span class="swatch" style="background:var(--system-accent-hover);"></span><code>border/text var(--system-accent-hover)</code></div>
+        <span style="display:block; margin-top:4px; color:var(--system-text-disabled);">hover보다 딱 한 단계만 진하게</span>
+      </td>
+    </tr>
+    <tr>
+      <td>focus-visible <span style="font-weight:normal; color:var(--system-text-disabled);">(신규)</span></td>
+      <td class="na">커스텀 규칙 없음 — 브라우저 기본 outline만 표시됨</td>
+      <td>hover와 동일한 색(accent-soft/accent) + <code>box-shadow: var(--system-shadow-focus-ring)</code> — 키보드 사용자도 마우스와 같은 신호를 봄</td>
+    </tr>
+    <tr>
+      <td>disabled</td>
+      <td><code>opacity: 0.5</code></td>
+      <td><code>opacity: 0.5</code> (동일 + <code>pointer-events: none</code> 추가) — 기본이 회색이라 자연스럽게 neutral gray 유지</td>
+    </tr>
+  </table>
+
+  <h3 class="sub">3-2. 크기 비교</h3>
+  <table class="compare-table">
+    <tr>
+      <th>size</th>
+      <th>Before — .save-button</th>
+      <th>After — .imory-button--primary</th>
+    </tr>
+    <tr>
+      <td>medium</td>
+      <td><code>min-height 30px</code> <code>padding 6px 12px</code> <code>font-size 10px</code></td>
+      <td><code>min-height 30px</code> <code>padding 6px 12px</code> <code>font-size var(--imory-font-size-200)</code>(10px) — 동일</td>
+    </tr>
+    <tr>
+      <td>small</td>
+      <td class="na">N/A — 실제 서비스에 small .save-button 없음</td>
+      <td><code>min-height 26px</code> <code>padding 4px 8px</code> <code>font-size var(--imory-font-size-100)</code>(9px) — 이번에 신규 정의</td>
+    </tr>
+  </table>
+
+  <h3 class="sub">3-3. 실제 인터랙션으로 확인</h3>
+  <p class="note">아래는 실제 CSS를 그대로 적용한 버튼입니다 — 위 표의 색이 진짜인지 마우스 hover / 클릭 유지(active) / Tab 이동(focus)으로 직접 확인하세요.</p>
+
+  <div class="live-grid">
+    <div class="live-cell">
+      <span class="cell-label">medium · default / hover / active / focus</span>
+      <div class="cell-buttons">
+        <button class="legacy-save-button">저장 (before)</button>
+        <button class="imory-button imory-button--primary imory-button--md">저장 (after)</button>
+      </div>
+    </div>
+
+    <div class="live-cell">
+      <span class="cell-label">medium · disabled</span>
+      <div class="cell-buttons">
+        <button class="legacy-save-button" disabled>저장 (before)</button>
+        <button class="imory-button imory-button--primary imory-button--md" disabled>저장 (after)</button>
+      </div>
+    </div>
+
+    <div class="live-cell">
+      <span class="cell-label">small · default / hover / active / focus <br>(before는 실제 없음 — 재현)</span>
+      <div class="cell-buttons">
+        <button class="legacy-save-button legacy-save-button--sm">저장 (before)</button>
+        <button class="imory-button imory-button--primary imory-button--sm">저장 (after)</button>
+      </div>
+    </div>
+
+    <div class="live-cell">
+      <span class="cell-label">small · disabled <br>(before는 실제 없음 — 재현)</span>
+      <div class="cell-buttons">
+        <button class="legacy-save-button legacy-save-button--sm" disabled>저장 (before)</button>
+        <button class="imory-button imory-button--primary imory-button--sm" disabled>저장 (after)</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="hint">default/hover는 사실상 동일하게 맞췄습니다 — 눌러서(active) 한 단계 더 진해지는지, Tab으로 이동해(focus) ring이 뜨는지가 실제로 새로 생긴 부분입니다.</p>
+</section>
+
+<!-- ============================================================
+     4. 다음 단계
+============================================================= -->
+<section>
+  <h2><span class="index">04</span> 다음 단계</h2>
+  <ul class="note-list">
+    <li><b>primary 방향 최종 확정</b> — <code>.save-button</code>의 default(회색) → hover(핑크) 동작을 그대로 Core 기준 패턴으로 승격. "항상 핑크"가 아니라 상호작용 시에만 accent가 드러나는 조용한 버튼. active/focus-visible만 새로 추가.</li>
+    <li><b>secondary</b>는 <code>.google-login-button</code>/<code>.logout-button</code> 패턴을, <b>ghost</b>는 <code>.back-button</code>/<code>.quote-preset-load</code>의 실제 색(#aaaaaa)을, <b>danger</b>는 <code>.customize-icon-button-danger</code>의 "평소엔 중립, hover에만 red" 패턴을 각각 보존 — 결과적으로 primary/secondary/danger가 default에서는 거의 같은 회색으로 보이고, hover에서만 각자의 역할(핑크/회색 유지/빨강)이 드러나는 것이 Imory 전체의 실제 패턴입니다.</li>
+    <li>확정됐으니 다음 단계로 <code>.save-button</code> / <code>.customize-save-button</code>부터 <code>.imory-button--primary</code>로 1:1 치환 (완전히 동일한 패턴이라 가장 안전한 시작점).</li>
+    <li>그다음 <code>.logout-button</code>/<code>.google-login-button</code> → secondary, <code>.back-button</code>/<code>.quote-preset-load</code> → ghost, <code>.customize-icon-button-danger</code> → danger 순으로 검토.</li>
+    <li>sm 크기(26px/4px 8px/9px)는 이번에 새로 정한 값입니다 — 기존 spacing scale(4/8/12/16/20/24)에 정확히 맞는 컴포넌트 높이 토큰이 없어 literal로 남겼습니다. 필요하면 v0.2에서 <code>--imory-control-height-*</code> 신설을 검토합니다.</li>
+  </ul>
+</section>
+
+</body>
+</html>

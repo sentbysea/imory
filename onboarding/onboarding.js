@@ -2,10 +2,12 @@
    ONBOARDING
 
    auth/auth-callback.js가 profiles 없는 신규 계정을 여기로
-   보낸다. 닉네임/slug(공개 홈 주소)/자기소개를 받아
-   complete_onboarding() RPC를 호출한다 — 최종 검증(형식/
-   예약어/중복/인증)은 전부 그 RPC 안에서 다시 이뤄지므로,
-   여기서 하는 클라이언트 검증은 빠른 피드백용일 뿐이다.
+   보낸다. 닉네임/slug(공개 홈 주소)를 받아 complete_onboarding()
+   RPC를 호출한다 — 자기소개는 온보딩 단계에서는 받지 않고
+   (p_bio는 항상 null) admin 설정 화면에서 나중에 채우도록
+   남겨둔다. 최종 검증(형식/예약어/중복/인증)은 전부 RPC 안에서
+   다시 이뤄지므로, 여기서 하는 클라이언트 검증은 빠른
+   피드백용일 뿐이다.
 
    RESERVED_SLUGS는 core/lib/reserved-slugs.js,
    supabaseClient는 core/lib/supabase-client.js,
@@ -28,9 +30,9 @@ const onboardingSlugMessage =
     "onboardingSlugMessage"
   );
 
-const onboardingBioInput =
+const onboardingSlugPreview =
   document.getElementById(
-    "onboardingBioInput"
+    "onboardingSlugPreview"
   );
 
 const onboardingSubmitButton =
@@ -234,6 +236,49 @@ onboardingSlugInput
 
 
 /* =========================================================
+   SLUG 실시간 미리보기 (안내용 — 저장/검증 로직과 무관)
+========================================================== */
+
+function updateSlugPreview() {
+
+  const rawValue =
+    onboardingSlugInput
+      .value;
+
+
+  if (!rawValue) {
+
+    onboardingSlugPreview.textContent =
+      "here♡";
+
+    onboardingSlugPreview.classList.add(
+      "onboarding-slug-preview--placeholder"
+    );
+
+    return;
+
+  }
+
+
+  onboardingSlugPreview.textContent =
+    rawValue;
+
+  onboardingSlugPreview.classList.remove(
+    "onboarding-slug-preview--placeholder"
+  );
+
+}
+
+
+onboardingSlugInput
+  ?.addEventListener(
+    "input",
+    updateSlugPreview
+  );
+
+
+
+/* =========================================================
    제출
 ========================================================== */
 
@@ -298,11 +343,6 @@ onboardingSubmitButton
           .trim()
           .toLowerCase();
 
-      const bio =
-        onboardingBioInput
-          .value
-          .trim();
-
 
       if (
         !nickname
@@ -355,7 +395,6 @@ onboardingSubmitButton
                 slug,
 
               p_bio:
-                bio ||
                 null
 
             }

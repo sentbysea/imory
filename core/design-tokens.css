@@ -30,7 +30,17 @@
   --imory-gray-400: #aaaaaa;
   --imory-gray-500: #999999;
   --imory-gray-600: #777777;
+  --imory-gray-650: #888888; /* category-type-select 전용 outlier 승격 — 값 자체는
+    gray-500(#999999)과 gray-600(#777777) 사이 밝기지만, 실사용처가
+    .category-type-select 하나뿐이라 번호는 그 자리에 끼워 넣지 않고
+    도입 순서를 따라 650으로 붙였다. semantic은 아직 배정하지 않음
+    (design-tokens-mapping.md 참고). */
   --imory-gray-700: #555555;
+  --imory-gray-750: #444444; /* Input v0.1 조사에서 확인된 반복값 —
+    admin-settings .setting-input/.editor-block textarea, customize
+    .customize-field-*, onboarding .setting-input 재사용 등 4/5 그룹의
+    field 텍스트 색. --system-text(gray-800)로 억지로 합치지 않고
+    Input 컴포넌트 내부에서 field 텍스트 전용으로 참조한다. */
   --imory-gray-800: #333333;
   --imory-gray-900: #222222;
 
@@ -65,6 +75,14 @@
   --system-text-strong: var(--imory-gray-900);
   --system-text-muted: var(--imory-gray-500);
   --system-text-disabled: var(--imory-gray-400);
+
+  /* disabled(상호작용 불가)와는 별개 의미다 — hint/caption/unit/icon
+     glyph/기본(비선택) 상태처럼 "본문보다 우선순위가 낮은 보조 텍스트"에
+     쓴다. 실사용 조사에서 disabled 요소와 겹치는 곳이 한 곳도 없었다
+     (design-tokens-mapping.md "semantic 재검토 대상" 참고). 값은
+     --system-text-disabled와 같은 primitive를 가리키지만 이름이 다른
+     역할을 가리키므로 별도 토큰으로 둔다. */
+  --system-text-faint: var(--imory-gray-400);
 
   --system-border: var(--imory-gray-100);
   --system-border-strong: var(--imory-gray-200);

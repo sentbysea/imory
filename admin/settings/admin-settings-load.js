@@ -496,7 +496,7 @@ function renderCategories() {
 
 
       typeSelect.className =
-        "category-type-select";
+        "category-type-select imory-field imory-field--sm";
 
 
       [
@@ -570,7 +570,7 @@ function renderCategories() {
 
 
       upButton.className =
-        "category-action";
+        "category-action imory-button imory-button--ghost imory-button--sm";
 
 
       upButton.textContent =
@@ -605,7 +605,7 @@ function renderCategories() {
 
 
       downButton.className =
-        "category-action";
+        "category-action imory-button imory-button--ghost imory-button--sm";
 
 
       downButton.textContent =
@@ -641,7 +641,7 @@ function renderCategories() {
 
 
       deleteButton.className =
-        "category-action delete";
+        "category-action delete imory-button imory-button--ghost imory-button--sm";
 
 
       deleteButton.textContent =

@@ -1,0 +1,69 @@
+/* =========================================================
+   Imory Core Patterns — Section Header v0.1 (spread only)
+
+   조사 대상: admin/admin-settings.css .settings-group-title /
+   admin/admin-quote.css .quote-preview-heading. 둘 다
+   "div > span(메인 라벨) + small(보조 힌트)" 구조에 display:flex +
+   align-items:baseline + justify-content:space-between + gap:20px
+   (--imory-space-500)까지 완전히 동일해서 base로 승격했다.
+
+   admin-quote.css의 .quote-special-heading은 DOM shape(span+small)는
+   같지만 flex가 아니라 일반 inline 흐름(라벨과 힌트가 공백 하나
+   간격으로 붙어서 렌더링)이라 이번 Pattern에는 편입하지 않는다 —
+   억지로 여기 넣으면 힌트가 오른쪽 끝까지 밀려나 외형이 바뀐다.
+   (quote-special-heading은 admin-quote.css에 로컬로 남아 있고,
+   그중 값이 그대로 토큰과 일치하는 font-size/font-weight/color만
+   별도로 토큰 연결했다.)
+
+   span/small의 font-size·color(11px/#555555 vs 10px/#777777 등)는
+   두 화면이 서로 다른 값이라 여기서 통일하지 않고 각 화면 CSS에
+   로컬로 남겨둔다 — Tabs의 boxed-accent/boxed-neutral과 같은 결로,
+   "구조는 공용, 색/사이즈는 화면별"로 나눈다.
+
+   small의 #b5b5b5(옅은 보조색)는 아직 semantic token이 없는 상태라
+   이번에도 literal로 남겨둔다 — Empty State 조사와 함께 다음 단계에서
+   판단한다(design-tokens-mapping.md의 outlier 군집 참고).
+
+   구조: .imory-section-header(base) + --divider / --plain(변형)
+     모바일 gap 축소(20px→10px) 같은 화면별 배치 override는 이
+     Pattern이 아니라 각 화면 CSS(admin-quote.css의 반응형 블록)에
+     그대로 남겨둔다 — Button/Input 때와 동일한 원칙("배치는 로컬").
+
+   이 파일은 core/design-tokens.css가 먼저 로드되어 있다고 가정한다.
+========================================================== */
+
+.imory-section-header {
+  display: flex;
+
+  align-items: baseline;
+  justify-content: space-between;
+
+  gap: var(--imory-space-500); /* 20px */
+}
+
+
+/* =========================================================
+   VARIANT — divider
+
+   .settings-group-title 기준: 섹션 사이 구분선이 있는 무거운 헤더.
+========================================================== */
+
+.imory-section-header--divider {
+  margin-bottom: var(--imory-space-600); /* 24px */
+
+  padding-bottom: 10px; /* outlier — space token(8/12px) 어느 쪽과도
+    정확히 일치하지 않아 literal 유지 */
+
+  border-bottom: var(--imory-border-width) solid var(--system-border);
+}
+
+
+/* =========================================================
+   VARIANT — plain
+
+   .quote-preview-heading 기준: 구분선 없이 여백만 있는 가벼운 헤더.
+========================================================== */
+
+.imory-section-header--plain {
+  margin-bottom: var(--imory-space-300); /* 12px */
+}

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imory Core Components — Input v0.1 Preview</title>
+<link rel="stylesheet" href="../design-tokens.css">
+<link rel="stylesheet" href="./input.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pretendard&display=swap" rel="stylesheet">
+<style>
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 40px 32px 120px;
+    background: var(--system-bg);
+    color: var(--system-text);
+    font-family: var(--system-font-family);
+    font-size: var(--imory-font-size-400);
+    line-height: var(--imory-line-height-base);
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 22px;
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text-strong);
+  }
+
+  .lede {
+    margin: 0 0 var(--imory-space-600);
+    color: var(--system-text-muted);
+    font-size: var(--imory-font-size-500);
+    max-width: 680px;
+  }
+
+  section {
+    margin-bottom: 56px;
+  }
+
+  section > h2 {
+    display: flex;
+    align-items: baseline;
+    gap: var(--imory-space-200);
+
+    margin: 0 0 var(--imory-space-100);
+    padding-bottom: var(--imory-space-200);
+    border-bottom: var(--imory-border-width) solid var(--system-border-strong);
+
+    font-size: var(--imory-font-size-600);
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text-strong);
+  }
+
+  section > h2 .index {
+    color: var(--system-accent);
+    font-weight: var(--imory-font-weight-regular);
+  }
+
+  section > p.note {
+    margin: 0 0 var(--imory-space-500);
+    color: var(--system-text-muted);
+    font-size: var(--imory-font-size-300);
+    max-width: 720px;
+  }
+
+  h3.sub {
+    margin: var(--imory-space-600) 0 var(--imory-space-300);
+    font-size: var(--imory-font-size-500);
+    font-weight: var(--imory-font-weight-medium);
+    color: var(--system-text);
+  }
+
+  code {
+    font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+    background: var(--system-surface);
+    padding: 1px 5px;
+    font-size: 0.9em;
+    color: var(--system-text);
+  }
+
+  table.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--imory-font-size-200);
+    margin-bottom: var(--imory-space-500);
+  }
+
+  table.data-table th,
+  table.data-table td {
+    padding: var(--imory-space-200) var(--imory-space-300);
+    border: var(--imory-border-width) solid var(--system-border);
+    text-align: left;
+    vertical-align: top;
+  }
+
+  table.data-table th {
+    background: var(--system-surface);
+    color: var(--system-text-strong);
+    font-weight: var(--imory-font-weight-medium);
+  }
+
+  table.data-table td.na {
+    color: var(--system-text-disabled);
+    font-style: italic;
+  }
+
+  .note-list {
+    margin: 0;
+    padding-left: 1.2em;
+    color: var(--system-text-muted);
+    font-size: var(--imory-font-size-300);
+  }
+
+  .note-list li {
+    margin-bottom: var(--imory-space-200);
+  }
+
+  /* ---- 1. variant grid ---- */
+
+  .field-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: var(--imory-space-500);
+    padding: var(--imory-space-400) 0;
+    border-bottom: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .field-row .label {
+    flex: 0 0 140px;
+    padding-top: 8px;
+    font-size: var(--imory-font-size-200);
+    color: var(--system-text-muted);
+  }
+
+  .field-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    width: 220px;
+  }
+
+  .field-cell .cell-caption {
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-disabled);
+  }
+
+  .field-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--imory-space-500);
+  }
+
+  /* ---- 3. compare ---- */
+
+  .compare-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: var(--imory-space-500);
+    margin-top: var(--imory-space-400);
+  }
+
+  .compare-cell {
+    padding: var(--imory-space-400);
+    border: var(--imory-border-width) solid var(--system-border);
+  }
+
+  .compare-cell .cell-label {
+    display: block;
+    margin-bottom: var(--imory-space-300);
+    font-size: var(--imory-font-size-100);
+    color: var(--system-text-muted);
+  }
+
+  /* ---- legacy reproductions (button.css/input.css 미사용, 비교용) ---- */
+
+  .legacy-setting-input {
+    display: block;
+    width: 100%;
+    height: 38px;
+    box-sizing: border-box;
+    padding: 0 12px;
+    border: 1px solid var(--system-border);
+    border-radius: 4px;
+    outline: none;
+    background: #ffffff;
+    color: #444444;
+    font-family: var(--system-font-family);
+    font-size: 13px;
+    transition: border-color 0.2s ease;
+  }
+
+  .legacy-setting-input:focus {
+    border-color: #e0bdca;
+  }
+
+  .legacy-quote-text-input {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 36px;
+    padding: 8px 10px;
+    border: 1px solid #ececec;
+    border-radius: 0;
+    outline: none;
+    background: #ffffff;
+    color: #444444;
+    font-family: var(--system-font-family);
+    font-size: 11px;
+    transition: border-color 0.2s ease;
+  }
+
+  .legacy-quote-text-input:focus {
+    border-color: #e7b6c8;
+  }
+
+</style>
+</head>
+<body>
+
+<h1>Imory Core Components — Input / Textarea v0.1</h1>
+<p class="lede">
+  <code>core/components/input.css</code> 설계 미리보기입니다. 아직 실제 서비스 input/textarea/select
+  (<code>.setting-input</code>, <code>.quote-text-input</code>, <code>.customize-field-input</code> 등)는
+  <code>.imory-field</code>로 치환하지 않았습니다 — 이 페이지는 <code>design-tokens.css</code> +
+  <code>input.css</code>만 불러와 독립적으로 렌더링됩니다.
+</p>
+
+<!-- ============================================================
+     0. 조사 요약
+============================================================= -->
+<section>
+  <h2><span class="index">00</span> 실서비스 조사 요약</h2>
+  <p class="note">치환 전, 프로젝트 전체에서 input/textarea/select 역할을 하는 selector를 모두 비교했습니다.</p>
+
+  <table class="data-table">
+    <tr>
+      <th>그룹</th>
+      <th>selector</th>
+      <th>height/padding</th>
+      <th>border</th>
+      <th>text</th>
+      <th>focus</th>
+    </tr>
+    <tr>
+      <td>settings / onboarding</td>
+      <td><code>.setting-input</code></td>
+      <td>38px / <code>0 12px</code></td>
+      <td><code>var(--system-border)</code></td>
+      <td><code>#444444</code></td>
+      <td><code>#e0bdca</code></td>
+    </tr>
+    <tr>
+      <td>settings textarea</td>
+      <td><code>.editor-block textarea</code></td>
+      <td>105px / <code>12px 14px</code></td>
+      <td><code>var(--system-border)</code></td>
+      <td><code>#444444</code></td>
+      <td><code>#e0bdca</code></td>
+    </tr>
+    <tr>
+      <td>quote text/textarea/select</td>
+      <td><code>.quote-text-input</code> 등</td>
+      <td>36~135px / <code>8~11px</code></td>
+      <td><code>#ececec</code></td>
+      <td><code>#444444</code>~<code>#666666</code></td>
+      <td><code>#e7b6c8</code></td>
+    </tr>
+    <tr>
+      <td>quote number</td>
+      <td><code>.quote-number-input</code></td>
+      <td>auto / <code>7px 8px</code></td>
+      <td><code>#ececec</code></td>
+      <td><code>#555555</code></td>
+      <td><code>#e8b7c9</code></td>
+    </tr>
+    <tr>
+      <td>customize field</td>
+      <td><code>.customize-field-*</code></td>
+      <td>auto / <code>8px 10px</code></td>
+      <td><code>#eeeeee</code></td>
+      <td><code>#444444</code></td>
+      <td><code>#e0bdca</code></td>
+    </tr>
+  </table>
+
+  <ul class="note-list">
+    <li>hover 상태는 실서비스 어디에도 없습니다 — <b>Core Input도 hover 규칙을 두지 않기로 확정</b>했습니다.</li>
+    <li>focus 색이 서로 다른 3종 outlier(<code>#e0bdca</code>/<code>#e7b6c8</code>/<code>#e8b7c9</code>)로 흩어져 있어 <code>--system-accent</code> 하나로 통일했습니다. 처음엔 <code>design-tokens-preview.html</code>의 focus-ring 데모(accent border + <code>--system-shadow-focus-ring</code>)를 그대로 승격했지만, border와 ring이 같은 색으로 겹쳐 두꺼워 보인다는 피드백으로 <code>.imory-field:focus-visible</code>은 <code>box-shadow: none</code>으로 바꾸고 1px accent border만 남겼습니다 (ring 토큰 자체는 <code>.imory-button</code>과 공유하므로 그대로 둠).</li>
+    <li><code>#444444</code>가 5개 그룹 중 4개에서 반복돼 <code>--imory-gray-750</code> primitive로 승격했습니다 (design-tokens-mapping.md가 이미 v0.2 후보로 예고했던 값). <code>--system-text</code>와는 합치지 않고 <code>.imory-field</code> 내부에서만 참조합니다.</li>
+    <li>onboarding의 bio textarea는 <code>.imory-field--textarea</code> 분리 없이 온보딩 화면에서 아예 제거하는 쪽으로 정리됐습니다(자기소개는 onboarding 이후 admin 설정 화면에서 입력) — 이 문서가 예고했던 치환 시나리오는 실서비스에 적용되지 않았습니다.</li>
+  </ul>
+</section>
+
+<!-- ============================================================
+     1. Variant × Size (실제 인터랙션)
+============================================================= -->
+<section>
+  <h2><span class="index">01</span> Variant × Size</h2>
+  <p class="note">클릭해서 focus 색(hover는 규칙 없음 — 변화 없는 게 정상), Tab으로 포커스 이동, 아래쪽 disabled를 확인하세요.</p>
+
+  <div class="field-row">
+    <span class="label">input — md</span>
+    <div class="field-group">
+      <div class="field-cell">
+        <input class="imory-field imory-field--md" type="text" placeholder="닉네임">
+        <span class="cell-caption">default → focus</span>
+      </div>
+      <div class="field-cell">
+        <input class="imory-field imory-field--md" type="text" value="disabled" disabled>
+        <span class="cell-caption">disabled</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="field-row">
+    <span class="label">input — sm</span>
+    <div class="field-group">
+      <div class="field-cell">
+        <input class="imory-field imory-field--sm" type="text" placeholder="quote 본문 필드">
+        <span class="cell-caption">default → focus</span>
+      </div>
+      <div class="field-cell">
+        <input class="imory-field imory-field--sm" type="text" value="disabled" disabled>
+        <span class="cell-caption">disabled</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="field-row">
+    <span class="label">select — sm</span>
+    <div class="field-group">
+      <div class="field-cell">
+        <select class="imory-field imory-field--sm">
+          <option>Regular</option>
+          <option>Medium</option>
+          <option>Bold</option>
+        </select>
+        <span class="cell-caption">default → focus</span>
+      </div>
+      <div class="field-cell">
+        <select class="imory-field imory-field--sm" disabled>
+          <option>disabled</option>
+        </select>
+        <span class="cell-caption">disabled</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="field-row">
+    <span class="label">number — sm</span>
+    <div class="field-group">
+      <div class="field-cell" style="width:120px;">
+        <input class="imory-field imory-field--sm imory-field--number" type="number" value="24">
+        <span class="cell-caption">text-align: right</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="field-row">
+    <span class="label">textarea — md</span>
+    <div class="field-group">
+      <div class="field-cell" style="width:320px;">
+        <textarea class="imory-field imory-field--md imory-field--textarea" placeholder="editor-block textarea 기준 (min-height 84px 기본, 화면별로 override 가능)"></textarea>
+        <span class="cell-caption">resize: vertical</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="field-row">
+    <span class="label">textarea — sm</span>
+    <div class="field-group">
+      <div class="field-cell" style="width:320px;">
+        <textarea class="imory-field imory-field--sm imory-field--textarea" placeholder="quote-test-textarea 기준"></textarea>
+        <span class="cell-caption">resize: vertical</span>
+      </div>
+      <div class="field-cell" style="width:200px;">
+        <textarea class="imory-field imory-field--sm imory-field--textarea" disabled>disabled</textarea>
+        <span class="cell-caption">disabled</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     2. State → Token 대응표
+============================================================= -->
+<section>
+  <h2><span class="index">02</span> State → Token 대응표</h2>
+
+  <table class="data-table">
+    <tr>
+      <th>state</th>
+      <th>규칙</th>
+    </tr>
+    <tr>
+      <td>default</td>
+      <td>
+        <code>background: var(--system-bg)</code><br>
+        <code>border-color: var(--system-border)</code><br>
+        <code>color: var(--imory-gray-750)</code>
+      </td>
+    </tr>
+    <tr>
+      <td>hover</td>
+      <td class="na">규칙 없음 — 의도적으로 default와 동일하게 유지 (조용한 기본 상태)</td>
+    </tr>
+    <tr>
+      <td>focus-visible</td>
+      <td>
+        <code>border-color: var(--system-accent)</code><br>
+        <code>box-shadow: none</code>
+      </td>
+    </tr>
+    <tr>
+      <td>disabled</td>
+      <td><code>opacity: 0.5</code> · <code>cursor: default</code></td>
+    </tr>
+  </table>
+</section>
+
+<!-- ============================================================
+     3. Before / After
+============================================================= -->
+<section>
+  <h2><span class="index">03</span> Before / After</h2>
+  <p class="note">
+    왼쪽은 각 화면의 실제 literal 값을 그대로 재현한 것, 오른쪽은 새 <code>.imory-field</code>입니다.
+    이 페이지에서만 비교용으로 재현했고, 실제 selector는 아직 건드리지 않았습니다.
+  </p>
+
+  <h3 class="sub">3-1. SETTINGS — .setting-input (comfortable/md)</h3>
+  <div class="compare-grid">
+    <div class="compare-cell">
+      <span class="cell-label">Before — .setting-input (literal, radius 4px)</span>
+      <input class="legacy-setting-input" type="text" placeholder="예: hongjiwon">
+    </div>
+    <div class="compare-cell">
+      <span class="cell-label">After — .imory-field.imory-field--md (radius 2px, focus 색 변경)</span>
+      <input class="imory-field imory-field--md" type="text" placeholder="예: hongjiwon">
+    </div>
+  </div>
+  <p class="note" style="margin-top: var(--imory-space-300);">두 입력창 모두 클릭해서 focus 색을 비교하세요 — before는 옅은 outlier 핑크, after는 accent + ring입니다.</p>
+
+  <h3 class="sub">3-2. QUOTE — .quote-text-input (compact/sm)</h3>
+  <div class="compare-grid">
+    <div class="compare-cell">
+      <span class="cell-label">Before — .quote-text-input (literal, border #ececec, radius 0)</span>
+      <input class="legacy-quote-text-input" type="text" placeholder="quote 본문">
+    </div>
+    <div class="compare-cell">
+      <span class="cell-label">After — .imory-field.imory-field--sm (border/radius 통일)</span>
+      <input class="imory-field imory-field--sm" type="text" placeholder="quote 본문">
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     4. 다음 단계
+============================================================= -->
+<section>
+  <h2><span class="index">04</span> 다음 단계</h2>
+  <ul class="note-list">
+    <li>이 preview에서 md/sm 치수, focus ring, disabled가 기대한 대로 보이는지 확인.</li>
+    <li>확인되면 실제 selector 치환 순서 제안: <code>.setting-input</code>(settings+onboarding 공유) → <code>.editor-block textarea</code> → <code>.customize-field-*</code> → <code>.quote-text-input</code>/<code>.quote-test-textarea</code>/<code>.quote-select-input</code>/<code>.quote-number-input</code>.</li>
+    <li>onboarding bio textarea는 치환 시 <code>.setting-input</code> 단독이 아니라 <code>.imory-field.imory-field--textarea.imory-field--md</code>로 분리 적용 — 지금까지 있던 높이 눌림 문제가 이 시점에 자연스럽게 해결됨.</li>
+    <li><code>.quote-color-input</code>(input[type=color])과 <code>.quote-check-input</code>(checkbox)은 이번 Input/Textarea 범위 밖 — 필요하면 별도 컴포넌트로 다룸.</li>
+  </ul>
+</section>
+
+</body>
+</html>

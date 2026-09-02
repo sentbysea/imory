@@ -2146,7 +2146,7 @@ function renderCustomizePageTabs() {
         "button";
 
       button.className =
-        "customize-page-tab";
+        "customize-page-tab imory-tab imory-tab--boxed imory-tab--boxed-accent";
 
       button.dataset.pageId =
         pageDef.id;

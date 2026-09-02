@@ -7,30 +7,17 @@
 }
 
 
-.settings-group-title {
-  display: flex;
-
-  align-items: baseline;
-  justify-content: space-between;
-
-  gap: 20px;
-
-  margin-bottom: 26px;
-
-  padding-bottom: 10px;
-
-  border-bottom:
-    1px solid
-    var(--system-border);
-}
-
+/* 레이아웃(flex/gap/margin/padding/border)은
+   core/patterns/section-header.css의 .imory-section-header/
+   --divider가 담당한다(admin/index.html에서 class 부여). 여기는
+   이 화면만의 span/small 색·크기만 남긴다. */
 
 .settings-group-title span {
-  font-size: 11px;
+  font-size: var(--imory-font-size-300);
 
   letter-spacing: 0.08em;
 
-  color: #555555;
+  color: var(--imory-gray-700);
 }
 
 
@@ -54,17 +41,12 @@
 }
 
 
-.editor-block label {
-  display: block;
-
-  margin-bottom: 8px;
-
-  font-size: 10px;
-
-  letter-spacing: 0.08em;
-
-  color: #777777;
-}
+/* 시각 스타일(display/margin-bottom/font-size/letter-spacing/color)은
+   core/components/label.css의 .imory-label이 담당한다. 현재 이
+   selector에 매칭되는 .editor-block 요소가 admin/index.html에
+   없어(dead selector로 보임) 실제 class 적용 대상은 없다 — 향후
+   .editor-block이 다시 쓰이게 되면 .setting-line label과 동일하게
+   해당 label에 imory-label class를 붙이면 된다. */
 
 
 .editor-block textarea {
@@ -110,56 +92,19 @@
    저장 버튼
 ========================================================== */
 
-.save-button {
-  display: block;
+/* 시각 스타일/상태(배경·border·색·radius·hover·disabled 등)는
+   core/components/button.css의 .imory-button/.imory-button--primary가
+   담당한다 — 여기는 이 화면에서만 쓰이는 레이아웃 값만 남긴다.
+   우측 정렬은 더 이상 margin-left:auto가 아니라 부모의
+   .imory-form-actions(core/patterns/form-actions.css)가 담당한다
+   — Button이 block→inline-flex로 바뀌면서 margin-left:auto가
+   부모가 flex가 아닌 곳에서는 더 이상 동작하지 않았기 때문
+   (auto margin이 inline-level box에서는 0으로 계산됨). */
 
+.save-button {
   min-width: 58px;
 
-  min-height: 30px;
-
-  margin-left: auto;
-
   margin-right: 14px;
-
-  padding:
-    6px 12px;
-
-  border:
-    1px solid
-    #e8e8e8;
-
-  border-radius: 2px;
-
-  background: #ffffff;
-
-  color: #777777;
-
-  font-size: 10px;
-
-  letter-spacing: 0.06em;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
-}
-
-
-.save-button:hover {
-  color: #e39ab5;
-
-  border-color: #e7c7d3;
-
-  background: #fffafb;
-}
-
-
-.save-button:disabled {
-  opacity: 0.5;
-
-  cursor: default;
 }
 
 
@@ -195,50 +140,22 @@
 }
 
 
-.setting-line label {
-  display: block;
+/* 시각 스타일(display/margin-bottom/font-size/letter-spacing/color)은
+   core/components/label.css의 .imory-label이 담당한다
+   (admin/index.html에서 각 label에 class로 부여). 이 selector에는
+   더 이상 남길 화면별 layout 값이 없다. */
 
-  margin-bottom: 8px;
 
-  font-size: 10px;
-
-  letter-spacing: 0.08em;
-
-  color: #777777;
-}
-
+/* 시각 스타일/상태(배경·border·색·radius·focus 등)는
+   core/components/input.css의 .imory-field/.imory-field--md가
+   담당한다. height는 min-height가 아니라 고정 height 의미를
+   유지해야 하는 한 줄 입력이라, Core를 바꾸지 않고 여기서
+   legacy override로 남긴다 — width와 마찬가지로 이 화면의 값. */
 
 .setting-input {
-  display: block;
-
   width: 100%;
 
   height: 38px;
-
-  padding:
-    0 12px;
-
-  border:
-    1px solid
-    var(--system-border);
-
-  border-radius: 4px;
-
-  outline: none;
-
-  background: #ffffff;
-
-  color: #444444;
-
-  font-size: 13px;
-
-  transition:
-    border-color 0.2s ease;
-}
-
-
-.setting-input:focus {
-  border-color: #e0bdca;
 }
 
 
@@ -305,43 +222,19 @@
 }
 
 
+/* 시각 스타일/상태(배경·border·색·radius·hover·disabled 등)는
+   core/components/button.css의 .imory-button/.imory-button--primary가
+   담당한다(admin/index.html에서 class로 부여) — hover도 theme pink
+   (#e0bdca/#d980a2) 대신 Core의 --system-accent 계열로 통일된다.
+   여기는 Core가 대신하지 않는 값만 남긴다: font-weight/letter-spacing은
+   Core에 대응 값이 없어 기존 외형 유지를 위해 남기고, padding-inline은
+   Core --md 기본값(12px)보다 넓은 14px을 유지한다. */
+
 .my-banner-change-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  padding-inline: 14px;
 
-  min-height: 30px;
-
-  padding: 6px 14px;
-
-  border: 1px solid #e8e8e8;
-  border-radius: 2px;
-
-  background: #ffffff;
-
-  font-family:
-    "Pretendard",
-    sans-serif;
-
-  font-size: 10px;
   font-weight: 500;
-
   letter-spacing: 0.03em;
-
-  color: #777777;
-
-  cursor: pointer;
-
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease;
-}
-
-
-.my-banner-change-button:hover {
-  border-color: #e0bdca;
-
-  color: #d980a2;
 }
 
 
@@ -354,7 +247,7 @@
 
   letter-spacing: 0.03em;
 
-  color: #d980a2;
+  color: var(--system-accent-hover);
 
   min-height: 12px;
 }
@@ -375,41 +268,21 @@
 }
 
 
+/* 시각 스타일/상태(배경·border·색·radius·hover·disabled 등)는
+   core/components/button.css의 .imory-button/.imory-button--secondary가
+   담당한다(admin/index.html에서 class로 부여) — hover도 theme pink
+   대신 secondary의 neutral(gray) hover로 바뀐다. min-height는 옆
+   readonly input(38px)과 행 높이를 맞추기 위한 이 화면만의 값이라
+   Core를 바꾸지 않고 로컬로 override한다. font-weight/letter-spacing도
+   Core에 대응 값이 없어 기존 외형 유지를 위해 남긴다. */
+
 .my-banner-copy-button {
   flex: 0 0 auto;
 
   min-height: 38px;
 
-  padding: 0 12px;
-
-  border: 1px solid #e8e8e8;
-  border-radius: 4px;
-
-  background: #ffffff;
-
-  font-family:
-    "Pretendard",
-    sans-serif;
-
-  font-size: 9px;
   font-weight: 500;
-
   letter-spacing: 0.03em;
-
-  color: #777777;
-
-  cursor: pointer;
-
-  transition:
-    color 0.15s ease,
-    border-color 0.15s ease;
-}
-
-
-.my-banner-copy-button:hover {
-  border-color: #e0bdca;
-
-  color: #d980a2;
 }
 
 
@@ -447,27 +320,19 @@
 
   border-bottom:
     1px solid
-    #f1f1f1;
+    var(--system-border);
 }
 
 
+/* 시각 스타일/상태(배경·border·radius·focus·크기 등)는
+   core/components/input.css의 .imory-field/.imory-field--sm이
+   담당한다(admin-settings-load.js에서 클래스 부여). 여기는 Core가
+   대신하지 않는 값만 남긴다 — color는 Core 기본값(#444444)과 달리
+   이 select만 --imory-gray-650(#888888)을 쓰기로 해 로컬 override로
+   남겼다. */
+
 .category-type-select {
-  padding: 5px 6px;
-
-  border: 1px solid #e5e5e5;
-  border-radius: 6px;
-
-  outline: none;
-
-  background: #ffffff;
-
-  color: #888888;
-
-  font-family:
-    "Pretendard",
-    sans-serif;
-
-  font-size: 10px;
+  color: var(--imory-gray-650);
 
   cursor: pointer;
 }
@@ -509,49 +374,42 @@
 }
 
 
+/* 시각 스타일/상태(색·hover(accent)·disabled 등)는
+   core/components/button.css의 .imory-button/.imory-button--ghost가
+   담당한다(admin-settings-load.js에서 class로 부여). 25×25 정사각
+   아이콘 크기는 Core sm/md 어디에도 없는 이 화면만의 값이라
+   width/height/padding으로 로컬 override한다 — min-height도 함께
+   override해야 한다: --sm의 min-height(26px)가 height(25px)보다
+   커서 그대로 두면 25×26으로 정사각형이 깨진다. */
+
 .category-action {
+  min-height: 25px;
+
   width: 25px;
 
   height: 25px;
 
   padding: 0;
-
-  border: 0;
-
-  background: transparent;
-
-  color: #bbbbbb;
-
-  font-size: 10px;
-
-  cursor: pointer;
 }
 
 
-.category-action:hover {
-  color: #e39ab5;
-}
-
+/* 시각 스타일/상태(색·hover(accent 신규 추가)·disabled 등)는
+   core/components/button.css의 .imory-button/.imory-button--ghost가
+   담당한다 — "+ add category" text-link 느낌을 위해 display/margin/
+   min-height/padding은 로컬로 남긴다. min-height는 Core --md의
+   30px을 쓰지 않고 auto로 되돌려, 원래처럼 padding(4px 0)과
+   font-size(10px)만으로 자연 높이가 정해지게 한다. */
 
 .add-category-button {
   display: block;
 
   margin:
     10px 14px
-    20px;
+    14px;
 
-  padding:
-    4px 0;
+  min-height: auto;
 
-  border: 0;
-
-  background: transparent;
-
-  color: #aaaaaa;
-
-  font-size: 10px;
-
-  cursor: pointer;
+  padding: 4px 0;
 }
 
 
@@ -579,51 +437,12 @@
 }
 
 
-.settings-tab {
-  padding: 0;
-
-  border: 0;
-
-  border-radius: 0;
-
-  background: transparent;
-
-  color: #b8b8b8;
-
-  font-size: 9px;
-
-  font-weight: 400;
-
-  letter-spacing: 0.08em;
-
-  cursor: pointer;
-
-  appearance: none;
-
-  -webkit-appearance: none;
-
-  transition:
-    color 0.2s ease;
-}
-
-
-.settings-tab:hover {
-  color: #e39ab5;
-}
-
-
-.settings-tab.active {
-  color: #555555;
-}
-
-
-.settings-tab-divider {
-  color: var(--system-border-strong);
-
-  font-size: 9px;
-
-  user-select: none;
-}
+/* 시각 스타일/상태(배경·색·hover·active·focus-visible 등)는
+   core/patterns/tabs.css의 .imory-tab/.imory-tab--text가 담당한다
+   (admin/index.html에서 class로 부여, customize/editor의
+   .customize-panel-tab과 공용). 이 화면만의 남길 layout 값은 없다.
+   JS의 classList.toggle("active", …)는 그대로 유지된다 —
+   .imory-tab--text.active가 이 class를 그대로 이어받는다. */
 
 
 .settings-subpanel {

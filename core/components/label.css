@@ -1,0 +1,36 @@
+/* =========================================================
+   Imory Core Components — Label v0.1
+
+   조사 대상: admin/admin-settings.css .editor-block label /
+   .setting-line label.
+
+   두 selector가 완전히 동일한 규칙(display/margin-bottom/
+   font-size/letter-spacing/color)이라 시각값을 그대로 승격한다 —
+   새 디자인 값은 만들지 않았다. .setting-line label만 admin/
+   index.html에서 실제로 쓰이고 있음을 확인했다(.editor-block은
+   현재 admin-settings.css를 로드하는 어떤 화면에도 매칭되는
+   요소가 없다 — customize/editor의 동명 selector와는 별개 CSS
+   파일이라 겹치지 않는다. dead selector로 보이나 이번 범위 밖이라
+   손대지 않았다).
+
+   color만 --imory-gray-600(#777777) primitive를 그대로 참조—
+   아직 semantic 미배정 상태라 매핑표와 동일하게 primitive를
+   직접 쓴다.
+
+   width/margin 등 배치 값은 넣지 않는다 — 각 화면 CSS(.setting-line
+   label 등)가 필요하면 .imory-label 위에 덧붙이는 구조를 가정한다
+   (Button/Input과 동일한 패턴).
+
+   이 파일은 core/design-tokens.css가 먼저 로드되어 있다고 가정한다.
+========================================================== */
+
+.imory-label {
+  display: block;
+
+  margin-bottom: var(--imory-space-200); /* 8px */
+
+  font-size: var(--imory-font-size-200); /* 10px */
+  letter-spacing: 0.08em;
+
+  color: var(--imory-gray-600);
+}

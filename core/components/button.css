@@ -1,0 +1,237 @@
+/* =========================================================
+   Imory Core Components — Button v0.1
+
+   기준: admin/admin-settings.css .save-button,
+   customize/editor/editor.css .customize-save-button
+   (두 곳 완전히 동일한 패턴 — 각진 사각형 / 얇은 gray border /
+   흰 배경 / hover에서만 핑크). primary는 이 default(회색) → hover
+   (핑크) 동작 자체를 Core 기준 패턴으로 승격했다 — "항상 핑크인
+   버튼"이 아니라 상호작용 시에만 accent가 드러나는 조용한 버튼.
+
+   이 파일은 core/design-tokens.css가 먼저 로드되어 있다고 가정한다
+   (semantic 토큰을 직접 정의하지 않고 var()로만 참조).
+
+   ⚠️ 아직 실제 서비스 버튼(.save-button, .logout-button,
+   .back-button, .customize-icon-button 등)을 이 컴포넌트로
+   치환하지 않았다. 이 파일은 core/components/button-preview.html
+   에서만 사용되는 설계 단계 산출물이다.
+
+   구조: .imory-button(base) + variant + size
+     variant: --primary / --secondary / --danger / --ghost
+     size:    --sm / --md (생략 시 --md와 동일)
+========================================================== */
+
+.imory-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--imory-space-100);
+
+  box-sizing: border-box;
+  margin: 0;
+  border: var(--imory-border-width) solid transparent;
+  border-radius: var(--imory-radius-100);
+
+  background: none;
+
+  font-family: var(--system-font-family);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-decoration: none;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+
+/* =========================================================
+   SIZE
+========================================================== */
+
+.imory-button,
+.imory-button--md {
+  min-height: 30px;
+  padding: 6px 12px;
+  font-size: var(--imory-font-size-200); /* 10px — save-button 기준 */
+}
+
+.imory-button--sm {
+  min-height: 26px;
+  padding: 4px 8px;
+  font-size: var(--imory-font-size-100); /* 9px — customize-icon-button 계열 */
+}
+
+
+/* =========================================================
+   VARIANT — primary
+
+   preview 검증 후 방향 재확정: "항상 핑크인 버튼"이 아니라
+   상호작용 시에만 pink accent가 드러나는 조용한 버튼. 실제
+   .save-button의 default(회색) → hover(핑크) 동작을 그대로
+   Core primary의 기준 패턴으로 승격한다 — 이번엔 색만이 아니라
+   "평소엔 중립, 상호작용 시에만 신호"라는 동작 자체를 승격한 것
+   (danger variant와 같은 철학).
+   focus-visible도 hover와 동일한 색 전환을 공유한다 — 키보드
+   사용자에게도 "지금 누르면 무슨 일이 일어나는지"가 마우스
+   사용자와 동일하게 보여야 하기 때문. 링(box-shadow)은 아래
+   공통 STATE — focus 규칙에서 별도로 더해진다.
+========================================================== */
+
+.imory-button--primary {
+  background: var(--system-bg);
+  border-color: var(--system-border);
+  color: var(--system-text-muted);
+}
+
+.imory-button--primary:hover:not(:disabled),
+.imory-button--primary:focus-visible:not(:disabled) {
+  background: var(--system-accent-soft);
+  border-color: var(--system-accent);
+  color: var(--system-accent);
+}
+
+/* active: hover보다 "한 단계만" 강하게 — border/text는 이미 accent
+   에 있어 더 진해질 표준 토큰이 없으므로, 배경만 accent-soft →
+   accent-border 한 단계 올려 눌림감을 준다. */
+.imory-button--primary:active:not(:disabled) {
+  background: var(--system-accent-border);
+  border-color: var(--system-accent-hover);
+  color: var(--system-accent-hover);
+}
+
+
+/* =========================================================
+   VARIANT — secondary
+
+   gray border/text. google-login-button / logout-button 계열을
+   그대로 따른다 (두 버튼 모두 이미 system 토큰을 쓰고 있음) —
+   기본은 옅은 border(system-border), hover에서 border만 한 단계
+   진해지는 것은 google-login-button:hover와 동일. hover 텍스트는
+   logout-button:hover의 #666666(미토큰 literal) 대신 가장 가까운
+   기존 토큰인 --system-text를 쓴다(새 literal을 만들지 않기 위함 —
+   완전히 같은 색은 아니지만 "한 단계 진해짐"이라는 의도는 동일).
+========================================================== */
+
+.imory-button--secondary {
+  background: var(--system-bg);
+  border-color: var(--system-border);
+  color: var(--system-text-muted);
+}
+
+.imory-button--secondary:hover:not(:disabled),
+.imory-button--secondary:focus-visible:not(:disabled) {
+  background: var(--system-surface);
+  border-color: var(--system-border-strong);
+  color: var(--system-text);
+}
+
+/* active: hover보다 한 단계만 강하게 — gray 계열을 벗어나지 않는다
+   (primary와 구분되는 지점). bg는 surface보다 한 톤 더 짙은
+   border 톤을 재사용하고, text는 strong까지 한 단계 더 진하게. */
+.imory-button--secondary:active:not(:disabled) {
+  background: var(--system-border);
+  border-color: var(--system-border-strong);
+  color: var(--system-text-strong);
+}
+
+
+/* =========================================================
+   VARIANT — danger
+
+   실제 근거: customize/editor/editor.css의 .customize-icon-button
+   / .customize-icon-button-danger 조합 — 두 클래스는 base(기본
+   상태)를 완전히 공유하고 danger 쪽은 :hover 규칙만 따로 있다.
+   즉 평상시엔 다른 중립 버튼과 구별되지 않다가, hover(실제 삭제
+   행동에 가까워질 때만) 옅은 red로 경고 신호를 준다 — Imory가
+   실제로 쓰고 있는 "평소엔 조용히, 위험할 때만 신호" 패턴을
+   그대로 보존한다. solid red를 기본값으로 쓰지 않는다.
+   --system-danger* semantic 토큰이 아직 없어 --imory-red-* primitive를
+   직접 참조한다 (design-tokens.css에 이미 존재, 새 literal 아님).
+========================================================== */
+
+.imory-button--danger {
+  background: var(--system-bg);
+  border-color: var(--system-border);
+  color: var(--system-text-muted);
+}
+
+.imory-button--danger:hover:not(:disabled),
+.imory-button--danger:focus-visible:not(:disabled) {
+  background: var(--imory-red-50);
+  border-color: var(--imory-red-200);
+  color: var(--imory-red-500);
+}
+
+/* active: hover보다 한 단계만 강하게 — red primitive가 50/200/500
+   세 단뿐이라 text는 이미 최고 단계(500)에 있다. border만 200 →
+   500으로 올려 눌림감을 준다. */
+.imory-button--danger:active:not(:disabled) {
+  background: var(--imory-red-50);
+  border-color: var(--imory-red-500);
+  color: var(--imory-red-500);
+}
+
+
+/* =========================================================
+   VARIANT — ghost
+
+   배경/테두리 없이 텍스트 중심. back-button / quote-preset-load 계열.
+   두 버튼 모두 기본 텍스트가 #aaaaaa(gray-400)라, semantic
+   --system-text-muted(gray-500, #999999)보다 한 단계 연한 실제
+   색을 그대로 보존하기 위해 primitive(--imory-gray-400)를
+   직접 참조한다 — --system-text-disabled와 값은 같지만, 이 톤은
+   disabled 의미가 아니라 faint/subtle 용도라 그 이름은 쓰지 않는다
+   (design-tokens-mapping.md의 "semantic 재검토 대상" 참고).
+========================================================== */
+
+.imory-button--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--imory-gray-400);
+}
+
+.imory-button--ghost:hover:not(:disabled),
+.imory-button--ghost:focus-visible:not(:disabled) {
+  color: var(--system-accent);
+}
+
+/* active: hover보다 한 단계만 강하게 */
+.imory-button--ghost:active:not(:disabled) {
+  color: var(--system-accent-hover);
+}
+
+
+/* =========================================================
+   STATE — focus
+
+   프로젝트 전체에서 버튼에 focus-visible ring이 실제로 쓰인 사례가
+   아직 없다 (input류만 border-color 변경). design-tokens.css의
+   --system-shadow-focus-ring을 버튼에 처음 적용한다.
+   색 전환(위 variant별 :focus-visible 규칙)과 별개로, 링은
+   variant와 무관하게 accent 톤 하나로 고정한다 — 별도 danger-ring
+   토큰은 만들지 않았다 (v0.1 범위 밖, 필요 시 v0.2에서 검토).
+========================================================== */
+
+.imory-button:focus-visible {
+  outline: none;
+  box-shadow: var(--system-shadow-focus-ring);
+}
+
+
+/* =========================================================
+   STATE — disabled
+
+   <button disabled>뿐 아니라 <a aria-disabled="true">처럼 네이티브
+   disabled가 없는 요소도 같은 룩+동작을 갖도록 함께 처리한다.
+========================================================== */
+
+.imory-button:disabled,
+.imory-button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+  pointer-events: none;
+}

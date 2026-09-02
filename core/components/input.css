@@ -1,0 +1,149 @@
+/* =========================================================
+   Imory Core Components — Input / Textarea v0.1
+
+   조사 대상: admin/admin-settings.css .setting-input /
+   .editor-block textarea, admin/admin-quote.css
+   .quote-text-input / .quote-test-textarea / .quote-select-input /
+   .quote-number-input, customize/editor/editor.css
+   .customize-field-input / -select / -textarea,
+   onboarding/index.html의 .setting-input 재사용.
+
+   Imory 원칙(Button과 동일한 결): 기본 상태는 최대한 조용하게
+   (흰 배경 + 옅은 gray border + 진한 gray 텍스트), hover는 아무
+   변화도 주지 않는다 — 사용자가 실제로 입력하려고 focus했을 때만
+   pink accent가 드러난다.
+
+   이 파일은 core/design-tokens.css가 먼저 로드되어 있다고 가정한다.
+
+   ⚠️ 아직 실제 서비스 input/textarea/select(.setting-input,
+   .quote-text-input, .customize-field-input 등)를 이 컴포넌트로
+   치환하지 않았다. core/components/input-preview.html에서만
+   검증하는 설계 단계 산출물이다.
+
+   구조: .imory-field(base, input/select 공통) + size + 형태 modifier
+     size:  --md (comfortable — settings/onboarding 기준, 38px)
+            --sm (compact — quote/customize 기준, 30px)
+     형태:  --textarea (input과 분리 — resize/line-height/min-height만
+                        override, 나머지 시각 규칙은 base와 완전히 공유)
+
+   width/margin 등 배치 값은 넣지 않는다 — 각 화면 CSS
+   (.setting-input, .quote-number-input 등)에 남겨서, 그 selector가
+   .imory-field 위에 필요한 만큼만 덧붙이는 구조를 가정한다
+   (Button 때 .save-button에 레이아웃만 남긴 것과 동일 패턴).
+========================================================== */
+
+.imory-field {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+
+  border: var(--imory-border-width) solid var(--system-border);
+  border-radius: var(--imory-radius-100);
+
+  outline: none;
+  background: var(--system-bg);
+
+  font-family: var(--system-font-family);
+  color: var(--imory-gray-750);
+
+  transition: border-color 0.2s ease;
+}
+
+
+/* =========================================================
+   SIZE
+
+   실제 값이 두 군집으로 뚜렷이 갈렸다 — comfortable(설정/온보딩,
+   38px·13px)과 compact(quote/customize, 30px 안팎·11px).
+   compact 쪽은 조사 대상 4곳의 padding/font-size가 완전히
+   일치하지 않아(11px vs 12px 등) 가장 반복도가 높은 값으로
+   맞췄다 — 정확한 값은 preview에서 실제 화면과 나란히 비교해서
+   확인한다.
+========================================================== */
+
+.imory-field--md {
+  min-height: 38px;
+  padding: 0 12px;
+  font-size: var(--imory-font-size-500); /* 13px — setting-input 기준 */
+}
+
+.imory-field--sm {
+  min-height: 30px;
+  padding: 8px 10px;
+  font-size: var(--imory-font-size-300); /* 11px — quote-text-input 기준 */
+}
+
+
+/* =========================================================
+   FORM — textarea
+
+   input과 시각 규칙(border/background/text/radius/focus/disabled)을
+   전부 공유하고, resize/line-height/min-height만 override한다.
+   실제 min-height는 화면마다 84~135px로 용도에 따라 다르므로
+   (customize 84px / editor-block 105px / quote 135px) 여기서는
+   가장 작은 실사용값을 기본으로 두고, 화면별로 필요하면 로컬
+   CSS에서 min-height만 다시 override하는 것을 전제로 한다 —
+   width/margin과 같은 성격의 "화면별 값"으로 취급.
+
+   ⚠️ onboarding의 bio textarea가 지금 .setting-input(input용,
+   height:38px 고정)을 그대로 재사용해서 3줄 textarea가 눌려
+   보이는 문제가 있었다 — Core 적용 시에는 반드시 이 modifier를
+   함께 붙여(.imory-field.imory-field--textarea.imory-field--md)
+   input과 분리해야 한다. (지금 단계에서는 실제 서비스 미수정)
+========================================================== */
+
+.imory-field--textarea {
+  min-height: 84px;
+  line-height: var(--imory-line-height-relaxed); /* 1.6 */
+  resize: vertical;
+}
+
+
+/* =========================================================
+   FORM — number
+
+   quote-number-input 계열: 우측 정렬만 다르고 나머지는 base와 동일.
+   width(78px 등)는 화면별 값이라 여기서 정하지 않는다.
+========================================================== */
+
+.imory-field--number {
+  text-align: right;
+}
+
+
+/* =========================================================
+   STATE — hover
+
+   의도적으로 규칙 없음. Imory Input은 hover에서 아무 변화도
+   주지 않는다 — 조용한 기본 상태를 유지하다가 focus에서만
+   신호를 준다.
+========================================================== */
+
+
+/* =========================================================
+   STATE — focus
+
+   기존 3종 outlier 포커스 색(#e0bdca/#e7b6c8/#e8b7c9)을 대신해
+   --system-accent 하나로 통일한다. 처음엔 core/design-tokens-
+   preview.html 06 섹션의 focus-ring 데모(accent border + shadow
+   ring)를 그대로 승격했었지만, border와 ring이 같은 색으로 겹쳐
+   두껍고 진하게 보인다는 피드백으로 ring(box-shadow)은 빼고 1px
+   accent border만 남긴다. --system-shadow-focus-ring 토큰 자체는
+   .imory-button과 공유하므로 여기서는 건드리지 않고, 이 규칙에서만
+   box-shadow를 쓰지 않는다.
+========================================================== */
+
+.imory-field:focus-visible {
+  border-color: var(--system-accent);
+  box-shadow: none;
+}
+
+
+/* =========================================================
+   STATE — disabled
+========================================================== */
+
+.imory-field:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

@@ -49,14 +49,14 @@
 
   border-top:
     1px solid
-    #eeeeee;
+    var(--system-border);
 }
 
 
 .quote-accordion:last-child {
   border-bottom:
     1px solid
-    #eeeeee;
+    var(--system-border);
 }
 
 
@@ -105,8 +105,14 @@
 }
 
 
+/* #b8b8b8 → --system-text-faint: 같은 행의 .quote-accordion-icon이
+   이미 이 토큰(#aaaaaa)을 쓰고 있어, 이 caption만 다른 값이면 같은
+   행 안에서 실제로 색이 어긋나 보인다. "비슷한 색 통합"이 아니라
+   같은 행의 불일치를 바로잡는 것 — b5b5b5/b8b8b8/bbbbbb의 다른
+   사용처는 이런 인접 문제가 없어 이번엔 건드리지 않는다. */
+
 .quote-accordion-toggle small {
-  color: #b8b8b8;
+  color: var(--system-text-faint);
 
   font-size: 9px;
 
@@ -122,7 +128,7 @@
   align-items: center;
   justify-content: center;
 
-  color: #aaaaaa;
+  color: var(--system-text-faint);
 
   font-size: 12px;
 }
@@ -173,7 +179,7 @@
 
   outline: none;
 
-  background: #ffffff;
+  background: var(--system-bg);
 
   color: #444444;
 
@@ -250,48 +256,29 @@
 }
 
 
+/* 시각 스타일/상태(border·background·hover·active·focus-visible
+   등)는 core/patterns/tabs.css의 .imory-tab/.imory-tab--boxed/
+   .imory-tab--boxed-neutral이 담당한다(admin-quote-panel.html에서
+   class 부여). hover border의 #efccd9는 --system-accent-border로
+   흡수되어 customize-page-tab과 값이 통일된다. default color만
+   --system-text-faint(#aaaaaa, "옅지만 disabled는 아닌" 보조 톤 —
+   core/design-tokens.css 참고)로 로컬 override — min-height/padding/
+   radius/font-size/letter-spacing은 customize-page-tab과 실제로
+   다른 값이라 Pattern에 넣지 않았다. */
+
 .quote-ratio-button {
   min-height: 28px;
 
   padding:
     5px 9px;
 
-  border:
-    1px solid
-    #eeeeee;
-
   border-radius: 0;
 
-  background: #ffffff;
-
-  color: #aaaaaa;
+  color: var(--system-text-faint);
 
   font-size: 9px;
 
   letter-spacing: 0.04em;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
-}
-
-
-.quote-ratio-button:hover {
-  color: #e39ab5;
-
-  border-color: #efccd9;
-}
-
-
-.quote-ratio-button.active {
-  color: #555555;
-
-  border-color: #d9d9d9;
-
-  background: #fafafa;
 }
 
 
@@ -353,7 +340,7 @@
 
   border-radius: 0;
 
-  background: #ffffff;
+  background: var(--system-bg);
 
   color: #555555;
 
@@ -401,7 +388,7 @@
 
   border-radius: 0;
 
-  background: #ffffff;
+  background: var(--system-bg);
 
   cursor: pointer;
 }
@@ -478,17 +465,9 @@
 }
 
 
-.quote-preview-heading {
-  display: flex;
-
-  align-items: baseline;
-  justify-content: space-between;
-
-  gap: 20px;
-
-  margin-bottom: 12px;
-}
-
+/* 레이아웃(flex/gap/margin)은 core/patterns/section-header.css의
+   .imory-section-header/--plain이 담당한다(admin-quote-panel.html에서
+   class 부여). 여기는 이 화면만의 span/small 색·크기만 남긴다. */
 
 .quote-preview-heading span {
   color: #777777;
@@ -544,9 +523,9 @@
 
   border:
     1px solid
-    #eeeeee;
+    var(--system-border);
 
-  background: #fafafa;
+  background: var(--system-surface);
 
   overflow: hidden;
 
@@ -831,6 +810,9 @@
   }
 
 
+  /* core/patterns/section-header.css의 .imory-section-header
+     gap(20px)을 모바일에서만 좁힌다 — 화면별 배치 override라
+     Pattern 파일이 아니라 여기 그대로 둔다. */
   .settings-group-title {
     gap: 10px;
   }
@@ -1160,11 +1142,11 @@
         env(safe-area-inset-bottom)
       );
 
-    background: #ffffff;
+    background: var(--system-bg);
 
     border-top:
       1px solid
-      #eeeeee;
+      var(--system-border);
   }
 
 
@@ -1187,11 +1169,11 @@
 
     z-index: 1;
 
-    background: #ffffff;
+    background: var(--system-bg);
 
     border-bottom:
       1px solid
-      #eeeeee;
+      var(--system-border);
   }
 
 
@@ -1210,6 +1192,18 @@
   }
 
 
+  /* 시각 스타일/상태(border·background·hover·focus-visible/pressed
+     등)는 core/patterns/tabs.css의 .imory-tab/.imory-tab--boxed/
+     .imory-tab--boxed-accent가 담당한다(admin-quote-panel.html에서
+     class 부여, aria-pressed="true"를 .active와 동일하게 인식하도록
+     Pattern 쪽 셀렉터를 확장해뒀다 — JS의 aria-pressed 토글 로직은
+     그대로). theme pink 3종(#f0d3de/#fff5f8/#d980a2)은 제거되고
+     system-accent/-soft/-hover로 통일됨. min-width/padding/font-size/
+     letter-spacing/border-color(#e5e5e5)는 이 화면 전용 값이라
+     Pattern에 넣지 않고 로컬로 남긴다. default color는 .imory-tab--boxed
+     base에 정의가 없어(hover/active만 색을 지정) .quote-ratio-button과
+     같은 방식으로 로컬에 남겨둔다. */
+
   .quote-mobile-tab {
     flex: 1 1 0;
 
@@ -1218,19 +1212,9 @@
 
     padding: 7px 5px;
 
-    border:
-      1px solid
-      #e5e5e5;
+    border-color: #e5e5e5;
 
-    border-radius: 0;
-
-    background: transparent;
-
-    color: #999999;
-
-    font-family:
-      "Pretendard",
-      sans-serif;
+    color: var(--system-text-muted);
 
     font-size: 8.5px;
     font-weight: 500;
@@ -1239,19 +1223,8 @@
 
     white-space: nowrap;
 
-    cursor: pointer;
-
     -webkit-tap-highlight-color:
       transparent;
-  }
-
-
-  .quote-mobile-tab[aria-pressed="true"] {
-    border-color: #f0d3de;
-
-    background: #fff5f8;
-
-    color: #d980a2;
   }
 
 
@@ -1336,7 +1309,7 @@
 
   border-top:
     1px solid
-    #eeeeee;
+    var(--system-border);
 }
 
 
@@ -1358,7 +1331,7 @@
 
   border-bottom:
     1px solid
-    #eeeeee;
+    var(--system-border);
 
   background:
     transparent;
@@ -1380,6 +1353,13 @@
 
 /* 실제 글에 적용되는 프리셋으로 지정하는 버튼 */
 
+/* default 색만 --system-text-faint로 연결한다(.quote-preset-delete와
+   같은 값이 되어 같은 행 안에서 계속 일치한다). border/hover/disabled는
+   Button Core에 편입하지 않고 그대로 로컬에 남긴다 — disabled는
+   범용 비활성이 아니라 "현재 사용 중"을 accent 색으로 알리는 의미
+   있는 상태라 Core의 공통 disabled(opacity dimming)로 흡수하면 그
+   신호가 약해진다. */
+
 .quote-preset-activate {
   display: block;
 
@@ -1395,8 +1375,7 @@
   background:
     transparent;
 
-  color:
-    #bbbbbb;
+  color: var(--system-text-faint);
 
   font-size: 8px;
 
@@ -1488,43 +1467,32 @@
 
 /* 삭제 버튼 */
 
+/* 시각 스타일/상태(배경·색·hover/focus-visible)는
+   core/components/button.css의 .imory-button/.imory-button--ghost/
+   --sm이 담당한다(admin-quote-preset-list.js에서 class 부여). ghost
+   기본색이 정확히 --system-text-faint와 같은 --imory-gray-400
+   (#aaaaaa)이라 값 변화 없이 편입된다. 28×28 원형 아이콘 크기는
+   Core --sm(26px)과 달라 로컬 override로 유지 — min-height도 함께
+   override해야 한다(category-action과 동일한 이유). hover의 옅은
+   핑크 배경(#fffafb = --system-accent-soft)은 ghost 기본 동작에
+   없어 로컬로 추가한다 — 이번엔 danger(red)로 바꾸지 않는다. */
+
 .quote-preset-delete {
-  display: flex;
-
-  align-items: center;
-  justify-content: center;
-
   width: 28px;
 
   height: 28px;
 
+  min-height: 28px;
+
   padding: 0;
 
-  border: 0;
-
-  outline: none;
-
-  background:
-    transparent;
-
-  color:
-    #bbbbbb;
-
   font-size: 12px;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    background 0.2s ease;
 }
 
 
-.quote-preset-delete:hover {
-  color: #e39ab5;
-
-  background:
-    #fffafb;
+.quote-preset-delete:hover:not(:disabled),
+.quote-preset-delete:focus-visible:not(:disabled) {
+  background: var(--system-accent-soft);
 }
 
 
@@ -1679,28 +1647,32 @@
 
 /* ACTION / DIALOGUE 제목 */
 
+/* flex가 아닌 inline 배치(span+small이 공백 하나 간격으로 붙어 렌더링)라
+   core/patterns/section-header.css에는 편입하지 않는다 — 값이 그대로
+   일치하는 font-size/font-weight/color만 토큰으로 연결한다. */
+
 .quote-special-heading {
-  font-size: 10px;
+  font-size: var(--imory-font-size-200); /* 10px */
 }
 
 
 .quote-special-heading span {
-  font-size: 10px;
+  font-size: var(--imory-font-size-200); /* 10px */
 
-  font-weight: 500;
+  font-weight: var(--imory-font-weight-medium); /* 500 */
 
   letter-spacing: 0.08em;
 
-  color: #555555;
+  color: var(--imory-gray-700); /* #555555 */
 }
 
 
 .quote-special-heading small {
-  font-size: 9px;
+  font-size: var(--imory-font-size-100); /* 9px */
 
-  font-weight: 400;
+  font-weight: var(--imory-font-weight-regular); /* 400 */
 
-  color: #aaaaaa;
+  color: var(--system-text-faint); /* #aaaaaa */
 }
 
 

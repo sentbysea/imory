@@ -54,6 +54,36 @@
 
   <link
     rel="stylesheet"
+    href="../core/components/button.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/components/input.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/components/label.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/patterns/form-actions.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/patterns/tabs.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/patterns/section-header.css"
+  >
+
+  <link
+    rel="stylesheet"
     href="./admin-shell.css"
   >
 
@@ -334,31 +364,31 @@
             >
 
               <button
-                class="settings-tab active"
+                class="settings-tab imory-tab imory-tab--text active"
                 id="categoryTabButton"
                 type="button"
               >
                 카테고리
               </button>
 
-              <span class="settings-tab-divider">
+              <span class="settings-tab-divider imory-tab-divider">
                 |
               </span>
 
               <button
-                class="settings-tab"
+                class="settings-tab imory-tab imory-tab--text"
                 id="homeTabButton"
                 type="button"
               >
                 홈페이지
               </button>
 
-              <span class="settings-tab-divider">
+              <span class="settings-tab-divider imory-tab-divider">
                 |
               </span>
 
               <button
-                class="settings-tab"
+                class="settings-tab imory-tab imory-tab--text"
                 id="dataTabButton"
                 type="button"
               >
@@ -379,7 +409,7 @@
           hidden
         >
 
-          <div class="settings-group-title">
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
 
             <span>
               CATEGORIES
@@ -399,7 +429,7 @@
 
 
           <button
-            class="add-category-button"
+            class="add-category-button imory-button imory-button--ghost imory-button--md"
             id="addCategoryButton"
             type="button"
           >
@@ -407,13 +437,17 @@
           </button>
 
 
-          <button
-            class="save-button"
-            id="categorySaveButton"
-            type="button"
-          >
-            save
-          </button>
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="categorySaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
 
 
           <p
@@ -437,7 +471,7 @@
           id="bgmSettingsPanel"
         >
 
-          <div class="settings-group-title">
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
 
             <span>
               BGM
@@ -452,13 +486,13 @@
 
           <div class="setting-line">
 
-            <label for="bgmUrlInput">
+            <label for="bgmUrlInput" class="imory-label">
               YouTube URL
             </label>
 
             <input
               id="bgmUrlInput"
-              class="setting-input"
+              class="setting-input imory-field imory-field--md"
               type="url"
               placeholder="https://www.youtube.com/watch?v=..."
             >
@@ -466,13 +500,17 @@
           </div>
 
 
-          <button
-            class="save-button"
-            id="bgmSaveButton"
-            type="button"
-          >
-            save
-          </button>
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="bgmSaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
 
 
           <p
@@ -499,7 +537,7 @@
           id="myBannerSettingsPanel"
         >
 
-          <div class="settings-group-title">
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
 
             <span>
               MY BANNER
@@ -530,7 +568,7 @@
 
 
             <label
-              class="my-banner-change-button"
+              class="my-banner-change-button imory-button imory-button--primary imory-button--md"
               for="myBannerFileInput"
             >
               change
@@ -555,13 +593,13 @@
 
           <div class="setting-line">
 
-            <label for="myBannerUrlInput">
+            <label for="myBannerUrlInput" class="imory-label">
               배너 클릭 시 이동할 URL
             </label>
 
             <input
               id="myBannerUrlInput"
-              class="setting-input"
+              class="setting-input imory-field imory-field--md"
               type="url"
               placeholder="https://바이브.me"
             >
@@ -571,7 +609,7 @@
 
           <div class="setting-line">
 
-            <label for="myBannerImageUrlDisplay">
+            <label for="myBannerImageUrlDisplay" class="imory-label">
               고정 IMAGE URL
             </label>
 
@@ -579,13 +617,13 @@
 
               <input
                 id="myBannerImageUrlDisplay"
-                class="setting-input"
+                class="setting-input imory-field imory-field--md"
                 type="text"
                 readonly
               >
 
               <button
-                class="my-banner-copy-button"
+                class="my-banner-copy-button imory-button imory-button--secondary imory-button--md"
                 id="myBannerCopyImageUrlButton"
                 type="button"
               >
@@ -597,13 +635,17 @@
           </div>
 
 
-          <button
-            class="save-button"
-            id="myBannerSaveButton"
-            type="button"
-          >
-            save
-          </button>
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="myBannerSaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
 
 
           <p
@@ -620,7 +662,7 @@
           id="blogTitleSettingsPanel"
         >
 
-          <div class="settings-group-title">
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
 
             <span>
               블로그 제목
@@ -635,13 +677,13 @@
 
           <div class="setting-line">
 
-            <label for="blogTitleInput">
+            <label for="blogTitleInput" class="imory-label">
               제목
             </label>
 
             <input
               id="blogTitleInput"
-              class="setting-input"
+              class="setting-input imory-field imory-field--md"
               type="text"
               placeholder="Imory"
             >
@@ -649,13 +691,17 @@
           </div>
 
 
-          <button
-            class="save-button"
-            id="blogTitleSaveButton"
-            type="button"
-          >
-            save
-          </button>
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="blogTitleSaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
 
 
           <p
@@ -672,7 +718,7 @@
           id="cursorSettingsPanel"
         >
 
-          <div class="settings-group-title">
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
 
             <span>
               마우스 포인터
@@ -687,13 +733,13 @@
 
           <div class="setting-line">
 
-            <label for="cursorUrlInput">
+            <label for="cursorUrlInput" class="imory-label">
               커서 이미지 URL
             </label>
 
             <input
               id="cursorUrlInput"
-              class="setting-input"
+              class="setting-input imory-field imory-field--md"
               type="url"
               placeholder="https://example.com/cursor.png"
             >
@@ -701,13 +747,17 @@
           </div>
 
 
-          <button
-            class="save-button"
-            id="cursorSaveButton"
-            type="button"
-          >
-            save
-          </button>
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="cursorSaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
 
 
           <p
@@ -732,7 +782,7 @@
           hidden
         >
 
-          <div class="settings-group-title">
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
 
             <span>
               DATA
@@ -747,12 +797,12 @@
 
           <div class="setting-line">
 
-            <label>
+            <label class="imory-label">
               스킨 내보내기
             </label>
 
             <button
-              class="save-button"
+              class="save-button imory-button imory-button--primary imory-button--md"
               type="button"
               disabled
             >
@@ -764,12 +814,12 @@
 
           <div class="setting-line">
 
-            <label>
+            <label class="imory-label">
               백업
             </label>
 
             <button
-              class="save-button"
+              class="save-button imory-button imory-button--primary imory-button--md"
               type="button"
               disabled
             >

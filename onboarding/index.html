@@ -32,12 +32,37 @@
 
   <link
     rel="stylesheet"
+    href="../core/design-tokens.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/components/button.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/components/input.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/patterns/form-actions.css"
+  >
+
+  <link
+    rel="stylesheet"
     href="../admin/admin-shell.css"
   >
 
   <link
     rel="stylesheet"
     href="../admin/admin-settings.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./onboarding.css"
   >
 
 </head>
@@ -71,10 +96,9 @@
 
           <input
             id="onboardingNicknameInput"
-            class="setting-input"
+            class="setting-input imory-field imory-field--md"
             type="text"
             maxlength="30"
-            placeholder="홍지원"
           >
 
         </div>
@@ -83,15 +107,17 @@
         <div class="setting-line">
 
           <label for="onboardingSlugInput">
-            공개 홈페이지 주소 (imory.me/이 값)
+            공개 홈페이지 주소 (imory.me/<span
+              id="onboardingSlugPreview"
+              class="onboarding-slug-preview onboarding-slug-preview--placeholder"
+            >here♡</span>)
           </label>
 
           <input
             id="onboardingSlugInput"
-            class="setting-input"
+            class="setting-input imory-field imory-field--md"
             type="text"
             maxlength="30"
-            placeholder="예: hongjiwon"
           >
 
           <p
@@ -102,29 +128,17 @@
         </div>
 
 
-        <div class="setting-line">
+        <div class="imory-form-actions">
 
-          <label for="onboardingBioInput">
-            자기소개 (선택)
-          </label>
-
-          <textarea
-            id="onboardingBioInput"
-            class="setting-input"
-            rows="3"
-            maxlength="200"
-          ></textarea>
+          <button
+            class="save-button imory-button imory-button--primary imory-button--md"
+            id="onboardingSubmitButton"
+            type="button"
+          >
+            시작하기
+          </button>
 
         </div>
-
-
-        <button
-          class="save-button"
-          id="onboardingSubmitButton"
-          type="button"
-        >
-          시작하기
-        </button>
 
 
         <p

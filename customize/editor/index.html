@@ -27,6 +27,21 @@
 
   <link
     rel="stylesheet"
+    href="../../core/design-tokens.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../../core/components/button.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../../core/patterns/tabs.css"
+  >
+
+  <link
+    rel="stylesheet"
     href="./editor.css"
   >
 
@@ -100,31 +115,31 @@
         >
 
           <button
-            class="customize-panel-tab active"
+            class="customize-panel-tab imory-tab imory-tab--text active"
             id="panelTabPageButton"
             type="button"
           >
             페이지 설정
           </button>
 
-          <span class="customize-panel-tab-divider">
+          <span class="customize-panel-tab-divider imory-tab-divider">
             |
           </span>
 
           <button
-            class="customize-panel-tab"
+            class="customize-panel-tab imory-tab imory-tab--text"
             id="panelTabAddButton"
             type="button"
           >
             요소 추가
           </button>
 
-          <span class="customize-panel-tab-divider">
+          <span class="customize-panel-tab-divider imory-tab-divider">
             |
           </span>
 
           <button
-            class="customize-panel-tab"
+            class="customize-panel-tab imory-tab imory-tab--text"
             id="panelTabElementButton"
             type="button"
           >
@@ -652,7 +667,7 @@
 
                 <button
                   type="button"
-                  class="customize-icon-button"
+                  class="customize-icon-button imory-button imory-button--primary imory-button--sm"
                   id="duplicateBlockButton"
                   title="이 요소 복제"
                 >
@@ -661,7 +676,7 @@
 
                 <button
                   type="button"
-                  class="customize-icon-button customize-icon-button-danger"
+                  class="customize-icon-button customize-icon-button-danger imory-button imory-button--danger imory-button--sm"
                   id="deleteBlockButton"
                   title="이 요소 삭제"
                 >
@@ -688,7 +703,7 @@
       <div class="customize-editor-panel-footer">
 
         <button
-          class="customize-save-button"
+          class="customize-save-button imory-button imory-button--primary imory-button--md"
           id="customizeSaveButton"
           type="button"
           disabled

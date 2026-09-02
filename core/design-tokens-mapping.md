@@ -40,7 +40,7 @@
 | `#eeeeee` | `--imory-gray-100` (`--system-border`, `--theme-border`) | 기본 divider/border (가장 빈도 높음) |
 | `#dddddd` | `--imory-gray-200` (`--system-border-strong`) | 진한 border |
 | `#cccccc` | `--imory-gray-300` | border/disabled (아직 semantic 미배정) |
-| `#aaaaaa` | `--imory-gray-400` (`--system-text-disabled`) | 비활성 아이콘/텍스트 — ⚠️ 아래 "semantic 재검토 대상" 참고 |
+| `#aaaaaa` | `--imory-gray-400` (`--system-text-disabled`, `--system-text-faint`) | 비활성 아이콘/텍스트(`--system-text-disabled`) 또는 hint/caption/unit/icon glyph/기본(비선택) 상태 같은 "본문보다 낮은 우선순위의 보조 텍스트"(`--system-text-faint`, 신설) — 실사용처는 거의 전부 후자였다. 아래 "semantic 재검토 대상" 참고 |
 | `#999999` | `--imory-gray-500` (`--system-text-muted`, `--theme-text-muted`) | placeholder, 보조 텍스트 |
 | `#777777` | `--imory-gray-600` | 라벨/보조 텍스트 (아직 semantic 미배정) |
 | `#555555` | `--imory-gray-700` | 실제 `posts-list-detail.css`/`cover-profile.css` 본문 텍스트 리터럴 (현재 semantic 미배정 — `--theme-text`는 당분간 gray-800을 가리킴) |
@@ -48,7 +48,9 @@
 | `#222222` | `--imory-gray-900` (`--system-text-strong`) | 제목/강조 텍스트 |
 
 **Core에 넣지 않은 근접값 (literal 유지, v0.2에서 필요성 확인 후 추가 검토)**
-`#f6f6f6`, `#f2f2f2`, `#f1f1f1`, `#e8e8e8`, `#e5e5e5`, `#bbbbbb`, `#888888`, `#666666`, `#c2c2c2`, `#c5c5c5`, `#c7c7c7`, `#c9c9c9`, `#d0d0d0`, `#d4d4d4`, `#b5b5b5`, `#b8b8b8`, `#b3b3b3`, `#c1c1c1`, `#ececec`, `#ededed`, `#dedede`, `#a9a9a9`, `#f5f5f5` 등
+`#f6f6f6`, `#f2f2f2`, `#f1f1f1`, `#e8e8e8`, `#e5e5e5`, `#bbbbbb`, `#666666`, `#c2c2c2`, `#c5c5c5`, `#c7c7c7`, `#c9c9c9`, `#d0d0d0`, `#d4d4d4`, `#b5b5b5`, `#b8b8b8`, `#b3b3b3`, `#c1c1c1`, `#ececec`, `#ededed`, `#dedede`, `#a9a9a9`, `#f5f5f5` 등
+
+> **`#888888` 승격 (onboarding/category-type-select Core 편입 작업)**: `.category-type-select`가 Core Input(`.imory-field`/`.imory-field--sm`)으로 편입되면서 border/radius/background 등은 Core 기본값으로 대체됐지만, text color만은 Core 기본값(`--imory-gray-750`, `#444444`)과 시각적으로 크게 달라 합치지 않고 `--imory-gray-650`(`#888888`) primitive로 별도 승격해 로컬 override로 남겼다. semantic은 아직 배정하지 않음 — 실사용처가 `.category-type-select` 하나뿐이라 다른 outlier처럼 v0.2로 미루지 않고 이번에 바로 승격했다.
 
 > **v0.2 우선 검토 후보: `#444444`** — 다수 파일(`admin-shell.css`, `admin-quote.css`, `posts-preview-export.css` 등)에서 반복 사용되어 다른 outlier보다 사용 빈도가 뚜렷이 높다. 이번 v0.1 Core 목록에서는 의도적으로 제외했지만, `--imory-gray-750` 등으로 다음 단계에서 우선적으로 검토한다.
 
@@ -149,10 +151,12 @@ elevation shadow(sm/md/lg)는 만들지 않음 — 프로젝트 전체에 box-sh
 
 ---
 
-## semantic 재검토 대상
+## semantic 재검토 대상 — 해결됨 (`--system-text-faint` 신설)
 
-- **`#aaaaaa` (`--imory-gray-400`)** — `admin-shell.css`에서 6곳(`.login-desc`, `.user-email`, `.home-desc`, `.menu-copy small`, `.back-button`, `.view-heading p`)이 모두 이 값을 쓰는데, 실제 역할은 전부 **muted/secondary description text**이고 실제 비활성(disabled) 상태 요소는 하나도 없다. 값은 `--system-text-disabled`와 정확히 일치하지만 이름이 실제 역할과 맞지 않아, 이 6곳은 이번 admin-shell.css 치환에서 **literal로 유지**했다.
-- 반복도로 볼 때 별도 `--system-text-subtle` 같은 semantic token 신설이 합리적일 수 있으나, 지금 단계에서는 만들지 않는다 — 다른 파일(예: `admin-settings.css`, `admin-quote.css`)의 `#aaaaaa`/근접 muted-text 사용처를 더 확인한 뒤 v0.2에서 결정.
+- **`#aaaaaa` (`--imory-gray-400`)** — `admin-shell.css` 6곳(`.login-desc`, `.user-email`, `.home-desc`, `.menu-copy small`, `.back-button`, `.view-heading p`)이 모두 이 값을 쓰는데, 실제 역할은 전부 **muted/secondary description text**이고 실제 비활성(disabled) 상태 요소는 하나도 없다. 값은 `--system-text-disabled`와 정확히 일치하지만 이름이 실제 역할과 맞지 않는다는 문제가 있었다.
+- Empty State 조사(아래 참고)에서 `admin-quote.css`/`customize/editor.css`까지 합쳐 `#aaaaaa` 사용처가 11곳으로 재확인되면서, `--system-text-disabled`와 분리된 **`--system-text-faint: var(--imory-gray-400)`를 `core/design-tokens.css`에 신설**했다. `--system-text-disabled`는 의미를 바꾸지 않고 그대로 둔다.
+- 정확히 `#aaaaaa`와 일치하는 11곳만 이번에 `var(--system-text-faint)`로 치환했다(전부 값 동일 — 시각 변화 없음): `admin-shell.css`의 `.login-desc`/`.user-email`/`.home-desc`/`.menu-copy small`/`.back-button`/`.view-heading p`(6곳), `admin-quote.css`의 `.quote-accordion-icon`/`.quote-ratio-button`(기본 상태)/`.quote-special-heading small`(3곳), `customize/editor/editor.css`의 `.customize-accordion-icon`/`.customize-field-unit`(2곳).
+- `#b5b5b5`(8곳: `.settings-group-title small`, `.quote-preview-heading small`, `.quote-unit`×2, `.customize-editor-subtitle`, `.customize-panel-hint`, `.customize-field-hint`, `.customize-elements-empty`), `#b8b8b8`(2곳: `core/patterns/tabs.css` `.imory-tab--text` 기본색, `.quote-accordion-toggle small`), `#bbbbbb`(5곳: `.quote-preset-empty`, `.my-banner-preview-empty`, `.coming-soon-text`, `.quote-preset-activate` 기본 상태, `.menu-arrow`)는 **같은 역할(faint) 후보 군집이지만 값이 `#aaaaaa`와 미세하게 달라 이번에는 literal로 유지**한다 — `--system-text-faint`로 흡수할지는 드리프트를 의식적으로 받아들이는 별도 결정이 필요해 다음 단계로 미룬다.
 
 ## 적용 현황 (실서비스 연결 시작)
 
@@ -182,10 +186,27 @@ elevation shadow(sm/md/lg)는 만들지 않음 — 프로젝트 전체에 box-sh
   - `themes/sua/heart-interaction.css` `.love-drop` — `color: #ee9fbd` → `color: var(--theme-accent)`
   - `themes/sua/cover-profile.css` `.profile-text`, `.more-text` — `color: #777777` → `color: var(--theme-text)`
 - `.love-message`(`#e893b4`, outlier)와 border 관련 항목은 시험 대상에서 제외 — 매핑표 근거 없이 억지로 채우지 않음.
+- `admin-quote.css` literal → token 치환 (17곳):
+  - `.quote-accordion`(border-top), `.quote-accordion:last-child`(border-bottom), `.quote-ratio-button`(border), `.quote-preview-stage`(border), `.quote-controls`(모바일, border-top), `.quote-mobile-tabbar-wrap`(모바일, border-bottom), `.quote-preset-list`(border-top), `.quote-preset-item`(border-bottom) — `#eeeeee` → `var(--system-border)` (8곳)
+  - `.quote-text-input`/`.quote-test-textarea`/`.quote-select-input`, `.quote-ratio-button`, `.quote-number-input`, `.quote-color-input`, `.quote-controls`(모바일), `.quote-mobile-tabbar-wrap`(모바일) — `#ffffff` → `var(--system-bg)` (6곳)
+  - `.quote-ratio-button.active`, `.quote-preview-stage` — `#fafafa` → `var(--system-surface)` (2곳)
+  - `.quote-mobile-tab`(color) — `#999999` → `var(--system-text-muted)` (1곳)
+  - `#ececec`, `#555555`, `#d9d9d9`, `#e5e5e5`, `#444444` 등 근접값은 치환하지 않고 literal 유지.
+- `admin-quote.css`의 `.quote-preview-*`(title/text/source/canvas)는 관리자 UI가 아니라 **실제 발췌(카드) 결과물**을 렌더링하는 영역이라 판단해 system 토큰 치환에서 제외 — `#ffffff`(canvas 배경), `#222222`(title), `#333333`(text), `#999999`(source)는 값이 system 토큰과 정확히 일치해도 literal로 남김. content/theme 성격 영역은 관리자 화면 안에 있어도 system UI로 취급하지 않는다는 원칙을 여기서 처음 명문화.
+- `.quote-accordion-icon`, `.quote-ratio-button`(기본 상태), `.quote-special-heading small`의 `#aaaaaa` 3곳도 같은 이유로 이번엔 literal 유지했었으나, 이후 "semantic 재검토 대상" 항목에서 `--system-text-faint` 신설과 함께 `var(--system-text-faint)`로 치환됨.
+
+## semantic 재검토 대상 (추가) — 해결됨
+
+- **`#aaaaaa`가 v0.2 재검토 대상인 이유가 `admin-quote.css`에서도 재확인됨.** 이 파일에서도 disabled 의미로 쓰인 곳은 하나도 없고, 아이콘(`.quote-accordion-icon`)·기본 상태 버튼 텍스트(`.quote-ratio-button`)·보조 캡션(`.quote-special-heading small`) 전부 **faint/subtle 보조 톤**으로 쓰인다. 위 "semantic 재검토 대상" 항목과 합쳐 `--system-text-faint` 신설 및 11곳 치환으로 정리했다.
+
+## Empty State — Pattern/Component로 만들지 않음
+
+`.quote-preset-empty`(admin-quote.css) / `.my-banner-preview-empty`(admin-settings.css) / `.customize-elements-empty`(customize/editor/editor.css) 3곳을 조사했으나, box model 속성 자체가 다르고(margin vs padding) 값도 다르며(12px vs 14px) 테두리 유무도 갈려서(dashed box는 1곳뿐) 공유되는 규칙이 색상 하나뿐이었다. Section Header 때처럼 구조(flex/gap 등)가 실제로 일치하는 경우가 아니라 `.imory-empty-state` 같은 Pattern/Component를 만들지 않기로 했다 — 억지로 만들면 실제로 묶이는 코드 없이 빈 껍데기만 남는다. 각자 local layout은 유지하고, 색 통일(`#bbbbbb`/`#b5b5b5` → `--system-text-faint` 흡수 여부)만 위 "semantic 재검토 대상" 항목의 남은 후보 군집과 함께 다음 단계에서 판단한다. `.coming-soon-text`(admin-settings.css)는 "리스트가 비었다"가 아니라 "기능 자체가 아직 없다"는 다른 역할이라 애초에 Empty State 공용화 대상에서 제외했다.
 
 ## 다음 단계
 
 1. 브라우저에서 SUA 하트/텍스트 색이 기존과 동일한지, system UI(메뉴 등)에 변화가 없는지 육안 확인
-2. 확인되면 파일 단위로 점진적 치환 계속 진행 (지금은 위 2곳뿐)
-3. 치환 과정에서 발견되는 추가 outlier는 이 표에 계속 추가
-4. 토큰 미리보기 테스트 페이지(`core/design-tokens-preview.html`)는 별도로 유지, 실서비스와 무관
+2. `admin-quote.css` 적용분도 관리자 화면에서 아코디언/버튼/입력창/모바일 탭바 육안 확인
+3. **system 토큰의 실전 검증은 `admin-shell.css` + `admin-settings.css` + `admin-quote.css` 적용으로 충분히 확인됐다고 보고, 추가적인 대규모 literal 일괄 치환은 여기서 잠시 멈춘다.** 남은 outlier/근접값 정리는 v0.2로 미룬다.
+4. 다음 작업은 **Core Components v0.1** 설계로 이동 (버튼/입력/탭 등 반복 패턴을 컴포넌트 단위로 정리) — 이 문서는 계속 참고용으로 유지하되, 컴포넌트 설계는 별도 문서에서 진행.
+5. 토큰 미리보기 테스트 페이지(`core/design-tokens-preview.html`)는 별도로 유지, 실서비스와 무관

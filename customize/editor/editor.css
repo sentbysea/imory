@@ -156,47 +156,26 @@ button {
 }
 
 
+/* 시각 스타일/상태(border·background·색·hover·active·focus-visible
+   등)는 core/patterns/tabs.css의 .imory-tab/.imory-tab--boxed/
+   .imory-tab--boxed-accent가 담당한다(editor.js에서 class 부여).
+   active 배경도 theme 값(#fff5f8) 대신 --system-accent-soft
+   (#fffafb)로 바뀐다. flex:1(등분 폭)/padding/radius/font-size/
+   letter-spacing은 quote-ratio-button과 실제로 다른 값이라
+   Pattern에 넣지 않고 이 화면만의 값으로 남긴다. */
+
 .customize-page-tab {
   flex: 1;
 
   padding: 8px 0;
 
-  border:
-    1px solid
-    #eeeeee;
-
   border-radius: 2px;
 
-  background: #ffffff;
-
-  color: #999999;
+  color: var(--system-text-muted);
 
   font-size: 10px;
 
   letter-spacing: 0.08em;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
-}
-
-
-.customize-page-tab:hover {
-  color: #e39ab5;
-
-  border-color: #e7c7d3;
-}
-
-
-.customize-page-tab.active {
-  color: #c66f8e;
-
-  border-color: #e39ab5;
-
-  background: #fff5f8;
 }
 
 
@@ -218,42 +197,13 @@ button {
 }
 
 
-.customize-panel-tab {
-  padding: 0;
-
-  border: 0;
-
-  background: transparent;
-
-  color: #b8b8b8;
-
-  font-size: 9px;
-
-  letter-spacing: 0.08em;
-
-  cursor: pointer;
-
-  transition: color 0.2s ease;
-}
-
-
-.customize-panel-tab:hover {
-  color: #e39ab5;
-}
-
-
-.customize-panel-tab.active {
-  color: #555555;
-}
-
-
-.customize-panel-tab-divider {
-  color: #dddddd;
-
-  font-size: 9px;
-
-  user-select: none;
-}
+/* 시각 스타일/상태(배경·색·hover·active·focus-visible 등)는
+   core/patterns/tabs.css의 .imory-tab/.imory-tab--text가 담당한다
+   (index.html에서 class로 부여, admin의 .settings-tab과 공용).
+   이 화면만의 남길 layout 값은 없다. divider의 #dddddd literal도
+   .imory-tab-divider(var(--system-border-strong))로 대체되어
+   토큰과 값이 일치한다(#dddddd = --imory-gray-200 = --system-
+   border-strong, 시각 변화 없음). */
 
 
 
@@ -339,7 +289,7 @@ button {
 
 
 .customize-accordion-icon {
-  color: #aaaaaa;
+  color: var(--system-text-faint);
 
   font-size: 12px;
 }
@@ -679,47 +629,33 @@ button {
 }
 
 
+/* 시각 스타일/상태(배경·테두리·색·hover/focus-visible)는
+   core/components/button.css의 .imory-button/.imory-button--primary/
+   --danger/--sm이 담당한다(customize/editor/index.html에서 class
+   부여) — default 값(배경 system-bg/테두리 system-border/텍스트
+   text-muted)이 primary·danger 공통 default와 정확히 일치하고,
+   danger hover(red-500/200/50)도 이 selector 자체가 근거였던 값이라
+   무손실로 편입된다. padding/min-height/letter-spacing은 Core --sm
+   (4px 8px/26px/0.06em)과 달라 로컬로 유지 — min-height는 원래
+   지정한 적이 없어 auto로 되돌려 버튼 높이가 커지지 않게 한다.
+   plain(복제) 버튼의 hover 테두리/배경(#e7c7d3/#fff5f8)은 Core
+   primary의 hover 값(accent 자체/pink-25)과 미세하게 달라 로컬로
+   유지 — 텍스트 색만 정확히 같아 primary가 그대로 담당한다. */
+
 .customize-icon-button {
   padding: 5px 9px;
 
-  border:
-    1px solid
-    #eeeeee;
-
-  border-radius: 2px;
-
-  background: #ffffff;
-
-  color: #999999;
-
-  font-size: 9px;
+  min-height: auto;
 
   letter-spacing: 0.04em;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
 }
 
 
-.customize-icon-button:hover {
-  color: #e39ab5;
-
+.customize-icon-button:hover:not(.customize-icon-button-danger),
+.customize-icon-button:focus-visible:not(.customize-icon-button-danger) {
   border-color: #e7c7d3;
 
   background: #fff5f8;
-}
-
-
-.customize-icon-button-danger:hover {
-  color: #c65a5a;
-
-  border-color: #e7bcbc;
-
-  background: #fff5f5;
 }
 
 
@@ -933,7 +869,7 @@ button {
 
   font-size: 9px;
 
-  color: #aaaaaa;
+  color: var(--system-text-faint);
 }
 
 
@@ -1103,49 +1039,12 @@ button {
    호버 시 분홍).
 ========================================================== */
 
+/* 시각 스타일/상태는 core/components/button.css의
+   .imory-button/.imory-button--primary가 담당한다 — 여기는 이
+   화면에서만 쓰이는 레이아웃 값만 남긴다. */
+
 .customize-save-button {
   min-width: 58px;
-
-  min-height: 30px;
-
-  padding: 6px 12px;
-
-  border:
-    1px solid
-    #e8e8e8;
-
-  border-radius: 2px;
-
-  background: #ffffff;
-
-  color: #777777;
-
-  font-size: 10px;
-
-  letter-spacing: 0.06em;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
-}
-
-
-.customize-save-button:hover:not(:disabled) {
-  color: #e39ab5;
-
-  border-color: #e7c7d3;
-
-  background: #fffafb;
-}
-
-
-.customize-save-button:disabled {
-  opacity: 0.5;
-
-  cursor: default;
 }
 
 

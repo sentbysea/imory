@@ -225,7 +225,7 @@ function renderQuotePresets(
 
 
       deleteButton.className =
-        "quote-preset-delete";
+        "quote-preset-delete imory-button imory-button--ghost imory-button--sm";
 
 
       deleteButton.textContent =
