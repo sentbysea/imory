@@ -109,6 +109,25 @@ button {
 }
 
 
+.login-desc-link {
+  display: inline-block;
+
+  margin:
+    -20px 0 30px;
+
+  font-size: 12px;
+
+  color: var(--system-text-faint);
+
+  text-decoration: underline;
+}
+
+
+.login-desc-link:hover {
+  color: var(--system-text);
+}
+
+
 .google-login-button {
   display: flex;
 
