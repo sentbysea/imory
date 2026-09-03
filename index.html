@@ -10,7 +10,50 @@
     content="width=device-width, initial-scale=1.0, viewport-fit=cover"
   >
 
-  <title>Imory</title>
+
+  <!--
+    SYSTEM THEME INIT — light/dark 깜빡임(FOUC) 방지용. CSS
+    로드/본문 렌더링보다 먼저 실행되어야 하므로 head 맨 앞,
+    다른 어떤 스타일시트/스크립트 로드보다도 앞에 둔다. localStorage 저장값
+    → 없으면 OS prefers-color-scheme 순으로 판정해 <html>에
+    data-theme를 붙이기만 한다(다른 책임 없음 — core/theme-toggle.js
+    가 이후 토글 클릭을 처리).
+  -->
+
+  <script>
+
+    (function initSystemTheme() {
+
+      try {
+
+        var stored =
+          localStorage.getItem(
+            "imory_system_theme"
+          );
+
+        var theme =
+          stored === "light" || stored === "dark"
+            ? stored
+            : (
+                window.matchMedia &&
+                window.matchMedia("(prefers-color-scheme: dark)").matches
+                  ? "dark"
+                  : "light"
+              );
+
+        document.documentElement.setAttribute(
+          "data-theme",
+          theme
+        );
+
+      } catch (e) {}
+
+    })();
+
+  </script>
+
+
+  <title>imory</title>
 
 
   <!--
@@ -80,6 +123,8 @@
   <script src="./core/lib/reserved-slugs.js"></script>
 
   <script src="./core/lib/site-path.js"></script>
+
+  <script src="./core/lib/auth-shared.js"></script>
 
 
   <!-- =========================================================
@@ -225,7 +270,7 @@
 
 
   <!-- =========================================================
-       LANDING (개발 중 화면 — /:slug 없이 루트("/")로
+       LANDING (공개 시작 페이지 — /:slug 없이 루트("/")로
        접속했을 때만)
   ========================================================== -->
 
@@ -237,10 +282,26 @@
       z-index: 9999;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      background: #ffffff;
+      align-items: stretch;
+      background: var(--system-bg);
+
+      /*
+        body는 home-base.css에서 height:100%; overflow:hidden이라
+        자체 스크롤이 안 된다 — .start-hero-block이 최소 100dvh라
+        about 섹션은 항상 스크롤해야 보인다. 이 화면 자체를 스크롤
+        컨테이너로 두고, "about imory" 클릭 시 자연스럽게 아래로
+        이동하도록 smooth 처리(reduced-motion에서는 즉시 이동).
+      */
+      overflow-y: auto;
+      scroll-behavior: smooth;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      .landing-screen {
+        scroll-behavior: auto;
+      }
+
     }
 
     /*
@@ -265,15 +326,719 @@
       display: none;
     }
 
-    .landing-title {
-      font-size: 28px;
-      letter-spacing: 0.04em;
-      color: #333333;
+    /*
+      공개 시작 페이지 헤더 — 좌측 로고 + 우측
+      .start-header-actions(테마 토글 + SIGN IN)를 한 줄에 둔다.
+    */
+
+    .start-header {
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-right: max(24px, env(safe-area-inset-right));
+      padding-bottom: 16px;
+      padding-left: max(24px, env(safe-area-inset-left));
+
+      border-bottom: 1px solid var(--system-border);
     }
 
-    .landing-subtitle {
-      font-size: 14px;
-      color: #999999;
+    /*
+      ★ 로고/액션 자체는 예전엔 폭 제한 없이 .start-header
+      바로 아래 flex 자식이라, 넓은 데스크톱 화면에서 뷰포트
+      양 끝에 그대로 붙어(끝과 끝) 보였다 — naru.pub 참고
+      이미지처럼 좌우 여백이 있는 좁은 헤더로 보이도록 이
+      안쪽 래퍼에만 max-width + auto margin을 줘서 가운데
+      정렬한다. border-bottom은 .start-header에 그대로 둬서
+      구분선 자체는 전체 폭을 유지한다(콘텐츠만 좁아짐).
+      화면이 900px보다 좁으면 max-width가 자연히 무시되고
+      기존 padding만 남는다.
+    */
+
+    .start-header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: nowrap;
+
+      width: 100%;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /*
+      로고 폰트는 --theme-font-family-serif와 같은 Nanum Myeongjo를
+      직접 지정한다(새 폰트 로드 없음, 이미 <head>에서 로드된
+      Google Fonts 링크 재사용) — 이 화면은 --theme-*가 아니라
+      --system-* 영역이라 토큰 자체는 재사용하지 않는다.
+    */
+
+    .start-logo {
+      display: inline-flex;
+      align-items: center;
+
+      font-family: "Nanum Myeongjo", serif;
+      font-size: 30px;
+      font-weight: 400;
+      color: var(--system-text);
+
+      text-decoration: none;
+    }
+
+    /*
+      naru.pub 스타일 요청 반영 — 세로선을 로고 옆 장식용
+      구분선이 아니라 "imory" 마지막 y에 바짝 붙은 텍스트 입력
+      커서처럼 보이게 한다. margin-left 없이 2px 고정 간격만
+      두고, 높이도 글자 전체(1.05em)가 아니라 살짝 짧게(0.92em)
+      줄여 커서 느낌을 낸다.
+    */
+
+    .start-logo::after {
+      content: "";
+      display: inline-block;
+
+      width: 1px;
+      height: 0.92em;
+      margin-left: 2px;
+
+      background: var(--imory-pink-system);
+    }
+
+
+    /*
+      우측 액션 영역 — 테마 토글 + SIGN IN. naru.pub 상단바처럼
+      가벼운 navigation action으로, 큰 CTA 버튼 형태를 피한다.
+      기본은 조용한 gray, hover/focus에서만 pink accent.
+    */
+
+    .start-header-actions {
+      display: flex;
+      align-items: center;
+      gap: var(--imory-space-400);
+      flex-shrink: 0;
+    }
+
+    .start-theme-toggle {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      width: 28px;
+      height: 28px;
+      padding: 0;
+
+      background: none;
+      border: none;
+      border-radius: var(--imory-radius-100);
+
+      color: var(--system-text-muted);
+
+      cursor: pointer;
+    }
+
+    .start-theme-toggle:hover,
+    .start-theme-toggle:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-theme-toggle:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    .start-theme-icon {
+      width: 15px;
+      height: 15px;
+    }
+
+    .start-theme-icon--moon {
+      display: none;
+    }
+
+    :root[data-theme="dark"] .start-theme-icon--sun {
+      display: none;
+    }
+
+    :root[data-theme="dark"] .start-theme-icon--moon {
+      display: inline-flex;
+    }
+
+    .start-sign-in {
+      display: inline-flex;
+      align-items: center;
+
+      padding: 6px 2px;
+
+      background: none;
+      border: none;
+
+      font-family: var(--system-font-family);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.07em;
+      color: var(--system-text-muted);
+
+      white-space: nowrap;
+
+      cursor: pointer;
+    }
+
+    .start-sign-in:hover,
+    .start-sign-in:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-sign-in:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    .start-sign-in:disabled {
+      color: var(--system-text-disabled);
+      cursor: default;
+    }
+
+    @media (max-width: 600px) {
+
+      .start-header {
+        padding-top: max(12px, env(safe-area-inset-top));
+        padding-right: max(16px, env(safe-area-inset-right));
+        padding-bottom: 12px;
+        padding-left: max(16px, env(safe-area-inset-left));
+      }
+
+      .start-logo {
+        font-size: 26px;
+      }
+
+      .start-header-actions {
+        gap: var(--imory-space-300);
+      }
+
+    }
+
+
+    /*
+      HERO BLOCK — 메인 3줄(i + memory = ♡ / 헤드라인 / 설명) +
+      운영 안내 + about 진입점. 첫 화면을 채우도록 min-height를
+      최소 100dvh로 둬서(헤더 높이만큼 다음 화면으로 자연히
+      넘어감) about 섹션은 스크롤해야만 보인다. 화면 정중앙보다
+      살짝 위쪽에 놓이도록 padding-bottom을 padding-top보다 크게
+      줘서 중앙 정렬 박스 자체를 위로 밀었다("육안상 중앙이 아닌
+      느낌" 피드백 반영). 전부 .landing-screen 안에서만 존재해서
+      gateHomeByOwner()의 기존 hidden 전환을 그대로 따른다 —
+      별도 표시/숨김 로직 없음. --theme-*(사용자 홈페이지 스킨)는
+      쓰지 않고 --system-*만 사용해 현재 light/dark 토글에
+      자동으로 대응한다.
+    */
+
+    .start-hero-block {
+      min-height: 100dvh;
+
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+
+      padding-top: max(16px, env(safe-area-inset-top));
+      padding-right: max(24px, env(safe-area-inset-right));
+      padding-bottom: max(180px, env(safe-area-inset-bottom));
+      padding-left: max(24px, env(safe-area-inset-left));
+
+      text-align: center;
+    }
+
+    /*
+      메인 3줄(i + memory = ♡ / 헤드라인 / 설명) + 운영 안내를
+      "텍스트 뭉치" 하나로 묶는 래퍼 — 핑크 GLOW(아래 ::before)를
+      이 둘을 합친 실제 텍스트 범위 정중앙에 맞추기 위해서다.
+      .start-main만 기준으로 뒀을 때는 그 아래 .start-notice까지
+      포함한 전체 텍스트 덩어리 중심과 어긋나 보였다 — 이 래퍼가
+      둘의 공통 부모가 되어야 position:absolute 중앙 정렬이 실제
+      텍스트 뭉치 전체 기준으로 계산된다.
+    */
+
+    .start-hero-text {
+      position: relative;
+
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .start-main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /*
+      텍스트 뭉치(.start-hero-text) 뒤에 까는 핑크 GLOW —
+      .home-notice--not-found::before와 완전히 동일한 그라데이션
+      (sua 테마 하트 뒤 GLOW를 그대로 재사용한 값, 색상 단계·
+      alpha·블러·크기 전부 같음)을 이 블록 뒤에도 재사용한다.
+      다만 저기는 뷰포트 중앙에 항상 고정돼야 해서 position:fixed였고,
+      여기는 스크롤하면 hero 블록과 함께 자연스럽게 같이 지나가야
+      하므로 position:absolute + .start-hero-text(position:relative)
+      기준으로 중앙에 둔다.
+    */
+
+    .start-hero-text::before {
+      content: "";
+
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+
+      width: min(54vw, 370px);
+      height: min(54vw, 370px);
+
+      border-radius: 50%;
+
+      background:
+        radial-gradient(
+          circle,
+          rgba(255, 155, 197, 0.35) 0%,
+          rgba(255, 180, 211, 0.23) 30%,
+          rgba(255, 206, 226, 0.12) 54%,
+          rgba(255, 228, 239, 0.05) 70%,
+          rgba(255, 244, 249, 0.015) 82%,
+          rgba(255, 255, 255, 0) 100%
+        );
+
+      filter: blur(20px);
+
+      pointer-events: none;
+
+      z-index: -1;
+    }
+
+    .start-main-mark {
+      margin: 0;
+
+      font-family: var(--system-font-family);
+      font-size: 20px;
+      font-weight: 400;
+      color: var(--system-accent);
+    }
+
+    .start-main-title {
+      margin: var(--imory-space-300) 0 0;
+
+      font-family: var(--system-font-family);
+      font-size: 24px;
+      font-weight: 400;
+      line-height: var(--imory-line-height-snug);
+
+      /*
+        ★ 예전엔 --system-text-muted(옅은 회색)라 로고("imory",
+        --system-text)보다 훨씬 흐려 보였다 — 로고와 같은 톤으로
+        올려서 헤드라인/설명이 더 또렷하게 보이도록 함.
+      */
+      color: var(--system-text);
+    }
+
+    .start-main-desc {
+      margin: var(--imory-space-300) 0 0;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-600);
+      font-weight: 400;
+      line-height: var(--imory-line-height-relaxed);
+      color: var(--system-text);
+    }
+
+    /*
+      메인 3줄과는 확실히 분리되도록 큰 margin-top으로 간격을 둔다.
+    */
+
+    .start-notice {
+      margin-top: 64px;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-400);
+      font-weight: 400;
+      line-height: var(--imory-line-height-relaxed);
+      color: var(--system-text-faint);
+    }
+
+    .start-notice p {
+      margin: 0;
+    }
+
+    .start-notice-contact {
+      margin-top: var(--imory-space-200);
+    }
+
+    .start-notice-link {
+      color: var(--system-text-faint);
+      text-decoration: none;
+    }
+
+    .start-notice-link:hover,
+    .start-notice-link:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-notice-link:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    /*
+      심플 하트 구분선 — 장식은 최소한으로, 얇은 선 2개 사이에
+      브랜드 하트(로고 라인의 ♡ 재사용) 하나만 둔다.
+    */
+
+    .start-about-divider {
+      display: flex;
+      align-items: center;
+      gap: var(--imory-space-200);
+
+      width: 100%;
+      max-width: 120px;
+      margin-top: 40px;
+    }
+
+    .start-about-divider-line {
+      flex: 1;
+      height: 1px;
+      background: var(--system-border);
+    }
+
+    .start-about-divider-heart {
+      font-size: 11px;
+      line-height: 1;
+      color: var(--system-accent);
+    }
+
+    .start-about-link {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--imory-space-100);
+
+      margin-top: var(--imory-space-400);
+      padding: 6px 2px;
+
+      background: none;
+      border: none;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-400);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      color: var(--system-text-muted);
+      text-decoration: none;
+
+      cursor: pointer;
+    }
+
+    .start-about-link:hover,
+    .start-about-link:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-about-link:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    .start-about-link-arrow {
+      font-size: 11px;
+    }
+
+    /*
+      ABOUT 섹션 — 실제 기능 소개가 들어갈 자리. 지금은 임시
+      문구가 담긴 직사각형 컨테이너 3개만 배치한다(내용은 후속
+      작업에서 채움). IntersectionObserver(아래 스크립트)가 이
+      영역이 뷰포트에 들어올 때 .is-visible을 붙여 순차적으로
+      나타나게 한다.
+
+      min-height를 hero block과 똑같이 최소 100dvh로 둔다 — 이
+      섹션 자체 콘텐츠(제목+박스 3개)는 이보다 훨씬 짧아서, 이
+      값이 없으면 스크롤 가능한 전체 길이가 부족해 "about imory"
+      클릭 시 이 섹션의 top을 화면 상단에 맞춰 스크롤하는 게
+      물리적으로 불가능했다(맨 아래까지 스크롤해도 섹션의 짧은
+      높이 때문에 화면 중간에 걸친 채로 멈춤). 최소 한 화면
+      높이를 확보해 "다음 화면"처럼 자연스럽게 전환되게 한다.
+    */
+
+    .start-about-section {
+      min-height: 100dvh;
+
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+
+      padding: 64px max(24px, env(safe-area-inset-right)) 64px
+        max(24px, env(safe-area-inset-left));
+
+      text-align: center;
+    }
+
+    .start-about-title {
+      margin: 0;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-700);
+      font-weight: 500;
+      color: var(--system-text-strong);
+    }
+
+    .start-about-boxes {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: var(--imory-space-400);
+
+      /*
+        .start-about-section이 flex-direction:column이라 이 요소는
+        cross-axis(가로) 기준 flex item이다 — margin-left/right:auto로
+        가운데 정렬하려면 width를 명시해야 한다(안 그러면 auto
+        margin이 stretch를 무시하고 콘텐츠 크기로 줄어들어, 카드
+        3개가 한 줄에 안 들어가고 세로로 쌓이는 문제가 있었음).
+      */
+      width: 100%;
+      max-width: 800px;
+      margin: var(--imory-space-600) auto 0;
+    }
+
+    .start-about-box {
+      flex: 1 1 200px;
+      max-width: 240px;
+
+      padding: 32px 20px;
+
+      background: var(--system-surface);
+      border: 1px solid var(--system-border);
+      border-radius: var(--imory-radius-200);
+
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.4s ease, transform 0.4s ease;
+    }
+
+    .start-about-boxes.is-visible .start-about-box:nth-child(1) {
+      transition-delay: 0s;
+    }
+
+    .start-about-boxes.is-visible .start-about-box:nth-child(2) {
+      transition-delay: 0.1s;
+    }
+
+    .start-about-boxes.is-visible .start-about-box:nth-child(3) {
+      transition-delay: 0.2s;
+    }
+
+    .start-about-boxes.is-visible .start-about-box {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+
+      .start-about-box {
+        transition: none;
+        opacity: 1;
+        transform: none;
+      }
+
+    }
+
+    .start-about-box-label {
+      margin: 0;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-600);
+      font-weight: 500;
+      color: var(--system-text-strong);
+    }
+
+    .start-about-box-placeholder {
+      margin: var(--imory-space-200) 0 0;
+
+      font-family: var(--system-font-family);
+      font-size: var(--imory-font-size-400);
+      font-weight: 400;
+      color: var(--system-text-muted);
+    }
+
+    @media (max-width: 600px) {
+
+      .start-hero-block {
+        padding-right: max(16px, env(safe-area-inset-right));
+        padding-bottom: max(110px, env(safe-area-inset-bottom));
+        padding-left: max(16px, env(safe-area-inset-left));
+      }
+
+      .start-main-mark {
+        font-size: 17px;
+      }
+
+      .start-main-title {
+        margin-top: var(--imory-space-200);
+        font-size: 19px;
+      }
+
+      .start-main-desc {
+        margin-top: var(--imory-space-200);
+        font-size: var(--imory-font-size-500);
+      }
+
+      .start-notice {
+        margin-top: 40px;
+        font-size: var(--imory-font-size-300);
+      }
+
+      .start-about-divider {
+        margin-top: 28px;
+      }
+
+      .start-about-section {
+        padding-top: 48px;
+        padding-right: max(16px, env(safe-area-inset-right));
+        padding-bottom: 48px;
+        padding-left: max(16px, env(safe-area-inset-left));
+      }
+
+      .start-about-boxes {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .start-about-box {
+        /*
+          flex:1 1 200px(기본 규칙)는 가로 배치를 가정한
+          flex-basis라, 세로 배치(flex-direction:column)에서는
+          같은 200px가 "높이" 기준이 되어 박스가 불필요하게 커진다
+          — 세로 배치에서는 콘텐츠 높이에 맞게 flex-basis를 없앤다.
+        */
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 320px;
+      }
+
+    }
+
+
+    /*
+      HOME_MODE 렌더러 분기(gateHomeByOwner 아래 스크립트)가
+      loadSuaTheme() 대신 그리는 안내 화면 3종(준비 중/존재하지
+      않음/조회 실패) 공통 레이아웃. 색상 토큰은 아래
+      .home-notice-title/-subtitle/-link 참고 — 특정 사용자의
+      커스터마이징 홈이 아니라 Imory 공용 시스템 안내라
+      --theme-*가 아닌 --system-*을 쓴다.
+    */
+
+    .home-notice {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--imory-space-200);
+      padding: var(--imory-space-600);
+      text-align: center;
+    }
+
+    /*
+      home-notice*는 세 안내 상태(customize-empty/not-found/
+      load-error) 공용이며 전부 특정 사용자의 커스터마이징 홈이
+      아니라 Imory 공용 시스템 안내 화면이다 — 그래서
+      --theme-*(사용자 홈페이지 영역용)가 아니라 design-tokens.css에
+      정의된 --system-* semantic 토큰을 쓴다.
+    */
+
+    .home-notice-title {
+      font-size: var(--imory-font-size-700);
+      color: var(--system-text);
+    }
+
+    .home-notice-subtitle {
+      font-size: var(--imory-font-size-600);
+      color: var(--system-text-muted);
+    }
+
+    /*
+      각진 버튼 박스 대신 조용한 텍스트 링크 — 기본 상태는
+      배경/테두리/밑줄 없이 muted gray, hover/focus에서만
+      --system-accent로 신호하고 밑줄이 붙는다. focus-visible에서
+      outline을 직접 그려 키보드 포커스가 항상 보이게 한다
+      (core/patterns/tabs.css의 .imory-tab--text 텍스트형
+      인터랙션 규칙과 같은 패턴). padding(10px/14px)은 시각적
+      크기를 그대로 두면서(배경/테두리 없음) 모바일 탭 영역만
+      키우는 투명 여백이라, 그만큼 margin-top을 줄여 subtitle과의
+      실제 보이는 간격은 이전과 동일하게 유지한다.
+    */
+
+    .home-notice-link {
+      display: inline-block;
+      margin-top: calc(var(--imory-space-400) - 10px);
+      padding: 10px 14px;
+
+      background: none;
+      border: none;
+
+      font-size: var(--imory-font-size-200);
+      color: var(--system-text-muted);
+
+      text-decoration: none;
+    }
+
+    .home-notice-link:hover,
+    .home-notice-link:focus-visible {
+      color: var(--system-accent);
+      text-decoration: underline;
+    }
+
+    .home-notice-link:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+
+    /*
+      "존재하지 않는 홈이에요" 안내 전용 배경 원형 — sua 테마의
+      하트 뒤 핑크 GLOW(themes/sua/heart-interaction.css의
+      .heart-stage::before, radial-gradient 색상 단계 그대로)를
+      재사용하되, 문구를 압도하지 않도록 이 화면 전용으로 더
+      작고 흐리고 옅게 조정했다(alpha를 원본의 약 60%로 낮춤,
+      blur 14px→20px, 크기 71vw/496px→54vw/370px). sua DOM/
+      스크립트는 전혀 로드하지 않고, 이 화면에서만 순수 CSS로
+      시각적 느낌만 재현한다. position:fixed로 뷰포트 정중앙에
+      고정해 데스크톱/모바일 어디서든 화면 중앙을 유지하고,
+      문서 스크롤 영역에는 영향을 주지 않는다(뷰포트 기준
+      위치라 overflow 유발 없음). z-index:-1은 .home-notice의
+      일반 흐름 자식(문구/링크, z-index:auto)보다 항상 아래에
+      그려진다 — 이 화면엔 겹칠 만한 다른 fixed 요소(footer/메뉴
+      등)가 전부 숨겨져 있어 안전하다.
+    */
+
+    .home-notice--not-found::before {
+      content: "";
+
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+
+      width: min(54vw, 370px);
+      height: min(54vw, 370px);
+
+      border-radius: 50%;
+
+      background:
+        radial-gradient(
+          circle,
+          rgba(255, 155, 197, 0.35) 0%,
+          rgba(255, 180, 211, 0.23) 30%,
+          rgba(255, 206, 226, 0.12) 54%,
+          rgba(255, 228, 239, 0.05) 70%,
+          rgba(255, 244, 249, 0.015) 82%,
+          rgba(255, 255, 255, 0) 100%
+        );
+
+      filter: blur(20px);
+
+      pointer-events: none;
+
+      z-index: -1;
     }
 
   </style>
@@ -286,12 +1051,14 @@
 
 
   <!-- =========================================================
-       LANDING (개발 중 화면)
+       LANDING (공개 시작 페이지)
 
-       /:slug 없이 루트로 접속했을 때만 보이는 아주 단순한
-       placeholder. 아래 MAIN JS의 gateHomeByOwner()가 첫 path
-       segment(slug) 존재 여부에 따라 이 화면과 실제 홈 UI
-       (메뉴/뷰어/푸터/BGM 등) 중 하나만 보이게 전환한다.
+       /:slug 없이 루트로 접속했을 때만 보이는 화면. 아래 MAIN
+       JS의 gateHomeByOwner()가 첫 path segment(slug) 존재
+       여부에 따라 이 화면과 실제 홈 UI(메뉴/뷰어/푸터/BGM 등)
+       중 하나만 보이게 전환한다 — 이 블록 내부는 그 전환 로직과
+       무관하게 헤더/메인 3줄/운영 안내/about 진입점 마크업만
+       담당한다.
   ========================================================== -->
 
   <div
@@ -299,15 +1066,345 @@
     id="landingScreen"
   >
 
-    <div class="landing-title">
-      Imory
+    <header class="start-header">
+
+      <div class="start-header-inner">
+
+        <a
+          class="start-logo"
+          href="/"
+        >imory</a>
+
+
+        <div class="start-header-actions">
+
+          <button
+            type="button"
+            class="start-theme-toggle"
+            id="startThemeToggle"
+            aria-label="다크 모드로 전환"
+          >
+
+            <svg
+              class="start-theme-icon start-theme-icon--sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="4"></circle>
+              <line x1="12" y1="2" x2="12" y2="4"></line>
+              <line x1="12" y1="20" x2="12" y2="22"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="2" y1="12" x2="4" y2="12"></line>
+              <line x1="20" y1="12" x2="22" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+
+            <svg
+              class="start-theme-icon start-theme-icon--moon"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M20.354 15.354A9 9 0 0 1 8.646 3.646 9.003 9.003 0 1 0 20.354 15.354Z"></path>
+            </svg>
+
+          </button>
+
+
+          <button
+            type="button"
+            class="start-sign-in"
+            id="startSignIn"
+          >SIGN IN</button>
+
+        </div>
+
+      </div>
+
+    </header>
+
+
+    <div class="start-hero-block">
+
+      <div class="start-hero-text">
+
+        <div class="start-main">
+
+          <p class="start-main-mark">i + memory = ♡</p>
+
+          <h1 class="start-main-title">기억하고 싶은 순간을 한 곳에</h1>
+
+          <p class="start-main-desc">글과 문장을 나만의 imory에 기록해 보세요.</p>
+
+        </div>
+
+
+        <div class="start-notice">
+
+          <p>imory는 개인이 취미로 운영하는 서비스입니다.</p>
+
+          <p>원활한 유지·보수를 위해 회원가입은 정해진 기간에만 열립니다.</p>
+
+          <p class="start-notice-contact">문의:
+            <a
+              class="start-notice-link"
+              href="https://x.com/imory_info"
+              target="_blank"
+              rel="noopener noreferrer"
+            >@imory_info</a> (X)
+          </p>
+
+        </div>
+
+      </div>
+
+
+      <div
+        class="start-about-divider"
+        aria-hidden="true"
+      >
+        <span class="start-about-divider-line"></span>
+        <span class="start-about-divider-heart">♡</span>
+        <span class="start-about-divider-line"></span>
+      </div>
+
+
+      <a
+        class="start-about-link"
+        href="#start-about"
+      >about imory<span class="start-about-link-arrow">⌄</span></a>
+
     </div>
 
-    <div class="landing-subtitle">
-      개발 중입니다
-    </div>
+
+    <section
+      class="start-about-section"
+      id="start-about"
+      aria-label="imory 기능 소개"
+    >
+
+      <h2 class="start-about-title">About imory</h2>
+
+      <div class="start-about-boxes">
+
+        <div class="start-about-box">
+          <p class="start-about-box-label">기능 01</p>
+          <p class="start-about-box-placeholder">내용 준비 중</p>
+        </div>
+
+        <div class="start-about-box">
+          <p class="start-about-box-label">기능 02</p>
+          <p class="start-about-box-placeholder">내용 준비 중</p>
+        </div>
+
+        <div class="start-about-box">
+          <p class="start-about-box-label">기능 03</p>
+          <p class="start-about-box-placeholder">내용 준비 중</p>
+        </div>
+
+      </div>
+
+    </section>
 
   </div>
+
+
+  <!--
+    START HEADER ACTIONS
+
+    theme toggle 클릭 로직은 core/theme-toggle.js(공용, FOUC 방지용
+    <head> 인라인 스크립트와 분리). SIGN IN은 이 페이지 전용이라
+    새 로그인 로직을 만들지 않고 core/lib/auth-shared.js의
+    authSignInWithGoogle()를 admin-session.js와 동일한 redirectTo
+    (`${origin}/auth/`)로 그대로 호출한다 — callback 분기/onboarding·
+    admin 이동 로직은 auth/auth-callback.js가 그대로 처리.
+  -->
+
+  <script src="./core/theme-toggle.js"></script>
+
+  <script>
+
+    (function initStartSignIn() {
+
+      const signInButton =
+        document.getElementById(
+          "startSignIn"
+        );
+
+      if (!signInButton) {
+        return;
+      }
+
+
+      signInButton.addEventListener(
+        "click",
+        async () => {
+
+          signInButton.disabled =
+            true;
+
+
+          const redirectUrl =
+            `${window.location.origin}/auth/`;
+
+
+          const {
+            error
+          } =
+            await authSignInWithGoogle(
+              redirectUrl
+            );
+
+
+          if (error) {
+
+            console.error(
+              "Google login error:",
+              error
+            );
+
+            signInButton.disabled =
+              false;
+
+          }
+
+        }
+      );
+
+    })();
+
+  </script>
+
+
+  <!--
+    ABOUT REVEAL
+
+    1. "about imory" 클릭 시 #start-about를 컨테이너(.landing-screen)
+       기준 상단에 맞춰 스크롤한다. 네이티브 해시 이동(href만)에
+       맡기면 대상이 폴드 바로 아래(첫 화면 min-height:100dvh
+       + padding-bottom 만큼만 벗어남)라 브라우저가 최소 이동만
+       하고 멈춰 섹션이 애매하게 걸치는 문제가 있어, scrollIntoView
+       (block:"start")로 명시한다 — JS 비활성 환경 대비 href는
+       유지(최소한 근처로는 이동).
+    2. 그 섹션이 실제로 화면에 들어올 때 3개 박스에 .is-visible만
+       붙여 순차 등장(transition-delay는 CSS)시킨다 —
+       IntersectionObserver 1회성 관찰이라 scroll 이벤트 폴링이
+       아니다.
+  -->
+
+  <script>
+
+    (function initAboutScroll() {
+
+      const aboutLink =
+        document.querySelector(
+          ".start-about-link"
+        );
+
+      const aboutSection =
+        document.getElementById(
+          "start-about"
+        );
+
+      if (
+        !aboutLink ||
+        !aboutSection
+      ) {
+        return;
+      }
+
+
+      const prefersReducedMotion =
+        window.matchMedia(
+          "(prefers-reduced-motion: reduce)"
+        ).matches;
+
+
+      aboutLink.addEventListener(
+        "click",
+        event => {
+
+          event.preventDefault();
+
+          aboutSection.scrollIntoView(
+            {
+              behavior:
+                prefersReducedMotion
+                  ? "auto"
+                  : "smooth",
+              block: "start"
+            }
+          );
+
+        }
+      );
+
+    })();
+
+
+    (function initAboutReveal() {
+
+      const boxes =
+        document.querySelector(
+          ".start-about-boxes"
+        );
+
+      if (!boxes) {
+        return;
+      }
+
+
+      if (!("IntersectionObserver" in window)) {
+
+        boxes.classList.add(
+          "is-visible"
+        );
+
+        return;
+
+      }
+
+
+      const observer =
+        new IntersectionObserver(
+          entries => {
+
+            entries.forEach(
+              entry => {
+
+                if (entry.isIntersecting) {
+
+                  boxes.classList.add(
+                    "is-visible"
+                  );
+
+                  observer.disconnect();
+
+                }
+
+              }
+            );
+
+          },
+          {
+            threshold: 0.2
+          }
+        );
+
+
+      observer.observe(
+        boxes
+      );
+
+    })();
+
+  </script>
 
 
 
@@ -460,9 +1557,20 @@
        sua 테마/카테고리/BGM/메뉴는 아예 불러오지 않는다. 첫 path
        segment가 slug면(유효 여부는 각 스크립트 내부의 owner
        resolver가 판단) 기존 공개 홈 구조를 그대로 불러온다.
-       posts 모듈/site-footer.js는 이 게이팅과 무관하게 기존대로
-       그대로 로드한다(건드리지 않음) — 랜딩 화면에서는 어차피
-       위에서 hidden 처리되어 있어 화면에 보이지 않는다.
+       posts 모듈은 이 게이팅과 무관하게 기존대로 그대로 로드한다
+       (건드리지 않음) — 랜딩 화면에서는 어차피 위에서 hidden
+       처리되어 있어 화면에 보이지 않는다.
+
+       site-footer.js(today/total 방문자 + copyright, sua 전용
+       footer)는 더 이상 여기서 무조건 로드하지 않는다 — HOME
+       MODE 렌더러 분기(아래 SUA THEME LOADER 스크립트의
+       initHomeRenderer)가 owner.status==='found' &&
+       owner.homeMode==='legacy_sua'로 확인된 사이트에서만 동적으로
+       로드한다(글/카테고리 등 그 사이트의 모든 화면 포함, 존재하지
+       않는 slug/조회 실패/customize/예상 밖 home_mode에서는 로드
+       안 함). 방문자 카운터 RPC가 site-footer.js 로드 즉시
+       실행되므로, "로드 자체를 안 한다"가 그런 화면에서 카운터가
+       도는 것을 막는다.
   ========================================================== -->
 
   <script>
@@ -504,8 +1612,6 @@
 
 
       [
-        "menuButton",
-        "menuPanel",
         "viewerArea",
         "postsMount",
         "musicButton",
@@ -530,18 +1636,18 @@
       );
 
 
-      document
-        .querySelectorAll(
-          ".site-footer"
-        )
-        .forEach(
-          el => {
-
-            el.hidden =
-              false;
-
-          }
-        );
+      /*
+        .site-footer(today/total 방문자 + copyright)와
+        menuButton/menuPanel(카테고리 메뉴 토글)은 더 이상 여기서
+        무조건 unhide하지 않는다 — owner.status==='found' &&
+        owner.homeMode==='legacy_sua' 확인된 뒤에만
+        initHomeRenderer()가 이 둘의 unhide를 site-footer.js 로드와
+        함께 한다(SUA THEME LOADER 스크립트 참고). hasOwner(slug
+        존재 여부)만으로는 존재하지 않는 slug/customize에서도 이
+        UI들이 보이는 문제가 있었다. viewerArea/postsMount는
+        renderHomeNotice()의 안내 화면도 그 안에 그려야 하므로
+        계속 무조건 unhide한다(그대로 유지).
+      */
 
 
       window.homeOwnerModeActive =
@@ -661,22 +1767,43 @@
           );
 
 
-        if (heartGroup) {
+        /*
+          sua-home.html 조각이 손상됐거나(예: 서버 설정에 따라
+          다른 페이지가 대신 반환되는 경우) 예상한 두 필수 요소가
+          없으면, 그 상태로 heart-interaction.js/cover-profile.js를
+          로드하지 않는다 — 두 스크립트 모두 로드 즉시
+          getElementById로 이 요소들의 자손을 찾아
+          addEventListener하므로, 없는 채로 실행하면 null 참조
+          오류가 연쇄로 발생한다. 원본 HTML이나 예외 내용은 화면에
+          내지 않고, 이미 있는 안내 화면(HOME_NOTICE_TEXT의
+          "load-error")으로 안전하게 떨어진다.
+        */
 
-          themeMount.replaceWith(
-            heartGroup
+        if (
+          !heartGroup ||
+          !loveEvent
+        ) {
+
+          console.error(
+            "sua theme load failed: sua-home.html에 필수 요소(heartGroup/loveEvent)가 없습니다"
           );
+
+          renderHomeNotice(
+            "load-error"
+          );
+
+          return;
 
         }
 
 
-        if (loveEvent) {
+        themeMount.replaceWith(
+          heartGroup
+        );
 
-          themeLoveMount.replaceWith(
-            loveEvent
-          );
-
-        }
+        themeLoveMount.replaceWith(
+          loveEvent
+        );
 
 
         /*
@@ -748,17 +1875,272 @@
     }
 
 
+    /* =========================================================
+       HOME MODE 렌더러 분기
+
+       loadSuaTheme()는 owner.status === "found" &&
+       owner.homeMode === "legacy_sua"가 둘 다 참일 때만 호출한다
+       — 이 한 조건이 "sua 마크업을 보여줘도 되는가"를 판정하는
+       유일한 지점이다(home/site-owner.js는 home_mode를 가공 없이
+       전달만 함). 그 외 모든 경우(존재하지 않는 slug, 조회 실패,
+       home_mode가 'customize'이거나 예상 밖 값)는 sua로 폴백하지
+       않고 아래 세 안내 문구 중 하나만 보여준다.
+    ========================================================== */
+
+    const HOME_NOTICE_TEXT =
+      {
+
+        "customize-empty": {
+          title: "아직 준비 중인 홈이에요",
+          subtitle: "곧 이 공간이 채워질 예정이에요"
+        },
+
+        "not-found": {
+          title: "존재하지 않는 홈이에요",
+          subtitle: "주소를 다시 확인해 주세요"
+        },
+
+        /*
+          "조회 실패"(status:"error")뿐 아니라, found인데 homeMode가
+          'legacy_sua'/'customize' 어느 쪽도 아닌 예상 밖 값(DB
+          체크 제약상 사실상 불가능하지만 방어적으로 포함)일 때도
+          이 문구를 재사용한다 — "어떻게 보여줘야 할지 판정하지
+          못했다"는 의미상 조회 실패와 같은 취급이 맞다.
+        */
+
+        "load-error": {
+          title: "홈을 불러오지 못했어요",
+          subtitle: "잠시 후 다시 시도해 주세요"
+        }
+
+      };
+
+
+    function renderHomeNotice(
+      kind
+    ) {
+
+      const themeMount =
+        document.getElementById(
+          "themeMount"
+        );
+
+
+      if (!themeMount) {
+        return;
+      }
+
+
+      const text =
+        HOME_NOTICE_TEXT[kind]
+          || HOME_NOTICE_TEXT["load-error"];
+
+
+      const wrapper =
+        document.createElement(
+          "div"
+        );
+
+      wrapper.className =
+        kind === "not-found"
+          ? "home-notice home-notice--not-found"
+          : "home-notice";
+
+
+      const title =
+        document.createElement(
+          "div"
+        );
+
+      title.className =
+        "home-notice-title";
+
+      title.textContent =
+        text.title;
+
+      wrapper.appendChild(
+        title
+      );
+
+
+      const subtitle =
+        document.createElement(
+          "div"
+        );
+
+      subtitle.className =
+        "home-notice-subtitle";
+
+      subtitle.textContent =
+        text.subtitle;
+
+      wrapper.appendChild(
+        subtitle
+      );
+
+
+      if (kind === "not-found") {
+
+        const homeLink =
+          document.createElement(
+            "a"
+          );
+
+        homeLink.className =
+          "home-notice-link";
+
+        homeLink.href =
+          buildSitePath(
+            null,
+            "/"
+          );
+
+        homeLink.textContent =
+          "← imory로 돌아가기";
+
+        wrapper.appendChild(
+          homeLink
+        );
+
+      }
+
+
+      themeMount.replaceWith(
+        wrapper
+      );
+
+    }
+
+
+    /* =========================================================
+       LEGACY_SUA HOME CHROME (footer + 메뉴 토글)
+
+       footer(today/total 방문자 + copyright)와 메뉴 토글
+       (menuButton/menuPanel, 카테고리 목록)은 둘 다
+       "owner.status === 'found' && owner.homeMode === 'legacy_sua'"
+       인 사이트 전체(홈 루트뿐 아니라 그 아래 글/카테고리 등 모든
+       정상 화면 포함)에서 켠다 — sua 사이트를 방문한 동안 계속
+       보이던 기존 동작 그대로. 존재하지 않는 slug/조회 실패/
+       customize/예상 밖 home_mode에서는 절대 켜지 않는다(이 UI들이
+       gateHomeByOwner 시점엔 아직 owner가 확정되지 않았는데도
+       slug 존재 여부만으로 노출되던 문제 수정 — home/menu.js 자체
+       로직은 손대지 않았고, 초기 hidden 여부만 이쪽으로 옮김).
+       menuButton/menuPanel은 HTML의 hidden 속성으로 숨기므로
+       CSS(#viewerArea[hidden] 등과 동일한 네이티브 처리)로 접근성
+       트리/키보드 포커스에서도 함께 빠진다.
+
+       방문자 카운터는 footer와 마찬가지로 initHomeRenderer()가
+       페이지당 정확히 1번 호출될 때만 실행되므로(아래),
+       site-footer.js도 자연히 페이지 세션당 1번만 로드되고
+       카운터 RPC도 1번만 실행된다 — 별도의 중복 로드 방지 플래그가
+       필요 없다.
+    ========================================================== */
+
+    function showLegacySuaChrome() {
+
+      document
+        .querySelectorAll(
+          ".site-footer"
+        )
+        .forEach(
+          el => {
+
+            el.hidden =
+              false;
+
+          }
+        );
+
+
+      [
+        "menuButton",
+        "menuPanel"
+      ].forEach(
+        id => {
+
+          const el =
+            document.getElementById(
+              id
+            );
+
+
+          if (el) {
+
+            el.hidden =
+              false;
+
+          }
+
+        }
+      );
+
+
+      const footerScript =
+        document.createElement(
+          "script"
+        );
+
+      footerScript.src =
+        "./site-footer.js";
+
+      footerScript.onerror =
+        () => {
+
+          console.error(
+            "site-footer.js 로드 실패"
+          );
+
+          footerScript.remove();
+
+        };
+
+      document.body.appendChild(
+        footerScript
+      );
+
+    }
+
+
+    async function initHomeRenderer() {
+
+      const owner =
+        await getSiteOwner();
+
+
+      if (
+        owner.status === "found" &&
+        owner.homeMode === "legacy_sua"
+      ) {
+
+        loadSuaTheme();
+
+        showLegacySuaChrome();
+
+        return;
+
+      }
+
+
+      renderHomeNotice(
+        owner.status === "found"
+          ? "customize-empty"
+          : owner.status === "not_found"
+            ? "not-found"
+            : "load-error"
+      );
+
+    }
+
+
     if (
       window.homeOwnerModeActive
     ) {
 
-      loadSuaTheme();
+      initHomeRenderer();
 
     }
 
   </script>
-
-  <script src="./site-footer.js"></script>
 
 
 

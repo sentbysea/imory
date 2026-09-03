@@ -642,6 +642,18 @@ function fitQuotePreview() {
 
   applyQuotePreviewScale();
 
+
+  /*
+    전체 보기로 되돌아왔으니 안내 문구도 다시 페이드인
+    (admin-quote-preview-gesture.js의 beginPinch 참고).
+  */
+
+  quotePreviewHelp
+    ?.classList
+    .remove(
+      "is-dimmed"
+    );
+
 }
 
 

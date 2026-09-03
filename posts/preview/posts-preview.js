@@ -39,15 +39,22 @@ function applyPreviewTitleStyle(
 
 
   /*
-    ★ 제목/출처는 항상 Pretendard로 고정(인라인 지정).
-    html2canvas로 캡처(발췌 export)할 때 이 값이 조상
-    요소로부터 상속만 되어 있으면 가끔 못 읽어서 시스템
-    명조체로 깨져 나오는 문제가 있었음 — 요소 자체에
-    직접 박아두면 그 문제가 안 생긴다.
+    ★ GENERAL의 폰트를 body와 동일하게 그대로 따름(admin-quote의
+    QUOTE PRESET 미리보기와 동일 — 예전엔 항상 Pretendard로
+    고정했었는데, admin-quote 쪽만 "폰트를 GENERAL 하나로 옮겨서
+    title/body/source가 다 같이 바뀌게" 바뀌고 여기는 그대로
+    남아있어서 프리셋이 나눔명조일 때 두 미리보기가 서로
+    다른 폰트로 보이던 원인이었음(줄바꿈 위치까지 달라짐).
+    인라인으로 직접 지정하는 이유는 그대로 유지 — html2canvas로
+    캡처(발췌 export)할 때 조상 요소로부터 상속만 되어 있으면
+    가끔 못 읽어서 시스템 명조체로 깨져 나오는 문제가 있었음.
   */
 
   title.style.fontFamily =
-    '"Pretendard", sans-serif';
+    settings.bodyFont ===
+    "nanummyeongjo"
+      ? '"Nanum Myeongjo", serif'
+      : '"Pretendard", sans-serif';
 
 
   title.style.color =
@@ -129,12 +136,15 @@ function createPreviewSource(
 
 
   /*
-    항상 Pretendard 고정 — 이유는 applyPreviewTitleStyle의
-    주석 참고(html2canvas 캡처 시 명조체로 깨지는 문제 방지).
+    GENERAL 폰트를 title/body와 동일하게 따름 — 이유는
+    applyPreviewTitleStyle의 주석 참고.
   */
 
   source.style.fontFamily =
-    '"Pretendard", sans-serif';
+    settings.bodyFont ===
+    "nanummyeongjo"
+      ? '"Nanum Myeongjo", serif'
+      : '"Pretendard", sans-serif';
 
 
   source.style.color =

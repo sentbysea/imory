@@ -740,12 +740,22 @@ function legacyMarkupToRichHTML(
    CONTENT FORMAT CHECK
 ========================================================== */
 
+/*
+  ★ b/strong/i/em/u도 검사 대상에 포함해야 한다 — 글 전체가
+  줄바꿈 하나 없이 볼드/이탤릭/밑줄 서식만 있는 경우(div/p/br/span이
+  하나도 없음) 이 태그들을 못 찾으면 legacyMarkupToRichHTML로
+  잘못 빠져서, 실제 HTML 태그가 서식으로 해석되지 않고 꺾쇠
+  괄호가 그대로 텍스트로 보이는(예: "Hello <strong>world</strong>"가
+  글자 그대로 노출) 문제가 있었다 — 볼드/이탤릭/밑줄을 추가했는데
+  프리뷰/뷰어에 반영이 안 되던 원인.
+*/
+
 function isRichPostContent(
   content
 ) {
 
   return (
-    /<\s*(?:div|p|br|span)\b/i
+    /<\s*(?:div|p|br|span|b|strong|i|em|u)\b/i
       .test(
         String(
           content || ""

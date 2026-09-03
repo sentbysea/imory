@@ -721,7 +721,7 @@
   position: absolute;
 
   right: 8px;
-  bottom: 8px;
+  top: 8px;
 
   z-index: 4;
 
@@ -744,6 +744,22 @@
   letter-spacing: 0.03em;
 
   pointer-events: none;
+
+  opacity: 1;
+
+  transition: opacity 0.4s ease;
+}
+
+
+/*
+  핀치로 확대/축소하는 중에는(admin-quote-preview-gesture.js의
+  beginPinch) 이미 제스처를 알고 쓰는 중이므로 안내가 필요 없다
+  — 서서히 페이드아웃. 더블탭으로 전체 보기로 되돌아가면
+  (fitQuotePreview) 다시 페이드인.
+*/
+
+.quote-preview-help.is-dimmed {
+  opacity: 0;
 }
 
 
@@ -956,6 +972,17 @@
     width: 100%;
 
     margin: 0;
+
+    /*
+      ★ 데스크톱 규칙(gap: 44px, 위 QUOTE WORKSPACE 참고)이
+      모바일에서도 그대로 상속돼서, 대지(.quote-preview-panel)와
+      설정창(.quote-controls) 사이가 필요 이상으로 크게 벌어져
+      있었다 — 절반(22px)으로 줄이고, 그렇게 확보한 나머지
+      절반은 아래 .quote-preview-panel의 height에 그대로 더해서
+      대지 쪽에 되돌려준다.
+    */
+
+    gap: 22px;
   }
 
 
@@ -977,11 +1004,15 @@
       입력 필드로 채우게 함. 대지는 핀치/드래그로 어차피
       확대해서 볼 수 있으니 32vh로 줄이고, 그만큼 설정창이
       더 넓게 쓰이게 했다.
+
+      ★ + 22px: .quote-workspace의 gap을 44px→22px로 줄이며
+      확보한 나머지 절반을 그대로 돌려받은 몫(위 .quote-workspace
+      모바일 규칙 참고).
     */
 
     flex: 0 0 auto;
 
-    height: 32vh;
+    height: calc(32vh + 22px);
 
     min-height: 160px;
     max-height: 78vh;
