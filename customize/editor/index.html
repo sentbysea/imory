@@ -697,7 +697,15 @@
 
 
       <!-- =============================================
-           SAVE (1단계에서는 동작 없음)
+           SAVE — home_customize.layout_json에 현재 cover
+           페이지 blocks/theme/contentArea를 저장(editor.js
+           customizeSaveButton 클릭 핸들러 참고).
+
+           기본값은 disabled — editor.js가 원격 layout_json을
+           확인(loaded/empty)하기 전까지는 절대 활성화되지 않는다
+           (setCustomizeLoadStatus/applyCustomizeSaveUiState 참고).
+           JS 로드 자체가 실패하는 극단적 상황에서도 이 기본값이
+           안전망 역할을 한다.
       ============================================== -->
 
       <div class="customize-editor-panel-footer">
@@ -707,10 +715,14 @@
           id="customizeSaveButton"
           type="button"
           disabled
-          title="저장은 다음 단계에서 구현됩니다"
         >
           save
         </button>
+
+        <p
+          class="customize-save-message"
+          id="customizeSaveMessage"
+        ></p>
 
       </div>
 
@@ -770,6 +782,19 @@
 
 
   </div>
+
+
+  <!-- =========================================================
+       SAVE/LOAD용 Supabase client — 이 문서는 admin iframe 안의
+       독립된 browsing context라 admin/index.html의 <script>를
+       상속받지 않으므로 여기서 따로 불러와야 함
+       (core/lib/supabase-client.js 주석 참고). 같은 origin이라
+       admin에서 이미 로그인한 세션을 그대로 이어받는다(supabase-js가
+       localStorage에 세션을 저장/공유하므로).
+  ========================================================== -->
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../core/lib/supabase-client.js"></script>
 
 
   <!-- =========================================================

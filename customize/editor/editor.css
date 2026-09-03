@@ -108,7 +108,32 @@ button {
 
   display: flex;
 
-  justify-content: flex-end;
+  flex-direction: column;
+
+  align-items: flex-end;
+
+  gap: 6px;
+}
+
+
+/* admin-settings.css .save-message와 동일한 시각 톤(우측 정렬,
+   작은 pink 텍스트) — 이 문서는 그 CSS를 공유하지 않으므로
+   여기 따로 둔다. */
+
+.customize-save-message {
+  min-height: 16px;
+
+  margin: 0;
+
+  text-align: right;
+
+  font-size: 10px;
+
+  color: #c66f8e;
+
+  /* LOAD 실패 안내가 두 줄(\n)로 오는 경우를 그대로 줄바꿈해서
+     보여준다 — editor.js "저장된 홈을 불러오지 못했습니다..." 참고. */
+  white-space: pre-line;
 }
 
 

@@ -337,6 +337,12 @@ const backgroundPatternSizeRow =
 const backgroundPatternSizeInput =
   document.getElementById("backgroundPatternSizeInput");
 
+const customizeSaveButton =
+  document.getElementById("customizeSaveButton");
+
+const customizeSaveMessage =
+  document.getElementById("customizeSaveMessage");
+
 
 
 /* =========================================================
@@ -2122,6 +2128,8 @@ function switchCustomizeEditorPage(
 
   updateCustomizePageTabUI();
 
+  applyCustomizeSaveUiState();
+
   refreshCustomizePreview();
 
   renderCustomizeElementsList();
@@ -3847,10 +3855,470 @@ function initCustomizeAccordions() {
 
 
 /* =========================================================
+   SAVE / LOAD (home_customize.layout_json)
+
+   home_customize는 1 user = 1 row이고, 온보딩 완료(complete_onboarding
+   RPC)가 항상 그 row를 만들어 두므로, 이 admin(iframe 부모)까지
+   도달한 로그인 사용자는 항상 row가 존재한다고 가정한다 — 그래서
+   SAVE는 upsert가 아니라 update만 쓴다. 혹시라도(수동 삭제 등으로)
+   row가 없다면 LOAD든 SAVE든 그 시점에 곧바로 감지된다(LOAD는
+   maybeSingle()의 data===null, SAVE는 update 후 .select("user_id")가
+   빈 배열) — 둘 다 CUSTOMIZE_LOAD_STATUS.ROW_MISSING으로 취급해
+   "데이터를 찾을 수 없습니다"로 명시 보고하고 이후 SAVE를 잠근다
+   (조용히 "저장 실패" 한 줄로 끝내거나, upsert로 새 row를 몰래
+   만들어 상황을 감추지 않는다).
+
+   layout_json은 아직 pages 개념 없이 단일 {version, theme,
+   contentArea, blocks} 구조다(onboarding RPC가 심는 초기값도 동일
+   구조 — supabase/migrations/20260831120000_*.sql 참고). 에디터
+   쪽 CUSTOMIZE_PAGE_DEFS에는 "profile" 탭도 있지만 그 raw layout은
+   여전히 로컬 placeholder(CUSTOMIZE_PROFILE_PLACEHOLDER_RAW_LAYOUT)
+   일 뿐 DB 스키마에 자리가 없으므로, 이번 단계의 저장/불러오기는
+   "cover" 페이지 하나만 대상으로 한다 — 공개 renderer도 이번
+   단계 범위 밖이라 이 제약이 문제를 만들지 않는다.
+========================================================== */
+
+const CUSTOMIZE_PERSISTED_PAGE_ID =
+  "cover";
+
+
+/*
+  LOAD 결과 상태 — "layout_json이 진짜 비어있음"과 "원격 상태를
+  확인하지 못함"을 구조적으로 분리한다. 이 구분이 SAVE 가능 여부를
+  그대로 결정한다(아래 computeCustomizeSaveEnabled) — 원격 상태를
+  확인 못한 세션에서 로컬 placeholder를 그대로 SAVE해버리면 원격의
+  실제 layout_json을 덮어쓸 수 있으므로, LOADED/EMPTY 두 상태에서만
+  SAVE를 허용한다.
+
+  - loaded: row 있음 + layout_json 실사용 가능 → 그 값으로 편집
+  - empty: row 있음 + layout_json이 실제로 비어있음(null 등) →
+    DEFAULT_LAYOUT으로 편집(신규나 다름없는 정상 상태)
+  - row-missing: query는 성공했지만 row 자체가 없음 — onboarding이
+    항상 row를 만드는 설계이므로 이건 정상 empty가 아니라 데이터
+    이상 상태. upsert로 조용히 복구하지 않는다.
+  - error: 네트워크/DB query 자체가 실패 — 원격 상태를 전혀 모름.
+  - unauthenticated: 로그인 세션 없음 — 역시 원격 상태를 모름.
+*/
+
+const CUSTOMIZE_LOAD_STATUS =
+  {
+    LOADED: "loaded",
+    EMPTY: "empty",
+    ROW_MISSING: "row-missing",
+    ERROR: "error",
+    UNAUTHENTICATED: "unauthenticated"
+  };
+
+
+let customizeLoadStatus =
+  null;
+
+let customizeLoadStatusMessage =
+  "";
+
+
+/*
+  SAVE는 "원격 상태를 확인한 상태(loaded/empty)"이면서 "저장 대상인
+  cover 페이지를 보고 있을 때"만 허용한다. profile 탭은 layout_json
+  스키마에 자리가 없는 로컬 placeholder라 SAVE 대상이 아니다(아래
+  "PROFILE 탭 SAVE 오해 방지" 섹션 참고).
+*/
+
+function computeCustomizeSaveEnabled() {
+
+  const isLoadConfirmed =
+    customizeLoadStatus === CUSTOMIZE_LOAD_STATUS.LOADED ||
+    customizeLoadStatus === CUSTOMIZE_LOAD_STATUS.EMPTY;
+
+  const isOnPersistedPage =
+    customizeEditorState.currentPage === CUSTOMIZE_PERSISTED_PAGE_ID;
+
+  return (
+    isLoadConfirmed &&
+    isOnPersistedPage
+  );
+
+}
+
+
+/*
+  SAVE 버튼 disabled/안내 문구를 현재 상태(load status + 현재 탭)로부터
+  다시 계산한다 — 두 조건 중 하나라도 SAVE를 막고 있으면 그 이유를
+  보여준다(profile 탭 안내가 load 실패 안내보다 더 직접적인 이유이므로
+  우선한다 — cover로 돌아가면 load 실패 메시지가 다시 보임).
+*/
+
+function applyCustomizeSaveUiState() {
+
+  customizeSaveButton.disabled =
+    !computeCustomizeSaveEnabled();
+
+  if (
+    customizeEditorState.currentPage !== CUSTOMIZE_PERSISTED_PAGE_ID
+  ) {
+
+    customizeSaveMessage.textContent =
+      "cover 페이지만 저장돼요 — profile은 아직 저장 대상이 아니에요.";
+
+    return;
+
+  }
+
+  customizeSaveMessage.textContent =
+    customizeLoadStatusMessage;
+
+}
+
+
+function setCustomizeLoadStatus(
+  status,
+  message
+) {
+
+  customizeLoadStatus =
+    status;
+
+  customizeLoadStatusMessage =
+    message || "";
+
+  applyCustomizeSaveUiState();
+
+}
+
+
+/*
+  네트워크/DB query 실패와 "row는 있는데 layout_json이 실제로
+  비어있음"과 "row 자체가 없음"을 서로 다른 status로 반환한다 —
+  호출하는 쪽(initCustomizeEditor)이 이 셋을 절대 같은 값(예: null)
+  하나로 뭉뚱그리지 않게 하기 위함.
+*/
+
+async function loadCustomizeHomeLayoutJson(
+  userId
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from("home_customize")
+      .select("layout_json")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+
+  if (error) {
+
+    console.error(
+      "customize load error:",
+      error
+    );
+
+    return {
+      status: CUSTOMIZE_LOAD_STATUS.ERROR,
+      layoutJson: null
+    };
+
+  }
+
+
+  if (!data) {
+
+    console.error(
+      "customize load error: home_customize row missing for user",
+      userId
+    );
+
+    return {
+      status: CUSTOMIZE_LOAD_STATUS.ROW_MISSING,
+      layoutJson: null
+    };
+
+  }
+
+
+  const layoutJson =
+    data.layout_json;
+
+  const hasUsableLayoutJson =
+    layoutJson !== null &&
+    typeof layoutJson === "object" &&
+    !Array.isArray(layoutJson);
+
+  if (!hasUsableLayoutJson) {
+
+    return {
+      status: CUSTOMIZE_LOAD_STATUS.EMPTY,
+      layoutJson: null
+    };
+
+  }
+
+
+  return {
+    status: CUSTOMIZE_LOAD_STATUS.LOADED,
+    layoutJson
+  };
+
+}
+
+
+/*
+  현재 편집 state(customizeEditorState) 중 "cover" 페이지만
+  layout_json 스키마 그대로 직렬화한다 — HTML 문자열이 아니라
+  블록 구조 JSON 그대로.
+*/
+
+function buildCustomizeCoverLayoutJson() {
+
+  return {
+
+    version:
+      CUSTOMIZE_LAYOUT_VERSION,
+
+    theme:
+      { ...customizeEditorState.theme },
+
+    contentArea:
+      { ...customizeEditorState.pages[CUSTOMIZE_PERSISTED_PAGE_ID].contentArea },
+
+    blocks:
+      customizeEditorState.pages[CUSTOMIZE_PERSISTED_PAGE_ID].blocks
+
+  };
+
+}
+
+
+customizeSaveButton.addEventListener(
+  "click",
+  async () => {
+
+    /*
+      버튼 disabled만 믿지 않는다 — 이 핸들러가 어떤 경로로든(예:
+      테스트에서 강제 호출) disabled 상태에서 실행되더라도, 원격
+      상태를 확인 못했거나(load status가 loaded/empty가 아님) cover
+      페이지가 아니면 여기서 그냥 끝낸다. update 요청 자체가 아예
+      나가지 않는다.
+    */
+
+    if (!computeCustomizeSaveEnabled()) {
+      return;
+    }
+
+
+    /*
+      비활성화가 곧 중복 클릭 방지다 — disabled 버튼은 브라우저가
+      click을 아예 발생시키지 않으므로 별도 in-flight 플래그가
+      필요 없다.
+    */
+
+    customizeSaveButton.disabled =
+      true;
+
+    customizeSaveMessage.textContent =
+      "저장 중...";
+
+
+    const {
+      data: userData,
+      error: userError
+    } =
+      await supabaseClient
+        .auth
+        .getUser();
+
+
+    if (
+      userError ||
+      !userData?.user
+    ) {
+
+      /*
+        로그인 세션이 사라진 경우 — 원격 상태를 더 이상 신뢰할 수
+        없으므로 load status 자체를 unauthenticated로 낮춰서 다음
+        클릭(또는 강제 호출)도 computeCustomizeSaveEnabled에서
+        막히게 한다.
+      */
+
+      setCustomizeLoadStatus(
+        CUSTOMIZE_LOAD_STATUS.UNAUTHENTICATED,
+        "로그인이 필요합니다."
+      );
+
+      return;
+
+    }
+
+
+    const {
+      data,
+      error
+    } =
+      await supabaseClient
+        .from("home_customize")
+        .update({
+          layout_json:
+            buildCustomizeCoverLayoutJson()
+        })
+        .eq("user_id", userData.user.id)
+        .select("user_id");
+
+
+    if (error) {
+
+      /*
+        일시적 실패(네트워크 등)로 본다 — load status는 그대로
+        유지해 재시도를 허용한다. 현재 편집 state(customizeEditorState)
+        는 여기서 아무 것도 건드리지 않는다 — 화면에 보이는 편집
+        내용은 실패 여부와 무관하게 그대로 유지된다.
+      */
+
+      console.error(
+        "customize save error:",
+        error
+      );
+
+      customizeSaveMessage.textContent =
+        "저장에 실패했습니다.";
+
+      customizeSaveButton.disabled =
+        !computeCustomizeSaveEnabled();
+
+      return;
+
+    }
+
+
+    if (
+      !data ||
+      data.length === 0
+    ) {
+
+      /*
+        query 자체는 성공했는데 매치된 row가 0개 — onboarding이
+        항상 row를 만드는 설계상 "정상 empty"가 아니라 데이터 이상
+        상태다. upsert로 조용히 새 row를 만들지 않고, load status를
+        row-missing으로 낮춰 이후 SAVE를 막는다(LOAD 때와 동일하게
+        취급).
+      */
+
+      console.error(
+        "customize save error: no matching home_customize row for current user"
+      );
+
+      setCustomizeLoadStatus(
+        CUSTOMIZE_LOAD_STATUS.ROW_MISSING,
+        "홈 설정 데이터를 찾을 수 없습니다."
+      );
+
+      return;
+
+    }
+
+
+    customizeSaveMessage.textContent =
+      "saved ♡";
+
+    customizeSaveButton.disabled =
+      !computeCustomizeSaveEnabled();
+
+  }
+);
+
+
+
+/* =========================================================
    init
 ========================================================== */
 
-function initCustomizeEditor() {
+async function initCustomizeEditor() {
+
+  /*
+    "cover" 페이지 raw layout은 우선 Supabase(home_customize.
+    layout_json)에서 불러온다. layout_json이 실제로 비어있는 경우
+    (loaded 상태가 아닌 empty)에만 로컬 placeholder(DEFAULT_LAYOUT)로
+    대체한다 — validateCustomizeLayout이 그 안에서 다시 null/구버전/
+    손상된 구조를 안전하게 정규화한다.
+
+    ★ query 실패(error)/row 없음(row-missing)/세션 없음
+    (unauthenticated)은 절대 "빈 값과 동일 취급"하지 않는다 — 이
+    경우들은 원격 상태를 확인하지 못한 것이므로, 화면에는(사용자가
+    당황하지 않도록) 그대로 placeholder를 보여주더라도
+    setCustomizeLoadStatus가 SAVE를 잠근다(computeCustomizeSaveEnabled
+    참고) — 원격의 실제 layout_json을 못 보고 덮어쓰는 사고를
+    막기 위함. "profile" 등 나머지 페이지는 이번 단계에서 손대지
+    않는다(위 SAVE/LOAD 섹션 설명 참고).
+  */
+
+  const pageRawLayouts =
+    { ...CUSTOMIZE_PAGE_PLACEHOLDER_RAW_LAYOUTS };
+
+
+  const {
+    data: userData,
+    error: userError
+  } =
+    await supabaseClient
+      .auth
+      .getUser();
+
+
+  if (
+    userError ||
+    !userData?.user
+  ) {
+
+    setCustomizeLoadStatus(
+      CUSTOMIZE_LOAD_STATUS.UNAUTHENTICATED,
+      "로그인이 필요합니다."
+    );
+
+  } else {
+
+    const loadResult =
+      await loadCustomizeHomeLayoutJson(
+        userData.user.id
+      );
+
+    if (loadResult.status === CUSTOMIZE_LOAD_STATUS.LOADED) {
+
+      pageRawLayouts[CUSTOMIZE_PERSISTED_PAGE_ID] =
+        loadResult.layoutJson;
+
+      setCustomizeLoadStatus(
+        CUSTOMIZE_LOAD_STATUS.LOADED,
+        ""
+      );
+
+    } else if (loadResult.status === CUSTOMIZE_LOAD_STATUS.EMPTY) {
+
+      /* pageRawLayouts.cover는 이미 DEFAULT_LAYOUT placeholder다. */
+
+      setCustomizeLoadStatus(
+        CUSTOMIZE_LOAD_STATUS.EMPTY,
+        ""
+      );
+
+    } else if (loadResult.status === CUSTOMIZE_LOAD_STATUS.ROW_MISSING) {
+
+      setCustomizeLoadStatus(
+        CUSTOMIZE_LOAD_STATUS.ROW_MISSING,
+        "홈 설정 데이터를 찾을 수 없습니다."
+      );
+
+    } else {
+
+      setCustomizeLoadStatus(
+        CUSTOMIZE_LOAD_STATUS.ERROR,
+        "저장된 홈을 불러오지 못했습니다.\n새로고침 후 다시 시도해 주세요."
+      );
+
+    }
+
+  }
+
 
   /*
     theme(배경/글자색 등)는 페이지별이 아니라 사이트 공통이라,
@@ -3862,7 +4330,7 @@ function initCustomizeEditor() {
     (pageDef, index) => {
 
       const rawLayout =
-        CUSTOMIZE_PAGE_PLACEHOLDER_RAW_LAYOUTS[pageDef.id]
+        pageRawLayouts[pageDef.id]
           || { version: CUSTOMIZE_LAYOUT_VERSION, blocks: [] };
 
       const validation =
