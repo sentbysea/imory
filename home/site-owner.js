@@ -44,14 +44,212 @@
    not_found/error를 구분하지 못해도 지금과 동일하게 동작한다(둘 다
    "ownerId 없음"으로만 보임). status/homeMode를 실제로 구분해서
    쓰는 곳은 index.html의 home_mode 렌더러 분기뿐이다.
+
+   RETRY: 모바일 Safari에서 로그인 직후 /:slug 진입 시 이 조회가
+   간헐적으로 실패했다가 새로고침하면 성공하는 문제가 있었다(원인
+   추정: 부트스트랩 스크립트 캐시/타이밍, build-version.js 기반
+   cache-busting으로 별도 대응 중). 그 증상을 완화하기 위해 "진짜
+   쿼리 에러 또는 예외"일 때만 500ms 후 1회 재시도한다.
+   data:null + error:null인 정상 not_found는 재시도 대상이 아니다
+   — 존재하지 않는 slug를 재시도로 인해 load-error로 바꾸면 안 됨.
 ========================================================== */
 
 const siteOwnerSlug =
   getSiteOwnerSlugFromPath();
 
 
+const SITE_OWNER_RETRY_DELAY_MS = 500;
+
+
 let siteOwnerPromise =
   null;
+
+
+function queryProfileBySlug() {
+
+  return supabaseClient
+    .from(
+      "profiles"
+    )
+    .select(
+      "user_id, home_mode"
+    )
+    .eq(
+      "slug",
+      siteOwnerSlug
+    )
+    .maybeSingle();
+
+}
+
+
+function delay(ms) {
+
+  return new Promise(
+    (resolve) =>
+      setTimeout(
+        resolve,
+        ms
+      )
+  );
+
+}
+
+
+function logSiteOwnerFailure(level, error, retryCount) {
+
+  const payload =
+    {
+      slug: siteOwnerSlug,
+      timestamp: new Date().toISOString(),
+      userAgent: navigator.userAgent,
+      online: navigator.onLine,
+      errorCode: error?.code ?? null,
+      errorMessage: error?.message ?? String(error),
+      errorDetails: error?.details ?? null,
+      errorHint: error?.hint ?? null,
+      retryCount
+    };
+
+
+  if (level === "warn") {
+
+    console.warn(
+      "[home-owner]",
+      payload
+    );
+
+  } else {
+
+    console.error(
+      "[home-owner]",
+      payload
+    );
+
+  }
+
+}
+
+
+/*
+  쿼리 1회 시도를 {ok:true, data} / {ok:false, error}로 통일해서
+  돌려준다 — {data, error} 결과로 오는 쿼리 에러와, 쿼리 자체가
+  reject하는 예외(네트워크 등)를 같은 모양으로 합쳐야 재시도
+  로직을 한 곳에만 두고 두 경로 모두에 적용할 수 있다.
+*/
+async function attemptProfileQuery() {
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await queryProfileBySlug();
+
+
+    if (error) {
+
+      return {
+        ok: false,
+        error
+      };
+
+    }
+
+
+    return {
+      ok: true,
+      data
+    };
+
+  } catch (thrown) {
+
+    return {
+      ok: false,
+      error: thrown
+    };
+
+  }
+
+}
+
+
+async function resolveSiteOwner() {
+
+  let attempt =
+    await attemptProfileQuery();
+
+  let retryCount =
+    0;
+
+
+  if (!attempt.ok) {
+
+    logSiteOwnerFailure(
+      "warn",
+      attempt.error,
+      retryCount
+    );
+
+    await delay(
+      SITE_OWNER_RETRY_DELAY_MS
+    );
+
+    retryCount =
+      1;
+
+    attempt =
+      await attemptProfileQuery();
+
+  }
+
+
+  if (!attempt.ok) {
+
+    logSiteOwnerFailure(
+      "error",
+      attempt.error,
+      retryCount
+    );
+
+    return {
+      scoped: true,
+      ownerId: null,
+      status: "error",
+      homeMode: null
+    };
+
+  }
+
+
+  if (!attempt.data) {
+
+    /*
+      maybeSingle()은 매칭되는 행이 0개일 때 error 없이 data:null만
+      준다 — "존재하지 않는 slug"를 진짜 조회 실패와 구분할 수 있는
+      지점이 바로 여기. 이 분기는 attempt.ok===true일 때만 오므로
+      재시도를 거치지 않는다.
+    */
+
+    return {
+      scoped: true,
+      ownerId: null,
+      status: "not_found",
+      homeMode: null
+    };
+
+  }
+
+
+  return {
+    scoped: true,
+    ownerId: attempt.data.user_id,
+    status: "found",
+    homeMode: attempt.data.home_mode
+  };
+
+}
 
 
 function getSiteOwner() {
@@ -82,93 +280,7 @@ function getSiteOwner() {
 
 
   siteOwnerPromise =
-    supabaseClient
-      .from(
-        "profiles"
-      )
-      .select(
-        "user_id, home_mode"
-      )
-      .eq(
-        "slug",
-        siteOwnerSlug
-      )
-      .maybeSingle()
-      .then(
-        ({
-          data,
-          error
-        }) => {
-
-          if (error) {
-
-            console.error(
-              "site owner slug 조회 실패:",
-              error
-            );
-
-
-            return {
-              scoped: true,
-              ownerId: null,
-              status: "error",
-              homeMode: null
-            };
-
-          }
-
-
-          if (!data) {
-
-            /*
-              maybeSingle()은 매칭되는 행이 0개일 때 error 없이
-              data:null만 준다 — "존재하지 않는 slug"를 진짜 조회
-              실패와 구분할 수 있는 지점이 바로 여기.
-            */
-
-            return {
-              scoped: true,
-              ownerId: null,
-              status: "not_found",
-              homeMode: null
-            };
-
-          }
-
-
-          return {
-            scoped: true,
-            ownerId: data.user_id,
-            status: "found",
-            homeMode: data.home_mode
-          };
-
-        }
-      )
-      .catch(
-        (thrown) => {
-
-          /*
-            쿼리 자체가 reject하는 극단적 케이스(네트워크 예외 등)
-            방어 — 위 .then() 안의 {data, error} 분기로 못 잡는
-            경우까지 항상 안전한 status:"error"로 수렴시킨다.
-          */
-
-          console.error(
-            "site owner slug 조회 중 예외:",
-            thrown
-          );
-
-
-          return {
-            scoped: true,
-            ownerId: null,
-            status: "error",
-            homeMode: null
-          };
-
-        }
-      );
+    resolveSiteOwner();
 
 
   return siteOwnerPromise;

@@ -1,0 +1,30 @@
+# core/lib/build-version.js는 APP_BUILD_VERSION(배포 버전 값)의
+# 유일한 소스다. 이 파일 자체가 브라우저에 오래 캐시되면 새
+# 배포가 있어도 이전 버전 값을 계속 읽어 나머지 핵심 스크립트가
+# 여전히 예전 ?v= URL로 요청되는 문제가 생긴다. no-cache는
+# "저장하지 마라"(no-store)가 아니라 "쓰기 전에 서버에 재검증부터
+# 하라"는 뜻이므로, 매 요청마다 최신 버전 값을 확인하면서도 내용이
+# 그대로면 조건부 요청(304)으로 처리된다.
+#
+# 이 규칙은 build-version.js 한 파일에만 적용된다 — core/lib/*.js,
+# home/site-owner.js 등 ?v=<version>이 붙는 나머지 스크립트들은
+# 이 파일과 무관하게 기존 브라우저 캐시 정책을 그대로 유지한다.
+/core/lib/build-version.js
+  Cache-Control: no-cache
+
+# 인증/공개 홈 진입점 HTML도 같은 이유로 재검증을 강제한다 — 새
+# 배포 여부를 확인하는 시작점이 이 문서들이기 때문. slug 동적
+# 경로(/:slug 등)는 _redirects가 index.html로 rewrite하지만, 이
+# 규칙은 원 요청 경로 기준이라 그 경로들까지 자동으로 덮지는
+# 않는다 — 그 경로들은 지금까지와 동일하게 동작한다.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/auth/
+  Cache-Control: no-cache
+
+/auth/index.html
+  Cache-Control: no-cache

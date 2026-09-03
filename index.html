@@ -118,13 +118,20 @@
     src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
   ></script>
 
-  <script src="./core/lib/supabase-client.js"></script>
+  <script src="./core/lib/build-version.js"></script>
 
-  <script src="./core/lib/reserved-slugs.js"></script>
+  <script>
 
-  <script src="./core/lib/site-path.js"></script>
+    loadVersionedScripts(
+      [
+        "./core/lib/supabase-client.js",
+        "./core/lib/reserved-slugs.js",
+        "./core/lib/site-path.js",
+        "./core/lib/auth-shared.js"
+      ]
+    );
 
-  <script src="./core/lib/auth-shared.js"></script>
+  </script>
 
 
   <!-- =========================================================
@@ -185,7 +192,15 @@
   </script>
 
 
-  <script src="./home/site-owner.js"></script>
+  <script>
+
+    loadVersionedScripts(
+      [
+        "./home/site-owner.js"
+      ]
+    );
+
+  </script>
 
 
 
