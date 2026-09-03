@@ -3,7 +3,8 @@
 
    인증/공개 홈 부트스트랩 핵심 스크립트(core/lib/supabase-client.js,
    core/lib/reserved-slugs.js, core/lib/site-path.js,
-   core/lib/auth-shared.js, home/site-owner.js)의 캐시를
+   core/lib/auth-shared.js, core/lib/invite-token.js,
+   home/site-owner.js)의 캐시를
    무효화하기 위한 배포 단위 버전 값. index.html/auth/index.html의
    loadVersionedScripts() 호출이 이 값을 읽어 위 스크립트들을
    <script src="...?v=APP_BUILD_VERSION">로 불러온다.

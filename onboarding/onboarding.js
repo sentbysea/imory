@@ -9,9 +9,20 @@
    다시 이뤄지므로, 여기서 하는 클라이언트 검증은 빠른
    피드백용일 뿐이다.
 
+   getStoredInviteToken()(core/lib/invite-token.js)으로 읽은
+   초대 토큰을 p_invite_token으로 그대로 전달한다 — 가입 기간이
+   열려 있으면 서버가 무시하고, 닫혀 있으면 서버가 원자적으로
+   검증+소비한다. clearStoredInviteToken()은 RPC 성공 시, 그리고
+   "invalid invite"(그 토큰이 invalid/expired/exhausted/inactive로
+   확정됐다는 뜻)로 실패한 경우에만 호출한다. 그 외 오류(닉네임/
+   슬러그 검증 실패, 네트워크 등 재시도로 해결되거나 invite 상태와
+   무관한 오류)는 토큰을 지우지 않는다 — 재시도할 수 있어야 한다.
+
    RESERVED_SLUGS는 core/lib/reserved-slugs.js,
    supabaseClient는 core/lib/supabase-client.js,
-   authGetSession은 core/lib/auth-shared.js
+   authGetSession은 core/lib/auth-shared.js,
+   getStoredInviteToken/clearStoredInviteToken은
+   core/lib/invite-token.js
    (전부 이 파일보다 먼저 로드됨 — onboarding/index.html 참고).
 ========================================================== */
 
@@ -315,7 +326,10 @@ function mapOnboardingError(
         "사용할 수 없는 주소입니다.",
 
       "signup closed":
-        "현재 회원가입 기간이 아닙니다."
+        "현재 회원가입 기간이 아닙니다.",
+
+      "invalid invite":
+        "초대 링크가 유효하지 않습니다."
 
     };
 
@@ -398,7 +412,10 @@ onboardingSubmitButton
                 slug,
 
               p_bio:
-                null
+                null,
+
+              p_invite_token:
+                getStoredInviteToken()
 
             }
           );
@@ -418,6 +435,22 @@ onboardingSubmitButton
           );
 
 
+        /*
+          invite가 invalid/expired/exhausted/inactive로 확정된
+          경우에만 토큰을 지운다 — 그 외(닉네임/슬러그 검증 실패,
+          네트워크 오류 등)는 재시도 가능해야 하므로 그대로 둔다.
+        */
+
+        if (
+          error.message ===
+          "invalid invite"
+        ) {
+
+          clearStoredInviteToken();
+
+        }
+
+
         onboardingSubmitButton.disabled =
           false;
 
@@ -428,6 +461,14 @@ onboardingSubmitButton
 
       onboardingSubmitMessage.textContent =
         "saved ♡";
+
+
+      /*
+        성공했을 때만 지운다 — 실패한 시도(형식 오류, slug 중복 등)의
+        토큰은 재시도할 수 있어야 하므로 그대로 남겨둔다.
+      */
+
+      clearStoredInviteToken();
 
 
       window.location.href =
