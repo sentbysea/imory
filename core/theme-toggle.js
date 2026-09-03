@@ -22,6 +22,11 @@
     return;
   }
 
+  const themeColorMeta =
+    document.getElementById(
+      "systemThemeColorMeta"
+    );
+
 
   function currentTheme() {
 
@@ -70,6 +75,23 @@
         next
       );
 
+      /*
+        iOS Safari 상단/하단 바 색은 <html data-theme>가 아니라
+        이 meta의 content를 본다 — index.html <head>의
+        #systemThemeColorMeta 값(라이트 #ffffff / 다크 #222222,
+        --system-bg 실값과 동일하게 유지)과 반드시 같이 갱신해야
+        토글 직후에도 화면 위아래가 이전 테마 색으로 남지 않는다.
+      */
+
+      if (themeColorMeta) {
+
+        themeColorMeta.setAttribute(
+          "content",
+          next === "dark" ? "#222222" : "#ffffff"
+        );
+
+      }
+
       try {
 
         localStorage.setItem(
@@ -80,6 +102,34 @@
       } catch (e) {}
 
       syncLabel();
+
+      /*
+        iOS 26 Safari는 theme-color 메타를 무시하고 body/fixed
+        전체화면 요소(.landing-screen)의 배경색에서 상태바/툴바
+        틴트를 직접 샘플링하는데, 새로고침 없는 클릭 토글에서는
+        이 재샘플링이 누락되는 WebKit 버그가 있다(Design.md 4-7-1
+        3번 참고, 26.2에서 수정 예정). requestAnimationFrame으로
+        새 배경색이 페인트된 뒤 .landing-screen을 1px 스크롤했다
+        되돌려 reflow를 유발, Safari가 다시 샘플링하도록 유도한다
+        — 완화 조치일 뿐 100% 보장은 아니다.
+      */
+
+      requestAnimationFrame(() => {
+
+        const scroller =
+          document.querySelector(
+            ".landing-screen"
+          );
+
+        if (scroller) {
+
+          const top = scroller.scrollTop;
+          scroller.scrollTop = top + 1;
+          scroller.scrollTop = top;
+
+        }
+
+      });
 
     }
   );

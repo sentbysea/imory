@@ -14,7 +14,19 @@ body {
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background: #ffffff;
+
+  /*
+    ★ 이전엔 리터럴 #ffffff — 다크 모드에서도 html/body 배경은
+    항상 흰색으로 고정돼 있었다. iOS Safari는 elastic
+    overscroll(고무줄 바운스)이나 상단 상태바/하단 툴바 영역을
+    이 배경색으로 채우기 때문에, .landing-screen 자체는
+    --system-bg로 다크 전환이 되어도 그 바깥(html/body)이
+    흰색으로 남아 화면 위아래가 흰색으로 번쩍이는 원인이 됐다.
+    반드시 토큰을 참조해 다크 모드와 함께 전환되게 한다 —
+    index.html <head>의 theme-color meta 동기화와 함께
+    Design.md 4-7 "iOS Safari 흰 배경 방지 지침" 참고.
+  */
+  background: var(--system-bg);
 
   font-family:
     "Pretendard",
