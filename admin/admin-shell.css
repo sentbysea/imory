@@ -123,8 +123,15 @@ button {
 }
 
 
-.login-desc-link:hover {
-  color: var(--system-text);
+.login-desc-link:hover,
+.login-desc-link:focus-visible {
+  color: var(--system-accent);
+}
+
+
+.login-desc-link:focus-visible {
+  outline: 1px solid var(--system-accent);
+  outline-offset: 2px;
 }
 
 
@@ -213,6 +220,91 @@ button {
   color: #c66f8e;
 }
 
+
+
+/* =========================================================
+   짧은 안내 화면 — 화면 중앙 정렬 + 핑크 GLOW
+
+   auth 콜백의 처리중/가입기간 안내/오류 안내(auth/index.html
+   .login-box)처럼, 폼도 로그인 버튼도 없이 안내 문구 한 덩어리 +
+   보조 링크 하나로 끝나는 "빈 화면" 전용 modifier다.
+   admin/index.html의 로그인 화면(#loginBox, Google 로그인 버튼
+   있음)과 onboarding/index.html의 .login-box(입력 폼)에는 붙이지
+   않는다 — 둘 다 실제로 상호작용하는 화면이라 글로우로 안내
+   화면처럼 바꾸지 않는다.
+
+   GLOW는 새로 만들지 않고 루트 index.html의
+   .home-notice--not-found::before / .start-hero-text::before와
+   완전히 동일한 값(sua 테마 하트 뒤 GLOW 원본, 색상 단계·alpha·
+   블러·크기 전부 같음)을 그대로 재사용한다 — "짧은 안내 문구"
+   화면에는 어디서든 이 하나의 글로우만 쓴다는 시각 언어를
+   통일하기 위해서다. 다크모드에서도 원본과 동일하게 별도
+   override 없이 같은 raw pink 값을 그대로 쓴다(index.html 쪽
+   두 곳도 다크모드 전용 override가 없음).
+
+   min-height는 .admin-page의 세로 padding(70px + 90px = 160px,
+   위 .admin-page 규칙 참고)을 100vh에서 뺀 값이다 — 이 padding이
+   바뀌면 이 값도 같이 맞춰야 한다.
+========================================================== */
+
+.login-box--centered {
+  position: relative;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  min-height: calc(100vh - 160px);
+
+  text-align: center;
+}
+
+
+.login-box--centered::before {
+  content: "";
+
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  width: min(54vw, 370px);
+  height: min(54vw, 370px);
+
+  border-radius: 50%;
+
+  background:
+    radial-gradient(
+      circle,
+      rgba(255, 155, 197, 0.35) 0%,
+      rgba(255, 180, 211, 0.23) 30%,
+      rgba(255, 206, 226, 0.12) 54%,
+      rgba(255, 228, 239, 0.05) 70%,
+      rgba(255, 244, 249, 0.015) 82%,
+      rgba(255, 255, 255, 0) 100%
+    );
+
+  filter: blur(20px);
+
+  pointer-events: none;
+
+  z-index: -1;
+}
+
+
+/*
+  루트 index.html의 .start-notice("imory는 개인이 취미로 운영하는
+  서비스입니다..." 블록)와 같은 줄간격 토큰으로 맞춘다 — 색상/
+  글자크기는 이미 .login-desc가 같은 토큰(--system-text-faint,
+  --imory-font-size-400)을 쓰고 있었지만 line-height만 지정돼 있지
+  않아 더 빡빡해 보였다. .login-box--centered로 범위를 좁혀서
+  admin 로그인/onboarding 등 다른 .login-desc 쓰임에는 영향 없음.
+*/
+
+.login-box--centered .login-desc {
+  line-height: var(--imory-line-height-relaxed);
+}
 
 
 /* =========================================================
