@@ -14,8 +14,13 @@
       공개 홈(/<slug>)으로, slug가 비어있는 비정상 상태라면
       /admin/으로 안전하게 이동(아래 예외 처리 참고)
    3. 세션 있음, profiles 없음:
-      - app_config.signup_open === true → /onboarding/으로 이동
+      - public.get_signup_availability() RPC(서버가 signup_open +
+        signup_opens_at/signup_closes_at 기간까지 함께 판정한 boolean만
+        반환 — is_signup_open()과 동일 기준, 클라이언트는 날짜를 직접
+        비교하지 않음) === true → /onboarding/으로 이동
       - false → signOut() 후 이 페이지에 안내만 표시(리다이렉트 없음)
+      - RPC 자체 오류 → fail closed. onboarding으로 보내지 않고
+        일반 오류 안내만 표시(세션/가입 상태는 건드리지 않음)
 
    authGetSession/authSignOut은 core/lib/auth-shared.js,
    supabaseClient는 core/lib/supabase-client.js, buildSitePath는
@@ -230,28 +235,48 @@ async function runAuthCallback() {
   }
 
 
+  /*
+    가입 가능 여부는 항상 서버 판정(public.is_signup_open())을
+    그대로 재사용하는 이 RPC 하나로만 확인한다 — signup_opens_at/
+    signup_closes_at을 클라이언트가 직접 받아서 비교하지 않는다
+    (브라우저 시각 미사용, Hook/complete_onboarding()과 동일 기준).
+  */
+
   const {
-    data: appConfig,
-    error: appConfigError
+    data: isAvailable,
+    error: availabilityError
   } =
     await supabaseClient
-      .from(
-        "app_config"
-      )
-      .select(
-        "signup_open"
-      )
-      .eq(
-        "id",
-        1
-      )
-      .maybeSingle();
+      .rpc(
+        "get_signup_availability"
+      );
 
 
-  if (
-    appConfigError ||
-    !appConfig?.signup_open
-  ) {
+  if (availabilityError) {
+
+    console.error(
+      "signup availability check error:",
+      availabilityError
+    );
+
+
+    /*
+      fail closed: RPC 자체가 실패한 경우 신규 사용자를 onboarding으로
+      보내지 않는다. 다만 이게 "가입 기간이 아님"을 의미하는 건 아니므로
+      signOut()도 하지 않고(profile lookup 오류 처리와 동일하게) 일반
+      오류 안내만 표시한다.
+    */
+
+    authStatusMessage.textContent =
+      "로그인 확인 중 오류가 발생했습니다.";
+
+
+    return;
+
+  }
+
+
+  if (!isAvailable) {
 
     await authSignOut();
 
