@@ -1407,12 +1407,18 @@
     분기/onboarding·admin 이동 로직은 auth/auth-callback.js가 그대로
     처리한다(변경 없음).
 
-    signup_open 등 가입 기간 상태는 이 dialog에서 전혀 읽지 않는다
-    — 가입이 닫혀 있어도 기존 회원 로그인은 항상 가능해야 하므로
-    Google 버튼을 비활성화/숨김하면 안 된다(요구사항). 안내 문구
-    (#startSignInDialogNotice)는 지금은 고정 텍스트지만, 나중에
-    signup 상태를 반영하려면 이 id만 타깃해서 textContent/innerHTML을
-    바꾸면 된다.
+    signup_opens_at/signup_closes_at 같은 원문 컬럼은 이 dialog에서
+    전혀 읽지 않는다(브라우저 시각 비교 금지) — auth-callback.js와
+    동일하게 public.get_signup_availability() RPC(boolean만 반환,
+    fail-closed)만 사용해 안내 문구(#startSignInDialogNotice)를
+    채운다. 가입이 닫혀 있거나 RPC 자체가 실패해도 기존 회원 로그인은
+    항상 가능해야 하므로 Google 버튼(#startSignInGoogleButton)은
+    이 판정과 무관하게 절대 비활성화/숨김하지 않는다(요구사항).
+
+    RPC는 dialog를 처음 열 때 한 번만 호출하고 결과를 페이지 세션
+    동안 메모리에 캐시한다(재방문마다 다시 열어도 재호출 안 함) —
+    다만 오류 결과는 캐시하지 않고 다음에 다시 열 때 재시도한다
+    (일시적 네트워크 오류가 계속 오류 문구로 굳어지지 않도록).
   -->
 
   <script src="./core/theme-toggle.js"></script>
@@ -1436,6 +1442,11 @@
           "startSignInDialogClose"
         );
 
+      const signInDialogNotice =
+        document.getElementById(
+          "startSignInDialogNotice"
+        );
+
       const googleButton =
         document.getElementById(
           "startSignInGoogleButton"
@@ -1446,9 +1457,139 @@
         !signInButton ||
         !signInDialog ||
         !signInDialogClose ||
+        !signInDialogNotice ||
         !googleButton
       ) {
         return;
+      }
+
+
+      /*
+        가입 가능 여부 안내 문구 — public.get_signup_availability()
+        RPC(boolean만 반환) 결과를 #startSignInDialogNotice에 반영한다.
+        signupAvailabilityCache는 페이지 세션 동안의 짧은 캐시로,
+        dialog를 다시 열 때마다 RPC를 재호출하지 않기 위함이다.
+        오류(status === "error")는 캐시하지 않아 다음에 열 때 재시도한다.
+        signupAvailabilityPromise는 진행 중인 호출이 있을 때 중복
+        요청을 막기 위한 dedupe용.
+      */
+
+      const SIGNIN_NOTICE_MESSAGES = {
+        loading: [
+          "회원가입 가능 여부를 확인하고 있어요..."
+        ],
+        available: [
+          "현재 신규 회원가입이 가능합니다."
+        ],
+        closed: [
+          "현재는 신규 회원가입 기간이 아닙니다.",
+          "기존 회원은 계속 로그인할 수 있어요."
+        ],
+        error: [
+          "회원가입 상태를 확인하지 못했습니다.",
+          "기존 회원은 계속 로그인할 수 있어요."
+        ]
+      };
+
+      let signupAvailabilityCache =
+        null;
+
+      let signupAvailabilityPromise =
+        null;
+
+
+      function renderSignInDialogNotice(
+        status
+      ) {
+
+        signInDialogNotice.innerHTML =
+          SIGNIN_NOTICE_MESSAGES[status]
+            .map(
+              (line) =>
+                `<p>${line}</p>`
+            )
+            .join("");
+
+      }
+
+
+      function loadSignupAvailability() {
+
+        if (signupAvailabilityCache) {
+
+          renderSignInDialogNotice(
+            signupAvailabilityCache
+          );
+
+          return;
+
+        }
+
+
+        renderSignInDialogNotice(
+          "loading"
+        );
+
+
+        if (!signupAvailabilityPromise) {
+
+          signupAvailabilityPromise =
+            supabaseClient
+              .rpc(
+                "get_signup_availability"
+              )
+              .then(
+                ({
+                  data,
+                  error
+                }) => {
+
+                  if (error) {
+
+                    console.error(
+                      "signup availability check error:",
+                      error
+                    );
+
+                    return "error";
+
+                  }
+
+                  return data
+                    ? "available"
+                    : "closed";
+
+                }
+              )
+              .finally(
+                () => {
+
+                  signupAvailabilityPromise =
+                    null;
+
+                }
+              );
+
+        }
+
+
+        signupAvailabilityPromise.then(
+          (status) => {
+
+            if (status !== "error") {
+
+              signupAvailabilityCache =
+                status;
+
+            }
+
+            renderSignInDialogNotice(
+              status
+            );
+
+          }
+        );
+
       }
 
 
@@ -1457,6 +1598,8 @@
         () => {
 
           signInDialog.showModal();
+
+          loadSignupAvailability();
 
         }
       );
