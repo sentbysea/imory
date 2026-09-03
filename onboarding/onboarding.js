@@ -312,7 +312,10 @@ function mapOnboardingError(
         "주소 형식을 확인해주세요(영문 소문자/숫자/하이픈, 3~30자).",
 
       "reserved slug":
-        "사용할 수 없는 주소입니다."
+        "사용할 수 없는 주소입니다.",
+
+      "signup closed":
+        "현재 회원가입 기간이 아닙니다."
 
     };
 
