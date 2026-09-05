@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>POST Skin Lifecycle Transition Test Harness (PHASE 1C-F hardening)</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; background: #f2f2f2; }
+  h2 { margin-top: 40px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  #summary { font-size: 16px; font-weight: bold; margin-top: 24px; }
+  #fixtureHost { display: none; }
+</style>
+</head>
+<body>
+
+  <h1>POST Skin Lifecycle Transition Test Harness</h1>
+  <p>
+    실제 <code>posts/posts.html</code> 마크업 + 실제
+    <code>posts-view-detail.js</code>/<code>posts-view-secret-gate.js</code>/
+    <code>posts-refs.js</code>/<code>posts-state.js</code>/스타일·포맷 헬퍼를 그대로
+    로드하고, <code>supabaseClient</code>/<code>getSiteOwner</code>/
+    <code>getSignedInUser</code>/<code>skin/skin-post.js</code>(이미 별도 하네스로
+    검증됨)만 mock해서 Skin↔legacy POST 전환 시 <code>#postSecretGate</code> DOM
+    reparent와 <code>currentPostBodyMountTarget</code>의 실제 DOM lifecycle을
+    검증한다. 함수 호출 횟수가 아니라 <code>parentElement</code>/
+    <code>closest("[hidden]")</code>/<code>isConnected</code>/실제 DOM 내용을 검사한다.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <div id="fixtureHost"></div>
+
+  <script>
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function report(name, passed, detail) {
+      const item = document.createElement("li");
+      item.className = passed ? "pass" : "fail";
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      reportList.appendChild(item);
+      if (passed) { passCount++; } else { failCount++; }
+    }
+
+    function assert(name, condition, detail) {
+      report(name, !!condition, detail);
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+      window.__testDone = true;
+    }
+
+  </script>
+
+  <!-- =========================================================
+       1. 실제 posts.html fragment 주입(동기 XHR — 이후 모든 classic
+       script가 실제 ID 구조를 document.getElementById로 찾을 수 있게).
+  ========================================================== -->
+
+  <script>
+
+    const __fixtureXhr = new XMLHttpRequest();
+    __fixtureXhr.open("GET", "../posts/posts.html", false);
+    __fixtureXhr.send(null);
+    document.getElementById("fixtureHost").innerHTML = __fixtureXhr.responseText;
+
+  </script>
+
+  <!-- =========================================================
+       2. mock: supabaseClient / getSiteOwner / getSignedInUser /
+       skinPostReady — 이 네 가지만 실제 Supabase/skin-post.js
+       대신 이 하네스가 통제한다. skin-post.js 자체의 fallback
+       matrix는 skin-post-integration-test.html이 이미 검증했으므로,
+       이 하네스는 그 모듈의 "결과"만 흉내 내고 posts-view-detail.js가
+       그 결과를 받아 DOM을 어떻게 바꾸는지에 집중한다.
+  ========================================================== -->
+
+  <script>
+
+    /* ---- 시나리오가 매 호출 전에 바꿔 끼우는 상태 ---- */
+
+    window.__mock = {
+      ownerId: "owner-1",
+      signedInUserId: null,           // null = 익명, "owner-1" = owner 본인 로그인
+      skinBehavior: "success",        // "success" | "false" | "no-region"
+      post: null,                     // 현재 openPostPage가 조회할 posts row
+      postContent: "본문 텍스트",
+      categoryName: null,
+      secretRpcSucceeds: true
+    };
+
+    window.supabaseClient = {
+
+      from(table) {
+
+        const calls = { maybeSingle: false, eqs: [] };
+
+        const builder = {
+          select() { return builder; },
+          eq(col, val) { calls.eqs.push([col, val]); return builder; },
+          in(col, val) { calls.eqs.push([col, val]); return builder; },
+          order() { return builder; },
+          limit() { return builder; },
+          maybeSingle() { calls.maybeSingle = true; return resolve(); },
+          then(onFulfilled, onRejected) { return resolve().then(onFulfilled, onRejected); }
+        };
+
+        function resolve() {
+
+          if (table === "posts") {
+
+            if (calls.maybeSingle) {
+              const idEq = calls.eqs.find(([col]) => col === "id");
+              const match = idEq && window.__mock.post && String(window.__mock.post.id) === String(idEq[1])
+                ? window.__mock.post
+                : null;
+              return Promise.resolve({ data: match, error: null });
+            }
+
+            /* loadRelatedPosts()의 목록 조회 — 비어있어도 무방 */
+            return Promise.resolve({ data: [], error: null });
+
+          }
+
+          if (table === "post_contents") {
+            return Promise.resolve({ data: { content: window.__mock.postContent }, error: null });
+          }
+
+          if (table === "categories") {
+            return Promise.resolve({
+              data: window.__mock.categoryName ? { name: window.__mock.categoryName } : null,
+              error: null
+            });
+          }
+
+          if (table === "quote_presets") {
+            return Promise.resolve({ data: { settings: {} }, error: null });
+          }
+
+          return Promise.resolve({ data: null, error: null });
+
+        }
+
+        return builder;
+
+      },
+
+      rpc(name, args) {
+
+        if (name === "get_secret_post_content") {
+
+          if (window.__mock.secretRpcSucceeds) {
+            return Promise.resolve({ data: [{ content: window.__mock.postContent }], error: null });
+          }
+
+          return Promise.resolve({ data: null, error: null });
+
+        }
+
+        return Promise.resolve({ data: null, error: null });
+
+      }
+
+    };
+
+    window.getSiteOwner = async function () {
+      return { scoped: true, ownerId: window.__mock.ownerId };
+    };
+
+    window.getSignedInUser = async function () {
+      return window.__mock.signedInUserId ? { id: window.__mock.signedInUserId } : null;
+    };
+
+    /*
+      skin-post.js 자체의 fallback matrix(published skin 없음/
+      templates.post 없음/schemaVersion 등)는 skin-post-integration-test.html이
+      이미 실제 모듈로 검증했다 — 여기서는 그 모듈의 "결과"만 흉내 내서
+      posts-view-detail.js/tryRenderPublishedSkinPost의 owner guard +
+      DOM 반영 로직만 검증한다. 실제 skin-render.js와 동일하게 매번
+      container.innerHTML을 통째로 새로 그린다(= 이전 bodyRegion은
+      항상 detach된다)는 계약을 그대로 재현한다.
+    */
+
+    window.skinPostReady = Promise.resolve(async function renderPublishedSkinPost({ container }) {
+
+      if (window.__mock.skinBehavior === "false") {
+        return false;
+      }
+
+      if (window.__mock.skinBehavior === "no-region") {
+        container.innerHTML = `<article class="skin-post-mock"><h1>mock chrome, no region</h1></article>`;
+        container.innerHTML = "";
+        return false;
+      }
+
+      container.innerHTML =
+        `<article class="skin-post-mock">` +
+        `<h1 class="skin-post-mock-title"></h1>` +
+        `<div data-imory-region="post-body" class="skin-post-body-slot"></div>` +
+        `</article>`;
+
+      const bodyRegion = container.querySelector('[data-imory-region="post-body"]');
+
+      return { rendered: true, bodyRegion };
+
+    });
+
+  </script>
+
+  <!-- =========================================================
+       3. 실제 앱 코드 로드(classic script, 실제 index.html과
+       동일한 상대 순서 — posts-refs.js/posts-state.js가 맨 마지막).
+  ========================================================== -->
+
+  <script src="../core/lib/reserved-slugs.js"></script>
+  <script src="../core/lib/site-path.js"></script>
+  <script src="../posts/posts-format.js"></script>
+  <script src="../posts/posts-sanitize.js"></script>
+  <script src="../posts/posts-reader-scale.js"></script>
+  <script src="../posts/style/posts-style-preset.js"></script>
+  <script src="../posts/style/posts-style-dialogue.js"></script>
+  <script src="../posts/style/posts-style-render.js"></script>
+  <script src="../posts/posts-view-html-fit.js"></script>
+  <script src="../posts/view/posts-view-detail.js"></script>
+  <script src="../posts/view/posts-view-secret-gate.js"></script>
+  <script src="../posts/editor/posts-refs.js"></script>
+  <script src="../posts/editor/posts-state.js"></script>
+
+  <!-- =========================================================
+       4. posts-view-transition.js는 로드하지 않는다(애니메이션/
+       에디터 전용, 이번 lifecycle 검증과 무관) — 대신 openPostPage()가
+       참조하는 세 함수만 no-op으로 직접 선언한다. 실제 파일을
+       로드하지 않으므로 여기서 override가 아니라 최초 선언이다.
+  ========================================================== -->
+
+  <script>
+
+    function closePostMenu() {}
+
+    function hidePostEditor() {}
+
+    async function showPostArea() {
+      if (typeof postArea !== "undefined" && postArea) {
+        postArea.hidden = false;
+      }
+    }
+
+    /*
+      posts-state.js가 자기 자신의 real getSignedInUser()(실제
+      supabaseClient.auth.getUser() 호출)를 top-level function
+      declaration으로 선언해서, 앞서(섹션 2) 정의해 둔 mock을
+      덮어썼다 — 여기서 다시 mock으로 되돌린다(function 선언도
+      결국 이 global 스코프의 변수 하나일 뿐이라 나중에 로드된
+      쪽이 이긴다). getSiteOwner는 home/site-owner.js를 아예
+      로드하지 않았으므로 섹션 2의 mock이 계속 유효하다.
+    */
+
+    async function getSignedInUser() {
+      return window.__mock.signedInUserId ? { id: window.__mock.signedInUserId } : null;
+    }
+
+  </script>
+
+  <!-- =========================================================
+       5. 시나리오 드라이버
+  ========================================================== -->
+
+  <script type="module">
+
+    function setPost({ id, visibility = "public", categoryId = null, contentType = "richtext" }) {
+      window.__mock.post = {
+        id,
+        category_id: categoryId,
+        user_id: window.__mock.ownerId,
+        title: `post ${id}`,
+        content_type: contentType,
+        visibility,
+        created_at: "2026-01-01T00:00:00.000Z",
+        quote_preset_id: null
+      };
+    }
+
+    function bodyMarker(postId) {
+      return `marker-post-${postId}-${Math.random().toString(36).slice(2)}`;
+    }
+
+    async function go(postId, { skinBehavior = "success", signedInUserId = null, visibility = "public" } = {}) {
+      window.__mock.skinBehavior = skinBehavior;
+      window.__mock.signedInUserId = signedInUserId;
+      window.__mock.postContent = bodyMarker(postId);
+      setPost({ id: postId, visibility });
+      await openPostPage(postId, { updateUrl: false });
+      return window.__mock.postContent;
+    }
+
+    /* =====================================================
+       A. Skin normal post -> legacy normal post
+    ===================================================== */
+
+    {
+      const markerA1 = await go(1, { skinBehavior: "success" });
+
+      assert(
+        "A1. Skin post: postSkinContainer visible, postDetail hidden",
+        postSkinContainer.hidden === false && postDetail.hidden === true
+      );
+
+      assert(
+        "A1. Skin post: body content actually inside postSkinContainer",
+        postSkinContainer.textContent.includes(markerA1),
+        postSkinContainer.innerHTML
+      );
+
+      assert(
+        "A1. currentPostBodyMountTarget is a live element inside postSkinContainer",
+        currentPostBodyMountTarget instanceof Element &&
+          postSkinContainer.contains(currentPostBodyMountTarget)
+      );
+
+      const skinRegionFromA = currentPostBodyMountTarget;
+
+      const markerA2 = await go(2, { skinBehavior: "false" });
+
+      assert(
+        "A2. legacy post: postDetail visible, postSkinContainer hidden",
+        postDetail.hidden === false && postSkinContainer.hidden === true
+      );
+
+      assert(
+        "A2. legacy post: body actually rendered into #postDetailContent",
+        postDetailContent.textContent.includes(markerA2)
+      );
+
+      assert(
+        "A2. currentPostBodyMountTarget reset to null on legacy fallback",
+        currentPostBodyMountTarget === null
+      );
+
+      assert(
+        "A2. postSkinContainer cleared (previous skin markup gone)",
+        postSkinContainer.innerHTML === ""
+      );
+
+      assert(
+        "A2. previous skin bodyRegion is now detached from the document",
+        skinRegionFromA.isConnected === false
+      );
+
+      assert(
+        "A2. stale detached skin region still holds only its OWN old content, not the new post's",
+        skinRegionFromA.textContent.includes(markerA1) &&
+          !skinRegionFromA.textContent.includes(markerA2)
+      );
+    }
+
+    /* =====================================================
+       B. Skin secret post -> legacy secret post
+    ===================================================== */
+
+    {
+      const markerB1 = await go(10, { skinBehavior: "success", visibility: "secret" });
+
+      assert(
+        "B1. Skin secret: postSecretGate visible and inside the visible skin container",
+        postSecretGate.hidden === false &&
+          postSkinContainer.contains(postSecretGate) &&
+          postSkinContainer.hidden === false
+      );
+
+      assert(
+        "B1. postSecretGate is NOT inside the hidden legacy #postDetail",
+        !postDetail.contains(postSecretGate)
+      );
+
+      assert(
+        "B1. body content NOT exposed while locked (secret content never fetched)",
+        !postSkinContainer.textContent.includes(markerB1)
+      );
+
+      await go(11, { skinBehavior: "false", visibility: "secret" });
+
+      assert(
+        "B2. legacy secret: postSecretGate visible and back inside legacy #postDetail",
+        postSecretGate.hidden === false && postDetail.contains(postSecretGate)
+      );
+
+      assert(
+        "B2. postSecretGate is NOT left behind inside the hidden #postSkinContainer",
+        !postSkinContainer.contains(postSecretGate)
+      );
+
+      assert(
+        "B2. postSecretGate is visible (no hidden ancestor)",
+        postSecretGate.closest("[hidden]") === null
+      );
+    }
+
+    /* =====================================================
+       C. Skin secret post -> legacy normal post -> legacy secret post
+    ===================================================== */
+
+    {
+      await go(20, { skinBehavior: "success", visibility: "secret" });
+      await go(21, { skinBehavior: "false", visibility: "public" });
+
+      assert(
+        "C1. legacy normal in between: postSecretGate hidden, still in legacy #postDetail",
+        postSecretGate.hidden === true && postDetail.contains(postSecretGate)
+      );
+
+      await go(22, { skinBehavior: "false", visibility: "secret" });
+
+      assert(
+        "C2. final legacy secret: gate visible in legacy #postDetail",
+        postSecretGate.hidden === false &&
+          postDetail.contains(postSecretGate) &&
+          postSecretGate.closest("[hidden]") === null
+      );
+    }
+
+    /* =====================================================
+       D. legacy secret post -> Skin secret post -> legacy secret post
+    ===================================================== */
+
+    {
+      await go(30, { skinBehavior: "false", visibility: "secret" });
+
+      assert(
+        "D1. legacy secret: gate visible in #postDetail",
+        postSecretGate.hidden === false && postDetail.contains(postSecretGate)
+      );
+
+      const markerD2 = await go(31, { skinBehavior: "success", visibility: "secret" });
+
+      assert(
+        "D2. Skin secret: gate moved into the visible skin bodyRegion",
+        postSecretGate.hidden === false &&
+          postSkinContainer.contains(postSecretGate) &&
+          !postDetail.contains(postSecretGate)
+      );
+
+      /* 잠금 해제까지 실제로 실행해서 currentPostBodyMountTarget이
+         가리키는 자리에 본문이 들어가는지 확인(24-7절이 보고한
+         secret unlock 흐름의 실제 DOM 검증). handleSecretGateSubmit은
+         window.__mock.postContent를 그대로 RPC 응답에 담아 돌려주므로
+         go(31)이 남겨둔 markerD2와 같은 값이어야 한다. */
+
+      postSecretGateInput.value = "whatever";
+
+      await handleSecretGateSubmit({ preventDefault() {} });
+
+      assert(
+        "D2b. secret unlock: body actually mounted into the Skin bodyRegion",
+        currentPostBodyMountTarget instanceof Element &&
+          currentPostBodyMountTarget.textContent.includes(markerD2)
+      );
+
+      await go(32, { skinBehavior: "false", visibility: "secret" });
+
+      assert(
+        "D3. back to legacy secret: gate restored to #postDetail before legacy render",
+        postSecretGate.hidden === false &&
+          postDetail.contains(postSecretGate) &&
+          !postSkinContainer.contains(postSecretGate)
+      );
+    }
+
+    /* =====================================================
+       E. Skin post -> owner's own post (legacy guard)
+    ===================================================== */
+
+    {
+      await go(40, { skinBehavior: "success", visibility: "public" });
+
+      assert(
+        "E1. Skin post rendered for anonymous viewer",
+        postSkinContainer.hidden === false
+      );
+
+      const markerE2 = await go(41, { skinBehavior: "success", signedInUserId: "owner-1", visibility: "public" });
+
+      assert(
+        "E2. owner viewing own post: guard forces legacy even though skinBehavior=success",
+        postDetail.hidden === false && postSkinContainer.hidden === true
+      );
+
+      assert(
+        "E2. owner management UI (#postDetailActions) visible",
+        postDetailActions.hidden === false
+      );
+
+      assert(
+        "E2. legacy body rendered normally for owner",
+        postDetailContent.textContent.includes(markerE2)
+      );
+
+      assert(
+        "E2. currentPostBodyMountTarget is null under owner guard",
+        currentPostBodyMountTarget === null
+      );
+    }
+
+    /* =====================================================
+       F. Skin render failure(no region) -> legacy secret post
+    ===================================================== */
+
+    {
+      const markerF1 = await go(50, { skinBehavior: "no-region", visibility: "public" });
+
+      assert(
+        "F1. no-region failure: falls back to legacy, no blank screen",
+        postDetail.hidden === false &&
+          postSkinContainer.hidden === true &&
+          postDetailContent.textContent.includes(markerF1)
+      );
+
+      assert(
+        "F1. postSkinContainer left empty after the failed attempt",
+        postSkinContainer.innerHTML === ""
+      );
+
+      await go(51, { skinBehavior: "no-region", visibility: "secret" });
+
+      assert(
+        "F2. no-region + secret: gate/body both use the legacy root",
+        postSecretGate.hidden === false && postDetail.contains(postSecretGate)
+      );
+    }
+
+    /* =====================================================
+       G. Skin post render -> region detaches on next entry ->
+       next legacy body render must not write into the stale region
+    ===================================================== */
+
+    {
+      const markerG1 = await go(60, { skinBehavior: "success", visibility: "public" });
+      const staleRegion = currentPostBodyMountTarget;
+
+      const markerG2 = await go(61, { skinBehavior: "false", visibility: "public" });
+
+      assert(
+        "G1. previous skin region is detached after the next entry resets the container",
+        staleRegion.isConnected === false
+      );
+
+      assert(
+        "G2. new legacy render did not touch the stale detached region (it still only has its own old content)",
+        staleRegion.textContent.includes(markerG1) &&
+          !staleRegion.textContent.includes(markerG2)
+      );
+
+      assert(
+        "G3. new legacy render landed in the correct live target (#postDetailContent)",
+        postDetailContent.textContent.includes(markerG2)
+      );
+    }
+
+    finishSummary();
+
+  </script>
+
+</body>
+</html>
