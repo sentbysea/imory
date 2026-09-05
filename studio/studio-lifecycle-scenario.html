@@ -336,7 +336,11 @@
             skin_image_slot_values: [],
             profiles: [{ user_id: "user-m", nickname: "Scenario M", bio: null, slug: "scenario-m" }],
             site_settings: [],
-            categories: [],
+            categories: [
+              { id: "cat-m-log", user_id: "user-m", name: "LOG", type: "post", sort_order: 1 },
+              { id: "cat-m-pic", user_id: "user-m", name: "PIC", type: "post", sort_order: 2 },
+              { id: "cat-m-memo", user_id: "user-m", name: "MEMO", type: "post", sort_order: 3 }
+            ],
             posts: [],
             banners: []
           },
@@ -369,6 +373,82 @@
 
             }
           }
+        },
+
+        /*
+          Scenario C — 실사용자 재현: HOME-only(top-level html) draft
+          Skin + 실제 post형 category(LOG/PIC/MEMO, type "post")는
+          있지만 templates.category는 없음. CATEGORY 버튼의
+          enabled/disabled는 오직 post형 category 존재 여부로만
+          결정되어야 한다(templates.category 유무와 무관, Studio
+          chrome 재정리 2라운드 회귀 검증용) — 이 fixture에서
+          CATEGORY는 enabled여야 하고, 클릭하면 "아직 CATEGORY
+          템플릿이 없습니다" unsupported overlay가 떠야 한다.
+        */
+        c: {
+          userId: "user-c",
+          tables: {
+            skins: [
+              { id: "skin-c1", user_id: "user-c", is_active: true, current_draft_version_id: "draft-c1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-c1",
+                content: {
+                  schemaVersion: 1,
+                  html: '<div class="scenario-c-marker"><h1 data-imory-bind="site.title"></h1></div>',
+                  css: ".scenario-c-marker { color: green; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-c", nickname: "Scenario C", bio: null, slug: "scenario-c" }],
+            site_settings: [],
+            categories: [
+              { id: "cat-c-log", user_id: "user-c", name: "LOG", type: "post", sort_order: 1 },
+              { id: "cat-c-pic", user_id: "user-c", name: "PIC", type: "post", sort_order: 2 },
+              { id: "cat-c-memo", user_id: "user-c", name: "MEMO", type: "post", sort_order: 3 }
+            ],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {}
+        },
+
+        /*
+          Scenario L — post형 category가 0개(실제로 없음). CATEGORY는
+          disabled여야 한다(회귀 대조군).
+        */
+        l: {
+          userId: "user-l",
+          tables: {
+            skins: [
+              { id: "skin-l1", user_id: "user-l", is_active: true, current_draft_version_id: "draft-l1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-l1",
+                content: {
+                  schemaVersion: 1,
+                  html: '<div class="scenario-l-marker"><h1 data-imory-bind="site.title"></h1></div>',
+                  css: ".scenario-l-marker { color: purple; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-l", nickname: "Scenario L", bio: null, slug: "scenario-l" }],
+            site_settings: [],
+            categories: [],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {}
         }
 
       };
