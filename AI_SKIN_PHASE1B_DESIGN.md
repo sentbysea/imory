@@ -127,9 +127,10 @@ studio/
 
 **결정됨(이번 라운드): `#skinStudioPanel`은 거의 풀스크린으로 구성한다.** 다른 admin 패널(SETTINGS/QUOTE/CUSTOMIZE)이 쓰는 `view-top`(뒤로가기+제목 heading 줄) + 여백 있는 본문 레이아웃을 그대로 따르지 않는다:
 
-- `<iframe id="skinStudioFrame">`이 패널 안에서 **화면 대부분**을 차지하도록 admin 공통 헤더/패딩을 최소화한다(`#skinStudioPanel` 전용 CSS로 `admin-view`의 기본 패딩을 0에 가깝게 override).
-- **필수 navigation만 유지**한다 — `← back`(admin 홈으로) 버튼 정도만 작게 남기고, 다른 패널처럼 큰 `<h2>CUSTOMIZE</h2>` 제목 줄이나 설명 텍스트 영역은 만들지 않는다.
-- 즉 admin 레벨에서는 "거의 안 보이는 얇은 뒤로가기"만 있고, 그 아래 `studio/index.html` iframe이 10절의 풀스크린 Preview UX를 이어받는 구조 — admin chrome과 Studio chrome이 이중으로 여백/제목을 쌓지 않게 한다.
+- `<iframe id="skinStudioFrame">`이 패널 안에서 **화면 전체**를 차지하도록 admin 공통 헤더/footer/패딩을 전부 숨긴다(`admin-shell.css` `.skin-studio-mode`).
+- **admin 바깥쪽 back row(`.skin-studio-top`)는 Studio 모드에서 시각적으로 완전히 숨긴다**(`display:none`) — back 버튼은 이제 `studio/index.html` 안쪽 Top Dock(11-3절)이 담당하고, 클릭 시 `postMessage({type:"studio:back"})`로 이 admin 문서(`admin-session.js`)에 알려 `showAdminHome()`을 호출한다. 바깥쪽 back을 그대로 뒀다면 back 버튼이 이중으로 보였을 것이므로 숨긴 것 — 마크업/JS 자체(`skinStudioBackButton` 등)는 iframe 로드 실패 등을 대비한 안전망으로 그대로 남겨둔다.
+- 다른 패널처럼 큰 `<h2>CUSTOMIZE</h2>` 제목 줄이나 설명 텍스트 영역은 만들지 않는다.
+- 즉 admin 레벨에는 이제 그 어떤 chrome도 남지 않고, `studio/index.html` iframe이 11절의 풀스크린 Preview UX를 그대로 이어받는 구조다 — admin chrome과 Studio chrome이 이중으로 여백/제목/back 버튼을 쌓지 않는다.
 
 ---
 
@@ -297,58 +298,72 @@ owner 본인 `buildSkinContext()` 직접 호출 / `extractImageSlotNames()` 공�
 
 ---
 
-## 11. Studio 화면 구조 — 전체 화면이 Preview인 제작 UI (변경 없음)
+## 11. Studio 화면 구조 — 전체 화면이 Preview인 제작 UI (Studio UI 정리 라운드 반영)
 
 ### 11-1. 설계 철학
 
-**PHASE 1B에는 아직 AI 채팅이 없으므로 왼쪽 패널을 채울 실질적인 콘텐츠가 없고, 있다 해도 Studio의 핵심 가치는 "실제 내 데이터로 채워진 홈페이지가 지금 어떻게 보이는가"를 계속 눈에 담고 있는 것**이다. 그래서 화면 대부분(사실상 전체)을 Preview가 차지하고, 편집 컨트롤은 화면 가장자리에 최소한으로만 존재하는 구조로 설계한다.
+**PHASE 1B에는 아직 AI 채팅이 없으므로 왼쪽 패널을 채울 실질적인 콘텐츠가 없고, 있다 해도 Studio의 핵심 가치는 "실제 내 데이터로 채워진 홈페이지가 지금 어떻게 보이는가"를 계속 눈에 담고 있는 것**이다. 그래서 화면 전체를 Preview가 차지하고, 편집 컨트롤은 전부 그 위에 얹히는 절대배치 overlay로만 존재하는 구조로 구현했다 — `#studioPreviewStage`(iframe이 앉은 자리)는 항상 shell 전체 크기를 그대로 유지하고, 어떤 컨트롤도 그 레이아웃 공간을 나눠 갖지 않는다(11-2절 이하 각 컨트롤 설명 참고).
 
-Studio는 **데스크탑 전용 제작 도구**다(Slice 1에서 이미 구현/검증 완료). 다만 Studio 안에서 **미리보는 대상**(사용자의 공개 홈페이지)의 모바일 버전은 1급 기능으로 다룬다.
+Studio는 **데스크탑 전용 제작 도구**다(Slice 1에서 이미 구현/검증 완료 — 좁은 화면에서는 `admin-shell.css`가 iframe 대신 `#skinStudioMobileNotice` 안내만 보여준다). 다만 Studio 안에서 **미리보는 대상**(사용자의 공개 홈페이지)의 모바일 버전은 1급 기능으로 다룬다.
 
 ### 11-2. 레이아웃 개요
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                     [ ▾ Desktop / Mobile ]  ← 상단 중앙, 작은 floating tab
+│ (hover/focus 시에만 내려옴) ← back   Save  Code  Settings │ ← Top Dock, 평소엔 화면 위로 숨고 ▾ handle만 보임
+│                        DESKTOP | MOBILE                │ ← 상단 중앙, 항상 노출되는 ghost 텍스트 toggle
+│                                                        │
+│                                                        │
+│                   PREVIEW (iframe, 화면 전체)            │
 │                                                        │
 │                                                        │
 │                                                        │
-│                   PREVIEW (iframe, 화면 대부분)         │
-│                                                        │
-│                                                        │
-│                                                        │
-│                        [ ✎ AI (준비 중) ]  ← 하단 중앙, 작은 floating tab
+│                            △  ← 하단 중앙, chevron handle
 └──────────────────────────────────────────────────────┘
-       ↑ 우측 상단 구석: [Save] [Code] [Settings] 소형 버튼
 ```
 
-### 11-3. 상단 중앙 — Desktop/Mobile 전환 tab
+핵심 원칙: **어떤 컨트롤도 Preview(iframe)의 레이아웃 공간을 차지하지 않는다.** Top Dock/viewport toggle/AI handle·drawer 전부 `position:absolute`로 `#studioPreviewShell` 위에 겹쳐 그려지고, `#studioPreviewStage`와 그 안의 iframe은 이 shell 전체를 그대로 차지한다(`studio.css`).
 
-- Preview iframe의 **CSS 폭만 변경**한다(예: Desktop = `width: 100%`/유동폭, Mobile = `width: 390px` 고정 + 가운데 정렬).
-- iframe 안의 문서는 **다시 로드하지 않는다** — 컨테이너 폭만 바뀌므로 브라우저가 실제 창 크기가 바뀐 것과 동일하게 `@media` 쿼리를 재평가한다(11-5절).
-- 전환은 매우 가볍다 — CSS 한 줄(`iframe.style.width`)만 바꾸면 된다.
+### 11-3. 상단 — auto-hide Top Dock(← back / Save / Code / Settings)
 
-### 11-4. Preview 구조 — iframe **1개만** 사용
+- 평소에는 `transform: translateY(-100%)`로 화면 위쪽에 완전히 숨어 있고, 그 자리에는 얇은 `▾` handle(`#studioTopDockHandle`)만 보인다.
+- `#studioTopDockZone`(높이 42px의 hit-area 겸 positioning context, 항상 DOM에 존재)에 마우스가 들어오거나(`mouseenter`/`mouseleave`) dock 내부에 keyboard focus가 있을 때(`focusin`/`focusout`) `.is-open` 클래스가 붙어 dock이 내려온다. 순수 CSS `:hover`가 아니라 JS로 여닫는 이유는 "마우스가 멀어지면 350ms 지연 후 숨긴다"는 동작과, focus가 남아 있는 동안은 hover 여부와 무관하게 계속 열려 있어야 하는 요구를 하나의 로직으로 합쳐야 했기 때문이다(`studio-preview.js`의 `updateStudioTopDockVisibility()`).
+- 내려왔을 때 담는 컨트롤은 왼쪽 `← back`, 오른쪽 `Save`/`Code`/`Settings` 3개(Phase 1B에서는 셋 다 `disabled` — 실제 기능은 Slice 4/후속 몫, 15절).
+- `← back` 클릭 시 실제 화면 전환은 이 문서가 하지 않는다 — `window.parent`로 `{type:"studio:back"}`을 postMessage하면 admin 쪽 `admin-session.js`가 받아 `showAdminHome()`을 호출한다(2-2절에서 admin 바깥 back row를 숨긴 이유가 바로 이 대체 경로다).
+- dock이 닫혀 있어도(화면 밖으로 밀려나 있어도) 버튼들은 여전히 DOM/tab 순서에 남아 있다 — `-100%` 이동만으로 뷰포트 밖으로 나가므로 `overflow:hidden` 없이도 시각적으로 사라진다.
+
+### 11-4. 상단 중앙 — `DESKTOP | MOBILE` ghost toggle (dropdown 아님)
+
+- Slice 3 설계 초안의 `▾ Desktop/Mobile` **dropdown은 채택하지 않았다** — 옵션이 단 2개뿐이라 항상 나란히 노출되는 ghost 텍스트 버튼 한 쌍(`DESKTOP` / `MOBILE`, 사이에 얇은 구분선)으로 클릭 한 번에 바로 전환한다. 현재 모드는 굵은 글씨로 표시.
+- 이 toggle은 Top Dock과 달리 **항상 보인다**(hover/focus 여닫기 없음) — Preview 위 `position:absolute` overlay라는 점은 동일.
+- Preview iframe 자체는 재생성/재로드하지 않는다 — `#studioPreviewStage`에 `.studio-preview-stage--mobile` 클래스를 토글해 iframe/wrap의 CSS 크기만 바꾼다(11-5/11-6절).
+
+### 11-5. Preview 구조 — iframe **1개만** 사용
 
 ```
 studio/preview/preview-frame.html   ← 이 문서 하나만 존재
 ```
 
-`studio/index.html`은 이 문서를 로드하는 `<iframe id="studioPreviewFrame">` 하나만 가진다. 부모(Studio 셸)가 `postMessage`로 `{skin, context}`를 보내면(10절), `preview-bridge.js`가 받아서 `renderSkin({container, skin, context, mode:"preview"})`를 호출한다.
+`studio/index.html`은 이 문서를 로드하는 `<iframe id="studioPreviewFrame">` 하나만 가진다. 부모(`studio-preview.js`)가 `postMessage`로 `{skin, context}`를 보내면(10절), `preview-bridge.js`가 받아서 `renderSkin({container, skin, context, mode:"preview"})`를 호출한다. 왜 iframe 1개 + 폭 전환만으로 `@media`가 정확히 동작하는지의 근거(레이아웃 뷰포트 재평가)는 변경 없음.
 
-### 11-5. 왜 iframe 1개 + 폭 전환만으로 `@media`가 정확히 동작하는가
+### 11-6. Mobile Preview — iframe은 390×844 고정, 좁은 화면은 wrapper `scale()`로만 축소
 
-CSS `@media (max-width: ...)`는 평가 대상 문서의 레이아웃 뷰포트 폭을 기준으로 판정된다. `<iframe>`은 그 자체로 내부 문서의 레이아웃 뷰포트다 — 부모가 `iframe.style.width`를 바꾸면 iframe 안의 문서는 실제 창 크기가 바뀐 것과 동일하게 미디어쿼리를 재평가한다.
+- Mobile 모드에서 iframe 자신의 CSS 크기(레이아웃 뷰포트)는 **항상 정확히 390×844로 고정**한다 — Skin CSS의 `@media (max-width: 390px)` 등이 실제 기기와 동일하게 평가되려면 iframe의 레이아웃 뷰포트 자체가 이 기준과 어긋나면 안 되기 때문이다.
+- Studio 화면(admin iframe 안 가용 공간)이 390×844보다 좁을 때는 **iframe 크기를 줄이는 대신**, 그 iframe을 감싼 `#studioPreviewFrameWrap`에만 `transform: scale()`을 건다 — `transform: scale()`은 레이아웃 박스 크기(따라서 iframe이 인식하는 레이아웃 뷰포트)에 영향을 주지 않고 시각적으로만 축소하므로, "화면엔 작게 보이지만 내부 `@media` 판정은 390px 기준 그대로"가 동시에 성립한다.
+- 배율은 `studio-preview.js`의 `updateStudioMobileFrameScale()`이 `#studioPreviewStage`의 실측 크기에서 32px 여백을 뺀 뒤 390×844 대비 비율을 계산해 `--studio-mobile-scale` CSS 변수로 주입한다 — 1을 넘지 않게(큰 화면에서 확대는 하지 않음) 클램프하고, `ResizeObserver`로 admin iframe 크기 변화(창 크기 변화 등)에도 다시 계산한다.
 
-### 11-6. 하단 중앙 — AI Prompt 자리 예약 (Phase 1B에서는 placeholder)
+### 11-7. 하단 중앙 — chevron handle + 얕은 AI input drawer shell (Phase 1B는 shell만)
 
-**Phase 1B에서는 비활성 상태로만 존재.** 향후(PHASE 6) AI 채팅을 붙일 때 이 tab의 동작만 활성화하면 되도록 자리만 예약해 둔다.
+- Slice 설계 초안의 **하단 pill형 `[✎ AI (준비 중)]` 버튼은 채택하지 않았다** — 대신 위쪽만 둥근 작은 사각 tab 모양의 chevron/triangle handle(`△`/`▽`, `#studioAiHandle`) 하나만 하단 중앙에 항상 보인다.
+- handle 클릭 시 그 위에 `#studioAiDrawer`(라벨 "어떻게 바꾸고 싶나요?" + textarea 1줄 + 전송 버튼)가 `max-height: 0 → 140px` 전환으로 얕게 펼쳐진다(`transform` 대신 `max-height`를 쓰는 이유는 handle이 항상 drawer 아래쪽에 붙어 있는 flex 흐름을 유지하기 위함, `studio.css` 참고). 다시 클릭하면 접힌다.
+- **실제 AI 기능은 아직 없다** — 전송 버튼은 항상 `disabled`이고, textarea도 닫혀 있을 때는 `tabindex="-1"`로 tab 순서에서 빠진다. PHASE 6에서 AI 채팅을 붙일 때 이 shell의 동작만 활성화하면 되도록 자리만 예약해 둔 상태.
 
-### 11-7. 기타 컨트롤 — Save / Code / Settings
+### 11-8. 기타 컨트롤 — Save / Code / Settings
 
-- **Save**: 현재 draft를 저장(8절, `save_skin_draft_version` RPC). Phase 1B의 핵심 완료 조건.
-- **Code**: HTML/CSS 직접 수정 modal(12절)을 연다.
-- **Settings**: Skin 관련 부가 설정 자리(최소한만). Publish 버튼은 Phase 1B 어디에도 노출하지 않는다.
+- 셋 다 11-3절 Top Dock 안에 위치한다(더 이상 "우측 상단 구석"이 아니라 dock 전체의 오른쪽 그룹).
+- **Save**: 현재 draft를 저장(8절, `save_skin_draft_version` RPC). Phase 1B의 핵심 완료 조건. 아직 `disabled`(Slice 4 몫).
+- **Code**: HTML/CSS 직접 수정 modal(12절)을 연다. 아직 `disabled`(Slice 4 몫).
+- **Settings**: Skin 관련 부가 설정 자리(최소한만). 아직 `disabled`. Publish 버튼은 Phase 1B 어디에도 노출하지 않는다.
 
 ---
 
@@ -364,7 +379,7 @@ CANCEL / APPLY
 
 - `<textarea>` 2개(HTML/CSS) + Apply 버튼이 전부 — IDE 수준 기능은 후순위.
 - Apply 클릭 시: 값을 즉시 `skin-sanitize.js`/`skin-css-validate.js`로 검증 → Preview(11절 iframe)에 즉시 반영.
-- 실제 저장은 이 modal이 아니라 11-7절의 **Save** 버튼이 담당.
+- 실제 저장은 이 modal이 아니라 11-8절의 **Save** 버튼이 담당.
 
 ---
 
