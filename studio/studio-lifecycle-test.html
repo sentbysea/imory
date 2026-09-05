@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Studio Preview Lifecycle Integration Test</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h1 { margin-top: 0; }
+  h2 {
+    margin-top: 32px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; }
+  #summary { font-size: 16px; font-weight: bold; margin-top: 16px; }
+  #frames iframe {
+    width: 480px;
+    height: 360px;
+    border: 2px dashed #999;
+    margin: 8px 8px 8px 0;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Studio Preview Lifecycle Integration Test</h1>
+  <p>
+    studio/index.html과 동일한 부모(studio-state.js/studio-preview.js) + iframe
+    (studio/preview/preview-frame.html, preview-bridge.js) 문서 쌍을
+    studio/studio-lifecycle-scenario.html(실제 URL로 로드, srcdoc 아님)을 통해
+    조립해 postMessage 핸드셰이크 전체를 검증한다. Supabase만 그 문서 안의
+    in-memory mock으로 대체하고, 나머지 production 파일(skin-generator.js/
+    skin-initializer.js/skin-sanitize.js/skin-context.js/questionnaire.js/
+    skin-render.js 포함)은 전부 실제 파일을 그대로 로드한다.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <h2>A. Existing skin 사용자 — Studio 최초 진입</h2>
+  <h2>B. Skin 없음 → Questionnaire 완료 → 같은 문서에서 재진입 → Preview 전환</h2>
+  <div id="frames"></div>
+
+  <script>
+
+    const reportList = document.getElementById("reportList");
+    const allResults = [];
+
+    function record(name, pass, detail) {
+      allResults.push({ name, pass: !!pass, detail: detail || "" });
+      const li = document.createElement("li");
+      li.className = pass ? "pass" : "fail";
+      li.textContent = (pass ? "PASS — " : "FAIL — ") + name;
+      if (detail) {
+        const d = document.createElement("span");
+        d.className = "detail";
+        d.textContent = detail;
+        li.appendChild(d);
+      }
+      reportList.appendChild(li);
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function waitFor(fn, timeoutMs, intervalMs) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        let val;
+        try {
+          val = fn();
+        } catch (e) {
+          val = null;
+        }
+        if (val) {
+          return val;
+        }
+        await sleep(intervalMs || 50);
+      }
+      return null;
+    }
+
+    function loadIframe(src) {
+      return new Promise((resolve) => {
+        const iframe = document.createElement("iframe");
+        iframe.addEventListener("load", () => resolve(iframe), { once: true });
+        iframe.src = src;
+        document.getElementById("frames").appendChild(iframe);
+      });
+    }
+
+
+    /* =========================================================
+       SCENARIO A — active skin 사용자, Studio 최초 진입
+    ========================================================== */
+
+    async function runScenarioA() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=a");
+
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+
+      const rendered = await waitFor(
+        () => !shell().hidden && overlay().hidden && !overlay().classList.contains("studio-preview-overlay--error"),
+        8000,
+        100
+      );
+
+      record(
+        "A1. existing skin 사용자가 Studio에 처음 진입하면 Preview가 정상 렌더된다",
+        !!rendered,
+        rendered ? "" : "overlay가 loading 상태에서 벗어나지 못함(타임아웃)"
+      );
+
+      record(
+        "A2. 최초 진입 동안 preview iframe이 정확히 1회만 로드된다",
+        win.__previewFrameLoadCount === 1,
+        "loadCount=" + win.__previewFrameLoadCount
+      );
+
+      const markerPresent = !!(innerDoc() && innerDoc().querySelector(".scenario-a-marker"));
+      record(
+        "A3. 렌더된 내용이 실제 draft(skin_versions.content)와 일치한다",
+        markerPresent
+      );
+
+      // Desktop/Mobile 전환, iframe reload 없이
+      const stage = doc.getElementById("studioPreviewStage");
+      doc.getElementById("studioViewportToggleButton").click();
+      doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="mobile"]').click();
+      await sleep(80);
+      const isMobile = stage.classList.contains("studio-preview-stage--mobile");
+
+      doc.getElementById("studioViewportToggleButton").click();
+      doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="desktop"]').click();
+      await sleep(80);
+      const isDesktopAgain = !stage.classList.contains("studio-preview-stage--mobile");
+
+      record(
+        "A4. Desktop/Mobile 뷰포트 전환이 iframe 재로드 없이 동작한다",
+        isMobile && isDesktopAgain && win.__previewFrameLoadCount === 1,
+        "isMobile=" + isMobile + " isDesktopAgain=" + isDesktopAgain + " loadCount=" + win.__previewFrameLoadCount
+      );
+
+      // c) 부모(studio-preview.js)가 wrong-source 메시지를 무시하는지
+      win.postMessage({ type: "preview:error", message: "spoofed-from-outside" }, win.location.origin);
+      await sleep(150);
+      record(
+        "A5. studio-preview.js가 studioPreviewFrame이 아닌 곳에서 온 메시지를 무시한다",
+        overlay().hidden === true,
+        "overlay.hidden=" + overlay().hidden
+      );
+
+      // a) preview-bridge.js가 window.parent가 아닌 곳에서 온 메시지를 무시하는지
+      const grandWin = doc.getElementById("studioPreviewFrame").contentWindow;
+      grandWin.postMessage(
+        {
+          type: "preview:render",
+          skin: { schemaVersion: 1, html: '<div class="wrong-source-marker">x</div>', css: "", imageSlots: [], regions: [], metadata: {} },
+          context: {}
+        },
+        win.location.origin
+      );
+      await sleep(200);
+      const wrongSourceLeaked = !!(innerDoc() && innerDoc().querySelector(".wrong-source-marker"));
+      record(
+        "A6. preview-bridge.js가 window.parent가 아닌 곳에서 온 preview:render를 무시한다",
+        !wrongSourceLeaked
+      );
+
+      // 원래 마커가 그대로 유지되는지(A6에서 실제로 아무 것도 안 바뀌었는지 재확인)
+      record(
+        "A7. wrong-source 시도 이후에도 기존 렌더 내용이 그대로 유지된다",
+        !!(innerDoc() && innerDoc().querySelector(".scenario-a-marker"))
+      );
+
+      // b) 올바른 source지만 malformed shape인 메시지는 preview:error로 이어진다(검증 체인이 실제로 동작함을 대조 확인)
+      win.__testHooks.sendFromRealParent({ type: "preview:render", skin: null, context: null });
+      const errored = await waitFor(
+        () => (overlay().classList.contains("studio-preview-overlay--error") ? true : null),
+        2000,
+        50
+      );
+      record(
+        "A8. 올바른 source + malformed shape 메시지는 preview:error로 이어져 에러 오버레이가 뜬다(정상 source 검증 대비군)",
+        !!errored
+      );
+
+      return true;
+    }
+
+
+    /* =========================================================
+       SCENARIO B — skin 없음 -> Questionnaire 완료 -> 재진입
+    ========================================================== */
+
+    async function runScenarioB() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=b");
+
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const submitBtn = await waitFor(
+        () => doc.querySelector(".skin-questionnaire-submit-button"),
+        5000,
+        100
+      );
+
+      record(
+        "B1. skin 없는 사용자는 Preview shell 없이 Questionnaire를 본다",
+        !!submitBtn && doc.getElementById("studioPreviewShell").hidden === true
+      );
+
+      if (!submitBtn) {
+        return false;
+      }
+
+      const loadCountBeforeSubmit = win.__previewFrameLoadCount;
+
+      /*
+        preview-frame.html iframe은 first-time 상태에서도 이미
+        정적 HTML의 src로 즉시 로드되어 "preview:ready"를 이 시점
+        훨씬 이전에 보낸다 — 실제 previewFrameReady 회귀를
+        재현하려면 그 ready가 studio-preview.js에 확실히 반영된
+        뒤에 제출해야 한다(그래야 mountStudioPreview 재호출이 이미
+        true인 상태를 false로 되돌리는 상황이 만들어진다).
+      */
+      await sleep(500);
+
+      submitBtn.click();
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+
+      const rendered = await waitFor(
+        () => !shell().hidden && overlay().hidden && !overlay().classList.contains("studio-preview-overlay--error"),
+        8000,
+        100
+      );
+
+      record(
+        "B2. Questionnaire 제출 성공 직후 같은 문서에서 재진입한 Preview가 정상 렌더된다(previewFrameReady 회귀 없음)",
+        !!rendered,
+        rendered
+          ? ""
+          : "STUCK: overlay가 loading 상태에서 영원히 벗어나지 못함 — mountStudioPreview가 previewFrameReady를 false로 되돌리는 회귀가 재발했을 가능성"
+      );
+
+      record(
+        "B3. Questionnaire -> Preview 전환 동안 preview iframe이 재로드되지 않는다",
+        win.__previewFrameLoadCount === loadCountBeforeSubmit && win.__previewFrameLoadCount === 1,
+        "before=" + loadCountBeforeSubmit + " after=" + win.__previewFrameLoadCount
+      );
+
+      await waitFor(() => window.__capturedMetadataB, 2000, 50);
+
+      record(
+        "B4. 생성된 Skin의 metadata에는 generatedBy만 남고 Questionnaire 답변은 저장되지 않는다",
+        !!window.__capturedMetadataB &&
+          Object.keys(window.__capturedMetadataB).length === 1 &&
+          window.__capturedMetadataB.generatedBy === "deterministic-v1",
+        JSON.stringify(window.__capturedMetadataB)
+      );
+
+      return true;
+    }
+
+
+    async function main() {
+
+      try {
+        await runScenarioA();
+      } catch (err) {
+        record("Scenario A 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioB();
+      } catch (err) {
+        record("Scenario B 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      const failCount = allResults.filter((r) => !r.pass).length;
+      document.getElementById("summary").textContent =
+        failCount === 0
+          ? `모든 검증 통과 (${allResults.length}개)`
+          : `실패 ${failCount}건 / 전체 ${allResults.length}건`;
+
+      window.__testResults = allResults;
+      window.__testDone = true;
+
+    }
+
+    main();
+
+  </script>
+
+</body>
+</html>

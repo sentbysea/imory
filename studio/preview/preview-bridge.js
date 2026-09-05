@@ -47,9 +47,10 @@ function postToParent(message) {
 }
 
 /* =========================================================
-   메시지 shape 검증 — 같은 origin이라도 값 형태를 신뢰하지
-   않는다(12절 "같은 origin이라도 message shape validation은
-   하세요").
+   메시지 검증 — origin + source(event.source === window.parent,
+   부모 studio-preview.js의 event.source === studioPreviewFrame.
+   contentWindow 확인과 대칭) + shape 세 가지를 모두 확인한다
+   (12절 "같은 origin이라도 message shape validation은 하세요").
 ========================================================== */
 
 function isValidRenderMessage(data) {
@@ -99,6 +100,10 @@ function handleRenderMessage(data) {
 window.addEventListener("message", (event) => {
 
   if (event.origin !== window.location.origin) {
+    return;
+  }
+
+  if (event.source !== window.parent) {
     return;
   }
 

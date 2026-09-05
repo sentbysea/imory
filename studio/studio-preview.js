@@ -77,6 +77,15 @@ const studioViewportToggleLabel =
   동일한 로드 순서 관례).
 */
 
+/*
+  iframe(studio/preview/preview-frame.html)은 studio/index.html에
+  #studioPreviewFrame으로 한 번만 생성되고 이후 재로드/재생성되지
+  않는다 — preview-bridge.js의 "preview:ready"도 그 iframe 문서
+  최초 로드 시 한 번만 온다. 그래서 previewFrameReady는
+  mountStudioPreview() 재호출(예: Questionnaire 제출 후 재진입)
+  시점에 false로 되돌리지 않는다 — 되돌리면 ready가 다시는 오지
+  않으므로 이후 render가 pendingRenderPayload에 영구 대기하게 된다.
+*/
 let previewFrameReady = false;
 let pendingRenderPayload = null;
 let mountToken = 0;
@@ -347,9 +356,6 @@ async function mountStudioPreview(
 
   const token =
     ++mountToken;
-
-  previewFrameReady =
-    false;
 
   pendingRenderPayload =
     null;

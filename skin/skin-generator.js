@@ -22,8 +22,6 @@
    의존 없음(순수 문자열 조립).
 ========================================================== */
 
-const SKIN_GENERATOR_DENSITY = "balanced";
-
 const SKIN_GENERATOR_APPEARANCE_TOKENS = {
 
   light: {
@@ -320,11 +318,7 @@ function generateInitialSkin(answers) {
     regions: [],
 
     metadata: {
-      generatedBy: "deterministic-v1",
-      layoutPreference,
-      baseAppearance,
-      homeStyle,
-      density: SKIN_GENERATOR_DENSITY
+      generatedBy: "deterministic-v1"
     }
 
   };

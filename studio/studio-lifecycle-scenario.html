@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SKIN STUDIO (lifecycle test scenario)</title>
+<link rel="stylesheet" href="../core/design-tokens.css">
+<link rel="stylesheet" href="../skin-questionnaire/questionnaire.css">
+<link rel="stylesheet" href="./studio.css">
+</head>
+<body>
+
+  <!--
+    studio/studio-lifecycle-test.html 전용 시나리오 문서 —
+    studio/index.html과 동일한 body/script 로드 순서를 그대로
+    쓰되, supabase-js/supabase-client.js만 in-memory mock으로
+    바꾼다. ?scenario=a|b 쿼리로 어떤 fixture를 쓸지 결정한다.
+    iframe.srcdoc이 아니라 실제 URL로 로드해야 window.location.origin이
+    studio-preview.js/preview-bridge.js의 postMessage(targetOrigin)와
+    동일하게 정상 동작한다(about:srcdoc은 origin이 "null" 문자열이라
+    postMessage가 던진다).
+  -->
+
+  <main class="studio-shell" id="studioShell">
+    <div class="studio-status" id="studioStatus">
+      <p class="studio-status-text" id="studioStatusText">불러오는 중...</p>
+      <dl class="studio-status-detail" id="studioStatusDetail" hidden></dl>
+      <div id="studioQuestionnaireMount" hidden></div>
+    </div>
+  </main>
+
+  <div class="studio-preview-shell" id="studioPreviewShell" hidden>
+
+    <div class="studio-preview-stage" id="studioPreviewStage">
+      <iframe id="studioPreviewFrame" src="./preview/preview-frame.html" title="Skin Preview"></iframe>
+    </div>
+
+    <script>
+      window.__previewFrameLoadCount = 0;
+      document.getElementById("studioPreviewFrame").addEventListener("load", function () {
+        window.__previewFrameLoadCount++;
+      });
+    </script>
+
+    <div class="studio-viewport-toggle" id="studioViewportToggle">
+      <button type="button" class="studio-viewport-toggle-button" id="studioViewportToggleButton" aria-haspopup="true" aria-expanded="false">
+        <span id="studioViewportToggleLabel">Desktop</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+      <div class="studio-viewport-toggle-menu" id="studioViewportToggleMenu" hidden>
+        <button type="button" class="studio-viewport-toggle-option studio-viewport-toggle-option--active" data-viewport-mode="desktop">Desktop</button>
+        <button type="button" class="studio-viewport-toggle-option" data-viewport-mode="mobile">Mobile</button>
+      </div>
+    </div>
+
+    <button type="button" class="studio-ai-tab" id="studioAiTab" disabled>AI</button>
+
+    <div class="studio-corner-controls">
+      <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
+      <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
+      <button type="button" class="studio-corner-button" id="studioSettingsButton" disabled>Settings</button>
+    </div>
+
+    <div class="studio-preview-overlay" id="studioPreviewOverlay" hidden>
+      <p class="studio-preview-overlay-text" id="studioPreviewOverlayText"></p>
+    </div>
+
+  </div>
+
+  <script>
+    window.skinInitializerReady = new Promise(function (resolve) {
+      window.__resolveSkinInitializerReady = resolve;
+    });
+  </script>
+
+  <!-- =========================================================
+       MOCK SUPABASE CLIENT (test only) — 실제 supabase-js/
+       supabase-client.js 대신, ?scenario= 값에 따라 in-memory
+       fixture를 돌려주는 최소 mock. 이 파일 이후에 로드되는
+       production 코드(skin-context.js/studio-preview.js/
+       studio-state.js/skin-initializer.js)는 전부 실제 파일이며
+       이 mock을 구분하지 못한다(동일한 supabaseClient 계약만
+       구현).
+  ========================================================== -->
+
+  <script>
+    (function () {
+
+      function makeQuery(rows) {
+        const query = {
+          select: function () { return query; },
+          eq: function (col, val) { rows = rows.filter(function (r) { return r[col] === val; }); return query; },
+          in: function (col, vals) { rows = rows.filter(function (r) { return vals.indexOf(r[col]) !== -1; }); return query; },
+          order: function (col, opts) {
+            const asc = !opts || opts.ascending !== false;
+            rows = rows.slice().sort(function (a, b) {
+              if (a[col] === b[col]) return 0;
+              return (a[col] > b[col] ? 1 : -1) * (asc ? 1 : -1);
+            });
+            return query;
+          },
+          limit: function (n) { rows = rows.slice(0, n); return query; },
+          maybeSingle: function () { return Promise.resolve({ data: rows[0] || null, error: null }); },
+          single: function () {
+            return rows[0]
+              ? Promise.resolve({ data: rows[0], error: null })
+              : Promise.resolve({ data: null, error: new Error("not found") });
+          },
+          then: function (resolve, reject) {
+            return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
+          }
+        };
+        return query;
+      }
+
+      const scenario = new URLSearchParams(window.location.search).get("scenario");
+
+      const FIXTURES = {
+
+        a: {
+          userId: "user-a",
+          tables: {
+            skins: [
+              { id: "skin-a1", user_id: "user-a", is_active: true, current_draft_version_id: "draft-a1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-a1",
+                content: {
+                  schemaVersion: 1,
+                  html: '<div class="scenario-a-marker"><h1 data-imory-bind="site.title"></h1><p data-imory-bind="profile.nickname"></p></div>',
+                  css: ".scenario-a-marker { color: red; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-a", nickname: "Scenario A", bio: "hello", slug: "scenario-a" }],
+            site_settings: [],
+            categories: [],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {}
+        },
+
+        b: {
+          userId: "user-b",
+          tables: {
+            skins: [],
+            skin_versions: [],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-b", nickname: "Scenario B", bio: null, slug: "scenario-b" }],
+            site_settings: [],
+            categories: [],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {
+            create_skin_with_initial_version: function (params) {
+              const versionId = "draft-b1";
+              const skinId = "skin-b1";
+              state.tables.skin_versions.push({ id: versionId, content: params.p_content });
+              state.tables.skins.push({
+                id: skinId,
+                user_id: "user-b",
+                is_active: true,
+                current_draft_version_id: versionId,
+                current_published_version_id: null
+              });
+              window.top.__capturedMetadataB = params.p_content.metadata;
+              return { data: skinId, error: null };
+            }
+          }
+        }
+
+      };
+
+      const state = FIXTURES[scenario] || FIXTURES.a;
+
+      window.supabaseClient = {
+        auth: {
+          getUser: function () {
+            return Promise.resolve({ data: { user: { id: state.userId } }, error: null });
+          }
+        },
+        from: function (table) {
+          return makeQuery((state.tables[table] || []).slice());
+        },
+        rpc: function (name, params) {
+          const handler = state.rpcHandlers[name];
+          if (!handler) {
+            return Promise.resolve({ data: null, error: new Error("unmocked rpc: " + name) });
+          }
+          return Promise.resolve(handler(params));
+        }
+      };
+
+    })();
+  </script>
+
+  <script src="../skin/skin-sanitize.js"></script>
+  <script src="../skin/skin-generator.js"></script>
+  <script type="module" src="../skin/skin-initializer.js"></script>
+  <script src="../skin-questionnaire/questionnaire.js"></script>
+  <script src="../core/lib/site-path.js"></script>
+  <script src="../skin/skin-image-slots.js"></script>
+  <script src="../skin/skin-context.js"></script>
+  <script src="./studio-preview.js"></script>
+  <script src="./studio-state.js"></script>
+
+  <script>
+    window.__testHooks = {
+      sendFromRealParent: function (payload) {
+        document.getElementById("studioPreviewFrame").contentWindow.postMessage(payload, window.location.origin);
+      }
+    };
+  </script>
+
+</body>
+</html>
