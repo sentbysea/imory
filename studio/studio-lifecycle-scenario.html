@@ -86,6 +86,21 @@
   <script>
     (function () {
 
+      /*
+        약간의 인위적 지연 — 없으면 mock Promise가 전부 같은
+        microtask tick에 풀려서, loading overlay가 실제로 화면에
+        떠 있는 구간을 통합 테스트가 관찰할 기회조차 없이 렌더가
+        끝나 버린다(overlay가 "떠 있다가 사라지는지"를 검증하려면
+        떠 있는 구간이 실제로 존재해야 한다).
+      */
+      const MOCK_LATENCY_MS = 150;
+
+      function delayed(result) {
+        return new Promise(function (resolve) {
+          setTimeout(function () { resolve(result); }, MOCK_LATENCY_MS);
+        });
+      }
+
       function makeQuery(rows) {
         const query = {
           select: function () { return query; },
@@ -100,14 +115,16 @@
             return query;
           },
           limit: function (n) { rows = rows.slice(0, n); return query; },
-          maybeSingle: function () { return Promise.resolve({ data: rows[0] || null, error: null }); },
+          maybeSingle: function () { return delayed({ data: rows[0] || null, error: null }); },
           single: function () {
-            return rows[0]
-              ? Promise.resolve({ data: rows[0], error: null })
-              : Promise.resolve({ data: null, error: new Error("not found") });
+            return delayed(
+              rows[0]
+                ? { data: rows[0], error: null }
+                : { data: null, error: new Error("not found") }
+            );
           },
           then: function (resolve, reject) {
-            return Promise.resolve({ data: rows, error: null }).then(resolve, reject);
+            return delayed({ data: rows, error: null }).then(resolve, reject);
           }
         };
         return query;

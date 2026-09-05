@@ -395,6 +395,19 @@ body {
 }
 
 
+/*
+  [hidden]과 위 .studio-preview-overlay{display:flex}는 명시도가
+  같아서 소스 순서상 이 규칙이 없으면 hidden 속성이 무시되고
+  계속 보인다 — studio-preview.js의 setStudioPreviewOverlay("hidden")이
+  hidden 속성을 켜도 overlay가 안 사라지는 버그였다(index.html의
+  .landing-screen[hidden]과 동일한 원인/처리).
+*/
+
+.studio-preview-overlay[hidden] {
+  display: none;
+}
+
+
 .studio-preview-overlay-text {
   margin: 0;
 

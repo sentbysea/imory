@@ -90,6 +90,17 @@
       return null;
     }
 
+    /*
+      overlay.hidden(IDL 속성)은 hidden attribute가 붙었는지만
+      알려준다 — studio.css의 .studio-preview-overlay{display:flex}가
+      [hidden]보다 명시도가 같아 소스 순서상 이겨버리는 버그에서는
+      hidden=true인데도 실제로는 여전히 보이는 상태가 될 수 있다.
+      그래서 실제 렌더 여부는 항상 getComputedStyle로 확인한다.
+    */
+    function isOverlayVisible(win, overlayEl) {
+      return win.getComputedStyle(overlayEl).display !== "none";
+    }
+
     function loadIframe(src) {
       return new Promise((resolve) => {
         const iframe = document.createElement("iframe");
@@ -115,16 +126,34 @@
       const shell = () => doc.getElementById("studioPreviewShell");
       const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
 
+      // A0: draft/context loading 중에는 overlay가 실제로 화면에 보여야 한다(계산된 스타일 기준)
+      const loadingVisible = await waitFor(
+        () => (isOverlayVisible(win, overlay()) ? true : null),
+        3000,
+        30
+      );
+
+      record(
+        "A0. Draft/context loading 중에는 overlay가 실제로 표시된다(computed display)",
+        !!loadingVisible
+      );
+
       const rendered = await waitFor(
-        () => !shell().hidden && overlay().hidden && !overlay().classList.contains("studio-preview-overlay--error"),
+        () =>
+          !shell().hidden &&
+          overlay().hidden &&
+          !isOverlayVisible(win, overlay()) &&
+          !overlay().classList.contains("studio-preview-overlay--error"),
         8000,
         100
       );
 
       record(
-        "A1. existing skin 사용자가 Studio에 처음 진입하면 Preview가 정상 렌더된다",
+        "A1. existing skin 사용자가 Studio에 처음 진입하면 Preview가 정상 렌더되고 overlay가 완전히 숨겨진다(computed display: none)",
         !!rendered,
-        rendered ? "" : "overlay가 loading 상태에서 벗어나지 못함(타임아웃)"
+        rendered
+          ? ""
+          : "overlay.hidden=" + overlay().hidden + " computedDisplay=" + win.getComputedStyle(overlay()).display
       );
 
       record(
@@ -157,13 +186,19 @@
         "isMobile=" + isMobile + " isDesktopAgain=" + isDesktopAgain + " loadCount=" + win.__previewFrameLoadCount
       );
 
+      record(
+        "A4b. Desktop/Mobile 전환 후에도 overlay가 다시 나타나지 않는다(computed display)",
+        !isOverlayVisible(win, overlay()),
+        "computedDisplay=" + win.getComputedStyle(overlay()).display
+      );
+
       // c) 부모(studio-preview.js)가 wrong-source 메시지를 무시하는지
       win.postMessage({ type: "preview:error", message: "spoofed-from-outside" }, win.location.origin);
       await sleep(150);
       record(
         "A5. studio-preview.js가 studioPreviewFrame이 아닌 곳에서 온 메시지를 무시한다",
-        overlay().hidden === true,
-        "overlay.hidden=" + overlay().hidden
+        overlay().hidden === true && !isOverlayVisible(win, overlay()),
+        "overlay.hidden=" + overlay().hidden + " computedDisplay=" + win.getComputedStyle(overlay()).display
       );
 
       // a) preview-bridge.js가 window.parent가 아닌 곳에서 온 메시지를 무시하는지
@@ -199,6 +234,15 @@
       record(
         "A8. 올바른 source + malformed shape 메시지는 preview:error로 이어져 에러 오버레이가 뜬다(정상 source 검증 대비군)",
         !!errored
+      );
+
+      record(
+        "A9. error 상태에서는 overlay가 실제로 다시 표시되고(computed display) 에러 문구를 보여준다",
+        !!errored &&
+          isOverlayVisible(win, overlay()) &&
+          doc.getElementById("studioPreviewOverlayText").textContent === "미리보기를 표시하지 못했습니다.",
+        "computedDisplay=" + win.getComputedStyle(overlay()).display +
+          " text=" + JSON.stringify(doc.getElementById("studioPreviewOverlayText").textContent)
       );
 
       return true;
@@ -249,17 +293,21 @@
       const shell = () => doc.getElementById("studioPreviewShell");
 
       const rendered = await waitFor(
-        () => !shell().hidden && overlay().hidden && !overlay().classList.contains("studio-preview-overlay--error"),
+        () =>
+          !shell().hidden &&
+          overlay().hidden &&
+          !isOverlayVisible(win, overlay()) &&
+          !overlay().classList.contains("studio-preview-overlay--error"),
         8000,
         100
       );
 
       record(
-        "B2. Questionnaire 제출 성공 직후 같은 문서에서 재진입한 Preview가 정상 렌더된다(previewFrameReady 회귀 없음)",
+        "B2. Questionnaire 제출 성공 직후 같은 문서에서 재진입한 Preview가 정상 렌더되고 overlay가 완전히 숨겨진다(previewFrameReady 회귀 없음, computed display: none)",
         !!rendered,
         rendered
           ? ""
-          : "STUCK: overlay가 loading 상태에서 영원히 벗어나지 못함 — mountStudioPreview가 previewFrameReady를 false로 되돌리는 회귀가 재발했을 가능성"
+          : "STUCK/VISIBLE: overlay.hidden=" + overlay().hidden + " computedDisplay=" + win.getComputedStyle(overlay()).display
       );
 
       record(
