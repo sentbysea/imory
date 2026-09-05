@@ -1,0 +1,129 @@
+/* =========================================================
+   HOME - SKIN 꾸미기 유도 POPUP (AI_SKIN_PHASE1B_DESIGN.md 4-3절)
+
+   Studio의 "거의 풀스크린"과 분명히 대비되는 가벼운 카드 —
+   큰 onboarding wizard처럼 보이지 않게 작게 유지한다.
+   index.html이 core/design-tokens.css를 이미 로드해 두므로
+   --system-* 변수를 그대로 쓴다.
+========================================================== */
+
+.home-skin-prompt-overlay {
+  position: fixed;
+
+  inset: 0;
+
+  z-index: 9999;
+
+  display: flex;
+
+  align-items: flex-end;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(0, 0, 0, 0.32);
+}
+
+
+.home-skin-prompt-card {
+  width: 100%;
+
+  max-width: 320px;
+
+  padding: 20px;
+
+  border-radius: 14px;
+
+  background: var(--system-bg);
+
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+
+  animation: home-skin-prompt-rise 0.2s ease;
+}
+
+
+@keyframes home-skin-prompt-rise {
+
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+}
+
+
+.home-skin-prompt-text {
+  margin: 0 0 16px;
+
+  color: var(--system-text);
+
+  font-size: 13px;
+
+  line-height: 1.6;
+
+  white-space: pre-line;
+
+  text-align: center;
+}
+
+
+.home-skin-prompt-actions {
+  display: flex;
+
+  gap: 8px;
+}
+
+
+.home-skin-prompt-button {
+  flex: 1;
+
+  padding: 10px 0;
+
+  border: 0;
+
+  border-radius: 8px;
+
+  font-size: 12px;
+
+  cursor: pointer;
+
+  transition: background 0.15s ease;
+}
+
+
+.home-skin-prompt-button--ghost {
+  background: var(--system-surface);
+
+  color: var(--system-text-muted);
+}
+
+
+.home-skin-prompt-button--ghost:hover {
+  background: var(--system-border);
+}
+
+
+.home-skin-prompt-button--primary {
+  background: var(--system-accent);
+
+  color: #ffffff;
+}
+
+
+.home-skin-prompt-button--primary:hover {
+  background: var(--system-accent-hover);
+}
+
+
+@media (min-width: 480px) {
+
+  .home-skin-prompt-overlay {
+    align-items: center;
+  }
+
+}

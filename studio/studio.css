@@ -1,0 +1,414 @@
+/* =========================================================
+   SKIN STUDIO SHELL (PHASE 1B Slice 1)
+
+   이 문서는 admin의 #skinStudioFrame iframe 안에서 항상 거의
+   풀스크린으로 뜬다(admin/admin-shell.css .skin-studio-mode) —
+   여기서도 html/body가 뷰포트 전체를 채워야 그 바깥 iframe
+   height:100%가 의미를 갖는다.
+
+   Slice 1/2는 진입 상태 판별 결과(placeholder/Questionnaire)만
+   보여주는 중앙 정렬 레이아웃이라 단순했다 — 이 파일 하단의
+   PREVIEW SHELL 섹션이 Slice 3에서 추가한 부분으로, "existing"
+   사용자 전용 전체화면 Preview UI(11절: 상단/하단 floating tab,
+   구석 컨트롤, loading/error overlay)를 담당한다.
+========================================================== */
+
+* {
+  box-sizing: border-box;
+}
+
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+
+  height: 100%;
+}
+
+
+body {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  min-height: 100vh;
+  min-height: 100dvh;
+
+  background: var(--system-bg);
+
+  font-family:
+    "Pretendard",
+    -apple-system,
+    sans-serif;
+
+  color: var(--system-text);
+}
+
+
+
+/* =========================================================
+   상태 placeholder
+========================================================== */
+
+.studio-shell {
+  width: 100%;
+
+  padding: 24px;
+}
+
+
+.studio-status {
+  max-width: 420px;
+
+  margin: 0 auto;
+
+  text-align: center;
+}
+
+
+.studio-status-text {
+  margin: 0 0 6px;
+
+  font-size: 13px;
+
+  line-height: 1.6;
+
+  white-space: pre-line;
+}
+
+
+.studio-status-detail {
+  margin: 18px 0 0;
+
+  padding: 14px 16px;
+
+  border: 1px solid var(--system-border);
+
+  border-radius: 8px;
+
+  background: var(--system-surface);
+
+  font-size: 11px;
+
+  line-height: 1.8;
+
+  text-align: left;
+}
+
+
+.studio-status-detail-row {
+  display: flex;
+
+  gap: 8px;
+
+  margin: 0;
+}
+
+
+.studio-status-detail-row dt {
+  flex: 0 0 auto;
+
+  color: var(--system-text-muted);
+}
+
+
+.studio-status-detail-row dd {
+  flex: 1;
+
+  margin: 0;
+
+  overflow-wrap: anywhere;
+
+  color: var(--system-text);
+}
+
+
+.studio-status-text--error {
+  color: var(--system-accent-hover);
+}
+
+
+
+/* =========================================================
+   PREVIEW SHELL (Slice 3) — "화면 전체가 Preview"
+
+   AI_SKIN_PHASE1B_DESIGN.md 11절. body는 이미 위에서 flex로
+   가운데 정렬되어 있지만, 이 shell은 position:fixed로 뷰포트
+   전체를 뒤덮으므로 그 레이아웃과 무관하게 항상 화면 전체를
+   차지한다 — 안의 절대배치 컨트롤(viewport toggle/AI tab/구석
+   버튼/overlay)은 전부 이 요소를 positioning context로 삼는다.
+========================================================== */
+
+.studio-preview-shell {
+  position: fixed;
+  inset: 0;
+
+  background: var(--system-surface);
+}
+
+
+.studio-preview-stage {
+  position: absolute;
+  inset: 0;
+
+  display: flex;
+
+  align-items: stretch;
+  justify-content: center;
+}
+
+
+#studioPreviewFrame {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  border: 0;
+
+  background: var(--imory-white);
+}
+
+
+/*
+  Mobile: iframe 문서는 재생성/재로드하지 않는다(7/11-5절) — 이
+  규칙은 오직 iframe의 CSS width만 390px로 고정한다. iframe은
+  자기 자신의 레이아웃 뷰포트를 가지므로, 이 폭 변경만으로 그
+  안의 Skin CSS `@media (max-width: ...)`가 실제 창 크기 변화와
+  동일하게 재평가된다.
+*/
+
+.studio-preview-stage--mobile {
+  align-items: flex-start;
+
+  padding: 40px 0;
+
+  overflow: auto;
+}
+
+
+.studio-preview-stage--mobile #studioPreviewFrame {
+  width: 390px;
+  height: 100%;
+
+  min-height: calc(100% - 80px);
+
+  margin: 0 auto;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: 12px;
+}
+
+
+
+/* =========================================================
+   상단 중앙 — Desktop/Mobile floating tab (7/8절)
+
+   평소엔 [ Desktop ▾ ] 정도로 작게, 클릭하면 메뉴가 펼쳐진다.
+   과도한 애니메이션 없음 — hidden 속성으로만 표시 전환.
+========================================================== */
+
+.studio-viewport-toggle {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  z-index: 5;
+}
+
+
+.studio-viewport-toggle-button {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+
+  padding: 6px 12px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-pill);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+
+  cursor: pointer;
+}
+
+
+.studio-viewport-toggle-button:hover {
+  border-color: var(--system-accent-border);
+
+  color: var(--system-accent-hover);
+}
+
+
+.studio-viewport-toggle-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+
+  display: flex;
+  flex-direction: column;
+
+  min-width: 96px;
+  padding: 4px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  box-shadow: var(--system-shadow-focus-ring);
+}
+
+
+.studio-viewport-toggle-option {
+  padding: 6px 10px;
+
+  border: 0;
+  border-radius: var(--imory-radius-100);
+
+  background: transparent;
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.studio-viewport-toggle-option:hover {
+  background: var(--system-accent-soft);
+}
+
+
+.studio-viewport-toggle-option--active {
+  color: var(--system-accent);
+
+  font-weight: var(--imory-font-weight-medium);
+}
+
+
+
+/* =========================================================
+   하단 중앙 — AI Prompt 자리 예약 (9절, PHASE 1B에서는 비활성)
+
+   향후 PHASE 6에서 이 tab의 disabled만 풀고 실제 prompt panel을
+   연결하면 된다 — 지금은 자리만 예약.
+========================================================== */
+
+.studio-ai-tab {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  z-index: 5;
+
+  padding: 8px 18px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-pill);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-faint);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+
+  cursor: not-allowed;
+}
+
+
+
+/* =========================================================
+   우측 상단 구석 — Save / Code / Settings 자리 예약 (11-7절)
+
+   이번 Slice에서는 실제 기능 없이 disabled로만 존재한다(15절).
+========================================================== */
+
+.studio-corner-controls {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+
+  z-index: 5;
+
+  display: flex;
+  gap: 8px;
+}
+
+
+.studio-corner-button {
+  padding: 6px 12px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-faint);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+
+  cursor: not-allowed;
+}
+
+
+
+/* =========================================================
+   loading/error overlay (10절)
+
+   draft/context/iframe 준비가 끝날 때까지 iframe 위를 얇게
+   덮는다 — Studio 자체가 완전히 blank가 되지 않도록, viewport
+   toggle/AI tab/구석 컨트롤은 이 overlay와 별개로 항상 그대로
+   보인다(모두 이 shell의 다른 형제 요소).
+========================================================== */
+
+.studio-preview-overlay {
+  position: absolute;
+  inset: 0;
+
+  z-index: 4;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 24px;
+
+  background: color-mix(in srgb, var(--system-bg) 88%, transparent);
+
+  text-align: center;
+}
+
+
+.studio-preview-overlay-text {
+  margin: 0;
+
+  max-width: 320px;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-400);
+  line-height: var(--imory-line-height-relaxed);
+
+  white-space: pre-line;
+}
+
+
+.studio-preview-overlay--error .studio-preview-overlay-text {
+  color: var(--system-accent-hover);
+}

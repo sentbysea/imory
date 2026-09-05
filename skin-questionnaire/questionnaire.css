@@ -1,0 +1,281 @@
+/* =========================================================
+   SKIN QUESTIONNAIRE (Studio 전용, AI_SKIN_PHASE1B_DESIGN.md 7-4절)
+
+   호스트 페이지(studio/index.html)가 design-tokens.css를 먼저
+   로드해 두었다는 전제로 --system-* 변수를 그대로 쓴다.
+========================================================== */
+
+.skin-questionnaire {
+  max-width: 480px;
+
+  margin: 0 auto;
+
+  padding: 8px 0;
+}
+
+
+.skin-questionnaire-heading {
+  margin: 0 0 24px;
+
+  font-size: 13px;
+
+  color: var(--system-text);
+
+  text-align: center;
+}
+
+
+
+/* =========================================================
+   질문 그룹
+========================================================== */
+
+.skin-q-group {
+  margin: 0 0 28px;
+
+  padding: 0;
+
+  border: 0;
+}
+
+
+.skin-q-group-title {
+  padding: 0 0 10px;
+
+  font-size: 11px;
+
+  letter-spacing: 0.08em;
+
+  color: var(--system-text-muted);
+}
+
+
+.skin-q-options {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 10px;
+}
+
+
+
+/* =========================================================
+   옵션 카드
+========================================================== */
+
+.skin-q-option {
+  display: flex;
+
+  flex-direction: column;
+
+  align-items: center;
+
+  gap: 8px;
+
+  width: 96px;
+
+  padding: 12px 8px;
+
+  border: 1px solid var(--system-border);
+
+  border-radius: 10px;
+
+  cursor: pointer;
+
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+
+.skin-q-option:hover {
+  border-color: var(--system-border-strong);
+}
+
+
+.skin-q-option--selected {
+  border-color: var(--system-accent);
+
+  background: var(--system-accent-soft);
+}
+
+
+.skin-q-option-input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  overflow: hidden;
+
+  clip: rect(0 0 0 0);
+}
+
+
+.skin-q-option-label {
+  font-size: 11px;
+
+  color: var(--system-text);
+}
+
+
+
+/* =========================================================
+   mini wireframe
+
+   회색 박스/선 수준의 정적 미니어처 — 실제 Skin Preview 렌더링은
+   하지 않는다(7-1절).
+========================================================== */
+
+.skin-q-wireframe {
+  display: grid;
+
+  gap: 3px;
+
+  width: 64px;
+  height: 40px;
+
+  padding: 4px;
+
+  border-radius: 4px;
+
+  background: var(--system-surface);
+}
+
+
+.skin-q-wireframe-block {
+  display: block;
+
+  border-radius: 2px;
+
+  background: var(--imory-gray-300);
+}
+
+
+/* 레이아웃(1/2/3단) — 가로로 나뉜 세로 블록 */
+
+.skin-q-wireframe--layout-one {
+  grid-template-columns: 1fr;
+}
+
+
+.skin-q-wireframe--layout-two {
+  grid-template-columns: 1fr 2fr;
+}
+
+
+.skin-q-wireframe--layout-three {
+  grid-template-columns: 1fr 2fr 1fr;
+}
+
+
+/* HOME 스타일 */
+
+.skin-q-wireframe--home-intro {
+  grid-template-rows: 1fr 1fr;
+}
+
+.skin-q-wireframe--home-intro .skin-q-wireframe-block:first-child {
+  width: 60%;
+
+  justify-self: center;
+}
+
+
+.skin-q-wireframe--home-index {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+
+.skin-q-wireframe--home-profile {
+  grid-template-rows: auto 1fr 1fr;
+
+  justify-items: center;
+}
+
+.skin-q-wireframe--home-profile .skin-q-wireframe-block:first-child {
+  width: 16px;
+  height: 16px;
+
+  border-radius: 50%;
+}
+
+
+/* 전체 분위기 스와치 */
+
+.skin-q-wireframe--appearance-light {
+  background: var(--system-surface);
+}
+
+.skin-q-wireframe--appearance-light .skin-q-wireframe-block {
+  background: #ffffff;
+
+  border: 1px solid var(--system-border-strong);
+}
+
+.skin-q-wireframe--appearance-dark {
+  background: var(--system-surface);
+}
+
+.skin-q-wireframe--appearance-dark .skin-q-wireframe-block {
+  background: #15161a;
+}
+
+
+
+/* =========================================================
+   제출
+========================================================== */
+
+.skin-questionnaire-submit-row {
+  margin-top: 8px;
+
+  text-align: center;
+}
+
+
+.skin-questionnaire-submit-button {
+  padding: 10px 20px;
+
+  border: 0;
+
+  border-radius: 8px;
+
+  background: var(--system-accent);
+
+  color: #ffffff;
+
+  font-size: 12px;
+
+  cursor: pointer;
+
+  transition: background 0.15s ease;
+}
+
+
+.skin-questionnaire-submit-button:hover {
+  background: var(--system-accent-hover);
+}
+
+
+.skin-questionnaire-submit-button:disabled {
+  background: var(--system-text-disabled);
+
+  cursor: default;
+}
+
+
+.skin-questionnaire-status {
+  margin: 10px 0 0;
+
+  font-size: 11px;
+
+  color: var(--system-text-muted);
+}
+
+
+.skin-questionnaire-status--error {
+  color: var(--system-accent-hover);
+}

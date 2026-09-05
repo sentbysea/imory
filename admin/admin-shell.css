@@ -414,6 +414,150 @@ button {
 
 
 /* =========================================================
+   SKIN STUDIO - studio/index.html embed
+
+   CUSTOMIZE(위)와 달리 이 패널은 데스크탑을 포함해 항상 거의
+   풀스크린으로 구성된다(미디어쿼리로 제한하지 않음,
+   AI_SKIN_PHASE1B_DESIGN.md 2-2/9절) — admin 공통 헤더/footer/
+   본문 패딩을 전부 숨기고 #skinStudioPanel이 뷰포트 전체를 쓴다.
+   나가면(showAdminHome 등이 .skin-studio-mode를 제거하면) 이
+   규칙들이 전부 안 걸리므로 기존 admin 레이아웃으로 자동
+   복귀한다.
+
+   body.skin-studio-body-mode는 admin.js의 MutationObserver가
+   .skin-studio-mode 유무에 맞춰 그대로 미러링한다 — quote-mode/
+   customize-mode가 쓰는 admin-fullscreen-editor-scroll-locked는
+   아래 @media(모바일) 섹션 안에서만 position:fixed가 걸리므로
+   재사용하지 않고 별도 클래스를 둔다.
+
+   Skin Studio 제작 자체는 데스크탑 전용이라(스튜디오 안 편집
+   기능), 좁은 화면에서는 iframe 대신 #skinStudioMobileNotice
+   안내만 보인다 — 아래 @media 섹션.
+========================================================== */
+
+body.skin-studio-body-mode {
+  position: fixed;
+
+  left: 0;
+  right: 0;
+
+  width: 100%;
+
+  overflow: hidden;
+}
+
+
+.admin-page.skin-studio-mode {
+  width: 100%;
+
+  max-width: none;
+
+  padding: 0;
+}
+
+
+.admin-page.skin-studio-mode ~ .admin-site-footer {
+  display: none;
+}
+
+
+.admin-page.skin-studio-mode .admin-header {
+  display: none;
+}
+
+
+.admin-page.skin-studio-mode #adminDashboard {
+  height: 100vh;
+  height: 100dvh;
+}
+
+
+.admin-page.skin-studio-mode #skinStudioPanel {
+  display: flex;
+
+  flex-direction: column;
+
+  height: 100%;
+
+  padding-top: 0;
+
+  overflow: hidden;
+}
+
+
+.admin-page.skin-studio-mode .skin-studio-top {
+  flex: 0 0 auto;
+
+  padding: 10px 14px;
+}
+
+
+.admin-page.skin-studio-mode .skin-studio-back-button {
+  margin: 0;
+}
+
+
+.admin-page.skin-studio-mode .skin-studio-embed {
+  flex: 1;
+
+  min-height: 0;
+
+  overflow: hidden;
+}
+
+
+.admin-page.skin-studio-mode #skinStudioFrame {
+  display: block;
+
+  width: 100%;
+
+  height: 100%;
+
+  border: 0;
+}
+
+
+.admin-page.skin-studio-mode .skin-studio-mobile-notice {
+  display: none;
+}
+
+
+@media (max-width: 900px) {
+
+  .admin-page.skin-studio-mode .skin-studio-embed {
+    display: none;
+  }
+
+
+  .admin-page.skin-studio-mode .skin-studio-mobile-notice {
+    display: flex;
+
+    align-items: center;
+    justify-content: center;
+
+    flex: 1;
+
+    padding: 24px;
+
+    text-align: center;
+  }
+
+}
+
+
+.skin-studio-mobile-notice-text {
+  margin: 0;
+
+  color: var(--system-text-faint);
+
+  font-size: 12px;
+
+  line-height: 1.6;
+}
+
+
+
+/* =========================================================
    ADMIN HOME
 ========================================================== */
 

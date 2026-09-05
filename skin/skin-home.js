@@ -20,7 +20,9 @@
 
    의존(classic script, 이 모듈보다 먼저 로드되어야 함):
    supabaseClient(core/lib/supabase-client.js), buildSkinContext
-   (skin/skin-context.js). renderSkin은 정적 import로 받는다.
+   (skin/skin-context.js), extractImageSlotNames
+   (skin/skin-image-slots.js — Studio Preview 경로와 공유하는 공용
+   helper, Slice 3). renderSkin은 정적 import로 받는다.
 
    책임 경계: renderPublishedSkinHome()은 절대 throw하지 않는다
    — 실패 사유가 무엇이든(RPC 에러, context 빌드 실패, 알 수
@@ -40,27 +42,6 @@
 import { renderSkin } from "./skin-render.js";
 
 const SKIN_HOME_SUPPORTED_SCHEMA_VERSION = 1;
-
-/* =========================================================
-   Skin Package의 imageSlots 정의에서 slot 이름만 뽑아
-   buildSkinContext()에 넘긴다 — "이 Skin이 어떤 이미지 자리를
-   필요로 하는지"는 Skin Package(저장된 구조)의 책임이고,
-   "그 자리에 실제로 어떤 URL이 들어있는지"는 RPC의
-   imageSlotValues(개인 데이터, skin_image_slot_values 테이블)의
-   책임이다 — 이 함수는 그 둘을 잇는 지점.
-========================================================== */
-
-function extractImageSlotNames(skinPackage) {
-
-  if (!skinPackage || !Array.isArray(skinPackage.imageSlots)) {
-    return [];
-  }
-
-  return skinPackage.imageSlots
-    .map((slot) => (slot && typeof slot.name === "string" ? slot.name : null))
-    .filter(Boolean);
-
-}
 
 /* =========================================================
    renderPublishedSkinHome({ ownerId, container }) -> Promise<boolean>

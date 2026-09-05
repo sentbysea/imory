@@ -18,9 +18,19 @@
    슬러그 검증 실패, 네트워크 등 재시도로 해결되거나 invite 상태와
    무관한 오류)는 토큰을 지우지 않는다 — 재시도할 수 있어야 한다.
 
+   성공 후 이동 대상(AI_SKIN_PHASE1B_DESIGN.md 3절, v5): 관리자
+   화면(admin/)이 아니라 방금 만든 자신의 공개 홈(/<slug>)으로
+   보낸다 — auth/auth-callback.js가 기존 회원에게 이미 쓰는
+   buildSitePath(slug, "/")와 동일한 목적지다. Questionnaire는
+   여기 없다 — Skin이 없는 상태에서 그 홈에 도착하면
+   home/home-skin-prompt.js가 뜨는 popup이 Skin Studio로
+   유도한다. complete_onboarding() RPC 자체는 이 변경과 무관하게
+   그대로다.
+
    RESERVED_SLUGS는 core/lib/reserved-slugs.js,
    supabaseClient는 core/lib/supabase-client.js,
    authGetSession은 core/lib/auth-shared.js,
+   buildSitePath는 core/lib/site-path.js,
    getStoredInviteToken/clearStoredInviteToken은
    core/lib/invite-token.js
    (전부 이 파일보다 먼저 로드됨 — onboarding/index.html 참고).
@@ -472,7 +482,10 @@ onboardingSubmitButton
 
 
       window.location.href =
-        "../admin/";
+        buildSitePath(
+          slug,
+          "/"
+        );
 
     }
   );

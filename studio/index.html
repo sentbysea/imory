@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>SKIN STUDIO</title>
+
+  <!--
+    PRETENDARD — admin/CUSTOMIZE와 동일한 공통 UI 폰트. 이 문서는
+    admin iframe 안에서 독립된 browsing context로 로드되므로 admin의
+    <link>를 상속받지 않는다 — 따로 불러와야 함(customize/editor/
+    index.html과 동일 패턴).
+  -->
+
+  <link
+    rel="stylesheet"
+    as="style"
+    crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/design-tokens.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../skin-questionnaire/questionnaire.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./studio.css"
+  >
+
+</head>
+
+
+<body>
+
+  <!-- =========================================================
+       SKIN STUDIO SHELL — "skin 없음" / 에러 상태 (PHASE 1B Slice 1/2)
+
+       studio-state.js가 판별한 진입 상태 중 "first-time"(Questionnaire)
+       과 "error"만 이 중앙 정렬 박스를 쓴다(AI_SKIN_PHASE1B_DESIGN.md
+       5절). "existing"(active skin 있음)은 이 블록을 hidden 처리하고
+       아래 SKIN STUDIO PREVIEW SHELL(Slice 3)을 대신 띄운다 — Save/
+       Publish/Code Editor 실제 기능은 아직 없다(15절, Slice 4 몫).
+  ========================================================== -->
+
+  <main
+    class="studio-shell"
+    id="studioShell"
+  >
+
+    <div
+      class="studio-status"
+      id="studioStatus"
+    >
+
+      <p
+        class="studio-status-text"
+        id="studioStatusText"
+      >
+        불러오는 중...
+      </p>
+
+      <dl
+        class="studio-status-detail"
+        id="studioStatusDetail"
+        hidden
+      ></dl>
+
+      <div
+        id="studioQuestionnaireMount"
+        hidden
+      ></div>
+
+    </div>
+
+  </main>
+
+
+  <!-- =========================================================
+       SKIN STUDIO PREVIEW SHELL (Slice 3)
+
+       "skin 있음" 사용자 전용 — 화면 전체가 Preview인 제작 UI
+       (AI_SKIN_PHASE1B_DESIGN.md 11절). studio-state.js가 "existing"
+       분기에서 studio-preview.js의 mountStudioPreview()를 호출할
+       때만 보인다. iframe은 아래 #studioPreviewFrame 단 하나뿐 —
+       Desktop/Mobile 전환은 이 iframe을 재생성/재로드하지 않고
+       #studioPreviewStage의 CSS 클래스만 바꿔 폭을 조절한다(11-5절
+       "iframe 1개 + 폭 전환만으로 @media가 정확히 동작하는 이유").
+  ========================================================== -->
+
+  <div
+    class="studio-preview-shell"
+    id="studioPreviewShell"
+    hidden
+  >
+
+    <div
+      class="studio-preview-stage"
+      id="studioPreviewStage"
+    >
+
+      <iframe
+        id="studioPreviewFrame"
+        src="./preview/preview-frame.html"
+        title="Skin Preview"
+      ></iframe>
+
+    </div>
+
+
+    <div
+      class="studio-viewport-toggle"
+      id="studioViewportToggle"
+    >
+
+      <button
+        type="button"
+        class="studio-viewport-toggle-button"
+        id="studioViewportToggleButton"
+        aria-haspopup="true"
+        aria-expanded="false"
+      >
+        <span id="studioViewportToggleLabel">Desktop</span>
+        <span aria-hidden="true">▾</span>
+      </button>
+
+      <div
+        class="studio-viewport-toggle-menu"
+        id="studioViewportToggleMenu"
+        hidden
+      >
+
+        <button
+          type="button"
+          class="studio-viewport-toggle-option studio-viewport-toggle-option--active"
+          data-viewport-mode="desktop"
+        >
+          Desktop
+        </button>
+
+        <button
+          type="button"
+          class="studio-viewport-toggle-option"
+          data-viewport-mode="mobile"
+        >
+          Mobile
+        </button>
+
+      </div>
+
+    </div>
+
+
+    <button
+      type="button"
+      class="studio-ai-tab"
+      id="studioAiTab"
+      disabled
+    >
+      ✎ AI
+    </button>
+
+
+    <div class="studio-corner-controls">
+
+      <button
+        type="button"
+        class="studio-corner-button"
+        id="studioSaveButton"
+        disabled
+      >
+        Save
+      </button>
+
+      <button
+        type="button"
+        class="studio-corner-button"
+        id="studioCodeButton"
+        disabled
+      >
+        Code
+      </button>
+
+      <button
+        type="button"
+        class="studio-corner-button"
+        id="studioSettingsButton"
+        disabled
+      >
+        Settings
+      </button>
+
+    </div>
+
+
+    <div
+      class="studio-preview-overlay"
+      id="studioPreviewOverlay"
+      hidden
+    >
+
+      <p
+        class="studio-preview-overlay-text"
+        id="studioPreviewOverlayText"
+      ></p>
+
+    </div>
+
+  </div>
+
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+  ></script>
+
+  <script src="../core/lib/supabase-client.js"></script>
+
+  <!-- =========================================================
+       SKIN INITIALIZER 핸드셰이크 (skin/skin-home.js와 동일 패턴)
+
+       skin/skin-initializer.js는 ES 모듈이라(skin-css-validate.js를
+       정적 import) classic script들보다 늦게 실행된다 — 아래
+       classic script들(studio-state.js 포함)이 폴링 없이
+       안전하게 넘겨받도록, 그 모듈을 로드하기 전에 Promise를
+       먼저 선언해 둔다.
+  ========================================================== -->
+
+  <script>
+
+    window.skinInitializerReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinInitializerReady = resolve;
+        }
+      );
+
+  </script>
+
+  <script src="../skin/skin-sanitize.js"></script>
+
+  <script src="../skin/skin-generator.js"></script>
+
+  <script type="module" src="../skin/skin-initializer.js"></script>
+
+  <script src="../skin-questionnaire/questionnaire.js"></script>
+
+  <!-- =========================================================
+       SKIN CONTEXT / PREVIEW (Slice 3)
+
+       skin-context.js(classic)는 buildSitePath(site-path.js)와
+       supabaseClient를 필요로 하므로 그 둘보다 먼저 로드하면 안
+       된다 — supabaseClient는 위에서 이미 로드됐고, site-path.js를
+       바로 앞에 추가한다. skin-image-slots.js는 skin/skin-home.js
+       (공개 HOME)와 studio-preview.js가 공유하는 순수 helper라
+       의존이 없다(2/5절).
+  ========================================================== -->
+
+  <script src="../core/lib/site-path.js"></script>
+
+  <script src="../skin/skin-image-slots.js"></script>
+
+  <script src="../skin/skin-context.js"></script>
+
+  <script src="./studio-preview.js"></script>
+
+  <script src="./studio-state.js"></script>
+
+</body>
+
+</html>

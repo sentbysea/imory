@@ -59,6 +59,17 @@ inquiryBackButton
   );
 
 
+skinStudioBackButton
+  .addEventListener(
+    "click",
+    () => {
+
+      showAdminHome();
+
+    }
+  );
+
+
 
 /* =========================================================
    현재 로그인 상태 확인

@@ -309,6 +309,36 @@
           </button>
 
 
+
+          <button
+            class="admin-menu-item"
+            id="openSkinStudioButton"
+            type="button"
+          >
+
+            <span class="menu-number">
+              05
+            </span>
+
+            <span class="menu-copy">
+
+              <strong>
+                SKIN STUDIO
+              </strong>
+
+              <small>
+                AI (beta)
+              </small>
+
+            </span>
+
+            <span class="menu-arrow">
+              →
+            </span>
+
+          </button>
+
+
         </div>
 
       </section>
@@ -1060,6 +1090,68 @@
           </p>
 
         </section>
+
+      </section>
+
+
+
+      <!-- ===================================================
+           SKIN STUDIO
+
+           studio/index.html을 그대로 iframe으로 embed한다(CUSTOMIZE와
+           동일 패턴 — 별도 document라 id 충돌 없음). CUSTOMIZE와
+           달리 이 패널은 데스크탑을 포함해 항상 거의 풀스크린으로
+           구성된다(admin-shell.css의 .skin-studio-mode, 미디어쿼리
+           없이 적용) — AI_SKIN_PHASE1B_DESIGN.md 2-2/9절.
+
+           Skin Studio 제작 자체는 데스크탑 전용이라, 좁은
+           화면(admin-shell.css 기준 900px 이하)에서는 iframe 대신
+           #skinStudioMobileNotice 안내만 보여준다 — admin 자체는
+           모바일에서도 깨지지 않아야 하므로 iframe 로드는 그대로
+           두고 CSS로만 전환한다.
+      ==================================================== -->
+
+      <section
+        class="admin-view"
+        id="skinStudioPanel"
+        hidden
+      >
+
+        <div class="skin-studio-top">
+
+          <button
+            class="back-button skin-studio-back-button"
+            id="skinStudioBackButton"
+            type="button"
+          >
+            ← back
+          </button>
+
+        </div>
+
+
+        <div class="skin-studio-embed">
+
+          <iframe
+            class="skin-studio-embed-frame"
+            id="skinStudioFrame"
+            src="../studio/index.html"
+            title="SKIN STUDIO"
+          ></iframe>
+
+        </div>
+
+
+        <div
+          class="skin-studio-mobile-notice"
+          id="skinStudioMobileNotice"
+        >
+
+          <p class="skin-studio-mobile-notice-text">
+            Skin Studio는 데스크탑에서 이용할 수 있습니다.
+          </p>
+
+        </div>
 
       </section>
 

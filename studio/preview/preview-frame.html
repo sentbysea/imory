@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Skin Preview</title>
+
+  <!--
+    AI_SKIN_PHASE1B_DESIGN.md Slice 3, 11-4/11-5절. 이 문서는
+    studio/index.html의 #studioPreviewFrame iframe 하나에만 로드되는
+    단일 Preview 문서다 — Desktop/Mobile 전환은 studio/index.html이
+    이 iframe의 CSS width만 바꾸는 방식으로 이뤄지므로(문서
+    재로드 없음), 이 문서 자체는 뷰포트 폭에 대해 아무 것도 몰라도
+    된다. 실제 Skin의 @media 쿼리는 이 문서의 레이아웃 뷰포트
+    (iframe 자신의 폭)를 기준으로 브라우저가 자연스럽게 재평가한다.
+
+    admin/studio 공통 UI 크롬(Pretendard/design-tokens.css)은 의도적으로
+    로드하지 않는다 — 이 문서가 보여주는 것은 Imory 관리 UI가 아니라
+    "사용자의 공개 HOME이 지금 어떻게 보이는가"이므로, 공개 HOME과
+    동일하게 아무 전제 스타일 없이 Skin CSS만으로 렌더되어야 한다.
+  -->
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+    }
+
+    body {
+      background: #ffffff;
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+  <div id="previewRoot"></div>
+
+
+  <!-- =========================================================
+       renderSkin() 신뢰 경계(Slice 3.5)를 그대로 유지한다 —
+       preview-bridge.js는 sanitize/validate를 직접 하지 않고
+       renderSkin() 호출 하나에 전부 맡긴다(그 함수가 매 호출마다
+       항상 재검증하므로, 부모가 postMessage로 보낸 draft가 아직
+       저장되지 않았거나 malformed여도 안전하다).
+
+       skin-sanitize.js는 classic script로 먼저 로드해 전역
+       sanitizeSkinHTML()/isSafeSkinUrl()을 제공해야 한다
+       (skin-render.js가 이 전역에 의존 — skin/skin-render.js 파일
+       상단 주석과 동일한 순서 제약).
+  ========================================================== -->
+
+  <script src="../../skin/skin-sanitize.js"></script>
+
+  <script type="module" src="./preview-bridge.js"></script>
+
+</body>
+
+</html>

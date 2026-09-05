@@ -92,6 +92,12 @@ const inquiryPanel =
   );
 
 
+const skinStudioPanel =
+  document.getElementById(
+    "skinStudioPanel"
+  );
+
+
 
 /* =========================================================
    메뉴 버튼
@@ -121,6 +127,12 @@ const openInquiryButton =
   );
 
 
+const openSkinStudioButton =
+  document.getElementById(
+    "openSkinStudioButton"
+  );
+
+
 const quoteBackButton =
   document.getElementById(
     "quoteBackButton"
@@ -145,6 +157,12 @@ const inquiryBackButton =
   );
 
 
+const skinStudioBackButton =
+  document.getElementById(
+    "skinStudioBackButton"
+  );
+
+
 
 /* =========================================================
    현재 큰 화면 기억
@@ -154,6 +172,7 @@ const inquiryBackButton =
    settings
    customize
    inquiry
+   skin-studio
 ========================================================== */
 
 let currentAdminView =
@@ -193,6 +212,10 @@ function showLogin() {
 
   adminPage.classList.remove(
     "customize-mode"
+  );
+
+  adminPage.classList.remove(
+    "skin-studio-mode"
   );
 
 
@@ -271,6 +294,10 @@ function showAdminHome(
     "customize-mode"
   );
 
+  adminPage.classList.remove(
+    "skin-studio-mode"
+  );
+
 
   adminHome.hidden =
     false;
@@ -289,6 +316,10 @@ function showAdminHome(
 
 
   inquiryPanel.hidden =
+    true;
+
+
+  skinStudioPanel.hidden =
     true;
 
 }
@@ -322,6 +353,10 @@ function showQuotePanel(
     "customize-mode"
   );
 
+  adminPage.classList.remove(
+    "skin-studio-mode"
+  );
+
 
   adminHome.hidden =
     true;
@@ -340,6 +375,10 @@ function showQuotePanel(
 
 
   inquiryPanel.hidden =
+    true;
+
+
+  skinStudioPanel.hidden =
     true;
 
 
@@ -411,6 +450,10 @@ function showSettingsPanel(
     "customize-mode"
   );
 
+  adminPage.classList.remove(
+    "skin-studio-mode"
+  );
+
 
   adminHome.hidden =
     true;
@@ -429,6 +472,10 @@ function showSettingsPanel(
 
 
   inquiryPanel.hidden =
+    true;
+
+
+  skinStudioPanel.hidden =
     true;
 
 
@@ -480,6 +527,10 @@ function showCustomizePanel(
     "customize-mode"
   );
 
+  adminPage.classList.remove(
+    "skin-studio-mode"
+  );
+
 
   adminHome.hidden =
     true;
@@ -498,6 +549,10 @@ function showCustomizePanel(
 
 
   inquiryPanel.hidden =
+    true;
+
+
+  skinStudioPanel.hidden =
     true;
 
 
@@ -537,6 +592,10 @@ function showInquiryPanel(
     "customize-mode"
   );
 
+  adminPage.classList.remove(
+    "skin-studio-mode"
+  );
+
 
   adminHome.hidden =
     true;
@@ -555,6 +614,81 @@ function showInquiryPanel(
 
 
   inquiryPanel.hidden =
+    false;
+
+
+  skinStudioPanel.hidden =
+    true;
+
+
+  window.scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
+
+}
+
+
+
+/* =========================================================
+   SKIN STUDIO
+
+   CUSTOMIZE와 달리 데스크탑에서도 항상 거의 풀스크린으로
+   구성된다(admin-shell.css .skin-studio-mode, 미디어쿼리로
+   제한되지 않음 — AI_SKIN_PHASE1B_DESIGN.md 2-2절). 좁은 화면에서는
+   같은 클래스 안에서 iframe 대신 안내 문구로만 전환된다(순수
+   CSS 미디어쿼리, 여기서 JS로 폭을 따로 감지하지 않는다).
+========================================================== */
+
+function showSkinStudioPanel(
+  saveState = true
+) {
+
+  if (
+    saveState
+  ) {
+
+    saveCurrentAdminView(
+      "skin-studio"
+    );
+
+  }
+
+
+  adminPage.classList.remove(
+    "quote-mode"
+  );
+
+  adminPage.classList.remove(
+    "customize-mode"
+  );
+
+  adminPage.classList.add(
+    "skin-studio-mode"
+  );
+
+
+  adminHome.hidden =
+    true;
+
+
+  quotePanel.hidden =
+    true;
+
+
+  settingsPanel.hidden =
+    true;
+
+
+  customizePanel.hidden =
+    true;
+
+
+  inquiryPanel.hidden =
+    true;
+
+
+  skinStudioPanel.hidden =
     false;
 
 
@@ -629,6 +763,20 @@ function restoreAdminView() {
   }
 
 
+  if (
+    currentAdminView ===
+    "skin-studio"
+  ) {
+
+    showSkinStudioPanel(
+      false
+    );
+
+    return;
+
+  }
+
+
   showAdminHome(
     false
   );
@@ -680,6 +828,17 @@ openInquiryButton
     () => {
 
       showInquiryPanel();
+
+    }
+  );
+
+
+openSkinStudioButton
+  .addEventListener(
+    "click",
+    () => {
+
+      showSkinStudioPanel();
 
     }
   );
@@ -791,6 +950,27 @@ new MutationObserver(
       unlockAdminBodyScroll();
 
     }
+
+
+    /*
+      SKIN STUDIO는 quote-mode/customize-mode와 달리 데스크탑을
+      포함해 항상 거의 풀스크린이라(2-2절), 같은
+      admin-fullscreen-editor-scroll-locked 클래스(모바일에서만
+      position:fixed가 걸리도록 admin-shell.css @media 안에 있음)를
+      재사용하지 않고 별도 body 클래스를 둔다 — 이 클래스의
+      position:fixed는 admin-shell.css에 미디어쿼리 없이 적용된다.
+    */
+
+    const isSkinStudioMode =
+      adminPage.classList.contains(
+        "skin-studio-mode"
+      );
+
+
+    document.body.classList.toggle(
+      "skin-studio-body-mode",
+      isSkinStudioMode
+    );
 
   }
 )

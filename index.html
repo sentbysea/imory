@@ -233,7 +233,8 @@
 
     loadVersionedScripts(
       [
-        "./home/site-owner.js"
+        "./home/site-owner.js",
+        "./home/home-skin-prompt.js"
       ]
     );
 
@@ -271,6 +272,7 @@
     loadVersionedScripts(
       [
         "./skin/skin-sanitize.js",
+        "./skin/skin-image-slots.js",
         "./skin/skin-context.js"
       ]
     );
@@ -315,6 +317,11 @@
   <link
     rel="stylesheet"
     href="./home/home-base.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="./home/home-skin-prompt.css"
   >
 
   <link
@@ -3039,6 +3046,37 @@
 
       const owner =
         await getSiteOwner();
+
+
+      /*
+        본인 HOME + active Skin 없음일 때만 뜨는 꾸미기 유도
+        popup(AI_SKIN_PHASE1B_DESIGN.md 4절) — 아래 HOME 렌더
+        분기(published Skin/legacy_sua/customize/notice) 전부와
+        무관하게 항상 시도한다. fire-and-forget: 이 popup의
+        성공/실패가 HOME 렌더링 자체를 막아서는 안 된다.
+      */
+
+      if (
+        owner.status === "found" &&
+        owner.ownerId &&
+        typeof initHomeSkinPrompt === "function"
+      ) {
+
+        initHomeSkinPrompt(
+          owner.ownerId
+        )
+          .catch(
+            (err) => {
+
+              console.error(
+                "[index] initHomeSkinPrompt failed",
+                err
+              );
+
+            }
+          );
+
+      }
 
 
       if (
