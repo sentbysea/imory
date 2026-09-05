@@ -1097,13 +1097,19 @@
   <script src="../core/lib/invite-token.js"></script>
 
   <!-- =========================================================
-       INVITE TOKEN 진입점
+       INVITE TOKEN 진입점 (하위호환)
 
-       `/admin/?invite=<token>` 형태로 들어온 초대 토큰을 즉시
-       sessionStorage로 옮기고 URL에서 지운다(core/lib/invite-token.js
-       참고). loginBox는 정적 마크업이라 이 시점에 이미 DOM에
-       있고, quotePanel 동적 로딩과 무관하게 페이지 파싱 중
-       곧바로 실행되어야 한다(로그인 버튼 클릭보다 항상 먼저).
+       초대 링크의 실제 진입점은 이제 invite/index.html이다
+       ("초대 링크로 왔으니 가입 가능" 안내 화면 — imory-ops의
+       IMORY_INVITE_BASE_URL 참고). 여기 admin 쪽 캡처 로직은
+       예전에 발급되어 이미 공유된 `/admin/?invite=<token>` 링크가
+       계속 동작하도록 남겨둔 것뿐이다.
+
+       들어온 초대 토큰을 즉시 sessionStorage로 옮기고 URL에서
+       지운다(core/lib/invite-token.js 참고). loginBox는 정적
+       마크업이라 이 시점에 이미 DOM에 있고, quotePanel 동적
+       로딩과 무관하게 페이지 파싱 중 곧바로 실행되어야 한다
+       (로그인 버튼 클릭보다 항상 먼저).
   ========================================================== -->
 
   <script>

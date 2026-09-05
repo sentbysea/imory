@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>imory 초대</title>
+
+  <link
+    rel="preconnect"
+    href="https://fonts.googleapis.com"
+  >
+
+  <link
+    rel="preconnect"
+    href="https://fonts.gstatic.com"
+    crossorigin
+  >
+
+  <link
+    rel="stylesheet"
+    as="style"
+    crossorigin
+    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
+  >
+
+  <link
+    rel="stylesheet"
+    href="../core/design-tokens.css"
+  >
+
+  <!--
+    새 CSS를 만들지 않고 admin/admin-shell.css의 .login-box /
+    .google-login-button / .login-desc-link 등을 그대로 재사용한다
+    (auth/index.html과 같은 패턴) — admin의 로그인 화면과 시각적으로
+    통일된 "빈 화면 + Google 버튼" 레이아웃이면 충분하기 때문.
+  -->
+
+  <link
+    rel="stylesheet"
+    href="../admin/admin-shell.css"
+  >
+
+</head>
+
+
+<body>
+
+  <main class="admin-page">
+
+    <section
+      class="login-box"
+      id="inviteBox"
+    >
+
+      <h1>
+        imory
+      </h1>
+
+      <p
+        class="login-desc"
+        id="inviteMessage"
+      >
+        초대 링크를 확인하고 있어요...
+      </p>
+
+      <button
+        class="google-login-button"
+        id="googleLoginButton"
+        type="button"
+      >
+
+        <span class="google-icon">
+          G
+        </span>
+
+        <span>
+          Sign in with Google
+        </span>
+
+      </button>
+
+      <a
+        class="login-desc-link"
+        id="inviteHomeLink"
+        href="../"
+        hidden
+      >
+        홈으로 가기
+      </a>
+
+      <p
+        class="login-message"
+        id="inviteStatusMessage"
+      ></p>
+
+    </section>
+
+  </main>
+
+
+  <script
+    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+  ></script>
+
+  <script src="../core/lib/build-version.js"></script>
+
+  <script>
+
+    loadVersionedScripts(
+      [
+        "../core/lib/supabase-client.js",
+        "../core/lib/auth-shared.js",
+        "../core/lib/invite-token.js"
+      ]
+    );
+
+  </script>
+
+  <script src="./invite.js"></script>
+
+</body>
+
+</html>
