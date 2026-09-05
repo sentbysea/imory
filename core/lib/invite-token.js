@@ -28,9 +28,11 @@
            자체를 호출하지 않으므로(사용 횟수 미소비)
            clearStoredInviteToken()으로 즉시 삭제하고 자기 홈으로
            이동한다.
-         · 신규 사용자 + 가입 가능(true) → 토큰을 지우지 않고
-           onboarding으로 이동한다(아래 onboarding 흐름에서 계속
-           사용).
+         · 신규 사용자 + 가입 가능(true) → 토큰을 지우지 않고,
+           /onboarding/으로 이동할 때도 `?invite=<token>` 쿼리로
+           한 번 더 실어 보낸다(redirectTo와 동일한 이유 — 이
+           네비게이션도 하나의 top-level navigation이라 인앱
+           브라우저에서 sessionStorage가 비어있을 수 있다).
          · 가입 불가 확정(false — signup closed이고 그 토큰이
            invalid/expired/exhausted/inactive) →
            clearStoredInviteToken()으로 삭제한다.
@@ -38,7 +40,9 @@
            → fail closed로 onboarding에 보내지 않지만, 일시적
            오류일 수 있으므로 토큰은 지우지 않는다(재시도 가능해야
            함).
-     - onboarding/onboarding.js: getStoredInviteToken()을
+     - onboarding/onboarding.js: 파일 최상단에서 다시 한 번
+       captureInviteTokenFromUrl()을 호출해 위 `?invite=` 쿼리를
+       sessionStorage로 회수한 뒤(URL에서는 제거), getStoredInviteToken()을
        complete_onboarding(p_invite_token)에 그대로 전달한다.
          · RPC 성공 → clearStoredInviteToken().
          · "invalid invite"(원자적 검증 실패로 확정) →

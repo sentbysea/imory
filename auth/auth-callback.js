@@ -42,8 +42,11 @@
         클라이언트는 날짜를 직접 비교하지 않음). 여기서는 읽기만
         할 뿐 소비하지 않는다(실제 소비는 onboarding의
         complete_onboarding()).
-        === true → 토큰은 지우지 않고 /onboarding/으로 이동(거기서
-        계속 쓰임)
+        === true → 토큰은 지우지 않고 /onboarding/으로 이동. 토큰이
+        있으면 이동 URL에도 `?invite=`로 함께 실어 보낸다(Twitter/X
+        같은 인앱브라우저는 이 마지막 same-origin 이동에서조차
+        sessionStorage가 비어있을 수 있어, onboarding/onboarding.js가
+        도착 즉시 captureInviteTokenFromUrl()로 다시 회수한다).
       - false(가입 불가 확정 — signup이 닫혀 있고 그 토큰이
         invalid/expired/exhausted/inactive 중 하나라는 뜻) →
         clearStoredInviteToken()으로 토큰을 삭제하고 signOut() 후
@@ -527,8 +530,26 @@ async function runAuthCallback() {
   }
 
 
+  /*
+    onboarding/onboarding.js가 getStoredInviteToken()으로 다시
+    읽어 complete_onboarding(p_invite_token)에 넘긴다. sessionStorage만
+    믿지 않고 여기서도 URL에 실어 보내는 이유는 invite/invite.js·
+    admin-session.js가 redirectTo에 토큰을 싣는 것과 동일하다 —
+    Twitter/X 인앱브라우저는 OAuth 왕복 중 sessionStorage가 아니라
+    "같은 오리진으로의 일반 네비게이션" 자체에서도 페이지 간
+    스토리지가 유지된다는 보장이 없는 사례가 관찰된다(이 페이지
+    →/onboarding/도 결국 하나의 top-level navigation). URL 쿼리로
+    보내면 onboarding/index.html이 로드하는 core/lib/invite-token.js의
+    captureInviteTokenFromUrl()(onboarding.js가 최상단에서 호출)이
+    도착 즉시 sessionStorage로 재회수하고 URL에서 지우므로, 중간에
+    스토리지가 비어 있었어도 안전하게 이어진다. 토큰이 없으면
+    기존과 동일하게 그냥 "../onboarding/"로 이동한다.
+  */
+
   window.location.href =
-    "../onboarding/";
+    inviteToken
+      ? `../onboarding/?invite=${encodeURIComponent(inviteToken)}`
+      : "../onboarding/";
 
 }
 

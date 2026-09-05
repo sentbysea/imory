@@ -31,9 +31,15 @@
    supabaseClient는 core/lib/supabase-client.js,
    authGetSession은 core/lib/auth-shared.js,
    buildSitePath는 core/lib/site-path.js,
-   getStoredInviteToken/clearStoredInviteToken은
-   core/lib/invite-token.js
+   captureInviteTokenFromUrl/getStoredInviteToken/
+   clearStoredInviteToken은 core/lib/invite-token.js
    (전부 이 파일보다 먼저 로드됨 — onboarding/index.html 참고).
+   captureInviteTokenFromUrl()은 auth/auth-callback.js가 성공 시
+   실어 보내는 `?invite=` 쿼리를 도착 즉시 sessionStorage로
+   회수한다(파일 하단이 아니라 최상단에서 바로 호출 — Twitter/X
+   인앱브라우저처럼 페이지 이동 사이 sessionStorage가 비어있을
+   수 있는 경우의 대비책, invite/invite.js·auth-callback.js와
+   동일 패턴).
 ========================================================== */
 
 const onboardingNicknameInput =
@@ -69,6 +75,20 @@ const onboardingSubmitMessage =
 
 const SLUG_FORMAT =
   /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+
+/* =========================================================
+   초대 토큰 URL 회수 — auth/auth-callback.js가 성공 시
+   `?invite=<token>`을 실어 이 페이지로 보낸다(Twitter/X
+   인앱브라우저처럼 페이지 이동 사이에 sessionStorage가 비는
+   경우에도 안전하게 이어지도록). invite/invite.js·
+   auth-callback.js와 동일하게 도착 즉시 회수해 sessionStorage에
+   쓰고 URL에서 지운다. URL에 값이 없으면(예: signup이 열려 있어
+   토큰 없이 온 경우) 아무 일도 하지 않고, 이미 sessionStorage에
+   남아있던 값은 그대로 유지된다.
+========================================================== */
+
+captureInviteTokenFromUrl();
 
 
 /* =========================================================
