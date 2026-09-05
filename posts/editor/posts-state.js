@@ -138,6 +138,21 @@ let currentPostView =
   "home";
 
 
+/*
+  PHASE 1C-F: 지금 열려 있는 POST가 published Skin outer chrome으로
+  렌더된 상태인지, 그렇다면 본문을 mount할 protected region이
+  어디인지. posts-view-detail.js(openPostPage)가 매번 설정하고,
+  posts-view-detail.js/posts-view-secret-gate.js 양쪽의
+  renderPostDetailBody() 호출부가 이 값을 읽어 본문을 legacy
+  #postDetailContent 대신 Skin region에 mount한다. Skin 미지원/
+  실패/owner 열람이면 항상 null로 되돌아가 기존 legacy 동작과
+  100% 동일하다.
+*/
+
+let currentPostBodyMountTarget =
+  null;
+
+
 let currentEditorMode =
   null;
 

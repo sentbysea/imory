@@ -98,6 +98,17 @@ const postDetail =
     "postDetail"
   );
 
+/*
+  PHASE 1C-F: published Skin이 이 POST를 지원할 때 outer chrome을
+  통째로 여기 렌더한다(posts/view/posts-view-detail.js의
+  tryRenderPublishedSkinPost). 지원하지 않으면 항상 hidden.
+*/
+
+const postSkinContainer =
+  document.getElementById(
+    "postSkinContainer"
+  );
+
 const postDetailTitle =
   document.getElementById(
     "postDetailTitle"

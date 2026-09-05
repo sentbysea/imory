@@ -422,6 +422,24 @@
     </article>
 
 
+    <!-- ===================================================
+         POST SKIN CONTAINER (PHASE 1C-F)
+
+         published Skin이 이 POST를 지원할 때만 채워진다
+         (skin/skin-post.js). Skin outer chrome(article 전체)을
+         이 컨테이너가 통째로 소유하고, 그 안의
+         [data-imory-region="post-body"]에 기존 Quote
+         Preset/raw HTML/secret gate 렌더러가 그대로 mount된다
+         (posts/view/posts-view-detail.js). 지원하지 않으면
+         항상 hidden으로 남고 위 #postDetail이 쓰인다.
+    ==================================================== -->
+
+    <div
+      class="post-skin-container"
+      id="postSkinContainer"
+      hidden
+    ></div>
+
 
     <!-- =====================================================
          POST EDITOR

@@ -928,4 +928,153 @@ unsupported/empty 상태에서는 **iframe에 아무 것도 다시 그리지 않
 2. `posts-view-detail.js`의 `openPostPage()` 진입부에 `renderPublishedSkinCategory()`(1C-C)와 동일한 패턴으로 분기 추가 — **secret gate 분기(23-1절)와의 관계가 유일한 새 결정 지점**: secret post면 Skin 렌더 자체를 잠금 해제 이후로 미룰지, 아니면 chrome(제목 등)은 Skin이 먼저 그리고 region 안에만 `#postSecretGate`류 잠금 UI를 얹을지 — 이번 문서(7-5절 "locked state도 수용 가능해야 한다")는 후자를 권장하지만 실제 결정은 그 Slice가 내려야 한다.
 3. Studio POST Preview(1C-D가 CATEGORY에 했던 것과 동일 패턴을 POST에 반복) — `getRegion("post-body")` 자리에 무엇을 보여줄지(빈 자리 그대로 둘지, "본문 미리보기" placeholder 텍스트를 얹을지)는 아직 열린 질문.
 
+---
+
+## 24. Slice 1C-F 구현 결과 (실제 구현 완료, 2026-09-05)
+
+23절이 다음 Slice로 미뤄둔 두 가지(public route 연결, Studio POST Preview) 중 **public route 연결만** 이번에 완료했다. Studio POST Preview는 이번에도 의도적으로 손대지 않았다(24-11절).
+
+### 24-1. 새 진입점 — `skin/skin-post.js`
+
+`skin-category.js`와 완전히 동일한 골격(`renderPublishedSkinPost({ownerId, postId, container}) -> Promise<false | {rendered:true, bodyRegion}>`). 23-10-1절 권장 순서 그대로 구현:
+
+1. `get_published_skin` RPC → 없음/에러/throw면 `false`.
+2. `schemaVersion !== 1`이면 `false`.
+3. `resolveSkinTemplate(skin, "post")` 없으면 `false`.
+4. `buildPostSkinContext(ownerId, postId, {imageSlotNames, imageSlotValues})` → `null`/throw면 `false`.
+5. `renderSkin({container, skin: postTemplate, context, mode:"view"})` → throw하면 `container.innerHTML = ""` 후 `false`.
+6. `instance.getRegion("post-body")`가 `undefined`면(23-6절이 예고한 "template 있음 + region 없음 → invalid" 판정을 여기서 실제로 강제) `container.innerHTML = ""` 후 `false`.
+7. 전부 통과하면 `{rendered:true, bodyRegion}` 반환.
+
+boolean 하나 대신 작은 result object를 쓴 이유는 3절 지시 그대로 — caller(`posts-view-detail.js`)가 실제 본문을 mount할 자리(`bodyRegion`)를 넘겨받아야 하기 때문이다. `skinInstance` 자체는 반환하지 않는다 — 이번 Slice의 public POST는 1회 mount 후 `update()`를 호출할 일이 없으므로(17절, Studio처럼 실시간 재마운트가 필요 없는 화면) 캐싱 위험이 있는 인스턴스를 굳이 노출하지 않았다.
+
+`index.html`에 `window.skinPostReady` 핸드셰이크(`skinHomeReady`/`skinCategoryReady`와 동일 패턴) + `<script type="module" src="./skin/skin-post.js">` 로드를 추가했다.
+
+### 24-2. public POST route 연결 위치 — `posts/view/posts-view-detail.js`
+
+`openPostPage()`가 `posts` row를 확정(`if (error || !post) {...return;}` 통과)한 직후, 기존 `applyPostVisibilityTitle`/`postDetailDate` 대입보다 먼저 `tryRenderPublishedSkinPost(post.id, postSkinContainer)`를 호출한다. 이 헬퍼는 `posts-view-list.js`의 `tryRenderPublishedSkinCategory()`와 판단 기준이 완전히 동일하다 — `getSiteOwner()`로 scoped 여부 확인 → `getSignedInUser()`로 "지금 보는 사람이 이 사이트의 owner 본인인가" 확인 → owner 본인이면 무조건 `false`(아래 24-9절) → `window.skinPostReady` 핸드셰이크로 받은 `renderPublishedSkinPost()` 호출.
+
+secret 판정(`post.visibility === "secret" && !isOwnerViewing`)과 raw HTML/richtext 분기는 이 지점 **이후**, 완전히 그대로 남아 있다 — Skin 여부는 "본문을 어디에 mount할지"만 바꾸고 "무엇을 언제 가져올지"는 전혀 바꾸지 않는다(20절 지시 그대로 가장 작은 삽입 지점).
+
+### 24-3. Skin vs legacy 분기
+
+`usingSkinPost = Boolean(skinPostResult && skinPostResult.rendered)` 하나로 이후 모든 분기가 갈린다:
+
+- `postDetail.hidden = usingSkinPost` / `postSkinContainer.hidden = !usingSkinPost` — 새로 추가한 `<div id="postSkinContainer">`(posts.html, `#postDetail` 바로 다음 형제)와 기존 `<article id="postDetail">`가 서로 배타적으로 보인다.
+- `usingSkinPost`이면 legacy `#postDetailTitle`/`#postDetailDate` 대입 자체를 생략한다(어차피 hidden된 트리라 쓸 이유가 없고, Skin의 outer chrome이 `buildPostSkinContext()`가 채운 `post.title`/`post.categoryName`/`post.categoryHref`/`post.publishedAt`을 이미 `data-imory-bind`/`data-imory-href`로 그렸다).
+- fallback이면(`false`) 기존 코드 그대로 — 한 줄도 안 바뀜.
+
+폴백 사유는 20-13절 A~F 전부 `renderPublishedSkinPost()` 내부에서 처리되고(24-1절), `tryRenderPublishedSkinPost()`는 추가로 "owner 본인 열람"(24-9절)까지 걸러 `false`를 만든다 — 어떤 사유든 호출자 쪽에서는 동일하게 "legacy 그대로 진행"으로 수렴한다.
+
+### 24-4. body region mount 흐름
+
+`currentPostBodyMountTarget`(신규 module-level 상태, `posts/editor/posts-state.js`)이 "지금 본문을 어디에 꽂을지"의 유일한 진실이다. `openPostPage()`가 Skin 분기 직후 `currentPostBodyMountTarget = usingSkinPost ? skinPostResult.bodyRegion : null`로 설정하고, `renderPostDetailBody(contentType, contentText, quotePresetId)`(secret gate 잠금 해제 후 호출하는 `handleSecretGateSubmit()`도 포함해 **두 호출부 모두**)가 이 값을 읽어 분기한다:
+
+- `currentPostBodyMountTarget`이 있으면(Skin) → `skinBodyTarget.innerHTML = contentText`(html 모드) 또는 `renderStyledPostContentInto(skinBodyTarget, contentText, postStyleSettings)`(richtext 모드) 후 즉시 `return`.
+- 없으면(legacy) → 기존 코드 그대로(`postDetailContent` 하드코딩), 단 한 글자도 변경 없음.
+
+전역 상태 하나로 양쪽 호출부(최초 진입/잠금 해제 후)가 자연스럽게 같은 결정을 공유한다 — `handleSecretGateSubmit()`(`posts-view-secret-gate.js`)은 이번 Slice에서 전혀 수정하지 않았다.
+
+매 `openPostPage()` 진입 시작 지점에서 `currentPostBodyMountTarget = null`, `postSkinContainer.hidden = true`, `postSkinContainer.innerHTML = ""`로 무조건 리셋한 뒤 다시 판정한다 — 이전 글이 Skin 경로였고 이번 글이 legacy(또는 그 반대)여도 이전 상태가 새지 않는다.
+
+### 24-5. Quote Preset 유지 방식
+
+`renderPostDetailBody()`의 richtext 분기가 `renderStyledPostContent()`(내부에서 `postDetailContent`를 하드코딩) 대신 `renderStyledPostContentInto(container, ...)`를 **직접** 호출하도록 바꿨을 뿐 — `posts/style/posts-style-render.js`/`posts-style-dialogue.js`는 한 글자도 건드리지 않았다. 23-1절에서 이미 확인했듯 이 함수는 "컨테이너를 인자로 받아 자식만 관리"하므로 Skin의 `bodyRegion`을 넘겨도 그 정체를 몰라도 동일하게 동작한다 — `.post-dialogue`/`.post-action` 등 Quote Preset 클래스도 그대로 부여되고, `skin-css-validate.js`의 `SKIN_CSS_PROTECTED_SELECTOR_PATTERN`(23-5절)이 이번에도 코드 변경 없이 그대로 그 클래스들을 Skin CSS의 직접 타겟팅으로부터 보호한다.
+
+### 24-6. raw HTML 유지 방식
+
+`contentType === "html"` 분기도 동일한 패턴 — `container.classList.add("is-html-content"); container.innerHTML = contentText;`로 legacy와 완전히 동일한 결과를 만들되 `container`가 legacy `postDetailContent` 대신 `currentPostBodyMountTarget`일 수 있다는 점만 다르다.
+
+**의도적으로 이식하지 않은 것(스코프 결정, 24-7절과 동일 근거)**: `fitHtmlPostContentToViewport()`(폭 자동 축소)와 `initReaderFontScaleForCurrentPost()`/`hideReaderFontScaleControl()`(글자 크기 +/- 컨트롤)는 legacy `#postDetail` 전용 고정 DOM(`#postDetailContent`/`#postDetailContentWrap`/`#postDetailFontScale`)만 직접 참조하는 chrome 기능이다 — POST Skin Contract v0.1(6절)은 애초에 이 두 기능을 계약하지 않았고, Skin outer chrome에는 대응하는 자리 자체가 없다. Skin 경로에서는 이 두 호출을 아예 하지 않는다(레거시 고정 엘리먼트를 대상으로 계속 호출해봐야 hidden 트리를 헛되이 건드릴 뿐이라 의미가 없다). **본문 컨텐츠 자체(원본 HTML/Quote Preset 스타일)의 출력 결과는 legacy와 동일** — 차이는 두 개의 chrome 편의 기능(폭 자동 축소, 글자 크기 조절)이 v0.1 Skin POST에는 없다는 것뿐이다.
+
+### 24-7. secret locked/unlock 흐름 + secret gate 위치
+
+11절 "추천 우선순위 A"(post-body region 안에 system-owned secret gate mount)를 채택했다 — 코드 변경이 더 작았다(11절 지시 그대로). 구현 방식은 **기존 `#postSecretGate` DOM 노드 자체를 이동**시키는 것이다(새 gate UI를 만들지 않음 — password input은 여전히 완전히 system-owned):
+
+- `openPostPage()` 시작 지점에서 `postSecretGate.parentNode !== postDetail`이면 항상 `postDetail`로 되돌려 놓는다(이전 글이 Skin+secret 조합이었을 가능성 방어).
+- 이번 글이 `usingSkinPost`이면 `skinPostResult.bodyRegion.appendChild(postSecretGate)`로 gate를 region 안으로 옮긴다.
+- `showPostSecretGate()`/`handleSecretGateSubmit()`(`posts-view-secret-gate.js`)은 **한 글자도 수정하지 않았다** — 두 함수 다 `postSecretGate`/`postSecretGateInput`/`postSecretGateMessage` 등 전역 참조로만 동작하므로, 그 노드가 지금 DOM 어디에 붙어 있는지와 무관하게 그대로 동작한다. 비밀번호 대조도 여전히 `get_secret_post_content` RPC 안에서만 일어난다(변경 없음).
+- 잠금 해제 성공 시 `handleSecretGateSubmit()`이 호출하는 `renderPostDetailBody()`는 24-4절의 `currentPostBodyMountTarget`을 그대로 읽으므로, Skin 경로였다면 본문이 자동으로 같은 `bodyRegion`에 들어간다 — secret 전용 분기를 추가하지 않았다.
+- **locked 상태에서 실제 secret content가 Skin Context로 가지 않는다**: `buildPostSkinContext()`(`skin-context.js`)는 애초에 `post_contents`/`secret_password_hash`를 select하지 않으므로(23절/PHASE1C 6-1/7-2절부터 이미 보장) 이번 Slice가 새로 지켜야 할 것이 없었다 — Skin outer chrome이 렌더되는 시점(잠금 여부와 무관하게 항상 렌더됨)에도 본문은 여전히 별도 쿼리(`post_contents` 테이블)로만 오고, 그 쿼리 자체가 secret이면 실행되지 않는다(기존 로직 미변경).
+
+### 24-8. invalid/missing region → fallback
+
+`skin-post.js`의 24-1절 6단계가 이 전체를 담당한다 — `templates.post`는 있지만 렌더된 DOM에 `data-imory-region="post-body"`가 없으면(sanitize 과정에서 제거된 경우 포함) `container.innerHTML = ""` 후 `false`를 반환해 blank 화면 없이 legacy `#postDetail`로 폴백한다. `renderSkin()` 자체가 throw해도 동일하게 컨테이너를 비우고 `false`.
+
+### 24-9. owner 로그인 상태 판단
+
+CATEGORY guard(`tryRenderPublishedSkinCategory`)를 그대로 복붙하지 말라는 지시에 따라 실제 POST 관리 UI를 먼저 조사했다(`posts-view-secret-gate.js`의 `updatePostOwnerActions()`) — owner가 자기 글을 열람하면 `#postDetailActions`(edit/delete 버튼)가 `currentPostOwnerId === signedInUser.id`일 때만 보인다. 이 관리 UI는 legacy `#postDetail` 안에만 존재하고 Skin outer chrome(6절 POST Contract)에는 애초에 대응 필드가 없다 — 따라서 **CATEGORY와 동일한 결론**(owner 본인이 자기 사이트를 보고 있으면 Skin을 아예 시도하지 않고 legacy로 폴백)을 내렸다. 다만 판단 근거는 복붙이 아니라 독립 조사 결과다: CATEGORY는 "글 추가/편집모드/бulk 삭제" UI, POST는 "edit/delete 버튼" UI로 서로 다른 기능이지만, 둘 다 "owner 본인 열람 시에만 나타나는 관리 UI가 legacy 화면에만 있다"는 동일한 구조라 동일한 guard가 정당화된다.
+
+### 24-10. 관련 글(`#postRelated`) 처리
+
+POST Skin Contract v0.1(6-2절)이 애초에 관련 글 목록을 계약하지 않으므로, `usingSkinPost`이면 `loadRelatedPosts()` 호출 자체를 생략한다(불필요한 `posts` 테이블 조회 하나를 아낀다) — 호출해도 결과가 hidden `#postRelated`에 쌓일 뿐 화면에 나타나지 않았을 것이므로 동작 차이는 없고, 낭비만 없앤 것이다. `postPageTitle`(카테고리 breadcrumb, `.post-header` 안의 공용 chrome — `#postDetail`/`#postSkinContainer` 어느 쪽도 아니다)과 `updatePostOwnerActions()`는 Skin/legacy 여부와 무관하게 기존과 동일하게 호출한다 — 전자는 페이지 공통 상단바라 Skin이 소유할 이유가 없고, 후자는 owner가 이미 24-9절에서 Skin 경로 자체를 타지 않으므로 항상 무해하게 hidden 상태를 유지한다.
+
+### 24-11. Studio는 이번 Slice에서 건드리지 않음 — 확인
+
+`studio/` 디렉터리 어떤 파일도 diff에 없다(코드 diff로 확인). HOME|CATEGORY toggle에 POST를 추가하지 않았고, Studio가 POST를 미리보는 경로 자체가 없다 — 21절 지시 그대로.
+
+### 24-12. 변경/생성 파일
+
+- **생성** `skin/skin-post.js` — 24-1절.
+- **생성** `skin/skin-post-integration-test.html` — 24-13절.
+- **수정** `index.html` — `window.skinPostReady` 핸드셰이크 + `skin-post.js` 모듈 로드 추가.
+- **수정** `posts/posts.html` — `<div id="postSkinContainer" hidden>`을 `#postDetail` 바로 다음 형제로 추가.
+- **수정** `posts/editor/posts-refs.js` — `postSkinContainer` DOM 참조 추가.
+- **수정** `posts/editor/posts-state.js` — `currentPostBodyMountTarget` 전역 상태 추가.
+- **수정** `posts/view/posts-view-detail.js` — `tryRenderPublishedSkinPost()` 신규 + `openPostPage()` 분기 삽입 + `renderPostDetailBody()`가 `currentPostBodyMountTarget`을 읽도록 확장(24-2/24-4/24-6절).
+- **변경 없음**: `posts/view/posts-view-secret-gate.js`(24-7절 — 의도적으로 손대지 않음), `posts/style/posts-style-render.js`, `posts/style/posts-style-dialogue.js`, `posts/editor/posts-router-init.js`, `skin/skin-context.js`, `skin/skin-render.js`, `skin/skin-sanitize.js`, `skin/skin-template.js`, `skin/skin-css-validate.js`, `skin/skin-home.js`, `skin/skin-category.js`, `studio/*`.
+
+### 24-13. 테스트 결과
+
+실제 Chromium(`npx playwright`, 로컬 정적 서버 `http://127.0.0.1:8934/`)에서 실행:
+
+| 파일 | 결과 |
+|---|---|
+| `skin/skin-post-integration-test.html`(신규, mock 기반) | **20 PASS / 0 FAIL** |
+| `skin/skin-post-region-test.html`(1C-E 회귀) | 17 PASS / 0 FAIL |
+| `skin/skin-render-test.html`(회귀) | 39 PASS / 0 FAIL |
+| `skin/skin-render-security-test.html`(회귀) | 23 PASS / 0 FAIL |
+| `skin/skin-css-validate-test.html`(회귀) | 23 PASS / 0 FAIL |
+| `skin/skin-page-context-test.html`(회귀) | 32 PASS / 0 FAIL |
+| `skin/skin-package-normalize-test.html`(회귀) | 12 PASS / 0 FAIL |
+| `skin/skin-context-test.html` | 실행 안 됨(폼 입력으로 실제 Supabase 자격증명을 받는 수동 하네스라 자동화 대상이 아님 — 이번 변경으로 인한 회귀 아님, `skin-context.js` diff 없음) |
+
+신규 하네스(`skin-post-integration-test.html`)는 `supabaseClient.rpc`/`buildPostSkinContext`를 mock해서 `renderPublishedSkinPost()` 자체를 격리 검증한다 — published Skin 없음(A)/`templates.post` 없음(B)/정상 렌더+bind 확인(C,D,E)/post-body region 없음(H)/알 수 없는 schemaVersion(I)/context null(post 없음)/RPC 에러·throw/context 빌드 throw/인자 누락 방어까지 20개 케이스.
+
+**이번 세션이 자동화하지 못한 것(19절 체크리스트 중)**: `posts-view-detail.js`의 실제 배선(secret gate DOM 이동, `currentPostBodyMountTarget` 전환, owner guard)은 실제 앱 셸(index.html 전체 부트스트랩) + 로그인 세션 + 실제 Supabase 프로젝트가 있어야 브라우저에서 재현 가능하다 — 이번 세션은 이 조합을 갖추지 못해 **정적 코드 추적**(24-2~24-10절)으로만 확인했다. J~M(secret locked/unlock 실제 화면, secret RPC 미변경, legacy 회귀, HOME/CATEGORY 회귀)도 동일한 이유로 소스 diff 검사(24-3/24-7/24-11/24-12절 "변경 없음" 목록)로 대체했다 — `posts-view-secret-gate.js`/`posts-view-list.js`/`skin-home.js`/`skin-category.js` 전부 diff가 없으므로 이 파일들이 담당하는 동작(secret RPC, HOME, CATEGORY)은 로직 레벨에서 회귀할 여지가 없다.
+
+### 24-14. 실브라우저 확인 여부
+
+**부분적으로 했다.** `skin-post.js`의 mock 기반 fallback matrix(24-13절)는 실제 헤드리스 Chromium에서 실행해 확인했다. 그러나 다음은 실제 Supabase 프로젝트 + 로그인 세션이 필요해 이번 세션에서 확인하지 못했다:
+
+1. 일반 styled post + Skin POST
+2. Quote Preset post + Skin POST
+3. raw HTML post + Skin POST
+4. secret post locked(Skin 경로에서 gate가 실제로 region 안에 보이는지)
+5. secret unlock(비밀번호 맞힌 뒤 실제로 같은 region에 본문이 나타나는지)
+6. `templates.post` 없음 → legacy 실제 화면 확인
+
+다음 세션에서 실제 프로젝트로 이 6가지를 확인하는 것을 권장한다.
+
+### 24-15. HOME/CATEGORY 회귀 여부
+
+**없음(코드 diff 기준).** `skin/skin-home.js`, `skin/skin-category.js`, `posts/view/posts-view-list.js`, `home/*` 어디도 이번 Slice에서 수정하지 않았다. `index.html`은 수정했지만 추가한 내용은 `window.skinPostReady` 선언과 `skin-post.js` 모듈 로드 `<script>` 태그뿐 — 기존 `skinHomeReady`/`skinCategoryReady` 블록과 HOME/CATEGORY 렌더 로직은 그대로다. `posts/editor/posts-refs.js`/`posts-state.js`에 추가한 것도 전부 **새 식별자 추가**뿐이라 기존 변수/참조와 충돌하지 않는다.
+
+### 24-16. 장기 Studio UX 방향 (설계 메모, 이번 Slice 구현 아님)
+
+사용자 요청에 따라 다음을 명시적으로 기록해 둔다 — 이번 Slice는 이 방향으로 Studio를 바꾸지 않았다:
+
+- 현재 Studio의 `HOME | CATEGORY` toggle(그리고 이번에도 추가하지 않은 POST toggle)은 **멀티페이지 렌더 엔진 검증을 위한 중간 개발 UI**로 취급한다 — 최종 제품 UX가 아니다.
+- 최종 목표: Questionnaire에서 사용자가 기본 방향(1단/2단/3단 등 + light/dark + home style)을 고르면, 하나의 SkinPackage 안에 `templates.home`/`templates.category`/`templates.post`가 함께 생성되고, Studio Preview는 실제 공개 홈페이지처럼 **내부 링크로 탐색**된다 — HOME에서 category 링크 클릭 → CATEGORY Preview, CATEGORY에서 post 링크 클릭 → POST Preview, Preview 내부에서 뒤로 이동. 사용자는 HOME/CATEGORY/POST를 별도 편집 화면으로 의식하지 않는다.
+- 사용자가 Preview의 특정 구역을 클릭하고 자연어로 수정을 요청하면, AI가 현재 page type과 selected region을 인식해 해당 template 또는 공통 CSS를 수정하는 것이 최종 편집 UX다.
+- 다음 Slice 가칭 **PHASE 1C-G — Navigable Studio Preview**: Studio parent가 iframe 안의 link intent를 intercept해서(`category/:id` → `buildCategorySkinContext()` + `templates.category`, `post/:id` → `buildPostSkinContext()` + `templates.post`) 같은 iframe에 다시 render한다 — 실제 public route로 navigate하지 않는다. 이 Slice가 끝나면 현재 `HOME | CATEGORY` toggle을 제거하거나 dev-only fallback으로 남길지 재검토한다.
+
+### 24-17. 초기 Generator 방향 (설계 메모, 이번 Slice 구현 아님)
+
+현재 `skin/skin-generator.js`는 여전히 HOME-only deterministic generator다(이번 Slice도 이 파일을 건드리지 않았다). 향후 방향을 기록해 둔다: Questionnaire(1단/2단/3단 + light/dark + home style)가 끝나면, 한 번의 생성으로 `templates.home`/`templates.category`/`templates.post`와 공용 `css`를 모두 포함한 SkinPackage 하나가 나오는 구조가 목표다 — 이번 Slice/다음 Slice(1C-G) 어디에서도 generator 자체는 수정하지 않는다. 별도의 "멀티페이지 generation Slice"가 이 작업을 전담해야 한다.
+
+### 24-18. 다음 PHASE 1C-G(Navigable Studio Preview) 진행 가능 여부
+
+**가능.** public POST route가 실제로 `templates.post` + protected post-body region + 기존 Quote Preset/raw HTML/secret 렌더러를 연결해 동작하는 것을 이번 Slice가 증명했으므로(24-14절의 실제 프로젝트 확인만 남음), Studio가 같은 `buildPostSkinContext()`/`resolveSkinTemplate(skin, "post")`/`renderSkin().getRegion("post-body")` 조각을 그대로 재사용해 iframe 내부 네비게이션을 구현할 수 있는 기반은 이미 갖춰졌다. 새로 필요한 것은 Studio 쪽의 link-intercept 로직과 뒤로가기 스택뿐, `skin/` 디렉터리에 새 인프라를 더 추가할 필요는 없어 보인다.
+
 이번 Slice가 다루지 않은 것 중 다음 Slice에서도 여전히 다루지 않아야 할 것(18절 원칙 계승): AI/OpenAI, DB migration, RPC 변경, pagination, banner/gallery, 기존 legacy customize 제거.

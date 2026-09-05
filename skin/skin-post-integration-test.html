@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Public POST Skin Integration Test Harness (PHASE 1C-F)</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  .panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    max-width: 960px;
+    margin-bottom: 16px;
+  }
+  #summary {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Public POST Skin Integration Test Harness (PHASE 1C-F)</h1>
+  <p>
+    <code>skin/skin-post.js</code>의 <code>renderPublishedSkinPost()</code>가 fallback
+    matrix(published Skin 없음 / templates.post 없음 / post-body region 없음 /
+    정상 렌더)를 올바르게 처리하는지 <code>supabaseClient.rpc</code>·
+    <code>buildPostSkinContext</code>를 mock해서 격리 검증한다. 실제 Supabase
+    자격증명이나 posts-view-detail.js 배선(secret gate 이동, 본문 mount target
+    전환)은 이 페이지 범위 밖이다 — 그 부분은 정적 코드 추적으로 별도 확인.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <div class="panel">
+    <p>Case C 렌더 결과(육안 확인용):</p>
+    <div id="mountFixtureC"></div>
+  </div>
+
+  <script src="./skin-sanitize.js"></script>
+  <script src="./skin-image-slots.js"></script>
+  <script src="./skin-template.js"></script>
+
+  <script type="module">
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function report(name, passed, detail) {
+      const item = document.createElement("li");
+      item.className = passed ? "pass" : "fail";
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      reportList.appendChild(item);
+      if (passed) { passCount++; } else { failCount++; }
+    }
+
+    function assert(name, condition, detail) {
+      report(name, !!condition, detail);
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+      window.__testDone = true;
+      window.__testPassCount = passCount;
+      window.__testFailCount = failCount;
+    }
+
+    const VALID_POST_SKIN = {
+      schemaVersion: 1,
+      templates: {
+        post: {
+          html: `<article class="skin-post"><header><h1 data-imory-bind="post.title"></h1><a data-imory-if="post.categoryName" data-imory-href="post.categoryHref" data-imory-bind="post.categoryName"></a></header><div data-imory-region="post-body"><p>placeholder</p></div></article>`
+        }
+      },
+      css: "",
+      imageSlots: [],
+      regions: [],
+      metadata: {}
+    };
+
+    const NO_REGION_POST_SKIN = {
+      schemaVersion: 1,
+      templates: {
+        post: {
+          html: `<article class="skin-post"><h1 data-imory-bind="post.title"></h1></article>`
+        }
+      },
+      css: "",
+      imageSlots: [],
+      regions: [],
+      metadata: {}
+    };
+
+    const NO_TEMPLATES_POST_SKIN = {
+      schemaVersion: 1,
+      html: "<div>home only</div>",
+      css: "",
+      imageSlots: [],
+      regions: [],
+      metadata: {}
+    };
+
+    const SAMPLE_CONTEXT = {
+      site: { title: "Test Site", slug: "tester", faviconUrl: null, description: null, language: "ko" },
+      profile: { nickname: "tester", bio: null, avatarUrl: null },
+      navigation: { categories: [] },
+      banners: { items: [] },
+      images: {},
+      page: { type: "post", isHome: false, isCategory: false, isPost: true },
+      post: {
+        id: "42",
+        title: "Hello World",
+        publishedAt: "2026-01-01T00:00:00.000Z",
+        categoryName: "Diary",
+        categoryHref: "/tester/category/7"
+      }
+    };
+
+    let mockRpcResponse = null;
+    let mockRpcShouldThrow = false;
+    let mockContextResponse = SAMPLE_CONTEXT;
+    let mockContextShouldThrow = false;
+
+    window.supabaseClient = {
+      rpc(name, args) {
+        if (mockRpcShouldThrow) {
+          return Promise.reject(new Error("network down"));
+        }
+        return Promise.resolve(mockRpcResponse);
+      }
+    };
+
+    window.buildPostSkinContext = async function (ownerId, postId, options) {
+      if (mockContextShouldThrow) {
+        throw new Error("context build failed");
+      }
+      return mockContextResponse;
+    };
+
+    const { renderPublishedSkinPost } = await import("./skin-post.js");
+
+    function freshContainer() {
+      const el = document.createElement("div");
+      document.body.appendChild(el);
+      return el;
+    }
+
+    /* ===================================================
+       A. published Skin 없음 -> false
+    =================================================== */
+
+    mockRpcResponse = { data: null, error: null };
+    mockRpcShouldThrow = false;
+    {
+      const container = freshContainer();
+      const result = await renderPublishedSkinPost({ ownerId: "u1", postId: 1, container });
+      assert("A. published Skin 없음 -> false", result === false, JSON.stringify(result));
+      assert("A. container는 비어 있음", container.innerHTML === "");
+      container.remove();
+    }
+
+    /* ===================================================
+       B. templates.post 없음(html-only skin) -> false
+    =================================================== */
+
+    mockRpcResponse = { data: { skin: NO_TEMPLATES_POST_SKIN, schemaVersion: 1, imageSlotValues: {} }, error: null };
+    {
+      const container = freshContainer();
+      const result = await renderPublishedSkinPost({ ownerId: "u1", postId: 1, container });
+      assert("B. templates.post 없음 -> false", result === false, JSON.stringify(result));
+      container.remove();
+    }
+
+    /* ===================================================
+       C. valid template + post-body region -> outer chrome 렌더
+    =================================================== */
+
+    mockRpcResponse = { data: { skin: VALID_POST_SKIN, schemaVersion: 1, imageSlotValues: {} }, error: null };
+    mockContextResponse = SAMPLE_CONTEXT;
+    let caseCResult;
+    {
+      const container = document.getElementById("mountFixtureC");
+      caseCResult = await renderPublishedSkinPost({ ownerId: "u1", postId: 42, container });
+
+      assert("C. 정상 케이스 -> { rendered: true, bodyRegion }", caseCResult && caseCResult.rendered === true, JSON.stringify(caseCResult && caseCResult.rendered));
+      assert("C. bodyRegion이 실제 Element", caseCResult && caseCResult.bodyRegion instanceof Element);
+      assert("C. post.title binding 정상", container.querySelector("h1")?.textContent === "Hello World", container.querySelector("h1")?.textContent);
+      assert("C. post.categoryName binding 정상", container.textContent.includes("Diary"));
+      assert("C. post.categoryHref binding 정상", container.querySelector("a")?.getAttribute("href") === "/tester/category/7", container.querySelector("a")?.getAttribute("href"));
+      assert("C. post-body region이 mount 시 비어있음(placeholder 제거됨)", caseCResult && caseCResult.bodyRegion.innerHTML === "", caseCResult && caseCResult.bodyRegion.innerHTML);
+
+      /* caller가 실제 body를 mount하는 흉내 */
+      caseCResult.bodyRegion.textContent = "실제 본문(예: Quote Preset 렌더 결과)";
+      assert("C. caller가 bodyRegion에 mount 가능", caseCResult.bodyRegion.textContent === "실제 본문(예: Quote Preset 렌더 결과)");
+    }
+
+    /* ===================================================
+       D/E는 C의 binding 검증에 이미 포함(post.title, post.categoryName/Href)
+    =================================================== */
+
+    /* ===================================================
+       H. templates.post는 있지만 post-body region 없음 -> false, blank 아님
+    =================================================== */
+
+    mockRpcResponse = { data: { skin: NO_REGION_POST_SKIN, schemaVersion: 1, imageSlotValues: {} }, error: null };
+    {
+      const container = freshContainer();
+      const result = await renderPublishedSkinPost({ ownerId: "u1", postId: 1, container });
+      assert("H. post-body region 없음 -> false", result === false, JSON.stringify(result));
+      assert("H. 실패 시 container를 비워 blank/반쪽 렌더를 남기지 않음", container.innerHTML === "");
+      container.remove();
+    }
+
+    /* ===================================================
+       I. 알 수 없는 schemaVersion -> false(legacy fallback), blank 아님
+    =================================================== */
+
+    mockRpcResponse = { data: { skin: VALID_POST_SKIN, schemaVersion: 999, imageSlotValues: {} }, error: null };
+    {
+      const container = freshContainer();
+      const result = await renderPublishedSkinPost({ ownerId: "u1", postId: 1, container });
+      assert("I. 알 수 없는 schemaVersion -> false", result === false, JSON.stringify(result));
+      container.remove();
+    }
+
+    /* ===================================================
+       buildPostSkinContext가 null 반환(post 없음/다른 owner) -> false
+    =================================================== */
+
+    mockRpcResponse = { data: { skin: VALID_POST_SKIN, schemaVersion: 1, imageSlotValues: {} }, error: null };
+    mockContextResponse = null;
+    {
+      const container = freshContainer();
+      const result = await renderPublishedSkinPost({ ownerId: "u1", postId: 999, container });
+      assert("context null(post 없음) -> false", result === false, JSON.stringify(result));
+      container.remove();
+    }
+
+    /* ===================================================
+       RPC 에러 -> false
+    =================================================== */
+
+    mockContextResponse = SAMPLE_CONTEXT;
+    mockRpcResponse = { data: null, error: { message: "boom" } };
+    {
+      const container = freshContainer();
+      const result = await renderPublishedSkinPost({ ownerId: "u1", postId: 1, container });
+      assert("RPC 에러 -> false", result === false, JSON.stringify(result));
+      container.remove();
+    }
+
+    /* ===================================================
+       RPC throw -> false
+    =================================================== */
+
+    mockRpcShouldThrow = true;
+    {
+      const container = freshContainer();
+      const result = await renderPublishedSkinPost({ ownerId: "u1", postId: 1, container });
+      assert("RPC throw -> false", result === false, JSON.stringify(result));
+      container.remove();
+    }
+    mockRpcShouldThrow = false;
+
+    /* ===================================================
+       buildPostSkinContext throw -> false
+    =================================================== */
+
+    mockRpcResponse = { data: { skin: VALID_POST_SKIN, schemaVersion: 1, imageSlotValues: {} }, error: null };
+    mockContextShouldThrow = true;
+    {
+      const container = freshContainer();
+      const result = await renderPublishedSkinPost({ ownerId: "u1", postId: 1, container });
+      assert("buildPostSkinContext throw -> false", result === false, JSON.stringify(result));
+      container.remove();
+    }
+    mockContextShouldThrow = false;
+
+    /* ===================================================
+       인자 누락 방어
+    =================================================== */
+
+    assert("ownerId 없음 -> false", await renderPublishedSkinPost({ postId: 1, container: freshContainer() }) === false);
+    assert("postId 없음 -> false", await renderPublishedSkinPost({ ownerId: "u1", container: freshContainer() }) === false);
+    assert("container 없음 -> false", await renderPublishedSkinPost({ ownerId: "u1", postId: 1 }) === false);
+
+    finishSummary();
+
+  </script>
+
+</body>
+</html>

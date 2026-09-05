@@ -282,6 +282,19 @@
         }
       );
 
+    /*
+      POST(Slice 1C-F, skin/skin-post.js)도 동일한 핸드셰이크
+      패턴을 쓴다 — posts-view-detail.js(classic script)가
+      openPostPage()에서 폴링 없이 이 모듈을 넘겨받는다.
+    */
+
+    window.skinPostReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinPostReady = resolve;
+        }
+      );
+
     loadVersionedScripts(
       [
         "./skin/skin-sanitize.js",
@@ -297,6 +310,10 @@
 
     document.write(
       `<script type="module" src="./skin/skin-category.js?v=${APP_BUILD_VERSION}"><\/script>`
+    );
+
+    document.write(
+      `<script type="module" src="./skin/skin-post.js?v=${APP_BUILD_VERSION}"><\/script>`
     );
 
   </script>
