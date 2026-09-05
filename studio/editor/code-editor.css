@@ -1,0 +1,240 @@
+/* =========================================================
+   SKIN STUDIO - CODE EDITOR MODAL (PHASE 1B Slice 4)
+
+   AI_SKIN_PHASE1B_DESIGN.md 12절. plain textarea 2개(HTML/CSS) +
+   Cancel/Apply만 있는 단순 overlay modal — Monaco/CodeMirror 등
+   외부 IDE 라이브러리는 쓰지 않는다.
+
+   호스트 문서(studio/index.html)가 design-tokens.css를 먼저
+   로드해 두었다는 전제로 --system-* / --imory-* 변수를 그대로
+   쓴다(skin-questionnaire/questionnaire.css와 동일한 전제).
+========================================================== */
+
+.code-editor-overlay {
+  position: fixed;
+  inset: 0;
+
+  z-index: 20;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 32px;
+
+  background: color-mix(in srgb, #000000 55%, transparent);
+}
+
+
+.code-editor-overlay[hidden] {
+  display: none;
+}
+
+
+.code-editor-modal {
+  display: flex;
+  flex-direction: column;
+
+  width: min(920px, 100%);
+  height: min(720px, 100%);
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-300);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+}
+
+
+.code-editor-header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  flex: 0 0 auto;
+
+  padding: 14px 18px;
+
+  border-bottom: 1px solid var(--system-border);
+}
+
+
+.code-editor-title {
+  margin: 0;
+
+  font-size: var(--imory-font-size-300);
+  letter-spacing: 0.06em;
+
+  color: var(--system-text-muted);
+}
+
+
+.code-editor-close {
+  padding: 4px 8px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: var(--system-text-faint);
+
+  font-size: var(--imory-font-size-400);
+
+  cursor: pointer;
+}
+
+
+.code-editor-close:hover {
+  color: var(--system-accent-hover);
+}
+
+
+.code-editor-body {
+  display: grid;
+
+  grid-template-columns: 1fr 1fr;
+
+  gap: 16px;
+
+  flex: 1 1 auto;
+
+  min-height: 0;
+
+  padding: 16px 18px;
+}
+
+
+.code-editor-field {
+  display: flex;
+  flex-direction: column;
+
+  min-height: 0;
+}
+
+
+.code-editor-field-label {
+  margin: 0 0 6px;
+
+  font-size: 11px;
+
+  letter-spacing: 0.06em;
+
+  color: var(--system-text-muted);
+}
+
+
+.code-editor-textarea {
+  flex: 1 1 auto;
+
+  min-height: 0;
+
+  resize: none;
+
+  padding: 10px 12px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-surface);
+
+  color: var(--system-text);
+
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+
+  tab-size: 2;
+}
+
+
+.code-editor-textarea:focus {
+  outline: none;
+
+  border-color: var(--system-accent);
+}
+
+
+.code-editor-footer {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  flex: 0 0 auto;
+
+  gap: 12px;
+
+  padding: 12px 18px;
+
+  border-top: 1px solid var(--system-border);
+}
+
+
+.code-editor-message {
+  flex: 1 1 auto;
+
+  margin: 0;
+
+  font-size: 12px;
+
+  line-height: 1.5;
+
+  color: var(--system-text-muted);
+}
+
+
+.code-editor-message--error {
+  color: var(--system-accent-hover);
+}
+
+
+.code-editor-actions {
+  display: flex;
+
+  flex: 0 0 auto;
+
+  gap: 8px;
+}
+
+
+.code-editor-button {
+  padding: 8px 16px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+
+  cursor: pointer;
+}
+
+
+.code-editor-button:hover {
+  border-color: var(--system-accent);
+}
+
+
+.code-editor-button--primary {
+  border-color: var(--system-accent);
+
+  background: var(--system-accent);
+
+  color: #ffffff;
+}
+
+
+.code-editor-button--primary:hover {
+  background: var(--system-accent-hover);
+
+  border-color: var(--system-accent-hover);
+}

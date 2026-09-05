@@ -620,3 +620,49 @@ body {
 .studio-preview-overlay--error .studio-preview-overlay-text {
   color: var(--system-accent-hover);
 }
+
+
+
+/* =========================================================
+   TOAST (Slice 4) — Save 성공/실패, sanitize 안내 등 짧은 1회성
+   알림. Top Dock 바로 아래, 항상 화면 중앙 상단에 뜬다 — dock의
+   hover/focus 여닫기와 완전히 독립된 별도 overlay다
+   (studio-preview.js의 showStudioToast()가 표시/자동 숨김을
+   담당).
+========================================================== */
+
+.studio-toast {
+  position: absolute;
+  top: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  z-index: 9;
+
+  max-width: min(360px, calc(100% - 32px));
+
+  padding: 8px 14px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-size: var(--imory-font-size-300);
+  line-height: 1.5;
+  text-align: center;
+}
+
+
+.studio-toast[hidden] {
+  display: none;
+}
+
+
+.studio-toast--error {
+  border-color: var(--system-accent-hover);
+
+  color: var(--system-accent-hover);
+}

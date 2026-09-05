@@ -79,6 +79,15 @@ const studioTopDockZone =
 const studioBackButton =
   document.getElementById("studioBackButton");
 
+const studioSaveButton =
+  document.getElementById("studioSaveButton");
+
+const studioCodeButton =
+  document.getElementById("studioCodeButton");
+
+const studioToast =
+  document.getElementById("studioToast");
+
 const studioAiDrawer =
   document.getElementById("studioAiDrawer");
 
@@ -115,7 +124,280 @@ let pendingRenderPayload = null;
 let mountToken = 0;
 
 
+/* =========================================================
+   WORKING DRAFT 상태 (Slice 4)
+
+   AI_SKIN_PHASE1B_DESIGN.md 2/9/10/12/13절. Studio가 메모리 안에
+   유지하는 "현재 작업 중인 SkinPackage" — DB의 current_draft_
+   version_id가 가리키는 content를 최초 진입 시 그대로 복사해
+   시작하고, 이후 Code Apply만 이 값을 갱신한다(Save는 이 값을
+   DB로 내보낼 뿐, 이 값 자체를 바꾸지 않는다).
+
+   currentWorkingSkin은 항상 새 객체로 교체한다(참조를 그 자리에서
+   mutate하지 않음) — handleStudioSaveClick()이 저장 시작 시점의
+   객체 참조를 스냅샷으로 들고 있다가, 저장이 끝난 뒤 그 사이에
+   Apply로 currentWorkingSkin이 이미 교체됐는지(참조 비교)를 확인해
+   더 최신 미저장 변경을 실수로 "저장됨"으로 지우지 않기 위함이다
+   (12절).
+========================================================== */
+
+let currentWorkingSkin = null;
+let currentSkinContext = null;
+let currentSkinId = null;
+let currentDraftVersionId = null;
+let isStudioDirty = false;
+let isStudioSavePending = false;
+let studioToastHideTimer = null;
+
+
+function updateStudioSaveButtonState() {
+
+  studioSaveButton.disabled =
+    !isStudioDirty ||
+    isStudioSavePending ||
+    !currentWorkingSkin;
+
+}
+
+
+function resetStudioWorkingState() {
+
+  currentWorkingSkin =
+    null;
+
+  currentSkinContext =
+    null;
+
+  currentSkinId =
+    null;
+
+  currentDraftVersionId =
+    null;
+
+  isStudioDirty =
+    false;
+
+  isStudioSavePending =
+    false;
+
+  studioCodeButton.disabled =
+    true;
+
+  updateStudioSaveButtonState();
+
+}
+
+
+/* =========================================================
+   TOAST (Slice 4) — Save 성공/실패, Code Apply의 sanitize 안내
+   등 짧은 1회성 알림. 4초 뒤 자동으로 숨는다 — 그 전에 다시
+   호출되면 기존 타이머를 취소하고 새로 4초를 센다.
+========================================================== */
+
+function showStudioToast(message, options) {
+
+  const isError =
+    !!(options && options.isError);
+
+  if (studioToastHideTimer) {
+
+    clearTimeout(
+      studioToastHideTimer
+    );
+
+    studioToastHideTimer =
+      null;
+
+  }
+
+  studioToast.textContent =
+    message;
+
+  studioToast.classList.toggle(
+    "studio-toast--error",
+    isError
+  );
+
+  studioToast.hidden =
+    false;
+
+  studioToastHideTimer =
+    setTimeout(
+      () => {
+
+        studioToast.hidden =
+          true;
+
+        studioToastHideTimer =
+          null;
+
+      },
+      4000
+    );
+
+}
+
+
+/* =========================================================
+   Code Apply — code-editor.js가 sanitize/validate를 이미 통과한
+   뒤에만 이 함수를 호출한다(studio/editor/code-editor.js 참고).
+   여기서는 DB에 전혀 손대지 않는다 — currentWorkingSkin 교체 +
+   Preview 즉시 반영 + dirty=true만 한다(5절 "Apply와 Save는
+   반드시 분리").
+========================================================== */
+
+function applyWorkingSkinChanges(html, css, meta) {
+
+  if (!currentWorkingSkin) {
+    return;
+  }
+
+  currentWorkingSkin =
+    {
+      ...currentWorkingSkin,
+      html,
+      css
+    };
+
+  isStudioDirty =
+    true;
+
+  updateStudioSaveButtonState();
+
+  postRenderToFrame(
+    {
+      skin: currentWorkingSkin,
+      context: currentSkinContext
+    }
+  );
+
+  if (meta && meta.htmlWasModified) {
+
+    showStudioToast(
+      "일부 허용되지 않는 HTML이 제거되었습니다."
+    );
+
+  }
+
+}
+
+
+studioCodeButton.addEventListener(
+  "click",
+  () => {
+
+    if (!currentWorkingSkin) {
+      return;
+    }
+
+    window.openSkinCodeEditor(
+      {
+        html: currentWorkingSkin.html,
+        css: currentWorkingSkin.css,
+        onApply: applyWorkingSkinChanges
+      }
+    );
+
+  }
+);
+
+
+/* =========================================================
+   Save — save_skin_draft_version() RPC(studio/studio-write.js
+   wrapper) 1회 호출. 저장 대상은 항상 currentWorkingSkin 전체
+   (schemaVersion/html/css/imageSlots/regions/metadata 전부) —
+   Code Editor가 html/css만 바꿔도 나머지 필드는 이미
+   currentWorkingSkin 안에 그대로 보존되어 있다(11절).
+
+   pending 중 중복 클릭은 무시한다(버튼도 disabled지만, 방어적으로
+   함수 진입점에서도 한 번 더 막는다, 14절).
+========================================================== */
+
+async function handleStudioSaveClick() {
+
+  if (
+    isStudioSavePending ||
+    !isStudioDirty ||
+    !currentWorkingSkin ||
+    !currentSkinId
+  ) {
+    return;
+  }
+
+  const snapshot =
+    currentWorkingSkin;
+
+  isStudioSavePending =
+    true;
+
+  updateStudioSaveButtonState();
+
+  try {
+
+    const newVersionId =
+      await saveSkinDraftVersion(
+        currentSkinId,
+        snapshot,
+        snapshot.schemaVersion,
+        null
+      );
+
+    currentDraftVersionId =
+      newVersionId;
+
+    /*
+      저장이 끝나기 전에 사용자가 다시 Apply를 해서
+      currentWorkingSkin이 이미 다른 객체로 교체됐다면, 방금 끝난
+      저장은 그 "더 새로운" 미저장 변경사항을 알지 못한다 —
+      이번에 저장한 스냅샷과 지금의 currentWorkingSkin이 여전히
+      같은 객체일 때만 dirty를 내린다(13절 "이전 draft는 그대로/
+      작업 상태를 버리지 않는다"와 같은 결).
+    */
+
+    if (currentWorkingSkin === snapshot) {
+
+      isStudioDirty =
+        false;
+
+    }
+
+    showStudioToast(
+      "저장되었습니다."
+    );
+
+  } catch (err) {
+
+    console.error(
+      "[studio-preview] save draft failed",
+      err
+    );
+
+    showStudioToast(
+      "저장하지 못했습니다. 다시 시도해주세요.",
+      { isError: true }
+    );
+
+  } finally {
+
+    isStudioSavePending =
+      false;
+
+    updateStudioSaveButtonState();
+
+  }
+
+}
+
+
+studioSaveButton.addEventListener(
+  "click",
+  handleStudioSaveClick
+);
+
+
 function hideStudioPreviewShell() {
+
+  resetStudioWorkingState();
 
   studioPreviewShell.hidden =
     true;
@@ -384,6 +666,8 @@ async function mountStudioPreview(
   pendingRenderPayload =
     null;
 
+  resetStudioWorkingState();
+
   studioPreviewShell.hidden =
     false;
 
@@ -534,10 +818,39 @@ async function mountStudioPreview(
     "미리보기를 그리는 중..."
   );
 
+  /*
+    이 시점부터 draftContent/context는 DB 원본 스냅샷이 아니라
+    Studio가 메모리에 들고 있는 working draft가 된다(Slice 4,
+    파일 상단 "WORKING DRAFT 상태" 절 참고) — 이후 Code Apply는
+    이 currentWorkingSkin만 갱신하고, Save가 성공하기 전까지 DB는
+    전혀 바뀌지 않는다. dirty는 항상 false로 시작한다(9절 "Studio
+    최초 진입: dirty false").
+  */
+
+  currentWorkingSkin =
+    draftContent;
+
+  currentSkinContext =
+    context;
+
+  currentSkinId =
+    skin.id;
+
+  currentDraftVersionId =
+    skin.current_draft_version_id;
+
+  isStudioDirty =
+    false;
+
+  studioCodeButton.disabled =
+    false;
+
+  updateStudioSaveButtonState();
+
   postRenderToFrame(
     {
-      skin: draftContent,
-      context
+      skin: currentWorkingSkin,
+      context: currentSkinContext
     }
   );
 
@@ -805,6 +1118,22 @@ studioTopDockZone.addEventListener(
 studioBackButton.addEventListener(
   "click",
   () => {
+
+    /*
+      저장하지 않은 변경사항이 있으면 나가기 전에 한 번 확인한다
+      (20절 "과도한 beforeunload 확장 없이, Studio Back 동선부터
+      우선 처리"). 취소하면 Studio는 그대로 유지되고 currentWorkingSkin/
+      Preview/dirty 무엇도 바뀌지 않는다.
+    */
+
+    if (
+      isStudioDirty &&
+      !window.confirm(
+        "저장하지 않은 변경사항이 있습니다. 나갈까요?"
+      )
+    ) {
+      return;
+    }
 
     window.parent.postMessage(
       {

@@ -41,6 +41,11 @@
     href="./studio.css"
   >
 
+  <link
+    rel="stylesheet"
+    href="./editor/code-editor.css"
+  >
+
 </head>
 
 
@@ -331,6 +336,22 @@
 
     </div>
 
+
+    <!-- =====================================================
+         TOAST — Save 성공/실패, sanitize 안내 등 짧은 1회성
+         알림(9/13절). Top Dock의 hover/focus 여닫기와 무관하게
+         항상 같은 자리에 뜬다(studio-preview.js의
+         showStudioToast()).
+    ====================================================== -->
+
+    <div
+      class="studio-toast"
+      id="studioToast"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></div>
+
   </div>
 
 
@@ -385,6 +406,22 @@
   <script src="../skin/skin-image-slots.js"></script>
 
   <script src="../skin/skin-context.js"></script>
+
+  <!-- =========================================================
+       CODE EDITOR / SAVE DRAFT (Slice 4)
+
+       studio-write.js는 save_skin_draft_version() RPC wrapper뿐
+       (supabaseClient만 있으면 됨, 이미 위에서 로드됨). editor/
+       code-editor.js는 sanitizeSkinHTML(skin-sanitize.js, 이미
+       위에서 로드됨)과 window.skinInitializerReady 핸드셰이크를
+       쓴다 — 둘 다 studio-preview.js가 호출하는 시점(사용자가
+       Code/Save 버튼을 실제로 누르는 시점)보다 먼저 로드되어
+       있으면 충분하다.
+  ========================================================== -->
+
+  <script src="./studio-write.js"></script>
+
+  <script src="./editor/code-editor.js"></script>
 
   <script src="./studio-preview.js"></script>
 

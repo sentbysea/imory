@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="../core/design-tokens.css">
 <link rel="stylesheet" href="../skin-questionnaire/questionnaire.css">
 <link rel="stylesheet" href="./studio.css">
+<link rel="stylesheet" href="./editor/code-editor.css">
 </head>
 <body>
 
@@ -78,6 +79,8 @@
     <div class="studio-preview-overlay" id="studioPreviewOverlay" hidden>
       <p class="studio-preview-overlay-text" id="studioPreviewOverlayText"></p>
     </div>
+
+    <div class="studio-toast" id="studioToast" role="status" aria-live="polite" hidden></div>
 
   </div>
 
@@ -174,7 +177,82 @@
             posts: [],
             banners: []
           },
-          rpcHandlers: {}
+          rpcHandlers: {
+            /*
+              Slice 4 — save_skin_draft_version() mock. 새 skin_versions
+              row를 fixture의 in-memory 테이블에 실제로 추가하고
+              skins.current_draft_version_id도 옮겨서, 테스트가
+              "버전 수 +1 / draft pointer 이동"을 실제 데이터로 확인할
+              수 있게 한다. window.top.__savedDraftCalls로 호출 횟수/
+              payload를 기록해 중복 호출 방지 테스트에도 쓴다.
+            */
+            save_skin_draft_version: function (params) {
+
+              window.top.__savedDraftCalls =
+                window.top.__savedDraftCalls || [];
+
+              window.top.__savedDraftCalls.push(params);
+
+              const newVersionId =
+                "draft-a" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            }
+          }
+        },
+
+        /*
+          Scenario P — Scenario A와 동일한 초기 draft를 갖지만
+          save_skin_draft_version()이 항상 실패한다(Save 실패 경로
+          전용, 13절 "실패 시 working state를 버리거나 DB draft를
+          다시 불러와 덮어쓰지 않는다"를 검증하기 위함).
+        */
+        p: {
+          userId: "user-p",
+          tables: {
+            skins: [
+              { id: "skin-p1", user_id: "user-p", is_active: true, current_draft_version_id: "draft-p1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-p1",
+                content: {
+                  schemaVersion: 1,
+                  html: '<div class="scenario-p-marker"><h1 data-imory-bind="site.title"></h1></div>',
+                  css: ".scenario-p-marker { color: blue; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-p", nickname: "Scenario P", bio: null, slug: "scenario-p" }],
+            site_settings: [],
+            categories: [],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version: function () {
+              return { data: null, error: new Error("mock save failure") };
+            }
+          }
         },
 
         b: {
@@ -239,6 +317,8 @@
   <script src="../core/lib/site-path.js"></script>
   <script src="../skin/skin-image-slots.js"></script>
   <script src="../skin/skin-context.js"></script>
+  <script src="./studio-write.js"></script>
+  <script src="./editor/code-editor.js"></script>
   <script src="./studio-preview.js"></script>
   <script src="./studio-state.js"></script>
 
