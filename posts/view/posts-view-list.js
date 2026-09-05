@@ -239,6 +239,137 @@ function fetchCategoryPageData(
 
 
 /* =========================================================
+   CATEGORY PAGE - published Skin 시도 (Slice 1C-C)
+
+   skin/skin-category.js의 renderPublishedSkinCategory()를
+   posts-view-list.js(classic script)가 폴링 없이 넘겨받도록
+   index.html이 선언해 둔 window.skinCategoryReady 핸드셰이크를
+   쓴다(skin-home.js/index.html의 tryRenderPublishedSkinHome와
+   동일한 패턴).
+
+   이 함수는 절대 throw하지 않는다 — 실패하면 항상 false를
+   반환해서 openCategoryPage()가 기존 legacy post-list 렌더를
+   그대로 진행하게 한다.
+
+   "site owner 본인이 로그인해서 자기 사이트를 관리 중인가"는
+   여기서만 판단한다(renderPublishedSkinCategory 자신은 이 맥락을
+   전혀 모른다) — owner가 자기 카테고리를 열람/관리할 때(글 추가,
+   편집 모드 bulk 삭제 등, updatePostAddButton()이 켜는 UI)까지
+   장식용 공개 Skin으로 바뀌어버리면 관리 기능을 잃는다. 그래서
+   signed-in user가 이 사이트의 실제 owner일 때는 Skin을 시도하지
+   않고 legacy 관리 화면으로 둔다 — 익명 방문자나 다른 로그인
+   사용자가 이 사이트를 읽을 때는 정상적으로 Skin이 적용된다.
+========================================================== */
+
+async function tryRenderPublishedSkinCategory(
+  categoryId,
+  container
+) {
+
+  let owner;
+
+  try {
+
+    owner =
+      await getSiteOwner();
+
+  } catch (err) {
+
+    console.error(
+      "[posts-view-list] getSiteOwner failed",
+      err
+    );
+
+    return false;
+
+  }
+
+
+  if (
+    !owner ||
+    !owner.scoped ||
+    !owner.ownerId
+  ) {
+
+    return false;
+
+  }
+
+
+  let signedInUser;
+
+  try {
+
+    signedInUser =
+      await getSignedInUser();
+
+  } catch (err) {
+
+    console.error(
+      "[posts-view-list] getSignedInUser failed",
+      err
+    );
+
+    signedInUser =
+      null;
+
+  }
+
+
+  const isOwnerViewingOwnSite =
+    Boolean(signedInUser) &&
+    signedInUser.id === owner.ownerId;
+
+  if (isOwnerViewingOwnSite) {
+
+    return false;
+
+  }
+
+
+  let renderPublishedSkinCategory;
+
+  try {
+
+    renderPublishedSkinCategory =
+      await window.skinCategoryReady;
+
+  } catch (err) {
+
+    console.error(
+      "[posts-view-list] skin-category module failed to load",
+      err
+    );
+
+    return false;
+
+  }
+
+
+  try {
+
+    return await renderPublishedSkinCategory({
+      ownerId: owner.ownerId,
+      categoryId,
+      container
+    });
+
+  } catch (err) {
+
+    console.error(
+      "[posts-view-list] renderPublishedSkinCategory threw unexpectedly",
+      err
+    );
+
+    return false;
+
+  }
+
+}
+
+
+
+/* =========================================================
    CATEGORY PAGE
 ========================================================== */
 
@@ -572,6 +703,36 @@ async function openCategoryPage(
       }
     );
 
+  }
+
+
+  /*
+    published Skin이 이 post형 category를 지원하면 먼저 시도한다
+    (Slice 1C-C) — 실패/미지원이면 항상 false가 돌아오므로 아래
+    legacy renderPostListItems()로 조용히 폴백한다. 이 지점은
+    이미 currentPostCategoryType === "post"로 확정된 뒤다(banner는
+    위에서 이미 return했음).
+  */
+
+  const renderedPublishedSkinCategory =
+    await tryRenderPublishedSkinCategory(
+      numericCategoryId,
+      postList
+    );
+
+
+  if (
+    requestId !==
+    categoryPageRequestSeq
+  ) {
+
+    return;
+
+  }
+
+
+  if (renderedPublishedSkinCategory) {
+    return;
   }
 
 

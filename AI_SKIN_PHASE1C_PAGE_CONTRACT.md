@@ -639,3 +639,86 @@ resolveSkinTemplate(skin, "category" | "post")
 ### 20-7. 다음 Slice(1C-C, CATEGORY route 연결) 진행 가능 여부
 
 **가능.** `templates.category`가 실제로 저장/보존/정규화되는 경로가 이번 Slice로 안정화되었고, `resolveSkinTemplate(skin, "category")`가 없으면 `undefined`를 돌려주는 계약(1C-A)도 그대로 유효하다 — 1C-C는 `skin/skin-category.js`(가칭)를 새로 만들어 `posts-view-list.js`의 `openCategoryPage()` 진입부에 "published Skin이 `templates.category`를 지원하면 먼저 시도, 없으면 legacy 렌더로 폴백" 분기를 추가하면 된다(legacy 경로 완전 보존, `skin-home.js`와 동일한 원칙). `data-imory-region`/protected post-body(7절)는 여전히 1C-D의 몫으로 남아 있다.
+
+---
+
+## 21. Slice 1C-C 구현 결과 (실제 구현 완료, 2026-09-05)
+
+> 16절 로드맵의 1C-C("CATEGORY Skin Renderer — `openCategoryPage()` 진입부에 'published Skin이 CATEGORY를 지원하면 먼저 시도' 분기 추가, legacy 경로 완전 보존")가 실제로 구현됐다. 대상은 **post형 category만**이다 — banner category는 이번 Slice에서도 legacy `renderBannerCategory()` 경로 그대로다(11/13-1절 그대로 유지). Studio CATEGORY Preview, POST Viewer 연결, `data-imory-region`/protected post-body, pagination/gallery, DB migration/RPC 변경 — 전부 이번 Slice도 손대지 않았다(18절 원칙 그대로).
+
+### 21-1. 변경/생성 파일
+
+- **신규** `skin/skin-category.js` — `renderPublishedSkinCategory({ ownerId, categoryId, container }) -> Promise<boolean>`. `skin/skin-home.js`와 완전히 동일한 구조(RPC → schemaVersion 확인 → `resolveSkinTemplate(skin,"category")` → `buildCategorySkinContext()` → `renderSkin()`)이며, 추가로 `context.category.type !== "post"`면 `false`를 반환하는 분기 하나만 더 있다. `skin-home.js`와 동일하게 어떤 경우에도 throw하지 않는다.
+- **수정** `index.html` — `window.skinHomeReady`와 같은 블록에 `window.skinCategoryReady` Promise 핸드셰이크를 추가로 선언하고, `<script type="module" src="./skin/skin-category.js">`를 `document.write`로 추가 로드한다. `skin-sanitize.js`/`skin-image-slots.js`/`skin-context.js`/`skin-template.js`는 이미 HOME 경로가 로드해 두므로 재로드하지 않는다.
+- **수정** `posts/view/posts-view-list.js` — `tryRenderPublishedSkinCategory(categoryId, container)` 헬퍼(신규 함수)를 추가하고, `openCategoryPage()` 안에서 `currentPostCategoryType === "post"`로 확정된 뒤, `renderPostListItems()` 호출 직전에 이 헬퍼를 호출하도록 배선했다. 그 외 `openCategoryPage()`의 기존 로직(캐시, banner 분기, history pushState, 편집모드/배너 UI 리셋, `postsError` 처리)은 한 줄도 바뀌지 않았다.
+
+### 21-2. 실제 CATEGORY route 연결 위치
+
+`posts/editor/posts-router-init.js`의 `/^\/category\/(\d+)\/?$/` 매칭 → `openCategoryPage(id)` 호출 자체는 그대로다(라우트 패턴 변경 없음, 11절 요구사항 그대로). 새 분기는 `posts-view-list.js`의 `openCategoryPage()` 함수 **본문 안쪽**, 다음 지점 하나뿐이다:
+
+```
+category/posts 캐시 저장 직후
+  → tryRenderPublishedSkinCategory(numericCategoryId, postList) 호출
+  → true면 return (renderPostListItems() 도달 안 함)
+  → false면 그대로 renderPostListItems() 진행(기존 코드 100% 동일)
+```
+
+이 지점은 이미 `currentPostCategoryType === "banner"` 분기가 위에서 먼저 `return`한 뒤이므로, 이 아래 도달하는 시점엔 category.type이 사실상 `"post"`로 확정돼 있다(banner는 이 코드에 아예 도달하지 않는다) — 그럼에도 `renderPublishedSkinCategory()` 내부에서 `context.category.type !== "post"` 재확인을 한 번 더 두어(21-1절), 호출 순서가 나중에 바뀌어도 banner가 실수로 Skin 경로를 타는 일이 없도록 이중으로 방어했다.
+
+### 21-3. Skin/legacy 분기 흐름
+
+`tryRenderPublishedSkinCategory()`가 순서대로 판단한다(true를 반환해야만 Skin이 적용됨):
+
+1. `getSiteOwner()` — `owner.scoped && owner.ownerId`가 아니면(무필터 배포, not_found, error) 즉시 `false`.
+2. **owner 본인 관리 화면 보호(신규 판단, 21-6절)**: `getSignedInUser()`로 현재 로그인 사용자를 확인해 `user.id === owner.ownerId`면 즉시 `false` — 로그인한 사이트 소유자가 자기 카테고리를 열람/관리할 때는 Skin을 시도하지 않고 legacy 관리 화면(글쓰기 버튼, 편집모드 토글, bulk 삭제)을 그대로 유지한다.
+3. `window.skinCategoryReady` 핸드셰이크로 `renderPublishedSkinCategory` 함수 참조 획득.
+4. `renderPublishedSkinCategory({ ownerId, categoryId, container })` 내부: `get_published_skin` RPC → published Skin 없음/RPC 에러/알 수 없는 schemaVersion이면 `false` → `resolveSkinTemplate(skin,"category")`가 `undefined`(=`templates.category` 없음)면 `false` → `buildCategorySkinContext()`가 `null`(category 없음/타인 소유)이면 `false` → `context.category.type !== "post"`면 `false` → `renderSkin()`이 throw하면 `false` → 전부 통과하면 `true`.
+
+각 단계 실패는 전부 `console.error`(예상 밖 오류) 또는 `console.warn`(예상된 미지원, 예: schemaVersion 불일치)으로 로그를 남기고 조용히 `false`로 수렴한다 — `skin-home.js`와 동일한 에러 정책(14절 요구사항).
+
+### 21-4. DOM ownership
+
+`renderPublishedSkinCategory()`에 넘기는 `container`는 기존 `#postList` 그 자체다(별도 mount point를 새로 만들지 않음). `renderSkin()`의 `mount()`가 항상 `container.innerHTML = ""`부터 다시 그리므로(`skin-render.js:333`), 직전에 남아있던 "loading..." 마크업이나 이전 카테고리의 잔여 DOM도 안전하게 대체된다. Skin이 성공하면(`true` 반환) `openCategoryPage()`는 **즉시 `return`**하므로 `renderPostListItems()`가 이후 같은 `#postList`를 다시 덮어쓰는 일이 없다 — 반대로 실패/미지원(`false`)이면 `renderPostListItems()`가 지금과 완전히 동일하게 실행된다. `postListEditToggleButton`/`postListSelectBar`/`bannerGrid`/`bannerEditor`(edit-mode UI)는 `postList` 바깥의 별도 엘리먼트라 이번 변경의 영향을 받지 않는다 — 다만 21-6절 이유로 애초에 owner 본인 세션에서는 Skin 분기 자체가 시도되지 않는다.
+
+### 21-5. template/context 사용 방식
+
+`buildCategorySkinContext(ownerId, categoryId, { imageSlotNames, imageSlotValues })`를 그대로 호출한다(`skin-home.js`가 `buildSkinContext()`에 넘기는 것과 동일하게 `extractImageSlotNames(skinPackage)` + RPC의 `imageSlotValues`를 전달) — category 렌더러 자신은 `categories`/`posts` 테이블을 직접 조회하지 않는다. `resolveSkinTemplate(skin, "category")`도 그대로 사용하며, `metadata.supports`는 어디서도 읽지 않는다(사용자 요청 7절 원칙 그대로).
+
+### 21-6. banner fallback + owner-view 보호(조사로 새로 발견한 사실)
+
+- **banner**: 5-2/13-1절 그대로, `category.posts` 계약을 아예 타지 않고 legacy `renderBannerCategory()`로 폴백(21-2절에서 이미 이중 방어 확인).
+- **owner-view 보호(이번 구현 중 새로 확인한 사실)**: 코드베이스 조사 결과 `posts-view-list.js`/`posts-router-init.js`는 사이트 소유자가 로그인해서 자기 사이트를 관리할 때와 익명 방문자가 같은 사이트를 읽을 때 **동일한 SPA/동일한 `openCategoryPage()`**를 탄다 — `updatePostAddButton()`(`posts/view/posts-view-transition.js`)이 "로그인 여부"만으로 글쓰기/편집모드 버튼을 켜고, `#postList`의 `.post-list-item` 마크업 자체는 owner/방문자 구분 없이 동일하다. 이 사실을 반영하지 않고 Skin을 무조건 적용했다면, 카테고리 템플릿을 가진 Skin을 publish한 소유자가 정작 **자기 글을 관리(추가/편집모드 bulk 삭제)하려고 자기 카테고리를 열 때마다 관리 UI 없는 장식용 화면**을 보게 되는 회귀가 생겼을 것이다. 그래서 `tryRenderPublishedSkinCategory()`가 `getSignedInUser().id === owner.ownerId`를 확인해 소유자 본인 세션에서는 Skin을 아예 시도하지 않도록 가드를 추가했다(21-3절 2번). 다른 로그인 사용자(이 사이트의 소유자가 아닌 계정)나 익명 방문자는 정상적으로 Skin이 적용된다.
+
+### 21-7. empty/secret 처리
+
+- **secret/visibility**: `buildCategorySkinContext()`를 그대로 재사용하므로 5-3/19-4절에서 이미 검증된 마스킹 정책(🔒/🙈 아이콘, `visibility` 원본 미노출, `content`/`ooc_content`/`secret_password_hash` select 자체가 없음)이 그대로 적용된다 — CATEGORY Skin Renderer는 이 정책을 다시 구현하지 않는다.
+- **empty category**: `category.posts === []`일 때 `data-imory-repeat="category.posts"`는 아무것도 렌더하지 않고(기존 엔진 동작, 1-4절), Skin renderer 자신은 별도의 "글 없음" fallback DOM을 강제로 삽입하지 않는다(요청 12절 그대로).
+- **binding 엔진의 기존 제약 재확인(신규 구현 아님, 보고만)**: `isSkinTruthy([])`가 `false`이므로(`skin-render.js:67-75`) `data-imory-if="category.posts"`로 감싼 블록은 빈 배열일 때 숨겨진다 — "글이 없습니다" 안내를 이 조건의 **반대**로 표시하려면 비교/부정 연산이 필요한데 엔진에 그런 연산자가 없다(9-1/1-4절에 이미 기록된 기존 제약, 이번 Slice가 새로 발견한 문제는 아니다). 이번 Slice는 이 문법을 확장하지 않았다 — Skin 저작자가 오늘 쓸 수 있는 유일한 패턴은 9-1절에 이미 적힌 대로 `data-imory-repeat`만으로 목록을 그리고, 별도 "안내 문구"는 v0.1에서 표현 불가능하다는 점을 그대로 계승한다.
+
+### 21-8. 테스트
+
+`node --check`로 `skin/skin-category.js`, `posts/view/posts-view-list.js` 구문 검증 통과. **실제 Supabase 프로젝트/브라우저를 이 세션에서 띄워 클릭 테스트를 수행하지는 못했다** — 아래 A~M은 코드 경로를 직접 추적해 확인한 것이지 실행 결과가 아니다. 다음 Slice(1C-D) 착수 전에 최소 A/C/H/K/L은 실제 브라우저에서 한 번 더 확인하는 것을 권장한다.
+
+| # | 시나리오 | 확인 방법 | 결과 |
+|---|---|---|---|
+| A | published Skin 없음 | `get_published_skin` → `rpcData.skin` falsy → `false` 반환 지점 확인 | 코드상 확인 |
+| B | published Skin + `templates.category` 없음 | `resolveSkinTemplate` → `undefined` → `false` | 코드상 확인 |
+| C | published Skin + `templates.category` 있음 + post category | 전체 체인 통과 → `renderSkin()` 호출 | 코드상 확인 |
+| D | `category.name` bind | `buildCategorySkinContext`가 `category.name` 그대로 전달, 기존 `data-imory-bind` 동작 재사용 | 코드상 확인(신규 로직 없음) |
+| E | `category.posts` repeat(title/href/publishedAt) | `buildCategorySkinContext`의 기존 posts 매핑 재사용, 신규 필드 추가 없음 | 코드상 확인 |
+| F | secret/visibility masking | `maskSkinPostTitle()` 그대로 재사용(21-7절) | 코드상 확인 |
+| G | empty category | `[]` → repeat 무출력(21-7절), 강제 fallback DOM 없음 | 코드상 확인 |
+| H | banner category | `currentPostCategoryType === "banner"` 분기가 `tryRenderPublishedSkinCategory` 호출 지점보다 먼저 `return`(21-2절 이중 방어) | 코드상 확인 |
+| I | category context null(없음/타인 소유) | `buildCategorySkinContext` → `null` → `false` | 코드상 확인 |
+| J | invalid/malicious stored template | `renderSkin()` 내부 `sanitizeSkinHTML`/`validateAndScopeSkinCss`가 매 mount마다 재검증(기존 신뢰 경계, 새 코드가 우회하지 않음) | 코드상 확인 |
+| K | 기존 HOME published Skin | `skin-home.js`/`index.html`의 HOME 블록 미변경(같은 블록에 CATEGORY 핸드셰이크만 추가) | 코드 diff 확인 |
+| L | POST route | `posts-view-detail.js`/POST 라우트 미변경(이번 Slice는 `posts-view-list.js`만 수정) | 코드 diff 확인 |
+| M | 기존 category click/navigation | 라우트 패턴/`openCategoryPage(id)` 호출 시그니처 변경 없음 | 코드 diff 확인 |
+
+### 21-9. 공개 HOME/POST 회귀 여부
+
+**없음(코드 diff 기준).** `skin/skin-home.js`, `posts/view/posts-view-detail.js`, `posts/editor/posts-router-init.js`는 이번 Slice에서 전혀 수정하지 않았다. `index.html`의 변경은 HOME 블록 안에 CATEGORY용 Promise 선언 + 모듈 스크립트 태그를 "추가"한 것뿐이고, 기존 `window.skinHomeReady`/`tryRenderPublishedSkinHome`/`initHomeRenderer()` 코드는 한 글자도 바뀌지 않았다.
+
+### 21-10. 다음 Slice(1C-D, Studio CATEGORY Preview / POST Skin Renderer) 진행 가능 여부
+
+**부분적으로 가능.** `templates.category`가 실제 공개 라우트에서 legacy를 깨지 않고 안정적으로 시도되는 경로는 이번 Slice로 마련됐다. 다만 21-8절에 적었듯 **이 세션은 실제 브라우저/DB로 검증하지 못했다** — 1C-D(또는 Studio CATEGORY Preview) 착수 전에 실제 published Skin + post형 category 조합으로 A/C/H 최소 3개 시나리오를 한 번은 육안으로 확인하는 것을 권장한다. Studio CATEGORY Preview 자체(17절 스케치)는 이번 Slice가 손대지 않았으므로 여전히 HOME만 미리보기 가능한 상태다. POST Skin Renderer + `data-imory-region` 실제 연결(7절)은 여전히 미착수.

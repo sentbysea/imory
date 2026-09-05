@@ -269,6 +269,19 @@
         }
       );
 
+    /*
+      CATEGORY(Slice 1C-C, skin/skin-category.js)도 HOME과 동일한
+      핸드셰이크 패턴을 쓴다 — posts-view-list.js(classic script)가
+      openCategoryPage()에서 폴링 없이 이 모듈을 넘겨받는다.
+    */
+
+    window.skinCategoryReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinCategoryReady = resolve;
+        }
+      );
+
     loadVersionedScripts(
       [
         "./skin/skin-sanitize.js",
@@ -280,6 +293,10 @@
 
     document.write(
       `<script type="module" src="./skin/skin-home.js?v=${APP_BUILD_VERSION}"><\/script>`
+    );
+
+    document.write(
+      `<script type="module" src="./skin/skin-category.js?v=${APP_BUILD_VERSION}"><\/script>`
     );
 
   </script>
