@@ -1078,3 +1078,135 @@ POST Skin Contract v0.1(6-2절)이 애초에 관련 글 목록을 계약하지 �
 **가능.** public POST route가 실제로 `templates.post` + protected post-body region + 기존 Quote Preset/raw HTML/secret 렌더러를 연결해 동작하는 것을 이번 Slice가 증명했으므로(24-14절의 실제 프로젝트 확인만 남음), Studio가 같은 `buildPostSkinContext()`/`resolveSkinTemplate(skin, "post")`/`renderSkin().getRegion("post-body")` 조각을 그대로 재사용해 iframe 내부 네비게이션을 구현할 수 있는 기반은 이미 갖춰졌다. 새로 필요한 것은 Studio 쪽의 link-intercept 로직과 뒤로가기 스택뿐, `skin/` 디렉터리에 새 인프라를 더 추가할 필요는 없어 보인다.
 
 이번 Slice가 다루지 않은 것 중 다음 Slice에서도 여전히 다루지 않아야 할 것(18절 원칙 계승): AI/OpenAI, DB migration, RPC 변경, pagination, banner/gallery, 기존 legacy customize 제거.
+
+---
+
+## 25. Slice 1C-G 구현 결과 (실제 구현 완료, 2026-09-05)
+
+**Studio page selector는 최종 UX가 아니다 — Skin navigation 자체로 이동한다.** 24-16절이 예고한 방향을 그대로 구현했다: `HOME | CATEGORY` toggle을 제거하고, Studio Preview iframe 안의 실제 Skin 링크(카테고리 메뉴, 글 목록)를 클릭해 HOME → CATEGORY → POST를 이동한다. navigation UI의 모양/위치는 Skin의 책임이고, navigation data(`navigation.categories`/`category.posts`)는 이미 1C-A~D에서 계약된 Skin Context 책임이다 — 이번 Slice는 그 링크 클릭을 실제 public route로 내보내지 않고 같은 iframe 안에서 다시 렌더하는 interception/route 해석/history 계층만 추가했다.
+
+### 25-1. 변경/생성 파일
+
+- **생성** `studio/preview/preview-route.js` — `resolveStudioPreviewTarget(href, currentSlug)`. DOM/Supabase에 접촉하지 않는 순수 함수. `SITE_BASE_PATH`(`core/lib/site-path.js`)에만 의존.
+- **생성** `studio/preview/preview-navigation.js` — previewHistory 스택, `renderHomePreview`/`renderCategoryPreviewFor`/`renderPostPreviewFor`/`renderCurrentPreviewEntry`/`pushPreviewNavigation`/`popPreviewNavigation`/`handlePreviewNavigateMessage`/`getCurrentPreviewLocation`, Preview Back 버튼 DOM/가시성.
+- **수정** `studio/preview/preview-bridge.js` — 내부 링크 click interception(delegated `document` click listener), `preview:navigate` postMessage, `preview:rendered`에 `hasPostBodyRegion` 추가.
+- **수정** `studio/studio-preview.js` — 옛 `HOME|CATEGORY` toggle 관련 코드(`findFirstPostCategoryId`/`loadCategoryContextAndRender`/`renderCategoryPreview`/`setPreviewPageType`/`updateStudioPageToggleAvailability`/`updateStudioPageToggleActiveState`) 전부 제거, `preview:navigate` 메시지 라우팅 + POST invalid 판정(`hasPostBodyRegion`) 추가. **1623줄 → 1339줄**로 오히려 줄었다(Concept.md의 "JS 파일은 1000줄 내외로 유지, 크게 넘기면 책임 분리 검토"에 따라 navigation 로직을 별도 파일로 분리).
+- **수정** `studio/index.html`, `studio/studio-lifecycle-scenario.html` — `HOME|CATEGORY` toggle 마크업 제거, `#studioPreviewBackButton`/`#studioPreviewBackDivider` 추가, 두 신규 스크립트 로드.
+- **수정** `studio/studio.css` — `.studio-page-toggle*` 규칙을 `.studio-preview-back-button`으로 교체.
+- **수정** `studio/studio-lifecycle-scenario.html` — fixture `n`(happy path, post형 category 2개 + banner 카테고리 1개, templates.home/category/post 전부 유효)/`o`(templates.category/post 없음)/`q`(templates.post는 있지만 post-body region 없음) 추가 + `window.__testHooks.simulateNavigate(href)` 훅 추가(클릭 가능한 링크가 없는 fixture에서도 route 해석/overlay 전환을 검증하기 위함).
+- **생성** `studio/studio-navigation-test.html` — Part 1(순수 함수 단위 테스트) + Part 2(scenario n/o/q 실제 통합 테스트).
+- **변경 없음**: `skin/*`(스킨 렌더러/컨텍스트/템플릿 계약 자체는 이번 Slice에서 손대지 않았다 — `getRegion()`/`resolveSkinTemplate()`/`buildCategorySkinContext()`/`buildPostSkinContext()`를 그대로 재사용), `skin/skin-generator.js`, public route(`posts/view/*`, `skin/skin-home.js`/`skin-category.js`/`skin-post.js`), DB/RPC.
+
+### 25-2. internal link interception 위치 — `studio/preview/preview-bridge.js`
+
+iframe(Preview) 문서 자신의 `document`에 delegated click listener 하나(`event.target.closest("a[href]")`). Skin이 렌더한 앵커든(바인딩 경유 `data-imory-href`든 리터럴 `href`든 — 새니타이저가 둘 다 허용, 1-4절) 전부 이 한 listener가 가로챈다. 판정 순서:
+
+1. 앵커가 아니거나 `href`가 없으면 무시.
+2. `new URL(rawHref, location.href)`로 파싱 실패하거나 protocol이 `http:`/`https:`가 아니면(예: sanitizer를 어떻게든 피한 값) **아무 것도 하지 않는다**(`preventDefault`조차 안 함 — 애초에 그런 앵커는 새니타이저가 이미 `href` 자체를 지웠어야 정상이라 방어적 코드).
+3. 그 외에는 항상 `preventDefault()` — 이 iframe이 실제 public route로 벗어나는 경로 자체가 없다.
+4. 같은 origin이면 `{type:"preview:navigate", href: pathname+search}`만 parent에 전달 — route business logic(owner slug/숫자 id 판별)은 여기서 하지 않는다.
+5. 다른 origin(외부 링크)이면 `window.open(url, "_blank", "noopener,noreferrer")`로만 연다 — Studio Preview 자신은 그 주소로 이동하지 않는다(23절 최소 정책 채택).
+
+### 25-3. navigation intent protocol
+
+```
+iframe -> parent   { type: "preview:navigate", href: "/scenario-n/category/301" }
+```
+
+href만 전달한다(문서 6절 "iframe이 route business logic을 깊게 알지 않게 하세요") — categoryId/postId 파싱, owner slug 검증은 전부 parent 몫. 기존 `preview:rendered`에도 `hasPostBodyRegion: boolean`을 추가했다(POST 페이지에서만 parent가 이 값을 쓴다, 25-6절).
+
+### 25-4. parent route parser — `studio/preview/preview-route.js`
+
+`resolveStudioPreviewTarget(href, currentSlug)`이 유일한 진입점. `href`를 `window.location.origin` 기준으로 파싱한 뒤:
+
+- `origin`이 다르면(외부/opaque — `javascript:`/`data:` 등은 origin이 `"null"`이라 여기서도 걸러진다, 이중 방어) `null`.
+- `SITE_BASE_PATH`(github pages 배포 시 저장소 이름 prefix) 제거 후 `/` 기준으로 segment 분리.
+- 첫 segment가 `currentSlug`와 다르면 `null`(다른 owner — Studio internal route로 처리 안 함).
+- 나머지 segment가 없으면 `{type:"home"}`, `category/\d+`면 `{type:"category", categoryId}`, `post/\d+`면 `{type:"post", postId}`, 그 외 전부 `null`(새 router framework 없음 — 기존 3개 공개 라우트 shape만 인식).
+
+새 route framework를 만들지 않았다 — `core/lib/site-path.js`의 `buildSitePath()`가 만드는 shape을 그대로 역파싱할 뿐이다.
+
+### 25-5. navigation history state — `studio/preview/preview-navigation.js`
+
+```js
+previewHistory = [{ type: "home" }, { type: "category", categoryId }, { type: "post", postId }]
+```
+
+HOME으로 이동하면 스택을 `[{type:"home"}]`으로 리셋(로고 등으로 되돌아온 경우 중복 HOME이 쌓이지 않게), CATEGORY/POST는 push(단 이미 그 위치면 no-op — 같은 링크를 다시 눌러도 스택이 늘지 않음), Preview Back은 pop. forward는 없다(browser history API 미사용, 문서 요구사항 그대로). `getCurrentPreviewLocation()`을 `window`에 노출해 향후 AI가 "지금 보고 있는 page"를 인식할 수 있는 최소 API로 남겨뒀다(31절, 지금은 이 파일 자신도 중복 push 방지 판정에만 재사용).
+
+### 25-6. Preview Back UI
+
+`studioTopDock` 안, 옛 `HOME|CATEGORY` toggle이 있던 자리에 작은 `← PREVIEW` 버튼(`#studioPreviewBackButton`) + 구분선(`#studioPreviewBackDivider`)을 배치했다. `previewHistory.length <= 1`(HOME)일 때 둘 다 `hidden`. Admin으로 나가는 `#studioBackButton`("← back")과는 완전히 다른 버튼/역할 — 하나는 Studio 자체를 떠나고, 하나는 Preview 안에서 한 단계만 되돌아간다.
+
+### 25-7. HOME → CATEGORY → POST 실제 흐름
+
+`preview-bridge.js`가 `preview:navigate`를 보내면 `handlePreviewNavigateMessage()`가 `resolveStudioPreviewTarget()`으로 재해석 → 같은 위치가 아니면 `pushPreviewNavigation()` → `renderCurrentPreviewEntry()`가 스택 최상단에 맞는 `renderHomePreview`/`renderCategoryPreviewFor`/`renderPostPreviewFor`를 호출 → `resolveSkinTemplate()`으로 template 확인 → (CATEGORY/POST면) `buildCategorySkinContext()`/`buildPostSkinContext()`로 fetch → `postRenderToFrame()`으로 같은 iframe에 다시 render. CATEGORY는 `context.category.type !== "post"`(예: banner)면 fetch 후 unsupported 처리 — public route로 나가지 않는다(11절).
+
+### 25-8. Skin navigation UI와 Studio chrome 책임 분리
+
+- **Skin(HTML)**: navigation의 모양/위치/카피 전부(`<nav>`, dropdown, sidebar 등 자유) — `data-imory-repeat="navigation.categories"` + `data-imory-href="item.href"` + `data-imory-bind="item.name"` 패턴 하나로 어떤 레이아웃도 표현 가능(기존 binding 문법 변경 없음).
+- **Skin Context(`skin/skin-context.js`, 1C-A~D에서 이미 완성)**: 실제 category/post 데이터. 이번 Slice는 이 파일을 전혀 수정하지 않았다.
+- **Studio Preview(`preview-bridge.js`+`preview-navigation.js`, 이번 Slice)**: 그 링크 클릭을 public route 이동 대신 같은 iframe 안의 페이지 전환으로 바꾸는 것**만** 담당.
+
+### 25-9. 기존 `HOME|CATEGORY` toggle 처리
+
+**완전히 제거했다**(dev-only fallback 아님) — 마크업/CSS/JS 전부 삭제. Navigable Preview가 이미 안정적으로 동작하므로(25-13절 테스트 결과) 중간 개발 UI를 남겨둘 이유가 없었다. POST toggle은 애초에 추가하지 않았다.
+
+### 25-10. Desktop/Mobile 유지
+
+`studioViewportMode`(`studio-preview.js`)는 navigation 상태와 완전히 독립적인 채로 그대로 뒀다 — HOME→CATEGORY→POST→Back→Back 전체 동안 Mobile을 선택하면 그대로 유지되고 Desktop으로 자동 reset되지 않는다(25-13절 테스트 J로 확인).
+
+### 25-11. currentWorkingSkin 유지
+
+모든 page(HOME/CATEGORY/POST) 렌더가 `currentWorkingSkin`(draft, Save 전이어도 Apply 결과 포함) 기준으로만 template을 선택한다(`resolveSkinTemplate(currentWorkingSkin, pageType)`) — Published Skin을 참조하는 경로가 없다. HOME Code Apply 후 CATEGORY/POST로 이동했다가 Preview Back으로 HOME에 돌아와도 Apply 결과가 그대로 보인다(같은 `currentWorkingSkin` 참조를 계속 읽으므로 별도 동기화 불필요).
+
+### 25-12. POST protected body Preview 처리 — 이번 Slice는 outer chrome + placeholder까지만
+
+**조사 결과**: 실제 본문을 Studio Preview 안에서 보여주려면 (1) owner-authenticated `post_contents` fetch, (2) secret gate UI(비밀번호 확인은 DB RPC 안에서만), (3) Quote Preset Renderer(`posts/style/posts-style-render.js`)를 Studio Preview(iframe 너머 postMessage 경계, 게다가 아직 저장되지 않은 draft post 데이터가 아니라 **실제 owner의 published/draft post row**를 참조해야 함)에 새로 연결해야 한다 — public POST(`skin/skin-post.js`, 24절)는 이 전부를 "같은 문서 안에서 직접 DOM을 공유"하는 구조로 풀었지만, Studio Preview는 iframe 경계 때문에 그 전제가 성립하지 않는다.
+
+**결정**: 이번 Slice에서는 **mount하지 않는다**. `templates.post`에 `data-imory-region="post-body"`가 있으면 `skin-render.js`의 `applySkinRegion()`이 이미 "항상 빈 컨테이너"로 만들어 두므로(7절 계약), 별도 코드 없이 그 자체로 protected placeholder 역할을 한다 — Context에 `post.content`/`secretPasswordHash` 등을 추가하지 않았고(`skin-context.js` 미수정), Skin template에 content binding도 없다. 결합도가 이번 Slice 범위에 비해 크다고 판단해 outer chrome까지만 구현했다(사용자 지시 14절 "억지로 복잡하게 만들지 마세요"에 따른 명시적 축소 — 향후 Slice에서 owner-authenticated fetch를 Studio Preview로 안전하게 끌어오는 별도 설계가 필요하다).
+
+### 25-13. unsupported/error 처리
+
+| 상황 | overlay 문구 |
+|---|---|
+| `templates.category` 없음 | "이 스킨에는 아직 CATEGORY 템플릿이 없습니다." |
+| `templates.post` 없음 | "이 스킨에는 아직 POST 템플릿이 없습니다." |
+| category 존재하지 않음/다른 owner | "이 카테고리를 찾을 수 없습니다." |
+| post 존재하지 않음/다른 owner | "이 글을 찾을 수 없습니다." |
+| `category.type !== "post"`(banner 등) | "이 카테고리 유형은 아직 Studio Preview를 지원하지 않습니다." |
+| `templates.post`는 있지만 post-body region 없음 | "이 스킨에는 글 본문을 표시할 자리가 없습니다." |
+| fetch 실패(네트워크 등) | "카테고리/글 미리보기를 불러오지 못했습니다." |
+
+모든 상태에서 Preview Back으로 HOME 복귀 가능(blank iframe 없음) — HOME 자체는 실패해도 기존 Draft/Context 로딩 error overlay(변경 없음)로 수렴한다.
+
+### 25-14. iframe lifecycle
+
+iframe(`#studioPreviewFrame`)은 계속 1개, HOME↔CATEGORY↔POST 전환마다 재생성/재로드되지 않는다 — 기존 `postRenderToFrame()`/`preview:render`/`preview:rendered` 왕복을 그대로 재사용한다. 테스트 K/N13으로 `__previewFrameLoadCount === 1`을 전체 시나리오(happy path + banner + mobile) 동안 확인했다.
+
+### 25-15. 테스트 결과
+
+실제 Chromium(`npx playwright`, 로컬 정적 서버)에서 실행:
+
+| 파일 | 결과 |
+|---|---|
+| `studio/studio-navigation-test.html`(신규) | **35 PASS / 0 FAIL** |
+| `studio/studio-lifecycle-test.html`(회귀, scenario a/b) | 15 PASS / 0 FAIL |
+| `studio/studio-multipage-test.html`(회귀, scenario m) | 16 PASS / 0 FAIL |
+
+`studio-navigation-test.html` 구성:
+
+- **Part 1(단위 테스트, 12개)**: `resolveStudioPreviewTarget()` 직접 호출 — HOME/CATEGORY/POST 정상 매칭, trailing slash, 절대 URL(같은 origin), 다른 owner slug(Q), `javascript:`/`data:` 스킴(R1/R2), 다른 origin 절대 URL(R3), 숫자가 아닌 id, 알 수 없는 route segment, 빈 입력.
+- **Part 2 scenario N(실제 클릭 시뮬레이션, 22개)**: HOME nav 렌더(N1) → 실제 `dispatchEvent(MouseEvent)`로 LOG 클릭 → CATEGORY 렌더/바인딩(N4/N5) → secret 글 마스킹 확인(N6, `🔒 Secret Note`) → Preview Back/Code 버튼 상태(N7) → 글 제목 클릭 → POST 렌더(N8) → post-body region이 빈 placeholder로 존재(N9) → overlay 정상(N10) → Preview Back x2(N11/N12) → iframe load count(N13) → banner 카테고리 클릭 → unsupported(P/P2/P3) → 다른 slug의 navigate 메시지 무시(Q2) → iframe 안에 직접 주입한 `javascript:` 앵커 실제 클릭 → 아무 동작 없음(R4) → Mobile 뷰포트로 전체 흐름 재확인, Desktop 자동 reset 없음(J) → iframe load count 최종 확인(K).
+- **Part 2 scenario O(`simulateNavigate` 훅, 2개)**: `templates.category`/`templates.post` 없는 multi-page skin에서 각각 unsupported(M/N).
+- **Part 2 scenario Q(`simulateNavigate` 훅, 1개)**: `templates.post`는 있지만 post-body region이 없을 때 invalid(O).
+
+`simulateNavigate(href)` 훅(`window.__testHooks`)은 클릭 가능한 링크가 없는 fixture(o/q)에서 `preview-bridge.js`가 보냈을 `preview:navigate` 메시지를 parent 쪽에서 직접 흉내내 route 해석/overlay 전환만 독립적으로 검증한다 — scenario N은 이 훅을 쓰지 않고 iframe 안에서 진짜 `MouseEvent`를 dispatch한다(진짜 클릭 경로 자체를 검증하기 위함).
+
+### 25-16. 실브라우저 확인
+
+**했다.** 위 세 파일 전부 헤드리스 Chromium으로 실행했고, scenario N은 실제 렌더된 iframe DOM 안의 실제 앵커에 진짜 클릭 이벤트를 dispatch하는 방식이라(스텁 없이 `preview-bridge.js`의 실제 delegated click listener가 실행됨) "페이지 탭 선택"이 아니라 "실제로 링크를 눌러 이동"하는 경험을 그대로 재현한다. 핵심 판단 기준(문서 27절): HOME에서 `LOG` 텍스트를 가진 실제 앵커를 클릭 → 같은 iframe 안에서 CATEGORY로 전환 → 글 제목 텍스트를 가진 실제 앵커를 클릭 → POST로 전환 → 작은 `← PREVIEW` 버튼으로 한 단계씩 복귀 — 이 전체가 별도 page selector 없이 Skin 자신의 링크만으로 이뤄진다.
+
+### 25-17. 다음 multipage generator Slice 진행 가능 여부
+
+**가능.** 이번 Slice로 Studio Preview가 실제 다중 페이지 SkinPackage(`templates.home`/`category`/`post`가 모두 채워진 경우)를 실제 사용자처럼 탐색 가능함을 증명했다(fixture `n`) — `skin/skin-generator.js`가 이 shape의 SkinPackage를 생성하기 시작하면 Studio 쪽 추가 배선 없이 바로 탐색 가능하다(29절 "기본 Skin은 HOME→CATEGORY→POST 탐색이 가능해야 한다" 요구를 이미 충족하는 소비측 준비가 끝났다는 뜻). 다음 Slice가 새로 정해야 할 것은 generator가 만드는 navigation 마크업의 실제 디자인(1단/2단/3단 레이아웃별 배치)뿐 — 이번 Slice가 강제하는 마크업 형태는 없다(`data-imory-repeat`+`data-imory-href`+`data-imory-bind` 조합이면 어떤 시각적 표현도 가능).

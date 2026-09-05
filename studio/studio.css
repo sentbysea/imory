@@ -399,30 +399,19 @@ body {
 
 
 /* =========================================================
-   HOME / CATEGORY — Studio Preview page 전환 (PHASE 1C-D)
+   PREVIEW BACK — Studio Preview 안에서 한 단계 되돌아가기
+   (PHASE 1C-G)
 
-   더 이상 별도 절대배치 레이어가 아니라 #studioTopDock 안의 한
-   그룹이다(Studio chrome 재정리 라운드) — .studio-viewport-toggle
-   과 완전히 동일한 ghost text 스타일은 그대로 유지한다(둘 다 "두
-   옵션뿐, 클릭 한 번으로 전환"이라는 같은 UX 원칙).
+   HOME/CATEGORY/POST는 더 이상 이 dock의 버튼으로 고르지 않는다
+   (Skin 자신의 navigation을 Preview 안에서 클릭해 이동한다,
+   studio/preview/preview-bridge.js) — 이 control은 그 이동을
+   한 단계 되돌리는 것뿐이라 previewHistory가 HOME 하나뿐일 때는
+   아예 숨는다(studio/preview/preview-navigation.js의
+   updatePreviewBackButtonVisibility()). .studio-viewport-toggle과
+   동일한 ghost text 스타일을 그대로 쓴다.
 ========================================================== */
 
-.studio-page-toggle {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-
-.studio-page-toggle-divider {
-  width: 1px;
-  height: 12px;
-
-  background: var(--system-border-strong);
-}
-
-
-.studio-page-toggle-option {
+.studio-preview-back-button {
   padding: 4px 2px;
 
   border: 0;
@@ -440,29 +429,13 @@ body {
 }
 
 
-.studio-page-toggle-option:hover {
+.studio-preview-back-button:hover {
   color: var(--system-accent-hover);
 }
 
 
-.studio-page-toggle-option--active {
-  color: var(--system-text);
-
-  font-weight: var(--imory-font-weight-medium);
-}
-
-
-.studio-page-toggle-option:disabled {
-  color: var(--system-text-faint);
-
-  opacity: 0.4;
-
-  cursor: not-allowed;
-}
-
-
-.studio-page-toggle-option:disabled:hover {
-  color: var(--system-text-faint);
+.studio-preview-back-button[hidden] {
+  display: none;
 }
 
 

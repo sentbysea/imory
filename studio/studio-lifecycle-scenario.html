@@ -49,12 +49,8 @@
       <div class="studio-top-dock" id="studioTopDock">
         <button type="button" class="studio-top-dock-back" id="studioBackButton">← back</button>
         <div class="studio-top-dock-groups">
-          <div class="studio-page-toggle" id="studioPageToggle" role="group" aria-label="Preview 페이지">
-            <button type="button" class="studio-page-toggle-option studio-page-toggle-option--active" data-page-type="home">Home</button>
-            <span class="studio-page-toggle-divider" aria-hidden="true"></span>
-            <button type="button" class="studio-page-toggle-option" id="studioPageToggleCategory" data-page-type="category" disabled>Category</button>
-          </div>
-          <span class="studio-top-dock-divider" aria-hidden="true"></span>
+          <button type="button" class="studio-preview-back-button" id="studioPreviewBackButton" hidden>← PREVIEW</button>
+          <span class="studio-top-dock-divider" id="studioPreviewBackDivider" aria-hidden="true" hidden></span>
           <div class="studio-viewport-toggle" id="studioViewportToggle" role="group" aria-label="Preview 화면 크기">
             <button type="button" class="studio-viewport-toggle-option studio-viewport-toggle-option--active" data-viewport-mode="desktop">Desktop</button>
             <span class="studio-viewport-toggle-divider" aria-hidden="true"></span>
@@ -449,6 +445,165 @@
             banners: []
           },
           rpcHandlers: {}
+        },
+
+        /*
+          Scenario N — PHASE 1C-G navigable multi-page happy path.
+          templates.home/category/post 전부 존재하고, HOME에는 실제
+          navigation 링크(LOG=post형, FRIENDS=banner형)가 있다 —
+          Studio Preview iframe 안에서 이 링크들을 실제로 클릭해
+          HOME -> CATEGORY -> POST -> Preview Back을 검증하는 용도.
+          post "402"는 secret이라 category.posts[].title에 🔒 아이콘이
+          섞이는지도 확인할 수 있다.
+        */
+        n: {
+          userId: "user-n",
+          tables: {
+            skins: [
+              { id: "skin-n1", user_id: "user-n", is_active: true, current_draft_version_id: "draft-n1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-n1",
+                content: {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html:
+                        '<div class="scenario-n-home">' +
+                        '<h1 data-imory-bind="site.title"></h1>' +
+                        '<nav>' +
+                        '<a class="scenario-n-nav-link" data-imory-repeat="navigation.categories" data-imory-href="item.href" data-imory-bind="item.name"></a>' +
+                        '</nav>' +
+                        '</div>'
+                    },
+                    category: {
+                      html:
+                        '<div class="scenario-n-category">' +
+                        '<h1 class="scenario-n-category-title" data-imory-bind="category.name"></h1>' +
+                        '<a class="scenario-n-post-link" data-imory-repeat="category.posts" data-imory-href="item.href" data-imory-bind="item.title"></a>' +
+                        '</div>'
+                    },
+                    post: {
+                      html:
+                        '<div class="scenario-n-post">' +
+                        '<h1 class="scenario-n-post-title" data-imory-bind="post.title"></h1>' +
+                        '<div class="scenario-n-post-body" data-imory-region="post-body"></div>' +
+                        '</div>'
+                    }
+                  },
+                  css: ".scenario-n-home { color: teal; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-n", nickname: "Scenario N", bio: null, slug: "scenario-n" }],
+            site_settings: [],
+            categories: [
+              { id: "301", user_id: "user-n", name: "LOG", type: "post", sort_order: 1 },
+              { id: "302", user_id: "user-n", name: "PIC", type: "post", sort_order: 2 },
+              { id: "303", user_id: "user-n", name: "FRIENDS", type: "banner", sort_order: 3 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-n", title: "Hello World", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301" },
+              { id: "402", user_id: "user-n", title: "Secret Note", created_at: "2026-01-02T00:00:00Z", visibility: "secret", category_id: "301" }
+            ],
+            banners: []
+          },
+          rpcHandlers: {}
+        },
+
+        /*
+          Scenario O — templates.home만 있고 templates.category/post는
+          없는 multi-page 대상(post형 category "301"은 실제로 존재)
+          — "카테고리/글 템플릿이 없습니다" unsupported 상태를
+          검증하는 용도. HOME 안에는 클릭 가능한 nav 링크가 없어도
+          되므로(테스트가 window.__testHooks.simulateNavigate()로
+          직접 preview:navigate를 흉내낸다) 마크업은 최소로 둔다.
+        */
+        o: {
+          userId: "user-o",
+          tables: {
+            skins: [
+              { id: "skin-o1", user_id: "user-o", is_active: true, current_draft_version_id: "draft-o1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-o1",
+                content: {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html: '<div class="scenario-o-home"><h1 data-imory-bind="site.title"></h1></div>'
+                    }
+                  },
+                  css: "",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-o", nickname: "Scenario O", bio: null, slug: "scenario-o" }],
+            site_settings: [],
+            categories: [
+              { id: "301", user_id: "user-o", name: "LOG", type: "post", sort_order: 1 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-o", title: "Hi", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301" }
+            ],
+            banners: []
+          },
+          rpcHandlers: {}
+        },
+
+        /*
+          Scenario Q — templates.post는 있지만 data-imory-region=
+          "post-body"가 없는 경우 — "본문을 표시할 자리가 없습니다"
+          invalid 상태를 검증하는 용도(문서 13/20-O절).
+        */
+        q: {
+          userId: "user-q",
+          tables: {
+            skins: [
+              { id: "skin-q1", user_id: "user-q", is_active: true, current_draft_version_id: "draft-q1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-q1",
+                content: {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html: '<div class="scenario-q-home"><h1 data-imory-bind="site.title"></h1></div>'
+                    },
+                    post: {
+                      html: '<div class="scenario-q-post"><h1 data-imory-bind="post.title"></h1></div>'
+                    }
+                  },
+                  css: "",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-q", nickname: "Scenario Q", bio: null, slug: "scenario-q" }],
+            site_settings: [],
+            categories: [
+              { id: "301", user_id: "user-q", name: "LOG", type: "post", sort_order: 1 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-q", title: "Hi", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301" }
+            ],
+            banners: []
+          },
+          rpcHandlers: {}
         }
 
       };
@@ -488,12 +643,25 @@
   <script src="./studio-write.js"></script>
   <script src="./editor/code-editor.js"></script>
   <script src="./studio-preview.js"></script>
+  <script src="./preview/preview-route.js"></script>
+  <script src="./preview/preview-navigation.js"></script>
   <script src="./studio-state.js"></script>
 
   <script>
     window.__testHooks = {
       sendFromRealParent: function (payload) {
         document.getElementById("studioPreviewFrame").contentWindow.postMessage(payload, window.location.origin);
+      },
+      /*
+        preview-bridge.js(iframe)가 실제로 postMessage
+        "preview:navigate"를 보낸 것과 동일한 효과를 낸다 — 클릭
+        가능한 링크가 없는 fixture(scenario o/q)에서도 route
+        해석/overlay 상태 전환을 검증할 수 있게 한다. 실제 클릭
+        interception 자체(scenario n)는 이 hook을 쓰지 않고 inner
+        iframe 안에서 진짜 MouseEvent를 dispatch한다.
+      */
+      simulateNavigate: function (href) {
+        handlePreviewNavigateMessage(href);
       }
     };
   </script>

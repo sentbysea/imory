@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Studio Navigable Preview Integration Test (PHASE 1C-G)</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h1 { margin-top: 0; }
+  h2 {
+    margin-top: 32px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  #summary { font-size: 16px; font-weight: bold; margin-top: 16px; }
+  #frames iframe {
+    width: 480px;
+    height: 360px;
+    border: 2px dashed #999;
+    margin: 8px 8px 8px 0;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Studio Navigable Preview Integration Test (PHASE 1C-G)</h1>
+  <p>
+    "Skin Studio Preview를 실제 홈페이지처럼 탐색 가능하게 만든다" 검증. Part 1은
+    resolveStudioPreviewTarget()(studio/preview/preview-route.js)만 단독으로 부르는
+    순수 함수 단위 테스트. Part 2는 studio-lifecycle-scenario.html?scenario=n/o/q를
+    통해 studio-preview.js/preview-navigation.js/preview-bridge.js를 전부 실제
+    파일 그대로 구동하고, Preview iframe 안의 실제 Skin 링크를 진짜 클릭해서
+    HOME -> CATEGORY -> POST -> Preview Back 흐름을 확인한다.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <h2>Part 2 — Scenario N/O/Q iframes</h2>
+  <div id="frames"></div>
+
+  <script src="../core/lib/reserved-slugs.js"></script>
+  <script src="../core/lib/site-path.js"></script>
+  <script src="./preview/preview-route.js"></script>
+
+  <script>
+
+    const reportList = document.getElementById("reportList");
+    const allResults = [];
+
+    function record(name, pass, detail) {
+      allResults.push({ name, pass: !!pass, detail: detail || "" });
+      const li = document.createElement("li");
+      li.className = pass ? "pass" : "fail";
+      li.textContent = (pass ? "PASS — " : "FAIL — ") + name;
+      if (detail) {
+        const d = document.createElement("span");
+        d.className = "detail";
+        d.textContent = detail;
+        li.appendChild(d);
+      }
+      reportList.appendChild(li);
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function waitFor(fn, timeoutMs, intervalMs) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        let val;
+        try {
+          val = fn();
+        } catch (e) {
+          val = null;
+        }
+        if (val) {
+          return val;
+        }
+        await sleep(intervalMs || 50);
+      }
+      return null;
+    }
+
+    function isOverlayVisible(win, overlayEl) {
+      return win.getComputedStyle(overlayEl).display !== "none";
+    }
+
+    function loadIframe(src) {
+      return new Promise((resolve) => {
+        const iframe = document.createElement("iframe");
+        iframe.addEventListener("load", () => resolve(iframe), { once: true });
+        iframe.src = src;
+        document.getElementById("frames").appendChild(iframe);
+      });
+    }
+
+    function clickAnchor(anchor) {
+      anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: anchor.ownerDocument.defaultView }));
+    }
+
+    function findAnchorByText(doc, selector, text) {
+      return Array.from(doc.querySelectorAll(selector)).find((el) => el.textContent === text);
+    }
+
+
+    /* =========================================================
+       PART 1 — resolveStudioPreviewTarget() 단위 테스트(순수 함수,
+       iframe/네트워크 없음)
+    ========================================================== */
+
+    function runPart1() {
+
+      const base = window.location.origin;
+
+      record(
+        "1. HOME 경로가 정확히 매칭된다",
+        JSON.stringify(resolveStudioPreviewTarget("/scenario-n", "scenario-n")) === JSON.stringify({ type: "home" })
+      );
+
+      record(
+        "2. slug만 있고 trailing slash가 있어도 HOME으로 매칭된다",
+        JSON.stringify(resolveStudioPreviewTarget("/scenario-n/", "scenario-n")) === JSON.stringify({ type: "home" })
+      );
+
+      record(
+        "3. CATEGORY 경로가 정확히 매칭된다",
+        JSON.stringify(resolveStudioPreviewTarget("/scenario-n/category/301", "scenario-n")) === JSON.stringify({ type: "category", categoryId: "301" })
+      );
+
+      record(
+        "4. POST 경로가 정확히 매칭된다",
+        JSON.stringify(resolveStudioPreviewTarget("/scenario-n/post/401", "scenario-n")) === JSON.stringify({ type: "post", postId: "401" })
+      );
+
+      record(
+        "5. 절대 URL(같은 origin)도 정확히 매칭된다",
+        JSON.stringify(resolveStudioPreviewTarget(base + "/scenario-n/post/401", "scenario-n")) === JSON.stringify({ type: "post", postId: "401" })
+      );
+
+      record(
+        "Q. 다른 owner slug는 null(Studio internal route로 처리 안 함)",
+        resolveStudioPreviewTarget("/other-slug/category/301", "scenario-n") === null
+      );
+
+      record(
+        "R1. javascript: 스킴 href는 null",
+        resolveStudioPreviewTarget("javascript:alert(1)", "scenario-n") === null
+      );
+
+      record(
+        "R2. data: 스킴 href는 null",
+        resolveStudioPreviewTarget("data:text/html,x", "scenario-n") === null
+      );
+
+      record(
+        "R3. 다른 origin의 절대 URL은 null(외부 링크로 취급)",
+        resolveStudioPreviewTarget("https://evil.example/scenario-n/category/301", "scenario-n") === null
+      );
+
+      record(
+        "6. 숫자가 아닌 category id는 null",
+        resolveStudioPreviewTarget("/scenario-n/category/abc", "scenario-n") === null
+      );
+
+      record(
+        "7. 알 수 없는 경로 segment는 null(새 route framework를 만들지 않음)",
+        resolveStudioPreviewTarget("/scenario-n/unknown/301", "scenario-n") === null
+      );
+
+      record(
+        "8. href가 비었거나 currentSlug가 없으면 null",
+        resolveStudioPreviewTarget("", "scenario-n") === null &&
+          resolveStudioPreviewTarget("/scenario-n", "") === null
+      );
+
+    }
+
+
+    /* =========================================================
+       PART 2 — SCENARIO N: 실제 클릭으로 HOME -> CATEGORY -> POST
+       -> Preview Back
+    ========================================================== */
+
+    async function runScenarioN() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=n");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+      const codeButton = () => doc.getElementById("studioCodeButton");
+
+      const homeRendered = await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")),
+        8000,
+        100
+      );
+
+      record(
+        "N1. HOME Preview가 실제 navigation 링크(LOG/PIC/FRIENDS)와 함께 렌더된다",
+        !!homeRendered &&
+          !!findAnchorByText(innerDoc(), ".scenario-n-nav-link", "LOG") &&
+          !!findAnchorByText(innerDoc(), ".scenario-n-nav-link", "FRIENDS")
+      );
+
+      record(
+        "N2. HOME에서는 Preview Back이 숨겨져 있다",
+        backButton().hidden === true
+      );
+
+      record(
+        "N3. HOME에서는 Code 버튼이 활성화된다",
+        !codeButton().disabled
+      );
+
+      // --- HOME -> CATEGORY(LOG) ---
+      clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-nav-link", "LOG"));
+
+      const categoryRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".scenario-n-category-title")) || null,
+        4000,
+        50
+      );
+
+      record(
+        "N4. LOG 클릭 -> 같은 iframe 안에서 CATEGORY가 렌더된다(browser location 변화 없음)",
+        !!categoryRendered && win.location.pathname.indexOf("category") === -1
+      );
+
+      record(
+        "N5. category.name 바인딩이 정상이다",
+        categoryRendered && categoryRendered.textContent === "LOG"
+      );
+
+      const postLinkTexts = Array.from(innerDoc().querySelectorAll(".scenario-n-post-link")).map((a) => a.textContent);
+
+      record(
+        "N6. category.posts 바인딩이 정상이다(secret 글은 🔒 아이콘 포함)",
+        postLinkTexts.includes("Hello World") && postLinkTexts.includes("🔒 Secret Note"),
+        JSON.stringify(postLinkTexts)
+      );
+
+      record(
+        "N7. CATEGORY Preview 중에는 Preview Back이 보이고, Code 버튼은 비활성화된다",
+        backButton().hidden === false && codeButton().disabled === true
+      );
+
+      // --- CATEGORY -> POST ---
+      clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-post-link", "Hello World"));
+
+      const postRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".scenario-n-post-title")) || null,
+        4000,
+        50
+      );
+
+      record(
+        "N8. 글 제목 클릭 -> 같은 iframe 안에서 POST가 렌더된다",
+        !!postRendered && postRendered.textContent === "Hello World"
+      );
+
+      const bodyRegionEmpty = await waitFor(
+        () => {
+          const region = innerDoc() && innerDoc().querySelector(".scenario-n-post-body");
+          return region && region.childNodes.length === 0 ? region : null;
+        },
+        2000,
+        50
+      );
+
+      record(
+        "N9. post-body region이 protected placeholder(항상 빈 컨테이너)로 존재한다 — 본문은 이번 Slice에서 mount하지 않는다",
+        !!bodyRegionEmpty
+      );
+
+      const postOverlayStaysHidden = await waitFor(
+        () => (overlay().hidden === true && !isOverlayVisible(win, overlay()) ? true : null),
+        2000,
+        50
+      );
+
+      record(
+        "N10. post-body region이 있는 정상 POST는 overlay가 뜨지 않는다(hasPostBodyRegion=true 왕복 확인)",
+        !!postOverlayStaysHidden
+      );
+
+      // --- Preview Back x2 ---
+      clickAnchor(backButton());
+
+      const backToCategory = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".scenario-n-category-title")) || null,
+        3000,
+        50
+      );
+
+      record(
+        "N11. Preview Back(POST -> CATEGORY)이 동작한다",
+        !!backToCategory && backToCategory.textContent === "LOG"
+      );
+
+      clickAnchor(backButton());
+
+      const backToHome = await waitFor(
+        () => !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")),
+        3000,
+        50
+      );
+
+      record(
+        "N12. Preview Back(CATEGORY -> HOME)이 동작하고, HOME에서 다시 Preview Back이 숨겨진다",
+        !!backToHome && backButton().hidden === true
+      );
+
+      record(
+        "N13. 이 모든 이동 동안 iframe은 정확히 1회만 로드된다(reload 없음)",
+        win.__previewFrameLoadCount === 1,
+        "loadCount=" + win.__previewFrameLoadCount
+      );
+
+      // --- 배너 카테고리 클릭 -> unsupported ---
+      clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-nav-link", "FRIENDS"));
+
+      /*
+        renderCategoryPreviewFor()는 fetch가 끝나기 전까지 "loading"
+        overlay를 먼저 보여준다(isOverlayVisible만 보면 그 과도기를
+        unsupported로 착각할 수 있다) — 최종 문구가 나타날 때까지
+        기다린다.
+      */
+      const bannerUnsupported = await waitFor(
+        () =>
+          isOverlayVisible(win, overlay()) &&
+          doc.getElementById("studioPreviewOverlayText").textContent === "이 카테고리 유형은 아직 Studio Preview를 지원하지 않습니다."
+            ? true
+            : null,
+        3000,
+        50
+      );
+
+      record(
+        "P. banner 카테고리 클릭 -> unsupported overlay(public 라우트로 나가지 않음)",
+        !!bannerUnsupported
+      );
+
+      record(
+        "P2. unsupported 상태에서도 Preview Back으로 HOME 복귀가 가능하다",
+        backButton().hidden === false
+      );
+
+      clickAnchor(backButton());
+
+      const backFromUnsupported = await waitFor(
+        () => !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")),
+        3000,
+        50
+      );
+
+      record(
+        "P3. unsupported 상태에서 Preview Back -> HOME 정상 복귀",
+        !!backFromUnsupported
+      );
+
+      // --- Q. 다른 slug의 preview:navigate는 무시된다 ---
+      win.__testHooks.simulateNavigate("/some-other-owner/category/301");
+      await sleep(150);
+
+      record(
+        "Q2. 다른 owner slug를 가리키는 내부 navigate 메시지는 무시된다(HOME 그대로)",
+        !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")) && backButton().hidden === true
+      );
+
+      // --- R. iframe 안에서 위험한 href 클릭 시 아무 것도 하지 않는다 ---
+      const roguePreDoc = innerDoc();
+      const rogueAnchor = roguePreDoc.createElement("a");
+      rogueAnchor.href = "javascript:window.__scenarioNXss = true";
+      rogueAnchor.textContent = "rogue";
+      roguePreDoc.body.appendChild(rogueAnchor);
+      clickAnchor(rogueAnchor);
+      await sleep(150);
+
+      record(
+        "R4. javascript: href를 가진 앵커를 실제로 클릭해도 아무 동작도 하지 않는다(XSS 실행 없음, 여전히 HOME)",
+        win.__scenarioNXss !== true &&
+          !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")) &&
+          backButton().hidden === true
+      );
+
+      // --- Desktop/Mobile persists through navigation ---
+      doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="mobile"]').click();
+      await sleep(80);
+
+      clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-nav-link", "LOG"));
+      await waitFor(() => !!(innerDoc() && innerDoc().querySelector(".scenario-n-category-title")), 3000, 50);
+
+      clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-post-link", "Hello World"));
+      await waitFor(() => !!(innerDoc() && innerDoc().querySelector(".scenario-n-post-title")), 3000, 50);
+
+      const stillMobileAfterPost = doc.getElementById("studioPreviewStage").classList.contains("studio-preview-stage--mobile");
+
+      clickAnchor(backButton());
+      clickAnchor(backButton());
+      await waitFor(() => !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")), 3000, 50);
+
+      const stillMobileAfterBackToHome = doc.getElementById("studioPreviewStage").classList.contains("studio-preview-stage--mobile");
+
+      record(
+        "J. Mobile 뷰포트가 HOME -> CATEGORY -> POST -> Back -> Back 전체 동안 유지된다(Desktop로 자동 reset 없음)",
+        stillMobileAfterPost && stillMobileAfterBackToHome
+      );
+
+      record(
+        "K. 전체 시나리오 동안 iframe은 여전히 정확히 1회만 로드됐다",
+        win.__previewFrameLoadCount === 1,
+        "loadCount=" + win.__previewFrameLoadCount
+      );
+
+      return true;
+
+    }
+
+
+    /* =========================================================
+       PART 2 — SCENARIO O: templates.category/post가 없는 multi-page
+       Skin — "템플릿이 없습니다" unsupported
+    ========================================================== */
+
+    async function runScenarioO() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=o");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-o-home")),
+        8000,
+        100
+      );
+
+      win.__testHooks.simulateNavigate("/scenario-o/category/301");
+
+      const categoryUnsupported = await waitFor(
+        () => (isOverlayVisible(win, overlay()) ? true : null),
+        3000,
+        50
+      );
+
+      record(
+        "M. templates.category 없음 -> unsupported, Preview Back 가능",
+        !!categoryUnsupported &&
+          doc.getElementById("studioPreviewOverlayText").textContent === "이 스킨에는 아직 CATEGORY 템플릿이 없습니다." &&
+          backButton().hidden === false
+      );
+
+      clickAnchor(backButton());
+      await waitFor(() => !!(innerDoc() && innerDoc().querySelector(".scenario-o-home")), 3000, 50);
+
+      win.__testHooks.simulateNavigate("/scenario-o/post/401");
+
+      const postUnsupported = await waitFor(
+        () => (isOverlayVisible(win, overlay()) ? true : null),
+        3000,
+        50
+      );
+
+      record(
+        "N. templates.post 없음 -> unsupported, Preview Back 가능",
+        !!postUnsupported &&
+          doc.getElementById("studioPreviewOverlayText").textContent === "이 스킨에는 아직 POST 템플릿이 없습니다." &&
+          backButton().hidden === false
+      );
+
+      return true;
+
+    }
+
+
+    /* =========================================================
+       PART 2 — SCENARIO Q: templates.post는 있지만 post-body region이
+       없는 경우 — invalid/unsupported
+    ========================================================== */
+
+    async function runScenarioQ() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=q");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-q-home")),
+        8000,
+        100
+      );
+
+      win.__testHooks.simulateNavigate("/scenario-q/post/401");
+
+      /*
+        renderPostPreviewFor()는 fetch 동안 "loading"을 먼저 보여주고,
+        fetch가 끝나면 잠깐 "hidden"으로 내려갔다가 iframe이 실제
+        mount 결과(hasPostBodyRegion)를 보고한 뒤에야 최종 상태로
+        바뀐다 — 최종 문구가 나타날 때까지 기다린다(isOverlayVisible
+        만으로는 그 과도기의 "loading" 상태를 오검출한다).
+      */
+      const invalidPost = await waitFor(
+        () =>
+          isOverlayVisible(win, overlay()) &&
+          doc.getElementById("studioPreviewOverlayText").textContent === "이 스킨에는 글 본문을 표시할 자리가 없습니다."
+            ? true
+            : null,
+        3000,
+        50
+      );
+
+      record(
+        "O. templates.post는 있지만 post-body region이 없으면 invalid/unsupported(본문 없는 POST를 정상으로 처리하지 않음)",
+        !!invalidPost && backButton().hidden === false
+      );
+
+      return true;
+
+    }
+
+
+    async function main() {
+
+      runPart1();
+
+      try {
+        await runScenarioN();
+      } catch (err) {
+        record("Scenario N 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioO();
+      } catch (err) {
+        record("Scenario O 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioQ();
+      } catch (err) {
+        record("Scenario Q 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      const passCount = allResults.filter((r) => r.pass).length;
+      const failCount = allResults.length - passCount;
+      const summary = document.getElementById("summary");
+      summary.textContent = `${allResults.length}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+
+      window.__testDone = true;
+      window.__testPassCount = passCount;
+      window.__testFailCount = failCount;
+
+    }
+
+    main();
+
+  </script>
+
+</body>
+</html>

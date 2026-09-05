@@ -312,7 +312,7 @@ Studio는 **데스크탑 전용 제작 도구**다(Slice 1에서 이미 구현/�
 ┌──────────────────────────────────────────────────────┐
 │                            ▾  ← 평소엔 이 handle만 보임      │
 │  (handle 클릭으로만 펼침/접힘)                              │
-│  ← back  HOME|CATEGORY  DESKTOP|MOBILE  Save Code Settings │ ← Top Dock, 한 줄
+│  ← back  ← PREVIEW  DESKTOP|MOBILE  Save Code Settings │ ← Top Dock, 한 줄
 │                                                        │
 │                                                        │
 │                   PREVIEW (iframe, 화면 전체)            │
@@ -328,22 +328,24 @@ Studio는 **데스크탑 전용 제작 도구**다(Slice 1에서 이미 구현/�
 ### 11-3. 상단 — 수동 toggle Top Dock(← back / HOME\|CATEGORY / DESKTOP\|MOBILE / Save / Code / Settings 한 줄)
 
 > Studio chrome 재정리 라운드(PHASE 1C-D 이후) 업데이트: 이전에는 hover/focus로 자동 여닫히는 Top Dock과, 그 아래 별도로 항상 노출되는 `HOME|CATEGORY`/`DESKTOP|MOBILE` ghost toggle 두 줄이 분리되어 있었다. Mobile Preview에서 마우스가 상단을 스치기만 해도 dock이 예고 없이 내려와 그 아래 컨트롤을 가리는 문제가 있어, hover/focus auto-hide를 완전히 제거하고 모든 컨트롤을 한 dock 안에 합쳤다.
+>
+> **PHASE 1C-G 업데이트(중요, 최종 UX 확정): `HOME|CATEGORY` toggle은 제거됐다.** Studio는 최종 사용자에게 page selector를 주지 않는다 — 사용자는 Skin 자신의 navigation(카테고리 메뉴, 글 목록 링크)을 Preview iframe 안에서 실제로 클릭해 HOME → CATEGORY → POST를 돌아다닌다("페이지 탭을 고른다"가 아니라 "내 홈페이지를 실제로 돌아다닌다"). 그 자리엔 HOME이 아닐 때만 보이는 작은 `← PREVIEW`(Preview Back) 컨트롤이 대신 들어간다 — 아래 11-4-A절 참고. 자세한 계약은 `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` 1C-G 결과 절.
 
 - 평소에는 `transform: translateY(-100%)`로 화면 위쪽에 완전히 숨어 있고, 그 자리에는 얇은 `▾`/`▴` handle(`#studioTopDockHandle`, 실제 `<button>`)만 보인다.
 - **handle을 클릭할 때만** `#studioTopDockZone`에 `.is-open` 클래스가 토글되어 dock이 내려오거나(펼침) 다시 올라간다(접힘) — `mouseenter`/`mouseleave`/`focusin`/`focusout` 기반 자동 열림·닫힘은 없다. handle은 dock이 열려 있든 닫혀 있든 항상 같은 위치에서 클릭 가능하다(`aria-expanded`/`aria-controls`로 상태 노출).
-- 펼쳤을 때 한 줄에 담는 컨트롤(왼쪽→오른쪽): `← back` / `HOME|CATEGORY` toggle(11-4-A절) / `DESKTOP|MOBILE` toggle(11-4-B절) / `Save`·`Code`·`Settings`(Phase 1B에서는 셋 다 `disabled` — 실제 기능은 Slice 4/후속 몫, 15절).
-- `← back` 클릭 시 실제 화면 전환은 이 문서가 하지 않는다 — `window.parent`로 `{type:"studio:back"}`을 postMessage하면 admin 쪽 `admin-session.js`가 받아 `showAdminHome()`을 호출한다(2-2절에서 admin 바깥 back row를 숨긴 이유가 바로 이 대체 경로다).
+- 펼쳤을 때 한 줄에 담는 컨트롤(왼쪽→오른쪽): `← back` / Preview Back(11-4-A절) / `DESKTOP|MOBILE` toggle(11-4-B절) / `Save`·`Code`·`Settings`(Phase 1B에서는 셋 다 `disabled` — 실제 기능은 Slice 4/후속 몫, 15절).
+- `← back` 클릭 시 실제 화면 전환은 이 문서가 하지 않는다 — `window.parent`로 `{type:"studio:back"}`을 postMessage하면 admin 쪽 `admin-session.js`가 받아 `showAdminHome()`을 호출한다(2-2절에서 admin 바깥 back row를 숨긴 이유가 바로 이 대체 경로다). Preview Back(위 11-4-A절)과는 완전히 다른 버튼이다 — 하나는 Studio 자체를 떠나고, 하나는 Preview 안에서 한 단계 되돌아간다.
 - dock이 닫혀 있어도(화면 밖으로 밀려나 있어도) 버튼들은 여전히 DOM/tab 순서에 남아 있다 — `-100%` 이동만으로 뷰포트 밖으로 나가므로 `overflow:hidden` 없이도 시각적으로 사라진다.
 
-### 11-4. Top Dock 안의 두 toggle — `HOME | CATEGORY`(11-4-A) / `DESKTOP | MOBILE`(11-4-B)
+### 11-4. Top Dock 안의 컨트롤 — Preview Back(11-4-A) / `DESKTOP | MOBILE`(11-4-B)
 
-두 toggle 모두 Top Dock 한 줄 가운데(`#studioTopDock` 안 `.studio-top-dock-groups`)에 나란히 놓인다 — **배치만 같은 dock 안일 뿐, state는 서로 완전히 독립적**이다(HOME/CATEGORY 전환이 Desktop/Mobile 선택에 영향을 주지 않고 그 반대도 마찬가지, PHASE 1C-D 계약 그대로).
+Preview Back과 `DESKTOP | MOBILE` 모두 Top Dock 한 줄 가운데(`#studioTopDock` 안 `.studio-top-dock-groups`)에 나란히 놓인다 — **배치만 같은 dock 안일 뿐, state는 서로 완전히 독립적**이다(CATEGORY/POST 이동이 Desktop/Mobile 선택에 영향을 주지 않고 그 반대도 마찬가지).
 
-**11-4-A. `HOME | CATEGORY`** — PHASE 1C-D에서 추가된 Preview 페이지 전환. `templates.category`가 없거나 post형 category가 없을 때의 동작은 `AI_SKIN_PHASE1C_PAGE_CONTRACT.md`를 따른다(변경 없음, 위치만 이동).
+**11-4-A. Preview Back(`← PREVIEW`)** — PHASE 1C-G. HOME/CATEGORY/POST를 고르는 selector가 아니라, Skin 자신의 navigation 링크로 이동한 뒤 한 단계만 되돌아가는 control이다 — `previewHistory` 스택이 HOME 하나뿐일 때는(`previewHistory.length <= 1`) 자동으로 숨는다. `templates.category`/`templates.post`가 없거나 post-body region이 없을 때, 혹은 클릭한 카테고리가 post형이 아닐 때(banner 등)의 동작은 `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` 1C-G 결과 절을 따른다.
 
-**11-4-B. `DESKTOP | MOBILE`** — Slice 3 설계 초안의 `▾ Desktop/Mobile` **dropdown은 채택하지 않았다** — 옵션이 단 2개뿐이라 항상 나란히 노출되는 ghost 텍스트 버튼 한 쌍(`DESKTOP` / `MOBILE`, 사이에 얇은 구분선)으로 클릭 한 번에 바로 전환한다. 현재 모드는 굵은 글씨로 표시. Preview iframe 자체는 재생성/재로드하지 않는다 — `#studioPreviewStage`에 `.studio-preview-stage--mobile` 클래스를 토글해 iframe/wrap의 CSS 크기만 바꾼다(11-5/11-6절).
+**11-4-B. `DESKTOP | MOBILE`** — Slice 3 설계 초안의 `▾ Desktop/Mobile` **dropdown은 채택하지 않았다** — 옵션이 단 2개뿐이라 항상 나란히 노출되는 ghost 텍스트 버튼 한 쌍(`DESKTOP` / `MOBILE`, 사이에 얇은 구분선)으로 클릭 한 번에 바로 전환한다. 현재 모드는 굵은 글씨로 표시. Preview iframe 자체는 재생성/재로드하지 않는다 — `#studioPreviewStage`에 `.studio-preview-stage--mobile` 클래스를 토글해 iframe/wrap의 CSS 크기만 바꾼다(11-5/11-6절). HOME→CATEGORY→POST 이동 중에도 그대로 유지된다(Desktop로 자동 reset되지 않음).
 
-두 toggle 모두 Top Dock 안에 있으므로 **dock이 닫혀 있으면 이 toggle들도 화면 밖으로 함께 숨는다** — 예전처럼 dock과 무관하게 항상 노출되지는 않는다(대신 handle 클릭 한 번이면 언제든 다시 꺼낼 수 있다).
+Preview Back과 `DESKTOP | MOBILE` 모두 Top Dock 안에 있으므로 **dock이 닫혀 있으면 이 컨트롤들도 화면 밖으로 함께 숨는다** — 예전처럼 dock과 무관하게 항상 노출되지는 않는다(대신 handle 클릭 한 번이면 언제든 다시 꺼낼 수 있다).
 
 ### 11-5. Preview 구조 — iframe **1개만** 사용
 

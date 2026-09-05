@@ -149,7 +149,7 @@
 
 
     <!-- =====================================================
-         TOP DOCK — Back / HOME|CATEGORY / DESKTOP|MOBILE /
+         TOP DOCK — Back / Preview Back / DESKTOP|MOBILE /
          Save / Code / Settings 한 줄 통합 (Studio chrome 재정리
          라운드).
 
@@ -162,14 +162,17 @@
          열렸을 때도 handle이 dock 바로 위(z-index 상 dock보다
          위)에 그려지므로 다시 눌러 접을 수 있다.
 
-         HOME|CATEGORY(PHASE 1C-D)와 DESKTOP|MOBILE는 서로 완전히
-         독립된 state다(studio-preview.js setPreviewPageType()/
+         Preview Back(PHASE 1C-G)과 DESKTOP|MOBILE는 서로 완전히
+         독립된 state다(studio/preview/preview-navigation.js의
+         popPreviewNavigation()/studio-preview.js의
          setStudioViewportMode() 참고) — 이 dock 안에 나란히 놓인
-         것은 순전히 배치일 뿐, 로직은 각자 그대로다. CATEGORY
-         버튼은 post형 category가 하나도 없으면 disabled 처리되고
-         (updateStudioPageToggleAvailability()), templates.category
-         가 없어도 버튼 자체는 눌려서 unsupported overlay를 띄운다
-         (renderCategoryPreview()).
+         것은 순전히 배치일 뿐, 로직은 각자 그대로다. Preview Back은
+         Admin으로 나가는 #studioBackButton과 다른 버튼이다 — Preview
+         안에서 HOME이 아닐 때만(previewHistory.length > 1) 보이고,
+         클릭하면 한 단계만 되돌아간다. HOME/CATEGORY/POST는 더 이상
+         이 dock의 버튼으로 고르지 않는다 — Skin 자신의 navigation
+         링크를 Preview 안에서 실제로 클릭해 이동한다(studio/preview/
+         preview-bridge.js의 링크 interception 참고).
     ====================================================== -->
 
     <div
@@ -193,42 +196,20 @@
 
         <div class="studio-top-dock-groups">
 
-          <div
-            class="studio-page-toggle"
-            id="studioPageToggle"
-            role="group"
-            aria-label="Preview 페이지"
+          <button
+            type="button"
+            class="studio-preview-back-button"
+            id="studioPreviewBackButton"
+            hidden
           >
-
-            <button
-              type="button"
-              class="studio-page-toggle-option studio-page-toggle-option--active"
-              data-page-type="home"
-            >
-              Home
-            </button>
-
-            <span
-              class="studio-page-toggle-divider"
-              aria-hidden="true"
-            ></span>
-
-            <button
-              type="button"
-              class="studio-page-toggle-option"
-              id="studioPageToggleCategory"
-              data-page-type="category"
-              disabled
-            >
-              Category
-            </button>
-
-          </div>
-
+            ← PREVIEW
+          </button>
 
           <span
             class="studio-top-dock-divider"
+            id="studioPreviewBackDivider"
             aria-hidden="true"
+            hidden
           ></span>
 
 
@@ -482,6 +463,21 @@
   <script src="./editor/code-editor.js"></script>
 
   <script src="./studio-preview.js"></script>
+
+  <!-- =========================================================
+       NAVIGABLE PREVIEW (PHASE 1C-G)
+
+       preview-route.js는 site-path.js(SITE_BASE_PATH)에만
+       의존하는 순수 route parser다. preview-navigation.js는
+       studio-preview.js가 이미 선언해 둔 buildStudioHomePreviewSkin/
+       postRenderToFrame/setStudioPreviewOverlay/
+       updateStudioCodeButtonState와 skin-context.js/
+       skin-template.js를 함께 쓴다 — 그래서 이 셋 다음에 로드한다.
+  ========================================================== -->
+
+  <script src="./preview/preview-route.js"></script>
+
+  <script src="./preview/preview-navigation.js"></script>
 
   <script src="./studio-state.js"></script>
 
