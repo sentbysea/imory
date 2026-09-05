@@ -400,6 +400,51 @@ async function renderPostPreviewFor(postId) {
     overlay로 전환한다.
   */
 
+  /* =========================================================
+     실제 본문(PHASE 1C-I) — outer chrome(위 postRenderToFrame)과는
+     항상 별도 메시지로 보낸다(post.content는 context에 절대 담기지
+     않는다, PHASE1C 7-2절). postMessage 전송 순서가 도착 순서와
+     같으므로, iframe은 이 메시지를 처리할 때 이미 이번 POST의
+     post-body region을 갖고 있다(preview-bridge.js).
+
+     buildStudioPostBodyPayload()는 Supabase를 왕복하므로 그 사이에
+     사용자가 다른 곳으로 이동했을 수 있다 — context fetch와 동일한
+     staleness 가드(token + 현재 위치)로 stale 응답을 버린다.
+  ========================================================== */
+
+  let bodyPayload;
+
+  try {
+
+    bodyPayload =
+      await buildStudioPostBodyPayload(
+        currentOwnerId,
+        postId
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[preview-navigation] buildStudioPostBodyPayload failed",
+      err
+    );
+
+    return;
+
+  }
+
+  if (
+    token !== previewNavToken ||
+    getCurrentPreviewLocation().type !== "post" ||
+    !bodyPayload
+  ) {
+    return;
+  }
+
+  postPostBodyToFrame(
+    bodyPayload
+  );
+
 }
 
 

@@ -473,6 +473,28 @@
 
   <script src="./preview/preview-route.js"></script>
 
+  <!-- =========================================================
+       STUDIO POST ACTUAL BODY PREVIEW (PHASE 1C-I)
+
+       preview-post-body.js가 재사용하는 공개 POST Viewer 서식
+       파이프라인 — 이 넷은 이미 posts/*에서 쓰이는 순수 함수
+       모음이라 여기서 새로 만들지 않는다(파일 자체는 수정하지
+       않음). posts/style/posts-style-preset.js는 getSafeHighlightColor/
+       getPresetHighlightColor만 가져다 쓴다(loadPostStylePreset* 는
+       getSiteOwner()/admin swatch UI에 의존해서 재사용하지 않는다,
+       preview-post-body.js 파일 상단 주석 참고).
+  ========================================================== -->
+
+  <script src="../posts/posts-sanitize.js"></script>
+
+  <script src="../posts/style/posts-style-preset.js"></script>
+
+  <script src="../posts/style/posts-style-dialogue.js"></script>
+
+  <script src="../posts/style/posts-style-render.js"></script>
+
+  <script src="./preview/preview-post-body.js"></script>
+
   <script src="./preview/preview-navigation.js"></script>
 
   <script src="./studio-state.js"></script>

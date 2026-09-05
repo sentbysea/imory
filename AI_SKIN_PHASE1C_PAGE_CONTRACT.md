@@ -1352,3 +1352,94 @@ CATEGORY/POST도 HOME과 완전히 같은 `createLayoutCss(columnCount)` 규칙�
 - **CATEGORY/POST Code Editor 지원**: 현재 Code Editor는 여전히 HOME만 편집한다(8/29절 원칙 유지) — 사용자가 생성된 CATEGORY/POST 마크업을 직접 손보고 싶어지면 필요해질 확장.
 - **실 계정 최종 확인**: 26-11절의 fixture 기반 확인을 실제 Supabase 프로젝트 + 로그인 세션으로 재현(Questionnaire 제출 → 실제 Studio에서 HOME→CATEGORY→POST 탐색).
 - **레이아웃 마이크로 튜닝**: 지금은 세 homeStyle 전부 같은 nav/main을 쓰므로, 실제 사용자 반응을 본 뒤 CATEGORY/POST의 meta 블록 내용(예: 글 개수, 카테고리 설명 등)을 확장할지는 열린 질문으로 남긴다.
+
+---
+
+## 27. Slice 1C-I 구현 결과 (실제 구현 완료, 2026-09-06)
+
+26-12절이 첫 항목으로 예고한 "POST 실제 본문 Preview"를 완료했다 — Studio Preview에서 POST로 이동하면 protected post-body region(`[data-imory-region="post-body"]`)이 더 이상 항상 빈 placeholder가 아니라, 그 글의 실제 본문(Quote Preset/대화체 서식 포함)을 보여준다. Schema/generator/DB/Code Editor 확장, Preview Back 재설계, pipeline 리팩터링 — 전부 이번에도 손대지 않았다(문서 14절 원칙 그대로).
+
+### 27-1. 조사 결과
+
+- **Studio POST data flow**(변경 전): `preview-navigation.js`의 `renderPostPreviewFor()`가 `buildPostSkinContext()`로 outer chrome(title/category/date)만 만들어 iframe에 `postMessage("preview:render")`로 보낸다. iframe(`preview-bridge.js`)의 `renderSkin()`이 `data-imory-region="post-body"`를 만나면 `skin-render.js`의 `applySkinRegion()`이 그 안을 항상 비워 둔다(1C-G/1C-H 완료 보고에 이미 "본문은 mount하지 않는다"고 명시돼 있었다) — 즉 "본문 mount 로직 자체가 아직 없다"였지, 있는데 빠진 게 아니었다.
+- **public POST rendering flow**: `posts/view/posts-view-detail.js`의 `openPostPage()`가 (1) `posts`에서 `content_type`/`quote_preset_id` 등을 조회, (2) secret이면 게이트, 아니면 `post_contents`에서 `content`를 조회, (3) `renderPostDetailBody()`가 `content_type === "html"`이면 sanitize 없이 그대로 innerHTML, 아니면 `loadPostStylePreset()`/`loadPostStylePresetById()`(`posts/style/posts-style-preset.js`)로 프리셋을 불러온 뒤 `renderStyledPostContentInto()`(`posts/style/posts-style-render.js`)로 렌더한다. 이 함수는 내부적으로 `getPostContentAsSafeHTML()`(`posts/posts-sanitize.js`)로 sanitize하고, `applyActionDialogueStyles()`(`posts/style/posts-style-dialogue.js`)로 대화체 강조를 적용한다.
+- **재사용 가능 여부**: `renderStyledPostContentInto()`/`getPostContentAsSafeHTML()`/`applyActionDialogueStyles()`는 순수 함수(컨테이너 인자 하나로 동작, 전역 DOM ref 의존 없음)라 그대로 재사용 가능했다. 다만 `posts-sanitize.js`의 하이라이트 색 sanitize가 `getSafeHighlightColor()`(`posts/style/posts-style-preset.js`)를 부르고, 그 함수가 전역 `postStyleSettings`를 직접 읽는다는 숨은 결합이 있었다 — `posts/style/posts-style-preset.js` 자체의 `loadPostStylePreset()`/`loadPostStylePresetById()`는 `getSiteOwner()`(slug 기반 URL 라우팅 전제, Studio에는 없음)와 admin 전용 swatch UI 업데이트 함수(`updatePresetHighlightSwatch()` 등, Studio DOM에 존재하지 않음)에 의존해서 그대로 가져다 쓰면 깨진다는 것도 이번에 확인했다. 그래서 서식 파이프라인(sanitize/render/dialogue)은 파일째로 그대로 재사용하고, "프리셋을 어떻게 찾아서 불러올지"만 Studio가 이미 가진 `currentOwnerId`(로그인 사용자 id, slug 아님) 기준으로 별도 작성했다 — 조회 SQL 모양은 동일하되 `getSiteOwner()`/swatch UI 의존을 걷어낸 버전이다. 기존 `posts/style/posts-style-preset.js`/`posts-sanitize.js`/`posts-style-render.js`/`posts-style-dialogue.js`는 **한 줄도 수정하지 않았다**.
+- **최소 변경 지점**: (1) 본문 조회+렌더를 담당하는 새 Studio 전용 모듈 하나, (2) 그 결과를 iframe에 전달할 postMessage 타입 하나(기존 `preview:render`와 분리 — `post.content`가 Skin Context에 절대 들어가지 않는다는 계약, 7-2절을 지키기 위해), (3) iframe에서 그 메시지를 받아 region에 주입하는 핸들러 하나, (4) `renderPostPreviewFor()`에서 그 셋을 연결하는 몇 줄. `skin-render.js`/`skin-context.js`는 이미 충분해서 손대지 않았다(9절 "existing API가 이미 충분하면 수정하지 않는다").
+
+### 27-2. 변경/생성 파일
+
+- **생성** `studio/preview/preview-post-body.js` — `fetchStudioPostRecord()`(posts.content_type/quote_preset_id, user_id+id scope, `skin-context.js`의 `fetchSkinPostById()`와 동일한 scope 원칙), `fetchStudioPostContent()`(post_contents.content, post_id로만 조회 — Studio는 항상 site owner 본인 세션이라 secret gate 분기가 아예 없다), `loadStudioPostStyleSettings()`(quote_preset_id 우선 → is_active 우선 → name="Vibe" 폴백, ownerId 기준으로 `posts-style-preset.js`의 우선순위를 재구현), `buildStudioPostBodyPayload()`(위 세 함수를 조합해 `{ html, containerStyle, isHtmlContent }` 반환). 전역 `postStyleSettings`를 `posts/style/posts-style-preset.js`가 기대하는 바로 그 이름으로 선언한다(파일 상단 주석에 이 결합을 명시).
+- **수정** `studio/index.html` — `posts/posts-sanitize.js`/`posts/style/posts-style-preset.js`/`posts/style/posts-style-dialogue.js`/`posts/style/posts-style-render.js`/`studio/preview/preview-post-body.js`를 `preview-navigation.js` 앞에 추가로 로드(로드 시점에 top-level 부작용이 없음을 사전에 확인 — 27-1절).
+- **수정** `studio/preview/preview-navigation.js` — `renderPostPreviewFor()`가 `postRenderToFrame()` 직후 `buildStudioPostBodyPayload(currentOwnerId, postId)`를 호출하고, context fetch와 동일한 staleness 가드(token + 현재 위치)를 통과하면 `postPostBodyToFrame()`으로 전달한다.
+- **수정** `studio/studio-preview.js` — `PREVIEW_MSG_POST_BODY = "preview:post-body"` 상수와 `postPostBodyToFrame(payload)` 추가(기존 `postRenderToFrame()`과 같은 자리, 같은 `studioPreviewFrame.contentWindow.postMessage` 패턴 — pending queue는 재사용하지 않는다, 27-3절).
+- **수정** `studio/preview/preview-bridge.js` — 같은 `PREVIEW_MSG_POST_BODY` 상수(두 문서가 다른 browsing context라 상수를 공유할 수 없다는 기존 컨벤션 그대로), `isValidPostBodyMessage()`/`handlePostBodyMessage()` 추가, 기존 message listener에 분기 추가.
+- **수정** `studio/studio-lifecycle-scenario.html` — production과 동일한 script 로드 순서 미러링, scenario `r`의 `posts`에 `content_type`/`quote_preset_id` 필드 추가 + `post_contents`/`quote_presets` fixture 테이블 추가(식별 가능한 본문 "Scenario R actual post body." + "Second paragraph.", **fixture 데이터에만 존재** — production `skin-generator.js` POST template에는 절대 넣지 않았다).
+- **수정** `studio/studio-navigation-test.html` — scenario R의 기존 "R-POST-REGION"(본문이 항상 비어 있다는 검사)을 이번 변경의 목적 그대로 교체·확장(27-4절). scenario N의 "N9" 라벨은 로직 변경 없이 문구만 갱신(N 시나리오엔 `post_contents`/`quote_presets` fixture가 없어 여전히 빈 region으로 끝난다는 점을 명확히 함).
+- **변경 없음**: `skin/skin-render.js`/`skin-context.js`/`skin-sanitize.js`/`skin-generator.js`/`skin-package-normalize.js`/`skin-template.js`, `posts/*`(전부 읽기 전용 재사용), `studio/editor/code-editor.js`, `skin-questionnaire/*`, DB/migration/RPC 전부, `studio/preview/preview-route.js`, Preview Back 마크업/로직.
+
+### 27-3. postMessage 계약 — `post.content`는 여전히 Context에 없다
+
+`preview:render`의 `context.post`는 지금도 `id`/`title`/`publishedAt`/`categoryName`/`categoryHref` 5개뿐이다(6-1절 그대로) — 본문은 별도 메시지 `preview:post-body`(`{ type, html, containerStyle, isHtmlContent }`)로만 전달한다. 이렇게 나눈 이유:
+
+1. **7-2절 계약 유지**: Skin의 `data-imory-bind` 경로로는 여전히 본문에 접근할 수 없다. Context에 `post.content`를 추가하는 대신 완전히 다른 채널을 쓰면, 이 계약을 "지키기 위해 조심한다"가 아니라 "애초에 접근할 방법이 없다"로 만들 수 있다.
+2. **순서 보장**: 같은 window에서 같은 대상으로 보낸 postMessage는 도착 순서가 전송 순서와 같다(HTML Living Standard) — `renderPostPreviewFor()`가 `postRenderToFrame()`(region을 새로 만듦) 다음에 `postPostBodyToFrame()`(그 region에 본문을 채움)을 호출하므로, iframe이 두 메시지를 처리하는 시점엔 항상 region이 먼저 존재한다. 별도의 ack 왕복이 필요 없다.
+3. **`containerStyle`을 `html`과 분리한 이유**: `applyPostBodyStyles()`(`posts/style/posts-style-render.js`)가 폰트/색/줄간격 등을 컨테이너 자신의 인라인 style로 적용한다(자식이 아니라) — `offscreen.innerHTML`만 보내면 이 서식이 통째로 사라진다. `preview-post-body.js`가 오프스크린 `<div>`에 `renderStyledPostContentInto()`를 실제로 실행한 뒤 그 `style` 속성과 `innerHTML`을 분리해서 보내고, `preview-bridge.js`의 `handlePostBodyMessage()`가 실제 region 엘리먼트에 그대로 적용한다 — 공개 POST의 `#postDetailContent`가 이 스타일들을 자기 자신에게 직접 받는 것과 동일한 결과(불필요한 wrapper `<div>` 하나 끼워 넣지 않음).
+4. **html-content 모드는 sanitize를 추가하지 않는다**: `content_type === "html"`이면 공개 POST Viewer와 동일하게 저장된 HTML을 그대로 `innerHTML`에 쓴다(`containerStyle: ""`) — 기존에 이미 신뢰하는 owner 콘텐츠 경계를 그대로 유지했을 뿐, 새 신뢰 경계를 추가하지 않았다.
+5. **iframe 재로드/재렌더가 없는 한 본문은 그대로 남는다**: Desktop/Mobile 전환은 iframe의 CSS 폭만 바꿀 뿐 `postMessage`를 다시 보내지 않으므로(11-5절), 이미 주입된 본문이 사라지거나 중복 mount될 일이 없다 — 이번 Slice가 별도로 처리할 게 없었다(27-5절에서 실측 확인).
+
+### 27-4. `studio-navigation-test.html` scenario R 확장
+
+기존 "R-POST-REGION"(mount 시점에 region이 항상 비어 있다는 검사, 1C-H가 세운 검사)을 이번 변경의 목적과 정면으로 배치되므로 아래로 교체·확장했다:
+
+| 검사 | 내용 |
+|---|---|
+| R-POST-BODY | fixture `post_contents`의 실제 본문이 protected region 안에 mount된다 |
+| R-POST-BODY-PARA | 여러 문단(두 번째 `<p>`)도 함께 mount된다 |
+| R-POST-BODY-MOBILE | Desktop → Mobile 전환 후에도 본문이 사라지지 않는다(재렌더 없음이므로 postMessage가 다시 오지 않음을 실측) |
+| R-POST-BODY-MOBILE-NODUP | Mobile 전환으로 본문이 중복 mount되지 않는다(`.skin-post-body-slot`이 정확히 1개) |
+| R-POST-TEMPLATE-PURITY | `generateInitialSkin()`을 다시 호출해 얻은 POST template 소스 자체에는 fixture 본문 텍스트도 `post.content` bind도 없다 — "Skin template != actual content storage" 계약을 코드로 고정 |
+| R-POST-B / R-POST-B-BODY | 같은 CATEGORY에서 다른 글(Secret Note, id=402)로 이동하면 그 글 자신의 본문이 mount되고 이전 글(Hello World)의 본문이 남아있지 않다 |
+| R-BACK1B | POST → CATEGORY로 되돌아가면 애초에 CATEGORY template에는 post-body region 자체가 없다(stale 본문이 새어 나올 자리가 없음을 구조적으로 확인) |
+
+scenario N의 "N9"은 검사 로직(여전히 `childNodes.length === 0`) 자체는 바꾸지 않았다 — scenario N fixture에는 `post_contents`/`quote_presets`가 없으므로 `buildStudioPostBodyPayload()`가 빈 문자열로 렌더해 region이 여전히 비어 있는 게 맞는 동작이다(9절 empty 케이스, crash 없음). 라벨 문구만 "이번 Slice에서 mount하지 않는다"(더 이상 사실이 아님)에서 "이 fixture엔 본문 데이터가 없어서 비어 있다"로 갱신했다.
+
+### 27-5. Navigation lifecycle / Desktop·Mobile 결과
+
+R-POST-B/R-POST-B-BODY/R-BACK1B(위 표)로 "POST A → Back → CATEGORY → POST B" 전체를 실제로 검증했다 — A의 본문이 B에 남지 않는 이유는 매 POST 진입마다 `postRenderToFrame()`이 region을 포함해 컨테이너를 통째로 다시 그리기 때문이다(`renderSkin()`의 기존 mount 동작, 7-6-2절이 이미 문서화한 "region은 매 렌더마다 사라진다"는 특성을 이번엔 오히려 "stale 본문이 새어 나올 수 없다"는 안전장치로 활용했다). CATEGORY template 자체엔 post-body region이 없으므로 "CATEGORY에 본문이 남는다"는 시나리오는 애초에 발생할 수 없다.
+
+Desktop/Mobile은 R-POST-BODY-MOBILE/-NODUP로 확인했고, 실제 Chromium 스크린샷으로도 재확인했다 — Desktop 1280px/Mobile 390px(scale 적용) 양쪽에서 "Hello World" 아래 "Scenario R actual post body." / "Second paragraph." 두 문단이 정확히 한 번만 보인다. Desktop→Mobile 전환이 `postMessage`를 다시 보내지 않는다는 기존 설계(11-5절) 덕분에 이 Slice가 별도로 처리할 것이 없었다.
+
+### 27-6. Secret post 보안 — 변경 없음
+
+- 새 SELECT 컬럼 없음: `fetchStudioPostRecord()`는 `posts.content_type`/`quote_preset_id`만 추가로 select한다(제목/날짜 등은 이미 `buildPostSkinContext()`가 조회). `secret_password_hash`는 어디서도 select하지 않는다(기존과 동일, 6-1/7-2절).
+- `get_secret_post_content` RPC를 호출하지 않는다 — Studio는 항상 site owner 본인의 인증 세션이므로(`loadCurrentUserId()`가 `auth.getUser()`로 직접 얻은 id, slug 경로 아님) `posts-view-detail.js`의 `isOwnerViewing === true` 분기와 동일한 신뢰 경계를 그대로 물려받는다 — secret 글도 비밀번호 없이 본문을 읽지만, 이는 "Studio가 secret gate를 우회한다"가 아니라 "Studio 접근 자체가 이미 owner 인증을 전제한다"는 기존 경계다(다른 사용자가 Studio에서 남의 Skin을 미리보기하는 경로 자체가 없다).
+- anon 정책 확대 없음, RLS/GRANT 변경 없음, migration 없음(27-2절 "변경 없음" 목록에 DB 전부 포함).
+- `content_type === "html"` 콘텐츠는 sanitize 없이 그대로 innerHTML로 주입하지만, 이는 공개 POST Viewer가 이미 (owner 자신의 콘텐츠에 한해) 신뢰하고 있던 동일한 경계를 그대로 재사용한 것이지 새로 추가한 신뢰 경계가 아니다(27-3절 4).
+
+### 27-7. 테스트 결과 + 회귀
+
+`npx playwright`(headless Chromium) + 로컬 정적 서버(`http://127.0.0.1:8934/`)로 관련 테스트 하네스 전부 재실행:
+
+| 파일 | 결과 |
+|---|---|
+| `studio/studio-navigation-test.html`(확장) | **55 PASS / 0 FAIL**(기존 48 + 신규 7) |
+| `studio/studio-lifecycle-test.html` | 15 PASS / 0 FAIL(회귀 없음) |
+| `studio/studio-multipage-test.html` | 16 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-generator-test.html` | 24 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-post-region-test.html` | 17 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-post-integration-test.html` | 20 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-render-test.html` | 39 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-render-security-test.html` | 23 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-css-validate-test.html` | 23 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-page-context-test.html` | 32 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-package-normalize-test.html` | 12 PASS / 0 FAIL(회귀 없음) |
+
+전 항목 26절 baseline과 동일하거나(회귀 없음) 이번에 늘어난 항목(scenario R +7)이며, **FAIL 0건**. `node --check`로 새/수정 JS 파일 4개(`preview-post-body.js`/`preview-navigation.js`/`preview-bridge.js`/`studio-preview.js`) 구문도 확인했다.
+
+**실제 Chromium 스크린샷**(scenario `r`, mock Supabase)으로 Desktop/Mobile 양쪽에서 HOME → LOG → CATEGORY → "Hello World" → POST 흐름을 재현해 "Hello World" 제목 아래 실제 본문 두 문단이 표시되는 것을 육안으로도 확인했다(27-5절). 이 세션도 26-11절과 동일한 한계로 실제 Supabase 프로젝트/로그인 세션은 없다 — 실 계정 최종 확인은 여전히 다음 세션 권장 사항이다.
+
+### 27-8. 다음 추천 Slice
+
+- **CATEGORY/POST Code Editor 지원**(26-12절에서 이월).
+- **실 계정 최종 확인**(26-12절에서 이월, 이제 POST 실제 본문까지 포함).
+- **HTML 모드 본문의 폭 자동 축소**: 공개 POST Viewer는 `content_type === "html"` 글에 대해 `fitHtmlPostContentToViewport()`(`posts/view/posts-view-html-fit.js`)로 화면 폭에 맞게 축소한다 — 이번 Slice는 범위 밖으로 남겼으므로(문서 14절 "예상 후보" 밖), 폭이 고정된 HTML 붙여넣기 글을 Studio POST Preview에서 열면 공개 화면과 달리 잘리거나 가로 스크롤이 생길 수 있다. 실제로 필요해지는 시점에 별도로 붙인다.

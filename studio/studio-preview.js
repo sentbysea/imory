@@ -44,6 +44,7 @@ const PREVIEW_MSG_READY = "preview:ready";
 const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
+const PREVIEW_MSG_POST_BODY = "preview:post-body";
 
 /*
   studio(이 문서) -> admin(부모 window)로 보내는 메시지. admin은
@@ -597,6 +598,48 @@ function postRenderToFrame(payload) {
       type: PREVIEW_MSG_RENDER,
       skin: payload.skin,
       context: payload.context
+    },
+    window.location.origin
+  );
+
+}
+
+
+/* =========================================================
+   postPostBodyToFrame(payload) (PHASE 1C-I)
+
+   preview-navigation.js의 renderPostPreviewFor()가 postRenderToFrame()
+   직후에 호출한다 — postMessage 전송 순서가 그대로 도착 순서이므로
+   (같은 window에서 같은 대상으로 보낸 메시지는 순서가 보장된다),
+   iframe은 항상 "preview:render"로 post-body region을 먼저(다시)
+   만든 뒤에 이 본문을 그 region에 채운다(preview-bridge.js).
+
+   본문(post.content)은 절대 "preview:render"의 context에 담지 않는다
+   — Skin의 data-imory-bind 경로로는 여전히 본문에 접근할 수 없다는
+   계약(PHASE1C 7-2절)을 그대로 유지하기 위해 완전히 별도의 메시지
+   타입으로만 보낸다.
+
+   previewFrameReady가 아직 false인 경우(이론상 HOME이 먼저 렌더된
+   뒤에만 POST로 이동할 수 있으므로 실제로는 도달하지 않는다,
+   previewHistory는 항상 {type:"home"}에서 시작한다)는 조용히
+   무시한다 — postRenderToFrame()처럼 pending queue에 태우지 않는다
+   (본문은 항상 "이번 POST 렌더 하나"에만 유효한 1회성 데이터라
+   나중에 다른 렌더 뒤에 뒤늦게 도착하면 오히려 stale 본문을 다른
+   페이지에 붙이는 사고가 된다).
+========================================================== */
+
+function postPostBodyToFrame(payload) {
+
+  if (!previewFrameReady) {
+    return;
+  }
+
+  studioPreviewFrame.contentWindow.postMessage(
+    {
+      type: PREVIEW_MSG_POST_BODY,
+      html: payload.html,
+      containerStyle: payload.containerStyle,
+      isHtmlContent: payload.isHtmlContent
     },
     window.location.origin
   );

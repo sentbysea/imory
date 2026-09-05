@@ -41,6 +41,7 @@ const PREVIEW_MSG_READY = "preview:ready";
 const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
+const PREVIEW_MSG_POST_BODY = "preview:post-body";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -115,6 +116,58 @@ function handleRenderMessage(data) {
     });
 
   }
+
+}
+
+/* =========================================================
+   post-body 주입 (PHASE 1C-I)
+
+   본문 자체는 renderSkin()이 보지 못한다 — parent(studio/preview/
+   preview-post-body.js)가 이미 공개 POST Viewer와 동일한 sanitize/
+   서식 파이프라인을 거쳐 만든 안전한 결과물만 여기로 넘어온다.
+   이 함수는 skin-post.js/posts-view-detail.js의 "caller가 mount된
+   region에 직접 본문을 채운다"는 책임 분리를 이 iframe 경계 안에서
+   그대로 재현할 뿐, 새로운 sanitize 로직을 추가하지 않는다.
+
+   renderSkin()이 매 렌더(mount/update)마다 컨테이너를 통째로
+   다시 그리므로(PHASE1C 7-6-2절 미해결 지점) region은 항상
+   "preview:render" 직후에만 유효하다 — 그래서 currentRoot에서
+   매번 다시 querySelector한다(캐싱 금지, skin-post.js와 동일
+   원칙). region이 없으면(Skin에 본문 자리가 없거나 아직 렌더
+   전이면) 조용히 무시한다 — hasPostBodyRegion=false는 이미
+   "preview:rendered"에서 studio-preview.js에 전달되어 unsupported
+   overlay로 처리된다.
+========================================================== */
+
+function isValidPostBodyMessage(data) {
+
+  return (
+    data &&
+    typeof data === "object" &&
+    data.type === PREVIEW_MSG_POST_BODY &&
+    typeof data.html === "string" &&
+    typeof data.containerStyle === "string" &&
+    typeof data.isHtmlContent === "boolean"
+  );
+
+}
+
+function handlePostBodyMessage(data) {
+
+  if (!renderInstance) {
+    return;
+  }
+
+  const region =
+    renderInstance.getRegion(POST_BODY_REGION_NAME);
+
+  if (!region) {
+    return;
+  }
+
+  region.setAttribute("style", data.containerStyle);
+
+  region.innerHTML = data.html;
 
 }
 
@@ -206,6 +259,18 @@ window.addEventListener("message", (event) => {
     }
 
     handleRenderMessage(data);
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_POST_BODY) {
+
+    if (!isValidPostBodyMessage(data)) {
+      postToParent({ type: PREVIEW_MSG_ERROR, message: "malformed preview:post-body payload" });
+      return;
+    }
+
+    handlePostBodyMessage(data);
     return;
 
   }

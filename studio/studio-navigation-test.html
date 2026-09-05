@@ -296,7 +296,7 @@
       );
 
       record(
-        "N9. post-body region이 protected placeholder(항상 빈 컨테이너)로 존재한다 — 본문은 이번 Slice에서 mount하지 않는다",
+        "N9. 이 fixture는 post_contents/quote_presets 데이터가 없으므로(scenario N은 outer chrome 전용) post-body region이 빈 컨테이너로 남는다 — crash 없이 조용히 비어 있음(PHASE 1C-I 9절 empty 케이스)",
         !!bodyRegionEmpty
       );
 
@@ -665,18 +665,71 @@
         !!postRendered && postRendered.textContent === "Hello World"
       );
 
-      const bodyRegionEmpty = await waitFor(
+      /*
+        PHASE 1C-I — post-body region은 더 이상 빈 placeholder로
+        남지 않는다. preview-post-body.js가 fixture의 post_contents
+        (studio-lifecycle-scenario.html 참고)를 조회해 protected
+        region 안에 실제 본문을 mount할 때까지 기다린다("preview:render"
+        와 "preview:post-body"는 별도 postMessage라 약간의 지연이
+        있다 — mock 자체에도 MOCK_LATENCY_MS가 있다).
+      */
+
+      const bodyMounted = await waitFor(
         () => {
           const region = innerDoc() && innerDoc().querySelector(".skin-post-body-slot");
-          return region && region.childNodes.length === 0 ? region : null;
+          return region && region.textContent.includes("Scenario R actual post body.") ? region : null;
         },
-        2000,
+        4000,
         50
       );
 
       record(
-        "R-POST-REGION. 생성기가 넣은 placeholder 문단(<p class=skin-authored-placeholder>)이 mount 시점에 비워진다(protected region 계약)",
-        !!bodyRegionEmpty
+        "R-POST-BODY. fixture post_contents의 실제 본문이 protected post-body region 안에 mount된다",
+        !!bodyMounted
+      );
+
+      record(
+        "R-POST-BODY-PARA. 여러 문단(두 번째 <p>)도 함께 mount된다",
+        !!bodyMounted && bodyMounted.textContent.includes("Second paragraph.")
+      );
+
+      /*
+        PHASE 1C-I 검증 5단계 — Desktop/Mobile 전환은 iframe을
+        재생성하지 않으므로("iframe은 절대 재생성/재로드하지
+        않는다", studio-preview.js) postMessage가 다시 오지 않는다.
+        즉 Mobile로 전환해도 이미 mount된 본문이 그대로 남아있어야
+        하고(사라짐 없음), 다시 렌더되며 중복 mount되지도 않아야
+        한다.
+      */
+
+      doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="mobile"]').click();
+
+      record(
+        "R-POST-BODY-MOBILE. Desktop -> Mobile 전환 후에도 본문이 사라지지 않는다(재렌더 없음)",
+        !!(innerDoc() && innerDoc().querySelector(".skin-post-body-slot")?.textContent.includes("Scenario R actual post body."))
+      );
+
+      record(
+        "R-POST-BODY-MOBILE-NODUP. Mobile 전환으로 본문이 중복 mount되지 않는다",
+        innerDoc().querySelectorAll(".skin-post-body-slot").length === 1
+      );
+
+      doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="desktop"]').click();
+
+      record(
+        "R-POST-TEMPLATE-PURITY. generator가 만든 POST template 소스 자체에는 fixture 본문 텍스트도, post.content bind도 없다(Skin template != actual content storage)",
+        (function () {
+          const regenerated = win.generateInitialSkin({
+            layoutPreference: "two-column",
+            baseAppearance: "light",
+            homeStyle: "index"
+          });
+          const postHtml = regenerated.templates.post.html;
+          return (
+            !postHtml.includes("Scenario R actual post body.") &&
+            !postHtml.includes("post.content")
+          );
+        })()
       );
 
       clickAnchor(backButton());
@@ -690,6 +743,55 @@
       record(
         "R-BACK1. Preview Back(POST -> CATEGORY)이 실제 생성된 Skin에서도 동작한다",
         !!backToCategory && backToCategory.textContent === "LOG"
+      );
+
+      /*
+        PHASE 1C-I 요구사항(문서 10/13-D절) — POST A -> Back ->
+        CATEGORY -> POST B로 이동해도 A의 본문이 B에 남지 않아야
+        한다. 같은 CATEGORY에서 다른 글(Secret Note)로 다시
+        들어간다.
+      */
+
+      clickAnchor(findAnchorByText(innerDoc(), ".skin-category-posts-link", "🔒 Secret Note"));
+
+      const postBRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".skin-post-title")) || null,
+        4000,
+        50
+      );
+
+      record(
+        "R-POST-B. CATEGORY에서 다른 글(Secret Note)로 이동하면 그 글의 post.title이 바인딩된다",
+        !!postBRendered && postBRendered.textContent === "🔒 Secret Note"
+      );
+
+      const bodyBMounted = await waitFor(
+        () => {
+          const region = innerDoc() && innerDoc().querySelector(".skin-post-body-slot");
+          return region && region.textContent.includes("Secret Note body.") ? region : null;
+        },
+        4000,
+        50
+      );
+
+      record(
+        "R-POST-B-BODY. POST B(Secret Note)는 자신의 본문을 mount하고, POST A(Hello World)의 stale 본문이 남아있지 않다",
+        !!bodyBMounted && !bodyBMounted.textContent.includes("Scenario R actual post body.")
+      );
+
+      clickAnchor(backButton());
+
+      const backToCategoryAgain = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".skin-category-title")) || null,
+        3000,
+        50
+      );
+
+      record(
+        "R-BACK1B. POST B에서 CATEGORY로 되돌아가면 어느 글의 본문도 CATEGORY 화면에 남아있지 않다(post-body region 자체가 CATEGORY template에 없음)",
+        !!backToCategoryAgain &&
+          backToCategoryAgain.textContent === "LOG" &&
+          !(innerDoc() && innerDoc().querySelector(".skin-post-body-slot"))
       );
 
       clickAnchor(backButton());

@@ -656,8 +656,20 @@
                 { id: "303", user_id: "user-r", name: "FRIENDS", type: "banner", sort_order: 3 }
               ],
               posts: [
-                { id: "401", user_id: "user-r", title: "Hello World", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301" },
-                { id: "402", user_id: "user-r", title: "Secret Note", created_at: "2026-01-02T00:00:00Z", visibility: "secret", category_id: "301" }
+                { id: "401", user_id: "user-r", title: "Hello World", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301", content_type: "rich", quote_preset_id: null },
+                { id: "402", user_id: "user-r", title: "Secret Note", created_at: "2026-01-02T00:00:00Z", visibility: "secret", category_id: "301", content_type: "rich", quote_preset_id: null }
+              ],
+              /*
+                PHASE 1C-I — 실제 식별 가능한 본문은 fixture 데이터
+                에만 존재한다(production skin-generator.js POST
+                template에는 절대 하드코딩하지 않는다, 문서 12절).
+              */
+              post_contents: [
+                { post_id: "401", content: "<p>Scenario R actual post body.</p><p>Second paragraph.</p>" },
+                { post_id: "402", content: "<p>Secret Note body.</p>" }
+              ],
+              quote_presets: [
+                { id: "501", user_id: "user-r", name: "Vibe", is_active: true, settings: {} }
               ],
               banners: []
             },
@@ -704,6 +716,12 @@
   <script src="./editor/code-editor.js"></script>
   <script src="./studio-preview.js"></script>
   <script src="./preview/preview-route.js"></script>
+  <!-- PHASE 1C-I — production과 동일한 순서(studio/index.html 참고) -->
+  <script src="../posts/posts-sanitize.js"></script>
+  <script src="../posts/style/posts-style-preset.js"></script>
+  <script src="../posts/style/posts-style-dialogue.js"></script>
+  <script src="../posts/style/posts-style-render.js"></script>
+  <script src="./preview/preview-post-body.js"></script>
   <script src="./preview/preview-navigation.js"></script>
   <script src="./studio-state.js"></script>
 
