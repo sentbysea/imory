@@ -253,7 +253,7 @@ v4는 onboarding도 Questionnaire를 쓴다는 전제로 이 로직을 "onboardi
 // skin/skin-generator.js
 generateInitialSkin(answers) -> SkinPackage
 ```
-- 순수 함수, DOM/Supabase 접촉 없음. `layoutPreference`로 뼈대(1/2/3단)를, `homeStyle`로 섹션 구성/순서를 결정한다 — `intro`는 소개/공지 블록을 최상단 중앙에 크게 배치하고 카테고리를 주변부로, `index`는 카테고리 목록 + 최근 글 그리드를 중심에, `profile`은 프로필 블록을 최상단 전체 폭으로 두고 그 아래 카테고리/글 목록을 배치한다. 9가지 조합(3×3)을 전부 하드코딩하지 않고 "섹션 블록 문자열 + 순서 배열 재배치 + 레이아웃 그리드 CSS 골격"의 조합으로 구현한다. CSS는 `baseAppearance`에 대응하는 색상 변수 맵 + 고정 `balanced` density 값을 공통 골격에 주입. `imageSlots`는 `homeStyle === "profile"`이면 `profile`(+선택적 `header`) 슬롯 포함, 그 외는 최소 `profile` 슬롯만 optional 포함.
+- 순수 함수, DOM/Supabase 접촉 없음. **PHASE 1C-H 갱신(2026-09-06): 더 이상 HOME-only가 아니다.** 반환값은 `templates.home`/`templates.category`/`templates.post`를 전부 갖춘 멀티페이지 SkinPackage다(top-level `html`은 만들지 않는다 — `skin/skin-template.js`의 `resolveSkinTemplate()`이 `templates.*`를 최우선으로 읽는다). 세 template은 `.skin-shell` > `.skin-shell-grid` > `.skin-block--meta|nav|main` 공유 클래스 체계 하나를 쓰고, 단 하나의 공유 `css`만 갖는다(페이지별 css 없음). `layoutPreference`(1/2/3단)는 `createLayoutCss()`가 담당하는 순수 CSS Grid 배치 문제로 분리했다 — meta/nav/main 세 block의 grid-column/row를 항상 명시적으로 지정하며 auto-placement에 기대지 않는다(2단은 `skin-shell--has-meta` 마커로 meta 유무를 분기, 3단은 DOM 순서(meta→nav→main)와 시각적 순서(meta|main|nav)가 의도적으로 다르다 — 접근성 순서를 지키기 위해 DOM은 재정렬하지 않는다). `homeStyle`은 오직 HOME의 meta 블록 유무/내용(`intro`=소개 bio, `index`=없음, `profile`=아바타+닉네임+bio)만 결정하고, nav(`navigation.categories`)/main은 세 homeStyle 전부에서 동일하다 — CATEGORY/POST는 `homeStyle`과 무관하게 항상 meta 블록을 갖는다. CSS는 `baseAppearance`에 따라 `.skin-shell`에 `--skin-bg`/`--skin-surface`/`--skin-text`/`--skin-muted`/`--skin-border`/`--skin-accent` 커스텀 프로퍼티를 선언하고 나머지 규칙은 `var(--skin-*)`만 참조한다. `imageSlots`는 `homeStyle === "profile"`이면 `profile`(+선택적 `header`) 슬롯 포함, 그 외는 최소 `profile` 슬롯만 optional 포함 — 이 부분은 변경 없음. 상세 계약은 `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` 26절.
 
 ```js
 // skin/skin-initializer.js
@@ -325,25 +325,25 @@ Studio는 **데스크탑 전용 제작 도구**다(Slice 1에서 이미 구현/�
 
 핵심 원칙: **어떤 컨트롤도 Preview(iframe)의 레이아웃 공간을 차지하지 않는다.** Top Dock/AI handle·drawer 전부 `position:absolute`로 `#studioPreviewShell` 위에 겹쳐 그려지고, `#studioPreviewStage`와 그 안의 iframe은 이 shell 전체를 그대로 차지한다(`studio.css`).
 
-### 11-3. 상단 — 수동 toggle Top Dock(← back / HOME\|CATEGORY / DESKTOP\|MOBILE / Save / Code / Settings 한 줄)
+### 11-3. 상단 — 수동 toggle Top Dock(← back / DESKTOP\|MOBILE / Save / Code / Settings 한 줄)
 
 > Studio chrome 재정리 라운드(PHASE 1C-D 이후) 업데이트: 이전에는 hover/focus로 자동 여닫히는 Top Dock과, 그 아래 별도로 항상 노출되는 `HOME|CATEGORY`/`DESKTOP|MOBILE` ghost toggle 두 줄이 분리되어 있었다. Mobile Preview에서 마우스가 상단을 스치기만 해도 dock이 예고 없이 내려와 그 아래 컨트롤을 가리는 문제가 있어, hover/focus auto-hide를 완전히 제거하고 모든 컨트롤을 한 dock 안에 합쳤다.
 >
-> **PHASE 1C-G 업데이트(중요, 최종 UX 확정): `HOME|CATEGORY` toggle은 제거됐다.** Studio는 최종 사용자에게 page selector를 주지 않는다 — 사용자는 Skin 자신의 navigation(카테고리 메뉴, 글 목록 링크)을 Preview iframe 안에서 실제로 클릭해 HOME → CATEGORY → POST를 돌아다닌다("페이지 탭을 고른다"가 아니라 "내 홈페이지를 실제로 돌아다닌다"). 그 자리엔 HOME이 아닐 때만 보이는 작은 `← PREVIEW`(Preview Back) 컨트롤이 대신 들어간다 — 아래 11-4-A절 참고. 자세한 계약은 `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` 1C-G 결과 절.
+> **PHASE 1C-G 업데이트(중요, 최종 UX 확정): `HOME|CATEGORY` toggle은 제거됐다.** Studio는 최종 사용자에게 page selector를 주지 않는다 — 사용자는 Skin 자신의 navigation(카테고리 메뉴, 글 목록 링크)을 Preview iframe 안에서 실제로 클릭해 HOME → CATEGORY → POST를 돌아다닌다("페이지 탭을 고른다"가 아니라 "내 홈페이지를 실제로 돌아다닌다"). 그 자리엔 HOME이 아닐 때만 보이는 `← PREVIEW`(Preview Back) 컨트롤이 대신 들어갔다 — **PHASE 1C-H에서 이 컨트롤은 다시 이 Top Dock 밖으로 옮겨졌다**(아래 업데이트 노트, 11-4-A절).
+>
+> **PHASE 1C-H 업데이트(Preview Back 재배치): Top Dock 안의 `← PREVIEW` 항목은 완전히 삭제됐다.** Top Dock을 펼쳐야만 접근할 수 있는 구조가 불편하다는 피드백에 따라, 같은 id(`#studioPreviewBackButton`)의 컨트롤을 Top Dock 밖 — Preview 화면 위의 작은 floating 버튼(`.studio-preview-back-floating`, `←` 아이콘만)으로 재배치했다. Top Dock은 이제 `← back` / `DESKTOP|MOBILE` / `Save`·`Code`·`Settings`만 남는다(그래서 이 절 제목에서도 `HOME|CATEGORY`뿐 아니라 Preview Back 표기를 뺐다). 자세한 위치/z-index/DOM 구조는 11-4-A절.
 
 - 평소에는 `transform: translateY(-100%)`로 화면 위쪽에 완전히 숨어 있고, 그 자리에는 얇은 `▾`/`▴` handle(`#studioTopDockHandle`, 실제 `<button>`)만 보인다.
 - **handle을 클릭할 때만** `#studioTopDockZone`에 `.is-open` 클래스가 토글되어 dock이 내려오거나(펼침) 다시 올라간다(접힘) — `mouseenter`/`mouseleave`/`focusin`/`focusout` 기반 자동 열림·닫힘은 없다. handle은 dock이 열려 있든 닫혀 있든 항상 같은 위치에서 클릭 가능하다(`aria-expanded`/`aria-controls`로 상태 노출).
-- 펼쳤을 때 한 줄에 담는 컨트롤(왼쪽→오른쪽): `← back` / Preview Back(11-4-A절) / `DESKTOP|MOBILE` toggle(11-4-B절) / `Save`·`Code`·`Settings`(Phase 1B에서는 셋 다 `disabled` — 실제 기능은 Slice 4/후속 몫, 15절).
-- `← back` 클릭 시 실제 화면 전환은 이 문서가 하지 않는다 — `window.parent`로 `{type:"studio:back"}`을 postMessage하면 admin 쪽 `admin-session.js`가 받아 `showAdminHome()`을 호출한다(2-2절에서 admin 바깥 back row를 숨긴 이유가 바로 이 대체 경로다). Preview Back(위 11-4-A절)과는 완전히 다른 버튼이다 — 하나는 Studio 자체를 떠나고, 하나는 Preview 안에서 한 단계 되돌아간다.
+- 펼쳤을 때 한 줄에 담는 컨트롤(왼쪽→오른쪽): `← back` / `DESKTOP|MOBILE` toggle(11-4-B절) / `Save`·`Code`·`Settings`(Phase 1B에서는 셋 다 `disabled` — 실제 기능은 Slice 4/후속 몫, 15절). Preview Back은 더 이상 이 dock에 없다(11-4-A절).
+- `← back` 클릭 시 실제 화면 전환은 이 문서가 하지 않는다 — `window.parent`로 `{type:"studio:back"}`을 postMessage하면 admin 쪽 `admin-session.js`가 받아 `showAdminHome()`을 호출한다(2-2절에서 admin 바깥 back row를 숨긴 이유가 바로 이 대체 경로다). Preview Back(아래 11-4-A절, 이제 floating)과는 완전히 다른 버튼이다 — 하나는 Studio 자체를 떠나고, 하나는 Preview 안에서 한 단계 되돌아간다. Top Dock을 열어도 floating Preview Back의 표시/클릭 동작에는 영향이 없다(서로 완전히 독립된 DOM 서브트리/state).
 - dock이 닫혀 있어도(화면 밖으로 밀려나 있어도) 버튼들은 여전히 DOM/tab 순서에 남아 있다 — `-100%` 이동만으로 뷰포트 밖으로 나가므로 `overflow:hidden` 없이도 시각적으로 사라진다.
 
-### 11-4. Top Dock 안의 컨트롤 — Preview Back(11-4-A) / `DESKTOP | MOBILE`(11-4-B)
+### 11-4. Preview Back(11-4-A, floating) / Top Dock 안의 `DESKTOP | MOBILE`(11-4-B)
 
-Preview Back과 `DESKTOP | MOBILE` 모두 Top Dock 한 줄 가운데(`#studioTopDock` 안 `.studio-top-dock-groups`)에 나란히 놓인다 — **배치만 같은 dock 안일 뿐, state는 서로 완전히 독립적**이다(CATEGORY/POST 이동이 Desktop/Mobile 선택에 영향을 주지 않고 그 반대도 마찬가지).
+**11-4-A. Preview Back(`←`, floating)** — PHASE 1C-G에서 도입, PHASE 1C-H에서 위치 재배치. HOME/CATEGORY/POST를 고르는 selector가 아니라, Skin 자신의 navigation 링크로 이동한 뒤 한 단계만 되돌아가는 control이다 — `previewHistory` 스택이 HOME 하나뿐일 때는(`previewHistory.length <= 1`) 자동으로 숨는다. `templates.category`/`templates.post`가 없거나 post-body region이 없을 때, 혹은 클릭한 카테고리가 post형이 아닐 때(banner 등)의 동작은 `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` 1C-G 결과 절을 따른다(이번 재배치가 이 판정 로직을 전혀 바꾸지 않았다). **위치**: Top Dock이 아니라 `#studioPreviewShell`의 직계 자식(`#studioPreviewStage`의 형제) — `position:absolute; top:56px; left:12px`(Top Dock 예약 밴드 48px 바로 아래, dock 열림/닫힘과 절대 겹치지 않음), `z-index:5`(overlay=4 < 이 버튼=5 < ai-dock=6 < top-dock-zone=8 < toast=9). Desktop/Mobile 어느 뷰포트에서든 `#studioPreviewFrameWrap`의 `transform:scale()`(11-6절, Mobile 축소)에 영향받지 않는 위치라 hit-area가 항상 동일하다. 상세 근거는 `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` 26-7절.
 
-**11-4-A. Preview Back(`← PREVIEW`)** — PHASE 1C-G. HOME/CATEGORY/POST를 고르는 selector가 아니라, Skin 자신의 navigation 링크로 이동한 뒤 한 단계만 되돌아가는 control이다 — `previewHistory` 스택이 HOME 하나뿐일 때는(`previewHistory.length <= 1`) 자동으로 숨는다. `templates.category`/`templates.post`가 없거나 post-body region이 없을 때, 혹은 클릭한 카테고리가 post형이 아닐 때(banner 등)의 동작은 `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` 1C-G 결과 절을 따른다.
-
-**11-4-B. `DESKTOP | MOBILE`** — Slice 3 설계 초안의 `▾ Desktop/Mobile` **dropdown은 채택하지 않았다** — 옵션이 단 2개뿐이라 항상 나란히 노출되는 ghost 텍스트 버튼 한 쌍(`DESKTOP` / `MOBILE`, 사이에 얇은 구분선)으로 클릭 한 번에 바로 전환한다. 현재 모드는 굵은 글씨로 표시. Preview iframe 자체는 재생성/재로드하지 않는다 — `#studioPreviewStage`에 `.studio-preview-stage--mobile` 클래스를 토글해 iframe/wrap의 CSS 크기만 바꾼다(11-5/11-6절). HOME→CATEGORY→POST 이동 중에도 그대로 유지된다(Desktop로 자동 reset되지 않음).
+**11-4-B. `DESKTOP | MOBILE`**(Top Dock 안, `#studioTopDock` 안 `.studio-top-dock-groups`) — Slice 3 설계 초안의 `▾ Desktop/Mobile` **dropdown은 채택하지 않았다** — 옵션이 단 2개뿐이라 항상 나란히 노출되는 ghost 텍스트 버튼 한 쌍(`DESKTOP` / `MOBILE`, 사이에 얇은 구분선)으로 클릭 한 번에 바로 전환한다. 현재 모드는 굵은 글씨로 표시. Preview iframe 자체는 재생성/재로드하지 않는다 — `#studioPreviewStage`에 `.studio-preview-stage--mobile` 클래스를 토글해 iframe/wrap의 CSS 크기만 바꾼다(11-5/11-6절). HOME→CATEGORY→POST 이동 중에도, Preview Back을 눌러 되돌아가는 중에도 그대로 유지된다(Desktop로 자동 reset되지 않음) — Preview Back과 `DESKTOP|MOBILE`은 이제 같은 dock에 있지도 않을 만큼(11-4-A절) state가 서로 완전히 독립적이다.
 
 Preview Back과 `DESKTOP | MOBILE` 모두 Top Dock 안에 있으므로 **dock이 닫혀 있으면 이 컨트롤들도 화면 밖으로 함께 숨는다** — 예전처럼 dock과 무관하게 항상 노출되지는 않는다(대신 handle 클릭 한 번이면 언제든 다시 꺼낼 수 있다).
 

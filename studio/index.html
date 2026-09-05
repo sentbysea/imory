@@ -149,9 +149,34 @@
 
 
     <!-- =====================================================
-         TOP DOCK — Back / Preview Back / DESKTOP|MOBILE /
-         Save / Code / Settings 한 줄 통합 (Studio chrome 재정리
-         라운드).
+         PREVIEW BACK — floating control directly on the Preview
+         surface (PHASE 1C-H). 더 이상 Top Dock 안에 있지 않다 —
+         previewHistory가 HOME 하나뿐일 때는 숨고(hidden), CATEGORY/
+         POST로 이동하면 나타난다(studio/preview/preview-navigation.js
+         의 updatePreviewBackButtonVisibility()). Undo/browser-back/
+         Admin Back(#studioBackButton, Top Dock 안)과 전혀 다른
+         컨트롤이다 — 오직 Preview 내부 탐색 기록(previewHistory)을
+         한 단계 pop한다. #studioPreviewStage/iframe의 형제로 두어
+         Mobile 모드의 --studio-mobile-scale transform(#studioPreview
+         FrameWrap에만 걸림) 영향을 받지 않는다 — hit-area가 Desktop/
+         Mobile 어느 쪽에서도 항상 동일한 실제 픽셀 크기를 유지한다.
+    ====================================================== -->
+
+    <button
+      type="button"
+      class="studio-preview-back-floating"
+      id="studioPreviewBackButton"
+      hidden
+      aria-label="이전 화면"
+      title="이전 화면"
+    >←</button>
+
+
+    <!-- =====================================================
+         TOP DOCK — Back / DESKTOP|MOBILE / Save / Code / Settings
+         한 줄 통합 (Studio chrome 재정리 라운드, PHASE 1C-H에서
+         Preview Back을 위 floating 컨트롤로 옮기며 이 dock에서는
+         제거됨).
 
          평소엔 화면 밖(위)으로 숨어 있고 얇은 handle
          (#studioTopDockHandle)만 보인다. hover/focus로는 절대
@@ -161,18 +186,6 @@
          자리(zone 최상단)에 남아 있어 클릭 가능해야 한다 — dock이
          열렸을 때도 handle이 dock 바로 위(z-index 상 dock보다
          위)에 그려지므로 다시 눌러 접을 수 있다.
-
-         Preview Back(PHASE 1C-G)과 DESKTOP|MOBILE는 서로 완전히
-         독립된 state다(studio/preview/preview-navigation.js의
-         popPreviewNavigation()/studio-preview.js의
-         setStudioViewportMode() 참고) — 이 dock 안에 나란히 놓인
-         것은 순전히 배치일 뿐, 로직은 각자 그대로다. Preview Back은
-         Admin으로 나가는 #studioBackButton과 다른 버튼이다 — Preview
-         안에서 HOME이 아닐 때만(previewHistory.length > 1) 보이고,
-         클릭하면 한 단계만 되돌아간다. HOME/CATEGORY/POST는 더 이상
-         이 dock의 버튼으로 고르지 않는다 — Skin 자신의 navigation
-         링크를 Preview 안에서 실제로 클릭해 이동한다(studio/preview/
-         preview-bridge.js의 링크 interception 참고).
     ====================================================== -->
 
     <div
@@ -195,23 +208,6 @@
 
 
         <div class="studio-top-dock-groups">
-
-          <button
-            type="button"
-            class="studio-preview-back-button"
-            id="studioPreviewBackButton"
-            hidden
-          >
-            ← PREVIEW
-          </button>
-
-          <span
-            class="studio-top-dock-divider"
-            id="studioPreviewBackDivider"
-            aria-hidden="true"
-            hidden
-          ></span>
-
 
           <div
             class="studio-viewport-toggle"

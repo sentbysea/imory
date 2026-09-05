@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Skin Generator Multipage Test Harness (PHASE 1C-H)</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  #summary {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Skin Generator Multipage Test Harness (PHASE 1C-H)</h1>
+  <p>
+    skin/skin-generator.js(generateInitialSkin)가 9개(layoutPreference x
+    homeStyle) x 2(baseAppearance) = 18개 조합 전부에서 templates.home/
+    category/post를 갖춘 멀티페이지 SkinPackage를 만드는지, 그 결과가
+    실제 sanitizeSkinHTML()/validateAndScopeSkinCss()를 통과하는지,
+    skin/skin-initializer.js의 저장 시퀀스가 이 결과를 그대로 RPC에
+    넘기는지, 기존 legacy(HOME-only) Skin이 여전히 정상 동작하는지를
+    검증한다.
+  </p>
+
+  <div id="summary">모듈 로드 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <script>
+    window.skinInitializerReady = new Promise(function (resolve) {
+      window.__resolveSkinInitializerReady = resolve;
+    });
+
+    /* skin-initializer.js(L 테스트)가 require하는 전역 —
+       실제 supabase-js를 로드하지 않고 rpc() 호출만 가로채는
+       최소 mock. 실제 네트워크/DB에 전혀 닿지 않는다. */
+    window.__mockRpcCalls = [];
+    window.supabaseClient = {
+      rpc: function (name, args) {
+        window.__mockRpcCalls.push({ name: name, args: args });
+        return Promise.resolve({ data: "mock-skin-id-1", error: null });
+      }
+    };
+  </script>
+
+  <script src="./skin-sanitize.js"></script>
+  <script src="./skin-template.js"></script>
+  <script src="./skin-package-normalize.js"></script>
+  <script src="./skin-generator.js"></script>
+  <script type="module" src="./skin-initializer.js"></script>
+
+  <script type="module">
+
+    /* side-effect import만으로 충분 — skin-package-normalize-test.html과
+       동일한 이유(window.validateAndScopeSkinCss 등록). */
+    import "./skin-css-validate.js";
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function record(name, pass, detail) {
+      const li = document.createElement("li");
+      li.className = pass ? "pass" : "fail";
+      li.textContent = (pass ? "PASS — " : "FAIL — ") + name;
+      if (detail) {
+        const d = document.createElement("span");
+        d.className = "detail";
+        d.textContent = detail;
+        li.appendChild(d);
+      }
+      reportList.appendChild(li);
+      if (pass) { passCount++; } else { failCount++; }
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+      window.__testDone = true;
+      window.__testPassCount = passCount;
+      window.__testFailCount = failCount;
+    }
+
+    const LAYOUTS = ["one-column", "two-column", "three-column"];
+    const APPEARANCES = ["light", "dark"];
+    const HOME_STYLES = ["intro", "index", "profile"];
+
+    function allCombos() {
+      const combos = [];
+      LAYOUTS.forEach((layoutPreference) => {
+        APPEARANCES.forEach((baseAppearance) => {
+          HOME_STYLES.forEach((homeStyle) => {
+            combos.push({ layoutPreference, baseAppearance, homeStyle });
+          });
+        });
+      });
+      return combos;
+    }
+
+    function comboLabel(combo) {
+      return `${combo.layoutPreference}/${combo.baseAppearance}/${combo.homeStyle}`;
+    }
+
+    function recordAcrossCombos(name, predicate) {
+      const failures = [];
+      allCombos().forEach((combo) => {
+        const skin = generateInitialSkin(combo);
+        let ok;
+        try {
+          ok = !!predicate(skin, combo);
+        } catch (err) {
+          ok = false;
+          failures.push(comboLabel(combo) + " threw: " + err.message);
+          return;
+        }
+        if (!ok) {
+          failures.push(comboLabel(combo));
+        }
+      });
+      record(name, failures.length === 0, failures.length ? failures.join("; ") : undefined);
+    }
+
+    async function runAllTests() {
+
+      /* =====================================================
+         A/B/C — templates.home/category/post 전부 존재(모든 18개
+         조합에서, 문서 31절 A/B/C)
+      ===================================================== */
+
+      recordAcrossCombos(
+        "A. 모든 조합에서 templates.home이 존재하고 html이 비어있지 않은 문자열이다",
+        (skin) => skin.templates && typeof skin.templates.home?.html === "string" && skin.templates.home.html.length > 0
+      );
+
+      recordAcrossCombos(
+        "B. 모든 조합에서 templates.category가 존재하고 html이 비어있지 않은 문자열이다",
+        (skin) => skin.templates && typeof skin.templates.category?.html === "string" && skin.templates.category.html.length > 0
+      );
+
+      recordAcrossCombos(
+        "C. 모든 조합에서 templates.post가 존재하고 html이 비어있지 않은 문자열이다",
+        (skin) => skin.templates && typeof skin.templates.post?.html === "string" && skin.templates.post.html.length > 0
+      );
+
+      /* =====================================================
+         D/E/F/G — binding/region 계약
+      ===================================================== */
+
+      recordAcrossCombos(
+        'D. HOME에 data-imory-repeat="navigation.categories"가 존재한다',
+        (skin) => skin.templates.home.html.includes('data-imory-repeat="navigation.categories"')
+      );
+
+      recordAcrossCombos(
+        'E. CATEGORY에 data-imory-repeat="category.posts"가 존재한다',
+        (skin) => skin.templates.category.html.includes('data-imory-repeat="category.posts"')
+      );
+
+      recordAcrossCombos(
+        'F. POST에 data-imory-region="post-body"가 존재한다',
+        (skin) => skin.templates.post.html.includes('data-imory-region="post-body"')
+      );
+
+      recordAcrossCombos(
+        "G. POST html 어디에도 post.content 바인딩이 없다(본문은 오직 protected region으로만 표현)",
+        (skin) => !skin.templates.post.html.includes("post.content")
+      );
+
+      recordAcrossCombos(
+        "schemaVersion은 항상 1이다",
+        (skin) => skin.schemaVersion === 1
+      );
+
+      /* =====================================================
+         H — 1단/2단/3단 output이 구조적으로 구분된다
+      ===================================================== */
+
+      const oneColSkin = generateInitialSkin({ layoutPreference: "one-column", baseAppearance: "light", homeStyle: "index" });
+      const twoColSkin = generateInitialSkin({ layoutPreference: "two-column", baseAppearance: "light", homeStyle: "index" });
+      const threeColSkin = generateInitialSkin({ layoutPreference: "three-column", baseAppearance: "light", homeStyle: "index" });
+
+      record(
+        "H1. 1단 HOME은 skin-shell--cols-1 클래스를 갖고, 2단/3단 전용 grid-template-columns 값이 css에 없다",
+        oneColSkin.templates.home.html.includes("skin-shell--cols-1") &&
+          !oneColSkin.css.includes("200px 1fr") &&
+          !oneColSkin.css.includes("1fr 2fr 1fr")
+      );
+
+      record(
+        "H2. 2단 HOME은 skin-shell--cols-2 클래스를 갖고, css에 200px 1fr(2단 전용) grid가 있으며 3단 grid는 없다",
+        twoColSkin.templates.home.html.includes("skin-shell--cols-2") &&
+          twoColSkin.css.includes("200px 1fr") &&
+          !twoColSkin.css.includes("1fr 2fr 1fr")
+      );
+
+      record(
+        "H3. 3단 HOME은 skin-shell--cols-3 클래스를 갖고, css에 1fr 2fr 1fr(3단 전용) grid가 있으며 2단 grid는 없다",
+        threeColSkin.templates.home.html.includes("skin-shell--cols-3") &&
+          threeColSkin.css.includes("1fr 2fr 1fr") &&
+          !threeColSkin.css.includes("200px 1fr")
+      );
+
+      record(
+        "H4. CATEGORY/POST도 같은 columnCount 클래스를 공유한다(HOME과 동일 레이아웃 철학)",
+        threeColSkin.templates.category.html.includes("skin-shell--cols-3") &&
+          threeColSkin.templates.post.html.includes("skin-shell--cols-3")
+      );
+
+      /* =====================================================
+         I — light/dark CSS 차이 존재
+      ===================================================== */
+
+      const lightSkin = generateInitialSkin({ layoutPreference: "one-column", baseAppearance: "light", homeStyle: "index" });
+      const darkSkin = generateInitialSkin({ layoutPreference: "one-column", baseAppearance: "dark", homeStyle: "index" });
+
+      function extractSkinBgVar(css) {
+        const match = css.match(/--skin-bg:\s*([^;]+);/);
+        return match ? match[1] : null;
+      }
+
+      record(
+        "I1. light/dark의 --skin-bg 값이 서로 다르다",
+        extractSkinBgVar(lightSkin.css) &&
+          extractSkinBgVar(darkSkin.css) &&
+          extractSkinBgVar(lightSkin.css) !== extractSkinBgVar(darkSkin.css),
+        `light=${extractSkinBgVar(lightSkin.css)} dark=${extractSkinBgVar(darkSkin.css)}`
+      );
+
+      /* =====================================================
+         J — intro/index/profile HOME 구조 차이 유지
+      ===================================================== */
+
+      const introSkin = generateInitialSkin({ layoutPreference: "one-column", baseAppearance: "light", homeStyle: "intro" });
+      const indexSkin = generateInitialSkin({ layoutPreference: "one-column", baseAppearance: "light", homeStyle: "index" });
+      const profileSkin = generateInitialSkin({ layoutPreference: "one-column", baseAppearance: "light", homeStyle: "profile" });
+
+      record(
+        "J1. intro HOME은 skin-intro 메타 블록 + skin-shell--has-meta를 갖는다",
+        introSkin.templates.home.html.includes("skin-intro") &&
+          introSkin.templates.home.html.includes("skin-shell--has-meta")
+      );
+
+      record(
+        "J2. profile HOME은 skin-profile 메타 블록 + skin-shell--has-meta를 갖는다",
+        profileSkin.templates.home.html.includes("skin-profile") &&
+          profileSkin.templates.home.html.includes("skin-shell--has-meta")
+      );
+
+      record(
+        "J3. index HOME은 meta 블록이 없다(skin-intro/skin-profile/skin-shell--has-meta 전부 없음)",
+        !indexSkin.templates.home.html.includes("skin-intro") &&
+          !indexSkin.templates.home.html.includes("skin-profile") &&
+          !indexSkin.templates.home.html.includes("skin-shell--has-meta")
+      );
+
+      record(
+        "J4. CATEGORY/POST는 homeStyle과 무관하게 항상 meta 블록(skin-shell--has-meta)을 갖는다",
+        introSkin.templates.category.html.includes("skin-shell--has-meta") &&
+          indexSkin.templates.category.html.includes("skin-shell--has-meta") &&
+          introSkin.templates.post.html.includes("skin-shell--has-meta") &&
+          indexSkin.templates.post.html.includes("skin-shell--has-meta")
+      );
+
+      /* =====================================================
+         K — sanitize/validate 통과 (normalizeSkinPackageForDraft
+         end-to-end, 실제 저장 직전 경로와 동일)
+      ===================================================== */
+
+      let normalizedMultipage = null;
+
+      try {
+        normalizedMultipage = await normalizeSkinPackageForDraft(threeColSkin);
+        record("K1. generateInitialSkin() 결과가 normalizeSkinPackageForDraft()를 예외 없이 통과한다", true);
+      } catch (err) {
+        record("K1. generateInitialSkin() 결과가 normalizeSkinPackageForDraft()를 예외 없이 통과한다", false, err.message);
+      }
+
+      record(
+        "K2. normalize 이후에도 세 template의 핵심 바인딩/region이 살아남는다(sanitizer가 정상 마크업을 지우지 않음)",
+        !!normalizedMultipage &&
+          normalizedMultipage.templates.home.html.includes('data-imory-repeat="navigation.categories"') &&
+          normalizedMultipage.templates.category.html.includes('data-imory-repeat="category.posts"') &&
+          normalizedMultipage.templates.post.html.includes('data-imory-region="post-body"')
+      );
+
+      /* =====================================================
+         L — skin-initializer.js의 저장 시퀀스가 이 결과를 그대로
+         RPC에 넘긴다(mock supabaseClient.rpc)
+      ===================================================== */
+
+      window.__mockRpcCalls.length = 0;
+
+      const initResult = await createInitialSkinFromAnswers({
+        layoutPreference: "two-column",
+        baseAppearance: "dark",
+        homeStyle: "profile"
+      });
+
+      record(
+        "L1. createInitialSkinFromAnswers()가 create_skin_with_initial_version RPC를 정확히 1번 호출한다",
+        window.__mockRpcCalls.length === 1 &&
+          window.__mockRpcCalls[0].name === "create_skin_with_initial_version"
+      );
+
+      record(
+        "L2. RPC에 넘어간 p_content가 templates.home/category/post를 전부 갖춘 멀티페이지 SkinPackage다",
+        window.__mockRpcCalls.length === 1 &&
+          !!window.__mockRpcCalls[0].args.p_content.templates &&
+          !!window.__mockRpcCalls[0].args.p_content.templates.home &&
+          !!window.__mockRpcCalls[0].args.p_content.templates.category &&
+          !!window.__mockRpcCalls[0].args.p_content.templates.post
+      );
+
+      record(
+        "L3. createInitialSkinFromAnswers()가 mock RPC의 data를 skinId로 반환한다",
+        initResult && initResult.skinId === "mock-skin-id-1"
+      );
+
+      /* =====================================================
+         M — 기존 HOME-only(legacy) Skin 회귀 없음
+      ===================================================== */
+
+      try {
+
+        const legacySkin = await fetch("./test-skins/static-test-skin.json").then((r) => r.json());
+
+        const legacyResolved = resolveSkinTemplate(legacySkin, "home");
+
+        record(
+          "M1. 기존 legacy(HOME-only, templates 필드 없음) fixture는 resolveSkinTemplate(skin,'home')으로 여전히 정상 해석된다",
+          !!legacyResolved && legacyResolved.html === legacySkin.html && legacyResolved.css === legacySkin.css
+        );
+
+        record(
+          "M2. legacy fixture는 category/post에 대해 여전히 undefined(HOME html로 대체되지 않음)",
+          resolveSkinTemplate(legacySkin, "category") === undefined &&
+            resolveSkinTemplate(legacySkin, "post") === undefined
+        );
+
+      } catch (err) {
+        record("M. legacy fixture 회귀 검사", false, "fixture load/resolve failed: " + err.message);
+      }
+
+      finishSummary();
+
+    }
+
+    runAllTests();
+
+  </script>
+
+</body>
+</html>

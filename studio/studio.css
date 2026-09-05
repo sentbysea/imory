@@ -325,16 +325,6 @@ body {
 }
 
 
-.studio-top-dock-divider {
-  flex: none;
-
-  width: 1px;
-  height: 16px;
-
-  background: var(--system-border-strong);
-}
-
-
 .studio-top-dock-actions {
   flex: none;
 
@@ -399,42 +389,76 @@ body {
 
 
 /* =========================================================
-   PREVIEW BACK — Studio Preview 안에서 한 단계 되돌아가기
-   (PHASE 1C-G)
+   PREVIEW BACK — floating control on the Preview surface, not
+   inside the Top Dock (PHASE 1C-H, moved out of the dock where
+   it previously lived as PHASE 1C-G's "← PREVIEW" ghost-text
+   entry).
 
-   HOME/CATEGORY/POST는 더 이상 이 dock의 버튼으로 고르지 않는다
-   (Skin 자신의 navigation을 Preview 안에서 클릭해 이동한다,
-   studio/preview/preview-bridge.js) — 이 control은 그 이동을
-   한 단계 되돌리는 것뿐이라 previewHistory가 HOME 하나뿐일 때는
-   아예 숨는다(studio/preview/preview-navigation.js의
-   updatePreviewBackButtonVisibility()). .studio-viewport-toggle과
-   동일한 ghost text 스타일을 그대로 쓴다.
+   HOME/CATEGORY/POST는 이 컨트롤로 "고르는" 것이 아니다(Skin
+   자신의 navigation을 Preview 안에서 클릭해 이동한다, studio/
+   preview/preview-bridge.js) — 이 control은 그 이동을 한 단계
+   되돌리는 것뿐이라 previewHistory가 HOME 하나뿐일 때는 아예
+   숨는다(studio/preview/preview-navigation.js의
+   updatePreviewBackButtonVisibility()).
+
+   위치: #studioPreviewShell 직계 자식(#studioPreviewStage/iframe의
+   형제)이라 Mobile 모드의 transform:scale()(#studioPreviewFrameWrap
+   에만 걸림, 위 193-218행)의 영향을 받지 않는다 — Desktop/Mobile
+   어느 쪽이든 hit-area가 항상 동일한 28x28 실픽셀이다.
+
+   top:56px로 Top Dock 예약 영역(.studio-top-dock-zone, height:48px)
+   바로 아래에 둬서 dock이 열려 있든 닫혀 있든 절대 겹치지 않는다
+   — 그래서 dock의 z-index(8)와 직접 경쟁할 필요가 없다.
+
+   z-index 순서(기존 컨벤션 그대로, studio.css 전체 기준):
+   overlay(.studio-preview-overlay)=4 < 이 버튼=5 < ai-dock=6 <
+   top-dock-zone=8 < toast=9. 즉 이 버튼은 로딩 overlay보다는 항상
+   위에 뜨지만(가려지지 않음), ai-dock/top-dock/toast보다는 항상
+   아래다 — 다만 top:56px 배치 자체가 top-dock-zone(0~48px 밴드)과
+   겹치지 않으므로 실제로는 그 둘 사이의 z-index 우선순위가 화면에
+   드러날 일이 없다(안전망 성격).
+
+   작은 정사각 ghost 버튼 — pill/캡슐 형태는 쓰지 않는다(프로젝트
+   전반의 각진 톤 컨벤션, .studio-corner-button과 동일한
+   radius/border 규모).
 ========================================================== */
 
-.studio-preview-back-button {
-  padding: 4px 2px;
+.studio-preview-back-floating {
+  position: absolute;
+  top: 56px;
+  left: 12px;
+  z-index: 5;
 
-  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 
-  background: transparent;
+  width: 28px;
+  height: 28px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
 
   color: var(--system-text-faint);
 
   font-family: inherit;
   font-size: var(--imory-font-size-300);
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  line-height: 1;
 
   cursor: pointer;
 }
 
 
-.studio-preview-back-button:hover {
+.studio-preview-back-floating:hover,
+.studio-preview-back-floating:focus-visible {
   color: var(--system-accent-hover);
+  border-color: var(--system-accent-hover);
 }
 
 
-.studio-preview-back-button[hidden] {
+.studio-preview-back-floating[hidden] {
   display: none;
 }
 

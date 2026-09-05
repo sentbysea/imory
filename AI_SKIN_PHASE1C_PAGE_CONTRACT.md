@@ -1210,3 +1210,145 @@ iframe(`#studioPreviewFrame`)은 계속 1개, HOME↔CATEGORY↔POST 전환마�
 ### 25-17. 다음 multipage generator Slice 진행 가능 여부
 
 **가능.** 이번 Slice로 Studio Preview가 실제 다중 페이지 SkinPackage(`templates.home`/`category`/`post`가 모두 채워진 경우)를 실제 사용자처럼 탐색 가능함을 증명했다(fixture `n`) — `skin/skin-generator.js`가 이 shape의 SkinPackage를 생성하기 시작하면 Studio 쪽 추가 배선 없이 바로 탐색 가능하다(29절 "기본 Skin은 HOME→CATEGORY→POST 탐색이 가능해야 한다" 요구를 이미 충족하는 소비측 준비가 끝났다는 뜻). 다음 Slice가 새로 정해야 할 것은 generator가 만드는 navigation 마크업의 실제 디자인(1단/2단/3단 레이아웃별 배치)뿐 — 이번 Slice가 강제하는 마크업 형태는 없다(`data-imory-repeat`+`data-imory-href`+`data-imory-bind` 조합이면 어떤 시각적 표현도 가능).
+
+---
+
+## 26. Slice 1C-H 구현 결과 (실제 구현 완료, 2026-09-06)
+
+25절이 예고한 "다음 multipage generator Slice"를 완료했다 — `skin/skin-generator.js`가 이제 HOME뿐 아니라 `templates.home`/`category`/`post`를 모두 갖춘 완성된 SkinPackage를 만든다. 동시에, Studio Preview의 "← PREVIEW" 컨트롤을 Top Dock 밖으로 옮겨 Preview 화면 위의 floating 컨트롤로 재배치했다(사용자 요청 — 이전에는 Top Dock을 펼쳐야만 접근 가능했다). AI/자연어 수정, Element Selection, Image Library, Version History UI, 여러 Skin UI, DB migration, RPC 변경, pagination, gallery/banner Skin 구현, POST 실제 본문 Preview, browser history API, Code Editor의 CATEGORY/POST 편집 지원 — 전부 18절 원칙 그대로 이번에도 손대지 않았다.
+
+### 26-1. 변경/생성 파일
+
+- **수정** `skin/skin-generator.js` — 26-2~26-6절. `generateInitialSkin()`의 시그니처(`answers = {layoutPreference, baseAppearance, homeStyle}`)는 변경 없음, 반환 shape만 `templates.home/category/post` 중심으로 바뀌었다.
+- **수정** `studio/index.html` — `#studioPreviewBackButton`/`#studioPreviewBackDivider`를 `.studio-top-dock-groups`에서 제거하고, `#studioPreviewShell`의 직계 자식(=`#studioPreviewStage`/`#studioTopDockZone`의 형제)으로 floating 버튼 하나만 남겼다(26-7절). Top Dock은 이제 `← back` / `DESKTOP|MOBILE` / `Save·Code·Settings`만 남는다.
+- **수정** `studio/studio.css` — `.studio-preview-back-button`(ghost text, Top Dock 전용) 규칙을 `.studio-preview-back-floating`(작은 정사각 ghost 버튼, Preview 위 overlay)으로 교체. 이제 유일한 소비자가 사라진 `.studio-top-dock-divider` 규칙도 함께 삭제.
+- **수정** `studio/preview/preview-navigation.js` — `studioPreviewBackDivider` element 참조 및 그 `.hidden` 대입 두 곳만 제거. `studioPreviewBackButton` 조회/클릭 바인딩/`previewHistory` push·pop 로직은 전부 변경 없음(같은 id를 그대로 재사용했으므로).
+- **수정** `studio/studio-lifecycle-scenario.html` — production 마크업과 동일하게 미러링(divider 제거 + floating 버튼 추가), `skin-generator.js` 로드 시점을 mock 정의보다 앞으로 옮김(신규 fixture `r`이 실제 `generateInitialSkin()`을 호출하므로), fixture `r` 추가(26-9절).
+- **수정** `studio/studio-lifecycle-test.html` — B4 검사를 `metadata` 키 정확히 1개(`generatedBy`만) 기준에서 "questionnaire 원문 답변이 새지 않는다"는 원래 취지를 지키는 검사로 완화(`generatedBy`/`supports` 두 키까지 허용) — generator가 이제 `metadata.supports`도 채우므로 필요한 조정.
+- **수정** `studio/studio-navigation-test.html` — scenario N에 Preview Back 재배치 확인용 검사 3개(V1~V3, 26-10절) 추가, scenario R(신규) 추가 + `main()`에 연결.
+- **생성** `skin/skin-generator-test.html` — generator 전용 신규 테스트 하네스(26-8절).
+- **변경 없음**: `skin/skin-render.js`/`skin-context.js`/`skin-sanitize.js`/`skin-css-validate.js`/`skin-template.js`/`skin-package-normalize.js`/`skin-home.js`/`skin-category.js`/`skin-post.js`/`skin-initializer.js`, `studio/studio-preview.js`, `studio/preview/preview-bridge.js`/`preview-route.js`, `posts/*`, DB/RPC 전부.
+
+### 26-2. 새 SkinPackage 출력 shape
+
+```js
+{
+  schemaVersion: 1,
+  templates: {
+    home: { html },
+    category: { html },
+    post: { html }
+  },
+  css,            // 세 template이 공유하는 단 하나의 css(12-B/14-1절 v0.1 원칙 그대로)
+  imageSlots,     // 기존 로직 그대로(homeStyle==="profile"일 때만 header 슬롯 추가)
+  regions: [],    // 여전히 미사용 placeholder(1-4/23-6절 원칙 유지 — data-imory-region 존재 여부가 유일한 runtime 판정 기준)
+  metadata: { generatedBy: "deterministic-v1", supports: { home: true, list: true, post: true } }
+}
+```
+
+top-level `html`은 더 이상 만들지 않는다 — `skin/test-skins/static-test-post-skin.json`이 이미 세운 "templates만 있고 top-level html은 없는" 선례를 그대로 따른다. `resolveSkinTemplate()`(`skin-template.js`)이 `templates.home`을 최우선으로 읽으므로, `skin-home.js`/`skin-category.js`/`skin-post.js`(공개 라우트)와 `studio/preview/preview-navigation.js`(Studio Preview) 어느 쪽도 이 변경을 감지하기 위한 추가 배선이 필요 없었다 — 실제로 이번 Slice가 그 두 소비자 파일을 전혀 건드리지 않았다는 사실 자체가 그 증거다.
+
+### 26-3. 공유 block 모델 — 세 template이 정확히 같은 클래스 체계를 쓴다
+
+`.skin-shell`(페이지 wrapper) 안에 `.skin-header`(site.title) + `.skin-shell-grid`(레이아웃 grid) 하나, 그 grid 안에 최대 세 block:
+
+- `.skin-block--meta` — 페이지 정체성(HOME: `homeStyle`에 따라 intro bio/profile card/없음, CATEGORY: `category.name`, POST: `post.categoryName`+`post.categoryHref`+`post.publishedAt`)
+- `.skin-block--nav` — `data-imory-repeat="navigation.categories"` 하나(HOME/CATEGORY/POST 세 template과 세 `homeStyle` 전부에서 글자 하나 다르지 않게 재사용, 8-3절 근거)
+- `.skin-block--main` — 페이지 주 콘텐츠(HOME: `home.recentPosts`, CATEGORY: `category.posts` + `item.publishedAt`, POST: `post.title` + `data-imory-region="post-body"`)
+
+DOM 순서는 항상 meta(있으면) → nav → main다 — 시각적 순서는 레이아웃(1/2/3단)에 따라 CSS만으로 달라진다(26-5절). 이 하나의 block 모델 덕분에 CATEGORY/POST가 HOME과 별도의 grid 로직을 갖지 않고, 세 template이 자연스럽게 "하나의 Skin"처럼 보인다(8절 "공통 디자인 언어" 요구, 새 CSS 시스템을 페이지마다 만들지 않음).
+
+### 26-4. `homeStyle`은 오직 HOME의 meta 블록만 결정한다
+
+| homeStyle | meta 블록 | `skin-shell--has-meta` |
+|---|---|---|
+| `intro` | `.skin-intro`(소개/공지 bio) | 있음 |
+| `index` | 없음 | 없음 |
+| `profile` | `.skin-profile`(아바타+닉네임+bio) | 있음 |
+
+nav/main은 세 `homeStyle` 전부에서 동일하다(항상 `navigation.categories`/`home.recentPosts`) — 3×3(레이아웃×homeStyle) 조합을 하드코딩하지 않고 "meta 블록 유무·내용"과 "레이아웃 CSS"라는 두 독립 축의 조합으로 구현했다(원 설계 문서 7-3절 원칙 계승). CATEGORY/POST는 `homeStyle`과 무관하게 항상 meta 블록을 갖는다(`skin-shell--has-meta`가 항상 붙음).
+
+### 26-5. 레이아웃별 navigation 배치 — auto-placement에 기대지 않는 명시적 grid
+
+- **1단**: `.skin-shell-grid{grid-template-columns:1fr}`(자연스러운 세로 스택) + `.skin-shell--cols-1 .skin-nav-list{display:flex;flex-direction:row;flex-wrap:wrap}` — nav 목록 자체가 상단 가로 ghost 목록으로 바뀐다(예: `LOG PIC MEMO`가 한 줄에). 마크업은 다른 레이아웃과 완전히 동일 — CSS 하나만 다르다.
+- **2단**: `grid-template-columns:200px 1fr`, `grid-template-rows:auto auto`. `skin-shell--has-meta` 마커 클래스로 두 경우를 완전히 분기해 **auto-placement에 전혀 기대지 않고** grid-column *과* grid-row를 전부 명시한다 — meta 있음(intro/profile/CATEGORY/POST)이면 `meta{1/-1,row1}` / `nav{col1,row2}` / `main{col2,row2}`, meta 없음(HOME index)이면 `nav{col1,row1}` / `main{col2,row1}`.
+- **3단**: `grid-template-columns:1fr 2fr 1fr`. **DOM 순서(meta→nav→main)와 시각적 순서(meta|main|nav)가 의도적으로 다르다** — `grid-column`만으로 시각적 좌우 순서를 바꾸고 DOM 자체는 절대 재정렬하지 않는다(`meta{col1}`/`main{col2}`/`nav{col3}`, 셋 다 `grid-row:1`도 명시). 키보드 tab 순서/스크린 리더 낭독 순서는 DOM 순서(meta→nav→main)를 그대로 따르는 것이 자연스럽다는 판단 — "PROFILE | CONTENT | NAV" 같은 시각적 요구가 접근성 순서까지 바꿔야 할 이유는 없다.
+- `@media (max-width:640px)`: 2단/3단 모두 강제로 1단(`grid-template-columns:1fr`, 모든 block `grid-column:1`)으로 되돌린다(기존 generator의 모바일 폴백과 동일 원칙).
+
+CATEGORY/POST도 HOME과 완전히 같은 `createLayoutCss(columnCount)` 규칙을 그대로 쓰므로, "1/2/3단은 HOME만 바뀌는 옵션이 아니다"(사용자 요청 12절)라는 요구가 페이지 타입별 별도 코드 없이 성립한다.
+
+### 26-6. CSS 변수 기반 appearance
+
+`.skin-shell`에 `--skin-bg`/`--skin-surface`/`--skin-text`/`--skin-muted`/`--skin-border`/`--skin-accent` 커스텀 프로퍼티를 `baseAppearance`(light/dark)에 따라 한 번 선언하고, 나머지 모든 규칙은 `var(--skin-*)`만 참조한다(기존 generator의 하드코딩된 hex 인라인 방식에서 전환) — light/dark 전환이 값 하나 스왑으로 끝난다.
+
+### 26-7. Preview Back — Top Dock에서 Preview 위 floating 컨트롤로 재배치
+
+- **위치**: `#studioPreviewShell`의 직계 자식(`#studioPreviewStage`/`#studioTopDockZone`의 형제), `position:absolute; top:56px; left:12px`(Top Dock 예약 밴드 `height:48px` 바로 아래) — dock이 열려 있든 닫혀 있든 절대 겹치지 않으므로 dock의 `z-index:8`와 경쟁할 필요가 없다.
+- **z-index**: `5` — 기존 컨벤션(overlay=4 < ai-dock=6 < top-dock-zone=8 < toast=9) 사이에 끼워 넣었다: 로딩 overlay보다는 항상 위, ai-dock/top-dock/toast보다는 항상 아래(다만 top:56px 배치 자체가 top-dock-zone과 물리적으로 겹치지 않으므로 이 우선순위가 화면에 실제로 드러날 상황은 없다 — 안전망 성격).
+- **모양**: 작은 정사각(`28×28`) ghost 버튼, `border:1px solid var(--system-border-strong)`, `border-radius:var(--imory-radius-200)`(프로젝트 전반의 "pill/캡슐 금지" 각진 톤 컨벤션 유지). `aria-label`/`title` 둘 다 "이전 화면".
+- **Desktop/Mobile 무관 hit-area**: `#studioPreviewStage`/`#studioPreviewFrameWrap`의 형제가 아니라 `#studioPreviewShell`의 직계 자식이므로, Mobile 모드의 `transform:scale(var(--studio-mobile-scale))`(`#studioPreviewFrameWrap`에만 걸림)의 영향을 전혀 받지 않는다 — Desktop/Mobile 어느 쪽이든 항상 동일한 28×28 실픽셀 hit-area(스크린샷으로 실측 확인, 26-11절).
+- **id/로직은 완전히 동일**: `id="studioPreviewBackButton"`를 그대로 유지했으므로 `preview-navigation.js`의 조회/클릭 바인딩/`previewHistory` 로직은 한 줄도 바꾸지 않았다 — DOM 위치와 CSS만 바뀌었다. `studioPreviewBackDivider`(Top Dock 안에서 Desktop|Mobile 토글과의 시각적 구분선이었다)는 floating 버튼에 필요 없어져 완전히 삭제했다(마크업/CSS/JS 세 곳 모두).
+- **Top Dock과의 독립성**: Top Dock을 열어도(`#studioTopDockZone.is-open`) floating Preview Back의 `hidden` 상태나 클릭 동작에 아무 영향이 없다(26-10절 V2/V3 테스트로 실측 확인) — 서로 다른 DOM 서브트리, 서로 다른 state.
+
+### 26-8. Generator 테스트 — `skin/skin-generator-test.html`(신규)
+
+9(layoutPreference×homeStyle)×2(baseAppearance)=18개 조합 전부를 순회하며 검증:
+
+| # | 검사 | 결과 |
+|---|---|---|
+| A/B/C | 모든 조합에서 templates.home/category/post 존재 | PASS |
+| D/E/F | HOME `navigation.categories` repeat / CATEGORY `category.posts` repeat / POST `data-imory-region="post-body"` 존재 | PASS |
+| G | POST html 어디에도 `post.content` 바인딩 없음(본문은 protected region만) | PASS |
+| H1~H4 | 1/2/3단이 구조적으로 구분됨(클래스 + grid-template-columns 값) + CATEGORY/POST도 같은 columnCount 클래스 공유 | PASS |
+| I1 | light/dark `--skin-bg` 값이 다름 | PASS |
+| J1~J4 | intro/index/profile HOME 구조 차이(meta 블록 유무/종류) 유지, CATEGORY/POST는 homeStyle 무관하게 항상 meta 있음 | PASS |
+| K1/K2 | `normalizeSkinPackageForDraft()`를 예외 없이 통과, 핵심 바인딩/region이 sanitize 후에도 살아남음 | PASS |
+| L1~L3 | `createInitialSkinFromAnswers()`(mock RPC)가 정확히 1번 호출되고, `p_content`가 templates 셋을 전부 갖추며, 반환된 skinId가 정확함 | PASS |
+| M1/M2 | 기존 legacy(HOME-only) fixture(`static-test-skin.json`)가 `resolveSkinTemplate()`으로 여전히 정상 해석되고 category/post는 여전히 undefined | PASS |
+
+**24개 검사 전부 PASS** — `npx playwright`(headless Chromium) + 로컬 정적 서버(`http://127.0.0.1:8934/`)에서 실제 실행(19절과 동일 방법).
+
+### 26-9. Navigable Preview 테스트 — 실제 generator 출력으로 E2E 검증(scenario R)
+
+`studio/studio-lifecycle-scenario.html`에 **손으로 쓴 마커 마크업이 아니라 `window.generateInitialSkin({layoutPreference:"two-column",baseAppearance:"light",homeStyle:"index"})`을 실제로 호출한 결과**를 그대로 쓰는 fixture `r`을 추가했다(이 때문에 `skin-generator.js` 로드 시점을 mock 정의보다 앞으로 옮겼다 — classic script를 같은 문서에 두 번 로드하면 top-level `const` 재선언 SyntaxError가 나므로, 기존 636행의 로드 지점은 제거하고 위치만 이동했다). `studio-navigation-test.html`에 `runScenarioR()`을 추가해 실제 generator 클래스 이름(`.skin-nav-link`/`.skin-category-title`/`.skin-category-posts-link`/`.skin-post-title`/`.skin-post-body-slot`)으로 HOME→CATEGORY→POST→Back→Back 전체를 실제 클릭(MouseEvent dispatch)으로 검증했다 — **10개 검사 전부 PASS**(HOME nav 렌더/Preview Back 숨김, CATEGORY 바인딩/목록/Preview Back 노출, POST 바인딩/protected region이 mount 시 비워짐, Back x2, iframe reload count 불변).
+
+### 26-10. Preview Back UI 테스트 — scenario N에 추가
+
+기존 scenario N(25-15절, 이번 Slice에서도 로직 미변경) 흐름 중 CATEGORY/POST 구간에 3개 검사를 추가:
+
+- **V1**: Preview Back의 부모가 이제 `#studioPreviewShell`이고 `#studioTopDock`의 자손이 아니다(재배치 자체를 구조적으로 확인).
+- **V2**: Top Dock을 열어도(POST Preview 중) Preview Back의 `hidden` 상태가 바뀌지 않는다.
+- **V3**: Top Dock이 열린 상태에서 누른 Preview Back도 POST→CATEGORY 전환을 정상 처리한다(admin `← back`/Top Dock과 이벤트 충돌 없음).
+
+**핵심 자동 검증을 우선하고, 픽셀 단위 겹침 여부(getBoundingClientRect 비교)는 다루지 않았다** — 이미 hidden 상태와 부모-자식 관계만으로 "재배치됐다"/"서로 방해하지 않는다"는 요구를 구조적으로 증명할 수 있고, 이 확인만을 위해 production DOM에 새 hook/속성을 추가하지 않는 편이 낫다는 판단(사용자 지시). 시각적 겹침 여부는 26-11절의 스크린샷으로 보조 확인했다.
+
+전체 `studio-navigation-test.html`은 기존 35개 + 이번에 추가한 13개(V1~V3 3개 + scenario R 10개) = **48개 전부 PASS**.
+
+### 26-11. 회귀 결과 + 실브라우저 확인
+
+`npx playwright`(headless Chromium) + 로컬 정적 서버로 관련 테스트 하네스 11개 전부 실행:
+
+| 파일 | 결과 |
+|---|---|
+| `skin/skin-generator-test.html`(신규) | 24 PASS / 0 FAIL |
+| `skin/skin-render-test.html` | 39 PASS / 0 FAIL |
+| `skin/skin-render-security-test.html` | 23 PASS / 0 FAIL |
+| `skin/skin-css-validate-test.html` | 23 PASS / 0 FAIL |
+| `skin/skin-page-context-test.html` | 32 PASS / 0 FAIL |
+| `skin/skin-package-normalize-test.html` | 12 PASS / 0 FAIL |
+| `skin/skin-post-region-test.html` | 17 PASS / 0 FAIL |
+| `skin/skin-post-integration-test.html` | 20 PASS / 0 FAIL |
+| `studio/studio-navigation-test.html`(확장) | 48 PASS / 0 FAIL |
+| `studio/studio-multipage-test.html` | 16 PASS / 0 FAIL |
+| `studio/studio-lifecycle-test.html`(B4 검사 조정) | 15 PASS / 0 FAIL |
+
+유일한 실패는 최초 1회, `studio-lifecycle-test.html`의 B4(생성된 Skin의 metadata에 `generatedBy`만 남는다는 검사)였다 — generator가 이제 `metadata.supports`도 채우므로 발생한 **의도된** 변화였고, "questionnaire 원문 답변(layoutPreference/baseAppearance/homeStyle)이 metadata로 새지 않는다"는 원래 취지를 유지한 채 허용 키 집합만 넓히는 것으로 수정했다(26-1절).
+
+**실제 Chromium으로 시각 확인도 했다**: fixture `r`(실제 generator 출력)을 Desktop/Mobile 양쪽에서 스크린샷으로 확인 — HOME(nav 링크 실재, Preview Back 숨김) → LOG 클릭 → CATEGORY(meta 카드에 "LOG" 제목, nav 사이드바, 글 목록, Preview Back 노출) → "Hello World" 클릭 → POST(meta에 카테고리 링크, `post.title`, 빈 protected region) → Preview Back 두 번 → CATEGORY → HOME(Preview Back 다시 숨김) — Mobile(390×844) 모드에서도 동일 흐름 재현, floating 버튼이 화면 고정 위치에 그대로 있고 mobile scale의 영향을 받지 않음을 실측했다. 이 세션은 실제 Supabase 프로젝트/로그인 세션이 없으므로(24/25절과 동일한 한계), 이 확인은 fixture `r`(mock Supabase + 실제 generator)을 통한 것이며 실제 계정에서의 최종 확인은 다음 세션 권장 사항으로 남긴다.
+
+### 26-12. 다음 추천 Slice
+
+- **POST 실제 본문 Preview**(25-12절이 이미 열어둔 질문): Studio Preview 안에서 owner-authenticated fetch + secret gate + Quote Preset Renderer를 iframe 경계 너머로 안전하게 끌어오는 별도 설계.
+- **CATEGORY/POST Code Editor 지원**: 현재 Code Editor는 여전히 HOME만 편집한다(8/29절 원칙 유지) — 사용자가 생성된 CATEGORY/POST 마크업을 직접 손보고 싶어지면 필요해질 확장.
+- **실 계정 최종 확인**: 26-11절의 fixture 기반 확인을 실제 Supabase 프로젝트 + 로그인 세션으로 재현(Questionnaire 제출 → 실제 Studio에서 HOME→CATEGORY→POST 탐색).
+- **레이아웃 마이크로 튜닝**: 지금은 세 homeStyle 전부 같은 nav/main을 쓰므로, 실제 사용자 반응을 본 뒤 CATEGORY/POST의 meta 블록 내용(예: 글 개수, 카테고리 설명 등)을 확장할지는 열린 질문으로 남긴다.

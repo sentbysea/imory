@@ -259,6 +259,19 @@
         backButton().hidden === false && codeButton().disabled === true
       );
 
+      /*
+        PHASE 1C-H — Preview Back이 실제로 Top Dock 밖으로 옮겨졌는지
+        확인(핵심 자동 검증). 픽셀 단위 겹침 여부(getBoundingClientRect
+        비교)는 부차적 확인이라 다루지 않는다 — 이 검증만을 위해
+        production DOM에 새 hook/속성을 추가하지도 않는다. 기존
+        DOM 구조(부모 관계)만으로 이동 여부를 확인한다.
+      */
+      record(
+        "V1. Preview Back의 부모는 이제 #studioPreviewShell이다(Top Dock 밖으로 이동, #studioTopDock의 자손이 아님)",
+        backButton().parentElement === shell() &&
+          backButton().closest("#studioTopDock") === null
+      );
+
       // --- CATEGORY -> POST ---
       clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-post-link", "Hello World"));
 
@@ -298,7 +311,30 @@
         !!postOverlayStaysHidden
       );
 
-      // --- Preview Back x2 ---
+      /*
+        PHASE 1C-H — Top Dock을 연 상태에서도 floating Preview Back이
+        정상 동작하는지(admin ← back/Top Dock과 이벤트 충돌 없음,
+        문서 V절). 두 컨트롤은 서로 다른 DOM 위치/state이므로 dock을
+        여는 것이 Preview Back의 가시성이나 클릭 동작에 영향을
+        주면 안 된다.
+      */
+      const topDockHandle = () => doc.getElementById("studioTopDockHandle");
+      const topDockZone = () => doc.getElementById("studioTopDockZone");
+
+      topDockHandle().click();
+
+      const dockOpened = await waitFor(
+        () => (topDockZone().classList.contains("is-open") ? true : null),
+        2000,
+        50
+      );
+
+      record(
+        "V2. Top Dock을 열어도(POST Preview 중) Preview Back의 hidden 상태가 바뀌지 않는다",
+        !!dockOpened && backButton().hidden === false
+      );
+
+      // --- Preview Back x2 (Top Dock이 열린 채로 첫 번째 클릭) ---
       clickAnchor(backButton());
 
       const backToCategory = await waitFor(
@@ -311,6 +347,14 @@
         "N11. Preview Back(POST -> CATEGORY)이 동작한다",
         !!backToCategory && backToCategory.textContent === "LOG"
       );
+
+      record(
+        "V3. Top Dock이 열린 상태에서 누른 Preview Back도 정상적으로 POST -> CATEGORY를 처리한다(admin back과 이벤트 충돌 없음)",
+        !!backToCategory && topDockZone().classList.contains("is-open")
+      );
+
+      // 이후 검사에 영향 없도록 dock을 다시 닫는다.
+      topDockHandle().click();
 
       clickAnchor(backButton());
 
@@ -543,6 +587,135 @@
     }
 
 
+    /* =========================================================
+       PART 2 — SCENARIO R (PHASE 1C-H): 손으로 쓴 마커 마크업이
+       아니라 실제 window.generateInitialSkin()이 만든 SkinPackage로
+       HOME -> CATEGORY -> POST -> Back -> Back 전체 흐름을 검증한다
+       (문서 32절 "새로 생성된 Skin 자체로 navigation E2E"). 클래스
+       이름은 skin/skin-generator.js가 실제로 쓰는 이름
+       (.skin-nav-link/.skin-category-title/.skin-category-posts-link/
+       .skin-post-title/.skin-post-body-slot)이다.
+    ========================================================== */
+
+    async function runScenarioR() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=r");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+
+      const homeRendered = await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".skin-shell--home")),
+        8000,
+        100
+      );
+
+      record(
+        "R-HOME. 실제 generateInitialSkin() 결과가 HOME Preview로 렌더되고, 실제 category nav 링크(LOG/PIC)를 포함한다",
+        !!homeRendered &&
+          !!findAnchorByText(innerDoc(), ".skin-nav-link", "LOG") &&
+          !!findAnchorByText(innerDoc(), ".skin-nav-link", "PIC")
+      );
+
+      record(
+        "R-HOME-BACK. 생성 직후 HOME에서는 floating Preview Back이 숨겨져 있다",
+        backButton().hidden === true
+      );
+
+      clickAnchor(findAnchorByText(innerDoc(), ".skin-nav-link", "LOG"));
+
+      const categoryRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".skin-category-title")) || null,
+        4000,
+        50
+      );
+
+      record(
+        "R-CATEGORY. LOG 클릭 -> 실제 생성된 CATEGORY template이 렌더되고 category.name이 바인딩된다",
+        !!categoryRendered && categoryRendered.textContent === "LOG"
+      );
+
+      record(
+        "R-CATEGORY-BACK. CATEGORY에서는 floating Preview Back이 보인다",
+        backButton().hidden === false
+      );
+
+      const postLinkTexts = Array.from(innerDoc().querySelectorAll(".skin-category-posts-link")).map((a) => a.textContent);
+
+      record(
+        "R-CATEGORY-LIST. category.posts repeat이 실제 글 목록(secret 글 마스킹 포함)을 렌더한다",
+        postLinkTexts.includes("Hello World") && postLinkTexts.includes("🔒 Secret Note"),
+        JSON.stringify(postLinkTexts)
+      );
+
+      clickAnchor(findAnchorByText(innerDoc(), ".skin-category-posts-link", "Hello World"));
+
+      const postRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".skin-post-title")) || null,
+        4000,
+        50
+      );
+
+      record(
+        "R-POST. 글 제목 클릭 -> 실제 생성된 POST template이 렌더되고 post.title이 바인딩된다",
+        !!postRendered && postRendered.textContent === "Hello World"
+      );
+
+      const bodyRegionEmpty = await waitFor(
+        () => {
+          const region = innerDoc() && innerDoc().querySelector(".skin-post-body-slot");
+          return region && region.childNodes.length === 0 ? region : null;
+        },
+        2000,
+        50
+      );
+
+      record(
+        "R-POST-REGION. 생성기가 넣은 placeholder 문단(<p class=skin-authored-placeholder>)이 mount 시점에 비워진다(protected region 계약)",
+        !!bodyRegionEmpty
+      );
+
+      clickAnchor(backButton());
+
+      const backToCategory = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".skin-category-title")) || null,
+        3000,
+        50
+      );
+
+      record(
+        "R-BACK1. Preview Back(POST -> CATEGORY)이 실제 생성된 Skin에서도 동작한다",
+        !!backToCategory && backToCategory.textContent === "LOG"
+      );
+
+      clickAnchor(backButton());
+
+      const backToHome = await waitFor(
+        () => !!(innerDoc() && innerDoc().querySelector(".skin-shell--home")),
+        3000,
+        50
+      );
+
+      record(
+        "R-BACK2. Preview Back(CATEGORY -> HOME)이 실제 생성된 Skin에서도 동작하고, HOME에서 다시 숨겨진다",
+        !!backToHome && backButton().hidden === true
+      );
+
+      record(
+        "R-LOADCOUNT. 전체 흐름 동안 iframe은 정확히 1회만 로드된다",
+        win.__previewFrameLoadCount === 1,
+        "loadCount=" + win.__previewFrameLoadCount
+      );
+
+      return true;
+
+    }
+
+
     async function main() {
 
       runPart1();
@@ -563,6 +736,12 @@
         await runScenarioQ();
       } catch (err) {
         record("Scenario Q 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioR();
+      } catch (err) {
+        record("Scenario R 실행 중 예외 발생", false, String(err && err.stack || err));
       }
 
       const passCount = allResults.filter((r) => r.pass).length;

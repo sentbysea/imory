@@ -44,9 +44,6 @@
 const studioPreviewBackButton =
   document.getElementById("studioPreviewBackButton");
 
-const studioPreviewBackDivider =
-  document.getElementById("studioPreviewBackDivider");
-
 
 let previewHistory =
   [{ type: "home" }];
@@ -64,9 +61,6 @@ function updatePreviewBackButtonVisibility() {
     previewHistory.length <= 1;
 
   studioPreviewBackButton.hidden =
-    isHome;
-
-  studioPreviewBackDivider.hidden =
     isHome;
 
 }

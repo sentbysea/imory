@@ -316,11 +316,25 @@
 
       await waitFor(() => window.__capturedMetadataB, 2000, 50);
 
+      /*
+        PHASE 1C-H: generateInitialSkin()이 이제 metadata.supports
+        (정보성 필드, resolveSkinTemplate()이 실제로 읽지 않는다 —
+        skin/skin-template.js 참고)도 함께 채운다. 이 검사가 지키려는
+        불변식은 여전히 "answers(layoutPreference/baseAppearance/
+        homeStyle) 원문이 metadata에 그대로 새지 않는다"이지 "필드가
+        정확히 1개다"가 아니므로, 허용된 키 집합으로 검사를 완화한다.
+      */
+      const capturedMetadataBKeys =
+        window.__capturedMetadataB ? Object.keys(window.__capturedMetadataB) : [];
+
       record(
-        "B4. 생성된 Skin의 metadata에는 generatedBy만 남고 Questionnaire 답변은 저장되지 않는다",
+        "B4. 생성된 Skin의 metadata에는 generatedBy/supports만 남고 Questionnaire 답변(layoutPreference/baseAppearance/homeStyle)은 저장되지 않는다",
         !!window.__capturedMetadataB &&
-          Object.keys(window.__capturedMetadataB).length === 1 &&
-          window.__capturedMetadataB.generatedBy === "deterministic-v1",
+          window.__capturedMetadataB.generatedBy === "deterministic-v1" &&
+          capturedMetadataBKeys.every((key) => key === "generatedBy" || key === "supports") &&
+          !("layoutPreference" in window.__capturedMetadataB) &&
+          !("baseAppearance" in window.__capturedMetadataB) &&
+          !("homeStyle" in window.__capturedMetadataB),
         JSON.stringify(window.__capturedMetadataB)
       );
 
