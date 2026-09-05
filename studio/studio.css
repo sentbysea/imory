@@ -355,15 +355,92 @@ body {
 
 
 /* =========================================================
+   HOME / CATEGORY — Studio Preview page 전환 (PHASE 1C-D)
+
+   .studio-viewport-toggle과 완전히 동일한 ghost text 스타일을
+   그대로 재사용한다(둘 다 "두 옵션뿐, 클릭 한 번으로 전환"이라는
+   같은 UX 원칙) — 위쪽에 한 줄 더 쌓아 두 줄 구성(page 전환 위,
+   viewport 전환 아래)으로 배치한다.
+========================================================== */
+
+.studio-page-toggle {
+  position: absolute;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  z-index: 5;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+
+.studio-page-toggle-divider {
+  width: 1px;
+  height: 12px;
+
+  background: var(--system-border-strong);
+}
+
+
+.studio-page-toggle-option {
+  padding: 4px 2px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: var(--system-text-faint);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+
+  cursor: pointer;
+}
+
+
+.studio-page-toggle-option:hover {
+  color: var(--system-accent-hover);
+}
+
+
+.studio-page-toggle-option--active {
+  color: var(--system-text);
+
+  font-weight: var(--imory-font-weight-medium);
+}
+
+
+.studio-page-toggle-option:disabled {
+  color: var(--system-text-faint);
+
+  opacity: 0.4;
+
+  cursor: not-allowed;
+}
+
+
+.studio-page-toggle-option:disabled:hover {
+  color: var(--system-text-faint);
+}
+
+
+
+/* =========================================================
    Desktop / Mobile — dropdown 없는 직접 toggle (2절)
 
    두 옵션뿐이라 클릭 한 번으로 바로 전환되는 ghost text
-   버튼으로 둔다 — pill/둥근 캡슐 형태는 쓰지 않는다.
+   버튼으로 둔다 — pill/둥근 캡슐 형태는 쓰지 않는다. page
+   toggle 한 줄 아래로 위치를 옮겼다(top 54px -> 78px).
 ========================================================== */
 
 .studio-viewport-toggle {
   position: absolute;
-  top: 54px;
+  top: 78px;
   left: 50%;
   transform: translateX(-50%);
 

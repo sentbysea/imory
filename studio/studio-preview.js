@@ -74,6 +74,12 @@ const studioPreviewOverlay =
 const studioPreviewOverlayText =
   document.getElementById("studioPreviewOverlayText");
 
+const studioPageToggle =
+  document.getElementById("studioPageToggle");
+
+const studioPageToggleCategoryButton =
+  document.getElementById("studioPageToggleCategory");
+
 const studioViewportToggle =
   document.getElementById("studioViewportToggle");
 
@@ -154,12 +160,105 @@ let isStudioSavePending = false;
 let studioToastHideTimer = null;
 
 
+/* =========================================================
+   PAGE PREVIEW 상태 (PHASE 1C-D)
+
+   viewport state(studioViewportMode, 이 파일 하단)와 완전히
+   독립적이다 — HOME/CATEGORY 전환이 Desktop/Mobile 선택에 영향을
+   주지 않고, 그 반대도 마찬가지다(4절).
+
+   currentOwnerId/currentImageSlotNames/currentImageSlotValues는
+   mountStudioPreview()가 HOME context를 만들 때 이미 조회한
+   값을 그대로 재사용하기 위해 저장해 둔다 — CATEGORY context를
+   만들 때 같은 owner/이미지 슬롯 기준으로 buildCategorySkinContext()
+   를 호출해야 하기 때문이다(15절 "Studio가 category 데이터를
+   새로 조립하지 않는다").
+
+   currentCategoryContext는 categoryId 하나에 대한 캐시다 — v0.1은
+   category picker가 없어 세션 동안 categoryId가 바뀌지 않으므로
+   (13절) 한 번 불러오면 재사용한다. categoryContextToken은
+   fetch 도중 사용자가 다시 페이지를 전환해도 stale 응답이 나중에
+   덮어쓰지 않도록 막는 가드(mountToken과 동일한 패턴).
+========================================================== */
+
+let currentPreviewPageType = "home";
+let currentPreviewCategoryId = null;
+let currentCategoryContext = null;
+let categoryContextToken = 0;
+let currentOwnerId = null;
+let currentImageSlotNames = [];
+let currentImageSlotValues = {};
+
+
 function updateStudioSaveButtonState() {
 
   studioSaveButton.disabled =
     !isStudioDirty ||
     isStudioSavePending ||
     !currentWorkingSkin;
+
+}
+
+
+/* =========================================================
+   Code Editor는 이번 Slice에서도 HOME만 편집한다(16절) — CATEGORY
+   Preview 중에는 "HOME html을 수정하는" 오해를 막기 위해 버튼
+   자체를 비활성화한다. currentWorkingSkin이 아직 없을 때도 당연히
+   비활성 상태를 유지한다.
+========================================================== */
+
+function updateStudioCodeButtonState() {
+
+  studioCodeButton.disabled =
+    !currentWorkingSkin ||
+    currentPreviewPageType === "category";
+
+  studioCodeButton.title =
+    currentPreviewPageType === "category"
+      ? "현재 Code Editor는 HOME만 편집합니다"
+      : "";
+
+}
+
+
+/* =========================================================
+   CATEGORY 버튼 활성화 여부(3절) — post형 category가 하나도
+   없으면 버튼을 disabled 처리하고, 그 이유를 title tooltip으로만
+   짧게 알린다(별도 큰 안내 UI 없음, 3절).
+========================================================== */
+
+function updateStudioPageToggleAvailability() {
+
+  const hasPreviewCategory =
+    currentPreviewCategoryId !== null;
+
+  studioPageToggleCategoryButton.disabled =
+    !hasPreviewCategory;
+
+  studioPageToggleCategoryButton.title =
+    hasPreviewCategory
+      ? ""
+      : "미리볼 글 카테고리가 없습니다";
+
+}
+
+
+function updateStudioPageToggleActiveState() {
+
+  Array.from(
+    studioPageToggle.querySelectorAll(
+      ".studio-page-toggle-option"
+    )
+  ).forEach(
+    (button) => {
+
+      button.classList.toggle(
+        "studio-page-toggle-option--active",
+        button.dataset.pageType === currentPreviewPageType
+      );
+
+    }
+  );
 
 }
 
@@ -184,8 +283,32 @@ function resetStudioWorkingState() {
   isStudioSavePending =
     false;
 
-  studioCodeButton.disabled =
-    true;
+  currentPreviewPageType =
+    "home";
+
+  currentPreviewCategoryId =
+    null;
+
+  currentCategoryContext =
+    null;
+
+  categoryContextToken +=
+    1;
+
+  currentOwnerId =
+    null;
+
+  currentImageSlotNames =
+    [];
+
+  currentImageSlotValues =
+    {};
+
+  updateStudioCodeButtonState();
+
+  updateStudioPageToggleAvailability();
+
+  updateStudioPageToggleActiveState();
 
   updateStudioSaveButtonState();
 
@@ -259,6 +382,260 @@ function buildStudioHomePreviewSkin(skin) {
   );
 
 }
+
+
+/* =========================================================
+   PHASE 1C-D: HOME/CATEGORY page 전환 — resolveSkinTemplate()의
+   14-1절 우선순위를 그대로 따르되, CATEGORY는 HOME과 달리 legacy
+   top-level html로 대체하지 않는다(7절 "CATEGORY template 없다고
+   HOME html을 대신 사용하지 않는다") — resolveSkinTemplate(skin,
+   "category")가 undefined면 곧장 unsupported 안내로 처리한다.
+========================================================== */
+
+function findFirstPostCategoryId(context) {
+
+  const categories =
+    context?.navigation?.categories || [];
+
+  const firstPostCategory =
+    categories.find(
+      (category) =>
+        category.type === "post"
+    );
+
+  return (
+    firstPostCategory
+      ? firstPostCategory.id
+      : null
+  );
+
+}
+
+
+function renderHomePreview() {
+
+  setStudioPreviewOverlay(
+    "hidden"
+  );
+
+  postRenderToFrame(
+    {
+      skin: buildStudioHomePreviewSkin(currentWorkingSkin),
+      context: currentSkinContext
+    }
+  );
+
+}
+
+
+/* =========================================================
+   CATEGORY context 로드 — currentCategoryContext에 categoryId
+   하나만 캐시한다(v0.1은 category picker가 없어 세션 중
+   categoryId가 바뀌지 않는다, 13절). 이미 캐시돼 있으면 fetch
+   없이 즉시 iframe에 다시 보낸다 — HOME <-> CATEGORY 전환이
+   "iframe reload 느낌 없이 즉시" 되어야 한다는 요구(20절)를
+   두 번째 전환부터는 네트워크 왕복 없이 만족시킨다.
+========================================================== */
+
+async function loadCategoryContextAndRender(categoryTemplate) {
+
+  setStudioPreviewOverlay(
+    "loading",
+    "카테고리 미리보기를 불러오는 중..."
+  );
+
+  const token =
+    ++categoryContextToken;
+
+  let context;
+
+  try {
+
+    context =
+      await buildCategorySkinContext(
+        currentOwnerId,
+        currentPreviewCategoryId,
+        {
+          imageSlotNames: currentImageSlotNames,
+          imageSlotValues: currentImageSlotValues
+        }
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[studio-preview] buildCategorySkinContext failed",
+      err
+    );
+
+    if (
+      token === categoryContextToken &&
+      currentPreviewPageType === "category"
+    ) {
+
+      setStudioPreviewOverlay(
+        "error",
+        "카테고리 미리보기를 불러오지 못했습니다."
+      );
+
+    }
+
+    return;
+
+  }
+
+  /*
+    stale 응답 — fetch가 끝나기 전에 사용자가 다시 전환(다른
+    categoryContextToken 발급) 했거나, HOME으로 돌아갔다면 이
+    결과는 더 이상 화면에 반영하지 않는다(mountToken과 동일한
+    패턴, 이 파일 상단 참고).
+  */
+  if (
+    token !== categoryContextToken ||
+    currentPreviewPageType !== "category"
+  ) {
+    return;
+  }
+
+  if (!context) {
+
+    /*
+      categoryId가 이 owner 소유가 아니거나 존재하지 않음 — 정상
+      "없음" 상태(19-1절과 동일 원칙). v0.1은 첫 post형 category를
+      그대로 쓰므로 이 분기는 사실상 방어적이다.
+    */
+
+    setStudioPreviewOverlay(
+      "empty",
+      "미리볼 글 카테고리가 없습니다."
+    );
+
+    return;
+
+  }
+
+  currentCategoryContext =
+    context;
+
+  setStudioPreviewOverlay(
+    "hidden"
+  );
+
+  postRenderToFrame(
+    {
+      skin: categoryTemplate,
+      context: currentCategoryContext
+    }
+  );
+
+}
+
+
+function renderCategoryPreview() {
+
+  if (!currentWorkingSkin) {
+    return;
+  }
+
+  const categoryTemplate =
+    resolveSkinTemplate(currentWorkingSkin, "category");
+
+  if (!categoryTemplate) {
+
+    setStudioPreviewOverlay(
+      "unsupported",
+      "이 스킨에는 아직 CATEGORY 템플릿이 없습니다."
+    );
+
+    return;
+
+  }
+
+  if (currentPreviewCategoryId === null) {
+
+    setStudioPreviewOverlay(
+      "empty",
+      "미리볼 글 카테고리가 없습니다."
+    );
+
+    return;
+
+  }
+
+  if (currentCategoryContext) {
+
+    setStudioPreviewOverlay(
+      "hidden"
+    );
+
+    postRenderToFrame(
+      {
+        skin: categoryTemplate,
+        context: currentCategoryContext
+      }
+    );
+
+    return;
+
+  }
+
+  loadCategoryContextAndRender(
+    categoryTemplate
+  );
+
+}
+
+
+function setPreviewPageType(pageType) {
+
+  if (pageType === currentPreviewPageType) {
+    return;
+  }
+
+  currentPreviewPageType =
+    pageType;
+
+  updateStudioPageToggleActiveState();
+
+  updateStudioCodeButtonState();
+
+  if (pageType === "home") {
+
+    renderHomePreview();
+
+  } else {
+
+    renderCategoryPreview();
+
+  }
+
+}
+
+
+Array.from(
+  studioPageToggle.querySelectorAll(
+    ".studio-page-toggle-option"
+  )
+).forEach(
+  (button) => {
+
+    button.addEventListener(
+      "click",
+      () => {
+
+        if (button.disabled) {
+          return;
+        }
+
+        setPreviewPageType(
+          button.dataset.pageType
+        );
+
+      }
+    );
+
+  }
+);
 
 
 /* =========================================================
@@ -935,8 +1312,34 @@ async function mountStudioPreview(
   isStudioDirty =
     false;
 
-  studioCodeButton.disabled =
-    false;
+  /*
+    CATEGORY Preview가 재사용할 owner/이미지 슬롯 기준을 여기서
+    저장해 둔다 — buildCategorySkinContext()도 같은 owner/슬롯
+    기준으로 호출해야 하기 때문이다(PHASE 1C-D, 15절).
+  */
+  currentOwnerId =
+    ownerId;
+
+  currentImageSlotNames =
+    imageSlotNames;
+
+  currentImageSlotValues =
+    imageSlotValues;
+
+  currentPreviewPageType =
+    "home";
+
+  currentPreviewCategoryId =
+    findFirstPostCategoryId(context);
+
+  currentCategoryContext =
+    null;
+
+  updateStudioCodeButtonState();
+
+  updateStudioPageToggleAvailability();
+
+  updateStudioPageToggleActiveState();
 
   updateStudioSaveButtonState();
 

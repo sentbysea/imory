@@ -222,8 +222,54 @@
 
 
     <!-- =====================================================
+         HOME / CATEGORY — Studio Preview page 전환 (PHASE 1C-D).
+         viewport toggle과 완전히 독립된 별도 state — Desktop/Mobile
+         선택은 이 토글을 눌러도 그대로 유지된다(studio-preview.js
+         setPreviewPageType() 참고). iframe은 재생성/재로드하지
+         않고 template/context만 바꿔 같은 postMessage 경로로 다시
+         보낸다. CATEGORY 버튼은 post형 category가 하나도 없으면
+         disabled 처리된다(studio-preview.js
+         updateStudioPageToggleAvailability()).
+    ====================================================== -->
+
+    <div
+      class="studio-page-toggle"
+      id="studioPageToggle"
+      role="group"
+      aria-label="Preview 페이지"
+    >
+
+      <button
+        type="button"
+        class="studio-page-toggle-option studio-page-toggle-option--active"
+        data-page-type="home"
+      >
+        Home
+      </button>
+
+      <span
+        class="studio-page-toggle-divider"
+        aria-hidden="true"
+      ></span>
+
+      <button
+        type="button"
+        class="studio-page-toggle-option"
+        id="studioPageToggleCategory"
+        data-page-type="category"
+        disabled
+      >
+        Category
+      </button>
+
+    </div>
+
+
+    <!-- =====================================================
          Desktop / Mobile — dropdown 없이 클릭 한 번으로 전환
-         (2절). iframe은 재생성/재로드하지 않는다(위 참고).
+         (2절). iframe은 재생성/재로드하지 않는다(위 참고). page
+         toggle과 완전히 독립된 state(studio-preview.js
+         studioViewportMode 참고).
     ====================================================== -->
 
     <div

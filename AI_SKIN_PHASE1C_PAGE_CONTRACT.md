@@ -722,3 +722,105 @@ category/posts 캐시 저장 직후
 ### 21-10. 다음 Slice(1C-D, Studio CATEGORY Preview / POST Skin Renderer) 진행 가능 여부
 
 **부분적으로 가능.** `templates.category`가 실제 공개 라우트에서 legacy를 깨지 않고 안정적으로 시도되는 경로는 이번 Slice로 마련됐다. 다만 21-8절에 적었듯 **이 세션은 실제 브라우저/DB로 검증하지 못했다** — 1C-D(또는 Studio CATEGORY Preview) 착수 전에 실제 published Skin + post형 category 조합으로 A/C/H 최소 3개 시나리오를 한 번은 육안으로 확인하는 것을 권장한다. Studio CATEGORY Preview 자체(17절 스케치)는 이번 Slice가 손대지 않았으므로 여전히 HOME만 미리보기 가능한 상태다. POST Skin Renderer + `data-imory-region` 실제 연결(7절)은 여전히 미착수.
+
+---
+
+## 22. Slice 1C-D 구현 결과 (실제 구현 완료, 2026-09-05)
+
+> 16절 로드맵이 1C-D로 적어 둔 범위 중 "Studio 안에서 HOME뿐 아니라 CATEGORY Preview도 볼 수 있게 한다" 부분만 이번 Slice가 다룬다 — **POST Skin Renderer + `data-imory-region` 실제 연결은 이번에도 착수하지 않았다**(여전히 다음 Slice 몫). POST Preview/protected region, banner category Skin preview, gallery, pagination, AI/OpenAI, DB migration, RPC 변경, public CATEGORY/HOME route 변경, 기존 owner management guard 변경, Code Editor의 페이지별 tab 확장, `templates.category` 편집 UI — 전부 18절 원칙 그대로 손대지 않았다.
+
+### 22-1. 변경 파일
+
+- **수정** `studio/index.html` — `#studioViewportToggle` 바로 위에 `HOME | CATEGORY` ghost text toggle(`#studioPageToggle`, 버튼 `data-page-type="home"|"category"`)을 추가했다. `#studioPageToggleCategory`는 HTML 단계에서 기본 `disabled` — 실제 활성화 여부는 mount 이후 `studio-preview.js`가 판단한다(22-3절). 새 iframe을 추가하지 않았다 — 기존 `#studioPreviewFrame` 하나를 그대로 재사용한다.
+- **수정** `studio/studio.css` — `.studio-viewport-toggle`과 동일한 ghost text 스타일을 `.studio-page-toggle`로 복제하고, 두 토글을 세로로 쌓았다(`.studio-page-toggle` `top:54px`, `.studio-viewport-toggle`을 기존 `54px`에서 `78px`로 내림). `:disabled` 상태에 `opacity:0.4`만 추가했다 — 별도 큰 안내 UI 없이 버튼 자체의 흐린 표시만으로 "미리볼 글 카테고리가 없음"을 나타낸다(3절 권장안 그대로).
+- **수정** `studio/studio-preview.js` — 이번 Slice의 실제 로직 전부(22-2~22-6절).
+
+### 22-2. Page Preview state 구조
+
+`studioViewportMode`(Desktop/Mobile)와 완전히 분리된 새 module-level state를 추가했다:
+
+```js
+let currentPreviewPageType = "home";       // "home" | "category"
+let currentPreviewCategoryId = null;       // 첫 post형 category id, 없으면 null
+let currentCategoryContext = null;         // categoryId 하나에 대한 캐시
+let categoryContextToken = 0;              // stale fetch 가드(mountToken과 동일 패턴)
+let currentOwnerId = null;
+let currentImageSlotNames = [];
+let currentImageSlotValues = {};
+```
+
+`currentOwnerId`/`currentImageSlotNames`/`currentImageSlotValues`는 `mountStudioPreview()`가 HOME context를 만들 때 이미 조회해 둔 값을 그대로 저장해 뒀다가, CATEGORY context를 만들 때 재사용한다 — Studio가 category 데이터를 새로 조립하지 않고 `buildCategorySkinContext()`에 그대로 넘기기 위해서다(14절). `resetStudioWorkingState()`가 이 state 전부를 초기화하므로, Questionnaire 제출 후 재진입(`initStudio()` 재호출) 같은 기존 재마운트 경로도 그대로 안전하다.
+
+### 22-3. CATEGORY 기본 선택 방식
+
+`findFirstPostCategoryId(context)`가 HOME context의 `context.navigation.categories`(이미 `sort_order` 기준으로 정렬돼 내려온다, `skin-context.js`의 `fetchSkinCategories()` 참고)에서 `type === "post"`인 첫 항목의 `id`를 돌려준다. 별도로 `categories` 테이블을 다시 조회하지 않는다 — HOME context가 이미 가진 `navigation.categories`를 그대로 재사용한다(13절 "Studio가 category 데이터를 새로 조립하지 않는다"와 같은 원칙). `mountStudioPreview()`가 HOME context를 만든 직후 이 값을 `currentPreviewCategoryId`에 저장하고, `updateStudioPageToggleAvailability()`가 그 값의 유무로 CATEGORY 버튼의 `disabled`를 결정한다 — 하드코딩된 "첫 카테고리"가 아니라 state 하나(`currentPreviewCategoryId`)로 두었으므로, 나중에 category picker가 붙어도 이 값만 다시 대입하면 된다(13절 확장 여지).
+
+### 22-4. context/template 전환 방식
+
+`setPreviewPageType(pageType)`가 유일한 진입점이다:
+
+- 같은 타입으로 다시 호출되면 즉시 no-op.
+- `currentPreviewPageType` 갱신 → 토글 active class 갱신 → `updateStudioCodeButtonState()`(22-6절) → `renderHomePreview()` 또는 `renderCategoryPreview()`.
+
+`renderHomePreview()`는 overlay를 곧장 숨기고 `buildStudioHomePreviewSkin(currentWorkingSkin)` + `currentSkinContext`를 기존 `postRenderToFrame()` 경로(`preview:render` postMessage)로 다시 보낸다 — HOME context는 mount 시점에 이미 메모리에 있으므로 네트워크 왕복이 없다.
+
+`renderCategoryPreview()`는 `resolveSkinTemplate(currentWorkingSkin, "category")`를 호출해 template이 없으면 즉시 unsupported(22-5절)로 빠지고, 있으면 `currentPreviewCategoryId`가 `null`인지(empty, 22-5절) 확인한 뒤, `currentCategoryContext`가 이미 캐시돼 있으면 fetch 없이 바로 `postRenderToFrame()`, 없으면 `loadCategoryContextAndRender()`가 `buildCategorySkinContext(currentOwnerId, currentPreviewCategoryId, { imageSlotNames, imageSlotValues })`를 호출해 채운 뒤 캐시하고 렌더한다. **HOME/CATEGORY 어느 쪽도 새 iframe을 만들지 않는다** — 항상 같은 `#studioPreviewFrame`에 같은 `preview:render`/`preview:ready`/`preview:rendered`/`preview:error` 계약(`studio-preview.js` 파일 상단 주석, `preview-bridge.js`)을 그대로 재사용한다. `preview-bridge.js`는 이번 Slice에서 한 글자도 바뀌지 않았다 — `renderInstance.update(skin, context)`가 이미 skin/context가 바뀌는 모든 경우(Code Apply 포함)를 처리하고 있어서, "페이지가 바뀌었다"는 사실을 iframe 쪽이 구분할 필요가 없었다.
+
+### 22-5. unsupported / empty / error / loading 처리
+
+`setStudioPreviewOverlay(mode, text)`는 기존에도 `mode === "error"`일 때만 스타일을 다르게 주는 구조였다(`"loading"` 등 다른 문자열은 전부 중립 스타일) — 그래서 `"unsupported"`/`"empty"` 두 mode를 새 CSS 없이 그대로 추가할 수 있었다:
+
+| 상태 | 조건 | overlay mode | 텍스트 |
+|---|---|---|---|
+| loading | category context 최초 fetch 중 | `"loading"` | "카테고리 미리보기를 불러오는 중..." |
+| unsupported | `resolveSkinTemplate(skin,"category")`가 undefined | `"unsupported"` | "이 스킨에는 아직 CATEGORY 템플릿이 없습니다." |
+| empty | `currentPreviewCategoryId === null`(post형 category 없음) | `"empty"` | "미리볼 글 카테고리가 없습니다." |
+| error | `buildCategorySkinContext()` throw, 또는 결과가 `null`(소유자 불일치 등 방어적 케이스는 empty로 처리) | `"error"` | "카테고리 미리보기를 불러오지 못했습니다." |
+
+unsupported/empty 상태에서는 **iframe에 아무 것도 다시 그리지 않는다** — 마지막으로 렌더된 내용(보통 HOME) 위에 반투명 overlay(`color-mix(in srgb, var(--system-bg) 88%, transparent)`, 기존 loading overlay와 동일 배경)만 얹는다. HOME으로 돌아가면 `renderHomePreview()`가 overlay를 곧장 숨기고 다시 렌더하므로 즉시 정상 화면으로 돌아온다 — legacy CATEGORY 화면이나 HOME html을 대신 띄우는 경로는 어디에도 없다(7절 요구사항).
+
+### 22-6. Code Editor 처리
+
+`updateStudioCodeButtonState()`가 `studioCodeButton.disabled = !currentWorkingSkin || currentPreviewPageType === "category"`로 통합했다 — 기존에 `resetStudioWorkingState()`/`mountStudioPreview()`가 각자 `studioCodeButton.disabled = true/false`를 직접 대입하던 두 지점을 이 함수 호출로 교체했다. CATEGORY Preview 중에는 버튼이 disabled라 클릭 자체가 안 되고, `title` 속성에 "현재 Code Editor는 HOME만 편집합니다"를 채워 hover 시 이유를 알 수 있게 했다 — 별도 모달/토스트 안내는 만들지 않았다(16절 "추천" 수준의 최소 처리).
+
+### 22-7. Save/Apply와의 관계 — 회귀 여부
+
+- **Apply(`applyWorkingSkinChanges`)**: 코드를 전혀 바꾸지 않았다. Code Editor가 CATEGORY Preview 중엔 애초에 열리지 않으므로(22-6절) 이 함수가 CATEGORY 상태에서 호출될 경로 자체가 없다 — "Apply가 실수로 CATEGORY 렌더 로직을 건드리는" 시나리오가 코드 구조상 발생하지 않는다.
+- **Save(`handleStudioSaveClick`)**: 한 글자도 바꾸지 않았다. `currentWorkingSkin` 전체(schemaVersion/html/css/templates/imageSlots/regions/metadata)를 그대로 저장하는 기존 경로 그대로이고, page type을 참조하지 않는다(17절 요구사항).
+- **mount(`mountStudioPreview`)**: HOME context 로드 직후 `currentOwnerId`/`currentImageSlotNames`/`currentImageSlotValues`/`currentPreviewCategoryId`/`currentPreviewPageType`/`currentCategoryContext`를 초기화하는 코드만 추가했다 — draft 로드, image slot 조회, `buildSkinContext()` 호출 등 기존 로직은 순서/내용 변경 없음.
+
+### 22-8. 테스트
+
+`node --check studio/studio-preview.js`, `node --check studio/studio-state.js` 구문 검증 통과. **이 세션은 실제 Supabase 프로젝트/브라우저를 띄워 클릭 테스트를 수행하지 못했다** — 21-8절과 동일한 한계다. 아래는 코드 경로를 직접 추적해 확인한 것이지 실행 결과가 아니다.
+
+| # | 시나리오 | 확인 방법 | 결과 |
+|---|---|---|---|
+| A | Studio 최초 진입 → HOME Preview | `mountStudioPreview()`가 기존과 동일하게 `postRenderToFrame(home)`으로 끝남(22-7절, 변경 없음) | 코드상 확인 |
+| B | HOME → CATEGORY + templates.category 존재 | `renderCategoryPreview()` → template 있음 → `loadCategoryContextAndRender()` → `buildCategorySkinContext()` → `postRenderToFrame()` | 코드상 확인 |
+| C | category.name binding | `buildCategorySkinContext()` 재사용, 신규 매핑 없음(1C-C에서 이미 검증) | 코드상 확인(신규 로직 없음) |
+| D | category.posts repeat | 위와 동일 | 코드상 확인 |
+| E | CATEGORY → HOME 복귀 | `renderHomePreview()`가 캐시된 `currentSkinContext`로 즉시 재렌더 | 코드상 확인 |
+| F | templates.category 없음 → unsupported | `resolveSkinTemplate` undefined → overlay `"unsupported"`, render 호출 없음 | 코드상 확인 |
+| G | post형 category 없음 → empty | `currentPreviewCategoryId === null` → overlay `"empty"`, 버튼도 disabled(이중 방어) | 코드상 확인 |
+| H | CATEGORY + MOBILE 유지 | viewport state(`studioViewportMode`)는 이번 Slice가 전혀 건드리지 않은 별도 변수 — page 전환 함수 어디서도 참조하지 않음 | 코드상 확인 |
+| I | CATEGORY+MOBILE → HOME, Mobile 유지 | 위와 동일 이유 | 코드상 확인 |
+| J | HOME+Desktop → CATEGORY, Desktop 유지 | 위와 동일 이유 | 코드상 확인 |
+| K | 전환마다 iframe load count 불변 | `#studioPreviewFrame`은 `mountStudioPreview()` 최초 1회만 만들어지고, page 전환 함수 어디도 `src`/DOM 재생성을 하지 않음(기존 `postRenderToFrame()` 재사용) | 코드 diff 확인 |
+| L | preview:ready lifecycle 회귀 없음 | `preview-bridge.js`/`PREVIEW_MSG_*` 상수·핸들러 미변경 | 코드 diff 확인 |
+| M | currentWorkingSkin 기준 Preview | HOME/CATEGORY 모두 `resolveSkinTemplate(currentWorkingSkin, ...)` 사용, published Skin을 별도로 다시 읽지 않음 | 코드상 확인 |
+| N | public HOME/CATEGORY/POST 코드 경로 미변경 | `skin/skin-home.js`, `skin/skin-category.js`, `posts/view/*` 미수정(diff 확인) | 코드 diff 확인 |
+| O | owner management guard 미변경 | `posts-view-list.js`의 owner-view 가드(21-6절)는 이번 Slice가 건드리지 않음 | 코드 diff 확인 |
+| P | Code Editor 오해 방지 | 22-6절, CATEGORY 중 버튼 disabled | 코드상 확인 |
+| Q | Save Draft 회귀 없음 | 22-7절, `handleStudioSaveClick` 미변경 | 코드 diff 확인 |
+
+### 22-9. 공개 route/guard 회귀 여부
+
+**없음(코드 diff 기준).** 이번 Slice가 수정한 파일은 `studio/index.html`, `studio/studio.css`, `studio/studio-preview.js` 셋뿐이다 — `skin/` 디렉터리(HOME/CATEGORY/POST 렌더러, context 빌더, 새니타이저, 템플릿 선택), `posts/view/*`, `posts/editor/posts-router-init.js`, `home/*` 어디도 손대지 않았다. `studio/preview/preview-bridge.js`도 미변경 — 부모(`studio-preview.js`)가 보내는 `{skin, context}` payload의 **내용**만 페이지 타입에 따라 달라질 뿐, postMessage 계약 자체는 그대로다.
+
+### 22-10. 실제 브라우저 확인 여부
+
+**하지 못했다.** 이 세션은 Supabase 프로젝트/브라우저를 띄울 수 없는 환경이라 22-8절 표는 전부 코드 경로 추적 결과다. 다음 세션에서 최소 다음을 실제로 확인하는 것을 권장한다: (1) post형 category가 있는 draft Skin에서 CATEGORY 토글이 활성화되는지, (2) `templates.category`가 없는 기존 draft에서 unsupported 안내가 뜨는지, (3) HOME↔CATEGORY 전환 시 network 탭 기준 iframe 재로드가 없는지, (4) Mobile 모드에서 페이지 전환 시 390×844 유지 여부.
+
+### 22-11. 다음 PHASE 1C-E 진행 가능 여부
+
+**부분적으로 가능.** Studio가 CATEGORY template/context를 실시간으로 미리볼 수 있는 기반은 이번 Slice로 마련됐다 — 다만 22-10절의 실제 브라우저 검증이 먼저 필요하다. POST Skin Renderer(공개 라우트) + `data-imory-region`/protected post-body 실제 연결(7절), Studio POST Preview, Code Editor의 CATEGORY/POST 편집 UI, category picker(13절 확장) — 전부 여전히 미착수 상태로 남아 있다.
