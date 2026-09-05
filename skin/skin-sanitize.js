@@ -52,6 +52,20 @@ const SKIN_SANITIZE_BIND_ATTRS = new Set([
   "data-imory-if"
 ]);
 
+/* =========================================================
+   data-imory-region (PHASE1C-E, 7절 Protected Post-Body Contract)
+
+   나머지 5종과 달리 값이 context path가 아니라 고정 문자열
+   식별자다(resolve 대상 아님, skin-render.js가 그대로 통과시킴).
+   v0.1은 "post-body" 하나만 허용 — 그 외 값은 저장 시점에 조용히
+   제거한다(속성 자체가 안 남으므로 렌더러가 이후 이 이름으로
+   region을 찾을 일도 없다). id 속성은 여전히 SKIN_SANITIZE_DENY_ATTRS
+   에서 전면 금지된 채라 Skin이 표준 id로 system root를 spoof할 수
+   없다 — region 식별은 항상 이 전용 속성만으로 이뤄진다.
+========================================================== */
+const SKIN_SANITIZE_REGION_ATTR = "data-imory-region";
+const SKIN_SANITIZE_ALLOWED_REGION_NAMES = new Set(["post-body"]);
+
 /* 명시적으로 전량 제거되는 속성(접두어 매칭은 별도 처리) */
 const SKIN_SANITIZE_DENY_ATTRS = new Set([
   "style", "srcdoc", "formaction", "xlink:href",
@@ -136,6 +150,15 @@ function copySkinSanitizedAttributes(sourceEl, destEl, tag) {
         destEl.setAttribute(name, value);
       } else {
         console.warn(`[skin-sanitize] dropped malformed binding path ${name}="${value}"`);
+      }
+      return;
+    }
+
+    if (name === SKIN_SANITIZE_REGION_ATTR) {
+      if (SKIN_SANITIZE_ALLOWED_REGION_NAMES.has(value)) {
+        destEl.setAttribute(name, value);
+      } else {
+        console.warn(`[skin-sanitize] dropped unsupported ${name}="${value}"`);
       }
       return;
     }

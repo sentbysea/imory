@@ -243,10 +243,33 @@ function applySkinUrlBinding(el, prop, resolvePath) {
 }
 
 /* =========================================================
-   walkSkinTree — 단일 재귀 순회로 repeat > if > bind/src/href
-   순서를 자연스럽게 보장한다. repeat을 만나면 그 서브트리는
-   전적으로 applySkinRepeat이 처리하고(각 clone마다 재귀 재진입),
-   원본 템플릿 엘리먼트 자체의 if/bind/자식 순회는 하지 않는다.
+   data-imory-region — protected post-body contract
+   (AI_SKIN_PHASE1C_PAGE_CONTRACT.md 7절/Slice 1C-E).
+
+   값을 resolve하지 않는다(경로가 아니라 고정 식별자, 이미
+   저장 시점에 skin-sanitize.js가 "post-body" 외 값을 제거했다).
+   이 엘리먼트는 Skin이 소유하는 게 아니라 caller(POST Viewer)가
+   실제 본문을 mount할 자리이므로, Skin 저작자가 미리보기용으로
+   넣어둔 임의 child DOM(플레이스홀더 텍스트 등)은 여기서 항상
+   비운다 — region 안의 콘텐츠는 caller가 채우기 전까지 항상 빈
+   컨테이너다. bind/if 등 다른 data-imory-* 속성과의 조합은 v0.1이
+   지원하지 않는다(문서 5절, region은 단독으로만 쓰인다).
+========================================================== */
+
+function applySkinRegion(el) {
+
+  while (el.firstChild) {
+    el.removeChild(el.firstChild);
+  }
+
+}
+
+/* =========================================================
+   walkSkinTree — 단일 재귀 순회로 repeat > region > if > bind/src/href
+   순서를 자연스럽게 보장한다. repeat/region을 만나면 그 서브트리는
+   전적으로 각자의 처리 함수가 담당하고(repeat은 각 clone마다 재귀
+   재진입, region은 자식을 비우고 종료), 원본 템플릿 엘리먼트 자체의
+   if/bind/자식 순회는 하지 않는다.
 ========================================================== */
 
 function walkSkinTree(el, resolvePath, repeatDepth) {
@@ -257,6 +280,11 @@ function walkSkinTree(el, resolvePath, repeatDepth) {
 
   if (el.hasAttribute("data-imory-repeat")) {
     applySkinRepeat(el, resolvePath, repeatDepth);
+    return;
+  }
+
+  if (el.hasAttribute("data-imory-region")) {
+    applySkinRegion(el);
     return;
   }
 
@@ -302,6 +330,13 @@ function walkSkinTree(el, resolvePath, repeatDepth) {
    보존한다.
 ========================================================== */
 
+/* region 이름은 caller(예: POST Viewer)가 넘기는 리터럴이지 Skin
+   콘텐츠에서 오는 값이 아니지만, attribute selector 문자열 조립에
+   그대로 꽂히므로(querySelector) 방어적으로 형태를 제한한다. */
+function isValidSkinRegionName(name) {
+  return typeof name === "string" && /^[A-Za-z][A-Za-z0-9_-]*$/.test(name);
+}
+
 let skinRenderInstanceCounter = 0;
 
 export function renderSkin({ container, skin, context, mode = "view" } = {}) {
@@ -313,6 +348,7 @@ export function renderSkin({ container, skin, context, mode = "view" } = {}) {
   let currentSkin = skin;
   let currentContext = context;
   let currentMode = mode;
+  let currentRoot;
 
   const instanceNamespace = `i${++skinRenderInstanceCounter}`;
 
@@ -351,6 +387,7 @@ export function renderSkin({ container, skin, context, mode = "view" } = {}) {
     root.appendChild(template.content.cloneNode(true));
 
     container.appendChild(root);
+    currentRoot = root;
 
     const resolveTopLevel = (path) => resolveSkinPath(currentContext, path);
 
@@ -380,6 +417,32 @@ export function renderSkin({ container, skin, context, mode = "view" } = {}) {
 
     destroy() {
       container.innerHTML = "";
+      currentRoot = undefined;
+    },
+
+    /* =========================================================
+       getRegion(name) -> Element | undefined
+
+       protected post-body contract(PHASE1C 7절/Slice 1C-E)의
+       caller-facing API. 항상 "지금 mount되어 있는" DOM을 live
+       query하므로, update()로 재마운트된 뒤에는 이전에 저장해 둔
+       엘리먼트 참조가 아니라 getRegion()을 다시 호출해서 새
+       엘리먼트를 받아야 한다(재마운트 시 container.innerHTML을
+       통째로 다시 그리므로 이전 참조는 detached된다 — 이건
+       renderSkin() 자체의 기존 동작이지 이 API가 새로 만드는
+       제약이 아니다). skin.templates.post에 "post-body" region이
+       없으면 undefined — 호출자는 이 경우를 "이 Skin은 POST 본문을
+       표시할 자리가 없다"로 취급해야 한다(문서 15절, template
+       invalid/unsupported 판정 후보).
+    ========================================================== */
+    getRegion(name) {
+
+      if (!currentRoot || !isValidSkinRegionName(name)) {
+        return undefined;
+      }
+
+      return currentRoot.querySelector(`[data-imory-region="${name}"]`) || undefined;
+
     }
 
   };

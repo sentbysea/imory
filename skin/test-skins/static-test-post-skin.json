@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "templates": {
+    "post": {
+      "html": "<article class=\"skin-post\"><header class=\"skin-post-header\"><h1 class=\"skin-post-title\" data-imory-bind=\"post.title\"></h1><p class=\"skin-post-meta\" data-imory-if=\"post.categoryName\"><a class=\"skin-post-category\" data-imory-href=\"post.categoryHref\" data-imory-bind=\"post.categoryName\"></a><span class=\"skin-post-date\" data-imory-bind=\"post.publishedAt\"></span></p></header><div class=\"skin-post-body-slot\" data-imory-region=\"post-body\"><p class=\"skin-authored-placeholder\">본문이 여기 표시됩니다(미리보기용 placeholder — mount 시 제거되어야 함)</p></div><footer class=\"skin-post-footer\"><a data-imory-href=\"site.slug\">back to site</a></footer></article>"
+    }
+  },
+  "css": ".skin-post { font-family: system-ui, sans-serif; max-width: 720px; margin: 0 auto; padding: 16px; } .skin-post-body-slot { margin-top: 24px; padding: 12px 0; border-top: 1px solid #eee; } .skin-post-title { font-size: 24px; }",
+  "imageSlots": [],
+  "regions": [],
+  "metadata": {
+    "title": "Static Test POST Skin",
+    "generatedBy": "manual",
+    "supports": { "home": false, "list": false, "post": true },
+    "requiredContext": [
+      "post.title",
+      "post.categoryName",
+      "post.categoryHref",
+      "post.publishedAt"
+    ]
+  }
+}

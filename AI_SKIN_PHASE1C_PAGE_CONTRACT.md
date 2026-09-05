@@ -826,3 +826,106 @@ unsupported/empty 상태에서는 **iframe에 아무 것도 다시 그리지 않
 ### 22-11. 다음 PHASE 1C-E 진행 가능 여부
 
 **부분적으로 가능.** Studio가 CATEGORY template/context를 실시간으로 미리볼 수 있는 기반은 이번 Slice로 마련됐다 — 다만 22-10절의 실제 브라우저 검증이 먼저 필요하다. POST Skin Renderer(공개 라우트) + `data-imory-region`/protected post-body 실제 연결(7절), Studio POST Preview, Code Editor의 CATEGORY/POST 편집 UI, category picker(13절 확장) — 전부 여전히 미착수 상태로 남아 있다.
+
+---
+
+## 23. Slice 1C-E 구현 결과 (실제 구현 완료, 2026-09-05)
+
+> **범위 명명 관련 참고**: 16절 로드맵 원안은 "1C-E = Studio Preview 페이지 탭"이었지만, 그 내용은 실제로는 1C-D(22절)가 이미 다뤘다(Studio가 CATEGORY까지 미리보게 됨). 이번에 실제로 "1C-E"라는 이름으로 진행/완료된 작업은 로드맵 원안의 1C-D("POST Skin Renderer + 7절 region 실제 연결") 중에서도 **public route 연결과 Studio POST Preview를 뺀 절반** — 즉 7절 Protected Post-Body Contract 자체의 최소 구현(새니타이저/렌더러)이다. 이 문서 16절 표는 계획 당시의 로드맵이라 그대로 두고, 실제 진행 순서는 19/20/21/22절 및 이번 23절의 각 절 제목으로 추적한다. **public `/post/:id` route에는 이번에도 연결하지 않았다. Studio POST Preview도 이번에도 만들지 않았다** — 둘 다 다음 Slice(23-10절, 이후 "1C-F"로 부를 예정) 몫이다.
+
+### 23-1. POST VIEWER 실제 구조 재조사 — 7절 원안과의 차이
+
+7절(Protected Post-Body Contract) 작성 시점의 조사(1-3절)는 그 자체로 정확했고, 이번에 실제 파일(`posts/view/posts-view-detail.js`, `posts/style/posts-style-render.js`, `posts/posts.html`, `skin/skin-css-validate.js`)을 다시 읽어 다음을 재확인/보강했다:
+
+- **본문 DOM root**: `<div id="postDetailContent" class="post-detail-content">`(`posts/posts.html:345-346`) — 1-3절 그대로. `openPostPage()`가 매번 `postDetailContent.textContent = ""`로 먼저 비운 뒤(`posts-view-detail.js:141-146`), `renderPostDetailBody()`가 `content_type`에 따라 `postDetailContent.innerHTML = contentText`(html 모드) 또는 `renderStyledPostContentInto(postDetailContent, ...)`(styled/Quote Preset 모드)를 호출한다 — **두 모드 다 최종적으로 이 컨테이너 하나**로 귀결된다는 7절 서술 그대로다.
+- **secret post 흐름과 body container의 관계**: `openPostPage()`는 `post.visibility === "secret" && !isOwnerViewing`이면 `renderPostDetailBody()`를 아예 호출하지 않고 `showPostSecretGate()`만 띄운다(`posts-view-detail.js:320-338`) — 이때 `postDetailContent`는 방금 비워진 빈 상태 그대로 남아있다(잠금 화면은 `#postSecretGate`라는 **별도 엘리먼트**이지 `postDetailContent` 내부가 아니다, `posts.html:361-393`). 비밀번호를 맞히면(`handleSecretGateSubmit`, 별도 파일) 그제서야 **동일한** `renderPostDetailBody()`를 호출해 같은 컨테이너를 채운다 — secret 전용 렌더 분기가 없다는 7-5절 서술이 정확했다.
+- **Quote Preset Renderer의 실제 DOM 조작 범위**: `renderStyledPostContentInto(container, content, settings, options)`(`posts-style-render.js:173-356`)는 `container.replaceChildren()`으로 시작해서(자기 자신이 컨테이너를 비우는 책임도 이미 진다) content를 파싱해 자식으로 붙이고, 그 위에 `applyPostBodyStyles()`(폰트/색/줄간격 인라인 스타일, `container.style.*`)와 `applyActionDialogueStyles()`(`.post-action`/`.post-dialogue` 클래스가 실제로 여기서 부여된다, `posts/style/posts-style-dialogue.js`)를 적용한다. **컨테이너 엘리먼트 자체(id/class)는 건드리지 않고 내부 자식만 관리한다** — 즉 region 컨테이너를 caller가 만들어서 넘겨줘도 이 함수는 그 컨테이너의 정체(Skin이 만들었는지 legacy `#postDetailContent`인지)를 전혀 몰라도 그대로 동작한다(7-3절 "Post Viewer가 region 엘리먼트를 찾아 Quote Preset Renderer 호출"이 실제로 성립하는 근거).
+- **CSS 보호 경계가 이미 선제 구현돼 있었다**: `skin/skin-css-validate.js:104`의 `SKIN_CSS_PROTECTED_SELECTOR_PATTERN`(`/#postDetailContent\b|\.post-detail-content\b|\.post-dialogue\b|\.post-action\b|\.post-inline-/`)이 **PHASE 1A 단계(Slice 3)에서 이미** "POST 단계 선행 설계"라는 주석과 함께 들어가 있었다 — 7-6-1절이 "미해결 지점"으로 남겨 둔 CSS 누수 방지가 사실은 이미 부분적으로 구현돼 있었다는 뜻이다. 실제 Quote Preset 클래스 이름(`posts-list-detail.css:854-870`, `posts/style/posts-style-dialogue.js`)을 대조한 결과 `.post-action`/`.post-dialogue`/`.post-inline-*`가 정확히 일치했다 — 이번 Slice는 이 패턴을 **바꾸지 않았다**(23-5절).
+
+### 23-2. 확정한 Protected Post-Body 계약 (7절 제안의 실제 구현)
+
+7절이 제안만 하고 미루던 것을 그대로 구현했다 — 계약 자체는 7-5절 표에서 바뀐 것이 없다:
+
+- **속성**: `data-imory-region="post-body"`. v0.1 유일 지원 값(다른 값은 저장 시점에 제거).
+- **region 엘리먼트가 mount root다(7-9절 "후보 A" 채택)**: 별도 `#postDetailContent`를 region 안에 시스템이 새로 만들어 넣는 "후보 B"는 채택하지 않았다 — 23-1절에서 확인했듯 `renderStyledPostContentInto()`/`postDetailContent.innerHTML=...` 양쪽 다 "컨테이너 엘리먼트를 인자로 받아 그 자식만 관리"하는 방식이라, region 엘리먼트 자체를 그 컨테이너 인자로 바로 넘기면 기존 함수를 한 글자도 안 고쳐도 된다 — "기존 post body renderer 수정 최소화"라는 7-9절 우선순위와 정확히 맞아떨어진다. `id="postDetailContent"`를 Skin이 직접 선언하는 경로는 애초에 없다(sanitizer가 `id` 속성을 전면 금지, 23-3절) — 향후 실제 공개 route 연결 Slice에서 caller가 `getRegion("post-body")`로 얻은 엘리먼트를 `renderStyledPostContentInto()`의 `container` 인자로 바로 넘기면 된다.
+- **Skin-authored child content는 mount 시점에 항상 비운다**: "placeholder로만 사용"이라는 5절 권장안을 채택 — sanitize 단계에서는 보존하되(저장된 HTML 자체는 그대로, Studio Code Editor에서 다시 열어도 보일 수 있음), **renderSkin() mount 시점에 항상 제거**한다(23-4절). 이 시점을 sanitize가 아니라 render로 정한 이유: sanitize는 저장 시 1회만 통과하지만, render(`mount()`)는 update()로 재호출될 때마다 다시 실행되므로 — region의 "항상 빈 컨테이너"라는 불변식을 sanitize 시점에만 지키면 Skin HTML 자체(저장된 원본)에는 여전히 placeholder 자식이 남아있어 다음 mount 때마다 다시 나타났다 사라지는 깜빡임이 생길 수 있다. render 시점에 매번 지우면 이 문제가 구조적으로 없다.
+- **caller 책임 경계는 7-5절 표 그대로** — 이번 Slice는 caller(POST Viewer)를 만들지 않았으므로 이 경계는 여전히 "다음 Slice가 지켜야 할 계약"으로만 남는다.
+
+### 23-3. 새니타이저 변경 — `skin/skin-sanitize.js`
+
+- `SKIN_SANITIZE_REGION_ATTR = "data-imory-region"`, `SKIN_SANITIZE_ALLOWED_REGION_NAMES = new Set(["post-body"])` 추가.
+- `copySkinSanitizedAttributes()`에 전용 분기 추가 — 기존 5종(`SKIN_SANITIZE_BIND_ATTRS`)과 값 검증 방식이 다르다(dotted path가 아니라 고정 문자열이라 `isSafeSkinBindPath()`의 `[A-Za-z0-9_]` 패턴을 그냥 재사용할 수 없다 — `"post-body"`의 하이픈이 그 패턴에 안 맞는다). `SKIN_SANITIZE_ALLOWED_REGION_NAMES.has(value)`가 거짓이면 **속성 자체를 제거**(값 대체 없음, href/src 실패 시와 동일 원칙, 1-4절).
+- `id` 속성은 그대로 `SKIN_SANITIZE_DENY_ATTRS`에 남아있다 — 변경 없음. `on*`/`style`/`script` 등 기존 제거 규칙도 region 속성 유무와 무관하게 그대로 적용된다(같은 `copySkinSanitizedAttributes`/`sanitizeSkinNode` 파이프라인을 그대로 통과하므로 새 우회 경로가 생기지 않는다 — 23-7절 E1/E2 테스트로 확인).
+- **추가로 건드리지 않은 것**: `SKIN_SANITIZE_BIND_PATH_PATTERN`, 태그 allowlist, URL 스킴 정책 — 전부 그대로.
+
+### 23-4. 렌더러 변경 — `skin/skin-render.js`
+
+- `applySkinRegion(el)`: `data-imory-region` 속성이 있는 엘리먼트의 자식을 전부 제거한다(`while (el.firstChild) el.removeChild(el.firstChild)`) — 값을 resolve하지 않는다(7-3절 원안 그대로, 고정 식별자라 resolve 대상이 아님).
+- `walkSkinTree()`의 분기 순서: `repeat → region → if → bind/src/href`. `data-imory-region`이 있으면 `applySkinRegion()`만 실행하고 **그 자리에서 return**한다 — repeat과 동일하게 그 서브트리는 더 이상 순회하지 않는다(같은 엘리먼트에 `data-imory-if`/`data-imory-bind`가 함께 있어도 무시됨 — v0.1은 region과 다른 바인딩의 조합을 지원하지 않는다고 문서 5절이 이미 명시했으므로 의도된 제약이다).
+- `renderSkin()`이 반환하는 인스턴스에 `getRegion(name)` 메서드를 추가했다 — `regions` 맵 대신 메서드 하나를 선택한 이유: `update()`가 매번 `container.innerHTML`을 통째로 다시 그리므로(기존 동작, 7-6-2절이 이미 지적한 문제) mount 시점에 한 번 계산해 둔 맵은 update 직후 stale해진다. 메서드로 두면 "항상 지금 mount된 DOM을 live query한다"는 계약이 이름 자체로 드러나고, 호출자가 실수로 오래된 참조를 캐싱해 쓰는 실수를 문서(주석)로 경고할 수 있다. 내부적으로는 `currentRoot.querySelector('[data-imory-region="name"]')` 하나뿐 — `findSkinRegion` 같은 별도 export 헬퍼나 region registry는 만들지 않았다(16절 "generic plugin system 금지" 원칙).
+- `isValidSkinRegionName(name)`으로 `getRegion()` 인자 형태를 방어적으로 제한했다(`querySelector` attribute-selector 문자열 조립에 그대로 꽂히므로) — 이 이름은 caller(신뢰된 앱 코드)가 넘기는 리터럴이지 Skin 콘텐츠에서 온 값이 아니라 보안 경계는 아니고, 방어적 코딩 수준이다.
+- **추가로 건드리지 않은 것**: `resolveSkinPath`/`isSkinTruthy`/`applySkinRepeat`/`applySkinIf`/`applySkinBind`/`applySkinUrlBinding` 로직 자체, `mount()`의 sanitize/validate 호출, keyframe namespace 처리 — 전부 그대로.
+
+### 23-5. CSS 보호 경계 — 정책 확정, 코드 변경 없음
+
+10/11절이 요구한 정책(wrapper styling 허용 + region 내부 system-owned selector 직접 타겟 제한)은 **이미 `skin-css-validate.js`에 구현돼 있었다**(23-1절에서 확인한 `SKIN_CSS_PROTECTED_SELECTOR_PATTERN`). 이 패턴은 selector 텍스트 전체를 정규식으로 검사하므로:
+
+- `[data-imory-region="post-body"] { margin-top: 24px; }` (wrapper 자체, attribute selector) — 패턴에 안 걸림 → **허용**.
+- `[data-imory-region="post-body"] .post-dialogue { ... }`, `#postDetailContent b { ... }`, `.post-action-button { ... }`, `.post-inline-highlight { ... }` — 앞에 어떤 조상 selector(`[data-imory-region=...]` 포함)를 붙여도 정규식이 selector 문자열 전체에서 매치되므로 **그대로 제거**(23-7절 G1/G2 테스트로 실측 확인).
+
+즉 이번 Slice는 10/11절이 요구한 "wrapper는 되고 내부 system selector는 안 되는" 경계를 위한 **새 코드를 추가하지 않았다** — PHASE 1A 시점에 이미 선제로 들어간 방어가 정확히 이 요구를 충족한다. 문서화된 한계(7-6-1절 그대로 유지, 고치지 않음): 이 패턴은 **알려진 특정 클래스/id만** 막는 denylist라 `p`, `div`, `.title` 같은 범용 selector가 region 내부 콘텐츠에 캐스케이드되는 것은 막지 못한다 — Shadow DOM 없이는 완전한 격리가 불가능하다는 7-6-1절의 결론을 그대로 승계하며, v0.1은 이 한계를 받아들인다.
+
+### 23-6. `regions` 필드 / template 유효성 판정
+
+- **`SkinPackage.regions` 배열은 여전히 손대지 않았다** — `skin-generator.js`가 항상 `[]`만 채우는 placeholder 그대로다. 이번 Slice도 이 필드를 실제 truth source로 승격하지 않는다(14절 원칙 그대로) — HTML 안의 `data-imory-region="post-body"` 존재 여부(= `renderSkin().getRegion("post-body")`가 엘리먼트를 돌려주는지)가 유일한 runtime 판정 기준이다.
+- **template 있음 + region 없음 → "본문 자리 없는 POST"의 판정 신호는 이번 Slice가 만들었다**: `getRegion("post-body")`가 `undefined`를 반환하는 것 자체가 그 신호다(23-7절 F1). 실제로 이걸 "invalid/unsupported"로 취급해 legacy로 폴백시키는 **호출자 로직은 아직 없다** — 그 호출자(공개 POST route 연결)가 다음 Slice의 몫이므로, 이번 Slice는 "판정할 수 있는 근거"만 마련했다(15절 권장 방향 그대로, 강제하는 코드는 다음 Slice).
+
+### 23-7. 변경/생성 파일
+
+- **수정** `skin/skin-sanitize.js` — 23-3절.
+- **수정** `skin/skin-render.js` — 23-4절.
+- **생성** `skin/test-skins/static-test-post-skin.json` — POST template fixture(17절 요구, `templates.post`에 chrome bind 3종 + `data-imory-region="post-body"` placeholder 포함).
+- **생성** `skin/skin-post-region-test.html` — 이번 Slice 전용 테스트 하네스(아래).
+- **변경 없음**: `skin/skin-context.js`(`buildPostSkinContext`는 1C-A에서 이미 완성), `skin/skin-template.js`, `skin/skin-css-validate.js`, `skin/skin-category.js`, `skin/skin-home.js`, `skin/skin-package-normalize.js`, `skin/skin-generator.js`, `posts/view/*`, `posts/style/*`, `posts/editor/posts-router-init.js`, `studio/*`.
+
+### 23-8. 테스트 결과 — 이번엔 실제 Chromium에서 실행했다
+
+이전 슬라이스(20/21/22절)는 전부 "이 세션은 실제 브라우저를 띄울 수 없다"는 한계 아래 `node --check` 구문 검증과 코드 추적만으로 결과를 보고했다 — **이번 세션은 그 한계가 없었다.** `npx playwright`(Chromium)로 실제 헤드리스 브라우저를 띄우고, 로컬 정적 서버(`http://localhost:8934/`, 이 세션의 scratchpad에만 존재하는 임시 스크립트)로 리포지토리를 서빙해 기존/신규 테스트 하네스를 전부 **실제로 로드하고 실행**했다(`file://`로는 ES 모듈 `import`가 CORS로 막혀서 HTTP 서버가 필요했다 — 이 자체가 이번에 새로 확인된 사실).
+
+| 파일 | 결과 |
+|---|---|
+| `skin/skin-post-region-test.html`(신규, 17개 검사) | **17 PASS / 0 FAIL** |
+| `skin/skin-render-test.html`(회귀) | 39 PASS / 0 FAIL |
+| `skin/skin-render-security-test.html`(회귀) | 23 PASS / 0 FAIL |
+| `skin/skin-css-validate-test.html`(회귀) | 23 PASS / 0 FAIL |
+| `skin/skin-page-context-test.html`(1C-A 회귀) | 32 PASS / 0 FAIL |
+| `skin/skin-package-normalize-test.html`(1C-B 회귀) | 12 PASS / 0 FAIL |
+| `studio/studio-multipage-test.html`(1C-B 회귀) | 16 PASS / 0 FAIL |
+| `studio/studio-lifecycle-test.html`(legacy 회귀) | 15 PASS / 0 FAIL |
+
+신규 하네스(`skin-post-region-test.html`)가 실제로 확인한 것(18절 체크리스트 대응):
+
+- **A/B**: `sanitizeSkinHTML()`이 `data-imory-region="post-body"`를 통과시키고, 기존 5종 바인딩(`bind`/`if`/`href`)이 같은 template 안에서 함께 보존됨.
+- **B1/B2/B3**: `renderSkin().getRegion("post-body")`가 실제 엘리먼트를 반환하고, chrome 영역(`post.title`/`post.categoryName`/`post.categoryHref`)은 region과 무관하게 정상 bind됨.
+- **C**: mount 직후 region 내부의 Skin-authored placeholder(`<p class="skin-authored-placeholder">...</p>`)가 제거되어 `children.length === 0`, `textContent === ""`.
+- **D**: `data-imory-region="post-hero"`(v0.1 미지원 값)는 속성째 제거되고 형제 텍스트(`child`)는 그대로 남음(unwrap이 아니라 속성만 제거하는 계약 확인).
+- **E1/E2**: `data-imory-region="post-body"` + `id`/`style`/`onclick`/`<script>`를 한 엘리먼트에 몰아넣어도 region 속성만 남고 나머지는 전부 제거되며, 렌더 후에도 공격 마커(`window.__regionAttack*`)가 실행되지 않음.
+- **F1**: region이 없는 POST template에서 `getRegion("post-body")`가 `undefined`.
+- **G1/G2**: wrapper attribute selector는 통과, `.post-dialogue`/`#postDetailContent`/`.post-action-button`/`.post-inline-highlight`를 겨냥한 규칙은 앞에 wrapper selector를 붙여도 전부 제거(23-5절).
+- **H1/H2/H3**: `update()` 이후 이전 region 참조는 `isConnected === false`(detach 확인), `getRegion()`을 다시 부르면 새 mount의(비어있는) region을 찾고, binding도 새 context로 갱신됨 — "재조회 없이 캐시하면 안 된다"는 계약을 실측으로 증명.
+- **I1**: `skin/skin-context.js`의 `fetchSkinPostById()` select 컬럼(`"id, title, created_at, visibility, category_id"`)에 `content`/`quote_preset_id` 등 본문 관련 필드가 전혀 없음을 소스 텍스트 검사로 재확인(정적 검사지만 실제 소스를 fetch해서 정규식으로 확인 — 문서 서술을 그대로 믿지 않고 이번에 다시 검증).
+- **J1**: HOME fixture(`static-test-skin.json`)로 `repeat`/`if`/`href`/`bind` 조합이 이번 변경 이후에도 정상 동작(회귀 없음, walkSkinTree 분기 순서 변경의 영향 없음을 실측).
+
+### 23-9. public route 미변경 확인
+
+**코드 diff 기준으로 없음.** 이번 Slice가 수정한 파일은 `skin/skin-sanitize.js`/`skin/skin-render.js` 둘뿐이고, 생성한 파일(`static-test-post-skin.json`/`skin-post-region-test.html`)은 어디에서도 import/참조되지 않는 독립 테스트 자산이다. `posts/view/posts-view-detail.js`, `posts/view/posts-view-list.js`, `posts/style/posts-style-render.js`, `posts/editor/posts-router-init.js`, `skin/skin-home.js`, `skin/skin-category.js`, `studio/*` — 전부 이번 Slice에서 열어보기만 하고 한 글자도 고치지 않았다. `posts/posts.html`도 미수정 — 23-1절의 라인 번호는 조사를 위해 읽은 기존 코드를 인용한 것이지 변경분이 아니다.
+
+### 23-10. 다음 Slice 진행 가능 여부
+
+**가능.** protected post-body의 저장/렌더 계약(sanitizer + `getRegion()`)이 실제로 동작하는 것을 Chromium에서 검증했으므로, 다음 Slice(로드맵상 남은 "POST Skin Renderer 공개 라우트 연결")는 다음을 하면 된다 — 새 인프라 없이 지금까지 만든 조각을 잇는 작업이다:
+
+1. `skin/skin-post.js`(가칭, `skin-category.js`와 동일 골격) — `resolveSkinTemplate(skin, "post")` 확인 → 없으면 `false`(legacy 폴백) → `buildPostSkinContext(ownerId, postId, {imageSlotNames, imageSlotValues})` → `renderSkin({container, skin: postTemplate, context})` → `instance.getRegion("post-body")` → **없으면(`undefined`) 이것도 `false`로 legacy 폴백**(23-6절 "template 있음 + region 없음 → invalid" 판정을 여기서 실제로 강제).
+2. `posts-view-detail.js`의 `openPostPage()` 진입부에 `renderPublishedSkinCategory()`(1C-C)와 동일한 패턴으로 분기 추가 — **secret gate 분기(23-1절)와의 관계가 유일한 새 결정 지점**: secret post면 Skin 렌더 자체를 잠금 해제 이후로 미룰지, 아니면 chrome(제목 등)은 Skin이 먼저 그리고 region 안에만 `#postSecretGate`류 잠금 UI를 얹을지 — 이번 문서(7-5절 "locked state도 수용 가능해야 한다")는 후자를 권장하지만 실제 결정은 그 Slice가 내려야 한다.
+3. Studio POST Preview(1C-D가 CATEGORY에 했던 것과 동일 패턴을 POST에 반복) — `getRegion("post-body")` 자리에 무엇을 보여줄지(빈 자리 그대로 둘지, "본문 미리보기" placeholder 텍스트를 얹을지)는 아직 열린 질문.
+
+이번 Slice가 다루지 않은 것 중 다음 Slice에서도 여전히 다루지 않아야 할 것(18절 원칙 계승): AI/OpenAI, DB migration, RPC 변경, pagination, banner/gallery, 기존 legacy customize 제거.

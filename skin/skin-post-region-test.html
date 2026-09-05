@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Protected Post-Body Region Test Harness (PHASE 1C-E)</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  .panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    max-width: 960px;
+    margin-bottom: 16px;
+  }
+  #summary {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Protected Post-Body Region Test Harness (PHASE 1C-E)</h1>
+  <p>
+    <code>data-imory-region="post-body"</code> — skin-sanitize.js(저장 시점)와
+    skin-render.js(렌더 시점)의 protected post-body 계약 최소 구현을
+    검증한다. 이 페이지는 <strong>public POST route에 연결되지 않는다</strong> —
+    fixture(skin/test-skins/static-test-post-skin.json)와 sanitize/render
+    파이프라인만 격리해서 확인한다.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <div class="panel">
+    <p>fixture 렌더 결과(육안 확인용) — post-body 자리는 비어 있어야 정상이다.</p>
+    <div id="mountFixture"></div>
+  </div>
+
+  <script src="./skin-sanitize.js"></script>
+
+  <script type="module">
+
+    import { renderSkin } from "./skin-render.js";
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function report(name, passed, detail) {
+      const item = document.createElement("li");
+      item.className = passed ? "pass" : "fail";
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      reportList.appendChild(item);
+      if (passed) { passCount++; } else { failCount++; }
+    }
+
+    function assert(name, condition, detail) {
+      report(name, !!condition, detail);
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+    }
+
+    async function runAllTests() {
+
+      const fixtureResponse = await fetch("./test-skins/static-test-post-skin.json");
+      const fixture = await fixtureResponse.json();
+
+      /* =====================================================
+         A. sanitize 단계 — data-imory-region="post-body"는 저장을
+         통과하고, Skin-authored placeholder 자식은 sanitize 단계
+         에서는 그대로 보존된다(placeholder 제거는 렌더 시점 계약).
+      ===================================================== */
+
+      const sanitizedPostHtml = sanitizeSkinHTML(fixture.templates.post.html);
+
+      assert(
+        "A1. sanitizeSkinHTML: data-imory-region=\"post-body\"가 저장을 통과한다",
+        /data-imory-region="post-body"/.test(sanitizedPostHtml)
+      );
+
+      assert(
+        "A2. sanitizeSkinHTML: post.title 등 기존 5종 바인딩은 그대로 보존된다",
+        sanitizedPostHtml.includes('data-imory-bind="post.title"') &&
+          sanitizedPostHtml.includes('data-imory-if="post.categoryName"') &&
+          sanitizedPostHtml.includes('data-imory-href="post.categoryHref"')
+      );
+
+      /* =====================================================
+         B/C. renderSkin — post-body region을 찾을 수 있고, mount
+         시 Skin-authored child content는 비워진다(플레이스홀더로만
+         쓰임, 실제 본문은 caller가 채운다).
+      ===================================================== */
+
+      const context = {
+        site: { slug: "demo" },
+        post: {
+          id: "1",
+          title: "테스트 글 제목",
+          publishedAt: "2026-09-05T00:00:00.000Z",
+          categoryName: "일상",
+          categoryHref: "/demo/category/1"
+        }
+      };
+
+      const mountFixture = document.getElementById("mountFixture");
+
+      const instance = renderSkin({
+        container: mountFixture,
+        skin: { html: sanitizedPostHtml, css: fixture.css },
+        context,
+        mode: "view"
+      });
+
+      const region = instance.getRegion("post-body");
+
+      assert(
+        "B1. renderSkin().getRegion(\"post-body\")가 실제 엘리먼트를 반환한다",
+        region instanceof HTMLElement
+      );
+
+      assert(
+        "C1. post-body region 내부의 Skin-authored placeholder 자식이 mount 시 제거된다",
+        region && region.children.length === 0 && region.textContent === ""
+      );
+
+      assert(
+        "B2. post.title binding이 chrome(header)에는 정상 적용된다",
+        mountFixture.querySelector(".skin-post-title")?.textContent === context.post.title
+      );
+
+      assert(
+        "B3. post.categoryName/categoryHref binding도 정상 적용된다(chrome 영역, region과 무관)",
+        mountFixture.querySelector(".skin-post-category")?.textContent === context.post.categoryName &&
+          mountFixture.querySelector(".skin-post-category")?.getAttribute("href") === context.post.categoryHref
+      );
+
+      /* =====================================================
+         D. invalid region name — sanitizer가 값 자체를 무효화한다
+         (속성 자체가 사라짐, 값 대체 없음).
+      ===================================================== */
+
+      const invalidRegionHtml = sanitizeSkinHTML(
+        '<div class="skin-post-body-slot" data-imory-region="post-hero">child</div>'
+      );
+
+      assert(
+        "D1. data-imory-region=\"post-hero\"(v0.1 미지원 값)는 sanitize에서 속성째 제거된다",
+        !/data-imory-region/.test(invalidRegionHtml) &&
+          invalidRegionHtml.includes("child"),
+        invalidRegionHtml
+      );
+
+      /* =====================================================
+         E. region 속성이 기존 sanitizer 보안 경계를 우회하는 문을
+         열지 않는다 — script/onclick/id/style이 함께 있어도 전부
+         그대로 제거된다.
+      ===================================================== */
+
+      const attackRegionHtml = sanitizeSkinHTML(
+        '<div data-imory-region="post-body" id="postDetailContent" style="color:red" onclick="window.__regionAttack=true">' +
+          '<script>window.__regionAttack2=true;<\/script>' +
+        '</div>'
+      );
+
+      assert(
+        "E1. region 속성과 함께 있어도 id/style/onclick/script는 여전히 제거된다",
+        /data-imory-region="post-body"/.test(attackRegionHtml) &&
+          !/id="/.test(attackRegionHtml) &&
+          !/style="/.test(attackRegionHtml) &&
+          !/onclick/.test(attackRegionHtml) &&
+          !/<script/i.test(attackRegionHtml),
+        attackRegionHtml
+      );
+
+      const attackInstance = renderSkin({
+        container: document.createElement("div"),
+        skin: { html: attackRegionHtml, css: "" },
+        context: {},
+        mode: "view"
+      });
+
+      assert(
+        "E2. 공격 payload가 섞인 region도 렌더 후 실제로 스크립트를 실행하지 않는다",
+        window.__regionAttack !== true && window.__regionAttack2 !== true
+      );
+
+      /* =====================================================
+         F. templates.post는 있으나 post-body region이 없는 경우 —
+         getRegion()이 undefined를 반환해 "본문 자리 없음"을 호출자가
+         판별할 수 있어야 한다(문서 15절, invalid/unsupported 판정 신호).
+      ===================================================== */
+
+      const noRegionInstance = renderSkin({
+        container: document.createElement("div"),
+        skin: {
+          html: '<article class="skin-post"><h1 data-imory-bind="post.title"></h1></article>',
+          css: ""
+        },
+        context,
+        mode: "view"
+      });
+
+      assert(
+        "F1. post-body region이 없는 POST template은 getRegion(\"post-body\")가 undefined를 반환한다",
+        noRegionInstance.getRegion("post-body") === undefined
+      );
+
+      /* =====================================================
+         G. CSS 보호 경계 — wrapper(region 자기 자신) 스타일링은
+         허용되고, protected selector(#postDetailContent/.post-dialogue/
+         .post-action/.post-inline-*)를 이 wrapper 경유로 우회
+         타겟팅해도 여전히 제거된다(skin-css-validate.js 기존 정책
+         재확인 — 이번 Slice가 새 코드를 추가하지 않은 부분).
+      ===================================================== */
+
+      const { validateAndScopeSkinCss } = await import("./skin-css-validate.js");
+
+      const wrapperCss = '[data-imory-region="post-body"] { margin-top: 24px; padding: 12px; }';
+      const wrapperResult = validateAndScopeSkinCss(wrapperCss, { namespace: "region-test-wrapper" });
+
+      assert(
+        "G1. post-body wrapper 자체(attribute selector)를 겨냥한 CSS는 허용된다",
+        wrapperResult.ok && wrapperResult.css.includes('[data-imory-region="post-body"]')
+      );
+
+      const protectedAttackCss =
+        '[data-imory-region="post-body"] .post-dialogue { color: red; } ' +
+        '#postDetailContent b { color: blue; } ' +
+        '.post-action-button { background: black; } ' +
+        '.post-inline-highlight { background: yellow; }';
+
+      const protectedResult = validateAndScopeSkinCss(protectedAttackCss, { namespace: "region-test-protected" });
+
+      assert(
+        "G2. protected selector(post-dialogue/#postDetailContent/post-action/post-inline-*)는 wrapper selector를 앞에 붙여도 전부 제거된다",
+        protectedResult.ok &&
+          !protectedResult.css.includes("post-dialogue") &&
+          !protectedResult.css.includes("postDetailContent") &&
+          !protectedResult.css.includes("post-action-button") &&
+          !protectedResult.css.includes("post-inline-highlight"),
+        protectedResult.css
+      );
+
+      /* =====================================================
+         H. update()/재마운트 — 이전 region 참조는 stale해지고
+         (detached), getRegion()을 다시 호출하면 새 mount의 region을
+         찾을 수 있다.
+      ===================================================== */
+
+      const updateMount = document.createElement("div");
+      updateMount.style.display = "none";
+      document.body.appendChild(updateMount);
+
+      const updateInstance = renderSkin({
+        container: updateMount,
+        skin: { html: sanitizedPostHtml, css: fixture.css },
+        context,
+        mode: "view"
+      });
+
+      const regionBeforeUpdate = updateInstance.getRegion("post-body");
+
+      updateInstance.update(undefined, { ...context, post: { ...context.post, title: "수정된 제목" } });
+
+      const regionAfterUpdate = updateInstance.getRegion("post-body");
+
+      assert(
+        "H1. update() 이후 이전 region 참조는 detach된다(재사용하면 안 된다는 계약의 근거)",
+        regionBeforeUpdate instanceof HTMLElement && !regionBeforeUpdate.isConnected
+      );
+
+      assert(
+        "H2. update() 이후 getRegion()을 다시 호출하면 새로 mount된 region을 찾을 수 있다",
+        regionAfterUpdate instanceof HTMLElement &&
+          regionAfterUpdate !== regionBeforeUpdate &&
+          regionAfterUpdate.isConnected &&
+          regionAfterUpdate.children.length === 0
+      );
+
+      assert(
+        "H3. update() 이후 binding도 새 context로 다시 반영된다",
+        updateMount.querySelector(".skin-post-title")?.textContent === "수정된 제목"
+      );
+
+      /* =====================================================
+         I. secret/raw 본문 데이터는 Skin Context 생성 경로
+         (skin/skin-context.js의 fetchSkinPostById)가 애초에
+         select하지 않는다 — 소스를 직접 확인(정적 검사, 이
+         Slice는 skin-context.js 자체를 수정하지 않았다).
+      ===================================================== */
+
+      const contextSourceResponse = await fetch("./skin-context.js");
+      const contextSource = await contextSourceResponse.text();
+
+      const fetchSkinPostByIdMatch = contextSource.match(
+        /async function fetchSkinPostById[\s\S]*?\.select\(\s*"([^"]+)"\s*\)/
+      );
+
+      assert(
+        "I1. fetchSkinPostById()의 select 컬럼 목록에 본문(content/ooc_content/quote_preset_id) 필드가 없다",
+        !!fetchSkinPostByIdMatch &&
+          !/\bcontent\b/i.test(fetchSkinPostByIdMatch[1]) &&
+          !/quote_preset_id/i.test(fetchSkinPostByIdMatch[1]),
+        fetchSkinPostByIdMatch ? fetchSkinPostByIdMatch[1] : "(match 실패)"
+      );
+
+      /* =====================================================
+         J. 기존 5종 바인딩(HOME fixture) 회귀 확인 — 이 Slice가
+         walkSkinTree의 분기 순서를 바꿨으므로 repeat/if/bind/src/href
+         가 여전히 정상 동작하는지 최소 재확인한다(전체 회귀는
+         skin-render-test.html/skin-render-security-test.html이 담당).
+      ===================================================== */
+
+      const homeFixtureResponse = await fetch("./test-skins/static-test-skin.json");
+      const homeFixture = await homeFixtureResponse.json();
+
+      const homeMount = document.createElement("div");
+
+      renderSkin({
+        container: homeMount,
+        skin: homeFixture,
+        context: {
+          site: { title: "홈 제목" },
+          profile: { nickname: "닉네임", bio: null, avatarUrl: null },
+          navigation: { categories: [{ id: "1", name: "일상", href: "/x/category/1" }] },
+          home: { recentPosts: [{ id: "1", title: "최근글", href: "/x/post/1" }] }
+        },
+        mode: "view"
+      });
+
+      assert(
+        "J1. HOME fixture 회귀: repeat/bind/href/if 조합이 이번 Slice 이후에도 정상 동작한다",
+        homeMount.querySelector(".skin-nav a")?.textContent === "일상" &&
+          homeMount.querySelector(".skin-nav a")?.getAttribute("href") === "/x/category/1" &&
+          homeMount.querySelector(".skin-recent-posts a")?.textContent === "최근글" &&
+          homeMount.querySelector(".skin-profile-bio")?.hidden === true
+      );
+
+      finishSummary();
+
+    }
+
+    runAllTests().catch((err) => {
+      report("치명적 오류 — 테스트 실행 자체가 실패함", false, err && err.stack);
+      finishSummary();
+    });
+
+  </script>
+
+</body>
+</html>
