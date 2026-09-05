@@ -32,7 +32,9 @@
   <div class="studio-preview-shell" id="studioPreviewShell" hidden>
 
     <div class="studio-preview-stage" id="studioPreviewStage">
-      <iframe id="studioPreviewFrame" src="./preview/preview-frame.html" title="Skin Preview"></iframe>
+      <div class="studio-preview-frame-wrap" id="studioPreviewFrameWrap">
+        <iframe id="studioPreviewFrame" src="./preview/preview-frame.html" title="Skin Preview"></iframe>
+      </div>
     </div>
 
     <script>
@@ -42,23 +44,35 @@
       });
     </script>
 
-    <div class="studio-viewport-toggle" id="studioViewportToggle">
-      <button type="button" class="studio-viewport-toggle-button" id="studioViewportToggleButton" aria-haspopup="true" aria-expanded="false">
-        <span id="studioViewportToggleLabel">Desktop</span>
-        <span aria-hidden="true">▾</span>
-      </button>
-      <div class="studio-viewport-toggle-menu" id="studioViewportToggleMenu" hidden>
-        <button type="button" class="studio-viewport-toggle-option studio-viewport-toggle-option--active" data-viewport-mode="desktop">Desktop</button>
-        <button type="button" class="studio-viewport-toggle-option" data-viewport-mode="mobile">Mobile</button>
+    <div class="studio-top-dock-zone" id="studioTopDockZone">
+      <div class="studio-top-dock" id="studioTopDock">
+        <button type="button" class="studio-top-dock-back" id="studioBackButton">← back</button>
+        <div class="studio-top-dock-actions">
+          <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
+          <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
+          <button type="button" class="studio-corner-button" id="studioSettingsButton" disabled>Settings</button>
+        </div>
       </div>
+      <span class="studio-top-dock-handle" id="studioTopDockHandle" aria-hidden="true">▾</span>
     </div>
 
-    <button type="button" class="studio-ai-tab" id="studioAiTab" disabled>AI</button>
+    <div class="studio-viewport-toggle" id="studioViewportToggle" role="group" aria-label="Preview 화면 크기">
+      <button type="button" class="studio-viewport-toggle-option studio-viewport-toggle-option--active" data-viewport-mode="desktop">Desktop</button>
+      <span class="studio-viewport-toggle-divider" aria-hidden="true"></span>
+      <button type="button" class="studio-viewport-toggle-option" data-viewport-mode="mobile">Mobile</button>
+    </div>
 
-    <div class="studio-corner-controls">
-      <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
-      <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
-      <button type="button" class="studio-corner-button" id="studioSettingsButton" disabled>Settings</button>
+    <div class="studio-ai-dock" id="studioAiDock">
+      <div class="studio-ai-drawer" id="studioAiDrawer">
+        <label class="studio-ai-drawer-label" for="studioAiDrawerInput">어떻게 바꾸고 싶나요?</label>
+        <div class="studio-ai-drawer-row">
+          <textarea id="studioAiDrawerInput" class="studio-ai-drawer-input" rows="1" placeholder="어떻게 바꾸고 싶나요?" tabindex="-1"></textarea>
+          <button type="button" class="studio-ai-drawer-send" id="studioAiDrawerSend" disabled aria-label="전송">↑</button>
+        </div>
+      </div>
+      <button type="button" class="studio-ai-handle" id="studioAiHandle" aria-expanded="false" aria-controls="studioAiDrawer">
+        <span id="studioAiHandleIcon" aria-hidden="true">△</span>
+      </button>
     </div>
 
     <div class="studio-preview-overlay" id="studioPreviewOverlay" hidden>

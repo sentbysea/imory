@@ -70,6 +70,55 @@ skinStudioBackButton
   );
 
 
+/* =========================================================
+   SKIN STUDIO — 내부 Top Dock의 Back -> admin으로 복귀
+
+   studio/studio-preview.js가 #skinStudioFrame 안에서 window.parent
+   (=이 admin 문서)로 STUDIO_MSG_BACK을 보낸다(Studio UI 정리
+   라운드 — 바깥쪽 skinStudioBackButton은 그대로 남겨두되 CSS로
+   숨겨서 이중 chrome을 없앴다, admin-shell.css 참고). 같은 origin +
+   실제로 그 iframe에서 온 메시지인지까지 확인한 뒤에만
+   showAdminHome()을 호출한다 — studio-preview.js의 preview-frame
+   메시지 검증과 동일한 패턴.
+========================================================== */
+
+const STUDIO_MSG_BACK =
+  "studio:back";
+
+
+window.addEventListener(
+  "message",
+  (event) => {
+
+    if (
+      event.origin !== window.location.origin
+    ) {
+      return;
+    }
+
+    if (
+      event.source !== skinStudioFrame.contentWindow
+    ) {
+      return;
+    }
+
+    const data =
+      event.data;
+
+    if (
+      !data ||
+      typeof data !== "object" ||
+      data.type !== STUDIO_MSG_BACK
+    ) {
+      return;
+    }
+
+    showAdminHome();
+
+  }
+);
+
+
 
 /* =========================================================
    현재 로그인 상태 확인

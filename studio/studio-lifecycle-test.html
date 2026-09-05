@@ -168,14 +168,12 @@
         markerPresent
       );
 
-      // Desktop/Mobile 전환, iframe reload 없이
+      // Desktop/Mobile 전환(dropdown 없이 클릭 한 번), iframe reload 없이
       const stage = doc.getElementById("studioPreviewStage");
-      doc.getElementById("studioViewportToggleButton").click();
       doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="mobile"]').click();
       await sleep(80);
       const isMobile = stage.classList.contains("studio-preview-stage--mobile");
 
-      doc.getElementById("studioViewportToggleButton").click();
       doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="desktop"]').click();
       await sleep(80);
       const isDesktopAgain = !stage.classList.contains("studio-preview-stage--mobile");

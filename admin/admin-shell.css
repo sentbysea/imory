@@ -485,15 +485,19 @@ body.skin-studio-body-mode {
 }
 
 
+/*
+  Studio UI 정리 라운드: Back은 이제 studio/index.html 내부의
+  Top Dock(studio/studio.css .studio-top-dock)이 담당하고,
+  postMessage로 이 admin 문서에 알려 showAdminHome()을 호출한다
+  (admin-session.js 참고) — 바깥쪽 이 바를 그대로 두면 back
+  버튼이 두 번 보이는 이중 chrome이 생기므로 숨긴다. 마크업/JS
+  (skinStudioBackButton 등)는 안전하게 그대로 남겨둔다(admin
+  navigation 계약 변경 없음, iframe 로드가 실패하는 등의 경우를
+  대비한 안전망).
+*/
+
 .admin-page.skin-studio-mode .skin-studio-top {
-  flex: 0 0 auto;
-
-  padding: 10px 14px;
-}
-
-
-.admin-page.skin-studio-mode .skin-studio-back-button {
-  margin: 0;
+  display: none;
 }
 
 

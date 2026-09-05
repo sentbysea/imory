@@ -39,12 +39,27 @@ const PREVIEW_MSG_READY = "preview:ready";
 const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 
+/*
+  studio(이 문서) -> admin(부모 window)로 보내는 메시지. admin은
+  admin/index.html에 #skinStudioFrame으로 이 문서를 iframe embed
+  하고 있고, admin/admin-session.js가 이 타입을 받아 showAdminHome()
+  을 호출한다(Studio UI 정리 라운드 — admin 바깥쪽 별도 back 버튼과
+  이중 chrome이 생기지 않도록, Top Dock의 back이 부모로 이 메시지를
+  보내는 방식으로 대체했다). preview-frame.html 쪽 PREVIEW_MSG_*와
+  마찬가지로 두 문서가 서로 다른 browsing context라 상수를 공유할
+  수 없다 — 값을 바꿀 땐 admin-session.js도 함께 고친다.
+*/
+const STUDIO_MSG_BACK = "studio:back";
+
 
 const studioPreviewShell =
   document.getElementById("studioPreviewShell");
 
 const studioPreviewFrame =
   document.getElementById("studioPreviewFrame");
+
+const studioPreviewFrameWrap =
+  document.getElementById("studioPreviewFrameWrap");
 
 const studioPreviewStage =
   document.getElementById("studioPreviewStage");
@@ -58,14 +73,23 @@ const studioPreviewOverlayText =
 const studioViewportToggle =
   document.getElementById("studioViewportToggle");
 
-const studioViewportToggleButton =
-  document.getElementById("studioViewportToggleButton");
+const studioTopDockZone =
+  document.getElementById("studioTopDockZone");
 
-const studioViewportToggleMenu =
-  document.getElementById("studioViewportToggleMenu");
+const studioBackButton =
+  document.getElementById("studioBackButton");
 
-const studioViewportToggleLabel =
-  document.getElementById("studioViewportToggleLabel");
+const studioAiDrawer =
+  document.getElementById("studioAiDrawer");
+
+const studioAiDrawerInput =
+  document.getElementById("studioAiDrawerInput");
+
+const studioAiHandle =
+  document.getElementById("studioAiHandle");
+
+const studioAiHandleIcon =
+  document.getElementById("studioAiHandleIcon");
 
 
 /*
@@ -522,39 +546,89 @@ async function mountStudioPreview(
 
 
 /* =========================================================
-   Desktop / Mobile 뷰포트 전환 (7/8절)
+   Desktop / Mobile 뷰포트 전환 (2/4절)
 
    iframe은 절대 재생성/재로드하지 않는다 — #studioPreviewStage의
    클래스만 바꿔 iframe의 CSS width를 바꾼다. iframe은 자신만의
    레이아웃 뷰포트를 가지므로, 폭이 바뀌면 브라우저가 그 안의
    Skin CSS `@media` 규칙을 실제 창 크기가 바뀐 것과 동일하게
    재평가한다(11-5절 근거, studio.css의 width 규칙 참고).
+
+   dropdown 없이 두 버튼(Desktop/Mobile)을 항상 나란히 보여주고,
+   클릭 한 번으로 바로 전환한다.
 ========================================================== */
+
+const STUDIO_MOBILE_FRAME_WIDTH = 390;
+const STUDIO_MOBILE_FRAME_HEIGHT = 844;
+
+/*
+  Studio 화면이 390x844보다 작을 때 iframe 가장자리가 stage에
+  바로 붙지 않도록 두는 여백 — 이 값만큼 뺀 나머지를 기준으로
+  축소 비율을 계산한다(studio.css의 .studio-preview-stage--mobile
+  padding과 별개로, wrap 자체 크기 계산용).
+*/
+const STUDIO_MOBILE_SCALE_MARGIN = 32;
+
+let studioViewportMode = "desktop";
+
+
+function updateStudioMobileFrameScale() {
+
+  if (
+    studioViewportMode !== "mobile"
+  ) {
+
+    studioPreviewFrameWrap.style.removeProperty(
+      "--studio-mobile-scale"
+    );
+
+    return;
+
+  }
+
+  const stageRect =
+    studioPreviewStage.getBoundingClientRect();
+
+  const availableWidth =
+    stageRect.width - STUDIO_MOBILE_SCALE_MARGIN;
+
+  const availableHeight =
+    stageRect.height - STUDIO_MOBILE_SCALE_MARGIN;
+
+  /*
+    1을 넘지 않게(작은 화면에서만 축소, 큰 화면에서 확대는 하지
+    않는다) — 그리고 stage가 아직 0 크기인 극단적인 경우를 대비해
+    최소값도 둔다.
+  */
+  const scale =
+    Math.min(
+      1,
+      availableWidth / STUDIO_MOBILE_FRAME_WIDTH,
+      availableHeight / STUDIO_MOBILE_FRAME_HEIGHT
+    );
+
+  studioPreviewFrameWrap.style.setProperty(
+    "--studio-mobile-scale",
+    String(Math.max(scale, 0.1))
+  );
+
+}
+
 
 function setStudioViewportMode(
   mode
 ) {
+
+  studioViewportMode =
+    mode;
 
   studioPreviewStage.classList.toggle(
     "studio-preview-stage--mobile",
     mode === "mobile"
   );
 
-  studioViewportToggleLabel.textContent =
-    mode === "mobile"
-      ? "Mobile"
-      : "Desktop";
-
-  studioViewportToggleMenu.hidden =
-    true;
-
-  studioViewportToggleButton.setAttribute(
-    "aria-expanded",
-    "false"
-  );
-
   Array.from(
-    studioViewportToggleMenu.querySelectorAll(
+    studioViewportToggle.querySelectorAll(
       ".studio-viewport-toggle-option"
     )
   ).forEach(
@@ -568,30 +642,13 @@ function setStudioViewportMode(
     }
   );
 
+  updateStudioMobileFrameScale();
+
 }
 
 
-studioViewportToggleButton.addEventListener(
-  "click",
-  () => {
-
-    const isOpen =
-      !studioViewportToggleMenu.hidden;
-
-    studioViewportToggleMenu.hidden =
-      isOpen;
-
-    studioViewportToggleButton.setAttribute(
-      "aria-expanded",
-      String(!isOpen)
-    );
-
-  }
-);
-
-
 Array.from(
-  studioViewportToggleMenu.querySelectorAll(
+  studioViewportToggle.querySelectorAll(
     ".studio-viewport-toggle-option"
   )
 ).forEach(
@@ -612,23 +669,200 @@ Array.from(
 );
 
 
-document.addEventListener(
+/*
+  Studio 화면 크기 자체가 바뀌는 경우(admin iframe 크기 변화,
+  창 크기 변화 등) mobile 배율을 다시 계산한다 — mode가 desktop일
+  땐 updateStudioMobileFrameScale()이 바로 return하므로 비용이
+  거의 없다.
+*/
+
+new ResizeObserver(
+  updateStudioMobileFrameScale
+).observe(
+  studioPreviewStage
+);
+
+
+
+/* =========================================================
+   TOP DOCK — hover/focus로 여닫기 + Back (1절)
+
+   순수 CSS :hover만으로는 "마우스가 멀어지면 약간의 delay 후
+   숨긴다"를 표현할 수 없어서, hover/focus 상태를 여기서 합쳐
+   판단하고 studio-top-dock-zone에 .is-open만 토글한다(실제
+   보이기/숨기기 애니메이션은 studio.css의 transform transition).
+   dock 내부에 keyboard focus가 있는 동안은 hover 여부와 무관하게
+   열려 있어야 하므로 focusin/focusout도 같은 함수로 합류시킨다.
+========================================================== */
+
+let studioTopDockHovered = false;
+let studioTopDockFocused = false;
+let studioTopDockHideTimer = null;
+
+
+function updateStudioTopDockVisibility() {
+
+  if (
+    studioTopDockHideTimer
+  ) {
+
+    clearTimeout(
+      studioTopDockHideTimer
+    );
+
+    studioTopDockHideTimer =
+      null;
+
+  }
+
+
+  const shouldShow =
+    studioTopDockHovered ||
+    studioTopDockFocused;
+
+  if (
+    shouldShow
+  ) {
+
+    studioTopDockZone.classList.add(
+      "is-open"
+    );
+
+    return;
+
+  }
+
+  studioTopDockHideTimer =
+    setTimeout(
+      () => {
+
+        studioTopDockZone.classList.remove(
+          "is-open"
+        );
+
+        studioTopDockHideTimer =
+          null;
+
+      },
+      350
+    );
+
+}
+
+
+studioTopDockZone.addEventListener(
+  "mouseenter",
+  () => {
+
+    studioTopDockHovered =
+      true;
+
+    updateStudioTopDockVisibility();
+
+  }
+);
+
+
+studioTopDockZone.addEventListener(
+  "mouseleave",
+  () => {
+
+    studioTopDockHovered =
+      false;
+
+    updateStudioTopDockVisibility();
+
+  }
+);
+
+
+studioTopDockZone.addEventListener(
+  "focusin",
+  () => {
+
+    studioTopDockFocused =
+      true;
+
+    updateStudioTopDockVisibility();
+
+  }
+);
+
+
+studioTopDockZone.addEventListener(
+  "focusout",
+  () => {
+
+    studioTopDockFocused =
+      false;
+
+    updateStudioTopDockVisibility();
+
+  }
+);
+
+
+studioBackButton.addEventListener(
   "click",
-  (event) => {
+  () => {
+
+    window.parent.postMessage(
+      {
+        type: STUDIO_MSG_BACK
+      },
+      window.location.origin
+    );
+
+  }
+);
+
+
+
+/* =========================================================
+   AI drawer shell (3/7절) — 이번 라운드는 shell만, 실제 AI 연결
+   없음. handle 클릭으로 열고 닫는다 — send는 항상 disabled라
+   여기서 별도 no-op 핸들러를 달 필요가 없다(HTML의 disabled 속성만
+   으로 충분).
+========================================================== */
+
+studioAiHandle.addEventListener(
+  "click",
+  () => {
+
+    const willOpen =
+      !studioAiDrawer.classList.contains(
+        "is-open"
+      );
+
+    studioAiDrawer.classList.toggle(
+      "is-open",
+      willOpen
+    );
+
+    studioAiHandle.setAttribute(
+      "aria-expanded",
+      String(willOpen)
+    );
+
+    studioAiHandleIcon.textContent =
+      willOpen
+        ? "▽"
+        : "△";
+
+    /*
+      닫혀 있을 땐 시각적으로 접힌 textarea가 Tab 순서에 끼어들지
+      않도록 한다 — 열렸을 때만 포커스를 받을 수 있게.
+    */
+    studioAiDrawerInput.tabIndex =
+      willOpen
+        ? 0
+        : -1;
 
     if (
-      !studioViewportToggle.contains(
-        event.target
-      )
+      willOpen
     ) {
 
-      studioViewportToggleMenu.hidden =
-        true;
-
-      studioViewportToggleButton.setAttribute(
-        "aria-expanded",
-        "false"
-      );
+      studioAiDrawerInput.focus();
 
     }
 

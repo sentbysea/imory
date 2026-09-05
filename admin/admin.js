@@ -98,6 +98,12 @@ const skinStudioPanel =
   );
 
 
+const skinStudioFrame =
+  document.getElementById(
+    "skinStudioFrame"
+  );
+
+
 
 /* =========================================================
    메뉴 버튼

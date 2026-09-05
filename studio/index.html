@@ -90,7 +90,8 @@
 
 
   <!-- =========================================================
-       SKIN STUDIO PREVIEW SHELL (Slice 3)
+       SKIN STUDIO PREVIEW SHELL (Slice 3, chrome refined in the
+       "Studio UI 정리" round)
 
        "skin 있음" 사용자 전용 — 화면 전체가 Preview인 제작 UI
        (AI_SKIN_PHASE1B_DESIGN.md 11절). studio-state.js가 "existing"
@@ -99,6 +100,12 @@
        Desktop/Mobile 전환은 이 iframe을 재생성/재로드하지 않고
        #studioPreviewStage의 CSS 클래스만 바꿔 폭을 조절한다(11-5절
        "iframe 1개 + 폭 전환만으로 @media가 정확히 동작하는 이유").
+
+       Chrome 정리 라운드에서 모든 컨트롤(top dock/viewport
+       toggle/AI drawer)은 Preview 레이아웃 공간을 전혀 차지하지
+       않는 절대배치 overlay로만 존재한다 — #studioPreviewStage와
+       그 안의 iframe은 이 shell 전체를 그대로 차지하고, 위 컨트롤은
+       전부 그 위에 겹쳐 그려진다(studio.css 참고).
   ========================================================== -->
 
   <div
@@ -112,95 +119,200 @@
       id="studioPreviewStage"
     >
 
-      <iframe
-        id="studioPreviewFrame"
-        src="./preview/preview-frame.html"
-        title="Skin Preview"
-      ></iframe>
-
-    </div>
-
-
-    <div
-      class="studio-viewport-toggle"
-      id="studioViewportToggle"
-    >
-
-      <button
-        type="button"
-        class="studio-viewport-toggle-button"
-        id="studioViewportToggleButton"
-        aria-haspopup="true"
-        aria-expanded="false"
-      >
-        <span id="studioViewportToggleLabel">Desktop</span>
-        <span aria-hidden="true">▾</span>
-      </button>
+      <!--
+        wrap을 따로 두는 이유: Mobile 모드에서 iframe 자체의 CSS
+        크기(레이아웃 뷰포트)는 항상 390x844로 유지하되, Studio
+        화면이 좁을 땐 이 wrap에만 CSS transform: scale()을 걸어
+        시각적으로만 축소한다(4절) — iframe 크기를 직접 줄이면
+        내부 Skin CSS의 @media 기준(390px)이 실제와 달라진다.
+      -->
 
       <div
-        class="studio-viewport-toggle-menu"
-        id="studioViewportToggleMenu"
-        hidden
+        class="studio-preview-frame-wrap"
+        id="studioPreviewFrameWrap"
       >
 
-        <button
-          type="button"
-          class="studio-viewport-toggle-option studio-viewport-toggle-option--active"
-          data-viewport-mode="desktop"
-        >
-          Desktop
-        </button>
-
-        <button
-          type="button"
-          class="studio-viewport-toggle-option"
-          data-viewport-mode="mobile"
-        >
-          Mobile
-        </button>
+        <iframe
+          id="studioPreviewFrame"
+          src="./preview/preview-frame.html"
+          title="Skin Preview"
+        ></iframe>
 
       </div>
 
     </div>
 
 
-    <button
-      type="button"
-      class="studio-ai-tab"
-      id="studioAiTab"
-      disabled
+    <!-- =====================================================
+         TOP DOCK — Back / Save / Code / Settings 통합 (1절)
+
+         평소엔 화면 밖(위)으로 숨어 있고 얇은 handle만 보인다.
+         마우스가 상단 hot-zone에 오거나 dock 내부에 keyboard
+         focus가 있을 때만 studio-preview.js가 is-open 클래스를
+         붙여 아래로 내려온다 — 순수 CSS :hover만 쓰지 않는 이유는
+         "leave 후 약간의 delay를 두고 다시 숨긴다"는 요구 때문에
+         hover/focus 상태를 JS에서 합쳐 판단해야 하기 때문이다.
+    ====================================================== -->
+
+    <div
+      class="studio-top-dock-zone"
+      id="studioTopDockZone"
     >
-      ✎ AI
-    </button>
+
+      <div
+        class="studio-top-dock"
+        id="studioTopDock"
+      >
+
+        <button
+          type="button"
+          class="studio-top-dock-back"
+          id="studioBackButton"
+        >
+          ← back
+        </button>
 
 
-    <div class="studio-corner-controls">
+        <div class="studio-top-dock-actions">
+
+          <button
+            type="button"
+            class="studio-corner-button"
+            id="studioSaveButton"
+            disabled
+          >
+            Save
+          </button>
+
+          <button
+            type="button"
+            class="studio-corner-button"
+            id="studioCodeButton"
+            disabled
+          >
+            Code
+          </button>
+
+          <button
+            type="button"
+            class="studio-corner-button"
+            id="studioSettingsButton"
+            disabled
+          >
+            Settings
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <span
+        class="studio-top-dock-handle"
+        id="studioTopDockHandle"
+        aria-hidden="true"
+      >▾</span>
+
+    </div>
+
+
+    <!-- =====================================================
+         Desktop / Mobile — dropdown 없이 클릭 한 번으로 전환
+         (2절). iframe은 재생성/재로드하지 않는다(위 참고).
+    ====================================================== -->
+
+    <div
+      class="studio-viewport-toggle"
+      id="studioViewportToggle"
+      role="group"
+      aria-label="Preview 화면 크기"
+    >
 
       <button
         type="button"
-        class="studio-corner-button"
-        id="studioSaveButton"
-        disabled
+        class="studio-viewport-toggle-option studio-viewport-toggle-option--active"
+        data-viewport-mode="desktop"
       >
-        Save
+        Desktop
       </button>
 
-      <button
-        type="button"
-        class="studio-corner-button"
-        id="studioCodeButton"
-        disabled
-      >
-        Code
-      </button>
+      <span
+        class="studio-viewport-toggle-divider"
+        aria-hidden="true"
+      ></span>
 
       <button
         type="button"
-        class="studio-corner-button"
-        id="studioSettingsButton"
-        disabled
+        class="studio-viewport-toggle-option"
+        data-viewport-mode="mobile"
       >
-        Settings
+        Mobile
+      </button>
+
+    </div>
+
+
+    <!-- =====================================================
+         AI drawer shell (3/7절) — 이번 라운드에서는 shell만.
+         실제 AI 연결/전송/history 없음. handle 클릭 시
+         studio-preview.js가 .is-open을 토글해 drawer의
+         max-height만 여닫는다(transform 대신 이 방식을 쓰는
+         이유는 studio.css 참고).
+    ====================================================== -->
+
+    <div
+      class="studio-ai-dock"
+      id="studioAiDock"
+    >
+
+      <div
+        class="studio-ai-drawer"
+        id="studioAiDrawer"
+      >
+
+        <label
+          class="studio-ai-drawer-label"
+          for="studioAiDrawerInput"
+        >
+          어떻게 바꾸고 싶나요?
+        </label>
+
+        <div class="studio-ai-drawer-row">
+
+          <textarea
+            id="studioAiDrawerInput"
+            class="studio-ai-drawer-input"
+            rows="1"
+            placeholder="어떻게 바꾸고 싶나요?"
+            tabindex="-1"
+          ></textarea>
+
+          <button
+            type="button"
+            class="studio-ai-drawer-send"
+            id="studioAiDrawerSend"
+            disabled
+            aria-label="전송"
+          >
+            ↑
+          </button>
+
+        </div>
+
+      </div>
+
+
+      <button
+        type="button"
+        class="studio-ai-handle"
+        id="studioAiHandle"
+        aria-expanded="false"
+        aria-controls="studioAiDrawer"
+      >
+        <span
+          id="studioAiHandleIcon"
+          aria-hidden="true"
+        >△</span>
       </button>
 
     </div>

@@ -160,6 +160,12 @@ body {
 }
 
 
+.studio-preview-frame-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+
 #studioPreviewFrame {
   display: block;
 
@@ -173,29 +179,39 @@ body {
 
 
 /*
-  Mobile: iframe 문서는 재생성/재로드하지 않는다(7/11-5절) — 이
-  규칙은 오직 iframe의 CSS width만 390px로 고정한다. iframe은
-  자기 자신의 레이아웃 뷰포트를 가지므로, 이 폭 변경만으로 그
-  안의 Skin CSS `@media (max-width: ...)`가 실제 창 크기 변화와
-  동일하게 재평가된다.
+  Mobile: iframe 문서는 재생성/재로드하지 않고, 레이아웃 뷰포트도
+  항상 390x844로 고정한다(4절) — 안의 Skin CSS `@media (max-width:
+  390px)` 등이 실제 기기와 동일하게 평가되려면 iframe 자신의 CSS
+  크기가 그 기준과 어긋나면 안 된다. Studio 화면이 390x844보다
+  좁으면 iframe 크기를 줄이는 대신 #studioPreviewFrameWrap에만
+  transform: scale()을 걸어 시각적으로만 축소한다 — scale은 레이아웃
+  박스 크기(따라서 iframe의 레이아웃 뷰포트 인식)에 영향을 주지
+  않는다. 실제 배율은 studio-preview.js가 --studio-mobile-scale로
+  계산해 넣는다.
 */
 
 .studio-preview-stage--mobile {
-  align-items: flex-start;
+  align-items: center;
 
-  padding: 40px 0;
+  padding: 16px;
 
-  overflow: auto;
+  overflow: hidden;
+}
+
+
+.studio-preview-stage--mobile .studio-preview-frame-wrap {
+  flex: none;
+
+  width: 390px;
+  height: 844px;
+
+  transform: scale(var(--studio-mobile-scale, 1));
 }
 
 
 .studio-preview-stage--mobile #studioPreviewFrame {
   width: 390px;
-  height: 100%;
-
-  min-height: calc(100% - 80px);
-
-  margin: 0 auto;
+  height: 844px;
 
   border: 1px solid var(--system-border-strong);
   border-radius: 12px;
@@ -204,35 +220,72 @@ body {
 
 
 /* =========================================================
-   상단 중앙 — Desktop/Mobile floating tab (7/8절)
+   TOP DOCK — Back / Save / Code / Settings 통합 (1절)
 
-   평소엔 [ Desktop ▾ ] 정도로 작게, 클릭하면 메뉴가 펼쳐진다.
-   과도한 애니메이션 없음 — hidden 속성으로만 표시 전환.
+   #studioTopDockZone은 hover/focus를 감지하는 hit-area 겸
+   positioning context다(항상 같은 높이로 존재, Preview 레이아웃과
+   무관 — position:absolute라 iframe 크기를 줄이지 않는다). 실제
+   바(#studioTopDock)는 그 안에서 transform: translateY(-100%)로
+   화면 위쪽에 숨어 있다가, studio-preview.js가 hover/focus 상태를
+   합쳐 판단해 붙이는 .is-open 클래스가 있을 때만 내려온다.
+
+   순수 CSS :hover가 아니라 JS로 여닫는 이유: "마우스가 멀어지면
+   약간의 delay 후 숨긴다"는 요구가 :hover만으로는 표현이 안 되고,
+   dock 내부에 keyboard focus가 있는 동안은 hover 여부와 무관하게
+   계속 열려 있어야 하기 때문이다(focusin/focusout도 같이 본다).
+
+   닫힌 상태에서 -100%만큼 위로 이동하면 화면(뷰포트) 밖으로
+   완전히 나가므로 별도 overflow:hidden 없이도 시각적으로 사라진다
+   — 그래서 Tab으로 여기 포커스가 와도(닫힌 상태에서도 버튼은
+   여전히 DOM에 있고 focusable) 레이아웃이 스크롤되지 않는다.
 ========================================================== */
 
-.studio-viewport-toggle {
+.studio-top-dock-zone {
   position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 0;
+  left: 0;
+  right: 0;
 
-  z-index: 5;
+  height: 42px;
+
+  z-index: 8;
 }
 
 
-.studio-viewport-toggle-button {
+.studio-top-dock {
+  position: absolute;
+  inset: 0;
+
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: space-between;
 
-  padding: 6px 12px;
+  gap: 12px;
+  padding: 0 14px;
 
-  border: 1px solid var(--system-border-strong);
-  border-radius: var(--imory-radius-pill);
+  border-bottom: 1px solid var(--system-border-strong);
 
   background: var(--system-bg);
 
-  color: var(--system-text);
+  transform: translateY(-100%);
+
+  transition: transform 0.15s ease;
+}
+
+
+.studio-top-dock-zone.is-open .studio-top-dock {
+  transform: translateY(0);
+}
+
+
+.studio-top-dock-back {
+  padding: 6px 4px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: var(--system-text-muted);
 
   font-family: inherit;
   font-size: var(--imory-font-size-300);
@@ -241,111 +294,14 @@ body {
 }
 
 
-.studio-viewport-toggle-button:hover {
-  border-color: var(--system-accent-border);
-
+.studio-top-dock-back:hover {
   color: var(--system-accent-hover);
 }
 
 
-.studio-viewport-toggle-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-
+.studio-top-dock-actions {
   display: flex;
-  flex-direction: column;
 
-  min-width: 96px;
-  padding: 4px;
-
-  border: 1px solid var(--system-border-strong);
-  border-radius: var(--imory-radius-200);
-
-  background: var(--system-bg);
-
-  box-shadow: var(--system-shadow-focus-ring);
-}
-
-
-.studio-viewport-toggle-option {
-  padding: 6px 10px;
-
-  border: 0;
-  border-radius: var(--imory-radius-100);
-
-  background: transparent;
-
-  color: var(--system-text);
-
-  font-family: inherit;
-  font-size: var(--imory-font-size-300);
-  text-align: left;
-
-  cursor: pointer;
-}
-
-
-.studio-viewport-toggle-option:hover {
-  background: var(--system-accent-soft);
-}
-
-
-.studio-viewport-toggle-option--active {
-  color: var(--system-accent);
-
-  font-weight: var(--imory-font-weight-medium);
-}
-
-
-
-/* =========================================================
-   하단 중앙 — AI Prompt 자리 예약 (9절, PHASE 1B에서는 비활성)
-
-   향후 PHASE 6에서 이 tab의 disabled만 풀고 실제 prompt panel을
-   연결하면 된다 — 지금은 자리만 예약.
-========================================================== */
-
-.studio-ai-tab {
-  position: absolute;
-  bottom: 18px;
-  left: 50%;
-  transform: translateX(-50%);
-
-  z-index: 5;
-
-  padding: 8px 18px;
-
-  border: 1px solid var(--system-border-strong);
-  border-radius: var(--imory-radius-pill);
-
-  background: var(--system-bg);
-
-  color: var(--system-text-faint);
-
-  font-family: inherit;
-  font-size: var(--imory-font-size-300);
-
-  cursor: not-allowed;
-}
-
-
-
-/* =========================================================
-   우측 상단 구석 — Save / Code / Settings 자리 예약 (11-7절)
-
-   이번 Slice에서는 실제 기능 없이 disabled로만 존재한다(15절).
-========================================================== */
-
-.studio-corner-controls {
-  position: absolute;
-  top: 14px;
-  right: 14px;
-
-  z-index: 5;
-
-  display: flex;
   gap: 8px;
 }
 
@@ -364,6 +320,245 @@ body {
   font-size: var(--imory-font-size-300);
 
   cursor: not-allowed;
+}
+
+
+.studio-top-dock-handle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+
+  padding: 1px 10px 3px;
+
+  border: 1px solid var(--system-border-strong);
+  border-top: 0;
+  border-radius: 0 0 var(--imory-radius-200) var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-faint);
+
+  font-size: 10px;
+  line-height: 1.2;
+
+  pointer-events: none;
+
+  transition: opacity 0.15s ease;
+}
+
+
+.studio-top-dock-zone.is-open .studio-top-dock-handle {
+  opacity: 0;
+}
+
+
+
+/* =========================================================
+   Desktop / Mobile — dropdown 없는 직접 toggle (2절)
+
+   두 옵션뿐이라 클릭 한 번으로 바로 전환되는 ghost text
+   버튼으로 둔다 — pill/둥근 캡슐 형태는 쓰지 않는다.
+========================================================== */
+
+.studio-viewport-toggle {
+  position: absolute;
+  top: 54px;
+  left: 50%;
+  transform: translateX(-50%);
+
+  z-index: 5;
+
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+
+.studio-viewport-toggle-divider {
+  width: 1px;
+  height: 12px;
+
+  background: var(--system-border-strong);
+}
+
+
+.studio-viewport-toggle-option {
+  padding: 4px 2px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: var(--system-text-faint);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+
+  cursor: pointer;
+}
+
+
+.studio-viewport-toggle-option:hover {
+  color: var(--system-accent-hover);
+}
+
+
+.studio-viewport-toggle-option--active {
+  color: var(--system-text);
+
+  font-weight: var(--imory-font-weight-medium);
+}
+
+
+
+/* =========================================================
+   하단 중앙 — AI drawer shell (3/7절, PHASE 1B에서는 shell만)
+
+   #studioAiDock은 flex-direction:column으로 drawer 다음에
+   handle을 쌓아 bottom:0에 고정한다 — drawer가 max-height:0으로
+   접혀 있어도 handle은 항상 바닥에 붙어 보인다("아래에 숨겨진
+   drawer가 살짝 튀어나온 것 같은" 모양). transform 대신
+   max-height + overflow:hidden으로 여닫는 이유: transform으로
+   숨기면 handle과 drawer가 서로 겹치는 좌표 계산이 필요해지는데,
+   max-height 방식은 flex 흐름에 맡기면 자동으로 handle이 항상
+   맨 아래에 남는다. border-color도 같이 전환해 접혔을 때 1px
+   테두리 선이 handle 위에 남지 않게 한다.
+
+   실제 AI 호출/전송/history 없음 — send 버튼은 항상 disabled.
+========================================================== */
+
+.studio-ai-dock {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+
+  z-index: 6;
+
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+
+  width: min(420px, calc(100% - 32px));
+}
+
+
+.studio-ai-drawer {
+  box-sizing: border-box;
+
+  max-height: 0;
+
+  overflow: hidden;
+
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: var(--imory-radius-300) var(--imory-radius-300) 0 0;
+
+  background: var(--system-bg);
+
+  transition:
+    max-height 0.15s ease,
+    border-color 0.15s ease;
+}
+
+
+.studio-ai-drawer.is-open {
+  max-height: 140px;
+
+  border-color: var(--system-border-strong);
+}
+
+
+.studio-ai-drawer-label {
+  display: block;
+
+  margin: 12px 14px 6px;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-300);
+}
+
+
+.studio-ai-drawer-row {
+  display: flex;
+
+  gap: 8px;
+
+  margin: 0 14px 12px;
+}
+
+
+.studio-ai-drawer-input {
+  flex: 1;
+
+  resize: none;
+
+  padding: 8px 10px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-400);
+}
+
+
+.studio-ai-drawer-send {
+  flex: 0 0 auto;
+
+  width: 32px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-faint);
+
+  cursor: not-allowed;
+}
+
+
+/*
+  최소 hit area 32~40px 확보(5절) — pill/캡슐 형태는 쓰지 않고
+  위쪽만 둥근 사각 tab 모양의 chevron 버튼으로 둔다.
+*/
+
+.studio-ai-handle {
+  flex: 0 0 auto;
+  align-self: center;
+
+  width: 40px;
+  height: 32px;
+
+  margin-top: -1px;
+  padding: 0;
+
+  border: 1px solid var(--system-border-strong);
+  border-bottom: 0;
+  border-radius: var(--imory-radius-300) var(--imory-radius-300) 0 0;
+
+  background: var(--system-bg);
+
+  color: var(--system-text-faint);
+
+  font-size: 12px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+
+.studio-ai-handle:hover {
+  color: var(--system-accent-hover);
 }
 
 
