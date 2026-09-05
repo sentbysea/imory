@@ -470,7 +470,7 @@ DB/코드 어디에도 아직 존재하지 않는 미래 타입(1-2절). `catego
 
 | Slice(가칭) | 내용 |
 |---|---|
-| 1C-A | `buildSkinContext()`를 확장해 `page`/`category`/`post` 네임스페이스를 만들 수 있게 하되, 실제 라우트(posts-view-list.js/posts-view-detail.js)에서는 아직 호출하지 않음(순수 함수 확장 + 유닛 테스트만) |
+| 1C-A | ✅ 구현 완료(19절). `buildSkinContext()`를 확장해 `page`/`category`/`post` 네임스페이스를 만들 수 있게 하되, 실제 라우트(posts-view-list.js/posts-view-detail.js)에서는 아직 호출하지 않음(순수 함수 확장 + 유닛 테스트만) |
 | 1C-B | `skin-sanitize.js`에 `data-imory-region` 추가, `skin-generator.js`/저장 RPC가 `templates` 필드를 다루도록 확장(14-1절 fallback 로직 포함) |
 | 1C-C | CATEGORY Skin Renderer(`skin/skin-category.js` 가칭, `skin-home.js`와 동일한 폴백 원칙) — `posts-view-list.js`의 `openCategoryPage()` 진입부에 "published Skin이 CATEGORY를 지원하면 먼저 시도" 분기 추가(legacy 경로 완전 보존) |
 | 1C-D | POST Skin Renderer + 7절 region 실제 연결(Quote Preset 주입 로직) |
@@ -507,3 +507,64 @@ DB/코드 어디에도 아직 존재하지 않는 미래 타입(1-2절). `catego
 - 기존 legacy customize 제거
 
 이번 라운드는 조사 + 이 설계 문서 작성만 수행했다.
+
+---
+
+## 19. Slice 1C-A 구현 결과 (실제 구현 완료, 2026-09-05)
+
+> 16절 로드맵의 1C-A("`buildSkinContext()`를 확장해 `page`/`category`/`post` 네임스페이스를 만들 수 있게 하되, 실제 라우트에서는 아직 호출하지 않음")가 실제로 구현됐다. 이 절은 "설계대로 됐다"의 재확인이 아니라, 구현 과정에서 확정된 **실제 runtime 규칙**을 기록한다 — 18절에서 명시한 범위(CATEGORY/POST Renderer 구현, region, DB migration, AI 연동, 공개 페이지 동작 변경, Studio multi-page toggle)는 이번에도 전부 손대지 않았다.
+
+### 19-1. Context API — `skin/skin-context.js`
+
+3절 구조를 그대로 구현했다. 함수 분리:
+
+- `buildBaseSkinContext(ownerId, options, commonData?)` — `site`/`profile`/`navigation`/`banners`/`images` 공통 namespace만 만든다. `commonData`(내부 헬퍼 `fetchSkinCommonData()`의 결과)를 이미 갖고 있으면 재사용하고, 없으면 직접 조회한다.
+- `buildHomeSkinContext(ownerId, options)` — `buildBaseSkinContext()` 결과 위에 `page:{type:"home",...}` + `home.recentPosts`를 얹는다. 기존 `buildSkinContext()`가 반환하던 값과 **key 하나(`page`) 추가를 제외하면 완전히 동일**하다.
+- `buildCategorySkinContext(ownerId, categoryId, options)` — `page:{type:"category",...}` + `category:{id,name,type,href,posts:[...]}`. categoryId가 이 ownerId 소유가 아니거나 존재하지 않으면 `null`(throw 아님) — `fetchSkinProfile()` 등 기존 조회 헬퍼가 "없으면 null"을 쓰는 관례를 그대로 따른다. `ownerId`/`categoryId` 자체가 없으면(프로그래머 실수) throw한다.
+- `buildPostSkinContext(ownerId, postId, options)` — `page:{type:"post",...}` + `post:{id,title,publishedAt,categoryName,categoryHref}`. 존재하지 않거나 다른 owner의 postId면 `null`. 인자 누락 시 throw.
+- `buildSkinContext(ownerId, options)` — **기존 호출부(스킨-home.js, studio-preview.js) 하위 호환용 별칭**, `buildHomeSkinContext()`를 그대로 위임 호출한다. 시그니처/에러 조건 전부 기존과 동일.
+
+새 fetch 헬퍼(`fetchSkinCategoryById`/`fetchSkinCategoryPosts`/`fetchSkinPostById`)는 `posts-view-list.js`/`posts-view-detail.js`가 실제로 select하는 컬럼(`id, title, created_at, visibility[, category_id]`)만 select한다 — `content`/`ooc_content`/`secret_password_hash`는 이 파일 어디서도 select하지 않는다(1-3절 GRANT 마이그레이션과 동일한 최소 컬럼 원칙).
+
+### 19-2. Template 선택 API — `skin/skin-template.js` (신규 파일)
+
+`resolveSkinTemplate(skinPackage, pageType)`과 `skinPackageSupportsPageType(skinPackage, pageType)` 두 순수 함수. 14-1절에서 제안한 함수를 그대로 구현했다:
+
+```js
+resolveSkinTemplate(skin, "home")
+  // 1) skin.templates?.home 있으면 그것
+  // 2) 없으면 { html: skin.html, css: skin.css } 로 폴백
+
+resolveSkinTemplate(skin, "category" | "post")
+  // 1) skin.templates?.[pageType] 있으면 그것
+  // 2) 없으면 undefined — HOME html로 대체하지 않는다
+```
+
+`skinPackageSupportsPageType()`은 `resolveSkinTemplate(...) !== undefined`로만 판단한다 — `skin.metadata.supports`는 읽지 않는다(19-4절).
+
+**이 파일은 이번 Slice에서 어디에도 연결(import)되지 않았다** — `skin-render.js`/`skin-home.js`/`preview-bridge.js`/`studio-preview.js`는 여전히 `skin.html`/`skin.css`를 직접 읽는다. 실제 배선은 CATEGORY/POST Renderer가 생기는 1C-C/1C-D의 몫이다.
+
+### 19-3. Backward compatibility 확인
+
+- `buildSkinContext()`의 시그니처, 에러 조건(`ownerId` 없으면 throw), 반환 shape(`site/profile/navigation/home/banners/images`)이 전부 그대로 유지된다 — 추가된 것은 `page` key 하나뿐.
+- `skin-home.js`/`studio-preview.js`의 호출부는 코드 변경 없이 그대로 동작한다(이 함수들은 `buildSkinContext(ownerId, {...})` 형태로만 부르고, 반환값에서 `page`를 읽지 않으므로 추가된 key를 무시한다).
+- `resolveSkinTemplate()`은 `templates` 필드가 없는 기존 Skin에 대해 `pageType==="home"`일 때 기존 `html`/`css`를 정확히 그대로 반환한다(테스트 [A]).
+
+### 19-4. 확정된 runtime 규칙 (이번 구현으로 실제로 강제됨)
+
+- **`templates.home ?? html`**: `resolveSkinTemplate()`이 구현하는 유일한 HOME fallback 규칙. category/post는 이 fallback 대상이 아니다(테스트 [F]).
+- **category/post는 template 없으면 unsupported**: `templates.category`/`templates.post`가 없으면 `resolveSkinTemplate()`은 `undefined`를 반환한다 — HOME html을 억지로 재사용하지 않는다. 호출자가 이 값을 legacy 렌더 폴백 신호로 써야 한다는 계약은 문서 그대로 유지(아직 그 호출자 자체가 없음, 1C-C/D 몫).
+- **`metadata.supports`는 runtime truth source가 아니다**: `skinPackageSupportsPageType()`은 `metadata.supports`를 전혀 읽지 않는다. 테스트로 직접 확인함 — `metadata.supports = {home:true, list:true, post:true}`로 우겨도 `templates`가 없으면 category/post는 여전히 미지원으로 판정된다.
+- **`requiredContext`는 여전히 informational**: 이번 Slice도 이 필드를 검증하는 코드를 추가하지 않았다.
+- **secret data exclusion**: `category.posts[]`/`post` 어디에도 `content`/`ooc_content`/`secret_password_hash`/원본 `visibility`가 없다 — select 단계에서부터 컬럼을 가져오지 않고, 혹시 row 객체에 그런 필드가 섞여 있어도(테스트 픽스처가 의도적으로 넣어 확인) 매핑 로직이 옮기지 않는다는 것까지 테스트로 확인했다.
+- **region/protected post-body**: 이번 Slice는 손대지 않았다. `post.content`는 여전히 Context 어디에도 없다.
+
+### 19-5. 테스트
+
+`skin/skin-page-context-test.html` — 실제 Supabase 대신 이 페이지 안의 mock `supabaseClient`(고정 fixture, in-memory `eq`/`in`/`order`/`limit` 흉내)로 결정론적으로 검증하는 새 테스트 페이지(기존 `skin-context-test.html`은 실 데이터 기반 HOME 전용 테스트로 그대로 둠, 변경 없음). 브라우저에서 열면 A~G + 인자 누락 시 throw + `metadata.supports` 무시까지 총 32개 assertion을 리포트한다.
+
+로컬에서 Node `vm` 모듈로 브라우저 없이 동일 로직을 재현해 실행한 결과: **32 passed, 0 failed** (커버: HOME/CATEGORY/POST의 `page.type` 정확성, 기존 `buildSkinContext()` shape 무변경, secret/private 마스킹, secret 필드 미노출, 없는/타인 소유 category·post → `null`, 필수 인자 누락 → throw, `resolveSkinTemplate()`의 A/B/F 케이스, `metadata.supports` 무시).
+
+### 19-6. 다음 Slice(1C-B) 진행 가능 여부
+
+**가능.** 이번 Slice가 만든 Context shape(`page`/`category`/`post`)와 template 선택 규칙(`resolveSkinTemplate`)이 1C-B(`skin-sanitize.js`에 `data-imory-region` 추가, `skin-generator.js`/저장 RPC가 `templates` 필드를 다루도록 확장)가 그대로 전제할 수 있는 안정된 기반이다. 1C-B부터는 이 문서의 7절(Protected Post-Body Contract)이 다루는 새니타이저/저장 RPC 변경이 필요하므로, DB migration이 필요한 시점도 그 즈음이 될 것으로 보인다(이번 Slice는 여전히 DB migration 없음).
