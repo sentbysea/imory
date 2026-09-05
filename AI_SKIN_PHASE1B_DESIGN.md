@@ -541,3 +541,32 @@ Phase 1B의 핵심 완료 조건이 Publish가 아니라 **Draft 저장**이므�
 
 ### 아직 열려 있는 것
 - 이번 라운드가 다룬 구조적 결정 사항은 전부 확정됨 — Slice 2 착수.
+
+---
+
+## 19. PHASE 1B 이후 순서 (참고, PHASE 1B 구현 내용 자체는 변경 없음)
+
+PHASE 1B 완료(9절 완료 조건 — Draft 저장까지) 다음 단계는 곧장 AI 연동이 아니다. 실제 순서는:
+
+```
+PHASE 1B (이 문서, Skin Studio Foundation — HOME 전용)
+  ↓
+PHASE 1C — Multi-page Skin Contract v0.1 설계
+  (HOME/CATEGORY/POST가 주고받을 Context shape + SkinPackage
+   multi-page 구조를 먼저 확정. `AI_SKIN_PHASE1C_PAGE_CONTRACT.md`
+   — 이 라운드는 조사/설계 문서 작성만, 구현 없음)
+  ↓
+CATEGORY/LIST Skin integration
+  (PHASE 1C 계약대로 실제 CATEGORY Skin Renderer 구현)
+  ↓
+POST Skin integration
+  (PHASE 1C 계약대로 실제 POST Skin Renderer + protected
+   post-body region 구현)
+  ↓
+Studio multi-page Preview
+  (HOME | CATEGORY | POST 탭 전환 — PHASE 1C 15절/17절 스케치)
+  ↓
+AI generation/editing (PHASE 5+)
+```
+
+즉 "PHASE 1B 다음 바로 AI"가 아니라, AI가 생성/수정할 대상의 **데이터 계약과 SkinPackage 구조가 먼저 CATEGORY/POST까지 확정되고 안정화된 뒤에** AI 연동이 시작된다 — PHASE 1C가 그 계약을 정의하는 단계다.
