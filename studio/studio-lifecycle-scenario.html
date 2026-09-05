@@ -48,19 +48,26 @@
     <div class="studio-top-dock-zone" id="studioTopDockZone">
       <div class="studio-top-dock" id="studioTopDock">
         <button type="button" class="studio-top-dock-back" id="studioBackButton">← back</button>
+        <div class="studio-top-dock-groups">
+          <div class="studio-page-toggle" id="studioPageToggle" role="group" aria-label="Preview 페이지">
+            <button type="button" class="studio-page-toggle-option studio-page-toggle-option--active" data-page-type="home">Home</button>
+            <span class="studio-page-toggle-divider" aria-hidden="true"></span>
+            <button type="button" class="studio-page-toggle-option" id="studioPageToggleCategory" data-page-type="category" disabled>Category</button>
+          </div>
+          <span class="studio-top-dock-divider" aria-hidden="true"></span>
+          <div class="studio-viewport-toggle" id="studioViewportToggle" role="group" aria-label="Preview 화면 크기">
+            <button type="button" class="studio-viewport-toggle-option studio-viewport-toggle-option--active" data-viewport-mode="desktop">Desktop</button>
+            <span class="studio-viewport-toggle-divider" aria-hidden="true"></span>
+            <button type="button" class="studio-viewport-toggle-option" data-viewport-mode="mobile">Mobile</button>
+          </div>
+        </div>
         <div class="studio-top-dock-actions">
           <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
           <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
           <button type="button" class="studio-corner-button" id="studioSettingsButton" disabled>Settings</button>
         </div>
       </div>
-      <span class="studio-top-dock-handle" id="studioTopDockHandle" aria-hidden="true">▾</span>
-    </div>
-
-    <div class="studio-viewport-toggle" id="studioViewportToggle" role="group" aria-label="Preview 화면 크기">
-      <button type="button" class="studio-viewport-toggle-option studio-viewport-toggle-option--active" data-viewport-mode="desktop">Desktop</button>
-      <span class="studio-viewport-toggle-divider" aria-hidden="true"></span>
-      <button type="button" class="studio-viewport-toggle-option" data-viewport-mode="mobile">Mobile</button>
+      <button type="button" class="studio-top-dock-handle" id="studioTopDockHandle" aria-expanded="false" aria-controls="studioTopDock" aria-label="Studio 상단 컨트롤 펼치기"><span id="studioTopDockHandleIcon" aria-hidden="true">▾</span></button>
     </div>
 
     <div class="studio-ai-dock" id="studioAiDock">

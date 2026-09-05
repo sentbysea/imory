@@ -733,6 +733,8 @@ category/posts 캐시 저장 직후
 
 - **수정** `studio/index.html` — `#studioViewportToggle` 바로 위에 `HOME | CATEGORY` ghost text toggle(`#studioPageToggle`, 버튼 `data-page-type="home"|"category"`)을 추가했다. `#studioPageToggleCategory`는 HTML 단계에서 기본 `disabled` — 실제 활성화 여부는 mount 이후 `studio-preview.js`가 판단한다(22-3절). 새 iframe을 추가하지 않았다 — 기존 `#studioPreviewFrame` 하나를 그대로 재사용한다.
 - **수정** `studio/studio.css` — `.studio-viewport-toggle`과 동일한 ghost text 스타일을 `.studio-page-toggle`로 복제하고, 두 토글을 세로로 쌓았다(`.studio-page-toggle` `top:54px`, `.studio-viewport-toggle`을 기존 `54px`에서 `78px`로 내림). `:disabled` 상태에 `opacity:0.4`만 추가했다 — 별도 큰 안내 UI 없이 버튼 자체의 흐린 표시만으로 "미리볼 글 카테고리가 없음"을 나타낸다(3절 권장안 그대로).
+
+> **이후 업데이트(Studio chrome 재정리 라운드)**: 위 두 절이 설명하는 "Top Dock과 별개로 항상 노출되는 두 줄짜리 절대배치 toggle" 배치는 더 이상 유효하지 않다. `#studioPageToggle`/`#studioViewportToggle`은 이제 `#studioTopDock` 안 `.studio-top-dock-groups`로 옮겨져 Back/Save/Code/Settings와 한 줄에 놓이고, Top Dock 자체가 hover/focus가 아니라 `#studioTopDockHandle` 클릭으로만 열고 닫힌다(`AI_SKIN_PHASE1B_DESIGN.md` 11-3/11-4절 참고). `data-page-type`/`data-viewport-mode` 마크업과 `studio-preview.js`의 판별 로직(활성화 조건, unsupported 처리 등)은 이 라운드에서 전혀 바뀌지 않았다 — 위치만 이동했다.
 - **수정** `studio/studio-preview.js` — 이번 Slice의 실제 로직 전부(22-2~22-6절).
 
 ### 22-2. Page Preview state 구조

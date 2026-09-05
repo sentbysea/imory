@@ -86,6 +86,12 @@ const studioViewportToggle =
 const studioTopDockZone =
   document.getElementById("studioTopDockZone");
 
+const studioTopDockHandle =
+  document.getElementById("studioTopDockHandle");
+
+const studioTopDockHandleIcon =
+  document.getElementById("studioTopDockHandleIcon");
+
 const studioBackButton =
   document.getElementById("studioBackButton");
 
@@ -1494,118 +1500,40 @@ new ResizeObserver(
 
 
 /* =========================================================
-   TOP DOCK — hover/focus로 여닫기 + Back (1절)
+   TOP DOCK — handle 클릭으로 수동 여닫기 + Back (Studio chrome
+   재정리 라운드)
 
-   순수 CSS :hover만으로는 "마우스가 멀어지면 약간의 delay 후
-   숨긴다"를 표현할 수 없어서, hover/focus 상태를 여기서 합쳐
-   판단하고 studio-top-dock-zone에 .is-open만 토글한다(실제
-   보이기/숨기기 애니메이션은 studio.css의 transform transition).
-   dock 내부에 keyboard focus가 있는 동안은 hover 여부와 무관하게
-   열려 있어야 하므로 focusin/focusout도 같은 함수로 합류시킨다.
+   hover/focus 기반 auto-hide는 제거했다 — Mobile Preview에서
+   마우스가 상단 영역을 스쳐 지나가기만 해도 dock이 예고 없이
+   내려와 그 아래 컨트롤을 가리는 문제가 있었기 때문이다.
+   #studioTopDockHandle 클릭만이 #studioTopDockZone의 .is-open을
+   토글한다(실제 보이기/숨기기 애니메이션은 studio.css의 transform
+   transition) — AI drawer handle(이 파일 하단)과 동일한 패턴이다.
 ========================================================== */
 
-let studioTopDockHovered = false;
-let studioTopDockFocused = false;
-let studioTopDockHideTimer = null;
+studioTopDockHandle.addEventListener(
+  "click",
+  () => {
 
+    const willOpen =
+      !studioTopDockZone.classList.contains(
+        "is-open"
+      );
 
-function updateStudioTopDockVisibility() {
-
-  if (
-    studioTopDockHideTimer
-  ) {
-
-    clearTimeout(
-      studioTopDockHideTimer
+    studioTopDockZone.classList.toggle(
+      "is-open",
+      willOpen
     );
 
-    studioTopDockHideTimer =
-      null;
-
-  }
-
-
-  const shouldShow =
-    studioTopDockHovered ||
-    studioTopDockFocused;
-
-  if (
-    shouldShow
-  ) {
-
-    studioTopDockZone.classList.add(
-      "is-open"
+    studioTopDockHandle.setAttribute(
+      "aria-expanded",
+      String(willOpen)
     );
 
-    return;
-
-  }
-
-  studioTopDockHideTimer =
-    setTimeout(
-      () => {
-
-        studioTopDockZone.classList.remove(
-          "is-open"
-        );
-
-        studioTopDockHideTimer =
-          null;
-
-      },
-      350
-    );
-
-}
-
-
-studioTopDockZone.addEventListener(
-  "mouseenter",
-  () => {
-
-    studioTopDockHovered =
-      true;
-
-    updateStudioTopDockVisibility();
-
-  }
-);
-
-
-studioTopDockZone.addEventListener(
-  "mouseleave",
-  () => {
-
-    studioTopDockHovered =
-      false;
-
-    updateStudioTopDockVisibility();
-
-  }
-);
-
-
-studioTopDockZone.addEventListener(
-  "focusin",
-  () => {
-
-    studioTopDockFocused =
-      true;
-
-    updateStudioTopDockVisibility();
-
-  }
-);
-
-
-studioTopDockZone.addEventListener(
-  "focusout",
-  () => {
-
-    studioTopDockFocused =
-      false;
-
-    updateStudioTopDockVisibility();
+    studioTopDockHandleIcon.textContent =
+      willOpen
+        ? "▴"
+        : "▾";
 
   }
 );

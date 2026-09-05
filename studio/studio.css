@@ -220,19 +220,18 @@ body {
 
 
 /* =========================================================
-   TOP DOCK — Back / Save / Code / Settings 통합 (1절)
+   TOP DOCK — Back / HOME|CATEGORY / DESKTOP|MOBILE / Save /
+   Code / Settings 한 줄 통합 (Studio chrome 재정리 라운드)
 
-   #studioTopDockZone은 hover/focus를 감지하는 hit-area 겸
-   positioning context다(항상 같은 높이로 존재, Preview 레이아웃과
-   무관 — position:absolute라 iframe 크기를 줄이지 않는다). 실제
-   바(#studioTopDock)는 그 안에서 transform: translateY(-100%)로
-   화면 위쪽에 숨어 있다가, studio-preview.js가 hover/focus 상태를
-   합쳐 판단해 붙이는 .is-open 클래스가 있을 때만 내려온다.
-
-   순수 CSS :hover가 아니라 JS로 여닫는 이유: "마우스가 멀어지면
-   약간의 delay 후 숨긴다"는 요구가 :hover만으로는 표현이 안 되고,
-   dock 내부에 keyboard focus가 있는 동안은 hover 여부와 무관하게
-   계속 열려 있어야 하기 때문이다(focusin/focusout도 같이 본다).
+   #studioTopDockZone은 항상 같은 높이로 존재하는 positioning
+   context다(Preview 레이아웃과 무관 — position:absolute라 iframe
+   크기를 줄이지 않는다). 실제 바(#studioTopDock)는 그 안에서
+   transform: translateY(-100%)로 화면 위쪽에 숨어 있다가,
+   #studioTopDockHandle을 클릭할 때만 studio-preview.js가
+   .is-open 클래스를 토글해 내려오거나 다시 올라간다 — hover나
+   focus만으로는 절대 열리지 않는다(과거 hover/focus auto-hide는
+   Mobile Preview에서 dock이 예고 없이 내려와 컨트롤을 가리는
+   문제가 있어 제거했다).
 
    닫힌 상태에서 -100%만큼 위로 이동하면 화면(뷰포트) 밖으로
    완전히 나가므로 별도 overflow:hidden 없이도 시각적으로 사라진다
@@ -246,7 +245,7 @@ body {
   left: 0;
   right: 0;
 
-  height: 42px;
+  height: 48px;
 
   z-index: 8;
 }
@@ -279,6 +278,8 @@ body {
 
 
 .studio-top-dock-back {
+  flex: none;
+
   padding: 6px 4px;
 
   border: 0;
@@ -299,7 +300,44 @@ body {
 }
 
 
+/*
+  Back과 Save/Code/Settings의 너비가 서로 다르므로(← back이 더
+  좁다), 이 그룹을 그냥 flex:1 안에서 justify-content:center로
+  두면 실제 중심이 뷰포트 중앙(= handle의 left:50% 기준점)과
+  어긋난다 — #studioTopDockHandle이 DESKTOP/MOBILE 글자 위에
+  겹쳐 보이는 원인이었다. #studioTopDock 자체가 이미 positioning
+  context(position:absolute)이므로, 이 그룹을 flex 흐름에서 빼서
+  뷰포트 중앙에 직접 고정한다 — handle과 정확히 같은 기준점을
+  써서 항상 두 그룹 사이 divider 위에 handle이 오도록 맞춘다.
+  Studio는 데스크탑 전용 도구라 좁은 화면에서 줄바꿈을 고려할
+  필요가 없다(11-1절).
+*/
+.studio-top-dock-groups {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+
+  display: flex;
+  align-items: center;
+
+  gap: 16px;
+}
+
+
+.studio-top-dock-divider {
+  flex: none;
+
+  width: 1px;
+  height: 16px;
+
+  background: var(--system-border-strong);
+}
+
+
 .studio-top-dock-actions {
+  flex: none;
+
   display: flex;
 
   gap: 8px;
@@ -323,11 +361,19 @@ body {
 }
 
 
+/*
+  dock 열림/닫힘과 무관하게 항상 zone 최상단(같은 좌표)에 남아
+  클릭 가능해야 한다 — dock이 열려도 그 위에 그려지도록 dock보다
+  높은 z-index를 준다(같은 top:0 좌표에서 겹치므로). pointer-events
+  는 기본값(auto)을 그대로 쓴다 — 이전 버전은 decorative span이라
+  pointer-events:none이었지만, 지금은 실제 클릭 대상인 button.
+*/
 .studio-top-dock-handle {
   position: absolute;
   top: 0;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 1;
 
   padding: 1px 10px 3px;
 
@@ -342,14 +388,12 @@ body {
   font-size: 10px;
   line-height: 1.2;
 
-  pointer-events: none;
-
-  transition: opacity 0.15s ease;
+  cursor: pointer;
 }
 
 
-.studio-top-dock-zone.is-open .studio-top-dock-handle {
-  opacity: 0;
+.studio-top-dock-handle:hover {
+  color: var(--system-accent-hover);
 }
 
 
@@ -357,20 +401,13 @@ body {
 /* =========================================================
    HOME / CATEGORY — Studio Preview page 전환 (PHASE 1C-D)
 
-   .studio-viewport-toggle과 완전히 동일한 ghost text 스타일을
-   그대로 재사용한다(둘 다 "두 옵션뿐, 클릭 한 번으로 전환"이라는
-   같은 UX 원칙) — 위쪽에 한 줄 더 쌓아 두 줄 구성(page 전환 위,
-   viewport 전환 아래)으로 배치한다.
+   더 이상 별도 절대배치 레이어가 아니라 #studioTopDock 안의 한
+   그룹이다(Studio chrome 재정리 라운드) — .studio-viewport-toggle
+   과 완전히 동일한 ghost text 스타일은 그대로 유지한다(둘 다 "두
+   옵션뿐, 클릭 한 번으로 전환"이라는 같은 UX 원칙).
 ========================================================== */
 
 .studio-page-toggle {
-  position: absolute;
-  top: 54px;
-  left: 50%;
-  transform: translateX(-50%);
-
-  z-index: 5;
-
   display: flex;
   align-items: center;
   gap: 10px;
@@ -434,18 +471,13 @@ body {
    Desktop / Mobile — dropdown 없는 직접 toggle (2절)
 
    두 옵션뿐이라 클릭 한 번으로 바로 전환되는 ghost text
-   버튼으로 둔다 — pill/둥근 캡슐 형태는 쓰지 않는다. page
-   toggle 한 줄 아래로 위치를 옮겼다(top 54px -> 78px).
+   버튼으로 둔다 — pill/둥근 캡슐 형태는 쓰지 않는다. HOME|CATEGORY
+   toggle과 나란히 #studioTopDock 안의 한 그룹으로 배치한다
+   (Studio chrome 재정리 라운드 — 더 이상 별도 절대배치 레이어가
+   아니다).
 ========================================================== */
 
 .studio-viewport-toggle {
-  position: absolute;
-  top: 78px;
-  left: 50%;
-  transform: translateX(-50%);
-
-  z-index: 5;
-
   display: flex;
   align-items: center;
   gap: 10px;
