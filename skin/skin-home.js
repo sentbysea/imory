@@ -22,7 +22,9 @@
    supabaseClient(core/lib/supabase-client.js), buildSkinContext
    (skin/skin-context.js), extractImageSlotNames
    (skin/skin-image-slots.js — Studio Preview 경로와 공유하는 공용
-   helper, Slice 3). renderSkin은 정적 import로 받는다.
+   helper, Slice 3), resolveSkinTemplate(skin/skin-template.js —
+   PHASE 1C-B부터 HOME 렌더 대상 선택에 실제로 쓰인다). renderSkin은
+   정적 import로 받는다.
 
    책임 경계: renderPublishedSkinHome()은 절대 throw하지 않는다
    — 실패 사유가 무엇이든(RPC 에러, context 빌드 실패, 알 수
@@ -109,6 +111,21 @@ export async function renderPublishedSkinHome({ ownerId, container }) {
     return false;
   }
 
+  /* PHASE 1C-B: HOME 렌더 대상을 resolveSkinTemplate()으로 고른다
+     (skin/skin-template.js, classic global). templates.home이 있는
+     새 멀티페이지 Skin은 그것을 쓰고, 없는 기존 html-only Skin은
+     그대로 top-level html/css로 폴백한다 — 반환 shape은 항상
+     {html, css}라 아래 renderSkin() 호출은 바뀌지 않는다. 이
+     함수가 undefined를 돌려주는 경우(스키마상 있을 수 없지만
+     방어적으로)도 legacy HOME으로 조용히 폴백한다(Case C와
+     동일한 결). */
+  const homeTemplate = resolveSkinTemplate(skinPackage, "home");
+
+  if (!homeTemplate) {
+    console.warn("[skin-home] published skin has no resolvable HOME template, falling back to legacy HOME");
+    return false;
+  }
+
   const imageSlotNames = extractImageSlotNames(skinPackage);
 
   let context;
@@ -136,7 +153,7 @@ export async function renderPublishedSkinHome({ ownerId, container }) {
 
     renderSkin({
       container,
-      skin: skinPackage,
+      skin: homeTemplate,
       context,
       mode: "view"
     });

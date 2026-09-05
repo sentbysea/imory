@@ -31,7 +31,11 @@
    의존(classic script, 이 파일보다 먼저 로드되어야 함):
    supabaseClient(core/lib/supabase-client.js), buildSkinContext
    (skin/skin-context.js), extractImageSlotNames
-   (skin/skin-image-slots.js). studio/index.html의 로드 순서 참고.
+   (skin/skin-image-slots.js), resolveSkinTemplate
+   (skin/skin-template.js — PHASE 1C-B, HOME 편집/미리보기 대상
+   선택), normalizeSkinPackageForDraft
+   (skin/skin-package-normalize.js — PHASE 1C-B, Save 직전 전체
+   정규화). studio/index.html의 로드 순서 참고.
 ========================================================== */
 
 const PREVIEW_MSG_RENDER = "preview:render";
@@ -239,11 +243,39 @@ function showStudioToast(message, options) {
 
 
 /* =========================================================
+   PHASE 1C-B: HOME 편집/미리보기 대상 선택 — resolveSkinTemplate()
+   (skin/skin-template.js, classic global)의 우선순위를 그대로
+   따른다: templates.home이 있으면 그것, 없으면 legacy top-level
+   html/css. Studio Code Editor는 이번 Slice에서도 여전히
+   HOME만 편집한다(category/post는 8절 "Code UI에서 직접 편집할
+   필요 없음" — 그대로 보존만 된다, applyWorkingSkinChanges 참고).
+========================================================== */
+
+function buildStudioHomePreviewSkin(skin) {
+
+  return (
+    resolveSkinTemplate(skin, "home") ||
+    { html: skin?.html || "", css: skin?.css || "" }
+  );
+
+}
+
+
+/* =========================================================
    Code Apply — code-editor.js가 sanitize/validate를 이미 통과한
    뒤에만 이 함수를 호출한다(studio/editor/code-editor.js 참고).
    여기서는 DB에 전혀 손대지 않는다 — currentWorkingSkin 교체 +
    Preview 즉시 반영 + dirty=true만 한다(5절 "Apply와 Save는
    반드시 분리").
+
+   PHASE 1C-B: templates.home이 이미 있는(멀티페이지) Skin이면
+   HOME 편집 결과를 templates.home.html에 써야 resolveSkinTemplate()
+   우선순위와 일치한다(top-level html에만 써 봐야 아무도 안 읽는
+   죽은 필드가 된다) — templates.category/post/imageSlots/regions/
+   metadata는 스프레드로 그대로 보존된다. templates.home이 없는
+   기존 html-only Skin은 지금까지와 동일하게 top-level html에
+   쓴다. css는 templates 유무와 무관하게 항상 공유 top-level
+   css 하나에만 쓴다(페이지별 css를 두지 않는다는 12-B절 결정).
 ========================================================== */
 
 function applyWorkingSkinChanges(html, css, meta) {
@@ -252,12 +284,27 @@ function applyWorkingSkinChanges(html, css, meta) {
     return;
   }
 
+  const hasHomeTemplate =
+    !!(currentWorkingSkin.templates && currentWorkingSkin.templates.home);
+
   currentWorkingSkin =
-    {
-      ...currentWorkingSkin,
-      html,
-      css
-    };
+    hasHomeTemplate
+      ? {
+          ...currentWorkingSkin,
+          css,
+          templates: {
+            ...currentWorkingSkin.templates,
+            home: {
+              ...currentWorkingSkin.templates.home,
+              html
+            }
+          }
+        }
+      : {
+          ...currentWorkingSkin,
+          html,
+          css
+        };
 
   isStudioDirty =
     true;
@@ -266,7 +313,7 @@ function applyWorkingSkinChanges(html, css, meta) {
 
   postRenderToFrame(
     {
-      skin: currentWorkingSkin,
+      skin: buildStudioHomePreviewSkin(currentWorkingSkin),
       context: currentSkinContext
     }
   );
@@ -290,10 +337,13 @@ studioCodeButton.addEventListener(
       return;
     }
 
+    const homeSource =
+      buildStudioHomePreviewSkin(currentWorkingSkin);
+
     window.openSkinCodeEditor(
       {
-        html: currentWorkingSkin.html,
-        css: currentWorkingSkin.css,
+        html: homeSource.html,
+        css: homeSource.css,
         onApply: applyWorkingSkinChanges
       }
     );
@@ -305,9 +355,22 @@ studioCodeButton.addEventListener(
 /* =========================================================
    Save — save_skin_draft_version() RPC(studio/studio-write.js
    wrapper) 1회 호출. 저장 대상은 항상 currentWorkingSkin 전체
-   (schemaVersion/html/css/imageSlots/regions/metadata 전부) —
-   Code Editor가 html/css만 바꿔도 나머지 필드는 이미
+   (schemaVersion/html/css/templates/imageSlots/regions/metadata
+   전부) — Code Editor가 HOME html/css만 바꿔도 나머지 필드는 이미
    currentWorkingSkin 안에 그대로 보존되어 있다(11절).
+
+   PHASE 1C-B: RPC 호출 직전에 normalizeSkinPackageForDraft()
+   (skin/skin-package-normalize.js)로 전체 SkinPackage를 마지막으로
+   한 번 더 정규화한다 — 이게 실제 "저장 시점" 신뢰 경계다(legacy
+   html + templates.home/category/post 각각 존재하는 것만 sanitize,
+   공유 css validate). currentWorkingSkin은 이미 Apply 단계에서
+   sanitize/validate를 통과한 상태라 보통 이 호출은 아무것도 바꾸지
+   않는(idempotent) no-op에 가깝지만, 이 함수 자체가 유일한 저장
+   전 검증 지점이라는 계약을 지키기 위해 항상 거친다. 정규화가
+   실패하면(예: css가 구조적으로 깨짐) RPC를 아예 호출하지 않고
+   currentWorkingSkin/dirty 무엇도 바꾸지 않는다 — Apply/Save 둘 중
+   어느 후보든 검증 실패는 항상 "working Skin 변경 없음"으로
+   귀결되어야 한다는 원칙과 동일한 결.
 
    pending 중 중복 클릭은 무시한다(버튼도 disabled지만, 방어적으로
    함수 진입점에서도 한 번 더 막는다, 14절).
@@ -332,13 +395,43 @@ async function handleStudioSaveClick() {
 
   updateStudioSaveButtonState();
 
+  let normalizedSnapshot;
+
+  try {
+
+    normalizedSnapshot =
+      await normalizeSkinPackageForDraft(
+        snapshot
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[studio-preview] normalize before save failed",
+      err
+    );
+
+    showStudioToast(
+      "저장하지 못했습니다. 스킨 내용을 확인해주세요.",
+      { isError: true }
+    );
+
+    isStudioSavePending =
+      false;
+
+    updateStudioSaveButtonState();
+
+    return;
+
+  }
+
   try {
 
     const newVersionId =
       await saveSkinDraftVersion(
         currentSkinId,
-        snapshot,
-        snapshot.schemaVersion,
+        normalizedSnapshot,
+        normalizedSnapshot.schemaVersion,
         null
       );
 
@@ -849,7 +942,7 @@ async function mountStudioPreview(
 
   postRenderToFrame(
     {
-      skin: currentWorkingSkin,
+      skin: buildStudioHomePreviewSkin(currentWorkingSkin),
       context: currentSkinContext
     }
   );

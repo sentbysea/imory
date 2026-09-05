@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Skin Package Normalize / Template Resolve Test Harness (PHASE 1C-B)</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  #summary {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Skin Package Normalize / Template Resolve Test Harness (PHASE 1C-B)</h1>
+  <p>
+    skin/skin-package-normalize.js(normalizeSkinPackageForDraft)와
+    skin/skin-template.js(resolveSkinTemplate)의 저장 시점 정규화 +
+    fallback 규칙을 실제 sanitizeSkinHTML()/validateAndScopeSkinCss()로
+    검증하는 격리된 페이지 — mock 없이 production 파일을 그대로 로드한다.
+  </p>
+
+  <div id="summary">모듈 로드 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <script>
+    window.skinInitializerReady = new Promise(function (resolve) {
+      window.__resolveSkinInitializerReady = resolve;
+    });
+  </script>
+
+  <script src="./skin-sanitize.js"></script>
+  <script src="./skin-template.js"></script>
+  <script src="./skin-package-normalize.js"></script>
+
+  <script type="module">
+
+    /* side-effect import만으로 충분 — 이 모듈 로드가 끝나면
+       skin-css-validate.js 바닥의 코드가 window.validateAndScopeSkinCss를
+       등록한다(studio/index.html에서 skin-initializer.js가 하는 것과
+       동일한 역할을 이 테스트 페이지에서는 직접 한다). */
+    import "./skin-css-validate.js";
+
+    window.__resolveSkinInitializerReady(true);
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function record(name, pass, detail) {
+      const li = document.createElement("li");
+      li.className = pass ? "pass" : "fail";
+      li.textContent = (pass ? "PASS — " : "FAIL — ") + name;
+      if (detail) {
+        const d = document.createElement("span");
+        d.className = "detail";
+        d.textContent = detail;
+        li.appendChild(d);
+      }
+      reportList.appendChild(li);
+      if (pass) { passCount++; } else { failCount++; }
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+    }
+
+    async function expectThrow(name, fn) {
+      try {
+        await fn();
+        record(name, false, "expected throw, but resolved normally");
+      } catch (err) {
+        record(name, true, "threw as expected: " + (err && err.message));
+      }
+    }
+
+    async function runAllTests() {
+
+      /* =====================================================
+         A. legacy html-only SkinPackage — sanitize/validate/save
+         경로가 그대로 정상 동작한다(backward compat, 회귀 없음)
+      ===================================================== */
+
+      const legacyInput = {
+        schemaVersion: 1,
+        html: '<div class="legacy-marker" onclick="alert(1)"><h1 data-imory-bind="site.title"></h1></div>',
+        css: ".legacy-marker { color: red; }",
+        imageSlots: [{ name: "profile", label: "프로필", required: false, aspectRatioHint: "1:1" }],
+        regions: [],
+        metadata: { generatedBy: "deterministic-v1" }
+      };
+
+      const legacyResult = await normalizeSkinPackageForDraft(legacyInput);
+
+      record(
+        "A1. legacy html-only SkinPackage — top-level html이 sanitize된다(onclick 제거)",
+        !legacyResult.templates &&
+          legacyResult.html.includes("legacy-marker") &&
+          !/onclick/i.test(legacyResult.html)
+      );
+
+      record(
+        "A2. legacy html-only SkinPackage — css/imageSlots/regions/metadata는 그대로 보존된다",
+        legacyResult.css === legacyInput.css &&
+          legacyResult.imageSlots === legacyInput.imageSlots &&
+          legacyResult.regions === legacyInput.regions &&
+          legacyResult.metadata === legacyInput.metadata
+      );
+
+      /* =====================================================
+         B/C/D. multi-page SkinPackage — templates.home/category/post
+         각각 존재하는 것만 sanitize, 공유 css 하나만 검증
+      ===================================================== */
+
+      const multipageInput = {
+        schemaVersion: 1,
+        templates: {
+          home: { html: '<div class="mp-home"><h1 data-imory-bind="site.title"></h1></div>' },
+          category: {
+            html:
+              '<div class="mp-category"><script>window.__xss1=true;<\/script>' +
+              '<p onclick="window.__xss2=true" data-imory-bind="category.name"></p></div>'
+          },
+          post: {
+            html:
+              '<div class="mp-post"><img src="x" onerror="window.__xss3=true">' +
+              '<p data-imory-bind="post.title"></p></div>'
+          }
+        },
+        css: ".mp-home { color: blue; }",
+        imageSlots: [],
+        regions: [],
+        metadata: { generatedBy: "deterministic-v1" }
+      };
+
+      const multipageResult = await normalizeSkinPackageForDraft(multipageInput);
+
+      record(
+        "B1. templates.home은 sanitize를 통과하고 바인딩은 그대로 유지된다",
+        multipageResult.templates.home.html.includes("mp-home") &&
+          multipageResult.templates.home.html.includes('data-imory-bind="site.title"')
+      );
+
+      record(
+        "C1. templates.category의 <script>/onclick이 제거되고, 안전한 바인딩은 보존된다",
+        !/<script/i.test(multipageResult.templates.category.html) &&
+          !/onclick/i.test(multipageResult.templates.category.html) &&
+          multipageResult.templates.category.html.includes("mp-category") &&
+          multipageResult.templates.category.html.includes('data-imory-bind="category.name"'),
+        multipageResult.templates.category.html
+      );
+
+      record(
+        "D1. templates.post의 onerror가 제거되고, 안전한 바인딩은 보존된다",
+        !/onerror/i.test(multipageResult.templates.post.html) &&
+          multipageResult.templates.post.html.includes("mp-post") &&
+          multipageResult.templates.post.html.includes('data-imory-bind="post.title"'),
+        multipageResult.templates.post.html
+      );
+
+      record(
+        "B2. 공유 css는 페이지별로 중복 검증/저장되지 않고 raw(미scope) 값 그대로 하나만 보존된다",
+        multipageResult.css === multipageInput.css
+      );
+
+      record(
+        "B3. top-level html 필드는 원래 없었으므로 정규화 후에도 여전히 없다(죽은 필드 생성 안 함)",
+        !("html" in multipageResult)
+      );
+
+      /* =====================================================
+         E. 구조적으로 깨진 CSS — normalize는 예외를 던지고, 그
+         후보(Apply/Save)는 반영되지 않아야 한다는 계약의 근거
+      ===================================================== */
+
+      await expectThrow(
+        "E1. 구조적으로 깨진 CSS는 normalizeSkinPackageForDraft()가 throw한다(호출자가 working skin/DB를 바꾸지 않을 근거)",
+        () => normalizeSkinPackageForDraft({
+          schemaVersion: 1,
+          html: "<div>ok</div>",
+          css: "}}}{{{ ;;; @@@ ###",
+          imageSlots: [],
+          regions: [],
+          metadata: {}
+        })
+      );
+
+      /* =====================================================
+         멱등성 — Save 시점마다 다시 호출해도 이미 정상화된
+         SkinPackage는 추가로 바뀌지 않는다(handleStudioSaveClick이
+         Apply 이후 매번 다시 부르므로 이 성질이 실제로 중요하다)
+      ===================================================== */
+
+      const secondPassResult = await normalizeSkinPackageForDraft(multipageResult);
+
+      record(
+        "멱등성. 이미 정규화된 multi-page SkinPackage를 다시 정규화해도 html/css가 그대로 유지된다",
+        secondPassResult.templates.home.html === multipageResult.templates.home.html &&
+          secondPassResult.templates.category.html === multipageResult.templates.category.html &&
+          secondPassResult.templates.post.html === multipageResult.templates.post.html &&
+          secondPassResult.css === multipageResult.css
+      );
+
+      /* =====================================================
+         resolveSkinTemplate — H/I/J: fallback 우선순위
+      ===================================================== */
+
+      record(
+        "H1. resolveSkinTemplate: templates 필드 자체가 없는 legacy Skin은 top-level html/css로 폴백한다",
+        (() => {
+          const r = resolveSkinTemplate({ schemaVersion: 1, html: "<p>legacy</p>", css: "p{color:red}" }, "home");
+          return r && r.html === "<p>legacy</p>" && r.css === "p{color:red}";
+        })()
+      );
+
+      record(
+        "I1. resolveSkinTemplate: templates.home과 legacy html이 둘 다 있으면 templates.home이 우선한다",
+        (() => {
+          const skin = {
+            schemaVersion: 1,
+            html: "<p>legacy should be ignored</p>",
+            css: "p{color:red}",
+            templates: { home: { html: "<p>new home</p>" } }
+          };
+          const r = resolveSkinTemplate(skin, "home");
+          return r && r.html === "<p>new home</p>" && r.css === "p{color:red}";
+        })()
+      );
+
+      record(
+        "J1. resolveSkinTemplate: templates.category/post가 없으면 undefined(HOME html로 대체하지 않음)",
+        (() => {
+          const skin = { schemaVersion: 1, html: "<p>home only</p>", css: "" };
+          return (
+            resolveSkinTemplate(skin, "category") === undefined &&
+            resolveSkinTemplate(skin, "post") === undefined
+          );
+        })()
+      );
+
+      finishSummary();
+
+    }
+
+    runAllTests();
+
+  </script>
+
+</body>
+</html>

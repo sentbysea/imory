@@ -283,6 +283,85 @@
               return { data: skinId, error: null };
             }
           }
+        },
+
+        /*
+          Scenario M — PHASE 1C-B multi-page SkinPackage(templates.home/
+          category/post, legacy top-level html 없음). category/post
+          template에는 저장 시점에 제거되어야 할 위험 마크업
+          (script/onclick/onerror)이 일부러 섞여 있다 — Studio가
+          이 템플릿들을 Code Editor로 전혀 건드리지 않아도
+          save_skin_draft_version() 호출 직전에 normalizeSkinPackageForDraft()
+          (skin/skin-package-normalize.js)가 항상 다시 sanitize하는지
+          확인하는 용도. save_skin_draft_version mock은 scenario a와
+          동일한 패턴(버전 push + draft pointer 이동 + __savedDraftCalls
+          기록)을 쓴다.
+        */
+        m: {
+          userId: "user-m",
+          tables: {
+            skins: [
+              { id: "skin-m1", user_id: "user-m", is_active: true, current_draft_version_id: "draft-m1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-m1",
+                content: {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html: '<div class="scenario-m-home"><h1 data-imory-bind="site.title"></h1></div>'
+                    },
+                    category: {
+                      html: '<div class="scenario-m-category"><script>window.__scenarioMXss=true;<\/script><p onclick="alert(1)" data-imory-bind="category.name"></p></div>'
+                    },
+                    post: {
+                      html: '<div class="scenario-m-post"><img src="x" onerror="window.__scenarioMXss=true"><p data-imory-bind="post.title"></p></div>'
+                    }
+                  },
+                  css: ".scenario-m-home { color: red; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-m", nickname: "Scenario M", bio: null, slug: "scenario-m" }],
+            site_settings: [],
+            categories: [],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version: function (params) {
+
+              window.top.__savedDraftCalls =
+                window.top.__savedDraftCalls || [];
+
+              window.top.__savedDraftCalls.push(params);
+
+              const newVersionId =
+                "draft-m" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            }
+          }
         }
 
       };
@@ -311,12 +390,14 @@
   </script>
 
   <script src="../skin/skin-sanitize.js"></script>
+  <script src="../skin/skin-package-normalize.js"></script>
   <script src="../skin/skin-generator.js"></script>
   <script type="module" src="../skin/skin-initializer.js"></script>
   <script src="../skin-questionnaire/questionnaire.js"></script>
   <script src="../core/lib/site-path.js"></script>
   <script src="../skin/skin-image-slots.js"></script>
   <script src="../skin/skin-context.js"></script>
+  <script src="../skin/skin-template.js"></script>
   <script src="./studio-write.js"></script>
   <script src="./editor/code-editor.js"></script>
   <script src="./studio-preview.js"></script>

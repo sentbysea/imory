@@ -17,45 +17,25 @@
    보다 먼저 선언해 둔다.
 
    의존(classic script, 이 파일보다 먼저 로드되어야 함):
-   supabaseClient(core/lib/supabase-client.js), sanitizeSkinHTML
-   (skin/skin-sanitize.js), generateInitialSkin(skin/skin-generator.js).
+   supabaseClient(core/lib/supabase-client.js), generateInitialSkin
+   (skin/skin-generator.js), normalizeSkinPackageForDraft
+   (skin/skin-package-normalize.js — sanitize/validate 전체를 이제
+   이 helper 하나가 맡는다, PHASE1C-B).
 ========================================================== */
 
-import { validateAndScopeSkinCss } from "./skin-css-validate.js";
-
-const SKIN_INITIALIZER_CSS_CHECK_NAMESPACE = "init";
+/* side-effect import — window.validateAndScopeSkinCss를 등록시키는
+   목적뿐이다(normalizeSkinPackageForDraft가 실제로 그 전역을
+   호출한다). 이 파일이 여전히 studio/index.html에서 유일하게
+   skin-css-validate.js를 정적 import하는 지점이라, 이 import를
+   지우면 그 전역 자체가 생기지 않는다(code-editor.js/
+   skin-package-normalize.js 주석 참고). */
+import "./skin-css-validate.js";
 
 async function createInitialSkinFromAnswers(answers) {
 
   const skinPackage = generateInitialSkin(answers);
 
-  const sanitizedHtml = sanitizeSkinHTML(skinPackage.html);
-
-  const cssResult = validateAndScopeSkinCss(skinPackage.css, {
-    namespace: SKIN_INITIALIZER_CSS_CHECK_NAMESPACE
-  });
-
-  /*
-    cssResult.css는 이 인스턴스 전용으로 스코프된 결과라 저장하지
-    않는다 — skin_versions.content.css는 항상 raw(미scope) 상태로
-    저장되고, 실제 scope는 매 렌더 시점에 renderSkin()이 새
-    namespace로 다시 계산한다(0절). 여기서는 오직 "저장 가능한
-    CSS인가"만 검증용으로 확인한다.
-  */
-
-  if (!cssResult.ok) {
-
-    throw new Error(
-      "generated skin css failed validation: " +
-      cssResult.warnings.join(", ")
-    );
-
-  }
-
-  const finalPackage = {
-    ...skinPackage,
-    html: sanitizedHtml
-  };
+  const finalPackage = await normalizeSkinPackageForDraft(skinPackage);
 
   const { data, error } = await supabaseClient.rpc(
     "create_skin_with_initial_version",

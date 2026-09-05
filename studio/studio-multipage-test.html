@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Studio Multi-page Skin Package Integration Test (PHASE 1C-B)</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h1 { margin-top: 0; }
+  h2 {
+    margin-top: 32px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  #summary { font-size: 16px; font-weight: bold; margin-top: 16px; }
+  #frames iframe {
+    width: 480px;
+    height: 360px;
+    border: 2px dashed #999;
+    margin: 8px 8px 8px 0;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Studio Multi-page Skin Package Integration Test (PHASE 1C-B)</h1>
+  <p>
+    studio/studio-lifecycle-scenario.html?scenario=m(templates.home/category/post를 가진
+    SkinPackage, 기존 top-level html 없음)을 실제 URL로 로드해 studio-preview.js/
+    code-editor.js/skin-template.js/skin-package-normalize.js를 전부 실제 파일 그대로
+    구동한다. 검증 대상: (1) Code Editor가 templates.home을 읽어서 여는지, (2) Apply가
+    templates.home만 교체하고 category/post는 보존하는지, (3) Save 직전
+    normalizeSkinPackageForDraft()가 Code Editor로 건드리지 않은 category/post
+    template까지 포함해 전체를 다시 sanitize하는지, (4) RPC 시그니처가 그대로인지
+    (p_content에 templates 전체 포함).
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <h2>Scenario M — multi-page skin(templates.home/category/post)</h2>
+  <div id="frames"></div>
+
+  <script>
+
+    const reportList = document.getElementById("reportList");
+    const allResults = [];
+
+    function record(name, pass, detail) {
+      allResults.push({ name, pass: !!pass, detail: detail || "" });
+      const li = document.createElement("li");
+      li.className = pass ? "pass" : "fail";
+      li.textContent = (pass ? "PASS — " : "FAIL — ") + name;
+      if (detail) {
+        const d = document.createElement("span");
+        d.className = "detail";
+        d.textContent = detail;
+        li.appendChild(d);
+      }
+      reportList.appendChild(li);
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function waitFor(fn, timeoutMs, intervalMs) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        let val;
+        try {
+          val = fn();
+        } catch (e) {
+          val = null;
+        }
+        if (val) {
+          return val;
+        }
+        await sleep(intervalMs || 50);
+      }
+      return null;
+    }
+
+    function isOverlayVisible(win, overlayEl) {
+      return win.getComputedStyle(overlayEl).display !== "none";
+    }
+
+    function loadIframe(src) {
+      return new Promise((resolve) => {
+        const iframe = document.createElement("iframe");
+        iframe.addEventListener("load", () => resolve(iframe), { once: true });
+        iframe.src = src;
+        document.getElementById("frames").appendChild(iframe);
+      });
+    }
+
+
+    /* =========================================================
+       SCENARIO M
+    ========================================================== */
+
+    async function runScenarioM() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=m");
+
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+
+      const rendered = await waitFor(
+        () =>
+          !shell().hidden &&
+          overlay().hidden &&
+          !isOverlayVisible(win, overlay()) &&
+          !overlay().classList.contains("studio-preview-overlay--error"),
+        8000,
+        100
+      );
+
+      record(
+        "M1. templates.home만 가진(legacy html 없는) multi-page Skin도 Studio Preview가 정상 렌더된다",
+        !!rendered,
+        rendered ? "" : "overlay.hidden=" + overlay().hidden
+      );
+
+      const homeMarkerPresent = !!(innerDoc() && innerDoc().querySelector(".scenario-m-home"));
+      record(
+        "M2. Preview에 실제로 templates.home.html이 렌더된다(resolveSkinTemplate 배선 확인)",
+        homeMarkerPresent
+      );
+
+      const codeButton = doc.getElementById("studioCodeButton");
+      record(
+        "M3. Code 버튼이 활성화된다",
+        !!codeButton && !codeButton.disabled
+      );
+
+      codeButton.click();
+
+      const overlayModal = await waitFor(
+        () => doc.querySelector(".code-editor-overlay:not([hidden])"),
+        3000,
+        50
+      );
+
+      record(
+        "M4. Code 버튼 클릭 시 Code Editor modal이 열린다",
+        !!overlayModal
+      );
+
+      const textareas = doc.querySelectorAll(".code-editor-textarea");
+      const htmlTextarea = textareas[0];
+      const cssTextarea = textareas[1];
+
+      const expectedHomeHtml =
+        '<div class="scenario-m-home"><h1 data-imory-bind="site.title"></h1></div>';
+
+      record(
+        "M5. Code Editor의 HTML 필드가 top-level html이 아니라 templates.home.html을 보여준다",
+        htmlTextarea && htmlTextarea.value === expectedHomeHtml,
+        "actual=" + JSON.stringify(htmlTextarea && htmlTextarea.value)
+      );
+
+      record(
+        "M6. Code Editor의 CSS 필드가 공유 top-level css를 보여준다",
+        cssTextarea && cssTextarea.value === ".scenario-m-home { color: red; }",
+        "actual=" + JSON.stringify(cssTextarea && cssTextarea.value)
+      );
+
+      const updatedHomeHtml =
+        '<div class="scenario-m-home-updated"><h1 data-imory-bind="site.title"></h1>' +
+        '<script>window.__scenarioMXss = true;<\/script></div>';
+
+      htmlTextarea.value = updatedHomeHtml;
+
+      const applyButton = doc.querySelector(".code-editor-button--primary");
+      applyButton.click();
+
+      const modalClosed = await waitFor(
+        () => doc.querySelector(".code-editor-overlay[hidden]") || null,
+        3000,
+        50
+      );
+
+      record(
+        "M7. Apply 후 Code Editor modal이 닫힌다",
+        !!modalClosed
+      );
+
+      const updatedMarkerPresent = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".scenario-m-home-updated") ? true : null),
+        3000,
+        50
+      );
+
+      record(
+        "M8. Apply 후 Preview가 새 HOME 내용으로 갱신된다",
+        !!updatedMarkerPresent
+      );
+
+      const saveButton = doc.getElementById("studioSaveButton");
+      record(
+        "M9. Apply 후(dirty) Save 버튼이 활성화된다",
+        !!saveButton && !saveButton.disabled
+      );
+
+      window.__savedDraftCalls = null;
+
+      saveButton.click();
+
+      const saved = await waitFor(
+        () => (window.__savedDraftCalls && window.__savedDraftCalls.length > 0 ? window.__savedDraftCalls : null),
+        4000,
+        50
+      );
+
+      record(
+        "M10. Save 클릭 시 save_skin_draft_version RPC가 정확히 1회 호출된다",
+        !!saved && saved.length === 1,
+        "calls=" + (saved ? saved.length : 0)
+      );
+
+      const savedContent = saved && saved[0] && saved[0].p_content;
+
+      record(
+        "M11. Save payload에 schemaVersion/templates 전체가 그대로 포함된다(RPC 시그니처 변경 없음, p_content 안에 SkinPackage 전체)",
+        !!savedContent && savedContent.schemaVersion === 1 && !!savedContent.templates,
+        JSON.stringify(savedContent && Object.keys(savedContent))
+      );
+
+      record(
+        "M12. Apply로 편집한 HOME은 templates.home.html에 저장되고, 그 안의 <script>는 sanitize로 제거된다",
+        !!savedContent &&
+          savedContent.templates.home.html.includes("scenario-m-home-updated") &&
+          !/<script/i.test(savedContent.templates.home.html),
+        JSON.stringify(savedContent && savedContent.templates.home)
+      );
+
+      record(
+        "M13. Code Editor로 건드리지 않은 templates.category도 Save 시점에 sanitize되어 <script>/onclick이 제거되지만 안전한 바인딩은 보존된다",
+        !!savedContent &&
+          !/<script/i.test(savedContent.templates.category.html) &&
+          !/onclick/i.test(savedContent.templates.category.html) &&
+          savedContent.templates.category.html.includes("scenario-m-category") &&
+          savedContent.templates.category.html.includes('data-imory-bind="category.name"'),
+        JSON.stringify(savedContent && savedContent.templates.category)
+      );
+
+      record(
+        "M14. Code Editor로 건드리지 않은 templates.post도 Save 시점에 sanitize되어 onerror가 제거되지만 안전한 바인딩은 보존된다",
+        !!savedContent &&
+          !/onerror/i.test(savedContent.templates.post.html) &&
+          savedContent.templates.post.html.includes("scenario-m-post") &&
+          savedContent.templates.post.html.includes('data-imory-bind="post.title"'),
+        JSON.stringify(savedContent && savedContent.templates.post)
+      );
+
+      record(
+        "M15. 공유 css는 페이지별로 중복 저장되지 않고 top-level 하나로 그대로 보존된다",
+        !!savedContent && savedContent.css === ".scenario-m-home { color: red; }",
+        JSON.stringify(savedContent && savedContent.css)
+      );
+
+      record(
+        "M16. HOME 편집 결과가 죽은 top-level html 필드로는 저장되지 않는다(templates.home이 유일한 기록 위치)",
+        !!savedContent && !("html" in savedContent),
+        JSON.stringify(savedContent && Object.keys(savedContent))
+      );
+
+      return true;
+    }
+
+
+    async function main() {
+
+      try {
+        await runScenarioM();
+      } catch (err) {
+        record("Scenario M 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      const passCount = allResults.filter((r) => r.pass).length;
+      const failCount = allResults.length - passCount;
+      const summary = document.getElementById("summary");
+      summary.textContent = `${allResults.length}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+
+      window.__testDone = true;
+      window.__testPassCount = passCount;
+      window.__testFailCount = failCount;
+
+    }
+
+    main();
+
+  </script>
+
+</body>
+</html>

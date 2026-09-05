@@ -568,3 +568,74 @@ resolveSkinTemplate(skin, "category" | "post")
 ### 19-6. 다음 Slice(1C-B) 진행 가능 여부
 
 **가능.** 이번 Slice가 만든 Context shape(`page`/`category`/`post`)와 template 선택 규칙(`resolveSkinTemplate`)이 1C-B(`skin-sanitize.js`에 `data-imory-region` 추가, `skin-generator.js`/저장 RPC가 `templates` 필드를 다루도록 확장)가 그대로 전제할 수 있는 안정된 기반이다. 1C-B부터는 이 문서의 7절(Protected Post-Body Contract)이 다루는 새니타이저/저장 RPC 변경이 필요하므로, DB migration이 필요한 시점도 그 즈음이 될 것으로 보인다(이번 Slice는 여전히 DB migration 없음).
+
+---
+
+## 20. Slice 1C-B 구현 결과 (실제 구현 완료, 2026-09-05)
+
+> 이번 Slice 착수 시점에 16절 로드맵이 적어 둔 1C-B 범위(`data-imory-region`을 새니타이저에 추가 + 저장 RPC가 `templates`를 다루도록 "확장")는 **실제로 착수하지 않았다** — 재검토 결과 `save_skin_draft_version(p_content jsonb, ...)`가 이미 SkinPackage 전체 JSON을 받으므로 `templates` 필드를 위해 RPC 시그니처를 바꿀 필요가 전혀 없었고, `data-imory-region`/protected post-body(7절)는 CATEGORY/POST Renderer가 실제로 붙는 1C-C/1C-D의 몫으로 그대로 미룬다. 이번 Slice가 실제로 한 일은 좁게 정의된 목표 하나뿐이다: **"멀티페이지 SkinPackage(`templates.{home,category,post}`)가 기존 sanitize/validate/Studio edit/Save Draft 파이프라인을 안전하게 통과하도록 기반을 확장"**. DB migration/RPC 시그니처 변경 없음, `data-imory-region` 미구현, CATEGORY/POST route 연결 없음, Studio HOME/CATEGORY/POST toggle 없음 — 전부 18절 원칙 그대로 유지.
+
+### 20-1. Canonical `templates` shape
+
+19-2절에서 이미 구현된 `resolveSkinTemplate()`의 기대 shape을 그대로 확정했다(새 shape을 만들지 않음):
+
+```js
+{
+  schemaVersion: 1,
+
+  templates: {
+    home:     { html, css? },   // 셋 다 optional — 존재하는 것만 채움
+    category: { html, css? },
+    post:     { html, css? }
+  },
+
+  css,          // 공유 top-level 하나 — v0.1은 template별 css를 두지 않는다(12-B절 결정 그대로)
+  imageSlots,
+  regions,
+  metadata,
+
+  html?         // legacy Skin 하위 호환용, templates가 없을 때만 HOME에서 읽힘
+}
+```
+
+`templates.*.css`는 이번 Slice에서 아무 코드도 쓰지 않는다(read/write 둘 다) — `resolveSkinTemplate()`이 이미 그 필드가 있으면 우선 사용하도록 짜여 있지만(19-2절), 저장 경로 어디서도 이 필드를 채우지 않으므로 실질적으로 항상 공유 `css`로 폴백한다.
+
+### 20-2. 변경/생성 파일
+
+- **신규** `skin/skin-package-normalize.js` — `normalizeSkinPackageForDraft(skinPackage)`(비동기). "저장 시점" SkinPackage 정규화를 한 곳에 모은 유일한 공용 helper: legacy `html`(있으면) sanitize, `templates.home/category/post`(존재하는 것만) 각각 sanitize, 공유 `css` 하나만 validate. 실패(CSS가 구조적으로 깨짐)하면 throw — 호출자는 이 경우 아무것도 반영하지 않는다.
+- **수정** `skin/skin-initializer.js` — 인라인 sanitize/validate 로직을 걷어내고 `normalizeSkinPackageForDraft()` 호출로 대체(중복 제거). `skin-css-validate.js` import는 side-effect import(`import "./skin-css-validate.js"`)로 형태만 바뀌었다 — studio 부모 문서에서 `window.validateAndScopeSkinCss`를 등록하는 유일한 정적 import 지점이라는 역할은 그대로 유지.
+- **수정** `skin/skin-home.js` — 공개 HOME이 `skinPackage.html`을 직접 읽던 것을 `resolveSkinTemplate(skinPackage, "home")` 결과로 교체(10절 "additive라면 연결 가능" 판단 반영). `undefined`면 legacy HOME으로 폴백(다른 실패 케이스와 동일한 결).
+- **수정** `studio/studio-preview.js` — `buildStudioHomePreviewSkin()` 헬퍼 추가(내부적으로 `resolveSkinTemplate(skin, "home")` 위임). Code 버튼/Apply/Preview postMessage 세 지점이 전부 이 헬퍼를 거치도록 교체. `applyWorkingSkinChanges()`는 `templates.home`이 있으면 그 안의 `html`만 교체(+ 공유 `css`), 없으면 기존처럼 top-level `html`/`css`를 교체 — 어느 쪽이든 `templates.category`/`post`/`imageSlots`/`regions`/`metadata`는 스프레드로 그대로 보존된다. `handleStudioSaveClick()`은 RPC 호출 직전에 `normalizeSkinPackageForDraft()`를 한 번 더 거친다(20-3절).
+- **수정** `index.html`, `studio/index.html`, `studio/studio-lifecycle-scenario.html` — `skin/skin-template.js`(classic) 로드 추가. `studio/index.html`/`studio-lifecycle-scenario.html`은 `skin/skin-package-normalize.js` 로드도 추가.
+- **신규 테스트** `skin/skin-package-normalize-test.html`, `studio/studio-multipage-test.html` — 20-5절.
+
+### 20-3. Sanitize/validate 흐름 — "저장 시점" 신뢰 경계를 어디에 둘지
+
+기존 파일들의 문서화된 원칙(`skin-sanitize.js`/`skin-css-validate.js` 파일 상단: "이 파일은 저장 시점에만 호출된다")을 그대로 따라, `normalizeSkinPackageForDraft()`는 **Apply가 아니라 Save 직전**에서만 호출한다:
+
+- **Apply**(Code Editor onApply): 이미 `code-editor.js`가 사용자가 방금 편집한 raw html/css에 대해 자체적으로 sanitize/validate를 수행한 뒤에만 호출자 콜백을 부른다(기존 동작, 변경 없음) — Apply는 여전히 "즉시 Preview 반영"만 책임진다.
+- **Save**(`handleStudioSaveClick`): RPC 호출 직전에 `currentWorkingSkin` 전체를 `normalizeSkinPackageForDraft()`에 통과시킨다. `currentWorkingSkin`은 보통 이미 Apply 단계에서 sanitize된 상태라 이 호출은 대부분 아무것도 바꾸지 않는(idempotent) no-op에 가깝지만, **Code Editor가 전혀 건드리지 않은 `templates.category`/`templates.post`까지 포함해 SkinPackage 전체를 다시 한번 sanitize하는 유일한 지점**이라는 점이 중요하다 — "sanitize되지 않은 template HTML이 Save Draft에 들어갈 수 있는 우회 경로를 만들지 않는다"는 요구를 이 함수 하나가 구조적으로 강제한다. 정규화가 실패하면(CSS가 구조적으로 깨짐) RPC 자체를 호출하지 않고 `currentWorkingSkin`/dirty 상태 무엇도 바꾸지 않는다.
+
+### 20-4. Legacy `html` 하위 호환
+
+`resolveSkinTemplate()`(1C-A에서 이미 구현) 우선순위를 그대로 재사용해서 배선했다 — 새 fallback 로직을 추가하지 않았다:
+
+- Studio Code 버튼/Apply/Preview: `buildStudioHomePreviewSkin()`이 `templates.home`이 있으면 그것을, 없으면 top-level `html`/`css`를 편집/렌더 대상으로 삼는다.
+- 공개 HOME(`skin-home.js`): 동일한 우선순위로 `renderSkin()`에 넘길 대상을 고른다.
+- `templates` 필드가 아예 없는 기존 Skin은 이번 Slice의 어떤 코드 경로에서도 다시 저장하거나 shape을 바꾸도록 강제되지 않는다(회귀 테스트 20-5절 확인).
+
+### 20-5. 테스트
+
+**A. `skin/skin-package-normalize-test.html`**(신규, mock 없이 실제 `sanitizeSkinHTML`/`validateAndScopeSkinCss`/`resolveSkinTemplate` 사용) — legacy html-only 정규화, multi-page 세 template 각각 sanitize(스크립트/onclick/onerror 제거 + 안전 바인딩 보존), 공유 css 보존, 구조적으로 깨진 CSS는 throw, 이미 정규화된 결과를 다시 정규화해도 변하지 않는(멱등) 성질, `resolveSkinTemplate()`의 legacy-fallback/`templates.home`-우선/category·post-unsupported 세 케이스. **Playwright(Chromium)로 실행: 12개 중 12개 PASS.**
+
+**B. `studio/studio-multipage-test.html`**(신규) + `studio/studio-lifecycle-scenario.html`에 추가한 `scenario=m` fixture(legacy `html` 없이 `templates.home/category/post`만 가진 SkinPackage, `category`/`post`에는 저장 전 제거되어야 할 `<script>`/`onclick`/`onerror`를 의도적으로 섞어 둠) — studio-preview.js/code-editor.js/skin-template.js/skin-package-normalize.js를 **실제 파일 그대로** 구동하는 통합 테스트. 확인 항목: Preview가 `templates.home`을 렌더하는지, Code Editor가 top-level `html`이 아니라 `templates.home.html`을 열어 보여주는지, Apply가 `templates.home.html`만 교체하고 공유 `css`만 갱신하는지, Save 시점에 Code Editor가 건드리지 않은 `templates.category`/`templates.post`까지 sanitize되어 위험한 마크업이 제거되면서도 안전한 바인딩/구조는 보존되는지, `save_skin_draft_version` RPC가 정확히 1회만 호출되고 `p_content`에 `templates` 전체가 그대로 실리는지(RPC 시그니처 변경 없음), HOME 편집 결과가 죽은 top-level `html` 필드로 새지 않는지. **Playwright(Chromium)로 실행: 16개 중 16개 PASS.**
+
+**C. 회귀 — 기존 `studio/studio-lifecycle-test.html`**(scenario a/b, legacy html-only Skin) — 이번 Slice의 변경(특히 `handleStudioSaveClick`이 매 Save마다 `normalizeSkinPackageForDraft()`를 새로 거치게 된 것, `skin-initializer.js`의 로직 교체)이 기존 html-only Skin의 Draft 로드/Preview/Desktop-Mobile 전환/Questionnaire→생성 흐름에 회귀를 만들지 않는지 확인. **Playwright(Chromium)로 실행: 15개 중 15개 PASS**(수정 없이 그대로 통과 — 코드 변경 없이 기존 파일을 재사용).
+
+### 20-6. DB/RPC 변경 여부
+
+**변경 없음.** `save_skin_draft_version`/`create_skin_with_initial_version` 둘 다 시그니처/호출 방식 그대로다 — `p_content`가 이미 SkinPackage 전체를 받으므로 `templates` 필드는 그 JSON 안에 자연스럽게 실릴 뿐이다. `data-imory-region`도 이번 Slice에서 손대지 않아(18절 유지) 새니타이저 새 마이그레이션이 필요 없다.
+
+### 20-7. 다음 Slice(1C-C, CATEGORY route 연결) 진행 가능 여부
+
+**가능.** `templates.category`가 실제로 저장/보존/정규화되는 경로가 이번 Slice로 안정화되었고, `resolveSkinTemplate(skin, "category")`가 없으면 `undefined`를 돌려주는 계약(1C-A)도 그대로 유효하다 — 1C-C는 `skin/skin-category.js`(가칭)를 새로 만들어 `posts-view-list.js`의 `openCategoryPage()` 진입부에 "published Skin이 `templates.category`를 지원하면 먼저 시도, 없으면 legacy 렌더로 폴백" 분기를 추가하면 된다(legacy 경로 완전 보존, `skin-home.js`와 동일한 원칙). `data-imory-region`/protected post-body(7절)는 여전히 1C-D의 몫으로 남아 있다.
