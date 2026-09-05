@@ -9,6 +9,17 @@
    화면이 재노출되지 않게 하기 위함(정책: "초대 토큰 원문을
    불필요하게 로그나 화면에 노출하지 않는다").
 
+   admin/admin-session.js·invite/invite.js의 Google 로그인 버튼은
+   sessionStorage에 저장된 토큰을 signInWithOAuth의 redirectTo
+   query string(`/auth/?invite=<token>`)에도 함께 실어 보낸다 —
+   Supabase Auth가 redirectTo의 query string은 그대로 두고 뒤에
+   #access_token=... 해시만 붙여 돌려주므로, 인앱 브라우저(트위터/
+   인스타그램 등)가 Google OAuth를 별도 브라우저 컨텍스트로 넘기며
+   sessionStorage를 비우는 경우에도 토큰이 살아남는다. auth-callback.js는
+   도착 즉시 captureInviteTokenFromUrl()을 한 번 더 호출해 이 값을
+   sessionStorage로 회수한다(정상적으로 sessionStorage가 유지된
+   경우엔 같은 값을 한 번 더 쓸 뿐 무해함).
+
    이후 흐름:
      - auth/auth-callback.js: getStoredInviteToken()으로 읽어
        get_signup_availability(token) 사전확인에 쓴다(소비 아님).

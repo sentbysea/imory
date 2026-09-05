@@ -464,7 +464,7 @@
 
     /*
       공개 시작 페이지 헤더 — 좌측 로고 + 우측
-      .start-header-actions(테마 토글 + SIGN IN)를 한 줄에 둔다.
+      .start-header-actions(테마 토글 + 메뉴 햄버거)를 한 줄에 둔다.
     */
 
     .start-header {
@@ -539,9 +539,10 @@
 
 
     /*
-      우측 액션 영역 — 테마 토글 + SIGN IN. naru.pub 상단바처럼
-      가벼운 navigation action으로, 큰 CTA 버튼 형태를 피한다.
-      기본은 조용한 gray, hover/focus에서만 pink accent.
+      우측 액션 영역 — 테마 토글 + 메뉴 햄버거(로그인/회원가입
+      드롭다운). naru.pub 상단바처럼 가벼운 navigation action으로,
+      큰 CTA 버튼 형태를 피한다. 기본은 조용한 gray, hover/focus에서만
+      pink accent.
     */
 
     .start-header-actions {
@@ -596,39 +597,108 @@
       display: inline-flex;
     }
 
-    .start-sign-in {
+    /*
+      START MENU — 이전 "SIGN IN" 텍스트 버튼을 햄버거 아이콘 +
+      드롭다운(로그인/회원가입)으로 교체. 네이티브 <dialog>가 아닌
+      absolute-positioned panel이라 바깥 클릭/Escape 닫기를 아래
+      script에서 직접 처리한다(테마 토글과 동일한 조용한 gray →
+      pink accent 톤 유지).
+    */
+
+    .start-menu {
+      position: relative;
+    }
+
+    .start-menu-toggle {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
 
-      padding: 6px 2px;
+      width: 28px;
+      height: 28px;
+      padding: 0;
+
+      background: none;
+      border: none;
+      border-radius: var(--imory-radius-100);
+
+      color: var(--system-text-muted);
+
+      cursor: pointer;
+    }
+
+    .start-menu-toggle:hover,
+    .start-menu-toggle:focus-visible {
+      color: var(--system-accent);
+    }
+
+    .start-menu-toggle:focus-visible {
+      outline: 1px solid var(--system-accent);
+      outline-offset: 2px;
+    }
+
+    .start-menu-icon {
+      width: 17px;
+      height: 17px;
+    }
+
+    .start-menu-dropdown {
+      position: absolute;
+      top: calc(100% + var(--imory-space-200));
+      right: 0;
+      z-index: 20;
+
+      display: flex;
+      flex-direction: column;
+
+      min-width: 128px;
+
+      background: var(--system-bg);
+      border: 1px solid var(--system-border-strong);
+      border-radius: var(--imory-radius-100);
+
+      overflow: hidden;
+    }
+
+    /*
+      .landing-screen[hidden]/#viewerArea[hidden]와 동일한 이유
+      (위 주석 참고) — class selector의 display:flex가 hidden
+      속성의 UA display:none과 명시도가 같아 이 규칙이 없으면
+      dropdown을 닫아도 계속 보인다.
+    */
+
+    .start-menu-dropdown[hidden] {
+      display: none;
+    }
+
+    .start-menu-item {
+      padding: var(--imory-space-300) var(--imory-space-400);
 
       background: none;
       border: none;
 
       font-family: var(--system-font-family);
-      font-size: 11px;
+      font-size: var(--imory-font-size-400);
       font-weight: 500;
-      letter-spacing: 0.07em;
-      color: var(--system-text-muted);
-
-      white-space: nowrap;
+      color: var(--system-text);
+      text-align: left;
 
       cursor: pointer;
     }
 
-    .start-sign-in:hover,
-    .start-sign-in:focus-visible {
+    .start-menu-item + .start-menu-item {
+      border-top: 1px solid var(--system-border);
+    }
+
+    .start-menu-item:hover,
+    .start-menu-item:focus-visible {
+      background: var(--system-accent-soft);
       color: var(--system-accent);
     }
 
-    .start-sign-in:focus-visible {
+    .start-menu-item:focus-visible {
       outline: 1px solid var(--system-accent);
-      outline-offset: 2px;
-    }
-
-    .start-sign-in:disabled {
-      color: var(--system-text-disabled);
-      cursor: default;
+      outline-offset: -1px;
     }
 
     @media (max-width: 600px) {
@@ -925,6 +995,20 @@
 
     .start-notice p {
       margin: 0;
+    }
+
+    /*
+      --system-text-faint가 다크모드에서 --imory-gray-600으로
+      매핑되는데, 다크 배경(--imory-gray-900) 위에서는 대비가
+      낮아 가독성이 떨어진다. 안내 문구 두 줄(서비스 소개 + 가입
+      기간 안내)만 다크모드에서 --system-text-strong(다크모드에서
+      흰색)으로 올린다 — 공지사항 링크 줄(.start-notice-contact)은
+      제외: 그 안의 .start-notice-link가 이미 자기 색/hover를
+      따로 갖고 있어 그대로 둔다.
+    */
+
+    :root[data-theme="dark"] .start-notice p:not(.start-notice-contact) {
+      color: var(--system-text-strong);
     }
 
     .start-notice-contact {
@@ -1380,11 +1464,55 @@
           </button>
 
 
-          <button
-            type="button"
-            class="start-sign-in"
-            id="startSignIn"
-          >SIGN IN</button>
+          <div class="start-menu">
+
+            <button
+              type="button"
+              class="start-menu-toggle"
+              id="startMenuToggle"
+              aria-haspopup="true"
+              aria-expanded="false"
+              aria-controls="startMenuDropdown"
+              aria-label="메뉴 열기"
+            >
+
+              <svg
+                class="start-menu-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <line x1="4" y1="7" x2="20" y2="7"></line>
+                <line x1="4" y1="12" x2="20" y2="12"></line>
+                <line x1="4" y1="17" x2="20" y2="17"></line>
+              </svg>
+
+            </button>
+
+            <div
+              class="start-menu-dropdown"
+              id="startMenuDropdown"
+              hidden
+            >
+
+              <button
+                type="button"
+                class="start-menu-item"
+                id="startMenuLoginItem"
+              >로그인</button>
+
+              <button
+                type="button"
+                class="start-menu-item"
+                id="startMenuSignupItem"
+              >회원가입</button>
+
+            </div>
+
+          </div>
 
         </div>
 
@@ -1410,7 +1538,7 @@
       <h2
         class="start-signin-dialog-title"
         id="startSignInDialogTitle"
-      >imory에 로그인</h2>
+      >로그인</h2>
 
       <div
         class="start-signin-dialog-notice"
@@ -1518,28 +1646,37 @@
     START HEADER ACTIONS
 
     theme toggle 클릭 로직은 core/theme-toggle.js(공용, FOUC 방지용
-    <head> 인라인 스크립트와 분리). SIGN IN은 이 페이지 전용이라
-    새 로그인 로직을 만들지 않고, 클릭 시 바로 OAuth로 나가는 대신
-    #startSignInDialog(네이티브 <dialog>)를 먼저 연다. 실제
-    authSignInWithGoogle() 호출은 그 안의 "Google로 계속하기"
-    버튼(#startSignInGoogleButton)으로 미뤄진다 — core/lib/
-    auth-shared.js의 authSignInWithGoogle()를 admin-session.js와
-    동일한 redirectTo(`${origin}/auth/`)로 그대로 호출하며, callback
+    <head> 인라인 스크립트와 분리). 예전 "SIGN IN" 텍스트 버튼을
+    햄버거(#startMenuToggle) + 드롭다운(#startMenuDropdown, 로그인/
+    회원가입 두 항목)으로 바꿨다 — 새 로그인 로직을 만들지 않고,
+    두 항목 모두 여전히 같은 #startSignInDialog(네이티브 <dialog>)를
+    연다. 실제 authSignInWithGoogle() 호출은 그 안의 "Google로
+    계속하기" 버튼(#startSignInGoogleButton)으로 미뤄진다 —
+    core/lib/auth-shared.js의 authSignInWithGoogle()를
+    admin-session.js와 동일한 베이스 redirectTo(`${origin}/auth/`)로
+    호출하되, 어느 항목으로 열었는지(currentMode: "login"|"signup")를
+    `?intent=` query string에 실어 보낸다. callback
     분기/onboarding·admin 이동 로직은 auth/auth-callback.js가 그대로
-    처리한다(변경 없음).
+    처리하며, intent만 새로 읽어 분기를 하나 더 나눈다(아래 auth-callback.js
+    참고 — "로그인"으로 들어왔는데 회원이 아니면 회원가입 가능
+    여부와 무관하게 "회원이 아닙니다."만 보여주고 onboarding으로
+    보내지 않는다).
 
     signup_opens_at/signup_closes_at 같은 원문 컬럼은 이 dialog에서
     전혀 읽지 않는다(브라우저 시각 비교 금지) — auth-callback.js와
     동일하게 public.get_signup_availability() RPC(boolean만 반환,
-    fail-closed)만 사용해 안내 문구(#startSignInDialogNotice)를
-    채운다. 가입이 닫혀 있거나 RPC 자체가 실패해도 기존 회원 로그인은
-    항상 가능해야 하므로 Google 버튼(#startSignInGoogleButton)은
-    이 판정과 무관하게 절대 비활성화/숨김하지 않는다(요구사항).
+    fail-closed)만 사용해 "회원가입" 모드의 안내 문구
+    (#startSignInDialogNotice)를 채운다. "로그인" 모드는 가입 기간과
+    무관하므로 이 RPC를 아예 호출하지 않고 고정 문구만 보여준다.
+    가입이 닫혀 있거나 RPC 자체가 실패해도 기존 회원 로그인은 항상
+    가능해야 하므로 Google 버튼(#startSignInGoogleButton)은 이
+    판정과 무관하게 절대 비활성화/숨김하지 않는다(요구사항).
 
-    RPC는 dialog를 처음 열 때 한 번만 호출하고 결과를 페이지 세션
-    동안 메모리에 캐시한다(재방문마다 다시 열어도 재호출 안 함) —
-    다만 오류 결과는 캐시하지 않고 다음에 다시 열 때 재시도한다
-    (일시적 네트워크 오류가 계속 오류 문구로 굳어지지 않도록).
+    RPC는 "회원가입" dialog를 처음 열 때 한 번만 호출하고 결과를
+    페이지 세션 동안 메모리에 캐시한다(재방문마다 다시 열어도
+    재호출 안 함) — 다만 오류 결과는 캐시하지 않고 다음에 다시 열
+    때 재시도한다(일시적 네트워크 오류가 계속 오류 문구로 굳어지지
+    않도록).
   -->
 
   <script src="./core/theme-toggle.js"></script>
@@ -1548,14 +1685,34 @@
 
     (function initStartSignIn() {
 
-      const signInButton =
+      const menuToggle =
         document.getElementById(
-          "startSignIn"
+          "startMenuToggle"
+        );
+
+      const menuDropdown =
+        document.getElementById(
+          "startMenuDropdown"
+        );
+
+      const loginMenuItem =
+        document.getElementById(
+          "startMenuLoginItem"
+        );
+
+      const signupMenuItem =
+        document.getElementById(
+          "startMenuSignupItem"
         );
 
       const signInDialog =
         document.getElementById(
           "startSignInDialog"
+        );
+
+      const signInDialogTitle =
+        document.getElementById(
+          "startSignInDialogTitle"
         );
 
       const signInDialogClose =
@@ -1575,8 +1732,12 @@
 
 
       if (
-        !signInButton ||
+        !menuToggle ||
+        !menuDropdown ||
+        !loginMenuItem ||
+        !signupMenuItem ||
         !signInDialog ||
+        !signInDialogTitle ||
         !signInDialogClose ||
         !signInDialogNotice ||
         !googleButton
@@ -1585,14 +1746,104 @@
       }
 
 
+      // "login" | "signup" — Google 버튼 클릭 시 redirectTo에 실어
+      // 보낼 intent이자, dialog 안내 문구를 어느 쪽으로 채울지 결정.
+      let currentMode =
+        "signup";
+
+
+      function closeMenuDropdown() {
+
+        menuDropdown.hidden =
+          true;
+
+        menuToggle.setAttribute(
+          "aria-expanded",
+          "false"
+        );
+
+      }
+
+
+      menuToggle.addEventListener(
+        "click",
+        () => {
+
+          const isOpen =
+            !menuDropdown.hidden;
+
+          if (isOpen) {
+
+            closeMenuDropdown();
+
+          } else {
+
+            menuDropdown.hidden =
+              false;
+
+            menuToggle.setAttribute(
+              "aria-expanded",
+              "true"
+            );
+
+          }
+
+        }
+      );
+
+
+      document.addEventListener(
+        "click",
+        (event) => {
+
+          if (menuDropdown.hidden) {
+            return;
+          }
+
+          if (
+            menuToggle.contains(
+              event.target
+            ) ||
+            menuDropdown.contains(
+              event.target
+            )
+          ) {
+            return;
+          }
+
+          closeMenuDropdown();
+
+        }
+      );
+
+
+      document.addEventListener(
+        "keydown",
+        (event) => {
+
+          if (
+            event.key === "Escape" &&
+            !menuDropdown.hidden
+          ) {
+
+            closeMenuDropdown();
+
+            menuToggle.focus();
+
+          }
+
+        }
+      );
+
+
       /*
-        가입 가능 여부 안내 문구 — public.get_signup_availability()
-        RPC(boolean만 반환) 결과를 #startSignInDialogNotice에 반영한다.
-        signupAvailabilityCache는 페이지 세션 동안의 짧은 캐시로,
-        dialog를 다시 열 때마다 RPC를 재호출하지 않기 위함이다.
-        오류(status === "error")는 캐시하지 않아 다음에 열 때 재시도한다.
-        signupAvailabilityPromise는 진행 중인 호출이 있을 때 중복
-        요청을 막기 위한 dedupe용.
+        가입 가능 여부 안내 문구("회원가입" 모드 전용) —
+        public.get_signup_availability() RPC(boolean만 반환) 결과를
+        #startSignInDialogNotice에 반영한다. signupAvailabilityCache는
+        페이지 세션 동안의 짧은 캐시로, dialog를 다시 열 때마다
+        RPC를 재호출하지 않기 위함이다. 오류(status === "error")는
+        캐시하지 않아 다음에 열 때 재시도한다. signupAvailabilityPromise는
+        진행 중인 호출이 있을 때 중복 요청을 막기 위한 dedupe용.
       */
 
       const SIGNIN_NOTICE_MESSAGES = {
@@ -1611,6 +1862,11 @@
           "기존 회원은 계속 로그인할 수 있어요."
         ]
       };
+
+      const LOGIN_NOTICE_MESSAGE =
+        [
+          "기존 회원만 로그인할 수 있어요."
+        ];
 
       let signupAvailabilityCache =
         null;
@@ -1714,13 +1970,65 @@
       }
 
 
-      signInButton.addEventListener(
+      function setDialogMode(
+        mode
+      ) {
+
+        currentMode =
+          mode;
+
+        if (mode === "login") {
+
+          signInDialogTitle.textContent =
+            "로그인";
+
+          signInDialogNotice.innerHTML =
+            LOGIN_NOTICE_MESSAGE
+              .map(
+                (line) =>
+                  `<p>${line}</p>`
+              )
+              .join("");
+
+        } else {
+
+          signInDialogTitle.textContent =
+            "회원가입";
+
+          loadSignupAvailability();
+
+        }
+
+      }
+
+
+      loginMenuItem.addEventListener(
         "click",
         () => {
 
+          closeMenuDropdown();
+
+          setDialogMode(
+            "login"
+          );
+
           signInDialog.showModal();
 
-          loadSignupAvailability();
+        }
+      );
+
+
+      signupMenuItem.addEventListener(
+        "click",
+        () => {
+
+          closeMenuDropdown();
+
+          setDialogMode(
+            "signup"
+          );
+
+          signInDialog.showModal();
 
         }
       );
@@ -1771,7 +2079,7 @@
 
 
           const redirectUrl =
-            `${window.location.origin}/auth/`;
+            `${window.location.origin}/auth/?intent=${currentMode}`;
 
 
           const {

@@ -180,8 +180,24 @@ googleLoginButton.addEventListener(
       "Google 로그인으로 이동 중...";
 
 
+    /*
+      초대 토큰이 있으면 redirectTo의 query string에 실어 보낸다.
+      sessionStorage만 믿으면 인앱 브라우저(트위터/인스타그램 등)가
+      Google 로그인을 외부 브라우저로 넘기면서 별도 저장소 컨텍스트를
+      쓰는 경우 토큰이 유실된다 — Supabase Auth가 redirectTo의 query
+      string은 그대로 보존한 채 뒤에 #access_token=... 해시만 붙여
+      돌려주므로, 이 값은 어떤 브라우저 전환을 거치든 살아남는다.
+      auth/auth-callback.js가 도착 즉시 captureInviteTokenFromUrl()로
+      다시 회수한다(core/lib/invite-token.js).
+    */
+
+    const inviteToken =
+      getStoredInviteToken();
+
     const redirectUrl =
-      `${window.location.origin}/auth/`;
+      inviteToken
+        ? `${window.location.origin}/auth/?invite=${encodeURIComponent(inviteToken)}`
+        : `${window.location.origin}/auth/`;
 
     const { error } =
       await authSignInWithGoogle(

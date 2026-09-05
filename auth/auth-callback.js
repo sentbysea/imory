@@ -4,7 +4,16 @@
    admin/admin-session.js와 index.html의 SIGN IN이 signInWithOAuth의
    redirectTo를 이 페이지로 지정한다(auth/index.html). 여기서:
 
-   0. callback URL(query 또는 hash)에 Supabase Auth error가 있으면
+   0-a. captureInviteTokenFromUrl()을 가장 먼저 호출한다 — Google
+      로그인 버튼(admin/admin-session.js, invite/invite.js)이
+      sessionStorage 유실에 대비해 초대 토큰을 redirectTo의 query
+      string(`?invite=`)에도 실어 보내므로, 도착하자마자 그 값을
+      sessionStorage로 회수하고 URL에서 지운다(core/lib/invite-token.js
+      참고 — 인앱 브라우저가 Google OAuth를 별도 브라우저 컨텍스트로
+      넘기면서 sessionStorage가 비는 경우의 대비책. sessionStorage가
+      이미 정상 유지된 경우엔 같은 값을 한 번 더 쓸 뿐 무해하고, URL에
+      `invite`가 없으면 아무 일도 하지 않는다).
+   0-b. callback URL(query 또는 hash)에 Supabase Auth error가 있으면
       세션 조회보다 먼저 처리한다 — Before User Created Hook이
       가입을 거절한 경우 auth.users/session이 아예 생성되지 않으므로
       authGetSession()만으로는 "세션 없음"과 구분할 수 없다.
@@ -17,8 +26,15 @@
       비어있는 비정상 상태라면 /admin/으로 안전하게 이동(아래
       예외 처리 참고)
    3. 세션 있음, profiles 없음:
-      - admin/index.html이 `?invite=` 진입 시 sessionStorage에 저장해둔
-        토큰(core/lib/invite-token.js, getStoredInviteToken())이 있으면
+      - intent=login(루트 index.html의 "로그인" 메뉴로 들어온
+        경우만 — admin/invite 쪽 Google 버튼은 이 값을 붙이지
+        않음)이면 가입 가능 여부와 무관하게 무조건 "회원이
+        아닙니다."만 보여주고 signOut() 후 종료한다(onboarding으로
+        보내지 않음). 그 외(기본값, 즉 admin/invite 진입 및
+        index.html "회원가입" 메뉴)는 아래 기존 로직을 그대로 탄다.
+      - admin/index.html·invite/index.html의 `?invite=` 진입으로
+        sessionStorage에 저장된(0-a에서 회수됐을 수도 있는) 토큰
+        (core/lib/invite-token.js, getStoredInviteToken())이 있으면
         함께 실어 public.get_signup_availability(p_invite_token) RPC를
         호출한다(서버가 signup_open + signup_opens_at/signup_closes_at
         기간, 그리고 닫혀 있을 때는 그 토큰의 활성/미소진/미만료까지
@@ -62,6 +78,46 @@ const SIGNUP_CLOSED_MESSAGE =
 
 const GENERIC_AUTH_ERROR_MESSAGE =
   "로그인 중 문제가 발생했습니다.<br>잠시 후 다시 시도해 주세요.";
+
+/*
+  루트 index.html의 메뉴에서 "로그인"을 명시적으로 고르고 들어온
+  경우(intent=login) 전용 메시지 — profiles가 없으면 회원가입 가능
+  여부와 무관하게 이 문구만 보여주고 onboarding으로 보내지 않는다
+  (아래 runAuthCallback의 intent 분기 참고).
+*/
+
+const NOT_A_MEMBER_MESSAGE =
+  "회원이 아닙니다.";
+
+const SIGNUP_UNAVAILABLE_MESSAGE =
+  "현재 회원 가입을 받지 않습니다.";
+
+
+/*
+  이 페이지의 모든 "짧은 안내" 종료 상태(회원 아님/가입 불가/오류
+  등)는 화면 문구 + #authHomeLink("홈으로 돌아가기")로 끝난다.
+  링크 클릭뿐 아니라 Enter 키로도 같은 동작을 하도록, 링크가 보이는
+  상태에서만 반응하는 전역 리스너를 한 번만 등록한다.
+*/
+
+document.addEventListener(
+  "keydown",
+  (event) => {
+
+    if (
+      event.key !== "Enter" ||
+      authHomeLink.hidden
+    ) {
+
+      return;
+
+    }
+
+    window.location.href =
+      authHomeLink.href;
+
+  }
+);
 
 
 /*
@@ -160,6 +216,39 @@ function showAuthFailureMessage(
 
 
 async function runAuthCallback() {
+
+  /*
+    admin/index.html·invite/index.html의 Google 로그인 버튼이
+    sessionStorage 유실에 대비해 초대 토큰을 redirectTo의 query
+    string(`?invite=`)에도 실어 보낸다(core/lib/invite-token.js 주석
+    참고 — 인앱 브라우저가 OAuth를 별도 브라우저 컨텍스트로 넘기면서
+    sessionStorage가 비어버리는 경우가 있다). 여기서 도착 즉시
+    captureInviteTokenFromUrl()로 그 값을 다시 sessionStorage에
+    회수하고 URL에서 지운다 — 원래 sessionStorage에 값이 남아있던
+    정상 케이스에서도 같은 값을 덮어쓸 뿐이라 부작용이 없고, URL에
+    `invite`가 없으면 이 호출은 아무 일도 하지 않는다.
+  */
+
+  captureInviteTokenFromUrl();
+
+
+  /*
+    루트 index.html의 메뉴("로그인"/"회원가입")에서만 실어 보내는
+    값이다(index.html의 googleButton 클릭 핸들러 참고) — admin/index.html·
+    invite/index.html의 Google 로그인 버튼은 이 값을 붙이지 않으므로
+    거기서 들어온 요청은 항상 intent가 null이고, 아래 분기에서 기존
+    동작(가입 가능 여부 확인 후 onboarding 이동)을 그대로 탄다.
+    "login"일 때만 별도로 취급한다 — "회원이 아닙니다."로 끝내고
+    onboarding으로 보내지 않는다(아래 참고).
+  */
+
+  const intent =
+    new URLSearchParams(
+      window.location.search
+    ).get(
+      "intent"
+    );
+
 
   const authError =
     getAuthErrorFromUrl();
@@ -291,6 +380,30 @@ async function runAuthCallback() {
 
 
   /*
+    "로그인"으로 명시적으로 들어왔는데(index.html 메뉴) profile이
+    없다 — 이 사람은 회원가입을 하려는 게 아니라 로그인을 하려던
+    것이므로, 가입 가능 여부(get_signup_availability)와 무관하게
+    "회원이 아닙니다."만 보여주고 끝낸다. onboarding으로는 절대
+    보내지 않는다 — 그러려면 "회원가입" 메뉴로 다시 들어와야 한다.
+    이 경로엔 애초에 invite 토큰이 실려올 수 없으므로(index.html의
+    로그인/회원가입 메뉴는 invite 흐름과 무관) 토큰 처리는 하지
+    않는다.
+  */
+
+  if (intent === "login") {
+
+    await authSignOut();
+
+    showAuthFailureMessage(
+      NOT_A_MEMBER_MESSAGE
+    );
+
+    return;
+
+  }
+
+
+  /*
     가입 가능 여부는 항상 서버 판정(public.is_signup_open())을
     그대로 재사용하는 이 RPC 하나로만 확인한다 — signup_opens_at/
     signup_closes_at을 클라이언트가 직접 받아서 비교하지 않는다
@@ -369,7 +482,7 @@ async function runAuthCallback() {
     */
 
     let unavailableMessage =
-      "현재 가입을 받지 않습니다.";
+      SIGNUP_UNAVAILABLE_MESSAGE;
 
 
     if (inviteToken) {
@@ -404,8 +517,9 @@ async function runAuthCallback() {
     }
 
 
-    authStatusMessage.textContent =
-      unavailableMessage;
+    showAuthFailureMessage(
+      unavailableMessage
+    );
 
 
     return;

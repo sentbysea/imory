@@ -113,11 +113,11 @@ function getSlugFormatError(
 
   if (
     !slug ||
-    slug.length < 3 ||
-    slug.length > 30
+    slug.length < 1 ||
+    slug.length > 20
   ) {
 
-    return "3~30자로 입력해주세요.";
+    return "1~20자로 입력해주세요.";
 
   }
 
@@ -330,7 +330,7 @@ function mapOnboardingError(
         "닉네임을 확인해주세요.",
 
       "invalid slug format":
-        "주소 형식을 확인해주세요(영문 소문자/숫자/하이픈, 3~30자).",
+        "주소 형식을 확인해주세요(영문 소문자/숫자/하이픈, 1~20자).",
 
       "reserved slug":
         "사용할 수 없는 주소입니다.",

@@ -90,6 +90,30 @@
           next === "dark" ? "#222222" : "#ffffff"
         );
 
+        /*
+          content 속성만 바꾸면 iOS Safari가 상태바/툴바 색을 다시
+          읽어오지 않는 경우가 있다(아래 rAF 완화책과 별개의 오래된
+          WebKit 버그) — 메타 엘리먼트를 DOM에서 뺐다 그 자리에
+          다시 넣으면 값은 그대로인 채로 Safari가 강제로 다시
+          읽는다. 부모/다음 형제가 없어질 일은 없으므로(항상 head
+          안의 고정 엘리먼트) 조건 없이 안전하게 수행.
+        */
+
+        const themeColorParent =
+          themeColorMeta.parentNode;
+
+        const themeColorNextSibling =
+          themeColorMeta.nextSibling;
+
+        themeColorParent.removeChild(
+          themeColorMeta
+        );
+
+        themeColorParent.insertBefore(
+          themeColorMeta,
+          themeColorNextSibling
+        );
+
       }
 
       try {
@@ -108,26 +132,33 @@
         전체화면 요소(.landing-screen)의 배경색에서 상태바/툴바
         틴트를 직접 샘플링하는데, 새로고침 없는 클릭 토글에서는
         이 재샘플링이 누락되는 WebKit 버그가 있다(Design.md 4-7-1
-        3번 참고, 26.2에서 수정 예정). requestAnimationFrame으로
-        새 배경색이 페인트된 뒤 .landing-screen을 1px 스크롤했다
-        되돌려 reflow를 유발, Safari가 다시 샘플링하도록 유도한다
-        — 완화 조치일 뿐 100% 보장은 아니다.
+        3번 참고, 26.2에서 수정 예정). data-theme 변경이 실제로
+        페인트된 뒤에 스크롤 트릭을 실행해야 하므로 rAF를 두 번
+        중첩한다(첫 rAF는 "다음 프레임 직전"이라 아직 이번 프레임의
+        페인트가 끝났다는 보장이 없고, 그 안에서 또 rAF를 걸면
+        그 사이 프레임이 실제로 그려진 뒤 실행된다) — .landing-screen을
+        1px 스크롤했다 되돌려 reflow를 유발, Safari가 다시
+        샘플링하도록 유도한다. 완화 조치일 뿐 100% 보장은 아니다.
       */
 
       requestAnimationFrame(() => {
 
-        const scroller =
-          document.querySelector(
-            ".landing-screen"
-          );
+        requestAnimationFrame(() => {
 
-        if (scroller) {
+          const scroller =
+            document.querySelector(
+              ".landing-screen"
+            );
 
-          const top = scroller.scrollTop;
-          scroller.scrollTop = top + 1;
-          scroller.scrollTop = top;
+          if (scroller) {
 
-        }
+            const top = scroller.scrollTop;
+            scroller.scrollTop = top + 1;
+            scroller.scrollTop = top;
+
+          }
+
+        });
 
       });
 
