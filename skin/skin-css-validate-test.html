@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>skin css validator/scoper test harness</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  .panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    max-width: 960px;
+    margin-bottom: 16px;
+  }
+  pre.code {
+    background: #111;
+    color: #eee;
+    padding: 12px;
+    border-radius: 6px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+  }
+  #summary {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Skin CSS Validator / Scoper Test Harness</h1>
+  <p>
+    skin/skin-css-validate.js(validateAndScopeSkinCss)를 위험/정상 CSS 샘플로
+    검증하는 격리된 페이지. 이 파일만 <code>@eslint/css-tree</code>를 CDN에서
+    로드한다(저장 시점 전용, 공개 HOME은 이 모듈을 절대 로드하지 않음).
+  </p>
+
+  <div id="summary">모듈 로드 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <h2>케이스별 input/output</h2>
+  <div class="panel" id="casePanel"></div>
+
+  <h2>실제 DOM에 적용해 스코프가 진짜로 격리를 만드는지 확인</h2>
+  <div class="panel">
+    <div id="scopeProofRoot" class="imory-skin-root">
+      <div id="scopeProofInside">root 안쪽 — 빨간색이어야 정상</div>
+    </div>
+    <div id="scopeProofOutside">root 바깥쪽 — 원래 색(검정)이어야 정상</div>
+  </div>
+
+  <script type="module">
+
+    import { validateAndScopeSkinCss } from "./skin-css-validate.js";
+
+    const reportList = document.getElementById("reportList");
+    const casePanel = document.getElementById("casePanel");
+    let passCount = 0;
+    let failCount = 0;
+
+    function report(name, passed, detail) {
+      const item = document.createElement("li");
+      item.className = passed ? "pass" : "fail";
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      reportList.appendChild(item);
+      if (passed) { passCount++; } else { failCount++; }
+      console[passed ? "log" : "error"](`[${passed ? "PASS" : "FAIL"}] ${name}`, detail || "");
+    }
+
+    function assert(name, condition, detail) {
+      report(name, !!condition, detail);
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+    }
+
+    function showCase(name, input, result) {
+      const row = document.createElement("div");
+      row.innerHTML =
+        `<strong>${name}</strong>` +
+        `<pre class="code">input:    ${escapeForDisplay(input)}\nok:       ${result.ok}\ncss out:  ${escapeForDisplay(result.css)}\nwarnings: ${escapeForDisplay(JSON.stringify(result.warnings))}</pre>`;
+      casePanel.appendChild(row);
+    }
+
+    function escapeForDisplay(str) {
+      return String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function run(name, input, check, options) {
+      const result = validateAndScopeSkinCss(input, options);
+      showCase(name, input, result);
+      assert(name, check(result), JSON.stringify(result));
+      return result;
+    }
+
+
+    function runAllTests() {
+
+      run(
+        "@import 완전 제거, 나머지 규칙은 유지+스코프됨",
+        '@import url("https://evil.example.com/x.css"); div{color:red}',
+        (r) => r.ok && !/@import/.test(r.css) && /\.imory-skin-root div\{color:red\}/.test(r.css)
+      );
+
+      run(
+        ":root/html/body 단독 셀렉터는 .imory-skin-root로 치환",
+        ':root{color:red} html{margin:0} body{padding:0}',
+        (r) => r.ok &&
+          r.css.split(".imory-skin-root{").length - 1 === 3 &&
+          !/\bhtml\b/.test(r.css) && !/\bbody\{/.test(r.css) && !/:root/.test(r.css)
+      );
+
+      run(
+        "compound(body.dark)는 치환하지 않고 안전하게 접두어만 추가(죽은 규칙, 위험 아님)",
+        'body.dark{color:pink}',
+        (r) => r.ok && /\.imory-skin-root body\.dark\{color:pink\}/.test(r.css)
+      );
+
+      run(
+        "일반 selector는 결합자를 보존하며 스코프 접두어가 붙음",
+        'div span{color:blue} div > p{color:green} div + p ~ span{color:red} *{box-sizing:border-box}',
+        (r) => r.ok &&
+          /\.imory-skin-root div span\{color:blue\}/.test(r.css) &&
+          /\.imory-skin-root div>p\{color:green\}/.test(r.css) &&
+          /\.imory-skin-root div\+p~span\{color:red\}/.test(r.css) &&
+          /\.imory-skin-root \*\{box-sizing:border-box\}/.test(r.css)
+      );
+
+      run(
+        "따옴표 없는 javascript: url() — 문법이 깨진 url-token이라 csstree 자체가 parse error를 내고, 전체가 안전하게 실패 처리됨",
+        'div{background:url(javascript:alert(1))}',
+        (r) => r.ok === false && r.css === "" && r.warnings.length > 0
+      );
+
+      run(
+        "따옴표 있는 javascript: url() — Url 노드 스킴 검증으로 제거됨",
+        'div{background:url("javascript:alert(1)")}',
+        (r) => r.ok && !/javascript/.test(r.css) && !/background/.test(r.css)
+      );
+
+      run(
+        "data:/vbscript:/file:/blob: url() 전부 제거",
+        'div{background:url("data:text/html,x")} p{background:url(vbscript:x)} span{background:url("file:///etc/passwd")} a{background:url(blob:xyz)}',
+        (r) => r.ok && !/data:/.test(r.css) && !/vbscript:/.test(r.css) && !/file:/.test(r.css) && !/blob:/.test(r.css)
+      );
+
+      run(
+        "안전한 https url()은 그대로 보존",
+        'div{background:url(https://example.com/a.png)}',
+        (r) => r.ok && /url\(https:\/\/example\.com\/a\.png\)/.test(r.css)
+      );
+
+      run(
+        "-moz-binding / behavior 프로퍼티 자체가 제거됨",
+        'div{-moz-binding:url("https://evil.example.com/xbl")} p{behavior:url("x.htc")}',
+        (r) => r.ok && !/-moz-binding/.test(r.css) && !/behavior/.test(r.css)
+      );
+
+      run(
+        "expression() 사용이 제거됨(레거시 IE 방어)",
+        'div{width:expression(alert(1))}',
+        (r) => r.ok && !/expression/.test(r.css) && !/width/.test(r.css)
+      );
+
+      run(
+        "위험 키워드가 담긴 custom property 선언 자체는 제거됨(다른 선언의 var(--evil) 참조 문자열은 그대로 남지만, 정의가 사라졌으니 무효)",
+        'div{--evil: url(javascript:alert(1)); background: var(--evil);}',
+        (r) => r.ok && !/--evil:/.test(r.css) && /background:var\(--evil\)/.test(r.css)
+      );
+
+      run(
+        "안전한 custom property는 그대로 보존",
+        'div{--safe-color: #ffffff;}',
+        (r) => r.ok && /--safe-color:\s*#ffffff/.test(r.css)
+      );
+
+      run(
+        "@media 내부 selector도 정상적으로 스코프됨",
+        '@media (min-width: 100px){ span{color:red} }',
+        (r) => r.ok && /@media \(min-width:100px\)\{\.imory-skin-root span\{color:red\}\}/.test(r.css)
+      );
+
+      run(
+        "@keyframes 내부의 0%/50%/to 같은 timing selector는 절대 스코프되지 않음",
+        '@keyframes spin{ 0%{opacity:0} 50%,75%{opacity:.5} to{opacity:1} } div{animation:spin 1s}',
+        (r) => r.ok &&
+          /@keyframes spin\{0%\{opacity:0\}50%,75%\{opacity:\.5\}to\{opacity:1\}\}/.test(r.css) &&
+          /\.imory-skin-root div\{animation:spin 1s\}/.test(r.css)
+      );
+
+      run(
+        "보호 대상 selector(#postDetailContent 등)만 제거, 같은 목록의 안전한 selector는 유지",
+        'a, #postDetailContent, span.post-inline-font{color:red} .post-detail-content{color:blue} .post-dialogue{color:green}',
+        (r) => r.ok &&
+          /\.imory-skin-root a\{color:red\}/.test(r.css) &&
+          !/postDetailContent/.test(r.css) &&
+          !/post-detail-content/.test(r.css) &&
+          !/post-dialogue/.test(r.css) &&
+          !/post-inline-font/.test(r.css)
+      );
+
+      run(
+        "namespace 없이 호출하면(저장 시점 용도) @keyframes 이름은 원래대로 유지됨",
+        '@keyframes fade{0%{opacity:0}} div{animation:fade 1s}',
+        (r) => r.ok && /@keyframes fade\{/.test(r.css) && /animation:fade 1s/.test(r.css)
+      );
+
+      run(
+        "namespace가 주어지면 @keyframes 이름 + animation-name/animation shorthand 참조가 함께 격리됨",
+        '@keyframes fade{0%{opacity:0}100%{opacity:1}} div{animation:fade 1s ease-in-out infinite alternate} p{animation-name:fade}',
+        (r) => r.ok &&
+          /@keyframes imory-kf-instA-fade\{/.test(r.css) &&
+          /animation:imory-kf-instA-fade 1s ease-in-out infinite alternate/.test(r.css) &&
+          /animation-name:imory-kf-instA-fade/.test(r.css) &&
+          r.css.replace(/imory-kf-instA-fade/g, "").indexOf("fade") === -1,
+        { namespace: "instA" }
+      );
+
+      {
+        const rA = validateAndScopeSkinCss('@keyframes fade{0%{opacity:0}} div{animation-name:fade}', { namespace: "skinA" });
+        const rB = validateAndScopeSkinCss('@keyframes fade{0%{opacity:0}} div{animation-name:fade}', { namespace: "skinB" });
+        showCase("서로 다른 namespace로 같은 원본 keyframe 이름(fade)을 렌더", "skinA vs skinB", { ok: rA.ok && rB.ok, css: `A: ${rA.css}\nB: ${rB.css}`, warnings: [] });
+        assert(
+          "같은 원본 keyframe 이름이라도 namespace가 다르면 서로 다른 최종 이름이 되어 충돌하지 않음",
+          rA.ok && rB.ok &&
+          rA.css.includes("imory-kf-skinA-fade") &&
+          rB.css.includes("imory-kf-skinB-fade") &&
+          !rA.css.includes("imory-kf-skinB-fade") &&
+          !rB.css.includes("imory-kf-skinA-fade")
+        );
+      }
+
+      run(
+        "완전히 깨진 CSS는 신뢰하지 않고 통째로 실패 처리(빈 문자열)",
+        '}}}{{{ ;;; @@@ ###',
+        (r) => r.ok === false && r.css === "" && r.warnings.length > 0
+      );
+
+      run(
+        "빈 문자열 입력은 정상적으로 빈 문자열 반환(3절: css는 빈 문자열 허용)",
+        "",
+        (r) => r.ok === true && r.css === ""
+      );
+
+      run(
+        "일반적인 사소한 표기 편차(트레일링 세미콜론/공백/주석/유니코드)는 실패 처리하지 않음",
+        'div  {\n  color:  red;;\n} /* 주석 */ p::before{content:"안녕"}',
+        (r) => r.ok === true && r.css.length > 0
+      );
+
+
+      /* =====================================================
+         실제 DOM 적용 — 문자열 검사가 아니라 진짜로 격리가
+         동작하는지 눈으로/computed style로 확인
+      ===================================================== */
+
+      const scopeResult = validateAndScopeSkinCss('div{color:red;font-weight:bold}');
+      showCase("실제 스코프 적용 결과", 'div{color:red;font-weight:bold}', scopeResult);
+
+      const styleEl = document.createElement("style");
+      styleEl.textContent = scopeResult.css;
+      document.head.appendChild(styleEl);
+
+      const insideColor = getComputedStyle(document.getElementById("scopeProofInside")).color;
+      const outsideColor = getComputedStyle(document.getElementById("scopeProofOutside")).color;
+
+      assert(
+        "스코프된 CSS는 .imory-skin-root 안쪽 엘리먼트에만 적용됨(빨간색)",
+        insideColor === "rgb(255, 0, 0)",
+        insideColor
+      );
+
+      assert(
+        "스코프된 CSS는 .imory-skin-root 바깥쪽 엘리먼트에는 적용되지 않음(기본색 유지)",
+        outsideColor !== "rgb(255, 0, 0)",
+        outsideColor
+      );
+
+      finishSummary();
+
+    }
+
+    runAllTests();
+
+  </script>
+
+</body>
+</html>

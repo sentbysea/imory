@@ -240,6 +240,48 @@
   </script>
 
 
+  <!-- =========================================================
+       AI SKIN (PHASE 1A, Slice 4)
+
+       published Skin이 있는 사용자만 이 경로로 렌더된다(아래
+       initHomeRenderer 참고). skin-sanitize.js/skin-context.js는
+       classic script라 다른 코드처럼 그냥 전역 함수를 노출한다.
+       skin-render.js는 이 모듈(skin-home.js)이 정적 import하므로
+       여기서 별도로 로드하지 않는다.
+
+       skin-home.js는 type="module"이라 classic script와 로드
+       타이밍이 다르다(문서 파싱이 끝난 뒤 실행) — initHomeRenderer가
+       "전역이 생기길 기다리며 폴링"하지 않도록, 이 모듈이 로드를
+       마치는 순간 resolve되는 Promise를 미리 선언해 둔다.
+
+       롤백: 이 블록 전체 + 아래 initHomeRenderer의
+       tryRenderPublishedSkinHome 분기만 제거하면 완전히 가역이다
+       — 기존 legacy_sua/customize/notice 로직은 한 줄도 안 바뀜.
+  ========================================================== -->
+
+  <script>
+
+    window.skinHomeReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinHomeReady = resolve;
+        }
+      );
+
+    loadVersionedScripts(
+      [
+        "./skin/skin-sanitize.js",
+        "./skin/skin-context.js"
+      ]
+    );
+
+    document.write(
+      `<script type="module" src="./skin/skin-home.js?v=${APP_BUILD_VERSION}"><\/script>`
+    );
+
+  </script>
+
+
 
   <!-- =========================================================
        PRETENDARD
@@ -2932,10 +2974,88 @@
        HOME MODE 렌더러 분기 (3-way)
     ========================================================== */
 
+    /*
+      published Skin(Slice 4) 우선 시도 — profiles.home_mode에
+      새 enum을 추가하지 않고, "이 사용자에게 새 skins published
+      row가 있는가"만으로 우선순위를 가른다
+      (AI_SKIN_PHASE1A_DESIGN.md 9-1절). 실패하면(published 없음/
+      RPC 에러/렌더 실패 전부 포함) 반드시 false를 반환하도록
+      skin-home.js가 보장하므로, 여기서는 그 결과만 보고 기존
+      legacy 분기로 자연스럽게 흘러가게 둔다 — 새 Skin 시스템
+      장애가 기존 사용자의 HOME까지 깨뜨리지 않는다.
+    */
+
+    async function tryRenderPublishedSkinHome(ownerId) {
+
+      const themeMount =
+        document.getElementById(
+          "themeMount"
+        );
+
+      if (!themeMount) {
+        return false;
+      }
+
+      let renderPublishedSkinHome;
+
+      try {
+
+        renderPublishedSkinHome =
+          await window.skinHomeReady;
+
+      } catch (err) {
+
+        console.error(
+          "[index] skin-home module failed to load",
+          err
+        );
+
+        return false;
+
+      }
+
+      try {
+
+        return await renderPublishedSkinHome({
+          ownerId,
+          container: themeMount
+        });
+
+      } catch (err) {
+
+        console.error(
+          "[index] renderPublishedSkinHome threw unexpectedly",
+          err
+        );
+
+        return false;
+
+      }
+
+    }
+
+
     async function initHomeRenderer() {
 
       const owner =
         await getSiteOwner();
+
+
+      if (
+        owner.status === "found" &&
+        owner.ownerId
+      ) {
+
+        const renderedPublishedSkin =
+          await tryRenderPublishedSkinHome(
+            owner.ownerId
+          );
+
+        if (renderedPublishedSkin) {
+          return;
+        }
+
+      }
 
 
       if (

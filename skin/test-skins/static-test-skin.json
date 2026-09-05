@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "html": "<article class=\"skin-home\"><header class=\"skin-home-header\"><h1 data-imory-bind=\"site.title\"></h1></header><section class=\"skin-profile\"><img class=\"skin-profile-avatar\" data-imory-src=\"profile.avatarUrl\" alt=\"profile avatar\"><p class=\"skin-profile-nickname\" data-imory-bind=\"profile.nickname\"></p><p class=\"skin-profile-bio\" data-imory-if=\"profile.bio\" data-imory-bind=\"profile.bio\"></p></section><nav class=\"skin-nav\"><ul><li data-imory-repeat=\"navigation.categories\"><a data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></li></ul></nav><section class=\"skin-recent-posts\"><h2>Recent Posts</h2><ul data-imory-if=\"home.recentPosts\"><li data-imory-repeat=\"home.recentPosts\"><a data-imory-href=\"item.href\" data-imory-bind=\"item.title\"></a></li></ul></section></article>",
+  "css": ".skin-home { font-family: system-ui, sans-serif; max-width: 640px; margin: 0 auto; padding: 16px; } .skin-profile-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; display: block; } .skin-nav ul, .skin-recent-posts ul { list-style: none; padding: 0; margin: 8px 0; } .skin-nav li, .skin-recent-posts li { margin: 4px 0; }",
+  "imageSlots": [
+    { "name": "profile", "label": "프로필 사진", "required": false, "aspectRatioHint": "1:1" }
+  ],
+  "regions": [],
+  "metadata": {
+    "title": "Static Test Skin",
+    "generatedBy": "manual",
+    "supports": { "home": true, "list": false, "post": false },
+    "requiredContext": [
+      "site.title",
+      "profile.nickname",
+      "profile.avatarUrl",
+      "profile.bio",
+      "navigation.categories",
+      "home.recentPosts"
+    ]
+  }
+}

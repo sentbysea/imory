@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>skin sanitizer + renderer test harness</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  h3 {
+    margin-top: 24px;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    max-width: 900px;
+    margin-bottom: 16px;
+  }
+  ul.report li.pass {
+    color: #2f9e44;
+  }
+  ul.report li.fail {
+    color: #e03131;
+    font-weight: bold;
+  }
+  .render-target {
+    border: 2px dashed #999;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fafafa;
+    margin-top: 8px;
+  }
+  pre.code {
+    background: #111;
+    color: #eee;
+    padding: 12px;
+    border-radius: 6px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 12px;
+  }
+  #summary {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Skin Sanitizer + Renderer Test Harness</h1>
+  <p>
+    skin/skin-sanitize.js와 skin/skin-render.js를 mockContext로 검증하는
+    격리된 페이지. AI/Supabase 연결 없음 — 정적 테스트 Skin(skin/test-skins/static-test-skin.json)과
+    하드코딩된 mockContext만 사용한다. 공개 HOME/Customize와 완전히 무관.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <h2>A. Sanitizer — 위험 태그/속성 제거</h2>
+  <div class="panel" id="sanitizerPanel"></div>
+
+  <h2>B. Renderer — 정상 바인딩 (전체 데이터)</h2>
+  <div class="panel">
+    <div class="render-target" id="renderFull"></div>
+  </div>
+
+  <h2>C. Renderer — 빈 데이터 (카테고리/최근글 0개, bio/avatar null)</h2>
+  <div class="panel">
+    <div class="render-target" id="renderEmpty"></div>
+  </div>
+
+  <h2>D. Renderer — 잘못된 path / repeat 대상이 배열이 아님 / nested repeat</h2>
+  <div class="panel">
+    <div class="render-target" id="renderMalformed"></div>
+  </div>
+
+  <h2>E. 책임 경계(Slice 3.5) — raw skin을 그대로 renderSkin에 넣어도 안전한가?</h2>
+  <div class="panel">
+    <p>
+      Slice 3.5부터 <code>renderSkin()</code>은 <code>skin.html</code>이
+      이미 sanitize를 통과했다고 가정하지 않는다 — DB에 저장된 skin은
+      Studio UI를 거치지 않고 REST로 직접 쓰였을 수도 있으므로(신뢰
+      경계 문서 참고), 호출될 때마다 항상 스스로
+      <code>sanitizeSkinHTML()</code>/<code>validateAndScopeSkinCss()</code>를
+      실행한다. 아래는 sanitize를 전혀 거치지 않은 원본(raw) 악성
+      HTML을 곧바로 <code>renderSkin()</code>에 넘긴 결과다.
+    </p>
+    <div class="render-target" id="renderUnsanitized"></div>
+  </div>
+
+  <!-- 의존 스크립트 로드 순서 중요: sanitize(classic) -> render(module, 내부에서 sanitize/css-validate 호출) -->
+  <script src="./skin-sanitize.js"></script>
+
+  <script type="module">
+
+    import { renderSkin } from "./skin-render.js";
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function report(name, passed, detail) {
+      const item = document.createElement("li");
+      item.className = passed ? "pass" : "fail";
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      reportList.appendChild(item);
+      if (passed) { passCount++; } else { failCount++; }
+      console[passed ? "log" : "error"](`[${passed ? "PASS" : "FAIL"}] ${name}`, detail || "");
+    }
+
+    function assert(name, condition, detail) {
+      report(name, !!condition, detail);
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+    }
+
+
+    /* =====================================================
+       A. Sanitizer 테스트
+    ===================================================== */
+
+    function runSanitizerTests() {
+
+      const panel = document.getElementById("sanitizerPanel");
+
+      const cases = [
+        {
+          name: "script 태그 + 내부 텍스트 완전 제거",
+          input: '<div>hello<script>alert(1)<\/script>world</div>',
+          check: (out) => !/script/i.test(out) && !/alert\(1\)/.test(out) && /hello/.test(out) && /world/.test(out)
+        },
+        {
+          name: "iframe 태그 완전 제거",
+          input: '<div><iframe src="https://evil.example.com"></iframe>safe</div>',
+          check: (out) => !/iframe/i.test(out) && /safe/.test(out)
+        },
+        {
+          name: "인라인 style 태그 완전 제거",
+          input: '<style>body{display:none}</style><p>text</p>',
+          check: (out) => !/<style/i.test(out) && /text/.test(out)
+        },
+        {
+          name: "form/input/button 완전 제거",
+          input: '<form><input type="text"><button>go</button></form><p>kept</p>',
+          check: (out) => !/<form/i.test(out) && !/<input/i.test(out) && !/<button/i.test(out) && /kept/.test(out)
+        },
+        {
+          name: "onerror 등 모든 on* 이벤트 속성 제거",
+          input: '<img src="https://example.com/a.png" onerror="alert(1)" onclick="alert(2)">',
+          check: (out) => !/onerror/i.test(out) && !/onclick/i.test(out) && /src="https:\/\/example\.com\/a\.png"/.test(out)
+        },
+        {
+          name: "인라인 style 속성 제거",
+          input: '<div style="position:fixed;top:0">x</div>',
+          check: (out) => !/style=/i.test(out)
+        },
+        {
+          name: "javascript: href 제거(태그는 유지)",
+          input: '<a href="javascript:alert(1)">click</a>',
+          check: (out) => /<a[^>]*>click<\/a>/.test(out) && !/javascript:/i.test(out)
+        },
+        {
+          name: "data: src 제거(img 태그는 유지)",
+          input: '<img data-imory-bind="" src="data:text/html,<script>alert(1)<\/script>">',
+          check: (out) => /<img/.test(out) && !/data:/i.test(out)
+        },
+        {
+          name: "vbscript:/file:/blob: href 전부 제거",
+          input: '<a href="vbscript:msgbox(1)">a</a><a href="file:///etc/passwd">b</a><a href="blob:xyz">c</a>',
+          check: (out) => !/vbscript:/i.test(out) && !/file:/i.test(out) && !/blob:/i.test(out)
+        },
+        {
+          name: "id 속성 전면 제거",
+          input: '<div id="postDetailContent">x</div>',
+          check: (out) => !/id="/i.test(out)
+        },
+        {
+          name: "허용되지 않은 미지의 태그는 unwrap(자식은 유지)",
+          input: '<table><tr><td>cell text</td></tr></table>',
+          check: (out) => !/<table/i.test(out) && !/<tr/i.test(out) && !/<td/i.test(out) && /cell text/.test(out)
+        },
+        {
+          name: "허용 태그/속성/data-imory-* 바인딩은 그대로 보존",
+          input: '<div class="box" data-imory-if="profile.bio"><p data-imory-bind="profile.bio"></p><a data-imory-href="item.href" href="https://example.com/ok">ok</a></div>',
+          check: (out) =>
+            /class="box"/.test(out) &&
+            /data-imory-if="profile\.bio"/.test(out) &&
+            /data-imory-bind="profile\.bio"/.test(out) &&
+            /data-imory-href="item\.href"/.test(out) &&
+            /href="https:\/\/example\.com\/ok"/.test(out)
+        },
+        {
+          name: "형식이 이상한 data-imory-* path는 속성 자체가 드롭됨",
+          input: '<span data-imory-bind="../evil; alert(1)"></span>',
+          check: (out) => !/data-imory-bind/.test(out)
+        }
+      ];
+
+      cases.forEach((testCase) => {
+        const output = sanitizeSkinHTML(testCase.input);
+        assert(`[sanitize] ${testCase.name}`, testCase.check(output), output);
+
+        const row = document.createElement("div");
+        row.innerHTML = `<strong>${testCase.name}</strong><pre class="code">input:  ${escapeForDisplay(testCase.input)}\noutput: ${escapeForDisplay(output)}</pre>`;
+        panel.appendChild(row);
+      });
+
+    }
+
+    function escapeForDisplay(str) {
+      return String(str).replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+
+    /* =====================================================
+       Mock Contexts
+    ===================================================== */
+
+    const mockContextFull = {
+      site: { title: "Imory Test Site", slug: "testuser", faviconUrl: null, description: null, language: "ko" },
+      profile: {
+        nickname: "테스트유저",
+        bio: "안녕하세요, 테스트 자기소개입니다.",
+        avatarUrl: "https://example.com/avatar.png"
+      },
+      navigation: {
+        categories: [
+          { id: "1", name: "일상", type: "post", href: "/testuser/category/1", itemCount: null },
+          { id: "2", name: "여행", type: "post", href: "/testuser/category/2", itemCount: null }
+        ]
+      },
+      home: {
+        recentPosts: [
+          { id: "10", title: "첫 번째 글", href: "/testuser/post/10", publishedAt: "2026-09-01T00:00:00Z", categoryName: "일상" },
+          { id: "11", title: "🔒 두 번째 글", href: "/testuser/post/11", publishedAt: "2026-09-02T00:00:00Z", categoryName: null }
+        ]
+      },
+      banners: { items: [] },
+      images: { profile: "https://example.com/avatar.png" }
+    };
+
+    const mockContextEmpty = {
+      site: { title: "Imory Empty Site", slug: "emptyuser", faviconUrl: null, description: null, language: "ko" },
+      profile: { nickname: "빈유저", bio: null, avatarUrl: null },
+      navigation: { categories: [] },
+      home: { recentPosts: [] },
+      banners: { items: [] },
+      images: { profile: null }
+    };
+
+
+    /* =====================================================
+       B/C. static-test-skin.json으로 실제 렌더
+    ===================================================== */
+
+    async function runStaticSkinRenderTests() {
+
+      const res = await fetch("./test-skins/static-test-skin.json");
+      const staticSkin = await res.json();
+
+      // --- Full context ---
+      const fullContainer = document.getElementById("renderFull");
+      renderSkin({ container: fullContainer, skin: staticSkin, context: mockContextFull, mode: "view" });
+
+      assert(
+        "[render:full] site.title 텍스트 바인딩",
+        fullContainer.querySelector(".skin-home-header h1").textContent === mockContextFull.site.title
+      );
+
+      assert(
+        "[render:full] profile.nickname 텍스트 바인딩",
+        fullContainer.querySelector(".skin-profile-nickname").textContent === mockContextFull.profile.nickname
+      );
+
+      assert(
+        "[render:full] bio가 있으면 보이고(hidden=false) 텍스트도 채워짐",
+        fullContainer.querySelector(".skin-profile-bio").hidden === false &&
+        fullContainer.querySelector(".skin-profile-bio").textContent === mockContextFull.profile.bio
+      );
+
+      assert(
+        "[render:full] navigation.categories repeat: 2개 <li> 렌더",
+        fullContainer.querySelectorAll(".skin-nav li").length === 2
+      );
+
+      assert(
+        "[render:full] repeat item.name / item.href 바인딩 정확히 매핑",
+        fullContainer.querySelectorAll(".skin-nav li a")[0].textContent === "일상" &&
+        fullContainer.querySelectorAll(".skin-nav li a")[0].getAttribute("href") === "/testuser/category/1" &&
+        fullContainer.querySelectorAll(".skin-nav li a")[1].textContent === "여행" &&
+        fullContainer.querySelectorAll(".skin-nav li a")[1].getAttribute("href") === "/testuser/category/2"
+      );
+
+      assert(
+        "[render:full] home.recentPosts repeat: 2개 <li>, if로 감싼 ul은 표시됨",
+        fullContainer.querySelectorAll(".skin-recent-posts li").length === 2 &&
+        fullContainer.querySelector(".skin-recent-posts ul").hidden === false
+      );
+
+      assert(
+        "[render:full] data-imory-src: 안전한 https URL은 그대로 적용",
+        fullContainer.querySelector(".skin-profile-avatar").getAttribute("src") === mockContextFull.profile.avatarUrl
+      );
+
+      // --- Empty context ---
+      const emptyContainer = document.getElementById("renderEmpty");
+      renderSkin({ container: emptyContainer, skin: staticSkin, context: mockContextEmpty, mode: "view" });
+
+      assert(
+        "[render:empty] bio가 null이면 해당 엘리먼트가 hidden 처리됨(에러 아님)",
+        emptyContainer.querySelector(".skin-profile-bio").hidden === true
+      );
+
+      assert(
+        "[render:empty] categories가 빈 배열이면 <li> 0개, 에러 없이 렌더 지속",
+        emptyContainer.querySelectorAll(".skin-nav li").length === 0
+      );
+
+      assert(
+        "[render:empty] recentPosts가 빈 배열이면 <li> 0개 + if로 감싼 ul은 hidden",
+        emptyContainer.querySelectorAll(".skin-recent-posts li").length === 0 &&
+        emptyContainer.querySelector(".skin-recent-posts ul").hidden === true
+      );
+
+      assert(
+        "[render:empty] avatarUrl이 null이면 src 속성 자체가 제거됨(placeholder 없음, v0.1 범위)",
+        emptyContainer.querySelector(".skin-profile-avatar").hasAttribute("src") === false
+      );
+
+      assert(
+        "[render:empty] 페이지 헤더/닉네임은 빈 데이터에서도 정상 표시",
+        emptyContainer.querySelector(".skin-home-header h1").textContent === mockContextEmpty.site.title &&
+        emptyContainer.querySelector(".skin-profile-nickname").textContent === mockContextEmpty.profile.nickname
+      );
+
+    }
+
+
+    /* =====================================================
+       D. 잘못된 path / non-array repeat / nested repeat
+    ===================================================== */
+
+    function runMalformedBindingTests() {
+
+      const container = document.getElementById("renderMalformed");
+
+      const malformedSkin = {
+        schemaVersion: 1,
+        html:
+          '<div class="mf-root">' +
+            '<span class="mf-bind" data-imory-bind="totally.bogus.path"></span>' +
+            '<div class="mf-if" data-imory-if="also.bogus.path">visible-if-truthy</div>' +
+            '<img class="mf-img" data-imory-src="nope.does.not.exist" alt="">' +
+            '<a class="mf-link" data-imory-href="still.missing">link</a>' +
+            '<ul><li data-imory-repeat="profile.nickname"><span data-imory-bind="item"></span></li></ul>' +
+            '<ul class="mf-nested"><li data-imory-repeat="list">' +
+              '<span data-imory-bind="item.name"></span>' +
+              '<ul><li data-imory-repeat="item.children"><span data-imory-bind="item.name"></span></li></ul>' +
+            '</li></ul>' +
+          '</div>',
+        css: ""
+      };
+
+      const malformedContext = {
+        profile: { nickname: "이건 배열이 아님" },
+        list: [
+          { name: "A", children: [{ name: "a1" }, { name: "a2" }] },
+          { name: "B", children: [] }
+        ]
+      };
+
+      let threw = false;
+
+      try {
+        renderSkin({ container, skin: malformedSkin, context: malformedContext, mode: "view" });
+      } catch (err) {
+        threw = true;
+        console.error("renderSkin threw unexpectedly", err);
+      }
+
+      assert("[render:malformed] renderSkin은 잘못된 path에서도 throw하지 않음", !threw);
+
+      assert(
+        "[render:malformed] 존재하지 않는 path의 data-imory-bind는 빈 텍스트로 처리",
+        container.querySelector(".mf-bind").textContent === ""
+      );
+
+      assert(
+        "[render:malformed] 존재하지 않는 path의 data-imory-if는 falsy(hidden)로 처리",
+        container.querySelector(".mf-if").hidden === true
+      );
+
+      assert(
+        "[render:malformed] 존재하지 않는 path의 data-imory-src는 속성 제거",
+        container.querySelector(".mf-img").hasAttribute("src") === false
+      );
+
+      assert(
+        "[render:malformed] 존재하지 않는 path의 data-imory-href는 속성 제거",
+        container.querySelector(".mf-link").hasAttribute("href") === false
+      );
+
+      assert(
+        "[render:malformed] data-imory-repeat 대상이 배열이 아니면(문자열) 0개 렌더, throw 없음",
+        container.querySelectorAll("ul")[0].querySelectorAll("li").length === 0
+      );
+
+      assert(
+        "[render:malformed] 최상위 repeat(list)은 정상적으로 2개 렌더",
+        container.querySelector(".mf-nested").querySelectorAll(":scope > li").length === 2
+      );
+
+      const nestedLis = container.querySelectorAll(".mf-nested > li");
+
+      assert(
+        "[render:malformed] nested data-imory-repeat(item.children)은 명시적으로 미지원 — 내부 li는 0개",
+        Array.from(nestedLis).every((li) => li.querySelectorAll("ul li").length === 0)
+      );
+
+      assert(
+        "[render:malformed] nested repeat이 제거돼도 바깥쪽 item.name 바인딩은 정상 유지",
+        nestedLis[0].querySelector(":scope > span").textContent === "A" &&
+        nestedLis[1].querySelector(":scope > span").textContent === "B"
+      );
+
+    }
+
+
+    /* =====================================================
+       E. Slice 3.5 — raw skin을 그대로 renderSkin에 넣어도
+       스스로 방어하는지 확인 (+ 사전에 sanitize해도 이중으로
+       망가지지 않는지 idempotency 확인)
+    ===================================================== */
+
+    function runResponsibilityBoundaryTests() {
+
+      const container = document.getElementById("renderUnsanitized");
+
+      window.__skinRenderTestScriptRan = false;
+
+      const maliciousHtml =
+        '<div class="boundary-root">' +
+          '<script>window.__skinRenderTestScriptRan = true;<\/script>' +
+          '<img class="boundary-img" src="https://example.com/broken.png" onerror="window.__skinRenderTestOnErrorLive = true">' +
+          '<a class="boundary-link" href="javascript:window.__skinRenderTestHrefLive = true">click</a>' +
+        '</div>';
+
+      // --- 1) sanitize를 전혀 거치지 않은 raw skin을 곧바로 renderSkin에 투입 ---
+      renderSkin({
+        container,
+        skin: { schemaVersion: 1, html: maliciousHtml, css: "" },
+        context: {},
+        mode: "view"
+      });
+
+      assert(
+        "[boundary] <script>는 <template> 파싱 경로 덕에 브라우저 차원에서 실행되지 않음",
+        window.__skinRenderTestScriptRan === false
+      );
+
+      assert(
+        "[boundary] renderSkin이 내부적으로 sanitize하므로 script 태그 자체가 DOM에 존재하지 않음",
+        container.querySelector("script") === null
+      );
+
+      assert(
+        "[boundary] raw skin을 그대로 넣어도 onerror 속성이 완전히 제거됨",
+        container.querySelector(".boundary-img") === null || !container.querySelector(".boundary-img").hasAttribute("onerror")
+      );
+
+      assert(
+        "[boundary] raw skin을 그대로 넣어도 javascript: href가 완전히 제거됨",
+        container.querySelector(".boundary-link") === null || !container.querySelector(".boundary-link").hasAttribute("href")
+      );
+
+      // --- 2) 호출자가 미리 sanitize해서 넘겨도(이중 적용) 정상 콘텐츠가 깨지지 않음 ---
+      const preSanitizedHtml = sanitizeSkinHTML(maliciousHtml);
+
+      const idempotentContainer = document.createElement("div");
+      renderSkin({
+        container: idempotentContainer,
+        skin: { schemaVersion: 1, html: preSanitizedHtml, css: "" },
+        context: {},
+        mode: "view"
+      });
+
+      assert(
+        "[boundary] 호출자가 미리 sanitize해서 넘겨도(이중 적용) 여전히 안전하고 정상 렌더됨(idempotent)",
+        idempotentContainer.querySelector("script") === null &&
+        (idempotentContainer.querySelector(".boundary-img") === null || !idempotentContainer.querySelector(".boundary-img").hasAttribute("onerror"))
+      );
+
+    }
+
+
+    /* =====================================================
+       실행
+    ===================================================== */
+
+    (async () => {
+
+      runSanitizerTests();
+
+      try {
+        await runStaticSkinRenderTests();
+      } catch (err) {
+        assert("[render:full/empty] static-test-skin.json 로드 및 렌더", false, err.message);
+        console.error(err);
+      }
+
+      runMalformedBindingTests();
+      runResponsibilityBoundaryTests();
+
+      finishSummary();
+
+    })();
+
+  </script>
+
+</body>
+</html>

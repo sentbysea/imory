@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>skin context builder test harness</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+  }
+  #loadForm {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    max-width: 720px;
+    margin-bottom: 24px;
+  }
+  #loadForm label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 14px;
+  }
+  #loadForm input {
+    font-size: 14px;
+    padding: 6px 8px;
+    width: 240px;
+  }
+  #loadForm button {
+    font-size: 14px;
+    padding: 6px 14px;
+    margin-left: 8px;
+    cursor: pointer;
+  }
+  #reportList {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    max-width: 720px;
+  }
+  #reportList li.pass {
+    color: #2f9e44;
+  }
+  #reportList li.fail {
+    color: #e03131;
+    font-weight: bold;
+  }
+  #contextOutput {
+    background: #111;
+    color: #eee;
+    padding: 16px;
+    border-radius: 8px;
+    max-width: 900px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>skin context builder test harness</h1>
+  <p>
+    skin/skin-context.js(buildSkinContext)를 실제 Supabase 데이터로
+    호출해서 결과 shape을 확인하는 격리된 테스트 페이지.
+    공개 HOME/Customize와 완전히 무관함 — 이 페이지만 열어서 확인한다.
+  </p>
+
+  <form id="loadForm">
+    <label for="slugInput">
+      대상 사용자 slug (profiles.slug) — 로그인 없이도 조회 가능한
+      공개 컬럼만 사용
+    </label>
+    <input id="slugInput" type="text" placeholder="예: yenable">
+    <button id="loadButton" type="submit">Load Context</button>
+  </form>
+
+  <h2>Skin Context (raw JSON)</h2>
+  <pre id="contextOutput">(아직 로드 안 됨)</pre>
+
+  <h2>검증 결과</h2>
+  <ul id="reportList"></ul>
+
+  <!-- 의존 스크립트 로드 순서 중요 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../core/lib/reserved-slugs.js"></script>
+  <script src="../core/lib/site-path.js"></script>
+  <script src="../core/lib/supabase-client.js"></script>
+  <script src="./skin-context.js"></script>
+
+  <script>
+
+    const reportList =
+      document.getElementById("reportList");
+
+    const contextOutput =
+      document.getElementById("contextOutput");
+
+    function report(name, passed, detail) {
+
+      const item =
+        document.createElement("li");
+
+      item.className =
+        passed ? "pass" : "fail";
+
+      item.textContent =
+        `[${passed ? "PASS" : "FAIL"}] ${name}` +
+        (detail ? ` — ${detail}` : "");
+
+      reportList.appendChild(item);
+
+      console[passed ? "log" : "error"](
+        `[${passed ? "PASS" : "FAIL"}] ${name}`,
+        detail || ""
+      );
+
+    }
+
+    function assert(name, condition, detail) {
+
+      report(name, !!condition, detail);
+
+    }
+
+
+    /* =====================================================
+       structural assertions — 실제 데이터 값이 아니라
+       PHASE1A_DESIGN.md 1절 shape 자체를 검사한다. 데이터가
+       비어있는 계정(카테고리/글/배너 0개)에서도 전부 통과해야
+       한다("없으면 조용히 빈 값"이 정상 상태).
+    ===================================================== */
+
+    function assertContextShape(context, ownerSlug) {
+
+      assert(
+        "context.site.title은 비어있지 않은 문자열",
+        typeof context.site.title === "string" && context.site.title.length > 0,
+        context.site.title
+      );
+
+      assert(
+        "context.site.slug === 조회한 slug",
+        context.site.slug === ownerSlug,
+        `${context.site.slug} vs ${ownerSlug}`
+      );
+
+      assert(
+        "context.site.faviconUrl은 string 또는 null",
+        context.site.faviconUrl === null || typeof context.site.faviconUrl === "string"
+      );
+
+      assert(
+        "context.site.description은 v0.1에서 항상 null(설계 문서 1-1절)",
+        context.site.description === null
+      );
+
+      assert(
+        "context.site.language === 'ko'",
+        context.site.language === "ko"
+      );
+
+      assert(
+        "context.profile.nickname은 문자열",
+        typeof context.profile.nickname === "string"
+      );
+
+      assert(
+        "context.profile.bio은 string 또는 null",
+        context.profile.bio === null || typeof context.profile.bio === "string"
+      );
+
+      assert(
+        "context.profile.avatarUrl === context.images.profile (동일 소스, 1-2절)",
+        context.profile.avatarUrl === (context.images.profile ?? null)
+      );
+
+      assert(
+        "context.navigation.categories는 배열",
+        Array.isArray(context.navigation.categories)
+      );
+
+      assert(
+        "카테고리 항목마다 id/name/type/href가 전부 채워짐, itemCount는 null(v0.1 미구현)",
+        context.navigation.categories.every(c =>
+          typeof c.id === "string" &&
+          typeof c.name === "string" &&
+          typeof c.type === "string" &&
+          typeof c.href === "string" &&
+          c.itemCount === null
+        )
+      );
+
+      assert(
+        "home.recentPosts는 최대 5개(설계 문서 1-4절 고정 LIMIT)",
+        context.home.recentPosts.length <= 5,
+        `count=${context.home.recentPosts.length}`
+      );
+
+      assert(
+        "recentPosts 항목마다 id/title/href/publishedAt이 채워짐, categoryName은 string|null",
+        context.home.recentPosts.every(p =>
+          typeof p.id === "string" &&
+          typeof p.title === "string" &&
+          typeof p.href === "string" &&
+          typeof p.publishedAt === "string" &&
+          (p.categoryName === null || typeof p.categoryName === "string")
+        )
+      );
+
+      assert(
+        "banners.items는 배열, 항목마다 id/imageUrl이 채워지고 href/alt는 string|null",
+        Array.isArray(context.banners.items) &&
+        context.banners.items.every(b =>
+          typeof b.id === "string" &&
+          typeof b.imageUrl === "string" &&
+          (b.href === null || typeof b.href === "string") &&
+          (b.alt === null || typeof b.alt === "string")
+        )
+      );
+
+      assert(
+        "images 네임스페이스는 요청한 imageSlotNames 키만 가짐",
+        Object.keys(context.images).sort().join(",") ===
+          ["profile", "header", "custom_01"].sort().join(",")
+      );
+
+      assert(
+        "요청했지만 값이 없는 슬롯(header)은 null로 채워짐",
+        context.images.header === null
+      );
+
+      assert(
+        "요청하고 값도 있는 슬롯(profile)은 mock 값 그대로 반영됨",
+        context.images.profile === "https://example.com/mock-avatar.png"
+      );
+
+    }
+
+
+    async function resolveOwnerIdBySlug(slug) {
+
+      const { data, error } =
+        await supabaseClient
+          .from("profiles")
+          .select("user_id, slug")
+          .eq("slug", slug)
+          .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return data;
+
+    }
+
+
+    async function runContextTest(slug) {
+
+      reportList.innerHTML = "";
+      contextOutput.textContent = "loading...";
+
+      let owner;
+
+      try {
+
+        owner = await resolveOwnerIdBySlug(slug);
+
+      } catch (err) {
+
+        contextOutput.textContent = "profiles 조회 실패: " + err.message;
+        report("profiles.slug 조회", false, err.message);
+        return;
+
+      }
+
+      if (!owner) {
+
+        contextOutput.textContent = `slug "${slug}"에 해당하는 사용자가 없습니다.`;
+        report("slug로 사용자 찾기", false, `slug="${slug}"`);
+        return;
+
+      }
+
+      report("slug로 사용자 찾기", true, `user_id=${owner.user_id}`);
+
+      let context;
+
+      try {
+
+        context = await buildSkinContext(owner.user_id, {
+          imageSlotNames: ["profile", "header", "custom_01"],
+          imageSlotValues: {
+            profile: "https://example.com/mock-avatar.png"
+            // header/custom_01: 의도적으로 비움 — null 처리 확인용
+          }
+        });
+
+      } catch (err) {
+
+        contextOutput.textContent = "buildSkinContext 실패: " + err.message;
+        report("buildSkinContext() 호출", false, err.message);
+        return;
+
+      }
+
+      report("buildSkinContext() 호출", true);
+
+      contextOutput.textContent = JSON.stringify(context, null, 2);
+
+      assertContextShape(context, owner.slug);
+
+      console.log("skin context test finished", context);
+
+    }
+
+
+    document.getElementById("loadForm").addEventListener("submit", (event) => {
+
+      event.preventDefault();
+
+      const slug =
+        document.getElementById("slugInput").value.trim();
+
+      if (!slug) {
+        return;
+      }
+
+      runContextTest(slug);
+
+    });
+
+
+    /* URL에 ?slug=xxx가 있으면 자동 로드 */
+
+    const presetSlug =
+      new URLSearchParams(window.location.search).get("slug");
+
+    if (presetSlug) {
+
+      document.getElementById("slugInput").value = presetSlug;
+      runContextTest(presetSlug);
+
+    }
+
+  </script>
+
+</body>
+</html>

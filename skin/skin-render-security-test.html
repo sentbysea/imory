@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>skin public render trust-boundary attack test</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  .panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    max-width: 960px;
+    margin-bottom: 16px;
+  }
+  .skin-pair {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .skin-mount {
+    border: 2px dashed #999;
+    border-radius: 8px;
+    padding: 8px;
+    background: #fafafa;
+    flex: 1;
+    min-width: 280px;
+  }
+  #summary {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 24px;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Skin Public Render Trust-Boundary Attack Test</h1>
+  <p>
+    Slice 3.5 검증용. 여기서 만드는 "raw skin" 객체들은 Studio UI를
+    전혀 거치지 않고 authenticated owner가 Supabase REST를 직접 호출해
+    <code>skin_versions</code>에 밀어넣었다고 가정한 <strong>완전히
+    검증되지 않은</strong> 원본이다 — sanitize/validate를 이 테스트
+    코드에서 미리 호출하지 않고, <code>renderSkin()</code> 딱 하나에만
+    통과시킨다(공개 HOME이 앞으로 정확히 이렇게 동작해야 한다).
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <h2>같은 document에 렌더된 두 개의 악성 Skin</h2>
+  <div class="panel">
+    <p>둘 다 <code>@keyframes shake</code>라는 같은 이름을 쓴다 — 이름이 충돌하지 않고 각자의 애니메이션을 유지해야 한다.</p>
+    <div class="skin-pair">
+      <div class="skin-mount" id="mountX"></div>
+      <div class="skin-mount" id="mountY"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <p>CSS leak 확인용 — 아래 마커는 두 Skin의 <code>.imory-skin-root</code> 밖에 있다. 두 Skin의 CSS(예: <code>body{...}</code> 전역 셀렉터, 넓은 태그 셀렉터)가 여기에 영향을 주면 안 된다.</p>
+    <div id="outsideMarker">outside marker — 배경/글자색이 기본값이어야 정상</div>
+  </div>
+
+  <script src="./skin-sanitize.js"></script>
+
+  <script type="module">
+
+    import { renderSkin } from "./skin-render.js";
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function report(name, passed, detail) {
+      const item = document.createElement("li");
+      item.className = passed ? "pass" : "fail";
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      reportList.appendChild(item);
+      if (passed) { passCount++; } else { failCount++; }
+      console[passed ? "log" : "error"](`[${passed ? "PASS" : "FAIL"}] ${name}`, detail || "");
+    }
+
+    function assert(name, condition, detail) {
+      report(name, !!condition, detail);
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+    }
+
+
+    /* =====================================================
+       공격 시나리오 확인용 전역 마커 — 실제로 코드가 실행되면
+       true가 된다. renderSkin을 거친 뒤에도 전부 false여야 한다.
+    ===================================================== */
+
+    window.__attackScriptRan = false;
+    window.__attackOnErrorRan = false;
+    window.__attackOnLoadRan = false;
+
+    function makeRawMaliciousSkin(label, keyframeShift) {
+
+      return {
+        schemaVersion: 1,
+        html:
+          `<div class="attack-root" id="should-be-stripped-${label}" style="position:fixed;top:0;left:0;z-index:99999">` +
+            `<script>window.__attackScriptRan = true;<\/script>` +
+            `<style>body{display:none}</style>` +
+            `<img class="attack-img-onerror" src="https://example.invalid/broken-${label}.png" onerror="window.__attackOnErrorRan = true">` +
+            `<img class="attack-img-jssrc" src="javascript:window.__attackOnLoadRan = true" onload="window.__attackOnLoadRan = true">` +
+            `<a class="attack-link" href="javascript:window.__attackScriptRan = true">click me</a>` +
+            `<p class="attack-text" data-imory-bind="label"></p>` +
+            `<div class="attack-shake">shake ${label}</div>` +
+          `</div>`,
+        css:
+          `@import url("https://evil.example.invalid/steal.css");` +
+          `body{background:red;color:red}` +
+          `* {outline: 1px solid red}` +
+          `.attack-root{background:url(javascript:window.__attackScriptRan=true)}` +
+          `.attack-shake{display:inline-block;animation:shake 1s ease-in-out infinite}` +
+          `@keyframes shake{0%{transform:translateX(0)}50%{transform:translateX(${keyframeShift}px)}100%{transform:translateX(0)}}`,
+        imageSlots: [],
+        regions: [],
+        metadata: { title: `attack-${label}`, generatedBy: "manual", supports: { home: true, list: false, post: false }, requiredContext: [] }
+      };
+
+    }
+
+    const rawSkinX = makeRawMaliciousSkin("X", 10);
+    const rawSkinY = makeRawMaliciousSkin("Y", 30);
+
+
+    function runAttackScenarioTests() {
+
+      const mountX = document.getElementById("mountX");
+      const mountY = document.getElementById("mountY");
+
+      // 공개 HOME이 앞으로 실제로 하게 될 일: DB에서 막 읽어온 raw skin을
+      // 그대로 renderSkin에 넘긴다. 여기서 sanitize/validate를 미리
+      // 호출하지 않는다 — 그게 이번 테스트의 핵심이다.
+      renderSkin({ container: mountX, skin: rawSkinX, context: { label: "X" }, mode: "view" });
+      renderSkin({ container: mountY, skin: rawSkinY, context: { label: "Y" }, mode: "view" });
+
+      assert(
+        "두 Skin 모두 렌더된 뒤에도 <script> 내용이 실행되지 않음",
+        window.__attackScriptRan === false
+      );
+
+      assert(
+        "onerror 핸들러가 실행되지 않음(속성 자체가 제거됨)",
+        window.__attackOnErrorRan === false
+      );
+
+      assert(
+        "onload 핸들러가 실행되지 않음",
+        window.__attackOnLoadRan === false
+      );
+
+      [["X", mountX], ["Y", mountY]].forEach(([label, mount]) => {
+
+        assert(
+          `[${label}] DOM 안에 <script> 태그가 존재하지 않음`,
+          mount.querySelector("script") === null
+        );
+
+        assert(
+          `[${label}] DOM 안에 <style> 태그가 (skin-render가 직접 넣은 것 하나 제외하고) HTML에서 유입되지 않음`,
+          mount.querySelectorAll("style").length === 1
+        );
+
+        const allElements = mount.querySelectorAll("*");
+        let hasOnAttr = false;
+        let hasIdAttr = false;
+        let hasStyleAttr = false;
+        let hasDangerousUrlAttr = false;
+
+        allElements.forEach((el) => {
+          Array.from(el.attributes).forEach((attr) => {
+            const name = attr.name.toLowerCase();
+            if (name.startsWith("on")) hasOnAttr = true;
+            if (name === "id") hasIdAttr = true;
+            if (name === "style") hasStyleAttr = true;
+            if ((name === "href" || name === "src") && /^\s*javascript:/i.test(attr.value)) hasDangerousUrlAttr = true;
+          });
+        });
+
+        assert(`[${label}] on* 이벤트 속성이 DOM 어디에도 없음`, !hasOnAttr);
+        assert(`[${label}] id 속성이 DOM 어디에도 없음(v0.1 전면 금지)`, !hasIdAttr);
+        assert(`[${label}] style 속성이 DOM 어디에도 없음`, !hasStyleAttr);
+        assert(`[${label}] javascript: href/src가 DOM 어디에도 없음`, !hasDangerousUrlAttr);
+
+        assert(
+          `[${label}] data-imory-bind 텍스트 바인딩은 정상 동작(공격 payload와 무관하게 정상 기능 유지)`,
+          mount.querySelector(".attack-text").textContent === label
+        );
+
+      });
+
+      assert(
+        "outside marker의 배경색이 공격 CSS(body{background:red}, 넓은 selector)에 영향받지 않음",
+        getComputedStyle(document.getElementById("outsideMarker")).backgroundColor !== "rgb(255, 0, 0)"
+      );
+
+      assert(
+        "outside marker의 글자색도 영향받지 않음",
+        getComputedStyle(document.getElementById("outsideMarker")).color !== "rgb(255, 0, 0)"
+      );
+
+      assert(
+        "생성된 <style> 어디에도 위험한 url()/javascript: 스킴 문자열이 남아있지 않음",
+        Array.from(document.querySelectorAll("style")).every((s) => !/javascript:/i.test(s.textContent))
+      );
+
+      assert(
+        "생성된 <style> 어디에도 @import가 남아있지 않음",
+        Array.from(document.querySelectorAll("style")).every((s) => !/@import/i.test(s.textContent))
+      );
+
+      const animNameX = getComputedStyle(mountX.querySelector(".attack-shake")).animationName;
+      const animNameY = getComputedStyle(mountY.querySelector(".attack-shake")).animationName;
+
+      assert(
+        "두 Skin 모두 자신의 keyframe 애니메이션이 실제로 적용됨(animation-name !== none)",
+        animNameX !== "none" && animNameY !== "none",
+        `X=${animNameX} Y=${animNameY}`
+      );
+
+      assert(
+        "동일한 원본 keyframe 이름(shake)을 썼음에도 두 Skin의 최종 animation-name이 서로 다름(충돌 없음)",
+        animNameX !== animNameY,
+        `X=${animNameX} Y=${animNameY}`
+      );
+
+    }
+
+
+    runAttackScenarioTests();
+    finishSummary();
+
+  </script>
+
+</body>
+</html>
