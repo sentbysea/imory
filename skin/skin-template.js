@@ -111,3 +111,31 @@ function skinPackageSupportsPageType(
   );
 
 }
+
+
+/* =========================================================
+   htmlHasPostBodyRegion(html) -> boolean (PHASE 1C-J, PHASE 1
+   Final Gap 공용화)
+
+   POST 페이지 HTML에 실제 글 본문이 표시될 자리
+   (data-imory-region="post-body")가 남아 있는지 검사한다. 원래
+   studio/studio-preview.js 안에 Code Editor 전용으로만 있었으나,
+   SkinPackage Import(skin/skin-package-import.js)도 동일한 계약을
+   검증해야 하므로 이 파일로 옮겨 두 호출자가 공유한다. DOMParser로
+   파싱해 판정한다(정규식으로 raw 문자열을 훑지 않음 — 속성 순서/
+   따옴표 형태에 흔들리지 않기 위해).
+========================================================== */
+
+function htmlHasPostBodyRegion(html) {
+
+  const parsed =
+    new DOMParser().parseFromString(
+      String(html || ""),
+      "text/html"
+    );
+
+  return (
+    !!parsed.querySelector('[data-imory-region="post-body"]')
+  );
+
+}

@@ -46,6 +46,11 @@
     href="./editor/code-editor.css"
   >
 
+  <link
+    rel="stylesheet"
+    href="./editor/import-editor.css"
+  >
+
 </head>
 
 
@@ -265,6 +270,15 @@
           <button
             type="button"
             class="studio-corner-button"
+            id="studioImportButton"
+            disabled
+          >
+            Import
+          </button>
+
+          <button
+            type="button"
+            class="studio-corner-button"
             id="studioSettingsButton"
             disabled
           >
@@ -443,6 +457,17 @@
   <script src="../skin/skin-template.js"></script>
 
   <!-- =========================================================
+       WHOLE SKINPACKAGE IMPORT (PHASE 1 Final Gap)
+
+       skin-package-import.js는 sanitizeSkinHTML(위에서 이미 로드)과
+       htmlHasPostBodyRegion(바로 위 skin-template.js)에 의존한다 —
+       그래서 그 둘 다음, studio-preview.js/import-editor.js보다는
+       먼저 로드한다.
+  ========================================================== -->
+
+  <script src="../skin/skin-package-import.js"></script>
+
+  <!-- =========================================================
        CODE EDITOR / SAVE DRAFT (Slice 4)
 
        studio-write.js는 save_skin_draft_version() RPC wrapper뿐
@@ -451,12 +476,16 @@
        위에서 로드됨)과 window.skinInitializerReady 핸드셰이크를
        쓴다 — 둘 다 studio-preview.js가 호출하는 시점(사용자가
        Code/Save 버튼을 실제로 누르는 시점)보다 먼저 로드되어
-       있으면 충분하다.
+       있으면 충분하다. editor/import-editor.js는 skin-package-import.js
+       (바로 위)의 validateSkinPackageImport()만 쓴다(PHASE 1 Final
+       Gap — Whole SkinPackage Import).
   ========================================================== -->
 
   <script src="./studio-write.js"></script>
 
   <script src="./editor/code-editor.js"></script>
+
+  <script src="./editor/import-editor.js"></script>
 
   <script src="./studio-preview.js"></script>
 

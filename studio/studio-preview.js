@@ -106,6 +106,9 @@ const studioSaveButton =
 const studioCodeButton =
   document.getElementById("studioCodeButton");
 
+const studioImportButton =
+  document.getElementById("studioImportButton");
+
 const studioToast =
   document.getElementById("studioToast");
 
@@ -237,6 +240,22 @@ function updateStudioCodeButtonState() {
 }
 
 
+/* =========================================================
+   PHASE 1 Final Gap: IMPORT 버튼은 페이지 종류(HOME/CATEGORY/POST)
+   와 무관하게 "지금 working draft가 있는가"로만 활성화된다 — CODE
+   버튼처럼 currentPreviewPageType별 template 존재 여부를 따지지
+   않는다(Import는 애초에 template이 없는 페이지를 채우는 기능이라,
+   CODE와 같은 기준을 쓰면 정작 필요한 순간 비활성화되어 버린다).
+========================================================== */
+
+function updateStudioImportButtonState() {
+
+  studioImportButton.disabled =
+    !currentWorkingSkin;
+
+}
+
+
 function resetStudioWorkingState() {
 
   currentWorkingSkin =
@@ -275,6 +294,8 @@ function resetStudioWorkingState() {
   resetPreviewNavigation();
 
   updateStudioSaveButtonState();
+
+  updateStudioImportButtonState();
 
 }
 
@@ -378,30 +399,16 @@ function resolveCodeEditorSource(skin, pageType) {
 
 
 /* =========================================================
-   PHASE 1C-J: htmlHasPostBodyRegion(html) -> boolean
+   htmlHasPostBodyRegion(html) -> boolean
 
-   POST 페이지를 Code Editor로 편집할 때만 쓰는 검증 — 사용자가
-   POST HTML에서 data-imory-region="post-body"를 지워버리면 실제
-   글 본문을 표시할 자리가 사라진다(PHASE1C-I 계약). sanitizeSkinHTML
-   과 동일하게 DOMParser로 파싱해 판정한다(정규식으로 raw 문자열을
-   훑지 않음 — 속성 순서/따옴표 형태에 흔들리지 않기 위해). 이
-   검사는 applyWorkingSkinChanges()가 currentWorkingSkin을 바꾸기
-   전에만 호출한다 — 실패하면 애초에 아무 상태도 건드리지 않는다.
+   PHASE 1C-J에서 만든 POST region 검증 — PHASE 1 Final Gap(전체
+   SkinPackage Import)부터는 skin/skin-template.js로 옮겨 Code
+   Editor(applyWorkingSkinChanges, 바로 아래)와 Import
+   (skin/skin-package-import.js)가 같은 함수를 공유한다. 이 파일은
+   더 이상 직접 정의하지 않고 그 전역 함수를 그대로 호출한다
+   (skin-template.js가 studio-preview.js보다 먼저 로드됨, index.html
+   순서 참고).
 ========================================================== */
-
-function htmlHasPostBodyRegion(html) {
-
-  const parsed =
-    new DOMParser().parseFromString(
-      String(html || ""),
-      "text/html"
-    );
-
-  return (
-    !!parsed.querySelector('[data-imory-region="post-body"]')
-  );
-
-}
 
 
 /* =========================================================
@@ -573,6 +580,70 @@ studioCodeButton.addEventListener(
         css: source.css,
         onApply: (html, css, meta) =>
           applyWorkingSkinChanges(pageType, html, css, meta)
+      }
+    );
+
+  }
+);
+
+
+/* =========================================================
+   PHASE 1 Final Gap — Whole SkinPackage Import: Apply
+
+   studio/editor/import-editor.js가 skin/skin-package-import.js의
+   validateSkinPackageImport()로 이미 구조 검사 + sanitize + CSS
+   validate + POST region 검사를 모두 통과시킨 SkinPackage만 이
+   함수로 넘긴다(import-editor.js의 VALIDATE 단계에서 끝남) — 그래서
+   이 함수는 추가 검증 없이 currentWorkingSkin을 그 결과로 통째로
+   교체하기만 한다. Code Apply(applyWorkingSkinChanges, 바로 위)와
+   달리 pageType 하나만 바꾸는 게 아니라 templates.home/category/
+   post/css/imageSlots/regions/metadata 전체를 새 객체로 바꾼다 —
+   "SkinPackage 하나를 한 번만 가져온다"는 이번 Slice의 계약 그대로.
+
+   DB에는 전혀 손대지 않는다(Apply와 Save/Publish 분리 원칙은 Code
+   Editor와 동일) — Import 직후에도 사용자가 명시적으로 Save를
+   눌러야만 draft가 실제로 저장된다.
+
+   previewHistory를 HOME으로 리셋하는 이유: import 이전에 보고
+   있던 CATEGORY/POST(예: 옛 template 기준 categoryId/postId)가 새
+   SkinPackage에서도 유효하다는 보장이 없다 — 항상 HOME부터 다시
+   보여주고, 사용자가 새 template의 실제 navigation을 클릭해
+   CATEGORY/POST까지 스스로 확인하게 한다(요구사항 6절).
+========================================================== */
+
+function applyImportedSkinPackage(skinPackage) {
+
+  if (!currentWorkingSkin) {
+    return;
+  }
+
+  currentWorkingSkin =
+    skinPackage;
+
+  isStudioDirty =
+    true;
+
+  updateStudioSaveButtonState();
+
+  resetPreviewNavigation();
+
+  renderHomePreview();
+
+}
+
+
+studioImportButton.addEventListener(
+  "click",
+  () => {
+
+    if (!currentWorkingSkin) {
+      return;
+    }
+
+    window.openSkinImportEditor(
+      {
+        onApply: (skinPackage) =>
+          applyImportedSkinPackage(skinPackage)
       }
     );
 
@@ -1251,6 +1322,8 @@ async function mountStudioPreview(
     imageSlotValues;
 
   updateStudioSaveButtonState();
+
+  updateStudioImportButtonState();
 
   /*
     previewHistory는 이 함수 진입 시점의 resetStudioWorkingState()

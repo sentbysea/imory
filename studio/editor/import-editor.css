@@ -1,0 +1,246 @@
+/* =========================================================
+   SKIN STUDIO - IMPORT EDITOR MODAL (PHASE 1 Final Gap — Whole
+   SkinPackage Import)
+
+   studio/editor/code-editor.css와 같은 톤(같은 --system-*/
+   --imory-* 변수, 같은 radius/border 규모)을 그대로 따르되 클래스
+   접두어만 import-editor-*로 분리한다 — 두 modal은 서로 다른 시점
+   (페이지별 편집 vs SkinPackage 전체 가져오기)에만 열리므로 CSS
+   충돌 걱정 없이 완전히 별개 파일로 둔다. 필드가 1개(JSON textarea
+   하나)라 code-editor의 2열 grid 대신 단일 컬럼이다.
+
+   호스트 문서(studio/index.html)가 design-tokens.css를 먼저
+   로드해 두었다는 전제는 code-editor.css와 동일하다.
+========================================================== */
+
+.import-editor-overlay {
+  position: fixed;
+  inset: 0;
+
+  z-index: 20;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 32px;
+
+  background: color-mix(in srgb, #000000 55%, transparent);
+}
+
+
+.import-editor-overlay[hidden] {
+  display: none;
+}
+
+
+.import-editor-modal {
+  display: flex;
+  flex-direction: column;
+
+  width: min(640px, 100%);
+  height: min(600px, 100%);
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-300);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+}
+
+
+.import-editor-header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  flex: 0 0 auto;
+
+  padding: 14px 18px;
+
+  border-bottom: 1px solid var(--system-border);
+}
+
+
+.import-editor-title {
+  margin: 0;
+
+  font-size: var(--imory-font-size-300);
+  letter-spacing: 0.06em;
+
+  color: var(--system-text-muted);
+}
+
+
+.import-editor-close {
+  padding: 4px 8px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: var(--system-text-faint);
+
+  font-size: var(--imory-font-size-400);
+
+  cursor: pointer;
+}
+
+
+.import-editor-close:hover {
+  color: var(--system-accent-hover);
+}
+
+
+.import-editor-body {
+  display: flex;
+  flex-direction: column;
+
+  flex: 1 1 auto;
+
+  min-height: 0;
+
+  padding: 16px 18px;
+}
+
+
+.import-editor-field-label {
+  margin: 0 0 6px;
+
+  font-size: 11px;
+
+  letter-spacing: 0.06em;
+
+  color: var(--system-text-muted);
+}
+
+
+.import-editor-textarea {
+  flex: 1 1 auto;
+
+  min-height: 0;
+
+  resize: none;
+
+  padding: 10px 12px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-surface);
+
+  color: var(--system-text);
+
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+
+  tab-size: 2;
+}
+
+
+.import-editor-textarea:focus {
+  outline: none;
+
+  border-color: var(--system-accent);
+}
+
+
+.import-editor-footer {
+  display: flex;
+  flex-direction: column;
+
+  flex: 0 0 auto;
+
+  gap: 10px;
+
+  padding: 12px 18px;
+
+  border-top: 1px solid var(--system-border);
+}
+
+
+.import-editor-message {
+  margin: 0;
+
+  min-height: 1.5em;
+
+  font-size: 12px;
+
+  line-height: 1.5;
+
+  color: var(--system-text-muted);
+}
+
+
+.import-editor-message--error {
+  color: var(--system-accent-hover);
+}
+
+
+.import-editor-actions {
+  display: flex;
+
+  justify-content: flex-end;
+
+  flex: 0 0 auto;
+
+  gap: 8px;
+}
+
+
+.import-editor-button {
+  padding: 8px 16px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+
+  cursor: pointer;
+}
+
+
+.import-editor-button:hover {
+  border-color: var(--system-accent);
+}
+
+
+.import-editor-button:disabled {
+  opacity: 0.5;
+
+  cursor: not-allowed;
+}
+
+
+.import-editor-button--primary {
+  border-color: var(--system-accent);
+
+  background: var(--system-accent);
+
+  color: #ffffff;
+}
+
+
+.import-editor-button--primary:hover {
+  background: var(--system-accent-hover);
+
+  border-color: var(--system-accent-hover);
+}
+
+
+.import-editor-button--primary:disabled {
+  background: var(--system-bg);
+
+  color: var(--system-text-faint);
+}

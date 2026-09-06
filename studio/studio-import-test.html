@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Studio Whole SkinPackage Import Test (PHASE 1 Final Gap)</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h1 { margin-top: 0; }
+  h2 {
+    margin-top: 32px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  #summary { font-size: 16px; font-weight: bold; margin-top: 16px; }
+  #frames iframe {
+    width: 480px;
+    height: 360px;
+    border: 2px dashed #999;
+    margin: 8px 8px 8px 0;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Studio Whole SkinPackage Import Test (PHASE 1 Final Gap)</h1>
+  <p>
+    studio/studio-lifecycle-scenario.html?scenario=s(templates 필드가 없는 HOME-only legacy
+    draft + 실제 post형/banner형 카테고리 + public/secret 글)를 실제 URL로 로드해 studio-preview.js/
+    editor/import-editor.js/skin/skin-package-import.js를 전부 실제 파일 그대로 구동한다.
+    fixture(skin/test-skins/imory-diary-v0.1.json)를 IMPORT SKIN으로 실제로 가져와
+    HOME/CATEGORY/POST가 한 번에 채워지는지, 잘못된/위험한 JSON은 draft를 전혀 바꾸지 않는지
+    검증한다.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <h2>Scenario S — HOME-only legacy Skin + Import</h2>
+  <div id="frames"></div>
+
+  <script>
+
+    const reportList = document.getElementById("reportList");
+    const allResults = [];
+
+    function record(name, pass, detail) {
+      allResults.push({ name, pass: !!pass, detail: detail || "" });
+      const li = document.createElement("li");
+      li.className = pass ? "pass" : "fail";
+      li.textContent = (pass ? "PASS — " : "FAIL — ") + name;
+      if (detail) {
+        const d = document.createElement("span");
+        d.className = "detail";
+        d.textContent = detail;
+        li.appendChild(d);
+      }
+      reportList.appendChild(li);
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function waitFor(fn, timeoutMs, intervalMs) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        let val;
+        try {
+          val = fn();
+        } catch (e) {
+          val = null;
+        }
+        if (val) {
+          return val;
+        }
+        await sleep(intervalMs || 50);
+      }
+      return null;
+    }
+
+    function loadIframe(src) {
+      return new Promise((resolve) => {
+        const iframe = document.createElement("iframe");
+        iframe.addEventListener("load", () => resolve(iframe), { once: true });
+        iframe.src = src;
+        document.getElementById("frames").appendChild(iframe);
+      });
+    }
+
+    function clickAnchor(anchor) {
+      anchor.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: anchor.ownerDocument.defaultView }));
+    }
+
+    function findAnchorByText(doc, selector, text) {
+      return Array.from(doc.querySelectorAll(selector)).find((el) => el.textContent === text);
+    }
+
+    function setTextareaValue(textarea, value) {
+      /* React 없는 plain textarea라 .value 대입만으로 충분하다(input-editor.js의
+         validate/apply 핸들러는 클릭 시점에 .value를 직접 읽는다) — 다만 "다시 편집하면
+         Apply가 잠긴다" 회귀(S-invalid-2 이후 재입력)를 위해 input 이벤트도 함께 쏜다. */
+      textarea.value = value;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+
+
+    /* =========================================================
+       FIXTURE — 실제 Imory Diary v0.1 SkinPackage JSON
+    ========================================================== */
+
+    let IMORY_DIARY_JSON_TEXT = null;
+
+    async function loadFixtureJsonText() {
+      const res = await fetch("../skin/test-skins/imory-diary-v0.1.json");
+      IMORY_DIARY_JSON_TEXT = await res.text();
+    }
+
+
+    /* =========================================================
+       SCENARIO S — happy path: HOME-only -> Import -> HOME/CATEGORY/POST
+    ========================================================== */
+
+    async function runHappyPath() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=s");
+
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const overlayText = () => doc.getElementById("studioPreviewOverlayText");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const importButton = () => doc.getElementById("studioImportButton");
+      const codeButton = () => doc.getElementById("studioCodeButton");
+      const saveButton = () => doc.getElementById("studioSaveButton");
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+
+      const rendered = await waitFor(
+        () => !shell().hidden && overlay().hidden,
+        8000,
+        100
+      );
+
+      const legacyMarker = await waitFor(
+        () => innerDoc() && innerDoc().querySelector(".scenario-s-legacy-home"),
+        3000,
+        50
+      );
+
+      record(
+        "S1. templates 필드가 없는 HOME-only legacy draft도 지금까지처럼 그대로 렌더된다",
+        !!rendered && !!legacyMarker
+      );
+
+      record(
+        "S2. Import 전에도 IMPORT 버튼은 활성화되어 있다(페이지 종류와 무관하게 draft만 있으면 됨)",
+        !!importButton() && !importButton().disabled
+      );
+
+      win.__testHooks.simulateNavigate("/scenario-s/category/301");
+
+      const unsupportedShown = await waitFor(
+        () => !overlay().hidden && overlayText().textContent.includes("아직 CATEGORY 템플릿이 없습니다"),
+        3000,
+        50
+      );
+
+      record(
+        "S3. Import 전 CATEGORY 이동은 갭 그대로 재현된다(템플릿 없음 unsupported)",
+        !!unsupportedShown,
+        overlayText() && overlayText().textContent
+      );
+
+      backButton().click();
+
+      await waitFor(
+        () => !!(innerDoc() && innerDoc().querySelector(".scenario-s-legacy-home")),
+        3000,
+        50
+      );
+
+      importButton().click();
+
+      const importModalOpen = await waitFor(
+        () => doc.querySelector(".import-editor-overlay:not([hidden])"),
+        3000,
+        50
+      );
+
+      record(
+        "S4. IMPORT 버튼 클릭 시 Import modal이 열린다(Code Editor와 별개 modal)",
+        !!importModalOpen
+      );
+
+      const textarea = doc.querySelector(".import-editor-textarea");
+      const actionButtons = doc.querySelectorAll(".import-editor-actions .import-editor-button");
+      const cancelBtn = actionButtons[0];
+      const validateBtn = actionButtons[1];
+      const applyBtn = doc.querySelector(".import-editor-button--primary");
+
+      record(
+        "S5. Apply to Draft는 Validate 전까지 비활성 상태다",
+        !!applyBtn && applyBtn.disabled
+      );
+
+      setTextareaValue(textarea, IMORY_DIARY_JSON_TEXT);
+      validateBtn.click();
+
+      const validateOk = await waitFor(
+        () => doc.querySelector(".import-editor-message") &&
+          doc.querySelector(".import-editor-message").textContent.includes("검증 성공") &&
+          !applyBtn.disabled,
+        3000,
+        50
+      );
+
+      record(
+        "S6. 실제 Imory Diary v0.1 JSON을 붙여넣고 VALIDATE하면 성공하고 Apply가 활성화된다",
+        !!validateOk,
+        doc.querySelector(".import-editor-message") && doc.querySelector(".import-editor-message").textContent
+      );
+
+      applyBtn.click();
+
+      const modalClosed = await waitFor(
+        () => doc.querySelector(".import-editor-overlay[hidden]"),
+        3000,
+        50
+      );
+
+      record(
+        "S7. Apply to Draft 클릭 시 Import modal이 닫힌다",
+        !!modalClosed
+      );
+
+      const homeRerendered = await waitFor(
+        () => innerDoc() && innerDoc().querySelector(".diary-shell") && innerDoc().querySelector(".diary-post-list-section"),
+        3000,
+        50
+      );
+
+      record(
+        "S8. Import 즉시 HOME Preview가 새 SkinPackage(templates.home)로 다시 그려진다",
+        !!homeRerendered
+      );
+
+      const postCatNames = homeRerendered
+        ? Array.from(innerDoc().querySelectorAll(".diary-nav-list a")).map((a) => a.textContent)
+        : [];
+      const bannerCatNames = homeRerendered
+        ? Array.from(innerDoc().querySelectorAll(".diary-banner-list a")).map((a) => a.textContent)
+        : [];
+
+      record(
+        "S9. HOME/CATEGORY/POST 세 template이 한 번에 생성되어 post형/banner형 카테고리가 올바르게 분리 렌더된다",
+        postCatNames.includes("LOG") && !postCatNames.includes("FRIENDS") && bannerCatNames.includes("FRIENDS"),
+        "post=" + JSON.stringify(postCatNames) + " banner=" + JSON.stringify(bannerCatNames)
+      );
+
+      /*
+        preview-frame.html 자체도 iframe 기본 여백 리셋용 <style>을
+        하나 갖고 있어(문서 최상단) 단순 querySelector("style")은
+        그 baseline을 집을 수 있다 — 실제 Skin CSS는 skin-render.js
+        가 만드는 [data-skin-root] 안의 <style>이다.
+      */
+      const styleTag = homeRerendered ? innerDoc().querySelector("[data-skin-root] style") : null;
+
+      record(
+        "S10. 공용 CSS(diary 팔레트)가 Preview에 실제로 적용된다",
+        !!styleTag && styleTag.textContent.includes("diary-pink")
+      );
+
+      const postListTexts = homeRerendered
+        ? Array.from(innerDoc().querySelectorAll(".diary-post-title")).map((el) => el.textContent)
+        : [];
+      const secretBadgeShown = homeRerendered
+        ? !!innerDoc().querySelector(".diary-post-secret")
+        : false;
+
+      record(
+        "S11. HOME의 home.recentPosts가 실제 글 데이터(제목/비밀글 배지)로 채워진다",
+        postListTexts.includes("Hello Import") && secretBadgeShown,
+        JSON.stringify(postListTexts) + " secretBadge=" + secretBadgeShown
+      );
+
+      record(
+        "S12. Import 직후 dirty 처리되어 Save 버튼이 활성화된다",
+        !!saveButton() && !saveButton().disabled
+      );
+
+      clickAnchor(findAnchorByText(innerDoc(), ".diary-nav-list a", "LOG"));
+
+      const categoryRendered = await waitFor(
+        () => innerDoc() && innerDoc().querySelector(".diary-category-header"),
+        3000,
+        50
+      );
+
+      record(
+        "S13. 새로 import된 HOME의 실제 링크를 클릭해 CATEGORY로 이동할 수 있다",
+        !!categoryRendered
+      );
+
+      const categoryPostTitles = categoryRendered
+        ? Array.from(innerDoc().querySelectorAll(".diary-post-title")).map((el) => el.textContent)
+        : [];
+
+      record(
+        "S14. CATEGORY 페이지에 실제 카테고리 글 목록(public+secret, secret은 🔒 표시)이 표시된다",
+        categoryPostTitles.includes("Hello Import") &&
+          categoryPostTitles.some((t) => t.includes("Secret Import Note")),
+        JSON.stringify(categoryPostTitles)
+      );
+
+      /* diary-post-title은 <a class="diary-post-link"> 안의 <span>이라 앵커 자체를 찾아 클릭한다 */
+      const postAnchor = Array.from(innerDoc().querySelectorAll("a.diary-post-link"))
+        .find((a) => a.querySelector(".diary-post-title") && a.querySelector(".diary-post-title").textContent === "Hello Import");
+
+      clickAnchor(postAnchor);
+
+      const postRendered = await waitFor(
+        () => innerDoc() && innerDoc().querySelector(".diary-post-detail-title"),
+        3000,
+        50
+      );
+
+      record(
+        "S15. CATEGORY의 실제 글 링크를 클릭해 POST로 이동할 수 있다",
+        !!postRendered,
+        postRendered ? innerDoc().querySelector(".diary-post-detail-title").textContent : ""
+      );
+
+      const postBodyMounted = await waitFor(
+        () => {
+          const body = innerDoc() && innerDoc().querySelector(".diary-post-body");
+          return body && body.textContent.includes("Imported skin real post body.") ? body : null;
+        },
+        3000,
+        50
+      );
+
+      const placeholderGone = postRendered
+        ? !innerDoc().querySelector(".skin-authored-placeholder")
+        : false;
+
+      record(
+        "S16. POST의 protected post-body region에 실제 글 본문이 mount되고 authoring placeholder는 사라진다",
+        !!postBodyMounted && placeholderGone
+      );
+
+      backButton().click();
+      await waitFor(() => innerDoc() && innerDoc().querySelector(".diary-category-header"), 3000, 50);
+      backButton().click();
+
+      const backToHome = await waitFor(
+        () => innerDoc() && innerDoc().querySelector(".diary-post-list-section") && backButton().hidden,
+        3000,
+        50
+      );
+
+      record(
+        "S17. Preview Back을 두 번 누르면 POST -> CATEGORY -> HOME 순서로 정상 복귀한다",
+        !!backToHome
+      );
+
+      codeButton().click();
+
+      const codeModalOpen = await waitFor(
+        () => doc.querySelector(".code-editor-overlay:not([hidden])"),
+        3000,
+        50
+      );
+
+      const codeHtmlTextarea = codeModalOpen ? doc.querySelectorAll(".code-editor-textarea")[0] : null;
+
+      record(
+        "S18. 기존 route-aware Code Editor는 Import 이후에도 정상 동작하며 templates.home.html을 보여준다",
+        !!codeModalOpen && !!codeHtmlTextarea && codeHtmlTextarea.value.includes("diary-shell")
+      );
+
+      doc.querySelector(".code-editor-button:not(.code-editor-button--primary)").click();
+
+      window.__savedDraftCalls = null;
+
+      saveButton().click();
+
+      const saved = await waitFor(
+        () => (window.__savedDraftCalls && window.__savedDraftCalls.length > 0 ? window.__savedDraftCalls : null),
+        4000,
+        50
+      );
+
+      record(
+        "S19. Save 클릭 시 save_skin_draft_version RPC가 호출되어 import된 SkinPackage 전체가 저장된다",
+        !!saved && saved.length === 1
+      );
+
+      const savedContent = saved && saved[0] && saved[0].p_content;
+
+      record(
+        "S20. 저장된 draft에 templates.home/category/post와 공용 css가 전부 포함된다",
+        !!savedContent &&
+          !!savedContent.templates &&
+          savedContent.templates.home.html.includes("diary-shell") &&
+          savedContent.templates.category.html.includes("diary-category-header") &&
+          savedContent.templates.post.html.includes('data-imory-region="post-body"') &&
+          savedContent.css.includes("diary-pink")
+      );
+
+      const skinRow = win.__testHooks.getSkinRow
+        ? win.__testHooks.getSkinRow()
+        : null;
+
+      record(
+        "S21. Save/Import 어디에서도 Publish는 자동으로 일어나지 않는다(current_published_version_id는 그대로 null)",
+        !!skinRow && skinRow.current_published_version_id === null,
+        JSON.stringify(skinRow)
+      );
+
+    }
+
+
+    /* =========================================================
+       SCENARIO S — invalid/atomic 회귀: 실패는 draft를 절대
+       바꾸지 않는다.
+    ========================================================== */
+
+    async function runRejectionCases() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=s");
+
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const importButton = () => doc.getElementById("studioImportButton");
+      const saveButton = () => doc.getElementById("studioSaveButton");
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && innerDoc() && innerDoc().querySelector(".scenario-s-legacy-home"),
+        8000,
+        100
+      );
+
+      async function tryImportAndExpectRejection(rawJson, expectedMessageFragment, label) {
+
+        importButton().click();
+
+        await waitFor(() => doc.querySelector(".import-editor-overlay:not([hidden])"), 3000, 50);
+
+        const textarea = doc.querySelector(".import-editor-textarea");
+        const applyBtn = doc.querySelector(".import-editor-button--primary");
+        const validateBtn = doc.querySelectorAll(".import-editor-actions .import-editor-button")[1];
+
+        setTextareaValue(textarea, rawJson);
+        validateBtn.click();
+
+        const failed = await waitFor(
+          () => {
+            const msg = doc.querySelector(".import-editor-message");
+            return msg && msg.classList.contains("import-editor-message--error") && msg.textContent.includes(expectedMessageFragment)
+              ? msg
+              : null;
+          },
+          3000,
+          50
+        );
+
+        record(
+          label + " — 실패 메시지가 정확히 표시되고 Apply는 비활성 상태로 남는다",
+          !!failed && applyBtn.disabled,
+          failed ? failed.textContent : "(no error message shown)"
+        );
+
+        doc.querySelector(".import-editor-close").click();
+
+        record(
+          label + " — 실패한 Import는 기존 draft(legacy HOME)를 전혀 바꾸지 않는다",
+          !!(innerDoc() && innerDoc().querySelector(".scenario-s-legacy-home")) && saveButton().disabled
+        );
+
+      }
+
+      await tryImportAndExpectRejection(
+        "{ this is not valid json ",
+        "JSON 형식이 올바르지 않습니다",
+        "R1. 잘못된 JSON"
+      );
+
+      const missingRegionPackage = JSON.stringify({
+        schemaVersion: 1,
+        templates: {
+          home: { html: '<div data-imory-bind="site.title"></div>' },
+          category: { html: '<div data-imory-bind="category.name"></div>' },
+          post: { html: '<div><h1 data-imory-bind="post.title"></h1></div>' }
+        },
+        css: "",
+        imageSlots: [],
+        regions: [],
+        metadata: {}
+      });
+
+      await tryImportAndExpectRejection(
+        missingRegionPackage,
+        "post-body region",
+        "R2. POST region 누락 package"
+      );
+
+      const dangerousPackage = JSON.stringify({
+        schemaVersion: 1,
+        templates: {
+          home: {
+            html:
+              '<div class="scenario-s-danger-home"><script>window.top.__scenarioSXss = true;<\/script>' +
+              '<img src="x" onerror="window.top.__scenarioSXss = true">' +
+              '<h1 data-imory-bind="site.title"></h1></div>'
+          },
+          category: { html: '<div data-imory-bind="category.name"></div>' },
+          post: { html: '<div data-imory-region="post-body"><h1 data-imory-bind="post.title"></h1></div>' }
+        },
+        css: "",
+        imageSlots: [],
+        regions: [],
+        metadata: {}
+      });
+
+      window.top.__scenarioSXss = false;
+
+      importButton().click();
+      await waitFor(() => doc.querySelector(".import-editor-overlay:not([hidden])"), 3000, 50);
+
+      const textarea = doc.querySelector(".import-editor-textarea");
+      const applyBtn = doc.querySelector(".import-editor-button--primary");
+      const validateBtn = doc.querySelectorAll(".import-editor-actions .import-editor-button")[1];
+
+      setTextareaValue(textarea, dangerousPackage);
+      validateBtn.click();
+
+      const validateOk = await waitFor(
+        () => doc.querySelector(".import-editor-message").textContent.includes("검증 성공") && !applyBtn.disabled,
+        3000,
+        50
+      );
+
+      record(
+        "R3. script/위험 속성이 섞인 package도 구조 자체는 유효하면 sanitize를 거쳐 VALIDATE는 통과한다",
+        !!validateOk
+      );
+
+      applyBtn.click();
+
+      const applied = await waitFor(
+        () => innerDoc() && innerDoc().querySelector(".scenario-s-danger-home"),
+        3000,
+        50
+      );
+
+      record(
+        "R4. Apply 이후에도 <script>/onerror는 실행되지 않고(sanitize로 제거) draft에도 남지 않는다",
+        !!applied && window.top.__scenarioSXss === false
+      );
+
+    }
+
+
+    async function main() {
+
+      try {
+        await loadFixtureJsonText();
+      } catch (err) {
+        record("fixture(imory-diary-v0.1.json) 로드 실패", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runHappyPath();
+      } catch (err) {
+        record("Happy path 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runRejectionCases();
+      } catch (err) {
+        record("Rejection cases 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      const passCount = allResults.filter((r) => r.pass).length;
+      const failCount = allResults.length - passCount;
+      const summary = document.getElementById("summary");
+      summary.textContent = `${allResults.length}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+
+      window.__testDone = true;
+      window.__testPassCount = passCount;
+      window.__testFailCount = failCount;
+
+    }
+
+    main();
+
+  </script>
+
+</body>
+</html>

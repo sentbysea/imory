@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="../skin-questionnaire/questionnaire.css">
 <link rel="stylesheet" href="./studio.css">
 <link rel="stylesheet" href="./editor/code-editor.css">
+<link rel="stylesheet" href="./editor/import-editor.css">
 </head>
 <body>
 
@@ -60,6 +61,7 @@
         <div class="studio-top-dock-actions">
           <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
           <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
+          <button type="button" class="studio-corner-button" id="studioImportButton" disabled>Import</button>
           <button type="button" class="studio-corner-button" id="studioSettingsButton" disabled>Settings</button>
         </div>
       </div>
@@ -619,6 +621,97 @@
         },
 
         /*
+          Scenario S (PHASE 1 Final Gap — Whole SkinPackage Import) —
+          "실제 재현" 계정: templates 필드가 아예 없는 HOME-only
+          legacy draft(Questionnaire 이전 세대 Skin과 동일 shape,
+          scenario a/c/l과 같은 모양)인데 실제 post형/banner형
+          카테고리와 public/secret 글이 모두 존재한다. Import
+          이전에는 CODE 버튼이 CATEGORY/POST에서 비활성화되어야
+          정상이고(templates.category/post 자체가 없으므로), Import
+          로 templates.home/category/post를 한 번에 채운 뒤에는
+          그 실제 카테고리/글 데이터로 HOME -> CATEGORY -> POST를
+          끝까지 클릭해서 이동할 수 있어야 한다 — Imory Diary v0.1
+          JSON을 그대로 이 시나리오에 Import해서 검증한다
+          (studio/studio-import-test.html).
+        */
+        s: {
+          userId: "user-s",
+          tables: {
+            skins: [
+              { id: "skin-s1", user_id: "user-s", is_active: true, current_draft_version_id: "draft-s1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-s1",
+                content: {
+                  schemaVersion: 1,
+                  html: '<div class="scenario-s-legacy-home"><h1 data-imory-bind="site.title"></h1></div>',
+                  css: ".scenario-s-legacy-home { color: orange; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-s", nickname: "Scenario S", bio: "HOME-only legacy Skin", slug: "scenario-s" }],
+            site_settings: [],
+            categories: [
+              { id: "301", user_id: "user-s", name: "LOG", type: "post", sort_order: 1 },
+              { id: "302", user_id: "user-s", name: "FRIENDS", type: "banner", sort_order: 2 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-s", title: "Hello Import", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301", content_type: "rich", quote_preset_id: null },
+              { id: "402", user_id: "user-s", title: "Secret Import Note", created_at: "2026-01-02T00:00:00Z", visibility: "secret", category_id: "301", content_type: "rich", quote_preset_id: null }
+            ],
+            /*
+              PHASE 1C-I와 동일한 이유(scenario r 참고)로 실제
+              식별 가능한 본문은 fixture에만 존재한다 — Import한
+              POST template의 protected post-body region에 이
+              문자열이 실제로 mount됐는지(placeholder가 아니라)를
+              studio-import-test.html이 확인한다.
+            */
+            post_contents: [
+              { post_id: "401", content: "<p>Imported skin real post body.</p>" },
+              { post_id: "402", content: "<p>Secret post body after import.</p>" }
+            ],
+            quote_presets: [
+              { id: "501", user_id: "user-s", name: "Vibe", is_active: true, settings: {} }
+            ],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version: function (params) {
+
+              window.top.__savedDraftCalls =
+                window.top.__savedDraftCalls || [];
+
+              window.top.__savedDraftCalls.push(params);
+
+              const newVersionId =
+                "draft-s" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            }
+          }
+        },
+
+        /*
           Scenario R (PHASE 1C-H) — 손으로 쓴 마커 마크업이 아니라
           실제 window.generateInitialSkin()이 만든 SkinPackage를
           그대로 fixture로 쓴다. "새로 생성된 Skin이 추가 수동
@@ -682,6 +775,15 @@
 
       const state = FIXTURES[scenario] || FIXTURES.a;
 
+      /*
+        studio-import-test.html의 __testHooks.getSkinRow()가 이
+        IIFE 바깥(별도 <script> 블록)에서 in-memory skins row를
+        들여다봐야 한다 — state는 이 IIFE 로컬 변수라 그대로는
+        접근할 수 없으므로 window에 하나만 노출한다(mock 전용,
+        production 코드는 이 전역을 전혀 참조하지 않는다).
+      */
+      window.__mockState = state;
+
       window.supabaseClient = {
         auth: {
           getUser: function () {
@@ -712,8 +814,10 @@
   <script src="../skin/skin-image-slots.js"></script>
   <script src="../skin/skin-context.js"></script>
   <script src="../skin/skin-template.js"></script>
+  <script src="../skin/skin-package-import.js"></script>
   <script src="./studio-write.js"></script>
   <script src="./editor/code-editor.js"></script>
+  <script src="./editor/import-editor.js"></script>
   <script src="./studio-preview.js"></script>
   <script src="./preview/preview-route.js"></script>
   <!-- PHASE 1C-I — production과 동일한 순서(studio/index.html 참고) -->
@@ -740,6 +844,16 @@
       */
       simulateNavigate: function (href) {
         handlePreviewNavigateMessage(href);
+      },
+      /*
+        PHASE 1 Final Gap(studio/studio-import-test.html) — Import가
+        current_published_version_id를 절대 건드리지 않는지(자동
+        Publish 없음) 확인하려면 fixture의 skins row를 직접 들여다볼
+        수 있어야 한다. 이 시나리오 문서는 항상 skin row를 하나만
+        갖는다(FIXTURES.*.tables.skins 참고).
+      */
+      getSkinRow: function () {
+        return window.__mockState.tables.skins[0] || null;
       }
     };
   </script>
