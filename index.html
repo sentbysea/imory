@@ -3417,10 +3417,35 @@
 
       try {
 
-        return await renderPublishedSkinHome({
-          ownerId,
-          container: themeMount
-        });
+        const rendered =
+          await renderPublishedSkinHome({
+            ownerId,
+            container: themeMount
+          });
+
+        /*
+          #themeMount는 기본적으로 .viewer-area(flex row,
+          align-items/justify-content:center)의 평범한 flex
+          item이라 콘텐츠 크기로 shrink-wrap된다(legacy_sua
+          heart-widget/customize/notice 카드처럼 고정 크기
+          콘텐츠를 중앙에 두는 용도로는 맞는 동작이지만, 세로로
+          길고 전체 폭을 기대하는 Skin에는 맞지 않다 — PHASE1
+          공개 렌더 통합 버그). Skin이 실제로 mount된 경우에만
+          이 클래스를 붙여 반대로 동작하게 한다(공개 mount
+          contract, home-base.css 참고). 실패/미발행이면 클래스가
+          안 붙으므로 기존 legacy_sua/customize/notice 분기는
+          전혀 영향받지 않는다.
+        */
+
+        if (rendered) {
+
+          themeMount.classList.add(
+            "theme-mount--skin"
+          );
+
+        }
+
+        return rendered;
 
       } catch (err) {
 
@@ -3437,6 +3462,39 @@
 
 
     async function initHomeRenderer() {
+
+      /*
+        theme-mount--skin(공개 Skin mount contract, home-base.css
+        참고)은 tryRenderPublishedSkinHome() 성공 시에만 붙는다.
+        initHomeRenderer()가 동일 페이지에서 다시 호출되는
+        경우(위 legacySuaCommonScriptsPromise/
+        customizeRendererScriptsPromise 캐싱 주석 참고 —
+        중복 호출에 대비한 기존 방어 패턴과 동일한 이유) 이전
+        호출에서 Skin이 성공 렌더되어 클래스가 남아있는 채로 이번
+        호출이 legacy_sua/customize/notice로 떨어지면, legacy
+        레이아웃(customize의 renderCustomizeLayout()은 container의
+        기존 classList/자식을 지우지 않고 그 위에 덧붙인다)이 이
+        클래스의 flex-stretch/overflow-auto 규칙을 그대로 물려받아
+        "legacy fallback 화면의 기존 레이아웃 유지" 원칙이 깨진다.
+        매 호출 시작 시 무조건 제거해 두면, 이번 호출에서
+        published Skin이 다시 성공할 때만 아래에서 다시 붙는다
+        (legacy_sua/notice는 어차피 themeMount.replaceWith()로
+        노드 자체를 통째로 갈아치우므로 원래도 안전하다).
+      */
+
+      const staleThemeMount =
+        document.getElementById(
+          "themeMount"
+        );
+
+      if (staleThemeMount) {
+
+        staleThemeMount.classList.remove(
+          "theme-mount--skin"
+        );
+
+      }
+
 
       const owner =
         await getSiteOwner();

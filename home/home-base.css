@@ -64,6 +64,46 @@ body {
 
 
 /* =========================================================
+   PUBLISHED SKIN MOUNT CONTRACT
+
+   #themeMount은 기본적으로 위 .viewer-area(flex row,
+   align-items/justify-content:center)의 평범한 flex item이라
+   콘텐츠 크기로 shrink-wrap되고 중앙에 놓인다 — legacy_sua
+   heart-widget/customize/notice 카드처럼 고정/좁은 콘텐츠를
+   화면 중앙에 두는 용도로는 맞는 동작이다.
+
+   Published Skin이 실제로 그 자리에 mount되면(index.html의
+   tryRenderPublishedSkinHome 성공 시에만 이 클래스가 붙는다)
+   반대로 동작해야 한다 — Skin은 .viewer-area가 가진 가용
+   폭/높이를 전부 받아야 하고, 세로로 길면 이 안에서 스크롤돼야
+   한다(html/body/.viewer-area 자체는 그대로 고정 100dvh
+   뷰포트로 남는다 — posts-base.css의 .post-area가 쓰는 것과
+   동일한 "내부 스크롤 컨테이너" 패턴).
+
+   flex-grow(가용 폭을 shrink-to-fit이 아니라 항상 채우게 함) +
+   align-self:stretch(cross-axis center를 이 항목만 override) +
+   overflow non-visible(flex item의 자동 min-size를 content
+   크기가 아니라 0으로 만들어, 위 두 규칙이 실제로 먹히게 함)
+   조합이 이 계약을 성립시킨다. Skin CSS/SkinPackage는 전혀
+   건드리지 않는다 — Skin 내부 max-width/padding은 Skin 스스로
+   결정한다.
+========================================================== */
+
+.theme-mount--skin {
+  flex: 1 1 auto;
+  align-self: stretch;
+
+  min-width: 0;
+  min-height: 0;
+
+  overflow-y: auto;
+  overflow-x: hidden;
+
+  -webkit-overflow-scrolling: touch;
+}
+
+
+/* =========================================================
    하단 방문자 + COPYRIGHT
 ========================================================== */
 

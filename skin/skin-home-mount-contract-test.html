@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Published Skin HOME mount contract repro/verify</title>
+<link rel="stylesheet" href="../home/home-base.css">
+<style>
+  /*
+    이 harness는 공개 HOME(index.html)의 실제 host DOM/CSS
+    체인(html/body + .viewer-area + #themeMount, home-base.css)만
+    그대로 복제한다. Supabase/index.html의 나머지 UI(메뉴/footer 등)는
+    이 버그와 무관하므로 가져오지 않는다.
+
+    #controlPanel은 html/body 바깥 존재가 아니라 안쪽에 있지만
+    home-base.css가 건드리는 선택자(.viewer-area, html/body)와
+    전혀 겹치지 않으므로 측정에 영향 없다. position:fixed로 항상
+    위에 떠서 실제 host 레이아웃을 가리지 않는다.
+  */
+  #controlPanel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 999999;
+    background: rgba(255, 220, 220, 0.95);
+    color: #200;
+    font: 11px monospace;
+    padding: 4px 6px;
+    max-width: 100vw;
+    overflow: auto;
+  }
+  #controlPanel[data-hide] {
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+  <div id="controlPanel">
+    fix=<span id="fixState"></span> —
+    <a href="?fix=0">?fix=0 (버그 재현: 클래스 없음)</a> |
+    <a href="?fix=1">?fix=1 (수정 후: theme-mount--skin)</a>
+  </div>
+
+  <!--
+    index.html:2303-2319과 완전히 동일한 구조.
+    실제로는 initHomeRenderer()의 3-way 분기 중 하나가 unhide하는데,
+    이 harness는 그 판단 로직 없이 항상 published Skin이 mount된
+    경우만 재현한다(이 버그는 published Skin 케이스에만 해당).
+  -->
+  <main class="viewer-area" id="viewerArea">
+    <div id="themeMount"></div>
+  </main>
+
+  <!--
+    회귀 테스트: initHomeRenderer()가 동일 페이지에서 다시 호출되어
+    published Skin → legacy_sua/customize/notice로 전환될 때,
+    이전 호출이 남긴 theme-mount--skin이 확실히 제거되는지 확인한다.
+    index.html을 통째로 실행하지 않고(Supabase 의존 없는 격리 원칙
+    유지) 1) index.html 소스에 실제 제거 호출이 있는지 정적으로
+    확인하고, 2) 그 클래스가 제거되면 실제로 flex-stretch/
+    overflow-auto 계약이 풀려 legacy가 기대하는 기본 상태로
+    돌아오는지 동작으로 확인한다.
+  -->
+  <h2>회귀: legacy fallback 전환 시 theme-mount--skin 제거</h2>
+  <ul id="staleClassReport"></ul>
+
+  <script src="./skin-sanitize.js"></script>
+  <script type="module">
+    import { renderSkin } from "./skin-render.js";
+
+    const params = new URLSearchParams(location.search);
+    const fixOn = params.get("fix") !== "0";
+    document.getElementById("fixState").textContent = fixOn ? "1 (patched)" : "0 (pre-fix repro)";
+
+    const themeMount = document.getElementById("themeMount");
+
+    if (fixOn) {
+      themeMount.classList.add("theme-mount--skin");
+    }
+
+    const context = {
+      site: { title: "Imory Mount Contract Test", slug: "mounttest" },
+      profile: {
+        nickname: "Sua",
+        bio: "test",
+        avatarUrl: ""
+      },
+      navigation: {
+        home: { enabled: true, href: "/mounttest" },
+        postCategories: [
+          { href: "/mounttest/category/log", name: "LOG" },
+          { href: "/mounttest/category/pic", name: "PIC" },
+          { href: "/mounttest/category/memo", name: "MEMO" }
+        ],
+        bannerCategories: [
+          { href: "/mounttest/category/banner", name: "BANNER" }
+        ]
+      },
+      home: {
+        recentPosts: [
+          { href: "/mounttest/post/1", title: "P", categoryName: "LOG", isSecret: false, publishedAt: "2026-09-05T15:16:11+00:00" },
+          { href: "/mounttest/post/2", title: "장보기", categoryName: "LOG", isSecret: true, publishedAt: "2026-09-03T16:01:38+00:00" },
+          { href: "/mounttest/post/3", title: "2002, 영도", categoryName: "LOG", isSecret: false, publishedAt: "2026-09-02T16:34:18+00:00" },
+          { href: "/mounttest/post/4", title: "ㄱㅇㅇ", categoryName: "LOG", isSecret: false, publishedAt: "2026-08-30T15:45:33+00:00" },
+          { href: "/mounttest/post/5", title: "untitled", categoryName: "LOG", isSecret: false, publishedAt: "2026-08-30T11:06:38+00:00" }
+        ]
+      }
+    };
+
+    async function boot() {
+
+      const res = await fetch("./test-skins/quiet-frame-v1-mount-contract-repro.json");
+      const skin = await res.json();
+
+      renderSkin({
+        container: themeMount,
+        skin: { html: skin.templates.home.html, css: skin.css },
+        context,
+        mode: "view"
+      });
+
+      window.__mountContractReady = true;
+
+    }
+
+    /*
+      Playwright가 page.evaluate()로 직접 호출해서 측정값을
+      가져간다 — 텍스트 파싱이 아니라 구조화된 객체로 반환한다.
+    */
+    window.measureMountContract = function () {
+
+      const rectOf = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      };
+
+      const skinRoot = document.querySelector(".imory-skin-root");
+      const quietFrame = document.querySelector(".quiet-frame");
+      const viewerArea = document.getElementById("viewerArea");
+      const scrollingEl = document.scrollingElement;
+
+      return {
+        fixOn,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        docClientWidth: document.documentElement.clientWidth,
+        bodyRect: rectOf(document.body),
+        viewerAreaRect: rectOf(viewerArea),
+        themeMountRect: rectOf(themeMount),
+        skinRootRect: rectOf(skinRoot),
+        quietFrameRect: rectOf(quietFrame),
+        themeMount: {
+          scrollHeight: themeMount.scrollHeight,
+          clientHeight: themeMount.clientHeight,
+          scrollWidth: themeMount.scrollWidth,
+          clientWidth: themeMount.clientWidth,
+          overflowY: getComputedStyle(themeMount).overflowY
+        },
+        documentScrolling: {
+          scrollingElementIsHtml: scrollingEl === document.documentElement,
+          scrollHeight: scrollingEl.scrollHeight,
+          clientHeight: scrollingEl.clientHeight
+        },
+        bodyOverflowX: getComputedStyle(document.body).overflowX,
+        htmlOverflowY: getComputedStyle(document.documentElement).overflowY
+      };
+
+    };
+
+    boot();
+
+
+    /* =====================================================
+       회귀: legacy fallback 전환 시 theme-mount--skin 제거
+    ===================================================== */
+
+    function reportStale(name, passed, detail) {
+      const item = document.createElement("li");
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      item.style.color = passed ? "#2f9e44" : "#e03131";
+      document.getElementById("staleClassReport").appendChild(item);
+      return passed;
+    }
+
+    async function runStaleClassCleanupRegressionTest() {
+
+      const results = {};
+
+      /*
+        1) 정적 가드 — index.html의 initHomeRenderer()가 owner
+        조회(getSiteOwner) 전에 themeMount에서 theme-mount--skin을
+        제거하는 코드가 실제로 있는지 소스에서 직접 확인한다.
+        이 harness가 아니라 index.html 자체를 검사하므로, 나중에
+        누가 그 제거 호출을 지워도 여기서 FAIL로 잡힌다.
+      */
+
+      const indexHtml = await (await fetch("../index.html")).text();
+
+      const fnBodyMatch = indexHtml.match(
+        /async function initHomeRenderer\(\)\s*{([\s\S]*?)const\s+owner\s*=\s*await\s+getSiteOwner\(\)/
+      );
+
+      const preOwnerFetchBody = fnBodyMatch ? fnBodyMatch[1] : "";
+
+      const hasCleanupCall =
+        /\.classList\.remove\(\s*["']theme-mount--skin["']\s*\)/.test(preOwnerFetchBody);
+
+      results.hasCleanupCall = hasCleanupCall;
+
+      reportStale(
+        "[static] initHomeRenderer()가 owner 조회 전에 theme-mount--skin을 제거한다",
+        hasCleanupCall,
+        hasCleanupCall ? "index.html에서 확인됨" : "index.html의 initHomeRenderer() 시작부에서 제거 호출을 찾지 못함"
+      );
+
+      /*
+        2) 동작 가드 — 실제로 이 클래스가 남아있으면 flex-stretch/
+        overflow-auto 계약이 걸려 있고(=버그 재현), classList.remove
+        한 줄만으로 legacy_sua/customize/notice가 기대하는 평범한
+        flex item(중앙 정렬 shrink-wrap)으로 정확히 되돌아오는지
+        확인한다. customize의 renderCustomizeLayout()은 container를
+        비우지 않고 그 위에 덧붙이므로, 이전 Skin이 남긴 자식이 함께
+        있는 상태까지 그대로 흉내낸다.
+      */
+
+      const probe = document.createElement("div");
+      probe.id = "regressionProbeThemeMount";
+      probe.className = "theme-mount--skin";
+
+      const leftoverSkinRoot = document.createElement("div");
+      leftoverSkinRoot.className = "imory-skin-root";
+      probe.appendChild(leftoverSkinRoot);
+
+      document.getElementById("viewerArea").appendChild(probe);
+
+      const before = getComputedStyle(probe);
+
+      const hadContract =
+        before.flexGrow === "1" &&
+        before.alignSelf === "stretch" &&
+        before.overflowY === "auto";
+
+      results.hadContractBeforeRemoval = hadContract;
+
+      reportStale(
+        "[behavior] 제거 전: 잔여 theme-mount--skin에 flex-stretch/overflow-auto 계약이 걸려 있다",
+        hadContract,
+        `flexGrow=${before.flexGrow} alignSelf=${before.alignSelf} overflowY=${before.overflowY}`
+      );
+
+      // index.html에 추가한 것과 동일한 한 줄.
+      probe.classList.remove("theme-mount--skin");
+
+      const after = getComputedStyle(probe);
+
+      const restoredLegacyDefault =
+        after.flexGrow === "0" &&
+        after.overflowY !== "auto";
+
+      results.restoredLegacyDefaultAfterRemoval = restoredLegacyDefault;
+
+      reportStale(
+        "[behavior] 제거 후: legacy_sua/customize/notice가 기대하는 평범한 flex item으로 돌아온다",
+        restoredLegacyDefault,
+        `flexGrow=${after.flexGrow} alignSelf=${after.alignSelf} overflowY=${after.overflowY}`
+      );
+
+      probe.remove();
+
+      window.__staleClassRegressionResult = results;
+
+      return results;
+
+    }
+
+    runStaleClassCleanupRegressionTest();
+  </script>
+
+</body>
+</html>
