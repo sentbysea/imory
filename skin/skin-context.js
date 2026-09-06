@@ -90,6 +90,91 @@ function maskSkinPostTitle(
 
 
 /* =========================================================
+   PUBLISHED DATE LABEL
+
+   posts/posts-format.js의 formatPostDetailDate()와 동일한 원칙
+   (Intl.DateTimeFormat + timeZone: "Asia/Seoul")으로 UTC created_at을
+   방문자가 실제로 보는 한국 날짜로 변환한다 — 단순 문자열 슬라이싱은
+   자정 근처 UTC 시각에서 하루가 밀리는 문제가 있어 쓰지 않는다.
+
+   publishedAt(raw ISO)은 그대로 두고 이 함수가 만든 값만
+   publishedAtLabel로 별도 노출한다 — 기존 계약을 바꾸지 않기 위함
+   (SKIN_DESIGNER_CONTRACT.md 2절).
+========================================================== */
+
+function formatSkinPublishedAtLabel(
+  rawDate
+) {
+
+  if (!rawDate) {
+
+    return "";
+
+  }
+
+
+  const date =
+    new Date(rawDate);
+
+
+  if (isNaN(date.getTime())) {
+
+    return "";
+
+  }
+
+
+  const parts =
+    new Intl.DateTimeFormat(
+      "en-US",
+      {
+        timeZone:
+          "Asia/Seoul",
+
+        year:
+          "numeric",
+
+        month:
+          "2-digit",
+
+        day:
+          "2-digit"
+      }
+    )
+      .formatToParts(date);
+
+
+  const getPart =
+    type =>
+      parts.find(
+        part =>
+          part.type === type
+      )?.value || "";
+
+
+  const year =
+    getPart("year");
+
+  const month =
+    getPart("month");
+
+  const day =
+    getPart("day");
+
+
+  if (!year || !month || !day) {
+
+    return "";
+
+  }
+
+
+  return `${year}. ${month}. ${day}`;
+
+}
+
+
+/* =========================================================
    개별 조회 헬퍼
 
    전부 owner의 user_id로 scope된다 — 익명 방문자가 보는
@@ -735,6 +820,7 @@ async function buildHomeSkinContext(
             title: maskSkinPostTitle(post.visibility, post.title),
             href: buildSitePath(commonData.slug, `/post/${post.id}`),
             publishedAt: post.created_at,
+            publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
             categoryId:
               post.category_id != null
                 ? String(post.category_id)
@@ -829,6 +915,7 @@ async function buildCategorySkinContext(
             title: maskSkinPostTitle(post.visibility, post.title),
             href: buildSitePath(commonData.slug, `/post/${post.id}`),
             publishedAt: post.created_at,
+            publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
             isSecret: post.visibility === "secret"
           })
         )
@@ -922,6 +1009,7 @@ async function buildPostSkinContext(
       id: String(post.id),
       title: maskSkinPostTitle(post.visibility, post.title),
       publishedAt: post.created_at,
+      publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
       categoryName,
       categoryHref
     }

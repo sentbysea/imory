@@ -149,7 +149,8 @@
         "id": "42",
         "title": "🔒 오늘의 일기",              // secret이면 "🔒 ", private이면 "🙈 " 접두어 자동 포함
         "href": "/minji/post/42",
-        "publishedAt": "2026-09-05T10:00:00+00:00",  // created_at ISO 문자열 그대로
+        "publishedAt": "2026-09-05T10:00:00+00:00",  // created_at ISO 원본 문자열 그대로(UTC, 호환성 유지 — 절대 변경/제거되지 않음)
+        "publishedAtLabel": "2026. 09. 05",    // 화면 표시용 — Asia/Seoul(한국 시간) 기준 "YYYY. MM. DD". 값이 없거나 잘못된 날짜면 빈 문자열("")
         "categoryId": "3",                     // 없으면 null
         "categoryName": "일상",                 // 없으면 null
         "isSecret": true                       // visibility === "secret"
@@ -160,6 +161,9 @@
 ```
 
 최근 글 최대 5개(`created_at` 내림차순, 페이지네이션 없음).
+
+- `publishedAt`은 DB `created_at`(UTC) ISO 문자열 원본이고, `publishedAtLabel`은 그 값을 **Asia/Seoul(한국 시간)** 기준으로 변환해 `"YYYY. MM. DD"` 형태로 만든 화면 표시용 문자열이다(`skin/skin-context.js` `formatSkinPublishedAtLabel()`, 공용 순수 함수 하나로 세 namespace 모두 처리). 단순 UTC 날짜 슬라이싱이 아니라 실제 타임존 변환이므로, UTC 자정 근처 값(예: `2026-09-05T15:16:11+00:00`)은 한국 시간으로는 다음 날(`2026. 09. 06`)로 정확히 넘어간다 — 날짜가 하루 밀리는 문제를 피하기 위한 의도적 설계다.
+- `publishedAt`이 `null`/`undefined`이거나 파싱 불가능한 날짜 문자열이면 `publishedAtLabel`은 에러 없이 빈 문자열(`""`)이다.
 
 ### 2-4. `category` namespace (CATEGORY 페이지에서만 채워짐)
 
@@ -176,6 +180,7 @@
         "title": "🙈 비공개 글",
         "href": "/minji/post/42",
         "publishedAt": "2026-09-05T10:00:00+00:00",
+        "publishedAtLabel": "2026. 09. 05",     // home.recentPosts와 동일 규칙(2-3절 참고)
         "isSecret": false
       }
     ]
@@ -196,6 +201,7 @@
     "id": "42",
     "title": "🔒 오늘의 일기",
     "publishedAt": "2026-09-05T10:00:00+00:00",
+    "publishedAtLabel": "2026. 09. 05",     // home.recentPosts와 동일 규칙(2-3절 참고)
     "categoryName": "일상",     // 카테고리 없이 쓴 글이면 null
     "categoryHref": "/minji/category/3"  // categoryName이 null이면 이것도 null
   }
@@ -251,9 +257,9 @@
 | repeat 대상 경로 | item 필드 |
 |---|---|
 | `navigation.categories` / `navigation.postCategories` / `navigation.bannerCategories` | `item.id`, `item.name`, `item.type`, `item.href`, `item.itemCount`(항상 null) |
-| `home.recentPosts` | `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.categoryId`, `item.categoryName`, `item.isSecret` |
+| `home.recentPosts` | `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.publishedAtLabel`, `item.categoryId`, `item.categoryName`, `item.isSecret` |
 | `banners.items` | `item.id`, `item.imageUrl`, `item.href`, `item.alt` |
-| `category.posts` | `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.isSecret` |
+| `category.posts` | `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.publishedAtLabel`, `item.isSecret` |
 
 ### 4-1. 중요한 제약
 
