@@ -49,6 +49,24 @@
   margin: 0 auto;
 }
 
+
+/*
+  Published Skin이 CATEGORY/POST 본문을 대신 그릴 때만 붙는다
+  (posts-view-list.js/posts-view-detail.js) — legacy
+  post-header(제목+뒤로가기)가 Skin 자체 nav와 중복 표시되던
+  버그 수정. 실패/미지원/owner 열람이면 이 클래스가 안 붙으므로
+  기존 legacy 레이아웃은 그대로다.
+*/
+
+.post-container--skin-active {
+  max-width: none;
+}
+
+.post-container--skin-active .post-header {
+  display: none;
+}
+
+
 /* =========================================================
    POST HEADER
 ========================================================== */

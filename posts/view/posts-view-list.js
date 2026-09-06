@@ -394,6 +394,23 @@ async function openCategoryPage(
   }
 
 
+  /*
+    이전 카테고리가 Skin 경로로 그려졌을 수 있으므로(post-container
+    --skin-active) 매 호출마다 우선 되돌려 둔다 — banner/에러
+    분기처럼 아래 renderedPublishedSkinCategory 지점까지 가지 않고
+    return하는 경로에서도 legacy 헤더/폭이 정확히 복원되게 한다.
+    실제로 이번 카테고리가 Skin 경로를 타면 아래에서 다시 붙는다.
+  */
+
+  if (postContainer) {
+
+    postContainer.classList.remove(
+      "post-container--skin-active"
+    );
+
+  }
+
+
   const numericCategoryId =
     Number(
       categoryId
@@ -727,6 +744,16 @@ async function openCategoryPage(
   ) {
 
     return;
+
+  }
+
+
+  if (postContainer) {
+
+    postContainer.classList.toggle(
+      "post-container--skin-active",
+      renderedPublishedSkinCategory
+    );
 
   }
 

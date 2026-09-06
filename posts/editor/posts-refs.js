@@ -83,6 +83,11 @@ postArea?.addEventListener(
   }
 );
 
+const postContainer =
+  document.getElementById(
+    "postContainer"
+  );
+
 const postPageTitle =
   document.getElementById(
     "postPageTitle"

@@ -356,6 +356,21 @@ async function openPostPage(
   }
 
 
+  /*
+    이전 글이 Skin 경로(post-container--skin-active)로 그려졌을
+    수 있으므로 매 진입마다 우선 되돌려 둔다 — 이번 글이 실제로
+    Skin 경로를 타면 아래 usingSkinPost 확정 지점에서 다시 붙는다.
+  */
+
+  if (postContainer) {
+
+    postContainer.classList.remove(
+      "post-container--skin-active"
+    );
+
+  }
+
+
   const owner =
     await getSiteOwner();
 
@@ -499,6 +514,16 @@ async function openPostPage(
 
     postSkinContainer.hidden =
       !usingSkinPost;
+
+  }
+
+
+  if (postContainer) {
+
+    postContainer.classList.toggle(
+      "post-container--skin-active",
+      usingSkinPost
+    );
 
   }
 
