@@ -169,6 +169,8 @@ Select(별도 컴포넌트 없이 Field 재사용 추정), Checkbox, Toggle, Dia
 - 초기 렌더링 시 잘못된 테마가 잠깐 보이는 현상(FOUC)을 최소화해야 한다(`<head>` 인라인 스크립트로 테마 클래스를 조기 적용하는 방식으로 구현됨)
 - 라이트/다크는 **Imory 시스템 UI**(관리자/에디터/공개 시작 페이지 등 `--system-*` 토큰 영역)에 적용된다
 - 사용자가 꾸민 **공개 홈페이지의 개별 테마**(`--theme-*` 토큰 영역)는 시스템 UI 테마와 별개로 취급한다 — 즉 방문자가 다크 모드를 켜도 사용자가 커스터마이징한 홈페이지 디자인 자체는 영향받지 않는 것을 원칙으로 한다(`--theme-*`는 `--system-*`의 다크 오버라이드를 상속하지 않음, `core/design-tokens.css` 참고)
+- 초기 로드(FOUC 방지 스크립트) / 사용자 수동 토글 / OS `prefers-color-scheme` 변경(페이지를 띄워둔 채 시스템 설정을 바꾼 경우) 세 경로 모두 같은 결과를 내야 한다 — 수동 토글과 OS 변경 두 경로는 `core/theme-toggle.js`의 `applyTheme()` 하나를 공유한다(2026-09-06 추가). 단, 저장된 수동 선택이 있으면 OS 변경은 무시한다(위 정책 그대로).
+- 네이티브 UI(폼 컨트롤/스크롤바 등)도 `--system-*`와 같은 판정을 따르도록 `color-scheme`을 `:root`/`:root[data-theme="dark"]`에 동기화해뒀다(`core/design-tokens.css`) — 이게 없으면 사용자가 시스템 설정과 다른 테마를 수동으로 골랐을 때 네이티브 요소만 OS 설정을 따라가 어긋난다.
 
 ### 4-7-1. 지침 — iOS Safari 흰 배경(오버스크롤/상태바·툴바) 방지
 
@@ -176,9 +178,9 @@ Select(별도 컴포넌트 없이 Field 재사용 추정), Checkbox, Toggle, Dia
 
 1. **`html`/`body`(그리고 전체 화면을 덮는 `position: fixed; inset: 0` 컨테이너, 예: `.landing-screen`)의 배경은 절대 리터럴 색(`#ffffff`, `white` 등)으로 고정하지 않는다.** 반드시 `var(--system-bg)`(또는 해당 화면이 `--theme-*` 영역이면 `var(--theme-bg)`)를 참조해야 한다. iOS Safari는 스크롤 컨테이너의 elastic overscroll(고무줄 바운스)이 일어날 때 그 컨테이너 "뒤"의 배경(대개 `html`/`body`)을 그대로 드러내므로, 이 배경이 테마와 함께 전환되지 않으면 다크 모드에서도 흰 배경이 번쩍인다.
 2. **`<meta name="theme-color">`를 두고, 테마가 바뀌는 모든 지점(FOUC 방지 스크립트 + 토글 클릭 핸들러)에서 함께 갱신한다.** iOS 15~18 Safari와 대부분의 다른 브라우저(Android Chrome 등)는 상단 상태바/하단 툴바 영역 색을 이 메타의 `content`로 칠한다 — 메타가 없으면 페이지 배경색을 추정해서 쓰는데, 이 추정은 항상 정확하지 않다. `content` 값은 CSS 변수를 참조할 수 없으므로 `--system-bg`의 라이트/다크 실값(`#ffffff` / `#222222`)을 리터럴로 직접 넣고, 토큰 값이 바뀌면 메타 갱신 코드도 함께 고친다. 실제 구현 예시: `index.html`의 `#systemThemeColorMeta` + `initSystemTheme()`, `core/theme-toggle.js`. **단, 아래 3번 참고 — iOS 26에서는 이 메타 자체가 무시된다.**
-3. **iOS 26 Safari는 `theme-color` 메타를 아예 무시한다 — 대신 `body`의 배경색이나, 화면 위/아래 가장자리에 걸친 `position: fixed` 요소(예: `.landing-screen`)의 배경색에서 상태바/툴바 틴트를 직접 샘플링한다.** 새로고침(최초 렌더링) 시점에는 이 샘플링이 잘 되지만, **새로고침 없이 JS로 테마를 바꾸는 클릭 토글의 경우 fixed 오버레이가 있는 화면에서는 재샘플링이 안 되는 WebKit 버그가 있다**(2026-09 기준 iOS 26.0/26.1에서 확인, WebKit에는 수정이 반영되어 26.2에서 정식 배포 예정 — [Ben Frain](https://benfrain.com/ios26-safari-theme-color-tab-tinting-with-fixed-position-elements/), [thatdevpro](https://www.thatdevpro.com/reference/html-meta-theme-color/)). 즉 버튼을 눌러 라이트↔다크를 전환해도 상단/하단 바 색이 전환 전 색 그대로 남을 수 있다. 대응:
-   - `data-theme` 변경 직후 fixed 풀스크린 컨테이너(스크롤 가능한 `.landing-screen` 등)를 강제로 1px 스크롤했다가 되돌려 reflow를 유발해 Safari가 배경색을 재샘플링하도록 유도한다(`core/theme-toggle.js`의 클릭 핸들러 참고). 이 nudge는 완화 조치일 뿐 100% 보장되지 않는다 — 근본 원인이 WebKit 버그이기 때문이다.
-   - 이 문제는 **iOS 실기기**(시뮬레이터 아님)에서 "새로고침 후 진입"과 "같은 페이지에서 버튼 클릭으로 전환" 두 경로를 모두 따로 확인해야 발견된다 — 둘의 동작이 다르다.
+3. **iOS 26 Safari는 `theme-color` 메타를 아예 무시한다 — 대신 `body`의 배경색이나, 화면 위/아래 가장자리에 걸친 `position: fixed` 요소(예: `.landing-screen`)의 배경색에서 상태바/툴바 틴트를 직접 샘플링한다.** 새로고침(최초 렌더링) 시점에는 이 샘플링이 잘 되지만, **새로고침 없이 JS로 테마를 바꾸는 경우(클릭 토글, OS `prefers-color-scheme` 변경 둘 다) fixed 오버레이가 있는 화면에서는 재샘플링이 안 되는 WebKit 버그가 있다**(2026-09 기준 iOS 26.0/26.1에서 확인, WebKit에는 수정이 반영되어 26.2에서 정식 배포 예정 — [Ben Frain](https://benfrain.com/ios26-safari-theme-color-tab-tinting-with-fixed-position-elements/), [thatdevpro](https://www.thatdevpro.com/reference/html-meta-theme-color/)). 즉 라이트↔다크를 전환해도 상단/하단 바 색이 전환 전 색 그대로 남을 수 있다. 대응:
+   - `data-theme` 변경 직후 fixed 풀스크린 컨테이너(스크롤 가능한 `.landing-screen` 등)를 강제로 1px 스크롤했다가 되돌려 reflow를 유발해 Safari가 배경색을 재샘플링하도록 유도한다(`core/theme-toggle.js`의 `applyTheme()` 참고 — 클릭 토글과 OS 변경 리스너가 이 함수 하나를 공유하므로 두 경로 모두 같은 nudge를 받는다). 이 nudge는 완화 조치일 뿐 100% 보장되지 않는다 — 근본 원인이 WebKit 버그이기 때문이다.
+   - 이 문제는 **iOS 실기기**(시뮬레이터 아님)에서 "새로고침 후 진입"과 "같은 페이지에서 버튼 클릭/OS 설정 변경으로 전환" 두 경로를 모두 따로 확인해야 발견된다 — 둘의 동작이 다르다.
    - 1/2번(리터럴 색 금지, 토큰 참조, theme-color 메타 갱신)은 iOS 26 이전 버전과 다른 브라우저를 위해 계속 필요하다 — 폐기하지 않는다.
 
 이 지침은 공개 시작 페이지 1번만 예외적으로 지키면 되는 게 아니라, 앞으로 다크 모드가 확장되는 모든 화면(관리자/에디터 등)에 새 다크 모드 코드를 작성할 때마다 라이트/다크 양쪽 다 실기기로 위아래 바 색까지 확인하고 그대로 재적용해야 한다.

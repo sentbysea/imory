@@ -6,9 +6,11 @@
    참조를 공유해서 쓰므로 반드시 이 파일이 먼저
    로드돼야 함(admin/index.html 순서 참고).
 
-   내용: DOM 요소 참조, 설정 탭 전환, BGM/카테고리 목록
-   불러오기 및 렌더링, 카테고리 순서변경/삭제/추가.
-   (about/notice/ng PROFILE 탭은 Phase 0-5에서 레거시 제거됨)
+   내용: DOM 요소 참조, 설정 탭 전환(PROFILE/HOME/CATEGORY/
+   BANNER/DATA), 닉네임/BGM/마우스 포인터 미리보기/카테고리
+   목록 불러오기 및 렌더링, 카테고리 순서변경/삭제/추가.
+   아바타 업로드/저장은 admin-settings-avatar.js로 분리되어
+   있음(favicon과 같은 패턴).
 ========================================================== */
 
 
@@ -33,6 +35,12 @@ const bgmSaveMessage =
     "bgmSaveMessage"
   );
 
+const profileTabButton =
+  document.getElementById(
+    "profileTabButton"
+  );
+
+
 const categoryTabButton =
   document.getElementById(
     "categoryTabButton"
@@ -45,9 +53,21 @@ const homeTabButton =
   );
 
 
+const bannerTabButton =
+  document.getElementById(
+    "bannerTabButton"
+  );
+
+
 const dataTabButton =
   document.getElementById(
     "dataTabButton"
+  );
+
+
+const profileSettingsPanel =
+  document.getElementById(
+    "profileSettingsPanel"
   );
 
 
@@ -60,6 +80,12 @@ const categorySettingsPanel =
 const homeSettingsPanel =
   document.getElementById(
     "homeSettingsPanel"
+  );
+
+
+const bannerSettingsPanel =
+  document.getElementById(
+    "bannerSettingsPanel"
   );
 
 
@@ -99,6 +125,36 @@ const blogTitleSaveMessage =
   );
 
 
+const nicknameInput =
+  document.getElementById(
+    "nicknameInput"
+  );
+
+
+const nicknameSaveButton =
+  document.getElementById(
+    "nicknameSaveButton"
+  );
+
+
+const nicknameSaveMessage =
+  document.getElementById(
+    "nicknameSaveMessage"
+  );
+
+
+const cursorPreview =
+  document.getElementById(
+    "cursorPreview"
+  );
+
+
+const cursorPreviewEmpty =
+  document.getElementById(
+    "cursorPreviewEmpty"
+  );
+
+
 const cursorUrlInput =
   document.getElementById(
     "cursorUrlInput"
@@ -126,6 +182,48 @@ const cursorFileInput =
 const cursorUploadMessage =
   document.getElementById(
     "cursorUploadMessage"
+  );
+
+
+const withdrawAccountButton =
+  document.getElementById(
+    "withdrawAccountButton"
+  );
+
+
+const withdrawAccountMessage =
+  document.getElementById(
+    "withdrawAccountMessage"
+  );
+
+
+const withdrawAccountDialog =
+  document.getElementById(
+    "withdrawAccountDialog"
+  );
+
+
+const withdrawAccountConfirmInput =
+  document.getElementById(
+    "withdrawAccountConfirmInput"
+  );
+
+
+const withdrawAccountCancelButton =
+  document.getElementById(
+    "withdrawAccountCancelButton"
+  );
+
+
+const withdrawAccountConfirmButton =
+  document.getElementById(
+    "withdrawAccountConfirmButton"
+  );
+
+
+const withdrawAccountDialogMessage =
+  document.getElementById(
+    "withdrawAccountDialogMessage"
   );
 
 
@@ -168,6 +266,10 @@ function showSettingsSection(
   section
 ) {
 
+  profileSettingsPanel.hidden =
+    section !== "profile";
+
+
   categorySettingsPanel.hidden =
     section !== "category";
 
@@ -176,8 +278,18 @@ function showSettingsSection(
     section !== "home";
 
 
+  bannerSettingsPanel.hidden =
+    section !== "banner";
+
+
   dataSettingsPanel.hidden =
     section !== "data";
+
+
+  profileTabButton.classList.toggle(
+    "active",
+    section === "profile"
+  );
 
 
   categoryTabButton.classList.toggle(
@@ -192,12 +304,30 @@ function showSettingsSection(
   );
 
 
+  bannerTabButton.classList.toggle(
+    "active",
+    section === "banner"
+  );
+
+
   dataTabButton.classList.toggle(
     "active",
     section === "data"
   );
 
 }
+
+
+profileTabButton.addEventListener(
+  "click",
+  () => {
+
+    showSettingsSection(
+      "profile"
+    );
+
+  }
+);
 
 
 categoryTabButton.addEventListener(
@@ -218,6 +348,18 @@ homeTabButton.addEventListener(
 
     showSettingsSection(
       "home"
+    );
+
+  }
+);
+
+
+bannerTabButton.addEventListener(
+  "click",
+  () => {
+
+    showSettingsSection(
+      "banner"
     );
 
   }
@@ -342,6 +484,88 @@ async function loadBlogTitle(
 
 
 /* =========================================================
+   마우스 포인터 미리보기
+
+   showFaviconPreview()(admin-favicon.js)와 완전히 같은 구조 —
+   "현재 값"을 그대로 미리보기 src로 써서 onload/onerror로
+   있고 없음을 판단한다.
+========================================================== */
+
+function showCursorPreview(
+  url
+) {
+
+  if (!cursorPreview) {
+    return;
+  }
+
+
+  if (!url) {
+
+    cursorPreview.hidden =
+      true;
+
+
+    if (
+      cursorPreviewEmpty
+    ) {
+
+      cursorPreviewEmpty.hidden =
+        false;
+
+    }
+
+
+    return;
+
+  }
+
+
+  cursorPreview.onload =
+    () => {
+
+      cursorPreview.hidden =
+        false;
+
+
+      if (
+        cursorPreviewEmpty
+      ) {
+
+        cursorPreviewEmpty.hidden =
+          true;
+
+      }
+
+    };
+
+
+  cursorPreview.onerror =
+    () => {
+
+      cursorPreview.hidden =
+        true;
+
+
+      if (
+        cursorPreviewEmpty
+      ) {
+
+        cursorPreviewEmpty.hidden =
+          false;
+
+      }
+
+    };
+
+
+  cursorPreview.src =
+    url;
+
+}
+
+
+/* =========================================================
    마우스 포인터 불러오기
 ========================================================== */
 
@@ -391,7 +615,66 @@ async function loadCursorSetting(
   cursorUrlInput.value =
     data?.value || "";
 
+
+  showCursorPreview(
+    data?.value || ""
+  );
+
 }
+
+
+/* =========================================================
+   닉네임 불러오기
+
+   profiles.nickname은 public select 정책으로 이미 읽을 수
+   있다([[20260830140000_rls_profiles_app_config_home_customize.sql]]).
+   저장은 update_own_nickname() RPC로만 가능(admin-settings-save.js).
+========================================================== */
+
+async function loadNickname(
+  user
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from(
+        "profiles"
+      )
+      .select(
+        "nickname"
+      )
+      .eq(
+        "user_id",
+        user.id
+      )
+      .maybeSingle();
+
+
+  if (error) {
+
+    console.error(
+      "load nickname error:",
+      error
+    );
+
+
+    nicknameSaveMessage.textContent =
+      "닉네임을 불러오지 못했습니다.";
+
+
+    return;
+
+  }
+
+
+  nicknameInput.value =
+    data?.nickname || "";
+
+}
+
 
 async function loadCategories(
   user

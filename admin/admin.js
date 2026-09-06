@@ -491,7 +491,7 @@ function showSettingsPanel(
   ) {
 
     showSettingsSection(
-      "category"
+      "profile"
     );
 
   }
@@ -812,17 +812,6 @@ openSettingsButton
     () => {
 
       showSettingsPanel();
-
-    }
-  );
-
-
-openCustomizeButton
-  .addEventListener(
-    "click",
-    () => {
-
-      showCustomizePanel();
 
     }
   );

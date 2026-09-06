@@ -17,6 +17,17 @@
 
 :root {
 
+  /*
+    네이티브 UI(폼 컨트롤, 스크롤바, iOS의 overscroll 채움색 등)를
+    OS의 prefers-color-scheme가 아니라 실제 적용된 --system-*
+    테마(data-theme)에 맞춘다. 이게 없으면 사용자가 버튼으로
+    시스템 설정과 다른 테마를 직접 선택했을 때 브라우저 네이티브
+    요소만 OS 설정을 따라가 화면 색과 어긋날 수 있다 — 아래
+    :root[data-theme="dark"]에서 dark로 재정의(Design.md 4-7,
+    core/theme-toggle.js 참고).
+  */
+  color-scheme: light;
+
   /* =======================================================
      1. Color Primitive
   ======================================================== */
@@ -197,6 +208,8 @@
 ========================================================== */
 
 :root[data-theme="dark"] {
+
+  color-scheme: dark;
 
   --system-bg: var(--imory-gray-900);
   --system-surface: var(--imory-gray-800);

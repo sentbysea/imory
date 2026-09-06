@@ -394,6 +394,48 @@
    Storage URL), 저장은 기존 save 버튼으로 별도 수행한다.
 ========================================================== */
 
+.cursor-preview-row {
+  display: flex;
+  align-items: center;
+
+  gap: 12px;
+
+  padding: 0 14px 14px;
+}
+
+
+.cursor-preview {
+  display: block;
+
+  width: 40px;
+  height: 40px;
+
+  border: 1px solid var(--system-border);
+
+  background: #f6f6f6;
+
+  object-fit: contain;
+}
+
+
+.cursor-preview[hidden] {
+  display: none;
+}
+
+
+.cursor-preview-empty {
+  width: 40px;
+  height: 40px;
+
+  border: 1px dashed var(--system-border);
+}
+
+
+.cursor-preview-empty[hidden] {
+  display: none;
+}
+
+
 .cursor-upload-row {
   display: flex;
   align-items: flex-start;
@@ -599,12 +641,15 @@
 
 
 /*
-  홈페이지 탭 안에서는 BGM/MY BANNER/블로그 제목/마우스 포인터가
+  홈페이지 탭 안에서는 BGM/블로그 제목/마우스 포인터/파비콘이
   하나의 패널에 세로로 같이 나열되므로, 그룹 사이에 구분 여백을
   준다(각 그룹 자체의 margin-top:0은 유지하고 인접할 때만 적용).
+  PROFILE 탭도 닉네임/아바타 두 그룹이 같은 방식으로 나열되므로
+  같은 규칙을 공유한다.
 */
 
-#homeSettingsPanel .settings-group + .settings-group {
+#homeSettingsPanel .settings-group + .settings-group,
+#profileSettingsPanel .settings-group + .settings-group {
   margin-top: 40px;
 }
 
@@ -631,6 +676,142 @@
   font-size: 11px;
 
   letter-spacing: 0.1em;
+}
+
+
+
+/* =========================================================
+   AVATAR (PROFILE PICTURE)
+
+   admin-settings-avatar.js 참고. FAVICON과 같은 preview/change
+   구조를 재사용하되, 프로필 사진이라 미리보기 박스를 64px
+   정사각형으로 조금 더 키운다.
+========================================================== */
+
+.avatar-group {
+  margin-top: 0;
+}
+
+
+.avatar-preview-row {
+  display: flex;
+  align-items: center;
+
+  gap: 12px;
+
+  padding: 0 14px 14px;
+}
+
+
+.avatar-preview {
+  display: block;
+
+  width: 64px;
+  height: 64px;
+
+  border: 1px solid var(--system-border);
+  border-radius: 50%;
+
+  background: #f6f6f6;
+
+  object-fit: cover;
+}
+
+
+.avatar-preview[hidden] {
+  display: none;
+}
+
+
+.avatar-preview-empty {
+  width: 64px;
+  height: 64px;
+
+  border: 1px dashed var(--system-border);
+  border-radius: 50%;
+}
+
+
+.avatar-preview-empty[hidden] {
+  display: none;
+}
+
+
+.avatar-change-button {
+  padding-inline: 14px;
+
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+
+.avatar-upload-message {
+  margin: 0 0 14px;
+
+  padding: 0 14px;
+
+  font-size: 10px;
+
+  letter-spacing: 0.03em;
+
+  color: var(--system-accent-hover);
+
+  min-height: 12px;
+}
+
+
+
+/* =========================================================
+   회원 탈퇴 확인 다이얼로그
+
+   root index.html의 .start-signin-dialog와 같은 네이티브 <dialog>
+   패턴(위치/backdrop만 이 화면에 맞게 재정의, 색/spacing 토큰은
+   core/design-tokens.css 공용). 삭제 버튼은 확인 문구를 정확히
+   입력하기 전까지 disabled 상태를 유지한다(admin-settings-save.js).
+========================================================== */
+
+.withdraw-account-dialog {
+  position: relative;
+
+  width: min(360px, calc(100vw - 48px));
+
+  margin: auto;
+  padding: var(--imory-space-600) var(--imory-space-500) var(--imory-space-500);
+
+  background: var(--system-bg);
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  color: var(--system-text);
+}
+
+
+.withdraw-account-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.25);
+}
+
+
+.withdraw-account-dialog-title {
+  margin: 0 0 var(--imory-space-300);
+
+  font-size: var(--imory-font-size-700);
+  font-weight: 500;
+  color: var(--system-text-strong);
+}
+
+
+.withdraw-account-dialog-notice {
+  margin: 0 0 var(--imory-space-500);
+
+  font-size: var(--imory-font-size-400);
+  line-height: var(--imory-line-height-snug);
+  color: var(--system-text-muted);
+}
+
+
+#withdrawAccountConfirmInput {
+  width: 100%;
+  margin-bottom: var(--imory-space-500);
 }
 
 

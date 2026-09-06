@@ -4,8 +4,10 @@
    admin-settings.js 분할본 중 마지막. DOM 참조는
    admin-settings-load.js에 있음(반드시 먼저 로드돼야 함).
 
-   내용: 로그인한 유저의 설정 전체 불러오기, BGM/카테고리 저장.
-   (about/notice/ng PROFILE 저장은 Phase 0-5에서 레거시 제거됨)
+   내용: 로그인한 유저의 설정 전체 불러오기, 닉네임/BGM/블로그
+   제목/마우스 포인터(저장+업로드)/카테고리 저장, 회원 탈퇴.
+   아바타 업로드/저장은 admin-settings-avatar.js로 분리되어
+   있음(favicon과 같은 패턴).
 ========================================================== */
 
 
@@ -16,6 +18,16 @@
 async function loadAdminSettings(
   user
 ) {
+
+  await loadNickname(
+    user
+  );
+
+
+  await loadAvatar(
+    user
+  );
+
 
   await loadCategories(
   user
@@ -281,6 +293,105 @@ blogTitleSaveButton
 
 
 /* =========================================================
+   닉네임 저장
+
+   profiles는 UPDATE 정책이 없어 직접 update()를 호출할 수
+   없다 — update_own_nickname() RPC로만 저장 가능
+   ([[20260906120000_add_update_own_nickname_rpc.sql]]).
+========================================================== */
+
+nicknameSaveButton
+  ?.addEventListener(
+    "click",
+    async () => {
+
+      const {
+        data:
+        userData,
+
+        error:
+        userError
+      } =
+        await supabaseClient
+          .auth
+          .getUser();
+
+
+      if (
+        userError ||
+        !userData.user
+      ) {
+
+        nicknameSaveMessage.textContent =
+          "로그인이 필요합니다.";
+
+
+        return;
+
+      }
+
+
+      const nickname =
+        nicknameInput
+          .value
+          .trim();
+
+
+      nicknameSaveButton.disabled =
+        true;
+
+
+      nicknameSaveMessage.textContent =
+        "저장 중...";
+
+
+      const {
+        error
+      } =
+        await supabaseClient
+          .rpc(
+            "update_own_nickname",
+            {
+              p_nickname:
+                nickname
+            }
+          );
+
+
+      if (error) {
+
+        console.error(
+          "nickname save error:",
+          error
+        );
+
+
+        nicknameSaveMessage.textContent =
+          "저장에 실패했습니다.";
+
+
+        nicknameSaveButton.disabled =
+          false;
+
+
+        return;
+
+      }
+
+
+      nicknameSaveMessage.textContent =
+        "saved ♡";
+
+
+      nicknameSaveButton.disabled =
+        false;
+
+    }
+  );
+
+
+
+/* =========================================================
    마우스 포인터 저장
 ========================================================== */
 
@@ -389,6 +500,11 @@ cursorSaveButton
 
       cursorSaveButton.disabled =
         false;
+
+
+      showCursorPreview(
+        cursorUrl
+      );
 
     }
   );
@@ -537,6 +653,11 @@ cursorFileInput
         buildCursorImageUrl(
           user.id
         );
+
+
+      showCursorPreview(
+        cursorUrlInput.value
+      );
 
 
       if (
@@ -829,6 +950,143 @@ categorySaveButton
       await loadCategories(
         user
       );
+
+    }
+  );
+
+
+
+/* =========================================================
+   회원 탈퇴
+
+   즉시 자가 삭제 — delete_own_account() RPC
+   ([[20260906130000_add_delete_own_account_rpc.sql]])를 호출해
+   auth.users row를 바로 삭제한다. 확인 다이얼로그에서 "탈퇴"를
+   정확히 입력해야만 삭제 버튼이 활성화된다(오클릭 방지). 성공
+   하면 signOut() 후 사이트 루트로 이동한다.
+========================================================== */
+
+const WITHDRAW_CONFIRM_PHRASE =
+  "탈퇴";
+
+
+withdrawAccountButton
+  ?.addEventListener(
+    "click",
+    () => {
+
+      withdrawAccountConfirmInput.value =
+        "";
+
+
+      withdrawAccountConfirmButton.disabled =
+        true;
+
+
+      if (
+        withdrawAccountDialogMessage
+      ) {
+
+        withdrawAccountDialogMessage.textContent =
+          "";
+
+      }
+
+
+      withdrawAccountDialog.showModal();
+
+    }
+  );
+
+
+withdrawAccountConfirmInput
+  ?.addEventListener(
+    "input",
+    () => {
+
+      withdrawAccountConfirmButton.disabled =
+        withdrawAccountConfirmInput
+          .value
+          .trim() !==
+        WITHDRAW_CONFIRM_PHRASE;
+
+    }
+  );
+
+
+withdrawAccountCancelButton
+  ?.addEventListener(
+    "click",
+    () => {
+
+      withdrawAccountDialog.close();
+
+    }
+  );
+
+
+withdrawAccountConfirmButton
+  ?.addEventListener(
+    "click",
+    async () => {
+
+      withdrawAccountConfirmButton.disabled =
+        true;
+
+
+      if (
+        withdrawAccountDialogMessage
+      ) {
+
+        withdrawAccountDialogMessage.textContent =
+          "탈퇴 처리 중...";
+
+      }
+
+
+      const {
+        error
+      } =
+        await supabaseClient
+          .rpc(
+            "delete_own_account"
+          );
+
+
+      if (error) {
+
+        console.error(
+          "delete own account error:",
+          error
+        );
+
+
+        if (
+          withdrawAccountDialogMessage
+        ) {
+
+          withdrawAccountDialogMessage.textContent =
+            "탈퇴에 실패했습니다.";
+
+        }
+
+
+        withdrawAccountConfirmButton.disabled =
+          false;
+
+
+        return;
+
+      }
+
+
+      await supabaseClient
+        .auth
+        .signOut();
+
+
+      window.location.href =
+        "/";
 
     }
   );

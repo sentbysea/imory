@@ -260,7 +260,7 @@
 
           <button
             class="admin-menu-item"
-            id="openCustomizeButton"
+            id="openSkinStudioButton"
             type="button"
           >
 
@@ -271,8 +271,12 @@
             <span class="menu-copy">
 
               <strong>
-                CUSTOMIZE
+                SKIN STUDIO
               </strong>
+
+              <small>
+                AI (beta)
+              </small>
 
             </span>
 
@@ -299,36 +303,6 @@
               <strong>
                 INQUIRY
               </strong>
-
-            </span>
-
-            <span class="menu-arrow">
-              →
-            </span>
-
-          </button>
-
-
-
-          <button
-            class="admin-menu-item"
-            id="openSkinStudioButton"
-            type="button"
-          >
-
-            <span class="menu-number">
-              05
-            </span>
-
-            <span class="menu-copy">
-
-              <strong>
-                SKIN STUDIO
-              </strong>
-
-              <small>
-                AI (beta)
-              </small>
 
             </span>
 
@@ -395,10 +369,10 @@
 
               <button
                 class="settings-tab imory-tab imory-tab--text active"
-                id="categoryTabButton"
+                id="profileTabButton"
                 type="button"
               >
-                CATEGORY
+                PROFILE
               </button>
 
               <span class="settings-tab-divider imory-tab-divider">
@@ -419,6 +393,30 @@
 
               <button
                 class="settings-tab imory-tab imory-tab--text"
+                id="categoryTabButton"
+                type="button"
+              >
+                CATEGORY
+              </button>
+
+              <span class="settings-tab-divider imory-tab-divider">
+                |
+              </span>
+
+              <button
+                class="settings-tab imory-tab imory-tab--text"
+                id="bannerTabButton"
+                type="button"
+              >
+                BANNER
+              </button>
+
+              <span class="settings-tab-divider imory-tab-divider">
+                |
+              </span>
+
+              <button
+                class="settings-tab imory-tab imory-tab--text"
                 id="dataTabButton"
                 type="button"
               >
@@ -430,6 +428,177 @@
           </div>
 
         </div>
+
+
+
+        <section
+          class="settings-subpanel"
+          id="profileSettingsPanel"
+          hidden
+        >
+
+          <section
+            class="settings-group nickname-group"
+            id="nicknameSettingsPanel"
+          >
+
+            <div class="settings-group-title imory-section-header imory-section-header--divider">
+
+              <span>
+                NICKNAME
+              </span>
+
+              <small>
+                public name
+              </small>
+
+            </div>
+
+
+            <div class="setting-line">
+
+              <label for="nicknameInput" class="imory-label">
+                NICKNAME
+              </label>
+
+              <input
+                id="nicknameInput"
+                class="setting-input imory-field imory-field--md"
+                type="text"
+                placeholder="nickname"
+                maxlength="30"
+              >
+
+            </div>
+
+
+            <div class="imory-form-actions">
+
+              <button
+                class="save-button imory-button imory-button--primary imory-button--md"
+                id="nicknameSaveButton"
+                type="button"
+              >
+                save
+              </button>
+
+            </div>
+
+
+            <p
+              class="save-message"
+              id="nicknameSaveMessage"
+            ></p>
+
+          </section>
+
+
+
+          <!-- =================================================
+               AVATAR
+
+               FAVICON과 같은 패턴(admin-settings-avatar.js 참고) — 이미지는
+               Supabase Storage의 항상 같은 경로(user-avatars/{user_id}/
+               avatar, 확장자 없음)에 업로드로 덮어쓰기(upsert)되고,
+               site_settings에 key='avatar_url'로 그 고정 URL(또는
+               직접 입력한 외부 URL)이 저장된다.
+          ================================================== -->
+
+          <section
+            class="settings-group avatar-group"
+            id="avatarSettingsPanel"
+          >
+
+            <div class="settings-group-title imory-section-header imory-section-header--divider">
+
+              <span>
+                PROFILE PICTURE
+              </span>
+
+              <small>
+                avatar
+              </small>
+
+            </div>
+
+
+            <div class="avatar-preview-row">
+
+              <img
+                class="avatar-preview"
+                id="avatarPreview"
+                alt="avatar preview"
+                hidden
+              >
+
+              <div
+                class="avatar-preview-empty"
+                id="avatarPreviewEmpty"
+                aria-label="no avatar yet"
+              ></div>
+
+
+              <label
+                class="avatar-change-button imory-button imory-button--primary imory-button--md"
+                for="avatarFileInput"
+              >
+                change
+              </label>
+
+              <input
+                class="avatar-file-input"
+                id="avatarFileInput"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                hidden
+              >
+
+            </div>
+
+
+            <p
+              class="avatar-upload-message"
+              id="avatarUploadMessage"
+            ></p>
+
+
+            <div class="setting-line">
+
+              <label for="avatarUrlInput" class="imory-label">
+                AVATAR URL
+              </label>
+
+              <input
+                id="avatarUrlInput"
+                class="setting-input imory-field imory-field--md"
+                type="url"
+                placeholder="https://example.com/avatar.png"
+              >
+
+            </div>
+
+
+            <div class="imory-form-actions">
+
+              <button
+                class="save-button imory-button imory-button--primary imory-button--md"
+                id="avatarSaveButton"
+                type="button"
+              >
+                save
+              </button>
+
+            </div>
+
+
+            <p
+              class="save-message"
+              id="avatarSaveMessage"
+            ></p>
+
+          </section>
+
+        </section>
 
 
 
@@ -677,6 +846,24 @@
           </div>
 
 
+          <div class="cursor-preview-row">
+
+            <img
+              class="cursor-preview"
+              id="cursorPreview"
+              alt="cursor preview"
+              hidden
+            >
+
+            <div
+              class="cursor-preview-empty"
+              id="cursorPreviewEmpty"
+              aria-label="no cursor yet"
+            ></div>
+
+          </div>
+
+
           <div class="setting-line">
 
             <label for="cursorUrlInput" class="imory-label">
@@ -796,8 +983,12 @@
 
 
 
+        </section>
+
+
+
         <!-- =================================================
-             MY BANNER
+             BANNER
 
              다른 사람들이 자기 사이트에 내 배너를 심어두면,
              내가 나중에 이미지를 바꿔도 그쪽 코드는 안 건드려도
@@ -807,128 +998,133 @@
         ================================================== -->
 
         <section
-          class="settings-group my-banner-group"
-          id="myBannerSettingsPanel"
+          class="settings-subpanel"
+          id="bannerSettingsPanel"
+          hidden
         >
 
-          <div class="settings-group-title imory-section-header imory-section-header--divider">
+          <section
+            class="settings-group my-banner-group"
+            id="myBannerSettingsPanel"
+          >
 
-            <span>
-              MY BANNER
-            </span>
+            <div class="settings-group-title imory-section-header imory-section-header--divider">
 
-            <small>
-              friends link
-            </small>
+              <span>
+                MY BANNER
+              </span>
 
-          </div>
+              <small>
+                friends link
+              </small>
 
-
-          <div class="my-banner-preview-row">
-
-            <img
-              class="my-banner-preview"
-              id="myBannerPreview"
-              alt="배너 미리보기"
-              hidden
-            >
-
-            <div
-              class="my-banner-preview-empty"
-              id="myBannerPreviewEmpty"
-            >
-              아직 배너 이미지가 없습니다
             </div>
 
 
-            <label
-              class="my-banner-change-button imory-button imory-button--primary imory-button--md"
-              for="myBannerFileInput"
-            >
-              change
-            </label>
+            <div class="my-banner-preview-row">
 
-            <input
-              class="my-banner-file-input"
-              id="myBannerFileInput"
-              type="file"
-              accept="image/*"
-              hidden
-            >
+              <img
+                class="my-banner-preview"
+                id="myBannerPreview"
+                alt="배너 미리보기"
+                hidden
+              >
 
-          </div>
-
-
-          <p
-            class="my-banner-upload-message"
-            id="myBannerUploadMessage"
-          ></p>
+              <div
+                class="my-banner-preview-empty"
+                id="myBannerPreviewEmpty"
+              >
+                아직 배너 이미지가 없습니다
+              </div>
 
 
-          <div class="setting-line">
-
-            <label for="myBannerUrlInput" class="imory-label">
-              배너 클릭 시 이동할 URL
-            </label>
-
-            <input
-              id="myBannerUrlInput"
-              class="setting-input imory-field imory-field--md"
-              type="url"
-              placeholder="https://바이브.me"
-            >
-
-          </div>
-
-
-          <div class="setting-line">
-
-            <label for="myBannerImageUrlDisplay" class="imory-label">
-              고정 IMAGE URL
-            </label>
-
-            <div class="my-banner-copy-row">
+              <label
+                class="my-banner-change-button imory-button imory-button--primary imory-button--md"
+                for="myBannerFileInput"
+              >
+                change
+              </label>
 
               <input
-                id="myBannerImageUrlDisplay"
-                class="setting-input imory-field imory-field--md"
-                type="text"
-                readonly
+                class="my-banner-file-input"
+                id="myBannerFileInput"
+                type="file"
+                accept="image/*"
+                hidden
               >
 
+            </div>
+
+
+            <p
+              class="my-banner-upload-message"
+              id="myBannerUploadMessage"
+            ></p>
+
+
+            <div class="setting-line">
+
+              <label for="myBannerUrlInput" class="imory-label">
+                배너 클릭 시 이동할 URL
+              </label>
+
+              <input
+                id="myBannerUrlInput"
+                class="setting-input imory-field imory-field--md"
+                type="url"
+                placeholder="https://바이브.me"
+              >
+
+            </div>
+
+
+            <div class="setting-line">
+
+              <label for="myBannerImageUrlDisplay" class="imory-label">
+                고정 IMAGE URL
+              </label>
+
+              <div class="my-banner-copy-row">
+
+                <input
+                  id="myBannerImageUrlDisplay"
+                  class="setting-input imory-field imory-field--md"
+                  type="text"
+                  readonly
+                >
+
+                <button
+                  class="my-banner-copy-button imory-button imory-button--secondary imory-button--md"
+                  id="myBannerCopyImageUrlButton"
+                  type="button"
+                >
+                  copy image url
+                </button>
+
+              </div>
+
+            </div>
+
+
+            <div class="imory-form-actions">
+
               <button
-                class="my-banner-copy-button imory-button imory-button--secondary imory-button--md"
-                id="myBannerCopyImageUrlButton"
+                class="save-button imory-button imory-button--primary imory-button--md"
+                id="myBannerSaveButton"
                 type="button"
               >
-                copy image url
+                save
               </button>
 
             </div>
 
-          </div>
 
+            <p
+              class="save-message"
+              id="myBannerSaveMessage"
+            ></p>
 
-          <div class="imory-form-actions">
-
-            <button
-              class="save-button imory-button imory-button--primary imory-button--md"
-              id="myBannerSaveButton"
-              type="button"
-            >
-              save
-            </button>
-
-          </div>
-
-
-          <p
-            class="save-message"
-            id="myBannerSaveMessage"
-          ></p>
-
-        </section>
-
+          </section>
 
         </section>
 
@@ -990,7 +1186,94 @@
 
           </div>
 
+
+          <!-- =================================================
+               회원 탈퇴
+
+               즉시 자가 삭제(delete_own_account() RPC 호출) — 확인
+               다이얼로그에서 문구를 정확히 입력해야만 실제 삭제
+               버튼이 활성화된다. 성공 시 signOut() 후 사이트 루트로
+               리다이렉트.
+          ================================================== -->
+
+          <div class="setting-line">
+
+            <label class="imory-label">
+              회원 탈퇴
+            </label>
+
+            <button
+              class="save-button imory-button imory-button--danger imory-button--md"
+              id="withdrawAccountButton"
+              type="button"
+            >
+              회원 탈퇴
+            </button>
+
+          </div>
+
+
+          <p
+            class="save-message"
+            id="withdrawAccountMessage"
+          ></p>
+
         </section>
+
+
+        <dialog
+          class="withdraw-account-dialog"
+          id="withdrawAccountDialog"
+          aria-labelledby="withdrawAccountDialogTitle"
+        >
+
+          <h2
+            class="withdraw-account-dialog-title"
+            id="withdrawAccountDialogTitle"
+          >
+            정말 탈퇴하시겠습니까?
+          </h2>
+
+          <p class="withdraw-account-dialog-notice">
+            탈퇴하면 블로그, 카테고리, 스킨 등 모든 데이터가 즉시
+            삭제되며 복구할 수 없습니다. 계속하려면 아래에
+            <strong>탈퇴</strong>를 입력하세요.
+          </p>
+
+          <input
+            id="withdrawAccountConfirmInput"
+            class="setting-input imory-field imory-field--md"
+            type="text"
+            autocomplete="off"
+          >
+
+          <div class="imory-form-actions">
+
+            <button
+              class="imory-button imory-button--ghost imory-button--md"
+              id="withdrawAccountCancelButton"
+              type="button"
+            >
+              cancel
+            </button>
+
+            <button
+              class="imory-button imory-button--danger imory-button--md"
+              id="withdrawAccountConfirmButton"
+              type="button"
+              disabled
+            >
+              회원 탈퇴
+            </button>
+
+          </div>
+
+          <p
+            class="save-message"
+            id="withdrawAccountDialogMessage"
+          ></p>
+
+        </dialog>
 
 
       </section>
@@ -1298,6 +1581,7 @@
             "./settings/admin-settings-load.js",
             "./settings/admin-my-banner.js",
             "./settings/admin-favicon.js",
+            "./settings/admin-settings-avatar.js",
             "./settings/admin-settings-save.js",
 
             /*
