@@ -348,7 +348,7 @@
       );
 
       assert(
-        "[G] home.recentPosts는 최대 5개, item shape 변경 없음(id/title/href/publishedAt/categoryName)",
+        "[G] home.recentPosts는 최대 5개, 기존 필드(id/title/href/publishedAt/categoryName) 유지",
         legacyHomeCtx.home.recentPosts.every((p) =>
           typeof p.id === "string" &&
           typeof p.title === "string" &&
@@ -356,6 +356,50 @@
           typeof p.publishedAt === "string" &&
           (p.categoryName === null || typeof p.categoryName === "string")
         )
+      );
+
+      /* ---- PHASE1D-A: home.recentPosts item에 categoryId/isSecret 추가 ---- */
+
+      assert(
+        "[1D-A] home.recentPosts item은 categoryId(string|null)/isSecret(boolean)을 가짐",
+        homeCtx.home.recentPosts.every((p) =>
+          (p.categoryId === null || typeof p.categoryId === "string") &&
+          typeof p.isSecret === "boolean"
+        )
+      );
+
+      const homeSecretPost =
+        homeCtx.home.recentPosts.find((p) => p.id === "11");
+
+      assert(
+        "[1D-A] home: secret 글은 isSecret === true, categoryId === '1'",
+        homeSecretPost &&
+        homeSecretPost.isSecret === true &&
+        homeSecretPost.categoryId === "1"
+      );
+
+      const homePrivatePost =
+        homeCtx.home.recentPosts.find((p) => p.id === "12");
+
+      assert(
+        "[1D-A] home: private 글은 isSecret === false(자물쇠 표시는 secret 전용)",
+        homePrivatePost && homePrivatePost.isSecret === false
+      );
+
+      const homePublicPost =
+        homeCtx.home.recentPosts.find((p) => p.id === "10");
+
+      assert(
+        "[1D-A] home: public 글은 isSecret === false",
+        homePublicPost && homePublicPost.isSecret === false
+      );
+
+      const homeNoCategoryPost =
+        homeCtx.home.recentPosts.find((p) => p.id === "13");
+
+      assert(
+        "[1D-A] home: category_id 없는 글은 categoryId === null",
+        homeNoCategoryPost && homeNoCategoryPost.categoryId === null
       );
 
 
@@ -411,10 +455,29 @@
       );
 
       assert(
-        "[C] category.posts item은 정확히 4개 키(id/title/href/publishedAt)만 가짐",
+        "[C] category.posts item은 정확히 5개 키(id/title/href/publishedAt/isSecret)만 가짐",
         categoryCtx.category.posts.every((p) =>
-          Object.keys(p).sort().join(",") === "href,id,publishedAt,title"
+          Object.keys(p).sort().join(",") === "href,id,isSecret,publishedAt,title"
         )
+      );
+
+      /* ---- PHASE1D-A: category.posts item에 isSecret 추가(categoryId/categoryName은
+         이미 category.id/category.name으로 노출되어 있어 item마다 중복하지
+         않음 — 5-4절 "불필요한 필드 반복 금지" 원칙 그대로 계승) ---- */
+
+      assert(
+        "[1D-A] category.posts: secret 글은 isSecret === true",
+        securePost && securePost.isSecret === true
+      );
+
+      assert(
+        "[1D-A] category.posts: private 글은 isSecret === false",
+        privatePost && privatePost.isSecret === false
+      );
+
+      assert(
+        "[1D-A] category.posts: public 글은 isSecret === false",
+        publicCategoryPost && publicCategoryPost.isSecret === false
       );
 
       const emptyCategoryCtx =

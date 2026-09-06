@@ -27,6 +27,13 @@
    buildSitePath(core/lib/site-path.js) — 이 파일보다 먼저
    로드되어야 함. DOM에 접촉하지 않는 순수 데이터 빌더라
    index.html에서든 테스트 페이지에서든 동일하게 동작한다.
+
+   AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md(Slice 1D-A)로
+   home.recentPosts[]/category.posts[] item에 categoryId(home만)/
+   isSecret이 추가됐다 — 둘 다 이미 select하던 category_id/
+   visibility에서 파생된 값이라 새 컬럼/RPC/RLS 변경이 없다.
+   excerpt/thumbnail/isNotice는 안전하게 채울 source가 DB에
+   아직 없어 이번 Slice에서 보류됐다(감사 문서 참고).
 ========================================================== */
 
 const SKIN_CONTEXT_LANGUAGE =
@@ -675,7 +682,12 @@ async function buildHomeSkinContext(
             title: maskSkinPostTitle(post.visibility, post.title),
             href: buildSitePath(commonData.slug, `/post/${post.id}`),
             publishedAt: post.created_at,
-            categoryName: categoryNameById.get(post.category_id) ?? null
+            categoryId:
+              post.category_id != null
+                ? String(post.category_id)
+                : null,
+            categoryName: categoryNameById.get(post.category_id) ?? null,
+            isSecret: post.visibility === "secret"
           })
         )
     }
@@ -763,7 +775,8 @@ async function buildCategorySkinContext(
             id: String(post.id),
             title: maskSkinPostTitle(post.visibility, post.title),
             href: buildSitePath(commonData.slug, `/post/${post.id}`),
-            publishedAt: post.created_at
+            publishedAt: post.created_at,
+            isSecret: post.visibility === "secret"
           })
         )
     }
