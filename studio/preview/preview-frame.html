@@ -46,6 +46,25 @@
 
   </style>
 
+  <!--
+    Studio Banner Category Preview(PHASE — Banner Category Preview)
+    전용. banner category(category.type === "banner")는 Skin
+    template 시스템 밖에서 이 문서가 직접 그리는 read-only adapter로
+    렌더된다(공개 Skin CATEGORY 렌더러가 banner 타입을 아예 타지
+    않는 것과 같은 경계, skin/skin-category.js 참고) — 그래서
+    renderSkin()이 쓰는 Skin CSS가 아니라 공개 legacy Banner
+    렌더러(posts/view/posts-view-banner.js)와 같은 시각 표현을 써야
+    한다. posts-list-detail.css 전체(post-list/detail 등 무관한
+    규칙 포함)를 중복 로드하지 않도록, banner-card/grid 규칙만 뽑아
+    둔 posts/view/posts-view-banner.css 하나만 공유해서 로드한다
+    (index.html의 공개 라우트와 동일한 소스, 디자인 변경 없음).
+  -->
+
+  <link
+    rel="stylesheet"
+    href="../../posts/view/posts-view-banner.css"
+  >
+
 </head>
 
 

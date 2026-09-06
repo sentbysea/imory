@@ -375,47 +375,108 @@
         "loadCount=" + win.__previewFrameLoadCount
       );
 
-      // --- 배너 카테고리 클릭 -> unsupported ---
+      // --- Banner Category Preview (Studio Banner Category Preview) ---
+      const innerWin = () => doc.getElementById("studioPreviewFrame").contentWindow;
+
       clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-nav-link", "FRIENDS"));
 
-      /*
-        renderCategoryPreviewFor()는 fetch가 끝나기 전까지 "loading"
-        overlay를 먼저 보여준다(isOverlayVisible만 보면 그 과도기를
-        unsupported로 착각할 수 있다) — 최종 문구가 나타날 때까지
-        기다린다.
-      */
-      const bannerUnsupported = await waitFor(
-        () =>
-          isOverlayVisible(win, overlay()) &&
-          doc.getElementById("studioPreviewOverlayText").textContent === "이 카테고리 유형은 아직 Studio Preview를 지원하지 않습니다."
-            ? true
-            : null,
+      const bannerGridRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".banner-grid")) || null,
         3000,
         50
       );
 
       record(
-        "P. banner 카테고리 클릭 -> unsupported overlay(public 라우트로 나가지 않음)",
-        !!bannerUnsupported
+        "P1. banner 카테고리(FRIENDS) 클릭 -> unsupported로 막히지 않고 실제 배너 grid가 렌더된다",
+        !!bannerGridRendered
+      );
+
+      const bannerCards = () => Array.from(innerDoc().querySelectorAll(".banner-card"));
+      const bannerNames = () => bannerCards().map((card) => card.querySelector(".banner-card-name")?.textContent);
+
+      record(
+        "P2. owner + category_id 필터 — FRIENDS(303)에는 이 카테고리 소속(user-n) 배너 2개만 보이고, 다른 사용자(user-other)의 배너는 섞이지 않는다",
+        bannerCards().length === 2 && !bannerNames().includes("Other Owner Banner"),
+        JSON.stringify(bannerNames())
+      );
+
+      const safeCard = () => bannerCards().find((card) => card.querySelector(".banner-card-name")?.textContent === "Safe Friend");
+
+      record(
+        "P3. 안전한 https href/image는 <a target=_blank rel=noopener noreferrer>와 실제 <img src>로 렌더된다",
+        safeCard()?.tagName === "A" &&
+          safeCard().getAttribute("href") === "https://example.com/safe" &&
+          safeCard().getAttribute("target") === "_blank" &&
+          (safeCard().getAttribute("rel") || "").includes("noopener") &&
+          (safeCard().getAttribute("rel") || "").includes("noreferrer") &&
+          safeCard().querySelector(".banner-card-image")?.getAttribute("src") === "https://example.com/safe.png"
+      );
+
+      const unsafeCard = () => bannerCards().find((card) => card.querySelector(".banner-card-name")?.textContent === "Unsafe Friend");
+
+      record(
+        "P4. javascript:/data: 같은 위험한 href/image_url은 링크·이미지 없이(plain <div>, <img> 없음) 이름만 표시된다(DB 원본 값을 그대로 DOM에 넣지 않음)",
+        unsafeCard()?.tagName === "DIV" &&
+          !unsafeCard().hasAttribute("href") &&
+          !unsafeCard().querySelector(".banner-card-image")
       );
 
       record(
-        "P2. unsupported 상태에서도 Preview Back으로 HOME 복귀가 가능하다",
+        "P5. Studio Preview iframe 안에 실제 banner-card/banner-grid CSS가 로드되어 적용된다(posts-list-detail.css 전체 중복 로드 없이)",
+        innerWin().getComputedStyle(safeCard()).textDecorationLine === "none" &&
+          innerWin().getComputedStyle(innerDoc().querySelector(".banner-grid")).display === "flex"
+      );
+
+      record(
+        "P6. banner 카테고리 Preview 중에도 Preview Back이 보인다",
         backButton().hidden === false
       );
 
       clickAnchor(backButton());
 
-      const backFromUnsupported = await waitFor(
+      const backFromBanner = await waitFor(
         () => !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")),
         3000,
         50
       );
 
       record(
-        "P3. unsupported 상태에서 Preview Back -> HOME 정상 복귀",
-        !!backFromUnsupported
+        "P7. banner 카테고리에서 Preview Back -> HOME 정상 복귀",
+        !!backFromBanner
       );
+
+      // --- 빈 banner 카테고리 ---
+      win.__testHooks.simulateNavigate("/scenario-n/category/304");
+
+      const emptyBannerRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".banner-grid-empty")) || null,
+        3000,
+        50
+      );
+
+      record(
+        "P8. 배너가 하나도 없는 banner 카테고리는 empty 상태로 표시되고 banner-card는 하나도 없다",
+        !!emptyBannerRendered && innerDoc().querySelectorAll(".banner-card").length === 0
+      );
+
+      // --- 서로 다른 banner 카테고리 간 데이터 분리 ---
+      win.__testHooks.simulateNavigate("/scenario-n/category/305");
+
+      const secondCategoryRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelectorAll(".banner-card").length > 0) || null,
+        3000,
+        50
+      );
+
+      record(
+        "P9. 여러 banner 카테고리 간 데이터 분리 — FRIENDS2(305)에는 자신의 배너만 보이고 FRIENDS(303)의 배너는 섞이지 않는다",
+        !!secondCategoryRendered &&
+          JSON.stringify(bannerNames()) === JSON.stringify(["Second Category Banner"])
+      );
+
+      win.__testHooks.simulateNavigate("/scenario-n");
+
+      await waitFor(() => !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")), 3000, 50);
 
       // --- Q. 다른 slug의 preview:navigate는 무시된다 ---
       win.__testHooks.simulateNavigate("/some-other-owner/category/301");
@@ -500,8 +561,21 @@
 
       win.__testHooks.simulateNavigate("/scenario-o/category/301");
 
+      /*
+        Banner Category Preview 확장 이후 renderCategoryPreviewFor()는
+        categoryTemplate 유무를 확인하기 전에 항상 fetchSkinCategoryById()
+        로 실제 category.type을 먼저 확인한다(banner 카테고리가
+        template 없이도 미리보기 가능해야 하므로) — 그래서 이 경로도
+        "loading"을 거쳐 간다(isOverlayVisible만 보면 그 과도기를
+        최종 unsupported로 착각할 수 있다). 최종 문구가 나타날 때까지
+        기다린다.
+      */
       const categoryUnsupported = await waitFor(
-        () => (isOverlayVisible(win, overlay()) ? true : null),
+        () =>
+          isOverlayVisible(win, overlay()) &&
+          doc.getElementById("studioPreviewOverlayText").textContent === "이 스킨에는 아직 CATEGORY 템플릿이 없습니다."
+            ? true
+            : null,
         3000,
         50
       );
@@ -509,7 +583,6 @@
       record(
         "M. templates.category 없음 -> unsupported, Preview Back 가능",
         !!categoryUnsupported &&
-          doc.getElementById("studioPreviewOverlayText").textContent === "이 스킨에는 아직 CATEGORY 템플릿이 없습니다." &&
           backButton().hidden === false
       );
 
@@ -580,6 +653,69 @@
       record(
         "O. templates.post는 있지만 post-body region이 없으면 invalid/unsupported(본문 없는 POST를 정상으로 처리하지 않음)",
         !!invalidPost && backButton().hidden === false
+      );
+
+      return true;
+
+    }
+
+
+    /* =========================================================
+       PART 2 — SCENARIO U: Banner Category Preview 중 banners
+       query 자체가 실패하는 경우 — 이전 Preview DOM을 어중간하게
+       남기지 않고 오류 상태 + Preview Back을 제공하는지 확인한다.
+    ========================================================== */
+
+    async function runScenarioBannerQueryFailure() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=u");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-u-home")),
+        8000,
+        100
+      );
+
+      win.__testHooks.simulateNavigate("/scenario-u/category/301");
+
+      const bannerQueryFailed = await waitFor(
+        () =>
+          isOverlayVisible(win, overlay()) &&
+          doc.getElementById("studioPreviewOverlayText").textContent === "배너 미리보기를 불러오지 못했습니다."
+            ? true
+            : null,
+        3000,
+        50
+      );
+
+      record(
+        "U1. banner 카테고리 진입 중 banners query가 실패하면 이전 Preview DOM을 남기지 않고 오류 상태로 전환된다",
+        !!bannerQueryFailed
+      );
+
+      record(
+        "U2. 오류 상태에서도 Preview Back으로 HOME 복귀가 가능하다",
+        backButton().hidden === false
+      );
+
+      clickAnchor(backButton());
+
+      const backFromError = await waitFor(
+        () => !!(innerDoc() && innerDoc().querySelector(".scenario-u-home")),
+        3000,
+        50
+      );
+
+      record(
+        "U3. 오류 상태에서 Preview Back -> HOME 정상 복귀",
+        !!backFromError
       );
 
       return true;
@@ -1259,6 +1395,12 @@
         await runScenarioQ();
       } catch (err) {
         record("Scenario Q 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioBannerQueryFailure();
+      } catch (err) {
+        record("Scenario U(banner query failure) 실행 중 예외 발생", false, String(err && err.stack || err));
       }
 
       try {

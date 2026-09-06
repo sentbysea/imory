@@ -27,9 +27,21 @@
    resetStudioWorkingState/message listener).
 
    의존(먼저 로드되어야 함): resolveSkinTemplate(skin/
-   skin-template.js), buildCategorySkinContext/buildPostSkinContext
-   (skin/skin-context.js), resolveStudioPreviewTarget(studio/
-   preview/preview-route.js).
+   skin-template.js), buildCategorySkinContext/buildPostSkinContext/
+   fetchSkinCategoryById/fetchSkinBanners(skin/skin-context.js),
+   isSafeSkinUrl(skin/skin-sanitize.js), resolveStudioPreviewTarget
+   (studio/preview/preview-route.js), postBannerRenderToFrame
+   (studio-preview.js).
+
+   Banner Category Preview — category.type === "banner"는 Skin
+   template(templates.category) 없이도 항상 미리볼 수 있다(공개
+   Banner 렌더러가 Skin 유무와 무관하게 동작하는 것과 같은 계약).
+   Skin의 CATEGORY template 렌더 경로(postRenderToFrame + renderSkin)
+   를 타지 않고, 이 파일의 renderBannerCategoryPreviewFor()가 만든
+   안전한 평문 데이터만 postBannerRenderToFrame()으로 보내면
+   preview-bridge.js가 iframe 안에서 직접 DOM을 구성한다(자세한
+   내용은 아래 renderBannerCategoryPreviewFor()/studio-preview.js/
+   preview-bridge.js 주석).
 
    previewHistory 스택 규칙(문서 8/9/10/12절):
    - 최초 진입은 항상 [{type:"home"}] 하나뿐(resetPreviewNavigation).
@@ -150,6 +162,18 @@ function renderHomePreview() {
    여러 번 오갈 수 있어 단일 슬롯 캐시가 더 이상 맞지 않고, 이번
    Slice는 정확성/단순함을 성능보다 우선한다(문서 25/26절 "억지로
    복잡하게 만들지 않는다"와 같은 결).
+
+   Banner Category Preview(카테고리 유형 확장) — category.type을
+   먼저 알아야만 어느 렌더 경로(post형 Skin CATEGORY template vs
+   banner형 read-only adapter)를 탈지 결정할 수 있다. banner
+   카테고리는 Skin이 CATEGORY template을 전혀 갖고 있지 않아도
+   (HOME-only Skin 포함) 항상 미리볼 수 있어야 하므로 — 공개
+   Banner 렌더러(posts/view/posts-view-banner.js)가 Skin 유무와
+   무관하게 항상 동작하는 것과 같은 계약 — categoryTemplate 존재
+   여부를 확인하기 전에 fetchSkinCategoryById()(skin/skin-context.js
+   전역, 이미 로드됨)로 실제 type을 가볍게 먼저 확인한다. post형은
+   기존과 동일하게 categoryTemplate이 없으면 그 자리에서 바로
+   unsupported로 끝난다(추가 fetch 없음).
 ========================================================== */
 
 async function renderCategoryPreviewFor(categoryId) {
@@ -165,6 +189,82 @@ async function renderCategoryPreviewFor(categoryId) {
     return;
   }
 
+  setStudioPreviewOverlay(
+    "loading",
+    "카테고리 미리보기를 불러오는 중..."
+  );
+
+  const token =
+    ++previewNavToken;
+
+  let category;
+
+  try {
+
+    category =
+      await fetchSkinCategoryById(
+        currentOwnerId,
+        categoryId
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[preview-navigation] fetchSkinCategoryById failed",
+      err
+    );
+
+    if (
+      token === previewNavToken &&
+      getCurrentPreviewLocation().type === "category"
+    ) {
+
+      setStudioPreviewOverlay(
+        "error",
+        "카테고리 미리보기를 불러오지 못했습니다."
+      );
+
+    }
+
+    return;
+
+  }
+
+  /*
+    stale 응답 — fetch가 끝나기 전에 사용자가 이미 다른 곳으로
+    이동했다면 이 결과는 화면에 반영하지 않는다(mountToken과
+    동일한 패턴, studio-preview.js 참고).
+  */
+  if (
+    token !== previewNavToken ||
+    getCurrentPreviewLocation().type !== "category"
+  ) {
+    return;
+  }
+
+  if (!category) {
+
+    setStudioPreviewOverlay(
+      "empty",
+      "이 카테고리를 찾을 수 없습니다."
+    );
+
+    return;
+
+  }
+
+  if (category.type === "banner") {
+
+    await renderBannerCategoryPreviewFor(
+      categoryId,
+      category,
+      token
+    );
+
+    return;
+
+  }
+
   const categoryTemplate =
     resolveSkinTemplate(currentWorkingSkin, "category");
 
@@ -178,14 +278,6 @@ async function renderCategoryPreviewFor(categoryId) {
     return;
 
   }
-
-  setStudioPreviewOverlay(
-    "loading",
-    "카테고리 미리보기를 불러오는 중..."
-  );
-
-  const token =
-    ++previewNavToken;
 
   let context;
 
@@ -224,11 +316,6 @@ async function renderCategoryPreviewFor(categoryId) {
 
   }
 
-  /*
-    stale 응답 — fetch가 끝나기 전에 사용자가 이미 다른 곳으로
-    이동했다면 이 결과는 화면에 반영하지 않는다(mountToken과
-    동일한 패턴, studio-preview.js 참고).
-  */
   if (
     token !== previewNavToken ||
     getCurrentPreviewLocation().type !== "category"
@@ -250,9 +337,10 @@ async function renderCategoryPreviewFor(categoryId) {
   if (context.category.type !== "post") {
 
     /*
-      banner 등 v0.1이 계약하지 않는 category type(문서 11절) —
-      public 라우트로 나가지 않고 Preview Back만 가능한 unsupported
-      상태로 남긴다.
+      banner는 위에서 이미 분기됐다 — 여기 남는 건 post/banner가
+      아닌 미래의 알 수 없는 category type뿐이다(문서 11절과 동일한
+      결). public 라우트로 나가지 않고 Preview Back만 가능한
+      unsupported 상태로 남긴다.
     */
 
     setStudioPreviewOverlay(
@@ -272,6 +360,105 @@ async function renderCategoryPreviewFor(categoryId) {
     {
       skin: categoryTemplate,
       context
+    }
+  );
+
+}
+
+
+/* =========================================================
+   BANNER CATEGORY — Studio 전용 read-only adapter (Skin template
+   시스템 밖). 공개 Banner 렌더러(posts/view/posts-view-banner.js)와
+   달리 edit 모드/순서 변경/폼은 없다 — 목록을 보여주기만 한다.
+
+   owner(currentOwnerId) + category_id 필터를 모두 적용한다
+   (fetchSkinBanners가 이미 .eq("user_id", ownerId).in("category_id",
+   [categoryId])로 두 조건 다 강제한다, skin/skin-context.js) — 다른
+   사용자의 배너나 다른 banner category의 배너가 섞이지 않는다.
+
+   href/image_url은 원본 DB 값을 그대로 DOM에 넣지 않는다 — 공개
+   Banner 렌더러/Skin Context가 공유하는 단일 URL 판정 함수
+   isSafeSkinUrl()(skin/skin-sanitize.js 전역, https + 위험 스킴
+   차단, skin/skin-render.js의 data-imory-href/src 런타임 바인딩과
+   동일 함수)로 여기서 한 번 걸러 보낸 뒤, preview-bridge.js(iframe)가
+   실제 DOM에 반영하는 시점에 다시 한번 재검증한다(Slice 3.5
+   renderSkin()과 동일한 "매 반영 지점마다 재검증" 원칙, 이중 방어).
+   안전하지 않은 값은 null로 보낸다 — 표시 자체를 막지 않고(이름은
+   여전히 보인다) 링크/이미지만 없앤다(공개 CATEGORY 렌더러가 관리자
+   전용 화면이 아니라는 점, 5절과 동일 결).
+========================================================== */
+
+async function renderBannerCategoryPreviewFor(categoryId, category, token) {
+
+  setStudioPreviewOverlay(
+    "loading",
+    "배너 미리보기를 불러오는 중..."
+  );
+
+  let banners;
+
+  try {
+
+    banners =
+      await fetchSkinBanners(
+        currentOwnerId,
+        [categoryId]
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[preview-navigation] fetchSkinBanners failed",
+      err
+    );
+
+    if (
+      token === previewNavToken &&
+      getCurrentPreviewLocation().type === "category"
+    ) {
+
+      setStudioPreviewOverlay(
+        "error",
+        "배너 미리보기를 불러오지 못했습니다."
+      );
+
+    }
+
+    return;
+
+  }
+
+  if (
+    token !== previewNavToken ||
+    getCurrentPreviewLocation().type !== "category"
+  ) {
+    return;
+  }
+
+  const items =
+    banners.map(
+      (banner) => ({
+        id: String(banner.id),
+        name: banner.name || "",
+        href:
+          typeof banner.url === "string" && isSafeSkinUrl(banner.url)
+            ? banner.url
+            : null,
+        imageUrl:
+          typeof banner.image_url === "string" && isSafeSkinUrl(banner.image_url)
+            ? banner.image_url
+            : null
+      })
+    );
+
+  setStudioPreviewOverlay(
+    "hidden"
+  );
+
+  postBannerRenderToFrame(
+    {
+      categoryName: category.name || "",
+      items
     }
   );
 

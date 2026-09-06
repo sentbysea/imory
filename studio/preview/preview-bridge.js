@@ -11,11 +11,12 @@
    함께 고쳐야 한다).
 
    postMessage contract(양쪽 다 origin + shape 검증, 12절):
-     parent -> iframe  "preview:render"   { type, skin, context }
-     iframe -> parent  "preview:ready"    { type }
-     iframe -> parent  "preview:rendered" { type, hasPostBodyRegion }
-     iframe -> parent  "preview:error"    { type, message }
-     iframe -> parent  "preview:navigate" { type, href }
+     parent -> iframe  "preview:render"        { type, skin, context }
+     parent -> iframe  "preview:render-banner" { type, categoryName, items }
+     iframe -> parent  "preview:ready"         { type }
+     iframe -> parent  "preview:rendered"      { type, hasPostBodyRegion }
+     iframe -> parent  "preview:error"         { type, message }
+     iframe -> parent  "preview:navigate"      { type, href }
 
    보안 경계(Slice 3.5 그대로 유지, 12절): 여기서 skin/context를
    신뢰 입력으로 취급하지 않는다 — 최종 DOM 반영은 항상
@@ -24,6 +25,15 @@
    render 인스턴스는 처음 한 번만 만들고, 이후 메시지는 매번
    update()로 반영해 인스턴스를 유지한다(같은 keyframe namespace
    유지, skin-render.js 305행대 참고).
+
+   "preview:render-banner"(Studio Banner Category Preview, Skin
+   template 시스템 밖)도 같은 원칙을 따른다 — parent(studio/preview/
+   preview-navigation.js)가 이미 isSafeSkinUrl()로 href/imageUrl을
+   걸렀다고 해서 여기서 그 값을 그대로 믿지 않는다. handleBannerMessage()
+   는 DOM에 실제로 반영하는 이 지점에서 다시 한번 isSafeSkinUrl()로
+   재검증하고(전역, skin-sanitize.js가 이 문서에도 classic script로
+   먼저 로드되어 있다), 이름 등 모든 텍스트는 textContent로만 넣는다
+   (innerHTML 사용 없음, renderSkin()과 동일한 신뢰 경계).
 
    PHASE 1C-G(문서 4/5/6절) — Preview 내부 링크 interception: 렌더된
    Skin 안의 <a href> 클릭을 이 문서(iframe) 안에서만 가로챈다.
@@ -37,6 +47,7 @@
 import { renderSkin } from "../../skin/skin-render.js";
 
 const PREVIEW_MSG_RENDER = "preview:render";
+const PREVIEW_MSG_RENDER_BANNER = "preview:render-banner";
 const PREVIEW_MSG_READY = "preview:ready";
 const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
@@ -118,6 +129,132 @@ function handleRenderMessage(data) {
   }
 
 }
+
+/* =========================================================
+   BANNER CATEGORY (Studio Banner Category Preview) — Skin template
+   시스템 밖에서 이 문서가 직접 그리는 read-only adapter. 공개
+   Banner 렌더러(posts/view/posts-view-banner.js)의 DOM 모양(banner-grid
+   > banner-card > banner-card-image/banner-card-name, 같은 CSS
+   클래스라 posts/view/posts-view-banner.css를 그대로 재사용한다,
+   이 문서 <head> 참고)을 그대로 재현하되, edit 모드/컨트롤은
+   전혀 만들지 않는다(읽기 전용).
+
+   name은 항상 textContent로만 넣는다(innerHTML 없음, 파일 상단
+   신뢰 경계 참고) — href/imageUrl은 parent가 이미 isSafeSkinUrl()로
+   걸렀어도 이 지점에서 다시 검증한다: 안전한 https href가 있을
+   때만 <a>(target=_blank, rel=noopener noreferrer)로 만들고, 없으면
+   평범한 <div>로 만들어 클릭해도 아무 데도 이동하지 않는다(요구사항
+   4절). 안전한 이미지 URL이 없으면 <img> 자체를 만들지 않는다
+   (깨진 이미지 아이콘 대신 조용히 생략).
+========================================================== */
+
+function isValidBannerMessage(data) {
+
+  return (
+    data &&
+    typeof data === "object" &&
+    data.type === PREVIEW_MSG_RENDER_BANNER &&
+    Array.isArray(data.items)
+  );
+
+}
+
+function buildBannerCardElement(doc, item) {
+
+  const hasSafeHref =
+    typeof item?.href === "string" && isSafeSkinUrl(item.href);
+
+  const card =
+    doc.createElement(hasSafeHref ? "a" : "div");
+
+  card.className = "banner-card";
+
+  if (hasSafeHref) {
+    card.setAttribute("href", item.href);
+    card.setAttribute("target", "_blank");
+    card.setAttribute("rel", "noopener noreferrer");
+  }
+
+  const hasSafeImage =
+    typeof item?.imageUrl === "string" && isSafeSkinUrl(item.imageUrl);
+
+  if (hasSafeImage) {
+
+    const image = doc.createElement("img");
+    image.className = "banner-card-image";
+    image.setAttribute("src", item.imageUrl);
+    image.alt = typeof item.name === "string" ? item.name : "";
+    image.loading = "lazy";
+    card.appendChild(image);
+
+  }
+
+  if (typeof item?.name === "string" && item.name.trim()) {
+
+    const name = doc.createElement("div");
+    name.className = "banner-card-name";
+    name.textContent = item.name;
+    card.appendChild(name);
+
+  }
+
+  return card;
+
+}
+
+function handleBannerMessage(data) {
+
+  try {
+
+    previewRoot.innerHTML = "";
+
+    const doc = previewRoot.ownerDocument;
+
+    const grid = doc.createElement("div");
+    grid.className = "banner-grid";
+
+    if (!data.items.length) {
+
+      const empty = doc.createElement("div");
+      empty.className = "banner-grid-empty";
+      empty.textContent = "등록된 배너가 없습니다.";
+      grid.appendChild(empty);
+
+    } else {
+
+      data.items.forEach((item) => {
+        grid.appendChild(buildBannerCardElement(doc, item));
+      });
+
+    }
+
+    previewRoot.appendChild(grid);
+
+    /*
+      hasPostBodyRegion은 이 렌더와 무관하지만(currentPreviewPageType
+      이 "post"가 아닌 "category"일 때만 studio-preview.js가 이
+      메시지를 받으므로, 파일 상단 계약과 동일하게 항상 false로
+      보낸다 — "preview:render"/renderSkin 경로와 동일한 완료 신호
+      형태를 재사용해 parent 쪽에 새 분기를 만들지 않기 위함이다.
+    */
+    postToParent({
+      type: PREVIEW_MSG_RENDERED,
+      hasPostBodyRegion: false
+    });
+
+  } catch (err) {
+
+    console.error("[preview-bridge] banner render failed", err);
+
+    postToParent({
+      type: PREVIEW_MSG_ERROR,
+      message: err?.message || "unknown banner render error"
+    });
+
+  }
+
+}
+
 
 /* =========================================================
    post-body 주입 (PHASE 1C-I)
@@ -259,6 +396,18 @@ window.addEventListener("message", (event) => {
     }
 
     handleRenderMessage(data);
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_RENDER_BANNER) {
+
+    if (!isValidBannerMessage(data)) {
+      postToParent({ type: PREVIEW_MSG_ERROR, message: "malformed preview:render-banner payload" });
+      return;
+    }
+
+    handleBannerMessage(data);
     return;
 
   }

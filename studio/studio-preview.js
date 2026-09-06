@@ -23,11 +23,20 @@
    와 동일한 문자열을 하드코딩 — 두 문서는 서로 다른 browsing
    context라 상수를 import로 공유할 수 없다. 값을 바꿀 땐 두 파일을
    함께 고친다):
-     parent -> iframe  "preview:render"   { type, skin, context }
-     iframe -> parent  "preview:ready"    { type }
-     iframe -> parent  "preview:rendered" { type, hasPostBodyRegion }
-     iframe -> parent  "preview:error"    { type, message }
-     iframe -> parent  "preview:navigate" { type, href }
+     parent -> iframe  "preview:render"        { type, skin, context }
+     parent -> iframe  "preview:render-banner" { type, categoryName, items }
+     iframe -> parent  "preview:ready"         { type }
+     iframe -> parent  "preview:rendered"      { type, hasPostBodyRegion }
+     iframe -> parent  "preview:error"         { type, message }
+     iframe -> parent  "preview:navigate"      { type, href }
+
+   "preview:render-banner"(Studio Banner Category Preview)는 Skin
+   template 시스템을 타지 않는 별도 경로다 — items[]는 이미
+   isSafeSkinUrl()로 걸러진 { id, name, href, imageUrl } 평문
+   데이터뿐이고(studio/preview/preview-navigation.js의
+   renderBannerCategoryPreviewFor()), skin/context는 전혀 담기지
+   않는다. iframe(preview-bridge.js)은 이 데이터를 그대로 믿지
+   않고 반영 시점에 href/imageUrl을 다시 한번 재검증한다.
 
    의존(classic script, 이 파일보다 먼저 로드되어야 함):
    supabaseClient(core/lib/supabase-client.js), buildSkinContext
@@ -48,6 +57,7 @@
 ========================================================== */
 
 const PREVIEW_MSG_RENDER = "preview:render";
+const PREVIEW_MSG_RENDER_BANNER = "preview:render-banner";
 const PREVIEW_MSG_READY = "preview:ready";
 const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
@@ -855,6 +865,37 @@ function postPostBodyToFrame(payload) {
       html: payload.html,
       containerStyle: payload.containerStyle,
       isHtmlContent: payload.isHtmlContent
+    },
+    window.location.origin
+  );
+
+}
+
+
+/* =========================================================
+   postBannerRenderToFrame(payload) (Banner Category Preview)
+
+   preview-navigation.js의 renderBannerCategoryPreviewFor()가
+   postRenderToFrame() 대신 호출한다 — banner 카테고리는 Skin
+   template/renderSkin()을 전혀 거치지 않는 별도 경로이기 때문이다
+   (파일 상단 postMessage contract 참고). payload는 이미 안전하게
+   걸러진 평문 데이터뿐이라 pending queue가 필요 없다 —
+   postPostBodyToFrame()과 동일한 이유(previewHistory는 항상
+   HOME에서 시작하므로 이 시점엔 previewFrameReady가 이미
+   true다)로 준비 전이면 조용히 무시한다.
+========================================================== */
+
+function postBannerRenderToFrame(payload) {
+
+  if (!previewFrameReady) {
+    return;
+  }
+
+  studioPreviewFrame.contentWindow.postMessage(
+    {
+      type: PREVIEW_MSG_RENDER_BANNER,
+      categoryName: payload.categoryName,
+      items: payload.items
     },
     window.location.origin
   );

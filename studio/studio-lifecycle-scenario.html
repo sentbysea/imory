@@ -519,14 +519,83 @@
             categories: [
               { id: "301", user_id: "user-n", name: "LOG", type: "post", sort_order: 1 },
               { id: "302", user_id: "user-n", name: "PIC", type: "post", sort_order: 2 },
-              { id: "303", user_id: "user-n", name: "FRIENDS", type: "banner", sort_order: 3 }
+              { id: "303", user_id: "user-n", name: "FRIENDS", type: "banner", sort_order: 3 },
+              { id: "304", user_id: "user-n", name: "EMPTY_BANNERS", type: "banner", sort_order: 4 },
+              { id: "305", user_id: "user-n", name: "FRIENDS2", type: "banner", sort_order: 5 }
             ],
             posts: [
               { id: "401", user_id: "user-n", title: "Hello World", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301" },
               { id: "402", user_id: "user-n", title: "Secret Note", created_at: "2026-01-02T00:00:00Z", visibility: "secret", category_id: "301" }
             ],
+            /*
+              Banner Category Preview 검증용(303=FRIENDS/304=EMPTY_BANNERS/
+              305=FRIENDS2) — b2는 일부러 위험한 href/image_url을
+              담고 있고(javascript:/data: 스킴), b3는 다른 사용자
+              소유라 "owner + category_id 필터" 검증에 쓰인다(같은
+              category_id=303를 가리켜도 user_id가 다르면 제외되어야
+              한다). b4는 305에만 속해 303/304와 섞이면 안 된다.
+            */
+            banners: [
+              { id: "b1", user_id: "user-n", name: "Safe Friend", url: "https://example.com/safe", image_url: "https://example.com/safe.png", category_id: "303", sort_order: 1 },
+              { id: "b2", user_id: "user-n", name: "Unsafe Friend", url: "javascript:alert(1)", image_url: "data:text/html,evil", category_id: "303", sort_order: 2 },
+              { id: "b3", user_id: "user-other", name: "Other Owner Banner", url: "https://example.com/leak", image_url: "https://example.com/leak.png", category_id: "303", sort_order: 3 },
+              { id: "b4", user_id: "user-n", name: "Second Category Banner", url: "https://example.com/second", image_url: "https://example.com/second.png", category_id: "305", sort_order: 1 }
+            ]
+          },
+          rpcHandlers: {}
+        },
+
+        /*
+          Scenario U — Banner Category Preview 전용, banners 조회
+          자체가 실패하는 경우("query 실패 시 오류 상태 + Preview
+          Back" 검증). 아래 공용 from()에 있는 state.bannerQueryShouldFail
+          플래그로 이 시나리오에서만 "banners" 테이블 조회가 항상
+          reject되도록 만든다 — 다른 시나리오는 이 플래그가 없어(=
+          undefined) 기존 동작 그대로다.
+        */
+        u: {
+          userId: "user-u",
+          tables: {
+            skins: [
+              { id: "skin-u1", user_id: "user-u", is_active: true, current_draft_version_id: "draft-u1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-u1",
+                content: {
+                  schemaVersion: 1,
+                  templates: {
+                    home: { html: '<div class="scenario-u-home"><h1 data-imory-bind="site.title"></h1></div>' }
+                  },
+                  css: "",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-u", nickname: "Scenario U", bio: null, slug: "scenario-u" }],
+            site_settings: [],
+            categories: [
+              { id: "301", user_id: "user-u", name: "FAIL_BANNERS", type: "banner", sort_order: 1 }
+            ],
+            posts: [],
             banners: []
           },
+          /*
+            아래 공용 from()의 "banners" 특수 분기 참고 — 이 값이
+            true면 fetchSkinBanners()가 성공해야 하는 첫 호출
+            (bannerQuerySucceedCalls번, mountStudioPreview()가
+            buildBaseSkinContext()로 HOME banners.items를 조립할 때
+            이 카테고리도 포함되어 자동으로 한 번 호출된다)까지는
+            정상 응답하고, 그 이후(우리가 실제로 테스트하는 카테고리
+            진입 시점의 명시적 fetchSkinBanners 호출)부터 매번
+            reject한다 — "HOME은 정상 진입하되, 이 특정 카테고리
+            진입만 실패"를 재현하기 위함이다.
+          */
+          bannerQueryShouldFail: true,
+          bannerQuerySucceedCalls: 1,
           rpcHandlers: {}
         },
 
@@ -791,6 +860,37 @@
           }
         },
         from: function (table) {
+
+          /*
+            Scenario U 전용(Banner Category Preview "query 실패"
+            검증) — banners 테이블 조회의 마지막 체이닝 지점(.order())
+            이 항상 reject되게 만든다. fetchSkinBanners()
+            (skin/skin-context.js)가 이 값을 await하므로, 이 파일
+            안에서는 try/catch로 감싸지 않은 실제 promise rejection이
+            preview-navigation.js의 renderBannerCategoryPreviewFor()
+            까지 그대로 전파된다(mock에만 있는 분기 — 다른 시나리오는
+            state.bannerQueryShouldFail이 없어 기존 동작 그대로).
+          */
+          if (table === "banners" && state.bannerQueryShouldFail) {
+
+            state.__bannerQueryCallCount = (state.__bannerQueryCallCount || 0) + 1;
+
+            const allowedSuccessCalls =
+              state.bannerQuerySucceedCalls || 0;
+
+            if (state.__bannerQueryCallCount > allowedSuccessCalls) {
+              return {
+                select: function () { return this; },
+                eq: function () { return this; },
+                in: function () { return this; },
+                order: function () {
+                  return Promise.reject(new Error("mock banners query failure"));
+                }
+              };
+            }
+
+          }
+
           return makeQuery((state.tables[table] || []).slice());
         },
         rpc: function (name, params) {
