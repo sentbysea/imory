@@ -61,6 +61,60 @@ function getPointColorForNode(
 
 
 /* =========================================================
+   BOLD/ITALIC 상속
+
+   액션/대사 span은 항상 자기 font-weight/font-style을
+   인라인으로 하드코딩해왔는데, 그 값이 조상 <strong>/<em>
+   (사용자가 직접 건 볼드/이탤릭)보다 자기 자신에 더 가깝게
+   붙어있어서(같은 속성이라도 상속보다 자기 자신에 직접 지정된
+   값이 항상 이긴다) 안쪽 텍스트의 볼드/이탤릭을 통째로
+   덮어써버렸다 — 밑줄(<u>)은 이 span들이 text-decoration을
+   전혀 건드리지 않아서 안 가려지고 그대로 보였던 것과 대비됨.
+   조상에 <strong>/<b>(또는 <em>/<i>)가 있으면 그 방향의
+   인라인 스타일 지정 자체를 생략해서 자연스럽게 상속되게 한다.
+========================================================== */
+
+function hasAncestorTag(
+  node,
+  container,
+  tagNames
+) {
+
+  let element =
+    node?.nodeType ===
+    Node.ELEMENT_NODE
+      ? node
+      : node?.parentElement;
+
+
+  while (
+    element &&
+    element !== container
+  ) {
+
+    if (
+      tagNames.includes(
+        element.tagName
+      )
+    ) {
+
+      return true;
+
+    }
+
+
+    element =
+      element.parentElement;
+
+  }
+
+
+  return false;
+
+}
+
+
+/* =========================================================
    1. DIALOGUE ("...", "...")
 
    한 텍스트 노드 안에서만 판단(줄바꿈을 넘어가지 않음).
@@ -71,7 +125,8 @@ function getPointColorForNode(
 
 function replaceDialogueTextNode(
   textNode,
-  settings = {}
+  settings = {},
+  container
 ) {
 
   const text =
@@ -101,6 +156,22 @@ function replaceDialogueTextNode(
   const pointColor =
     getPointColorForNode(
       textNode
+    );
+
+
+  const isBold =
+    hasAncestorTag(
+      textNode,
+      container,
+      ["STRONG", "B"]
+    );
+
+
+  const isItalic =
+    hasAncestorTag(
+      textNode,
+      container,
+      ["EM", "I"]
     );
 
 
@@ -165,16 +236,24 @@ function replaceDialogueTextNode(
       "#555555";
 
 
-    span.style.fontWeight =
-      settings.dialogueWeight ||
-      settings.bodyWeight ||
-      "400";
+    if (!isBold) {
+
+      span.style.fontWeight =
+        settings.dialogueWeight ||
+        settings.bodyWeight ||
+        "400";
+
+    }
 
 
-    span.style.fontStyle =
-      settings.dialogueItalic
-        ? "italic"
-        : "normal";
+    if (!isItalic) {
+
+      span.style.fontStyle =
+        settings.dialogueItalic
+          ? "italic"
+          : "normal";
+
+    }
 
 
     fragment.appendChild(
@@ -512,7 +591,9 @@ function scanTextForActionSegments(
 function makeActionSpan(
   text,
   settings,
-  pointColor
+  pointColor,
+  isBold,
+  isItalic
 ) {
 
   const span =
@@ -531,15 +612,23 @@ function makeActionSpan(
     "#888888";
 
 
-  span.style.fontWeight =
-    settings.actionWeight ||
-    "400";
+  if (!isBold) {
+
+    span.style.fontWeight =
+      settings.actionWeight ||
+      "400";
+
+  }
 
 
-  span.style.fontStyle =
-    settings.actionItalic
-      ? "italic"
-      : "normal";
+  if (!isItalic) {
+
+    span.style.fontStyle =
+      settings.actionItalic
+        ? "italic"
+        : "normal";
+
+  }
 
 
   span.textContent =
@@ -553,7 +642,9 @@ function makeActionSpan(
 
 function wrapOpaqueNodeAsAction(
   node,
-  settings
+  settings,
+  isBold,
+  isItalic
 ) {
 
   const span =
@@ -571,15 +662,23 @@ function wrapOpaqueNodeAsAction(
     "#888888";
 
 
-  span.style.fontWeight =
-    settings.actionWeight ||
-    "400";
+  if (!isBold) {
+
+    span.style.fontWeight =
+      settings.actionWeight ||
+      "400";
+
+  }
 
 
-  span.style.fontStyle =
-    settings.actionItalic
-      ? "italic"
-      : "normal";
+  if (!isItalic) {
+
+    span.style.fontStyle =
+      settings.actionItalic
+        ? "italic"
+        : "normal";
+
+  }
 
 
   node.replaceWith(
@@ -643,7 +742,17 @@ function applyActionRangesAcrossDocument(
 
           wrapOpaqueNodeAsAction(
             atom.node,
-            settings
+            settings,
+            hasAncestorTag(
+              atom.node,
+              container,
+              ["STRONG", "B"]
+            ),
+            hasAncestorTag(
+              atom.node,
+              container,
+              ["EM", "I"]
+            )
           );
 
         }
@@ -659,6 +768,22 @@ function applyActionRangesAcrossDocument(
       const text =
         textNode.nodeValue ||
         "";
+
+
+      const isBold =
+        hasAncestorTag(
+          textNode,
+          container,
+          ["STRONG", "B"]
+        );
+
+
+      const isItalic =
+        hasAncestorTag(
+          textNode,
+          container,
+          ["EM", "I"]
+        );
 
 
       if (
@@ -677,7 +802,9 @@ function applyActionRangesAcrossDocument(
               settings,
               getPointColorForNode(
                 textNode
-              )
+              ),
+              isBold,
+              isItalic
             );
 
 
@@ -740,7 +867,9 @@ function applyActionRangesAcrossDocument(
               makeActionSpan(
                 segment.text,
                 settings,
-                pointColor
+                pointColor,
+                isBold,
+                isItalic
               )
             );
 
@@ -815,7 +944,8 @@ function applyActionDialogueStyles(
 
       replaceDialogueTextNode(
         node,
-        settings
+        settings,
+        container
       );
 
     }
