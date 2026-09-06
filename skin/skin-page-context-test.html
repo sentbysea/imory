@@ -325,6 +325,78 @@
       );
 
 
+      /* ---- PHASE1D-B: navigation.home / postCategories / bannerCategories ---- */
+
+      assert(
+        "[1D-B] navigation.home.href === HOME 실제 경로(buildSitePath(slug, '/')와 동일)",
+        homeCtx.navigation.home.href === "/testuser"
+      );
+
+      assert(
+        "[1D-B] navigation.home.name === site.title(같은 siteTitle 소스 재사용)",
+        homeCtx.navigation.home.name === homeCtx.site.title
+      );
+
+      assert(
+        "[1D-B] navigation.home.enabled === true",
+        homeCtx.navigation.home.enabled === true
+      );
+
+      assert(
+        "[1D-B] navigation.categories는 owner-1의 post+banner 카테고리 2개(다른 owner 혼입 없음), 순서는 sort_order 그대로",
+        homeCtx.navigation.categories.length === 2 &&
+        homeCtx.navigation.categories[0].id === "1" &&
+        homeCtx.navigation.categories[1].id === "2"
+      );
+
+      assert(
+        "[1D-B] navigation.postCategories는 type==='post'인 카테고리만(정확히 1개, id='1')",
+        Array.isArray(homeCtx.navigation.postCategories) &&
+        homeCtx.navigation.postCategories.length === 1 &&
+        homeCtx.navigation.postCategories[0].id === "1" &&
+        homeCtx.navigation.postCategories[0].type === "post"
+      );
+
+      assert(
+        "[1D-B] navigation.bannerCategories는 type==='banner'인 카테고리만(정확히 1개, id='2')",
+        Array.isArray(homeCtx.navigation.bannerCategories) &&
+        homeCtx.navigation.bannerCategories.length === 1 &&
+        homeCtx.navigation.bannerCategories[0].id === "2" &&
+        homeCtx.navigation.bannerCategories[0].type === "banner"
+      );
+
+      assert(
+        "[1D-B] postCategories/bannerCategories item shape === categories item shape(id/name/type/href/itemCount)",
+        Object.keys(homeCtx.navigation.postCategories[0]).sort().join(",") ===
+          Object.keys(homeCtx.navigation.categories[0]).sort().join(",") &&
+        Object.keys(homeCtx.navigation.bannerCategories[0]).sort().join(",") ===
+          Object.keys(homeCtx.navigation.categories[0]).sort().join(",")
+      );
+
+      const otherOwnerHomeCtx =
+        await buildHomeSkinContext(OTHER_OWNER_ID);
+
+      assert(
+        "[1D-B] 배너 카테고리가 없는 owner는 bannerCategories === []( 빈 배열 정상 처리, categories/postCategories는 남의 카테고리 혼입 없이 1개)",
+        Array.isArray(otherOwnerHomeCtx.navigation.bannerCategories) &&
+        otherOwnerHomeCtx.navigation.bannerCategories.length === 0 &&
+        otherOwnerHomeCtx.navigation.categories.length === 1 &&
+        otherOwnerHomeCtx.navigation.postCategories.length === 1 &&
+        otherOwnerHomeCtx.navigation.categories[0].id === "99"
+      );
+
+      assert(
+        "[1D-B] navigation.categories(기존 필드)는 값/shape 그대로 — postCategories/bannerCategories 추가는 파괴적 변경 아님",
+        categoryCtx.navigation.categories.every((c) =>
+          typeof c.id === "string" &&
+          typeof c.name === "string" &&
+          typeof c.type === "string" &&
+          typeof c.href === "string" &&
+          c.itemCount === null
+        )
+      );
+
+
       /* ---- G. 기존 buildSkinContext()/HOME shape 회귀 없음 ---- */
 
       const legacyHomeCtx =

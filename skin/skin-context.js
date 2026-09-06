@@ -34,6 +34,16 @@
    visibility에서 파생된 값이라 새 컬럼/RPC/RLS 변경이 없다.
    excerpt/thumbnail/isNotice는 안전하게 채울 source가 DB에
    아직 없어 이번 Slice에서 보류됐다(감사 문서 참고).
+
+   AI_SKIN_PHASE1D_B_NAVIGATION_CONTRACT.md(Slice 1D-B)로
+   navigation에 home{name,href,enabled}/postCategories[]/
+   bannerCategories[]가 추가됐다 — home은 buildSitePath(slug, "/")
+   로 조립한 기존 HOME 경로 재노출(새 source 없음), post/banner
+   Categories는 기존 navigation.categories[]를 category.type으로
+   필터링한 부분집합(item shape 동일)이다. categories.type이
+   DB에 새로 생겨도(gallery 등) 이 필터는 자동으로 안전하게
+   무시한다. 기존 navigation.categories[]는 값/순서/shape 전부
+   그대로다.
 ========================================================== */
 
 const SKIN_CONTEXT_LANGUAGE =
@@ -544,13 +554,41 @@ async function buildBaseSkinContext(
       : null;
 
 
+  const siteTitle =
+    siteSettings.blog_title?.trim() ||
+    profile?.nickname ||
+    "Imory";
+
+
+  /*
+    navigation.categories[]는 v1D-A까지의 계약(id/name/type/href/
+    itemCount)을 그대로 유지한다 — postCategories/bannerCategories는
+    이 배열을 category.type으로 필터링만 한 부분집합이라 item shape이
+    완전히 동일하고(6절), 순서도 원본 sort_order 순서를 그대로
+    보존한다. renderer(data-imory-if/repeat)가 비교식을 지원하지
+    않아(PHASE1D-B 2절) type별 배치가 필요한 Skin은 이 필터링된
+    배열을 직접 반복해야 한다 — categories.type이 "post"/"banner"가
+    아닌 값(미래 확장 타입)은 두 필터 배열 어디에도 들어가지
+    않고 categories[]에만 남는다(안전한 기본 처리).
+  */
+
+  const categoryItems =
+    categories.map(
+      (category) => ({
+        id: String(category.id),
+        name: category.name,
+        type: category.type,
+        href: buildSitePath(slug, `/category/${category.id}`),
+        itemCount: null
+      })
+    );
+
+
   return {
 
     site: {
       title:
-        siteSettings.blog_title?.trim() ||
-        profile?.nickname ||
-        "Imory",
+        siteTitle,
       slug,
       faviconUrl:
         siteSettings.favicon_url?.trim() ||
@@ -572,16 +610,31 @@ async function buildBaseSkinContext(
     },
 
     navigation: {
+
+      home: {
+        name:
+          siteTitle,
+        href:
+          buildSitePath(slug, "/"),
+        enabled:
+          true
+      },
+
       categories:
-        categories.map(
-          (category) => ({
-            id: String(category.id),
-            name: category.name,
-            type: category.type,
-            href: buildSitePath(slug, `/category/${category.id}`),
-            itemCount: null
-          })
+        categoryItems,
+
+      postCategories:
+        categoryItems.filter(
+          (category) =>
+            category.type === "post"
+        ),
+
+      bannerCategories:
+        categoryItems.filter(
+          (category) =>
+            category.type === "banner"
         )
+
     },
 
     banners: {
