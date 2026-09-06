@@ -169,6 +169,12 @@ const skinStudioBackButton =
   );
 
 
+const skinStudioMobileBackButton =
+  document.getElementById(
+    "skinStudioMobileBackButton"
+  );
+
+
 
 /* =========================================================
    현재 큰 화면 기억

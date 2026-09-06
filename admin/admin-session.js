@@ -70,6 +70,17 @@ skinStudioBackButton
   );
 
 
+skinStudioMobileBackButton
+  .addEventListener(
+    "click",
+    () => {
+
+      showAdminHome();
+
+    }
+  );
+
+
 /* =========================================================
    SKIN STUDIO — 내부 Top Dock의 Back -> admin으로 복귀
 

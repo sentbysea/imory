@@ -497,8 +497,12 @@ body.skin-studio-body-mode {
   .admin-page.skin-studio-mode .skin-studio-mobile-notice {
     display: flex;
 
+    flex-direction: column;
+
     align-items: center;
     justify-content: center;
+
+    gap: 16px;
 
     flex: 1;
 
