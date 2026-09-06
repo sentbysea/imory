@@ -2,26 +2,34 @@
      POSTS
 ========================================================== -->
 
+<!-- =========================================================
+     PUBLISHED SKIN 전환 대기 표시(posts-view-transition.js).
+     CATEGORY/POST가 published Skin 경로를 탈 수 있는 대상일 때만,
+     응답이 오래 걸릴 경우에 한해 잠깐 보인다 — 클릭 불가
+     (pointer-events:none)라 중복 이동을 유발하지 않는다.
+
+     ★ #postArea 바깥(#postsMount 직속)에 둔다. published Skin
+     경로는 다음 화면이 완성될 때까지 이전 화면을 그대로 두고
+     #postArea를 hidden으로 유지하는데(posts-view-list.js/
+     posts-view-detail.js의 revealPostArea 지점), 이 표시가
+     #postArea 안에 있으면 정작 기다리는 그 시간 동안 함께
+     display:none이 되어 절대 보이지 않는다. position:fixed라
+     어느 쪽에 있든 화면상 위치는 동일하다.
+========================================================== -->
+
+<div
+  class="post-pending-indicator"
+  id="postPendingIndicator"
+  hidden
+  aria-hidden="true"
+></div>
+
+
 <section
   class="post-area"
   id="postArea"
   hidden
 >
-
-  <!-- =====================================================
-       PUBLISHED SKIN 전환 대기 표시(posts-view-transition.js).
-       CATEGORY/POST가 published Skin 경로를 탈 수 있는 대상일
-       때만, 응답이 오래 걸릴 경우에 한해 잠깐 보인다 — 클릭
-       불가(pointer-events:none)라 중복 이동을 유발하지 않는다.
-  ====================================================== -->
-
-  <div
-    class="post-pending-indicator"
-    id="postPendingIndicator"
-    hidden
-    aria-hidden="true"
-  ></div>
-
 
   <div class="post-container" id="postContainer">
 

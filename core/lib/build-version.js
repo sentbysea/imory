@@ -21,7 +21,7 @@
    개선이다.
 ========================================================== */
 
-const APP_BUILD_VERSION = "2026-09-03-1";
+const APP_BUILD_VERSION = "2026-09-07-1";
 
 
 function loadVersionedScripts(paths) {
@@ -31,6 +31,55 @@ function loadVersionedScripts(paths) {
       .map(
         (path) =>
           `<script src="${path}?v=${APP_BUILD_VERSION}"><\/script>`
+      )
+      .join("")
+  );
+
+}
+
+
+/* =========================================================
+   loadVersionedStyles(paths)
+
+   ★ 이 함수가 왜 필요한가(실사용자 버그의 실제 원인)
+
+   공개 홈의 스크립트는 전부 캐시가 무효화된다 — core/lib/*.js와
+   home/site-owner.js는 위 loadVersionedScripts()의 ?v=,
+   posts.html과 posts/** 스크립트는 index.html의 ?v=Date.now()를
+   쓴다. 그런데 CSS는 지금까지 <link href="./posts/posts-base.css">
+   처럼 버전 없이 고정 URL로 걸려 있었고, Cloudflare가 이 파일들에
+   Cache-Control: public, max-age=14400을 붙여 내려준다.
+
+   그래서 배포 직후 최대 4시간 동안 "새 JS + 옛 CSS" 조합이
+   실기기에서 실행될 수 있다. JS가 붙이는 클래스의 의미가 CSS에만
+   있는 경우(#postArea.post-area--skin-active { padding: 0 } 처럼)
+   그 규칙이 통째로 없는 상태가 되어, published Skin의 POST/CATEGORY
+   프레임만 legacy 여백(72px/24px, 모바일 68px/22px/86px)을 그대로
+   뒤집어쓴 채 HOME보다 좁고 아래로 밀려 보였다 — HOME 쪽 규칙
+   (.theme-mount--skin)은 한 배포 앞서 이미 캐시돼 있어 정상이었다.
+   재현/확인 절차는 skin/skin-published-frame-e2e-test.mjs 참고.
+
+   CSS도 스크립트와 동일하게 ?v=APP_BUILD_VERSION으로 건다. 위
+   버전 값을 한 번 올리면 URL 자체가 바뀌므로 이미 캐시를 물고 있는
+   기기도 즉시 새 CSS를 받는다. 앞으로 이 값을 깜빡 잊고 안 올려도
+   같은 문제가 재발하지 않도록, _headers에서 공개 홈 CSS에
+   Cache-Control: no-cache(= 쓰기 전에 재검증)를 함께 지정한다 —
+   두 장치가 서로를 보완한다.
+
+   <link>를 document.write로 넣으므로 preload scanner의 선발견
+   이득은 잃지만, 이 함수는 CSS 섹션이 원래 있던 그 자리(파서가
+   그 지점을 지나는 순간)에서 동기적으로 실행되어 같은 순서로
+   같은 위치에 삽입한다 — 로드 시작 시점이 사실상 동일하고
+   FOUC도 생기지 않는다.
+========================================================== */
+
+function loadVersionedStyles(paths) {
+
+  document.write(
+    paths
+      .map(
+        (path) =>
+          `<link rel="stylesheet" href="${path}?v=${APP_BUILD_VERSION}">`
       )
       .join("")
   );

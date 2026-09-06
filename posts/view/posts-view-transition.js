@@ -173,6 +173,172 @@ async function showPostArea() {
 
 
 /* =========================================================
+   POST AREA 즉시 표시/숨김 (published Skin 전용)
+
+   showPostArea()의 흰색 커튼(380ms opacity/background/blur
+   페이드인)은 legacy #postDetail/#postList가 "빈 화면에서
+   loading… 을 거쳐 채워지는" 전제로 만들어진 연출이다. published
+   Skin 화면은 그 전제가 다르다 — 호출자(posts-view-list.js/
+   posts-view-detail.js)가 이전 화면을 그대로 둔 채 떨어진
+   스크래치 엘리먼트에 완성된 화면을 먼저 그려두고, 준비가 끝난
+   뒤에야 #postArea를 드러낸다. 그 순간에 커튼을 한 번 더 페이드인
+   시키면 "다 그려진 화면 위에 흰 배경이 서서히 덮였다가 걷히는"
+   군더더기 전환이 되므로(실사용자 리포트), Skin 경로에서는 이
+   두 함수로 애니메이션 없이 그대로 교체한다.
+
+   legacy/banner 경로는 기존 showPostArea()/hidePostAreaCurtain()을
+   그대로 쓴다 — 이 두 함수는 그쪽에서 호출되지 않는다.
+
+   진행 중인 postCurtainAnimation이 있으면 반드시 먼저 취소한다.
+   fill:"forwards"라 취소하지 않으면 이전(추월된) 전환의 애니메이션
+   결과가 최신 화면 위에 계속 남아 opacity/배경을 덮어쓴다.
+   showPostArea()가 await하던 finished Promise는 cancel() 시
+   reject되고, 그쪽 코드는 이미 그 경우 즉시 return하도록 되어
+   있어(catch { return }) 늦게 도착한 콜백이 최신 화면을 건드리지
+   않는다.
+========================================================== */
+
+function showPostAreaInstant() {
+
+  if (!postArea) {
+    return;
+  }
+
+
+  if (postCurtainAnimation) {
+
+    postCurtainAnimation.cancel();
+
+    postCurtainAnimation =
+      null;
+
+  }
+
+
+  postArea.classList.remove(
+    "is-opening",
+    "is-closing",
+    "is-visible"
+  );
+
+
+  /*
+    showPostArea()가 남겨 둘 수 있는 인라인 잔재를 전부 비워
+    .post-area CSS 기본값으로 되돌린다 — opacity만 1로 명시하면
+    이전 전환이 중간에 취소된 경우의 어중간한 값이 남지 않는다.
+  */
+
+  postArea.style.transition =
+    "none";
+
+  postArea.style.opacity =
+    "1";
+
+  postArea.style.background =
+    "";
+
+  postArea.style.backdropFilter =
+    "";
+
+  postArea.style.webkitBackdropFilter =
+    "";
+
+  postArea.style.pointerEvents =
+    "auto";
+
+
+  postArea.hidden =
+    false;
+
+
+  document.body.classList.add(
+    "post-mode"
+  );
+
+}
+
+
+function hidePostAreaInstant() {
+
+  if (!postArea) {
+    return;
+  }
+
+
+  if (postCurtainAnimation) {
+
+    postCurtainAnimation.cancel();
+
+    postCurtainAnimation =
+      null;
+
+  }
+
+
+  postArea.hidden =
+    true;
+
+
+  postArea.style.transition =
+    "";
+
+  postArea.style.opacity =
+    "";
+
+  postArea.style.background =
+    "";
+
+  postArea.style.backdropFilter =
+    "";
+
+  postArea.style.webkitBackdropFilter =
+    "";
+
+  postArea.style.pointerEvents =
+    "";
+
+
+  document.body.classList.remove(
+    "post-mode"
+  );
+
+}
+
+
+/*
+  "이번 화면을 실제로 드러내는" 단 하나의 지점. 호출자는 화면이
+  완성된 뒤 이 함수를 부르고, Skin이면 커튼 없이(instant), legacy면
+  기존 커튼으로 연다. #postArea가 이미 열려 있으면(CATEGORY→POST처럼
+  같은 컨테이너 안에서 이동) showPostArea()가 자체 guard로 즉시
+  return하므로 중복 애니메이션이 생기지 않는다.
+*/
+
+async function revealPostArea(
+  useSkinTransition
+) {
+
+  if (!postArea) {
+    return;
+  }
+
+
+  if (useSkinTransition) {
+
+    showPostAreaInstant();
+
+
+    return;
+
+  }
+
+
+  await showPostArea();
+
+}
+
+
+
+/* =========================================================
    POST TRANSITION OUT
 ========================================================== */
 
@@ -588,17 +754,13 @@ async function closePostArea(
 
   else {
 
-    if (postArea) {
+    /*
+      showPostAreaInstant()가 남긴 인라인 잔재(opacity/transition/
+      pointer-events)까지 함께 되돌린다 — 그대로 두면 다음에
+      legacy 커튼으로 열 때 시작 상태가 어긋난다.
+    */
 
-      postArea.hidden =
-        true;
-
-    }
-
-
-    document.body.classList.remove(
-      "post-mode"
-    );
+    hidePostAreaInstant();
 
   }
 
@@ -639,6 +801,45 @@ async function closePostArea(
       true;
 
   }
+
+
+  /*
+    HOME으로 돌아왔으니 published Skin이 그려 뒀던 CATEGORY/POST
+    화면과 그때 붙은 레이아웃 계약 클래스도 함께 정리한다 — 다음
+    진입에서 openCategoryPage/openPostPage가 다시 정확히 붙이므로
+    남겨 둘 이유가 없고, 남아 있으면 그 사이 legacy 화면이 열릴 때
+    Skin용 규칙(padding:0 등)을 잘못 물려받는다.
+
+    비우기 전에 postSecretGate를 legacy #postDetail로 되돌린다
+    (posts-view-detail.js의 helper 주석 참고).
+  */
+
+  restorePostSecretGateToLegacyDetail();
+
+
+  if (postSkinContainer) {
+
+    postSkinContainer.hidden =
+      true;
+
+    postSkinContainer.innerHTML =
+      "";
+
+  }
+
+
+  if (postContainer) {
+
+    postContainer.classList.remove(
+      "post-container--skin-active"
+    );
+
+  }
+
+
+  postArea?.classList.remove(
+    "post-area--skin-active"
+  );
 
 
   if (postAddButton) {

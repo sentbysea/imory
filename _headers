@@ -46,3 +46,51 @@
 
 /studio/studio-preview.js
   Cache-Control: no-cache
+
+# 공개 홈이 쓰는 CSS. index.html의 loadVersionedStyles()가
+# ?v=APP_BUILD_VERSION을 붙여 주지만, 그 값은 사람이 손으로
+# 올려야 하는 문자열이라 배포 때 깜빡 잊을 수 있다. 그때도
+# "새 JS + 옛 CSS"(published Skin POST/CATEGORY 프레임이 HOME보다
+# 좁고 아래로 밀려 보이던 실사용자 버그의 실제 원인 —
+# core/lib/build-version.js 주석 참고)가 재발하지 않도록,
+# 위 /index.html·/studio/studio.css와 동일하게 재검증을 강제한다.
+# no-cache는 "저장하지 마라"가 아니라 "쓰기 전에 서버에
+# 재검증하라"는 뜻이라, 내용이 그대로면 304로 끝난다.
+/core/design-tokens.css
+  Cache-Control: no-cache
+
+/home/home-base.css
+  Cache-Control: no-cache
+
+/home/home-skin-prompt.css
+  Cache-Control: no-cache
+
+/home/bgm.css
+  Cache-Control: no-cache
+
+/home/menu.css
+  Cache-Control: no-cache
+
+/themes/sua/heart-interaction.css
+  Cache-Control: no-cache
+
+/themes/sua/cover-profile.css
+  Cache-Control: no-cache
+
+/posts/posts-base.css
+  Cache-Control: no-cache
+
+/posts/posts-list-detail.css
+  Cache-Control: no-cache
+
+/posts/view/posts-view-banner.css
+  Cache-Control: no-cache
+
+/posts/posts-editor.css
+  Cache-Control: no-cache
+
+/posts/posts-preview-export.css
+  Cache-Control: no-cache
+
+/posts/posts-mobile.css
+  Cache-Control: no-cache

@@ -373,6 +373,55 @@ async function tryRenderPublishedSkinCategory(
    CATEGORY PAGE
 ========================================================== */
 
+/*
+  CATEGORY 화면으로 실제 전환하는 DOM 조작을 한 곳에 모은다 —
+  글 상세(legacy #postDetail / Skin #postSkinContainer)를 접고
+  목록(#postList)을 편다. Skin 후보 경로는 화면이 준비된 뒤에
+  (각 확정/폴백 지점에서) 이 함수를 부르고, 그 외 경로는 기존처럼
+  진입 즉시 부른다.
+*/
+
+function switchToCategoryScreen() {
+
+  if (postDetail) {
+
+    postDetail.hidden =
+      true;
+
+  }
+
+
+  /*
+    직전 글이 Skin+비밀글이었다면 postSecretGate가 그 Skin 컨테이너
+    안에 들어가 있다 — 비우기 전에 반드시 legacy #postDetail로
+    되돌린다(posts-view-detail.js의 helper, 실행 시점엔 이미 로드돼
+    있다).
+  */
+
+  restorePostSecretGateToLegacyDetail();
+
+
+  if (postSkinContainer) {
+
+    postSkinContainer.hidden =
+      true;
+
+    postSkinContainer.innerHTML =
+      "";
+
+  }
+
+
+  if (postList) {
+
+    postList.hidden =
+      false;
+
+  }
+
+}
+
+
 async function openCategoryPage(
   categoryId,
   options = {}
@@ -459,12 +508,28 @@ async function openCategoryPage(
     ++categoryPageRequestSeq;
 
 
+  /*
+    PHASE 1D 전환 정리: Skin 후보가 아닐 때만 기존처럼 지금 바로
+    흰색 커튼을 친다. 후보면 이전 화면(HOME이거나 이전 카테고리/글)을
+    그대로 둔 채 기다렸다가, 아래 각 확정 지점에서 revealPostArea()로
+    한 번에 교체한다 — 다 그려진 화면 위로 흰 배경이 페이드인했다가
+    걷히는 군더더기 전환(실사용자 리포트)을 없앤다. 응답이 오래
+    걸릴 때만 작은 스피너(schedulePendingIndicator)가 잠깐 뜬다.
+
+    아래의 모든 return 경로(banner / category 조회 실패 / posts 조회
+    실패 / Skin 성공 / legacy 폴백)가 빠짐없이 revealPostArea()를
+    거쳐야 한다 — 하나라도 빠지면 그 경로에서 화면이 열리지 않는다.
+  */
+
   const comingFromHome =
     currentPostView ===
       "home";
 
 
-  if (comingFromHome) {
+  if (
+    comingFromHome &&
+    !maybeSkinCandidate
+  ) {
 
     await showPostArea();
 
@@ -486,19 +551,22 @@ async function openCategoryPage(
   closePostMenu();
 
 
-  if (postDetail) {
+  /*
+    Skin 후보면 이전 화면(직전 글의 Skin이거나 legacy 상세)을
+    아래 확정 지점까지 그대로 유지한다 — 여기서 postDetail을 숨기고
+    빈 postList를 드러내면 응답을 기다리는 동안 화면이 비거나,
+    이전 카테고리의 낡은 목록과 이번 글이 겹쳐 보인다.
+    switchToCategoryScreen()이 확정 지점에서 이 셋을 한 번에 맞춘다.
+  */
 
-    postDetail.hidden =
-      true;
+  if (!maybeSkinCandidate) {
+
+    switchToCategoryScreen();
 
   }
 
 
   hidePostEditor();
-
-
-  postList.hidden =
-    false;
 
 
   const cached =
@@ -623,12 +691,26 @@ async function openCategoryPage(
         );
 
 
+        switchToCategoryScreen();
+
+
         postList.innerHTML =
           `
             <div class="post-empty">
               failed to load
             </div>
           `;
+
+
+        /*
+          #postArea 자체가 아직 안 열려 있을 수 있다(HOME에서 곧장
+          들어온 Skin 후보 경로) — 열지 않으면 오류 문구도
+          뒤로가기 버튼도 통째로 안 보인다.
+        */
+
+        await revealPostArea(
+          false
+        );
 
       }
 
@@ -735,12 +817,26 @@ async function openCategoryPage(
     );
 
 
+    switchToCategoryScreen();
+
+
     if (postList) {
 
       postList.hidden =
         true;
 
     }
+
+
+    /*
+      banner는 Skin 대상이 아니므로 기존 legacy 연출(흰색 커튼)을
+      그대로 쓴다 — 이미 열려 있으면 showPostArea()가 자체 guard로
+      즉시 return한다.
+    */
+
+    await revealPostArea(
+      false
+    );
 
 
     await renderBannerCategory(
@@ -804,8 +900,12 @@ async function openCategoryPage(
     );
 
 
-  postList.hidden =
-    false;
+  if (!maybeSkinCandidate) {
+
+    postList.hidden =
+      false;
+
+  }
 
 
   if (postsError) {
@@ -834,12 +934,20 @@ async function openCategoryPage(
     );
 
 
+    switchToCategoryScreen();
+
+
     postList.innerHTML =
       `
         <div class="post-empty">
           failed to load
         </div>
       `;
+
+
+    await revealPostArea(
+      false
+    );
 
 
     return;
@@ -914,6 +1022,15 @@ async function openCategoryPage(
   );
 
 
+  /*
+    Skin 후보 경로는 여기까지 이전 화면을 그대로 유지했다 — 이제서야
+    글 상세를 접고 목록을 편다(switchToCategoryScreen). 그 다음
+    완성된 Skin 내용을 옮기고, 마지막으로 화면을 드러낸다.
+  */
+
+  switchToCategoryScreen();
+
+
   if (renderedPublishedSkinCategory) {
 
     postList.innerHTML =
@@ -950,11 +1067,23 @@ async function openCategoryPage(
 
 
   if (renderedPublishedSkinCategory) {
+
+    await revealPostArea(
+      true
+    );
+
+
     return;
+
   }
 
 
   renderPostListItems();
+
+
+  await revealPostArea(
+    false
+  );
 
 }
 

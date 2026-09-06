@@ -153,6 +153,34 @@ let postPageRequestSeq =
   0;
 
 
+/*
+  postSecretGate는 legacy #postDetail 안에 선언된 고정 DOM인데,
+  Skin 경로에서는 Skin의 post-body region 안으로 옮겨진다
+  (showPostSecretGate). 그 상태로 Skin 컨테이너를 비우면 이 노드가
+  통째로 사라져 다음 글에서 쓸 수 없게 되므로, 컨테이너를 비우기
+  직전에 반드시 원래 자리로 되돌려야 한다 — 그 한 줄짜리 규칙을
+  세 호출 지점(비-후보 즉시 정리 / 조회 실패 / Skin 확정)이
+  공유한다.
+*/
+
+function restorePostSecretGateToLegacyDetail() {
+
+  if (
+    postDetail &&
+    postSecretGate &&
+    postSecretGate.parentNode !==
+      postDetail
+  ) {
+
+    postDetail.appendChild(
+      postSecretGate
+    );
+
+  }
+
+}
+
+
 async function openPostPage(
   postId,
   options = {}
@@ -163,9 +191,49 @@ async function openPostPage(
   } = options;
 
 
-  if (
+  /*
+    PHASE 1D: published Skin 후보인지 먼저 가볍게 확인한다
+    (getSiteOwner()는 메모이즈돼 있어 HOME 로드 이후엔 사실상
+    즉시 resolve된다) — 아래에서 legacy #postDetail을 "loading..."
+    상태로 바로 열어젖힐지, 아니면 이전 화면(HOME이거나 카테고리
+    목록이거나 이전 글)을 그대로 둔 채 조용히 기다릴지를 가른다.
+    실제로 이 글이 Skin으로 렌더될지는 아래 tryRenderPublishedSkinPost가
+    최종 판정하고 그 결과로 다시 정확히 바로잡는다 — 이 fetch는
+    바로 아래 posts 조회에도 필요해서(owner.scoped 필터) 앞당긴
+    것뿐, 새로 추가된 네트워크 요청이 아니다.
+
+    openCategoryPage()와 동일하게 showPostArea()보다 먼저 읽는다 —
+    "커튼을 칠지 말지"를 이 값이 결정하기 때문이다.
+  */
+
+  const owner =
+    await getSiteOwner();
+
+  const maybeSkinCandidate =
+    Boolean(
+      owner.scoped &&
+      owner.ownerId
+    );
+
+
+  /*
+    PHASE 1D 전환 정리: Skin 후보가 아닐 때만 기존처럼 지금 바로
+    흰색 커튼을 친다. 후보면 이 시점엔 아무것도 하지 않고 이전
+    화면(HOME/카테고리/이전 글)을 그대로 둔 채 기다렸다가, 아래
+    usingSkinPost 확정 지점에서 revealPostArea()로 한 번에
+    교체한다 — 다 그려진 화면 위로 흰 배경이 페이드인했다가
+    걷히는 군더더기 전환(실사용자 리포트)을 없앤다. 응답이 오래
+    걸릴 때만 작은 스피너(schedulePendingIndicator)가 잠깐 뜬다.
+  */
+
+  const comingFromHome =
     currentPostView ===
-      "home"
+      "home";
+
+
+  if (
+    comingFromHome &&
+    !maybeSkinCandidate
   ) {
 
     await showPostArea();
@@ -190,7 +258,16 @@ async function openPostPage(
   closePostMenu();
 
 
-  if (postList) {
+  /*
+    Skin 후보면 이전 화면(카테고리 Skin 목록)을 아래 확정
+    지점까지 그대로 유지한다 — 여기서 미리 숨기면 #postArea가
+    빈 흰 화면이 된 채로 응답을 기다리게 된다.
+  */
+
+  if (
+    postList &&
+    !maybeSkinCandidate
+  ) {
 
     postList.hidden =
       true;
@@ -199,28 +276,6 @@ async function openPostPage(
 
 
   hidePostEditor();
-
-
-  /*
-    PHASE 1D: published Skin 후보인지 먼저 가볍게 확인한다
-    (getSiteOwner()는 메모이즈돼 있어 HOME 로드 이후엔 사실상
-    즉시 resolve된다) — 아래에서 legacy #postDetail을 "loading..."
-    상태로 바로 열어젖힐지, 아니면 이전 화면(카테고리 목록이거나
-    이전 글)을 그대로 둔 채 조용히 기다릴지를 가른다. 실제로 이
-    글이 Skin으로 렌더될지는 아래 tryRenderPublishedSkinPost가
-    최종 판정하고 그 결과로 다시 정확히 바로잡는다 — 이 fetch는
-    바로 아래 posts 조회에도 필요해서(owner.scoped 필터) 앞당긴
-    것뿐, 새로 추가된 네트워크 요청이 아니다.
-  */
-
-  const owner =
-    await getSiteOwner();
-
-  const maybeSkinCandidate =
-    Boolean(
-      owner.scoped &&
-      owner.ownerId
-    );
 
 
   const pendingIndicatorTimer =
@@ -375,43 +430,40 @@ async function openPostPage(
   }
 
 
-  /*
-    PHASE 1C-F: 매 진입마다 이전 글이 Skin 경로로 그려졌을 수
-    있으므로 postSecretGate를 항상 legacy #postDetail 소속으로
-    되돌려 둔다 — 아래에서 이번 글이 실제로 Skin 경로를 타면
-    다시 bodyRegion 안으로 옮긴다(showPostSecretGate). 이 리셋이
-    없으면 이전 글이 Skin+secret 조합이었을 때 postSecretGate
-    DOM 노드가 이미 사라진 이전 Skin 컨테이너 안에 남아 미아가
-    될 수 있다.
-  */
-
-  if (
-    postDetail &&
-    postSecretGate &&
-    postSecretGate.parentNode !==
-      postDetail
-  ) {
-
-    postDetail.appendChild(
-      postSecretGate
-    );
-
-  }
-
-
   currentPostBodyMountTarget =
     null;
 
 
-  if (
-    postSkinContainer
-  ) {
+  /*
+    PHASE 1C-F: 이전 글이 Skin 경로로 그려졌다면 postSecretGate가
+    그 Skin 컨테이너 안에 들어가 있다 — 매 진입마다 legacy
+    #postDetail 소속으로 되돌려 둬야 이전 Skin 컨테이너가 지워질 때
+    미아가 되지 않는다(이번 글이 다시 Skin 경로를 타면
+    showPostSecretGate가 bodyRegion 안으로 옮긴다).
 
-    postSkinContainer.hidden =
-      true;
+    단 Skin 후보일 때는 이 정리(그리고 postSkinContainer 비우기)를
+    아래 usingSkinPost 확정 지점까지 미룬다 — 여기서 미리 지우면
+    응답을 기다리는 동안 이전 화면이 빈 흰 화면으로 바뀐다. 확정
+    지점은 어차피 postSkinContainer.innerHTML을 통째로 갈아치우므로
+    "매 진입마다 한 번" 이라는 보장은 그대로 유지된다.
+  */
 
-    postSkinContainer.innerHTML =
-      "";
+  if (!maybeSkinCandidate) {
+
+    restorePostSecretGateToLegacyDetail();
+
+
+    if (
+      postSkinContainer
+    ) {
+
+      postSkinContainer.hidden =
+        true;
+
+      postSkinContainer.innerHTML =
+        "";
+
+    }
 
   }
 
@@ -542,6 +594,10 @@ async function openPostPage(
       post-back-button)를 되살린다 — Skin 후보라 위에서 헤더를
       미리 숨기고 postDetail도 아직 안 열어 뒀을 수 있으므로,
       벗겨내지 않으면 "post not found" 문구조차 보이지 않는다.
+
+      #postArea 자체도 아직 안 열려 있을 수 있다(HOME에서 곧장
+      들어온 Skin 후보 경로는 화면이 준비될 때까지 커튼을 미룬다)
+      — 여기서 열지 않으면 오류와 뒤로가기 버튼이 통째로 안 보인다.
     */
 
     if (maybeSkinCandidate) {
@@ -550,6 +606,28 @@ async function openPostPage(
 
         postDetail.hidden =
           false;
+
+      }
+
+
+      restorePostSecretGateToLegacyDetail();
+
+
+      if (postSkinContainer) {
+
+        postSkinContainer.hidden =
+          true;
+
+        postSkinContainer.innerHTML =
+          "";
+
+      }
+
+
+      if (postList) {
+
+        postList.hidden =
+          true;
 
       }
 
@@ -565,6 +643,11 @@ async function openPostPage(
 
       postArea?.classList.remove(
         "post-area--skin-active"
+      );
+
+
+      await revealPostArea(
+        false
       );
 
     }
@@ -665,6 +748,27 @@ async function openPostPage(
   }
 
 
+  /*
+    Skin 후보 경로는 여기까지 이전 화면을 그대로 유지했다 —
+    이제서야 이전 글의 Skin 컨테이너를 비운다. 비우기 직전에
+    postSecretGate를 반드시 legacy #postDetail로 되돌린다(위
+    helper 주석 참고).
+  */
+
+  restorePostSecretGateToLegacyDetail();
+
+
+  if (
+    postList &&
+    !postList.hidden
+  ) {
+
+    postList.hidden =
+      true;
+
+  }
+
+
   if (postSkinContainer) {
 
     postSkinContainer.innerHTML =
@@ -703,6 +807,18 @@ async function openPostPage(
 
   postArea?.classList.toggle(
     "post-area--skin-active",
+    usingSkinPost
+  );
+
+
+  /*
+    화면이 완성된 지금 한 번에 드러낸다 — Skin이면 커튼 없이,
+    legacy 폴백이면 기존 흰색 커튼으로. #postArea가 이미 열려
+    있으면(카테고리→글처럼 같은 컨테이너 안 이동) 아무 일도
+    일어나지 않는다.
+  */
+
+  await revealPostArea(
     usingSkinPost
   );
 
