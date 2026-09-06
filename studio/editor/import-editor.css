@@ -2,7 +2,7 @@
    SKIN STUDIO - IMPORT EDITOR MODAL (PHASE 1 Final Gap — Whole
    SkinPackage Import)
 
-   studio/editor/code-editor.css와 같은 톤(같은 --system-*/
+   studio/editor/code-editor.css와 같은 톤(같은 --system-* /
    --imory-* 변수, 같은 radius/border 규모)을 그대로 따르되 클래스
    접두어만 import-editor-*로 분리한다 — 두 modal은 서로 다른 시점
    (페이지별 편집 vs SkinPackage 전체 가져오기)에만 열리므로 CSS
