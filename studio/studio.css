@@ -352,6 +352,18 @@ body {
 
 
 /*
+  Save/Publish/Code/Import는 실제로 활성화되는 실기능 버튼이다
+  (Settings만 아직 항상 disabled인 자리표시자로 남는다) — 위
+  기본 cursor:not-allowed는 그 자리표시자 시절 값이 그대로 남은
+  것이라, 실제로 클릭 가능해진 뒤에도 hover 시 금지 커서가 보이는
+  버그였다. 진짜 disabled 상태는 여전히 not-allowed로 남긴다.
+*/
+.studio-corner-button:not(:disabled) {
+  cursor: pointer;
+}
+
+
+/*
   dock 열림/닫힘과 무관하게 항상 zone 최상단(같은 좌표)에 남아
   클릭 가능해야 한다 — dock이 열려도 그 위에 그려지도록 dock보다
   높은 z-index를 준다(같은 top:0 좌표에서 겹치므로). pointer-events
