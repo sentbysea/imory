@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Skin Draft Publish Integration Test</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h1 { margin-top: 0; }
+  h2 {
+    margin-top: 32px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  #summary { font-size: 16px; font-weight: bold; margin-top: 16px; }
+  #frames iframe {
+    width: 480px;
+    height: 360px;
+    border: 2px dashed #999;
+    margin: 8px 8px 8px 0;
+    background: #fff;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Skin Draft Publish Integration Test</h1>
+  <p>
+    studio-preview.js의 Publish 상태 전이(currentDraftVersionId/
+    currentPublishedVersionId/isStudioDirty/isStudioPublishPending)와
+    studio-write.js의 publishSkin() RPC wrapper, studio/editor/
+    confirm-dialog.js의 확인 dialog를 studio/studio-lifecycle-scenario.html
+    (실제 URL, in-memory mock Supabase)을 통해 실제 파일 그대로
+    구동해 검증한다. Scenario V(happy path 전체 흐름) / W(Publish
+    실패 — "다른 사용자 skin 거부"와 client 관점에서 동일한 RPC 에러
+    경로) / Z(이미 발행된 상태로 mount — 새로고침 상태 복원)로 나눈다.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <h2>Scenario V/W/Z iframes</h2>
+  <div id="frames"></div>
+
+  <script>
+
+    const reportList = document.getElementById("reportList");
+    const allResults = [];
+
+    function record(name, pass, detail) {
+      allResults.push({ name, pass: !!pass, detail: detail || "" });
+      const li = document.createElement("li");
+      li.className = pass ? "pass" : "fail";
+      li.textContent = (pass ? "PASS — " : "FAIL — ") + name;
+      if (detail) {
+        const d = document.createElement("span");
+        d.className = "detail";
+        d.textContent = detail;
+        li.appendChild(d);
+      }
+      reportList.appendChild(li);
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function waitFor(fn, timeoutMs, intervalMs) {
+      const start = Date.now();
+      while (Date.now() - start < timeoutMs) {
+        let val;
+        try {
+          val = fn();
+        } catch (e) {
+          val = null;
+        }
+        if (val) {
+          return val;
+        }
+        await sleep(intervalMs || 50);
+      }
+      return null;
+    }
+
+    function loadIframe(src) {
+      return new Promise((resolve) => {
+        const iframe = document.createElement("iframe");
+        iframe.addEventListener("load", () => resolve(iframe), { once: true });
+        iframe.src = src;
+        document.getElementById("frames").appendChild(iframe);
+      });
+    }
+
+    /*
+      studio-navigation-test.html의 runScenarioCodeEditor()와 동일한
+      최소 helper — HOME html에 마커 하나를 추가해 Apply하고
+      isStudioDirty를 true로 만드는 데만 쓴다(Publish 차단 조건
+      검증용, 실제 마크업 내용 자체는 이 테스트의 관심사가 아니다).
+    */
+    function openCodeEditor(doc) {
+      doc.getElementById("studioCodeButton").click();
+      return waitFor(
+        () => {
+          const overlay = doc.querySelector(".code-editor-overlay");
+          return overlay && !overlay.hidden ? true : null;
+        },
+        2000,
+        30
+      );
+    }
+
+    function applyDirtyChange(doc) {
+      const htmlTextarea = doc.querySelectorAll(".code-editor-textarea")[0];
+      htmlTextarea.value = htmlTextarea.value + "<!-- publish-test-marker -->";
+      const applyButton = Array.from(doc.querySelectorAll(".code-editor-button")).find((b) => b.textContent === "Apply");
+      applyButton.click();
+    }
+
+
+    /* =========================================================
+       SCENARIO V — Publish happy path 전체 흐름(순서대로 진행,
+       뒤 단계가 앞 단계의 상태에 의존한다).
+    ========================================================== */
+
+    async function runScenarioV() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=v");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const publishButton = () => doc.getElementById("studioPublishButton");
+      const saveButton = () => doc.getElementById("studioSaveButton");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const toast = () => doc.getElementById("studioToast");
+      const confirmOverlay = () => doc.querySelector(".studio-confirm-overlay");
+      const confirmMessage = () => doc.querySelector(".studio-confirm-message");
+      const confirmButtons = () => Array.from(doc.querySelectorAll(".studio-confirm-button"));
+      const confirmConfirmButton = () => confirmButtons().find((b) => b.textContent === "적용");
+      const confirmCancelButton = () => confirmButtons().find((b) => b.textContent === "취소");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-v-home")),
+        8000,
+        100
+      );
+
+      // --- V1: 최초 published 없음 -> Publish 즉시 활성 ---
+      record(
+        "V1. 최초 published 없음(current_published_version_id=null) 상태에서 draft가 있으면 Publish가 곧바로 활성화된다",
+        publishButton().disabled === false && publishButton().textContent === "Publish"
+      );
+
+      // --- V2: dirty 상태 -> Publish 차단 + 안내 문구 ---
+      await openCodeEditor(doc);
+      applyDirtyChange(doc);
+
+      const dirtyBlocked = await waitFor(
+        () => (publishButton().disabled === true ? true : null),
+        2000,
+        30
+      );
+
+      record(
+        "V2. 저장하지 않은 변경(dirty)이 있으면 Publish가 비활성화되고 먼저 Save해야 한다는 안내가 title에 표시된다",
+        !!dirtyBlocked &&
+          publishButton().title.indexOf("Save") !== -1,
+        "title=" + JSON.stringify(publishButton().title)
+      );
+
+      // --- V3: Save 진행 중에는 Save/Publish 모두 비활성 ---
+      saveButton().click();
+
+      const savePendingBlocksPublish = await waitFor(
+        () => (saveButton().disabled === true && publishButton().disabled === true ? true : null),
+        1000,
+        10
+      );
+
+      record(
+        "V3. Save 진행 중에는 Save/Publish 버튼이 모두 비활성화된다(동시 실행 방지)",
+        !!savePendingBlocksPublish
+      );
+
+      // --- V4: Save 성공 후 Publish 재활성 ---
+      const saveDoneAndPublishBack = await waitFor(
+        () => (saveButton().disabled === true && publishButton().disabled === false ? true : null),
+        3000,
+        30
+      );
+
+      record(
+        "V4. Save 성공 후(dirty=false) Publish가 다시 활성화된다",
+        !!saveDoneAndPublishBack &&
+          publishButton().textContent === "Publish"
+      );
+
+      record(
+        "V4b. Save만으로는 current_published_version_id가 바뀌지 않는다(public 미변경)",
+        win.__mockState.tables.skins[0].current_published_version_id === null
+      );
+
+      // --- V5: 확인 dialog 취소 ---
+      publishButton().click();
+
+      const dialogOpenedForCancel = await waitFor(
+        () => (confirmOverlay() && !confirmOverlay().hidden ? true : null),
+        1000,
+        20
+      );
+
+      record(
+        "V5a. Publish 클릭 시 확인 dialog가 뜨고 지정된 문구를 보여준다",
+        !!dialogOpenedForCancel &&
+          confirmMessage().textContent === "저장된 스킨을 공개 홈페이지에 적용할까요?"
+      );
+
+      confirmCancelButton().click();
+
+      await sleep(150);
+
+      record(
+        "V5b. 확인 dialog 취소 시 publish RPC가 호출되지 않고 published pointer가 그대로 유지된다",
+        confirmOverlay().hidden === true &&
+          !window.__publishCallsV &&
+          win.__mockState.tables.skins[0].current_published_version_id === null
+      );
+
+      // --- V6: Publish 중 중복 클릭 방지 ---
+      publishButton().click();
+
+      await waitFor(() => (confirmOverlay() && !confirmOverlay().hidden ? true : null), 1000, 20);
+
+      confirmConfirmButton().click();
+
+      // pending 창(150ms mock latency) 동안 빠르게 다시 클릭
+      publishButton().click();
+      publishButton().click();
+
+      const publishPending = await waitFor(
+        () => (saveButton().disabled === true && publishButton().disabled === true ? true : null),
+        500,
+        10
+      );
+
+      record(
+        "V6a. Publish 진행 중에는 Save/Publish 버튼이 모두 비활성화된다",
+        !!publishPending
+      );
+
+      const publishDone = await waitFor(
+        () => (publishButton().textContent === "Published" ? true : null),
+        3000,
+        30
+      );
+
+      record(
+        "V6b. Publish 진행 중 버튼을 여러 번 눌러도 publish_skin RPC는 정확히 1회만 호출된다(중복 방지)",
+        !!publishDone && window.__publishCallsV && window.__publishCallsV.length === 1,
+        "calls=" + (window.__publishCallsV ? window.__publishCallsV.length : 0)
+      );
+
+      // --- V7: Publish 성공 ---
+      record(
+        "V7a. Publish 성공 시 버튼이 Published로 바뀌고 비활성화된다",
+        publishButton().textContent === "Published" && publishButton().disabled === true
+      );
+
+      record(
+        "V7b. Publish 성공 시 성공 토스트가 표시된다",
+        toast().hidden === false && toast().textContent === "공개 홈페이지에 적용되었습니다."
+      );
+
+      record(
+        "V7c. Publish 성공 후에도 자동으로 다른 페이지/새 탭으로 이동하지 않는다(같은 Studio 문서에 그대로 머무른다)",
+        !!(innerDoc() && innerDoc().querySelector(".scenario-v-home"))
+      );
+
+      record(
+        "V7d. Publish 성공 후 current_published_version_id가 실제로 draft와 같아진다",
+        win.__mockState.tables.skins[0].current_published_version_id === win.__mockState.tables.skins[0].current_draft_version_id
+      );
+
+      // --- V8: 이미 Published인 상태에서 클릭 ---
+      const publishedVersionAfterFirstPublish = win.__mockState.tables.skins[0].current_published_version_id;
+
+      publishButton().click();
+      await sleep(150);
+
+      record(
+        "V8. 이미 Published인 상태에서 버튼을 눌러도 dialog가 뜨거나 RPC가 다시 호출되지 않는다(동일 version 재발행 금지)",
+        (!confirmOverlay() || confirmOverlay().hidden === true) &&
+          window.__publishCallsV.length === 1 &&
+          win.__mockState.tables.skins[0].current_published_version_id === publishedVersionAfterFirstPublish
+      );
+
+      // --- V9: 새 Draft Save 후 재활성 ---
+      await openCodeEditor(doc);
+      applyDirtyChange(doc);
+
+      /*
+        Code Editor Apply(handleCodeEditorApply)는 window.skinInitializerReady
+        를 await한 뒤에야 sanitize/validate를 거쳐 onApply를 호출하는
+        비동기 흐름이다(studio/editor/code-editor.js) — Apply 버튼
+        클릭 자체는 동기 함수 호출이라 곧바로 isStudioDirty가 true로
+        바뀐다고 보장할 수 없다. Save 버튼을 누르기 전에 실제로
+        dirty해졌다는 신호(Save 버튼 활성화)를 기다린다.
+      */
+      await waitFor(
+        () => (saveButton().disabled === false ? true : null),
+        2000,
+        30
+      );
+
+      saveButton().click();
+
+      const reactivatedAfterNewDraft = await waitFor(
+        () => (publishButton().disabled === false && publishButton().textContent === "Publish" ? true : null),
+        3000,
+        30
+      );
+
+      record(
+        "V9. 새 변경을 Save한 뒤에는(새 draft !== published) Publish가 다시 Publish 텍스트로 활성화된다",
+        !!reactivatedAfterNewDraft
+      );
+
+      record(
+        "V9b. 새 Draft를 Save한 것만으로는(아직 Publish 안 함) current_published_version_id가 바뀌지 않는다",
+        win.__mockState.tables.skins[0].current_published_version_id === publishedVersionAfterFirstPublish
+      );
+
+      return true;
+
+    }
+
+
+    /* =========================================================
+       SCENARIO W — Publish 실패(다른 사용자 skin 거부와 client
+       입장에서 동일한 코드 경로: RPC가 error를 반환).
+    ========================================================== */
+
+    async function runScenarioW() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=w");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const publishButton = () => doc.getElementById("studioPublishButton");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const toast = () => doc.getElementById("studioToast");
+      const confirmOverlay = () => doc.querySelector(".studio-confirm-overlay");
+      const confirmConfirmButton = () => Array.from(doc.querySelectorAll(".studio-confirm-button")).find((b) => b.textContent === "적용");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-w-home")),
+        8000,
+        100
+      );
+
+      publishButton().click();
+
+      await waitFor(() => (confirmOverlay() && !confirmOverlay().hidden ? true : null), 1000, 20);
+
+      confirmConfirmButton().click();
+
+      const failed = await waitFor(
+        () => (toast().hidden === false && toast().classList.contains("studio-toast--error") ? true : null),
+        3000,
+        30
+      );
+
+      record(
+        "W1. Publish 실패(다른 사용자 skin 거부와 동일한 client 경로)시 published pointer는 바뀌지 않고 버튼이 재활성화되며 재시도 가능한 오류 토스트가 표시된다",
+        !!failed &&
+          toast().classList.contains("studio-toast--error") &&
+          publishButton().disabled === false &&
+          publishButton().textContent === "Publish" &&
+          win.__mockState.tables.skins[0].current_published_version_id === null
+      );
+
+      return true;
+
+    }
+
+
+    /* =========================================================
+       SCENARIO Z — 이미 발행된 상태로 mount(새로고침 상태 복원 +
+       이미 Published인 상태).
+    ========================================================== */
+
+    async function runScenarioZ() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=z");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const publishButton = () => doc.getElementById("studioPublishButton");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-z-home")),
+        8000,
+        100
+      );
+
+      record(
+        "Z1. mount 시점에 DB의 current_draft_version_id/current_published_version_id가 같으면(이미 발행됨) 아무 조작 없이도 Publish 버튼이 곧바로 Published/비활성 상태로 복원된다(새로고침 상태 복원)",
+        publishButton().disabled === true && publishButton().textContent === "Published"
+      );
+
+      return true;
+
+    }
+
+
+    async function main() {
+
+      try {
+        await runScenarioV();
+      } catch (err) {
+        record("Scenario V 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioW();
+      } catch (err) {
+        record("Scenario W 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioZ();
+      } catch (err) {
+        record("Scenario Z 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      const passCount = allResults.filter((r) => r.pass).length;
+      const failCount = allResults.length - passCount;
+      const summary = document.getElementById("summary");
+      summary.textContent = `${allResults.length}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+
+      window.__testDone = true;
+      window.__testPassCount = passCount;
+      window.__testFailCount = failCount;
+
+    }
+
+    main();
+
+  </script>
+
+</body>
+</html>

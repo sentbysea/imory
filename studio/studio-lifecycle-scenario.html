@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="./studio.css">
 <link rel="stylesheet" href="./editor/code-editor.css">
 <link rel="stylesheet" href="./editor/import-editor.css">
+<link rel="stylesheet" href="./editor/confirm-dialog.css">
 </head>
 <body>
 
@@ -60,6 +61,7 @@
         </div>
         <div class="studio-top-dock-actions">
           <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
+          <button type="button" class="studio-corner-button" id="studioPublishButton" disabled>Publish</button>
           <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
           <button type="button" class="studio-corner-button" id="studioImportButton" disabled>Import</button>
           <button type="button" class="studio-corner-button" id="studioSettingsButton" disabled>Settings</button>
@@ -600,6 +602,211 @@
         },
 
         /*
+          Scenario V — Skin Draft Publish 전체 happy-path(dirty/Save
+          pending/확인 dialog/중복 클릭 방지/성공/재활성)를 한 시나리오
+          안에서 순서대로 검증하는 용도. HOME-only legacy Skin(templates
+          필드 없음, top-level html/css만)이라 "HOME-only legacy Skin도
+          발행 가능"도 같은 시나리오로 함께 확인한다. current_published_
+          version_id가 처음부터 null이라 "최초 published 없음" 상태로
+          시작한다. save_skin_draft_version/publish_skin 핸들러 둘 다
+          delayed()로 인위적 지연을 줘서(위 MOCK_LATENCY_MS) 테스트가
+          isStudioSavePending/isStudioPublishPending===true인 중간
+          상태를 실제로 관찰할 수 있게 한다.
+        */
+        v: {
+          userId: "user-v",
+          tables: {
+            skins: [
+              { id: "skin-v1", user_id: "user-v", is_active: true, current_draft_version_id: "draft-v1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-v1",
+                content: {
+                  schemaVersion: 1,
+                  html: '<div class="scenario-v-home"><h1 data-imory-bind="site.title"></h1></div>',
+                  css: ".scenario-v-home { color: green; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-v", nickname: "Scenario V", bio: null, slug: "scenario-v" }],
+            site_settings: [],
+            categories: [],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version: function (params) {
+
+              window.top.__savedDraftCallsV =
+                window.top.__savedDraftCallsV || [];
+
+              window.top.__savedDraftCallsV.push(params);
+
+              const newVersionId =
+                "draft-v" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return delayed({ data: newVersionId, error: null });
+
+            },
+            publish_skin: function (params) {
+
+              window.top.__publishCallsV =
+                window.top.__publishCallsV || [];
+
+              window.top.__publishCallsV.push(params);
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_published_version_id = skinRow.current_draft_version_id;
+              }
+
+              return delayed({ data: null, error: null });
+
+            }
+          }
+        },
+
+        /*
+          Scenario W — publish_skin() RPC가 항상 실패하는 경우(Publish
+          실패 경로, 그리고 client 관점에서 "다른 사용자 skin 거부"와
+          동일한 코드 경로 — 어느 쪽이든 client는 그냥 RPC 에러 하나로
+          본다. 실제 소유권 재확인은 publish_skin() 함수 본문 안에서
+          SECURITY DEFINER로 이미 강제된다, supabase/migrations/
+          20260905100000_add_skin_draft_write_rpcs.sql 참고). 실패 후
+          current_published_version_id가 절대 바뀌지 않고 버튼이
+          재활성화되어 재시도 가능한지 확인하는 용도.
+        */
+        w: {
+          userId: "user-w",
+          tables: {
+            skins: [
+              { id: "skin-w1", user_id: "user-w", is_active: true, current_draft_version_id: "draft-w1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-w1",
+                content: {
+                  schemaVersion: 1,
+                  html: '<div class="scenario-w-home"><h1 data-imory-bind="site.title"></h1></div>',
+                  css: "",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-w", nickname: "Scenario W", bio: null, slug: "scenario-w" }],
+            site_settings: [],
+            categories: [],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {
+            publish_skin: function () {
+              return delayed({ data: null, error: new Error("mock publish failure (not owner)") });
+            }
+          }
+        },
+
+        /*
+          Scenario Z — 이미 발행된 상태(current_draft_version_id ===
+          current_published_version_id)로 mount되는 경우. "새로고침 시
+          상태 복원"과 "이미 Published인 상태"를 함께 확인한다 — 이
+          시나리오 문서 자체를 다시 로드하는 것이 곧 실제 새로고침과
+          동일한 효과다(둘 다 in-memory state를 DB 스냅샷 취급해
+          처음부터 다시 읽는다).
+        */
+        z: {
+          userId: "user-z",
+          tables: {
+            skins: [
+              { id: "skin-z1", user_id: "user-z", is_active: true, current_draft_version_id: "draft-z1", current_published_version_id: "draft-z1" }
+            ],
+            skin_versions: [
+              {
+                id: "draft-z1",
+                content: {
+                  schemaVersion: 1,
+                  html: '<div class="scenario-z-home"><h1 data-imory-bind="site.title"></h1></div>',
+                  css: "",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-z", nickname: "Scenario Z", bio: null, slug: "scenario-z" }],
+            site_settings: [],
+            categories: [],
+            posts: [],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version: function (params) {
+
+              const newVersionId =
+                "draft-z" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            },
+            publish_skin: function (params) {
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_published_version_id = skinRow.current_draft_version_id;
+              }
+
+              return { data: null, error: null };
+
+            }
+          }
+        },
+
+        /*
           Scenario O — templates.home만 있고 templates.category/post는
           없는 multi-page 대상(post형 category "301"은 실제로 존재)
           — "카테고리/글 템플릿이 없습니다" unsupported 상태를
@@ -918,6 +1125,7 @@
   <script src="./studio-write.js"></script>
   <script src="./editor/code-editor.js"></script>
   <script src="./editor/import-editor.js"></script>
+  <script src="./editor/confirm-dialog.js"></script>
   <script src="./studio-preview.js"></script>
   <script src="./preview/preview-route.js"></script>
   <!-- PHASE 1C-I — production과 동일한 순서(studio/index.html 참고) -->

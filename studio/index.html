@@ -51,6 +51,11 @@
     href="./editor/import-editor.css"
   >
 
+  <link
+    rel="stylesheet"
+    href="./editor/confirm-dialog.css"
+  >
+
 </head>
 
 
@@ -256,6 +261,15 @@
             disabled
           >
             Save
+          </button>
+
+          <button
+            type="button"
+            class="studio-corner-button"
+            id="studioPublishButton"
+            disabled
+          >
+            Publish
           </button>
 
           <button
@@ -486,6 +500,14 @@
   <script src="./editor/code-editor.js"></script>
 
   <script src="./editor/import-editor.js"></script>
+
+  <!--
+       Skin Draft Publish — Publish 클릭 시 뜨는 확인 dialog.
+       studio-preview.js가 클릭 핸들러 안에서만
+       window.openStudioConfirmDialog를 호출하므로(즉시 실행 아님),
+       studio-preview.js보다 먼저 로드되어 있기만 하면 된다.
+  -->
+  <script src="./editor/confirm-dialog.js"></script>
 
   <script src="./studio-preview.js"></script>
 

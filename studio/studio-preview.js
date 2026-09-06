@@ -19,6 +19,14 @@
    11절), (6) Save/Code/Settings/AI는 이번 Slice에서 자리만 예약
    (실제 기능 없음, 15절).
 
+   Skin Draft Publish — Save와 별개로 Publish 상태 전이도 이 파일이
+   맡는다: currentDraftVersionId/currentPublishedVersionId/
+   isStudioDirty/isStudioPublishPending(파일 하단 "WORKING DRAFT
+   상태" 절)로 Publish 가능 여부를 판정하고, publish_skin() RPC
+   (studio/studio-write.js wrapper) 호출은 handleStudioPublishConfirmed()
+   하나뿐이다. Publish는 Save와 달리 currentWorkingSkin(content)을
+   전혀 건드리지 않는다 — DB의 두 버전 포인터 중 하나만 옮긴다.
+
    postMessage contract(12절, iframe 쪽 studio/preview/preview-bridge.js
    와 동일한 문자열을 하드코딩 — 두 문서는 서로 다른 browsing
    context라 상수를 import로 공유할 수 없다. 값을 바꿀 땐 두 파일을
@@ -45,7 +53,9 @@
    (skin/skin-template.js — PHASE 1C-B, 페이지별 편집/미리보기
    대상 선택), normalizeSkinPackageForDraft
    (skin/skin-package-normalize.js — PHASE 1C-B, Save 직전 전체
-   정규화). studio/index.html의 로드 순서 참고.
+   정규화), saveSkinDraftVersion/publishSkin(studio-write.js),
+   openStudioConfirmDialog(studio/editor/confirm-dialog.js — Publish
+   확인 dialog). studio/index.html의 로드 순서 참고.
 
    반대 방향 의존 하나(PHASE 1C-J): applyWorkingSkinChanges()는
    studio/preview/preview-navigation.js의 renderCurrentPreviewEntry()
@@ -113,6 +123,9 @@ const studioBackButton =
 const studioSaveButton =
   document.getElementById("studioSaveButton");
 
+const studioPublishButton =
+  document.getElementById("studioPublishButton");
+
 const studioCodeButton =
   document.getElementById("studioCodeButton");
 
@@ -173,14 +186,30 @@ let mountToken = 0;
    Apply로 currentWorkingSkin이 이미 교체됐는지(참조 비교)를 확인해
    더 최신 미저장 변경을 실수로 "저장됨"으로 지우지 않기 위함이다
    (12절).
+
+   Skin Draft Publish — currentPublishedVersionId는 DB의
+   skins.current_published_version_id를 그대로 거울처럼 들고 있는
+   상태다(mountStudioPreview()가 최초 진입/새로고침마다 복원). Save
+   가 currentDraftVersionId만 옮기고 이 값은 절대 건드리지 않는
+   것과 대칭으로, Publish(handleStudioPublishConfirmed)만 이 값을
+   currentDraftVersionId와 같게 옮긴다 — 그래서 "currentDraftVersionId
+   !== currentPublishedVersionId"가 곧 "발행되지 않은 저장된 변경이
+   있다"는 뜻이 되고, updateStudioPublishButtonState()가 이 비교
+   하나로 Publish 가능 여부를 판정한다. isStudioPublishPending은
+   isStudioSavePending과 서로의 진행 중에는 반대쪽 버튼도 비활성화
+   시켜 Save/Publish 요청이 동시에 실행되지 않게 한다(각자
+   updateStudioSaveButtonState()/updateStudioPublishButtonState()에서
+   상대 플래그를 함께 확인).
 ========================================================== */
 
 let currentWorkingSkin = null;
 let currentSkinContext = null;
 let currentSkinId = null;
 let currentDraftVersionId = null;
+let currentPublishedVersionId = null;
 let isStudioDirty = false;
 let isStudioSavePending = false;
+let isStudioPublishPending = false;
 let studioToastHideTimer = null;
 
 
@@ -215,7 +244,47 @@ function updateStudioSaveButtonState() {
   studioSaveButton.disabled =
     !isStudioDirty ||
     isStudioSavePending ||
+    isStudioPublishPending ||
     !currentWorkingSkin;
+
+}
+
+
+/* =========================================================
+   Skin Draft Publish — Publish 가능 조건(전부 참이어야 활성화):
+   currentWorkingSkin 존재 + currentDraftVersionId 존재 +
+   currentDraftVersionId !== currentPublishedVersionId(발행 안 된
+   저장된 변경이 있음) + isStudioDirty === false(저장하지 않은
+   변경 없음) + Save/Publish 어느 쪽도 pending이 아님.
+
+   이미 발행된 상태(currentDraftVersionId === currentPublishedVersionId,
+   HOME-only legacy Skin 포함 — 이 비교는 페이지 종류를 전혀 보지
+   않는다)에는 버튼 자체를 "Published"로 바꿔 다시 누를 이유가
+   없음을 보여준다(동일 version 재발행 RPC 호출 금지, 11절).
+========================================================== */
+
+function updateStudioPublishButtonState() {
+
+  const hasUnpublishedDraft =
+    !!currentWorkingSkin &&
+    !!currentDraftVersionId &&
+    currentDraftVersionId !== currentPublishedVersionId;
+
+  studioPublishButton.disabled =
+    !hasUnpublishedDraft ||
+    isStudioDirty ||
+    isStudioSavePending ||
+    isStudioPublishPending;
+
+  studioPublishButton.textContent =
+    (!!currentWorkingSkin && !!currentDraftVersionId && currentDraftVersionId === currentPublishedVersionId)
+      ? "Published"
+      : "Publish";
+
+  studioPublishButton.title =
+    (isStudioDirty && !!currentWorkingSkin)
+      ? "저장하지 않은 변경사항이 있습니다. 먼저 Save 해주세요."
+      : "";
 
 }
 
@@ -280,10 +349,16 @@ function resetStudioWorkingState() {
   currentDraftVersionId =
     null;
 
+  currentPublishedVersionId =
+    null;
+
   isStudioDirty =
     false;
 
   isStudioSavePending =
+    false;
+
+  isStudioPublishPending =
     false;
 
   currentOwnerId =
@@ -304,6 +379,8 @@ function resetStudioWorkingState() {
   resetPreviewNavigation();
 
   updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
 
   updateStudioImportButtonState();
 
@@ -550,6 +627,8 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
 
   updateStudioSaveButtonState();
 
+  updateStudioPublishButtonState();
+
   renderCurrentPreviewEntry();
 
   if (meta && meta.htmlWasModified) {
@@ -635,6 +714,8 @@ function applyImportedSkinPackage(skinPackage) {
 
   updateStudioSaveButtonState();
 
+  updateStudioPublishButtonState();
+
   resetPreviewNavigation();
 
   renderHomePreview();
@@ -689,6 +770,7 @@ async function handleStudioSaveClick() {
 
   if (
     isStudioSavePending ||
+    isStudioPublishPending ||
     !isStudioDirty ||
     !currentWorkingSkin ||
     !currentSkinId
@@ -703,6 +785,8 @@ async function handleStudioSaveClick() {
     true;
 
   updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
 
   let normalizedSnapshot;
 
@@ -729,6 +813,8 @@ async function handleStudioSaveClick() {
       false;
 
     updateStudioSaveButtonState();
+
+    updateStudioPublishButtonState();
 
     return;
 
@@ -786,6 +872,14 @@ async function handleStudioSaveClick() {
 
     updateStudioSaveButtonState();
 
+    /*
+      Publish 가능 여부는 currentDraftVersionId(성공 시 변경)와
+      isStudioDirty(성공 시에만 내려감) 둘 다에 좌우된다 — 성공/
+      실패 어느 쪽이든 다시 계산해 둔다(실패했다면 두 값 모두
+      바뀌지 않았으니 사실상 no-op).
+    */
+    updateStudioPublishButtonState();
+
   }
 
 }
@@ -794,6 +888,117 @@ async function handleStudioSaveClick() {
 studioSaveButton.addEventListener(
   "click",
   handleStudioSaveClick
+);
+
+
+/* =========================================================
+   Publish — publish_skin() RPC(studio/studio-write.js wrapper) 1회
+   호출. 저장하지 않은 변경이 있으면(isStudioDirty) 그 자리에서
+   막고 먼저 Save해야 한다는 문구를 보여준다(updateStudioPublishButtonState()
+   가 이미 title에 그 문구를 채워 두므로, 여기서는 버튼이 실제로
+   disabled인 상태라 클릭 자체가 오지 않는다 — 방어적으로 함수
+   진입점에서도 같은 조건을 한 번 더 확인한다, handleStudioSaveClick과
+   동일한 관례).
+
+   확인 dialog(studio/editor/confirm-dialog.js)는 사용자가 확인을
+   누른 뒤에만 닫히고 handleStudioPublishConfirmed를 호출한다 —
+   dialog가 열려 있는 동안은 배경(Save/Back 등)을 클릭할 수 없으므로
+   (overlay가 전체를 덮음) 그 사이 currentDraftVersionId 등이 바뀔
+   가능성은 없지만, 실행 시점에 조건을 다시 한번 확인해 동일
+   version을 두 번 발행하는 RPC 호출을 구조적으로 막는다(11절).
+========================================================== */
+
+function isStudioPublishAllowed() {
+
+  return (
+    !isStudioPublishPending &&
+    !isStudioSavePending &&
+    !isStudioDirty &&
+    !!currentWorkingSkin &&
+    !!currentSkinId &&
+    !!currentDraftVersionId &&
+    currentDraftVersionId !== currentPublishedVersionId
+  );
+
+}
+
+
+function handleStudioPublishClick() {
+
+  if (!isStudioPublishAllowed()) {
+    return;
+  }
+
+  openStudioConfirmDialog(
+    {
+      message: "저장된 스킨을 공개 홈페이지에 적용할까요?",
+      confirmLabel: "적용",
+      cancelLabel: "취소",
+      onConfirm: handleStudioPublishConfirmed
+    }
+  );
+
+}
+
+
+async function handleStudioPublishConfirmed() {
+
+  if (!isStudioPublishAllowed()) {
+    return;
+  }
+
+  const targetVersionId =
+    currentDraftVersionId;
+
+  isStudioPublishPending =
+    true;
+
+  updateStudioPublishButtonState();
+
+  updateStudioSaveButtonState();
+
+  try {
+
+    await publishSkin(
+      currentSkinId
+    );
+
+    currentPublishedVersionId =
+      targetVersionId;
+
+    showStudioToast(
+      "공개 홈페이지에 적용되었습니다."
+    );
+
+  } catch (err) {
+
+    console.error(
+      "[studio-preview] publish failed",
+      err
+    );
+
+    showStudioToast(
+      "적용하지 못했습니다. 다시 시도해주세요.",
+      { isError: true }
+    );
+
+  } finally {
+
+    isStudioPublishPending =
+      false;
+
+    updateStudioPublishButtonState();
+
+    updateStudioSaveButtonState();
+
+  }
+
+}
+
+
+studioPublishButton.addEventListener(
+  "click",
+  handleStudioPublishClick
 );
 
 
@@ -1345,6 +1550,18 @@ async function mountStudioPreview(
   currentDraftVersionId =
     skin.current_draft_version_id;
 
+  /*
+    Skin Draft Publish — DB의 current_published_version_id를 그대로
+    복원한다(mount는 최초 진입뿐 아니라 매 새로고침마다 다시
+    호출되므로, 이 한 줄이 "새로고침 후 Publish 버튼 상태 복원"
+    요구사항을 충족한다). 발행 이력이 아직 없으면 skin row 자체가
+    null을 갖고 있고(loadStudioEntryState의 select 그대로), 그 경우
+    updateStudioPublishButtonState()가 hasUnpublishedDraft 판정에서
+    "currentDraftVersionId !== null"로 자연히 Publish를 활성화한다.
+  */
+  currentPublishedVersionId =
+    skin.current_published_version_id;
+
   isStudioDirty =
     false;
 
@@ -1363,6 +1580,8 @@ async function mountStudioPreview(
     imageSlotValues;
 
   updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
 
   updateStudioImportButtonState();
 
