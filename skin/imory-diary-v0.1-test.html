@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Imory Diary v0.1 — test skin verification harness</title>
+<style>
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 24px;
+    background: #f2f2f2;
+  }
+  h2 {
+    margin-top: 40px;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4px;
+  }
+  p.intro {
+    max-width: 900px;
+  }
+  .panel {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px 24px;
+    margin-bottom: 16px;
+  }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  #summary {
+    font-size: 16px;
+    font-weight: bold;
+    margin-top: 24px;
+  }
+  .device-frame-wrap {
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .device-frame {
+    border: 2px dashed #999;
+    border-radius: 8px;
+    background: #fafafa;
+    display: block;
+  }
+  .device-frame.desktop { width: 1280px; height: 900px; }
+  .device-frame.mobile { width: 375px; height: 900px; }
+  .device-controls {
+    margin: 10px 0 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .device-controls button {
+    font-size: 12px;
+    padding: 6px 10px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+  <h1>Imory Diary v0.1 — 테스트 스킨 검증 하네스</h1>
+  <p class="intro">
+    PHASE 1 최종 실사용 검증용. 실 Supabase/로그인 없이, 현재
+    <code>skin/skin-context.js</code>가 반환하는 shape과 동일한
+    mock context로 <code>skin/test-skins/imory-diary-v0.1.json</code>
+    SkinPackage를 렌더한다. AI/실 DB 연결 없음 — 공개 HOME/Studio와
+    완전히 무관한 격리된 페이지.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <p class="intro">
+    Desktop/Mobile 프레임은 각각 &lt;iframe&gt;이다 — 스킨 CSS의
+    <code>@media (max-width: 720px)</code>가 부모 문서의 뷰포트가
+    아니라 각 iframe 자신의 너비를 기준으로 평가되게 하기 위함
+    (실제 공개 사이트에서 페이지 자체가 뷰포트인 것과 동일한 조건).
+  </p>
+
+  <h2>Desktop Preview (1280px)</h2>
+  <div class="panel">
+    <div class="device-controls" id="desktopControls"></div>
+    <div class="device-frame-wrap">
+      <iframe class="device-frame desktop" id="desktopFrame" title="Desktop preview"></iframe>
+    </div>
+  </div>
+
+  <h2>Mobile Preview (375px)</h2>
+  <div class="panel">
+    <div class="device-controls" id="mobileControls"></div>
+    <div class="device-frame-wrap">
+      <iframe class="device-frame mobile" id="mobileFrame" title="Mobile preview"></iframe>
+    </div>
+  </div>
+
+  <!-- 의존 스크립트 로드 순서: sanitize/template(classic) -> render(module, 내부에서 css-validate 호출) -->
+  <script src="./skin-sanitize.js"></script>
+  <script src="./skin-template.js"></script>
+
+  <script type="module">
+
+    import { renderSkin } from "./skin-render.js";
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function report(name, passed, detail) {
+      const item = document.createElement("li");
+      item.className = passed ? "pass" : "fail";
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      reportList.appendChild(item);
+      if (passed) { passCount++; } else { failCount++; }
+      console[passed ? "log" : "error"](`[${passed ? "PASS" : "FAIL"}] ${name}`, detail || "");
+    }
+
+    function assert(name, condition, detail) {
+      report(name, !!condition, detail);
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+    }
+
+
+    /* =====================================================
+       MOCK DATA — skin-context.js가 실제로 만드는 shape과 동일하게
+       손으로 구성. buildBaseSkinContext()/buildHomeSkinContext()/
+       buildCategorySkinContext()/buildPostSkinContext() 반환값을
+       그대로 재현한다(실 Supabase 연결 없이 검증하기 위함).
+    ===================================================== */
+
+    const SLUG = "haru";
+
+    const categories = [
+      { id: "10", name: "일상", type: "post", href: `/${SLUG}/category/10`, itemCount: null },
+      { id: "11", name: "생각", type: "post", href: `/${SLUG}/category/11`, itemCount: null },
+      { id: "12", name: "여행", type: "post", href: `/${SLUG}/category/12`, itemCount: null },
+      { id: "20", name: "즐겨찾기", type: "banner", href: `/${SLUG}/category/20`, itemCount: null }
+    ];
+
+    const base = {
+      site: { title: "하루의 다이어리", slug: SLUG, faviconUrl: null, description: null, language: "ko" },
+      profile: {
+        nickname: "하루",
+        bio: "매일 조금씩, 소소한 기록.",
+        avatarUrl: "test-skins/imory-diary-avatar-placeholder.svg"
+      },
+      navigation: {
+        home: { name: "하루의 다이어리", href: `/${SLUG}/`, enabled: true },
+        categories,
+        postCategories: categories.filter((c) => c.type === "post"),
+        bannerCategories: categories.filter((c) => c.type === "banner")
+      },
+      banners: { items: [] },
+      images: { profile: "test-skins/imory-diary-avatar-placeholder.svg" }
+    };
+
+    function pageMeta(type) {
+      return { type, isHome: type === "home", isCategory: type === "category", isPost: type === "post" };
+    }
+
+    const homeContext = {
+      ...base,
+      page: pageMeta("home"),
+      home: {
+        recentPosts: [
+          { id: "101", title: "봄비 오는 날", href: `/${SLUG}/post/101`, publishedAt: "2026-03-02T09:15:00+00:00", categoryId: "10", categoryName: "일상", isSecret: false },
+          { id: "102", title: "🔒 untitled", href: `/${SLUG}/post/102`, publishedAt: "2026-02-27T21:40:00+00:00", categoryId: "12", categoryName: "여행", isSecret: true },
+          { id: "103", title: "책 한 권", href: `/${SLUG}/post/103`, publishedAt: "2026-02-20T08:00:00+00:00", categoryId: "10", categoryName: "일상", isSecret: false },
+          { id: "104", title: "여름 바다", href: `/${SLUG}/post/104`, publishedAt: "2026-02-14T13:05:00+00:00", categoryId: "12", categoryName: "여행", isSecret: false },
+          { id: "105", title: "혼자 걷는 길", href: `/${SLUG}/post/105`, publishedAt: "2026-02-09T19:20:00+00:00", categoryId: "10", categoryName: "일상", isSecret: false }
+        ]
+      }
+    };
+
+    function categoryContext(categoryId, name, posts) {
+      return {
+        ...base,
+        page: pageMeta("category"),
+        category: { id: categoryId, name, type: "post", href: `/${SLUG}/category/${categoryId}`, posts }
+      };
+    }
+
+    const categoryContexts = {
+      "10": categoryContext("10", "일상", [
+        { id: "103", title: "책 한 권", href: `/${SLUG}/post/103`, publishedAt: "2026-02-20T08:00:00+00:00", isSecret: false },
+        { id: "105", title: "혼자 걷는 길", href: `/${SLUG}/post/105`, publishedAt: "2026-02-09T19:20:00+00:00", isSecret: false },
+        { id: "106", title: "새벽 세시", href: `/${SLUG}/post/106`, publishedAt: "2026-01-30T03:00:00+00:00", isSecret: false }
+      ]),
+      "11": categoryContext("11", "생각", []),
+      "12": categoryContext("12", "여행", [
+        { id: "102", title: "🔒 untitled", href: `/${SLUG}/post/102`, publishedAt: "2026-02-27T21:40:00+00:00", isSecret: true },
+        { id: "104", title: "여름 바다", href: `/${SLUG}/post/104`, publishedAt: "2026-02-14T13:05:00+00:00", isSecret: false },
+        { id: "107", title: "기차 창밖", href: `/${SLUG}/post/107`, publishedAt: "2026-01-22T11:10:00+00:00", isSecret: false }
+      ])
+    };
+
+    function postContext(postId, title, categoryId, categoryName) {
+      return {
+        ...base,
+        page: pageMeta("post"),
+        post: {
+          id: postId,
+          title,
+          publishedAt: "2026-02-20T08:00:00+00:00",
+          categoryName,
+          categoryHref: categoryId ? `/${SLUG}/category/${categoryId}` : null
+        }
+      };
+    }
+
+    const postContexts = {
+      "101": postContext("101", "봄비 오는 날", "10", "일상"),
+      "102": postContext("102", "🔒 untitled", "12", "여행"),
+      "103": postContext("103", "책 한 권", "10", "일상"),
+      "104": postContext("104", "여름 바다", "12", "여행"),
+      "105": postContext("105", "혼자 걷는 길", "10", "일상"),
+      "106": postContext("106", "새벽 세시", "10", "일상"),
+      "107": postContext("107", "기차 창밖", "12", "여행")
+    };
+
+    const secretPostIds = new Set(["102"]);
+
+    function mountFakeBody(bodyRegion, postId) {
+      if (secretPostIds.has(postId)) {
+        bodyRegion.innerHTML =
+          '<p style="text-align:center;color:#888;padding:24px 0;">🔒 비밀번호가 필요한 글입니다.</p>';
+        return;
+      }
+      bodyRegion.innerHTML =
+        '<p>오늘은 날씨가 참 좋았다. 창밖을 보다가 문득 이 순간을 기록해두고 싶어졌다.</p>' +
+        '<p><span class="post-dialogue">"가끔은 아무것도 하지 않는 하루도 필요해."</span></p>' +
+        '<p>' + "긴 문단 테스트를 위해 같은 문장을 여러 번 반복한다. ".repeat(20) + '</p>' +
+        '<p>그렇게 하루가 지나갔다.</p>';
+    }
+
+
+    /* =====================================================
+       fixture 로드 + normalize 검증
+    ===================================================== */
+
+    const fixtureRes = await fetch("./test-skins/imory-diary-v0.1.json");
+    const skinPackage = await fixtureRes.json();
+
+    assert("A1. schemaVersion === 1", skinPackage.schemaVersion === 1);
+    assert("A2. templates.home/category/post 모두 존재", !!(skinPackage.templates.home && skinPackage.templates.category && skinPackage.templates.post));
+
+    const cssResult = window.validateAndScopeSkinCss(skinPackage.css, { namespace: "diary-fixture-check" });
+    assert("A3. CSS validate 통과", cssResult.ok, cssResult.warnings.join(", "));
+    assert("A4. CSS validate 경고 없음(위험 구문 없음)", cssResult.warnings.length === 0, cssResult.warnings.join(", "));
+
+    ["home", "category", "post"].forEach((type) => {
+      const sanitized = sanitizeSkinHTML(skinPackage.templates[type].html);
+      assert(`A5. templates.${type}.html이 sanitize 전후 동일(허용 태그/속성만 사용)`, sanitized.length > 0 && sanitized === sanitizeSkinHTML(sanitized));
+    });
+
+    assert("A6. post 템플릿 소스에 post.content 바인딩 없음(protected region만 사용)", !skinPackage.templates.post.html.includes("post.content"));
+    assert("A7. 어떤 템플릿에도 secret_password 관련 문자열 없음", !JSON.stringify(skinPackage).toLowerCase().includes("password"));
+
+
+    /* =====================================================
+       device frame 헬퍼 — desktop/mobile 각각 독립된 iframe
+       (자신만의 CSS viewport) 안에서 HOME/CATEGORY/POST 사이를
+       오갈 수 있는 최소 SPA 라우터. 실 사이트 라우팅과 무관 —
+       이 하네스 전용 테스트 배선이다.
+
+       iframe을 쓰는 이유: skin.css의 `@media (max-width: 720px)`는
+       뷰포트 기준 media query라, 넓은 브라우저 창 안에 375px짜리
+       <div>만 그려서는 이 미디어쿼리가 전혀 발동하지 않는다(실제
+       매체 조건은 항상 "탭 전체 너비"이지 "특정 div의 너비"가
+       아니기 때문). skin-render.js 자신이 "document-agnostic —
+       container.ownerDocument로 동작하므로 부모 문서든 iframe
+       안이든 그대로 동작한다"고 설계돼 있으므로(skin-render.js
+       파일 상단 주석), 각 프레임을 실제 별도 문서(iframe)로 만들면
+       그 iframe 자신의 너비가 곧 media query 기준 뷰포트가 되어
+       공개 사이트와 동일한 조건으로 반응형을 검증할 수 있다.
+    ===================================================== */
+
+    async function createDiaryPreviewFrame(iframeEl, controlsEl) {
+
+      await new Promise((resolve) => {
+        iframeEl.addEventListener("load", resolve, { once: true });
+        iframeEl.srcdoc = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><style>html,body{margin:0;padding:0;}.legacy-banner-placeholder{padding:40px;text-align:center;color:#555;font-size:14px;font-family:system-ui,sans-serif;}</style></head><body></body></html>";
+      });
+
+      const frameDoc = iframeEl.contentDocument;
+      const frameWin = iframeEl.contentWindow;
+      const targetEl = frameDoc.createElement("div");
+      frameDoc.body.appendChild(targetEl);
+
+      let currentInstance = null;
+      const historyStack = [];
+
+      function renderView(kind, key, pushHistory = true) {
+
+        if (pushHistory) {
+          historyStack.push({ kind, key });
+        }
+
+        if (kind === "legacy-banner") {
+          if (currentInstance) { currentInstance.destroy(); currentInstance = null; }
+          targetEl.innerHTML = '<div class="legacy-banner-placeholder">(legacy Banner renderer — Skin Renderer 범위 밖)</div>';
+          return { kind, key };
+        }
+
+        const template = resolveSkinTemplate(skinPackage, kind);
+
+        const context =
+          kind === "home" ? homeContext
+          : kind === "category" ? categoryContexts[key]
+          : postContexts[key];
+
+        if (currentInstance) {
+          currentInstance.destroy();
+        }
+
+        currentInstance = renderSkin({ container: targetEl, skin: template, context, mode: "view" });
+
+        if (kind === "post") {
+          const region = currentInstance.getRegion("post-body");
+          if (region) {
+            mountFakeBody(region, key);
+          }
+        }
+
+        /* Skin이 렌더한 <a data-imory-href>를 실제 페이지 이동 대신
+           이 하네스의 라우터로 가로챈다(정적 하네스라 실제 사이트
+           라우트가 존재하지 않으므로). */
+        targetEl.querySelectorAll("a[href]").forEach((a) => {
+          a.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            navigateByHref(a.getAttribute("href"));
+          });
+        });
+
+        return { kind, key };
+
+      }
+
+      function navigateByHref(href) {
+
+        const postMatch = href.match(new RegExp(`^/${SLUG}/post/(\\d+)$`));
+        const categoryMatch = href.match(new RegExp(`^/${SLUG}/category/(\\d+)$`));
+        const homeMatch = href === `/${SLUG}/` || href === `/${SLUG}`;
+
+        if (postMatch) {
+          renderView("post", postMatch[1]);
+          return;
+        }
+
+        if (categoryMatch) {
+          const id = categoryMatch[1];
+          if (categoryContexts[id]) {
+            renderView("category", id);
+          } else {
+            renderView("legacy-banner", id);
+          }
+          return;
+        }
+
+        if (homeMatch) {
+          renderView("home", null);
+        }
+
+      }
+
+      function goBack() {
+        if (historyStack.length <= 1) {
+          return currentEntry();
+        }
+        historyStack.pop();
+        const prev = historyStack[historyStack.length - 1];
+        return renderView(prev.kind, prev.key, false);
+      }
+
+      function currentEntry() {
+        return historyStack[historyStack.length - 1];
+      }
+
+      function addButton(text, onClick) {
+        const btn = document.createElement("button");
+        btn.textContent = text;
+        btn.addEventListener("click", onClick);
+        controlsEl.appendChild(btn);
+      }
+
+      addButton("HOME", () => renderView("home", null));
+      addButton("→ POST CATEGORY(일상)", () => renderView("category", "10"));
+      addButton("→ POST A(책 한 권)", () => renderView("post", "103"));
+      addButton("← Back", () => goBack());
+      addButton("HOME → BANNER CATEGORY", () => { renderView("home", null); navigateByHref(`/${SLUG}/category/20`); });
+
+      renderView("home", null);
+
+      return {
+        get current() { return currentEntry(); },
+        get target() { return targetEl; },
+        doc: frameDoc,
+        win: frameWin,
+        navigateByHref,
+        goBack,
+        renderView
+      };
+
+    }
+
+    const desktopFrame = await createDiaryPreviewFrame(
+      document.getElementById("desktopFrame"),
+      document.getElementById("desktopControls")
+    );
+
+    const mobileFrame = await createDiaryPreviewFrame(
+      document.getElementById("mobileFrame"),
+      document.getElementById("mobileControls")
+    );
+
+
+    /* =====================================================
+       B. HOME 렌더 검증(desktop frame 재사용)
+    ===================================================== */
+
+    desktopFrame.renderView("home", null);
+    let root = desktopFrame.target;
+
+    assert("B1. site.title 바인딩", root.querySelector(".diary-site-title").textContent === "하루의 다이어리");
+    assert("B2. profile.nickname 바인딩", root.querySelector(".diary-nickname").textContent === "하루");
+    assert("B3. profile.bio 표시(truthy)", root.querySelector(".diary-bio").textContent === "매일 조금씩, 소소한 기록.");
+    assert("B4. navigation.home 링크 href/label", root.querySelector(".diary-home-link").getAttribute("href") === "/haru/" && root.querySelector(".diary-home-link").textContent === "HOME");
+    assert("B5. navigation.postCategories 3건이 POST 메뉴에만 렌더", root.querySelectorAll(".diary-nav-list li").length === 3);
+    assert("B6. navigation.bannerCategories 1건이 LINKS 메뉴에 별도 렌더", root.querySelectorAll(".diary-banner-list li").length === 1 && root.querySelector(".diary-banner-list a").textContent === "즐겨찾기");
+    assert("B7. home.recentPosts 5건 렌더", root.querySelectorAll(".diary-post-list-section .diary-post-item").length === 5);
+    assert("B8. secret 표시는 정확히 1건(102)", root.querySelectorAll(".diary-post-list-section .diary-post-secret:not([hidden])").length === 1);
+    assert("B9. 날짜는 원본 ISO 문자열 그대로 노출(포맷터 없음, 알려진 한계)", root.querySelectorAll(".diary-post-date")[0].textContent === "2026-03-02T09:15:00+00:00");
+    assert("B10. 아바타 src 반영", root.querySelector(".diary-avatar").getAttribute("src") === "test-skins/imory-diary-avatar-placeholder.svg");
+
+
+    /* =====================================================
+       C/D. CATEGORY 렌더 검증(populated + empty)
+    ===================================================== */
+
+    desktopFrame.renderView("category", "10");
+    root = desktopFrame.target;
+    assert("C1. category.name 바인딩(일상)", root.querySelector(".diary-section-title").textContent === "일상");
+    assert("C2. category.posts 3건 렌더", root.querySelectorAll(".diary-post-item").length === 3);
+
+    desktopFrame.renderView("category", "11");
+    root = desktopFrame.target;
+    assert("D1. 빈 category(생각) 제목 정상 렌더", root.querySelector(".diary-section-title").textContent === "생각");
+    assert("D2. 빈 category.posts는 오류 없이 <ul> 0개 항목", root.querySelectorAll(".diary-post-item").length === 0);
+    const emptyList = root.querySelector(".diary-post-list");
+    const emptyAfter = desktopFrame.win.getComputedStyle(emptyList, "::after").content;
+    assert("D3. 빈 목록에 CSS ::after 안내 문구 노출(렌더러 확장 없이 CSS만으로 해결)", emptyAfter.includes("없습니다"), emptyAfter);
+
+
+    /* =====================================================
+       E. POST 렌더 검증(일반글 + 비밀글)
+    ===================================================== */
+
+    desktopFrame.renderView("post", "103");
+    root = desktopFrame.target;
+    assert("E1. post.title 바인딩", root.querySelector(".diary-post-detail-title").textContent === "책 한 권");
+    assert("E2. breadcrumb category 링크", root.querySelector(".diary-breadcrumb a").getAttribute("href") === "/haru/category/10" && root.querySelector(".diary-breadcrumb a").textContent === "일상");
+    assert("E3. post-body region 존재", !!root.querySelector('[data-imory-region="post-body"]'));
+    assert("E4. region에 실제 본문 mount됨(placeholder 제거)", !root.querySelector(".skin-authored-placeholder") && root.querySelector('[data-imory-region="post-body"]').textContent.includes("날씨가 참 좋았다"));
+
+    desktopFrame.renderView("post", "102");
+    root = desktopFrame.target;
+    assert("E5. 비밀글 제목은 마스킹된 텍스트만 노출(원본/비밀번호 없음)", root.querySelector(".diary-post-detail-title").textContent === "🔒 untitled");
+    assert("E6. 비밀글 본문 자리에도 실 콘텐츠/비밀번호 노출 없이 안내문만", root.querySelector('[data-imory-region="post-body"]').textContent.includes("비밀번호가 필요"));
+
+
+    /* =====================================================
+       F. 보안 — script 실행 없음 / 위험 속성 없음
+    ===================================================== */
+
+    desktopFrame.renderView("home", null);
+    root = desktopFrame.target;
+    assert("F1. 렌더된 DOM에 <script> 없음", root.querySelectorAll("script").length === 0);
+    const hasEventAttr = Array.from(root.querySelectorAll("*")).some((el) =>
+      Array.from(el.attributes).some((attr) => attr.name.toLowerCase().startsWith("on"))
+    );
+    assert("F2. on* 이벤트 속성 없음", !hasEventAttr);
+    assert("F3. id 속성 없음(v0.1 전면 금지 정책 준수)", root.querySelectorAll("[id]").length === 0 || root.querySelectorAll("[id]").length === Array.from(root.querySelectorAll("[data-skin-root]")).length);
+
+
+    /* =====================================================
+       G. 레이아웃 — 가로 스크롤 없음(desktop 1280px / mobile 375px)
+    ===================================================== */
+
+    desktopFrame.renderView("home", null);
+    mobileFrame.renderView("home", null);
+
+    const desktopDocEl = desktopFrame.doc.documentElement;
+    const mobileDocEl = mobileFrame.doc.documentElement;
+
+    assert("G1. Desktop(1280px) 프레임 가로 스크롤 없음", desktopDocEl.scrollWidth <= desktopDocEl.clientWidth + 1, `scrollWidth=${desktopDocEl.scrollWidth} clientWidth=${desktopDocEl.clientWidth}`);
+    assert("G2. Mobile(375px) 프레임 가로 스크롤 없음", mobileDocEl.scrollWidth <= mobileDocEl.clientWidth + 1, `scrollWidth=${mobileDocEl.scrollWidth} clientWidth=${mobileDocEl.clientWidth}`);
+
+
+    /* =====================================================
+       H. Navigation 시나리오(자동) — 11절 체크리스트 그대로
+       HOME -> POST CATEGORY -> POST A -> Back -> CATEGORY -> Back -> HOME
+       그리고 HOME -> BANNER CATEGORY
+    ===================================================== */
+
+    desktopFrame.renderView("home", null);
+    assert("H1. HOME 진입", desktopFrame.current.kind === "home");
+
+    desktopFrame.navigateByHref("/haru/category/10");
+    assert("H2. HOME → POST CATEGORY(일상)", desktopFrame.current.kind === "category" && desktopFrame.current.key === "10");
+
+    desktopFrame.navigateByHref("/haru/post/103");
+    assert("H3. CATEGORY → POST A(103)", desktopFrame.current.kind === "post" && desktopFrame.current.key === "103");
+
+    desktopFrame.goBack();
+    assert("H4. Back → CATEGORY(10)로 복귀", desktopFrame.current.kind === "category" && desktopFrame.current.key === "10");
+
+    desktopFrame.goBack();
+    assert("H5. Back → HOME으로 복귀", desktopFrame.current.kind === "home");
+
+    desktopFrame.renderView("home", null);
+    desktopFrame.navigateByHref("/haru/category/20");
+    assert("H6. HOME → BANNER CATEGORY(20)는 legacy 자리표시자로 이동(Skin Renderer 렌더 안 함)", desktopFrame.current.kind === "legacy-banner");
+
+    /* 하네스 상태를 원래 HOME으로 되돌려 스크린샷/수동 조작이 항상
+       동일한 초기 상태에서 시작하게 한다. */
+    desktopFrame.renderView("home", null);
+    mobileFrame.renderView("home", null);
+
+
+    finishSummary();
+
+  </script>
+
+</body>
+</html>
