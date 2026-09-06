@@ -500,8 +500,17 @@ async function handleCodeEditorApply() {
       err
     );
 
+    /*
+      PHASE 1C-J: onApply(studio-preview.js의 applyWorkingSkinChanges)
+      가 POST post-body region 누락처럼 구체적인 validation 실패를
+      던지면 err.message를 그대로 보여준다 — 이 파일은 여전히 그
+      메시지의 "의미"(무엇이 왜 틀렸는지)는 모르고 문자열만 relay
+      한다(파일 상단 주석의 책임 분리 유지). message가 없는 예외만
+      기존 범용 문구로 대체한다.
+    */
     setCodeEditorMessage(
-      "적용하지 못했습니다. 다시 시도해주세요.",
+      (err && err.message) ||
+        "적용하지 못했습니다. 다시 시도해주세요.",
       true
     );
 

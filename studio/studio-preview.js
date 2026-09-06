@@ -33,10 +33,18 @@
    supabaseClient(core/lib/supabase-client.js), buildSkinContext
    (skin/skin-context.js), extractImageSlotNames
    (skin/skin-image-slots.js), resolveSkinTemplate
-   (skin/skin-template.js — PHASE 1C-B, HOME 편집/미리보기 대상
-   선택), normalizeSkinPackageForDraft
+   (skin/skin-template.js — PHASE 1C-B, 페이지별 편집/미리보기
+   대상 선택), normalizeSkinPackageForDraft
    (skin/skin-package-normalize.js — PHASE 1C-B, Save 직전 전체
    정규화). studio/index.html의 로드 순서 참고.
+
+   반대 방향 의존 하나(PHASE 1C-J): applyWorkingSkinChanges()는
+   studio/preview/preview-navigation.js의 renderCurrentPreviewEntry()
+   를 호출한다 — 그 파일은 이 파일보다 나중에 로드되지만(index.html),
+   실제 호출은 항상 사용자가 CODE Apply를 누른 뒤(= window "load"
+   이후, 두 파일 모두 이미 평가를 마친 시점)에만 일어나므로 안전하다
+   (preview-navigation.js가 이 파일의 updateStudioCodeButtonState() 등을
+   반대 방향으로 참조하는 것과 동일한 패턴).
 ========================================================== */
 
 const PREVIEW_MSG_RENDER = "preview:render";
@@ -200,22 +208,30 @@ function updateStudioSaveButtonState() {
 
 
 /* =========================================================
-   Code Editor는 HOME만 편집한다(PHASE 1C-G 20절) — CATEGORY/POST
-   Preview 중에는 "HOME html을 수정하는" 오해를 막기 위해 버튼
-   자체를 비활성화한다. currentWorkingSkin이 아직 없을 때도 당연히
-   비활성 상태를 유지한다. currentPreviewPageType은 studio/preview/
-   preview-navigation.js가 소유/갱신한다.
+   PHASE 1C-J: Code Editor는 현재 Preview가 보여주고 있는 페이지
+   (currentPreviewPageType)를 그대로 편집 대상으로 삼는다 — 별도
+   페이지 선택 UI(탭/드롭다운)는 만들지 않는다(문서 2절). 버튼은
+   그 페이지에 편집 가능한 template이 없을 때만 비활성화한다
+   (resolveCodeEditorSource가 undefined를 돌려주는 경우 — 예:
+   templates.category/post가 아직 없는 기존 HOME-only Skin에서
+   CATEGORY/POST를 보고 있을 때). currentWorkingSkin이 아직 없을
+   때도 당연히 비활성 상태를 유지한다. currentPreviewPageType은
+   studio/preview/preview-navigation.js가 소유/갱신한다.
 ========================================================== */
 
 function updateStudioCodeButtonState() {
 
+  const codeEditorSource =
+    currentWorkingSkin
+      ? resolveCodeEditorSource(currentWorkingSkin, currentPreviewPageType)
+      : null;
+
   studioCodeButton.disabled =
-    !currentWorkingSkin ||
-    currentPreviewPageType !== "home";
+    !codeEditorSource;
 
   studioCodeButton.title =
-    currentPreviewPageType !== "home"
-      ? "현재 Code Editor는 HOME만 편집합니다"
+    (currentWorkingSkin && !codeEditorSource)
+      ? "이 페이지에는 아직 편집할 template이 없습니다"
       : "";
 
 }
@@ -317,9 +333,11 @@ function showStudioToast(message, options) {
    PHASE 1C-B: HOME 편집/미리보기 대상 선택 — resolveSkinTemplate()
    (skin/skin-template.js, classic global)의 우선순위를 그대로
    따른다: templates.home이 있으면 그것, 없으면 legacy top-level
-   html/css. Studio Code Editor는 이번 Slice에서도 여전히
-   HOME만 편집한다(category/post는 8절 "Code UI에서 직접 편집할
-   필요 없음" — 그대로 보존만 된다, applyWorkingSkinChanges 참고).
+   html/css. skin이 null이어도(예: currentWorkingSkin 없음) 항상
+   { html, css } 객체를 돌려준다 — "HOME은 항상 편집 가능"이라는
+   기존 계약을 유지하기 위함이다(호출자가 별도로 currentWorkingSkin
+   존재 여부를 먼저 확인해야 함, resolveCodeEditorSource/
+   updateStudioCodeButtonState 참고).
 ========================================================== */
 
 function buildStudioHomePreviewSkin(skin) {
@@ -327,6 +345,60 @@ function buildStudioHomePreviewSkin(skin) {
   return (
     resolveSkinTemplate(skin, "home") ||
     { html: skin?.html || "", css: skin?.css || "" }
+  );
+
+}
+
+
+/* =========================================================
+   PHASE 1C-J: resolveCodeEditorSource(skin, pageType)
+     -> { html, css } | undefined
+
+   Code Editor가 열 때 불러올 소스와, CODE 버튼 활성화 여부 판정에
+   공통으로 쓰는 단일 지점. HOME은 buildStudioHomePreviewSkin()의
+   legacy top-level html fallback 계약을 그대로 타므로 항상 정의된
+   값을 돌려준다. CATEGORY/POST는 resolveSkinTemplate()을 그대로
+   따른다 — templates.category/post가 없는 기존 HOME-only Skin에서
+   CATEGORY/POST를 보고 있으면 undefined를 돌려주고, 그 경우 HOME
+   html을 복제하거나 빈 template을 만들어주지 않는다(문서 7절
+   "지원하지 않는 페이지에서 CODE를 눌렀다면... 원본 SkinPackage를
+   변경하지 않는다") — 호출자는 undefined를 "이 페이지는 아직 Code
+   Editor로 편집할 수 없음"으로 취급한다.
+========================================================== */
+
+function resolveCodeEditorSource(skin, pageType) {
+
+  if (pageType === "home") {
+    return buildStudioHomePreviewSkin(skin);
+  }
+
+  return resolveSkinTemplate(skin, pageType);
+
+}
+
+
+/* =========================================================
+   PHASE 1C-J: htmlHasPostBodyRegion(html) -> boolean
+
+   POST 페이지를 Code Editor로 편집할 때만 쓰는 검증 — 사용자가
+   POST HTML에서 data-imory-region="post-body"를 지워버리면 실제
+   글 본문을 표시할 자리가 사라진다(PHASE1C-I 계약). sanitizeSkinHTML
+   과 동일하게 DOMParser로 파싱해 판정한다(정규식으로 raw 문자열을
+   훑지 않음 — 속성 순서/따옴표 형태에 흔들리지 않기 위해). 이
+   검사는 applyWorkingSkinChanges()가 currentWorkingSkin을 바꾸기
+   전에만 호출한다 — 실패하면 애초에 아무 상태도 건드리지 않는다.
+========================================================== */
+
+function htmlHasPostBodyRegion(html) {
+
+  const parsed =
+    new DOMParser().parseFromString(
+      String(html || ""),
+      "text/html"
+    );
+
+  return (
+    !!parsed.querySelector('[data-imory-region="post-body"]')
   );
 
 }
@@ -346,11 +418,26 @@ function buildStudioHomePreviewSkin(skin) {
 
 
 /* =========================================================
-   Code Apply — code-editor.js가 sanitize/validate를 이미 통과한
-   뒤에만 이 함수를 호출한다(studio/editor/code-editor.js 참고).
-   여기서는 DB에 전혀 손대지 않는다 — currentWorkingSkin 교체 +
-   Preview 즉시 반영 + dirty=true만 한다(5절 "Apply와 Save는
+   PHASE 1C-J: Code Apply — code-editor.js가 sanitize/validate를
+   이미 통과한 뒤에만 이 함수를 호출한다(studio/editor/code-editor.js
+   참고). 여기서는 DB에 전혀 손대지 않는다 — currentWorkingSkin
+   교체 + Preview 즉시 반영 + dirty=true만 한다(5절 "Apply와 Save는
    반드시 분리").
+
+   pageType은 CODE를 연 시점의 currentPreviewPageType을 호출자
+   (studioCodeButton 클릭 핸들러, 바로 아래)가 클로저로 고정해
+   넘긴다 — 모달이 열려 있는 동안 사용자가 Preview를 옮길 수 없으니
+   (모달이 배경 클릭을 막는다, code-editor.js 참고) Apply 시점에도
+   항상 그 페이지가 대상이다. 이 함수가 실제로 건드리는 template은
+   pageType 하나뿐이고, 나머지 두 페이지의 html은 byte 단위로도
+   변하지 않는다(spread로만 보존).
+
+   POST는 추가로 data-imory-region="post-body"가 남아 있는지
+   검사한다(PHASE1C-I 계약) — 없으면 currentWorkingSkin을 전혀
+   바꾸지 않고 에러를 던진다. code-editor.js의 handleCodeEditorApply
+   가 이 예외를 잡아 err.message를 그대로 사용자에게 보여주고
+   모달을 열어둔 채 유지한다(구조는 그대로, catch 블록만 PHASE 1C-J
+   에서 메시지를 relay하도록 바뀜).
 
    PHASE 1C-B: templates.home이 이미 있는(멀티페이지) Skin이면
    HOME 편집 결과를 templates.home.html에 써야 resolveSkinTemplate()
@@ -358,49 +445,95 @@ function buildStudioHomePreviewSkin(skin) {
    죽은 필드가 된다) — templates.category/post/imageSlots/regions/
    metadata는 스프레드로 그대로 보존된다. templates.home이 없는
    기존 html-only Skin은 지금까지와 동일하게 top-level html에
-   쓴다. css는 templates 유무와 무관하게 항상 공유 top-level
-   css 하나에만 쓴다(페이지별 css를 두지 않는다는 12-B절 결정).
+   쓴다. CATEGORY/POST는 버튼이 이미 resolveCodeEditorSource()로
+   template 존재를 확인한 뒤에만 열리므로 templates[pageType]이
+   항상 있어야 하지만, 방어적으로 한 번 더 확인한다. css는 pageType
+   과 무관하게 항상 공유 top-level css 하나에만 쓴다(페이지별 css를
+   두지 않는다는 12-B절 결정, 이번 Slice도 유지).
+
+   재렌더는 pageType별 분기를 새로 만들지 않고 preview-navigation.js
+   의 renderCurrentPreviewEntry()를 그대로 재사용한다 — previewHistory
+   최상단 항목(HOME/CATEGORY categoryId/POST postId)을 보고 이미
+   올바른 render*PreviewFor를 호출해 주므로, Apply 후 재렌더 경로가
+   Preview navigation 경로와 완전히 같아진다(POST라면 실제 본문도
+   postPostBodyToFrame()로 다시 채워진다 — regression 테스트 G).
 ========================================================== */
 
-function applyWorkingSkinChanges(html, css, meta) {
+function applyWorkingSkinChanges(pageType, html, css, meta) {
 
   if (!currentWorkingSkin) {
     return;
   }
 
-  const hasHomeTemplate =
-    !!(currentWorkingSkin.templates && currentWorkingSkin.templates.home);
+  if (
+    pageType === "post" &&
+    !htmlHasPostBodyRegion(html)
+  ) {
 
-  currentWorkingSkin =
-    hasHomeTemplate
-      ? {
-          ...currentWorkingSkin,
-          css,
-          templates: {
-            ...currentWorkingSkin.templates,
-            home: {
-              ...currentWorkingSkin.templates.home,
-              html
+    throw new Error(
+      "POST 템플릿에는 글 본문이 표시되는 자리(post-body region)가 반드시 있어야 합니다."
+    );
+
+  }
+
+  if (pageType === "home") {
+
+    const hasHomeTemplate =
+      !!(currentWorkingSkin.templates && currentWorkingSkin.templates.home);
+
+    currentWorkingSkin =
+      hasHomeTemplate
+        ? {
+            ...currentWorkingSkin,
+            css,
+            templates: {
+              ...currentWorkingSkin.templates,
+              home: {
+                ...currentWorkingSkin.templates.home,
+                html
+              }
             }
           }
+        : {
+            ...currentWorkingSkin,
+            html,
+            css
+          };
+
+  } else {
+
+    if (
+      !currentWorkingSkin.templates ||
+      !currentWorkingSkin.templates[pageType]
+    ) {
+
+      throw new Error(
+        "이 페이지는 아직 편집할 수 없습니다."
+      );
+
+    }
+
+    currentWorkingSkin =
+      {
+        ...currentWorkingSkin,
+        css,
+        templates: {
+          ...currentWorkingSkin.templates,
+          [pageType]: {
+            ...currentWorkingSkin.templates[pageType],
+            html
+          }
         }
-      : {
-          ...currentWorkingSkin,
-          html,
-          css
-        };
+      };
+
+  }
 
   isStudioDirty =
     true;
 
   updateStudioSaveButtonState();
 
-  postRenderToFrame(
-    {
-      skin: buildStudioHomePreviewSkin(currentWorkingSkin),
-      context: currentSkinContext
-    }
-  );
+  renderCurrentPreviewEntry();
 
   if (meta && meta.htmlWasModified) {
 
@@ -421,14 +554,25 @@ studioCodeButton.addEventListener(
       return;
     }
 
-    const homeSource =
-      buildStudioHomePreviewSkin(currentWorkingSkin);
+    const pageType =
+      currentPreviewPageType;
+
+    const source =
+      resolveCodeEditorSource(
+        currentWorkingSkin,
+        pageType
+      );
+
+    if (!source) {
+      return;
+    }
 
     window.openSkinCodeEditor(
       {
-        html: homeSource.html,
-        css: homeSource.css,
-        onApply: applyWorkingSkinChanges
+        html: source.html,
+        css: source.css,
+        onApply: (html, css, meta) =>
+          applyWorkingSkinChanges(pageType, html, css, meta)
       }
     );
 

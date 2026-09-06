@@ -255,8 +255,8 @@
       );
 
       record(
-        "N7. CATEGORY Preview 중에는 Preview Back이 보이고, Code 버튼은 비활성화된다",
-        backButton().hidden === false && codeButton().disabled === true
+        "N7. CATEGORY Preview 중에는 Preview Back이 보이고, Code 버튼도 활성화된다(PHASE 1C-J — templates.category가 있으면 CATEGORY도 route-aware하게 편집 가능, 더 이상 HOME만 편집 가능한 제한이 아님)",
+        backButton().hidden === false && codeButton().disabled === false
       );
 
       /*
@@ -818,6 +818,427 @@
     }
 
 
+    /* =========================================================
+       PART 3 (PHASE 1C-J) — Route-aware Code Editor. "페이지 선택
+       UI를 만들지 않고, 현재 Preview에서 보고 있는 페이지의 HTML을
+       CODE가 자동으로 편집한다"를 검증한다. Scenario N을 그대로
+       재사용한다(templates.home/category/post 전부 존재 + POST에
+       post-body region까지 있어 세 페이지를 모두 왕복 편집할 수
+       있는 유일한 손-마커 fixture). Code Editor DOM은 studio-preview
+       와 같은 문서(studio-lifecycle-scenario.html)에 직접
+       appendChild되므로 innerDoc()이 아니라 doc에서 찾는다
+       (code-editor.js 참고).
+    ========================================================== */
+
+    async function runScenarioCodeEditor() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=n");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+      const codeButton = () => doc.getElementById("studioCodeButton");
+
+      const codeOverlay = () => doc.querySelector(".code-editor-overlay");
+      const htmlTextarea = () => doc.querySelectorAll(".code-editor-textarea")[0];
+      const cssTextarea = () => doc.querySelectorAll(".code-editor-textarea")[1];
+      const codeMessage = () => doc.querySelector(".code-editor-message");
+      const applyButton = () => Array.from(doc.querySelectorAll(".code-editor-button")).find((b) => b.textContent === "Apply");
+      const cancelButton = () => Array.from(doc.querySelectorAll(".code-editor-button")).find((b) => b.textContent === "Cancel");
+
+      const openCodeEditor = async () => {
+        codeButton().click();
+        return waitFor(() => codeOverlay() && !codeOverlay().hidden ? true : null, 2000, 30);
+      };
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")),
+        8000,
+        100
+      );
+
+      // --- A. Route-aware open — HOME ---
+      record("CJ-A0. HOME에서는 Code 버튼이 활성화된다", !codeButton().disabled);
+
+      await openCodeEditor();
+
+      record(
+        "CJ-A1. HOME에서 CODE를 열면 templates.home.html이 보인다",
+        htmlTextarea().value.includes("scenario-n-home")
+      );
+
+      // --- Cancel: 아무 것도 바뀌지 않아야 한다 ---
+      htmlTextarea().value = htmlTextarea().value + "<!-- should never apply -->";
+      cancelButton().click();
+
+      record("CJ-CANCEL-1. Cancel 클릭 후 모달이 닫힌다", codeOverlay().hidden === true);
+
+      await openCodeEditor();
+
+      record(
+        "CJ-CANCEL-2. Cancel 후 다시 열어도 방금 입력한 임시 텍스트가 남아있지 않다(draft 폐기)",
+        !htmlTextarea().value.includes("should never apply")
+      );
+
+      cancelButton().click();
+
+      record(
+        "CJ-CANCEL-3. Cancel은 Preview도 건드리지 않는다(HOME 그대로)",
+        !!(innerDoc() && innerDoc().querySelector(".scenario-n-home"))
+      );
+
+      // --- HOME -> CATEGORY ---
+      clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-nav-link", "LOG"));
+
+      await waitFor(() => (innerDoc() && innerDoc().querySelector(".scenario-n-category-title")) || null, 4000, 50);
+
+      record(
+        "CJ-A2. CATEGORY Preview 중에는 Code 버튼이 활성화된다(기존 HOME-only 제한을 해제)",
+        !codeButton().disabled
+      );
+
+      await openCodeEditor();
+
+      record(
+        "CJ-A3. CATEGORY에서 CODE를 열면 templates.category.html이 보이고 HOME html은 섞여 있지 않다",
+        htmlTextarea().value.includes("scenario-n-category") &&
+          !htmlTextarea().value.includes("scenario-n-home")
+      );
+
+      // --- B. CATEGORY html + 공유 css 수정 후 Apply ---
+      htmlTextarea().value = htmlTextarea().value.replace(
+        "scenario-n-category-title",
+        "scenario-n-category-title cj-edited-category"
+      );
+      cssTextarea().value = cssTextarea().value + " .cj-marker-category { color: hotpink; }";
+
+      applyButton().click();
+
+      const categoryApplied = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".cj-edited-category")) || null,
+        3000,
+        50
+      );
+
+      record("CJ-B1. CATEGORY Apply 후 Preview가 즉시 새 HTML로 재렌더된다", !!categoryApplied);
+
+      record("CJ-B1-MODAL. Apply 성공 후 모달이 자동으로 닫힌다", codeOverlay().hidden === true);
+
+      /*
+        [data-skin-root] 안의 <style>만 본다 — preview-frame.html
+        자체의 boilerplate <style>(iframe 최상단, 첫 번째 style 태그)과
+        skin-render.js가 mount()마다 새로 넣는 scoped <style>(같은
+        문서 안 두 번째 style 태그)을 혼동하지 않기 위함이다
+        (skin-render.js의 root.setAttribute("data-skin-root", "") 참고).
+      */
+      const categoryStyleTag = () => innerDoc() && innerDoc().querySelector("[data-skin-root] style");
+
+      record(
+        "CJ-CSS-1. Apply한 CSS가 Preview에 즉시 반영된다(scoped 결과로 다시 검증되어 실제 mount에 쓰인다)",
+        !!categoryStyleTag() && categoryStyleTag().textContent.includes("cj-marker-category")
+      );
+
+      // --- CATEGORY -> POST ---
+      clickAnchor(findAnchorByText(innerDoc(), ".scenario-n-post-link", "Hello World"));
+
+      await waitFor(() => (innerDoc() && innerDoc().querySelector(".scenario-n-post-title")) || null, 4000, 50);
+
+      record("CJ-A4. POST Preview 중에도 Code 버튼이 활성화된다", !codeButton().disabled);
+
+      await openCodeEditor();
+
+      record(
+        "CJ-A5. POST에서 CODE를 열면 templates.post.html이 보이고 post-body region도 포함한다",
+        htmlTextarea().value.includes("scenario-n-post") &&
+          htmlTextarea().value.includes('data-imory-region="post-body"')
+      );
+
+      record(
+        "CJ-ISO-1. POST HTML을 열어도 방금 CATEGORY에 넣은 마커는 섞여있지 않다(페이지별 편집 격리)",
+        !htmlTextarea().value.includes("cj-edited-category")
+      );
+
+      record(
+        "CJ-CSS-2. CATEGORY에서 추가한 CSS가 POST Code Editor에도 그대로 보인다(공유 skin.css 하나, 페이지별 css 없음)",
+        cssTextarea().value.includes("cj-marker-category")
+      );
+
+      // --- E. POST protected region 제거 시도 -> Apply 실패 ---
+      const originalPostHtml = htmlTextarea().value;
+
+      htmlTextarea().value = originalPostHtml.replace(
+        / data-imory-region="post-body"/,
+        ""
+      );
+
+      applyButton().click();
+
+      const regionError = await waitFor(
+        () => (codeMessage() && codeMessage().textContent.includes("post-body") ? true : null),
+        2000,
+        50
+      );
+
+      record(
+        "CJ-E1. post-body region을 지운 채 Apply하면 명확한 검증 에러가 표시된다",
+        !!regionError
+      );
+
+      record("CJ-E2. region 검증 실패 후 모달은 닫히지 않고 유지된다", codeOverlay().hidden === false);
+
+      cancelButton().click();
+
+      await openCodeEditor();
+
+      record(
+        "CJ-E3. region 삭제 시도가 실패한 뒤에도 기존 POST template이 그대로 유지된다(재오픈 시 post-body 여전히 존재)",
+        htmlTextarea().value.includes('data-imory-region="post-body"')
+      );
+
+      // --- B2. 정상 POST 수정(region 유지) -> Apply 성공, 실제 재렌더 확인 ---
+      htmlTextarea().value = htmlTextarea().value.replace(
+        "scenario-n-post-title",
+        "scenario-n-post-title cj-edited-post"
+      );
+
+      applyButton().click();
+
+      const postApplied = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".cj-edited-post")) || null,
+        3000,
+        50
+      );
+
+      record("CJ-B2. POST HTML 수정 + Apply 후 Preview가 즉시 재렌더된다(region은 유지한 채)", !!postApplied);
+
+      record(
+        "CJ-B2-REGION. POST 재렌더 후에도 post-body region 자체는 남아있다(빈 placeholder, 이 fixture엔 post_contents가 없어 본문은 mount되지 않음)",
+        !!(innerDoc() && innerDoc().querySelector(".scenario-n-post-body"))
+      );
+
+      // --- F. Back -> CATEGORY: 이전에 Apply한 CATEGORY 수정이 여전히 남아있는지 ---
+      clickAnchor(backButton());
+
+      const backToEditedCategory = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".cj-edited-category")) || null,
+        3000,
+        50
+      );
+
+      record(
+        "CJ-F1. POST -> Back으로 CATEGORY에 돌아가면, 이전에 Apply한 CATEGORY 수정이 그대로 남아있다",
+        !!backToEditedCategory
+      );
+
+      // --- Back -> HOME: HOME은 한 번도 Apply하지 않았으니 원본 그대로(byte 불변) ---
+      clickAnchor(backButton());
+
+      const backToHome = await waitFor(
+        () => !!(innerDoc() && innerDoc().querySelector(".scenario-n-home")),
+        3000,
+        50
+      );
+
+      record(
+        "CJ-ISO-2. HOME은 CATEGORY/POST를 Apply하는 동안 한 번도 건드리지 않아 원본 그대로다(nav 링크 정상, cj- 마커 없음)",
+        !!backToHome &&
+          !innerDoc().querySelector(".cj-edited-category, .cj-edited-post") &&
+          !!findAnchorByText(innerDoc(), ".scenario-n-nav-link", "LOG")
+      );
+
+      await openCodeEditor();
+
+      record(
+        "CJ-ISO-3. HOME Code Editor를 다시 열어도 HOME html 자체는 byte 단위로 변경되지 않았다(cj- 마커 없음)",
+        htmlTextarea().value.includes("scenario-n-home") &&
+          !htmlTextarea().value.includes("cj-edited")
+      );
+
+      cancelButton().click();
+
+      // --- H. Desktop/Mobile 전환 후에도 현재 pageType(HOME)을 잃지 않는다 ---
+      doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="mobile"]').click();
+
+      await openCodeEditor();
+
+      record(
+        "CJ-H1. Mobile 전환 후에도 CODE는 여전히 현재 보고 있는 페이지(HOME)를 연다",
+        htmlTextarea().value.includes("scenario-n-home")
+      );
+
+      cancelButton().click();
+      doc.querySelector('.studio-viewport-toggle-option[data-viewport-mode="desktop"]').click();
+
+      return true;
+
+    }
+
+
+    /* =========================================================
+       PART 3B (PHASE 1C-J) — 기존 HOME-only(top-level html) Skin
+       호환. Scenario O는 templates.home만 있고 category/post
+       template은 없다(문서 7절 backward compatibility) —
+       CATEGORY/POST를 보고 있을 때 CODE 버튼이 안전하게
+       비활성화되고, 클릭해도 원본 SkinPackage가 바뀌지 않는지
+       확인한다. HOME은 top-level html fallback으로 여전히 편집
+       가능해야 한다.
+    ========================================================== */
+
+    async function runScenarioCodeEditorUnsupported() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=o");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+      const codeButton = () => doc.getElementById("studioCodeButton");
+      const codeOverlay = () => doc.querySelector(".code-editor-overlay");
+      const htmlTextarea = () => doc.querySelectorAll(".code-editor-textarea")[0];
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-o-home")),
+        8000,
+        100
+      );
+
+      record(
+        "CJ-G1. HOME-only Skin에서도 HOME은 top-level html fallback으로 여전히 CODE 편집 가능하다",
+        !codeButton().disabled
+      );
+
+      win.__testHooks.simulateNavigate("/scenario-o/category/301");
+
+      await waitFor(
+        () => (doc.getElementById("studioPreviewOverlayText").textContent === "이 스킨에는 아직 CATEGORY 템플릿이 없습니다." ? true : null),
+        3000,
+        50
+      );
+
+      record(
+        "CJ-G2. templates.category가 없는 페이지에서는 Code 버튼이 비활성화된다(HOME html을 복제하거나 빈 template을 만들지 않음)",
+        codeButton().disabled === true
+      );
+
+      codeButton().click();
+
+      record(
+        "CJ-G3. 비활성화된 Code 버튼을 눌러도 Code Editor 모달이 열리지 않는다",
+        !codeOverlay() || codeOverlay().hidden === true
+      );
+
+      clickAnchor(backButton());
+
+      await waitFor(() => !!(innerDoc() && innerDoc().querySelector(".scenario-o-home")), 3000, 50);
+
+      record(
+        "CJ-G4. CATEGORY unsupported 상태를 거쳐 HOME으로 돌아온 뒤에도 Code Editor는 정상적으로 HOME html을 편집할 수 있다(package가 몰래 바뀌지 않았음)",
+        !codeButton().disabled
+      );
+
+      return true;
+
+    }
+
+
+    /* =========================================================
+       PART 3C (PHASE 1C-J, 테스트 G) — POST template을 Code Editor로
+       수정한 뒤에도 실제 글 본문이 protected post-body region 안에
+       다시 정상 mount되는지(PHASE 1C-I 회귀). Scenario N에는
+       post_contents fixture가 없어(빈 region으로만 확인 가능) 이
+       확인엔 실제 window.generateInitialSkin() + 실제 post_contents
+       를 가진 Scenario R을 그대로 재사용한다.
+    ========================================================== */
+
+    async function runScenarioRCodeEditorPostBodyRegression() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=r");
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const codeButton = () => doc.getElementById("studioCodeButton");
+      const codeOverlay = () => doc.querySelector(".code-editor-overlay");
+      const htmlTextarea = () => doc.querySelectorAll(".code-editor-textarea")[0];
+      const applyButton = () => Array.from(doc.querySelectorAll(".code-editor-button")).find((b) => b.textContent === "Apply");
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".skin-shell--home")),
+        8000,
+        100
+      );
+
+      clickAnchor(findAnchorByText(innerDoc(), ".skin-nav-link", "LOG"));
+      await waitFor(() => (innerDoc() && innerDoc().querySelector(".skin-category-title")) || null, 4000, 50);
+
+      clickAnchor(findAnchorByText(innerDoc(), ".skin-category-posts-link", "Hello World"));
+      await waitFor(() => (innerDoc() && innerDoc().querySelector(".skin-post-title")) || null, 4000, 50);
+
+      const bodyBeforeEdit = await waitFor(
+        () => {
+          const region = innerDoc() && innerDoc().querySelector(".skin-post-body-slot");
+          return region && region.textContent.includes("Scenario R actual post body.") ? region : null;
+        },
+        4000,
+        50
+      );
+
+      record("CJ-G0. 편집 전 실제 본문이 이미 post-body region 안에 mount되어 있다(전제 조건)", !!bodyBeforeEdit);
+
+      codeButton().click();
+      await waitFor(() => (codeOverlay() && !codeOverlay().hidden ? true : null), 2000, 30);
+
+      record(
+        "CJ-G1-OPEN. POST에서 CODE를 열면 실제 generator가 만든 POST template이 보이고, 실제 본문 텍스트는 섞여 있지 않다(template != content storage)",
+        htmlTextarea().value.includes('data-imory-region="post-body"') &&
+          !htmlTextarea().value.includes("Scenario R actual post body.")
+      );
+
+      htmlTextarea().value = htmlTextarea().value.replace(
+        "skin-post-title",
+        "skin-post-title cj-r-edited-post"
+      );
+
+      applyButton().click();
+
+      const templateApplied = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".cj-r-edited-post")) || null,
+        3000,
+        50
+      );
+
+      record("CJ-G1. POST template Apply 후 Preview가 즉시 새 HTML로 재렌더된다", !!templateApplied);
+
+      const bodyAfterEdit = await waitFor(
+        () => {
+          const region = innerDoc() && innerDoc().querySelector(".skin-post-body-slot");
+          return region && region.textContent.includes("Scenario R actual post body.") ? region : null;
+        },
+        4000,
+        50
+      );
+
+      record(
+        "CJ-G2. POST template을 Code Editor로 수정한 뒤에도 실제 본문이 post-body region 안에 다시 정상 mount된다(PHASE 1C-I 회귀 없음)",
+        !!bodyAfterEdit
+      );
+
+      record(
+        "CJ-G3. 중복 mount 없이 post-body region은 여전히 1개뿐이다",
+        innerDoc().querySelectorAll(".skin-post-body-slot").length === 1
+      );
+
+      return true;
+
+    }
+
+
     async function main() {
 
       runPart1();
@@ -844,6 +1265,24 @@
         await runScenarioR();
       } catch (err) {
         record("Scenario R 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioCodeEditor();
+      } catch (err) {
+        record("PHASE 1C-J Code Editor 시나리오 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioCodeEditorUnsupported();
+      } catch (err) {
+        record("PHASE 1C-J Code Editor unsupported 시나리오 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioRCodeEditorPostBodyRegression();
+      } catch (err) {
+        record("PHASE 1C-J Code Editor post-body 회귀 시나리오 실행 중 예외 발생", false, String(err && err.stack || err));
       }
 
       const passCount = allResults.filter((r) => r.pass).length;

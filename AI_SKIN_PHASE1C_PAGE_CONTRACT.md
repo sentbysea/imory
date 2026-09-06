@@ -1443,3 +1443,77 @@ Desktop/Mobile은 R-POST-BODY-MOBILE/-NODUP로 확인했고, 실제 Chromium 스
 - **CATEGORY/POST Code Editor 지원**(26-12절에서 이월).
 - **실 계정 최종 확인**(26-12절에서 이월, 이제 POST 실제 본문까지 포함).
 - **HTML 모드 본문의 폭 자동 축소**: 공개 POST Viewer는 `content_type === "html"` 글에 대해 `fitHtmlPostContentToViewport()`(`posts/view/posts-view-html-fit.js`)로 화면 폭에 맞게 축소한다 — 이번 Slice는 범위 밖으로 남겼으므로(문서 14절 "예상 후보" 밖), 폭이 고정된 HTML 붙여넣기 글을 Studio POST Preview에서 열면 공개 화면과 달리 잘리거나 가로 스크롤이 생길 수 있다. 실제로 필요해지는 시점에 별도로 붙인다.
+
+
+## 28. Slice 1C-J 구현 결과 (실제 구현 완료, 2026-09-06)
+
+27-8절에서 이월된 "CATEGORY/POST Code Editor 지원"을 구현했다. 목표는 "사용자가 CODE를 누르면 현재 Preview에서 보고 있는 페이지의 HTML을 자동으로 편집하게 하는 것" — HOME/CATEGORY/POST를 고르는 별도 page selector(탭/드롭다운)는 만들지 않는다.
+
+### 28-1. 현재 Preview pageType과 Code Editor 연결 방식
+
+- **pageType의 유일한 source of truth**는 `studio/preview/preview-navigation.js`의 전역 `let currentPreviewPageType`(`"home" | "category" | "post"`)이다 — HOME/CATEGORY/POST 이동 시 각 `render*PreviewFor()` 함수가 자신의 진입부에서 이 값을 갱신한다(기존 PHASE 1C-G 구조, 변경 없음). `getCurrentPreviewLocation()`으로도 조회 가능하지만, 이번 Slice는 `currentPreviewPageType`을 직접 읽는다(같은 전역 렉시컬 환경을 공유하는 classic script라 별도 API 호출 없이도 접근 가능 — 기존 `updateStudioCodeButtonState()`가 이미 이렇게 읽고 있었다).
+- **CODE 버튼 클릭 시점에 pageType을 고정**한다(`studio-preview.js`의 `studioCodeButton` 클릭 핸들러): `const pageType = currentPreviewPageType;`로 클로저에 캡처한 뒤 `resolveCodeEditorSource(currentWorkingSkin, pageType)`으로 소스를 구하고, `onApply`도 `(html, css, meta) => applyWorkingSkinChanges(pageType, html, css, meta)`로 그 pageType에 고정해서 넘긴다. Code Editor 모달이 열려 있는 동안은 배경 클릭으로 닫히지 않고(기존 code-editor.js 설계, 16절) Preview를 옮길 방법이 없으므로, Apply 시점에도 항상 CODE를 열었을 때와 같은 페이지가 대상이 된다는 것이 보장된다.
+- **버튼 활성화 판정**은 새로 추가한 `resolveCodeEditorSource(skin, pageType)`(`studio-preview.js`) 하나로 통일했다 — HOME은 항상 `buildStudioHomePreviewSkin()`(legacy top-level html fallback 포함)을 통해 정의된 값을 돌려주고, CATEGORY/POST는 `resolveSkinTemplate(skin, pageType)`을 그대로 따라 template이 없으면 `undefined`를 돌려준다. `updateStudioCodeButtonState()`는 이 반환값의 존재 여부만으로 버튼을 disable/enable한다 — 기존 "CATEGORY/POST면 무조건 비활성화"(HOME-only 제한) 로직을 대체했다.
+
+### 28-2. 페이지 선택 UI를 만들지 않는다는 결정
+
+Code Editor 내부에는 기존 HTML/CSS 탭만 유지했다 — `studio/editor/code-editor.js`는 이번 Slice에서 **한 줄도 수정하지 않았다**(catch 블록의 에러 메시지 relay 한 곳만 변경, 28-5절). 이 파일은 여전히 "무엇을 편집 중인지" 전혀 모르는 dumb modal이다 — 페이지 개념 자체가 이 파일에 존재하지 않으므로, 탭/드롭다운을 만들지 않는다는 제약이 구조적으로 지켜진다. 다른 페이지를 편집하려면 사용자가 Code Editor를 닫고 Preview에서 실제로 그 페이지로 이동한 뒤 CODE를 다시 눌러야 한다 — 이 흐름 자체가 Preview navigation(기존 PHASE 1C-G)을 그대로 재사용하므로 별도 page history도 만들지 않았다.
+
+### 28-3. 페이지별 HTML 수정 격리 + 공유 CSS
+
+`applyWorkingSkinChanges(pageType, html, css, meta)`(`studio-preview.js`)의 pageType 분기:
+
+- **home**: 기존 로직 그대로 — `templates.home`이 있으면 `templates.home.html`에, 없으면(legacy html-only Skin) top-level `html`에 쓴다. `templates.category`/`templates.post`/`imageSlots`/`regions`/`metadata`는 스프레드로 그대로 보존.
+- **category/post**: `templates[pageType].html`만 교체한다(`{ ...currentWorkingSkin.templates[pageType], html }`) — 다른 두 페이지의 template 객체는 스프레드로 참조까지 그대로 유지되므로 byte 단위로도 바뀌지 않는다. 버튼이 이미 `resolveCodeEditorSource()`로 template 존재를 확인한 뒤에만 열리므로 `templates[pageType]`은 항상 있어야 하지만, 방어적으로 한 번 더 존재를 확인하고 없으면(이론상 도달 불가) 상태를 바꾸지 않고 에러를 던진다.
+- **css**: pageType과 무관하게 항상 top-level `css` 하나에만 쓴다 — `templates.*.css` 필드는 추가하지 않았다(PHASE 1C-B 12-B절 결정을 그대로 유지). 어느 페이지에서 CSS를 수정해도 다른 모든 페이지가 같은 `skin.css`를 공유하므로 즉시 함께 반영된다(CJ-CSS-2 테스트로 확인, 28-6절).
+
+### 28-4. APPLY / CANCEL
+
+- **CANCEL**: 기존 `closeCodeEditor()` 그대로 — `codeEditorCurrentOnApply`를 null로 비우고 모달만 숨긴다. `currentWorkingSkin`/Preview에는 애초에 손도 대지 않으므로 "정확히 열기 전 상태로 돌아간다"가 구조적으로 보장된다(별도 스냅샷/롤백 로직 불필요).
+- **APPLY 성공**: `sanitizeSkinHTML()` → `validateAndScopeSkinCss()`(기존 code-editor.js 경계, 변경 없음) 통과 후 `applyWorkingSkinChanges()`가 (1) 해당 pageType의 template.html만 교체, (2) `css` 갱신, (3) `isStudioDirty = true`, (4) **`renderCurrentPreviewEntry()`**(`preview-navigation.js`, 새로 재사용)를 호출해 현재 Preview 페이지를 즉시 재렌더한다. DB Published Skin은 건드리지 않는다(Save는 여전히 별도 버튼/RPC, 5절 계약 그대로).
+- **재렌더 방식**: pageType별 재렌더 분기를 새로 만들지 않고 기존 `renderCurrentPreviewEntry()`(`previewHistory` 최상단 항목을 보고 `renderHomePreview()`/`renderCategoryPreviewFor()`/`renderPostPreviewFor()` 중 하나를 호출)를 그대로 재사용했다 — Apply 후 재렌더 경로가 Preview navigation 경로와 완전히 같아지므로, POST라면 실제 본문(`postPostBodyToFrame()`, PHASE 1C-I)까지 자동으로 다시 채워진다. 이 함수는 `studio-preview.js`보다 나중에 로드되는 `preview-navigation.js`에 있지만, 실제 호출은 항상 사용자가 Apply를 누른 뒤(= 두 파일 모두 이미 평가를 마친 시점)에만 일어나므로 안전하다(기존에도 반대 방향으로 이런 참조가 있었다, `studio-preview.js` 파일 헤더에 명시).
+
+### 28-5. POST protected region 검증
+
+새 `htmlHasPostBodyRegion(html)`(`studio-preview.js`)가 `sanitizeSkinHTML()`과 동일하게 `DOMParser`로 파싱해 `[data-imory-region="post-body"]`의 존재를 확인한다(정규식으로 raw 문자열을 훑지 않음 — 속성 순서/따옴표 형태에 흔들리지 않기 위해). `applyWorkingSkinChanges()`는 `pageType === "post"`이고 이 검사가 실패하면 **`currentWorkingSkin`을 전혀 바꾸기 전에** `Error`를 던진다.
+
+이 예외는 `code-editor.js`의 `handleCodeEditorApply()`가 이미 갖고 있던 try/catch로 잡힌다 — 기존엔 `catch` 블록이 항상 고정 문구("적용하지 못했습니다. 다시 시도해주세요.")만 보여줬는데, 이번에 `(err && err.message) || 고정 문구`로 한 줄 바꿔 구체적인 검증 실패 사유를 그대로 보여주도록 했다. `code-editor.js`는 여전히 그 메시지의 "의미"는 모르고 문자열만 relay할 뿐이라 Skin 도메인 지식이 이 파일로 새어 들어가지 않는다(파일 헤더의 책임 분리 원칙 유지). 검증 실패 시 모달은 열린 채로 남고(기존 catch 블록 동작 그대로), `codeEditorApplyButton`도 다시 활성화되어 사용자가 수정 후 재시도할 수 있다.
+
+### 28-6. Backward compatibility — HOME-only Skin
+
+`templates.category`/`templates.post`가 없는 기존 HOME-only Skin(top-level `html`만 있음)에서 CATEGORY/POST를 보고 있을 때: `resolveCodeEditorSource()`가 `undefined`를 돌려주므로 CODE 버튼이 비활성화되고(툴팁 "이 페이지에는 아직 편집할 template이 없습니다"), 클릭해도 아무 일도 일어나지 않는다 — HOME html을 복제하거나 빈 template을 자동 생성하거나 canonical package로 몰래 승격시키지 않는다. HOME은 여전히 `resolveSkinTemplate()`의 legacy top-level `html` fallback을 통해 정상적으로 CODE 편집이 가능하다. Scenario O(templates.home만 있음)로 이 전체 흐름(HOME 편집 가능 → CATEGORY 비활성화 → CATEGORY unsupported overlay를 거쳐 HOME으로 복귀해도 여전히 정상)을 검증했다(CJ-G1~G4, 28-7절).
+
+### 28-7. 변경/생성 파일 + 테스트 결과
+
+- **수정** `studio/studio-preview.js` — `updateStudioCodeButtonState()`를 "HOME만" 게이트에서 "현재 페이지 template 존재 여부" 게이트로 교체, `resolveCodeEditorSource(skin, pageType)`/`htmlHasPostBodyRegion(html)` 신규 추가, `applyWorkingSkinChanges(pageType, html, css, meta)`에 pageType 매개변수 추가(기존 1개 인자 → 4개) + POST region 검증 + pageType별 template 분기 + 재렌더를 `renderCurrentPreviewEntry()`로 교체, CODE 버튼 클릭 핸들러가 클릭 시점 pageType을 클로저로 고정.
+- **수정** `studio/editor/code-editor.js` — `handleCodeEditorApply()`의 catch 블록 한 곳만 변경(`err.message` relay). 그 외 전부 변경 없음(dumb modal 경계 유지).
+- **수정** `studio/studio-navigation-test.html` — 기존 "N7"(CATEGORY 중 Code 버튼 비활성화 기대)을 새 의도된 동작(CATEGORY도 활성화)으로 갱신, PHASE 1C-J 전용 시나리오 3개 추가:
+  - `runScenarioCodeEditor()`(scenario N 재사용): route-aware open(A0-A5), Cancel이 draft/Preview를 건드리지 않음(CANCEL-1~3), CATEGORY 수정+Apply(B1) 및 즉시 재렌더/CSS 반영(CSS-1), 페이지별 편집 격리(ISO-1~3), 공유 CSS(CSS-2), POST region 삭제 시도 실패(E1~E3) 및 정상 POST 수정 성공(B2), Back 이후에도 이전 Apply가 남아있음(F1), Desktop/Mobile 전환 후에도 pageType을 잃지 않음(H1).
+  - `runScenarioCodeEditorUnsupported()`(scenario O 재사용): HOME-only Skin에서의 backward compatibility(G1~G4, 28-6절).
+  - `runScenarioRCodeEditorPostBodyRegression()`(scenario R 재사용, 실제 `generateInitialSkin()` + 실제 `post_contents`): POST template을 Code Editor로 수정한 뒤에도 실제 본문이 post-body region 안에 다시 정상 mount됨(G0-G3, PHASE 1C-I 회귀 없음).
+- **변경 없음**: `skin/skin-template.js`/`skin-sanitize.js`/`skin-css-validate.js`/`skin-package-normalize.js`/`skin-render.js`/`skin-context.js`/`skin-generator.js`, `studio/preview/preview-navigation.js`/`preview-route.js`/`preview-bridge.js`/`preview-post-body.js`, `studio/studio-write.js`, `studio/studio-state.js`, DB/RLS/GRANT/RPC/migration 전부, Preview Back 마크업/로직, `skin-questionnaire/*`.
+
+`npx playwright`(headless Chromium) + 로컬 정적 서버(`http://localhost:8934/`)로 전체 재실행:
+
+| 파일 | 결과 |
+|---|---|
+| `studio/studio-navigation-test.html`(확장) | **87 PASS / 0 FAIL**(기존 55 + PHASE 1C-J 신규 32) |
+| `studio/studio-lifecycle-test.html` | 15 PASS / 0 FAIL(회귀 없음) |
+| `studio/studio-multipage-test.html` | 16 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-generator-test.html` | 24 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-post-region-test.html` | 17 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-post-integration-test.html` | 20 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-post-lifecycle-test.html` | 32 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-render-test.html` | 39 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-render-security-test.html` | 23 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-css-validate-test.html` | 23 PASS / 0 FAIL(회귀 없음) |
+| `skin/skin-package-normalize-test.html` | 12 PASS / 0 FAIL(회귀 없음) |
+
+전 항목 FAIL 0건(27절 baseline과 동일하거나, N7 갱신 + 신규 32건만큼 증가). `node --check`로 수정한 두 JS 파일(`studio-preview.js`/`code-editor.js`) 구문도 확인했다.
+
+첫 실행에서 2건 실패가 있었으나 둘 다 하네스 자체의 문제였다(프로덕션 코드 결함 아님) — (1) "N7"은 이번 Slice가 의도적으로 바꾼 동작(CATEGORY Code 버튼 활성화)에 대해 갱신되지 않은 옛 기대값이었고, (2) "CJ-CSS-1"은 `innerDoc().querySelector("style")`가 preview-frame.html 자신의 boilerplate `<style>`(문서상 첫 번째)을 집어버린 테스트 셀렉터 버그였다 — `[data-skin-root] style`로 좁혀 실제 skin이 mount한 scoped `<style>`(`.imory-skin-root-i1 .cj-marker-category{color:hotpink}`)을 직접 확인해 수정했다. 두 수정 모두 하네스 파일에만 적용했다.
+
+### 28-8. 다음 추천 Slice
+
+- **실 계정 최종 확인**(26-12/27-8절에서 계속 이월) — 이 세션도 실제 Supabase 프로젝트/로그인 세션은 없다.
+- **AI 연결**: `studio-preview.js`의 AI drawer는 여전히 shell만 있고 실제 연결이 없다 — 이번 Slice가 노출해 둔 `resolveCodeEditorSource()`/`applyWorkingSkinChanges(pageType, ...)`이 향후 AI가 "지금 보고 있는 페이지"를 그대로 편집 대상으로 삼을 때 재사용할 수 있는 지점이다(문서 자체 범위 밖, 12절 "AI 연결" 금지 항목).
