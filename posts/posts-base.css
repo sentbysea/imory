@@ -67,6 +67,67 @@
 }
 
 
+/*
+  post-container--skin-active와 같은 순간에 같이 붙는다
+  (posts-view-list.js/posts-view-detail.js). .post-area 자체가
+  가진 padding(72px/24px — legacy post-header를 위한 여백)까지는
+  위 규칙이 걷어내지 않아서, Skin이 자기 CSS로 이미 여백/폭을
+  정하는데도 그 바깥에 플랫폼 여백이 한 번 더 겹쳐 CATEGORY/POST의
+  프레임이 HOME(.theme-mount--skin, home-base.css)보다 좁고
+  위로 크게 밀려 보이는 버그가 있었다. HOME과 동일한 계약대로
+  이 상태에서는 padding을 0으로 걷어내 Skin 자신의 CSS가 여백과
+  폭을 전부 결정하게 한다. 이 클래스가 없으면(legacy/실패/owner
+  열람) .post-area는 기존 padding을 그대로 유지한다.
+
+  #postArea + 클래스로 명시해서 posts-mobile.css의
+  @media(max-width:600px) .post-area 재정의(padding:
+  68px 22px 86px)보다 항상 우선하게 한다 — 그쪽은 specificity가
+  같은 .post-area 단일 클래스라 로드 순서(posts-mobile.css가
+  posts-base.css 다음)로 이겨버려서 모바일에서 skin-active여도
+  padding이 그대로 남는 문제를 selector 특정도로 막는다.
+*/
+
+#postArea.post-area--skin-active {
+  padding: 0;
+}
+
+
+/*
+  PHASE 1D: published Skin 후보 CATEGORY/POST 전환 대기 표시.
+  기존 화면을 그대로 둔 채 응답이 오래 걸릴 때만 잠깐 나타나는
+  작은 스피너 — pointer-events:none이라 그 아래 화면을 조작해
+  중복 이동을 유발하지 않는다.
+*/
+
+.post-pending-indicator {
+  position: fixed;
+  top: max(18px, env(safe-area-inset-top));
+  right: max(18px, env(safe-area-inset-right));
+
+  width: 16px;
+  height: 16px;
+
+  border: 2px solid rgba(153, 153, 153, 0.25);
+  border-top-color: rgba(153, 153, 153, 0.75);
+  border-radius: 50%;
+
+  pointer-events: none;
+  z-index: 51;
+
+  animation: post-pending-indicator-spin 0.7s linear infinite;
+}
+
+.post-pending-indicator[hidden] {
+  display: none;
+}
+
+@keyframes post-pending-indicator-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+
 /* =========================================================
    POST HEADER
 ========================================================== */

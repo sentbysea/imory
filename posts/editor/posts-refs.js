@@ -88,6 +88,18 @@ const postContainer =
     "postContainer"
   );
 
+/*
+  PHASE 1D: published Skin 후보 CATEGORY/POST 전환 중,
+  기존 화면을 그대로 유지하다가 응답이 오래 걸릴 때만 잠깐
+  보여주는 작은 대기 표시(posts-view-transition.js의
+  schedulePendingIndicator/clearPendingIndicator).
+*/
+
+const postPendingIndicator =
+  document.getElementById(
+    "postPendingIndicator"
+  );
+
 const postPageTitle =
   document.getElementById(
     "postPageTitle"

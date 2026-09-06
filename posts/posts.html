@@ -8,6 +8,21 @@
   hidden
 >
 
+  <!-- =====================================================
+       PUBLISHED SKIN 전환 대기 표시(posts-view-transition.js).
+       CATEGORY/POST가 published Skin 경로를 탈 수 있는 대상일
+       때만, 응답이 오래 걸릴 경우에 한해 잠깐 보인다 — 클릭
+       불가(pointer-events:none)라 중복 이동을 유발하지 않는다.
+  ====================================================== -->
+
+  <div
+    class="post-pending-indicator"
+    id="postPendingIndicator"
+    hidden
+    aria-hidden="true"
+  ></div>
+
+
   <div class="post-container" id="postContainer">
 
 

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HOME/CATEGORY/POST Skin Frame Geometry Test</title>
+
+<!-- 실제 플랫폼 CSS 그대로(스킨 자체 CSS는 이 테스트와 무관 —
+     여기서는 플랫폼이 published Skin에게 넘겨주는 "바깥 프레임"의
+     x/y/width만 비교한다) -->
+<link rel="stylesheet" href="../home/home-base.css">
+<link rel="stylesheet" href="../posts/posts-base.css">
+<link rel="stylesheet" href="../posts/posts-mobile.css">
+
+<style>
+  /* 테스트 리포트 전용 — 플랫폼 CSS와 무관 */
+  #report { position: fixed; inset: 0; z-index: 9999; background: #fff; overflow: auto; padding: 24px; font-family: system-ui, sans-serif; display: none; }
+  #report.show { display: block; }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+</style>
+
+</head>
+<body>
+
+  <!-- =========================================================
+       HOME: .viewer-area > #themeMount.theme-mount--skin
+  ========================================================== -->
+
+  <div class="viewer-area">
+    <div id="themeMount" class="theme-mount--skin"></div>
+  </div>
+
+  <!-- =========================================================
+       CATEGORY/POST: 실제 앱은 #postArea 하나를 카테고리/글 화면이
+       번갈아 쓴다(posts.html) — id는 반드시 실제와 동일한 "postArea"
+       여야 #postArea.post-area--skin-active selector(posts-base.css)가
+       먹는다. #postList/#postSkinContainer는 둘 다 .post-container의
+       평범한 자식 div로 자기 CSS가 전혀 없으므로(posts-base.css/
+       posts-list-detail.css 확인됨), 이 하나의 마운트 지점으로
+       CATEGORY/POST 프레임을 동일하게 대표할 수 있다.
+  ========================================================== -->
+
+  <section class="post-area post-area--skin-active" id="postArea">
+    <div class="post-container post-container--skin-active" id="postContainer">
+      <div id="skinMountFrame"></div>
+    </div>
+  </section>
+
+  <div id="report">
+    <h1>HOME/CATEGORY/POST Skin Frame Geometry</h1>
+    <div id="summary"></div>
+    <ul class="report" id="reportList"></ul>
+  </div>
+
+  <script>
+
+    /*
+      실제 앱은 #postArea 하나를 CATEGORY/POST가 번갈아 쓰고,
+      #postList/#postSkinContainer 둘 다 .post-container의 평범한
+      자식 div로 자기 CSS가 없어 기하학적으로 동일하다 — 그래서
+      #skinMountFrame 하나로 두 화면을 동일하게 대표해 측정한다.
+    */
+
+    function rectOf(id) {
+      const el = document.getElementById(id);
+      const r = el.getBoundingClientRect();
+      return { x: Math.round(r.x), y: Math.round(r.y), width: Math.round(r.width) };
+    }
+
+    window.measureFrames = function () {
+      const frame = rectOf("skinMountFrame");
+      return {
+        home: rectOf("themeMount"),
+        category: frame,
+        post: frame
+      };
+    };
+
+    window.renderReport = function (viewportLabel, results) {
+
+      const reportEl = document.getElementById("report");
+      reportEl.classList.add("show");
+
+      const list = document.getElementById("reportList");
+      let pass = 0, fail = 0;
+
+      function assert(name, condition, detail) {
+        const item = document.createElement("li");
+        item.className = condition ? "pass" : "fail";
+        item.textContent = `[${condition ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+        list.appendChild(item);
+        if (condition) pass++; else fail++;
+      }
+
+      const { home, category, post } = results;
+
+      assert(
+        `[${viewportLabel}] CATEGORY frame x matches HOME frame x`,
+        category.x === home.x,
+        `home.x=${home.x} category.x=${category.x}`
+      );
+
+      assert(
+        `[${viewportLabel}] CATEGORY frame y matches HOME frame y`,
+        category.y === home.y,
+        `home.y=${home.y} category.y=${category.y}`
+      );
+
+      assert(
+        `[${viewportLabel}] CATEGORY frame width matches HOME frame width`,
+        category.width === home.width,
+        `home.width=${home.width} category.width=${category.width}`
+      );
+
+      assert(
+        `[${viewportLabel}] POST frame x matches HOME frame x`,
+        post.x === home.x,
+        `home.x=${home.x} post.x=${post.x}`
+      );
+
+      assert(
+        `[${viewportLabel}] POST frame y matches HOME frame y`,
+        post.y === home.y,
+        `home.y=${home.y} post.y=${post.y}`
+      );
+
+      assert(
+        `[${viewportLabel}] POST frame width matches HOME frame width`,
+        post.width === home.width,
+        `home.width=${home.width} post.width=${post.width}`
+      );
+
+      const summary = document.getElementById("summary");
+      const prevText = summary.textContent || "";
+      summary.textContent =
+        prevText +
+        `\n[${viewportLabel}] home=${JSON.stringify(home)} category=${JSON.stringify(category)} post=${JSON.stringify(post)}`;
+      summary.style.whiteSpace = "pre-wrap";
+
+      window.__lastPass = (window.__lastPass || 0) + pass;
+      window.__lastFail = (window.__lastFail || 0) + fail;
+
+    };
+
+  </script>
+
+</body>
+</html>

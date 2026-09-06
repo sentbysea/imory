@@ -141,7 +141,17 @@ async function tryRenderPublishedSkinPost(
 
 /* =========================================================
    POST PAGE
+
+   postPageRequestSeq: openCategoryPage()의 categoryPageRequestSeq와
+   동일한 목적 — 빠른 연속 클릭/뒤로가기로 이 글보다 나중에 시작된
+   호출이 먼저 끝나버리면, 이 글의 늦게 도착한 응답이 최신 화면을
+   덮어쓰지 않도록 순번으로 막는다(posts-view-list.js에 이미 있던
+   패턴을 POST에도 동일하게 적용).
 ========================================================== */
+
+let postPageRequestSeq =
+  0;
+
 
 async function openPostPage(
   postId,
@@ -173,6 +183,10 @@ async function openPostPage(
     );
 
 
+  const requestId =
+    ++postPageRequestSeq;
+
+
   closePostMenu();
 
 
@@ -187,10 +201,56 @@ async function openPostPage(
   hidePostEditor();
 
 
+  /*
+    PHASE 1D: published Skin 후보인지 먼저 가볍게 확인한다
+    (getSiteOwner()는 메모이즈돼 있어 HOME 로드 이후엔 사실상
+    즉시 resolve된다) — 아래에서 legacy #postDetail을 "loading..."
+    상태로 바로 열어젖힐지, 아니면 이전 화면(카테고리 목록이거나
+    이전 글)을 그대로 둔 채 조용히 기다릴지를 가른다. 실제로 이
+    글이 Skin으로 렌더될지는 아래 tryRenderPublishedSkinPost가
+    최종 판정하고 그 결과로 다시 정확히 바로잡는다 — 이 fetch는
+    바로 아래 posts 조회에도 필요해서(owner.scoped 필터) 앞당긴
+    것뿐, 새로 추가된 네트워크 요청이 아니다.
+  */
+
+  const owner =
+    await getSiteOwner();
+
+  const maybeSkinCandidate =
+    Boolean(
+      owner.scoped &&
+      owner.ownerId
+    );
+
+
+  const pendingIndicatorTimer =
+    maybeSkinCandidate
+      ? schedulePendingIndicator(
+          () =>
+            requestId ===
+            postPageRequestSeq
+        )
+      : null;
+
+
+  /*
+    후보가 아니면 기존 그대로 즉시 legacy 상세 화면을 연다.
+
+    후보면 결과를 알기 전까지는 postDetail을 계속 hidden으로
+    묶어 둔다(직전 화면이 이 postDetail 자체였더라도) — 그 안의
+    title/date/content를 아래에서 바로 "loading..."/빈 값으로
+    덮어써버리므로, hidden을 안 강제하면 "직전 글의 그림/날짜에
+    엉뚱한 loading 제목"이 섞인 어중간한 화면이 잠깐 보일 수
+    있다. 대신 커튼(showPostArea) 배경만 보이는 중립 상태로
+    기다리다 아래 usingSkinPost 확정 지점에서 최종 화면으로
+    한 번에 교체한다 — 뒤로가기 헤더+"loading..."가 잠깐
+    나타났다 사라지는 깜빡임을 없앤다.
+  */
+
   if (postDetail) {
 
     postDetail.hidden =
-      false;
+      maybeSkinCandidate;
 
   }
 
@@ -357,22 +417,29 @@ async function openPostPage(
 
 
   /*
-    이전 글이 Skin 경로(post-container--skin-active)로 그려졌을
-    수 있으므로 매 진입마다 우선 되돌려 둔다 — 이번 글이 실제로
-    Skin 경로를 타면 아래 usingSkinPost 확정 지점에서 다시 붙는다.
+    후보가 아니면(비-scoped/legacy 배포) 이전 글이 Skin 경로로
+    그려졌을 수 있으므로 매 진입마다 우선 되돌려 둔다 — 기존과
+    동일.
+
+    후보면 반대로 미리 붙여 둔다 — 이전 글이 무엇이었든 뒤로가기
+    헤더가 잠깐 나타났다 사라지는 깜빡임 없이 곧장 최종 화면(Skin
+    성공 시 그대로, 실패 시 아래 usingSkinPost 확정 지점에서 다시
+    벗겨낸다)으로 이어지게 한다.
   */
 
   if (postContainer) {
 
-    postContainer.classList.remove(
-      "post-container--skin-active"
+    postContainer.classList.toggle(
+      "post-container--skin-active",
+      maybeSkinCandidate
     );
 
   }
 
-
-  const owner =
-    await getSiteOwner();
+  postArea?.classList.toggle(
+    "post-area--skin-active",
+    maybeSkinCandidate
+  );
 
 
   let post =
@@ -445,9 +512,62 @@ async function openPostPage(
     !post
   ) {
 
+    if (
+      requestId !==
+      postPageRequestSeq
+    ) {
+
+      cancelPendingIndicator(
+        pendingIndicatorTimer
+      );
+
+
+      return;
+
+    }
+
+
+    clearPendingIndicator(
+      pendingIndicatorTimer
+    );
+
+
     console.error(
       error
     );
+
+
+    /*
+      실패 시 오류를 보여주고 돌아갈 수 있는 경로(기존
+      post-back-button)를 되살린다 — Skin 후보라 위에서 헤더를
+      미리 숨기고 postDetail도 아직 안 열어 뒀을 수 있으므로,
+      벗겨내지 않으면 "post not found" 문구조차 보이지 않는다.
+    */
+
+    if (maybeSkinCandidate) {
+
+      if (postDetail) {
+
+        postDetail.hidden =
+          false;
+
+      }
+
+
+      if (postContainer) {
+
+        postContainer.classList.remove(
+          "post-container--skin-active"
+        );
+
+      }
+
+
+      postArea?.classList.remove(
+        "post-area--skin-active"
+      );
+
+    }
 
 
     postDetailTitle.textContent =
@@ -486,13 +606,48 @@ async function openPostPage(
     post row가 확정된 뒤이므로 secret/raw HTML 분기는 전혀
     건드리지 않는다 — 아래에서 본문을 "어디에" mount할지만
     결정한다.
+
+    postSkinContainer에 곧장 렌더하지 않고 떨어진(detached) 스크래치
+    엘리먼트에 먼저 그린다 — renderSkin()은 container.innerHTML을
+    통째로 다시 그리므로, 이 응답이 늦게 도착했는데 그 사이 더 빠른
+    다른 글 클릭이 이미 postSkinContainer에 최신 화면을 그려 둔
+    상태라면, 곧장 postSkinContainer에 그렸을 경우 requestId 검사
+    이전에 이미 최신 화면을 덮어써버린다. 아래에서 requestId가
+    여전히 최신일 때만 이 스크래치 엘리먼트의 내용을 옮긴다 —
+    bodyRegion은 실제 DOM 노드를 옮기는(clone 아님) 것이므로 참조는
+    그대로 유효하다.
   */
+
+  const skinRenderTarget =
+    document.createElement(
+      "div"
+    );
 
   const skinPostResult =
     await tryRenderPublishedSkinPost(
       post.id,
-      postSkinContainer
+      skinRenderTarget
     );
+
+
+  if (
+    requestId !==
+    postPageRequestSeq
+  ) {
+
+    cancelPendingIndicator(
+      pendingIndicatorTimer
+    );
+
+
+    return;
+
+  }
+
+
+  clearPendingIndicator(
+    pendingIndicatorTimer
+  );
 
 
   const usingSkinPost =
@@ -512,6 +667,25 @@ async function openPostPage(
 
   if (postSkinContainer) {
 
+    postSkinContainer.innerHTML =
+      "";
+
+
+    if (usingSkinPost) {
+
+      while (
+        skinRenderTarget.firstChild
+      ) {
+
+        postSkinContainer.appendChild(
+          skinRenderTarget.firstChild
+        );
+
+      }
+
+    }
+
+
     postSkinContainer.hidden =
       !usingSkinPost;
 
@@ -526,6 +700,11 @@ async function openPostPage(
     );
 
   }
+
+  postArea?.classList.toggle(
+    "post-area--skin-active",
+    usingSkinPost
+  );
 
 
   currentPostBodyMountTarget =

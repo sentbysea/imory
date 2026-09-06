@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>CATEGORY/POST Transition Timing Test Harness (PHASE 1D hardening)</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; padding: 24px; background: #f2f2f2; }
+  h2 { margin-top: 40px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+  ul.report li.pass { color: #2f9e44; }
+  ul.report li.fail { color: #e03131; font-weight: bold; }
+  ul.report li .detail { color: #666; font-weight: normal; font-size: 12px; display: block; margin-left: 20px; white-space: pre-wrap; }
+  #summary { font-size: 16px; font-weight: bold; margin-top: 24px; }
+  #fixtureHost { display: none; }
+</style>
+</head>
+<body>
+
+  <h1>CATEGORY/POST Transition Timing Test Harness</h1>
+  <p>
+    실제 <code>posts/posts.html</code> 마크업 + 실제
+    <code>posts-view-transition.js</code>/<code>posts-view-list.js</code>/
+    <code>posts-view-detail.js</code>/<code>posts-refs.js</code>/<code>posts-state.js</code>를
+    그대로 로드하고, <code>supabaseClient</code>/<code>getSiteOwner</code>/
+    <code>getSignedInUser</code>/<code>skinCategoryReady</code>/<code>skinPostReady</code>만
+    (응답 지연을 인위적으로 제어 가능하게) mock해서, published Skin 후보
+    CATEGORY/POST 전환 도중 legacy 헤더/"..."/"loading..." 화면이 끼어들지
+    않는지, 대기 표시(post-pending-indicator)가 지연 임계값 전에는 안 보이고
+    이후에만 보이는지, 응답이 빨리 오면 아예 안 보이는지, 빠른 연속 이동에서
+    늦게 도착한 응답이 최신 화면을 덮어쓰지 않는지를 실제 DOM 타이밍으로
+    검증한다.
+  </p>
+
+  <div id="summary">테스트 실행 중...</div>
+  <h2>검증 결과</h2>
+  <ul class="report" id="reportList"></ul>
+
+  <div id="fixtureHost"></div>
+
+  <script>
+
+    const reportList = document.getElementById("reportList");
+    let passCount = 0;
+    let failCount = 0;
+
+    function report(name, passed, detail) {
+      const item = document.createElement("li");
+      item.className = passed ? "pass" : "fail";
+      item.textContent = `[${passed ? "PASS" : "FAIL"}] ${name}` + (detail ? ` — ${detail}` : "");
+      reportList.appendChild(item);
+      if (passed) { passCount++; } else { failCount++; }
+    }
+
+    function assert(name, condition, detail) {
+      report(name, !!condition, detail);
+    }
+
+    function finishSummary() {
+      const summary = document.getElementById("summary");
+      summary.textContent = `${passCount + failCount}개 검사 중 PASS ${passCount} / FAIL ${failCount}`;
+      summary.style.color = failCount === 0 ? "#2f9e44" : "#e03131";
+      window.__testDone = true;
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+  </script>
+
+  <!-- =========================================================
+       1. 실제 posts.html fragment 주입
+  ========================================================== -->
+
+  <script>
+
+    const __fixtureXhr = new XMLHttpRequest();
+    __fixtureXhr.open("GET", "../posts/posts.html", false);
+    __fixtureXhr.send(null);
+    document.getElementById("fixtureHost").innerHTML = __fixtureXhr.responseText;
+
+  </script>
+
+  <!-- =========================================================
+       2. mock: supabaseClient / getSiteOwner / getSignedInUser /
+       skinCategoryReady / skinPostReady — 응답 지연(delayMs)을
+       시나리오가 실행 도중 자유롭게 바꿔 끼울 수 있다.
+  ========================================================== -->
+
+  <script>
+
+    window.__mock = {
+      ownerId: "owner-1",
+      signedInUserId: null,        // null = 익명, "owner-1" = owner 본인 로그인
+      scoped: true,                // false로 두면 legacy/unscoped 배포 흉내
+      legacyDelayMs: 0,            // categories/posts 테이블 조회 지연
+      skinDelayMs: 0,              // skinCategoryReady/skinPostReady 지연
+      skinCategoryBehavior: "success",  // "success" | "false"
+      skinPostBehavior: "success",      // "success" | "false"
+      categories: {},              // id -> { name, type }
+      postsByCategory: {},         // categoryId -> [posts]
+      posts: {}                    // id -> post row
+    };
+
+    function delay(ms) {
+      return ms > 0 ? new Promise(r => setTimeout(r, ms)) : Promise.resolve();
+    }
+
+    window.supabaseClient = {
+
+      from(table) {
+
+        const calls = { maybeSingle: false, eqs: [], order: false };
+
+        const builder = {
+          select() { return builder; },
+          eq(col, val) { calls.eqs.push([col, val]); return builder; },
+          order() { calls.order = true; return builder; },
+          maybeSingle() { calls.maybeSingle = true; return resolve(); },
+          then(onFulfilled, onRejected) { return resolve().then(onFulfilled, onRejected); }
+        };
+
+        async function resolve() {
+
+          await delay(window.__mock.legacyDelayMs);
+
+          if (table === "categories") {
+
+            const idEq = calls.eqs.find(([col]) => col === "id");
+            const id = idEq ? Number(idEq[1]) : null;
+            const category = window.__mock.categories[id] || null;
+
+            if (calls.maybeSingle) {
+              return { data: category, error: null };
+            }
+
+            return { data: category ? { name: category.name } : null, error: null };
+
+          }
+
+          if (table === "posts") {
+
+            const idEq = calls.eqs.find(([col]) => col === "id");
+            const categoryIdEq = calls.eqs.find(([col]) => col === "category_id");
+
+            if (calls.maybeSingle && idEq) {
+              const post = window.__mock.posts[Number(idEq[1])] || null;
+              return { data: post, error: null };
+            }
+
+            if (categoryIdEq) {
+              const list = window.__mock.postsByCategory[Number(categoryIdEq[1])] || [];
+              return { data: list, error: null };
+            }
+
+            return { data: [], error: null };
+
+          }
+
+          if (table === "post_contents") {
+            return { data: { content: "mock body" }, error: null };
+          }
+
+          return { data: null, error: null };
+
+        }
+
+        return builder;
+
+      },
+
+      rpc() {
+        return Promise.resolve({ data: null, error: null });
+      }
+
+    };
+
+    window.getSiteOwner = async function () {
+      if (!window.__mock.scoped) {
+        return { scoped: false, ownerId: null, status: "unscoped", homeMode: null };
+      }
+      return { scoped: true, ownerId: window.__mock.ownerId, status: "found", homeMode: null };
+    };
+
+    window.getSignedInUser = async function () {
+      return window.__mock.signedInUserId ? { id: window.__mock.signedInUserId } : null;
+    };
+
+    /*
+      실제 skin-category.js/skin-post.js의 fallback matrix는 각자의
+      integration test가 이미 검증했다 — 여기서는 그 모듈의 "결과"만
+      (지연 포함) 흉내 내서 posts-view-list.js/posts-view-detail.js가
+      기다리는 동안 화면에 무엇을 보여주는지(타이밍)만 검증한다.
+    */
+
+    window.skinCategoryReady = Promise.resolve(async function renderPublishedSkinCategory({ container }) {
+
+      await delay(window.__mock.skinDelayMs);
+
+      if (window.__mock.skinCategoryBehavior === "false") {
+        return false;
+      }
+
+      container.innerHTML = `<div class="skin-category-mock">skin category content</div>`;
+      return true;
+
+    });
+
+    window.skinPostReady = Promise.resolve(async function renderPublishedSkinPost({ container }) {
+
+      await delay(window.__mock.skinDelayMs);
+
+      if (window.__mock.skinPostBehavior === "false") {
+        return false;
+      }
+
+      container.innerHTML =
+        `<article class="skin-post-mock">` +
+        `<h1></h1>` +
+        `<div data-imory-region="post-body"></div>` +
+        `</article>`;
+
+      return { rendered: true, bodyRegion: container.querySelector('[data-imory-region="post-body"]') };
+
+    });
+
+  </script>
+
+  <!-- =========================================================
+       3. 실제 앱 코드 로드(classic script, 실제 index.html과
+       동일한 상대 순서).
+  ========================================================== -->
+
+  <script src="../core/lib/reserved-slugs.js"></script>
+  <script src="../core/lib/site-path.js"></script>
+  <script src="../posts/posts-format.js"></script>
+  <script src="../posts/posts-sanitize.js"></script>
+  <script src="../posts/posts-reader-scale.js"></script>
+  <script src="../posts/style/posts-style-preset.js"></script>
+  <script src="../posts/style/posts-style-dialogue.js"></script>
+  <script src="../posts/style/posts-style-render.js"></script>
+  <script src="../posts/posts-view-html-fit.js"></script>
+  <script src="../posts/view/posts-view-transition.js"></script>
+  <script src="../posts/view/posts-view-list.js"></script>
+  <script src="../posts/view/posts-view-detail.js"></script>
+  <script src="../posts/view/posts-view-secret-gate.js"></script>
+  <script src="../posts/editor/posts-refs.js"></script>
+  <script src="../posts/editor/posts-state.js"></script>
+
+  <!-- =========================================================
+       4. posts-view-list.js가 참조하지만 이 타이밍 검증과 무관한
+       배너 렌더러는 로드하지 않고(posts-view-banner.js는 자기
+       DOM/상태를 더 필요로 함) 최소 stub으로 대체한다 — 실제
+       posts-view-banner.js는 이 변경으로 건드리지 않았다.
+  ========================================================== -->
+
+  <script>
+
+    let __bannerRenderCount = 0;
+
+    async function renderBannerCategory(categoryId) {
+      __bannerRenderCount++;
+      if (typeof bannerGrid !== "undefined" && bannerGrid) {
+        bannerGrid.hidden = false;
+        bannerGrid.innerHTML = `<div class="banner-mock">banner ${categoryId}</div>`;
+      }
+    }
+
+    /*
+      home/menu.js(menuPanel/menuButton)와 에디터 프리뷰 모듈
+      (closeEditorPreview)은 로드하지 않았다 — 이 타이밍 검증과
+      무관하므로 posts-state.js의 실제 closePostMenu/hidePostEditor가
+      참조하는 두 의존성만 no-op로 대체한다(skin-post-lifecycle-test.html과
+      동일한 패턴). 나중에 선언된 함수 선언이 이긴다.
+    */
+
+    function closePostMenu() {}
+
+    function hidePostEditor() {}
+
+    /*
+      posts-state.js가 자기 자신의 real getSignedInUser()(실제
+      supabaseClient.auth.getUser() 호출)를 top-level function
+      declaration으로 선언해서 섹션 2의 mock을 덮어썼다 — 여기서
+      다시 mock으로 되돌린다(skin-post-lifecycle-test.html과 동일한
+      이유/패턴 — function 선언은 나중에 로드된 쪽이 이긴다).
+    */
+
+    async function getSignedInUser() {
+      return window.__mock.signedInUserId ? { id: window.__mock.signedInUserId } : null;
+    }
+
+  </script>
+
+  <!-- =========================================================
+       5. 시나리오 드라이버
+  ========================================================== -->
+
+  <script type="module">
+
+    function headerHiddenNow() {
+      return postContainer.classList.contains("post-container--skin-active");
+    }
+
+    function indicatorVisible() {
+      return postPendingIndicator && postPendingIndicator.hidden === false;
+    }
+
+    function seedCategory(id, name, type = "post") {
+      window.__mock.categories[id] = { name, type };
+    }
+
+    function seedPosts(categoryId, posts) {
+      window.__mock.postsByCategory[categoryId] = posts.map(p => ({
+        id: p.id, title: p.title, created_at: "2026-01-01T00:00:00.000Z", visibility: "public"
+      }));
+    }
+
+    function seedPost(id, categoryId, title) {
+      window.__mock.posts[id] = {
+        id, category_id: categoryId, user_id: window.__mock.ownerId,
+        title, content_type: "richtext", visibility: "public",
+        created_at: "2026-01-01T00:00:00.000Z", quote_preset_id: null
+      };
+    }
+
+    /* =====================================================
+       CATEGORY — 느린 응답: legacy "..."/"loading..." 헤더가
+       중간에 한 번도 나타나지 않아야 하고, 대기 표시는
+       임계값(300ms) 전엔 안 보이다가 이후에만 보여야 한다.
+    ===================================================== */
+
+    {
+      seedCategory(101, "LOG", "post");
+      seedPosts(101, [{ id: 9001, title: "hello" }]);
+
+      window.__mock.legacyDelayMs = 260;
+      window.__mock.skinDelayMs = 260;
+      window.__mock.skinCategoryBehavior = "success";
+
+      /*
+        HOME -> CATEGORY 전환은 showPostArea()의 커튼 페이드인
+        애니메이션(약 380ms, posts-view-transition.js)을 실제로
+        거친다 — 이 테스트는 그 애니메이션 도중에도 legacy
+        헤더/"..."/"loading..."가 한 번도 보이면 안 된다는 것과,
+        대기 표시 임계값(300ms)이 애니메이션이 끝난 뒤부터
+        정확히 계산되는지를 함께 검증한다.
+      */
+
+      currentPostView = "home";
+      postArea.hidden = true;
+      postPageTitle.textContent = "";
+      postList.innerHTML = "";
+
+      const nav = openCategoryPage(101, { updateUrl: false });
+
+      await sleep(120);
+
+      assert(
+        "CAT-slow T+120ms(커튼 애니메이션 도중): post-header already hidden (no back-header flash)",
+        headerHiddenNow()
+      );
+
+      assert(
+        "CAT-slow T+120ms(커튼 애니메이션 도중): legacy '...' title never painted",
+        postPageTitle.textContent !== "..."
+      );
+
+      assert(
+        "CAT-slow T+120ms(커튼 애니메이션 도중): legacy 'loading...' list never painted",
+        !postList.innerHTML.includes("loading...")
+      );
+
+      assert(
+        "CAT-slow T+120ms(커튼 애니메이션 도중): pending indicator not shown yet",
+        !indicatorVisible()
+      );
+
+      await sleep(650);
+
+      assert(
+        "CAT-slow T+770ms(커튼 종료 후 대기 임계값 초과): pending indicator now visible",
+        indicatorVisible()
+      );
+
+      await nav;
+
+      assert(
+        "CAT-slow final: skin content mounted into postList",
+        postList.innerHTML.includes("skin-category-mock")
+      );
+
+      assert(
+        "CAT-slow final: post-header stays hidden (skin succeeded)",
+        headerHiddenNow()
+      );
+
+      assert(
+        "CAT-slow final: pending indicator hidden again",
+        !indicatorVisible()
+      );
+
+    }
+
+    /* =====================================================
+       CATEGORY — 빠른 응답: 대기 표시가 한 번도 보이면 안 된다.
+    ===================================================== */
+
+    {
+      window.__mock.legacyDelayMs = 0;
+      window.__mock.skinDelayMs = 0;
+      window.__mock.skinCategoryBehavior = "success";
+
+      /* category-to-category 전환(showPostArea 커튼과 무관) */
+      currentPostView = "category";
+      postArea.hidden = false;
+
+      await openCategoryPage(101, { updateUrl: false });
+
+      assert(
+        "CAT-fast: pending indicator never shown for a fast response",
+        !indicatorVisible()
+      );
+
+    }
+
+    /* =====================================================
+       CATEGORY — Skin 실패(owner 본인 열람 등) -> legacy 폴백:
+       최종적으로 헤더가 되살아나고 실제 목록이 보여야 한다.
+    ===================================================== */
+
+    {
+      seedCategory(102, "NOTES", "post");
+      seedPosts(102, [{ id: 9101, title: "fallback post" }]);
+
+      window.__mock.legacyDelayMs = 50;
+      window.__mock.skinDelayMs = 50;
+      window.__mock.skinCategoryBehavior = "false";
+
+      currentPostView = "category";
+      postArea.hidden = false;
+
+      await openCategoryPage(102, { updateUrl: false });
+
+      assert(
+        "CAT-fallback: post-header restored (skin declined)",
+        !headerHiddenNow()
+      );
+
+      assert(
+        "CAT-fallback: legacy list actually rendered",
+        postList.querySelector(".post-list-item") !== null
+      );
+
+      assert(
+        "CAT-fallback: pending indicator hidden",
+        !indicatorVisible()
+      );
+
+    }
+
+    /* =====================================================
+       CATEGORY — banner 타입: Skin 후보라도 항상 legacy 배너
+       레이아웃으로 돌아와야 한다(헤더 복원).
+    ===================================================== */
+
+    {
+      seedCategory(103, "LINKS", "banner");
+
+      window.__mock.legacyDelayMs = 30;
+      window.__mock.skinDelayMs = 30;
+
+      currentPostView = "category";
+      postArea.hidden = false;
+
+      await openCategoryPage(103, { updateUrl: false });
+
+      assert(
+        "CAT-banner: post-header restored for banner category",
+        !headerHiddenNow()
+      );
+
+      assert(
+        "CAT-banner: renderBannerCategory actually ran",
+        __bannerRenderCount > 0
+      );
+
+    }
+
+    /* =====================================================
+       CATEGORY — 빠른 연속 클릭: 먼저 시작했지만 늦게 도착하는
+       응답이 나중에 시작해서 먼저 끝난 최신 화면을 덮어쓰면 안 된다.
+    ===================================================== */
+
+    {
+      seedCategory(104, "SLOW", "post");
+      seedPosts(104, [{ id: 9201, title: "slow cat post" }]);
+
+      seedCategory(105, "FAST", "post");
+      seedPosts(105, [{ id: 9301, title: "fast cat post" }]);
+
+      currentPostView = "category";
+      postArea.hidden = false;
+
+      window.__mock.legacyDelayMs = 300;
+      window.__mock.skinDelayMs = 300;
+      window.__mock.skinCategoryBehavior = "success";
+
+      const staleNav = openCategoryPage(104, { updateUrl: false });
+
+      await sleep(10);
+
+      window.__mock.legacyDelayMs = 0;
+      window.__mock.skinDelayMs = 0;
+
+      await openCategoryPage(105, { updateUrl: false });
+
+      const titleAfterFastNav = postPageTitle.textContent;
+      const listAfterFastNav = postList.innerHTML;
+
+      await staleNav;
+
+      assert(
+        "CAT-race: stale (category 104) response did not overwrite the newer screen's title",
+        postPageTitle.textContent === titleAfterFastNav
+      );
+
+      assert(
+        "CAT-race: stale response did not overwrite the newer screen's list content",
+        postList.innerHTML === listAfterFastNav
+      );
+
+    }
+
+    /* =====================================================
+       CATEGORY — legacy/unscoped 배포: 기존 그대로 즉시
+       "..."/"loading..." 화면을 보여줘야 한다(회귀 없음).
+    ===================================================== */
+
+    {
+      seedCategory(106, "LEGACY", "post");
+      seedPosts(106, [{ id: 9401, title: "legacy post" }]);
+
+      window.__mock.scoped = false;
+      window.__mock.legacyDelayMs = 200;
+
+      currentPostView = "category";
+      postArea.hidden = false;
+      postPageTitle.textContent = "";
+      postList.innerHTML = "";
+
+      const nav = openCategoryPage(106, { updateUrl: false });
+
+      await sleep(20);
+
+      assert(
+        "CAT-legacy: unscoped deployment still shows immediate '...' title",
+        postPageTitle.textContent === "..."
+      );
+
+      assert(
+        "CAT-legacy: unscoped deployment still shows immediate 'loading...' list",
+        postList.innerHTML.includes("loading...")
+      );
+
+      assert(
+        "CAT-legacy: post-header stays visible throughout (never Skin-hidden)",
+        !headerHiddenNow()
+      );
+
+      await nav;
+
+      window.__mock.scoped = true;
+
+    }
+
+    /* =====================================================
+       POST — 느린 응답: legacy article("loading..." 제목 +
+       뒤로가기 헤더)이 중간에 한 번도 보이면 안 된다.
+    ===================================================== */
+
+    {
+      seedPost(9501, null, "slow post title");
+
+      window.__mock.legacyDelayMs = 260;
+      window.__mock.skinDelayMs = 260;
+      window.__mock.skinPostBehavior = "success";
+      window.__mock.signedInUserId = null;
+
+      currentPostView = "category";
+      postArea.hidden = false;
+      postDetail.hidden = true;
+      postSkinContainer.hidden = true;
+
+      const nav = openPostPage(9501, { updateUrl: false });
+
+      await sleep(30);
+
+      assert(
+        "POST-slow T+30ms: legacy #postDetail still hidden (no loading-title flash)",
+        postDetail.hidden === true
+      );
+
+      assert(
+        "POST-slow T+30ms: post-header hidden (no back-header flash)",
+        headerHiddenNow()
+      );
+
+      assert(
+        "POST-slow T+30ms: pending indicator not shown yet",
+        !indicatorVisible()
+      );
+
+      await sleep(400);
+
+      assert(
+        "POST-slow T+430ms: pending indicator now visible",
+        indicatorVisible()
+      );
+
+      await nav;
+
+      assert(
+        "POST-slow final: skin post mounted, legacy detail stays hidden",
+        postSkinContainer.hidden === false && postDetail.hidden === true
+      );
+
+      assert(
+        "POST-slow final: pending indicator hidden again",
+        !indicatorVisible()
+      );
+
+    }
+
+    /* =====================================================
+       POST — 실패(오류) 시: 오류 문구 + 뒤로갈 수 있는 헤더가
+       실제로 보여야 한다.
+    ===================================================== */
+
+    {
+      window.__mock.legacyDelayMs = 30;
+      window.__mock.skinDelayMs = 30;
+
+      currentPostView = "category";
+      postArea.hidden = false;
+      postDetail.hidden = true;
+
+      await openPostPage(999999, { updateUrl: false });
+
+      assert(
+        "POST-error: legacy #postDetail revealed so the error is actually visible",
+        postDetail.hidden === false
+      );
+
+      assert(
+        "POST-error: post-header restored (back button usable)",
+        !headerHiddenNow()
+      );
+
+      assert(
+        "POST-error: 'post not found' message shown",
+        postDetailTitle.textContent === "post not found"
+      );
+
+    }
+
+    /* =====================================================
+       POST — 빠른 연속 클릭(다른 글로 바로 이동): 먼저 시작했지만
+       늦게 도착하는 응답이 나중에 시작해서 먼저 끝난 최신 글
+       화면을 덮어쓰면 안 된다.
+    ===================================================== */
+
+    {
+      seedPost(9601, null, "slow post");
+      seedPost(9602, null, "fast post");
+
+      currentPostView = "category";
+      postArea.hidden = false;
+      postDetail.hidden = true;
+      postSkinContainer.hidden = true;
+
+      window.__mock.legacyDelayMs = 300;
+      window.__mock.skinDelayMs = 300;
+      window.__mock.skinPostBehavior = "success";
+
+      const staleNav = openPostPage(9601, { updateUrl: false });
+
+      await sleep(10);
+
+      window.__mock.legacyDelayMs = 0;
+      window.__mock.skinDelayMs = 0;
+
+      await openPostPage(9602, { updateUrl: false });
+
+      const skinContentAfterFastNav = postSkinContainer.innerHTML;
+      const detailHiddenAfterFastNav = postDetail.hidden;
+
+      await staleNav;
+
+      assert(
+        "POST-race: stale (post 9601) response did not overwrite the newer post's skin content",
+        postSkinContainer.innerHTML === skinContentAfterFastNav
+      );
+
+      assert(
+        "POST-race: stale response did not flip #postDetail visibility back",
+        postDetail.hidden === detailHiddenAfterFastNav
+      );
+
+    }
+
+    finishSummary();
+
+  </script>
+
+</body>
+</html>

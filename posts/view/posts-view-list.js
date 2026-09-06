@@ -395,20 +395,52 @@ async function openCategoryPage(
 
 
   /*
-    이전 카테고리가 Skin 경로로 그려졌을 수 있으므로(post-container
-    --skin-active) 매 호출마다 우선 되돌려 둔다 — banner/에러
-    분기처럼 아래 renderedPublishedSkinCategory 지점까지 가지 않고
-    return하는 경로에서도 legacy 헤더/폭이 정확히 복원되게 한다.
-    실제로 이번 카테고리가 Skin 경로를 타면 아래에서 다시 붙는다.
+    PHASE 1D: published Skin 후보(getSiteOwner()가 scoped &&
+    ownerId)인지 먼저 가볍게 확인한다 — getSiteOwner()는 메모이즈돼
+    있어 HOME 로드 이후엔 사실상 즉시 resolve된다. 실제로 이
+    카테고리가 Skin으로 렌더될지(owner 본인 열람/banner 타입/
+    미지원이면 결국 legacy로 폴백)는 아래 tryRenderPublishedSkinCategory가
+    최종 판정하고, 그 결과로 아래에서 다시 정확히 바로잡는다 —
+    이 값은 로딩 중에 화면에 legacy 헤더+"..."/"loading..."을
+    보여줄지, 아니면 헤더를 미리 숨기고 조용히 기다릴지만 고른다.
+  */
+
+  const owner =
+    await getSiteOwner();
+
+  const maybeSkinCandidate =
+    Boolean(
+      owner.scoped &&
+      owner.ownerId
+    );
+
+
+  /*
+    후보가 아니면(비-scoped/legacy 배포) 기존 그대로 매 호출마다
+    되돌려 둔다 — banner/에러 분기처럼 아래 renderedPublishedSkinCategory
+    지점까지 가지 않고 return하는 경로에서도 legacy 헤더/폭이 정확히
+    복원되게 한다.
+
+    후보면 반대로 미리 붙여 둔다 — 이전 카테고리가 무엇이었든
+    (Skin이었든 legacy였든, 혹은 HOME에서 막 넘어와 아무 상태도
+    없었든) legacy 뒤로가기 헤더가 잠깐 나타났다 사라지는 깜빡임
+    없이 곧장 최종 화면(Skin 성공 시 그대로, 실패 시 아래 banner/
+    에러/최종 폴백 분기에서 다시 벗겨낸다)으로 이어지게 한다.
   */
 
   if (postContainer) {
 
-    postContainer.classList.remove(
-      "post-container--skin-active"
+    postContainer.classList.toggle(
+      "post-container--skin-active",
+      maybeSkinCandidate
     );
 
   }
+
+  postArea.classList.toggle(
+    "post-area--skin-active",
+    maybeSkinCandidate
+  );
 
 
   const numericCategoryId =
@@ -475,6 +507,25 @@ async function openCategoryPage(
     );
 
 
+  /*
+    Skin 후보면 legacy 캐시 적중 여부와 무관하게 아래
+    tryRenderPublishedSkinCategory가 항상 새로 (RPC 등) 확인하므로,
+    대기 표시 타이머도 캐시 여부와 상관없이 여기서 한 번만 건다 —
+    실제로 표시되는 건 응답이 PENDING_INDICATOR_DELAY_MS보다 오래
+    걸릴 때뿐이고, 그 전에 끝나면(clearPendingIndicator, 아래) 전혀
+    보이지 않는다.
+  */
+
+  const pendingIndicatorTimer =
+    maybeSkinCandidate
+      ? schedulePendingIndicator(
+          () =>
+            requestId ===
+            categoryPageRequestSeq
+        )
+      : null;
+
+
   let category;
   let posts;
   let postsError = null;
@@ -492,16 +543,20 @@ async function openCategoryPage(
 
   else {
 
-    postPageTitle.textContent =
-      "...";
+    if (!maybeSkinCandidate) {
+
+      postPageTitle.textContent =
+        "...";
 
 
-    postList.innerHTML =
-      `
-        <div class="post-empty">
-          loading...
-        </div>
-      `;
+      postList.innerHTML =
+        `
+          <div class="post-empty">
+            loading...
+          </div>
+        `;
+
+    }
 
 
     const result =
@@ -520,6 +575,11 @@ async function openCategoryPage(
       categoryPageRequestSeq
     ) {
 
+      cancelPendingIndicator(
+        pendingIndicatorTimer
+      );
+
+
       return;
 
     }
@@ -533,6 +593,44 @@ async function openCategoryPage(
       console.error(
         result.categoryError
       );
+
+
+      clearPendingIndicator(
+        pendingIndicatorTimer
+      );
+
+
+      /*
+        실패 시 오류를 보여주고 돌아갈 수 있는 경로(기존
+        post-back-button)를 되살린다 — Skin 후보라 위에서
+        헤더를 미리 숨겨 둔 상태(post-container--skin-active)일
+        수 있으므로 벗겨내지 않으면 오류 문구조차 보이지 않는다.
+      */
+
+      if (maybeSkinCandidate) {
+
+        if (postContainer) {
+
+          postContainer.classList.remove(
+            "post-container--skin-active"
+          );
+
+        }
+
+
+        postArea.classList.remove(
+          "post-area--skin-active"
+        );
+
+
+        postList.innerHTML =
+          `
+            <div class="post-empty">
+              failed to load
+            </div>
+          `;
+
+      }
 
 
       postPageTitle.textContent =
@@ -609,6 +707,32 @@ async function openCategoryPage(
       );
 
     }
+
+
+    /*
+      banner 카테고리는 Skin 렌더 대상이 아니다(skin-category.js가
+      category.type !== "post"면 항상 false를 반환) — 위에서
+      Skin 후보라고 미리 헤더를 숨겨 뒀을 수 있으므로 여기서
+      확실히 legacy 레이아웃으로 되돌린다.
+    */
+
+    if (postContainer) {
+
+      postContainer.classList.remove(
+        "post-container--skin-active"
+      );
+
+    }
+
+
+    postArea.classList.remove(
+      "post-area--skin-active"
+    );
+
+
+    clearPendingIndicator(
+      pendingIndicatorTimer
+    );
 
 
     if (postList) {
@@ -691,6 +815,25 @@ async function openCategoryPage(
     );
 
 
+    clearPendingIndicator(
+      pendingIndicatorTimer
+    );
+
+
+    if (postContainer) {
+
+      postContainer.classList.remove(
+        "post-container--skin-active"
+      );
+
+    }
+
+
+    postArea.classList.remove(
+      "post-area--skin-active"
+    );
+
+
     postList.innerHTML =
       `
         <div class="post-empty">
@@ -729,12 +872,25 @@ async function openCategoryPage(
     legacy renderPostListItems()로 조용히 폴백한다. 이 지점은
     이미 currentPostCategoryType === "post"로 확정된 뒤다(banner는
     위에서 이미 return했음).
+
+    postList에 곧장 렌더하지 않고 떨어진(detached) 스크래치
+    엘리먼트에 먼저 그린다 — renderSkin()은 container.innerHTML을
+    통째로 다시 그리므로, 이 응답이 늦게 도착했는데 그 사이 더 빠른
+    다른 카테고리 클릭이 이미 postList에 최신 화면을 그려 둔
+    상태라면, 곧장 postList에 그렸을 경우 requestId 검사 이전에
+    이미 최신 화면을 덮어써버린다. 아래에서 requestId가 여전히
+    최신일 때만 이 스크래치 엘리먼트의 내용을 postList로 옮긴다.
   */
+
+  const skinRenderTarget =
+    document.createElement(
+      "div"
+    );
 
   const renderedPublishedSkinCategory =
     await tryRenderPublishedSkinCategory(
       numericCategoryId,
-      postList
+      skinRenderTarget
     );
 
 
@@ -743,7 +899,36 @@ async function openCategoryPage(
     categoryPageRequestSeq
   ) {
 
+    cancelPendingIndicator(
+      pendingIndicatorTimer
+    );
+
+
     return;
+
+  }
+
+
+  clearPendingIndicator(
+    pendingIndicatorTimer
+  );
+
+
+  if (renderedPublishedSkinCategory) {
+
+    postList.innerHTML =
+      "";
+
+
+    while (
+      skinRenderTarget.firstChild
+    ) {
+
+      postList.appendChild(
+        skinRenderTarget.firstChild
+      );
+
+    }
 
   }
 
@@ -756,6 +941,12 @@ async function openCategoryPage(
     );
 
   }
+
+
+  postArea.classList.toggle(
+    "post-area--skin-active",
+    renderedPublishedSkinCategory
+  );
 
 
   if (renderedPublishedSkinCategory) {

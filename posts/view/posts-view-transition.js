@@ -284,6 +284,101 @@ async function hidePostAreaCurtain() {
 
 
 /* =========================================================
+   PUBLISHED SKIN 전환 대기 표시
+
+   CATEGORY/POST가 published Skin 후보(getSiteOwner()가
+   scoped && ownerId — 실제로 Skin이 렌더될지, 지금 보는 사람이
+   owner 본인인지는 아직 모른다, 그 최종 판정은 각자
+   tryRenderPublishedSkinCategory/tryRenderPublishedSkinPost가
+   한다)일 때, posts-view-list.js/posts-view-detail.js는 legacy
+   "..."/"loading..." 화면과 post-header를 즉시 그리는 대신
+   이 대기 표시를 쓴다 — 이전 화면을 그대로 둔 채 기다리다가,
+   응답이 오래 걸릴 때만 잠깐 나타나는 작은 스피너 하나로
+   대체한다(posts-base.css .post-pending-indicator,
+   pointer-events:none이라 그 아래 화면을 조작해 중복 이동을
+   유발하지 않는다).
+
+   isStillCurrent()는 타이머가 실제로 발동하는 시점에 이 전환이
+   여전히 최신 요청인지(더 빠른 다른 클릭/뒤로가기로 이미
+   추월되지 않았는지 — categoryPageRequestSeq/currentPostId 등
+   호출자가 가진 판정 기준을 그대로 넘겨받는다) 다시 확인하는
+   콜백이다 — 추월됐으면 스피너를 띄우지 않는다(어차피 곧
+   clearPendingIndicator가 정리하지만, 추월된 요청이 뒤늦게
+   화면에 아무것도 안 보여야 할 때 잠깐이라도 스피너가 끼어드는
+   것 자체를 막는다).
+========================================================== */
+
+const PENDING_INDICATOR_DELAY_MS =
+  300;
+
+
+function schedulePendingIndicator(
+  isStillCurrent
+) {
+
+  return setTimeout(
+    () => {
+
+      if (
+        postPendingIndicator &&
+        isStillCurrent()
+      ) {
+
+        postPendingIndicator.hidden =
+          false;
+
+      }
+
+    },
+    PENDING_INDICATOR_DELAY_MS
+  );
+
+}
+
+
+function clearPendingIndicator(
+  timerId
+) {
+
+  clearTimeout(
+    timerId
+  );
+
+
+  if (postPendingIndicator) {
+
+    postPendingIndicator.hidden =
+      true;
+
+  }
+
+}
+
+
+/*
+  postPendingIndicator는 CATEGORY/POST 전체가 공유하는 단일
+  엘리먼트다 — 추월당해 더 이상 최신이 아닌 요청이 여기서
+  clearPendingIndicator()를 그대로 불러버리면, 그 사이 새로
+  시작된 요청이 이미 띄워 둔 스피너를 잘못 꺼버릴 수 있다.
+  isStillCurrent() 검사 안에서 걸린 자기 자신의 타이머는(위
+  schedulePendingIndicator) 발동 시점에 스스로 막히므로, 추월된
+  요청은 그저 자신의 타이머만 취소하면 충분하다 — 공유 엘리먼트는
+  건드리지 않는다.
+*/
+
+function cancelPendingIndicator(
+  timerId
+) {
+
+  clearTimeout(
+    timerId
+  );
+
+}
+
+
+
+/* =========================================================
    PREPARE EDITOR
 ========================================================== */
 
