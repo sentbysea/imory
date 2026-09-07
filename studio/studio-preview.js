@@ -33,6 +33,7 @@
    함께 고친다):
      parent -> iframe  "preview:render"        { type, skin, context }
      parent -> iframe  "preview:render-banner" { type, categoryName, items }
+     parent -> iframe  "preview:ping"          { type }
      iframe -> parent  "preview:ready"         { type }
      iframe -> parent  "preview:rendered"      { type, hasPostBodyRegion }
      iframe -> parent  "preview:error"         { type, message }
@@ -69,6 +70,7 @@
 const PREVIEW_MSG_RENDER = "preview:render";
 const PREVIEW_MSG_RENDER_BANNER = "preview:render-banner";
 const PREVIEW_MSG_READY = "preview:ready";
+const PREVIEW_MSG_PING = "preview:ping";
 const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
@@ -1739,6 +1741,40 @@ window.addEventListener(
     }
 
   }
+);
+
+
+/* =========================================================
+   ready 재요청 — 위 리스너 등록 전에 도착한 "preview:ready" 구제
+
+   iframe(preview-bridge.js)은 자기 모듈이 평가될 때 "preview:ready"를
+   딱 한 번만 보낸다. 그런데 그 iframe은 studio/index.html의 <body>
+   맨 위에 있고, 이 파일은 그 문서가 document.write로 순서대로 받는
+   스크립트 중 거의 마지막이다 — iframe이 거치는 직렬 요청 수가
+   parent보다 훨씬 적으므로, 실제 네트워크(요청당 RTT 25ms 이상)에서는
+   ready가 위 리스너 등록보다 **먼저** 도착하는 쪽이 오히려 정상이다.
+   그러면 그 메시지는 받는 곳이 없어 그대로 버려지고, previewFrameReady가
+   영원히 false로 남아 postRenderToFrame()이 payload를
+   pendingRenderPayload에 영구 대기시킨다(= Preview가 계속 blank,
+   overlay만 "미리보기를 그리는 중..."에서 멈춤). pending을 꺼내는
+   유일한 경로가 방금 유실된 그 ready 수신부이기 때문에 스스로는
+   절대 회복하지 못한다. localhost는 RTT가 0에 가까워 이 역전이
+   거의 일어나지 않는다 — 그래서 배포 후에만 보인다.
+
+   그래서 리스너를 등록한 직후 여기서 한 번만 다시 물어본다.
+   preview-bridge.js는 자기 message 리스너를 등록한 **뒤에** ready를
+   보내므로, ready가 이미 유실된 상황이라면 그 리스너는 반드시 살아
+   있다 — 이 ping은 항상 도달하고 ready가 다시 온다. 반대로 iframe이
+   아직 로드 전이면 이 ping이 버려지는 대신 원래의 ready가 위
+   리스너로 정상 도착한다. 어느 쪽이든 폴링 없이 한 번에 덮인다
+   (파일 상단 postMessage contract 참고).
+========================================================== */
+
+studioPreviewFrame.contentWindow.postMessage(
+  {
+    type: PREVIEW_MSG_PING
+  },
+  window.location.origin
 );
 
 

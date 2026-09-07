@@ -13,6 +13,7 @@
    postMessage contract(양쪽 다 origin + shape 검증, 12절):
      parent -> iframe  "preview:render"        { type, skin, context }
      parent -> iframe  "preview:render-banner" { type, categoryName, items }
+     parent -> iframe  "preview:ping"          { type }
      iframe -> parent  "preview:ready"         { type }
      iframe -> parent  "preview:rendered"      { type, hasPostBodyRegion }
      iframe -> parent  "preview:error"         { type, message }
@@ -53,6 +54,7 @@ const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
+const PREVIEW_MSG_PING = "preview:ping";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -407,6 +409,31 @@ window.addEventListener("message", (event) => {
 
   if (!data || typeof data !== "object" || typeof data.type !== "string") {
     return;
+  }
+
+  /*
+     ready 재요청("preview:ping") — 아래 파일 끝의 "preview:ready"는
+     이 모듈이 평가될 때 딱 한 번만 나간다. parent(studio/studio-preview.js)
+     가 그 시점에 아직 message 리스너를 등록하지 못했으면 그 신호는
+     받는 곳이 없어 그대로 버려지고, parent는 previewFrameReady가
+     영원히 false로 남아 render를 pendingRenderPayload에 영구 대기시킨다
+     (= Preview가 계속 blank). 이 문서는 iframe이라 parent보다 훨씬
+     적은 직렬 요청만 거치므로, 실제 네트워크(RTT 25ms 이상)에서는
+     그 역전이 정상적으로 일어난다 — localhost에서는 거의 재현되지
+     않는다.
+
+     그래서 parent는 리스너를 등록한 직후 이 ping을 한 번 보낸다.
+     아래 ready 발신은 이 리스너 등록 **뒤에** 실행되므로, ready가
+     이미 유실됐다면 이 리스너는 반드시 살아 있다 — 즉 ping은
+     항상 도달한다. 반대로 이 문서가 아직 로드 전이면 ping 쪽이
+     버려지고 원래의 ready가 parent 리스너에 정상 도착한다. 두 경우
+     모두 폴링 없이 덮인다.
+  */
+  if (data.type === PREVIEW_MSG_PING) {
+
+    postToParent({ type: PREVIEW_MSG_READY });
+    return;
+
   }
 
   if (data.type === PREVIEW_MSG_RENDER) {
