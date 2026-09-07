@@ -582,6 +582,51 @@ async function openStudio(playwright, backend) {
   return { browser, page, errors };
 }
 
+/*
+  클립보드 붙여넣기 시뮬레이션.
+
+  실제 OS 클립보드에 이미지를 넣고 Ctrl+V를 누르는 건 헤드리스에서
+  재현이 어렵다 — 대신 브라우저 안에서 DataTransfer를 만들어 paste
+  이벤트를 업로드 영역에 그대로 보낸다. 페이지 코드가 보는 것은
+  진짜 붙여넣기와 같은 event.clipboardData(files / items / types)다.
+
+  반환값은 event.defaultPrevented — "기본 붙여넣기를 가로챘는가".
+*/
+
+async function pasteInto(page, selector, payload) {
+  return await page.evaluate(([sel, p]) => {
+
+    const target = document.querySelector(sel);
+    if (!target) throw new Error("paste target not found: " + sel);
+
+    target.focus();
+
+    const dt = new DataTransfer();
+
+    if (p.text) dt.setData("text/plain", p.text);
+    if (p.html) dt.setData("text/html", p.html);
+    if (p.uri) dt.setData("text/uri-list", p.uri);
+
+    if (p.file) {
+      dt.items.add(
+        new File([new Uint8Array(p.file.size)], p.file.name, { type: p.file.type })
+      );
+    }
+
+    const event = new ClipboardEvent("paste", {
+      clipboardData: dt,
+      bubbles: true,
+      cancelable: true
+    });
+
+    target.dispatchEvent(event);
+
+    return event.defaultPrevented;
+
+  }, [selector, payload]);
+}
+
+
 async function attachFile(page, name, bytes, mime) {
   await page.setInputFiles(".images-panel-overlay input[type=file]", {
     name, mimeType: mime, buffer: bytes
@@ -1249,6 +1294,342 @@ async function testRestorePreservesBindingsAndFlag(playwright) {
 
 
 /* ---------------------------------------------------------
+   11) 클립보드 붙여넣기 업로드 — 성공 경로와 부작용 없음
+--------------------------------------------------------- */
+
+async function testPasteUpload(playwright) {
+  console.log("\n[paste] 이미지 붙여넣기 업로드 성공 / 슬롯·Save 부작용 없음 / 파일 선택 유지");
+  const backend = createMockBackend();
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  try {
+    await page.click("#studioTopDockHandle");
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+    const zoneText = (await page.textContent(".images-panel-pastezone") || "").trim();
+    check("[paste] 업로드 영역에 붙여넣기 안내가 보인다",
+      zoneText === "파일 선택 또는 이미지 붙여넣기 (Ctrl+V / ⌘V)", JSON.stringify(zoneText));
+
+    const zoneFocus = await page.evaluate(() => {
+      const zone = document.querySelector(".images-panel-pastezone");
+      return { tabIndex: zone.tabIndex, focusedOnOpen: document.activeElement === zone };
+    });
+    check("[paste] 업로드 영역이 포커스 가능하고 열자마자 포커스를 받는다",
+      zoneFocus.tabIndex === 0 && zoneFocus.focusedOnOpen, JSON.stringify(zoneFocus));
+
+    /* 화면 캡처 붙여넣기 = 이름이 뻔한 image.png 한 장 */
+    const prevented = await pasteInto(page, ".images-panel-pastezone", {
+      file: { name: "image.png", type: "image/png", size: PNG_BYTES.length }
+    });
+    await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+
+    check("[paste] 이미지가 있을 때만 기본 붙여넣기를 가로챈다 (가로챔)",
+      prevented === true, String(prevented));
+
+    const uploadPath = backend.state.uploads[0]?.objectPath || "";
+    check("[paste] 붙여넣은 이미지도 {user_id}/{uuid}.{ext} 경로로 올라간다",
+      uploadPath.startsWith(OWNER_ID + "/") && /\/[0-9a-z-]{8,}\.png$/.test(uploadPath),
+      uploadPath);
+
+    const createCall = backend.state.calls.filter(c => c.name === "create_skin_image").pop();
+    check("[paste] 기존 업로드와 같은 create_skin_image RPC를 재사용한다",
+      !!createCall &&
+      createCall.body.p_mime_type === "image/png" &&
+      createCall.body.p_byte_size === PNG_BYTES.length,
+      JSON.stringify(createCall && createCall.body));
+
+    check("[paste] 뻔한 이름(image.png)은 붙여넣은 시각이 담긴 이름으로 저장된다",
+      !!createCall && /^pasted-[\d-]+\.png$/.test(createCall.body.p_original_name || ""),
+      String(createCall && createCall.body.p_original_name));
+
+    check("[paste] 라이브러리에 1장 등록됐다",
+      backend.state.images.length === 1, "images=" + backend.state.images.length);
+
+    /* ★ 업로드만으로 슬롯 연결/Save/Publish가 일어나지 않는다 */
+    const slotState = await page.evaluate(() => window.getStudioImageSlotState());
+    check("[paste] 업로드만으로 슬롯이 자동 연결되지 않는다",
+      slotState.slots.every(s => !s.binding),
+      JSON.stringify(slotState.slots.map(s => [s.name, !!s.binding])));
+
+    const saveDisabled = await page.getAttribute("#studioSaveButton", "disabled");
+    check("[paste] 업로드만으로는 dirty가 되지 않는다(Save 여전히 비활성)",
+      saveDisabled !== null, "disabled=" + saveDisabled);
+
+    check("[paste] 업로드만으로 Save/Publish RPC가 불리지 않는다",
+      !backend.state.calls.some(c =>
+        c.name.startsWith("save_skin_draft_version") || c.name === "publish_skin"),
+      JSON.stringify(backend.state.calls.map(c => c.name)));
+
+    /* 붙여넣은 이미지도 평소처럼 슬롯에 연결할 수 있다 */
+    await page.click(".images-panel-card-attach");
+    await page.waitForTimeout(400);
+    const avatarSrc = await page.frameLocator("#studioPreviewFrame")
+      .locator(".t-avatar").getAttribute("src");
+    check("[paste] 붙여넣은 이미지도 카드에서 슬롯에 연결된다",
+      !!avatarSrc && avatarSrc.includes("/skin-images/"), String(avatarSrc));
+
+    /* 기존 파일 선택 업로드가 그대로 남아 있다 */
+    await attachFile(page, "picked.png", PNG_BYTES, "image/png");
+    await page.waitForFunction(
+      () => document.querySelectorAll(".images-panel-card").length === 2,
+      null, { timeout: 10000 }
+    );
+    check("[paste] 기존 파일 선택 업로드도 그대로 동작한다",
+      backend.state.images.length === 2 &&
+      backend.state.images.some(i => i.original_name === "picked.png"),
+      JSON.stringify(backend.state.images.map(i => i.original_name)));
+
+    check("[paste] 헤더의 + 업로드 버튼도 남아 있다",
+      await page.isVisible(".images-panel-upload-button"));
+
+    check("[paste] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
+   12) 붙여넣기도 기존 제한을 그대로 받는다
+--------------------------------------------------------- */
+
+async function testPasteLimits(playwright) {
+  console.log("\n[paste-limit] 붙여넣기에도 형식·용량·개수 제한과 오류 표시가 그대로 적용된다");
+  const backend = createMockBackend();
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  try {
+    await page.click("#studioTopDockHandle");
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+    /* 형식 — SVG는 image/*지만 화이트리스트 밖이다 */
+    let prevented = await pasteInto(page, ".images-panel-pastezone", {
+      file: { name: "image.svg", type: "image/svg+xml", size: 64 }
+    });
+    await page.waitForTimeout(300);
+    let message = await page.textContent(".images-panel-message");
+    check("[paste-limit] 허용되지 않는 형식은 붙여넣기에서도 거절되고 사유가 보인다",
+      prevented === true && /PNG/.test(message || ""),
+      "prevented=" + prevented + " / " + message);
+    check("[paste-limit] 거절된 붙여넣기는 업로드 요청 자체가 없다",
+      backend.state.uploads.length === 0, "uploads=" + backend.state.uploads.length);
+
+    /* 용량 — 5MB 초과 */
+    prevented = await pasteInto(page, ".images-panel-pastezone", {
+      file: { name: "image.png", type: "image/png", size: 6 * 1024 * 1024 }
+    });
+    await page.waitForTimeout(300);
+    message = await page.textContent(".images-panel-message");
+    check("[paste-limit] 5MB 초과는 붙여넣기에서도 거절되고 사유가 보인다",
+      prevented === true && /너무 커/.test(message || ""),
+      "prevented=" + prevented + " / " + message);
+    check("[paste-limit] 용량 초과도 업로드 요청 없이 막힌다",
+      backend.state.uploads.length === 0, "uploads=" + backend.state.uploads.length);
+    check("[paste-limit] 거절된 붙여넣기는 라이브러리에 아무것도 추가하지 않는다",
+      backend.state.images.length === 0 && (await page.$(".images-panel-card")) === null,
+      "images=" + backend.state.images.length);
+
+    /* 개수 — 서버(create_skin_image)가 100장에서 거절하고 그 사유를 보여준다 */
+    backend.state.images = Array.from({ length: 100 }, (_, i) => ({
+      id: "seed-" + i,
+      user_id: OWNER_ID,
+      storage_path: OWNER_ID + "/seed-" + i + ".png",
+      public_url: "https://" + SUPABASE_HOST +
+        "/storage/v1/object/public/skin-images/" + OWNER_ID + "/seed-" + i + ".png",
+      original_name: "seed-" + i + ".png",
+      mime_type: "image/png",
+      byte_size: 10,
+      created_at: "2026-01-01T00:00:00Z"
+    }));
+
+    prevented = await pasteInto(page, ".images-panel-pastezone", {
+      file: { name: "image.png", type: "image/png", size: PNG_BYTES.length }
+    });
+    await page.waitForTimeout(1000);
+    message = await page.textContent(".images-panel-message");
+    check("[paste-limit] 개수 상한(100장)도 붙여넣기에 그대로 적용되고 사유가 보인다",
+      prevented === true && /full/.test(message || ""),
+      "prevented=" + prevented + " / " + message);
+    check("[paste-limit] 개수 초과 시 등록되지 않는다",
+      backend.state.images.length === 100, "images=" + backend.state.images.length);
+
+    check("[paste-limit] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
+   13) 이미지가 아닌 붙여넣기는 건드리지 않는다
+--------------------------------------------------------- */
+
+async function testPasteLeavesTextAlone(playwright) {
+  console.log("\n[paste-text] 일반 텍스트/URL/HTML 붙여넣기와 Code 입력을 방해하지 않는다");
+  const backend = createMockBackend();
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  /* 외부 이미지 URL을 우리가 대신 내려받는지 감시한다 */
+  let externalRequests = 0;
+  await page.route("https://example.com/**", route => {
+    externalRequests += 1;
+    return route.abort();
+  });
+
+  try {
+    await page.click("#studioTopDockHandle");
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+    /* (a) 순수 텍스트 */
+    let prevented = await pasteInto(page, ".images-panel-pastezone", {
+      text: "그냥 텍스트입니다"
+    });
+    await page.waitForTimeout(200);
+    check("[paste-text] 텍스트만 있는 붙여넣기는 가로채지 않는다",
+      prevented === false, String(prevented));
+
+    /* (b) 이미지 URL / <img> HTML — 이미지로 간주해 내려받지 않는다 */
+    prevented = await pasteInto(page, ".images-panel-pastezone", {
+      text: "https://example.com/cat.png",
+      uri: "https://example.com/cat.png",
+      html: '<img src="https://example.com/cat.png">'
+    });
+    await page.waitForTimeout(500);
+    check("[paste-text] 클립보드의 URL/HTML은 이미지로 간주하지 않는다",
+      prevented === false, String(prevented));
+    check("[paste-text] URL/HTML 붙여넣기가 외부 요청을 만들지 않는다",
+      externalRequests === 0, "requests=" + externalRequests);
+
+    /* (c) 파일이지만 이미지가 아닌 경우 */
+    prevented = await pasteInto(page, ".images-panel-pastezone", {
+      file: { name: "notes.txt", type: "text/plain", size: 12 }
+    });
+    await page.waitForTimeout(200);
+    check("[paste-text] 이미지가 아닌 파일 붙여넣기는 가로채지 않는다",
+      prevented === false, String(prevented));
+
+    const message = await page.textContent(".images-panel-message");
+    check("[paste-text] 이미지 아닌 붙여넣기는 업로드도, 오류 표시도 만들지 않는다",
+      backend.state.uploads.length === 0 &&
+      backend.state.images.length === 0 &&
+      !(message || "").trim(),
+      "uploads=" + backend.state.uploads.length + " / message=" + JSON.stringify(message));
+
+    /* (d) Code 편집기 textarea 붙여넣기 — 우리 리스너가 아예 없다 */
+    await page.click(".images-panel-done-button");
+    await page.click("#studioCodeButton");
+    await page.waitForSelector(".code-editor-textarea", { timeout: 10000 });
+
+    const codePrevented = await pasteInto(page, ".code-editor-textarea", {
+      text: "<div>붙여넣은 코드</div>"
+    });
+    check("[paste-text] Code 편집기의 붙여넣기는 가로채지 않는다",
+      codePrevented === false, String(codePrevented));
+
+    const codeImagePrevented = await pasteInto(page, ".code-editor-textarea", {
+      file: { name: "image.png", type: "image/png", size: PNG_BYTES.length }
+    });
+    await page.waitForTimeout(400);
+    check("[paste-text] Code 편집기에 이미지를 붙여넣어도 업로드로 새지 않는다",
+      codeImagePrevented === false && backend.state.uploads.length === 0,
+      "prevented=" + codeImagePrevented + " / uploads=" + backend.state.uploads.length);
+
+    check("[paste-text] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
+   14) 진짜 클립보드 + 진짜 Ctrl+V
+
+   11~13번은 DataTransfer로 만든 paste 이벤트를 보낸다 — 우리
+   핸들러가 무엇을 하는지는 증명하지만 "실제 키 입력이 그 핸들러까지
+   오는가"는 증명하지 못한다. 여기서는 OS 클립보드에 PNG를 실제로
+   넣고(navigator.clipboard.write) 업로드 영역을 클릭한 뒤 진짜
+   Ctrl+V를 눌러 사용자 흐름 전체를 확인한다.
+
+   클립보드 권한이 필요하므로 chromium에서만 돌린다 — 다른 엔진에서는
+   건너뛴 사실을 로그로 남긴다(조용히 통과시키지 않는다).
+--------------------------------------------------------- */
+
+async function testRealClipboardPaste(playwright) {
+
+  if (BROWSER !== "chromium") {
+    console.log("\n[paste-real] SKIP — 클립보드 권한 부여는 chromium에서만 지원한다");
+    return;
+  }
+
+  console.log("\n[paste-real] 이미지 복사 → 업로드 영역 클릭 → 진짜 Ctrl+V");
+  const backend = createMockBackend();
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  try {
+    await page.context().grantPermissions(
+      ["clipboard-read", "clipboard-write"],
+      { origin: `http://localhost:${PORT}` }
+    );
+
+    await page.click("#studioTopDockHandle");
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+    /* OS 클립보드에 PNG를 실제로 넣는다 */
+    const copied = await page.evaluate(async (base64) => {
+      try {
+        const bytes = Uint8Array.from(atob(base64), (ch) => ch.charCodeAt(0));
+        await navigator.clipboard.write([
+          new ClipboardItem({ "image/png": new Blob([bytes], { type: "image/png" }) })
+        ]);
+        return "ok";
+      } catch (err) {
+        return String(err && err.message || err);
+      }
+    }, PNG_BYTES.toString("base64"));
+
+    check("[paste-real] 클립보드에 이미지를 넣을 수 있다", copied === "ok", copied);
+
+    if (copied !== "ok") {
+      return;
+    }
+
+    /* 사용자 흐름: 업로드 영역 클릭 → Ctrl+V */
+    await page.click(".images-panel-pastezone");
+
+    const focusedAfterClick = await page.evaluate(
+      () => document.activeElement === document.querySelector(".images-panel-pastezone")
+    );
+    check("[paste-real] 업로드 영역을 클릭하면 포커스가 그 영역으로 간다",
+      focusedAfterClick === true, String(focusedAfterClick));
+
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+V" : "Control+V");
+
+    await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+
+    check("[paste-real] 진짜 Ctrl+V로 라이브러리에 등록된다",
+      backend.state.images.length === 1 && backend.state.uploads.length === 1,
+      `images=${backend.state.images.length} uploads=${backend.state.uploads.length}`);
+
+    const message = await page.textContent(".images-panel-message");
+    check("[paste-real] 성공 메시지가 기존 업로드와 같다",
+      /업로드했어요/.test(message || ""), String(message));
+
+    check("[paste-real] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
    main
 --------------------------------------------------------- */
 
@@ -1269,6 +1650,10 @@ try {
   await testDraftSaveDoesNotAffectPublished(playwright);
   await testFirstEmptySaveDoesNotRestoreLegacy(playwright);
   await testRestorePreservesBindingsAndFlag(playwright);
+  await testPasteUpload(playwright);
+  await testPasteLimits(playwright);
+  await testPasteLeavesTextAlone(playwright);
+  await testRealClipboardPaste(playwright);
 } finally {
   server.close();
 }

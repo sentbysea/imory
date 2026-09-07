@@ -200,6 +200,88 @@
 
 
 /* =========================================================
+   업로드 영역 (파일 선택 + 클립보드 붙여넣기)
+
+   tabindex=0인 포커스 대상이므로 포커스 상태가 눈에 보여야 한다 —
+   "지금 여기에 Ctrl+V가 들어간다"를 알려주는 유일한 신호다.
+========================================================== */
+
+.images-panel-pastezone {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  flex-wrap: wrap;
+
+  gap: 2px;
+
+  margin-bottom: 10px;
+  padding: 12px 10px;
+
+  border: 1px dashed var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: transparent;
+
+  color: var(--system-text-muted);
+
+  font-size: 10px;
+  line-height: 1.6;
+
+  text-align: center;
+
+  word-break: keep-all;
+
+  cursor: default;
+}
+
+
+.images-panel-pastezone:focus {
+  outline: none;
+
+  border-style: solid;
+  border-color: var(--system-text);
+
+  background: var(--system-surface);
+
+  color: var(--system-text);
+}
+
+
+.images-panel-pastezone--busy {
+  opacity: 0.6;
+}
+
+
+.images-panel-pastezone-pick {
+  padding: 0;
+
+  border: 0;
+  border-bottom: 1px solid currentColor;
+
+  background: transparent;
+
+  color: inherit;
+
+  font: inherit;
+
+  cursor: pointer;
+}
+
+
+.images-panel-pastezone-pick:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+
+.images-panel-pastezone-hint {
+  color: inherit;
+}
+
+
+/* =========================================================
    SLOTS
 ========================================================== */
 

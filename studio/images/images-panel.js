@@ -9,8 +9,13 @@
      - 왼쪽 SLOTS: 지금 Skin이 선언한 imageSlots 목록. 각 슬롯의
        현재 연결 썸네일 + "비우기". 슬롯을 고르면 오른쪽에서 고른
        이미지가 그 슬롯에 연결된다.
-     - 오른쪽 MY IMAGES: 업로드 버튼 + 내 이미지 그리드. 각 이미지
-       카드에서 "연결"(선택된 슬롯으로) / "삭제".
+     - 오른쪽 MY IMAGES: 업로드 영역(파일 선택 + 클립보드 붙여넣기)
+       + 내 이미지 그리드. 각 이미지 카드에서 "연결"(선택된 슬롯으로)
+       / "삭제".
+
+   업로드 영역은 tabindex=0인 포커스 가능한 영역이다 — 거기에만
+   paste 리스너를 건다(document이 아니다). 그래서 Code/Import
+   modal이나 AI 입력창의 붙여넣기는 이 코드를 아예 지나가지 않는다.
 
    이 파일은 DB/Storage를 직접 만지지 않는다 — 전부
    window.skinImageLibrary(studio/images/skin-image-library.js)를
@@ -39,6 +44,8 @@ let imagesPanelMessage = null;
 let imagesPanelNotice = null;
 let imagesPanelFileInput = null;
 let imagesPanelUploadButton = null;
+let imagesPanelPasteZone = null;
+let imagesPanelPasteZonePick = null;
 let imagesPanelBody = null;
 
 let imagesPanelIsOpen = false;
@@ -70,6 +77,14 @@ function setImagesPanelBusy(busy) {
 
   if (imagesPanelUploadButton) {
     imagesPanelUploadButton.disabled = busy;
+  }
+
+  if (imagesPanelPasteZonePick) {
+    imagesPanelPasteZonePick.disabled = busy;
+  }
+
+  if (imagesPanelPasteZone) {
+    imagesPanelPasteZone.classList.toggle("images-panel-pastezone--busy", busy);
   }
 
   if (imagesPanelOverlay) {
@@ -209,6 +224,41 @@ function buildImagesPanelDom() {
   fileInput.hidden = true;
   libraryColumn.appendChild(fileInput);
 
+  /*
+    업로드 영역 — 클릭하면 포커스를 받고, 그 상태에서 Ctrl+V /
+    ⌘V로 클립보드의 이미지를 그대로 올릴 수 있다. 영역 전체를
+    파일 대화상자 열기로 쓰지 않는 이유: 클릭이 곧 대화상자면
+    "클릭 후 붙여넣기"가 불가능해진다. 그래서 파일 선택은 안쪽
+    버튼(과 헤더의 + 업로드)이 맡는다.
+  */
+
+  const pasteZone =
+    document.createElement("div");
+
+  pasteZone.className = "images-panel-pastezone";
+  pasteZone.tabIndex = 0;
+  pasteZone.setAttribute(
+    "aria-label",
+    "이미지 업로드 영역 — 파일 선택 또는 이미지 붙여넣기 (Ctrl+V / ⌘V)"
+  );
+
+  const pasteZonePick =
+    document.createElement("button");
+
+  pasteZonePick.type = "button";
+  pasteZonePick.className = "images-panel-pastezone-pick";
+  pasteZonePick.textContent = "파일 선택";
+  pasteZone.appendChild(pasteZonePick);
+
+  const pasteZoneHint =
+    document.createElement("span");
+
+  pasteZoneHint.className = "images-panel-pastezone-hint";
+  pasteZoneHint.textContent = " 또는 이미지 붙여넣기 (Ctrl+V / ⌘V)";
+  pasteZone.appendChild(pasteZoneHint);
+
+  libraryColumn.appendChild(pasteZone);
+
   const grid =
     document.createElement("div");
 
@@ -257,6 +307,8 @@ function buildImagesPanelDom() {
   imagesPanelNotice = notice;
   imagesPanelFileInput = fileInput;
   imagesPanelUploadButton = uploadButton;
+  imagesPanelPasteZone = pasteZone;
+  imagesPanelPasteZonePick = pasteZonePick;
   imagesPanelBody = body;
 
   closeButton.addEventListener("click", closeSkinImagesPanel);
@@ -275,6 +327,41 @@ function buildImagesPanelDom() {
   });
 
   fileInput.addEventListener("change", handleImagesPanelFileChange);
+
+  pasteZonePick.addEventListener("click", () => {
+    if (!imagesPanelIsBusy) {
+      fileInput.click();
+    }
+  });
+
+  /*
+    영역의 빈 곳을 클릭하면 포커스를 준다 — tabindex가 있는 div는
+    브라우저에 따라 클릭만으로 포커스를 받지 않기도 해서 명시한다.
+    안쪽 버튼 클릭은 그 버튼이 처리한다.
+  */
+  pasteZone.addEventListener("click", (event) => {
+    if (event.target !== pasteZonePick) {
+      pasteZone.focus();
+    }
+  });
+
+  /* 키보드 사용자: 포커스된 영역에서 Enter/Space = 파일 선택 */
+  pasteZone.addEventListener("keydown", (event) => {
+
+    if (event.target !== pasteZone) {
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      if (!imagesPanelIsBusy) {
+        fileInput.click();
+      }
+    }
+
+  });
+
+  pasteZone.addEventListener("paste", handleImagesPanelPaste);
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && imagesPanelIsOpen) {
@@ -440,7 +527,7 @@ function renderImagesPanelGrid() {
 
     empty.className = "images-panel-grid-empty";
     empty.textContent =
-      "아직 올린 이미지가 없어요. 위의 + 업로드로 시작해 보세요.";
+      "아직 올린 이미지가 없어요. 위에서 파일을 고르거나 이미지를 붙여넣어 보세요.";
     imagesPanelGrid.appendChild(empty);
 
     return;
@@ -560,15 +647,25 @@ function renderImagesPanelGrid() {
    업로드 / 삭제
 ========================================================== */
 
-async function handleImagesPanelFileChange(event) {
+/*
+  파일 선택과 클립보드 붙여넣기가 공유하는 단 하나의 업로드 경로.
+  검증(형식·용량)도, 개수 초과 등 서버가 돌려주는 오류 표시도 여기
+  한 곳에서만 일어난다 — 두 입구가 서로 다른 규칙을 갖는 일이
+  생기지 않게 한다.
 
-  const file =
-    event.target.files && event.target.files[0];
+  ★ 여기서 하지 않는 일: 슬롯 연결, Save, Publish. 업로드는
+  라이브러리에 등록하는 것까지다(슬롯 연결은 사용자가 카드의
+  "이 슬롯에 연결"을 눌러야, 저장은 Save를 눌러야 일어난다).
+*/
 
-  /* 같은 파일을 다시 골라도 change가 뜨도록 즉시 비운다 */
-  event.target.value = "";
+async function uploadImagesPanelFile(file) {
 
   if (!file) {
+    return;
+  }
+
+  if (imagesPanelIsBusy) {
+    setImagesPanelMessage("먼저 진행 중인 업로드가 끝난 뒤에 올려주세요.", true);
     return;
   }
 
@@ -615,6 +712,142 @@ async function handleImagesPanelFileChange(event) {
     setImagesPanelBusy(false);
 
   }
+
+}
+
+
+function handleImagesPanelFileChange(event) {
+
+  const file =
+    event.target.files && event.target.files[0];
+
+  /* 같은 파일을 다시 골라도 change가 뜨도록 즉시 비운다 */
+  event.target.value = "";
+
+  uploadImagesPanelFile(file);
+
+}
+
+
+/* =========================================================
+   클립보드 붙여넣기
+
+   ★ 파일 데이터만 본다(clipboardData.files / items의 kind ===
+   "file"). text/html이나 text/uri-list가 함께 와도 무시한다 —
+   그 안의 <img src>나 URL을 우리가 대신 내려받으면 사용자가
+   고르지도 않은 외부 요청이 생기고, 남의 서버 이미지를 내
+   라이브러리로 복사하는 경로가 된다. 붙여넣기 업로드는
+   "클립보드에 이미지 비트가 실제로 있을 때"만이다.
+
+   getAsFile()은 반드시 paste 핸들러 안에서 동기로 불러야 한다 —
+   await 뒤에서는 clipboardData가 이미 비워져 있을 수 있다.
+========================================================== */
+
+function extractPastedImageFile(clipboardData) {
+
+  if (!clipboardData) {
+    return null;
+  }
+
+  const files =
+    clipboardData.files
+      ? Array.prototype.slice.call(clipboardData.files)
+      : [];
+
+  const pastedFile =
+    files.find(
+      (file) =>
+        file &&
+        typeof file.type === "string" &&
+        file.type.indexOf("image/") === 0
+    );
+
+  if (pastedFile) {
+    return pastedFile;
+  }
+
+  const items =
+    clipboardData.items
+      ? Array.prototype.slice.call(clipboardData.items)
+      : [];
+
+  for (let i = 0; i < items.length; i += 1) {
+
+    const item = items[i];
+
+    if (!item || item.kind !== "file") {
+      continue;
+    }
+
+    if (typeof item.type !== "string" || item.type.indexOf("image/") !== 0) {
+      continue;
+    }
+
+    const file = item.getAsFile();
+
+    if (file) {
+      return file;
+    }
+
+  }
+
+  return null;
+
+}
+
+
+/*
+  화면 캡처를 붙여넣으면 브라우저가 이름 없는 파일이나 "image.png"
+  같은 뻔한 이름을 준다 — 그리드 캡션에서 서로 구분되지 않으므로
+  붙여넣은 시각을 이름에 담는다. 이름만 바꿀 뿐 MIME/바이트는
+  그대로다(검증도, 저장 경로 생성도 원래 규칙 그대로 돌아간다).
+*/
+
+const IMAGES_PANEL_GENERIC_PASTE_NAME = /^image[.](png|jpe?g|webp|gif)$/i;
+
+function nameImagesPanelPastedFile(file) {
+
+  if (file.name && !IMAGES_PANEL_GENERIC_PASTE_NAME.test(file.name)) {
+    return file;
+  }
+
+  const subtype =
+    String(file.type || "").slice("image/".length);
+
+  const extension =
+    subtype === "jpeg" ? "jpg" : (subtype || "png");
+
+  const stamp =
+    new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+
+  try {
+    return new File([file], `pasted-${stamp}.${extension}`, { type: file.type });
+  } catch (err) {
+    /* File 생성자를 못 쓰는 환경 — 이름만 포기하고 그대로 올린다 */
+    console.warn("[images-panel] pasted file rename failed", err);
+    return file;
+  }
+
+}
+
+
+function handleImagesPanelPaste(event) {
+
+  const file =
+    extractPastedImageFile(event.clipboardData);
+
+  if (!file) {
+    /*
+      이미지 비트가 없으면 아무것도 하지 않는다 — preventDefault도
+      부르지 않아서 텍스트/URL/HTML 붙여넣기는 브라우저 기본
+      동작에 그대로 맡겨진다.
+    */
+    return;
+  }
+
+  event.preventDefault();
+
+  uploadImagesPanelFile(nameImagesPanelPastedFile(file));
 
 }
 
@@ -701,6 +934,13 @@ async function openSkinImagesPanel() {
   imagesPanelBody.hidden = false;
 
   renderImagesPanelSlots();
+
+  /*
+    열자마자 Ctrl+V가 통하도록 업로드 영역에 포커스를 준다 —
+    "클릭 후 붙여넣기"도 물론 그대로 동작한다. Escape는 document
+    리스너가 받으므로 여기 포커스가 있어도 닫힌다.
+  */
+  imagesPanelPasteZone.focus();
 
   imagesPanelGrid.innerHTML = "";
 
