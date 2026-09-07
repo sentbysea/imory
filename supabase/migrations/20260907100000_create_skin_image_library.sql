@@ -28,6 +28,7 @@
 --   5) create_skin_image / delete_skin_image /
 --      save_skin_draft_version_with_image_slots (신규 RPC)
 --   6) get_published_skin / restore_skin_version (같은 시그니처 교체)
+--   7) skin_versions.uses_image_library 컬럼 추가(버전별 모델 구분)
 --
 -- 기존 save_skin_draft_version(uuid, jsonb, smallint, text)와
 -- create_skin_with_initial_version(...)은 한 줄도 바꾸지 않는다 —
@@ -184,6 +185,36 @@ comment on table public.skin_version_image_slots is
 
 create index skin_version_image_slots_image_id_idx
   on public.skin_version_image_slots (image_id);
+
+
+-- =========================================================
+-- 3-b) skin_versions.uses_image_library — 버전별 "새 모델을 쓴 버전인가"
+--
+-- 왜 컬럼이 필요한가
+-- ------------------
+-- 연결 row 수만으로는 두 상태를 구분할 수 없다:
+--
+--   (a) Image Library 도입 이전에 만들어진 버전 (연결 0건)
+--       -> 옛 skin_image_slot_values로 폴백해야 한다
+--   (b) 새 모델에서 사용자가 슬롯을 "의도적으로 전부 비운" 버전 (연결 0건)
+--       -> 비어 있는 그대로 공개해야 한다(옛 값이 부활하면 안 된다)
+--
+-- 그리고 이 판정은 반드시 **버전 단위**여야 한다. "이 skin이 새 모델을
+-- 한 번이라도 썼는가"처럼 skin 단위로 보면, legacy 이미지를 가진 공개
+-- 버전 A가 그대로인데 새 draft B를 Save하는 순간 A의 폴백 조건이 뒤집혀
+-- 공개 화면의 이미지가 Publish 없이 사라진다 — "Save만으로 공개본이
+-- 바뀌지 않는다"는 이 기능의 핵심 불변식이 깨진다.
+--
+-- default false: 이 migration 이전에 만들어진 모든 버전은 (a)에 해당하므로
+-- 기존 발행본의 이미지가 그대로 유지된다. 새 모델로 저장한 버전만
+-- save_skin_draft_version_with_image_slots()가 true로 기록한다.
+-- =========================================================
+
+alter table public.skin_versions
+  add column uses_image_library boolean not null default false;
+
+comment on column public.skin_versions.uses_image_library is
+  '이 버전이 Skin Image Library(skin_version_image_slots) 모델로 저장됐는가. 연결 0건이라는 사실만으로는 "도입 이전 버전"과 "새 모델에서 의도적으로 전부 비운 버전"을 구분할 수 없어서 명시적으로 기록한다. false인 버전만 옛 skin_image_slot_values로 폴백한다(get_published_skin). 판정이 버전 단위여야 draft 저장이 published 버전의 이미지를 바꾸지 못한다.';
 
 
 -- =========================================================
@@ -477,8 +508,16 @@ begin
     raise exception 'skin not found or not owned by caller';
   end if;
 
-  insert into public.skin_versions (skin_id, schema_version, content, label, created_by)
-  values (p_skin_id, p_schema_version, p_content, p_label, v_user_id)
+  /*
+    uses_image_library = true — 이 함수로 저장된 버전은 연결이 0건이어도
+    "새 모델에서 의도적으로 비운 버전"이다. 그래야 슬롯을 전부 비우고
+    저장/발행했을 때 옛 skin_image_slot_values가 부활하지 않는다.
+  */
+
+  insert into public.skin_versions (
+    skin_id, schema_version, content, label, created_by, uses_image_library
+  )
+  values (p_skin_id, p_schema_version, p_content, p_label, v_user_id, true)
   returning id into v_version_id;
 
   update public.skins
@@ -588,24 +627,29 @@ begin
     where s.version_id = v_skin.current_published_version_id;
 
   /*
-    ★ 폴백 조건은 "지금 연결이 0건인가"가 아니라 "이 skin이 새 모델을
-    한 번도 쓴 적이 없는가"다.
+    ★ 폴백은 **published 버전 하나의 uses_image_library**로만 판정한다.
 
-    "0건이면 폴백"으로 두면, 사용자가 슬롯을 전부 비우고 발행한 순간
-    연결이 0건이 되어 옛 skin_image_slot_values 값이 공개 화면에 다시
-    나타난다(사용자는 지웠는데 되살아난다). 그래서 이 skin에 속한 어떤
-    버전에도 연결 기록이 없을 때 — 즉 Image Library 도입 이전 상태
-    그대로일 때 — 만 폴백한다. 한 번이라도 연결을 저장한 skin은 그
-    뒤로 새 모델이 유일한 근거이고, "전부 비움"은 비어 있는 그대로
-    공개된다.
+    연결 0건이라는 사실만으로 폴백하면 "슬롯을 전부 비운 버전"에서 옛
+    값이 부활한다. 반대로 skin 단위로("이 skin이 한 번이라도 썼는가")
+    판정하면, legacy 이미지를 가진 공개 버전이 그대로인데 새 draft를
+    Save하는 순간 그 조건이 뒤집혀 공개 화면의 이미지가 Publish 없이
+    사라진다. 둘 다 피하려면 판정 기준이 정확히 이 버전이어야 한다.
+
+    v_version은 current_published_version_id가 가리키는 row다 — draft는
+    이 함수 어디에서도 참조하지 않으므로, draft에 무슨 일이 일어나도
+    공개 화면은 영향을 받지 않는다.
   */
 
-  if not exists (
-    select 1
-    from public.skin_version_image_slots s
-    join public.skin_versions v on v.id = s.version_id
-    where v.skin_id = v_skin.id
-  ) then
+  /*
+    v_image_slots = '{}' 조건을 함께 두는 이유: 연결이 실제로 있는
+    버전은 플래그를 보지 않아도 명백히 새 모델 버전이다(연결을 만드는
+    경로가 save_skin_draft_version_with_image_slots 하나뿐이라 정상
+    데이터에서는 항상 플래그도 true지만, 수동 시드처럼 손으로 넣은
+    row에서도 이미지가 사라지지 않게 방어한다). 두 조건 모두 이
+    버전 하나만 본다 — 다른 버전이나 draft는 여전히 영향을 주지 않는다.
+  */
+
+  if v_image_slots = '{}'::jsonb and not v_version.uses_image_library then
 
     select coalesce(jsonb_object_agg(slot_name, image_url), '{}'::jsonb)
       into v_image_slots
@@ -623,7 +667,7 @@ end;
 $$;
 
 comment on function public.get_published_skin(uuid) is
-  '공개 방문자가 특정 사용자의 발행된 Skin을 읽는 유일한 통로. is_active skins row + current_published_version_id가 가리키는 skin_versions.content를 반환하며, imageSlotValues는 그 published 버전의 skin_version_image_slots -> skin_images.public_url로 구성한다(이 skin에 속한 어떤 버전에도 연결 기록이 없을 때 — 즉 Image Library 도입 이전 상태 그대로일 때 — 만 기존 skin_image_slot_values로 폴백한다. 슬롯을 전부 비워 발행한 경우는 비어 있는 그대로 공개된다). current_draft_version_id는 이 함수 어디에서도 참조하지 않는다(AI_SKIN_PHASE1A_DESIGN.md 2-7절).';
+  '공개 방문자가 특정 사용자의 발행된 Skin을 읽는 유일한 통로. is_active skins row + current_published_version_id가 가리키는 skin_versions.content를 반환하며, imageSlotValues는 그 published 버전의 skin_version_image_slots -> skin_images.public_url로 구성한다(폴백 여부는 published 버전 하나의 skin_versions.uses_image_library로만 판정한다 — false인 도입 이전 버전만 기존 skin_image_slot_values로 폴백하고, 새 모델로 저장된 버전은 슬롯을 전부 비웠어도 비어 있는 그대로 공개된다. 판정이 버전 단위라 draft 저장이 공개본을 바꾸지 못한다). current_draft_version_id는 이 함수 어디에서도 참조하지 않는다(AI_SKIN_PHASE1A_DESIGN.md 2-7절).';
 
 revoke execute on function public.get_published_skin(uuid) from public;
 grant execute on function public.get_published_skin(uuid) to anon, authenticated;
@@ -688,13 +732,23 @@ begin
     raise exception 'source version not found for this skin';
   end if;
 
-  insert into public.skin_versions (skin_id, schema_version, content, label, created_by)
+  /*
+    uses_image_library도 원본 버전에서 그대로 복제한다 — 연결(아래)만
+    복제하고 이 플래그를 빠뜨리면, "새 모델에서 전부 비운 버전"을
+    Restore했을 때 복원본이 도입 이전 버전으로 취급되어 옛
+    skin_image_slot_values가 되살아난다.
+  */
+
+  insert into public.skin_versions (
+    skin_id, schema_version, content, label, created_by, uses_image_library
+  )
   values (
     p_skin_id,
     v_source.schema_version,
     v_source.content,
     coalesce(nullif(trim(p_label), ''), 'Restored version'),
-    v_user_id
+    v_user_id,
+    v_source.uses_image_library
   )
   returning id into v_new_version_id;
 
@@ -712,7 +766,7 @@ end;
 $$;
 
 comment on function public.restore_skin_version(uuid, uuid, text) is
-  '같은 skin 소속 과거 버전의 content를 복제한 새 skin_versions row를 만들고 current_draft_version_id를 옮긴다(과거 row로 포인터를 되돌리지 않음). 그 버전의 이미지 슬롯 연결(skin_version_image_slots)도 함께 복제해서 Restore가 이미지까지 그대로 되살리도록 한다.';
+  '같은 skin 소속 과거 버전의 content를 복제한 새 skin_versions row를 만들고 current_draft_version_id를 옮긴다(과거 row로 포인터를 되돌리지 않음). 그 버전의 이미지 슬롯 연결(skin_version_image_slots)과 uses_image_library 플래그도 함께 복제해서 Restore가 이미지까지 그대로 되살리도록 한다.';
 
 revoke execute on function public.restore_skin_version(uuid, uuid, text) from public;
 revoke execute on function public.restore_skin_version(uuid, uuid, text) from anon;

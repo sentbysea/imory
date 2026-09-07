@@ -363,42 +363,41 @@ async function loadVersionImageSlots(versionId) {
 
 
 /* =========================================================
-   hasAnySkinImageSlotBinding(skinId)
+   versionUsesImageLibrary(versionId)
 
-   "이 skin이 Image Library를 한 번이라도 쓴 적이 있는가" — 지금
-   연결이 몇 건인지가 아니라, 어떤 버전에든 연결 기록이 있는지를 본다.
+   "이 버전이 Image Library 모델로 저장된 버전인가"
+   (skin_versions.uses_image_library).
 
-   왜 필요한가: 옛 skin_image_slot_values 폴백 조건을 "지금 연결이
-   0건이면"으로 두면, 사용자가 슬롯을 전부 비우고 저장한 순간 옛 값이
-   화면에 다시 나타난다(지웠는데 되살아난다). get_published_skin()의
-   폴백 조건과 정확히 같은 규칙을 Studio 쪽에도 둬서 draft Preview와
-   공개 화면이 어긋나지 않게 한다.
+   왜 버전 단위인가: 연결 0건이라는 사실만으로는 "도입 이전 버전"과
+   "새 모델에서 의도적으로 전부 비운 버전"을 구분할 수 없다. 그렇다고
+   skin 단위로("이 skin이 한 번이라도 썼는가") 판정하면, legacy 이미지를
+   가진 공개 버전이 그대로인데 새 draft를 Save하는 순간 그 판정이
+   뒤집혀 공개 화면이 Publish 없이 바뀐다. get_published_skin()이
+   published 버전 하나로 판정하는 것과 대칭으로, Studio는 draft 버전
+   하나로 판정한다.
+
+   migration 적용 전에는 이 컬럼 자체가 없다 — 호출자가
+   isSkinImageLibraryAvailable일 때만 부른다.
 ========================================================== */
 
-async function hasAnySkinImageSlotBinding(skinId) {
+async function versionUsesImageLibrary(versionId) {
 
-  if (!skinId) {
+  if (!versionId) {
     return false;
   }
 
-  /*
-    skin_version_image_slots에는 skin_id가 없다(version_id 기준) —
-    PostgREST의 embedded resource 필터로 skin_versions를 inner join해서
-    이 skin에 속한 연결이 하나라도 있는지만 확인한다.
-  */
-
   const { data, error } =
     await supabaseClient
-      .from("skin_version_image_slots")
-      .select("version_id, skin_versions!inner(skin_id)")
-      .eq("skin_versions.skin_id", skinId)
-      .limit(1);
+      .from("skin_versions")
+      .select("uses_image_library")
+      .eq("id", versionId)
+      .maybeSingle();
 
   if (error) {
     throw error;
   }
 
-  return (data || []).length > 0;
+  return Boolean(data && data.uses_image_library);
 
 }
 
@@ -417,7 +416,7 @@ if (typeof window !== "undefined") {
     upload: uploadSkinImage,
     remove: deleteSkinImage,
     loadVersionSlots: loadVersionImageSlots,
-    hasAnyBinding: hasAnySkinImageSlotBinding
+    versionUsesLibrary: versionUsesImageLibrary
   };
 
 }

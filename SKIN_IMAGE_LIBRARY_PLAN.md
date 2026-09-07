@@ -130,8 +130,18 @@ public.skin_version_image_slots          -- "이 버전의 이 슬롯 = 이 이�
   primary key (version_id, slot_name)
 ```
 
+여기에 더해 `skin_versions`에 컬럼 하나를 추가한다:
+
+```
+public.skin_versions
+  + uses_image_library boolean not null default false
+```
+
+"이 버전이 새 모델로 저장됐는가"를 버전마다 명시적으로 기록한다 —
+왜 필요한지는 §4-5.
+
 `skin_image_slot_values`(기존)는 **건드리지 않는다** — 남겨두고
-읽기 폴백으로만 쓴다(§4-3).
+읽기 폴백으로만 쓴다(§4-5).
 
 ### 2-3. 이 모델이 요구사항을 만족시키는 방식
 
@@ -144,7 +154,7 @@ public.skin_version_image_slots          -- "이 버전의 이 슬롯 = 이 이�
 | 과거 버전이 참조하는 이미지도 삭제 정책에서 고려한다 | `image_id`가 `on delete restrict` — **어떤 버전이든(발행 이력 포함)** 참조 중이면 DB가 삭제를 막는다 |
 | 사용 중 이미지 삭제 방지 | 위와 동일. `delete_skin_image()` RPC가 사전에 친절한 메시지로 먼저 거절 |
 | Skin에 선언되지 않은 슬롯 연결은 저장하지 않는다 | Save RPC가 `p_content->'imageSlots'`에서 선언된 이름을 뽑아 그 교집합만 insert(나머지는 조용히 버림). 프런트에서도 한 번 더 필터 |
-| `imageSlots: []` 및 기존 스킨 호환성 | 선언이 없으면 연결이 0건. `get_published_skin()`은 **이 skin이 새 모델을 한 번도 쓴 적이 없을 때만** 기존 `skin_image_slot_values`로 폴백하므로, 기존 발행본은 유지되면서도 "슬롯을 전부 비웠는데 옛 이미지가 부활"하지 않는다(§4-3) |
+| `imageSlots: []` 및 기존 스킨 호환성 | 선언이 없으면 연결이 0건. 폴백은 **published 버전 하나의 `uses_image_library`**로 판정하므로 기존 발행본은 유지되고, "전부 비움"도 부활하지 않으며, draft 저장이 공개본을 바꾸지도 않는다(§4-5) |
 
 ### 2-4. Draft 편집 중의 슬롯 값은 어디 있나
 
@@ -230,18 +240,13 @@ Draft 이미지 연결이 복원된다")과도 일치한다. dirty 표시 대상
 - `get_published_skin(uuid)`
   - `current_published_version_id`의 `skin_version_image_slots` →
     `skin_images.public_url`로 `imageSlotValues` 구성
-  - 폴백 조건은 **"지금 연결이 0건인가"가 아니라 "이 skin이 새 모델을
-    한 번도 쓴 적이 없는가"**다. "0건이면 폴백"으로 두면 사용자가
-    슬롯을 전부 비우고 발행한 순간 옛 값이 되살아난다(지웠는데
-    부활). 이 skin에 속한 어떤 버전에도 연결 기록이 없을 때 —
-    즉 도입 이전 상태 그대로일 때 — 만 기존
-    `skin_image_slot_values`로 폴백한다.
-  - Studio 쪽(`studio-preview.js`)도 **같은 규칙**을 쓴다
-    (`skinImageLibrary.hasAnyBinding()`) — draft Preview와 공개
-    화면이 어긋나지 않게 하기 위함.
+  - 폴백 여부는 **published 버전 하나의
+    `skin_versions.uses_image_library`**로만 판정한다(§4-5).
 - `restore_skin_version(uuid, uuid, text)`
-  - 새 버전 row를 만들 때 **원본 버전의 슬롯 연결도 함께 복제**한다
-    — 안 하면 Restore가 이미지를 잃는다
+  - 새 버전 row를 만들 때 **원본 버전의 슬롯 연결과
+    `uses_image_library` 플래그를 함께 복제**한다 — 연결만 복제하고
+    플래그를 빠뜨리면 "새 모델에서 전부 비운 버전"을 Restore했을 때
+    복원본이 도입 이전 버전으로 취급되어 옛 값이 되살아난다
 
 ### 4-4. 하지 않는 것
 
@@ -249,6 +254,42 @@ Draft 이미지 연결이 복원된다")과도 일치한다. dirty 표시 대상
   시점에는 연결할 이미지가 존재할 수 없다.
 - 기존 `skin_image_slot_values`에 대한 쓰기 경로는 **끝까지 만들지
   않는다**.
+
+
+### 4-5. 판정 기준은 왜 "버전 단위"여야 하는가
+
+연결 row 수만으로는 두 상태를 구분할 수 없다:
+
+| 상태 | 연결 | 원하는 동작 |
+| --- | --- | --- |
+| (a) Image Library 도입 이전 버전 | 0건 | 옛 `skin_image_slot_values`로 폴백 |
+| (b) 새 모델에서 의도적으로 전부 비운 버전 | 0건 | 비어 있는 그대로 (옛 값 부활 금지) |
+
+그래서 `skin_versions.uses_image_library` 컬럼으로 **버전마다 명시적으로**
+기록한다(default false — 이 migration 이전의 모든 버전은 (a)).
+
+그리고 이 판정은 반드시 **그 버전 하나**를 봐야 한다. "이 skin이 새
+모델을 한 번이라도 썼는가"처럼 skin 단위로 보면:
+
+> legacy 이미지를 가진 공개 버전 A가 그대로인데, 새 draft B를 Save하는
+> 순간 A의 폴백 조건이 뒤집혀 **공개 화면의 이미지가 Publish 없이
+> 사라진다.**
+
+"Save만으로 공개본이 바뀌지 않는다"는 이 기능의 핵심 불변식이 정면으로
+깨진다. 그래서:
+
+| 화면 | 판정 기준 |
+| --- | --- |
+| 공개 화면 (`get_published_skin`) | `current_published_version_id` 버전의 플래그 |
+| Studio Preview (`studio-preview.js`) | `current_draft_version_id` 버전의 플래그 |
+
+두 화면이 각자 자기 버전만 보므로 서로 간섭하지 않는다.
+
+추가로 두 곳 모두 "그 버전에 연결이 실제로 있으면 플래그를 볼 것도 없이
+새 모델 버전"으로 취급한다 — 연결을 만드는 경로가 Save RPC 하나뿐이라
+정상 데이터에서는 플래그도 항상 true지만, 수동 시드처럼 손으로 넣은
+row에서도 이미지가 사라지지 않게 방어한다. 이 조건 역시 그 버전
+하나만 본다.
 
 ---
 

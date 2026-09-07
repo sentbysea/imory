@@ -171,9 +171,13 @@ function createMockBackend(options = {}) {
     images: [],
     /* versionId -> { slotName: imageId } */
     versionSlots: { [DRAFT_V1]: {}, [PUBLISHED_V0]: {} },
+    /*
+      usesImageLibrary — migration의 skin_versions.uses_image_library.
+      기본 false = Image Library 도입 이전에 만들어진 버전.
+    */
     versions: {
-      [PUBLISHED_V0]: { content: SKIN_CONTENT, schema_version: 1 },
-      [DRAFT_V1]: { content: SKIN_CONTENT, schema_version: 1 }
+      [PUBLISHED_V0]: { content: SKIN_CONTENT, schema_version: 1, usesImageLibrary: false },
+      [DRAFT_V1]: { content: SKIN_CONTENT, schema_version: 1, usesImageLibrary: false }
     },
     skin: {
       id: SKIN_ID,
@@ -241,7 +245,8 @@ function createMockBackend(options = {}) {
       const newId = `version-${nextVersionSeq++}`;
       state.versions[newId] = {
         content: body.p_content,
-        schema_version: body.p_schema_version
+        schema_version: body.p_schema_version,
+        usesImageLibrary: name === "save_skin_draft_version_with_image_slots"
       };
 
       const bindings = {};
@@ -265,6 +270,22 @@ function createMockBackend(options = {}) {
       return { status: 200, body: newId };
     }
 
+    if (name === "restore_skin_version") {
+      const src = state.versions[body.p_source_version_id];
+      if (!src) return { status: 400, body: { message: "source version not found for this skin" } };
+      const newId = `version-${nextVersionSeq++}`;
+      state.versions[newId] = {
+        content: src.content,
+        schema_version: src.schema_version,
+        /* 플래그도 함께 복제 */
+        usesImageLibrary: !!src.usesImageLibrary
+      };
+      /* 연결도 함께 복제 */
+      state.versionSlots[newId] = { ...(state.versionSlots[body.p_source_version_id] || {}) };
+      state.skin.current_draft_version_id = newId;
+      return { status: 200, body: newId };
+    }
+
     if (name === "publish_skin") {
       state.skin.current_published_version_id = state.skin.current_draft_version_id;
       return { status: 200, body: null };
@@ -281,14 +302,11 @@ function createMockBackend(options = {}) {
       });
 
       /*
-        migration의 폴백 조건을 그대로 흉내 낸다 — "지금 0건이면"이
-        아니라 "이 skin이 새 모델을 한 번도 쓴 적이 없으면"만 옛
-        skin_image_slot_values로 폴백한다.
+        migration의 폴백 조건을 그대로 흉내 낸다 — published 버전
+        하나의 uses_image_library로만 판정한다. draft가 무엇이든
+        이 결과에 영향을 주지 않는다.
       */
-      const everUsedNewModel = Object.values(state.versionSlots)
-        .some(slots => Object.keys(slots).length > 0);
-
-      if (!everUsedNewModel) {
+      if (Object.keys(values).length === 0 && !version.usesImageLibrary) {
         state.legacySlotValues.forEach(row => { values[row.slot_name] = row.image_url; });
       }
       return {
@@ -318,18 +336,6 @@ function createMockBackend(options = {}) {
         return { status: 404, body: { code: "42P01", message: "does not exist" } };
       }
 
-      /*
-        hasAnyBinding()의 embedded resource 필터
-        (?skin_versions.skin_id=eq.<id>) — 이 skin에 속한 어떤
-        버전에든 연결이 있으면 1건이라도 돌려준다.
-      */
-      const skinFilter = params.get("skin_versions.skin_id");
-      if (skinFilter) {
-        const any = Object.values(state.versionSlots)
-          .some(slots => Object.keys(slots).length > 0);
-        return { status: 200, body: any ? [{ version_id: DRAFT_V1 }] : [] };
-      }
-
       const eq = params.get("version_id") || "";
       const versionId = eq.startsWith("eq.") ? eq.slice(3) : eq;
       const rows = Object.entries(state.versionSlots[versionId] || {}).map(([slot, imageId]) => {
@@ -345,7 +351,15 @@ function createMockBackend(options = {}) {
       const eq = params.get("id") || "";
       const id = eq.startsWith("eq.") ? eq.slice(3) : eq;
       const v = state.versions[id];
-      return { status: 200, body: v ? [{ content: v.content }] : [] };
+      if (!v) return { status: 200, body: [] };
+      const select = params.get("select") || "";
+      if (select.includes("uses_image_library")) {
+        if (!libraryReady) {
+          return { status: 400, body: { code: "42703", message: "column does not exist" } };
+        }
+        return { status: 200, body: [{ uses_image_library: !!v.usesImageLibrary }] };
+      }
+      return { status: 200, body: [{ content: v.content }] };
     }
 
     if (table === "skin_image_slot_values") {
@@ -1029,6 +1043,211 @@ async function testClearedSlotsDoNotRestoreLegacy(playwright) {
 }
 
 
+
+/* ---------------------------------------------------------
+   8) 버전 분리 — draft 저장이 published 버전의 폴백을 바꾸지 않는다
+
+   폴백을 skin 단위로("이 skin이 한 번이라도 새 모델을 썼는가") 판정하면,
+   legacy 이미지를 가진 공개 버전 A가 그대로인데 새 draft B를 Save하는
+   순간 A의 조건이 뒤집혀 공개 화면의 이미지가 Publish 없이 사라진다.
+   판정이 버전 단위인지 확인한다.
+--------------------------------------------------------- */
+
+async function testDraftSaveDoesNotAffectPublished(playwright) {
+  console.log("\n[version] legacy 공개 A → 새 draft B Save → 공개 A 불변");
+
+  const LEGACY_URL =
+    `https://${SUPABASE_HOST}/storage/v1/object/public/user-avatars/legacy.png`;
+
+  const backend = createMockBackend({
+    seedLegacySlotValues: [{ slot_name: "profile", image_url: LEGACY_URL }]
+  });
+
+  const beforeAny = backend.rpc("get_published_skin", {}).body;
+  check("[version] 시작 상태: 공개 A는 legacy 이미지를 보여준다",
+    beforeAny.imageSlotValues.profile === LEGACY_URL,
+    JSON.stringify(beforeAny.imageSlotValues));
+
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  try {
+    /* draft B: 새 모델로 이미지를 연결하고 Save (Publish 하지 않는다) */
+    await page.click("#studioTopDockHandle");
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+    await attachFile(page, "b.png", PNG_BYTES, "image/png");
+    await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+    await page.click(".images-panel-card-attach");
+    await page.waitForTimeout(300);
+    await page.click(".images-panel-done-button");
+
+    await page.click("#studioSaveButton");
+    await page.waitForTimeout(1200);
+
+    const savedNewModel = backend.state.calls
+      .some(c => c.name === "save_skin_draft_version_with_image_slots");
+    check("[version] draft B가 새 모델로 저장됐다", savedNewModel, String(savedNewModel));
+
+    const afterSave = backend.rpc("get_published_skin", {}).body;
+    check("[version] ★ Publish 없이 Save만 했을 때 공개 A가 그대로다",
+      afterSave.imageSlotValues.profile === LEGACY_URL,
+      JSON.stringify(afterSave.imageSlotValues));
+
+    check("[version] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
+   9) 최초 새 모델 저장이 "빈 연결"이어도 legacy가 부활하지 않는다
+
+   연결 row 수만으로 판정하면 이 경우가 "도입 이전 버전"과 구분되지
+   않아 옛 값이 되살아난다. uses_image_library 플래그가 그 둘을
+   구분하는지 확인한다.
+--------------------------------------------------------- */
+
+async function testFirstEmptySaveDoesNotRestoreLegacy(playwright) {
+  console.log("\n[version] 최초 새 모델 저장이 빈 연결이어도 legacy 부활 없음");
+
+  const LEGACY_URL =
+    `https://${SUPABASE_HOST}/storage/v1/object/public/user-avatars/legacy.png`;
+
+  const backend = createMockBackend({
+    seedLegacySlotValues: [{ slot_name: "profile", image_url: LEGACY_URL }]
+  });
+
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  try {
+    /* 이미지를 하나도 연결하지 않은 채로 Import만 해서 dirty를 만든다 */
+    await page.click("#studioTopDockHandle");
+    await page.click("#studioImportButton");
+    await page.waitForSelector(".import-editor-overlay:not([hidden])", { timeout: 10000 });
+    await page.fill(".import-editor-overlay textarea", JSON.stringify(SKIN_CONTENT));
+    await page.click(".import-editor-overlay .import-editor-button:nth-of-type(2)");
+    await page.waitForTimeout(600);
+    await page.click(".import-editor-button--primary");
+    await page.waitForTimeout(600);
+
+    await page.click("#studioSaveButton");
+    await page.waitForTimeout(1200);
+
+    const saveCall = backend.state.calls
+      .filter(c => c.name === "save_skin_draft_version_with_image_slots").pop();
+    check("[version] 빈 연결로 새 모델 저장이 일어났다",
+      !!saveCall && Object.keys(saveCall.body.p_image_slots).length === 0,
+      JSON.stringify(saveCall && saveCall.body.p_image_slots));
+
+    /* Publish해서 그 빈 버전을 공개한다 */
+    await page.click("#studioPublishButton");
+    await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 })
+      .catch(() => {});
+    const confirm = await page.$(".studio-confirm-button--primary");
+    if (confirm) await confirm.click();
+    await page.waitForTimeout(1200);
+
+    const published = backend.rpc("get_published_skin", {}).body;
+    check("[version] ★ 빈 연결로 발행해도 legacy가 부활하지 않는다",
+      Object.keys(published.imageSlotValues).length === 0,
+      JSON.stringify(published.imageSlotValues));
+
+    check("[version] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
+   10) Restore — 그 버전의 연결과 모델 구분이 함께 보존된다
+--------------------------------------------------------- */
+
+async function testRestorePreservesBindingsAndFlag(playwright) {
+  console.log("\n[version] Restore가 연결과 모델 구분을 함께 보존한다");
+
+  const LEGACY_URL =
+    `https://${SUPABASE_HOST}/storage/v1/object/public/user-avatars/legacy.png`;
+
+  const backend = createMockBackend({
+    seedLegacySlotValues: [{ slot_name: "profile", image_url: LEGACY_URL }]
+  });
+
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  let boundVersionId = null;
+
+  try {
+    await page.click("#studioTopDockHandle");
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+    await attachFile(page, "r.png", PNG_BYTES, "image/png");
+    await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+    await page.click(".images-panel-card-attach");
+    await page.waitForTimeout(300);
+    await page.click(".images-panel-done-button");
+    await page.click("#studioSaveButton");
+    await page.waitForTimeout(1200);
+
+    boundVersionId = backend.state.skin.current_draft_version_id;
+
+    /* 그 다음 전부 비우고 다시 Save — draft는 "새 모델 + 빈 연결" */
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+    await page.click(".images-panel-slot .images-panel-slot-clear");
+    await page.waitForTimeout(300);
+    await page.click(".images-panel-done-button");
+    await page.click("#studioSaveButton");
+    await page.waitForTimeout(1200);
+
+    check("[version] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+
+  const emptyVersionId = backend.state.skin.current_draft_version_id;
+
+  /* (a) 이미지가 있던 버전으로 Restore -> 연결이 복원된다 */
+  backend.rpc("restore_skin_version", {
+    p_skin_id: SKIN_ID,
+    p_source_version_id: boundVersionId,
+    p_label: null
+  });
+  const restoredBound = backend.state.skin.current_draft_version_id;
+
+  check("[version] Restore가 그 버전의 연결을 복원한다",
+    Object.keys(backend.state.versionSlots[restoredBound] || {}).length === 1,
+    JSON.stringify(backend.state.versionSlots[restoredBound]));
+
+  check("[version] Restore된 버전도 새 모델 버전으로 표시된다",
+    backend.state.versions[restoredBound].usesImageLibrary === true,
+    String(backend.state.versions[restoredBound].usesImageLibrary));
+
+  /* (b) "전부 비운" 버전으로 Restore -> 비어 있고 legacy도 부활하지 않는다 */
+  backend.rpc("restore_skin_version", {
+    p_skin_id: SKIN_ID,
+    p_source_version_id: emptyVersionId,
+    p_label: null
+  });
+  const restoredEmpty = backend.state.skin.current_draft_version_id;
+
+  check("[version] '전부 비운 버전' Restore는 연결 0건 그대로다",
+    Object.keys(backend.state.versionSlots[restoredEmpty] || {}).length === 0,
+    JSON.stringify(backend.state.versionSlots[restoredEmpty]));
+
+  backend.rpc("publish_skin", { p_skin_id: SKIN_ID });
+  const published = backend.rpc("get_published_skin", {}).body;
+
+  check("[version] ★ '전부 비운 버전' Restore 후 발행해도 legacy 부활 없음",
+    Object.keys(published.imageSlotValues).length === 0,
+    JSON.stringify(published.imageSlotValues));
+}
+
+
 /* ---------------------------------------------------------
    main
 --------------------------------------------------------- */
@@ -1047,6 +1266,9 @@ try {
   await testLibraryNotReady(playwright);
   await testImportPrunesSlots(playwright);
   await testClearedSlotsDoNotRestoreLegacy(playwright);
+  await testDraftSaveDoesNotAffectPublished(playwright);
+  await testFirstEmptySaveDoesNotRestoreLegacy(playwright);
+  await testRestorePreservesBindingsAndFlag(playwright);
 } finally {
   server.close();
 }

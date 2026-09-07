@@ -1850,13 +1850,20 @@ async function mountStudioPreview(
   }
 
   /*
-    ★ 폴백 조건은 "지금 연결이 0건인가"가 아니라 "이 skin이 새 모델을
-    한 번도 쓴 적이 없는가"다 — get_published_skin()과 정확히 같은 규칙이다
+    ★ 폴백은 **draft 버전 하나의 uses_image_library**로만 판정한다 —
+    get_published_skin()이 published 버전 하나로 판정하는 것과 대칭이다
     (supabase/migrations/20260907100000_create_skin_image_library.sql).
 
-    "0건이면 폴백"으로 두면 슬롯을 전부 비우고 저장한 뒤 다시 들어왔을 때
-    옛 skin_image_slot_values 값이 Preview에 되살아나고, 공개 화면과도
-    어긋난다(사용자는 지웠는데 되살아난다).
+    연결 0건이라는 사실만으로 폴백하면 "슬롯을 전부 비운 draft"에서 옛
+    skin_image_slot_values가 Preview에 부활한다. 반대로 skin 단위로
+    판정하면 draft 상태가 공개 화면 판정에까지 영향을 준다 — 두 화면이
+    각자 자기 버전만 보게 해서 서로 간섭하지 않게 한다.
+  */
+
+  /*
+    이미 읽어 온 draft 연결이 하나라도 있으면 플래그를 볼 것도 없이
+    새 모델 버전이다 — 아래 조회는 "연결이 0건인 draft"에서만
+    "도입 이전 버전"과 "의도적으로 비운 버전"을 가르기 위해 쓴다.
   */
 
   let skinUsedImageLibrary =
@@ -1867,24 +1874,24 @@ async function mountStudioPreview(
     try {
 
       skinUsedImageLibrary =
-        await window.skinImageLibrary.hasAnyBinding(
-          skin.id
+        await window.skinImageLibrary.versionUsesLibrary(
+          skin.current_draft_version_id
         );
 
     } catch (err) {
 
       /*
         확인에 실패하면 폴백하지 않는다 — 지운 이미지를 되살리는 쪽이
-        아무것도 안 보이는 쪽보다 나쁘다.
+        아무것도 안 보이는 쪽보다 나쁘다. 이미 읽어 온 연결이 있으면
+        그것만으로도 새 모델 버전임이 분명하다.
       */
 
       console.error(
-        "[studio-preview] hasAnyBinding check failed",
+        "[studio-preview] versionUsesLibrary check failed",
         err
       );
 
-      skinUsedImageLibrary =
-        true;
+      skinUsedImageLibrary = true;
 
     }
 
