@@ -10,7 +10,9 @@
    skin/skin-published-frame-e2e-test.mjs와 같은 방식/같은 규약을
    따른다(정적 서버 + Supabase 네트워크만 mock + 실제 저장소 파일).
    그 파일이 HOME/CATEGORY/POST를 담당하므로 여기서는 겹치는
-   검증을 반복하지 않고 BANNER와 viewer(WRITE/ADMIN)에 집중한다.
+   검증을 반복하지 않고 BANNER와 viewer(WRITE/ADMIN), 그리고 네
+   화면의 소유자 진입 계약(PHASE 1E 후속: CATEGORY/POST의 관리
+   진입과 스킨 복귀)에 집중한다.
 
    ★ 무엇을 mock하는가
    Supabase REST/RPC 응답과, 로그인 상태(supabase-js 클라이언트의
@@ -1337,6 +1339,263 @@ async function testOwnerCategoryScreen(vpName) {
 
 
 /* ---------------------------------------------------------
+   4-d) 소유자의 POST 상세 화면 (PHASE 1E 후속)
+
+   소유자도 일반 글 링크로 들어가면 방문자와 같은 POST 스킨으로
+   읽는다. 수정/삭제는 스킨 위에 떠 있는 관리 토글로 기존 화면을
+   명시적으로 열어야 하고, 편집을 끝내면(취소/저장) 다시 POST
+   스킨으로 돌아온다.
+--------------------------------------------------------- */
+
+const READ_POST_SCREEN = `(() => {
+  const skinBox = document.getElementById("postSkinContainer");
+  const detail = document.getElementById("postDetail");
+  const actions = document.getElementById("postDetailActions");
+  const manage = document.getElementById("postManageToggleButton");
+  const editor = document.getElementById("postEditor");
+  const gate = document.getElementById("postSecretGate");
+  const container = document.getElementById("postContainer");
+  const area = document.getElementById("postArea");
+  const header = document.querySelector(".post-header");
+  const body = document.querySelector(".quiet-post-body");
+  const title = document.querySelector(".quiet-article-title");
+  return {
+    skinVisible: Boolean(skinBox) && !skinBox.hidden,
+    skinTitle: title ? title.textContent : null,
+    skinBody: body ? body.innerText.trim() : null,
+    legacyVisible: Boolean(detail) && !detail.hidden,
+    legacyBody: document.getElementById("postDetailContent")
+      ? document.getElementById("postDetailContent").innerText.trim() : null,
+    actionsVisible: Boolean(actions) && !actions.hidden,
+    manageVisible: Boolean(manage) && !manage.hidden,
+    managePressed: manage ? manage.getAttribute("aria-pressed") : null,
+    editorVisible: Boolean(editor) && !editor.hidden,
+    gateVisible: Boolean(gate) && !gate.hidden,
+    gateInSkin: Boolean(gate) && Boolean(skinBox) && skinBox.contains(gate),
+    ownerTools: container.className.includes("post-container--owner-tools"),
+    skinActive: area.className.includes("post-area--skin-active"),
+    headerPosition: header ? getComputedStyle(header).position : null,
+    titleDisplay: document.querySelector(".post-page-title")
+      ? getComputedStyle(document.querySelector(".post-page-title")).display : null,
+    url: location.pathname + location.search
+  };
+})()`;
+
+async function testOwnerPostScreen(vpName) {
+  const vp = VIEWPORTS[vpName];
+  console.log(`\n[${vpName}] 소유자의 POST 상세 화면`);
+
+  /* --- 소유자: 일반 글 링크 → 스킨으로 읽기 → 관리 진입 → 편집 --- */
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await gotoHome(page);
+    const home = await page.evaluate(MEASURE);
+
+    await page.click('#themeMount .quiet-link-list a[href$="/category/1"]');
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.click('#postList a[href$="/post/101"]');
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const reading = await page.evaluate(READ_POST_SCREEN);
+    const readingFrame = await page.evaluate(MEASURE);
+    await shot(page, `${vpName}-owner-post`);
+
+    check(`[${vpName}] 소유자도 일반 글 링크로 들어가면 POST 스킨으로 읽는다`,
+      reading.skinVisible && !reading.legacyVisible &&
+      (reading.skinBody || "").includes("첫 번째 글 본문") &&
+      reading.skinTitle === "첫 번째 글",
+      JSON.stringify(reading));
+
+    check(`[${vpName}] 소유자 POST 스킨 프레임이 HOME과 동일 좌표/폭`,
+      sameFrame(home.frame, readingFrame.frame),
+      `home=${JSON.stringify(home.frame && [home.frame.x, home.frame.y, home.frame.w])} ` +
+      `post=${JSON.stringify(readingFrame.frame && [readingFrame.frame.x, readingFrame.frame.y, readingFrame.frame.w])}`);
+
+    check(`[${vpName}] 스킨 위에는 관리 진입점만 떠 있고 legacy 제목/수정 버튼은 없다`,
+      reading.manageVisible && reading.managePressed === "false" &&
+      reading.ownerTools && reading.headerPosition === "fixed" &&
+      reading.titleDisplay === "none" && !reading.actionsVisible,
+      JSON.stringify(reading));
+
+    check(`[${vpName}] 읽기 주소에는 관리 쿼리가 붙지 않는다`,
+      reading.url === `/${SLUG}/post/101`, reading.url);
+
+    /* 관리 진입 → 기존 legacy 상세(수정/삭제) */
+    await page.click("#postManageToggleButton");
+    await page.waitForSelector("#postDetail:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const manage = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 관리 토글을 누르면 기존 상세 화면(수정/삭제)이 열린다`,
+      manage.legacyVisible && !manage.skinVisible && manage.actionsVisible &&
+      (manage.legacyBody || "").includes("첫 번째 글 본문") &&
+      !manage.ownerTools && !manage.skinActive,
+      JSON.stringify(manage));
+
+    check(`[${vpName}] 관리 화면에서는 legacy 헤더가 원래대로 돌아온다`,
+      manage.headerPosition === "relative" && manage.titleDisplay !== "none" &&
+      manage.manageVisible && manage.managePressed === "true",
+      JSON.stringify(manage));
+
+    check(`[${vpName}] 관리 화면이 열렸을 때만 주소에 ?manage=1이 남는다`,
+      manage.url === `/${SLUG}/post/101?manage=1`, manage.url);
+
+    /* 수정 폼 → 취소 → POST 스킨 복귀 */
+    await page.click("#postEditButton");
+    await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(500);
+
+    const editor = await page.evaluate(() => ({
+      editorVisible: !document.getElementById("postEditor").hidden,
+      title: document.getElementById("postEditorTitle").value,
+      editable: !document.getElementById("postEditorTitle").disabled
+    }));
+
+    check(`[${vpName}] 관리 화면의 edit가 기존 수정 폼을 그대로 연다`,
+      editor.editorVisible && editor.title === "첫 번째 글" && editor.editable,
+      JSON.stringify(editor));
+
+    await page.click(".post-back-button");
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const cancelled = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 수정을 취소하면 POST 스킨으로 돌아온다`,
+      cancelled.skinVisible && !cancelled.legacyVisible && !cancelled.editorVisible &&
+      (cancelled.skinBody || "").includes("첫 번째 글 본문") &&
+      cancelled.manageVisible && cancelled.ownerTools,
+      JSON.stringify(cancelled));
+
+    /* 다시 관리 → 수정 → 저장 → POST 스킨 복귀 */
+    await page.click("#postManageToggleButton");
+    await page.waitForSelector("#postDetail:not([hidden])", { timeout: 15000 });
+    await page.click("#postEditButton");
+    await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(400);
+    await page.fill("#postEditorTitle", "스킨에서 고친 제목");
+    await page.click("#postEditorSaveButton");
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const saved = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 저장을 마쳐도 POST 스킨으로 돌아온다`,
+      saved.skinVisible && !saved.legacyVisible && !saved.editorVisible &&
+      saved.manageVisible && saved.ownerTools,
+      JSON.stringify(saved));
+
+    check(`[${vpName}] 소유자 POST 경로 전체에서 문서 재로드 없음`,
+      ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);
+
+    check(`[${vpName}] 소유자 POST 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 관리 진입 URL 직접 접속 / 새로고침 --- */
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/post/101?manage=1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postDetail:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(900);
+
+    const direct = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 소유자가 ?manage=1로 직접 들어오면 기존 상세 화면이 복원된다`,
+      direct.legacyVisible && !direct.skinVisible && direct.actionsVisible &&
+      direct.managePressed === "true",
+      JSON.stringify(direct));
+
+    check(`[${vpName}] 관리 진입 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 비소유자가 같은 관리 URL로 들어오면 그냥 스킨 --- */
+  await withPage(vp, { signedInAs: OTHER_USER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/post/101?manage=1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const visitor = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 다른 계정이 ?manage=1로 들어와도 관리 화면이 열리지 않는다`,
+      visitor.skinVisible && !visitor.legacyVisible && !visitor.manageVisible &&
+      !visitor.ownerTools && !visitor.actionsVisible,
+      JSON.stringify(visitor));
+
+    check(`[${vpName}] 비소유자 POST 관리 URL 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 로그아웃 방문자: 공개글 스킨 / 비밀글 잠금 --- */
+  await withPage(vp, {}, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/post/101`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const anon = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 로그아웃 방문자: POST 스킨 + 소유자 도구 없음`,
+      anon.skinVisible && (anon.skinBody || "").includes("첫 번째 글 본문") &&
+      !anon.manageVisible && !anon.ownerTools,
+      JSON.stringify(anon));
+
+    await page.goto(`${BASE}/${SLUG}/post/102`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const secret = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 방문자의 비밀글: 스킨 본문 자리에 비밀번호 확인 폼이 그대로 뜬다`,
+      secret.skinVisible && secret.gateVisible && secret.gateInSkin &&
+      !secret.manageVisible,
+      JSON.stringify(secret));
+
+    check(`[${vpName}] 방문자 POST 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 소유자의 비밀글: 스킨 안에서 본문이 바로 보인다 --- */
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/post/102`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const ownerSecret = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 소유자의 비밀글: 잠금 없이 스킨 본문 자리에서 읽고, 관리 진입점이 남는다`,
+      ownerSecret.skinVisible && !ownerSecret.gateVisible &&
+      (ownerSecret.skinTitle || "").includes("비밀 글") &&
+      ownerSecret.manageVisible && ownerSecret.ownerTools,
+      JSON.stringify(ownerSecret));
+
+    check(`[${vpName}] 소유자 비밀글 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- POST template이 없는 스킨: 소유자도 기존 legacy 상세 그대로 --- */
+  await withPage(vp, { skin: HOME_ONLY_SKIN, signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/post/101`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postDetail:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(900);
+
+    const legacy = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] POST template이 없으면 소유자도 기존 legacy 상세 그대로(수정/삭제 포함)`,
+      legacy.legacyVisible && !legacy.skinVisible && legacy.actionsVisible &&
+      (legacy.legacyBody || "").includes("첫 번째 글 본문") && !legacy.ownerTools,
+      JSON.stringify(legacy));
+
+    check(`[${vpName}] 돌아갈 스킨이 없으면 관리 토글도 뜨지 않는다`,
+      !legacy.manageVisible, JSON.stringify(legacy));
+
+    check(`[${vpName}] legacy POST 폴백 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+}
+
+
+/* ---------------------------------------------------------
    5) 날짜 표시 — HOME/CATEGORY는 item.publishedAtLabel,
       POST는 post.publishedAtLabel
 --------------------------------------------------------- */
@@ -1413,6 +1672,7 @@ try {
     await testOwnerLinks(vpName);
     await testOwnerBannerScreen(vpName);
     await testOwnerCategoryScreen(vpName);
+    await testOwnerPostScreen(vpName);
     await testDateLabels(vpName);
   }
 } finally {

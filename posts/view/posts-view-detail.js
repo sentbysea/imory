@@ -22,13 +22,17 @@
    반환해서 openPostPage()가 기존 legacy #postDetail 렌더를
    그대로 진행하게 한다.
 
-   "site owner 본인이 로그인해서 자기 글을 보는가"는 여기서만
-   판단한다(renderPublishedSkinPost 자신은 이 맥락을 전혀 모른다)
-   — owner가 자기 글을 열람할 때는 edit/delete 버튼
-   (updatePostOwnerActions, posts-view-secret-gate.js)이 있는
-   legacy #postDetail이 계속 필요하다. tryRenderPublishedSkinCategory
-   와 완전히 동일한 판단 기준(site owner 여부만, 이 글 하나에
-   국한된 판단이 아님).
+   PHASE 1E 후속: 소유자 본인도 여기서 POST 스킨을 본다. 예전에는
+   "로그인한 사람이 이 사이트의 주인이면 스킨을 통째로 건너뛴다"는
+   분기가 이 함수 안에 있었다 — 수정/삭제 버튼이 legacy #postDetail
+   안에 있어서였다. 그 결과 소유자만 자기 글을 방문자와 다른 화면으로
+   읽게 됐다. 이제 CATEGORY/BANNER와 같은 원칙을 쓴다: 화면을 가르는
+   기준은 "누가 보는가"가 아니라 "무엇을 하려고 들어왔는가"다. 기존
+   관리 화면(legacy 상세 + edit/delete)은 명시적인 관리 진입
+   (?manage=1 또는 스킨 위에 떠 있는 관리 토글)일 때만 열리고, 그
+   판단은 호출자인 openPostPage()가 한다 — 이 함수는
+   tryRenderPublishedSkinCategory와 마찬가지로 "누가 보고 있는가"를
+   전혀 모른다.
 ========================================================== */
 
 async function tryRenderPublishedSkinPost(
@@ -60,37 +64,6 @@ async function tryRenderPublishedSkinPost(
     !owner.scoped ||
     !owner.ownerId
   ) {
-
-    return false;
-
-  }
-
-
-  let signedInUser;
-
-  try {
-
-    signedInUser =
-      await getSignedInUser();
-
-  } catch (err) {
-
-    console.error(
-      "[posts-view-detail] getSignedInUser failed",
-      err
-    );
-
-    signedInUser =
-      null;
-
-  }
-
-
-  const isOwnerViewingOwnSite =
-    Boolean(signedInUser) &&
-    signedInUser.id === owner.ownerId;
-
-  if (isOwnerViewingOwnSite) {
 
     return false;
 
@@ -187,7 +160,8 @@ async function openPostPage(
 ) {
 
   const {
-    updateUrl = true
+    updateUrl = true,
+    manage = false
   } = options;
 
 
@@ -209,11 +183,32 @@ async function openPostPage(
   const owner =
     await getSiteOwner();
 
-  const maybeSkinCandidate =
+
+  const skinRouteCandidate =
     Boolean(
       owner.scoped &&
       owner.ownerId
     );
+
+
+  /*
+    PHASE 1E 관리 진입 계약 — ?manage=1(또는 openPostPage의 manage
+    옵션)은 "이 글의 기존 관리 화면을 열어달라"는 **요청**일 뿐이다.
+    실제로 열지는 여기서 소유자인지 다시 확인하고 정한다
+    (isSiteOwnerSignedIn, posts/editor/posts-state.js) — 주소를 직접
+    쳐서 들어온 방문자나 다른 계정은 그냥 평소의 읽기 화면을 본다.
+    manage가 false인 평소 탐색에서는 && 단락 평가 때문에 추가 조회가
+    아예 일어나지 않는다(openCategoryPage()와 같은 규칙).
+  */
+
+  const wantsManageScreen =
+    manage === true &&
+    await isSiteOwnerSignedIn();
+
+
+  const maybeSkinCandidate =
+    skinRouteCandidate &&
+    !wantsManageScreen;
 
 
   /*
@@ -340,6 +335,22 @@ async function openPostPage(
   ) {
 
     postListEditToggleButton.hidden =
+      true;
+
+  }
+
+
+  /*
+    PHASE 1E 후속: 관리 토글은 아래 확정 지점에서 "이 글의 주인이
+    보고 있고, 스킨으로 그려졌거나 관리 진입으로 열렸을 때"만 다시
+    켠다 — 매 진입마다 여기서 한 번 끈다.
+  */
+
+  if (
+    postManageToggleButton
+  ) {
+
+    postManageToggleButton.hidden =
       true;
 
   }
@@ -492,6 +503,21 @@ async function openPostPage(
     "post-area--skin-active",
     maybeSkinCandidate
   );
+
+
+  /*
+    PHASE 1E 후속: 떠 있는 소유자 도구는 직전 화면(카테고리/배너
+    스킨)에서 켜져 있었을 수 있다 — 이번 글의 확정 지점에서 다시
+    판단하므로 진입 시 한 번 끈다.
+  */
+
+  if (postContainer) {
+
+    postContainer.classList.remove(
+      "post-container--owner-tools"
+    );
+
+  }
 
 
   let post =
@@ -653,6 +679,10 @@ async function openPostPage(
     }
 
 
+    postManageScreenActive =
+      false;
+
+
     postDetailTitle.textContent =
       "post not found";
 
@@ -706,11 +736,20 @@ async function openPostPage(
       "div"
     );
 
+  /*
+    관리 진입으로 연 화면(그리고 애초에 후보가 아닌 배포)에서는
+    스킨을 시도하지 않는다 — tryRenderPublishedSkinPost 자신도
+    후보가 아니면 false를 돌려주지만, 여기서 걸러 관리 화면이
+    쓸데없는 RPC 왕복을 기다리지 않게 한다.
+  */
+
   const skinPostResult =
-    await tryRenderPublishedSkinPost(
-      post.id,
-      skinRenderTarget
-    );
+    maybeSkinCandidate
+      ? await tryRenderPublishedSkinPost(
+          post.id,
+          skinRenderTarget
+        )
+      : false;
 
 
   if (
@@ -738,6 +777,16 @@ async function openPostPage(
       skinPostResult &&
       skinPostResult.rendered
     );
+
+
+  /*
+    PHASE 1E 후속: 지금 화면이 "명시적 관리 진입"인지 기록한다 —
+    관리 토글(posts/editor/posts-list-detail-nav.js)이 다음에 어느
+    쪽으로 갈지를 이 값 하나로 정한다.
+  */
+
+  postManageScreenActive =
+    wantsManageScreen;
 
 
   if (postDetail) {
@@ -881,6 +930,60 @@ async function openPostPage(
     );
 
 
+  /*
+    PHASE 1E 후속 — 소유자 전용 진입점(CATEGORY/BANNER와 같은 방식).
+
+    스킨이 이 글을 그렸다면 legacy 헤더는 mount contract가 통째로
+    숨기므로(posts/posts-base.css) 그 안의 관리 토글만 화면 오른쪽
+    아래에 떠 있는 플랫폼 도구로 되살린다. 관리 화면을 연 상태에서는
+    legacy 헤더가 그대로 보이므로, 같은 버튼이 원래 자리에서 "읽기
+    화면으로 돌아가기"가 된다(aria-pressed로 구분).
+
+    판정은 아래 secret 분기와 updatePostOwnerActions()가 이미 쓰는
+    "이 글의 주인인가"(isOwnerViewing)와 같은 값이라 조회가 하나도
+    늘지 않는다 — 다른 계정으로 로그인한 방문자에게는 어느 쪽도
+    보이지 않는다. 실제 수정/삭제 권한은 여전히 각 쿼리의 user_id
+    필터와 RLS가 강제한다.
+
+    관리 화면에서는 스킨 후보 라우트일 때만 토글을 남긴다 — POST
+    template이 없는 배포에서는 돌아갈 스킨 화면 자체가 없다.
+  */
+
+  if (postManageToggleButton) {
+
+    postManageToggleButton.hidden =
+      !(
+        isOwnerViewing &&
+        (
+          usingSkinPost ||
+          (
+            wantsManageScreen &&
+            skinRouteCandidate
+          )
+        )
+      );
+
+    postManageToggleButton.setAttribute(
+      "aria-pressed",
+      wantsManageScreen
+        ? "true"
+        : "false"
+    );
+
+  }
+
+
+  if (postContainer) {
+
+    postContainer.classList.toggle(
+      "post-container--owner-tools",
+      usingSkinPost &&
+      isOwnerViewing
+    );
+
+  }
+
+
   if (
     post.visibility ===
       "secret" &&
@@ -1011,12 +1114,54 @@ async function openPostPage(
           )
       },
       "",
-      buildPostRoute(
-        `/post/${post.id}`
-      )
+      wantsManageScreen
+        ? buildSiteManageUrl(
+            buildPostRoute(
+              `/post/${post.id}`
+            )
+          )
+        : buildPostRoute(
+            `/post/${post.id}`
+          )
     );
 
   }
+
+}
+
+
+
+/* =========================================================
+   POST 관리 화면 토글 (PHASE 1E 후속)
+
+   스킨으로 읽는 화면 <-> 기존 관리 화면(legacy #postDetail의
+   edit/delete/관련 글/글자 크기)을 명시적으로 오간다. 배너의
+   toggleBannerEditMode() / 글 목록의 togglePostListEditMode()와
+   같은 계약이고, 다른 점은 POST의 두 화면이 주소로도 구분된다는
+   것뿐이다(?manage=1).
+
+   별도 렌더 경로를 새로 만들지 않고 openPostPage()를 그대로 다시
+   태운다 — 스킨 POST 렌더 경로가 이 저장소에 한 벌만 존재하게
+   유지하기 위해서다(배너의 restoreBannerSkinList와 같은 이유).
+   관리 화면 자체(수정/삭제/관련 글)는 기존 코드 그대로다.
+========================================================== */
+
+async function togglePostManageScreen() {
+
+  if (!currentPostId) {
+
+    return;
+
+  }
+
+
+  await openPostPage(
+    currentPostId,
+    {
+      manage:
+        !postManageScreenActive
+    }
+  );
 
 }
 

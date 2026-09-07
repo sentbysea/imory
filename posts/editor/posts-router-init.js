@@ -29,13 +29,24 @@ async function handlePostRoute() {
 
   if (postMatch) {
 
+    /*
+      PHASE 1E 후속: 카테고리와 같은 규칙 — ?manage=1로 들어온(또는
+      그 상태에서 새로고침/뒤로가기 한) 경우 기존 관리 화면을 그대로
+      복원한다. 실제 소유자 검사는 openPostPage()가 다시 한다.
+    */
+
     await openPostPage(
       Number(
         postMatch[1]
       ),
       {
         updateUrl:
-          false
+          false,
+
+        manage:
+          isSiteManageRequested(
+            window.location.search
+          )
       }
     );
 

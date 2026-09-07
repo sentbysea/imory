@@ -95,22 +95,24 @@
 /*
   PHASE 1E — Skin 화면 위의 소유자 전용 도구
 
-  배너 카테고리도 글 카테고리도 소유자가 방문자와 같은 Skin을 본다.
-  그래도 추가(+)와 관리(edit)는 계속 필요하므로, legacy post-header를
-  통째로 되살리는 대신 그 안의 두 버튼만 화면 오른쪽 아래에 떠 있는
-  작은 플랫폼 도구로 다시 꺼내 쓴다(제목/뒤로가기는 계속 숨김 —
+  배너 카테고리도 글 카테고리도 글 상세도 소유자가 방문자와 같은
+  Skin을 본다. 그래도 추가(+)와 관리(edit)는 계속 필요하므로, legacy
+  post-header를 통째로 되살리는 대신 그 안의 버튼만 화면 오른쪽 아래에
+  떠 있는 작은 플랫폼 도구로 다시 꺼내 쓴다(제목/뒤로가기는 계속 숨김 —
   Skin이 자기 nav를 이미 갖고 있다). 어느 화면이냐에 따라 실제로
-  보이는 버튼만 다르다(배너: bannerEditToggleButton, 글:
-  postListEditToggleButton — 각 렌더러가 hidden을 맞춘다).
+  보이는 버튼만 다르다(배너: bannerEditToggleButton, 글 목록:
+  postListEditToggleButton, 글 상세: postManageToggleButton — 각
+  렌더러가 hidden을 맞춘다).
 
   position: fixed라 문서 흐름에서 빠져 있어 Skin 프레임의 좌표/폭에
   전혀 영향을 주지 않는다(HOME/CATEGORY/POST와 같은 프레임을 유지해야
   한다는 mount contract 그대로). 위치는 오른쪽 아래 — 위쪽은 이미
   .music-button(오른쪽 위)/.menu-button(왼쪽 위)이 쓰고 있다.
 
-  이 클래스는 posts/view/posts-view-list.js가 "Skin 렌더 성공 + 실제
-  사이트 소유자"일 때만 붙인다. 비소유자에게는 애초에 클래스도 버튼
-  hidden 해제도 없다.
+  이 클래스는 posts/view/posts-view-list.js(목록)와
+  posts/view/posts-view-detail.js(글 상세)가 "Skin 렌더 성공 + 실제
+  소유자"일 때만 붙인다. 비소유자에게는 애초에 클래스도 버튼 hidden
+  해제도 없다.
 */
 
 .post-container--skin-active.post-container--owner-tools .post-header {
@@ -285,9 +287,10 @@
 
 
 /*
-  배너 카테고리의 "edit"(posts-view-banner.js)와 글 카테고리의
-  "edit"(선택 삭제, posts-view-list-select.js)가 같이 씀 —
-  카테고리 타입에 따라 둘 중 하나만 보임.
+  배너 카테고리의 "edit"(posts-view-banner.js), 글 카테고리의
+  "edit"(선택 삭제, posts-view-list-select.js), 글 상세의
+  "edit"(관리 화면 토글, posts-view-detail.js)가 같이 씀 —
+  화면에 따라 셋 중 하나만 보임.
 */
 
 .list-edit-toggle-button {

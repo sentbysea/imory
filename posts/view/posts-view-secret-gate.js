@@ -265,6 +265,21 @@ async function updatePostOwnerActions() {
     true;
 
 
+  /*
+    PHASE 1E 후속: 스킨이 이 글을 그렸다면(currentPostBodyMountTarget)
+    legacy 상세는 통째로 hidden이고, 소유자 진입점은 화면에 떠 있는
+    관리 토글(#postManageToggleButton)이다 — 보이지도 않는 화면의
+    버튼까지 켜 두지 않는다. 관리 화면으로 들어오면 이 값이 다시
+    null이라 기존대로 켜진다.
+  */
+
+  if (currentPostBodyMountTarget) {
+
+    return;
+
+  }
+
+
   if (
     !currentPostOwnerId
   ) {

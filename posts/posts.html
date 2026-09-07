@@ -78,6 +78,26 @@
       </button>
 
 
+      <!--
+        PHASE 1E 후속: 소유자가 자기 글을 POST 스킨으로 읽는 중에
+        기존 관리 화면(legacy 상세 + edit/delete)을 명시적으로 열고
+        닫는 진입점. 배너/글 목록의 edit 토글과 같은 자리, 같은
+        모양이고, 스킨이 실제로 그 글을 그렸고 보는 사람이 이
+        사이트의 소유자일 때만 나타난다.
+      -->
+
+      <button
+        class="list-edit-toggle-button"
+        id="postManageToggleButton"
+        type="button"
+        aria-label="글 관리"
+        aria-pressed="false"
+        hidden
+      >
+        edit
+      </button>
+
+
       <button
         class="post-add-button"
         id="postAddButton"

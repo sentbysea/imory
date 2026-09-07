@@ -4,8 +4,11 @@
 
 1. **BANNER page type** — 배너 목록 카테고리를 Skin template으로 그린다.
 2. **`viewer` namespace** — 소유자에게만 보이는 글쓰기/관리 진입 링크.
-3. **관리 진입 계약(`?manage=1`)** — 카테고리를 "구경하는" 진입과
-   "관리하는" 진입을 주소로 구분한다.
+3. **관리 진입 계약(`?manage=1`)** — 화면을 "구경하는" 진입과
+   "관리하는" 진입을 주소로 구분한다. CATEGORY(3-1절)에서 시작해
+   BANNER(2-4절)와 POST(3-2절)까지 같은 규칙으로 마무리했고, 그 결과
+   네 화면 어디에도 "로그인했다는 이유만으로 legacy가 되는 경로"가
+   남아 있지 않다(3-3절 요약표).
 
 두 계약 모두 **DB 스키마 변경이 없다**. 새 컬럼/RPC/RLS/마이그레이션을
 하나도 추가하지 않았고, 이미 조회하던 `categories` / `banners` /
@@ -204,6 +207,8 @@ CODE 버튼이 `templates.banner`를 편집 대상으로 잡는다.
 
 ## 3. 관리 진입 계약 (`?manage=1`)
 
+### 3-1. CATEGORY
+
 소유자가 **"이 카테고리를 관리하겠다"** 고 명시적으로 고른 진입과, 그냥
 카테고리를 구경하는 진입을 구분하는 최소 계약.
 
@@ -228,6 +233,94 @@ CODE 버튼이 `templates.banner`를 편집 대상으로 잡는다.
 실제로 열렸을 때만 URL에 쿼리가 유지되므로(pushState), 새로고침과
 뒤로가기가 그 화면을 그대로 복원한다. 평소 탐색에서는
 `manage === false`라 `&&` 단락 평가로 소유자 조회조차 일어나지 않는다.
+
+### 3-2. POST 상세 (PHASE 1E 후속)
+
+POST에도 **같은 계약을 그대로** 적용했다. 카테고리와 달라진 건
+경로 모양 하나뿐이다.
+
+```
+/:slug/post/:id            → 글 읽기 화면(모두에게 Skin)
+/:slug/post/:id?manage=1   → 기존 관리 화면(소유자에게만)
+```
+
+라우터 패턴(`/^\/post\/(\d+)\/?$/`)은 그대로고, 새 경로도 새
+컬럼/RPC도 없다.
+
+| 위치 | 역할 |
+| --- | --- |
+| `posts/view/posts-view-detail.js` | 실제 판단 — `manage === true && await isSiteOwnerSignedIn()` 일 때만 관리 화면을 연다. 그 경우에만 Skin 시도를 건너뛴다 |
+| `posts/editor/posts-router-init.js` | 직접 접속/새로고침/뒤로가기에서도 복원(카테고리와 같은 줄) |
+| `posts/posts.html` + `posts/editor/posts-refs.js` | `#postManageToggleButton` — 소유자 전용 진입점 |
+| `posts/editor/posts-state.js` | `postManageScreenActive` — 지금 화면이 관리 진입인지 |
+
+**소유자도 방문자와 같은 화면으로 읽는다.** 예전에는
+`tryRenderPublishedSkinPost()` 안에 "로그인한 사람이 이 사이트의
+주인이면 Skin을 통째로 건너뛴다"는 분기가 있었다(수정/삭제 버튼이
+legacy `#postDetail` 안에 있어서다). 이제 그 분기는 없고, 그
+함수는 "누가 보고 있는가"를 전혀 모른다 — CATEGORY/BANNER와 같다.
+
+**관리 진입점은 하나뿐이다.** Skin이 그린 글 화면 오른쪽 아래에
+떠 있는 `edit` 버튼(`#postManageToggleButton`)이다. 배너/글 목록의
+edit 토글과 **같은 자리·같은 CSS**(`.post-container--owner-tools`,
+`posts/posts-base.css`)를 쓰고, 화면에 따라 셋 중 하나만 보인다.
+
+| 상태 | 화면 | 그 버튼 |
+| --- | --- | --- |
+| 읽기(기본) | POST Skin | 떠 있는 `edit` (`aria-pressed="false"`) → 관리 화면 |
+| 관리 진입 | 기존 legacy 상세(edit/delete/관련 글/글자 크기) | legacy 헤더 안의 `edit` (`aria-pressed="true"`) → 읽기 화면 |
+
+관리 화면은 **기존 코드 그대로**다. `#postDetailActions`(edit/delete)와
+`updatePostOwnerActions()`, 비밀글 게이트, 관련 글, 글자 크기 조절
+어느 것도 삭제하거나 Skin HTML 안으로 옮기지 않았다. 달라진 건
+`updatePostOwnerActions()`가 "Skin이 이 글을 그린 상태
+(`currentPostBodyMountTarget`)에서는 legacy 버튼을 켜지 않는다"는
+한 줄이 붙은 것뿐이다 — 어차피 `#postDetail`이 통째로 hidden이라
+화면에는 아무 변화가 없고, 보이지 않는 화면의 버튼을 켜 두지
+않게 됐을 뿐이다.
+
+**편집을 끝내면 항상 읽기 화면(Skin)으로 돌아온다.** 새 코드가
+아니라 기존 복귀 경로가 그대로 그렇게 동작한다 —
+`cancelPostEditor()`와 저장 후 처리가 모두 `openPostPage(postId)`를
+`manage` 없이 부르기 때문이다. 삭제는 기존대로
+`openCategoryPage()`로 나간다(그 화면도 Skin이다).
+
+Skin 목록으로 되돌릴 때 `openCategoryPage()`를 다시 태우는 것과
+같은 이유로, 읽기 화면 복귀도 **`openPostPage()`를 그대로 다시
+태운다**(`togglePostManageScreen()`) — POST Skin 렌더 경로가 이
+저장소에 한 벌만 존재하게 유지한다.
+
+**돌아갈 Skin이 없으면 토글도 없다.** `templates.post`가 없는
+기존 스킨(또는 렌더 실패)에서는 소유자도 예전과 100% 같은 legacy
+상세를 보고, 관리 토글은 뜨지 않는다 — 누를 이유가 없기 때문이다.
+
+**남은 제한(의도한 것)**: 관리 화면에서 수정 폼으로 들어갔다가
+취소/저장으로 돌아오면 화면은 읽기(Skin)로 복귀하지만 주소창의
+`?manage=1`은 남는다 — 복귀 경로가 기존대로 `updateUrl: false`로
+부르기 때문이다(그 상태에서 새로고침하면 관리 화면이 열린다).
+CATEGORY의 기존 동작과 같은 자리이므로 이번에도 손대지 않았다.
+
+**비밀글/공개범위 계약은 그대로다.** 소유자는 잠금 없이 Skin의
+protected post-body region에서 바로 읽고, 방문자에게는 그 자리에
+기존 비밀번호 확인 폼(`#postSecretGate`)이 그대로 들어간다.
+`post_contents`/`secret_password_hash`는 여전히 Skin Context에
+노출되지 않고, Quote Preset/raw HTML 본문 렌더도 기존 함수를 그대로
+쓴다(PHASE1C 6절).
+
+
+### 3-3. 네 화면의 최종 표시 방식
+
+| 화면 | 방문자 | 소유자(일반 탐색) | 소유자의 관리 진입 |
+| --- | --- | --- | --- |
+| HOME | Skin | **Skin** | 없음(SETTINGS/Studio는 ADMIN 링크) |
+| CATEGORY(post형) | Skin | **Skin** + 떠 있는 `+`/`edit` | `?manage=1` 또는 `edit` → 기존 목록 관리 화면 |
+| BANNER | Skin | **Skin** + 떠 있는 `+`/`edit` | `edit` → 기존 배너 관리 그리드 |
+| POST | Skin | **Skin** + 떠 있는 `edit` | `?manage=1` 또는 `edit` → 기존 상세(수정/삭제) |
+
+즉 **"로그인했다는 이유만으로 legacy가 되는 경로"는 네 화면 어디에도
+남아 있지 않다.** 남은 legacy 폴백은 전부 "스킨이 없거나 못 그렸을
+때"뿐이다(미발행/`templates.*` 없음/schemaVersion 모름/조회·렌더 실패).
+
 
 ---
 
@@ -327,6 +420,9 @@ parent(`studio/preview/preview-route.js`)는 HOME/CATEGORY/POST 세 패턴만
 - 배너 추가/수정 기능과 실제 권한 검사 — 그대로. 진입점의 **위치**만 legacy
   헤더 안에서 떠 있는 도구로 옮겼고, 관리 화면 자체(그리드/폼/순서/삭제)는
   기존 코드 그대로다.
+- 글 수정/삭제, 비밀글 소유자 접근과 방문자 비밀번호 확인, protected
+  post-body mount, Quote Preset/raw HTML 본문 렌더 — 그대로. POST도 진입
+  **경로**만 바뀌었다(3-2절).
 - DB — 변경 없음.
 
 ---
@@ -338,6 +434,8 @@ parent(`studio/preview/preview-route.js`)는 HOME/CATEGORY/POST 세 패턴만
 | Context 단위(BANNER/viewer/URL 안전/소유자 판정/writeHref 폴백) | `skin/skin-page-context-test.html` |
 | 공개 화면 E2E(프레임/항목/빈 목록/실패/폴백/날짜) | `skin/skin-banner-page-e2e-test.mjs` |
 | 소유자 흐름 E2E(WRITE→작성 폼까지, 배너 Skin+관리 진입점, 비소유자 미노출) | `skin/skin-banner-page-e2e-test.mjs` |
+| 소유자 POST E2E(스킨 읽기 → 관리 진입 → 수정 폼 → 취소/저장 복귀, ?manage=1 직접 접속, 비소유자/방문자, 비밀글, template 없음) | `skin/skin-banner-page-e2e-test.mjs` (4-d) |
+| POST 화면 전환 단위(소유자 일반 탐색 vs 관리 진입, secret gate/본문 mount lifecycle) | `skin/skin-post-lifecycle-test.html` (시나리오 E) |
 | Studio Preview(배너 template 경로 + CODE 대상) | `studio/studio-navigation-test.html` (Scenario X) |
 | 기존 회귀 | `skin/skin-published-frame-e2e-test.mjs`, `studio/studio-import-test.html`, `studio/studio-multipage-test.html` |
 

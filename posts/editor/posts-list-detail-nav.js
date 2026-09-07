@@ -275,6 +275,22 @@ postEditButton
 
 
 /* =========================================================
+   MANAGE TOGGLE (PHASE 1E 후속)
+
+   스킨으로 읽는 POST 화면과 기존 관리 화면(legacy 상세 +
+   edit/delete)을 오간다 — 실제 동작은 posts-view-detail.js의
+   togglePostManageScreen().
+========================================================== */
+
+postManageToggleButton
+  ?.addEventListener(
+    "click",
+    togglePostManageScreen
+  );
+
+
+
+/* =========================================================
    DELETE
 ========================================================== */
 

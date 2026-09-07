@@ -66,16 +66,29 @@ const postArea =
 /*
   글 읽기 화면은 window가 아니라 #postArea 안에서
   자체적으로 스크롤되므로, 메뉴/음악 버튼 숨김 함수
-  (home/home-love-event.js, 전역)를 여기서도 그대로 호출해준다.
+  (home/menu.js, 전역)를 여기서도 그대로 호출해준다.
+
+  그 함수는 legacy_sua 홈에서만 로드되는 스크립트가 선언한다
+  (index.html의 loadLegacySuaCommonScripts) — 선언 자체가 없는
+  배포(customize/Skin 홈)에서는 optional call(?.)로도 ReferenceError가 나므로
+  (선언되지 않은 식별자는 optional call이 막아주지 못한다) typeof로
+  확인한다. 없으면 조용히 넘어간다 — 숨길 버튼 자체가 없는 화면이다.
 */
 
 postArea?.addEventListener(
   "scroll",
   () => {
 
-    updateFixedButtonsOnScroll?.(
-      postArea.scrollTop
-    );
+    if (
+      typeof updateFixedButtonsOnScroll ===
+      "function"
+    ) {
+
+      updateFixedButtonsOnScroll(
+        postArea.scrollTop
+      );
+
+    }
 
   },
   {
@@ -186,6 +199,17 @@ const bannerEditToggleButton =
 const postListEditToggleButton =
   document.getElementById(
     "postListEditToggleButton"
+  );
+
+
+/*
+  PHASE 1E 후속: POST 스킨 위에서 기존 관리 화면(legacy 상세 +
+  edit/delete)을 열고 닫는 소유자 전용 토글(posts.html).
+*/
+
+const postManageToggleButton =
+  document.getElementById(
+    "postManageToggleButton"
   );
 
 const postListSelectBar =

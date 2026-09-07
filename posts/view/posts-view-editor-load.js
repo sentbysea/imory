@@ -101,6 +101,25 @@ async function openNewPostEditor(
   }
 
 
+  /*
+    PHASE 1E 후속: 스킨 POST에서 곧장 에디터로 들어온 경우 떠 있는
+    관리 토글이 남아 있으면 안 된다.
+  */
+
+  if (
+    postManageToggleButton
+  ) {
+
+    postManageToggleButton.hidden =
+      true;
+
+  }
+
+
+  postManageScreenActive =
+    false;
+
+
   postListEditModeOn =
     false;
 
@@ -376,6 +395,25 @@ async function openPostEditor(
       true;
 
   }
+
+
+  /*
+    PHASE 1E 후속: 스킨 POST에서 곧장 에디터로 들어온 경우 떠 있는
+    관리 토글이 남아 있으면 안 된다.
+  */
+
+  if (
+    postManageToggleButton
+  ) {
+
+    postManageToggleButton.hidden =
+      true;
+
+  }
+
+
+  postManageScreenActive =
+    false;
 
 
   postListEditModeOn =

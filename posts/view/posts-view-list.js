@@ -468,6 +468,26 @@ function switchToCategoryScreen() {
 
 
   /*
+    PHASE 1E 후속: 글 상세를 접으면 그 화면 전용 소유자 도구(관리
+    토글)도 같이 접는다 — 목록 화면의 + / edit는 아래
+    updatePostAddButton()이 따로 정한다.
+  */
+
+  if (
+    postManageToggleButton
+  ) {
+
+    postManageToggleButton.hidden =
+      true;
+
+  }
+
+
+  postManageScreenActive =
+    false;
+
+
+  /*
     직전 글이 Skin+비밀글이었다면 postSecretGate가 그 Skin 컨테이너
     안에 들어가 있다 — 비우기 전에 반드시 legacy #postDetail로
     되돌린다(posts-view-detail.js의 helper, 실행 시점엔 이미 로드돼

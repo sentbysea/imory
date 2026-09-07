@@ -269,6 +269,16 @@
       return window.__mock.signedInUserId ? { id: window.__mock.signedInUserId } : null;
     }
 
+    /*
+      URL 갱신은 이 하네스의 검증 대상이 아니다(그리고 file://로 열면
+      pushState가 SecurityError를 던진다) — 관리 진입 URL(?manage=1)의
+      실제 라우팅은 E2E가 검증한다. 시나리오 E의 관리 토글은 기본값
+      (updateUrl: true)으로 openPostPage()를 다시 태우므로, 여기서만
+      무해하게 막아 둔다.
+    */
+
+    history.pushState = function () {};
+
   </script>
 
   <!-- =========================================================
@@ -294,13 +304,24 @@
       return `marker-post-${postId}-${Math.random().toString(36).slice(2)}`;
     }
 
-    async function go(postId, { skinBehavior = "success", signedInUserId = null, visibility = "public" } = {}) {
+    async function go(postId, { skinBehavior = "success", signedInUserId = null, visibility = "public", manage = false } = {}) {
       window.__mock.skinBehavior = skinBehavior;
       window.__mock.signedInUserId = signedInUserId;
       window.__mock.postContent = bodyMarker(postId);
       setPost({ id: postId, visibility });
-      await openPostPage(postId, { updateUrl: false });
+      await openPostPage(postId, { updateUrl: false, manage });
       return window.__mock.postContent;
+    }
+
+    function readOwnerTools() {
+      return {
+        toggleVisible: Boolean(postManageToggleButton) && !postManageToggleButton.hidden,
+        togglePressed: postManageToggleButton
+          ? postManageToggleButton.getAttribute("aria-pressed") : null,
+        floating: postContainer.classList.contains("post-container--owner-tools"),
+        skinActive: postContainer.classList.contains("post-container--skin-active"),
+        manageState: postManageScreenActive
+      };
     }
 
     /* =====================================================
@@ -476,7 +497,12 @@
     }
 
     /* =====================================================
-       E. Skin post -> owner's own post (legacy guard)
+       E. 소유자의 일반 탐색 vs 명시적 관리 진입 (PHASE 1E 후속)
+
+       예전에는 "로그인한 사람이 사이트 주인이면 무조건 legacy"였다.
+       이제 소유자도 일반 링크로 들어가면 방문자와 같은 POST 스킨을
+       읽고, 기존 관리 화면(legacy 상세 + edit/delete)은 manage 진입
+       에서만 열린다.
     ===================================================== */
 
     {
@@ -487,26 +513,116 @@
         postSkinContainer.hidden === false
       );
 
+      assert(
+        "E1. anonymous viewer gets no owner tools",
+        readOwnerTools().toggleVisible === false && readOwnerTools().floating === false,
+        JSON.stringify(readOwnerTools())
+      );
+
       const markerE2 = await go(41, { skinBehavior: "success", signedInUserId: "owner-1", visibility: "public" });
+      const toolsE2 = readOwnerTools();
 
       assert(
-        "E2. owner viewing own post: guard forces legacy even though skinBehavior=success",
-        postDetail.hidden === false && postSkinContainer.hidden === true
+        "E2. owner navigating normally now reads the Skin post (no legacy fallback)",
+        postSkinContainer.hidden === false && postDetail.hidden === true,
+        JSON.stringify(toolsE2)
       );
 
       assert(
-        "E2. owner management UI (#postDetailActions) visible",
+        "E2. owner's body is mounted in the Skin body region",
+        currentPostBodyMountTarget instanceof Element &&
+          currentPostBodyMountTarget.textContent.includes(markerE2) &&
+          postSkinContainer.contains(currentPostBodyMountTarget)
+      );
+
+      assert(
+        "E2. owner keeps an explicit manage entry point floating over the Skin",
+        toolsE2.toggleVisible === true && toolsE2.floating === true &&
+          toolsE2.togglePressed === "false" && toolsE2.manageState === false,
+        JSON.stringify(toolsE2)
+      );
+
+      /* --- 명시적 관리 진입 --- */
+
+      const markerE3 = await go(41, { skinBehavior: "success", signedInUserId: "owner-1", visibility: "public", manage: true });
+      const toolsE3 = readOwnerTools();
+
+      assert(
+        "E3. explicit manage entry opens the existing legacy detail",
+        postDetail.hidden === false && postSkinContainer.hidden === true &&
+          toolsE3.skinActive === false && toolsE3.floating === false,
+        JSON.stringify(toolsE3)
+      );
+
+      assert(
+        "E3. owner management UI (#postDetailActions) visible",
         postDetailActions.hidden === false
       );
 
       assert(
-        "E2. legacy body rendered normally for owner",
-        postDetailContent.textContent.includes(markerE2)
+        "E3. legacy body rendered normally in the manage screen",
+        postDetailContent.textContent.includes(markerE3)
       );
 
       assert(
-        "E2. currentPostBodyMountTarget is null under owner guard",
+        "E3. currentPostBodyMountTarget is null in the manage screen",
         currentPostBodyMountTarget === null
+      );
+
+      assert(
+        "E3. manage screen keeps the toggle (pressed) so the owner can go back",
+        toolsE3.toggleVisible === true && toolsE3.togglePressed === "true" &&
+          toolsE3.manageState === true,
+        JSON.stringify(toolsE3)
+      );
+
+      /* --- 토글로 스킨 복귀 (실제 핸들러 함수를 그대로 호출) --- */
+
+      await togglePostManageScreen();
+      const toolsE4 = readOwnerTools();
+
+      assert(
+        "E4. toggling the manage screen off returns to the Skin post",
+        postSkinContainer.hidden === false && postDetail.hidden === true &&
+          toolsE4.floating === true && toolsE4.manageState === false,
+        JSON.stringify(toolsE4)
+      );
+
+      /* --- 다른 계정은 manage 요청을 받아도 그냥 읽기 화면 --- */
+
+      await go(42, { skinBehavior: "success", signedInUserId: "someone-else", visibility: "public", manage: true });
+      const toolsE5 = readOwnerTools();
+
+      assert(
+        "E5. a different account asking for the manage screen still gets the Skin",
+        postSkinContainer.hidden === false && postDetail.hidden === true,
+        JSON.stringify(toolsE5)
+      );
+
+      assert(
+        "E5. and no owner entry points at all",
+        toolsE5.toggleVisible === false && toolsE5.floating === false &&
+          postDetailActions.hidden === true,
+        JSON.stringify(toolsE5)
+      );
+
+      /* --- POST template이 없으면 관리 진입 없이도 legacy 그대로 --- */
+
+      const markerE6 = await go(43, { skinBehavior: "false", signedInUserId: "owner-1", visibility: "public" });
+      const toolsE6 = readOwnerTools();
+
+      assert(
+        "E6. no POST template: owner keeps the existing legacy detail (edit/delete in place)",
+        postDetail.hidden === false && postSkinContainer.hidden === true &&
+          postDetailActions.hidden === false &&
+          postDetailContent.textContent.includes(markerE6),
+        JSON.stringify(toolsE6)
+      );
+
+      assert(
+        "E6. and the manage toggle stays hidden (nothing to toggle back to)",
+        toolsE6.toggleVisible === false && toolsE6.floating === false,
+        JSON.stringify(toolsE6)
       );
     }
 
