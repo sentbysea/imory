@@ -887,7 +887,25 @@ async function buildBaseSkinContext(
       adminHref:
         isOwner
           ? adminHref
-          : null
+          : null,
+
+      /*
+        manageHref(PHASE 1H) — "지금 보고 있는 이 화면의 관리 화면을
+        열어달라"는 요청 주소다. 여기(공통 base)에서는 항상 null이고,
+        그 화면에 실제로 관리 화면이 있는 page builder만 자기 주소로
+        덮어쓴다 — 지금은 post형 CATEGORY 하나뿐이다
+        (buildCategorySkinContext). HOME/POST/BANNER에는 대응하는
+        목록 관리 화면이 없으므로 null 그대로다.
+
+        null로 두는 것 자체가 계약의 일부다: 스킨이 EDIT 링크를
+        data-imory-if="viewer.manageHref"로 감싸 두면, 관리 진입점이
+        없는 화면에서는 링크가 아예 그려지지 않고 플랫폼의 기본
+        소유자 도구가 그대로 남는다(posts/view/posts-view-list.js).
+        비소유자에게는 writeHref/adminHref와 같은 이유로 항상 null이다.
+      */
+
+      manageHref:
+        null
 
     },
 
@@ -1064,6 +1082,51 @@ async function buildCategorySkinContext(
 
     page:
       buildSkinPageMeta("category"),
+
+    /*
+      PHASE 1H — 이 카테고리의 목록 관리 화면 주소. buildSiteManageUrl()이
+      만드는 기존 ?manage=1 주소 그대로이고(core/lib/site-path.js), 실제로
+      열지는 openCategoryPage()가 isSiteOwnerSignedIn()으로 다시 판단한다 —
+      쿼리는 권한이 아니라 요청이다.
+
+      banner형 카테고리는 제외한다: 배너 관리는 URL 요청이 아니라 화면 안의
+      토글(bannerEditToggleButton)이라 ?manage=1로 열리는 화면이 애초에 없다.
+      없는 진입점을 스킨에 노출하면 눌러도 아무 일이 일어나지 않는 링크가
+      되므로, 그 경우는 null로 두어 플랫폼의 기본 소유자 도구가 그대로
+      남게 한다.
+    */
+
+    viewer: {
+      ...base.viewer,
+
+      /*
+        PHASE 1H — CATEGORY 화면에서는 "이 카테고리에 쓴다"가 명확하다.
+        base의 writeHref는 화면 맥락이 없어서 POST 카테고리가 여럿이면
+        HOME 작성 주소로 떨어지는데(받는 쪽이 첫 카테고리를 고른다),
+        지금 그 카테고리를 보고 있는 화면에서는 그럴 이유가 없다.
+        플랫폼의 + 버튼이 늘 하던 일(currentPostCategoryId로 작성)과
+        같은 대상을 스킨의 WRITE도 가리키게 맞춘다 — 그래야 플랫폼이
+        중복 + 를 접어도 "보고 있는 카테고리에 쓴다"가 사라지지 않는다.
+        banner 카테고리에서는 base 값을 그대로 둔다(그 카테고리에
+        글을 쓸 수는 없다).
+      */
+
+      writeHref:
+        base.viewer.isOwner &&
+        (category.type || "post") === "post"
+          ? buildSiteComposeUrl(
+              buildSitePath(commonData.slug, `/category/${category.id}`)
+            )
+          : base.viewer.writeHref,
+
+      manageHref:
+        base.viewer.isOwner &&
+        (category.type || "post") === "post"
+          ? buildSiteManageUrl(
+              buildSitePath(commonData.slug, `/category/${category.id}`)
+            )
+          : null
+    },
 
     category: {
       id: String(category.id),

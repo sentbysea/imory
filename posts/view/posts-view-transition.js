@@ -1138,6 +1138,53 @@ function hidePostEditor() {
 
 
 /* =========================================================
+   스킨이 직접 그린 소유자 진입점 (PHASE 1H)
+
+   스킨 레이아웃 안에 EDIT(?manage=1)이나 WRITE(?write=1)가 이미
+   있으면 같은 동작을 표시 공간 오른쪽 위의 플랫폼 도구로 한 번 더
+   보여줄 이유가 없다. 어떤 스킨이 그렸는지는 보지 않고 "그 주소를
+   가리키는 링크가 렌더된 DOM에 있는가"만 본다
+   (resolveSkinOwnerEntries, skin/skin-owner-entry.js).
+
+   이 값을 여기(공용 화면 상태)에 두는 이유: updatePostAddButton()은
+   화면 진입 시 await 없이 시작되고 openCategoryPage()의 스킨 확정
+   지점보다 늦게 끝날 수 있다. 양쪽이 같은 값을 보게 해 두면 어느
+   쪽이 나중에 끝나도 결과가 같다.
+
+   post형 CATEGORY 화면에서만 채워진다. banner 카테고리의 + / edit은
+   URL 요청(?manage=1 등)으로 표현되는 동작이 아니라 화면 안의
+   토글이라, 스킨이 대신 그릴 수 있는 진입점이 애초에 없다 —
+   그쪽은 플랫폼 도구를 그대로 둔다.
+========================================================== */
+
+let skinOwnerEntriesForScreen = {
+  manage: false,
+  write: false,
+  edit: false
+};
+
+
+function setSkinOwnerEntriesForScreen(
+  entries
+) {
+
+  skinOwnerEntriesForScreen = {
+    manage: Boolean(entries && entries.manage),
+    write: Boolean(entries && entries.write),
+    edit: Boolean(entries && entries.edit)
+  };
+
+}
+
+
+function getSkinOwnerEntriesForScreen() {
+
+  return skinOwnerEntriesForScreen;
+
+}
+
+
+/* =========================================================
    ADD BUTTON
 ========================================================== */
 
@@ -1182,10 +1229,15 @@ async function updatePostAddButton() {
   }
 
 
+  /*
+    PHASE 1H: 스킨이 자기 자리에 WRITE를 그렸으면 플랫폼의 + 는
+    접는다 — 작성은 그 WRITE로 계속 된다.
+  */
+
   if (postAddButton) {
 
     postAddButton.hidden =
-      false;
+      skinOwnerEntriesForScreen.write;
 
   }
 
@@ -1194,6 +1246,8 @@ async function updatePostAddButton() {
     글 목록 편집(선택 삭제)은 배너 카테고리엔 의미가
     없음 — 배너는 자기 전용 edit 버튼(bannerEditToggleButton)
     이 따로 있음.
+
+    PHASE 1H: 스킨이 EDIT(?manage=1)을 그렸으면 같은 이유로 접는다.
   */
 
   if (
@@ -1203,7 +1257,7 @@ async function updatePostAddButton() {
   ) {
 
     postListEditToggleButton.hidden =
-      false;
+      skinOwnerEntriesForScreen.manage;
 
   }
 

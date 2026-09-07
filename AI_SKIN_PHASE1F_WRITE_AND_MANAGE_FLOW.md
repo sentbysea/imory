@@ -52,6 +52,12 @@ POST 카테고리 1개  → buildSiteComposeUrl(그 카테고리 href)
 그 외(0개/여러 개) → buildSiteComposeUrl(HOME href)
 ```
 
+> **PHASE 1H에서 변경됨** — CATEGORY(글 카테고리) 화면에서는 위 규칙 대신
+> **지금 보고 있는 그 카테고리**의 작성 주소를 가리킨다. HOME/POST/BANNER는
+> 위 규칙 그대로다. 근거는
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
+> §3-1.
+
 Skin은 여전히 category id도 작성 폼 주소도 모른다. 여러 개일 때 어느
 카테고리로 폼을 열지는 받는 쪽(`posts/view/posts-view-compose.js`)이 정하고,
 하나도 없으면 같은 자리에서 안내 + 설정 진입점을 준다.

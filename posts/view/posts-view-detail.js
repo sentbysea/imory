@@ -232,6 +232,42 @@ async function openPostPage(
   }
 
 
+  /*
+    PHASE 1H — POST 읽기 모드 전환(skin/skin-post-focus.js).
+
+    목록/HOME에서 글을 눌러 들어온 경우에만 "펼쳐진 상태에서 접히는"
+    전환을 재생한다. 직접 접속·새로고침·뒤로가기(updateUrl:false)는
+    이전 화면이 없거나 이미 본 화면으로 돌아가는 것이라 처음부터 접힌
+    상태로 나타나고, POST → POST 이동은 다시 펼쳤다 접지 않는다.
+    두 값 모두 아래에서 currentPostView를 덮어쓰기 전에 읽어야 한다.
+  */
+
+  const postFocusAnimate =
+    updateUrl &&
+    currentPostView !== "post";
+
+
+  /*
+    PHASE 1H — 목록에서 글로 들어가는 길목에서만 그 목록의 스크롤
+    위치를 기억한다. 되돌리는 쪽은 openCategoryPage()의 스킨 확정
+    지점이고, 거기서 한 번 꺼내면 메모가 비워진다.
+  */
+
+  if (
+    currentPostView === "category" &&
+    currentPostCategoryId !== null &&
+    currentPostCategoryId !== undefined &&
+    postArea
+  ) {
+
+    rememberSkinListScroll(
+      `category:${currentPostCategoryId}`,
+      postArea.scrollTop
+    );
+
+  }
+
+
   currentPostView =
     "post";
 
@@ -514,6 +550,14 @@ async function openPostPage(
     );
 
   }
+
+
+  /*
+    PHASE 1H: 직전 화면(카테고리 스킨)의 진입점 판정이 남아 있으면
+    안 된다 — 화면마다 새로 판정한다(posts-view-transition.js).
+  */
+
+  setSkinOwnerEntriesForScreen(null);
 
 
   let post =
@@ -808,6 +852,22 @@ async function openPostPage(
 
     if (usingSkinPost) {
 
+      /*
+        PHASE 1H: 스킨 루트에 읽기 모드 상태를 실어 준다 — 최종
+        배치는 스킨 CSS가 정하고(:root[data-imory-post-focus="on"]),
+        이 상태를 쓰지 않는 스킨은 지금까지와 똑같은 화면이 된다.
+        옮기기 직전에 시작 상태를 박아 두고, 실제 전환은 옮긴 뒤
+        두 프레임 뒤에 일어난다(skin/skin-post-focus.js).
+      */
+
+      applySkinPostFocus(
+        skinRenderTarget.firstElementChild,
+        {
+          animate: postFocusAnimate
+        }
+      );
+
+
       while (
         skinRenderTarget.firstChild
       ) {
@@ -815,6 +875,20 @@ async function openPostPage(
         postSkinContainer.appendChild(
           skinRenderTarget.firstChild
         );
+
+      }
+
+
+      /*
+        글은 항상 처음부터 읽는다 — 스크롤한 목록에서 들어오면
+        #postArea의 스크롤이 그대로 남아 제목이 화면 위로 잘려
+        보인다. 돌아갈 목록의 위치는 위에서 이미 기억해 뒀다.
+      */
+
+      if (postArea) {
+
+        postArea.scrollTop =
+          0;
 
       }
 
@@ -932,13 +1006,31 @@ async function openPostPage(
     그대로 있다.
   */
 
+  /*
+    PHASE 1H: 스킨이 자기 자리에 수정 진입점(?edit=1)을 그렸다면 같은
+    동작을 떠 있는 도구로 한 번 더 보여주지 않는다 — CATEGORY의 EDIT과
+    같은 계약이다(skin/skin-owner-entry.js). 그리지 않은 스킨(지금의
+    Quiet Frame 포함)에서는 지금까지와 똑같이 도구가 남는다.
+  */
+
+  const skinPostOwnerEntries =
+    usingSkinPost
+      ? resolveSkinOwnerEntries(
+          postSkinContainer
+        )
+      : null;
+
+
+  const needsPostManageTool =
+    isOwnerViewing &&
+    usingSkinPost &&
+    !(skinPostOwnerEntries && skinPostOwnerEntries.edit);
+
+
   if (postManageToggleButton) {
 
     postManageToggleButton.hidden =
-      !(
-        isOwnerViewing &&
-        usingSkinPost
-      );
+      !needsPostManageTool;
 
     postManageToggleButton.setAttribute(
       "aria-pressed",
@@ -952,8 +1044,7 @@ async function openPostPage(
 
     postContainer.classList.toggle(
       "post-container--owner-tools",
-      usingSkinPost &&
-      isOwnerViewing
+      needsPostManageTool
     );
 
   }

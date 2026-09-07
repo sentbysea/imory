@@ -1194,8 +1194,13 @@ async function testOwnerCategoryScreen(vpName) {
       skinView.titleDisplay === "none" && skinView.areaPadding === "0px",
       JSON.stringify(skinView));
 
-    check(`[${vpName}] 소유자 전용 진입점(+ / edit)이 스킨 위에 남아 있다`,
-      skinView.addVisible && skinView.editVisible && !skinView.selectBarVisible,
+    /* PHASE 1H: 이 스킨(v2)은 사이드바에 WRITE는 그리지만 EDIT(?manage=1)은
+       그리지 않는다 — 그래서 떠 있는 + 는 접히고(같은 동작이 두 번 나오지
+       않는다) edit은 그대로 남는다. 진입점을 하나도 그리지 않는 스킨에서는
+       둘 다 남는다(skin-write-manage-e2e-test.mjs의 diary 대조군). */
+    check(`[${vpName}] 스킨이 WRITE를 그렸으므로 떠 있는 + 는 접히고 edit만 남는다`,
+      !skinView.addVisible && skinView.editVisible && !skinView.selectBarVisible &&
+      skinView.ownerTools,
       JSON.stringify(skinView));
 
     check(`[${vpName}] URL에는 관리 쿼리가 붙지 않는다(탐색과 관리 진입 구분)`,
@@ -1240,8 +1245,17 @@ async function testOwnerCategoryScreen(vpName) {
       backToSkin.skinActive && backToSkin.ownerTools && !backToSkin.selectBarVisible,
       JSON.stringify(backToSkin));
 
-    /* 스킨 위의 + → 바로 작성 폼 */
-    await page.click("#postAddButton");
+    /* 스킨의 WRITE → 바로 작성 폼 (PHASE 1H 전에는 떠 있는 + 가 하던 일이다.
+       CATEGORY 화면의 writeHref는 지금 보고 있는 그 카테고리를 가리킨다.) */
+    const skinWriteHref = await page.evaluate(() => {
+      const a = document.querySelector('#postList a[href*="write=1"]');
+      return a ? a.getAttribute("href") : null;
+    });
+
+    check(`[${vpName}] CATEGORY 스킨의 WRITE는 지금 보고 있는 카테고리를 가리킨다`,
+      skinWriteHref === `/${SLUG}/category/1?write=1`, String(skinWriteHref));
+
+    await page.click('#postList a[href*="write=1"]');
     await page.waitForTimeout(800);
 
     const editor = await page.evaluate(() => {
@@ -1254,7 +1268,7 @@ async function testOwnerCategoryScreen(vpName) {
       };
     });
 
-    check(`[${vpName}] 스킨 위의 + 는 곧바로 기존 글 작성 폼을 연다`,
+    check(`[${vpName}] 스킨의 WRITE는 곧바로 기존 글 작성 폼을 연다`,
       editor.editorVisible && editor.editorMode && editor.titleEditable,
       JSON.stringify(editor));
 

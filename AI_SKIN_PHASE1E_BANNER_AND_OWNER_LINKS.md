@@ -348,6 +348,13 @@ protected post-body region에서 바로 읽고, 방문자에게는 그 자리에
 > **PHASE 1F에서 개정됨** — `viewer.writeHref`는 더 이상 관리 목록
 > (`?manage=1`)이 아니라 작성 진입 주소(`?write=1`)를 가리킨다.
 > `AI_SKIN_PHASE1F_WRITE_AND_MANAGE_FLOW.md` 2절 참고.
+>
+> **PHASE 1H에서 변경됨** — 아래 4-1의 shape에 `manageHref`가 하나 더
+> 붙었고, `writeHref`는 CATEGORY 화면에서 "지금 보고 있는 그 카테고리"를
+> 가리킨다. 또 스킨이 이 주소들을 자기 레이아웃 안에 그리면 플랫폼이
+> 같은 동작의 떠 있는 도구를 접는다. 현재 계약은
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
+> §3-1이 기준이다.
 
 ### 4-1. shape
 

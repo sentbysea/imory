@@ -1,5 +1,5 @@
 /* =========================================================
-   작성·관리 동선 + Quiet Frame v3 배너 크기 — 공개 화면 E2E 테스트
+   작성·관리 동선 + CATEGORY EDIT + 모바일 POST 읽기 모드 — 공개 화면 E2E
 
    실사용자가 보고한 세 가지를 실제 화면에서 확인한다:
    1. WRITE를 누르면 옛 LOG 관리 목록이 먼저 나온다.
@@ -16,7 +16,17 @@
    - 목록 관리 패널 진입/종료 중 legacy 커튼·로딩 화면 미노출
    - 뒤로가기/앞으로가기/새로고침에서 화면과 주소 일치
    - 비소유자 차단
-   - Quiet Frame v3의 배너 표시 폭(240px, 좁은 화면 축소, 비율 유지)
+   - Quiet Frame v4의 배너 표시 폭(240px, 좁은 화면 축소, 비율 유지 — v3 그대로)
+
+   PHASE 1H로 두 묶음이 더 붙었다:
+
+   - CATEGORY의 INDEX 자리: 소유자에게 EDIT(?manage=1), 방문자에게 INDEX.
+     스킨이 그 진입점을 그리면 플랫폼의 떠 있는 + / edit은 접히고,
+     그리지 않는 기존 스킨(imory-diary-v0.1)에서는 그대로 남는다.
+   - 모바일 POST 읽기 모드: 목록에서 글을 열면 사이드바가 접히고(전환을
+     실제로 캡처한다), 직접 접속은 처음부터 접힌 상태, POST→POST는 다시
+     펼치지 않고, 목록으로 돌아오면 사이드바와 스크롤이 복원된다.
+     데스크톱은 그대로다.
 
    ★ 무엇을 mock하는가
    Supabase REST/RPC 응답과 로그인 상태뿐이다. HTML/CSS/JS는 저장소의
@@ -26,6 +36,10 @@
    ★ 실행 방법
      node skin/skin-write-manage-e2e-test.mjs
      node skin/skin-write-manage-e2e-test.mjs --browser=webkit
+     node skin/skin-write-manage-e2e-test.mjs --browser=webkit --only=post-focus
+
+   --only= 뒤에 쓸 수 있는 이름: write / category-tools / history / slow /
+   banner / edit-entry / post-focus
 ========================================================== */
 
 import fs from "node:fs";
@@ -50,6 +64,15 @@ const argOf = (name, fallback) => {
   return hit ? hit.slice(name.length + 3) : fallback;
 };
 const BROWSER = argOf("browser", "chromium");
+
+/* --only=post-focus 처럼 묶음 하나만 돌린다 — 브라우저 호환성이 걸리는
+   경로만 WebKit으로 한 번 더 볼 때 전체 스위트를 반복하지 않기 위해서다.
+   생략하면 지금까지처럼 전부 돈다. */
+const ONLY = argOf("only", "");
+
+function shouldRun(name) {
+  return !ONLY || ONLY === name;
+}
 
 
 /* =========================================================
@@ -144,15 +167,21 @@ function startServer() {
 
 
 /* =========================================================
-   SkinPackage — 이번 작업의 산출물(v3)을 그대로 쓴다.
+   SkinPackage — 이번 작업의 산출물(v4)을 기본으로 쓴다.
+   V2는 배너 크기 대조군, DIARY는 "소유자 진입점을 전혀 그리지 않는
+   기존 스킨" 대조군이다(플랫폼 기본 도구가 그대로 남아야 한다).
 ========================================================== */
 
 const SKIN_PACKAGE = JSON.parse(
-  fs.readFileSync(path.join(HERE, "test-skins", "imory-quiet-frame-v3.json"), "utf8")
+  fs.readFileSync(path.join(HERE, "test-skins", "imory-quiet-frame-v4.json"), "utf8")
 );
 
 const V2_PACKAGE = JSON.parse(
   fs.readFileSync(path.join(HERE, "test-skins", "imory-quiet-frame-v2.json"), "utf8")
+);
+
+const DIARY_PACKAGE = JSON.parse(
+  fs.readFileSync(path.join(HERE, "test-skins", "imory-diary-v0.1.json"), "utf8")
 );
 
 
@@ -231,7 +260,7 @@ const TALL_PNG = makePng(TALL_W, TALL_H, [200, 180, 190]);
    그 드롭다운에 섞이지 않는지 보기 위해서다.
 ========================================================== */
 
-function makeDb({ postCategories = 2 } = {}) {
+function makeDb({ postCategories = 2, withSecret = false, extraPosts = 0 } = {}) {
   const categories = [];
   if (postCategories >= 1) {
     categories.push({ id: 1, user_id: OWNER_ID, name: "일기", type: "post", sort_order: 1 });
@@ -253,11 +282,15 @@ function makeDb({ postCategories = 2 } = {}) {
     categories,
     posts: [
       { id: 101, user_id: OWNER_ID, category_id: 1, title: "첫 번째 글", content_type: "text", visibility: "public", created_at: "2026-09-01T02:00:00Z", quote_preset_id: null },
-      { id: 102, user_id: OWNER_ID, category_id: 1, title: "두 번째 글", content_type: "text", visibility: "public", created_at: "2026-09-02T02:00:00Z", quote_preset_id: null }
+      { id: 102, user_id: OWNER_ID, category_id: 1, title: "두 번째 글", content_type: "text", visibility: "public", created_at: "2026-09-02T02:00:00Z", quote_preset_id: null },
+      ...(withSecret
+        ? [{ id: 103, user_id: OWNER_ID, category_id: 1, title: "비밀 글", content_type: "text", visibility: "secret", created_at: "2026-09-03T02:00:00Z", quote_preset_id: null }]
+        : [])
     ],
     post_contents: [
       { post_id: 101, content: "첫 번째 글 본문입니다." },
-      { post_id: 102, content: "두 번째 글 본문입니다." }
+      { post_id: 102, content: "두 번째 글 본문입니다." },
+      { post_id: 103, content: "비밀 글 본문입니다." }
     ],
     banners: [
       { id: 1, user_id: OWNER_ID, category_id: 2, name: "넓은 배너", url: "https://friend.example/", image_url: "https://img.example/wide.png", image_path: null, sort_order: 1 },
@@ -266,6 +299,23 @@ function makeDb({ postCategories = 2 } = {}) {
     quote_presets: [],
     skins: [{ id: 1, user_id: OWNER_ID, is_active: true }]
   };
+}
+
+/* 목록 스크롤 복원을 재려면 목록이 실제로 스크롤될 만큼 길어야 한다 —
+   글 두 개짜리 기본 fixture는 좁은 화면에서도 한 화면에 다 들어간다. */
+function makeLongListDb(count = 16) {
+  const db = makeDb();
+  for (let i = 0; i < count; i++) {
+    const id = 200 + i;
+    db.posts.push({
+      id, user_id: OWNER_ID, category_id: 1, title: `채우기 글 ${i + 1}`,
+      content_type: "text", visibility: "public",
+      created_at: `2026-08-${String(i + 1).padStart(2, "0")}T02:00:00Z`,
+      quote_preset_id: null
+    });
+    db.post_contents.push({ post_id: id, content: `채우기 본문 ${i + 1}` });
+  }
+  return db;
 }
 
 const RESERVED_PARAMS = new Set(["select", "order", "limit", "offset", "on_conflict", "columns"]);
@@ -454,7 +504,11 @@ async function launchBrowser() {
 
 async function withPage(viewport, opts, fn) {
   const browser = await launchBrowser();
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  const context = await browser.newContext({
+    viewport,
+    deviceScaleFactor: 1,
+    ...(opts.reducedMotion ? { reducedMotion: "reduce" } : {})
+  });
   const page = await context.newPage();
   const errors = [];
   page.on("pageerror", e => errors.push(e.message));
@@ -688,19 +742,37 @@ async function testCategoryTools(vpName) {
       return area.scrollTop;
     });
 
-    /* + → 작성 폼 */
-    await page.click("#postAddButton");
+    /* PHASE 1H: 스킨이 자기 자리에 WRITE/EDIT을 그렸으므로 떠 있는
+       플랫폼 도구(+ / edit)는 접혀 있어야 한다 — 같은 동작이 화면에
+       두 번 나오지 않는다. */
+    const folded = await page.evaluate(READ_SCREEN);
+
+    check(`[${vpName}] 스킨이 진입점을 그렸으면 떠 있는 + / edit 도구가 접힌다`,
+      !folded.addVisible && !folded.listEditVisible && !folded.ownerTools &&
+      folded.skinInList,
+      JSON.stringify(folded));
+
+    /* 스킨의 WRITE → 그 카테고리의 작성 폼 */
+    const categoryWriteHref = await page.evaluate(() => {
+      const a = document.querySelector('#postList .quiet-owner-link[href*="write=1"]');
+      return a ? a.getAttribute("href") : null;
+    });
+
+    check(`[${vpName}] CATEGORY 화면의 WRITE는 지금 보고 있는 카테고리를 가리킨다`,
+      categoryWriteHref === `/${SLUG}/category/1?write=1`, String(categoryWriteHref));
+
+    await page.click('#postList .quiet-owner-link[href*="write=1"]');
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(400);
 
     const editor = await page.evaluate(READ_SCREEN);
 
-    check(`[${vpName}] 스킨 CATEGORY의 + 는 곧장 그 카테고리의 작성 폼을 연다`,
+    check(`[${vpName}] 스킨 CATEGORY의 WRITE는 곧장 그 카테고리의 작성 폼을 연다`,
       editor.editorVisible && editor.editorCategory === "1" &&
       !editor.listVisible && !editor.detailVisible && !editor.skinPostVisible,
       JSON.stringify({ ...editor, listText: undefined }));
 
-    check(`[${vpName}] + 로 연 작성 폼도 주소가 화면과 일치한다`,
+    check(`[${vpName}] WRITE로 연 작성 폼도 주소가 화면과 일치한다`,
       editor.url === `/${SLUG}/category/1?write=1`, editor.url);
 
     check(`[${vpName}] 작성 중에는 스킨용 소유자 도구가 남지 않는다`,
@@ -717,7 +789,7 @@ async function testCategoryTools(vpName) {
       document.getElementById("postArea").scrollTop);
 
     check(`[${vpName}] 취소하면 그 카테고리 스킨으로 돌아오고 주소도 정리된다`,
-      back.skinInList && !back.editorVisible && back.skinActive && back.ownerTools &&
+      back.skinInList && !back.editorVisible && back.skinActive && !back.ownerTools &&
       back.url === `/${SLUG}/category/1`,
       JSON.stringify(back));
 
@@ -728,25 +800,51 @@ async function testCategoryTools(vpName) {
       Math.abs(scrollAfter - scrollBefore) <= 2,
       `before=${scrollBefore} after=${scrollAfter}`);
 
-    /* 목록 관리 패널 열기/닫기 */
+    /* 스킨의 EDIT → 기존 목록 관리 화면. 거기서는 legacy 헤더가 다시
+       보이므로 예전 그대로 #postListEditToggleButton으로 선택 삭제까지
+       이어진다(관리 동작 자체는 한 줄도 새로 만들지 않았다). */
+    await page.click('#postList .quiet-back-edit');
+    await page.waitForTimeout(600);
+
+    const managed = await page.evaluate(READ_SCREEN);
+
+    check(`[${vpName}] 스킨의 EDIT은 기존 목록 관리 화면으로 들어간다`,
+      managed.legacyItems === 2 && !managed.skinInList && !managed.skinActive &&
+      managed.listEditVisible && managed.addVisible &&
+      managed.url === `/${SLUG}/category/1?manage=1`,
+      JSON.stringify(managed));
+
     await page.click("#postListEditToggleButton");
     await page.waitForTimeout(500);
 
     const manage = await page.evaluate(READ_SCREEN);
 
-    check(`[${vpName}] edit는 목록 관리 패널(선택 삭제)을 연다`,
-      manage.selectBarVisible && manage.legacyItems === 2 && !manage.skinInList &&
-      !manage.skinActive,
+    check(`[${vpName}] 관리 화면의 edit는 예전 그대로 선택 삭제 패널을 연다`,
+      manage.selectBarVisible && manage.legacyItems === 2 && !manage.skinInList,
       JSON.stringify(manage));
 
     await page.click("#postListEditToggleButton");
+    await page.waitForTimeout(500);
+
+    const unselected = await page.evaluate(READ_SCREEN);
+
+    check(`[${vpName}] 선택 삭제를 끄면 관리 화면(주소 포함)은 그대로 유지된다`,
+      !unselected.selectBarVisible && unselected.legacyItems === 2 &&
+      unselected.url === `/${SLUG}/category/1?manage=1`,
+      JSON.stringify(unselected));
+
+    /* 관리 화면에서 나가는 길은 주소 계약 그대로다 — ?manage=1은
+       pushState로 쌓였으므로 뒤로가기가 그 카테고리 스킨으로 되돌린다. */
+    await page.goBack();
     await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
-    await page.waitForTimeout(600);
+    await page.waitForTimeout(700);
 
     const closed = await page.evaluate(READ_SCREEN);
 
-    check(`[${vpName}] 관리 패널을 닫으면 그 카테고리 스킨으로 돌아온다`,
-      closed.skinInList && !closed.selectBarVisible && closed.skinActive,
+    check(`[${vpName}] 관리 화면에서 뒤로가기하면 그 카테고리 스킨으로 돌아온다`,
+      closed.skinInList && !closed.selectBarVisible && closed.skinActive &&
+      !closed.addVisible && !closed.listEditVisible &&
+      closed.url === `/${SLUG}/category/1`,
       JSON.stringify(closed));
 
     check(`[${vpName}] CATEGORY 도구 경로 전체에서 문서 재로드 없음`,
@@ -806,7 +904,7 @@ async function testHistory(vpName) {
     await gotoHome(page);
     await page.click(`#themeMount .quiet-link-list a[href$="/category/1"]`);
     await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
-    await page.click("#postAddButton");
+    await page.click('#postList .quiet-owner-link[href*="write=1"]');
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(400);
 
@@ -929,7 +1027,7 @@ async function testSlowAndRapid(vpName) {
 
 
 /* ---------------------------------------------------------
-   5) Quiet Frame v3 배너 크기
+   5) Quiet Frame v4 배너 크기(v3에서 그대로 유지)
 --------------------------------------------------------- */
 
 const READ_BANNERS = `(() => {
@@ -975,7 +1073,7 @@ const READ_BANNERS = `(() => {
 
 async function testBannerSize(vpName) {
   const vp = VIEWPORTS[vpName];
-  console.log(`\n[${vpName}] Quiet Frame v3 배너 크기`);
+  console.log(`\n[${vpName}] Quiet Frame v4 배너 크기`);
 
   await withPage(vp, {}, async (page, ctx) => {
     await page.goto(`${BASE}/${SLUG}/category/2`, { waitUntil: "domcontentloaded" });
@@ -1016,7 +1114,7 @@ async function testBannerSize(vpName) {
       Math.abs(b.rects[0].left - (b.mainLeft + b.mainPaddingLeft)) <= 1.5,
       `img.left=${b.rects[0].left} main.contentLeft=${(b.mainLeft + b.mainPaddingLeft).toFixed(1)}`);
 
-    check(`[${vpName}] v3 배너 경로 콘솔 에러 없음`,
+    check(`[${vpName}] v4 배너 경로 콘솔 에러 없음`,
       ctx.errors.length === 0, ctx.errors.join(" | "));
   });
 
@@ -1039,24 +1137,377 @@ async function testBannerSize(vpName) {
 }
 
 
+/* ---------------------------------------------------------
+   6) CATEGORY의 INDEX 자리 — 소유자 EDIT / 방문자 INDEX (PHASE 1H)
+
+   "특정 스킨 클래스에 의존하지 않는다"는 제품 코드 쪽 원칙이고,
+   여기서는 그 스킨이 의도대로 그렸는지를 보는 것이므로 v4의 클래스를
+   직접 확인한다(기존 배너 크기 검증과 같은 성격).
+--------------------------------------------------------- */
+
+const READ_CATEGORY_HEAD = `(() => {
+  const visible = node => Boolean(node) && !node.hidden &&
+    getComputedStyle(node).display !== "none";
+  const edit = document.querySelector("#postList .quiet-back-edit");
+  const index = document.querySelector("#postList .quiet-back-index");
+  return {
+    editVisible: visible(edit),
+    editHref: edit ? edit.getAttribute("href") : null,
+    indexVisible: visible(index),
+    indexHref: index ? index.getAttribute("href") : null
+  };
+})()`;
+
+async function testCategoryEditEntry(vpName) {
+  const vp = VIEWPORTS[vpName];
+  console.log(`\n[${vpName}] CATEGORY INDEX → EDIT`);
+
+  /* 소유자 */
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(400);
+
+    const head = await page.evaluate(READ_CATEGORY_HEAD);
+    const screen = await page.evaluate(READ_SCREEN);
+
+    check(`[${vpName}] 소유자에게는 INDEX 자리에 EDIT이 보이고 목록 관리를 가리킨다`,
+      head.editVisible && !head.indexVisible &&
+      head.editHref === `/${SLUG}/category/1?manage=1`,
+      JSON.stringify(head));
+
+    check(`[${vpName}] 소유자 화면에 떠 있는 중복 도구(+ / edit)가 남지 않는다`,
+      !screen.addVisible && !screen.listEditVisible && !screen.ownerTools,
+      JSON.stringify(screen));
+
+    check(`[${vpName}] EDIT 표시 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* 로그아웃 방문자 */
+  await withPage(vp, {}, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(400);
+
+    const head = await page.evaluate(READ_CATEGORY_HEAD);
+    const screen = await page.evaluate(READ_SCREEN);
+
+    check(`[${vpName}] 방문자에게는 INDEX 그대로다(EDIT 없음)`,
+      !head.editVisible && head.indexVisible && head.indexHref === `/${SLUG}`,
+      JSON.stringify(head));
+
+    check(`[${vpName}] 방문자에게는 관리 도구가 전혀 없다`,
+      !screen.addVisible && !screen.listEditVisible && !screen.ownerTools,
+      JSON.stringify(screen));
+
+    check(`[${vpName}] 방문자 CATEGORY 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* 다른 계정이 EDIT 주소로 직접 들어와도 관리 화면이 열리지 않는다 */
+  await withPage(vp, { signedInAs: OTHER_USER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/1?manage=1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const screen = await page.evaluate(READ_SCREEN);
+    const head = await page.evaluate(READ_CATEGORY_HEAD);
+
+    check(`[${vpName}] 다른 계정의 ?manage=1은 평소 스킨 화면이 되고 주소도 정리된다`,
+      screen.skinInList && !screen.selectBarVisible && !screen.addVisible &&
+      !head.editVisible && head.indexVisible &&
+      screen.url === `/${SLUG}/category/1`,
+      JSON.stringify({ ...screen, listText: undefined }));
+
+    check(`[${vpName}] 비소유자 관리 URL 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* 진입점을 그리지 않는 기존 스킨 — 플랫폼 기본 도구가 그대로 남는다 */
+  await withPage(vp, { signedInAs: OWNER_ID, skin: DIARY_PACKAGE }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const screen = await page.evaluate(READ_SCREEN);
+
+    check(`[${vpName}] 진입점이 없는 기존 스킨에서는 기본 관리 도구가 그대로 남는다`,
+      screen.skinInList && screen.ownerTools &&
+      screen.addVisible && screen.listEditVisible,
+      JSON.stringify({ ...screen, listText: undefined }));
+
+    check(`[${vpName}] 기존 스킨 fallback 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+}
+
+
+/* ---------------------------------------------------------
+   7) 모바일 POST 읽기 모드 (PHASE 1H)
+
+   플랫폼이 스킨 루트에 싣는 상태(data-imory-post-focus)와, 그 상태를
+   받은 v4 CSS의 실제 결과(사이드바 높이)를 함께 본다.
+--------------------------------------------------------- */
+
+const READ_POST_FOCUS = `(() => {
+  const visible = node => Boolean(node) && !node.hidden &&
+    getComputedStyle(node).display !== "none";
+  const root = document.querySelector("#postSkinContainer .imory-skin-root");
+  const sidebar = document.querySelector("#postSkinContainer .quiet-sidebar");
+  const area = document.getElementById("postArea");
+  const body = document.querySelector("#postSkinContainer .quiet-post-body");
+  return {
+    focus: root ? root.getAttribute("data-imory-post-focus") : null,
+    roots: document.querySelectorAll("#postSkinContainer .imory-skin-root").length,
+    bodies: document.querySelectorAll("#postSkinContainer .quiet-post-body").length,
+    bodyText: body ? body.innerText.trim() : null,
+    sidebarHeight: sidebar ? +sidebar.getBoundingClientRect().height.toFixed(1) : null,
+    topbarVisible: visible(document.querySelector("#postSkinContainer .quiet-topbar")),
+    backLinkVisible: visible(document.querySelector("#postSkinContainer .quiet-post-nav a")),
+    titleVisible: visible(document.querySelector("#postSkinContainer .quiet-article-title")),
+    gateInSkin: Boolean(document.querySelector("#postSkinContainer #postSecretGate")),
+    gateVisible: visible(document.getElementById("postSecretGate")),
+    areaScroll: area ? Math.round(area.scrollTop) : null,
+    url: location.pathname + location.search
+  };
+})()`;
+
+async function sampleSidebarHeights(page, count = 22, everyMs = 40) {
+  const heights = [];
+  for (let i = 0; i < count; i++) {
+    heights.push(await page.evaluate(() => {
+      const sidebar = document.querySelector("#postSkinContainer .quiet-sidebar");
+      return sidebar ? +sidebar.getBoundingClientRect().height.toFixed(1) : null;
+    }));
+    await page.waitForTimeout(everyMs);
+  }
+  return heights.filter(h => h !== null);
+}
+
+async function testMobilePostFocus() {
+  const vp = VIEWPORTS["mobile-390"];
+  console.log("\n[mobile-390] POST 읽기 모드");
+
+  /* 목록 → POST: 전환이 실제로 재생되고, 돌아오면 복원된다 */
+  await withPage(vp, { signedInAs: OWNER_ID, db: makeLongListDb() }, async (page, ctx) => {
+    await gotoHome(page);
+    await page.click(`#themeMount .quiet-link-list a[href$="/category/1"]`);
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(400);
+
+    /* 실제로 스크롤되는 목록인지 먼저 확인한다 — 스크롤이 0이면
+       "복원됐다"는 검사가 아무것도 재지 않는다. */
+    const listScroll = await page.evaluate(() => {
+      const area = document.getElementById("postArea");
+      area.scrollTop = 200;
+      return Math.round(area.scrollTop);
+    });
+
+    check("[mobile-390] (전제) 목록이 실제로 스크롤된다",
+      listScroll > 50, `scrollTop=${listScroll}`);
+
+    /* page.click()은 대상이 화면 밖이면 스스로 스크롤해 버려서 방금
+       맞춘 위치가 바뀐다 — 목록 스크롤을 그대로 둔 채 링크만 누른다. */
+    await page.evaluate(() => {
+      document.querySelector('#postList a[href$="/post/101"]').click();
+    });
+    await page.waitForSelector("#postSkinContainer .quiet-article-title", { timeout: 15000 });
+
+    const heights = await sampleSidebarHeights(page);
+    const maxH = Math.max(...heights);
+    const minH = Math.min(...heights);
+    const sawMidway = heights.some(h => h > 4 && h < maxH - 4);
+
+    check("[mobile-390] 글을 열면 사이드바가 접히는 전환이 실제로 재생된다",
+      maxH > 40 && minH <= 2 && sawMidway,
+      `max=${maxH} min=${minH} samples=${heights.slice(0, 8).join("/")}`);
+
+    await page.waitForTimeout(400);
+    const reading = await page.evaluate(READ_POST_FOCUS);
+
+    check("[mobile-390] 접힌 뒤에도 작은 상단바와 목록 복귀 링크는 남는다",
+      reading.focus === "on" && reading.sidebarHeight <= 2 &&
+      reading.topbarVisible && reading.backLinkVisible && reading.titleVisible,
+      JSON.stringify(reading));
+
+    check("[mobile-390] 본문은 한 번만 mount된다(중복 없음)",
+      reading.roots === 1 && reading.bodies === 1 &&
+      (reading.bodyText || "").includes("첫 번째"),
+      JSON.stringify(reading));
+
+    /* 목록 복귀 */
+    await page.click("#postSkinContainer .quiet-post-nav a");
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const backToList = await page.evaluate(() => {
+      const sidebar = document.querySelector("#postList .quiet-sidebar");
+      const area = document.getElementById("postArea");
+      return {
+        sidebarHeight: sidebar ? +sidebar.getBoundingClientRect().height.toFixed(1) : null,
+        areaScroll: Math.round(area.scrollTop),
+        url: location.pathname + location.search
+      };
+    });
+
+    check("[mobile-390] 목록으로 돌아오면 프로필·메뉴가 다시 보인다",
+      backToList.sidebarHeight > 40 && backToList.url === `/${SLUG}/category/1`,
+      JSON.stringify(backToList));
+
+    check("[mobile-390] 목록으로 돌아오면 읽던 스크롤 위치가 복원된다",
+      Math.abs(backToList.areaScroll - listScroll) <= 3,
+      `before=${listScroll} after=${backToList.areaScroll}`);
+
+    check("[mobile-390] 읽기 모드 경로 문서 재로드 없음",
+      ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);
+
+    check("[mobile-390] 읽기 모드 경로 콘솔 에러 없음",
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* 직접 접속 — 처음부터 접힌 상태(전환 없음) */
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/post/102`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer .quiet-article-title", { timeout: 15000 });
+
+    const heights = await sampleSidebarHeights(page, 12);
+
+    check("[mobile-390] POST 직접 접속은 처음부터 접힌 상태다(펼쳤다 접지 않는다)",
+      heights.length > 0 && Math.max(...heights) <= 2,
+      `samples=${heights.slice(0, 8).join("/")}`);
+
+    /* POST → POST: 다시 펼치지 않는다 */
+    await page.evaluate(() => openPostPage(101));
+    await page.waitForTimeout(120);
+
+    const next = await sampleSidebarHeights(page, 12);
+    const settled = await page.evaluate(READ_POST_FOCUS);
+
+    check("[mobile-390] POST → POST 이동은 다시 펼치지 않는다",
+      Math.max(...next) <= 2 && settled.focus === "on" &&
+      (settled.bodyText || "").includes("첫 번째"),
+      `samples=${next.slice(0, 8).join("/")} ${JSON.stringify(settled)}`);
+
+    check("[mobile-390] 직접 접속/연속 이동 경로 콘솔 에러 없음",
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* 모션 감소 — 애니메이션 없이 최종 상태 */
+  await withPage(vp, { signedInAs: OWNER_ID, reducedMotion: true }, async (page, ctx) => {
+    await gotoHome(page);
+    await page.click(`#themeMount .quiet-link-list a[href$="/category/1"]`);
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.click(`#postList a[href$="/post/101"]`);
+    await page.waitForSelector("#postSkinContainer .quiet-article-title", { timeout: 15000 });
+
+    const heights = await sampleSidebarHeights(page, 12);
+
+    check("[mobile-390] 모션 감소 환경에서는 전환 없이 최종 상태로 간다",
+      heights.length > 0 && Math.max(...heights) <= 2,
+      `samples=${heights.slice(0, 8).join("/")}`);
+
+    check("[mobile-390] 모션 감소 경로 콘솔 에러 없음",
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* 비밀글 — 게이트가 스킨 본문 자리에 한 번만 들어간다 */
+  await withPage(vp, { db: makeDb({ withSecret: true }) }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/post/103`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer .quiet-article-title", { timeout: 15000 });
+    await page.waitForTimeout(800);
+
+    const secret = await page.evaluate(READ_POST_FOCUS);
+
+    check("[mobile-390] 비밀글도 읽기 모드로 열리고 게이트가 스킨 본문 자리에 한 번만 들어간다",
+      secret.focus === "on" && secret.sidebarHeight <= 2 &&
+      secret.gateInSkin && secret.gateVisible &&
+      secret.roots === 1 && secret.bodies === 1,
+      JSON.stringify(secret));
+
+    check("[mobile-390] 비밀글 경로 콘솔 에러 없음",
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* 본문이 늦게 오는 경우 — 읽기 모드 진입과 본문 mount가 어긋나지 않는다 */
+  await withPage(vp, {
+    signedInAs: OWNER_ID,
+    slowMs: 1000,
+    slowWhen: pathAndSearch => pathAndSearch.includes("/rest/v1/post_contents")
+  }, async (page, ctx) => {
+    await gotoHome(page);
+    await page.click(`#themeMount .quiet-link-list a[href$="/category/1"]`);
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(300);
+
+    await page.click(`#postList a[href$="/post/101"]`);
+    await page.waitForSelector("#postSkinContainer .quiet-article-title", { timeout: 15000 });
+    await page.waitForTimeout(1400);
+
+    const after = await page.evaluate(READ_POST_FOCUS);
+
+    check("[mobile-390] 본문이 늦게 와도 읽기 모드로 진입하고 본문이 한 번만 붙는다",
+      after.focus === "on" && after.sidebarHeight <= 2 && after.roots === 1 &&
+      after.bodies === 1 && (after.bodyText || "").includes("첫 번째"),
+      JSON.stringify(after));
+
+    check("[mobile-390] 느린 본문 경로 콘솔 에러 없음",
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+}
+
+
+/* ---------------------------------------------------------
+   8) 데스크톱은 그대로 — 사이드바가 유지된다
+--------------------------------------------------------- */
+
+async function testDesktopPostSidebar() {
+  const vp = VIEWPORTS["desktop-1280"];
+  console.log("\n[desktop-1280] POST 사이드바 유지");
+
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await gotoHome(page);
+    await page.click(`#themeMount .quiet-link-list a[href$="/category/1"]`);
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.click(`#postList a[href$="/post/101"]`);
+    await page.waitForSelector("#postSkinContainer .quiet-article-title", { timeout: 15000 });
+    await page.waitForTimeout(800);
+
+    const desktop = await page.evaluate(READ_POST_FOCUS);
+
+    check("[desktop-1280] 데스크톱에서는 상태가 실려도 사이드바가 그대로 보인다",
+      desktop.focus === "on" && desktop.sidebarHeight > 200 &&
+      desktop.titleVisible && desktop.roots === 1 && desktop.bodies === 1,
+      JSON.stringify(desktop));
+
+    check("[desktop-1280] 데스크톱 POST 경로 콘솔 에러 없음",
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+}
+
+
 /* =========================================================
    실행
 ========================================================== */
 
 (async () => {
-  console.log(`\n=== WRITE / MANAGE 동선 + v3 배너 E2E (${BROWSER}) ===`);
+  console.log(`\n=== WRITE / MANAGE / EDIT / POST 읽기 모드 E2E (${BROWSER}) ===`);
 
   playwright = await loadPlaywright(BROWSER);
   const server = await startServer();
 
   try {
     for (const vpName of Object.keys(VIEWPORTS)) {
-      await testWriteEntry(vpName);
-      await testCategoryTools(vpName);
-      await testHistory(vpName);
-      await testSlowAndRapid(vpName);
-      await testBannerSize(vpName);
+      if (shouldRun("write")) await testWriteEntry(vpName);
+      if (shouldRun("category-tools")) await testCategoryTools(vpName);
+      if (shouldRun("history")) await testHistory(vpName);
+      if (shouldRun("slow")) await testSlowAndRapid(vpName);
+      if (shouldRun("banner")) await testBannerSize(vpName);
+      if (shouldRun("edit-entry")) await testCategoryEditEntry(vpName);
     }
+
+    if (shouldRun("post-focus")) await testMobilePostFocus();
+    if (shouldRun("post-focus")) await testDesktopPostSidebar();
   } finally {
     server.close();
   }

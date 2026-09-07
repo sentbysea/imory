@@ -5,7 +5,7 @@
 > 상세 규칙은 여기서만 관리한다. 작업 지침([CLAUDE.md](./CLAUDE.md))에는 핵심
 > 원칙과 이 문서 링크만 둔다.
 >
-> 작성 기준: 2026-09-07, `main`(`f1a92a7` + 이번 라운드 로컬 커밋). 아래 §1~§4의
+> 작성 기준: 2026-09-07, `main`(`9e3f029` + PHASE 1H 로컬 커밋). 아래 §1~§4의
 > 파일·함수·클래스 이름은 전부 저장소에서 확인한 실제 이름이다.
 >
 > 표기:
@@ -158,6 +158,33 @@ throw하지 않고 `false`를 반환해 호출자가 legacy 화면으로 조용�
 `postPageRequestSeq`(`posts-view-detail.js`) 요청 순번으로, 늦게 도착한 응답이 최신
 화면을 덮어쓰지 않게 한다.
 
+**POST 읽기 모드(PHASE 1H)** — `skin/skin-post-focus.js`. 플랫폼은 POST 스킨 루트에
+`data-imory-post-focus` 속성 하나를 싣고, **최종 배치는 스킨 CSS가 정한다**. 이
+상태를 CSS로 받지 않는 스킨은 지금까지와 완전히 같은 화면이 나온다(효과를 쓰지 않을
+자유). 스킨이 루트 자신의 상태를 표현할 수 있게 `skin-css-validate.js`의 selector
+스코퍼가 `:root`를 — 단독이든 상태가 붙어 있든 — scope class로 치환한다.
+
+| 값 | 뜻 |
+| --- | --- |
+| `off` | 아직 펼쳐진 상태(전환의 시작 지점) |
+| `on` | 읽기 모드 |
+
+- 목록/HOME에서 글을 눌러 들어오면(`updateUrl === true`이고 직전 화면이 POST가
+  아닐 때) `off`로 mount한 뒤 두 프레임 뒤에 `on`으로 바꾼다 — 그래야 브라우저가
+  시작 상태를 한 번 레이아웃해서 스킨이 선언한 transition이 실제로 재생된다.
+- 직접 접속·새로고침·뒤로가기(`updateUrl === false`), POST → POST 이동,
+  `prefers-reduced-motion: reduce`에서는 처음부터 `on`이다. 새로 삽입된
+  엘리먼트에는 transition이 걸리지 않으므로 애니메이션 없이 최종 상태로 나타난다.
+- 늦은 응답 보호와 충돌하지 않는다 — 더 새로운 글이 먼저 그려져 이 루트가 버려졌다면
+  detached 노드의 속성을 바꾸는 것이라 화면에 영향이 없다.
+
+**목록 스크롤 기억(PHASE 1H)** — 같은 파일의 한 칸짜리 메모다. 목록에서 글로 들어가는
+길목(`openPostPage`, 직전 화면이 CATEGORY일 때)에서 `#postArea.scrollTop`을 기억하고,
+그 카테고리를 다시 열 때(`openCategoryPage`) 한 번 꺼내 되돌린다 — 꺼내는 순간 메모가
+비므로 낡은 위치가 다음 화면까지 따라가지 않는다. 글을 열 때는 항상
+`#postArea.scrollTop = 0`으로 시작한다. `rememberPlatformScreenReturn()`(에디터/관리
+화면 왕복용)과는 목적도 생명주기도 달라 섞지 않는다.
+
 **진입 · 복귀 · 스크롤 · 미저장 입력** — `posts/view/posts-view-transition.js`
 
 - `rememberPlatformScreenReturn()` — 플랫폼 화면에 들어가기 직전의 주소·화면
@@ -200,12 +227,36 @@ throw하지 않고 `false`를 반환해 호출자가 legacy 화면으로 조용�
   로그인했다는 이유만으로 legacy 읽기 화면으로 바뀌지 않는다.
 - 권한에 따라 다른 것은 **콘텐츠**(비밀글 본문 등)와 **관리 버튼**이다.
   `skin/skin-context.js`가 `viewer.isOwner` / `viewer.writeHref` /
-  `viewer.adminHref`를 주고, 스킨은 그 값으로 링크를 그릴지만 정한다.
+  `viewer.adminHref` / `viewer.manageHref`를 주고, 스킨은 그 값으로 링크를
+  그릴지만 정한다.
+- **`viewer.manageHref`(PHASE 1H)** — "지금 보고 있는 이 화면의 목록 관리 화면"
+  주소다. 기존 `?manage=1` 계약 그대로이고(§2-1 주소 표), 그 화면에 실제로 목록
+  관리가 있는 page builder만 채운다 — 현재는 **post형 CATEGORY 하나뿐**이고
+  HOME/POST/BANNER에서는 `null`이다. 배너 관리는 URL 요청이 아니라 화면 안의
+  토글(`#bannerEditToggleButton`)이라 스킨이 대신 그릴 수 있는 진입점이 없다.
+- **`viewer.writeHref`는 CATEGORY에서 그 카테고리를 가리킨다(PHASE 1H)** — 예전에는
+  화면 맥락이 없어 POST 카테고리가 여럿이면 HOME 작성 주소로 떨어졌지만, 그 카테고리를
+  보고 있는 화면에서는 플랫폼의 `+`가 늘 하던 일과 같은 대상을 가리킨다.
+- **스킨이 그린 진입점이 있으면 플랫폼 도구를 접는다(PHASE 1H)** —
+  `resolveSkinOwnerEntries()`(`skin/skin-owner-entry.js`)가 렌더된 DOM의
+  `<a href>` 중 이 사이트의 요청 쿼리(`?manage=1` / `?write=1` / `?edit=1`)를
+  가리키는 것이 있는지만 본다 — 스킨 이름·클래스·카테고리 id는 전혀 보지 않는다.
+  있으면 대응하는 떠 있는 버튼(`#postAddButton` / `#postListEditToggleButton` /
+  `#postManageToggleButton`)을 접고, 남는 버튼이 하나도 없으면
+  `.post-container--owner-tools` 자체를 켜지 않는다. **진입점을 그리지 않는 기존
+  스킨에서는 지금까지와 똑같이 기본 도구가 남는다.** 판정값은
+  `setSkinOwnerEntriesForScreen()`(`posts-view-transition.js`)에 화면 단위로
+  보관되므로, 같은 값을 보는 `updatePostAddButton()`이 먼저 끝나든 나중에 끝나든
+  결과가 같다. banner 화면에서는 이 값이 비어 있어 배너 도구가 그대로 남는다.
 - 소유자 검사는 받는 쪽이 다시 한다 — `isSiteOwnerSignedIn()`
   (`posts/editor/posts-state.js`), 글 수정은 `posts.user_id` 대조. 실제 쓰기 권한은
   저장 시점의 `user_id` 필터와 RLS가 강제한다.
 - 관리 기능은 명시적 플랫폼 진입점으로 연다: 표시 공간 오른쪽 위의 소유자
-  도구(`+` / `edit`)와 위 §2-1의 요청 쿼리.
+  도구(`+` / `edit`)와 위 §2-1의 요청 쿼리. 스킨이 그 요청 쿼리를 자기 레이아웃
+  안에 링크로 두면 위치만 스킨이 정하는 것이고, 여는 화면과 권한 검사는 그대로다.
+- 열어 줄 수 없는 요청 쿼리는 주소에서도 지운다 — `?write=1`/`?edit=1`과 마찬가지로
+  `?manage=1`도 직접 접속(`updateUrl: false`)에서 소유자가 아니면
+  `replaceState`로 쿼리 없는 주소로 정리한다(`openCategoryPage`, PHASE 1H).
 - 작성 대상 카테고리는 `fetchOwnerPostCategories()`
   (`posts/view/posts-view-compose.js`) 하나가 정한다 — 소유자의 `type === "post"`
   카테고리만. 작성 폼의 CATEGORY 드롭다운(`loadPostEditorCategories()`,
@@ -282,7 +333,9 @@ URL을 만들 수 없기 때문이고, 진입 문서(HTML)는 `_headers`의 `no-
 | D2 | **mount 클래스를 붙이는 곳이 흩어져 있다.** 벗기는 쪽만 `enterPlatformScreen()` 한 곳으로 모여 있고, 붙이는 쪽은 `posts-view-list.js`·`posts-view-detail.js`·`posts-view-banner.js`·`posts-view-list-select.js`에 10곳 넘게 반복된다. 새 페이지를 추가하면 그 반복이 한 벌 더 는다. | 위 4개 파일 |
 | D3 | **소유자 도구가 스킨 상단 띠와 겹칠 수 있다.** 표시 공간 기준 오른쪽 위 absolute라, 좁은 화면에서 스킨이 자기 상단 띠 오른쪽에 무언가를 그리면 그 위에 얹힌다. 스킨 계약에 소유자 도구용 자리(slot)가 없어서 플랫폼이 좌표로만 피할 수 있다. | `posts/posts-base.css`, `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` |
 | D4 | **Preview와 공개 화면의 프레임 폭 일치를 자동으로 검증하지 않는다.** 공개 화면끼리의 일치(HOME 대 CATEGORY 대 POST 프레임 좌표/폭)는 `skin/skin-banner-page-e2e-test.mjs`의 `sameFrame()`이 보지만, Preview 쪽과 대조하는 테스트는 없다. §4-2의 2번은 아직 **규칙**이다. | `skin/skin-banner-page-e2e-test.mjs`, `studio/*-test.html` |
-| D5 | **`viewer` 계약이 좁다.** 스킨이 받는 것은 `isOwner` / `writeHref` / `adminHref`뿐이라, 관리 진입점을 스킨 레이아웃 안에 두고 싶어도 표현할 방법이 없다(D3의 배경). 사용자가 Skin Data Contract 확장을 동결한 상태라 그대로 둔다. | `skin/skin-context.js`, `AI_SKIN_PHASE1D_B_NAVIGATION_CONTRACT.md` |
+| ~~D5~~ | ~~**`viewer` 계약이 좁다.**~~ **PHASE 1H에서 해소됨** — `viewer.manageHref`가 추가되어 목록 관리 진입점을 스킨 레이아웃 안에 둘 수 있고, 플랫폼은 그걸 알아보고 중복 도구를 접는다(§3-1). 남은 부분은 D3(소유자 도구용 slot이 없어 좌표로만 피한다)와 D8이다. | `skin/skin-context.js`, `skin/skin-owner-entry.js` |
+| D8 | **`?manage=1` 화면에서 나가는 길이 뒤로가기뿐이다.** 스킨의 EDIT은 기존 `?manage=1` 화면(legacy 목록 + 선택 삭제)으로 들어가고, 거기서 선택 삭제를 꺼도 그 화면에 남는다(`togglePostListEditMode`의 복귀는 `categorySkinActive`가 true일 때만 동작하는데, `?manage=1`은 스킨을 건너뛰고 열리므로 false다). legacy 헤더의 뒤로가기는 HOME으로 간다. 주소·히스토리는 일치하므로(브라우저 뒤로가기가 그 카테고리 스킨으로 정확히 돌아온다) 이번 라운드에서는 그대로 두었다. 고치려면 "`?manage=1`을 스킨 위의 오버레이로 연다"와 "관리 화면에 명시적 종료 진입점을 둔다" 중 하나를 골라야 한다. | `posts/view/posts-view-list-select.js`, `posts/view/posts-view-list.js` |
+| D9 | **POST 읽기 모드의 전환은 스킨 CSS 기술 선택에 달려 있다.** 플랫폼이 주는 것은 상태 속성 하나뿐이라, 실제로 부드럽게 접히는지는 스킨이 무엇으로 접느냐에 달렸다 — Quiet Frame v4는 `grid-template-rows: 1fr → 0fr` 보간을 쓰는데, 이 보간을 지원하지 않는 오래된 브라우저에서는 전환 없이 즉시 접힌다(요구된 "효과 미지원 환경에서는 애니메이션 없이 최종 상태" 그대로라 결함은 아니지만, 다른 스킨이 같은 선택을 하면 같은 조건이 붙는다). | `skin/test-skins/imory-quiet-frame-v4.json` |
 | D6 | **CDN이 `_headers`의 `no-cache`를 CSS/JS에서 `max-age=14400`으로 덮는다.** 저장소 쪽에서는 `?v=`로 우회했지만 원인 자체는 남아 있다 — Cloudflare 대시보드(imory.me zone → Caching → Configuration → Browser Cache TTL, Caching → Cache Rules, Rules → Page Rules)를 볼 수 없어 확인하지 못했다. 그대로 두면 `_headers`에 규칙을 넣고 "해결됐다"고 착각하기 쉽다. 또 `functions/_middleware.js`가 `*.pages.dev`를 301로 돌려서 Pages 기본 도메인과 imory.me의 같은 파일 응답을 비교할 수 없다 — 원인 격리에 필요한 대조군이 막혀 있다. | `_headers`, `functions/_middleware.js` |
 | D7 | **`/admin/`은 아직 버전이 붙지 않는다.** 공개 화면·Studio·Preview·auth·invite는 모든 자산이 `?v=`로 걸리지만, `/admin/`은 `build-version.js`를 부르지 않아 CSS/JS 20개가 고정 URL이다 — 그쪽 배포는 여전히 최대 4시간 늦게 반영될 수 있다. | `admin/index.html` |
 

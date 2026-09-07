@@ -143,6 +143,24 @@ function scopeSkinCssSelector(selectorNode, scopeClass) {
     compoundEnd = items.length;
   }
 
+  /* PHASE 1H: 맨 앞이 `:root`면 그 자리에 scope class를 끼워 넣는다 —
+     단독(`:root`)이든 상태가 붙어 있든(`:root[data-imory-post-focus="on"]`)
+     동일하다. 플랫폼이 스킨 루트 자체에 붙이는 상태 속성을 스킨 CSS가
+     받을 수 있는 유일한 형태이고(플랫폼은 루트보다 위의 DOM에 상태를
+     두지 않는다 — 스킨 CSS는 자기 루트 밖을 볼 수 없다), 결과 selector는
+     여전히 이 인스턴스의 scope class로 시작하므로 스코프는 그대로다.
+     이 처리가 없으면 접두어만 붙어(`.imory-skin-root-i3 :root[...]`)
+     매치 대상이 없는 죽은 규칙이 된다. */
+  if (
+    compoundEnd >= 1 &&
+    items[0].type === "PseudoClassSelector" &&
+    items[0].name === "root"
+  ) {
+    children.shift();
+    children.prependData({ type: "ClassSelector", name: scopeClass });
+    return;
+  }
+
   if (compoundEnd === 1 && isPureGlobalSelectorCompound(items[0])) {
     children.shift();
     children.prependData({ type: "ClassSelector", name: scopeClass });

@@ -123,6 +123,12 @@
       { "id": "10", "imageUrl": "https://.../banner.png", "href": "https://instagram.com/...", "alt": "인스타그램" }
     ]
   },
+  "viewer": {
+    "isOwner": true,                     // 지금 이 화면을 보는 사람이 이 블로그 주인인가
+    "writeHref": "/minji/category/3?write=1",  // 글쓰기 요청 주소 (비소유자 null)
+    "adminHref": "/admin/",              // 관리 화면 (비소유자 null)
+    "manageHref": "/minji/category/3?manage=1" // 이 화면의 목록 관리 (해당 없으면 null)
+  },
   "images": {
     "profile": "https://.../avatar.png"   // imageSlots[].name 목록에 있는 슬롯만 키로 존재, 값 없으면 null
   }
@@ -132,6 +138,22 @@
 - `navigation.home`/`postCategories`/`bannerCategories`는 최근 추가된 필드입니다(PHASE1D-B). `categories`는 원본 순서(`sort_order`)를 그대로 보존한 전체 목록, `postCategories`/`bannerCategories`는 그 부분집합(순서 동일)입니다. **`gallery` 등 미래 타입이 생기면 두 필터 배열 어디에도 들어가지 않고 `categories`에만 남습니다.**
 - `itemCount`는 항상 `null`입니다(계산 로직 없음).
 - `banners.items[].href`는 사용자가 직접 입력한 외부 URL일 수 있고, `https://`만 통과합니다(없으면 `null`).
+- `viewer`는 **링크를 그릴지만** 정합니다. 실제 권한 검사는 그 주소를 받은
+  플랫폼이 다시 하고, 쓰기 권한은 DB(RLS)가 강제합니다 — 스킨은 작성·수정·삭제·
+  인증을 구현하지 않습니다. 비소유자에게는 `isOwner: false`와 함께 세 href가 전부
+  `null`이라, `data-imory-if`를 빠뜨려도 링크가 만들어지지 않습니다.
+- `viewer.writeHref`는 화면에 따라 대상이 다릅니다. CATEGORY(글 카테고리)에서는
+  **지금 보고 있는 그 카테고리**, 그 외 화면에서는 글 카테고리가 하나뿐이면 그
+  카테고리, 여러 개거나 없으면 HOME 주소입니다(받는 쪽이 고르게 하거나 안내).
+- `viewer.manageHref`는 **그 화면에 실제로 목록 관리 화면이 있을 때만** 채워집니다 —
+  현재는 글 카테고리(CATEGORY)뿐이고 HOME/POST/BANNER에서는 `null`입니다. 배너
+  관리는 주소로 표현되는 동작이 아니라 화면 안의 토글이라 스킨이 대신 그릴 수
+  없습니다.
+- **스킨이 `manageHref`/`writeHref` 링크를 그리면 플랫폼은 같은 동작의 기본
+  도구(표시 공간 오른쪽 위에 떠 있는 `+` / `edit`)를 접습니다.** 그리지 않으면
+  기본 도구가 그대로 남으므로, 예전 스킨은 아무것도 바뀌지 않습니다. 판정은 렌더된
+  DOM에 그 주소를 가리키는 `<a href>`가 있는지로만 하고, 스킨 이름이나 클래스는
+  전혀 보지 않습니다.
 
 ### 2-2. `page` namespace (공통, 항상 존재)
 
@@ -440,7 +462,13 @@ id
 
 ### 9-3. Selector 스코프 강제
 
-모든 selector 앞에 `.imory-skin-root-<인스턴스ID>` 클래스가 자동으로 붙습니다(저장되는 CSS 자체에는 붙지 않고, **렌더될 때마다** 매번 적용). `:root`/`html`/`body`가 단독 compound일 때만 스코프 클래스로 치환되고, 그 외(`body.dark`처럼 다른 selector와 결합된 경우)는 죽은 규칙이 됩니다(매치 대상 없음, 위험하지는 않음).
+모든 selector 앞에 `.imory-skin-root-<인스턴스ID>` 클래스가 자동으로 붙습니다(저장되는 CSS 자체에는 붙지 않고, **렌더될 때마다** 매번 적용).
+
+- `:root`는 **맨 앞에 오기만 하면** 스코프 클래스로 치환됩니다 — 단독(`:root { }`)이든
+  상태가 붙어 있든(`:root[data-imory-post-focus="on"] .sidebar { }`) 똑같습니다.
+  이게 스킨이 자기 루트 엘리먼트를 가리킬 수 있는 유일한 방법입니다(아래 9-6).
+- `html`/`body`는 **단독 compound일 때만** 치환됩니다. 그 외(`body.dark`처럼 다른
+  selector와 결합된 경우)는 죽은 규칙이 됩니다(매치 대상 없음, 위험하지는 않음).
 
 ### 9-4. `@keyframes` 이름 격리
 
@@ -451,6 +479,41 @@ id
 - 외부 폰트/이미지 `url()`은 **https만** 허용됩니다.
 - `@font-face`, 미디어 쿼리, CSS 커스텀 프로퍼티(`--*`), `@keyframes` 애니메이션은 전부 사용 가능합니다.
 - `body`/`html`에 전역 스타일을 걸고 싶어도 스코프 처리 때문에 사실상 무력화되므로, 최상위 래퍼(`.skin-shell` 등 직접 만든 클래스)에 스타일을 거는 것을 전제로 설계해야 합니다.
+
+### 9-6. 플랫폼이 알려 주는 화면 상태 (`data-imory-post-focus`)
+
+POST 화면에서 플랫폼이 스킨 루트에 속성 하나를 실어 줍니다. **쓸지 말지는 스킨이
+정합니다** — 이 속성을 CSS에서 받지 않으면 지금까지와 완전히 같은 화면이 나옵니다.
+
+| 값 | 뜻 |
+| --- | --- |
+| `off` | 아직 펼쳐진 상태 — 전환의 시작 지점 |
+| `on` | 읽기 모드 |
+
+```css
+/* 좁은 화면에서만 프로필·메뉴를 접는 예 */
+@media (max-width: 720px) {
+  :root[data-imory-post-focus] .sidebar {
+    display: grid;
+    grid-template-rows: 1fr;
+    transition: grid-template-rows 340ms ease, opacity 200ms ease;
+  }
+  :root[data-imory-post-focus] .sidebar-inner { min-height: 0; overflow: hidden; }
+  :root[data-imory-post-focus="on"] .sidebar { grid-template-rows: 0fr; opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-imory-post-focus] .sidebar { transition: none; }
+}
+```
+
+전환 시점은 플랫폼이 정합니다:
+
+- 목록/HOME에서 글을 눌러 들어오면 `off` → `on`으로 바뀌므로 선언한 transition이
+  실제로 재생됩니다.
+- 직접 접속·새로고침·뒤로가기, POST → POST 이동, `prefers-reduced-motion: reduce`
+  환경에서는 처음부터 `on`이라 애니메이션 없이 최종 상태로 나타납니다.
+- 접었을 때 **돌아갈 길은 스킨이 남겨야 합니다** — 상단 띠의 사이트 제목 링크나
+  `post.categoryHref` 링크처럼, 접히지 않는 자리에 하나는 남기세요.
 
 ---
 

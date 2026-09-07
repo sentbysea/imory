@@ -107,6 +107,27 @@ function handleRenderMessage(data) {
     }
 
     /*
+      PHASE 1H: 공개 POST 화면은 스킨 루트에 읽기 모드 상태를 싣는다
+      (skin/skin-post-focus.js) — Preview가 그걸 빼먹으면 좁은 폭에서
+      공개 화면과 다른 배치가 나온다(기준 문서 §4-2 2번). 값은 항상
+      "on"이다: Preview에는 "목록에서 눌러 들어온다"는 이전 화면이
+      없으므로 공개 화면의 직접 접속과 같은 상태로 둔다(전환 재생 없이
+      최종 배치). 상태를 쓰지 않는 스킨에는 아무 영향이 없다.
+    */
+    const previewSkinRoot =
+      previewRoot.querySelector("[data-skin-root]");
+
+    if (previewSkinRoot) {
+
+      if (data.context?.page?.isPost) {
+        previewSkinRoot.setAttribute("data-imory-post-focus", "on");
+      } else {
+        previewSkinRoot.removeAttribute("data-imory-post-focus");
+      }
+
+    }
+
+    /*
       post-body region 존재 여부(PHASE1C 7/13절)는 parent가 판단할 수
       없다 — 실제 mount된 DOM은 이 iframe 안에만 있으므로, 매 렌더마다
       알려준다(HOME/CATEGORY 렌더에서는 studio-preview.js가 이 값을

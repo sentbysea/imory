@@ -641,6 +641,15 @@ async function openCategoryPage(
   setCategorySkinActive(false);
 
 
+  /*
+    PHASE 1H: 스킨이 그린 소유자 진입점 판정은 화면마다 새로 한다 —
+    이전 화면의 판정이 남아 이번 화면의 플랫폼 도구를 잘못 접지
+    않게 진입점에서 한 번 비운다(posts-view-transition.js).
+  */
+
+  setSkinOwnerEntriesForScreen(null);
+
+
   if (postContainer) {
 
     postContainer.classList.remove(
@@ -653,6 +662,19 @@ async function openCategoryPage(
   const numericCategoryId =
     Number(
       categoryId
+    );
+
+
+  /*
+    PHASE 1H: 글을 열면서 기억해 둔 이 목록의 스크롤 위치(있다면)를
+    여기서 한 번만 꺼낸다(skin/skin-post-focus.js) — 꺼내는 순간
+    메모가 비므로, 아래 어느 경로로 끝나든 낡은 위치가 다음 화면까지
+    따라가지 않는다. 실제로 되돌리는 건 스킨 CATEGORY 확정 지점이다.
+  */
+
+  const listScrollRestoreTop =
+    takeSkinListScroll(
+      `category:${numericCategoryId}`
     );
 
 
@@ -944,6 +966,39 @@ async function openCategoryPage(
         : buildPostRoute(
             `/category/${categoryId}`
           )
+    );
+
+  }
+
+
+  /*
+    PHASE 1H: 열어 줄 수 없는 요청 쿼리는 주소에서도 지운다(기준 문서
+    §2-2 7번). updateUrl이 true인 경로는 바로 위 pushState가 이미
+    쿼리 없는 주소를 쓰지만, 직접 접속/새로고침/뒤로가기(updateUrl:
+    false)로 들어온 ?manage=1은 지금까지 주소에 그대로 남아 있었다 —
+    화면은 평소 스킨인데 주소만 관리 요청인 불일치다. POST 쪽
+    ?manage=1이 posts-router-init.js에서 이미 하는 정리와 같다.
+  */
+
+  if (
+    !updateUrl &&
+    manage === true &&
+    !wantsManageScreen &&
+    isSiteManageRequested(window.location.search)
+  ) {
+
+    history.replaceState(
+      {
+        page:
+          "category",
+
+        categoryId:
+          numericCategoryId
+      },
+      "",
+      buildPostRoute(
+        `/category/${categoryId}`
+      )
     );
 
   }
@@ -1394,6 +1449,20 @@ async function openCategoryPage(
     setCategorySkinActive(true);
 
 
+    /*
+      PHASE 1H: 이번에 그려진 스킨이 자기 레이아웃 안에 관리(EDIT)나
+      작성(WRITE) 진입점을 직접 두었는지 본다 — 화면에 옮기기 전의
+      스크래치 엘리먼트에서 읽으므로 이 판정은 이번 렌더 결과에만
+      근거한다(skin/skin-owner-entry.js).
+    */
+
+    setSkinOwnerEntriesForScreen(
+      resolveSkinOwnerEntries(
+        skinRenderTarget
+      )
+    );
+
+
     postList.innerHTML =
       "";
 
@@ -1413,18 +1482,52 @@ async function openCategoryPage(
       소유자에게는 배너와 똑같은 방식으로 떠 있는 플랫폼 도구
       (+ / edit)를 남긴다 — legacy post-header는 Skin mount
       contract가 계속 숨기고, 그 안의 두 버튼만 되살린다
-      (posts/posts-base.css). updatePostAddButton()이 이미 두 버튼의
-      hidden을 소유자 기준으로 맞춰 두므로 여기서는 클래스만 켠다.
+      (posts/posts-base.css).
+
+      PHASE 1H: 단, 스킨이 이미 같은 동작을 자기 자리에 그렸다면 그
+      버튼은 접는다. updatePostAddButton()도 위에서 방금 채운 같은
+      값을 보므로(setSkinOwnerEntriesForScreen), 그 비동기 호출이
+      이 지점보다 먼저 끝나든 나중에 끝나든 결과가 같다. 두 버튼이
+      모두 접히면 떠 있는 도구 껍데기만 남으므로 클래스 자체를 켜지
+      않는다 — 스킨에 진입점이 하나도 없으면 지금까지와 똑같이
+      플랫폼 도구가 그대로 남는다.
     */
 
     const canManagePosts =
       await isSiteOwnerSignedIn();
 
+
+    if (postAddButton) {
+
+      postAddButton.hidden =
+        !canManagePosts ||
+        getSkinOwnerEntriesForScreen().write;
+
+    }
+
+
+    if (postListEditToggleButton) {
+
+      postListEditToggleButton.hidden =
+        !canManagePosts ||
+        getSkinOwnerEntriesForScreen().manage;
+
+    }
+
+
+    const needsPlatformOwnerTools =
+      canManagePosts &&
+      (
+        Boolean(postAddButton && !postAddButton.hidden) ||
+        Boolean(postListEditToggleButton && !postListEditToggleButton.hidden)
+      );
+
+
     if (postContainer) {
 
       postContainer.classList.toggle(
         "post-container--owner-tools",
-        canManagePosts
+        needsPlatformOwnerTools
       );
 
     }
@@ -1453,6 +1556,22 @@ async function openCategoryPage(
     await revealPostArea(
       true
     );
+
+
+    /*
+      PHASE 1H: 글을 읽고 돌아온 목록이면 떠날 때의 위치로 되돌린다 —
+      목록을 다시 그린 직후라 이 프레임에는 아직 새 높이가 없을 수
+      있어 다음 프레임에 한 번 더 확정한다(skin/skin-post-focus.js).
+    */
+
+    if (listScrollRestoreTop !== null) {
+
+      applySkinScrollTop(
+        postArea,
+        listScrollRestoreTop
+      );
+
+    }
 
 
     return;
