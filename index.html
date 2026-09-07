@@ -2618,8 +2618,15 @@
         );
 
 
+      /*
+        다른 자산과 같은 배포 버전을 붙인다 — 고정 URL로 두면
+        CDN의 4시간 캐시에 걸려 새 배포가 늦게 반영된다
+        (core/lib/build-version.js 상단 주석).
+      */
+
       script.src =
-        "./home/site-meta.js";
+        "./home/site-meta.js?v=" +
+        APP_BUILD_VERSION;
 
 
       script.async =
