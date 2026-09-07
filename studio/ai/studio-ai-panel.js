@@ -39,10 +39,21 @@
    건드리지 않는다. 판정 자체는 상태를 소유한 studio-preview.js가
    한다(그쪽 주석 참고).
 
+   ★ 참고 이미지 (PHASE AI-4)
+   drawer 안에서 파일 선택/붙여넣기로 최대 2장까지 "디자인 참고
+   이미지"를 붙일 수 있다. 이 이미지는 **스킨에 삽입되는 이미지가
+   아니다** — 모델이 분위기/여백/색감만 참고하도록 요청에 함께
+   실려 가는 재료다. 그래서 imageSlots / Images panel / Supabase
+   Storage 어느 것과도 연결되지 않는다.
+
+   저장 범위는 브라우저 메모리(studioAiAttachments)와 그때 보내는
+   요청 body뿐이다. localStorage / IndexedDB / DB / Storage 어디에도
+   쓰지 않으므로 탭을 닫거나 새로고침하면 사라진다.
+
    ★ 이번 Phase에서 하지 않는 것
-   - 이미지 첨부(붙여넣기/파일 선택/thumbnail) — 다음 Phase
    - 여러 단계 undo — 1단계만
    - 자동 Save — 절대 없음(Save는 지금까지처럼 사용자가 누른다)
+   - 참고 이미지의 영구 보관/재사용 — 의도적으로 하지 않는다
 
    classic script. studio-preview.js(showStudioToast /
    getStudioAiWorkingState / applyAiSkinPackage), skin-package-import.js
@@ -265,6 +276,521 @@ function stopStudioAiLoading() {
     studioAiElapsedElement.hidden = true;
     studioAiElapsedElement.textContent = "";
   }
+
+}
+
+
+/* =========================================================
+   참고 이미지 첨부 (PHASE AI-4)
+
+   ★ 이것은 "스킨에 넣을 이미지"가 아니다.
+   Images panel(studio/images/*)이 다루는 imageSlots 이미지는
+   Supabase Storage에 올라가 published 스킨에 실제로 박히는
+   자산이다. 여기 첨부되는 것은 **모델에게 한 번 보여주는 디자인
+   참고 자료**일 뿐이라, 두 경로는 코드도 상태도 공유하지 않는다
+   (skinImageLibrary / getStudioImageSlotState를 부르지 않는다).
+
+   ★ 저장하지 않는다
+   attachment는 아래 studioAiAttachments 배열(브라우저 메모리)과
+   전송 시 만들어지는 요청 body에만 존재한다. localStorage /
+   sessionStorage / IndexedDB / Supabase / SkinPackage 어디에도
+   쓰지 않는다 — 탭을 닫거나 새로고침하면 사라지는 것이 의도다.
+
+   ★ working skin과 섞지 않는다
+   applyAiSkinPackage()로 들어가는 SkinPackage에는 attachment가
+   전혀 들어가지 않는다. 그래서 되돌리기(undo)도 attachment를
+   건드리지 않고, attachment를 넣거나 빼도 working revision이
+   올라가지 않는다(진행 중인 요청이 stale이 되지 않는다).
+
+   ★ MIME
+   PNG / JPEG / WebP 셋만 받는다. 저장소의 이미지 계약
+   (studio/images/skin-image-library.js SKIN_IMAGE_ALLOWED_MIME)은
+   여기에 GIF를 더 허용하고, OpenAI vision input은 "non-animated
+   GIF"만 받는다. 브라우저에서 애니메이션 여부를 싸게 판정할
+   방법이 없어 교집합에서 GIF를 뺀다 — 애니메이션 GIF를 보내
+   업스트림에서 거절당하는 것보다 낫다.
+
+   dots/경과시간과 같은 이유로 마크업을 JS에서 만든다 —
+   studio/index.html과 studio/studio-lifecycle-scenario.html 두
+   문서에 같은 DOM을 중복해 두지 않기 위해서다.
+========================================================== */
+
+const STUDIO_AI_MAX_ATTACHMENTS = 2;
+
+const STUDIO_AI_MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
+const STUDIO_AI_ATTACHMENT_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp"
+];
+
+const STUDIO_AI_ATTACHMENT_COUNT_MESSAGE =
+  "참고 이미지는 최대 " + STUDIO_AI_MAX_ATTACHMENTS + "장까지 첨부할 수 있습니다.";
+
+const STUDIO_AI_ATTACHMENT_MIME_MESSAGE =
+  "PNG, JPEG, WebP 이미지만 사용할 수 있습니다.";
+
+const STUDIO_AI_ATTACHMENT_SIZE_MESSAGE =
+  "이미지 한 장은 " +
+  Math.floor(STUDIO_AI_MAX_ATTACHMENT_BYTES / 1024 / 1024) +
+  "MB 이하만 사용할 수 있습니다.";
+
+/*
+  Imory가 저장하지 않는다는 것만 말한다. OpenAI 쪽 처리 정책까지
+  대신 보장하는 문장("어디에도 저장되지 않습니다")은 쓰지 않는다.
+*/
+const STUDIO_AI_ATTACHMENT_PRIVACY_NOTE =
+  "참고 이미지는 AI 요청에만 사용되며 Imory에 저장되지 않습니다.";
+
+
+/* { id, mimeType, dataUrl, size, name } */
+let studioAiAttachments = [];
+
+let studioAiAttachmentSeq = 0;
+
+let studioAiAttachmentsRow = null;
+
+let studioAiAttachmentAddButton = null;
+
+let studioAiAttachmentFileInput = null;
+
+let studioAiAttachmentNote = null;
+
+
+function buildStudioAiAttachmentUi() {
+
+  if (studioAiAttachmentsRow || !studioAiPanelDrawer || !studioAiPanelInput) {
+    return;
+  }
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "studio-ai-drawer-attachments";
+
+  const addButton =
+    document.createElement("button");
+
+  addButton.type =
+    "button";
+
+  addButton.className =
+    "studio-ai-drawer-attach-add";
+
+  /*
+    사용자가 직접 여는 파일 선택창이므로 hidden input을 이 버튼이
+    대신 클릭한다(Images panel의 "파일 선택"과 같은 방식). 여기서
+    Storage upload 코드는 하나도 재사용하지 않는다 — 읽어서
+    메모리에 두는 것이 전부다.
+  */
+  const fileInput =
+    document.createElement("input");
+
+  fileInput.type =
+    "file";
+
+  /* 선택자를 고정해 둔다(테스트가 이 input에 파일을 넣는다). */
+  fileInput.id =
+    "studioAiDrawerAttachInput";
+
+  fileInput.accept =
+    STUDIO_AI_ATTACHMENT_MIME_TYPES.join(",");
+
+  fileInput.multiple =
+    true;
+
+  fileInput.hidden =
+    true;
+
+  const note =
+    document.createElement("p");
+
+  note.className =
+    "studio-ai-drawer-attach-note";
+
+  note.textContent =
+    STUDIO_AI_ATTACHMENT_PRIVACY_NOTE;
+
+  note.hidden =
+    true;
+
+  row.appendChild(addButton);
+  row.appendChild(fileInput);
+
+  /* label 바로 아래, textarea 줄 위 — 입력 흐름을 가리지 않는다. */
+  studioAiPanelDrawer.insertBefore(
+    row,
+    studioAiPanelInput.closest(".studio-ai-drawer-row") || studioAiPanelInput
+  );
+
+  /* 안내는 상태 줄 바로 위(= drawer 맨 아래)에 둔다. */
+  studioAiPanelDrawer.insertBefore(
+    note,
+    studioAiPanelStatus || null
+  );
+
+  /*
+    2장이 되면 이 버튼은 disabled가 된다(renderStudioAiAttachments).
+    "최대 2장" 안내가 필요한 경우 — 여러 파일을 한 번에 고르거나
+    붙여넣는 경우 — 는 addStudioAiAttachmentFiles()가 맡는다.
+  */
+  addButton.addEventListener(
+    "click",
+    () => {
+      fileInput.click();
+    }
+  );
+
+  fileInput.addEventListener(
+    "change",
+    () => {
+
+      const files =
+        Array.prototype.slice.call(fileInput.files || []);
+
+      /* 같은 파일을 연달아 고르면 change가 안 나므로 값을 비운다. */
+      fileInput.value = "";
+
+      addStudioAiAttachmentFiles(files);
+
+    }
+  );
+
+  studioAiAttachmentsRow = row;
+  studioAiAttachmentAddButton = addButton;
+  studioAiAttachmentFileInput = fileInput;
+  studioAiAttachmentNote = note;
+
+  renderStudioAiAttachments();
+
+}
+
+
+function renderStudioAiAttachments() {
+
+  if (!studioAiAttachmentsRow) {
+    return;
+  }
+
+  Array.prototype.slice
+    .call(studioAiAttachmentsRow.querySelectorAll(".studio-ai-drawer-thumb"))
+    .forEach((element) => {
+      element.remove();
+    });
+
+  studioAiAttachments.forEach((attachment, index) => {
+
+    const thumb =
+      document.createElement("span");
+
+    thumb.className =
+      "studio-ai-drawer-thumb";
+
+    const image =
+      document.createElement("img");
+
+    image.src =
+      attachment.dataUrl;
+
+    image.alt =
+      "참고 이미지 " + (index + 1);
+
+    const remove =
+      document.createElement("button");
+
+    remove.type =
+      "button";
+
+    remove.className =
+      "studio-ai-drawer-thumb-remove";
+
+    remove.textContent =
+      "×";
+
+    remove.setAttribute(
+      "aria-label",
+      "참고 이미지 " + (index + 1) + " 삭제"
+    );
+
+    remove.addEventListener(
+      "click",
+      () => {
+        removeStudioAiAttachment(attachment.id);
+      }
+    );
+
+    thumb.appendChild(image);
+    thumb.appendChild(remove);
+
+    studioAiAttachmentsRow.appendChild(thumb);
+
+  });
+
+  const count =
+    studioAiAttachments.length;
+
+  /* 몇 장을 붙였는지가 thumbnail 개수뿐 아니라 글자로도 읽힌다. */
+  studioAiAttachmentAddButton.textContent =
+    count === 0
+      ? "＋ 참고 이미지"
+      : "＋ 참고 이미지 " + count + "/" + STUDIO_AI_MAX_ATTACHMENTS;
+
+  studioAiAttachmentAddButton.disabled =
+    count >= STUDIO_AI_MAX_ATTACHMENTS;
+
+  studioAiAttachmentNote.hidden =
+    count === 0;
+
+  /* 첨부가 있을 때만 drawer를 조금 더 열어 준다(studio.css). */
+  studioAiPanelDrawer.classList.toggle(
+    "has-attachments",
+    count > 0
+  );
+
+}
+
+
+function removeStudioAiAttachment(id) {
+
+  studioAiAttachments =
+    studioAiAttachments.filter((attachment) => attachment.id !== id);
+
+  renderStudioAiAttachments();
+
+}
+
+
+function readStudioAiAttachmentDataUrl(file) {
+
+  return new Promise((resolve) => {
+
+    const reader =
+      new FileReader();
+
+    reader.onload =
+      () => {
+        resolve(
+          typeof reader.result === "string" ? reader.result : null
+        );
+      };
+
+    reader.onerror =
+      () => {
+        resolve(null);
+      };
+
+    reader.readAsDataURL(file);
+
+  });
+
+}
+
+
+/* =========================================================
+   파일 -> attachment
+
+   순서: MIME -> 크기 -> 남은 장수. 어느 하나라도 걸리면 그 파일만
+   버리고 나머지는 계속 받는다. 안내는 종류마다 한 번씩만 띄운다
+   (세 파일이 전부 GIF일 때 같은 toast를 세 번 쌓지 않는다).
+
+   ★ 서버 검증을 대신하지 않는다. 여기 검사는 "사용자에게 빨리
+   알려주기"용이고, 실제 방어선은 functions/api/skin-ai.js다.
+========================================================== */
+
+async function addStudioAiAttachmentFiles(files) {
+
+  if (!files || !files.length) {
+    return;
+  }
+
+  const rejected = {
+    mime: false,
+    size: false,
+    count: false
+  };
+
+  for (const file of files) {
+
+    if (!file) {
+      continue;
+    }
+
+    if (STUDIO_AI_ATTACHMENT_MIME_TYPES.indexOf(file.type) === -1) {
+      rejected.mime = true;
+      continue;
+    }
+
+    if (file.size > STUDIO_AI_MAX_ATTACHMENT_BYTES) {
+      rejected.size = true;
+      continue;
+    }
+
+    if (studioAiAttachments.length >= STUDIO_AI_MAX_ATTACHMENTS) {
+      rejected.count = true;
+      continue;
+    }
+
+    const dataUrl =
+      await readStudioAiAttachmentDataUrl(file);
+
+    if (!dataUrl || dataUrl.indexOf("data:" + file.type + ";base64,") !== 0) {
+
+      showStudioToast(
+        "참고 이미지를 읽지 못했습니다.",
+        { isError: true }
+      );
+
+      continue;
+
+    }
+
+    /*
+      await 사이에 사용자가 다른 이미지를 더 붙였을 수 있으므로
+      상한을 한 번 더 본다.
+    */
+    if (studioAiAttachments.length >= STUDIO_AI_MAX_ATTACHMENTS) {
+      rejected.count = true;
+      continue;
+    }
+
+    studioAiAttachmentSeq += 1;
+
+    studioAiAttachments = studioAiAttachments.concat([{
+      id: "attachment-" + studioAiAttachmentSeq,
+      mimeType: file.type,
+      dataUrl,
+      size: file.size,
+      name: file.name || ""
+    }]);
+
+    renderStudioAiAttachments();
+
+  }
+
+  if (rejected.mime) {
+    showStudioToast(STUDIO_AI_ATTACHMENT_MIME_MESSAGE, { isError: true });
+  }
+
+  if (rejected.size) {
+    showStudioToast(STUDIO_AI_ATTACHMENT_SIZE_MESSAGE, { isError: true });
+  }
+
+  if (rejected.count) {
+    showStudioToast(STUDIO_AI_ATTACHMENT_COUNT_MESSAGE, { isError: true });
+  }
+
+  renderStudioAiAttachments();
+
+}
+
+
+/* =========================================================
+   붙여넣기
+
+   drawer 전체에 건다(textarea에서 올라온 paste도 여기로 버블한다).
+
+   ★ 텍스트 붙여넣기를 깨지 않는다.
+   - 클립보드에 이미지 비트가 없으면 아무것도 하지 않는다
+     (preventDefault도 부르지 않는다).
+   - 이미지가 있어도 **평문 텍스트가 함께 있으면** preventDefault를
+     부르지 않는다 — 이미지는 첨부되고 텍스트는 textarea에 그대로
+     들어간다(텍스트+이미지 혼합).
+   - 순수 이미지일 때만 preventDefault로 기본 동작을 막는다.
+
+   getAsFile()은 handler 안에서 동기로 불러야 한다 — await 뒤에는
+   clipboardData가 이미 비워져 있을 수 있다(images-panel.js의
+   같은 주석 참고).
+========================================================== */
+
+function collectStudioAiPastedImageFiles(clipboardData) {
+
+  if (!clipboardData) {
+    return [];
+  }
+
+  const fromFiles =
+    clipboardData.files
+      ? Array.prototype.slice.call(clipboardData.files)
+      : [];
+
+  const images =
+    fromFiles.filter(
+      (file) =>
+        file &&
+        typeof file.type === "string" &&
+        file.type.indexOf("image/") === 0
+    );
+
+  if (images.length) {
+    return images;
+  }
+
+  const items =
+    clipboardData.items
+      ? Array.prototype.slice.call(clipboardData.items)
+      : [];
+
+  const fromItems = [];
+
+  items.forEach((item) => {
+
+    if (!item || item.kind !== "file") {
+      return;
+    }
+
+    if (typeof item.type !== "string" || item.type.indexOf("image/") !== 0) {
+      return;
+    }
+
+    const file =
+      item.getAsFile();
+
+    if (file) {
+      fromItems.push(file);
+    }
+
+  });
+
+  return fromItems;
+
+}
+
+
+function handleStudioAiPaste(event) {
+
+  const files =
+    collectStudioAiPastedImageFiles(event.clipboardData);
+
+  if (!files.length) {
+    return;
+  }
+
+  const pastedText =
+    event.clipboardData
+      ? (event.clipboardData.getData("text/plain") || "")
+      : "";
+
+  if (!pastedText) {
+    event.preventDefault();
+  }
+
+  addStudioAiAttachmentFiles(files);
+
+}
+
+
+/*
+  요청 body에 실을 최소 모양. size/name/id는 브라우저 안에서만
+  쓰는 값이라 서버로 보내지 않는다.
+*/
+function snapshotStudioAiAttachments() {
+
+  return studioAiAttachments.map((attachment) => ({
+    mimeType: attachment.mimeType,
+    dataUrl: attachment.dataUrl
+  }));
 
 }
 
@@ -514,6 +1040,15 @@ async function handleStudioAiSend() {
 
   }
 
+  /*
+    ★ 요청 시점의 attachment만 실어 보낸다(12절).
+    보낸 뒤 사용자가 이미지를 더 붙이거나 지워도 진행 중인 요청은
+    이 snapshot 그대로 끝난다 — attachment 편집은 working
+    SkinPackage를 바꾸지 않으므로 stale 판정에도 쓰지 않는다.
+  */
+  const attachments =
+    snapshotStudioAiAttachments();
+
   const snapshot = {
     skinPackage: working.skinPackage,
     imageSlotBindings: working.imageSlotBindings,
@@ -585,10 +1120,23 @@ async function handleStudioAiSend() {
           method: "POST",
           headers,
           signal: controller.signal,
-          body: JSON.stringify({
-            instruction,
-            skinPackage: snapshot.skinPackage
-          })
+          /*
+            이미지가 없으면 images 키 자체를 넣지 않는다 — 첨부
+            기능을 쓰지 않는 요청은 PHASE AI-2와 바이트까지 같은
+            body로 나간다.
+          */
+          body: JSON.stringify(
+            attachments.length
+              ? {
+                  instruction,
+                  skinPackage: snapshot.skinPackage,
+                  images: attachments
+                }
+              : {
+                  instruction,
+                  skinPackage: snapshot.skinPackage
+                }
+          )
         }
       );
 
@@ -716,6 +1264,11 @@ async function handleStudioAiSend() {
     revisionAfterApply: applied.revision
   };
 
+  /*
+    성공해도 attachment는 지우지 않는다(11절) — 같은 참고 이미지로
+    "이번엔 색감만" 같은 후속 요청을 이어서 보내는 경우가 흔하다.
+    지우는 방법은 thumbnail의 × 하나뿐이고, 새로고침하면 사라진다.
+  */
   studioAiPanelInput.value =
     "";
 
@@ -879,6 +1432,23 @@ if (studioAiPanelHandle) {
 }
 
 
+/*
+  붙여넣기는 drawer 전체에서 받는다 — textarea에 포커스가 있든
+  drawer 여백을 눌러 두었든 같은 동작이다.
+*/
+if (studioAiPanelDrawer) {
+
+  studioAiPanelDrawer.addEventListener(
+    "paste",
+    handleStudioAiPaste
+  );
+
+}
+
+
+buildStudioAiAttachmentUi();
+
+
 updateStudioAiSendButtonState();
 
 
@@ -901,7 +1471,11 @@ if (typeof window !== "undefined") {
             ? studioAiPanelStatusText.textContent
             : "",
         undoVisible:
-          !!(studioAiPanelUndoButton && !studioAiPanelUndoButton.hidden)
+          !!(studioAiPanelUndoButton && !studioAiPanelUndoButton.hidden),
+        attachmentCount:
+          studioAiAttachments.length,
+        attachmentMimeTypes:
+          studioAiAttachments.map((attachment) => attachment.mimeType)
       };
 
     };

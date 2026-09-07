@@ -1,5 +1,6 @@
 /* =========================================================
-   PAGES FUNCTION — POST /api/skin-ai  (PHASE AI-2: OpenAI 실제 연결)
+   PAGES FUNCTION — POST /api/skin-ai
+   (PHASE AI-2: OpenAI 실제 연결 / PHASE AI-4: 참고 이미지)
 
    Skin Studio의 AI drawer가 부르는 유일한 서버 엔드포인트다.
    PHASE AI-1에서는 받은 SkinPackage를 거의 그대로 돌려주는
@@ -15,7 +16,8 @@
 
    요청·응답 shape은 AI-1에서 고정한 그대로 바뀌지 않는다:
 
-     요청  { instruction: string, skinPackage: object, images?: [] }
+     요청  { instruction: string, skinPackage: object,
+             images?: [{ mimeType, dataUrl }] }
      성공  { ok: true, skinPackage: {...}, summary: string }
      실패  { ok: false, message: string }
 
@@ -38,9 +40,17 @@
    AI로 할 수 없다(기존 Import/Code 경로로는 가능하다). 남은 차이로
    남겨둔다.
 
+   ★ 참고 이미지 (PHASE AI-4)
+   images는 **디자인 참고 자료**다. 스킨에 삽입될 이미지가 아니다 —
+   이 파일은 imageSlots도 Supabase Storage도 DB도 건드리지 않는다.
+   검증을 통과한 data URL을 OpenAI vision input(input_image)으로
+   한 번 넘기고 그대로 버린다. 저장하는 곳은 어디에도 없다.
+   images가 없으면 요청 body도 시스템 프롬프트도 PHASE AI-2와
+   완전히 같다(아래 buildSkinAiSystemPrompt / buildSkinAiModelRequestBody).
+
    ★ 이번 Phase에서 하지 않는 것
    - KV daily limit / 중복 요청 hash (PHASE AI-3)
-   - images 첨부 처리 (필드는 받되 프롬프트로 보내지 않는다)
+   - 참고 이미지의 보관/재사용
    - 대화 history / streaming
 
    ★ 인증과 허용 사용자
@@ -58,8 +68,10 @@
 
    ★ Supabase access token은 OpenAI로 나가지 않는다
    토큰은 위 /auth/v1/user 검증에만 쓰고, OpenAI 요청 body에도
-   헤더에도 넣지 않는다. 프롬프트에 들어가는 것은 아래 3종뿐이다:
-   시스템 계약 / 사용자 instruction / 현재 SkinPackage.
+   헤더에도 넣지 않는다. 프롬프트에 들어가는 것은 아래 4종뿐이다:
+   시스템 계약 / 사용자 instruction / 현재 SkinPackage / 사용자가
+   직접 붙인 참고 이미지. 계정 이메일·nickname·게시글 본문은 어느
+   경로로도 들어가지 않는다.
 ========================================================== */
 
 const SKIN_AI_SUPABASE_URL_FALLBACK =
@@ -69,11 +81,211 @@ const SKIN_AI_SUPABASE_ANON_KEY_FALLBACK =
   "sb_publishable_9KQkblZdg92IPiB-p5_g0w_tG7HsMuG";
 
 
-/* 본문 상한 — SkinPackage 하나(HTML 4종 + CSS)는 실측 30~60KB
-   수준이라 256KB면 넉넉하다. content-length로 먼저 거르고, 헤더가
-   없거나 실제와 다른 경우를 대비해 읽은 바이트 길이도 한 번 더
-   잰다. */
-const SKIN_AI_MAX_BODY_BYTES = 256 * 1024;
+/* =========================================================
+   참고 이미지 (PHASE AI-4)
+
+   ★ 무엇인가
+   사용자가 Studio AI drawer에 붙인 **디자인 참고 이미지**다.
+   스킨에 삽입될 자산이 아니다 — imageSlots도, Supabase Storage도,
+   DB도 이 경로에서는 건드리지 않는다. 이 함수가 하는 일은
+   "받은 data URL을 검증해서 OpenAI vision input으로 한 번 넘기고
+   버리는" 것이 전부다.
+
+   ★ 허용 MIME — PNG / JPEG / WebP
+   OpenAI vision input이 실제로 받는 것은 PNG / JPEG / WebP /
+   **non-animated** GIF다(2026-09 공식 문서). 저장소의 이미지 계약
+   (studio/images/skin-image-library.js)은 GIF도 허용한다. 두
+   목록의 교집합에서 GIF만 뺀 이유는 "정지 GIF만 허용"을 우리가
+   싸게 판정할 수 없기 때문이다 — 애니메이션 GIF를 그대로 올려
+   업스트림에서 거절당하는 쪽이 더 나쁘다.
+
+   ★ client 검증을 신뢰하지 않는다
+   studio/ai/studio-ai-panel.js도 같은 상한을 검사하지만, 그것은
+   사용자에게 빨리 알려주기 위한 것이다. 이 파일이 실제 방어선이고,
+   여기서 걸린 요청은 **OpenAI를 0회 호출한다**.
+========================================================== */
+
+const SKIN_AI_MAX_REFERENCE_IMAGES = 2;
+
+const SKIN_AI_MAX_REFERENCE_IMAGE_BYTES = 4 * 1024 * 1024;
+
+const SKIN_AI_REFERENCE_IMAGE_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/webp"
+];
+
+
+/* =========================================================
+   본문 상한
+
+   ★ 두 개로 나눠 잰다.
+
+   1) 텍스트 몫 (SKIN_AI_MAX_TEXT_BODY_BYTES)
+      instruction + SkinPackage. SkinPackage 하나(HTML 4종 + CSS)는
+      실측 30~60KB 수준이라 256KB면 넉넉하다 — PHASE AI-2의 값을
+      그대로 유지한다. 이미지 때문에 전체 상한이 올라갔다고 해서
+      프롬프트에 10MB짜리 CSS가 들어갈 수 있게 두지 않는다.
+
+   2) 이미지 몫
+      base64는 3바이트를 4문자로 만든다. 장당 4MiB면
+        ceil(4194304 / 3) * 4 = 5,592,408자
+      이고 여기에 "data:image/jpeg;base64," 접두사와 JSON 안의
+      따옴표/필드 이름 몫으로 1KB를 더 준다. 2장이면 약 10.7MiB.
+
+   합계는 약 10.9MiB다. Cloudflare Pages Functions(=Workers)의
+   요청 본문 상한은 **계정 요금제**가 정하며 Free/Pro 100MB,
+   Business 200MB, Enterprise 최대 5GB다(2026-09 공식 문서).
+   즉 이 값은 플랫폼 상한의 1/9 수준이고, 병목은 우리가 정한
+   장당 4MB 쪽이다.
+
+   content-length로 먼저 거르고, 헤더가 없거나 실제와 다른 경우를
+   대비해 읽은 바이트 길이도 한 번 더 잰다(PHASE AI-2와 동일).
+========================================================== */
+
+const SKIN_AI_MAX_TEXT_BODY_BYTES = 256 * 1024;
+
+const SKIN_AI_MAX_REFERENCE_IMAGE_WIRE_BYTES =
+  Math.ceil(SKIN_AI_MAX_REFERENCE_IMAGE_BYTES / 3) * 4 + 1024;
+
+const SKIN_AI_MAX_BODY_BYTES =
+  SKIN_AI_MAX_TEXT_BODY_BYTES +
+  (SKIN_AI_MAX_REFERENCE_IMAGES * SKIN_AI_MAX_REFERENCE_IMAGE_WIRE_BYTES);
+
+
+/* =========================================================
+   base64 문자열의 실제 byte 수
+
+   atob()로 실제 디코딩하지 않는다 — 4MB짜리 문자열을 굳이 메모리에
+   한 번 더 풀 이유가 없다. 대신 base64 문법을 정확히 강제하고
+   (아래 정규식 + 길이 4의 배수) 길이에서 바이트 수를 계산한다.
+   문법을 통과한 문자열은 정의상 디코딩 가능하다.
+
+   정규식은 padding("=")이 끝에만, 최대 2개까지 오는 것을 강제한다.
+   개행이나 공백이 섞인 base64는 받지 않는다 — data URL이 그렇게
+   생길 이유가 없고, 허용하면 길이 계산이 어긋난다.
+========================================================== */
+
+const SKIN_AI_BASE64_PATTERN = /^[A-Za-z0-9+/]+={0,2}$/;
+
+
+function measureSkinAiBase64Bytes(base64) {
+
+  if (
+    typeof base64 !== "string" ||
+    base64.length === 0 ||
+    base64.length % 4 !== 0 ||
+    !SKIN_AI_BASE64_PATTERN.test(base64)
+  ) {
+    return -1;
+  }
+
+  const padding =
+    base64.endsWith("==") ? 2 : (base64.endsWith("=") ? 1 : 0);
+
+  return ((base64.length / 4) * 3) - padding;
+
+}
+
+
+/* =========================================================
+   images 검증
+
+   요청의 images는 **선택**이다. 없거나 null이면 빈 배열로 보고
+   PHASE AI-2와 완전히 같은 경로를 탄다.
+
+   검사 순서는 "싼 것부터": 배열인가 -> 장수 -> 항목이 객체인가 ->
+   MIME allowlist -> data URL 접두사가 그 MIME과 일치하는가 ->
+   base64 문법 -> 디코딩했을 때의 실제 byte 수.
+
+   ★ 접두사와 MIME이 일치해야 하는 이유
+   mimeType만 믿고 넘기면 "mimeType은 image/png인데 실제 data URL은
+   data:text/html;base64,..." 같은 요청을 그대로 업스트림에 던지게
+   된다. 두 값이 정확히 같은 한 쌍일 때만 통과시킨다.
+========================================================== */
+
+function validateSkinAiReferenceImages(value) {
+
+  if (value === undefined || value === null) {
+    return { ok: true, images: [] };
+  }
+
+  if (!Array.isArray(value)) {
+    return { ok: false, message: "참고 이미지 형식이 올바르지 않습니다." };
+  }
+
+  if (value.length > SKIN_AI_MAX_REFERENCE_IMAGES) {
+
+    return {
+      ok: false,
+      message:
+        "참고 이미지는 최대 " + SKIN_AI_MAX_REFERENCE_IMAGES +
+        "장까지 첨부할 수 있습니다."
+    };
+
+  }
+
+  const images = [];
+
+  for (const item of value) {
+
+    if (!isSkinAiPlainObject(item)) {
+      return { ok: false, message: "참고 이미지 형식이 올바르지 않습니다." };
+    }
+
+    const mimeType =
+      typeof item.mimeType === "string" ? item.mimeType.trim() : "";
+
+    if (SKIN_AI_REFERENCE_IMAGE_MIME_TYPES.indexOf(mimeType) === -1) {
+
+      return {
+        ok: false,
+        message: "PNG, JPEG, WebP 이미지만 사용할 수 있습니다."
+      };
+
+    }
+
+    const dataUrl =
+      typeof item.dataUrl === "string" ? item.dataUrl : "";
+
+    const prefix =
+      "data:" + mimeType + ";base64,";
+
+    if (!dataUrl.startsWith(prefix)) {
+      return { ok: false, message: "참고 이미지 형식이 올바르지 않습니다." };
+    }
+
+    const byteLength =
+      measureSkinAiBase64Bytes(dataUrl.slice(prefix.length));
+
+    if (byteLength < 0) {
+      return { ok: false, message: "참고 이미지 형식이 올바르지 않습니다." };
+    }
+
+    if (byteLength > SKIN_AI_MAX_REFERENCE_IMAGE_BYTES) {
+
+      return {
+        ok: false,
+        message:
+          "이미지 한 장은 " +
+          Math.floor(SKIN_AI_MAX_REFERENCE_IMAGE_BYTES / 1024 / 1024) +
+          "MB 이하만 사용할 수 있습니다."
+      };
+
+    }
+
+    /*
+      받은 객체를 그대로 들고 가지 않는다 — 검증을 통과한 두 값만
+      새 리터럴에 담아서, 요청에 딸려 온 다른 키가 업스트림 요청
+      body로 흘러갈 여지를 없앤다.
+    */
+    images.push({ mimeType, dataUrl });
+
+  }
+
+  return { ok: true, images };
+
+}
 
 const SKIN_AI_MAX_INSTRUCTION_LENGTH = 2000;
 
@@ -366,11 +578,16 @@ function normalizeSkinAiInputPackage(input) {
 
    반대로 **validator가 검사하지 않는 것**(owner/admin 링크 보존,
    최소 변경)은 프롬프트가 유일한 방어선이므로 특히 강하게 쓴다.
+
+   ★ 참고 이미지 규칙은 첨부가 있을 때만 덧붙인다 (PHASE AI-4)
+   첨부가 없는데 "attached images"를 설명하면 토큰만 쓰고 모델을
+   혼란스럽게 한다. hasReferenceImages가 false면 이 함수는 PHASE
+   AI-2와 **글자 하나 다르지 않은** 문자열을 돌려준다.
 ========================================================== */
 
-function buildSkinAiSystemPrompt() {
+function buildSkinAiSystemPrompt(hasReferenceImages) {
 
-  return [
+  const base = [
 
     "You are the skin editor built into Imory Skin Studio.",
     "Imory is a Korean personal blog service. A \"SkinPackage\" is a JSON object that decides how one blog's public pages look.",
@@ -472,7 +689,33 @@ function buildSkinAiSystemPrompt() {
     "- No decorative animation, no auto-playing motion.",
     "- Do not restructure the layout when only colors or type were requested."
 
-  ].join("\n");
+  ];
+
+  if (!hasReferenceImages) {
+    return base.join("\n");
+  }
+
+  /*
+    ★ 여기서 가장 중요한 문장은 "첨부 이미지를 스킨에 넣지 말라"이다.
+    사용자가 붙인 이미지는 Storage에 올라가 있지도 않고 imageSlots에도
+    없으므로, 모델이 그것을 넣으려 해봤자 만들 수 있는 것은 깨진
+    <img>나 data: URL뿐이다(둘 다 sanitizer/validator가 지운다).
+    그래서 "참고만 한다"를 계약으로 못박는다.
+  */
+  return base.concat([
+
+    "",
+    "## Reference images (attached by the user)",
+    "- The user attached one or two images. They are DESIGN REFERENCES ONLY.",
+    "- NEVER put an attached image into the skin. Do not add an <img> for it, do not reference it from url(), do not invent an imageSlot for it. You cannot: those images are not hosted anywhere your templates could reach.",
+    "- The user's written instruction always wins. The images only fill in what the words leave open.",
+    "- What you MAY take from a reference image: overall layout mood, spacing and density, typography hierarchy and relative sizes, border weight and corner radius, color palette, visual balance.",
+    "- What you must NOT copy: any logo, brand mark, product name, photograph, or literal text visible in the image. Never transcribe text out of an image into the templates.",
+    "- The minimal-change rule still applies. Do not restructure the layout just because the reference looks different from the current skin. Change only what the instruction asks for.",
+    "- Every rule above still holds exactly as written: runtime bindings, the protected post-body region, owner/admin links, allowed tags, CSS restrictions, mobile behaviour.",
+    "- Reading the examples: \"이 이미지 느낌으로 바꿔줘\" means take the overall visual mood. \"이 이미지의 색감만 참고해줘\" means keep the layout exactly as it is and change the palette only."
+
+  ]).join("\n");
 
 }
 
@@ -556,22 +799,40 @@ function buildSkinAiResponseSchema() {
    Chat Completions가 아니라 Responses API다. instructions 필드에
    시스템 계약을, input에 사용자 요청과 현재 SkinPackage를 넣는다.
 
-   ★ 프롬프트에 들어가는 것은 이 세 가지가 전부다.
+   ★ 프롬프트에 들어가는 것은 이 네 가지가 전부다.
    게시글 본문 / 비밀글 / 계정 이메일 / nickname / Supabase 토큰은
-   여기 어디에도 없다 — 이 함수는 instruction과 normalize된
-   SkinPackage 외에 아무것도 받지 않는다(그래서 넣을 수도 없다).
+   여기 어디에도 없다 — 이 함수는 instruction, normalize된
+   SkinPackage, 그리고 검증을 통과한 참고 이미지 외에 아무것도
+   받지 않는다(그래서 넣을 수도 없다).
+
+   ★ 참고 이미지 (PHASE AI-4)
+   Responses API의 image input은 user 메시지 content 배열 안의
+       { type: "input_image", image_url: "data:<mime>;base64,...", detail }
+   항목이다(2026-09 공식 문서). input_text 하나 뒤에 첨부 순서대로
+   붙인다 — 모델이 "첫 번째 이미지"를 사용자와 같은 순서로 본다.
+
+   detail은 "auto"로 둔다. 참고 이미지에서 읽어야 하는 것은 여백감·
+   색감·계층 같은 전체 인상이라 "high"로 해상도를 올릴 이유가 없고,
+   "low"로 낮추면 그 인상마저 뭉갠다.
+
+   이미지가 0장이면 input_image를 하나도 넣지 않고 시스템 프롬프트도
+   PHASE AI-2와 동일하다 — 즉 첨부를 쓰지 않는 요청의 body는 이전과
+   바이트까지 같다.
 
    store:false — OpenAI 쪽에 응답을 남길 이유가 없다.
 ========================================================== */
 
-function buildSkinAiModelRequestBody(model, instruction, skinPackage) {
+function buildSkinAiModelRequestBody(model, instruction, skinPackage, images) {
+
+  const referenceImages =
+    Array.isArray(images) ? images : [];
 
   return {
 
     model,
 
     instructions:
-      buildSkinAiSystemPrompt(),
+      buildSkinAiSystemPrompt(referenceImages.length > 0),
 
     input: [
       {
@@ -585,9 +846,21 @@ function buildSkinAiModelRequestBody(model, instruction, skinPackage) {
               JSON.stringify(skinPackage, null, 2) +
               "\n```\n\n" +
               "사용자의 요청:\n" +
-              instruction
+              instruction +
+              (
+                referenceImages.length
+                  ? "\n\n첨부된 " + referenceImages.length +
+                    "장은 디자인 참고 이미지다. 스킨에 넣을 이미지가 아니다."
+                  : ""
+              )
           }
-        ]
+        ].concat(
+          referenceImages.map((image) => ({
+            type: "input_image",
+            image_url: image.dataUrl,
+            detail: "auto"
+          }))
+        )
       }
     ],
 
@@ -847,7 +1120,7 @@ function describeSkinAiUpstreamFailure(status) {
 }
 
 
-async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage) {
+async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, images) {
 
   const controller =
     new AbortController();
@@ -875,7 +1148,7 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage) {
           },
           signal: controller.signal,
           body: JSON.stringify(
-            buildSkinAiModelRequestBody(model, instruction, skinPackage)
+            buildSkinAiModelRequestBody(model, instruction, skinPackage, images)
           )
         }
       );
@@ -951,6 +1224,7 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage) {
     "skin-ai: model call finished",
     {
       model,
+      referenceImages: Array.isArray(images) ? images.length : 0,
       status: typeof payload.status === "string" ? payload.status : "unknown",
       inputTokens: usage.input_tokens ?? null,
       outputTokens: usage.output_tokens ?? null,
@@ -1074,6 +1348,30 @@ export async function onRequest(context) {
   }
 
   /*
+    ★ 전체 상한(SKIN_AI_MAX_BODY_BYTES)이 이미지 몫만큼 커졌다고 해서
+    프롬프트에 들어가는 텍스트까지 커져도 되는 것은 아니다. instruction
+    + SkinPackage는 PHASE AI-2와 같은 256KB로 따로 잰다.
+  */
+  const skinPackageBytes =
+    new TextEncoder().encode(JSON.stringify(parsed.skinPackage)).length;
+
+  if (skinPackageBytes > SKIN_AI_MAX_TEXT_BODY_BYTES) {
+    return skinAiFail(413, "요청이 너무 큽니다.");
+  }
+
+  /*
+    참고 이미지는 선택이다. 없으면 빈 배열이 되어 아래 경로 전체가
+    PHASE AI-2와 똑같이 돈다. 잘못된 이미지는 여기서 끝나고 인증도
+    OpenAI 호출도 하지 않는다.
+  */
+  const referenceImages =
+    validateSkinAiReferenceImages(parsed.images);
+
+  if (!referenceImages.ok) {
+    return skinAiFail(400, referenceImages.message);
+  }
+
+  /*
     인증은 본문 검증 다음에 한다 — 형식이 틀린 요청 때문에
     Supabase로 불필요한 호출이 나가지 않도록.
   */
@@ -1121,7 +1419,8 @@ export async function onRequest(context) {
       env.OPENAI_API_KEY.trim(),
       model,
       instruction,
-      currentPackage
+      currentPackage,
+      referenceImages.images
     );
 
   if (!result.ok) {

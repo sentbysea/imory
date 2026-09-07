@@ -1,5 +1,5 @@
 /* =========================================================
-   PHASE AI-2 — Studio AI OpenAI 실제 연결 E2E
+   PHASE AI-2 / AI-4 — Studio AI OpenAI 연결 + 참고 이미지 E2E
 
    ★ 실제 OpenAI를 부르지 않는다(유료 호출 0회). api.openai.com
    으로 나가는 fetch는 이 파일이 전부 가로채고, 가로채지 못한
@@ -32,7 +32,11 @@
 
    --only= 뒤에 쓸 수 있는 이름:
      server / happy / undo / empty / invalid / duplicate / stale / reload /
-     mobile / save-undo
+     mobile / save-undo / images
+
+   PHASE AI-4(참고 이미지)는 server 섹션의 J1~J12와 브라우저 섹션
+   images(J1~J26)가 담당한다. 여기서도 실제 이미지가 OpenAI로
+   나가지 않는다 — api.openai.com 요청은 전부 이 파일이 가로챈다.
 ========================================================== */
 
 import fs from "node:fs";
@@ -137,6 +141,21 @@ const VALID_SKIN_PACKAGE = {
   imageSlots: [{ name: "profile", label: "프로필 사진" }],
   regions: [],
   metadata: { title: "Fixture" }
+};
+
+/* =========================================================
+   참고 이미지 fixture (PHASE AI-4)
+
+   1x1 PNG 67바이트. 내용은 중요하지 않고 "정상적인 data URL 한 쌍"
+   이면 된다 — 서버는 이미지를 디코딩하지 않고 MIME/문법/크기만
+   본다.
+========================================================== */
+const TINY_PNG_BASE64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
+const PNG_IMAGE = {
+  mimeType: "image/png",
+  dataUrl: "data:image/png;base64," + TINY_PNG_BASE64
 };
 
 const VALID_SKIN_PACKAGE_WITH_BANNER = {
@@ -808,6 +827,204 @@ async function runServerChecks() {
   }
 
 
+
+  /* ---- J. 참고 이미지 (PHASE AI-4) ---- */
+
+  {
+    resetOpenAiMock("ok");
+    const r = await callSkinAi({
+      body: { instruction: "이 이미지 느낌으로", skinPackage: VALID_SKIN_PACKAGE, images: [PNG_IMAGE] }
+    });
+    const content = openAiLastRequest.body.input[0].content;
+
+    record(
+      "J1. 이미지 1장을 붙이면 OpenAI user content가 input_text + input_image가 된다",
+      r.status === 200 &&
+        content.length === 2 &&
+        content[0].type === "input_text" &&
+        content[1].type === "input_image" &&
+        content[1].image_url === PNG_IMAGE.dataUrl &&
+        content[1].detail === "auto",
+      JSON.stringify(content.map(c => c.type)) + ` detail=${content[1] && content[1].detail}`
+    );
+
+    record(
+      "J2. 이미지가 있을 때만 시스템 프롬프트에 참고 이미지 규칙이 붙는다",
+      openAiLastRequest.body.instructions.includes("Reference images") &&
+        openAiLastRequest.body.instructions.includes("DESIGN REFERENCES ONLY") &&
+        openAiLastRequest.body.instructions.includes("NEVER put an attached image into the skin"),
+      "instructions.length=" + openAiLastRequest.body.instructions.length
+    );
+
+    const wire = JSON.stringify(openAiLastRequest.body);
+
+    record(
+      "J3. 이미지를 붙여도 Supabase access token / 계정 정보는 OpenAI로 가지 않는다",
+      !wire.includes(VALID_TOKEN) &&
+        !wire.includes("mock-access-token") &&
+        !wire.toLowerCase().includes("supabase") &&
+        String(openAiLastRequest.headers.authorization || "") === "Bearer test-openai-key-not-real",
+      "authHeaderIsOpenAiKey=true"
+    );
+
+    record(
+      "J4. 이미지는 프롬프트로만 가고 결과 SkinPackage에는 들어가지 않는다(imageSlots 그대로)",
+      JSON.stringify(r.payload.skinPackage.imageSlots) === JSON.stringify(VALID_SKIN_PACKAGE.imageSlots) &&
+        !JSON.stringify(r.payload.skinPackage).includes("data:image"),
+      JSON.stringify(r.payload.skinPackage.imageSlots)
+    );
+  }
+
+  {
+    resetOpenAiMock("ok");
+    const second = { mimeType: "image/webp", dataUrl: "data:image/webp;base64," + TINY_PNG_BASE64 };
+    const r = await callSkinAi({
+      body: { instruction: "a", skinPackage: VALID_SKIN_PACKAGE, images: [PNG_IMAGE, second] }
+    });
+    const content = openAiLastRequest.body.input[0].content;
+
+    record(
+      "J5. 이미지 2장은 첨부 순서 그대로 input_image 2개가 된다",
+      r.status === 200 &&
+        content.length === 3 &&
+        content[1].image_url === PNG_IMAGE.dataUrl &&
+        content[2].image_url === second.dataUrl,
+      JSON.stringify(content.map(c => c.type))
+    );
+  }
+
+  {
+    resetOpenAiMock("ok");
+    const r = await callSkinAi({ body: { instruction: "a", skinPackage: VALID_SKIN_PACKAGE } });
+    const content = openAiLastRequest.body.input[0].content;
+
+    record(
+      "J6. 이미지가 없으면 input_image가 하나도 없고 프롬프트도 PHASE AI-2 그대로다",
+      r.status === 200 &&
+        content.length === 1 &&
+        content[0].type === "input_text" &&
+        !openAiLastRequest.body.instructions.includes("Reference images"),
+      JSON.stringify(content.map(c => c.type))
+    );
+
+    /* images: null / [] 도 "없음"과 완전히 같은 body를 만들어야 한다 */
+    const baseline = JSON.stringify(openAiLastRequest.body);
+
+    resetOpenAiMock("ok");
+    await callSkinAi({ body: { instruction: "a", skinPackage: VALID_SKIN_PACKAGE, images: [] } });
+    const emptyArray = JSON.stringify(openAiLastRequest.body);
+
+    resetOpenAiMock("ok");
+    await callSkinAi({ body: { instruction: "a", skinPackage: VALID_SKIN_PACKAGE, images: null } });
+    const nullImages = JSON.stringify(openAiLastRequest.body);
+
+    record(
+      "J7. images가 [] 이거나 null이어도 요청 body가 이미지 없는 경우와 완전히 같다",
+      emptyArray === baseline && nullImages === baseline,
+      `emptyEqual=${emptyArray === baseline} nullEqual=${nullImages === baseline}`
+    );
+  }
+
+  /* 서버 거부 — 전부 OpenAI 호출 0회여야 한다 */
+  for (const [label, images, expectedFragment] of [
+    ["3장", [PNG_IMAGE, PNG_IMAGE, PNG_IMAGE], "최대 2장"],
+    ["허용하지 않는 MIME(gif)", [{ mimeType: "image/gif", dataUrl: "data:image/gif;base64," + TINY_PNG_BASE64 }], "PNG, JPEG, WebP"],
+    ["MIME과 data URL 접두사 불일치", [{ mimeType: "image/png", dataUrl: "data:image/webp;base64," + TINY_PNG_BASE64 }], "형식이 올바르지 않"],
+    ["data URL이 아닌 http URL", [{ mimeType: "image/png", dataUrl: "https://example.com/a.png" }], "형식이 올바르지 않"],
+    ["깨진 base64", [{ mimeType: "image/png", dataUrl: "data:image/png;base64,!!!not-base64!!!" }], "형식이 올바르지 않"],
+    ["길이가 4의 배수가 아닌 base64", [{ mimeType: "image/png", dataUrl: "data:image/png;base64,QUJD" + "Q" }], "형식이 올바르지 않"],
+    ["배열이 아님", "not-an-array", "형식이 올바르지 않"],
+    ["항목이 객체가 아님", [42], "형식이 올바르지 않"],
+    ["dataUrl이 없음", [{ mimeType: "image/png" }], "형식이 올바르지 않"]
+  ]) {
+    resetOpenAiMock("ok");
+    const r = await callSkinAi({ body: { instruction: "a", skinPackage: VALID_SKIN_PACKAGE, images } });
+    record(
+      `J8. 서버가 거부한다(${label}) — OpenAI 호출 0회`,
+      r.status === 400 &&
+        r.payload.ok === false &&
+        r.payload.message.includes(expectedFragment) &&
+        openAiCallCount === 0 &&
+        !("skinPackage" in r.payload),
+      `status=${r.status} message=${r.payload && r.payload.message} openAiCalls=${openAiCallCount}`
+    );
+  }
+
+  {
+    /*
+      장당 4MB 상한 — client 검증을 우회한 요청이 서버에서 막히는지.
+      base64 5,592,412자는 디코딩하면 4MiB + 3바이트다.
+    */
+    resetOpenAiMock("ok");
+    const oversizeBase64 = "A".repeat(Math.ceil((4 * 1024 * 1024 + 3) / 3) * 4);
+    const r = await callSkinAi({
+      body: {
+        instruction: "a",
+        skinPackage: VALID_SKIN_PACKAGE,
+        images: [{ mimeType: "image/png", dataUrl: "data:image/png;base64," + oversizeBase64 }]
+      }
+    });
+    record(
+      "J9. 디코딩한 실제 크기가 4MB를 넘으면 서버가 막는다 — OpenAI 호출 0회",
+      r.status === 400 &&
+        r.payload.message.includes("4MB") &&
+        openAiCallCount === 0,
+      `status=${r.status} message=${r.payload && r.payload.message} openAiCalls=${openAiCallCount}`
+    );
+  }
+
+  {
+    /*
+      정확히 4MiB는 통과해야 한다(경계). 5,592,408자 + padding 2 =
+      1,398,102 * 3 - 2 = 4,194,304 바이트.
+    */
+    resetOpenAiMock("ok");
+    const exact = "A".repeat(Math.floor((4 * 1024 * 1024) / 3) * 4) + "AA==";
+    const r = await callSkinAi({
+      body: {
+        instruction: "a",
+        skinPackage: VALID_SKIN_PACKAGE,
+        images: [{ mimeType: "image/png", dataUrl: "data:image/png;base64," + exact }]
+      }
+    });
+    record(
+      "J10. 정확히 4MB짜리 이미지는 통과한다(경계값)",
+      r.status === 200 && openAiCallCount === 1,
+      `status=${r.status} bytes=${(exact.length / 4) * 3 - 2} openAiCalls=${openAiCallCount}`
+    );
+  }
+
+  {
+    /*
+      본문 상한 — 이미지 몫만큼 커졌지만 텍스트 몫(instruction +
+      SkinPackage)은 여전히 256KB다.
+    */
+    resetOpenAiMock("ok");
+    const r = await callSkinAi({
+      body: {
+        instruction: "a",
+        skinPackage: { ...VALID_SKIN_PACKAGE, css: "/*" + "x".repeat(300 * 1024) + "*/" },
+        images: [PNG_IMAGE]
+      }
+    });
+    record(
+      "J11. 이미지 상한이 커져도 SkinPackage 텍스트 몫은 그대로 256KB다 — 413",
+      r.status === 413 && openAiCallCount === 0,
+      `status=${r.status} openAiCalls=${openAiCallCount}`
+    );
+  }
+
+  {
+    const source = fs.readFileSync(path.join(ROOT, "functions", "api", "skin-ai.js"), "utf8");
+    record(
+      "J12. 전체 본문 상한이 '텍스트 256KB + 이미지 2장'으로 계산돼 선언돼 있다",
+      /SKIN_AI_MAX_TEXT_BODY_BYTES\s*=\s*256 \* 1024/.test(source) &&
+        /SKIN_AI_MAX_REFERENCE_IMAGE_BYTES\s*=\s*4 \* 1024 \* 1024/.test(source) &&
+        /SKIN_AI_MAX_BODY_BYTES\s*=\s*\n?\s*SKIN_AI_MAX_TEXT_BODY_BYTES \+/.test(source),
+      "SKIN_AI_MAX_BODY_BYTES = 256KB + 2 * (ceil(4MiB/3)*4 + 1KB) ≈ 10.9MiB"
+    );
+  }
+
   /* ---- Z. 실제 유료 호출을 하지 않았다는 확인 ---- */
 
   record(
@@ -908,6 +1125,10 @@ let aiRouteMode = "real";
 let aiRouteRequestCount = 0;
 let aiRouteRelease = null;
 
+/* PHASE AI-4 — 브라우저가 실제로 보낸 body(문자열). images 필드가
+   어떻게 실렸는지를 테스트가 직접 확인한다. */
+let aiRouteLastBody = null;
+
 async function handleAiRoute(route) {
 
   aiRouteRequestCount += 1;
@@ -915,6 +1136,8 @@ async function handleAiRoute(route) {
   const request = route.request();
   const bodyText = request.postData() || "";
   const headers = await request.allHeaders();
+
+  aiRouteLastBody = bodyText;
 
   if (aiRouteMode === "invalid") {
     /*
@@ -1046,6 +1269,17 @@ async function openDrawer(page) {
   const isOpen = await page.evaluate(() => document.getElementById("studioAiDrawer").classList.contains("is-open"));
   if (!isOpen) await page.click("#studioAiHandle");
   await page.waitForFunction(() => document.getElementById("studioAiDrawer").classList.contains("is-open"));
+}
+
+function readToast(page) {
+  return page.evaluate(() => {
+    const el = document.getElementById("studioToast");
+    return {
+      hidden: el.hidden,
+      text: el.textContent,
+      isError: el.classList.contains("studio-toast--error")
+    };
+  });
 }
 
 function workingState(page) {
@@ -1825,6 +2059,600 @@ async function runSaveUndo(context) {
 
 
 /* =========================================================
+   J. 참고 이미지 첨부 (PHASE AI-4)
+
+   drawer의 첨부 UI -> /api/skin-ai 요청 body -> (진짜 서버) ->
+   OpenAI 요청의 input_image 까지 한 줄로 확인한다.
+
+   ★ 이 섹션은 자기 context를 따로 만든다 — 텍스트 붙여넣기가
+   깨지지 않았는지를 **진짜 Ctrl+V**로 재려면 클립보드 권한이
+   필요하기 때문이다(chromium). 권한을 못 받는 브라우저에서는 그
+   한 검사만 건너뛰고 나머지는 그대로 돈다.
+
+   ★ 이미지가 Supabase로 가지 않는지도 여기서 잰다. scenario 문서의
+   supabaseClient mock에는 storage가 아예 없고(그쪽 주석 참고),
+   여기서는 그 위에 네트워크 수준 감시를 하나 더 얹는다.
+========================================================== */
+
+/* PNG는 서버 섹션이 쓰는 TINY_PNG_BASE64를 그대로 재사용한다 */
+const TINY_PNG_BUFFER = Buffer.from(TINY_PNG_BASE64, "base64");
+
+/* 1x1 WebP (lossy) */
+const TINY_WEBP_BASE64 =
+  "UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==";
+
+const TINY_WEBP_BUFFER = Buffer.from(TINY_WEBP_BASE64, "base64");
+
+
+function attachmentState(page) {
+  return page.evaluate(() => {
+    const debug = window.getStudioAiPanelDebugState();
+    const row = document.querySelector(".studio-ai-drawer-attachments");
+    const thumbs = Array.prototype.slice.call(
+      document.querySelectorAll(".studio-ai-drawer-thumb")
+    );
+    const add = document.querySelector(".studio-ai-drawer-attach-add");
+    const note = document.querySelector(".studio-ai-drawer-attach-note");
+    return {
+      count: debug.attachmentCount,
+      mimeTypes: debug.attachmentMimeTypes,
+      rowExists: !!row,
+      thumbCount: thumbs.length,
+      thumbAlts: thumbs.map(t => t.querySelector("img").alt),
+      thumbSrcPrefixes: thumbs.map(
+        t => t.querySelector("img").src.split(";base64,")[0] + ";base64,"
+      ),
+      removeButtons: thumbs.filter(t => !!t.querySelector(".studio-ai-drawer-thumb-remove")).length,
+      addLabel: add ? add.textContent.trim() : "",
+      addDisabled: add ? add.disabled : null,
+      noteHidden: note ? note.hidden : null,
+      noteText: note ? note.textContent.trim() : "",
+      drawerHasClass: document.getElementById("studioAiDrawer").classList.contains("has-attachments")
+    };
+  });
+}
+
+async function attachFiles(page, files) {
+  await page.setInputFiles("#studioAiDrawerAttachInput", files);
+  /* FileReader가 data URL을 만들 때까지 — 개수로 기다린다 */
+  await sleep(250);
+}
+
+/*
+  합성 paste 이벤트. Playwright에는 "클립보드에 이미지를 넣는" API가
+  없으므로 DataTransfer를 만들어 직접 dispatch한다. 우리 handler가
+  clipboardData를 읽는 경로 자체는 실제와 같다.
+*/
+async function dispatchPaste(page, options) {
+  return page.evaluate((opts) => {
+    const dt = new DataTransfer();
+    if (opts.text) dt.setData("text/plain", opts.text);
+    if (opts.imageBase64) {
+      const binary = atob(opts.imageBase64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+      dt.items.add(new File([bytes], opts.imageName || "pasted.png", { type: opts.imageMime || "image/png" }));
+    }
+    const event = new ClipboardEvent("paste", {
+      clipboardData: dt,
+      bubbles: true,
+      cancelable: true
+    });
+    document.getElementById("studioAiDrawerInput").dispatchEvent(event);
+    return { defaultPrevented: event.defaultPrevented };
+  }, options);
+}
+
+
+async function runImages(browser) {
+
+  const context =
+    await browser.newContext({ viewport: { width: 1280, height: 900 } });
+
+  /* 실제 Ctrl+V 검사를 위해 클립보드 권한을 시도한다(chromium 전용) */
+  let clipboardGranted = false;
+  try {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    clipboardGranted = true;
+  } catch {
+    clipboardGranted = false;
+  }
+
+  const page = await openStudio(context);
+
+  /* 이미지가 Supabase Storage/DB로 나가는지 네트워크에서 직접 감시 */
+  const supabaseRequests = [];
+  page.on("request", req => {
+    const url = req.url();
+    if (url.includes("supabase.co") || url.includes("/storage/v1/") || url.includes("/rest/v1/")) {
+      supabaseRequests.push(url);
+    }
+  });
+
+  await openDrawer(page);
+
+  /* ---------- 1. 첨부 전 ---------- */
+
+  const empty = await attachmentState(page);
+
+  record(
+    "J1. 첨부가 없을 때 drawer에 '참고 이미지' 버튼만 있고 안내/thumbnail은 없다",
+    empty.rowExists === true &&
+      empty.count === 0 &&
+      empty.thumbCount === 0 &&
+      empty.addDisabled === false &&
+      empty.noteHidden === true &&
+      empty.drawerHasClass === false,
+    JSON.stringify(empty)
+  );
+
+  /* ---------- 2. 파일 선택으로 PNG 1장 ---------- */
+
+  await attachFiles(page, [
+    { name: "ref.png", mimeType: "image/png", buffer: TINY_PNG_BUFFER }
+  ]);
+
+  const one = await attachmentState(page);
+
+  record(
+    "J2. 파일 선택으로 PNG 1장을 붙이면 thumbnail과 삭제 버튼이 생기고 장수가 표시된다",
+    one.count === 1 &&
+      one.thumbCount === 1 &&
+      one.removeButtons === 1 &&
+      one.thumbAlts[0] === "참고 이미지 1" &&
+      one.thumbSrcPrefixes[0] === "data:image/png;base64," &&
+      one.addLabel.includes("1/2") &&
+      one.drawerHasClass === true,
+    JSON.stringify(one)
+  );
+
+  record(
+    "J3. 첨부가 생기면 '저장되지 않는다' 안내가 보인다(Imory 범위로만 한정된 문구)",
+    one.noteHidden === false &&
+      one.noteText === "참고 이미지는 AI 요청에만 사용되며 Imory에 저장되지 않습니다.",
+    JSON.stringify(one.noteText)
+  );
+
+  /* ---------- 3. 전송 -> 요청 body / OpenAI input_image ---------- */
+
+  aiRouteLastBody = null;
+  resetOpenAiMock("ok");
+
+  await page.fill("#studioAiDrawerInput", "이 이미지 느낌으로 바꿔줘");
+  await page.click("#studioAiDrawerSend");
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().hasUndo === true,
+    null,
+    { timeout: 10000 }
+  );
+
+  const sentOnce = JSON.parse(aiRouteLastBody);
+  const openAiContentOnce = openAiLastRequest.body.input[0].content;
+
+  record(
+    "J4. 요청 body에 images가 { mimeType, dataUrl }로 1개 실린다(id/size/name은 보내지 않는다)",
+    Array.isArray(sentOnce.images) &&
+      sentOnce.images.length === 1 &&
+      sentOnce.images[0].mimeType === "image/png" &&
+      sentOnce.images[0].dataUrl.startsWith("data:image/png;base64,") &&
+      Object.keys(sentOnce.images[0]).sort().join(",") === "dataUrl,mimeType",
+    JSON.stringify(Object.keys(sentOnce.images[0] || {}))
+  );
+
+  record(
+    "J5. 그 이미지가 OpenAI 요청의 input_image로 그대로 전달된다",
+    openAiContentOnce.length === 2 &&
+      openAiContentOnce[1].type === "input_image" &&
+      openAiContentOnce[1].image_url === sentOnce.images[0].dataUrl,
+    JSON.stringify(openAiContentOnce.map(c => c.type))
+  );
+
+  record(
+    "J6. AI 요청이 성공해도 첨부는 남는다(같은 참고 이미지로 이어서 요청할 수 있게)",
+    (await attachmentState(page)).count === 1,
+    JSON.stringify(await attachmentState(page))
+  );
+
+  const appliedWithImage = await workingState(page);
+
+  record(
+    "J7. 참고 이미지는 working SkinPackage에 들어가지 않는다(imageSlots/템플릿/CSS 어디에도 없다)",
+    !JSON.stringify(appliedWithImage.skinPackage).includes("data:image") &&
+      appliedWithImage.skinPackage.css.includes(MOCK_CSS_MARKER),
+    `imageSlots=${JSON.stringify(appliedWithImage.skinPackage.imageSlots)}`
+  );
+
+  /* ---------- 4. 되돌리기 후에도 첨부 유지 ---------- */
+
+  await page.click("#studioAiDrawerUndo");
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().hasUndo === false,
+    null,
+    { timeout: 5000 }
+  );
+
+  record(
+    "J8. 되돌리기는 SkinPackage만 되돌리고 첨부는 건드리지 않는다",
+    (await attachmentState(page)).count === 1 &&
+      !(await workingState(page)).skinPackage.css.includes(MOCK_CSS_MARKER),
+    JSON.stringify(await attachmentState(page))
+  );
+
+  /* ---------- 5. 두 번째 이미지 + 3장째 차단 ---------- */
+
+  await attachFiles(page, [
+    { name: "ref2.webp", mimeType: "image/webp", buffer: TINY_WEBP_BUFFER }
+  ]);
+
+  const two = await attachmentState(page);
+
+  record(
+    "J9. 2장까지 붙이면 추가 버튼이 비활성이 되고 2/2로 표시된다",
+    two.count === 2 &&
+      two.thumbCount === 2 &&
+      two.mimeTypes.join(",") === "image/png,image/webp" &&
+      two.thumbSrcPrefixes.join(" ") === "data:image/png;base64, data:image/webp;base64," &&
+      two.addLabel.includes("2/2") &&
+      two.addDisabled === true &&
+      two.thumbAlts.join(",") === "참고 이미지 1,참고 이미지 2",
+    JSON.stringify(two)
+  );
+
+  await attachFiles(page, [
+    { name: "ref3.png", mimeType: "image/png", buffer: TINY_PNG_BUFFER }
+  ]);
+
+  const third = await attachmentState(page);
+  const thirdToast = await readToast(page);
+
+  record(
+    "J10. 3장째는 받지 않고 최대 장수를 안내한다",
+    third.count === 2 &&
+      thirdToast.hidden === false &&
+      thirdToast.isError === true &&
+      thirdToast.text.includes("최대 2장"),
+    `count=${third.count} toast=${JSON.stringify(thirdToast.text)}`
+  );
+
+  /* ---------- 6. 2장 전송 -> input_image 2개 (순서 유지) ---------- */
+
+  aiRouteLastBody = null;
+  resetOpenAiMock("ok");
+
+  await page.fill("#studioAiDrawerInput", "이 두 이미지를 참고해줘");
+  await page.click("#studioAiDrawerSend");
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().hasUndo === true,
+    null,
+    { timeout: 10000 }
+  );
+
+  const sentTwo = JSON.parse(aiRouteLastBody);
+  const openAiContentTwo = openAiLastRequest.body.input[0].content;
+
+  record(
+    "J11. 이미지 2장이 첨부 순서 그대로 OpenAI input_image 2개가 된다",
+    sentTwo.images.length === 2 &&
+      openAiContentTwo.length === 3 &&
+      openAiContentTwo[1].image_url === sentTwo.images[0].dataUrl &&
+      openAiContentTwo[2].image_url === sentTwo.images[1].dataUrl &&
+      sentTwo.images[0].mimeType === "image/png" &&
+      sentTwo.images[1].mimeType === "image/webp",
+    JSON.stringify(openAiContentTwo.map(c => c.type))
+  );
+
+  /* ---------- 7. thumbnail × 로 삭제 ---------- */
+
+  await page.click(".studio-ai-drawer-thumb:first-of-type .studio-ai-drawer-thumb-remove");
+
+  const afterRemoveOne = await attachmentState(page);
+
+  record(
+    "J12. thumbnail의 ×를 누르면 메모리 state에서 즉시 사라지고 남은 것이 다시 번호를 받는다",
+    afterRemoveOne.count === 1 &&
+      afterRemoveOne.thumbCount === 1 &&
+      afterRemoveOne.mimeTypes.join(",") === "image/webp" &&
+      afterRemoveOne.thumbAlts[0] === "참고 이미지 1" &&
+      afterRemoveOne.addDisabled === false,
+    JSON.stringify(afterRemoveOne)
+  );
+
+  await page.click(".studio-ai-drawer-thumb .studio-ai-drawer-thumb-remove");
+
+  const afterRemoveAll = await attachmentState(page);
+
+  record(
+    "J13. 전부 지우면 안내와 thumbnail 줄이 원래대로 돌아간다",
+    afterRemoveAll.count === 0 &&
+      afterRemoveAll.thumbCount === 0 &&
+      afterRemoveAll.noteHidden === true &&
+      afterRemoveAll.drawerHasClass === false &&
+      afterRemoveAll.addLabel === "＋ 참고 이미지",
+    JSON.stringify(afterRemoveAll)
+  );
+
+  /* ---------- 8. 첨부가 없으면 요청 body에 images 키가 없다 ---------- */
+
+  aiRouteLastBody = null;
+
+  await page.fill("#studioAiDrawerInput", "이미지 없이 보내기");
+  await page.click("#studioAiDrawerSend");
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().hasUndo === true,
+    null,
+    { timeout: 10000 }
+  );
+
+  const sentNone = JSON.parse(aiRouteLastBody);
+
+  record(
+    "J14. 첨부가 없으면 body에 images 키 자체가 없다(PHASE AI-2와 동일한 요청)",
+    !("images" in sentNone) &&
+      Object.keys(sentNone).sort().join(",") === "instruction,skinPackage" &&
+      openAiLastRequest.body.input[0].content.length === 1,
+    JSON.stringify(Object.keys(sentNone))
+  );
+
+  /* ---------- 9. 잘못된 파일은 client가 먼저 막는다 ---------- */
+
+  aiRouteLastBody = null;
+  const requestsBeforeBadFiles = aiRouteRequestCount;
+
+  await attachFiles(page, [
+    { name: "anim.gif", mimeType: "image/gif", buffer: TINY_PNG_BUFFER }
+  ]);
+
+  const afterGif = await attachmentState(page);
+  const gifToast = await readToast(page);
+
+  record(
+    "J15. 허용하지 않는 MIME(gif)은 client가 먼저 막는다 — 첨부 0, 요청 0",
+    afterGif.count === 0 &&
+      gifToast.isError === true &&
+      gifToast.text.includes("PNG, JPEG, WebP") &&
+      aiRouteRequestCount === requestsBeforeBadFiles,
+    `count=${afterGif.count} toast=${JSON.stringify(gifToast.text)}`
+  );
+
+  await attachFiles(page, [
+    { name: "huge.png", mimeType: "image/png", buffer: Buffer.alloc(4 * 1024 * 1024 + 1) }
+  ]);
+
+  const afterHuge = await attachmentState(page);
+  const hugeToast = await readToast(page);
+
+  record(
+    "J16. 4MB를 넘는 이미지는 client가 먼저 막는다 — 첨부 0, 요청 0",
+    afterHuge.count === 0 &&
+      hugeToast.isError === true &&
+      hugeToast.text.includes("4MB") &&
+      aiRouteRequestCount === requestsBeforeBadFiles,
+    `count=${afterHuge.count} toast=${JSON.stringify(hugeToast.text)}`
+  );
+
+  /* ---------- 10. 붙여넣기 ---------- */
+
+  const textOnlyPaste =
+    await dispatchPaste(page, { text: "붙여넣은 텍스트" });
+
+  record(
+    "J17. 일반 텍스트 붙여넣기는 우리 handler가 전혀 손대지 않는다(preventDefault 없음, 첨부 없음)",
+    textOnlyPaste.defaultPrevented === false &&
+      (await attachmentState(page)).count === 0,
+    JSON.stringify(textOnlyPaste)
+  );
+
+  if (clipboardGranted) {
+
+    await page.fill("#studioAiDrawerInput", "");
+    await page.evaluate(() => navigator.clipboard.writeText("실제 클립보드 텍스트"));
+    await page.focus("#studioAiDrawerInput");
+    await page.keyboard.press("ControlOrMeta+V");
+    await sleep(250);
+
+    const pastedValue =
+      await page.evaluate(() => document.getElementById("studioAiDrawerInput").value);
+
+    record(
+      "J18. 실제 Ctrl+V 텍스트 붙여넣기가 textarea에 그대로 들어간다(기존 동작 유지)",
+      pastedValue === "실제 클립보드 텍스트",
+      JSON.stringify(pastedValue)
+    );
+
+    await page.fill("#studioAiDrawerInput", "");
+
+  } else {
+
+    record(
+      "J18. 실제 Ctrl+V 텍스트 붙여넣기가 textarea에 그대로 들어간다(기존 동작 유지)",
+      true,
+      "이 브라우저에서 클립보드 권한을 받지 못해 건너뜀 — J17이 handler 계약을 대신 확인한다"
+    );
+
+  }
+
+  const imagePaste =
+    await dispatchPaste(page, { imageBase64: TINY_PNG_BASE64, imageMime: "image/png" });
+
+  await sleep(250);
+
+  const afterImagePaste = await attachmentState(page);
+
+  record(
+    "J19. 이미지 붙여넣기는 attachment로 들어간다(순수 이미지일 때만 기본 동작을 막는다)",
+    imagePaste.defaultPrevented === true &&
+      afterImagePaste.count === 1 &&
+      afterImagePaste.mimeTypes.join(",") === "image/png",
+    JSON.stringify({ imagePaste, count: afterImagePaste.count })
+  );
+
+  const mixedPaste =
+    await dispatchPaste(page, { text: "설명 문장", imageBase64: TINY_PNG_BASE64, imageMime: "image/png" });
+
+  await sleep(250);
+
+  const afterMixedPaste = await attachmentState(page);
+
+  record(
+    "J20. 텍스트+이미지 혼합 붙여넣기는 이미지를 첨부하면서 텍스트 입력을 막지 않는다",
+    mixedPaste.defaultPrevented === false &&
+      afterMixedPaste.count === 2,
+    JSON.stringify({ mixedPaste, count: afterMixedPaste.count })
+  );
+
+  /* ---------- 11. 중단/타임아웃 후에도 첨부 유지 ---------- */
+
+  aiRouteMode = "hold";
+  aiRouteRelease = null;
+
+  await page.fill("#studioAiDrawerInput", "중단해볼 요청");
+  await page.click("#studioAiDrawerSend");
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().pending === true,
+    null,
+    { timeout: 5000 }
+  );
+
+  /*
+    요청 중에 첨부를 하나 지운다 — 진행 중인 요청은 보낸 시점의
+    snapshot 그대로 끝나야 하고(stale이 되면 안 된다), 중단 후에도
+    남은 첨부는 그대로여야 한다(12절).
+  */
+  await page.click(".studio-ai-drawer-thumb .studio-ai-drawer-thumb-remove");
+
+  const duringRequest = await attachmentState(page);
+
+  /* Send 버튼이 지금은 중단 버튼이다 */
+  await page.click("#studioAiDrawerSend");
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().pending === false,
+    null,
+    { timeout: 5000 }
+  );
+
+  if (aiRouteRelease) aiRouteRelease();
+  aiRouteMode = "real";
+
+  const afterAbort = await attachmentState(page);
+
+  record(
+    "J21. 요청 중 첨부를 편집해도 진행 중 요청이 stale로 죽지 않고, 중단 후 첨부는 그대로 남는다",
+    duringRequest.count === 1 &&
+      afterAbort.count === 1 &&
+      (await panelState(page)).statusText === "",
+    JSON.stringify({ during: duringRequest.count, after: afterAbort.count })
+  );
+
+  /* ---------- 12. Supabase로 나가지 않는다 ---------- */
+
+  record(
+    "J22. 참고 이미지는 Supabase Storage/DB로 전송되지 않는다(네트워크 요청 0건, storage API 자체가 없음)",
+    supabaseRequests.length === 0 &&
+      (await page.evaluate(() => typeof window.supabaseClient.storage)) === "undefined",
+    `supabaseRequests=${JSON.stringify(supabaseRequests)}`
+  );
+
+  record(
+    "J23. 참고 이미지를 localStorage / sessionStorage에 쓰지 않는다",
+    (await page.evaluate(() => {
+      const scan = (store) => {
+        for (let i = 0; i < store.length; i += 1) {
+          const value = store.getItem(store.key(i)) || "";
+          if (value.includes("data:image")) return true;
+        }
+        return false;
+      };
+      return !scan(window.localStorage) && !scan(window.sessionStorage);
+    })) === true
+  );
+
+  /* ---------- 13. 새로고침하면 사라진다 ---------- */
+
+  await page.reload({ waitUntil: "load" });
+  await page.waitForFunction(
+    () => window.getStudioAiWorkingState && window.getStudioAiWorkingState().hasWorkingSkin === true,
+    null,
+    { timeout: 15000 }
+  );
+  await openDrawer(page);
+
+  record(
+    "J24. 새로고침하면 첨부가 사라진다(어디에도 저장하지 않으므로)",
+    (await attachmentState(page)).count === 0,
+    JSON.stringify(await attachmentState(page))
+  );
+
+  await page.close();
+  await context.close();
+
+
+  /* ---------- 14. 모바일 ---------- */
+
+  const mobileContext =
+    await browser.newContext({ viewport: { width: 390, height: 780 } });
+
+  const mobilePage = await openStudio(mobileContext);
+  await openDrawer(mobilePage);
+
+  await mobilePage.setInputFiles("#studioAiDrawerAttachInput", [
+    { name: "a.png", mimeType: "image/png", buffer: TINY_PNG_BUFFER },
+    { name: "b.webp", mimeType: "image/webp", buffer: TINY_WEBP_BUFFER }
+  ]);
+  await sleep(400);
+
+  await mobilePage.fill("#studioAiDrawerInput", "모바일에서 이미지와 함께 보내기");
+  await mobilePage.click("#studioAiDrawerSend");
+  await mobilePage.waitForFunction(
+    () => window.getStudioAiPanelDebugState().hasUndo === true,
+    null,
+    { timeout: 10000 }
+  );
+
+  const mobileBox = await mobilePage.evaluate(() => {
+    const dock = document.getElementById("studioAiDock").getBoundingClientRect();
+    const drawer = document.getElementById("studioAiDrawer");
+    const thumbs = Array.prototype.slice
+      .call(document.querySelectorAll(".studio-ai-drawer-thumb"))
+      .map(t => t.getBoundingClientRect());
+    const input = document.getElementById("studioAiDrawerInput").getBoundingClientRect();
+    return {
+      dock: { left: dock.left, right: dock.right, top: dock.top, bottom: dock.bottom },
+      thumbs: thumbs.map(t => ({ left: t.left, right: t.right, width: t.width, height: t.height })),
+      input: { width: input.width, height: input.height },
+      drawerScrollsInside: drawer.scrollHeight > drawer.clientHeight
+        ? getComputedStyle(drawer).overflowY === "auto"
+        : true,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      docScrollX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    };
+  });
+
+  record(
+    "J25. 모바일에서 첨부 2장을 붙여도 drawer가 화면 밖으로 넘치지 않는다",
+    mobileBox.dock.left >= -0.5 &&
+      mobileBox.dock.right <= mobileBox.innerWidth + 0.5 &&
+      mobileBox.dock.top >= -0.5 &&
+      mobileBox.docScrollX <= 0.5 &&
+      mobileBox.drawerScrollsInside === true,
+    JSON.stringify({ dock: mobileBox.dock, innerWidth: mobileBox.innerWidth, docScrollX: mobileBox.docScrollX })
+  );
+
+  record(
+    "J26. 모바일에서도 thumbnail 2개와 textarea가 실제로 보이고 화면 안에 있다",
+    mobileBox.thumbs.length === 2 &&
+      mobileBox.thumbs.every(t => t.width > 20 && t.height > 20 && t.right <= mobileBox.innerWidth + 0.5) &&
+      mobileBox.input.width > 100 && mobileBox.input.height > 20,
+    JSON.stringify({ thumbs: mobileBox.thumbs, input: mobileBox.input })
+  );
+
+  await mobilePage.close();
+  await mobileContext.close();
+
+}
+
+
+/* =========================================================
    실행
 ========================================================== */
 
@@ -1860,6 +2688,7 @@ async function main() {
     if (shouldRun("reload")) await runReload(context);
     if (shouldRun("save-undo")) await runSaveUndo(context);
     if (shouldRun("mobile")) await runMobile(browser);
+    if (shouldRun("images")) await runImages(browser);
   } finally {
     await context.close();
     await browser.close();
