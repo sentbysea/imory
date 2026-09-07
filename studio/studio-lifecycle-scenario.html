@@ -59,12 +59,14 @@
             <button type="button" class="studio-viewport-toggle-option" data-viewport-mode="mobile">Mobile</button>
           </div>
         </div>
+        <!-- PHASE AI-2.1 — studio/index.html과 같은 순서/구성을 그대로 비춘다
+             (Code / Import / Save / Publish, Settings 없음). Images는 이 하네스가
+             images 모듈을 로드하지 않으므로 원래대로 두지 않는다. -->
         <div class="studio-top-dock-actions">
-          <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
-          <button type="button" class="studio-corner-button" id="studioPublishButton" disabled>Publish</button>
           <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
           <button type="button" class="studio-corner-button" id="studioImportButton" disabled>Import</button>
-          <button type="button" class="studio-corner-button" id="studioSettingsButton" disabled>Settings</button>
+          <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
+          <button type="button" class="studio-corner-button" id="studioPublishButton" disabled>Publish</button>
         </div>
       </div>
       <button type="button" class="studio-top-dock-handle" id="studioTopDockHandle" aria-expanded="false" aria-controls="studioTopDock" aria-label="Studio 상단 컨트롤 펼치기"><span id="studioTopDockHandleIcon" aria-hidden="true">▾</span></button>

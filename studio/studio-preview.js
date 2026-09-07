@@ -1075,7 +1075,7 @@ function getStudioImageSlotState() {
    나가고, 쓰기는 아래 applyAiSkinPackage() 한 곳으로만 들어온다.
 
    getStudioAiWorkingState(options)
-     { hasWorkingSkin, isDirty, revision, mountToken,
+     { hasWorkingSkin, isDirty, revision, mountToken, draftVersionId,
        skinPackage, imageSlotBindings }
 
    options.includePackage가 참일 때만 skinPackage/imageSlotBindings
@@ -1095,6 +1095,7 @@ function getStudioAiWorkingState(options) {
     isDirty: isStudioDirty,
     revision: studioWorkingRevision,
     mountToken,
+    draftVersionId: currentDraftVersionId,
     skinPackage: null,
     imageSlotBindings: null
   };
@@ -1123,6 +1124,10 @@ function getStudioAiWorkingState(options) {
      expectedMountToken 요청을 보낸 시점의 mountToken
      dirty              적용 후 dirty 값(생략 시 true)
      imageSlotBindings  함께 복원할 슬롯 연결(되돌리기 전용)
+     expectedDraftVersionId
+                        요청 시점의 currentDraftVersionId. 지금과 다르면
+                        그 사이 Save가 성공한 것이므로 dirty를 강제로
+                        true로 둔다(되돌리기 전용, 아래 본문 참고).
 
    "늦은 응답 방어"의 판정을 패널이 아니라 여기서 한다 — 상태를
    소유한 쪽이 한 곳에서 판단해야 패널이 늘어나도 규칙이 갈라지지
@@ -1159,10 +1164,37 @@ function applyAiSkinPackage(skinPackage, options) {
     return { ok: false, reason: "stale" };
   }
 
+  /*
+     ★ 되돌리기와 그 사이의 Save
+
+     options.dirty는 "AI 요청을 보낸 시점의 dirty"다. 그 값은
+     "그때의 working draft가 그때 저장돼 있던 draft와 같은가"를
+     뜻하므로, 그 뒤에 Save가 일어났다면 더 이상 사실이 아니다:
+     Save는 저장된 draft를 AI 결과로 옮겨 놓았으므로, 되돌린
+     working draft는 저장된 draft와 **다르다**.
+
+     그대로 dirty=false를 복원하면 Save 버튼이 비활성이라 되돌린
+     내용을 저장할 방법이 없고, Publish는 활성인 채로 되돌리기
+     이전의 AI 버전을 발행한다(사용자가 본 화면과 다른 것이
+     공개된다).
+
+     revision 비교로는 이걸 잡을 수 없다 — Save는 working draft
+     내용을 바꾸지 않으므로 revision을 올리지 않는다(그리고 올려서도
+     안 된다, 올리면 Save 뒤의 되돌리기가 stale로 거부된다).
+     그래서 draft version id를 따로 비교한다: 요청 시점의 id와
+     지금의 id가 다르면 그 사이 Save가 성공한 것이므로 dirty는
+     무조건 true다.
+  */
+
+  const savedSinceRequest =
+    !!options &&
+    options.expectedDraftVersionId !== undefined &&
+    options.expectedDraftVersionId !== currentDraftVersionId;
+
   applyImportedSkinPackage(
     skinPackage,
     {
-      dirty: options ? options.dirty : undefined,
+      dirty: savedSinceRequest ? true : (options ? options.dirty : undefined),
       imageSlotBindings: options ? options.imageSlotBindings : undefined
     }
   );

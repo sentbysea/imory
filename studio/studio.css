@@ -702,6 +702,75 @@ body {
 }
 
 
+/* =========================================================
+   AI 로딩 표시 (PHASE AI-2.1)
+
+   상태 줄 안에서만 산다 — Preview를 덮는 overlay는 없다.
+   점 세 개는 순서대로 흐려졌다 진해지고, 그 뒤에 실제 경과
+   시간(초)이 붙는다. 진행률 막대는 두지 않는다(서버가 진행
+   정보를 주지 않으므로 가짜가 된다).
+========================================================== */
+
+.studio-ai-drawer-dots {
+  flex: 0 0 auto;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+
+.studio-ai-drawer-dots i {
+  width: 4px;
+  height: 4px;
+
+  border-radius: 50%;
+
+  background: currentColor;
+
+  opacity: 0.25;
+
+  animation: studio-ai-dot 1.2s ease-in-out infinite;
+}
+
+
+.studio-ai-drawer-dots i:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+
+.studio-ai-drawer-dots i:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+
+@keyframes studio-ai-dot {
+  0%, 80%, 100% { opacity: 0.25; }
+  40%           { opacity: 1; }
+}
+
+
+/* 애니메이션을 줄이는 설정에서는 점을 고정해 둔다 — 경과시간
+   숫자만으로도 "진행 중"이 충분히 전달된다. */
+@media (prefers-reduced-motion: reduce) {
+
+  .studio-ai-drawer-dots i {
+    animation: none;
+    opacity: 0.55;
+  }
+
+}
+
+
+.studio-ai-drawer-elapsed {
+  flex: 0 0 auto;
+
+  font-variant-numeric: tabular-nums;
+
+  white-space: nowrap;
+}
+
+
 .studio-ai-drawer-undo {
   flex: 0 0 auto;
 

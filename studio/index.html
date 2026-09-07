@@ -268,25 +268,14 @@
         </div>
 
 
+        <!--
+             PHASE AI-2.1 — 버튼 순서는 "만들기(Code/Import/Images)"
+             다음에 "내보내기(Save/Publish)"다. Settings는 이 toolbar
+             에서 뺐다(진입점만 제거, 기능 코드는 건드리지 않는다 —
+             이 id를 참조하는 JS는 원래 없다).
+        -->
+
         <div class="studio-top-dock-actions">
-
-          <button
-            type="button"
-            class="studio-corner-button"
-            id="studioSaveButton"
-            disabled
-          >
-            Save
-          </button>
-
-          <button
-            type="button"
-            class="studio-corner-button"
-            id="studioPublishButton"
-            disabled
-          >
-            Publish
-          </button>
 
           <button
             type="button"
@@ -325,10 +314,19 @@
           <button
             type="button"
             class="studio-corner-button"
-            id="studioSettingsButton"
+            id="studioSaveButton"
             disabled
           >
-            Settings
+            Save
+          </button>
+
+          <button
+            type="button"
+            class="studio-corner-button"
+            id="studioPublishButton"
+            disabled
+          >
+            Publish
           </button>
 
         </div>

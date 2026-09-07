@@ -112,6 +112,163 @@ let studioAiPendingRequest = null;
 let studioAiUndoSnapshot = null;
 
 
+/* =========================================================
+   로딩 표시 (PHASE AI-2.1)
+
+   실제 호출이 1분 가까이 걸릴 수 있어서 "고치는 중…" 한 줄로는
+   멈춘 것과 구분되지 않는다. Preview를 덮는 overlay는 만들지 않고
+   (요구사항 그대로) drawer 상태 줄 안에서만 강화한다:
+
+     스킨을 수정하고 있어요…  ● ● ●  37초
+
+   - 진행률(%)은 만들지 않는다 — 서버가 진행 정보를 주지 않으므로
+     어떤 숫자를 그려도 가짜다. 경과시간은 실제로 측정된 값이라
+     괜찮다.
+   - textarea는 그대로 둔다(내용/포커스 유지). 로딩 화면으로
+     바꾸지 않는다.
+   - 중단은 기존 Send 버튼(■)이 그대로 담당한다.
+
+   dots/경과시간 요소는 여기서 만들어 붙인다 — studio/index.html과
+   studio/studio-lifecycle-scenario.html 두 문서에 같은 마크업을
+   중복해 두지 않기 위해서다(둘 다 이 파일을 로드하므로 어느
+   쪽에서도 동일하게 동작한다).
+
+   접근성: 상태 줄은 aria-live="polite"다. 초 단위로 바뀌는
+   텍스트를 그 안에 그냥 넣으면 스크린리더가 1초마다 다시 읽는다.
+   그래서 낭독 대상인 #studioAiDrawerStatusText에는 고정 문장만
+   두고, 점과 경과시간은 aria-hidden으로 감춘다.
+========================================================== */
+
+const STUDIO_AI_LOADING_TEXT = "스킨을 수정하고 있어요…";
+
+let studioAiLoadingTimerId = null;
+
+let studioAiLoadingStartedAt = 0;
+
+let studioAiDotsElement = null;
+
+let studioAiElapsedElement = null;
+
+
+function ensureStudioAiLoadingElements() {
+
+  if (studioAiDotsElement || !studioAiPanelStatus) {
+    return;
+  }
+
+  const dots =
+    document.createElement("span");
+
+  dots.className =
+    "studio-ai-drawer-dots";
+
+  dots.setAttribute("aria-hidden", "true");
+
+  dots.hidden =
+    true;
+
+  [0, 1, 2].forEach(() => {
+    dots.appendChild(document.createElement("i"));
+  });
+
+  const elapsed =
+    document.createElement("span");
+
+  elapsed.className =
+    "studio-ai-drawer-elapsed";
+
+  elapsed.setAttribute("aria-hidden", "true");
+
+  elapsed.hidden =
+    true;
+
+  /* 되돌리기 버튼보다 앞(=문장 바로 뒤)에 둔다. */
+  studioAiPanelStatus.insertBefore(dots, studioAiPanelUndoButton);
+  studioAiPanelStatus.insertBefore(elapsed, studioAiPanelUndoButton);
+
+  studioAiDotsElement = dots;
+  studioAiElapsedElement = elapsed;
+
+}
+
+
+function renderStudioAiElapsed() {
+
+  if (!studioAiElapsedElement) {
+    return;
+  }
+
+  const seconds =
+    Math.floor((Date.now() - studioAiLoadingStartedAt) / 1000);
+
+  /* 0초는 표시하지 않는다 — 눌리자마자 "0초"가 뜨는 게 더 어색하다. */
+  if (seconds < 1) {
+
+    studioAiElapsedElement.hidden = true;
+    studioAiElapsedElement.textContent = "";
+
+    return;
+
+  }
+
+  studioAiElapsedElement.hidden = false;
+  studioAiElapsedElement.textContent = seconds + "초";
+
+}
+
+
+function startStudioAiLoading() {
+
+  ensureStudioAiLoadingElements();
+
+  stopStudioAiLoadingTimer();
+
+  studioAiLoadingStartedAt =
+    Date.now();
+
+  if (studioAiDotsElement) {
+    studioAiDotsElement.hidden = false;
+  }
+
+  renderStudioAiElapsed();
+
+  studioAiLoadingTimerId =
+    setInterval(renderStudioAiElapsed, 1000);
+
+}
+
+
+function stopStudioAiLoadingTimer() {
+
+  if (studioAiLoadingTimerId !== null) {
+
+    clearInterval(studioAiLoadingTimerId);
+
+    studioAiLoadingTimerId = null;
+
+  }
+
+}
+
+
+/* 성공/실패/중단/타임아웃 어느 경로로 끝나든 여기 한 곳으로 모인다
+   (setStudioAiStatus가 로딩이 아닌 모든 호출에서 부른다). */
+function stopStudioAiLoading() {
+
+  stopStudioAiLoadingTimer();
+
+  if (studioAiDotsElement) {
+    studioAiDotsElement.hidden = true;
+  }
+
+  if (studioAiElapsedElement) {
+    studioAiElapsedElement.hidden = true;
+    studioAiElapsedElement.textContent = "";
+  }
+
+}
+
+
 function isStudioAiRequestCurrent(seq) {
 
   return (
@@ -194,7 +351,8 @@ function updateStudioAiSendButtonState() {
    drawer 안 상태 한 줄
 
    Preview 전체를 덮는 loading overlay는 쓰지 않는다(요구사항 8절)
-   — 이 한 줄이 "고치는 중…" / 결과 요약 / 실패를 전부 담는다.
+   — 이 한 줄이 로딩(문장 + 점 + 경과시간) / 결과 요약 / 실패를
+   전부 담는다.
    오류 toast는 기존 showStudioToast()를 그대로 재사용한다.
 ========================================================== */
 
@@ -209,6 +367,18 @@ function setStudioAiStatus(text, options) {
 
   const showUndo =
     !!(options && options.showUndo);
+
+  const isLoading =
+    !!(options && options.loading);
+
+  /*
+     로딩이 아닌 모든 호출은 곧 "요청이 끝났다"는 뜻이다 — 여기 한
+     곳에서 타이머/애니메이션을 정리하므로 성공/실패/중단/타임아웃
+     경로마다 따로 정리 코드를 두지 않는다.
+  */
+  if (!isLoading) {
+    stopStudioAiLoading();
+  }
 
   if (!text) {
 
@@ -238,6 +408,10 @@ function setStudioAiStatus(text, options) {
 
   studioAiPanelUndoButton.hidden =
     !showUndo;
+
+  if (isLoading) {
+    startStudioAiLoading();
+  }
 
 }
 
@@ -345,7 +519,9 @@ async function handleStudioAiSend() {
     imageSlotBindings: working.imageSlotBindings,
     isDirty: working.isDirty,
     revision: working.revision,
-    mountToken: working.mountToken
+    mountToken: working.mountToken,
+    /* 되돌리기 시점에 "그 사이 Save가 있었는가"를 판정하기 위한 값 */
+    draftVersionId: working.draftVersionId
   };
 
   studioAiRequestSeq += 1;
@@ -383,7 +559,7 @@ async function handleStudioAiSend() {
   studioAiUndoSnapshot =
     null;
 
-  setStudioAiStatus("고치는 중…");
+  setStudioAiStatus(STUDIO_AI_LOADING_TEXT, { loading: true });
 
   updateStudioAiSendButtonState();
 
@@ -536,6 +712,7 @@ async function handleStudioAiSend() {
     imageSlotBindings: snapshot.imageSlotBindings,
     isDirty: snapshot.isDirty,
     mountToken: snapshot.mountToken,
+    draftVersionId: snapshot.draftVersionId,
     revisionAfterApply: applied.revision
   };
 
@@ -561,6 +738,12 @@ async function handleStudioAiSend() {
 
    AI 적용 이후 사용자가 또 무언가 바꿨다면(revision 불일치)
    되돌리지 않는다 — 그 변경을 조용히 지우게 되기 때문이다.
+
+   그 사이 Save가 있었다면 되돌리기 자체는 정상으로 진행하되 dirty는
+   복원하지 않고 true로 둔다 — 저장된 draft가 이미 AI 결과로 옮겨져
+   있어서, 되돌린 화면과 저장된 내용이 서로 다르기 때문이다. 판정은
+   상태를 소유한 studio-preview.js의 applyAiSkinPackage()가 한다
+   (expectedDraftVersionId, 그쪽 주석 참고).
 ========================================================== */
 
 function handleStudioAiUndo() {
@@ -579,6 +762,7 @@ function handleStudioAiUndo() {
         expectedRevision: snapshot.revisionAfterApply,
         expectedMountToken: snapshot.mountToken,
         dirty: snapshot.isDirty,
+        expectedDraftVersionId: snapshot.draftVersionId,
         imageSlotBindings: snapshot.imageSlotBindings
       }
     );

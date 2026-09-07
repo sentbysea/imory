@@ -31,7 +31,8 @@
      node studio/studio-ai-panel-e2e-test.mjs --only=server   (브라우저 없이 서버만)
 
    --only= 뒤에 쓸 수 있는 이름:
-     server / happy / undo / empty / invalid / duplicate / stale / reload
+     server / happy / undo / empty / invalid / duplicate / stale / reload /
+     mobile / save-undo
 ========================================================== */
 
 import fs from "node:fs";
@@ -45,6 +46,54 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const PORT = 8937;
 const SCENARIO_URL = `http://localhost:${PORT}/studio/studio-lifecycle-scenario.html?scenario=x`;
+
+/* =========================================================
+   PHASE AI-2.1 — Save/Undo 회귀 (섹션 I)
+
+   scenario x는 save_skin_draft_version/publish_skin RPC를 아예
+   mock하지 않는다(rpcHandlers: {}) — 그래서 "AI 적용 -> Save ->
+   Undo"라는 조합을 태울 수 없었고, 그것이 이 버그가 기존 63개
+   검사를 그대로 통과한 이유다. scenario v는 두 RPC를 모두 mock
+   하고 current_published_version_id가 null로 시작하므로 Save와
+   Publish를 실제로 끝까지 돌릴 수 있다(studio/studio-lifecycle-
+   scenario.html의 Scenario V 주석 참고).
+========================================================== */
+const SCENARIO_V_URL = `http://localhost:${PORT}/studio/studio-lifecycle-scenario.html?scenario=v`;
+
+/* Scenario V fixture(draft-v1)의 css. 이 문자열이 보이면 "AI 이전
+   버전", MOCK_CSS_MARKER_V가 보이면 "AI 버전"이다. */
+const SCENARIO_V_INITIAL_CSS_MARK = ".scenario-v-home";
+
+const MOCK_CSS_MARKER_V = "/* imory-ai save-undo fixture */";
+
+/*
+  이 섹션만 진짜 functions/api/skin-ai.js를 거치지 않고 고정 응답을
+  쓴다(aiRouteMode = "fixed-package", 위 "invalid" 모드와 같은 방식).
+
+  이유: mock 모델(buildMockStructuredOutput)은 "요청에 실려 온
+  SkinPackage의 templates를 그대로 되돌려주는" 역할이라
+  pkg.templates.home.html을 읽는다. Scenario V는 templates가 없는
+  HOME-only legacy Skin이고(그 legacy 성격은 studio-publish-test.html
+  의 "HOME-only legacy Skin도 발행 가능" 검증이 쓰고 있어 바꾸면
+  안 된다), 서버도 그런 요청의 templates를 {}로 정리해 보내므로
+  mock 모델이 읽을 templates가 없다.
+
+  이 섹션이 검증하는 것은 모델/서버 경로가 아니라 **응답을 적용한
+  뒤의 Studio 상태 기계**(dirty / draft version / Save·Publish 가능
+  여부)다. 모델·서버 경로는 A~H 섹션이 scenario x로 이미 덮는다.
+*/
+const AI_RESULT_PACKAGE_V = {
+  schemaVersion: 1,
+  templates: {
+    home: { html: '<div class="ai-v-home"><h1 data-imory-bind="site.title"></h1></div>' },
+    category: { html: '<div class="ai-v-category"></div>' },
+    post: { html: '<div class="ai-v-post"><div data-imory-region="post-body"></div></div>' }
+  },
+  css: `.ai-v-home { color: crimson; }\n${MOCK_CSS_MARKER_V}`,
+  imageSlots: [],
+  regions: [],
+  metadata: { title: "AI result for scenario V" }
+};
 
 const args = process.argv.slice(2);
 const argOf = (name, fallback) => {
@@ -886,6 +935,24 @@ async function handleAiRoute(route) {
     return;
   }
 
+  if (aiRouteMode === "fixed-package") {
+    /*
+      섹션 I(save-undo) 전용 — 고정된 유효 SkinPackage를 그대로
+      돌려준다. 왜 실제 서버를 거치지 않는지는 파일 상단
+      AI_RESULT_PACKAGE_V 주석 참고.
+    */
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json; charset=utf-8",
+      body: JSON.stringify({
+        ok: true,
+        summary: MOCK_SUMMARY,
+        skinPackage: AI_RESULT_PACKAGE_V
+      })
+    });
+    return;
+  }
+
   if (aiRouteMode === "hold") {
     await new Promise(resolve => { aiRouteRelease = resolve; });
   }
@@ -927,7 +994,7 @@ const PRE_EXISTING_CONSOLE_ERROR_PATTERN = /image library probe failed/;
 
 const consoleErrors = [];
 
-async function openStudio(context) {
+async function openStudio(context, url = SCENARIO_URL) {
 
   const page = await context.newPage();
 
@@ -941,7 +1008,7 @@ async function openStudio(context) {
 
   await page.route("**/api/skin-ai", handleAiRoute);
 
-  await page.goto(SCENARIO_URL, { waitUntil: "load" });
+  await page.goto(url, { waitUntil: "load" });
 
   /*
     scenario 문서는 supabaseClient mock에 인위적 지연을 두었으므로
@@ -957,6 +1024,22 @@ async function openStudio(context) {
 
   return page;
 
+}
+
+/*
+  Save/Publish는 평소 화면 밖으로 접혀 있는 상단 dock 안에 있다 —
+  handle을 눌러야만 열린다(studio-preview.js: #studioTopDockHandle
+  클릭만이 #studioTopDockZone의 .is-open을 토글한다). 실제 사용자와
+  같은 경로로 열어 두고 클릭한다.
+*/
+async function openTopDock(page) {
+  const isOpen = await page.evaluate(
+    () => document.getElementById("studioTopDockZone").classList.contains("is-open")
+  );
+  if (!isOpen) await page.click("#studioTopDockHandle");
+  await page.waitForFunction(
+    () => document.getElementById("studioTopDockZone").classList.contains("is-open")
+  );
 }
 
 async function openDrawer(page) {
@@ -1260,6 +1343,21 @@ async function runDuplicate(context) {
     () => document.getElementById("studioPreviewOverlay").hidden
   );
 
+  /* PHASE AI-2.1 — 로딩 표시는 drawer 안에서만 강화됐다(점 세 개 +
+     실제 경과시간). 진행률(%)은 만들지 않는다. 점/경과시간은
+     aria-hidden이라 aria-live="polite" 상태 줄이 1초마다 다시
+     낭독되지 않는다(studio/ai/studio-ai-panel.js 주석 참고). */
+  const loadingDuringRequest = await page.evaluate(() => {
+    const dots = document.querySelector(".studio-ai-drawer-dots");
+    const elapsed = document.querySelector(".studio-ai-drawer-elapsed");
+    return {
+      dotsShown: !!dots && !dots.hidden,
+      dotCount: dots ? dots.children.length : 0,
+      dotsAriaHidden: !!dots && dots.getAttribute("aria-hidden") === "true",
+      elapsedAriaHidden: !!elapsed && elapsed.getAttribute("aria-hidden") === "true"
+    };
+  });
+
   /* 요청 중 Enter로 재전송을 시도해도 새 요청이 나가면 안 된다 */
   await page.fill("#studioAiDrawerInput", "또 보내볼까");
   await page.focus("#studioAiDrawerInput");
@@ -1288,8 +1386,17 @@ async function runDuplicate(context) {
 
   record(
     "E3. 요청 중 Preview 전체를 덮는 overlay는 뜨지 않고 drawer 안 문구만 바뀐다",
-    overlayHiddenDuringRequest === true && statusDuringRequest.includes("고치는 중"),
+    overlayHiddenDuringRequest === true && statusDuringRequest.includes("스킨을 수정하고 있어요"),
     `overlayHidden=${overlayHiddenDuringRequest} status=${JSON.stringify(statusDuringRequest)}`
+  );
+
+  record(
+    "E3-2. 요청 중 drawer 안에 점 세 개가 뜨고, 점/경과시간은 aria-hidden이다",
+    loadingDuringRequest.dotsShown &&
+      loadingDuringRequest.dotCount === 3 &&
+      loadingDuringRequest.dotsAriaHidden &&
+      loadingDuringRequest.elapsedAriaHidden,
+    JSON.stringify(loadingDuringRequest)
   );
 
   record(
@@ -1451,6 +1558,273 @@ async function runMobile(browser) {
 
 
 /* =========================================================
+   I. AI 적용 -> Save -> Undo (PHASE AI-2.1 회귀)
+
+   되돌리기는 "AI 요청 직전의 dirty"를 복원한다. 그 값의 뜻은
+   "그때의 working draft가 그때 저장돼 있던 draft와 같은가"이므로,
+   그 사이에 Save가 성공했다면 더 이상 사실이 아니다 — Save가
+   저장된 draft를 AI 결과로 옮겨 놓았기 때문에, 되돌린 working
+   draft는 저장된 draft와 다르다.
+
+   그대로 dirty=false를 복원하면 두 가지가 동시에 깨진다:
+     - Save 버튼이 비활성이라 **되돌린 내용을 저장할 방법이 없다**
+     - Publish는 활성인 채로 남아 **되돌리기 이전의 AI 버전**을
+       발행한다(사용자가 보고 있는 화면과 다른 것이 공개된다)
+
+   revision 비교로는 잡히지 않는다 — Save는 working draft 내용을
+   바꾸지 않아 studioWorkingRevision을 올리지 않는다(올리면 Save
+   뒤의 되돌리기가 stale로 거부되므로 올려서도 안 된다). 그래서
+   draft version id를 따로 비교한다(studio/studio-preview.js의
+   applyAiSkinPackage() expectedDraftVersionId).
+========================================================== */
+
+async function runSaveUndo(context) {
+
+  const previousRouteMode = aiRouteMode;
+
+  aiRouteMode = "fixed-package";
+
+  const page = await openStudio(context, SCENARIO_V_URL);
+  await openTopDock(page);
+  await openDrawer(page);
+
+  const savedCalls = () =>
+    page.evaluate(() => (window.__savedDraftCallsV || []).map(c => ({ css: c.p_content.css })));
+
+  const publishCalls = () =>
+    page.evaluate(() => (window.__publishCallsV || []).length);
+
+  const publishState = () =>
+    page.evaluate(() => {
+      const btn = document.getElementById("studioPublishButton");
+      return { disabled: btn.disabled, text: btn.textContent.trim(), title: btn.title };
+    });
+
+  /* ---------- 1. 초기 상태 ---------- */
+
+  const initial = await workingState(page);
+  const initialSaves = await savedCalls();
+
+  record(
+    "I1. 초기에는 working draft가 저장된 draft(draft-v1) 그대로다",
+    initial.skinPackage.css.includes(SCENARIO_V_INITIAL_CSS_MARK) &&
+      initial.draftVersionId === "draft-v1" &&
+      initialSaves.length === 0,
+    `css=${JSON.stringify(initial.skinPackage.css)} draftVersionId=${initial.draftVersionId} saves=${initialSaves.length}`
+  );
+
+  record(
+    "I2. 초기 dirty=false / Save 비활성",
+    initial.isDirty === false && (await saveButtonDisabled(page)) === true,
+    `isDirty=${initial.isDirty}`
+  );
+
+  /* ---------- 2. AI 결과 적용 ---------- */
+
+  await page.fill("#studioAiDrawerInput", "배경을 조금 밝게 해줘");
+  await page.click("#studioAiDrawerSend");
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().hasUndo === true,
+    null,
+    { timeout: 10000 }
+  );
+
+  const applied = await workingState(page);
+
+  record(
+    "I3. AI 결과가 working skin에 반영된다",
+    applied.skinPackage.css.includes(MOCK_CSS_MARKER_V) &&
+      !applied.skinPackage.css.includes(SCENARIO_V_INITIAL_CSS_MARK),
+    `css=${JSON.stringify(applied.skinPackage.css)}`
+  );
+
+  record(
+    "I4. AI 적용은 dirty=true / Save 활성으로만 만들고 저장하지는 않는다",
+    applied.isDirty === true &&
+      (await saveButtonDisabled(page)) === false &&
+      applied.draftVersionId === "draft-v1" &&
+      (await savedCalls()).length === 0,
+    `isDirty=${applied.isDirty} draftVersionId=${applied.draftVersionId}`
+  );
+
+  /* ---------- 3. Save (AI 버전이 저장된다) ---------- */
+
+  await page.click("#studioSaveButton");
+  await page.waitForFunction(
+    () => (window.__savedDraftCallsV || []).length === 1,
+    null,
+    { timeout: 10000 }
+  );
+  await page.waitForFunction(
+    () => document.getElementById("studioPublishButton").disabled === false,
+    null,
+    { timeout: 10000 }
+  );
+
+  const afterSave = await workingState(page);
+  const savesAfterFirst = await savedCalls();
+
+  record(
+    "I5. Save가 실제 RPC까지 도달하고 저장된 draft가 AI 버전이 된다",
+    savesAfterFirst.length === 1 && savesAfterFirst[0].css.includes(MOCK_CSS_MARKER_V),
+    JSON.stringify(savesAfterFirst)
+  );
+
+  record(
+    "I6. 저장 후 currentDraftVersionId가 새 버전으로 갱신된다",
+    afterSave.draftVersionId === "draft-v2",
+    `draftVersionId=${afterSave.draftVersionId}`
+  );
+
+  record(
+    "I7. 저장 후 dirty=false / Save 비활성 / Publish 활성",
+    afterSave.isDirty === false &&
+      (await saveButtonDisabled(page)) === true &&
+      (await publishState()).disabled === false,
+    `isDirty=${afterSave.isDirty} publish=${JSON.stringify(await publishState())}`
+  );
+
+  /* ---------- 4. Undo (여기가 이 회귀의 핵심) ---------- */
+
+  await page.click("#studioAiDrawerUndo");
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().hasUndo === false,
+    null,
+    { timeout: 5000 }
+  );
+
+  const undone = await workingState(page);
+  const savesAfterUndo = await savedCalls();
+  const publishAfterUndo = await publishState();
+
+  record(
+    "I8. 되돌리기는 working skin을 AI 이전 버전으로 복원한다",
+    JSON.stringify(undone.skinPackage) === JSON.stringify(initial.skinPackage),
+    `css=${JSON.stringify(undone.skinPackage.css)}`
+  );
+
+  record(
+    "I9. 저장된 draft는 여전히 AI 버전이다(되돌리기는 DB를 되돌리지 않는다)",
+    savesAfterUndo.length === 1 &&
+      savesAfterUndo[0].css.includes(MOCK_CSS_MARKER_V) &&
+      undone.draftVersionId === "draft-v2",
+    `saves=${JSON.stringify(savesAfterUndo)} draftVersionId=${undone.draftVersionId}`
+  );
+
+  record(
+    "I10. 그러므로 되돌린 뒤 dirty=true다(화면과 저장된 draft가 다르다)",
+    undone.isDirty === true,
+    `isDirty=${undone.isDirty}`
+  );
+
+  const canSaveAfterUndo =
+    (await saveButtonDisabled(page)) === false;
+
+  record(
+    "I11. 되돌린 내용을 저장할 수 있도록 Save가 활성이다",
+    canSaveAfterUndo
+  );
+
+  record(
+    "I12. 저장 전 Publish는 막힌다(되돌리기 이전 AI 버전이 발행되지 않도록)",
+    publishAfterUndo.disabled === true && publishAfterUndo.title.includes("먼저 Save"),
+    JSON.stringify(publishAfterUndo)
+  );
+
+  /* ---------- 5·6. 다시 Save -> Publish ----------
+
+     Save가 비활성이면(= 이 회귀가 되살아난 상태) 클릭할 수 없다.
+     그때 Playwright의 클릭 재시도로 타임아웃을 내며 스위트 전체를
+     중단시키면 정작 무엇이 깨졌는지가 보이지 않으므로, 남은 검사를
+     "왜 실패했는지"와 함께 FAIL로 기록하고 정상 종료한다. */
+
+  if (!canSaveAfterUndo) {
+
+    const blocked =
+      "Undo 후 Save가 비활성이라 되돌린 내용을 저장할 수 없다" +
+      ` (dirty=${undone.isDirty}, publish.disabled=${publishAfterUndo.disabled})`;
+
+    record("I13. 다시 Save하면 되돌린 working skin이 새 draft로 저장된다", false, blocked);
+    record("I14. 저장 후 draft 포인터가 다시 갱신되고 dirty=false / Publish 활성", false, blocked);
+    record(
+      "I15. 발행되는 것은 AI 버전(draft-v2)이 아니라 되돌린 버전(draft-v3)이다",
+      false,
+      blocked + " — 이 상태에서 Publish를 누르면 되돌리기 이전의 AI 버전이 발행된다"
+    );
+
+    await page.close();
+
+    aiRouteMode = previousRouteMode;
+
+    return;
+
+  }
+
+  await page.click("#studioSaveButton");
+  await page.waitForFunction(
+    () => (window.__savedDraftCallsV || []).length === 2,
+    null,
+    { timeout: 10000 }
+  );
+  await page.waitForFunction(
+    () => document.getElementById("studioPublishButton").disabled === false,
+    null,
+    { timeout: 10000 }
+  );
+
+  const afterSave2 = await workingState(page);
+  const savesAfterSecond = await savedCalls();
+
+  record(
+    "I13. 다시 Save하면 되돌린 working skin이 새 draft로 저장된다",
+    savesAfterSecond.length === 2 &&
+      savesAfterSecond[1].css.includes(SCENARIO_V_INITIAL_CSS_MARK) &&
+      !savesAfterSecond[1].css.includes(MOCK_CSS_MARKER_V),
+    JSON.stringify(savesAfterSecond)
+  );
+
+  record(
+    "I14. 저장 후 draft 포인터가 다시 갱신되고 dirty=false / Publish 활성",
+    afterSave2.draftVersionId === "draft-v3" &&
+      afterSave2.isDirty === false &&
+      (await publishState()).disabled === false,
+    `draftVersionId=${afterSave2.draftVersionId} isDirty=${afterSave2.isDirty}`
+  );
+
+  /* ---------- 6. Publish (AI 버전이 아니라 되돌린 버전이 발행된다) ---------- */
+
+  await page.click("#studioPublishButton");
+  await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 5000 });
+  await page.click(".studio-confirm-button--primary");
+  await page.waitForFunction(
+    () => (window.__publishCallsV || []).length === 1,
+    null,
+    { timeout: 10000 }
+  );
+  await page.waitForFunction(
+    () => document.getElementById("studioPublishButton").textContent.trim() === "Published",
+    null,
+    { timeout: 10000 }
+  );
+
+  const afterPublish = await workingState(page);
+
+  record(
+    "I15. 발행되는 것은 AI 버전(draft-v2)이 아니라 되돌린 버전(draft-v3)이다",
+    (await publishCalls()) === 1 &&
+      afterPublish.draftVersionId === "draft-v3" &&
+      (await publishState()).text === "Published",
+    `draftVersionId=${afterPublish.draftVersionId} publish=${JSON.stringify(await publishState())}`
+  );
+
+  await page.close();
+
+  aiRouteMode = previousRouteMode;
+
+}
+
+
+/* =========================================================
    실행
 ========================================================== */
 
@@ -1484,6 +1858,7 @@ async function main() {
     if (shouldRun("duplicate")) await runDuplicate(context);
     if (shouldRun("stale")) await runStale(context);
     if (shouldRun("reload")) await runReload(context);
+    if (shouldRun("save-undo")) await runSaveUndo(context);
     if (shouldRun("mobile")) await runMobile(browser);
   } finally {
     await context.close();
