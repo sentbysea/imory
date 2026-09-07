@@ -29,6 +29,18 @@ from storage.buckets
 where id = 'skin-images';
 -- 기대: skin-images / public = true
 
+-- storage 정책 — UPDATE 정책이 없어야 한다(같은 경로 덮어쓰기 불가).
+select policyname, cmd
+from pg_policies
+where schemaname = 'storage'
+  and tablename = 'objects'
+  and policyname like 'skin_images%'
+order by policyname;
+-- 기대: skin_images_owner_delete (DELETE)
+--       skin_images_owner_insert (INSERT)
+--       skin_images_public_read  (SELECT)
+--       → UPDATE 정책은 없어야 한다.
+
 
 -- =========================================================
 -- 2) RLS가 켜져 있는가
@@ -158,6 +170,22 @@ where o.bucket_id = 'skin-images'
   and o.created_at < now() - interval '7 days'
 order by o.created_at;
 
+-- 6-3) 참조 중인 파일을 Storage API로 직접 지울 수 없는지
+--      (앱 UI가 아니라 클라이언트에서 storage.remove()를 직접 호출한
+--       상황을 가정한 확인 — skin_images row가 남아 있는 한 거부된다)
+--
+--      SQL로는 정책을 직접 재현하기 어렵다. 실제 확인은 브라우저
+--      콘솔에서 로그인 상태로 아래를 실행해 error가 나오는지 본다:
+--
+--        await supabaseClient.storage.from('skin-images')
+--          .remove(['<USER_ID>/<uuid>.png'])          -- 참조 중인 파일
+--        // 기대: 삭제되지 않음(파일이 그대로 남아 있어야 한다)
+--
+--        await supabaseClient.storage.from('skin-images')
+--          .upload('<USER_ID>/<uuid>.png', file, { upsert: true })
+--        // 기대: 거부(UPDATE 정책 없음)
+
+
 
 -- =========================================================
 -- 7) 하위 호환 확인
@@ -166,10 +194,26 @@ order by o.created_at;
 -- 7-1) 기존 skin_image_slot_values는 그대로 남아 있어야 한다
 select count(*) as legacy_rows from public.skin_image_slot_values;
 
--- 7-2) Image Library 도입 이전에 발행된 스킨(새 연결 0건)은
---      get_published_skin()이 기존 값으로 폴백해야 한다.
---      legacy_rows > 0인 사용자로 실행해서 확인한다.
+-- 7-2) Image Library를 한 번도 쓴 적 없는 스킨만 기존 값으로
+--      폴백해야 한다. legacy_rows > 0인 사용자로 확인한다.
 select public.get_published_skin('<LEGACY_USER_ID>') -> 'imageSlotValues';
+
+-- 7-3) ★ 폴백 조건 확인 — "지금 0건이면"이 아니라 "한 번도 쓴 적
+--      없으면"이어야 한다. 새 모델로 슬롯을 연결해 발행한 뒤,
+--      슬롯을 전부 비우고 다시 발행한다.
+--      기대: 옛 skin_image_slot_values 값이 되살아나지 않고 {}가
+--            나온다. (이 조건이 잘못되면 "사용자는 지웠는데
+--            옛 이미지가 부활"한다)
+select
+  (select count(*)
+     from public.skin_version_image_slots s
+     join public.skin_versions v on v.id = s.version_id
+    where v.skin_id = k.id)                       as ever_used_new_model,
+  public.get_published_skin(k.user_id) -> 'imageSlotValues' as published_images
+from public.skins k
+where k.user_id = '<USER_ID>'
+  and k.is_active;
+-- 기대: ever_used_new_model > 0 이면 published_images는 {}
 
 
 -- =========================================================

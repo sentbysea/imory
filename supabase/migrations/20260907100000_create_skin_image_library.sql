@@ -58,17 +58,47 @@ values ('skin-images', 'skin-images', true)
 on conflict (id) do nothing;
 
 
-create policy "skin_images_owner_write"
+-- ★ 다른 user-* 버킷처럼 for all 하나로 두지 않는다.
+--
+-- for all은 UPDATE와 DELETE까지 함께 열어준다 — 그러면 소유자가
+-- Storage API를 직접 호출해서 (a) 이미 발행된 버전이 참조 중인 파일을
+-- 지우거나 (b) 같은 경로에 upsert로 다른 이미지를 덮어써서 공개본과
+-- 과거 버전을 깨뜨릴 수 있다. delete_skin_image() RPC의 참조 검사와
+-- skin_version_image_slots의 on delete restrict는 DB row만 지키고
+-- 실제 파일은 지키지 못한다.
+--
+-- 그래서 권한을 쪼갠다:
+--   INSERT  : 자기 폴더면 허용 (업로드)
+--   UPDATE  : 정책 없음 = 항상 거부 → 같은 경로 덮어쓰기(upsert) 불가.
+--             업로드 경로는 매번 새 uuid라 UPDATE가 필요한 적이 없다.
+--   DELETE  : 자기 폴더이고, 그 경로를 가리키는 skin_images row가
+--             더 이상 없을 때만 허용 → 모든 삭제가
+--             delete_skin_image() RPC(참조 검사 포함)를 반드시
+--             거치게 된다. 클라이언트는 이미 "RPC로 row 삭제 →
+--             Storage object 삭제" 순서라 그대로 동작하고,
+--             등록 실패 후 되돌리는 고아 정리도 row가 없으므로 허용된다.
+
+create policy "skin_images_owner_insert"
 on storage.objects
-for all
+for insert
+to authenticated
+with check (
+  bucket_id = 'skin-images'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+create policy "skin_images_owner_delete"
+on storage.objects
+for delete
 to authenticated
 using (
   bucket_id = 'skin-images'
   and (storage.foldername(name))[1] = auth.uid()::text
-)
-with check (
-  bucket_id = 'skin-images'
-  and (storage.foldername(name))[1] = auth.uid()::text
+  and not exists (
+    select 1
+    from public.skin_images i
+    where i.storage_path = storage.objects.name
+  )
 );
 
 -- 발행된 Skin을 익명 방문자가 봐야 하므로 공개 읽기는 필수다.
@@ -557,7 +587,25 @@ begin
     join public.skin_images i on i.id = s.image_id
     where s.version_id = v_skin.current_published_version_id;
 
-  if v_image_slots = '{}'::jsonb then
+  /*
+    ★ 폴백 조건은 "지금 연결이 0건인가"가 아니라 "이 skin이 새 모델을
+    한 번도 쓴 적이 없는가"다.
+
+    "0건이면 폴백"으로 두면, 사용자가 슬롯을 전부 비우고 발행한 순간
+    연결이 0건이 되어 옛 skin_image_slot_values 값이 공개 화면에 다시
+    나타난다(사용자는 지웠는데 되살아난다). 그래서 이 skin에 속한 어떤
+    버전에도 연결 기록이 없을 때 — 즉 Image Library 도입 이전 상태
+    그대로일 때 — 만 폴백한다. 한 번이라도 연결을 저장한 skin은 그
+    뒤로 새 모델이 유일한 근거이고, "전부 비움"은 비어 있는 그대로
+    공개된다.
+  */
+
+  if not exists (
+    select 1
+    from public.skin_version_image_slots s
+    join public.skin_versions v on v.id = s.version_id
+    where v.skin_id = v_skin.id
+  ) then
 
     select coalesce(jsonb_object_agg(slot_name, image_url), '{}'::jsonb)
       into v_image_slots
@@ -575,7 +623,7 @@ end;
 $$;
 
 comment on function public.get_published_skin(uuid) is
-  '공개 방문자가 특정 사용자의 발행된 Skin을 읽는 유일한 통로. is_active skins row + current_published_version_id가 가리키는 skin_versions.content를 반환하며, imageSlotValues는 그 published 버전의 skin_version_image_slots -> skin_images.public_url로 구성한다(연결이 0건이면 Image Library 도입 이전에 발행된 스킨 호환을 위해 기존 skin_image_slot_values로 폴백). current_draft_version_id는 이 함수 어디에서도 참조하지 않는다(AI_SKIN_PHASE1A_DESIGN.md 2-7절).';
+  '공개 방문자가 특정 사용자의 발행된 Skin을 읽는 유일한 통로. is_active skins row + current_published_version_id가 가리키는 skin_versions.content를 반환하며, imageSlotValues는 그 published 버전의 skin_version_image_slots -> skin_images.public_url로 구성한다(이 skin에 속한 어떤 버전에도 연결 기록이 없을 때 — 즉 Image Library 도입 이전 상태 그대로일 때 — 만 기존 skin_image_slot_values로 폴백한다. 슬롯을 전부 비워 발행한 경우는 비어 있는 그대로 공개된다). current_draft_version_id는 이 함수 어디에서도 참조하지 않는다(AI_SKIN_PHASE1A_DESIGN.md 2-7절).';
 
 revoke execute on function public.get_published_skin(uuid) from public;
 grant execute on function public.get_published_skin(uuid) to anon, authenticated;

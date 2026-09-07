@@ -362,6 +362,47 @@ async function loadVersionImageSlots(versionId) {
 }
 
 
+/* =========================================================
+   hasAnySkinImageSlotBinding(skinId)
+
+   "이 skin이 Image Library를 한 번이라도 쓴 적이 있는가" — 지금
+   연결이 몇 건인지가 아니라, 어떤 버전에든 연결 기록이 있는지를 본다.
+
+   왜 필요한가: 옛 skin_image_slot_values 폴백 조건을 "지금 연결이
+   0건이면"으로 두면, 사용자가 슬롯을 전부 비우고 저장한 순간 옛 값이
+   화면에 다시 나타난다(지웠는데 되살아난다). get_published_skin()의
+   폴백 조건과 정확히 같은 규칙을 Studio 쪽에도 둬서 draft Preview와
+   공개 화면이 어긋나지 않게 한다.
+========================================================== */
+
+async function hasAnySkinImageSlotBinding(skinId) {
+
+  if (!skinId) {
+    return false;
+  }
+
+  /*
+    skin_version_image_slots에는 skin_id가 없다(version_id 기준) —
+    PostgREST의 embedded resource 필터로 skin_versions를 inner join해서
+    이 skin에 속한 연결이 하나라도 있는지만 확인한다.
+  */
+
+  const { data, error } =
+    await supabaseClient
+      .from("skin_version_image_slots")
+      .select("version_id, skin_versions!inner(skin_id)")
+      .eq("skin_versions.skin_id", skinId)
+      .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).length > 0;
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.skinImageLibrary = {
@@ -375,7 +416,8 @@ if (typeof window !== "undefined") {
     validateFile: validateSkinImageFile,
     upload: uploadSkinImage,
     remove: deleteSkinImage,
-    loadVersionSlots: loadVersionImageSlots
+    loadVersionSlots: loadVersionImageSlots,
+    hasAnyBinding: hasAnySkinImageSlotBinding
   };
 
 }

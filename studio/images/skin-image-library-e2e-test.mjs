@@ -181,6 +181,8 @@ function createMockBackend(options = {}) {
       current_draft_version_id: DRAFT_V1,
       current_published_version_id: PUBLISHED_V0
     },
+    /* Image Library 도입 이전에 시드된 옛 슬롯 값 */
+    legacySlotValues: options.seedLegacySlotValues || [],
     calls: [],
     uploads: []
   };
@@ -277,6 +279,18 @@ function createMockBackend(options = {}) {
         const img = state.images.find(i => i.id === imageId);
         if (img) values[slot] = img.public_url;
       });
+
+      /*
+        migration의 폴백 조건을 그대로 흉내 낸다 — "지금 0건이면"이
+        아니라 "이 skin이 새 모델을 한 번도 쓴 적이 없으면"만 옛
+        skin_image_slot_values로 폴백한다.
+      */
+      const everUsedNewModel = Object.values(state.versionSlots)
+        .some(slots => Object.keys(slots).length > 0);
+
+      if (!everUsedNewModel) {
+        state.legacySlotValues.forEach(row => { values[row.slot_name] = row.image_url; });
+      }
       return {
         status: 200,
         body: { skin: version.content, schemaVersion: version.schema_version, imageSlotValues: values }
@@ -303,6 +317,19 @@ function createMockBackend(options = {}) {
       if (!libraryReady) {
         return { status: 404, body: { code: "42P01", message: "does not exist" } };
       }
+
+      /*
+        hasAnyBinding()의 embedded resource 필터
+        (?skin_versions.skin_id=eq.<id>) — 이 skin에 속한 어떤
+        버전에든 연결이 있으면 1건이라도 돌려준다.
+      */
+      const skinFilter = params.get("skin_versions.skin_id");
+      if (skinFilter) {
+        const any = Object.values(state.versionSlots)
+          .some(slots => Object.keys(slots).length > 0);
+        return { status: 200, body: any ? [{ version_id: DRAFT_V1 }] : [] };
+      }
+
       const eq = params.get("version_id") || "";
       const versionId = eq.startsWith("eq.") ? eq.slice(3) : eq;
       const rows = Object.entries(state.versionSlots[versionId] || {}).map(([slot, imageId]) => {
@@ -321,7 +348,9 @@ function createMockBackend(options = {}) {
       return { status: 200, body: v ? [{ content: v.content }] : [] };
     }
 
-    if (table === "skin_image_slot_values") return { status: 200, body: [] };
+    if (table === "skin_image_slot_values") {
+      return { status: 200, body: state.legacySlotValues };
+    }
 
     if (table === "profiles") {
       return {
@@ -903,6 +932,104 @@ async function testImportPrunesSlots(playwright) {
 
 
 /* ---------------------------------------------------------
+   7) 슬롯을 전부 비워 저장해도 옛 legacy 이미지가 되살아나지 않는다
+
+   폴백 조건을 "지금 연결이 0건이면"으로 두면, 사용자가 슬롯을 전부
+   비운 순간 옛 skin_image_slot_values 값이 draft Preview와 공개
+   화면에 다시 나타난다. 조건이 "이 skin이 새 모델을 한 번도 쓴 적이
+   없으면"으로 바뀌었는지 확인한다.
+--------------------------------------------------------- */
+
+async function testClearedSlotsDoNotRestoreLegacy(playwright) {
+  console.log("\n[legacy] 슬롯 전부 비움 → 옛 이미지가 되살아나지 않는다");
+
+  const LEGACY_URL =
+    `https://${SUPABASE_HOST}/storage/v1/object/public/user-avatars/legacy.png`;
+
+  const backend = createMockBackend({
+    seedLegacySlotValues: [{ slot_name: "profile", image_url: LEGACY_URL }]
+  });
+
+  /* 사전 확인: 새 모델을 쓴 적 없는 skin은 지금까지대로 legacy로 폴백한다 */
+  const before = backend.rpc("get_published_skin", {}).body;
+  check("[legacy] 도입 이전 상태에서는 기존 값으로 폴백한다(하위 호환)",
+    before.imageSlotValues.profile === LEGACY_URL,
+    JSON.stringify(before.imageSlotValues));
+
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  try {
+    /* 새 모델로 한 번 연결하고 저장 → 발행 */
+    await page.click("#studioTopDockHandle");
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+    await attachFile(page, "new.png", PNG_BYTES, "image/png");
+    await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+    await page.click(".images-panel-card-attach");
+    await page.waitForTimeout(300);
+    await page.click(".images-panel-done-button");
+
+    await page.click("#studioSaveButton");
+    await page.waitForTimeout(1200);
+    await page.click("#studioPublishButton");
+    await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 })
+      .catch(() => {});
+    const confirm1 = await page.$(".studio-confirm-button--primary");
+    if (confirm1) await confirm1.click();
+    await page.waitForTimeout(1200);
+
+    const afterBind = backend.rpc("get_published_skin", {}).body;
+    check("[legacy] 새 연결이 legacy 값을 대신한다",
+      afterBind.imageSlotValues.profile &&
+      afterBind.imageSlotValues.profile.includes("/skin-images/"),
+      JSON.stringify(afterBind.imageSlotValues));
+
+    /* 이제 슬롯을 전부 비우고 저장 → 발행 */
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+    await page.click(".images-panel-slot .images-panel-slot-clear");
+    await page.waitForTimeout(300);
+    await page.click(".images-panel-done-button");
+
+    await page.click("#studioSaveButton");
+    await page.waitForTimeout(1200);
+    await page.click("#studioPublishButton");
+    await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 })
+      .catch(() => {});
+    const confirm2 = await page.$(".studio-confirm-button--primary");
+    if (confirm2) await confirm2.click();
+    await page.waitForTimeout(1200);
+
+    const afterClear = backend.rpc("get_published_skin", {}).body;
+    check("[legacy] 전부 비우고 발행하면 공개본도 비어 있다(legacy 부활 없음)",
+      Object.keys(afterClear.imageSlotValues).length === 0,
+      JSON.stringify(afterClear.imageSlotValues));
+
+    check("[legacy] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+
+  /* 재접속했을 때 Studio Preview도 legacy를 되살리지 않아야 한다 */
+  const reopened = await openStudio(playwright, backend);
+
+  try {
+    await reopened.page.waitForTimeout(900);
+
+    const avatarSrc = await reopened.page.frameLocator("#studioPreviewFrame")
+      .locator(".t-avatar").getAttribute("src");
+
+    check("[legacy] 재접속 Preview도 legacy를 되살리지 않는다",
+      !avatarSrc, String(avatarSrc));
+
+  } finally {
+    await reopened.browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
    main
 --------------------------------------------------------- */
 
@@ -919,6 +1046,7 @@ try {
   await testValidationAndDeletionGuard(playwright);
   await testLibraryNotReady(playwright);
   await testImportPrunesSlots(playwright);
+  await testClearedSlotsDoNotRestoreLegacy(playwright);
 } finally {
   server.close();
 }

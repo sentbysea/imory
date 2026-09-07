@@ -144,7 +144,7 @@ public.skin_version_image_slots          -- "이 버전의 이 슬롯 = 이 이�
 | 과거 버전이 참조하는 이미지도 삭제 정책에서 고려한다 | `image_id`가 `on delete restrict` — **어떤 버전이든(발행 이력 포함)** 참조 중이면 DB가 삭제를 막는다 |
 | 사용 중 이미지 삭제 방지 | 위와 동일. `delete_skin_image()` RPC가 사전에 친절한 메시지로 먼저 거절 |
 | Skin에 선언되지 않은 슬롯 연결은 저장하지 않는다 | Save RPC가 `p_content->'imageSlots'`에서 선언된 이름을 뽑아 그 교집합만 insert(나머지는 조용히 버림). 프런트에서도 한 번 더 필터 |
-| `imageSlots: []` 및 기존 스킨 호환성 | 선언이 없으면 연결이 0건. `get_published_skin()`은 연결 0건일 때 기존 `skin_image_slot_values`로 폴백하므로 기존 발행본이 그대로 유지된다 |
+| `imageSlots: []` 및 기존 스킨 호환성 | 선언이 없으면 연결이 0건. `get_published_skin()`은 **이 skin이 새 모델을 한 번도 쓴 적이 없을 때만** 기존 `skin_image_slot_values`로 폴백하므로, 기존 발행본은 유지되면서도 "슬롯을 전부 비웠는데 옛 이미지가 부활"하지 않는다(§4-3) |
 
 ### 2-4. Draft 편집 중의 슬롯 값은 어디 있나
 
@@ -164,18 +164,32 @@ Draft 이미지 연결이 복원된다")과도 일치한다. dirty 표시 대상
 
 - 버킷: `skin-images`, `public = true`
 - 경로: `{user_id}/{uuid}.{ext}` — **절대 재사용/덮어쓰기 없음**
-- 정책:
-  - `skin_images_owner_write`: `authenticated`, 자기 폴더만 (기존
-    `user-avatars` 정책과 동일 형태)
-  - `skin_images_public_read`: `anon, authenticated` SELECT
-    — 발행된 스킨을 익명 방문자가 봐야 하므로 필수
+- 정책 — **다른 `user-*` 버킷처럼 `for all` 하나로 두지 않는다.**
+  `for all`은 UPDATE/DELETE까지 열어주므로, 소유자가 Storage API를
+  직접 호출해 (a) 발행된 버전이 참조 중인 파일을 지우거나 (b) 같은
+  경로에 upsert로 덮어써서 공개본과 과거 버전을 깨뜨릴 수 있다.
+  `delete_skin_image()`의 참조 검사와 FK는 DB row만 지키고 파일은
+  지키지 못한다.
+
+  | 작업 | 정책 |
+  | --- | --- |
+  | INSERT | 자기 폴더면 허용(업로드) |
+  | UPDATE | **정책 없음 = 항상 거부** → 같은 경로 덮어쓰기(upsert) 불가. 업로드 경로는 매번 새 uuid라 필요한 적이 없다 |
+  | DELETE | 자기 폴더이고 **그 경로를 가리키는 `skin_images` row가 더 이상 없을 때만** 허용 → 모든 삭제가 `delete_skin_image()`(참조 검사 포함)를 반드시 거친다 |
+  | SELECT | `anon, authenticated` — 발행된 스킨을 익명 방문자가 봐야 하므로 필수 |
+
+  클라이언트는 이미 "RPC로 row 삭제 → Storage object 삭제" 순서라
+  그대로 동작하고, 등록 실패 후 되돌리는 고아 정리도 row가 없으므로
+  허용된다.
 
 ### 공개 URL 열람 ↔ 비공개 관리의 분리
 
 | 대상 | anon | 소유자 |
 | --- | --- | --- |
 | Storage object (URL을 아는 경우) | 읽기 O | 읽기 O |
-| Storage object 업로드/삭제 | X | 자기 폴더만 O |
+| Storage object 업로드 | X | 자기 폴더만 O |
+| Storage object 덮어쓰기(upsert) | X | **X** (UPDATE 정책 없음) |
+| Storage object 삭제 | X | 자기 폴더 + `skin_images` row가 없을 때만 O |
 | `skin_images` 목록 조회(= 내 이미지 목록) | **X** | 자기 것만 O |
 | `skin_version_image_slots` | **X** | 자기 skin 소속만 O |
 
@@ -216,8 +230,15 @@ Draft 이미지 연결이 복원된다")과도 일치한다. dirty 표시 대상
 - `get_published_skin(uuid)`
   - `current_published_version_id`의 `skin_version_image_slots` →
     `skin_images.public_url`로 `imageSlotValues` 구성
-  - **연결이 0건이면** 기존 `skin_image_slot_values`로 폴백
-    (마이그레이션 전에 시드된 기존 발행본 호환)
+  - 폴백 조건은 **"지금 연결이 0건인가"가 아니라 "이 skin이 새 모델을
+    한 번도 쓴 적이 없는가"**다. "0건이면 폴백"으로 두면 사용자가
+    슬롯을 전부 비우고 발행한 순간 옛 값이 되살아난다(지웠는데
+    부활). 이 skin에 속한 어떤 버전에도 연결 기록이 없을 때 —
+    즉 도입 이전 상태 그대로일 때 — 만 기존
+    `skin_image_slot_values`로 폴백한다.
+  - Studio 쪽(`studio-preview.js`)도 **같은 규칙**을 쓴다
+    (`skinImageLibrary.hasAnyBinding()`) — draft Preview와 공개
+    화면이 어긋나지 않게 하기 위함.
 - `restore_skin_version(uuid, uuid, text)`
   - 새 버전 row를 만들 때 **원본 버전의 슬롯 연결도 함께 복제**한다
     — 안 하면 Restore가 이미지를 잃는다

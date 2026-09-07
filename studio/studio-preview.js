@@ -1849,7 +1849,48 @@ async function mountStudioPreview(
 
   }
 
-  if (Object.keys(workingImageSlots).length > 0) {
+  /*
+    ★ 폴백 조건은 "지금 연결이 0건인가"가 아니라 "이 skin이 새 모델을
+    한 번도 쓴 적이 없는가"다 — get_published_skin()과 정확히 같은 규칙이다
+    (supabase/migrations/20260907100000_create_skin_image_library.sql).
+
+    "0건이면 폴백"으로 두면 슬롯을 전부 비우고 저장한 뒤 다시 들어왔을 때
+    옛 skin_image_slot_values 값이 Preview에 되살아나고, 공개 화면과도
+    어긋난다(사용자는 지웠는데 되살아난다).
+  */
+
+  let skinUsedImageLibrary =
+    Object.keys(workingImageSlots).length > 0;
+
+  if (isSkinImageLibraryAvailable && !skinUsedImageLibrary) {
+
+    try {
+
+      skinUsedImageLibrary =
+        await window.skinImageLibrary.hasAnyBinding(
+          skin.id
+        );
+
+    } catch (err) {
+
+      /*
+        확인에 실패하면 폴백하지 않는다 — 지운 이미지를 되살리는 쪽이
+        아무것도 안 보이는 쪽보다 나쁘다.
+      */
+
+      console.error(
+        "[studio-preview] hasAnyBinding check failed",
+        err
+      );
+
+      skinUsedImageLibrary =
+        true;
+
+    }
+
+  }
+
+  if (skinUsedImageLibrary) {
 
     imageSlotValues =
       deriveImageSlotValues(workingImageSlots);
