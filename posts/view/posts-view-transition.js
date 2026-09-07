@@ -553,7 +553,7 @@ function cancelPendingIndicator(
    풀며, .post-area--skin-active는 .post-area의 padding을 0으로
    만들고, --owner-tools는 헤더를 화면 오른쪽 아래 떠 있는 알약으로
    바꾼다. 전부 "Skin이 자기 CSS로 프레임을 정한다"는 전제의 규칙이라,
-   그 자리에 플랫폼 자신의 화면(에디터/선택 패널/관리 패널)을 열 때는
+   그 자리에 플랫폼 자신의 화면(에디터/안내 패널/관리 패널)을 열 때는
    반드시 걷어내야 한다.
 
    걷어내지 않으면 실제로 이렇게 깨진다:
@@ -636,7 +636,7 @@ function enterPlatformScreen() {
 
 /*
   플랫폼 화면이 쓰는 "이 화면 말고 다른 건 전부 접는다" 정리.
-  에디터/선택 패널이 열리기 직전에 한 번 부른다 — 각 화면이
+  에디터/안내 패널이 열리기 직전에 한 번 부른다 — 각 화면이
   자기 것만 다시 펴면 된다.
 */
 
@@ -682,9 +682,9 @@ function hideOtherPostScreens() {
   }
 
 
-  if (postComposePicker) {
+  if (postComposeNotice) {
 
-    postComposePicker.hidden =
+    postComposeNotice.hidden =
       true;
 
   }
@@ -745,11 +745,11 @@ let platformScreenReturn =
 function rememberPlatformScreenReturn() {
 
   /*
-    선택 패널 → 작성 폼처럼 플랫폼 화면끼리 이어질 때는 최초
-    진입 지점을 그대로 유지한다 — 중간 화면(빈 작성 폼, 선택
-    패널)으로 되돌아가면 안 되기 때문이다. 기록이 없는 채로
-    이어졌다면(주소를 직접 쳐서 선택 패널부터 시작한 경우) 그냥
-    없는 상태로 두고, 호출자가 준 fallback으로 돌아간다.
+    플랫폼 화면끼리 이어질 때는 최초 진입 지점을 그대로
+    유지한다 — 중간 화면(빈 작성 폼, 안내 패널)으로 되돌아가면
+    안 되기 때문이다. 기록이 없는 채로 이어졌다면(주소를 직접
+    쳐서 플랫폼 화면부터 시작한 경우) 그냥 없는 상태로 두고,
+    호출자가 준 fallback으로 돌아간다.
   */
 
   if (
@@ -1062,16 +1062,16 @@ function hidePostEditor() {
 
 
   /*
-    작성 대상 카테고리 선택 패널도 같은 "작성 화면" 묶음이다 —
+    글 카테고리 없음 안내 패널도 같은 "작성 화면" 묶음이다 —
     이 함수는 openCategoryPage/openPostPage/closePostArea가 각자
     화면을 열기 직전에 부르는 공통 정리 지점이라, 여기서 함께
-    접어야 선택 패널이 다음 화면 위에 남지 않는다
+    접어야 안내 패널이 다음 화면 위에 남지 않는다
     (posts/view/posts-view-compose.js).
   */
 
-  if (postComposePicker) {
+  if (postComposeNotice) {
 
-    postComposePicker.hidden =
+    postComposeNotice.hidden =
       true;
 
   }

@@ -304,50 +304,16 @@ postManageToggleButton
 
 
 /* =========================================================
-   작성 대상 카테고리 선택 (WRITE)
+   글 카테고리 없음 안내 (WRITE)
 
-   posts/view/posts-view-compose.js가 그린 버튼들. 고르면 곧바로
-   그 카테고리의 작성 폼이 열린다.
+   글 카테고리가 하나도 없을 때만 뜨는 안내 패널의 cancel —
+   진입 전 화면으로 돌아간다(posts/view/posts-view-compose.js).
 ========================================================== */
 
-postComposePickerList
+postComposeNoticeClose
   ?.addEventListener(
     "click",
-    async event => {
-
-      const button =
-        event.target.closest(
-          "[data-category-id]"
-        );
-
-
-      if (!button) {
-        return;
-      }
-
-
-      if (postComposePicker) {
-
-        postComposePicker.hidden =
-          true;
-
-      }
-
-
-      await openNewPostEditor(
-        Number(
-          button.dataset.categoryId
-        )
-      );
-
-    }
-  );
-
-
-postComposePickerClose
-  ?.addEventListener(
-    "click",
-    closeComposeCategoryPicker
+    closeComposeCategoryNotice
   );
 
 

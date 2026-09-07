@@ -216,34 +216,29 @@ const postManageToggleButton =
 
 
 /*
-  WRITE에서 대상 카테고리가 정해지지 않았을 때만 잠깐 거치는
-  선택 패널(posts/view/posts-view-compose.js). 스킨 HTML 밖의
+  WRITE를 눌렀는데 글 카테고리가 하나도 없을 때만 뜨는 안내
+  패널(posts/view/posts-view-compose.js). 스킨 HTML 밖의
   플랫폼 UI라 스킨은 이 화면의 존재를 몰라도 된다.
 */
 
-const postComposePicker =
+const postComposeNotice =
   document.getElementById(
-    "postComposePicker"
+    "postComposeNotice"
   );
 
-const postComposePickerHint =
+const postComposeNoticeHint =
   document.getElementById(
-    "postComposePickerHint"
+    "postComposeNoticeHint"
   );
 
-const postComposePickerList =
+const postComposeNoticeAdmin =
   document.getElementById(
-    "postComposePickerList"
+    "postComposeNoticeAdmin"
   );
 
-const postComposePickerAdmin =
+const postComposeNoticeClose =
   document.getElementById(
-    "postComposePickerAdmin"
-  );
-
-const postComposePickerClose =
-  document.getElementById(
-    "postComposePickerClose"
+    "postComposeNoticeClose"
   );
 
 const postListSelectBar =

@@ -113,42 +113,37 @@
 
 
     <!-- =====================================================
-         작성 대상 카테고리 선택 (WRITE)
+         글 카테고리 없음 안내 (WRITE)
 
-         스킨의 WRITE를 눌렀는데 글 카테고리가 여러 개일 때만
-         잠깐 거치는 화면. 고르면 곧바로 작성 폼이 열린다 —
-         옛 LOG 목록은 거치지 않는다.
+         스킨의 WRITE를 눌렀는데 글 카테고리가 하나도 없어서
+         작성 폼을 열 수 없을 때만 나타난다. 카테고리가 하나라도
+         있으면 이 화면 없이 곧장 작성 폼이 열리고, 어느 카테고리에
+         쓸지는 폼 안의 CATEGORY 드롭다운에서 고른다.
          posts/view/posts-view-compose.js 참고.
     ====================================================== -->
 
     <section
-      class="post-compose-picker"
-      id="postComposePicker"
+      class="post-compose-notice"
+      id="postComposeNotice"
       hidden
     >
 
       <p
-        class="post-compose-picker-hint"
-        id="postComposePickerHint"
+        class="post-compose-notice-hint"
+        id="postComposeNoticeHint"
       ></p>
 
-      <div
-        class="post-compose-picker-list"
-        id="postComposePickerList"
-      ></div>
-
       <a
-        class="post-compose-picker-admin"
-        id="postComposePickerAdmin"
+        class="post-compose-notice-admin"
+        id="postComposeNoticeAdmin"
         href="/admin/"
-        hidden
       >
         설정에서 카테고리 만들기
       </a>
 
       <button
-        class="post-compose-picker-close"
-        id="postComposePickerClose"
+        class="post-compose-notice-close"
+        id="postComposeNoticeClose"
         type="button"
       >
         cancel

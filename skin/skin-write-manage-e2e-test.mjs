@@ -11,7 +11,7 @@
    그 파일이 BANNER/viewer 링크와 POST 수정 동선을 담당하므로,
    여기서는 겹치는 검증을 반복하지 않고 다음에 집중한다:
 
-   - WRITE 진입 (카테고리 0개 / 1개 / 여러 개)
+   - WRITE 진입 (카테고리 0개 / 1개 / 여러 개 — 고르는 중간 화면 없음)
    - 카테고리 + → 작성 폼, 취소 → 스킨 복귀 (스크롤 포함)
    - 목록 관리 패널 진입/종료 중 legacy 커튼·로딩 화면 미노출
    - 뒤로가기/앞으로가기/새로고침에서 화면과 주소 일치
@@ -223,9 +223,12 @@ const TALL_PNG = makePng(TALL_W, TALL_H, [200, 180, 190]);
    DB fixture
 
    categories에 POST 타입을 둘 두는 게 이 파일의 기본값이다 —
-   "WRITE를 눌렀을 때 어느 카테고리에 쓸지 골라야 하는" 경우가
-   실사용자의 기본 상황이기 때문이다. 하나뿐인 계정과 하나도 없는
-   계정은 아래에서 fixture를 갈아끼워 따로 확인한다.
+   "쓸 수 있는 카테고리가 여러 개"가 실사용자의 기본 상황이기
+   때문이다. 여러 개여도 고르는 중간 화면 없이 첫 카테고리의 작성
+   폼이 열리고, 다른 데 쓰려면 폼의 CATEGORY 드롭다운에서 바꾼다.
+   하나뿐인 계정과 하나도 없는 계정은 아래에서 fixture를 갈아끼워
+   따로 확인한다. banner 타입 카테고리("링크")를 함께 두는 이유는
+   그 드롭다운에 섞이지 않는지 보기 위해서다.
 ========================================================== */
 
 function makeDb({ postCategories = 2 } = {}) {
@@ -493,11 +496,12 @@ const READ_SCREEN = `(() => {
     editorTitle: el("postEditorTitle") ? el("postEditorTitle").value : null,
     editorCategory: el("postEditorCategory") ? el("postEditorCategory").value : null,
     deleteVisible: visible(el("postEditorDeleteButton")),
-    pickerVisible: visible(el("postComposePicker")),
-    pickerItems: [...document.querySelectorAll(".post-compose-picker-item")]
-      .map(b => b.textContent.trim()),
-    pickerAdminVisible: visible(el("postComposePickerAdmin")),
-    pickerHint: el("postComposePickerHint") ? el("postComposePickerHint").textContent : null,
+    editorCategoryOptions: el("postEditorCategory")
+      ? [...el("postEditorCategory").options].map(o => o.textContent.trim())
+      : null,
+    noticeVisible: visible(el("postComposeNotice")),
+    noticeAdminVisible: visible(el("postComposeNoticeAdmin")),
+    noticeHint: el("postComposeNoticeHint") ? el("postComposeNoticeHint").textContent : null,
     skinInList: Boolean(document.querySelector("#postList .imory-skin-root")),
     legacyItems: document.querySelectorAll("#postList .post-list-item").length,
     listVisible: visible(el("postList")),
@@ -526,7 +530,7 @@ async function testWriteEntry(vpName) {
   const vp = VIEWPORTS[vpName];
   console.log(`\n[${vpName}] WRITE 진입`);
 
-  /* 카테고리 여러 개 → 선택 패널 → 작성 폼 */
+  /* 카테고리 여러 개 → 고르는 화면 없이 곧장 작성 폼 */
   await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
     await gotoHome(page);
 
@@ -537,36 +541,36 @@ async function testWriteEntry(vpName) {
       href === `/${SLUG}?write=1`, String(href));
 
     await page.click(`.quiet-owner-link[href$="?write=1"]`);
-    await page.waitForSelector("#postComposePicker:not([hidden])", { timeout: 15000 });
-    await page.waitForTimeout(400);
-
-    const picker = await page.evaluate(READ_SCREEN);
-
-    check(`[${vpName}] WRITE → 옛 LOG 목록이 아니라 카테고리 선택 패널이 열린다`,
-      picker.pickerVisible && picker.pickerItems.join("/") === "일기/메모" &&
-      !picker.legacyItems && !picker.listVisible && !picker.skinInList,
-      JSON.stringify(picker));
-
-    check(`[${vpName}] 선택 패널 주소가 화면과 일치한다(?write=1)`,
-      picker.url === `/${SLUG}?write=1`, picker.url);
-
-    check(`[${vpName}] 선택 패널은 스킨 mount contract를 벗고 legacy 프레임을 쓴다`,
-      !picker.skinActive && !picker.ownerTools,
-      JSON.stringify(picker));
-
-    await page.click('.post-compose-picker-item[data-category-id="3"]');
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(400);
 
     const editor = await page.evaluate(READ_SCREEN);
 
-    check(`[${vpName}] 카테고리를 고르면 곧장 그 카테고리의 작성 폼이 열린다`,
-      editor.editorVisible && editor.editorMode && editor.editorCategory === "3" &&
-      !editor.pickerVisible && !editor.legacyItems && !editor.deleteVisible,
+    check(`[${vpName}] WRITE → 고르는 화면 없이 첫 카테고리의 작성 폼이 열린다`,
+      editor.editorVisible && editor.editorMode && editor.editorCategory === "1" &&
+      !editor.noticeVisible && !editor.legacyItems && !editor.listVisible &&
+      !editor.skinInList && !editor.deleteVisible,
       JSON.stringify(editor));
 
+    check(`[${vpName}] 어느 카테고리에 쓸지는 폼의 CATEGORY 드롭다운이 담당한다`,
+      (editor.editorCategoryOptions || []).join("/") === "일기/메모",
+      JSON.stringify(editor.editorCategoryOptions));
+
     check(`[${vpName}] 작성 폼 주소가 그 카테고리를 가리킨다`,
-      editor.url === `/${SLUG}/category/3?write=1`, editor.url);
+      editor.url === `/${SLUG}/category/1?write=1`, editor.url);
+
+    check(`[${vpName}] 작성 폼은 스킨 mount contract를 벗고 legacy 프레임을 쓴다`,
+      !editor.skinActive && !editor.ownerTools,
+      JSON.stringify(editor));
+
+    /* 드롭다운으로 대상 카테고리를 바꾼다 — 이게 옛 선택 패널의 대체다 */
+    await page.selectOption("#postEditorCategory", "3");
+    await page.waitForTimeout(200);
+
+    check(`[${vpName}] 드롭다운에서 다른 카테고리로 바꿀 수 있다`,
+      await page.evaluate(() =>
+        document.getElementById("postEditorCategory").value) === "3",
+      "editorCategory");
 
     check(`[${vpName}] WRITE 흐름 전체에서 문서 재로드 없음`,
       ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);
@@ -602,7 +606,7 @@ async function testWriteEntry(vpName) {
     const editor = await page.evaluate(READ_SCREEN);
 
     check(`[${vpName}] 카테고리가 하나면 고르는 단계 없이 바로 작성 폼`,
-      editor.editorVisible && !editor.pickerVisible && editor.editorCategory === "1" &&
+      editor.editorVisible && !editor.noticeVisible && editor.editorCategory === "1" &&
       editor.url === `/${SLUG}/category/1?write=1`,
       JSON.stringify(editor));
 
@@ -614,14 +618,14 @@ async function testWriteEntry(vpName) {
   await withPage(vp, { signedInAs: OWNER_ID, db: makeDb({ postCategories: 0 }) }, async (page, ctx) => {
     await gotoHome(page);
     await page.click(`.quiet-owner-link[href$="?write=1"]`);
-    await page.waitForSelector("#postComposePicker:not([hidden])", { timeout: 15000 });
+    await page.waitForSelector("#postComposeNotice:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(400);
 
     const empty = await page.evaluate(READ_SCREEN);
 
     check(`[${vpName}] 글 카테고리가 없으면 안내와 설정 진입점을 준다`,
-      empty.pickerVisible && empty.pickerItems.length === 0 &&
-      empty.pickerAdminVisible && (empty.pickerHint || "").includes("카테고리"),
+      empty.noticeVisible && !empty.editorVisible &&
+      empty.noticeAdminVisible && (empty.noticeHint || "").includes("카테고리"),
       JSON.stringify(empty));
 
     check(`[${vpName}] 카테고리 없음 경로 콘솔 에러 없음`,
@@ -637,7 +641,7 @@ async function testWriteEntry(vpName) {
     const visitor = await page.evaluate(READ_SCREEN);
 
     check(`[${vpName}] 다른 계정이 ?write=1로 들어와도 작성 폼이 열리지 않고 주소가 정리된다`,
-      !visitor.editorVisible && !visitor.pickerVisible && visitor.skinInList &&
+      !visitor.editorVisible && !visitor.noticeVisible && visitor.skinInList &&
       !visitor.addVisible && visitor.url === `/${SLUG}/category/1`,
       JSON.stringify(visitor));
 
@@ -654,7 +658,7 @@ async function testWriteEntry(vpName) {
     const anon = await page.evaluate(READ_SCREEN);
 
     check(`[${vpName}] 로그아웃 방문자의 ?write=1은 그냥 HOME이 되고 주소도 정리된다`,
-      !anon.editorVisible && !anon.pickerVisible && !anon.areaOpen &&
+      !anon.editorVisible && !anon.noticeVisible && !anon.areaOpen &&
       anon.url === `/${SLUG}`,
       JSON.stringify(anon));
 
@@ -699,7 +703,7 @@ async function testCategoryTools(vpName) {
     check(`[${vpName}] + 로 연 작성 폼도 주소가 화면과 일치한다`,
       editor.url === `/${SLUG}/category/1?write=1`, editor.url);
 
-    check(`[${vpName}] 작성 중에는 떠 있는 소유자 도구(빈 알약)가 남지 않는다`,
+    check(`[${vpName}] 작성 중에는 스킨용 소유자 도구가 남지 않는다`,
       !editor.ownerTools && editor.headerPosition === "relative",
       JSON.stringify(editor));
 

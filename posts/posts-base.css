@@ -97,17 +97,29 @@
 
   배너 카테고리도 글 카테고리도 글 상세도 소유자가 방문자와 같은
   Skin을 본다. 그래도 추가(+)와 관리(edit)는 계속 필요하므로, legacy
-  post-header를 통째로 되살리는 대신 그 안의 버튼만 화면 오른쪽 아래에
-  떠 있는 작은 플랫폼 도구로 다시 꺼내 쓴다(제목/뒤로가기는 계속 숨김 —
-  Skin이 자기 nav를 이미 갖고 있다). 어느 화면이냐에 따라 실제로
-  보이는 버튼만 다르다(배너: bannerEditToggleButton, 글 목록:
+  post-header를 통째로 되살리는 대신 그 안의 버튼만 표시 공간의
+  오른쪽 위에 놓인 작은 고스트 버튼으로 다시 꺼내 쓴다(제목/뒤로가기는
+  계속 숨김 — Skin이 자기 nav를 이미 갖고 있다). 어느 화면이냐에 따라
+  실제로 보이는 버튼만 다르다(배너: bannerEditToggleButton, 글 목록:
   postListEditToggleButton, 글 상세: postManageToggleButton — 각
   렌더러가 hidden을 맞춘다).
 
-  position: fixed라 문서 흐름에서 빠져 있어 Skin 프레임의 좌표/폭에
-  전혀 영향을 주지 않는다(HOME/CATEGORY/POST와 같은 프레임을 유지해야
-  한다는 mount contract 그대로). 위치는 오른쪽 아래 — 위쪽은 이미
-  .music-button(오른쪽 위)/.menu-button(왼쪽 위)이 쓰고 있다.
+  ★ 왜 오른쪽 아래 알약에서 오른쪽 위 고스트로 옮겼나
+  원래는 position: fixed로 화면 오른쪽 아래에 떠 있는 알약이었다.
+  그런데 이 요소를 담고 있는 #postArea에 backdrop-filter가 걸려 있어
+  fixed의 기준이 뷰포트가 아니라 #postArea가 된다 — 그래서 알약은
+  "화면 아래"가 아니라 "표시 공간의 아래"에 놓였고, 본문이 짧으면
+  아무것도 없는 흰 여백 한가운데에, 긴 글을 읽는 중에는 화면 중간
+  오른쪽에 떠 있는 것처럼 보였다. 지금은 그 기준을 숨기지 않고
+  #postArea 기준의 position: absolute로 못 박고, 자리도 글의 위쪽
+  (카테고리 → 제목이 시작되는 구간)으로 올렸다. 본문을 내리면 함께
+  올라가 사라진다 — 읽는 동안 계속 떠 있어야 하는 도구가 아니다.
+
+  문서 흐름에서 빠져 있어 Skin 프레임의 좌표/폭에는 여전히 전혀
+  영향을 주지 않는다(HOME/CATEGORY/POST와 같은 프레임을 유지해야
+  한다는 mount contract 그대로). 다만 좁은 화면에서는 Skin이 자기
+  상단 띠에 그린 것과 겹칠 수 있다 — 알약 껍데기를 벗기고 고스트
+  (테두리/배경 없음)로 둔 이유이기도 하다.
 
   이 클래스는 posts/view/posts-view-list.js(목록)와
   posts/view/posts-view-detail.js(글 상세)가 "Skin 렌더 성공 + 실제
@@ -120,33 +132,44 @@
   align-items: center;
   justify-content: flex-end;
 
-  gap: 10px;
+  gap: 12px;
 
-  position: fixed;
-  top: auto;
+  position: absolute;
+  bottom: auto;
+  left: auto;
 
-  right:
+  top:
     max(
-      16px,
-      env(safe-area-inset-right)
+      12px,
+      env(safe-area-inset-top)
     );
 
-  bottom:
-    max(
-      18px,
-      env(safe-area-inset-bottom)
+  /*
+    같은 모서리를 .music-button(home/bgm.css — fixed, 오른쪽 위
+    16px, 28px)이 쓴다. BGM을 설정한 사이트에서만 나타나므로
+    "있을 때만 비키는" 규칙을 만들 수 없어, 그 자리(16 + 28)를
+    항상 비워 두고 그 왼쪽에 앉는다.
+  */
+
+  right:
+    calc(
+      max(
+        16px,
+        env(safe-area-inset-right)
+      )
+      + 40px
     );
 
   width: auto;
   min-height: 0;
 
   margin: 0;
-  padding: 5px 12px;
+  padding: 0;
 
-  border: 1px solid #eeeeee;
-  border-radius: 999px;
+  border: 0;
+  border-radius: 0;
 
-  background: rgba(255, 255, 255, 0.94);
+  background: none;
 
   z-index: 60;
 }
@@ -160,7 +183,7 @@
 
 /*
   두 버튼은 원래 .post-header 안에서 absolute로 좌우에 붙어 있다 —
-  떠 있는 도구 안에서는 그냥 나란히 놓는다.
+  이 도구 안에서는 그냥 나란히 놓는다.
 */
 
 .post-container--skin-active.post-container--owner-tools .post-header .post-add-button,
@@ -170,6 +193,49 @@
   right: auto;
 
   transform: none;
+}
+
+
+/*
+  고스트 — core/components/button.css의 .imory-button--ghost와 같은
+  결(테두리/배경 없음, 회색 글자, hover에서만 accent). 이 자리에서는
+  Skin이 그린 화면 위에 얹히므로 알약 껍데기가 오히려 눈에 띈다.
+  aria-pressed(관리 패널 열림)는 배경이 아니라 색으로만 나타낸다.
+*/
+
+.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button {
+  padding: 2px 0;
+
+  border: 0;
+  border-radius: 0;
+
+  background: none;
+
+  color: #aaaaaa;
+}
+
+.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button:hover,
+.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button:focus-visible {
+  color: #ee9fbd;
+}
+
+.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button[aria-pressed="true"] {
+  border-color: transparent;
+
+  background: none;
+
+  color: #d980a2;
+}
+
+
+.post-container--skin-active.post-container--owner-tools .post-header .post-add-button {
+  padding: 0;
+
+  font-size: 15px;
+
+  line-height: 1;
+
+  color: #aaaaaa;
 }
 
 
@@ -343,9 +409,9 @@
 
 
 /* =========================================================
-   작성 대상 카테고리 선택 (WRITE)
+   글 카테고리 없음 안내 (WRITE)
 
-   스킨의 WRITE를 눌렀는데 글 카테고리가 여러 개일 때만 잠깐
+   스킨의 WRITE를 눌렀는데 글 카테고리가 하나도 없을 때만
    나타나는 플랫폼 화면(posts/view/posts-view-compose.js).
    #postArea 안, .post-container(max-width 720px) 안에 그려지므로
    기존 legacy 화면과 같은 프레임을 쓴다 — 스킨 프레임의 폭/여백
@@ -353,7 +419,7 @@
    걷혀 있다(enterPlatformScreen).
 ========================================================== */
 
-.post-compose-picker {
+.post-compose-notice {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -363,11 +429,11 @@
   padding: 8px 0 0;
 }
 
-.post-compose-picker[hidden] {
+.post-compose-notice[hidden] {
   display: none;
 }
 
-.post-compose-picker-hint {
+.post-compose-notice-hint {
   margin: 0;
 
   color: #888888;
@@ -380,55 +446,7 @@
   word-break: keep-all;
 }
 
-.post-compose-picker-list {
-  display: flex;
-  flex-wrap: wrap;
-
-  gap: 8px;
-
-  width: 100%;
-}
-
-.post-compose-picker-item {
-  min-width: 96px;
-
-  padding: 10px 14px;
-
-  border: 1px solid #e8e8e8;
-  border-radius: 0;
-
-  background: #ffffff;
-
-  font-family:
-    "Pretendard",
-    sans-serif;
-
-  font-size: 11px;
-
-  letter-spacing: 0.02em;
-
-  color: #666666;
-
-  cursor: pointer;
-
-  transition:
-    color 0.2s ease,
-    border-color 0.2s ease,
-    background 0.2s ease;
-
-  -webkit-tap-highlight-color:
-    transparent;
-}
-
-.post-compose-picker-item:hover {
-  color: #ee9fbd;
-
-  border-color: #e8c1d0;
-
-  background: #fffafb;
-}
-
-.post-compose-picker-admin {
+.post-compose-notice-admin {
   color: #999999;
 
   font-size: 10px;
@@ -439,11 +457,7 @@
   text-underline-offset: 3px;
 }
 
-.post-compose-picker-admin[hidden] {
-  display: none;
-}
-
-.post-compose-picker-close {
+.post-compose-notice-close {
   min-width: 54px;
 
   padding: 7px 10px;
@@ -469,7 +483,7 @@
     transparent;
 }
 
-.post-compose-picker-close:hover {
+.post-compose-notice-close:hover {
   color: #666666;
 
   border-color: #dddddd;

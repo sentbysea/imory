@@ -38,6 +38,18 @@ function showPostEditorMessage(
    EDITOR CATEGORY
 ========================================================== */
 
+/*
+  WRITE가 대상 카테고리를 정할 때 쓰는 목록과 같은 목록으로
+  채운다(fetchOwnerPostCategories, posts/view/posts-view-compose.js) —
+  소유자의 POST 카테고리만. 이 드롭다운이 "어느 카테고리에 쓸지"를
+  고르는 유일한 자리이므로, 배너 카테고리나 남의 카테고리가 섞이면
+  고를 수 없어야 할 곳에 글이 저장된다.
+
+  수정 중인 글이 이미 들어 있는 카테고리는 목록에서 빼지 않는다
+  (keepCategoryId) — 빠지면 select.value가 ""가 되어 저장할 때
+  카테고리가 조용히 바뀐다.
+*/
+
 async function loadPostEditorCategories(
   selectedCategoryId = null
 ) {
@@ -47,41 +59,18 @@ async function loadPostEditorCategories(
   }
 
 
-  const {
-    data,
-    error
-  } =
-    await supabaseClient
-      .from(
-        "categories"
-      )
-      .select(
-        "id, name, sort_order"
-      )
-      .order(
-        "sort_order",
-        {
-          ascending: true
-        }
-      );
-
-
-  if (error) {
-
-    console.error(
-      error
-    );
-
-    return;
-
-  }
+  const categories =
+    await fetchOwnerPostCategories({
+      keepCategoryId:
+        selectedCategoryId
+    });
 
 
   postEditorCategory.innerHTML =
     "";
 
 
-  (data || []).forEach(
+  categories.forEach(
     category => {
 
       const option =

@@ -9,12 +9,13 @@
    눌렀는데 옛 LOG 목록이 먼저 나온다"로 보였다. 이 파일은 그
    중간 화면을 없애고 곧장 작성 폼을 연다.
 
-   대상 카테고리를 정하는 규칙(요청서 1절):
+   대상 카테고리를 정하는 규칙:
    - categoryId가 이미 정해져 있으면(카테고리의 + 버튼, 또는
      /:slug/category/:id?write=1) 그대로 쓴다.
-   - 정해지지 않았고(HOME의 WRITE) POST 카테고리가 하나뿐이면
-     그 카테고리로 바로 연다.
-   - 여러 개면 고르게 한다(아래 선택 패널).
+   - 정해지지 않았으면(HOME의 WRITE) 첫 번째 POST 카테고리로
+     연다. 여러 개여도 고르는 화면을 따로 거치지 않는다 —
+     작성 폼 안에 이미 CATEGORY 드롭다운이 있어서, 중간 화면은
+     같은 선택을 한 번 더 누르게 만들 뿐이었다.
    - 하나도 없으면 "카테고리부터 만들어야 한다"고 안내하고 기존
      관리 진입점(/admin/)을 준다.
 
@@ -25,9 +26,9 @@
    같은 검사를 거친다. 실제 쓰기 권한은 여전히 저장 시점의
    user_id 필터와 RLS가 강제한다.
 
-   선택 패널은 스킨 HTML 밖의 플랫폼 UI다(#postComposePicker,
-   posts/posts.html) — 스킨은 자기 안에 카테고리 선택 화면이
-   있다는 사실을 전혀 몰라도 된다.
+   카테고리가 하나도 없을 때만 뜨는 안내 패널은 스킨 HTML 밖의
+   플랫폼 UI다(#postComposeNotice, posts/posts.html) — 스킨은
+   그런 화면이 있다는 사실을 전혀 몰라도 된다.
 
    의존(먼저 로드돼야 함): posts/editor/posts-refs.js(DOM 참조),
    posts/editor/posts-state.js(isSiteOwnerSignedIn),
@@ -95,7 +96,15 @@ async function startPostCompose(
     await fetchOwnerPostCategories();
 
 
-  if (categories.length === 1) {
+  /*
+    여러 개여도 고르는 화면을 거치지 않는다 — 첫 카테고리
+    (sort_order가 가장 앞선 것)로 폼을 열고, 다른 데 쓰고
+    싶으면 폼의 CATEGORY 드롭다운에서 바꾼다. 그 드롭다운은
+    여기와 같은 목록(소유자의 POST 카테고리)만 보여준다
+    (loadPostEditorCategories, posts/editor/format/posts-editor.js).
+  */
+
+  if (categories.length > 0) {
 
     await openNewPostEditor(
       Number(
@@ -112,12 +121,9 @@ async function startPostCompose(
   }
 
 
-  openComposeCategoryPicker(
-    categories,
-    {
-      updateUrl
-    }
-  );
+  openComposeCategoryNotice({
+    updateUrl
+  });
 
 
   return true;
@@ -201,9 +207,23 @@ async function leaveComposeRequest(
    규칙(owner.scoped면 user_id로 좁힌다) — 새 조회 경로를
    만들지 않는다. 여기서만 type === "post"로 거른다(배너
    카테고리에는 글을 쓸 수 없다).
+
+   작성 폼의 CATEGORY 드롭다운도 이 함수를 쓴다
+   (loadPostEditorCategories, posts/editor/format/posts-editor.js) —
+   WRITE가 고를 수 있는 목록과 폼에서 고를 수 있는 목록이 갈라지면
+   안 되기 때문이다. keepCategoryId는 그 드롭다운 전용 예외로,
+   수정 중인 글이 이미 들어 있는 카테고리는 type이 어긋나더라도
+   목록에 남긴다 — 빼 버리면 저장할 때 다른 카테고리로 조용히
+   옮겨진다.
 ========================================================== */
 
-async function fetchOwnerPostCategories() {
+async function fetchOwnerPostCategories(
+  options = {}
+) {
+
+  const {
+    keepCategoryId = null
+  } = options;
 
   const owner =
     await getSiteOwner();
@@ -255,6 +275,15 @@ async function fetchOwnerPostCategories() {
   }
 
 
+  const kept =
+    keepCategoryId === null ||
+    keepCategoryId === undefined
+      ? null
+      : String(
+          keepCategoryId
+        );
+
+
   return (
     data ||
     []
@@ -263,22 +292,25 @@ async function fetchOwnerPostCategories() {
       (
         category.type ||
         "post"
-      ) === "post"
+      ) === "post" ||
+      String(
+        category.id
+      ) === kept
   );
 
 }
 
 
 /* =========================================================
-   CATEGORY PICKER
+   NO CATEGORY NOTICE
 
-   카테고리가 여러 개일 때만 잠깐 거치는 화면. 고르면 곧바로
-   그 카테고리의 작성 폼이 열린다(옛 목록은 거치지 않는다).
-   하나도 없으면 같은 자리에서 안내만 보여준다.
+   글 카테고리가 하나도 없어서 작성 폼을 열 수 없을 때만 뜨는
+   화면. 고를 것이 없으므로 목록이 아니라 안내와 설정 진입점만
+   보여준다 — 카테고리가 하나라도 있으면 여기 오지 않고 곧장
+   작성 폼이 열린다(startPostCompose).
 ========================================================== */
 
-function openComposeCategoryPicker(
-  categories,
+function openComposeCategoryNotice(
   options = {}
 ) {
 
@@ -287,7 +319,7 @@ function openComposeCategoryPicker(
   } = options;
 
 
-  if (!postComposePicker) {
+  if (!postComposeNotice) {
 
     return;
 
@@ -330,29 +362,15 @@ function openComposeCategoryPicker(
   }
 
 
-  if (postComposePickerList) {
+  if (postComposeNoticeHint) {
 
-    postComposePickerList.innerHTML =
-      "";
-
-  }
-
-
-  const hasCategories =
-    categories.length > 0;
-
-
-  if (postComposePickerHint) {
-
-    postComposePickerHint.textContent =
-      hasCategories
-        ? "어느 카테고리에 쓸까요?"
-        : "글을 쓰려면 글 카테고리가 먼저 필요합니다. 설정에서 카테고리를 만든 뒤 다시 시도해 주세요.";
+    postComposeNoticeHint.textContent =
+      "글을 쓰려면 글 카테고리가 먼저 필요합니다. 설정에서 카테고리를 만든 뒤 다시 시도해 주세요.";
 
   }
 
 
-  if (postComposePickerAdmin) {
+  if (postComposeNoticeAdmin) {
 
     /*
       github.io처럼 sub-path에 배포된 경우까지 맞추려면 관리자
@@ -361,60 +379,13 @@ function openComposeCategoryPicker(
       한 번 정확한 값으로 덮어쓴다.
     */
 
-    postComposePickerAdmin.href =
+    postComposeNoticeAdmin.href =
       SITE_BASE_PATH + "/admin/";
 
-
-    postComposePickerAdmin.hidden =
-      hasCategories;
-
   }
 
 
-  if (
-    hasCategories &&
-    postComposePickerList
-  ) {
-
-    categories.forEach(
-      (category) => {
-
-        const button =
-          document.createElement(
-            "button"
-          );
-
-
-        button.type =
-          "button";
-
-
-        button.className =
-          "post-compose-picker-item";
-
-
-        button.textContent =
-          category.name ||
-          "이름 없는 카테고리";
-
-
-        button.dataset.categoryId =
-          String(
-            category.id
-          );
-
-
-        postComposePickerList.appendChild(
-          button
-        );
-
-      }
-    );
-
-  }
-
-
-  postComposePicker.hidden =
+  postComposeNotice.hidden =
     false;
 
 
@@ -438,15 +409,15 @@ function openComposeCategoryPicker(
 
 
 /*
-  선택 패널을 닫는다 — 진입 전 화면으로 돌아간다(에디터의
+  안내 패널을 닫는다 — 진입 전 화면으로 돌아간다(에디터의
   취소와 같은 복귀 규칙을 그대로 쓴다).
 */
 
-async function closeComposeCategoryPicker() {
+async function closeComposeCategoryNotice() {
 
-  if (postComposePicker) {
+  if (postComposeNotice) {
 
-    postComposePicker.hidden =
+    postComposeNotice.hidden =
       true;
 
   }

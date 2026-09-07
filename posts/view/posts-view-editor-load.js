@@ -12,8 +12,9 @@
 /* =========================================================
    NEW EDITOR
 
-   카테고리의 + 버튼, 스킨의 WRITE(?write=1), 그리고 선택 패널이
-   전부 여기로 모인다 — 옛 목록 화면을 거치지 않는다.
+   카테고리의 + 버튼과 스킨의 WRITE(?write=1)가 전부 여기로
+   모인다 — 목록도 선택 화면도 거치지 않는다. 어느 카테고리에
+   쓸지는 폼 안의 CATEGORY 드롭다운에서 바꾼다.
 
    updateUrl: 진입 주소를 /:slug/category/:id?write=1로 남길지.
    라우터가 이미 그 주소로 들어온 경우(직접 접속/새로고침/
@@ -47,9 +48,9 @@ async function openNewPostEditor(
 
   /*
     들어오기 직전 화면(스킨 HOME/CATEGORY/POST)과 스크롤을
-    기억해 둔다 — 취소하면 여기로 돌아온다. 선택 패널을 거쳐
-    들어왔으면 그 패널이 이미 기록해 둔 최초 진입 지점을
-    그대로 유지한다(rememberPlatformScreenReturn의 guard).
+    기억해 둔다 — 취소하면 여기로 돌아온다. 이미 기록해 둔
+    진입 지점이 있으면 덮어쓰지 않는다
+    (rememberPlatformScreenReturn의 guard).
 
     updateUrl이 false면 라우터가 ?write=1 주소로 들어온 것이라
     "진입 전 화면"이 이 세션에 없다 — 그 주소를 복귀 지점으로
@@ -189,7 +190,7 @@ async function openNewPostEditor(
     주소를 작성 화면과 일치시킨다 — 새로고침/뒤로가기/앞으로가기
     어디서든 라우터가 이 주소를 보고 같은 작성 폼을 다시 연다
     (posts/editor/posts-router-init.js). 카테고리가 정해지지 않은
-    상태(선택 패널을 거치지 않은 예외)에서는 HOME 작성 주소를
+    상태(글 카테고리가 없는 예외)에서는 HOME 작성 주소를
     유지한다.
   */
 

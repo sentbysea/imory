@@ -1190,7 +1190,7 @@ async function testOwnerCategoryScreen(vpName) {
       `category=${JSON.stringify(skinFrame.frame && [skinFrame.frame.x, skinFrame.frame.y, skinFrame.frame.w])}`);
 
     check(`[${vpName}] 스킨 상태에서 legacy 헤더 제목은 숨고 도구만 떠 있다`,
-      skinView.ownerTools && skinView.headerPosition === "fixed" &&
+      skinView.ownerTools && skinView.headerPosition === "absolute" &&
       skinView.titleDisplay === "none" && skinView.areaPadding === "0px",
       JSON.stringify(skinView));
 
@@ -1378,6 +1378,19 @@ const READ_POST_SCREEN = `(() => {
     ownerTools: container.className.includes("post-container--owner-tools"),
     skinActive: area.className.includes("post-area--skin-active"),
     headerPosition: header ? getComputedStyle(header).position : null,
+
+    /* 소유자 도구가 표시 공간의 "위쪽"에 있는지 — 예전에는 fixed +
+       #postArea의 backdrop-filter 때문에 짧은 글에서는 빈 여백 아래,
+       긴 글에서는 화면 중간 오른쪽에 떠 있었다. */
+    toolsOffsetTop: header
+      ? header.getBoundingClientRect().top - area.getBoundingClientRect().top
+      : null,
+    toolsOffsetRight: header
+      ? area.getBoundingClientRect().right - header.getBoundingClientRect().right
+      : null,
+    toolsBorder: header ? getComputedStyle(header).borderTopWidth : null,
+    toolsBackground: header ? getComputedStyle(header).backgroundColor : null,
+
     titleDisplay: document.querySelector(".post-page-title")
       ? getComputedStyle(document.querySelector(".post-page-title")).display : null,
     url: location.pathname + location.search
@@ -1416,12 +1429,23 @@ async function testOwnerPostScreen(vpName) {
 
     check(`[${vpName}] 스킨 위에는 수정 진입점만 떠 있고 legacy 제목/수정 버튼은 없다`,
       reading.manageVisible && reading.managePressed === "false" &&
-      reading.ownerTools && reading.headerPosition === "fixed" &&
+      reading.ownerTools && reading.headerPosition === "absolute" &&
       reading.titleDisplay === "none" && !reading.actionsVisible,
       JSON.stringify(reading));
 
     check(`[${vpName}] 읽기 주소에는 관리/수정 쿼리가 붙지 않는다`,
       reading.url === `/${SLUG}/post/101`, reading.url);
+
+    check(`[${vpName}] 수정 진입점은 표시 공간의 오른쪽 위에 있다(중간/아래 아님)`,
+      reading.toolsOffsetTop !== null && reading.toolsOffsetTop >= 0 &&
+      reading.toolsOffsetTop <= 40 && reading.toolsOffsetRight <= 80,
+      `top=${reading.toolsOffsetTop} right=${reading.toolsOffsetRight}`);
+
+    check(`[${vpName}] 수정 진입점은 알약 껍데기 없이 고스트로 놓인다`,
+      reading.toolsBorder === "0px" &&
+      (reading.toolsBackground === "rgba(0, 0, 0, 0)" ||
+       reading.toolsBackground === "transparent"),
+      `border=${reading.toolsBorder} bg=${reading.toolsBackground}`);
 
     const readingScroll = await page.evaluate(() => {
       const area = document.getElementById("postArea");
