@@ -101,10 +101,12 @@ throw하지 않고 `false`를 반환해 호출자가 legacy 화면으로 조용�
    위 / `.music-button` 오른쪽 위 / 소유자 도구)는 계속 고려한다. 플랫폼 chrome끼리
    겹치게 두지 않는다.
 5. **페이지별 임시 보정 CSS를 추가하기 전에 공통 host와 부모 DOM/CSS를 먼저
-   조사한다.** 지금까지 이 자리에서 나온 버그는 전부 스킨 CSS가 아니라 부모 쪽
-   규칙(부모의 flex shrink-wrap, 부모의 legacy padding, 부모의 `backdrop-filter`)이
-   원인이었다. `.imory-skin-root`에 `!important`를 얹어 증상만 덮는 수정은 하지
-   않는다.
+   확인한다.** 부모 쪽 규칙(부모의 flex shrink-wrap, 부모의 legacy padding,
+   부모의 `backdrop-filter`)이 실제 원인이었던 사례가 있어 먼저 볼 값어치가
+   있다는 뜻이지, 원인이 항상 거기라는 뜻은 아니다. 스킨 CSS 자체, 라우팅(어떤
+   화면이 열렸는지), 캐시(옛 CSS/JS가 남아 있는지)도 원인 후보로 함께 확인한다.
+   어느 쪽이든 `.imory-skin-root`에 `!important`를 얹어 증상만 덮는 수정은
+   하지 않는다.
 6. 스킨 모드 진입·종료·실패 시 관련 클래스와 상태를 확실히 복원한다. 플랫폼
    화면(에디터 / 안내 패널 / 관리 패널)을 열기 직전에는 `enterPlatformScreen()`
    (`posts/view/posts-view-transition.js`)이 세 클래스를 모두 벗긴다 — 벗기지
