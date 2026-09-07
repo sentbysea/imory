@@ -184,6 +184,15 @@ const BANNER_LESS_SKIN = {
   }
 };
 
+/* HOME template만 가진 스킨 — CATEGORY/POST/BANNER 전부 legacy로
+   폴백해야 한다("템플릿 없는 기존 스킨" 대조군). */
+const HOME_ONLY_SKIN = {
+  ...SKIN_PACKAGE,
+  templates: {
+    home: SKIN_PACKAGE.templates.home
+  }
+};
+
 /* 40x12 PNG — 프레임(수백 px)보다 훨씬 작아서 "작은 배너를 강제로
    확대하지 않는다"와 "원본 비율을 유지한다"를 실제 픽셀로 확인할 수
    있다. 외부 자산을 저장소에 추가하지 않으려고 여기서 직접
@@ -871,12 +880,12 @@ async function testOwnerLinks(vpName) {
       links.visible && links.texts.join("/") === "WRITE/ADMIN",
       JSON.stringify(links));
 
-    check(`[${vpName}] 링크 주소가 하드코딩이 아니라 실제 경로로 채워짐`,
-      links.hrefs[0] === `/${SLUG}/category/1` && links.hrefs[1] === "/admin/",
+    check(`[${vpName}] 링크 주소가 하드코딩이 아니라 실제 경로로 채워짐(WRITE는 관리 진입 URL)`,
+      links.hrefs[0] === `/${SLUG}/category/1?manage=1` && links.hrefs[1] === "/admin/",
       JSON.stringify(links.hrefs));
 
-    /* WRITE 클릭 → 기존 글쓰기 흐름(카테고리 목록 + 추가 버튼) */
-    await page.click(".quiet-owner-link[href$='/category/1']");
+    /* WRITE 클릭 → 기존 관리 화면(카테고리 목록 + 추가 버튼) */
+    await page.click(".quiet-owner-link[href$='?manage=1']");
     await page.waitForSelector("#postArea:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(900);
 
@@ -884,14 +893,16 @@ async function testOwnerLinks(vpName) {
       const add = document.getElementById("postAddButton");
       return {
         url: location.pathname,
+        search: location.search,
         addVisible: Boolean(add) && !add.hidden,
         legacyList: Boolean(document.querySelector("#postList .post-list-item")),
         skinInList: Boolean(document.querySelector("#postList .imory-skin-root"))
       };
     });
 
-    check(`[${vpName}] WRITE는 기존 글쓰기 진입 화면(해당 카테고리 목록 + 추가 버튼)으로 연결`,
+    check(`[${vpName}] WRITE는 기존 관리 화면(해당 카테고리 목록 + 추가 버튼)으로 연결`,
       writeScreen.url === `/${SLUG}/category/1` &&
+      writeScreen.search === "?manage=1" &&
       writeScreen.addVisible && writeScreen.legacyList && !writeScreen.skinInList,
       JSON.stringify(writeScreen));
 
@@ -1114,6 +1125,218 @@ async function testOwnerBannerScreen(vpName) {
 
 
 /* ---------------------------------------------------------
+   4-c) 소유자의 post형 CATEGORY 화면 (PHASE 1E 후속)
+
+   소유자도 일반 카테고리 링크로 들어가면 방문자와 같은 CATEGORY
+   스킨을 본다. 기존 관리 화면(추가 / 선택 삭제)은 명시적으로
+   골랐을 때만 열리고, 닫으면 다시 스킨으로 돌아온다.
+--------------------------------------------------------- */
+
+const READ_CATEGORY_SCREEN = `(() => {
+  const list = document.getElementById("postList");
+  const area = document.getElementById("postArea");
+  const container = document.getElementById("postContainer");
+  const header = document.querySelector(".post-header");
+  const add = document.getElementById("postAddButton");
+  const editToggle = document.getElementById("postListEditToggleButton");
+  const selectBar = document.getElementById("postListSelectBar");
+  return {
+    skinItems: document.querySelectorAll("#postList .quiet-post-item").length,
+    legacyItems: document.querySelectorAll("#postList .post-list-item").length,
+    listVisible: Boolean(list) && !list.hidden,
+    skinActive: area.className.includes("post-area--skin-active"),
+    ownerTools: container.className.includes("post-container--owner-tools"),
+    headerDisplay: header ? getComputedStyle(header).display : null,
+    headerPosition: header ? getComputedStyle(header).position : null,
+    titleDisplay: document.querySelector(".post-page-title")
+      ? getComputedStyle(document.querySelector(".post-page-title")).display : null,
+    addVisible: Boolean(add) && !add.hidden,
+    editVisible: Boolean(editToggle) && !editToggle.hidden,
+    selectBarVisible: Boolean(selectBar) && !selectBar.hidden,
+    areaPadding: getComputedStyle(area).padding
+  };
+})()`;
+
+async function testOwnerCategoryScreen(vpName) {
+  const vp = VIEWPORTS[vpName];
+  console.log(`\n[${vpName}] 소유자의 CATEGORY 화면`);
+
+  /* --- 소유자: 일반 카테고리 링크 --- */
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await gotoHome(page);
+    const home = await page.evaluate(MEASURE);
+
+    /* 스킨 메뉴의 평범한 카테고리 링크(?manage 없음) */
+    await page.click('#themeMount .quiet-link-list a[href$="/category/1"]');
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const skinView = await page.evaluate(READ_CATEGORY_SCREEN);
+    const skinFrame = await page.evaluate(MEASURE);
+    await shot(page, `${vpName}-owner-category`);
+
+    check(`[${vpName}] 소유자도 일반 카테고리 링크로 들어가면 CATEGORY 스킨을 본다`,
+      skinView.skinItems === 2 && skinView.legacyItems === 0 && skinView.skinActive,
+      JSON.stringify(skinView));
+
+    check(`[${vpName}] 소유자 CATEGORY 스킨 프레임이 HOME과 동일 좌표/폭`,
+      sameFrame(home.frame, skinFrame.frame),
+      `home=${JSON.stringify(home.frame && [home.frame.x, home.frame.y, home.frame.w])} ` +
+      `category=${JSON.stringify(skinFrame.frame && [skinFrame.frame.x, skinFrame.frame.y, skinFrame.frame.w])}`);
+
+    check(`[${vpName}] 스킨 상태에서 legacy 헤더 제목은 숨고 도구만 떠 있다`,
+      skinView.ownerTools && skinView.headerPosition === "fixed" &&
+      skinView.titleDisplay === "none" && skinView.areaPadding === "0px",
+      JSON.stringify(skinView));
+
+    check(`[${vpName}] 소유자 전용 진입점(+ / edit)이 스킨 위에 남아 있다`,
+      skinView.addVisible && skinView.editVisible && !skinView.selectBarVisible,
+      JSON.stringify(skinView));
+
+    check(`[${vpName}] URL에는 관리 쿼리가 붙지 않는다(탐색과 관리 진입 구분)`,
+      await page.evaluate(() => location.pathname + location.search) === `/${SLUG}/category/1`,
+      await page.evaluate(() => location.pathname + location.search));
+
+    /* edit → 기존 관리 화면 */
+    await page.click("#postListEditToggleButton");
+    await page.waitForTimeout(700);
+
+    const manage = await page.evaluate(READ_CATEGORY_SCREEN);
+
+    check(`[${vpName}] edit를 누르면 기존 관리 화면(선택 삭제 목록 + 선택 바)이 열린다`,
+      manage.legacyItems === 2 && manage.skinItems === 0 &&
+      manage.selectBarVisible && !manage.skinActive && !manage.ownerTools,
+      JSON.stringify(manage));
+
+    check(`[${vpName}] 관리 화면에서는 legacy 헤더/여백이 원래대로 돌아온다`,
+      manage.headerPosition === "relative" && manage.titleDisplay !== "none" &&
+      manage.areaPadding !== "0px",
+      JSON.stringify(manage));
+
+    const selectable = await page.evaluate(() => {
+      const first = document.querySelector("#postList .post-list-item");
+      return {
+        isDiv: first ? first.tagName === "DIV" : null,
+        hasCheckbox: Boolean(document.querySelector("#postList .post-list-check, #postList input[type=checkbox], #postList .post-list-select"))
+      };
+    });
+
+    check(`[${vpName}] 관리 화면 항목이 선택 가능한 형태로 바뀐다(기능 삭제 없음)`,
+      selectable.isDiv === true, JSON.stringify(selectable));
+
+    /* edit 다시 → 스킨 복귀 */
+    await page.click("#postListEditToggleButton");
+    await page.waitForTimeout(1200);
+
+    const backToSkin = await page.evaluate(READ_CATEGORY_SCREEN);
+
+    check(`[${vpName}] 관리 화면을 닫으면 해당 카테고리 스킨으로 돌아온다`,
+      backToSkin.skinItems === 2 && backToSkin.legacyItems === 0 &&
+      backToSkin.skinActive && backToSkin.ownerTools && !backToSkin.selectBarVisible,
+      JSON.stringify(backToSkin));
+
+    /* 스킨 위의 + → 바로 작성 폼 */
+    await page.click("#postAddButton");
+    await page.waitForTimeout(800);
+
+    const editor = await page.evaluate(() => {
+      const el = document.getElementById("postEditor");
+      const title = document.getElementById("postEditorTitle");
+      return {
+        editorVisible: Boolean(el) && !el.hidden,
+        editorMode: document.body.classList.contains("post-editor-mode"),
+        titleEditable: Boolean(title) && !title.disabled && !title.readOnly
+      };
+    });
+
+    check(`[${vpName}] 스킨 위의 + 는 곧바로 기존 글 작성 폼을 연다`,
+      editor.editorVisible && editor.editorMode && editor.titleEditable,
+      JSON.stringify(editor));
+
+    await page.fill("#postEditorTitle", "스킨에서 바로 쓴 글");
+
+    check(`[${vpName}] 그 작성 폼에 실제로 입력할 수 있다`,
+      await page.evaluate(() => document.getElementById("postEditorTitle").value) === "스킨에서 바로 쓴 글");
+
+    check(`[${vpName}] 소유자 CATEGORY 경로 전체에서 문서 재로드 없음`,
+      ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);
+
+    check(`[${vpName}] 소유자 CATEGORY 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 관리 진입 URL 직접 접속 --- */
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/1?manage=1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postArea:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(1000);
+
+    const direct = await page.evaluate(READ_CATEGORY_SCREEN);
+
+    check(`[${vpName}] 소유자가 ?manage=1로 직접 들어오면 기존 관리 화면이 열린다`,
+      direct.legacyItems === 2 && direct.skinItems === 0 && !direct.skinActive &&
+      direct.addVisible && direct.editVisible,
+      JSON.stringify(direct));
+
+    check(`[${vpName}] 관리 진입 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 비소유자가 같은 관리 URL로 들어오면 그냥 스킨 --- */
+  await withPage(vp, { signedInAs: OTHER_USER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/1?manage=1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postArea:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(1000);
+
+    const visitor = await page.evaluate(READ_CATEGORY_SCREEN);
+
+    check(`[${vpName}] 다른 계정이 ?manage=1로 들어와도 관리 화면이 열리지 않고 스킨만 보인다`,
+      visitor.skinItems === 2 && visitor.legacyItems === 0 && visitor.skinActive &&
+      !visitor.ownerTools && !visitor.addVisible && !visitor.editVisible,
+      JSON.stringify(visitor));
+
+    check(`[${vpName}] 비소유자 관리 URL 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 로그아웃 방문자도 평소대로 스킨 --- */
+  await withPage(vp, {}, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(500);
+
+    const anon = await page.evaluate(READ_CATEGORY_SCREEN);
+
+    check(`[${vpName}] 로그아웃 방문자: CATEGORY 스킨 + 도구 없음`,
+      anon.skinItems === 2 && anon.skinActive && !anon.ownerTools &&
+      !anon.addVisible && !anon.editVisible,
+      JSON.stringify(anon));
+
+    check(`[${vpName}] 방문자 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- CATEGORY template이 없는 스킨: 소유자도 방문자도 기존 legacy --- */
+  await withPage(vp, { skin: HOME_ONLY_SKIN, signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postArea:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(1000);
+
+    const legacy = await page.evaluate(READ_CATEGORY_SCREEN);
+
+    check(`[${vpName}] CATEGORY template이 없으면 소유자도 기존 legacy 목록 그대로`,
+      legacy.legacyItems === 2 && legacy.skinItems === 0 && !legacy.skinActive &&
+      !legacy.ownerTools && legacy.addVisible && legacy.editVisible &&
+      legacy.headerPosition === "relative",
+      JSON.stringify(legacy));
+
+    check(`[${vpName}] legacy CATEGORY 폴백 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+}
+
+
+/* ---------------------------------------------------------
    5) 날짜 표시 — HOME/CATEGORY는 item.publishedAtLabel,
       POST는 post.publishedAtLabel
 --------------------------------------------------------- */
@@ -1189,6 +1412,7 @@ try {
     await testBannerEdgeCases(vpName);
     await testOwnerLinks(vpName);
     await testOwnerBannerScreen(vpName);
+    await testOwnerCategoryScreen(vpName);
     await testDateLabels(vpName);
   }
 } finally {

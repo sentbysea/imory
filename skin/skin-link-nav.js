@@ -103,7 +103,20 @@ function resolveInSiteSkinRoute(url) {
     }
 
     if (segments[0] === "category") {
-      return { page: "category", id: Number(segments[1]) };
+
+      /*
+        PHASE 1E 관리 진입 계약 — 같은 카테고리 경로라도 ?manage=1이
+        붙어 있으면 "관리 화면을 열어달라"는 요청이다(core/lib/
+        site-path.js). 여기서는 전달만 하고, 실제 소유자 검사는
+        openCategoryPage()가 한다.
+      */
+
+      return {
+        page: "category",
+        id: Number(segments[1]),
+        manage: isSiteManageRequested(url.search)
+      };
+
     }
 
   }
@@ -232,7 +245,12 @@ document.addEventListener(
           throw new Error("openCategoryPage unavailable");
         }
 
-        await openCategoryPage(route.id);
+        await openCategoryPage(
+          route.id,
+          {
+            manage: route.manage === true
+          }
+        );
 
         return;
 

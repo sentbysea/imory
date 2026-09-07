@@ -1,9 +1,11 @@
 # AI SKIN — PHASE 1E: BANNER 페이지 스킨 + 소유자 진입 링크
 
-이 문서는 PHASE 1E에서 추가된 **두 개의 계약**만 정의한다.
+이 문서는 PHASE 1E에서 추가된 **세 개의 계약**만 정의한다.
 
 1. **BANNER page type** — 배너 목록 카테고리를 Skin template으로 그린다.
 2. **`viewer` namespace** — 소유자에게만 보이는 글쓰기/관리 진입 링크.
+3. **관리 진입 계약(`?manage=1`)** — 카테고리를 "구경하는" 진입과
+   "관리하는" 진입을 주소로 구분한다.
 
 두 계약 모두 **DB 스키마 변경이 없다**. 새 컬럼/RPC/RLS/마이그레이션을
 하나도 추가하지 않았고, 이미 조회하던 `categories` / `banners` /
@@ -111,52 +113,58 @@ container })`. `skin-category.js` / `skin-post.js`와 **완전히 같은 구조*
 - `index.html`이 `window.skinBannerReady` 핸드셰이크를 선언하고
   `posts/view/posts-view-list.js`가 그것을 받아 쓴다(폴링 없음).
 
-**소유자 본인도 방문자와 같은 Skin을 본다.** post형 CATEGORY와 여기서
-정책이 갈린다(`resolveSkinRouteViewer()`, posts-view-list.js):
+**소유자 본인도 방문자와 같은 Skin을 본다** — banner와 post형 CATEGORY
+모두 정책이 같다(`resolvePublishedSkinRouteOwnerId()`,
+posts-view-list.js는 더 이상 "누가 보고 있는가"를 보지 않는다):
 
 | | post형 CATEGORY | banner |
 | --- | --- | --- |
-| 소유자 본인 열람 | legacy(관리 화면) | **Skin** |
+| 소유자 본인 열람 | **Skin** | **Skin** |
 | 그 외 방문자 | Skin | Skin |
+| 소유자 + 명시적 관리 진입 | legacy 관리 화면 | legacy 관리 화면 |
 
-이유는 관리 UI가 어디에 붙어 있느냐가 다르기 때문이다. post형 CATEGORY는
-목록 자체가 관리 화면이다(글 추가, 편집 모드 bulk 삭제, 선택 바) — 목록을
-장식용 Skin으로 바꾸면 그 기능들이 갈 곳이 없다. 반면 배너 관리는 목록이
-아니라 플랫폼이 소유한 별도 진입점에 있어서, 목록을 legacy로 되돌리지
-않고도 그대로 유지할 수 있다.
+즉 화면을 가르는 기준은 **"누구인가"가 아니라 "무엇을 하려고 들어왔는가"**
+다(3절 관리 진입 계약).
 
 **소유자 전용 진입점(2-4-1절)**
 
-Skin이 배너 목록을 그린 화면에서 소유자에게만 남는 두 버튼:
+Skin이 목록을 그린 화면에서 소유자에게만 남는 두 버튼. 화면에 따라 실제로
+보이는 `edit` 버튼만 다르고 구조는 같다:
 
-| 버튼 | 동작 |
-| --- | --- |
-| `+` (`#postAddButton`) | `openBannerForm()` — 기존 배너 추가 폼 |
-| `edit` (`#bannerEditToggleButton`) | 배너 관리 화면(순서 ↑↓ / 삭제 × / 카드 클릭 → 수정) 열기 |
+| 버튼 | banner | post형 CATEGORY |
+| --- | --- | --- |
+| `+` (`#postAddButton`) | `openBannerForm()` — 배너 추가 폼 | `openNewPostEditor()` — 글 작성 폼 |
+| `edit` | `#bannerEditToggleButton` → 배너 관리(순서 ↑↓ / 삭제 × / 카드 → 수정) | `#postListEditToggleButton` → 글 관리(선택 삭제 목록 + 선택 바) |
+
+두 화면 모두 **기존 관리 기능을 그대로 쓴다.** 추가/편집모드/선택바 중
+어느 것도 삭제하지 않았고, Skin HTML 안에 다시 구현하지도 않았다 —
+`togglePostListEditMode()` / `toggleBannerEditMode()`가 원래 하던 일을
+그대로 하고, 앞뒤로 "Skin을 접었다 편다"만 붙었다.
 
 둘 다 원래 legacy `.post-header` 안에 있고, 그 헤더는 Skin mount
-contract가 통째로 숨긴다. 그래서 `.post-container--banner-owner-tools`
+contract가 통째로 숨긴다. 그래서 `.post-container--owner-tools`
 (posts/posts-base.css)로 **그 두 버튼만** 화면 오른쪽 아래에 떠 있는 작은
 플랫폼 도구로 되살린다(제목/뒤로가기는 계속 숨김). `position: fixed`라
 문서 흐름 밖에 있어서 Skin 프레임의 좌표/폭에 전혀 영향을 주지 않는다 —
 HOME/CATEGORY/POST와 같은 프레임이라는 계약이 그대로 유지된다.
 
 관리 화면은 **명시적으로 열고 닫는다**: `edit`을 누르면 Skin 목록을 잠시
-접고 legacy 관리 그리드를 열고, 다시 누르면 곧바로 Skin 목록으로 돌아온다
-(`toggleBannerEditMode()` / `restoreBannerSkinList()`,
-posts-view-banner.js). 폼을 닫거나 저장/삭제를 마쳤을 때도 마찬가지로 Skin
-목록으로 복귀한다 — "편집이 가능하려면 목록이 계속 legacy여야 한다"는
-상태는 어디에도 없다.
+접고 기존 관리 화면을 열고, 다시 누르면 곧바로 Skin 목록으로 돌아온다
+(`toggleBannerEditMode()`/`restoreBannerSkinList()`,
+`togglePostListEditMode()`/`restoreCategorySkinList()`). 폼을 닫거나
+저장/삭제를 마쳤을 때도 마찬가지로 Skin 목록으로 복귀한다 — "편집이
+가능하려면 목록이 계속 legacy여야 한다"는 상태는 어디에도 없다.
 
 Skin 목록으로 되돌릴 때는 별도 렌더 경로를 새로 만들지 않고
 `openCategoryPage()`를 그대로 다시 태운다 — Skin 배너 렌더 경로가 이
 저장소에 한 벌만 존재하게 유지하기 위해서다.
 
-상태(`bannerSkinActive`)와 setter는 배너 렌더러가 아니라 공용 상태 모듈
-(`posts/editor/posts-state.js`)에 있다. `openCategoryPage()`는 배너가 아닌
-카테고리를 열 때도 진입점에서 이 값을 끄므로, 배너 렌더러를 로드하지 않는
-구성(예: `skin/skin-transition-timing-test.html`)에서도 그 호출이 안전해야
-하기 때문이다. 화면 전환 동작만 `posts-view-banner.js`에 둔다.
+상태(`bannerSkinActive` / `categorySkinActive`)와 setter는 각 렌더러가
+아니라 공용 상태 모듈(`posts/editor/posts-state.js`)에 있다.
+`openCategoryPage()`는 어떤 카테고리를 열든 진입점에서 두 값을 끄므로,
+배너 렌더러를 로드하지 않는 구성(예:
+`skin/skin-transition-timing-test.html`)에서도 그 호출이 안전해야 하기
+때문이다. 화면 전환 동작만 각 뷰 파일에 둔다.
 
 **소유자 판정**: `isSiteOwnerSignedIn()`(posts/editor/posts-state.js). 이번
 Slice 전에는 이 자리들이 "로그인했으면 주인"으로 취급해서, 다중 사용자
@@ -194,9 +202,38 @@ CODE 버튼이 `templates.banner`를 편집 대상으로 잡는다.
 
 ---
 
-## 3. `viewer` namespace (WRITE / ADMIN)
+## 3. 관리 진입 계약 (`?manage=1`)
 
-### 3-1. shape
+소유자가 **"이 카테고리를 관리하겠다"** 고 명시적으로 고른 진입과, 그냥
+카테고리를 구경하는 진입을 구분하는 최소 계약.
+
+```
+/:slug/category/:id            → 카테고리 화면(모두에게 Skin)
+/:slug/category/:id?manage=1   → 기존 관리 화면(소유자에게만)
+```
+
+새 경로를 만들지 않았다. 기존 카테고리 경로에 쿼리 하나를 붙이는 것이
+전부이고, 라우터의 `/^\/category\/(\d+)\/?$/` 패턴도 그대로다.
+
+| 위치 | 역할 |
+| --- | --- |
+| `core/lib/site-path.js` | `SITE_MANAGE_QUERY_PARAM`, `buildSiteManageUrl()`, `isSiteManageRequested()` — 경로 모양을 아는 유일한 모듈 |
+| `skin/skin-context.js` | `viewer.writeHref`를 이 URL로 만든다 |
+| `skin/skin-link-nav.js` | Skin 링크 클릭에서 쿼리를 읽어 `openCategoryPage(id, { manage })`로 넘긴다 |
+| `posts/editor/posts-router-init.js` | 직접 접속/새로고침/뒤로가기에서도 복원 |
+| `posts/view/posts-view-list.js` | 실제 판단 — `manage === true && await isSiteOwnerSignedIn()` 일 때만 관리 화면을 연다 |
+
+**쿼리는 권한이 아니라 요청이다.** 로그아웃 방문자나 다른 계정이 이 주소를
+직접 쳐도 관리 화면은 열리지 않고 평소의 Skin 화면이 나온다. 관리 화면이
+실제로 열렸을 때만 URL에 쿼리가 유지되므로(pushState), 새로고침과
+뒤로가기가 그 화면을 그대로 복원한다. 평소 탐색에서는
+`manage === false`라 `&&` 단락 평가로 소유자 조회조차 일어나지 않는다.
+
+---
+
+## 4. `viewer` namespace (WRITE / ADMIN)
+
+### 4-1. shape
 
 모든 page context(HOME / CATEGORY / POST / BANNER)의 **공통 namespace**다.
 
@@ -208,7 +245,7 @@ viewer: {
 }
 ```
 
-### 3-2. 판정 기준
+### 4-2. 판정 기준
 
 `resolveSkinViewerId()`가 `supabaseClient.auth.getSession()`으로 읽은
 `session.user.id`가 `ownerId`와 같으면 소유자다 —
@@ -217,14 +254,18 @@ viewer: {
 추가되지 않는다. 어떤 이유로든 실패하면 항상 `null`(= 소유자 아님)로
 떨어진다.
 
-### 3-3. `writeHref` 정의
+### 4-3. `writeHref` 정의
 
-Imory에는 독립된 "글쓰기 URL"이 없다 — 글은 항상 **카테고리 목록 화면의 `+`
+Imory에는 독립된 "글쓰기 URL"이 없다 — 글은 항상 **카테고리 화면의 `+`
 버튼**(`posts/editor/posts-list-detail-nav.js`)에서 시작한다. 그래서
-`writeHref`는 **첫 번째 POST 카테고리의 목록 경로**다.
+`writeHref`는 **첫 번째 POST 카테고리의 관리 진입 URL**
+(`buildSiteManageUrl(...)` = 그 카테고리 경로 + `?manage=1`)이다.
 
 - 그 화면이 곧 기존 글쓰기 진입점이고, 동시에 다른 카테고리를 고를 수 있는
   기존 카테고리 선택 흐름이기도 하다.
+- **같은 카테고리를 그냥 보는 링크(`navigation.postCategories[].href`)와
+  주소가 다르다.** 소유자가 메뉴에서 카테고리를 누르면 방문자와 똑같은
+  CATEGORY Skin을 보고, WRITE를 눌렀을 때만 기존 관리 화면이 열린다.
 - POST 카테고리가 하나도 없으면 보낼 목록이 없으므로 `adminHref`와 같은
   값(관리 화면)으로 떨어진다 — SETTINGS의 CATEGORY 탭에서 카테고리를 만들
   수 있다. "눌렀는데 아무 일도 안 일어난다"보다 "여기서 카테고리부터 만들면
@@ -236,7 +277,7 @@ Imory에는 독립된 "글쓰기 URL"이 없다 — 글은 항상 **카테고리
 `adminHref`는 `${SITE_BASE_PATH}/admin/` — `home/home-skin-prompt.js`가 Skin
 Studio로 보낼 때 쓰는 것과 같은 조립 방식이다.
 
-### 3-4. 표시 규칙과 권한
+### 4-4. 표시 규칙과 권한
 
 - 비소유자에게는 `isOwner: false`이고 **두 href도 `null`** 이다. Skin이
   실수로 `data-imory-if`를 빠뜨려도 링크가 만들어지지 않는다
@@ -246,11 +287,11 @@ Studio로 보낼 때 쓰는 것과 같은 조립 방식이다.
   정한다.
 - Skin에 JavaScript는 들어가지 않는다 — 평범한 `<a href>` 두 개다.
 
-### 3-5. 링크 이동 동작
+### 4-5. 링크 이동 동작
 
 | 링크 | 동작 |
 | --- | --- |
-| WRITE (`/:slug/category/:id`) | `skin/skin-link-nav.js`가 가로채 기존 SPA 라우터(`openCategoryPage`)로 넘긴다 — 문서 전체 재로드/흰색 커튼 없음. 소유자라 legacy 글 목록 화면이 열리고, 거기 `+`를 누르면 기존 글 작성 폼이 뜬다. |
+| WRITE (`/:slug/category/:id?manage=1`) | `skin/skin-link-nav.js`가 가로채 기존 SPA 라우터(`openCategoryPage`)로 넘긴다 — 문서 전체 재로드/흰색 커튼 없음. 소유자면 기존 관리 화면이 열리고, 거기 `+`를 누르면 기존 글 작성 폼이 뜬다. |
 | WRITE (POST 카테고리 없음 → `/admin/`) | 관리 화면으로 이동해 카테고리를 먼저 만들게 한다. |
 | ADMIN (`/admin/`) | slug 라우트가 아니므로 SPA 라우터가 가로채지 않고 평범한 문서 이동으로 관리 화면이 열린다. |
 
@@ -259,7 +300,10 @@ WRITE는 "카테고리까지 이동"이 아니라 **작성 폼이 실제로 열�
 제목 입력이 실제로 되는 데까지 UI를 그대로 눌러서 확인한다
 (`skin/skin-banner-page-e2e-test.mjs`).
 
-### 3-6. Studio Preview에서의 동작
+WRITE의 2단계와 별개로, **CATEGORY Skin 위의 떠 있는 `+` 는 한 번에 작성
+폼을 연다** — 이미 그 카테고리를 보고 있다면 관리 화면을 거칠 이유가 없다.
+
+### 4-6. Studio Preview에서의 동작
 
 Studio Preview의 iframe(`studio/preview/preview-bridge.js`)은 **같은 origin의
 모든 앵커 클릭을 `preventDefault`** 하고 href 문자열만 parent로 보낸다.
@@ -273,7 +317,7 @@ parent(`studio/preview/preview-route.js`)는 HOME/CATEGORY/POST 세 패턴만
 
 ---
 
-## 4. 이 계약이 바꾸지 않는 것
+## 5. 이 계약이 바꾸지 않는 것
 
 - `navigation.categories` / `postCategories` / `bannerCategories`,
   `banners.items`, `category.posts`, `home.recentPosts`, `post.*` — 값/순서/
@@ -287,7 +331,7 @@ parent(`studio/preview/preview-route.js`)는 HOME/CATEGORY/POST 세 패턴만
 
 ---
 
-## 5. 검증
+## 6. 검증
 
 | 대상 | 파일 |
 | --- | --- |
@@ -299,7 +343,7 @@ parent(`studio/preview/preview-route.js`)는 HOME/CATEGORY/POST 세 패턴만
 
 ---
 
-## 6. 참고용 스킨
+## 7. 참고용 스킨
 
 `skin/test-skins/imory-quiet-frame-v2.json` — HOME/CATEGORY/POST/BANNER 네
 template과 WRITE/ADMIN 링크를 모두 갖춘 Import용 SkinPackage. 상단 문구

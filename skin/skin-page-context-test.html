@@ -978,9 +978,15 @@
       );
 
       assert(
-        "[1E] 소유자 writeHref === 첫 POST 카테고리 목록 경로(글쓰기 + 버튼이 있는 화면)",
-        ownerCtx.viewer.writeHref === "/testuser/category/1" &&
-        ownerCtx.viewer.writeHref === ownerCtx.navigation.postCategories[0].href
+        "[1E] 소유자 writeHref === 첫 POST 카테고리의 관리 진입 URL(?manage=1)",
+        ownerCtx.viewer.writeHref === "/testuser/category/1?manage=1"
+      );
+
+      assert(
+        "[1E] writeHref는 같은 카테고리를 그냥 보는 링크와 주소가 다르다(탐색과 관리 진입 구분)",
+        ownerCtx.viewer.writeHref !== ownerCtx.navigation.postCategories[0].href &&
+        ownerCtx.viewer.writeHref.startsWith(ownerCtx.navigation.postCategories[0].href),
+        ownerCtx.viewer.writeHref + " vs " + ownerCtx.navigation.postCategories[0].href
       );
 
       assert(

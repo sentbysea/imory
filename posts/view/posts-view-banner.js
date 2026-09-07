@@ -642,7 +642,7 @@ function hideBannerSkinListForManagement() {
     */
 
     postContainer.classList.remove(
-      "post-container--banner-owner-tools"
+      "post-container--owner-tools"
     );
 
   }

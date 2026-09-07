@@ -754,7 +754,7 @@ async function buildBaseSkinContext(
 
 
   /*
-    viewer(PHASE 1E 3절) — 소유자일 때만 글쓰기/관리 href를 채운다.
+    viewer(PHASE 1E 4절) — 소유자일 때만 글쓰기/관리 href를 채운다.
     비소유자에게는 isOwner=false와 함께 두 href 모두 null이라,
     Skin이 실수로 data-imory-if를 빠뜨려도 링크가 만들어지지
     않는다(data-imory-href는 값이 문자열이 아니면 href 속성 자체를
@@ -763,9 +763,17 @@ async function buildBaseSkinContext(
     writeHref: Imory에는 독립된 "글쓰기 URL"이 없다 — 글은 항상
     카테고리 목록 화면의 + 버튼(posts/editor/posts-list-detail-nav.js)
     에서 시작한다. 그래서 HOME처럼 카테고리가 정해지지 않은
-    화면에서는 첫 번째 POST 카테고리 목록으로 보낸다: 그 화면이
-    바로 기존 글쓰기 진입점(+ 버튼)이고, 동시에 다른 카테고리를
-    고를 수 있는 기존 카테고리 선택 흐름이기도 하다.
+    화면에서는 첫 번째 POST 카테고리의 **관리 진입 URL**
+    (buildSiteManageUrl, core/lib/site-path.js — 같은 경로에
+    ?manage=1만 붙인다)로 보낸다. 그 화면이 바로 기존 글쓰기
+    진입점(+ 버튼)이고, 동시에 다른 카테고리를 고를 수 있는 기존
+    카테고리 선택 흐름이기도 하다.
+
+    같은 카테고리를 그냥 구경하는 링크(navigation.postCategories의
+    href)와 주소가 달라야 한다 — 소유자가 메뉴에서 카테고리를 누르면
+    방문자와 똑같은 CATEGORY 스킨을 보고, WRITE를 눌렀을 때만 기존
+    관리 화면이 열린다. 쿼리는 요청일 뿐이고 실제 소유자 검사는
+    openCategoryPage()가 다시 한다.
 
     POST 카테고리가 하나도 없으면 보낼 목록 자체가 없다 — 이때는
     링크를 없애는 대신 관리 화면으로 보낸다(SETTINGS의 CATEGORY
@@ -865,7 +873,11 @@ async function buildBaseSkinContext(
 
       writeHref:
         isOwner
-          ? (firstPostCategory ? firstPostCategory.href : adminHref)
+          ? (
+              firstPostCategory
+                ? buildSiteManageUrl(firstPostCategory.href)
+                : adminHref
+            )
           : null,
 
       adminHref:

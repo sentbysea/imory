@@ -93,6 +93,62 @@ function getSiteOwnerSlugFromPath() {
 }
 
 
+/* =========================================================
+   관리 진입 계약 (PHASE 1E)
+
+   소유자가 "이 카테고리를 관리하겠다"고 명시적으로 고른 진입과,
+   그냥 카테고리를 구경하는 진입을 구분하는 최소 계약. 새 경로를
+   만들지 않고 기존 카테고리 경로에 쿼리 하나(?manage=1)만 붙인다 —
+   /:slug/category/:id 는 그대로 두고 라우터/링크 파싱도 기존 패턴을
+   재사용한다.
+
+   이 쿼리는 "관리 화면을 열어달라"는 요청일 뿐 권한이 아니다.
+   실제로 열지 말지는 요청을 받은 쪽(posts/view/posts-view-list.js의
+   openCategoryPage)이 isSiteOwnerSignedIn()으로 다시 판단한다 —
+   주소를 직접 쳐서 들어온 방문자는 그냥 평소의 카테고리 화면을
+   본다.
+========================================================== */
+
+const SITE_MANAGE_QUERY_PARAM =
+  "manage";
+
+
+function buildSiteManageUrl(
+  path
+) {
+
+  return (
+    path + "?" + SITE_MANAGE_QUERY_PARAM + "=1"
+  );
+
+}
+
+
+function isSiteManageRequested(
+  search
+) {
+
+  try {
+
+    return (
+      new URLSearchParams(
+        search || ""
+      ).get(
+        SITE_MANAGE_QUERY_PARAM
+      ) === "1"
+    );
+
+  }
+
+  catch (err) {
+
+    return false;
+
+  }
+
+}
+
+
 /*
   slug 다음에 이어지는 나머지 경로("/post/5", "/category/3",
   slug만 있으면 "/")를 돌려준다. posts-router-init.js의

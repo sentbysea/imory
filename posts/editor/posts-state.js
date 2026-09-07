@@ -133,6 +133,42 @@ let bannerSkinActive =
   false;
 
 
+/*
+  PHASE 1E: 지금 열려 있는 post형 CATEGORY 화면이 published Skin의
+  templates.category로 그려졌는지. bannerSkinActive와 같은 역할이고
+  같은 이유로 여기(공용 상태 모듈)에 있다.
+
+  true면 글 목록은 #postList 안의 Skin이 그린다. 소유자가 떠 있는
+  edit 토글을 눌러 관리 화면(선택 삭제 목록)으로 들어갈 때만 그
+  자리를 legacy 목록이 대신하고, 토글을 끄면 다시 Skin으로 돌아온다.
+*/
+
+let categorySkinActive =
+  false;
+
+
+function setCategorySkinActive(
+  active
+) {
+
+  categorySkinActive =
+    !!active;
+
+
+  if (categorySkinActive) {
+
+    postListEditModeOn =
+      false;
+
+
+    selectedPostIdsForDelete =
+      new Set();
+
+  }
+
+}
+
+
 function setBannerSkinActive(
   active
 ) {

@@ -19,7 +19,7 @@
    EDIT 모드 토글
 ========================================================== */
 
-function togglePostListEditMode() {
+async function togglePostListEditMode() {
 
   postListEditModeOn =
     !postListEditModeOn;
@@ -51,7 +51,109 @@ function togglePostListEditMode() {
   updatePostListSelectBar();
 
 
+  if (!categorySkinActive) {
+
+    renderPostListItems();
+
+
+    return;
+
+  }
+
+
+  /*
+    PHASE 1E — Skin 목록 위에서의 관리 (배너와 같은 패턴)
+
+    켤 때: Skin 목록을 접고 그 자리에 기존 관리 목록(선택 삭제)을
+    연다. 목록을 "legacy로 되돌려 두는" 게 아니라 사용자가 명시적으로
+    열고 닫는 관리 화면이다 — 추가/편집모드/선택바 기능은 하나도
+    바뀌지 않고 그대로 쓰인다.
+
+    끌 때: 곧바로 그 카테고리의 Skin으로 돌아간다(방금 삭제한 결과가
+    반영된 채로).
+  */
+
+  if (postListEditModeOn) {
+
+    enterCategoryManageScreen();
+
+
+    return;
+
+  }
+
+
+  await restoreCategorySkinList();
+
+}
+
+
+/*
+  Skin 목록 -> legacy 관리 목록. Skin이 쓰던 mount contract
+  클래스(posts/posts-base.css)를 걷어내야 관리 목록이 기존 여백/
+  헤더 안에서 정상적으로 보인다.
+*/
+
+function enterCategoryManageScreen() {
+
+  if (postContainer) {
+
+    postContainer.classList.remove(
+      "post-container--skin-active"
+    );
+
+
+    postContainer.classList.remove(
+      "post-container--owner-tools"
+    );
+
+  }
+
+
+  if (postArea) {
+
+    postArea.classList.remove(
+      "post-area--skin-active"
+    );
+
+  }
+
+
   renderPostListItems();
+
+}
+
+
+/*
+  Skin 목록을 다시 그린다. 별도 렌더 경로를 새로 만들지 않고
+  openCategoryPage()를 그대로 다시 태운다(배너의
+  restoreBannerSkinList와 같은 이유) — URL은 이미 이 카테고리를
+  가리키므로 history를 건드리지 않는다.
+*/
+
+async function restoreCategorySkinList() {
+
+  if (
+    !categorySkinActive ||
+    currentPostCategoryId === null ||
+    currentPostCategoryId === undefined
+  ) {
+
+    return false;
+
+  }
+
+
+  await openCategoryPage(
+    currentPostCategoryId,
+    {
+      updateUrl:
+        false
+    }
+  );
+
+
+  return true;
 
 }
 
