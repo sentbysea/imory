@@ -58,6 +58,8 @@
   <!-- 의존 스크립트 로드 순서 중요 -->
   <script src="../core/lib/reserved-slugs.js"></script>
   <script src="../core/lib/site-path.js"></script>
+  <!-- skin-context.js가 banner URL 1차 검증에 isSafeSkinUrl()을 쓴다(PHASE 1E) -->
+  <script src="./skin-sanitize.js"></script>
   <script src="./skin-context.js"></script>
   <script src="./skin-template.js"></script>
 
@@ -202,11 +204,33 @@
 
       }
 
-      return {
+      /*
+        PHASE 1E: skin-context.js의 resolveSkinViewerId()가
+        supabaseClient.auth.getSession()으로 "지금 보는 사람이
+        소유자인가"를 판정한다. 테스트에서 그 값을 직접 갈아끼울 수
+        있도록 mockSession을 노출한다 — null이면 로그아웃 방문자.
+      */
+
+      const client = {
+
+        mockSession: null,
+
         from(tableName) {
           return makeBuilder(tableName);
+        },
+
+        auth: {
+          getSession() {
+            return Promise.resolve({
+              data: { session: client.mockSession },
+              error: null
+            });
+          }
         }
+
       };
+
+      return client;
 
     }
 
@@ -271,7 +295,12 @@
         }
       ],
 
-      banners: []
+      banners: [
+        { id: 501, user_id: OWNER_ID, category_id: 2, name: "친구 블로그", url: "https://friend.example/", image_url: "https://friend.example/banner.png", sort_order: 1 },
+        { id: 502, user_id: OWNER_ID, category_id: 2, name: "위험한 배너", url: "javascript:alert(1)", image_url: "http://insecure.example/b.png", sort_order: 2 },
+        { id: 503, user_id: OTHER_OWNER_ID, category_id: 99, name: "남의 배너", url: "https://other.example/", image_url: "https://other.example/b.png", sort_order: 1 },
+        { id: 504, user_id: OTHER_OWNER_ID, category_id: 2, name: "남의 배너인데 같은 카테고리 id", url: "https://other.example/2", image_url: "https://other.example/b2.png", sort_order: 0 }
+      ]
 
     };
 
@@ -816,6 +845,155 @@
         skinPackageSupportsPageType(skinWithMisleadingSupports, "category") === false &&
         skinPackageSupportsPageType(skinWithMisleadingSupports, "post") === false
       );
+
+
+      /* ---- PHASE 1E: BANNER page context ---- */
+
+      const bannerCtx =
+        await buildBannerSkinContext(OWNER_ID, 2);
+
+      assert(
+        "[1E] BANNER: page.type === 'banner', boolean 4종 정확(isCategory는 false)",
+        bannerCtx.page.type === "banner" &&
+        bannerCtx.page.isBanner === true &&
+        bannerCtx.page.isHome === false &&
+        bannerCtx.page.isCategory === false &&
+        bannerCtx.page.isPost === false
+      );
+
+      assert(
+        "[1E] 기존 page.type 3종에도 isBanner === false가 함께 발급됨(하나만 true 불변식)",
+        homeCtx.page.isBanner === false &&
+        categoryCtx.page.isBanner === false &&
+        postCtx.page.isBanner === false
+      );
+
+      assert(
+        "[1E] bannerCategory 메타(id/name/type/href)가 실제 카테고리 값",
+        bannerCtx.bannerCategory.id === "2" &&
+        bannerCtx.bannerCategory.name === "배너" &&
+        bannerCtx.bannerCategory.type === "banner" &&
+        bannerCtx.bannerCategory.href === "/testuser/category/2"
+      );
+
+      assert(
+        "[1E] items는 owner + 해당 카테고리 배너만(다른 owner의 같은 category_id row 혼입 없음), sort_order 순서",
+        bannerCtx.bannerCategory.items.length === 2 &&
+        bannerCtx.bannerCategory.items[0].id === "501" &&
+        bannerCtx.bannerCategory.items[1].id === "502",
+        JSON.stringify(bannerCtx.bannerCategory.items.map(i => i.id))
+      );
+
+      assert(
+        "[1E] 안전한 https 배너는 href/imageUrl이 그대로",
+        bannerCtx.bannerCategory.items[0].href === "https://friend.example/" &&
+        bannerCtx.bannerCategory.items[0].imageUrl === "https://friend.example/banner.png" &&
+        bannerCtx.bannerCategory.items[0].name === "친구 블로그"
+      );
+
+      assert(
+        "[1E] javascript: href와 http: 이미지는 null로 떨어지고 항목/이름 자체는 남는다",
+        bannerCtx.bannerCategory.items[1].href === null &&
+        bannerCtx.bannerCategory.items[1].imageUrl === null &&
+        bannerCtx.bannerCategory.items[1].name === "위험한 배너",
+        JSON.stringify(bannerCtx.bannerCategory.items[1])
+      );
+
+      assert(
+        "[1E] BANNER context에도 공통 namespace(site/profile/navigation/images)가 그대로 있다",
+        bannerCtx.site.slug === "testuser" &&
+        bannerCtx.navigation.bannerCategories.length === 1 &&
+        typeof bannerCtx.profile.nickname === "string"
+      );
+
+      assert(
+        "[1E] BANNER context에는 category.posts가 없다(글 목록 계약을 재사용하지 않음)",
+        bannerCtx.category === undefined
+      );
+
+      const missingBannerCtx =
+        await buildBannerSkinContext(OWNER_ID, 12345);
+
+      assert(
+        "[1E] 없는 카테고리 → null(정상 '없음' 상태, throw 아님)",
+        missingBannerCtx === null
+      );
+
+      const otherOwnerBannerCtx =
+        await buildBannerSkinContext(OWNER_ID, 99);
+
+      assert(
+        "[1E] 다른 owner의 카테고리 id → null(소유자 필터가 걸린다)",
+        otherOwnerBannerCtx === null
+      );
+
+      const postCategoryAsBannerCtx =
+        await buildBannerSkinContext(OWNER_ID, 1);
+
+      assert(
+        "[1E] post형 카테고리로 부르면 type이 'post'로 그대로 나온다(판정은 호출자 몫) + items는 빈 배열",
+        postCategoryAsBannerCtx !== null &&
+        postCategoryAsBannerCtx.bannerCategory.type === "post" &&
+        postCategoryAsBannerCtx.bannerCategory.items.length === 0
+      );
+
+
+      /* ---- PHASE 1E: viewer namespace ---- */
+
+      assert(
+        "[1E] 로그아웃 방문자: viewer.isOwner === false, write/admin href는 둘 다 null",
+        homeCtx.viewer.isOwner === false &&
+        homeCtx.viewer.writeHref === null &&
+        homeCtx.viewer.adminHref === null
+      );
+
+      supabaseClient.mockSession =
+        { user: { id: OTHER_OWNER_ID } };
+
+      const otherUserCtx =
+        await buildHomeSkinContext(OWNER_ID);
+
+      assert(
+        "[1E] 다른 계정으로 로그인한 방문자: viewer.isOwner === false, href는 여전히 null",
+        otherUserCtx.viewer.isOwner === false &&
+        otherUserCtx.viewer.writeHref === null &&
+        otherUserCtx.viewer.adminHref === null
+      );
+
+      supabaseClient.mockSession =
+        { user: { id: OWNER_ID } };
+
+      const ownerCtx =
+        await buildHomeSkinContext(OWNER_ID);
+
+      assert(
+        "[1E] 소유자 본인: viewer.isOwner === true",
+        ownerCtx.viewer.isOwner === true
+      );
+
+      assert(
+        "[1E] 소유자 writeHref === 첫 POST 카테고리 목록 경로(글쓰기 + 버튼이 있는 화면)",
+        ownerCtx.viewer.writeHref === "/testuser/category/1" &&
+        ownerCtx.viewer.writeHref === ownerCtx.navigation.postCategories[0].href
+      );
+
+      assert(
+        "[1E] 소유자 adminHref === 관리 화면 경로",
+        ownerCtx.viewer.adminHref === "/admin/"
+      );
+
+      const ownerBannerCtx =
+        await buildBannerSkinContext(OWNER_ID, 2);
+
+      assert(
+        "[1E] viewer는 공통 namespace라 BANNER/CATEGORY/POST context에도 동일하게 실린다",
+        ownerBannerCtx.viewer.isOwner === true &&
+        (await buildCategorySkinContext(OWNER_ID, 1)).viewer.isOwner === true &&
+        (await buildPostSkinContext(OWNER_ID, 10)).viewer.isOwner === true
+      );
+
+      supabaseClient.mockSession =
+        null;
 
 
       summaryEl.textContent =

@@ -2,7 +2,7 @@
    SKIN TEMPLATE SELECTION
 
    AI_SKIN_PHASE1C_PAGE_CONTRACT.md 12-B/14-1절. SkinPackage가
-   페이지별 templates.{home,category,post}를 갖는 멀티페이지
+   페이지별 templates.{home,category,post,banner}를 갖는 멀티페이지
    shape으로 확장되는 동안, 이미 저장된 단일-html Skin(templates
    필드 없음)이 계속 HOME을 문제없이 렌더할 수 있게 하는 유일한
    선택 로직.
@@ -19,8 +19,15 @@
    window.skinPackageSupportsPageType으로 노출된다.
 ========================================================== */
 
+/* PHASE 1E: "banner"가 네 번째 page type으로 추가됐다
+   (AI_SKIN_PHASE1E_BANNER_AND_OWNER_LINKS.md 2절). 아래
+   resolveSkinTemplate()의 규칙은 한 줄도 바뀌지 않는다 —
+   templates.banner가 없는 기존 Skin은 여전히 undefined를 받아
+   legacy 배너 화면으로 폴백한다(HOME html을 배너에 재사용하지
+   않는다). 즉 이 배열에 이름을 하나 더하는 것만으로 "선택적
+   배너 template" 계약이 성립한다. */
 const SKIN_TEMPLATE_PAGE_TYPES =
-  ["home", "category", "post"];
+  ["home", "category", "post", "banner"];
 
 
 /* =========================================================
@@ -33,7 +40,7 @@ const SKIN_TEMPLATE_PAGE_TYPES =
       top-level skinPackage.html/css로 폴백한다 — 기존
       published/draft HOME Skin(templates 필드 자체가 없는 Skin)은
       이 계약이 도입돼도 단 한 byte도 다시 저장할 필요가 없다.
-   3. 그 외(category/post인데 templates에 해당 페이지가 없음)에는
+   3. 그 외(category/post/banner인데 templates에 해당 페이지가 없음)에는
       undefined를 돌려준다 — "지원하지 않음"을 명시적으로 표현하는
       것이지, HOME html을 category/post에 억지로 재사용하지
       않는다. 호출자(미래의 CATEGORY/POST Skin Renderer)는

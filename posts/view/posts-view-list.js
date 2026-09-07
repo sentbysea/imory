@@ -261,10 +261,22 @@ function fetchCategoryPageData(
    사용자가 이 사이트를 읽을 때는 정상적으로 Skin이 적용된다.
 ========================================================== */
 
-async function tryRenderPublishedSkinCategory(
-  categoryId,
-  container
-) {
+/*
+  두 Skin 시도 함수(post형 CATEGORY, banner)가 공유하는 사전 판정.
+  "이 사이트가 published Skin 후보인가" + "지금 보고 있는 사람이
+  소유자 본인인가"를 한 곳에서만 계산한다 — 판정 규칙이 두 벌로
+  갈라지면 한쪽만 고쳐지는 사고가 난다.
+
+  소유자 본인일 때 null을 돌려주는 이유는 위 주석 그대로다:
+  post형 CATEGORY는 글 추가/편집 모드 UI를, banner 카테고리는
+  배너 추가/순서변경/삭제 UI(posts-view-banner.js)를 잃지 않아야
+  한다. 익명 방문자나 다른 로그인 사용자에게는 정상적으로 Skin이
+  적용된다.
+
+  -> ownerId(문자열) | null
+*/
+
+async function resolvePublishedSkinRouteOwnerId() {
 
   let owner;
 
@@ -280,7 +292,7 @@ async function tryRenderPublishedSkinCategory(
       err
     );
 
-    return false;
+    return null;
 
   }
 
@@ -291,7 +303,7 @@ async function tryRenderPublishedSkinCategory(
     !owner.ownerId
   ) {
 
-    return false;
+    return null;
 
   }
 
@@ -322,6 +334,26 @@ async function tryRenderPublishedSkinCategory(
 
   if (isOwnerViewingOwnSite) {
 
+    return null;
+
+  }
+
+
+  return owner.ownerId;
+
+}
+
+
+async function tryRenderPublishedSkinCategory(
+  categoryId,
+  container
+) {
+
+  const ownerId =
+    await resolvePublishedSkinRouteOwnerId();
+
+  if (!ownerId) {
+
     return false;
 
   }
@@ -349,7 +381,7 @@ async function tryRenderPublishedSkinCategory(
   try {
 
     return await renderPublishedSkinCategory({
-      ownerId: owner.ownerId,
+      ownerId,
       categoryId,
       container
     });
@@ -358,6 +390,76 @@ async function tryRenderPublishedSkinCategory(
 
     console.error(
       "[posts-view-list] renderPublishedSkinCategory threw unexpectedly",
+      err
+    );
+
+    return false;
+
+  }
+
+}
+
+
+
+/* =========================================================
+   BANNER CATEGORY - published Skin 시도 (PHASE 1E)
+
+   skin/skin-banner.js의 renderPublishedSkinBanner()를 위
+   tryRenderPublishedSkinCategory와 완전히 같은 방식으로 넘겨받는다
+   (window.skinBannerReady 핸드셰이크). 다른 점은 오직 어떤 모듈/
+   어떤 template을 쓰느냐뿐이다 — templates.banner가 없는 기존
+   스킨에서는 그 모듈이 false를 돌려주므로 기존 legacy 배너 화면이
+   그대로 나온다.
+
+   이 함수도 절대 throw하지 않는다.
+========================================================== */
+
+async function tryRenderPublishedSkinBanner(
+  categoryId,
+  container
+) {
+
+  const ownerId =
+    await resolvePublishedSkinRouteOwnerId();
+
+  if (!ownerId) {
+
+    return false;
+
+  }
+
+
+  let renderPublishedSkinBanner;
+
+  try {
+
+    renderPublishedSkinBanner =
+      await window.skinBannerReady;
+
+  } catch (err) {
+
+    console.error(
+      "[posts-view-list] skin-banner module failed to load",
+      err
+    );
+
+    return false;
+
+  }
+
+
+  try {
+
+    return await renderPublishedSkinBanner({
+      ownerId,
+      categoryId,
+      container
+    });
+
+  } catch (err) {
+
+    console.error(
+      "[posts-view-list] renderPublishedSkinBanner threw unexpectedly",
       err
     );
 
@@ -792,10 +894,150 @@ async function openCategoryPage(
 
 
     /*
-      banner 카테고리는 Skin 렌더 대상이 아니다(skin-category.js가
-      category.type !== "post"면 항상 false를 반환) — 위에서
-      Skin 후보라고 미리 헤더를 숨겨 뒀을 수 있으므로 여기서
-      확실히 legacy 레이아웃으로 되돌린다.
+      PHASE 1E: banner 카테고리도 published Skin이 templates.banner를
+      갖고 있으면 그 template으로 그린다(skin/skin-banner.js). post형
+      CATEGORY와 동일하게 떨어진(detached) 스크래치 엘리먼트에 먼저
+      그린 뒤, requestId가 여전히 최신일 때만 화면에 옮긴다 — 늦게
+      도착한 응답이 그 사이 열린 다른 카테고리 화면을 덮어쓰지
+      않게 하는 같은 이유다.
+
+      templates.banner가 없거나(기존 HOME/CATEGORY/POST 스킨),
+      소유자 본인이 열람 중이거나, 어떤 이유로든 실패하면 항상
+      false가 돌아오고 아래 legacy 배너 경로가 지금까지와 100%
+      동일하게 실행된다.
+    */
+
+    const bannerSkinRenderTarget =
+      document.createElement(
+        "div"
+      );
+
+    const renderedPublishedSkinBanner =
+      await tryRenderPublishedSkinBanner(
+        numericCategoryId,
+        bannerSkinRenderTarget
+      );
+
+
+    if (
+      requestId !==
+      categoryPageRequestSeq
+    ) {
+
+      cancelPendingIndicator(
+        pendingIndicatorTimer
+      );
+
+
+      return;
+
+    }
+
+
+    clearPendingIndicator(
+      pendingIndicatorTimer
+    );
+
+
+    switchToCategoryScreen();
+
+
+    if (renderedPublishedSkinBanner) {
+
+      /*
+        Skin이 배너 목록 전체를 그렸으므로 legacy 배너 UI(그리드/
+        추가·편집 폼/편집 토글)는 전부 접어 둔다 — 이 경로는
+        소유자가 아닌 방문자에게만 도달하므로 관리 UI가 사라지는
+        것이 아니라 애초에 보일 이유가 없다.
+      */
+
+      if (bannerGrid) {
+
+        bannerGrid.hidden =
+          true;
+
+      }
+
+
+      if (bannerEditor) {
+
+        bannerEditor.hidden =
+          true;
+
+      }
+
+
+      if (
+        bannerEditToggleButton
+      ) {
+
+        bannerEditToggleButton.hidden =
+          true;
+
+      }
+
+
+      if (postAddButton) {
+
+        postAddButton.hidden =
+          true;
+
+      }
+
+
+      postList.innerHTML =
+        "";
+
+
+      while (
+        bannerSkinRenderTarget.firstChild
+      ) {
+
+        postList.appendChild(
+          bannerSkinRenderTarget.firstChild
+        );
+
+      }
+
+
+      postList.hidden =
+        false;
+
+
+      /*
+        post형 CATEGORY/POST와 동일한 mount contract — legacy
+        헤더(제목+뒤로가기)를 숨기고 .post-area의 legacy padding을
+        0으로 만들어, Skin이 자기 CSS로 정한 프레임 폭/여백이
+        HOME과 정확히 같은 자리에 오게 한다(posts/posts-base.css).
+      */
+
+      if (postContainer) {
+
+        postContainer.classList.add(
+          "post-container--skin-active"
+        );
+
+      }
+
+
+      postArea.classList.add(
+        "post-area--skin-active"
+      );
+
+
+      await revealPostArea(
+        true
+      );
+
+
+      return;
+
+    }
+
+
+    /*
+      legacy 배너 화면 — 위에서 Skin 후보라고 미리 헤더를 숨겨
+      뒀을 수 있으므로 여기서 확실히 legacy 레이아웃으로 되돌린다.
     */
 
     if (postContainer) {
@@ -812,14 +1054,6 @@ async function openCategoryPage(
     );
 
 
-    clearPendingIndicator(
-      pendingIndicatorTimer
-    );
-
-
-    switchToCategoryScreen();
-
-
     if (postList) {
 
       postList.hidden =
@@ -829,9 +1063,9 @@ async function openCategoryPage(
 
 
     /*
-      banner는 Skin 대상이 아니므로 기존 legacy 연출(흰색 커튼)을
-      그대로 쓴다 — 이미 열려 있으면 showPostArea()가 자체 guard로
-      즉시 return한다.
+      Skin이 없는 배너는 기존 legacy 연출(흰색 커튼)을 그대로 쓴다
+      — 이미 열려 있으면 showPostArea()가 자체 guard로 즉시
+      return한다.
     */
 
     await revealPostArea(

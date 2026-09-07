@@ -419,6 +419,14 @@ function updateStudioPublishButtonState() {
    CATEGORY/POST를 보고 있을 때). currentWorkingSkin이 아직 없을
    때도 당연히 비활성 상태를 유지한다. currentPreviewPageType은
    studio/preview/preview-navigation.js가 소유/갱신한다.
+
+   PHASE 1E로 네 번째 값 "banner"가 생겼다 — 이 함수도
+   resolveCodeEditorSource()도 pageType 문자열을 그대로
+   resolveSkinTemplate()에 넘기는 일반형이라 별도 분기가 필요
+   없었다. banner 카테고리를 보고 있는데 templates.banner가 없으면
+   preview-navigation.js가 currentPreviewPageType을 "category"로
+   둔 채 legacy 배너 adapter를 그리므로, CODE는 그 상황에서 여전히
+   CATEGORY template을 편집한다(기존 동작 그대로).
 ========================================================== */
 
 function updateStudioCodeButtonState() {

@@ -4,9 +4,12 @@
    AI_SKIN_PHASE1C_PAGE_CONTRACT.md 12-B/19-6절 이후 실제 Slice.
    저장 시점(create_skin_with_initial_version / save_skin_draft_version
    RPC 호출 직전)에 SkinPackage 전체를 한 번에 정규화하는 유일한
-   공용 helper — legacy `html` sanitize + `templates.{home,category,post}`
-   각각 존재하는 것만 sanitize + 공유 `css` validate를 한 곳에만
-   둔다. skin/skin-initializer.js(최초 생성)와
+   공용 helper — legacy `html` sanitize +
+   `templates.{home,category,post,banner}` 각각 존재하는 것만
+   sanitize + 공유 `css` validate를 한 곳에만 둔다. 아래 page type
+   배열은 "있으면 정규화한다" 목록일 뿐이라(없는 template은 그냥
+   건너뛴다) banner를 더해도 기존 HOME/CATEGORY/POST 스킨의 저장
+   결과는 byte 단위로 동일하다. skin/skin-initializer.js(최초 생성)와
    studio/studio-preview.js(Save Draft)가 각자 sanitize/validate
    로직을 복붙하지 않고 이 함수 하나만 부른다 — 새 sanitizer/CSS
    parser는 만들지 않는다(skin-sanitize.js/skin-css-validate.js
@@ -42,7 +45,7 @@
 ========================================================== */
 
 const SKIN_PACKAGE_NORMALIZE_CSS_CHECK_NAMESPACE = "package-normalize-check";
-const SKIN_PACKAGE_NORMALIZE_PAGE_TYPES = ["home", "category", "post"];
+const SKIN_PACKAGE_NORMALIZE_PAGE_TYPES = ["home", "category", "post", "banner"];
 
 async function normalizeSkinPackageForDraft(skinPackage) {
 

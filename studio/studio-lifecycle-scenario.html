@@ -548,6 +548,89 @@
         },
 
         /*
+          Scenario X (PHASE 1E) — templates.banner를 가진 Skin.
+          Scenario N과 데이터는 동일하되 SkinPackage에 banner
+          template이 하나 더 있다. "배너 template이 있으면 Studio
+          Preview도 공개 화면과 같은 template/Context/renderSkin
+          경로를 탄다"를 확인하는 시나리오 — 대조군은 Scenario N
+          (banner template 없음 -> legacy read-only adapter)이다.
+        */
+        x: {
+          userId: "user-x",
+          tables: {
+            skins: [
+              { id: "skin-x1", user_id: "user-x", is_active: true, current_draft_version_id: "draft-x1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-x1",
+                content: {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html:
+                        '<div class="scenario-x-home">' +
+                        '<h1 data-imory-bind="site.title"></h1>' +
+                        '<nav>' +
+                        '<a class="scenario-x-nav-link" data-imory-repeat="navigation.categories" data-imory-href="item.href" data-imory-bind="item.name"></a>' +
+                        '</nav>' +
+                        '</div>'
+                    },
+                    category: {
+                      html:
+                        '<div class="scenario-x-category">' +
+                        '<h1 data-imory-bind="category.name"></h1>' +
+                        '</div>'
+                    },
+                    post: {
+                      html:
+                        '<div class="scenario-x-post">' +
+                        '<h1 data-imory-bind="post.title"></h1>' +
+                        '<div data-imory-region="post-body"></div>' +
+                        '</div>'
+                    },
+                    banner: {
+                      html:
+                        '<div class="scenario-x-banner">' +
+                        '<h1 class="scenario-x-banner-title" data-imory-bind="bannerCategory.name"></h1>' +
+                        '<ul class="scenario-x-banner-list">' +
+                        '<li class="scenario-x-banner-item" data-imory-repeat="bannerCategory.items">' +
+                        '<a class="scenario-x-banner-link" data-imory-href="item.href">' +
+                        '<img class="scenario-x-banner-image" data-imory-if="item.imageUrl" data-imory-src="item.imageUrl" alt="">' +
+                        '<span class="scenario-x-banner-name" data-imory-bind="item.name"></span>' +
+                        '</a>' +
+                        '</li>' +
+                        '</ul>' +
+                        '</div>'
+                    }
+                  },
+                  css: ".scenario-x-home { color: teal; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-x", nickname: "Scenario X", bio: null, slug: "scenario-x" }],
+            site_settings: [],
+            categories: [
+              { id: "301", user_id: "user-x", name: "LOG", type: "post", sort_order: 1 },
+              { id: "303", user_id: "user-x", name: "FRIENDS", type: "banner", sort_order: 2 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-x", title: "Hello World", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301" }
+            ],
+            banners: [
+              { id: "b1", user_id: "user-x", name: "Safe Friend", url: "https://example.com/safe", image_url: "https://example.com/safe.png", category_id: "303", sort_order: 1 },
+              { id: "b2", user_id: "user-x", name: "Unsafe Friend", url: "javascript:alert(1)", image_url: "data:text/html,evil", category_id: "303", sort_order: 2 },
+              { id: "b3", user_id: "user-other", name: "Other Owner Banner", url: "https://example.com/leak", image_url: "https://example.com/leak.png", category_id: "303", sort_order: 3 }
+            ]
+          },
+          rpcHandlers: {}
+        },
+
+        /*
           Scenario U — Banner Category Preview 전용, banners 조회
           자체가 실패하는 경우("query 실패 시 오류 상태 + Preview
           Back" 검증). 아래 공용 from()에 있는 state.bannerQueryShouldFail

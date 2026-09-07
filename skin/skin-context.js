@@ -44,6 +44,24 @@
    DB에 새로 생겨도(gallery 등) 이 필터는 자동으로 안전하게
    무시한다. 기존 navigation.categories[]는 값/순서/shape 전부
    그대로다.
+
+   AI_SKIN_PHASE1E_BANNER_AND_OWNER_LINKS.md(PHASE 1E)로 두 가지가
+   추가됐다 — 둘 다 새 DB 컬럼/RPC/RLS 없이 이미 조회하던 값에서
+   파생된다:
+   1. buildBannerSkinContext() + page.isBanner — banner 타입
+      카테고리를 Skin template으로 그리기 위한 page context.
+      데이터는 기존 fetchSkinCategoryById()/fetchSkinBanners()를
+      그대로 재사용한다(새 조회 없음).
+   2. viewer namespace — "지금 이 화면을 보고 있는 사람이 이
+      블로그의 소유자인가"와, 소유자일 때만 채워지는 글쓰기/관리
+      진입 경로. 판정은 home/home-skin-prompt.js가 이미 쓰는 것과
+      동일한 기준(Supabase 세션 user.id === ownerId)이고, 실제
+      작성/관리 권한 검사는 여전히 각 화면과 RLS가 한다 — 이
+      필드는 "링크를 보여줄지"만 정한다.
+
+   의존이 하나 늘었다: isSafeSkinUrl(skin/skin-sanitize.js) —
+   banner의 외부 URL/이미지 URL을 Context 단계에서 1차로 거르는 데
+   쓴다(렌더 시점 재검증은 skin-render.js가 그대로 담당).
 ========================================================== */
 
 const SKIN_CONTEXT_LANGUAGE =
@@ -54,6 +72,15 @@ const SKIN_HOME_RECENT_POSTS_LIMIT =
 
 const SKIN_CONTEXT_SITE_SETTINGS_KEYS =
   ["blog_title", "favicon_url"];
+
+/*
+  관리 화면 경로 — home/home-skin-prompt.js가 Skin Studio로 보낼 때
+  쓰는 것과 정확히 같은 조립 방식(SITE_BASE_PATH + "/admin/")이다.
+  Skin이 이 문자열을 직접 알 필요가 없도록 Context가 완성된 href만
+  노출한다(요구사항 "링크 주소를 하드코딩하지 않는다").
+*/
+const SKIN_CONTEXT_ADMIN_SUBPATH =
+  "/admin/";
 
 
 /* =========================================================
@@ -487,6 +514,57 @@ async function fetchSkinBanners(
 
 
 /* =========================================================
+   viewer namespace — 현재 로그인 사용자가 이 블로그의 소유자인지
+   (PHASE 1E 3절)
+
+   home/home-skin-prompt.js의 shouldShowHomeSkinPrompt()가 쓰는 것과
+   같은 기준이다: Supabase 세션의 user.id가 ownerId와 같으면 소유자.
+   그 파일은 core/lib/auth-shared.js의 authGetSession()을 쓰지만,
+   이 파일은 Studio(studio/index.html)에서도 로드되고 그쪽은
+   auth-shared.js를 로드하지 않으므로 supabaseClient.auth를 직접
+   쓴다(studio/images/skin-image-library.js도 같은 방식).
+
+   getSession()은 네트워크가 아니라 로컬 저장소의 세션을 읽는다 —
+   로그아웃 방문자에게 추가 왕복이 생기지 않는다. 어떤 이유로든
+   실패하면(모의 클라이언트에 auth가 없는 테스트 하네스, 저장소
+   접근 불가 등) 항상 null = "소유자 아님"으로 떨어진다. 링크를
+   못 보여주는 것은 불편일 뿐이지만, 반대로 잘못 보여주는 것은
+   방문자에게 의미 없는(그리고 어차피 권한 검사에 막히는) 관리
+   링크를 노출하는 일이라 안전한 기본값이 명확하다.
+========================================================== */
+
+async function resolveSkinViewerId() {
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await supabaseClient
+        .auth
+        .getSession();
+
+
+    if (error) {
+
+      return null;
+
+    }
+
+
+    return data?.session?.user?.id ?? null;
+
+  } catch (err) {
+
+    return null;
+
+  }
+
+}
+
+
+/* =========================================================
    images namespace
 
    고정 키 맵이 아니라, 렌더링하려는 Skin Version의 imageSlots
@@ -611,11 +689,17 @@ async function buildBaseSkinContext(
       );
 
 
-  const banners =
-    await fetchSkinBanners(
-      ownerId,
-      bannerCategoryIds
-    );
+  const [
+    banners,
+    viewerId
+  ] =
+    await Promise.all([
+      fetchSkinBanners(
+        ownerId,
+        bannerCategoryIds
+      ),
+      resolveSkinViewerId()
+    ]);
 
 
   const images =
@@ -667,6 +751,36 @@ async function buildBaseSkinContext(
         itemCount: null
       })
     );
+
+
+  /*
+    viewer(PHASE 1E 3절) — 소유자일 때만 글쓰기/관리 href를 채운다.
+    비소유자에게는 isOwner=false와 함께 두 href 모두 null이라,
+    Skin이 실수로 data-imory-if를 빠뜨려도 링크가 만들어지지
+    않는다(data-imory-href는 값이 문자열이 아니면 href 속성 자체를
+    지운다, skin-render.js).
+
+    writeHref: Imory에는 독립된 "글쓰기 URL"이 없다 — 글은 항상
+    카테고리 목록 화면의 + 버튼(posts/editor/posts-list-detail-nav.js)
+    에서 시작한다. 그래서 HOME처럼 카테고리가 정해지지 않은
+    화면에서는 첫 번째 POST 카테고리 목록으로 보낸다: 그 화면이
+    바로 기존 글쓰기 진입점이고, 동시에 다른 카테고리를 고를 수
+    있는 기존 카테고리 선택 흐름이기도 하다. POST 카테고리가 하나도
+    없으면 null(링크 자체가 사라진다). 이 판단은 항상 이 파일이
+    하고, Skin은 category id를 전혀 모른다.
+  */
+
+  const isOwner =
+    !!viewerId &&
+    viewerId === ownerId;
+
+
+  const firstPostCategory =
+    categoryItems.find(
+      (category) =>
+        category.type === "post"
+    ) ||
+    null;
 
 
   return {
@@ -734,6 +848,22 @@ async function buildBaseSkinContext(
         )
     },
 
+    viewer: {
+
+      isOwner,
+
+      writeHref:
+        isOwner && firstPostCategory
+          ? firstPostCategory.href
+          : null,
+
+      adminHref:
+        isOwner
+          ? `${SITE_BASE_PATH}${SKIN_CONTEXT_ADMIN_SUBPATH}`
+          : null
+
+    },
+
     images
 
   };
@@ -744,7 +874,12 @@ async function buildBaseSkinContext(
 /* =========================================================
    page namespace 헬퍼 — 항상 하나의 page.type만 true다
    (PHASE1C 3-2/3-3절). data-imory-if가 비교 연산을 지원하지
-   않기 때문에 boolean 3종을 함께 발급해 둔다.
+   않기 때문에 boolean 4종을 함께 발급해 둔다. PHASE 1E에서
+   isBanner가 네 번째로 추가됐다 — banner 페이지는 category
+   라우트(/:slug/category/:id) 위에 있지만 page.type은 "banner"
+   하나뿐이라 isCategory는 false다("항상 정확히 하나만 true"
+   불변식 유지). 기존 CATEGORY template은 여전히 post형
+   카테고리에서만 렌더되므로 이 구분으로 깨지는 Skin은 없다.
 ========================================================== */
 
 function buildSkinPageMeta(
@@ -755,7 +890,8 @@ function buildSkinPageMeta(
     type,
     isHome: type === "home",
     isCategory: type === "category",
-    isPost: type === "post"
+    isPost: type === "post",
+    isBanner: type === "banner"
   };
 
 }
@@ -1012,6 +1148,119 @@ async function buildPostSkinContext(
       publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
       categoryName,
       categoryHref
+    }
+
+  };
+
+}
+
+
+/* =========================================================
+   buildBannerSkinContext(ownerId, categoryId, options)
+   -> BANNER context | null   (PHASE 1E 2절)
+
+   banner 타입 카테고리(지인/사이트 배너 모음) 화면의 page context.
+   buildCategorySkinContext()와 완전히 같은 뼈대를 쓰되, posts 대신
+   그 카테고리의 배너 목록을 채운다 — 글 목록 계약(category.posts)을
+   배너에 재사용하지 않는다(항목의 의미가 완전히 다르다: 제목/날짜/
+   내부 링크가 아니라 이미지/외부 링크).
+
+   조회는 새로 만들지 않는다 — 이미 있는 fetchSkinCategoryById()와
+   fetchSkinBanners()를 그대로 쓴다. 둘 다 ownerId로 scope되어 있어
+   (fetchSkinBanners는 .eq("user_id").in("category_id")) 다른
+   사용자의 배너나 다른 카테고리의 배너가 섞일 수 없다. 정렬도
+   기존 sort_order 그대로다.
+
+   category.type 검사는 여기서 하지 않는다 —
+   buildCategorySkinContext()가 type과 무관하게 posts를 채우고
+   호출자(skin-category.js)가 type을 판정하는 것과 동일한 분리다.
+   이 함수의 호출자(skin/skin-banner.js, studio/preview/
+   preview-navigation.js)가 bannerCategory.type으로 판정한다.
+
+   href/imageUrl은 isSafeSkinUrl()(skin/skin-sanitize.js)로 여기서
+   한 번 거른다 — 안전하지 않으면 항목을 숨기지 않고 그 필드만
+   null로 만든다(이름은 계속 보인다, studio/preview/
+   preview-navigation.js의 banner adapter와 동일한 정책). 렌더
+   시점에 skin-render.js가 data-imory-href/src를 다시 검증하므로
+   이건 이중 방어의 첫 겹이다.
+
+   categoryId가 이 ownerId 소유가 아니거나 존재하지 않으면 null —
+   buildCategorySkinContext()와 동일하다.
+========================================================== */
+
+async function buildBannerSkinContext(
+  ownerId,
+  categoryId,
+  options = {}
+) {
+
+  if (!ownerId) {
+
+    throw new Error(
+      "buildBannerSkinContext: ownerId is required"
+    );
+
+  }
+
+  if (categoryId === undefined || categoryId === null) {
+
+    throw new Error(
+      "buildBannerSkinContext: categoryId is required"
+    );
+
+  }
+
+
+  const commonData =
+    await fetchSkinCommonData(ownerId);
+
+
+  const [
+    base,
+    category,
+    bannersRaw
+  ] =
+    await Promise.all([
+      buildBaseSkinContext(ownerId, options, commonData),
+      fetchSkinCategoryById(ownerId, categoryId),
+      fetchSkinBanners(ownerId, [categoryId])
+    ]);
+
+
+  if (!category) {
+    return null;
+  }
+
+
+  return {
+
+    ...base,
+
+    page:
+      buildSkinPageMeta("banner"),
+
+    bannerCategory: {
+      id: String(category.id),
+      name: category.name,
+      type: category.type,
+      href: buildSitePath(commonData.slug, `/category/${category.id}`),
+
+      items:
+        bannersRaw.map(
+          (banner) => ({
+            id: String(banner.id),
+            name: banner.name || "",
+            alt: banner.name || null,
+            href:
+              typeof banner.url === "string" && isSafeSkinUrl(banner.url)
+                ? banner.url
+                : null,
+            imageUrl:
+              typeof banner.image_url === "string" && isSafeSkinUrl(banner.image_url)
+                ? banner.image_url
+                : null
+          })
+        )
     }
 
   };

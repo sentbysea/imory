@@ -661,6 +661,142 @@
 
 
     /* =========================================================
+       PART 2 — SCENARIO X (PHASE 1E): templates.banner가 있는 Skin의
+       배너 미리보기. Scenario N(banner template 없음 -> legacy
+       read-only adapter)과 정확히 대조되는 시나리오다 — 여기서는
+       Studio Preview가 공개 화면(skin/skin-banner.js)과 같은
+       template/Context/renderSkin 경로를 타야 한다.
+    ========================================================== */
+
+    async function runScenarioBannerTemplate() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=x");
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const backButton = () => doc.getElementById("studioPreviewBackButton");
+      const codeButton = () => doc.getElementById("studioCodeButton");
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && !!(innerDoc() && innerDoc().querySelector(".scenario-x-home")),
+        8000,
+        100
+      );
+
+      clickAnchor(findAnchorByText(innerDoc(), ".scenario-x-nav-link", "FRIENDS"));
+
+      const bannerSkinRendered = await waitFor(
+        () => (innerDoc() && innerDoc().querySelector(".scenario-x-banner")) || null,
+        3000,
+        50
+      );
+
+      record(
+        "X1. templates.banner가 있으면 legacy read-only adapter가 아니라 Skin banner template이 렌더된다",
+        !!bannerSkinRendered && !innerDoc().querySelector(".banner-grid")
+      );
+
+      record(
+        "X2. bannerCategory.name 바인딩이 정상이다",
+        innerDoc().querySelector(".scenario-x-banner-title")?.textContent === "FRIENDS",
+        innerDoc().querySelector(".scenario-x-banner-title")?.textContent
+      );
+
+      const bannerItems = () => Array.from(innerDoc().querySelectorAll(".scenario-x-banner-item"));
+      const bannerNames = () => bannerItems().map((li) => li.querySelector(".scenario-x-banner-name")?.textContent);
+
+      record(
+        "X3. owner + category_id 필터 — 다른 사용자(user-other)의 배너는 섞이지 않는다",
+        bannerItems().length === 2 && !bannerNames().includes("Other Owner Banner"),
+        JSON.stringify(bannerNames())
+      );
+
+      const safeLink = () => bannerItems()[0].querySelector(".scenario-x-banner-link");
+      const unsafeLink = () => bannerItems()[1].querySelector(".scenario-x-banner-link");
+
+      record(
+        "X4. 안전한 https href/image는 그대로 렌더된다",
+        safeLink().getAttribute("href") === "https://example.com/safe" &&
+          bannerItems()[0].querySelector(".scenario-x-banner-image")?.getAttribute("src") === "https://example.com/safe.png"
+      );
+
+      record(
+        "X5. javascript:/data: 같은 위험한 값은 href/src 속성 자체가 남지 않는다(이름은 표시)",
+        !unsafeLink().hasAttribute("href") &&
+          !bannerItems()[1].querySelector(".scenario-x-banner-image")?.hasAttribute("src") &&
+          bannerNames()[1] === "Unsafe Friend"
+      );
+
+      record(
+        "X6. banner Preview 중에는 CODE 버튼이 활성화된다(templates.banner를 편집 대상으로 잡는다)",
+        codeButton().disabled === false
+      );
+
+      codeButton().click();
+
+      const codeOverlay = () => doc.querySelector(".code-editor-overlay");
+      const htmlTextarea = () => doc.querySelectorAll(".code-editor-textarea")[0];
+
+      await waitFor(
+        () => (codeOverlay() && codeOverlay().hidden === false) || null,
+        3000,
+        50
+      );
+
+      const loadedHtml = htmlTextarea() ? htmlTextarea().value : "";
+
+      record(
+        "X7. CODE를 열면 CATEGORY/HOME이 아니라 banner template의 html이 로드된다",
+        loadedHtml.includes("scenario-x-banner") && !loadedHtml.includes("scenario-x-category"),
+        loadedHtml.slice(0, 60) || "(no editor)"
+      );
+
+      const cancelButton =
+        Array.from(doc.querySelectorAll(".code-editor-button")).find((b) => b.textContent === "Cancel");
+
+      if (cancelButton) {
+        cancelButton.click();
+      }
+
+      await waitFor(
+        () => (codeOverlay() && codeOverlay().hidden === true) || null,
+        3000,
+        50
+      );
+
+      record(
+        "X8. banner Preview 중에도 Preview Back이 보인다",
+        backButton().hidden === false
+      );
+
+      clickAnchor(backButton());
+
+      const backFromBanner = await waitFor(
+        () => !!(innerDoc() && innerDoc().querySelector(".scenario-x-home")),
+        3000,
+        50
+      );
+
+      record(
+        "X9. banner에서 Preview Back -> HOME 정상 복귀",
+        !!backFromBanner
+      );
+
+      record(
+        "X10. banner 왕복 동안 Preview iframe은 재로드되지 않는다",
+        win.__previewFrameLoadCount === 1,
+        "loadCount=" + win.__previewFrameLoadCount
+      );
+
+      return true;
+
+    }
+
+
+    /* =========================================================
        PART 2 — SCENARIO U: Banner Category Preview 중 banners
        query 자체가 실패하는 경우 — 이전 Preview DOM을 어중간하게
        남기지 않고 오류 상태 + Preview Back을 제공하는지 확인한다.
@@ -1395,6 +1531,12 @@
         await runScenarioQ();
       } catch (err) {
         record("Scenario Q 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runScenarioBannerTemplate();
+      } catch (err) {
+        record("Scenario X(banner template) 실행 중 예외 발생", false, String(err && err.stack || err));
       }
 
       try {

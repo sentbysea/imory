@@ -120,9 +120,18 @@
 
     let IMORY_DIARY_JSON_TEXT = null;
 
+    /* PHASE 1E — templates.banner(선택 필드)를 포함한 SkinPackage.
+       "banner를 넣어도 통과하고 저장/렌더까지 보존되는가"와
+       "banner 없는 기존 JSON도 그대로 통과하는가"를 같은 하네스에서
+       대조 검증한다. */
+    let QUIET_FRAME_V2_JSON_TEXT = null;
+
     async function loadFixtureJsonText() {
       const res = await fetch("../skin/test-skins/imory-diary-v0.1.json");
       IMORY_DIARY_JSON_TEXT = await res.text();
+
+      const bannerRes = await fetch("../skin/test-skins/imory-quiet-frame-v2.json");
+      QUIET_FRAME_V2_JSON_TEXT = await bannerRes.text();
     }
 
 
@@ -432,6 +441,138 @@
 
 
     /* =========================================================
+       PHASE 1E — templates.banner를 포함한 SkinPackage Import
+
+       위 happy path(3종 template)와 같은 시나리오/같은 모달을 쓰되,
+       banner template까지 있는 JSON을 가져온다. banner가 required가
+       아니라 optional이라는 것은 위 happy path가 계속 통과하는 것으로
+       이미 증명되므로, 여기서는 "넣었을 때 실제로 살아남는가"만 본다.
+    ========================================================== */
+
+    async function runBannerTemplateImport() {
+
+      const iframe = await loadIframe("./studio-lifecycle-scenario.html?scenario=s");
+
+      const win = iframe.contentWindow;
+      const doc = iframe.contentDocument;
+
+      const overlay = () => doc.getElementById("studioPreviewOverlay");
+      const shell = () => doc.getElementById("studioPreviewShell");
+      const innerDoc = () => doc.getElementById("studioPreviewFrame").contentDocument;
+      const importButton = () => doc.getElementById("studioImportButton");
+      const codeButton = () => doc.getElementById("studioCodeButton");
+      const saveButton = () => doc.getElementById("studioSaveButton");
+
+      await waitFor(
+        () => !shell().hidden && overlay().hidden && innerDoc() && innerDoc().querySelector(".scenario-s-legacy-home"),
+        8000,
+        100
+      );
+
+      importButton().click();
+
+      await waitFor(() => doc.querySelector(".import-editor-overlay:not([hidden])"), 3000, 50);
+
+      const textarea = doc.querySelector(".import-editor-textarea");
+      const actionButtons = doc.querySelectorAll(".import-editor-actions .import-editor-button");
+      const validateBtn = actionButtons[1];
+      const applyBtn = doc.querySelector(".import-editor-button--primary");
+
+      setTextareaValue(textarea, QUIET_FRAME_V2_JSON_TEXT);
+      validateBtn.click();
+
+      const validated = await waitFor(
+        () => (applyBtn && !applyBtn.disabled ? true : null),
+        3000,
+        50
+      );
+
+      record(
+        "B1. templates.banner가 포함된 SkinPackage도 VALIDATE를 통과한다",
+        !!validated,
+        doc.querySelector(".import-editor-message") && doc.querySelector(".import-editor-message").textContent
+      );
+
+      applyBtn.click();
+
+      const homeRendered = await waitFor(
+        () => innerDoc() && innerDoc().querySelector(".quiet-page") ? true : null,
+        4000,
+        50
+      );
+
+      record(
+        "B2. Apply 직후 HOME Preview가 새 SkinPackage로 다시 그려진다",
+        !!homeRendered
+      );
+
+      win.__testHooks.simulateNavigate("/scenario-s/category/302");
+
+      const bannerRendered = await waitFor(
+        () => innerDoc() && innerDoc().querySelector(".quiet-banner-list") ? true : null,
+        4000,
+        50
+      );
+
+      record(
+        "B3. banner 카테고리(302)가 legacy adapter가 아니라 import된 banner template으로 렌더된다",
+        !!bannerRendered && !innerDoc().querySelector(".banner-grid")
+      );
+
+      record(
+        "B4. bannerCategory.name이 실제 카테고리 이름으로 바인딩된다",
+        innerDoc().querySelector(".quiet-eyebrow") &&
+          innerDoc().querySelector(".quiet-eyebrow").textContent === "FRIENDS",
+        innerDoc().querySelector(".quiet-eyebrow") && innerDoc().querySelector(".quiet-eyebrow").textContent
+      );
+
+      record(
+        "B5. 배너가 하나도 없는 카테고리도 빈 목록으로 정상 렌더된다(오류/legacy 폴백 아님)",
+        innerDoc().querySelector(".quiet-banner-list").children.length === 0
+      );
+
+      record(
+        "B6. banner Preview 중 CODE 버튼이 활성화된다(templates.banner를 편집 대상으로 잡는다)",
+        codeButton().disabled === false
+      );
+
+      window.__savedDraftCalls = null;
+
+      saveButton().click();
+
+      const saved = await waitFor(
+        () => (window.__savedDraftCalls && window.__savedDraftCalls.length > 0 ? window.__savedDraftCalls : null),
+        4000,
+        50
+      );
+
+      const savedContent = saved && saved[0] && saved[0].p_content;
+
+      record(
+        "B7. Save 시 templates.banner가 다른 세 template과 함께 그대로 저장된다",
+        !!savedContent &&
+          !!savedContent.templates &&
+          typeof savedContent.templates.banner === "object" &&
+          savedContent.templates.banner.html.includes("quiet-banner-list") &&
+          savedContent.templates.home.html.includes("quiet-post-list") &&
+          savedContent.templates.category.html.includes("quiet-post-list") &&
+          savedContent.templates.post.html.includes('data-imory-region="post-body"')
+      );
+
+      const skinRow = win.__testHooks.getSkinRow
+        ? win.__testHooks.getSkinRow()
+        : null;
+
+      record(
+        "B8. banner를 포함한 Import/Save도 Publish를 자동으로 일으키지 않는다",
+        !!skinRow && skinRow.current_published_version_id === null,
+        JSON.stringify(skinRow)
+      );
+
+    }
+
+
+    /* =========================================================
        SCENARIO S — invalid/atomic 회귀: 실패는 draft를 절대
        바꾸지 않는다.
     ========================================================== */
@@ -587,6 +728,12 @@
         await runHappyPath();
       } catch (err) {
         record("Happy path 실행 중 예외 발생", false, String(err && err.stack || err));
+      }
+
+      try {
+        await runBannerTemplateImport();
+      } catch (err) {
+        record("PHASE 1E banner template import 실행 중 예외 발생", false, String(err && err.stack || err));
       }
 
       try {

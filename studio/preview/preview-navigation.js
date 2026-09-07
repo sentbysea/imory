@@ -28,7 +28,8 @@
 
    의존(먼저 로드되어야 함): resolveSkinTemplate(skin/
    skin-template.js), buildCategorySkinContext/buildPostSkinContext/
-   fetchSkinCategoryById/fetchSkinBanners(skin/skin-context.js),
+   buildBannerSkinContext/fetchSkinCategoryById/fetchSkinBanners
+   (skin/skin-context.js),
    isSafeSkinUrl(skin/skin-sanitize.js), resolveStudioPreviewTarget
    (studio/preview/preview-route.js), postBannerRenderToFrame
    (studio-preview.js).
@@ -255,6 +256,32 @@ async function renderCategoryPreviewFor(categoryId) {
 
   if (category.type === "banner") {
 
+    /*
+      PHASE 1E — 이 스킨이 templates.banner를 갖고 있으면 공개
+      화면(skin/skin-banner.js)과 **같은 template/같은 Context/같은
+      renderSkin 경로**로 미리 본다. 없으면 지금까지처럼 Studio
+      전용 read-only adapter(renderBannerCategoryPreviewFor, 아래)로
+      떨어진다 — 그래야 배너 template이 없는 스킨을 편집하는
+      중에도 배너 화면을 계속 확인할 수 있다(공개 배너 렌더러가
+      Skin 유무와 무관하게 동작하는 것과 같은 계약).
+    */
+
+    const bannerTemplate =
+      resolveSkinTemplate(currentWorkingSkin, "banner");
+
+    if (bannerTemplate) {
+
+      await renderBannerSkinPreviewFor(
+        categoryId,
+        bannerTemplate,
+        token
+      );
+
+      return;
+
+    }
+
+
     await renderBannerCategoryPreviewFor(
       categoryId,
       category,
@@ -367,8 +394,113 @@ async function renderCategoryPreviewFor(categoryId) {
 
 
 /* =========================================================
+   BANNER — Skin template 경로 (PHASE 1E)
+
+   templates.banner가 있는 스킨의 배너 미리보기. 공개 경로
+   (skin/skin-banner.js)와 완전히 같은 계약을 쓴다 —
+   buildBannerSkinContext()가 만든 같은 Context를 같은 template과
+   함께 postRenderToFrame()으로 보내고, iframe 안에서
+   renderSkin()이 그린다. Studio 전용 렌더 경로를 따로 만들지
+   않으므로 "Preview에서는 되는데 공개 화면에서는 다르다"가
+   구조적으로 생길 수 없다.
+
+   currentPreviewPageType을 "banner"로 바꿔서 CODE 버튼이
+   templates.banner를 편집 대상으로 잡게 한다
+   (studio-preview.js의 resolveCodeEditorSource/
+   applyWorkingSkinChanges는 pageType 일반형이라 별도 분기가
+   필요 없다). previewHistory 항목 자체는 여전히
+   {type:"category", categoryId}다 — 실제 라우트가 그것이고,
+   renderCurrentPreviewEntry()가 다시 들어오면 여기서 다시
+   banner로 판정된다.
+
+   staleness 가드(token + 현재 위치)는 renderCategoryPreviewFor/
+   renderPostPreviewFor와 동일하다.
+========================================================== */
+
+async function renderBannerSkinPreviewFor(categoryId, bannerTemplate, token) {
+
+  currentPreviewPageType =
+    "banner";
+
+  updateStudioCodeButtonState();
+
+  setStudioPreviewOverlay(
+    "loading",
+    "배너 미리보기를 불러오는 중..."
+  );
+
+  let context;
+
+  try {
+
+    context =
+      await buildBannerSkinContext(
+        currentOwnerId,
+        categoryId,
+        {
+          imageSlotNames: currentImageSlotNames,
+          imageSlotValues: currentImageSlotValues
+        }
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[preview-navigation] buildBannerSkinContext failed",
+      err
+    );
+
+    if (
+      token === previewNavToken &&
+      getCurrentPreviewLocation().type === "category"
+    ) {
+
+      setStudioPreviewOverlay(
+        "error",
+        "배너 미리보기를 불러오지 못했습니다."
+      );
+
+    }
+
+    return;
+
+  }
+
+  if (
+    token !== previewNavToken ||
+    getCurrentPreviewLocation().type !== "category"
+  ) {
+    return;
+  }
+
+  if (!context) {
+
+    setStudioPreviewOverlay(
+      "empty",
+      "이 카테고리를 찾을 수 없습니다."
+    );
+
+    return;
+
+  }
+
+  setStudioPreviewOverlay(
+    "hidden"
+  );
+
+  postRenderToFrame(
+    {
+      skin: bannerTemplate,
+      context
+    }
+  );
+
+}
+
+
+/* =========================================================
    BANNER CATEGORY — Studio 전용 read-only adapter (Skin template
-   시스템 밖). 공개 Banner 렌더러(posts/view/posts-view-banner.js)와
+   시스템 밖, templates.banner가 없는 스킨 전용). 공개 Banner 렌더러(posts/view/posts-view-banner.js)와
    달리 edit 모드/순서 변경/폼은 없다 — 목록을 보여주기만 한다.
 
    owner(currentOwnerId) + category_id 필터를 모두 적용한다

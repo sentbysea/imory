@@ -1,6 +1,11 @@
 /* =========================================================
    SKIN PACKAGE IMPORT (PHASE 1 Final Gap — Whole SkinPackage Import)
 
+   PHASE 1E: templates.banner(선택 필드)도 이 함수가 함께 검증/
+   sanitize한다 — 아래 requiredPageTypes 루프 바로 다음의 banner
+   블록 참고. required가 아니므로 기존 3종 SkinPackage JSON은
+   지금까지와 100% 동일하게 통과한다.
+
    기존 route-aware Code Editor(studio/editor/code-editor.js)는
    "지금 Preview가 보고 있는 페이지 하나"의 html/css만 편집한다 —
    templates.category/post가 아예 없는 HOME-only Skin에서는 그
@@ -90,6 +95,36 @@ async function validateSkinPackageImport(rawJsonText) {
 
   }
 
+  /*
+    PHASE 1E — templates.banner는 **선택**이다. 배너 화면까지 스킨을
+    입히고 싶은 SkinPackage만 넣으면 되고, 없으면 그 사이트의 배너
+    카테고리는 지금까지처럼 legacy 배너 화면으로 렌더된다
+    (skin/skin-banner.js). 그래서 기존 HOME/CATEGORY/POST 3종만 가진
+    JSON도 이 Import를 그대로 통과한다 — banner를 required에 넣으면
+    이미 배포된 스킨 파일들이 전부 가져오기 불가능해진다.
+
+    다만 "넣었는데 모양이 틀린" 경우는 조용히 무시하지 않고
+    실패시킨다(오탈자를 성공으로 착각하게 두지 않는다).
+  */
+
+  const bannerTemplateInput =
+    templatesInput.banner;
+
+  const hasBannerTemplate =
+    bannerTemplateInput !== undefined &&
+    bannerTemplateInput !== null;
+
+  if (
+    hasBannerTemplate &&
+    (
+      typeof bannerTemplateInput !== "object" ||
+      Array.isArray(bannerTemplateInput) ||
+      typeof bannerTemplateInput.html !== "string"
+    )
+  ) {
+    return { ok: false, message: "templates.banner를 포함하려면 templates.banner.html이 문자열이어야 합니다." };
+  }
+
   let cssRaw;
 
   if (typeof parsed.css === "string") {
@@ -116,6 +151,11 @@ async function validateSkinPackageImport(rawJsonText) {
 
   const sanitizedPostHtml =
     sanitizeSkinHTML(templatesInput.post.html);
+
+  const sanitizedBannerHtml =
+    hasBannerTemplate
+      ? sanitizeSkinHTML(bannerTemplateInput.html)
+      : null;
 
   if (!htmlHasPostBodyRegion(sanitizedPostHtml)) {
     return {
@@ -163,15 +203,31 @@ async function validateSkinPackageImport(rawJsonText) {
       ? parsed.metadata
       : {};
 
+  /*
+    templates는 항상 새 리터럴로 만든다(파일 상단 "원본을 스프레드
+    하지 않는다" 원칙) — banner는 실제로 들어온 경우에만 키를
+    추가해서, 없는 스킨의 결과에 `banner: undefined` 같은 죽은 키가
+    남지 않게 한다(resolveSkinTemplate이 undefined를 그대로
+    "미지원"으로 읽으므로 동작상 차이는 없지만, 저장되는 JSON이
+    깨끗한 편이 낫다).
+  */
+
+  const templates =
+    {
+      home: { html: sanitizedHomeHtml },
+      category: { html: sanitizedCategoryHtml },
+      post: { html: sanitizedPostHtml }
+    };
+
+  if (hasBannerTemplate) {
+    templates.banner = { html: sanitizedBannerHtml };
+  }
+
   return {
     ok: true,
     skinPackage: {
       schemaVersion: 1,
-      templates: {
-        home: { html: sanitizedHomeHtml },
-        category: { html: sanitizedCategoryHtml },
-        post: { html: sanitizedPostHtml }
-      },
+      templates,
       css: cssRaw,
       imageSlots,
       regions,

@@ -146,8 +146,10 @@ function buildImportEditorDom() {
   textarea.spellcheck =
     false;
 
+  /* banner는 선택 필드다(skin/skin-package-import.js) — 안내에도
+     그렇게 표시한다. */
   textarea.placeholder =
-    '{ "schemaVersion": 1, "templates": { "home": {...}, "category": {...}, "post": {...} }, "css": "..." }';
+    '{ "schemaVersion": 1, "templates": { "home": {...}, "category": {...}, "post": {...}, "banner": {...} (선택) }, "css": "..." }';
 
   body.appendChild(textarea);
 

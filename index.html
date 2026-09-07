@@ -295,6 +295,22 @@
         }
       );
 
+    /*
+      BANNER(PHASE 1E, skin/skin-banner.js)도 동일한 핸드셰이크
+      패턴을 쓴다 — posts-view-list.js(classic script)가
+      openCategoryPage()의 banner 분기에서 폴링 없이 이 모듈을
+      넘겨받는다. templates.banner가 없는 기존 스킨에서는 그
+      모듈이 항상 false를 돌려주므로 기존 legacy 배너 화면이
+      그대로 유지된다.
+    */
+
+    window.skinBannerReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinBannerReady = resolve;
+        }
+      );
+
     loadVersionedScripts(
       [
         "./skin/skin-sanitize.js",
@@ -324,6 +340,10 @@
 
     document.write(
       `<script type="module" src="./skin/skin-post.js?v=${APP_BUILD_VERSION}"><\/script>`
+    );
+
+    document.write(
+      `<script type="module" src="./skin/skin-banner.js?v=${APP_BUILD_VERSION}"><\/script>`
     );
 
   </script>
