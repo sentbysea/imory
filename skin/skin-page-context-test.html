@@ -978,15 +978,23 @@
       );
 
       assert(
-        "[1E] 소유자 writeHref === 첫 POST 카테고리의 관리 진입 URL(?manage=1)",
-        ownerCtx.viewer.writeHref === "/testuser/category/1?manage=1"
+        "[write] POST 카테고리가 하나뿐인 소유자: writeHref === 그 카테고리의 작성 진입 URL(?write=1)",
+        ownerCtx.navigation.postCategories.length === 1 &&
+        ownerCtx.viewer.writeHref === "/testuser/category/1?write=1",
+        ownerCtx.viewer.writeHref
       );
 
       assert(
-        "[1E] writeHref는 같은 카테고리를 그냥 보는 링크와 주소가 다르다(탐색과 관리 진입 구분)",
+        "[write] writeHref는 같은 카테고리를 그냥 보는 링크와 주소가 다르다(탐색과 작성 진입 구분)",
         ownerCtx.viewer.writeHref !== ownerCtx.navigation.postCategories[0].href &&
         ownerCtx.viewer.writeHref.startsWith(ownerCtx.navigation.postCategories[0].href),
         ownerCtx.viewer.writeHref + " vs " + ownerCtx.navigation.postCategories[0].href
+      );
+
+      assert(
+        "[write] writeHref는 관리 진입(?manage=1)이 아니다 — 옛 목록을 거치지 않는다",
+        !ownerCtx.viewer.writeHref.includes("manage="),
+        ownerCtx.viewer.writeHref
       );
 
       assert(
@@ -1011,13 +1019,38 @@
         await buildHomeSkinContext(BANNER_ONLY_OWNER_ID);
 
       assert(
-        "[1E] POST 카테고리가 하나도 없는 소유자: writeHref가 null이 아니라 관리 화면(카테고리를 만들 수 있는 곳)으로 간다",
+        "[write] POST 카테고리가 하나도 없는 소유자: writeHref가 null이 아니라 HOME 작성 진입 URL(받는 쪽이 안내한다)",
         bannerOnlyOwnerCtx.viewer.isOwner === true &&
         bannerOnlyOwnerCtx.navigation.postCategories.length === 0 &&
-        bannerOnlyOwnerCtx.viewer.writeHref === bannerOnlyOwnerCtx.viewer.adminHref &&
-        bannerOnlyOwnerCtx.viewer.writeHref === "/admin/",
+        bannerOnlyOwnerCtx.viewer.writeHref === "/banneronly?write=1",
         JSON.stringify(bannerOnlyOwnerCtx.viewer)
       );
+
+      /*
+        POST 카테고리가 여러 개면 이 파일은 대상을 단정하지 않는다 —
+        HOME 작성 주소만 주고, 어느 카테고리인지는 받는 쪽
+        (posts/view/posts-view-compose.js)이 고르게 한다.
+      */
+
+      fixtures.categories.push(
+        { id: 3, user_id: OWNER_ID, name: "두 번째 글 카테고리", type: "post", sort_order: 3 }
+      );
+
+      supabaseClient.mockSession =
+        { user: { id: OWNER_ID } };
+
+      const twoCategoryOwnerCtx =
+        await buildHomeSkinContext(OWNER_ID);
+
+      assert(
+        "[write] POST 카테고리가 여러 개인 소유자: writeHref === HOME 작성 진입 URL(선택은 받는 쪽 몫)",
+        twoCategoryOwnerCtx.navigation.postCategories.length === 2 &&
+        twoCategoryOwnerCtx.viewer.writeHref === "/testuser?write=1",
+        JSON.stringify(twoCategoryOwnerCtx.viewer)
+      );
+
+      fixtures.categories =
+        fixtures.categories.filter((c) => c.id !== 3);
 
       supabaseClient.mockSession =
         null;

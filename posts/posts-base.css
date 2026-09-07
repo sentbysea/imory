@@ -340,3 +340,137 @@
 }
 
 
+
+
+/* =========================================================
+   작성 대상 카테고리 선택 (WRITE)
+
+   스킨의 WRITE를 눌렀는데 글 카테고리가 여러 개일 때만 잠깐
+   나타나는 플랫폼 화면(posts/view/posts-view-compose.js).
+   #postArea 안, .post-container(max-width 720px) 안에 그려지므로
+   기존 legacy 화면과 같은 프레임을 쓴다 — 스킨 프레임의 폭/여백
+   규칙(post-container--skin-active)은 이 화면이 열릴 때 이미
+   걷혀 있다(enterPlatformScreen).
+========================================================== */
+
+.post-compose-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  gap: 14px;
+
+  padding: 8px 0 0;
+}
+
+.post-compose-picker[hidden] {
+  display: none;
+}
+
+.post-compose-picker-hint {
+  margin: 0;
+
+  color: #888888;
+
+  font-size: 11px;
+  line-height: 1.7;
+
+  letter-spacing: 0.02em;
+
+  word-break: keep-all;
+}
+
+.post-compose-picker-list {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 8px;
+
+  width: 100%;
+}
+
+.post-compose-picker-item {
+  min-width: 96px;
+
+  padding: 10px 14px;
+
+  border: 1px solid #e8e8e8;
+  border-radius: 0;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 11px;
+
+  letter-spacing: 0.02em;
+
+  color: #666666;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+.post-compose-picker-item:hover {
+  color: #ee9fbd;
+
+  border-color: #e8c1d0;
+
+  background: #fffafb;
+}
+
+.post-compose-picker-admin {
+  color: #999999;
+
+  font-size: 10px;
+
+  letter-spacing: 0.06em;
+
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.post-compose-picker-admin[hidden] {
+  display: none;
+}
+
+.post-compose-picker-close {
+  min-width: 54px;
+
+  padding: 7px 10px;
+
+  border: 1px solid #e8e8e8;
+  border-radius: 0;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+
+  letter-spacing: 0.06em;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+.post-compose-picker-close:hover {
+  color: #666666;
+
+  border-color: #dddddd;
+}

@@ -239,23 +239,6 @@ let currentPostBodyMountTarget =
   null;
 
 
-/*
-  PHASE 1E 후속: 지금 열려 있는 POST가 "명시적인 관리 진입"으로
-  legacy 상세(#postDetail + edit/delete)를 연 상태인지.
-
-  categorySkinActive / bannerSkinActive와 같은 역할이고 같은 이유로
-  여기(공용 상태 모듈)에 있다 — posts-view-detail.js가 매 진입마다
-  설정하고, posts-list-detail-nav.js의 관리 토글이 "다음에 어느
-  쪽으로 갈지"를 이 값 하나로 정한다.
-
-  false면 평소의 읽기 화면이다(스킨이 그렸거나, 스킨이 없어 legacy로
-  폴백했거나). 소유자든 방문자든 일반 탐색은 항상 이 상태로 들어온다.
-*/
-
-let postManageScreenActive =
-  false;
-
-
 let currentEditorMode =
   null;
 

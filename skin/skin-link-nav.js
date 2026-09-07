@@ -13,6 +13,11 @@
 
    이 파일은 published Skin 안에서 시작된 클릭만 가로채서 기존 SPA
    라우터(openPostPage/openCategoryPage/closePostArea)로 넘긴다.
+   같은 세 경로에 ?write=1 / ?edit=1 / ?manage=1이 붙어 있으면
+   작성 폼(startPostCompose) / 수정 폼(openPostEditor) / 목록 관리
+   패널로 곧장 넘긴다 — 옛 목록·상세 화면을 한 번 그렸다가 그 위에서
+   다시 폼을 여는 중간 단계를 만들지 않기 위해서다(주소 계약은
+   core/lib/site-path.js, 권한 검사는 받는 쪽이 다시 한다).
    그 라우터들이 이미 갖고 있는 보호 장치를 그대로 물려받는다 —
    요청 순번(postPageRequestSeq/categoryPageRequestSeq)으로 늦게
    도착한 응답이 최신 화면을 덮지 않게 하고, 화면이 준비된 뒤에야
@@ -89,7 +94,19 @@ function resolveInSiteSkinRoute(url) {
 
 
   if (segments.length === 0) {
-    return { page: "home", id: null };
+
+    /*
+      HOME 경로 + ?write=1은 "대상 카테고리가 아직 정해지지 않은
+      작성 요청"이다(core/lib/site-path.js). 여기서는 전달만 하고,
+      소유자 검사와 카테고리 결정은 startPostCompose()가 한다.
+    */
+
+    return {
+      page: "home",
+      id: null,
+      compose: isSiteComposeRequested(url.search)
+    };
+
   }
 
 
@@ -99,22 +116,35 @@ function resolveInSiteSkinRoute(url) {
   ) {
 
     if (segments[0] === "post") {
-      return { page: "post", id: Number(segments[1]) };
+
+      /*
+        ?edit=1은 "이 글의 수정 폼을 열어달라"는 요청이다 —
+        작성자 검사는 openPostEditor()가 다시 한다.
+      */
+
+      return {
+        page: "post",
+        id: Number(segments[1]),
+        edit: isSiteEditRequested(url.search)
+      };
+
     }
 
     if (segments[0] === "category") {
 
       /*
         PHASE 1E 관리 진입 계약 — 같은 카테고리 경로라도 ?manage=1이
-        붙어 있으면 "관리 화면을 열어달라"는 요청이다(core/lib/
-        site-path.js). 여기서는 전달만 하고, 실제 소유자 검사는
-        openCategoryPage()가 한다.
+        붙어 있으면 "목록 관리 패널을 열어달라", ?write=1이면 "이
+        카테고리에 새 글을 쓰겠다"는 요청이다(core/lib/site-path.js).
+        여기서는 전달만 하고, 실제 소유자 검사는 각각
+        openCategoryPage()/startPostCompose()가 한다.
       */
 
       return {
         page: "category",
         id: Number(segments[1]),
-        manage: isSiteManageRequested(url.search)
+        manage: isSiteManageRequested(url.search),
+        compose: isSiteComposeRequested(url.search)
       };
 
     }
@@ -222,6 +252,48 @@ document.addEventListener(
       if (typeof loadPostsModule === "function") {
 
         await loadPostsModule();
+
+      }
+
+
+      /*
+        작성/수정 요청(?write=1 / ?edit=1)은 어느 경로에 붙어 있든
+        먼저 처리한다 — 옛 목록/상세 화면을 한 번 그렸다가 그
+        위에서 다시 폼을 여는 중간 단계를 만들지 않기 위해서다.
+        소유자/작성자 검사는 받는 쪽(startPostCompose /
+        openPostEditor)이 한다.
+      */
+
+      if (route.compose === true) {
+
+        if (typeof startPostCompose !== "function") {
+          throw new Error("startPostCompose unavailable");
+        }
+
+        await startPostCompose({
+          categoryId:
+            route.page === "category"
+              ? route.id
+              : null
+        });
+
+        return;
+
+      }
+
+
+      if (
+        route.page === "post" &&
+        route.edit === true
+      ) {
+
+        if (typeof openPostEditor !== "function") {
+          throw new Error("openPostEditor unavailable");
+        }
+
+        await openPostEditor(route.id);
+
+        return;
 
       }
 

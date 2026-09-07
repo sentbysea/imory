@@ -128,13 +128,109 @@ function isSiteManageRequested(
   search
 ) {
 
+  return siteQueryFlagIsSet(
+    search,
+    SITE_MANAGE_QUERY_PARAM
+  );
+
+}
+
+
+/* =========================================================
+   작성/수정 진입 계약
+
+   "글을 쓰겠다"/"이 글을 고치겠다"는 관리 목록을 구경하는 것과
+   다른 요청이다. 예전에는 WRITE도 ?manage=1(카테고리 관리 목록)로
+   보내고 거기서 + 를 한 번 더 누르게 했는데, 실사용자가 WRITE를
+   누르는 이유는 바로 쓰기 위해서지 옛 목록 화면을 보기 위해서가
+   아니다. 그래서 관리와 구분되는 쿼리 두 개를 더 둔다 — 경로는
+   여전히 기존 세 패턴 그대로다.
+
+   - /:slug/?write=1            : 대상 카테고리가 아직 없는 작성 요청
+                                  (여러 개면 고르게, 하나면 바로,
+                                   없으면 안내)
+   - /:slug/category/:id?write=1: 그 카테고리에 새 글 작성
+   - /:slug/post/:id?edit=1     : 그 글의 수정 폼
+
+   ?manage=1과 마찬가지로 이 쿼리들도 권한이 아니라 **요청**이다 —
+   실제로 열지는 받는 쪽(posts/view/posts-view-compose.js의
+   startPostCompose, posts/view/posts-view-editor-load.js의
+   openPostEditor)이 소유자/작성자인지 다시 확인해서 정한다. 주소를
+   직접 친 방문자는 그냥 평소의 스킨 화면을 본다.
+========================================================== */
+
+const SITE_COMPOSE_QUERY_PARAM =
+  "write";
+
+
+const SITE_EDIT_QUERY_PARAM =
+  "edit";
+
+
+function buildSiteComposeUrl(
+  path
+) {
+
+  return (
+    path + "?" + SITE_COMPOSE_QUERY_PARAM + "=1"
+  );
+
+}
+
+
+function isSiteComposeRequested(
+  search
+) {
+
+  return siteQueryFlagIsSet(
+    search,
+    SITE_COMPOSE_QUERY_PARAM
+  );
+
+}
+
+
+function buildSiteEditUrl(
+  path
+) {
+
+  return (
+    path + "?" + SITE_EDIT_QUERY_PARAM + "=1"
+  );
+
+}
+
+
+function isSiteEditRequested(
+  search
+) {
+
+  return siteQueryFlagIsSet(
+    search,
+    SITE_EDIT_QUERY_PARAM
+  );
+
+}
+
+
+/*
+  위 세 계약이 공유하는 파싱 — 잘못된 search 문자열이 와도
+  예외 대신 false로 떨어뜨린다(기존 isSiteManageRequested의
+  try/catch를 그대로 옮긴 것).
+*/
+
+function siteQueryFlagIsSet(
+  search,
+  param
+) {
+
   try {
 
     return (
       new URLSearchParams(
         search || ""
       ).get(
-        SITE_MANAGE_QUERY_PARAM
+        param
       ) === "1"
     );
 

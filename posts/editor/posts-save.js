@@ -344,6 +344,33 @@ postEditorSaveButton
         hidePostEditor();
 
 
+        /*
+          저장했으니 이 폼으로 되돌아갈 이유가 없다 — 진입 지점
+          기록을 버리고, 주소도 ?edit=1을 뗀 그 글의 읽기 주소로
+          맞춘 뒤(replaceState) 그 화면을 연다. 그대로 두면 새로
+          고침이나 뒤로가기 때 방금 저장한 글의 수정 폼이 다시
+          열린다(posts/view/posts-view-transition.js).
+        */
+
+        forgetPlatformScreenReturn();
+
+
+        history.replaceState(
+          {
+            page: "post",
+
+            postId:
+              Number(
+                savedId
+              )
+          },
+          "",
+          buildPostRoute(
+            `/post/${savedId}`
+          )
+        );
+
+
         await openPostPage(
           savedId,
           {
@@ -451,8 +478,38 @@ postEditorSaveButton
       hidePostEditor();
 
 
+      /*
+        새 글은 방금 만든 글의 스킨 상세로 간다(요청서 2절).
+        들어올 때 쌓아 둔 ?write=1 항목을 그 주소로 덮어써서,
+        뒤로가기/새로고침이 "저장한 뒤 빈 작성 폼"으로 되돌아가지
+        않게 한다.
+      */
+
+      forgetPlatformScreenReturn();
+
+
+      history.replaceState(
+        {
+          page: "post",
+
+          postId:
+            Number(
+              data.id
+            )
+        },
+        "",
+        buildPostRoute(
+          `/post/${data.id}`
+        )
+      );
+
+
       await openPostPage(
-        data.id
+        data.id,
+        {
+          updateUrl:
+            false
+        }
       );
 
     }

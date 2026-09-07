@@ -11,11 +11,24 @@
 
 /* =========================================================
    NEW EDITOR
+
+   카테고리의 + 버튼, 스킨의 WRITE(?write=1), 그리고 선택 패널이
+   전부 여기로 모인다 — 옛 목록 화면을 거치지 않는다.
+
+   updateUrl: 진입 주소를 /:slug/category/:id?write=1로 남길지.
+   라우터가 이미 그 주소로 들어온 경우(직접 접속/새로고침/
+   뒤로가기)에는 false로 불러 같은 항목을 두 번 쌓지 않는다.
 ========================================================== */
 
 async function openNewPostEditor(
-  categoryId
+  categoryId,
+  options = {}
 ) {
+
+  const {
+    updateUrl = true
+  } = options;
+
 
   const user =
     await getSignedInUser();
@@ -32,6 +45,36 @@ async function openNewPostEditor(
   }
 
 
+  /*
+    들어오기 직전 화면(스킨 HOME/CATEGORY/POST)과 스크롤을
+    기억해 둔다 — 취소하면 여기로 돌아온다. 선택 패널을 거쳐
+    들어왔으면 그 패널이 이미 기록해 둔 최초 진입 지점을
+    그대로 유지한다(rememberPlatformScreenReturn의 guard).
+
+    updateUrl이 false면 라우터가 ?write=1 주소로 들어온 것이라
+    "진입 전 화면"이 이 세션에 없다 — 그 주소를 복귀 지점으로
+    기억하면 취소해도 ?write=1이 그대로 남는다. 그때는 기록하지
+    않고 cancelPostEditor()의 fallback(그 카테고리)으로 간다.
+  */
+
+  if (updateUrl) {
+
+    rememberPlatformScreenReturn();
+
+  }
+
+
+  /*
+    스킨 mount contract를 걷어내고 커튼 없이 #postArea를 연다 —
+    이 두 줄이 없으면 에디터가 프레임 폭/여백 없이 그려지고,
+    소유자 도구 알약이 빈 껍데기로 남는다(posts-view-transition.js).
+  */
+
+  enterPlatformScreen();
+
+  hideOtherPostScreens();
+
+
   currentPostView =
     "editor";
 
@@ -44,20 +87,12 @@ async function openNewPostEditor(
     null;
 
 
-  if (postList) {
-
-    postList.hidden =
-      true;
-
-  }
-
-
-  if (postDetail) {
-
-    postDetail.hidden =
-      true;
-
-  }
+  currentPostCategoryId =
+    categoryId
+      ? Number(
+          categoryId
+        )
+      : currentPostCategoryId;
 
 
   if (postEditor) {
@@ -73,65 +108,24 @@ async function openNewPostEditor(
   );
 
 
-  if (postAddButton) {
-
-    postAddButton.hidden =
-      true;
-
-  }
-
-
-  if (
-    bannerEditToggleButton
-  ) {
-
-    bannerEditToggleButton.hidden =
-      true;
-
-  }
-
-
-  if (
-    postListEditToggleButton
-  ) {
-
-    postListEditToggleButton.hidden =
-      true;
-
-  }
+  closePostMenu();
 
 
   /*
-    PHASE 1E 후속: 스킨 POST에서 곧장 에디터로 들어온 경우 떠 있는
-    관리 토글이 남아 있으면 안 된다.
+    새 글에는 삭제할 대상이 없다 — 삭제 버튼은 수정 폼에서만
+    보인다(posts/editor/posts-list-detail-nav.js).
   */
 
-  if (
-    postManageToggleButton
-  ) {
+  if (postEditorDeleteButton) {
 
-    postManageToggleButton.hidden =
+    postEditorDeleteButton.hidden =
       true;
 
   }
-
-
-  postManageScreenActive =
-    false;
 
 
   postListEditModeOn =
     false;
-
-
-  if (
-    postListSelectBar
-  ) {
-
-    postListSelectBar.hidden =
-      true;
-
-  }
 
 
   postPageTitle.textContent =
@@ -191,6 +185,47 @@ async function openNewPostEditor(
   }
 
 
+  /*
+    주소를 작성 화면과 일치시킨다 — 새로고침/뒤로가기/앞으로가기
+    어디서든 라우터가 이 주소를 보고 같은 작성 폼을 다시 연다
+    (posts/editor/posts-router-init.js). 카테고리가 정해지지 않은
+    상태(선택 패널을 거치지 않은 예외)에서는 HOME 작성 주소를
+    유지한다.
+  */
+
+  if (updateUrl) {
+
+    history.pushState(
+      {
+        page: "compose",
+
+        categoryId:
+          currentPostCategoryId
+      },
+      "",
+      buildSiteComposeUrl(
+        currentPostCategoryId
+          ? buildPostRoute(
+              `/category/${currentPostCategoryId}`
+            )
+          : buildPostRoute(
+              "/"
+            )
+      )
+    );
+
+  }
+
+
+  /*
+    "저장하지 않은 입력"을 판단하는 기준점 — 지금 막 채운 값이
+    곧 "아직 아무것도 안 쓴 상태"다(posts-view-transition.js의
+    복귀 경로와 posts-router-init.js의 뒤로가기 가드가 쓴다).
+  */
+
+  capturePostEditorSnapshot();
+
+
   postEditorTitle.focus();
 
 }
@@ -199,11 +234,26 @@ async function openNewPostEditor(
 
 /* =========================================================
    EDIT EDITOR
+
+   스킨 POST 위에 떠 있는 edit 버튼과 ?edit=1 주소가 여기로
+   온다 — 옛 상세 화면을 한 번 그렸다가 다시 폼을 여는 중간
+   단계를 만들지 않는다.
+
+   글 주인이 아니면(로그아웃/다른 계정/주소 직접 입력) 폼을 열지
+   않고 주소에서 ?edit=1을 지운 뒤 평소의 읽기 화면으로 돌려보낸다
+   — 실제 수정 권한은 여전히 저장 시점의 user_id 필터와 RLS가
+   강제한다.
 ========================================================== */
 
 async function openPostEditor(
-  postId
+  postId,
+  options = {}
 ) {
+
+  const {
+    updateUrl = true
+  } = options;
+
 
   const user =
     await getSignedInUser();
@@ -211,8 +261,8 @@ async function openPostEditor(
 
   if (!user) {
 
-    alert(
-      "로그인이 필요합니다."
+    await leavePostEditRequest(
+      postId
     );
 
     return;
@@ -251,6 +301,16 @@ async function openPostEditor(
     !post
   ) {
 
+    console.error(
+      error
+    );
+
+
+    await leavePostEditRequest(
+      postId
+    );
+
+
     return;
 
   }
@@ -261,9 +321,10 @@ async function openPostEditor(
       user.id
   ) {
 
-    alert(
-      "수정 권한이 없습니다."
+    await leavePostEditRequest(
+      postId
     );
+
 
     return;
 
@@ -318,6 +379,20 @@ async function openPostEditor(
     "";
 
 
+  /*
+    들어오기 직전 화면(스킨 POST)과 스크롤을 기억해 둔다 —
+    취소하면 여기로 돌아온다(posts-view-transition.js).
+    updateUrl이 false면 ?edit=1 주소로 곧장 들어온 것이라 기록할
+    진입 전 화면이 없다(openNewPostEditor의 같은 guard 참고).
+  */
+
+  if (updateUrl) {
+
+    rememberPlatformScreenReturn();
+
+  }
+
+
   currentPostView =
     "editor";
 
@@ -332,6 +407,12 @@ async function openPostEditor(
     );
 
 
+  currentPostId =
+    Number(
+      post.id
+    );
+
+
   currentPostCategoryId =
     post.category_id
       ? Number(
@@ -340,20 +421,19 @@ async function openPostEditor(
       : null;
 
 
-  if (postList) {
-
-    postList.hidden =
-      true;
-
-  }
+  currentPostOwnerId =
+    post.user_id ||
+    null;
 
 
-  if (postDetail) {
+  /*
+    스킨 mount contract를 걷어내고 커튼 없이 #postArea를 연다 —
+    openNewPostEditor()와 같은 이유다(posts-view-transition.js).
+  */
 
-    postDetail.hidden =
-      true;
+  enterPlatformScreen();
 
-  }
+  hideOtherPostScreens();
 
 
   if (postEditor) {
@@ -369,65 +449,26 @@ async function openPostEditor(
   );
 
 
-  if (postAddButton) {
-
-    postAddButton.hidden =
-      true;
-
-  }
-
-
-  if (
-    bannerEditToggleButton
-  ) {
-
-    bannerEditToggleButton.hidden =
-      true;
-
-  }
-
-
-  if (
-    postListEditToggleButton
-  ) {
-
-    postListEditToggleButton.hidden =
-      true;
-
-  }
+  closePostMenu();
 
 
   /*
-    PHASE 1E 후속: 스킨 POST에서 곧장 에디터로 들어온 경우 떠 있는
-    관리 토글이 남아 있으면 안 된다.
+    삭제는 수정 폼 안에 있다 — 스킨 POST에서 옛 상세 화면을 거쳐야
+    삭제할 수 있었던 동선을 없앤 자리다(요청서 1절). 실제 확인
+    창/삭제 로직/삭제 후 이동은 기존 것을 그대로 쓴다
+    (posts/editor/posts-list-detail-nav.js).
   */
 
-  if (
-    postManageToggleButton
-  ) {
+  if (postEditorDeleteButton) {
 
-    postManageToggleButton.hidden =
-      true;
+    postEditorDeleteButton.hidden =
+      false;
 
   }
-
-
-  postManageScreenActive =
-    false;
 
 
   postListEditModeOn =
     false;
-
-
-  if (
-    postListSelectBar
-  ) {
-
-    postListSelectBar.hidden =
-      true;
-
-  }
 
 
   postPageTitle.textContent =
@@ -597,6 +638,37 @@ async function openPostEditor(
   }
 
 
+  /*
+    주소를 수정 화면과 일치시킨다 — 새로고침/뒤로가기/앞으로가기
+    어디서든 라우터가 이 주소를 보고 같은 수정 폼을 다시 연다
+    (posts/editor/posts-router-init.js).
+  */
+
+  if (updateUrl) {
+
+    history.pushState(
+      {
+        page: "edit",
+
+        postId:
+          Number(
+            post.id
+          )
+      },
+      "",
+      buildSiteEditUrl(
+        buildPostRoute(
+          `/post/${post.id}`
+        )
+      )
+    );
+
+  }
+
+
+  capturePostEditorSnapshot();
+
+
   postEditorTitle.focus();
 
 }
@@ -604,10 +676,197 @@ async function openPostEditor(
 
 
 /* =========================================================
+   수정 요청을 처리할 수 없을 때
+
+   ?edit=1은 요청일 뿐이라 작성자가 아니면 폼을 열지 않는다.
+   그때 주소에 ?edit=1이 남아 있으면 새로고침할 때마다 같은
+   거절을 반복하므로, 쿼리를 지우고 그 글의 평소 읽기 화면으로
+   돌려보낸다. 로그아웃 방문자/다른 계정/삭제된 글 모두 같은
+   경로다 — 어느 쪽인지 알려주지 않는다.
+========================================================== */
+
+async function leavePostEditRequest(
+  postId
+) {
+
+  history.replaceState(
+    {
+      page: "post",
+
+      postId:
+        Number(
+          postId
+        )
+    },
+    "",
+    buildPostRoute(
+      `/post/${postId}`
+    )
+  );
+
+
+  await openPostPage(
+    postId,
+    {
+      updateUrl:
+        false
+    }
+  );
+
+}
+
+
+
+/* =========================================================
+   저장하지 않은 입력 보호
+
+   에디터를 연 순간의 값(제목/본문/OOC)을 그대로 담아두고,
+   나가려 할 때 지금 값과 비교한다. 바뀐 게 없으면 아무것도 묻지
+   않고, 바뀌었으면 한 번만 확인한다.
+
+   취소 버튼뿐 아니라 브라우저 뒤로가기(popstate,
+   posts/editor/posts-router-init.js)와 탭 닫기(beforeunload)도
+   같은 판단을 쓴다 — 작성/수정 화면이 이제 자기 주소를 갖게
+   되면서 "뒤로가기 한 번에 쓰던 글이 사라지는" 경로가 실제로
+   생겼기 때문이다.
+========================================================== */
+
+let postEditorSnapshot =
+  null;
+
+
+function readPostEditorValues() {
+
+  return {
+
+    title:
+      postEditorTitle
+        ? postEditorTitle.value
+        : "",
+
+    content:
+      editorContentMode === "html"
+        ? (
+            postEditorHtmlContent
+              ? postEditorHtmlContent.value
+              : ""
+          )
+        : (
+            typeof getRichEditorHTML === "function"
+              ? getRichEditorHTML()
+              : ""
+          ),
+
+    ooc:
+      postEditorOOC
+        ? postEditorOOC.value
+        : ""
+
+  };
+
+}
+
+
+function capturePostEditorSnapshot() {
+
+  postEditorSnapshot =
+    readPostEditorValues();
+
+}
+
+
+function clearPostEditorSnapshot() {
+
+  postEditorSnapshot =
+    null;
+
+}
+
+
+function postEditorHasUnsavedChanges() {
+
+  if (
+    !postEditorSnapshot ||
+    !postEditor ||
+    postEditor.hidden
+  ) {
+
+    return false;
+
+  }
+
+
+  const now =
+    readPostEditorValues();
+
+
+  return (
+    now.title !== postEditorSnapshot.title ||
+    now.content !== postEditorSnapshot.content ||
+    now.ooc !== postEditorSnapshot.ooc
+  );
+
+}
+
+
+function confirmLeavePostEditor() {
+
+  if (!postEditorHasUnsavedChanges()) {
+
+    return true;
+
+  }
+
+
+  return confirm(
+    "저장하지 않은 내용이 있습니다. 화면을 나갈까요?"
+  );
+
+}
+
+
+window.addEventListener(
+  "beforeunload",
+  (event) => {
+
+    if (!postEditorHasUnsavedChanges()) {
+
+      return;
+
+    }
+
+
+    event.preventDefault();
+
+
+    /* 구형 브라우저 호환 — 문구 자체는 브라우저가 정한다. */
+
+    event.returnValue =
+      "";
+
+  }
+);
+
+
+
+/* =========================================================
    CANCEL EDITOR
+
+   진입 전 스킨 화면과 스크롤 위치로 돌아간다
+   (returnToPlatformScreenOrigin, posts-view-transition.js).
+   기억된 진입 지점이 없으면(주소를 직접 쳐서 ?write=1 /
+   ?edit=1로 바로 들어온 경우) 수정 중이던 글 / 쓰고 있던
+   카테고리로 돌아간다.
 ========================================================== */
 
 async function cancelPostEditor() {
+
+  if (!confirmLeavePostEditor()) {
+
+    return;
+
+  }
+
 
   const mode =
     currentEditorMode;
@@ -624,38 +883,22 @@ async function cancelPostEditor() {
   hidePostEditor();
 
 
-  if (
-    mode === "edit" &&
-    postId
-  ) {
-
-    await openPostPage(
-      postId,
-      {
-        updateUrl:
-          false
-      }
-    );
-
-    return;
-
-  }
-
-
-  if (categoryId) {
-
-    currentPostView =
-      "category";
-
-
-    await openCategoryPage(
-      categoryId,
-      {
-        updateUrl:
-          false
-      }
-    );
-
-  }
+  await returnToPlatformScreenOrigin(
+    mode === "edit" && postId
+      ? {
+          view: "post",
+          postId,
+          categoryId
+        }
+      : (
+          categoryId
+            ? {
+                view: "category",
+                postId: null,
+                categoryId
+              }
+            : null
+        )
+  );
 
 }

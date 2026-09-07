@@ -203,13 +203,47 @@ const postListEditToggleButton =
 
 
 /*
-  PHASE 1E 후속: POST 스킨 위에서 기존 관리 화면(legacy 상세 +
-  edit/delete)을 열고 닫는 소유자 전용 토글(posts.html).
+  POST 스킨 위에서 그 글의 수정 폼을 곧장 여는 소유자 전용
+  진입점(posts.html). 예전에는 옛 상세 화면을 열고 닫는
+  토글이었는데, 실사용자가 이 버튼을 누르는 이유는 고치기
+  위해서라 지금은 바로 폼으로 간다.
 */
 
 const postManageToggleButton =
   document.getElementById(
     "postManageToggleButton"
+  );
+
+
+/*
+  WRITE에서 대상 카테고리가 정해지지 않았을 때만 잠깐 거치는
+  선택 패널(posts/view/posts-view-compose.js). 스킨 HTML 밖의
+  플랫폼 UI라 스킨은 이 화면의 존재를 몰라도 된다.
+*/
+
+const postComposePicker =
+  document.getElementById(
+    "postComposePicker"
+  );
+
+const postComposePickerHint =
+  document.getElementById(
+    "postComposePickerHint"
+  );
+
+const postComposePickerList =
+  document.getElementById(
+    "postComposePickerList"
+  );
+
+const postComposePickerAdmin =
+  document.getElementById(
+    "postComposePickerAdmin"
+  );
+
+const postComposePickerClose =
+  document.getElementById(
+    "postComposePickerClose"
   );
 
 const postListSelectBar =
@@ -408,6 +442,19 @@ const postEditorHtmlContent =
 const postEditorCancelButton =
   document.getElementById(
     "postEditorCancelButton"
+  );
+
+
+/*
+  수정 폼에서만 보이는 삭제 버튼 — 스킨 POST에서 옛 상세 화면을
+  거쳐야만 삭제할 수 있던 동선을 대신한다. 확인 창과 삭제 로직은
+  기존 #postDeleteButton과 완전히 같은 함수를 쓴다
+  (posts/editor/posts-list-detail-nav.js).
+*/
+
+const postEditorDeleteButton =
+  document.getElementById(
+    "postEditorDeleteButton"
   );
 
 const postEditorSaveButton =

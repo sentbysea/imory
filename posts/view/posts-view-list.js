@@ -468,9 +468,9 @@ function switchToCategoryScreen() {
 
 
   /*
-    PHASE 1E 후속: 글 상세를 접으면 그 화면 전용 소유자 도구(관리
-    토글)도 같이 접는다 — 목록 화면의 + / edit는 아래
-    updatePostAddButton()이 따로 정한다.
+    글 상세를 접으면 그 화면 전용 소유자 도구(수정 진입점)도 같이
+    접는다 — 목록 화면의 + / edit는 아래 updatePostAddButton()이
+    따로 정한다.
   */
 
   if (
@@ -481,10 +481,6 @@ function switchToCategoryScreen() {
       true;
 
   }
-
-
-  postManageScreenActive =
-    false;
 
 
   /*
@@ -581,6 +577,31 @@ async function openCategoryPage(
 
 
   /*
+    관리 패널(목록 관리)은 스킨 화면 위에서 명시적으로 연 것이라
+    빈 화면을 채우는 연출이 필요 없다 — legacy 커튼(380ms 흰색
+    페이드)도, 그 사이를 메우던 "..."/"loading..." 자리표시도
+    쓰지 않는다. 실사용자가 본 "관리로 넘어갈 때 옛 로딩 화면이
+    한 번 스친다"가 이 두 가지였다.
+
+    스킨을 쓰지 않는 배포의 평소 탐색(wantsManageScreen이 false)은
+    지금까지와 완전히 동일하게 커튼과 자리표시를 그대로 쓴다.
+  */
+
+  const useInstantReveal =
+    maybeSkinCandidate ||
+    wantsManageScreen;
+
+
+  /*
+    revealPostArea() 자체는 지금까지와 같은 인자를 쓴다 — 관리
+    패널로 들어오는 경로는 위에서 이미 showPostAreaInstant()로
+    #postArea를 열어 두었고, 그 상태에서 showPostArea()는 자체
+    guard로 즉시 return하므로 커튼이 다시 뜨지 않는다. Skin 렌더가
+    실패해 legacy로 폴백하는 경로의 연출은 건드리지 않는다.
+  */
+
+
+  /*
     후보가 아니면(비-scoped/legacy 배포) 기존 그대로 매 호출마다
     되돌려 둔다 — banner/에러 분기처럼 아래 renderedPublishedSkinCategory
     지점까지 가지 않고 return하는 경로에서도 legacy 헤더/폭이 정확히
@@ -663,12 +684,24 @@ async function openCategoryPage(
       "home";
 
 
-  if (
-    comingFromHome &&
-    !maybeSkinCandidate
-  ) {
+  if (comingFromHome) {
 
-    await showPostArea();
+    if (wantsManageScreen) {
+
+      /*
+        관리 패널은 legacy 레이아웃 안에서 열리므로 #postArea를
+        지금 열어 둬야 한다 — 다만 커튼 없이 연다.
+      */
+
+      showPostAreaInstant();
+
+    }
+
+    else if (!maybeSkinCandidate) {
+
+      await showPostArea();
+
+    }
 
   }
 
@@ -722,7 +755,7 @@ async function openCategoryPage(
   */
 
   const pendingIndicatorTimer =
-    maybeSkinCandidate
+    useInstantReveal
       ? schedulePendingIndicator(
           () =>
             requestId ===
@@ -748,7 +781,7 @@ async function openCategoryPage(
 
   else {
 
-    if (!maybeSkinCandidate) {
+    if (!useInstantReveal) {
 
       postPageTitle.textContent =
         "...";
@@ -812,7 +845,7 @@ async function openCategoryPage(
         수 있으므로 벗겨내지 않으면 오류 문구조차 보이지 않는다.
       */
 
-      if (maybeSkinCandidate) {
+      if (useInstantReveal) {
 
         if (postContainer) {
 

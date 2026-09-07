@@ -882,55 +882,58 @@ async function testOwnerLinks(vpName) {
       links.visible && links.texts.join("/") === "WRITE/ADMIN",
       JSON.stringify(links));
 
-    check(`[${vpName}] 링크 주소가 하드코딩이 아니라 실제 경로로 채워짐(WRITE는 관리 진입 URL)`,
-      links.hrefs[0] === `/${SLUG}/category/1?manage=1` && links.hrefs[1] === "/admin/",
+    check(`[${vpName}] 링크 주소가 하드코딩이 아니라 실제 경로로 채워짐(WRITE는 작성 진입 URL)`,
+      links.hrefs[0] === `/${SLUG}/category/1?write=1` && links.hrefs[1] === "/admin/",
       JSON.stringify(links.hrefs));
 
-    /* WRITE 클릭 → 기존 관리 화면(카테고리 목록 + 추가 버튼) */
-    await page.click(".quiet-owner-link[href$='?manage=1']");
-    await page.waitForSelector("#postArea:not([hidden])", { timeout: 15000 });
-    await page.waitForTimeout(900);
+    /* WRITE 클릭 → 옛 LOG 목록을 거치지 않고 곧장 작성 폼 */
+    await page.click(".quiet-owner-link[href$='?write=1']");
+    await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(500);
 
     const writeScreen = await page.evaluate(() => {
-      const add = document.getElementById("postAddButton");
+      const editor = document.getElementById("postEditor");
+      const title = document.getElementById("postEditorTitle");
+      const container = document.getElementById("postContainer");
+      const header = document.querySelector(".post-header");
       return {
         url: location.pathname,
         search: location.search,
-        addVisible: Boolean(add) && !add.hidden,
+        editorVisible: Boolean(editor) && !editor.hidden &&
+          getComputedStyle(editor).display !== "none",
+        editorMode: document.body.classList.contains("post-editor-mode"),
+        titleEditable: Boolean(title) && !title.disabled && !title.readOnly,
         legacyList: Boolean(document.querySelector("#postList .post-list-item")),
-        skinInList: Boolean(document.querySelector("#postList .imory-skin-root"))
+        listVisible: Boolean(document.getElementById("postList")) &&
+          !document.getElementById("postList").hidden,
+        skinInList: Boolean(document.querySelector("#postList .imory-skin-root")),
+        skinActive: container.className.includes("post-container--skin-active"),
+        ownerTools: container.className.includes("post-container--owner-tools"),
+        headerPosition: header ? getComputedStyle(header).position : null,
+        categoryValue: document.getElementById("postEditorCategory")
+          ? document.getElementById("postEditorCategory").value : null
       };
     });
 
-    check(`[${vpName}] WRITE는 기존 관리 화면(해당 카테고리 목록 + 추가 버튼)으로 연결`,
-      writeScreen.url === `/${SLUG}/category/1` &&
-      writeScreen.search === "?manage=1" &&
-      writeScreen.addVisible && writeScreen.legacyList && !writeScreen.skinInList,
+    check(`[${vpName}] WRITE는 옛 LOG 목록 없이 곧장 작성 폼을 연다`,
+      writeScreen.editorVisible && writeScreen.editorMode && writeScreen.titleEditable &&
+      !writeScreen.legacyList && !writeScreen.listVisible && !writeScreen.skinInList,
       JSON.stringify(writeScreen));
+
+    check(`[${vpName}] WRITE 주소가 작성 화면과 일치한다(?write=1)`,
+      writeScreen.url === `/${SLUG}/category/1` && writeScreen.search === "?write=1",
+      JSON.stringify(writeScreen));
+
+    check(`[${vpName}] 작성 폼은 스킨 mount contract를 벗고 legacy 프레임을 되찾는다`,
+      !writeScreen.skinActive && !writeScreen.ownerTools &&
+      writeScreen.headerPosition === "relative",
+      JSON.stringify(writeScreen));
+
+    check(`[${vpName}] 작성 폼의 카테고리가 WRITE가 정한 카테고리로 채워져 있다`,
+      writeScreen.categoryValue === "1", String(writeScreen.categoryValue));
 
     check(`[${vpName}] WRITE 이동이 문서 전체 재로드를 일으키지 않음`,
       ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);
-
-    /* 여기서 멈추면 "카테고리까지는 갔다"만 검증한 것이다 — 실제로
-       글 작성 폼이 열리는 데까지 UI를 그대로 눌러 본다. */
-
-    await page.click("#postAddButton");
-    await page.waitForTimeout(700);
-
-    const editor = await page.evaluate(() => {
-      const el = document.getElementById("postEditor");
-      const title = document.getElementById("postEditorTitle");
-      return {
-        editorVisible: Boolean(el) && !el.hidden && getComputedStyle(el).display !== "none",
-        editorMode: document.body.classList.contains("post-editor-mode"),
-        titleInput: Boolean(title),
-        titleEditable: Boolean(title) && !title.disabled && !title.readOnly
-      };
-    });
-
-    check(`[${vpName}] + 클릭 -> 기존 글 작성 폼이 실제로 열린다`,
-      editor.editorVisible && editor.editorMode && editor.titleInput && editor.titleEditable,
-      JSON.stringify(editor));
 
     await page.fill("#postEditorTitle", "WRITE 흐름 확인용 제목");
 
@@ -1385,7 +1388,7 @@ async function testOwnerPostScreen(vpName) {
   const vp = VIEWPORTS[vpName];
   console.log(`\n[${vpName}] 소유자의 POST 상세 화면`);
 
-  /* --- 소유자: 일반 글 링크 → 스킨으로 읽기 → 관리 진입 → 편집 --- */
+  /* --- 소유자: 일반 글 링크 → 스킨으로 읽기 → edit → 수정 폼 --- */
   await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
     await gotoHome(page);
     const home = await page.evaluate(MEASURE);
@@ -1411,56 +1414,62 @@ async function testOwnerPostScreen(vpName) {
       `home=${JSON.stringify(home.frame && [home.frame.x, home.frame.y, home.frame.w])} ` +
       `post=${JSON.stringify(readingFrame.frame && [readingFrame.frame.x, readingFrame.frame.y, readingFrame.frame.w])}`);
 
-    check(`[${vpName}] 스킨 위에는 관리 진입점만 떠 있고 legacy 제목/수정 버튼은 없다`,
+    check(`[${vpName}] 스킨 위에는 수정 진입점만 떠 있고 legacy 제목/수정 버튼은 없다`,
       reading.manageVisible && reading.managePressed === "false" &&
       reading.ownerTools && reading.headerPosition === "fixed" &&
       reading.titleDisplay === "none" && !reading.actionsVisible,
       JSON.stringify(reading));
 
-    check(`[${vpName}] 읽기 주소에는 관리 쿼리가 붙지 않는다`,
+    check(`[${vpName}] 읽기 주소에는 관리/수정 쿼리가 붙지 않는다`,
       reading.url === `/${SLUG}/post/101`, reading.url);
 
-    /* 관리 진입 → 기존 legacy 상세(수정/삭제) */
+    const readingScroll = await page.evaluate(() => {
+      const area = document.getElementById("postArea");
+      area.scrollTop = 120;
+      return area.scrollTop;
+    });
+
+    /* 스킨 위의 edit → 옛 상세 화면 없이 곧장 수정 폼 */
     await page.click("#postManageToggleButton");
-    await page.waitForSelector("#postDetail:not([hidden])", { timeout: 15000 });
-    await page.waitForTimeout(600);
-
-    const manage = await page.evaluate(READ_POST_SCREEN);
-
-    check(`[${vpName}] 관리 토글을 누르면 기존 상세 화면(수정/삭제)이 열린다`,
-      manage.legacyVisible && !manage.skinVisible && manage.actionsVisible &&
-      (manage.legacyBody || "").includes("첫 번째 글 본문") &&
-      !manage.ownerTools && !manage.skinActive,
-      JSON.stringify(manage));
-
-    check(`[${vpName}] 관리 화면에서는 legacy 헤더가 원래대로 돌아온다`,
-      manage.headerPosition === "relative" && manage.titleDisplay !== "none" &&
-      manage.manageVisible && manage.managePressed === "true",
-      JSON.stringify(manage));
-
-    check(`[${vpName}] 관리 화면이 열렸을 때만 주소에 ?manage=1이 남는다`,
-      manage.url === `/${SLUG}/post/101?manage=1`, manage.url);
-
-    /* 수정 폼 → 취소 → POST 스킨 복귀 */
-    await page.click("#postEditButton");
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(500);
 
-    const editor = await page.evaluate(() => ({
-      editorVisible: !document.getElementById("postEditor").hidden,
-      title: document.getElementById("postEditorTitle").value,
-      editable: !document.getElementById("postEditorTitle").disabled
-    }));
+    const editor = await page.evaluate(() => {
+      const container = document.getElementById("postContainer");
+      const del = document.getElementById("postEditorDeleteButton");
+      return {
+        editorVisible: !document.getElementById("postEditor").hidden,
+        legacyVisible: !document.getElementById("postDetail").hidden,
+        actionsVisible: !document.getElementById("postDetailActions").hidden,
+        title: document.getElementById("postEditorTitle").value,
+        editable: !document.getElementById("postEditorTitle").disabled,
+        deleteVisible: Boolean(del) && !del.hidden,
+        skinActive: container.className.includes("post-container--skin-active"),
+        ownerTools: container.className.includes("post-container--owner-tools"),
+        url: location.pathname + location.search
+      };
+    });
 
-    check(`[${vpName}] 관리 화면의 edit가 기존 수정 폼을 그대로 연다`,
-      editor.editorVisible && editor.title === "첫 번째 글" && editor.editable,
+    check(`[${vpName}] 스킨 POST의 edit는 옛 상세 화면 없이 곧장 수정 폼을 연다`,
+      editor.editorVisible && !editor.legacyVisible && !editor.actionsVisible &&
+      editor.title === "첫 번째 글" && editor.editable,
       JSON.stringify(editor));
 
-    await page.click(".post-back-button");
+    check(`[${vpName}] 수정 폼 주소가 화면과 일치한다(?edit=1)`,
+      editor.url === `/${SLUG}/post/101?edit=1`, editor.url);
+
+    check(`[${vpName}] 수정 폼에는 삭제 버튼이 있고 스킨 mount contract는 벗겨져 있다`,
+      editor.deleteVisible && !editor.skinActive && !editor.ownerTools,
+      JSON.stringify(editor));
+
+    /* 취소 → 진입 전 스킨 화면 + 스크롤 위치 */
+    await page.click("#postEditorCancelButton");
     await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(700);
 
     const cancelled = await page.evaluate(READ_POST_SCREEN);
+    const cancelledScroll = await page.evaluate(() =>
+      document.getElementById("postArea").scrollTop);
 
     check(`[${vpName}] 수정을 취소하면 POST 스킨으로 돌아온다`,
       cancelled.skinVisible && !cancelled.legacyVisible && !cancelled.editorVisible &&
@@ -1468,10 +1477,15 @@ async function testOwnerPostScreen(vpName) {
       cancelled.manageVisible && cancelled.ownerTools,
       JSON.stringify(cancelled));
 
-    /* 다시 관리 → 수정 → 저장 → POST 스킨 복귀 */
+    check(`[${vpName}] 취소 후 주소에 ?edit=1이 남지 않는다`,
+      cancelled.url === `/${SLUG}/post/101`, cancelled.url);
+
+    check(`[${vpName}] 취소하면 진입 전 스크롤 위치로 돌아온다`,
+      Math.abs(cancelledScroll - readingScroll) <= 2,
+      `before=${readingScroll} after=${cancelledScroll}`);
+
+    /* 다시 수정 → 저장 → POST 스킨 복귀 */
     await page.click("#postManageToggleButton");
-    await page.waitForSelector("#postDetail:not([hidden])", { timeout: 15000 });
-    await page.click("#postEditButton");
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(400);
     await page.fill("#postEditorTitle", "스킨에서 고친 제목");
@@ -1486,6 +1500,9 @@ async function testOwnerPostScreen(vpName) {
       saved.manageVisible && saved.ownerTools,
       JSON.stringify(saved));
 
+    check(`[${vpName}] 저장 후 주소도 그 글의 읽기 주소로 정리된다`,
+      saved.url === `/${SLUG}/post/101`, saved.url);
+
     check(`[${vpName}] 소유자 POST 경로 전체에서 문서 재로드 없음`,
       ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);
 
@@ -1493,37 +1510,66 @@ async function testOwnerPostScreen(vpName) {
       ctx.errors.length === 0, ctx.errors.join(" | "));
   });
 
-  /* --- 관리 진입 URL 직접 접속 / 새로고침 --- */
+  /* --- 수정 진입 URL 직접 접속 / 새로고침 --- */
   await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
-    await page.goto(`${BASE}/${SLUG}/post/101?manage=1`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector("#postDetail:not([hidden])", { timeout: 15000 });
+    await page.goto(`${BASE}/${SLUG}/post/101?edit=1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(900);
 
-    const direct = await page.evaluate(READ_POST_SCREEN);
+    const direct = await page.evaluate(() => ({
+      editorVisible: !document.getElementById("postEditor").hidden,
+      legacyVisible: !document.getElementById("postDetail").hidden,
+      title: document.getElementById("postEditorTitle").value,
+      url: location.pathname + location.search
+    }));
 
-    check(`[${vpName}] 소유자가 ?manage=1로 직접 들어오면 기존 상세 화면이 복원된다`,
-      direct.legacyVisible && !direct.skinVisible && direct.actionsVisible &&
-      direct.managePressed === "true",
+    check(`[${vpName}] 소유자가 ?edit=1로 직접 들어오면 곧장 그 글의 수정 폼이 열린다`,
+      direct.editorVisible && !direct.legacyVisible && direct.title === "첫 번째 글" &&
+      direct.url === `/${SLUG}/post/101?edit=1`,
       JSON.stringify(direct));
 
-    check(`[${vpName}] 관리 진입 경로 콘솔 에러 없음`,
+    /* 직접 접속에는 돌아갈 진입 전 화면이 없다 — 그 글의 읽기 화면으로 */
+    await page.click("#postEditorCancelButton");
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const backFromDirect = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 직접 접속한 수정 폼을 취소하면 그 글의 스킨으로 가고 주소도 정리된다`,
+      backFromDirect.skinVisible && !backFromDirect.editorVisible &&
+      backFromDirect.url === `/${SLUG}/post/101`,
+      JSON.stringify(backFromDirect));
+
+    check(`[${vpName}] 수정 진입 경로 콘솔 에러 없음`,
       ctx.errors.length === 0, ctx.errors.join(" | "));
   });
 
-  /* --- 비소유자가 같은 관리 URL로 들어오면 그냥 스킨 --- */
+  /* --- 비소유자가 같은 수정/관리 URL로 들어오면 그냥 스킨 --- */
   await withPage(vp, { signedInAs: OTHER_USER_ID }, async (page, ctx) => {
-    await page.goto(`${BASE}/${SLUG}/post/101?manage=1`, { waitUntil: "domcontentloaded" });
+    await page.goto(`${BASE}/${SLUG}/post/101?edit=1`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(700);
 
     const visitor = await page.evaluate(READ_POST_SCREEN);
 
-    check(`[${vpName}] 다른 계정이 ?manage=1로 들어와도 관리 화면이 열리지 않는다`,
-      visitor.skinVisible && !visitor.legacyVisible && !visitor.manageVisible &&
-      !visitor.ownerTools && !visitor.actionsVisible,
+    check(`[${vpName}] 다른 계정이 ?edit=1로 들어와도 수정 폼이 열리지 않고 주소가 정리된다`,
+      visitor.skinVisible && !visitor.legacyVisible && !visitor.editorVisible &&
+      !visitor.manageVisible && !visitor.ownerTools && !visitor.actionsVisible &&
+      visitor.url === `/${SLUG}/post/101`,
       JSON.stringify(visitor));
 
-    check(`[${vpName}] 비소유자 POST 관리 URL 경로 콘솔 에러 없음`,
+    await page.goto(`${BASE}/${SLUG}/post/101?manage=1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const legacyQuery = await page.evaluate(READ_POST_SCREEN);
+
+    check(`[${vpName}] 옛 ?manage=1 주소는 그냥 읽기 화면으로 정리된다`,
+      legacyQuery.skinVisible && !legacyQuery.legacyVisible &&
+      legacyQuery.url === `/${SLUG}/post/101`,
+      JSON.stringify(legacyQuery));
+
+    check(`[${vpName}] 비소유자 POST 수정 URL 경로 콘솔 에러 없음`,
       ctx.errors.length === 0, ctx.errors.join(" | "));
   });
 
@@ -1586,7 +1632,7 @@ async function testOwnerPostScreen(vpName) {
       (legacy.legacyBody || "").includes("첫 번째 글 본문") && !legacy.ownerTools,
       JSON.stringify(legacy));
 
-    check(`[${vpName}] 돌아갈 스킨이 없으면 관리 토글도 뜨지 않는다`,
+    check(`[${vpName}] 돌아갈 스킨이 없으면 떠 있는 수정 진입점도 뜨지 않는다`,
       !legacy.manageVisible, JSON.stringify(legacy));
 
     check(`[${vpName}] legacy POST 폴백 경로 콘솔 에러 없음`,

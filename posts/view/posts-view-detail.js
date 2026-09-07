@@ -160,8 +160,7 @@ async function openPostPage(
 ) {
 
   const {
-    updateUrl = true,
-    manage = false
+    updateUrl = true
   } = options;
 
 
@@ -192,23 +191,20 @@ async function openPostPage(
 
 
   /*
-    PHASE 1E 관리 진입 계약 — ?manage=1(또는 openPostPage의 manage
-    옵션)은 "이 글의 기존 관리 화면을 열어달라"는 **요청**일 뿐이다.
-    실제로 열지는 여기서 소유자인지 다시 확인하고 정한다
-    (isSiteOwnerSignedIn, posts/editor/posts-state.js) — 주소를 직접
-    쳐서 들어온 방문자나 다른 계정은 그냥 평소의 읽기 화면을 본다.
-    manage가 false인 평소 탐색에서는 && 단락 평가 때문에 추가 조회가
-    아예 일어나지 않는다(openCategoryPage()와 같은 규칙).
+    POST에는 더 이상 별도의 "관리 화면"이 없다. 예전에는 소유자가
+    ?manage=1로 옛 상세 화면(legacy #postDetail + edit/delete)을 열고
+    거기서 다시 수정 버튼을 눌러야 했는데, 실사용자가 그 버튼을
+    누르는 이유는 고치기 위해서라 이제 곧장 수정 폼(?edit=1,
+    posts/view/posts-view-editor-load.js)으로 간다. 그래서 이 화면은
+    "누가 보든 같은 읽기 화면"이고, 스킨을 그릴지 여부만 남는다.
+
+    ?manage=1이 붙은 옛 주소로 들어와도 여기서는 그냥 무시된다 —
+    아래 pushState가 쿼리 없는 주소로 정리하므로 새로고침해도
+    같은 읽기 화면이 나온다.
   */
 
-  const wantsManageScreen =
-    manage === true &&
-    await isSiteOwnerSignedIn();
-
-
   const maybeSkinCandidate =
-    skinRouteCandidate &&
-    !wantsManageScreen;
+    skinRouteCandidate;
 
 
   /*
@@ -679,10 +675,6 @@ async function openPostPage(
     }
 
 
-    postManageScreenActive =
-      false;
-
-
     postDetailTitle.textContent =
       "post not found";
 
@@ -777,16 +769,6 @@ async function openPostPage(
       skinPostResult &&
       skinPostResult.rendered
     );
-
-
-  /*
-    PHASE 1E 후속: 지금 화면이 "명시적 관리 진입"인지 기록한다 —
-    관리 토글(posts/editor/posts-list-detail-nav.js)이 다음에 어느
-    쪽으로 갈지를 이 값 하나로 정한다.
-  */
-
-  postManageScreenActive =
-    wantsManageScreen;
 
 
   if (postDetail) {
@@ -945,8 +927,9 @@ async function openPostPage(
     보이지 않는다. 실제 수정/삭제 권한은 여전히 각 쿼리의 user_id
     필터와 RLS가 강제한다.
 
-    관리 화면에서는 스킨 후보 라우트일 때만 토글을 남긴다 — POST
-    template이 없는 배포에서는 돌아갈 스킨 화면 자체가 없다.
+    스킨이 이 글을 그렸을 때만 필요하다 — 스킨을 쓰지 않는(폴백)
+    화면에는 legacy #postDetailActions의 edit/delete가 원래 자리에
+    그대로 있다.
   */
 
   if (postManageToggleButton) {
@@ -954,20 +937,12 @@ async function openPostPage(
     postManageToggleButton.hidden =
       !(
         isOwnerViewing &&
-        (
-          usingSkinPost ||
-          (
-            wantsManageScreen &&
-            skinRouteCandidate
-          )
-        )
+        usingSkinPost
       );
 
     postManageToggleButton.setAttribute(
       "aria-pressed",
-      wantsManageScreen
-        ? "true"
-        : "false"
+      "false"
     );
 
   }
@@ -1114,54 +1089,12 @@ async function openPostPage(
           )
       },
       "",
-      wantsManageScreen
-        ? buildSiteManageUrl(
-            buildPostRoute(
-              `/post/${post.id}`
-            )
-          )
-        : buildPostRoute(
-            `/post/${post.id}`
-          )
+      buildPostRoute(
+        `/post/${post.id}`
+      )
     );
 
   }
-
-}
-
-
-
-/* =========================================================
-   POST 관리 화면 토글 (PHASE 1E 후속)
-
-   스킨으로 읽는 화면 <-> 기존 관리 화면(legacy #postDetail의
-   edit/delete/관련 글/글자 크기)을 명시적으로 오간다. 배너의
-   toggleBannerEditMode() / 글 목록의 togglePostListEditMode()와
-   같은 계약이고, 다른 점은 POST의 두 화면이 주소로도 구분된다는
-   것뿐이다(?manage=1).
-
-   별도 렌더 경로를 새로 만들지 않고 openPostPage()를 그대로 다시
-   태운다 — 스킨 POST 렌더 경로가 이 저장소에 한 벌만 존재하게
-   유지하기 위해서다(배너의 restoreBannerSkinList와 같은 이유).
-   관리 화면 자체(수정/삭제/관련 글)는 기존 코드 그대로다.
-========================================================== */
-
-async function togglePostManageScreen() {
-
-  if (!currentPostId) {
-
-    return;
-
-  }
-
-
-  await openPostPage(
-    currentPostId,
-    {
-      manage:
-        !postManageScreenActive
-    }
-  );
 
 }
 

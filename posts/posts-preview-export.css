@@ -1054,6 +1054,25 @@ text-size-adjust: 100%;
   background: #fffafb;
 }
 
+/*
+  수정 폼 안의 삭제 버튼(#postEditorDeleteButton). 실수로 누르기
+  쉬운 자리가 아니도록 다른 버튼과 같은 크기/모양을 쓰되 hover에서만
+  경고색이 된다 — 확인 창은 기존 상세 화면의 삭제와 똑같이 뜬다.
+*/
+
+.post-editor-button.delete:hover {
+  color: #c98a8a;
+
+  border-color: #e4c6c6;
+
+  background: #fffafa;
+}
+
+.post-editor-button[hidden] {
+  display: none;
+}
+
+
 .post-editor-button:disabled {
   opacity: 0.5;
 

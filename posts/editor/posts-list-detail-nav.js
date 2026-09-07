@@ -275,26 +275,16 @@ postEditButton
 
 
 /* =========================================================
-   MANAGE TOGGLE (PHASE 1E 후속)
+   스킨 POST 위의 EDIT
 
-   스킨으로 읽는 POST 화면과 기존 관리 화면(legacy 상세 +
-   edit/delete)을 오간다 — 실제 동작은 posts-view-detail.js의
-   togglePostManageScreen().
+   예전에는 이 버튼이 옛 상세 화면(legacy #postDetail +
+   edit/delete/관련 글)을 열고 닫는 토글이었다 — 고치려면 그
+   화면을 한 번 거쳐야 했다. 지금은 곧장 수정 폼을 연다
+   (posts/view/posts-view-editor-load.js). 삭제는 그 폼 안의
+   delete 버튼에 있다.
 ========================================================== */
 
 postManageToggleButton
-  ?.addEventListener(
-    "click",
-    togglePostManageScreen
-  );
-
-
-
-/* =========================================================
-   DELETE
-========================================================== */
-
-postDeleteButton
   ?.addEventListener(
     "click",
     async () => {
@@ -304,81 +294,215 @@ postDeleteButton
       }
 
 
-      if (
-        !confirm(
-          "이 글을 삭제할까요?"
-        )
-      ) {
-
-        return;
-
-      }
-
-
-      const user =
-        await getSignedInUser();
-
-
-      if (
-        !user ||
-        user.id !==
-          currentPostOwnerId
-      ) {
-
-        return;
-
-      }
-
-
-      const categoryId =
-        currentPostCategoryId;
-
-
-      const {
-        error
-      } =
-        await supabaseClient
-          .from(
-            "posts"
-          )
-          .delete()
-          .eq(
-            "id",
-            currentPostId
-          )
-          .eq(
-            "user_id",
-            user.id
-          );
-
-
-      if (error) {
-
-        console.error(
-          error
-        );
-
-
-        alert(
-          "삭제하지 못했습니다."
-        );
-
-
-        return;
-
-      }
-
-
-      invalidateCategoryPageCache(
-        categoryId
-      );
-
-
-      await openCategoryPage(
-        categoryId
+      await openPostEditor(
+        currentPostId
       );
 
     }
+  );
+
+
+
+/* =========================================================
+   작성 대상 카테고리 선택 (WRITE)
+
+   posts/view/posts-view-compose.js가 그린 버튼들. 고르면 곧바로
+   그 카테고리의 작성 폼이 열린다.
+========================================================== */
+
+postComposePickerList
+  ?.addEventListener(
+    "click",
+    async event => {
+
+      const button =
+        event.target.closest(
+          "[data-category-id]"
+        );
+
+
+      if (!button) {
+        return;
+      }
+
+
+      if (postComposePicker) {
+
+        postComposePicker.hidden =
+          true;
+
+      }
+
+
+      await openNewPostEditor(
+        Number(
+          button.dataset.categoryId
+        )
+      );
+
+    }
+  );
+
+
+postComposePickerClose
+  ?.addEventListener(
+    "click",
+    closeComposeCategoryPicker
+  );
+
+
+
+/* =========================================================
+   DELETE
+
+   상세 화면의 delete 버튼과 수정 폼의 delete 버튼이 같은 함수를
+   쓴다 — 확인 창, 작성자 재검사, 캐시 무효화, 삭제 후 그 글이
+   있던 카테고리 화면으로 이동까지 전부 한 벌이다. 스킨을 쓰는
+   사이트에서 그 카테고리 화면은 CATEGORY 스킨이다
+   (openCategoryPage가 알아서 정한다).
+========================================================== */
+
+async function deleteCurrentPost() {
+
+  if (!currentPostId) {
+    return;
+  }
+
+
+  if (
+    !confirm(
+      "이 글을 삭제할까요?"
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  const user =
+    await getSignedInUser();
+
+
+  if (
+    !user ||
+    user.id !==
+      currentPostOwnerId
+  ) {
+
+    return;
+
+  }
+
+
+  const postId =
+    currentPostId;
+
+
+  const categoryId =
+    currentPostCategoryId;
+
+
+  const {
+    error
+  } =
+    await supabaseClient
+      .from(
+        "posts"
+      )
+      .delete()
+      .eq(
+        "id",
+        postId
+      )
+      .eq(
+        "user_id",
+        user.id
+      );
+
+
+  if (error) {
+
+    console.error(
+      error
+    );
+
+
+    alert(
+      "삭제하지 못했습니다."
+    );
+
+
+    return;
+
+  }
+
+
+  invalidateCategoryPageCache(
+    categoryId
+  );
+
+
+  /*
+    지운 글의 폼/화면은 더 이상 되돌아갈 곳이 아니다 — 기억해 둔
+    복귀 지점(그 글의 스킨 화면)을 버리고, 주소도 카테고리로
+    맞춘 뒤 그 화면을 연다.
+  */
+
+  hidePostEditor();
+
+
+  forgetPlatformScreenReturn();
+
+
+  if (categoryId) {
+
+    history.replaceState(
+      {
+        page: "category",
+
+        categoryId:
+          Number(
+            categoryId
+          )
+      },
+      "",
+      buildPostRoute(
+        `/category/${categoryId}`
+      )
+    );
+
+
+    await openCategoryPage(
+      categoryId,
+      {
+        updateUrl:
+          false
+      }
+    );
+
+
+    return;
+
+  }
+
+
+  await closePostArea();
+
+}
+
+
+postDeleteButton
+  ?.addEventListener(
+    "click",
+    deleteCurrentPost
+  );
+
+
+postEditorDeleteButton
+  ?.addEventListener(
+    "click",
+    deleteCurrentPost
   );
 
 

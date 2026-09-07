@@ -545,6 +545,456 @@ function cancelPendingIndicator(
 
 
 /* =========================================================
+   플랫폼 화면(작성 폼 / 카테고리 선택 / 관리 패널) 진입
+
+   Skin이 CATEGORY/POST/BANNER를 그리는 동안 #postContainer /
+   #postArea에는 mount contract 클래스가 붙어 있다(posts-base.css) —
+   .post-container--skin-active는 legacy 헤더를 숨기고 max-width를
+   풀며, .post-area--skin-active는 .post-area의 padding을 0으로
+   만들고, --owner-tools는 헤더를 화면 오른쪽 아래 떠 있는 알약으로
+   바꾼다. 전부 "Skin이 자기 CSS로 프레임을 정한다"는 전제의 규칙이라,
+   그 자리에 플랫폼 자신의 화면(에디터/선택 패널/관리 패널)을 열 때는
+   반드시 걷어내야 한다.
+
+   걷어내지 않으면 실제로 이렇게 깨진다:
+   - 에디터가 프레임 폭/여백 없이 화면 가장자리에 붙는다.
+   - 떠 있는 알약 안의 버튼은 전부 hidden인데 알약 껍데기(테두리+
+     배경)만 남아 빈 캡슐이 떠 있다.
+
+   그리고 커튼(showPostArea의 380ms 흰색 페이드)은 쓰지 않는다 —
+   이 화면들은 전부 "이미 보고 있던 화면 위에서 명시적으로 연" 것이라
+   빈 화면을 채우는 연출이 필요 없다. #postArea가 아직 닫혀 있었으면
+   (HOME에서 곧장 WRITE) 애니메이션 없이 그 자리에서 연다.
+
+   Skin 화면으로 돌아가는 복원은 각 화면의 기존 경로가 그대로
+   한다(openCategoryPage/openPostPage가 렌더 결과에 따라 이 클래스를
+   다시 붙인다) — 여기서 되돌리는 코드를 따로 두지 않는다.
+========================================================== */
+
+function enterPlatformScreen() {
+
+  showPostAreaInstant();
+
+
+  if (postContainer) {
+
+    postContainer.classList.remove(
+      "post-container--skin-active"
+    );
+
+    postContainer.classList.remove(
+      "post-container--owner-tools"
+    );
+
+  }
+
+
+  if (postArea) {
+
+    postArea.classList.remove(
+      "post-area--skin-active"
+    );
+
+  }
+
+
+  if (postSkinContainer) {
+
+    postSkinContainer.hidden =
+      true;
+
+  }
+
+
+  /*
+    비밀글 입력 폼이 Skin 본문 영역 안으로 옮겨져 있을 수 있다 —
+    Skin 컨테이너를 비우기 전에 항상 legacy #postDetail로 되돌린다
+    (posts-view-detail.js의 helper 주석 참고). 그 파일을 로드하지
+    않는 축소 구성(테스트 harness)에서도 안전하도록 존재 확인 후
+    호출한다.
+  */
+
+  if (
+    typeof restorePostSecretGateToLegacyDetail ===
+    "function"
+  ) {
+
+    restorePostSecretGateToLegacyDetail();
+
+  }
+
+
+  if (postSkinContainer) {
+
+    postSkinContainer.innerHTML =
+      "";
+
+  }
+
+}
+
+
+/*
+  플랫폼 화면이 쓰는 "이 화면 말고 다른 건 전부 접는다" 정리.
+  에디터/선택 패널이 열리기 직전에 한 번 부른다 — 각 화면이
+  자기 것만 다시 펴면 된다.
+*/
+
+function hideOtherPostScreens() {
+
+  if (postList) {
+
+    postList.hidden =
+      true;
+
+  }
+
+
+  if (postDetail) {
+
+    postDetail.hidden =
+      true;
+
+  }
+
+
+  if (bannerGrid) {
+
+    bannerGrid.hidden =
+      true;
+
+  }
+
+
+  if (bannerEditor) {
+
+    bannerEditor.hidden =
+      true;
+
+  }
+
+
+  if (postListSelectBar) {
+
+    postListSelectBar.hidden =
+      true;
+
+  }
+
+
+  if (postComposePicker) {
+
+    postComposePicker.hidden =
+      true;
+
+  }
+
+
+  for (
+    const button
+    of
+    [
+      postAddButton,
+      bannerEditToggleButton,
+      postListEditToggleButton,
+      postManageToggleButton
+    ]
+  ) {
+
+    if (button) {
+
+      button.hidden =
+        true;
+
+    }
+
+  }
+
+}
+
+
+
+/* =========================================================
+   플랫폼 화면의 복귀 지점
+
+   "취소/닫기를 누르면 들어오기 직전에 보고 있던 스킨 화면과 그
+   스크롤 위치로 돌아온다"를 위한 최소 기록(요청서 2절). 진입
+   직전의 주소/화면 종류/스크롤만 담아두고, 복귀는 기존 렌더
+   경로(openPostPage/openCategoryPage/closePostArea)를 그대로 다시
+   태운다 — 복원 전용 렌더 경로를 새로 만들지 않는다.
+
+   주소는 pushState가 아니라 replaceState로 되돌린다. 진입할 때
+   ?write=1 / ?edit=1을 pushState로 쌓았으므로, 나갈 때 그 항목을
+   복귀 지점으로 덮어써야 "닫았는데 주소에 ?write=1이 남아 새로고침
+   하면 다시 작성 화면"이 되는 불일치가 생기지 않는다.
+
+   기록이 없을 수도 있다 — 주소를 직접 치거나 북마크로 ?edit=1에
+   바로 들어온 경우다. 그때는 호출자가 준 fallback(그 글/그
+   카테고리)으로 돌아간다.
+
+   #postArea는 window가 아니라 자기 안에서 스크롤되므로
+   (posts-base.css의 overflow-y:auto) 두 값을 모두 기억한다 —
+   HOME에서 들어왔으면 window, 이미 열린 화면에서 들어왔으면
+   #postArea 쪽이 실제 위치다.
+========================================================== */
+
+let platformScreenReturn =
+  null;
+
+
+function rememberPlatformScreenReturn() {
+
+  /*
+    선택 패널 → 작성 폼처럼 플랫폼 화면끼리 이어질 때는 최초
+    진입 지점을 그대로 유지한다 — 중간 화면(빈 작성 폼, 선택
+    패널)으로 되돌아가면 안 되기 때문이다. 기록이 없는 채로
+    이어졌다면(주소를 직접 쳐서 선택 패널부터 시작한 경우) 그냥
+    없는 상태로 두고, 호출자가 준 fallback으로 돌아간다.
+  */
+
+  if (
+    platformScreenReturn ||
+    currentPostView === "editor" ||
+    currentPostView === "compose"
+  ) {
+
+    return;
+
+  }
+
+
+  platformScreenReturn = {
+
+    path:
+      window.location.pathname +
+      window.location.search,
+
+    view:
+      currentPostView,
+
+    postId:
+      currentPostId,
+
+    categoryId:
+      currentPostCategoryId,
+
+    scrollTop:
+      postArea
+        ? postArea.scrollTop
+        : 0,
+
+    scrollY:
+      window.scrollY
+
+  };
+
+}
+
+
+function forgetPlatformScreenReturn() {
+
+  platformScreenReturn =
+    null;
+
+}
+
+
+async function returnToPlatformScreenOrigin(
+  fallback = null
+) {
+
+  const origin =
+    platformScreenReturn ||
+    fallback;
+
+
+  platformScreenReturn =
+    null;
+
+
+  const view =
+    origin?.view ||
+    "home";
+
+
+  const path =
+    origin?.path ||
+    null;
+
+
+  if (
+    view === "post" &&
+    origin.postId
+  ) {
+
+    history.replaceState(
+      {
+        page: "post",
+
+        postId:
+          Number(
+            origin.postId
+          )
+      },
+      "",
+      path ||
+        buildPostRoute(
+          `/post/${origin.postId}`
+        )
+    );
+
+
+    await openPostPage(
+      origin.postId,
+      {
+        updateUrl:
+          false
+      }
+    );
+
+
+    restorePlatformScreenScroll(
+      origin
+    );
+
+
+    return;
+
+  }
+
+
+  if (
+    view === "category" &&
+    origin.categoryId
+  ) {
+
+    history.replaceState(
+      {
+        page: "category",
+
+        categoryId:
+          Number(
+            origin.categoryId
+          )
+      },
+      "",
+      path ||
+        buildPostRoute(
+          `/category/${origin.categoryId}`
+        )
+    );
+
+
+    await openCategoryPage(
+      origin.categoryId,
+      {
+        updateUrl:
+          false
+      }
+    );
+
+
+    restorePlatformScreenScroll(
+      origin
+    );
+
+
+    return;
+
+  }
+
+
+  history.replaceState(
+    {
+      page: "home"
+    },
+    "",
+    path ||
+      buildPostRoute(
+        "/"
+      )
+  );
+
+
+  await closePostArea({
+    updateUrl:
+      false,
+
+    animate:
+      false
+  });
+
+
+  restorePlatformScreenScroll(
+    origin
+  );
+
+}
+
+
+/*
+  화면이 방금 다시 그려진 직후에는 아직 레이아웃이 잡히기 전일 수
+  있어서 그 프레임에 scrollTop을 넣어도 0으로 눌린다 — 다음
+  프레임에서 한 번 더 맞춘다("가능한 스크롤 위치"라 실패해도
+  화면은 정상이다).
+*/
+
+function restorePlatformScreenScroll(
+  origin
+) {
+
+  if (!origin) {
+
+    return;
+
+  }
+
+
+  const apply =
+    () => {
+
+      if (
+        postArea &&
+        !postArea.hidden &&
+        origin.scrollTop
+      ) {
+
+        postArea.scrollTop =
+          origin.scrollTop;
+
+      }
+
+
+      if (
+        (
+          !postArea ||
+          postArea.hidden
+        ) &&
+        origin.scrollY
+      ) {
+
+        window.scrollTo(
+          0,
+          origin.scrollY
+        );
+
+      }
+
+    };
+
+
+  apply();
+
+
+  requestAnimationFrame(
+    apply
+  );
+
+}
+
+
+
+/* =========================================================
    PREPARE EDITOR
 ========================================================== */
 
@@ -611,11 +1061,35 @@ function hidePostEditor() {
   closeEditorPreview();
 
 
+  /*
+    작성 대상 카테고리 선택 패널도 같은 "작성 화면" 묶음이다 —
+    이 함수는 openCategoryPage/openPostPage/closePostArea가 각자
+    화면을 열기 직전에 부르는 공통 정리 지점이라, 여기서 함께
+    접어야 선택 패널이 다음 화면 위에 남지 않는다
+    (posts/view/posts-view-compose.js).
+  */
+
+  if (postComposePicker) {
+
+    postComposePicker.hidden =
+      true;
+
+  }
+
+
   if (
     postEditor
   ) {
 
     postEditor.hidden =
+      true;
+
+  }
+
+
+  if (postEditorDeleteButton) {
+
+    postEditorDeleteButton.hidden =
       true;
 
   }
@@ -631,6 +1105,23 @@ function hidePostEditor() {
 
   savedEditorRange =
     null;
+
+
+  /*
+    에디터를 닫는 순간 "저장하지 않은 입력"도 더 이상 없다 —
+    기준점을 비워 두지 않으면 다음 화면에서 뒤로가기/탭 닫기
+    가드가 남은 값으로 잘못 발동한다
+    (posts/view/posts-view-editor-load.js).
+  */
+
+  if (
+    typeof clearPostEditorSnapshot ===
+    "function"
+  ) {
+
+    clearPostEditorSnapshot();
+
+  }
 
 
   if (

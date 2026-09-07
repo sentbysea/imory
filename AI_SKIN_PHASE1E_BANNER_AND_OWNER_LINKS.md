@@ -207,6 +207,10 @@ CODE 버튼이 `templates.banner`를 편집 대상으로 잡는다.
 
 ## 3. 관리 진입 계약 (`?manage=1`)
 
+> **PHASE 1F에서 일부 개정됨** — `AI_SKIN_PHASE1F_WRITE_AND_MANAGE_FLOW.md`
+> 참고. 카테고리의 `?manage=1`(목록 관리 패널)은 그대로지만, POST의
+> `?manage=1`은 폐기되고 `?edit=1`(수정 폼 직행)로 대체됐다.
+
 ### 3-1. CATEGORY
 
 소유자가 **"이 카테고리를 관리하겠다"** 고 명시적으로 고른 진입과, 그냥
@@ -325,6 +329,10 @@ protected post-body region에서 바로 읽고, 방문자에게는 그 자리에
 ---
 
 ## 4. `viewer` namespace (WRITE / ADMIN)
+
+> **PHASE 1F에서 개정됨** — `viewer.writeHref`는 더 이상 관리 목록
+> (`?manage=1`)이 아니라 작성 진입 주소(`?write=1`)를 가리킨다.
+> `AI_SKIN_PHASE1F_WRITE_AND_MANAGE_FLOW.md` 2절 참고.
 
 ### 4-1. shape
 

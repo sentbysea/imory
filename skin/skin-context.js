@@ -760,28 +760,25 @@ async function buildBaseSkinContext(
     않는다(data-imory-href는 값이 문자열이 아니면 href 속성 자체를
     지운다, skin-render.js).
 
-    writeHref: Imory에는 독립된 "글쓰기 URL"이 없다 — 글은 항상
-    카테고리 목록 화면의 + 버튼(posts/editor/posts-list-detail-nav.js)
-    에서 시작한다. 그래서 HOME처럼 카테고리가 정해지지 않은
-    화면에서는 첫 번째 POST 카테고리의 **관리 진입 URL**
-    (buildSiteManageUrl, core/lib/site-path.js — 같은 경로에
-    ?manage=1만 붙인다)로 보낸다. 그 화면이 바로 기존 글쓰기
-    진입점(+ 버튼)이고, 동시에 다른 카테고리를 고를 수 있는 기존
-    카테고리 선택 흐름이기도 하다.
+    writeHref: "지금 바로 글을 쓰겠다"는 요청 주소다(buildSiteComposeUrl,
+    core/lib/site-path.js — 같은 경로에 ?write=1만 붙인다). 예전에는
+    카테고리 관리 목록(?manage=1)으로 보내고 거기서 + 를 한 번 더
+    누르게 했지만, WRITE를 누르는 이유는 바로 쓰기 위해서다 — 이제
+    이 주소로 들어가면 옛 목록을 거치지 않고 작성 폼이 곧장 열린다
+    (posts/view/posts-view-compose.js).
+
+    대상 카테고리를 여기서 정할 수 있으면 정해 준다:
+    - POST 카테고리가 정확히 하나면 그 카테고리 경로에 ?write=1.
+    - 0개거나 여러 개면 HOME 경로에 ?write=1 — 받는 쪽이 여러 개면
+      고르게 하고, 없으면 카테고리부터 만들라고 안내한다.
 
     같은 카테고리를 그냥 구경하는 링크(navigation.postCategories의
     href)와 주소가 달라야 한다 — 소유자가 메뉴에서 카테고리를 누르면
-    방문자와 똑같은 CATEGORY 스킨을 보고, WRITE를 눌렀을 때만 기존
-    관리 화면이 열린다. 쿼리는 요청일 뿐이고 실제 소유자 검사는
-    openCategoryPage()가 다시 한다.
+    방문자와 똑같은 CATEGORY 스킨을 보고, WRITE를 눌렀을 때만 작성
+    폼이 열린다. 쿼리는 요청일 뿐이고 실제 소유자 검사는 받는 쪽이
+    다시 한다.
 
-    POST 카테고리가 하나도 없으면 보낼 목록 자체가 없다 — 이때는
-    링크를 없애는 대신 관리 화면으로 보낸다(SETTINGS의 CATEGORY
-    탭에서 카테고리를 만들 수 있다). "글을 쓰려고 눌렀는데 아무
-    일도 안 일어난다"보다 "여기서 카테고리부터 만들면 된다"로
-    이어지는 편이 낫다.
-
-    이 판단은 항상 이 파일이 하고, Skin은 category id도 관리 화면
+    이 판단은 항상 이 파일이 하고, Skin은 category id도 작성 폼
     주소도 전혀 모른다.
   */
 
@@ -790,12 +787,22 @@ async function buildBaseSkinContext(
     viewerId === ownerId;
 
 
-  const firstPostCategory =
-    categoryItems.find(
+  const postCategoryItems =
+    categoryItems.filter(
       (category) =>
         category.type === "post"
-    ) ||
-    null;
+    );
+
+
+  /*
+    딱 하나뿐일 때만 "이 카테고리에 쓴다"고 단정한다 — 여러 개면
+    고르는 건 받는 쪽 몫이고, 0개면 애초에 보낼 카테고리가 없다.
+  */
+
+  const onlyPostCategory =
+    postCategoryItems.length === 1
+      ? postCategoryItems[0]
+      : null;
 
 
   const adminHref =
@@ -842,10 +849,7 @@ async function buildBaseSkinContext(
         categoryItems,
 
       postCategories:
-        categoryItems.filter(
-          (category) =>
-            category.type === "post"
-        ),
+        postCategoryItems,
 
       bannerCategories:
         categoryItems.filter(
@@ -873,10 +877,10 @@ async function buildBaseSkinContext(
 
       writeHref:
         isOwner
-          ? (
-              firstPostCategory
-                ? buildSiteManageUrl(firstPostCategory.href)
-                : adminHref
+          ? buildSiteComposeUrl(
+              onlyPostCategory
+                ? onlyPostCategory.href
+                : buildSitePath(slug, "/")
             )
           : null,
 
