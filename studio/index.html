@@ -56,6 +56,11 @@
     href="./editor/confirm-dialog.css"
   >
 
+  <link
+    rel="stylesheet"
+    href="./images/images-panel.css"
+  >
+
 </head>
 
 
@@ -290,6 +295,22 @@
             Import
           </button>
 
+          <!--
+               Skin Image Library v0.1 — 지금 Skin이 선언한
+               imageSlots에 내 이미지를 연결/교체/비운다.
+               Import 버튼과 같은 기준으로 "working draft가 있는가"
+               만 보고 활성화된다(studio-preview.js
+               updateStudioImagesButtonState).
+          -->
+          <button
+            type="button"
+            class="studio-corner-button"
+            id="studioImagesButton"
+            disabled
+          >
+            Images
+          </button>
+
           <button
             type="button"
             class="studio-corner-button"
@@ -508,6 +529,22 @@
        studio-preview.js보다 먼저 로드되어 있기만 하면 된다.
   -->
   <script src="./editor/confirm-dialog.js"></script>
+
+  <!-- =========================================================
+       SKIN IMAGE LIBRARY (v0.1)
+
+       skin-image-library.js는 supabaseClient/SUPABASE_URL(위에서
+       이미 로드됨)에만 의존하는 데이터 계층이다. images-panel.js는
+       그 라이브러리와, studio-preview.js가 노출하는
+       getStudioImageSlotState/setStudioImageSlot을 쓴다 — 후자는
+       사용자가 Images 버튼을 실제로 누르는 시점에만 있으면 되므로
+       studio-preview.js보다 먼저 로드해도 안전하다(import-editor.js
+       와 동일한 관계).
+  ========================================================== -->
+
+  <script src="./images/skin-image-library.js"></script>
+
+  <script src="./images/images-panel.js"></script>
 
   <script src="./studio-preview.js"></script>
 

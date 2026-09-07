@@ -1,0 +1,568 @@
+/* =========================================================
+   SKIN STUDIO - IMAGES PANEL (Skin Image Library v0.1)
+
+   studio/editor/import-editor.css와 같은 톤(같은 --system-* /
+   --imory-* 변수, 같은 radius/border 규모)을 그대로 따르되 클래스
+   접두어만 images-panel-*로 분리한다. 호스트 문서(studio/index.html)가
+   design-tokens.css를 먼저 로드해 두었다는 전제도 동일하다.
+========================================================== */
+
+.images-panel-overlay {
+  position: fixed;
+  inset: 0;
+
+  z-index: 20;
+
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 32px;
+
+  background: color-mix(in srgb, #000000 55%, transparent);
+}
+
+
+.images-panel-overlay[hidden] {
+  display: none;
+}
+
+
+.images-panel-overlay--busy {
+  cursor: progress;
+}
+
+
+.images-panel-modal {
+  display: flex;
+  flex-direction: column;
+
+  width: min(880px, 100%);
+  height: min(620px, 100%);
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-300);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+}
+
+
+.images-panel-header {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+
+  padding: 14px 16px;
+
+  border-bottom: 1px solid var(--system-border);
+}
+
+
+.images-panel-title {
+  margin: 0;
+
+  font-size: 12px;
+  font-weight: 600;
+
+  letter-spacing: 0.14em;
+}
+
+
+.images-panel-close {
+  padding: 4px 8px;
+
+  border: 0;
+  border-radius: var(--imory-radius-200);
+
+  background: transparent;
+
+  color: var(--system-text-muted);
+
+  font: inherit;
+  font-size: 12px;
+
+  cursor: pointer;
+}
+
+
+.images-panel-close:hover {
+  color: var(--system-text);
+}
+
+
+.images-panel-notice {
+  margin: 0;
+
+  padding: 24px 20px;
+
+  color: var(--system-text-muted);
+
+  font-size: 12px;
+  line-height: 1.7;
+
+  word-break: keep-all;
+}
+
+
+.images-panel-notice[hidden] {
+  display: none;
+}
+
+
+.images-panel-body {
+  flex: 1 1 auto;
+
+  display: grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+
+  min-height: 0;
+}
+
+
+.images-panel-body[hidden] {
+  display: none;
+}
+
+
+.images-panel-column {
+  display: flex;
+  flex-direction: column;
+
+  min-width: 0;
+  min-height: 0;
+
+  padding: 14px 16px;
+}
+
+
+.images-panel-column + .images-panel-column {
+  border-left: 1px solid var(--system-border);
+}
+
+
+.images-panel-column-heading {
+  margin: 0 0 10px;
+
+  color: var(--system-text-muted);
+
+  font-size: 9px;
+  font-weight: 600;
+
+  letter-spacing: 0.16em;
+}
+
+
+.images-panel-column-heading--row {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 10px;
+}
+
+
+.images-panel-upload-button {
+  padding: 5px 10px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: 999px;
+
+  background: transparent;
+
+  color: var(--system-text);
+
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+
+  cursor: pointer;
+}
+
+
+.images-panel-upload-button:hover:not(:disabled) {
+  background: var(--system-surface);
+}
+
+
+.images-panel-upload-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+
+/* =========================================================
+   SLOTS
+========================================================== */
+
+.images-panel-slot-list {
+  flex: 1 1 auto;
+
+  list-style: none;
+
+  margin: 0;
+  padding: 0;
+
+  overflow-y: auto;
+}
+
+
+.images-panel-slot-empty {
+  padding: 16px 2px;
+
+  color: var(--system-text-muted);
+
+  font-size: 11px;
+  line-height: 1.7;
+
+  word-break: keep-all;
+}
+
+
+.images-panel-slot {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 8px 6px;
+
+  border-bottom: 1px solid var(--system-border);
+}
+
+
+.images-panel-slot--selected {
+  background: var(--system-surface);
+}
+
+
+.images-panel-slot-pick {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+
+  align-items: center;
+
+  gap: 10px;
+
+  min-width: 0;
+
+  padding: 2px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: inherit;
+
+  font: inherit;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.images-panel-slot-thumb {
+  display: flex;
+
+  align-items: center;
+  justify-content: center;
+
+  width: 46px;
+  height: 46px;
+
+  overflow: hidden;
+
+  border: 1px solid var(--system-border);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-surface);
+
+  color: var(--system-text-muted);
+
+  font-size: 8px;
+
+  text-align: center;
+}
+
+
+.images-panel-slot-thumb img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+
+.images-panel-slot-meta {
+  display: flex;
+  flex-direction: column;
+
+  gap: 2px;
+
+  min-width: 0;
+}
+
+
+.images-panel-slot-label {
+  overflow: hidden;
+
+  font-size: 11px;
+  font-weight: 500;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.images-panel-slot-sub {
+  overflow: hidden;
+
+  color: var(--system-text-muted);
+
+  font-size: 9px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.images-panel-slot-clear {
+  padding: 4px 8px;
+
+  border: 1px solid var(--system-border);
+  border-radius: 999px;
+
+  background: transparent;
+
+  color: var(--system-text-muted);
+
+  font: inherit;
+  font-size: 9px;
+
+  cursor: pointer;
+}
+
+
+.images-panel-slot-clear:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+
+/* =========================================================
+   MY IMAGES
+========================================================== */
+
+.images-panel-grid {
+  flex: 1 1 auto;
+
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+
+  align-content: start;
+
+  gap: 12px;
+
+  min-height: 0;
+
+  overflow-y: auto;
+}
+
+
+.images-panel-grid-empty {
+  grid-column: 1 / -1;
+
+  margin: 0;
+
+  padding: 16px 2px;
+
+  color: var(--system-text-muted);
+
+  font-size: 11px;
+  line-height: 1.7;
+
+  word-break: keep-all;
+}
+
+
+.images-panel-card {
+  display: flex;
+  flex-direction: column;
+
+  gap: 6px;
+
+  min-width: 0;
+
+  margin: 0;
+
+  padding: 8px;
+
+  border: 1px solid var(--system-border);
+  border-radius: var(--imory-radius-200);
+}
+
+
+.images-panel-card-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+
+  border-radius: var(--imory-radius-100);
+
+  background: var(--system-surface);
+
+  object-fit: cover;
+}
+
+
+.images-panel-card-caption {
+  overflow: hidden;
+
+  color: var(--system-text-muted);
+
+  font-size: 9px;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+.images-panel-card-actions {
+  display: flex;
+
+  gap: 6px;
+}
+
+
+.images-panel-card-attach,
+.images-panel-card-delete {
+  flex: 1 1 auto;
+
+  padding: 4px 6px;
+
+  border: 1px solid var(--system-border);
+  border-radius: 999px;
+
+  background: transparent;
+
+  color: var(--system-text);
+
+  font: inherit;
+  font-size: 9px;
+
+  cursor: pointer;
+}
+
+
+.images-panel-card-delete {
+  color: var(--system-text-muted);
+}
+
+
+.images-panel-card-attach:disabled,
+.images-panel-card-delete:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+
+/* =========================================================
+   MESSAGE / FOOTER
+========================================================== */
+
+.images-panel-message {
+  margin: 0;
+
+  min-height: 16px;
+
+  padding: 0 16px;
+
+  color: var(--system-text-muted);
+
+  font-size: 10px;
+  line-height: 1.6;
+
+  word-break: keep-all;
+}
+
+
+.images-panel-message--error {
+  color: var(--imory-red-500, #d05a5a);
+}
+
+
+.images-panel-footer {
+  display: flex;
+
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 12px;
+
+  padding: 12px 16px;
+
+  border-top: 1px solid var(--system-border);
+}
+
+
+.images-panel-hint {
+  color: var(--system-text-muted);
+
+  font-size: 9px;
+  line-height: 1.6;
+
+  word-break: keep-all;
+}
+
+
+.images-panel-done-button {
+  flex: 0 0 auto;
+
+  padding: 6px 14px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: 999px;
+
+  background: transparent;
+
+  color: var(--system-text);
+
+  font: inherit;
+  font-size: 10px;
+
+  cursor: pointer;
+}
+
+
+@media (max-width: 760px) {
+
+  .images-panel-overlay {
+    padding: 12px;
+  }
+
+  .images-panel-body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .images-panel-column + .images-panel-column {
+    border-left: 0;
+    border-top: 1px solid var(--system-border);
+  }
+
+  .images-panel-slot-list,
+  .images-panel-grid {
+    overflow: visible;
+  }
+
+}

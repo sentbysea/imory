@@ -132,6 +132,9 @@ const studioCodeButton =
 const studioImportButton =
   document.getElementById("studioImportButton");
 
+const studioImagesButton =
+  document.getElementById("studioImagesButton");
+
 const studioToast =
   document.getElementById("studioToast");
 
@@ -239,6 +242,123 @@ let currentImageSlotNames = [];
 let currentImageSlotValues = {};
 
 
+/* =========================================================
+   SKIN IMAGE LIBRARY 상태 (v0.1)
+
+   SKIN_IMAGE_LIBRARY_PLAN.md 2-4절. 슬롯 연결도 html/css와 똑같이
+   "메모리 working draft"다 — 패널에서 바꾸면 currentWorkingImageSlots
+   만 바뀌고 dirty가 올라가며, DB에는 Save가 성공해야 비로소
+   기록된다(그것도 새 버전 row에만). 그래서 업로드/교체/Save 어느
+   것도 공개본을 바꾸지 않는다.
+
+   모양: { slotName: { imageId, imageUrl } }
+   currentImageSlotValues({ slotName: url })는 buildSkinContext/
+   buildCategorySkinContext/buildPostSkinContext가 그대로 받는
+   기존 계약이라 형태를 바꾸지 않고, 이 맵에서 파생시킨다.
+
+   isSkinImageLibraryAvailable: migration 적용 전 배포에서도 Studio
+   전체가 멀쩡해야 하므로(계획 문서 8절), mount 시 probe 결과를
+   들고 있다가 IMAGES 패널/Save 경로가 각자 분기한다.
+========================================================== */
+
+let currentWorkingImageSlots = {};
+let isSkinImageLibraryAvailable = false;
+
+
+function deriveImageSlotValues(workingSlots) {
+
+  const values = {};
+
+  Object.keys(workingSlots || {}).forEach((slotName) => {
+
+    const binding = workingSlots[slotName];
+
+    if (binding && binding.imageUrl) {
+      values[slotName] = binding.imageUrl;
+    }
+
+  });
+
+  return values;
+
+}
+
+
+/*
+  "Skin에 선언되지 않은 슬롯 연결은 저장하지 않는다"의 working
+  상태 쪽 절반 — Import/Code Apply로 imageSlots 선언이 바뀌면
+  사라진 슬롯의 연결을 즉시 버린다. 나머지 절반(저장 시점)은
+  save_skin_draft_version_with_image_slots() RPC가 content의
+  imageSlots와 교집합을 취해 한 번 더 강제한다.
+*/
+
+function pruneWorkingImageSlotsToDeclared() {
+
+  currentImageSlotNames =
+    extractImageSlotNames(currentWorkingSkin);
+
+  const declared =
+    new Set(currentImageSlotNames);
+
+  const pruned = {};
+
+  Object.keys(currentWorkingImageSlots).forEach((slotName) => {
+
+    if (declared.has(slotName)) {
+      pruned[slotName] = currentWorkingImageSlots[slotName];
+    }
+
+  });
+
+  currentWorkingImageSlots = pruned;
+
+  currentImageSlotValues =
+    deriveImageSlotValues(pruned);
+
+  syncImageSlotsIntoCurrentContext();
+
+}
+
+
+/*
+  HOME context는 mount 때 한 번 만들어 두고 재사용하므로, 슬롯이
+  바뀌면 그 안의 images/profile.avatarUrl을 다시 계산해 줘야
+  Preview에 즉시 반영된다. buildSkinImages()(skin/skin-context.js
+  전역)를 그대로 써서 "선언된 슬롯만 노출"과 "avatarUrl은
+  images.profile과 항상 같다"는 규칙이 한 곳에만 남게 한다.
+
+  CATEGORY/POST context는 매 이동마다 currentImageSlotNames/
+  currentImageSlotValues로 새로 만들어지므로(preview-navigation.js)
+  따로 손댈 필요가 없다.
+*/
+
+function syncImageSlotsIntoCurrentContext() {
+
+  if (!currentSkinContext) {
+    return;
+  }
+
+  const images =
+    buildSkinImages(
+      currentImageSlotNames,
+      currentImageSlotValues
+    );
+
+  currentSkinContext = {
+    ...currentSkinContext,
+    images,
+    profile: {
+      ...currentSkinContext.profile,
+      avatarUrl:
+        Object.prototype.hasOwnProperty.call(images, "profile")
+          ? images.profile
+          : null
+    }
+  };
+
+}
+
+
 function updateStudioSaveButtonState() {
 
   studioSaveButton.disabled =
@@ -335,6 +455,26 @@ function updateStudioImportButtonState() {
 }
 
 
+/* =========================================================
+   Skin Image Library v0.1 — IMAGES 버튼도 IMPORT와 같은 기준으로
+   "working draft가 있는가"만 본다. migration 미적용 배포에서도
+   버튼은 살아 있고, 패널을 열면 준비 안내를 보여준다(버튼을
+   숨기면 "왜 없지?"가 되어 오히려 안내가 어려워진다,
+   SKIN_IMAGE_LIBRARY_PLAN.md 8절).
+========================================================== */
+
+function updateStudioImagesButtonState() {
+
+  if (!studioImagesButton) {
+    return;
+  }
+
+  studioImagesButton.disabled =
+    !currentWorkingSkin;
+
+}
+
+
 function resetStudioWorkingState() {
 
   currentWorkingSkin =
@@ -370,6 +510,9 @@ function resetStudioWorkingState() {
   currentImageSlotValues =
     {};
 
+  currentWorkingImageSlots =
+    {};
+
   /*
     previewHistory/currentPreviewPageType(studio/preview/
     preview-navigation.js)도 함께 리셋한다 — 이 함수 자체가
@@ -383,6 +526,8 @@ function resetStudioWorkingState() {
   updateStudioPublishButtonState();
 
   updateStudioImportButtonState();
+
+  updateStudioImagesButtonState();
 
 }
 
@@ -709,6 +854,17 @@ function applyImportedSkinPackage(skinPackage) {
   currentWorkingSkin =
     skinPackage;
 
+  /*
+    Import는 imageSlots 선언을 통째로 갈아치울 수 있다 — 이름이
+    그대로 남은 슬롯의 연결만 유지하고, 새 선언에 없는 슬롯의
+    연결은 즉시 버린다(SKIN_IMAGE_LIBRARY_PLAN.md 6절 규칙 1/2).
+    Import가 남의 SkinPackage에서 이미지 연결을 "가져오는" 일은
+    없다 — 연결은 개인 데이터라 SkinPackage에 애초에 들어 있지
+    않다(규칙 4).
+  */
+
+  pruneWorkingImageSlotsToDeclared();
+
   isStudioDirty =
     true;
 
@@ -719,6 +875,115 @@ function applyImportedSkinPackage(skinPackage) {
   resetPreviewNavigation();
 
   renderHomePreview();
+
+}
+
+
+/* =========================================================
+   SKIN IMAGE LIBRARY — 슬롯 연결 변경 (v0.1)
+
+   studio/images/images-panel.js가 쓰는 유일한 진입점. 연결/교체/
+   비우기를 전부 이 함수 하나로 처리한다 — image가 null이면 비우기.
+
+   DB에는 전혀 손대지 않는다(Code Apply/Import와 동일한 분리 원칙)
+   — dirty만 올리고 Preview를 다시 그린다. 실제 기록은 Save가
+   새 버전 row에 할 때뿐이다.
+
+   선언되지 않은 슬롯은 애초에 받지 않는다 — 패널이 선언된 슬롯만
+   보여주지만, 이 함수도 방어적으로 한 번 더 확인한다.
+========================================================== */
+
+function setStudioImageSlot(slotName, image) {
+
+  if (!currentWorkingSkin) {
+    return false;
+  }
+
+  if (!currentImageSlotNames.includes(slotName)) {
+    return false;
+  }
+
+  const next = { ...currentWorkingImageSlots };
+
+  if (image && image.id && image.public_url) {
+
+    next[slotName] = {
+      imageId: image.id,
+      imageUrl: image.public_url
+    };
+
+  } else {
+
+    delete next[slotName];
+
+  }
+
+  currentWorkingImageSlots =
+    next;
+
+  currentImageSlotValues =
+    deriveImageSlotValues(next);
+
+  syncImageSlotsIntoCurrentContext();
+
+  isStudioDirty =
+    true;
+
+  updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
+
+  /*
+    지금 보고 있는 페이지를 그대로 다시 그린다 — HOME이면 갱신된
+    currentSkinContext로, CATEGORY/POST면 그쪽 렌더러가
+    currentImageSlotValues로 context를 새로 만든다. 어느 쪽이든
+    "Preview 즉시 반영" 요구사항이 세 페이지에서 동일하게 성립한다.
+  */
+
+  renderCurrentPreviewEntry();
+
+  return true;
+
+}
+
+
+/*
+  패널이 현재 상태를 읽는 통로 — 선언된 슬롯 목록(원본 imageSlots
+  정의 그대로: name/label/required/aspectRatioHint)과 현재 연결을
+  함께 돌려준다. 패널이 currentWorkingSkin을 직접 들여다보지
+  않도록 여기서 한 번 정리해서 넘긴다.
+*/
+
+function getStudioImageSlotState() {
+
+  const declared =
+    (currentWorkingSkin && Array.isArray(currentWorkingSkin.imageSlots))
+      ? currentWorkingSkin.imageSlots
+      : [];
+
+  const slots =
+    declared
+      .filter((slot) => slot && typeof slot.name === "string")
+      .map((slot) => ({
+        name: slot.name,
+        label:
+          (typeof slot.label === "string" && slot.label.trim())
+            ? slot.label
+            : slot.name,
+        required: slot.required === true,
+        aspectRatioHint:
+          typeof slot.aspectRatioHint === "string"
+            ? slot.aspectRatioHint
+            : null,
+        binding:
+          currentWorkingImageSlots[slot.name] || null
+      }));
+
+  return {
+    available: isSkinImageLibraryAvailable,
+    hasWorkingSkin: !!currentWorkingSkin,
+    slots
+  };
 
 }
 
@@ -737,6 +1002,20 @@ studioImportButton.addEventListener(
           applyImportedSkinPackage(skinPackage)
       }
     );
+
+  }
+);
+
+
+studioImagesButton?.addEventListener(
+  "click",
+  () => {
+
+    if (!currentWorkingSkin) {
+      return;
+    }
+
+    window.openSkinImagesPanel();
 
   }
 );
@@ -781,6 +1060,31 @@ async function handleStudioSaveClick() {
   const snapshot =
     currentWorkingSkin;
 
+  /*
+    Skin Image Library — 이번 Save가 기록할 슬롯 연결의 스냅샷.
+    { slotName: skin_images.id } 모양으로 RPC에 넘긴다. 저장 중에
+    패널에서 슬롯을 또 바꾸더라도 이번 저장은 여기 찍힌 상태만
+    기록한다(currentWorkingSkin 스냅샷과 정확히 같은 이유 — 아래
+    참조 비교로 dirty를 내릴지 판단하는 로직과 짝이 맞아야 한다).
+  */
+
+  const imageSlotSnapshot =
+    currentWorkingImageSlots;
+
+  const imageSlotPayload =
+    {};
+
+  Object.keys(imageSlotSnapshot).forEach((slotName) => {
+
+    const binding =
+      imageSlotSnapshot[slotName];
+
+    if (binding && binding.imageId) {
+      imageSlotPayload[slotName] = binding.imageId;
+    }
+
+  });
+
   isStudioSavePending =
     true;
 
@@ -822,13 +1126,31 @@ async function handleStudioSaveClick() {
 
   try {
 
+    /*
+      Skin Image Library가 준비된 배포에서는 새 버전 row와 그
+      버전의 이미지 슬롯 연결을 하나의 트랜잭션으로 기록하는
+      RPC를 쓴다. migration 적용 전이면 기존 RPC를 그대로 써서
+      지금까지와 100% 동일하게 동작한다(SKIN_IMAGE_LIBRARY_PLAN.md
+      8절) — 이 경우 슬롯 연결은 저장되지 않으며, 패널이 애초에
+      "아직 준비되지 않았다"고 안내하므로 사용자가 슬롯을 바꿔
+      둔 상태일 수도 없다.
+    */
+
     const newVersionId =
-      await saveSkinDraftVersion(
-        currentSkinId,
-        normalizedSnapshot,
-        normalizedSnapshot.schemaVersion,
-        null
-      );
+      isSkinImageLibraryAvailable
+        ? await saveSkinDraftVersionWithImageSlots(
+            currentSkinId,
+            normalizedSnapshot,
+            normalizedSnapshot.schemaVersion,
+            null,
+            imageSlotPayload
+          )
+        : await saveSkinDraftVersion(
+            currentSkinId,
+            normalizedSnapshot,
+            normalizedSnapshot.schemaVersion,
+            null
+          );
 
     currentDraftVersionId =
       newVersionId;
@@ -840,9 +1162,16 @@ async function handleStudioSaveClick() {
       이번에 저장한 스냅샷과 지금의 currentWorkingSkin이 여전히
       같은 객체일 때만 dirty를 내린다(13절 "이전 draft는 그대로/
       작업 상태를 버리지 않는다"와 같은 결).
+
+      슬롯 연결도 같은 판정을 받는다 — 저장하는 사이에 패널에서
+      슬롯을 또 바꿨다면 그 변경은 아직 어느 버전에도 기록되지
+      않았으므로 dirty를 내리면 안 된다.
     */
 
-    if (currentWorkingSkin === snapshot) {
+    if (
+      currentWorkingSkin === snapshot &&
+      currentWorkingImageSlots === imageSlotSnapshot
+    ) {
 
       isStudioDirty =
         false;
@@ -1464,25 +1793,92 @@ async function mountStudioPreview(
   let imageSlotValues =
     {};
 
+  let workingImageSlots =
+    {};
+
+  /*
+    Skin Image Library v0.1 — draft 이미지 연결은 "이번 draft 버전이
+    가진 연결"이다(skin_version_image_slots, version_id 기준). 그래서
+    저장 후 재접속하면 current_draft_version_id의 연결이 그대로
+    복원되고, published 버전의 연결은 이 경로가 아예 읽지도 쓰지도
+    않는다(SKIN_IMAGE_LIBRARY_PLAN.md 2-3절).
+
+    migration 적용 전 배포에서는 isReady()가 false를 돌려주고, 그때는
+    기존 skin_image_slot_values(skin_id 기준) 읽기를 그대로 쓴다 —
+    지금까지와 완전히 동일한 동작이다. 새 테이블이 있어도 연결이
+    0건이면(= 이 기능 도입 전에 만들어진 draft) 같은 폴백을 탄다.
+  */
+
   try {
 
-    imageSlotValues =
-      await loadImageSlotValues(
-        skin.id
-      );
+    isSkinImageLibraryAvailable =
+      await window.skinImageLibrary.isReady();
 
   } catch (err) {
 
-    /*
-      이미지 슬롯 값 조회 실패는 전체 Preview를 막을 이유가 없다
-      — 슬롯 없는 상태로라도 나머지 Context(site/profile/navigation/
-      home/banners)는 정상 렌더한다.
-    */
-
     console.error(
-      "[studio-preview] failed to load image slot values",
+      "[studio-preview] image library probe failed",
       err
     );
+
+    isSkinImageLibraryAvailable =
+      false;
+
+  }
+
+  if (isSkinImageLibraryAvailable) {
+
+    try {
+
+      workingImageSlots =
+        await window.skinImageLibrary.loadVersionSlots(
+          skin.current_draft_version_id
+        );
+
+    } catch (err) {
+
+      console.error(
+        "[studio-preview] failed to load version image slots",
+        err
+      );
+
+      workingImageSlots =
+        {};
+
+    }
+
+  }
+
+  if (Object.keys(workingImageSlots).length > 0) {
+
+    imageSlotValues =
+      deriveImageSlotValues(workingImageSlots);
+
+  }
+
+  else {
+
+    try {
+
+      imageSlotValues =
+        await loadImageSlotValues(
+          skin.id
+        );
+
+    } catch (err) {
+
+      /*
+        이미지 슬롯 값 조회 실패는 전체 Preview를 막을 이유가 없다
+        — 슬롯 없는 상태로라도 나머지 Context(site/profile/navigation/
+        home/banners)는 정상 렌더한다.
+      */
+
+      console.error(
+        "[studio-preview] failed to load image slot values",
+        err
+      );
+
+    }
 
   }
 
@@ -1579,11 +1975,16 @@ async function mountStudioPreview(
   currentImageSlotValues =
     imageSlotValues;
 
+  currentWorkingImageSlots =
+    workingImageSlots;
+
   updateStudioSaveButtonState();
 
   updateStudioPublishButtonState();
 
   updateStudioImportButtonState();
+
+  updateStudioImagesButtonState();
 
   /*
     previewHistory는 이 함수 진입 시점의 resetStudioWorkingState()

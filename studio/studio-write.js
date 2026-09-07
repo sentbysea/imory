@@ -54,6 +54,57 @@ async function saveSkinDraftVersion(
 
 
 /* =========================================================
+   saveSkinDraftVersionWithImageSlots(...) — Skin Image Library v0.1
+
+   save_skin_draft_version()과 하는 일이 같고, 거기에 "이번 draft
+   버전의 이미지 슬롯 연결"을 같은 트랜잭션으로 함께 기록한다
+   (supabase/migrations/20260907100000_create_skin_image_library.sql).
+
+   기존 save_skin_draft_version()의 시그니처는 한 줄도 바꾸지
+   않았다 — 파라미터를 더하면 PostgreSQL에 오버로드가 생겨
+   PostgREST 호출이 모호해지고, 무엇보다 migration 적용 전 배포에서
+   기존 Save가 그대로 동작해야 하기 때문이다. 어느 쪽을 부를지는
+   studio-preview.js가 isSkinImageLibraryAvailable로 고른다.
+
+   imageSlots 모양: { "<slotName>": "<skin_images.id>" }. 선언되지
+   않은 슬롯/남의 이미지는 RPC가 조용히 걸러내므로 여기서는 그대로
+   넘긴다(그쪽이 신뢰 경계다).
+========================================================== */
+
+async function saveSkinDraftVersionWithImageSlots(
+  skinId,
+  content,
+  schemaVersion,
+  label,
+  imageSlots
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .rpc(
+        "save_skin_draft_version_with_image_slots",
+        {
+          p_skin_id: skinId,
+          p_content: content,
+          p_schema_version: schemaVersion,
+          p_label: label || null,
+          p_image_slots: imageSlots || {}
+        }
+      );
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+
+}
+
+
+/* =========================================================
    publishSkin(skinId) — current_published_version_id를 현재
    current_draft_version_id로 이동한다(RPC 반환값 없음, void).
    실패(소유자 아님/draft 없음/네트워크 오류 등)는 항상 throw로만
@@ -87,6 +138,9 @@ if (typeof window !== "undefined") {
 
   window.saveSkinDraftVersion =
     saveSkinDraftVersion;
+
+  window.saveSkinDraftVersionWithImageSlots =
+    saveSkinDraftVersionWithImageSlots;
 
   window.publishSkin =
     publishSkin;
