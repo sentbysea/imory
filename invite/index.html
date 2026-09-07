@@ -30,10 +30,39 @@
     href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
   >
 
-  <link
-    rel="stylesheet"
-    href="../core/design-tokens.css"
-  >
+  <!-- =========================================================
+       배포 버전 원천 — 이 파일만 ?t= 로 받는다
+
+       자기가 정의하는 값으로 자기 URL을 만들 수 없어서(닭과 달걀),
+       고정 URL로 두면 CDN이 붙이는 4시간 캐시 때문에 최대 4시간
+       동안 옛 버전 값을 읽는다 — 그러면 그 뒤의 ?v=가 전부 옛
+       값이 되어 새 배포가 통째로 무시된다. 이 문서(HTML)는
+       _headers의 no-cache가 실제로 먹히므로 항상 최신이고, 그
+       문서가 매번 새 ?t= URL을 만들어 주므로 평범한 새로고침
+       한 번으로 새 버전 값이 들어온다.
+       배경: core/lib/build-version.js 상단 주석.
+  ========================================================== -->
+
+  <script>
+
+    document.write(
+      '<script src="../core/lib/build-version.js?t=' +
+      Date.now() +
+      '"><' + '/script>'
+    );
+
+  </script>
+
+
+  <script>
+
+    loadVersionedStyles(
+      [
+        "../core/design-tokens.css"
+      ]
+    );
+
+  </script>
 
   <!--
     새 CSS를 만들지 않고 admin/admin-shell.css의 .login-box /
@@ -42,10 +71,15 @@
     통일된 "빈 화면 + Google 버튼" 레이아웃이면 충분하기 때문.
   -->
 
-  <link
-    rel="stylesheet"
-    href="../admin/admin-shell.css"
-  >
+  <script>
+
+    loadVersionedStyles(
+      [
+        "../admin/admin-shell.css"
+      ]
+    );
+
+  </script>
 
 </head>
 
@@ -109,8 +143,6 @@
     src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
   ></script>
 
-  <script src="../core/lib/build-version.js"></script>
-
   <script>
 
     loadVersionedScripts(
@@ -123,7 +155,15 @@
 
   </script>
 
-  <script src="./invite.js"></script>
+  <script>
+
+    loadVersionedScripts(
+      [
+        "./invite.js"
+      ]
+    );
+
+  </script>
 
 </body>
 

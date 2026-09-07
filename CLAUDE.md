@@ -25,10 +25,9 @@
   경로가 `index.html`로 rewrite되고, 라우팅은 전부 클라이언트 JS가 한다
   (`core/lib/site-path.js`).
 - **백엔드**: Supabase (Postgres + Auth + Storage + RLS).
-- **배포 버전**: `core/lib/build-version.js`의 `APP_BUILD_VERSION` 하나가 유일한
-  소스다. 핵심 스크립트/스타일은 `?v=${APP_BUILD_VERSION}`으로 로드되고,
-  `_headers`가 진입점 HTML과 공개 화면 CSS에 `Cache-Control: no-cache`를 건다.
-  새 캐시 무효화 방식을 추가하지 않는다.
+- **배포 버전 / 캐시**: `core/lib/build-version.js`의 `APP_BUILD_VERSION` 하나가
+  유일한 소스다. CSS/JS를 고친 배포에서는 **이 문자열 하나만 올린다** — 다른
+  파일에 값을 복사해 적지 않는다. 자세한 내용은 §5.
 - JS 파일은 가능하면 1000줄 내외로 유지한다. 크게 넘기면 책임 분리를 먼저
   검토하되, 기능 응집도를 깨면서 억지로 나누지 않는다.
 
@@ -122,7 +121,57 @@
 
 ---
 
-## 4. 문서 관리
+## 4. 캐시와 배포 버전
+
+상세: [core/lib/build-version.js](./core/lib/build-version.js) 상단 주석 ·
+[_headers](./_headers) 상단 주석
+
+### 지금 실제로 동작하는 것
+
+- 버전 원천은 `APP_BUILD_VERSION` **하나**다. 자산은 전부
+  `?v=${APP_BUILD_VERSION}`으로 로드한다 —
+  `loadVersionedScripts()` / `loadVersionedModules()` /
+  `loadVersionedStyles()` / `writeVersionedImportMap()`
+  (전부 `core/lib/build-version.js`).
+- `build-version.js` **자신만** `?t=<Date.now()>`로 받는다. 자기가 정의하는
+  값으로 자기 URL을 만들 수 없기 때문이다. 진입 문서(HTML)는 `_headers`의
+  `no-cache`가 실제로 먹히므로 항상 최신이고, 그 문서가 매번 새 `?t=` URL을
+  만들어 준다 — 그래서 이미 캐시를 물고 있는 브라우저도 **평범한 새로고침
+  한 번**으로 새 버전 값을 받는다. Date.now()는 이 한 파일에만 쓴다.
+- ES 모듈이 **정적 import로만** 끌어오는 파일(`skin/skin-render.js`,
+  `skin/skin-css-validate.js`)은 import 지정자가 문자열 리터럴이라 `?v=`가
+  붙지 않는다 — 진입 문서의 import map(`writeVersionedImportMap()`)이 그
+  URL만 버전 붙은 URL로 돌린다.
+- 진입 문서: `index.html`, `auth/index.html`, `invite/index.html`,
+  `studio/index.html`, `studio/preview/preview-frame.html`. iframe은 독립된
+  browsing context라 부모의 import map도 캐시 상태도 물려받지 않는다 —
+  Preview 문서가 자기 몫을 따로 선언한다.
+
+### `_headers`를 믿지 말 것
+
+`_headers`의 `no-cache`는 **HTML에만** 실제로 도달한다. CSS/JS는 CDN에서
+`max-age=14400`으로 덮인다(2026-09-07 imory.me 실측 — `_headers` 상단 주석에
+측정값이 있다). 그래서:
+
+- 캐시 문제를 `_headers`에 규칙을 더 넣는 것으로 해결했다고 판단하지 않는다.
+  HTML이 아니면 **실제 응답 헤더를 재어** 확인한다.
+- 캐시를 실제로 무효화하는 장치는 URL의 `?v=` 하나뿐이다.
+
+원인을 저장소에서 더 좁힐 수는 없다. 확인하려면 Cloudflare 대시보드에서:
+**imory.me zone → Caching → Configuration → Browser Cache TTL**,
+그리고 **Caching → Cache Rules**(Browser TTL을 Override하는 규칙),
+**Rules → Page Rules**(남아 있다면). Pages 쪽은
+**Workers & Pages → imory → Settings**. 그 값이 4시간(14400초)으로
+잡혀 있는지 본다.
+
+### 새 자산을 추가할 때
+
+고정 URL `<link>` / `<script src>`를 새로 만들지 않는다. 위 loader 중 하나를
+쓰고, 모듈 정적 import가 새로 생기면 import map에 추가한다.
+
+---
+
+## 5. 문서 관리
 
 - 상세 규칙은 **한 기준 문서**에서만 관리하고, 다른 문서에는 링크를 둔다.
 - `AI_SKIN_PHASE*.md`는 각 라운드의 **기록**이다. 나중 라운드가 앞 계약을

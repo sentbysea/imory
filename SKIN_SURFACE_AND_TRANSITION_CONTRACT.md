@@ -239,10 +239,19 @@ Studio Preview(`studio/preview/preview-frame.html` +
 `applySkinRegion()`이 만든 자리에 플랫폼이 채운다
 (`studio/preview/preview-post-body.js`).
 
-배포 버전은 `core/lib/build-version.js`의 `APP_BUILD_VERSION` 하나가 소스이고, 핵심
-스크립트/스타일이 `?v=${APP_BUILD_VERSION}`으로 로드된다. 그 값 자체는 사람이 손으로
-올려야 하므로, 깜빡해도 "새 JS + 옛 CSS"가 되지 않도록 `_headers`가 진입점 HTML과
-공개 화면 CSS에 `Cache-Control: no-cache`(재검증)를 건다.
+배포 버전은 `core/lib/build-version.js`의 `APP_BUILD_VERSION` 하나가 소스이고, 자산은
+전부 `?v=${APP_BUILD_VERSION}`으로 로드된다(`loadVersionedScripts()` /
+`loadVersionedModules()` / `loadVersionedStyles()` / `writeVersionedImportMap()`).
+`build-version.js` 자신만 `?t=<Date.now()>`로 받는다 — 자기가 정의하는 값으로 자기
+URL을 만들 수 없기 때문이고, 진입 문서(HTML)는 `_headers`의 `no-cache`가 실제로
+먹히므로 그 문서가 매번 새 `?t=` URL을 만들어 준다.
+
+`_headers`의 `no-cache`는 **HTML에만** 도달한다 — CSS/JS는 CDN에서
+`max-age=14400`으로 덮인다(2026-09-07 imory.me 실측, `_headers` 상단 주석에 측정값).
+그래서 캐시를 실제로 무효화하는 장치는 URL의 `?v=` 하나뿐이다. 진입 문서는
+`index.html` / `auth/index.html` / `invite/index.html` / `studio/index.html` /
+`studio/preview/preview-frame.html` 다섯이고, iframe은 부모의 import map도 캐시
+상태도 물려받지 않으므로 Preview 문서가 자기 몫을 따로 선언한다.
 
 ### 4-2. 원칙 **[원칙]**
 
@@ -254,8 +263,11 @@ Studio Preview(`studio/preview/preview-frame.html` +
 4. 신규 페이지 지원을 추가할 때는 한 줄을 끝까지 확인한다:
    **Import → normalize/validate → resolve → Preview/Code → Save/Publish → 공개
    라우트 연결**.
-5. 배포 시 HTML/JS/CSS 버전이 어긋나지 않도록 기존 방식(`APP_BUILD_VERSION` +
-   `_headers`)을 따른다. 새 캐시 무효화 방식을 추가하지 않는다.
+5. 배포 시 HTML/JS/CSS 버전이 어긋나지 않도록 기존 방식을 따른다 — 자산은 위
+   loader 중 하나로 걸고, 모듈 정적 import가 새로 생기면 import map에 추가한다.
+   고정 URL `<link>` / `<script src>`를 새로 만들지 않는다. 캐시 문제를
+   `_headers`에 규칙을 더 넣는 것으로 해결했다고 판단하지 않는다 — HTML이 아니면
+   실제 응답 헤더를 재어 확인한다(CLAUDE.md §4).
 
 ---
 
@@ -271,6 +283,8 @@ Studio Preview(`studio/preview/preview-frame.html` +
 | D3 | **소유자 도구가 스킨 상단 띠와 겹칠 수 있다.** 표시 공간 기준 오른쪽 위 absolute라, 좁은 화면에서 스킨이 자기 상단 띠 오른쪽에 무언가를 그리면 그 위에 얹힌다. 스킨 계약에 소유자 도구용 자리(slot)가 없어서 플랫폼이 좌표로만 피할 수 있다. | `posts/posts-base.css`, `AI_SKIN_PHASE1C_PAGE_CONTRACT.md` |
 | D4 | **Preview와 공개 화면의 프레임 폭 일치를 자동으로 검증하지 않는다.** 공개 화면끼리의 일치(HOME 대 CATEGORY 대 POST 프레임 좌표/폭)는 `skin/skin-banner-page-e2e-test.mjs`의 `sameFrame()`이 보지만, Preview 쪽과 대조하는 테스트는 없다. §4-2의 2번은 아직 **규칙**이다. | `skin/skin-banner-page-e2e-test.mjs`, `studio/*-test.html` |
 | D5 | **`viewer` 계약이 좁다.** 스킨이 받는 것은 `isOwner` / `writeHref` / `adminHref`뿐이라, 관리 진입점을 스킨 레이아웃 안에 두고 싶어도 표현할 방법이 없다(D3의 배경). 사용자가 Skin Data Contract 확장을 동결한 상태라 그대로 둔다. | `skin/skin-context.js`, `AI_SKIN_PHASE1D_B_NAVIGATION_CONTRACT.md` |
+| D6 | **CDN이 `_headers`의 `no-cache`를 CSS/JS에서 `max-age=14400`으로 덮는다.** 저장소 쪽에서는 `?v=`로 우회했지만 원인 자체는 남아 있다 — Cloudflare 대시보드(imory.me zone → Caching → Configuration → Browser Cache TTL, Caching → Cache Rules, Rules → Page Rules)를 볼 수 없어 확인하지 못했다. 그대로 두면 `_headers`에 규칙을 넣고 "해결됐다"고 착각하기 쉽다. 또 `functions/_middleware.js`가 `*.pages.dev`를 301로 돌려서 Pages 기본 도메인과 imory.me의 같은 파일 응답을 비교할 수 없다 — 원인 격리에 필요한 대조군이 막혀 있다. | `_headers`, `functions/_middleware.js` |
+| D7 | **`/admin/`은 아직 버전이 붙지 않는다.** 공개 화면·Studio·Preview·auth·invite는 모든 자산이 `?v=`로 걸리지만, `/admin/`은 `build-version.js`를 부르지 않아 CSS/JS 20개가 고정 URL이다 — 그쪽 배포는 여전히 최대 4시간 늦게 반영될 수 있다. | `admin/index.html` |
 
 ---
 

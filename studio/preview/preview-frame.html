@@ -60,10 +60,50 @@
     (index.html의 공개 라우트와 동일한 소스, 디자인 변경 없음).
   -->
 
-  <link
-    rel="stylesheet"
-    href="../../posts/view/posts-view-banner.css"
-  >
+  <!-- =========================================================
+       배포 버전 원천 — 이 파일만 ?t= 로 받는다
+
+       Preview는 Studio 안에서 iframe으로 계속 재사용되는 문서라
+       CSS/JS가 오래 캐시되면 부모(Studio)와 버전이 어긋난다.
+       배경: core/lib/build-version.js 상단 주석.
+  ========================================================== -->
+
+  <script>
+
+    document.write(
+      '<script src="../../core/lib/build-version.js?t=' +
+      Date.now() +
+      '"><' + '/script>'
+    );
+
+  </script>
+
+
+  <script>
+
+    loadVersionedStyles(
+      [
+        "../../posts/view/posts-view-banner.css"
+      ]
+    );
+
+
+    /*
+      preview-bridge.js(모듈)가 정적 import로 끌어오는
+      skin-render.js와, 그 안이 다시 import하는 skin-css-validate.js는
+      import 지정자가 문자열 리터럴이라 ?v=가 붙지 않는다.
+      부모 Studio 문서와 같은 표를 여기서도 쓴다 — iframe은 독립된
+      browsing context라 부모의 import map을 물려받지 않는다.
+    */
+
+    writeVersionedImportMap(
+      [
+        "/skin/skin-render.js",
+        "/skin/skin-css-validate.js"
+      ]
+    );
+
+  </script>
 
 </head>
 
@@ -86,9 +126,22 @@
        상단 주석과 동일한 순서 제약).
   ========================================================== -->
 
-  <script src="../../skin/skin-sanitize.js"></script>
+  <script>
 
-  <script type="module" src="./preview-bridge.js"></script>
+    loadVersionedScripts(
+      [
+        "../../skin/skin-sanitize.js"
+      ]
+    );
+
+
+    loadVersionedModules(
+      [
+        "./preview-bridge.js"
+      ]
+    );
+
+  </script>
 
 </body>
 
