@@ -217,6 +217,37 @@ let studioToastHideTimer = null;
 
 
 /* =========================================================
+   PHASE AI-1 — working state revision
+
+   "요청을 보낸 뒤 사용자가 Studio 상태를 바꿨다면 늦게 도착한 AI
+   응답은 폐기한다"를 판정하기 위한 단조 증가 카운터다. Code
+   Apply / Import / 이미지 슬롯 변경 / mount(다른 skin 로드,
+   remount) 등 **working draft를 바꾸는 모든 지점**에서 1씩
+   올린다.
+
+   왜 참조 비교(currentWorkingSkin === snapshot)가 아니라
+   카운터인가: currentWorkingSkin은 항상 새 객체로 교체되므로
+   html/css 변경은 참조 비교로 잡히지만, 이미지 슬롯 연결
+   (currentWorkingImageSlots)이나 mount 재진입은 그 객체를 바꾸지
+   않는 경우가 있어 참조 비교만으로는 놓친다. 하나의 카운터가
+   "무엇이 바뀌었든 바뀌었다"를 빠짐없이 표현한다.
+
+   mountToken(파일 위쪽)은 별개로 함께 확인한다 — remount는
+   revision도 올리지만, 두 값을 함께 보면 "다른 skin으로 갈아탄
+   뒤 우연히 revision이 같아지는" 경우가 원천적으로 없다.
+========================================================== */
+
+let studioWorkingRevision = 0;
+
+
+function bumpStudioWorkingRevision() {
+
+  studioWorkingRevision += 1;
+
+}
+
+
+/* =========================================================
    PAGE PREVIEW 상태
 
    viewport state(studioViewportMode, 이 파일 하단)와 완전히
@@ -521,6 +552,8 @@ function resetStudioWorkingState() {
   currentWorkingImageSlots =
     {};
 
+  bumpStudioWorkingRevision();
+
   /*
     previewHistory/currentPreviewPageType(studio/preview/
     preview-navigation.js)도 함께 리셋한다 — 이 함수 자체가
@@ -778,6 +811,8 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
   isStudioDirty =
     true;
 
+  bumpStudioWorkingRevision();
+
   updateStudioSaveButtonState();
 
   updateStudioPublishButtonState();
@@ -851,9 +886,22 @@ studioCodeButton.addEventListener(
    SkinPackage에서도 유효하다는 보장이 없다 — 항상 HOME부터 다시
    보여주고, 사용자가 새 template의 실제 navigation을 클릭해
    CATEGORY/POST까지 스스로 확인하게 한다(요구사항 6절).
+
+   PHASE AI-1 — options(선택):
+     { dirty?: boolean, imageSlotBindings?: object }
+
+   둘 다 생략하면 지금까지와 완전히 동일하다(dirty=true, 이미지
+   슬롯 연결은 현재 값을 그대로 두고 새 선언 기준으로 prune).
+   IMPORT 버튼은 옵션을 넘기지 않으므로 기존 동작이 그대로다.
+
+   AI 되돌리기(studio/ai/studio-ai-panel.js)만 이 옵션을 쓴다 —
+   AI 적용 직전의 dirty 값과 이미지 슬롯 연결까지 정확히 그
+   상태로 되돌려야 하기 때문이다("AI 전 dirty=false → 적용
+   dirty=true → Undo → dirty=false"). 이걸 위해 apply 함수를
+   하나 더 만들지 않고 기존 함수를 최소 확장한다.
 ========================================================== */
 
-function applyImportedSkinPackage(skinPackage) {
+function applyImportedSkinPackage(skinPackage, options) {
 
   if (!currentWorkingSkin) {
     return;
@@ -861,6 +909,20 @@ function applyImportedSkinPackage(skinPackage) {
 
   currentWorkingSkin =
     skinPackage;
+
+  /*
+    PHASE AI-1 — 되돌리기는 그 시점의 슬롯 연결까지 함께 복원한다.
+    복원 값을 먼저 넣어두면 바로 아래 prune이 "새(=복원된)
+    imageSlots 선언과의 교집합"을 그대로 계산해 주므로, 별도의
+    복원 경로를 만들 필요가 없다.
+  */
+
+  if (options && options.imageSlotBindings) {
+
+    currentWorkingImageSlots =
+      { ...options.imageSlotBindings };
+
+  }
 
   /*
     Import는 imageSlots 선언을 통째로 갈아치울 수 있다 — 이름이
@@ -874,7 +936,11 @@ function applyImportedSkinPackage(skinPackage) {
   pruneWorkingImageSlotsToDeclared();
 
   isStudioDirty =
-    true;
+    (options && options.dirty === false)
+      ? false
+      : true;
+
+  bumpStudioWorkingRevision();
 
   updateStudioSaveButtonState();
 
@@ -937,6 +1003,8 @@ function setStudioImageSlot(slotName, image) {
   isStudioDirty =
     true;
 
+  bumpStudioWorkingRevision();
+
   updateStudioSaveButtonState();
 
   updateStudioPublishButtonState();
@@ -992,6 +1060,123 @@ function getStudioImageSlotState() {
     hasWorkingSkin: !!currentWorkingSkin,
     slots
   };
+
+}
+
+
+/* =========================================================
+   PHASE AI-1 — AI panel bridge
+
+   studio/ai/studio-ai-panel.js가 Studio 내부 상태를 직접 만지지
+   않게 하는 최소 통로 둘이다. currentWorkingSkin 자체를 전역
+   writable 객체로 노출하지 않는다 — 읽기는 깊은 복사본으로만
+   나가고, 쓰기는 아래 applyAiSkinPackage() 한 곳으로만 들어온다.
+
+   getStudioAiWorkingState(options)
+     { hasWorkingSkin, isDirty, revision, mountToken,
+       skinPackage, imageSlotBindings }
+
+   options.includePackage가 참일 때만 skinPackage/imageSlotBindings
+   깊은 복사본을 함께 담는다 — Send 버튼 활성화 판정처럼 매
+   키 입력마다 부르는 경로에서 SkinPackage 전체를 복사하지 않기
+   위해서다. skinPackage는 JSON.parse/stringify를 거쳐도 손실이
+   없는 순수 데이터다(DB의 skin_versions.content 그대로).
+========================================================== */
+
+function getStudioAiWorkingState(options) {
+
+  const includePackage =
+    !!(options && options.includePackage);
+
+  const state = {
+    hasWorkingSkin: !!currentWorkingSkin,
+    isDirty: isStudioDirty,
+    revision: studioWorkingRevision,
+    mountToken,
+    skinPackage: null,
+    imageSlotBindings: null
+  };
+
+  if (includePackage && currentWorkingSkin) {
+
+    state.skinPackage =
+      JSON.parse(JSON.stringify(currentWorkingSkin));
+
+    state.imageSlotBindings =
+      JSON.parse(JSON.stringify(currentWorkingImageSlots));
+
+  }
+
+  return state;
+
+}
+
+
+/* =========================================================
+   applyAiSkinPackage(skinPackage, options)
+     -> { ok: true, revision } | { ok: false, reason }
+
+   options:
+     expectedRevision   요청을 보낸 시점의 revision
+     expectedMountToken 요청을 보낸 시점의 mountToken
+     dirty              적용 후 dirty 값(생략 시 true)
+     imageSlotBindings  함께 복원할 슬롯 연결(되돌리기 전용)
+
+   "늦은 응답 방어"의 판정을 패널이 아니라 여기서 한다 — 상태를
+   소유한 쪽이 한 곳에서 판단해야 패널이 늘어나도 규칙이 갈라지지
+   않는다. expectedRevision/expectedMountToken이 지금과 다르면
+   (= 요청 이후 Code Apply/Import/Images/다른 skin load/remount가
+   있었다면) 아무것도 하지 않고 reason:"stale"만 돌려준다.
+
+   skinPackage는 반드시 validateSkinPackageImport()를 통과한
+   결과여야 한다 — 이 함수는 추가 검증을 하지 않고
+   applyImportedSkinPackage()로 그대로 넘긴다(AI 전용 적용 경로를
+   따로 만들지 않는다는 이번 Phase의 계약).
+========================================================== */
+
+function applyAiSkinPackage(skinPackage, options) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, reason: "no-working-skin" };
+  }
+
+  if (!skinPackage || typeof skinPackage !== "object") {
+    return { ok: false, reason: "invalid-package" };
+  }
+
+  const expectedRevision =
+    options ? options.expectedRevision : undefined;
+
+  const expectedMountToken =
+    options ? options.expectedMountToken : undefined;
+
+  if (
+    (expectedRevision !== undefined && expectedRevision !== studioWorkingRevision) ||
+    (expectedMountToken !== undefined && expectedMountToken !== mountToken)
+  ) {
+    return { ok: false, reason: "stale" };
+  }
+
+  applyImportedSkinPackage(
+    skinPackage,
+    {
+      dirty: options ? options.dirty : undefined,
+      imageSlotBindings: options ? options.imageSlotBindings : undefined
+    }
+  );
+
+  return { ok: true, revision: studioWorkingRevision };
+
+}
+
+
+if (typeof window !== "undefined") {
+
+  window.getStudioAiWorkingState =
+    getStudioAiWorkingState;
+
+  window.applyAiSkinPackage =
+    applyAiSkinPackage;
 
 }
 
@@ -2033,6 +2218,14 @@ async function mountStudioPreview(
 
   currentWorkingImageSlots =
     workingImageSlots;
+
+  /*
+    PHASE AI-1 — mount는 working draft를 통째로 새로 채우는
+    지점이라 revision도 함께 올린다. 이 시점 이전에 나간 AI
+    요청의 응답은 mountToken 비교로도 걸러지지만, 두 값을 항상
+    같이 올려 두면 "revision만 보는 호출자"도 안전하다.
+  */
+  bumpStudioWorkingRevision();
 
   updateStudioSaveButtonState();
 

@@ -349,11 +349,17 @@
 
 
     <!-- =====================================================
-         AI drawer shell (3/7절) — 이번 라운드에서는 shell만.
-         실제 AI 연결/전송/history 없음. handle 클릭 시
-         studio-preview.js가 .is-open을 토글해 drawer의
-         max-height만 여닫는다(transform 대신 이 방식을 쓰는
-         이유는 studio.css 참고).
+         AI drawer (3/7절 shell + PHASE AI-1 연결)
+
+         handle 클릭 시 studio-preview.js가 .is-open을 토글해
+         drawer의 max-height만 여닫는다(transform 대신 이 방식을
+         쓰는 이유는 studio.css 참고).
+
+         PHASE AI-1에서 붙은 것: 실제 전송(studio/ai/studio-ai-panel.js)
+         과 그 결과를 보여주는 상태 한 줄(#studioAiDrawerStatus) +
+         되돌리기 버튼(#studioAiDrawerUndo). Preview 전체를 덮는
+         loading overlay는 쓰지 않는다 — 진행 상태도 이 한 줄에
+         표시한다. 이미지 첨부는 다음 Phase.
     ====================================================== -->
 
     <div
@@ -389,11 +395,28 @@
             id="studioAiDrawerSend"
             disabled
             aria-label="전송"
-          >
-            ↑
-          </button>
+          >↑</button>
 
         </div>
+
+        <p
+          class="studio-ai-drawer-status"
+          id="studioAiDrawerStatus"
+          role="status"
+          aria-live="polite"
+          hidden
+        >
+
+          <span id="studioAiDrawerStatusText"></span>
+
+          <button
+            type="button"
+            class="studio-ai-drawer-undo"
+            id="studioAiDrawerUndo"
+            hidden
+          >되돌리기</button>
+
+        </p>
 
       </div>
 
@@ -678,7 +701,29 @@
         "../posts/style/posts-style-dialogue.js",
         "../posts/style/posts-style-render.js",
         "./preview/preview-post-body.js",
-        "./preview/preview-navigation.js",
+        "./preview/preview-navigation.js"
+      ]
+    );
+
+  </script>
+
+  <!-- =========================================================
+       AI PANEL (PHASE AI-1)
+
+       ai/studio-ai-panel.js는 studio-preview.js가 노출하는
+       showStudioToast/getStudioAiWorkingState/applyAiSkinPackage와
+       skin-package-import.js의 validateSkinPackageImport, 그리고
+       supabaseClient(access token 조회)를 쓴다 — 넷 다 위에서 이미
+       로드됐다. studio-state.js(실제 mount 시작)보다는 먼저 둔다:
+       패널이 평가 시점에 Send 버튼 상태를 한 번 계산하므로, 그때
+       DOM과 bridge가 모두 준비돼 있는 편이 단순하다.
+  ========================================================== -->
+
+  <script>
+
+    loadVersionedScripts(
+      [
+        "./ai/studio-ai-panel.js",
         "./studio-state.js"
       ]
     );
