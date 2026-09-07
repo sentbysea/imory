@@ -1,5 +1,12 @@
 # AI SKIN — PHASE 1E: BANNER 페이지 스킨 + 소유자 진입 링크
 
+> **이 문서는 PHASE 1E 라운드의 기록이다.** 이후 라운드가 바꾼 것:
+> WRITE의 2단계 진입은 [PHASE 1F](./AI_SKIN_PHASE1F_WRITE_AND_MANAGE_FLOW.md)가,
+> POST의 `?manage=1`과 소유자 도구의 위치·모양은
+> [PHASE 1G](./AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md)가 철회했다.
+> 서 있는 규칙은
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)에 있다.
+
 이 문서는 PHASE 1E에서 추가된 **세 개의 계약**만 정의한다.
 
 1. **BANNER page type** — 배너 목록 카테고리를 Skin template으로 그린다.
@@ -146,10 +153,16 @@ Skin이 목록을 그린 화면에서 소유자에게만 남는 두 버튼. 화�
 
 둘 다 원래 legacy `.post-header` 안에 있고, 그 헤더는 Skin mount
 contract가 통째로 숨긴다. 그래서 `.post-container--owner-tools`
-(posts/posts-base.css)로 **그 두 버튼만** 화면 오른쪽 아래에 떠 있는 작은
-플랫폼 도구로 되살린다(제목/뒤로가기는 계속 숨김). `position: fixed`라
-문서 흐름 밖에 있어서 Skin 프레임의 좌표/폭에 전혀 영향을 주지 않는다 —
-HOME/CATEGORY/POST와 같은 프레임이라는 계약이 그대로 유지된다.
+(posts/posts-base.css)로 **그 두 버튼만** 작은 플랫폼 도구로 되살린다
+(제목/뒤로가기는 계속 숨김). 문서 흐름 밖에 있어서 Skin 프레임의 좌표/폭에
+전혀 영향을 주지 않는다 — HOME/CATEGORY/POST와 같은 프레임이라는 계약이
+그대로 유지된다.
+
+> **변경됨(PHASE 1G).** 이 라운드에서는 "화면 오른쪽 아래에 떠 있는
+> `position: fixed` 알약"이었다. `#postArea`의 `backdrop-filter` 때문에 그
+> fixed가 실제로는 뷰포트 기준이 아니었고(화면 중간에 떠 보임), 지금은 표시
+> 공간 오른쪽 **위**의 `position: absolute` 고스트 버튼이다 —
+> [PHASE 1G](./AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md) 2절.
 
 관리 화면은 **명시적으로 열고 닫는다**: `edit`을 누르면 Skin 목록을 잠시
 접고 기존 관리 화면을 열고, 다시 누르면 곧바로 Skin 목록으로 돌아온다
@@ -264,8 +277,10 @@ POST에도 **같은 계약을 그대로** 적용했다. 카테고리와 달라�
 legacy `#postDetail` 안에 있어서다). 이제 그 분기는 없고, 그
 함수는 "누가 보고 있는가"를 전혀 모른다 — CATEGORY/BANNER와 같다.
 
-**관리 진입점은 하나뿐이다.** Skin이 그린 글 화면 오른쪽 아래에
-떠 있는 `edit` 버튼(`#postManageToggleButton`)이다. 배너/글 목록의
+**관리 진입점은 하나뿐이다.** Skin이 그린 글 화면 위의 `edit`
+버튼(`#postManageToggleButton`)이다(위치는 PHASE 1G에서 오른쪽 위 고스트로
+바뀌었고, 그 버튼이 여는 화면은 PHASE 1F에서 legacy 상세가 아니라 수정 폼이
+됐다). 배너/글 목록의
 edit 토글과 **같은 자리·같은 CSS**(`.post-container--owner-tools`,
 `posts/posts-base.css`)를 쓰고, 화면에 따라 셋 중 하나만 보인다.
 

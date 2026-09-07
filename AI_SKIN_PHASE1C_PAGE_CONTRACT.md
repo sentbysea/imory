@@ -7,6 +7,8 @@
 > **이번 라운드는 설계 문서 작성만 한다.** CATEGORY/POST Skin Renderer 구현, AI/OpenAI 연결, DB migration, 기존 공개 페이지 동작 변경 — 전부 이번 범위 밖이다(16절에서 다시 명시).
 >
 > 목적: HOME/CATEGORY/POST 세 화면이 결국 하나의 Skin이 담당하게 될 때, 그 세 화면이 주고받을 **데이터와 바인딩 계약**을 먼저 확정해서, 이후 실제 구현(별도 Phase/Slice)이 코드를 짜다가 계약 자체를 다시 뒤집는 일이 없게 한다.
+>
+> 이 문서는 **Skin이 받는 데이터(Context)와 바인딩**을 다룬다. 그 Skin이 화면에서 받는 **자리와 전환**(표시 공간·스크롤·라우팅·소유자 관리 진입·Preview 일치)은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)가 관리한다.
 
 ---
 

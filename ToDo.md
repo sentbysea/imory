@@ -679,3 +679,5 @@
 - **SQL 실행이 필요한 경우**: 어떤 SQL Editor에 무엇을 붙여넣는지(현재 문서에서는 5-6의 `[?]` 항목 확인용 조회 SQL이 필요 — 실행 전 반드시 사용자 승인 필요, 이 문서 작성 세션에서는 실행하지 않음)
 
 아직 테스트하지 않은 기능은 "구현 완료"라고 쓰지 않는다(5-1 검증 수준 원칙과 동일).
+
+공개 스킨 화면(HOME/CATEGORY/POST/BANNER)을 건드리는 변경의 완료 기준과, 원칙과 현재 구현 사이에 남아 있는 차이 목록(후속 목록)은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) 5~6절에 있다.

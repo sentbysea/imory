@@ -8,6 +8,8 @@
 
 앞으로 Imory Customize 관련 기능을 구현하거나 수정할 때 **최상위 기준 문서**로 사용한다.
 
+단, 공개 페이지(HOME/CATEGORY/POST/BANNER)의 **표시 공간·화면 전환·소유자 관리 동선·Preview 일치**에 관한 상세 규칙은 이 문서가 아니라 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)가 관리한다. 이 문서는 제품 방향과 단계 계획을 담당한다.
+
 기존 구현과 충돌할 경우 무작정 새 구조로 교체하지 말고, 현재 코드를 먼저 조사한 뒤 이 문서의 방향에 맞게 단계적으로 마이그레이션한다.
 
 ---

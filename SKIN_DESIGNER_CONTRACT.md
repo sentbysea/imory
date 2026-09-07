@@ -1,6 +1,8 @@
 # Imory SkinPackage v1 — 스킨 제작 계약서 (디자이너용)
 
 > 이 문서는 2026-09-06 기준 리포지토리의 **실제 코드**(`skin/*.js`, `studio/*`, `supabase/migrations/*`)를 조사해서 작성했습니다. 추측이나 희망 사항은 포함하지 않았고, 코드가 실제로 강제하는 것과 "적혀만 있고 강제되지 않는 것"을 명확히 구분했습니다. 근거 파일은 각 절에 표기합니다.
+>
+> 이 문서는 **SkinPackage JSON이 어떤 모양이어야 하는지**를 다룹니다. 그 스킨이 실제 화면에서 어떤 자리를 받고(표시 공간·스크롤), 화면 전환·소유자 관리 진입·Preview 일치가 어떻게 동작하는지는 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)에 있습니다.
 
 ---
 

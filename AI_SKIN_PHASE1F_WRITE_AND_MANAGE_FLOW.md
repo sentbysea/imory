@@ -1,5 +1,11 @@
 # AI SKIN — PHASE 1F: 작성·관리 동선 정리 + Quiet Frame v3 배너 크기
 
+> **이 문서는 PHASE 1F 라운드의 기록이다.** 이후 라운드가 바꾼 것: 카테고리
+> 선택 패널(`#postComposePicker`)과 소유자 도구의 위치·모양은
+> [PHASE 1G](./AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md)가 철회했다.
+> 서 있는 규칙은
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)에 있다.
+
 PHASE 1E에서 소유자도 방문자와 같은 스킨으로 HOME/CATEGORY/POST/BANNER를
 보게 됐고, 스킨 위에 WRITE/ADMIN 링크와 떠 있는 소유자 도구(+ / edit)가
 생겼다. 그 다음 단계에서 실사용자가 보고한 것은 세 가지다.
@@ -47,8 +53,13 @@ POST 카테고리 1개  → buildSiteComposeUrl(그 카테고리 href)
 ```
 
 Skin은 여전히 category id도 작성 폼 주소도 모른다. 여러 개일 때 어느
-카테고리에 쓸지는 받는 쪽(`posts/view/posts-view-compose.js`)이 고르게
-하고, 하나도 없으면 같은 자리에서 안내 + 설정 진입점을 준다.
+카테고리로 폼을 열지는 받는 쪽(`posts/view/posts-view-compose.js`)이 정하고,
+하나도 없으면 같은 자리에서 안내 + 설정 진입점을 준다.
+
+> **변경됨(PHASE 1G).** 이 라운드에서는 여러 개일 때 선택 패널을 거쳐
+> 사용자가 골랐다. 지금은 첫 카테고리의 작성 폼이 곧장 열리고, 대상은 폼의
+> CATEGORY 드롭다운에서 바꾼다 —
+> [PHASE 1G](./AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md) 1절.
 
 `WRITE`라는 링크 이름은 그대로다 — 이름을 바꾸거나 숨겨서 해결하지 않는다.
 
@@ -59,7 +70,7 @@ Skin은 여전히 category id도 작성 폼 주소도 모른다. 여러 개일 �
 | 화면 | 어디에 | 비고 |
 | --- | --- | --- |
 | 작성/수정 폼 | 기존 `#postEditor` | 에디터·저장/삭제·권한·비밀글·Quote Preset 전부 기존 코드 |
-| 카테고리 선택 패널 | `#postComposePicker` (`posts/posts.html`) | 새로 추가된 유일한 화면. 스킨 HTML 밖의 플랫폼 UI |
+| 카테고리 선택 패널 | `#postComposePicker` (`posts/posts.html`) | 새로 추가된 유일한 화면. 스킨 HTML 밖의 플랫폼 UI. **PHASE 1G에서 폐기** — 지금은 카테고리가 하나도 없을 때만 뜨는 `#postComposeNotice` 안내 패널이다 |
 | 목록 관리 패널 | 기존 `#postList` + 선택 바 | `postListEditToggleButton` — 기존 그대로 |
 | 배너 관리 패널 | 기존 `#bannerGrid` + 폼 | `bannerEditToggleButton` — 기존 그대로 |
 
