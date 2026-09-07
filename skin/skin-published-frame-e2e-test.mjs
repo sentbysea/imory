@@ -473,8 +473,38 @@ const VIEWPORTS = {
 
 let playwright;
 
+/* =========================================================
+   launchBrowser — spawn 재시도
+
+   이 머신의 webkit 빌드는 간헐적으로 spawn EPERM을 낸다(같은
+   실행 파일이 바로 다음 시도에서는 정상적으로 뜬다) — 제품 결함이
+   아니라 환경 문제이므로, 브라우저를 띄우는 지점에서만 짧게
+   재시도한다. 재시도해도 안 되면 그대로 실패시켜서 "환경 때문에
+   못 돌렸다"는 사실이 조용히 묻히지 않게 한다.
+========================================================== */
+
+async function launchBrowser(playwright, browserName) {
+
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= 4; attempt++) {
+
+    try {
+      return await playwright[browserName].launch();
+    } catch (err) {
+      lastError = err;
+      await new Promise((r) => setTimeout(r, attempt * 500));
+    }
+
+  }
+
+  throw lastError;
+
+}
+
+
 async function withPage(viewport, mockOpts, fn) {
-  const browser = await playwright[BROWSER].launch();
+  const browser = await launchBrowser(playwright, BROWSER);
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const errors = [];
