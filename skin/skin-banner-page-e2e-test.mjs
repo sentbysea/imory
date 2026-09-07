@@ -898,6 +898,35 @@ async function testOwnerLinks(vpName) {
     check(`[${vpName}] WRITE 이동이 문서 전체 재로드를 일으키지 않음`,
       ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);
 
+    /* 여기서 멈추면 "카테고리까지는 갔다"만 검증한 것이다 — 실제로
+       글 작성 폼이 열리는 데까지 UI를 그대로 눌러 본다. */
+
+    await page.click("#postAddButton");
+    await page.waitForTimeout(700);
+
+    const editor = await page.evaluate(() => {
+      const el = document.getElementById("postEditor");
+      const title = document.getElementById("postEditorTitle");
+      return {
+        editorVisible: Boolean(el) && !el.hidden && getComputedStyle(el).display !== "none",
+        editorMode: document.body.classList.contains("post-editor-mode"),
+        titleInput: Boolean(title),
+        titleEditable: Boolean(title) && !title.disabled && !title.readOnly
+      };
+    });
+
+    check(`[${vpName}] + 클릭 -> 기존 글 작성 폼이 실제로 열린다`,
+      editor.editorVisible && editor.editorMode && editor.titleInput && editor.titleEditable,
+      JSON.stringify(editor));
+
+    await page.fill("#postEditorTitle", "WRITE 흐름 확인용 제목");
+
+    const typed = await page.evaluate(() =>
+      document.getElementById("postEditorTitle").value);
+
+    check(`[${vpName}] 작성 폼에 실제로 입력할 수 있다`,
+      typed === "WRITE 흐름 확인용 제목", `value="${typed}"`);
+
     check(`[${vpName}] 소유자 경로 콘솔 에러 없음`, ctx.errors.length === 0, ctx.errors.join(" | "));
   });
 
@@ -909,6 +938,177 @@ async function testOwnerLinks(vpName) {
 
     check(`[${vpName}] ADMIN 링크가 실제 관리 화면 주소로 이동`,
       new URL(page.url()).pathname === "/admin/", page.url());
+  });
+}
+
+
+/* ---------------------------------------------------------
+   4-b) 소유자의 BANNER 화면 (PHASE 1E)
+
+   소유자도 방문자와 같은 배너 스킨을 본다. 배너 추가/수정은
+   목록을 legacy로 되돌리지 않고 플랫폼이 소유한 진입점
+   (+ 버튼 / EDIT 토글)에서 시작한다.
+--------------------------------------------------------- */
+
+const READ_BANNER_SCREEN = `(() => {
+  const grid = document.getElementById("bannerGrid");
+  const toggle = document.getElementById("bannerEditToggleButton");
+  const add = document.getElementById("postAddButton");
+  const editor = document.getElementById("bannerEditor");
+  const list = document.getElementById("postList");
+  const area = document.getElementById("postArea");
+  return {
+    skinItems: document.querySelectorAll("#postList .quiet-banner-item").length,
+    skinVisible: Boolean(list) && !list.hidden,
+    gridVisible: Boolean(grid) && !grid.hidden,
+    gridCards: document.querySelectorAll("#bannerGrid .banner-card").length,
+    editorVisible: Boolean(editor) && !editor.hidden,
+    toggleVisible: Boolean(toggle) && !toggle.hidden,
+    addVisible: Boolean(add) && !add.hidden,
+    skinActive: area.className.includes("post-area--skin-active")
+  };
+})()`;
+
+async function testOwnerBannerScreen(vpName) {
+  const vp = VIEWPORTS[vpName];
+  console.log(`\n[${vpName}] 소유자의 BANNER 화면`);
+
+  /* --- 소유자 --- */
+  await withPage(vp, { signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/2`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(500);
+
+    const initial = await page.evaluate(READ_BANNER_SCREEN);
+    await shot(page, `${vpName}-owner-banner`);
+
+    check(`[${vpName}] 소유자도 배너 목록을 Skin으로 본다(legacy 그리드 아님)`,
+      initial.skinItems === 2 && initial.skinVisible && !initial.gridVisible && initial.skinActive,
+      JSON.stringify(initial));
+
+    check(`[${vpName}] 소유자 전용 진입점(+ / EDIT)이 Skin 위에 그대로 남아 있다`,
+      initial.addVisible && initial.toggleVisible,
+      JSON.stringify(initial));
+
+    /* EDIT 토글 -> 관리 화면(순서/삭제/수정) */
+    await page.click("#bannerEditToggleButton");
+    await page.waitForTimeout(1000);
+
+    const manage = await page.evaluate(READ_BANNER_SCREEN);
+
+    check(`[${vpName}] EDIT를 누르면 관리 그리드가 열리고 실제 배너 카드가 들어 있다`,
+      manage.gridVisible && manage.gridCards === 2 && !manage.skinVisible,
+      JSON.stringify(manage));
+
+    const controls = await page.evaluate(() => {
+      const first = document.querySelector("#bannerGrid .banner-card");
+      return {
+        controlCount: document.querySelectorAll("#bannerGrid .banner-card-control").length,
+        firstIsDiv: first ? first.tagName === "DIV" : null
+      };
+    });
+
+    check(`[${vpName}] 관리 그리드에 순서/삭제 컨트롤이 있고 카드가 외부 링크가 아니다`,
+      controls.controlCount === 6 && controls.firstIsDiv === true,
+      JSON.stringify(controls));
+
+    /* EDIT 다시 눌러 끄면 Skin 목록으로 복귀 */
+    await page.click("#bannerEditToggleButton");
+    await page.waitForTimeout(1500);
+
+    const backToSkin = await page.evaluate(READ_BANNER_SCREEN);
+
+    check(`[${vpName}] EDIT를 끄면 다시 Skin 목록으로 돌아온다(legacy로 굳지 않는다)`,
+      backToSkin.skinItems === 2 && backToSkin.skinVisible &&
+      !backToSkin.gridVisible && backToSkin.skinActive,
+      JSON.stringify(backToSkin));
+
+    /* + -> 배너 추가 폼 */
+    await page.click("#postAddButton");
+    await page.waitForTimeout(700);
+
+    const form = await page.evaluate(() => {
+      const editor = document.getElementById("bannerEditor");
+      const heading = document.getElementById("bannerEditorHeading");
+      const list = document.getElementById("postList");
+      return {
+        editorVisible: Boolean(editor) && !editor.hidden,
+        heading: heading ? heading.textContent.trim() : null,
+        skinVisible: Boolean(list) && !list.hidden
+      };
+    });
+
+    check(`[${vpName}] + 를 누르면 기존 배너 추가 폼이 열리고 목록과 겹치지 않는다`,
+      form.editorVisible && form.heading === "ADD BANNER" && !form.skinVisible,
+      JSON.stringify(form));
+
+    /* 폼 닫기 -> Skin 목록 복귀 */
+    await page.click("#bannerEditorCancel");
+    await page.waitForTimeout(1500);
+
+    const afterCancel = await page.evaluate(READ_BANNER_SCREEN);
+
+    check(`[${vpName}] 폼을 닫으면 Skin 목록으로 되돌아온다`,
+      afterCancel.skinItems === 2 && afterCancel.skinVisible &&
+      !afterCancel.editorVisible && !afterCancel.gridVisible,
+      JSON.stringify(afterCancel));
+
+    check(`[${vpName}] 소유자 배너 경로 전체에서 문서 재로드 없음`,
+      ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);
+
+    check(`[${vpName}] 소유자 배너 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 다른 계정으로 로그인한 방문자: 관리 진입점이 없어야 한다 --- */
+  await withPage(vp, { signedInAs: OTHER_USER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/2`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const visitor = await page.evaluate(READ_BANNER_SCREEN);
+
+    check(`[${vpName}] 다른 계정 방문자: 배너는 Skin으로 보이지만 + / EDIT는 없다`,
+      visitor.skinItems === 2 && !visitor.addVisible && !visitor.toggleVisible,
+      JSON.stringify(visitor));
+
+    /* post형 카테고리에서도 작성 진입점이 없어야 한다 */
+    await page.goto(`${BASE}/${SLUG}/category/1`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const visitorPostCategory = await page.evaluate(() => {
+      const add = document.getElementById("postAddButton");
+      const editToggle = document.getElementById("postListEditToggleButton");
+      return {
+        addVisible: Boolean(add) && !add.hidden,
+        editVisible: Boolean(editToggle) && !editToggle.hidden
+      };
+    });
+
+    check(`[${vpName}] 다른 계정 방문자: post형 카테고리에도 글쓰기/편집 진입점이 없다`,
+      !visitorPostCategory.addVisible && !visitorPostCategory.editVisible,
+      JSON.stringify(visitorPostCategory));
+
+    check(`[${vpName}] 비소유자 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* --- 배너 template이 없는 스킨에서는 소유자가 기존 legacy 화면 --- */
+  await withPage(vp, { skin: BANNER_LESS_SKIN, signedInAs: OWNER_ID }, async (page, ctx) => {
+    await page.goto(`${BASE}/${SLUG}/category/2`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postArea:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(1000);
+
+    const legacy = await page.evaluate(READ_BANNER_SCREEN);
+
+    check(`[${vpName}] 배너 template이 없으면 소유자도 기존 legacy 배너 화면 그대로(+ / EDIT 포함)`,
+      legacy.gridVisible && legacy.gridCards === 2 && legacy.skinItems === 0 &&
+      legacy.addVisible && legacy.toggleVisible && !legacy.skinActive,
+      JSON.stringify(legacy));
+
+    check(`[${vpName}] legacy 폴백 경로 콘솔 에러 없음`,
+      ctx.errors.length === 0, ctx.errors.join(" | "));
   });
 }
 
@@ -988,6 +1188,7 @@ try {
     await testBannerItems(vpName);
     await testBannerEdgeCases(vpName);
     await testOwnerLinks(vpName);
+    await testOwnerBannerScreen(vpName);
     await testDateLabels(vpName);
   }
 } finally {

@@ -18,7 +18,59 @@
 ========================================================== */
 
 /* =========================================================
-   카테고리 진입
+   SKIN 배너 목록 위에서의 화면 전환 (PHASE 1E)
+
+   bannerSkinActive 상태와 setBannerSkinActive()는
+   posts/editor/posts-state.js에 있다(그 파일 주석 참고 — 배너
+   렌더러를 로드하지 않는 구성에서도 openCategoryPage()가 안전하게
+   부를 수 있어야 하므로). 여기에는 그 상태를 보고 실제로 화면을
+   바꾸는 동작만 둔다.
+
+   bannerSkinActive가 true일 때 배너 목록은 #postList 안의 Skin이
+   그린다. legacy #bannerGrid는 숨어 있고, 소유자가 EDIT 토글을 눌러
+   관리 화면으로 들어갈 때만 드러난다 — 즉 "편집을 하려면 목록이 계속
+   legacy로 남아 있어야 한다"가 아니라, 기본 화면은 방문자와 똑같은
+   Skin이고 관리만 명시적으로 열고 닫는다.
+========================================================== */
+
+/*
+  Skin 배너 목록을 다시 그린다. 별도의 렌더 경로를 새로 만들지 않고
+  openCategoryPage()를 그대로 다시 태운다 — Skin 배너 렌더 경로가
+  이 저장소에 한 벌만 존재하게 유지하기 위함이다(관리 화면에서
+  나올 때/폼을 닫을 때 모두 이 함수 하나를 쓴다). URL은 이미 이
+  카테고리를 가리키고 있으므로 history를 건드리지 않는다.
+*/
+
+async function restoreBannerSkinList() {
+
+  if (
+    !bannerSkinActive ||
+    currentPostCategoryId === null ||
+    currentPostCategoryId === undefined
+  ) {
+
+    return false;
+
+  }
+
+
+  await openCategoryPage(
+    currentPostCategoryId,
+    {
+      updateUrl:
+        false
+    }
+  );
+
+
+  return true;
+
+}
+
+
+/* =========================================================
+   카테고리 진입 (legacy — templates.banner가 없거나 Skin 렌더가
+   실패했을 때만 도달한다)
 ========================================================== */
 
 async function renderBannerCategory(
@@ -143,14 +195,16 @@ async function renderBannerCategory(
     [];
 
 
-  const user =
-    await getSignedInUser();
-
+  /*
+    PHASE 1E: "로그인했으면 주인"이 아니라 실제 이 사이트의
+    소유자인지로 판단한다(isSiteOwnerSignedIn,
+    posts/editor/posts-state.js) — 다른 계정으로 로그인한 방문자에게
+    배너 편집 토글이 보이면 안 된다. 실제 쓰기 권한은 별개로 각
+    쿼리의 user_id 필터와 RLS가 계속 강제한다.
+  */
 
   const isOwner =
-    Boolean(
-      user
-    );
+    await isSiteOwnerSignedIn();
 
 
   if (
@@ -183,6 +237,23 @@ function renderBannerGrid() {
 
   if (!bannerGrid) {
     return;
+  }
+
+
+  /*
+    Skin이 목록을 그리고 있고 관리 모드도 아니면 legacy 그리드는
+    화면에 없다 — 저장/삭제 후 호출되는 경로(refreshBannerList,
+    deleteBanner)가 숨은 그리드를 그리려 애쓸 필요가 없다.
+    관리 모드일 때는 이 그리드가 곧 관리 화면이므로 정상 렌더한다.
+  */
+
+  if (
+    bannerSkinActive &&
+    !bannerEditModeOn
+  ) {
+
+    return;
+
   }
 
 
@@ -487,7 +558,7 @@ function createBannerCardControls(
    EDIT 모드 토글
 ========================================================== */
 
-function toggleBannerEditMode() {
+async function toggleBannerEditMode() {
 
   bannerEditModeOn =
     !bannerEditModeOn;
@@ -502,7 +573,114 @@ function toggleBannerEditMode() {
     );
 
 
-  renderBannerGrid();
+  if (!bannerSkinActive) {
+
+    renderBannerGrid();
+
+
+    return;
+
+  }
+
+
+  /*
+    Skin 목록 위에서의 관리 (PHASE 1E)
+
+    켤 때: Skin 목록을 잠시 접고 legacy 관리 그리드(순서 ↑↓ /
+    삭제 × / 카드 클릭 → 수정 폼)를 그 자리에 연다. 목록을 "되돌려
+    두는" 게 아니라 사용자가 명시적으로 열고 닫는 관리 화면이다.
+    currentBanners는 Skin 경로에서 채워지지 않으므로 여기서
+    refreshBannerList()로 실제 데이터를 가져온다.
+
+    끌 때: 곧바로 Skin 목록으로 돌아간다(방금 바꾼 순서/삭제가
+    그대로 반영된 채로).
+  */
+
+  if (bannerEditModeOn) {
+
+    await enterBannerManageScreen();
+
+
+    return;
+
+  }
+
+
+  await restoreBannerSkinList();
+
+}
+
+
+/*
+  Skin 목록 -> legacy 관리 그리드. Skin이 쓰던 mount contract
+  클래스(post-container--skin-active / post-area--skin-active,
+  posts/posts-base.css)를 걷어내야 legacy 그리드가 기존 여백/헤더
+  안에서 정상적으로 보인다.
+*/
+
+function hideBannerSkinListForManagement() {
+
+  if (postList) {
+
+    postList.hidden =
+      true;
+
+  }
+
+
+  if (postContainer) {
+
+    postContainer.classList.remove(
+      "post-container--skin-active"
+    );
+
+
+    /*
+      관리 화면/폼은 legacy 레이아웃 안에서 열린다 — 떠 있는
+      소유자 도구(+ / edit)도 함께 걷어내고, legacy post-header가
+      원래 자리에서 다시 보이게 둔다(거기에 같은 두 버튼이 있다).
+    */
+
+    postContainer.classList.remove(
+      "post-container--banner-owner-tools"
+    );
+
+  }
+
+
+  if (postArea) {
+
+    postArea.classList.remove(
+      "post-area--skin-active"
+    );
+
+  }
+
+}
+
+
+async function enterBannerManageScreen() {
+
+  hideBannerSkinListForManagement();
+
+
+  if (bannerEditor) {
+
+    bannerEditor.hidden =
+      true;
+
+  }
+
+
+  if (bannerGrid) {
+
+    bannerGrid.hidden =
+      false;
+
+  }
+
+
+  await refreshBannerList();
 
 }
 

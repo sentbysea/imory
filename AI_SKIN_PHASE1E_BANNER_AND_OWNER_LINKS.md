@@ -111,10 +111,60 @@ container })`. `skin-category.js` / `skin-post.js`와 **완전히 같은 구조*
 - `index.html`이 `window.skinBannerReady` 핸드셰이크를 선언하고
   `posts/view/posts-view-list.js`가 그것을 받아 쓴다(폴링 없음).
 
-**소유자 본인이 열람할 때는 Skin을 시도하지 않는다.** post형 CATEGORY와
-동일한 정책이며(`resolvePublishedSkinRouteOwnerId()`, posts-view-list.js),
-그래야 소유자가 기존 배너 추가/순서변경/삭제 UI를 잃지 않는다. 익명 방문자와
-다른 로그인 사용자에게는 정상적으로 Skin이 적용된다.
+**소유자 본인도 방문자와 같은 Skin을 본다.** post형 CATEGORY와 여기서
+정책이 갈린다(`resolveSkinRouteViewer()`, posts-view-list.js):
+
+| | post형 CATEGORY | banner |
+| --- | --- | --- |
+| 소유자 본인 열람 | legacy(관리 화면) | **Skin** |
+| 그 외 방문자 | Skin | Skin |
+
+이유는 관리 UI가 어디에 붙어 있느냐가 다르기 때문이다. post형 CATEGORY는
+목록 자체가 관리 화면이다(글 추가, 편집 모드 bulk 삭제, 선택 바) — 목록을
+장식용 Skin으로 바꾸면 그 기능들이 갈 곳이 없다. 반면 배너 관리는 목록이
+아니라 플랫폼이 소유한 별도 진입점에 있어서, 목록을 legacy로 되돌리지
+않고도 그대로 유지할 수 있다.
+
+**소유자 전용 진입점(2-4-1절)**
+
+Skin이 배너 목록을 그린 화면에서 소유자에게만 남는 두 버튼:
+
+| 버튼 | 동작 |
+| --- | --- |
+| `+` (`#postAddButton`) | `openBannerForm()` — 기존 배너 추가 폼 |
+| `edit` (`#bannerEditToggleButton`) | 배너 관리 화면(순서 ↑↓ / 삭제 × / 카드 클릭 → 수정) 열기 |
+
+둘 다 원래 legacy `.post-header` 안에 있고, 그 헤더는 Skin mount
+contract가 통째로 숨긴다. 그래서 `.post-container--banner-owner-tools`
+(posts/posts-base.css)로 **그 두 버튼만** 화면 오른쪽 아래에 떠 있는 작은
+플랫폼 도구로 되살린다(제목/뒤로가기는 계속 숨김). `position: fixed`라
+문서 흐름 밖에 있어서 Skin 프레임의 좌표/폭에 전혀 영향을 주지 않는다 —
+HOME/CATEGORY/POST와 같은 프레임이라는 계약이 그대로 유지된다.
+
+관리 화면은 **명시적으로 열고 닫는다**: `edit`을 누르면 Skin 목록을 잠시
+접고 legacy 관리 그리드를 열고, 다시 누르면 곧바로 Skin 목록으로 돌아온다
+(`toggleBannerEditMode()` / `restoreBannerSkinList()`,
+posts-view-banner.js). 폼을 닫거나 저장/삭제를 마쳤을 때도 마찬가지로 Skin
+목록으로 복귀한다 — "편집이 가능하려면 목록이 계속 legacy여야 한다"는
+상태는 어디에도 없다.
+
+Skin 목록으로 되돌릴 때는 별도 렌더 경로를 새로 만들지 않고
+`openCategoryPage()`를 그대로 다시 태운다 — Skin 배너 렌더 경로가 이
+저장소에 한 벌만 존재하게 유지하기 위해서다.
+
+상태(`bannerSkinActive`)와 setter는 배너 렌더러가 아니라 공용 상태 모듈
+(`posts/editor/posts-state.js`)에 있다. `openCategoryPage()`는 배너가 아닌
+카테고리를 열 때도 진입점에서 이 값을 끄므로, 배너 렌더러를 로드하지 않는
+구성(예: `skin/skin-transition-timing-test.html`)에서도 그 호출이 안전해야
+하기 때문이다. 화면 전환 동작만 `posts-view-banner.js`에 둔다.
+
+**소유자 판정**: `isSiteOwnerSignedIn()`(posts/editor/posts-state.js). 이번
+Slice 전에는 이 자리들이 "로그인했으면 주인"으로 취급해서, 다중 사용자
+배포에서 **다른 계정으로 로그인한 방문자에게도** 글쓰기 `+`와 배너 `edit`이
+보였다(누르면 RLS에 막혀 실패할 뿐이라 데이터가 새지는 않았다). 이제
+slug로 해석한 실제 소유자와 비교한다 — `updatePostAddButton()`,
+`renderBannerCategory()`, 배너 Skin 경로 셋 다 같은 함수를 쓴다. 표시만
+바뀌고 실제 쓰기 권한은 여전히 각 쿼리의 user_id 필터와 RLS가 강제한다.
 
 Skin이 실제로 렌더되면 `post-container--skin-active` /
 `post-area--skin-active`를 붙여 legacy 헤더와 `.post-area`의 legacy padding을
@@ -175,7 +225,11 @@ Imory에는 독립된 "글쓰기 URL"이 없다 — 글은 항상 **카테고리
 
 - 그 화면이 곧 기존 글쓰기 진입점이고, 동시에 다른 카테고리를 고를 수 있는
   기존 카테고리 선택 흐름이기도 하다.
-- POST 카테고리가 하나도 없으면 `null`(링크 자체가 사라진다).
+- POST 카테고리가 하나도 없으면 보낼 목록이 없으므로 `adminHref`와 같은
+  값(관리 화면)으로 떨어진다 — SETTINGS의 CATEGORY 탭에서 카테고리를 만들
+  수 있다. "눌렀는데 아무 일도 안 일어난다"보다 "여기서 카테고리부터 만들면
+  된다"로 이어지는 편이 낫다. 비소유자에게는 이 폴백도 적용되지 않는다
+  (여전히 `null`).
 - 어떤 카테고리인지는 **항상 `skin-context.js`가 정한다.** Skin은 category id를
   전혀 모르고 주소를 하드코딩하지 않는다.
 
@@ -196,8 +250,14 @@ Studio로 보낼 때 쓰는 것과 같은 조립 방식이다.
 
 | 링크 | 동작 |
 | --- | --- |
-| WRITE (`/:slug/category/:id`) | `skin/skin-link-nav.js`가 가로채 기존 SPA 라우터(`openCategoryPage`)로 넘긴다 — 문서 전체 재로드/흰색 커튼 없음. 소유자라 legacy 관리 화면 + `+` 버튼이 나온다. |
+| WRITE (`/:slug/category/:id`) | `skin/skin-link-nav.js`가 가로채 기존 SPA 라우터(`openCategoryPage`)로 넘긴다 — 문서 전체 재로드/흰색 커튼 없음. 소유자라 legacy 글 목록 화면이 열리고, 거기 `+`를 누르면 기존 글 작성 폼이 뜬다. |
+| WRITE (POST 카테고리 없음 → `/admin/`) | 관리 화면으로 이동해 카테고리를 먼저 만들게 한다. |
 | ADMIN (`/admin/`) | slug 라우트가 아니므로 SPA 라우터가 가로채지 않고 평범한 문서 이동으로 관리 화면이 열린다. |
+
+WRITE는 "카테고리까지 이동"이 아니라 **작성 폼이 실제로 열리는 것까지**를
+완료 조건으로 본다 — E2E가 링크 클릭 → `+` 클릭 → `#postEditor`가 열리고
+제목 입력이 실제로 되는 데까지 UI를 그대로 눌러서 확인한다
+(`skin/skin-banner-page-e2e-test.mjs`).
 
 ### 3-6. Studio Preview에서의 동작
 
@@ -220,7 +280,9 @@ parent(`studio/preview/preview-route.js`)는 HOME/CATEGORY/POST 세 패턴만
   shape 전부 그대로.
 - `templates.{home,category,post}`만 가진 기존 스킨의 렌더/Import/Save/Publish
   동작 — 그대로.
-- 배너 추가/수정 진입점과 권한 검사 — 그대로(소유자는 계속 legacy 화면).
+- 배너 추가/수정 기능과 실제 권한 검사 — 그대로. 진입점의 **위치**만 legacy
+  헤더 안에서 떠 있는 도구로 옮겼고, 관리 화면 자체(그리드/폼/순서/삭제)는
+  기존 코드 그대로다.
 - DB — 변경 없음.
 
 ---
@@ -229,8 +291,9 @@ parent(`studio/preview/preview-route.js`)는 HOME/CATEGORY/POST 세 패턴만
 
 | 대상 | 파일 |
 | --- | --- |
-| Context 단위(BANNER/viewer/URL 안전/소유자 판정) | `skin/skin-page-context-test.html` |
-| 공개 화면 E2E(프레임/항목/빈 목록/실패/폴백/WRITE·ADMIN/날짜) | `skin/skin-banner-page-e2e-test.mjs` |
+| Context 단위(BANNER/viewer/URL 안전/소유자 판정/writeHref 폴백) | `skin/skin-page-context-test.html` |
+| 공개 화면 E2E(프레임/항목/빈 목록/실패/폴백/날짜) | `skin/skin-banner-page-e2e-test.mjs` |
+| 소유자 흐름 E2E(WRITE→작성 폼까지, 배너 Skin+관리 진입점, 비소유자 미노출) | `skin/skin-banner-page-e2e-test.mjs` |
 | Studio Preview(배너 template 경로 + CODE 대상) | `studio/studio-navigation-test.html` (Scenario X) |
 | 기존 회귀 | `skin/skin-published-frame-e2e-test.mjs`, `studio/studio-import-test.html`, `studio/studio-multipage-test.html` |
 

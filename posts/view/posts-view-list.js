@@ -263,20 +263,27 @@ function fetchCategoryPageData(
 
 /*
   두 Skin 시도 함수(post형 CATEGORY, banner)가 공유하는 사전 판정.
-  "이 사이트가 published Skin 후보인가" + "지금 보고 있는 사람이
+  "이 사이트가 published Skin 후보인가"와 "지금 보고 있는 사람이
   소유자 본인인가"를 한 곳에서만 계산한다 — 판정 규칙이 두 벌로
   갈라지면 한쪽만 고쳐지는 사고가 난다.
 
-  소유자 본인일 때 null을 돌려주는 이유는 위 주석 그대로다:
-  post형 CATEGORY는 글 추가/편집 모드 UI를, banner 카테고리는
-  배너 추가/순서변경/삭제 UI(posts-view-banner.js)를 잃지 않아야
-  한다. 익명 방문자나 다른 로그인 사용자에게는 정상적으로 Skin이
-  적용된다.
+  두 값을 따로 돌려주는 이유(PHASE 1E): 두 페이지의 정책이 서로
+  다르기 때문이다.
 
-  -> ownerId(문자열) | null
+  - post형 CATEGORY는 소유자 본인일 때 Skin을 시도하지 않는다.
+    글 목록 화면 자체가 곧 관리 화면이라(글 추가, 편집 모드 bulk
+    삭제, 선택 바) 장식용 공개 Skin으로 바꿔버리면 그 기능들이
+    갈 곳이 없다.
+  - banner 카테고리는 소유자 본인도 Skin으로 본다. 배너 관리는
+    목록 자체가 아니라 플랫폼이 소유한 별도 진입점(+ 버튼 /
+    EDIT 토글 / 배너 폼)에 있어서, 목록을 legacy로 되돌리지
+    않고도 그대로 유지할 수 있다.
+
+  -> { ownerId: string|null, isOwnerViewing: boolean }
+     ownerId가 null이면 이 라우트는 published Skin 후보가 아니다.
 */
 
-async function resolvePublishedSkinRouteOwnerId() {
+async function resolveSkinRouteViewer() {
 
   let owner;
 
@@ -292,7 +299,7 @@ async function resolvePublishedSkinRouteOwnerId() {
       err
     );
 
-    return null;
+    return { ownerId: null, isOwnerViewing: false };
 
   }
 
@@ -303,7 +310,7 @@ async function resolvePublishedSkinRouteOwnerId() {
     !owner.ownerId
   ) {
 
-    return null;
+    return { ownerId: null, isOwnerViewing: false };
 
   }
 
@@ -332,14 +339,11 @@ async function resolvePublishedSkinRouteOwnerId() {
     Boolean(signedInUser) &&
     signedInUser.id === owner.ownerId;
 
-  if (isOwnerViewingOwnSite) {
 
-    return null;
-
-  }
-
-
-  return owner.ownerId;
+  return {
+    ownerId: owner.ownerId,
+    isOwnerViewing: isOwnerViewingOwnSite
+  };
 
 }
 
@@ -349,10 +353,13 @@ async function tryRenderPublishedSkinCategory(
   container
 ) {
 
-  const ownerId =
-    await resolvePublishedSkinRouteOwnerId();
+  const {
+    ownerId,
+    isOwnerViewing
+  } =
+    await resolveSkinRouteViewer();
 
-  if (!ownerId) {
+  if (!ownerId || isOwnerViewing) {
 
     return false;
 
@@ -411,6 +418,13 @@ async function tryRenderPublishedSkinCategory(
    스킨에서는 그 모듈이 false를 돌려주므로 기존 legacy 배너 화면이
    그대로 나온다.
 
+   post형 CATEGORY와 딱 하나 다른 점(PHASE 1E): 소유자 본인이
+   열람할 때도 Skin을 시도한다. 소유자만 방문자와 다른 화면을 보는
+   상태를 없애기 위해서다 — 배너 추가/수정은 목록이 아니라 플랫폼이
+   소유한 진입점(+ 버튼 / EDIT 토글, openCategoryPage의 banner
+   분기 참고)에 있으므로, 목록을 legacy로 되돌리지 않고도 그대로
+   유지된다.
+
    이 함수도 절대 throw하지 않는다.
 ========================================================== */
 
@@ -419,8 +433,8 @@ async function tryRenderPublishedSkinBanner(
   container
 ) {
 
-  const ownerId =
-    await resolvePublishedSkinRouteOwnerId();
+  const { ownerId } =
+    await resolveSkinRouteViewer();
 
   if (!ownerId) {
 
@@ -592,6 +606,25 @@ async function openCategoryPage(
     "post-area--skin-active",
     maybeSkinCandidate
   );
+
+
+  /*
+    이 화면 전환을 시작하는 시점에는 아직 Skin 배너 목록이 아니다 —
+    아래 banner 분기에서 Skin 렌더가 실제로 성공했을 때만 다시
+    켠다(PHASE 1E). 배너가 아닌 카테고리로 넘어가거나 실패로
+    끝나는 경로에서도 이 상태가 남지 않게 진입점에서 한 번 끈다.
+  */
+
+  setBannerSkinActive(false);
+
+
+  if (postContainer) {
+
+    postContainer.classList.remove(
+      "post-container--banner-owner-tools"
+    );
+
+  }
 
 
   const numericCategoryId =
@@ -945,11 +978,16 @@ async function openCategoryPage(
     if (renderedPublishedSkinBanner) {
 
       /*
-        Skin이 배너 목록 전체를 그렸으므로 legacy 배너 UI(그리드/
-        추가·편집 폼/편집 토글)는 전부 접어 둔다 — 이 경로는
-        소유자가 아닌 방문자에게만 도달하므로 관리 UI가 사라지는
-        것이 아니라 애초에 보일 이유가 없다.
+        Skin이 배너 목록을 그렸으므로 legacy 그리드/폼은 접어 둔다.
+        단 소유자 전용 진입점(+ 버튼, EDIT 토글)은 그대로 남긴다
+        (PHASE 1E) — 배너 추가/수정은 목록을 legacy로 되돌리지 않고
+        이 두 버튼에서 시작한다. 두 버튼 모두 #postArea가 소유한
+        플랫폼 UI라 Skin 마크업 밖에 떠 있고, Skin은 이들의 존재를
+        전혀 몰라도 된다.
       */
+
+      setBannerSkinActive(true);
+
 
       if (bannerGrid) {
 
@@ -967,12 +1005,28 @@ async function openCategoryPage(
       }
 
 
+      /*
+        "로그인했으면 주인"이 아니라 실제 이 사이트의 소유자인지로
+        판단한다(isSiteOwnerSignedIn, posts/editor/posts-state.js) —
+        다른 계정으로 로그인한 방문자에게 관리 진입점이 보이면 안
+        된다. 실제 쓰기 권한은 별개로 RLS가 계속 강제한다.
+      */
+
+      const canManageBanners =
+        await isSiteOwnerSignedIn();
+
+
       if (
         bannerEditToggleButton
       ) {
 
         bannerEditToggleButton.hidden =
-          true;
+          !canManageBanners;
+
+        bannerEditToggleButton.setAttribute(
+          "aria-pressed",
+          "false"
+        );
 
       }
 
@@ -980,7 +1034,24 @@ async function openCategoryPage(
       if (postAddButton) {
 
         postAddButton.hidden =
-          true;
+          !canManageBanners;
+
+      }
+
+
+      /*
+        legacy post-header는 Skin mount contract가 통째로 숨긴다
+        (posts/posts-base.css) — 소유자일 때만 그 안의 + / edit 두
+        버튼을 화면 오른쪽 아래 떠 있는 도구로 되살리는 클래스를
+        붙인다. 제목/뒤로가기는 계속 숨겨진 채다.
+      */
+
+      if (postContainer) {
+
+        postContainer.classList.toggle(
+          "post-container--banner-owner-tools",
+          canManageBanners
+        );
 
       }
 
@@ -1039,6 +1110,9 @@ async function openCategoryPage(
       legacy 배너 화면 — 위에서 Skin 후보라고 미리 헤더를 숨겨
       뒀을 수 있으므로 여기서 확실히 legacy 레이아웃으로 되돌린다.
     */
+
+    setBannerSkinActive(false);
+
 
     if (postContainer) {
 

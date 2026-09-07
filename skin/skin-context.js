@@ -764,10 +764,17 @@ async function buildBaseSkinContext(
     카테고리 목록 화면의 + 버튼(posts/editor/posts-list-detail-nav.js)
     에서 시작한다. 그래서 HOME처럼 카테고리가 정해지지 않은
     화면에서는 첫 번째 POST 카테고리 목록으로 보낸다: 그 화면이
-    바로 기존 글쓰기 진입점이고, 동시에 다른 카테고리를 고를 수
-    있는 기존 카테고리 선택 흐름이기도 하다. POST 카테고리가 하나도
-    없으면 null(링크 자체가 사라진다). 이 판단은 항상 이 파일이
-    하고, Skin은 category id를 전혀 모른다.
+    바로 기존 글쓰기 진입점(+ 버튼)이고, 동시에 다른 카테고리를
+    고를 수 있는 기존 카테고리 선택 흐름이기도 하다.
+
+    POST 카테고리가 하나도 없으면 보낼 목록 자체가 없다 — 이때는
+    링크를 없애는 대신 관리 화면으로 보낸다(SETTINGS의 CATEGORY
+    탭에서 카테고리를 만들 수 있다). "글을 쓰려고 눌렀는데 아무
+    일도 안 일어난다"보다 "여기서 카테고리부터 만들면 된다"로
+    이어지는 편이 낫다.
+
+    이 판단은 항상 이 파일이 하고, Skin은 category id도 관리 화면
+    주소도 전혀 모른다.
   */
 
   const isOwner =
@@ -781,6 +788,10 @@ async function buildBaseSkinContext(
         category.type === "post"
     ) ||
     null;
+
+
+  const adminHref =
+    `${SITE_BASE_PATH}${SKIN_CONTEXT_ADMIN_SUBPATH}`;
 
 
   return {
@@ -853,13 +864,13 @@ async function buildBaseSkinContext(
       isOwner,
 
       writeHref:
-        isOwner && firstPostCategory
-          ? firstPostCategory.href
+        isOwner
+          ? (firstPostCategory ? firstPostCategory.href : adminHref)
           : null,
 
       adminHref:
         isOwner
-          ? `${SITE_BASE_PATH}${SKIN_CONTEXT_ADMIN_SUBPATH}`
+          ? adminHref
           : null
 
     },

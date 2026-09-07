@@ -93,6 +93,83 @@
 
 
 /*
+  PHASE 1E — 배너 Skin 위의 소유자 전용 도구
+
+  배너 카테고리는 소유자도 방문자와 같은 Skin 목록을 본다. 그래도
+  배너 추가(+)와 편집(edit)은 계속 필요하므로, legacy post-header를
+  통째로 되살리는 대신 그 안의 두 버튼만 화면 오른쪽 아래에 떠 있는
+  작은 플랫폼 도구로 다시 꺼내 쓴다(제목/뒤로가기는 계속 숨김 —
+  Skin이 자기 nav를 이미 갖고 있다).
+
+  position: fixed라 문서 흐름에서 빠져 있어 Skin 프레임의 좌표/폭에
+  전혀 영향을 주지 않는다(HOME/CATEGORY/POST와 같은 프레임을 유지해야
+  한다는 mount contract 그대로). 위치는 오른쪽 아래 — 위쪽은 이미
+  .music-button(오른쪽 위)/.menu-button(왼쪽 위)이 쓰고 있다.
+
+  이 클래스는 posts/view/posts-view-list.js가 "Skin 배너 렌더 성공 +
+  실제 사이트 소유자"일 때만 붙인다. 비소유자에게는 애초에 클래스도
+  버튼 hidden 해제도 없다.
+*/
+
+.post-container--skin-active.post-container--banner-owner-tools .post-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 10px;
+
+  position: fixed;
+  top: auto;
+
+  right:
+    max(
+      16px,
+      env(safe-area-inset-right)
+    );
+
+  bottom:
+    max(
+      18px,
+      env(safe-area-inset-bottom)
+    );
+
+  width: auto;
+  min-height: 0;
+
+  margin: 0;
+  padding: 5px 12px;
+
+  border: 1px solid #eeeeee;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.94);
+
+  z-index: 60;
+}
+
+
+.post-container--skin-active.post-container--banner-owner-tools .post-header .post-back-button,
+.post-container--skin-active.post-container--banner-owner-tools .post-header .post-page-title {
+  display: none;
+}
+
+
+/*
+  두 버튼은 원래 .post-header 안에서 absolute로 좌우에 붙어 있다 —
+  떠 있는 도구 안에서는 그냥 나란히 놓는다.
+*/
+
+.post-container--skin-active.post-container--banner-owner-tools .post-header .post-add-button,
+.post-container--skin-active.post-container--banner-owner-tools .post-header .list-edit-toggle-button {
+  position: static;
+  top: auto;
+  right: auto;
+
+  transform: none;
+}
+
+
+/*
   PHASE 1D: published Skin 후보 CATEGORY/POST 전환 대기 표시.
   기존 화면을 그대로 둔 채 응답이 오래 걸릴 때만 잠깐 나타나는
   작은 스피너 — pointer-events:none이라 그 아래 화면을 조작해

@@ -112,6 +112,56 @@ let editingBannerId =
 
 
 /*
+  PHASE 1E: 지금 열려 있는 배너 화면이 published Skin의
+  templates.banner로 그려졌는지.
+
+  posts/view/posts-view-list.js의 openCategoryPage()가 렌더 결과에
+  따라 켜고 끄고, posts-view-banner.js / posts-view-banner-form.js가
+  "legacy 그리드를 그려야 하는가 / 폼을 닫으면 어디로 돌아가는가"를
+  이 값으로 판단한다.
+
+  ★ 상태를 배너 렌더러가 아니라 여기(공용 상태 모듈)에 두는 이유:
+  openCategoryPage()는 배너가 아닌 카테고리를 열 때도 진입점에서 이
+  값을 끈다. 배너 렌더러(posts-view-banner.js)를 로드하지 않는
+  구성(예: skin/skin-transition-timing-test.html)에서도 그 호출이
+  안전해야 하므로, 상태와 setter는 두 화면 모두가 항상 갖는 이
+  파일에 둔다. 실제 화면 전환 동작(관리 그리드 열기/Skin 목록
+  복원)만 posts-view-banner.js에 있다.
+*/
+
+let bannerSkinActive =
+  false;
+
+
+function setBannerSkinActive(
+  active
+) {
+
+  bannerSkinActive =
+    !!active;
+
+
+  if (bannerSkinActive) {
+
+    /*
+      Skin 목록으로 (다시) 들어올 때는 항상 관리 모드가 꺼진
+      상태에서 시작한다 — legacy 경로에서 renderBannerCategory()가
+      하는 초기화와 같은 역할.
+    */
+
+    bannerEditModeOn =
+      false;
+
+
+    editingBannerId =
+      null;
+
+  }
+
+}
+
+
+/*
   글 카테고리 목록 상태. posts-view-list.js /
   posts-view-list-select.js 전용. currentCategoryPosts는
   지금 화면에 그려진 글 목록(선택 삭제 모드에서 다시
@@ -319,6 +369,82 @@ async function getSignedInUser() {
 
 
   return data.user;
+
+}
+
+
+/* =========================================================
+   isSiteOwnerSignedIn() -> Promise<boolean>   (PHASE 1E)
+
+   "지금 로그인한 사람이 **이 사이트의** 주인인가". 소유자 전용
+   진입점(글쓰기 +, 배너 편집 토글)을 보여줄지 판단하는 단일
+   지점이다.
+
+   원래 이 자리들은 getSignedInUser()의 결과만 보고 "로그인했으면
+   주인"으로 취급했다 — 다중 사용자 배포에서는 다른 계정으로
+   로그인한 방문자에게도 관리 진입점이 보인다는 뜻이다(실제 쓰기는
+   RLS가 막으므로 데이터가 새지는 않지만, 눌러도 실패하는 버튼을
+   남에게 보여주는 셈이다). 여기서 slug로 해석한 실제 소유자와
+   비교해 그 표시를 바로잡는다.
+
+   getSiteOwner()가 unscoped(= URL에 slug segment가 없는 레거시/
+   단일 사용자 배포)를 돌려주면 비교할 대상이 없으므로 기존
+   동작(로그인했으면 주인)을 그대로 유지한다.
+
+   ★ 이 함수는 "UI를 보여줄지"만 정한다. 실제 작성/수정/삭제
+   권한은 여전히 각 쿼리의 user_id 필터와 RLS가 강제한다 —
+   이 값을 true로 속여도 남의 데이터를 건드릴 수 없다.
+
+   의존: getSiteOwner(home/site-owner.js) — index.html이 posts
+   모듈보다 먼저 로드한다.
+========================================================== */
+
+async function isSiteOwnerSignedIn() {
+
+  let owner;
+  let user;
+
+  try {
+
+    [
+      owner,
+      user
+    ] =
+      await Promise.all([
+        getSiteOwner(),
+        getSignedInUser()
+      ]);
+
+  } catch (err) {
+
+    console.error(
+      "[posts-state] isSiteOwnerSignedIn failed",
+      err
+    );
+
+    return false;
+
+  }
+
+
+  if (!user) {
+
+    return false;
+
+  }
+
+
+  if (
+    !owner ||
+    !owner.scoped
+  ) {
+
+    return true;
+
+  }
+
+
+  return owner.ownerId === user.id;
 
 }
 

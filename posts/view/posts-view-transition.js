@@ -670,16 +670,18 @@ async function updatePostAddButton() {
   }
 
 
-  const user =
-    await getSignedInUser();
-
+  /*
+    PHASE 1E: "로그인했으면 주인"이 아니라 실제 이 사이트의
+    소유자인지로 판단한다(isSiteOwnerSignedIn,
+    posts/editor/posts-state.js). 예전에는 다른 계정으로 로그인한
+    방문자에게도 + 버튼이 보였고, 눌러도 RLS에 막혀 실패할 뿐이라
+    보여줄 이유가 없었다. 실제 작성 권한은 여전히 저장 시점의
+    user_id 필터와 RLS가 강제한다 — 이 판정은 표시만 정한다.
+  */
 
   const isOwnerViewingCategory =
-    Boolean(
-      user
-    ) &&
-    currentPostView ===
-      "category";
+    currentPostView === "category" &&
+    await isSiteOwnerSignedIn();
 
 
   if (

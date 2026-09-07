@@ -145,6 +145,20 @@ function openBannerForm(
   }
 
 
+  /*
+    PHASE 1E: Skin이 배너 목록을 그리고 있으면 그 목록도 함께
+    접는다 — 폼과 목록이 겹쳐 보이지 않게. 폼은 legacy 레이아웃
+    안에서 열리므로 Skin mount contract 클래스도 같이 걷어낸다
+    (posts-view-banner.js의 helper 재사용).
+  */
+
+  if (bannerSkinActive) {
+
+    hideBannerSkinListForManagement();
+
+  }
+
+
   if (bannerEditor) {
 
     bannerEditor.hidden =
@@ -177,6 +191,34 @@ function closeBannerForm() {
 
     bannerEditor.hidden =
       true;
+
+  }
+
+
+  /*
+    PHASE 1E: Skin 목록 화면에서 + 로 연 폼이면(관리 모드가 아니면)
+    legacy 그리드가 아니라 Skin 목록으로 되돌아간다 — 방금 추가/
+    수정한 배너가 반영된 상태로 다시 그려진다. 관리 모드에서 연
+    폼이면 기존처럼 관리 그리드로 돌아간다.
+  */
+
+  if (
+    bannerSkinActive &&
+    !bannerEditModeOn
+  ) {
+
+    if (bannerGrid) {
+
+      bannerGrid.hidden =
+        true;
+
+    }
+
+
+    restoreBannerSkinList();
+
+
+    return;
 
   }
 
