@@ -21,7 +21,7 @@
    개선이다.
 ========================================================== */
 
-const APP_BUILD_VERSION = "2026-09-07-1";
+const APP_BUILD_VERSION = "2026-09-07-2";
 
 
 function loadVersionedScripts(paths) {
