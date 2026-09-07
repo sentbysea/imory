@@ -21,10 +21,10 @@
 --
 -- 이 migration이 하는 일
 -- ----------------------
---   1) storage 버킷 'skin-images' + 정책
+--   1) storage 버킷 'skin-images'
 --   2) public.skin_images (사용자별 이미지 라이브러리)
 --   3) public.skin_version_image_slots (버전별 슬롯 연결)
---   4) RLS + GRANT
+--   4) RLS + GRANT, 4-b) storage 정책(2번 테이블을 참조하므로 그 뒤)
 --   5) create_skin_image / delete_skin_image /
 --      save_skin_draft_version_with_image_slots (신규 RPC)
 --   6) get_published_skin / restore_skin_version (같은 시그니처 교체)
@@ -36,7 +36,26 @@
 -- 모호해지므로, 이미지 연결이 필요한 Save는 새 이름의 함수를 쓴다.
 -- 그래야 이 migration 적용 전/후 모두 프런트가 안전하게 동작한다
 -- (SKIN_IMAGE_LIBRARY_PLAN.md 8절).
+--
+-- 실행 순서/재실행에 대하여
+-- -------------------------
+-- 의존 순서는 테이블 생성 -> RLS/GRANT -> 그 테이블을 참조하는
+-- storage 정책이다. storage 정책을 앞에 두면
+-- ERROR: 42P01 relation "public.skin_images" does not exist 로
+-- 중단된다(그 오류로 이 파일의 순서를 바로잡았다).
+--
+-- 전체가 하나의 트랜잭션(begin/commit)으로 묶여 있어 중간에 실패하면
+-- 아무것도 남지 않는다. 또한 실패한 이전 실행이 일부 객체를 남겼을
+-- 수 있으므로 모든 DDL에 if not exists / drop policy if exists /
+-- create or replace 가드를 붙여 그대로 재실행할 수 있게 했다.
+-- 기존 테이블이나 데이터를 drop 하는 문장은 하나도 없다.
+--
+-- ※ 이 프로젝트는 Supabase SQL Editor에 붙여넣어 적용한다. 훗날
+--   supabase CLI(db push)로 적용하게 되면 CLI가 이미 트랜잭션을
+--   열기 때문에 아래 begin/commit 두 줄은 제거해야 한다.
 -- =========================================================
+
+begin;
 
 
 -- =========================================================
@@ -59,60 +78,6 @@ values ('skin-images', 'skin-images', true)
 on conflict (id) do nothing;
 
 
--- ★ 다른 user-* 버킷처럼 for all 하나로 두지 않는다.
---
--- for all은 UPDATE와 DELETE까지 함께 열어준다 — 그러면 소유자가
--- Storage API를 직접 호출해서 (a) 이미 발행된 버전이 참조 중인 파일을
--- 지우거나 (b) 같은 경로에 upsert로 다른 이미지를 덮어써서 공개본과
--- 과거 버전을 깨뜨릴 수 있다. delete_skin_image() RPC의 참조 검사와
--- skin_version_image_slots의 on delete restrict는 DB row만 지키고
--- 실제 파일은 지키지 못한다.
---
--- 그래서 권한을 쪼갠다:
---   INSERT  : 자기 폴더면 허용 (업로드)
---   UPDATE  : 정책 없음 = 항상 거부 → 같은 경로 덮어쓰기(upsert) 불가.
---             업로드 경로는 매번 새 uuid라 UPDATE가 필요한 적이 없다.
---   DELETE  : 자기 폴더이고, 그 경로를 가리키는 skin_images row가
---             더 이상 없을 때만 허용 → 모든 삭제가
---             delete_skin_image() RPC(참조 검사 포함)를 반드시
---             거치게 된다. 클라이언트는 이미 "RPC로 row 삭제 →
---             Storage object 삭제" 순서라 그대로 동작하고,
---             등록 실패 후 되돌리는 고아 정리도 row가 없으므로 허용된다.
-
-create policy "skin_images_owner_insert"
-on storage.objects
-for insert
-to authenticated
-with check (
-  bucket_id = 'skin-images'
-  and (storage.foldername(name))[1] = auth.uid()::text
-);
-
-create policy "skin_images_owner_delete"
-on storage.objects
-for delete
-to authenticated
-using (
-  bucket_id = 'skin-images'
-  and (storage.foldername(name))[1] = auth.uid()::text
-  and not exists (
-    select 1
-    from public.skin_images i
-    where i.storage_path = storage.objects.name
-  )
-);
-
--- 발행된 Skin을 익명 방문자가 봐야 하므로 공개 읽기는 필수다.
--- "URL을 아는 사람은 그 이미지를 볼 수 있다"와 "누가 어떤 이미지를
--- 갖고 있는지 목록을 볼 수 있다"는 아래 public.skin_images RLS로
--- 완전히 분리된다.
-create policy "skin_images_public_read"
-on storage.objects
-for select
-to anon, authenticated
-using (bucket_id = 'skin-images');
-
-
 -- =========================================================
 -- 2) public.skin_images — 사용자별 이미지 라이브러리
 --
@@ -126,7 +91,7 @@ using (bucket_id = 'skin-images');
 -- 스크립트를 품을 수 있어 sanitize 경계 밖의 실행 경로가 된다.
 -- =========================================================
 
-create table public.skin_images (
+create table if not exists public.skin_images (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(user_id) on delete cascade,
   storage_path text not null unique
@@ -145,7 +110,7 @@ create table public.skin_images (
 comment on table public.skin_images is
   '사용자가 Skin Studio IMAGES에 올린 이미지 라이브러리(개인 데이터). storage_path는 skin-images 버킷 안의 object key로 {user_id}/{uuid}.{ext} 형태이며 절대 재사용/덮어쓰기하지 않는다 — 같은 경로를 덮어쓰면 이미 발행된 공개 스킨이 참조하는 이미지가 Publish 없이 바뀌기 때문. 슬롯 연결은 이 테이블이 아니라 skin_version_image_slots가 버전 단위로 들고 있다(SKIN_IMAGE_LIBRARY_PLAN.md 2절).';
 
-create index skin_images_user_id_created_at_idx
+create index if not exists skin_images_user_id_created_at_idx
   on public.skin_images (user_id, created_at desc);
 
 
@@ -171,7 +136,7 @@ create index skin_images_user_id_created_at_idx
 -- 표현할 수 없다).
 -- =========================================================
 
-create table public.skin_version_image_slots (
+create table if not exists public.skin_version_image_slots (
   version_id uuid not null references public.skin_versions(id) on delete cascade,
   slot_name text not null
     check (slot_name ~ '^[a-z][a-z0-9_]*$' and char_length(slot_name) <= 50),
@@ -183,7 +148,7 @@ create table public.skin_version_image_slots (
 comment on table public.skin_version_image_slots is
   'Skin 버전 하나가 각 이미지 슬롯에 무엇을 연결했는지. skin_id가 아니라 version_id 기준이라 draft 편집이 published 연결을 건드릴 수 없고, Publish(포인터 이동)만으로 그 버전의 연결이 함께 공개된다. image_id는 on delete restrict — 과거 발행 이력이 참조하는 이미지도 삭제되지 않는다(SKIN_IMAGE_LIBRARY_PLAN.md 2-3절).';
 
-create index skin_version_image_slots_image_id_idx
+create index if not exists skin_version_image_slots_image_id_idx
   on public.skin_version_image_slots (image_id);
 
 
@@ -211,7 +176,7 @@ create index skin_version_image_slots_image_id_idx
 -- =========================================================
 
 alter table public.skin_versions
-  add column uses_image_library boolean not null default false;
+  add column if not exists uses_image_library boolean not null default false;
 
 comment on column public.skin_versions.uses_image_library is
   '이 버전이 Skin Image Library(skin_version_image_slots) 모델로 저장됐는가. 연결 0건이라는 사실만으로는 "도입 이전 버전"과 "새 모델에서 의도적으로 전부 비운 버전"을 구분할 수 없어서 명시적으로 기록한다. false인 버전만 옛 skin_image_slot_values로 폴백한다(get_published_skin). 판정이 버전 단위여야 draft 저장이 published 버전의 이미지를 바꾸지 못한다.';
@@ -233,6 +198,7 @@ comment on column public.skin_versions.uses_image_library is
 
 alter table public.skin_images enable row level security;
 
+drop policy if exists "skin_images_owner_all" on public.skin_images;
 create policy "skin_images_owner_all"
 on public.skin_images
 for all
@@ -246,6 +212,7 @@ grant select, insert, delete on public.skin_images to authenticated;
 
 alter table public.skin_version_image_slots enable row level security;
 
+drop policy if exists "skin_version_image_slots_owner_all" on public.skin_version_image_slots;
 create policy "skin_version_image_slots_owner_all"
 on public.skin_version_image_slots
 for all
@@ -279,6 +246,76 @@ grant select on public.skin_version_image_slots to authenticated;
 -- 연결은 절대 사후 변경되지 않는다"를 클라이언트 관례가 아니라
 -- 구조로 보장할 수 있다(GRANT 레벨 강제, 기존 skin_versions의
 -- append-only 처리와 같은 사고방식).
+
+
+-- =========================================================
+-- 4-b) STORAGE 정책 — skin-images 버킷
+--
+-- ★ 이 블록은 반드시 public.skin_images CREATE TABLE **뒤**에 와야
+--   한다. skin_images_owner_delete 정책의 using 절이 그 테이블을
+--   직접 참조하므로, 앞에 두면 정책 생성 시점에
+--   ERROR: 42P01 relation "public.skin_images" does not exist 로
+--   전체 migration이 중단된다. 버킷 자체(1번)는 테이블에 의존하지
+--   않으므로 위에 그대로 둔다.
+-- =========================================================
+
+-- ★ 다른 user-* 버킷처럼 for all 하나로 두지 않는다.
+--
+-- for all은 UPDATE와 DELETE까지 함께 열어준다 — 그러면 소유자가
+-- Storage API를 직접 호출해서 (a) 이미 발행된 버전이 참조 중인 파일을
+-- 지우거나 (b) 같은 경로에 upsert로 다른 이미지를 덮어써서 공개본과
+-- 과거 버전을 깨뜨릴 수 있다. delete_skin_image() RPC의 참조 검사와
+-- skin_version_image_slots의 on delete restrict는 DB row만 지키고
+-- 실제 파일은 지키지 못한다.
+--
+-- 그래서 권한을 쪼갠다:
+--   INSERT  : 자기 폴더면 허용 (업로드)
+--   UPDATE  : 정책 없음 = 항상 거부 → 같은 경로 덮어쓰기(upsert) 불가.
+--             업로드 경로는 매번 새 uuid라 UPDATE가 필요한 적이 없다.
+--   DELETE  : 자기 폴더이고, 그 경로를 가리키는 skin_images row가
+--             더 이상 없을 때만 허용 → 모든 삭제가
+--             delete_skin_image() RPC(참조 검사 포함)를 반드시
+--             거치게 된다. 클라이언트는 이미 "RPC로 row 삭제 →
+--             Storage object 삭제" 순서라 그대로 동작하고,
+--             등록 실패 후 되돌리는 고아 정리도 row가 없으므로 허용된다.
+
+drop policy if exists "skin_images_owner_insert" on storage.objects;
+create policy "skin_images_owner_insert"
+on storage.objects
+for insert
+to authenticated
+with check (
+  bucket_id = 'skin-images'
+  and (storage.foldername(name))[1] = auth.uid()::text
+);
+
+drop policy if exists "skin_images_owner_delete" on storage.objects;
+create policy "skin_images_owner_delete"
+on storage.objects
+for delete
+to authenticated
+using (
+  bucket_id = 'skin-images'
+  and (storage.foldername(name))[1] = auth.uid()::text
+  and not exists (
+    select 1
+    from public.skin_images i
+    where i.storage_path = storage.objects.name
+  )
+);
+
+-- 발행된 Skin을 익명 방문자가 봐야 하므로 공개 읽기는 필수다.
+-- "URL을 아는 사람은 그 이미지를 볼 수 있다"와 "누가 어떤 이미지를
+-- 갖고 있는지 목록을 볼 수 있다"는 아래 public.skin_images RLS로
+-- 완전히 분리된다.
+drop policy if exists "skin_images_public_read" on storage.objects;
+create policy "skin_images_public_read"
+on storage.objects
+for select
+to anon, authenticated
+using (bucket_id = 'skin-images');
+
+
 
 
 -- =========================================================
@@ -771,3 +808,6 @@ comment on function public.restore_skin_version(uuid, uuid, text) is
 revoke execute on function public.restore_skin_version(uuid, uuid, text) from public;
 revoke execute on function public.restore_skin_version(uuid, uuid, text) from anon;
 grant execute on function public.restore_skin_version(uuid, uuid, text) to authenticated;
+
+
+commit;
