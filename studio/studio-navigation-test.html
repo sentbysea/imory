@@ -321,7 +321,20 @@
       const topDockHandle = () => doc.getElementById("studioTopDockHandle");
       const topDockZone = () => doc.getElementById("studioTopDockZone");
 
-      topDockHandle().click();
+      /*
+        PHASE AI-5A.1 — Top Dock의 초기 상태가 "펼침"으로 바뀌었다
+        (studio/index.html 마크업의 .is-open). 이 검사는 "dock이
+        열려 있을 때"를 보는 것이므로, 무조건 한 번 누르는 대신
+        닫혀 있을 때만 눌러 원하는 상태로 맞춘다 — 초기값이 어느
+        쪽이든 같은 상황을 만든다.
+      */
+      const setTopDock = (open) => {
+        if (topDockZone().classList.contains("is-open") !== open) {
+          topDockHandle().click();
+        }
+      };
+
+      setTopDock(true);
 
       const dockOpened = await waitFor(
         () => (topDockZone().classList.contains("is-open") ? true : null),
@@ -354,7 +367,7 @@
       );
 
       // 이후 검사에 영향 없도록 dock을 다시 닫는다.
-      topDockHandle().click();
+      setTopDock(false);
 
       clickAnchor(backButton());
 

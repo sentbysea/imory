@@ -38,7 +38,6 @@
      iframe -> parent  "preview:rendered"      { type, hasPostBodyRegion }
      iframe -> parent  "preview:error"         { type, message }
      iframe -> parent  "preview:navigate"      { type, href }
-     iframe -> parent  "preview:surface-pointer" { type }
 
    "preview:render-banner"(Studio Banner Category Preview)는 Skin
    template 시스템을 타지 않는 별도 경로다 — items[]는 이미
@@ -76,7 +75,6 @@ const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
-const PREVIEW_MSG_SURFACE_POINTER = "preview:surface-pointer";
 
 /*
   studio(이 문서) -> admin(부모 window)로 보내는 메시지. admin은
@@ -144,12 +142,11 @@ const studioToast =
 
 /*
   PHASE AI-5A — AI 패널 요소는 여기서 더 이상 잡지 않는다.
-  하단 drawer가 우측 사이드바가 되면서 여닫기/폭 드래그/Preview
-  클릭 시 접기가 함께 붙었고, 그 전부를
-  studio/ai/studio-ai-panel-layout.js로 옮겼다. 이 파일은 iframe이
-  올려보낸 "preview:surface-pointer"를 그쪽
-  collapseStudioAiPanelFromPreview()에 넘기기만 한다(아래 message
-  리스너).
+  하단 drawer가 우측 사이드바가 되면서 여닫기와 폭 드래그가 함께
+  붙었고, 그 전부를 studio/ai/studio-ai-panel-layout.js로 옮겼다.
+  여는 버튼(#studioAiToggleButton)은 Top Dock 안에 있지만 그
+  리스너도 그 파일이 단다 — 패널의 열림 상태를 한 파일이 모두
+  갖게 하기 위해서다(PHASE AI-5A.1).
 */
 
 
@@ -1796,22 +1793,6 @@ window.addEventListener(
 
     }
 
-    /*
-      PHASE AI-5A — Preview를 누르면 열려 있던 AI 패널이 접힌다.
-      판정과 실행은 전부 studio/ai/studio-ai-panel-layout.js가
-      하고(닫혀 있으면 no-op, 폭 드래그 중이면 무시), 이 파일은
-      iframe에서 온 신호를 그쪽으로 넘기기만 한다. 그 파일이 아직
-      로드되지 않았거나 없는 문서에서도 안전하도록 optional call로
-      둔다.
-    */
-    if (data.type === PREVIEW_MSG_SURFACE_POINTER) {
-
-      window.collapseStudioAiPanelFromPreview?.();
-
-      return;
-
-    }
-
   }
 );
 
@@ -2502,7 +2483,15 @@ new ResizeObserver(
    내려와 그 아래 컨트롤을 가리는 문제가 있었기 때문이다.
    #studioTopDockHandle 클릭만이 #studioTopDockZone의 .is-open을
    토글한다(실제 보이기/숨기기 애니메이션은 studio.css의 transform
-   transition) — AI drawer handle(이 파일 하단)과 동일한 패턴이다.
+   transition).
+
+   PHASE AI-5A.1 — 초기 상태는 studio/index.html 마크업이 정한다
+   (지금은 .is-open이 붙은 "펼침"). 여기서는 그 값을 읽지도
+   되돌리지도 않는다 — 이 리스너는 사용자가 handle을 누른 그
+   순간의 토글만 담당하고, mount/remount 시 상태를 강제로 다시
+   맞추지 않는다(저장하지도 않는다). AI 패널의 열림 상태와도
+   완전히 독립이다: 그쪽은 studio/ai/studio-ai-panel-layout.js가
+   따로 가진 studioAiPanelOpen 하나로만 움직인다.
 ========================================================== */
 
 studioTopDockHandle.addEventListener(

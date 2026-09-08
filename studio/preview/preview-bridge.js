@@ -18,7 +18,6 @@
      iframe -> parent  "preview:rendered"      { type, hasPostBodyRegion }
      iframe -> parent  "preview:error"         { type, message }
      iframe -> parent  "preview:navigate"      { type, href }
-     iframe -> parent  "preview:surface-pointer" { type }
 
    보안 경계(Slice 3.5 그대로 유지, 12절): 여기서 skin/context를
    신뢰 입력으로 취급하지 않는다 — 최종 DOM 반영은 항상
@@ -56,7 +55,6 @@ const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
 const PREVIEW_MSG_PING = "preview:ping";
-const PREVIEW_MSG_SURFACE_POINTER = "preview:surface-pointer";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -396,34 +394,6 @@ document.addEventListener("click", (event) => {
   });
 
 });
-
-
-/* =========================================================
-   "Preview를 보려고 눌렀다" 신호 (PHASE AI-5A)
-
-   Studio의 AI 패널이 열려 있을 때 사용자가 Preview를 누르면
-   패널이 접힌다. iframe 안의 클릭은 부모 문서로 올라가지 않으므로
-   여기서 알려 줘야만 그 판정이 가능하다.
-
-   ★ 이 리스너는 아무 것도 막지 않는다 — preventDefault도
-   stopPropagation도 하지 않고, 메시지 하나를 보내는 것이 전부다.
-   그래서 스킨 안의 링크/버튼/텍스트 선택은 평소와 똑같이 동작하고,
-   위의 앵커 위임 처리도 그대로 이어진다. passive:true로 등록해
-   브라우저에게도 "기본 동작을 막지 않는다"고 명시한다(그래서 이
-   리스너에서 실수로 preventDefault를 부를 수도 없다).
-
-   보내는 것은 type 하나뿐이다 — 좌표나 대상 요소는 부모가 알 필요가
-   없고, 스킨 DOM에서 온 값을 부모로 넘기지 않는다는 이 경계의
-   원칙과도 맞다.
-========================================================== */
-
-document.addEventListener(
-  "pointerdown",
-  () => {
-    postToParent({ type: PREVIEW_MSG_SURFACE_POINTER });
-  },
-  { capture: true, passive: true }
-);
 
 window.addEventListener("message", (event) => {
 

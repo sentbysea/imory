@@ -1,21 +1,21 @@
 /* =========================================================
-   SKIN STUDIO — AI PANEL LAYOUT (PHASE AI-5A)
+   SKIN STUDIO — AI PANEL LAYOUT (PHASE AI-5A / AI-5A.1)
 
-   AI 패널의 **모양**만 담당한다: 여닫기, 폭 조절, Preview를
-   클릭했을 때 접기. 실제 AI 요청/응답/되돌리기/참고 이미지는
-   studio/ai/studio-ai-panel.js가 그대로 담당한다 — 이 파일은
-   그쪽 상태를 하나도 읽지 않고, 반대쪽도 이 파일의 변수를 읽지
-   않는다. 둘 사이의 연결은 window 이벤트 하나뿐이다:
+   AI 패널의 **모양**만 담당한다: 여닫기와 폭 조절. 실제 AI
+   요청/응답/되돌리기/참고 이미지는 studio/ai/studio-ai-panel.js가
+   그대로 담당한다 — 이 파일은 그쪽 상태를 하나도 읽지 않고,
+   반대쪽도 이 파일의 변수를 읽지 않는다. 둘 사이의 연결은
+   window 이벤트 하나뿐이다:
 
      "studio-ai-panel-toggle"  { detail: { open } }
 
    ★ 왜 studio-preview.js에서 옮겨 왔나
    예전에는 하단 drawer의 handle 클릭 리스너가 studio-preview.js
    맨 아래에 있었다(Top Dock handle 바로 옆). 우측 사이드바가
-   되면서 여닫기 말고도 폭 드래그/Preview 클릭 접기/좁은 화면
-   판정이 함께 붙는데, studio-preview.js는 이미 2500줄이 넘어
-   더 키우지 않는 편이 낫다고 판단했다(CLAUDE.md의 "JS 파일은
-   가능하면 1000줄 내외" 지침).
+   되면서 여닫기 말고도 폭 드래그와 좁은 화면 판정이 함께 붙는데,
+   studio-preview.js는 이미 2500줄이 넘어 더 키우지 않는 편이
+   낫다고 판단했다(CLAUDE.md의 "JS 파일은 가능하면 1000줄 내외"
+   지침).
 
    ★ 폭의 원천은 CSS 변수 하나
    --studio-ai-panel-width를 #studioPreviewShell에 인라인으로
@@ -32,20 +32,22 @@
    쓰지 않는다(새 persistent state를 만들지 않는다는 이번 Phase의
    요구사항 4절).
 
-   ★ Preview 클릭으로 접기
-   Preview는 iframe이라 그 안의 클릭은 부모 문서로 올라오지
-   않는다. 그래서 preview-bridge.js가 pointerdown마다
-   "preview:surface-pointer"를 부모로 보내고(그 자체는 아무
-   것도 막지 않는다 — preventDefault도 stopPropagation도 하지
-   않으므로 스킨 안의 링크/버튼 동작은 그대로다),
-   studio-preview.js의 message 리스너가 아래
-   collapseStudioAiPanelFromPreview()를 부른다. iframe 바깥의
-   stage 여백(Mobile 모드의 letterbox)은 부모 문서에서 직접
-   pointerdown을 받는다.
+   ★ 여닫는 곳은 두 버튼뿐 (PHASE AI-5A.1)
+   Top Dock의 "AI Assistant"(#studioAiToggleButton)와 패널 헤더의
+   접기 버튼(#studioAiPanelCollapse). 둘 다 아래 toggleStudioAiPanel()
+   하나를 부르고, 열림 여부는 studioAiPanelOpen **한 변수**만이
+   갖는다 — 두 버튼의 aria-expanded는 setStudioAiPanelOpen()이
+   같은 자리에서 함께 갱신하므로 서로 어긋날 수 없다.
 
-   패널 안쪽이나 resizer를 눌렀을 때는 두 경로 어디에도 걸리지
-   않으므로 접히지 않는다(패널/resizer는 stage의 형제이고 iframe
-   바깥이다).
+   AI-5A에는 "Preview를 클릭하면 접힌다"가 있었다(iframe이
+   preview:surface-pointer를 올려보내는 방식). AI-5A.1에서 제거했다 —
+   결과를 눌러 확인하면서 패널을 열어 둔 채 비교하는 흐름이 더
+   중요하고, 그러려면 패널이 사용자가 누르지 않았는데 닫히면 안
+   된다. 그 메시지는 이 용도로만 있었으므로 preview-bridge.js /
+   studio-preview.js 양쪽에서 함께 지웠다.
+
+   오른쪽 가장자리의 세로 탭도 함께 없앴다 — Preview 위에 떠 있는
+   또 하나의 진입점이 되므로.
 ========================================================== */
 
 
@@ -58,8 +60,9 @@ const studioAiPanelDock =
 const studioAiPanelElement =
   document.getElementById("studioAiDrawer");
 
-const studioAiPanelExpandButton =
-  document.getElementById("studioAiHandle");
+/* Top Dock 안의 "AI Assistant" — 유일한 여는 곳(PHASE AI-5A.1) */
+const studioAiPanelToggleButton =
+  document.getElementById("studioAiToggleButton");
 
 const studioAiPanelCollapseButton =
   document.getElementById("studioAiPanelCollapse");
@@ -69,9 +72,6 @@ const studioAiPanelResizer =
 
 const studioAiPanelInputElement =
   document.getElementById("studioAiDrawerInput");
-
-const studioAiPanelStage =
-  document.getElementById("studioPreviewStage");
 
 
 /* =========================================================
@@ -162,7 +162,7 @@ function isStudioAiPanelOpen() {
 }
 
 
-function setStudioAiPanelOpen(open, options) {
+function setStudioAiPanelOpen(open) {
 
   const next =
     !!open;
@@ -192,9 +192,13 @@ function setStudioAiPanelOpen(open, options) {
 
   }
 
-  if (studioAiPanelExpandButton) {
+  /*
+    두 진입점의 aria-expanded를 같은 자리에서 함께 갱신한다 —
+    패널 헤더로 닫아도 Top Dock 버튼이 즉시 false가 된다.
+  */
+  if (studioAiPanelToggleButton) {
 
-    studioAiPanelExpandButton.setAttribute(
+    studioAiPanelToggleButton.setAttribute(
       "aria-expanded",
       String(next)
     );
@@ -224,20 +228,16 @@ function setStudioAiPanelOpen(open, options) {
 
   }
 
+  /*
+    여는 경로는 둘 다 사용자가 직접 누른 것이므로 항상 입력칸까지
+    포커스를 옮긴다 — 버튼을 누른 뒤 바로 타이핑할 수 있게.
+  */
   if (next) {
 
     applyStudioAiPanelWidth();
 
-    /*
-      Preview를 클릭해서 접히는 경우처럼 "패널을 쓰려는 것이
-      아닌" 경로에서는 포커스를 빼앗지 않는다.
-    */
-    if (!options || options.focus !== false) {
-
-      if (studioAiPanelInputElement) {
-        studioAiPanelInputElement.focus();
-      }
-
+    if (studioAiPanelInputElement) {
+      studioAiPanelInputElement.focus();
     }
 
   }
@@ -264,9 +264,9 @@ function toggleStudioAiPanel() {
 }
 
 
-if (studioAiPanelExpandButton) {
+if (studioAiPanelToggleButton) {
 
-  studioAiPanelExpandButton.addEventListener(
+  studioAiPanelToggleButton.addEventListener(
     "click",
     toggleStudioAiPanel
   );
@@ -284,48 +284,13 @@ if (studioAiPanelCollapseButton) {
 }
 
 
-/* 폭 드래그 상태 — 아래 "폭 드래그" 절이 쓰지만, 바로 다음
-   collapseStudioAiPanelFromPreview()도 함께 보므로 여기서 선언한다. */
+/* 폭 드래그 상태 */
 
 let studioAiPanelResizing =
   false;
 
 let studioAiPanelResizePointerId =
   null;
-
-
-/* =========================================================
-   Preview를 클릭하면 접힌다
-
-   "Preview를 보려고 눌렀다"는 신호로만 쓴다 — 이 경로는 아무
-   기본 동작도 막지 않는다(preventDefault/stopPropagation 없음).
-   그래서 스킨 안의 링크·버튼은 평소처럼 동작하고, 그 클릭이
-   내부 이동을 일으키는 경우에도 패널만 조용히 접힌다.
-
-   드래그 중에는 접지 않는다 — resizer는 iframe 바깥이라 애초에
-   여기 걸리지 않지만, 드래그 도중 포인터가 Preview 위를 지나며
-   생기는 이벤트까지 막기 위해 플래그를 함께 본다.
-========================================================== */
-
-function collapseStudioAiPanelFromPreview() {
-
-  if (!studioAiPanelOpen || studioAiPanelResizing) {
-    return;
-  }
-
-  setStudioAiPanelOpen(false);
-
-}
-
-
-if (studioAiPanelStage) {
-
-  studioAiPanelStage.addEventListener(
-    "pointerdown",
-    collapseStudioAiPanelFromPreview
-  );
-
-}
 
 
 /* =========================================================
@@ -472,13 +437,6 @@ applyStudioAiPanelWidth();
 
 
 if (typeof window !== "undefined") {
-
-  /*
-    studio-preview.js의 message 리스너가 iframe에서 올라온
-    "preview:surface-pointer"를 받아 부른다.
-  */
-  window.collapseStudioAiPanelFromPreview =
-    collapseStudioAiPanelFromPreview;
 
   window.setStudioAiPanelOpen =
     setStudioAiPanelOpen;

@@ -1,5 +1,5 @@
 /* =========================================================
-   PHASE AI-5A — AI 패널 레이아웃 + AI 적용 후 화면 유지 E2E
+   PHASE AI-5A / AI-5A.1 — AI 패널 레이아웃 + AI 적용 후 화면 유지 E2E
 
    ★ 실제 OpenAI를 부르지 않는다. 이 파일은 /api/skin-ai를
    가로채 **고정된 유효 SkinPackage**를 그대로 돌려준다 — 서버
@@ -8,10 +8,12 @@
    적용된 **뒤의 화면**이기 때문이다.
 
    검사 범위
-     A. 패널이 Preview 오른쪽에 서고 Preview를 덮지 않는다
-     B. 세로 탭 / 헤더 버튼으로 펼치고 접는다(aria-expanded 포함)
-     C. Preview를 클릭하면 접힌다(iframe 안 실제 클릭)
-     D. 패널 안을 클릭하면 접히지 않는다
+     A. 패널이 Preview 오른쪽에 서고 Preview를 덮지 않는다 +
+        Top Dock의 AI Assistant / divider (AI-5A.1)
+     B. 두 진입점(toolbar / 헤더 접기)이 같은 state를 토글하고
+        aria-expanded가 항상 함께 움직인다
+     C. Preview를 클릭해도 **접히지 않는다** (AI-5A.1에서 뒤집힘)
+     D. Preview 안 링크/버튼은 그대로 동작한다
      E. resizer 드래그로 폭이 바뀐다
      F. min/max로 clamp된다
      G. textarea가 1줄에서 최대 5줄까지 자란다
@@ -25,6 +27,9 @@
      R. 로딩 표시/중단이 사이드바 안에서 정상
      S. 1280 / 1440에서 가로 overflow 없음
      T. 좁은 뷰포트에서는 overlay fallback
+     U. 여닫기 모션 — Preview/Top Dock/패널이 같은 타이밍으로
+        움직이고 layout jump가 없다, reduced-motion 대응 (AI-5A.1)
+     V. Top Dock 기본 상태 = 펼침, AI 패널 상태와 서로 독립 (AI-5A.1)
 
    ★ 실행 방법
      node studio/studio-ai-panel-layout-e2e-test.mjs
@@ -33,7 +38,7 @@
 
    --only= 뒤에 쓸 수 있는 이름:
      layout / toggle / collapse / resize / textarea / keys /
-     route / import / attach / loading / viewport
+     route / import / attach / loading / viewport / motion / dock
 ========================================================== */
 
 import fs from "node:fs";
@@ -251,10 +256,60 @@ async function openStudio(context, options) {
 }
 
 
+/*
+  PHASE AI-5A.1 — 여는 곳은 Top Dock의 "AI Assistant" 하나뿐이라
+  dock을 먼저 열어야 한다(실제 사용자와 같은 순서).
+
+  그리고 이제 여닫기에 0.15s 슬라이드가 붙었으므로, 좌표를 재는
+  검사들이 애니메이션 도중 값을 읽지 않도록 "다 들어왔다"까지
+  기다린다(모션 자체는 아래 runMotion이 따로 검증한다).
+*/
+async function waitForPanelSettled(page, expectOpen) {
+  await page.waitForFunction(
+    (open) => {
+      const panel = document.getElementById("studioAiDrawer");
+      const box = panel.getBoundingClientRect();
+
+      if (open) {
+        return box.right <= window.innerWidth + 1;
+      }
+
+      /*
+        닫힘은 transform이 끝난 **뒤에** visibility가 hidden이 되는
+        계약이다(studio.css: visibility 0s linear 0.15s) — 그 두 번째
+        단계까지 기다려야 "다 닫혔다"이다. resizer도 같은 지연을
+        쓰므로 함께 본다.
+      */
+      const resizer = document.getElementById("studioAiResizer");
+
+      return (
+        box.left >= window.innerWidth - 1 &&
+        window.getComputedStyle(panel).visibility === "hidden" &&
+        window.getComputedStyle(resizer).visibility === "hidden"
+      );
+    },
+    expectOpen,
+    { timeout: 3000 }
+  );
+}
+
+
 async function openPanel(page) {
   const open = await page.evaluate(() => window.getStudioAiPanelLayoutState().open);
-  if (!open) await page.click("#studioAiHandle");
+  if (!open) {
+    await openTopDock(page);
+    await page.click("#studioAiToggleButton");
+  }
   await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === true);
+  await waitForPanelSettled(page, true);
+}
+
+
+async function closePanel(page) {
+  const open = await page.evaluate(() => window.getStudioAiPanelLayoutState().open);
+  if (open) await page.click("#studioAiPanelCollapse");
+  await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === false);
+  await waitForPanelSettled(page, false);
 }
 
 
@@ -318,11 +373,23 @@ function rects(page) {
       stage: r("studioPreviewStage"),
       panel: r("studioAiDrawer"),
       dock: r("studioAiDock"),
-      handle: r("studioAiHandle"),
       resizer: r("studioAiResizer"),
-      topDock: r("studioTopDockZone")
+      topDock: r("studioTopDockZone"),
+      toggleButton: r("studioAiToggleButton"),
+      publishButton: r("studioPublishButton")
     };
   });
+}
+
+
+/* 지금 화면에 보이는가(visibility/display 모두 고려) */
+function visibility(page, id) {
+  return page.evaluate((elementId) => {
+    const el = document.getElementById(elementId);
+    if (!el) return null;
+    const style = window.getComputedStyle(el);
+    return { display: style.display, visibility: style.visibility, pointerEvents: style.pointerEvents };
+  }, id);
 }
 
 
@@ -335,12 +402,50 @@ async function runLayout(context) {
   const page = await openStudio(context, { viewport: { width: 1280, height: 800 } });
 
   const closed = await rects(page);
+  const closedPanelVisibility = await visibility(page, "studioAiDrawer");
 
   await openPanel(page);
 
   const open = await rects(page);
+  const openResizerVisibility = await visibility(page, "studioAiResizer");
 
   const width = await page.evaluate(() => window.getStudioAiPanelLayoutState().width);
+
+  const toolbar = await page.evaluate(() => {
+    const button = document.getElementById("studioAiToggleButton");
+    const publish = document.getElementById("studioPublishButton");
+    const dividers = document.querySelectorAll(".studio-top-dock-actions .studio-top-dock-divider");
+    const divider = dividers[0];
+    const actions = Array.from(document.querySelector(".studio-top-dock-actions").children);
+    const buttonStyle = window.getComputedStyle(button);
+    const publishStyle = window.getComputedStyle(publish);
+    const dividerStyle = divider ? window.getComputedStyle(divider) : null;
+
+    return {
+      handleExists: !!document.getElementById("studioAiHandle"),
+      label: button.textContent.trim(),
+      controls: button.getAttribute("aria-controls"),
+      disabled: button.disabled,
+      dividerCount: dividers.length,
+      dividerWidth: divider ? Math.round(divider.getBoundingClientRect().width) : null,
+      dividerText: divider ? divider.textContent : null,
+      /* Publish -> divider -> AI Assistant 순서 */
+      orderOk:
+        actions.indexOf(publish) >= 0 &&
+        actions.indexOf(divider) === actions.indexOf(publish) + 1 &&
+        actions.indexOf(button) === actions.indexOf(divider) + 1,
+      sameHeight:
+        Math.round(button.getBoundingClientRect().height) ===
+        Math.round(publish.getBoundingClientRect().height),
+      sameFontSize: buttonStyle.fontSize === publishStyle.fontSize,
+      sameRadius: buttonStyle.borderTopLeftRadius === publishStyle.borderTopLeftRadius,
+      /* 색은 달라야 한다 — 토큰이 실제로 적용됐는지 */
+      accentColored:
+        buttonStyle.color !== publishStyle.color &&
+        buttonStyle.borderTopColor !== publishStyle.borderTopColor,
+      dividerBackground: dividerStyle ? dividerStyle.backgroundColor : null
+    };
+  });
 
   record(
     "A1. 접혀 있으면 Preview stage와 Top Dock이 화면 전체를 그대로 쓴다",
@@ -350,9 +455,11 @@ async function runLayout(context) {
   );
 
   record(
-    "A2. 접힌 상태에서 패널은 렌더되지 않고 세로 탭만 보인다",
-    closed.panel.width === 0 && closed.handle.width > 0,
-    `panel.width=${closed.panel.width} handle.width=${closed.handle.width}`
+    "A2. 접힌 상태에서 패널은 화면 밖으로 나가 있고 보이지 않는다",
+    closedPanelVisibility.visibility === "hidden" &&
+      closedPanelVisibility.pointerEvents === "none" &&
+      closed.panel.left >= closed.innerWidth - 1,
+    `visibility=${JSON.stringify(closedPanelVisibility)} panel.left=${closed.panel.left} innerWidth=${closed.innerWidth}`
   );
 
   record(
@@ -381,9 +488,47 @@ async function runLayout(context) {
   );
 
   record(
-    "A7. 펼친 상태에서 세로 탭은 사라지고 resizer가 나타난다",
-    open.handle.width === 0 && open.resizer.width > 0,
-    `handle.width=${open.handle.width} resizer.width=${open.resizer.width}`
+    "A7. 펼친 상태에서 resizer가 잡을 수 있게 나타난다",
+    openResizerVisibility.visibility === "visible" &&
+      openResizerVisibility.pointerEvents === "auto" &&
+      open.resizer.width > 0,
+    `visibility=${JSON.stringify(openResizerVisibility)} resizer.width=${open.resizer.width}`
+  );
+
+  /* ---------------------------------------------------------
+     PHASE AI-5A.1 — 오른쪽 세로 탭 제거 + Top Dock 진입점
+  --------------------------------------------------------- */
+
+  record(
+    "A8. 오른쪽 가장자리의 세로 AI 탭이 더 이상 문서에 없다",
+    toolbar.handleExists === false,
+    `#studioAiHandle=${toolbar.handleExists}`
+  );
+
+  record(
+    "A9. Top Dock에 'AI Assistant' 버튼이 있다",
+    toolbar.label === "AI Assistant" &&
+      toolbar.controls === "studioAiDrawer" &&
+      toolbar.disabled === false,
+    JSON.stringify(toolbar)
+  );
+
+  record(
+    "A10. Publish와 AI Assistant 사이에 1px divider가 있다(문자 | 아님)",
+    toolbar.dividerCount === 1 &&
+      toolbar.dividerWidth === 1 &&
+      toolbar.dividerText === "" &&
+      toolbar.orderOk === true,
+    JSON.stringify(toolbar)
+  );
+
+  record(
+    "A11. AI Assistant는 다른 toolbar 버튼과 같은 높이/글꼴을 쓰고 색만 다르다",
+    toolbar.sameHeight === true &&
+      toolbar.sameFontSize === true &&
+      toolbar.sameRadius === true &&
+      toolbar.accentColored === true,
+    JSON.stringify(toolbar)
   );
 
   await page.close();
@@ -400,39 +545,55 @@ async function runToggle(context) {
   const page = await openStudio(context, { viewport: { width: 1280, height: 800 } });
 
   const readAria = () => page.evaluate(() => ({
-    handle: document.getElementById("studioAiHandle").getAttribute("aria-expanded"),
+    toolbar: document.getElementById("studioAiToggleButton").getAttribute("aria-expanded"),
     collapse: document.getElementById("studioAiPanelCollapse").getAttribute("aria-expanded"),
     isOpen: document.getElementById("studioAiDrawer").classList.contains("is-open"),
     shell: document.getElementById("studioPreviewShell").classList.contains("has-ai-panel"),
-    inputTabIndex: document.getElementById("studioAiDrawerInput").tabIndex
+    inputTabIndex: document.getElementById("studioAiDrawerInput").tabIndex,
+    /* 상태는 한 군데(레이아웃 모듈)만 갖는다 */
+    stateOpen: window.getStudioAiPanelLayoutState().open
   }));
+
+  await openTopDock(page);
 
   const before = await readAria();
 
-  await page.click("#studioAiHandle");
+  /* --- toolbar로 열기 --- */
+  await page.click("#studioAiToggleButton");
   await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === true);
 
   const opened = await readAria();
 
   const focused = await page.evaluate(() => document.activeElement.id);
 
+  /* --- toolbar로 다시 닫기(같은 버튼이 toggle) --- */
+  await page.click("#studioAiToggleButton");
+  await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === false);
+
+  const toggledClosed = await readAria();
+
+  /* --- 다시 열고 패널 헤더로 닫기 --- */
+  await page.click("#studioAiToggleButton");
+  await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === true);
+
   await page.click("#studioAiPanelCollapse");
   await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === false);
 
-  const closed = await readAria();
+  const collapsedClosed = await readAria();
 
   record(
-    "B1. 처음에는 접혀 있다 (aria-expanded=false, textarea는 Tab 순서 밖)",
-    before.handle === "false" && before.collapse === "false" &&
-      before.isOpen === false &&
-      before.shell === false && before.inputTabIndex === -1,
+    "B1. 처음에는 접혀 있다 (두 버튼 모두 aria-expanded=false, textarea는 Tab 순서 밖)",
+    before.toolbar === "false" && before.collapse === "false" &&
+      before.isOpen === false && before.shell === false &&
+      before.inputTabIndex === -1 && before.stateOpen === false,
     JSON.stringify(before)
   );
 
   record(
-    "B2. 세로 탭을 누르면 펼쳐지고 aria-expanded가 두 버튼 모두 true가 된다",
-    opened.handle === "true" && opened.collapse === "true" &&
-      opened.isOpen === true && opened.shell === true && opened.inputTabIndex === 0,
+    "B2. toolbar의 AI Assistant를 누르면 펼쳐지고 두 버튼의 aria-expanded가 함께 true가 된다",
+    opened.toolbar === "true" && opened.collapse === "true" &&
+      opened.isOpen === true && opened.shell === true &&
+      opened.inputTabIndex === 0 && opened.stateOpen === true,
     JSON.stringify(opened)
   );
 
@@ -443,10 +604,19 @@ async function runToggle(context) {
   );
 
   record(
-    "B4. 헤더의 접기 버튼으로 다시 접힌다",
-    closed.handle === "false" && closed.collapse === "false" &&
-      closed.isOpen === false && closed.shell === false && closed.inputTabIndex === -1,
-    JSON.stringify(closed)
+    "B4. 같은 AI Assistant 버튼을 다시 누르면 닫힌다(toggle)",
+    toggledClosed.toolbar === "false" && toggledClosed.collapse === "false" &&
+      toggledClosed.isOpen === false && toggledClosed.shell === false &&
+      toggledClosed.stateOpen === false,
+    JSON.stringify(toggledClosed)
+  );
+
+  record(
+    "B5. 패널 헤더의 접기로 닫아도 toolbar의 aria-expanded가 즉시 false가 된다(state 하나)",
+    collapsedClosed.toolbar === "false" && collapsedClosed.collapse === "false" &&
+      collapsedClosed.isOpen === false && collapsedClosed.shell === false &&
+      collapsedClosed.inputTabIndex === -1 && collapsedClosed.stateOpen === false,
+    JSON.stringify(collapsedClosed)
   );
 
   await page.close();
@@ -455,7 +625,11 @@ async function runToggle(context) {
 
 
 /* =========================================================
-   C/D. Preview 클릭 시 접힘 / 패널 내부 클릭은 유지
+   C/D. Preview를 눌러도 접히지 않는다 (PHASE AI-5A.1에서 뒤집힘)
+
+   AI-5A에는 "Preview를 클릭하면 접힌다"가 있었다. 결과를 눌러
+   확인하면서 패널을 열어 둔 채 비교하는 흐름이 더 중요해서
+   제거했다 — 이제 패널을 닫는 것은 두 버튼뿐이다.
 ========================================================== */
 
 async function runCollapse(context) {
@@ -487,7 +661,7 @@ async function runCollapse(context) {
   );
 
   /* ---------------------------------------------------------
-     C1. Preview(iframe) 안 진짜 마우스 클릭
+     C1. Preview(iframe) 안 진짜 마우스 클릭 — 패널은 그대로
 
      좌표는 Preview stage 한가운데를 쓴다 — 화면 위쪽 48px 띠는
      #studioTopDockZone(투명하지만 클릭을 받는 예약 영역)이라
@@ -500,36 +674,49 @@ async function runCollapse(context) {
   });
 
   await page.mouse.click(stage.x, stage.y);
-
-  await page.waitForFunction(
-    () => window.getStudioAiPanelLayoutState().open === false,
-    null,
-    { timeout: 3000 }
-  ).then(() => {}, () => {});
+  await sleep(300);
 
   const afterPreviewClick = await page.evaluate(() => window.getStudioAiPanelLayoutState().open);
 
   record(
-    "C1. Preview를 클릭하면 패널이 접힌다",
-    afterPreviewClick === false,
-    `click=${JSON.stringify(stage)}`
+    "C1. Preview를 클릭해도 패널이 접히지 않는다 (PHASE AI-5A.1)",
+    afterPreviewClick === true,
+    `click=${JSON.stringify(stage)} open=${afterPreviewClick}`
   );
 
   /* ---------------------------------------------------------
-     C2. 접는 경로가 Preview 안 링크를 막지 않는다
+     C2. auto-collapse용 postMessage 자체가 사라졌다
+
+     preview:surface-pointer는 이 용도로만 있었으므로 iframe/부모
+     양쪽에서 함께 지웠다. 혹시 남아 있더라도 부모가 반응하지
+     않는지까지 확인한다(직접 쏴 본다).
+  --------------------------------------------------------- */
+
+  const protocolGone = await page.evaluate(async () => {
+    window.postMessage({ type: "preview:surface-pointer" }, window.location.origin);
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return {
+      stillOpen: window.getStudioAiPanelLayoutState().open,
+      handlerGone: typeof window.collapseStudioAiPanelFromPreview === "undefined"
+    };
+  });
+
+  record(
+    "C2. preview:surface-pointer 경로가 제거되어 부모가 아무 반응도 하지 않는다",
+    protocolGone.stillOpen === true && protocolGone.handlerGone === true,
+    JSON.stringify(protocolGone)
+  );
+
+  /* ---------------------------------------------------------
+     D3. Preview 안 링크는 기존대로 동작한다
 
      scenario x의 navigation 링크는 화면 맨 위(Top Dock 예약 영역
      아래)라 실제 마우스로는 그 띠에 가린다 — 그래서 여기서만
      iframe 안에서 진짜 이벤트를 직접 dispatch한다(기존
      studio-ai-panel-e2e-test.mjs의 클릭 interception 검사와 같은
-     방식). 확인하는 것은 두 가지다:
-       - pointerdown이 취소되지 않았다(우리 리스너는 passive다)
-       - 그런데도 링크는 그대로 동작해 CATEGORY로 이동한다
-     click 쪽 defaultPrevented는 preview-bridge.js의 기존 앵커
-     가로채기가 만든 것이라 true가 정상이다.
+     방식). click 쪽 defaultPrevented는 preview-bridge.js의 기존
+     앵커 가로채기가 만든 것이라 true가 정상이다.
   --------------------------------------------------------- */
-
-  await openPanel(page);
 
   const linkOutcome = await page.evaluate(() => {
     const doc = document.getElementById("studioPreviewFrame").contentDocument;
@@ -561,10 +748,10 @@ async function runCollapse(context) {
   }));
 
   record(
-    "C2. Preview 안 링크는 그대로 동작하면서 패널만 접힌다(pointerdown을 막지 않는다)",
+    "D3. Preview 안 링크는 그대로 CATEGORY로 이동하고, 그동안에도 패널은 열려 있다",
     linkOutcome !== null &&
       linkOutcome.downPrevented === false &&
-      afterLinkClick.open === false &&
+      afterLinkClick.open === true &&
       afterLinkClick.location.type === "category",
     `link=${JSON.stringify(linkOutcome)} after=${JSON.stringify(afterLinkClick)}`
   );
@@ -660,8 +847,7 @@ async function runResize(context) {
   );
 
   /* 폭은 접었다 펴도 세션 동안 유지된다 */
-  await page.click("#studioAiPanelCollapse");
-  await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === false);
+  await closePanel(page);
   await openPanel(page);
 
   const reopened = await page.evaluate(() => window.getStudioAiPanelLayoutState().width);
@@ -670,6 +856,37 @@ async function runResize(context) {
     "E3. 접었다 다시 펴도 조절한 폭이 유지된다(세션 동안)",
     reopened === maxed.width,
     `reopened=${reopened} expected=${maxed.width}`
+  );
+
+  /* ---------------------------------------------------------
+     K. 닫혀 있으면 resizer가 아예 잡히지 않는다 (PHASE AI-5A.1)
+
+     CSS(pointer-events:none + visibility:hidden)와 JS 가드
+     (studioAiPanelOpen) 둘 다 확인한다 — 닫힌 상태에서 resizer가
+     있던 자리를 드래그해도 폭이 바뀌지 않아야 한다.
+  --------------------------------------------------------- */
+
+  await closePanel(page);
+
+  const closedResizer = await visibility(page, "studioAiResizer");
+
+  const widthBeforeDrag = await page.evaluate(() => window.getStudioAiPanelLayoutState().width);
+
+  /* 열려 있었다면 resizer가 있었을 좌표를 그대로 긁어 본다 */
+  await page.mouse.move(1280 - widthBeforeDrag, 400);
+  await page.mouse.down();
+  await page.mouse.move(600, 400, { steps: 6 });
+  await page.mouse.up();
+
+  const afterClosedDrag = await page.evaluate(() => window.getStudioAiPanelLayoutState());
+
+  record(
+    "K1. 닫혀 있으면 resizer가 포인터를 받지 않고 드래그로 폭이 바뀌지 않는다",
+    closedResizer.pointerEvents === "none" &&
+      closedResizer.visibility === "hidden" &&
+      afterClosedDrag.resizing === false &&
+      afterClosedDrag.width === widthBeforeDrag,
+    `closedResizer=${JSON.stringify(closedResizer)} width=${widthBeforeDrag} -> ${afterClosedDrag.width}`
   );
 
   await page.close();
@@ -1248,6 +1465,49 @@ async function runViewport(context) {
 
     const r = await rects(page);
 
+    /*
+      PHASE AI-5A.1 — divider와 AI Assistant가 붙어도 toolbar가
+      한 줄에 들어가야 한다. "한 줄"은 모든 버튼의 top이 같고,
+      맨 왼쪽 버튼이 Back 오른쪽에서 시작하며, 맨 오른쪽 버튼이
+      dock 안에 있다는 것으로 잰다.
+    */
+    const toolbarFit = await page.evaluate(() => {
+      const actions = document.querySelector(".studio-top-dock-actions");
+      const dock = document.getElementById("studioTopDock");
+      const buttons = Array.from(actions.querySelectorAll("button"))
+        .map(el => el.getBoundingClientRect());
+      const divider = actions
+        .querySelector(".studio-top-dock-divider")
+        .getBoundingClientRect();
+      const actionsBox = actions.getBoundingClientRect();
+      const dockBox = dock.getBoundingClientRect();
+      const back = document.getElementById("studioBackButton").getBoundingClientRect();
+      const groups = document.querySelector(".studio-top-dock-groups").getBoundingClientRect();
+
+      const rowTop = Math.round(buttons[0].top);
+      const rowBottom = Math.round(buttons[0].bottom);
+
+      return {
+        buttonTops: buttons.map(b => Math.round(b.top)),
+        /* 버튼은 전부 같은 줄에 있어야 한다(divider는 더 짧고 가운데 정렬이라 제외) */
+        singleRow: new Set(buttons.map(b => Math.round(b.top))).size === 1,
+        /* divider는 그 줄 안에서 세로 가운데 */
+        dividerCentered:
+          divider.top > rowTop &&
+          divider.bottom < rowBottom &&
+          Math.abs(
+            (divider.top - rowTop) - (rowBottom - divider.bottom)
+          ) <= 1,
+        insideDock:
+          actionsBox.right <= dockBox.right + 1 &&
+          actionsBox.left >= dockBox.left - 1,
+        clearsBack: actionsBox.left > back.right,
+        clearsCenterGroup: actionsBox.left > groups.right,
+        actionsRight: actionsBox.right,
+        dockRight: dockBox.right
+      };
+    });
+
     record(
       `S${width === 1280 ? 1 : 2}. ${width}x900에서 가로 overflow가 없고 Preview/패널이 나란히 있다`,
       r.scrollWidth <= r.innerWidth &&
@@ -1255,6 +1515,16 @@ async function runViewport(context) {
         r.stage.right < r.panel.right &&
         r.stage.right > 0,
       JSON.stringify(r)
+    );
+
+    record(
+      `S${width === 1280 ? 3 : 4}. ${width}x900에서 toolbar가 한 줄에 들어가고 기존 버튼과 겹치지 않는다`,
+      toolbarFit.singleRow === true &&
+        toolbarFit.dividerCentered === true &&
+        toolbarFit.insideDock === true &&
+        toolbarFit.clearsBack === true &&
+        toolbarFit.clearsCenterGroup === true,
+      JSON.stringify(toolbarFit)
     );
 
     await page.close();
@@ -1288,6 +1558,453 @@ async function runViewport(context) {
     `display=${resizerVisible}`
   );
 
+  /*
+    PHASE AI-5A.1 — overlay 모드에서 패널이 Top Dock 밴드 아래에서
+    시작하므로, 여닫는 버튼(AI Assistant)과 패널 헤더의 접기 버튼이
+    둘 다 가려지지 않고 눌린다.
+  */
+  const narrowReach = await page.evaluate(() => {
+    const toggle = document.getElementById("studioAiToggleButton").getBoundingClientRect();
+    const panel = document.getElementById("studioAiDrawer").getBoundingClientRect();
+    const collapse = document.getElementById("studioAiPanelCollapse").getBoundingClientRect();
+    const topOf = (x, y) => {
+      const el = document.elementFromPoint(x, y);
+      return el ? (el.id || el.className) : null;
+    };
+    return {
+      toggleNotCovered: toggle.bottom <= panel.top + 1,
+      toggleHit: topOf(toggle.left + toggle.width / 2, toggle.top + toggle.height / 2),
+      collapseHit: topOf(collapse.left + collapse.width / 2, collapse.top + collapse.height / 2)
+    };
+  });
+
+  record(
+    "T3. overlay 모드에서도 AI Assistant와 패널 접기 버튼이 서로 가리지 않고 눌린다",
+    narrowReach.toggleNotCovered === true &&
+      narrowReach.toggleHit === "studioAiToggleButton" &&
+      narrowReach.collapseHit === "studioAiPanelCollapse",
+    JSON.stringify(narrowReach)
+  );
+
+  /* 닫으면 overlay가 사라지고 Preview가 다시 전부 보인다 */
+  await closePanel(page);
+
+  const narrowClosed = await rects(page);
+
+  record(
+    "T4. overlay를 닫으면 Preview가 다시 화면 전체를 쓰고 가로 overflow가 없다",
+    Math.abs(narrowClosed.stage.right - narrowClosed.innerWidth) < 1 &&
+      narrowClosed.panel.left >= narrowClosed.innerWidth - 1 &&
+      narrowClosed.scrollWidth <= narrowClosed.innerWidth,
+    JSON.stringify(narrowClosed)
+  );
+
+  await page.close();
+
+}
+
+
+/* =========================================================
+   U. 여닫기 모션 (PHASE AI-5A.1)
+
+   "같은 timing으로 움직인다"를 직접 재려면 애니메이션 도중의
+   좌표가 필요하다 — 열기를 시작한 뒤 중간 시점에 세 요소
+   (Preview stage / Top Dock zone / 패널)의 좌표를 한 번에 읽어
+   서로 붙어 있는지 본다. 셋이 다른 duration으로 움직이면 그
+   순간 stage.right와 panel.left가 벌어진다(= 흰 틈이 보인다).
+
+   layout jump는 "중간 좌표가 시작/끝 사이에 있는가"로 잰다 —
+   전환 없이 툭 끊기면 중간 프레임이 이미 최종값이라 이 검사가
+   실패한다.
+========================================================== */
+
+async function runMotion(context) {
+
+  const page = await openStudio(context, { viewport: { width: 1280, height: 800 } });
+
+  /* 선언된 모션 값이 Top Dock과 같은 타이밍인가 */
+  const motion = await page.evaluate(() => {
+    const shell = document.getElementById("studioPreviewShell");
+    const shellStyle = window.getComputedStyle(shell);
+    const dockBar = document.getElementById("studioTopDock");
+    const stage = document.getElementById("studioPreviewStage");
+    const panel = document.getElementById("studioAiDrawer");
+    const zone = document.getElementById("studioTopDockZone");
+    return {
+      token: shellStyle.getPropertyValue("--studio-ai-panel-motion").trim(),
+      topDockBar: window.getComputedStyle(dockBar).transitionDuration,
+      stage: window.getComputedStyle(stage).transitionDuration,
+      zone: window.getComputedStyle(zone).transitionDuration,
+      panel: window.getComputedStyle(panel).transitionDuration,
+      stageProperty: window.getComputedStyle(stage).transitionProperty,
+      panelProperty: window.getComputedStyle(panel).transitionProperty
+    };
+  });
+
+  record(
+    "U1. 패널 모션이 Top Dock과 같은 타이밍(0.15s)을 쓴다",
+    motion.token === "0.15s ease" &&
+      motion.topDockBar === "0.15s" &&
+      motion.stage === "0.15s" &&
+      motion.zone === "0.15s" &&
+      motion.panel.startsWith("0.15s"),
+    JSON.stringify(motion)
+  );
+
+  record(
+    "U2. 주 효과는 layout/slide다 (stage는 right, 패널은 transform)",
+    motion.stageProperty.includes("right") &&
+      motion.panelProperty.includes("transform"),
+    JSON.stringify(motion)
+  );
+
+  /* --- 애니메이션 도중 좌표 --- */
+
+  await openTopDock(page);
+
+  const openingFrames = await page.evaluate(async () => {
+    const stage = document.getElementById("studioPreviewStage");
+    const panel = document.getElementById("studioAiDrawer");
+    const zone = document.getElementById("studioTopDockZone");
+
+    const read = () => ({
+      stageRight: stage.getBoundingClientRect().right,
+      panelLeft: panel.getBoundingClientRect().left,
+      zoneRight: zone.getBoundingClientRect().right
+    });
+
+    const start = read();
+
+    document.getElementById("studioAiToggleButton").click();
+
+    await new Promise(resolve => setTimeout(resolve, 70));
+    const mid = read();
+
+    await new Promise(resolve => setTimeout(resolve, 400));
+    const end = read();
+
+    return { start, mid, end };
+  });
+
+  const { start, mid, end } = openingFrames;
+
+  record(
+    "U3. 여는 동안 Preview stage가 중간 좌표를 거친다(툭 끊기지 않는다)",
+    mid.stageRight < start.stageRight - 5 && mid.stageRight > end.stageRight + 5,
+    JSON.stringify(openingFrames)
+  );
+
+  record(
+    "U4. 여는 동안 stage / Top Dock zone / 패널이 같은 좌표를 유지한다(틈이 벌어지지 않는다)",
+    Math.abs(mid.stageRight - mid.panelLeft) <= 8 &&
+      Math.abs(mid.zoneRight - mid.panelLeft) <= 8,
+    JSON.stringify(mid)
+  );
+
+  record(
+    "U5. 모션이 끝나면 세 요소가 정확히 맞물린다",
+    Math.abs(end.stageRight - end.panelLeft) <= 7 &&
+      Math.abs(end.zoneRight - end.panelLeft) <= 7,
+    JSON.stringify(end)
+  );
+
+  /* --- 닫는 동안 --- */
+
+  const closingFrames = await page.evaluate(async () => {
+    const stage = document.getElementById("studioPreviewStage");
+    const panel = document.getElementById("studioAiDrawer");
+
+    const read = () => ({
+      stageRight: stage.getBoundingClientRect().right,
+      panelLeft: panel.getBoundingClientRect().left,
+      panelVisibility: window.getComputedStyle(panel).visibility
+    });
+
+    const start = read();
+
+    document.getElementById("studioAiPanelCollapse").click();
+
+    await new Promise(resolve => setTimeout(resolve, 70));
+    const mid = read();
+
+    await new Promise(resolve => setTimeout(resolve, 400));
+    const end = read();
+
+    return { start, mid, end };
+  });
+
+  record(
+    "U6. 닫는 동안에도 중간 좌표를 거치고, 다 나간 뒤에야 숨겨진다",
+    closingFrames.mid.stageRight > closingFrames.start.stageRight + 5 &&
+      closingFrames.mid.stageRight < closingFrames.end.stageRight - 5 &&
+      closingFrames.mid.panelVisibility === "visible" &&
+      closingFrames.end.panelVisibility === "hidden",
+    JSON.stringify(closingFrames)
+  );
+
+  await page.close();
+
+  /* --- L. prefers-reduced-motion --- */
+
+  const reducedContext = await context.browser().newContext({ reducedMotion: "reduce" });
+
+  const reducedPage = await openStudio(reducedContext, { viewport: { width: 1280, height: 800 } });
+
+  const reduced = await reducedPage.evaluate(() => {
+    const shell = document.getElementById("studioPreviewShell");
+    const stage = document.getElementById("studioPreviewStage");
+    const panel = document.getElementById("studioAiDrawer");
+    return {
+      token: window.getComputedStyle(shell).getPropertyValue("--studio-ai-panel-motion").trim(),
+      stage: window.getComputedStyle(stage).transitionDuration,
+      panel: window.getComputedStyle(panel).transitionDuration
+    };
+  });
+
+  await openPanel(reducedPage);
+
+  const reducedOpen = await rects(reducedPage);
+
+  record(
+    "U7. prefers-reduced-motion에서는 전환을 없앤다",
+    reduced.token === "0s" &&
+      reduced.stage === "0s" &&
+      reduced.panel.split(",").every(d => d.trim() === "0s"),
+    JSON.stringify(reduced)
+  );
+
+  record(
+    "U8. 전환을 없애도 열린 결과 레이아웃은 동일하다",
+    Math.abs(reducedOpen.panel.right - reducedOpen.innerWidth) < 1 &&
+      Math.abs(reducedOpen.stage.right - reducedOpen.panel.left) <= 7,
+    JSON.stringify(reducedOpen)
+  );
+
+  await reducedPage.close();
+  await reducedContext.close();
+
+}
+
+
+/* =========================================================
+   V. Top Dock 기본 상태와 AI 패널의 독립성 (PHASE AI-5A.1)
+
+   AI 진입점이 dock 안으로 들어오면서 "들어오자마자 AI Assistant가
+   보이는가"가 중요해졌다. 초기값은 studio/index.html 마크업의
+   .is-open이 정하고 어디에도 저장하지 않는다 — 그래서 새로 연
+   페이지는 항상 펼친 상태로 시작한다.
+
+   두 토글(dock / AI 패널)이 서로의 상태를 건드리지 않는지도
+   여기서 함께 잰다.
+========================================================== */
+
+async function runDock(context) {
+
+  const page = await openStudio(context, { viewport: { width: 1280, height: 800 } });
+
+  const initial = await page.evaluate(() => {
+    const zone = document.getElementById("studioTopDockZone");
+    const bar = document.getElementById("studioTopDock");
+    const handle = document.getElementById("studioTopDockHandle");
+    const toggle = document.getElementById("studioAiToggleButton");
+    const barBox = bar.getBoundingClientRect();
+    const toggleBox = toggle.getBoundingClientRect();
+    return {
+      zoneOpen: zone.classList.contains("is-open"),
+      handleExpanded: handle.getAttribute("aria-expanded"),
+      handleIcon: document.getElementById("studioTopDockHandleIcon").textContent,
+      /* 바가 실제로 화면 안에 내려와 있는가 */
+      barVisible: barBox.top >= -1 && barBox.bottom > 0,
+      /* AI Assistant가 실제로 보이고 눌리는 자리에 있는가 */
+      toggleVisible: toggleBox.top >= 0 && toggleBox.bottom <= window.innerHeight,
+      toggleHit: (() => {
+        const el = document.elementFromPoint(
+          toggleBox.left + toggleBox.width / 2,
+          toggleBox.top + toggleBox.height / 2
+        );
+        return el ? el.id : null;
+      })(),
+      aiPanelOpen: window.getStudioAiPanelLayoutState().open
+    };
+  });
+
+  record(
+    "V1. Studio에 처음 들어가면 Top Dock이 펼쳐져 있다",
+    initial.zoneOpen === true &&
+      initial.handleExpanded === "true" &&
+      initial.handleIcon === "▴" &&
+      initial.barVisible === true,
+    JSON.stringify(initial)
+  );
+
+  record(
+    "V2. 그래서 AI Assistant가 최초 화면에서 바로 보이고 눌린다",
+    initial.toggleVisible === true &&
+      initial.toggleHit === "studioAiToggleButton",
+    JSON.stringify(initial)
+  );
+
+  record(
+    "V3. Top Dock이 펼쳐져 있어도 AI 패널은 닫힌 채로 시작한다(별개 상태)",
+    initial.aiPanelOpen === false
+  );
+
+  /* --- V4. 클릭 한 번으로 AI 패널이 열린다 (dock을 먼저 열 필요 없음) --- */
+
+  await page.click("#studioAiToggleButton");
+  await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === true);
+  await waitForPanelSettled(page, true);
+
+  const afterOneClick = await page.evaluate(() => ({
+    aiPanelOpen: window.getStudioAiPanelLayoutState().open,
+    zoneOpen: document.getElementById("studioTopDockZone").classList.contains("is-open")
+  }));
+
+  record(
+    "V4. 최초 화면에서 AI Assistant 한 번만 눌러도 패널이 열린다",
+    afterOneClick.aiPanelOpen === true && afterOneClick.zoneOpen === true,
+    JSON.stringify(afterOneClick)
+  );
+
+  /* --- V5/V6. dock을 접어도 AI 패널 상태는 그대로 --- */
+
+  const stageBeforeCollapse = (await rects(page)).stage;
+
+  await page.click("#studioTopDockHandle");
+  await page.waitForFunction(
+    () => document.getElementById("studioTopDockZone").classList.contains("is-open") === false
+  );
+  await sleep(250);
+
+  const afterDockCollapse = await page.evaluate(() => {
+    const bar = document.getElementById("studioTopDock").getBoundingClientRect();
+    return {
+      zoneOpen: document.getElementById("studioTopDockZone").classList.contains("is-open"),
+      handleExpanded: document.getElementById("studioTopDockHandle").getAttribute("aria-expanded"),
+      handleIcon: document.getElementById("studioTopDockHandleIcon").textContent,
+      barOffScreen: bar.bottom <= 1,
+      aiPanelOpen: window.getStudioAiPanelLayoutState().open,
+      aiPanelWidth: window.getStudioAiPanelLayoutState().width
+    };
+  });
+
+  record(
+    "V5. Top Dock handle로 접히고 바가 화면 밖으로 나간다",
+    afterDockCollapse.zoneOpen === false &&
+      afterDockCollapse.handleExpanded === "false" &&
+      afterDockCollapse.handleIcon === "▾" &&
+      afterDockCollapse.barOffScreen === true,
+    JSON.stringify(afterDockCollapse)
+  );
+
+  record(
+    "V6. dock을 접어도 AI 패널은 열린 그대로다(두 토글이 서로 독립)",
+    afterDockCollapse.aiPanelOpen === true &&
+      afterDockCollapse.aiPanelWidth === 380,
+    JSON.stringify(afterDockCollapse)
+  );
+
+  /* --- V7. dock을 접은 뒤에도 패널 헤더로 닫을 수 있고, dock 상태는 불변 --- */
+
+  await page.click("#studioAiPanelCollapse");
+  await page.waitForFunction(() => window.getStudioAiPanelLayoutState().open === false);
+  await waitForPanelSettled(page, false);
+
+  const afterPanelClose = await page.evaluate(() => ({
+    aiPanelOpen: window.getStudioAiPanelLayoutState().open,
+    zoneOpen: document.getElementById("studioTopDockZone").classList.contains("is-open"),
+    toolbarExpanded: document.getElementById("studioAiToggleButton").getAttribute("aria-expanded")
+  }));
+
+  const stageAfterAll = (await rects(page)).stage;
+
+  record(
+    "V7. AI 패널을 닫아도 Top Dock은 접힌 그대로다(패널이 dock을 건드리지 않는다)",
+    afterPanelClose.aiPanelOpen === false &&
+      afterPanelClose.zoneOpen === false &&
+      afterPanelClose.toolbarExpanded === "false",
+    JSON.stringify(afterPanelClose)
+  );
+
+  record(
+    "V8. AI 패널이 닫히면 Preview가 다시 화면 전체를 쓴다(dock 상태와 무관)",
+    Math.abs(stageAfterAll.right - stageAfterAll.width) < 1 &&
+      stageAfterAll.right > stageBeforeCollapse.right,
+    `before=${stageBeforeCollapse.right} after=${stageAfterAll.right}`
+  );
+
+  /* --- V9. handle을 다시 누르면 열린다 --- */
+
+  await page.click("#studioTopDockHandle");
+  await page.waitForFunction(
+    () => document.getElementById("studioTopDockZone").classList.contains("is-open") === true
+  );
+  await sleep(250);
+
+  const reopened = await page.evaluate(() => {
+    const bar = document.getElementById("studioTopDock").getBoundingClientRect();
+    return {
+      zoneOpen: document.getElementById("studioTopDockZone").classList.contains("is-open"),
+      handleExpanded: document.getElementById("studioTopDockHandle").getAttribute("aria-expanded"),
+      barVisible: bar.top >= -1 && bar.bottom > 0,
+      aiPanelOpen: window.getStudioAiPanelLayoutState().open
+    };
+  });
+
+  record(
+    "V9. handle을 다시 누르면 Top Dock이 열리고, AI 패널 상태는 여전히 그대로다",
+    reopened.zoneOpen === true &&
+      reopened.handleExpanded === "true" &&
+      reopened.barVisible === true &&
+      reopened.aiPanelOpen === false,
+    JSON.stringify(reopened)
+  );
+
+  /* --- V10. Desktop/Mobile 토글 회귀 --- */
+
+  const viewportToggle = await page.evaluate(async () => {
+    const stage = document.getElementById("studioPreviewStage");
+    const wrap = document.getElementById("studioPreviewFrameWrap");
+    const options = Array.from(document.querySelectorAll(".studio-viewport-toggle-option"));
+
+    options.find(b => b.dataset.viewportMode === "mobile").click();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const mobile = {
+      hasClass: stage.classList.contains("studio-preview-stage--mobile"),
+      activeLabel: document.querySelector(".studio-viewport-toggle-option--active").textContent.trim(),
+      /*
+        레이아웃 폭(offsetWidth)으로 잰다 — getBoundingClientRect는
+        #studioPreviewFrameWrap에 걸린 transform: scale()이 반영된
+        시각 크기라 390이 아니다(studio.css의 의도된 동작: iframe의
+        레이아웃 뷰포트는 항상 390으로 두고 화면이 좁으면 시각적으로만
+        축소한다).
+      */
+      frameWidth: document.getElementById("studioPreviewFrame").offsetWidth,
+      scale: wrap.style.getPropertyValue("--studio-mobile-scale")
+    };
+
+    options.find(b => b.dataset.viewportMode === "desktop").click();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    const desktop = {
+      hasClass: stage.classList.contains("studio-preview-stage--mobile"),
+      activeLabel: document.querySelector(".studio-viewport-toggle-option--active").textContent.trim()
+    };
+
+    return { mobile, desktop };
+  });
+
+  record(
+    "V10. Desktop/Mobile Preview 토글에 회귀가 없다(Top Dock 기본값 변경과 무관)",
+    viewportToggle.mobile.hasClass === true &&
+      viewportToggle.mobile.activeLabel === "Mobile" &&
+      viewportToggle.mobile.frameWidth === 390 &&
+      viewportToggle.desktop.hasClass === false &&
+      viewportToggle.desktop.activeLabel === "Desktop",
+    JSON.stringify(viewportToggle)
+  );
+
   await page.close();
 
 }
@@ -1317,6 +2034,8 @@ try {
   if (shouldRun("attach")) await runAttach(context);
   if (shouldRun("loading")) await runLoading(context);
   if (shouldRun("viewport")) await runViewport(context);
+  if (shouldRun("motion")) await runMotion(context);
+  if (shouldRun("dock")) await runDock(context);
 
 } finally {
 

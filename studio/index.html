@@ -204,18 +204,31 @@
          Preview Back을 위 floating 컨트롤로 옮기며 이 dock에서는
          제거됨).
 
-         평소엔 화면 밖(위)으로 숨어 있고 얇은 handle
-         (#studioTopDockHandle)만 보인다. hover/focus로는 절대
-         열리지 않는다 — handle을 클릭해야만 studio-preview.js가
+         hover/focus로는 절대 열리거나 닫히지 않는다 —
+         #studioTopDockHandle을 클릭할 때만 studio-preview.js가
          #studioTopDockZone에 is-open 클래스를 토글한다(닫힘 ↔
          펼침). handle은 dock이 열려 있든 닫혀 있든 항상 같은
          자리(zone 최상단)에 남아 있어 클릭 가능해야 한다 — dock이
          열렸을 때도 handle이 dock 바로 위(z-index 상 dock보다
          위)에 그려지므로 다시 눌러 접을 수 있다.
+
+         ★ 기본 상태 = 펼침 (PHASE AI-5A.1 마지막 조정)
+         예전에는 접힌 채로 시작했다. AI 진입점이 오른쪽 세로 탭에서
+         이 dock 안의 "AI Assistant"로 옮겨 오면서, 접힌 채로
+         시작하면 Studio에 들어와 AI를 쓰기까지 handle을 먼저
+         찾아 눌러야 했다 — 그래서 초기값만 펼침으로 바꾼다.
+         "접으면 Preview가 실제 사이트와 같아진다"는 이 dock의
+         존재 이유는 그대로다(사용자가 handle로 접으면 된다).
+
+         상태는 **여기 마크업의 초기값**일 뿐이고 어디에도 저장하지
+         않는다 — 사용자가 세션 중 접고 편 결과는 그 문서가 살아
+         있는 동안만 유지되며(Studio는 admin iframe 안에서 계속
+         살아 있다), 새로 로드하면 다시 이 초기값에서 시작한다.
+         AI 패널의 열림 상태와도 무관하다(서로 다른 토글).
     ====================================================== -->
 
     <div
-      class="studio-top-dock-zone"
+      class="studio-top-dock-zone is-open"
       id="studioTopDockZone"
     >
 
@@ -329,6 +342,32 @@
             Publish
           </button>
 
+          <!--
+               PHASE AI-5A.1 — AI 패널의 유일한 여는 곳.
+               예전에는 화면 오른쪽 가장자리의 세로 탭이었는데,
+               "Preview 위에 떠 있는 또 하나의 진입점"이 되어
+               제거하고 여기로 합쳤다. 스킨을 직접 만드는 버튼들과는
+               1px divider로 한 칸 떼어 둔다.
+
+               aria-expanded는 studio/ai/studio-ai-panel-layout.js가
+               패널 헤더의 접기 버튼과 **같은 state 하나**로 동기화한다
+               — 어느 쪽으로 닫든 이 값이 즉시 false가 된다.
+          -->
+          <span
+            class="studio-top-dock-divider"
+            aria-hidden="true"
+          ></span>
+
+          <button
+            type="button"
+            class="studio-corner-button studio-ai-toggle-button"
+            id="studioAiToggleButton"
+            aria-expanded="false"
+            aria-controls="studioAiDrawer"
+          >
+            AI Assistant
+          </button>
+
         </div>
 
       </div>
@@ -338,10 +377,10 @@
         type="button"
         class="studio-top-dock-handle"
         id="studioTopDockHandle"
-        aria-expanded="false"
+        aria-expanded="true"
         aria-controls="studioTopDock"
-        aria-label="Studio 상단 컨트롤 펼치기"
-      ><span id="studioTopDockHandleIcon" aria-hidden="true">▾</span></button>
+        aria-label="Studio 상단 컨트롤"
+      ><span id="studioTopDockHandleIcon" aria-hidden="true">▴</span></button>
 
     </div>
 
@@ -350,13 +389,17 @@
          AI PANEL — 오른쪽 사이드바 (PHASE AI-5A)
 
          PHASE 1B~AI-4에서는 화면 아래 가운데에 붙는 drawer였다.
-         이번 라운드에서 VS Code/Cursor식 우측 패널로 바꿨다 —
-         요청을 쓰는 곳과 그 결과(Preview)가 나란히 보이게 하기
-         위해서다. DOM 순서는 [세로 탭][resizer][패널]이고,
-         여닫기/폭 조절/Preview 클릭 시 접기는
+         AI-5A에서 VS Code/Cursor식 우측 패널로 바꿨다 — 요청을
+         쓰는 곳과 그 결과(Preview)가 나란히 보이게 하기 위해서다.
+         DOM 순서는 [resizer][패널]이고, 여닫기/폭 조절은
          studio/ai/studio-ai-panel-layout.js가, 전송/로딩/되돌리기/
          참고 이미지는 studio/ai/studio-ai-panel.js가 담당한다
          (레이아웃과 기능을 다른 파일로 나눈다).
+
+         PHASE AI-5A.1 — 오른쪽 가장자리의 세로 탭은 제거했고,
+         여는 곳은 Top Dock의 #studioAiToggleButton 하나다. Preview를
+         클릭해도 패널은 접히지 않는다 — 결과를 눌러 확인하면서
+         패널을 열어 두는 흐름이 더 중요하다고 판단했다.
 
          "어떻게 바꾸고 싶나요?"는 헤더 한 곳에만 둔다 — 예전에는
          label과 textarea placeholder 양쪽에 있어 두 번 보였다.
@@ -373,21 +416,6 @@
       class="studio-ai-dock"
       id="studioAiDock"
     >
-
-      <!-- 접힌 상태에서만 보이는 세로 탭(펼치기) -->
-      <button
-        type="button"
-        class="studio-ai-handle"
-        id="studioAiHandle"
-        aria-expanded="false"
-        aria-controls="studioAiDrawer"
-        aria-label="AI 패널 펼치기"
-      >
-        <span
-          id="studioAiHandleIcon"
-          aria-hidden="true"
-        >AI</span>
-      </button>
 
       <div
         class="studio-ai-resizer"

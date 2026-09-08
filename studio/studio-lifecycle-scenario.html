@@ -49,7 +49,8 @@
 
     <button type="button" class="studio-preview-back-floating" id="studioPreviewBackButton" hidden aria-label="이전 화면" title="이전 화면">←</button>
 
-    <div class="studio-top-dock-zone" id="studioTopDockZone">
+    <!-- PHASE AI-5A.1 — 기본 상태 = 펼침(studio/index.html과 동일) -->
+    <div class="studio-top-dock-zone is-open" id="studioTopDockZone">
       <div class="studio-top-dock" id="studioTopDock">
         <button type="button" class="studio-top-dock-back" id="studioBackButton">← back</button>
         <div class="studio-top-dock-groups">
@@ -67,16 +68,17 @@
           <button type="button" class="studio-corner-button" id="studioImportButton" disabled>Import</button>
           <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
           <button type="button" class="studio-corner-button" id="studioPublishButton" disabled>Publish</button>
+          <!-- PHASE AI-5A.1 — studio/index.html과 동일한 AI 진입점 -->
+          <span class="studio-top-dock-divider" aria-hidden="true"></span>
+          <button type="button" class="studio-corner-button studio-ai-toggle-button" id="studioAiToggleButton" aria-expanded="false" aria-controls="studioAiDrawer">AI Assistant</button>
         </div>
       </div>
-      <button type="button" class="studio-top-dock-handle" id="studioTopDockHandle" aria-expanded="false" aria-controls="studioTopDock" aria-label="Studio 상단 컨트롤 펼치기"><span id="studioTopDockHandleIcon" aria-hidden="true">▾</span></button>
+      <button type="button" class="studio-top-dock-handle" id="studioTopDockHandle" aria-expanded="true" aria-controls="studioTopDock" aria-label="Studio 상단 컨트롤"><span id="studioTopDockHandleIcon" aria-hidden="true">▴</span></button>
     </div>
 
-    <!-- PHASE AI-5A — studio/index.html과 동일한 우측 사이드바 구조 -->
+    <!-- PHASE AI-5A / AI-5A.1 — studio/index.html과 동일한 우측 사이드바 구조
+         (세로 탭 없음, 진입점은 위 Top Dock의 #studioAiToggleButton) -->
     <div class="studio-ai-dock" id="studioAiDock">
-      <button type="button" class="studio-ai-handle" id="studioAiHandle" aria-expanded="false" aria-controls="studioAiDrawer" aria-label="AI 패널 펼치기">
-        <span id="studioAiHandleIcon" aria-hidden="true">AI</span>
-      </button>
       <div class="studio-ai-resizer" id="studioAiResizer" role="separator" aria-orientation="vertical" aria-label="AI 패널 폭 조절"></div>
       <div class="studio-ai-drawer" id="studioAiDrawer">
         <div class="studio-ai-panel-header">

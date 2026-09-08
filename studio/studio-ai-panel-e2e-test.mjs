@@ -1267,13 +1267,20 @@ async function openTopDock(page) {
 
 /*
   PHASE AI-5A — 하단 drawer가 우측 사이드바가 됐다. 열림 표식은
-  여전히 #studioAiDrawer의 .is-open이고, 접힌 상태에서만 보이는
-  세로 탭(#studioAiHandle)을 눌러 연다(레이아웃 계약은
-  studio/studio-ai-panel-layout-e2e-test.mjs가 따로 검증한다).
+  여전히 #studioAiDrawer의 .is-open이다.
+
+  PHASE AI-5A.1 — 오른쪽 가장자리의 세로 탭은 없어졌고, 여는 곳은
+  Top Dock 안의 "AI Assistant"(#studioAiToggleButton) 하나뿐이다.
+  그래서 실제 사용자와 같은 순서로 dock을 먼저 연 뒤 그 버튼을
+  누른다(레이아웃 계약 자체는 studio/studio-ai-panel-layout-e2e-test.mjs
+  가 따로 검증한다).
 */
 async function openDrawer(page) {
   const isOpen = await page.evaluate(() => document.getElementById("studioAiDrawer").classList.contains("is-open"));
-  if (!isOpen) await page.click("#studioAiHandle");
+  if (!isOpen) {
+    await openTopDock(page);
+    await page.click("#studioAiToggleButton");
+  }
   await page.waitForFunction(() => document.getElementById("studioAiDrawer").classList.contains("is-open"));
 }
 
