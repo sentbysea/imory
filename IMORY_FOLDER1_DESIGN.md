@@ -263,6 +263,57 @@ additive로 추가한다.
 안쪽 `item`은 바깥 `item`을 가린다(일반적인 반복문 관례). 바깥 스코프의
 다른 경로(`category.name` 등)는 계속 닿는다.
 
+### 1-10. Folder-aware 스킨 렌더링 (published + Studio Preview)
+
+플랫폼 코드는 바뀐 것이 없다 — published CATEGORY(`skin/skin-category.js`)와
+Studio Preview(`studio/preview/preview-navigation.js`)는 이미 **같은**
+`buildCategorySkinContext()`를 호출하므로 `category.tree`가 양쪽에 같은
+모양으로 도착하고, 렌더러의 중첩 repeat(§1-9)이 그것을 그린다. 이 라운드가
+한 일은 "그 계약으로 폴더를 실제로 표현하는 스킨"을 하나 만들고 양쪽에서
+같은 구조가 나오는지 확인한 것이다.
+
+**스킨이 폴더/글을 가르는 방법** — `data-imory-if`는 비교를 못 하므로 한
+repeat 안에 두 가지를 모두 두고, 해당 없는 가지를 `hidden`으로 만든다:
+
+```html
+<div class="tree"><div class="node" data-imory-repeat="category.tree">
+  <section class="folder-card" data-imory-if="item.name">      <!-- 폴더 가지 -->
+    <strong data-imory-bind="item.name"></strong>
+    <ul><li data-imory-repeat="item.children"> … 같은 분기를 한 단계 더 … </li></ul>
+  </section>
+  <a class="entry" data-imory-if="item.href" data-imory-href="item.href"> <!-- 글 가지 -->
+    <span data-imory-bind="item.title"></span>
+  </a>
+</div></div>
+```
+
+- hidden 가지 안의 `item.children` repeat은 undefined를 만나 조용히 제거되고
+  밖으로 새지 않는다(`skin/skin-render-test.html` D-3).
+- 스킨 CSS에 `[hidden] { display: none; }`이 있어야 한다(스킨 `display`
+  규칙이 UA의 `[hidden]`보다 명시도가 높을 수 있다 — §1-6b와 같은 이유).
+- 폴더가 없는 카테고리에서도 `tree`에 root 글이 오므로 같은 템플릿이
+  그대로 동작한다(`hasFolders`로 분기할 필요가 없다).
+
+**예시 스킨**: [skin/test-skins/imory-finder-folders-v1.json](skin/test-skins/imory-finder-folders-v1.json)
+— 2026-09-09 현재 published된 finder 스타일(글마다 분홍 폴더 카드) 스킨을
+바탕으로, **1단계 폴더만 큰 분홍 폴더 카드**가 되고 그 안의 글은 작은
+항목(문서 아이콘 + 제목 + 날짜), 2·3단계 폴더는 카드 안의 들여쓴 묶음,
+root 글은 작은 항목이다. HOME/POST/BANNER 템플릿은 그 스킨 그대로다.
+기존 published 스킨을 자동으로 바꾸지 않는다 — Studio에서 Import해서
+쓰거나 CATEGORY 템플릿과 `.finder-tree*`/`.finder-folder-*`/`.finder-entry*`
+CSS만 옮겨 쓴다.
+
+**Studio AI 계약**: `functions/api/skin-ai.js`의 시스템 프롬프트
+(`buildSkinAiSystemPrompt`, "Category folders" 절)가 `category.posts`(평면·
+최신순, 폴더 무시)와 `category.tree`(폴더 계층·sort_order·root 글 포함)의
+역할, 두 node shape, 폴더에 `href`가 없다는 것, `item.kind` 비교 대신
+필드 존재로 분기하는 방법, 중첩 repeat 상한을 설명한다. **사용자가 폴더
+표현을 요청할 때만** `category.tree`를 쓰고, 일반 최신순 목록 요청이면
+`category.posts`를 쓰며, 기존 `category.posts` 스킨을 폴더형으로 강제
+변환하지 않도록 지시한다. 검증은 `studio/studio-ai-panel-e2e-test.mjs`
+server 섹션 K1~K8(실제 모델 호출 없음, K8은 예시 스킨이 서버 검증을
+통과하는지).
+
 ---
 
 ## 2. 보안 — 무엇이 공개되고 무엇이 아닌가
@@ -348,7 +399,8 @@ REST로 직접 읽을 수 있다. 화면에서 안 보이는 것과 접근할 �
 | 실제 Supabase 인스턴스 확인 절차 | [supabase/tests/20260908_post_folders_manual_test.sql](supabase/tests/20260908_post_folders_manual_test.sql) | **미실행 — 사용자 확인 필요** |
 | 관리 트리 렌더·CRUD·drop 판정·터치 drag·롤백 | [posts/posts-folder-manage-e2e-test.mjs](posts/posts-folder-manage-e2e-test.mjs) (포트 8941) | 30/30 통과 |
 | `category.tree` shape·마스킹·잘라내기·`category.posts` 불변 | [skin/skin-page-context-test.html](skin/skin-page-context-test.html) | 99/99 통과 |
-| 중첩 repeat 4단계 + 상한 | [skin/skin-render-test.html](skin/skin-render-test.html) | 44/44 통과 |
+| 중첩 repeat 4단계 + 상한 · 폴더/글 분기 패턴(D-3) | [skin/skin-render-test.html](skin/skin-render-test.html) | 53/53 통과 |
+| folder-aware 스킨 — published CATEGORY(소유자/방문자 · 모바일/데스크톱 · 카드 안 글 → POST · 폴더 없음 · 빈 카테고리) + Studio Preview(`?scenario=t`) 동일 signature + `category.posts` 스킨 5종 회귀(폴더 유무에 innerHTML 동일) | [skin/skin-folder-tree-e2e-test.mjs](skin/skin-folder-tree-e2e-test.mjs) (포트 8942) | 56/56 통과 |
 | 기존 관리/스킨 동선 회귀 | `skin/skin-write-manage-e2e-test.mjs` · `skin-published-frame` · `skin-banner-page` · `studio/studio-inspector` | 147 / 64 / 216 / 34 전부 통과 |
 
 **구분해서 읽을 것**: 위 표에서 "통과"는 전부 **mock 또는 로컬 엔진** 결과다.

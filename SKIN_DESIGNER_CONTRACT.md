@@ -247,8 +247,9 @@
 - `category.tree`만 사용자가 관리 화면에서 drag로 정한 순서를 반영합니다. 폴더와 글이 한 컨테이너 안에서 섞여 정렬됩니다.
 - **폴더에는 `href`가 없습니다.** 폴더를 여는 페이지가 아직 없기 때문입니다 — 폴더 이름을 링크로 감싸지 마세요.
 - **`kind` 값으로 분기할 수 없습니다**(`data-imory-if`는 값 비교를 못 합니다). 대신 필드 존재로 갈라 쓰세요: 폴더는 `item.name`/`item.children`, 글은 `item.title`/`item.href`.
-- 폴더가 하나도 없으면 `tree`는 빈 배열, `hasFolders`는 `false`입니다. 그때 목록을 그리려면 `category.posts`를 쓰세요.
+- 폴더가 하나도 없으면 `hasFolders`는 `false`이고, `tree`에는 root 글 노드만 관리 화면 순서(`sort_order`)로 옵니다(글이 없으면 빈 배열). 그래서 `category.tree`만 쓰는 스킨도 폴더가 없는 카테고리를 그릴 수 있습니다. 최신순 목록이 필요하면 `category.posts`를 쓰세요.
 - **방문자에게 보이는 글이 하나도 없는 폴더는 `tree`에 아예 오지 않습니다** — 빈 폴더 이름이 화면에 남지 않습니다.
+- **한 repeat 안에서 폴더 가지와 글 가지를 둘 다 두고 `data-imory-if`로 가릅니다.** 해당 없는 가지는 `hidden`이 되므로 스킨 CSS에 `[hidden] { display: none; }`이 있어야 합니다. 완성 예시: [skin/test-skins/imory-finder-folders-v1.json](skin/test-skins/imory-finder-folders-v1.json) — 1단계 폴더는 큰 폴더 카드, 그 안의 글은 작은 항목, 2·3단계 폴더는 카드 안의 들여쓴 묶음, root 글은 작은 항목입니다(글 하나하나가 폴더 카드가 되지 않습니다).
 
 ```html
 <!-- 아코디언/들여쓰기 등 표현은 전적으로 스킨이 정합니다 -->
@@ -642,7 +643,7 @@ Studio에는 데스크톱/모바일 두 미리보기 모드가 있고, 정확히
 | `<table><tr><td>메뉴</td></tr></table>` | `table`/`tr`/`td` 태그만 벗겨지고 "메뉴" 텍스트만 남음 |
 | `<div data-imory-bind="home.recentPosts[0].title">` | 경로가 정규식(3-1절)에 안 맞아 속성 전체 삭제 |
 | `<div data-imory-region="sidebar">` | 허용 값이 `"post-body"` 하나뿐이라 속성 전체 삭제 |
-| repeat 내부에 또 `data-imory-repeat` | 렌더 시점에 그 하위 엘리먼트가 삭제됨(저장은 성공, **렌더할 때** 사라짐) |
+| repeat 내부에 또 `data-imory-repeat` — **6단계 이상** | 렌더 시점에 그 엘리먼트가 삭제됨(저장은 성공, **렌더할 때** 사라짐). 5단계까지는 FOLDER-1부터 정상 렌더된다(4-1절) |
 
 ### 12-2. CSS — 부분 제거되지만 저장은 성공
 

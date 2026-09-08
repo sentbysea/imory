@@ -1025,6 +1025,93 @@ async function runServerChecks() {
     );
   }
 
+  /* ---- K. category.posts / category.tree 계약 (Folder-aware Skin Rendering) ----
+
+     FOLDER-1이 category.tree(폴더 계층)를 additive로 넣은 뒤, AI가
+     CATEGORY 템플릿을 고칠 때 두 목록의 역할을 구분해야 한다. 실제 모델
+     호출 없이 서버가 조립한 시스템 프롬프트(instructions)만 본다. */
+
+  {
+    resetOpenAiMock("ok");
+    await callSkinAi({ body: { instruction: "a", skinPackage: VALID_SKIN_PACKAGE } });
+    const instructions = openAiLastRequest.body.instructions;
+
+    record(
+      "K1. 프롬프트가 category.posts(평면·최신순)와 category.tree(폴더 계층·sort_order·root 글 포함)를 나란히 설명한다",
+      instructions.includes("category.tree[]") &&
+        instructions.includes("category.hasFolders") &&
+        instructions.includes("`category.posts` is the FLAT list") &&
+        instructions.includes("newest first (created_at DESC), folders ignored") &&
+        instructions.includes("`category.tree` is the FOLDER-AWARE hierarchy") &&
+        instructions.includes("Root-level posts (posts in no folder) are included"),
+      "instructions.length=" + instructions.length
+    );
+
+    record(
+      "K2. folder node / post node shape가 실제 skin-context.js 계약과 같은 필드로 적혀 있다",
+      instructions.includes("{ kind: \"folder\", id, name, depth, children: [...] }") &&
+        instructions.includes("{ kind: \"post\", id, title, href, publishedAt, publishedAtLabel, isSecret, depth }")
+    );
+
+    record(
+      "K3. 폴더에는 href가 없고 폴더 페이지/Series Viewer가 없다고 명시한다(폴더 링크 금지)",
+      instructions.includes("A folder node has NO `href` in this version") &&
+        instructions.includes("no folder page or series viewer") &&
+        instructions.includes("Never wrap a folder name in a link")
+    );
+
+    record(
+      "K4. kind 비교 대신 필드 존재(item.name / item.href)로 분기하고 [hidden] CSS가 필요하다고 안내한다",
+      instructions.includes("do not test `item.kind`") &&
+        instructions.includes("a folder has `item.name` and `item.children`; a post has `item.title` and `item.href`") &&
+        instructions.includes("[hidden] { display: none; }")
+    );
+
+    record(
+      "K5. nested repeat(item.children)로 최대 3단계 폴더를 그린다고 안내하고, repeat 중첩이 가능하다고 바인딩 설명에도 적혀 있다",
+      instructions.includes("nested `data-imory-repeat=\"item.children\"`") &&
+        instructions.includes("3 folder levels") &&
+        instructions.includes("Repeats may be nested")
+    );
+
+    record(
+      "K6. 사용자가 폴더 표현을 요청할 때만 category.tree, 일반 최신순 목록은 category.posts, 기존 스킨 강제 변환 금지",
+      instructions.includes("use `category.tree` ONLY when the user asks for folders to be shown") &&
+        instructions.includes("`category.posts` is the right choice") &&
+        instructions.includes("Never convert an existing `category.posts` skin to `category.tree` unless the user asked for folders")
+    );
+
+    /* 위치: CATEGORY context 항목 바로 뒤, 소유자 진입점 규칙 앞 */
+    record(
+      "K7. 폴더 계약이 CATEGORY context 항목과 POST 항목 사이에 있다(모델이 CATEGORY 설명으로 읽는다)",
+      instructions.indexOf("#### Category folders") > instructions.indexOf("### CATEGORY") &&
+        instructions.indexOf("#### Category folders") < instructions.indexOf("### POST")
+    );
+  }
+
+  {
+    /* folder-aware 예시 스킨(중첩 repeat 4단계 + 분기 패턴)이 서버의
+       SkinPackage 검증/정규화를 그대로 통과하고, 되돌아온 결과에도
+       category.tree / 중첩 item.children repeat이 살아 있어야 한다. */
+    const folderSkin = JSON.parse(
+      fs.readFileSync(path.join(ROOT, "skin", "test-skins", "imory-finder-folders-v1.json"), "utf8")
+    );
+    resetOpenAiMock("ok");
+    const r = await callSkinAi({
+      body: { instruction: "폴더 카드 색을 조금 더 진하게", skinPackage: folderSkin }
+    });
+    const outHtml = r.status === 200 ? r.payload.skinPackage.templates.category.html : "";
+    record(
+      "K8. folder-aware 스킨(category.tree + 중첩 repeat)이 서버 검증을 통과하고 결과에도 트리 바인딩이 유지된다",
+      r.status === 200 &&
+        outHtml.includes('data-imory-repeat="category.tree"') &&
+        (outHtml.match(/data-imory-repeat="item\.children"/g) || []).length === 3 &&
+        outHtml.includes('data-imory-if="item.name"') &&
+        outHtml.includes('data-imory-if="item.href"'),
+      `status=${r.status} childrenRepeats=${(outHtml.match(/data-imory-repeat="item\.children"/g) || []).length}`
+    );
+  }
+
   /* ---- Z. 실제 유료 호출을 하지 않았다는 확인 ---- */
 
   record(

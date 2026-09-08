@@ -93,6 +93,11 @@
     <div class="render-target" id="renderNestedDepth"></div>
   </div>
 
+  <h2>D-3. Renderer — folder-aware 스킨 패턴(한 repeat 안에서 폴더/글 분기)</h2>
+  <div class="panel">
+    <div class="render-target" id="renderFolderBranch"></div>
+  </div>
+
   <h2>E. 책임 경계(Slice 3.5) — raw skin을 그대로 renderSkin에 넣어도 안전한가?</h2>
   <div class="panel">
     <p>
@@ -563,6 +568,193 @@
 
 
     /* =====================================================
+       D-3. folder-aware 스킨이 실제로 쓰는 패턴
+
+       category.tree는 폴더 노드와 글 노드가 한 배열에 섞여 있고
+       data-imory-if는 값 비교를 못 한다. 그래서 스킨은 한 repeat
+       안에 폴더 가지(data-imory-if="item.name")와 글 가지
+       (data-imory-if="item.href")를 둘 다 두고, 렌더러가 해당 없는
+       가지를 hidden으로 만드는 방식으로 분기한다
+       (skin/test-skins/imory-finder-folders-v1.json이 이 패턴이다).
+
+       확인하는 것:
+         - 폴더 노드에서는 글 가지가, 글 노드에서는 폴더 가지가 hidden
+         - hidden된 폴더 가지 안의 nested repeat(item.children)은
+           undefined를 만나 조용히 제거되고 밖으로 새지 않는다
+         - 3단계 폴더 안의 글까지 href/title/isSecret이 채워진다
+         - 안쪽 item이 바깥 item을 가려도 category.name은 계속 닿는다
+    ===================================================== */
+
+    function runFolderBranchTests() {
+
+      const container = document.getElementById("renderFolderBranch");
+
+      const entry =
+        '<a class="fb-entry" data-imory-if="item.href" data-imory-href="item.href">' +
+          '<span class="fb-title" data-imory-bind="item.title"></span>' +
+          '<span class="fb-lock" data-imory-if="item.isSecret">LOCK</span>' +
+          '<span class="fb-cat" data-imory-bind="category.name"></span>' +
+        '</a>';
+
+      const folderSkin = {
+        schemaVersion: 1,
+        html:
+          '<div class="fb-tree"><div class="fb-node" data-imory-repeat="category.tree">' +
+            '<section class="fb-folder" data-imory-if="item.name">' +
+              '<strong class="fb-folder-name" data-imory-bind="item.name"></strong>' +
+              '<ul class="fb-list"><li class="fb-child" data-imory-repeat="item.children">' +
+                '<div class="fb-sub" data-imory-if="item.name">' +
+                  '<span class="fb-sub-name" data-imory-bind="item.name"></span>' +
+                  '<ul class="fb-list"><li class="fb-child" data-imory-repeat="item.children">' +
+                    '<div class="fb-sub fb-sub-3" data-imory-if="item.name">' +
+                      '<span class="fb-sub-name" data-imory-bind="item.name"></span>' +
+                      '<ul class="fb-list"><li class="fb-child" data-imory-repeat="item.children">' + entry + '</li></ul>' +
+                    '</div>' + entry +
+                  '</li></ul>' +
+                '</div>' + entry +
+              '</li></ul>' +
+            '</section>' +
+            entry.replace('fb-entry', 'fb-entry fb-root') +
+          '</div></div>',
+        css: ""
+      };
+
+      const folderContext = {
+        category: {
+          name: "LOG",
+          hasFolders: true,
+          tree: [
+            { kind: "post", id: "1", title: "루트 글", href: "/me/post/1", isSecret: false, depth: 1 },
+            {
+              kind: "folder", id: "10", name: "홍차", depth: 1,
+              children: [
+                {
+                  kind: "folder", id: "11", name: "Sentinel AU", depth: 2,
+                  children: [
+                    {
+                      kind: "folder", id: "12", name: "3단", depth: 3,
+                      children: [
+                        { kind: "post", id: "3", title: "깊은 글", href: "/me/post/3", isSecret: true, depth: 4 }
+                      ]
+                    },
+                    { kind: "post", id: "2", title: "첫 만남", href: "/me/post/2", isSecret: false, depth: 3 }
+                  ]
+                },
+                { kind: "post", id: "4", title: "홍차 노트", href: "/me/post/4", isSecret: false, depth: 2 }
+              ]
+            },
+            { kind: "post", id: "5", title: "맨 아래 글", href: "/me/post/5", isSecret: false, depth: 1 }
+          ]
+        }
+      };
+
+      renderSkin({ container, skin: folderSkin, context: folderContext, mode: "view" });
+
+      const nodes = Array.from(container.querySelectorAll(".fb-tree > .fb-node"));
+
+      assert(
+        "[render:folder] root 컨테이너의 노드 수 = tree 길이(3)",
+        nodes.length === 3
+      );
+
+      const visibleDirect = (node) =>
+        Array.from(node.children).filter((el) => !el.hidden);
+
+      assert(
+        "[render:folder] 각 노드에서 해당하는 가지 하나만 보인다(글→a, 폴더→section)",
+        visibleDirect(nodes[0]).length === 1 && visibleDirect(nodes[0])[0].matches("a.fb-root") &&
+        visibleDirect(nodes[1]).length === 1 && visibleDirect(nodes[1])[0].matches("section.fb-folder") &&
+        visibleDirect(nodes[2]).length === 1 && visibleDirect(nodes[2])[0].matches("a.fb-root")
+      );
+
+      assert(
+        "[render:folder] 글 노드의 hidden 폴더 가지 안에는 nested repeat이 아무것도 만들지 않음",
+        nodes[0].querySelectorAll(".fb-child").length === 0 &&
+        nodes[0].querySelector("[data-imory-repeat]") === null
+      );
+
+      const folder = nodes[1].querySelector("section.fb-folder");
+      const level1Children = Array.from(folder.querySelectorAll(":scope > .fb-list > .fb-child"));
+
+      assert(
+        "[render:folder] 1단계 폴더 이름과 자식 수(2)",
+        folder.querySelector(":scope > .fb-folder-name").textContent === "홍차" &&
+        level1Children.length === 2
+      );
+
+      const sub2 = level1Children[0].querySelector(":scope > .fb-sub");
+      const sub2Children = sub2 ? Array.from(sub2.querySelectorAll(":scope > .fb-list > .fb-child")) : [];
+
+      assert(
+        "[render:folder] 2단계 폴더는 폴더 가지로, 옆의 글은 글 가지로 렌더됨",
+        sub2 && !sub2.hidden &&
+        sub2.querySelector(":scope > .fb-sub-name").textContent === "Sentinel AU" &&
+        level1Children[0].querySelector(":scope > a.fb-entry").hidden === true &&
+        level1Children[1].querySelector(":scope > .fb-sub").hidden === true &&
+        level1Children[1].querySelector(":scope > a.fb-entry").hidden === false &&
+        level1Children[1].querySelector(":scope > a.fb-entry .fb-title").textContent === "홍차 노트"
+      );
+
+      const sub3 = sub2Children[0] && sub2Children[0].querySelector(":scope > .fb-sub-3");
+      const deepEntry = sub3 && sub3.querySelector(".fb-child > a.fb-entry");
+
+      assert(
+        "[render:folder] 3단계 폴더 안의 글까지 href/title/isSecret이 채워짐",
+        sub3 && !sub3.hidden &&
+        sub3.querySelector(":scope > .fb-sub-name").textContent === "3단" &&
+        deepEntry && !deepEntry.hidden &&
+        deepEntry.getAttribute("href") === "/me/post/3" &&
+        deepEntry.querySelector(".fb-title").textContent === "깊은 글" &&
+        deepEntry.querySelector(".fb-lock").hidden === false
+      );
+
+      assert(
+        "[render:folder] 안쪽 item이 바깥 item을 가려도 category.name은 모든 깊이에서 닿음",
+        Array.from(container.querySelectorAll(".fb-cat")).every((el) => el.textContent === "LOG")
+      );
+
+      const visibleTitles = Array.from(container.querySelectorAll("a.fb-entry"))
+        .filter((a) => !a.hidden)
+        .map((a) => a.querySelector(".fb-title").textContent);
+
+      assert(
+        "[render:folder] 보이는 글의 DFS 순서가 tree 순서와 같음",
+        JSON.stringify(visibleTitles) ===
+          JSON.stringify(["루트 글", "깊은 글", "첫 만남", "홍차 노트", "맨 아래 글"])
+      );
+
+      /* 폴더가 없는 카테고리 — tree에는 root 글만 온다(hasFolders=false). */
+
+      const flatContainer = document.createElement("div");
+      container.appendChild(flatContainer);
+
+      renderSkin({
+        container: flatContainer,
+        skin: folderSkin,
+        context: {
+          category: {
+            name: "NOTE",
+            hasFolders: false,
+            tree: [
+              { kind: "post", id: "7", title: "노트 하나", href: "/me/post/7", isSecret: false, depth: 1 }
+            ]
+          }
+        },
+        mode: "view"
+      });
+
+      assert(
+        "[render:folder] 폴더가 없어도 같은 템플릿이 root 글을 글 가지로 그림",
+        flatContainer.querySelectorAll(".fb-node").length === 1 &&
+        flatContainer.querySelector("section.fb-folder").hidden === true &&
+        flatContainer.querySelector("a.fb-root").hidden === false &&
+        flatContainer.querySelector("a.fb-root .fb-title").textContent === "노트 하나"
+      );
+
+    }
+
+
+    /* =====================================================
        E. Slice 3.5 — raw skin을 그대로 renderSkin에 넣어도
        스스로 방어하는지 확인 (+ 사전에 sanitize해도 이중으로
        망가지지 않는지 idempotency 확인)
@@ -646,6 +838,7 @@
 
       runMalformedBindingTests();
       runNestedRepeatDepthTests();
+      runFolderBranchTests();
       runResponsibilityBoundaryTests();
 
       finishSummary();

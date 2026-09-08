@@ -806,6 +806,102 @@
         },
 
         /*
+          Scenario T — folder-aware Skin Preview fixture (FOLDER-1
+          후속: Folder-aware Skin Rendering).
+
+          category.tree를 그리는 스킨이 Studio Preview에서도 published
+          화면과 같은 폴더 구조로 보이는지 확인한다. Preview는
+          production과 같은 buildCategorySkinContext()를 그대로
+          호출하므로(preview-navigation.js) 이 fixture가 하는 일은
+          post_folders 테이블과 folder_id/sort_order가 붙은 posts를
+          mock에 두는 것뿐이다.
+
+          스킨 본체는 e2e(skin/skin-folder-tree-e2e-test.mjs)가
+          addInitScript로 window.__scenarioFolderSkinPackage에
+          skin/test-skins/imory-finder-folders-v1.json을 실어 준다 —
+          published 쪽 검증과 **같은 JSON 파일**을 써야 "같은 구조"를
+          말할 수 있기 때문이다. 이 문서를 브라우저에서 직접 열었을
+          때를 위해 최소 fallback 템플릿을 둔다(같은 분기 패턴).
+
+          카테고리 301(LOG)에 폴더가 있고, 302(NOTE)에는 없다 —
+          hasFolders=false인 카테고리에서도 같은 템플릿이 root 글을
+          그리는지 함께 본다. 폴더 "빈 폴더"(f4)에는 글이 없어
+          tree에서 잘리고, "비공개 폴더"(f6)에는 private 글만 있다
+          (mock에는 RLS가 없으므로 Preview(소유자)에서는 보인다).
+        */
+        t: {
+          userId: "user-t",
+          tables: {
+            skins: [
+              { id: "skin-t1", user_id: "user-t", is_active: true, current_draft_version_id: "draft-t1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-t1",
+                content: window.__scenarioFolderSkinPackage || {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html:
+                        '<div class="t-home"><h1 data-imory-bind="site.title"></h1>' +
+                        '<ul><li data-imory-repeat="navigation.postCategories"><a class="t-cat-link" data-imory-href="item.href" data-imory-bind="item.name"></a></li></ul></div>'
+                    },
+                    category: {
+                      html:
+                        '<div class="t-category"><h1 data-imory-bind="category.name"></h1>' +
+                        '<div class="t-tree"><div class="t-node" data-imory-repeat="category.tree">' +
+                        '<section class="t-folder" data-imory-if="item.name"><strong data-imory-bind="item.name"></strong>' +
+                        '<ul><li data-imory-repeat="item.children">' +
+                        '<span class="t-sub" data-imory-if="item.name" data-imory-bind="item.name"></span>' +
+                        '<a class="t-entry" data-imory-if="item.href" data-imory-href="item.href" data-imory-bind="item.title"></a>' +
+                        '</li></ul></section>' +
+                        '<a class="t-entry t-root" data-imory-if="item.href" data-imory-href="item.href" data-imory-bind="item.title"></a>' +
+                        '</div></div></div>'
+                    },
+                    post: {
+                      html:
+                        '<div class="t-post"><h1 data-imory-bind="post.title"></h1>' +
+                        '<div data-imory-region="post-body"></div></div>'
+                    }
+                  },
+                  css: ".t-category [hidden] { display: none; }",
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "folder-tree-fallback" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-t", nickname: "Scenario T", bio: null, slug: "scenario-t" }],
+            site_settings: [],
+            categories: [
+              { id: "301", user_id: "user-t", name: "LOG", type: "post", sort_order: 1 },
+              { id: "302", user_id: "user-t", name: "NOTE", type: "post", sort_order: 2 }
+            ],
+            post_folders: [
+              { id: "f1", user_id: "user-t", category_id: "301", parent_id: null, name: "홍차", depth: 1, sort_order: 200 },
+              { id: "f2", user_id: "user-t", category_id: "301", parent_id: "f1", name: "Sentinel AU", depth: 2, sort_order: 100 },
+              { id: "f3", user_id: "user-t", category_id: "301", parent_id: "f2", name: "3단 폴더", depth: 3, sort_order: 100 },
+              { id: "f4", user_id: "user-t", category_id: "301", parent_id: null, name: "빈 폴더", depth: 1, sort_order: 300 },
+              { id: "f5", user_id: "user-t", category_id: "301", parent_id: null, name: "2002", depth: 1, sort_order: 400 },
+              { id: "f6", user_id: "user-t", category_id: "301", parent_id: null, name: "비공개 폴더", depth: 1, sort_order: 450 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-t", title: "폴더 없는 글", created_at: "2026-01-05T00:00:00Z", visibility: "public", category_id: "301", folder_id: null, sort_order: 100, content: "본문 401." },
+              { id: "402", user_id: "user-t", title: "첫 만남", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301", folder_id: "f2", sort_order: 200, content: "본문 402." },
+              { id: "403", user_id: "user-t", title: "깊은 글", created_at: "2026-01-02T00:00:00Z", visibility: "secret", category_id: "301", folder_id: "f3", sort_order: 100, content: "본문 403." },
+              { id: "404", user_id: "user-t", title: "홍차 노트", created_at: "2026-01-03T00:00:00Z", visibility: "public", category_id: "301", folder_id: "f1", sort_order: 300, content: "본문 404." },
+              { id: "405", user_id: "user-t", title: "영도", created_at: "2026-01-04T00:00:00Z", visibility: "public", category_id: "301", folder_id: "f5", sort_order: 100, content: "본문 405." },
+              { id: "406", user_id: "user-t", title: "맨 아래 글", created_at: "2025-12-31T00:00:00Z", visibility: "public", category_id: "301", folder_id: null, sort_order: 500, content: "본문 406." },
+              { id: "407", user_id: "user-t", title: "숨은 글", created_at: "2025-12-30T00:00:00Z", visibility: "private", category_id: "301", folder_id: "f6", sort_order: 100, content: "본문 407." },
+              { id: "408", user_id: "user-t", title: "노트 하나", created_at: "2026-01-06T00:00:00Z", visibility: "public", category_id: "302", folder_id: null, sort_order: 100, content: "본문 408." }
+            ],
+            banners: []
+          },
+          rpcHandlers: {}
+        },
+
+        /*
           Scenario F — production 스킨(quiet-frame 계열)을 축소한
           회귀 fixture (PHASE AI-6B.1).
 
