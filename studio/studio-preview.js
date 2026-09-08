@@ -38,6 +38,7 @@
      iframe -> parent  "preview:rendered"      { type, hasPostBodyRegion }
      iframe -> parent  "preview:error"         { type, message }
      iframe -> parent  "preview:navigate"      { type, href }
+     iframe -> parent  "preview:surface-pointer" { type }
 
    "preview:render-banner"(Studio Banner Category Preview)는 Skin
    template 시스템을 타지 않는 별도 경로다 — items[]는 이미
@@ -75,6 +76,7 @@ const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
+const PREVIEW_MSG_SURFACE_POINTER = "preview:surface-pointer";
 
 /*
   studio(이 문서) -> admin(부모 window)로 보내는 메시지. admin은
@@ -140,17 +142,15 @@ const studioImagesButton =
 const studioToast =
   document.getElementById("studioToast");
 
-const studioAiDrawer =
-  document.getElementById("studioAiDrawer");
-
-const studioAiDrawerInput =
-  document.getElementById("studioAiDrawerInput");
-
-const studioAiHandle =
-  document.getElementById("studioAiHandle");
-
-const studioAiHandleIcon =
-  document.getElementById("studioAiHandleIcon");
+/*
+  PHASE AI-5A — AI 패널 요소는 여기서 더 이상 잡지 않는다.
+  하단 drawer가 우측 사이드바가 되면서 여닫기/폭 드래그/Preview
+  클릭 시 접기가 함께 붙었고, 그 전부를
+  studio/ai/studio-ai-panel-layout.js로 옮겼다. 이 파일은 iframe이
+  올려보낸 "preview:surface-pointer"를 그쪽
+  collapseStudioAiPanelFromPreview()에 넘기기만 한다(아래 message
+  리스너).
+*/
 
 
 /*
@@ -888,19 +888,30 @@ studioCodeButton.addEventListener(
    SkinPackage에서도 유효하다는 보장이 없다 — 항상 HOME부터 다시
    보여주고, 사용자가 새 template의 실제 navigation을 클릭해
    CATEGORY/POST까지 스스로 확인하게 한다(요구사항 6절).
+   이 계약은 IMPORT 버튼에 대해 그대로 유지된다.
 
-   PHASE AI-1 — options(선택):
-     { dirty?: boolean, imageSlotBindings?: object }
+   PHASE AI-1 / AI-5A — options(선택):
+     { dirty?: boolean, imageSlotBindings?: object,
+       preserveNavigation?: boolean }
 
-   둘 다 생략하면 지금까지와 완전히 동일하다(dirty=true, 이미지
-   슬롯 연결은 현재 값을 그대로 두고 새 선언 기준으로 prune).
-   IMPORT 버튼은 옵션을 넘기지 않으므로 기존 동작이 그대로다.
+   전부 생략하면 지금까지와 완전히 동일하다(dirty=true, 이미지
+   슬롯 연결은 현재 값을 그대로 두고 새 선언 기준으로 prune,
+   Preview는 HOME으로 리셋). IMPORT 버튼은 옵션을 넘기지 않으므로
+   기존 동작이 그대로다.
 
    AI 되돌리기(studio/ai/studio-ai-panel.js)만 이 옵션을 쓴다 —
    AI 적용 직전의 dirty 값과 이미지 슬롯 연결까지 정확히 그
    상태로 되돌려야 하기 때문이다("AI 전 dirty=false → 적용
    dirty=true → Undo → dirty=false"). 이걸 위해 apply 함수를
    하나 더 만들지 않고 기존 함수를 최소 확장한다.
+
+   preserveNavigation(PHASE AI-5A)은 AI 경로(적용/되돌리기) 전용
+   이다. 스킨을 고쳐 달라고 한 사람은 **지금 보고 있는 화면**이
+   어떻게 바뀌었는지를 보려는 것이므로, CATEGORY/POST를 보다가
+   AI를 쓰면 그 화면 그대로 다시 그린다. 그 항목을 더 이상 그릴
+   수 없으면(카테고리/글이 없거나 새 스킨이 그 페이지를 지원하지
+   않으면) HOME으로 떨어진다 — 판정은 preview-navigation.js의
+   renderPreviewAfterSkinPackageChange()에 있다.
 ========================================================== */
 
 function applyImportedSkinPackage(skinPackage, options) {
@@ -948,9 +959,17 @@ function applyImportedSkinPackage(skinPackage, options) {
 
   updateStudioPublishButtonState();
 
-  resetPreviewNavigation();
+  if (options && options.preserveNavigation) {
 
-  renderHomePreview();
+    renderPreviewAfterSkinPackageChange();
+
+  } else {
+
+    resetPreviewNavigation();
+
+    renderHomePreview();
+
+  }
 
 }
 
@@ -1139,6 +1158,10 @@ function getStudioAiWorkingState(options) {
    결과여야 한다 — 이 함수는 추가 검증을 하지 않고
    applyImportedSkinPackage()로 그대로 넘긴다(AI 전용 적용 경로를
    따로 만들지 않는다는 이번 Phase의 계약).
+
+   PHASE AI-5A — 적용/되돌리기 모두 preserveNavigation:true로
+   넘긴다. 이 함수 하나가 AI 경로의 유일한 입구이므로 여기서만
+   켜면 "AI는 보던 화면 유지 / Import는 HOME 리셋"이 갈린다.
 ========================================================== */
 
 function applyAiSkinPackage(skinPackage, options) {
@@ -1195,7 +1218,8 @@ function applyAiSkinPackage(skinPackage, options) {
     skinPackage,
     {
       dirty: savedSinceRequest ? true : (options ? options.dirty : undefined),
-      imageSlotBindings: options ? options.imageSlotBindings : undefined
+      imageSlotBindings: options ? options.imageSlotBindings : undefined,
+      preserveNavigation: true
     }
   );
 
@@ -1767,6 +1791,22 @@ window.addEventListener(
       if (typeof data.href === "string") {
         handlePreviewNavigateMessage(data.href);
       }
+
+      return;
+
+    }
+
+    /*
+      PHASE AI-5A — Preview를 누르면 열려 있던 AI 패널이 접힌다.
+      판정과 실행은 전부 studio/ai/studio-ai-panel-layout.js가
+      하고(닫혀 있으면 no-op, 폭 드래그 중이면 무시), 이 파일은
+      iframe에서 온 신호를 그쪽으로 넘기기만 한다. 그 파일이 아직
+      로드되지 않았거나 없는 문서에서도 안전하도록 optional call로
+      둔다.
+    */
+    if (data.type === PREVIEW_MSG_SURFACE_POINTER) {
+
+      window.collapseStudioAiPanelFromPreview?.();
 
       return;
 
@@ -2519,59 +2559,6 @@ studioBackButton.addEventListener(
       },
       window.location.origin
     );
-
-  }
-);
-
-
-
-/* =========================================================
-   AI drawer shell (3/7절) — 이번 라운드는 shell만, 실제 AI 연결
-   없음. handle 클릭으로 열고 닫는다 — send는 항상 disabled라
-   여기서 별도 no-op 핸들러를 달 필요가 없다(HTML의 disabled 속성만
-   으로 충분).
-========================================================== */
-
-studioAiHandle.addEventListener(
-  "click",
-  () => {
-
-    const willOpen =
-      !studioAiDrawer.classList.contains(
-        "is-open"
-      );
-
-    studioAiDrawer.classList.toggle(
-      "is-open",
-      willOpen
-    );
-
-    studioAiHandle.setAttribute(
-      "aria-expanded",
-      String(willOpen)
-    );
-
-    studioAiHandleIcon.textContent =
-      willOpen
-        ? "▽"
-        : "△";
-
-    /*
-      닫혀 있을 땐 시각적으로 접힌 textarea가 Tab 순서에 끼어들지
-      않도록 한다 — 열렸을 때만 포커스를 받을 수 있게.
-    */
-    studioAiDrawerInput.tabIndex =
-      willOpen
-        ? 0
-        : -1;
-
-    if (
-      willOpen
-    ) {
-
-      studioAiDrawerInput.focus();
-
-    }
 
   }
 );

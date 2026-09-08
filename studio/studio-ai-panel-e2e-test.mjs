@@ -1265,6 +1265,12 @@ async function openTopDock(page) {
   );
 }
 
+/*
+  PHASE AI-5A — 하단 drawer가 우측 사이드바가 됐다. 열림 표식은
+  여전히 #studioAiDrawer의 .is-open이고, 접힌 상태에서만 보이는
+  세로 탭(#studioAiHandle)을 눌러 연다(레이아웃 계약은
+  studio/studio-ai-panel-layout-e2e-test.mjs가 따로 검증한다).
+*/
 async function openDrawer(page) {
   const isOpen = await page.evaluate(() => document.getElementById("studioAiDrawer").classList.contains("is-open"));
   if (!isOpen) await page.click("#studioAiHandle");
@@ -1324,9 +1330,8 @@ async function runHappy(context) {
   const before = await workingState(page);
 
   /*
-    Preview를 CATEGORY로 옮겨 둔다 — AI 적용 후 실제로 다시
-    그려졌는지(현재 계약대로 HOME으로 복귀하는지)를 눈으로 잴 수
-    있게 하기 위함이다.
+    Preview를 CATEGORY로 옮겨 둔다 — PHASE AI-5A부터 AI 적용은
+    보고 있던 화면을 그대로 유지한다(HOME 복귀는 Import 버튼만).
   */
   await page.evaluate(() => window.__testHooks.simulateNavigate("/scenario-x/category/301"));
   const onCategory = await previewHas(page, ".scenario-x-category");
@@ -1346,7 +1351,13 @@ async function runHappy(context) {
 
   const after = await workingState(page);
   const panel = await panelState(page);
-  const backOnHome = await previewHas(page, ".scenario-x-home");
+
+  /*
+    적용 후에도 CATEGORY에 남아 있어야 한다. 재렌더 자체는
+    AI 결과 css marker가 iframe <style>에 들어왔는지로 잰다.
+  */
+  const stillOnCategory = await previewHas(page, ".scenario-x-category");
+  const previewLocation = await page.evaluate(() => window.getCurrentPreviewLocation());
 
   record(
     "A1. instruction을 입력하면 Send가 활성화된다",
@@ -1373,9 +1384,12 @@ async function runHappy(context) {
   );
 
   record(
-    "A5. Preview가 실제로 다시 그려진다(CATEGORY -> 적용 -> HOME 복귀, 기존 Import와 동일 계약)",
-    onCategory === true && backOnHome === true,
-    `onCategory=${onCategory} backOnHome=${backOnHome}`
+    "A5. Preview가 다시 그려지되 보고 있던 CATEGORY를 유지한다 (PHASE AI-5A)",
+    onCategory === true &&
+      stillOnCategory === true &&
+      previewLocation.type === "category" &&
+      previewLocation.categoryId === "301",
+    `onCategory=${onCategory} stillOnCategory=${stillOnCategory} location=${JSON.stringify(previewLocation)}`
   );
 
   record(

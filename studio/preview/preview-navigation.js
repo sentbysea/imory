@@ -177,7 +177,7 @@ function renderHomePreview() {
    unsupported로 끝난다(추가 fetch 없음).
 ========================================================== */
 
-async function renderCategoryPreviewFor(categoryId) {
+async function renderCategoryPreviewFor(categoryId, options) {
 
   currentPreviewPageType =
     "category";
@@ -245,7 +245,8 @@ async function renderCategoryPreviewFor(categoryId) {
 
   if (!category) {
 
-    setStudioPreviewOverlay(
+    reportPreviewEntryUnavailable(
+      options,
       "empty",
       "이 카테고리를 찾을 수 없습니다."
     );
@@ -274,7 +275,8 @@ async function renderCategoryPreviewFor(categoryId) {
       await renderBannerSkinPreviewFor(
         categoryId,
         bannerTemplate,
-        token
+        token,
+        options
       );
 
       return;
@@ -297,7 +299,8 @@ async function renderCategoryPreviewFor(categoryId) {
 
   if (!categoryTemplate) {
 
-    setStudioPreviewOverlay(
+    reportPreviewEntryUnavailable(
+      options,
       "unsupported",
       "이 스킨에는 아직 CATEGORY 템플릿이 없습니다."
     );
@@ -352,7 +355,8 @@ async function renderCategoryPreviewFor(categoryId) {
 
   if (!context) {
 
-    setStudioPreviewOverlay(
+    reportPreviewEntryUnavailable(
+      options,
       "empty",
       "이 카테고리를 찾을 수 없습니다."
     );
@@ -370,7 +374,8 @@ async function renderCategoryPreviewFor(categoryId) {
       unsupported 상태로 남긴다.
     */
 
-    setStudioPreviewOverlay(
+    reportPreviewEntryUnavailable(
+      options,
       "unsupported",
       "이 카테고리 유형은 아직 Studio Preview를 지원하지 않습니다."
     );
@@ -417,7 +422,7 @@ async function renderCategoryPreviewFor(categoryId) {
    renderPostPreviewFor와 동일하다.
 ========================================================== */
 
-async function renderBannerSkinPreviewFor(categoryId, bannerTemplate, token) {
+async function renderBannerSkinPreviewFor(categoryId, bannerTemplate, token, options) {
 
   currentPreviewPageType =
     "banner";
@@ -475,7 +480,8 @@ async function renderBannerSkinPreviewFor(categoryId, bannerTemplate, token) {
 
   if (!context) {
 
-    setStudioPreviewOverlay(
+    reportPreviewEntryUnavailable(
+      options,
       "empty",
       "이 카테고리를 찾을 수 없습니다."
     );
@@ -609,7 +615,7 @@ async function renderBannerCategoryPreviewFor(categoryId, category, token) {
    동작한다(별도 코드 불필요, PHASE1C 7절 계약 그대로).
 ========================================================== */
 
-async function renderPostPreviewFor(postId) {
+async function renderPostPreviewFor(postId, options) {
 
   currentPreviewPageType =
     "post";
@@ -627,7 +633,8 @@ async function renderPostPreviewFor(postId) {
 
   if (!postTemplate) {
 
-    setStudioPreviewOverlay(
+    reportPreviewEntryUnavailable(
+      options,
       "unsupported",
       "이 스킨에는 아직 POST 템플릿이 없습니다."
     );
@@ -690,7 +697,8 @@ async function renderPostPreviewFor(postId) {
 
   if (!context) {
 
-    setStudioPreviewOverlay(
+    reportPreviewEntryUnavailable(
+      options,
       "empty",
       "이 글을 찾을 수 없습니다."
     );
@@ -767,7 +775,24 @@ async function renderPostPreviewFor(postId) {
 }
 
 
-function renderCurrentPreviewEntry() {
+/* =========================================================
+   renderCurrentPreviewEntry(options)
+
+   options.fallbackToHomeIfUnavailable (PHASE AI-5A)
+     이 렌더가 "그 카테고리/글을 찾을 수 없다" 또는 "이 스킨은 그
+     페이지를 지원하지 않는다"로 끝나면 overlay를 띄우는 대신 HOME
+     으로 되돌린다. AI 결과를 적용한 뒤 보고 있던 화면을 복원하는
+     경로에서만 쓴다 — 사용자가 직접 링크를 눌러 들어간 경우에는
+     지금까지처럼 그 자리에 남아 overlay + Preview Back을 본다
+     (자기가 누른 링크가 조용히 HOME으로 바뀌면 더 혼란스럽다).
+
+   플래그를 모듈 변수로 들고 있지 않고 인자로 흘려보내는 이유:
+   렌더는 비동기라 "지금 복원 중인가"를 전역 상태로 두면 그 사이
+   사용자가 이동했을 때 누가 언제 그 값을 지워야 하는지가
+   불분명해진다. 인자는 그 렌더 한 번에만 붙는다.
+========================================================== */
+
+function renderCurrentPreviewEntry(options) {
 
   const entry =
     previewHistory[previewHistory.length - 1];
@@ -778,11 +803,67 @@ function renderCurrentPreviewEntry() {
   }
 
   if (entry.type === "category") {
-    renderCategoryPreviewFor(entry.categoryId);
+    renderCategoryPreviewFor(entry.categoryId, options);
     return;
   }
 
-  renderPostPreviewFor(entry.postId);
+  renderPostPreviewFor(entry.postId, options);
+
+}
+
+
+/* =========================================================
+   PHASE AI-5A — SkinPackage가 통째로 바뀐 뒤 화면 복원
+
+   studio-preview.js의 applyImportedSkinPackage()가
+   options.preserveNavigation일 때(= AI 적용/되돌리기) 호출한다.
+   Import 버튼은 지금까지처럼 resetPreviewNavigation() + HOME이다.
+
+   previewNavToken을 먼저 올려 진행 중이던 fetch 응답이 새 화면을
+   덮지 않게 한다(resetPreviewNavigation과 같은 이유).
+========================================================== */
+
+function renderPreviewAfterSkinPackageChange() {
+
+  previewNavToken +=
+    1;
+
+  renderCurrentPreviewEntry(
+    { fallbackToHomeIfUnavailable: true }
+  );
+
+}
+
+
+/* =========================================================
+   지금 항목을 그릴 수 없을 때
+
+   기본은 지금까지와 같은 overlay다. 복원 렌더(위 options)에서만
+   HOME으로 되돌린다 — previewHistory까지 HOME 하나로 되돌리므로
+   Preview Back도 함께 사라진다(renderHomePreview가
+   updatePreviewBackButtonVisibility를 부른다).
+========================================================== */
+
+function reportPreviewEntryUnavailable(options, state, message) {
+
+  if (options && options.fallbackToHomeIfUnavailable) {
+
+    previewHistory =
+      [{ type: "home" }];
+
+    previewNavToken +=
+      1;
+
+    renderHomePreview();
+
+    return;
+
+  }
+
+  setStudioPreviewOverlay(
+    state,
+    message
+  );
 
 }
 

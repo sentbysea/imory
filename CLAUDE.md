@@ -97,15 +97,19 @@
 - **HTML 하네스** — `skin/*-test.html`, `studio/*-test.html`. 브라우저에서 열어
   검사 결과를 화면에 찍는다. ES 모듈 `import` 때문에 `file://`로는 못 열고 로컬
   정적 서버가 필요하다(관례상 포트 8934).
-- **Playwright E2E** — `skin/*-e2e-test.mjs`. 자기 정적 서버를 직접 띄우고
-  `node skin/<파일>.mjs`로 실행한다(`--browser=webkit` 지원). Supabase 응답과
-  로그인 상태만 mock하고 HTML/CSS/JS는 저장소의 실제 파일을 서빙한다.
+- **Playwright E2E** — `skin/*-e2e-test.mjs`, `studio/*-e2e-test.mjs`. 자기 정적
+  서버를 직접 띄우고 `node <파일>.mjs`로 실행한다(`--browser=webkit`,
+  `--only=<섹션>` 지원). Supabase 응답과 로그인 상태만 mock하고 HTML/CSS/JS는
+  저장소의 실제 파일을 서빙한다. Studio 쪽은 `studio/studio-lifecycle-scenario.html`
+  (production과 같은 스크립트 구성 + in-memory supabase mock)을 띄운다.
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
 | `skin/skin-published-frame-e2e-test.mjs` | 8934 | 공개 스킨 프레임 좌표/폭 |
 | `skin/skin-banner-page-e2e-test.mjs` | 8935 | BANNER·소유자 링크·POST 수정 동선 |
 | `skin/skin-write-manage-e2e-test.mjs` | 8936 | WRITE/관리 동선·전환·배너 크기·CATEGORY EDIT·모바일 POST 읽기 모드 |
+| `studio/studio-ai-panel-e2e-test.mjs` | 8937 | Skin Studio AI — 서버 방어선(`functions/api/skin-ai.js` 직접 호출) + 전송/검증/적용/되돌리기/참고 이미지 |
+| `studio/studio-ai-panel-layout-e2e-test.mjs` | 8938 | AI 우측 사이드바 레이아웃(여닫기·폭 드래그·Preview 클릭 접기·textarea) + AI 적용 후 화면 유지 |
 
 **완료 기준** (상세: 기준 문서 §6)
 

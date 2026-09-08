@@ -347,23 +347,26 @@
 
 
     <!-- =====================================================
-         AI drawer (3/7절 shell + PHASE AI-1 연결)
+         AI PANEL — 오른쪽 사이드바 (PHASE AI-5A)
 
-         handle 클릭 시 studio-preview.js가 .is-open을 토글해
-         drawer의 max-height만 여닫는다(transform 대신 이 방식을
-         쓰는 이유는 studio.css 참고).
+         PHASE 1B~AI-4에서는 화면 아래 가운데에 붙는 drawer였다.
+         이번 라운드에서 VS Code/Cursor식 우측 패널로 바꿨다 —
+         요청을 쓰는 곳과 그 결과(Preview)가 나란히 보이게 하기
+         위해서다. DOM 순서는 [세로 탭][resizer][패널]이고,
+         여닫기/폭 조절/Preview 클릭 시 접기는
+         studio/ai/studio-ai-panel-layout.js가, 전송/로딩/되돌리기/
+         참고 이미지는 studio/ai/studio-ai-panel.js가 담당한다
+         (레이아웃과 기능을 다른 파일로 나눈다).
 
-         PHASE AI-1에서 붙은 것: 실제 전송(studio/ai/studio-ai-panel.js)
-         과 그 결과를 보여주는 상태 한 줄(#studioAiDrawerStatus) +
-         되돌리기 버튼(#studioAiDrawerUndo). Preview 전체를 덮는
-         loading overlay는 쓰지 않는다 — 진행 상태도 이 한 줄에
-         표시한다.
+         "어떻게 바꾸고 싶나요?"는 헤더 한 곳에만 둔다 — 예전에는
+         label과 textarea placeholder 양쪽에 있어 두 번 보였다.
+         textarea는 aria-labelledby로 그 제목을 가리킨다.
 
          PHASE AI-4의 참고 이미지 UI(thumbnail 줄 / 파일 선택 /
-         안내 문구)는 여기 마크업으로 두지 않고 studio-ai-panel.js가
+         안내 문구)와 AI-2.1의 로딩 점/경과시간은 여기 마크업으로
+         두지 않고 studio-ai-panel.js가 #studioAiPanelBody 안에
          만들어 넣는다 — 이 문서와 studio-lifecycle-scenario.html
-         두 곳에 같은 DOM을 중복해 두지 않기 위해서다(로딩 점 세 개도
-         같은 이유로 JS에서 만든다).
+         두 곳에 같은 DOM을 중복해 두지 않기 위해서다.
     ====================================================== -->
 
     <div
@@ -371,72 +374,101 @@
       id="studioAiDock"
     >
 
-      <div
-        class="studio-ai-drawer"
-        id="studioAiDrawer"
-      >
-
-        <label
-          class="studio-ai-drawer-label"
-          for="studioAiDrawerInput"
-        >
-          어떻게 바꾸고 싶나요?
-        </label>
-
-        <div class="studio-ai-drawer-row">
-
-          <textarea
-            id="studioAiDrawerInput"
-            class="studio-ai-drawer-input"
-            rows="1"
-            placeholder="어떻게 바꾸고 싶나요?"
-            tabindex="-1"
-          ></textarea>
-
-          <button
-            type="button"
-            class="studio-ai-drawer-send"
-            id="studioAiDrawerSend"
-            disabled
-            aria-label="전송"
-          >↑</button>
-
-        </div>
-
-        <p
-          class="studio-ai-drawer-status"
-          id="studioAiDrawerStatus"
-          role="status"
-          aria-live="polite"
-          hidden
-        >
-
-          <span id="studioAiDrawerStatusText"></span>
-
-          <button
-            type="button"
-            class="studio-ai-drawer-undo"
-            id="studioAiDrawerUndo"
-            hidden
-          >되돌리기</button>
-
-        </p>
-
-      </div>
-
-
+      <!-- 접힌 상태에서만 보이는 세로 탭(펼치기) -->
       <button
         type="button"
         class="studio-ai-handle"
         id="studioAiHandle"
         aria-expanded="false"
         aria-controls="studioAiDrawer"
+        aria-label="AI 패널 펼치기"
       >
         <span
           id="studioAiHandleIcon"
           aria-hidden="true"
-        >△</span>
+        >AI</span>
       </button>
+
+      <div
+        class="studio-ai-resizer"
+        id="studioAiResizer"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="AI 패널 폭 조절"
+      ></div>
+
+      <div
+        class="studio-ai-drawer"
+        id="studioAiDrawer"
+      >
+
+        <div class="studio-ai-panel-header">
+
+          <h2
+            class="studio-ai-panel-title"
+            id="studioAiPanelTitle"
+          >
+            어떻게 바꾸고 싶나요?
+          </h2>
+
+          <button
+            type="button"
+            class="studio-ai-panel-collapse"
+            id="studioAiPanelCollapse"
+            aria-expanded="false"
+            aria-controls="studioAiDrawer"
+            aria-label="AI 패널 접기"
+          >›</button>
+
+        </div>
+
+        <div
+          class="studio-ai-panel-body"
+          id="studioAiPanelBody"
+        >
+
+          <div class="studio-ai-drawer-row">
+
+            <textarea
+              id="studioAiDrawerInput"
+              class="studio-ai-drawer-input"
+              rows="1"
+              aria-labelledby="studioAiPanelTitle"
+              tabindex="-1"
+            ></textarea>
+
+            <button
+              type="button"
+              class="studio-ai-drawer-send"
+              id="studioAiDrawerSend"
+              disabled
+              aria-label="전송"
+            >↑</button>
+
+          </div>
+
+          <p
+            class="studio-ai-drawer-status"
+            id="studioAiDrawerStatus"
+            role="status"
+            aria-live="polite"
+            hidden
+          >
+
+            <span id="studioAiDrawerStatusText"></span>
+
+            <button
+              type="button"
+              class="studio-ai-drawer-undo"
+              id="studioAiDrawerUndo"
+              hidden
+            >되돌리기</button>
+
+          </p>
+
+        </div>
+
+      </div>
 
     </div>
 
@@ -712,7 +744,7 @@
   </script>
 
   <!-- =========================================================
-       AI PANEL (PHASE AI-1)
+       AI PANEL (PHASE AI-1 / AI-5A)
 
        ai/studio-ai-panel.js는 studio-preview.js가 노출하는
        showStudioToast/getStudioAiWorkingState/applyAiSkinPackage와
@@ -721,12 +753,21 @@
        로드됐다. studio-state.js(실제 mount 시작)보다는 먼저 둔다:
        패널이 평가 시점에 Send 버튼 상태를 한 번 계산하므로, 그때
        DOM과 bridge가 모두 준비돼 있는 편이 단순하다.
+
+       PHASE AI-5A — ai/studio-ai-panel-layout.js(우측 사이드바
+       여닫기 / 폭 조절 / Preview 클릭 시 접기)를 그 앞에 둔다.
+       studio-ai-panel.js가 평가 시점에 textarea 높이를 한 번
+       계산하는데, 그전에 패널의 열림 상태(#studioPreviewShell의
+       .has-ai-panel)가 정해져 있는 편이 단순하기 때문이다. 두
+       파일은 window 이벤트("studio-ai-panel-toggle") 하나로만
+       연결된다 — 서로의 내부 변수를 읽지 않는다.
   ========================================================== -->
 
   <script>
 
     loadVersionedScripts(
       [
+        "./ai/studio-ai-panel-layout.js",
         "./ai/studio-ai-panel.js",
         "./studio-state.js"
       ]

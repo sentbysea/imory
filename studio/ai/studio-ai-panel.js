@@ -1,11 +1,16 @@
 /* =========================================================
    SKIN STUDIO — AI PANEL (PHASE AI-1 / AI-2)
 
-   studio/index.html에 이미 있던 AI drawer shell(#studioAiDock /
+   studio/index.html에 이미 있던 AI 패널 shell(#studioAiDock /
    #studioAiDrawer / #studioAiDrawerInput / #studioAiDrawerSend)에
    실제 동작을 붙인다. 새 패널/새 UI를 따로 만들지 않는다 —
-   drawer 안에 상태 한 줄(#studioAiDrawerStatus)과 되돌리기 버튼
+   패널 안에 상태 한 줄(#studioAiDrawerStatus)과 되돌리기 버튼
    (#studioAiDrawerUndo)만 더한다.
+
+   PHASE AI-5A — 패널의 **모양**(우측 사이드바 여닫기 / 폭 드래그 /
+   Preview 클릭 시 접기)은 studio/ai/studio-ai-panel-layout.js가
+   따로 담당한다. 이 파일은 그쪽 내부 변수를 읽지 않고 window
+   이벤트 "studio-ai-panel-toggle" 하나만 듣는다.
 
    ★ 데이터 흐름 (이번 Phase의 전부)
 
@@ -100,8 +105,14 @@ const studioAiPanelStatusText =
 const studioAiPanelUndoButton =
   document.getElementById("studioAiDrawerUndo");
 
-const studioAiPanelHandle =
-  document.getElementById("studioAiHandle");
+/*
+  PHASE AI-5A — JS가 만들어 넣는 UI(첨부 줄 / 안내 문구 / 로딩 점)의
+  부모. 헤더는 고정이고 이 본문만 스크롤한다(studio.css).
+  없으면 예전처럼 패널 자체에 넣는다.
+*/
+const studioAiPanelBody =
+  document.getElementById("studioAiPanelBody") ||
+  studioAiPanelDrawer;
 
 
 /* =========================================================
@@ -360,7 +371,7 @@ let studioAiAttachmentNote = null;
 
 function buildStudioAiAttachmentUi() {
 
-  if (studioAiAttachmentsRow || !studioAiPanelDrawer || !studioAiPanelInput) {
+  if (studioAiAttachmentsRow || !studioAiPanelBody || !studioAiPanelInput) {
     return;
   }
 
@@ -419,14 +430,14 @@ function buildStudioAiAttachmentUi() {
   row.appendChild(addButton);
   row.appendChild(fileInput);
 
-  /* label 바로 아래, textarea 줄 위 — 입력 흐름을 가리지 않는다. */
-  studioAiPanelDrawer.insertBefore(
+  /* textarea 줄 바로 위 — 입력 흐름을 가리지 않는다. */
+  studioAiPanelBody.insertBefore(
     row,
     studioAiPanelInput.closest(".studio-ai-drawer-row") || studioAiPanelInput
   );
 
-  /* 안내는 상태 줄 바로 위(= drawer 맨 아래)에 둔다. */
-  studioAiPanelDrawer.insertBefore(
+  /* 안내는 상태 줄 바로 위(= 패널 본문 맨 아래)에 둔다. */
+  studioAiPanelBody.insertBefore(
     note,
     studioAiPanelStatus || null
   );
@@ -543,7 +554,12 @@ function renderStudioAiAttachments() {
   studioAiAttachmentNote.hidden =
     count === 0;
 
-  /* 첨부가 있을 때만 drawer를 조금 더 열어 준다(studio.css). */
+  /*
+    PHASE AI-4에서는 이 클래스가 하단 drawer의 max-height를 키웠다.
+    우측 사이드바(AI-5A)는 세로가 넉넉해서 높이를 따로 키울 필요가
+    없어졌지만, "지금 첨부가 있다"를 밖에서 알 수 있는 표식이라
+    그대로 둔다(studio.css에는 대응 규칙이 없다).
+  */
   studioAiPanelDrawer.classList.toggle(
     "has-attachments",
     count > 0
@@ -1272,6 +1288,8 @@ async function handleStudioAiSend() {
   studioAiPanelInput.value =
     "";
 
+  resizeStudioAiInput();
+
   setStudioAiStatus(
     payload.summary || "적용했습니다.",
     { showUndo: true }
@@ -1342,6 +1360,69 @@ function handleStudioAiUndo() {
 
 
 /* =========================================================
+   textarea 자동 높이 (PHASE AI-5A)
+
+   비었을 때 한 줄, 내용이 늘면 최대 5줄까지 같이 늘고, 그보다
+   길어지면 textarea 안에서만 스크롤한다. 사이드바가 되면서 세로
+   공간이 생겼는데 입력칸이 한 줄로 고정돼 있으면 조금만 길게
+   써도 앞부분이 보이지 않는다.
+
+   line-height는 studio.css에서 px로 고정해 뒀다(20px) — 브라우저별
+   "normal" 해석 차이로 최대 높이가 흔들리지 않게 하기 위해서다.
+   box-sizing:border-box(studio.css 최상단 * 규칙)이므로 scrollHeight
+   (내용+padding)에 테두리 두께를 더해야 실제 높이가 된다.
+
+   호출 지점: 입력할 때마다, 전송 후 값을 비웠을 때, 그리고 패널이
+   열릴 때(닫혀 있는 동안에는 display:none이라 scrollHeight가 0이다).
+========================================================== */
+
+const STUDIO_AI_INPUT_MAX_ROWS = 5;
+
+
+function resizeStudioAiInput() {
+
+  if (!studioAiPanelInput || !studioAiPanelInput.offsetParent) {
+    return;
+  }
+
+  const style =
+    window.getComputedStyle(studioAiPanelInput);
+
+  const lineHeight =
+    parseFloat(style.lineHeight) || 20;
+
+  const chrome =
+    parseFloat(style.paddingTop) +
+    parseFloat(style.paddingBottom) +
+    parseFloat(style.borderTopWidth) +
+    parseFloat(style.borderBottomWidth);
+
+  const maxHeight =
+    Math.round(lineHeight * STUDIO_AI_INPUT_MAX_ROWS + chrome);
+
+  const borders =
+    parseFloat(style.borderTopWidth) +
+    parseFloat(style.borderBottomWidth);
+
+  /* auto로 한 번 되돌려야 줄어드는 방향도 정확히 측정된다. */
+  studioAiPanelInput.style.height =
+    "auto";
+
+  const needed =
+    studioAiPanelInput.scrollHeight + borders;
+
+  studioAiPanelInput.style.height =
+    Math.min(needed, maxHeight) + "px";
+
+  studioAiPanelInput.style.overflowY =
+    needed > maxHeight
+      ? "auto"
+      : "hidden";
+
+}
+
+
+/* =========================================================
    입력 / 키보드
 
    Enter 전송, Shift+Enter 줄바꿈. 한글(IME) 조합 중의 Enter는
@@ -1354,7 +1435,13 @@ if (studioAiPanelInput) {
 
   studioAiPanelInput.addEventListener(
     "input",
-    updateStudioAiSendButtonState
+    () => {
+
+      updateStudioAiSendButtonState();
+
+      resizeStudioAiInput();
+
+    }
   );
 
   studioAiPanelInput.addEventListener(
@@ -1413,23 +1500,24 @@ if (studioAiPanelUndoButton) {
 
 
 /*
-  drawer를 여닫는 핸들 자체는 studio-preview.js가 소유한다(그쪽
-  리스너가 .is-open 토글/포커스를 담당) — 여기서는 열릴 때
-  Send 버튼 상태만 한 번 다시 계산한다. 같은 요소에 리스너를
-  하나 더 붙이는 것뿐이라 기존 동작에는 영향이 없다.
+  패널을 여닫는 것 자체는 studio/ai/studio-ai-panel-layout.js가
+  소유한다(.is-open / .has-ai-panel 토글, 포커스, 폭). 여기서는
+  열릴 때 Send 버튼 상태와 textarea 높이만 다시 계산한다 — 닫혀
+  있는 동안 패널은 display:none이라 scrollHeight가 0이어서 그때
+  잰 높이는 쓸 수 없다.
 */
-if (studioAiPanelHandle) {
+window.addEventListener(
+  "studio-ai-panel-toggle",
+  (event) => {
 
-  studioAiPanelHandle.addEventListener(
-    "click",
-    () => {
+    updateStudioAiSendButtonState();
 
-      updateStudioAiSendButtonState();
-
+    if (event.detail && event.detail.open) {
+      resizeStudioAiInput();
     }
-  );
 
-}
+  }
+);
 
 
 /*
@@ -1450,6 +1538,9 @@ buildStudioAiAttachmentUi();
 
 
 updateStudioAiSendButtonState();
+
+
+resizeStudioAiInput();
 
 
 /*
