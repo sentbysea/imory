@@ -2,10 +2,15 @@
    POSTS MANAGE - 폴더 트리 렌더 (FOLDER-1)
 
    ?manage=1(또는 Skin 위의 edit 토글)로 열리는 카테고리 관리
-   화면의 본문을 그린다. 기존 관리 화면의 두 기능 — 글 체크박스와
-   하단 선택삭제 바 — 은 그대로 살아 있고, 그 위에 폴더 계층과
-   drag handle이 얹힌다(사용자 결정 F-2: 정리 모드/삭제 모드를
-   따로 만들지 않는다).
+   화면의 본문을 그린다.
+
+   FOLDER-1 후속(관리 UI 정리): 기본 상태는 "정리"다 — drag handle
+   ≡만 보이고 체크박스도 하단 선택삭제 바도 없다. 상단 툴바의
+   − delete를 눌러 삭제 모드로 들어갔을 때만 각 글 행의 ≡ 바로
+   옆에 체크박스가 붙고, 하나 이상 고르면 기존 하단 선택삭제 바가
+   나타난다. 삭제 자체는 기존 deleteSelectedPosts()를 그대로 쓴다
+   (새 삭제 경로를 만들지 않는다). 예전 F-2(정리 모드와 삭제 모드를
+   나누지 않는다)는 이 라운드에서 철회됐다.
 
    의존(classic script, 이 파일보다 먼저 로드돼야 함):
    posts/manage/posts-folder-data.js, posts/editor/posts-refs.js,
@@ -27,6 +32,100 @@
 */
 let postFolderTreeMessage =
   "";
+
+
+/*
+  삭제 모드(체크박스 + 하단 선택삭제 바)가 켜져 있는가.
+
+  관리 세션 안에서만 사는 화면 상태다 — 관리 화면을 새로 열
+  때마다 꺼진 채로 시작한다(resetPostFolderDeleteMode를 부르는
+  posts-view-list.js / posts-view-list-select.js).
+*/
+let postFolderDeleteModeOn =
+  false;
+
+
+function isPostFolderDeleteModeOn() {
+
+  return postFolderDeleteModeOn;
+
+}
+
+
+/*
+  지금 화면에 폴더 트리가 그려져 있는가. 하단 선택삭제 바의 표시
+  규칙이 트리(삭제 모드에서 고른 게 있을 때만)와 기존 평면 관리
+  목록(관리 모드면 항상)에서 다르므로 그 판정에 쓴다
+  (posts/view/posts-view-list-select.js).
+*/
+
+function isPostFolderTreeActive() {
+
+  return Boolean(
+    postList &&
+    postList.querySelector(
+      ".folder-tree"
+    )
+  );
+
+}
+
+
+/*
+  관리 화면 진입 시 호출 — 모드와 선택을 함께 비운다. 트리를
+  다시 그리지는 않는다(부르는 쪽이 곧 그린다).
+*/
+
+function resetPostFolderDeleteMode() {
+
+  postFolderDeleteModeOn =
+    false;
+
+
+  selectedPostIdsForDelete =
+    new Set();
+
+}
+
+
+/*
+  삭제 모드 전환. 모드를 빠져나가면 선택을 비우고(체크가 남아
+  있다가 다음에 되살아나지 않게) 트리를 다시 그려 체크박스를
+  붙이거나 걷어낸다. 하단 바는 updatePostListSelectBar()가 정한다.
+*/
+
+function setPostFolderDeleteMode(
+  on
+) {
+
+  const next =
+    Boolean(on);
+
+
+  if (
+    next === postFolderDeleteModeOn
+  ) {
+
+    return;
+
+  }
+
+
+  postFolderDeleteModeOn =
+    next;
+
+
+  if (!postFolderDeleteModeOn) {
+
+    selectedPostIdsForDelete =
+      new Set();
+
+  }
+
+
+  renderPostFolderTree();
+
+}
 
 
 function setPostFolderTreeMessage(
@@ -163,13 +262,39 @@ function renderPostFolderTree() {
   }
 
 
+  /*
+    하단 선택삭제 바의 표시 규칙은 트리가 실제로 그려진 뒤에야
+    적용할 수 있다(isPostFolderTreeActive) — 여기서 한 번 맞춘다.
+  */
+
+  if (
+    typeof updatePostListSelectBar ===
+    "function"
+  ) {
+
+    updatePostListSelectBar();
+
+  }
+
+
   return true;
 
 }
 
 
 /* =========================================================
-   툴바 — root 폴더 만들기 + 메시지 자리
+   툴바 — 이 화면의 유일한 관리 action
+
+     + folder   폴더 만들기
+     + post     글 쓰기(기존 진입점 openNewPostEditor 그대로)
+     − delete   삭제 모드 켜기 / 끄기(cancel)
+     done       관리 화면 나가기
+
+   legacy 헤더의 떠 있는 edit / ＋ 는 이 화면에서 감춘다
+   (posts/view/posts-view-transition.js의 updatePostAddButton) —
+   같은 일을 하는 진입점이 화면에 둘 있으면 어느 쪽이 "지금"의
+   관리 도구인지 알 수 없다. done이 그 자리를 대신하는 유일한
+   나가기 경로이므로 툴바에서 빼지 않는다.
 ========================================================== */
 
 function createPostFolderToolbar() {
@@ -184,33 +309,107 @@ function createPostFolderToolbar() {
     "folder-tree-toolbar";
 
 
-  const addButton =
-    document.createElement(
-      "button"
+  if (postFolderDeleteModeOn) {
+
+    toolbar.classList.add(
+      "folder-tree-toolbar--delete"
+    );
+
+  }
+
+
+  const addFolderButton =
+    createPostFolderToolbarButton(
+      "+ folder",
+      "폴더 추가",
+      () => {
+
+        createPostFolderFromPrompt(
+          null
+        );
+
+      }
     );
 
 
-  addButton.type =
-    "button";
+  /*
+    기존 e2e(posts/posts-folder-manage-e2e-test.mjs)와 이 화면을
+    가리키는 다른 코드가 쓰는 이름이라 그대로 둔다.
+  */
+
+  addFolderButton.classList.add(
+    "folder-tree-add-button"
+  );
 
 
-  addButton.className =
-    "folder-tree-add-button";
+  const addPostButton =
+    createPostFolderToolbarButton(
+      "+ post",
+      "글 쓰기",
+      () => {
+
+        /*
+          플랫폼의 ＋ 와 같은 진입점을 그대로 부른다 — 관리 화면
+          전용 작성 경로를 새로 만들지 않는다
+          (posts/view/posts-view-editor-load.js).
+        */
+
+        openNewPostEditor(
+          currentPostCategoryId
+        );
+
+      }
+    );
 
 
-  addButton.textContent =
-    "+ folder";
+  addPostButton.classList.add(
+    "folder-tree-write-button"
+  );
 
 
-  addButton.addEventListener(
-    "click",
-    () => {
+  const deleteModeButton =
+    createPostFolderToolbarButton(
+      postFolderDeleteModeOn
+        ? "cancel"
+        : "− delete",
+      postFolderDeleteModeOn
+        ? "삭제 모드 끄기"
+        : "글 선택 삭제",
+      () => {
 
-      createPostFolderFromPrompt(
-        null
-      );
+        setPostFolderDeleteMode(
+          !postFolderDeleteModeOn
+        );
 
-    }
+      }
+    );
+
+
+  deleteModeButton.classList.add(
+    "folder-tree-delete-button"
+  );
+
+
+  deleteModeButton.setAttribute(
+    "aria-pressed",
+    String(postFolderDeleteModeOn)
+  );
+
+
+  const doneButton =
+    createPostFolderToolbarButton(
+      "done",
+      "관리 마치기",
+      () => {
+
+        exitPostFolderManageScreen();
+
+      }
+    );
+
+
+  doneButton.classList.add(
+    "folder-tree-done-button"
   );
 
 
@@ -235,12 +434,115 @@ function createPostFolderToolbar() {
 
 
   toolbar.append(
-    addButton,
+    addFolderButton,
+    addPostButton,
+    deleteModeButton,
+    doneButton,
     message
   );
 
 
   return toolbar;
+
+}
+
+
+function createPostFolderToolbarButton(
+  label,
+  ariaLabel,
+  onClick
+) {
+
+  const button =
+    document.createElement(
+      "button"
+    );
+
+
+  button.type =
+    "button";
+
+
+  button.className =
+    "folder-tree-tool-button";
+
+
+  button.textContent =
+    label;
+
+
+  button.setAttribute(
+    "aria-label",
+    ariaLabel
+  );
+
+
+  button.title =
+    ariaLabel;
+
+
+  button.addEventListener(
+    "click",
+    onClick
+  );
+
+
+  return button;
+
+}
+
+
+/* =========================================================
+   관리 화면 나가기
+
+   ?manage=1을 뗀 같은 카테고리를 다시 연다 — 스킨이 있으면
+   스킨으로, 없으면 기존 읽기 목록으로 돌아온다. 별도 복귀
+   경로를 만들지 않고 openCategoryPage()를 그대로 다시 태운다
+   (restoreCategorySkinList와 같은 이유).
+========================================================== */
+
+async function exitPostFolderManageScreen() {
+
+  resetPostFolderDeleteMode();
+
+
+  postListEditModeOn =
+    false;
+
+
+  if (postListSelectBar) {
+
+    postListSelectBar.hidden =
+      true;
+
+  }
+
+
+  if (
+    typeof setCategoryManageScreenActive ===
+    "function"
+  ) {
+
+    setCategoryManageScreenActive(
+      false
+    );
+
+  }
+
+
+  if (
+    currentPostCategoryId === null ||
+    currentPostCategoryId === undefined
+  ) {
+
+    return;
+
+  }
+
+
+  await openCategoryPage(
+    currentPostCategoryId
+  );
 
 }
 
@@ -418,23 +720,52 @@ function createPostFolderNode(
   );
 
 
+  /*
+    자식이 하나도 없으면 접을 것이 없다 — 눌러도 아무 일이
+    없는 버튼 대신 비활성으로 둔다(자리는 유지해서 폴더 행의
+    이름 위치가 형제들과 어긋나지 않게 한다). 빈 폴더의
+    컨테이너는 drop 대상으로 계속 열려 있어야 하므로 접히면
+    안 되기도 하다.
+  */
+
+  const hasChildren =
+    (node.children || []).length > 0;
+
+
+  if (!hasChildren) {
+
+    toggle.disabled =
+      true;
+
+
+    toggle.classList.add(
+      "folder-toggle--empty"
+    );
+
+  }
+
+
+  /*
+    접기는 화면에서만 접는 동작이다 — sort_order도 parent_id도
+    건드리지 않고, 서버로 나가는 요청도 없다. 트리를 통째로 다시
+    그리지 않고 이 폴더의 자식 컨테이너만 여닫는다: 다시 그리면
+    Sortable 인스턴스와 스크롤 위치가 통째로 날아간다.
+  */
+
   toggle.addEventListener(
     "click",
-    () => {
+    event => {
 
-      if (
-        postFolderCollapsedIds.has(
-          node.id
-        )
-      ) {
+      event.stopPropagation();
 
-        postFolderCollapsedIds.delete(
+
+      const nowCollapsed =
+        !postFolderCollapsedIds.has(
           node.id
         );
 
-      }
 
-      else {
+      if (nowCollapsed) {
 
         postFolderCollapsedIds.add(
           node.id
@@ -442,8 +773,35 @@ function createPostFolderNode(
 
       }
 
+      else {
 
-      renderPostFolderTree();
+        postFolderCollapsedIds.delete(
+          node.id
+        );
+
+      }
+
+
+      wrapper.classList.toggle(
+        "folder-node--collapsed",
+        nowCollapsed
+      );
+
+
+      childContainer.hidden =
+        nowCollapsed;
+
+
+      toggle.textContent =
+        nowCollapsed
+          ? "▸"
+          : "▾";
+
+
+      toggle.setAttribute(
+        "aria-expanded",
+        String(!nowCollapsed)
+      );
 
     }
   );
@@ -601,7 +959,12 @@ function createPostFolderActionButton(
    기존 관리 화면의 항목과 같은 클래스(post-list-item /
    post-list-item-checkbox / post-list-title / post-list-date)를
    그대로 쓴다 — 기존 CSS와 선택삭제 동작을 그대로 물려받기
-   위함이다. 달라진 것은 앞에 붙는 drag handle 하나뿐이다.
+   위함이다.
+
+   기본 상태에는 drag handle ≡ 하나만 앞에 붙는다. 체크박스는
+   삭제 모드에서만 만들어지고, 그때도 ≡ 바로 옆(관리 action
+   영역)에 붙어 제목과 떨어진 독립 컬럼처럼 보이지 않게 한다
+   (posts/manage/posts-folder-tree.css).
 ========================================================== */
 
 function createPostFolderPostNode(
@@ -664,24 +1027,41 @@ function createPostFolderPostNode(
   );
 
 
+  /*
+    체크박스는 삭제 모드에서만 존재한다 — 기본 관리 화면에는
+    ≡ 와 제목뿐이다.
+  */
+
   const checkbox =
-    document.createElement(
-      "input"
+    postFolderDeleteModeOn
+      ? document.createElement(
+          "input"
+        )
+      : null;
+
+
+  if (checkbox) {
+
+    checkbox.type =
+      "checkbox";
+
+
+    checkbox.className =
+      "post-list-item-checkbox";
+
+
+    checkbox.checked =
+      selectedPostIdsForDelete.has(
+        post.id
+      );
+
+
+    checkbox.setAttribute(
+      "aria-label",
+      `${post.title || "제목 없음"} 선택`
     );
 
-
-  checkbox.type =
-    "checkbox";
-
-
-  checkbox.className =
-    "post-list-item-checkbox";
-
-
-  checkbox.checked =
-    selectedPostIdsForDelete.has(
-      post.id
-    );
+  }
 
 
   /*
@@ -715,15 +1095,23 @@ function createPostFolderPostNode(
       }
 
 
-      checkbox.checked =
+      const selected =
         selectedPostIdsForDelete.has(
           post.id
         );
 
 
+      if (checkbox) {
+
+        checkbox.checked =
+          selected;
+
+      }
+
+
       row.classList.toggle(
         "post-list-item--selected",
-        checkbox.checked
+        selected
       );
 
 
@@ -732,17 +1120,21 @@ function createPostFolderPostNode(
     };
 
 
-  checkbox.addEventListener(
-    "click",
-    event => {
+  if (checkbox) {
 
-      event.stopPropagation();
+    checkbox.addEventListener(
+      "click",
+      event => {
+
+        event.stopPropagation();
 
 
-      syncSelection();
+        syncSelection();
 
-    }
-  );
+      }
+    );
+
+  }
 
 
   const title =
@@ -778,28 +1170,56 @@ function createPostFolderPostNode(
     );
 
 
-  row.append(
-    handle,
-    checkbox,
-    title,
-    date
-  );
+  if (checkbox) {
+
+    row.classList.add(
+      "folder-post-row--selectable"
+    );
+
+
+    row.append(
+      handle,
+      checkbox,
+      title,
+      date
+    );
+
+  }
+
+  else {
+
+    row.append(
+      handle,
+      title,
+      date
+    );
+
+  }
 
 
   row.classList.toggle(
     "post-list-item--selected",
-    checkbox.checked
+    Boolean(checkbox && checkbox.checked)
   );
 
 
   /*
-    행 아무 데나 눌러도 선택이 토글된다(기존 관리 화면과 동일).
-    handle과 checkbox는 각자 처리하므로 여기서 걸러낸다.
+    행 아무 데나 눌러도 선택이 토글된다 — 다만 삭제 모드에서만
+    이다. 기본 상태의 행은 정렬 대상일 뿐이라 눌러도 아무 일도
+    일어나지 않는다. handle과 checkbox는 각자 처리하므로 여기서
+    걸러낸다.
   */
 
   row.addEventListener(
     "click",
     event => {
+
+      if (!postFolderDeleteModeOn) {
+
+        return;
+
+      }
+
 
       if (
         event.target === checkbox ||

@@ -29,6 +29,51 @@ async function togglePostListEditMode() {
     new Set();
 
 
+  /*
+    FOLDER-1 후속: 관리 화면은 항상 "정리" 상태로 시작한다 —
+    지난번에 삭제 모드로 나갔다고 해서 이번에 체크박스가 먼저
+    보이면 안 된다(posts/manage/posts-folder-tree.js).
+  */
+
+  if (
+    typeof resetPostFolderDeleteMode ===
+    "function"
+  ) {
+
+    resetPostFolderDeleteMode();
+
+  }
+
+
+  /*
+    관리 화면에서는 legacy 헤더의 떠 있는 edit / ＋ 를 감춘다 —
+    같은 일을 하는 진입점이 트리 툴바와 헤더에 둘 있으면 어느
+    쪽이 지금의 관리 도구인지 알 수 없다
+    (posts/view/posts-view-transition.js).
+  */
+
+  if (
+    typeof setCategoryManageScreenActive ===
+    "function"
+  ) {
+
+    setCategoryManageScreenActive(
+      postListEditModeOn
+    );
+
+  }
+
+
+  if (
+    typeof updatePostAddButton ===
+    "function"
+  ) {
+
+    updatePostAddButton();
+
+  }
+
+
   postListEditToggleButton
     ?.setAttribute(
       "aria-pressed",
@@ -38,12 +83,18 @@ async function togglePostListEditMode() {
     );
 
 
+  /*
+    FOLDER-1 후속: 관리 화면을 켜는 것만으로는 하단 선택삭제 바가
+    뜨지 않는다 — 트리에서는 − delete + 선택이 있을 때만,
+    평면 폴백에서는 renderPostListItems()가 다시 편다.
+  */
+
   if (
     postListSelectBar
   ) {
 
     postListSelectBar.hidden =
-      !postListEditModeOn;
+      true;
 
   }
 
@@ -334,6 +385,30 @@ function togglePostSelection(
 ========================================================== */
 
 function updatePostListSelectBar() {
+
+  /*
+    FOLDER-1 후속 — 하단 선택삭제 바의 표시 규칙
+
+      · 폴더 트리 관리 화면: 삭제 모드에서 하나 이상 골랐을 때만
+      · 그 밖(기존 평면 관리 목록): 지금까지처럼 관리 모드면 항상
+        (그 목록은 체크박스를 늘 달고 있다)
+
+    트리가 실제로 그려졌는지로 판단한다 — 폴더 조회가 실패해
+    평면 목록으로 폴백한 화면에서도 삭제가 계속 가능해야 한다.
+  */
+
+  if (
+    postListSelectBar &&
+    typeof isPostFolderTreeActive === "function" &&
+    isPostFolderTreeActive()
+  ) {
+
+    postListSelectBar.hidden =
+      !isPostFolderDeleteModeOn() ||
+      selectedPostIdsForDelete.size === 0;
+
+  }
+
 
   if (
     postListSelectCount

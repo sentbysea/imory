@@ -1185,6 +1185,42 @@ function getSkinOwnerEntriesForScreen() {
 
 
 /* =========================================================
+   카테고리 관리 화면(?manage=1 / Skin 위의 edit 토글)이 열려
+   있는가.
+
+   FOLDER-1 후속: 관리 화면은 이미 "관리하러 들어온" 시스템 UI라
+   자기 상단에 + folder / + post / − delete / done 을 갖는다.
+   그 위에 legacy 헤더의 edit / ＋ 까지 함께 떠 있으면 같은 일을
+   하는 진입점이 둘이 된다 — 관리 화면에서는 그 둘을 감춘다
+   (updatePostAddButton 아래 참고).
+
+   openCategoryPage()가 화면을 열 때마다 이 값을 다시 정하므로
+   (이전 화면의 판정이 남지 않는다), 관리 화면을 벗어나는 어느
+   경로로 나가도 상태가 남지 않는다.
+========================================================== */
+
+let categoryManageScreenActive =
+  false;
+
+
+function setCategoryManageScreenActive(
+  active
+) {
+
+  categoryManageScreenActive =
+    Boolean(active);
+
+}
+
+
+function isCategoryManageScreenActive() {
+
+  return categoryManageScreenActive;
+
+}
+
+
+/* =========================================================
    ADD BUTTON
 ========================================================== */
 
@@ -1226,6 +1262,19 @@ async function updatePostAddButton() {
     !isOwnerViewingCategory
   ) {
     return;
+  }
+
+
+  /*
+    FOLDER-1 후속: 관리 화면에서는 두 버튼 모두 접은 채로 둔다.
+    관리 action은 트리 자신의 툴바가 전부 갖고 있다
+    (posts/manage/posts-folder-tree.js의 createPostFolderToolbar).
+  */
+
+  if (categoryManageScreenActive) {
+
+    return;
+
   }
 
 

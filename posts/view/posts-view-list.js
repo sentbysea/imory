@@ -579,6 +579,27 @@ async function openCategoryPage(
     manage === true &&
     await isSiteOwnerSignedIn();
 
+
+  /*
+    FOLDER-1 후속: 관리 화면에서는 legacy 헤더의 떠 있는 edit / ＋
+    를 감춘다 — 관리 action은 폴더 트리 자신의 툴바(+ folder /
+    + post / − delete / done)가 전부 갖는다. 아래
+    updatePostAddButton()보다 **먼저** 정해야 하므로 여기서 세운다
+    (posts/view/posts-view-transition.js).
+  */
+
+  if (
+    typeof setCategoryManageScreenActive ===
+    "function"
+  ) {
+
+    setCategoryManageScreenActive(
+      wantsManageScreen
+    );
+
+  }
+
+
   const maybeSkinCandidate =
     Boolean(
       owner.scoped &&
@@ -1310,12 +1331,35 @@ async function openCategoryPage(
     new Set();
 
 
+  /*
+    FOLDER-1 후속: 관리 화면은 항상 "정리" 상태로 시작한다 —
+    삭제 모드(체크박스 + 하단 선택삭제 바)는 상단 − delete를
+    누른 뒤에만 켜진다(posts/manage/posts-folder-tree.js).
+  */
+
+  if (
+    typeof resetPostFolderDeleteMode ===
+    "function"
+  ) {
+
+    resetPostFolderDeleteMode();
+
+  }
+
+
+  /*
+    FOLDER-1 후속: 하단 선택삭제 바는 관리 화면을 여는 것만으로는
+    뜨지 않는다 — 폴더 트리에서는 − delete로 삭제 모드에 들어가
+    하나 이상 골랐을 때만, 트리를 못 그린 평면 폴백에서는
+    renderPostListItems()의 그 분기가 다시 편다.
+  */
+
   if (
     postListSelectBar
   ) {
 
     postListSelectBar.hidden =
-      !postListEditModeOn;
+      true;
 
   }
 
@@ -1700,6 +1744,21 @@ function renderPostListItems() {
   ) {
 
     return;
+
+  }
+
+
+  /*
+    FOLDER-1 후속: 여기까지 왔다는 건 폴더 트리를 그리지 못했다는
+    뜻이다(폴더 조회 실패 등). 그 평면 관리 목록은 지금까지처럼
+    모든 행에 체크박스를 달고 있으므로, 하단 선택삭제 바도
+    지금까지처럼 관리 모드면 곧바로 편다.
+  */
+
+  if (postListSelectBar) {
+
+    postListSelectBar.hidden =
+      !postListEditModeOn;
 
   }
 

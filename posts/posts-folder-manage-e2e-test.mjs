@@ -34,7 +34,8 @@
      node posts/posts-folder-manage-e2e-test.mjs --browser=webkit
      node posts/posts-folder-manage-e2e-test.mjs --only=drag
 
-   --only= 뒤에 쓸 수 있는 이름: render / crud / guard / drag / rollback
+   --only= 뒤에 쓸 수 있는 이름:
+     render / chrome / collapse / exits / crud / guard / drag / rollback
 ========================================================== */
 
 import fs from "node:fs";
@@ -650,56 +651,412 @@ async function testRender() {
       JSON.stringify(tree));
 
     const chrome = await page.evaluate(() => ({
-      addButton: Boolean(document.querySelector("#postList .folder-tree-add-button")),
+      tools: Array.from(
+        document.querySelectorAll("#postList .folder-tree-tool-button")
+      ).map(b => b.textContent.trim()),
       handles: document.querySelectorAll("#postList .tree-drag-handle").length,
       checkboxes: document.querySelectorAll("#postList .post-list-item-checkbox").length,
       selectBar: !document.getElementById("postListSelectBar").hidden,
-      containers: document.querySelectorAll("#postList .folder-tree-container").length
+      containers: document.querySelectorAll("#postList .folder-tree-container").length,
+      legacyEdit: !document.getElementById("postListEditToggleButton").hidden,
+      legacyAdd: !document.getElementById("postAddButton").hidden
     }));
 
-    check("[A] 기존 체크박스와 하단 선택삭제 바가 트리와 같은 화면에 있다(F-2)",
-      chrome.checkboxes === 3 && chrome.selectBar === true,
+    check("[A] 상단 action은 + folder / + post / − delete (+ done) 뿐이다",
+      JSON.stringify(chrome.tools) ===
+        JSON.stringify(["+ folder", "+ post", "− delete", "done"]),
+      JSON.stringify(chrome.tools));
+
+    check("[A] 기본 상태에는 체크박스도 하단 선택삭제 바도 없다",
+      chrome.checkboxes === 0 && chrome.selectBar === false,
+      JSON.stringify(chrome));
+
+    check("[A] 관리 화면에는 legacy 헤더의 edit / ＋ 가 보이지 않는다",
+      chrome.legacyEdit === false && chrome.legacyAdd === false,
       JSON.stringify(chrome));
 
     check("[A] 폴더/글 모두에 drag handle이 있고 컨테이너가 계층대로 생긴다",
-      chrome.handles === 6 && chrome.containers === 4 && chrome.addButton,
+      chrome.handles === 6 && chrome.containers === 4,
       JSON.stringify(chrome));
 
-    /* 체크 토글이 트리를 다시 그리지 않아야 한다(펼침 상태/스크롤 보존) */
+    check("[A] 렌더 경로 콘솔 에러 없음", ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+}
+
+
+/* =========================================================
+   A2. 삭제 모드 (관리 UI 정리 라운드)
+
+   기본 상태는 정리에 집중한다 — 체크박스는 − delete로 삭제
+   모드에 들어갔을 때만 생기고, ≡ 바로 옆에 붙는다. 하단
+   선택삭제 바는 하나 이상 골랐을 때만 나타난다.
+========================================================== */
+
+async function testChrome() {
+  console.log("\n[A2] 삭제 모드");
+
+  await withPage({}, async (page, ctx) => {
+    await gotoManage(page);
+
+    /* ---- 1) − delete 로 삭제 모드 진입 ---- */
+
+    await page.click("#postList .folder-tree-delete-button");
+    await page.waitForTimeout(250);
+
+    const inDeleteMode = await page.evaluate(() => ({
+      label: document.querySelector("#postList .folder-tree-delete-button").textContent.trim(),
+      checkboxes: document.querySelectorAll("#postList .post-list-item-checkbox").length,
+      selectBar: !document.getElementById("postListSelectBar").hidden,
+      order: Array.from(
+        document.querySelector("#postList .folder-node[data-node-id='102'] > .post-list-item").children
+      ).map(el => el.className.split(" ")[0])
+    }));
+
+    check("[A2] − delete를 누르면 체크박스가 나타나고 버튼은 cancel이 된다",
+      inDeleteMode.checkboxes === 3 && inDeleteMode.label === "cancel",
+      JSON.stringify(inDeleteMode));
+
+    check("[A2] 아직 아무것도 고르지 않았으면 하단 선택삭제 바는 숨어 있다",
+      inDeleteMode.selectBar === false, JSON.stringify(inDeleteMode));
+
+    check("[A2] 체크박스는 drag handle 바로 오른쪽에 붙는다",
+      JSON.stringify(inDeleteMode.order) ===
+        JSON.stringify(["tree-drag-handle", "post-list-item-checkbox", "post-list-title", "post-list-date"]),
+      JSON.stringify(inDeleteMode.order));
+
+    /* 실제 화면 좌표 — ≡ 옆에 붙어 있고 겹치지도 않는다 */
+    const geometry = await page.evaluate(() => {
+      const row = document.querySelector("#postList .folder-node[data-node-id='102'] > .post-list-item");
+      const box = el => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right }; };
+      const handle = box(row.querySelector(".tree-drag-handle"));
+      const cb = box(row.querySelector(".post-list-item-checkbox"));
+      const title = box(row.querySelector(".post-list-title"));
+      const date = box(row.querySelector(".post-list-date"));
+      return {
+        gapFromHandle: cb.l - handle.r,
+        gapToTitle: title.l - cb.r,
+        dateFromRowEnd: box(row).r - date.r
+      };
+    });
+
+    check("[A2] 체크박스가 ≡ 바로 옆에 붙는다(겹치지 않고 20px 이내)",
+      geometry.gapFromHandle > 0 && geometry.gapFromHandle < 20,
+      JSON.stringify(geometry));
+
+    check("[A2] 제목은 체크박스 바로 옆에서 시작하고 날짜만 오른쪽 끝에 남는다",
+      geometry.gapToTitle < 20 && geometry.dateFromRowEnd < 6,
+      JSON.stringify(geometry));
+
+    /* ---- 2) 선택 → 하단 바 ---- */
+
     await page.click("#postList .folder-node[data-node-id='102'] .post-list-item-checkbox");
     await page.waitForTimeout(200);
 
-    const afterCheck = await page.evaluate(() => ({
-      count: document.getElementById("postListSelectCount").textContent,
+    const afterSelect = await page.evaluate(() => ({
+      selectBar: !document.getElementById("postListSelectBar").hidden,
+      count: document.getElementById("postListSelectCount").textContent.trim(),
       deleteEnabled: !document.getElementById("postListSelectDeleteButton").disabled,
       treeStillThere: Boolean(document.querySelector("#postList .folder-tree")),
       checked: document.querySelectorAll("#postList .post-list-item-checkbox:checked").length
     }));
 
-    check("[A] 글을 체크하면 선택삭제 바만 갱신되고 트리는 그대로다",
-      afterCheck.checked === 1 && afterCheck.deleteEnabled &&
-      afterCheck.count.includes("1") && afterCheck.treeStillThere,
-      JSON.stringify(afterCheck));
+    check("[A2] 하나 고르면 하단 선택삭제 바가 나타나고 트리는 다시 그려지지 않는다",
+      afterSelect.selectBar && afterSelect.checked === 1 &&
+      afterSelect.deleteEnabled && afterSelect.count.includes("1") &&
+      afterSelect.treeStillThere,
+      JSON.stringify(afterSelect));
 
-    /* 접기/펼치기 */
-    await page.click("#postList .folder-node[data-node-id='11'] > .folder-row > .folder-toggle");
-    await page.waitForTimeout(250);
+    /* ---- 3) 실제 선택삭제(기존 deleteSelectedPosts 재사용) ---- */
 
-    const collapsed = await page.evaluate(() => {
-      const node = document.querySelector("#postList .folder-node[data-node-id='11']");
+    page.once("dialog", d => d.accept());
+    await page.click("#postListSelectDeleteButton");
+    await page.waitForTimeout(700);
+
+    const afterDelete = await page.evaluate(READ_TREE);
+
+    check("[A2] 선택삭제가 실제로 그 글만 지운다",
+      Array.isArray(afterDelete) &&
+      !afterDelete.some(n => n.kind === "post" && n.id === "102") &&
+      afterDelete.some(n => n.kind === "post" && n.id === "101"),
+      JSON.stringify(afterDelete && afterDelete.map(n => n.kind + ":" + n.id)));
+
+    /* ---- 4) cancel → 기본 상태 복귀 ---- */
+
+    await page.click("#postList .folder-tree-delete-button");
+    await page.waitForTimeout(300);
+
+    const afterCancel = await page.evaluate(() => ({
+      label: document.querySelector("#postList .folder-tree-delete-button").textContent.trim(),
+      checkboxes: document.querySelectorAll("#postList .post-list-item-checkbox").length,
+      selectBar: !document.getElementById("postListSelectBar").hidden,
+      count: document.getElementById("postListSelectCount").textContent.trim()
+    }));
+
+    check("[A2] cancel이면 체크박스·선택·하단 바가 모두 원상복귀한다",
+      afterCancel.label === "− delete" && afterCancel.checkboxes === 0 &&
+      afterCancel.selectBar === false && afterCancel.count.includes("0"),
+      JSON.stringify(afterCancel));
+
+    check("[A2] 삭제 모드 경로 콘솔 에러 없음", ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+}
+
+
+/* =========================================================
+   A3. 폴더 접기/펼치기
+
+   시각적으로만 접는 기능이다 — 서버 요청도, sort_order/parent_id
+   변경도 없어야 한다.
+========================================================== */
+
+async function testCollapse() {
+  console.log("\n[A3] 폴더 접기/펼치기");
+
+  const db = makeDb();
+  const rpcCalls = [];
+
+  await withPage({ db, rpcCalls }, async (page, ctx) => {
+    await gotoManage(page);
+
+    const readFolder = id => page.evaluate(folderId => {
+      const node = document.querySelector(
+        "#postList .folder-node[data-node-id='" + folderId + "']"
+      );
+      const toggle = node.querySelector(":scope > .folder-row > .folder-toggle");
       const child = node.querySelector(":scope > .folder-tree-container");
       return {
-        collapsed: node.classList.contains("folder-node--collapsed"),
-        childHidden: child.hidden,
-        expanded: node.querySelector(":scope > .folder-row > .folder-toggle").getAttribute("aria-expanded")
+        collapsedClass: node.classList.contains("folder-node--collapsed"),
+        hidden: child.hidden,
+        /* CSS가 [hidden]을 무시하지 않는지 — 실제 계산값으로 본다 */
+        display: getComputedStyle(child).display,
+        visibleHeight: child.getBoundingClientRect().height,
+        glyph: toggle.textContent.trim(),
+        expanded: toggle.getAttribute("aria-expanded"),
+        disabled: toggle.disabled
+      };
+    }, id);
+
+    const toggleFolder = id =>
+      page.click(
+        "#postList .folder-node[data-node-id='" + id + "'] > .folder-row > .folder-toggle"
+      );
+
+    /* ---- depth 1 ---- */
+
+    await toggleFolder(11);
+    await page.waitForTimeout(250);
+    const root1 = await readFolder(11);
+
+    check("[A3] depth 1 폴더를 접으면 자식이 실제로 화면에서 사라진다",
+      root1.collapsedClass && root1.hidden &&
+      root1.display === "none" && root1.visibleHeight === 0 &&
+      root1.glyph === "▸" && root1.expanded === "false",
+      JSON.stringify(root1));
+
+    await toggleFolder(11);
+    await page.waitForTimeout(250);
+    const root2 = await readFolder(11);
+
+    check("[A3] 다시 누르면 펼쳐진다",
+      !root2.collapsedClass && !root2.hidden &&
+      root2.display !== "none" && root2.visibleHeight > 0 &&
+      root2.glyph === "▾" && root2.expanded === "true",
+      JSON.stringify(root2));
+
+    /* ---- depth 2는 부모와 독립적으로 ---- */
+
+    await toggleFolder(12);
+    await page.waitForTimeout(250);
+
+    const nested = await page.evaluate(() => {
+      const box = id => {
+        const n = document.querySelector(
+          "#postList .folder-node[data-node-id='" + id + "']"
+        );
+        const c = n.querySelector(":scope > .folder-tree-container");
+        return { hidden: c.hidden, display: getComputedStyle(c).display };
+      };
+      const f13 = document.querySelector("#postList .folder-node[data-node-id='13']");
+      return {
+        f11: box(11),
+        f12: box(12),
+        f13Height: f13 ? f13.getBoundingClientRect().height : -1
       };
     });
 
-    check("[A] 폴더를 접으면 하위 컨테이너가 숨고 aria-expanded가 따라간다",
-      collapsed.collapsed && collapsed.childHidden && collapsed.expanded === "false",
-      JSON.stringify(collapsed));
+    check("[A3] depth 2 폴더는 부모와 독립적으로 접히고 그 안의 depth 3도 함께 사라진다",
+      nested.f11.hidden === false && nested.f12.hidden === true &&
+      nested.f12.display === "none" && nested.f13Height === 0,
+      JSON.stringify(nested));
 
-    check("[A] 렌더 경로 콘솔 에러 없음", ctx.errors.length === 0, ctx.errors.join(" | "));
+    await toggleFolder(12);
+    await page.waitForTimeout(250);
+
+    /* ---- depth 3: 자식이 없으므로 toggle 비활성 ---- */
+
+    const depth3 = await readFolder(13);
+
+    check("[A3] 자식이 없는 depth 3 폴더의 toggle은 비활성이다",
+      depth3.disabled === true, JSON.stringify(depth3));
+
+    /* ---- 접기는 DB를 건드리지 않는다 ---- */
+
+    const before = JSON.stringify({
+      posts: db.posts.map(p => [p.id, p.folder_id, p.sort_order]),
+      folders: db.post_folders.map(f => [f.id, f.parent_id, f.sort_order])
+    });
+
+    check("[A3] 접기/펼치기는 서버 요청을 하나도 만들지 않는다",
+      rpcCalls.length === 0, JSON.stringify(rpcCalls.map(c => c.fn)));
+
+    /* ---- 트리를 통째로 다시 그리는 조작 뒤에도 접힘이 유지되는가 ----
+
+       폴더 이름 바꾸기는 재조회 + 재렌더를 거친다 — 그 사이
+       postFolderCollapsedIds가 살아남아야 접힘이 되살아난다.
+    */
+
+    await toggleFolder(11);
+    await page.waitForTimeout(200);
+
+    await page.evaluate(() => { window.prompt = () => "홍차(재렌더)"; });
+    await page.click("#postList .folder-node[data-node-id='11'] > .folder-row .folder-action-button[aria-label='폴더 이름 수정']");
+    await page.waitForTimeout(700);
+
+    const afterOther = await readFolder(11);
+
+    check("[A3] 트리를 다시 그려도 접은 상태가 유지된다",
+      afterOther.collapsedClass && afterOther.hidden &&
+      afterOther.display === "none" && afterOther.glyph === "▸",
+      JSON.stringify(afterOther));
+
+    check("[A3] 접기 동안 글/폴더의 folder_id·parent_id·sort_order가 그대로다",
+      JSON.stringify({
+        posts: db.posts.map(p => [p.id, p.folder_id, p.sort_order]),
+        folders: db.post_folders.map(f => [f.id, f.parent_id, f.sort_order])
+      }) === before,
+      before);
+
+    check("[A3] 접기 경로 콘솔 에러 없음", ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+}
+
+
+/* =========================================================
+   A4. + post 진입 / done 나가기 / 모바일 터치 목표
+========================================================== */
+
+async function testExits() {
+  console.log("\n[A4] + post · done · 모바일 간격");
+
+  /* ---- + post: 기존 작성 진입점을 그대로 부른다 ---- */
+
+  await withPage({}, async (page, ctx) => {
+    await gotoManage(page);
+
+    await page.click("#postList .folder-tree-write-button");
+    await page.waitForTimeout(700);
+
+    const editor = await page.evaluate(() => ({
+      editorOpen: !document.getElementById("postEditor").hidden,
+      listHidden: document.getElementById("postList").hidden,
+      selectBar: !document.getElementById("postListSelectBar").hidden
+    }));
+
+    check("[A4] + post는 기존 글 작성 화면을 연다",
+      editor.editorOpen, JSON.stringify(editor));
+
+    check("[A4] 작성 화면에서는 관리 목록과 하단 바가 화면에 남지 않는다",
+      editor.listHidden && editor.selectBar === false, JSON.stringify(editor));
+
+    check("[A4] + post 경로 콘솔 에러 없음", ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* ---- done: ?manage=1을 떼고 공개 화면으로 돌아온다 ---- */
+
+  await withPage({}, async (page, ctx) => {
+    await gotoManage(page);
+
+    /* 나가기 전에 삭제 모드를 켜 두고, 돌아왔을 때 남지 않는지 본다 */
+    await page.click("#postList .folder-tree-delete-button");
+    await page.waitForTimeout(200);
+    await page.click("#postList .folder-node[data-node-id='102'] .post-list-item-checkbox");
+    await page.waitForTimeout(200);
+
+    await page.click("#postList .folder-tree-done-button");
+    await page.waitForTimeout(900);
+
+    const after = await page.evaluate(() => ({
+      url: location.pathname + location.search,
+      treeGone: !document.querySelector("#postList .folder-tree"),
+      selectBar: !document.getElementById("postListSelectBar").hidden,
+      skinActive: document.getElementById("postContainer")
+        .classList.contains("post-container--skin-active")
+    }));
+
+    check("[A4] done이면 주소에서 ?manage=1이 사라진다",
+      !after.url.includes("manage=1"), after.url);
+
+    check("[A4] done이면 관리 트리와 하단 바가 사라지고 공개 화면으로 돌아온다",
+      after.treeGone && after.selectBar === false, JSON.stringify(after));
+
+    /* 다시 들어오면 기본 상태(체크박스 없음)로 시작한다 */
+    await gotoManage(page);
+
+    const reentered = await page.evaluate(() => ({
+      checkboxes: document.querySelectorAll("#postList .post-list-item-checkbox").length,
+      label: document.querySelector("#postList .folder-tree-delete-button").textContent.trim(),
+      selectBar: !document.getElementById("postListSelectBar").hidden
+    }));
+
+    check("[A4] 다시 들어오면 삭제 모드/선택이 남아 있지 않다",
+      reentered.checkboxes === 0 && reentered.label === "− delete" &&
+      reentered.selectBar === false,
+      JSON.stringify(reentered));
+
+    check("[A4] done 경로 콘솔 에러 없음", ctx.errors.length === 0, ctx.errors.join(" | "));
+  });
+
+  /* ---- 모바일: ≡ 와 체크박스의 터치 목표가 겹치지 않는가 ---- */
+
+  await withPage({ viewport: { width: 390, height: 780 }, hasTouch: true }, async (page, ctx) => {
+    await gotoManage(page);
+
+    await page.click("#postList .folder-tree-delete-button");
+    await page.waitForTimeout(250);
+
+    const touch = await page.evaluate(() => {
+      const row = document.querySelector("#postList .folder-node[data-node-id='102'] > .post-list-item");
+      const r = el => el.getBoundingClientRect();
+      const handle = r(row.querySelector(".tree-drag-handle"));
+      const cb = r(row.querySelector(".post-list-item-checkbox"));
+
+      /* 체크박스 한가운데를 눌렀을 때 실제로 잡히는 요소 */
+      const hit = document.elementFromPoint(cb.left + cb.width / 2, cb.top + cb.height / 2);
+
+      /* handle 한가운데를 눌렀을 때 실제로 잡히는 요소 */
+      const handleHit = document.elementFromPoint(
+        handle.left + handle.width / 2,
+        handle.top + handle.height / 2
+      );
+
+      return {
+        gap: cb.left - handle.right,
+        handleSize: [handle.width, handle.height],
+        cbSize: [cb.width, cb.height],
+        hit: hit && hit.className,
+        handleHit: handleHit && handleHit.className
+      };
+    });
+
+    check("[A4] 모바일에서 ≡ 와 체크박스가 겹치지 않는다",
+      touch.gap > 0, JSON.stringify(touch));
+
+    check("[A4] 모바일에서 각 지점이 의도한 요소를 잡는다",
+      String(touch.hit).includes("post-list-item-checkbox") &&
+      String(touch.handleHit).includes("tree-drag-handle"),
+      JSON.stringify(touch));
+
+    check("[A4] 모바일 경로 콘솔 에러 없음", ctx.errors.length === 0, ctx.errors.join(" | "));
   });
 }
 
@@ -1105,6 +1462,9 @@ async function testRollback() {
 
   try {
     if (shouldRun("render")) await testRender();
+    if (shouldRun("chrome")) await testChrome();
+    if (shouldRun("collapse")) await testCollapse();
+    if (shouldRun("exits")) await testExits();
     if (shouldRun("crud")) await testCrud();
     if (shouldRun("guard")) await testGuard();
     if (shouldRun("drag")) await testDrag();

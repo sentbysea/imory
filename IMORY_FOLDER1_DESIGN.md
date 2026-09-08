@@ -132,9 +132,10 @@ BEFORE INSERT 트리거). 오늘의 체감(`created_at DESC`라 새 글이 맨 �
 | [posts/manage/posts-folder-sortable.js](posts/manage/posts-folder-sortable.js) | SortableJS 배선 · drop 판정 · 저장/롤백 |
 | [posts/manage/posts-folder-tree.css](posts/manage/posts-folder-tree.css) | 트리 전용 스타일 |
 
-- **한 화면에 정리와 삭제가 같이 있다**(사용자 결정 F-2). 기존 글
-  체크박스와 하단 선택삭제 바가 그대로 있고, 그 위에 폴더 계층과 `≡`
-  핸들이 얹힌다. 별도의 "정리 모드"를 만들지 않는다.
+- ~~**한 화면에 정리와 삭제가 같이 있다**(사용자 결정 F-2)~~ —
+  **철회됨(관리 UI 정리 라운드, 아래 1-6b)**. 모든 글 행에 체크박스가
+  줄지어 서 있는 화면이 관리자 테이블처럼 보인다는 판단이었다. 지금은
+  기본 상태가 "정리"이고, 삭제는 별도 모드다.
 - `?manage=1`은 이제 **들어가자마자** 이 화면이다. 예전에는 읽기 목록이
   먼저 나오고 `edit`을 한 번 더 눌러야 했는데, PHASE 1H가 스킨의
   `manageHref`를 이 주소로 보내기 시작한 뒤로는 "관리하러 왔는데 읽기
@@ -143,6 +144,43 @@ BEFORE INSERT 트리거). 오늘의 체감(`created_at DESC`라 새 글이 맨 �
   기존 CSS와 선택삭제 동작을 그대로 물려받기 위해서다.
 - 폴더 조회에 실패하면 트리 대신 기존 평면 관리 목록이 그려진다. 관리
   화면 자체가 열리지 않는 경로를 만들지 않는다.
+
+### 1-6b. 관리 화면의 두 상태 (관리 UI 정리 라운드)
+
+관리 화면은 이미 사용자가 **명시적으로 관리하러 들어온** 시스템 UI다.
+그래서 이 화면의 관리 action은 트리 자신의 상단 툴바 하나로 모은다.
+
+| 상태 | 글 행 | 상단 툴바 | 하단 선택삭제 바 |
+| --- | --- | --- | --- |
+| 기본(정리) | `≡ 제목 … 날짜` | `+ folder` `+ post` `− delete` … `done` | 없음 |
+| 삭제 모드 | `≡ □ 제목 … 날짜` | `+ folder` `+ post` `cancel` … `done` | 하나 이상 골랐을 때만 |
+
+- **체크박스는 삭제 모드에서만 만들어진다**(`postFolderDeleteModeOn`,
+  [posts/manage/posts-folder-tree.js](posts/manage/posts-folder-tree.js)).
+  그때도 제목과 떨어진 독립 컬럼이 아니라 `≡` 바로 옆 — 관리 action
+  영역에 붙는다. 모드를 나가면 선택 상태까지 함께 비운다.
+- 삭제 자체는 기존 `deleteSelectedPosts()`를 그대로 쓴다. 새 삭제
+  경로를 만들지 않는다.
+- **legacy 헤더의 떠 있는 `edit` / `＋` 는 이 화면에서 감춘다**
+  (`categoryManageScreenActive`,
+  [posts/view/posts-view-transition.js](posts/view/posts-view-transition.js)).
+  같은 일을 하는 진입점이 툴바와 헤더에 둘 있으면 어느 쪽이 지금의
+  관리 도구인지 알 수 없다. 그래서 나가는 길로 툴바에 `done`을 둔다 —
+  `?manage=1`을 뗀 같은 카테고리를 `openCategoryPage()`로 다시 연다.
+- **published Skin 쪽 `EDIT` / `WRITE` 진입점 계약은 그대로다.**
+  Skin → EDIT → 이 관리 화면으로 들어오는 흐름과 주소(`?manage=1`)는
+  바뀌지 않았다.
+- 폴더 접기(`▾`/`▸`)는 **화면에서만** 접는다 — `sort_order`도
+  `parent_id`도 건드리지 않고 서버 요청도 없다. 접힘 목록
+  (`postFolderCollapsedIds`)은 관리 세션 동안만 살아 있고 DB에
+  저장하지 않는다. 자식이 없는 폴더의 토글은 비활성이다(빈 폴더의
+  컨테이너는 drop 대상으로 계속 열려 있어야 한다).
+- 접기는 트리를 통째로 다시 그리지 않고 그 폴더의 자식 컨테이너만
+  여닫는다 — 다시 그리면 Sortable 인스턴스와 스크롤이 통째로 날아간다.
+  `.folder-tree-container[hidden] { display: none }` 규칙이 반드시
+  있어야 한다: UA의 `[hidden]{display:none}`은
+  `.folder-tree-container{display:block}`보다 명시도가 낮아 그대로는
+  무시된다(이 규칙이 없어서 접기가 동작하지 않던 버그를 여기서 고쳤다).
 
 ### 1-7. drag & drop
 

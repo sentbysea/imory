@@ -24,13 +24,21 @@
 
 /* =========================================================
    툴바
+
+   이 화면의 유일한 관리 action: + folder / + post / − delete,
+   그리고 오른쪽 끝의 done(관리 마치기). legacy 헤더의 떠 있는
+   edit / ＋ 는 관리 화면에서 감춘다(posts-view-transition.js).
+
+   메시지는 flex-basis: 100%로 다음 줄을 차지한다 — 버튼 줄의
+   높이가 메시지 유무에 따라 흔들리지 않게 한다.
 ========================================================== */
 
 .folder-tree-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
 
-  gap: 12px;
+  gap: 6px;
 
   padding:
     4px
@@ -39,7 +47,7 @@
 }
 
 
-.folder-tree-add-button {
+.folder-tree-tool-button {
   padding:
     6px
     12px;
@@ -60,18 +68,47 @@
 
   transition:
     color 0.2s ease,
-    border-color 0.2s ease;
+    border-color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 
-.folder-tree-add-button:hover {
+.folder-tree-tool-button:hover {
   color: #ee9fbd;
 
   border-color: #f3d3de;
 }
 
 
+/* 삭제 모드일 때의 − delete(=cancel)만 켜진 상태로 보인다 */
+
+.folder-tree-toolbar--delete
+  .folder-tree-delete-button {
+  border-color: #f0d3de;
+
+  background: #fff8fa;
+
+  color: #d08098;
+}
+
+
+/*
+  done은 관리 action이 아니라 나가기다 — 버튼 줄 오른쪽 끝으로
+  밀어 두고 테두리를 지워 조용하게 남긴다.
+*/
+
+.folder-tree-done-button {
+  margin-left: auto;
+
+  border-color: transparent;
+
+  color: #aaaaaa;
+}
+
+
 .folder-tree-message {
+  flex: 0 0 100%;
+
   margin: 0;
 
   color: #d08098;
@@ -95,6 +132,18 @@
   display: block;
 
   width: 100%;
+}
+
+
+/*
+  접기(folder-toggle)는 이 컨테이너에 hidden 속성을 붙인다.
+  UA 기본 규칙 [hidden]{display:none}은 위의 .folder-tree-container
+  선택자보다 명시도가 낮아 그대로는 무시된다 — 여기서 같은
+  명시도로 다시 못박아야 실제로 접힌다.
+*/
+
+.folder-tree-container[hidden] {
+  display: none;
 }
 
 
@@ -159,8 +208,20 @@
 }
 
 
-.folder-toggle:hover {
+.folder-toggle:hover:not(:disabled) {
   color: #ee9fbd;
+}
+
+
+/*
+  자식이 없는 폴더 — 접을 것이 없으므로 비활성. 자리는 남겨서
+  형제 폴더들과 이름 위치가 어긋나지 않게 한다.
+*/
+
+.folder-toggle--empty {
+  opacity: 0.25;
+
+  cursor: default;
 }
 
 
@@ -237,8 +298,44 @@
 }
 
 
+/*
+  .post-list-item은 justify-content: space-between이고 제목은
+  자라지 않는다 — 평면 목록에서는 항목이 둘뿐이라 문제가 없지만,
+  트리에서는 앞에 ≡ 가(삭제 모드에서는 체크박스까지) 붙어 제목이
+  행 한가운데로 떠 버린다. 제목을 자라게 해서 남는 공간을 없애면
+  ≡ · 체크박스 · 제목이 왼쪽에 붙고 날짜만 오른쪽 끝에 남는다.
+*/
+
+.folder-post-row > .post-list-title {
+  flex: 1 1 auto;
+}
+
+
 .folder-post-row:hover {
   padding-left: 2px;
+}
+
+
+/* 삭제 모드에서만 행 전체가 선택 대상이다 */
+
+.folder-post-row--selectable {
+  cursor: pointer;
+}
+
+
+/*
+  삭제 모드의 체크박스는 ≡ 바로 옆(관리 action 영역)에 붙는다 —
+  제목과 떨어진 독립 컬럼처럼 줄지어 보이지 않게 음수 여백으로
+  handle 쪽으로 당기고, 제목과는 행의 gap(10px)만큼 떨어뜨린다.
+  터치 목표가 겹치지 않도록 handle과의 실제 간격은 6px 이상
+  유지한다(모바일은 아래에서 더 넓힌다).
+*/
+
+.folder-post-row > .post-list-item-checkbox {
+  width: 14px;
+  height: 14px;
+
+  margin: 0 0 0 -4px;
 }
 
 
@@ -336,6 +433,26 @@
   .tree-drag-handle {
     width: 32px;
     height: 32px;
+  }
+
+  /*
+    모바일에서는 handle(32px)과 체크박스가 서로 닿지 않도록
+    당기지 않는다 — 행의 gap 10px이 그대로 둘 사이 간격이 되고,
+    체크박스 자체도 조금 키워 손가락으로 정확히 누를 수 있게
+    한다.
+  */
+
+  .folder-post-row > .post-list-item-checkbox {
+    width: 18px;
+    height: 18px;
+
+    margin-left: 0;
+  }
+
+  .folder-tree-tool-button {
+    padding:
+      7px
+      10px;
   }
 
 }

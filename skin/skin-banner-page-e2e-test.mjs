@@ -1213,9 +1213,20 @@ async function testOwnerCategoryScreen(vpName) {
 
     const manage = await page.evaluate(READ_CATEGORY_SCREEN);
 
-    check(`[${vpName}] edit를 누르면 기존 관리 화면(선택 삭제 목록 + 선택 바)이 열린다`,
+    /* 관리 UI 정리 라운드: 이 화면은 폴더 트리이고, 체크박스와 하단
+       선택삭제 바는 상단 − delete로 삭제 모드에 들어갔을 때만 나온다.
+       legacy 헤더의 떠 있는 edit / ＋ 도 이 화면에서는 감춘다 —
+       나가는 길은 트리 툴바의 done이다. */
+    check(`[${vpName}] edit를 누르면 기존 관리 화면(폴더 트리)이 열린다`,
       manage.legacyItems === 2 && manage.skinItems === 0 &&
-      manage.selectBarVisible && !manage.skinActive && !manage.ownerTools,
+      !manage.skinActive && !manage.ownerTools &&
+      await page.evaluate(() => Boolean(document.querySelector("#postList .folder-tree"))),
+      JSON.stringify(manage));
+
+    check(`[${vpName}] 관리 화면은 체크박스/하단 선택삭제 바 없이 열린다`,
+      !manage.selectBarVisible && !manage.addVisible && !manage.editVisible &&
+      await page.evaluate(() =>
+        document.querySelectorAll("#postList .post-list-item-checkbox").length === 0),
       JSON.stringify(manage));
 
     check(`[${vpName}] 관리 화면에서는 legacy 헤더/여백이 원래대로 돌아온다`,
@@ -1234,13 +1245,13 @@ async function testOwnerCategoryScreen(vpName) {
     check(`[${vpName}] 관리 화면 항목이 선택 가능한 형태로 바뀐다(기능 삭제 없음)`,
       selectable.isDiv === true, JSON.stringify(selectable));
 
-    /* edit 다시 → 스킨 복귀 */
-    await page.click("#postListEditToggleButton");
+    /* 관리 화면의 done → 스킨 복귀 */
+    await page.click("#postList .folder-tree-done-button");
     await page.waitForTimeout(1200);
 
     const backToSkin = await page.evaluate(READ_CATEGORY_SCREEN);
 
-    check(`[${vpName}] 관리 화면을 닫으면 해당 카테고리 스킨으로 돌아온다`,
+    check(`[${vpName}] 관리 화면의 done을 누르면 해당 카테고리 스킨으로 돌아온다`,
       backToSkin.skinItems === 2 && backToSkin.legacyItems === 0 &&
       backToSkin.skinActive && backToSkin.ownerTools && !backToSkin.selectBarVisible,
       JSON.stringify(backToSkin));
@@ -1292,9 +1303,15 @@ async function testOwnerCategoryScreen(vpName) {
 
     const direct = await page.evaluate(READ_CATEGORY_SCREEN);
 
+    /* 관리 UI 정리 라운드: 관리 화면의 action은 트리 자신의 툴바가
+       전부 갖는다 — legacy 헤더의 떠 있는 edit / ＋ 는 여기서 감춘다. */
     check(`[${vpName}] 소유자가 ?manage=1로 직접 들어오면 기존 관리 화면이 열린다`,
       direct.legacyItems === 2 && direct.skinItems === 0 && !direct.skinActive &&
-      direct.addVisible && direct.editVisible,
+      !direct.addVisible && !direct.editVisible &&
+      await page.evaluate(() => Boolean(
+        document.querySelector("#postList .folder-tree") &&
+        document.querySelector("#postList .folder-tree-done-button")
+      )),
       JSON.stringify(direct));
 
     check(`[${vpName}] 관리 진입 경로 콘솔 에러 없음`,
