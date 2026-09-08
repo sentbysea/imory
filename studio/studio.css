@@ -277,6 +277,24 @@ body {
 }
 
 
+/* =========================================================
+   DOCK LEAD — Back + Select (PHASE AI-6A)
+
+   dock의 in-flow 자식은 여전히 둘(이 wrapper와
+   .studio-top-dock-actions)이라 space-between 배치가 그대로다.
+   자세한 배경은 studio/index.html의 이 블록 주석 참고.
+========================================================== */
+
+.studio-top-dock-lead {
+  flex: none;
+
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+}
+
+
 .studio-top-dock-back {
   flex: none;
 

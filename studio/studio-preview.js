@@ -137,6 +137,12 @@ const studioImportButton =
 const studioImagesButton =
   document.getElementById("studioImagesButton");
 
+/* PHASE AI-6A — Element Inspector(Select) 진입점. 여닫기 리스너는
+   studio/inspector/studio-inspector.js가 달고, 이 파일은 활성화
+   여부만 다른 toolbar 버튼과 같은 자리에서 함께 갱신한다. */
+const studioInspectorButton =
+  document.getElementById("studioInspectorButton");
+
 const studioToast =
   document.getElementById("studioToast");
 
@@ -513,6 +519,35 @@ function updateStudioImagesButtonState() {
 }
 
 
+/* =========================================================
+   PHASE AI-6A — SELECT(Element Inspector) 버튼도 IMPORT/IMAGES와
+   같은 기준으로 "지금 working draft가 있는가"만 본다. 실제 여닫기
+   상태와 overlay는 studio/inspector/studio-inspector.js가 갖는다 —
+   이 파일은 working draft가 사라졌을 때(mount 재진입/Preview shell
+   숨김) Inspector를 강제로 끄도록 알려 주기만 한다.
+========================================================== */
+
+function updateStudioInspectorButtonState() {
+
+  if (!studioInspectorButton) {
+    return;
+  }
+
+  studioInspectorButton.disabled =
+    !currentWorkingSkin;
+
+  if (
+    !currentWorkingSkin &&
+    typeof window.setStudioInspectorEnabled === "function"
+  ) {
+
+    window.setStudioInspectorEnabled(false);
+
+  }
+
+}
+
+
 function resetStudioWorkingState() {
 
   currentWorkingSkin =
@@ -568,6 +603,8 @@ function resetStudioWorkingState() {
   updateStudioImportButtonState();
 
   updateStudioImagesButtonState();
+
+  updateStudioInspectorButtonState();
 
 }
 
@@ -1225,6 +1262,42 @@ function applyAiSkinPackage(skinPackage, options) {
 }
 
 
+/* =========================================================
+   PHASE AI-6A — Direct Edit 적용 (Element Inspector)
+
+   Inspector의 "직접 수정"이 working draft를 바꾸는 **유일한**
+   입구다. 새 mutation 경로를 만들지 않고 Code Apply와 같은
+   applyWorkingSkinChanges()를 그대로 부른다 — 그래서 Direct Edit도
+   Code Editor와 완전히 같은 규칙을 자동으로 따른다:
+
+     - POST는 post-body region이 남아 있어야만 통과(없으면 throw)
+     - templates.home이 있으면 templates.home.html에, 없으면 legacy
+       top-level html에 쓴다
+     - css는 언제나 공유 top-level css 하나
+     - dirty=true + revision bump + Save/Publish 버튼 갱신
+     - 지금 보고 있는 화면을 그대로 다시 그린다
+
+   DB에는 손대지 않는다(자동 Save 금지, 요구사항 8절) — 사용자가
+   Save를 눌러야만 저장된다.
+
+   실패는 예외로 던진다(applyWorkingSkinChanges 그대로) — 호출자가
+   잡아서 toast로 보여주고, 그 경우 working draft는 한 글자도 바뀌지
+   않는다.
+========================================================== */
+
+function applyStudioDirectEdit(pageType, html, css) {
+
+  if (!currentWorkingSkin) {
+    return false;
+  }
+
+  applyWorkingSkinChanges(pageType, html, css);
+
+  return true;
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.getStudioAiWorkingState =
@@ -1232,6 +1305,15 @@ if (typeof window !== "undefined") {
 
   window.applyAiSkinPackage =
     applyAiSkinPackage;
+
+  window.applyStudioDirectEdit =
+    applyStudioDirectEdit;
+
+  window.postInspectorModeToFrame =
+    postInspectorModeToFrame;
+
+  window.postInspectorSelectionToFrame =
+    postInspectorSelectionToFrame;
 
 }
 
@@ -1600,11 +1682,72 @@ function postRenderToFrame(payload) {
 
   }
 
+  /*
+    PHASE AI-6A — Element Inspector가 켜져 있을 때만, Preview로
+    보내는 **사본**의 각 요소에 임시 식별자(data-imory-edit-id)를
+    찍는다. currentWorkingSkin은 이 경로에서 절대 바뀌지 않는다 —
+    실제 SkinPackage에 id가 남는 건 사용자가 그 요소를 직접 수정한
+    순간뿐이다(studio/inspector/studio-inspector-model.js 참고).
+    Inspector가 꺼져 있으면 payload.skin이 그대로 나가므로 지금까지의
+    Preview와 byte 단위로 동일하다.
+
+    studio/inspector/studio-inspector.js는 이 파일보다 나중에
+    로드되므로(index.html) typeof 가드로 확인한다 — preview-navigation.js
+    를 참조하는 다른 지점들과 같은 패턴이다.
+  */
+  const skinForFrame =
+    (typeof window.stampSkinForInspector === "function")
+      ? window.stampSkinForInspector(payload.skin)
+      : payload.skin;
+
   studioPreviewFrame.contentWindow.postMessage(
     {
       type: PREVIEW_MSG_RENDER,
-      skin: payload.skin,
+      skin: skinForFrame,
       context: payload.context
+    },
+    window.location.origin
+  );
+
+}
+
+
+/* =========================================================
+   PHASE AI-6A — Inspector 관련 parent -> iframe 메시지
+
+   studio/inspector/studio-inspector.js가 iframe/postMessage를 직접
+   만지지 않도록, 이 파일이 이미 갖고 있는 "그 iframe으로 보낸다"
+   경로 하나를 그대로 재사용한다(postPostBodyToFrame/
+   postBannerRenderToFrame과 같은 모양).
+========================================================== */
+
+function postInspectorModeToFrame(enabled) {
+
+  if (!previewFrameReady) {
+    return;
+  }
+
+  studioPreviewFrame.contentWindow.postMessage(
+    {
+      type: "preview:inspector-mode",
+      enabled: !!enabled
+    },
+    window.location.origin
+  );
+
+}
+
+
+function postInspectorSelectionToFrame(editId) {
+
+  if (!previewFrameReady) {
+    return;
+  }
+
+  studioPreviewFrame.contentWindow.postMessage(
+    {
+      type: "preview:inspector-select",
+      editId: typeof editId === "string" ? editId : null
     },
     window.location.origin
   );
@@ -1788,6 +1931,23 @@ window.addEventListener(
       if (typeof data.href === "string") {
         handlePreviewNavigateMessage(data.href);
       }
+
+      return;
+
+    }
+
+    /*
+      PHASE AI-6A — Inspector가 올려보내는 hover/select/rects/escape는
+      이 파일이 해석하지 않고 그대로 넘긴다(studio/inspector/
+      studio-inspector.js). shape 검증은 그쪽에서 한다 — 어차피
+      origin/source는 여기서 이미 확인했다.
+    */
+    if (
+      data.type.startsWith("preview:inspect-") &&
+      typeof window.handleStudioInspectorMessage === "function"
+    ) {
+
+      window.handleStudioInspectorMessage(data);
 
       return;
 
@@ -2323,6 +2483,8 @@ async function mountStudioPreview(
   updateStudioImportButtonState();
 
   updateStudioImagesButtonState();
+
+  updateStudioInspectorButtonState();
 
   /*
     previewHistory는 이 함수 진입 시점의 resetStudioWorkingState()

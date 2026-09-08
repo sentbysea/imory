@@ -1,0 +1,413 @@
+/* =========================================================
+   SKIN STUDIO — ELEMENT INSPECTOR (PHASE AI-6A)
+
+   Preview **위에** 얹히는 overlay 전용 스타일. Preview iframe 안의
+   스킨 DOM에는 이 파일의 규칙이 단 하나도 닿지 않는다(다른 문서라
+   애초에 닿을 수 없다) — hover/선택 테두리를 실제 요소의 CSS로
+   그리지 않는 이유이자, 그래서 layout shift가 원천적으로 없는
+   이유다(요구사항 4절).
+
+   z-index 컨벤션(studio.css 전체 기준): overlay=4 < preview-back=5
+   < ai-dock=6 < **inspector=7** < top-dock-zone=8 < toast=9.
+   Inspector는 로딩 overlay와 AI 패널보다는 위, Top Dock과 toast
+   보다는 아래다 — 팝오버는 어차피 stage 안쪽으로 clamp되므로
+   (studio-inspector.js placeStudioInspectorPopover) 패널을 덮는
+   일은 없고, 이 순서는 안전망 성격이다.
+========================================================== */
+
+.studio-inspector-layer {
+  position: absolute;
+  inset: 0;
+
+  z-index: 7;
+
+  /*
+    레이어 전체는 클릭을 통과시킨다 — Preview는 iframe이 직접
+    받아야 하고, 이 레이어가 그 위를 덮으면 hover/click이 아예
+    iframe에 도달하지 못한다. 실제로 눌러야 하는 팝오버만 아래에서
+    pointer-events를 되살린다.
+  */
+  pointer-events: none;
+}
+
+
+/* =========================================================
+   hover / 선택 테두리
+
+   outline이 아니라 box-shadow inset을 쓴다 — 이 요소 자체는
+   좌표만 잡아 놓은 빈 div라 테두리가 바깥으로 번지면 실제 요소
+   경계와 1~2px씩 어긋나 보인다. inset은 항상 잡아준 사각형 안쪽에
+   정확히 붙는다.
+========================================================== */
+
+.studio-inspector-outline {
+  position: absolute;
+
+  pointer-events: none;
+
+  border-radius: var(--imory-radius-100);
+}
+
+
+.studio-inspector-outline--hover {
+  box-shadow: inset 0 0 0 1px var(--system-accent);
+
+  background: rgba(227, 154, 181, 0.08);
+}
+
+
+.studio-inspector-outline--selected {
+  box-shadow: inset 0 0 0 2px var(--system-accent-hover);
+
+  background: rgba(198, 111, 142, 0.10);
+}
+
+
+/* =========================================================
+   팝오버
+========================================================== */
+
+.studio-inspector-popover {
+  position: absolute;
+
+  pointer-events: auto;
+
+  width: 268px;
+  max-height: 60vh;
+
+  overflow-y: auto;
+
+  padding: 10px 12px 12px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-300);
+
+  background: var(--system-bg);
+
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+
+  font-size: var(--imory-font-size-300);
+
+  color: var(--system-text);
+}
+
+
+.studio-inspector-popover-title {
+  margin: 0 0 8px;
+
+  font-size: var(--imory-font-size-200);
+
+  line-height: var(--imory-line-height-snug);
+
+  color: var(--system-text-muted);
+
+  word-break: break-all;
+}
+
+
+.studio-inspector-popover-actions {
+  display: flex;
+
+  gap: 6px;
+}
+
+
+.studio-inspector-action {
+  flex: 1;
+
+  padding: 6px 8px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-action:hover {
+  border-color: var(--system-accent-border);
+
+  color: var(--system-accent-hover);
+}
+
+
+.studio-inspector-action--ai {
+  color: var(--system-text-muted);
+}
+
+
+.studio-inspector-note {
+  margin: 8px 0 0;
+
+  font-size: var(--imory-font-size-200);
+
+  line-height: var(--imory-line-height-snug);
+
+  color: var(--system-text-muted);
+}
+
+
+/* =========================================================
+   직접 수정 폼
+
+   요소 종류마다 행 개수가 다르다(studio-inspector.js
+   buildStudioInspectorControls) — 여기서는 "어떤 행이든 같은
+   모양"만 정의한다.
+========================================================== */
+
+.studio-inspector-fields {
+  margin-top: 10px;
+
+  padding-top: 10px;
+
+  border-top: 1px solid var(--system-border);
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+}
+
+
+.studio-inspector-row {
+  display: flex;
+
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.studio-inspector-row-label {
+  flex: none;
+
+  width: 84px;
+
+  font-size: var(--imory-font-size-200);
+
+  color: var(--system-text-muted);
+}
+
+
+.studio-inspector-input {
+  flex: 1;
+
+  min-width: 0;
+
+  padding: 4px 6px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+}
+
+
+.studio-inspector-input--number {
+  flex: none;
+
+  width: 62px;
+}
+
+
+.studio-inspector-color {
+  flex: none;
+
+  width: 32px;
+  height: 24px;
+
+  padding: 0;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-choice {
+  flex: 1;
+
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 4px;
+}
+
+
+.studio-inspector-choice-option {
+  padding: 4px 7px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-muted);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-choice-option:disabled {
+  color: var(--system-text-disabled);
+
+  cursor: not-allowed;
+}
+
+
+.studio-inspector-choice-option.is-active {
+  border-color: var(--system-accent-border);
+
+  background: var(--system-accent-soft);
+
+  color: var(--system-accent-hover);
+}
+
+
+.studio-inspector-clear {
+  flex: none;
+
+  padding: 4px 6px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: var(--system-text-faint);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-clear:hover {
+  color: var(--system-accent-hover);
+}
+
+
+.studio-inspector-empty {
+  margin: 0;
+
+  font-size: var(--imory-font-size-200);
+
+  color: var(--system-text-muted);
+}
+
+
+.studio-inspector-undo {
+  margin-top: 10px;
+
+  width: 100%;
+
+  padding: 5px 8px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-muted);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-undo:hover {
+  color: var(--system-accent-hover);
+}
+
+
+/* =========================================================
+   Top Dock의 Select 버튼 — 켜져 있는 동안의 표시
+
+   .studio-corner-button의 나머지 규칙은 studio.css가 갖는다.
+   여기서는 "지금 켜져 있다"만 덧그린다.
+========================================================== */
+
+.studio-corner-button--active:not(:disabled) {
+  border-color: var(--system-accent-border);
+
+  background: var(--system-accent-soft);
+
+  color: var(--system-accent-hover);
+}
+
+
+/* =========================================================
+   좁은 화면에서는 Select 진입점을 내린다
+
+   Top Dock은 원래도 좁은 화면에서 오른쪽 actions 그룹이 뷰포트를
+   넘친다(Studio는 데스크톱 전용 도구다 — studio.css의
+   .studio-top-dock-groups 주석 참고). Select 버튼을 왼쪽에
+   더하면 그만큼 더 밀려서, 이미 아슬아슬하던 "AI Assistant"가
+   아예 화면 밖으로 나가 누를 수 없게 된다.
+
+   그래서 AI 패널이 overlay로 바뀌는 것과 **같은 breakpoint**에서
+   이 버튼만 감춘다. Inspector는 hover/정밀 클릭이 전제인 도구라
+   이 폭에서 잃는 것이 크지 않고, 모드는 항상 꺼진 상태로
+   시작하므로 감춰도 어중간한 상태에 갇히지 않는다.
+
+   (Preview 자체를 Mobile 폭으로 보는 것과는 무관하다 — 그건
+   Studio 창은 넓은 채로 iframe만 390px가 되는 것이라 이 규칙에
+   걸리지 않는다. Inspector overlay가 그 축소 배율까지 반영하는지는
+   studio/studio-inspector-e2e-test.mjs 검사 U가 따로 확인한다.)
+========================================================== */
+
+@media (max-width: 720px) {
+
+  #studioInspectorButton {
+    display: none;
+  }
+
+}
+
+
+/* =========================================================
+   AI 패널의 선택 chip (요구사항 15절)
+
+   Inspector가 만들어 #studioAiPanelBody 맨 위에 얹는 한 줄.
+   AI 패널 쪽 CSS/JS는 이번 Phase에서 바뀌지 않는다.
+========================================================== */
+
+.studio-inspector-ai-chip {
+  margin: 0 0 8px;
+
+  padding: 5px 8px;
+
+  border: 1px solid var(--system-accent-border);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-accent-soft);
+
+  font-size: var(--imory-font-size-200);
+
+  line-height: var(--imory-line-height-snug);
+
+  color: var(--system-accent-hover);
+
+  word-break: break-all;
+}

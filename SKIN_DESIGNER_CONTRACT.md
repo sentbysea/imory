@@ -9,7 +9,7 @@
 ## 0. 한눈에 보는 요약
 
 - 스킨은 `schemaVersion: 1`인 **SkinPackage JSON** 하나입니다. HOME/CATEGORY/POST 세 화면을 각각 `templates.home` / `templates.category` / `templates.post`에 담습니다(레거시 단일 `html`/`css` 방식도 여전히 지원 — 1절).
-- HTML에는 일반 태그 + `data-imory-*` 바인딩 속성 5종 + `data-imory-region="post-body"` 1종만 씁니다. **인라인 JS, `style` 속성, `id` 속성은 전부 저장 시점에 제거됩니다.**
+- HTML에는 일반 태그 + `data-imory-*` 바인딩 속성 5종 + `data-imory-region="post-body"` 1종 + Studio Direct Edit 표식 `data-imory-edit-id` 1종만 씁니다. **인라인 JS, `style` 속성, `id` 속성은 전부 저장 시점에 제거됩니다.**
 - CSS는 저장 시점에 파싱되어 `.imory-skin-root` 스코프가 강제로 붙습니다. `@import`, `expression()`, `javascript:`/`data:` 스킴의 `url()`, 특정 "보호 대상 selector"는 제거됩니다.
 - POST 화면은 본문(글 내용) 데이터 자체를 절대 받지 않습니다. `data-imory-region="post-body"`로 "자리"만 표시하면 플랫폼이 그 자리에 실제 본문을 채웁니다. 이 region이 없는 POST 템플릿은 아예 공개되지 않고 레거시 화면으로 대체됩니다.
 - Studio에는 "SkinPackage JSON 전체 붙여넣기(Import)" 기능이 있고, 이 문서 13절이 그 검증 로직이 실제로 요구하는 정확한 shape입니다.
@@ -245,7 +245,7 @@
 
 근거: [skin/skin-sanitize.js](skin/skin-sanitize.js) `SKIN_SANITIZE_BIND_ATTRS`/`SKIN_SANITIZE_REGION_ATTR`, [skin/skin-render.js](skin/skin-render.js)
 
-**정확히 6개**만 존재합니다. 이 외의 `data-imory-*` 속성은 이름 자체를 아예 인식하지 않고, 저장 시점에 조용히 제거됩니다(경고 로그만 남김).
+**정확히 7개**만 존재합니다(그중 6개가 렌더러가 해석하는 것이고, 마지막 하나는 Studio 전용 표식입니다). 이 외의 `data-imory-*` 속성은 이름 자체를 아예 인식하지 않고, 저장 시점에 조용히 제거됩니다(경고 로그만 남김).
 
 | 속성 | 값 형식 | 동작 |
 |---|---|---|
@@ -255,6 +255,7 @@
 | `data-imory-repeat="path"` | dotted identifier | 값이 배열이면 그 엘리먼트를 템플릿 삼아 item마다 clone. 배열이 아니면(`undefined`/`null`/객체 등) **엘리먼트 자체를 제거**. |
 | `data-imory-if="path"` | dotted identifier | truthy/falsy만 판정해 `el.hidden` 토글. |
 | `data-imory-region="post-body"` | 고정 문자열 `"post-body"` 만 허용 | 값은 resolve 대상이 아님(경로 아니라 식별자). mount 시 이 엘리먼트의 **자식을 전부 비운 뒤**, 플랫폼(Post Viewer)이 실제 글 본문을 그 안에 주입할 자리로 씁니다. |
+| `data-imory-edit-id="..."` | 영문으로 시작하는 영문/숫자/`_`/`-` 문자열, 최대 64자 | **렌더러가 해석하지 않는 순수 표식**입니다(PHASE AI-6A). Skin Studio의 Direct Edit이 "이 요소"를 재렌더/재저장 뒤에도 다시 찾기 위해 붙이며, 생성된 CSS 규칙의 `[data-imory-edit-id="..."]` selector가 이 값을 가리킵니다. 디자이너가 직접 쓸 필요는 없고, 형태가 맞지 않으면 저장 시점에 제거됩니다. 자세한 내용: [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) 2절. |
 
 ### 3-1. 속성 값(경로) 문법 제약
 
@@ -419,7 +420,7 @@ style noscript template
 - `<a href="...">` — `isSafeSkinUrl()` 통과 시에만(6-1절), 실패 시 속성 삭제
 - `<img src="...">` — 위와 동일
 
-**`data-imory-*`**: 3절의 6종만(그 외 `data-*`는 화이트리스트에 없으므로 전부 제거됨 — `data-foo="bar"` 같은 임의 커스텀 데이터 속성은 쓸 수 없습니다).
+**`data-imory-*`**: 3절의 7종만(그 외 `data-*`는 화이트리스트에 없으므로 전부 제거됨 — `data-foo="bar"` 같은 임의 커스텀 데이터 속성은 쓸 수 없습니다).
 
 **전면 금지(값 무관 무조건 삭제)**:
 ```

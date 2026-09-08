@@ -66,6 +66,31 @@ const SKIN_SANITIZE_BIND_ATTRS = new Set([
 const SKIN_SANITIZE_REGION_ATTR = "data-imory-region";
 const SKIN_SANITIZE_ALLOWED_REGION_NAMES = new Set(["post-body"]);
 
+/* =========================================================
+   data-imory-edit-id (PHASE AI-6A, Element Inspector + Direct Edit)
+
+   Studio의 Direct Edit이 "지금 고른 이 요소"를 재렌더/재저장 뒤에도
+   같은 요소로 다시 찾기 위한 **안정 식별자**다. 값은 context path도
+   URL도 아니고 렌더러가 해석하지도 않는다 — 오직 두 곳에서만
+   쓰인다: (1) Studio가 생성하는 CSS 규칙의 attribute selector
+   (`[data-imory-edit-id="..."]`), (2) 그 요소를 다시 찾는
+   querySelector 문자열.
+
+   그래서 값 형태를 아주 좁게 제한한다: 첫 글자는 영문, 이후는
+   영문/숫자/`_`/`-`만, 최대 64자. 따옴표·대괄호·공백·역슬래시가
+   원천적으로 들어갈 수 없으므로 위 두 문자열 조립에 그대로 꽂아도
+   selector 구문을 깨거나 벗어날 수 없다. 형태가 맞지 않으면 조용히
+   버린다(id 속성이 여전히 전면 금지인 것과 같은 결 — 이 속성은
+   id의 대체재가 아니라 Studio 전용 편집 표식이다).
+
+   published skin에서도 이 속성은 그대로 남는다(renderSkin이 매번
+   sanitize를 다시 돌리므로 여기서 허용해야 공개 화면에서도 Direct
+   Edit CSS 규칙이 실제로 적용된다) — 하지만 아무 동작도 트리거하지
+   않는 순수 표식이라 렌더 결과에는 영향이 없다.
+========================================================== */
+const SKIN_SANITIZE_EDIT_ID_ATTR = "data-imory-edit-id";
+const SKIN_SANITIZE_EDIT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
 /* 명시적으로 전량 제거되는 속성(접두어 매칭은 별도 처리) */
 const SKIN_SANITIZE_DENY_ATTRS = new Set([
   "style", "srcdoc", "formaction", "xlink:href",
@@ -150,6 +175,15 @@ function copySkinSanitizedAttributes(sourceEl, destEl, tag) {
         destEl.setAttribute(name, value);
       } else {
         console.warn(`[skin-sanitize] dropped malformed binding path ${name}="${value}"`);
+      }
+      return;
+    }
+
+    if (name === SKIN_SANITIZE_EDIT_ID_ATTR) {
+      if (SKIN_SANITIZE_EDIT_ID_PATTERN.test(value)) {
+        destEl.setAttribute(name, value);
+      } else {
+        console.warn(`[skin-sanitize] dropped malformed ${name}="${value}"`);
       }
       return;
     }

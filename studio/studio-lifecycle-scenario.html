@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="./editor/code-editor.css">
 <link rel="stylesheet" href="./editor/import-editor.css">
 <link rel="stylesheet" href="./editor/confirm-dialog.css">
+<link rel="stylesheet" href="./inspector/studio-inspector.css">
 </head>
 <body>
 
@@ -52,7 +53,10 @@
     <!-- PHASE AI-5A.1 — 기본 상태 = 펼침(studio/index.html과 동일) -->
     <div class="studio-top-dock-zone is-open" id="studioTopDockZone">
       <div class="studio-top-dock" id="studioTopDock">
-        <button type="button" class="studio-top-dock-back" id="studioBackButton">← back</button>
+        <div class="studio-top-dock-lead">
+          <button type="button" class="studio-top-dock-back" id="studioBackButton">← back</button>
+          <button type="button" class="studio-corner-button" id="studioInspectorButton" aria-pressed="false" disabled>Select</button>
+        </div>
         <div class="studio-top-dock-groups">
           <div class="studio-viewport-toggle" id="studioViewportToggle" role="group" aria-label="Preview 화면 크기">
             <button type="button" class="studio-viewport-toggle-option studio-viewport-toggle-option--active" data-viewport-mode="desktop">Desktop</button>
@@ -647,6 +651,161 @@
         },
 
         /*
+          Scenario Y (PHASE AI-6A) — Element Inspector / Direct Edit
+          전용 fixture. 요구사항 16절의 대표 요소 여덟 가지를 한
+          SkinPackage 안에 모아 둔다:
+
+            A .y-heading      정적 heading 텍스트
+            B .y-post-title   runtime binding 텍스트(item.title)
+            C .y-avatar       imageSlot 이미지(profile, required 아님)
+              .y-cover        imageSlot 이미지(cover, required)
+            D .y-link         평범한 내부 링크(정적 href)
+            E .y-owner-link   owner/admin runtime binding 링크
+            F .y-button       버튼처럼 쓰는 링크(스킨 sanitizer가
+                              <button>을 허용하지 않으므로 실제
+                              스킨의 "버튼"은 항상 <a>다)
+            G .y-box          컨테이너
+            H POST template의 data-imory-region="post-body"
+
+          imageLibrary를 선언해서 슬롯 연결이 슬롯 단위로 유지되게
+          한다(위 mock skin image library 주석 참고) — 그래야 "한
+          슬롯만 비웠는데 다른 슬롯까지 사라지지 않는다"를 실제로
+          검증할 수 있다.
+        */
+        y: {
+          userId: "user-y",
+          imageLibrary: {
+            versionSlots: {
+              "draft-y1": {
+                profile: { imageId: "img-profile", imageUrl: "https://example.com/profile.png" },
+                cover: { imageId: "img-cover", imageUrl: "https://example.com/cover.png" }
+              }
+            },
+            images: [
+              { id: "img-profile", public_url: "https://example.com/profile.png", file_name: "profile.png", byte_size: 100 },
+              { id: "img-cover", public_url: "https://example.com/cover.png", file_name: "cover.png", byte_size: 100 }
+            ]
+          },
+          tables: {
+            skins: [
+              { id: "skin-y1", user_id: "user-y", is_active: true, current_draft_version_id: "draft-y1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-y1",
+                content: {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html:
+                        '<div class="y-home">' +
+                        '<h1 class="y-heading">Recent Notes</h1>' +
+                        '<img class="y-avatar" data-imory-src="profile.avatarUrl" alt="프로필">' +
+                        '<img class="y-cover" data-imory-src="images.cover" alt="커버">' +
+                        '<a class="y-link" href="/scenario-y/category/301">카테고리 보기</a>' +
+                        '<a class="y-owner-link" data-imory-if="viewer.isOwner" data-imory-href="viewer.adminHref">ADMIN</a>' +
+                        '<a class="y-button" href="https://example.com/more">더 보기</a>' +
+                        '<div class="y-box"><p class="y-box-text">감싸는 영역</p></div>' +
+                        '<ul class="y-post-list">' +
+                        '<li class="y-post-item" data-imory-repeat="home.recentPosts">' +
+                        '<a class="y-post-link" data-imory-href="item.href">' +
+                        '<span class="y-post-title" data-imory-bind="item.title"></span>' +
+                        '</a></li></ul>' +
+                        '</div>'
+                    },
+                    category: {
+                      html:
+                        '<div class="y-category">' +
+                        '<h1 class="y-category-title" data-imory-bind="category.name"></h1>' +
+                        '</div>'
+                    },
+                    post: {
+                      html:
+                        '<div class="y-post">' +
+                        '<h1 class="y-article-title" data-imory-bind="post.title"></h1>' +
+                        '<div class="y-post-body" data-imory-region="post-body"></div>' +
+                        '</div>'
+                    }
+                  },
+                  css:
+                    '.y-home { color: #222222; } ' +
+                    '.y-home .y-heading { font-size: 20px; } ' +
+                    '.y-box { padding: 4px; } ' +
+                    '@media (max-width: 720px) { .y-home .y-heading { font-size: 15px; } }',
+                  imageSlots: [
+                    { name: "profile", label: "프로필 사진", required: false, aspectRatioHint: "1:1" },
+                    { name: "cover", label: "커버 이미지", required: true, aspectRatioHint: "3:1" }
+                  ],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-y", nickname: "Scenario Y", bio: null, slug: "scenario-y" }],
+            site_settings: [],
+            categories: [
+              { id: "301", user_id: "user-y", name: "LOG", type: "post", sort_order: 1 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-y", title: "Hello World", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301", content: "본문입니다." }
+            ],
+            banners: []
+          },
+          rpcHandlers: {
+            /*
+              scenario y는 imageLibrary를 선언하므로(위 mock skin
+              image library) Studio Save가 슬롯 연결까지 함께 넘기는
+              RPC를 탄다 — 두 이름 모두 같은 동작으로 받아 둔다.
+            */
+            save_skin_draft_version_with_image_slots: function (params) {
+              return state.rpcHandlers.save_skin_draft_version(params);
+            },
+            save_skin_draft_version: function (params) {
+
+              window.top.__savedDraftCallsY =
+                window.top.__savedDraftCallsY || [];
+
+              window.top.__savedDraftCallsY.push(params);
+
+              const newVersionId =
+                "draft-y" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            },
+            publish_skin: function (params) {
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_published_version_id = skinRow.current_draft_version_id;
+              }
+
+              return { data: skinRow ? skinRow.current_published_version_id : null, error: null };
+
+            }
+          }
+        },
+
+        /*
           Scenario U — Banner Category Preview 전용, banners 조회
           자체가 실패하는 경우("query 실패 시 오류 상태 + Preview
           Back" 검증). 아래 공용 from()에 있는 state.bannerQueryShouldFail
@@ -1159,6 +1318,42 @@
       */
       window.__mockState = state;
 
+      /*
+        MOCK SKIN IMAGE LIBRARY (test only) — studio/images/
+        skin-image-library.js는 이 문서가 로드하지 않는다(그 파일은
+        새 테이블/Storage에 의존한다). 지금까지 studio-preview.js의
+        probe는 window.skinImageLibrary 자체가 없어서 throw했고, 그
+        결과 항상 "migration 이전" 폴백(skin_image_slot_values 통째로
+        읽기)을 탔다.
+
+        PHASE AI-6A의 Direct Edit은 "슬롯 하나만 비운다"를 검증해야
+        하는데, 그 폴백 경로에서는 currentWorkingImageSlots가 처음부터
+        비어 있어 슬롯 단위 구분 자체가 성립하지 않는다. 그래서
+        fixture가 imageLibrary를 선언한 시나리오에서만 준비된 것처럼
+        답하는 최소 mock을 둔다 — 선언하지 않은 기존 시나리오는
+        isReady()가 false라 지금까지와 완전히 동일한 폴백을 탄다
+        (throw 대신 false를 돌려주므로 콘솔 에러 하나만 사라진다).
+      */
+      window.skinImageLibrary = {
+        isReady: function () {
+          return Promise.resolve(!!state.imageLibrary);
+        },
+        loadVersionSlots: function (versionId) {
+          return Promise.resolve(
+            JSON.parse(JSON.stringify(
+              (state.imageLibrary && state.imageLibrary.versionSlots &&
+               state.imageLibrary.versionSlots[versionId]) || {}
+            ))
+          );
+        },
+        versionUsesLibrary: function () {
+          return Promise.resolve(!!state.imageLibrary);
+        },
+        list: function () {
+          return Promise.resolve((state.imageLibrary && state.imageLibrary.images) || []);
+        }
+      };
+
       window.supabaseClient = {
         auth: {
           getUser: function () {
@@ -1171,8 +1366,22 @@
             "세션이 있다"만 흉내 낸다.
           */
           getSession: function () {
+            /*
+              PHASE AI-6A — session.user.id도 함께 돌려준다.
+              skin/skin-context.js의 resolveSkinViewerId()가 이
+              값으로 viewer.isOwner를 판정하는데, 예전 mock은
+              access_token만 갖고 있어 Studio Preview의 viewer.*가
+              항상 "비소유자"였다(실제 Studio는 언제나 소유자
+              화면이므로 사실과 달랐다). owner/admin 링크 보호를
+              검증하려면 그 바인딩이 실제로 채워져야 한다.
+            */
             return Promise.resolve({
-              data: { session: { access_token: "mock-access-token-" + state.userId } },
+              data: {
+                session: {
+                  access_token: "mock-access-token-" + state.userId,
+                  user: { id: state.userId }
+                }
+              },
               error: null
             });
           }
@@ -1249,6 +1458,9 @@
   <!-- PHASE AI-1 / AI-5A — production과 동일한 순서(studio/index.html 참고) -->
   <script src="./ai/studio-ai-panel-layout.js"></script>
   <script src="./ai/studio-ai-panel.js"></script>
+  <!-- PHASE AI-6A — production과 동일한 순서(studio/index.html 참고) -->
+  <script src="./inspector/studio-inspector-model.js"></script>
+  <script src="./inspector/studio-inspector.js"></script>
   <script src="./studio-state.js"></script>
 
   <script>

@@ -11,13 +11,26 @@
    함께 고쳐야 한다).
 
    postMessage contract(양쪽 다 origin + shape 검증, 12절):
-     parent -> iframe  "preview:render"        { type, skin, context }
-     parent -> iframe  "preview:render-banner" { type, categoryName, items }
-     parent -> iframe  "preview:ping"          { type }
-     iframe -> parent  "preview:ready"         { type }
-     iframe -> parent  "preview:rendered"      { type, hasPostBodyRegion }
-     iframe -> parent  "preview:error"         { type, message }
-     iframe -> parent  "preview:navigate"      { type, href }
+     parent -> iframe  "preview:render"          { type, skin, context }
+     parent -> iframe  "preview:render-banner"   { type, categoryName, items }
+     parent -> iframe  "preview:ping"            { type }
+     parent -> iframe  "preview:inspector-mode"  { type, enabled }
+     parent -> iframe  "preview:inspector-select"{ type, editId }
+     iframe -> parent  "preview:ready"           { type }
+     iframe -> parent  "preview:rendered"        { type, hasPostBodyRegion }
+     iframe -> parent  "preview:error"           { type, message }
+     iframe -> parent  "preview:navigate"        { type, href }
+     iframe -> parent  "preview:inspect-hover"   { type, editId, tagName, rect }
+     iframe -> parent  "preview:inspect-select"  { type, editId, tagName, rect }
+     iframe -> parent  "preview:inspect-rects"   { type, hover, selected }
+     iframe -> parent  "preview:inspect-escape"  { type }
+
+   PHASE AI-6A(Element Inspector) — 위 inspect-* 넷은 **DOM 노드도
+   HTML 문자열도 절대 담지 않는다**. 올라가는 것은 식별자 문자열
+   하나(data-imory-edit-id), 태그 이름, 그리고 사각형 좌표 네 개뿐
+   이다. 고른 요소가 실제로 어떤 요소인지(바인딩/보호 여부/가능한
+   수정)는 parent가 자기가 갖고 있는 SkinPackage에서 그 id로 다시
+   찾아 판단한다 — iframe이 판단해서 올려보내지 않는다.
 
    보안 경계(Slice 3.5 그대로 유지, 12절): 여기서 skin/context를
    신뢰 입력으로 취급하지 않는다 — 최종 DOM 반영은 항상
@@ -55,6 +68,13 @@ const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
 const PREVIEW_MSG_PING = "preview:ping";
+
+const PREVIEW_MSG_INSPECTOR_MODE = "preview:inspector-mode";
+const PREVIEW_MSG_INSPECTOR_SELECT = "preview:inspector-select";
+const PREVIEW_MSG_INSPECT_HOVER = "preview:inspect-hover";
+const PREVIEW_MSG_INSPECT_SELECT = "preview:inspect-select";
+const PREVIEW_MSG_INSPECT_RECTS = "preview:inspect-rects";
+const PREVIEW_MSG_INSPECT_ESCAPE = "preview:inspect-escape";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -139,6 +159,20 @@ function handleRenderMessage(data) {
       type: PREVIEW_MSG_RENDERED,
       hasPostBodyRegion: !!renderInstance.getRegion(POST_BODY_REGION_NAME)
     });
+
+    /*
+      PHASE AI-6A — 재렌더로 DOM이 통째로 교체됐으므로 이전에 잡아
+      둔 element 참조는 전부 detached다. 같은 id의 요소를 다시 찾아
+      좌표를 올려보낸다(못 찾으면 selected:null이 올라가 Studio가
+      선택을 해제한다).
+    */
+    if (inspectorEnabled) {
+
+      inspectorHoverElement = null;
+
+      postInspectorRects();
+
+    }
 
   } catch (err) {
 
@@ -332,6 +366,326 @@ function handlePostBodyMessage(data) {
 }
 
 /* =========================================================
+   ELEMENT INSPECTOR — iframe 쪽 (PHASE AI-6A)
+
+   Inspector가 **꺼져 있는 동안에는 이 절의 코드가 화면에 아무런
+   영향도 주지 않는다**(요구사항 1절 "Inspector mode가 아닐 때 기존
+   Preview 동작을 절대 방해하지 않는다"). 리스너는 문서에 상시
+   달려 있지만 전부 첫 줄에서 inspectorEnabled를 확인하고 즉시
+   빠져나간다 — 켜고 끌 때마다 리스너를 붙였다 뗐다 하면 "껐는데
+   하나가 남아 있다"는 상태가 생길 수 있어서 상태 하나로만 가른다.
+
+   outline은 여기서 그리지 않는다. 좌표만 parent로 올려보내고
+   실제 표시는 Studio가 Preview **위에** 얹은 overlay가 담당한다
+   (요구사항 4절 "실제 element CSS를 수정해서 outline을 넣지 말고
+   overlay 방식 우선") — 스킨 DOM에는 클래스 하나도 붙지 않으므로
+   layout shift도, 스킨 CSS와의 충돌도 원천적으로 없다.
+
+   선택 대상은 element 참조로 들고 있는다(id 문자열만으로는 부족).
+   data-imory-repeat로 복제된 항목들은 **같은 template 요소에서
+   나왔으므로 id가 서로 같기 때문**이다 — 세 번째 글 항목을 눌렀는데
+   첫 번째 항목에 테두리가 그려지면 안 된다. 재렌더로 그 참조가
+   문서에서 떨어져 나가면 그때만 id로 다시 찾는다(그 경우 같은
+   id의 첫 번째 요소로 붙는다 — 반복 항목이면 첫 항목).
+========================================================== */
+
+let inspectorEnabled = false;
+
+let inspectorHoverElement = null;
+
+let inspectorSelectedElement = null;
+
+let inspectorSelectedEditId = null;
+
+let inspectorRectFrame = 0;
+
+
+function inspectorSkinRoot() {
+
+  return previewRoot.querySelector("[data-skin-root]");
+
+}
+
+
+function inspectorEditIdOf(el) {
+
+  return el && el.getAttribute
+    ? el.getAttribute("data-imory-edit-id")
+    : null;
+
+}
+
+
+/* 클릭/hover가 떨어진 노드에서 위로 올라가며 "사용자가 수정할
+   만한 단위"를 찾는다 — 장식용 빈 span/br 하나가 잡히지 않도록
+   판정 자체는 studio/inspector/studio-inspector-model.js의
+   isInspectableElement() 하나만 쓴다(Studio 쪽과 같은 규칙). */
+function resolveInspectableTarget(node) {
+
+  const root =
+    inspectorSkinRoot();
+
+  if (!root) {
+    return null;
+  }
+
+  let current =
+    (node && node.nodeType === 1) ? node : (node ? node.parentElement : null);
+
+  while (current && current !== root) {
+
+    if (inspectorEditIdOf(current) && window.isInspectableElement(current)) {
+      return current;
+    }
+
+    current = current.parentElement;
+
+  }
+
+  return null;
+
+}
+
+
+function inspectorRectOf(el) {
+
+  if (!el || !el.isConnected) {
+    return null;
+  }
+
+  const rect =
+    el.getBoundingClientRect();
+
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height
+  };
+
+}
+
+
+/* 재렌더 뒤에는 이전 element 참조가 detached다 — 그때만 id로 다시
+   찾는다(위 파일 주석의 반복 항목 한계 참고). */
+function inspectorReviveSelection() {
+
+  if (inspectorSelectedElement && inspectorSelectedElement.isConnected) {
+    return inspectorSelectedElement;
+  }
+
+  const root =
+    inspectorSkinRoot();
+
+  if (!root || !inspectorSelectedEditId) {
+    inspectorSelectedElement = null;
+    return null;
+  }
+
+  inspectorSelectedElement =
+    root.querySelector(`[data-imory-edit-id="${inspectorSelectedEditId}"]`) || null;
+
+  return inspectorSelectedElement;
+
+}
+
+
+function postInspectorRects() {
+
+  if (!inspectorEnabled) {
+    return;
+  }
+
+  const selected =
+    inspectorReviveSelection();
+
+  postToParent({
+    type: PREVIEW_MSG_INSPECT_RECTS,
+    hover:
+      (inspectorHoverElement && inspectorHoverElement.isConnected)
+        ? { editId: inspectorEditIdOf(inspectorHoverElement), rect: inspectorRectOf(inspectorHoverElement) }
+        : null,
+    selected:
+      selected
+        ? { editId: inspectorSelectedEditId, rect: inspectorRectOf(selected) }
+        : null
+  });
+
+}
+
+
+function scheduleInspectorRects() {
+
+  if (!inspectorEnabled || inspectorRectFrame) {
+    return;
+  }
+
+  inspectorRectFrame =
+    window.requestAnimationFrame(() => {
+      inspectorRectFrame = 0;
+      postInspectorRects();
+    });
+
+}
+
+
+function setInspectorHover(el) {
+
+  if (el === inspectorHoverElement) {
+    return;
+  }
+
+  inspectorHoverElement = el;
+
+  postToParent({
+    type: PREVIEW_MSG_INSPECT_HOVER,
+    editId: el ? inspectorEditIdOf(el) : null,
+    tagName: el ? el.tagName.toLowerCase() : null,
+    rect: inspectorRectOf(el)
+  });
+
+}
+
+
+function setInspectorSelection(el) {
+
+  inspectorSelectedElement = el;
+
+  inspectorSelectedEditId =
+    el ? inspectorEditIdOf(el) : null;
+
+  postToParent({
+    type: PREVIEW_MSG_INSPECT_SELECT,
+    editId: inspectorSelectedEditId,
+    tagName: el ? el.tagName.toLowerCase() : null,
+    rect: inspectorRectOf(el)
+  });
+
+}
+
+
+function setInspectorEnabled(enabled) {
+
+  inspectorEnabled = !!enabled;
+
+  if (!inspectorEnabled) {
+
+    inspectorHoverElement = null;
+    inspectorSelectedElement = null;
+    inspectorSelectedEditId = null;
+
+  }
+
+  document.body.classList.toggle(
+    "imory-inspector-on",
+    inspectorEnabled
+  );
+
+}
+
+
+/*
+  click은 **capture 단계**에서 받아 그 자리에서 전파를 끊는다 —
+  아래 링크 interception 리스너(document bubble)도, 스킨 안의
+  어떤 기본 동작도 실행되지 않게 하기 위해서다. 그 리스너도
+  자기 첫 줄에서 inspectorEnabled를 한 번 더 확인한다(두 겹으로
+  막아 둔다 — 전파 제어 한 가지에만 기대지 않는다).
+*/
+document.addEventListener(
+  "click",
+  (event) => {
+
+    if (!inspectorEnabled) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    setInspectorSelection(
+      resolveInspectableTarget(event.target)
+    );
+
+  },
+  true
+);
+
+
+/* 가운데 클릭(새 탭)도 Inspector 중에는 막는다. */
+document.addEventListener(
+  "auxclick",
+  (event) => {
+
+    if (!inspectorEnabled) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+  },
+  true
+);
+
+
+document.addEventListener(
+  "pointerover",
+  (event) => {
+
+    if (!inspectorEnabled) {
+      return;
+    }
+
+    setInspectorHover(
+      resolveInspectableTarget(event.target)
+    );
+
+  },
+  true
+);
+
+
+document.addEventListener(
+  "pointerout",
+  (event) => {
+
+    if (!inspectorEnabled || event.relatedTarget) {
+      return;
+    }
+
+    setInspectorHover(null);
+
+  },
+  true
+);
+
+
+/*
+  Escape는 두 문서 모두에서 받아야 한다 — 포커스가 Preview 안에
+  있을 때 parent의 keydown은 오지 않는다. 여기서는 판단하지 않고
+  parent에 알리기만 한다(선택 해제 정책은 Studio가 갖는다).
+*/
+document.addEventListener(
+  "keydown",
+  (event) => {
+
+    if (!inspectorEnabled || event.key !== "Escape") {
+      return;
+    }
+
+    postToParent({ type: PREVIEW_MSG_INSPECT_ESCAPE });
+
+  },
+  true
+);
+
+
+window.addEventListener("scroll", scheduleInspectorRects, true);
+
+window.addEventListener("resize", scheduleInspectorRects);
+
+
+/* =========================================================
    내부 링크 interception (문서 4/5/23/24절)
 
    delegated click listener 하나로 처리한다 — renderSkin()이 매
@@ -356,6 +710,13 @@ function handlePostBodyMessage(data) {
 ========================================================== */
 
 document.addEventListener("click", (event) => {
+
+  /* PHASE AI-6A — Inspector 중에는 링크가 "선택 대상"일 뿐이다.
+     위 capture 리스너가 이미 전파를 끊었지만, 그 한 가지에만
+     기대지 않는다. */
+  if (inspectorEnabled) {
+    return;
+  }
 
   const anchor = event.target?.closest?.("a[href]");
 
@@ -456,6 +817,32 @@ window.addEventListener("message", (event) => {
     }
 
     handleBannerMessage(data);
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_INSPECTOR_MODE) {
+
+    setInspectorEnabled(data.enabled === true);
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_INSPECTOR_SELECT) {
+
+    if (!inspectorEnabled) {
+      return;
+    }
+
+    const root =
+      inspectorSkinRoot();
+
+    setInspectorSelection(
+      (root && typeof data.editId === "string" && window.isValidInspectorEditId(data.editId))
+        ? root.querySelector(`[data-imory-edit-id="${data.editId}"]`)
+        : null
+    );
+
     return;
 
   }
