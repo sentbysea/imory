@@ -800,9 +800,17 @@ async function testCategoryTools(vpName) {
       Math.abs(scrollAfter - scrollBefore) <= 2,
       `before=${scrollBefore} after=${scrollAfter}`);
 
-    /* 스킨의 EDIT → 기존 목록 관리 화면. 거기서는 legacy 헤더가 다시
-       보이므로 예전 그대로 #postListEditToggleButton으로 선택 삭제까지
-       이어진다(관리 동작 자체는 한 줄도 새로 만들지 않았다). */
+    /* 스킨의 EDIT → 기존 목록 관리 화면.
+
+       FOLDER-1부터 이 화면은 "폴더 트리 + 글 체크박스 + 하단 선택삭제
+       바"가 한 화면에 있는 정리 화면이다(사용자 결정 F-2: 정리 모드와
+       삭제 모드를 따로 만들지 않는다). 예전에는 여기서 읽기 목록이
+       먼저 나오고 edit을 한 번 더 눌러야 선택삭제가 열렸는데, 스킨의
+       manageHref가 이 주소를 가리키기 시작한 뒤로는 "관리하러 왔는데
+       읽기 목록이 나온다"가 됐다.
+
+       글 행은 트리 안에서도 기존 .post-list-item 클래스를 그대로 쓰므로
+       legacyItems 계산(2개)은 예전과 같다. */
     await page.click('#postList .quiet-back-edit');
     await page.waitForTimeout(600);
 
@@ -814,24 +822,38 @@ async function testCategoryTools(vpName) {
       managed.url === `/${SLUG}/category/1?manage=1`,
       JSON.stringify(managed));
 
-    await page.click("#postListEditToggleButton");
-    await page.waitForTimeout(500);
+    check(`[${vpName}] 관리 화면은 들어가자마자 선택삭제 바와 함께 열린다(FOLDER-1)`,
+      managed.selectBarVisible && managed.legacyItems === 2,
+      JSON.stringify(managed));
 
-    const manage = await page.evaluate(READ_SCREEN);
-
-    check(`[${vpName}] 관리 화면의 edit는 예전 그대로 선택 삭제 패널을 연다`,
-      manage.selectBarVisible && manage.legacyItems === 2 && !manage.skinInList,
-      JSON.stringify(manage));
+    check(`[${vpName}] 관리 화면에 폴더 트리와 + folder 진입점이 있다(FOLDER-1)`,
+      await page.evaluate(() => Boolean(
+        document.querySelector("#postList .folder-tree") &&
+        document.querySelector("#postList .folder-tree-add-button") &&
+        document.querySelector("#postList .folder-tree-container") &&
+        document.querySelectorAll("#postList .tree-drag-handle").length === 2
+      )),
+      await page.evaluate(() => document.getElementById("postList").className +
+        " / handles=" + document.querySelectorAll("#postList .tree-drag-handle").length));
 
     await page.click("#postListEditToggleButton");
     await page.waitForTimeout(500);
 
     const unselected = await page.evaluate(READ_SCREEN);
 
-    check(`[${vpName}] 선택 삭제를 끄면 관리 화면(주소 포함)은 그대로 유지된다`,
+    check(`[${vpName}] 관리 화면의 edit를 끄면 선택삭제가 닫히고 주소는 그대로 유지된다`,
       !unselected.selectBarVisible && unselected.legacyItems === 2 &&
       unselected.url === `/${SLUG}/category/1?manage=1`,
       JSON.stringify(unselected));
+
+    await page.click("#postListEditToggleButton");
+    await page.waitForTimeout(500);
+
+    const manage = await page.evaluate(READ_SCREEN);
+
+    check(`[${vpName}] edit를 다시 켜면 선택삭제 패널이 예전 그대로 열린다`,
+      manage.selectBarVisible && manage.legacyItems === 2 && !manage.skinInList,
+      JSON.stringify(manage));
 
     /* 관리 화면에서 나가는 길은 주소 계약 그대로다 — ?manage=1은
        pushState로 쌓였으므로 뒤로가기가 그 카테고리 스킨으로 되돌린다. */
@@ -877,8 +899,10 @@ async function testCategoryTools(vpName) {
     const sawLoading = seen.some(s => s.list.includes("loading...") || s.title === "...");
     const manage = await page.evaluate(READ_SCREEN);
 
+    /* FOLDER-1: 직접 접속도 스킨 EDIT 경로와 같은 화면이어야 한다 —
+       들어가자마자 정리 화면(트리 + 체크박스 + 선택삭제 바)이다. */
     check(`[${vpName}] ?manage=1 직접 접속에서 관리 패널이 열린다`,
-      manage.selectBarVisible === false && manage.legacyItems === 2 &&
+      manage.selectBarVisible === true && manage.legacyItems === 2 &&
       manage.addVisible && manage.listEditVisible &&
       manage.url === `/${SLUG}/category/1?manage=1`,
       JSON.stringify(manage));

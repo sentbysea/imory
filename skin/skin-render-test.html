@@ -88,6 +88,11 @@
     <div class="render-target" id="renderMalformed"></div>
   </div>
 
+  <h2>D-2. Renderer — 중첩 repeat 깊이(FOLDER-1 폴더 트리)</h2>
+  <div class="panel">
+    <div class="render-target" id="renderNestedDepth"></div>
+  </div>
+
   <h2>E. 책임 경계(Slice 3.5) — raw skin을 그대로 renderSkin에 넣어도 안전한가?</h2>
   <div class="panel">
     <p>
@@ -430,15 +435,128 @@
 
       const nestedLis = container.querySelectorAll(".mf-nested > li");
 
+      /*
+        FOLDER-1 이전에는 nested repeat이 명시적 미지원이라 안쪽
+        li가 0개였다. 이제는 SKIN_MAX_REPEAT_DEPTH까지 실제로
+        렌더된다 — 그래서 이 항목의 기대값이 바뀌었다.
+      */
+
       assert(
-        "[render:malformed] nested data-imory-repeat(item.children)은 명시적으로 미지원 — 내부 li는 0개",
-        Array.from(nestedLis).every((li) => li.querySelectorAll("ul li").length === 0)
+        "[render:nested] nested data-imory-repeat(item.children)이 실제로 렌더됨 (A: 2개, B: 0개)",
+        nestedLis[0].querySelectorAll("ul li").length === 2 &&
+        nestedLis[1].querySelectorAll("ul li").length === 0
       );
 
       assert(
-        "[render:malformed] nested repeat이 제거돼도 바깥쪽 item.name 바인딩은 정상 유지",
+        "[render:nested] 안쪽 item은 바깥 item을 가린다 — 안쪽 바인딩이 자식 이름으로 채워짐",
+        Array.from(nestedLis[0].querySelectorAll(":scope > ul > li > span"))
+          .map((el) => el.textContent)
+          .join(",") === "a1,a2"
+      );
+
+      assert(
+        "[render:malformed] nested repeat이 있어도 바깥쪽 item.name 바인딩은 정상 유지",
         nestedLis[0].querySelector(":scope > span").textContent === "A" &&
         nestedLis[1].querySelector(":scope > span").textContent === "B"
+      );
+
+    }
+
+
+    /* =====================================================
+       D-2. FOLDER-1 — 폴더 트리 깊이의 중첩 repeat
+
+       category.tree를 끝까지 그리는 데 필요한 4단계가 실제로
+       렌더되는지, 그리고 상한(SKIN_MAX_REPEAT_DEPTH = 5)을 넘는
+       6단계째는 지금까지처럼 조용히 제거되는지 확인한다.
+    ===================================================== */
+
+    function runNestedRepeatDepthTests() {
+
+      const container = document.getElementById("renderNestedDepth");
+
+      /* 6단계 중첩 — 5단계까지만 렌더되어야 한다 */
+
+      const deepSkin = {
+        schemaVersion: 1,
+        html:
+          '<ul class="d1"><li data-imory-repeat="category.tree">' +
+            '<span class="n1" data-imory-bind="item.name"></span>' +
+            '<ul class="d2"><li data-imory-repeat="item.children">' +
+              '<span class="n2" data-imory-bind="item.name"></span>' +
+              '<ul class="d3"><li data-imory-repeat="item.children">' +
+                '<span class="n3" data-imory-bind="item.name"></span>' +
+                '<ul class="d4"><li data-imory-repeat="item.children">' +
+                  '<span class="n4" data-imory-bind="item.name"></span>' +
+                  '<ul class="d5"><li data-imory-repeat="item.children">' +
+                    '<span class="n5" data-imory-bind="item.name"></span>' +
+                    '<ul class="d6"><li data-imory-repeat="item.children">' +
+                      '<span class="n6" data-imory-bind="item.name"></span>' +
+                    '</li></ul>' +
+                  '</li></ul>' +
+                '</li></ul>' +
+              '</li></ul>' +
+            '</li></ul>' +
+          '</li></ul>',
+        css: ""
+      };
+
+      /* 한 갈래로만 6단계까지 내려가는 픽스처 */
+
+      function chain(depth) {
+
+        if (depth > 6) {
+          return [];
+        }
+
+        return [
+          {
+            name: `L${depth}`,
+            children: chain(depth + 1)
+          }
+        ];
+
+      }
+
+      const deepContext = {
+        category: {
+          tree: chain(1)
+        }
+      };
+
+      let threw = false;
+
+      try {
+        renderSkin({ container, skin: deepSkin, context: deepContext, mode: "view" });
+      } catch (err) {
+        threw = true;
+        console.error("renderSkin threw on deep nesting", err);
+      }
+
+      assert("[render:depth] 깊은 중첩에서도 renderSkin은 throw하지 않음", !threw);
+
+      assert(
+        "[render:depth] 폴더 트리에 필요한 4단계가 전부 렌더됨(L1~L4)",
+        container.querySelector(".n1") &&
+        container.querySelector(".n1").textContent === "L1" &&
+        container.querySelector(".n2") &&
+        container.querySelector(".n2").textContent === "L2" &&
+        container.querySelector(".n3") &&
+        container.querySelector(".n3").textContent === "L3" &&
+        container.querySelector(".n4") &&
+        container.querySelector(".n4").textContent === "L4"
+      );
+
+      assert(
+        "[render:depth] 상한(5단계)까지는 렌더됨(L5)",
+        container.querySelector(".n5") &&
+        container.querySelector(".n5").textContent === "L5"
+      );
+
+      assert(
+        "[render:depth] 상한을 넘는 6단계째 repeat은 제거됨(L6 없음)",
+        container.querySelector(".n6") === null &&
+        container.querySelectorAll(".d6 li").length === 0
       );
 
     }
@@ -527,6 +645,7 @@
       }
 
       runMalformedBindingTests();
+      runNestedRepeatDepthTests();
       runResponsibilityBoundaryTests();
 
       finishSummary();

@@ -182,15 +182,15 @@
 - **비개발자 테스트**: 관리자 CATEGORY 탭에서 카테고리를 추가/순서변경 후 공개 홈 메뉴에 즉시 반영되는지
 
 ### 14. 폴더와 중첩 구조
-- **목적**: 카테고리를 계층적으로 묶는 기능
-- **현재 상태**: `[ ]` — `categories` select에 `parent_id` 등 계층 필드 없음, 평면 리스트만 존재 · 코드 검증: 완료(미구현 확인)
-- **관련 파일**: 없음
-- **입력/출력**: -
-- **DB/Storage**: -
-- **의존 관계**: 13
-- **보안 주의**: 없음
-- **완료 조건**: 범위/우선순위 자체가 아직 미정(Concept.md 13번 "앞으로 구현할 범위"에도 미포함) — **확인 필요**(사용자에게 우선순위 재문의 필요 시점에 진행)
-- **비개발자 테스트**: -
+- **목적**: 카테고리 **안에서** 글을 폴더로 묶는 기능(최대 3단계). 카테고리 자체를 계층화하는 것이 아니라, 카테고리 아래에 폴더 계층을 두는 쪽으로 범위가 정해졌다(FOLDER-1)
+- **현재 상태**: `[x]` — 기준 문서: [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md) · 로컬/mock 검증 완료, **실제 Supabase 적용과 실기기 drag 확인은 아직 안 함**
+- **관련 파일**: `posts/manage/posts-folder-{data,tree,sortable}.js`, `posts/manage/posts-folder-tree.css`, `posts/view/posts-view-list.js`, `posts/view/posts-view-list-select.js`, `skin/skin-context.js`, `skin/skin-render.js`, `supabase/migrations/20260908{100000,110000,120000}_*.sql`
+- **입력/출력**: `?manage=1` 관리 화면의 폴더 생성/이름수정/삭제 + drag / `post_folders` row, `posts.folder_id`·`sort_order`
+- **DB/Storage**: `post_folders`(id, user_id, category_id, parent_id, name, depth, sort_order, created_at, updated_at), `posts.folder_id`, `posts.sort_order`. 쓰기는 RPC 4종(`create_post_folder`/`rename_post_folder`/`delete_post_folder`/`move_tree_node`)으로만
+- **의존 관계**: 13(카테고리), 15(게시글)
+- **보안 주의**: `post_folders`는 `categories`처럼 anon SELECT가 열려 있어 **폴더 이름이 공개된다**(글 내용/제목/공개범위는 기존 RLS 그대로). 폴더 단위 privacy는 범위 밖 — IMORY_FOLDER1_DESIGN.md §2 참고. `posts`의 컬럼 GRANT는 SELECT에만 추가했고 `secret_password_hash`는 그대로 제외
+- **완료 조건**: `supabase/tests/20260908_post_folders_manual_test.sql`을 실제 인스턴스에서 실행해 확인 + 실기기(iOS/Android) drag 확인
+- **비개발자 테스트**: 카테고리에서 EDIT(관리) → `+ folder`로 폴더 만들기 → 글을 폴더 안으로 끌어 넣기 → 폴더 삭제 시 글이 사라지지 않고 그 자리로 올라오는지 → 공개 화면에서 기존 목록이 예전과 같은 순서인지
 
 ### 15. 게시글
 - **목적**: 글 작성/조회/수정/삭제

@@ -459,6 +459,7 @@
         "./posts/posts-base.css",
         "./posts/posts-list-detail.css",
         "./posts/view/posts-view-banner.css",
+        "./posts/manage/posts-folder-tree.css",
         "./posts/posts-editor.css",
         "./posts/posts-preview-export.css",
         "./posts/posts-mobile.css"
@@ -3844,6 +3845,20 @@
             "./posts/view/posts-view-secret-gate.js",
             "./posts/view/posts-view-editor-load.js",
             "./posts/view/posts-view-compose.js",
+
+            /*
+              FOLDER-1: ?manage=1 카테고리 관리 화면의 폴더 트리.
+              posts-view-list.js의 renderPostListItems()가 관리
+              모드에서 renderPostFolderTree()를 부르지만, 위 주석대로
+              이 그룹은 전부 함수 정의뿐이라 로드 순서는 상관없다
+              (실제 호출은 posts-router-init.js 이후).
+              data -> tree -> sortable 순으로 둔 것은 의존 방향을
+              읽기 쉽게 하기 위함이다.
+            */
+
+            "./posts/manage/posts-folder-data.js",
+            "./posts/manage/posts-folder-tree.js",
+            "./posts/manage/posts-folder-sortable.js",
 
             /*
               옛 posts.js(3200줄+)를 기능별로 쪼갠 파일들.

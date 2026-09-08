@@ -412,7 +412,16 @@ async function fetchSkinCategoryPosts(
   } =
     await supabaseClient
       .from("posts")
-      .select("id, title, created_at, visibility")
+      /*
+        FOLDER-1: folder_id/sort_order를 함께 읽는다 — category.tree를
+        세우는 데 필요하다. 두 컬럼 모두 SELECT GRANT에 있고
+        (20260908110000_*.sql), 매핑 단계에서 category.posts item에는
+        옮기지 않는다(기존 6개 키 유지).
+        정렬은 지금까지와 같은 created_at DESC 그대로다 —
+        category.posts의 의미가 바뀌면 폴더를 모르는 기존 스킨의
+        목록 순서가 폴더 생성만으로 달라진다(사용자 결정, 설계 수정 2).
+      */
+      .select("id, title, created_at, visibility, folder_id, sort_order")
       .eq("user_id", ownerId)
       .eq("category_id", categoryId)
       .order("created_at", { ascending: false });
@@ -422,6 +431,47 @@ async function fetchSkinCategoryPosts(
 
     console.error(
       "[skin-context] category posts 조회 실패:",
+      error
+    );
+
+
+    return [];
+
+  }
+
+
+  return data || [];
+
+}
+
+
+/*
+  FOLDER-1: 이 카테고리의 폴더 행. 실패하면 빈 배열을 돌려준다 —
+  폴더 조회가 안 되더라도 category.posts는 그대로 나가야 하고,
+  폴더를 모르는 기존 스킨은 아무 영향도 받지 않아야 한다.
+*/
+
+async function fetchSkinCategoryFolders(
+  ownerId,
+  categoryId
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from("post_folders")
+      .select("id, parent_id, name, depth, sort_order")
+      .eq("user_id", ownerId)
+      .eq("category_id", categoryId)
+      .order("sort_order", { ascending: true });
+
+
+  if (error) {
+
+    console.error(
+      "[skin-context] post_folders 조회 실패:",
       error
     );
 
@@ -1032,6 +1082,216 @@ async function buildHomeSkinContext(
    상태 — fetchSkinProfile 등 기존 조회 헬퍼와 동일한 원칙).
 ========================================================== */
 
+/* =========================================================
+   FOLDER-1 — category.tree
+
+   폴더를 아는 스킨 전용의 계층 데이터. 기존 category.posts와
+   나란히 존재하고 서로 영향을 주지 않는다:
+
+     category.posts — 폴더를 모르는 기존 스킨용. 의미도 필드도
+       그대로이고(6개 키), 정렬도 지금까지의 created_at DESC다.
+       폴더에 들어간 글도 빠짐없이 들어 있다.
+
+     category.tree  — 폴더를 아는 스킨용. 사용자가 관리 화면에서
+       drag로 정한 순서(sort_order)를 그대로 반영한 계층이다.
+
+   node shape:
+     폴더 { kind: "folder", id, name, depth, children: [...] }
+     글   { kind: "post", id, title, href, publishedAt,
+            publishedAtLabel, isSecret, depth }
+
+   ★ 폴더에는 href가 없다(사용자 결정). 폴더를 여는 라우트가 아직
+     없으므로, 눌러도 아무 일이 없는 링크를 스킨에 노출하지 않는다
+     — PHASE 1H가 banner 카테고리의 manageHref를 null로 둔 것과
+     같은 판단이다. Series Viewer가 생기는 시점에 additive로
+     추가한다.
+
+   ★ 스킨은 kind 값을 비교할 수 없다(data-imory-if는 truthy 판정만
+     한다). 그래서 폴더에만 있는 필드(name/children)와 글에만 있는
+     필드(title/href)로도 분기할 수 있게 두 shape의 필드를 겹치지
+     않게 뒀다.
+
+   ── 방문자에게 아무것도 보이지 않는 폴더 ──────────────────
+   posts는 RLS가 이미 걸러서 온다(private 글은 비소유자에게 아예
+   행이 오지 않는다). 그래서 "보이는 글이 하나도 없는 폴더 서브
+   트리"를 여기서 잘라내면, 방문자는 빈 폴더 이름을 보지 않고
+   소유자는 자기 글이 있으니 그대로 다 본다 — 뷰어별 분기를 따로
+   쓰지 않아도 저절로 맞는다.
+
+   ★ 이것은 표현 계층의 정리이지 보안 경계가 아니다. post_folders는
+     anon SELECT가 가능하므로 폴더 **이름 자체**는 REST로 직접
+     읽을 수 있다(migration 1의 주석에 명시). 글의 제목/본문/공개
+     범위는 기존 RLS가 그대로 가린다.
+========================================================== */
+
+function buildSkinCategoryTree(
+  folders,
+  posts,
+  slug
+) {
+
+  const nodesById = new Map();
+
+  (folders || []).forEach((row) => {
+
+    nodesById.set(String(row.id), {
+      kind: "folder",
+      id: String(row.id),
+      name: row.name,
+      sortOrder: Number(row.sort_order ?? 0),
+      children: []
+    });
+
+  });
+
+  const rootChildren = [];
+
+  /* 폴더를 부모에 붙인다(부모가 없으면 root로 끌어올린다) */
+
+  (folders || []).forEach((row) => {
+
+    const node = nodesById.get(String(row.id));
+
+    const parent =
+      row.parent_id === null || row.parent_id === undefined
+        ? null
+        : nodesById.get(String(row.parent_id));
+
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      rootChildren.push(node);
+    }
+
+  });
+
+  /* 글을 컨테이너에 붙인다 */
+
+  (posts || []).forEach((post) => {
+
+    const node = {
+      kind: "post",
+      id: String(post.id),
+      title: maskSkinPostTitle(post.visibility, post.title),
+      href: buildSitePath(slug, `/post/${post.id}`),
+      publishedAt: post.created_at,
+      publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
+      isSecret: post.visibility === "secret",
+      sortOrder: Number(post.sort_order ?? 0)
+    };
+
+    const parent =
+      post.folder_id === null || post.folder_id === undefined
+        ? null
+        : nodesById.get(String(post.folder_id));
+
+    if (parent) {
+      parent.children.push(node);
+    } else {
+      rootChildren.push(node);
+    }
+
+  });
+
+  /*
+    DB(post_container_rebalance / move_tree_node)와 관리 화면이 쓰는
+    비교와 정확히 같아야 한다: sort_order → kind → id.
+  */
+
+  function sortContainer(children) {
+
+    children.sort((a, b) => {
+
+      if (a.sortOrder !== b.sortOrder) {
+        return a.sortOrder - b.sortOrder;
+      }
+
+      if (a.kind !== b.kind) {
+        return a.kind < b.kind ? -1 : 1;
+      }
+
+      return Number(a.id) - Number(b.id);
+
+    });
+
+    children.forEach((child) => {
+
+      if (child.kind === "folder") {
+        sortContainer(child.children);
+      }
+
+    });
+
+  }
+
+  sortContainer(rootChildren);
+
+  /*
+    보이는 글이 하나도 없는 폴더 서브트리를 잘라내고, 동시에
+    내부 정렬 키(sortOrder)를 떼어낸 공개 shape로 옮긴다.
+    -> { nodes, hasFolder }
+  */
+
+  function toPublicNodes(children, depth) {
+
+    const result = [];
+
+    let hasFolder = false;
+
+    children.forEach((child) => {
+
+      if (child.kind === "post") {
+
+        result.push({
+          kind: "post",
+          id: child.id,
+          title: child.title,
+          href: child.href,
+          publishedAt: child.publishedAt,
+          publishedAtLabel: child.publishedAtLabel,
+          isSecret: child.isSecret,
+          depth
+        });
+
+        return;
+
+      }
+
+      const inner = toPublicNodes(child.children, depth + 1);
+
+      if (inner.nodes.length === 0) {
+        return;
+      }
+
+      hasFolder = true;
+
+      result.push({
+        kind: "folder",
+        id: child.id,
+        name: child.name,
+        depth,
+        children: inner.nodes
+      });
+
+    });
+
+    return {
+      nodes: result,
+      hasFolder: hasFolder
+    };
+
+  }
+
+  const built = toPublicNodes(rootChildren, 1);
+
+  return {
+    tree: built.nodes,
+    hasFolders: built.hasFolder
+  };
+
+}
+
+
 async function buildCategorySkinContext(
   ownerId,
   categoryId,
@@ -1062,18 +1322,28 @@ async function buildCategorySkinContext(
   const [
     base,
     category,
-    postsRaw
+    postsRaw,
+    foldersRaw
   ] =
     await Promise.all([
       buildBaseSkinContext(ownerId, options, commonData),
       fetchSkinCategoryById(ownerId, categoryId),
-      fetchSkinCategoryPosts(ownerId, categoryId)
+      fetchSkinCategoryPosts(ownerId, categoryId),
+      fetchSkinCategoryFolders(ownerId, categoryId)
     ]);
 
 
   if (!category) {
     return null;
   }
+
+
+  const folderTree =
+    buildSkinCategoryTree(
+      foldersRaw,
+      postsRaw,
+      commonData.slug
+    );
 
 
   return {
@@ -1134,6 +1404,13 @@ async function buildCategorySkinContext(
       type: category.type,
       href: buildSitePath(commonData.slug, `/category/${category.id}`),
 
+      /*
+        폴더를 모르는 기존 스킨용. FOLDER-1 이전과 완전히 같다 —
+        같은 6개 키, 같은 created_at DESC 순서, 폴더에 들어간 글도
+        전부 포함. 폴더를 만들었다는 이유만으로 이 목록이 달라지면
+        하위 호환이 깨진다.
+      */
+
       posts:
         postsRaw.map(
           (post) => ({
@@ -1144,7 +1421,15 @@ async function buildCategorySkinContext(
             publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
             isSecret: post.visibility === "secret"
           })
-        )
+        ),
+
+      /* 폴더를 아는 스킨용(FOLDER-1). 위 buildSkinCategoryTree() 주석 참고. */
+
+      hasFolders:
+        folderTree.hasFolders,
+
+      tree:
+        folderTree.tree
     }
 
   };

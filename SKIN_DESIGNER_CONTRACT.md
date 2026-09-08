@@ -217,6 +217,57 @@
 - `category.posts[]`에는 `categoryName`이 없습니다(이미 `category.name`으로 상위에 있으므로 중복 노출 안 함).
 - 페이지네이션 없음 — 카테고리의 모든 글을 한 번에 반환합니다.
 
+#### 폴더를 쓰는 스킨 — `category.tree` / `category.hasFolders`
+
+기준 문서: [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md)
+
+사용자는 카테고리 안에서 글을 **폴더(최대 3단계)** 로 묶을 수 있습니다.
+그 계층은 `category.posts`와 **나란히** 별도 필드로 옵니다.
+
+```jsonc
+{
+  "category": {
+    "posts": [ /* 기존 그대로 — 폴더를 모르는 스킨용 */ ],
+
+    "hasFolders": true,
+    "tree": [
+      { "kind": "post",   "id": "12", "title": "폴더 없는 글", "href": "/me/post/12",
+        "publishedAt": "...", "publishedAtLabel": "2026. 09. 01", "isSecret": false, "depth": 1 },
+      { "kind": "folder", "id": "3", "name": "홍차", "depth": 1, "children": [
+        { "kind": "folder", "id": "4", "name": "Sentinel AU", "depth": 2, "children": [
+          { "kind": "post", "id": "20", "title": "첫 만남", "href": "/me/post/20", "depth": 3, "...": "..." }
+        ] }
+      ] }
+    ]
+  }
+}
+```
+
+- **`category.posts`는 폴더가 생겨도 달라지지 않습니다.** 필드도 그대로, 순서도 최신순(`created_at DESC`) 그대로, 폴더 안에 들어간 글도 전부 포함입니다. 기존 목록형 스킨은 아무것도 고칠 필요가 없습니다.
+- `category.tree`만 사용자가 관리 화면에서 drag로 정한 순서를 반영합니다. 폴더와 글이 한 컨테이너 안에서 섞여 정렬됩니다.
+- **폴더에는 `href`가 없습니다.** 폴더를 여는 페이지가 아직 없기 때문입니다 — 폴더 이름을 링크로 감싸지 마세요.
+- **`kind` 값으로 분기할 수 없습니다**(`data-imory-if`는 값 비교를 못 합니다). 대신 필드 존재로 갈라 쓰세요: 폴더는 `item.name`/`item.children`, 글은 `item.title`/`item.href`.
+- 폴더가 하나도 없으면 `tree`는 빈 배열, `hasFolders`는 `false`입니다. 그때 목록을 그리려면 `category.posts`를 쓰세요.
+- **방문자에게 보이는 글이 하나도 없는 폴더는 `tree`에 아예 오지 않습니다** — 빈 폴더 이름이 화면에 남지 않습니다.
+
+```html
+<!-- 아코디언/들여쓰기 등 표현은 전적으로 스킨이 정합니다 -->
+<ul data-imory-if="category.hasFolders">
+  <li data-imory-repeat="category.tree">
+    <span data-imory-if="item.name" data-imory-bind="item.name"></span>
+    <a data-imory-if="item.href" data-imory-href="item.href" data-imory-bind="item.title"></a>
+
+    <ul data-imory-if="item.children">
+      <li data-imory-repeat="item.children">
+        <span data-imory-if="item.name" data-imory-bind="item.name"></span>
+        <a data-imory-if="item.href" data-imory-href="item.href" data-imory-bind="item.title"></a>
+        <!-- 필요한 깊이만큼 같은 식으로 한 단계씩 더 (최대 4단계) -->
+      </li>
+    </ul>
+  </li>
+</ul>
+```
+
 ### 2-5. `post` namespace (POST 페이지에서만 채워짐)
 
 ```jsonc
@@ -285,11 +336,13 @@
 | `home.recentPosts` | `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.publishedAtLabel`, `item.categoryId`, `item.categoryName`, `item.isSecret` |
 | `banners.items` | `item.id`, `item.imageUrl`, `item.href`, `item.alt` |
 | `category.posts` | `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.publishedAtLabel`, `item.isSecret` |
+| `category.tree` / `item.children` | 폴더: `item.kind`, `item.id`, `item.name`, `item.depth`, `item.children` · 글: `item.kind`, `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.publishedAtLabel`, `item.isSecret`, `item.depth` |
 
 ### 4-1. 중요한 제약
 
-- **Nested repeat(반복 안에 또 반복)은 지원하지 않습니다.** repeat으로 clone된 서브트리 안에서 또 `data-imory-repeat`을 만나면 경고를 남기고 그 엘리먼트를 제거합니다(빈 배열 취급). 위 4개 배열의 item 중 어떤 것도 그 안에 배열 필드를 갖지 않으므로, 실제로 nested repeat이 필요한 상황 자체가 없습니다.
-- item 필드는 전부 스칼라(문자열/불리언/null)입니다.
+- **Nested repeat(반복 안에 또 반복)은 최대 5단계까지 지원합니다.** 그보다 깊으면 경고를 남기고 그 엘리먼트를 제거합니다. 폴더 트리를 끝까지 그리는 데 필요한 깊이는 4단계입니다(root → 1단계 폴더 안 → 2단계 폴더 안 → 3단계 폴더 안의 글).
+- **안쪽 `item`은 바깥 `item`을 가립니다**(일반적인 반복문과 같습니다). `item`으로 시작하지 않는 경로(`category.name` 등)는 안쪽에서도 계속 닿습니다.
+- `category.tree`를 제외한 위 배열들의 item 필드는 전부 스칼라(문자열/불리언/null)입니다.
 
 ---
 

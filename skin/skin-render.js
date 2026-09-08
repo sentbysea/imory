@@ -74,6 +74,14 @@ function isSkinTruthy(value) {
 
 }
 
+/*
+  중첩 repeat 안에서는 안쪽 item이 바깥 item을 가린다(일반적인
+  반복문 관례와 같다). 바깥 스코프의 다른 경로(category.name 등)는
+  outerResolve로 그대로 넘어가므로 계속 쓸 수 있고, 바깥 item만
+  이름이 겹쳐서 닿지 않는다 — 폴더 트리에서는 각 단계가 자기
+  item(폴더/글)만 그리므로 실제로 문제가 되지 않는다.
+*/
+
 function makeSkinItemResolver(item, outerResolve) {
 
   return function resolveItemPath(path) {
@@ -92,13 +100,34 @@ function makeSkinItemResolver(item, outerResolve) {
 
 }
 
+/*
+  중첩 repeat의 최대 깊이(FOLDER-1).
+
+  폴더 트리를 끝까지 그리는 데 필요한 깊이는 4다:
+    1) category.tree            (root 컨테이너: 1단계 폴더 + root 글)
+    2) item.children            (1단계 폴더 안: 2단계 폴더 + 글)
+    3) item.children            (2단계 폴더 안: 3단계 폴더 + 글)
+    4) item.children            (3단계 폴더 안: 글만 — 폴더는 3단계까지)
+  한 단계를 여유로 더 둬서 5로 잡는다. 상한을 두는 이유는 재귀가
+  무한해질 수 있어서가 아니라(깊이는 템플릿 중첩으로 이미 유한하다)
+  repeat × repeat × ... 의 조합 폭발을 막기 위해서다.
+*/
+
+const SKIN_MAX_REPEAT_DEPTH = 5;
+
 /* =========================================================
    data-imory-repeat
 
-   최상위(non-nested) 반복만 지원한다. resolvePath가 이미 item
-   스코프(makeSkinItemResolver로 만들어진 resolver)일 때 또
-   data-imory-repeat를 만나면 nested repeat이므로 명시적으로
-   미지원 처리한다(경고 후 빈 배열 취급) — repeatDepth로 판별.
+   FOLDER-1부터 중첩 반복을 지원한다(SKIN_MAX_REPEAT_DEPTH단계까지).
+   폴더 트리(category.tree)는 item.children을 따라 내려가야 그려지는데,
+   그 전까지는 이 함수가 nested repeat을 만나면 요소를 지워 버려서
+   어떤 스킨도 계층 구조를 표현할 수 없었다.
+
+   기존 스킨 동작은 바뀌지 않는다 — 지금까지 nested repeat은 아예
+   렌더되지 않았으므로 이 완화로 사라지던 요소가 되살아날 뿐이고,
+   1단계 repeat만 쓰는 기존 스킨은 코드 경로가 이전과 동일하다.
+
+   상한을 넘으면 지금까지와 같이 경고 후 그 요소를 제거한다.
 ========================================================== */
 
 function applySkinRepeat(templateEl, resolvePath, repeatDepth) {
@@ -111,8 +140,8 @@ function applySkinRepeat(templateEl, resolvePath, repeatDepth) {
     return;
   }
 
-  if (repeatDepth > 0) {
-    console.warn(`[skin-render] nested data-imory-repeat is not supported (path="${path}") — element skipped`);
+  if (repeatDepth >= SKIN_MAX_REPEAT_DEPTH) {
+    console.warn(`[skin-render] data-imory-repeat nesting exceeds ${SKIN_MAX_REPEAT_DEPTH} levels (path="${path}") — element skipped`);
     parent.removeChild(templateEl);
     return;
   }

@@ -273,19 +273,41 @@
         { id: 7, user_id: BANNER_ONLY_OWNER_ID, name: "링크만", type: "banner", sort_order: 1 }
       ],
 
+      /*
+        FOLDER-1: 카테고리 1의 폴더 구조.
+
+          root
+            ├─ (글) 11 비밀글            sort 100
+            ├─ 홍차(20)                  sort 200
+            │    ├─ Sentinel AU(21)      sort 100
+            │    │    └─ (글) 10 공개글   sort 100
+            │    └─ (글) 12 비공개글      sort 200
+            └─ 빈 폴더(22)               sort 300  ← 글이 없어 트리에서 잘림
+
+        category.posts는 이 배치와 무관하게 created_at DESC(10, 11, 12)를
+        유지해야 한다 — 그게 하위 호환의 핵심이다.
+      */
+
+      post_folders: [
+        { id: 20, user_id: OWNER_ID, category_id: 1, parent_id: null, name: "홍차", depth: 1, sort_order: 200 },
+        { id: 21, user_id: OWNER_ID, category_id: 1, parent_id: 20, name: "Sentinel AU", depth: 2, sort_order: 100 },
+        { id: 22, user_id: OWNER_ID, category_id: 1, parent_id: null, name: "빈 폴더", depth: 1, sort_order: 300 },
+        { id: 23, user_id: OTHER_OWNER_ID, category_id: 99, parent_id: null, name: "남의 폴더", depth: 1, sort_order: 100 }
+      ],
+
       posts: [
         {
-          id: 10, user_id: OWNER_ID, category_id: 1,
+          id: 10, user_id: OWNER_ID, category_id: 1, folder_id: 21, sort_order: 100,
           title: "공개글", created_at: "2026-01-03T00:00:00.000Z", visibility: "public",
           content: "<p>이건 절대 노출되면 안 됨</p>", ooc_content: "ooc-secret", secret_password_hash: "hash-abc"
         },
         {
-          id: 11, user_id: OWNER_ID, category_id: 1,
+          id: 11, user_id: OWNER_ID, category_id: 1, folder_id: null, sort_order: 100,
           title: "비밀글", created_at: "2026-01-02T00:00:00.000Z", visibility: "secret",
           content: "<p>secret body</p>", ooc_content: null, secret_password_hash: "hash-def"
         },
         {
-          id: 12, user_id: OWNER_ID, category_id: 1,
+          id: 12, user_id: OWNER_ID, category_id: 1, folder_id: 20, sort_order: 200,
           title: "비공개글", created_at: "2026-01-01T00:00:00.000Z", visibility: "private",
           content: "<p>private body</p>", ooc_content: null, secret_password_hash: null
         },
@@ -665,8 +687,121 @@
         publicCategoryPost && publicCategoryPost.isSecret === false
       );
 
+      /* ---- FOLDER-1: category.tree / category.hasFolders ----
+
+         가장 중요한 것은 "category.posts가 하나도 안 바뀌었다"이다.
+         폴더가 생겼다고 해서 폴더를 모르는 기존 스킨의 목록이
+         달라지면 하위 호환이 깨진다.
+      */
+
+      assert(
+        "[FOLDER-1] 폴더가 있어도 category.posts는 created_at DESC 그대로(10, 11, 12)",
+        categoryCtx.category.posts.map((p) => p.id).join(",") === "10,11,12"
+      );
+
+      assert(
+        "[FOLDER-1] 폴더가 있어도 category.posts item은 여전히 정확히 6개 키",
+        categoryCtx.category.posts.every((p) =>
+          Object.keys(p).sort().join(",") === "href,id,isSecret,publishedAt,publishedAtLabel,title"
+        )
+      );
+
+      assert(
+        "[FOLDER-1] 폴더 안에 든 글도 category.posts에서 빠지지 않음(3개 전부)",
+        categoryCtx.category.posts.length === 3
+      );
+
+      assert(
+        "[FOLDER-1] category.hasFolders === true",
+        categoryCtx.category.hasFolders === true
+      );
+
+      assert(
+        "[FOLDER-1] category.tree는 sort_order 순서 — root는 [글 11, 폴더 홍차]",
+        Array.isArray(categoryCtx.category.tree) &&
+        categoryCtx.category.tree.length === 2 &&
+        categoryCtx.category.tree[0].kind === "post" &&
+        categoryCtx.category.tree[0].id === "11" &&
+        categoryCtx.category.tree[1].kind === "folder" &&
+        categoryCtx.category.tree[1].name === "홍차"
+      );
+
+      const teaFolder =
+        categoryCtx.category.tree[1];
+
+      assert(
+        "[FOLDER-1] 폴더 안도 sort_order 순서 — 홍차 = [Sentinel AU, 글 12]",
+        teaFolder.children.length === 2 &&
+        teaFolder.children[0].kind === "folder" &&
+        teaFolder.children[0].name === "Sentinel AU" &&
+        teaFolder.children[1].kind === "post" &&
+        teaFolder.children[1].id === "12"
+      );
+
+      assert(
+        "[FOLDER-1] 3단계까지 중첩됨 — Sentinel AU 안에 글 10",
+        teaFolder.children[0].children.length === 1 &&
+        teaFolder.children[0].children[0].kind === "post" &&
+        teaFolder.children[0].children[0].id === "10"
+      );
+
+      assert(
+        "[FOLDER-1] depth는 1부터 시작해 한 단계씩 깊어진다",
+        categoryCtx.category.tree[0].depth === 1 &&
+        teaFolder.depth === 1 &&
+        teaFolder.children[0].depth === 2 &&
+        teaFolder.children[1].depth === 2 &&
+        teaFolder.children[0].children[0].depth === 3
+      );
+
+      assert(
+        "[FOLDER-1] 보이는 글이 하나도 없는 폴더는 tree에서 잘린다(빈 폴더)",
+        JSON.stringify(categoryCtx.category.tree).includes("빈 폴더") === false
+      );
+
+      assert(
+        "[FOLDER-1] 다른 owner의 폴더는 섞이지 않는다",
+        JSON.stringify(categoryCtx.category.tree).includes("남의 폴더") === false
+      );
+
+      assert(
+        "[FOLDER-1] 폴더 노드에는 href가 없다(폴더 라우트가 아직 없으므로)",
+        teaFolder.href === undefined &&
+        teaFolder.children[0].href === undefined
+      );
+
+      assert(
+        "[FOLDER-1] 폴더 노드 키는 정확히 kind/id/name/depth/children",
+        Object.keys(teaFolder).sort().join(",") === "children,depth,id,kind,name"
+      );
+
+      assert(
+        "[FOLDER-1] tree의 글 노드 키는 정확히 kind/id/title/href/publishedAt/publishedAtLabel/isSecret/depth",
+        Object.keys(teaFolder.children[1]).sort().join(",") ===
+          "depth,href,id,isSecret,kind,publishedAt,publishedAtLabel,title"
+      );
+
+      assert(
+        "[FOLDER-1] tree의 글도 category.posts와 같은 마스킹 규칙(secret은 🔒, private은 🙈)",
+        categoryCtx.category.tree[0].title === "🔒 비밀글" &&
+        teaFolder.children[1].title === "🙈 비공개글"
+      );
+
+      assert(
+        "[FOLDER-1] tree 어디에도 content/ooc_content/secret_password_hash/원본 visibility가 없다",
+        ["content", "ooc_content", "secret_password_hash", "visibility", "folder_id", "sort_order", "user_id"]
+          .every((key) => JSON.stringify(categoryCtx.category.tree).includes(`"${key}"`) === false)
+      );
+
       const emptyCategoryCtx =
         await buildCategorySkinContext(OWNER_ID, 2);
+
+      assert(
+        "[FOLDER-1] 폴더가 없는 카테고리는 tree === [] / hasFolders === false",
+        Array.isArray(emptyCategoryCtx.category.tree) &&
+        emptyCategoryCtx.category.tree.length === 0 &&
+        emptyCategoryCtx.category.hasFolders === false
+      );
 
       assert(
         "[C] posts 없는 카테고리(배너 타입, 실제로 연결된 글 없음)는 category.posts === []",

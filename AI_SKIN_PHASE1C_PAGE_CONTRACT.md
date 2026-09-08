@@ -65,7 +65,7 @@
 | `data-imory-bind="path"` | `resolvePath(path)` 결과를 **textContent로만** 대입(XSS 원천 차단). `undefined`/`null`이면 빈 문자열. | 값이 무엇이든 innerHTML 경로 없음. |
 | `data-imory-href="path"` | resolve된 문자열이 `isSafeSkinUrl()` 통과 시에만 `href` 속성 설정 | 실패 시 속성 자체를 제거(placeholder 대체 없음, "v0.1은 하지 않음"이라고 코드 주석에 명시) |
 | `data-imory-src="path"` | 위와 동일, `src` 속성 | 위와 동일 |
-| `data-imory-repeat="path"` | 배열이면 템플릿 엘리먼트를 item마다 clone. 아니면(배열 아님/undefined) 엘리먼트 자체를 제거 | **non-nested만 지원** — repeat 내부에서 또 `data-imory-repeat`를 만나면 경고 후 그 하위 엘리먼트를 스킵(빈 배열 취급). item 스코프에서는 `item`/`item.foo` 경로가 우선 해석되고, 못 찾으면 바깥 스코프로 폴백. |
+| `data-imory-repeat="path"` | 배열이면 템플릿 엘리먼트를 item마다 clone. 아니면(배열 아님/undefined) 엘리먼트 자체를 제거 | **[변경됨 → IMORY_FOLDER1_DESIGN.md §1-9]** 아래 "non-nested만 지원"은 FOLDER-1에서 철회됐다 — 지금은 최대 5단계까지 중첩 repeat이 렌더된다(폴더 트리에 4단계가 필요). 기록 당시 기준: **non-nested만 지원** — repeat 내부에서 또 `data-imory-repeat`를 만나면 경고 후 그 하위 엘리먼트를 스킵(빈 배열 취급). item 스코프에서는 `item`/`item.foo` 경로가 우선 해석되고, 못 찾으면 바깥 스코프로 폴백. |
 | `data-imory-if="path"` | truthy/falsy만 판정(배열은 `length > 0`) → `el.hidden` 토글 | **비교 연산 없음**("==", "!=" 등 지원 안 함) — `page.type === "home"` 같은 조건은 이 문법으로 표현 불가능(4-2절에서 이 제약이 실제로 설계에 영향을 준다). |
 
 **`data-imory-region`(또는 region 개념)은 현재 렌더러/새니타이저 어디에도 구현돼 있지 않다.** `SkinPackage.regions` 필드는 존재하지만(`skin/skin-generator.js`, `test-skins/static-test-skin.json`, DB migration 주석) 생성기가 항상 빈 배열(`[]`)만 채워 넣고, `skin-render.js`/`skin-css-validate.js` 어디서도 이 필드를 읽지 않는다 — **완전히 미사용 placeholder**다. 이번 문서 9절은 이 이름을 실제로 무엇에 쓸지 "제안"만 하고 구현하지 않는다.
@@ -305,7 +305,7 @@ Post Viewer(실제 페이지 컨트롤러)가 `renderSkin()`으로 Skin을 먼�
 | `data-imory-bind="path"` | **기존, 변경 없음** | textContent만. `undefined`/`null` → 빈 문자열 |
 | `data-imory-href="path"` | **기존, 변경 없음** | `isSafeSkinUrl()` 통과해야 적용, 실패 시 속성 제거 |
 | `data-imory-src="path"` | **기존, 변경 없음** | 위와 동일 |
-| `data-imory-repeat="path"` | **기존, 변경 없음** | 배열만, non-nested만 |
+| `data-imory-repeat="path"` | **기존, 변경 없음** | 배열만, non-nested만 *(non-nested 제약은 FOLDER-1에서 철회 → IMORY_FOLDER1_DESIGN.md §1-9)* |
 | `data-imory-if="path"` | **기존, 변경 없음** | truthy/falsy만, 비교 연산 없음 |
 | `data-imory-region="name"` | **신규 제안, 미구현**(7절) | v0.1 유일한 값: `"post-body"`. resolve 대상 아님(값 자체가 경로가 아니라 고정 문자열 식별자) — 새니타이저/렌더러 양쪽 확장 필요 |
 
@@ -337,6 +337,8 @@ Post Viewer(실제 페이지 컨트롤러)가 `renderSkin()`으로 Skin을 먼�
 | `category.posts`(신규) | `id, title, href, publishedAt` |
 
 nested repeat는 지금도 불가능하고(1-4절) v0.1도 이 제약을 그대로 유지한다 — 위 4개 배열 중 어떤 item도 그 안에 또 다른 배열 필드를 갖지 않는다(전부 스칼라/nullable 스칼라 필드만).
+
+> **[변경됨 → [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md) §1-8·§1-9]** FOLDER-1이 `category.tree`(폴더 계층)를 additive로 추가하면서 이 두 전제가 모두 바뀌었다: 중첩 repeat이 최대 5단계까지 지원되고, `category.tree`의 folder item은 `children` 배열 필드를 갖는다. **`category.posts`는 그대로다** — 필드도 6개 그대로, 정렬도 `created_at DESC` 그대로, 폴더에 든 글도 전부 포함이다. 폴더를 모르는 기존 스킨은 영향을 받지 않는다.
 
 ---
 

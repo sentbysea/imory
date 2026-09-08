@@ -51,6 +51,28 @@ async function togglePostListEditMode() {
   updatePostListSelectBar();
 
 
+  /*
+    FOLDER-1: 관리 화면을 켜는 순간 폴더 행을 읽어 둔다 — 트리
+    렌더는 동기 함수라 여기서 기다려야 첫 화면부터 폴더가 함께
+    보인다. 끌 때는 읽을 필요가 없다(스킨 목록으로 돌아간다).
+    조회에 실패하면 rows가 준비되지 않은 채로 남고, 기존 평면
+    관리 목록이 그대로 그려진다.
+  */
+
+  if (
+    postListEditModeOn &&
+    typeof loadPostFolderRows === "function" &&
+    currentPostCategoryId !== null &&
+    currentPostCategoryId !== undefined
+  ) {
+
+    await loadPostFolderRows(
+      currentPostCategoryId
+    );
+
+  }
+
+
   if (!categorySkinActive) {
 
     renderPostListItems();

@@ -166,11 +166,22 @@ function fetchCategoryPageData(
             "posts"
           )
           .select(
+            /*
+              FOLDER-1: folder_id/sort_order를 함께 읽는다. 읽기
+              목록 자체는 지금까지처럼 created_at DESC로 그리지만
+              (폴더를 모르는 화면의 순서를 바꾸지 않는다는 원칙),
+              ?manage=1 관리 트리가 이 배열을 그대로 재사용해
+              폴더 배치를 세우기 때문에 여기서 함께 받아 둔다.
+              두 컬럼 모두 SELECT GRANT에 추가돼 있다
+              (20260908110000_add_posts_folder_id_sort_order.sql).
+            */
             `
             id,
             title,
             created_at,
-            visibility
+            visibility,
+            folder_id,
+            sort_order
             `
           )
           .eq(
@@ -1279,8 +1290,20 @@ async function openCategoryPage(
   }
 
 
+  /*
+    FOLDER-1: ?manage=1은 "이 카테고리를 정리하겠다"는 요청이므로
+    관리 화면(폴더 트리 + 체크박스 + 선택삭제 바)을 바로 연다.
+    예전에는 여기서 항상 편집 모드를 끄고 평면 목록을 보여준 뒤
+    사용자가 edit을 한 번 더 눌러야 했는데, PHASE 1H가 스킨의
+    manageHref를 이 주소로 보내기 시작한 뒤로는 "관리하러 왔는데
+    읽기 목록이 나온다"가 됐다. Skin 위의 edit 토글로 들어오는
+    경로(togglePostListEditMode)는 지금까지와 동일하다.
+
+    선택 상태는 화면을 새로 열 때마다 항상 비운다.
+  */
+
   postListEditModeOn =
-    false;
+    wantsManageScreen;
 
 
   selectedPostIdsForDelete =
@@ -1292,7 +1315,7 @@ async function openCategoryPage(
   ) {
 
     postListSelectBar.hidden =
-      true;
+      !postListEditModeOn;
 
   }
 
@@ -1300,7 +1323,7 @@ async function openCategoryPage(
   postListEditToggleButton
     ?.setAttribute(
       "aria-pressed",
-      "false"
+      String(postListEditModeOn)
     );
 
 
@@ -1579,6 +1602,39 @@ async function openCategoryPage(
   }
 
 
+  /*
+    FOLDER-1: 관리 화면으로 들어왔으면 폴더 행을 먼저 읽어 둔다 —
+    renderPostListItems()는 동기 함수라 여기서 기다려야 트리가 첫
+    렌더부터 폴더와 함께 그려진다. 실패하면 rows가 준비되지 않은
+    채로 남고, 트리 대신 기존 평면 목록이 그려진다(관리 화면 자체는
+    열린다).
+  */
+
+  if (
+    postListEditModeOn &&
+    typeof loadPostFolderRows === "function"
+  ) {
+
+    await loadPostFolderRows(
+      numericCategoryId
+    );
+
+
+    if (
+      requestId !==
+      categoryPageRequestSeq
+    ) {
+
+      return;
+
+    }
+
+
+    updatePostListSelectBar();
+
+  }
+
+
   renderPostListItems();
 
 
@@ -1616,6 +1672,31 @@ function renderPostListItems() {
   if (
     categorySkinActive &&
     !postListEditModeOn
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+    FOLDER-1: 관리 모드에서는 평면 목록 대신 폴더 트리를 그린다
+    (posts/manage/posts-folder-tree.js). 트리 안에도 기존 체크박스와
+    하단 선택삭제 바가 그대로 있으므로 "정리 모드"와 "삭제 모드"가
+    갈라지지 않는다(사용자 결정 F-2).
+
+    renderPostFolderTree()는 이 카테고리의 폴더 행이 아직 준비되지
+    않았으면 false를 돌려준다 — 그 경우 아래 기존 평면 목록으로
+    그대로 내려간다. 폴더 조회가 실패해도 관리 화면은 열린다.
+
+    글이 하나도 없어도 폴더는 있을 수 있으므로, 아래 "no posts yet"
+    보다 먼저 판단해야 한다.
+  */
+
+  if (
+    postListEditModeOn &&
+    typeof renderPostFolderTree === "function" &&
+    renderPostFolderTree()
   ) {
 
     return;
