@@ -648,3 +648,23 @@
   }
 
 }
+
+
+/* =========================================================
+   DRAG & DROP (Skin Studio 파일 UX)
+
+   업로드 영역(.images-panel-pastezone) 위로 이미지 파일을 끌고
+   오면 :focus와 같은 강조를 보여 준다 — 붙여넣기/파일 선택/drop
+   세 입구가 모두 같은 영역이라는 것을 한 모양으로 알린다.
+   studio/images/images-panel.js가 dragenter/dragleave 깊이를 세어
+   붙였다 뗀다.
+========================================================== */
+
+.images-panel-pastezone--dragover {
+  border-style: solid;
+  border-color: var(--system-accent);
+
+  background: var(--system-surface);
+
+  color: var(--system-text);
+}

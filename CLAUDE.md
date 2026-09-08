@@ -118,6 +118,7 @@
 | `studio/studio-selected-ai-e2e-test.mjs` | 8940 | 선택 요소 AI 수정 — 서버 selectionContext 검증(+editId 실재 확인)·chip/선택 해제·요청 body 계약·선택 범위 적용·route 유지·Undo·참고 이미지 결합 + 반복 목록 fixture·오류 code/stage·back capability 감사 |
 | `posts/posts-folder-manage-e2e-test.mjs` | 8941 | FOLDER-1 관리 트리 — 계층 렌더·체크박스/선택삭제 공존·폴더 CRUD 요청 계약·3단계 및 cycle drop 판정·모바일 터치 drag·저장 실패 롤백 |
 | `skin/skin-folder-tree-e2e-test.mjs` | 8942 | Folder-aware 스킨 렌더 — published CATEGORY(소유자/방문자·모바일/데스크톱·폴더 없음·빈 카테고리·카드 안 글 → POST) + Studio Preview(`?scenario=t`) 동일 구조 + `category.posts` 스킨 5종 회귀(폴더 유무에 innerHTML 동일) |
+| `studio/studio-file-ux-e2e-test.mjs` | 8943 | Skin Studio 파일 UX — Export(.json 다운로드·allowlist 필드·DB 키 제외) → 파일 선택/drag&drop Import 왕복 구조 동일·붙여넣기 Import 회귀·Save 회귀·legacy HOME-only draft 안내 (이미지 슬롯 drag&drop은 `studio/images/skin-image-library-e2e-test.mjs` 8935의 `[drop]` 절) |
 
 **완료 기준** (상세: 기준 문서 §6)
 

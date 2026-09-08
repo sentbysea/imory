@@ -627,6 +627,20 @@ async function pasteInto(page, selector, payload) {
 }
 
 
+/*
+  PHASE AI-5A.1(5fdfec3)부터 Top Dock은 **기본 펼침**이다 — 핸들을
+  무조건 누르면 오히려 닫혀 버튼이 뷰포트 밖으로 나간다. 닫혀 있을
+  때만 연다(studio-ai-panel-layout-e2e-test.mjs openTopDock과 같은
+  규칙).
+*/
+async function openTopDock(page) {
+  const isOpen = await page.evaluate(
+    () => document.getElementById("studioTopDockZone").classList.contains("is-open")
+  );
+  if (!isOpen) await page.click("#studioTopDockHandle");
+}
+
+
 async function attachFile(page, name, bytes, mime) {
   await page.setInputFiles(".images-panel-overlay input[type=file]", {
     name, mimeType: mime, buffer: bytes
@@ -644,7 +658,7 @@ async function testPanelFlow(playwright) {
   const { browser, page, errors } = await openStudio(playwright, backend);
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
@@ -722,7 +736,7 @@ async function testDraftPublishSeparation(playwright) {
   const { browser, page, errors } = await openStudio(playwright, backend);
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "a.png", PNG_BYTES, "image/png");
@@ -802,7 +816,7 @@ async function testReloadRestoresDraftBindings(playwright) {
     check("[restore] mount 시 draft 버전의 연결이 Preview에 반영됨",
       !!avatarSrc && avatarSrc.includes("seed.png"), String(avatarSrc));
 
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
@@ -832,7 +846,7 @@ async function testValidationAndDeletionGuard(playwright) {
   const { browser, page, errors } = await openStudio(playwright, backend);
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
@@ -892,7 +906,7 @@ async function testLibraryNotReady(playwright) {
   const { browser, page, errors } = await openStudio(playwright, backend);
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForTimeout(500);
 
@@ -942,7 +956,7 @@ async function testImportPrunesSlots(playwright) {
   const { browser, page, errors } = await openStudio(playwright, backend);
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "a.png", PNG_BYTES, "image/png");
@@ -1019,7 +1033,7 @@ async function testClearedSlotsDoNotRestoreLegacy(playwright) {
 
   try {
     /* 새 모델로 한 번 연결하고 저장 → 발행 */
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "new.png", PNG_BYTES, "image/png");
@@ -1117,7 +1131,7 @@ async function testDraftSaveDoesNotAffectPublished(playwright) {
 
   try {
     /* draft B: 새 모델로 이미지를 연결하고 Save (Publish 하지 않는다) */
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "b.png", PNG_BYTES, "image/png");
@@ -1168,7 +1182,7 @@ async function testFirstEmptySaveDoesNotRestoreLegacy(playwright) {
 
   try {
     /* 이미지를 하나도 연결하지 않은 채로 Import만 해서 dirty를 만든다 */
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImportButton");
     await page.waitForSelector(".import-editor-overlay:not([hidden])", { timeout: 10000 });
     await page.fill(".import-editor-overlay textarea", JSON.stringify(SKIN_CONTENT));
@@ -1226,7 +1240,7 @@ async function testRestorePreservesBindingsAndFlag(playwright) {
   let boundVersionId = null;
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "r.png", PNG_BYTES, "image/png");
@@ -1303,7 +1317,7 @@ async function testPasteUpload(playwright) {
   const { browser, page, errors } = await openStudio(playwright, backend);
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
@@ -1401,7 +1415,7 @@ async function testPasteLimits(playwright) {
   const { browser, page, errors } = await openStudio(playwright, backend);
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
@@ -1481,7 +1495,7 @@ async function testPasteLeavesTextAlone(playwright) {
   });
 
   try {
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
@@ -1548,6 +1562,171 @@ async function testPasteLeavesTextAlone(playwright) {
 
 
 /* ---------------------------------------------------------
+   15) drag & drop 업로드 (Skin Studio 파일 UX)
+
+   업로드 영역(.images-panel-pastezone)에 이미지 파일을 놓으면
+   붙여넣기/파일 선택과 같은 uploadImagesPanelFile()로 들어간다.
+   DataTransfer + File을 브라우저 안에서 만들어 dragenter/dragover/
+   drop을 보낸다 — 페이지 코드가 보는 event.dataTransfer는 진짜 OS
+   drag와 같다.
+--------------------------------------------------------- */
+
+async function dropInto(page, selector, payload) {
+  return await page.evaluate(([sel, p]) => {
+
+    const target = document.querySelector(sel);
+    if (!target) throw new Error("drop target not found: " + sel);
+
+    const dt = new DataTransfer();
+
+    if (p.text) dt.setData("text/plain", p.text);
+
+    if (p.file) {
+      dt.items.add(
+        new File([new Uint8Array(p.file.size)], p.file.name, { type: p.file.type })
+      );
+    }
+
+    const fire = (name) => {
+      const ev = new DragEvent(name, { dataTransfer: dt, bubbles: true, cancelable: true });
+      target.dispatchEvent(ev);
+      return ev.defaultPrevented;
+    };
+
+    fire("dragenter");
+    fire("dragover");
+
+    const zone = document.querySelector(".images-panel-pastezone");
+    const highlightedDuringDrag = !!(zone && zone.classList.contains("images-panel-pastezone--dragover"));
+
+    if (p.leaveOnly) {
+      fire("dragleave");
+      return {
+        highlightedDuringDrag,
+        highlightedAfter: !!(zone && zone.classList.contains("images-panel-pastezone--dragover"))
+      };
+    }
+
+    const prevented = fire("drop");
+
+    return {
+      prevented,
+      highlightedDuringDrag,
+      highlightedAfter: !!(zone && zone.classList.contains("images-panel-pastezone--dragover"))
+    };
+
+  }, [selector, payload]);
+}
+
+
+async function testDropUpload(playwright) {
+  console.log("\n[drop] 이미지 drag & drop 업로드 / 비-이미지 거부 / 영역 밖 drop 무해 / 기존 경로 유지");
+  const backend = createMockBackend();
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  try {
+    await openTopDock(page);
+    await page.click("#studioImagesButton");
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+    const urlBefore = page.url();
+
+    /* 끌고 왔다가 나가면 강조만 붙었다 떨어진다 */
+    const leave = await dropInto(page, ".images-panel-pastezone", {
+      file: { name: "hover.png", type: "image/png", size: PNG_BYTES.length }, leaveOnly: true
+    });
+    check("[drop] 파일을 영역 위로 끌면 강조가 붙고 벗어나면 떨어진다",
+      leave.highlightedDuringDrag === true && leave.highlightedAfter === false, JSON.stringify(leave));
+    check("[drop] 끌기만으로는 업로드되지 않는다",
+      backend.state.uploads.length === 0, "uploads=" + backend.state.uploads.length);
+
+    /* 텍스트만 있는 drag는 가로채지 않는다 */
+    const textDrop = await dropInto(page, ".images-panel-pastezone", { text: "hello" });
+    check("[drop] 파일 없는 텍스트 drop은 가로채지 않는다(강조도 없다)",
+      textDrop.prevented === false && textDrop.highlightedDuringDrag === false, JSON.stringify(textDrop));
+
+    /* 이미지가 아닌 파일 — 거부 메시지, 업로드 없음 */
+    const badDrop = await dropInto(page, ".images-panel-pastezone", {
+      file: { name: "notes.txt", type: "text/plain", size: 10 }
+    });
+    await page.waitForTimeout(200);
+    const badMessage = await page.textContent(".images-panel-message");
+    check("[drop] 이미지가 아닌 파일은 기본 동작만 막고 거부 메시지를 보인다",
+      badDrop.prevented === true && /이미지 파일만 놓을 수 있어요/.test(badMessage || "") && badDrop.highlightedAfter === false,
+      JSON.stringify({ badDrop, badMessage }));
+    check("[drop] 이미지가 아닌 파일은 업로드되지 않는다",
+      backend.state.uploads.length === 0, "uploads=" + backend.state.uploads.length);
+
+    /* 진짜 이미지 drop */
+    const goodDrop = await dropInto(page, ".images-panel-pastezone", {
+      file: { name: "dropped.png", type: "image/png", size: PNG_BYTES.length }
+    });
+    await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+
+    check("[drop] 이미지 drop은 기본 동작을 막고 강조를 지운다",
+      goodDrop.prevented === true && goodDrop.highlightedAfter === false, JSON.stringify(goodDrop));
+
+    const uploadPath = backend.state.uploads[0]?.objectPath || "";
+    check("[drop] 놓은 이미지도 {user_id}/{uuid}.{ext} 경로로 올라간다(기존 업로드 경로 재사용)",
+      uploadPath.startsWith(OWNER_ID + "/") && /\/[0-9a-z-]{8,}\.png$/.test(uploadPath), uploadPath);
+
+    const createCall = backend.state.calls.filter(c => c.name === "create_skin_image").pop();
+    check("[drop] 기존 업로드와 같은 create_skin_image RPC를 재사용한다(원래 파일 이름 유지)",
+      !!createCall &&
+      createCall.body.p_mime_type === "image/png" &&
+      createCall.body.p_byte_size === PNG_BYTES.length &&
+      createCall.body.p_original_name === "dropped.png",
+      JSON.stringify(createCall && createCall.body));
+
+    const message = await page.textContent(".images-panel-message");
+    check("[drop] 성공 메시지가 기존 업로드와 같다", /업로드했어요/.test(message || ""), String(message));
+
+    /* 업로드만으로 슬롯 연결/Save가 일어나지 않는다 */
+    const slotState = await page.evaluate(() => window.getStudioImageSlotState());
+    check("[drop] 업로드만으로 슬롯이 자동 연결되지 않는다",
+      slotState.slots.every(s => !s.binding), JSON.stringify(slotState.slots.map(s => [s.name, !!s.binding])));
+
+    const saveDisabled = await page.getAttribute("#studioSaveButton", "disabled");
+    check("[drop] 업로드만으로는 dirty가 되지 않는다(Save 여전히 비활성)", saveDisabled !== null);
+
+    /* 놓은 이미지도 평소처럼 연결 → Preview 반영 */
+    await page.click(".images-panel-card-attach");
+    await page.waitForTimeout(400);
+    const avatarSrc = await page.frameLocator("#studioPreviewFrame").locator(".t-avatar").getAttribute("src");
+    check("[drop] 놓은 이미지도 카드에서 슬롯에 연결되고 Preview에 반영된다",
+      !!avatarSrc && avatarSrc.includes("/skin-images/"), String(avatarSrc));
+
+    /* 영역 밖(overlay 배경)에 놓으면 아무 일도 없고 페이지도 떠나지 않는다 */
+    const outside = await dropInto(page, ".images-panel-overlay", {
+      file: { name: "outside.png", type: "image/png", size: PNG_BYTES.length }
+    });
+    await page.waitForTimeout(300);
+    check("[drop] 영역 밖(overlay)에 놓으면 기본 동작만 막고 업로드하지 않는다 + 페이지 유지 + 패널 열림",
+      outside.prevented === true && backend.state.uploads.length === 1 && page.url() === urlBefore &&
+      (await page.isVisible(".images-panel-overlay")),
+      JSON.stringify({ outside, uploads: backend.state.uploads.length }));
+
+    /* 기존 파일 선택/붙여넣기 경로가 그대로 남아 있다 */
+    await attachFile(page, "picked.png", PNG_BYTES, "image/png");
+    await page.waitForFunction(
+      () => document.querySelectorAll(".images-panel-card").length === 2, null, { timeout: 10000 });
+    const pastePrevented = await pasteInto(page, ".images-panel-pastezone", {
+      file: { name: "image.png", type: "image/png", size: PNG_BYTES.length }
+    });
+    await page.waitForFunction(
+      () => document.querySelectorAll(".images-panel-card").length === 3, null, { timeout: 10000 });
+    check("[drop] 파일 선택 + 붙여넣기 업로드가 그대로 동작한다(카드 3장)",
+      pastePrevented === true && backend.state.images.length === 3, "images=" + backend.state.images.length);
+
+    check("[drop] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
    14) 진짜 클립보드 + 진짜 Ctrl+V
 
    11~13번은 DataTransfer로 만든 paste 이벤트를 보낸다 — 우리
@@ -1577,7 +1756,7 @@ async function testRealClipboardPaste(playwright) {
       { origin: `http://localhost:${PORT}` }
     );
 
-    await page.click("#studioTopDockHandle");
+    await openTopDock(page);
     await page.click("#studioImagesButton");
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
@@ -1654,6 +1833,7 @@ try {
   await testPasteLimits(playwright);
   await testPasteLeavesTextAlone(playwright);
   await testRealClipboardPaste(playwright);
+  await testDropUpload(playwright);
 } finally {
   server.close();
 }

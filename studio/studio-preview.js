@@ -134,6 +134,12 @@ const studioCodeButton =
 const studioImportButton =
   document.getElementById("studioImportButton");
 
+/* Skin Studio 파일 UX — 지금 working draft를 .json 파일로 내려받는
+   Export 버튼. Import와 같은 기준("working draft가 있는가")으로만
+   활성화된다(updateStudioImportButtonState). */
+const studioExportButton =
+  document.getElementById("studioExportButton");
+
 const studioImagesButton =
   document.getElementById("studioImagesButton");
 
@@ -495,6 +501,12 @@ function updateStudioImportButtonState() {
 
   studioImportButton.disabled =
     !currentWorkingSkin;
+
+  /* Export도 같은 기준 — 내보낼 working draft가 있으면 된다 */
+  if (studioExportButton) {
+    studioExportButton.disabled =
+      !currentWorkingSkin;
+  }
 
 }
 
@@ -1331,6 +1343,59 @@ studioImportButton.addEventListener(
         onApply: (skinPackage) =>
           applyImportedSkinPackage(skinPackage)
       }
+    );
+
+  }
+);
+
+
+/* =========================================================
+   Export (Skin Studio 파일 UX) — currentWorkingSkin을 다시 Import
+   가능한 SkinPackage .json으로 내려받는다. 변환/다운로드는 전부
+   skin/skin-package-export.js(downloadSkinPackageExport)가 하고,
+   여기서는 결과를 toast로만 알린다. Studio 상태(dirty/revision)는
+   전혀 바뀌지 않는다 — 읽기 전용 동작이다.
+========================================================== */
+
+studioExportButton?.addEventListener(
+  "click",
+  () => {
+
+    if (!currentWorkingSkin) {
+      return;
+    }
+
+    const result =
+      window.downloadSkinPackageExport(currentWorkingSkin);
+
+    if (!result.ok) {
+
+      showStudioToast(
+        result.message,
+        { isError: true }
+      );
+
+      return;
+
+    }
+
+    if (result.missingTemplates.length > 0) {
+
+      /*
+        legacy HOME-only draft — 파일은 만들었지만 그대로는 Import
+        검증(required-template)을 통과하지 못한다. 어느 템플릿을
+        채워야 하는지 알려 준다.
+      */
+      showStudioToast(
+        `${result.filename}으로 내보냈습니다. 다시 Import하려면 templates.${result.missingTemplates.join("/")}을(를) 채워야 합니다.`
+      );
+
+      return;
+
+    }
+
+    showStudioToast(
+      `${result.filename}으로 내보냈습니다.`
     );
 
   }

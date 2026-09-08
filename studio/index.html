@@ -345,6 +345,22 @@
           </button>
 
           <!--
+               Skin Studio 파일 UX — 지금 working draft(SkinPackage)를
+               다시 Import 가능한 .json 파일로 내려받는다. Import와
+               같은 기준(working draft 유무)으로 활성화된다
+               (studio-preview.js updateStudioImportButtonState).
+          -->
+          <button
+            type="button"
+            class="studio-corner-button"
+            id="studioExportButton"
+            title="현재 SkinPackage를 .json 파일로 내려받습니다"
+            disabled
+          >
+            Export
+          </button>
+
+          <!--
                Skin Image Library v0.1 — 지금 Skin이 선언한
                imageSlots에 내 이미지를 연결/교체/비운다.
                Import 버튼과 같은 기준으로 "working draft가 있는가"
@@ -687,7 +703,8 @@
 
     loadVersionedScripts(
       [
-        "../skin/skin-package-import.js"
+        "../skin/skin-package-import.js",
+        "../skin/skin-package-export.js"
       ]
     );
 

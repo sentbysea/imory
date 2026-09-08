@@ -53,6 +53,10 @@ let imagesPanelSelectedSlot = null;
 let imagesPanelImages = [];
 let imagesPanelIsBusy = false;
 
+/* drag & drop — dragenter/dragleave는 자식 요소를 지날 때마다 쌍으로
+   발생하므로 깊이를 세어야 "정말 영역 밖으로 나갔는가"를 안다. */
+let imagesPanelDragDepth = 0;
+
 
 function setImagesPanelMessage(text, isError) {
 
@@ -362,6 +366,69 @@ function buildImagesPanelDom() {
   });
 
   pasteZone.addEventListener("paste", handleImagesPanelPaste);
+
+  /*
+    drag & drop(Skin Studio 파일 UX) — 업로드 영역이 dropzone이다.
+    놓인 파일은 붙여넣기/파일 선택과 **같은** uploadImagesPanelFile()
+    로 들어간다(검증·업로드·목록 갱신 전부 그 한 곳). overlay
+    전체에서는 기본 동작만 막아, 영역 밖에 잘못 놓아도 브라우저가
+    그 이미지를 열어 Studio를 떠나는 일이 없게 한다.
+  */
+
+  overlay.addEventListener("dragover", (event) => {
+    if (imagesPanelDragHasFiles(event.dataTransfer)) {
+      event.preventDefault();
+    }
+  });
+
+  overlay.addEventListener("drop", (event) => {
+    if (imagesPanelDragHasFiles(event.dataTransfer)) {
+      event.preventDefault();
+    }
+  });
+
+  pasteZone.addEventListener("dragenter", (event) => {
+
+    if (!imagesPanelDragHasFiles(event.dataTransfer)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    imagesPanelDragDepth += 1;
+
+    pasteZone.classList.add("images-panel-pastezone--dragover");
+
+  });
+
+  pasteZone.addEventListener("dragover", (event) => {
+
+    if (!imagesPanelDragHasFiles(event.dataTransfer)) {
+      return;
+    }
+
+    event.preventDefault();
+
+    try {
+      event.dataTransfer.dropEffect = imagesPanelIsBusy ? "none" : "copy";
+    } catch (err) {
+      /* 읽기 전용인 브라우저 — 무시 */
+    }
+
+  });
+
+  pasteZone.addEventListener("dragleave", () => {
+
+    imagesPanelDragDepth =
+      Math.max(0, imagesPanelDragDepth - 1);
+
+    if (imagesPanelDragDepth === 0) {
+      pasteZone.classList.remove("images-panel-pastezone--dragover");
+    }
+
+  });
+
+  pasteZone.addEventListener("drop", handleImagesPanelDrop);
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && imagesPanelIsOpen) {
@@ -848,6 +915,63 @@ function handleImagesPanelPaste(event) {
   event.preventDefault();
 
   uploadImagesPanelFile(nameImagesPanelPastedFile(file));
+
+}
+
+
+/* =========================================================
+   drag & drop (Skin Studio 파일 UX)
+
+   DataTransfer는 clipboardData와 같은 모양(files / items)이라
+   extractPastedImageFile()을 그대로 재사용한다 — "첫 번째 이미지
+   파일 하나"를 고르는 규칙이 두 입구에서 갈리지 않는다. 이미지가
+   아닌 파일(또는 텍스트만 있는 drag)은 메시지로만 알리고 아무것도
+   올리지 않는다.
+========================================================== */
+
+function imagesPanelDragHasFiles(dataTransfer) {
+
+  if (!dataTransfer) {
+    return false;
+  }
+
+  const types =
+    dataTransfer.types
+      ? Array.prototype.slice.call(dataTransfer.types)
+      : [];
+
+  return types.indexOf("Files") !== -1;
+
+}
+
+
+function handleImagesPanelDrop(event) {
+
+  const hadFiles =
+    imagesPanelDragHasFiles(event.dataTransfer);
+
+  imagesPanelDragDepth = 0;
+
+  if (imagesPanelPasteZone) {
+    imagesPanelPasteZone.classList.remove("images-panel-pastezone--dragover");
+  }
+
+  if (!hadFiles) {
+    /* 텍스트/URL drag — 가로채지 않는다(붙여넣기와 같은 원칙) */
+    return;
+  }
+
+  event.preventDefault();
+
+  const file =
+    extractPastedImageFile(event.dataTransfer);
+
+  if (!file) {
+    setImagesPanelMessage("PNG · JPG · WEBP · GIF 이미지 파일만 놓을 수 있어요.", true);
+    return;
+  }
+
+  uploadImagesPanelFile(file);
 
 }
 

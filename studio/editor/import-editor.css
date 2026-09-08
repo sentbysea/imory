@@ -244,3 +244,78 @@
 
   color: var(--system-text-faint);
 }
+
+
+/* =========================================================
+   FILE ROW + DRAG & DROP (Skin Studio 파일 UX)
+
+   textarea 위의 한 줄 — "JSON 파일 선택" 버튼 + 안내 문장.
+   images-panel.css의 .images-panel-pastezone-pick과 같은
+   "밑줄 있는 텍스트 버튼" 모양을 따른다. 파일을 modal 위로 끌고
+   오면 modal 테두리가 accent 색으로 바뀐다(.import-editor-modal--
+   dragover — studio/editor/import-editor.js가 dragenter/dragleave
+   깊이를 세어 붙였다 뗀다).
+========================================================== */
+
+.import-editor-file-row {
+  display: flex;
+
+  align-items: baseline;
+
+  flex-wrap: wrap;
+
+  gap: 4px;
+
+  margin: 0 0 8px;
+
+  font-size: 12px;
+
+  color: var(--system-text-muted);
+}
+
+
+.import-editor-file-pick {
+  padding: 0;
+
+  border: 0;
+  border-bottom: 1px solid currentColor;
+
+  background: transparent;
+
+  color: var(--system-text);
+
+  font: inherit;
+
+  cursor: pointer;
+}
+
+
+.import-editor-file-pick:hover {
+  color: var(--system-accent);
+}
+
+
+.import-editor-file-pick:disabled {
+  opacity: 0.5;
+
+  cursor: default;
+}
+
+
+.import-editor-file-hint {
+  color: inherit;
+}
+
+
+.import-editor-modal--dragover {
+  border-color: var(--system-accent);
+
+  box-shadow: 0 0 0 2px var(--system-accent-border, var(--system-accent));
+}
+
+
+.import-editor-modal--dragover .import-editor-textarea {
+  border-style: dashed;
+
+  border-color: var(--system-accent);
+}
