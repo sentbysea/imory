@@ -922,6 +922,84 @@ body.studio-ai-resizing {
 }
 
 
+/* =========================================================
+   선택 요소 chip (PHASE AI-6B)
+
+   Element Inspector에서 요소를 고른 채 AI Assistant를 열면 패널
+   본문 맨 위에 뜨는 한 줄이다 — "지금 이 요청은 이 요소에 대한
+   것"임을 보여주고, ×로 선택을 풀 수 있다.
+
+   요소는 studio/ai/studio-ai-selection.js가 만들어 넣는다
+   (studio/index.html과 studio/studio-lifecycle-scenario.html 두
+   문서에 같은 마크업을 복붙하지 않기 위해서다 — 참고 이미지 UI와
+   같은 이유).
+
+   개발자용 값(태그 이름 / data-imory-edit-id)은 여기에 오지
+   않는다. 문구는 항상 "선택됨: HOME · 제목"처럼 사람이 읽는
+   라벨이다(buildStudioAiSelectionLabel).
+========================================================== */
+
+.studio-ai-selection-chip {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+
+  margin: 0 14px 10px;
+
+  padding: 5px 6px 5px 9px;
+
+  border: 1px solid var(--system-accent-border);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-accent-soft);
+
+  color: var(--system-accent-hover);
+
+  font-size: var(--imory-font-size-200);
+
+  line-height: var(--imory-line-height-snug);
+}
+
+
+.studio-ai-selection-chip-label {
+  flex: 1;
+
+  min-width: 0;
+
+  overflow-wrap: anywhere;
+}
+
+
+.studio-ai-selection-chip-clear {
+  flex: 0 0 auto;
+
+  width: 20px;
+  height: 20px;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: var(--imory-radius-100);
+
+  background: transparent;
+
+  color: inherit;
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+
+.studio-ai-selection-chip-clear:hover {
+  background: var(--system-bg);
+}
+
+
 /*
   헤더는 고정, 본문만 스크롤한다 — 첨부 thumbnail이나 긴 상태
   문장이 늘어나도 패널이 세로로 넘치지 않는다.

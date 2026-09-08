@@ -28,7 +28,7 @@
      N. Direct Edit 과정 OpenAI endpoint 호출 0회
      O. dirty=true / Save 활성
      P. Save / Publish 회귀 없음
-     Q. AI Assistant 기능 회귀 없음(패널 열기/선택 chip)
+     Q. AI Assistant 기능 회귀 없음(패널 열기/선택 chip/포커스)
      R. 참고 이미지 UI 회귀 없음
      S. HOME/CATEGORY/POST route 유지
      T. selector/identity가 재렌더 후에도 같은 요소를 가리킴
@@ -1168,23 +1168,29 @@ async function runAi(context) {
     { timeout: 4000 }
   ).then(() => true, () => false);
 
+  /*
+    PHASE AI-6B에서 chip의 주인이 studio/ai/studio-ai-selection.js로
+    옮겨졌다(#studioAiSelectionChip). "다음 단계에서 지원됩니다"
+    toast도 사라졌다 — 이제 실제로 지원된다. 선택 요소 AI 수정
+    자체의 검사는 studio/studio-selected-ai-e2e-test.mjs가 한다.
+  */
   const aiState = await page.evaluate(() => {
-    const chip = document.getElementById("studioInspectorAiChip");
+    const chip = document.getElementById("studioAiSelectionChip");
     return {
       panelOpen: window.getStudioAiPanelLayoutState().open,
       chipText: chip ? chip.textContent : null,
       chipHidden: chip ? chip.hidden : null,
-      toast: document.getElementById("studioToast").textContent,
+      focused: document.activeElement && document.activeElement.id,
       selection: window.getStudioInspectorSelection()
     };
   });
 
   record(
-    "Q1. 'AI 수정' — AI 패널이 열리고 선택 요소가 chip으로 표시되며 다음 단계 안내가 뜬다",
+    "Q1. 'AI 수정' — AI 패널이 열리고 선택 요소가 chip으로 표시되며 입력칸에 포커스가 간다",
     aiState.panelOpen === true &&
       aiState.chipHidden === false &&
       /HOME/.test(aiState.chipText) &&
-      /다음 단계/.test(aiState.toast) &&
+      aiState.focused === "studioAiDrawerInput" &&
       aiState.selection.editId,
     JSON.stringify(aiState)
   );
@@ -1208,7 +1214,7 @@ async function runAi(context) {
   );
 
   record(
-    "Q3. AI 수정 버튼은 이번 Phase에서 OpenAI를 부르지 않는다",
+    "Q3. AI 수정 버튼을 누른 것만으로는 OpenAI를 부르지 않는다(요구사항 1절)",
     aiCallCount === 0,
     `aiCallCount=${aiCallCount}`
   );

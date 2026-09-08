@@ -55,6 +55,16 @@
    요청 body뿐이다. localStorage / IndexedDB / DB / Storage 어디에도
    쓰지 않으므로 탭을 닫거나 새로고침하면 사라진다.
 
+   ★ 선택 요소 AI 수정 (PHASE AI-6B)
+   Element Inspector에서 요소를 고른 채 보낸 요청에는
+   selectionContext가 함께 실린다 — 그 요청은 "이 요소에 대한
+   것"으로 해석된다. 선택 chip / selectionContext 만들기 / 요청용
+   SkinPackage 사본은 studio/ai/studio-ai-selection.js가 갖고, 이
+   파일은 전송 시점에 그 두 함수를 부르는 것이 전부다.
+
+   선택이 없으면 body도 프롬프트도 PHASE AI-2/AI-4와 바이트까지
+   같다(아래 buildStudioAiRequestBody 주석).
+
    ★ 이번 Phase에서 하지 않는 것
    - 여러 단계 undo — 1단계만
    - 자동 Save — 절대 없음(Save는 지금까지처럼 사용자가 누른다)
@@ -1010,6 +1020,249 @@ async function readStudioAiAccessToken() {
    4. 통과한 것만 applyAiSkinPackage()로 한 번에 반영한다.
 ========================================================== */
 
+/* =========================================================
+   진단 코드 (PHASE AI-6B.1)
+
+   ★ 왜 필요했나
+   실패하면 사용자에게 "AI 요청을 처리하지 못했습니다." / "고치지
+   못했습니다." 두 문장만 보였다. 서로 완전히 다른 원인(선택 요소를
+   못 찾음 / 모델이 답을 끝맺지 못함 / 결과가 스킨 규칙을 통과하지
+   못함 / 그 사이 다른 변경)이 같은 문장이 되니, 사용자는 무엇을
+   고쳐 다시 시도해야 할지 알 수 없고 개발자는 어느 단계인지 알 수
+   없었다.
+
+   ★ 두 종류의 code
+   - 서버가 준 code — functions/api/skin-ai.js의 SKIN_AI_ERROR_CODES.
+     응답 JSON의 `code` 필드로 온다.
+   - 이 파일이 붙이는 code — 서버가 관여하지 않는 단계(S1~S3,
+     S9~S12)의 실패, 그리고 **응답이 JSON이 아니었던** 경우.
+
+   두 표를 합쳐 아래 STUDIO_AI_ERROR_MESSAGES 하나가 사용자 문장을
+   결정한다. 서버의 message가 있으면 그것을 우선 쓰고(서버가 더
+   구체적인 값을 알 때가 있다), 없을 때 이 표로 떨어진다.
+
+   ★ 서버 코드 표와의 미러
+   이름을 바꾸거나 코드를 더하면 functions/api/skin-ai.js와 이 파일을
+   **함께** 고친다. (skin-sanitize.js ↔ studio-inspector-model.js의
+   edit-id 패턴과 같은 성격의 미러다 — Pages Function은 ESM이고
+   Studio는 classic script라 한 파일을 공유할 수 없다.)
+
+   ★ 로그
+   실패할 때마다 console.warn으로 stage/code 한 줄을 남긴다.
+   instruction 원문 / SkinPackage / 이미지는 넣지 않는다.
+========================================================== */
+
+const STUDIO_AI_ERROR_CODES = {
+
+  /* client 단계 */
+  SELECTION_TARGET_NOT_FOUND: "SELECTION_TARGET_NOT_FOUND",  /* S2 */
+  NO_WORKING_SKIN: "NO_WORKING_SKIN",                        /* S3 */
+  INSTRUCTION_TOO_LONG: "INSTRUCTION_TOO_LONG",              /* S3 */
+  REQUEST_TIMEOUT: "REQUEST_TIMEOUT",                        /* S7 */
+  NETWORK_ERROR: "NETWORK_ERROR",                            /* S7 */
+  RESPONSE_NOT_JSON: "RESPONSE_NOT_JSON",                    /* S7 */
+  SKIN_VALIDATION_FAILED: "SKIN_VALIDATION_FAILED",          /* S9 */
+  STALE_RESPONSE: "STALE_RESPONSE",                          /* S10 */
+  APPLY_FAILED: "APPLY_FAILED",                              /* S11 */
+
+  /*
+    아직 아무 것도 이 코드를 내지 않는다 (PHASE AI-6B.1).
+    "현재 runtime에 없는 동작"(예: 뒤로가기 링크)을 기계적으로
+    판정할 방법이 지금은 없기 때문이다 — 모델의 자연어 요청을
+    해석해야 하고, 그건 capability manifest Phase의 몫이다.
+    표시 경로만 미리 맞춰 두고, 무엇이 필요한지는
+    AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md §7에 적어 둔다.
+  */
+  UNSUPPORTED_RUNTIME_CAPABILITY: "UNSUPPORTED_RUNTIME_CAPABILITY"
+
+};
+
+
+/* code -> 사용자에게 보이는 짧은 문장. 서버가 message를 함께
+   보냈으면 그쪽이 이긴다. */
+const STUDIO_AI_ERROR_MESSAGES = {
+
+  /* --- 선택 요소 --- */
+  SELECTION_TARGET_NOT_FOUND:
+    "선택한 요소를 수정 대상으로 찾지 못했습니다. 다시 선택해 주세요.",
+  SELECTION_INVALID:
+    "선택한 요소 정보가 올바르지 않습니다. 다시 선택해 주세요.",
+
+  /* --- 요청 --- */
+  NO_WORKING_SKIN:
+    "아직 편집할 스킨이 없습니다.",
+  INSTRUCTION_EMPTY:
+    "어떻게 바꾸고 싶은지 입력해 주세요.",
+  INSTRUCTION_TOO_LONG:
+    "요청이 너무 깁니다. 조금 줄여 주세요.",
+  BODY_TOO_LARGE:
+    "요청이 너무 큽니다. 참고 이미지를 줄여 보세요.",
+  REFERENCE_IMAGE_INVALID:
+    "참고 이미지를 사용할 수 없습니다. PNG / JPEG / WebP만 붙일 수 있습니다.",
+
+  /* --- 인증 / 설정 --- */
+  UNAUTHENTICATED:
+    "로그인이 필요합니다.",
+  FORBIDDEN:
+    "이 계정에서는 아직 AI 수정을 사용할 수 없습니다.",
+  NOT_CONFIGURED:
+    "AI 기능이 아직 설정되지 않았습니다.",
+
+  /* --- 네트워크 / OpenAI --- */
+  REQUEST_TIMEOUT:
+    "AI 응답이 너무 오래 걸려 중단했습니다. 잠시 후 다시 시도해 주세요.",
+  NETWORK_ERROR:
+    "AI 서버에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  RESPONSE_NOT_JSON:
+    "AI 서버가 알 수 없는 응답을 보냈습니다. 잠시 후 다시 시도해 주세요.",
+  OPENAI_TIMEOUT:
+    "AI 응답이 너무 오래 걸려 중단했습니다. 잠시 후 다시 시도해 주세요.",
+  OPENAI_UNREACHABLE:
+    "AI 서비스에 연결하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  OPENAI_RATE_LIMIT:
+    "지금은 AI 요청이 많습니다. 잠시 후 다시 시도해 주세요.",
+  OPENAI_ERROR:
+    "AI 서비스가 응답하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+  OPENAI_INCOMPLETE:
+    "AI 응답이 끝까지 생성되지 않았습니다. 요청 범위를 조금 줄여 다시 시도해 주세요.",
+  OPENAI_REFUSAL:
+    "AI가 이 요청은 처리할 수 없다고 답했습니다. 다른 표현으로 다시 요청해 주세요.",
+  STRUCTURED_OUTPUT_INVALID:
+    "AI 응답 형식이 올바르지 않아 적용하지 않았습니다. 다시 시도해 주세요.",
+
+  /* --- 적용 단계 --- */
+  SKIN_VALIDATION_FAILED:
+    "AI가 만든 결과가 Imory 스킨 규칙을 통과하지 못해 적용하지 않았습니다.",
+  STALE_RESPONSE:
+    "그 사이 다른 변경이 있어 AI 결과를 적용하지 않았습니다.",
+  APPLY_FAILED:
+    "AI 결과를 적용하지 못했습니다.",
+
+  /* --- 서버 --- */
+  SERVER_ERROR:
+    "AI 요청을 처리하는 중 서버 오류가 발생했습니다.",
+  BAD_REQUEST:
+    "요청 형식이 올바르지 않습니다.",
+  BAD_METHOD:
+    "요청 형식이 올바르지 않습니다.",
+  SKIN_PACKAGE_MISSING:
+    "현재 스킨 정보를 찾지 못했습니다.",
+
+  UNSUPPORTED_RUNTIME_CAPABILITY:
+    "현재 Imory에서 지원하지 않는 동작입니다."
+
+};
+
+
+/* 마지막 실패의 stage/code. 테스트(studio/studio-selected-ai-e2e-test.mjs)
+   와 개발자 콘솔이 읽는 값이다 — production 코드는 참조하지 않는다. */
+let studioAiLastFailure = null;
+
+
+function studioAiMessageForCode(code, serverMessage) {
+
+  if (typeof serverMessage === "string" && serverMessage.trim()) {
+    return serverMessage.trim();
+  }
+
+  return (
+    STUDIO_AI_ERROR_MESSAGES[code] ||
+    "AI 요청을 처리하지 못했습니다."
+  );
+
+}
+
+
+/* =========================================================
+   failStudioAiRequest(stage, code, options)
+
+   실패를 한 곳에서 처리한다 — 상태 줄 / toast / 로그 / 마지막
+   실패 기록. generic 문장만 보여주는 경로가 남지 않도록, 실패는
+   전부 이 함수를 지난다.
+========================================================== */
+
+function failStudioAiRequest(stage, code, options) {
+
+  const settings =
+    options || {};
+
+  const message =
+    studioAiMessageForCode(code, settings.serverMessage);
+
+  studioAiLastFailure =
+    {
+      stage,
+      code,
+      message,
+      /*
+        httpStatus는 RESPONSE_NOT_JSON을 가를 때 결정적이다:
+          200 + JSON 아님 -> /api/skin-ai가 Function에 닿지 않고
+                             _redirects의 SPA fallback(index.html)로
+                             떨어졌다는 뜻이다(배포 문제).
+          5xx + JSON 아님 -> Function이 죽었거나 edge 오류(524 등).
+        둘은 고쳐야 할 곳이 완전히 다르다.
+      */
+      httpStatus:
+        typeof settings.httpStatus === "number" ? settings.httpStatus : null
+    };
+
+  console.warn(
+    "[studio-ai] request failed",
+    {
+      stage,
+      code,
+      httpStatus: studioAiLastFailure.httpStatus,
+      hasSelection: !!settings.hasSelection
+    }
+  );
+
+  setStudioAiStatus(
+    settings.statusText || "고치지 못했습니다.",
+    { isError: true }
+  );
+
+  showStudioToast(message, { isError: true });
+
+}
+
+
+/* =========================================================
+   요청 body 조립
+
+   키를 넣는 **순서**가 중요하다 — 선택도 첨부도 없는 요청은 PHASE
+   AI-2와 바이트까지 같은 body로 나가야 하고, 첨부만 있는 요청은
+   PHASE AI-4와 같아야 한다. JSON.stringify는 삽입 순서를 그대로
+   쓰므로 여기서만 지키면 된다.
+
+     선택/첨부 없음  { instruction, skinPackage }
+     첨부만          { instruction, skinPackage, images }
+     선택만          { instruction, skinPackage, selectionContext }
+     둘 다           { instruction, skinPackage, images, selectionContext }
+
+   skinPackage는 호출자가 정한다 — 선택이 있으면 그 요소에 식별자를
+   심은 사본이고, 없으면 working draft 그대로다.
+========================================================== */
+
+function buildStudioAiRequestBody(instruction, skinPackage, attachments, selectionContext) {
+
+  const body = {
+    instruction,
+    skinPackage
+  };
+
+  if (attachments && attachments.length) {
+    body.images = attachments;
+  }
+
+  if (selectionContext) {
+    body.selectionContext = selectionContext;
+  }
+
+  return body;
+
+}
+
+
 async function handleStudioAiSend() {
 
   /*
@@ -1033,9 +1286,14 @@ async function handleStudioAiSend() {
 
   if (instruction.length > STUDIO_AI_MAX_INSTRUCTION_LENGTH) {
 
-    showStudioToast(
-      "요청은 " + STUDIO_AI_MAX_INSTRUCTION_LENGTH + "자까지 입력할 수 있습니다.",
-      { isError: true }
+    failStudioAiRequest(
+      "S3",
+      STUDIO_AI_ERROR_CODES.INSTRUCTION_TOO_LONG,
+      {
+        statusText: "",
+        serverMessage:
+          "요청은 " + STUDIO_AI_MAX_INSTRUCTION_LENGTH + "자까지 입력할 수 있습니다."
+      }
     );
 
     return;
@@ -1047,9 +1305,10 @@ async function handleStudioAiSend() {
 
   if (!working.hasWorkingSkin) {
 
-    showStudioToast(
-      "아직 편집할 스킨이 없습니다.",
-      { isError: true }
+    failStudioAiRequest(
+      "S3",
+      STUDIO_AI_ERROR_CODES.NO_WORKING_SKIN,
+      { statusText: "" }
     );
 
     return;
@@ -1064,6 +1323,45 @@ async function handleStudioAiSend() {
   */
   const attachments =
     snapshotStudioAiAttachments();
+
+  /*
+    ★ 선택 요소도 **전송 시점 snapshot**이다 (PHASE AI-6B, 10절).
+    보낸 뒤 사용자가 다른 요소를 고르거나 선택을 풀어도 진행 중인
+    요청의 타깃은 바뀌지 않는다 — 아래 selectionContext 지역 변수
+    하나가 그 요청의 전부다.
+
+    selectionPackage는 "고른 요소에 data-imory-edit-id 하나를 심은"
+    SkinPackage 사본이다. working draft는 이 시점에 바뀌지 않는다
+    (studio/ai/studio-ai-selection.js 파일 주석 참고) — 그래서
+    stale 판정에 쓰는 revision도 그대로다.
+  */
+  const selectionContext =
+    (typeof window.getStudioAiSelectionContext === "function")
+      ? window.getStudioAiSelectionContext()
+      : null;
+
+  const selectionPackage =
+    selectionContext
+      ? window.buildStudioAiSelectionPackage(working.skinPackage, selectionContext)
+      : null;
+
+  if (selectionContext && !selectionPackage) {
+
+    /*
+      고른 요소를 지금 SkinPackage에서 찾지 못했다(그 사이 스킨이
+      바뀌었거나, templates 없이 top-level html만 있는 예전 스킨).
+      "그럼 전체 스킨 수정으로 보내자"는 하지 않는다 — 사용자는
+      "이것만"이라고 썼는데 전부가 바뀌게 된다(요구사항 6절 8번).
+    */
+    failStudioAiRequest(
+      "S2",
+      STUDIO_AI_ERROR_CODES.SELECTION_TARGET_NOT_FOUND,
+      { statusText: "", hasSelection: true }
+    );
+
+    return;
+
+  }
 
   const snapshot = {
     skinPackage: working.skinPackage,
@@ -1142,16 +1440,12 @@ async function handleStudioAiSend() {
             body로 나간다.
           */
           body: JSON.stringify(
-            attachments.length
-              ? {
-                  instruction,
-                  skinPackage: snapshot.skinPackage,
-                  images: attachments
-                }
-              : {
-                  instruction,
-                  skinPackage: snapshot.skinPackage
-                }
+            buildStudioAiRequestBody(
+              instruction,
+              selectionPackage || snapshot.skinPackage,
+              attachments,
+              selectionContext
+            )
           )
         }
       );
@@ -1164,12 +1458,32 @@ async function handleStudioAiSend() {
       payload = null;
     }
 
+    /*
+      ★ payload가 null이면 응답이 JSON이 아니었다는 뜻이다 —
+      Function 예외로 Cloudflare가 만든 HTML 500이나 edge timeout
+      (524) 같은 경우다. 예전에는 이 자리가 전부 "AI 요청을
+      처리하지 못했습니다." 한 문장으로 뭉개졌다. 이제 code로
+      구분한다: 서버가 JSON을 준 경우는 그 code를, 아닌 경우는
+      RESPONSE_NOT_JSON을 쓴다(서버 로그를 볼 신호가 된다).
+    */
     if (!response.ok || !payload || payload.ok !== true) {
 
-      throw new Error(
-        (payload && payload.message) ||
-        "AI 요청을 처리하지 못했습니다."
-      );
+      const failure = new Error("skin-ai request failed");
+
+      failure.skinAiCode =
+        (payload && typeof payload.code === "string")
+          ? payload.code
+          : STUDIO_AI_ERROR_CODES.RESPONSE_NOT_JSON;
+
+      failure.skinAiServerMessage =
+        (payload && typeof payload.message === "string")
+          ? payload.message
+          : "";
+
+      failure.skinAiHttpStatus =
+        response.status;
+
+      throw failure;
 
     }
 
@@ -1188,22 +1502,30 @@ async function handleStudioAiSend() {
 
     if (err && err.name === "AbortError" && !timedOut) {
 
+      /* 사용자가 직접 중단한 것 — 오류가 아니다 */
       setStudioAiStatus("");
 
       return;
 
     }
 
-    setStudioAiStatus(
-      "고치지 못했습니다.",
-      { isError: true }
-    );
-
-    showStudioToast(
+    /*
+      err.skinAiCode가 있으면 위 throw가 만든 것(= 서버까지는
+      닿았다). 없으면 fetch 자체가 실패했거나 timeout이다.
+    */
+    const code =
       timedOut
-        ? "AI 응답이 너무 오래 걸려 중단했습니다. 잠시 후 다시 시도해주세요."
-        : ((err && err.message) || "AI 요청을 처리하지 못했습니다."),
-      { isError: true }
+        ? STUDIO_AI_ERROR_CODES.REQUEST_TIMEOUT
+        : ((err && err.skinAiCode) || STUDIO_AI_ERROR_CODES.NETWORK_ERROR);
+
+    failStudioAiRequest(
+      "S7",
+      code,
+      {
+        serverMessage: (err && err.skinAiServerMessage) || "",
+        httpStatus: (err && err.skinAiHttpStatus) || null,
+        hasSelection: !!selectionContext
+      }
     );
 
     return;
@@ -1232,14 +1554,20 @@ async function handleStudioAiSend() {
 
   if (!validated.ok) {
 
-    setStudioAiStatus(
-      "고치지 못했습니다.",
-      { isError: true }
+    /*
+      어느 validator가 거부했는지는 validated.reason에 남는다
+      (skin/skin-package-import.js) — 사용자 문장은 짧게 두고
+      개발자는 콘솔에서 reason을 본다(요구사항 9절).
+    */
+    console.warn(
+      "[studio-ai] AI 결과가 SkinPackage 검증을 통과하지 못했습니다",
+      { stage: "S9", reason: validated.reason || "unknown" }
     );
 
-    showStudioToast(
-      validated.message,
-      { isError: true }
+    failStudioAiRequest(
+      "S9",
+      STUDIO_AI_ERROR_CODES.SKIN_VALIDATION_FAILED,
+      { hasSelection: !!selectionContext }
     );
 
     return;
@@ -1258,17 +1586,27 @@ async function handleStudioAiSend() {
 
   if (!applied.ok) {
 
-    setStudioAiStatus("");
-
-    showStudioToast(
+    failStudioAiRequest(
+      applied.reason === "stale" ? "S10" : "S11",
       applied.reason === "stale"
-        ? "그 사이 다른 변경이 있어 AI 결과를 적용하지 않았습니다."
-        : "AI 결과를 적용하지 못했습니다.",
-      { isError: true }
+        ? STUDIO_AI_ERROR_CODES.STALE_RESPONSE
+        : STUDIO_AI_ERROR_CODES.APPLY_FAILED,
+      { statusText: "", hasSelection: !!selectionContext }
     );
 
     return;
 
+  }
+
+  /*
+    ★ 선택 요소가 살아남았는가 (PHASE AI-6B, 요구사항 12절)
+    남아 있으면 아무 일도 일어나지 않고 선택이 그대로 유지된다 —
+    바로 이어서 "조금만 더 작게"를 보낼 수 있다. AI가 그 요소를
+    지웠거나 식별자를 잃었으면 선택만 조용히 풀린다(오류 아님).
+    판정 이유는 studio/ai/studio-ai-selection.js 주석 참고.
+  */
+  if (selectionContext && typeof window.reconcileStudioAiSelection === "function") {
+    window.reconcileStudioAiSelection(selectionContext);
   }
 
   studioAiUndoSnapshot = {
@@ -1289,6 +1627,9 @@ async function handleStudioAiSend() {
     "";
 
   resizeStudioAiInput();
+
+  studioAiLastFailure =
+    null;
 
   setStudioAiStatus(
     payload.summary || "적용했습니다.",
@@ -1566,7 +1907,13 @@ if (typeof window !== "undefined") {
         attachmentCount:
           studioAiAttachments.length,
         attachmentMimeTypes:
-          studioAiAttachments.map((attachment) => attachment.mimeType)
+          studioAiAttachments.map((attachment) => attachment.mimeType),
+        selectionContext:
+          (typeof window.getStudioAiSelectionContext === "function")
+            ? window.getStudioAiSelectionContext()
+            : null,
+        lastFailure:
+          studioAiLastFailure ? { ...studioAiLastFailure } : null
       };
 
     };

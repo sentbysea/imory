@@ -52,10 +52,25 @@
 
 const SKIN_PACKAGE_IMPORT_CSS_CHECK_NAMESPACE = "studio-skin-import-check";
 
+/*
+  실패 반환에는 message(사용자용 문장)와 함께 reason(짧은 내부
+  식별자)이 들어간다 — PHASE AI-6B.1. Import 화면은 지금까지처럼
+  message만 쓰고, AI 경로(studio/ai/studio-ai-panel.js)는 사용자에게
+  짧은 문장 하나를 보여주면서 콘솔/로그에는 **어느 검사가 거부했는지**
+  를 남긴다(요구사항 9절).
+
+  reason 값: empty-input / json-parse / not-object / schema-version /
+  templates-missing / required-template / banner-template / css-type /
+  post-body-region / css-validator.
+
+  sanitizeSkinHTML()은 거부하지 않고 **조용히 지운다** — 그래서
+  "sanitizer violation"이라는 reason은 존재할 수 없다. 허용되지 않은
+  태그/속성이 들어오면 검증은 통과하고 그 부분만 사라진다.
+*/
 async function validateSkinPackageImport(rawJsonText) {
 
   if (typeof rawJsonText !== "string" || !rawJsonText.trim()) {
-    return { ok: false, message: "가져올 SkinPackage JSON을 입력해주세요." };
+    return { ok: false, reason: "empty-input", message: "가져올 SkinPackage JSON을 입력해주세요." };
   }
 
   let parsed;
@@ -63,22 +78,22 @@ async function validateSkinPackageImport(rawJsonText) {
   try {
     parsed = JSON.parse(rawJsonText);
   } catch (err) {
-    return { ok: false, message: "JSON 형식이 올바르지 않습니다: " + err.message };
+    return { ok: false, reason: "json-parse", message: "JSON 형식이 올바르지 않습니다: " + err.message };
   }
 
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    return { ok: false, message: "SkinPackage는 최상위가 객체({...})여야 합니다." };
+    return { ok: false, reason: "not-object", message: "SkinPackage는 최상위가 객체({...})여야 합니다." };
   }
 
   if (parsed.schemaVersion !== 1) {
-    return { ok: false, message: "schemaVersion은 1이어야 합니다." };
+    return { ok: false, reason: "schema-version", message: "schemaVersion은 1이어야 합니다." };
   }
 
   const templatesInput =
     parsed.templates;
 
   if (!templatesInput || typeof templatesInput !== "object" || Array.isArray(templatesInput)) {
-    return { ok: false, message: "templates 필드가 필요합니다." };
+    return { ok: false, reason: "templates-missing", message: "templates 필드가 필요합니다." };
   }
 
   const requiredPageTypes =
@@ -90,7 +105,7 @@ async function validateSkinPackageImport(rawJsonText) {
       templatesInput[pageType];
 
     if (!template || typeof template !== "object" || typeof template.html !== "string") {
-      return { ok: false, message: `templates.${pageType}.html이 필요합니다.` };
+      return { ok: false, reason: "required-template", message: `templates.${pageType}.html이 필요합니다.` };
     }
 
   }
@@ -122,7 +137,7 @@ async function validateSkinPackageImport(rawJsonText) {
       typeof bannerTemplateInput.html !== "string"
     )
   ) {
-    return { ok: false, message: "templates.banner를 포함하려면 templates.banner.html이 문자열이어야 합니다." };
+    return { ok: false, reason: "banner-template", message: "templates.banner를 포함하려면 templates.banner.html이 문자열이어야 합니다." };
   }
 
   let cssRaw;
@@ -132,7 +147,7 @@ async function validateSkinPackageImport(rawJsonText) {
   } else if (parsed.css === undefined) {
     cssRaw = "";
   } else {
-    return { ok: false, message: "css는 문자열이어야 합니다." };
+    return { ok: false, reason: "css-type", message: "css는 문자열이어야 합니다." };
   }
 
   /*
@@ -160,6 +175,7 @@ async function validateSkinPackageImport(rawJsonText) {
   if (!htmlHasPostBodyRegion(sanitizedPostHtml)) {
     return {
       ok: false,
+      reason: "post-body-region",
       message: "POST 템플릿에는 글 본문이 표시되는 자리(post-body region)가 반드시 있어야 합니다."
     };
   }
@@ -173,6 +189,7 @@ async function validateSkinPackageImport(rawJsonText) {
   if (!cssResult.ok) {
     return {
       ok: false,
+      reason: "css-validator",
       message: "CSS에 문제가 있어 가져올 수 없습니다: " + cssResult.warnings.join(", ")
     };
   }

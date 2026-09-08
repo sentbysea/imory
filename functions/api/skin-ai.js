@@ -14,10 +14,13 @@
        -> applyImportedSkinPackage()   (studio/studio-preview.js)
        -> Preview 재렌더 / undo
 
-   요청·응답 shape은 AI-1에서 고정한 그대로 바뀌지 않는다:
+   요청·응답 shape은 AI-1에서 고정한 그대로다. 뒤 Phase가 더한 것은
+   전부 **선택 필드**라, 그 필드를 보내지 않는 요청은 예전과 완전히
+   같은 경로를 탄다:
 
      요청  { instruction: string, skinPackage: object,
-             images?: [{ mimeType, dataUrl }] }
+             images?: [{ mimeType, dataUrl }],          (PHASE AI-4)
+             selectionContext?: {...} }                 (PHASE AI-6B)
      성공  { ok: true, skinPackage: {...}, summary: string }
      실패  { ok: false, message: string }
 
@@ -294,6 +297,293 @@ const SKIN_AI_TEMPLATE_PAGE_TYPES =
 
 
 /* =========================================================
+   selectionContext (PHASE AI-6B)
+
+   ★ 무엇인가
+   Studio의 Element Inspector에서 사용자가 **요소 하나를 고른 채**
+   AI 수정을 요청했을 때만 실려 오는 선택 정보다. 없으면 이 파일의
+   모든 경로가 PHASE AI-2/AI-4와 완전히 같이 돈다 — 선택 없는
+   요청은 지금까지의 "전체 스킨 수정" 그대로다.
+
+   ★ 무엇이 아닌가
+   partial patch 프로토콜이 아니다. 입력은 지금까지처럼 SkinPackage
+   **전체**이고 출력도 SkinPackage 전체다. selectionContext는 그
+   안에서 "어느 요소가 타깃인지"만 설명한다(요구사항 20절).
+
+   ★ client 값을 믿지 않는다
+   studio/ai/studio-ai-selection.js도 같은 모양을 만들지만, 실제
+   방어선은 여기다. 아래 검증을 통과하지 못한 요청은 **OpenAI를
+   0회 호출**하고 400으로 끝난다. 통과한 값도 그대로 흘려보내지
+   않고 필드별로 새 객체를 다시 만든다(모르는 키는 애초에 거부).
+
+   ★ editId 존재 확인 — 새 HTML parser를 만들지 않는다
+   editId는 아래 패턴이 강제하는 대로 [A-Za-z][A-Za-z0-9_-]{0,63}
+   뿐이라 따옴표/꺾쇠/공백이 들어갈 수 없다. 그래서
+   `data-imory-edit-id="<editId>"` 문자열이 해당 template html에
+   들어 있는지 보는 것만으로 충분하고 안전하다 — 닫는 따옴표까지
+   포함하므로 "e0-2"가 "e0-21"에 걸리지 않는다. Workers 런타임에는
+   DOMParser가 없고, 이 한 가지를 확인하자고 서버에 두 번째 HTML
+   파서를 들이지 않는다(요구사항 5절).
+
+   패턴은 skin/skin-sanitize.js의 SKIN_SANITIZE_EDIT_ID_PATTERN /
+   studio/inspector/studio-inspector-model.js의
+   INSPECTOR_EDIT_ID_PATTERN과 같아야 한다 — 셋을 함께 고친다.
+========================================================== */
+
+const SKIN_AI_SELECTION_EDIT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+const SKIN_AI_SELECTION_ELEMENT_TYPES =
+  ["text", "image", "link", "container"];
+
+/* 스킨 sanitizer가 허용하는 태그는 전부 소문자 영문자뿐이다
+   (skin/skin-sanitize.js) — h1~h6 때문에 숫자만 더 받는다. */
+const SKIN_AI_SELECTION_TAG_NAME_PATTERN = /^[a-z][a-z0-9]{0,15}$/;
+
+/* data-imory-bind / -src / -href / -repeat이 갖는 dotted path.
+   skin-sanitize.js의 path 검사와 같은 성격이다. */
+const SKIN_AI_SELECTION_PATH_PATTERN = /^[A-Za-z_][A-Za-z0-9_.]{0,79}$/;
+
+const SKIN_AI_SELECTION_SLOT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+/* skin-sanitize.js의 SKIN_SANITIZE_ALLOWED_REGION_NAMES와 같다. */
+const SKIN_AI_SELECTION_REGION_NAMES = ["post-body"];
+
+/* studio/inspector/studio-inspector-model.js describeInspectorElement()
+   가 만드는 capability 이름 전부. 그 목록이 늘면 여기도 늘린다 —
+   모르는 이름은 거부한다(fail closed). */
+const SKIN_AI_SELECTION_CAPABILITY_NAMES = [
+  "text", "href", "typography", "color", "background", "align",
+  "imageSource", "imageClear", "size", "shape", "border", "padding",
+  "imageAlign"
+];
+
+/* 사람이 읽는 한 줄 라벨("HOME · 제목 · Recent Notes"). 프롬프트에
+   그대로 들어가므로 길이를 자르고 제어문자를 거른다. */
+const SKIN_AI_SELECTION_MAX_LABEL_LENGTH = 80;
+
+const SKIN_AI_SELECTION_ALLOWED_KEYS = [
+  "template", "editId", "elementType", "tagName", "label",
+  "binding", "imageSlot", "hrefBinding", "region",
+  "repeat", "insideRepeat", "capabilities"
+];
+
+const SKIN_AI_SELECTION_CONTROL_CHAR_PATTERN =
+  /[\u0000-\u001F\u007F-\u009F\u2028\u2029]+/g;
+
+
+function isSkinAiSelectionNullableString(value, pattern) {
+
+  if (value === null || value === undefined) {
+    return true;
+  }
+
+  return typeof value === "string" && pattern.test(value);
+
+}
+
+
+function readSkinAiSelectionNullableString(value) {
+
+  return (typeof value === "string" && value) ? value : null;
+
+}
+
+
+/* template html 안에 그 editId가 실제로 있는가 (위 주석 참고) */
+function skinAiTemplateHasEditId(skinPackage, template, editId) {
+
+  const templates =
+    isSkinAiPlainObject(skinPackage) && isSkinAiPlainObject(skinPackage.templates)
+      ? skinPackage.templates
+      : null;
+
+  const entry =
+    templates ? templates[template] : null;
+
+  const html =
+    (isSkinAiPlainObject(entry) && typeof entry.html === "string")
+      ? entry.html
+      : "";
+
+  if (!html) {
+    return false;
+  }
+
+  return (
+    html.indexOf('data-imory-edit-id="' + editId + '"') !== -1 ||
+    html.indexOf("data-imory-edit-id='" + editId + "'") !== -1
+  );
+
+}
+
+
+/* =========================================================
+   validateSkinAiSelectionContext(value, skinPackage)
+     -> { ok: true, selection: null }   선택 없음(= 기존 경로 그대로)
+        { ok: true, selection: {...} }  검증을 통과해 새로 만든 객체
+        { ok: false, message }          400 (OpenAI 호출 0회)
+========================================================== */
+
+function validateSkinAiSelectionContext(value, skinPackage) {
+
+  if (value === undefined || value === null) {
+    return { ok: true, selection: null };
+  }
+
+  if (!isSkinAiPlainObject(value)) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+  }
+
+  const unknownKey =
+    Object.keys(value).find(
+      (key) => SKIN_AI_SELECTION_ALLOWED_KEYS.indexOf(key) === -1
+    );
+
+  if (unknownKey !== undefined) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+  }
+
+  if (SKIN_AI_TEMPLATE_PAGE_TYPES.indexOf(value.template) === -1) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소의 페이지를 알 수 없습니다." };
+  }
+
+  if (
+    typeof value.editId !== "string" ||
+    !SKIN_AI_SELECTION_EDIT_ID_PATTERN.test(value.editId)
+  ) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소를 식별할 수 없습니다." };
+  }
+
+  if (SKIN_AI_SELECTION_ELEMENT_TYPES.indexOf(value.elementType) === -1) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소의 종류를 알 수 없습니다." };
+  }
+
+  if (
+    typeof value.tagName !== "string" ||
+    !SKIN_AI_SELECTION_TAG_NAME_PATTERN.test(value.tagName)
+  ) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소의 종류를 알 수 없습니다." };
+  }
+
+  if (
+    !isSkinAiSelectionNullableString(value.binding, SKIN_AI_SELECTION_PATH_PATTERN) ||
+    !isSkinAiSelectionNullableString(value.hrefBinding, SKIN_AI_SELECTION_PATH_PATTERN) ||
+    !isSkinAiSelectionNullableString(value.repeat, SKIN_AI_SELECTION_PATH_PATTERN) ||
+    !isSkinAiSelectionNullableString(value.imageSlot, SKIN_AI_SELECTION_SLOT_NAME_PATTERN)
+  ) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+  }
+
+  if (
+    value.region !== null &&
+    value.region !== undefined &&
+    SKIN_AI_SELECTION_REGION_NAMES.indexOf(value.region) === -1
+  ) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+  }
+
+  if (
+    value.insideRepeat !== undefined &&
+    value.insideRepeat !== null &&
+    typeof value.insideRepeat !== "boolean"
+  ) {
+    return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+  }
+
+  let label = null;
+
+  if (value.label !== undefined && value.label !== null) {
+
+    if (typeof value.label !== "string") {
+      return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+    }
+
+    /*
+      제어문자는 프롬프트 안에서 줄을 갈라 "계약처럼 보이는 문장"을
+      끼워 넣는 데 쓰일 수 있다 — 공백 하나로 접는다. 라벨은 어차피
+      한 줄짜리 표시용이라 잃는 정보가 없다.
+    */
+    label =
+      value.label
+        .replace(SKIN_AI_SELECTION_CONTROL_CHAR_PATTERN, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (label.length > SKIN_AI_SELECTION_MAX_LABEL_LENGTH) {
+      label = label.slice(0, SKIN_AI_SELECTION_MAX_LABEL_LENGTH);
+    }
+
+    if (!label) {
+      label = null;
+    }
+
+  }
+
+  let capabilities = [];
+
+  if (value.capabilities !== undefined && value.capabilities !== null) {
+
+    if (!Array.isArray(value.capabilities)) {
+      return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+    }
+
+    if (value.capabilities.length > SKIN_AI_SELECTION_CAPABILITY_NAMES.length) {
+      return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+    }
+
+    const badCapability =
+      value.capabilities.find(
+        (name) => SKIN_AI_SELECTION_CAPABILITY_NAMES.indexOf(name) === -1
+      );
+
+    if (badCapability !== undefined) {
+      return { ok: false, code: SKIN_AI_ERROR_CODES.SELECTION_INVALID, message: "선택한 요소 정보가 올바르지 않습니다." };
+    }
+
+    capabilities =
+      value.capabilities.slice();
+
+  }
+
+  /*
+    ★ 마지막 관문 — 그 요소가 정말 이 SkinPackage 안에 있는가.
+    없는 editId로 요청이 오면 모델은 타깃을 찾지 못한 채 "비슷한
+    다른 요소"를 고치게 된다(요구사항 6절 8번이 금지하는 바로 그
+    동작). OpenAI를 부르기 전에 여기서 끝낸다.
+  */
+  if (!skinAiTemplateHasEditId(skinPackage, value.template, value.editId)) {
+
+    return {
+      ok: false,
+      code: SKIN_AI_ERROR_CODES.SELECTION_TARGET_NOT_FOUND,
+      message: "선택한 요소를 수정 대상으로 찾지 못했습니다. 다시 선택해 주세요."
+    };
+
+  }
+
+  return {
+    ok: true,
+    selection: {
+      template: value.template,
+      editId: value.editId,
+      elementType: value.elementType,
+      tagName: value.tagName,
+      label,
+      binding: readSkinAiSelectionNullableString(value.binding),
+      imageSlot: readSkinAiSelectionNullableString(value.imageSlot),
+      hrefBinding: readSkinAiSelectionNullableString(value.hrefBinding),
+      region: readSkinAiSelectionNullableString(value.region),
+      repeat: readSkinAiSelectionNullableString(value.repeat),
+      insideRepeat: value.insideRepeat === true,
+      capabilities
+    }
+  };
+
+}
+
+
+
+/* =========================================================
    모델 설정
 
    모델명은 여기 한 곳에만 적는다 — 다른 함수는 전부
@@ -334,6 +624,118 @@ function resolveSkinAiModel(env) {
 }
 
 
+/* =========================================================
+   진단 코드 + 단계 로그 (PHASE AI-6B.1)
+
+   ★ 왜 필요했나
+   AI 요청이 실패하면 사용자에게 "AI 요청을 처리하지 못했습니다."
+   한 줄만 보였고, 개발자도 어느 단계에서 끊겼는지 알 수 없었다.
+   특히 **응답이 JSON이 아닌 경우**(Function 예외 → Cloudflare가
+   만든 HTML 500, edge timeout 524)에는 서버가 쓴 메시지가 아예
+   존재하지 않아 브라우저가 그 generic 문장으로 떨어졌다. 그래서
+   "OpenAI까지 갔는가"조차 구분할 수 없었다.
+
+   ★ 이 파일이 지키는 것
+   - 실패 응답은 **항상** { ok:false, code, message } JSON이다.
+     아래 onRequest()가 전체를 try/catch로 감싸므로 예상 못 한
+     예외도 SERVER_ERROR JSON이 된다 — HTML 500이 브라우저에
+     도달하는 경로를 없앤다.
+   - code는 짧은 내부 식별자다. raw OpenAI 응답 본문 / SkinPackage /
+     instruction 원문은 code에도 message에도 들어가지 않는다.
+   - 로그는 stage + code + 몇 가지 크기 정도만 남긴다(아래
+     logSkinAiStage). instruction 원문 / SkinPackage 전문 / 이미지
+     base64는 **절대** 로그에 넣지 않는다.
+
+   ★ client에도 같은 표가 있다
+   studio/ai/studio-ai-panel.js의 STUDIO_AI_ERROR_MESSAGES가 이
+   code들을 사용자 문장으로 옮긴다. 코드를 더하거나 이름을 바꾸면
+   두 파일을 함께 고친다(skin-sanitize.js ↔ studio-inspector-model.js
+   의 edit-id 패턴과 같은 성격의 미러다).
+
+   ★ 단계 이름 (요구사항 1절)
+   S1 selection capture        client
+   S2 request-package stamping client
+   S3 client request validation client
+   S4 server selectionContext validation   ← 여기부터 이 파일
+   S5 selected editId 존재 검사
+   S6 OpenAI request 시작
+   S7 OpenAI HTTP response
+   S8 Structured Output parse
+   S9 SkinPackage import validation        ← 다시 client
+   S10 stale check
+   S11 applyAiSkinPackage
+   S12 selection reconcile
+========================================================== */
+
+const SKIN_AI_ERROR_CODES = {
+
+  /* 요청 형식 — OpenAI 호출 전 */
+  BAD_METHOD: "BAD_METHOD",
+  BODY_TOO_LARGE: "BODY_TOO_LARGE",
+  BAD_REQUEST: "BAD_REQUEST",
+  INSTRUCTION_EMPTY: "INSTRUCTION_EMPTY",
+  INSTRUCTION_TOO_LONG: "INSTRUCTION_TOO_LONG",
+  SKIN_PACKAGE_MISSING: "SKIN_PACKAGE_MISSING",
+  REFERENCE_IMAGE_INVALID: "REFERENCE_IMAGE_INVALID",
+
+  /* 선택 요소 (S4 / S5) */
+  SELECTION_INVALID: "SELECTION_INVALID",
+  SELECTION_TARGET_NOT_FOUND: "SELECTION_TARGET_NOT_FOUND",
+
+  /* 인증 / 설정 */
+  UNAUTHENTICATED: "UNAUTHENTICATED",
+  FORBIDDEN: "FORBIDDEN",
+  NOT_CONFIGURED: "NOT_CONFIGURED",
+
+  /* OpenAI (S6 / S7 / S8) */
+  OPENAI_TIMEOUT: "OPENAI_TIMEOUT",
+  OPENAI_UNREACHABLE: "OPENAI_UNREACHABLE",
+  OPENAI_RATE_LIMIT: "OPENAI_RATE_LIMIT",
+  OPENAI_ERROR: "OPENAI_ERROR",
+  OPENAI_INCOMPLETE: "OPENAI_INCOMPLETE",
+  OPENAI_REFUSAL: "OPENAI_REFUSAL",
+  STRUCTURED_OUTPUT_INVALID: "STRUCTURED_OUTPUT_INVALID",
+
+  /* 예상하지 못한 예외 — 이 코드가 보이면 Function 로그를 본다 */
+  SERVER_ERROR: "SERVER_ERROR"
+
+};
+
+
+/* =========================================================
+   logSkinAiStage(stage, code, detail)
+
+   Cloudflare Function 로그 한 줄. detail에는 **크기와 분류만**
+   넣는다 — 내용은 넣지 않는다. 호출자가 실수로 원문을 넘기지
+   못하도록, 여기서 문자열 값은 전부 길이로 바꾼다.
+========================================================== */
+
+function logSkinAiStage(stage, code, detail) {
+
+  const safe = {};
+
+  Object.keys(detail || {}).forEach((key) => {
+
+    const value = detail[key];
+
+    if (typeof value === "string") {
+      /* 내용이 아니라 길이만 남긴다 */
+      safe[key + "Length"] = value.length;
+      return;
+    }
+
+    if (typeof value === "number" || typeof value === "boolean" || value === null) {
+      safe[key] = value;
+      return;
+    }
+
+  });
+
+  console.log("skin-ai:", stage, code, safe);
+
+}
+
+
 function skinAiJson(status, body) {
 
   return new Response(
@@ -350,12 +752,23 @@ function skinAiJson(status, body) {
 }
 
 
-function skinAiFail(status, message) {
+/*
+  실패 응답은 항상 code를 함께 낸다 (PHASE AI-6B.1). stage를 주면
+  Function 로그에도 한 줄 남는다 — 그래야 production에서 "어느
+  단계에서 끊겼는가"를 볼 수 있다.
+*/
+function skinAiFail(status, message, code, stage, detail) {
+
+  const errorCode =
+    code || SKIN_AI_ERROR_CODES.BAD_REQUEST;
+
+  logSkinAiStage(stage || "S?", errorCode, { status, ...(detail || {}) });
 
   return skinAiJson(
     status,
     {
       ok: false,
+      code: errorCode,
       message
     }
   );
@@ -392,14 +805,14 @@ async function verifySkinAiAccessToken(request, env) {
     /^Bearer\s+(.+)$/i.exec(header.trim());
 
   if (!match) {
-    return { ok: false, status: 401, message: "로그인이 필요합니다." };
+    return { ok: false, status: 401, code: SKIN_AI_ERROR_CODES.UNAUTHENTICATED, message: "로그인이 필요합니다." };
   }
 
   const accessToken =
     match[1].trim();
 
   if (!accessToken) {
-    return { ok: false, status: 401, message: "로그인이 필요합니다." };
+    return { ok: false, status: 401, code: SKIN_AI_ERROR_CODES.UNAUTHENTICATED, message: "로그인이 필요합니다." };
   }
 
   const supabaseUrl =
@@ -458,7 +871,7 @@ async function verifySkinAiAccessToken(request, env) {
   }
 
   if (!user || typeof user.id !== "string") {
-    return { ok: false, status: 401, message: "로그인이 필요합니다." };
+    return { ok: false, status: 401, code: SKIN_AI_ERROR_CODES.UNAUTHENTICATED, message: "로그인이 필요합니다." };
   }
 
   return { ok: true, userId: user.id };
@@ -585,7 +998,7 @@ function normalizeSkinAiInputPackage(input) {
    AI-2와 **글자 하나 다르지 않은** 문자열을 돌려준다.
 ========================================================== */
 
-function buildSkinAiSystemPrompt(hasReferenceImages) {
+function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
 
   const base = [
 
@@ -691,29 +1104,102 @@ function buildSkinAiSystemPrompt(hasReferenceImages) {
 
   ];
 
-  if (!hasReferenceImages) {
-    return base.join("\n");
+  /*
+    ★ 첨부 이미지 규칙 — 여기서 가장 중요한 문장은 "첨부 이미지를
+    스킨에 넣지 말라"이다. 사용자가 붙인 이미지는 Storage에 올라가
+    있지도 않고 imageSlots에도 없으므로, 모델이 그것을 넣으려
+    해봤자 만들 수 있는 것은 깨진 <img>나 data: URL뿐이다(둘 다
+    sanitizer/validator가 지운다). 그래서 "참고만 한다"를 계약으로
+    못박는다.
+  */
+  const sections =
+    hasReferenceImages
+      ? base.concat([
+
+          "",
+          "## Reference images (attached by the user)",
+          "- The user attached one or two images. They are DESIGN REFERENCES ONLY.",
+          "- NEVER put an attached image into the skin. Do not add an <img> for it, do not reference it from url(), do not invent an imageSlot for it. You cannot: those images are not hosted anywhere your templates could reach.",
+          "- The user's written instruction always wins. The images only fill in what the words leave open.",
+          "- What you MAY take from a reference image: overall layout mood, spacing and density, typography hierarchy and relative sizes, border weight and corner radius, color palette, visual balance.",
+          "- What you must NOT copy: any logo, brand mark, product name, photograph, or literal text visible in the image. Never transcribe text out of an image into the templates.",
+          "- The minimal-change rule still applies. Do not restructure the layout just because the reference looks different from the current skin. Change only what the instruction asks for.",
+          "- Every rule above still holds exactly as written: runtime bindings, the protected post-body region, owner/admin links, allowed tags, CSS restrictions, mobile behaviour.",
+          "- Reading the examples: \"이 이미지 느낌으로 바꿔줘\" means take the overall visual mood. \"이 이미지의 색감만 참고해줘\" means keep the layout exactly as it is and change the palette only."
+
+        ])
+      : base;
+
+  if (!hasSelection) {
+    return sections.join("\n");
   }
 
   /*
-    ★ 여기서 가장 중요한 문장은 "첨부 이미지를 스킨에 넣지 말라"이다.
-    사용자가 붙인 이미지는 Storage에 올라가 있지도 않고 imageSlots에도
-    없으므로, 모델이 그것을 넣으려 해봤자 만들 수 있는 것은 깨진
-    <img>나 data: URL뿐이다(둘 다 sanitizer/validator가 지운다).
-    그래서 "참고만 한다"를 계약으로 못박는다.
+    ★ 선택 요소 편집 계약 (PHASE AI-6B)
+
+    selectionContext가 있을 때만 붙는다 — 없으면 위 문자열은 PHASE
+    AI-2/AI-4와 글자 하나 다르지 않다.
+
+    여기서 validator가 잡아주지 않는 것, 즉 **범위**가 전부다.
+    "이 폴더만 작게"라는 요청에 모델이 전체 레이아웃을 다시 짜도
+    sanitizer도 CSS validator도 아무 말을 하지 않는다. 그래서 범위
+    규칙은 프롬프트가 유일한 방어선이고, 참고 이미지 규칙보다
+    **뒤에** 둔다 — 이미지가 있어도 선택 범위가 이긴다(요구사항
+    15절의 우선순위).
+
+    공용 class를 고치지 말라는 규칙이 핵심이다. `.folder { }`를
+    건드리면 폴더 하나를 고쳐 달라는 요청이 폴더 전부를 바꾼다.
+    선택 요소에는 이미 data-imory-edit-id가 박혀 있으므로 그
+    속성 선택자를 두 번 겹쳐 쓰면 기존 클래스 규칙을 확실히 이긴다
+    — Direct Edit(studio/inspector/studio-inspector-model.js
+    buildInspectorEditSelector)이 쓰는 것과 **같은** 선택자라
+    나중에 사용자가 같은 요소를 Direct Edit으로 다시 만져도 규칙이
+    둘로 갈라지지 않는다(요구사항 7절).
   */
-  return base.concat([
+  return sections.concat([
 
     "",
-    "## Reference images (attached by the user)",
-    "- The user attached one or two images. They are DESIGN REFERENCES ONLY.",
-    "- NEVER put an attached image into the skin. Do not add an <img> for it, do not reference it from url(), do not invent an imageSlot for it. You cannot: those images are not hosted anywhere your templates could reach.",
-    "- The user's written instruction always wins. The images only fill in what the words leave open.",
-    "- What you MAY take from a reference image: overall layout mood, spacing and density, typography hierarchy and relative sizes, border weight and corner radius, color palette, visual balance.",
-    "- What you must NOT copy: any logo, brand mark, product name, photograph, or literal text visible in the image. Never transcribe text out of an image into the templates.",
-    "- The minimal-change rule still applies. Do not restructure the layout just because the reference looks different from the current skin. Change only what the instruction asks for.",
-    "- Every rule above still holds exactly as written: runtime bindings, the protected post-body region, owner/admin links, allowed tags, CSS restrictions, mobile behaviour.",
-    "- Reading the examples: \"이 이미지 느낌으로 바꿔줘\" means take the overall visual mood. \"이 이미지의 색감만 참고해줘\" means keep the layout exactly as it is and change the palette only."
+    "## Selected element editing (this request is scoped)",
+    "The user picked ONE element in the preview before writing the instruction. The selected element is described in the user message under \"선택한 요소\". Its `editId` is the value of its `data-imory-edit-id` attribute, which already exists in that template's HTML.",
+    "",
+    "### Reading the selection description",
+    "- `elementType` is a rough label (text / image / link / container). It does NOT limit which CSS properties you may change. A `text` element can still be given width, height, padding, border, background or display.",
+    "- `capabilities` lists what Studio's own no-AI edit form happens to offer for this element. It is NOT a permission list and NOT a restriction on you. Ignore it when deciding what is possible; it is there only so you know what the user could already do without asking you.",
+    "- `insideRepeat: true` means the element is one entry of a repeated list. `repeat` is set when the element itself carries `data-imory-repeat`.",
+    "",
+    "### Scope",
+    "- Read the instruction as being about THAT element. \"조금 더 작게 해줘\" means make the selected element smaller — not the page, not its siblings, not the other templates.",
+    "- You may also touch the minimum surrounding structure that the selected element directly needs (for example the wrapper that positions it). Nothing beyond that.",
+    "- Do NOT redesign the page. Do NOT touch the other templates. If the selected element is in `home`, the `category`, `post` and `banner` HTML must come back byte-for-byte identical.",
+    "- Widen the scope ONLY if the user explicitly asks for it (\"이런 요소를 전부\", \"모든 카테고리 폴더를\"). Then say so in the summary.",
+    "- If the element sits inside a `data-imory-repeat` list, every entry of that list is rendered from the same markup, so a change there necessarily applies to all of them. That is expected; do not try to single out one entry.",
+    "",
+    "### How to style the selected element",
+    "- Prefer a rule on the element's own identity attribute, written twice so it wins over the skin's existing class rules:",
+    "  [data-imory-edit-id=\"<editId>\"][data-imory-edit-id=\"<editId>\"] { ... }",
+    "- Put that rule at the END of the stylesheet, and keep at most ONE such base rule per element — edit the existing one instead of adding a second copy.",
+    "- Extra states go in their own rules with the same doubled attribute selector plus the state, e.g. `...:hover`, `...:focus-visible`, or inside a media query.",
+    "- Do NOT edit a shared class (`.folder`, `.card`, `.post-item`, ...) to change one selected element. That silently changes every other element using it.",
+    "- Do NOT invent a new random class name for the selected element. It already has a stable identity.",
+    "- KEEP the `data-imory-edit-id` attribute on the selected element exactly as it is. If it disappears the user loses their selection.",
+    "",
+    "### Structure changes are allowed",
+    "- The user may ask to rearrange the inside of the selected element (\"이 카드 안에서 이미지가 위, 텍스트가 아래로\"). Restructuring the selected element's own subtree is fine.",
+    "- Its siblings, its ancestors, the other templates, runtime bindings and the protected post-body region stay as they are.",
+    "- Keep every `data-imory-*` binding that is inside the selected element unless the user explicitly asks to remove that content.",
+    "- Deleting the selected element itself is allowed only if the user asked for it AND it is not a protected region, not an owner/admin link, and not the post-body region.",
+    "",
+    "### Effects",
+    "- Hover effects, transitions, shadows, borders, opacity changes and small animations on the selected element are exactly what this mode is for. Use them when asked.",
+    "- CSS only. Never add JavaScript or event handler attributes — they are stripped and the effect would silently disappear.",
+    "",
+    "### If you cannot do it",
+    "- This applies to requests the platform genuinely cannot express — for example behaviour that would need JavaScript, a browser history action (\"go back\"), or a runtime binding that is not in the context path list above. Imory has no back-navigation binding: `navigation.home.href` is a plain URL and there is no `data-imory-action`. Do not invent one, do not use `javascript:`, and do not add an event handler attribute — all three are stripped and the link would silently break.",
+    "- In that case change nothing, and say plainly in the summary what is not supported. Never edit a different element to fake the result, and never substitute a different behaviour that was not asked for.",
+    "- A plain visual request (size, spacing, colour, border, layout of the selected element) is NOT one of these cases. Carry it out.",
+    "",
+    "### Summary",
+    "- The `summary` must name what you changed about the selected element, in Korean. For example \"선택한 카테고리 폴더의 높이와 테두리를 줄였어요.\" — not a generic \"스킨을 업데이트했어요.\""
 
   ]).join("\n");
 
@@ -822,17 +1308,40 @@ function buildSkinAiResponseSchema() {
    store:false — OpenAI 쪽에 응답을 남길 이유가 없다.
 ========================================================== */
 
-function buildSkinAiModelRequestBody(model, instruction, skinPackage, images) {
+function buildSkinAiModelRequestBody(model, instruction, skinPackage, images, selection) {
 
   const referenceImages =
     Array.isArray(images) ? images : [];
+
+  /*
+    ★ 선택 요소는 **같은 input_text 안에** 덧붙인다 (PHASE AI-6B).
+    content 항목을 하나 더 만들지 않는 이유: 선택이 없을 때의 body가
+    PHASE AI-2/AI-4와 완전히 같아야 하고(content 길이 포함), 선택이
+    있을 때도 "현재 스킨 / 사용자 요청 / 선택 요소"가 한 덩어리로
+    읽히는 편이 낫기 때문이다.
+
+    selection은 이미 validateSkinAiSelectionContext()가 필드별로
+    다시 만든 객체다 — client가 보낸 원본이 여기로 오지 않는다.
+  */
+  const selectionText =
+    selection
+      ? (
+          "\n\n선택한 요소(사용자가 Preview에서 직접 고른 하나):\n" +
+          "```json\n" +
+          JSON.stringify(selection, null, 2) +
+          "\n```\n" +
+          "이 요청은 기본적으로 위 요소 하나에 대한 것이다. " +
+          "template \"" + selection.template + "\" 안에서 " +
+          "data-imory-edit-id=\"" + selection.editId + "\"인 요소를 찾아라."
+        )
+      : "";
 
   return {
 
     model,
 
     instructions:
-      buildSkinAiSystemPrompt(referenceImages.length > 0),
+      buildSkinAiSystemPrompt(referenceImages.length > 0, !!selection),
 
     input: [
       {
@@ -852,7 +1361,8 @@ function buildSkinAiModelRequestBody(model, instruction, skinPackage, images) {
                   ? "\n\n첨부된 " + referenceImages.length +
                     "장은 디자인 참고 이미지다. 스킨에 넣을 이미지가 아니다."
                   : ""
-              )
+              ) +
+              selectionText
           }
         ].concat(
           referenceImages.map((image) => ({
@@ -1094,6 +1604,7 @@ function describeSkinAiUpstreamFailure(status) {
   if (status === 401 || status === 403) {
     return {
       status: 502,
+      code: SKIN_AI_ERROR_CODES.OPENAI_ERROR,
       message: "AI 서비스 설정에 문제가 있어 요청하지 못했습니다. 잠시 후 다시 시도해주세요."
     };
   }
@@ -1101,6 +1612,7 @@ function describeSkinAiUpstreamFailure(status) {
   if (status === 429) {
     return {
       status: 429,
+      code: SKIN_AI_ERROR_CODES.OPENAI_RATE_LIMIT,
       message: "지금은 AI 요청이 많습니다. 잠시 후 다시 시도해주세요."
     };
   }
@@ -1108,19 +1620,21 @@ function describeSkinAiUpstreamFailure(status) {
   if (status === 400 || status === 413 || status === 422) {
     return {
       status: 502,
+      code: SKIN_AI_ERROR_CODES.OPENAI_ERROR,
       message: "AI가 이 요청을 처리하지 못했습니다. 조금 더 짧고 구체적으로 다시 요청해주세요."
     };
   }
 
   return {
     status: 502,
+    code: SKIN_AI_ERROR_CODES.OPENAI_ERROR,
     message: "AI 서비스가 응답하지 못했습니다. 잠시 후 다시 시도해주세요."
   };
 
 }
 
 
-async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, images) {
+async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, images, selection) {
 
   const controller =
     new AbortController();
@@ -1132,6 +1646,18 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
       },
       SKIN_AI_MODEL_TIMEOUT_MS
     );
+
+  /*
+    ★ 요구사항 8절 — "OpenAI까지 실제로 갔는가"를 production 로그
+    하나로 구분할 수 있게 한다. 이 줄이 있으면 호출이 시작된 것이고,
+    없으면 그 앞(S4/S5/인증/allowlist)에서 끝난 것이다.
+  */
+  logSkinAiStage("S6", "OPENAI_REQUEST_START", {
+    model,
+    referenceImages: Array.isArray(images) ? images.length : 0,
+    selectedEdit: !!selection,
+    timeoutMs: SKIN_AI_MODEL_TIMEOUT_MS
+  });
 
   let response;
 
@@ -1148,7 +1674,7 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
           },
           signal: controller.signal,
           body: JSON.stringify(
-            buildSkinAiModelRequestBody(model, instruction, skinPackage, images)
+            buildSkinAiModelRequestBody(model, instruction, skinPackage, images, selection)
           )
         }
       );
@@ -1168,6 +1694,11 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
     return {
       ok: false,
       status: aborted ? 504 : 502,
+      stage: "S7",
+      code:
+        aborted
+          ? SKIN_AI_ERROR_CODES.OPENAI_TIMEOUT
+          : SKIN_AI_ERROR_CODES.OPENAI_UNREACHABLE,
       message:
         aborted
           ? "AI 응답이 너무 오래 걸려 중단했습니다. 잠시 후 다시 시도해주세요."
@@ -1188,7 +1719,7 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
     const failure =
       describeSkinAiUpstreamFailure(response.status);
 
-    return { ok: false, status: failure.status, message: failure.message };
+    return { ok: false, status: failure.status, stage: "S7", code: failure.code, message: failure.message };
 
   }
 
@@ -1203,6 +1734,8 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
     return {
       ok: false,
       status: 502,
+      stage: "S7",
+      code: SKIN_AI_ERROR_CODES.OPENAI_ERROR,
       message: "AI 응답을 읽지 못했습니다. 잠시 후 다시 시도해주세요."
     };
 
@@ -1225,6 +1758,7 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
     {
       model,
       referenceImages: Array.isArray(images) ? images.length : 0,
+      selectedEdit: !!selection,
       status: typeof payload.status === "string" ? payload.status : "unknown",
       inputTokens: usage.input_tokens ?? null,
       outputTokens: usage.output_tokens ?? null,
@@ -1239,7 +1773,9 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
       return {
         ok: false,
         status: 502,
-        message: "수정할 내용이 너무 많아 AI가 끝맺지 못했습니다. 한 번에 한 가지씩 요청해주세요."
+        stage: "S8",
+        code: SKIN_AI_ERROR_CODES.OPENAI_INCOMPLETE,
+        message: "AI 응답이 끝까지 생성되지 않았습니다. 요청 범위를 조금 줄여 다시 시도해 주세요."
       };
 
     }
@@ -1249,6 +1785,8 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
       return {
         ok: false,
         status: 502,
+        stage: "S8",
+        code: SKIN_AI_ERROR_CODES.OPENAI_REFUSAL,
         message: "AI가 이 요청은 처리할 수 없다고 답했습니다. 다른 표현으로 다시 요청해주세요."
       };
 
@@ -1257,6 +1795,8 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
     return {
       ok: false,
       status: 502,
+      stage: "S8",
+      code: SKIN_AI_ERROR_CODES.STRUCTURED_OUTPUT_INVALID,
       message: "AI 응답 형식이 올바르지 않아 적용하지 못했습니다. 다시 시도해주세요."
     };
 
@@ -1267,7 +1807,7 @@ async function requestSkinAiModelEdit(apiKey, model, instruction, skinPackage, i
 }
 
 
-export async function onRequest(context) {
+async function handleSkinAiRequest(context) {
 
   const {
     request,
@@ -1278,7 +1818,11 @@ export async function onRequest(context) {
   if (request.method !== "POST") {
 
     return new Response(
-      JSON.stringify({ ok: false, message: "POST만 지원합니다." }),
+      JSON.stringify({
+        ok: false,
+        code: SKIN_AI_ERROR_CODES.BAD_METHOD,
+        message: "POST만 지원합니다."
+      }),
       {
         status: 405,
         headers: {
@@ -1295,7 +1839,7 @@ export async function onRequest(context) {
     Number(request.headers.get("content-length") || "0");
 
   if (Number.isFinite(declaredLength) && declaredLength > SKIN_AI_MAX_BODY_BYTES) {
-    return skinAiFail(413, "요청이 너무 큽니다.");
+    return skinAiFail(413, "요청이 너무 큽니다.", SKIN_AI_ERROR_CODES.BODY_TOO_LARGE, "S4");
   }
 
   let rawBody;
@@ -1303,14 +1847,14 @@ export async function onRequest(context) {
   try {
     rawBody = await request.text();
   } catch (err) {
-    return skinAiFail(400, "요청 본문을 읽지 못했습니다.");
+    return skinAiFail(400, "요청 본문을 읽지 못했습니다.", SKIN_AI_ERROR_CODES.BAD_REQUEST, "S4");
   }
 
   const actualLength =
     new TextEncoder().encode(rawBody).length;
 
   if (actualLength > SKIN_AI_MAX_BODY_BYTES) {
-    return skinAiFail(413, "요청이 너무 큽니다.");
+    return skinAiFail(413, "요청이 너무 큽니다.", SKIN_AI_ERROR_CODES.BODY_TOO_LARGE, "S4");
   }
 
   let parsed;
@@ -1318,11 +1862,11 @@ export async function onRequest(context) {
   try {
     parsed = JSON.parse(rawBody);
   } catch (err) {
-    return skinAiFail(400, "요청 형식이 올바르지 않습니다.");
+    return skinAiFail(400, "요청 형식이 올바르지 않습니다.", SKIN_AI_ERROR_CODES.BAD_REQUEST, "S4");
   }
 
   if (!isSkinAiPlainObject(parsed)) {
-    return skinAiFail(400, "요청 형식이 올바르지 않습니다.");
+    return skinAiFail(400, "요청 형식이 올바르지 않습니다.", SKIN_AI_ERROR_CODES.BAD_REQUEST, "S4");
   }
 
   const instruction =
@@ -1331,20 +1875,22 @@ export async function onRequest(context) {
       : "";
 
   if (!instruction) {
-    return skinAiFail(400, "어떻게 바꾸고 싶은지 입력해주세요.");
+    return skinAiFail(400, "어떻게 바꾸고 싶은지 입력해주세요.", SKIN_AI_ERROR_CODES.INSTRUCTION_EMPTY, "S4");
   }
 
   if (instruction.length > SKIN_AI_MAX_INSTRUCTION_LENGTH) {
 
     return skinAiFail(
       400,
-      "요청은 " + SKIN_AI_MAX_INSTRUCTION_LENGTH + "자까지 입력할 수 있습니다."
+      "요청은 " + SKIN_AI_MAX_INSTRUCTION_LENGTH + "자까지 입력할 수 있습니다.",
+      SKIN_AI_ERROR_CODES.INSTRUCTION_TOO_LONG,
+      "S4"
     );
 
   }
 
   if (!isSkinAiPlainObject(parsed.skinPackage)) {
-    return skinAiFail(400, "현재 스킨 정보를 찾지 못했습니다.");
+    return skinAiFail(400, "현재 스킨 정보를 찾지 못했습니다.", SKIN_AI_ERROR_CODES.SKIN_PACKAGE_MISSING, "S4");
   }
 
   /*
@@ -1356,7 +1902,7 @@ export async function onRequest(context) {
     new TextEncoder().encode(JSON.stringify(parsed.skinPackage)).length;
 
   if (skinPackageBytes > SKIN_AI_MAX_TEXT_BODY_BYTES) {
-    return skinAiFail(413, "요청이 너무 큽니다.");
+    return skinAiFail(413, "요청이 너무 큽니다.", SKIN_AI_ERROR_CODES.BODY_TOO_LARGE, "S4");
   }
 
   /*
@@ -1368,7 +1914,34 @@ export async function onRequest(context) {
     validateSkinAiReferenceImages(parsed.images);
 
   if (!referenceImages.ok) {
-    return skinAiFail(400, referenceImages.message);
+    return skinAiFail(400, referenceImages.message, SKIN_AI_ERROR_CODES.REFERENCE_IMAGE_INVALID, "S4");
+  }
+
+  /*
+    selectionContext도 선택이다 (PHASE AI-6B). 없으면 selection이
+    null이 되어 아래 경로 전체가 PHASE AI-2/AI-4와 똑같이 돈다.
+    모양이 틀렸거나 그 editId가 실제 SkinPackage에 없으면 여기서
+    끝난다 — 인증도 OpenAI 호출도 하지 않는다.
+  */
+  const selectionContext =
+    validateSkinAiSelectionContext(parsed.selectionContext, parsed.skinPackage);
+
+  if (!selectionContext.ok) {
+
+    return skinAiFail(
+      400,
+      selectionContext.message,
+      selectionContext.code,
+      selectionContext.code === SKIN_AI_ERROR_CODES.SELECTION_TARGET_NOT_FOUND ? "S5" : "S4",
+      {
+        selectionTemplate:
+          isSkinAiPlainObject(parsed.selectionContext) &&
+          typeof parsed.selectionContext.template === "string"
+            ? parsed.selectionContext.template
+            : null
+      }
+    );
+
   }
 
   /*
@@ -1380,7 +1953,7 @@ export async function onRequest(context) {
     await verifySkinAiAccessToken(request, env);
 
   if (!auth.ok) {
-    return skinAiFail(auth.status, auth.message);
+    return skinAiFail(auth.status, auth.message, auth.code, "S4");
   }
 
   /*
@@ -1392,7 +1965,9 @@ export async function onRequest(context) {
 
     return skinAiFail(
       403,
-      "이 계정에서는 아직 AI 수정을 사용할 수 없습니다."
+      "이 계정에서는 아직 AI 수정을 사용할 수 없습니다.",
+      SKIN_AI_ERROR_CODES.FORBIDDEN,
+      "S4"
     );
 
   }
@@ -1403,7 +1978,9 @@ export async function onRequest(context) {
 
     return skinAiFail(
       503,
-      "AI 기능이 아직 설정되지 않았습니다. (AI service is not configured.)"
+      "AI 기능이 아직 설정되지 않았습니다. (AI service is not configured.)",
+      SKIN_AI_ERROR_CODES.NOT_CONFIGURED,
+      "S4"
     );
 
   }
@@ -1420,11 +1997,12 @@ export async function onRequest(context) {
       model,
       instruction,
       currentPackage,
-      referenceImages.images
+      referenceImages.images,
+      selectionContext.selection
     );
 
   if (!result.ok) {
-    return skinAiFail(result.status, result.message);
+    return skinAiFail(result.status, result.message, result.code, result.stage);
   }
 
   return skinAiJson(
@@ -1435,5 +2013,53 @@ export async function onRequest(context) {
       summary: clampSkinAiSummary(result.edit.summary)
     }
   );
+
+}
+
+
+/* =========================================================
+   예상하지 못한 예외도 JSON으로 (PHASE AI-6B.1)
+
+   ★ 이것이 "AI 요청을 처리하지 못했습니다." 하나만 보이던 경로를
+   없앤다.
+
+   Function이 예외로 죽으면 Cloudflare가 **HTML 오류 페이지**를
+   돌려준다. 브라우저(studio/ai/studio-ai-panel.js)는 그것을 JSON으로
+   읽지 못해 payload가 null이 되고, 그러면 서버가 쓴 문장이 아예
+   존재하지 않으므로 마지막 fallback 문장으로 떨어진다 — 사용자도
+   개발자도 어느 단계에서 끊겼는지 알 수 없었다.
+
+   여기서 감싸 두면 어떤 경우에도 { ok:false, code, message } JSON이
+   나가고, code가 SERVER_ERROR면 "Function 안에서 예외가 났다"는
+   뜻이 된다. 예외 내용은 로그에만 남기고 브라우저로 보내지 않는다
+   (stack/message에 SkinPackage 조각이 섞여 있을 수 있다).
+========================================================== */
+
+export async function onRequest(context) {
+
+  try {
+
+    return await handleSkinAiRequest(context);
+
+  } catch (err) {
+
+    console.error(
+      "skin-ai: unhandled exception",
+      {
+        name: err && err.name,
+        /* 메시지는 남기되 길이를 제한한다 — 스택/본문 조각이
+           로그를 뒤덮지 않게. */
+        message: String((err && err.message) || "").slice(0, 300)
+      }
+    );
+
+    return skinAiFail(
+      500,
+      "AI 요청을 처리하는 중 서버 오류가 발생했습니다.",
+      SKIN_AI_ERROR_CODES.SERVER_ERROR,
+      "S?"
+    );
+
+  }
 
 }

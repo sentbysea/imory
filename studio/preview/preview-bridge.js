@@ -547,12 +547,30 @@ function setInspectorHover(el) {
 }
 
 
-function setInspectorSelection(el) {
+/*
+  options.silent — 부모가 시켜서 바꾼 선택은 다시 부모로 올려보내지
+  않는다 (PHASE AI-6B).
+
+  올려보내면 부모의 handleStudioInspectorMessage가 그 메시지를 또
+  처리하고, 그것이 null이면 clearStudioInspectorSelection()이 다시
+  이 프레임으로 null을 내려보내 **메시지가 무한히 오간다**. 값이
+  같으니 화면은 멀쩡해 보이지만, 그 사이에 사용자가 새 요소를 고르면
+  뒤늦게 도착한 null 하나가 방금 잡은 선택을 지운다 — "선택을 풀고
+  곧바로 다른 요소를 고르는" 흐름(AI chip의 ×)에서 실제로 그랬다.
+
+  부모가 시킨 선택은 부모가 이미 알고 있으므로 알릴 것이 없다.
+  좌표는 곧이어 postInspectorRects()가 보낸다.
+*/
+function setInspectorSelection(el, options) {
 
   inspectorSelectedElement = el;
 
   inspectorSelectedEditId =
     el ? inspectorEditIdOf(el) : null;
+
+  if (options && options.silent) {
+    return;
+  }
 
   postToParent({
     type: PREVIEW_MSG_INSPECT_SELECT,
@@ -840,7 +858,8 @@ window.addEventListener("message", (event) => {
     setInspectorSelection(
       (root && typeof data.editId === "string" && window.isValidInspectorEditId(data.editId))
         ? root.querySelector(`[data-imory-edit-id="${data.editId}"]`)
-        : null
+        : null,
+      { silent: true }
     );
 
     return;

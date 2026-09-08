@@ -806,6 +806,162 @@
         },
 
         /*
+          Scenario F — production 스킨(quiet-frame 계열)을 축소한
+          회귀 fixture (PHASE AI-6B.1).
+
+          ★ 왜 필요했나
+          scenario y는 Inspector 요소 종류를 고루 담고 있지만, 실제
+          production 스킨의 **반복 목록 구조**와는 다르다. y의 반복
+          항목은 li > a > span 한 겹이고 클래스도 하나씩이다. 실제
+          CATEGORY 목록은
+
+            ul.list > li[data-imory-repeat] > a > span(제목)
+                                                > span(잠금, data-imory-if)
+                                                > span(날짜)
+
+          처럼 **한 반복 항목 안에 형제 span이 여럿**이고, 그중 하나를
+          고른 뒤 "이 폴더 크기를 전체 항목에 똑같이" 같은 요청이
+          들어온다. 그 경로(선택 → 식별자 심기 → 요청 → 적용)를
+          축소된 형태로 그대로 태우기 위한 fixture다.
+
+          사이드바의 nav 반복(navigation.postCategories)까지 둔 이유:
+          한 template 안에 **repeat이 둘 이상**일 때 구조 경로 id가
+          엇갈리지 않는지 함께 보기 위해서다.
+
+          .f-home-link는 navigation.home.href가 붙은 HOME 링크다 —
+          "HOME이 아니라 뒤로 가기로 바꿔줘"(사례 2)를 판정하는 데
+          쓴다. 지금 runtime에는 back binding이 없다는 사실을 테스트가
+          기계적으로 확인한다.
+        */
+        f: {
+          userId: "user-f",
+          tables: {
+            skins: [
+              { id: "skin-f1", user_id: "user-f", is_active: true, current_draft_version_id: "draft-f1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-f1",
+                content: {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html:
+                        '<div class="f-page"><div class="f-frame">' +
+                        '<header class="f-topbar">' +
+                        '<a class="f-brand" data-imory-href="navigation.home.href" data-imory-bind="site.title"></a>' +
+                        '</header>' +
+                        '<div class="f-layout">' +
+                        '<aside class="f-sidebar">' +
+                        '<nav class="f-nav">' +
+                        '<a class="f-home-link" data-imory-if="navigation.home.enabled" data-imory-href="navigation.home.href">HOME</a>' +
+                        '<ul class="f-link-list">' +
+                        '<li class="f-link-item" data-imory-repeat="navigation.postCategories">' +
+                        '<a class="f-link" data-imory-href="item.href" data-imory-bind="item.name"></a>' +
+                        '</li></ul>' +
+                        '</nav></aside>' +
+                        '<main class="f-main">' +
+                        '<ul class="f-post-list">' +
+                        '<li class="f-post-item" data-imory-repeat="home.recentPosts">' +
+                        '<a class="f-post-link" data-imory-href="item.href">' +
+                        '<span class="f-folder">FOLDER</span>' +
+                        '<span class="f-post-title" data-imory-bind="item.title"></span>' +
+                        '<span class="f-date" data-imory-bind="item.publishedAtLabel"></span>' +
+                        '</a></li></ul>' +
+                        '</main></div></div></div>'
+                    },
+                    category: {
+                      html:
+                        '<div class="f-page"><div class="f-frame">' +
+                        '<header class="f-topbar">' +
+                        '<a class="f-brand" data-imory-href="navigation.home.href" data-imory-bind="site.title"></a>' +
+                        '</header>' +
+                        '<div class="f-layout">' +
+                        '<aside class="f-sidebar">' +
+                        '<nav class="f-nav">' +
+                        '<a class="f-home-link" data-imory-if="navigation.home.enabled" data-imory-href="navigation.home.href">HOME</a>' +
+                        '<ul class="f-link-list">' +
+                        '<li class="f-link-item" data-imory-repeat="navigation.postCategories">' +
+                        '<a class="f-link" data-imory-href="item.href" data-imory-bind="item.name"></a>' +
+                        '</li></ul>' +
+                        '</nav></aside>' +
+                        '<main class="f-main">' +
+                        '<header class="f-section-head">' +
+                        '<p class="f-eyebrow" data-imory-bind="category.name"></p>' +
+                        '<a class="f-index" data-imory-href="navigation.home.href">INDEX</a>' +
+                        '</header>' +
+                        '<ul class="f-post-list">' +
+                        '<li class="f-post-item" data-imory-repeat="category.posts">' +
+                        '<a class="f-post-link" data-imory-href="item.href">' +
+                        '<span class="f-folder">FOLDER</span>' +
+                        '<span class="f-post-title" data-imory-bind="item.title"></span>' +
+                        '<span class="f-lock" data-imory-if="item.isSecret">LOCK</span>' +
+                        '<span class="f-date" data-imory-bind="item.publishedAtLabel"></span>' +
+                        '</a></li></ul>' +
+                        '</main></div></div></div>'
+                    },
+                    post: {
+                      html:
+                        '<div class="f-page"><div class="f-frame">' +
+                        '<article class="f-article">' +
+                        '<h1 class="f-article-title" data-imory-bind="post.title"></h1>' +
+                        '<div class="f-article-body" data-imory-region="post-body"></div>' +
+                        '</article>' +
+                        '</div></div>'
+                    }
+                  },
+                  css:
+                    '.f-page { color: #222222; } ' +
+                    '.f-folder { width: 18px; height: 14px; display: inline-block; } ' +
+                    '.f-post-item { margin-bottom: 6px; } ' +
+                    '.f-home-link { text-decoration: none; }',
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "phase-ai6b1-repeat-fixture" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-f", nickname: "Scenario F", bio: null, slug: "scenario-f" }],
+            site_settings: [],
+            categories: [
+              { id: "501", user_id: "user-f", name: "LOG", type: "post", sort_order: 1 },
+              { id: "502", user_id: "user-f", name: "NOTE", type: "post", sort_order: 2 }
+            ],
+            posts: [
+              { id: "601", user_id: "user-f", title: "First", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "501", content: "본문 1." },
+              { id: "602", user_id: "user-f", title: "Second", created_at: "2026-01-02T00:00:00Z", visibility: "public", category_id: "501", content: "본문 2." },
+              { id: "603", user_id: "user-f", title: "Third", created_at: "2026-01-03T00:00:00Z", visibility: "public", category_id: "501", content: "본문 3." }
+            ],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version: function (params) {
+
+              const newVersionId =
+                "draft-f" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            }
+          }
+        },
+
+        /*
           Scenario U — Banner Category Preview 전용, banners 조회
           자체가 실패하는 경우("query 실패 시 오류 상태 + Preview
           Back" 검증). 아래 공용 from()에 있는 state.bannerQueryShouldFail
@@ -1457,6 +1613,7 @@
   <script src="./preview/preview-navigation.js"></script>
   <!-- PHASE AI-1 / AI-5A — production과 동일한 순서(studio/index.html 참고) -->
   <script src="./ai/studio-ai-panel-layout.js"></script>
+  <script src="./ai/studio-ai-selection.js"></script>
   <script src="./ai/studio-ai-panel.js"></script>
   <!-- PHASE AI-6A — production과 동일한 순서(studio/index.html 참고) -->
   <script src="./inspector/studio-inspector-model.js"></script>

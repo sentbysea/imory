@@ -7,6 +7,10 @@ OpenAI를 전혀 부르지 않고 Studio 자체 기능으로 끝내는 단계.
 "앞으로 계속 지켜야 하는 것"은 아래 3·7·8절에 모아 두었고, 아직 못 한 것은
 10절(남은 차이)에 있다.
 
+> **후속**: 선택 요소를 실제 AI 요청에 연결하는 것은
+> [PHASE AI-6B](./AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md)에서 했다.
+> 아래 10절 1번이 그 라운드에서 해소됐다.
+
 ---
 
 ## 1. 이번 라운드의 경계
@@ -285,11 +289,16 @@ imageSlot 판정은 Skin Context가 슬롯 값을 노출하는 두 경로만 인
 
 ## 10. 남은 차이
 
-1. **Selected Element AI 실제 호출이 없다.** "AI 수정"은 AI 패널을 열고
-   선택 요소를 chip으로 보여준 뒤 "다음 단계에서 지원됩니다"까지만 한다.
-   다음 Phase가 쓸 수 있도록 `window.getStudioInspectorSelection()`이
-   selectionContext 모양을 이미 노출한다(pageType/editId/kind/bindPath/
-   hrefPath/srcPath/region/imageSlot/capabilities).
+1. ~~**Selected Element AI 실제 호출이 없다.**~~ — **해소됨 →
+   [AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md](./AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md)**.
+   이 라운드에서는 "AI 수정"이 AI 패널을 열고 선택 요소를 chip으로 보여준 뒤
+   "다음 단계에서 지원됩니다"까지만 했다. AI-6B에서 그 자리가 실제
+   `selectionContext` 전송으로 바뀌었고, 함께 달라진 것:
+   - chip의 주인이 이 파일(Inspector)에서 `studio/ai/studio-ai-selection.js`로
+     옮겨졌다(`#studioInspectorAiChip` → `#studioAiSelectionChip`). Inspector는
+     이제 window 이벤트 `"studio-inspector-selection"`만 쏜다.
+   - `window.getStudioInspectorSelection()`에 `isViewerBinding` /
+     `repeatPath` / `isInsideRepeat` / `text`가 더해졌다.
 2. **정적 `src` 이미지는 교체할 수 없다.** 슬롯에 연결되지 않은
    `<img src="https://...">`에는 "이미지 변경"이 비활성으로 표시된다 —
    URL 입력 UI를 새로 만들지 않았다(기존 Images/slot picker 재사용 원칙).

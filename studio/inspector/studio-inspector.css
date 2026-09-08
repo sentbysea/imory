@@ -386,28 +386,3 @@
 }
 
 
-/* =========================================================
-   AI 패널의 선택 chip (요구사항 15절)
-
-   Inspector가 만들어 #studioAiPanelBody 맨 위에 얹는 한 줄.
-   AI 패널 쪽 CSS/JS는 이번 Phase에서 바뀌지 않는다.
-========================================================== */
-
-.studio-inspector-ai-chip {
-  margin: 0 0 8px;
-
-  padding: 5px 8px;
-
-  border: 1px solid var(--system-accent-border);
-  border-radius: var(--imory-radius-200);
-
-  background: var(--system-accent-soft);
-
-  font-size: var(--imory-font-size-200);
-
-  line-height: var(--imory-line-height-snug);
-
-  color: var(--system-accent-hover);
-
-  word-break: break-all;
-}

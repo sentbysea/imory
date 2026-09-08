@@ -1,5 +1,5 @@
 /* =========================================================
-   SKIN STUDIO — ELEMENT INSPECTOR + DIRECT EDIT (PHASE AI-6A)
+   SKIN STUDIO — ELEMENT INSPECTOR + DIRECT EDIT (PHASE AI-6A/6B)
 
    Preview 안의 요소를 F12 Inspector처럼 직접 고르고, 간단한 수정은
    OpenAI를 전혀 부르지 않고 여기서 끝낸다.
@@ -12,9 +12,16 @@
      - 고른 요소의 "가능한 수정"만 그리는 폼
      - 수정 결과를 SkinPackage에 반영(항상 applyStudioDirectEdit
        하나만 통과)
+     - 선택 상태의 **소유** — 바뀔 때마다 window 이벤트
+       "studio-inspector-selection"을 쏘고, 값은 항상
+       window.getStudioInspectorSelection()으로 읽게 한다
+       (PHASE AI-6B, 요구사항 10절)
 
    ★ 이 파일이 하지 않는 일
-     - OpenAI 호출(이번 Phase 전체 금지)
+     - OpenAI 호출 — "✦ AI 수정" 버튼도 패널을 열 뿐이다.
+       실제 호출은 사용자가 문장을 쓰고 Send를 눌렀을 때
+       studio/ai/studio-ai-panel.js가 한다(PHASE AI-6B)
+     - AI 패널의 선택 chip — studio/ai/studio-ai-selection.js
      - 자동 Save(사용자가 Save를 눌러야만 DB에 간다)
      - 요소 식별/capability/CSS 규칙 계산 — 전부
        studio/inspector/studio-inspector-model.js(순수 함수)
@@ -99,8 +106,6 @@ let studioInspectorNote = null;
 let studioInspectorUndoButton = null;
 
 let studioInspectorDirectButton = null;
-
-let studioInspectorAiChip = null;
 
 
 const STUDIO_INSPECTOR_PAGE_LABELS = {
@@ -1030,6 +1035,8 @@ function renderStudioInspectorPopover() {
     studioInspectorPopover.hidden = true;
     studioInspectorSelectBox.hidden = true;
 
+    notifyStudioInspectorSelectionChanged();
+
     return;
 
   }
@@ -1095,67 +1102,51 @@ function renderStudioInspectorPopover() {
     studioInspectorSelection ? studioInspectorSelection.rect : null
   );
 
-  renderStudioInspectorAiChip(resolved.info);
+  notifyStudioInspectorSelectionChanged();
 
 }
 
 
 /* =========================================================
-   AI 패널의 선택 chip (요구사항 15절 — 이번 Phase 필수 아님)
+   선택 변경 알림 (PHASE AI-6B)
 
-   Inspector가 AI 패널의 내부 상태를 읽거나 쓰지 않는다. 자기가
-   만든 요소 하나를 패널 본문 맨 위에 얹고 자기가 지운다 — 그래서
-   AI 패널 쪽 파일은 이번 Phase에서 한 줄도 바뀌지 않는다.
+   Inspector가 선택 상태의 주인이다(요구사항 10절). 다른 화면이
+   그 상태를 복사해 들고 있지 않도록, 여기서는 "바뀌었다"만 알리고
+   실제 값은 window.getStudioInspectorSelection()으로 다시 읽게
+   한다 — AI 패널의 선택 chip(studio/ai/studio-ai-selection.js)이
+   그렇게 동작한다.
+
+   PHASE AI-6A에서는 이 파일이 AI 패널 본문에 chip 요소를 직접
+   얹었다. 그 자리를 이벤트 하나로 바꿨다 — chip은 AI 패널의 UI라
+   AI 쪽 파일이 갖는 편이 맞고, 그래야 chip에서 선택을 해제하는
+   경로도 "AI가 Inspector에게 부탁한다" 한 방향으로 정리된다.
 ========================================================== */
 
-function renderStudioInspectorAiChip(info) {
+function notifyStudioInspectorSelectionChanged() {
 
-  const body =
-    document.getElementById("studioAiPanelBody");
-
-  if (!body) {
-    return;
-  }
-
-  if (!studioInspectorAiChip) {
-
-    studioInspectorAiChip =
-      document.createElement("p");
-
-    studioInspectorAiChip.className =
-      "studio-inspector-ai-chip";
-
-    studioInspectorAiChip.id =
-      "studioInspectorAiChip";
-
-    body.insertBefore(studioInspectorAiChip, body.firstChild);
-
-  }
-
-  if (!info) {
-
-    studioInspectorAiChip.hidden = true;
-    studioInspectorAiChip.textContent = "";
-
-    return;
-
-  }
-
-  studioInspectorAiChip.hidden =
-    false;
-
-  studioInspectorAiChip.textContent =
-    `선택됨: ${studioInspectorLabelFor(info)}`;
+  window.dispatchEvent(
+    new CustomEvent("studio-inspector-selection")
+  );
 
 }
 
 
+/* =========================================================
+   "✦ AI 수정" (PHASE AI-6B)
+
+   ★ 이 버튼은 OpenAI를 부르지 않는다.
+   하는 일은 "선택을 유지한 채 AI Assistant를 열고 입력칸에 커서를
+   둔다"가 전부다. 실제 호출은 사용자가 문장을 쓰고 Send를 눌렀을
+   때 studio/ai/studio-ai-panel.js가 한다(요구사항 1절).
+
+   패널이 이미 열려 있으면 setStudioAiPanelOpen()은 아무 것도 하지
+   않고 포커스도 옮기지 않는다 — 그래서 포커스는 여기서 한 번 더
+   직접 준다. 두 번 눌러도 결과가 같아야 한다.
+========================================================== */
+
 function handleStudioInspectorAiRequest() {
 
-  const resolved =
-    describeStudioInspectorSelection();
-
-  if (!resolved) {
+  if (!describeStudioInspectorSelection()) {
     return;
   }
 
@@ -1163,11 +1154,16 @@ function handleStudioInspectorAiRequest() {
     window.setStudioAiPanelOpen(true);
   }
 
-  renderStudioInspectorAiChip(resolved.info);
+  if (typeof window.renderStudioAiSelectionChip === "function") {
+    window.renderStudioAiSelectionChip();
+  }
 
-  showStudioToast(
-    "선택 요소 AI 수정은 다음 단계에서 지원됩니다."
-  );
+  const input =
+    document.getElementById("studioAiDrawerInput");
+
+  if (input) {
+    input.focus();
+  }
 
 }
 
@@ -1407,7 +1403,7 @@ function clearStudioInspectorSelection() {
     studioInspectorPopover.hidden = true;
   }
 
-  renderStudioInspectorAiChip(null);
+  notifyStudioInspectorSelectionChanged();
 
   if (typeof window.postInspectorSelectionToFrame === "function") {
     window.postInspectorSelectionToFrame(null);
@@ -1679,11 +1675,20 @@ if (typeof window !== "undefined") {
   window.handleStudioInspectorMessage =
     handleStudioInspectorMessage;
 
+  /* AI 패널의 선택 chip(×)이 부른다 — 선택 해제의 경로를
+     Inspector 한 곳으로 유지하기 위해서다(요구사항 10절). */
+  window.clearStudioInspectorSelection =
+    clearStudioInspectorSelection;
+
   /* =========================================================
-     다음 Phase(Selected Element AI)가 읽을 selectionContext.
-     지금은 아무도 이 값을 서버로 보내지 않는다 — 구조만 미리
-     고정해 둔다(요구사항 14절 "다음 PHASE에서 selectionContext
-     연결이 쉽게 가능한 구조").
+     선택 요소의 지금 상태. studio/ai/studio-ai-selection.js가
+     이 값 하나로 chip 문구와 서버로 보낼 selectionContext를
+     만든다(PHASE AI-6B) — 선택 상태의 복사본을 그쪽에 두지
+     않기 위해, 필요할 때마다 여기서 다시 계산해 간다.
+
+     여기 담기는 것은 전부 **현재 SkinPackage에서 다시 계산한**
+     값이다. 스냅샷이 아니므로 Code Apply/Import/AI 적용 뒤에도
+     옛 판단이 남지 않는다(describeStudioInspectorSelection 주석).
   ========================================================== */
   window.getStudioInspectorSelection =
     function () {
@@ -1707,6 +1712,10 @@ if (typeof window !== "undefined") {
         hrefPath: resolved.info.hrefPath,
         region: resolved.info.region,
         isProtectedRegion: resolved.info.isProtectedRegion,
+        isViewerBinding: resolved.info.isViewerBinding,
+        repeatPath: resolved.info.repeatPath,
+        isInsideRepeat: resolved.info.isInsideRepeat,
+        text: resolved.info.text,
         imageSlot: resolved.info.imageSlot,
         capabilities: resolved.info.capabilities
       };
