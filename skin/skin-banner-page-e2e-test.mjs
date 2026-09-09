@@ -272,8 +272,11 @@ const DB = {
     { id: 101, user_id: OWNER_ID, category_id: 1, title: "첫 번째 글", content_type: "text", visibility: "public", created_at: "2026-09-01T02:00:00Z", quote_preset_id: null },
     { id: 102, user_id: OWNER_ID, category_id: 1, title: "비밀 글", content_type: "text", visibility: "secret", created_at: "2026-09-02T02:00:00Z", quote_preset_id: null }
   ],
+  /* ooc_content는 편집기 전용 메모 — 테이블에서는 어느 역할도 SELECT할 수
+     없고(20260909100000_lock_down_post_contents_ooc.sql) 소유자의 수정 폼만
+     rpc/get_own_post_content로 받는다. 아래 [edit] 절이 그 경로를 확인한다. */
   post_contents: [
-    { post_id: 101, content: "첫 번째 글 본문입니다." }
+    { post_id: 101, content: "첫 번째 글 본문입니다.", ooc_content: "소유자만 보는 OOC 메모" }
   ],
   banners: [
     { id: 1, user_id: OWNER_ID, category_id: 2, name: "작은 배너", url: "https://friend.example/", image_url: "https://img.example/small.png", image_path: null, sort_order: 1 },
@@ -365,6 +368,52 @@ async function installSupabaseMock(page, opts = {}) {
 
     if (url.pathname.startsWith("/rest/v1/rpc/")) {
       const fn = url.pathname.slice("/rest/v1/rpc/".length);
+
+      /* 소유자 전용 본문+OOC RPC(SECURITY DEFINER, auth.uid() 소유권 확인).
+         비소유자·비로그인에게는 0행 — .maybeSingle()이 object Accept로
+         부르므로 아래 테이블 경로와 같이 PostgREST의 406/PGRST116으로 답한다. */
+      if (fn === "get_own_post_content") {
+        const args = JSON.parse(req.postData() || "{}");
+        const post = DB.posts.find(p => String(p.id) === String(args.p_post_id));
+        const owned = post && opts.signedInAs && post.user_id === opts.signedInAs;
+        const row = owned ? DB.post_contents.find(c => String(c.post_id) === String(post.id)) : null;
+        const rows = row ? [{ content: row.content ?? null, ooc_content: row.ooc_content ?? null }] : [];
+        const single = (req.headers()["accept"] || "").includes("vnd.pgrst.object");
+        if (single && rows.length === 0) {
+          return route.fulfill({
+            status: 406, headers, contentType: "application/json",
+            body: JSON.stringify({
+              code: "PGRST116",
+              details: "Results contain 0 rows",
+              message: "JSON object requested, multiple (or no) rows returned"
+            })
+          });
+        }
+        return route.fulfill({
+          status: 200, headers,
+          contentType: single ? "application/vnd.pgrst.object+json" : "application/json",
+          body: JSON.stringify(single ? rows[0] : rows)
+        });
+      }
+
+      /* 소유자 전용 저장 RPC — post_contents 에 직접 쓰는 GRANT 가 없다.
+         소유권만 확인하고 void(null)를 돌려준다. DB fixture 는 모든 절이
+         공유하므로 여기서 고쳐 쓰지 않는다(다른 절의 기대값이 흔들린다) —
+         실제 upsert 의미는 PGlite migration 하네스가 검증한다. */
+      if (fn === "upsert_own_post_content") {
+        const args = JSON.parse(req.postData() || "{}");
+        const post = DB.posts.find(p => String(p.id) === String(args.p_post_id));
+        if (!post || !opts.signedInAs || post.user_id !== opts.signedInAs) {
+          return route.fulfill({
+            status: 403, headers, contentType: "application/json",
+            body: JSON.stringify({ code: "42501", message: `not the owner of post ${args.p_post_id}` })
+          });
+        }
+        return route.fulfill({
+          status: 200, headers, contentType: "application/json", body: "null"
+        });
+      }
+
       const body = fn === "get_published_skin"
         ? { skin, schemaVersion: skin.schemaVersion, imageSlotValues: {} }
         : null;
@@ -1485,9 +1534,34 @@ async function testOwnerPostScreen(vpName) {
     });
 
     /* 스킨 위의 edit → 옛 상세 화면 없이 곧장 수정 폼 */
+    const editRequests = [];
+    const onEditRequest = r => {
+      const u = new URL(r.url());
+      if (u.pathname.startsWith("/rest/v1/")) editRequests.push(u.pathname + u.search);
+    };
+    page.on("request", onEditRequest);
     await page.click("#postManageToggleButton");
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(500);
+    page.off("request", onEditRequest);
+
+    /* 본문 + OOC는 테이블 SELECT가 아니라 소유자 전용 RPC로 온다
+       (ooc_content 컬럼에는 어느 역할도 SELECT GRANT가 없다). */
+    const editorBody = await page.evaluate(() => ({
+      content: (document.getElementById("postEditorContent") || {}).innerText || "",
+      ooc: (document.getElementById("postEditorOOC") || {}).value || "",
+      oocHidden: (document.getElementById("postEditorOOC") || {}).hidden
+    }));
+
+    check(`[${vpName}] 수정 폼의 본문과 OOC는 rpc/get_own_post_content로 채워진다`,
+      editRequests.some(u => u.startsWith("/rest/v1/rpc/get_own_post_content")) &&
+      editorBody.content.includes("첫 번째 글 본문입니다.") &&
+      editorBody.ooc === "소유자만 보는 OOC 메모" && editorBody.oocHidden === false,
+      JSON.stringify({ editorBody, editRequests }));
+
+    check(`[${vpName}] 수정 폼 로드가 post_contents 테이블에서 ooc_content를 select하지 않는다`,
+      !editRequests.some(u => u.startsWith("/rest/v1/post_contents") && /ooc_content/.test(u)),
+      editRequests.filter(u => u.startsWith("/rest/v1/post_contents")).join(" | "));
 
     const editor = await page.evaluate(() => {
       const container = document.getElementById("postContainer");
@@ -1544,9 +1618,41 @@ async function testOwnerPostScreen(vpName) {
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(400);
     await page.fill("#postEditorTitle", "스킨에서 고친 제목");
+    await page.fill("#postEditorOOC", "고친 OOC 메모");
+
+    const saveRequests = [];
+    const savePayloads = [];
+    const onSaveRequest = r => {
+      const u = new URL(r.url());
+      if (u.pathname.startsWith("/rest/v1/")) {
+        saveRequests.push(`${r.method()} ${u.pathname}${u.search}`);
+        if (u.pathname.endsWith("/rpc/upsert_own_post_content")) {
+          savePayloads.push(r.postData() || "");
+        }
+      }
+    };
+    page.on("request", onSaveRequest);
     await page.click("#postEditorSaveButton");
     await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(700);
+    page.off("request", onSaveRequest);
+
+    /* 본문/OOC 저장도 테이블 쓰기가 아니라 소유자 전용 RPC로 간다 —
+       post_contents에는 INSERT/UPDATE 컬럼 GRANT가 없다. */
+    check(`[${vpName}] 저장은 rpc/upsert_own_post_content로 가고 post_contents에 직접 쓰지 않는다`,
+      saveRequests.some(u => u.includes("/rest/v1/rpc/upsert_own_post_content")) &&
+      !saveRequests.some(u => /^(POST|PATCH|PUT) \/rest\/v1\/post_contents/.test(u)),
+      saveRequests.join(" | "));
+
+    const savePayload = (() => {
+      try { return JSON.parse(savePayloads[0] || "{}"); } catch { return {}; }
+    })();
+
+    check(`[${vpName}] 저장 RPC가 본문과 고친 OOC를 함께 보낸다`,
+      String(savePayload.p_post_id) === "101" &&
+      (savePayload.p_content || "").includes("첫 번째 글 본문") &&
+      savePayload.p_ooc_content === "고친 OOC 메모",
+      JSON.stringify(savePayload).slice(0, 300));
 
     const saved = await page.evaluate(READ_POST_SCREEN);
 
@@ -1557,6 +1663,7 @@ async function testOwnerPostScreen(vpName) {
 
     check(`[${vpName}] 저장 후 주소도 그 글의 읽기 주소로 정리된다`,
       saved.url === `/${SLUG}/post/101`, saved.url);
+
 
     check(`[${vpName}] 소유자 POST 경로 전체에서 문서 재로드 없음`,
       ctx.reloadCount() === 0, `reloads=${ctx.reloadCount()}`);

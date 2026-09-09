@@ -137,17 +137,6 @@
 
 
   <!-- =========================================================
-       3D MODEL VIEWER
-  ========================================================== -->
-
-  <script
-    type="module"
-    src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
-  ></script>
-
-
-
-  <!-- =========================================================
        SUPABASE
   ========================================================== -->
 
@@ -200,6 +189,24 @@
     );
 
   </script>
+
+  <!-- =========================================================
+       3D MODEL VIEWER
+
+       ★ 반드시 위 import map 뒤에 둔다. 이 문서에서 처음 나오는
+       module script가 import map보다 앞에 있으면 브라우저가
+       import map을 통째로 무시한다("An import map is added after
+       module script load was triggered") — 그러면 skin-render.js /
+       skin-css-validate.js가 ?v= 없이 요청되어 CDN 캐시(4시간)를
+       그대로 맞는다(2026-09-09 imory.me 실측). model-viewer는
+       themes/sua/sua-home.html의 <model-viewer> 커스텀 요소 정의에만
+       쓰이므로 로드 순서에 기대는 코드가 없다.
+  ========================================================== -->
+
+  <script
+    type="module"
+    src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
+  ></script>
 
   <script>
 

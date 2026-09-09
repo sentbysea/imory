@@ -31,26 +31,30 @@ async function savePostContentAndSecret(
   secretPassword
 ) {
 
+  /*
+    post_contents에 직접 upsert하지 않는다 — ooc_content는 어느
+    역할에도 SELECT GRANT가 없고, PostgreSQL은 ON CONFLICT DO
+    UPDATE 식에서 읽는 컬럼(EXCLUDED 포함)에 SELECT를 요구하므로
+    직접 upsert가 permission denied가 된다. 소유권을 auth.uid()로
+    확인하는 SECURITY DEFINER RPC가 같은 upsert를 대신한다
+    (supabase/migrations/20260909100000_lock_down_post_contents_ooc.sql).
+  */
+
   const {
     error: contentError
   } =
     await supabaseClient
-      .from(
-        "post_contents"
-      )
-      .upsert(
+      .rpc(
+        "upsert_own_post_content",
         {
-          post_id:
+          p_post_id:
             postId,
 
-          content,
+          p_content:
+            content,
 
-          ooc_content:
+          p_ooc_content:
             oocContent
-        },
-        {
-          onConflict:
-            "post_id"
         }
       );
 

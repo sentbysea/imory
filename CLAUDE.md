@@ -111,7 +111,7 @@
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
 | `skin/skin-published-frame-e2e-test.mjs` | 8934 | 공개 스킨 프레임 좌표/폭 |
-| `skin/skin-banner-page-e2e-test.mjs` | 8935 | BANNER·소유자 링크·POST 수정 동선 |
+| `skin/skin-banner-page-e2e-test.mjs` | 8935 | BANNER·소유자 링크·POST 수정 동선 · 본문/OOC가 소유자 전용 RPC(`get_own_post_content` / `upsert_own_post_content`)로만 오가는지 |
 | `skin/skin-write-manage-e2e-test.mjs` | 8936 | WRITE/관리 동선·전환·배너 크기·CATEGORY EDIT·모바일 POST 읽기 모드 |
 | `studio/studio-ai-panel-e2e-test.mjs` | 8937 | Skin Studio AI — 서버 방어선(`functions/api/skin-ai.js` 직접 호출) + 전송/검증/적용/되돌리기/참고 이미지 + 시스템 프롬프트의 `category.posts`/`category.tree` 계약(K) |
 | `studio/studio-ai-panel-layout-e2e-test.mjs` | 8938 | AI 우측 사이드바 레이아웃(여닫기·폭 드래그·Preview 클릭 접기·textarea) + AI 적용 후 화면 유지 |

@@ -336,8 +336,14 @@ async function openPostEditor(
     본문(content/ooc_content)은 posts가 아니라
     post_contents에 따로 있음(비밀글의 "제목은 보이되
     본문만 숨기기"를 DB RLS로 구현하려고 분리함).
-    글 주인이라 위 소유권 검사를 이미 통과했으므로
-    바로 읽어올 수 있다.
+
+    ooc_content는 테이블에서 직접 SELECT할 수 없다 —
+    anon/authenticated 어느 역할에도 그 컬럼의 SELECT
+    GRANT가 없다(supabase/migrations/
+    20260909100000_lock_down_post_contents_ooc.sql).
+    소유자만 본문 + OOC를 받는 SECURITY DEFINER RPC로
+    읽는다. 함수가 auth.uid()로 소유권을 다시 확인하므로
+    비소유자에게는 0행(null)이 온다.
   */
 
   const {
@@ -345,18 +351,12 @@ async function openPostEditor(
     error: postContentError
   } =
     await supabaseClient
-      .from(
-        "post_contents"
-      )
-      .select(
-        `
-        content,
-        ooc_content
-        `
-      )
-      .eq(
-        "post_id",
-        post.id
+      .rpc(
+        "get_own_post_content",
+        {
+          p_post_id:
+            post.id
+        }
       )
       .maybeSingle();
 
