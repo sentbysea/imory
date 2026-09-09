@@ -112,8 +112,9 @@ function resolveInSiteSkinRoute(url) {
 
 
   /*
-    FOLDER-2: /:slug/category/:cid/folder/:fid — 폴더 페이지. 요청
-    쿼리(?write=1 등)는 이 경로에 정의되지 않았으므로 전달하지 않는다.
+    FOLDER-2: /:slug/category/:cid/folder/:fid — 폴더 페이지. 이 경로가
+    인정하는 쿼리는 ?series=1(이어읽기) 하나뿐이고 나머지(?write=1 등)는
+    정의되지 않았으므로 전달하지 않는다.
   */
 
   if (
@@ -127,7 +128,8 @@ function resolveInSiteSkinRoute(url) {
     return {
       page: "folder",
       id: Number(segments[1]),
-      folderId: Number(segments[3])
+      folderId: Number(segments[3]),
+      series: isSiteSeriesRequested(url.search)
     };
 
   }
@@ -342,7 +344,10 @@ document.addEventListener(
 
         await openFolderPage(
           route.id,
-          route.folderId
+          route.folderId,
+          {
+            series: route.series
+          }
         );
 
         return;

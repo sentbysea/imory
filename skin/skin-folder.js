@@ -20,6 +20,10 @@
    렌더 뒤 instance.getRegions("post-body")로 글별 region을 받아
    직접 채운다(POST의 protected post-body contract와 같은 분리).
 
+   읽기 모드(series)는 그대로 Context에 실어 보낸다 — 기본(목록)에서는
+   호출자가 본문을 아예 채우지 않고, 스킨이 folder.isList/isSeries로
+   두 화면을 나눈다. 템플릿 유효성 검사는 모드와 무관하다(아래).
+
    의존(classic script, 먼저 로드): supabaseClient, buildFolderSkinContext,
    extractImageSlotNames, resolveSkinTemplate.
 ========================================================== */
@@ -41,7 +45,7 @@ const SKIN_FOLDER_BODY_REGION_NAME = "post-body";
    false: 그릴 수 없다(정상 "없음" 포함) — 호출자는 카테고리로 복귀.
 ========================================================== */
 
-export async function renderPublishedSkinFolder({ ownerId, categoryId, folderId, container }) {
+export async function renderPublishedSkinFolder({ ownerId, categoryId, folderId, container, series = false }) {
 
   if (
     !ownerId ||
@@ -106,7 +110,8 @@ export async function renderPublishedSkinFolder({ ownerId, categoryId, folderId,
 
     context = await buildFolderSkinContext(ownerId, categoryId, folderId, {
       imageSlotNames,
-      imageSlotValues
+      imageSlotValues,
+      series
     });
 
   } catch (err) {
@@ -141,8 +146,11 @@ export async function renderPublishedSkinFolder({ ownerId, categoryId, folderId,
 
   }
 
-  /* 본문 자리가 하나도 없는 FOLDER 템플릿은 무효다 — 제목만 나열되는
-     반쪽짜리 화면을 공개하지 않는다(POST의 20-3절과 같은 원칙).
+  /* 본문 자리가 하나도 없는 FOLDER 템플릿은 무효다 — 이어읽기가
+     불가능한 반쪽짜리 폴더 페이지를 공개하지 않는다(POST의 20-3절과
+     같은 원칙). 목록 모드에서도 같이 검사한다 — data-imory-if는
+     엘리먼트를 지우지 않고 hidden만 켜므로 region은 두 모드 모두에
+     존재한다(skin/skin-render.js applySkinIf).
      repeat 안의 region만 센다(key가 있는 것) — repeat 밖의 단일
      region은 어느 글의 자리인지 알 수 없어 채울 수 없다. */
   const keyedRegions =

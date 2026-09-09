@@ -101,7 +101,12 @@ function getCurrentPreviewLocation() {
   }
 
   if (top.type === "folder") {
-    return { type: "folder", categoryId: top.categoryId, folderId: top.folderId };
+    return {
+      type: "folder",
+      categoryId: top.categoryId,
+      folderId: top.folderId,
+      series: Boolean(top.series)
+    };
   }
 
   return { type: "home" };
@@ -802,7 +807,11 @@ async function renderPostPreviewFor(postId, options) {
    보이는 direct 글이 없으면 "empty"다.
 ========================================================== */
 
-async function renderFolderPreviewFor(categoryId, folderId, options) {
+async function renderFolderPreviewFor(categoryId, folderId, series, options) {
+
+  const seriesMode =
+    Boolean(series);
+
 
   currentPreviewPageType =
     "folder";
@@ -847,7 +856,8 @@ async function renderFolderPreviewFor(categoryId, folderId, options) {
       return (
         token === previewNavToken &&
         location.type === "folder" &&
-        location.folderId === folderId
+        location.folderId === folderId &&
+        Boolean(location.series) === seriesMode
       );
 
     };
@@ -863,7 +873,8 @@ async function renderFolderPreviewFor(categoryId, folderId, options) {
         folderId,
         {
           imageSlotNames: currentImageSlotNames,
-          imageSlotValues: currentImageSlotValues
+          imageSlotValues: currentImageSlotValues,
+          series: seriesMode
         }
       );
 
@@ -915,10 +926,19 @@ async function renderFolderPreviewFor(categoryId, folderId, options) {
   );
 
   /*
-    본문 — POST Preview(renderPostPreviewFor)와 같은 별도 채널. 글별
-    payload를 한 메시지에 담아 보내고, iframe이 region 키(item.id)로
-    짝지어 채운다(preview-bridge.js). 그 사이 사용자가 이동했으면
-    버린다.
+    본문 — 이어읽기 모드에서만이다. 목록 모드는 공개 화면과 똑같이
+    본문을 조회하지도 보내지도 않는다(posts/view/posts-view-folder.js).
+  */
+
+  if (!seriesMode) {
+    return;
+  }
+
+
+  /*
+    POST Preview(renderPostPreviewFor)와 같은 별도 채널. 글별 payload를
+    한 메시지에 담아 보내고, iframe이 region 키(item.id)로 짝지어
+    채운다(preview-bridge.js). 그 사이 사용자가 이동했으면 버린다.
   */
 
   let bodies;
@@ -992,7 +1012,7 @@ function renderCurrentPreviewEntry(options) {
   }
 
   if (entry.type === "folder") {
-    renderFolderPreviewFor(entry.categoryId, entry.folderId, options);
+    renderFolderPreviewFor(entry.categoryId, entry.folderId, entry.series, options);
     return;
   }
 
@@ -1121,7 +1141,8 @@ function handlePreviewNavigateMessage(href) {
       (
         target.type === "folder" &&
         current.categoryId === target.categoryId &&
-        current.folderId === target.folderId
+        current.folderId === target.folderId &&
+        Boolean(current.series) === Boolean(target.series)
       )
     );
 

@@ -109,7 +109,8 @@ async function handlePostRoute() {
 
 
   /*
-    FOLDER-2: /category/:cid/folder/:fid — 폴더 페이지(Series Viewer).
+    FOLDER-2: /category/:cid/folder/:fid — 폴더 페이지. ?series=1이면
+    이어읽기(Series Viewer), 없으면 목록이다(읽기 모드 요청).
     category 패턴보다 먼저 본다(그 패턴은 끝 앵커가 있어 겹치지
     않지만 읽는 순서를 계층대로 둔다). 스킨에 templates.folder가
     없거나 폴더가 없으면 openFolderPage()가 그 카테고리로 돌려보내고
@@ -133,7 +134,12 @@ async function handlePostRoute() {
       ),
       {
         updateUrl:
-          false
+          false,
+
+        series:
+          isSiteSeriesRequested(
+            window.location.search
+          )
       }
     );
 

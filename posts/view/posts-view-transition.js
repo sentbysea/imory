@@ -789,6 +789,13 @@ function rememberPlatformScreenReturn() {
         ? currentPostFolderId
         : null,
 
+    /* 폴더 페이지의 읽기 모드(목록 / 이어읽기)도 같이 기억한다. */
+
+    series:
+      isSiteSeriesRequested(
+        window.location.search
+      ),
+
     scrollTop:
       postArea
         ? postArea.scrollTop
@@ -908,7 +915,17 @@ async function returnToPlatformScreenOrigin(
       origin.folderId,
       {
         updateUrl:
-          false
+          false,
+
+        /*
+          글에서 돌아오는 곳은 그 글을 고른 화면이다 — 떠날 때
+          이어읽기였으면 이어읽기로, 목록이었으면 목록으로.
+        */
+
+        series:
+          Boolean(
+            origin.series
+          )
       }
     );
 

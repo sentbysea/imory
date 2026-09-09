@@ -1,10 +1,18 @@
 /* =========================================================
    POSTS VIEW - FOLDER PAGE (FOLDER-2 — Folder Route + Series Viewer)
 
-   /:slug/category/:cid/folder/:fid 를 여는 유일한 지점. 폴더 하나의
-   **direct 글**(하위 폴더 제외)을 관리 화면에서 정한 순서(sort_order)
-   그대로, 각 글의 본문이 위에서 아래로 이어지는 읽기 흐름으로
-   보여준다. 기준 문서: IMORY_FOLDER2_DESIGN.md.
+   /:slug/category/:cid/folder/:fid 를 여는 유일한 지점. 기준 문서:
+   IMORY_FOLDER2_DESIGN.md.
+
+   화면은 두 모드다 — 주소의 ?series=1 하나로 갈린다.
+   - 목록(기본): 하위 폴더와 direct 글의 제목/날짜만. **본문은 조회도
+     렌더도 하지 않는다.** 글을 누르면 평소의 개별 POST 페이지로 간다.
+   - 이어읽기(?series=1, Series Viewer): 폴더 하나의 direct 글(하위 폴더
+     제외)을 관리 화면에서 정한 순서(sort_order) 그대로, 각 글의 본문이
+     위에서 아래로 이어지는 읽기 흐름. 글마다의 제목/헤더는 스킨이
+     반복하지 않는다.
+   두 모드 모두 같은 templates.folder / 같은 Context로 그려지고, 서로를
+   오가는 링크는 Context의 folder.seriesHref / folder.listHref다.
 
    openCategoryPage()(posts-view-list.js)와 같은 뼈대를 쓴다:
    요청 순번으로 늦은 응답을 버리고, 이전 화면을 유지한 채 detached
@@ -17,7 +25,7 @@
    보이는 direct 글이 하나도 없으면 **그 카테고리 화면으로 복귀**한다
    — 폴더 전용 legacy/폴백 화면은 만들지 않는다(사용자 결정 3·4·5).
 
-   본문 채우기(Series Viewer):
+   본문 채우기(Series Viewer — series 모드에서만):
    - Skin Context에는 본문이 없다(buildFolderSkinContext). 렌더가 끝난
      뒤 instance.getRegions("post-body")로 글별 region을 받아 여기서
      채운다 — POST의 protected post-body contract와 같은 분리다.
@@ -71,7 +79,8 @@ async function tryRenderPublishedSkinFolder(
   ownerId,
   categoryId,
   folderId,
-  container
+  container,
+  series
 ) {
 
   let renderPublishedSkinFolder;
@@ -99,7 +108,8 @@ async function tryRenderPublishedSkinFolder(
       ownerId,
       categoryId,
       folderId,
-      container
+      container,
+      series
     });
 
   } catch (err) {
@@ -174,8 +184,18 @@ async function openFolderPage(
 ) {
 
   const {
-    updateUrl = true
+    updateUrl = true,
+    series = false
   } = options;
+
+
+  /*
+    읽기 모드. 목록이 기본이고 이어읽기는 명시적 선택일 때만이다 —
+    폴더에 들어서자마자 모든 글의 본문을 받아 그리지 않는다.
+  */
+
+  const seriesMode =
+    Boolean(series);
 
 
   if (
@@ -363,7 +383,8 @@ async function openFolderPage(
       owner.ownerId,
       numericCategoryId,
       numericFolderId,
-      skinRenderTarget
+      skinRenderTarget,
+      seriesMode
     );
 
 
@@ -522,52 +543,56 @@ async function openFolderPage(
   );
 
 
+  /*
+    폴더 주소가 인정하는 쿼리는 ?series=1 하나뿐이다(읽기 모드). 그
+    외(?manage=1 / ?write=1 / ?edit=1)는 이 경로에 정의된 적이 없으므로
+    주소에서 지운다 — 화면과 주소의 불일치를 남기지 않는다(PHASE 1H).
+  */
+
+  const folderRoutePath =
+    buildPostRoute(
+      `/category/${numericCategoryId}/folder/${numericFolderId}`
+    );
+
+  const folderRouteUrl =
+    seriesMode
+      ? buildSiteSeriesUrl(folderRoutePath)
+      : folderRoutePath;
+
+  const folderHistoryState = {
+    page:
+      "folder",
+
+    categoryId:
+      numericCategoryId,
+
+    folderId:
+      numericFolderId,
+
+    series:
+      seriesMode
+  };
+
+
   if (updateUrl) {
 
     history.pushState(
-      {
-        page:
-          "folder",
-
-        categoryId:
-          numericCategoryId,
-
-        folderId:
-          numericFolderId
-      },
+      folderHistoryState,
       "",
-      buildPostRoute(
-        `/category/${numericCategoryId}/folder/${numericFolderId}`
-      )
+      folderRouteUrl
     );
 
   }
 
   else if (
-    window.location.search
+    window.location.search !==
+      (seriesMode ? `?${SITE_SERIES_QUERY_PARAM}=1` : "")
   ) {
 
-    /*
-      폴더 주소에는 요청 쿼리(?manage=1 / ?write=1 / ?edit=1)가 정의되지
-      않았다 — 붙어 들어왔으면 주소에서 지운다(PHASE 1H와 같은 이유:
-      화면과 주소의 불일치를 남기지 않는다).
-    */
-
     history.replaceState(
-      {
-        page:
-          "folder",
-
-        categoryId:
-          numericCategoryId,
-
-        folderId:
-          numericFolderId
-      },
+      folderHistoryState,
       "",
-      buildPostRoute(
-        `/category/${numericCategoryId}/folder/${numericFolderId}`
-      )
+      folderRouteUrl
     );
 
   }
@@ -596,6 +621,19 @@ async function openFolderPage(
 
     postArea.scrollTop =
       0;
+
+  }
+
+
+  /*
+    ★ 목록 모드에서는 여기서 끝이다 — post_contents도 posts 메타도
+    조회하지 않는다. 스킨이 본문 region을 갖고 있어도(hidden) 비운
+    채로 둔다.
+  */
+
+  if (!seriesMode) {
+
+    return;
 
   }
 

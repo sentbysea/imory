@@ -1520,7 +1520,9 @@ async function buildCategorySkinContext(
      category: { id, name, type, href }            — 상위 카테고리
      folder: {
        id, name, depth,
-       href,                                        — 이 폴더 페이지 자신
+       href,                                        — 이 폴더 페이지 자신(목록)
+       isSeries, isList,                            — 읽기 모드(?series=1 여부)
+       listHref, seriesHref,                        — 목록 ↔ 이어읽기 전환 링크
        parentHref,                                    — 가장 가까운 열 수 있는 상위(부모 폴더 페이지 또는 카테고리)
        ancestors: [ { kind:"folder", id, name, depth, folderHref, postCount } ],  — 카테고리 바로 아래부터 부모까지
        children:  [ { kind:"folder", id, name, depth, folderHref, postCount } ],  — 직속 하위 폴더(보이는 글이 있는 것만)
@@ -1676,6 +1678,20 @@ async function buildFolderSkinContext(
     base.viewer.isOwner;
 
 
+  /*
+    읽기 모드(FOLDER-2 UX 개정). 기본은 목록이고, Series Viewer는
+    ?series=1로 들어왔을 때만이다 — 스킨은 folder.isSeries / folder.isList
+    로 두 화면을 나누고(data-imory-if), 두 링크로 서로를 오간다.
+    권한이 아니라 읽기 모드라 소유자/방문자 모두 같다.
+  */
+
+  const folderHref =
+    buildSkinFolderHref(commonData.slug, category.id, folderNode.id);
+
+  const isSeries =
+    Boolean(options.series);
+
+
   return {
 
     ...base,
@@ -1714,7 +1730,11 @@ async function buildFolderSkinContext(
       id: folderNode.id,
       name: folderNode.name,
       depth: folderNode.depth,
-      href: buildSkinFolderHref(commonData.slug, category.id, folderNode.id),
+      href: folderHref,
+      isSeries,
+      isList: !isSeries,
+      listHref: folderHref,
+      seriesHref: buildSiteSeriesUrl(folderHref),
       parentHref:
         openableAncestor
           ? openableAncestor.folderHref

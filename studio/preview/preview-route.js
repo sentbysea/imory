@@ -108,9 +108,10 @@ function resolveStudioPreviewTarget(href, currentSlug) {
   }
 
   /*
-    FOLDER-2: /:slug/category/:cid/folder/:fid — 폴더 페이지(Series
-    Viewer). 공개 라우터(posts-router-init.js)·skin-link-nav.js와 같은
-    패턴이다. 두 id 모두 숫자 문자열만 허용한다.
+    FOLDER-2: /:slug/category/:cid/folder/:fid — 폴더 페이지. 공개
+    라우터(posts-router-init.js)·skin-link-nav.js와 같은 패턴이다. 두 id
+    모두 숫자 문자열만 허용한다. 이 경로가 인정하는 쿼리는 ?series=1
+    (이어읽기 모드) 하나뿐이고, 나머지는 무시한다.
   */
   if (
     rest.length === 4 &&
@@ -119,7 +120,12 @@ function resolveStudioPreviewTarget(href, currentSlug) {
     rest[2] === "folder" &&
     /^\d+$/.test(rest[3])
   ) {
-    return { type: "folder", categoryId: rest[1], folderId: rest[3] };
+    return {
+      type: "folder",
+      categoryId: rest[1],
+      folderId: rest[3],
+      series: isSiteSeriesRequested(parsed.search)
+    };
   }
 
   return null;

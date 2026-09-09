@@ -213,6 +213,47 @@ function isSiteEditRequested(
 }
 
 
+/* =========================================================
+   이어읽기 진입 계약 (FOLDER-2 Series Viewer)
+
+   폴더 페이지의 기본 화면은 **목록**이다 — 하위 폴더와 direct 글의
+   제목/날짜만 보여주고 본문은 불러오지도 않는다. 글 본문을 위에서
+   아래로 이어 붙인 Series Viewer는 독자가 명시적으로 고를 때만
+   열린다. 그 요청을 나르는 쿼리 하나(?series=1)를 둔다 — 경로는
+   /:slug/category/:cid/folder/:fid 그대로다.
+
+   ?manage=1 / ?write=1 / ?edit=1과 달리 이건 권한 요청이 아니라
+   **읽기 모드 선택**이라 소유자/방문자 모두에게 같이 동작한다.
+   주소에 남으므로 새로고침·공유·뒤로가기가 모드까지 일치한다.
+========================================================== */
+
+const SITE_SERIES_QUERY_PARAM =
+  "series";
+
+
+function buildSiteSeriesUrl(
+  path
+) {
+
+  return (
+    path + "?" + SITE_SERIES_QUERY_PARAM + "=1"
+  );
+
+}
+
+
+function isSiteSeriesRequested(
+  search
+) {
+
+  return siteQueryFlagIsSet(
+    search,
+    SITE_SERIES_QUERY_PARAM
+  );
+
+}
+
+
 /*
   위 세 계약이 공유하는 파싱 — 잘못된 search 문자열이 와도
   예외 대신 false로 떨어뜨린다(기존 isSiteManageRequested의
