@@ -108,6 +108,53 @@ let studioInspectorUndoButton = null;
 let studioInspectorDirectButton = null;
 
 
+/* =========================================================
+   Select mode 직접 편집 라운드 — 임시 상태
+
+   여기 있는 값은 전부 "아직 확정되지 않은 것"이다. SkinPackage에도
+   dirty에도 반영되지 않고, 선택이 바뀌거나 취소하면 흔적 없이
+   사라진다(clearStudioInspectorTransient). 확정된 편집은 지금까지와
+   똑같이 applyStudioInspectorPatch() 하나만 지난다.
+
+     studioInspectorTextDraft   textarea에 입력 중인 문자열
+     studioInspectorComposing   한글 조합 중인가(조합 중에는 미리보기
+                                를 보내지 않는다 — 조합 문자열이
+                                iframe 쪽 textContent와 엇갈린다)
+     studioInspectorMetrics     iframe이 잰 선택 요소의 실제 크기
+     studioInspectorDrag        모서리 핸들 드래그 중인 정보
+     studioInspectorResizable   지금 선택이 크기 조절 가능한 이미지인가
+                                (rects 메시지마다 template을 다시
+                                파싱하지 않으려고 캐시한다)
+========================================================== */
+
+let studioInspectorTextDraft = null;
+
+let studioInspectorComposing = false;
+
+let studioInspectorMetrics = null;
+
+let studioInspectorPreviewActive = false;
+
+let studioInspectorDrag = null;
+
+let studioInspectorResizable = false;
+
+let studioInspectorSizeRange = null;
+
+let studioInspectorSizeNumber = null;
+
+let studioInspectorHandles = [];
+
+
+/* 크기 조절 하한/상한. 상한은 항상 "부모 안쪽 폭"으로 한 번 더
+   눌린다(studioInspectorSizeMax) — 모바일 가로 넘침 방지. */
+const STUDIO_INSPECTOR_SIZE_MIN = 16;
+
+const STUDIO_INSPECTOR_SIZE_MAX = 2000;
+
+const STUDIO_INSPECTOR_HANDLE_CORNERS = ["nw", "ne", "sw", "se"];
+
+
 const STUDIO_INSPECTOR_PAGE_LABELS = {
   home: "HOME",
   category: "CATEGORY",
@@ -284,6 +331,49 @@ function buildStudioInspectorLayer() {
 
   studioInspectorLayer.appendChild(studioInspectorHoverBox);
   studioInspectorLayer.appendChild(studioInspectorSelectBox);
+
+  /* 모서리 핸들 — 선택 테두리의 자식이 아니라 레이어의 형제로 둔다.
+     테두리 박스는 Preview 영역과의 교집합으로 잘려 있어서(즉
+     스크롤로 반쯤 나간 요소에서는 실제 모서리와 다른 자리다),
+     핸들은 잘리지 않은 좌표로 따로 찍어야 한다. */
+  studioInspectorHandles =
+    STUDIO_INSPECTOR_HANDLE_CORNERS.map((corner) => {
+
+      const handle =
+        document.createElement("div");
+
+      handle.className =
+        `studio-inspector-handle studio-inspector-handle--${corner}`;
+
+      handle.id =
+        `studioInspectorHandle-${corner}`;
+
+      handle.dataset.inspectorHandle =
+        corner;
+
+      handle.hidden =
+        true;
+
+      handle.addEventListener(
+        "pointerdown",
+        (event) => beginStudioInspectorHandleDrag(event, corner, handle)
+      );
+
+      /* move/up은 document에서 받는다(아래 리스너) — 포인터 캡처가
+         걸리면 이벤트는 이 핸들을 거쳐 document까지 올라오고,
+         캡처가 안 되는 환경에서도 document에는 도달하기 때문이다.
+         한 곳에서만 받으면 두 경우를 따로 처리할 필요가 없다. */
+      handle.addEventListener("lostpointercapture", cancelStudioInspectorHandleDrag);
+
+      /* 브라우저 기본 드래그(핸들 자체를 끌고 가는 동작)를 막는다. */
+      handle.addEventListener("dragstart", (event) => event.preventDefault());
+
+      studioInspectorLayer.appendChild(handle);
+
+      return handle;
+
+    });
+
   studioInspectorLayer.appendChild(studioInspectorPopover);
 
   studioInspectorShell.appendChild(studioInspectorLayer);
@@ -421,6 +511,95 @@ function paintStudioInspectorBox(element, rect) {
   element.style.height = `${mapped.height}px`;
 
   element.hidden = false;
+
+}
+
+
+/* =========================================================
+   잘리지 않은 좌표 — 모서리 핸들과 드래그 기준점 계산용
+
+   studioInspectorMapRect()는 Preview 영역과의 교집합만 돌려준다
+   (테두리가 Top Dock 위로 삐져나가지 않게). 하지만 "반대쪽 모서리를
+   기준으로 크기를 바꾼다"는 계산은 잘리기 전 좌표라야 맞다 —
+   잘린 좌표를 쓰면 스크롤로 요소가 반쯤 나가 있을 때 기준점이
+   화면 경계로 끌려와 드래그가 튄다.
+
+   Desktop/Mobile 전환(scale)·AI 패널 여닫기·창 크기 변경은 전부
+   getBoundingClientRect() 결과에 이미 반영돼 있으므로, 이 함수는
+   부를 때마다 그 순간의 배율과 원점을 그대로 쓴다.
+========================================================== */
+
+function studioInspectorMapRectRaw(rect) {
+
+  if (!rect || !studioInspectorFrame) {
+    return null;
+  }
+
+  const geometry =
+    studioInspectorFrameGeometry();
+
+  const left =
+    geometry.box.left + (geometry.borderLeft + rect.left) * geometry.scale;
+
+  const top =
+    geometry.box.top + (geometry.borderTop + rect.top) * geometry.scale;
+
+  return {
+    left,
+    top,
+    right: left + rect.width * geometry.scale,
+    bottom: top + rect.height * geometry.scale,
+    scale: geometry.scale,
+    frame: geometry.box
+  };
+
+}
+
+
+/* 핸들은 "지금 선택이 크기 조절 가능한 이미지"일 때만, 그리고 그
+   모서리가 실제로 Preview 안에 보일 때만 그린다. */
+function paintStudioInspectorHandles(rect) {
+
+  if (!studioInspectorHandles.length) {
+    return;
+  }
+
+  const mapped =
+    studioInspectorResizable ? studioInspectorMapRectRaw(rect) : null;
+
+  studioInspectorHandles.forEach((handle) => {
+
+    if (!mapped) {
+      handle.hidden = true;
+      return;
+    }
+
+    const corner =
+      handle.dataset.inspectorHandle;
+
+    const x =
+      corner.indexOf("w") === -1 ? mapped.right : mapped.left;
+
+    const y =
+      corner.indexOf("n") === -1 ? mapped.bottom : mapped.top;
+
+    const inside =
+      x >= mapped.frame.left - 1 &&
+      x <= mapped.frame.right + 1 &&
+      y >= mapped.frame.top - 1 &&
+      y <= mapped.frame.bottom + 1;
+
+    if (!inside) {
+      handle.hidden = true;
+      return;
+    }
+
+    handle.style.left = `${x}px`;
+    handle.style.top = `${y}px`;
+
+    handle.hidden = false;
+
+  });
 
 }
 
@@ -624,8 +803,18 @@ function buildStudioInspectorControls(info) {
 
   const controls = [];
 
+  /* 텍스트 내용은 언제나 맨 위다 — 사용자가 가장 자주 하는 일이
+     스타일 옵션 밑에 묻히지 않게. 고칠 수 없는 경우에도 자리는
+     그대로 두고 "왜 없는지"를 그 자리에서 말해 준다(빈칸으로 두면
+     고장으로 읽힌다). */
   if (can.text) {
-    controls.push({ control: "text", type: "text", label: "내용" });
+    controls.push({ control: "text", type: "textBlock", label: "텍스트 내용" });
+  } else if (
+    info.bindPath &&
+    (info.kind === "text" || info.kind === "link") &&
+    !info.isProtectedRegion
+  ) {
+    controls.push({ control: "textBinding", type: "bindNote", label: "텍스트 내용" });
   }
 
   if (can.href) {
@@ -637,7 +826,7 @@ function buildStudioInspectorControls(info) {
   }
 
   if (can.size) {
-    controls.push({ control: "size", type: "number", label: "가로 크기", unit: "px" });
+    controls.push({ control: "size", type: "imageSize", label: "너비", unit: "px" });
   }
 
   if (can.shape && info.kind === "image") {
@@ -710,6 +899,38 @@ function buildStudioInspectorControls(info) {
    보호/바인딩 때문에 옵션이 빠진 자리를 빈칸으로 두지 않는다 —
    사용자는 그걸 고장으로 읽는다.
 ========================================================== */
+
+/* =========================================================
+   데이터 연결 텍스트 — "왜 입력칸이 없는가"를 한 줄로
+
+   bind가 걸린 텍스트는 렌더 때마다 그 값으로 덮어써지므로 스킨
+   문구로 고칠 수 없다. 그 사실만 말하면 사용자는 "고장인가?"로
+   읽는다 — **어디서 고치는 값인지**까지 말한다.
+========================================================== */
+
+const STUDIO_INSPECTOR_BIND_NOTES = {
+  "profile.nickname": "Settings에서 관리하는 닉네임입니다.",
+  "profile.bio": "Settings에서 관리하는 소개글입니다.",
+  "profile.avatarUrl": "Settings에서 관리하는 프로필 사진입니다.",
+  "site.title": "Settings에서 관리하는 사이트 제목입니다.",
+  "post.title": "글 제목이라 글 편집 화면에서 바뀝니다.",
+  "post.createdAt": "글을 쓴 날짜라 글에서 옵니다.",
+  "category.name": "카테고리 이름이라 카테고리 관리에서 바뀝니다.",
+  "folder.name": "폴더 이름이라 카테고리 관리에서 바뀝니다.",
+  "item.title": "목록에 들어오는 글 제목이라 글에서 옵니다.",
+  "item.name": "목록 항목 이름이라 그 항목의 데이터에서 옵니다."
+};
+
+
+function studioInspectorBindNote(bindPath) {
+
+  return (
+    STUDIO_INSPECTOR_BIND_NOTES[bindPath] ||
+    `${bindPath} 값으로 자동으로 채워지는 자리입니다.`
+  );
+
+}
+
 
 function studioInspectorNoteFor(info) {
 
@@ -791,10 +1012,395 @@ function appendStudioInspectorRow(label, controlNode, clearHandler) {
 }
 
 
+/* =========================================================
+   텍스트 내용 블록 (Select mode 직접 편집 라운드)
+
+   한 줄 input이 아니라 textarea다 — 스킨 문구는 두 줄짜리 인사말
+   처럼 줄을 나누고 싶은 경우가 흔하다. 그리고 **입력 중에는 아무
+   것도 확정하지 않는다**:
+
+     입력 → Preview에만 임시 반영(postInspectorPreviewToFrame)
+     적용 → 한 번의 편집으로 확정(= Undo 한 번으로 복원)
+     취소 → 임시 반영을 걷어내고 원래 문구로 되돌린다
+
+   이렇게 나눈 이유가 IME다. 예전처럼 글자마다 SkinPackage를 고치면
+   그때마다 스킨 전체가 다시 그려지고, 그 사이에 있는 textarea는
+   새로 만들어진다 — 한글 조합 중이면 조합이 끊기고 커서가 튄다.
+   조합 중(compositionstart~end)에는 미리보기조차 보내지 않는다.
+========================================================== */
+
+function renderStudioInspectorTextBlock(spec, info) {
+
+  const block =
+    document.createElement("div");
+
+  block.className =
+    "studio-inspector-block";
+
+  const caption =
+    document.createElement("p");
+
+  caption.className =
+    "studio-inspector-block-label";
+
+  caption.textContent =
+    spec.label;
+
+  const input =
+    document.createElement("textarea");
+
+  input.className =
+    "studio-inspector-textarea";
+
+  input.id =
+    "studioInspectorTextInput";
+
+  input.rows =
+    3;
+
+  input.dataset.inspectorControl =
+    "text";
+
+  /* 폼이 다시 그려져도(다른 컨트롤을 만졌다든가) 입력 중이던 값은
+     잃지 않는다. */
+  input.value =
+    studioInspectorTextDraft === null
+      ? (info.text || "")
+      : studioInspectorTextDraft;
+
+  input.addEventListener("compositionstart", () => {
+    studioInspectorComposing = true;
+  });
+
+  input.addEventListener("compositionend", () => {
+    studioInspectorComposing = false;
+    studioInspectorTextDraft = input.value;
+    sendStudioInspectorTextPreview();
+  });
+
+  input.addEventListener("input", () => {
+
+    studioInspectorTextDraft =
+      input.value;
+
+    if (studioInspectorComposing) {
+      return;
+    }
+
+    sendStudioInspectorTextPreview();
+
+  });
+
+  const actions =
+    document.createElement("div");
+
+  actions.className =
+    "studio-inspector-block-actions";
+
+  const apply =
+    document.createElement("button");
+
+  apply.type = "button";
+  apply.className = "studio-inspector-block-button studio-inspector-block-button--primary";
+  apply.id = "studioInspectorTextApply";
+  apply.textContent = "적용";
+
+  apply.addEventListener("click", commitStudioInspectorTextDraft);
+
+  const cancel =
+    document.createElement("button");
+
+  cancel.type = "button";
+  cancel.className = "studio-inspector-block-button";
+  cancel.id = "studioInspectorTextCancel";
+  cancel.textContent = "취소";
+
+  cancel.addEventListener("click", cancelStudioInspectorTextDraft);
+
+  actions.appendChild(apply);
+  actions.appendChild(cancel);
+
+  block.appendChild(caption);
+  block.appendChild(input);
+  block.appendChild(actions);
+
+  studioInspectorFields.appendChild(block);
+
+  /* 입력하던 중에 다른 컨트롤을 만져 폼이 다시 그려졌다면(그때
+     스킨이 재렌더되면서 임시 반영이 사라진다) 미리보기를 다시
+     보낸다 — 입력칸과 화면이 서로 다른 문구를 보이지 않게. */
+  if (studioInspectorTextDraft !== null) {
+    sendStudioInspectorTextPreview();
+  }
+
+}
+
+
+function renderStudioInspectorBindNote(spec, info) {
+
+  const block =
+    document.createElement("div");
+
+  block.className =
+    "studio-inspector-block";
+
+  const caption =
+    document.createElement("p");
+
+  caption.className =
+    "studio-inspector-block-label";
+
+  caption.textContent =
+    spec.label;
+
+  const note =
+    document.createElement("p");
+
+  note.className =
+    "studio-inspector-block-note";
+
+  note.id =
+    "studioInspectorBindNote";
+
+  note.dataset.inspectorControl =
+    "textBinding";
+
+  note.textContent =
+    studioInspectorBindNote(info.bindPath);
+
+  block.appendChild(caption);
+  block.appendChild(note);
+
+  studioInspectorFields.appendChild(block);
+
+}
+
+
+/* =========================================================
+   이미지 너비 블록 — 슬라이더 + px 입력 + 기본으로 되돌리기
+
+   초기값은 "지금 화면에 실제로 보이는 폭"이다(iframe이 잰 metrics).
+   이미 이 요소에 크기 규칙을 써 둔 적이 있으면 그 값이 곧 보이는
+   폭이므로 둘은 자연히 같다.
+
+   상한은 부모 안쪽 폭이다 — 그보다 크게 만들 수 있게 두면 모바일
+   Preview에서 곧바로 가로 넘침이 생긴다. (그래도 넘치지 않도록
+   확정 규칙에는 max-width: 100%가 늘 함께 들어간다 —
+   studio-inspector-model.js size 참고.)
+========================================================== */
+
+function studioInspectorSizeRatio(declarations) {
+
+  const declared =
+    Number(window.readInspectorControlValue("sizeRatio", declarations));
+
+  if (Number.isFinite(declared) && declared > 0) {
+    return declared;
+  }
+
+  const metrics =
+    studioInspectorMetrics;
+
+  if (metrics && metrics.width > 0 && metrics.height > 0) {
+    return metrics.width / metrics.height;
+  }
+
+  if (metrics && metrics.naturalWidth > 0 && metrics.naturalHeight > 0) {
+    return metrics.naturalWidth / metrics.naturalHeight;
+  }
+
+  return null;
+
+}
+
+
+function studioInspectorSizeBaseline(declarations) {
+
+  const declared =
+    Number(window.readInspectorControlValue("size", declarations));
+
+  if (Number.isFinite(declared) && declared > 0) {
+    return Math.round(declared);
+  }
+
+  const metrics =
+    studioInspectorMetrics;
+
+  return metrics && metrics.width > 0 ? Math.round(metrics.width) : null;
+
+}
+
+
+function studioInspectorSizeMax(currentWidth) {
+
+  const metrics =
+    studioInspectorMetrics;
+
+  const parentWidth =
+    metrics && metrics.parentWidth > 0 ? metrics.parentWidth : 0;
+
+  const limit =
+    Math.min(
+      STUDIO_INSPECTOR_SIZE_MAX,
+      parentWidth || STUDIO_INSPECTOR_SIZE_MAX
+    );
+
+  /* 이미 그보다 큰 값이 들어 있으면(스킨이 원래 그렇게 만들었다면)
+     슬라이더가 그 값을 표현조차 못 하는 일이 없게 한다. */
+  return Math.max(limit, currentWidth || 0, STUDIO_INSPECTOR_SIZE_MIN + 1);
+
+}
+
+
+function renderStudioInspectorSizeBlock(spec, info, declarations) {
+
+  const baseline =
+    studioInspectorSizeBaseline(declarations);
+
+  const value =
+    baseline || STUDIO_INSPECTOR_SIZE_MIN;
+
+  const max =
+    studioInspectorSizeMax(value);
+
+  const block =
+    document.createElement("div");
+
+  block.className =
+    "studio-inspector-block";
+
+  const head =
+    document.createElement("div");
+
+  head.className =
+    "studio-inspector-block-head";
+
+  const caption =
+    document.createElement("p");
+
+  caption.className =
+    "studio-inspector-block-label";
+
+  caption.textContent =
+    `${spec.label} (${spec.unit})`;
+
+  const reset =
+    document.createElement("button");
+
+  reset.type = "button";
+  reset.className = "studio-inspector-clear";
+  reset.id = "studioInspectorSizeReset";
+  reset.textContent = "기본";
+
+  reset.addEventListener("click", () => {
+
+    clearStudioInspectorPreview();
+
+    commitStudioInspectorStyle("size", "");
+
+  });
+
+  head.appendChild(caption);
+  head.appendChild(reset);
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "studio-inspector-size-row";
+
+  const range =
+    document.createElement("input");
+
+  range.type = "range";
+  range.className = "studio-inspector-range";
+  range.id = "studioInspectorSizeRange";
+  range.dataset.inspectorControl = "sizeRange";
+  range.min = String(STUDIO_INSPECTOR_SIZE_MIN);
+  range.max = String(max);
+  range.step = "1";
+  range.value = String(value);
+
+  const number =
+    document.createElement("input");
+
+  number.type = "number";
+  number.className = "studio-inspector-input studio-inspector-input--number";
+  number.id = "studioInspectorSizeNumber";
+  number.dataset.inspectorControl = "size";
+  number.min = String(STUDIO_INSPECTOR_SIZE_MIN);
+  number.max = String(max);
+  number.value = String(value);
+
+  /* 슬라이더를 끄는 동안(input)은 미리보기만, 손을 뗐을 때(change)
+     한 번만 확정한다 — 드래그 한 번 = Undo 한 번. */
+  range.addEventListener("input", () => {
+    previewStudioInspectorSize(Number(range.value), { from: "range" });
+  });
+
+  range.addEventListener("change", () => {
+    commitStudioInspectorSize(Number(range.value));
+  });
+
+  number.addEventListener("input", () => {
+    previewStudioInspectorSize(Number(number.value), { from: "number" });
+  });
+
+  number.addEventListener("change", () => {
+    commitStudioInspectorSize(Number(number.value));
+  });
+
+  number.addEventListener("keydown", (event) => {
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitStudioInspectorSize(Number(number.value));
+    }
+
+  });
+
+  row.appendChild(range);
+  row.appendChild(number);
+
+  block.appendChild(head);
+  block.appendChild(row);
+
+  studioInspectorFields.appendChild(block);
+
+  studioInspectorSizeRange = range;
+  studioInspectorSizeNumber = number;
+
+}
+
+
 function renderStudioInspectorControl(spec, info, declarations) {
 
   const current =
     window.readInspectorControlValue(spec.control, declarations);
+
+  if (spec.type === "textBlock") {
+
+    renderStudioInspectorTextBlock(spec, info);
+
+    return;
+
+  }
+
+  if (spec.type === "bindNote") {
+
+    renderStudioInspectorBindNote(spec, info);
+
+    return;
+
+  }
+
+  if (spec.type === "imageSize") {
+
+    renderStudioInspectorSizeBlock(spec, info, declarations);
+
+    return;
+
+  }
 
   if (spec.type === "text") {
 
@@ -806,18 +1412,10 @@ function renderStudioInspectorControl(spec, info, declarations) {
     input.dataset.inspectorControl = spec.control;
 
     input.value =
-      spec.control === "text"
-        ? (info.text || "")
-        : (info.staticHref || "");
+      info.staticHref || "";
 
     input.addEventListener("change", () => {
-
-      if (spec.control === "text") {
-        commitStudioInspectorText(input.value);
-      } else {
-        commitStudioInspectorHref(input.value);
-      }
-
+      commitStudioInspectorHref(input.value);
     });
 
     appendStudioInspectorRow(spec.label, input);
@@ -1030,16 +1628,29 @@ function renderStudioInspectorPopover() {
   const resolved =
     describeStudioInspectorSelection();
 
+  /* 폼을 다시 그리는 순간 이전 입력 요소 참조는 전부 죽는다 —
+     드래그가 그 참조로 값을 쓰지 않도록 먼저 끊는다. */
+  studioInspectorSizeRange = null;
+  studioInspectorSizeNumber = null;
+
   if (!resolved) {
 
     studioInspectorPopover.hidden = true;
     studioInspectorSelectBox.hidden = true;
+
+    studioInspectorResizable = false;
+
+    paintStudioInspectorHandles(null);
 
     notifyStudioInspectorSelectionChanged();
 
     return;
 
   }
+
+  studioInspectorResizable =
+    resolved.info.kind === "image" &&
+    resolved.info.capabilities.size === true;
 
   studioInspectorPopover.hidden =
     false;
@@ -1097,6 +1708,10 @@ function renderStudioInspectorPopover() {
 
   studioInspectorUndoButton.hidden =
     !studioInspectorUndo;
+
+  paintStudioInspectorHandles(
+    studioInspectorSelection ? studioInspectorSelection.rect : null
+  );
 
   placeStudioInspectorPopover(
     studioInspectorSelection ? studioInspectorSelection.rect : null
@@ -1269,16 +1884,57 @@ function applyStudioInspectorPatch(patch) {
 }
 
 
+/* 지금 규칙에 이 컨트롤의 값만 덮어쓴 CSS 문자열을 만든다.
+   commitStudioInspectorStyle()과 같은 계산을 두 번 쓰지 않으려고
+   따로 뺐다 — 텍스트 확정은 HTML과 CSS를 **한 번에** 바꿔야 하기
+   때문이다(줄바꿈 유지용 white-space). */
+function mergeStudioInspectorDeclarations(css, editId, control, value) {
+
+  const declarations =
+    window.readInspectorEditDeclarations(css, editId);
+
+  const patch =
+    window.buildInspectorStylePatch(control, value);
+
+  Object.keys(patch).forEach((property) => {
+
+    if (patch[property] === null) {
+      delete declarations[property];
+    } else {
+      declarations[property] = patch[property];
+    }
+
+  });
+
+  return window.writeInspectorEditDeclarations(css, editId, declarations);
+
+}
+
+
 function commitStudioInspectorText(value) {
 
-  applyStudioInspectorPatch((element) => {
+  const text =
+    String(value);
+
+  return applyStudioInspectorPatch((element, css) => {
 
     /* textContent만 쓴다 — 사용자가 무엇을 입력하든 마크업으로
        해석되지 않는다(skin-render.js의 데이터 주입 원칙과 동일). */
     element.textContent =
-      String(value);
+      text;
 
-    return {};
+    /* 줄바꿈은 textContent 안에 그대로 들어가지만, HTML에서는 그냥
+       공백으로 접힌다 — 저장 후 다시 불러와도 화면에 남게 하려면
+       white-space를 함께 올려야 한다(= 규칙 하나가 더 붙는다).
+       한 줄로 되돌리면 그 규칙도 같이 사라진다. */
+    return {
+      css: mergeStudioInspectorDeclarations(
+        css,
+        studioInspectorSelection.editId,
+        "whiteSpace",
+        text.indexOf("\n") === -1 ? "" : "pre-wrap"
+      )
+    };
 
   });
 
@@ -1318,32 +1974,464 @@ function commitStudioInspectorHref(value) {
 
 function commitStudioInspectorStyle(control, value) {
 
-  applyStudioInspectorPatch((element, css) => {
+  return applyStudioInspectorPatch((element, css) => ({
+    css: mergeStudioInspectorDeclarations(
+      css,
+      studioInspectorSelection.editId,
+      control,
+      value
+    )
+  }));
 
-    const editId =
-      studioInspectorSelection.editId;
+}
 
-    const declarations =
-      window.readInspectorEditDeclarations(css, editId);
 
-    const patch =
-      window.buildInspectorStylePatch(control, value);
+/* =========================================================
+   임시 미리보기 (Select mode 직접 편집 라운드)
 
-    Object.keys(patch).forEach((property) => {
+   확정과 임시를 자로 자르듯 나눈다:
 
-      if (patch[property] === null) {
-        delete declarations[property];
-      } else {
-        declarations[property] = patch[property];
-      }
+     임시  postInspectorPreviewToFrame() — iframe의 live DOM만 바뀐다.
+           SkinPackage도 dirty도 Undo도 그대로다. Save/Publish가 읽는
+           것은 SkinPackage뿐이므로 여기서 무엇을 하든 저장되지
+           않는다.
+     확정  applyStudioInspectorPatch() — 예전부터 있던 그 경로 하나.
 
-    });
+   그래서 "취소·선택 해제·페이지 전환에서 임시 변경이 남지 않는다"는
+   clearStudioInspectorPreview() 한 줄로 지켜진다.
+========================================================== */
 
-    return {
-      css: window.writeInspectorEditDeclarations(css, editId, declarations)
-    };
+function sendStudioInspectorPreview(payload) {
 
+  /* 임시 반영이 화면에 떠 있는 동안 iframe이 재는 크기는 "지금
+     보이는 임시 크기"다 — 그 값을 확정값의 기준(baseline)으로
+     삼으면 "바뀐 게 없다"고 판단해 확정이 통째로 사라진다. 그래서
+     떠 있는 동안에는 실측값을 받아들이지 않는다(아래 rects 처리). */
+  studioInspectorPreviewActive =
+    !!payload;
+
+  if (typeof window.postInspectorPreviewToFrame !== "function") {
+    return;
+  }
+
+  window.postInspectorPreviewToFrame(payload);
+
+}
+
+
+function clearStudioInspectorPreview() {
+
+  sendStudioInspectorPreview(null);
+
+}
+
+
+function sendStudioInspectorTextPreview() {
+
+  if (!studioInspectorSelection || studioInspectorTextDraft === null) {
+    return;
+  }
+
+  sendStudioInspectorPreview({
+    editId: studioInspectorSelection.editId,
+    text: studioInspectorTextDraft
   });
+
+}
+
+
+function commitStudioInspectorTextDraft() {
+
+  if (!studioInspectorSelection || studioInspectorTextDraft === null) {
+    return;
+  }
+
+  const resolved =
+    describeStudioInspectorSelection();
+
+  if (!resolved) {
+    return;
+  }
+
+  const value =
+    studioInspectorTextDraft;
+
+  studioInspectorTextDraft =
+    null;
+
+  studioInspectorComposing =
+    false;
+
+  /* 내용이 그대로면 편집 이력을 만들지 않는다. */
+  if (value === (resolved.info.text || "")) {
+
+    clearStudioInspectorPreview();
+
+    renderStudioInspectorPopover();
+
+    return;
+
+  }
+
+  clearStudioInspectorPreview();
+
+  if (commitStudioInspectorText(value)) {
+    showStudioToast("문구를 바꿨어요.");
+  }
+
+}
+
+
+function cancelStudioInspectorTextDraft() {
+
+  studioInspectorTextDraft =
+    null;
+
+  studioInspectorComposing =
+    false;
+
+  clearStudioInspectorPreview();
+
+  /* 폼을 다시 그리면 textarea가 원래 문구로 채워진다. */
+  renderStudioInspectorPopover();
+
+}
+
+
+/* =========================================================
+   이미지 너비 — 임시 반영 / 확정
+
+   슬라이더·숫자칸·모서리 드래그 셋이 같은 함수 두 개를 쓴다.
+   그래서 "숫자·슬라이더·드래그 결과가 서로 다르다"가 구조적으로
+   생기지 않는다.
+========================================================== */
+
+function studioInspectorClampSize(width) {
+
+  const value =
+    Math.round(Number(width));
+
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+
+  const max =
+    studioInspectorSizeMax(
+      studioInspectorSizeNumber ? Number(studioInspectorSizeNumber.max) : 0
+    );
+
+  return Math.min(Math.max(value, STUDIO_INSPECTOR_SIZE_MIN), max);
+
+}
+
+
+function syncStudioInspectorSizeInputs(width, options) {
+
+  const from =
+    (options && options.from) || "";
+
+  if (studioInspectorSizeRange && from !== "range") {
+    studioInspectorSizeRange.value = String(width);
+  }
+
+  if (studioInspectorSizeNumber && from !== "number") {
+    studioInspectorSizeNumber.value = String(width);
+  }
+
+}
+
+
+function previewStudioInspectorSize(width, options) {
+
+  const value =
+    studioInspectorClampSize(width);
+
+  if (value === null || !studioInspectorSelection) {
+    return;
+  }
+
+  syncStudioInspectorSizeInputs(value, options);
+
+  /* 드래그는 시작할 때 잰 비율을 끝까지 그대로 쓴다 — 미리보기가
+     매 프레임 다시 재면 반올림이 조금씩 누적된다. */
+  const ratio =
+    (options && Number.isFinite(options.ratio) && options.ratio > 0)
+      ? options.ratio
+      : (() => {
+
+          const resolved =
+            describeStudioInspectorSelection();
+
+          return resolved ? studioInspectorSizeRatio(resolved.declarations) : null;
+
+        })();
+
+  sendStudioInspectorPreview({
+    editId: studioInspectorSelection.editId,
+    width: value,
+    ratio: ratio || undefined
+  });
+
+}
+
+
+function commitStudioInspectorSize(width, options) {
+
+  const value =
+    studioInspectorClampSize(width);
+
+  if (value === null || !studioInspectorSelection) {
+    return false;
+  }
+
+  const resolved =
+    describeStudioInspectorSelection();
+
+  if (!resolved) {
+    return false;
+  }
+
+  /* 실제 크기가 그대로면 편집 이력을 만들지 않는다(요구사항 3절). */
+  if (value === studioInspectorSizeBaseline(resolved.declarations)) {
+
+    clearStudioInspectorPreview();
+
+    syncStudioInspectorSizeInputs(value, {});
+
+    return false;
+
+  }
+
+  const ratio =
+    (options && Number.isFinite(options.ratio) && options.ratio > 0)
+      ? options.ratio
+      : studioInspectorSizeRatio(resolved.declarations);
+
+  clearStudioInspectorPreview();
+
+  return commitStudioInspectorStyle("size", { width: value, ratio });
+
+}
+
+
+/* =========================================================
+   모서리 드래그
+
+   ★ 기준점은 **반대쪽 모서리**다. 드래그를 시작한 순간의 화면
+   좌표로 한 번만 잡아 두고, 그 뒤로는 포인터와 그 점 사이의 거리만
+   본다 — 그래서 드래그 중 이미지가 커지면서 자기 자리가 밀려도
+   (일반 흐름 배치라 그렇다) 계산이 흔들리지 않는다. 페이지를
+   절대좌표 배치로 바꾸지 않는 이유이자, 바꿀 필요가 없는 이유다.
+
+   ★ 배율/스크롤은 studioInspectorMapRectRaw()가 이미 반영한 화면
+   좌표에서 시작하므로, 포인터 이동량을 iframe 안 px로 되돌릴 때
+   scale로 나누기만 하면 된다(Mobile Preview의 축소, AI 패널을
+   여닫아 생기는 이동, 창 크기 변경 모두 같은 식으로 처리된다).
+
+   ★ 포인터는 핸들이 캡처한다. 그래서 포인터가 이미지 밖으로,
+   iframe 밖으로, 심지어 창 밖으로 나가도 move/up이 계속 이 핸들로
+   온다 — "드래그가 끊긴다"도 "계속 붙잡힌 채로 남는다"도 없다
+   (lostpointercapture는 취소로 받는다).
+========================================================== */
+
+function beginStudioInspectorHandleDrag(event, corner, handle) {
+
+  if (
+    !studioInspectorEnabled ||
+    !studioInspectorResizable ||
+    !studioInspectorSelection ||
+    studioInspectorDrag
+  ) {
+    return;
+  }
+
+  const mapped =
+    studioInspectorMapRectRaw(studioInspectorSelection.rect);
+
+  if (!mapped || !mapped.scale) {
+    return;
+  }
+
+  const resolved =
+    describeStudioInspectorSelection();
+
+  if (!resolved) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const startWidth =
+    studioInspectorSizeBaseline(resolved.declarations) ||
+    Math.round(studioInspectorSelection.rect.width);
+
+  studioInspectorDrag = {
+    pointerId: event.pointerId,
+    handle,
+    corner,
+    scale: mapped.scale,
+    /* 반대쪽 모서리 */
+    anchorX: corner.indexOf("w") === -1 ? mapped.left : mapped.right,
+    anchorY: corner.indexOf("n") === -1 ? mapped.top : mapped.bottom,
+    ratio: studioInspectorSizeRatio(resolved.declarations),
+    startWidth,
+    width: startWidth,
+    frame: 0
+  };
+
+  try {
+    handle.setPointerCapture(event.pointerId);
+  } catch (err) {
+    /* 캡처가 안 되는 환경(오래된 WebKit 등)에서도 아래 document
+       리스너가 move/up을 받아 준다 — 기능이 없어지지는 않는다. */
+  }
+
+  if (studioInspectorLayer) {
+    studioInspectorLayer.classList.add("is-dragging");
+  }
+
+}
+
+
+function moveStudioInspectorHandleDrag(event) {
+
+  const drag =
+    studioInspectorDrag;
+
+  if (!drag || event.pointerId !== drag.pointerId) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const dx =
+    Math.abs(event.clientX - drag.anchorX) / drag.scale;
+
+  const dy =
+    (Math.abs(event.clientY - drag.anchorY) / drag.scale) * (drag.ratio || 1);
+
+  /* 비율이 고정돼 있으므로 가로/세로 중 하나만 보면 대각선 드래그가
+     한쪽 축에서만 반응하는 느낌이 된다 — 두 축이 각각 요구하는
+     너비의 평균을 쓴다. */
+  const next =
+    studioInspectorClampSize(drag.ratio ? (dx + dy) / 2 : dx);
+
+  if (next === null || next === drag.width) {
+    return;
+  }
+
+  drag.width =
+    next;
+
+  /* pointermove마다 postMessage를 쏘지 않는다 — 한 프레임에 한 번만
+     보낸다(요구사항 4절 "매 pointermove마다 재렌더/Undo 금지"). */
+  if (!drag.frame) {
+
+    drag.frame =
+      window.requestAnimationFrame(() => {
+
+        drag.frame = 0;
+
+        if (studioInspectorDrag === drag) {
+          previewStudioInspectorSize(drag.width, { ratio: drag.ratio });
+        }
+
+      });
+
+  }
+
+}
+
+
+function finishStudioInspectorDrag(drag) {
+
+  if (drag.frame) {
+    window.cancelAnimationFrame(drag.frame);
+  }
+
+  try {
+
+    if (drag.handle.hasPointerCapture && drag.handle.hasPointerCapture(drag.pointerId)) {
+      drag.handle.releasePointerCapture(drag.pointerId);
+    }
+
+  } catch (err) {
+    /* 이미 풀렸으면 그만이다 */
+  }
+
+  studioInspectorDrag =
+    null;
+
+  if (studioInspectorLayer) {
+    studioInspectorLayer.classList.remove("is-dragging");
+  }
+
+}
+
+
+function endStudioInspectorHandleDrag(event) {
+
+  const drag =
+    studioInspectorDrag;
+
+  if (!drag || event.pointerId !== drag.pointerId) {
+    return;
+  }
+
+  event.preventDefault();
+
+  finishStudioInspectorDrag(drag);
+
+  /* 실제로 크기가 변하지 않았으면 아무 것도 확정하지 않는다 —
+     임시 반영만 걷어낸다(= 이력도 생기지 않는다). */
+  if (drag.width === drag.startWidth) {
+
+    clearStudioInspectorPreview();
+
+    syncStudioInspectorSizeInputs(drag.startWidth, {});
+
+    return;
+
+  }
+
+  commitStudioInspectorSize(drag.width, { ratio: drag.ratio });
+
+}
+
+
+function cancelStudioInspectorHandleDrag(event) {
+
+  const drag =
+    studioInspectorDrag;
+
+  if (!drag || (event && event.pointerId !== drag.pointerId)) {
+    return;
+  }
+
+  finishStudioInspectorDrag(drag);
+
+  clearStudioInspectorPreview();
+
+  syncStudioInspectorSizeInputs(drag.startWidth, {});
+
+}
+
+
+/* 선택이 바뀌거나 모드를 끄거나 페이지가 바뀔 때 — 확정되지 않은
+   것은 전부 여기서 사라진다. */
+function clearStudioInspectorTransient() {
+
+  if (studioInspectorDrag) {
+    cancelStudioInspectorHandleDrag(null);
+  }
+
+  studioInspectorTextDraft = null;
+  studioInspectorComposing = false;
+  studioInspectorSizeRange = null;
+  studioInspectorSizeNumber = null;
+
+  clearStudioInspectorPreview();
 
 }
 
@@ -1389,11 +2477,24 @@ function undoStudioInspectorEdit() {
 
 function clearStudioInspectorSelection() {
 
+  /* 확정되지 않은 입력/드래그가 남아 있으면 먼저 걷어낸다 —
+     선택이 사라진 뒤에 걷어내려 하면 어느 요소에 되돌릴지 알 수
+     없다. */
+  clearStudioInspectorTransient();
+
   studioInspectorSelection =
     null;
 
   studioInspectorEditingOpen =
     false;
+
+  studioInspectorMetrics =
+    null;
+
+  studioInspectorResizable =
+    false;
+
+  paintStudioInspectorHandles(null);
 
   if (studioInspectorSelectBox) {
     studioInspectorSelectBox.hidden = true;
@@ -1412,7 +2513,7 @@ function clearStudioInspectorSelection() {
 }
 
 
-function setStudioInspectorSelection(editId, tagName, rect) {
+function setStudioInspectorSelection(editId, tagName, rect, metrics) {
 
   if (!editId || !window.isValidInspectorEditId(editId)) {
     clearStudioInspectorSelection();
@@ -1422,11 +2523,20 @@ function setStudioInspectorSelection(editId, tagName, rect) {
   const isSameElement =
     !!studioInspectorSelection && studioInspectorSelection.editId === editId;
 
+  /* 다른 요소로 옮겨가면 이전 요소에서 입력하던 값은 버린다 —
+     "적용"을 누르지 않았으므로 확정된 적이 없다. */
+  if (!isSameElement) {
+    clearStudioInspectorTransient();
+  }
+
   studioInspectorSelection = {
     editId,
     tagName: tagName || null,
     rect: rect || null
   };
+
+  studioInspectorMetrics =
+    metrics || null;
 
   /* 다른 요소를 새로 고르면 폼은 접힌 상태에서 시작한다 —
      팝오버가 곧바로 커다랗게 열려 Preview를 가리지 않게. */
@@ -1471,7 +2581,12 @@ function handleStudioInspectorMessage(data) {
 
   if (data.type === "preview:inspect-select") {
 
-    setStudioInspectorSelection(data.editId, data.tagName, data.rect);
+    setStudioInspectorSelection(
+      data.editId,
+      data.tagName,
+      data.rect,
+      data.metrics
+    );
 
     return;
 
@@ -1502,7 +2617,18 @@ function handleStudioInspectorMessage(data) {
     studioInspectorSelection.rect =
       data.selected.rect;
 
+    /* 임시 미리보기(입력 중/드래그 중)가 떠 있는 동안에는 실측값을
+       받아들이지 않는다 — 지금 화면에 보이는 크기는 아직 확정된
+       것이 아니라서, 그 값을 기준으로 삼으면 (1) 사용자의 손과
+       숫자가 서로를 쫓아다니고 (2) "바뀐 게 없다"는 판정이 잘못
+       나온다. 좌표(테두리/핸들)만 따라간다. */
+    if (!studioInspectorDrag && !studioInspectorPreviewActive) {
+      studioInspectorMetrics = data.selected.metrics || studioInspectorMetrics;
+    }
+
     paintStudioInspectorBox(studioInspectorSelectBox, data.selected.rect);
+
+    paintStudioInspectorHandles(data.selected.rect);
 
     placeStudioInspectorPopover(data.selected.rect);
 
@@ -1553,6 +2679,10 @@ function setStudioInspectorEnabled(enabled) {
     if (studioInspectorHoverBox) {
       studioInspectorHoverBox.hidden = true;
     }
+
+    studioInspectorHandles.forEach((handle) => {
+      handle.hidden = true;
+    });
 
   }
 
@@ -1629,6 +2759,30 @@ document.addEventListener(
       return;
     }
 
+    /* 드래그 중 Escape는 "시작 전 크기로 되돌리기"다 —
+       선택까지 풀어 버리면 사용자는 되돌아간 결과를 확인할 수
+       없다(요구사항 3절). */
+    if (studioInspectorDrag) {
+
+      event.preventDefault();
+
+      cancelStudioInspectorHandleDrag(null);
+
+      return;
+
+    }
+
+    /* 텍스트를 입력하던 중이면 그 입력만 취소한다. */
+    if (studioInspectorTextDraft !== null) {
+
+      event.preventDefault();
+
+      cancelStudioInspectorTextDraft();
+
+      return;
+
+    }
+
     if (!studioInspectorSelection) {
       return;
     }
@@ -1640,28 +2794,67 @@ document.addEventListener(
 
 
 /*
+  모서리 드래그의 move/up — 핸들이 아니라 document에서 받는다.
+
+  포인터를 캡처했으면 이벤트의 target은 계속 그 핸들이고, 캡처가
+  안 되는 환경에서는 포인터 아래의 아무 요소나 target이 된다. 어느
+  쪽이든 document까지는 올라오므로, 여기 한 곳만 보면 "이미지 밖으로
+  나갔다 / iframe 위로 지나갔다 / 창 밖으로 나갔다"를 따로 다루지
+  않아도 된다. 드래그 중이 아니면 첫 줄에서 빠져나간다.
+*/
+document.addEventListener("pointermove", moveStudioInspectorHandleDrag);
+
+document.addEventListener("pointerup", endStudioInspectorHandleDrag);
+
+document.addEventListener("pointercancel", cancelStudioInspectorHandleDrag);
+
+
+/*
   Studio 쪽 레이아웃이 바뀌면(AI 패널 여닫기/폭 드래그/창 크기)
   iframe 안 좌표는 그대로여도 화면 위 위치는 달라진다 — 다시
   칠한다. 좌표 자체를 다시 물어보지는 않는다(iframe 안에서 아무
   일도 일어나지 않았으므로).
 */
-window.addEventListener(
-  "resize",
-  () => {
+function repaintStudioInspectorOverlay() {
 
-    if (!studioInspectorEnabled) {
-      return;
-    }
-
-    paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
-
-    if (studioInspectorSelection) {
-      paintStudioInspectorBox(studioInspectorSelectBox, studioInspectorSelection.rect);
-      placeStudioInspectorPopover(studioInspectorSelection.rect);
-    }
-
+  if (!studioInspectorEnabled) {
+    return;
   }
-);
+
+  paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+
+  if (studioInspectorSelection) {
+    paintStudioInspectorBox(studioInspectorSelectBox, studioInspectorSelection.rect);
+    paintStudioInspectorHandles(studioInspectorSelection.rect);
+    placeStudioInspectorPopover(studioInspectorSelection.rect);
+  }
+
+}
+
+
+window.addEventListener("resize", repaintStudioInspectorOverlay);
+
+
+/*
+  창 크기만으로는 부족하다 — AI 패널을 여닫거나 폭을 끌면 창은
+  그대로인 채 Preview stage만 좁아진다. Mobile Preview는 그 stage
+  **가운데**에 놓이므로, 그때 iframe은 크기뿐 아니라 위치까지
+  옆으로 밀린다(테두리와 핸들이 원래 자리에 남아 요소에서 떨어진다).
+
+  stage 크기 변화 하나만 보면 세 경우(여닫기·폭 드래그·창 크기)를
+  모두 덮는다. studio-preview.js가 같은 요소에 이미 Mobile 축소
+  배율용 ResizeObserver를 달아 두었고(먼저 등록되어 먼저 실행된다),
+  여기서는 그 결과가 반영된 좌표로 다시 칠하기만 한다.
+*/
+if (studioInspectorStage && typeof ResizeObserver === "function") {
+
+  new ResizeObserver(
+    repaintStudioInspectorOverlay
+  ).observe(
+    studioInspectorStage
+  );
+
+}
 
 
 if (typeof window !== "undefined") {
@@ -1736,7 +2929,16 @@ if (typeof window !== "undefined") {
           studioInspectorSelection
             ? { ...studioInspectorSelection }
             : null,
-        hover: studioInspectorHover ? { ...studioInspectorHover } : null
+        hover: studioInspectorHover ? { ...studioInspectorHover } : null,
+
+        /* Select mode 직접 편집 라운드 — 확정되지 않은 상태.
+           "취소/선택 해제 뒤에 임시 변경이 남지 않는다"를 테스트가
+           내부 변수를 뒤지지 않고 확인할 수 있게 한다. */
+        textDraft: studioInspectorTextDraft,
+        composing: studioInspectorComposing,
+        resizable: studioInspectorResizable,
+        dragging: !!studioInspectorDrag,
+        metrics: studioInspectorMetrics ? { ...studioInspectorMetrics } : null
       };
 
     };

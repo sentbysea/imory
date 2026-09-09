@@ -10,6 +10,8 @@
 <link rel="stylesheet" href="./editor/code-editor.css">
 <link rel="stylesheet" href="./editor/import-editor.css">
 <link rel="stylesheet" href="./editor/confirm-dialog.css">
+<!-- studio/index.html과 같은 순서(images-panel 다음 inspector) -->
+<link rel="stylesheet" href="./images/images-panel.css">
 <link rel="stylesheet" href="./inspector/studio-inspector.css">
 </head>
 <body>
@@ -65,12 +67,19 @@
           </div>
         </div>
         <!-- PHASE AI-2.1 — studio/index.html과 같은 순서/구성을 그대로 비춘다
-             (Code / Import / Save / Publish, Settings 없음). Images는 이 하네스가
-             images 모듈을 로드하지 않으므로 원래대로 두지 않는다. -->
+             (Code / Import / Export / Images / Save / Publish, Settings 없음).
+
+             Select mode 직접 편집 라운드 — Images 버튼과 그 모듈을 이
+             하네스에도 넣었다. 예전에는 "images 모듈을 로드하지 않으므로"
+             라며 이 버튼 하나만 빼 두었는데, 그러면 Inspector가 검사하는
+             화면이 실제 Studio보다 버튼 하나 좁은 Top Dock이 된다 —
+             팝오버/overlay 좌표를 재는 테스트가 진짜 화면과 다른 폭에서
+             돌아간다. -->
         <div class="studio-top-dock-actions">
           <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
           <button type="button" class="studio-corner-button" id="studioImportButton" disabled>Import</button>
           <button type="button" class="studio-corner-button" id="studioExportButton" disabled>Export</button>
+          <button type="button" class="studio-corner-button" id="studioImagesButton" disabled>Images</button>
           <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
           <button type="button" class="studio-corner-button" id="studioPublishButton" disabled>Publish</button>
           <!-- PHASE AI-5A.1 — studio/index.html과 동일한 AI 진입점 -->
@@ -694,8 +703,16 @@
             ],
             skin_versions: [
               {
+                /*
+                  Select mode 직접 편집 라운드 — e2e가 "Save 후 다시
+                  불러오기"를 진짜로 확인하려면, 저장된 content를 담은
+                  채로 문서를 새로 열 수 있어야 한다. 이 fixture는
+                  in-memory라 새로고침하면 초기값으로 돌아가므로,
+                  scenario t와 같은 방식으로 addInitScript가 심어 주는
+                  값을 우선 쓴다(브라우저에서 직접 열면 아래 기본값).
+                */
                 id: "draft-y1",
-                content: {
+                content: window.__scenarioYSkinPackage || {
                   schemaVersion: 1,
                   templates: {
                     home: {
@@ -708,6 +725,16 @@
                         '<a class="y-owner-link" data-imory-if="viewer.isOwner" data-imory-href="viewer.adminHref">ADMIN</a>' +
                         '<a class="y-button" href="https://example.com/more">더 보기</a>' +
                         '<div class="y-box"><p class="y-box-text">감싸는 영역</p></div>' +
+                        /*
+                          Select mode 직접 편집 라운드 —
+                            I .y-nickname     Settings에서 오는 바인딩 텍스트
+                            J .y-static-image 슬롯이 없는 정적 이미지
+                          앞의 여덟 가지 뒤에 **덧붙이기만** 한다(앞
+                          요소들의 순서가 바뀌면 기존 검사 T의 구조
+                          경로 id 기대가 함께 흔들린다).
+                        */
+                        '<p class="y-nickname" data-imory-bind="profile.nickname"></p>' +
+                        '<img class="y-static-image" src="https://example.com/static.png" alt="정적 이미지">' +
                         '<ul class="y-post-list">' +
                         '<li class="y-post-item" data-imory-repeat="home.recentPosts">' +
                         '<a class="y-post-link" data-imory-href="item.href">' +
@@ -733,6 +760,21 @@
                     '.y-home { color: #222222; } ' +
                     '.y-home .y-heading { font-size: 20px; } ' +
                     '.y-box { padding: 4px; } ' +
+                    /*
+                      Select mode 직접 편집 라운드 — 크기 조절이
+                      "지금 보이는 비율"을 지키는지 보려면 fixture가
+                      먼저 그 비율을 갖고 있어야 한다.
+                        .y-avatar        정사각형 + object-fit(프로필 사진)
+                        .y-cover         가로형 헤더 이미지
+                        .y-static-image  슬롯 없는 정적 이미지
+                      (크기를 재는 e2e는 이 이미지들에 실제 바이트를
+                       물려 준다 — 로드에 실패한 <img>는 브라우저가 alt
+                       텍스트를 담은 일반 인라인 요소로 취급해서 아래
+                       width/height가 아예 먹지 않는다.)
+                    */
+                    '.y-avatar { width: 120px; height: 120px; object-fit: cover; } ' +
+                    '.y-cover { width: 300px; height: 100px; object-fit: cover; } ' +
+                    '.y-static-image { width: 200px; height: 80px; } ' +
                     '@media (max-width: 720px) { .y-home .y-heading { font-size: 15px; } }',
                   imageSlots: [
                     { name: "profile", label: "프로필 사진", required: false, aspectRatioHint: "1:1" },
@@ -1632,6 +1674,24 @@
         },
         list: function () {
           return Promise.resolve((state.imageLibrary && state.imageLibrary.images) || []);
+        },
+
+        /*
+          아래 셋은 studio/images/images-panel.js(실제 파일)가 패널을
+          만들 때/사용자가 업로드·삭제를 누를 때 부른다. 이 하네스는
+          패널이 "열리고 지금 슬롯을 보여준다"까지만 검증하므로
+          (업로드는 8935가 진짜 Storage mock으로 본다) 형태만 맞춰
+          둔다.
+        */
+        ALLOWED_MIME: ["image/png", "image/jpeg", "image/webp", "image/gif"],
+        validateFile: function () {
+          return { ok: false, message: "이 하네스에서는 업로드를 검증하지 않습니다." };
+        },
+        upload: function () {
+          return Promise.reject(new Error("mock: upload not supported here"));
+        },
+        remove: function () {
+          return Promise.reject(new Error("mock: remove not supported here"));
         }
       };
 
@@ -1728,6 +1788,14 @@
   <script src="./editor/code-editor.js"></script>
   <script src="./editor/import-editor.js"></script>
   <script src="./editor/confirm-dialog.js"></script>
+  <!-- Skin Image Library — 패널 UI(images-panel.js)는 실제 파일을
+       그대로 쓰고, 데이터 계층(skin-image-library.js)만 위 mock
+       블록의 window.skinImageLibrary로 대신한다. 그 파일은 실제
+       Storage/새 테이블에 붙는 계층이라 이 in-memory 하네스에서는
+       의미가 없고, 업로드/삭제 자체는 studio/images/
+       skin-image-library-e2e-test.mjs(8935)가 진짜 studio/index.html
+       위에서 검증한다. -->
+  <script src="./images/images-panel.js"></script>
   <script src="./studio-preview.js"></script>
   <script src="./preview/preview-route.js"></script>
   <!-- PHASE 1C-I — production과 동일한 순서(studio/index.html 참고) -->

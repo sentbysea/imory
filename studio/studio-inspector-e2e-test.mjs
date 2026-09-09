@@ -184,6 +184,23 @@ async function openStudio(context, options) {
     await route.fulfill({ status: 500, contentType: "text/plain", body: "must not be called" });
   });
 
+  /*
+    fixture 이미지(https://example.com/*.png)에 실제 바이트를 준다.
+    이 파일의 검사는 src 속성과 슬롯 상태만 보므로 결과는 달라지지
+    않지만, 로드 실패가 WebKit에서는 콘솔 오류로 올라와 마지막 검사
+    Z를 깨뜨린다(Chromium은 올리지 않는다). 1x1 투명 PNG면 충분하다.
+  */
+  await page.route("https://example.com/**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+        "base64"
+      )
+    });
+  });
+
   await page.goto(SCENARIO_URL, { waitUntil: "load" });
 
   await page.waitForFunction(
@@ -257,34 +274,88 @@ async function previewClick(page, selector) {
 }
 
 
+/*
+  선택자는 이 파일에서 항상 ".클래스" 하나다.
+
+  "선택이 null이 아니다"로 기다리면 안 된다 — 앞 단계에서 이미 무언가
+  고른 상태면 그 조건이 처음부터 참이라, 새 클릭이 도착하기도 전에
+  다음 단계로 넘어간다. Chromium에서는 우연히 맞아떨어졌지만 WebKit
+  에서는 그 자리에서 옛 선택의 폼을 읽어 검사가 무너졌다(J/J2).
+  **그 요소가** 선택될 때까지 기다린다.
+*/
 async function selectInPreview(page, selector) {
+
+  const className =
+    selector.replace(/^\./, "");
 
   await previewClick(page, selector);
 
   await page.waitForFunction(
-    () => window.getStudioInspectorState().selection !== null,
-    null,
-    { timeout: 4000 }
+    (name) => {
+      const selection = window.getStudioInspectorSelection();
+      return !!selection && selection.classNames.indexOf(name) !== -1;
+    },
+    className,
+    { timeout: 6000 }
   );
 
 }
 
 
+/*
+  한 번 눌러서 안 열리면 다시 누른다 — 선택 직후에 iframe에서 뒤늦게
+  올라온 select 메시지 하나가 폼을 다시 접을 수 있다(새 요소를 고르면
+  폼은 접힌 상태로 시작한다는 규칙 그대로다). 사람이 쓸 때는 그 사이가
+  워낙 짧아 겪을 일이 없지만, 스크립트는 고르자마자 누른다.
+*/
 async function openDirectEdit(page) {
 
-  const open = await page.evaluate(() => window.getStudioInspectorState().editingOpen);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
 
-  if (!open) {
+    const open = await page.evaluate(() => window.getStudioInspectorState().editingOpen);
+
+    if (open) {
+      return;
+    }
+
     await page.click("#studioInspectorDirectButton");
+
+    const opened = await page
+      .waitForFunction(
+        () => window.getStudioInspectorState().editingOpen === true,
+        null,
+        { timeout: 2000 }
+      )
+      .then(() => true, () => false);
+
+    if (opened) {
+      return;
+    }
+
+    await sleep(300);
+
   }
 
-  await page.waitForFunction(() => window.getStudioInspectorState().editingOpen === true);
+  throw new Error("직접 수정 폼이 열리지 않았습니다");
 
 }
 
 
 function controlSelector(control) {
   return `#studioInspectorFields [data-inspector-control="${control}"]`;
+}
+
+
+/* 텍스트 내용은 이제 한 줄 input의 change 하나로 확정되지 않는다 —
+   textarea에 쓰는 동안은 미리보기일 뿐이고 "적용"이 확정이다
+   (Select mode 직접 편집 라운드). 이 파일의 기존 검사들은 "확정된
+   결과"를 보므로, 그 두 단계를 여기 한 곳에 모아 둔다. */
+async function applyInspectorText(page, value) {
+
+  await page.fill(controlSelector("text"), value);
+
+  await page.click("#studioInspectorTextApply");
+
 }
 
 
@@ -510,10 +581,7 @@ async function runText(context) {
 
   const headingControls = await listControls(page);
 
-  await page.fill(controlSelector("text"), "최근 기록");
-  await page.evaluate((sel) => {
-    document.querySelector(sel).dispatchEvent(new Event("change", { bubbles: true }));
-  }, controlSelector("text"));
+  await applyInspectorText(page, "최근 기록");
 
   await page.waitForFunction(
     () => {
@@ -835,10 +903,7 @@ async function runLink(context) {
 
   const linkControls = await listControls(page);
 
-  await page.fill(controlSelector("text"), "카테고리로");
-  await page.evaluate((sel) => {
-    document.querySelector(sel).dispatchEvent(new Event("change", { bubbles: true }));
-  }, controlSelector("text"));
+  await applyInspectorText(page, "카테고리로");
 
   await page.waitForFunction(
     () => {
@@ -1073,10 +1138,7 @@ async function runState(context) {
   await selectInPreview(page, ".y-heading");
   await openDirectEdit(page);
 
-  await page.fill(controlSelector("text"), "저장 확인");
-  await page.evaluate((sel) => {
-    document.querySelector(sel).dispatchEvent(new Event("change", { bubbles: true }));
-  }, controlSelector("text"));
+  await applyInspectorText(page, "저장 확인");
 
   await page.waitForFunction(
     () => window.getStudioAiWorkingState().isDirty === true,

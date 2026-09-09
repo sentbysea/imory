@@ -64,6 +64,64 @@
 
 
 /* =========================================================
+   모서리 핸들 (이미지 크기 조절)
+
+   레이어 전체는 클릭을 통과시키지만(위 주석), 핸들만은 실제로
+   잡아야 하므로 pointer-events를 되살린다. 좌표는 요소 모서리
+   **정중앙**에 오도록 자기 크기의 절반만큼 당겨 놓는다 —
+   studio-inspector.js가 left/top에 넣는 값이 곧 모서리 점이다.
+
+   드래그 중에는 레이어 전체가 포인터를 받는다. 그래야 포인터가
+   핸들 밖으로 빠르게 벗어나도 Preview iframe이 hover/click을
+   가로채지 않는다(iframe 위로 지나가는 동안 부모 문서의
+   pointermove가 끊기는 것을 막는 안전장치이기도 하다).
+========================================================== */
+
+.studio-inspector-handle {
+  position: absolute;
+
+  width: 12px;
+  height: 12px;
+
+  margin: -6px 0 0 -6px;
+
+  box-sizing: border-box;
+
+  border: 1px solid var(--system-accent-hover);
+  border-radius: 50%;
+
+  background: var(--system-bg);
+
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+
+  pointer-events: auto;
+
+  touch-action: none;
+}
+
+
+.studio-inspector-handle--nw,
+.studio-inspector-handle--se {
+  cursor: nwse-resize;
+}
+
+
+.studio-inspector-handle--ne,
+.studio-inspector-handle--sw {
+  cursor: nesw-resize;
+}
+
+
+.studio-inspector-layer.is-dragging {
+  pointer-events: auto;
+
+  cursor: nwse-resize;
+
+  user-select: none;
+}
+
+
+/* =========================================================
    팝오버
 ========================================================== */
 
@@ -303,6 +361,138 @@
 
 .studio-inspector-clear:hover {
   color: var(--system-accent-hover);
+}
+
+
+/* =========================================================
+   블록형 컨트롤 (텍스트 내용 / 이미지 너비)
+
+   한 줄짜리 행(label + input)과 달리 세로로 쌓는다 — textarea와
+   슬라이더는 268px 팝오버에서 가로로 나눠 쓰기엔 너무 좁다.
+========================================================== */
+
+.studio-inspector-block {
+  display: flex;
+  flex-direction: column;
+
+  gap: 6px;
+}
+
+
+.studio-inspector-block-head {
+  display: flex;
+
+  align-items: center;
+
+  justify-content: space-between;
+
+  gap: 6px;
+}
+
+
+.studio-inspector-block-label {
+  margin: 0;
+
+  font-size: var(--imory-font-size-200);
+
+  color: var(--system-text-muted);
+}
+
+
+.studio-inspector-block-note {
+  margin: 0;
+
+  padding: 6px 8px;
+
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg-subtle, rgba(0, 0, 0, 0.04));
+
+  font-size: var(--imory-font-size-200);
+
+  line-height: var(--imory-line-height-snug);
+
+  color: var(--system-text-muted);
+}
+
+
+.studio-inspector-textarea {
+  width: 100%;
+
+  min-height: 56px;
+
+  max-height: 180px;
+
+  padding: 6px 8px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-300);
+
+  line-height: var(--imory-line-height-snug);
+
+  resize: vertical;
+}
+
+
+.studio-inspector-block-actions {
+  display: flex;
+
+  gap: 6px;
+}
+
+
+.studio-inspector-block-button {
+  flex: 1;
+
+  padding: 5px 8px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-muted);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-block-button--primary {
+  border-color: var(--system-accent-border);
+
+  background: var(--system-accent-soft);
+
+  color: var(--system-accent-hover);
+}
+
+
+.studio-inspector-size-row {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+}
+
+
+.studio-inspector-range {
+  flex: 1;
+
+  min-width: 0;
+
+  accent-color: var(--system-accent);
+
+  cursor: pointer;
 }
 
 

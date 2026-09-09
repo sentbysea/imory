@@ -16,14 +16,21 @@
      parent -> iframe  "preview:ping"            { type }
      parent -> iframe  "preview:inspector-mode"  { type, enabled }
      parent -> iframe  "preview:inspector-select"{ type, editId }
+     parent -> iframe  "preview:inspect-preview" { type, editId, text?, width?, ratio?, clear? }
      iframe -> parent  "preview:ready"           { type }
      iframe -> parent  "preview:rendered"        { type, hasPostBodyRegion }
      iframe -> parent  "preview:error"           { type, message }
      iframe -> parent  "preview:navigate"        { type, href }
      iframe -> parent  "preview:inspect-hover"   { type, editId, tagName, rect }
-     iframe -> parent  "preview:inspect-select"  { type, editId, tagName, rect }
+     iframe -> parent  "preview:inspect-select"  { type, editId, tagName, rect, metrics }
      iframe -> parent  "preview:inspect-rects"   { type, hover, selected }
      iframe -> parent  "preview:inspect-escape"  { type }
+
+   Select mode 직접 편집 라운드 — "preview:inspect-preview"는 이
+   문서의 live DOM만 임시로 바꾼다(저장되지 않는다). 확정은 언제나
+   parent가 SkinPackage를 고쳐 "preview:render"를 다시 보내는 경로
+   하나뿐이다. metrics도 좌표와 같은 성격의 **실측 숫자**만 담는다
+   (폭/높이/자연 크기/부모 안쪽 폭).
 
    PHASE AI-6A(Element Inspector) — 위 inspect-* 넷은 **DOM 노드도
    HTML 문자열도 절대 담지 않는다**. 올라가는 것은 식별자 문자열
@@ -76,6 +83,7 @@ const PREVIEW_MSG_INSPECT_HOVER = "preview:inspect-hover";
 const PREVIEW_MSG_INSPECT_SELECT = "preview:inspect-select";
 const PREVIEW_MSG_INSPECT_RECTS = "preview:inspect-rects";
 const PREVIEW_MSG_INSPECT_ESCAPE = "preview:inspect-escape";
+const PREVIEW_MSG_INSPECT_PREVIEW = "preview:inspect-preview";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -170,6 +178,11 @@ function handleRenderMessage(data) {
     if (inspectorEnabled) {
 
       inspectorHoverElement = null;
+
+      /* 임시 미리보기는 재렌더로 사라진 DOM 위에 있었다 — 되돌릴
+         대상이 없으므로 참조만 버린다(확정된 결과는 이미 새로
+         그려진 스킨 안에 들어 있다). */
+      clearInspectorPreview({ discard: true });
 
       postInspectorRects();
 
@@ -531,6 +544,56 @@ function inspectorRectOf(el) {
 }
 
 
+/* =========================================================
+   inspectorMetricsOf(el) — Studio의 크기 컨트롤이 필요로 하는 실측값
+
+   "초기값은 화면에 실제로 표시되는 크기를 기준으로 한다"와
+   "부모보다 커져 모바일 가로 넘침이 생기지 않게 한다"는 둘 다
+   **iframe 안에서만** 잴 수 있다. rect는 Studio가 이미 받고 있지만,
+   비율 계산에 쓸 자연 크기와 슬라이더 최대값에 쓸 부모 폭은
+   여기서만 알 수 있으므로 함께 올려보낸다.
+
+   parentWidth는 부모의 안쪽 폭(padding 제외)이다 — 그 값을 넘는
+   순간이 곧 가로 넘침이 시작되는 지점이다.
+========================================================== */
+function inspectorMetricsOf(el) {
+
+  if (!el || !el.isConnected) {
+    return null;
+  }
+
+  const rect =
+    el.getBoundingClientRect();
+
+  const parent =
+    el.parentElement;
+
+  let parentWidth = 0;
+
+  if (parent) {
+
+    const parentStyle =
+      window.getComputedStyle(parent);
+
+    parentWidth =
+      parent.clientWidth -
+      (parseFloat(parentStyle.paddingLeft) || 0) -
+      (parseFloat(parentStyle.paddingRight) || 0);
+
+  }
+
+  return {
+    width: rect.width,
+    height: rect.height,
+    naturalWidth: Number(el.naturalWidth) || 0,
+    naturalHeight: Number(el.naturalHeight) || 0,
+    parentWidth: Math.max(0, Math.round(parentWidth)),
+    viewportWidth: document.documentElement.clientWidth || 0
+  };
+
+}
+
+
 /* 재렌더 뒤에는 이전 element 참조가 detached다 — 그때만 id로 다시
    찾는다(위 파일 주석의 반복 항목 한계 참고). */
 function inspectorReviveSelection() {
@@ -572,7 +635,11 @@ function postInspectorRects() {
         : null,
     selected:
       selected
-        ? { editId: inspectorSelectedEditId, rect: inspectorRectOf(selected) }
+        ? {
+            editId: inspectorSelectedEditId,
+            rect: inspectorRectOf(selected),
+            metrics: inspectorMetricsOf(selected)
+          }
         : null
   });
 
@@ -641,8 +708,129 @@ function setInspectorSelection(el, options) {
     type: PREVIEW_MSG_INSPECT_SELECT,
     editId: inspectorSelectedEditId,
     tagName: el ? el.tagName.toLowerCase() : null,
-    rect: inspectorRectOf(el)
+    rect: inspectorRectOf(el),
+    metrics: inspectorMetricsOf(el)
   });
+
+}
+
+
+/* =========================================================
+   임시 미리보기 (Select mode 직접 편집 라운드)
+
+   ★ 여기서 바꾼 것은 **저장되지 않는다**. Save/Publish가 읽는 것은
+   Studio가 들고 있는 SkinPackage 문자열이지 이 문서의 live DOM이
+   아니다 — 그래서 "입력 중에는 미리보기로만 보고, 적용할 때 한 번의
+   편집으로 확정한다"를 재렌더 없이 만들 수 있다. 매 글자/매
+   pointermove마다 스킨 전체를 다시 그리면 한글 조합이 끊기고
+   (IME는 재생성된 textarea를 따라가지 못한다) undo도 그만큼 쌓인다.
+
+   원래 값은 처음 한 번만 저장해 두고, clear에서 되돌린다. 재렌더가
+   일어나면 어차피 DOM이 통째로 교체되므로 그때는 그냥 참조만 버린다.
+========================================================== */
+
+let inspectorPreviewNode = null;
+
+let inspectorPreviewRestore = null;
+
+
+function clearInspectorPreview(options) {
+
+
+  const node =
+    inspectorPreviewNode;
+
+  const restore =
+    inspectorPreviewRestore;
+
+  inspectorPreviewNode = null;
+  inspectorPreviewRestore = null;
+
+  if (!node || !restore) {
+    return;
+  }
+
+  /* 재렌더로 떨어져 나간 노드는 되돌릴 것도, 되돌릴 필요도 없다. */
+  if (!node.isConnected || (options && options.discard)) {
+    return;
+  }
+
+  if (typeof restore.text === "string") {
+    node.textContent = restore.text;
+  }
+
+  /* 선언을 먼저 통째로 비우고(cssText) 원래 값을 되돌린다 — 원래
+     style 속성이 없었으면 속성 자체를 지운다. 빈 문자열도 "없었던
+     것"으로 취급한다: 선언이 하나도 없는 style="" 는 화면에 아무
+     영향이 없지만, 남겨 두면 "임시 변경이 남았나?"를 눈으로 구분할
+     수 없게 된다. */
+  node.style.cssText = "";
+
+  if (typeof restore.style === "string" && restore.style.trim()) {
+    node.setAttribute("style", restore.style);
+  } else {
+    node.removeAttribute("style");
+  }
+
+}
+
+
+function applyInspectorPreview(data) {
+
+  const selected =
+    inspectorReviveSelection();
+
+  if (
+    !selected ||
+    !inspectorSelectedEditId ||
+    data.editId !== inspectorSelectedEditId
+  ) {
+    clearInspectorPreview();
+    return;
+  }
+
+  if (selected !== inspectorPreviewNode) {
+
+    clearInspectorPreview();
+
+    inspectorPreviewNode = selected;
+
+    inspectorPreviewRestore = {
+      text: null,
+      style: selected.getAttribute("style")
+    };
+
+  }
+
+  if (typeof data.text === "string") {
+
+    if (typeof inspectorPreviewRestore.text !== "string") {
+      inspectorPreviewRestore.text = selected.textContent;
+    }
+
+    /* textContent만 쓴다 — 입력을 마크업으로 해석하지 않는다.
+       (Studio가 자식 태그 없는 요소에만 이 메시지를 보낸다.) */
+    selected.textContent = data.text;
+
+    selected.style.whiteSpace =
+      data.text.indexOf("\n") === -1 ? "" : "pre-wrap";
+
+  }
+
+  if (typeof data.width === "number" && Number.isFinite(data.width)) {
+
+    selected.style.width = `${Math.round(data.width)}px`;
+    selected.style.height = "auto";
+    selected.style.maxWidth = "100%";
+
+    selected.style.aspectRatio =
+      (typeof data.ratio === "number" && Number.isFinite(data.ratio) && data.ratio > 0)
+        ? String(data.ratio)
+        : "";
+
+  }
+
+  postInspectorRects();
 
 }
 
@@ -652,6 +840,8 @@ function setInspectorEnabled(enabled) {
   inspectorEnabled = !!enabled;
 
   if (!inspectorEnabled) {
+
+    clearInspectorPreview();
 
     inspectorHoverElement = null;
     inspectorSelectedElement = null;
@@ -688,6 +878,27 @@ document.addEventListener(
     setInspectorSelection(
       resolveInspectableTarget(event.target)
     );
+
+  },
+  true
+);
+
+
+/*
+  브라우저 기본 이미지 드래그(ghost image를 끌고 다니는 동작)는
+  모서리 핸들 드래그와 정면으로 부딪힌다 — 핸들은 Studio overlay에
+  있지만 포인터가 이미지 위를 지나는 순간 이 동작이 시작되면
+  pointermove가 끊긴다. Inspector 중에는 아예 시작하지 않게 한다.
+*/
+document.addEventListener(
+  "dragstart",
+  (event) => {
+
+    if (!inspectorEnabled) {
+      return;
+    }
+
+    event.preventDefault();
 
   },
   true
@@ -926,6 +1137,28 @@ window.addEventListener("message", (event) => {
         : null,
       { silent: true }
     );
+
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_INSPECT_PREVIEW) {
+
+    if (!inspectorEnabled) {
+      return;
+    }
+
+    if (data.clear === true) {
+      clearInspectorPreview();
+      postInspectorRects();
+      return;
+    }
+
+    if (typeof data.editId !== "string" || !window.isValidInspectorEditId(data.editId)) {
+      return;
+    }
+
+    applyInspectorPreview(data);
 
     return;
 

@@ -1358,6 +1358,9 @@ if (typeof window !== "undefined") {
   window.postInspectorSelectionToFrame =
     postInspectorSelectionToFrame;
 
+  window.postInspectorPreviewToFrame =
+    postInspectorPreviewToFrame;
+
 }
 
 
@@ -1845,6 +1848,42 @@ function postInspectorSelectionToFrame(editId) {
       type: "preview:inspector-select",
       editId: typeof editId === "string" ? editId : null
     },
+    window.location.origin
+  );
+
+}
+
+
+/* =========================================================
+   postInspectorPreviewToFrame(payload) (Select mode 직접 편집)
+
+   입력 중인 텍스트/드래그 중인 크기를 **저장하지 않고** Preview에만
+   비춘다. payload가 null이면 임시 상태를 걷어내라는 뜻이다.
+
+   확정(applyStudioDirectEdit)과 달리 SkinPackage도 dirty도 건드리지
+   않는다 — 그래서 매 글자/매 pointermove마다 불러도 Undo가 쌓이지
+   않고 한글 조합도 끊기지 않는다.
+========================================================== */
+
+function postInspectorPreviewToFrame(payload) {
+
+  if (!previewFrameReady) {
+    return;
+  }
+
+  studioPreviewFrame.contentWindow.postMessage(
+    payload
+      ? {
+          type: "preview:inspect-preview",
+          editId: payload.editId,
+          text: typeof payload.text === "string" ? payload.text : undefined,
+          width: typeof payload.width === "number" ? payload.width : undefined,
+          ratio: typeof payload.ratio === "number" ? payload.ratio : undefined
+        }
+      : {
+          type: "preview:inspect-preview",
+          clear: true
+        },
     window.location.origin
   );
 

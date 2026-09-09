@@ -594,6 +594,65 @@ const INSPECTOR_SHAPE_VALUES = {
 };
 
 
+/* =========================================================
+   이미지 가로 크기와 비율 (Select mode 직접 편집 라운드)
+
+   크기 조절은 **가로 하나만** 사용자가 정하고, 세로는 지금 화면에
+   보이는 비율로 따라온다. 그래서 `height: auto` + `aspect-ratio`를
+   같이 쓴다:
+
+     - 스킨이 `width:120px; height:120px; object-fit:cover`로 만든
+       정사각형 프로필 사진에 `height:auto`만 주면 원본 비율로
+       늘어나 구도가 바뀐다. aspect-ratio가 그 정사각형을 그대로
+       유지해 준다(object-fit 값 자체는 건드리지 않는다).
+     - 반대로 `height`를 px로 박으면 좁은 화면에서 max-width로
+       가로가 줄 때 세로가 안 줄어 이미지가 찌그러진다.
+
+   max-width: 100%를 항상 함께 쓴다 — 부모보다 큰 px를 넣어도
+   모바일에서 가로 넘침이 생기지 않게 하는 안전장치다(가로가 줄면
+   aspect-ratio가 세로를 같이 줄여 비율은 그대로 유지된다).
+========================================================== */
+
+const INSPECTOR_ASPECT_RATIO_MIN = 0.02;
+
+const INSPECTOR_ASPECT_RATIO_MAX = 50;
+
+
+function inspectorAspectRatio(value) {
+
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return null;
+  }
+
+  const raw =
+    String(value).trim();
+
+  let ratio;
+
+  const pair =
+    /^([0-9]*\.?[0-9]+)\s*\/\s*([0-9]*\.?[0-9]+)$/.exec(raw);
+
+  if (pair) {
+    ratio = Number(pair[1]) / Number(pair[2]);
+  } else {
+    ratio = Number(raw);
+  }
+
+  if (!Number.isFinite(ratio) || ratio <= 0) {
+    return null;
+  }
+
+  const clamped =
+    Math.min(Math.max(ratio, INSPECTOR_ASPECT_RATIO_MIN), INSPECTOR_ASPECT_RATIO_MAX);
+
+  /* 소수 넷째 자리까지만 남긴다 — 측정값(예: 137.328125 / 91.5)을
+     그대로 쓰면 CSS에 의미 없이 긴 숫자가 남고, 저장 → 다시 읽기에서
+     문자열이 미묘하게 달라진다. */
+  return String(Math.round(clamped * 10000) / 10000);
+
+}
+
+
 function inspectorLengthPx(value, max) {
 
   /* 빈 값은 0이 아니라 "설정 안 함"이다 — Number("")가 0이라
@@ -674,11 +733,33 @@ function buildInspectorStylePatch(control, value) {
       return length ? { padding: length } : clear(["padding"]);
     }
 
+    /* 값은 두 가지 모양을 받는다:
+         "240"                       — 비율 정보 없이 가로만
+         { width: 240, ratio: 1.5 }  — 지금 화면에 보이는 비율 유지
+       빈 width는 "이번 직접 편집으로 넣은 크기 설정을 전부 제거"다
+       (= 스킨 CSS 원래 크기로 복귀). */
     case "size": {
-      const length = inspectorLengthPx(value, 2000);
-      return length
-        ? { width: length, height: "auto" }
-        : clear(["width", "height"]);
+
+      const isObject =
+        value !== null && typeof value === "object";
+
+      const length =
+        inspectorLengthPx(isObject ? value.width : value, 2000);
+
+      if (!length) {
+        return clear(["width", "height", "aspect-ratio", "max-width"]);
+      }
+
+      const ratio =
+        inspectorAspectRatio(isObject ? value.ratio : null);
+
+      return {
+        width: length,
+        height: "auto",
+        "aspect-ratio": ratio,
+        "max-width": "100%"
+      };
+
     }
 
     case "border": {
@@ -698,6 +779,15 @@ function buildInspectorStylePatch(control, value) {
       return { border: `${width} solid ${color || "#000000"}` };
 
     }
+
+    /* 여러 줄 텍스트 — textContent에 넣은 줄바꿈은 HTML에서 그냥
+       공백 하나로 접히므로, 사용자가 실제로 줄을 나눴을 때만
+       white-space를 pre-wrap으로 올린다(한 줄로 되돌리면 다시
+       제거해 스킨 원래 값으로 돌아간다). */
+    case "whiteSpace":
+      return String(value) === "pre-wrap"
+        ? { "white-space": "pre-wrap" }
+        : clear(["white-space"]);
 
     case "imageAlign": {
 
@@ -780,6 +870,14 @@ function readInspectorControlValue(control, declarations) {
     case "size":
       return px(decl.width);
 
+    /* 지금 규칙에 적혀 있는 비율(문자열). 없으면 빈 문자열 —
+       그때는 UI가 화면에서 잰 비율을 쓴다. */
+    case "sizeRatio":
+      return inspectorAspectRatio(decl["aspect-ratio"]) || "";
+
+    case "whiteSpace":
+      return decl["white-space"] === "pre-wrap" ? "pre-wrap" : "";
+
     case "border": {
 
       const parsed =
@@ -831,5 +929,6 @@ if (typeof window !== "undefined") {
   window.writeInspectorEditDeclarations = writeInspectorEditDeclarations;
   window.buildInspectorStylePatch = buildInspectorStylePatch;
   window.readInspectorControlValue = readInspectorControlValue;
+  window.inspectorAspectRatio = inspectorAspectRatio;
 
 }

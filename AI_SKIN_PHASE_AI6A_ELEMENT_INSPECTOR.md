@@ -321,6 +321,12 @@ imageSlot 판정은 Skin Context가 슬롯 값을 노출하는 두 경로만 인
 
 ## 11. 테스트
 
+> **일부 변경됨 →**
+> [AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md](./AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md)
+> — 텍스트 내용 입력(한 줄 input → 여러 줄 textarea + 적용/취소)과 이미지
+> 크기(숫자 하나 → 슬라이더 + 숫자 + 모서리 드래그, 비율 유지)가 그 라운드에서
+> 바뀌었다. 아래 fixture(scenario y)에도 요소 두 개와 Images 버튼이 더해졌다.
+
 `studio/studio-inspector-e2e-test.mjs` (포트 8939, `?scenario=y`).
 mock 대상은 Supabase 하나뿐이고 HTML/CSS/JS는 저장소의 실제 파일이다.
 

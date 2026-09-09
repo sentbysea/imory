@@ -55,6 +55,17 @@
       cursor: crosshair !important;
     }
 
+    /*
+      Select mode 직접 편집 라운드 — 모서리 핸들로 이미지 크기를
+      바꾸는 동안 브라우저 기본 이미지 드래그가 끼어들면 포인터
+      이동이 그쪽으로 넘어가 버린다(preview-bridge.js가 dragstart도
+      막지만, 아예 시작 자체를 못 하게 하는 쪽이 확실하다).
+    */
+    body.imory-inspector-on img {
+      -webkit-user-drag: none;
+      user-select: none;
+    }
+
   </style>
 
   <!--
