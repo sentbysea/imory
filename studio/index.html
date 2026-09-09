@@ -243,15 +243,13 @@
 
              Select는 "무엇을 만든다"가 아니라 **모드**라, Code/
              Import/Images/Save/Publish가 있는 오른쪽 actions 그룹이
-             아니라 dock 왼쪽에 둔다. 자리 때문이기도 하다:
-             actions 그룹은 이미 오른쪽 끝에 붙어 왼쪽으로 자라는데,
-             1280 폭에서 AI 패널까지 열면 가운데 Desktop/Mobile
-             토글(.studio-top-dock-groups, 뷰포트 중앙 고정)과
-             부딪힌다 — 왼쪽은 back 뒤로 300px 넘게 비어 있다.
+             아니라 dock 왼쪽에 둔다 — 왼쪽은 back 뒤로 300px 넘게
+             비어 있다.
 
-             back과 Select를 한 wrapper로 묶어 dock의 in-flow
-             자식 수를 그대로 둘(2개) 유지한다 — dock의
-             justify-content:space-between 배치가 바뀌지 않는다.
+             back과 Select를 한 wrapper로 묶어 dock의 자식 그룹을
+             셋(lead / groups / actions)으로 유지한다 — 이 셋이
+             같은 flex 줄에서 서로를 밀어내는 것이 지금의 반응형
+             배치 규칙이다(studio.css "세 그룹의 배치 규칙").
 
              aria-pressed로 "지금 켜져 있는가"를 나타낸다(여닫는
              패널이 아니라 모드라 aria-expanded가 아니다) —
@@ -422,17 +420,27 @@
 
         </div>
 
+
+        <!--
+             DOCK HANDLE — 바에 매달린 탭 (반응형 라운드에서
+             zone의 자식 → 바의 자식으로 옮김)
+
+             top:100%(studio.css)로 바 **아래**에 붙는다. 열려
+             있을 때 가운데 Desktop/Mobile 토글 위를 덮지 않고,
+             닫히면 바가 자기 높이만큼 올라가면서 이 탭이 정확히
+             화면 맨 위(y=0)에 남는다 — 예전과 같은 자리다.
+        -->
+
+        <button
+          type="button"
+          class="studio-top-dock-handle"
+          id="studioTopDockHandle"
+          aria-expanded="true"
+          aria-controls="studioTopDock"
+          aria-label="Studio 상단 컨트롤"
+        ><span id="studioTopDockHandleIcon" aria-hidden="true">▴</span></button>
+
       </div>
-
-
-      <button
-        type="button"
-        class="studio-top-dock-handle"
-        id="studioTopDockHandle"
-        aria-expanded="true"
-        aria-controls="studioTopDock"
-        aria-label="Studio 상단 컨트롤"
-      ><span id="studioTopDockHandleIcon" aria-hidden="true">▴</span></button>
 
     </div>
 

@@ -77,8 +77,9 @@
           <span class="studio-top-dock-divider" aria-hidden="true"></span>
           <button type="button" class="studio-corner-button studio-ai-toggle-button" id="studioAiToggleButton" aria-expanded="false" aria-controls="studioAiDrawer">AI Assistant</button>
         </div>
+        <!-- 반응형 라운드 — handle은 zone이 아니라 바의 자식이다(studio/index.html과 동일) -->
+        <button type="button" class="studio-top-dock-handle" id="studioTopDockHandle" aria-expanded="true" aria-controls="studioTopDock" aria-label="Studio 상단 컨트롤"><span id="studioTopDockHandleIcon" aria-hidden="true">▴</span></button>
       </div>
-      <button type="button" class="studio-top-dock-handle" id="studioTopDockHandle" aria-expanded="true" aria-controls="studioTopDock" aria-label="Studio 상단 컨트롤"><span id="studioTopDockHandleIcon" aria-hidden="true">▴</span></button>
     </div>
 
     <!-- PHASE AI-5A / AI-5A.1 — studio/index.html과 동일한 우측 사이드바 구조
@@ -882,7 +883,14 @@
             ],
             skin_image_slot_values: [],
             profiles: [{ user_id: "user-t", nickname: "Scenario T", bio: null, slug: "scenario-t" }],
-            site_settings: [],
+            /* Settings 연결 라운드 — Studio Preview가 Settings 값을
+               runtime binding으로 읽는지 재는 fixture다(공개 화면과
+               같은 buildSkinContext 경로). avatar_url은 스킨 이미지
+               슬롯 값이 없을 때의 기본값으로 쓰여야 한다. */
+            site_settings: [
+              { user_id: "user-t", key: "blog_title", value: "SCENARIO T BLOG" },
+              { user_id: "user-t", key: "avatar_url", value: "https://cdn.example.com/settings-avatar.png" }
+            ],
             categories: [
               { id: "301", user_id: "user-t", name: "LOG", type: "post", sort_order: 1 },
               { id: "302", user_id: "user-t", name: "NOTE", type: "post", sort_order: 2 }

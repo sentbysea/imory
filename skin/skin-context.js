@@ -70,8 +70,14 @@ const SKIN_CONTEXT_LANGUAGE =
 const SKIN_HOME_RECENT_POSTS_LIMIT =
   5;
 
+/*
+  avatar_url은 Settings > PROFILE PICTURE가 저장하는 값이다
+  (admin/settings/admin-settings-avatar.js). Skin은 이 키를
+  직접 알지 못하고 profile.avatarUrl / images.profile로만 본다
+  — 아래 buildBaseSkinContext() 참고.
+*/
 const SKIN_CONTEXT_SITE_SETTINGS_KEYS =
-  ["blog_title", "favicon_url"];
+  ["blog_title", "favicon_url", "avatar_url"];
 
 /*
   관리 화면 경로 — home/home-skin-prompt.js가 Skin Studio로 보낼 때
@@ -621,11 +627,49 @@ async function resolveSkinViewerId() {
    정의(imageSlotNames)가 어떤 슬롯이 존재하는지를 결정한다
    (PHASE1A_DESIGN.md 1-6절) — imageSlotValues에 값이 있어도
    imageSlotNames에 없는 슬롯은 노출하지 않는다.
+
+   slotDefaults는 "사용자가 이 슬롯에 이미지를 따로 지정하지
+   않았을 때 대신 쓸 값"이다. 지금은 profile 슬롯 하나가 쓴다
+   — Settings의 프로필 사진(site_settings.avatar_url). 슬롯에
+   실제 값이 있으면 언제나 그쪽이 이긴다(스킨에서 고른 이미지가
+   Settings 값에 덮이면 안 된다).
 ========================================================== */
+
+/*
+  슬롯 기본값 — 지금은 profile 하나뿐이다.
+
+  Settings > PROFILE PICTURE가 저장하는 site_settings.avatar_url을
+  "스킨이 profile 이미지를 따로 고르지 않았을 때의 값"으로 쓴다.
+  값은 업로드가 만든 URL이지만(admin/settings/admin-settings-avatar.js
+  에는 URL 입력칸이 없다), 예전 버전에서 직접 입력해 둔 외부 URL이
+  남아 있을 수 있어 banner와 같은 기준(isSafeSkinUrl)으로 한 번
+  거른다.
+*/
+
+function buildSkinImageSlotDefaults(
+  siteSettings
+) {
+
+  const rawAvatarUrl =
+    siteSettings?.avatar_url?.trim() ||
+    "";
+
+  return {
+
+    profile:
+      rawAvatarUrl && isSafeSkinUrl(rawAvatarUrl)
+        ? rawAvatarUrl
+        : null
+
+  };
+
+}
+
 
 function buildSkinImages(
   imageSlotNames,
-  imageSlotValues
+  imageSlotValues,
+  slotDefaults
 ) {
 
   const images =
@@ -637,6 +681,7 @@ function buildSkinImages(
 
       images[slotName] =
         imageSlotValues?.[slotName] ??
+        slotDefaults?.[slotName] ??
         null;
 
     }
@@ -752,25 +797,66 @@ async function buildBaseSkinContext(
     ]);
 
 
+  /*
+    프로필 사진의 원천은 이제 Settings > PROFILE PICTURE다
+    (site_settings.avatar_url, admin/settings/admin-settings-avatar.js).
+    예전에는 그런 기능이 아예 없어서 이미지 슬롯 값만 재노출했다
+    (PHASE1A_DESIGN.md 1-2절) — 그래서 Settings에서 사진을 바꿔도
+    스킨에는 아무 일도 일어나지 않았다.
+
+    우선순위(요구사항):
+      1. 스킨에서 profile 이미지 슬롯을 따로 지정했으면 그 이미지
+      2. 지정이 없으면 Settings의 avatar_url
+      3. 둘 다 없으면 null
+
+    1이 2를 이기는 것은 buildSkinImages()가 슬롯 값 → 기본값
+    순으로 읽기 때문이다.
+  */
+
+  const imageSlotDefaults =
+    buildSkinImageSlotDefaults(
+      siteSettings
+    );
+
+  const settingsAvatarUrl =
+    imageSlotDefaults.profile;
+
+
+  /*
+    Studio는 Images 패널에서 슬롯을 바꿀 때마다 이 맵을 다시
+    계산해야 하는데(studio-preview.js syncImageSlotsIntoCurrentContext),
+    site_settings를 한 번 더 조회하지 않도록 여기서 만든 기본값을
+    그대로 돌려준다. 공개 페이지는 이 콜백을 쓰지 않는다.
+  */
+
+  if (typeof options.onImageSlotDefaults === "function") {
+
+    options.onImageSlotDefaults(
+      imageSlotDefaults
+    );
+
+  }
+
+
   const images =
     buildSkinImages(
       imageSlotNames,
-      imageSlotValues
+      imageSlotValues,
+      imageSlotDefaults
     );
 
 
   /*
-    profile.avatarUrl은 images.profile과 항상 같은 값이어야
-    한다(PHASE1A_DESIGN.md 1-2절 — 별도 프로필 이미지 업로드
-    기능이 없어 이미지 슬롯 해석값을 그대로 재노출). 같은
-    images 맵에서 읽어야 "profile" 슬롯이 imageSlotNames에
-    없을 때 둘 다 동일하게 null이 된다.
+    profile.avatarUrl은 images.profile을 그대로 비추되, 스킨이
+    "profile" 슬롯을 아예 선언하지 않은 경우에도 Settings 값을
+    보여준다 — 그런 스킨에서도 프로필 사진을 쓸 수 있어야 한다.
+    슬롯을 선언한 스킨에서는 여전히 두 값이 항상 같다.
   */
 
   const avatarUrl =
     Object.prototype.hasOwnProperty.call(images, "profile")
       ? images.profile
-      : null;
+      : settingsAvatarUrl;
 
 
   const siteTitle =

@@ -495,13 +495,23 @@
 
 
           <!-- =================================================
-               AVATAR
+               AVATAR — 업로드 전용 (URL 직접 입력 제거)
 
-               FAVICON과 같은 패턴(admin-settings-avatar.js 참고) — 이미지는
-               Supabase Storage의 항상 같은 경로(user-avatars/{user_id}/
-               avatar, 확장자 없음)에 업로드로 덮어쓰기(upsert)되고,
-               site_settings에 key='avatar_url'로 그 고정 URL(또는
-               직접 입력한 외부 URL)이 저장된다.
+               이미지는 Supabase Storage에 **업로드마다 새 경로**
+               (user-avatars/{user_id}/avatars/{uuid})로 올라가고,
+               site_settings에 key='avatar_url'로 그 URL이 저장된다.
+
+               예전에는 "AVATAR URL 입력칸 + 별도 save 버튼"이
+               있어서, 업로드한 뒤 save를 한 번 더 눌러야 실제로
+               반영됐다(그 사이에 나가면 사진이 사라진 것처럼
+               보였다). 이제 이 화면은 사진만 다룬다 — 업로드가
+               성공하면 그 자리에서 site_settings까지 저장하고,
+               remove가 저장값과 Storage 파일을 함께 정리한다.
+               사용자가 URL 문자열을 만질 일이 없다.
+
+               경로를 매번 새로 만드는 이유(원자성 · 이전 객체
+               정리 · 빠른 연속 선택 처리)는 전부
+               admin/settings/admin-settings-avatar.js 상단에 있다.
           ================================================== -->
 
           <section
@@ -538,12 +548,25 @@
               ></div>
 
 
-              <label
-                class="avatar-change-button imory-button imory-button--primary imory-button--md"
-                for="avatarFileInput"
-              >
-                change
-              </label>
+              <div class="avatar-actions">
+
+                <label
+                  class="avatar-change-button imory-button imory-button--primary imory-button--md"
+                  for="avatarFileInput"
+                >
+                  change
+                </label>
+
+                <button
+                  class="avatar-remove-button imory-button imory-button--md"
+                  id="avatarRemoveButton"
+                  type="button"
+                  hidden
+                >
+                  remove
+                </button>
+
+              </div>
 
               <input
                 class="avatar-file-input"
@@ -559,41 +582,8 @@
             <p
               class="avatar-upload-message"
               id="avatarUploadMessage"
-            ></p>
-
-
-            <div class="setting-line">
-
-              <label for="avatarUrlInput" class="imory-label">
-                AVATAR URL
-              </label>
-
-              <input
-                id="avatarUrlInput"
-                class="setting-input imory-field imory-field--md"
-                type="url"
-                placeholder="https://example.com/avatar.png"
-              >
-
-            </div>
-
-
-            <div class="imory-form-actions">
-
-              <button
-                class="save-button imory-button imory-button--primary imory-button--md"
-                id="avatarSaveButton"
-                type="button"
-              >
-                save
-              </button>
-
-            </div>
-
-
-            <p
-              class="save-message"
-              id="avatarSaveMessage"
+              role="status"
+              aria-live="polite"
             ></p>
 
           </section>
@@ -1072,7 +1062,7 @@
                 id="myBannerUrlInput"
                 class="setting-input imory-field imory-field--md"
                 type="url"
-                placeholder="https://바이브.me"
+                placeholder="https://example.com"
               >
 
             </div>

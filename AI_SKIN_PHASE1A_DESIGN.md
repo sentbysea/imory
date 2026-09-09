@@ -27,7 +27,19 @@ v0.1은 **HOME에서 필요한 최소 필드만** 다룬다. LIST/POST 계약은
 |---|---|---|---|---|---|
 | `profile.nickname` | string | 아니오 | `profiles.nickname` | 예 | 표시 이름 |
 | `profile.bio` | string \| null | 예 | `profiles.bio` | 예 | 자기소개 텍스트 |
-| `profile.avatarUrl` | string \| null | 예 | 없음 — Skin Image Slot(`images.profile`, 3절) 해석 결과를 그대로 재노출 | 예 | 프로필 사진. 현재 별도의 "프로필 이미지 업로드" 기능이 앱에 없으므로(감사 결과), raw DB 컬럼이 아니라 이미지 슬롯 해석값을 그대로 반영 — `images.profile`과 값은 같지만 템플릿 작성 편의를 위해 `profile.avatarUrl`로도 노출 |
+| `profile.avatarUrl` | string \| null | 예 | **변경됨** → 아래 주 참고 (`site_settings.avatar_url` + `images.profile`) | 예 | 프로필 사진 |
+
+> **이 행은 이후 라운드에서 바뀌었다(Settings 연결 라운드).** 이 문서를
+> 쓸 당시에는 "프로필 이미지 업로드" 기능이 앱에 없어서 `profile.avatarUrl`을
+> Skin Image Slot(`images.profile`) 해석값의 미러로만 두었다. 지금은
+> Settings > PROFILE PICTURE(`admin/settings/admin-settings-avatar.js`)가
+> `site_settings.avatar_url`에 실제 업로드 URL을 저장하고,
+> `skin/skin-context.js`의 `buildSkinImageSlotDefaults()`가 그 값을
+> **`images.profile`의 기본값**으로 쓴다. 최종 우선순위는
+> ① 스킨이 profile 슬롯에 연결한 이미지 → ② Settings의 `avatar_url`
+> → ③ `null`. 스킨이 `profile` 슬롯을 선언한 경우 `profile.avatarUrl`은
+> 여전히 `images.profile`과 항상 같고, 선언하지 않은 스킨에서는
+> `profile.avatarUrl`만 ②를 그대로 보여준다.
 
 ### 1-3. `navigation`
 

@@ -281,6 +281,13 @@ function inspectorOwnText(el) {
      images.<slotName>
      profile.avatarUrl        -> "profile" 슬롯
 
+   profile 슬롯을 비워 두면 그 자리에 Settings의 프로필 사진
+   (site_settings.avatar_url)이 대신 그려지지만, 그건 슬롯의
+   **기본값**이지 슬롯 연결이 아니다 — 여기서 "이미지 변경"을
+   제공할지는 지금도 오직 "스킨이 그 슬롯을 선언했는가"로만
+   정한다(선언하지 않은 스킨의 profile.avatarUrl은 교체 대상이
+   Settings 쪽이므로 이 패널이 손대지 않는다).
+
    그 외 경로(item.imageUrl 등)는 글/배너 데이터에서 오는 값이라
    슬롯이 아니다 — 그런 이미지는 "이미지 변경"을 제공하지 않는다
    (교체 대상이 스킨이 아니라 사용자의 글 데이터이기 때문).

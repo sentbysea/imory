@@ -28,8 +28,9 @@
   - `navigation.categories[]`: `{ id, name, type, href, itemCount(null 고정) }`
   - `home.recentPosts[]`: `{ id, title(마스킹됨), href, publishedAt, categoryName }`
   - `banners.items[]`: `{ id, imageUrl, href, alt }`
-  - `images`: `{ [slotName]: url|null }` — 렌더링할 Skin Version의 `imageSlots[].name` 목록이 있는 슬롯만 키로 존재.
-- **데이터 출처**: `profiles`(nickname/bio/slug), `site_settings`(blog_title/favicon_url, key-value), `categories`(id/name/type/sort_order, `user_id` scope), `posts`(id/title/created_at/visibility/category_id, 최근 5개), `banners`(`category.type === "banner"`인 카테고리에만 연결).
+  - `images`: `{ [slotName]: url|null }` — 렌더링할 Skin Version의 `imageSlots[].name` 목록이 있는 슬롯만 키로 존재. 값이 없는 슬롯은 기본값이 있으면 그 값으로 채워진다(지금은 `profile` 슬롯 하나 — Settings의 `site_settings.avatar_url`, 아래 참고).
+  - **`profile.avatarUrl` / `images.profile` 우선순위(Settings 연결 라운드)**: ① 스킨이 `profile` 이미지 슬롯에 연결한 이미지 → ② Settings > PROFILE PICTURE가 저장한 `site_settings.avatar_url` → ③ `null`. `skin/skin-context.js`의 `buildSkinImageSlotDefaults()` + `buildSkinImages(names, values, defaults)`가 이 순서를 구현하고, Studio Preview도 같은 함수를 쓴다(`studio/studio-preview.js syncImageSlotsIntoCurrentContext`). PHASE 1A 1-2절의 "avatarUrl은 images.profile의 미러일 뿐"은 이 라운드에서 철회됐다 → [AI_SKIN_PHASE1A_DESIGN.md](./AI_SKIN_PHASE1A_DESIGN.md) 1-2절.
+- **데이터 출처**: `profiles`(nickname/bio/slug), `site_settings`(blog_title/favicon_url/avatar_url, key-value), `categories`(id/name/type/sort_order, `user_id` scope), `posts`(id/title/created_at/visibility/category_id, 최근 5개), `banners`(`category.type === "banner"`인 카테고리에만 연결).
 - **published Skin 렌더 진입점**: `get_published_skin(p_user_id)` RPC → `{ skin, schemaVersion, imageSlotValues }` → `schemaVersion !== 1`이면 즉시 폴백(모르는 버전을 부분 렌더하지 않음) → `buildSkinContext()` → `renderSkin({ container, skin, context, mode:"view" })`.
 
 ### 1-2. CATEGORY / LIST

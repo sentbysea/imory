@@ -686,6 +686,9 @@
    admin-settings-avatar.js 참고. FAVICON과 같은 preview/change
    구조를 재사용하되, 프로필 사진이라 미리보기 박스를 64px
    정사각형으로 조금 더 키운다.
+
+   URL 입력칸과 별도 save 버튼이 사라진 뒤로 이 그룹의 컨트롤은
+   change/remove 둘뿐이라, 미리보기 옆에 나란히 둔다.
 ========================================================== */
 
 .avatar-group {
@@ -737,11 +740,50 @@
 }
 
 
+.avatar-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+
+  gap: 8px;
+}
+
+
 .avatar-change-button {
   padding-inline: 14px;
 
   font-weight: 500;
   letter-spacing: 0.03em;
+}
+
+
+/*
+  파괴적인 동작이라 change와 같은 무게로 보이면 안 된다 —
+  primary 채움 없이 테두리만 있는 보조 버튼으로 둔다(색 토큰은
+  core/design-tokens.css 공용, 새 literal 색을 만들지 않는다).
+*/
+.avatar-remove-button {
+  padding-inline: 14px;
+
+  border: 1px solid var(--system-border-strong);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-muted);
+
+  letter-spacing: 0.03em;
+}
+
+
+.avatar-remove-button:hover:not(:disabled) {
+  color: var(--system-accent-hover);
+
+  border-color: var(--system-accent-border);
+}
+
+
+.avatar-remove-button[hidden] {
+  display: none;
 }
 
 

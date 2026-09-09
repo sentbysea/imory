@@ -28,7 +28,7 @@
      node skin/skin-folder-tree-e2e-test.mjs --browser=webkit
      node skin/skin-folder-tree-e2e-test.mjs --only=preview
 
-   --only= 뒤에 쓸 수 있는 이름: published / preview / regression
+   --only= 뒤에 쓸 수 있는 이름: published / preview / regression / profile
 ========================================================== */
 
 import fs from "node:fs";
@@ -301,7 +301,8 @@ async function installSupabaseMock(page, opts = {}) {
   const {
     skin = FOLDER_SKIN,
     db = makeDb(),
-    signedInAs = null
+    signedInAs = null,
+    imageSlotValues = {}
   } = opts;
 
   await page.route(`https://${SUPABASE_HOST}/**`, async route => {
@@ -325,7 +326,7 @@ async function installSupabaseMock(page, opts = {}) {
     if (url.pathname.startsWith("/rest/v1/rpc/")) {
       const fn = url.pathname.slice("/rest/v1/rpc/".length);
       const body = fn === "get_published_skin"
-        ? { skin, schemaVersion: skin.schemaVersion, imageSlotValues: {} }
+        ? { skin, schemaVersion: skin.schemaVersion, imageSlotValues }
         : null;
       return route.fulfill({
         status: 200, headers, contentType: "application/json",
@@ -756,6 +757,28 @@ async function testPreview() {
     check("Preview: 폴더 없는 카테고리(302)는 root 글만",
       same(flatSig, [post("노트 하나", 408)]), JSON.stringify(flatSig));
 
+    /* Settings 연결 라운드 — Preview도 공개 화면과 같은
+       buildSkinContext를 쓰므로 같은 값이 나와야 한다. scenario t의
+       site_settings에는 blog_title/avatar_url이 있고 스킨 이미지
+       슬롯 값은 비어 있다(skin_image_slot_values: []). */
+    const previewProfile = await page.evaluate(() => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      const root = doc.querySelector(".imory-skin-root");
+      const avatar = root.querySelector(".finder-avatar");
+      return {
+        avatarSrc: avatar ? avatar.getAttribute("src") : "(no-avatar-el)",
+        nickname: (root.querySelector(".finder-name") || {}).textContent || null,
+        brand: (root.querySelector(".finder-brand") || {}).textContent || null
+      };
+    });
+
+    check("Preview: Settings의 avatar_url이 profile.avatarUrl로 들어온다(슬롯 값 없음)",
+      previewProfile.avatarSrc === "https://cdn.example.com/settings-avatar.png",
+      JSON.stringify(previewProfile));
+    check("Preview: Settings의 blog_title이 site.title이고 nickname도 그대로다",
+      previewProfile.brand === "SCENARIO T BLOG" && previewProfile.nickname === "Scenario T",
+      JSON.stringify(previewProfile));
+
     check("Preview 흐름 중 페이지 오류 없음", errors.length === 0, errors.join(" | "));
   });
 }
@@ -812,6 +835,146 @@ async function testRegression() {
 }
 
 
+/* =========================================================
+   4. profile — Settings 값이 공개 스킨에 runtime binding으로
+      연결된다 (Settings 연결 라운드)
+
+   확인하는 것:
+     profiles.nickname        -> profile.nickname
+     site_settings.blog_title -> site.title
+     site_settings.avatar_url -> profile.avatarUrl + images.profile 기본값
+
+   avatar 우선순위: 스킨 슬롯 값 > Settings avatar_url > null.
+   imory-finder-folders-v1은 사이드바에 data-imory-src=
+   "profile.avatarUrl", HOME 본문에 data-imory-src="images.profile"을
+   둘 다 갖고 있어서 두 경로를 한 화면에서 같이 잴 수 있다.
+========================================================== */
+
+const SETTINGS_AVATAR = "https://cdn.example.com/settings-avatar.png";
+const SLOT_AVATAR = "https://cdn.example.com/slot-avatar.png";
+
+function dbWithSettings(extra) {
+  const db = makeDb();
+  db.site_settings = [
+    { user_id: OWNER_ID, key: "blog_title", value: "IMORY E2E" },
+    { user_id: OWNER_ID, key: "favicon_url", value: "" },
+    ...extra
+  ];
+  return db;
+}
+
+const READ_PROFILE = `() => {
+  const root = document.querySelector("#postList .imory-skin-root")
+    || document.querySelector(".imory-skin-root");
+  if (!root) return null;
+  const avatar = root.querySelector(".finder-avatar");
+  const feature = root.querySelector(".finder-home-image");
+  return {
+    avatarSrc: avatar ? avatar.getAttribute("src") : "(no-avatar-el)",
+    featureSrc: feature ? feature.getAttribute("src") : null,
+    nickname: (root.querySelector(".finder-name") || {}).textContent || null,
+    brand: (root.querySelector(".finder-brand") || {}).textContent || null
+  };
+}`;
+
+async function readProfileOn(page, urlPath, waitFor) {
+  await page.goto(`${BASE}${urlPath}`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector(waitFor, { timeout: 15000 });
+  await page.waitForTimeout(200);
+  return page.evaluate(eval(`(${READ_PROFILE})`));
+}
+
+async function testProfile() {
+  console.log("\n[profile · Settings → Skin]");
+
+  const viewport = VIEWPORTS["desktop-1280"];
+
+  /* --- 1. 슬롯 값이 없으면 Settings의 avatar_url이 쓰인다 --- */
+
+  await withPage(
+    viewport,
+    { db: dbWithSettings([{ user_id: OWNER_ID, key: "avatar_url", value: SETTINGS_AVATAR }]) },
+    async (page, { errors }) => {
+
+      const home = await readProfileOn(page, `/${SLUG}/`, ".imory-skin-root .finder-avatar");
+
+      check("HOME: profile.avatarUrl이 Settings의 avatar_url이다",
+        home.avatarSrc === SETTINGS_AVATAR, JSON.stringify(home));
+      check("HOME: images.profile 기본값도 같은 Settings 값이다",
+        home.featureSrc === SETTINGS_AVATAR, JSON.stringify(home));
+      check("HOME: profiles.nickname이 그대로 그려진다",
+        home.nickname === "테스트 사용자", JSON.stringify(home));
+      check("HOME: site.title이 site_settings.blog_title이다",
+        home.brand === "IMORY E2E", JSON.stringify(home));
+
+      const category = await readProfileOn(
+        page, `/${SLUG}/category/1`, "#postList .imory-skin-root .finder-avatar"
+      );
+
+      check("CATEGORY: 같은 Settings 값이 쓰인다(같은 buildBaseSkinContext)",
+        category.avatarSrc === SETTINGS_AVATAR && category.brand === "IMORY E2E",
+        JSON.stringify(category));
+
+      check("페이지 오류 없음", errors.length === 0, errors.join(" | "));
+    }
+  );
+
+  /* --- 2. 스킨 이미지 슬롯을 따로 지정하면 그쪽이 이긴다 --- */
+
+  await withPage(
+    viewport,
+    {
+      db: dbWithSettings([{ user_id: OWNER_ID, key: "avatar_url", value: SETTINGS_AVATAR }]),
+      imageSlotValues: { profile: SLOT_AVATAR }
+    },
+    async (page, { errors }) => {
+
+      const home = await readProfileOn(page, `/${SLUG}/`, ".imory-skin-root .finder-avatar");
+
+      check("슬롯 값이 있으면 Settings 값을 덮는다(profile.avatarUrl)",
+        home.avatarSrc === SLOT_AVATAR, JSON.stringify(home));
+      check("슬롯 값이 있으면 Settings 값을 덮는다(images.profile)",
+        home.featureSrc === SLOT_AVATAR, JSON.stringify(home));
+
+      check("페이지 오류 없음", errors.length === 0, errors.join(" | "));
+    }
+  );
+
+  /* --- 3. 둘 다 없으면 null → src 속성 자체가 없다 --- */
+
+  await withPage(
+    viewport,
+    { db: dbWithSettings([]) },
+    async (page, { errors }) => {
+
+      const home = await readProfileOn(page, `/${SLUG}/`, ".imory-skin-root .finder-avatar");
+
+      check("Settings도 슬롯도 없으면 src가 붙지 않는다(null)",
+        home.avatarSrc === null && home.featureSrc === null, JSON.stringify(home));
+
+      check("페이지 오류 없음", errors.length === 0, errors.join(" | "));
+    }
+  );
+
+  /* --- 4. 예전에 직접 입력해 둔 http:// 값은 걸러진다 --- */
+
+  await withPage(
+    viewport,
+    { db: dbWithSettings([{ user_id: OWNER_ID, key: "avatar_url", value: "http://insecure.example.com/a.png" }]) },
+    async (page, { errors }) => {
+
+      const home = await readProfileOn(page, `/${SLUG}/`, ".imory-skin-root .finder-avatar");
+
+      check("https가 아닌 avatar_url은 isSafeSkinUrl에서 걸러져 null이 된다",
+        home.avatarSrc === null && home.featureSrc === null, JSON.stringify(home));
+
+      check("페이지 오류 없음", errors.length === 0, errors.join(" | "));
+    }
+  );
+
+}
+
+
 /* ---------------------------------------------------------
    main
 --------------------------------------------------------- */
@@ -828,6 +991,7 @@ async function testRegression() {
     }
     if (shouldRun("preview")) await testPreview();
     if (shouldRun("regression")) await testRegression();
+    if (shouldRun("profile")) await testProfile();
   } finally {
     server.close();
   }

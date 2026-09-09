@@ -117,6 +117,9 @@ const studioViewportToggle =
 const studioTopDockZone =
   document.getElementById("studioTopDockZone");
 
+const studioTopDock =
+  document.getElementById("studioTopDock");
+
 const studioTopDockHandle =
   document.getElementById("studioTopDockHandle");
 
@@ -310,6 +313,14 @@ let currentImageSlotValues = {};
 let currentWorkingImageSlots = {};
 let isSkinImageLibraryAvailable = false;
 
+/*
+  Settings에서 오는 슬롯 기본값({ profile: site_settings.avatar_url }).
+  mount 시 buildSkinContext가 채워 준다 — 슬롯을 비우면 Preview가
+  이 값으로 돌아간다(스킨이 고른 이미지가 있으면 언제나 그쪽이
+  이긴다).
+*/
+let currentImageSlotDefaults = {};
+
 
 function deriveImageSlotValues(workingSlots) {
 
@@ -370,8 +381,10 @@ function pruneWorkingImageSlotsToDeclared() {
   HOME context는 mount 때 한 번 만들어 두고 재사용하므로, 슬롯이
   바뀌면 그 안의 images/profile.avatarUrl을 다시 계산해 줘야
   Preview에 즉시 반영된다. buildSkinImages()(skin/skin-context.js
-  전역)를 그대로 써서 "선언된 슬롯만 노출"과 "avatarUrl은
-  images.profile과 항상 같다"는 규칙이 한 곳에만 남게 한다.
+  전역)를 그대로 써서 "선언된 슬롯만 노출"과 "슬롯 값 → Settings
+  기본값 → null" 우선순위가 한 곳에만 남게 한다 —
+  currentImageSlotDefaults가 그 기본값이라, 사용자가 profile
+  슬롯을 비우면 Preview가 Settings의 프로필 사진으로 돌아간다.
 
   CATEGORY/POST context는 매 이동마다 currentImageSlotNames/
   currentImageSlotValues로 새로 만들어지므로(preview-navigation.js)
@@ -387,7 +400,8 @@ function syncImageSlotsIntoCurrentContext() {
   const images =
     buildSkinImages(
       currentImageSlotNames,
-      currentImageSlotValues
+      currentImageSlotValues,
+      currentImageSlotDefaults
     );
 
   currentSkinContext = {
@@ -398,7 +412,7 @@ function syncImageSlotsIntoCurrentContext() {
       avatarUrl:
         Object.prototype.hasOwnProperty.call(images, "profile")
           ? images.profile
-          : null
+          : (currentImageSlotDefaults.profile ?? null)
     }
   };
 
@@ -2504,7 +2518,22 @@ async function mountStudioPreview(
         ownerId,
         {
           imageSlotNames,
-          imageSlotValues
+          imageSlotValues,
+
+          /*
+            Settings에서 온 슬롯 기본값(지금은 profile =
+            site_settings.avatar_url)을 받아 둔다 — Images 패널에서
+            슬롯을 비웠을 때 Preview가 그 기본값으로 돌아가야
+            하는데, 그때마다 site_settings를 다시 조회하지 않기
+            위해서다(skin/skin-context.js buildBaseSkinContext).
+          */
+          onImageSlotDefaults:
+            (defaults) => {
+
+              currentImageSlotDefaults =
+                defaults;
+
+            }
         }
       );
 
@@ -2777,6 +2806,49 @@ new ResizeObserver(
    완전히 독립이다: 그쪽은 studio/ai/studio-ai-panel-layout.js가
    따로 가진 studioAiPanelOpen 하나로만 움직인다.
 ========================================================== */
+
+/*
+  바가 실제로 차지하는 높이를 CSS로 되돌려준다(반응형 라운드).
+
+  바는 좁은 폭에서 flex-wrap으로 두 줄 이상이 될 수 있는데
+  (studio.css "세 그룹의 배치 규칙"), 그 높이는 버튼 개수/글자
+  길이에 따라 달라져서 CSS에 상수로 적을 수 없다. 지금 이 값을
+  필요로 하는 곳은 좁은 화면 fallback의 AI 패널 하나다 —
+  overlay로 바뀐 패널이 바 **아래**에서 시작해야 헤더의 접기
+  버튼이 바에 가리지 않는다(z-index는 바가 위다).
+
+  ResizeObserver가 없거나 실패해도 CSS 기본값(48px)으로 예전과
+  같이 동작한다.
+*/
+
+function publishStudioTopDockHeight() {
+
+  if (!studioTopDock || !studioPreviewShell) {
+    return;
+  }
+
+  studioPreviewShell.style.setProperty(
+    "--studio-top-dock-height",
+    `${Math.round(studioTopDock.offsetHeight)}px`
+  );
+
+}
+
+
+if (
+  studioTopDock &&
+  typeof ResizeObserver === "function"
+) {
+
+  new ResizeObserver(
+    publishStudioTopDockHeight
+  ).observe(studioTopDock);
+
+}
+
+
+publishStudioTopDockHeight();
+
 
 studioTopDockHandle.addEventListener(
   "click",

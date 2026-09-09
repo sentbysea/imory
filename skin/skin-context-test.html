@@ -179,9 +179,23 @@
         context.profile.bio === null || typeof context.profile.bio === "string"
       );
 
+      /*
+        Settings 연결 라운드: profile 슬롯을 선언한 스킨에서는
+        예전처럼 두 값이 항상 같다. 슬롯을 아예 선언하지 않은
+        스킨에서는 images.profile 자체가 없고(undefined),
+        profile.avatarUrl만 Settings의 avatar_url을 보여준다 —
+        그래서 "슬롯이 있으면 같다"로만 검사한다.
+      */
       assert(
-        "context.profile.avatarUrl === context.images.profile (동일 소스, 1-2절)",
-        context.profile.avatarUrl === (context.images.profile ?? null)
+        "profile 슬롯을 선언했다면 context.profile.avatarUrl === context.images.profile",
+        !Object.prototype.hasOwnProperty.call(context.images, "profile") ||
+          context.profile.avatarUrl === context.images.profile,
+        `avatarUrl=${context.profile.avatarUrl} images.profile=${context.images.profile}`
+      );
+
+      assert(
+        "context.profile.avatarUrl은 string 또는 null (슬롯 없으면 Settings의 avatar_url)",
+        context.profile.avatarUrl === null || typeof context.profile.avatarUrl === "string"
       );
 
       assert(

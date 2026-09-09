@@ -30,6 +30,8 @@
      U. 여닫기 모션 — Preview/Top Dock/패널이 같은 타이밍으로
         움직이고 layout jump가 없다, reduced-motion 대응 (AI-5A.1)
      V. Top Dock 기본 상태 = 펼침, AI 패널 상태와 서로 독립 (AI-5A.1)
+     W. Top Dock 반응형 배치 — 폭을 줄여도 토글/버튼/handle이
+        서로 겹치지 않고, 넓을 때는 토글이 정중앙 (반응형 라운드)
 
    ★ 실행 방법
      node studio/studio-ai-panel-layout-e2e-test.mjs
@@ -38,7 +40,8 @@
 
    --only= 뒤에 쓸 수 있는 이름:
      layout / toggle / collapse / resize / textarea / keys /
-     route / import / attach / loading / viewport / motion / dock
+     route / import / attach / loading / viewport / motion / dock /
+     dockfit
 ========================================================== */
 
 import fs from "node:fs";
@@ -2011,6 +2014,218 @@ async function runDock(context) {
 
 
 /* =========================================================
+   W. Top Dock 반응형 배치 (반응형 라운드)
+
+   예전에는 가운데 Desktop/Mobile 토글이 position:absolute +
+   left:50%로 흐름 밖에 있어서, 창을 좁히면 오른쪽 actions
+   그룹이 그 위로 그대로 겹쳤다(실측: 패널 닫힘 ~990px,
+   패널 열림 ~1279px부터). 이제 셋이 같은 flex 줄에 있으므로
+   여기서는 "겹치지 않는가"와 "넓을 때는 여전히 정중앙인가"를
+   폭을 단계적으로 줄여 가며 잰다 — AI 패널 열림/닫힘 양쪽.
+========================================================== */
+
+/* 두 사각형이 실제로 겹치는가(같은 줄에 있고 x가 물리는가) */
+function overlaps(a, b) {
+  return (
+    a.left < b.right - 0.5 &&
+    b.left < a.right - 0.5 &&
+    a.top < b.bottom - 0.5 &&
+    b.top < a.bottom - 0.5
+  );
+}
+
+function dockProbe(page) {
+  return page.evaluate(() => {
+    const box = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const b = el.getBoundingClientRect();
+      return {
+        left: b.left, right: b.right, top: b.top, bottom: b.bottom,
+        width: b.width, height: b.height
+      };
+    };
+
+    const zone = box("#studioTopDockZone");
+
+    return {
+      innerWidth: window.innerWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      zone,
+      bar: box("#studioTopDock"),
+      lead: box(".studio-top-dock-lead"),
+      groups: box(".studio-top-dock-groups"),
+      toggle: box("#studioViewportToggle"),
+      actions: box(".studio-top-dock-actions"),
+      handle: box("#studioTopDockHandle"),
+      aiButton: box("#studioAiToggleButton"),
+      aiDrawer: box("#studioAiDrawer"),
+      /* 오른쪽 끝 버튼이 실제로 눌리는 자리에 있는가 */
+      aiButtonHit: (() => {
+        const el = document.getElementById("studioAiToggleButton");
+        const b = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          b.left + b.width / 2,
+          b.top + b.height / 2
+        );
+        return hit ? hit.id : null;
+      })()
+    };
+  });
+}
+
+
+async function runDockFit(context) {
+
+  const page = await openStudio(context, { viewport: { width: 1600, height: 900 } });
+
+  /* --- W1. 넓은 화면에서는 토글이 정확히 가운데 --- */
+
+  const wide = [];
+
+  for (const width of [1600, 1440, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await sleep(120);
+    const m = await dockProbe(page);
+    wide.push({
+      width,
+      center: (m.toggle.left + m.toggle.right) / 2,
+      expected: m.innerWidth / 2,
+      handleCenter: (m.handle.left + m.handle.right) / 2,
+      rows: Math.round(m.bar.height)
+    });
+  }
+
+  record(
+    "W1. 넓은 화면(1600/1440/1280)에서는 Desktop/Mobile 토글이 화면 정중앙이다",
+    wide.every(w => Math.abs(w.center - w.expected) <= 2 && w.rows <= 50),
+    JSON.stringify(wide)
+  );
+
+  record(
+    "W1-b. handle도 같은 중심을 쓴다(토글 divider 바로 위/아래)",
+    wide.every(w => Math.abs(w.handleCenter - w.expected) <= 2),
+    JSON.stringify(wide)
+  );
+
+  /* --- W2/W3. 폭을 단계적으로 줄여도 겹치지 않는다 (패널 닫힘/열림) --- */
+
+  const widths = [1280, 1180, 1100, 1000, 900, 800, 720, 640, 480, 390];
+
+  for (const panelOpen of [false, true]) {
+
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await sleep(120);
+
+    if (panelOpen) {
+      await openPanel(page);
+    } else {
+      await closePanel(page);
+    }
+
+    const bad = [];
+    const shifts = [];
+
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 900 });
+      await sleep(150);
+
+      const m = await dockProbe(page);
+
+      const problems = [];
+
+      if (overlaps(m.groups, m.lead)) problems.push("groups↔lead");
+      if (overlaps(m.groups, m.actions)) problems.push("groups↔actions");
+      if (overlaps(m.lead, m.actions)) problems.push("lead↔actions");
+      if (overlaps(m.handle, m.toggle)) problems.push("handle↔toggle");
+      if (overlaps(m.handle, m.actions)) problems.push("handle↔actions");
+
+      /* 오른쪽 끝 버튼이 화면 밖으로 밀려나면 안 된다 */
+      if (m.aiButton.right > m.innerWidth + 0.5) problems.push("aiButton overflow");
+      if (m.aiButton.left < -0.5) problems.push("aiButton offscreen-left");
+      if (m.aiButtonHit !== "studioAiToggleButton") problems.push(`aiButton hit=${m.aiButtonHit}`);
+
+      /* 문서 자체가 가로로 스크롤되면 안 된다 */
+      if (m.scrollWidth > m.innerWidth + 0.5) problems.push("h-scroll");
+
+      shifts.push({ width, toggleCenter: Math.round((m.toggle.left + m.toggle.right) / 2), barH: Math.round(m.bar.height) });
+
+      if (problems.length) bad.push({ width, problems });
+    }
+
+    record(
+      `W2${panelOpen ? "-panel" : ""}. 폭을 1280→390으로 줄이는 동안 Top Dock 요소가 서로 겹치지 않는다 (AI 패널 ${panelOpen ? "열림" : "닫힘"})`,
+      bad.length === 0,
+      bad.length ? JSON.stringify(bad) : JSON.stringify(shifts)
+    );
+
+    /* 좁아질수록 토글이 왼쪽으로 밀린다(오른쪽 버튼에 자리를 내준다) */
+    const monotone = shifts
+      .filter(s => s.barH <= 50)
+      .every((s, i, arr) => i === 0 || s.toggleCenter <= arr[i - 1].toggleCenter + 1);
+
+    record(
+      `W3${panelOpen ? "-panel" : ""}. 한 줄로 남아 있는 동안 토글은 좁아질수록 왼쪽으로만 이동한다 (AI 패널 ${panelOpen ? "열림" : "닫힘"})`,
+      monotone,
+      JSON.stringify(shifts)
+    );
+
+  }
+
+  /* --- W4. 390px에서 AI 패널 overlay가 바에 가리지 않는다 --- */
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sleep(200);
+
+  const narrow = await dockProbe(page);
+
+  record(
+    "W4. 390px에서 AI 패널 overlay가 (두 줄 이상이 된) Top Dock 바 아래에서 시작한다",
+    narrow.aiDrawer.top >= narrow.bar.bottom - 1,
+    JSON.stringify({ drawerTop: narrow.aiDrawer.top, barBottom: narrow.bar.bottom, barH: narrow.bar.height })
+  );
+
+  await closePanel(page);
+
+  /* --- W5. 닫으면 handle이 다시 화면 맨 위에 남아 클릭 가능하다 --- */
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await sleep(150);
+  await page.click("#studioTopDockHandle");
+  await page.waitForFunction(
+    () => document.getElementById("studioTopDockZone").classList.contains("is-open") === false
+  );
+  await sleep(250);
+
+  const closed = await page.evaluate(() => {
+    const handle = document.getElementById("studioTopDockHandle");
+    const bar = document.getElementById("studioTopDock");
+    const hb = handle.getBoundingClientRect();
+    const bb = bar.getBoundingClientRect();
+    const hit = document.elementFromPoint(hb.left + hb.width / 2, hb.top + hb.height / 2);
+    return {
+      handleTop: Math.round(hb.top),
+      handleBottom: Math.round(hb.bottom),
+      barBottom: Math.round(bb.bottom),
+      hit: hit ? (hit.id || hit.className) : null
+    };
+  });
+
+  record(
+    "W5. 좁은 화면에서 dock을 접어도 handle은 화면 맨 위(y=0)에 남고 눌린다",
+    Math.abs(closed.handleTop) <= 1 &&
+      closed.handleBottom > 0 &&
+      Math.abs(closed.barBottom) <= 1 &&
+      (closed.hit === "studioTopDockHandle" || closed.hit === "studioTopDockHandleIcon"),
+    JSON.stringify(closed)
+  );
+
+  await page.close();
+
+}
+
+
+/* =========================================================
    실행
 ========================================================== */
 
@@ -2036,6 +2251,7 @@ try {
   if (shouldRun("viewport")) await runViewport(context);
   if (shouldRun("motion")) await runMotion(context);
   if (shouldRun("dock")) await runDock(context);
+  if (shouldRun("dockfit")) await runDockFit(context);
 
 } finally {
 
