@@ -60,8 +60,9 @@ const SKIN_PACKAGE_IMPORT_CSS_CHECK_NAMESPACE = "studio-skin-import-check";
   를 남긴다(요구사항 9절).
 
   reason 값: empty-input / json-parse / not-object / schema-version /
-  templates-missing / required-template / banner-template / css-type /
-  post-body-region / css-validator.
+  templates-missing / required-template / banner-template /
+  folder-template / css-type / post-body-region / folder-body-region /
+  css-validator.
 
   sanitizeSkinHTML()은 거부하지 않고 **조용히 지운다** — 그래서
   "sanitizer violation"이라는 reason은 존재할 수 없다. 허용되지 않은
@@ -140,6 +141,33 @@ async function validateSkinPackageImport(rawJsonText) {
     return { ok: false, reason: "banner-template", message: "templates.banner를 포함하려면 templates.banner.html이 문자열이어야 합니다." };
   }
 
+  /*
+    FOLDER-2 — templates.folder(폴더 페이지 / Series Viewer)도 banner와
+    같은 **선택** 템플릿이다. 없으면 그 스킨에는 폴더 페이지가 없고,
+    플랫폼은 폴더 링크(folderHref)를 노출하지 않는다. 있으면 POST와
+    같이 글 본문 자리(post-body region)가 반드시 있어야 한다 — 폴더
+    페이지는 글마다 본문을 이어 보여주는 화면이라 region이 없으면
+    제목만 나열되는 반쪽짜리가 된다(IMORY_FOLDER2_DESIGN.md).
+  */
+
+  const folderTemplateInput =
+    templatesInput.folder;
+
+  const hasFolderTemplate =
+    folderTemplateInput !== undefined &&
+    folderTemplateInput !== null;
+
+  if (
+    hasFolderTemplate &&
+    (
+      typeof folderTemplateInput !== "object" ||
+      Array.isArray(folderTemplateInput) ||
+      typeof folderTemplateInput.html !== "string"
+    )
+  ) {
+    return { ok: false, reason: "folder-template", message: "templates.folder를 포함하려면 templates.folder.html이 문자열이어야 합니다." };
+  }
+
   let cssRaw;
 
   if (typeof parsed.css === "string") {
@@ -172,11 +200,27 @@ async function validateSkinPackageImport(rawJsonText) {
       ? sanitizeSkinHTML(bannerTemplateInput.html)
       : null;
 
+  const sanitizedFolderHtml =
+    hasFolderTemplate
+      ? sanitizeSkinHTML(folderTemplateInput.html)
+      : null;
+
   if (!htmlHasPostBodyRegion(sanitizedPostHtml)) {
     return {
       ok: false,
       reason: "post-body-region",
       message: "POST 템플릿에는 글 본문이 표시되는 자리(post-body region)가 반드시 있어야 합니다."
+    };
+  }
+
+  if (
+    hasFolderTemplate &&
+    !htmlHasPostBodyRegion(sanitizedFolderHtml)
+  ) {
+    return {
+      ok: false,
+      reason: "folder-body-region",
+      message: "FOLDER 템플릿에는 글 본문이 표시되는 자리(folder.posts 반복 안의 post-body region)가 반드시 있어야 합니다."
     };
   }
 
@@ -238,6 +282,10 @@ async function validateSkinPackageImport(rawJsonText) {
 
   if (hasBannerTemplate) {
     templates.banner = { html: sanitizedBannerHtml };
+  }
+
+  if (hasFolderTemplate) {
+    templates.folder = { html: sanitizedFolderHtml };
   }
 
   return {

@@ -126,7 +126,8 @@ throw하지 않고 `false`를 반환해 호출자가 legacy 화면으로 조용�
 
 - 스킨 바깥에서 시작된 클릭
 - 다른 오리진, `target=_blank`, `download`, 수정키/보조버튼 클릭
-- 이 사이트의 세 패턴(`/:slug`, `/:slug/category/:id`, `/:slug/post/:id`)이 아닌 주소
+- 이 사이트의 네 패턴(`/:slug`, `/:slug/category/:id`, `/:slug/post/:id`,
+  `/:slug/category/:cid/folder/:fid` — FOLDER-2)이 아닌 주소
 - 이미 다른 핸들러가 `preventDefault()`한 클릭
 - posts 모듈이 아직 로드되기 전의 첫 클릭
 

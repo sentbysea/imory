@@ -25,9 +25,15 @@
    templates.banner가 없는 기존 Skin은 여전히 undefined를 받아
    legacy 배너 화면으로 폴백한다(HOME html을 배너에 재사용하지
    않는다). 즉 이 배열에 이름을 하나 더하는 것만으로 "선택적
-   배너 template" 계약이 성립한다. */
+   배너 template" 계약이 성립한다.
+
+   FOLDER-2: "folder"가 다섯 번째 page type이다(IMORY_FOLDER2_DESIGN.md).
+   banner와 같은 **선택** template이다 — templates.folder가 없는 스킨은
+   undefined를 받고, 그 경우 플랫폼은 폴더 링크(folderHref)를 아예
+   노출하지 않으며 폴더 주소로 들어오면 그 카테고리로 돌려보낸다
+   (폴더 전용 폴백 화면을 만들지 않는다). */
 const SKIN_TEMPLATE_PAGE_TYPES =
-  ["home", "category", "post", "banner"];
+  ["home", "category", "post", "banner", "folder"];
 
 
 /* =========================================================

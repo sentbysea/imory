@@ -284,3 +284,132 @@ async function buildStudioPostBodyPayload(
   };
 
 }
+
+
+/* =========================================================
+   buildStudioFolderBodiesPayload(ownerId, postIds)
+     -> Array<{ key, html, containerStyle, isHtmlContent }>
+
+   FOLDER-2 — 폴더 페이지(Series Viewer) Preview의 글별 본문. 공개
+   화면(posts/view/posts-view-folder.js)과 같은 순서로 만든다: posts
+   메타를 `.in()` 한 번, post_contents를 `.in()` 한 번, 그리고 글마다
+   **순차로** 서식을 입힌다(loadStudioPostStyleSettings가 전역
+   postStyleSettings를 덮어쓰므로 동시에 그리면 프리셋이 섞인다).
+
+   Studio는 항상 소유자 세션이라 secret 글도 그대로 읽는다(위
+   fetchStudioPostContent와 같은 신뢰 경계). key는 글 id 문자열이고,
+   iframe(preview-bridge.js)이 렌더러가 region에 찍은
+   data-imory-region-key와 맞춘다.
+========================================================== */
+
+async function buildStudioFolderBodiesPayload(
+  ownerId,
+  postIds
+) {
+
+  /* id는 문자열 그대로 보낸다 — PostgREST는 bigint 비교에 문제가 없고,
+     Context(folder.posts[].id)와 region 키가 모두 문자열이다. */
+  const ids =
+    (postIds || [])
+      .map((id) => String(id))
+      .filter((id) => /^\d+$/.test(id));
+
+  if (!ids.length) {
+    return [];
+  }
+
+  const {
+    data: postRows,
+    error: postRowsError
+  } =
+    await supabaseClient
+      .from("posts")
+      .select("id, content_type, quote_preset_id")
+      .eq("user_id", ownerId)
+      .in("id", ids);
+
+  if (postRowsError) {
+
+    console.error(
+      "[preview-post-body] folder posts 조회 실패:",
+      postRowsError
+    );
+
+    return [];
+
+  }
+
+  const {
+    data: contentRows,
+    error: contentError
+  } =
+    await supabaseClient
+      .from("post_contents")
+      .select("post_id, content")
+      .in("post_id", ids);
+
+  if (contentError) {
+
+    console.error(
+      "[preview-post-body] folder post_contents 조회 실패:",
+      contentError
+    );
+
+  }
+
+  const contentById =
+    new Map(
+      (contentRows || []).map(
+        (row) => [String(row.post_id), row.content || ""]
+      )
+    );
+
+  const bodies = [];
+
+  for (const post of (postRows || [])) {
+
+    const key =
+      String(post.id);
+
+    const contentText =
+      contentById.get(key) || "";
+
+    if (post.content_type === "html") {
+
+      bodies.push({
+        key,
+        html: contentText,
+        containerStyle: "",
+        isHtmlContent: true
+      });
+
+      continue;
+
+    }
+
+    await loadStudioPostStyleSettings(
+      ownerId,
+      post.quote_preset_id
+    );
+
+    const offscreen =
+      document.createElement("div");
+
+    renderStyledPostContentInto(
+      offscreen,
+      contentText,
+      postStyleSettings || {}
+    );
+
+    bodies.push({
+      key,
+      html: offscreen.innerHTML,
+      containerStyle: offscreen.getAttribute("style") || "",
+      isHtmlContent: false
+    });
+
+  }
+
+  return bodies;
+
+}

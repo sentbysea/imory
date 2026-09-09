@@ -863,6 +863,14 @@
                       html:
                         '<div class="t-post"><h1 data-imory-bind="post.title"></h1>' +
                         '<div data-imory-region="post-body"></div></div>'
+                    },
+                    /* FOLDER-2: 폴더 페이지(Series Viewer) 최소 템플릿 —
+                       folder.posts repeat 안에 글마다 post-body region. */
+                    folder: {
+                      html:
+                        '<div class="t-folder"><h1 data-imory-bind="folder.name"></h1>' +
+                        '<article class="t-series-post" data-imory-repeat="folder.posts">' +
+                        '<h2 data-imory-bind="item.title"></h2><div data-imory-region="post-body"></div></article></div>'
                     }
                   },
                   css: ".t-category [hidden] { display: none; }",
@@ -880,22 +888,34 @@
               { id: "302", user_id: "user-t", name: "NOTE", type: "post", sort_order: 2 }
             ],
             post_folders: [
-              { id: "f1", user_id: "user-t", category_id: "301", parent_id: null, name: "홍차", depth: 1, sort_order: 200 },
-              { id: "f2", user_id: "user-t", category_id: "301", parent_id: "f1", name: "Sentinel AU", depth: 2, sort_order: 100 },
-              { id: "f3", user_id: "user-t", category_id: "301", parent_id: "f2", name: "3단 폴더", depth: 3, sort_order: 100 },
-              { id: "f4", user_id: "user-t", category_id: "301", parent_id: null, name: "빈 폴더", depth: 1, sort_order: 300 },
-              { id: "f5", user_id: "user-t", category_id: "301", parent_id: null, name: "2002", depth: 1, sort_order: 400 },
-              { id: "f6", user_id: "user-t", category_id: "301", parent_id: null, name: "비공개 폴더", depth: 1, sort_order: 450 }
+              { id: "901", user_id: "user-t", category_id: "301", parent_id: null, name: "홍차", depth: 1, sort_order: 200 },
+              { id: "902", user_id: "user-t", category_id: "301", parent_id: "901", name: "Sentinel AU", depth: 2, sort_order: 100 },
+              { id: "903", user_id: "user-t", category_id: "301", parent_id: "902", name: "3단 폴더", depth: 3, sort_order: 100 },
+              { id: "904", user_id: "user-t", category_id: "301", parent_id: null, name: "빈 폴더", depth: 1, sort_order: 300 },
+              { id: "905", user_id: "user-t", category_id: "301", parent_id: null, name: "2002", depth: 1, sort_order: 400 },
+              { id: "906", user_id: "user-t", category_id: "301", parent_id: null, name: "비공개 폴더", depth: 1, sort_order: 450 }
             ],
             posts: [
               { id: "401", user_id: "user-t", title: "폴더 없는 글", created_at: "2026-01-05T00:00:00Z", visibility: "public", category_id: "301", folder_id: null, sort_order: 100, content: "본문 401." },
-              { id: "402", user_id: "user-t", title: "첫 만남", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301", folder_id: "f2", sort_order: 200, content: "본문 402." },
-              { id: "403", user_id: "user-t", title: "깊은 글", created_at: "2026-01-02T00:00:00Z", visibility: "secret", category_id: "301", folder_id: "f3", sort_order: 100, content: "본문 403." },
-              { id: "404", user_id: "user-t", title: "홍차 노트", created_at: "2026-01-03T00:00:00Z", visibility: "public", category_id: "301", folder_id: "f1", sort_order: 300, content: "본문 404." },
-              { id: "405", user_id: "user-t", title: "영도", created_at: "2026-01-04T00:00:00Z", visibility: "public", category_id: "301", folder_id: "f5", sort_order: 100, content: "본문 405." },
+              { id: "402", user_id: "user-t", title: "첫 만남", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301", folder_id: "902", sort_order: 200, content: "본문 402." },
+              { id: "403", user_id: "user-t", title: "깊은 글", created_at: "2026-01-02T00:00:00Z", visibility: "secret", category_id: "301", folder_id: "903", sort_order: 100, content: "본문 403." },
+              { id: "404", user_id: "user-t", title: "홍차 노트", created_at: "2026-01-03T00:00:00Z", visibility: "public", category_id: "301", folder_id: "901", sort_order: 300, content: "본문 404." },
+              { id: "405", user_id: "user-t", title: "영도", created_at: "2026-01-04T00:00:00Z", visibility: "public", category_id: "301", folder_id: "905", sort_order: 100, content: "본문 405." },
               { id: "406", user_id: "user-t", title: "맨 아래 글", created_at: "2025-12-31T00:00:00Z", visibility: "public", category_id: "301", folder_id: null, sort_order: 500, content: "본문 406." },
-              { id: "407", user_id: "user-t", title: "숨은 글", created_at: "2025-12-30T00:00:00Z", visibility: "private", category_id: "301", folder_id: "f6", sort_order: 100, content: "본문 407." },
+              { id: "407", user_id: "user-t", title: "숨은 글", created_at: "2025-12-30T00:00:00Z", visibility: "private", category_id: "301", folder_id: "906", sort_order: 100, content: "본문 407." },
               { id: "408", user_id: "user-t", title: "노트 하나", created_at: "2026-01-06T00:00:00Z", visibility: "public", category_id: "302", folder_id: null, sort_order: 100, content: "본문 408." }
+            ],
+            /* FOLDER-2: 폴더 페이지 Preview가 글별 본문을 post_contents에서
+               읽는다(공개 화면과 같은 테이블). 위 posts의 content와 같은 값. */
+            post_contents: [
+              { post_id: "401", content: "본문 401." },
+              { post_id: "402", content: "본문 402." },
+              { post_id: "403", content: "본문 403." },
+              { post_id: "404", content: "본문 404." },
+              { post_id: "405", content: "본문 405." },
+              { post_id: "406", content: "본문 406." },
+              { post_id: "407", content: "본문 407." },
+              { post_id: "408", content: "본문 408." }
             ],
             banners: []
           },

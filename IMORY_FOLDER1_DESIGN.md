@@ -236,10 +236,13 @@ category: {
 
 `category.tree`만 사용자가 관리 화면에서 정한 `sort_order`를 반영한다.
 
-**폴더에 `href`가 없다**: 폴더를 여는 라우트가 아직 없으므로, 눌러도 아무
+~~**폴더에 `href`가 없다**: 폴더를 여는 라우트가 아직 없으므로, 눌러도 아무
 일이 없는 링크를 스킨에 노출하지 않는다(PHASE 1H가 banner 카테고리의
 `manageHref`를 null로 둔 것과 같은 판단). Series Viewer가 생기는 시점에
-additive로 추가한다.
+additive로 추가한다.~~ — **변경됨 → [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md) §1-3.**
+폴더 노드에는 여전히 `href`가 없고(글 판정 계약 유지), 폴더 페이지 링크는
+additive 키 **`folderHref`**(스킨에 `templates.folder`가 있고 direct 글이
+있을 때만 문자열, 아니면 null)와 `postCount`로 온다.
 
 **`kind`로 분기할 수 없다**: `data-imory-if`는 truthy 판정만 하고 비교
 연산이 없다. 그래서 폴더에만 있는 필드(`name`/`children`)와 글에만 있는
@@ -306,7 +309,8 @@ CSS만 옮겨 쓴다.
 **Studio AI 계약**: `functions/api/skin-ai.js`의 시스템 프롬프트
 (`buildSkinAiSystemPrompt`, "Category folders" 절)가 `category.posts`(평면·
 최신순, 폴더 무시)와 `category.tree`(폴더 계층·sort_order·root 글 포함)의
-역할, 두 node shape, 폴더에 `href`가 없다는 것, `item.kind` 비교 대신
+역할, 두 node shape, 폴더에 `href`가 없다는 것(FOLDER-2부터는 `folderHref`
+규칙과 FOLDER 페이지 절이 추가됐다), `item.kind` 비교 대신
 필드 존재로 분기하는 방법, 중첩 repeat 상한을 설명한다. **사용자가 폴더
 표현을 요청할 때만** `category.tree`를 쓰고, 일반 최신순 목록 요청이면
 `category.posts`를 쓰며, 기존 `category.posts` 스킨을 폴더형으로 강제
@@ -368,8 +372,9 @@ REST로 직접 읽을 수 있다. 화면에서 안 보이는 것과 접근할 �
 4. **정렬 비교는 세 군데가 같아야 한다**(§1-2). 한 곳만 고치면 저장은
    성공했는데 화면 순서가 다른 상태가 된다.
 5. **sort_order 정렬을 쓰는 범위를 넓히지 않는다.** 지금은 관리 트리와
-   `category.tree`뿐이다. legacy 읽기 목록 / 관련글 / HOME 최신글 / 기존
-   스킨의 `category.posts`는 `created_at DESC` 그대로다.
+   `category.tree`, 그리고 FOLDER-2의 `folder.posts`(같은 함수에서 나온다)
+   뿐이다. legacy 읽기 목록 / 관련글 / HOME 최신글 / 기존 스킨의
+   `category.posts`는 `created_at DESC` 그대로다.
 6. **폴더 삭제는 절대 자식을 지우지 않는다.** 승격 정책을 바꾸려면 이
    문서를 먼저 고친다.
 7. **직접 만든 drag 엔진을 도입하지 않는다.**
@@ -380,7 +385,7 @@ REST로 직접 읽을 수 있다. 화면에서 안 보이는 것과 접근할 �
 
 | 항목 | 상태 |
 | --- | --- |
-| **Series Viewer** | 미구현(범위 밖). `post_folders.id`가 안정적 식별자이고 `category.tree`에 폴더 노드가 있으므로 `/category/:id/folder/:fid` 라우트 + `folder.href`를 additive로 얹으면 된다. **secret/private 글이 섞인 폴더의 본문 이어보기는 기존 비밀글 접근 구조와 충돌 가능성이 있어 별도 보안 설계가 필요하다.** |
+| **Series Viewer** | **구현됨 → [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md)** — `/:slug/category/:cid/folder/:fid` + `folderHref`(additive) + `templates.folder`(선택) + repeat 안 post-body region. secret 글은 글별 gate와 기존 `get_secret_post_content` RPC만 쓴다. |
 | **폴더 단위 privacy/비밀번호** | 없음(범위 밖). §2-1의 "폴더 이름은 공개" 전제가 이 기능이 생기면 달라진다. |
 | **폴더 아이콘/색 등 표현 속성** | DB에 두지 않는다(§0). 필요하면 Skin CSS로 한다. |
 | **작성 폼에서 폴더 선택** | 없다. 새 글은 항상 root에 생기고, 배치는 관리 화면에서 한다. |

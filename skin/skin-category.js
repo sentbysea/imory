@@ -112,9 +112,13 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
 
   try {
 
+    /* FOLDER-2: 이 스킨이 폴더 페이지(templates.folder)를 갖고 있을
+       때만 category.tree의 폴더 노드에 folderHref가 채워진다 — 없으면
+       null이라 스킨이 폴더 링크를 그리지 않는다(skin/skin-context.js). */
     context = await buildCategorySkinContext(ownerId, categoryId, {
       imageSlotNames,
-      imageSlotValues
+      imageSlotValues,
+      supportsFolderPage: skinPackageSupportsPageType(skinPackage, "folder")
     });
 
   } catch (err) {

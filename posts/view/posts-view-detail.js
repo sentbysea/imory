@@ -267,6 +267,27 @@ async function openPostPage(
 
   }
 
+  /*
+    FOLDER-2: 폴더 페이지(Series Viewer)에서 글로 들어가는 길목도 같은
+    한 칸 메모를 쓴다 — 돌아오면 openFolderPage()가 꺼낸다
+    (posts/view/posts-view-folder.js). currentPostFolderId는 그 파일이
+    선언하므로 존재 여부를 확인한다.
+  */
+
+  else if (
+    currentPostView === "folder" &&
+    typeof currentPostFolderId !== "undefined" &&
+    currentPostFolderId !== null &&
+    postArea
+  ) {
+
+    rememberSkinListScroll(
+      `folder:${currentPostFolderId}`,
+      postArea.scrollTop
+    );
+
+  }
+
 
   currentPostView =
     "post";
@@ -1192,6 +1213,87 @@ async function openPostPage(
 
 
 /* =========================================================
+   renderPostBodyInto(target, contentType, contentText, quotePresetId)
+
+   "이 엘리먼트 안에 이 글의 본문을 그린다" — 대상 엘리먼트를 인자로
+   받는 본문 렌더러. 원래 renderPostDetailBody()의 Skin 분기 안에
+   있던 코드를 그대로 꺼낸 것이다(FOLDER-2): POST 스킨의 post-body
+   region(아래 renderPostDetailBody)과 폴더 페이지 Series Viewer의
+   글별 region(posts-view-folder.js), 그리고 비밀글 해제 뒤
+   (posts-view-secret-gate.js)가 전부 이 하나를 쓴다.
+
+   html 모드는 지금까지와 같이 저장된 HTML을 그대로 넣고(sanitize
+   없음 — 새로 정한 정책이 아니라 기존 신뢰 경계 그대로), rich 모드는
+   Quote Preset을 읽은 뒤 renderStyledPostContentInto()로 그린다.
+   프리셋 로더는 전역 postStyleSettings를 덮어쓰므로 여러 글을 그릴
+   때는 호출자가 한 번에 하나씩 await해야 한다.
+========================================================== */
+
+async function renderPostBodyInto(
+  target,
+  contentType,
+  contentText,
+  quotePresetId
+) {
+
+  if (!target) {
+
+    return;
+
+  }
+
+
+  if (
+    contentType ===
+    "html"
+  ) {
+
+    target.classList.add(
+      "is-html-content"
+    );
+
+
+    target.innerHTML =
+      contentText ||
+      "";
+
+
+    return;
+
+  }
+
+
+  target.classList.remove(
+    "is-html-content"
+  );
+
+
+  if (quotePresetId) {
+
+    await loadPostStylePresetById(
+      quotePresetId
+    );
+
+  } else {
+
+    await loadPostStylePreset();
+
+  }
+
+
+  renderStyledPostContentInto(
+    target,
+    contentText ||
+      "",
+    postStyleSettings ||
+      {}
+  );
+
+}
+
+
+
+/* =========================================================
    POST BODY RENDER
 
    openPostPage(공개/주인이 보는 secret,private)와
@@ -1220,55 +1322,12 @@ async function renderPostDetailBody(
 
   if (currentPostBodyMountTarget) {
 
-    const skinBodyTarget =
-      currentPostBodyMountTarget;
-
-
-    if (
-      contentType ===
-      "html"
-    ) {
-
-      skinBodyTarget.classList.add(
-        "is-html-content"
-      );
-
-
-      skinBodyTarget.innerHTML =
-        contentText ||
-        "";
-
-    }
-
-    else {
-
-      skinBodyTarget.classList.remove(
-        "is-html-content"
-      );
-
-
-      if (quotePresetId) {
-
-        await loadPostStylePresetById(
-          quotePresetId
-        );
-
-      } else {
-
-        await loadPostStylePreset();
-
-      }
-
-
-      renderStyledPostContentInto(
-        skinBodyTarget,
-        contentText ||
-          "",
-        postStyleSettings ||
-          {}
-      );
-
-    }
+    await renderPostBodyInto(
+      currentPostBodyMountTarget,
+      contentType,
+      contentText,
+      quotePresetId
+    );
 
 
     return;

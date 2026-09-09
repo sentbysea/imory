@@ -50,7 +50,8 @@ const STUDIO_AI_SELECTION_PAGE_LABELS = {
   home: "HOME",
   category: "CATEGORY",
   post: "POST",
-  banner: "BANNER"
+  banner: "BANNER",
+  folder: "FOLDER"
 };
 
 

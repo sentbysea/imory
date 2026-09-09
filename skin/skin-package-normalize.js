@@ -45,7 +45,8 @@
 ========================================================== */
 
 const SKIN_PACKAGE_NORMALIZE_CSS_CHECK_NAMESPACE = "package-normalize-check";
-const SKIN_PACKAGE_NORMALIZE_PAGE_TYPES = ["home", "category", "post", "banner"];
+/* FOLDER-2: templates.folder(선택)도 같은 sanitize를 거친다 */
+const SKIN_PACKAGE_NORMALIZE_PAGE_TYPES = ["home", "category", "post", "banner", "folder"];
 
 async function normalizeSkinPackageForDraft(skinPackage) {
 

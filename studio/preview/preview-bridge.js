@@ -67,6 +67,7 @@ const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
+const PREVIEW_MSG_FOLDER_BODIES = "preview:folder-bodies";
 const PREVIEW_MSG_PING = "preview:ping";
 
 const PREVIEW_MSG_INSPECTOR_MODE = "preview:inspector-mode";
@@ -362,6 +363,70 @@ function handlePostBodyMessage(data) {
   region.setAttribute("style", data.containerStyle);
 
   region.innerHTML = data.html;
+
+}
+
+/* =========================================================
+   folder-bodies 주입 (FOLDER-2, Series Viewer)
+
+   폴더 페이지는 post-body region이 글 수만큼 있다. 렌더러가 repeat
+   항목의 id를 region에 찍어 두므로(skin-render.js getRegions), 여기서는
+   payload의 key와 그 키를 맞춰 채운다 — DOM 순서에 기대지 않는다.
+   본문 자체는 post-body와 같은 경로(parent가 이미 서식/sanitize를
+   끝낸 결과물)로 온다.
+========================================================== */
+
+function isValidFolderBodiesMessage(data) {
+
+  return (
+    data &&
+    typeof data === "object" &&
+    data.type === PREVIEW_MSG_FOLDER_BODIES &&
+    Array.isArray(data.bodies) &&
+    data.bodies.every((body) =>
+      body &&
+      typeof body === "object" &&
+      typeof body.key === "string" &&
+      typeof body.html === "string" &&
+      typeof body.containerStyle === "string" &&
+      typeof body.isHtmlContent === "boolean"
+    )
+  );
+
+}
+
+function handleFolderBodiesMessage(data) {
+
+  if (!renderInstance || typeof renderInstance.getRegions !== "function") {
+    return;
+  }
+
+  const regionsByKey = new Map();
+
+  renderInstance.getRegions(POST_BODY_REGION_NAME).forEach((region) => {
+
+    if (region.key !== null && !regionsByKey.has(region.key)) {
+      regionsByKey.set(region.key, region.element);
+    }
+
+  });
+
+  data.bodies.forEach((body) => {
+
+    const region =
+      regionsByKey.get(body.key);
+
+    if (!region) {
+      return;
+    }
+
+    region.setAttribute("style", body.containerStyle);
+
+    region.classList.toggle("is-html-content", body.isHtmlContent);
+
+    region.innerHTML = body.html;
+
+  });
 
 }
 
@@ -862,6 +927,18 @@ window.addEventListener("message", (event) => {
       { silent: true }
     );
 
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_FOLDER_BODIES) {
+
+    if (!isValidFolderBodiesMessage(data)) {
+      postToParent({ type: PREVIEW_MSG_ERROR, message: "malformed preview:folder-bodies payload" });
+      return;
+    }
+
+    handleFolderBodiesMessage(data);
     return;
 
   }

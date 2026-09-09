@@ -771,8 +771,8 @@
       );
 
       assert(
-        "[FOLDER-1] 폴더 노드 키는 정확히 kind/id/name/depth/children",
-        Object.keys(teaFolder).sort().join(",") === "children,depth,id,kind,name"
+        "[FOLDER-1] 폴더 노드 키는 정확히 kind/id/name/depth/children (+ FOLDER-2의 folderHref/postCount)",
+        Object.keys(teaFolder).sort().join(",") === "children,depth,folderHref,id,kind,name,postCount"
       );
 
       assert(
@@ -823,6 +823,174 @@
       assert(
         "[C] 다른 owner의 categoryId는 (user_id로 scope되어) null 반환",
         otherOwnerCategoryCtx === null
+      );
+
+
+      /* ---- FOLDER-2: folderHref / buildFolderSkinContext ----
+
+         fixture(카테고리 1):
+           root
+             ├─ (글) 11 비밀글            sort 100
+             ├─ 홍차(20)                  sort 200
+             │    ├─ Sentinel AU(21)      sort 100
+             │    │    └─ (글) 10 공개글   sort 100
+             │    └─ (글) 12 비공개글      sort 200
+             └─ 빈 폴더(22)               sort 300  ← 잘림
+      */
+
+      supabaseClient.mockSession =
+        { user: { id: OWNER_ID } };
+
+      const treeNoFolderPageCtx =
+        await buildCategorySkinContext(OWNER_ID, 1);
+
+      const teaNoPage =
+        treeNoFolderPageCtx.category.tree[1];
+
+      assert(
+        "[FOLDER-2] supportsFolderPage 없음(기본): 폴더 노드의 folderHref는 null, postCount는 direct 글 수(홍차=1, Sentinel AU=1)",
+        teaNoPage.kind === "folder" &&
+        teaNoPage.folderHref === null &&
+        teaNoPage.postCount === 1 &&
+        teaNoPage.children[0].kind === "folder" &&
+        teaNoPage.children[0].folderHref === null &&
+        teaNoPage.children[0].postCount === 1,
+        JSON.stringify({ folderHref: teaNoPage.folderHref, postCount: teaNoPage.postCount })
+      );
+
+      assert(
+        "[FOLDER-2] 폴더 노드에는 여전히 href가 없다(item.href = 글 판정 계약 유지)",
+        !("href" in teaNoPage) &&
+        !("href" in teaNoPage.children[0])
+      );
+
+      const treeWithFolderPageCtx =
+        await buildCategorySkinContext(OWNER_ID, 1, { supportsFolderPage: true });
+
+      const teaWithPage =
+        treeWithFolderPageCtx.category.tree[1];
+
+      assert(
+        "[FOLDER-2] supportsFolderPage=true: direct 글이 있는 폴더는 folderHref = /:slug/category/:cid/folder/:fid",
+        teaWithPage.folderHref === "/testuser/category/1/folder/20" &&
+        teaWithPage.children[0].folderHref === "/testuser/category/1/folder/21",
+        teaWithPage.folderHref
+      );
+
+      assert(
+        "[FOLDER-2] folderHref가 생겨도 글 노드 shape/키는 그대로(8개 키)",
+        Object.keys(treeWithFolderPageCtx.category.tree[0]).sort().join(",") ===
+          "depth,href,id,isSecret,kind,publishedAt,publishedAtLabel,title"
+      );
+
+      assert(
+        "[FOLDER-2] category.posts는 folderHref 옵션과 무관하게 그대로(6개 키, created_at DESC)",
+        treeWithFolderPageCtx.category.posts.map((p) => p.id).join(",") === "10,11,12" &&
+        treeWithFolderPageCtx.category.posts.every((p) =>
+          Object.keys(p).sort().join(",") === "href,id,isSecret,publishedAt,publishedAtLabel,title"
+        )
+      );
+
+      /* 폴더 페이지 context — 홍차(20): direct 글은 12뿐, 자식 폴더 21 */
+
+      const teaFolderCtx =
+        await buildFolderSkinContext(OWNER_ID, 1, 20);
+
+      assert(
+        "[FOLDER-2] buildFolderSkinContext: page.type === 'folder' / isFolder만 true",
+        teaFolderCtx &&
+        teaFolderCtx.page.type === "folder" &&
+        teaFolderCtx.page.isFolder === true &&
+        teaFolderCtx.page.isCategory === false &&
+        teaFolderCtx.page.isPost === false
+      );
+
+      assert(
+        "[FOLDER-2] folder: id/name/depth/href/parentHref(부모가 없으면 카테고리)",
+        teaFolderCtx.folder.id === "20" &&
+        teaFolderCtx.folder.name === "홍차" &&
+        teaFolderCtx.folder.depth === 1 &&
+        teaFolderCtx.folder.href === "/testuser/category/1/folder/20" &&
+        teaFolderCtx.folder.parentHref === "/testuser/category/1" &&
+        teaFolderCtx.category.id === "1" &&
+        teaFolderCtx.category.href === "/testuser/category/1",
+        JSON.stringify(teaFolderCtx.folder)
+      );
+
+      assert(
+        "[FOLDER-2] folder.posts는 direct 글만(12) — 하위 폴더의 글(10)은 재귀 포함하지 않음, postCount 일치",
+        teaFolderCtx.folder.posts.map((p) => p.id).join(",") === "12" &&
+        teaFolderCtx.folder.postCount === 1
+      );
+
+      assert(
+        "[FOLDER-2] folder.children은 보이는 글이 있는 직속 하위 폴더(Sentinel AU) + folderHref/postCount",
+        teaFolderCtx.folder.children.length === 1 &&
+        teaFolderCtx.folder.children[0].id === "21" &&
+        teaFolderCtx.folder.children[0].name === "Sentinel AU" &&
+        teaFolderCtx.folder.children[0].folderHref === "/testuser/category/1/folder/21" &&
+        teaFolderCtx.folder.children[0].postCount === 1
+      );
+
+      assert(
+        "[FOLDER-2] 소유자: folder.posts[].editHref = ?edit=1 수정 폼 주소, 제목은 같은 마스킹(🙈)",
+        teaFolderCtx.folder.posts[0].editHref === "/testuser/post/12?edit=1" &&
+        teaFolderCtx.folder.posts[0].title === "🙈 비공개글" &&
+        Object.keys(teaFolderCtx.folder.posts[0]).sort().join(",") ===
+          "editHref,href,id,isSecret,publishedAt,publishedAtLabel,title"
+      );
+
+      assert(
+        "[FOLDER-2] 소유자: viewer.manageHref/writeHref는 카테고리의 것(폴더 전용 관리/작성 주소 없음)",
+        teaFolderCtx.viewer.manageHref === "/testuser/category/1?manage=1" &&
+        teaFolderCtx.viewer.writeHref === "/testuser/category/1?write=1"
+      );
+
+      assert(
+        "[FOLDER-2] folder context 어디에도 content/ooc_content/secret_password_hash/visibility가 없다(본문은 Context에 없다)",
+        ["content", "ooc_content", "secret_password_hash", "visibility", "folder_id", "sort_order"]
+          .every((key) => JSON.stringify(teaFolderCtx.folder).includes(`"${key}"`) === false)
+      );
+
+      const sentinelFolderCtx =
+        await buildFolderSkinContext(OWNER_ID, 1, 21);
+
+      assert(
+        "[FOLDER-2] 2단계 폴더(Sentinel AU): ancestors=[홍차(folderHref)], parentHref=부모 폴더 페이지, posts=[10]",
+        sentinelFolderCtx &&
+        sentinelFolderCtx.folder.depth === 2 &&
+        sentinelFolderCtx.folder.ancestors.length === 1 &&
+        sentinelFolderCtx.folder.ancestors[0].id === "20" &&
+        sentinelFolderCtx.folder.ancestors[0].folderHref === "/testuser/category/1/folder/20" &&
+        sentinelFolderCtx.folder.parentHref === "/testuser/category/1/folder/20" &&
+        sentinelFolderCtx.folder.posts.map((p) => p.id).join(",") === "10" &&
+        sentinelFolderCtx.folder.children.length === 0
+      );
+
+      supabaseClient.mockSession =
+        null;
+
+      const visitorFolderCtx =
+        await buildFolderSkinContext(OWNER_ID, 1, 21);
+
+      assert(
+        "[FOLDER-2] 방문자: editHref는 null, manageHref null, isOwner false",
+        visitorFolderCtx.folder.posts[0].editHref === null &&
+        visitorFolderCtx.viewer.manageHref === null &&
+        visitorFolderCtx.viewer.isOwner === false
+      );
+
+      assert(
+        "[FOLDER-2] 빈 폴더(22)는 null — 빈 폴더 페이지를 만들지 않는다",
+        (await buildFolderSkinContext(OWNER_ID, 1, 22)) === null
+      );
+
+      assert(
+        "[FOLDER-2] 없는 폴더(999) / 다른 카테고리의 폴더(2, 20) / 다른 owner(99, 23) / 배너 카테고리(2, x)는 전부 null",
+        (await buildFolderSkinContext(OWNER_ID, 1, 999)) === null &&
+        (await buildFolderSkinContext(OWNER_ID, 2, 20)) === null &&
+        (await buildFolderSkinContext(OWNER_ID, 99, 23)) === null &&
+        (await buildFolderSkinContext(OTHER_OWNER_ID, 1, 20)) === null
       );
 
 

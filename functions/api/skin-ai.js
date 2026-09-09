@@ -25,7 +25,8 @@
      실패  { ok: false, message: string }
 
    ★ 모델이 만드는 범위 (이 파일이 기계적으로 강제한다)
-   모델은 templates.{home,category,post,banner}.html 4종과 css,
+   모델은 templates.{home,category,post,banner,folder}.html 5종(banner/
+   folder는 선택, FOLDER-2)과 css,
    그리고 한 줄 summary만 만든다. schemaVersion / imageSlots /
    regions / metadata는 **요청으로 받은 현재 SkinPackage에서 그대로
    가져온다** — 모델이 손댈 수 없다. 이유 두 가지:
@@ -292,8 +293,10 @@ function validateSkinAiReferenceImages(value) {
 
 const SKIN_AI_MAX_INSTRUCTION_LENGTH = 2000;
 
+/* FOLDER-2: "folder"(폴더 페이지 / Series Viewer)는 banner와 같은
+   선택 템플릿이다 — 스키마에서 null 허용, 결과 병합도 같은 정책. */
 const SKIN_AI_TEMPLATE_PAGE_TYPES =
-  ["home", "category", "post", "banner"];
+  ["home", "category", "post", "banner", "folder"];
 
 
 /* =========================================================
@@ -1022,10 +1025,12 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "## templates",
     "- `templates.home`, `templates.category`, `templates.post` are required. Always return all three, even if you changed none of them.",
     "- `templates.banner` is optional. If the current package has a banner template, return it (edited or unchanged). Return null ONLY if the current package has no banner template.",
+    "- `templates.folder` is optional (same rule as banner): return the current folder template edited or unchanged; return null ONLY if the current package has no folder template and the user did not ask for a folder page.",
     "- home  : the blog front page (profile, navigation, recent post list).",
     "- category: one category's post list.",
     "- post  : one post's title/date plus the protected body region.",
     "- banner: one banner-type category's link images.",
+    "- folder: one folder's posts read as a series — every post's body flows top to bottom on one page (see \"FOLDER\" below).",
     "",
     "## Imory runtime bindings (data-imory-*)",
     "The platform fills these in at render time. Never invent new attribute names and never invent context paths that are not listed here.",
@@ -1034,7 +1039,7 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `data-imory-href=\"path\"`   sets an <a> href.",
     "- `data-imory-if=\"path\"`     hides the element when the value is falsy.",
     "- `data-imory-repeat=\"path\"` repeats the element once per array entry; inside it, use `item.*`. Repeats may be nested (a repeat inside a repeat, up to 5 levels); an inner `item` shadows the outer one.",
-    "- `data-imory-region=\"post-body\"` marks the protected post body. Only this one region name exists.",
+    "- `data-imory-region=\"post-body\"` marks the protected post body. Only this one region name exists. It appears once in `templates.post`, and once per repeated post inside `templates.folder` (see FOLDER).",
     "Keep every binding that already exists unless the user explicitly asks to remove that piece of content.",
     "",
     "### Context paths available on every page",
@@ -1058,12 +1063,23 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "The blog owner can group a category's posts into folders (up to 3 levels deep). Two views of the same posts exist side by side:",
     "- `category.posts` is the FLAT list: every post of the category, newest first (created_at DESC), folders ignored. Use it for an ordinary post list that does not show folders. This is what existing skins use and its meaning never changes.",
     "- `category.tree` is the FOLDER-AWARE hierarchy: folder nodes and post nodes mixed in the order the owner arranged them (sort_order). Root-level posts (posts in no folder) are included as post nodes at the top level. Folders that contain no visible post are omitted.",
-    "- Folder node: { kind: \"folder\", id, name, depth, children: [...] } — `children` holds folder nodes and post nodes again.",
+    "- Folder node: { kind: \"folder\", id, name, depth, folderHref, postCount, children: [...] } — `children` holds folder nodes and post nodes again.",
     "- Post node: { kind: \"post\", id, title, href, publishedAt, publishedAtLabel, isSecret, depth }",
-    "- A folder node has NO `href` in this version. Folders cannot be clicked or opened, and there is no folder page or series viewer. Never wrap a folder name in a link and never invent a folder URL.",
-    "- `data-imory-if` cannot compare values, so do not test `item.kind`. Branch on which fields exist instead: a folder has `item.name` and `item.children`; a post has `item.title` and `item.href`. Put both branches inside the same repeated element, e.g. `<section data-imory-if=\"item.name\">…folder…</section><a data-imory-if=\"item.href\" data-imory-href=\"item.href\">…post…</a>`. The branch that does not apply is hidden automatically, so the skin CSS must contain `[hidden] { display: none; }`.",
+    "- A folder node has NO `href`. Its link is `item.folderHref` (the folder page, see FOLDER). `folderHref` is a string only when the skin has `templates.folder` AND the folder directly contains at least one visible post; otherwise it is null. So a folder link must always be guarded: `<a data-imory-if=\"item.folderHref\" data-imory-href=\"item.folderHref\">`. Never invent a folder URL and never put the folder link on `item.href`.",
+    "- `data-imory-if` cannot compare values, so do not test `item.kind`. Branch on which fields exist instead: a folder has `item.name` and `item.children`; a post has `item.title` and `item.href` (`item.href` exists ONLY on post nodes — this is how skins tell posts from folders, keep it that way). Put both branches inside the same repeated element, e.g. `<section data-imory-if=\"item.name\">…folder…</section><a data-imory-if=\"item.href\" data-imory-href=\"item.href\">…post…</a>`. The branch that does not apply is hidden automatically, so the skin CSS must contain `[hidden] { display: none; }`.",
     "- Draw deeper levels with a nested `data-imory-repeat=\"item.children\"` inside the folder branch; repeat that pattern once per level (3 folder levels + the posts inside the deepest folder = 4 nested repeats at most).",
     "- Which one to use: use `category.tree` ONLY when the user asks for folders to be shown (e.g. \"show folders as big cards and the posts inside them as a small list\"). For a plain request such as \"just show the posts as a simple newest-first list\", `category.posts` is the right choice. Never convert an existing `category.posts` skin to `category.tree` unless the user asked for folders; a skin that ignores folders is valid and must keep working unchanged.",
+    "",
+    "### FOLDER (templates.folder — the folder page / series viewer)",
+    "Route: /:slug/category/:cid/folder/:fid. Shows ONE folder's direct posts (posts inside sub-folders are NOT included) in the owner's order, with every post's real body on the same page so the reader scrolls from one post into the next like a series.",
+    "category.id, category.name, category.href  (the parent category)",
+    "folder.id, folder.name, folder.depth, folder.href, folder.parentHref  (parentHref = nearest openable parent: parent folder page or the category)",
+    "folder.ancestors[]  (item.id, item.name, item.folderHref — from the category down to the parent; folderHref may be null)",
+    "folder.children[]   (item.id, item.name, item.folderHref, item.postCount — direct sub-folders that have visible posts; use for navigation only, their posts are not on this page)",
+    "folder.posts[]      (item.id, item.title, item.href, item.publishedAtLabel, item.isSecret, item.editHref — direct posts in order; editHref is the owner-only edit link, null for visitors)",
+    "folder.postCount",
+    "Required markup: repeat `folder.posts` and put `data-imory-region=\"post-body\"` INSIDE the repeated element, one per post, e.g. `<article data-imory-repeat=\"folder.posts\"><h2 data-imory-bind=\"item.title\"></h2><div data-imory-region=\"post-body\"></div></article>`. The platform fills each region with that post's body (secret posts get a password form there). A folder template whose region is not inside the `folder.posts` repeat is rejected.",
+    "Reading flow: the bodies are the content. Keep per-post chrome minimal (title, date, a thin divider) so the posts read continuously; do not wrap each post in a heavy card and do not link the title to itself unless asked. The title at the top of the page is `folder.name`.",
     "",
     "### POST",
     "post.id, post.title, post.publishedAtLabel, post.categoryName, post.categoryHref",
@@ -1082,6 +1098,7 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `templates.post` MUST contain an element with `data-imory-region=\"post-body\"`.",
     "- The platform injects the real post body into it. Leave that element empty in your HTML.",
     "- A post template without this region is rejected and your whole answer is thrown away.",
+    "- If you return `templates.folder`, it MUST contain `data-imory-region=\"post-body\"` inside the `folder.posts` repeat (one region per post). Same rejection rule.",
     "",
     "## HTML restrictions (a sanitizer enforces these; anything else is silently stripped)",
     "- Allowed tags: div, section, article, header, footer, nav, main, aside, figure, figcaption, h1-h6, p, span, br, hr, b, strong, i, em, u, small, mark, blockquote, cite, sub, sup, ul, ol, li, dl, dt, dd, a, img, details, summary.",
@@ -1272,9 +1289,10 @@ function buildSkinAiResponseSchema() {
           home: buildSkinAiTemplateSchema("home", false),
           category: buildSkinAiTemplateSchema("category", false),
           post: buildSkinAiTemplateSchema("post", false),
-          banner: buildSkinAiTemplateSchema("banner", true)
+          banner: buildSkinAiTemplateSchema("banner", true),
+          folder: buildSkinAiTemplateSchema("folder", true)
         },
-        required: ["home", "category", "post", "banner"],
+        required: ["home", "category", "post", "banner", "folder"],
         additionalProperties: false
       },
 
@@ -1537,7 +1555,7 @@ function extractSkinAiModelOutput(payload) {
 /* =========================================================
    모델 결과 + 현재 SkinPackage -> 돌려줄 SkinPackage
 
-   모델이 만든 것은 templates.html 4종과 css뿐이다. 나머지는 요청
+   모델이 만든 것은 templates.html 5종(banner/folder 선택)과 css뿐이다. 나머지는 요청
    으로 받은 현재 SkinPackage 값을 그대로 옮긴다.
 
    banner는 한 방향으로만 관대하다: 모델이 null을 줬는데 현재
@@ -1568,6 +1586,26 @@ function buildSkinAiResultPackage(currentPackage, edit) {
   ) {
 
     templates.banner = { html: currentPackage.templates.banner.html };
+
+  }
+
+  /* FOLDER-2: folder도 banner와 같은 한 방향 관대함 — 모델이 null을
+     줬는데 현재 패키지에 있으면 현재 것을 유지하고, 새로 만들었다면
+     받는다. */
+
+  const folderFromModel =
+    edit.templates.folder;
+
+  if (isSkinAiPlainObject(folderFromModel) && typeof folderFromModel.html === "string") {
+
+    templates.folder = { html: folderFromModel.html };
+
+  } else if (
+    isSkinAiPlainObject(currentPackage.templates.folder) &&
+    typeof currentPackage.templates.folder.html === "string"
+  ) {
+
+    templates.folder = { html: currentPackage.templates.folder.html };
 
   }
 

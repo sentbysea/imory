@@ -778,6 +778,17 @@ function rememberPlatformScreenReturn() {
     categoryId:
       currentPostCategoryId,
 
+    /*
+      FOLDER-2: 폴더 페이지에서 수정 폼으로 들어갔다가 취소하면 그
+      폴더로 돌아온다. currentPostFolderId는 posts-view-folder.js가
+      선언한다.
+    */
+
+    folderId:
+      typeof currentPostFolderId !== "undefined"
+        ? currentPostFolderId
+        : null,
+
     scrollTop:
       postArea
         ? postArea.scrollTop
@@ -846,6 +857,55 @@ async function returnToPlatformScreenOrigin(
 
     await openPostPage(
       origin.postId,
+      {
+        updateUrl:
+          false
+      }
+    );
+
+
+    restorePlatformScreenScroll(
+      origin
+    );
+
+
+    return;
+
+  }
+
+
+  if (
+    view === "folder" &&
+    origin.categoryId &&
+    origin.folderId &&
+    typeof openFolderPage === "function"
+  ) {
+
+    history.replaceState(
+      {
+        page: "folder",
+
+        categoryId:
+          Number(
+            origin.categoryId
+          ),
+
+        folderId:
+          Number(
+            origin.folderId
+          )
+      },
+      "",
+      path ||
+        buildPostRoute(
+          `/category/${origin.categoryId}/folder/${origin.folderId}`
+        )
+    );
+
+
+    await openFolderPage(
+      origin.categoryId,
+      origin.folderId,
       {
         updateUrl:
           false

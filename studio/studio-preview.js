@@ -75,6 +75,10 @@ const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
+/* FOLDER-2 — 폴더 페이지(Series Viewer)의 글별 본문. post-body와 같은
+   1회성 채널이고 payload는 { bodies: [{ key, html, containerStyle,
+   isHtmlContent }] }다(studio/preview/preview-post-body.js). */
+const PREVIEW_MSG_FOLDER_BODIES = "preview:folder-bodies";
 
 /*
   studio(이 문서) -> admin(부모 window)로 보내는 메시지. admin은
@@ -800,6 +804,19 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
 
     throw new Error(
       "POST 템플릿에는 글 본문이 표시되는 자리(post-body region)가 반드시 있어야 합니다."
+    );
+
+  }
+
+  /* FOLDER-2: 폴더 페이지(Series Viewer)도 글 본문 자리가 필수다 —
+     folder.posts repeat 안에 post-body region이 있어야 한다. */
+  if (
+    pageType === "folder" &&
+    !htmlHasPostBodyRegion(html)
+  ) {
+
+    throw new Error(
+      "FOLDER 템플릿에는 글 본문이 표시되는 자리(folder.posts 반복 안의 post-body region)가 반드시 있어야 합니다."
     );
 
   }
@@ -1862,6 +1879,34 @@ function postPostBodyToFrame(payload) {
 }
 
 
+/*
+  FOLDER-2 — 폴더 페이지의 글별 본문. postPostBodyToFrame()과 같은
+  규칙(준비 전이면 조용히 무시, pending queue 없음). 검증을 통과한
+  네 필드만 새 리터럴로 옮겨 보낸다.
+*/
+
+function postFolderBodiesToFrame(payload) {
+
+  if (!previewFrameReady) {
+    return;
+  }
+
+  studioPreviewFrame.contentWindow.postMessage(
+    {
+      type: PREVIEW_MSG_FOLDER_BODIES,
+      bodies: (payload.bodies || []).map((body) => ({
+        key: String(body.key),
+        html: body.html,
+        containerStyle: body.containerStyle,
+        isHtmlContent: body.isHtmlContent
+      }))
+    },
+    window.location.origin
+  );
+
+}
+
+
 /* =========================================================
    postBannerRenderToFrame(payload) (Banner Category Preview)
 
@@ -1954,13 +1999,25 @@ window.addEventListener(
         상태로 덮는다(공개 skin-post.js와 동일한 원칙).
       */
       if (
-        currentPreviewPageType === "post" &&
+        (
+          currentPreviewPageType === "post" ||
+          currentPreviewPageType === "folder"
+        ) &&
         !data.hasPostBodyRegion
       ) {
 
+        /*
+          FOLDER-2: 폴더 페이지도 같은 규칙이다 — 글 본문 자리가 하나도
+          없는 FOLDER 템플릿은 제목만 나열되는 반쪽짜리라 공개 화면이
+          카테고리로 돌려보낸다(skin/skin-folder.js). Preview는 그 사실을
+          보여준다.
+        */
+
         setStudioPreviewOverlay(
           "unsupported",
-          "이 스킨에는 글 본문을 표시할 자리가 없습니다."
+          currentPreviewPageType === "folder"
+            ? "이 FOLDER 템플릿에는 글 본문을 표시할 자리가 없습니다."
+            : "이 스킨에는 글 본문을 표시할 자리가 없습니다."
         );
 
         return;

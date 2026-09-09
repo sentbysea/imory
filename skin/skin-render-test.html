@@ -98,6 +98,11 @@
     <div class="render-target" id="renderFolderBranch"></div>
   </div>
 
+  <h2>D-4. Renderer — repeat 안의 post-body region 키 매핑(FOLDER-2 Series Viewer)</h2>
+  <div class="panel">
+    <div class="render-target" id="renderSeriesRegions"></div>
+  </div>
+
   <h2>E. 책임 경계(Slice 3.5) — raw skin을 그대로 renderSkin에 넣어도 안전한가?</h2>
   <div class="panel">
     <p>
@@ -755,6 +760,102 @@
 
 
     /* =====================================================
+       D-4. FOLDER-2 — repeat 안의 post-body region N개
+
+       폴더 페이지(Series Viewer)는 folder.posts를 반복하면서 글마다
+       post-body region을 둔다. 렌더러는 clone 안의 region에 그 항목의
+       id를 data-imory-region-key로 찍고(스킨 HTML에서 온 같은 이름의
+       속성은 sanitizer가 지운다), getRegions()가 {key, element}[]를
+       DOM 순서로 돌려준다. 채우는 쪽은 이 키로 글과 region을 짝짓는다.
+    ===================================================== */
+
+    function runSeriesRegionTests() {
+
+      const container = document.getElementById("renderSeriesRegions");
+
+      const seriesSkin = {
+        schemaVersion: 1,
+        html:
+          '<div class="sr">' +
+            '<div class="sr-top" data-imory-region="post-body">top placeholder</div>' +
+            '<article class="sr-post" data-imory-repeat="folder.posts">' +
+              '<h2 class="sr-title" data-imory-bind="item.title"></h2>' +
+              '<div class="sr-body" data-imory-region="post-body" data-imory-region-key="hacked">placeholder</div>' +
+            '</article>' +
+            '<section class="sr-children" data-imory-repeat="folder.children">' +
+              '<div class="sr-child" data-imory-repeat="item.items">' +
+                '<div class="sr-nested" data-imory-region="post-body"></div>' +
+              '</div>' +
+            '</section>' +
+          '</div>',
+        css: ""
+      };
+
+      const instance = renderSkin({
+        container,
+        skin: seriesSkin,
+        context: {
+          folder: {
+            posts: [
+              { id: "7", title: "첫 글" },
+              { id: 8, title: "둘째 글(숫자 id)" },
+              { title: "id 없는 항목" }
+            ],
+            children: [
+              { id: "c1", items: [{ id: "x1" }] }
+            ]
+          }
+        },
+        mode: "view"
+      });
+
+      const regions = instance.getRegions("post-body");
+
+      assert(
+        "[render:regions] getRegions('post-body')는 같은 이름의 region 전부를 DOM 순서로 돌려줌(5개)",
+        Array.isArray(regions) && regions.length === 5,
+        `length=${regions && regions.length}`
+      );
+
+      assert(
+        "[render:regions] key: repeat 밖은 null, repeat 안은 item.id(문자열/숫자 모두 문자열로), id 없는 항목은 null, 중첩 repeat은 가장 가까운 항목의 id",
+        JSON.stringify(regions.map((r) => r.key)) === JSON.stringify([null, "7", "8", null, "x1"]),
+        JSON.stringify(regions.map((r) => r.key))
+      );
+
+      assert(
+        "[render:regions] 스킨 HTML이 직접 쓴 data-imory-region-key는 sanitizer가 지우고 렌더러의 키만 남음(hacked 없음)",
+        regions.every((r) => r.key !== "hacked") &&
+        container.querySelector('[data-imory-region-key="hacked"]') === null
+      );
+
+      assert(
+        "[render:regions] region 안의 스킨 placeholder는 전부 비워짐(protected region 계약 그대로)",
+        regions.every((r) => r.element.childNodes.length === 0)
+      );
+
+      assert(
+        "[render:regions] 각 region이 자기 항목의 clone 안에 있음(키 7 → 제목 '첫 글')",
+        regions[1].element.closest(".sr-post").querySelector(".sr-title").textContent === "첫 글" &&
+        regions[2].element.closest(".sr-post").querySelector(".sr-title").textContent === "둘째 글(숫자 id)"
+      );
+
+      assert(
+        "[render:regions] getRegion()은 지금까지처럼 첫 번째 하나(repeat 밖 sr-top)를 돌려줌 — POST 계약 불변",
+        instance.getRegion("post-body") === regions[0].element &&
+        regions[0].element.classList.contains("sr-top")
+      );
+
+      assert(
+        "[render:regions] 없는 이름/잘못된 이름은 빈 배열",
+        instance.getRegions("nope").length === 0 &&
+        instance.getRegions("post body\"]").length === 0
+      );
+
+    }
+
+
+    /* =====================================================
        E. Slice 3.5 — raw skin을 그대로 renderSkin에 넣어도
        스스로 방어하는지 확인 (+ 사전에 sanitize해도 이중으로
        망가지지 않는지 idempotency 확인)
@@ -839,6 +940,7 @@
       runMalformedBindingTests();
       runNestedRepeatDepthTests();
       runFolderBranchTests();
+      runSeriesRegionTests();
       runResponsibilityBoundaryTests();
 
       finishSummary();

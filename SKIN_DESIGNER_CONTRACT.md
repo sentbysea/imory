@@ -31,10 +31,12 @@
   "templates": {
     "home":     { "html": "<!-- HOME 페이지 전체 마크업 -->" },
     "category": { "html": "<!-- CATEGORY 페이지 전체 마크업 -->" },
-    "post":     { "html": "<!-- POST 페이지 전체 마크업 (post-body region 필수) -->" }
+    "post":     { "html": "<!-- POST 페이지 전체 마크업 (post-body region 필수) -->" },
+    "banner":   { "html": "<!-- (선택) 배너 카테고리 페이지 -->" },
+    "folder":   { "html": "<!-- (선택) 폴더 페이지 / Series Viewer — folder.posts 반복 안에 post-body region 필수 (2-7절) -->" }
   },
 
-  "css": "/* HOME/CATEGORY/POST 세 화면이 공유하는 CSS 하나 */",
+  "css": "/* 모든 화면이 공유하는 CSS 하나 */",
 
   "imageSlots": [
     { "name": "profile", "label": "프로필 사진", "required": false, "aspectRatioHint": "1:1" }
@@ -52,7 +54,7 @@
 ```
 
 - `templates.<page>.css`처럼 페이지별 `css` 필드를 넣는 것 **자체는 구조상 허용**되지만(`resolveSkinTemplate`이 있으면 그걸 쓰고 없으면 공유 `css`로 폴백), 저장 검증(`normalizeSkinPackageForDraft`)은 오직 공유 `css` 하나만 CSS validator에 통과시킵니다. 즉 페이지별 CSS를 넣어도 **검증되지 않은 채 그대로 저장**됩니다 — 현재 도구 체인은 "세 화면이 CSS 하나를 공유한다"는 전제로 만들어져 있으므로, 페이지별 CSS는 쓰지 않는 것을 권장합니다.
-- Studio의 "SkinPackage Import" 기능(13절)은 **`templates.home`/`templates.category`/`templates.post` 세 개가 전부 존재하고 각각 `.html` 문자열을 가질 것**을 요구합니다. 셋 중 하나라도 없으면 Import 자체가 거부됩니다.
+- Studio의 "SkinPackage Import" 기능(13절)은 **`templates.home`/`templates.category`/`templates.post` 세 개가 전부 존재하고 각각 `.html` 문자열을 가질 것**을 요구합니다. 셋 중 하나라도 없으면 Import 자체가 거부됩니다. `templates.banner`와 `templates.folder`는 **선택**입니다 — 있으면 함께 검증되고(folder는 post-body region 필수), 없으면 그 화면은 각각 legacy 배너 화면 / "폴더 페이지 없음"(폴더 링크가 그려지지 않음)으로 동작합니다.
 
 ### 1-2. 레거시 단일 페이지 shape (HOME 전용, 여전히 지원됨)
 
@@ -233,8 +235,11 @@
     "tree": [
       { "kind": "post",   "id": "12", "title": "폴더 없는 글", "href": "/me/post/12",
         "publishedAt": "...", "publishedAtLabel": "2026. 09. 01", "isSecret": false, "depth": 1 },
-      { "kind": "folder", "id": "3", "name": "홍차", "depth": 1, "children": [
-        { "kind": "folder", "id": "4", "name": "Sentinel AU", "depth": 2, "children": [
+      { "kind": "folder", "id": "3", "name": "홍차", "depth": 1,
+        "folderHref": "/me/category/1/folder/3",   // 폴더 페이지 링크 — 없으면 null (2-7절)
+        "postCount": 1,                            // 이 폴더에 직접 든 보이는 글 수
+        "children": [
+        { "kind": "folder", "id": "4", "name": "Sentinel AU", "depth": 2, "folderHref": "/me/category/1/folder/4", "postCount": 1, "children": [
           { "kind": "post", "id": "20", "title": "첫 만남", "href": "/me/post/20", "depth": 3, "...": "..." }
         ] }
       ] }
@@ -245,7 +250,7 @@
 
 - **`category.posts`는 폴더가 생겨도 달라지지 않습니다.** 필드도 그대로, 순서도 최신순(`created_at DESC`) 그대로, 폴더 안에 들어간 글도 전부 포함입니다. 기존 목록형 스킨은 아무것도 고칠 필요가 없습니다.
 - `category.tree`만 사용자가 관리 화면에서 drag로 정한 순서를 반영합니다. 폴더와 글이 한 컨테이너 안에서 섞여 정렬됩니다.
-- **폴더에는 `href`가 없습니다.** 폴더를 여는 페이지가 아직 없기 때문입니다 — 폴더 이름을 링크로 감싸지 마세요.
+- **폴더에는 `href`가 없습니다.** 폴더 페이지 링크는 별도 키 **`item.folderHref`** 로 옵니다(FOLDER-2). 이 값은 스킨에 `templates.folder`가 있고 그 폴더에 직접 든 보이는 글이 하나 이상일 때만 문자열이고, 그 외에는 `null`입니다 — 반드시 `<a data-imory-if="item.folderHref" data-imory-href="item.folderHref">`처럼 가드하세요. `item.href`는 글 노드에만 있으므로 글/폴더 판정에 계속 쓸 수 있습니다.
 - **`kind` 값으로 분기할 수 없습니다**(`data-imory-if`는 값 비교를 못 합니다). 대신 필드 존재로 갈라 쓰세요: 폴더는 `item.name`/`item.children`, 글은 `item.title`/`item.href`.
 - 폴더가 하나도 없으면 `hasFolders`는 `false`이고, `tree`에는 root 글 노드만 관리 화면 순서(`sort_order`)로 옵니다(글이 없으면 빈 배열). 그래서 `category.tree`만 쓰는 스킨도 폴더가 없는 카테고리를 그릴 수 있습니다. 최신순 목록이 필요하면 `category.posts`를 쓰세요.
 - **방문자에게 보이는 글이 하나도 없는 폴더는 `tree`에 아예 오지 않습니다** — 빈 폴더 이름이 화면에 남지 않습니다.
@@ -268,6 +273,54 @@
   </li>
 </ul>
 ```
+
+### 2-7. `folder` namespace (FOLDER 페이지 — Series Viewer, `templates.folder`가 있을 때만)
+
+기준 문서: [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md)
+
+주소 `/{slug}/category/{cid}/folder/{fid}`. 폴더 하나의 **직접 든 글**(하위 폴더의 글은 포함하지 않음)을 관리 화면 순서대로, 각 글의 **실제 본문**이 같은 페이지에 위에서 아래로 이어지도록 보여주는 화면입니다.
+
+```jsonc
+{
+  "page": { "type": "folder", "isFolder": true, "isCategory": false, "...": "..." },
+  "category": { "id": "1", "name": "일상", "type": "post", "href": "/me/category/1" },
+  "folder": {
+    "id": "4", "name": "Sentinel AU", "depth": 2,
+    "href": "/me/category/1/folder/4",
+    "parentHref": "/me/category/1/folder/3",         // 가장 가까운 열 수 있는 상위(부모 폴더 페이지 또는 카테고리)
+    "ancestors": [ { "kind": "folder", "id": "3", "name": "홍차", "depth": 1, "folderHref": "/me/category/1/folder/3", "postCount": 1 } ],
+    "children":  [ /* 직속 하위 폴더(보이는 글이 있는 것만) — 같은 shape */ ],
+    "posts": [
+      { "id": "20", "title": "첫 만남", "href": "/me/post/20",
+        "publishedAt": "...", "publishedAtLabel": "2026. 01. 01", "isSecret": false,
+        "editHref": null }                          // 소유자에게만 "/me/post/20?edit=1"
+    ],
+    "postCount": 1
+  },
+  "viewer": { "isOwner": false, "writeHref": null, "manageHref": null, "...": "..." }  // 소유자면 그 카테고리의 ?write=1 / ?manage=1
+}
+```
+
+- **본문은 여기 없습니다.** POST와 같은 원칙(7절)으로, 플랫폼이 렌더 뒤 각 글의 `post-body` region에 채웁니다.
+- **필수 마크업**: `folder.posts`를 반복하고 반복되는 엘리먼트 **안에** 글마다 `data-imory-region="post-body"`를 하나 둡니다. 렌더러가 각 region에 그 글의 id를 찍어 두므로 순서가 바뀌거나 조건부로 숨겨도 다른 글의 본문이 섞이지 않습니다. 반복 밖의 region은 채워지지 않고, region이 하나도 없는 FOLDER 템플릿은 Import/공개 렌더에서 거부됩니다.
+
+```html
+<h1 data-imory-bind="folder.name"></h1>
+<nav data-imory-if="folder.children">
+  <a data-imory-repeat="folder.children" data-imory-if="item.folderHref" data-imory-href="item.folderHref" data-imory-bind="item.name"></a>
+</nav>
+<article data-imory-repeat="folder.posts">
+  <h2 data-imory-bind="item.title"></h2>
+  <p data-imory-bind="item.publishedAtLabel"></p>
+  <a data-imory-if="item.editHref" data-imory-href="item.editHref">EDIT</a>
+  <div data-imory-region="post-body"></div>
+</article>
+<a data-imory-href="folder.parentHref">← back</a>
+```
+
+- 비밀글은 방문자에게 그 글의 region 안에 비밀번호 폼으로 나타납니다(플랫폼 소유, 클래스 `.post-secret-gate*`). 소유자에게는 본문이 바로 보입니다. 비공개 글은 방문자에게 목록에도 없습니다.
+- 읽기 흐름이 목적이므로 글 사이의 구분은 최소로 두는 것을 권장합니다(제목·날짜·얇은 구분선). 완성 예시: [skin/test-skins/imory-finder-folders-v2.json](skin/test-skins/imory-finder-folders-v2.json).
+- 이 페이지를 그릴 수 없을 때(스킨에 `templates.folder`가 없음, 폴더 없음, 보이는 직접 글 없음) 플랫폼은 **그 카테고리 페이지로 돌려보냅니다** — 폴더 전용 폴백 화면은 없습니다.
 
 ### 2-5. `post` namespace (POST 페이지에서만 채워짐)
 
@@ -306,7 +359,7 @@
 | `data-imory-src="path"` | dotted identifier | `data-imory-href`와 동일 로직, `src` 속성 대상. |
 | `data-imory-repeat="path"` | dotted identifier | 값이 배열이면 그 엘리먼트를 템플릿 삼아 item마다 clone. 배열이 아니면(`undefined`/`null`/객체 등) **엘리먼트 자체를 제거**. |
 | `data-imory-if="path"` | dotted identifier | truthy/falsy만 판정해 `el.hidden` 토글. |
-| `data-imory-region="post-body"` | 고정 문자열 `"post-body"` 만 허용 | 값은 resolve 대상이 아님(경로 아니라 식별자). mount 시 이 엘리먼트의 **자식을 전부 비운 뒤**, 플랫폼(Post Viewer)이 실제 글 본문을 그 안에 주입할 자리로 씁니다. |
+| `data-imory-region="post-body"` | 고정 문자열 `"post-body"` 만 허용 | 값은 resolve 대상이 아님(경로 아니라 식별자). mount 시 이 엘리먼트의 **자식을 전부 비운 뒤**, 플랫폼(Post Viewer)이 실제 글 본문을 그 안에 주입할 자리로 씁니다. POST 템플릿에는 하나, FOLDER 템플릿에는 `folder.posts` 반복 안에 글마다 하나(2-7절) — 반복 안의 region에는 렌더러가 항목 id를 `data-imory-region-key`로 찍습니다(스킨이 직접 쓰는 속성이 아니며, 써도 제거됩니다). |
 | `data-imory-edit-id="..."` | 영문으로 시작하는 영문/숫자/`_`/`-` 문자열, 최대 64자 | **렌더러가 해석하지 않는 순수 표식**입니다(PHASE AI-6A). Skin Studio의 Direct Edit이 "이 요소"를 재렌더/재저장 뒤에도 다시 찾기 위해 붙이며, 생성된 CSS 규칙의 `[data-imory-edit-id="..."]` selector가 이 값을 가리킵니다. 디자이너가 직접 쓸 필요는 없고, 형태가 맞지 않으면 저장 시점에 제거됩니다. 자세한 내용: [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) 2절. |
 
 ### 3-1. 속성 값(경로) 문법 제약
@@ -381,6 +434,9 @@ el.hidden = !isSkinTruthy(value);
 | POST(HOME 최근글) | `home.recentPosts[].href` | `/{slug}/post/{id}` |
 | POST(카테고리 목록) | `category.posts[].href` | `/{slug}/post/{id}` |
 | POST(브레드크럼 → 소속 카테고리) | `post.categoryHref` | `/{slug}/category/{id}` 또는 `null` |
+| FOLDER(폴더 페이지, FOLDER-2) | `category.tree[].folderHref` / `folder.children[].folderHref` / `folder.ancestors[].folderHref` | `/{slug}/category/{cid}/folder/{fid}` 또는 `null`(스킨에 `templates.folder`가 없거나 직접 든 글이 없음) |
+| FOLDER(자기 자신 / 상위) | `folder.href` / `folder.parentHref` | `/{slug}/category/{cid}/folder/{fid}` / 부모 폴더 페이지 또는 `/{slug}/category/{cid}` |
+| POST 수정(소유자만) | `folder.posts[].editHref` | `/{slug}/post/{id}?edit=1` 또는 `null` |
 
 - 항상 `/`로 시작하는 **경로형** URL이며 절대 도메인이 붙지 않습니다(SPA 내부 History API 라우팅).
 - **prev/next(이전글/다음글) 개념 자체가 코드에 없습니다** — POST Context에는 그런 필드가 없습니다. "관련 글" UI는 Skin이 아니라 레거시 Post Viewer의 `#postRelated` 영역이 별도로 렌더합니다(Skin 영역 밖).
@@ -419,7 +475,7 @@ POST 템플릿 안에는 **정확히 이 속성을 가진 엘리먼트가 하나
 
 - 태그는 자유(`div`/`section`/`article` 등 허용 태그 중 아무거나)이지만 **`data-imory-region="post-body"` 속성값은 정확히 `"post-body"` 문자열**이어야 합니다(그 외 값은 저장 시점에 속성 자체가 제거됨).
 - **placeholder 자식 콘텐츠는 실제로 화면에 절대 나타나지 않습니다** — mount 시점에 `applySkinRegion()`이 이 엘리먼트의 자식을 전부 비웁니다. 디자이너 편의를 위한 미리보기용 문구일 뿐이며, 없어도 무방합니다.
-- 이 region 안에 `data-imory-bind`/`if`/repeat` 등 다른 바인딩 속성을 **함께 쓸 수 없습니다** — region은 단독으로만 처리되고, 다른 속성이 같은 엘리먼트에 있어도 무시됩니다.
+- 이 region 안에 `data-imory-bind`/`if`/repeat` 등 다른 바인딩 속성을 **함께 쓸 수 없습니다** — region은 단독으로만 처리되고, 다른 속성이 같은 엘리먼트에 있어도 무시됩니다. 단 region을 **repeat 안에** 두는 것은 FOLDER 템플릿에서 허용됩니다(2-7절) — 그때는 반복되는 엘리먼트의 자식으로 두세요(region 자신에 `data-imory-repeat`을 붙이지 않습니다).
 
 ### 7-3. 이 region이 없으면 어떻게 되는가
 

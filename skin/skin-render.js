@@ -116,6 +116,75 @@ function makeSkinItemResolver(item, outerResolve) {
 const SKIN_MAX_REPEAT_DEPTH = 5;
 
 /* =========================================================
+   repeat 안의 region — 항목 키 (FOLDER-2, Series Viewer)
+
+   폴더 페이지는 `data-imory-repeat="folder.posts"` 안에 글마다
+   `data-imory-region="post-body"`를 하나씩 둔다. 렌더러는 clone을
+   만들 때 그 clone 안의 region에 **어느 항목의 것인지**를 플랫폼
+   소유 속성(data-imory-region-key = item.id)으로 찍어 둔다. 본문을
+   채우는 쪽(posts/view/posts-view-folder.js, studio/preview/
+   preview-bridge.js)은 DOM 순서가 아니라 이 키로 글과 region을
+   짝짓는다 — 스킨이 region을 조건부(data-imory-if)로 숨기거나
+   순서를 바꿔도 다른 글의 본문이 엉뚱한 자리에 들어가지 않는다.
+
+   이 속성은 스킨 HTML에서 올 수 없다(skin-sanitize.js의 속성
+   화이트리스트에 없어 저장/렌더 전에 항상 제거된다). 렌더러만
+   찍고, 렌더러가 찍은 값만 읽힌다.
+
+   안쪽 repeat이 먼저 자기 항목으로 찍으므로(walkSkinTree가 깊이
+   우선), 바깥 repeat은 아직 키가 없는 region만 채운다 — 중첩
+   repeat에서도 가장 가까운 항목의 키가 남는다.
+========================================================== */
+
+const SKIN_REGION_KEY_ATTR = "data-imory-region-key";
+
+function resolveSkinRepeatItemKey(item) {
+
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+
+  const id = item.id;
+
+  if (typeof id === "number" && Number.isFinite(id)) {
+    return String(id);
+  }
+
+  if (typeof id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(id)) {
+    return id;
+  }
+
+  return null;
+
+}
+
+function stampSkinRepeatRegionKeys(clone, item) {
+
+  const key = resolveSkinRepeatItemKey(item);
+
+  if (key === null) {
+    return;
+  }
+
+  const regions = [];
+
+  if (clone.hasAttribute("data-imory-region")) {
+    regions.push(clone);
+  }
+
+  clone.querySelectorAll("[data-imory-region]").forEach((el) => regions.push(el));
+
+  regions.forEach((el) => {
+
+    if (!el.hasAttribute(SKIN_REGION_KEY_ATTR)) {
+      el.setAttribute(SKIN_REGION_KEY_ATTR, key);
+    }
+
+  });
+
+}
+
+/* =========================================================
    data-imory-repeat
 
    FOLDER-1부터 중첩 반복을 지원한다(SKIN_MAX_REPEAT_DEPTH단계까지).
@@ -180,6 +249,8 @@ function applySkinRepeat(templateEl, resolvePath, repeatDepth) {
     parent.insertBefore(clone, anchor);
 
     walkSkinTree(clone, itemResolve, repeatDepth + 1);
+
+    stampSkinRepeatRegionKeys(clone, item);
 
   });
 
@@ -471,6 +542,30 @@ export function renderSkin({ container, skin, context, mode = "view" } = {}) {
       }
 
       return currentRoot.querySelector(`[data-imory-region="${name}"]`) || undefined;
+
+    },
+
+    /* =========================================================
+       getRegions(name) -> Array<{ key: string | null, element }>
+
+       FOLDER-2(Series Viewer). 같은 이름의 region 전부를 DOM 순서로
+       돌려준다. key는 repeat 안에서 렌더러가 찍은 항목 키
+       (data-imory-region-key, 위 stampSkinRepeatRegionKeys)이고,
+       repeat 밖의 region은 null이다. getRegion()과 같은 이유로
+       항상 live query다 — update() 뒤에는 다시 불러야 한다.
+    ========================================================== */
+    getRegions(name) {
+
+      if (!currentRoot || !isValidSkinRegionName(name)) {
+        return [];
+      }
+
+      return Array.from(
+        currentRoot.querySelectorAll(`[data-imory-region="${name}"]`)
+      ).map((element) => ({
+        key: element.getAttribute(SKIN_REGION_KEY_ATTR),
+        element
+      }));
 
     }
 

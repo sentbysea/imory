@@ -986,7 +986,11 @@ function buildSkinPageMeta(
     isHome: type === "home",
     isCategory: type === "category",
     isPost: type === "post",
-    isBanner: type === "banner"
+    isBanner: type === "banner",
+    /* FOLDER-2: 폴더 페이지(Series Viewer). 라우트는
+       /:slug/category/:cid/folder/:fid 지만 page.type은 "folder"
+       하나뿐이라 isCategory는 false다(banner와 같은 불변식). */
+    isFolder: type === "folder"
   };
 
 }
@@ -1100,11 +1104,20 @@ async function buildHomeSkinContext(
      글   { kind: "post", id, title, href, publishedAt,
             publishedAtLabel, isSecret, depth }
 
-   ★ 폴더에는 href가 없다(사용자 결정). 폴더를 여는 라우트가 아직
-     없으므로, 눌러도 아무 일이 없는 링크를 스킨에 노출하지 않는다
-     — PHASE 1H가 banner 카테고리의 manageHref를 null로 둔 것과
-     같은 판단이다. Series Viewer가 생기는 시점에 additive로
-     추가한다.
+   ★ 폴더 노드에는 `href`가 없다. 폴더를 여는 링크는 FOLDER-2부터
+     **`folderHref`** 라는 별도 키로 준다(IMORY_FOLDER2_DESIGN.md).
+     `href`를 쓰지 않는 이유: 스킨과 AI 프롬프트가 "글 가지 = item.href
+     가 있는 노드"로 분기하고 있어서, 폴더에 href를 넣으면 폴더에서
+     글 가지까지 함께 그려진다(item.href = 글 판정 계약 유지).
+
+     folderHref는 다음 두 조건을 모두 만족할 때만 문자열이고 그 외에는
+     null이다 — 눌러도 아무 일이 없는 링크를 노출하지 않기 위해서다
+     (PHASE 1H가 banner의 manageHref를 null로 둔 것과 같은 판단):
+       1) 렌더 중인 스킨에 templates.folder가 있다
+          (options.supportsFolderPage — 호출자가 스킨을 보고 넘긴다)
+       2) 그 폴더에 **보이는 direct 글**이 하나 이상 있다
+          (폴더 페이지는 direct 글만 보여주므로, 하위 폴더에만 글이
+           있는 폴더는 열어도 빈 화면이 된다 → 링크를 주지 않는다)
 
    ★ 스킨은 kind 값을 비교할 수 없다(data-imory-if는 truthy 판정만
      한다). 그래서 폴더에만 있는 필드(name/children)와 글에만 있는
@@ -1124,11 +1137,32 @@ async function buildHomeSkinContext(
      범위는 기존 RLS가 그대로 가린다.
 ========================================================== */
 
+function buildSkinFolderHref(
+  slug,
+  categoryId,
+  folderId
+) {
+
+  return buildSitePath(
+    slug,
+    `/category/${categoryId}/folder/${folderId}`
+  );
+
+}
+
+
 function buildSkinCategoryTree(
   folders,
   posts,
-  slug
+  slug,
+  treeOptions = {}
 ) {
+
+  const {
+    categoryId = null,
+    folderHrefEnabled = false
+  } =
+    treeOptions;
 
   const nodesById = new Map();
 
@@ -1265,11 +1299,27 @@ function buildSkinCategoryTree(
 
       hasFolder = true;
 
+      /*
+        FOLDER-2: direct 글 수와 폴더 링크. postCount는 이 폴더에 직접
+        든(하위 폴더 제외) 보이는 글의 수 — folderHref 조건 2)의 근거
+        이고, 스킨이 "글 n개" 같은 표시에 써도 된다.
+      */
+
+      const directPostCount =
+        inner.nodes.filter((node) => node.kind === "post").length;
+
       result.push({
         kind: "folder",
         id: child.id,
         name: child.name,
         depth,
+        folderHref:
+          folderHrefEnabled &&
+          categoryId !== null &&
+          directPostCount > 0
+            ? buildSkinFolderHref(slug, categoryId, child.id)
+            : null,
+        postCount: directPostCount,
         children: inner.nodes
       });
 
@@ -1338,11 +1388,22 @@ async function buildCategorySkinContext(
   }
 
 
+  /*
+    FOLDER-2: options.supportsFolderPage — 호출자(skin/skin-category.js,
+    studio/preview/preview-navigation.js)가 "이 스킨에 templates.folder가
+    있는가"를 resolveSkinTemplate()으로 판정해 넘긴다. 없으면 폴더
+    노드의 folderHref는 전부 null이다(위 buildSkinCategoryTree 주석).
+  */
+
   const folderTree =
     buildSkinCategoryTree(
       foldersRaw,
       postsRaw,
-      commonData.slug
+      commonData.slug,
+      {
+        categoryId: category.id,
+        folderHrefEnabled: options.supportsFolderPage === true
+      }
     );
 
 
@@ -1430,6 +1491,255 @@ async function buildCategorySkinContext(
 
       tree:
         folderTree.tree
+    }
+
+  };
+
+}
+
+
+/* =========================================================
+   FOLDER-2 — buildFolderSkinContext(ownerId, categoryId, folderId, options)
+   -> FOLDER context | null
+
+   폴더 페이지(Series Viewer)의 page context. 같은 카테고리의
+   category.tree를 만드는 것과 **정확히 같은 조회·정렬·마스킹·
+   잘라내기**(buildSkinCategoryTree)를 거친 뒤 그 트리에서 폴더
+   노드 하나를 꺼내 shape만 바꾼다 — 그래서 CATEGORY 화면의 폴더
+   카드 안 글 순서와 폴더 페이지의 글 순서가 어긋날 수 없다
+   (IMORY_FOLDER1_DESIGN.md §1-2 "정렬 비교는 세 군데가 같아야 한다").
+
+   null을 돌려주는 경우(호출자는 전부 "그 카테고리로 복귀"로 처리한다):
+   - 카테고리가 없거나 이 ownerId 소유가 아니다 / post형이 아니다
+   - 폴더가 없다(삭제됨), 이 카테고리의 폴더가 아니다
+   - 이 뷰어에게 보이는 direct 글이 하나도 없다(방문자에게 private
+     글뿐인 폴더, 하위 폴더에만 글이 있는 폴더, 빈 폴더)
+
+   shape:
+     page:     { type: "folder", isFolder: true, ... }
+     category: { id, name, type, href }            — 상위 카테고리
+     folder: {
+       id, name, depth,
+       href,                                        — 이 폴더 페이지 자신
+       parentHref,                                    — 가장 가까운 열 수 있는 상위(부모 폴더 페이지 또는 카테고리)
+       ancestors: [ { kind:"folder", id, name, depth, folderHref, postCount } ],  — 카테고리 바로 아래부터 부모까지
+       children:  [ { kind:"folder", id, name, depth, folderHref, postCount } ],  — 직속 하위 폴더(보이는 글이 있는 것만)
+       posts:     [ { id, title, href, publishedAt, publishedAtLabel, isSecret, editHref } ],  — direct 글만, sort_order 순
+       postCount
+     }
+
+   ★ 본문은 여기 없다. category.posts/post와 같은 원칙(PHASE1C 7-2절)
+     — 본문은 렌더 뒤 플랫폼이 각 글의 post-body region에만 채운다.
+   ★ editHref는 소유자에게만 문자열(?edit=1 수정 폼 주소), 방문자에게는
+     null이다. 쿼리는 요청일 뿐이고 실제 작성자 검사는 받는 쪽
+     (openPostEditor)이 다시 한다.
+========================================================== */
+
+async function buildFolderSkinContext(
+  ownerId,
+  categoryId,
+  folderId,
+  options = {}
+) {
+
+  if (!ownerId) {
+
+    throw new Error(
+      "buildFolderSkinContext: ownerId is required"
+    );
+
+  }
+
+  if (categoryId === undefined || categoryId === null) {
+
+    throw new Error(
+      "buildFolderSkinContext: categoryId is required"
+    );
+
+  }
+
+  if (folderId === undefined || folderId === null) {
+
+    throw new Error(
+      "buildFolderSkinContext: folderId is required"
+    );
+
+  }
+
+
+  const commonData =
+    await fetchSkinCommonData(ownerId);
+
+
+  const [
+    base,
+    category,
+    postsRaw,
+    foldersRaw
+  ] =
+    await Promise.all([
+      buildBaseSkinContext(ownerId, options, commonData),
+      fetchSkinCategoryById(ownerId, categoryId),
+      fetchSkinCategoryPosts(ownerId, categoryId),
+      fetchSkinCategoryFolders(ownerId, categoryId)
+    ]);
+
+
+  if (
+    !category ||
+    (category.type || "post") !== "post"
+  ) {
+    return null;
+  }
+
+
+  const tree =
+    buildSkinCategoryTree(
+      foldersRaw,
+      postsRaw,
+      commonData.slug,
+      {
+        categoryId: category.id,
+        folderHrefEnabled: true
+      }
+    ).tree;
+
+
+  /* 트리에서 폴더 노드와 그 조상 경로를 찾는다(DFS) */
+
+  const targetId =
+    String(folderId);
+
+  function findFolderNode(nodes, path) {
+
+    for (const node of nodes) {
+
+      if (node.kind !== "folder") {
+        continue;
+      }
+
+      if (node.id === targetId) {
+        return { node, path };
+      }
+
+      const found =
+        findFolderNode(node.children, [...path, node]);
+
+      if (found) {
+        return found;
+      }
+
+    }
+
+    return null;
+
+  }
+
+  const found =
+    findFolderNode(tree, []);
+
+  if (!found) {
+    return null;
+  }
+
+  const folderNode =
+    found.node;
+
+  const directPosts =
+    folderNode.children.filter((node) => node.kind === "post");
+
+  if (directPosts.length === 0) {
+    return null;
+  }
+
+
+  const toFolderSummary =
+    (node) => ({
+      kind: "folder",
+      id: node.id,
+      name: node.name,
+      depth: node.depth,
+      folderHref: node.folderHref,
+      postCount: node.postCount
+    });
+
+  const ancestors =
+    found.path.map(toFolderSummary);
+
+  const categoryHref =
+    buildSitePath(commonData.slug, `/category/${category.id}`);
+
+  const openableAncestor =
+    [...ancestors].reverse().find((node) => node.folderHref);
+
+  const isOwner =
+    base.viewer.isOwner;
+
+
+  return {
+
+    ...base,
+
+    page:
+      buildSkinPageMeta("folder"),
+
+    viewer: {
+      ...base.viewer,
+
+      /*
+        CATEGORY와 같은 진입점이다 — 새 글은 항상 카테고리 root에
+        생기고(FOLDER-1 §1-5) 폴더 배치는 그 카테고리의 관리 화면에서
+        하므로, 폴더 전용 작성/관리 주소를 만들지 않는다.
+      */
+
+      writeHref:
+        isOwner
+          ? buildSiteComposeUrl(categoryHref)
+          : base.viewer.writeHref,
+
+      manageHref:
+        isOwner
+          ? buildSiteManageUrl(categoryHref)
+          : null
+    },
+
+    category: {
+      id: String(category.id),
+      name: category.name,
+      type: category.type,
+      href: categoryHref
+    },
+
+    folder: {
+      id: folderNode.id,
+      name: folderNode.name,
+      depth: folderNode.depth,
+      href: buildSkinFolderHref(commonData.slug, category.id, folderNode.id),
+      parentHref:
+        openableAncestor
+          ? openableAncestor.folderHref
+          : categoryHref,
+      ancestors,
+      children:
+        folderNode.children
+          .filter((node) => node.kind === "folder")
+          .map(toFolderSummary),
+      posts:
+        directPosts.map(
+          (post) => ({
+            id: post.id,
+            title: post.title,
+            href: post.href,
+            publishedAt: post.publishedAt,
+            publishedAtLabel: post.publishedAtLabel,
+            isSecret: post.isSecret,
+            editHref:
+              isOwner
+                ? buildSiteEditUrl(post.href)
+                : null
+          })
+        ),
+      postCount: directPosts.length
     }
 
   };

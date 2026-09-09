@@ -355,6 +355,20 @@
         }
       );
 
+    /*
+      FOLDER(FOLDER-2, skin/skin-folder.js) — 폴더 페이지(Series
+      Viewer). posts/view/posts-view-folder.js의 openFolderPage()가
+      같은 핸드셰이크로 넘겨받는다. templates.folder가 없는 스킨에서는
+      항상 false라 그 카테고리 화면으로 복귀한다.
+    */
+
+    window.skinFolderReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinFolderReady = resolve;
+        }
+      );
+
     loadVersionedScripts(
       [
         "./skin/skin-sanitize.js",
@@ -405,6 +419,10 @@
 
     document.write(
       `<script type="module" src="./skin/skin-banner.js?v=${APP_BUILD_VERSION}"><\/script>`
+    );
+
+    document.write(
+      `<script type="module" src="./skin/skin-folder.js?v=${APP_BUILD_VERSION}"><\/script>`
     );
 
   </script>
@@ -3843,6 +3861,14 @@
             "./posts/view/posts-view-banner-form.js",
             "./posts/view/posts-view-detail.js",
             "./posts/view/posts-view-secret-gate.js",
+
+            /*
+              FOLDER-2: 폴더 페이지(Series Viewer). openFolderPage()와
+              그 화면 전용 상태(currentPostFolderId)를 선언한다 — 역시
+              함수/선언뿐이라 이 그룹 안의 순서는 상관없다.
+            */
+
+            "./posts/view/posts-view-folder.js",
             "./posts/view/posts-view-editor-load.js",
             "./posts/view/posts-view-compose.js",
 

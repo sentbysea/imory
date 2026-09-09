@@ -108,6 +108,41 @@ async function handlePostRoute() {
   }
 
 
+  /*
+    FOLDER-2: /category/:cid/folder/:fid — 폴더 페이지(Series Viewer).
+    category 패턴보다 먼저 본다(그 패턴은 끝 앵커가 있어 겹치지
+    않지만 읽는 순서를 계층대로 둔다). 스킨에 templates.folder가
+    없거나 폴더가 없으면 openFolderPage()가 그 카테고리로 돌려보내고
+    주소도 정리한다(posts/view/posts-view-folder.js).
+  */
+
+  const folderMatch =
+    pathname.match(
+      /^\/category\/(\d+)\/folder\/(\d+)\/?$/
+    );
+
+
+  if (folderMatch) {
+
+    await openFolderPage(
+      Number(
+        folderMatch[1]
+      ),
+      Number(
+        folderMatch[2]
+      ),
+      {
+        updateUrl:
+          false
+      }
+    );
+
+
+    return;
+
+  }
+
+
   const categoryMatch =
     pathname.match(
       /^\/category\/(\d+)\/?$/

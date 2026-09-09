@@ -28,8 +28,9 @@
    - Skin 바깥(.imory-skin-root 밖)에서 시작된 클릭 — legacy
      post-list/배너/메뉴 링크의 기존 동작을 한 줄도 바꾸지 않는다.
    - 다른 오리진, target=_blank, download, 수정키/보조버튼 클릭.
-   - 이 사이트의 /:slug, /:slug/post/:id, /:slug/category/:id
-     세 패턴에 해당하지 않는 주소(배너의 외부 URL 등).
+   - 이 사이트의 /:slug, /:slug/post/:id, /:slug/category/:id,
+     /:slug/category/:cid/folder/:fid(FOLDER-2) 네 패턴에 해당하지
+     않는 주소(배너의 외부 URL 등).
    - 이미 다른 핸들러가 preventDefault()한 클릭.
 
    의존(classic script, 이 파일보다 먼저 로드되어야 함):
@@ -105,6 +106,28 @@ function resolveInSiteSkinRoute(url) {
       page: "home",
       id: null,
       compose: isSiteComposeRequested(url.search)
+    };
+
+  }
+
+
+  /*
+    FOLDER-2: /:slug/category/:cid/folder/:fid — 폴더 페이지. 요청
+    쿼리(?write=1 등)는 이 경로에 정의되지 않았으므로 전달하지 않는다.
+  */
+
+  if (
+    segments.length === 4 &&
+    segments[0] === "category" &&
+    /^\d+$/.test(segments[1]) &&
+    segments[2] === "folder" &&
+    /^\d+$/.test(segments[3])
+  ) {
+
+    return {
+      page: "folder",
+      id: Number(segments[1]),
+      folderId: Number(segments[3])
     };
 
   }
@@ -305,6 +328,22 @@ document.addEventListener(
         }
 
         await openPostPage(route.id);
+
+        return;
+
+      }
+
+
+      if (route.page === "folder") {
+
+        if (typeof openFolderPage !== "function") {
+          throw new Error("openFolderPage unavailable");
+        }
+
+        await openFolderPage(
+          route.id,
+          route.folderId
+        );
 
         return;
 

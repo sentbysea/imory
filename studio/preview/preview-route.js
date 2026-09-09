@@ -107,6 +107,21 @@ function resolveStudioPreviewTarget(href, currentSlug) {
     return { type: "post", postId: rest[1] };
   }
 
+  /*
+    FOLDER-2: /:slug/category/:cid/folder/:fid — 폴더 페이지(Series
+    Viewer). 공개 라우터(posts-router-init.js)·skin-link-nav.js와 같은
+    패턴이다. 두 id 모두 숫자 문자열만 허용한다.
+  */
+  if (
+    rest.length === 4 &&
+    rest[0] === "category" &&
+    /^\d+$/.test(rest[1]) &&
+    rest[2] === "folder" &&
+    /^\d+$/.test(rest[3])
+  ) {
+    return { type: "folder", categoryId: rest[1], folderId: rest[3] };
+  }
+
   return null;
 
 }

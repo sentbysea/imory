@@ -100,6 +100,10 @@ function getCurrentPreviewLocation() {
     return { type: "post", postId: top.postId };
   }
 
+  if (top.type === "folder") {
+    return { type: "folder", categoryId: top.categoryId, folderId: top.folderId };
+  }
+
   return { type: "home" };
 
 }
@@ -313,13 +317,20 @@ async function renderCategoryPreviewFor(categoryId, options) {
 
   try {
 
+    /*
+      FOLDER-2: 공개 화면(skin/skin-category.js)과 같은 판정 — 작업 중
+      스킨에 templates.folder가 있을 때만 폴더 노드의 folderHref가
+      채워진다. Preview에서 폴더 링크를 누르면 아래
+      renderFolderPreviewFor()로 간다.
+    */
     context =
       await buildCategorySkinContext(
         currentOwnerId,
         categoryId,
         {
           imageSlotNames: currentImageSlotNames,
-          imageSlotValues: currentImageSlotValues
+          imageSlotValues: currentImageSlotValues,
+          supportsFolderPage: !!resolveSkinTemplate(currentWorkingSkin, "folder")
         }
       );
 
@@ -776,6 +787,179 @@ async function renderPostPreviewFor(postId, options) {
 
 
 /* =========================================================
+   FOLDER — 폴더 페이지(Series Viewer) Preview (FOLDER-2)
+
+   공개 화면(skin/skin-folder.js + posts/view/posts-view-folder.js)과
+   같은 계약이다: 같은 templates.folder, 같은 buildFolderSkinContext(),
+   같은 renderSkin(), 그리고 본문은 Context가 아니라 렌더 뒤 글별
+   post-body region에 채운다. Studio는 항상 소유자 세션이므로 secret
+   gate 분기가 없다(POST Preview와 같은 신뢰 경계, preview-post-body.js).
+
+   templates.folder가 없으면 unsupported overlay + Preview Back으로
+   남긴다(공개 화면은 카테고리로 복귀하지만, Studio에서는 "이 스킨에
+   폴더 페이지가 없다"를 보여주는 편이 편집자에게 맞다 — 그 상태에서
+   CODE 버튼도 비활성이라 Import/AI로 채우게 된다). 폴더가 없거나
+   보이는 direct 글이 없으면 "empty"다.
+========================================================== */
+
+async function renderFolderPreviewFor(categoryId, folderId, options) {
+
+  currentPreviewPageType =
+    "folder";
+
+  updateStudioCodeButtonState();
+
+  updatePreviewBackButtonVisibility();
+
+  if (!currentWorkingSkin) {
+    return;
+  }
+
+  const folderTemplate =
+    resolveSkinTemplate(currentWorkingSkin, "folder");
+
+  if (!folderTemplate) {
+
+    reportPreviewEntryUnavailable(
+      options,
+      "unsupported",
+      "이 스킨에는 아직 FOLDER 템플릿이 없습니다."
+    );
+
+    return;
+
+  }
+
+  setStudioPreviewOverlay(
+    "loading",
+    "폴더 미리보기를 불러오는 중..."
+  );
+
+  const token =
+    ++previewNavToken;
+
+  const isCurrent =
+    () => {
+
+      const location =
+        getCurrentPreviewLocation();
+
+      return (
+        token === previewNavToken &&
+        location.type === "folder" &&
+        location.folderId === folderId
+      );
+
+    };
+
+  let context;
+
+  try {
+
+    context =
+      await buildFolderSkinContext(
+        currentOwnerId,
+        categoryId,
+        folderId,
+        {
+          imageSlotNames: currentImageSlotNames,
+          imageSlotValues: currentImageSlotValues
+        }
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[preview-navigation] buildFolderSkinContext failed",
+      err
+    );
+
+    if (isCurrent()) {
+
+      setStudioPreviewOverlay(
+        "error",
+        "폴더 미리보기를 불러오지 못했습니다."
+      );
+
+    }
+
+    return;
+
+  }
+
+  if (!isCurrent()) {
+    return;
+  }
+
+  if (!context) {
+
+    reportPreviewEntryUnavailable(
+      options,
+      "empty",
+      "이 폴더를 찾을 수 없거나 보여줄 글이 없습니다."
+    );
+
+    return;
+
+  }
+
+  setStudioPreviewOverlay(
+    "hidden"
+  );
+
+  postRenderToFrame(
+    {
+      skin: folderTemplate,
+      context
+    }
+  );
+
+  /*
+    본문 — POST Preview(renderPostPreviewFor)와 같은 별도 채널. 글별
+    payload를 한 메시지에 담아 보내고, iframe이 region 키(item.id)로
+    짝지어 채운다(preview-bridge.js). 그 사이 사용자가 이동했으면
+    버린다.
+  */
+
+  let bodies;
+
+  try {
+
+    bodies =
+      await buildStudioFolderBodiesPayload(
+        currentOwnerId,
+        context.folder.posts.map((post) => post.id)
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[preview-navigation] buildStudioFolderBodiesPayload failed",
+      err
+    );
+
+    return;
+
+  }
+
+  if (
+    !isCurrent() ||
+    !Array.isArray(bodies) ||
+    bodies.length === 0
+  ) {
+    return;
+  }
+
+  postFolderBodiesToFrame(
+    {
+      bodies
+    }
+  );
+
+}
+
+
+/* =========================================================
    renderCurrentPreviewEntry(options)
 
    options.fallbackToHomeIfUnavailable (PHASE AI-5A)
@@ -804,6 +988,11 @@ function renderCurrentPreviewEntry(options) {
 
   if (entry.type === "category") {
     renderCategoryPreviewFor(entry.categoryId, options);
+    return;
+  }
+
+  if (entry.type === "folder") {
+    renderFolderPreviewFor(entry.categoryId, entry.folderId, options);
     return;
   }
 
@@ -928,7 +1117,12 @@ function handlePreviewNavigateMessage(href) {
     (
       target.type === "home" ||
       (target.type === "category" && current.categoryId === target.categoryId) ||
-      (target.type === "post" && current.postId === target.postId)
+      (target.type === "post" && current.postId === target.postId) ||
+      (
+        target.type === "folder" &&
+        current.categoryId === target.categoryId &&
+        current.folderId === target.folderId
+      )
     );
 
   if (isSameLocation) {

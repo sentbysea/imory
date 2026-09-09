@@ -592,17 +592,19 @@ async function runServerChecks() {
     );
 
     record(
-      "A6. Structured Output schema가 templates.{home,category,post,banner}.html과 css를 강제한다",
+      "A6. Structured Output schema가 templates.{home,category,post,banner,folder}.html과 css를 강제한다(banner/folder는 null 허용)",
       (() => {
         const schema = body.text.format.schema;
         const t = schema.properties.templates;
-        return t.required.join(",") === "home,category,post,banner" &&
+        return t.required.join(",") === "home,category,post,banner,folder" &&
           t.additionalProperties === false &&
           t.properties.home.required[0] === "html" &&
           t.properties.home.additionalProperties === false &&
           t.properties.post.properties.html.type === "string" &&
           Array.isArray(t.properties.banner.type) &&
           t.properties.banner.type.includes("null") &&
+          Array.isArray(t.properties.folder.type) &&
+          t.properties.folder.type.includes("null") &&
           schema.properties.css.type === "string" &&
           schema.additionalProperties === false;
       })(),
@@ -1049,15 +1051,34 @@ async function runServerChecks() {
 
     record(
       "K2. folder node / post node shape가 실제 skin-context.js 계약과 같은 필드로 적혀 있다",
-      instructions.includes("{ kind: \"folder\", id, name, depth, children: [...] }") &&
+      instructions.includes("{ kind: \"folder\", id, name, depth, folderHref, postCount, children: [...] }") &&
         instructions.includes("{ kind: \"post\", id, title, href, publishedAt, publishedAtLabel, isSecret, depth }")
     );
 
+    /* FOLDER-2: 폴더 링크는 href가 아니라 folderHref(null 가능)이고,
+       item.href = 글 판정 계약은 그대로다. */
     record(
-      "K3. 폴더에는 href가 없고 폴더 페이지/Series Viewer가 없다고 명시한다(폴더 링크 금지)",
-      instructions.includes("A folder node has NO `href` in this version") &&
-        instructions.includes("no folder page or series viewer") &&
-        instructions.includes("Never wrap a folder name in a link")
+      "K3. 폴더에는 href가 없고 링크는 item.folderHref(null 가능, if 가드 필수)라고 명시하며 item.href = 글 판정을 유지하라고 적는다",
+      instructions.includes("A folder node has NO `href`. Its link is `item.folderHref`") &&
+        instructions.includes("data-imory-if=\"item.folderHref\" data-imory-href=\"item.folderHref\"") &&
+        instructions.includes("never put the folder link on `item.href`") &&
+        instructions.includes("`item.href` exists ONLY on post nodes")
+    );
+
+    record(
+      "K9. FOLDER 페이지(Series Viewer) 계약 — 경로, direct 글만, folder.* 필드, folder.posts repeat 안의 post-body region, 읽기 흐름, templates.folder 선택",
+      instructions.includes("### FOLDER (templates.folder") &&
+        instructions.includes("/:slug/category/:cid/folder/:fid") &&
+        instructions.includes("posts inside sub-folders are NOT included") &&
+        instructions.includes("folder.posts[]") &&
+        instructions.includes("item.editHref") &&
+        instructions.includes("folder.children[]") &&
+        instructions.includes("folder.parentHref") &&
+        instructions.includes("data-imory-repeat=\"folder.posts\"><h2 data-imory-bind=\"item.title\"></h2><div data-imory-region=\"post-body\">") &&
+        instructions.includes("Keep per-post chrome minimal") &&
+        instructions.includes("`templates.folder` is optional") &&
+        instructions.indexOf("### FOLDER") > instructions.indexOf("#### Category folders") &&
+        instructions.indexOf("### FOLDER") < instructions.indexOf("### POST")
     );
 
     record(
