@@ -1809,8 +1809,17 @@
   <script src="./ai/studio-ai-panel-layout.js"></script>
   <script src="./ai/studio-ai-selection.js"></script>
   <script src="./ai/studio-ai-panel.js"></script>
-  <!-- PHASE AI-6A — production과 동일한 순서(studio/index.html 참고) -->
+  <!-- PHASE AI-6A — production과 동일한 순서(studio/index.html 참고).
+       Inspector 파일 분리 라운드 이후로는 일곱 파일이고, state가 맨
+       앞·main(studio-inspector.js)이 맨 뒤인 순서를 지켜야 한다 —
+       이유는 studio/index.html의 같은 블록 주석에 있다. -->
   <script src="./inspector/studio-inspector-model.js"></script>
+  <script src="./inspector/studio-inspector-state.js"></script>
+  <script src="./inspector/studio-inspector-overlay.js"></script>
+  <script src="./inspector/studio-inspector-edit.js"></script>
+  <script src="./inspector/studio-inspector-text.js"></script>
+  <script src="./inspector/studio-inspector-image-size.js"></script>
+  <script src="./inspector/studio-inspector-controls.js"></script>
   <script src="./inspector/studio-inspector.js"></script>
   <script src="./studio-state.js"></script>
 

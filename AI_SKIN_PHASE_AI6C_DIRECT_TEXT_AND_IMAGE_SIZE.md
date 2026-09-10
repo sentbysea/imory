@@ -243,3 +243,24 @@ mock 하네스 위에서만 확인했다. 터치 입력은 `pointerdown/move/up`
    먼저 옮길 만한 것: 크기/비율 계산(`studioInspectorSizeRatio` /
    `SizeBaseline` / `SizeMax` / clamp)은 metrics를 인자로 받으면 순수
    함수가 되므로 `studio-inspector-model.js`(순수 계산 계층)가 제 자리다.
+
+   > **철회/변경됨 (Inspector 파일 분리 라운드)** — 위 5번의 미룬 이유
+   > 가운데 **전제 하나가 사실과 다르다**. classic script의 최상위
+   > `let`/`const`는 script scope가 아니라 **문서 하나가 공유하는 전역
+   > lexical 환경**에 들어간다 — 앞 script가 선언한 `let`을 뒤 script가
+   > 읽고 **대입까지** 할 수 있다(이 저장소는 이미 그렇게 쓰고 있다:
+   > `studio-preview.js`의 `let currentWorkingSkin`을 `studio-inspector.js`
+   > 가 그대로 읽는다). 그래서 파일을 나누기 위해 공유 상태를 `window`
+   > 객체로 올릴 필요가 없었고, "선택 상태의 주인은 한 곳"이라는 AI-6A
+   > 계약도 건드리지 않았다.
+   >
+   > 지금 구조: `studio-inspector-state.js`(공유 상태) ·
+   > `-overlay.js` · `-edit.js` · `-text.js` · `-image-size.js` ·
+   > `-controls.js` · `studio-inspector.js`(진입/lifecycle). 로드 순서와
+   > 이유는 `studio/index.html`의 ELEMENT INSPECTOR 블록 주석과
+   > `studio-inspector.js` 머리말 "파일 나누기"에 있다.
+   >
+   > 마지막 문단의 "먼저 옮길 만한 것"(크기/비율 계산을
+   > `studio-inspector-model.js`로)은 **아직 하지 않았다** — 이번
+   > 라운드는 파일 경계만 옮기고 함수 자체는 한 글자도 고치지 않았다.
+   > 여전히 유효한 다음 후보다.
