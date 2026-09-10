@@ -194,6 +194,13 @@ async function handlePostRoute() {
       소유자 검사는 openCategoryPage()가 다시 한다.
     */
 
+    /*
+      GALLERY-1: ?page=N은 갤러리 카테고리의 읽기 위치다. 직접 접속·
+      새로고침·뒤로가기 어디서 들어와도 같은 페이지가 열려야 하므로
+      여기서 그대로 넘긴다 — 유효 범위 판정과 주소 정정은 받는 쪽
+      (openCategoryPage)이 실제 글 수를 안 뒤에 한다.
+    */
+
     await openCategoryPage(
       categoryId,
       {
@@ -202,6 +209,11 @@ async function handlePostRoute() {
 
         manage:
           isSiteManageRequested(
+            search
+          ),
+
+        page:
+          getSiteRequestedPage(
             search
           )
       }

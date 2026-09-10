@@ -254,6 +254,104 @@ function isSiteSeriesRequested(
 }
 
 
+/* =========================================================
+   갤러리 페이지 이동 계약 (GALLERY-1)
+
+   갤러리 카테고리의 몇 번째 페이지를 보고 있는지를 나르는 쿼리
+   하나(?page=N). 경로는 /:slug/category/:id 그대로다 — 새 경로를
+   만들지 않는 것은 ?manage=1 / ?series=1과 같은 이유다.
+
+   1페이지는 쿼리를 붙이지 않는다(정규 주소). 그래야 같은 화면에
+   주소가 두 가지 생기지 않고, 기존 카테고리 링크(스킨/메뉴/
+   navigation.categories)가 그대로 1페이지를 가리킨다.
+
+   ?series=1과 마찬가지로 권한 요청이 아니라 **읽기 위치**라
+   소유자/방문자 모두에게 같이 동작한다. 주소에 남으므로 새로고침·
+   공유·뒤로가기가 페이지까지 일치한다.
+
+   범위를 벗어난 값(0, 음수, 숫자 아님, 마지막 페이지 초과)은 여기서
+   막지 않는다 — 실제 글 수를 아는 쪽(skin/skin-context.js의
+   페이지 계산)이 유효 범위로 맞추고, 화면을 그린 쪽이 주소를
+   정정한다(posts/view/posts-view-list.js).
+========================================================== */
+
+const SITE_PAGE_QUERY_PARAM =
+  "page";
+
+
+function buildSiteCategoryPageUrl(
+  path,
+  page
+) {
+
+  const numeric =
+    Number(page);
+
+
+  if (
+    !Number.isFinite(numeric) ||
+    numeric <= 1
+  ) {
+
+    return path;
+
+  }
+
+
+  return (
+    path + "?" + SITE_PAGE_QUERY_PARAM + "=" + Math.floor(numeric)
+  );
+
+}
+
+
+/*
+  주소에서 읽어낸 "요청된 페이지 번호". 없거나 해석할 수 없으면
+  1이다 — 호출자가 매번 방어 코드를 쓰지 않게 여기서 정규화한다.
+*/
+
+function getSiteRequestedPage(
+  search
+) {
+
+  try {
+
+    const raw =
+      new URLSearchParams(
+        search || ""
+      ).get(
+        SITE_PAGE_QUERY_PARAM
+      );
+
+
+    if (!raw || !/^\d+$/.test(raw)) {
+
+      return 1;
+
+    }
+
+
+    const numeric =
+      Number(raw);
+
+
+    return (
+      numeric >= 1
+        ? numeric
+        : 1
+    );
+
+  }
+
+  catch (err) {
+
+    return 1;
+
+  }
+
+}
+
+
 /*
   위 세 계약이 공유하는 파싱 — 잘못된 search 문자열이 와도
   예외 대신 false로 떨어뜨린다(기존 isSiteManageRequested의

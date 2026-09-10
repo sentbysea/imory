@@ -59,6 +59,15 @@
       작성/관리 권한 검사는 여전히 각 화면과 RLS가 한다 — 이
       필드는 "링크를 보여줄지"만 정한다.
 
+   IMORY_GALLERY1_DESIGN.md(GALLERY-1)로 category namespace에
+   listStyle/pageSize/isGallery/isList/gallery/pagination이 추가됐다.
+   기존 category.posts / category.tree / hasFolders의 의미는 **갤러리를
+   쓰지 않는 모든 렌더에서** 한 글자도 바뀌지 않는다 — 갤러리 모드는
+   (1) 카테고리 설정이 gallery이고 (2) 렌더 중인 스킨이 category.gallery를
+   실제로 그릴 때만 켜지기 때문이다(options.supportsGallery). 갤러리
+   모드에서만 조회가 페이지 단위가 되고, category.tree는 폴더 노드만
+   담는다(root 글은 카드 영역의 몫 — 중복 표시 방지).
+
    의존이 하나 늘었다: isSafeSkinUrl(skin/skin-sanitize.js) —
    banner의 외부 URL/이미지 URL을 Context 단계에서 1차로 거르는 데
    쓴다(렌더 시점 재검증은 skin-render.js가 그대로 담당).
@@ -377,16 +386,21 @@ async function fetchSkinCategoryById(
   categoryId
 ) {
 
+  /*
+    GALLERY-1: 표시 설정 컬럼은 migration이 적용된 배포에서만 존재한다.
+    낙관적으로 함께 읽고, 없는 배포에서만(42703) 기본 컬럼으로 한 번
+    더 읽는다 — 적용된 배포에는 추가 왕복이 전혀 없고, 적용 전 배포도
+    화면이 죽지 않는다. 판정은 세션당 한 번만 하고 재사용한다.
+  */
+
   const {
     data,
     error
   } =
-    await supabaseClient
-      .from("categories")
-      .select("id, name, type")
-      .eq("user_id", ownerId)
-      .eq("id", categoryId)
-      .maybeSingle();
+    await selectSkinCategoryRow(
+      ownerId,
+      categoryId
+    );
 
 
   if (error) {
@@ -488,6 +502,501 @@ async function fetchSkinCategoryFolders(
 
 
   return data || [];
+
+}
+
+
+/* =========================================================
+   GALLERY-1 — 카테고리 표시 설정 컬럼
+
+   categories에 GALLERY-1이 더한 컬럼 4개(list_style / page_size /
+   secret_cover_mode / secret_cover_path)는 migration이 아직 적용되지
+   않은 배포에서는 존재하지 않는다. 그 상태에서 select에 이름을 넣으면
+   42703으로 **카테고리 조회 자체가 통째로 실패**하므로, 한 번만
+   probe해서 있으면 넣고 없으면 빼는 방식으로 읽는다
+   (studio/images/skin-image-library.js의 isSkinImageLibraryReady()와
+   같은 패턴 — Studio가 아니라 공개 화면이라 더더욱 죽으면 안 된다).
+
+   판정은 세션당 한 번이고 결과는 Promise로 캐시한다.
+========================================================== */
+
+const SKIN_CATEGORY_BASE_COLUMNS =
+  "id, name, type";
+
+/*
+  GALLERY-1 후속: secret_cover_url(공개 https 주소)은 사라졌다.
+  파일은 비공개 버킷에 있고 바이트는 /api/post-cover?category=<id>로만
+  나간다 — 화면이 알아야 하는 것은 "지정 이미지가 있는가"뿐이라
+  경로의 유무만 읽는다(IMORY_GALLERY1_DESIGN.md §3-5).
+*/
+
+const SKIN_CATEGORY_GALLERY_COLUMNS =
+  "list_style, page_size, secret_cover_mode, secret_cover_path";
+
+
+/*
+  null = 아직 모름, true/false = 이 배포에 컬럼이 있는가. 첫 조회
+  결과로 한 번만 정해지고 그 뒤로는 그 값을 그대로 쓴다.
+*/
+
+let skinGalleryColumnsPresent =
+  null;
+
+
+function selectSkinCategoryRow(
+  ownerId,
+  categoryId
+) {
+
+  const run =
+    (columns) =>
+      supabaseClient
+        .from("categories")
+        .select(columns)
+        .eq("user_id", ownerId)
+        .eq("id", categoryId)
+        .maybeSingle();
+
+
+  if (skinGalleryColumnsPresent === false) {
+
+    return run(SKIN_CATEGORY_BASE_COLUMNS);
+
+  }
+
+
+  return run(
+    `${SKIN_CATEGORY_BASE_COLUMNS}, ${SKIN_CATEGORY_GALLERY_COLUMNS}`
+  ).then((result) => {
+
+    if (
+      result.error &&
+      result.error.code === "42703"
+    ) {
+
+      skinGalleryColumnsPresent =
+        false;
+
+      return run(SKIN_CATEGORY_BASE_COLUMNS);
+
+    }
+
+
+    if (!result.error) {
+
+      skinGalleryColumnsPresent =
+        true;
+
+    }
+
+
+    return result;
+
+  });
+
+}
+
+
+/*
+  기본값 정규화 — 컬럼이 없거나(migration 이전) 값이 이상하면
+  "지금까지의 화면"으로 떨어진다. DB의 CHECK 제약과 같은 값 집합을
+  쓰지만, 신뢰 경계는 DB이고 여기는 화면이 깨지지 않게 하는 방어다.
+*/
+
+const SKIN_GALLERY_PAGE_SIZES =
+  [6, 12, 18, 24];
+
+const SKIN_GALLERY_DEFAULT_PAGE_SIZE =
+  12;
+
+
+function normalizeSkinCategoryDisplay(
+  category
+) {
+
+  const listStyle =
+    category && category.list_style === "gallery"
+      ? "gallery"
+      : "list";
+
+
+  const rawPageSize =
+    Number(category && category.page_size);
+
+  const pageSize =
+    SKIN_GALLERY_PAGE_SIZES.includes(rawPageSize)
+      ? rawPageSize
+      : SKIN_GALLERY_DEFAULT_PAGE_SIZE;
+
+
+  /*
+    "지정 이미지"인데 이미지가 비어 있으면 기본 잠금 카드로 되돌아간다
+    (요구사항 3절) — 화면에 빈 <img>가 남지 않게 여기서 정리한다.
+  */
+
+  const secretCoverUrl =
+    category &&
+    typeof category.secret_cover_path === "string" &&
+    category.secret_cover_path
+      ? buildCategoryCoverUrl(category.id)
+      : null;
+
+
+  const secretCoverMode =
+    category &&
+    category.secret_cover_mode === "image" &&
+    secretCoverUrl
+      ? "image"
+      : "lock";
+
+
+  return {
+    listStyle,
+    pageSize,
+    secretCoverMode,
+    secretCoverUrl:
+      secretCoverMode === "image"
+        ? secretCoverUrl
+        : null
+  };
+
+}
+
+
+/* =========================================================
+   GALLERY-1 — 페이지 단위 글 조회
+
+   "전체 글을 받아 CSS로 숨기는 방식이 아닌, 해당 페이지의 글을
+   조회하는 방식"(요구사항 6절)의 실제 구현. PostgREST의 Range
+   헤더(supabase-js .range())와 count=exact를 같이 쓴다 — 한 번의
+   왕복으로 그 페이지의 행과 전체 개수를 함께 받는다.
+
+   ★ 조회 범위는 **카테고리 root의 direct 글**(folder_id is null)이다.
+     폴더 안의 글은 폴더 영역이 그리고 갤러리 카드 영역은 root 글만
+     그린다 — 같은 글이 두 군데 나오지 않게 하는 경계를 스킨의 관례가
+     아니라 데이터에서 정한다(요구사항 5절 마지막 항목, 기준 문서 §5-3).
+
+   ★ 정렬은 created_at DESC, **id DESC**다. 같은 시각에 저장된 글이
+     있어도 페이지마다 순서가 흔들리지 않아야 한다(요구사항 6절) —
+     id는 유일하므로 이 두 키로 전순서가 확정된다. FOLDER-1의
+     backfill이 쓴 tie-break와 같은 규칙이다.
+
+   ★ private 글은 방문자에게 행 자체가 오지 않으므로(RLS) 목록에도
+     count에도 들어가지 않는다. 소유자에게는 지금까지의 목록과
+     동일하게 자기 글이 전부 보인다.
+
+   범위를 벗어난 페이지 요청은 PostgREST가 416/PGRST103으로 거절한다.
+   그 경우에만 개수만 세는 가벼운 질의를 한 번 더 하고 마지막 페이지로
+   맞춰 다시 조회한다 — 정상 경로에는 추가 왕복이 없다.
+========================================================== */
+
+const SKIN_CATEGORY_POST_COLUMNS =
+  "id, title, created_at, visibility, folder_id, sort_order";
+
+
+function skinCategoryPostsPageQuery(
+  ownerId,
+  categoryId
+) {
+
+  return supabaseClient
+    .from("posts")
+    .select(SKIN_CATEGORY_POST_COLUMNS, { count: "exact" })
+    .eq("user_id", ownerId)
+    .eq("category_id", categoryId)
+    .is("folder_id", null)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+}
+
+
+async function fetchSkinCategoryRootPostsPage(
+  ownerId,
+  categoryId,
+  requestedPage,
+  pageSize
+) {
+
+  const page =
+    Number.isFinite(Number(requestedPage)) && Number(requestedPage) >= 1
+      ? Math.floor(Number(requestedPage))
+      : 1;
+
+
+  const from =
+    (page - 1) * pageSize;
+
+
+  const {
+    data,
+    error,
+    count
+  } =
+    await skinCategoryPostsPageQuery(ownerId, categoryId)
+      .range(from, from + pageSize - 1);
+
+
+  if (!error) {
+
+    return {
+      rows: data || [],
+      totalCount: Number(count || 0),
+      page
+    };
+
+  }
+
+
+  /*
+    범위를 벗어난 페이지 — 개수를 확인해 마지막 페이지로 맞춘다.
+    첫 페이지에서 이 오류가 났다면 범위 문제가 아니라 진짜 조회
+    실패이므로 그대로 빈 결과를 돌려준다.
+  */
+
+  if (error.code !== "PGRST103" || page === 1) {
+
+    console.error(
+      "[skin-context] gallery page 조회 실패:",
+      error
+    );
+
+
+    return {
+      rows: [],
+      totalCount: 0,
+      page: 1
+    };
+
+  }
+
+
+  const {
+    error: countError,
+    count: totalCount
+  } =
+    await skinCategoryPostsPageQuery(ownerId, categoryId)
+      .range(0, 0);
+
+
+  if (countError) {
+
+    console.error(
+      "[skin-context] gallery count 조회 실패:",
+      countError
+    );
+
+
+    return {
+      rows: [],
+      totalCount: 0,
+      page: 1
+    };
+
+  }
+
+
+  const total =
+    Number(totalCount || 0);
+
+  const lastPage =
+    Math.max(1, Math.ceil(total / pageSize));
+
+
+  if (total === 0) {
+
+    return {
+      rows: [],
+      totalCount: 0,
+      page: 1
+    };
+
+  }
+
+
+  const {
+    data: lastData,
+    error: lastError
+  } =
+    await skinCategoryPostsPageQuery(ownerId, categoryId)
+      .range((lastPage - 1) * pageSize, lastPage * pageSize - 1);
+
+
+  if (lastError) {
+
+    console.error(
+      "[skin-context] gallery 마지막 페이지 조회 실패:",
+      lastError
+    );
+
+
+    return {
+      rows: [],
+      totalCount: total,
+      page: lastPage
+    };
+
+  }
+
+
+  return {
+    rows: lastData || [],
+    totalCount: total,
+    page: lastPage
+  };
+
+}
+
+
+/*
+  갤러리 모드에서 category.tree를 세우는 데 필요한 "폴더 안의 글"만
+  읽는다. root 글은 갤러리 카드가 담당하므로 트리에서 제외되고,
+  그 결과 폴더 영역과 카드 영역이 구조적으로 겹치지 않는다.
+
+  폴더가 하나도 없으면 아예 호출하지 않는다(호출자 참고) — 폴더를
+  쓰지 않는 대부분의 갤러리 카테고리에는 이 왕복이 없다.
+*/
+
+async function fetchSkinCategoryFolderPosts(
+  ownerId,
+  categoryId
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from("posts")
+      .select(SKIN_CATEGORY_POST_COLUMNS)
+      .eq("user_id", ownerId)
+      .eq("category_id", categoryId)
+      .not("folder_id", "is", null)
+      .order("created_at", { ascending: false });
+
+
+  if (error) {
+
+    console.error(
+      "[skin-context] 폴더 안 글 조회 실패:",
+      error
+    );
+
+
+    return [];
+
+  }
+
+
+  return data || [];
+
+}
+
+
+/* =========================================================
+   GALLERY-1 — 대표 이미지 조회
+
+   post_covers는 posts와 분리된 테이블이고, 그 SELECT 정책이
+   "public 글이거나 내 글일 때만"을 행 단위로 강제한다
+   (supabase/migrations/20260910100000_*.sql).
+
+   ★ 이 조회는 **파일 주소를 받지 않는다**(GALLERY-1 후속)
+   대표 이미지 파일은 비공개 버킷에 있고 공개 주소가 없다. 여기서
+   받는 것은 "이 글에 대표 이미지가 있다"는 사실(post_id)뿐이고,
+   화면에 들어가는 주소는 글 id를 가리키는 우리 도메인 경로다
+   (/api/post-cover?post=<id>, core/lib/post-cover-url.js).
+   그 요청을 받을 때마다 서버가 그 시점의 공개 상태와 요청자를
+   다시 확인한다 — 목록 응답에 주소가 없을 뿐 아니라, 주소를
+   안다는 것 자체가 아무 권한도 주지 않는다.
+
+   그럼에도 이 함수는 **비밀글의 id를 아예 보내지 않는다**. 이유:
+   소유자 화면과 방문자 화면이 같은 카드(카테고리 공통 대체 이미지
+   또는 잠금 카드)를 보여주도록 정했기 때문에(기준 문서 §3-3),
+   비밀글의 실제 URL은 소유자에게도 이 화면에서는 필요가 없다.
+   덕분에 "비밀글 원본 이미지 주소가 목록 응답에 없다"가 RLS와
+   클라이언트 양쪽에서 동시에 참이 된다.
+
+   테이블이 아직 없는 배포(migration 이전)에서는 조용히 빈 Map을
+   돌려준다 — 썸네일 없는 대체 카드로 그려질 뿐 화면은 멀쩡하다.
+========================================================== */
+
+async function fetchSkinPostCoverMap(
+  postIds
+) {
+
+  if (!postIds.length) {
+
+    return new Map();
+
+  }
+
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from("post_covers")
+      .select("post_id")
+      .in("post_id", postIds);
+
+
+  if (error) {
+
+    console.warn(
+      "[skin-context] post_covers 조회 실패(대체 카드로 진행):",
+      error
+    );
+
+
+    return new Map();
+
+  }
+
+
+  const map =
+    new Map();
+
+
+  (data || []).forEach((row) => {
+
+    if (
+      row &&
+      row.post_id !== null &&
+      row.post_id !== undefined
+    ) {
+
+      map.set(
+        String(row.post_id),
+        buildPostCoverUrl(row.post_id)
+      );
+
+    }
+
+  });
+
+
+  /*
+    소유자가 자기 비공개 글의 사진을 보려면 <img> 요청에 본인
+    토큰이 실려 있어야 한다 — 그 쿠키가 서기 전에 카드를 그리면
+    그 한 장이 404로 끝난다(core/lib/post-cover-url.js).
+    공개 글에는 영향이 없고, 이미 서 있으면 즉시 resolve된다.
+  */
+
+  try {
+
+    await imoryPostCoverCookieReady;
+
+  }
+
+  catch (err) {
+
+    /* 쿠키를 못 세워도 공개 글 사진은 그대로 보인다 */
+
+  }
+
+
+  return map;
 
 }
 
@@ -1428,6 +1937,207 @@ function buildSkinCategoryTree(
 }
 
 
+/* =========================================================
+   GALLERY-1 — category.gallery.cards / category.pagination
+
+   두 namespace의 이름과 필드는 기존 규칙을 그대로 따른다:
+   href로 끝나는 링크, ...Label로 끝나는 표시용 문자열, is...로
+   시작하는 boolean. 스킨은 비교 연산을 쓸 수 없으므로
+   (data-imory-if는 truthy 판정만) 필요한 분기는 전부 boolean
+   필드로 미리 계산해 준다.
+
+   카드 shape:
+     { id, title, href, publishedAt, publishedAtLabel,
+       isSecret, isPrivate,
+       thumbnailUrl,      — 그릴 이미지가 없으면 null
+       thumbnailAlt,
+       hasThumbnail,      — 사진 카드인가
+       isPlaceholder,     — 대체(사진 없음) 카드인가  = !hasThumbnail
+       isLocked }         — 잠금 표시를 유지할 카드인가 = isSecret
+
+   ★ 비밀글 규칙(요구사항 3절)
+     비밀글 카드의 thumbnailUrl은 **절대** 그 글의 실제 대표
+     이미지가 아니다. 카테고리 설정이 "지정 이미지"면 그 공통
+     이미지, 아니면 null(잠금 카드)이다. 소유자에게도 같은 카드를
+     준다 — 그래야 "내 갤러리가 방문자에게 어떻게 보이는가"가
+     그대로 보이고, 소유자/방문자 화면이 갈라지는 경로 자체가
+     생기지 않는다(기준 문서 §3-3).
+     isLocked는 지정 이미지를 쓸 때도 true다 — 잠금 표시는 유지한다.
+========================================================== */
+
+function buildSkinGalleryCards(
+  posts,
+  slug,
+  coverMap,
+  display
+) {
+
+  return (posts || []).map((post) => {
+
+    const isSecret =
+      post.visibility === "secret";
+
+    const isPrivate =
+      post.visibility === "private";
+
+
+    const thumbnailUrl =
+      isSecret
+        ? display.secretCoverUrl
+        : (coverMap.get(String(post.id)) || null);
+
+
+    return {
+
+      id:
+        String(post.id),
+
+      title:
+        maskSkinPostTitle(post.visibility, post.title),
+
+      href:
+        buildSitePath(slug, `/post/${post.id}`),
+
+      publishedAt:
+        post.created_at,
+
+      publishedAtLabel:
+        formatSkinPublishedAtLabel(post.created_at),
+
+      isSecret,
+
+      isPrivate,
+
+      thumbnailUrl:
+        thumbnailUrl || null,
+
+      /*
+        alt는 마스킹 아이콘 없는 원래 제목이다 — 아이콘은 화면에
+        이미 잠금 배지로 나타나므로 보조기술에 두 번 읽히지 않게 한다.
+      */
+      thumbnailAlt:
+        post.title || "",
+
+      hasThumbnail:
+        Boolean(thumbnailUrl),
+
+      isPlaceholder:
+        !thumbnailUrl,
+
+      isLocked:
+        isSecret
+
+    };
+
+  });
+
+}
+
+
+/*
+  페이지 번호 목록은 플랫폼이 계산해서 완성된 링크와 함께 준다
+  (요구사항 5절 "페이지 계산·데이터 조회·권한 처리는 플랫폼").
+  스킨은 pages[]를 repeat으로 그리기만 하면 된다.
+
+  1페이지 링크에는 ?page=가 붙지 않는다(정규 주소,
+  core/lib/site-path.js의 buildSiteCategoryPageUrl 주석).
+*/
+
+function buildSkinCategoryPagination(
+  slug,
+  categoryId,
+  currentPage,
+  pageSize,
+  totalCount
+) {
+
+  const basePath =
+    buildSitePath(slug, `/category/${categoryId}`);
+
+
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(totalCount / pageSize)
+    );
+
+
+  const page =
+    Math.min(
+      Math.max(1, currentPage),
+      totalPages
+    );
+
+
+  const hrefFor =
+    (n) =>
+      buildSiteCategoryPageUrl(basePath, n);
+
+
+  const pages =
+    [];
+
+  for (let n = 1; n <= totalPages; n += 1) {
+
+    pages.push({
+      number: n,
+      label: String(n),
+      href: hrefFor(n),
+      isCurrent: n === page
+    });
+
+  }
+
+
+  return {
+
+    currentPage: page,
+
+    currentPageLabel:
+      String(page),
+
+    pageSize,
+
+    totalCount,
+
+    totalPages,
+
+    totalPagesLabel:
+      String(totalPages),
+
+    /* 페이지가 하나뿐이면 스킨이 이동 영역 자체를 접을 수 있다 */
+    hasPages:
+      totalPages > 1,
+
+    hasPrev:
+      page > 1,
+
+    hasNext:
+      page < totalPages,
+
+    prevHref:
+      page > 1
+        ? hrefFor(page - 1)
+        : null,
+
+    nextHref:
+      page < totalPages
+        ? hrefFor(page + 1)
+        : null,
+
+    firstHref:
+      hrefFor(1),
+
+    lastHref:
+      hrefFor(totalPages),
+
+    pages
+
+  };
+
+}
+
+
 async function buildCategorySkinContext(
   ownerId,
   categoryId,
@@ -1458,19 +2168,84 @@ async function buildCategorySkinContext(
   const [
     base,
     category,
-    postsRaw,
     foldersRaw
   ] =
     await Promise.all([
       buildBaseSkinContext(ownerId, options, commonData),
       fetchSkinCategoryById(ownerId, categoryId),
-      fetchSkinCategoryPosts(ownerId, categoryId),
       fetchSkinCategoryFolders(ownerId, categoryId)
     ]);
 
 
   if (!category) {
     return null;
+  }
+
+
+  /* =========================================================
+     GALLERY-1 — 이 렌더가 갤러리인가
+
+     두 조건이 모두 참일 때만 갤러리 모드로 조회한다:
+
+       1) 카테고리 설정이 gallery다(categories.list_style)
+       2) 렌더 중인 스킨이 category.gallery 계약을 실제로 쓴다
+          (options.supportsGallery — 호출자가 skinTemplateUsesGallery()로
+           판정해 넘긴다, skin/skin-template.js)
+
+     2)가 없으면 갤러리를 모르는 기존 스킨이 아무것도 바꾸지 않았는데
+     목록이 12개로 잘려 보인다(요구사항 5절 "기존 스킨이 갑자기 일부
+     글만 받지 않게"). 그 경우 이 함수는 GALLERY-1 이전과 **완전히
+     동일한** 조회·정렬·shape을 쓴다 — 아래 galleryActive가 false인
+     가지가 그것이다.
+  ========================================================== */
+
+  const display =
+    normalizeSkinCategoryDisplay(category);
+
+
+  const galleryActive =
+    display.listStyle === "gallery" &&
+    options.supportsGallery === true;
+
+
+  let postsRaw;
+  let treePosts;
+  let galleryPage = null;
+
+  if (galleryActive) {
+
+    galleryPage =
+      await fetchSkinCategoryRootPostsPage(
+        ownerId,
+        categoryId,
+        options.page,
+        display.pageSize
+      );
+
+    postsRaw =
+      galleryPage.rows;
+
+    /*
+      트리는 "폴더 안의 글"만으로 세운다 — root 글은 갤러리 카드가
+      담당하므로 트리에는 폴더 노드만 남고, 같은 글이 두 영역에
+      동시에 나올 수 없다. 폴더가 없으면 조회 자체를 생략한다.
+    */
+
+    treePosts =
+      foldersRaw.length
+        ? await fetchSkinCategoryFolderPosts(ownerId, categoryId)
+        : [];
+
+  }
+
+  else {
+
+    postsRaw =
+      await fetchSkinCategoryPosts(ownerId, categoryId);
+
+    treePosts =
+      postsRaw;
+
   }
 
 
@@ -1484,13 +2259,51 @@ async function buildCategorySkinContext(
   const folderTree =
     buildSkinCategoryTree(
       foldersRaw,
-      postsRaw,
+      treePosts,
       commonData.slug,
       {
         categoryId: category.id,
         folderHrefEnabled: options.supportsFolderPage === true
       }
     );
+
+
+  /*
+    대표 이미지는 갤러리 모드에서만, 그리고 **비밀글이 아닌 글의
+    id로만** 조회한다(위 fetchSkinPostCoverMap 주석).
+  */
+
+  const coverMap =
+    galleryActive
+      ? await fetchSkinPostCoverMap(
+          postsRaw
+            .filter((post) => post.visibility !== "secret")
+            .map((post) => post.id)
+        )
+      : new Map();
+
+
+  const galleryCards =
+    galleryActive
+      ? buildSkinGalleryCards(
+          postsRaw,
+          commonData.slug,
+          coverMap,
+          display
+        )
+      : null;
+
+
+  const pagination =
+    galleryActive
+      ? buildSkinCategoryPagination(
+          commonData.slug,
+          category.id,
+          galleryPage.page,
+          display.pageSize,
+          galleryPage.totalCount
+        )
+      : null;
 
 
   return {
@@ -1556,6 +2369,14 @@ async function buildCategorySkinContext(
         같은 6개 키, 같은 created_at DESC 순서, 폴더에 들어간 글도
         전부 포함. 폴더를 만들었다는 이유만으로 이 목록이 달라지면
         하위 호환이 깨진다.
+
+        GALLERY-1: 갤러리 모드에서는(= 이 스킨이 category.gallery를
+        쓰기로 선언한 경우에만 켜진다) 이 배열이 "지금 페이지의 root
+        글"이 된다 — 갤러리를 아는 스킨은 카드를 그리려고 이미 그
+        데이터를 보고 있으므로 같은 값을 두 벌 내려보내지 않는다.
+        갤러리를 모르는 스킨에는 갤러리 모드가 애초에 켜지지 않으므로
+        이 배열은 언제나 지금까지와 같은 전체 목록이다
+        (기준 문서 §4 하위 호환 규칙).
       */
 
       posts:
@@ -1576,7 +2397,63 @@ async function buildCategorySkinContext(
         folderTree.hasFolders,
 
       tree:
-        folderTree.tree
+        folderTree.tree,
+
+      /* =====================================================
+         GALLERY-1 — 표시 방식
+
+         listStyle/pageSize는 갤러리가 실제로 켜졌는지와 무관하게
+         "설정값"을 그대로 알려준다. isGallery는 반대로 **이번
+         렌더가 실제로 갤러리인가**다 — 스킨은 이 값 하나로 레이아웃을
+         가르면 되고, 설정만 gallery이고 스킨이 지원하지 않는 상태에
+         빠지지 않는다.
+      ====================================================== */
+
+      listStyle:
+        display.listStyle,
+
+      pageSize:
+        display.pageSize,
+
+      isGallery:
+        galleryActive,
+
+      /*
+        isGallery의 반대. data-imory-if는 부정(!)을 표현할 수 없으므로
+        두 상태를 각각 boolean으로 준다 — 한 스킨이 목록/갤러리 두
+        레이아웃을 함께 갖고 카테고리 설정에 따라 하나만 그릴 수
+        있게 하는 최소 장치다(FOLDER-2가 folder.isList/isSeries를
+        나란히 준 것과 같은 이유).
+      */
+
+      isList:
+        !galleryActive,
+
+      /*
+        갤러리가 아닐 때 두 namespace는 null이다 — data-imory-if는
+        falsy를 그대로 접으므로 스킨이 "갤러리 영역"을 통째로
+        감출 수 있다.
+      */
+
+      gallery:
+        galleryActive
+          ? {
+              cards: galleryCards,
+              count: galleryCards.length,
+              isEmpty: galleryCards.length === 0,
+              hasCards: galleryCards.length > 0,
+              /*
+                "이 카테고리에 (이 페이지가 아니라) 글이 하나도
+                없다" — 빈 카테고리 안내와 "마지막 페이지 너머"를
+                구분하려면 두 값이 모두 필요하다.
+              */
+              isEmptyCategory: pagination.totalCount === 0
+            }
+          : null,
+
+      pagination:
+        pagination
+
     }
 
   };

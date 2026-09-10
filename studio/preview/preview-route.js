@@ -96,7 +96,17 @@ function resolveStudioPreviewTarget(href, currentSlug) {
     rest[0] === "category" &&
     /^\d+$/.test(rest[1])
   ) {
-    return { type: "category", categoryId: rest[1] };
+    /*
+      GALLERY-1: 이 경로가 인정하는 쿼리는 ?page=N(갤러리 페이지
+      이동) 하나다. 공개 라우터(posts-router-init.js)·skin-link-nav.js와
+      같은 파싱을 쓰고(core/lib/site-path.js), 범위 판정은 하지 않는다 —
+      실제 글 수를 아는 Context가 유효 페이지로 맞춘다.
+    */
+    return {
+      type: "category",
+      categoryId: rest[1],
+      page: getSiteRequestedPage(parsed.search)
+    };
   }
 
   if (

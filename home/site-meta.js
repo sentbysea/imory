@@ -1,5 +1,5 @@
 /* =========================================================
-   HOME - BLOG TITLE / FAVICON / CURSOR
+   HOME - BLOG TITLE / FAVICON / CURSOR / 보호 설정
 
    getSiteOwner()는 home/site-owner.js에 있음(이 파일보다
    먼저 로드돼야 함 — index.html 순서 참고). supabaseClient는
@@ -266,6 +266,22 @@ async function loadSiteMeta() {
   ) {
 
     return;
+
+  }
+
+
+  /*
+    보호 설정(Settings > HOME > ETC)은 제목/파비콘/커서 뒤에 줄
+    세우지 않는다 — 그 셋은 순서대로 await하므로 뒤에 두면 왕복
+    세 번이 끝난 뒤에야 보호가 걸린다. 여기서 띄우고 기다리지
+    않는다(core/lib/content-protection.js).
+  */
+
+  if (
+    typeof applyImorySiteContentProtection === "function"
+  ) {
+
+    applyImorySiteContentProtection();
 
   }
 

@@ -215,7 +215,21 @@
         "./core/lib/supabase-client.js",
         "./core/lib/reserved-slugs.js",
         "./core/lib/site-path.js",
-        "./core/lib/auth-shared.js"
+        "./core/lib/auth-shared.js",
+
+        /*
+          GALLERY-1 후속: 대표 이미지 주소(/api/post-cover)와 소유자의
+          <img>가 권한을 증명하는 쿠키. supabase-client.js 뒤여야 하고,
+          이 값을 쓰는 skin/skin-context.js · posts/editor/posts-cover-image.js
+          보다 앞이다.
+        */
+        "./core/lib/post-cover-url.js",
+
+        /*
+          카테고리별 보호 설정(우클릭/복사 차단 · 이미지 EXIF 제거).
+          supabase-client.js 뒤, 이를 쓰는 posts/view/* 앞이다.
+        */
+        "./core/lib/content-protection.js"
       ]
     );
 
@@ -3908,6 +3922,14 @@
             "./posts/editor/posts-editor-undo.js",
             "./posts/editor/posts-highlight-toolbar.js",
             "./posts/editor/posts-toolbar-toggles.js",
+
+            /*
+              GALLERY-1: 글 대표 이미지(COVER 칸). posts-save.js가
+              저장 순서 안에서 이 파일의 preparePostCoverUpload()/
+              finishPostCoverSave()를 부르므로 그보다 먼저 로드된다.
+            */
+
+            "./posts/editor/posts-cover-image.js",
             "./posts/editor/posts-save.js",
             "./posts/editor/posts-router-init.js"
           ];

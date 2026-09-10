@@ -146,6 +146,12 @@ async function openNewPostEditor(
   resetEditorVisibility();
 
 
+  /* GALLERY-1: 새 글에는 대표 이미지가 없다. 이전 글의 미리보기가
+     남지 않게 비운다(posts/editor/posts-cover-image.js). */
+
+  resetPostCoverImage();
+
+
   if (
     postEditorHtmlContent
   ) {
@@ -498,6 +504,18 @@ async function openPostEditor(
 
 
   /*
+    GALLERY-1: 이 글에 저장된 대표 이미지를 COVER 칸에 보여준다.
+    await하지 않는다 — 대표 이미지는 폼을 여는 조건이 아니고,
+    한 번의 왕복을 더 기다리면 수정 폼이 그만큼 늦게 열린다.
+    도착하면 그 자리에 채워진다(posts/editor/posts-cover-image.js).
+  */
+
+  loadPostCoverImage(
+    post.id
+  );
+
+
+  /*
     비밀번호는 절대 다시 불러와서 보여주지 않음(애초에
     해시라서 원문을 알 방법도 없음). 비워두면 "기존
     비밀번호 유지"로 저장 시 처리된다.
@@ -804,7 +822,17 @@ function postEditorHasUnsavedChanges() {
   return (
     now.title !== postEditorSnapshot.title ||
     now.content !== postEditorSnapshot.content ||
-    now.ooc !== postEditorSnapshot.ooc
+    now.ooc !== postEditorSnapshot.ooc ||
+
+    /*
+      GALLERY-1: 사진만 바꾸고 나가려는 경우에도 확인 창이 떠야
+      한다 — 고른 파일은 아직 어디에도 올라가지 않았으므로 그냥
+      나가면 조용히 사라진다(posts/editor/posts-cover-image.js).
+    */
+    (
+      typeof postCoverHasPendingChange === "function" &&
+      postCoverHasPendingChange()
+    )
   );
 
 }
@@ -879,6 +907,15 @@ async function cancelPostEditor() {
 
   const categoryId =
     currentPostCategoryId;
+
+
+  /*
+    GALLERY-1: 고르기만 하고 취소했으므로 Storage에는 아무것도
+    없다 — 미리보기 URL만 해제한다(임시 파일 정리 문제 자체가
+    생기지 않는 설계, posts/editor/posts-cover-image.js 상단).
+  */
+
+  discardPostCoverImage();
 
 
   hidePostEditor();

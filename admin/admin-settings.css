@@ -387,11 +387,11 @@
 
 
 /* =========================================================
-   CURSOR — upload row
+   CURSOR — preview row
 
-   cursorUrlInput 옆에 my-banner-copy-row와 같은 구조로 upload
-   버튼을 붙인다. 업로드하면 이 input의 값 자체가 채워지고(고정
-   Storage URL), 저장은 기존 save 버튼으로 별도 수행한다.
+   FAVICON과 같은 모양이다(2026-09-11): URL 입력 칸을 없애고
+   미리보기 + change/remove 버튼 한 줄로 통일했다
+   (admin/settings/admin-cursor.js).
 ========================================================== */
 
 .cursor-preview-row {
@@ -436,28 +436,21 @@
 }
 
 
-.cursor-upload-row {
-  display: flex;
-  align-items: flex-start;
+/* FAVICON의 change 버튼과 같은 톤 */
 
-  gap: 8px;
-}
-
-
-.cursor-upload-row .setting-input {
-  flex: 1;
-
-  min-width: 0;
-}
-
-
-.cursor-upload-button {
-  flex: 0 0 auto;
-
-  min-height: 38px;
+.cursor-change-button,
+.cursor-remove-button,
+.favicon-remove-button {
+  padding-inline: 14px;
 
   font-weight: 500;
   letter-spacing: 0.03em;
+}
+
+
+.cursor-remove-button[hidden],
+.favicon-remove-button[hidden] {
+  display: none;
 }
 
 
@@ -858,3 +851,165 @@
 
 
 
+
+
+/* =========================================================
+   CATEGORY DISPLAY (GALLERY-1)
+
+   카테고리 한 줄 아래에 붙는 표시 설정. .category-item이 3열
+   grid라 전체 폭을 차지하도록 grid-column: 1 / -1로 깐다
+   (admin/settings/admin-settings-category-display.js).
+========================================================== */
+
+.category-display-row {
+  grid-column: 1 / -1;
+
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 10px 14px;
+
+  padding:
+    0 0 10px;
+}
+
+
+.category-display-control {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+
+  min-width: 0;
+}
+
+
+.category-display-label {
+  font-size: 9px;
+
+  letter-spacing: 0.08em;
+
+  color: var(--imory-gray-650, #888888);
+
+  white-space: nowrap;
+}
+
+
+.category-display-select {
+  color: var(--imory-gray-650, #888888);
+
+  cursor: pointer;
+}
+
+
+.category-display-select:disabled {
+  cursor: default;
+
+  opacity: 0.45;
+}
+
+
+.category-secret-cover-preview {
+  width: 32px;
+  height: 32px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border:
+    1px solid var(--system-border, #eeeeee);
+
+  background: #fbfbfb;
+
+  overflow: hidden;
+}
+
+
+.category-secret-cover-preview img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+
+  display: block;
+}
+
+
+.category-secret-cover-empty {
+  font-size: 8px;
+
+  letter-spacing: 0.05em;
+
+  color: #bbbbbb;
+}
+
+
+.category-secret-cover-button {
+  min-height: 25px;
+
+  padding:
+    0 8px;
+}
+
+
+/* =========================================================
+   ETC — 블로그 보호 설정 체크박스
+
+   HOME 탭 맨 아래(admin/settings/admin-etc-settings.js).
+   설명 문구가 길어서 체크박스 오른쪽에 제목/설명 두 줄로 둔다.
+========================================================== */
+
+.etc-option {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 8px;
+
+  padding: 0 14px 12px;
+
+  cursor: pointer;
+}
+
+
+.etc-option input {
+  width: 13px;
+  height: 13px;
+
+  margin: 2px 0 0;
+
+  flex: 0 0 auto;
+
+  cursor: pointer;
+}
+
+
+.etc-option-text {
+  display: flex;
+  flex-direction: column;
+
+  gap: 3px;
+
+  min-width: 0;
+}
+
+
+.etc-option-title {
+  font-size: 12px;
+
+  letter-spacing: 0.02em;
+
+  color: var(--system-text, #333333);
+}
+
+
+.etc-option-hint {
+  font-size: 10px;
+
+  line-height: 1.5;
+
+  letter-spacing: 0.02em;
+
+  color: var(--imory-gray-650, #888888);
+}

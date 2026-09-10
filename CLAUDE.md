@@ -11,6 +11,7 @@
 | 제품 방향 · 단계 계획 | [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](./IMORY_AI_SKIN_CUSTOMIZE_PLAN.md) |
 | 폴더(카테고리 안 3단계) · category.tree · 중첩 repeat | [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md) |
 | 폴더 라우트 · Series Viewer · folderHref · templates.folder · repeat 안 post-body region | [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md) |
+| 갤러리 표시 · 글 대표 이미지(post_covers) · category.gallery/pagination · ?page=N | [IMORY_GALLERY1_DESIGN.md](./IMORY_GALLERY1_DESIGN.md) |
 | Element Inspector · Direct Edit (식별자/patch 방식/보호 계약) | [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) |
 | Selected Element AI Edit (selectionContext/선택 범위 계약) | [AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md](./docs/ai-skin/AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md) |
 | AI 실패 진단 (error code / stage / 로그 규칙) | [AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md](./docs/ai-skin/AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md) |
@@ -117,7 +118,7 @@
 | `skin/skin-published-frame-e2e-test.mjs` | 8934 | 공개 스킨 프레임 좌표/폭 |
 | `skin/skin-banner-page-e2e-test.mjs` | 8935 | BANNER·소유자 링크·POST 수정 동선 · 본문/OOC가 소유자 전용 RPC(`get_own_post_content` / `upsert_own_post_content`)로만 오가는지 |
 | `skin/skin-write-manage-e2e-test.mjs` | 8936 | WRITE/관리 동선·전환·배너 크기·CATEGORY EDIT·모바일 POST 읽기 모드 |
-| `studio/studio-ai-panel-e2e-test.mjs` | 8937 | Skin Studio AI — 서버 방어선(`functions/api/skin-ai.js` 직접 호출) + 전송/검증/적용/되돌리기/참고 이미지 + 시스템 프롬프트의 `category.posts`/`category.tree` 계약(K) |
+| `studio/studio-ai-panel-e2e-test.mjs` | 8937 | Skin Studio AI — 서버 방어선(`functions/api/skin-ai.js` 직접 호출) + 전송/검증/적용/되돌리기/참고 이미지 + 시스템 프롬프트의 `category.posts`/`category.tree` 계약(K) + `category.gallery`/`category.pagination` 계약(L, 갤러리 스킨 왕복 시 카드 바인딩·페이지 링크 유지) |
 | `studio/studio-ai-panel-layout-e2e-test.mjs` | 8938 | AI 우측 사이드바 레이아웃(여닫기·폭 드래그·Preview 클릭 접기·textarea) + AI 적용 후 화면 유지 |
 | `studio/studio-inspector-e2e-test.mjs` | 8939 | Element Inspector(Select) — hover/선택·navigation 차단·Direct Edit(텍스트/이미지/링크/컨테이너)·binding/imageSlot/POST region 보호·Save·Publish |
 | `studio/studio-direct-edit-e2e-test.mjs` | 8945 | Select mode 직접 편집 — 텍스트 내용(여러 줄·IME·적용/취소·줄바꿈 유지·바인딩 안내) + 이미지 너비(슬라이더/숫자/모서리 드래그 일치·비율 유지·Undo 한 번·Desktop/Mobile·AI 패널·모바일 가로 넘침) + Save/재로드/Export→Import 유지 |
@@ -127,6 +128,8 @@
 | `skin/skin-folder-page-e2e-test.mjs` | 8944 | FOLDER-2 폴더 페이지(Series Viewer) — OPEN 링크(folderHref) 조건 · direct 글만 + 본문 region 채움 · children/breadcrumb/BACK/EDIT · 소유자 secret/private 본문 · 방문자 글별 gate(오답/정답, 네트워크에 secret id 없음) · 카테고리 복귀(삭제/빈/direct 없음/템플릿 없음/다른 카테고리) · 직접 접속·뒤로가기·모바일 + Studio Preview(`?scenario=t`) 동일 구조·`preview:folder-bodies`·CODE 활성·overlay |
 | `skin/skin-crop-published-e2e-test.mjs` | 8947 | 자르기 결과의 **공개 화면** 렌더 — Studio에서 자르고 Save/Export한 .json을 그대로 `get_published_skin`에 넣어 실제 `index.html`로 렌더 · sanitizer/CSS validator 이후 래퍼와 자르기 규칙 생존 · Studio Preview와 프레임/구도 일치 · desktop/mobile 빈틈·가로 넘침 · 자른 이미지의 링크 클릭 |
 | `studio/studio-crop-e2e-test.mjs` | 8946 | Select mode 이미지 자르기 — 비율(정사각/가로/세로·현재 비율)·확대·드래그 구도·빈틈 없음 + 임시/취소/Escape/Undo + 자르기 초기화 + 크기 조절과 공존(프레임이 주인) + 래퍼 중복 방지 + 좌표(Desktop/Mobile 축소·AI 패널) + Save/재로드/Export→Import + 보호 영역·로드 실패·이미지 교체 + `--only=frame`: 조상 overflow가 잘라내는 프레임의 테두리/드래그 판 위치·구도 이동이 포인터와 1:1·위치 슬라이더/방향 버튼·팝오버 고정 + `--only=free`/`freegeo`: 자유 비율(네 변·모서리 핸들·왜곡/빈틈 없음·자유↔고정 전환은 **그려진 사진**으로 판정·삼등분 가이드선) + `--only=freealign`: 왼쪽/가운데/오른쪽 정렬 × 네 변·모서리에서 잡은 변은 포인터 1:1·반대쪽 변 고정(모바일 배율 포함)·적용 시 임시 위치 해제 + `--only=freelimit`: 확대 상한에서 핸들 정지·안내 + `--only=sliders`: 슬라이더 토큰·방향키·채움 비율·비활성 |
+| `skin/skin-gallery-e2e-test.mjs` | 8948 | GALLERY-1 — 갤러리 공개 렌더(3열/2열·정사각 썸네일·사진 없음 대체 카드·본문 요청 0건·모바일 가로 넘침) · 비밀글 보호(대표 이미지 주소가 응답/DOM/이미지 요청 어디에도 없음, 지정 이미지 + 잠금 유지) · 페이지 이동(?page=N 클릭/직접 접속/새로고침/뒤로가기/범위 밖/빈 카테고리) · 하위 호환(갤러리를 모르는 스킨은 전체 목록 그대로, 목록·폴더·이어읽기 회귀, migration 이전 배포) · 글 대표 이미지(업로드·교체·제거·저장 실패 시 기존 값 보존·취소 시 임시 파일 없음) · `--only=access`: **파일 자체의 접근 경계** — 비공개 버킷 + 요청마다 권한 확인(`/api/post-cover`, **실제 Pages Function**을 그대로 돌린다). 공개→비밀/비공개 전환 뒤 같은 주소 재요청이 404가 되고(그 전환에서 파일을 하나도 건드리지 않는다), 같은 순간 소유자는 보이며, 다시 공개로 바꾸면 열린다 · `--only=protect`: 블로그 보호 설정(Settings > HOME > ETC) — 이미지 EXIF 제거(APP1을 실제로 넣은 JPEG로 확인)·우클릭/복사 방지(주인장 제외, 목록·글 화면 모두)·저장 payload · Studio Preview 일치(`?scenario=g`) |
+| `admin/admin-settings-e2e-test.mjs` | 8949 | 관리 설정 화면 — FAVICON/CURSOR(URL 칸 없음·**고를 때마다 새 경로**·save 전에는 DB/예전 파일 그대로·저장 뒤 예전 파일 삭제·remove·저장 실패 시 재시도 가능) · HOME>ETC 보호 설정 3개 불러오기/저장 · 설정 안쪽 탭이 화면 복귀(`restoreAdminView`) 뒤에도 유지되는지 |
 | `studio/studio-file-ux-e2e-test.mjs` | 8943 | Skin Studio 파일 UX — Export(.json 다운로드·allowlist 필드·DB 키 제외) → 파일 선택/drag&drop Import 왕복 구조 동일·붙여넣기 Import 회귀·Save 회귀·legacy HOME-only draft 안내 (이미지 슬롯 drag&drop은 `studio/images/skin-image-library-e2e-test.mjs` 8935의 `[drop]` 절) |
 
 **완료 기준** (상세: 기준 문서 §6)

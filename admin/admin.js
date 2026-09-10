@@ -527,13 +527,22 @@ function showSettingsPanel(
     true;
 
 
+  /*
+    보고 있던 안쪽 탭을 그대로 다시 연다 — 이 함수는 탭 복귀/토큰
+    갱신마다 restoreAdminView()로도 불리기 때문에, 여기서 "profile"을
+    강제하면 다른 앱에 갔다 오는 것만으로 탭이 튄다
+    (admin/settings/admin-settings-load.js).
+  */
+
   if (
     typeof showSettingsSection ===
       "function"
   ) {
 
     showSettingsSection(
-      "profile"
+      typeof currentSettingsSection === "function"
+        ? currentSettingsSection()
+        : "profile"
     );
 
   }

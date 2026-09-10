@@ -1133,6 +1133,113 @@ async function runServerChecks() {
     );
   }
 
+  /* ---- L. category.gallery / category.pagination 계약 (GALLERY-1) ----
+
+     갤러리 스킨을 AI로 고칠 때 카드 바인딩과 페이지 링크가 살아남아야
+     한다. 실제 모델 호출 없이 (1) 서버가 조립한 시스템 프롬프트와
+     (2) 실제 갤러리 스킨의 왕복 결과를 본다.
+     기준 문서: IMORY_GALLERY1_DESIGN.md §5 */
+
+  {
+    resetOpenAiMock("ok");
+    await callSkinAi({ body: { instruction: "a", skinPackage: VALID_SKIN_PACKAGE } });
+    const instructions = openAiLastRequest.body.instructions;
+
+    record(
+      "L1. 프롬프트가 표시 조건(isGallery/isList)과 두 네임스페이스(gallery/pagination)를 설명한다",
+      instructions.includes("#### Category gallery") &&
+        instructions.includes("category.listStyle, category.pageSize, category.isGallery, category.isList") &&
+        instructions.includes("Exactly one is true") &&
+        instructions.includes("`data-imory-if` cannot negate") &&
+        instructions.includes("never on `category.listStyle`"),
+      "instructions.length=" + instructions.length
+    );
+
+    record(
+      "L2. 카드 item shape이 실제 skin-context.js 계약과 같은 필드로 적혀 있다",
+      instructions.includes("item.id, item.title, item.href, item.publishedAtLabel, item.isSecret, item.isPrivate, item.thumbnailUrl, item.thumbnailAlt, item.hasThumbnail, item.isPlaceholder, item.isLocked") &&
+        instructions.includes("category.gallery.isEmpty") &&
+        instructions.includes("category.gallery.isEmptyCategory")
+    );
+
+    record(
+      "L3. 썸네일 규칙 — hasThumbnail 가드 · 사진 없는 글도 대체 카드 · onerror 없음 · 비밀글은 실제 이미지가 아니다",
+      instructions.includes("data-imory-if=\"item.hasThumbnail\"") &&
+        instructions.includes("A card must never disappear just because it has no photo") &&
+        instructions.includes("there is no `onerror`") &&
+        instructions.includes("NEVER that post's real cover image") &&
+        instructions.includes("visible lock badge")
+    );
+
+    record(
+      "L4. 페이지 이동 규칙 — pages[] 필드 · href를 직접 만들지 말 것 · CSS로 숨기지 말 것 · isCurrent 표시법",
+      instructions.includes("category.pagination.pages[] — item.number, item.label, item.href, item.isCurrent") &&
+        instructions.includes("NEVER build a page URL yourself") &&
+        instructions.includes("never append `?page=`") &&
+        instructions.includes("never try to \"show all posts\" by hiding the others with CSS") &&
+        instructions.includes("data-imory-if=\"item.isCurrent\"") &&
+        instructions.includes("category.pagination.hasPages")
+    );
+
+    record(
+      "L5. 갤러리는 템플릿이 실제로 그릴 때만 켜진다는 조건과 강제 변환 금지가 적혀 있다",
+      instructions.includes("the gallery only switches on when the CATEGORY template actually draws") &&
+        instructions.includes("silently stops working") &&
+        instructions.includes("Never convert an existing gallery skin to `category.posts`") &&
+        instructions.includes("never convert a plain list skin to a gallery unless the user asked")
+    );
+
+    record(
+      "L6. 폴더와 갤러리의 범위 경계(갤러리 렌더의 tree에는 폴더 노드만)를 설명한다",
+      instructions.includes("Folders and the gallery can coexist") &&
+        instructions.includes("ONLY folder nodes (no post nodes at the top level)") &&
+        instructions.includes("cannot show the same post twice")
+    );
+
+    record(
+      "L7. 갤러리 계약이 CATEGORY 항목과 POST 항목 사이에 있고, 폴더 절 뒤에 온다",
+      instructions.indexOf("#### Category gallery") > instructions.indexOf("#### Category folders") &&
+        instructions.indexOf("#### Category gallery") < instructions.indexOf("### POST")
+    );
+  }
+
+  {
+    /* 실제 갤러리 스킨이 서버의 SkinPackage 검증/정규화를 그대로 통과하고,
+       되돌아온 결과에도 카드 바인딩과 페이지 링크가 전부 살아 있어야 한다
+       — "AI로 고쳐도 갤러리가 꺼지지 않는다"의 실질 검증이다. */
+    const gallerySkin = JSON.parse(
+      fs.readFileSync(path.join(ROOT, "skin", "test-skins", "imory-gallery-grid-v1.json"), "utf8")
+    );
+    resetOpenAiMock("ok");
+    const r = await callSkinAi({
+      body: { instruction: "카드 간격을 조금 넓혀줘", skinPackage: gallerySkin }
+    });
+    const outHtml = r.status === 200 ? r.payload.skinPackage.templates.category.html : "";
+
+    const kept = [
+      'data-imory-if="category.isGallery"',
+      'data-imory-if="category.isList"',
+      'data-imory-repeat="category.gallery.cards"',
+      'data-imory-if="item.hasThumbnail"',
+      'data-imory-src="item.thumbnailUrl"',
+      'data-imory-if="item.isLocked"',
+      'data-imory-if="category.gallery.isEmpty"',
+      'data-imory-if="category.pagination.hasPages"',
+      'data-imory-repeat="category.pagination.pages"',
+      'data-imory-href="category.pagination.prevHref"',
+      'data-imory-href="category.pagination.nextHref"',
+      'data-imory-if="item.isCurrent"'
+    ];
+
+    const missing = kept.filter((needle) => !outHtml.includes(needle));
+
+    record(
+      "L8. 갤러리 스킨이 서버 검증을 통과하고 결과에도 카드 바인딩·페이지 링크가 전부 유지된다",
+      r.status === 200 && missing.length === 0,
+      `status=${r.status} missing=${missing.join(", ") || "none"}`
+    );
+  }
+
   /* ---- Z. 실제 유료 호출을 하지 않았다는 확인 ---- */
 
   record(

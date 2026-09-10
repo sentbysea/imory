@@ -152,3 +152,145 @@ function htmlHasPostBodyRegion(html) {
   );
 
 }
+
+
+/* =========================================================
+   skinTemplateUsesGallery(template) -> boolean (GALLERY-1)
+
+   "이 CATEGORY template이 갤러리 계약을 실제로 쓰는가".
+
+   왜 metadata 플래그가 아니라 마크업을 보는가 — 위
+   skinPackageSupportsPageType()의 주석과 정확히 같은 이유다.
+   metadata.supports는 신뢰 경계로 쓰지 않는다(PHASE1C 1-5/14-2절).
+   지원 여부의 유일한 근거는 "그 template이 그 데이터를 실제로
+   그리는가"이고, 그건 data-imory-* 바인딩 경로에 그대로 적혀 있다.
+
+   이 판정이 필요한 이유(기준 문서 §4):
+   갤러리 카테고리는 페이지를 나눠 조회하므로 category.posts가
+   "그 페이지의 글"이 된다. 갤러리를 모르는 기존 스킨이 그 데이터를
+   받으면 아무 조작도 하지 않았는데 목록이 12개로 잘려 보인다.
+   그래서 갤러리 계약을 쓰지 않는 스킨에서는 플랫폼이 갤러리 모드
+   자체를 켜지 않고 지금까지와 100% 동일한 목록 조회를 한다 —
+   설정은 남아 있고, 갤러리를 아는 스킨으로 바꾸면 그때 살아난다.
+
+   정규식으로 raw 문자열을 훑지 않고 DOMParser로 판정한다
+   (htmlHasPostBodyRegion과 같은 이유 — 속성 순서/따옴표 형태에
+   흔들리지 않기 위해).
+========================================================== */
+
+const SKIN_GALLERY_BINDING_ATTRS =
+  [
+    "data-imory-repeat",
+    "data-imory-if",
+    "data-imory-bind",
+    "data-imory-src",
+    "data-imory-href"
+  ];
+
+const SKIN_GALLERY_CONTEXT_PREFIXES =
+  ["category.gallery", "category.pagination"];
+
+
+function skinTemplateUsesGallery(
+  template
+) {
+
+  const html =
+    template && typeof template.html === "string"
+      ? template.html
+      : "";
+
+
+  if (!html) {
+
+    return false;
+
+  }
+
+
+  /* 빠른 사전 판정 — 문자열에 아예 없으면 파싱하지 않는다. */
+
+  if (
+    !SKIN_GALLERY_CONTEXT_PREFIXES.some(
+      (prefix) => html.includes(prefix)
+    )
+  ) {
+
+    return false;
+
+  }
+
+
+  let parsed;
+
+  try {
+
+    parsed =
+      new DOMParser().parseFromString(
+        html,
+        "text/html"
+      );
+
+  }
+
+  catch (err) {
+
+    return false;
+
+  }
+
+
+  const selector =
+    SKIN_GALLERY_BINDING_ATTRS
+      .map((attr) => `[${attr}]`)
+      .join(",");
+
+
+  return Array.from(
+    parsed.querySelectorAll(selector)
+  ).some(
+    (el) =>
+      SKIN_GALLERY_BINDING_ATTRS.some((attr) => {
+
+        const value =
+          el.getAttribute(attr) || "";
+
+        return SKIN_GALLERY_CONTEXT_PREFIXES.some(
+          (prefix) =>
+            value === prefix ||
+            value.startsWith(`${prefix}.`)
+        );
+
+      })
+  );
+
+}
+
+
+/*
+  SkinPackage 단위 편의 함수 — templates.category를 뽑아 위 판정에
+  넘긴다. 호출자(skin/skin-category.js, studio/preview/
+  preview-navigation.js)가 매번 resolveSkinTemplate을 두 번 부르지
+  않게 하기 위한 것뿐이다.
+*/
+
+function skinPackageUsesGallery(
+  skinPackage
+) {
+
+  return skinTemplateUsesGallery(
+    resolveSkinTemplate(skinPackage, "category")
+  );
+
+}
+
+
+if (typeof window !== "undefined") {
+
+  window.skinTemplateUsesGallery =
+    skinTemplateUsesGallery;
+
+  window.skinPackageUsesGallery =
+    skinPackageUsesGallery;
+
+}

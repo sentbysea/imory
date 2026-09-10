@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "templates": {
+    "home": {
+      "html": "<div class=\"gg-page\"><header class=\"gg-bar\"><a class=\"gg-brand\" data-imory-href=\"navigation.home.href\" data-imory-bind=\"site.title\"></a><nav class=\"gg-nav\"><a class=\"gg-nav-item\" data-imory-repeat=\"navigation.postCategories\" data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></nav></header><main class=\"gg-main\"><section class=\"gg-profile\"><img class=\"gg-avatar\" data-imory-src=\"profile.avatarUrl\" alt=\"\"><div><h1 class=\"gg-name\" data-imory-bind=\"profile.nickname\"></h1><p class=\"gg-bio\" data-imory-if=\"profile.bio\" data-imory-bind=\"profile.bio\"></p></div><p class=\"gg-owner\" data-imory-if=\"viewer.isOwner\"><a class=\"gg-owner-link\" data-imory-if=\"viewer.writeHref\" data-imory-href=\"viewer.writeHref\">WRITE</a><a class=\"gg-owner-link\" data-imory-if=\"viewer.manageHref\" data-imory-href=\"viewer.manageHref\">EDIT</a></p></section><section class=\"gg-section\"><h2 class=\"gg-section-title\">RECENT</h2><ul class=\"gg-list\"><li class=\"gg-list-item\" data-imory-repeat=\"home.recentPosts\"><a class=\"gg-list-link\" data-imory-href=\"item.href\"><span class=\"gg-list-title\" data-imory-bind=\"item.title\"></span><small class=\"gg-list-date\" data-imory-bind=\"item.publishedAtLabel\"></small></a></li></ul></section></main></div>"
+    },
+    "category": {
+      "html": "<div class=\"gg-page\"><header class=\"gg-bar\"><a class=\"gg-brand\" data-imory-href=\"navigation.home.href\" data-imory-bind=\"site.title\"></a><nav class=\"gg-nav\"><a class=\"gg-nav-item\" data-imory-repeat=\"navigation.postCategories\" data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></nav></header><main class=\"gg-main\"><div class=\"gg-head-row\"><h1 class=\"gg-title\" data-imory-bind=\"category.name\"></h1><p class=\"gg-owner\" data-imory-if=\"viewer.isOwner\"><a class=\"gg-owner-link\" data-imory-if=\"viewer.writeHref\" data-imory-href=\"viewer.writeHref\">WRITE</a><a class=\"gg-owner-link\" data-imory-if=\"viewer.manageHref\" data-imory-href=\"viewer.manageHref\">EDIT</a></p></div><section class=\"gg-folders\" data-imory-if=\"category.hasFolders\"><div class=\"gg-folder\" data-imory-repeat=\"category.tree\"><span class=\"gg-folder-card\" data-imory-if=\"item.name\"><span class=\"gg-folder-name\" data-imory-bind=\"item.name\"></span><a class=\"gg-folder-open\" data-imory-if=\"item.folderHref\" data-imory-href=\"item.folderHref\">OPEN</a></span></div></section><section class=\"gg-gallery\" data-imory-if=\"category.isGallery\"><ul class=\"gg-grid\"><li class=\"gg-card\" data-imory-repeat=\"category.gallery.cards\"><a class=\"gg-card-link\" data-imory-href=\"item.href\"><span class=\"gg-thumb\"><span class=\"gg-thumb-fallback\"><span class=\"gg-thumb-mark\"></span></span><img class=\"gg-thumb-img\" data-imory-if=\"item.hasThumbnail\" data-imory-src=\"item.thumbnailUrl\" alt=\"\"><span class=\"gg-lock\" data-imory-if=\"item.isLocked\">LOCKED</span></span><span class=\"gg-card-title\" data-imory-bind=\"item.title\"></span></a></li></ul><p class=\"gg-empty\" data-imory-if=\"category.gallery.isEmpty\">아직 글이 없습니다.</p><nav class=\"gg-pager\" data-imory-if=\"category.pagination.hasPages\"><a class=\"gg-pager-edge\" data-imory-if=\"category.pagination.hasPrev\" data-imory-href=\"category.pagination.prevHref\">PREV</a><span class=\"gg-pager-nums\"><span class=\"gg-pager-slot\" data-imory-repeat=\"category.pagination.pages\"><a class=\"gg-pager-num\" data-imory-href=\"item.href\" data-imory-bind=\"item.label\"></a><span class=\"gg-pager-dot\" data-imory-if=\"item.isCurrent\"></span></span></span><a class=\"gg-pager-edge\" data-imory-if=\"category.pagination.hasNext\" data-imory-href=\"category.pagination.nextHref\">NEXT</a></nav></section><section class=\"gg-listing\" data-imory-if=\"category.isList\"><ul class=\"gg-list\"><li class=\"gg-list-item\" data-imory-repeat=\"category.posts\"><a class=\"gg-list-link\" data-imory-href=\"item.href\"><span class=\"gg-list-title\" data-imory-bind=\"item.title\"></span><small class=\"gg-list-date\" data-imory-bind=\"item.publishedAtLabel\"></small></a></li></ul></section></main></div>"
+    },
+    "post": {
+      "html": "<div class=\"gg-page\"><header class=\"gg-bar\"><a class=\"gg-brand\" data-imory-href=\"navigation.home.href\" data-imory-bind=\"site.title\"></a><nav class=\"gg-nav\"><a class=\"gg-nav-item\" data-imory-repeat=\"navigation.postCategories\" data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></nav></header><main class=\"gg-main gg-main--post\"><p class=\"gg-crumb\"><a data-imory-href=\"post.categoryHref\" data-imory-bind=\"post.categoryName\"></a></p><h1 class=\"gg-title\" data-imory-bind=\"post.title\"></h1><p class=\"gg-post-date\" data-imory-bind=\"post.publishedAtLabel\"></p><p class=\"gg-owner\" data-imory-if=\"viewer.isOwner\"><a class=\"gg-owner-link\" data-imory-if=\"viewer.writeHref\" data-imory-href=\"viewer.writeHref\">WRITE</a><a class=\"gg-owner-link\" data-imory-if=\"viewer.manageHref\" data-imory-href=\"viewer.manageHref\">EDIT</a></p><article class=\"gg-post-body\" data-imory-region=\"post-body\"></article></main></div>"
+    },
+    "banner": {
+      "html": "<div class=\"gg-page\"><header class=\"gg-bar\"><a class=\"gg-brand\" data-imory-href=\"navigation.home.href\" data-imory-bind=\"site.title\"></a><nav class=\"gg-nav\"><a class=\"gg-nav-item\" data-imory-repeat=\"navigation.postCategories\" data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></nav></header><main class=\"gg-main\"><h1 class=\"gg-title\" data-imory-bind=\"bannerCategory.name\"></h1><ul class=\"gg-grid\"><li class=\"gg-card\" data-imory-repeat=\"bannerCategory.items\"><a class=\"gg-card-link\" data-imory-href=\"item.linkUrl\"><span class=\"gg-thumb\"><span class=\"gg-thumb-fallback\"><span class=\"gg-thumb-mark\"></span></span><img class=\"gg-thumb-img\" data-imory-src=\"item.imageUrl\" alt=\"\"></span><span class=\"gg-card-title\" data-imory-bind=\"item.title\"></span></a></li></ul></main></div>"
+    },
+    "folder": {
+      "html": "<div class=\"gg-page\"><header class=\"gg-bar\"><a class=\"gg-brand\" data-imory-href=\"navigation.home.href\" data-imory-bind=\"site.title\"></a><nav class=\"gg-nav\"><a class=\"gg-nav-item\" data-imory-repeat=\"navigation.postCategories\" data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></nav></header><main class=\"gg-main\"><p class=\"gg-crumb\"><a data-imory-href=\"folder.parentHref\">← BACK</a></p><h1 class=\"gg-title\" data-imory-bind=\"folder.name\"></h1><p class=\"gg-owner\"><a class=\"gg-owner-link\" data-imory-if=\"folder.isList\" data-imory-href=\"folder.seriesHref\">이어읽기</a><a class=\"gg-owner-link\" data-imory-if=\"folder.isSeries\" data-imory-href=\"folder.listHref\">목록</a></p><ul class=\"gg-list\" data-imory-if=\"folder.isList\"><li class=\"gg-list-item\" data-imory-repeat=\"folder.posts\"><a class=\"gg-list-link\" data-imory-href=\"item.href\"><span class=\"gg-list-title\" data-imory-bind=\"item.title\"></span><small class=\"gg-list-date\" data-imory-bind=\"item.publishedAtLabel\"></small></a></li></ul><div class=\"gg-series\" data-imory-if=\"folder.isSeries\"><article class=\"gg-series-item\" data-imory-repeat=\"folder.posts\"><h2 class=\"gg-series-title\" data-imory-bind=\"item.title\"></h2><div class=\"gg-post-body\" data-imory-region=\"post-body\"></div></article></div></main></div>"
+    }
+  },
+  "css": ".gg-page { --gg-cols: 3; --gg-cols-sm: 2; --gg-ratio: 1; --gg-gap: 14px; --gg-ink: #33323a; --gg-muted: #8d8a92; --gg-line: #e8e5e8; min-height: 100%; padding: 42px 20px 64px; background: #fff; color: var(--gg-ink); font-family: Pretendard, -apple-system, BlinkMacSystemFont, 'Apple SD Gothic Neo', 'Noto Sans KR', sans-serif; font-size: 13px; line-height: 1.6; letter-spacing: -0.01em; }\n.gg-page *, .gg-page *::before, .gg-page *::after { box-sizing: border-box; }\n.gg-page a { color: inherit; text-decoration: none; }\n.gg-bar { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; width: min(900px, 100%); margin: 0 auto 30px; padding-bottom: 14px; border-bottom: 1px solid var(--gg-line); }\n.gg-brand { font-size: 15px; font-weight: 600; letter-spacing: 0.02em; }\n.gg-nav { display: flex; flex-wrap: wrap; gap: 12px; }\n.gg-nav-item { font-size: 11px; letter-spacing: 0.08em; color: var(--gg-muted); }\n.gg-nav-item:hover { color: var(--gg-ink); }\n.gg-main { width: min(900px, 100%); margin: 0 auto; }\n.gg-main--post { width: min(680px, 100%); }\n.gg-head-row { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 18px; }\n.gg-title { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: 0.01em; }\n.gg-crumb { margin: 0 0 10px; font-size: 11px; letter-spacing: 0.06em; color: var(--gg-muted); }\n.gg-post-date { margin: 0 0 18px; font-size: 11px; color: var(--gg-muted); }\n.gg-owner { display: flex; gap: 10px; margin: 0; }\n.gg-owner-link { font-size: 10px; letter-spacing: 0.12em; color: var(--gg-muted); }\n.gg-owner-link:hover { color: var(--gg-ink); }\n.gg-profile { display: flex; align-items: center; gap: 14px; margin-bottom: 30px; }\n.gg-avatar { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: #f2f0f2; }\n.gg-name { margin: 0; font-size: 16px; font-weight: 600; }\n.gg-bio { margin: 2px 0 0; font-size: 12px; color: var(--gg-muted); }\n.gg-section { margin-top: 26px; }\n.gg-section-title { margin: 0 0 10px; font-size: 10px; letter-spacing: 0.14em; color: var(--gg-muted); }\n.gg-folders { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }\n.gg-folder { display: contents; }\n.gg-folder-card { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--gg-line); border-radius: 999px; font-size: 11px; }\n.gg-folder-name { letter-spacing: 0.02em; }\n.gg-folder-open { font-size: 9px; letter-spacing: 0.1em; color: var(--gg-muted); }\n.gg-grid { display: grid; grid-template-columns: repeat(var(--gg-cols), minmax(0, 1fr)); gap: var(--gg-gap); margin: 0; padding: 0; list-style: none; }\n.gg-card { min-width: 0; }\n.gg-card-link { display: block; min-width: 0; }\n.gg-thumb { position: relative; display: block; width: 100%; aspect-ratio: var(--gg-ratio); overflow: hidden; border: 1px solid var(--gg-line); border-radius: 4px; background: #f7f6f7; }\n.gg-thumb-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: repeating-linear-gradient(135deg, #f7f6f7 0 8px, #f1eff1 8px 16px); }\n.gg-thumb-mark { display: block; width: 18px; height: 18px; border: 1px solid #d6d2d6; border-radius: 3px; }\n.gg-thumb-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }\n.gg-thumb-img[hidden] { display: none; }\n.gg-lock { position: absolute; right: 6px; bottom: 6px; padding: 2px 6px; border-radius: 999px; background: rgba(41, 39, 44, .74); color: #fff; font-size: 8px; letter-spacing: 0.12em; }\n.gg-lock[hidden] { display: none; }\n.gg-card-title { display: block; margin-top: 7px; overflow: hidden; font-size: 11px; line-height: 1.45; white-space: nowrap; text-overflow: ellipsis; color: var(--gg-ink); }\n.gg-empty { margin: 26px 0; font-size: 12px; text-align: center; color: var(--gg-muted); }\n.gg-empty[hidden] { display: none; }\n.gg-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px; margin-top: 28px; }\n.gg-pager[hidden] { display: none; }\n.gg-pager-nums { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }\n.gg-pager-slot { position: relative; display: flex; flex-direction: column; align-items: center; }\n.gg-pager-dot { display: block; width: 3px; height: 3px; margin-top: 1px; border-radius: 50%; background: var(--gg-ink); }\n.gg-pager-dot[hidden] { display: none; }\n.gg-pager-num { min-width: 24px; padding: 4px 6px; border: 1px solid transparent; border-radius: 4px; font-size: 11px; text-align: center; color: var(--gg-muted); }\n.gg-pager-num:hover { border-color: var(--gg-line); color: var(--gg-ink); }\n.gg-pager-edge { font-size: 9px; letter-spacing: 0.12em; color: var(--gg-muted); }\n.gg-pager-edge[hidden] { display: none; }\n.gg-list { margin: 0; padding: 0; list-style: none; }\n.gg-list-item { border-bottom: 1px solid var(--gg-line); }\n.gg-list-link { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 2px; }\n.gg-list-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }\n.gg-list-date { flex: 0 0 auto; font-size: 10px; color: var(--gg-muted); }\n.gg-post-body { margin-top: 18px; font-size: 13px; line-height: 1.85; }\n.gg-series-item { padding-bottom: 26px; border-bottom: 1px solid var(--gg-line); }\n.gg-series-title { margin: 22px 0 0; font-size: 15px; font-weight: 600; }\n.gg-gallery[hidden], .gg-listing[hidden], .gg-folders[hidden], .gg-owner[hidden], .gg-series[hidden] { display: none; }\n@media (max-width: 640px) {\n.gg-page { padding: 26px 14px 48px; }\n.gg-grid { grid-template-columns: repeat(var(--gg-cols-sm), minmax(0, 1fr)); }\n.gg-title { font-size: 17px; }\n}",
+  "imageSlots": [
+    {
+      "name": "profile",
+      "label": "프로필 사진",
+      "required": false,
+      "aspectRatioHint": "1:1"
+    }
+  ],
+  "regions": [],
+  "metadata": {
+    "title": "Imory Gallery Grid v1",
+    "generatedBy": "manual",
+    "supports": {
+      "home": true,
+      "category": true,
+      "post": true,
+      "banner": true,
+      "folder": true
+    },
+    "requiredContext": [
+      "site.title",
+      "profile.nickname",
+      "profile.bio",
+      "profile.avatarUrl",
+      "navigation.home.href",
+      "navigation.postCategories",
+      "viewer.isOwner",
+      "viewer.writeHref",
+      "viewer.manageHref",
+      "home.recentPosts",
+      "category.name",
+      "category.posts",
+      "category.tree",
+      "category.hasFolders",
+      "category.isGallery",
+      "category.isList",
+      "category.gallery.cards",
+      "category.gallery.isEmpty",
+      "category.pagination.pages",
+      "category.pagination.hasPages",
+      "category.pagination.hasPrev",
+      "category.pagination.hasNext",
+      "post.title",
+      "post.publishedAtLabel",
+      "post.categoryName",
+      "post.categoryHref",
+      "bannerCategory.name",
+      "bannerCategory.items",
+      "folder.name",
+      "folder.posts",
+      "folder.parentHref",
+      "folder.isList",
+      "folder.isSeries",
+      "folder.listHref",
+      "folder.seriesHref"
+    ]
+  }
+}

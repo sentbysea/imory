@@ -478,6 +478,20 @@ async function deleteSelectedPosts() {
   }
 
 
+  /*
+    GALLERY-1 후속: 선택한 글들의 대표 이미지 Storage 경로를 **지우기
+    전에** 받아 둔다 — 단건 삭제(posts/editor/posts-list-detail-nav.js)와
+    같은 이유이고 같은 순서다.
+  */
+
+  const coverPaths =
+    typeof takePostCoverStoragePaths === "function"
+      ? await takePostCoverStoragePaths(
+          Array.from(selectedPostIdsForDelete)
+        )
+      : [];
+
+
   const {
     error
   } =
@@ -516,6 +530,17 @@ async function deleteSelectedPosts() {
 
 
     return;
+
+  }
+
+
+  if (
+    typeof removePostCoverStorageObjects === "function"
+  ) {
+
+    await removePostCoverStorageObjects(
+      coverPaths
+    );
 
   }
 

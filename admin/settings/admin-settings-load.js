@@ -7,10 +7,12 @@
    로드돼야 함(admin/index.html 순서 참고).
 
    내용: DOM 요소 참조, 설정 탭 전환(PROFILE/HOME/CATEGORY/
-   BANNER/DATA), 닉네임/BGM/마우스 포인터 미리보기/카테고리
-   목록 불러오기 및 렌더링, 카테고리 순서변경/삭제/추가.
-   아바타 업로드/저장은 admin-settings-avatar.js로 분리되어
-   있음(favicon과 같은 패턴).
+   BANNER/DATA), 닉네임/BGM/블로그 제목/카테고리 목록 불러오기
+   및 렌더링, 카테고리 순서변경/삭제/추가.
+   아바타는 admin-settings-avatar.js, 파비콘/커서는
+   admin-favicon.js·admin-cursor.js(공용 구현
+   admin-image-setting.js), HOME>ETC 보호 설정은
+   admin-etc-settings.js로 각각 분리되어 있다.
 ========================================================== */
 
 
@@ -143,46 +145,9 @@ const nicknameSaveMessage =
   );
 
 
-const cursorPreview =
-  document.getElementById(
-    "cursorPreview"
-  );
-
-
-const cursorPreviewEmpty =
-  document.getElementById(
-    "cursorPreviewEmpty"
-  );
-
-
-const cursorUrlInput =
-  document.getElementById(
-    "cursorUrlInput"
-  );
-
-
-const cursorSaveButton =
-  document.getElementById(
-    "cursorSaveButton"
-  );
-
-
-const cursorSaveMessage =
-  document.getElementById(
-    "cursorSaveMessage"
-  );
-
-
-const cursorFileInput =
-  document.getElementById(
-    "cursorFileInput"
-  );
-
-
-const cursorUploadMessage =
-  document.getElementById(
-    "cursorUploadMessage"
-  );
+/* 마우스 포인터(CURSOR)와 파비콘의 DOM 참조는 각자의 파일이
+   직접 잡는다 — admin/settings/admin-cursor.js ·
+   admin-favicon.js(공용 구현은 admin-image-setting.js). */
 
 
 const withdrawAccountButton =
@@ -260,11 +225,48 @@ let deletedCategoryIds =
 
 /* =========================================================
    SETTINGS 내부 탭
+
+   ★ 지금 보고 있는 탭을 기억한다
+   onAuthStateChange는 토큰 갱신이나 **탭 복귀**마다 다시 불리고,
+   그때 restoreAdminView()가 SETTINGS 화면을 다시 연다
+   (admin/admin-session.js · admin/admin.js). 예전에는 그 자리에서
+   무조건 "profile"을 열어서, 다른 앱에 갔다 돌아오면 보고 있던
+   탭이 첫 탭으로 튀었다. 큰 화면(currentAdminView)을 sessionStorage에
+   기억하는 것과 같은 방식으로 안쪽 탭도 기억한다.
 ========================================================== */
+
+const SETTINGS_SECTIONS =
+  ["profile", "home", "category", "banner", "data"];
+
+
+function currentSettingsSection() {
+
+  const saved =
+    sessionStorage.getItem(
+      "admin-settings-section"
+    );
+
+
+  return SETTINGS_SECTIONS.includes(saved)
+    ? saved
+    : "profile";
+
+}
+
 
 function showSettingsSection(
   section
 ) {
+
+  if (SETTINGS_SECTIONS.includes(section)) {
+
+    sessionStorage.setItem(
+      "admin-settings-section",
+      section
+    );
+
+  }
+
 
   profileSettingsPanel.hidden =
     section !== "profile";
@@ -483,145 +485,6 @@ async function loadBlogTitle(
 }
 
 
-/* =========================================================
-   마우스 포인터 미리보기
-
-   showFaviconPreview()(admin-favicon.js)와 완전히 같은 구조 —
-   "현재 값"을 그대로 미리보기 src로 써서 onload/onerror로
-   있고 없음을 판단한다.
-========================================================== */
-
-function showCursorPreview(
-  url
-) {
-
-  if (!cursorPreview) {
-    return;
-  }
-
-
-  if (!url) {
-
-    cursorPreview.hidden =
-      true;
-
-
-    if (
-      cursorPreviewEmpty
-    ) {
-
-      cursorPreviewEmpty.hidden =
-        false;
-
-    }
-
-
-    return;
-
-  }
-
-
-  cursorPreview.onload =
-    () => {
-
-      cursorPreview.hidden =
-        false;
-
-
-      if (
-        cursorPreviewEmpty
-      ) {
-
-        cursorPreviewEmpty.hidden =
-          true;
-
-      }
-
-    };
-
-
-  cursorPreview.onerror =
-    () => {
-
-      cursorPreview.hidden =
-        true;
-
-
-      if (
-        cursorPreviewEmpty
-      ) {
-
-        cursorPreviewEmpty.hidden =
-          false;
-
-      }
-
-    };
-
-
-  cursorPreview.src =
-    url;
-
-}
-
-
-/* =========================================================
-   마우스 포인터 불러오기
-========================================================== */
-
-async function loadCursorSetting(
-  user
-) {
-
-  const {
-    data,
-    error
-  } =
-    await supabaseClient
-      .from(
-        "site_settings"
-      )
-      .select(
-        "value"
-      )
-      .eq(
-        "key",
-        "cursor_url"
-      )
-      .eq(
-        "user_id",
-        user.id
-      )
-      .maybeSingle();
-
-
-  if (error) {
-
-    console.error(
-      "load cursor error:",
-      error
-    );
-
-
-    cursorSaveMessage.textContent =
-      "마우스 포인터 설정을 불러오지 못했습니다.";
-
-
-    return;
-
-  }
-
-
-  cursorUrlInput.value =
-    data?.value || "";
-
-
-  showCursorPreview(
-    data?.value || ""
-  );
-
-}
-
 
 /* =========================================================
    닉네임 불러오기
@@ -680,27 +543,84 @@ async function loadCategories(
   user
 ) {
 
-  const {
+  /*
+    GALLERY-1: 표시 설정 컬럼을 함께 읽는다. migration이 아직
+    적용되지 않은 배포에서는 42703이 나므로 기본 컬럼만으로 한 번 더
+    읽고, 그 사실을 표시 설정 UI에 알린다 — 없는 컬럼을 UPDATE에
+    넣으면 카테고리 저장 전체가 실패하기 때문이다
+    (admin/settings/admin-settings-category-display.js).
+  */
+
+  const BASE_COLUMNS =
+    "id, name, slug, sort_order, type";
+
+  /*
+    GALLERY-1 후속: secret_cover_url(공개 https 주소)은 사라졌다 —
+    파일은 비공개 버킷에 있고 미리보기도 /api/post-cover?category=<id>로
+    받는다(core/lib/post-cover-url.js).
+  */
+
+  const GALLERY_COLUMNS =
+    "list_style, page_size, secret_cover_mode, secret_cover_path";
+
+
+  const runCategoryQuery =
+    (columns) =>
+      supabaseClient
+        .from(
+          "categories"
+        )
+        .select(
+          columns
+        )
+        .eq(
+          "user_id",
+          user.id
+        )
+        .order(
+          "sort_order",
+          {
+            ascending: true
+          }
+        );
+
+
+  let {
     data,
     error
   } =
-    await supabaseClient
-      .from(
-        "categories"
-      )
-      .select(
-        "id, name, slug, sort_order, type"
-      )
-      .eq(
-        "user_id",
-        user.id
-      )
-      .order(
-        "sort_order",
-        {
-          ascending: true
-        }
-      );
+    await runCategoryQuery(
+      `${BASE_COLUMNS}, ${GALLERY_COLUMNS}`
+    );
+
+
+  if (
+    error &&
+    error.code === "42703"
+  ) {
+
+    setCategoryDisplayColumnsAvailable(
+      false
+    );
+
+
+    ({
+      data,
+      error
+    } =
+      await runCategoryQuery(
+        BASE_COLUMNS
+      ));
+
+  }
+
+  else if (!error) {
+
+    setCategoryDisplayColumnsAvailable(
+      true
+    );
+
+  }
 
 
   if (error) {
@@ -840,6 +760,12 @@ function renderCategories() {
           category.type =
             typeSelect.value;
 
+
+          /* GALLERY-1: post ↔ banner를 바꾸면 표시 설정 줄이
+             나타나거나 사라진다 — 전체를 다시 그린다. */
+
+          renderCategories();
+
         }
       );
 
@@ -967,6 +893,31 @@ function renderCategories() {
         typeSelect,
         actions
       );
+
+
+      /*
+        GALLERY-1: post형 카테고리에만 표시 설정 줄을 붙인다
+        (admin/settings/admin-settings-category-display.js).
+        migration 이전 배포에서는 null이 돌아와 아무것도 붙지 않고,
+        지금까지와 완전히 같은 화면이 된다.
+      */
+
+      const displayRow =
+        typeof buildCategoryDisplayRow === "function"
+          ? buildCategoryDisplayRow(
+              category,
+              renderCategories
+            )
+          : null;
+
+
+      if (displayRow) {
+
+        item.appendChild(
+          displayRow
+        );
+
+      }
 
 
       categoryList.appendChild(

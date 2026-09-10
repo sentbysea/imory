@@ -15,8 +15,13 @@
    의존(classic script, 이 모듈보다 먼저 로드되어야 함):
    supabaseClient(core/lib/supabase-client.js), buildCategorySkinContext
    (skin/skin-context.js), extractImageSlotNames(skin/skin-image-slots.js),
-   resolveSkinTemplate(skin/skin-template.js). renderSkin은 정적 import로
-   받는다.
+   resolveSkinTemplate / skinTemplateUsesGallery(skin/skin-template.js).
+   renderSkin은 정적 import로 받는다.
+
+   GALLERY-1: 이 함수가 page(주소의 ?page=N)를 받아 Context에 넘기고,
+   실제로 그려진 페이지를 outcome에 적어 호출자에게 돌려준다. 갤러리
+   모드는 카테고리 설정과 **이 스킨이 category.gallery를 실제로 쓰는지**
+   둘 다 참일 때만 켜진다(IMORY_GALLERY1_DESIGN.md §4).
 
    책임 경계: renderPublishedSkinCategory()는 절대 throw하지 않는다 —
    실패 사유가 무엇이든(RPC 에러, context 빌드 실패, 알 수 없는
@@ -49,7 +54,7 @@ const SKIN_CATEGORY_SUPPORTED_SCHEMA_VERSION = 1;
    기존 legacy post-list 렌더를 그대로 진행해야 한다.
 ========================================================== */
 
-export async function renderPublishedSkinCategory({ ownerId, categoryId, container }) {
+export async function renderPublishedSkinCategory({ ownerId, categoryId, container, page, outcome }) {
 
   if (!ownerId || categoryId === undefined || categoryId === null || !container) {
     return false;
@@ -115,10 +120,17 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
     /* FOLDER-2: 이 스킨이 폴더 페이지(templates.folder)를 갖고 있을
        때만 category.tree의 폴더 노드에 folderHref가 채워진다 — 없으면
        null이라 스킨이 폴더 링크를 그리지 않는다(skin/skin-context.js). */
+    /* GALLERY-1: 이 스킨의 CATEGORY template이 category.gallery /
+       category.pagination을 실제로 그리는 경우에만 갤러리 모드가
+       켜진다(skin/skin-template.js의 skinTemplateUsesGallery 주석).
+       page는 주소의 ?page=N을 그대로 전달한 값이고, 범위를 벗어난
+       값은 Context가 유효 페이지로 맞춰서 돌려준다. */
     context = await buildCategorySkinContext(ownerId, categoryId, {
       imageSlotNames,
       imageSlotValues,
-      supportsFolderPage: skinPackageSupportsPageType(skinPackage, "folder")
+      supportsFolderPage: skinPackageSupportsPageType(skinPackage, "folder"),
+      supportsGallery: skinTemplateUsesGallery(categoryTemplate),
+      page
     });
 
   } catch (err) {
@@ -155,6 +167,24 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
 
     console.error("[skin-category] renderSkin failed", err);
     return false;
+
+  }
+
+  /* GALLERY-1: 실제로 그려진 페이지 번호를 호출자에게 알려준다.
+     범위를 벗어난 ?page=99로 들어왔으면 Context가 마지막 페이지로
+     맞췄으므로 호출자가 주소도 그 값으로 정정한다
+     (posts/view/posts-view-list.js). 갤러리가 아니면 null이다 —
+     그때는 주소에 ?page=가 있을 이유가 없다. */
+
+  if (outcome && typeof outcome === "object") {
+
+    outcome.isGallery =
+      context.category.isGallery === true;
+
+    outcome.effectivePage =
+      context.category.pagination
+        ? context.category.pagination.currentPage
+        : null;
 
   }
 

@@ -229,6 +229,48 @@ postEditorSaveButton
 
 
       /* =====================================================
+         GALLERY-1 — 대표 이미지: 새 경로에 먼저 올린다
+
+         요구사항 2절의 순서 "새 경로 → 글 저장 성공 → 기존 파일
+         정리"의 첫 단계다. 이 시점에는 기존 대표 이미지도 post_covers
+         행도 전혀 건드리지 않는다 — 아래에서 글 저장이 실패하면
+         방금 올린 파일만 지우고(rollbackPostCoverUpload) 예전 사진은
+         그대로 남는다(posts/editor/posts-cover-image.js).
+
+         올릴 파일이 없으면(사진을 안 골랐거나 제거만 요청) uploaded는
+         null이고 아무 왕복도 일어나지 않는다.
+      ====================================================== */
+
+      const preparedCover =
+        await preparePostCoverUpload();
+
+
+      if (preparedCover.error) {
+
+        console.error(
+          preparedCover.error
+        );
+
+
+        postEditorSaveButton.disabled =
+          false;
+
+
+        postEditorSaveButton.textContent =
+          "save";
+
+
+        showPostEditorMessage(
+          "대표 이미지를 올리지 못했습니다."
+        );
+
+
+        return;
+
+      }
+
+
+      /* =====================================================
          EDIT
       ====================================================== */
 
@@ -320,12 +362,60 @@ postEditorSaveButton
           );
 
 
+          /* 글 저장이 실패했으니 방금 올린 대표 이미지 파일은
+             아무도 참조하지 않는다 — 지운다. 기존 대표 이미지는
+             건드리지 않았으므로 그대로다. */
+
+          await rollbackPostCoverUpload(
+            preparedCover
+          );
+
+
           showPostEditorMessage(
             "저장하지 못했습니다."
           );
 
 
           return;
+
+        }
+
+
+        /* 글이 저장됐다 — 이제 대표 이미지를 등록하고 밀려난
+           이전 파일을 정리한다. 여기서 실패해도 글은 이미 저장된
+           상태이므로 안내만 하고 화면은 그대로 진행한다. */
+
+        const coverSaveError =
+          await finishPostCoverSave(
+            savedId,
+            preparedCover
+          );
+
+
+        /*
+          GALLERY-1 후속: 공개 범위가 바뀌었다고 대표 이미지 파일을
+          옮기거나 지우는 단계는 **없다**. 대표 이미지는 비공개
+          버킷에 있고 바이트는 /api/post-cover로만 나가며, 그 요청마다
+          DB가 글의 현재 공개 상태와 요청자를 확인한다 — 이 저장이
+          커밋되는 순간 그 다음 요청부터 새 공개 범위가 적용된다
+          (posts/editor/posts-cover-image.js 상단 주석,
+           supabase/migrations/20260911100000_post_covers_private_access.sql).
+        */
+
+        if (coverSaveError) {
+
+          console.error(
+            coverSaveError
+          );
+
+
+          /* 이 뒤로 화면이 곧 글 읽기로 넘어가므로 폼 안 메시지는
+             보이지 않는다 — 드문 실패이고 사용자가 반드시 알아야
+             하는 내용이라 alert로 알린다. */
+
+          alert(
+            "글은 저장했지만 대표 이미지는 반영하지 못했습니다."
+          );
 
         }
 
@@ -464,12 +554,38 @@ postEditorSaveButton
         );
 
 
+        await rollbackPostCoverUpload(
+          preparedCover
+        );
+
+
         showPostEditorMessage(
           "저장하지 못했습니다."
         );
 
 
         return;
+
+      }
+
+
+      const newPostCoverError =
+        await finishPostCoverSave(
+          data.id,
+          preparedCover
+        );
+
+
+      if (newPostCoverError) {
+
+        console.error(
+          newPostCoverError
+        );
+
+
+        alert(
+          "글은 저장했지만 대표 이미지는 반영하지 못했습니다."
+        );
 
       }
 

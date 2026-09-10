@@ -5,9 +5,10 @@
    admin-settings-load.js에 있음(반드시 먼저 로드돼야 함).
 
    내용: 로그인한 유저의 설정 전체 불러오기, 닉네임/BGM/블로그
-   제목/마우스 포인터(저장+업로드)/카테고리 저장, 회원 탈퇴.
-   아바타 업로드/저장은 admin-settings-avatar.js로 분리되어
-   있음(favicon과 같은 패턴).
+   제목/카테고리 저장, 회원 탈퇴.
+   아바타는 admin-settings-avatar.js, 파비콘/커서는
+   admin-favicon.js·admin-cursor.js, HOME>ETC 보호 설정은
+   admin-etc-settings.js가 각각 담당한다.
 ========================================================== */
 
 
@@ -50,6 +51,11 @@ async function loadAdminSettings(
 
 
   await loadBgm(
+    user
+  );
+
+
+  await loadEtcSettings(
     user
   );
 
@@ -390,296 +396,6 @@ nicknameSaveButton
   );
 
 
-
-/* =========================================================
-   마우스 포인터 저장
-========================================================== */
-
-cursorSaveButton
-  ?.addEventListener(
-    "click",
-    async () => {
-
-      const {
-        data:
-        userData,
-
-        error:
-        userError
-      } =
-        await supabaseClient
-          .auth
-          .getUser();
-
-
-      if (
-        userError ||
-        !userData.user
-      ) {
-
-        cursorSaveMessage.textContent =
-          "로그인이 필요합니다.";
-
-
-        return;
-
-      }
-
-
-      const user =
-        userData.user;
-
-
-      const cursorUrl =
-        cursorUrlInput
-          .value
-          .trim();
-
-
-      cursorSaveButton.disabled =
-        true;
-
-
-      cursorSaveMessage.textContent =
-        "저장 중...";
-
-
-      const {
-        error
-      } =
-        await supabaseClient
-          .from(
-            "site_settings"
-          )
-          .upsert(
-            {
-
-              user_id:
-                user.id,
-
-              key:
-                "cursor_url",
-
-              value:
-                cursorUrl
-
-            },
-            {
-
-              onConflict:
-                "user_id,key"
-
-            }
-          );
-
-
-      if (error) {
-
-        console.error(
-          "cursor save error:",
-          error
-        );
-
-
-        cursorSaveMessage.textContent =
-          "저장에 실패했습니다.";
-
-
-        cursorSaveButton.disabled =
-          false;
-
-
-        return;
-
-      }
-
-
-      cursorSaveMessage.textContent =
-        "saved ♡";
-
-
-      cursorSaveButton.disabled =
-        false;
-
-
-      showCursorPreview(
-        cursorUrl
-      );
-
-    }
-  );
-
-
-
-/* =========================================================
-   마우스 포인터 이미지 업로드
-
-   MY BANNER/FAVICON과 같은 패턴 — Supabase Storage의 항상 같은
-   경로(user-cursors/{user_id}/cursor, 확장자 없음)에 upsert로
-   덮어쓰고, 그 고정 URL을 cursorUrlInput에 채워 넣는다. 저장은
-   기존 save 버튼을 직접 눌러야 site_settings에 반영된다(업로드
-   즉시 자동저장 안 함).
-
-   ⚠️ "user-cursors" Storage 버킷도 user-banners/user-favicons와
-   마찬가지로 이 저장소 코드로 만들어지지 않는다 — Supabase
-   대시보드에서 미리 만들어둬야 업로드가 실제로 동작한다.
-========================================================== */
-
-const CURSOR_BUCKET =
-  "user-cursors";
-
-
-function buildCursorImageUrl(
-  userId
-) {
-
-  return (
-    `${SUPABASE_URL}/storage/v1/object/public/` +
-    `${CURSOR_BUCKET}/${userId}/cursor`
-  );
-
-}
-
-
-cursorFileInput
-  ?.addEventListener(
-    "change",
-    async event => {
-
-      const file =
-        event.target.files?.[0];
-
-
-      if (!file) {
-        return;
-      }
-
-
-      const {
-        data:
-        userData,
-
-        error:
-        userError
-      } =
-        await supabaseClient
-          .auth
-          .getUser();
-
-
-      if (
-        userError ||
-        !userData.user
-      ) {
-
-        if (
-          cursorUploadMessage
-        ) {
-
-          cursorUploadMessage.textContent =
-            "로그인이 필요합니다.";
-
-        }
-
-        return;
-
-      }
-
-
-      const user =
-        userData.user;
-
-
-      if (
-        cursorUploadMessage
-      ) {
-
-        cursorUploadMessage.textContent =
-          "업로드 중...";
-
-      }
-
-
-      const path =
-        `${user.id}/cursor`;
-
-
-      const {
-        error
-      } =
-        await supabaseClient
-          .storage
-          .from(
-            CURSOR_BUCKET
-          )
-          .upload(
-            path,
-            file,
-            {
-              upsert:
-                true,
-
-              contentType:
-                file.type,
-
-              cacheControl:
-                "60"
-            }
-          );
-
-
-      if (error) {
-
-        console.error(
-          error
-        );
-
-
-        if (
-          cursorUploadMessage
-        ) {
-
-          cursorUploadMessage.textContent =
-            "업로드하지 못했습니다.";
-
-        }
-
-        return;
-
-      }
-
-
-      cursorUrlInput.value =
-        buildCursorImageUrl(
-          user.id
-        );
-
-
-      showCursorPreview(
-        cursorUrlInput.value
-      );
-
-
-      if (
-        cursorUploadMessage
-      ) {
-
-        cursorUploadMessage.textContent =
-          "업로드 완료 — save를 눌러 저장하세요 ♡";
-
-      }
-
-
-      /*
-        같은 파일을 다시 골라도 change 이벤트가 뜨게 비워둠.
-      */
-
-      event.target.value =
-        "";
-
-    }
-  );
-
   /* =========================================================
    CATEGORIES 저장
 ========================================================== */
@@ -750,6 +466,69 @@ categorySaveButton
 
 
       /* =====================================================
+         GALLERY-1 — 비밀글 대체 이미지: 새 경로에 먼저 올린다
+
+         글 대표 이미지와 같은 순서다(요구사항 2절): 새 경로 업로드
+         → 행 저장 성공 → 밀려난 예전 파일 정리. 여기서 실패하면
+         카테고리 행은 하나도 건드리지 않은 채로 끝난다
+         (admin/settings/admin-settings-category-display.js).
+      ====================================================== */
+
+      const secretCoverUpload =
+        typeof uploadPendingCategorySecretCovers === "function"
+          ? await uploadPendingCategorySecretCovers(
+              user.id,
+              validCategories
+            )
+          : { ok: true };
+
+
+      if (!secretCoverUpload.ok) {
+
+        categorySaveMessage.textContent =
+          secretCoverUpload.message ||
+          "저장에 실패했습니다.";
+
+
+        categorySaveButton.disabled =
+          false;
+
+
+        return;
+
+      }
+
+
+      /*
+        저장 중 어느 단계에서든 실패하면 방금 올린 파일만 지우고
+        값을 되돌린다 — 예전 이미지는 아직 어디에도 밀려나지 않았다.
+      */
+
+      const failCategorySave =
+        async (message) => {
+
+          if (
+            typeof rollbackPendingCategorySecretCovers === "function"
+          ) {
+
+            await rollbackPendingCategorySecretCovers(
+              validCategories
+            );
+
+          }
+
+
+          categorySaveMessage.textContent =
+            message;
+
+
+          categorySaveButton.disabled =
+            false;
+
+        };
+
+
+      /* =====================================================
          삭제된 카테고리 DB에서 삭제
       ====================================================== */
 
@@ -784,12 +563,9 @@ categorySaveButton
           );
 
 
-          categorySaveMessage.textContent =
-            "저장에 실패했습니다.";
-
-
-          categorySaveButton.disabled =
-            false;
+          await failCategorySave(
+            "저장에 실패했습니다."
+          );
 
 
           return;
@@ -797,6 +573,44 @@ categorySaveButton
         }
 
       }
+
+
+
+      /*
+        GALLERY-1: 표시 설정 4개 컬럼. migration이 아직 적용되지 않은
+        배포에서는 컬럼 자체가 없으므로 payload에 넣지 않는다 — 넣으면
+        카테고리 저장 전체가 42703으로 실패한다
+        (admin/settings/admin-settings-category-display.js).
+      */
+
+      const categoryDisplayPayload =
+        (category) => (
+          (
+            typeof categoryDisplayColumnsAvailable === "boolean" &&
+            categoryDisplayColumnsAvailable &&
+            (category.type || "post") === "post"
+          )
+            ? {
+                list_style:
+                  category.list_style === "gallery"
+                    ? "gallery"
+                    : "list",
+
+                page_size:
+                  [6, 12, 18, 24].includes(Number(category.page_size))
+                    ? Number(category.page_size)
+                    : 12,
+
+                secret_cover_mode:
+                  category.secret_cover_mode === "image"
+                    ? "image"
+                    : "lock",
+
+                secret_cover_path:
+                  category.secret_cover_path || null
+              }
+            : {}
+        );
 
 
       /* =====================================================
@@ -843,7 +657,9 @@ categorySaveButton
 
                 type:
                   category.type ||
-                  "post"
+                  "post",
+
+                ...categoryDisplayPayload(category)
 
               })
               .eq(
@@ -864,12 +680,9 @@ categorySaveButton
             );
 
 
-            categorySaveMessage.textContent =
-              "저장에 실패했습니다.";
-
-
-            categorySaveButton.disabled =
-              false;
+            await failCategorySave(
+              "저장에 실패했습니다."
+            );
 
 
             return;
@@ -907,7 +720,9 @@ categorySaveButton
 
                 type:
                   category.type ||
-                  "post"
+                  "post",
+
+                ...categoryDisplayPayload(category)
 
               });
 
@@ -920,12 +735,9 @@ categorySaveButton
             );
 
 
-            categorySaveMessage.textContent =
-              "저장에 실패했습니다.";
-
-
-            categorySaveButton.disabled =
-              false;
+            await failCategorySave(
+              "저장에 실패했습니다."
+            );
 
 
             return;
@@ -933,6 +745,22 @@ categorySaveButton
           }
 
         }
+
+      }
+
+
+      /*
+        GALLERY-1: 모든 행이 저장됐다 — 이제서야 밀려난 예전 대체
+        이미지 파일을 지운다(요구사항 2절의 마지막 단계).
+      */
+
+      if (
+        typeof cleanupReplacedCategorySecretCovers === "function"
+      ) {
+
+        await cleanupReplacedCategorySecretCovers(
+          validCategories
+        );
 
       }
 

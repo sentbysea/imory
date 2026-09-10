@@ -582,6 +582,94 @@
 
 
       <!-- ===================================================
+           COVER IMAGE (GALLERY-1)
+
+           글의 대표 이미지. 갤러리 표시 카테고리에서 카드 썸네일로
+           쓰인다(목록 표시에서는 화면에 나타나지 않지만 값은 그대로
+           남는다 — 표시 방식을 바꿔도 다시 올릴 필요가 없다).
+
+           고른 파일은 이 자리에서 미리보기만 하고 **저장을 눌러야**
+           업로드된다. 그래서 작성을 취소하면 Storage에 아무것도
+           남지 않고, 교체하다 그만둬도 예전 사진이 그대로다
+           (posts/editor/posts-cover-image.js 상단 주석).
+      ==================================================== -->
+
+      <div class="post-editor-field post-editor-cover-field">
+
+        <label
+          for="postEditorCoverSelect"
+        >
+          COVER
+        </label>
+
+
+        <div class="post-editor-cover-row">
+
+          <div
+            class="post-editor-cover-preview"
+            id="postEditorCoverPreview"
+          >
+
+            <img
+              id="postEditorCoverPreviewImage"
+              alt="대표 이미지 미리보기"
+              hidden
+            >
+
+
+            <span
+              class="post-editor-cover-empty"
+              id="postEditorCoverEmpty"
+            >
+              사진 없음
+            </span>
+
+          </div>
+
+
+          <div class="post-editor-cover-actions">
+
+            <input
+              id="postEditorCoverFile"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              hidden
+            >
+
+
+            <button
+              type="button"
+              class="post-editor-cover-button"
+              id="postEditorCoverSelect"
+            >
+              사진 선택
+            </button>
+
+
+            <button
+              type="button"
+              class="post-editor-cover-button post-editor-cover-remove"
+              id="postEditorCoverRemove"
+              hidden
+            >
+              제거
+            </button>
+
+
+            <p
+              class="post-editor-cover-message"
+              id="postEditorCoverMessage"
+            ></p>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+
+      <!-- ===================================================
            OOC + HTML MODE
 
            OOC: 독자에게는 보이지 않는 메모/설정 노트.

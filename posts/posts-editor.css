@@ -561,6 +561,7 @@
 */
 
 .post-editor-content-mode-toggle,
+.post-editor-cover-button,
 .post-editor-ooc-toggle {
   padding:
     4px 10px;
@@ -688,3 +689,106 @@
   color: #df8eac;
 }
 
+
+
+/* =========================================================
+   COVER IMAGE (GALLERY-1)
+
+   갤러리 카드의 썸네일이 될 대표 이미지 한 장. 미리보기는
+   정사각으로 자르지 않고 object-fit: cover로 채운다 — 공개
+   갤러리 카드가 쓰는 규칙과 같아서 "여기서 본 구도"가 카드에서도
+   그대로 나온다(IMORY_GALLERY1_DESIGN.md §3-2).
+========================================================== */
+
+.post-editor-cover-row {
+  display: flex;
+  align-items: flex-start;
+
+  gap: 12px;
+}
+
+
+.post-editor-cover-preview {
+  position: relative;
+
+  flex: 0 0 auto;
+
+  width: 96px;
+  height: 96px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border:
+    1px solid #eeeeee;
+
+  background: #fbfbfb;
+
+  overflow: hidden;
+}
+
+
+.post-editor-cover-preview img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+
+  display: block;
+}
+
+
+.post-editor-cover-preview img[hidden] {
+  display: none;
+}
+
+
+.post-editor-cover-empty {
+  font-size: 10px;
+
+  letter-spacing: 0.05em;
+
+  color: #bbbbbb;
+}
+
+
+.post-editor-cover-empty[hidden] {
+  display: none;
+}
+
+
+.post-editor-cover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 6px;
+
+  min-width: 0;
+}
+
+
+.post-editor-cover-button[hidden] {
+  display: none;
+}
+
+
+.post-editor-cover-button:hover {
+  border-color: #f0d3de;
+
+  color: #d980a2;
+}
+
+
+.post-editor-cover-message {
+  flex: 1 0 100%;
+
+  margin: 0;
+
+  font-size: 10px;
+
+  line-height: 1.5;
+
+  color: #999999;
+}

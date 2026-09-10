@@ -324,9 +324,18 @@ async function resolvePublishedSkinRouteOwnerId() {
 }
 
 
+/*
+  GALLERY-1: page는 주소의 ?page=N(없으면 1), outcome은 렌더러가
+  "실제로 그린 페이지"를 적어 넣는 그릇이다 — 반환값은 지금까지처럼
+  boolean 하나로 두고(호출자의 모든 분기가 그 계약 위에 있다),
+  추가 정보만 이 객체로 받는다.
+*/
+
 async function tryRenderPublishedSkinCategory(
   categoryId,
-  container
+  container,
+  page,
+  outcome
 ) {
 
   const ownerId =
@@ -363,7 +372,9 @@ async function tryRenderPublishedSkinCategory(
     return await renderPublishedSkinCategory({
       ownerId,
       categoryId,
-      container
+      container,
+      page,
+      outcome
     });
 
   } catch (err) {
@@ -532,8 +543,21 @@ async function openCategoryPage(
 
   const {
     updateUrl = true,
-    manage = false
+    manage = false,
+
+    /*
+      GALLERY-1: 갤러리 카테고리의 몇 번째 페이지인가(주소의 ?page=N).
+      목록 표시 카테고리나 갤러리를 모르는 스킨에서는 아무 의미가
+      없고, 아래에서 주소의 ?page=도 정리된다.
+    */
+    page = 1
   } = options;
+
+
+  const requestedPage =
+    Number.isFinite(Number(page)) && Number(page) >= 1
+      ? Math.floor(Number(page))
+      : 1;
 
 
   if (
@@ -969,6 +993,7 @@ async function openCategoryPage(
     "post";
 
 
+
   /*
     로그인 여부 확인(글쓰기 버튼 노출용)은 목록 표시와
     무관하므로 굳이 기다리지 않는다 — await하면 목록이
@@ -995,8 +1020,16 @@ async function openCategoryPage(
               `/category/${categoryId}`
             )
           )
-        : buildPostRoute(
-            `/category/${categoryId}`
+        : /*
+            GALLERY-1: 갤러리 페이지 이동도 평범한 카테고리 이동이다 —
+            주소에 ?page=N만 붙는다(1페이지는 붙지 않는다). 아래
+            렌더 결과에 따라 유효 범위로 다시 정정될 수 있다.
+          */
+          buildSiteCategoryPageUrl(
+            buildPostRoute(
+              `/category/${categoryId}`
+            ),
+            requestedPage
           )
     );
 
@@ -1473,12 +1506,20 @@ async function openCategoryPage(
     조용히 폴백한다.
   */
 
+  const skinCategoryOutcome =
+    {
+      isGallery: false,
+      effectivePage: null
+    };
+
   const renderedPublishedSkinCategory =
     wantsManageScreen
       ? false
       : await tryRenderPublishedSkinCategory(
           numericCategoryId,
-          skinRenderTarget
+          skinRenderTarget,
+          requestedPage,
+          skinCategoryOutcome
         );
 
 
@@ -1500,6 +1541,57 @@ async function openCategoryPage(
   clearPendingIndicator(
     pendingIndicatorTimer
   );
+
+
+  /* =========================================================
+     GALLERY-1 — 주소와 실제 화면을 일치시킨다
+
+     세 경우에 주소를 정정한다(전부 replaceState — 사용자가 누른
+     적 없는 항목을 history에 쌓지 않는다):
+
+       1) 범위를 벗어난 ?page=99 → Context가 마지막 페이지로 맞췄다
+       2) 갤러리가 아닌데 ?page=가 붙어 있다(설정을 목록으로 되돌렸거나,
+          갤러리를 모르는 스킨이거나, 주소를 직접 친 경우)
+       3) 갤러리인데 1페이지라 쿼리가 필요 없다
+
+     기준 문서 §2-2 7번("열어 줄 수 없는 요청 쿼리는 주소에서도
+     지운다")을 그대로 따른다 — POST의 ?manage=1 정리와 같은 결.
+  ========================================================== */
+
+  const effectivePage =
+    renderedPublishedSkinCategory &&
+    skinCategoryOutcome.isGallery &&
+    skinCategoryOutcome.effectivePage
+      ? skinCategoryOutcome.effectivePage
+      : 1;
+
+
+  if (
+    effectivePage !== requestedPage ||
+    (
+      !skinCategoryOutcome.isGallery &&
+      getSiteRequestedPage(window.location.search) !== 1
+    )
+  ) {
+
+    history.replaceState(
+      {
+        page:
+          "category",
+
+        categoryId:
+          numericCategoryId
+      },
+      "",
+      buildSiteCategoryPageUrl(
+        buildPostRoute(
+          `/category/${categoryId}`
+        ),
+        effectivePage
+      )
+    );
+
+  }
 
 
   /*

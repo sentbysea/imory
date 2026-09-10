@@ -93,7 +93,8 @@ function getCurrentPreviewLocation() {
     previewHistory[previewHistory.length - 1];
 
   if (top.type === "category") {
-    return { type: "category", categoryId: top.categoryId };
+    /* GALLERY-1: 페이지 번호까지 포함해야 "같은 자리" 판정이 정확하다 */
+    return { type: "category", categoryId: top.categoryId, page: top.page || 1 };
   }
 
   if (top.type === "post") {
@@ -186,7 +187,7 @@ function renderHomePreview() {
    unsupported로 끝난다(추가 fetch 없음).
 ========================================================== */
 
-async function renderCategoryPreviewFor(categoryId, options) {
+async function renderCategoryPreviewFor(categoryId, options, page) {
 
   currentPreviewPageType =
     "category";
@@ -328,6 +329,13 @@ async function renderCategoryPreviewFor(categoryId, options) {
       채워진다. Preview에서 폴더 링크를 누르면 아래
       renderFolderPreviewFor()로 간다.
     */
+    /*
+      GALLERY-1: 공개 화면(skin/skin-category.js)과 **같은 판정·같은
+      Context**를 쓴다 — 작업 중 CATEGORY template이 category.gallery를
+      실제로 그릴 때만 갤러리 모드가 켜지고, 페이지 번호도 Preview
+      안의 링크에서 온 값을 그대로 넘긴다. 그래서 "Preview에서는
+      갤러리인데 공개 화면에서는 목록"이 구조적으로 생길 수 없다.
+    */
     context =
       await buildCategorySkinContext(
         currentOwnerId,
@@ -335,7 +343,9 @@ async function renderCategoryPreviewFor(categoryId, options) {
         {
           imageSlotNames: currentImageSlotNames,
           imageSlotValues: currentImageSlotValues,
-          supportsFolderPage: !!resolveSkinTemplate(currentWorkingSkin, "folder")
+          supportsFolderPage: !!resolveSkinTemplate(currentWorkingSkin, "folder"),
+          supportsGallery: skinTemplateUsesGallery(categoryTemplate),
+          page: page || 1
         }
       );
 
@@ -1007,7 +1017,7 @@ function renderCurrentPreviewEntry(options) {
   }
 
   if (entry.type === "category") {
-    renderCategoryPreviewFor(entry.categoryId, options);
+    renderCategoryPreviewFor(entry.categoryId, options, entry.page || 1);
     return;
   }
 
@@ -1136,7 +1146,11 @@ function handlePreviewNavigateMessage(href) {
     current.type === target.type &&
     (
       target.type === "home" ||
-      (target.type === "category" && current.categoryId === target.categoryId) ||
+      (
+        target.type === "category" &&
+        current.categoryId === target.categoryId &&
+        (current.page || 1) === (target.page || 1)
+      ) ||
       (target.type === "post" && current.postId === target.postId) ||
       (
         target.type === "folder" &&

@@ -369,6 +369,20 @@ async function deleteCurrentPost() {
     currentPostCategoryId;
 
 
+  /*
+    GALLERY-1 후속: 대표 이미지 파일의 Storage 경로를 **지우기 전에**
+    받아 둔다 — 글이 지워지면 post_covers 행이 cascade로 사라져 경로를
+    알 방법이 없어지고, 그러면 파일만 남아 예전 주소로 계속 열린다
+    (posts/editor/posts-cover-image.js). 삭제가 실패하면 아무것도
+    지우지 않는다.
+  */
+
+  const coverPaths =
+    typeof takePostCoverStoragePaths === "function"
+      ? await takePostCoverStoragePaths([postId])
+      : [];
+
+
   const {
     error
   } =
@@ -400,6 +414,17 @@ async function deleteCurrentPost() {
 
 
     return;
+
+  }
+
+
+  if (
+    typeof removePostCoverStorageObjects === "function"
+  ) {
+
+    await removePostCoverStorageObjects(
+      coverPaths
+    );
 
   }
 

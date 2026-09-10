@@ -736,12 +736,19 @@
         <!-- =================================================
              FAVICON
 
-             MY BANNER와 같은 패턴(admin-favicon.js 참고) — 이미지는
-             Supabase Storage의 항상 같은 경로(user-favicons/{user_id}/
-             favicon, 확장자 없음)에 업로드로 덮어쓰기(upsert)되고,
-             site_settings에 key='favicon_url'로 그 고정 URL(또는
-             직접 입력한 외부 URL)이 저장된다. 공개 홈페이지 쪽 반영은
-             home/site-meta.js의 applyFaviconSetting() 참고.
+             CURSOR와 완전히 같은 화면이다 — 미리보기 + change +
+             remove. 공용 구현은 admin/settings/admin-image-setting.js,
+             설정만 넘기는 쪽이 admin-favicon.js다.
+
+             ★ 2026-09-11: URL 직접 입력 칸을 없앴고, 업로드는
+             **고를 때마다 새 경로**(user-favicons/{user_id}/{uuid})에
+             한다. 예전에는 고정 경로에 덮어써서 주소가 그대로였고,
+             그래서 파비콘을 바꿔도 브라우저·CDN이 예전 이미지를 계속
+             보여줬다. site_settings의 key='favicon_url'에는 저장을
+             눌렀을 때 그 새 주소가 들어가고, 그때 예전 파일을 지운다.
+
+             공개 홈페이지 쪽 반영은 home/site-meta.js의
+             applyFaviconSetting() 참고.
         ================================================== -->
 
         <section
@@ -793,6 +800,15 @@
               hidden
             >
 
+            <button
+              class="favicon-remove-button imory-button imory-button--ghost imory-button--md"
+              id="faviconRemoveButton"
+              type="button"
+              hidden
+            >
+              remove
+            </button>
+
           </div>
 
 
@@ -800,22 +816,6 @@
             class="favicon-upload-message"
             id="faviconUploadMessage"
           ></p>
-
-
-          <div class="setting-line">
-
-            <label for="faviconUrlInput" class="imory-label">
-              FAVICON URL
-            </label>
-
-            <input
-              id="faviconUrlInput"
-              class="setting-input imory-field imory-field--md"
-              type="url"
-              placeholder="https://example.com/favicon.png"
-            >
-
-          </div>
 
 
           <div class="imory-form-actions">
@@ -873,40 +873,30 @@
               aria-label="no cursor yet"
             ></div>
 
-          </div>
 
-
-          <div class="setting-line">
-
-            <label for="cursorUrlInput" class="imory-label">
-              CURSOR IMAGE URL
+            <label
+              class="cursor-change-button imory-button imory-button--primary imory-button--md"
+              for="cursorFileInput"
+            >
+              change
             </label>
 
-            <div class="cursor-upload-row">
+            <input
+              class="cursor-file-input"
+              id="cursorFileInput"
+              type="file"
+              accept="image/png,image/svg+xml,.cur"
+              hidden
+            >
 
-              <input
-                id="cursorUrlInput"
-                class="setting-input imory-field imory-field--md"
-                type="url"
-                placeholder="https://example.com/cursor.png"
-              >
-
-              <label
-                class="cursor-upload-button imory-button imory-button--secondary imory-button--md"
-                for="cursorFileInput"
-              >
-                upload
-              </label>
-
-              <input
-                class="cursor-file-input"
-                id="cursorFileInput"
-                type="file"
-                accept="image/png,image/svg+xml,.cur"
-                hidden
-              >
-
-            </div>
+            <button
+              class="cursor-remove-button imory-button imory-button--ghost imory-button--md"
+              id="cursorRemoveButton"
+              type="button"
+              hidden
+            >
+              remove
+            </button>
 
           </div>
 
@@ -989,6 +979,125 @@
           <p
             class="save-message"
             id="bgmSaveMessage"
+          ></p>
+
+        </section>
+
+
+
+        <!-- =================================================
+             ETC — 블로그 전체 보호 설정
+
+             카테고리가 아니라 **블로그 전체**에 걸리는 설정이라
+             여기 있다(admin/settings/admin-etc-settings.js,
+             IMORY_GALLERY1_DESIGN.md §13). 값은 site_settings의
+             key/value로 들어간다(blog_title/cursor_url과 같은 자리).
+
+             우클릭/복사 방지는 접근 통제가 아니다 — 브라우저 기본
+             동작을 막을 뿐이고 개발자 도구·소스 보기·화면 캡처는
+             막지 못한다. 화면 안내에도 그대로 적어 둔다.
+        ================================================== -->
+
+        <section
+          class="settings-group etc-group"
+          id="etcSettingsPanel"
+        >
+
+          <div class="settings-group-title imory-section-header imory-section-header--divider">
+
+            <span>
+              ETC
+            </span>
+
+            <small>
+              protection
+            </small>
+
+          </div>
+
+
+          <label class="etc-option">
+
+            <input
+              type="checkbox"
+              id="stripImageExifToggle"
+            >
+
+            <span class="etc-option-text">
+
+              <span class="etc-option-title">
+                이미지 EXIF 제거
+              </span>
+
+              <span class="etc-option-hint">
+                올리는 사진에서 위치·기기 정보를 지운 뒤 업로드합니다. GIF는 그대로 둡니다.
+              </span>
+
+            </span>
+
+          </label>
+
+
+          <label class="etc-option">
+
+            <input
+              type="checkbox"
+              id="blockContextMenuToggle"
+            >
+
+            <span class="etc-option-text">
+
+              <span class="etc-option-title">
+                우클릭 방지
+              </span>
+
+              <span class="etc-option-hint">
+                방문자의 우클릭 메뉴를 막습니다(주인장 제외). 개발자 도구·소스 보기·화면 캡처는 막지 못합니다.
+              </span>
+
+            </span>
+
+          </label>
+
+
+          <label class="etc-option">
+
+            <input
+              type="checkbox"
+              id="blockTextCopyToggle"
+            >
+
+            <span class="etc-option-text">
+
+              <span class="etc-option-title">
+                텍스트 복사 방지
+              </span>
+
+              <span class="etc-option-hint">
+                방문자의 본문 선택·복사를 막습니다(주인장 제외). 입력칸은 그대로 쓸 수 있습니다.
+              </span>
+
+            </span>
+
+          </label>
+
+
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="etcSaveButton"
+              type="button"
+            >
+              save
+            </button>
+
+          </div>
+
+
+          <p
+            class="save-message"
+            id="etcSaveMessage"
           ></p>
 
         </section>
@@ -1491,6 +1600,14 @@
 
   <script src="../core/lib/invite-token.js"></script>
 
+  <!-- GALLERY-1 후속: 카테고리 비밀글 지정 이미지 미리보기 주소
+       (/api/post-cover?category=<id>) — core/lib/post-cover-url.js -->
+  <script src="../core/lib/post-cover-url.js"></script>
+
+  <!-- 카테고리 보호 설정(EXIF 제거 등)의 공용 유틸
+       — core/lib/content-protection.js -->
+  <script src="../core/lib/content-protection.js"></script>
+
   <!-- =========================================================
        INVITE TOKEN 진입점 (하위호환)
 
@@ -1599,8 +1716,37 @@
             "./admin.js",
             "./admin-session.js",
             "./settings/admin-settings-load.js",
+
+            /*
+              GALLERY-1: 카테고리 표시 설정 줄(목록/갤러리 · 페이지당
+              글 수 · 비밀글 미리보기). admin-settings-load.js의
+              categories 상태를 쓰고, admin-settings-save.js가 이
+              파일의 업로드/정리 헬퍼를 부른다 — 그래서 두 파일
+              사이에 온다.
+            */
+
+            "./settings/admin-settings-category-display.js",
+
+            /*
+              HOME > ETC 보호 설정. 업로드 경로들이
+              imoryEtcStripImageExifEnabled()를 부르므로 그보다
+              먼저 로드된다(admin-etc-settings.js).
+            */
+
+            "./settings/admin-etc-settings.js",
+
             "./settings/admin-my-banner.js",
+
+            /*
+              FAVICON/CURSOR는 "이미지 한 장 → site_settings key
+              하나"라는 같은 화면이라 공용 구현을 쓴다 —
+              admin-image-setting.js가 그 둘보다 먼저다.
+            */
+
+            "./settings/admin-image-setting.js",
             "./settings/admin-favicon.js",
+            "./settings/admin-cursor.js",
+
             "./settings/admin-settings-avatar.js",
             "./settings/admin-settings-save.js",
 

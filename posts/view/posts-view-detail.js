@@ -768,6 +768,7 @@ async function openPostPage(
     null;
 
 
+
   /*
     PHASE 1C-F: published Skin이 이 POST를 지원하면 outer chrome
     (title/category/footer)을 먼저 시도한다 — 실패/미지원/owner

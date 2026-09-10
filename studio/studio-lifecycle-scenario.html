@@ -169,19 +169,73 @@
       }
 
       function makeQuery(rows) {
+
+        /*
+          GALLERY-1로 세 가지가 늘었다(전부 additive — 기존 scenario는
+          호출하지 않으므로 동작이 달라지지 않는다):
+            .is(col, null) / .not(col, "is", null)  — folder_id 분기
+            .range(from, to) + select(cols,{count}) — 페이지 조회
+          count는 range로 자르기 **전**의 행 수다(PostgREST와 같다).
+        */
+
+        let wantsCount = false;
+        let outOfRange = false;
+        let total = null;
+        const orderKeys = [];
+
         const query = {
-          select: function () { return query; },
+          select: function (cols, opts) {
+            if (opts && opts.count) { wantsCount = true; }
+            return query;
+          },
           eq: function (col, val) { rows = rows.filter(function (r) { return r[col] === val; }); return query; },
           in: function (col, vals) { rows = rows.filter(function (r) { return vals.indexOf(r[col]) !== -1; }); return query; },
+          is: function (col, val) {
+            rows = rows.filter(function (r) {
+              return val === null
+                ? (r[col] === null || r[col] === undefined)
+                : r[col] === val;
+            });
+            return query;
+          },
+          not: function (col, op, val) {
+            rows = rows.filter(function (r) {
+              if (op === "is" && val === null) {
+                return !(r[col] === null || r[col] === undefined);
+              }
+              return r[col] !== val;
+            });
+            return query;
+          },
+          /*
+            GALLERY-1: order()를 여러 번 부르면 PostgREST는 **복합
+            정렬 키**로 다룬다(order=created_at.desc,id.desc). 예전에는
+            매번 전체를 다시 정렬해서 마지막 키 하나만 남았고, 그래서
+            같은 데이터인데 Preview와 공개 화면의 순서가 달라졌다.
+            누적한 키를 순서대로 비교한다.
+          */
           order: function (col, opts) {
-            const asc = !opts || opts.ascending !== false;
+            orderKeys.push({
+              col: col,
+              asc: !opts || opts.ascending !== false
+            });
             rows = rows.slice().sort(function (a, b) {
-              if (a[col] === b[col]) return 0;
-              return (a[col] > b[col] ? 1 : -1) * (asc ? 1 : -1);
+              for (let i = 0; i < orderKeys.length; i += 1) {
+                const key = orderKeys[i];
+                if (a[key.col] === b[key.col]) continue;
+                return (a[key.col] > b[key.col] ? 1 : -1) * (key.asc ? 1 : -1);
+              }
+              return 0;
             });
             return query;
           },
           limit: function (n) { rows = rows.slice(0, n); return query; },
+          range: function (from, to) {
+            total = rows.length;
+            if (from > 0 && from >= total) { outOfRange = true; }
+            rows = rows.slice(from, to + 1);
+            return query;
+          },
           maybeSingle: function () { return delayed({ data: rows[0] || null, error: null }); },
           single: function () {
             return delayed(
@@ -191,7 +245,21 @@
             );
           },
           then: function (resolve, reject) {
-            return delayed({ data: rows, error: null }).then(resolve, reject);
+            if (outOfRange) {
+              return delayed({
+                data: null,
+                count: total,
+                error: {
+                  code: "PGRST103",
+                  message: "Requested range not satisfiable"
+                }
+              }).then(resolve, reject);
+            }
+            return delayed({
+              data: rows,
+              error: null,
+              count: wantsCount ? (total === null ? rows.length : total) : null
+            }).then(resolve, reject);
           }
         };
         return query;
@@ -1010,6 +1078,108 @@
         },
 
         /*
+          Scenario G — 갤러리 Preview fixture (GALLERY-1).
+
+          Studio Preview가 공개 화면과 **같은 buildCategorySkinContext()**
+          로 갤러리를 그리는지 확인한다(preview-navigation.js). 그래서
+          이 fixture가 하는 일은 list_style/page_size가 붙은 categories와
+          post_covers를 mock에 두는 것뿐이다.
+
+          스킨과 데이터 모두 e2e(skin/skin-gallery-e2e-test.mjs)가
+          addInitScript로 실어 준다 — published 검증과 **같은 JSON,
+          같은 행**을 써야 "같은 구조"를 말할 수 있기 때문이다
+          (scenario t와 같은 패턴). 이 문서를 브라우저에서 직접 열었을
+          때를 위한 최소 fallback을 함께 둔다.
+        */
+        g: (function () {
+
+          const injectedTables =
+            window.__scenarioGalleryTables || null;
+
+          const fallbackSkin = {
+            schemaVersion: 1,
+            templates: {
+              home: {
+                html:
+                  '<div class="g-home"><h1 data-imory-bind="site.title"></h1>' +
+                  '<ul><li data-imory-repeat="navigation.postCategories">' +
+                  '<a class="g-cat-link" data-imory-href="item.href" data-imory-bind="item.name"></a></li></ul></div>'
+              },
+              category: {
+                html:
+                  '<div class="g-category"><h1 data-imory-bind="category.name"></h1>' +
+                  '<ul class="g-grid"><li class="g-card" data-imory-repeat="category.gallery.cards">' +
+                  '<a data-imory-href="item.href">' +
+                  '<img class="g-thumb" data-imory-if="item.hasThumbnail" data-imory-src="item.thumbnailUrl" alt="">' +
+                  '<span class="g-title" data-imory-bind="item.title"></span></a></li></ul>' +
+                  '<nav class="g-pager"><a class="g-page" data-imory-repeat="category.pagination.pages" ' +
+                  'data-imory-href="item.href" data-imory-bind="item.label"></a></nav></div>'
+              },
+              post: {
+                html:
+                  '<div class="g-post"><h1 data-imory-bind="post.title"></h1>' +
+                  '<div data-imory-region="post-body"></div></div>'
+              }
+            },
+            css: ".g-category [hidden] { display: none; }",
+            imageSlots: [],
+            regions: [],
+            metadata: { generatedBy: "gallery-preview-fallback" }
+          };
+
+          const fallbackTables = {
+            profiles: [{ user_id: "user-g", nickname: "Scenario G", bio: null, slug: "scenario-g" }],
+            site_settings: [
+              { user_id: "user-g", key: "blog_title", value: "SCENARIO G BLOG" }
+            ],
+            categories: [
+              {
+                id: "1", user_id: "user-g", name: "PHOTO", type: "post", sort_order: 1,
+                list_style: "gallery", page_size: 12,
+                secret_cover_mode: "lock", secret_cover_path: null
+              }
+            ],
+            post_folders: [],
+            posts: [
+              { id: "501", user_id: "user-g", title: "사진 1", created_at: "2026-02-28T02:00:00Z", visibility: "public", category_id: "1", folder_id: null, sort_order: 100 },
+              { id: "502", user_id: "user-g", title: "사진 2", created_at: "2026-02-27T02:00:00Z", visibility: "public", category_id: "1", folder_id: null, sort_order: 200 }
+            ],
+            /* GALLERY-1 후속: 행에 파일 주소가 없다 — 화면은
+               "대표 이미지가 있다"만 알고 주소는 /api/post-cover?post=<id>다
+               (core/lib/post-cover-url.js). */
+            post_covers: [
+              { post_id: "501", user_id: "user-g", mime_type: "image/png", byte_size: 100 }
+            ],
+            post_contents: [],
+            banners: []
+          };
+
+          const tables =
+            injectedTables || fallbackTables;
+
+          return {
+            userId: "user-g",
+            tables: Object.assign(
+              {
+                skins: [
+                  { id: "skin-g1", user_id: "user-g", is_active: true, current_draft_version_id: "draft-g1", current_published_version_id: null }
+                ],
+                skin_versions: [
+                  {
+                    id: "draft-g1",
+                    content: window.__scenarioGallerySkinPackage || fallbackSkin
+                  }
+                ],
+                skin_image_slot_values: []
+              },
+              tables
+            ),
+            rpcHandlers: {}
+          };
+
+        })(),
+
+        /*
           Scenario F — production 스킨(quiet-frame 계열)을 축소한
           회귀 fixture (PHASE AI-6B.1).
 
@@ -1816,6 +1986,7 @@
   <script type="module" src="../skin/skin-initializer.js"></script>
   <script src="../skin-questionnaire/questionnaire.js"></script>
   <script src="../core/lib/site-path.js"></script>
+  <script src="../core/lib/post-cover-url.js"></script>
   <script src="../skin/skin-image-slots.js"></script>
   <script src="../skin/skin-context.js"></script>
   <script src="../skin/skin-template.js"></script>

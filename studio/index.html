@@ -690,6 +690,14 @@
     loadVersionedScripts(
       [
         "../core/lib/site-path.js",
+
+        /*
+          GALLERY-1 후속: skin-context.js가 갤러리 카드의 대표 이미지
+          주소를 buildPostCoverUrl()로 만든다 — 그 앞에 있어야 한다
+          (core/lib/post-cover-url.js).
+        */
+        "../core/lib/post-cover-url.js",
+
         "../skin/skin-image-slots.js",
         "../skin/skin-context.js",
         "../skin/skin-template.js"

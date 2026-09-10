@@ -218,6 +218,10 @@ context.category = {
 
 **v0.1은 pagination을 계약하지 않는다**(1-2절 조사: 실제 legacy 목록도 페이지네이션 없이 전체를 한 번에 로드). `category.posts`는 v0.1에서 카테고리의 전체 글 목록이다 — 글이 아주 많은 사용자에게는 이미 오늘도 존재하는 성능 리스크이고, Skin 도입이 이 리스크를 새로 만드는 것은 아니다. 13-4절에서 향후 확장 방향만 기록한다.
 
+> **[변경됨 → [IMORY_GALLERY1_DESIGN.md](../../IMORY_GALLERY1_DESIGN.md) §5·§7]** GALLERY-1이 pagination을 계약했다 — 15-3절의 (b)안(`/category/:id?page=N`, `category.posts`는 현재 페이지만)을 그대로 골랐고, 페이지 번호 링크는 플랫폼이 완성된 href와 함께 `category.pagination.pages[]`로 준다(클릭 핸들러 개념은 여전히 없다 — 평범한 `<a>` 링크다).
+>
+> **단, 갤러리 계약을 실제로 쓰는 스킨에만 적용된다.** 그 판정이 성립하지 않는 모든 렌더에서 `category.posts`는 이 절의 설명 그대로 카테고리의 전체 글 목록이다.
+
 ---
 
 ## 6. POST Contract — outer chrome만
@@ -451,6 +455,8 @@ function resolveSkinTemplate(skinPackage, pageType) {
 ### 15-2. Gallery
 
 DB/코드 어디에도 아직 존재하지 않는 미래 타입(1-2절). `category.type === "gallery"`가 실제로 추가되는 시점에 `category.images[]`(가칭) 같은 새 네임스페이스로 확장 — `category.posts`와 나란히 두되 서로 영향 없음(11절).
+
+> **[변경됨 → [IMORY_GALLERY1_DESIGN.md](../../IMORY_GALLERY1_DESIGN.md) §2·§4]** GALLERY-1은 `category.type`을 늘리지 않았다. 갤러리는 "다른 종류의 카테고리"가 아니라 **같은 post형 카테고리의 표시 방식**이어서, 글·작성 화면·POST 주소·공개 범위를 전부 그대로 재사용해야 했기 때문이다(`category.type === "gallery"`로 만들면 이 계약을 아예 타지 않게 되어 5-2절에 걸린다). 대신 `categories.list_style` 설정과 `category.gallery` / `category.pagination` 네임스페이스를 additive로 두었다 — 여기 적힌 "나란히 두되 서로 영향 없음" 원칙 자체는 그대로 지켜졌다.
 
 ### 15-3. Pagination
 

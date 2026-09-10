@@ -1454,6 +1454,7 @@ async function closePostArea(
     null;
 
 
+
   hidePostEditor();
 
 

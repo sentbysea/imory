@@ -165,11 +165,17 @@ function resolveInSiteSkinRoute(url) {
         openCategoryPage()/startPostCompose()가 한다.
       */
 
+      /*
+        GALLERY-1: 같은 경로의 ?page=N은 갤러리의 페이지 이동이다.
+        전달만 하고 유효 범위 판정은 openCategoryPage()가 한다.
+      */
+
       return {
         page: "category",
         id: Number(segments[1]),
         manage: isSiteManageRequested(url.search),
-        compose: isSiteComposeRequested(url.search)
+        compose: isSiteComposeRequested(url.search),
+        pageNumber: getSiteRequestedPage(url.search)
       };
 
     }
@@ -364,7 +370,8 @@ document.addEventListener(
         await openCategoryPage(
           route.id,
           {
-            manage: route.manage === true
+            manage: route.manage === true,
+            page: route.pageNumber || 1
           }
         );
 
