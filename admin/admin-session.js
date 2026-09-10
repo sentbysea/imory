@@ -132,6 +132,141 @@ window.addEventListener(
 
 
 /* =========================================================
+   자기 imory 홈 링크 (logout 왼쪽 "home")
+
+   공개 홈 주소는 /:slug 경로형이고(core/lib/site-path.js),
+   slug는 사람마다 다르므로 profiles에서 지금 로그인한
+   user_id의 slug를 읽어 href를 만든다 — profiles는 anon에게도
+   select가 열려 있어(home/site-owner.js가 같은 테이블을 그대로
+   조회한다) 별도 RPC가 필요 없다.
+
+   admin은 site-path.js를 로드하지 않으므로 base 경로는 지금
+   주소(/... /admin/)에서 admin 부분만 떼어 구한다 — 루트 배포
+   (imory.me/admin/)에서는 "", github.io 같은 하위 경로 배포에서는
+   그 하위 경로가 그대로 남는다.
+
+   slug가 없으면(온보딩 미완료 등) 링크를 hidden인 채로 둔다.
+   빈 href는 admin 페이지 자기 자신을 다시 여는 꼴이라 더 나쁘다.
+========================================================== */
+
+let ownerHomeLinkUserId =
+  null;
+
+
+function buildOwnerHomeHref(
+  slug
+) {
+
+  const basePath =
+    window.location.pathname
+      .replace(
+        /\/admin\/?$/,
+        ""
+      );
+
+
+  return (
+    basePath +
+    "/" +
+    encodeURIComponent(
+      slug
+    )
+  );
+
+}
+
+
+async function applyOwnerHomeLink(
+  user
+) {
+
+  if (
+    !ownerHomeLink ||
+    !user
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+    토큰 갱신/탭 복귀마다 onAuthStateChange가 다시 불리므로
+    같은 사용자면 다시 조회하지 않는다.
+  */
+
+  if (
+    ownerHomeLinkUserId === user.id
+  ) {
+
+    return;
+
+  }
+
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from(
+        "profiles"
+      )
+      .select(
+        "slug"
+      )
+      .eq(
+        "user_id",
+        user.id
+      )
+      .maybeSingle();
+
+
+  if (
+    error
+  ) {
+
+    console.error(
+      "load owner slug error:",
+      error
+    );
+
+
+    return;
+
+  }
+
+
+  const slug =
+    data?.slug || "";
+
+
+  if (
+    !slug
+  ) {
+
+    return;
+
+  }
+
+
+  ownerHomeLink.href =
+    buildOwnerHomeHref(
+      slug
+    );
+
+
+  ownerHomeLink.hidden =
+    false;
+
+
+  ownerHomeLinkUserId =
+    user.id;
+
+}
+
+
+/* =========================================================
    현재 로그인 상태 확인
 ========================================================== */
 
@@ -171,6 +306,11 @@ async function checkSession() {
   ) {
 
     showDashboard(
+      session.user
+    );
+
+
+    applyOwnerHomeLink(
       session.user
     );
 
@@ -369,6 +509,11 @@ supabaseClient
         userEmail.textContent =
           session.user.email ||
           "";
+
+
+        applyOwnerHomeLink(
+          session.user
+        );
 
 
         restoreAdminView();

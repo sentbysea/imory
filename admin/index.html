@@ -178,13 +178,35 @@
         </div>
 
 
-        <button
-          class="logout-button"
-          id="logoutButton"
-          type="button"
-        >
-          logout
-        </button>
+        <!-- ===================================================
+             logout 왼쪽: 자기 imory 홈으로
+
+             href는 로그인한 사람마다 다르므로(profiles.slug)
+             admin-session.js의 applyOwnerHomeLink()가 세션 확인
+             뒤에 채운다. slug를 못 읽으면 hidden인 채로 둔다 —
+             빈 href로 남겨두면 admin 페이지가 다시 로드된다.
+        ==================================================== -->
+
+        <div class="admin-header-actions">
+
+          <a
+            class="logout-button"
+            id="ownerHomeLink"
+            hidden
+          >
+            home
+          </a>
+
+
+          <button
+            class="logout-button"
+            id="logoutButton"
+            type="button"
+          >
+            logout
+          </button>
+
+        </div>
 
       </header>
 

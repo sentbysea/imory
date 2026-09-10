@@ -330,6 +330,49 @@ button {
 }
 
 
+/*
+  헤더 오른쪽 버튼 묶음 — #ownerHomeLink(자기 imory 홈) +
+  #logoutButton. .admin-header가 space-between이라 예전처럼
+  버튼을 헤더 직계로 두면 둘이 양끝으로 벌어진다.
+*/
+
+.admin-header-actions {
+  display: flex;
+
+  align-items: center;
+
+  flex-shrink: 0;
+
+  gap: 8px;
+}
+
+
+/*
+  #ownerHomeLink는 실제 이동이 있는 링크라 <a>지만 logout과
+  같은 모양이어야 한다 — <a>에만 필요한 차이만 여기서 맞춘다
+  (버튼은 이미 inline-block, 밑줄 없음, 가운데 정렬).
+*/
+
+a.logout-button {
+  display: inline-block;
+
+  text-decoration: none;
+
+  white-space: nowrap;
+}
+
+
+/*
+  위 display가 저자 스타일이라 브라우저 기본 [hidden]{display:none}
+  보다 우선한다 — 명시하지 않으면 slug를 못 읽은 상태에서도
+  링크가 보인다.
+*/
+
+a.logout-button[hidden] {
+  display: none;
+}
+
+
 
 /* =========================================================
    화면 공통

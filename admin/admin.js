@@ -45,6 +45,17 @@ const logoutButton =
   );
 
 
+/*
+  logout 왼쪽의 "home" 링크. href는 로그인한 사람의
+  profiles.slug로 admin-session.js가 채운다.
+*/
+
+const ownerHomeLink =
+  document.getElementById(
+    "ownerHomeLink"
+  );
+
+
 const loginMessage =
   document.getElementById(
     "loginMessage"
@@ -241,6 +252,31 @@ function showLogin() {
 
   userEmail.textContent =
     "";
+
+
+  /*
+    다른 계정으로 다시 로그인할 수 있으므로 home 링크는
+    로그아웃 시 감추고 캐시한 user id도 비운다
+    (applyOwnerHomeLink — admin-session.js).
+  */
+
+  if (
+    ownerHomeLink
+  ) {
+
+    ownerHomeLink.hidden =
+      true;
+
+
+    ownerHomeLink.removeAttribute(
+      "href"
+    );
+
+  }
+
+
+  ownerHomeLinkUserId =
+    null;
 
 }
 
