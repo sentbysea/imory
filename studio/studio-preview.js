@@ -1874,6 +1874,48 @@ function postInspectorSelectionToFrame(editId) {
    CSS로 바꾸는 계산은 iframe 쪽에서 studio-inspector-crop-model.js가
    한다(Studio가 확정 규칙을 만들 때 쓰는 바로 그 함수다 — 그래서
    "적용했더니 구도가 달라졌다"가 생기지 않는다). */
+/* 자르는 동안에만 쓰는 **임시 위치**의 기준점. "이 변을 이 자리에
+   붙여 둬라"가 전부이고, 확정 CSS에는 들어가지 않는다 — 변을 끌 때
+   반대쪽 변이 정렬 규칙 때문에 따라 움직이는 것을 막는다
+   (studio/inspector/studio-inspector-crop.js 임시 위치 절). */
+const INSPECTOR_PREVIEW_ANCHOR_SIDES = {
+  x: ["left", "right", "center"],
+  y: ["top", "bottom", "center"]
+};
+
+function inspectorPreviewCropAnchor(anchor) {
+
+  if (!anchor || typeof anchor !== "object") {
+    return undefined;
+  }
+
+  const number = (value) =>
+    (typeof value === "number" && Number.isFinite(value)) ? value : null;
+
+  const side = (value, axis) =>
+    INSPECTOR_PREVIEW_ANCHOR_SIDES[axis].includes(value) ? value : null;
+
+  const left = number(anchor.left);
+  const top = number(anchor.top);
+  const right = number(anchor.right);
+  const bottom = number(anchor.bottom);
+
+  if (left === null || top === null || right === null || bottom === null) {
+    return undefined;
+  }
+
+  return {
+    x: side(anchor.x, "x"),
+    y: side(anchor.y, "y"),
+    left,
+    top,
+    right,
+    bottom
+  };
+
+}
+
+
 function inspectorPreviewCropPayload(crop) {
 
   if (!crop || typeof crop !== "object") {
@@ -1889,7 +1931,8 @@ function inspectorPreviewCropPayload(crop) {
     x: number(crop.x),
     y: number(crop.y),
     frameWidth: number(crop.frameWidth),
-    fixedWidth: crop.fixedWidth === true
+    fixedWidth: crop.fixedWidth === true,
+    anchor: inspectorPreviewCropAnchor(crop.anchor)
   };
 
 }

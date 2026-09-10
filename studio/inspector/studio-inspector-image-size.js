@@ -214,6 +214,8 @@ function renderStudioInspectorSizeBlock(spec, info, declarations) {
   range.step = "1";
   range.value = String(value);
 
+  bindStudioInspectorRange(range);
+
   const number =
     document.createElement("input");
 
@@ -299,7 +301,14 @@ function syncStudioInspectorSizeInputs(width, options) {
     (options && options.from) || "";
 
   if (studioInspectorSizeRange && from !== "range") {
+
     studioInspectorSizeRange.value = String(width);
+
+    /* 값만 넣으면 채워진 구간이 따라오지 않는다(input 이벤트가
+       나지 않으므로) — 모서리를 끄는 동안 슬라이더 막대가 그
+       자리에 얼어붙는다. */
+    studioInspectorRangeFill(studioInspectorSizeRange);
+
   }
 
   if (studioInspectorSizeNumber && from !== "number") {

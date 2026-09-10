@@ -102,12 +102,17 @@ function clearStudioInspectorTransient() {
     finishStudioInspectorCropDrag(studioInspectorCropDrag);
   }
 
+  if (studioInspectorCropSideDrag) {
+    finishStudioInspectorCropSideDrag(studioInspectorCropSideDrag);
+  }
+
   studioInspectorTextDraft = null;
   studioInspectorComposing = false;
   studioInspectorSizeRange = null;
   studioInspectorSizeNumber = null;
   studioInspectorCropDraft = null;
   studioInspectorCropZoomRange = null;
+  studioInspectorCropLimitNote = null;
 
   clearStudioInspectorPreview();
 
@@ -490,6 +495,18 @@ document.addEventListener(
 
     }
 
+    /* 자유 비율로 변을 끄는 중이면 "끌기 시작 전 프레임"으로
+       되돌린다 — 자르기 편집 자체는 열린 채로 둔다. */
+    if (studioInspectorCropSideDrag) {
+
+      event.preventDefault();
+
+      cancelStudioInspectorCropSideDrag(null);
+
+      return;
+
+    }
+
     /* 자르기를 편집하던 중이면 그 임시 편집만 취소한다(선택과
        Inspector mode는 그대로) — 사용자가 되돌아간 결과를 바로
        확인할 수 있어야 한다. */
@@ -612,6 +629,14 @@ if (typeof window !== "undefined") {
         cropDraft:
           studioInspectorCropDraft ? { ...studioInspectorCropDraft } : null,
         cropDragging: !!studioInspectorCropDrag,
+
+        /* 자유 비율 라운드 — 변/모서리를 끄는 중인가. */
+        cropSizing: !!studioInspectorCropSideDrag,
+        cropSizingEdge:
+          studioInspectorCropSideDrag ? studioInspectorCropSideDrag.edge : null,
+
+        /* 확대 상한에 걸려 프레임이 멈춰 있는가(안내가 떠 있는가) */
+        cropLimited: studioInspectorCropLimited,
         metrics: studioInspectorMetrics ? { ...studioInspectorMetrics } : null
       };
 

@@ -240,9 +240,63 @@ function buildStudioInspectorLayer() {
     (event) => event.preventDefault()
   );
 
+  /* 삼등분 가이드선. 판의 자식이라 판이 hidden이면 함께 사라진다 —
+     "자르는 동안에만 보이고 적용하면 숨는다"를 따로 켜고 끌 필요가
+     없다. 선 자체는 pointer-events: none이라 그 위를 끌어도 사진
+     드래그가 그대로 시작된다(CSS). */
+  const cropGuide =
+    document.createElement("div");
+
+  cropGuide.className =
+    "studio-inspector-crop-guide";
+
+  cropGuide.id =
+    "studioInspectorCropGuide";
+
+  studioInspectorCropSurface.appendChild(cropGuide);
+
   studioInspectorLayer.appendChild(studioInspectorHoverBox);
   studioInspectorLayer.appendChild(studioInspectorSelectBox);
   studioInspectorLayer.appendChild(studioInspectorCropSurface);
+
+  /* 자유 비율 핸들 — 자르기 판과 같은 사각형 위에 앉지만 판보다
+     위에 있어야 잡힌다(레이어에 나중에 붙는다). 판과 마찬가지로
+     **보이는 사각형**을 쓴다(paintStudioInspectorCropHandles). */
+  studioInspectorCropHandles =
+    STUDIO_INSPECTOR_CROP_HANDLE_EDGES.map((edge) => {
+
+      const handle =
+        document.createElement("div");
+
+      handle.className =
+        `studio-inspector-crop-handle studio-inspector-crop-handle--${edge}`;
+
+      handle.id =
+        `studioInspectorCropHandle-${edge}`;
+
+      handle.dataset.inspectorCropHandle =
+        edge;
+
+      handle.hidden =
+        true;
+
+      handle.addEventListener(
+        "pointerdown",
+        (event) => beginStudioInspectorCropSideDrag(event, edge, handle)
+      );
+
+      handle.addEventListener(
+        "lostpointercapture",
+        cancelStudioInspectorCropSideDrag
+      );
+
+      handle.addEventListener("dragstart", (event) => event.preventDefault());
+
+      studioInspectorLayer.appendChild(handle);
+
+      return handle;
+
+    });
 
   /* 모서리 핸들 — 선택 테두리의 자식이 아니라 레이어의 형제로 둔다.
      테두리 박스는 Preview 영역과의 교집합으로 잘려 있어서(즉
@@ -487,6 +541,8 @@ function paintStudioInspectorHandles(rect, visibleRect) {
 
   paintStudioInspectorCropSurface(visible);
 
+  paintStudioInspectorCropHandles(visible);
+
   if (!studioInspectorHandles.length) {
     return;
   }
@@ -555,6 +611,22 @@ function paintStudioInspectorHandles(rect, visibleRect) {
 
 const STUDIO_INSPECTOR_POPOVER_GAP = 8;
 
+/* 자유 비율 핸들은 프레임 **밖으로** 나온다 — 변 막대는 10px,
+   모서리는 12px. 팝오버가 평소의 8px 간격만 두면 그 자리를 덮어
+   모서리 핸들이 팝오버 밑에 깔린다(눌러도 팝오버가 먼저 받는다).
+   자유 비율이 켜져 있는 동안에만 그만큼 더 비켜 앉는다. */
+const STUDIO_INSPECTOR_CROP_HANDLE_REACH = 16;
+
+
+function studioInspectorPopoverClearance() {
+
+  return STUDIO_INSPECTOR_POPOVER_GAP +
+    ((studioInspectorCropDraft && studioInspectorCropDraft.free)
+      ? STUDIO_INSPECTOR_CROP_HANDLE_REACH
+      : 0);
+
+}
+
 /* 지금 앉아 있는 자리.
 
    ★ 규칙 (요구사항 C)
@@ -582,7 +654,8 @@ function studioInspectorPopoverIsBusy() {
   return !!(
     studioInspectorPreviewActive ||
     studioInspectorDrag ||
-    studioInspectorCropDrag
+    studioInspectorCropDrag ||
+    studioInspectorCropSideDrag
   );
 
 }
@@ -601,8 +674,12 @@ function studioInspectorPopoverCovers(anchor, size, placement) {
     return false;
   }
 
+  /* 자유 비율에서는 잡을 것이 프레임 밖으로 더 나와 있다 */
   const pad =
-    STUDIO_INSPECTOR_HANDLE_HIT_PAD;
+    Math.max(
+      STUDIO_INSPECTOR_HANDLE_HIT_PAD,
+      studioInspectorPopoverClearance() - STUDIO_INSPECTOR_POPOVER_GAP
+    );
 
   return !(
     placement.left > anchor.left + anchor.width + pad ||
@@ -644,13 +721,19 @@ function studioInspectorPopoverSpot(anchor, size, bounds) {
   const maxTop =
     Math.max(minTop, bounds.bottom - size.height - STUDIO_INSPECTOR_POPOVER_GAP);
 
+  /* 앵커에서 떨어질 거리 — 자유 비율에서는 핸들이 나온 만큼 더
+     비켜 앉는다(studioInspectorPopoverClearance). stage 경계까지의
+     여백은 지금까지와 같은 8px 그대로다. */
+  const clearance =
+    studioInspectorPopoverClearance();
+
   if (studioInspectorCropDraft) {
 
     const right =
-      anchor.left + anchor.width + STUDIO_INSPECTOR_POPOVER_GAP;
+      anchor.left + anchor.width + clearance;
 
     const left =
-      anchor.left - size.width - STUDIO_INSPECTOR_POPOVER_GAP;
+      anchor.left - size.width - clearance;
 
     const beside =
       (right + size.width <= bounds.right - STUDIO_INSPECTOR_POPOVER_GAP)
@@ -669,12 +752,12 @@ function studioInspectorPopoverSpot(anchor, size, bounds) {
   }
 
   let top =
-    anchor.top + anchor.height + STUDIO_INSPECTOR_POPOVER_GAP;
+    anchor.top + anchor.height + clearance;
 
   if (top + size.height > bounds.bottom - STUDIO_INSPECTOR_POPOVER_GAP) {
 
     const above =
-      anchor.top - size.height - STUDIO_INSPECTOR_POPOVER_GAP;
+      anchor.top - size.height - clearance;
 
     top =
       above >= minTop ? above : maxTop;

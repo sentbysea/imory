@@ -503,6 +503,75 @@ function renderStudioInspectorCropBlock(spec, info, declarations) {
 }
 
 
+/* =========================================================
+   비율 버튼 — 보이는 사진을 그대로 두고 프레임만 바꾼다
+
+   비율만 갈아 끼우면(지금까지 그랬다) zoom/x/y 숫자는 그대로여도
+   **화면의 사진은 함께 커지고 작아진다** — 그 셋이 전부 프레임에
+   대한 비율이기 때문이다. 자유 ↔ 고정을 오갈 때 구도가 흔들리던
+   것이 이 때문이다.
+
+   그래서 변 핸들과 **같은 계산**을 지난다. 기준점은 왼쪽 위다:
+   비율 버튼은 프레임 **너비를 그대로 두고 높이만** 바꾸므로,
+   보통 흐름에서 프레임의 왼쪽 위는 제자리에 있다. 그 점을 기준으로
+   사진을 붙들어 두면 화면 위 사진이 정확히 그대로 남고, 프레임이
+   사진보다 커질 때만 덮는 데 필요한 최소 배율이 더해진다.
+========================================================== */
+
+function chooseStudioInspectorCropRatio(ratio) {
+
+  const draft =
+    studioInspectorCropDraft;
+
+  if (!draft || !ratio) {
+    return;
+  }
+
+  showStudioInspectorCropLimit(false);
+
+  const box =
+    studioInspectorCropFrameBox();
+
+  const height =
+    box.width > 0 ? box.width / Number(ratio) : 0;
+
+  if (!(box.width > 0) || !(box.height > 0) || !(height > 0)) {
+
+    updateStudioInspectorCropDraft({ ratio, free: false });
+
+    return;
+
+  }
+
+  const anchor =
+    { x: "left", y: "top" };
+
+  const next =
+    window.inspectorCropResizeFrame(
+      draft,
+      { width: box.width, height: box.height },
+      { width: box.width, height },
+      anchor,
+      studioInspectorCropNatural()
+    );
+
+  updateStudioInspectorCropDraft({
+    ratio,
+    free: false,
+
+    /* 임시 위치가 이미 얹혀 있으면 그 기준점도 왼쪽 위로 맞춘다 —
+       사진은 왼쪽 위를 붙들고 있는데 프레임은 아래쪽 변을 붙들고
+       있으면 둘이 서로 미끄러진다. */
+    anchor: draft.anchor ? studioInspectorCropAnchorFrom(anchor) : null,
+
+    zoom: next.zoom,
+    x: next.x,
+    y: next.y
+  });
+
+}
+
+
 function renderStudioInspectorCropEditor(block) {
 
   const draft =
@@ -527,21 +596,37 @@ function renderStudioInspectorCropEditor(block) {
     option.dataset.inspectorValue = name;
     option.textContent = label;
 
+    /* "자유"는 비율을 고르는 것이 아니라 **잠그지 않는 것**이다 —
+       고른 순간 화면은 그대로이고 변 핸들만 나타난다. 그래서
+       구도(확대·위치)도 하나도 건드리지 않는다(요구: 자유 ↔ 고정
+       전환에서 구도가 초기화되지 않는다). */
+    if (ratio === "free") {
+
+      if (draft.free) {
+        option.classList.add("is-active");
+      }
+
+      option.addEventListener("click", () => {
+        updateStudioInspectorCropDraft({ free: true });
+      });
+
+      ratioRow.appendChild(option);
+
+      return;
+
+    }
+
     const resolvedRatio =
       ratio === null
         ? studioInspectorCropMeasuredRatio()
         : window.inspectorAspectRatio(ratio);
 
-    if (resolvedRatio && draft.ratio === resolvedRatio) {
+    if (!draft.free && resolvedRatio && draft.ratio === resolvedRatio) {
       option.classList.add("is-active");
     }
 
     option.addEventListener("click", () => {
-
-      updateStudioInspectorCropDraft({
-        ratio: resolvedRatio || draft.ratio
-      });
-
+      chooseStudioInspectorCropRatio(resolvedRatio || draft.ratio);
     });
 
     ratioRow.appendChild(option);
@@ -556,6 +641,39 @@ function renderStudioInspectorCropEditor(block) {
 
   block.appendChild(ratioLabel);
   block.appendChild(ratioRow);
+
+  if (draft.free) {
+
+    const freeHint =
+      document.createElement("p");
+
+    freeHint.className = "studio-inspector-block-note";
+    freeHint.id = "studioInspectorCropFreeHint";
+    freeHint.textContent =
+      "프레임의 네 변과 모서리를 끌어 가로·세로를 따로 맞출 수 있어요 — 사진은 원래 비율 그대로 잘리기만 해요.";
+
+    block.appendChild(freeHint);
+
+  }
+
+  /* 확대 상한에 걸려 프레임이 멈췄다는 안내. 항상 만들어 두고
+     보이기만 토글한다 — 끄는 동안 폼을 다시 그리지 않고 이 노드만
+     바꾸기 위해서다(showStudioInspectorCropLimit). */
+  const limitNote =
+    document.createElement("p");
+
+  limitNote.className = "studio-inspector-block-note studio-inspector-block-note--warn";
+  limitNote.id = "studioInspectorCropLimitNote";
+  limitNote.textContent =
+    `확대 한계(${Math.round(window.INSPECTOR_CROP_ZOOM_MAX * 100)}%)에 닿아 여기까지만 줄일 수 있어요 — 더 줄이면 사진이 함께 작아져요.`;
+
+  limitNote.hidden =
+    !studioInspectorCropLimited;
+
+  block.appendChild(limitNote);
+
+  studioInspectorCropLimitNote =
+    limitNote;
 
   /* 확대 — 100%가 "프레임을 딱 채우는 크기"다. 그보다 작게는
      내려가지 않는다(내려가면 프레임 안에 빈틈이 생긴다). */
@@ -578,6 +696,8 @@ function renderStudioInspectorCropEditor(block) {
   zoom.step = "1";
   zoom.value = String(Math.round(draft.zoom * 100));
 
+  bindStudioInspectorRange(zoom);
+
   /* 끄는 동안에는 미리보기만, 손을 뗐을 때 폼을 다시 그린다 —
      입력 중에 폼을 다시 그리면 지금 잡고 있는 슬라이더가 통째로
      교체된다(크기 슬라이더와 같은 이유). */
@@ -585,6 +705,10 @@ function renderStudioInspectorCropEditor(block) {
 
     zoomLabel.textContent =
       `확대 (${Math.round(Number(zoom.value))}%)`;
+
+    /* 확대가 바뀌면 "여기까지만 줄일 수 있다"의 기준도 바뀐다 —
+       옛 안내가 남아 있지 않게 한다. */
+    showStudioInspectorCropLimit(false);
 
     updateStudioInspectorCropDraft(
       { zoom: Number(zoom.value) / 100 },
@@ -594,6 +718,7 @@ function renderStudioInspectorCropEditor(block) {
   });
 
   zoom.addEventListener("change", () => {
+    showStudioInspectorCropLimit(false);
     updateStudioInspectorCropDraft({ zoom: Number(zoom.value) / 100 });
   });
 
@@ -731,6 +856,8 @@ function renderStudioInspectorCropAxis(row, axis, travel, labels) {
   range.value =
     String(Math.round((axis === "x" ? studioInspectorCropDraft.x : studioInspectorCropDraft.y) * 100));
 
+  bindStudioInspectorRange(range);
+
   /* 확대 슬라이더와 같은 규칙 — 끄는 동안에는 미리보기만, 손을
      뗐을 때 한 번 폼을 다시 그린다(그리는 순간 지금 잡고 있는
      슬라이더 요소가 통째로 교체되기 때문). */
@@ -857,7 +984,12 @@ function beginStudioInspectorCropEdit() {
       x: context.crop.x,
       y: context.crop.y,
       frameWidth: context.crop.frameWidth || measuredWidth,
-      fixedWidth: context.crop.fixedWidth
+      fixedWidth: context.crop.fixedWidth,
+      free: false,
+
+      /* 임시 위치는 자르기를 여는 순간에는 없다 — 변을 처음 끌 때
+         생기고, 적용/취소와 함께 사라진다. */
+      anchor: null
     };
 
   } else {
@@ -874,10 +1006,14 @@ function beginStudioInspectorCropEdit() {
       x: 0,
       y: 0,
       frameWidth: measuredWidth,
-      fixedWidth: Number.isFinite(declaredWidth) && declaredWidth > 0
+      fixedWidth: Number.isFinite(declaredWidth) && declaredWidth > 0,
+      free: false,
+      anchor: null
     };
 
   }
+
+  showStudioInspectorCropLimit(false);
 
   renderStudioInspectorPopover();
 
@@ -900,6 +1036,7 @@ function updateStudioInspectorCropDraft(patch, options) {
   next.zoom = window.inspectorCropClampZoom(next.zoom);
   next.x = window.inspectorCropClampOffset(next.x);
   next.y = window.inspectorCropClampOffset(next.y);
+  next.free = !!next.free;
 
   studioInspectorCropDraft =
     next;
@@ -1054,6 +1191,10 @@ function commitStudioInspectorCropDraft() {
     finishStudioInspectorCropDrag(studioInspectorCropDrag);
   }
 
+  if (studioInspectorCropSideDrag) {
+    finishStudioInspectorCropSideDrag(studioInspectorCropSideDrag);
+  }
+
   clearStudioInspectorPreview();
 
   if (applyStudioInspectorCrop(draft)) {
@@ -1067,6 +1208,10 @@ function cancelStudioInspectorCropDraft() {
 
   if (studioInspectorCropDrag) {
     finishStudioInspectorCropDrag(studioInspectorCropDrag);
+  }
+
+  if (studioInspectorCropSideDrag) {
+    finishStudioInspectorCropSideDrag(studioInspectorCropSideDrag);
   }
 
   studioInspectorCropDraft =
@@ -1103,6 +1248,10 @@ function resetStudioInspectorCrop() {
 
   if (studioInspectorCropDrag) {
     finishStudioInspectorCropDrag(studioInspectorCropDrag);
+  }
+
+  if (studioInspectorCropSideDrag) {
+    finishStudioInspectorCropSideDrag(studioInspectorCropSideDrag);
   }
 
   studioInspectorCropDraft =
@@ -1368,6 +1517,404 @@ function cancelStudioInspectorCropDrag(event) {
 
 
 /* =========================================================
+   자유 비율 — 변과 모서리 끌기
+
+   ★ 이 조작이 바꾸는 것은 **프레임의 가로·세로** 둘뿐이다.
+     사진은 손대지 않는다 — 원본 비율 그대로 잘리기만 한다.
+     그런데 자르기 값(zoom/x/y)은 전부 "프레임에 대한 비율"이라
+     프레임만 바꾸면 사진도 함께 커지고 작아진다. 그래서 끌 때마다
+     inspectorCropResizeFrame()으로 zoom/x/y를 **사진이 제자리에
+     남도록** 다시 계산한다(그 함수 머리말 참고).
+
+   ★ 기준점은 "잡지 않은 반대쪽 변"이다. 오른쪽 변을 끌면 왼쪽
+     변에서 잰 사진까지의 거리가 그대로 유지된다 — 잡은 쪽만
+     움직이는 것으로 보인다.
+
+   ★ 포인터 이동량(delta)으로 잰다. 시작할 때 프레임 크기와 포인터
+     위치를 한 번만 잡아 두므로, 끄는 동안 프레임이 자기 자리에서
+     밀려도(가운데 정렬된 프레임은 폭이 바뀌면 양쪽이 함께 움직인다)
+     계산이 흔들리지 않는다 — 모서리 크기 조절이 반대쪽 모서리를
+     한 번만 잡아 두는 것과 같은 이유다.
+
+   ★ 사진 드래그와 절대 겹치지 않는다. 핸들은 판보다 위에 있고
+     pointerdown에서 전파를 끊는다.
+========================================================== */
+
+/* 원본 픽셀 크기 — cover가 잘라낸 몫을 아는 유일한 근거다. 모르면
+   상자 자체를 사진으로 보는 쪽으로 계산이 내려간다(모델 참고). */
+function studioInspectorCropNatural() {
+
+  const metrics =
+    studioInspectorMetrics;
+
+  return {
+    width: metrics ? metrics.naturalWidth : 0,
+    height: metrics ? metrics.naturalHeight : 0
+  };
+
+}
+
+
+/* 끌지 않은 변 — 사진 계산과 임시 위치가 **같은 기준점**을 쓴다.
+   오른쪽 변을 끌면 x는 "left"다: 사진도 왼쪽 변에서 잰 거리를
+   유지하고, 프레임도 왼쪽 변을 그 자리에 못 박는다. 둘이 다르면
+   "프레임은 가만히 있는데 사진만 미끄러진다"가 된다. */
+function studioInspectorCropAnchorOf(edge) {
+
+  return {
+    x:
+      edge.indexOf("e") !== -1
+        ? "left"
+        : (edge.indexOf("w") !== -1 ? "right" : "center"),
+    y:
+      edge.indexOf("s") !== -1
+        ? "top"
+        : (edge.indexOf("n") !== -1 ? "bottom" : "center")
+  };
+
+}
+
+
+/* =========================================================
+   임시 위치(anchor) — "반대쪽 변을 그 자리에 못 박는다"
+
+   ★ 무엇이 문제였나
+   프레임은 보통 흐름 안에 있고, 폭이 바뀌면 **정렬 규칙이 자리를
+   다시 정한다.** 가운데 정렬(margin: 0 auto)이면 폭을 10px 늘렸을
+   때 양쪽 변이 5px씩 벌어진다 — 잡은 변은 손의 절반만 따라오고
+   반대쪽 변은 가만히 있지 않는다. 오른쪽 정렬이면 오른쪽 변을
+   끌어도 왼쪽 변이 움직인다.
+
+   이동량을 2배로 키우는 방식은 잡은 변만 맞추고 반대쪽 변은 그대로
+   흔들리므로 답이 아니다.
+
+   ★ 어떻게 하나 — 재고 그만큼 되민다
+   자르는 동안에만 프레임에 `translate`를 얹어 **고정하기로 한 변을
+   시작 자리에 붙여 둔다.** 정렬 규칙을 알아낼 필요가 없다:
+   iframe이 새 폭으로 한 번 배치한 **결과를 재서** 어긋난 만큼
+   되민다(studio/preview/preview-bridge.js). 그러면
+   잡은 변 = 고정된 변 ± 폭이므로, 폭이 포인터를 따라오는 한
+   잡은 변도 포인터를 1:1로 따라온다.
+
+   ★ 임시 위치와 레이아웃 정렬을 나눈다
+   `translate`는 **임시 미리보기에만** 얹힌다 — 확정 CSS에는 한 글자도
+   들어가지 않고, 레이아웃도 밀지 않는다(transform이라 주변 글이
+   움직이지 않는다). "적용"을 누르면 임시 반영이 걷히면서 프레임은
+   새 크기 그대로 **스킨의 정렬 규칙이 정한 자리**로 앉는다.
+
+   좌표는 iframe 문서 기준이다(studioInspectorSelection.rect가 그
+   좌표계다). 자르는 동안 iframe은 스크롤되지 않는다 — 포인터를
+   Studio overlay가 잡고 있기 때문이다.
+========================================================== */
+
+function studioInspectorCropAnchorFrom(modelAnchor) {
+
+  const rect =
+    studioInspectorSelection ? studioInspectorSelection.rect : null;
+
+  if (!rect || !(rect.width > 0) || !(rect.height > 0)) {
+    return null;
+  }
+
+  return {
+    x: modelAnchor.x,
+    y: modelAnchor.y,
+    left: rect.left,
+    top: rect.top,
+    right: rect.left + rect.width,
+    bottom: rect.top + rect.height
+  };
+
+}
+
+
+/* 확대 상한에 걸려 멈췄다는 안내 — 끄는 동안 폼을 통째로 다시
+   그리면 지금 잡고 있는 것들이 교체되므로 이 노드만 바꾼다. */
+function showStudioInspectorCropLimit(limited) {
+
+  studioInspectorCropLimited =
+    !!limited;
+
+  if (!studioInspectorCropLimitNote) {
+    return;
+  }
+
+  studioInspectorCropLimitNote.hidden =
+    !limited;
+
+}
+
+
+/* 프레임 가로 상한 — 크기 슬라이더와 같은 값이다(부모 안쪽 폭).
+   그보다 넓게 끌 수 있게 두면 모바일에서 곧바로 가로 넘침이다. */
+function studioInspectorCropMaxWidth(current) {
+
+  return studioInspectorSizeMax(current || 0);
+
+}
+
+
+function beginStudioInspectorCropSideDrag(event, edge, handle) {
+
+  if (
+    !studioInspectorEnabled ||
+    !studioInspectorCropDraft ||
+    !studioInspectorCropDraft.free ||
+    !studioInspectorSelection ||
+    studioInspectorCropSideDrag ||
+    studioInspectorCropDrag
+  ) {
+    return;
+  }
+
+  const box =
+    studioInspectorCropFrameBox();
+
+  const mapped =
+    studioInspectorMapRectRaw(studioInspectorSelection.rect);
+
+  if (!mapped || !mapped.scale || !(box.width > 0) || !(box.height > 0)) {
+    return;
+  }
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const modelAnchor =
+    studioInspectorCropAnchorOf(edge);
+
+  studioInspectorCropSideDrag = {
+    pointerId: event.pointerId,
+    edge,
+    handle,
+    scale: mapped.scale,
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startWidth: box.width,
+    startHeight: box.height,
+    natural: studioInspectorCropNatural(),
+    crop: { ...studioInspectorCropDraft },
+
+    /* 사진 계산의 기준점과 임시 위치의 기준점 — 같은 변이다 */
+    modelAnchor,
+    anchor: studioInspectorCropAnchorFrom(modelAnchor),
+
+    width: box.width,
+    height: box.height,
+    request: { width: box.width, height: box.height },
+    frame: 0
+  };
+
+  showStudioInspectorCropLimit(false);
+
+  try {
+    handle.setPointerCapture(event.pointerId);
+  } catch (err) {
+    /* 캡처가 안 되는 환경에서도 아래 document 리스너가 받는다 */
+  }
+
+  if (studioInspectorLayer) {
+    studioInspectorLayer.classList.add("is-crop-sizing");
+  }
+
+}
+
+
+function moveStudioInspectorCropSideDrag(event) {
+
+  const drag =
+    studioInspectorCropSideDrag;
+
+  if (!drag || event.pointerId !== drag.pointerId) {
+    return;
+  }
+
+  event.preventDefault();
+
+  const dx =
+    (event.clientX - drag.startClientX) / drag.scale;
+
+  const dy =
+    (event.clientY - drag.startClientY) / drag.scale;
+
+  const min =
+    window.INSPECTOR_CROP_FRAME_MIN || 24;
+
+  let width =
+    drag.startWidth;
+
+  let height =
+    drag.startHeight;
+
+  if (drag.edge.indexOf("e") !== -1) {
+    width = drag.startWidth + dx;
+  } else if (drag.edge.indexOf("w") !== -1) {
+    width = drag.startWidth - dx;
+  }
+
+  if (drag.edge.indexOf("s") !== -1) {
+    height = drag.startHeight + dy;
+  } else if (drag.edge.indexOf("n") !== -1) {
+    height = drag.startHeight - dy;
+  }
+
+  width =
+    Math.round(
+      Math.min(Math.max(width, min), studioInspectorCropMaxWidth(drag.startWidth))
+    );
+
+  /* 세로는 비율 한계로 누른다 — aspect-ratio가 어차피 clamp되므로
+     그보다 넓게 받아 봐야 화면과 값이 어긋나기만 한다. */
+  height =
+    Math.round(Math.min(Math.max(height, min), width * 20));
+
+  if (width === drag.request.width && height === drag.request.height) {
+    return;
+  }
+
+  drag.request = { width, height };
+
+  if (drag.frame) {
+    return;
+  }
+
+  drag.frame =
+    window.requestAnimationFrame(() => {
+
+      drag.frame = 0;
+
+      if (studioInspectorCropSideDrag !== drag) {
+        return;
+      }
+
+      const from = {
+        width: drag.startWidth,
+        height: drag.startHeight
+      };
+
+      /* 확대 상한(4배)에 걸리면 값을 자르지 않고 **프레임을 그
+         지점에서 멈춘다** — 자르면 사진 배율이 조용히 작아진다. */
+      const fit =
+        window.inspectorCropFitFrame(
+          drag.crop,
+          from,
+          drag.request,
+          drag.modelAnchor,
+          drag.natural
+        );
+
+      const box = {
+        width: Math.max(1, Math.round(fit.width)),
+        height: Math.max(1, Math.round(fit.height))
+      };
+
+      const next =
+        window.inspectorCropResizeFrame(
+          drag.crop,
+          from,
+          box,
+          drag.modelAnchor,
+          drag.natural
+        );
+
+      drag.width = box.width;
+      drag.height = box.height;
+
+      showStudioInspectorCropLimit(fit.limited);
+
+      updateStudioInspectorCropDraft(
+        {
+          ratio: window.inspectorAspectRatio(box.width / box.height) || drag.crop.ratio,
+          frameWidth: box.width,
+
+          /* 가로를 직접 끈 순간부터 그 폭은 "사용자가 정한 값"이다 —
+             자르기를 풀 때 되돌려 준다(래퍼 표식 "fixed"). */
+          fixedWidth:
+            drag.edge.indexOf("e") !== -1 || drag.edge.indexOf("w") !== -1
+              ? true
+              : !!drag.crop.fixedWidth,
+
+          anchor: drag.anchor || drag.crop.anchor || null,
+
+          zoom: next.zoom,
+          x: next.x,
+          y: next.y
+        },
+        { silent: true }
+      );
+
+    });
+
+}
+
+
+function finishStudioInspectorCropSideDrag(drag) {
+
+  if (drag.frame) {
+    window.cancelAnimationFrame(drag.frame);
+  }
+
+  try {
+
+    if (
+      drag.handle &&
+      drag.handle.hasPointerCapture &&
+      drag.handle.hasPointerCapture(drag.pointerId)
+    ) {
+      drag.handle.releasePointerCapture(drag.pointerId);
+    }
+
+  } catch (err) {
+    /* 이미 풀렸으면 그만이다 */
+  }
+
+  studioInspectorCropSideDrag =
+    null;
+
+  if (studioInspectorLayer) {
+    studioInspectorLayer.classList.remove("is-crop-sizing");
+  }
+
+}
+
+
+function endStudioInspectorCropSideDrag(event) {
+
+  const drag =
+    studioInspectorCropSideDrag;
+
+  if (!drag || event.pointerId !== drag.pointerId) {
+    return;
+  }
+
+  event.preventDefault();
+
+  finishStudioInspectorCropSideDrag(drag);
+
+  /* 변을 끄는 것도 확정이 아니다 — 임시 반영만 남기고 "적용"을
+     기다린다. 폼은 다시 그려 확대 표시를 지금 값에 맞춘다. */
+  renderStudioInspectorPopover();
+
+}
+
+
+function cancelStudioInspectorCropSideDrag(event) {
+
+  const drag =
+    studioInspectorCropSideDrag;
+
+  if (!drag || (event && event.pointerId !== drag.pointerId)) {
+    return;
+  }
+
+  finishStudioInspectorCropSideDrag(drag);
+
+  updateStudioInspectorCropDraft({ ...drag.crop });
+
+}
+
+
+/* =========================================================
    드래그 판 위치 — 프레임(= 지금 선택 테두리)과 정확히 같은 자리
 
    잘라낸 부분까지 덮으면 Preview 밖으로 삐져나가므로, 테두리와
@@ -1398,6 +1945,63 @@ function paintStudioInspectorCropSurface(rect) {
 }
 
 
+/* =========================================================
+   자유 비율 핸들 위치 — 드래그 판과 **같은 사각형**
+
+   판과 한 함수 안에서 이어 칠한다(overlay paintStudioInspectorHandles).
+   그래야 "판은 여기 있는데 핸들은 저기 있다"가 생기지 않는다.
+
+   좌표도 판과 같은 studioInspectorMapRect(= 보이는 사각형)를 쓴다.
+   조상 overflow가 프레임을 잘라내고 있으면 레이아웃 사각형에는
+   화면에 그려지지 않는 부분이 들어 있는데, 그 자리에 핸들을 두면
+   아무 것도 없는 곳에 손잡이가 뜬다(AI-6E 라운드에서 판에 대해
+   같은 판단을 했다).
+
+   자유 비율일 때만 보인다 — 고정 비율에서 변을 끌면 비율이 깨지고,
+   그러면 사용자가 방금 고른 1:1이 조용히 1.03:1이 된다.
+========================================================== */
+
+function paintStudioInspectorCropHandles(rect) {
+
+  if (!studioInspectorCropHandles.length) {
+    return;
+  }
+
+  const mapped =
+    (studioInspectorCropDraft && studioInspectorCropDraft.free)
+      ? studioInspectorMapRect(rect)
+      : null;
+
+  studioInspectorCropHandles.forEach((handle) => {
+
+    if (!mapped) {
+      handle.hidden = true;
+      return;
+    }
+
+    const edge =
+      handle.dataset.inspectorCropHandle;
+
+    const x =
+      edge.indexOf("w") !== -1
+        ? mapped.left
+        : (edge.indexOf("e") !== -1 ? mapped.left + mapped.width : mapped.left + mapped.width / 2);
+
+    const y =
+      edge.indexOf("n") !== -1
+        ? mapped.top
+        : (edge.indexOf("s") !== -1 ? mapped.top + mapped.height : mapped.top + mapped.height / 2);
+
+    handle.style.left = `${x}px`;
+    handle.style.top = `${y}px`;
+
+    handle.hidden = false;
+
+  });
+
+}
+
+
 /*
   move/up은 판이 아니라 document에서 받는다 — 포인터가 판 밖으로,
   iframe 위로, 창 밖으로 나가도 계속 도착한다(모서리 드래그와
@@ -1408,3 +2012,9 @@ document.addEventListener("pointermove", moveStudioInspectorCropDrag);
 document.addEventListener("pointerup", endStudioInspectorCropDrag);
 
 document.addEventListener("pointercancel", cancelStudioInspectorCropDrag);
+
+document.addEventListener("pointermove", moveStudioInspectorCropSideDrag);
+
+document.addEventListener("pointerup", endStudioInspectorCropSideDrag);
+
+document.addEventListener("pointercancel", cancelStudioInspectorCropSideDrag);

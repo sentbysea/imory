@@ -55,6 +55,62 @@
 
 
 /* =========================================================
+   슬라이더 — 채워진 구간을 그리는 값 하나
+
+   너비 · 확대 · 위치 X/Y 넷이 같은 모양이어야 한다(슬라이더 디자인
+   통일). 트랙과 손잡이는 CSS가 그리지만, "어디까지 채워졌는가"만은
+   CSS가 알 수 없다 — ::-moz-range-progress 말고는 채움을 그려 주는
+   표준이 없어서, Chromium과 WebKit에서는 트랙 배경을 가로
+   그라디언트로 그리고 그 경계를 여기서 넣어 준다.
+
+   값이 바뀌는 자리는 셋이다: 사용자가 끄는 중(input), 손을 뗀
+   뒤(change), 그리고 **프로그램이 값을 넣는 경우**(모서리 드래그가
+   너비 슬라이더를 따라 움직이게 하는 syncStudioInspectorSizeInputs).
+   앞의 둘은 아래 bind가 걸어 주고, 셋째는 그 자리에서 직접 부른다.
+========================================================== */
+
+function studioInspectorRangeFill(range) {
+
+  if (!range) {
+    return;
+  }
+
+  const min =
+    Number(range.min);
+
+  const max =
+    Number(range.max);
+
+  const value =
+    Number(range.value);
+
+  const span =
+    (Number.isFinite(min) && Number.isFinite(max)) ? max - min : 0;
+
+  const percent =
+    span > 0 ? ((value - min) / span) * 100 : 0;
+
+  range.style.setProperty(
+    "--imory-range-fill",
+    `${Math.min(Math.max(Number.isFinite(percent) ? percent : 0, 0), 100)}%`
+  );
+
+}
+
+
+function bindStudioInspectorRange(range) {
+
+  studioInspectorRangeFill(range);
+
+  range.addEventListener("input", () => studioInspectorRangeFill(range));
+  range.addEventListener("change", () => studioInspectorRangeFill(range));
+
+  return range;
+
+}
+
+
+/* =========================================================
    요소별 컨트롤 목록 — capabilities를 그대로 따른다
 
    "모든 요소에 같은 설정 목록을 보여주지 않는다"(요구사항 7절)는
@@ -589,7 +645,14 @@ function studioInspectorPopoverShapeOf(resolved) {
     studioInspectorSelection ? studioInspectorSelection.editId : "",
     resolved ? resolved.info.kind : "",
     studioInspectorEditingOpen ? "open" : "shut",
-    studioInspectorCropDraft ? "crop" : "-"
+
+    /* 자유 비율은 팝오버가 **앉을 자리**를 바꾼다 — 프레임 밖으로
+       나온 핸들만큼 더 비켜 앉아야 모서리 핸들이 팝오버 밑에 깔리지
+       않는다(studio-inspector-overlay.js 팝오버 자리 절). 그래서
+       자르기 여부와 따로 적는다. */
+    studioInspectorCropDraft
+      ? (studioInspectorCropDraft.free ? "crop-free" : "crop")
+      : "-"
   ].join("|");
 
 }
@@ -609,6 +672,20 @@ function renderStudioInspectorPopover() {
   studioInspectorSizeRange = null;
   studioInspectorSizeNumber = null;
   studioInspectorCropZoomRange = null;
+  studioInspectorCropLimitNote = null;
+
+  /* 다시 그리기 전에 **팝오버 안에** 포커스가 있었다면 어디였는지
+     기억한다. 슬라이더는 방향키 한 번마다 change가 나고, 그때마다
+     폼을 다시 그리므로 잡고 있던 요소가 통째로 교체된다 — 그대로
+     두면 화살표를 한 번 누른 뒤 포커스가 사라져 키보드로는 값을
+     이어서 바꿀 수 없다. 팝오버 밖(예: AI 입력칸)에 있던 포커스는
+     건드리지 않는다. */
+  const focusedId =
+    (document.activeElement &&
+     document.activeElement !== document.body &&
+     studioInspectorPopover.contains(document.activeElement))
+      ? document.activeElement.id
+      : "";
 
   if (!resolved) {
 
@@ -719,6 +796,19 @@ function renderStudioInspectorPopover() {
       : null,
     { force: shapeChanged }
   );
+
+  /* 같은 id의 컨트롤이 다시 만들어졌으면 포커스를 돌려준다 —
+     사용자에게는 "슬라이더를 계속 잡고 있는" 상태로 보인다. */
+  if (focusedId) {
+
+    const restored =
+      studioInspectorPopover.querySelector(`#${CSS.escape(focusedId)}`);
+
+    if (restored && typeof restored.focus === "function" && !restored.disabled) {
+      restored.focus({ preventScroll: true });
+    }
+
+  }
 
   notifyStudioInspectorSelectionChanged();
 

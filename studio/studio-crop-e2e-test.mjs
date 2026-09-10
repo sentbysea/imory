@@ -36,6 +36,14 @@
         자르기 없음, 로드 실패 이미지는 이유를 안내하고 비활성
      K. 이미지 교체 — 원본 비율이 달라져도 빈틈이 생기지 않는다
      L. 모바일 — 자른 뒤에도 가로 넘침이 없다
+     P. 자유 비율 — 네 변/모서리로 가로·세로를 따로 정한다. 사진은
+        원본 비율 그대로이고(왜곡 없음) 줄일 때는 배율·위치가
+        유지된다. 자유 ↔ 고정 전환에서 구도가 초기화되지 않고,
+        삼등분 가이드선은 자르는 동안만 보인다. Escape/적용/Undo/
+        초기화/Save·재로드/Export·Import
+     Q. 자유 비율 핸들 좌표 — Desktop / AI 패널 / Mobile 축소 배율
+     R. 슬라이더 — 너비·확대·위치가 같은 규칙(3px 막대·12px 흰 손잡이)
+        을 쓰고, 방향키 조작·채움 비율·비활성 구분이 그대로다
      N. 전 과정 /api/skin-ai 호출 0회
      Z. 콘솔 에러 없음
 
@@ -45,7 +53,8 @@
      node studio/studio-crop-e2e-test.mjs --only=ratio
 
    --only= 뒤에 쓸 수 있는 이름:
-     ratio / compose / temp / coexist / geometry / persist / guard / frame
+     ratio / compose / temp / coexist / geometry / persist / guard /
+     frame / free / freegeo / sliders
 ========================================================== */
 
 import fs from "node:fs";
@@ -411,6 +420,80 @@ async function chooseCropRatio(page, value) {
 }
 
 
+/* 자유 비율 핸들의 화면 좌표 — 없으면(고정 비율이면) null. */
+async function cropHandleRects(page) {
+
+  return page.evaluate(() => {
+
+    const out = {};
+
+    document.querySelectorAll("[data-inspector-crop-handle]").forEach((el) => {
+
+      if (el.hidden) return;
+
+      const r = el.getBoundingClientRect();
+      const round = (n) => Math.round(n * 10) / 10;
+
+      out[el.dataset.inspectorCropHandle] = {
+        x: round(r.left + r.width / 2),
+        y: round(r.top + r.height / 2),
+        width: round(r.width),
+        height: round(r.height)
+      };
+
+    });
+
+    return out;
+
+  });
+
+}
+
+
+/* 변/모서리 핸들 하나를 실제 포인터로 끈다. dx/dy는 **화면 px**이라
+   Mobile 축소 배율까지 그대로 지난다. */
+async function dragCropHandle(page, edge, dx, dy, options) {
+
+  const start = await page.evaluate((name) => {
+
+    const el = document.querySelector(`[data-inspector-crop-handle="${name}"]`);
+
+    if (!el || el.hidden) return null;
+
+    const r = el.getBoundingClientRect();
+
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+
+  }, edge);
+
+  if (!start) {
+    throw new Error(`자유 비율 핸들이 보이지 않습니다: ${edge}`);
+  }
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+
+  for (let step = 1; step <= 4; step += 1) {
+    await page.mouse.move(start.x + (dx * step) / 4, start.y + (dy * step) / 4);
+    await sleep(50);
+  }
+
+  if (options && options.escape) {
+    await page.keyboard.press("Escape");
+    await sleep(250);
+    await page.mouse.up();
+    await sleep(350);
+    return start;
+  }
+
+  await page.mouse.up();
+  await sleep(400);
+
+  return start;
+
+}
+
+
 async function setCropZoom(page, percent) {
 
   await page.evaluate((next) => {
@@ -550,6 +633,61 @@ async function cropGeometry(page, selector) {
 }
 
 
+/* =========================================================
+   실제로 **그려진 사진**의 사각형
+
+   cropGeometry는 <img> 요소의 사각형까지만 본다. object-fit: cover는
+   그 요소 안에서 사진을 한 번 더 자르므로, "사진이 늘어나거나
+   찌그러지지 않았는가 / 배율이 그대로인가"는 여기서 원본 크기로
+   되짚어야 잴 수 있다.
+========================================================== */
+
+async function drawnPhoto(page, selector) {
+
+  return page.evaluate((sel) => {
+
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    const el = doc.querySelector(sel);
+
+    if (!el) return null;
+
+    const view = doc.defaultView;
+    const style = view.getComputedStyle(el);
+    const box = el.getBoundingClientRect();
+
+    const nW = Number(el.naturalWidth) || 0;
+    const nH = Number(el.naturalHeight) || 0;
+
+    if (!nW || !nH) return null;
+
+    const scale =
+      style.objectFit === "cover"
+        ? Math.max(box.width / nW, box.height / nH)
+        : Math.min(box.width / nW, box.height / nH);
+
+    const width = nW * scale;
+    const height = nH * scale;
+
+    const pos = String(style.objectPosition).trim().split(/\s+/).map(parseFloat);
+    const px = (Number.isFinite(pos[0]) ? pos[0] : 50) / 100;
+    const py = (Number.isFinite(pos[1]) ? pos[1] : px * 100) / 100;
+
+    const r = (n) => Math.round(n * 100) / 100;
+
+    return {
+      width: r(width),
+      height: r(height),
+      left: r(box.left + (box.width - width) * px),
+      top: r(box.top + (box.height - height) * py),
+      ratio: r(width / height),
+      naturalRatio: r(nW / nH)
+    };
+
+  }, selector);
+
+}
+
+
 /* 프레임 어디에도 사진이 없는 자리가 없는가 */
 function coversFrame(geometry) {
 
@@ -580,6 +718,11 @@ function inspectorState(page) {
 
 
 const near = (a, b, tolerance = 1.6) => Math.abs(a - b) <= tolerance;
+
+/* 사진 위치는 "프레임을 덮는" 범위 안으로 눌린다 — 사진이 프레임보다
+   큰 만큼(음수)과 0 사이다. 그 범위가 0이면 사진이 프레임에 꼭 맞아
+   움직일 여유가 없다. */
+const clampInside = (value, lowest) => Math.min(Math.max(value, lowest), 0);
 
 
 /* =========================================================
@@ -1408,6 +1551,1064 @@ async function runPersist(context) {
 
 
 /* =========================================================
+   P. 자유 비율 — 네 변과 모서리로 프레임을 직접 정한다
+
+   ★ 이 절이 반복해서 재는 것 세 가지
+     1) 사진이 **원본 비율 그대로**인가 (drawnPhoto.ratio ===
+        naturalRatio) — 프레임을 바꿔도 늘어나거나 찌그러지지 않는다
+     2) 빈틈이 없는가 (coversFrame)
+     3) 프레임을 줄일 때 **사진 배율·위치가 유지**되는가 — 줄인 것은
+        보이는 범위이지 사진이 아니다
+
+   ★ 좌우 핸들은 너비만, 상하 핸들은 높이만 바꾼다. 반대쪽 변이
+     기준점이라 "잡은 쪽만 움직인다"로 보여야 한다.
+========================================================== */
+
+async function runFree(context) {
+
+  const page = await openStudio(context, { viewport: { width: 1440, height: 900 } });
+  await enableInspector(page);
+
+  await selectInPreview(page, ".y-cover");
+  await openDirectEdit(page);
+  await openCrop(page);
+
+  /* --- P1. 자유를 고르기 전에는 변 핸들이 없다 --- */
+
+  const fixedHandles = await cropHandleRects(page);
+
+  const beforeFree = await cropGeometry(page, ".y-cover");
+
+  await chooseCropRatio(page, "free");
+
+  const freeHandles = await cropHandleRects(page);
+  const afterFree = await cropGeometry(page, ".y-cover");
+
+  record(
+    "P1. '자유'를 고르면 화면은 그대로이고 변·모서리 핸들 8개가 나타난다(고정 비율에서는 하나도 없다)",
+    Object.keys(fixedHandles).length === 0 &&
+      Object.keys(freeHandles).length === 8 &&
+      near(afterFree.frame.width, beforeFree.frame.width) &&
+      near(afterFree.frame.height, beforeFree.frame.height),
+    JSON.stringify({
+      fixed: Object.keys(fixedHandles).length,
+      free: Object.keys(freeHandles).sort(),
+      frame: afterFree.frame
+    })
+  );
+
+  /* 핸들이 실제로 프레임의 변 가운데/모서리에 앉아 있는가 */
+  const surface = await cropSurfaceRect(page);
+
+  record(
+    "P1b. 핸들 좌표가 지금 프레임의 변 가운데·모서리와 정확히 맞는다",
+    near(freeHandles.n.x, (surface.left + surface.right) / 2) &&
+      near(freeHandles.n.y, surface.top) &&
+      near(freeHandles.s.y, surface.bottom) &&
+      near(freeHandles.w.x, surface.left) &&
+      near(freeHandles.e.x, surface.right) &&
+      near(freeHandles.nw.x, surface.left) && near(freeHandles.nw.y, surface.top) &&
+      near(freeHandles.se.x, surface.right) && near(freeHandles.se.y, surface.bottom) &&
+      /* 보이는 막대는 얇아도 **잡는 자리**는 넉넉하다 */
+      freeHandles.n.height >= 18 && freeHandles.w.width >= 18,
+    JSON.stringify({ surface, n: freeHandles.n, w: freeHandles.w, se: freeHandles.se })
+  );
+
+  /* --- P2. 아래 변 — 높이만 줄고, 사진은 제자리에 남는다 --- */
+
+  const beforeBottom = await cropGeometry(page, ".y-cover");
+  const photoBefore = await drawnPhoto(page, ".y-cover");
+
+  await dragCropHandle(page, "s", 0, -30);
+
+  const afterBottom = await cropGeometry(page, ".y-cover");
+  const photoAfter = await drawnPhoto(page, ".y-cover");
+
+  record(
+    "P2. 아래 변을 끌면 **높이만** 줄고 너비는 그대로다 — 사진은 원본 비율 그대로이고 빈틈도 없다",
+    near(afterBottom.frame.width, beforeBottom.frame.width) &&
+      afterBottom.frame.height < beforeBottom.frame.height - 20 &&
+      near(photoAfter.ratio, photoAfter.naturalRatio, 0.02) &&
+      coversFrame(afterBottom),
+    JSON.stringify({ before: beforeBottom.frame, after: afterBottom.frame, photo: photoAfter })
+  );
+
+  record(
+    "P2b. 줄인 것은 보이는 범위다 — 사진의 배율과 화면 위 자리가 그대로다(위쪽 변이 기준점)",
+    near(photoAfter.width, photoBefore.width, 2) &&
+      near(photoAfter.height, photoBefore.height, 2) &&
+      near(photoAfter.left, photoBefore.left, 2) &&
+      near(photoAfter.top, photoBefore.top, 2),
+    JSON.stringify({ before: photoBefore, after: photoAfter })
+  );
+
+  /* --- P3. 오른쪽 변 — 너비만 --- */
+
+  const beforeRight = await cropGeometry(page, ".y-cover");
+
+  await dragCropHandle(page, "e", -40, 0);
+
+  const afterRight = await cropGeometry(page, ".y-cover");
+  const photoRight = await drawnPhoto(page, ".y-cover");
+
+  record(
+    "P3. 오른쪽 변을 끌면 **너비만** 줄고 높이는 그대로다 — 왜곡도 빈틈도 없다",
+    near(afterRight.frame.height, beforeRight.frame.height, 2) &&
+      afterRight.frame.width < beforeRight.frame.width - 25 &&
+      near(photoRight.ratio, photoRight.naturalRatio, 0.02) &&
+      coversFrame(afterRight),
+    JSON.stringify({ before: beforeRight.frame, after: afterRight.frame, photoRatio: photoRight.ratio })
+  );
+
+  /* --- P4. 모서리 — 가로·세로를 **따로** --- */
+
+  const beforeCorner = await cropGeometry(page, ".y-cover");
+
+  await dragCropHandle(page, "se", 60, 10);
+
+  const afterCorner = await cropGeometry(page, ".y-cover");
+  const photoCorner = await drawnPhoto(page, ".y-cover");
+
+  const beforeCornerRatio = beforeCorner.frame.width / beforeCorner.frame.height;
+  const afterCornerRatio = afterCorner.frame.width / afterCorner.frame.height;
+
+  record(
+    "P4. 모서리는 가로·세로를 각각 바꾼다(비율 유지가 아니다) — 그래도 사진은 원본 비율이고 빈틈이 없다",
+    afterCorner.frame.width > beforeCorner.frame.width + 25 &&
+      afterCorner.frame.height > beforeCorner.frame.height + 3 &&
+      Math.abs(afterCornerRatio - beforeCornerRatio) > 0.15 &&
+      near(photoCorner.ratio, photoCorner.naturalRatio, 0.02) &&
+      coversFrame(afterCorner),
+    JSON.stringify({
+      before: beforeCorner.frame, after: afterCorner.frame,
+      ratio: [Math.round(beforeCornerRatio * 100) / 100, Math.round(afterCornerRatio * 100) / 100]
+    })
+  );
+
+  /* --- P5. 자유 비율에서도 확대와 구도 이동이 그대로 된다 --- */
+
+  await setCropZoom(page, 180);
+
+  const zoomed = await cropGeometry(page, ".y-cover");
+  const zoomedDraft = (await inspectorState(page)).cropDraft;
+
+  /* 변을 끄는 동안 위쪽 변이 기준점이었으므로 세로 구도는 지금 위
+     끝(-1)에 붙어 있다 — 위로 끌어야(사진이 올라가야) 움직인다.
+     가로는 오른쪽으로 끌면 값이 줄어든다(부호는 model 머리말 참고). */
+  await dragCropSurface(page, 25, -18);
+
+  const movedDraft = (await inspectorState(page)).cropDraft;
+  const moved = await cropGeometry(page, ".y-cover");
+  const movedPhoto = await drawnPhoto(page, ".y-cover");
+
+  record(
+    "P5. 자유 비율에서도 확대·상하좌우 구도 이동이 된다 — 여전히 빈틈이 없다",
+    zoomedDraft.free === true &&
+      near(zoomedDraft.zoom, 1.8, 0.02) &&
+      coversFrame(zoomed) &&
+      movedDraft.x < zoomedDraft.x && movedDraft.y > zoomedDraft.y &&
+      coversFrame(moved) &&
+      near(movedPhoto.ratio, movedPhoto.naturalRatio, 0.02),
+    JSON.stringify({ zoom: zoomedDraft.zoom, before: [zoomedDraft.x, zoomedDraft.y], after: [movedDraft.x, movedDraft.y] })
+  );
+
+  /* --- P6. Escape — 끌기 시작 전 프레임으로만 되돌린다 --- */
+
+  const beforeEscape = await cropGeometry(page, ".y-cover");
+
+  await dragCropHandle(page, "n", 0, 35, { escape: true });
+
+  const afterEscape = await cropGeometry(page, ".y-cover");
+  const escapeState = await inspectorState(page);
+
+  record(
+    "P6. 변을 끄는 중 Escape — 끌기 시작 전 프레임으로 돌아가고 자르기 편집은 열린 채로 남는다",
+    !!escapeState.cropDraft &&
+      escapeState.cropSizing === false &&
+      near(afterEscape.frame.width, beforeEscape.frame.width, 2) &&
+      near(afterEscape.frame.height, beforeEscape.frame.height, 2),
+    JSON.stringify({ before: beforeEscape.frame, after: afterEscape.frame })
+  );
+
+  /* --- P7. 자유 -> 고정 -> 자유 전환 --- */
+
+  /* ★ zoom/x/y 숫자가 같다는 것은 구도가 보존됐다는 증거가 되지
+     못한다 — 그 셋은 전부 **프레임에 대한 비율**이라, 프레임 높이가
+     바뀌면 같은 숫자로도 화면의 사진이 함께 커지고 작아진다.
+     그래서 여기서는 **실제로 그려진 사진**의 자리와 크기를 잰다. */
+
+  const beforeSwitchPhoto = await drawnPhoto(page, ".y-cover");
+  const beforeSwitchFrame = await cropGeometry(page, ".y-cover");
+
+  await chooseCropRatio(page, "1:1");
+
+  const squareState = (await inspectorState(page)).cropDraft;
+  const squareFrame = await cropGeometry(page, ".y-cover");
+  const squarePhoto = await drawnPhoto(page, ".y-cover");
+
+  /* 1:1은 프레임을 크게 키우므로 사진이 덮지 못할 수 있다 —
+     그때만, **덮는 데 필요한 최소 배율**만큼 커져야 한다. */
+  const grew =
+    squarePhoto.width / beforeSwitchPhoto.width;
+
+  const coverNeeded =
+    Math.max(
+      1,
+      squareFrame.frame.width / beforeSwitchPhoto.width,
+      squareFrame.frame.height / beforeSwitchPhoto.height
+    );
+
+  record(
+    "P7. 자유 → 고정(1:1) — 화면의 사진은 그대로 있고, 프레임을 덮는 데 필요한 최소 배율만 더해진다",
+    squareState.free === false &&
+      near(squareFrame.frame.height, squareFrame.frame.width, 2) &&
+      near(squareFrame.frame.width, beforeSwitchFrame.frame.width, 2) &&
+      /* 사진은 절대 작아지지 않고, 커졌다면 딱 덮을 만큼만 */
+      grew >= 0.998 && near(grew, coverNeeded, 0.01) &&
+      /* 기준점은 프레임 왼쪽 위 — 그 점을 축으로 커지고, 프레임을
+         덮는 범위 안으로만 눌린다(빈틈이 생기지 않게) */
+      near(squarePhoto.left - squareFrame.frame.left,
+           clampInside((beforeSwitchPhoto.left - beforeSwitchFrame.frame.left) * grew,
+                       squareFrame.frame.width - squarePhoto.width), 1.2) &&
+      near(squarePhoto.top - squareFrame.frame.top,
+           clampInside((beforeSwitchPhoto.top - beforeSwitchFrame.frame.top) * grew,
+                       squareFrame.frame.height - squarePhoto.height), 1.2) &&
+      near(squarePhoto.ratio, squarePhoto.naturalRatio, 0.02) &&
+      coversFrame(squareFrame),
+    JSON.stringify({
+      photo: { before: beforeSwitchPhoto, after: squarePhoto },
+      frame: { before: beforeSwitchFrame.frame, after: squareFrame.frame },
+      grew: Math.round(grew * 10000) / 10000,
+      coverNeeded: Math.round(coverNeeded * 10000) / 10000
+    })
+  );
+
+  await chooseCropRatio(page, "free");
+
+  const backToFree = (await inspectorState(page)).cropDraft;
+  const backHandles = await cropHandleRects(page);
+  const backPhoto = await drawnPhoto(page, ".y-cover");
+  const backFrame = await cropGeometry(page, ".y-cover");
+
+  record(
+    "P7b. 고정 → 자유 — 비율만 풀릴 뿐이라 화면의 사진과 프레임이 한 픽셀도 움직이지 않고 핸들만 다시 나온다",
+    backToFree.free === true &&
+      Object.keys(backHandles).length === 8 &&
+      near(backFrame.frame.width, squareFrame.frame.width, 0.6) &&
+      near(backFrame.frame.height, squareFrame.frame.height, 0.6) &&
+      near(backPhoto.left, squarePhoto.left, 0.6) &&
+      near(backPhoto.top, squarePhoto.top, 0.6) &&
+      near(backPhoto.width, squarePhoto.width, 0.6),
+    JSON.stringify({ square: squarePhoto, free: backPhoto })
+  );
+
+  /* --- P8. 삼등분 가이드선 --- */
+
+  const guideWhileCropping = await page.evaluate(() => {
+    const el = document.getElementById("studioInspectorCropGuide");
+    const surfaceEl = document.getElementById("studioInspectorCropSurface");
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return {
+      visible: !surfaceEl.hidden && r.width > 0 && r.height > 0,
+      matchesSurface:
+        Math.round(r.width) === Math.round(surfaceEl.getBoundingClientRect().width)
+    };
+  });
+
+  /* --- P9. 임시다 — 적용 전에는 SkinPackage가 한 글자도 바뀌지 않는다 --- */
+
+  const packageBefore = await workingPackage(page);
+  const draftBeforeApply = (await inspectorState(page)).cropDraft;
+
+  await applyCrop(page);
+
+  const packageAfter = await workingPackage(page);
+  const applied = await cropGeometry(page, ".y-cover");
+  const appliedPhoto = await drawnPhoto(page, ".y-cover");
+
+  const guideAfterApply = await page.evaluate(() => {
+    const surfaceEl = document.getElementById("studioInspectorCropSurface");
+    return { surfaceHidden: surfaceEl.hidden };
+  });
+
+  record(
+    "P8. 자르는 동안 삼등분 가이드선이 프레임 위에 보이고, 적용하면 판과 함께 사라진다",
+    guideWhileCropping &&
+      guideWhileCropping.visible &&
+      guideWhileCropping.matchesSurface &&
+      guideAfterApply.surfaceHidden === true,
+    JSON.stringify({ cropping: guideWhileCropping, applied: guideAfterApply })
+  );
+
+  record(
+    "P9. 적용 전에는 SkinPackage가 그대로이고, 적용하면 자유 비율 프레임이 확정된다",
+    JSON.stringify(packageBefore) === JSON.stringify(packageBefore) &&
+      packageBefore.css.indexOf(`aspect-ratio: ${draftBeforeApply.ratio}`) === -1 &&
+      packageAfter.css.indexOf(`aspect-ratio: ${draftBeforeApply.ratio}`) !== -1 &&
+      near(applied.frame.width, draftBeforeApply.frameWidth, 2) &&
+      near(appliedPhoto.ratio, appliedPhoto.naturalRatio, 0.02) &&
+      coversFrame(applied),
+    JSON.stringify({ ratio: draftBeforeApply.ratio, frame: applied.frame })
+  );
+
+  /* --- P10. 적용 한 번 = Undo 한 번 --- */
+
+  const beforeUndo = await cropGeometry(page, ".y-cover");
+
+  await page.click("#studioInspectorUndoButton");
+  await sleep(700);
+
+  const afterUndo = await cropGeometry(page, ".y-cover");
+
+  record(
+    "P10. 자유 비율 적용 한 번 = 되돌리기 한 번 — 자르기 전 상태로 통째로 돌아간다",
+    beforeUndo.cropped && !afterUndo.cropped && afterUndo.wrapperCount === 0,
+    JSON.stringify({ before: beforeUndo.frame, after: afterUndo.frame, wrappers: afterUndo.wrapperCount })
+  );
+
+  /* --- P11. Save / 재로드 / Export → Import --- */
+
+  await selectInPreview(page, ".y-cover");
+  await openDirectEdit(page);
+  await openCrop(page);
+  await chooseCropRatio(page, "free");
+  await dragCropHandle(page, "s", 0, -26);
+  await dragCropHandle(page, "e", -34, 0);
+  await setCropZoom(page, 150);
+  await dragCropSurface(page, 14, 9);
+  await applyCrop(page);
+
+  const beforeSave = await cropGeometry(page, ".y-cover");
+
+  await page.click("#studioSaveButton");
+
+  await page.waitForFunction(
+    () => window.getStudioAiWorkingState().isDirty === false,
+    null,
+    { timeout: 8000 }
+  );
+
+  const savedContent = await page.evaluate(() => {
+    const calls = window.__savedDraftCallsY || [];
+    return calls.length ? calls[calls.length - 1].p_content : null;
+  });
+
+  const exported = await (async () => {
+    const downloadPromise = page.waitForEvent("download", { timeout: 10000 });
+    await page.click("#studioExportButton");
+    const download = await downloadPromise;
+    return {
+      filename: download.suggestedFilename(),
+      text: fs.readFileSync(await download.path(), "utf8")
+    };
+  })();
+
+  await page.close();
+
+  const reopened = await openStudio(context, { seedPackage: savedContent });
+
+  const afterReload = await cropGeometry(reopened, ".y-cover");
+
+  record(
+    "P11. Save → 재로드 — 자유 비율 프레임(가로·세로)과 구도가 그대로다",
+    afterReload.cropped &&
+      near(afterReload.frame.width, beforeSave.frame.width) &&
+      near(afterReload.frame.height, beforeSave.frame.height) &&
+      afterReload.objectPosition === beforeSave.objectPosition &&
+      coversFrame(afterReload),
+    JSON.stringify({ before: beforeSave.frame, after: afterReload.frame, position: afterReload.objectPosition })
+  );
+
+  await reopened.click("#studioImportButton");
+  await reopened.waitForSelector(".import-editor-overlay:not([hidden])", { timeout: 5000 });
+
+  await reopened.setInputFiles(".import-editor-file-input", {
+    name: exported.filename,
+    mimeType: "application/json",
+    buffer: Buffer.from(exported.text, "utf8")
+  });
+
+  await reopened.waitForFunction(
+    () => {
+      const msg = document.querySelector(".import-editor-message");
+      const apply = document.querySelector(".import-editor-button--primary");
+      return msg && msg.textContent.includes("검증 성공") && apply && !apply.disabled;
+    },
+    null,
+    { timeout: 10000 }
+  );
+
+  await reopened.click(".import-editor-button--primary");
+
+  await reopened.waitForFunction(
+    () => { const el = document.querySelector(".import-editor-overlay"); return el && el.hidden === true; },
+    null,
+    { timeout: 5000 }
+  );
+
+  await sleep(800);
+
+  const afterImport = await cropGeometry(reopened, ".y-cover");
+
+  record(
+    "P12. Export → Import 왕복 뒤에도 자유 비율과 구도가 살아난다",
+    afterImport.cropped &&
+      near(afterImport.frame.width, beforeSave.frame.width) &&
+      near(afterImport.frame.height, beforeSave.frame.height) &&
+      afterImport.objectPosition === beforeSave.objectPosition &&
+      coversFrame(afterImport),
+    JSON.stringify({ after: afterImport.frame, position: afterImport.objectPosition })
+  );
+
+  /* --- P13. 자르기 초기화 — 자유 비율도 깨끗이 풀린다 --- */
+
+  await enableInspector(reopened);
+  await selectInPreview(reopened, ".y-cover");
+  await openDirectEdit(reopened);
+
+  await reopened.click("#studioInspectorCropReset");
+  await sleep(700);
+
+  const afterReset = await cropGeometry(reopened, ".y-cover");
+
+  record(
+    "P13. 자르기 초기화 — 자유 비율로 자른 것도 래퍼째 풀린다",
+    !afterReset.cropped && afterReset.wrapperCount === 0,
+    JSON.stringify({ frame: afterReset.frame, wrappers: afterReset.wrapperCount })
+  );
+
+  await reopened.close();
+
+}
+
+
+/* =========================================================
+   S. 잡은 변은 포인터를 1:1로, 반대쪽 변은 그 자리에
+
+   ★ 왜 정렬마다 재는가
+   프레임은 보통 흐름 안에 있고 **폭이 바뀌면 정렬 규칙이 자리를
+   다시 정한다.** 가운데 정렬이면 폭을 10px 늘렸을 때 양쪽 변이
+   5px씩 벌어지고(잡은 변은 손의 절반만 따라온다), 오른쪽 정렬이면
+   오른쪽 변을 끌어도 왼쪽 변이 움직인다. 이동량을 2배로 키우는
+   방식은 잡은 변만 맞추고 반대쪽은 여전히 흔들린다.
+
+   그래서 왼쪽/가운데/오른쪽 정렬 **각각**에서 네 변과 모서리를
+   전부 끌어 보고, 두 가지를 함께 잰다:
+
+     잡은 변   포인터가 움직인 화면 px 그대로 움직였는가
+     반대쪽 변 한 픽셀도 움직이지 않았는가
+
+   ★ 화면 px로 잰다 — Mobile Preview의 축소 배율까지 그대로 지나야
+     하므로(아래 S-mobile) 두 값을 같은 좌표계에서 비교한다.
+========================================================== */
+
+/* 잡은 변과 반대쪽 변 — 이 표가 곧 검사 내용이다.
+
+   ★ 전부 프레임 **안쪽으로** 끈다. 오른쪽 정렬에서는 프레임의
+     오른쪽 변이 창 끝에 붙어 있어 바깥으로 끌면 포인터가 창 밖으로
+     나가고(그건 브라우저 한계이지 제품 동작이 아니다), 왼쪽 정렬은
+     왼쪽 변이 그렇다. 안쪽 방향은 세 정렬 모두에서 항상 창 안이다.
+   ★ 케이스마다 프레임을 원래 크기로 되돌리고 시작한다 — 여섯 번을
+     이어서 줄이면 마지막에는 하한에 닿아 "제한 전"이 아니게 된다. */
+const STUDIO_INSPECTOR_CROP_EDGE_CASES = [
+  { edge: "e", dx: -40, dy: 0, moves: ["right"], holds: ["left", "top", "bottom"] },
+  { edge: "w", dx: 34, dy: 0, moves: ["left"], holds: ["right", "top", "bottom"] },
+  { edge: "s", dx: 0, dy: -26, moves: ["bottom"], holds: ["top", "left", "right"] },
+  { edge: "n", dx: 0, dy: 18, moves: ["top"], holds: ["bottom", "left", "right"] },
+  { edge: "se", dx: -30, dy: -22, moves: ["right", "bottom"], holds: ["left", "top"] },
+  { edge: "nw", dx: 24, dy: 16, moves: ["left", "top"], holds: ["right", "bottom"] }
+];
+
+
+async function setCropAlignment(page, value) {
+
+  await page.click(`[data-inspector-control="imageAlign"][data-inspector-value="${value}"]`);
+
+  await sleep(600);
+
+}
+
+
+/* 프레임을 한 번 씌우고 정렬을 정한 뒤, 자유 비율로 다시 연다 */
+async function openFreeCropWithAlignment(page, selector, alignment) {
+
+  await selectInPreview(page, selector);
+  await openDirectEdit(page);
+
+  const geometry = await cropGeometry(page, selector);
+
+  if (!geometry.cropped) {
+
+    await openCrop(page);
+    await chooseCropRatio(page, "current");
+    await applyCrop(page);
+
+    /* 확정은 스킨을 다시 렌더하므로 선택과 폼을 다시 잡는다 */
+    await selectInPreview(page, selector);
+    await openDirectEdit(page);
+
+  }
+
+  await setCropAlignment(page, alignment);
+
+  await selectInPreview(page, selector);
+  await openDirectEdit(page);
+
+  await openCrop(page);
+  await chooseCropRatio(page, "free");
+
+}
+
+
+/* 케이스 하나가 끝나면 취소하고 다시 연다 — 확정된 프레임(원래
+   크기)에서 다시 시작한다. */
+async function resetFreeCrop(page, selector) {
+
+  await page.click("#studioInspectorCropCancel");
+  await sleep(450);
+
+  await selectInPreview(page, selector);
+  await openDirectEdit(page);
+  await openCrop(page);
+  await chooseCropRatio(page, "free");
+
+}
+
+
+/* ★ 오른쪽 정렬만 Mobile Preview에서 잰다
+   fixture의 프레임 부모는 iframe 폭을 꽉 채우므로, 오른쪽 정렬이면
+   프레임의 오른쪽 변이 **창의 오른쪽 끝 픽셀**에 붙는다. 그 자리의
+   핸들은 절반이 창 밖이라 테스트 포인터가 누를 수 없다 — 브라우저
+   한계이지 제품 동작이 아니다. Mobile Preview는 iframe(390px)이
+   stage 가운데에 놓여 사방에 여백이 생기므로 같은 정렬을 그대로
+   재면서 축소 배율까지 함께 지난다. */
+const STUDIO_INSPECTOR_CROP_ALIGN_CASES = [
+  { alignment: "left", mobile: false },
+  { alignment: "center", mobile: false },
+  { alignment: "right", mobile: true }
+];
+
+
+async function runFreeAlign(context) {
+
+  for (const { alignment, mobile } of STUDIO_INSPECTOR_CROP_ALIGN_CASES) {
+
+    const page = await openStudio(context, { viewport: { width: 1440, height: 900 } });
+    await enableInspector(page);
+
+    if (mobile) {
+      await page.click('#studioViewportToggle [data-viewport-mode="mobile"]');
+      await sleep(1100);
+    }
+
+    await openFreeCropWithAlignment(page, ".y-cover", alignment);
+
+    /* 정렬이 실제로 걸렸는지 먼저 확인한다 — 안 걸렸으면 아래
+       검사는 세 번 다 같은 상황을 재게 된다(빈 검사). */
+    const placement = await page.evaluate(() => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      const frame = doc.querySelector(".y-cover").parentElement;
+      const style = doc.defaultView.getComputedStyle(frame);
+      const box = frame.getBoundingClientRect();
+      const parent = frame.parentElement.getBoundingClientRect();
+      const r = (n) => Math.round(n * 10) / 10;
+      return {
+        marginLeft: style.marginLeft,
+        marginRight: style.marginRight,
+        gapLeft: r(box.left - parent.left),
+        gapRight: r(parent.right - box.right)
+      };
+    });
+
+    record(
+      `S0(${alignment}${mobile ? "·Mobile" : ""}). 프레임이 실제로 그 정렬로 놓여 있다`,
+      alignment === "left"
+        ? placement.gapLeft < 20 && placement.gapRight > 40
+        : alignment === "right"
+          ? placement.gapRight < 20 && placement.gapLeft > 40
+          : Math.abs(placement.gapLeft - placement.gapRight) < 3 && placement.gapLeft > 20,
+      JSON.stringify(placement)
+    );
+
+    for (const testCase of STUDIO_INSPECTOR_CROP_EDGE_CASES) {
+
+      await resetFreeCrop(page, ".y-cover");
+
+      const before = await previewRectOnScreen(page, ".y-cover");
+
+      await dragCropHandle(page, testCase.edge, testCase.dx, testCase.dy);
+
+      const after = await previewRectOnScreen(page, ".y-cover");
+      const geometry = await cropGeometry(page, ".y-cover");
+      const photo = await drawnPhoto(page, ".y-cover");
+
+      /* 잡은 변은 포인터가 간 만큼 — 가로는 dx, 세로는 dy */
+      const expected = {
+        left: testCase.dx,
+        right: testCase.dx,
+        top: testCase.dy,
+        bottom: testCase.dy
+      };
+
+      const moved =
+        testCase.moves.every(side =>
+          near(after[side] - before[side], expected[side], 2));
+
+      const held =
+        testCase.holds.every(side => near(after[side], before[side], 2));
+
+      record(
+        `S(${alignment}${mobile ? "·Mobile" : ""}) ${testCase.edge} — 잡은 변은 포인터만큼(${testCase.moves.join("/")}), 반대쪽은 제자리(${testCase.holds.join("/")})`,
+        moved && held &&
+          near(photo.ratio, photo.naturalRatio, 0.02) &&
+          coversFrame(geometry),
+        JSON.stringify({
+          before, after,
+          moved: testCase.moves.map(s => Math.round((after[s] - before[s]) * 10) / 10),
+          held: testCase.holds.map(s => Math.round((after[s] - before[s]) * 10) / 10),
+          pointer: [testCase.dx, testCase.dy]
+        })
+      );
+
+    }
+
+    await page.click("#studioInspectorCropCancel");
+    await sleep(400);
+
+    await page.close();
+
+  }
+
+}
+
+
+/* --- S-mobile. 축소 배율에서도 같은 값 --- */
+
+async function runFreeAlignMobile(context) {
+
+  const page = await openStudio(context, { viewport: { width: 1280, height: 720 } });
+  await enableInspector(page);
+
+  await openFreeCropWithAlignment(page, ".y-cover", "center");
+
+  await page.click('#studioViewportToggle [data-viewport-mode="mobile"]');
+  await sleep(1100);
+
+  const scale = (await previewRectOnScreen(page, ".y-cover")).scale;
+
+  for (const testCase of STUDIO_INSPECTOR_CROP_EDGE_CASES.slice(0, 5)) {
+
+    await resetFreeCrop(page, ".y-cover");
+
+    const before = await previewRectOnScreen(page, ".y-cover");
+
+    await dragCropHandle(page, testCase.edge, testCase.dx, testCase.dy);
+
+    const after = await previewRectOnScreen(page, ".y-cover");
+    const geometry = await cropGeometry(page, ".y-cover");
+
+    const expected = {
+      left: testCase.dx, right: testCase.dx,
+      top: testCase.dy, bottom: testCase.dy
+    };
+
+    record(
+      `S-mobile(${scale < 1 ? "축소" : "배율1"}) ${testCase.edge} — 축소된 Preview에서도 화면 px 그대로 움직이고 반대쪽은 제자리`,
+      scale < 1 &&
+        testCase.moves.every(side => near(after[side] - before[side], expected[side], 2)) &&
+        testCase.holds.every(side => near(after[side], before[side], 2)) &&
+        coversFrame(geometry),
+      JSON.stringify({
+        scale: Math.round(scale * 1000) / 1000,
+        moved: testCase.moves.map(s => Math.round((after[s] - before[s]) * 10) / 10),
+        held: testCase.holds.map(s => Math.round((after[s] - before[s]) * 10) / 10),
+        pointer: [testCase.dx, testCase.dy]
+      })
+    );
+
+  }
+
+  /* --- 적용하면 임시 위치가 걷히고 스킨의 정렬 규칙이 자리를 정한다 --- */
+
+  await page.click('#studioViewportToggle [data-viewport-mode="desktop"]');
+  await sleep(900);
+
+  const beforeApply = await page.evaluate(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    const frame = doc.querySelector(".y-cover").parentElement;
+    const box = frame.getBoundingClientRect();
+    const parent = frame.parentElement.getBoundingClientRect();
+    const r = (n) => Math.round(n * 10) / 10;
+    return {
+      translate: doc.defaultView.getComputedStyle(frame).translate,
+      gapLeft: r(box.left - parent.left),
+      gapRight: r(parent.right - box.right),
+      width: r(box.width),
+      height: r(box.height)
+    };
+  });
+
+  await applyCrop(page);
+
+  const afterApply = await page.evaluate(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    const frame = doc.querySelector(".y-cover").parentElement;
+    const box = frame.getBoundingClientRect();
+    const parent = frame.parentElement.getBoundingClientRect();
+    const r = (n) => Math.round(n * 10) / 10;
+    return {
+      translate: doc.defaultView.getComputedStyle(frame).translate,
+      gapLeft: r(box.left - parent.left),
+      gapRight: r(parent.right - box.right),
+      width: r(box.width),
+      height: r(box.height)
+    };
+  });
+
+  const savedCss = await page.evaluate(() =>
+    window.getStudioAiWorkingState({ includePackage: true }).skinPackage.css);
+
+  record(
+    "S-apply. 적용하면 임시 위치가 걷히고 크기는 그대로인 채 가운데 정렬 규칙이 자리를 정한다",
+    beforeApply.translate !== "none" &&
+      afterApply.translate === "none" &&
+      near(afterApply.width, beforeApply.width, 1.5) &&
+      near(afterApply.height, beforeApply.height, 1.5) &&
+      Math.abs(afterApply.gapLeft - afterApply.gapRight) < 3 &&
+      /* 임시 위치는 저장 CSS에 한 글자도 가지 않는다 */
+      savedCss.indexOf("translate") === -1,
+    JSON.stringify({ before: beforeApply, after: afterApply })
+  );
+
+  await page.close();
+
+}
+
+
+/* =========================================================
+   T. 확대 상한 — 값을 자르지 않고 프레임을 멈춘다
+========================================================== */
+
+async function runFreeLimit(context) {
+
+  const page = await openStudio(context, { viewport: { width: 1440, height: 900 } });
+  await enableInspector(page);
+
+  await selectInPreview(page, ".y-cover");
+  await openDirectEdit(page);
+  await openCrop(page);
+  await chooseCropRatio(page, "free");
+
+  /* 확대를 상한 근처로 올려 둔다 — 이 상태에서 프레임을 더 줄이면
+     사진 배율을 유지할 방법이 없어진다. */
+  await setCropZoom(page, 300);
+
+  const before = await cropGeometry(page, ".y-cover");
+  const photoBefore = await drawnPhoto(page, ".y-cover");
+
+  await dragCropHandle(page, "se", -200, -60);
+
+  const after = await cropGeometry(page, ".y-cover");
+  const photoAfter = await drawnPhoto(page, ".y-cover");
+  const state = await inspectorState(page);
+
+  const note = await page.evaluate(() => {
+    const el = document.getElementById("studioInspectorCropLimitNote");
+    return el ? { hidden: el.hidden, text: el.textContent } : null;
+  });
+
+  record(
+    "T1. 확대 상한에 닿으면 핸들이 그 지점에서 멈춘다 — 요청한 크기(100x40)까지 가지 않는다",
+    after.frame.height > 70 && after.frame.height < 80 &&
+      after.frame.width > 200 && after.frame.width < 230 &&
+      after.frame.height < before.frame.height - 20,
+    JSON.stringify({ before: before.frame, after: after.frame, asked: { width: 100, height: 40 } })
+  );
+
+  record(
+    "T2. 멈추는 대신 사진이 조용히 작아지지 않는다 — 배율과 구도가 그대로다",
+    near(photoAfter.width, photoBefore.width, 2) &&
+      near(photoAfter.height, photoBefore.height, 2) &&
+      near(state.cropDraft.zoom, 4, 0.01) &&
+      coversFrame(after),
+    JSON.stringify({ before: photoBefore, after: photoAfter, zoom: state.cropDraft.zoom })
+  );
+
+  record(
+    "T3. 왜 멈췄는지 안내가 뜬다",
+    state.cropLimited === true && note && note.hidden === false && note.text.indexOf("400%") !== -1,
+    JSON.stringify(note)
+  );
+
+  /* 다시 키우면 안내가 사라진다 */
+  await dragCropHandle(page, "se", 40, 12);
+
+  const relaxed = await inspectorState(page);
+
+  const noteAfter = await page.evaluate(() => {
+    const el = document.getElementById("studioInspectorCropLimitNote");
+    return el ? el.hidden : null;
+  });
+
+  record(
+    "T4. 다시 키우면 한계에서 벗어나 안내가 사라진다",
+    relaxed.cropLimited === false && noteAfter === true,
+    JSON.stringify({ limited: relaxed.cropLimited, hidden: noteAfter })
+  );
+
+  await page.click("#studioInspectorCropCancel");
+  await sleep(400);
+
+  await page.close();
+
+}
+
+
+/* =========================================================
+   R. 슬라이더 — 너비 · 확대 · 위치 X/Y가 같은 규칙을 쓴다
+
+   브라우저 기본 range를 버리고 직접 그렸으므로(studio-inspector.css
+   슬라이더 절) "보기만 바꾸고 동작은 그대로"를 여기서 재 둔다:
+   방향키로 값이 바뀌는가 · 채워진 구간이 값과 함께 움직이는가 ·
+   포커스가 보이는가 · 비활성이 활성과 구분되는가.
+========================================================== */
+
+/* ::-webkit-slider-runnable-track / -thumb의 계산값은 두 엔진 모두
+   getComputedStyle로 돌려주지 않는다(요청해도 요소 자신의 값이
+   나온다). 그래서 여기서는 **요소 자신에서 확인할 수 있는 것**만
+   잰다 — 기본 모양을 껐는가(appearance), 조작 영역 높이, 색 토큰,
+   채움 비율, 값. 3px 막대와 12px 흰 손잡이가 실제로 그렇게
+   그려지는지는 두 엔진의 스크린샷으로 확인했다(문서 9절). */
+async function rangeState(page, id) {
+
+  return page.evaluate((elementId) => {
+
+    const el = document.getElementById(elementId);
+
+    if (!el) return null;
+
+    const style = window.getComputedStyle(el);
+
+    return {
+      value: Number(el.value),
+      disabled: el.disabled,
+      fill: el.style.getPropertyValue("--imory-range-fill"),
+      progress: style.getPropertyValue("--imory-range-progress").trim(),
+      trackColor: style.getPropertyValue("--imory-range-track").trim(),
+      thumbBorder: style.getPropertyValue("--imory-range-thumb-border").trim(),
+      appearance: style.getPropertyValue("-webkit-appearance") || style.appearance,
+      height: style.height,
+      /* 조작 영역 — 얇게 만든 것은 막대뿐이어야 한다 */
+      hitHeight: Math.round(el.getBoundingClientRect().height),
+      focused: document.activeElement === el
+    };
+
+  }, id);
+
+}
+
+
+async function runSliders(context) {
+
+  const page = await openStudio(context);
+  await enableInspector(page);
+
+  await selectInPreview(page, ".y-avatar");
+  await openDirectEdit(page);
+
+  const width = await rangeState(page, "studioInspectorSizeRange");
+
+  record(
+    "R1. 너비 슬라이더 — 브라우저 기본 모양을 끄고 우리 토큰을 쓰며, 조작 영역은 얇아지지 않았다",
+    width &&
+      width.appearance === "none" &&
+      width.hitHeight >= 18 &&
+      width.progress === "#aaaaaa" &&
+      width.trackColor === "#dddddd" &&
+      width.thumbBorder === "#cccccc" &&
+      /%$/.test(width.fill),
+    JSON.stringify(width)
+  );
+
+  await openCrop(page);
+  await chooseCropRatio(page, "16:9");
+  await setCropZoom(page, 200);
+
+  /* --- R2. 키보드 --- */
+
+  await page.focus("#studioInspectorCropZoom");
+
+  const beforeKey = await rangeState(page, "studioInspectorCropZoom");
+
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await sleep(500);
+
+  const afterKey = await rangeState(page, "studioInspectorCropZoom");
+  const keyDraft = (await inspectorState(page)).cropDraft;
+
+  record(
+    "R2. 확대 슬라이더 — 방향키로 값이 움직이고 채워진 구간과 실제 자르기 값이 함께 따라온다",
+    beforeKey.focused &&
+      afterKey.value === beforeKey.value + 3 &&
+      afterKey.fill !== beforeKey.fill &&
+      near(keyDraft.zoom, afterKey.value / 100, 0.005),
+    JSON.stringify({ before: beforeKey.value, after: afterKey.value, fill: [beforeKey.fill, afterKey.fill], zoom: keyDraft.zoom })
+  );
+
+  /* --- R3. 채워진 구간이 값과 비례한다 --- */
+
+  await setCropZoom(page, 250);
+
+  const half = await rangeState(page, "studioInspectorCropZoom");
+
+  record(
+    "R3. 채워진 구간이 값 그대로다 — 100~400 범위의 250이면 딱 절반",
+    near(parseFloat(half.fill), 50, 0.6),
+    JSON.stringify({ value: half.value, fill: half.fill })
+  );
+
+  /* --- R4. 비활성 --- */
+
+  /* 정사각형 원본(40x40)을 16:9 프레임에 확대 1.0으로 넣으면 cover가
+     좌우는 딱 맞추고 위아래로만 잘라낸다 — 가로 축은 움직일 여유가
+     0이라 비활성, 세로 축은 활성이다(M4와 같은 상황). */
+  await setCropZoom(page, 100);
+  await chooseCropRatio(page, "16:9");
+
+  const disabledAxis = await rangeState(page, "studioInspectorCropPosition-x");
+  const enabledAxis = await rangeState(page, "studioInspectorCropPosition-y");
+
+  record(
+    "R4. 비활성 슬라이더도 같은 얇은 회색 형태로 남되 색이 한 단계 옅어 활성과 구분된다",
+    disabledAxis.disabled === true &&
+      enabledAxis.disabled === false &&
+      disabledAxis.appearance === "none" &&
+      disabledAxis.hitHeight === enabledAxis.hitHeight &&
+      disabledAxis.progress !== enabledAxis.progress &&
+      disabledAxis.trackColor !== enabledAxis.trackColor &&
+      disabledAxis.thumbBorder !== enabledAxis.thumbBorder,
+    JSON.stringify({ enabled: enabledAxis, disabled: disabledAxis })
+  );
+
+  await cancelCropIfOpen(page);
+
+  await page.close();
+
+}
+
+
+async function cancelCropIfOpen(page) {
+
+  if (await page.evaluate(() => !!window.getStudioInspectorState().cropDraft)) {
+    await page.click("#studioInspectorCropCancel");
+    await sleep(400);
+  }
+
+}
+
+
+/* =========================================================
+   Q. 자유 비율 핸들 좌표 — Mobile 축소 배율 · AI 패널
+========================================================== */
+
+async function runFreeGeometry(context) {
+
+  const page = await openStudio(context, { viewport: { width: 1280, height: 800 } });
+  await enableInspector(page);
+
+  await selectInPreview(page, ".y-avatar");
+  await openDirectEdit(page);
+  await openCrop(page);
+  await chooseCropRatio(page, "free");
+
+  const desktopHandles = await cropHandleRects(page);
+  const desktopFrame = await previewRectOnScreen(page, ".y-avatar");
+
+  record(
+    "Q1. Desktop — 핸들이 프레임의 네 변·모서리와 정확히 겹친다",
+    near(desktopHandles.w.x, desktopFrame.left) &&
+      near(desktopHandles.e.x, desktopFrame.right) &&
+      near(desktopHandles.n.y, desktopFrame.top) &&
+      near(desktopHandles.s.y, desktopFrame.bottom),
+    JSON.stringify({ handles: desktopHandles, frame: desktopFrame })
+  );
+
+  await page.click("#studioAiToggleButton");
+  await sleep(900);
+
+  const panelHandles = await cropHandleRects(page);
+  const panelFrame = await previewRectOnScreen(page, ".y-avatar");
+
+  record(
+    "Q2. AI 패널을 열어 Preview가 좁아져도 핸들이 프레임을 따라간다",
+    near(panelHandles.w.x, panelFrame.left) &&
+      near(panelHandles.e.x, panelFrame.right) &&
+      near(panelHandles.s.y, panelFrame.bottom),
+    JSON.stringify({ handles: { w: panelHandles.w, e: panelHandles.e }, frame: panelFrame })
+  );
+
+  await page.click("#studioAiToggleButton");
+  await sleep(900);
+
+  await page.click('#studioViewportToggle [data-viewport-mode="mobile"]');
+  await sleep(900);
+
+  const mobileHandles = await cropHandleRects(page);
+  const mobileFrame = await previewRectOnScreen(page, ".y-avatar");
+
+  record(
+    "Q3. Mobile Preview — 축소 배율까지 반영해 핸들 좌표가 맞는다",
+    mobileFrame.scale < 1 &&
+      near(mobileHandles.w.x, mobileFrame.left) &&
+      near(mobileHandles.e.x, mobileFrame.right) &&
+      near(mobileHandles.n.y, mobileFrame.top) &&
+      near(mobileHandles.s.y, mobileFrame.bottom),
+    JSON.stringify({ handles: mobileHandles, frame: mobileFrame })
+  );
+
+  /* 축소된 화면에서 끌어도 화면 위 이동량이 그대로 프레임에 반영되는가 */
+  const beforeDrag = await previewRectOnScreen(page, ".y-avatar");
+
+  await dragCropHandle(page, "e", -30, 0);
+
+  const afterDrag = await previewRectOnScreen(page, ".y-avatar");
+  const afterGeometry = await cropGeometry(page, ".y-avatar");
+
+  record(
+    "Q4. 축소된 Preview에서도 화면 위 이동량이 1:1로 반영된다(왼쪽 변은 그 자리)",
+    near(afterDrag.left, beforeDrag.left, 2) &&
+      near(afterDrag.right - beforeDrag.right, -30, 4) &&
+      coversFrame(afterGeometry),
+    JSON.stringify({ before: beforeDrag, after: afterDrag })
+  );
+
+  await applyCrop(page);
+
+  const overflow = await page.evaluate(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    return {
+      docWidth: doc.documentElement.clientWidth,
+      scrollWidth: doc.documentElement.scrollWidth,
+      bodyScrollWidth: doc.body.scrollWidth
+    };
+  });
+
+  record(
+    "Q5. 자유 비율로 자른 뒤에도 모바일 가로 넘침이 없다",
+    overflow.scrollWidth <= overflow.docWidth + 1 &&
+      overflow.bodyScrollWidth <= overflow.docWidth + 1,
+    JSON.stringify(overflow)
+  );
+
+  await page.close();
+
+}
+
+
+/* =========================================================
    J/K. 보호 · 이미지 교체
 ========================================================== */
 
@@ -1888,6 +3089,12 @@ async function popoverBox(page) {
     if (shouldRun("persist")) await runPersist(context);
     if (shouldRun("guard")) await runGuard(context);
     if (shouldRun("frame")) await runFrame(context);
+    if (shouldRun("free")) await runFree(context);
+    if (shouldRun("freegeo")) await runFreeGeometry(context);
+    if (shouldRun("freealign")) await runFreeAlign(context);
+    if (shouldRun("freealign")) await runFreeAlignMobile(context);
+    if (shouldRun("freelimit")) await runFreeLimit(context);
+    if (shouldRun("sliders")) await runSliders(context);
 
     record(
       "N. 자르기 전 과정에서 /api/skin-ai 호출 0회",

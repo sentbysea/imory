@@ -163,7 +163,19 @@ let studioInspectorHandles = [];
      studioInspectorCropSurface    Preview 위에 얹는 투명한 드래그 판
                                    (DOM은 overlay가 만든다)
      studioInspectorCropZoomRange  확대 슬라이더 참조 — 폼을 다시 그리면
-                                   죽는 참조라 그때 끊는다 */
+                                   죽는 참조라 그때 끊는다
+
+   자유 비율 라운드가 더한 것 — 프레임의 네 변과 모서리를 직접 끄는
+   길이다. 사진을 옮기는 드래그(studioInspectorCropDrag)와 완전히
+   다른 조작이라 상태도 따로 둔다: 하나는 "보이는 범위를 옮긴다",
+   다른 하나는 "보이는 범위의 크기를 바꾼다".
+
+     studioInspectorCropSideDrag   변/모서리 드래그 중인 정보
+     studioInspectorCropHandles    변·모서리 핸들 8개(DOM은 overlay가 만든다)
+     studioInspectorCropLimited    확대 상한 때문에 프레임을 더 줄일 수
+                                   없어 핸들이 멈춰 있는가
+     studioInspectorCropLimitNote  그 안내 문단 — 끄는 동안 폼을 통째로
+                                   다시 그리지 않고 이 노드만 바꾼다 */
 let studioInspectorCropDraft = null;
 
 let studioInspectorCropDrag = null;
@@ -171,6 +183,14 @@ let studioInspectorCropDrag = null;
 let studioInspectorCropSurface = null;
 
 let studioInspectorCropZoomRange = null;
+
+let studioInspectorCropSideDrag = null;
+
+let studioInspectorCropHandles = [];
+
+let studioInspectorCropLimited = false;
+
+let studioInspectorCropLimitNote = null;
 
 
 /* 크기 조절 하한/상한. 상한은 항상 "부모 안쪽 폭"으로 한 번 더
@@ -180,6 +200,15 @@ const STUDIO_INSPECTOR_SIZE_MIN = 16;
 const STUDIO_INSPECTOR_SIZE_MAX = 2000;
 
 const STUDIO_INSPECTOR_HANDLE_CORNERS = ["nw", "ne", "sw", "se"];
+
+/* 자유 비율 자르기의 핸들 — 네 변 가운데와 네 모서리.
+
+   변 핸들은 한 축만 바꾸고(좌우=너비, 상하=높이) 반대쪽 변이
+   기준점으로 남는다. 모서리는 두 축을 **각각** 바꾼다(비율 유지가
+   아니다) — 비율 유지는 자르지 않은 이미지의 크기 조절 쪽 몫이고,
+   여기는 "보이는 창의 모양을 자유롭게 정한다"가 일이다. */
+const STUDIO_INSPECTOR_CROP_HANDLE_EDGES =
+  ["n", "s", "w", "e", "nw", "ne", "sw", "se"];
 
 
 const STUDIO_INSPECTOR_PAGE_LABELS = {

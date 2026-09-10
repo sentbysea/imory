@@ -17,6 +17,7 @@
 | 직접 편집 — 텍스트 내용 · 이미지 크기 (임시/확정 분리, 모서리 드래그) | [AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md](./docs/ai-skin/AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md) |
 | 직접 편집 — 이미지 자르기 (프레임 래퍼 · 비율/확대/구도 · 크기 조절과의 경계) | [AI_SKIN_PHASE_AI6D_IMAGE_CROP.md](./docs/ai-skin/AI_SKIN_PHASE_AI6D_IMAGE_CROP.md) |
 | 프레임 좌표 (보이는 사각형) · 팝오버 자리 · 구도 이동 기어비 | [AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md](./docs/ai-skin/AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md) |
+| 자유 비율 자르기 (변·모서리 핸들) · Inspector 슬라이더 규칙 | [AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md](./docs/ai-skin/AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md) |
 | 서비스 개념 / 디자인 토큰 / 상태 체크리스트 | [Concept.md](./Concept.md) · [Design.md](./Design.md) · [ToDo.md](./ToDo.md) |
 
 ---
@@ -125,7 +126,7 @@
 | `skin/skin-folder-tree-e2e-test.mjs` | 8942 | Folder-aware 스킨 렌더 — published CATEGORY(소유자/방문자·모바일/데스크톱·폴더 없음·빈 카테고리·카드 안 글 → POST) + Studio Preview(`?scenario=t`) 동일 구조 + `category.posts` 스킨 5종 회귀(폴더 유무에 innerHTML 동일) |
 | `skin/skin-folder-page-e2e-test.mjs` | 8944 | FOLDER-2 폴더 페이지(Series Viewer) — OPEN 링크(folderHref) 조건 · direct 글만 + 본문 region 채움 · children/breadcrumb/BACK/EDIT · 소유자 secret/private 본문 · 방문자 글별 gate(오답/정답, 네트워크에 secret id 없음) · 카테고리 복귀(삭제/빈/direct 없음/템플릿 없음/다른 카테고리) · 직접 접속·뒤로가기·모바일 + Studio Preview(`?scenario=t`) 동일 구조·`preview:folder-bodies`·CODE 활성·overlay |
 | `skin/skin-crop-published-e2e-test.mjs` | 8947 | 자르기 결과의 **공개 화면** 렌더 — Studio에서 자르고 Save/Export한 .json을 그대로 `get_published_skin`에 넣어 실제 `index.html`로 렌더 · sanitizer/CSS validator 이후 래퍼와 자르기 규칙 생존 · Studio Preview와 프레임/구도 일치 · desktop/mobile 빈틈·가로 넘침 · 자른 이미지의 링크 클릭 |
-| `studio/studio-crop-e2e-test.mjs` | 8946 | Select mode 이미지 자르기 — 비율(정사각/가로/세로·현재 비율)·확대·드래그 구도·빈틈 없음 + 임시/취소/Escape/Undo + 자르기 초기화 + 크기 조절과 공존(프레임이 주인) + 래퍼 중복 방지 + 좌표(Desktop/Mobile 축소·AI 패널) + Save/재로드/Export→Import + 보호 영역·로드 실패·이미지 교체 + `--only=frame`: 조상 overflow가 잘라내는 프레임의 테두리/드래그 판 위치·구도 이동이 포인터와 1:1·위치 슬라이더/방향 버튼·팝오버 고정 |
+| `studio/studio-crop-e2e-test.mjs` | 8946 | Select mode 이미지 자르기 — 비율(정사각/가로/세로·현재 비율)·확대·드래그 구도·빈틈 없음 + 임시/취소/Escape/Undo + 자르기 초기화 + 크기 조절과 공존(프레임이 주인) + 래퍼 중복 방지 + 좌표(Desktop/Mobile 축소·AI 패널) + Save/재로드/Export→Import + 보호 영역·로드 실패·이미지 교체 + `--only=frame`: 조상 overflow가 잘라내는 프레임의 테두리/드래그 판 위치·구도 이동이 포인터와 1:1·위치 슬라이더/방향 버튼·팝오버 고정 + `--only=free`/`freegeo`: 자유 비율(네 변·모서리 핸들·왜곡/빈틈 없음·자유↔고정 전환은 **그려진 사진**으로 판정·삼등분 가이드선) + `--only=freealign`: 왼쪽/가운데/오른쪽 정렬 × 네 변·모서리에서 잡은 변은 포인터 1:1·반대쪽 변 고정(모바일 배율 포함)·적용 시 임시 위치 해제 + `--only=freelimit`: 확대 상한에서 핸들 정지·안내 + `--only=sliders`: 슬라이더 토큰·방향키·채움 비율·비활성 |
 | `studio/studio-file-ux-e2e-test.mjs` | 8943 | Skin Studio 파일 UX — Export(.json 다운로드·allowlist 필드·DB 키 제외) → 파일 선택/drag&drop Import 왕복 구조 동일·붙여넣기 Import 회귀·Save 회귀·legacy HOME-only draft 안내 (이미지 슬롯 drag&drop은 `studio/images/skin-image-library-e2e-test.mjs` 8935의 `[drop]` 절) |
 
 **완료 기준** (상세: 기준 문서 §6)

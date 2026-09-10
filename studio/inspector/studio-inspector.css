@@ -416,6 +416,17 @@
 }
 
 
+/* "여기까지만 줄일 수 있어요" — 손이 멈춘 이유를 말하는 안내라
+   평범한 설명보다 한 단계 눈에 띄어야 한다(색만 바꾼다). */
+.studio-inspector-block-note--warn {
+  border: 1px solid var(--system-accent-border);
+
+  background: var(--system-accent-soft);
+
+  color: var(--system-accent-hover);
+}
+
+
 .studio-inspector-textarea {
   width: 100%;
 
@@ -485,14 +496,169 @@
 }
 
 
+/* =========================================================
+   슬라이더 — 너비 · 확대 · 위치 X/Y 넷이 **한 규칙**을 쓴다
+
+   ★ 왜 브라우저 기본 모양을 버렸나
+     기본 range는 브라우저마다 트랙 두께도 손잡이 크기도 다르고,
+     accent-color로는 "얇은 회색 트랙 + 중간 회색 채움 + 흰 손잡이"
+     를 만들 수 없다. Chromium과 WebKit에서 같은 모양이 나오려면
+     appearance: none 뒤에 트랙과 손잡이를 직접 그리는 수밖에 없다.
+
+   ★ 채워진 구간
+     ::-moz-range-progress를 빼면 채움을 그려 주는 표준이 없다.
+     그래서 트랙 배경을 **가로 그라디언트**로 그리고, 경계 위치만
+     JS가 --imory-range-fill에 넣어 준다(studio-inspector-controls.js
+     studioInspectorRangeFill). 값이 바뀌는 모든 자리(input/change,
+     드래그 중 프로그램적 갱신)에서 함께 갱신된다.
+
+   ★ 얇은 것은 **보이는 막대**뿐이다
+     input 자체 높이는 18px 그대로라 손가락으로 잡을 자리가 줄지
+     않는다. 3px 막대는 그 안에 background-size로 세로 가운데
+     정렬해 그린다 — 음수 margin으로 손잡이를 끌어올리는 방식보다
+     브라우저 사이 차이가 적다.
+
+   ★ 키보드는 그대로다 — appearance만 껐지 <input type="range">의
+     방향키/Home/End 동작은 손대지 않았다. focus-visible에서는
+     손잡이에 accent 링을 둘러 어디에 포커스가 있는지 보인다.
+========================================================== */
+
 .studio-inspector-range {
+  /* 채워진 구간의 경계. JS가 값이 바뀔 때마다 다시 넣는다. */
+  --imory-range-fill: 0%;
+
+  --imory-range-track: var(--system-border-strong);
+  --imory-range-progress: var(--imory-gray-400);
+  --imory-range-thumb-border: var(--imory-gray-300);
+
   flex: 1;
 
   min-width: 0;
 
-  accent-color: var(--system-accent);
+  height: 18px;
+
+  margin: 0;
+  padding: 0;
+
+  -webkit-appearance: none;
+  appearance: none;
+
+  background: transparent;
 
   cursor: pointer;
+}
+
+
+.studio-inspector-range::-webkit-slider-runnable-track {
+  height: 18px;
+
+  border: 0;
+
+  background-color: transparent;
+  background-image:
+    linear-gradient(
+      to right,
+      var(--imory-range-progress) 0 var(--imory-range-fill),
+      var(--imory-range-track) var(--imory-range-fill) 100%
+    );
+  background-repeat: no-repeat;
+  background-position: 0 center;
+  background-size: 100% 3px;
+}
+
+
+.studio-inspector-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+
+  width: 12px;
+  height: 12px;
+
+  /* (18 - 12) / 2 — 3px 막대의 가운데에 앉는다 */
+  margin-top: 3px;
+
+  box-sizing: border-box;
+
+  border: 1px solid var(--imory-range-thumb-border);
+  border-radius: 50%;
+
+  background: var(--system-bg);
+
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+
+.studio-inspector-range::-moz-range-track {
+  height: 3px;
+
+  border: 0;
+
+  background: var(--imory-range-track);
+}
+
+
+.studio-inspector-range::-moz-range-progress {
+  height: 3px;
+
+  background: var(--imory-range-progress);
+}
+
+
+.studio-inspector-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+
+  box-sizing: border-box;
+
+  border: 1px solid var(--imory-range-thumb-border);
+  border-radius: 50%;
+
+  background: var(--system-bg);
+
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+
+/* 포커스 링은 손잡이에만 — input 전체에 outline을 주면 18px 판
+   전체가 사각형으로 둘러싸여 슬라이더처럼 보이지 않는다. */
+.studio-inspector-range:focus {
+  outline: none;
+}
+
+
+.studio-inspector-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--system-accent);
+
+  box-shadow: 0 0 0 3px var(--system-accent-soft), 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+
+.studio-inspector-range:focus-visible::-moz-range-thumb {
+  border-color: var(--system-accent);
+
+  box-shadow: 0 0 0 3px var(--system-accent-soft), 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+
+/* 비활성도 같은 형태로 두고 **밝기만** 한 단계 내린다 — opacity로
+   통째로 흐리면 손잡이의 흰색까지 배경에 녹아 어디가 슬라이더인지
+   알아보기 어렵다. */
+.studio-inspector-range:disabled {
+  --imory-range-track: var(--system-border);
+  --imory-range-progress: var(--system-border-strong);
+  --imory-range-thumb-border: var(--system-border-strong);
+
+  cursor: default;
+}
+
+
+.studio-inspector-range:disabled::-webkit-slider-thumb {
+  box-shadow: none;
+}
+
+
+.studio-inspector-range:disabled::-moz-range-thumb {
+  box-shadow: none;
 }
 
 
@@ -549,8 +715,9 @@
 }
 
 
-.studio-inspector-crop-step:disabled,
-.studio-inspector-crop-position:disabled {
+/* 슬라이더는 위 :disabled 규칙이 따로 맡는다 — 여기서 opacity로
+   한 번 더 흐리면 얇은 막대가 거의 사라진다. */
+.studio-inspector-crop-step:disabled {
   opacity: 0.4;
 
   cursor: default;
@@ -679,4 +846,190 @@
   cursor: grabbing;
 
   user-select: none;
+}
+
+
+/* =========================================================
+   삼등분 가이드선 (자유 비율 라운드)
+
+   자르기 판의 자식이라 판이 hidden이면 함께 사라진다 — "자르는
+   동안에만 보이고 적용하면 숨는다"를 따로 켜고 끌 필요가 없다.
+
+   선 두 벌을 겹쳐 그린다: 밝은 흰 선 위에 옅은 검은 선을 1px
+   비켜 두면 밝은 사진에서도 어두운 사진에서도 보인다.
+========================================================== */
+
+.studio-inspector-crop-guide {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+}
+
+
+.studio-inspector-crop-guide::before,
+.studio-inspector-crop-guide::after {
+  position: absolute;
+
+  content: "";
+}
+
+
+/* 세로선 둘 — 좌우 1/3 지점 */
+.studio-inspector-crop-guide::before {
+  top: 0;
+  bottom: 0;
+  left: 33.333%;
+  right: 33.333%;
+
+  border-left: 1px solid rgba(255, 255, 255, 0.62);
+  border-right: 1px solid rgba(255, 255, 255, 0.62);
+
+  box-shadow:
+    inset 1px 0 0 rgba(0, 0, 0, 0.14),
+    inset -1px 0 0 rgba(0, 0, 0, 0.14);
+}
+
+
+/* 가로선 둘 — 위아래 1/3 지점 */
+.studio-inspector-crop-guide::after {
+  left: 0;
+  right: 0;
+  top: 33.333%;
+  bottom: 33.333%;
+
+  border-top: 1px solid rgba(255, 255, 255, 0.62);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.62);
+
+  box-shadow:
+    inset 0 1px 0 rgba(0, 0, 0, 0.14),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.14);
+}
+
+
+/* =========================================================
+   자유 비율 핸들 — 네 변 가운데 + 네 모서리 (자유 비율 라운드)
+
+   ★ 보이는 것은 짧고 얇은 막대지만 **잡는 자리는 넉넉하다.**
+     실제 요소는 20~44px짜리 투명한 판이고, 막대는 그 안의
+     ::before가 그린다 — 터치에서도 3px짜리 선을 정확히 겨눌
+     필요가 없다.
+
+   ★ left/top에 들어가는 값이 곧 변의 가운데점(모서리는 그 점)
+     이라, 자기 크기의 절반만큼 당겨 놓는다(모서리 핸들과 같은 규칙).
+
+   ★ 자르기 판보다 뒤에 붙어 위에 온다 — 변을 잡으려던 손이 사진
+     드래그로 새지 않는다.
+========================================================== */
+
+.studio-inspector-crop-handle {
+  position: absolute;
+
+  pointer-events: auto;
+
+  touch-action: none;
+}
+
+
+.studio-inspector-crop-handle::before {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+
+  border-radius: var(--imory-radius-pill);
+
+  background: var(--system-accent-hover);
+
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.85);
+
+  transform: translate(-50%, -50%);
+
+  content: "";
+}
+
+
+.studio-inspector-crop-handle--n,
+.studio-inspector-crop-handle--s {
+  width: 44px;
+  height: 20px;
+
+  margin: -10px 0 0 -22px;
+
+  cursor: ns-resize;
+}
+
+
+.studio-inspector-crop-handle--n::before,
+.studio-inspector-crop-handle--s::before {
+  width: 26px;
+  height: 3px;
+}
+
+
+.studio-inspector-crop-handle--w,
+.studio-inspector-crop-handle--e {
+  width: 20px;
+  height: 44px;
+
+  margin: -22px 0 0 -10px;
+
+  cursor: ew-resize;
+}
+
+
+.studio-inspector-crop-handle--w::before,
+.studio-inspector-crop-handle--e::before {
+  width: 3px;
+  height: 26px;
+}
+
+
+.studio-inspector-crop-handle--nw,
+.studio-inspector-crop-handle--ne,
+.studio-inspector-crop-handle--sw,
+.studio-inspector-crop-handle--se {
+  width: 24px;
+  height: 24px;
+
+  margin: -12px 0 0 -12px;
+}
+
+
+.studio-inspector-crop-handle--nw::before,
+.studio-inspector-crop-handle--ne::before,
+.studio-inspector-crop-handle--sw::before,
+.studio-inspector-crop-handle--se::before {
+  width: 10px;
+  height: 10px;
+
+  border-radius: var(--imory-radius-100);
+}
+
+
+/* 모서리도 가로·세로를 **따로** 바꾼다(비율 유지가 아니다) —
+   그래도 커서는 대각선이 대각선 방향 조절임을 가장 잘 알린다. */
+.studio-inspector-crop-handle--nw,
+.studio-inspector-crop-handle--se {
+  cursor: nwse-resize;
+}
+
+
+.studio-inspector-crop-handle--ne,
+.studio-inspector-crop-handle--sw {
+  cursor: nesw-resize;
+}
+
+
+/* 변을 끄는 동안에도 레이어 전체가 포인터를 받는다 — 포인터가
+   핸들 밖으로 빠르게 벗어나도 iframe이 가로채지 않는다. */
+.studio-inspector-layer.is-crop-sizing {
+  pointer-events: auto;
+
+  user-select: none;
+}
+
+
+/* 끄는 동안에는 사진 판이 grab 커서를 덮어쓰지 않게 한다 */
+.studio-inspector-layer.is-crop-sizing .studio-inspector-crop-surface {
+  cursor: inherit;
 }

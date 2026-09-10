@@ -1042,6 +1042,75 @@ function ensureInspectorCropWrapper(node, restore) {
 }
 
 
+/* =========================================================
+   pinInspectorCropFrame(wrapper, anchor)
+
+   자유 비율로 변을 끄는 동안 **고정하기로 한 변을 제자리에 붙여
+   둔다.** Studio가 "이 변이 이 좌표에 있어야 한다"만 보내고, 얼마나
+   되밀지는 여기서 정한다.
+
+   ★ 왜 여기서 재는가
+   프레임은 보통 흐름 안에 있고 폭이 바뀌면 **정렬 규칙이 자리를
+   다시 정한다** — 가운데 정렬이면 양쪽이 반씩 벌어지고, 오른쪽
+   정렬이면 왼쪽 변이 움직인다. 그 규칙을 Studio가 알아낼 방법이
+   없다(부모의 margin/flex/grid/text-align 조합 전부를 읽어야 한다).
+   대신 **새 폭으로 한 번 배치한 결과를 재서** 어긋난 만큼 되밀면
+   정렬이 무엇이든 같은 결과가 나온다.
+
+   ★ transform이 아니라 translate 속성이다 — 스킨이 그 요소에
+     transform을 걸어 뒀더라도 덮어쓰지 않고 그 위에 얹힌다.
+     레이아웃을 밀지 않으므로 주변 글도 움직이지 않는다.
+
+   ★ 임시 미리보기에만 남는다. clearInspectorPreview()가 wrapper의
+     style을 통째로 되돌리므로 확정 CSS에는 한 글자도 가지 않고,
+     "적용"을 누르면 프레임은 새 크기 그대로 **스킨의 정렬 규칙이
+     정한 자리**로 앉는다.
+========================================================== */
+
+function pinInspectorCropFrame(wrapper, anchor) {
+
+  if (!wrapper) {
+    return;
+  }
+
+  if (!anchor || typeof anchor !== "object") {
+    wrapper.style.translate = "";
+    return;
+  }
+
+  /* 되민 값을 걷고 나서 재야 "정렬이 정한 자리"가 나온다 */
+  wrapper.style.translate = "";
+
+  const rect =
+    wrapper.getBoundingClientRect();
+
+  /* low/high는 붙여 둘 자리, at/to는 지금 배치된 자리.
+     "left"/"top"은 시작 쪽 변, "right"/"bottom"은 끝 쪽 변이다 —
+     축마다 이름이 다를 뿐 계산은 하나다. */
+  const shift = (side, low, high, at, to) => {
+
+    if (side === "left" || side === "top") return low - at;
+    if (side === "right" || side === "bottom") return high - to;
+    if (side === "center") return (low + high) / 2 - (at + to) / 2;
+
+    return 0;
+
+  };
+
+  const dx =
+    shift(anchor.x, anchor.left, anchor.right, rect.left, rect.right);
+
+  const dy =
+    shift(anchor.y, anchor.top, anchor.bottom, rect.top, rect.bottom);
+
+  wrapper.style.translate =
+    (dx || dy)
+      ? `${Math.round(dx * 100) / 100}px ${Math.round(dy * 100) / 100}px`
+      : "";
+
+}
+
+
 function applyInspectorPreview(data) {
 
   const selected =
@@ -1127,6 +1196,8 @@ function applyInspectorPreview(data) {
 
       applyInspectorInlineDeclarations(wrapper, declarations.frame);
       applyInspectorInlineDeclarations(selected, declarations.image);
+
+      pinInspectorCropFrame(wrapper, data.crop.anchor);
 
     }
 
