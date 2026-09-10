@@ -471,13 +471,21 @@ function studioInspectorMapRectRaw(rect) {
 
 /* 핸들은 "지금 선택이 크기 조절 가능한 이미지"일 때만, 그리고 그
    모서리가 실제로 Preview 안에 보일 때만 그린다. */
-function paintStudioInspectorHandles(rect) {
+function paintStudioInspectorHandles(rect, visibleRect) {
 
   /* 자르기 판과 모서리 핸들은 같은 사각형 위에 그려진다 — 둘을
      동시에 띄우면 사진을 끌려던 손이 핸들을 잡는다. 자르는 동안은
      핸들을 내리고, 자르기가 끝나면 다시 올라온다. 한 곳에서 함께
-     칠해야 "한쪽만 남아 있다"가 생기지 않는다. */
-  paintStudioInspectorCropSurface(rect);
+     칠해야 "한쪽만 남아 있다"가 생기지 않는다.
+
+     ★ 판은 **보이는 사각형** 위에 깐다. 프레임이 부모의
+     overflow: hidden에 잘려 있으면 레이아웃 사각형에는 화면에
+     그려지지 않는 부분이 들어 있고, 그 자리를 끌어도 사진은
+     없다(preview-bridge.js inspectorVisibleRectOf 머리말). */
+  const visible =
+    visibleRect || rect;
+
+  paintStudioInspectorCropSurface(visible);
 
   if (!studioInspectorHandles.length) {
     return;
@@ -487,6 +495,14 @@ function paintStudioInspectorHandles(rect) {
     (studioInspectorResizable && !studioInspectorCropDraft)
       ? studioInspectorMapRectRaw(rect)
       : null;
+
+  /* 핸들 **좌표**는 레이아웃 사각형 그대로다 — 크기 조절 계산이
+     반대쪽 모서리를 기준점으로 쓰기 때문이다. 다만 잘려서 보이지
+     않는 모서리는 잡을 수 없으므로 내린다. */
+  const clip =
+    mapped && visible !== rect
+      ? studioInspectorMapRectRaw(visible)
+      : mapped;
 
   studioInspectorHandles.forEach((handle) => {
 
@@ -508,7 +524,12 @@ function paintStudioInspectorHandles(rect) {
       x >= mapped.frame.left - 1 &&
       x <= mapped.frame.right + 1 &&
       y >= mapped.frame.top - 1 &&
-      y <= mapped.frame.bottom + 1;
+      y <= mapped.frame.bottom + 1 &&
+      (!clip ||
+        (x >= clip.left - 1 &&
+         x <= clip.right + 1 &&
+         y >= clip.top - 1 &&
+         y <= clip.bottom + 1));
 
     if (!inside) {
       handle.hidden = true;
@@ -534,30 +555,118 @@ function paintStudioInspectorHandles(rect) {
 
 const STUDIO_INSPECTOR_POPOVER_GAP = 8;
 
-function placeStudioInspectorPopover(rect) {
+/* 지금 앉아 있는 자리.
 
-  if (!studioInspectorPopover || studioInspectorPopover.hidden) {
-    return;
+   ★ 규칙 (요구사항 C)
+     - 손이 무언가를 만지고 있는 동안(슬라이더 · 숫자 입력 ·
+       모서리 드래그 · 자르기 드래그 = 임시 미리보기가 떠 있는
+       동안)에는 **절대 움직이지 않는다.** 이미지가 커지면 팝오버가
+       따라 내려가고, 그러면 손이 잡고 있는 슬라이더가 밑으로
+       도망간다. 그게 원래 불편의 정체다.
+     - 손을 뗀 뒤에는 자리를 그대로 두되, 두 경우에만 다시 고른다:
+       stage 밖으로 밀려났을 때, 그리고 **지금 편집 중인 요소를
+       덮고 있을 때**. 덮은 채로 두면 모서리 핸들이 팝오버 밑으로
+       들어가 잡히지 않는다.
+     - 선택이 바뀌거나 폼 모양이 바뀌면 새로 고른다(force).
+
+   ★ 선택 테두리와 모서리 핸들은 이 고정과 무관하게 늘 실제
+     프레임을 따라간다 — 그쪽은 "무엇이 선택돼 있는가"를 보여주는
+     선이고, 팝오버는 손이 올라가 있는 판이라서 요구가 반대다. */
+let studioInspectorPopoverPlacement = null;
+
+
+/* 지금 손이 무언가를 만지고 있는가 — 임시 미리보기가 떠 있으면
+   그렇다(크기 슬라이더/숫자칸/모서리 드래그/자르기 전 과정). */
+function studioInspectorPopoverIsBusy() {
+
+  return !!(
+    studioInspectorPreviewActive ||
+    studioInspectorDrag ||
+    studioInspectorCropDrag
+  );
+
+}
+
+
+/* 모서리 핸들은 사각형 모서리에 걸쳐 그려진다 — 팝오버가 그 바로
+   위까지 올라오면 핸들 절반이 덮인다. 그만큼 여유를 둔다. */
+const STUDIO_INSPECTOR_HANDLE_HIT_PAD = 10;
+
+
+/* 팝오버가 지금 편집 중인 사각형을 덮고 있는가(모서리 핸들이
+   잡히는 자리까지 조금 넉넉하게 본다). */
+function studioInspectorPopoverCovers(anchor, size, placement) {
+
+  if (!anchor || !anchor.width || !anchor.height) {
+    return false;
   }
 
-  const mapped =
-    studioInspectorMapRect(rect);
+  const pad =
+    STUDIO_INSPECTOR_HANDLE_HIT_PAD;
 
-  const bounds =
-    studioInspectorStage
-      ? studioInspectorStage.getBoundingClientRect()
-      : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  return !(
+    placement.left > anchor.left + anchor.width + pad ||
+    placement.left + size.width < anchor.left - pad ||
+    placement.top > anchor.top + anchor.height + pad ||
+    placement.top + size.height < anchor.top - pad
+  );
 
-  const size =
-    studioInspectorPopover.getBoundingClientRect();
+}
 
-  const anchor =
-    mapped || {
-      left: bounds.left + 16,
-      top: bounds.top + 16,
-      width: 0,
-      height: 0
-    };
+
+
+
+function studioInspectorStageBounds() {
+
+  return studioInspectorStage
+    ? studioInspectorStage.getBoundingClientRect()
+    : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+
+}
+
+
+/* 앵커(선택 사각형) 기준으로 앉을 자리를 새로 고른다.
+
+   자르는 동안에는 **옆으로** 비켜 앉는다 — 자르기는 프레임 위를
+   직접 끄는 조작이라, 아래에 붙으면 큰 프레임에서 드래그 영역을
+   덮는다. 옆에 자리가 없을 때만 위/아래로 돌아간다. */
+function studioInspectorPopoverSpot(anchor, size, bounds) {
+
+  const minLeft =
+    bounds.left + STUDIO_INSPECTOR_POPOVER_GAP;
+
+  const maxLeft =
+    Math.max(minLeft, bounds.right - size.width - STUDIO_INSPECTOR_POPOVER_GAP);
+
+  const minTop =
+    bounds.top + STUDIO_INSPECTOR_POPOVER_GAP;
+
+  const maxTop =
+    Math.max(minTop, bounds.bottom - size.height - STUDIO_INSPECTOR_POPOVER_GAP);
+
+  if (studioInspectorCropDraft) {
+
+    const right =
+      anchor.left + anchor.width + STUDIO_INSPECTOR_POPOVER_GAP;
+
+    const left =
+      anchor.left - size.width - STUDIO_INSPECTOR_POPOVER_GAP;
+
+    const beside =
+      (right + size.width <= bounds.right - STUDIO_INSPECTOR_POPOVER_GAP)
+        ? right
+        : (left >= minLeft ? left : null);
+
+    if (beside !== null) {
+
+      return {
+        left: beside,
+        top: Math.min(Math.max(anchor.top, minTop), maxTop)
+      };
+
+    }
+
+  }
 
   let top =
     anchor.top + anchor.height + STUDIO_INSPECTOR_POPOVER_GAP;
@@ -568,26 +677,100 @@ function placeStudioInspectorPopover(rect) {
       anchor.top - size.height - STUDIO_INSPECTOR_POPOVER_GAP;
 
     top =
-      above >= bounds.top + STUDIO_INSPECTOR_POPOVER_GAP
-        ? above
-        : Math.max(
-            bounds.top + STUDIO_INSPECTOR_POPOVER_GAP,
-            bounds.bottom - size.height - STUDIO_INSPECTOR_POPOVER_GAP
-          );
+      above >= minTop ? above : maxTop;
 
   }
 
-  const left =
-    Math.min(
-      Math.max(anchor.left, bounds.left + STUDIO_INSPECTOR_POPOVER_GAP),
-      Math.max(
-        bounds.left + STUDIO_INSPECTOR_POPOVER_GAP,
-        bounds.right - size.width - STUDIO_INSPECTOR_POPOVER_GAP
-      )
-    );
+  return {
+    left: Math.min(Math.max(anchor.left, minLeft), maxLeft),
+    top
+  };
 
-  studioInspectorPopover.style.left = `${left}px`;
-  studioInspectorPopover.style.top = `${top}px`;
+}
+
+
+function placeStudioInspectorPopover(rect, options) {
+
+  if (!studioInspectorPopover || studioInspectorPopover.hidden) {
+    studioInspectorPopoverPlacement = null;
+    return;
+  }
+
+  const bounds =
+    studioInspectorStageBounds();
+
+  const size =
+    studioInspectorPopover.getBoundingClientRect();
+
+  const mappedAnchor =
+    studioInspectorMapRect(rect);
+
+  /* 손을 떼고 난 뒤, 지금 자리가 편집 중인 요소를 덮고 있으면
+     다시 고른다 — 안 그러면 모서리 핸들이 팝오버 밑에 깔린다. */
+  const covering =
+    !studioInspectorPopoverIsBusy() &&
+    !!studioInspectorPopoverPlacement &&
+    studioInspectorPopoverCovers(mappedAnchor, size, studioInspectorPopoverPlacement);
+
+  const force =
+    !!(options && options.force) ||
+    !studioInspectorPopoverPlacement ||
+    covering;
+
+  if (!force) {
+
+    /* 자리는 그대로 두되, stage 밖으로 밀려났으면 그만큼만 되민다.
+       (AI 패널을 열어 stage가 좁아졌거나 창이 작아진 경우) */
+    const minLeft =
+      bounds.left + STUDIO_INSPECTOR_POPOVER_GAP;
+
+    const maxLeft =
+      Math.max(minLeft, bounds.right - size.width - STUDIO_INSPECTOR_POPOVER_GAP);
+
+    const minTop =
+      bounds.top + STUDIO_INSPECTOR_POPOVER_GAP;
+
+    const maxTop =
+      Math.max(minTop, bounds.bottom - size.height - STUDIO_INSPECTOR_POPOVER_GAP);
+
+    const left =
+      Math.min(Math.max(studioInspectorPopoverPlacement.left, minLeft), maxLeft);
+
+    const top =
+      Math.min(Math.max(studioInspectorPopoverPlacement.top, minTop), maxTop);
+
+    studioInspectorPopoverPlacement = { left, top };
+
+    studioInspectorPopover.style.left = `${left}px`;
+    studioInspectorPopover.style.top = `${top}px`;
+
+    return;
+
+  }
+
+  const anchor =
+    mappedAnchor || {
+      left: bounds.left + 16,
+      top: bounds.top + 16,
+      width: 0,
+      height: 0
+    };
+
+  studioInspectorPopoverPlacement =
+    studioInspectorPopoverSpot(anchor, size, bounds);
+
+  studioInspectorPopover.style.left = `${studioInspectorPopoverPlacement.left}px`;
+  studioInspectorPopover.style.top = `${studioInspectorPopoverPlacement.top}px`;
+
+}
+
+
+/* 팝오버 내용이 바뀌어 크기가 달라졌을 때(직접 수정 폼 여닫기,
+   자르기 열기) 자리를 새로 고른다 — 내용이 그대로면 부르지
+   않는다. renderStudioInspectorPopover()가 마지막에 부른다. */
+function resetStudioInspectorPopoverPlacement() {
+
+  studioInspectorPopoverPlacement = null;
 
 }
 
@@ -607,9 +790,19 @@ function repaintStudioInspectorOverlay() {
   paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
 
   if (studioInspectorSelection) {
-    paintStudioInspectorBox(studioInspectorSelectBox, studioInspectorSelection.rect);
-    paintStudioInspectorHandles(studioInspectorSelection.rect);
-    placeStudioInspectorPopover(studioInspectorSelection.rect);
+
+    const visible =
+      studioInspectorSelection.visibleRect || studioInspectorSelection.rect;
+
+    paintStudioInspectorBox(studioInspectorSelectBox, visible);
+
+    paintStudioInspectorHandles(studioInspectorSelection.rect, visible);
+
+    /* stage가 움직인 경우다(창 크기 · AI 패널 · Desktop/Mobile) —
+       그때는 팝오버도 새 자리를 골라야 한다. 다만 손이 무언가를
+       잡고 있는 중이면 그대로 둔다(자리 보정만 한다). */
+    placeStudioInspectorPopover(visible, { force: !studioInspectorPopoverIsBusy() });
+
   }
 
 }

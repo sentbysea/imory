@@ -496,6 +496,67 @@
 }
 
 
+/* =========================================================
+   자르기 위치 조절 — 축마다 [버튼][슬라이더][버튼] 한 줄
+
+   팝오버가 프레임 옆에 앉아도 좁은 화면에서는 겹칠 수 있고, 작은
+   프레임에서는 끌 자리 자체가 거의 없다. 사진을 잡지 않고도 구도를
+   옮길 수 있는 길이다(studio-inspector-crop.js 위치 조절 절).
+========================================================== */
+
+.studio-inspector-crop-position-row {
+  display: grid;
+
+  gap: 4px;
+}
+
+
+.studio-inspector-crop-axis {
+  display: flex;
+
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.studio-inspector-crop-step {
+  flex: 0 0 auto;
+
+  width: 22px;
+
+  padding: 2px 0;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-100);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-muted);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-200);
+  line-height: 1.2;
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-crop-step:hover:not(:disabled) {
+  border-color: var(--system-accent-border);
+
+  color: var(--system-accent-hover);
+}
+
+
+.studio-inspector-crop-step:disabled,
+.studio-inspector-crop-position:disabled {
+  opacity: 0.4;
+
+  cursor: default;
+}
+
+
 .studio-inspector-empty {
   margin: 0;
 

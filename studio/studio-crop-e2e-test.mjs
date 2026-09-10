@@ -27,6 +27,10 @@
      G. 재선택 · 다시 자르기 — 래퍼가 중복으로 생기지 않는다
      H. 좌표 — Desktop/Mobile 축소 배율, AI 패널 열림에서 드래그
         판이 프레임과 정확히 겹친다
+     M. 바깥 상자가 잘라내는 프레임 — 테두리/드래그 판은 **보이는
+        자리**에만 · 구도 이동이 포인터와 1:1 · 위치 슬라이더/방향
+        버튼 · 여유 없는 축 안내 · 팝오버가 조작 중에 움직이지 않고
+        손을 뗀 뒤 핸들을 덮지 않는다
      I. 저장 — Save → 재로드 / Export → Import 뒤에도 구도 유지
      J. 보존/보호 — src·슬롯·링크·edit id 유지, post-body 안 이미지는
         자르기 없음, 로드 실패 이미지는 이유를 안내하고 비활성
@@ -41,7 +45,7 @@
      node studio/studio-crop-e2e-test.mjs --only=ratio
 
    --only= 뒤에 쓸 수 있는 이름:
-     ratio / compose / temp / coexist / geometry / persist / guard
+     ratio / compose / temp / coexist / geometry / persist / guard / frame
 ========================================================== */
 
 import fs from "node:fs";
@@ -1580,6 +1584,286 @@ async function runGuard(context) {
 }
 
 
+
+
+/* =========================================================
+   M. 프레임 좌표 · 팝오버 자리 · 구도 이동 기어비
+      (자르기 프레임/팝오버 좌표 라운드)
+
+   fixture .y-hero-box는 **스스로 16:9 높이를 못 박고 자식을
+   overflow:hidden으로 잘라내는 바깥 상자**다(실제 사용자 스킨의
+   헤더가 이 모양이다). 그 안에서 프레임을 1:1로 키우면 아랫부분은
+   화면에 그려지지 않는다 — 그때 선택 테두리와 드래그 판이 어디에
+   그려지는지, 그리고 손이 슬라이더를 잡고 있는 동안 팝오버가
+   가만히 있는지를 잰다.
+========================================================== */
+
+async function runFrame(context) {
+
+  const page = await openStudio(context);
+  await enableInspector(page);
+
+  /* --- M1. 조상이 잘라내면 테두리·드래그 판은 "보이는 자리"까지만 --- */
+
+  await selectInPreview(page, ".y-hero");
+  await openDirectEdit(page);
+  await openCrop(page);
+  await chooseCropRatio(page, "1:1");
+
+  const clipped = await page.evaluate(() => {
+
+    const r = (n) => Math.round(n * 100) / 100;
+
+    const box = (id) => {
+      const el = document.getElementById(id);
+      if (!el || el.hidden) return null;
+      const b = el.getBoundingClientRect();
+      return { left: r(b.left), top: r(b.top), right: r(b.right), bottom: r(b.bottom), width: r(b.width), height: r(b.height) };
+    };
+
+    const frameEl = document.getElementById("studioPreviewFrame");
+    const fb = frameEl.getBoundingClientRect();
+    const scale = fb.width / (frameEl.offsetWidth || fb.width);
+    const doc = frameEl.contentDocument;
+
+    const img = doc.querySelector(".y-hero");
+    const wrap = img.parentElement;
+    const outer = doc.querySelector(".y-hero-box");
+
+    const map = (el) => {
+      const b = el.getBoundingClientRect();
+      return { left: r(fb.left + b.left * scale), top: r(fb.top + b.top * scale), right: r(fb.left + b.right * scale), bottom: r(fb.top + b.bottom * scale) };
+    };
+
+    return {
+      layoutFrame: map(wrap),
+      outerBox: map(outer),
+      belowTop: r(fb.top + doc.querySelector(".y-below").getBoundingClientRect().top * scale),
+      selectBox: box("studioInspectorSelectBox"),
+      cropSurface: box("studioInspectorCropSurface"),
+      popover: box("studioInspectorPopover"),
+      note: (document.getElementById("studioInspectorCropClipped") || {}).textContent || null
+    };
+
+  });
+
+  record(
+    "M1. 조상이 잘라내는 프레임 — 선택 테두리와 드래그 판이 **보이는 자리**에만 그려진다(아래 문단을 침범하지 않는다)",
+    clipped.cropSurface &&
+      near(clipped.cropSurface.bottom, clipped.outerBox.bottom, 1.5) &&
+      clipped.cropSurface.bottom < clipped.layoutFrame.bottom - 2 &&
+      clipped.cropSurface.bottom <= clipped.belowTop + 0.5 &&
+      near(clipped.selectBox.bottom, clipped.cropSurface.bottom, 1.5),
+    JSON.stringify({
+      surfaceBottom: clipped.cropSurface && clipped.cropSurface.bottom,
+      layoutBottom: clipped.layoutFrame.bottom,
+      outerBottom: clipped.outerBox.bottom,
+      belowTop: clipped.belowTop
+    })
+  );
+
+  record(
+    "M1b. 바깥 상자가 잘라내고 있다는 사실을 자르기 폼이 안내한다",
+    !!clipped.note && clipped.note.indexOf("바깥 상자") !== -1,
+    String(clipped.note)
+  );
+
+  record(
+    "M1c. 자르는 동안 팝오버가 드래그 판을 덮지 않는다",
+    clipped.popover &&
+      (clipped.popover.left >= clipped.cropSurface.right - 1 ||
+       clipped.popover.right <= clipped.cropSurface.left + 1 ||
+       clipped.popover.top >= clipped.cropSurface.bottom - 1 ||
+       clipped.popover.bottom <= clipped.cropSurface.top + 1),
+    JSON.stringify({ popover: clipped.popover, surface: clipped.cropSurface })
+  );
+
+  /* --- M2. 구도 이동 기어비 — 포인터가 움직인 만큼 사진이 따라온다 ---
+
+     확대 2.0에서 세로로 움직일 수 있는 거리는 (2-1) * 프레임높이다.
+     40px을 끌면 사진도 40px 움직여야 한다(예전에는 프레임 높이로
+     나누고 있어서 그 절반만 따라왔다). */
+
+  await chooseCropRatio(page, "current");
+  await setCropZoom(page, 200);
+
+  const before = await inspectorState(page);
+
+  const frameHeight =
+    before.selection.rect.height;
+
+  const beforeDraft = before.cropDraft;
+
+  await dragCropSurface(page, 0, -40);
+
+  const afterDraft = (await inspectorState(page)).cropDraft;
+
+  /* travel(px) = (zoom-1)*frameHeight + cover가 잘라낸 몫.
+     이 fixture는 원본 80x20을 16:9 프레임에 넣으므로 세로 cover 몫은
+     0이다 — travel은 프레임 높이 그대로다. */
+  const movedPx =
+    (beforeDraft.y - afterDraft.y) / 2 * frameHeight;
+
+  record(
+    "M2. 확대한 사진을 세로로 40px 끌면 사진도 40px 움직인다(포인터와 1:1)",
+    afterDraft.y > beforeDraft.y && Math.abs(movedPx + 40) <= 6,
+    JSON.stringify({ y: [beforeDraft.y, afterDraft.y], frameHeight, movedPx: Math.round(movedPx * 10) / 10 })
+  );
+
+  /* --- M3. 위치 슬라이더 / 방향 버튼 --- */
+
+  const stepBefore = (await inspectorState(page)).cropDraft;
+
+  await page.click("#studioInspectorCropStep-y-forward");
+  await sleep(400);
+
+  const stepAfter = (await inspectorState(page)).cropDraft;
+
+  record(
+    "M3. 사진을 잡지 않고 방향 버튼만으로도 상하 구도를 옮길 수 있다",
+    stepAfter.y > stepBefore.y,
+    JSON.stringify({ y: [stepBefore.y, stepAfter.y] })
+  );
+
+  await page.evaluate(() => {
+    const range = document.getElementById("studioInspectorCropPosition-y");
+    range.value = "-70";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    range.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await sleep(400);
+
+  const sliderGeometry = await cropGeometry(page, ".y-hero");
+
+  record(
+    "M3b. 세로 위치 슬라이더가 값 그대로 반영되고 빈틈이 생기지 않는다",
+    near((await inspectorState(page)).cropDraft.y, -0.7, 0.02) && coversFrame(sliderGeometry),
+    JSON.stringify({ frame: sliderGeometry.frame, image: sliderGeometry.image })
+  );
+
+  /* --- M4. 여유가 없는 축은 비활성 + 이유 안내 --- */
+
+  await setCropZoom(page, 100);
+  await chooseCropRatio(page, "current");
+
+  const noSlack = await page.evaluate(() => ({
+    hint: (document.getElementById("studioInspectorCropHint") || {}).textContent || "",
+    yDisabled: document.getElementById("studioInspectorCropPosition-y").disabled,
+    xDisabled: document.getElementById("studioInspectorCropPosition-x").disabled
+  }));
+
+  record(
+    "M4. 확대 1.0에서 움직일 여유가 없는 축은 비활성이고, '확대하면' 이유를 안내한다",
+    noSlack.yDisabled === true && noSlack.hint.indexOf("확대") !== -1,
+    JSON.stringify(noSlack)
+  );
+
+  await page.evaluate(() => {
+    const cancel = document.getElementById("studioInspectorCropCancel");
+    if (cancel) cancel.click();
+  });
+
+  await sleep(400);
+
+  /* --- M5. 손이 슬라이더를 잡고 있는 동안 팝오버가 움직이지 않는다 --- */
+
+  await selectInPreview(page, ".y-avatar");
+  await openDirectEdit(page);
+
+  const popoverStart = await popoverBox(page);
+
+  const duringDrag = [];
+
+  for (const width of [180, 240, 300, 200, 140]) {
+
+    await page.evaluate((value) => {
+      const range = document.getElementById("studioInspectorSizeRange");
+      range.value = String(value);
+      range.dispatchEvent(new Event("input", { bubbles: true }));
+    }, width);
+
+    await sleep(160);
+
+    duringDrag.push(await popoverBox(page));
+
+  }
+
+  record(
+    "M5. 너비 슬라이더를 끄는 동안 팝오버가 한 번도 움직이지 않는다(손이 잡은 슬라이더가 도망가지 않는다)",
+    duringDrag.every(p => p && near(p.left, popoverStart.left, 1) && near(p.top, popoverStart.top, 1)),
+    JSON.stringify({ start: popoverStart, during: duringDrag.map(p => p && [p.left, p.top]) })
+  );
+
+  /* 손을 뗀 뒤에는 이미지와 모서리 핸들을 덮고 있으면 안 된다 */
+
+  await page.evaluate(() => {
+    const range = document.getElementById("studioInspectorSizeRange");
+    range.value = "320";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    range.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  await sleep(700);
+
+  const released = await page.evaluate(() => {
+
+    const r = (n) => Math.round(n * 100) / 100;
+
+    const popover = document.getElementById("studioInspectorPopover").getBoundingClientRect();
+
+    const covered =
+      ["nw", "ne", "sw", "se"].filter((corner) => {
+
+        const el = document.getElementById("studioInspectorHandle-" + corner);
+
+        if (!el || el.hidden) return false;
+
+        const b = el.getBoundingClientRect();
+        const x = b.left + b.width / 2;
+        const y = b.top + b.height / 2;
+
+        return x >= popover.left && x <= popover.right && y >= popover.top && y <= popover.bottom;
+
+      });
+
+    return {
+      covered,
+      popover: { left: r(popover.left), top: r(popover.top), right: r(popover.right), bottom: r(popover.bottom) }
+    };
+
+  });
+
+  record(
+    "M5b. 손을 뗀 뒤에는 팝오버가 모서리 핸들을 덮지 않는다(덮고 있으면 자리를 다시 고른다)",
+    released.covered.length === 0,
+    JSON.stringify(released)
+  );
+
+  await page.close();
+
+}
+
+
+/* 팝오버의 지금 자리 */
+async function popoverBox(page) {
+
+  return page.evaluate(() => {
+
+    const el = document.getElementById("studioInspectorPopover");
+
+    if (!el || el.hidden) return null;
+
+    const b = el.getBoundingClientRect();
+    const r = (n) => Math.round(n * 100) / 100;
+
+    return { left: r(b.left), top: r(b.top), width: r(b.width), height: r(b.height) };
+
+  });
+
+}
+
+
 /* =========================================================
    실행
 ========================================================== */
@@ -1603,6 +1887,7 @@ async function runGuard(context) {
     if (shouldRun("geometry")) await runGeometry(context);
     if (shouldRun("persist")) await runPersist(context);
     if (shouldRun("guard")) await runGuard(context);
+    if (shouldRun("frame")) await runFrame(context);
 
     record(
       "N. 자르기 전 과정에서 /api/skin-ai 호출 0회",

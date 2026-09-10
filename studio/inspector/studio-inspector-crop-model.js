@@ -214,6 +214,92 @@ function buildInspectorCropDeclarations(crop, options) {
 }
 
 
+/* =========================================================
+   inspectorCropTravelPx(crop, frame) -> { x, y }
+
+   "이 구도를 한쪽 끝에서 반대쪽 끝까지 옮기면 사진이 실제로 몇 px
+   움직이는가". x/y는 -1~+1이므로 이 값이 곧 **2만큼의 이동에
+   해당하는 px**이다.
+
+   ★ 왜 필요한가
+   드래그는 원래 프레임 폭을 그대로 이동 한계로 썼다(x -= 2*dx/폭).
+   하지만 실제로 움직일 수 있는 거리는 프레임 폭이 아니라
+
+       확대로 생긴 여유            (zoom - 1) * 프레임크기
+     + cover가 잘라낸 몫           상자 안에서 넘치는 만큼
+
+   둘의 합이다. 확대 1.4배·213px 프레임이면 세로로 실제 움직일 수
+   있는 거리는 85px인데 213px로 나누고 있었으니, 손은 80px를 끌어도
+   사진은 32px밖에 따라오지 않았다("상하 구도 조절이 어렵다").
+   이 함수로 나누면 **포인터와 사진이 1:1로 움직인다.**
+
+   ★ 0이면 그 축은 아예 움직일 수 없다 — 확대가 1.0이고 원본 비율이
+   프레임 비율과 같은 축이 그렇다. 그때는 안내 문구를 띄운다
+   (studio-inspector-crop.js).
+
+   frame: { width, height, naturalWidth, naturalHeight }
+   원본 크기를 모르면 cover 몫은 0으로 둔다 — 확대 여유만 남으므로
+   "실제보다 덜 움직인다"가 아니라 "덜 움직일 수 있다고 본다"라서
+   빈틈이 생기는 쪽으로는 틀리지 않는다.
+========================================================== */
+
+function inspectorCropTravelPx(crop, frame) {
+
+  const value =
+    normalizeInspectorCrop(crop);
+
+  const box =
+    frame || {};
+
+  const frameWidth =
+    Number(box.width) > 0 ? Number(box.width) : 0;
+
+  const frameHeight =
+    Number(box.height) > 0 ? Number(box.height) : 0;
+
+  if (!frameWidth || !frameHeight) {
+    return { x: 0, y: 0 };
+  }
+
+  const boxWidth =
+    frameWidth * value.zoom;
+
+  const boxHeight =
+    frameHeight * value.zoom;
+
+  /* 확대로 생긴 여유 — 상자가 프레임보다 큰 만큼 */
+  let travelX =
+    Math.max(0, boxWidth - frameWidth);
+
+  let travelY =
+    Math.max(0, boxHeight - frameHeight);
+
+  const naturalWidth =
+    Number(box.naturalWidth) > 0 ? Number(box.naturalWidth) : 0;
+
+  const naturalHeight =
+    Number(box.naturalHeight) > 0 ? Number(box.naturalHeight) : 0;
+
+  /* object-fit: cover가 상자 안에서 잘라낸 몫 — object-position이
+     움직이는 거리다. 둘 중 한 축만 0이 아니다. */
+  if (naturalWidth && naturalHeight) {
+
+    const scale =
+      Math.max(boxWidth / naturalWidth, boxHeight / naturalHeight);
+
+    travelX += Math.max(0, naturalWidth * scale - boxWidth);
+    travelY += Math.max(0, naturalHeight * scale - boxHeight);
+
+  }
+
+  return {
+    x: inspectorCropRound(travelX),
+    y: inspectorCropRound(travelY)
+  };
+
+}
+
+
 /* 자르기가 걸리면서 이미지 쪽 규칙에서 **빠져야 하는** 속성들.
    너비/비율은 이제 프레임이 갖는다(둘 다 갖고 있으면 "크기 조절과
    자르기가 서로 덮어쓴다"가 된다). */
@@ -337,6 +423,7 @@ if (typeof window !== "undefined") {
   window.inspectorCropClampOffset = inspectorCropClampOffset;
   window.normalizeInspectorCrop = normalizeInspectorCrop;
   window.buildInspectorCropDeclarations = buildInspectorCropDeclarations;
+  window.inspectorCropTravelPx = inspectorCropTravelPx;
   window.readInspectorCrop = readInspectorCrop;
   window.buildInspectorCropWrapperId = buildInspectorCropWrapperId;
 

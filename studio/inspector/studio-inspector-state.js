@@ -82,6 +82,13 @@ let studioInspectorHover = null;
 
 let studioInspectorEditingOpen = false;
 
+/* 지금 선택한 프레임을 조상 overflow가 잘라내고 있는가.
+   rect(레이아웃)와 visibleRect(실제로 보이는 자리)의 차이 하나로
+   정한다 — 자르기 중에도 좌표는 계속 갱신되므로 metrics와 달리
+   한 박자 늦지 않는다(studio-inspector.js rects 처리 주석 참고). */
+let studioInspectorClipped = false;
+
+
 /* Direct Edit 1-step undo (요구사항 13절) — 바꾸기 **직전**의
    template html/css 한 벌. AI Undo와 통합하지 않는다(이번 Phase
    범위 밖) 대신, 두 경로 모두 applyWorkingSkinChanges() 하나만

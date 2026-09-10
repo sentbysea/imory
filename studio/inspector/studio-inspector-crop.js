@@ -226,6 +226,139 @@ function studioInspectorCropAwareCss(css, control, value, element) {
 }
 
 
+
+/* =========================================================
+   지금 자르기 프레임의 실측값과 축별 이동 여유
+
+   ★ 왜 draft.frameWidth를 그냥 쓰지 않는가
+   프레임에는 max-width: 100%가 늘 함께 붙는다(모바일에서 넘치지
+   않게). Mobile Preview나 좁은 부모에서는 실제 폭이 draft 값보다
+   작으므로, 이동 한계를 draft 값으로 재면 손과 사진이 어긋난다.
+   그래서 **지금 그려진 사각형**을 먼저 쓴다 — 자르기가 열려 있는
+   동안 selection.rect는 임시 미리보기가 얹힌 프레임의 사각형이다
+   (preview-bridge.js inspectorFrameElementOf).
+========================================================== */
+
+function studioInspectorCropFrameBox() {
+
+  const draft =
+    studioInspectorCropDraft;
+
+  const rect =
+    studioInspectorSelection ? studioInspectorSelection.rect : null;
+
+  let width =
+    rect && rect.width > 0 ? rect.width : 0;
+
+  let height =
+    rect && rect.height > 0 ? rect.height : 0;
+
+  if (!width && draft && Number(draft.frameWidth) > 0) {
+
+    width =
+      Number(draft.frameWidth);
+
+    const ratio =
+      Number(draft.ratio);
+
+    height =
+      ratio > 0 ? width / ratio : width;
+
+  }
+
+  const metrics =
+    studioInspectorMetrics;
+
+  return {
+    width,
+    height,
+    naturalWidth: metrics ? metrics.naturalWidth : 0,
+    naturalHeight: metrics ? metrics.naturalHeight : 0
+  };
+
+}
+
+
+/* 이보다 적게 움직일 수 있는 축은 "움직일 수 없다"로 본다. 원본
+   비율과 프레임 비율이 소수점 아래에서만 다를 때 cover가 1px도 안
+   되는 여유를 남기는데, 그걸 살려 두면 슬라이더는 끝에서 끝까지
+   가는데 화면은 그대로인 상태가 된다 — 제일 헷갈리는 경우다. */
+const STUDIO_INSPECTOR_CROP_TRAVEL_MIN = 2;
+
+
+/* 축별로 "끝에서 끝까지" 몇 px 움직일 수 있는가. 0이면 그 축은
+   지금 설정에서 아예 움직일 수 없다 — 이유를 안내한다. */
+function studioInspectorCropTravel() {
+
+  if (!studioInspectorCropDraft || typeof window.inspectorCropTravelPx !== "function") {
+    return { x: 0, y: 0 };
+  }
+
+  return window.inspectorCropTravelPx(
+    studioInspectorCropDraft,
+    studioInspectorCropFrameBox()
+  );
+
+}
+
+
+/* 안내 문구 — "왜 지금 이 방향으로는 안 움직이는가"까지 말한다.
+   자르기에서 제일 자주 막히는 자리라 그렇다(가로형 사진을 가로형
+   프레임에 넣으면 확대 전에는 위아래로 움직일 여유가 0이다). */
+function studioInspectorCropMoveHint(travel) {
+
+  const canX = travel.x >= STUDIO_INSPECTOR_CROP_TRAVEL_MIN;
+  const canY = travel.y >= STUDIO_INSPECTOR_CROP_TRAVEL_MIN;
+
+  if (canX && canY) {
+    return "사진을 끌거나 아래 위치 조절로 상하좌우 구도를 맞춰 보세요.";
+  }
+
+  if (canX) {
+    return "지금은 좌우로만 움직일 수 있어요 — 확대하면 위아래로도 이동할 수 있어요.";
+  }
+
+  if (canY) {
+    return "지금은 위아래로만 움직일 수 있어요 — 확대하면 좌우로도 이동할 수 있어요.";
+  }
+
+  return "사진이 프레임에 꼭 맞아 움직일 여유가 없어요 — 확대하거나 프레임 비율을 바꾸면 구도를 조절할 수 있어요.";
+
+}
+
+
+/* 방향 버튼 한 번에 움직일 거리(px). 화면에서 눈에 보이는 만큼만
+   움직이게 고정 px로 정하고, 그 축의 여유로 나눠 -1~+1 단위로
+   바꾼다 — 여유가 작은 축에서 한 번에 끝까지 튀지 않는다. */
+const STUDIO_INSPECTOR_CROP_NUDGE_PX = 16;
+
+function studioInspectorCropNudge(axis, direction) {
+
+  const travel =
+    studioInspectorCropTravel();
+
+  const span =
+    axis === "x" ? travel.x : travel.y;
+
+  if (!(span >= STUDIO_INSPECTOR_CROP_TRAVEL_MIN)) {
+    return;
+  }
+
+  const step =
+    (2 * STUDIO_INSPECTOR_CROP_NUDGE_PX) / span;
+
+  const current =
+    axis === "x" ? studioInspectorCropDraft.x : studioInspectorCropDraft.y;
+
+  updateStudioInspectorCropDraft(
+    axis === "x"
+      ? { x: current + step * direction }
+      : { y: current + step * direction }
+  );
+
+}
+
+
 /* =========================================================
    자르기를 시작할 수 있는가
 
@@ -467,14 +600,36 @@ function renderStudioInspectorCropEditor(block) {
   block.appendChild(zoomLabel);
   block.appendChild(zoom);
 
+  const travel =
+    studioInspectorCropTravel();
+
   const hint =
     document.createElement("p");
 
   hint.className = "studio-inspector-block-note";
   hint.id = "studioInspectorCropHint";
-  hint.textContent = "Preview 안의 사진을 끌어서 위치를 맞춰 보세요.";
+  hint.textContent = studioInspectorCropMoveHint(travel);
 
   block.appendChild(hint);
+
+  /* 바깥 상자가 프레임을 잘라내고 있으면 먼저 말해 준다 — 그때는
+     프레임을 키워도 아랫부분이 화면에 나타나지 않는다(스킨 쪽
+     레이아웃 문제라 여기서 고칠 수 없다). */
+  if (studioInspectorClipped) {
+
+    const clipped =
+      document.createElement("p");
+
+    clipped.className = "studio-inspector-block-note";
+    clipped.id = "studioInspectorCropClipped";
+    clipped.textContent =
+      "바깥 상자가 이 이미지를 잘라내고 있어요 — 프레임을 키워도 잘린 쪽은 화면에 보이지 않습니다.";
+
+    block.appendChild(clipped);
+
+  }
+
+  renderStudioInspectorCropPositionBlock(block, travel);
 
   const actions =
     document.createElement("div");
@@ -514,6 +669,136 @@ function renderStudioInspectorCropEditor(block) {
 
 }
 
+
+
+
+/* =========================================================
+   위치 조절 — 슬라이더 두 개 + 방향 버튼 네 개
+
+   ★ 왜 드래그만으로는 부족한가
+   팝오버는 자르는 동안 프레임 옆으로 비켜 앉지만(overlay), 좁은
+   화면에서는 프레임 위로 겹칠 수 있고 프레임이 작으면 끌 자리
+   자체가 몇 십 px밖에 안 된다. 그래서 "사진을 잡지 않고도 구도를
+   옮길 수 있는 길"을 함께 둔다(요구사항 D).
+
+   ★ 값은 드래그와 **같은 상태 하나**(draft.x / draft.y)를 바꾼다 —
+   슬라이더로 옮기고 이어서 끌어도 그 자리에서 이어진다.
+
+   ★ 여유가 없는 축은 비활성으로 둔다. 움직이는 것처럼 보이는데
+   화면이 그대로면 그게 제일 헷갈린다 — 대신 위 안내 문구가 이유를
+   말한다(studioInspectorCropMoveHint).
+========================================================== */
+
+function renderStudioInspectorCropAxis(row, axis, travel, labels) {
+
+  const span =
+    axis === "x" ? travel.x : travel.y;
+
+  const enabled =
+    span >= STUDIO_INSPECTOR_CROP_TRAVEL_MIN;
+
+  const line =
+    document.createElement("div");
+
+  line.className = "studio-inspector-crop-axis";
+
+  const back =
+    document.createElement("button");
+
+  back.type = "button";
+  back.className = "studio-inspector-crop-step";
+  back.id = `studioInspectorCropStep-${axis}-back`;
+  back.textContent = labels[0];
+  back.title = labels[2];
+  back.setAttribute("aria-label", labels[2]);
+  back.disabled = !enabled;
+
+  back.addEventListener("click", () => studioInspectorCropNudge(axis, -1));
+
+  const range =
+    document.createElement("input");
+
+  range.type = "range";
+  range.className = "studio-inspector-range studio-inspector-crop-position";
+  range.id = `studioInspectorCropPosition-${axis}`;
+  range.dataset.inspectorControl = `cropPosition${axis.toUpperCase()}`;
+  range.min = "-100";
+  range.max = "100";
+  range.step = "1";
+  range.disabled = !enabled;
+  range.setAttribute("aria-label", axis === "x" ? "가로 위치" : "세로 위치");
+
+  range.value =
+    String(Math.round((axis === "x" ? studioInspectorCropDraft.x : studioInspectorCropDraft.y) * 100));
+
+  /* 확대 슬라이더와 같은 규칙 — 끄는 동안에는 미리보기만, 손을
+     뗐을 때 한 번 폼을 다시 그린다(그리는 순간 지금 잡고 있는
+     슬라이더 요소가 통째로 교체되기 때문). */
+  range.addEventListener("input", () => {
+
+    updateStudioInspectorCropDraft(
+      axis === "x"
+        ? { x: Number(range.value) / 100 }
+        : { y: Number(range.value) / 100 },
+      { silent: true }
+    );
+
+  });
+
+  range.addEventListener("change", () => {
+
+    updateStudioInspectorCropDraft(
+      axis === "x"
+        ? { x: Number(range.value) / 100 }
+        : { y: Number(range.value) / 100 }
+    );
+
+  });
+
+  const forward =
+    document.createElement("button");
+
+  forward.type = "button";
+  forward.className = "studio-inspector-crop-step";
+  forward.id = `studioInspectorCropStep-${axis}-forward`;
+  forward.textContent = labels[1];
+  forward.title = labels[3];
+  forward.setAttribute("aria-label", labels[3]);
+  forward.disabled = !enabled;
+
+  forward.addEventListener("click", () => studioInspectorCropNudge(axis, 1));
+
+  line.appendChild(back);
+  line.appendChild(range);
+  line.appendChild(forward);
+
+  row.appendChild(line);
+
+}
+
+
+function renderStudioInspectorCropPositionBlock(block, travel) {
+
+  const label =
+    document.createElement("p");
+
+  label.className = "studio-inspector-block-label";
+  label.id = "studioInspectorCropPositionLabel";
+  label.textContent = "위치";
+
+  const row =
+    document.createElement("div");
+
+  row.className = "studio-inspector-crop-position-row";
+  row.id = "studioInspectorCropPositionRow";
+
+  renderStudioInspectorCropAxis(row, "x", travel, ["←", "→", "왼쪽으로", "오른쪽으로"]);
+  renderStudioInspectorCropAxis(row, "y", travel, ["↑", "↓", "위로", "아래로"]);
+
+  block.appendChild(label);
+  block.appendChild(row);
+
+}
 
 /* 지금 화면에 보이는 프레임 비율. "현재 비율" 버튼과, 처음
    자르기를 열 때의 기본값이 이 값을 쓴다. */
@@ -927,11 +1212,17 @@ function beginStudioInspectorCropDrag(event) {
   event.preventDefault();
   event.stopPropagation();
 
+  /* 확대·비율은 드래그 중에 바뀌지 않으므로 이동 여유는 시작할 때
+     한 번만 잰다. **프레임 크기가 아니라 이 값으로 나눈다** —
+     그래야 포인터를 움직인 만큼 사진이 따라온다(요구사항 D). */
+  const travel =
+    studioInspectorCropTravel();
+
   studioInspectorCropDrag = {
     pointerId: event.pointerId,
     scale: mapped.scale,
-    width: Math.max(1, (mapped.right - mapped.left) / mapped.scale),
-    height: Math.max(1, (mapped.bottom - mapped.top) / mapped.scale),
+    travelX: travel.x,
+    travelY: travel.y,
     startClientX: event.clientX,
     startClientY: event.clientY,
     baseX: studioInspectorCropDraft.x,
@@ -970,11 +1261,17 @@ function moveStudioInspectorCropDrag(event) {
   const dy =
     (event.clientY - drag.startClientY) / drag.scale;
 
+  /* 여유가 0인 축은 아예 움직이지 않는다 — 나눗셈으로 끝까지
+     clamp되어 "움직인 것처럼 보이는 값"이 남지 않게 한다. */
   const nextX =
-    window.inspectorCropClampOffset(drag.baseX - (2 * dx) / drag.width);
+    drag.travelX >= STUDIO_INSPECTOR_CROP_TRAVEL_MIN
+      ? window.inspectorCropClampOffset(drag.baseX - (2 * dx) / drag.travelX)
+      : drag.baseX;
 
   const nextY =
-    window.inspectorCropClampOffset(drag.baseY - (2 * dy) / drag.height);
+    drag.travelY >= STUDIO_INSPECTOR_CROP_TRAVEL_MIN
+      ? window.inspectorCropClampOffset(drag.baseY - (2 * dy) / drag.travelY)
+      : drag.baseY;
 
   if (
     studioInspectorCropDraft &&

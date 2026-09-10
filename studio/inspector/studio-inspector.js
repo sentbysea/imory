@@ -160,7 +160,23 @@ function clearStudioInspectorSelection() {
 }
 
 
-function setStudioInspectorSelection(editId, tagName, rect, metrics) {
+/* 레이아웃 사각형보다 실제로 보이는 자리가 작으면 조상이 잘라내고
+   있다는 뜻이다. 1px은 반올림 여유다. */
+function studioInspectorRectIsClipped(selection) {
+
+  if (!selection || !selection.rect || !selection.visibleRect) {
+    return false;
+  }
+
+  return (
+    selection.visibleRect.width < selection.rect.width - 1 ||
+    selection.visibleRect.height < selection.rect.height - 1
+  );
+
+}
+
+
+function setStudioInspectorSelection(editId, tagName, rect, metrics, visibleRect) {
 
   if (!editId || !window.isValidInspectorEditId(editId)) {
     clearStudioInspectorSelection();
@@ -179,11 +195,22 @@ function setStudioInspectorSelection(editId, tagName, rect, metrics) {
   studioInspectorSelection = {
     editId,
     tagName: tagName || null,
-    rect: rect || null
+    rect: rect || null,
+
+    /* 조상 overflow까지 반영한 "실제로 보이는" 사각형.
+       테두리·핸들·자르기 드래그 판은 이 값을 쓴다 — rect는
+       레이아웃 사각형이라 부모가 overflow: hidden으로 잘라내면
+       화면에 없는 자리를 가리킨다(preview-bridge.js
+       inspectorVisibleRectOf 머리말). 잘라내는 조상이 없으면
+       둘은 같은 값이다. */
+    visibleRect: visibleRect || rect || null
   };
 
   studioInspectorMetrics =
     metrics || null;
+
+  studioInspectorClipped =
+    studioInspectorRectIsClipped(studioInspectorSelection);
 
   /* 다른 요소를 새로 고르면 폼은 접힌 상태에서 시작한다 —
      팝오버가 곧바로 커다랗게 열려 Preview를 가리지 않게. */
@@ -191,7 +218,7 @@ function setStudioInspectorSelection(editId, tagName, rect, metrics) {
     studioInspectorEditingOpen = false;
   }
 
-  paintStudioInspectorBox(studioInspectorSelectBox, rect);
+  paintStudioInspectorBox(studioInspectorSelectBox, studioInspectorSelection.visibleRect);
 
   renderStudioInspectorPopover();
 
@@ -218,7 +245,7 @@ function handleStudioInspectorMessage(data) {
   if (data.type === "preview:inspect-hover") {
 
     studioInspectorHover =
-      data.rect || null;
+      data.visibleRect || data.rect || null;
 
     paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
 
@@ -232,7 +259,8 @@ function handleStudioInspectorMessage(data) {
       data.editId,
       data.tagName,
       data.rect,
-      data.metrics
+      data.metrics,
+      data.visibleRect
     );
 
     return;
@@ -242,7 +270,7 @@ function handleStudioInspectorMessage(data) {
   if (data.type === "preview:inspect-rects") {
 
     studioInspectorHover =
-      (data.hover && data.hover.rect) || null;
+      (data.hover && (data.hover.visibleRect || data.hover.rect)) || null;
 
     paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
 
@@ -264,6 +292,26 @@ function handleStudioInspectorMessage(data) {
     studioInspectorSelection.rect =
       data.selected.rect;
 
+    studioInspectorSelection.visibleRect =
+      data.selected.visibleRect || data.selected.rect;
+
+    const clipped =
+      studioInspectorRectIsClipped(studioInspectorSelection);
+
+    /* 자르는 동안 비율을 바꾸면 프레임이 커지면서 바깥 상자에 잘리기
+       시작할 수 있다 — 그 사실이 뒤집힐 때만 폼을 다시 그린다.
+       (매 좌표 갱신마다 다시 그리면 지금 잡고 있는 슬라이더가 통째로
+       교체된다. 드래그 중에는 아예 손대지 않는다.) */
+    if (clipped !== studioInspectorClipped) {
+
+      studioInspectorClipped = clipped;
+
+      if (studioInspectorCropDraft && !studioInspectorCropDrag) {
+        renderStudioInspectorPopover();
+      }
+
+    }
+
     /* 임시 미리보기(입력 중/드래그 중)가 떠 있는 동안에는 실측값을
        받아들이지 않는다 — 지금 화면에 보이는 크기는 아직 확정된
        것이 아니라서, 그 값을 기준으로 삼으면 (1) 사용자의 손과
@@ -273,11 +321,22 @@ function handleStudioInspectorMessage(data) {
       studioInspectorMetrics = data.selected.metrics || studioInspectorMetrics;
     }
 
-    paintStudioInspectorBox(studioInspectorSelectBox, data.selected.rect);
+    paintStudioInspectorBox(
+      studioInspectorSelectBox,
+      studioInspectorSelection.visibleRect
+    );
 
-    paintStudioInspectorHandles(data.selected.rect);
+    paintStudioInspectorHandles(
+      data.selected.rect,
+      studioInspectorSelection.visibleRect
+    );
 
-    placeStudioInspectorPopover(data.selected.rect);
+    /* 사용자가 크기를 만지는 동안에는 팝오버를 옮기지
+       않는다 — 이 경로는 "이미지가 커졌다/작아졌다"로 오는
+       좌표 갱신이라, 여기서 다시 앉히면 손이 잡고 있는
+       슬라이더가 밑으로 도망간다(placeStudioInspectorPopover
+       머리말). 화면 밖으로 나가면 그때만 되돌린다. */
+    placeStudioInspectorPopover(studioInspectorSelection.visibleRect);
 
     return;
 

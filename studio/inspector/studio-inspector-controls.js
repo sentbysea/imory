@@ -576,6 +576,25 @@ function renderStudioInspectorControl(spec, info, declarations) {
 }
 
 
+/* 팝오버가 "다른 모양"으로 바뀜는가. 이것이 바뀌었을 때만
+   자리를 다시 고른다 — 같은 모양으로 내용만 다시 그리는
+   경우(자르기 확대·구도 갱신, 크기 확정)는 손이 올라가 있는
+   판이므로 그 자리 그대로 둔다(요구사항 C,
+   studio-inspector-overlay.js placeStudioInspectorPopover 머리말). */
+let studioInspectorPopoverShape = "";
+
+function studioInspectorPopoverShapeOf(resolved) {
+
+  return [
+    studioInspectorSelection ? studioInspectorSelection.editId : "",
+    resolved ? resolved.info.kind : "",
+    studioInspectorEditingOpen ? "open" : "shut",
+    studioInspectorCropDraft ? "crop" : "-"
+  ].join("|");
+
+}
+
+
 function renderStudioInspectorPopover() {
 
   if (!studioInspectorPopover) {
@@ -598,7 +617,11 @@ function renderStudioInspectorPopover() {
 
     studioInspectorResizable = false;
 
-    paintStudioInspectorHandles(null);
+    studioInspectorPopoverShape = "";
+
+    resetStudioInspectorPopoverPlacement();
+
+    paintStudioInspectorHandles(null, null);
 
     notifyStudioInspectorSelectionChanged();
 
@@ -675,11 +698,26 @@ function renderStudioInspectorPopover() {
     !studioInspectorUndo;
 
   paintStudioInspectorHandles(
-    studioInspectorSelection ? studioInspectorSelection.rect : null
+    studioInspectorSelection ? studioInspectorSelection.rect : null,
+    studioInspectorSelection
+      ? (studioInspectorSelection.visibleRect || studioInspectorSelection.rect)
+      : null
   );
 
+  const shape =
+    studioInspectorPopoverShapeOf(resolved);
+
+  const shapeChanged =
+    shape !== studioInspectorPopoverShape;
+
+  studioInspectorPopoverShape =
+    shape;
+
   placeStudioInspectorPopover(
-    studioInspectorSelection ? studioInspectorSelection.rect : null
+    studioInspectorSelection
+      ? (studioInspectorSelection.visibleRect || studioInspectorSelection.rect)
+      : null,
+    { force: shapeChanged }
   );
 
   notifyStudioInspectorSelectionChanged();

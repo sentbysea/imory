@@ -21,8 +21,8 @@
      iframe -> parent  "preview:rendered"        { type, hasPostBodyRegion }
      iframe -> parent  "preview:error"           { type, message }
      iframe -> parent  "preview:navigate"        { type, href }
-     iframe -> parent  "preview:inspect-hover"   { type, editId, tagName, rect }
-     iframe -> parent  "preview:inspect-select"  { type, editId, tagName, rect, metrics }
+     iframe -> parent  "preview:inspect-hover"   { type, editId, tagName, rect, visibleRect }
+     iframe -> parent  "preview:inspect-select"  { type, editId, tagName, rect, visibleRect, metrics }
      iframe -> parent  "preview:inspect-rects"   { type, hover, selected }
      iframe -> parent  "preview:inspect-escape"  { type }
 
@@ -586,6 +586,98 @@ function inspectorRectOf(el) {
 
 
 /* =========================================================
+   inspectorVisibleRectOf(el) — 조상 overflow까지 반영한 사각형
+
+   자르기 프레임이 **자기 부모보다 클 수 있다.** 실제 스킨에서
+   흔하다: 헤더 이미지를 감싼 <figure>가 aspect-ratio로 높이를
+   못 박고 overflow: hidden을 걸어 두면, 그 안에서 프레임을 1:1로
+   바꾸는 순간 프레임 아랫부분은 화면에 아예 그려지지 않는다.
+
+   그때 프레임의 getBoundingClientRect()를 그대로 올려보내면
+   Studio는 **보이지 않는 자리에** 선택 테두리와 자르기 드래그 판을
+   그린다 — 사용자 눈에는 "테두리가 사진 아래 다른 영역까지
+   내려온" 것으로 보이고, 그 자리를 끌어도 사진은 없다.
+
+   그래서 프레임 rect를 잘라내는 조상(overflow가 visible이 아닌
+   요소) 전부와 교집합을 낸 사각형을 함께 올려보낸다. 아무 것도
+   자르지 않으면 rect와 같은 값이므로, 자르는 조상이 없는 보통
+   스킨에서는 지금까지와 완전히 같다.
+
+   ★ 스킨 DOM에는 아무 것도 쓰지 않는다 — 읽기만 한다.
+========================================================== */
+
+function inspectorVisibleRectOf(el) {
+
+  if (!el || !el.isConnected) {
+    return null;
+  }
+
+  const target =
+    inspectorFrameElementOf(el);
+
+  const rect =
+    target.getBoundingClientRect();
+
+  let left = rect.left;
+  let top = rect.top;
+  let right = rect.right;
+  let bottom = rect.bottom;
+
+  let node =
+    target.parentElement;
+
+  while (node && node.nodeType === 1) {
+
+    let style;
+
+    try {
+      style = window.getComputedStyle(node);
+    } catch (err) {
+      break;
+    }
+
+    /* overflow가 visible이 아니면 그 상자가 자식을 잘라낸다.
+       (clip / hidden / auto / scroll 모두 잘라낸다 — auto·scroll은
+       스크롤로 볼 수는 있지만 **지금 보이는 자리**는 아니다.) */
+    const clips =
+      style.overflowX !== "visible" || style.overflowY !== "visible";
+
+    if (clips) {
+
+      const box =
+        node.getBoundingClientRect();
+
+      if (style.overflowX !== "visible") {
+        left = Math.max(left, box.left);
+        right = Math.min(right, box.right);
+      }
+
+      if (style.overflowY !== "visible") {
+        top = Math.max(top, box.top);
+        bottom = Math.min(bottom, box.bottom);
+      }
+
+    }
+
+    node = node.parentElement;
+
+  }
+
+  if (right <= left || bottom <= top) {
+    return { left: rect.left, top: rect.top, width: 0, height: 0 };
+  }
+
+  return {
+    left,
+    top,
+    width: right - left,
+    height: bottom - top
+  };
+
+}
+
+
+/* =========================================================
    inspectorMetricsOf(el) — Studio의 크기 컨트롤이 필요로 하는 실측값
 
    "초기값은 화면에 실제로 표시되는 크기를 기준으로 한다"와
@@ -689,13 +781,18 @@ function postInspectorRects() {
     type: PREVIEW_MSG_INSPECT_RECTS,
     hover:
       (inspectorHoverElement && inspectorHoverElement.isConnected)
-        ? { editId: inspectorEditIdOf(inspectorHoverElement), rect: inspectorRectOf(inspectorHoverElement) }
+        ? {
+            editId: inspectorEditIdOf(inspectorHoverElement),
+            rect: inspectorRectOf(inspectorHoverElement),
+            visibleRect: inspectorVisibleRectOf(inspectorHoverElement)
+          }
         : null,
     selected:
       selected
         ? {
             editId: inspectorSelectedEditId,
             rect: inspectorRectOf(selected),
+            visibleRect: inspectorVisibleRectOf(selected),
             metrics: inspectorMetricsOf(selected)
           }
         : null
@@ -731,7 +828,8 @@ function setInspectorHover(el) {
     type: PREVIEW_MSG_INSPECT_HOVER,
     editId: el ? inspectorEditIdOf(el) : null,
     tagName: el ? el.tagName.toLowerCase() : null,
-    rect: inspectorRectOf(el)
+    rect: inspectorRectOf(el),
+    visibleRect: inspectorVisibleRectOf(el)
   });
 
 }
@@ -767,6 +865,7 @@ function setInspectorSelection(el, options) {
     editId: inspectorSelectedEditId,
     tagName: el ? el.tagName.toLowerCase() : null,
     rect: inspectorRectOf(el),
+    visibleRect: inspectorVisibleRectOf(el),
     metrics: inspectorMetricsOf(el)
   });
 

@@ -4,6 +4,19 @@ Select mode에서 이미지를 고른 뒤 **원본 파일은 그대로 두고** 
 보이는 범위와 구도만 바꾼다. 업로드한 파일도, 그 URL도, 이미지 슬롯
 연결도, Settings 프로필 사진 연결도 이 기능은 건드리지 않는다.
 
+> **변경됨 → [AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md](./AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md)**
+> 세 지점이 그 라운드에서 바뀌었다. 저장 방식(래퍼 · 두 규칙 ·
+> `--imory-crop` · x/y 정규화)은 그대로다.
+>
+> - 3절 "실측" — 좌표를 재는 자리가 `rect` 하나에서 `rect`(레이아웃)와
+>   `visibleRect`(조상 overflow까지 반영한, 보이는 자리) 둘로 나뉘었다.
+>   테두리·드래그 판은 `visibleRect`, 모서리 핸들 계산은 `rect`.
+> - 아래 "Preview 안의 사진을 드래그" — 이동량을 프레임 크기가 아니라
+>   **실제로 움직일 수 있는 px**(`inspectorCropTravelPx`)로 나눈다.
+>   위치 슬라이더와 방향 버튼도 생겼다.
+> - 팝오버는 자르는 동안 프레임 **옆에** 앉고, 손이 무언가를 잡고 있는
+>   동안에는 움직이지 않는다.
+
 앞 라운드: [AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md](./AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md)
 (텍스트 내용 · 이미지 너비). 임시/확정을 나누는 구조, Undo 한 번,
 Escape 정리 규칙은 그 문서 그대로이고 여기서는 **다른 점만** 적는다.
