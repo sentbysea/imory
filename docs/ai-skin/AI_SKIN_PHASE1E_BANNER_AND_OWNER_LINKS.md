@@ -5,7 +5,7 @@
 > POST의 `?manage=1`과 소유자 도구의 위치·모양은
 > [PHASE 1G](./AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md)가 철회했다.
 > 서 있는 규칙은
-> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)에 있다.
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)에 있다.
 
 이 문서는 PHASE 1E에서 추가된 **세 개의 계약**만 정의한다.
 
@@ -353,7 +353,7 @@ protected post-body region에서 바로 읽고, 방문자에게는 그 자리에
 > 붙었고, `writeHref`는 CATEGORY 화면에서 "지금 보고 있는 그 카테고리"를
 > 가리킨다. 또 스킨이 이 주소들을 자기 레이아웃 안에 그리면 플랫폼이
 > 같은 동작의 떠 있는 도구를 접는다. 현재 계약은
-> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
 > §3-1이 기준이다.
 
 ### 4-1. shape

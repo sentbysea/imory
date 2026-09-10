@@ -7,14 +7,14 @@
 | --- | --- |
 | 스킨 표시 공간 · 화면 전환 · 소유자/관리 · Preview 일치 | [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) |
 | SkinPackage JSON shape (디자이너용) | [SKIN_DESIGNER_CONTRACT.md](./SKIN_DESIGNER_CONTRACT.md) |
-| Skin Data Contract (템플릿이 받는 데이터) | [AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./AI_SKIN_PHASE1C_PAGE_CONTRACT.md) |
+| Skin Data Contract (템플릿이 받는 데이터) | [AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./docs/ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md) |
 | 제품 방향 · 단계 계획 | [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](./IMORY_AI_SKIN_CUSTOMIZE_PLAN.md) |
 | 폴더(카테고리 안 3단계) · category.tree · 중첩 repeat | [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md) |
 | 폴더 라우트 · Series Viewer · folderHref · templates.folder · repeat 안 post-body region | [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md) |
-| Element Inspector · Direct Edit (식별자/patch 방식/보호 계약) | [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) |
-| Selected Element AI Edit (selectionContext/선택 범위 계약) | [AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md](./AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md) |
-| AI 실패 진단 (error code / stage / 로그 규칙) | [AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md](./AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md) |
-| 직접 편집 — 텍스트 내용 · 이미지 크기 (임시/확정 분리, 모서리 드래그) | [AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md](./AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md) |
+| Element Inspector · Direct Edit (식별자/patch 방식/보호 계약) | [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) |
+| Selected Element AI Edit (selectionContext/선택 범위 계약) | [AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md](./docs/ai-skin/AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md) |
+| AI 실패 진단 (error code / stage / 로그 규칙) | [AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md](./docs/ai-skin/AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md) |
+| 직접 편집 — 텍스트 내용 · 이미지 크기 (임시/확정 분리, 모서리 드래그) | [AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md](./docs/ai-skin/AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md) |
 | 서비스 개념 / 디자인 토큰 / 상태 체크리스트 | [Concept.md](./Concept.md) · [Design.md](./Design.md) · [ToDo.md](./ToDo.md) |
 
 ---
@@ -191,9 +191,11 @@
 ## 5. 문서 관리
 
 - 상세 규칙은 **한 기준 문서**에서만 관리하고, 다른 문서에는 링크를 둔다.
-- `AI_SKIN_PHASE*.md`는 각 라운드의 **기록**이다. 나중 라운드가 앞 계약을
-  바꿨으면 앞 문서를 다시 쓰지 말고, 바뀐 지점에 "철회/변경됨 → 어느 문서"를
-  적는다.
+- AI 스킨 라운드 문서는 `docs/ai-skin/`에 모여 있다 (`AI_SKIN_*.md`). 코드
+  주석은 디렉터리 없이 파일명만 적고 있으니, 찾을 때는 그 폴더에서 본다.
+- `docs/ai-skin/AI_SKIN_PHASE*.md`는 각 라운드의 **기록**이다. 나중 라운드가 앞
+  계약을 바꿨으면 앞 문서를 다시 쓰지 말고, 바뀐 지점에 "철회/변경됨 → 어느
+  문서"를 적는다.
 - 문서에는 "현재 구현" / "앞으로 지켜야 할 원칙" / "남은 차이"를 구분해서 쓴다.
   아직 공통화되지 않은 것을 이미 구현된 것처럼 쓰지 않는다.
 - 실제 구현된 공통 함수·파일이 있으면 정확한 이름을 적는다.

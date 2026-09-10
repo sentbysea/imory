@@ -13,7 +13,7 @@
 > **[차이]** 원칙과 현재 구현 사이에 남아 있는 간극(§5에 모아 둔다).
 >
 > 관련 문서: [SKIN_DESIGNER_CONTRACT.md](./SKIN_DESIGNER_CONTRACT.md)(SkinPackage
-> JSON shape) · [AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
+> JSON shape) · [AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./docs/ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
 > (Skin Data Contract) · [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](./IMORY_AI_SKIN_CUSTOMIZE_PLAN.md)
 > (제품 방향).
 

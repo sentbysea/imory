@@ -8,7 +8,7 @@
 >
 > 목적: HOME/CATEGORY/POST 세 화면이 결국 하나의 Skin이 담당하게 될 때, 그 세 화면이 주고받을 **데이터와 바인딩 계약**을 먼저 확정해서, 이후 실제 구현(별도 Phase/Slice)이 코드를 짜다가 계약 자체를 다시 뒤집는 일이 없게 한다.
 >
-> 이 문서는 **Skin이 받는 데이터(Context)와 바인딩**을 다룬다. 그 Skin이 화면에서 받는 **자리와 전환**(표시 공간·스크롤·라우팅·소유자 관리 진입·Preview 일치)은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)가 관리한다.
+> 이 문서는 **Skin이 받는 데이터(Context)와 바인딩**을 다룬다. 그 Skin이 화면에서 받는 **자리와 전환**(표시 공간·스크롤·라우팅·소유자 관리 진입·Preview 일치)은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)가 관리한다.
 
 ---
 
@@ -339,7 +339,7 @@ Post Viewer(실제 페이지 컨트롤러)가 `renderSkin()`으로 Skin을 먼�
 
 nested repeat는 지금도 불가능하고(1-4절) v0.1도 이 제약을 그대로 유지한다 — 위 4개 배열 중 어떤 item도 그 안에 또 다른 배열 필드를 갖지 않는다(전부 스칼라/nullable 스칼라 필드만).
 
-> **[변경됨 → [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md) §1-8·§1-9]** FOLDER-1이 `category.tree`(폴더 계층)를 additive로 추가하면서 이 두 전제가 모두 바뀌었다: 중첩 repeat이 최대 5단계까지 지원되고, `category.tree`의 folder item은 `children` 배열 필드를 갖는다. **`category.posts`는 그대로다** — 필드도 6개 그대로, 정렬도 `created_at DESC` 그대로, 폴더에 든 글도 전부 포함이다. 폴더를 모르는 기존 스킨은 영향을 받지 않는다.
+> **[변경됨 → [IMORY_FOLDER1_DESIGN.md](../../IMORY_FOLDER1_DESIGN.md) §1-8·§1-9]** FOLDER-1이 `category.tree`(폴더 계층)를 additive로 추가하면서 이 두 전제가 모두 바뀌었다: 중첩 repeat이 최대 5단계까지 지원되고, `category.tree`의 folder item은 `children` 배열 필드를 갖는다. **`category.posts`는 그대로다** — 필드도 6개 그대로, 정렬도 `created_at DESC` 그대로, 폴더에 든 글도 전부 포함이다. 폴더를 모르는 기존 스킨은 영향을 받지 않는다.
 
 ---
 

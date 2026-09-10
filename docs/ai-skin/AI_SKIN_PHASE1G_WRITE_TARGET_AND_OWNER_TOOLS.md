@@ -12,7 +12,7 @@ PHASE 1F의 "카테고리 선택 패널" 계약과 PHASE 1E/1F의 "오른쪽 아
 설명은 이 문서로 **철회**한다.
 
 > 이 문서는 이 라운드의 기록이다. 표시 공간·화면 전환의 **서 있는 규칙**은
-> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)가
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)가
 > 관리한다.
 
 ---

@@ -360,7 +360,7 @@
 | `data-imory-repeat="path"` | dotted identifier | 값이 배열이면 그 엘리먼트를 템플릿 삼아 item마다 clone. 배열이 아니면(`undefined`/`null`/객체 등) **엘리먼트 자체를 제거**. |
 | `data-imory-if="path"` | dotted identifier | truthy/falsy만 판정해 `el.hidden` 토글. |
 | `data-imory-region="post-body"` | 고정 문자열 `"post-body"` 만 허용 | 값은 resolve 대상이 아님(경로 아니라 식별자). mount 시 이 엘리먼트의 **자식을 전부 비운 뒤**, 플랫폼(Post Viewer)이 실제 글 본문을 그 안에 주입할 자리로 씁니다. POST 템플릿에는 하나, FOLDER 템플릿에는 `folder.posts` 반복 안에 글마다 하나(2-7절) — 반복 안의 region에는 렌더러가 항목 id를 `data-imory-region-key`로 찍습니다(스킨이 직접 쓰는 속성이 아니며, 써도 제거됩니다). |
-| `data-imory-edit-id="..."` | 영문으로 시작하는 영문/숫자/`_`/`-` 문자열, 최대 64자 | **렌더러가 해석하지 않는 순수 표식**입니다(PHASE AI-6A). Skin Studio의 Direct Edit이 "이 요소"를 재렌더/재저장 뒤에도 다시 찾기 위해 붙이며, 생성된 CSS 규칙의 `[data-imory-edit-id="..."]` selector가 이 값을 가리킵니다. 디자이너가 직접 쓸 필요는 없고, 형태가 맞지 않으면 저장 시점에 제거됩니다. 자세한 내용: [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) 2절. |
+| `data-imory-edit-id="..."` | 영문으로 시작하는 영문/숫자/`_`/`-` 문자열, 최대 64자 | **렌더러가 해석하지 않는 순수 표식**입니다(PHASE AI-6A). Skin Studio의 Direct Edit이 "이 요소"를 재렌더/재저장 뒤에도 다시 찾기 위해 붙이며, 생성된 CSS 규칙의 `[data-imory-edit-id="..."]` selector가 이 값을 가리킵니다. 디자이너가 직접 쓸 필요는 없고, 형태가 맞지 않으면 저장 시점에 제거됩니다. 자세한 내용: [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) 2절. |
 
 ### 3-1. 속성 값(경로) 문법 제약
 

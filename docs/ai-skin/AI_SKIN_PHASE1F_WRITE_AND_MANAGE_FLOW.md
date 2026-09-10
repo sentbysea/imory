@@ -4,7 +4,7 @@
 > 선택 패널(`#postComposePicker`)과 소유자 도구의 위치·모양은
 > [PHASE 1G](./AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md)가 철회했다.
 > 서 있는 규칙은
-> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)에 있다.
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)에 있다.
 
 PHASE 1E에서 소유자도 방문자와 같은 스킨으로 HOME/CATEGORY/POST/BANNER를
 보게 됐고, 스킨 위에 WRITE/ADMIN 링크와 떠 있는 소유자 도구(+ / edit)가
@@ -55,7 +55,7 @@ POST 카테고리 1개  → buildSiteComposeUrl(그 카테고리 href)
 > **PHASE 1H에서 변경됨** — CATEGORY(글 카테고리) 화면에서는 위 규칙 대신
 > **지금 보고 있는 그 카테고리**의 작성 주소를 가리킨다. HOME/POST/BANNER는
 > 위 규칙 그대로다. 근거는
-> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
+> [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
 > §3-1.
 
 Skin은 여전히 category id도 작성 폼 주소도 모른다. 여러 개일 때 어느
