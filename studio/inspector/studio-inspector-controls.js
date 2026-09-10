@@ -95,6 +95,10 @@ function buildStudioInspectorControls(info) {
     controls.push({ control: "size", type: "imageSize", label: "너비", unit: "px" });
   }
 
+  if (can.crop) {
+    controls.push({ control: "crop", type: "crop", label: "자르기" });
+  }
+
   if (can.shape && info.kind === "image") {
     controls.push({
       control: "shape",
@@ -347,6 +351,14 @@ function renderStudioInspectorControl(spec, info, declarations) {
 
   }
 
+  if (spec.type === "crop") {
+
+    renderStudioInspectorCropBlock(spec, info, declarations);
+
+    return;
+
+  }
+
   if (spec.type === "text") {
 
     const input =
@@ -577,6 +589,7 @@ function renderStudioInspectorPopover() {
      드래그가 그 참조로 값을 쓰지 않도록 먼저 끊는다. */
   studioInspectorSizeRange = null;
   studioInspectorSizeNumber = null;
+  studioInspectorCropZoomRange = null;
 
   if (!resolved) {
 
@@ -643,8 +656,15 @@ function renderStudioInspectorPopover() {
 
     } else {
 
+      /* 컨트롤마다 "지금 값"을 어느 규칙에서 읽을지 물어본다 —
+         자른 이미지의 너비·모양·정렬은 이미지가 아니라 프레임
+         (래퍼)의 규칙에 들어 있다(studio-inspector-crop.js). */
       controls.forEach((spec) => {
-        renderStudioInspectorControl(spec, resolved.info, resolved.declarations);
+        renderStudioInspectorControl(
+          spec,
+          resolved.info,
+          studioInspectorCropDeclarationsFor(spec.control, resolved)
+        );
       });
 
     }

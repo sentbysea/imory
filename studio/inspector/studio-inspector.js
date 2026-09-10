@@ -98,10 +98,16 @@ function clearStudioInspectorTransient() {
     cancelStudioInspectorHandleDrag(null);
   }
 
+  if (studioInspectorCropDrag) {
+    finishStudioInspectorCropDrag(studioInspectorCropDrag);
+  }
+
   studioInspectorTextDraft = null;
   studioInspectorComposing = false;
   studioInspectorSizeRange = null;
   studioInspectorSizeNumber = null;
+  studioInspectorCropDraft = null;
+  studioInspectorCropZoomRange = null;
 
   clearStudioInspectorPreview();
 
@@ -135,6 +141,10 @@ function clearStudioInspectorSelection() {
 
   if (studioInspectorSelectBox) {
     studioInspectorSelectBox.hidden = true;
+  }
+
+  if (studioInspectorCropSurface) {
+    studioInspectorCropSurface.hidden = true;
   }
 
   if (studioInspectorPopover) {
@@ -409,6 +419,31 @@ document.addEventListener(
 
     }
 
+    /* 자르기 드래그 중 Escape는 "끌기 시작 전 구도로 되돌리기"다 —
+       모서리 드래그와 같은 결이다. */
+    if (studioInspectorCropDrag) {
+
+      event.preventDefault();
+
+      cancelStudioInspectorCropDrag(null);
+
+      return;
+
+    }
+
+    /* 자르기를 편집하던 중이면 그 임시 편집만 취소한다(선택과
+       Inspector mode는 그대로) — 사용자가 되돌아간 결과를 바로
+       확인할 수 있어야 한다. */
+    if (studioInspectorCropDraft) {
+
+      event.preventDefault();
+
+      cancelStudioInspectorCropDraft();
+
+      return;
+
+    }
+
     /* 텍스트를 입력하던 중이면 그 입력만 취소한다. */
     if (studioInspectorTextDraft !== null) {
 
@@ -511,6 +546,13 @@ if (typeof window !== "undefined") {
         composing: studioInspectorComposing,
         resizable: studioInspectorResizable,
         dragging: !!studioInspectorDrag,
+
+        /* 이미지 자르기 라운드 — 확정 전 값. "취소/Escape/선택
+           해제 뒤에 자르기 임시 편집이 남지 않는다"를 테스트가
+           내부 변수를 뒤지지 않고 확인할 수 있게 한다. */
+        cropDraft:
+          studioInspectorCropDraft ? { ...studioInspectorCropDraft } : null,
+        cropDragging: !!studioInspectorCropDrag,
         metrics: studioInspectorMetrics ? { ...studioInspectorMetrics } : null
       };
 

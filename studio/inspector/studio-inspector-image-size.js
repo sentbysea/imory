@@ -62,6 +62,26 @@
    studio-inspector-model.js size 참고.)
 ========================================================== */
 
+/* 크기 컨트롤이 읽고 써야 할 선언. 자른 이미지에서는 이미지가
+   아니라 **프레임(래퍼)**의 규칙이다 — 자른 뒤의 "너비"는 사진의
+   너비가 아니라 잘라 보여주는 창의 너비이기 때문이다. */
+function studioInspectorSizeDeclarations(resolved) {
+
+  return studioInspectorCropDeclarationsFor("size", resolved);
+
+}
+
+
+/* 지금 선택이 잘려 있는가 — 임시 미리보기를 이미지가 아니라
+   프레임에 적용해야 하는지를 이 값으로 가른다(실측은 iframe이
+   한다, preview-bridge.js inspectorMetricsOf). */
+function studioInspectorSizeTargetsFrame() {
+
+  return !!(studioInspectorMetrics && studioInspectorMetrics.cropped);
+
+}
+
+
 function studioInspectorSizeRatio(declarations) {
 
   const declared =
@@ -310,14 +330,17 @@ function previewStudioInspectorSize(width, options) {
           const resolved =
             describeStudioInspectorSelection();
 
-          return resolved ? studioInspectorSizeRatio(resolved.declarations) : null;
+          return resolved
+            ? studioInspectorSizeRatio(studioInspectorSizeDeclarations(resolved))
+            : null;
 
         })();
 
   sendStudioInspectorPreview({
     editId: studioInspectorSelection.editId,
     width: value,
-    ratio: ratio || undefined
+    ratio: ratio || undefined,
+    target: studioInspectorSizeTargetsFrame() ? "frame" : "image"
   });
 
 }
@@ -340,7 +363,7 @@ function commitStudioInspectorSize(width, options) {
   }
 
   /* 실제 크기가 그대로면 편집 이력을 만들지 않는다(요구사항 3절). */
-  if (value === studioInspectorSizeBaseline(resolved.declarations)) {
+  if (value === studioInspectorSizeBaseline(studioInspectorSizeDeclarations(resolved))) {
 
     clearStudioInspectorPreview();
 
@@ -353,7 +376,7 @@ function commitStudioInspectorSize(width, options) {
   const ratio =
     (options && Number.isFinite(options.ratio) && options.ratio > 0)
       ? options.ratio
-      : studioInspectorSizeRatio(resolved.declarations);
+      : studioInspectorSizeRatio(studioInspectorSizeDeclarations(resolved));
 
   clearStudioInspectorPreview();
 
@@ -410,8 +433,11 @@ function beginStudioInspectorHandleDrag(event, corner, handle) {
   event.preventDefault();
   event.stopPropagation();
 
+  const sizeDeclarations =
+    studioInspectorSizeDeclarations(resolved);
+
   const startWidth =
-    studioInspectorSizeBaseline(resolved.declarations) ||
+    studioInspectorSizeBaseline(sizeDeclarations) ||
     Math.round(studioInspectorSelection.rect.width);
 
   studioInspectorDrag = {
@@ -422,7 +448,7 @@ function beginStudioInspectorHandleDrag(event, corner, handle) {
     /* 반대쪽 모서리 */
     anchorX: corner.indexOf("w") === -1 ? mapped.left : mapped.right,
     anchorY: corner.indexOf("n") === -1 ? mapped.top : mapped.bottom,
-    ratio: studioInspectorSizeRatio(resolved.declarations),
+    ratio: studioInspectorSizeRatio(sizeDeclarations),
     startWidth,
     width: startWidth,
     frame: 0

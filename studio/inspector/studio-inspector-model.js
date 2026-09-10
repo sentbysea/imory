@@ -433,6 +433,12 @@ function describeInspectorElement(el, options) {
       !!imageSlot &&
       !requiredSlotNames.includes(imageSlot),
     size: canStyle && kind === "image",
+
+    /* 자르기도 크기와 같은 조건이다 — 원본 파일이 아니라 "스킨이
+       그 이미지를 어떻게 보여주는가"만 바꾸므로, 슬롯에 연결된
+       이미지든 글 데이터에서 온 이미지든 똑같이 할 수 있다.
+       보호 영역(post-body) 안에서만 canStyle이 false로 막힌다. */
+    crop: canStyle && kind === "image",
     shape: canStyle && (kind === "image" || kind === "link" || kind === "container"),
     border: canStyle && kind === "container",
     padding: canStyle && kind === "container",

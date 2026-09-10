@@ -208,8 +208,41 @@ function buildStudioInspectorLayer() {
   studioInspectorPopover.appendChild(studioInspectorFields);
   studioInspectorPopover.appendChild(studioInspectorUndoButton);
 
+  /* 자르기 중에 사진을 끌어 옮기는 투명한 판. 평소에는 hidden이라
+     Preview가 hover/click을 그대로 받고, 자르기를 여는 동안에만
+     프레임 위에 깔린다(studio-inspector-crop.js). iframe 안이
+     아니라 여기 있는 이유는 모서리 핸들과 같다 — 좌표 변환을
+     한 벌만 쓰고, 스킨 DOM에는 아무 것도 붙이지 않기 위해서다. */
+  studioInspectorCropSurface =
+    document.createElement("div");
+
+  studioInspectorCropSurface.className =
+    "studio-inspector-crop-surface";
+
+  studioInspectorCropSurface.id =
+    "studioInspectorCropSurface";
+
+  studioInspectorCropSurface.hidden =
+    true;
+
+  studioInspectorCropSurface.addEventListener(
+    "pointerdown",
+    beginStudioInspectorCropDrag
+  );
+
+  studioInspectorCropSurface.addEventListener(
+    "lostpointercapture",
+    cancelStudioInspectorCropDrag
+  );
+
+  studioInspectorCropSurface.addEventListener(
+    "dragstart",
+    (event) => event.preventDefault()
+  );
+
   studioInspectorLayer.appendChild(studioInspectorHoverBox);
   studioInspectorLayer.appendChild(studioInspectorSelectBox);
+  studioInspectorLayer.appendChild(studioInspectorCropSurface);
 
   /* 모서리 핸들 — 선택 테두리의 자식이 아니라 레이어의 형제로 둔다.
      테두리 박스는 Preview 영역과의 교집합으로 잘려 있어서(즉
@@ -440,12 +473,20 @@ function studioInspectorMapRectRaw(rect) {
    모서리가 실제로 Preview 안에 보일 때만 그린다. */
 function paintStudioInspectorHandles(rect) {
 
+  /* 자르기 판과 모서리 핸들은 같은 사각형 위에 그려진다 — 둘을
+     동시에 띄우면 사진을 끌려던 손이 핸들을 잡는다. 자르는 동안은
+     핸들을 내리고, 자르기가 끝나면 다시 올라온다. 한 곳에서 함께
+     칠해야 "한쪽만 남아 있다"가 생기지 않는다. */
+  paintStudioInspectorCropSurface(rect);
+
   if (!studioInspectorHandles.length) {
     return;
   }
 
   const mapped =
-    studioInspectorResizable ? studioInspectorMapRectRaw(rect) : null;
+    (studioInspectorResizable && !studioInspectorCropDraft)
+      ? studioInspectorMapRectRaw(rect)
+      : null;
 
   studioInspectorHandles.forEach((handle) => {
 

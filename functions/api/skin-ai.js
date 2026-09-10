@@ -357,7 +357,7 @@ const SKIN_AI_SELECTION_REGION_NAMES = ["post-body"];
 const SKIN_AI_SELECTION_CAPABILITY_NAMES = [
   "text", "href", "typography", "color", "background", "align",
   "imageSource", "imageClear", "size", "shape", "border", "padding",
-  "imageAlign"
+  "imageAlign", "crop"
 ];
 
 /* 사람이 읽는 한 줄 라벨("HOME · 제목 · Recent Notes"). 프롬프트에

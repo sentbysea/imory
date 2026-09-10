@@ -213,15 +213,22 @@ function commitStudioInspectorHref(value) {
 }
 
 
+/* =========================================================
+   스타일 컨트롤 확정
+
+   대상 규칙이 늘 선택한 요소인 것은 아니다 — 자른 이미지의
+   너비·모양·정렬은 **프레임(래퍼)**의 규칙이 갖는다. 그 판단과
+   병합은 전부 studio-inspector-crop.js의
+   studioInspectorCropAwareCss() 한 곳에 있고(자르지 않은 요소면
+   지금까지와 완전히 같은 한 줄이다), 여기서는 그 결과를 그대로
+   쓴다 — "크기 조절과 자르기가 서로 덮어쓴다"가 생기지 않는
+   이유다.
+========================================================== */
+
 function commitStudioInspectorStyle(control, value) {
 
   return applyStudioInspectorPatch((element, css) => ({
-    css: mergeStudioInspectorDeclarations(
-      css,
-      studioInspectorSelection.editId,
-      control,
-      value
-    )
+    css: studioInspectorCropAwareCss(css, control, value, element)
   }));
 
 }

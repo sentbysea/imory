@@ -125,6 +125,8 @@ let studioInspectorDirectButton = null;
      studioInspectorResizable   지금 선택이 크기 조절 가능한 이미지인가
                                 (rects 메시지마다 template을 다시
                                 파싱하지 않으려고 캐시한다)
+     studioInspectorCropDraft   자르기 편집 중인 값(비율/확대/구도)
+     studioInspectorCropDrag    사진을 끌어 옮기는 중인 정보
 ========================================================== */
 
 let studioInspectorTextDraft = null;
@@ -144,6 +146,24 @@ let studioInspectorSizeRange = null;
 let studioInspectorSizeNumber = null;
 
 let studioInspectorHandles = [];
+
+
+/* 이미지 자르기 라운드 — 여기도 전부 "아직 확정되지 않은 것"이다.
+   studio/inspector/studio-inspector-crop.js가 읽고 쓴다.
+
+     studioInspectorCropDraft      { ratio, zoom, x, y, frameWidth, fixedWidth }
+     studioInspectorCropDrag       드래그 중인 정보(시작 좌표 · 프레임 크기)
+     studioInspectorCropSurface    Preview 위에 얹는 투명한 드래그 판
+                                   (DOM은 overlay가 만든다)
+     studioInspectorCropZoomRange  확대 슬라이더 참조 — 폼을 다시 그리면
+                                   죽는 참조라 그때 끊는다 */
+let studioInspectorCropDraft = null;
+
+let studioInspectorCropDrag = null;
+
+let studioInspectorCropSurface = null;
+
+let studioInspectorCropZoomRange = null;
 
 
 /* 크기 조절 하한/상한. 상한은 항상 "부모 안쪽 폭"으로 한 번 더

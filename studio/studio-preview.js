@@ -1857,13 +1857,43 @@ function postInspectorSelectionToFrame(editId) {
 /* =========================================================
    postInspectorPreviewToFrame(payload) (Select mode 직접 편집)
 
-   입력 중인 텍스트/드래그 중인 크기를 **저장하지 않고** Preview에만
-   비춘다. payload가 null이면 임시 상태를 걷어내라는 뜻이다.
+   입력 중인 텍스트/드래그 중인 크기/자르기를 **저장하지 않고**
+   Preview에만 비춘다. payload가 null이면 임시 상태를 걷어내라는
+   뜻이다.
 
    확정(applyStudioDirectEdit)과 달리 SkinPackage도 dirty도 건드리지
    않는다 — 그래서 매 글자/매 pointermove마다 불러도 Undo가 쌓이지
    않고 한글 조합도 끊기지 않는다.
+
+   ★ 보내는 필드는 여기서 **하나씩 적어** 만든다(호출자가 준 객체를
+     그대로 넘기지 않는다). 새 임시 편집을 추가하면 이 목록에도
+     넣어야 한다 — 빠지면 Preview에서 아무 일도 일어나지 않는다.
 ========================================================== */
+
+/* 자르기 임시값 — 숫자 넷과 프레임 폭만 통과시킨다. 이 값을 실제
+   CSS로 바꾸는 계산은 iframe 쪽에서 studio-inspector-crop-model.js가
+   한다(Studio가 확정 규칙을 만들 때 쓰는 바로 그 함수다 — 그래서
+   "적용했더니 구도가 달라졌다"가 생기지 않는다). */
+function inspectorPreviewCropPayload(crop) {
+
+  if (!crop || typeof crop !== "object") {
+    return undefined;
+  }
+
+  const number = (value) =>
+    (typeof value === "number" && Number.isFinite(value)) ? value : undefined;
+
+  return {
+    ratio: typeof crop.ratio === "string" ? crop.ratio : undefined,
+    zoom: number(crop.zoom),
+    x: number(crop.x),
+    y: number(crop.y),
+    frameWidth: number(crop.frameWidth),
+    fixedWidth: crop.fixedWidth === true
+  };
+
+}
+
 
 function postInspectorPreviewToFrame(payload) {
 
@@ -1878,7 +1908,13 @@ function postInspectorPreviewToFrame(payload) {
           editId: payload.editId,
           text: typeof payload.text === "string" ? payload.text : undefined,
           width: typeof payload.width === "number" ? payload.width : undefined,
-          ratio: typeof payload.ratio === "number" ? payload.ratio : undefined
+          ratio: typeof payload.ratio === "number" ? payload.ratio : undefined,
+
+          /* 자른 이미지에서 "너비"는 프레임의 너비다 — 어느 쪽에
+             적용할지를 이 한 글자가 정한다. */
+          target: payload.target === "frame" ? "frame" : undefined,
+
+          crop: inspectorPreviewCropPayload(payload.crop)
         }
       : {
           type: "preview:inspect-preview",

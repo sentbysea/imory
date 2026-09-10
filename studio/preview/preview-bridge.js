@@ -16,7 +16,7 @@
      parent -> iframe  "preview:ping"            { type }
      parent -> iframe  "preview:inspector-mode"  { type, enabled }
      parent -> iframe  "preview:inspector-select"{ type, editId }
-     parent -> iframe  "preview:inspect-preview" { type, editId, text?, width?, ratio?, clear? }
+     parent -> iframe  "preview:inspect-preview" { type, editId, text?, width?, ratio?, target?, crop?, clear? }
      iframe -> parent  "preview:ready"           { type }
      iframe -> parent  "preview:rendered"        { type, hasPostBodyRegion }
      iframe -> parent  "preview:error"           { type, message }
@@ -525,6 +525,47 @@ function resolveInspectableTarget(node) {
 }
 
 
+/* =========================================================
+   inspectorFrameElementOf(el) — 잘린 이미지의 "보이는 사각형"
+
+   자르기가 걸린 이미지는 프레임(<span> 래퍼)보다 크고, 넘치는
+   부분은 overflow: hidden으로 잘려 안 보인다. 그 상태에서 이미지
+   자신의 rect를 올려보내면 Studio는 **화면에 보이지 않는 영역**에
+   테두리와 모서리 핸들을 그린다. 사용자가 보는 사각형은 프레임이
+   므로, 좌표를 재는 모든 자리에서 프레임을 대신 쓴다.
+
+   판정은 custom property 표식 하나다(studio-inspector-crop-model.js
+   INSPECTOR_CROP_MARKER). custom property는 상속되므로 "자식이
+   하나뿐인가"를 함께 본다 — 자르기 래퍼는 언제나 이미지 하나만
+   감싸므로, 표식을 물려받았을 뿐인 다른 상자를 프레임으로 착각
+   하지 않는다.
+========================================================== */
+
+function inspectorFrameElementOf(el) {
+
+  const parent =
+    el && el.parentElement;
+
+  if (!parent || parent.nodeType !== 1 || parent.children.length !== 1) {
+    return el;
+  }
+
+  try {
+
+    const marker =
+      window.getComputedStyle(parent).getPropertyValue(
+        window.INSPECTOR_CROP_MARKER || "--imory-crop"
+      );
+
+    return (marker && marker.trim()) ? parent : el;
+
+  } catch (err) {
+    return el;
+  }
+
+}
+
+
 function inspectorRectOf(el) {
 
   if (!el || !el.isConnected) {
@@ -532,7 +573,7 @@ function inspectorRectOf(el) {
   }
 
   const rect =
-    el.getBoundingClientRect();
+    inspectorFrameElementOf(el).getBoundingClientRect();
 
   return {
     left: rect.left,
@@ -562,11 +603,17 @@ function inspectorMetricsOf(el) {
     return null;
   }
 
+  /* 자른 이미지에서는 크기 컨트롤이 다루는 "너비"가 사진의 너비가
+     아니라 **프레임의 너비**다 — 그래서 여기서 재는 대상도 프레임
+     이고, 부모 폭도 프레임의 부모에서 잰다. */
+  const frame =
+    inspectorFrameElementOf(el);
+
   const rect =
-    el.getBoundingClientRect();
+    frame.getBoundingClientRect();
 
   const parent =
-    el.parentElement;
+    frame.parentElement;
 
   let parentWidth = 0;
 
@@ -588,7 +635,18 @@ function inspectorMetricsOf(el) {
     naturalWidth: Number(el.naturalWidth) || 0,
     naturalHeight: Number(el.naturalHeight) || 0,
     parentWidth: Math.max(0, Math.round(parentWidth)),
-    viewportWidth: document.documentElement.clientWidth || 0
+    viewportWidth: document.documentElement.clientWidth || 0,
+
+    /* 자르기 UI가 "이미지가 없거나 로드에 실패했다"를 말해 줄 수
+       있는 유일한 근거다 — 실패한 <img>는 브라우저가 alt 텍스트를
+       담은 인라인 요소로 취급해서 프레임을 씌워도 아무 것도 보이지
+       않는다. img가 아닌 요소에는 의미가 없으므로 null이다. */
+    loaded:
+      el.tagName === "IMG"
+        ? !!(el.complete && Number(el.naturalWidth) > 0)
+        : null,
+
+    cropped: frame !== el
   };
 
 }
@@ -750,7 +808,8 @@ function clearInspectorPreview(options) {
     return;
   }
 
-  /* 재렌더로 떨어져 나간 노드는 되돌릴 것도, 되돌릴 필요도 없다. */
+  /* 재렌더로 떨어져 나간 노드는 되돌릴 것도, 되돌릴 필요도 없다
+     (임시로 만든 자르기 래퍼도 그 DOM과 함께 사라진다). */
   if (!node.isConnected || (options && options.discard)) {
     return;
   }
@@ -771,6 +830,115 @@ function clearInspectorPreview(options) {
   } else {
     node.removeAttribute("style");
   }
+
+  if (!restore.crop) {
+    return;
+  }
+
+  /* 자르기 미리보기가 만든 래퍼는 통째로 걷어낸다. 이미 스킨에
+     있던 래퍼(= 이전에 자른 적이 있는 이미지)는 지우지 않고 inline
+     선언만 원래대로 되돌린다 — 그 래퍼는 확정된 결과물이라 임시
+     편집을 취소했다고 사라져서는 안 된다. */
+  const wrapper =
+    restore.crop.wrapper;
+
+  if (!wrapper || !wrapper.isConnected) {
+    return;
+  }
+
+  if (!restore.crop.created) {
+
+    wrapper.style.cssText = "";
+
+    if (typeof restore.crop.style === "string" && restore.crop.style.trim()) {
+      wrapper.setAttribute("style", restore.crop.style);
+    } else {
+      wrapper.removeAttribute("style");
+    }
+
+    return;
+
+  }
+
+  if (wrapper.parentNode) {
+    wrapper.parentNode.insertBefore(node, wrapper);
+    wrapper.remove();
+  }
+
+}
+
+
+/* 선언 묶음을 inline style로 얹는다 — 값이 null인 것은 건너뛴다.
+   custom property(--imory-crop)도 함께 실려야 하므로 setProperty를
+   쓴다(node.style.foo = ... 로는 custom property가 들어가지 않는다). */
+function applyInspectorInlineDeclarations(node, declarations) {
+
+  Object.keys(declarations || {}).forEach((property) => {
+
+    const value =
+      declarations[property];
+
+    if (value === null || value === undefined || value === "") {
+      return;
+    }
+
+    node.style.setProperty(property, String(value));
+
+  });
+
+}
+
+
+/* =========================================================
+   자르기 임시 미리보기 — 필요하면 래퍼를 **하나만** 만든다
+
+   이미 자른 적이 있는 이미지에는 스킨 HTML에 래퍼가 들어 있다.
+   그때는 그 래퍼를 그대로 쓴다 — 미리보기가 또 감싸면 재편집할
+   때마다 래퍼가 겹겹이 쌓인다(요구사항 3절).
+========================================================== */
+
+function ensureInspectorCropWrapper(node, restore) {
+
+  if (restore.crop) {
+    return restore.crop.wrapper;
+  }
+
+  const existing =
+    inspectorFrameElementOf(node);
+
+  if (existing !== node) {
+
+    restore.crop = {
+      wrapper: existing,
+      created: false,
+      style: existing.getAttribute("style")
+    };
+
+    return existing;
+
+  }
+
+  if (!node.parentNode) {
+    return null;
+  }
+
+  /* <span>이다 — <div>로 감싸면 <p> 안의 이미지에서 문단이 쪼개진다.
+     <a> 안의 이미지면 래퍼도 <a> 안쪽에 들어가므로 링크 클릭
+     범위가 그대로다. */
+  const wrapper =
+    document.createElement("span");
+
+  node.parentNode.insertBefore(wrapper, node);
+
+  wrapper.appendChild(node);
+
+  restore.crop = {
+    wrapper,
+    created: true,
+    style: null
+  };
+
+  return wrapper;
 
 }
 
@@ -797,7 +965,8 @@ function applyInspectorPreview(data) {
 
     inspectorPreviewRestore = {
       text: null,
-      style: selected.getAttribute("style")
+      style: selected.getAttribute("style"),
+      crop: null
     };
 
   }
@@ -819,14 +988,48 @@ function applyInspectorPreview(data) {
 
   if (typeof data.width === "number" && Number.isFinite(data.width)) {
 
-    selected.style.width = `${Math.round(data.width)}px`;
-    selected.style.height = "auto";
-    selected.style.maxWidth = "100%";
+    /* 자른 이미지에서 "너비"는 프레임의 너비다 — 안쪽 사진에
+       px를 박으면 프레임 안이 어긋나 빈틈이 생긴다. */
+    const sizeTarget =
+      (data.target === "frame" && inspectorFrameElementOf(selected) !== selected)
+        ? ensureInspectorCropWrapper(selected, inspectorPreviewRestore)
+        : selected;
 
-    selected.style.aspectRatio =
-      (typeof data.ratio === "number" && Number.isFinite(data.ratio) && data.ratio > 0)
-        ? String(data.ratio)
-        : "";
+    if (sizeTarget) {
+
+      sizeTarget.style.width = `${Math.round(data.width)}px`;
+      sizeTarget.style.maxWidth = "100%";
+
+      if (sizeTarget === selected) {
+        sizeTarget.style.height = "auto";
+      }
+
+      sizeTarget.style.aspectRatio =
+        (typeof data.ratio === "number" && Number.isFinite(data.ratio) && data.ratio > 0)
+          ? String(data.ratio)
+          : "";
+
+    }
+
+  }
+
+  if (data.crop && typeof window.buildInspectorCropDeclarations === "function") {
+
+    const wrapper =
+      ensureInspectorCropWrapper(selected, inspectorPreviewRestore);
+
+    if (wrapper) {
+
+      const declarations =
+        window.buildInspectorCropDeclarations(data.crop, {
+          frameWidth: data.crop.frameWidth,
+          fixedWidth: !!data.crop.fixedWidth
+        });
+
+      applyInspectorInlineDeclarations(wrapper, declarations.frame);
+      applyInspectorInlineDeclarations(selected, declarations.image);
+
+    }
 
   }
 

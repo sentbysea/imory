@@ -740,6 +740,13 @@
                         '<a class="y-post-link" data-imory-href="item.href">' +
                         '<span class="y-post-title" data-imory-bind="item.title"></span>' +
                         '</a></li></ul>' +
+                        /*
+                          이미지 자르기 라운드 —
+                            .y-portrait  세로 사진(정사각형·가로형과
+                                         함께 세 가지 비율을 검증한다)
+                          앞 요소들 **뒤에만** 덧붙인다.
+                        */
+                        '<img class="y-portrait" src="https://example.com/portrait.png" alt="세로 사진">' +
                         '</div>'
                     },
                     category: {
@@ -775,6 +782,7 @@
                     '.y-avatar { width: 120px; height: 120px; object-fit: cover; } ' +
                     '.y-cover { width: 300px; height: 100px; object-fit: cover; } ' +
                     '.y-static-image { width: 200px; height: 80px; } ' +
+                    '.y-portrait { width: 90px; height: 160px; object-fit: cover; } ' +
                     '@media (max-width: 720px) { .y-home .y-heading { font-size: 15px; } }',
                   imageSlots: [
                     { name: "profile", label: "프로필 사진", required: false, aspectRatioHint: "1:1" },
@@ -1814,11 +1822,13 @@
        앞·main(studio-inspector.js)이 맨 뒤인 순서를 지켜야 한다 —
        이유는 studio/index.html의 같은 블록 주석에 있다. -->
   <script src="./inspector/studio-inspector-model.js"></script>
+  <script src="./inspector/studio-inspector-crop-model.js"></script>
   <script src="./inspector/studio-inspector-state.js"></script>
   <script src="./inspector/studio-inspector-overlay.js"></script>
   <script src="./inspector/studio-inspector-edit.js"></script>
   <script src="./inspector/studio-inspector-text.js"></script>
   <script src="./inspector/studio-inspector-image-size.js"></script>
+  <script src="./inspector/studio-inspector-crop.js"></script>
   <script src="./inspector/studio-inspector-controls.js"></script>
   <script src="./inspector/studio-inspector.js"></script>
   <script src="./studio-state.js"></script>
