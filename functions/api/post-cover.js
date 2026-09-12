@@ -240,7 +240,8 @@ async function fetchPostCoverObjectRow(
   anonKey,
   token,
   functionName,
-  args
+  args,
+  galleryTokens = ""
 ) {
 
   const call =
@@ -249,7 +250,8 @@ async function fetchPostCoverObjectRow(
         `${supabaseUrl}/rest/v1/rpc/${functionName}`,
         {
           method: "POST",
-          headers: postCoverJsonHeaders(anonKey, bearer),
+          headers: { ...postCoverJsonHeaders(anonKey, bearer),
+            ...(galleryTokens ? { "X-Imory-Gallery-Access": galleryTokens } : {}) },
           body: JSON.stringify(args)
         }
       );
@@ -456,11 +458,15 @@ export async function onRequest(
   const categoryId =
     parsePostCoverId(url.searchParams.get("category"));
 
+  const rawImageId = url.searchParams.get("image");
+  const imageId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawImageId || "")
+    ? rawImageId : null;
+
 
   /* 둘 중 정확히 하나 */
 
   if (
-    (postId === null) === (categoryId === null)
+    [postId, categoryId, imageId].filter(value => value !== null).length !== 1
   ) {
 
     return new Response(
@@ -486,9 +492,18 @@ export async function onRequest(
   const token =
     readPostCoverTokenCookie(request);
 
+  const galleryTokens = imageId ? (request.headers.get("cookie") || "").split(";")
+    .map(part => part.trim()).filter(part => /^imory_gallery_[0-9]+=/.test(part))
+    .map(part => part.slice(part.indexOf("=") + 1))
+    .filter(value => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value))
+    .slice(0, 32).join(",") : "";
+
 
   const lookup =
-    postId !== null
+    imageId !== null
+      ? await fetchPostCoverObjectRow(supabaseUrl, anonKey, token,
+          "get_gallery_image_object", { p_image_id: imageId }, galleryTokens)
+      : postId !== null
       ? await fetchPostCoverObjectRow(
           supabaseUrl,
           anonKey,
@@ -560,7 +575,8 @@ export async function onRequest(
         method: "GET",
         headers: {
           "apikey": anonKey,
-          "Authorization": `Bearer ${token || anonKey}`
+          "Authorization": `Bearer ${token || anonKey}`,
+          ...(galleryTokens ? { "X-Imory-Gallery-Access": galleryTokens } : {})
         }
       }
     );

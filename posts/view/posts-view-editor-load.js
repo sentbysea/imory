@@ -150,6 +150,7 @@ async function openNewPostEditor(
      남지 않게 비운다(posts/editor/posts-cover-image.js). */
 
   resetPostCoverImage();
+  resetPostGallery();
 
 
   if (
@@ -513,6 +514,7 @@ async function openPostEditor(
   loadPostCoverImage(
     post.id
   );
+  await loadPostGallery(post.id);
 
 
   /*
@@ -820,6 +822,7 @@ function postEditorHasUnsavedChanges() {
 
 
   return (
+    postGalleryDirty ||
     now.title !== postEditorSnapshot.title ||
     now.content !== postEditorSnapshot.content ||
     now.ooc !== postEditorSnapshot.ooc ||

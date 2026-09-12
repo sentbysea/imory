@@ -289,10 +289,7 @@ async function fetchOwnerPostCategories(
     []
   ).filter(
     (category) =>
-      (
-        category.type ||
-        "post"
-      ) === "post" ||
+      ["post", "gallery"].includes(category.type || "post") ||
       String(
         category.id
       ) === kept

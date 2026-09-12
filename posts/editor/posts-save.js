@@ -31,6 +31,11 @@ async function savePostContentAndSecret(
   secretPassword
 ) {
 
+  if (typeof savePostGallery === "function") {
+    const galleryError = await savePostGallery(postId);
+    if (galleryError) return galleryError;
+  }
+
   /*
     post_contents에 직접 upsert하지 않는다 — ooc_content는 어느
     역할에도 SELECT GRANT가 없고, PostgreSQL은 ON CONFLICT DO
@@ -126,11 +131,16 @@ postEditorSaveButton
       const title =
         postEditorTitle
           .value
-          .trim();
+          .trim() || (isGalleryEditor() ? "Gallery" : "");
+
+      if (isGalleryEditor() && (postGalleryLoading || postGalleryLoadFailed || (postGalleryDirty && !postGalleryImages.length))) {
+        showPostEditorMessage(postGalleryLoading || postGalleryLoadFailed ? "사진을 다시 불러온 뒤 저장해주세요." : "사진을 한 장 이상 추가해주세요.");
+        return;
+      }
 
 
       const isHtmlMode =
-        editorContentMode ===
+        (isGalleryEditor() && postGalleryImages.length > 0) || editorContentMode ===
         "html";
 
 
@@ -142,7 +152,9 @@ postEditorSaveButton
       */
 
       const content =
-        isHtmlMode
+        isGalleryEditor() && postGalleryImages.length
+          ? getPostGalleryContent()
+          : isHtmlMode
           ? postEditorHtmlContent
               ?.value ||
             ""
@@ -150,7 +162,9 @@ postEditorSaveButton
 
 
       const plainText =
-        isHtmlMode
+        isGalleryEditor() && postGalleryImages.length
+          ? "gallery"
+          : isHtmlMode
           ? content.trim()
           : getRichEditorPlainText()
               .trim();
@@ -242,7 +256,7 @@ postEditorSaveButton
       ====================================================== */
 
       const preparedCover =
-        await preparePostCoverUpload();
+        isGalleryEditor() ? { uploaded: null, error: null } : await preparePostCoverUpload();
 
 
       if (preparedCover.error) {
@@ -386,7 +400,7 @@ postEditorSaveButton
            상태이므로 안내만 하고 화면은 그대로 진행한다. */
 
         const coverSaveError =
-          await finishPostCoverSave(
+          isGalleryEditor() ? null : await finishPostCoverSave(
             savedId,
             preparedCover
           );
@@ -548,6 +562,13 @@ postEditorSaveButton
         contentSaveError
       ) {
 
+        // A gallery upload can fail after the post row was created. Retry the
+        // same row instead of creating another post on each SAVE attempt.
+        if (data?.id && isGalleryEditor()) {
+          editorSourcePostId = data.id;
+          currentEditorMode = "edit";
+        }
+
         console.error(
           error ||
           contentSaveError
@@ -570,7 +591,7 @@ postEditorSaveButton
 
 
       const newPostCoverError =
-        await finishPostCoverSave(
+        isGalleryEditor() ? null : await finishPostCoverSave(
           data.id,
           preparedCover
         );
@@ -634,6 +655,3 @@ postEditorSaveButton
 
     }
   );
-
-
-

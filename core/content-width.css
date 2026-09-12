@@ -1,0 +1,67 @@
+/* Platform-owned width contract, shared by published skins and Studio.
+   Skin CSS controls appearance; content must remain inside its containing block. */
+:where(.imory-skin-root, #postArea, #themeMount, #postList,
+       .post-detail-content-wrap, .post-detail-content,
+       [data-imory-region="post-body"]) {
+  box-sizing: border-box !important;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.imory-skin-root {
+  width: 100%;
+  margin-inline: auto;
+}
+:where(.imory-skin-root, .post-detail-content) *,
+:where(.imory-skin-root, .post-detail-content) *::before,
+:where(.imory-skin-root, .post-detail-content) *::after {
+  box-sizing: border-box !important;
+  min-width: 0;
+}
+.imory-skin-root :where(*):not(table):not(thead):not(tbody):not(tfoot):not(tr):not(th):not(td):not(pre):not(pre *) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+:where(.imory-skin-root, .post-detail-content) :where(img, video, svg, canvas) {
+  max-width: 100%;
+  height: auto;
+}
+:where(.imory-skin-root, .post-detail-content) :where(iframe, embed, object) {
+  max-width: 100%;
+}
+:where(.is-html-content, [data-imory-region="post-body"]) :where(img, video, svg, canvas) {
+  height: auto !important;
+}
+:where(.is-html-content, [data-imory-region="post-body"], .post-detail-content) {
+  width: 100%;
+  margin-inline: auto;
+  overflow-wrap: anywhere !important;
+}
+:where(.is-html-content, [data-imory-region="post-body"], .post-detail-content)
+  :where(*):not(table):not(thead):not(tbody):not(tfoot):not(tr):not(th):not(td):not(pre):not(pre *) {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+:where(.imory-skin-root, .post-detail-content) :where(pre, table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto !important;
+  overscroll-behavior-inline: contain;
+}
+:where(.imory-skin-root, .post-detail-content) pre {
+  white-space: pre;
+  overflow-wrap: normal;
+}
+:where(.imory-skin-root, .post-detail-content) pre code {
+  white-space: inherit;
+  overflow-wrap: normal;
+}
+.post-detail-content-wrap {
+  overflow: visible;
+}
+@media (max-width: 600px) {
+  .imory-skin-root > :not(style) {
+    max-width: 100%;
+    margin-inline: auto;
+  }
+}

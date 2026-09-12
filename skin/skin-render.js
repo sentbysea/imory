@@ -39,6 +39,60 @@
 ========================================================== */
 
 import { validateAndScopeSkinCss } from "./skin-css-validate.js";
+import { installContentWidthContract } from "../core/content-width.js";
+
+/* 폭 계약 stylesheet.
+
+   진입 문서(index.html / preview-frame.html)는 이 파일을
+   loadVersionedStyles()로 미리 걸어 둔다 — FOUC 없이 첫 페인트부터
+   적용되고, ?v=APP_BUILD_VERSION으로 CDN 캐시(4시간)도 무효화된다.
+   그 <link>는 버전 쿼리가 붙은 URL이므로 속성이 아니라 **경로**로
+   찾는다. 진입 문서가 걸어 두지 않은 document(테스트 하네스 등)에서만
+   여기서 직접 넣고, 그때도 같은 버전 쿼리를 붙인다. */
+
+const CONTENT_WIDTH_STYLESHEET_URL =
+  new URL("../core/content-width.css", import.meta.url);
+
+function ensureContentWidthStylesheet(doc) {
+
+  const alreadyLinked =
+    Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).some(
+      (link) => {
+
+        try {
+          return new URL(link.getAttribute("href") || "", doc.baseURI).pathname ===
+            CONTENT_WIDTH_STYLESHEET_URL.pathname;
+        } catch (error) {
+          return false;
+        }
+
+      }
+    );
+
+  if (alreadyLinked) {
+    return;
+  }
+
+  /* build-version.js는 classic script의 top-level const라 전역
+     lexical 바인딩이다 — window 속성이 아니므로 bare 식별자로
+     읽는다(이 모듈과 같은 realm에서 이미 로드돼 있다). */
+
+  const version =
+    typeof APP_BUILD_VERSION === "string"
+      ? APP_BUILD_VERSION
+      : null;
+
+  const widthContract = doc.createElement("link");
+  widthContract.rel = "stylesheet";
+  widthContract.href = version
+    ? `${CONTENT_WIDTH_STYLESHEET_URL.pathname}?v=${version}`
+    : CONTENT_WIDTH_STYLESHEET_URL.href;
+  widthContract.setAttribute("data-imory-content-width", "");
+
+  doc.head.appendChild(widthContract);
+
+}
+
 
 function resolveSkinPath(scope, path) {
 
@@ -455,6 +509,8 @@ export function renderSkin({ container, skin, context, mode = "view" } = {}) {
   function mount() {
 
     const doc = container.ownerDocument;
+    installContentWidthContract(doc);
+    ensureContentWidthStylesheet(doc);
 
     const safeHtml = sanitizeSkinHTML(String(currentSkin?.html || ""), doc);
 

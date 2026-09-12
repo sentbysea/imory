@@ -764,6 +764,23 @@ async function runTab(browser) {
   await ctx.close();
 }
 
+async function runCategory(browser) {
+  const requests = [];
+  const db = makeDb();
+  const { ctx, page } = await openSettings(browser, { db, recorder: requests });
+  await openTab(page, 'CATEGORY');
+  const select = page.locator('.category-type-select').first();
+  check('[category] 종류 post/gallery/banner 제공', (await select.locator('option').evaluateAll(nodes => nodes.map(n => n.value))).join(',') === 'post,gallery,banner');
+  await select.selectOption('gallery');
+  check('[category] 별도 표시 선택 제거', await page.locator('.category-display-row option[value="list"]').count() === 0 && await page.locator('.category-display-row option[value="gallery"]').count() === 0);
+  await page.click('#categorySaveButton');
+  await page.waitForTimeout(800);
+  const updates = requests.filter(r => r.method === 'PATCH' && r.path.includes('/rest/v1/categories'))
+    .map(r => JSON.parse(r.body || '{}'));
+  check('[category] gallery 타입과 호환 mirror 저장', updates.some(row => row.type === 'gallery' && row.list_style === 'gallery'));
+  await ctx.close();
+}
+
 
 /* =========================================================
    MAIN
@@ -782,6 +799,7 @@ async function runTab(browser) {
     if (shouldRun("image")) await runImage(browser);
     if (shouldRun("etc")) await runEtc(browser);
     if (shouldRun("tab")) await runTab(browser);
+    if (shouldRun("category")) await runCategory(browser);
 
   } catch (err) {
 

@@ -137,7 +137,7 @@
 }
 ```
 
-- `navigation.home`/`postCategories`/`bannerCategories`는 최근 추가된 필드입니다(PHASE1D-B). `categories`는 원본 순서(`sort_order`)를 그대로 보존한 전체 목록, `postCategories`/`bannerCategories`는 그 부분집합(순서 동일)입니다. **`gallery` 등 미래 타입이 생기면 두 필터 배열 어디에도 들어가지 않고 `categories`에만 남습니다.**
+- `navigation.categories`는 원본 순서를 보존합니다. 기존 스킨의 메뉴 호환을 위해 `postCategories`는 post와 gallery를 포함합니다. 종류별 메뉴는 `textPostCategories`(post만), `galleryCategories`, `bannerCategories`를 사용합니다. 알 수 없는 미래 타입은 전체 `categories`에 유지됩니다.
 - `itemCount`는 항상 `null`입니다(계산 로직 없음).
 - `banners.items[].href`는 사용자가 직접 입력한 외부 URL일 수 있고, `https://`만 통과합니다(없으면 `null`).
 - `viewer`는 **링크를 그릴지만** 정합니다. 실제 권한 검사는 그 주소를 받은

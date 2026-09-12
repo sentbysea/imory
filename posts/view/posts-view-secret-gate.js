@@ -297,6 +297,14 @@ async function requestSecretPostContent(
   }
 
 
+  if (String(row.content || "").includes("/api/post-cover?image=")) {
+    const { data: galleryToken, error: tokenError } = await supabaseClient.rpc(
+      "issue_gallery_read_token", { p_post_id: postId, p_password: password }
+    );
+    if (tokenError || !/^[0-9a-f-]{36}$/i.test(galleryToken || "")) return { ok: false };
+    document.cookie = `imory_gallery_${Number(postId)}=${galleryToken}; Path=/api/post-cover; Max-Age=3600; SameSite=Strict${location.protocol === "https:" ? "; Secure" : ""}`;
+  }
+
   return {
     ok: true,
 
@@ -770,6 +778,4 @@ async function loadRelatedPosts(
   );
 
 }
-
-
 

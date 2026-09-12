@@ -86,6 +86,8 @@ async function loadPostEditorCategories(
       option.textContent =
         category.name;
 
+      option.dataset.categoryType = category.type || "post";
+
 
       postEditorCategory.appendChild(
         option
@@ -106,6 +108,8 @@ async function loadPostEditorCategories(
       );
 
   }
+
+  if (typeof renderPostGallery === "function") renderPostGallery();
 
 }
 
@@ -692,6 +696,3 @@ function toggleEditorUnderline() {
   );
 
 }
-
-
-

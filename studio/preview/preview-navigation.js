@@ -305,7 +305,8 @@ async function renderCategoryPreviewFor(categoryId, options, page) {
   }
 
   const categoryTemplate =
-    resolveSkinTemplate(currentWorkingSkin, "category");
+    resolveSkinTemplate(currentWorkingSkin, "category") ||
+      (category.type === "gallery" ? getDefaultGalleryTemplate() : null);
 
   if (!categoryTemplate) {
 
@@ -391,7 +392,7 @@ async function renderCategoryPreviewFor(categoryId, options, page) {
 
   }
 
-  if (context.category.type !== "post") {
+  if (!["post", "gallery"].includes(context.category.type)) {
 
     /*
       banner는 위에서 이미 분기됐다 — 여기 남는 건 post/banner가

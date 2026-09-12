@@ -643,6 +643,10 @@ async function loadCategories(
   categories =
     data;
 
+  categories.forEach(category => {
+    if (category.type === "post" && category.list_style === "gallery") category.type = "gallery";
+  });
+
 
   deletedCategoryIds =
     [];
@@ -720,6 +724,10 @@ function renderCategories() {
           label: "post"
         },
         {
+          value: "gallery",
+          label: "gallery"
+        },
+        {
           value: "banner",
           label: "banner"
         }
@@ -759,6 +767,8 @@ function renderCategories() {
 
           category.type =
             typeSelect.value;
+
+          category.list_style = category.type === "gallery" ? "gallery" : "list";
 
 
           /* GALLERY-1: post ↔ banner를 바꾸면 표시 설정 줄이
@@ -1023,4 +1033,3 @@ addCategoryButton.addEventListener(
   "click",
   addCategory
 );
-

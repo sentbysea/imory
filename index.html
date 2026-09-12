@@ -184,7 +184,14 @@
     writeVersionedImportMap(
       [
         "/skin/skin-render.js",
-        "/skin/skin-css-validate.js"
+        "/skin/skin-css-validate.js",
+
+        /* skin-render.js가 정적 import하는 폭 계약 모듈.
+           아래 loadVersionedModules()가 거는 URL과 **같은 URL**로
+           풀려야 모듈 인스턴스가 하나로 유지된다(설치 상태를
+           모듈 변수로 들고 있다). <base href="/"> 덕분에
+           "./core/content-width.js"도 이 키와 같은 곳으로 간다. */
+        "/core/content-width.js"
       ]
     );
 
@@ -1514,6 +1521,35 @@
     }
 
   </style>
+
+
+  <!-- =========================================================
+       CONTENT WIDTH CONTRACT
+
+       플랫폼이 소유하는 폭 계약(core/content-width.css/js). 고정
+       URL <link>/<script src>를 쓰지 않는다 — CSS/JS는 CDN이
+       max-age(4시간)를 붙여 내려주므로 ?v=APP_BUILD_VERSION만이
+       실제 무효화 장치다(CLAUDE.md 4절).
+
+       여기(head 끝)에 두는 이유: 위 <style> 블록들보다 뒤에
+       와야 플랫폼 폭 규칙이 legacy 장식 규칙을 덮는다.
+  ========================================================== -->
+
+  <script>
+
+    loadVersionedStyles(
+      [
+        "./core/content-width.css"
+      ]
+    );
+
+    loadVersionedModules(
+      [
+        "./core/content-width.js"
+      ]
+    );
+
+  </script>
 
 </head>
 
@@ -3930,6 +3966,7 @@
             */
 
             "./posts/editor/posts-cover-image.js",
+            "./posts/editor/posts-gallery.js",
             "./posts/editor/posts-save.js",
             "./posts/editor/posts-router-init.js"
           ];

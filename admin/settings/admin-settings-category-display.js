@@ -93,6 +93,10 @@ function normalizeCategoryDisplayFields(
   category
 ) {
 
+  if (category.type === "post" && category.list_style === "gallery") {
+    category.type = "gallery";
+  }
+
   category.list_style =
     category.list_style === "gallery"
       ? "gallery"
@@ -141,7 +145,7 @@ function buildCategoryDisplayRow(
 
   if (
     !categoryDisplayColumnsAvailable ||
-    (category.type || "post") !== "post"
+    category.type !== "gallery"
   ) {
 
     return null;
@@ -221,26 +225,6 @@ function buildCategoryDisplayRow(
     };
 
 
-  makeSelect(
-    "표시",
-    [
-      { value: "list", label: "목록" },
-      { value: "gallery", label: "갤러리" }
-    ],
-    category.list_style,
-    (value) => {
-
-      category.list_style =
-        value === "gallery"
-          ? "gallery"
-          : "list";
-
-      onChanged();
-
-    }
-  );
-
-
   const pageSizeSelect =
     makeSelect(
       "페이지당",
@@ -264,7 +248,7 @@ function buildCategoryDisplayRow(
   */
 
   pageSizeSelect.disabled =
-    category.list_style !== "gallery";
+    category.type !== "gallery";
 
 
   makeSelect(

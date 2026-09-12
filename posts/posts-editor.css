@@ -792,3 +792,14 @@
 
   color: #999999;
 }
+/* Gallery photos are uploaded once and can optionally be selected as primary. */
+.post-gallery-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
+  gap: 12px;
+}
+.post-gallery-photos > div { min-width: 0; }
+.post-gallery-photos img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+.post-gallery-photos button { display: block; margin-block: 6px; }
+.post-editor-cover-field[hidden], #postEditorGallery[hidden] { display: none; }
+.post-editor-field[hidden] { display: none; }

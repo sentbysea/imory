@@ -1129,6 +1129,7 @@ async function prepareEditorUI() {
 ========================================================== */
 
 function hidePostEditor() {
+  if (typeof resetPostGallery === "function") resetPostGallery();
 
   document.body.classList.remove(
     "post-editor-mode"

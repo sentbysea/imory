@@ -56,6 +56,24 @@ const SKIN_CATEGORY_SUPPORTED_SCHEMA_VERSION = 1;
 
 export async function renderPublishedSkinCategory({ ownerId, categoryId, container, page, outcome }) {
 
+  async function galleryFallback() {
+    try {
+      const context = await buildCategorySkinContext(ownerId, categoryId, {
+        supportsGallery: true, supportsFolderPage: !!resolveSkinTemplate(rpcData?.skin, "folder"), page
+      });
+      if (context?.category.type !== "gallery") return false;
+      renderSkin({ container, skin: getDefaultGalleryTemplate(), context, mode: "view" });
+      if (outcome) {
+        outcome.isGallery = true;
+        outcome.effectivePage = context.category.pagination?.currentPage;
+      }
+      return true;
+    } catch (error) {
+      console.warn("[skin-category] default gallery unavailable", error);
+      return false;
+    }
+  }
+
   if (!ownerId || categoryId === undefined || categoryId === null || !container) {
     return false;
   }
@@ -88,7 +106,7 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
      is_active=false) — get_published_skin()이 null을 반환한다
      (정상 상태, 에러 아님). 조용히 legacy post-list로 폴백. */
   if (!rpcData || !rpcData.skin) {
-    return false;
+    return galleryFallback();
   }
 
   const skinPackage = rpcData.skin;
@@ -108,7 +126,7 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
   const categoryTemplate = resolveSkinTemplate(skinPackage, "category");
 
   if (!categoryTemplate) {
-    return false;
+    return galleryFallback();
   }
 
   const imageSlotNames = extractImageSlotNames(skinPackage);
@@ -150,7 +168,7 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
   /* post형 category만 이번 Slice의 대상 — banner(및 미래 다른
      타입)는 이 계약을 아예 타지 않고 legacy banner 렌더로 폴백해야
      한다(PHASE1C 5-2/13-1절). */
-  if (context.category.type !== "post") {
+  if (!["post", "gallery"].includes(context.category.type)) {
     return false;
   }
 

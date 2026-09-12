@@ -588,11 +588,11 @@ categorySaveButton
           (
             typeof categoryDisplayColumnsAvailable === "boolean" &&
             categoryDisplayColumnsAvailable &&
-            (category.type || "post") === "post"
+            ["post", "gallery"].includes(category.type || "post")
           )
             ? {
                 list_style:
-                  category.list_style === "gallery"
+                  category.type === "gallery"
                     ? "gallery"
                     : "list",
 

@@ -199,22 +199,22 @@
       record(
         "H1. 1단 HOME은 skin-shell--cols-1 클래스를 갖고, 2단/3단 전용 grid-template-columns 값이 css에 없다",
         oneColSkin.templates.home.html.includes("skin-shell--cols-1") &&
-          !oneColSkin.css.includes("200px 1fr") &&
-          !oneColSkin.css.includes("1fr 2fr 1fr")
+          !oneColSkin.css.includes("200px minmax(0, 1fr)") &&
+          !oneColSkin.css.includes("minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr)")
       );
 
       record(
-        "H2. 2단 HOME은 skin-shell--cols-2 클래스를 갖고, css에 200px 1fr(2단 전용) grid가 있으며 3단 grid는 없다",
+        "H2. 2단 HOME은 skin-shell--cols-2 클래스를 갖고, css에 200px minmax(0, 1fr)(2단 전용) grid가 있으며 3단 grid는 없다",
         twoColSkin.templates.home.html.includes("skin-shell--cols-2") &&
-          twoColSkin.css.includes("200px 1fr") &&
-          !twoColSkin.css.includes("1fr 2fr 1fr")
+          twoColSkin.css.includes("200px minmax(0, 1fr)") &&
+          !twoColSkin.css.includes("minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr)")
       );
 
       record(
-        "H3. 3단 HOME은 skin-shell--cols-3 클래스를 갖고, css에 1fr 2fr 1fr(3단 전용) grid가 있으며 2단 grid는 없다",
+        "H3. 3단 HOME은 skin-shell--cols-3 클래스를 갖고, css에 minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr)(3단 전용) grid가 있으며 2단 grid는 없다",
         threeColSkin.templates.home.html.includes("skin-shell--cols-3") &&
-          threeColSkin.css.includes("1fr 2fr 1fr") &&
-          !threeColSkin.css.includes("200px 1fr")
+          threeColSkin.css.includes("minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr)") &&
+          !threeColSkin.css.includes("200px minmax(0, 1fr)")
       );
 
       record(

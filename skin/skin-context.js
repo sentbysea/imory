@@ -615,7 +615,8 @@ function normalizeSkinCategoryDisplay(
 ) {
 
   const listStyle =
-    category && category.list_style === "gallery"
+    category && (category.type === "gallery" ||
+      (category.type === "post" && category.list_style === "gallery"))
       ? "gallery"
       : "list";
 
@@ -1435,7 +1436,7 @@ async function buildBaseSkinContext(
   const postCategoryItems =
     categoryItems.filter(
       (category) =>
-        category.type === "post"
+        ["post", "gallery"].includes(category.type)
     );
 
 
@@ -1495,6 +1496,12 @@ async function buildBaseSkinContext(
 
       postCategories:
         postCategoryItems,
+
+      galleryCategories:
+        categoryItems.filter(category => category.type === "gallery"),
+
+      textPostCategories:
+        categoryItems.filter(category => category.type === "post"),
 
       bannerCategories:
         categoryItems.filter(
@@ -1969,7 +1976,8 @@ function buildSkinGalleryCards(
   posts,
   slug,
   coverMap,
-  display
+  display,
+  photoMap = new Map()
 ) {
 
   return (posts || []).map((post) => {
@@ -1984,7 +1992,8 @@ function buildSkinGalleryCards(
     const thumbnailUrl =
       isSecret
         ? display.secretCoverUrl
-        : (coverMap.get(String(post.id)) || null);
+        : ((photoMap.get(String(post.id)) || []).find(image => image.isPrimary)?.url ||
+          photoMap.get(String(post.id))?.[0]?.url || coverMap.get(String(post.id)) || null);
 
 
     return {
@@ -2010,6 +2019,12 @@ function buildSkinGalleryCards(
 
       thumbnailUrl:
         thumbnailUrl || null,
+
+      images: isSecret ? [] : (photoMap.get(String(post.id)) || []),
+      additionalImages: isSecret ? [] : (photoMap.get(String(post.id)) || []).filter(image => image.url !== thumbnailUrl),
+      hasAdditionalImages: !isSecret && (photoMap.get(String(post.id)) || []).length > 1,
+      imageCount: isSecret ? 0 : (photoMap.get(String(post.id)) || []).length,
+      hasImages: !isSecret && (photoMap.get(String(post.id)) || []).length > 0,
 
       /*
         alt는 마스킹 아이콘 없는 원래 제목이다 — 아이콘은 화면에
@@ -2283,13 +2298,30 @@ async function buildCategorySkinContext(
       : new Map();
 
 
+  const photoMap = new Map();
+  if (galleryActive && category.type === "gallery") {
+    const ids = postsRaw.filter(post => post.visibility !== "secret").map(post => post.id);
+    if (ids.length) {
+      const { data, error } = await supabaseClient.from("post_gallery_images")
+        .select("id, post_id, position, is_primary").in("post_id", ids).order("position").order("id");
+      if (error) console.warn("[skin-context] gallery photos unavailable", error);
+      for (const photo of data || []) {
+        const key = String(photo.post_id);
+        if (!photoMap.has(key)) photoMap.set(key, []);
+        photoMap.get(key).push({ id: photo.id, url: `/api/post-cover?image=${photo.id}`,
+          alt: "", isPrimary: photo.is_primary === true });
+      }
+    }
+  }
+
   const galleryCards =
     galleryActive
       ? buildSkinGalleryCards(
           postsRaw,
           commonData.slug,
           coverMap,
-          display
+          display,
+          photoMap
         )
       : null;
 
@@ -2343,7 +2375,7 @@ async function buildCategorySkinContext(
 
       writeHref:
         base.viewer.isOwner &&
-        (category.type || "post") === "post"
+        ["post", "gallery"].includes(category.type || "post")
           ? buildSiteComposeUrl(
               buildSitePath(commonData.slug, `/category/${category.id}`)
             )
@@ -2351,7 +2383,7 @@ async function buildCategorySkinContext(
 
       manageHref:
         base.viewer.isOwner &&
-        (category.type || "post") === "post"
+        ["post", "gallery"].includes(category.type || "post")
           ? buildSiteManageUrl(
               buildSitePath(commonData.slug, `/category/${category.id}`)
             )
@@ -2552,7 +2584,7 @@ async function buildFolderSkinContext(
 
   if (
     !category ||
-    (category.type || "post") !== "post"
+    !["post", "gallery"].includes(category.type || "post")
   ) {
     return null;
   }

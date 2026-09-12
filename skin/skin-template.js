@@ -35,6 +35,31 @@
 const SKIN_TEMPLATE_PAGE_TYPES =
   ["home", "category", "post", "banner", "folder"];
 
+/* Additive gallery fallback. Existing category templates retain full control. */
+function getDefaultGalleryTemplate() {
+  const tree = (path, depth) => `<ul><li data-imory-repeat="${path}">
+    <span data-imory-if="item.name" data-imory-bind="item.name"></span>
+    <a data-imory-if="item.href" data-imory-href="item.href" data-imory-bind="item.title"></a>
+    ${depth ? tree('item.children', depth - 1) : ''}</li></ul>`;
+  return {
+    html: `<section class="imory-default-gallery"><h1 data-imory-bind="category.name"></h1>
+      <div class="gallery-cards"><article data-imory-repeat="category.gallery.cards">
+      <a data-imory-href="item.href"><img data-imory-if="item.hasThumbnail" data-imory-src="item.thumbnailUrl" alt="">
+      <span data-imory-bind="item.title"></span></a>
+      <div class="gallery-photos" data-imory-if="item.hasAdditionalImages"><img data-imory-repeat="item.additionalImages" data-imory-src="item.url" alt=""></div>
+      <time data-imory-bind="item.publishedAtLabel"></time></article></div>
+      <p data-imory-if="category.gallery.isEmpty">아직 사진이 없습니다.</p>
+      <nav data-imory-if="category.pagination.hasPages"><a data-imory-repeat="category.pagination.pages" data-imory-href="item.href" data-imory-bind="item.label"></a></nav>
+      ${tree('category.tree', 3)}</section>`,
+    css: `.imory-default-gallery { max-width: 1000px; margin: auto; padding: 24px 16px; }
+      .gallery-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr)); gap: 16px; }
+      .gallery-cards article { min-width: 0; } .gallery-cards img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; }
+      .gallery-cards a, .gallery-cards time { display: block; } .gallery-cards time { font-size: 12px; }
+      .gallery-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-block: 8px; }
+      nav { display: flex; gap: 12px; margin-top: 20px; }`
+  };
+}
+
 
 /* =========================================================
    resolveSkinTemplate(skinPackage, pageType) -> { html, css } | undefined

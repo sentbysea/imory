@@ -594,6 +594,13 @@
            (posts/editor/posts-cover-image.js 상단 주석).
       ==================================================== -->
 
+      <div id="postEditorGallery" class="post-editor-field" hidden>
+        <label for="postEditorGalleryFiles">사진 추가</label>
+        <input id="postEditorGalleryFiles" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif">
+        <p>대표 사진은 선택 사항입니다. 지정하지 않으면 첫 번째 사진을 사용합니다.</p>
+        <div id="postEditorGalleryPhotos" class="post-gallery-photos"></div>
+      </div>
+
       <div class="post-editor-field post-editor-cover-field">
 
         <label

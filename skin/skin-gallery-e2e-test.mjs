@@ -201,9 +201,16 @@ function serverRequestIsOwner(req) {
   supabase/migrations/20260911100000_post_covers_private_access.sql의
   post_cover_object_is_readable()과 같은 술어다.
 */
-function serverCoverObjectIsReadable(key, isOwner) {
+function serverCoverObjectIsReadable(key, isOwner, tokens = "") {
   const db = serverFixture.db;
   if (!db) return false;
+
+  const photo = (db.post_gallery_images || []).find(g => g.storage_path === key);
+  if (photo) {
+    const post = db.posts.find(p => p.id === photo.post_id);
+    return !!post && (post.visibility === "public" || isOwner ||
+      (post.visibility === "secret" && (db.gallery_read_tokens || []).some(t => t.post_id === post.id && tokens.split(',').includes(t.token))));
+  }
 
   const cover = db.post_covers.find(c => c.__path === key);
   if (cover) {
@@ -236,6 +243,13 @@ async function handleServerSupabase(req, res, rel) {
     res.writeHead(status, { "Content-Type": "application/json" });
     res.end(JSON.stringify(body));
   };
+
+  if (rel === "/__supabase/rest/v1/rpc/get_gallery_image_object") {
+    const body = await readServerJsonBody(req);
+    const photo = (serverFixture.db?.post_gallery_images || []).find(g => g.id === body.p_image_id);
+    return json(200, photo && serverCoverObjectIsReadable(photo.storage_path, isOwner, req.headers['x-imory-gallery-access'] || '')
+      ? [{ storage_path: photo.storage_path, mime_type: photo.mime_type }] : []);
+  }
 
   if (rel === "/__supabase/rest/v1/rpc/get_post_cover_object") {
     const body = await readServerJsonBody(req);
@@ -270,7 +284,7 @@ async function handleServerSupabase(req, res, rel) {
 
     /* 정책이 먼저, 파일 존재는 그 다음 — 둘 다 404로 끝난다 */
     if (
-      !serverCoverObjectIsReadable(key, isOwner) ||
+      !serverCoverObjectIsReadable(key, isOwner, req.headers['x-imory-gallery-access'] || '') ||
       !(serverFixture.storage && serverFixture.storage.has(key))
     ) {
       return json(400, { statusCode: "404", error: "not_found" });
@@ -536,6 +550,7 @@ function makeDb(overrides = {}) {
     ],
     posts,
     post_covers,
+    post_gallery_images: [],
     post_contents: posts.map(p => ({ post_id: p.id, content: `${p.title} 본문입니다.` })),
     banners: [],
     quote_presets: [],
@@ -651,6 +666,7 @@ async function installSupabaseMock(page, opts = {}) {
     storageObjects = new Set(
       [
         ...(opts.db || makeDb()).post_covers.map((c) => c.__path),
+        ...(opts.db?.post_gallery_images || []).map(g => g.storage_path),
         ...(opts.db || makeDb()).categories.map((c) => c.secret_cover_path)
       ].filter(Boolean)
     )
@@ -854,6 +870,37 @@ async function installSupabaseMock(page, opts = {}) {
         });
       }
 
+      if (fn === "get_own_gallery_images") {
+        const body = JSON.parse(req.postData() || "{}");
+        return route.fulfill({ status: 200, headers, contentType: "application/json",
+          body: JSON.stringify(db.post_gallery_images.filter(g => g.post_id === Number(body.p_post_id))) });
+      }
+      if (fn === "get_secret_post_content" || fn === "issue_gallery_read_token") {
+        const body = JSON.parse(req.postData() || "{}");
+        let result = null;
+        if (body.p_password === "secret-pass") {
+          if (fn === "get_secret_post_content") result = db.post_contents.find(c => c.post_id === Number(body.p_post_id));
+          else {
+            result = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+            db.gallery_read_tokens = [{ post_id: Number(body.p_post_id), token: result }];
+          }
+        }
+        return route.fulfill({ status: 200, headers, contentType: "application/json", body: JSON.stringify(result) });
+      }
+      if (fn === "save_own_gallery_images") {
+        const body = JSON.parse(req.postData() || "{}");
+        db.post_gallery_images = db.post_gallery_images.filter(g => g.post_id !== Number(body.p_post_id))
+          .concat(body.p_images.map(g => ({ ...g, post_id: Number(body.p_post_id) })));
+        return route.fulfill({ status: 200, headers, contentType: "application/json", body: "[]" });
+      }
+      if (fn === "upsert_own_post_content") {
+        const body = JSON.parse(req.postData() || "{}");
+        const row = db.post_contents.find(c => c.post_id === Number(body.p_post_id));
+        if (row) row.content = body.p_content;
+        else db.post_contents.push({ post_id: Number(body.p_post_id), content: body.p_content });
+        return route.fulfill({ status: 200, headers, contentType: "application/json", body: "null" });
+      }
+
       if (fn === "upsert_own_post_cover") {
         const body = JSON.parse(req.postData() || "{}");
         const existing = db.post_covers.find(c => String(c.post_id) === String(body.p_post_id));
@@ -955,6 +1002,10 @@ async function installSupabaseMock(page, opts = {}) {
 
         const single = (req.headers()["accept"] || "").includes("vnd.pgrst.object");
         const created = { id: 999 };
+        if (req.method() === "POST" && table === "posts") {
+          db.posts.push({ ...JSON.parse(req.postData() || "{}"), ...created,
+            created_at: new Date().toISOString(), folder_id: null, sort_order: 100 });
+        }
         return route.fulfill({
           status: 201, headers,
           contentType: single ? "application/vnd.pgrst.object+json" : "application/json",
@@ -1006,6 +1057,7 @@ async function installSupabaseMock(page, opts = {}) {
         source = {
           ...db,
           posts: db.posts.filter(r => r.visibility !== "private"),
+          post_gallery_images: db.post_gallery_images.filter(g => db.posts.some(p => p.id === g.post_id && p.visibility === "public")),
           post_covers: db.post_covers.filter(c => {
             const p = db.posts.find(row => row.id === c.post_id);
             return p && p.visibility === "public";
@@ -1909,6 +1961,161 @@ async function openEditor(page, postId) {
   await page.waitForTimeout(500);
 }
 
+
+async function runGalleryContent(browser) {
+  console.log("\n[gallery2] independent category and photo content");
+  for (const failFirst of [false, true]) {
+    const ctx = await browser.newContext({ viewport: { width: 320, height: 850 } });
+    const p = await ctx.newPage();
+    await installSignedInUser(p, OWNER_ID);
+    const db = makeDb(); db.categories[0].type = 'gallery';
+    const requests = []; let attempts = 0;
+    await installSupabaseMock(p, { db, signedInAs: OWNER_ID, recorder: requests,
+      rpcOverrides: { save_own_gallery_images(body) {
+        if (failFirst && attempts++ === 0) return { __error: { message: 'test save failure' } };
+        db.post_gallery_images = body.p_images.map(g => ({ ...g, post_id: Number(body.p_post_id) }));
+        return [];
+      } } });
+    await p.goto(`http://localhost:${PORT}/${SLUG}/category/1?write=1`);
+    await p.locator('#postEditorGallery').waitFor({ state: 'visible' });
+    await p.setInputFiles('#postEditorGalleryFiles', [{ name:'new.png',mimeType:'image/png',buffer:TEST_IMAGE_BUFFER }]);
+    await p.click('#postEditorSaveButton');
+    if (failFirst) {
+      await p.waitForFunction(() => document.getElementById('postEditorMessage')?.textContent.includes('저장하지'));
+      check('[gallery2 create failure] uploaded file rolled back', requests.some(r => r.method === 'DELETE' && r.path.includes('/storage/v1/object/post-covers')) && !db.post_gallery_images.length);
+      await p.click('#postEditorSaveButton');
+    }
+    await p.waitForFunction(() => document.getElementById('postEditor').hidden);
+    check(`[gallery2 create ${failFirst}] photo-only post saves with no cover`, db.post_gallery_images.length === 1 && db.posts.find(post => post.id === 999)?.title === 'Gallery' && !db.post_covers.some(c => c.post_id === 999));
+    check(`[gallery2 create ${failFirst}] same ID on retry`, requests.filter(r => r.method === 'POST' && r.path === '/rest/v1/posts').length === 1);
+    await ctx.close();
+  }
+  for (const [count, primary] of [[1, false], [3, false], [3, true]]) {
+    const ctx = await browser.newContext({ viewport: { width: 375, height: 850 } });
+    const p = await ctx.newPage();
+    await installSignedInUser(p, OWNER_ID);
+    const db = makeDb();
+    db.categories[0].type = "gallery";
+    const skin = structuredClone(GALLERY_SKIN);
+    delete skin.templates.category; // Exercise the new default fallback.
+    const requests = [];
+    await installSupabaseMock(p, { db, skin, signedInAs: OWNER_ID, recorder: requests });
+    await openEditor(p, 501);
+    check(`[gallery2 ${count}/${primary}] photo picker replaces cover`,
+      await p.locator("#postEditorGallery").isVisible() && !await p.locator(".post-editor-cover-field").isVisible());
+    await p.setInputFiles("#postEditorGalleryFiles", Array.from({ length: count }, (_, i) =>
+      ({ name: `photo-${i}.png`, mimeType: "image/png", buffer: TEST_IMAGE_BUFFER })));
+    if (primary) await p.locator("#postEditorGalleryPhotos > div").last().locator("button").first().click();
+    await p.click("#postEditorSaveButton");
+    await p.waitForFunction(() => document.getElementById("postEditor").hidden);
+    check(`[gallery2 ${count}/${primary}] all photos saved once`, db.post_gallery_images.length === count &&
+      requests.filter(r => r.method === "POST" && r.path.includes("/storage/v1/object/post-covers/")).length === count);
+    check(`[gallery2 ${count}/${primary}] existing post cover retained`, db.post_covers.find(c => c.post_id === 501).__path.endsWith("cover-501.png"));
+    await openCategory(p, 1);
+    const images = await p.locator(".imory-default-gallery article").first().locator("img").evaluateAll(nodes => nodes.map(n => n.getAttribute("src")));
+    const chosen = db.post_gallery_images[primary ? count - 1 : 0];
+    check(`[gallery2 ${count}/${primary}] primary or first photo`, images[0] === `/api/post-cover?image=${chosen.id}`);
+    check(`[gallery2 ${count}/${primary}] all photos visible`, images.length === count);
+    const response = await p.request.get(`http://localhost:${PORT}/api/post-cover?image=${chosen.id}`);
+    check(`[gallery2 ${count}/${primary}] actual image proxy serves bytes`, response.status() === 200);
+    for (const width of [320, 375, 390, 1280]) {
+      await p.setViewportSize({ width, height: 850 });
+      await p.waitForTimeout(100);
+      const layout = await p.locator('.gallery-cards').evaluate(grid => ({
+        columns: getComputedStyle(grid).gridTemplateColumns.split(' ').length,
+        fits: grid.scrollWidth <= grid.clientWidth + 1 && document.getElementById('postArea').scrollWidth <= innerWidth + 1
+      }));
+      check(`[gallery2 ${count}/${primary} ${width}] default grid responds without overflow`, layout.fits &&
+        (width < 600 ? layout.columns >= 1 && layout.columns <= 2 : layout.columns >= 3), JSON.stringify(layout));
+    }
+    await openEditor(p, 501);
+    check(`[gallery2 ${count}/${primary}] edit reload preserves photos`, await p.locator("#postEditorGalleryPhotos img").count() === count);
+    if (primary) {
+      db.posts.find(post => post.id === 501).visibility = 'secret';
+      const visitor = await browser.newContext({ viewport: { width: 390, height: 850 } });
+      const reader = await visitor.newPage();
+      await installSupabaseMock(reader, { db, skin });
+      await reader.goto(`http://localhost:${PORT}/${SLUG}/post/501`);
+      await reader.waitForFunction(() => typeof requestSecretPostContent === 'function');
+      const imageUrl = `http://localhost:${PORT}/api/post-cover?image=${chosen.id}`;
+      check('[gallery2 secret] locked image returns 404', (await reader.request.get(imageUrl)).status() === 404);
+      const unlocked = await reader.evaluate(() => requestSecretPostContent(501, 'secret-pass'));
+      check('[gallery2 secret] password gate unlocks image bytes', unlocked.ok && (await reader.request.get(imageUrl)).status() === 200);
+      db.posts.find(post => post.id === 501).visibility = 'private';
+      check('[gallery2 secret] private transition revokes token access', (await reader.request.get(imageUrl)).status() === 404);
+      await visitor.close();
+    }
+    await ctx.close();
+  }
+}
+
+async function runContentWidth(browser) {
+  console.log("\n[width] shared HTML width contract");
+  const html = `<div style="width:1200px;min-width:1100px;padding:20px"><h2>HTML 폭 검증</h2>
+    <p>${'https://example.com/' + 'longword'.repeat(80)}</p>
+    <img width="1600" height="900" src="data:image/png;base64,${TEST_IMAGE_BUFFER.toString('base64')}">
+    <div style="display:grid;grid-template-columns:900px 900px"><div>${'긴단어'.repeat(100)}</div><p>두 번째 열</p></div>
+    <table style="width:1200px"><tbody><tr><td style="white-space:nowrap">${'table-data '.repeat(80)}</td><td>끝</td></tr></tbody></table>
+    <pre><code>${'const long_code = 123456789; '.repeat(80)}</code></pre>
+    <iframe width="1200" height="100" src="about:blank"></iframe></div>`;
+  for (const width of [320,375,390,1280]) {
+    for (const legacy of [false,true]) {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 } });
+      const p = await ctx.newPage();
+      const db = makeDb();
+      db.posts.find(post => post.id === 501).content_type = 'html';
+      db.post_contents.find(post => post.post_id === 501).content = html;
+      const skin = structuredClone(GALLERY_SKIN);
+      if (legacy) delete skin.templates.post;
+      await installSupabaseMock(p, { db, skin });
+      await p.goto(`http://localhost:${PORT}/${SLUG}/post/501`);
+      const selector = legacy ? '#postDetailContent' : '#postArea [data-imory-region="post-body"]';
+      await p.locator(selector).waitFor({ state: 'visible' });
+      await p.locator(`${selector} pre`).waitFor({ state: 'visible' });
+      await p.waitForTimeout(300);
+      const measure = await p.locator(selector).evaluate(root => {
+        const area = document.getElementById('postArea');
+        const rect = root.getBoundingClientRect();
+        const pre = root.querySelector('pre'); const table = root.querySelector('table');
+        return { width: rect.width, left: rect.left, right: rect.right,
+          fits: area.scrollWidth <= area.clientWidth + 1 && root.scrollWidth <= root.clientWidth + 1,
+          preScroll: pre.scrollWidth > pre.clientWidth && getComputedStyle(pre).overflowX === 'auto',
+          tableScroll: table.scrollWidth > table.clientWidth && getComputedStyle(table).overflowX === 'auto',
+          transform: getComputedStyle(root).transform };
+      });
+      check(`[width ${width} ${legacy?'legacy':'skin'}] content fits viewport`, measure.fits && measure.left >= -1 && measure.right <= width + 1, JSON.stringify(measure));
+      check(`[width ${width} ${legacy?'legacy':'skin'}] table/code scroll locally`, measure.preScroll && measure.tableScroll);
+      check(`[width ${width} ${legacy?'legacy':'skin'}] body text is not scaled`, measure.transform === 'none');
+      if (!legacy) {
+        const preview = await ctx.newPage();
+        await preview.goto(`http://localhost:${PORT}/studio/preview/preview-frame.html`);
+        const previewWidth = await preview.evaluate(async ({ skin, html }) => {
+          const { renderSkin } = await import('/skin/skin-render.js');
+          const host = document.createElement('main'); document.body.replaceChildren(host);
+          renderSkin({ container: host, skin: { ...skin.templates.post, css: skin.templates.post.css || skin.css }, context: {}, mode: 'preview' });
+          const root = host.querySelector('[data-imory-region="post-body"]');
+          root.classList.add('is-html-content'); root.innerHTML = html;
+          await new Promise(resolve => setTimeout(resolve, 150));
+          return root.getBoundingClientRect().width;
+        }, { skin, html });
+        check(`[width ${width}] Studio renderer matches published body width`, Math.abs(previewWidth - measure.width) <= 1, `${previewWidth}/${measure.width}`);
+      }
+      await ctx.close();
+    }
+  }
+}
+
+async function runContracts(browser) {
+  const page = await browser.newPage();
+  for (const name of ['skin-render-security-test','skin-post-region-test','skin-generator-test','skin-package-normalize-test','../studio/studio-publish-test']) {
+    await page.goto(`http://localhost:${PORT}/skin/${name}.html`);
+    await page.waitForFunction(() => /FAIL\s+\d/.test(document.getElementById('summary')?.textContent || ''));
+    const summary = await page.locator('#summary').textContent();
+    const details = /FAIL\s+0\b/.test(summary) ? summary : summary + ' ' + await page.locator('.fail').allTextContents();
+    check(`[contracts] ${name}`, /FAIL\s+0\b/.test(summary), details);
+  }
+  await page.close();
+}
 
 async function runCover(browser) {
   console.log("\n[cover] 글 대표 이미지");
@@ -3262,6 +3469,9 @@ async function runShots(browser) {
       await runShots(browser);
     } else {
 
+    if (shouldRun("gallery2")) await runGalleryContent(browser);
+    if (shouldRun("contracts")) await runContracts(browser);
+    if (shouldRun("width")) await runContentWidth(browser);
     if (shouldRun("published")) await runPublished(browser);
     if (shouldRun("secret")) await runSecret(browser);
     if (shouldRun("paging")) await runPaging(browser);
