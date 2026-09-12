@@ -23,6 +23,10 @@
                 권한 확인(/api/post-cover). 공개→비밀/비공개 전환 뒤
                 같은 주소 재요청, 소유자 미리보기, 다시 공개로 복귀,
                 파일을 하나도 건드리지 않아도 차단되는지
+     excerpt    발췌(PREVIEW/export/copy)에 들어가는 본문 사진 — 본문
+                순서·비율·가운데 정렬, 페이지 경계와 PAGE break, AUTO
+                비율, 실제 export PNG를 디코드해 사진이 그려졌는지와
+                PREVIEW/copy와 일치하는지, 느린 로딩·실패·재시도
      protect    블로그 보호 설정(Settings > HOME > ETC) — 이미지 EXIF
                 제거, 우클릭 방지, 텍스트 복사 방지(주인장 제외)와
                 그 설정 화면의 저장 payload
@@ -50,7 +54,8 @@
      node skin/skin-gallery-e2e-test.mjs --only=paging
 
    --only= 뒤에 쓸 수 있는 이름:
-     published / secret / paging / compat / body / access / protect / preview
+     published / secret / paging / compat / body / excerpt / access /
+     protect / preview
 ========================================================== */
 
 import fs from "node:fs";
@@ -92,7 +97,12 @@ const OWNER_TOKEN =
 */
 const serverFixture = {
   db: null,
-  storage: null
+  storage: null,
+
+  /* storage_path -> { buffer, mime } — 지정하면 그 경로의 바이트를
+     그대로 내보낸다. 발췌는 사진의 실제 크기/비율/투명도를 보고
+     배치를 정하므로, 1×1 PNG로는 아무것도 재지 못한다. */
+  bytes: null
 };
 
 /* CATEGORY/FOLDER 스킨은 #postList 안에 mount된다 — HOME 스킨(#themeMount)의
@@ -291,11 +301,14 @@ async function handleServerSupabase(req, res, rel) {
       return json(400, { statusCode: "404", error: "not_found" });
     }
 
+    const stored = serverFixture.bytes?.get(key);
+    const body = stored?.buffer || PNG_1X1;
+
     res.writeHead(200, {
-      "Content-Type": "image/png",
-      "Content-Length": String(PNG_1X1.length)
+      "Content-Type": stored?.mime || "image/png",
+      "Content-Length": String(body.length)
     });
-    return res.end(PNG_1X1);
+    return res.end(body);
   }
 
   return json(404, {});
@@ -682,6 +695,7 @@ async function installSupabaseMock(page, opts = {}) {
   */
   serverFixture.db = db;
   serverFixture.storage = storageObjects;
+  serverFixture.bytes = opts.storageBytes || null;
 
   if (VERBOSE) {
     page.on("pageerror", (err) => console.log("    [pageerror]", err.message));
@@ -2182,7 +2196,12 @@ async function runContracts(browser) {
   자명하게 참이 되어 아무것도 재지 못한다. 그래서 실제 크기의
   PNG를 만들어 쓴다(단색 240×160).
 */
-function makeSolidPng(width, height) {
+function makeSolidPng(width, height, options = {}) {
+  /* options.rgb  — [r,g,b]로 색을 지정(기본 회색). 발췌 export의
+     실제 픽셀에서 "이 사진이 그려졌는가"를 세려면 배경·글자와
+     확실히 구분되는 색이어야 한다.
+     options.alpha — true면 RGBA(colour type 6)로 만들고 오른쪽
+     절반을 완전 투명으로 둔다(투명 PNG 검사용). */
   const crcTable = Array.from({ length: 256 }, (_, n) => {
     let c = n;
     for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
@@ -2201,13 +2220,22 @@ function makeSolidPng(width, height) {
     tail.writeUInt32BE(crc(Buffer.concat([head.subarray(4), data])), 0);
     return Buffer.concat([head, data, tail]);
   };
+  const [red, green, blue] = options.rgb || [0x99, 0x99, 0x99];
+  const channels = options.alpha ? 4 : 3;
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr[8] = 8;   /* bit depth */
-  ihdr[9] = 2;   /* truecolour */
-  const raw = Buffer.concat(Array.from({ length: height }, () =>
-    Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x99)])));
+  ihdr[9] = options.alpha ? 6 : 2;   /* truecolour (+alpha) */
+  const row = Buffer.alloc(1 + width * channels);
+  for (let x = 0; x < width; x += 1) {
+    const at = 1 + x * channels;
+    row[at] = red;
+    row[at + 1] = green;
+    row[at + 2] = blue;
+    if (options.alpha) row[at + 3] = x < width / 2 ? 0xff : 0x00;
+  }
+  const raw = Buffer.concat(Array.from({ length: height }, () => Buffer.from(row)));
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", ihdr),
@@ -2552,9 +2580,9 @@ async function runBodyImages(browser) {
 
 
   /*
-    (2c) 발췌(PREVIEW / export / copy) — 사진이 든 본문에서도 오류가
-    없어야 한다. 발췌기의 이미지 지원은 다음 작업이므로(요구사항 5절)
-    지금은 글자만 그린다.
+    (2c) 발췌(PREVIEW / export / copy)가 사진이 든 본문에서도 열리고
+    끝나는지. 배치·페이지 나누기·export 픽셀은 [excerpt] 절에서
+    따로 잰다.
   */
   {
     /* 하단 PREVIEW 버튼은 모바일 폭에서만 나온다(posts-mobile.css) —
@@ -2585,8 +2613,8 @@ async function runBodyImages(browser) {
     }));
     check("[body excerpt] 사진이 있어도 PREVIEW가 열리고 글이 그려진다",
       excerpt.open && excerpt.text && excerpt.pages >= 1, JSON.stringify(excerpt));
-    check("[body excerpt] 발췌에는 아직 사진이 들어가지 않는다",
-      excerpt.images === 0, JSON.stringify(excerpt));
+    check("[body excerpt] 아직 저장하지 않은 사진도 발췌에 들어간다",
+      excerpt.images === 2, JSON.stringify(excerpt));
 
     await p.click("#postEditorCopyButton");
     await p.waitForTimeout(800);
@@ -3824,6 +3852,863 @@ async function runPreview(browser) {
 
 
 /* =========================================================
+   excerpt — 발췌(PREVIEW / export / copy)에 들어가는 본문 사진
+
+   기준 문서: IMORY_POST_BODY_IMAGE_DESIGN.md §7
+
+   [body] 절이 "에디터가 사진을 다루는가"를 재고, 여기는 그 사진이
+   **발췌 결과물**에 어떻게 들어가는가를 잰다. 판정은 DOM만 보지
+   않는다 — export가 실제로 만든 PNG를 디코드해서 그 안에 사진이
+   그려졌는지(색 픽셀 수), PREVIEW에서 잰 크기와 맞는지, 빈 페이지가
+   없는지까지 본다.
+========================================================== */
+
+/* html2canvas가 만드는 PNG는 8bit RGBA 논인터레이스다. 색을 세려면
+   실제로 디코드해야 한다(외부 의존성 없이). */
+function decodePng(buffer) {
+  let pos = 8;
+  let width = 0, height = 0, depth = 0, colourType = 0;
+  const idat = [];
+  while (pos + 8 <= buffer.length) {
+    const length = buffer.readUInt32BE(pos);
+    const kind = buffer.toString("ascii", pos + 4, pos + 8);
+    const data = buffer.subarray(pos + 8, pos + 8 + length);
+    if (kind === "IHDR") {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      depth = data[8];
+      colourType = data[9];
+      if (data[12] !== 0) throw new Error("인터레이스 PNG는 지원하지 않습니다");
+    }
+    if (kind === "IDAT") idat.push(data);
+    pos += 12 + length;
+    if (kind === "IEND") break;
+  }
+  const channels = colourType === 6 ? 4 : colourType === 2 ? 3 : 0;
+  if (!channels || depth !== 8) {
+    throw new Error(`지원하지 않는 PNG(type ${colourType}, depth ${depth})`);
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const stride = width * channels;
+  const pixels = Buffer.alloc(height * stride);
+  let previous = Buffer.alloc(stride);
+  for (let y = 0; y < height; y += 1) {
+    const at = y * (stride + 1);
+    const filter = raw[at];
+    const line = Buffer.from(raw.subarray(at + 1, at + 1 + stride));
+    for (let i = 0; i < stride; i += 1) {
+      const left = i >= channels ? line[i - channels] : 0;
+      const up = previous[i];
+      const upLeft = i >= channels ? previous[i - channels] : 0;
+      if (filter === 1) line[i] = (line[i] + left) & 0xff;
+      else if (filter === 2) line[i] = (line[i] + up) & 0xff;
+      else if (filter === 3) line[i] = (line[i] + ((left + up) >> 1)) & 0xff;
+      else if (filter === 4) {
+        const p = left + up - upLeft;
+        const pa = Math.abs(p - left), pb = Math.abs(p - up), pc = Math.abs(p - upLeft);
+        line[i] = (line[i] + (pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft)) & 0xff;
+      }
+    }
+    line.copy(pixels, y * stride);
+    previous = line;
+  }
+  return { width, height, channels, stride, pixels };
+}
+
+
+/* 지정한 색에 가까운 픽셀 수와, 그 픽셀이 나타난 행 범위 */
+function scanColour(png, rgb, tolerance = 26) {
+  let count = 0, top = -1, bottom = -1, left = png.width, right = -1;
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const at = y * png.stride + x * png.channels;
+      if (
+        Math.abs(png.pixels[at] - rgb[0]) <= tolerance &&
+        Math.abs(png.pixels[at + 1] - rgb[1]) <= tolerance &&
+        Math.abs(png.pixels[at + 2] - rgb[2]) <= tolerance &&
+        (png.channels < 4 || png.pixels[at + 3] > 200)
+      ) {
+        count += 1;
+        if (top < 0) top = y;
+        bottom = y;
+        if (x < left) left = x;
+        if (x > right) right = x;
+      }
+    }
+  }
+  return { count, top, bottom, left, right, width: right - left + 1, height: bottom - top + 1 };
+}
+
+
+function countPngColours(png) {
+  const seen = new Set();
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const at = y * png.stride + x * png.channels;
+      seen.add(png.pixels.subarray(at, at + png.channels).toString("hex"));
+      if (seen.size > 64) return seen.size;
+    }
+  }
+  return seen.size;
+}
+
+
+/* 모든 픽셀이 같은 색 = 아무것도 안 그려진 페이지 */
+function pngIsBlank(png) {
+  const first = png.pixels.subarray(0, png.channels).toString("hex");
+  for (let y = 0; y < png.height; y += 1) {
+    for (let x = 0; x < png.width; x += 1) {
+      const at = y * png.stride + x * png.channels;
+      if (png.pixels.subarray(at, at + png.channels).toString("hex") !== first) return false;
+    }
+  }
+  return true;
+}
+
+
+const EXCERPT_COLOUR = [0xcc, 0x33, 0x66];
+const EXCERPT_TALL_COLOUR = [0x22, 0x44, 0xcc];
+
+const EXCERPT_PHOTOS = {
+  /* 가로 */
+  wide: makeSolidPng(240, 120, { rgb: EXCERPT_COLOUR }),
+  /* 세로 */
+  tallish: makeSolidPng(120, 240, { rgb: [0x33, 0x99, 0x66] }),
+  /* 매우 긴 — 한 페이지에 절대 안 들어간다 */
+  long: makeSolidPng(100, 2000, { rgb: EXCERPT_TALL_COLOUR }),
+  /* 투명 PNG — 오른쪽 절반이 투명 */
+  alpha: makeSolidPng(200, 200, { rgb: [0xff, 0xcc, 0x00], alpha: true })
+};
+
+
+/* 본문 맨 끝에 caret만 놓는다(글자는 치지 않는다) */
+async function caretAtBodyEnd(page) {
+  await page.click("#postEditorContent");
+  await page.evaluate(() => {
+    const body = document.getElementById("postEditorContent");
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    range.collapse(false);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    body.dispatchEvent(new Event("keyup", { bubbles: true }));
+  });
+  await page.waitForTimeout(80);
+}
+
+
+async function insertExcerptPhotos(page, kinds) {
+  await attachBodyPhotoFiles(page, kinds.map((kind, index) => ({
+    name: `${kind}-${index}.png`,
+    mimeType: "image/png",
+    buffer: EXCERPT_PHOTOS[kind]
+  })));
+}
+
+
+/* PREVIEW 페이지의 배치를 순서대로 읽는다. 좌표는 clientWidth/
+   offsetWidth로만 잰다 — 화면 축소 transform이 섞이면 안 된다. */
+function readExcerptPages(page) {
+  return page.evaluate(() => {
+    const pages = Array.from(document.querySelectorAll(".post-editor-preview-page"));
+
+    /* 보이지 않는 페이지(display:none)는 offsetWidth가 0이다 —
+       재는 동안만 전부 보이게 하고 원래대로 돌려놓는다. */
+    const wasHidden = pages.map(node => node.hidden);
+    pages.forEach(node => { node.hidden = false; });
+
+    const read = pages.map((node) => {
+      const content = node.querySelector(".post-editor-preview-content");
+      const items = [];
+
+      /* 페이지 나누기는 글자를 단어 단위 텍스트 노드로 쪼개 넣는다 —
+         이어진 글자는 하나로 합쳐서 읽는다. */
+      const pushText = (text) => {
+        const last = items[items.length - 1];
+        if (last && last.kind === "text") {
+          last.text = `${last.text} ${text}`.replace(/\s+/g, " ").trim();
+          return;
+        }
+        items.push({ kind: "text", text });
+      };
+
+      const walk = (element) => {
+        Array.from(element.childNodes).forEach((child) => {
+          if (child.nodeType === Node.TEXT_NODE) {
+            const text = child.textContent.replace(/\s+/g, " ").trim();
+            if (text) pushText(text);
+            return;
+          }
+          if (child.nodeType !== Node.ELEMENT_NODE) return;
+          if (child.classList.contains("post-editor-preview-image")) {
+            items.push({
+              kind: "image",
+              src: child.getAttribute("src").slice(0, 24),
+              width: child.offsetWidth,
+              height: child.offsetHeight,
+              centered: child.style.marginLeft === "auto" &&
+                child.style.marginRight === "auto",
+              marginTop: parseFloat(child.style.marginTop) || 0,
+              ratio: Number(child.dataset.imoryPreviewRatio)
+            });
+            return;
+          }
+          if (child.classList.contains("post-editor-preview-image-missing")) {
+            items.push({ kind: "missing", width: child.offsetWidth, height: child.offsetHeight });
+            return;
+          }
+          if (child.tagName === "BR") { items.push({ kind: "br" }); return; }
+          walk(child);
+        });
+      };
+      walk(content);
+      return {
+        items,
+        bodyWidth: content.clientWidth,
+        /* 넘침(=본문이 여백/출처 자리를 침범) 여부 */
+        overflowing: node.scrollHeight > node.clientHeight + 1,
+        pageHeight: node.clientHeight
+      };
+    });
+
+    pages.forEach((node, index) => { node.hidden = wasHidden[index]; });
+
+    return read;
+  });
+}
+
+
+function excerptOrder(pages) {
+  return pages.flatMap(p => p.items)
+    .filter(item => item.kind === "text" || item.kind === "image" || item.kind === "missing")
+    .map(item => item.kind === "text" ? `T:${item.text}` : item.kind === "missing" ? "X" : "I")
+    .join(" ");
+}
+
+
+/* export로 실제 저장되는 PNG들을 받아 디코드한다 */
+async function waitForExportToFinish(page) {
+  /* 버튼 텍스트로는 판정할 수 없다 — 사진 준비 실패처럼 일찍
+     끝나는 경로는 버튼을 건드리지 않는다. 끝을 알리는 메시지를
+     기다리고, 먼저 메시지를 비워 이전 안내와 섞이지 않게 한다. */
+  await page.waitForFunction(() => {
+    const message = document.getElementById("postEditorMessage")?.textContent || "";
+    return /saved|실패|없습니다|불러오지/.test(message);
+  }, null, { timeout: 40000 });
+  await page.waitForTimeout(500);
+}
+
+
+async function collectExportedPngs(page) {
+  const downloads = [];
+  const onDownload = (download) => downloads.push(download);
+  page.on("download", onDownload);
+  await page.evaluate(() => {
+    document.getElementById("postEditorMessage").textContent = "";
+  });
+  await page.click("#postEditorExportButton");
+  await waitForExportToFinish(page);
+  page.off("download", onDownload);
+  const files = [];
+  for (const download of downloads) {
+    const filePath = await download.path();
+    files.push({
+      name: download.suggestedFilename(),
+      path: filePath,
+      png: decodePng(fs.readFileSync(filePath))
+    });
+  }
+  return files;
+}
+
+
+/* copy 버튼이 클립보드에 넘기는 이미지를 가로챈다(클립보드 자체는
+   headless에서 되읽을 수 없다 — 우리 코드가 넘긴 바이트를 본다). */
+async function installClipboardSpy(page) {
+  await page.evaluate(() => {
+    window.__copied = null;
+    window.__copyError = null;
+    navigator.clipboard.write = async (items) => {
+      try {
+        const blob = await items[0].getType("image/png");
+        const bitmap = await createImageBitmap(blob);
+        const canvas = document.createElement("canvas");
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        canvas.getContext("2d").drawImage(bitmap, 0, 0);
+        bitmap.close?.();
+        window.__copied = {
+          width: canvas.width,
+          height: canvas.height,
+          dataUrl: canvas.toDataURL("image/png")
+        };
+      } catch (error) {
+        window.__copyError = String(error.message || error);
+        throw error;
+      }
+    };
+  });
+}
+
+
+async function openExcerptEditor(browser, options = {}) {
+  const ctx = await browser.newContext({
+    viewport: options.viewport || VIEWPORTS["desktop-1280"],
+    acceptDownloads: true,
+    permissions: ["clipboard-read", "clipboard-write"]
+  });
+  const page = await ctx.newPage();
+  const errors = [];
+  page.on("pageerror", err => errors.push(String(err.message)));
+  await installSignedInUser(page, OWNER_ID);
+  const db = options.db || makeDb();
+  await installSupabaseMock(page, {
+    signedInAs: OWNER_ID, db, storageBytes: options.storageBytes || null,
+    ...(options.mock || {})
+  });
+  await openEditor(page, options.postId || 501);
+  /* 글자만 남기고 시작한다 — 본문 fixture는 절마다 다르다 */
+  if (options.clearBody !== false) {
+    await page.evaluate(() => {
+      document.getElementById("postEditorContent").replaceChildren();
+    });
+  }
+  return { ctx, page, db, errors };
+}
+
+
+async function runExcerptImages(browser) {
+  console.log("\n[excerpt] 발췌(PREVIEW/export/copy)에 들어가는 본문 사진");
+
+  /* ---------------------------------------------------------
+     (1) 글자만 있는 글 — 회귀. 사진 지원이 들어와도 그대로.
+  --------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser);
+    await typeInBody(page, "글자만 있는 발췌");
+    await page.waitForTimeout(400);
+    const pages = await readExcerptPages(page);
+    check("[excerpt text-only] 글자만 있는 글은 그대로 그려진다",
+      pages.length === 1 && excerptOrder(pages) === "T:글자만 있는 발췌",
+      excerptOrder(pages));
+    check("[excerpt text-only] img가 하나도 생기지 않는다",
+      await page.locator("#postEditorPreviewPages img").count() === 0);
+
+    const exported = await collectExportedPngs(page);
+    /*
+      ★ 이 검사가 잡은 것: html2canvas에 windowWidth를 못박아 두면
+      데스크톱에서 export가 **통째로 흰 이미지**가 됐다(복제 문서를
+      좁은 창에 다시 레이아웃하면서 자르는 좌표만 라이브 값이 남았다).
+      posts/export/posts-preview-export-capture.js의 주석 참고 —
+      그래서 여기서는 "장수"만 보지 않고 실제 픽셀을 확인한다.
+    */
+    check("[excerpt text-only] export가 한 장 나오고 비어 있지 않다",
+      exported.length === 1 && !pngIsBlank(exported[0].png),
+      `${exported.length}장 ` +
+      `${exported[0]?.png.width}×${exported[0]?.png.height} ` +
+      `색 ${exported[0] ? countPngColours(exported[0].png) : 0}종`);
+    check("[excerpt text-only] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* ---------------------------------------------------------
+     (2) 사진만 있는 글 + (3) 글과 사진이 섞인 글
+     — 본문 순서(A → 1 → B → 2)가 그대로 유지되는지
+  --------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser);
+    await insertExcerptPhotos(page, ["wide"]);
+    await page.waitForTimeout(500);
+    let pages = await readExcerptPages(page);
+    const only = pages.flatMap(p => p.items).find(item => item.kind === "image");
+    check("[excerpt photo-only] 사진 한 장만 있는 글도 발췌가 그려진다",
+      pages.length === 1 && !!only && excerptOrder(pages) === "I", excerptOrder(pages));
+    check("[excerpt photo-only] 본문 너비 안에 들어가고 가운데 정렬된다",
+      only.width <= pages[0].bodyWidth && only.centered,
+      `${only.width}px / body ${pages[0].bodyWidth}px`);
+    check("[excerpt photo-only] 원본 비율(240×120)을 지킨다",
+      Math.abs(only.height / only.width - 0.5) < 0.02,
+      `${only.width}×${only.height}`);
+    check("[excerpt photo-only] 페이지가 넘치지 않는다", !pages[0].overflowing);
+
+    /* 글 A → 사진 1 → 글 B → 사진 2 */
+    await page.evaluate(() => {
+      document.getElementById("postEditorContent").replaceChildren();
+    });
+    await typeInBody(page, "텍스트 A");
+    await insertExcerptPhotos(page, ["wide"]);
+    await typeInBody(page, "텍스트 B");
+    await insertExcerptPhotos(page, ["tallish"]);
+    await page.waitForTimeout(600);
+    pages = await readExcerptPages(page);
+    check("[excerpt mixed] 본문 순서(글→사진→글→사진)가 유지된다",
+      excerptOrder(pages) === "T:텍스트 A I T:텍스트 B I", excerptOrder(pages));
+
+    const images = pages.flatMap(p => p.items).filter(item => item.kind === "image");
+    check("[excerpt mixed] 두 사진이 각자의 비율을 지킨다",
+      Math.abs(images[0].height / images[0].width - 0.5) < 0.03 &&
+      Math.abs(images[1].height / images[1].width - 2) < 0.06,
+      images.map(i => `${i.width}×${i.height}`).join(" "));
+    check("[excerpt mixed] 글과 사진 사이에 간격이 있다",
+      images[0].marginTop > 0, `${images[0].marginTop}px`);
+    check("[excerpt mixed] 어느 페이지도 넘치지 않는다",
+      pages.every(p => !p.overflowing));
+    check("[excerpt mixed] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* ---------------------------------------------------------
+     (3b) Quote Preset — 프리셋의 여백/문단 간격을 그대로 따른다
+  --------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser);
+    await typeInBody(page, "프리셋 글");
+    await insertExcerptPhotos(page, ["wide"]);
+    await page.waitForTimeout(500);
+    const plain = await readExcerptPages(page);
+
+    await page.evaluate(() => {
+      postStyleSettings = {
+        ratioWidth: 4, ratioHeight: 5, exportWidth: 1080,
+        background: "#fffaf6", bodyColor: "#555555", bodySize: 14,
+        lineHeight: 1.9, padding: 40, paragraphSpacing: 26, titleSpacing: 18
+      };
+      updateEditorPreview();
+    });
+    await page.waitForTimeout(700);
+    const preset = await readExcerptPages(page);
+    const presetImage = preset.flatMap(p => p.items).find(i => i.kind === "image");
+    check("[excerpt preset] 프리셋 여백만큼 사진이 좁아진다",
+      presetImage.width === preset[0].bodyWidth &&
+      presetImage.width < plain[0].bodyWidth,
+      `${presetImage.width}px / body ${preset[0].bodyWidth}px ` +
+      `(여백 없을 때 ${plain[0].bodyWidth}px)`);
+    check("[excerpt preset] 글과 사진 사이 간격이 프리셋의 문단 간격이다",
+      presetImage.marginTop === 26, `${presetImage.marginTop}px`);
+    check("[excerpt preset] 프리셋 비율에서도 넘치지 않는다",
+      preset.every(p => !p.overflowing));
+    check("[excerpt preset] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* ---------------------------------------------------------
+     (4) 같은 사진이 여러 곳에 — 등장 순서대로 그대로 나온다
+  --------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser);
+    await typeInBody(page, "처음");
+    await insertExcerptPhotos(page, ["wide"]);
+    await typeInBody(page, "가운데");
+    /* 같은 사진을 한 번 더 — 본문의 <img>를 복제해 뒤에 붙인다 */
+    await page.evaluate(() => {
+      const body = document.getElementById("postEditorContent");
+      const first = body.querySelector("img");
+      body.appendChild(first.cloneNode(true));
+      body.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForTimeout(500);
+    const pages = await readExcerptPages(page);
+    const images = pages.flatMap(p => p.items).filter(item => item.kind === "image");
+    check("[excerpt repeat] 같은 사진이 두 자리에 각각 그려진다",
+      excerptOrder(pages) === "T:처음 I T:가운데 I" && images.length === 2,
+      excerptOrder(pages));
+    check("[excerpt repeat] 같은 바이트를 쓴다(두 번 읽지 않는다)",
+      images[0].src === images[1].src);
+    check("[excerpt repeat] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* ---------------------------------------------------------
+     (5) 투명 PNG + (6) 페이지 경계 + 매우 긴 사진 + PAGE break
+  --------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser);
+    await insertExcerptPhotos(page, ["alpha"]);
+    await page.waitForTimeout(500);
+    let pages = await readExcerptPages(page);
+    let image = pages.flatMap(p => p.items).find(item => item.kind === "image");
+    check("[excerpt alpha] 투명 PNG도 비율(1:1)대로 들어간다",
+      Math.abs(image.height / image.width - 1) < 0.02, `${image.width}×${image.height}`);
+
+    /* 매우 긴 사진 — 새 페이지에도 안 들어가므로 비율을 지켜 줄인다 */
+    await page.evaluate(() => {
+      document.getElementById("postEditorContent").replaceChildren();
+    });
+    await insertExcerptPhotos(page, ["long"]);
+    await page.waitForTimeout(600);
+    pages = await readExcerptPages(page);
+    image = pages.flatMap(p => p.items).find(item => item.kind === "image");
+    check("[excerpt long] 긴 사진이 한 페이지 안에 들어간다(자르지 않는다)",
+      pages.length === 1 && !pages[0].overflowing && image.height <= pages[0].pageHeight,
+      `${image.width}×${image.height} / page ${pages[0].pageHeight}`);
+    check("[excerpt long] 줄이면서도 비율(100×2000)을 지킨다",
+      Math.abs(image.height / image.width - 20) < 0.6, `${image.width}×${image.height}`);
+    check("[excerpt long] 본문 너비보다 좁아진다",
+      image.width < pages[0].bodyWidth, `${image.width} < ${pages[0].bodyWidth}`);
+
+    /* 페이지 경계 — 글을 많이 채운 뒤 사진을 넣으면 통째로 다음
+       페이지로 간다(쪼개지 않는다) */
+    await page.evaluate(() => {
+      const body = document.getElementById("postEditorContent");
+      body.replaceChildren();
+      for (let line = 0; line < 26; line += 1) {
+        body.appendChild(document.createTextNode(`채우는 줄 ${line}`));
+        body.appendChild(document.createElement("br"));
+      }
+      body.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await insertExcerptPhotos(page, ["tallish"]);
+    await page.waitForTimeout(700);
+    pages = await readExcerptPages(page);
+    const withImage = pages.filter(p => p.items.some(i => i.kind === "image"));
+    check("[excerpt boundary] 사진이 한 페이지에만 온전히 들어간다",
+      pages.length >= 2 && withImage.length === 1 &&
+      withImage[0].items.filter(i => i.kind === "image").length === 1,
+      `${pages.length}페이지 / 사진 있는 페이지 ${withImage.length}`);
+    check("[excerpt boundary] 어느 페이지도 넘치지 않는다",
+      pages.every(p => !p.overflowing));
+    check("[excerpt boundary] 빈 페이지가 없다",
+      pages.every(p => p.items.some(i => i.kind === "text" || i.kind === "image")),
+      pages.map(p => p.items.length).join(","));
+
+    check("[excerpt boundary] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* PAGE break는 fixture를 새로 만들어 따로 잰다 */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser);
+    await typeInBody(page, "앞장 글");
+    await insertExcerptPhotos(page, ["wide"]);
+    /* 파일 선택창을 거친 뒤라 caret을 다시 본문 끝에 놓는다 —
+       PAGE BREAK 버튼은 커서 자리에 넣는다. */
+    await caretAtBodyEnd(page);
+    await page.click("#postEditorPageBreak");
+    await page.waitForTimeout(300);
+    /* PAGE BREAK **뒤에** 글을 넣는다. 키보드로 치면 브라우저가
+       contenteditable=false인 마커 앞에 caret을 붙여서 글이 마커
+       앞으로 들어간다(그 경우도 정상 동작이다 — 뒤에 아무것도 없는
+       마커는 빈 페이지를 만들지 않는다). 여기서 재려는 것은 "마커
+       뒤에 글이 있을 때 그 자리에서 나뉘는가"다. */
+    await page.evaluate(() => {
+      const body = document.getElementById("postEditorContent");
+      body.appendChild(document.createTextNode("뒷장 글"));
+      body.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await page.waitForTimeout(700);
+    const pages = await readExcerptPages(page);
+    check("[excerpt pagebreak] 명시적 PAGE break가 유지된다",
+      pages.length === 2 &&
+      pages[0].items.some(i => i.kind === "image") &&
+      excerptOrder(pages) === "T:앞장 글 I T:뒷장 글",
+      `${pages.length}페이지 / ${excerptOrder(pages)}`);
+    check("[excerpt pagebreak] 사진 뒤 글이 사라지지 않는다",
+      pages[pages.length - 1].items.some(
+        i => i.kind === "text" && i.text === "뒷장 글"
+      ));
+    check("[excerpt pagebreak] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* ---------------------------------------------------------
+     (7) AUTO 높이 — 고정 높이 페이지 규칙을 적용하지 않는다
+  --------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser);
+    await insertExcerptPhotos(page, ["long"]);
+    await page.waitForTimeout(500);
+    const fixed = await readExcerptPages(page);
+
+    /* RATIO를 AUTO로 */
+    await page.evaluate(() => {
+      /* RATIO 버튼 묶음은 접혀 있을 수 있다(hidden) — 클릭 핸들러는
+         그대로 붙어 있으므로 직접 부른다. */
+      document
+        .querySelector('.post-editor-preview-ratio-button[data-ratio="auto"]')
+        ?.click();
+    });
+    await page.waitForTimeout(700);
+    const auto = await readExcerptPages(page);
+    const autoImage = auto.flatMap(p => p.items).find(item => item.kind === "image");
+    check("[excerpt auto] AUTO에서는 긴 사진을 줄이지 않는다",
+      auto.length === 1 && autoImage.width >= auto[0].bodyWidth - 1 &&
+      autoImage.width > (fixed.flatMap(p => p.items)
+        .find(item => item.kind === "image")?.width || 0),
+      `auto ${autoImage.width}px / fixed ${fixed.flatMap(p => p.items)
+        .find(item => item.kind === "image")?.width}px`);
+    check("[excerpt auto] AUTO는 페이지를 나누지 않는다", auto.length === 1);
+    check("[excerpt auto] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* ---------------------------------------------------------
+     (8) PREVIEW와 export / copy가 같은 결과를 낸다
+         — 실제 PNG를 디코드해서 사진이 그려졌는지까지 본다
+  --------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser);
+    await installClipboardSpy(page);
+    await typeInBody(page, "앞 글");
+    await insertExcerptPhotos(page, ["wide"]);
+    await typeInBody(page, "뒤 글");
+    await page.waitForTimeout(600);
+
+    const pages = await readExcerptPages(page);
+    const preview = pages.flatMap(p => p.items).find(item => item.kind === "image");
+    const exported = await collectExportedPngs(page);
+
+    check("[excerpt export] PREVIEW 페이지 수와 export 장수가 같다",
+      exported.length === pages.length, `${exported.length} vs ${pages.length}`);
+
+    const scale = exported[0].png.width / 520;
+    const found = scanColour(exported[0].png, EXCERPT_COLOUR);
+    check("[excerpt export] export PNG 안에 사진이 실제로 그려져 있다",
+      found.count > 0, `${found.count}px`);
+    check("[excerpt export] 그려진 크기가 PREVIEW와 같다(±3%)",
+      Math.abs(found.width / (preview.width * scale) - 1) < 0.03 &&
+      Math.abs(found.height / (preview.height * scale) - 1) < 0.03,
+      `export ${found.width}×${found.height} / preview×${scale.toFixed(2)} ` +
+      `${Math.round(preview.width * scale)}×${Math.round(preview.height * scale)}`);
+    check("[excerpt export] 사진이 잘리지 않았다(직사각형 그대로)",
+      Math.abs(found.width * (preview.height / preview.width) - found.height) <
+        Math.max(4, found.height * 0.04),
+      `${found.width}×${found.height}`);
+    check("[excerpt export] 빈 페이지가 없다",
+      exported.every(file => !pngIsBlank(file.png)));
+
+    await page.click("#postEditorCopyButton");
+    await page.waitForFunction(
+      () => window.__copied || window.__copyError, null, { timeout: 30000 }
+    );
+    const copied = await page.evaluate(() => ({
+      copied: window.__copied && {
+        width: window.__copied.width, height: window.__copied.height
+      },
+      error: window.__copyError
+    }));
+    check("[excerpt copy] copy가 넘기는 이미지 크기가 export와 같다",
+      !copied.error && copied.copied &&
+      copied.copied.width === exported[0].png.width &&
+      copied.copied.height === exported[0].png.height,
+      JSON.stringify(copied));
+
+    const copiedPng = decodePng(Buffer.from(
+      (await page.evaluate(() => window.__copied.dataUrl)).split(",")[1], "base64"
+    ));
+    const copiedFound = scanColour(copiedPng, EXCERPT_COLOUR);
+    check("[excerpt copy] copy 이미지에도 같은 자리에 사진이 있다",
+      copiedFound.count > 0 &&
+      Math.abs(copiedFound.count / found.count - 1) < 0.05 &&
+      Math.abs(copiedFound.top - found.top) <= 3,
+      `${copiedFound.count}px vs ${found.count}px`);
+    check("[excerpt export] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* ---------------------------------------------------------
+     (9) 저장된 사진 — /api/post-cover(실제 Pages Function)를 거친다.
+         느린 응답 / 실패 / 권한 만료 / 재시도.
+  --------------------------------------------------------- */
+  const savedImageId = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+  const savedPath = `${OWNER_ID}/excerpt-saved.png`;
+
+  function makeSavedDb() {
+    const db = makeDb();
+    db.post_contents.find(c => c.post_id === 501).content =
+      `저장된 글<img src="/api/post-cover?image=${savedImageId}" ` +
+      `data-imory-image="${savedImageId}" alt="">`;
+    db.post_gallery_images = [{
+      id: savedImageId, post_id: 501, storage_path: savedPath,
+      mime_type: "image/png", byte_size: EXCERPT_PHOTOS.wide.length,
+      position: 0, is_primary: true
+    }];
+    return db;
+  }
+
+  const savedBytes = new Map([
+    [savedPath, { buffer: EXCERPT_PHOTOS.wide, mime: "image/png" }]
+  ]);
+
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser, {
+      db: makeSavedDb(), storageBytes: savedBytes, clearBody: false
+    });
+    await page.waitForTimeout(700);
+    const pages = await readExcerptPages(page);
+    check("[excerpt saved] 저장된 사진도 발췌에 순서대로 들어간다",
+      excerptOrder(pages) === "T:저장된 글 I", excerptOrder(pages));
+    const image = pages.flatMap(p => p.items).find(item => item.kind === "image");
+    check("[excerpt saved] 사진 바이트를 data:로 굳혀서 쓴다(캔버스 오염 없음)",
+      image.src.startsWith("data:image/"), image.src);
+    const exported = await collectExportedPngs(page);
+    check("[excerpt saved] export PNG에 그 사진이 그려진다",
+      scanColour(exported[0].png, EXCERPT_COLOUR).count > 0);
+    check("[excerpt saved] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* 느린 응답 — 준비가 끝난 뒤에 사진이 들어간다 */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser, {
+      db: makeSavedDb(), storageBytes: savedBytes, clearBody: false
+    });
+    await page.route("**/api/post-cover*", async route => {
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      await route.continue();
+    });
+    await page.evaluate(() => {
+      /* 다시 그리도록 — 캐시를 비우고 프리뷰를 갱신한다 */
+      resetPostPreviewImages();
+      updateEditorPreview();
+    });
+    await page.waitForTimeout(300);
+    const during = await readExcerptPages(page);
+    await page.waitForTimeout(2500);
+    const after = await readExcerptPages(page);
+    check("[excerpt slow] 준비가 끝나면 사진이 들어간다",
+      after.flatMap(p => p.items).some(i => i.kind === "image"),
+      excerptOrder(after));
+    check("[excerpt slow] 준비 중에는 이전 화면을 그대로 둔다",
+      during.length >= 1, `${during.length}페이지`);
+
+    /* 로딩 중 본문 변경 — 늦게 온 준비가 최신 화면을 덮지 않는다 */
+    await page.evaluate(() => { resetPostPreviewImages(); updateEditorPreview(); });
+    await page.waitForTimeout(200);
+    await typeInBody(page, " 나중 글");
+    await page.waitForTimeout(3000);
+    const changed = await readExcerptPages(page);
+    check("[excerpt slow] 로딩 중 본문을 바꿔도 최신 본문이 남는다",
+      changed.flatMap(p => p.items).some(i => i.kind === "text" && i.text.includes("나중 글")) &&
+      changed.flatMap(p => p.items).some(i => i.kind === "image"),
+      excerptOrder(changed));
+    check("[excerpt slow] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* 실패 / 권한 만료 — 조용히 빼지 않고, 다시 누르면 재시도된다 */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser, {
+      db: makeSavedDb(), storageBytes: savedBytes, clearBody: false
+    });
+    let blocked = true;
+    await page.route("**/api/post-cover*", async route => {
+      if (blocked) return route.fulfill({ status: 404, body: "" });
+      return route.continue();
+    });
+    await page.evaluate(() => { resetPostPreviewImages(); updateEditorPreview(); });
+    await page.waitForTimeout(800);
+
+    const failedPages = await readExcerptPages(page);
+    check("[excerpt fail] 못 읽은 사진은 자리표시자로 남는다(조용히 빼지 않는다)",
+      excerptOrder(failedPages) === "T:저장된 글 X", excerptOrder(failedPages));
+    check("[excerpt fail] 사용자에게 알린다",
+      (await page.locator("#postEditorMessage").textContent()).includes("사진"),
+      await page.locator("#postEditorMessage").textContent());
+
+    const downloads = [];
+    page.on("download", d => downloads.push(d));
+    await page.evaluate(() => {
+      document.getElementById("postEditorMessage").textContent = "";
+    });
+    await page.click("#postEditorExportButton");
+    await waitForExportToFinish(page);
+    const message = await page.locator("#postEditorMessage").textContent();
+    check("[excerpt fail] export가 사진 없이 성공하지 않는다",
+      downloads.length === 0 && message.includes("사진") && !message.includes("saved"),
+      `${downloads.length}장 / ${message}`);
+
+    await installClipboardSpy(page);
+    await page.click("#postEditorCopyButton");
+    await page.waitForTimeout(2500);
+    check("[excerpt fail] copy도 사진 없이 성공하지 않는다",
+      await page.evaluate(() => window.__copied === null));
+
+    /* 재시도 — 같은 버튼을 다시 누르면 된다 */
+    blocked = false;
+    await page.evaluate(() => {
+      document.getElementById("postEditorMessage").textContent = "";
+    });
+    await page.click("#postEditorExportButton");
+    await waitForExportToFinish(page);
+    const retried = [];
+    for (const download of downloads) {
+      retried.push(decodePng(fs.readFileSync(await download.path())));
+    }
+    check("[excerpt retry] 다시 누르면 사진이 들어간 export가 나온다",
+      retried.length >= 1 && scanColour(retried[0], EXCERPT_COLOUR).count > 0,
+      `${retried.length}장`);
+    check("[excerpt retry] 자리표시자가 사라진다",
+      !(await readExcerptPages(page)).flatMap(p => p.items).some(i => i.kind === "missing"));
+    check("[excerpt fail] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* ---------------------------------------------------------
+     (10) 모바일 폭 — 발췌 시트를 열고 사진이 들어가는지,
+          gallery는 발췌 버튼이 계속 숨는지
+  --------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openExcerptEditor(browser, {
+      viewport: VIEWPORTS["mobile-390"]
+    });
+    await typeInBody(page, "모바일 발췌");
+    await insertExcerptPhotos(page, ["wide"]);
+    await page.click("#postEditorPreviewToggle");
+    await page.waitForTimeout(800);
+    const pages = await readExcerptPages(page);
+    const image = pages.flatMap(p => p.items).find(item => item.kind === "image");
+    check("[excerpt mobile] 모바일에서도 사진이 발췌에 들어간다",
+      excerptOrder(pages) === "T:모바일 발췌 I", excerptOrder(pages));
+    check("[excerpt mobile] 레이아웃 너비는 화면 폭과 무관하게 520 기준이다",
+      image.width <= pages[0].bodyWidth && pages[0].bodyWidth > 390 - 60,
+      `${image.width}px / body ${pages[0].bodyWidth}px`);
+    check("[excerpt mobile] 가로로 넘치지 않는다",
+      await page.evaluate(() =>
+        document.documentElement.scrollWidth <= window.innerWidth + 1));
+    check("[excerpt mobile] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* 눈으로 확인할 발췌 이미지를 남긴다(검사 아님).
+     IMORY_EXCERPT_OUT=<디렉터리> 를 주면 그 안에 PNG를 쓴다. */
+  if (process.env.IMORY_EXCERPT_OUT) {
+    const out = process.env.IMORY_EXCERPT_OUT;
+    fs.mkdirSync(out, { recursive: true });
+    const { ctx, page } = await openExcerptEditor(browser);
+    await typeInBody(page, "첫 문단입니다. 사진 앞에 오는 글이 여기 있습니다.");
+    await insertExcerptPhotos(page, ["wide"]);
+    await typeInBody(page, "사진 사이의 글. 다음은 세로 사진입니다.");
+    await insertExcerptPhotos(page, ["tallish"]);
+    await typeInBody(page, "세로 사진 뒤의 글. 이어서 긴 사진이 옵니다.");
+    await insertExcerptPhotos(page, ["long", "alpha"]);
+    await typeInBody(page, "마지막 문단.");
+    await page.waitForTimeout(900);
+    const files = await collectExportedPngs(page);
+    files.forEach((file, index) => {
+      fs.copyFileSync(file.path, path.join(out, `excerpt-${index + 1}.png`));
+    });
+    console.log(`  (발췌 이미지 ${files.length}장 저장: ${out})`);
+    await ctx.close();
+  }
+
+  {
+    const db = makeDb();
+    db.categories[0].type = "gallery";
+    const { ctx, page } = await openExcerptEditor(browser, { db });
+    const hidden = await page.evaluate(() => ({
+      preview: document.getElementById("postEditorPreviewToggle").hidden,
+      exportButton: document.getElementById("postEditorExportButton").hidden,
+      copy: document.getElementById("postEditorCopyButton").hidden
+    }));
+    check("[excerpt gallery] gallery는 발췌 버튼이 계속 숨는다",
+      hidden.preview && hidden.exportButton && hidden.copy, JSON.stringify(hidden));
+    await ctx.close();
+  }
+}
+
+
+/* =========================================================
    shots — 화면 캡처 (검사 아님)
 
    기본 실행에는 포함되지 않는다. `--only=shots`로만 돈다.
@@ -4015,6 +4900,7 @@ async function runShots(browser) {
     if (shouldRun("paging")) await runPaging(browser);
     if (shouldRun("compat")) await runCompat(browser);
     if (shouldRun("body")) await runBodyImages(browser);
+    if (shouldRun("excerpt")) await runExcerptImages(browser);
     if (shouldRun("access")) await runAccess(browser);
     if (shouldRun("protect")) await runProtect(browser);
     if (shouldRun("preview")) await runPreview(browser);

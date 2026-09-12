@@ -747,17 +747,32 @@ async function captureVisiblePageAsBlob(
                 }
           ),
 
-          windowWidth:
-            pageWidth,
+          /*
+            ★ windowWidth/windowHeight를 **주지 않는다**.
 
-          ...(
-            ratio.auto
-              ? {}
-              : {
-                  windowHeight:
-                    pageHeight
-                }
-          ),
+            html2canvas는 자를 영역의 좌표(x/y)를 **라이브
+            페이지에서 잰 bounding rect**로 정하고, 그림은 복제
+            문서를 windowWidth×windowHeight 크기의 iframe에
+            넣어 다시 레이아웃해서 그린다. 그래서 이 둘이 실제
+            창 크기와 다르면 복제본에서 요소의 위치가 달라지고,
+            자르는 자리는 라이브 좌표 그대로여서 **엉뚱한 곳을
+            찍는다**.
+
+            예전에는 windowWidth를 520(=캔버스 폭)으로 못박고
+            있었는데, 데스크톱(1280) 화면에서는 프리뷰 페이지가
+            문서 왼쪽에서 약 390px 자리에 있고 복제본(520px 창)
+            에서는 거의 0px로 옮겨가므로, 잘라낸 1040×1040이
+            **통째로 흰 이미지**가 됐다(skin-gallery-e2e-test.mjs
+            --only=excerpt의 [diag]로 재현/확인: windowWidth만
+            주면 1색, 안 주면 정상).
+
+            폭을 못박을 이유도 없다 — 페이지 박스 자체가 CSS에서
+            520px 고정이고 그 안의 크기도 전부 px이므로 창 폭에
+            영향받지 않는다. 오히려 창 폭을 520으로 바꾸면 복제본이
+            모바일 media query를 타서 PREVIEW와 다른 스타일로
+            그려진다. 자를 크기(width/height)만 주고, 레이아웃은
+            라이브와 같은 창 크기에 맡긴다.
+          */
 
           logging:
             false,

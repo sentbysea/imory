@@ -201,7 +201,13 @@ async function ensurePreviewPagesRendered() {
   }
 
 
-  updateEditorPreview();
+  /*
+    ★ await. updateEditorPreview()는 폰트와 본문 사진 준비를
+    기다린 다음에 그린다 — 기다리지 않고 80ms만 재우면 사진이
+    있는 글에서 아직 안 그려진 페이지를 캡처하게 된다.
+  */
+
+  await updateEditorPreview();
 
 
   await waitForExport(
@@ -214,5 +220,65 @@ async function ensurePreviewPagesRendered() {
       ".post-editor-preview-page"
     )
   );
+
+}
+
+
+/*
+  ★ export / copy 직전의 사진 준비
+
+  PREVIEW·export·copy는 **같은 발췌 페이지 DOM**을 캡처하므로
+  페이지 구성이 갈라질 자리가 없다(요구사항 5절). 갈라질 수 있는
+  것은 "그 페이지가 최신 사진을 담고 있는가"뿐이다 — 그래서
+  캡처 전에 여기서 한 번 맞춘다.
+
+    · 아직 못 굳힌 사진이 있으면 굳힌다(= 재시도).
+    · 하나라도 실패하면 **throw** 한다. 사진을 조용히 빼고
+      성공 처리하지 않는다.
+    · 이번에 새로 굳힌 사진이 있거나 지금 페이지에 자리표시자가
+      남아 있으면, 그 사진이 들어간 페이지로 다시 그린다.
+
+  호출자는 이 함수를 캡처 직전에 부른다. 모바일 클립보드 경로는
+  사용자 제스처 유효 시간을 지켜야 하므로, 이 대기를
+  ClipboardItem에 넘기는 Promise **안에서** 한다
+  (posts-preview-export.js).
+*/
+
+async function ensurePreviewImagesReadyForExport() {
+
+  const prepared =
+    await preparePostBodyImagesForPreview(
+      getRichEditorHTML()
+    );
+
+
+  if (
+    prepared.failed.length
+  ) {
+
+    throw new Error(
+      `사진 ${prepared.failed.length}장을 불러오지 못했습니다. 잠시 후 다시 눌러주세요.`
+    );
+
+  }
+
+
+  if (
+    prepared.resolved.length ||
+    previewPagesHaveMissingImages()
+  ) {
+
+    await updateEditorPreview(
+      {
+        preserveView: true
+      }
+    );
+
+
+    await waitForExport(
+      30
+    );
+
+  }
 
 }

@@ -205,6 +205,18 @@ function resetPostBodyImages() {
     null;
 
 
+  /* 발췌용으로 굳혀 둔 정지 raster도 이 글의 것이다
+     (posts/preview/posts-preview-images.js). */
+
+  if (
+    typeof resetPostPreviewImages === "function"
+  ) {
+
+    resetPostPreviewImages();
+
+  }
+
+
   hidePostBodyImageControl();
 
 }

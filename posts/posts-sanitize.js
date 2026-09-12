@@ -102,50 +102,14 @@ function getPostBodyImageId(
 
 
 /*
-  본문 HTML에서 사진만 걷어낸다. 발췌(PREVIEW/export/copy)가 쓴다 —
-  발췌기는 아직 이미지를 지원하지 않으므로(요구사항 5절) 글자만
-  남긴 채 그리게 한다. 저장된 본문은 건드리지 않는다.
-*/
-
-function stripPostBodyImages(
-  html
-) {
-
-  const holder =
-    document.createElement(
-      "div"
-    );
-
-
-  holder.innerHTML =
-    String(
-      html || ""
-    );
-
-
-  holder
-    .querySelectorAll(
-      "img"
-    )
-    .forEach(
-      image => {
-
-        image.remove();
-
-      }
-    );
-
-
-  return holder.innerHTML;
-
-}
-
-
-/*
   본문에 실제로 들어 있는 사진 식별자를 **나온 순서대로** 돌려준다.
   저장이 position을 이 순서로 매기고(요구사항 4절 "텍스트와 사진의
-  배치 순서를 저장"), 나중에 발췌기가 이미지를 지원할 때도 같은
-  순서를 쓴다(요구사항 5절).
+  배치 순서를 저장"), 발췌도 같은 순서로 사진을 준비한다
+  (posts/preview/posts-preview-images.js).
+
+  ★ 예전에 여기 있던 stripPostBodyImages()는 없어졌다. 발췌가
+  사진을 걷어내던 시절의 함수였고, 이제 발췌는 글과 사진을 같은
+  순서로 함께 그린다(기준 문서 IMORY_POST_BODY_IMAGE_DESIGN.md §7).
 */
 
 function listPostBodyImageIds(

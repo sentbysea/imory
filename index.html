@@ -3896,6 +3896,15 @@
             "./posts/preview/posts-preview-settings.js",
             "./posts/preview/posts-preview-css-vars.js",
             "./posts/preview/posts-preview.js",
+
+            /*
+              발췌에 들어가는 본문 사진. posts-preview-paginate.js가
+              여기 함수로 사진을 준비/배치하므로 먼저 둔다(실제
+              호출은 전부 나중이라 순서가 필수는 아니지만 의존
+              방향을 읽기 쉽게).
+            */
+
+            "./posts/preview/posts-preview-images.js",
             "./posts/preview/posts-preview-paginate.js",
             "./posts/export/posts-preview-export-capture.js",
             "./posts/export/posts-preview-export-section.js",

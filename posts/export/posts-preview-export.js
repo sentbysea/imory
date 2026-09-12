@@ -194,6 +194,12 @@ async function captureCurrentEditorPreviewPageAsFile(
   forceOpenSectionIfNeeded();
 
 
+  /* 사진이 준비되기 전에 캡처하지 않는다 — 실패하면 throw해서
+     "사진 없이 성공"이 되지 않게 한다(요구사항 5절). */
+
+  await ensurePreviewImagesReadyForExport();
+
+
   const previewPages =
     await ensurePreviewPagesRendered();
 
@@ -438,6 +444,17 @@ async function copyCurrentEditorPreviewPageToClipboard() {
       async () => {
 
         forceOpenSectionIfNeeded();
+
+
+        /*
+          ★ 사진 준비를 이 Promise 안에서 한다. clipboard.write는
+          이미 호출된 뒤이므로(아래) 여기서 네트워크를 기다려도
+          모바일의 사용자 제스처 조건이 깨지지 않는다. 실패하면
+          이 Promise가 reject되어 클립보드 쓰기도 실패하고,
+          아래 폴백이 같은 오류를 사용자에게 보여준다.
+        */
+
+        await ensurePreviewImagesReadyForExport();
 
 
         const previewPages =
@@ -724,6 +741,42 @@ async function exportEditorPreviewAsImages() {
 
 
   forceOpenSectionIfNeeded();
+
+
+  /*
+    사진이 준비될 때까지 기다린다. 느린 회선에서는 눈에 보이게
+    걸리므로 먼저 상태를 알린다 — 준비가 끝나기 전에 사진이 빠진
+    이미지를 내보내지 않는다(요구사항 5절).
+  */
+
+  try {
+
+    showPostEditorMessage(
+      "사진 준비 중..."
+    );
+
+
+    await ensurePreviewImagesReadyForExport();
+
+  } catch (imageError) {
+
+    console.error(
+      "preview export image error:",
+      imageError
+    );
+
+
+    showPostEditorMessage(
+      imageError?.message ||
+      "사진을 불러오지 못했습니다. 잠시 후 다시 눌러주세요."
+    );
+
+
+    restoreForcedExportSection();
+
+    return;
+
+  }
 
 
   const previewPages =
