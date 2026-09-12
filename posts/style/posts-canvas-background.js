@@ -86,26 +86,37 @@ const POST_BACKGROUND_OVERLAY_CLASS =
 
 
 /*
-  저장/렌더가 받아들이는 범위. 폼의 슬라이더(50~150%)보다 넓다 —
+  저장/렌더가 받아들이는 범위. 폼의 슬라이더(1~200%)보다 넓다 —
   이 범위를 좁히면 예전 슬라이더(100~300%)로 저장해둔 프리셋이
   **열기만 해도** 깎여 나가기 때문이다. 폼 쪽 호환 처리는
   admin/quote/admin-quote-apply-preset.js에 있다.
+
+  ★ 아래끝을 0.5에서 0.01로 내렸다 — 폼 슬라이더가 1%까지
+  내려가므로(POST_BACKGROUND_UI_MIN_SCALE), 저장 경로가 그보다
+  좁으면 사용자가 고른 값이 저장에서 깎인다.
 */
 
 const POST_BACKGROUND_MIN_SCALE =
-  0.5;
+  0.01;
 
 const POST_BACKGROUND_MAX_SCALE =
   3;
 
 
-/* 폼 슬라이더가 기본으로 보여주는 구간(%) */
+/*
+  폼 슬라이더가 기본으로 보여주는 구간(%).
+
+  1~200 — 캔버스보다 훨씬 작게 줄이는 쪽(작은 도장처럼 쓰는
+  구도)과 크게 확대하는 쪽을 둘 다 슬라이더 하나로 다룬다.
+  이 구간을 넘겨 저장된 옛 프리셋은 여는 순간 이 세션에 한해
+  범위가 그 값까지 넓어진다(admin/quote/admin-quote-apply-preset.js).
+*/
 
 const POST_BACKGROUND_UI_MIN_SCALE =
-  50;
+  1;
 
 const POST_BACKGROUND_UI_MAX_SCALE =
-  150;
+  200;
 
 const POST_BACKGROUND_MAX_BLUR =
   40;

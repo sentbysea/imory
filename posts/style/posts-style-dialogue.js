@@ -318,18 +318,43 @@ function isOpaqueActionAtom(
   node
 ) {
 
+  if (
+    node.nodeType !==
+    Node.ELEMENT_NODE
+  ) {
+
+    return false;
+
+  }
+
+
+  /*
+    ★ 복사 상자 · 메모는 통째로 불투명하다 (요구사항 8).
+
+    안에 든 별표(*)가 지문 범위를 열거나 닫는 데 관여하면,
+    코드 한 줄에 우연히 들어 있던 기호 때문에 그 뒤 본문 전체가
+    지문 색으로 바뀐다. 상자 안은 파싱하지 않고 넘어간다.
+  */
+
+  if (
+    typeof isPostBlockNode === "function" &&
+    isPostBlockNode(
+      node
+    )
+  ) {
+
+    return true;
+
+  }
+
+
   return (
-    node.nodeType ===
-      Node.ELEMENT_NODE
-    &&
-    (
-      node.classList.contains(
-        "post-editor-page-break"
-      )
-      ||
-      node.classList.contains(
-        "post-dialogue"
-      )
+    node.classList.contains(
+      "post-editor-page-break"
+    )
+    ||
+    node.classList.contains(
+      "post-dialogue"
     )
   );
 
@@ -931,6 +956,24 @@ function applyActionDialogueStyles(
   while (
     dialogueWalker.nextNode()
   ) {
+
+    /*
+      ★ 복사 상자 · 메모 안의 글자는 대사로 보지 않는다
+      (요구사항 8). 코드나 메모에 들어 있는 따옴표가 대사 색으로
+      칠해지면, 복사되는 글자와 화면이 어긋나 보인다.
+    */
+
+    if (
+      typeof postNodeIsInsidePostBlock === "function" &&
+      postNodeIsInsidePostBlock(
+        dialogueWalker.currentNode
+      )
+    ) {
+
+      continue;
+
+    }
+
 
     dialogueTextNodes.push(
       dialogueWalker.currentNode

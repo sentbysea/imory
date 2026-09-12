@@ -39,6 +39,16 @@
      export      실제로 저장되는 PNG의 픽셀 — 배경·강조선이 들어가고,
                  형광펜 높이가 그대로이고, 흐림이 진짜로 구워지는가
                  (html2canvas는 CSS filter를 그리지 않는다).
+     blocks      복사 상자 · 메모 · 구분선 — 삽입/편집/삭제/undo,
+                 저장 HTML에 조작 UI가 없고 재편집에서 다시 붙는가,
+                 복사되는 글자가 내용만이고 입력한 그대로인가,
+                 공개 뷰어에는 복사 버튼이 발췌에는 없는가,
+                 상자 안의 기호가 대사/지문으로 바뀌지 않는가,
+                 페이지보다 긴 상자에서 내용이 유실되지 않는가.
+     html        HTML 모드 — 감싼 코드 울타리만 벗기는가, 안쪽
+                 백틱·따옴표가 남는가, 여러 번 그려도 더 깎이지
+                 않는가, 디자인만 PNG로 저장되는가(OOC·제목·사이트
+                 UI 제외), 실제 PNG의 크기·내용·잘림.
      mobile      조정 모드에서만 터치가 배경을 움직이고, 평소에는
                  기존 스크롤·핀치 제스처를 그대로 둔다.
 
@@ -857,6 +867,40 @@ async function caretInEditor(page, at) {
 
 
 /* =========================================================
+   색 고르기는 두 단계다 (요구사항 2)
+
+     1단계  색 견본을 누르면 프리셋 색 목록(.imory-color-menu)
+     2단계  목록 안의 직접 선택 → 컬러피커
+
+   손가락 기기(native 모드)에서는 2단계의 직접 선택이 진짜
+   <input type="color">이고, 그 밖에는 커스텀 팝오버를 여는
+   버튼이다. 아래 두 헬퍼가 그 차이를 감춘다.
+========================================================== */
+
+async function openColorMenu(page, controlId, tap = false) {
+  if (tap) await page.tap(`#${controlId}`);
+  else await page.click(`#${controlId}`);
+  await page.waitForSelector(".imory-color-menu", {
+    state: "visible",
+    timeout: 5000
+  });
+}
+
+
+/* 목록을 거쳐 커스텀 팝오버까지 연다 */
+async function openCustomPicker(page, controlId, tap = false) {
+  await openColorMenu(page, controlId, tap);
+  const button = ".imory-color-menu-custom-button";
+  if (tap) await page.tap(button);
+  else await page.click(button);
+  await page.waitForSelector(".imory-color-picker", {
+    state: "visible",
+    timeout: 5000
+  });
+}
+
+
+/* =========================================================
    페이지 안에서 쓰는 검사 도구
 
    openPostEditor/openQuotePanel가 열린 뒤 한 번 심는다(이 화면들은
@@ -947,7 +991,25 @@ async function runPicker(browser) {
 
   const undoBefore = await page.evaluate(() => editorUndoStack.length);
 
-  await page.click("#postEditorCustomControl");
+  /* 1단계: 목록이 먼저 뜬다 */
+  await openColorMenu(page, "postEditorCustomControl");
+
+  check(
+    "[picker] 견본을 누르면 프리셋 색 목록이 먼저 뜬다(요구사항 2)",
+    await page.evaluate(() =>
+      isImoryColorMenuOpen() === true &&
+      isImoryColorPickerOpen() === false &&
+      document.querySelectorAll(".imory-color-menu-swatch").length > 0)
+  );
+
+  check(
+    "[picker] 목록을 여는 것만으로는 undo 기록이 생기지 않는다",
+    await page.evaluate(() => editorUndoStack.length) === undoBefore,
+    `${undoBefore} → ${await page.evaluate(() => editorUndoStack.length)}`
+  );
+
+  /* 2단계: 직접 선택 → 팝오버 */
+  await page.click(".imory-color-menu-custom-button");
   await page.waitForSelector(".imory-color-picker", { state: "visible", timeout: 5000 });
 
   check(
@@ -1074,8 +1136,7 @@ async function runPicker(browser) {
     undo: editorUndoStack.length
   }));
 
-  await page.click("#postEditorCustomControl");
-  await page.waitForSelector(".imory-color-picker", { state: "visible" });
+  await openCustomPicker(page, "postEditorCustomControl");
 
   await page.mouse.move(field.x + 20, field.y + 100);
   await page.mouse.down();
@@ -1115,8 +1176,7 @@ async function runPicker(browser) {
 
   const beforeOutside = await page.evaluate(() => postEditorContent.innerHTML);
 
-  await page.click("#postEditorCustomControl");
-  await page.waitForSelector(".imory-color-picker", { state: "visible" });
+  await openCustomPicker(page, "postEditorCustomControl");
 
   await page.mouse.move(field.x + 30, field.y + 90);
   await page.mouse.down();
@@ -1136,8 +1196,7 @@ async function runPicker(browser) {
   /* ---- remove ---- */
 
   await selectEditorRange(page, 0, 10);
-  await page.click("#postEditorCustomControl");
-  await page.waitForSelector(".imory-color-picker", { state: "visible" });
+  await openCustomPicker(page, "postEditorCustomControl");
   await page.click('.imory-color-picker [data-role="remove"]');
   await page.waitForTimeout(200);
 
@@ -1215,8 +1274,7 @@ async function runPickerTouch(browser) {
   /* 팝오버가 화면 폭을 다 먹지 않는다 */
 
   await selectEditorRange(page, 0, 10);
-  await page.tap("#postEditorCustomControl");
-  await page.waitForSelector(".imory-color-picker", { state: "visible", timeout: 5000 });
+  await openCustomPicker(page, "postEditorCustomControl", true);
 
   const size = await page.evaluate(() => {
     const el = document.querySelector(".imory-color-picker");
@@ -1269,8 +1327,7 @@ async function runPickerTouch(browser) {
   /* ---- 다시 열고 cancel ---- */
 
   await selectEditorRange(page, 12, 20);
-  await page.tap("#postEditorCustomControl");
-  await page.waitForSelector(".imory-color-picker", { state: "visible", timeout: 5000 });
+  await openCustomPicker(page, "postEditorCustomControl", true);
 
   check(
     "[picker/touch] 닫았다가 다시 열어도 정상으로 열린다",
@@ -1304,8 +1361,7 @@ async function runPickerTouch(browser) {
   /* ---- 세 번째로 열고 닫기까지 반복해도 정상 ---- */
 
   await selectEditorRange(page, 22, 26);
-  await page.tap("#postEditorCustomControl");
-  await page.waitForSelector(".imory-color-picker", { state: "visible", timeout: 5000 });
+  await openCustomPicker(page, "postEditorCustomControl", true);
   await page.tap('.imory-color-picker [data-role="cancel"]');
   await page.waitForTimeout(250);
 
@@ -1374,13 +1430,15 @@ async function runPickerNative(browser) {
     (input.type이 "text"로 떨어진다) hasTouch를 켜도
     navigator.maxTouchPoints가 0이다. 즉 **실제 아이폰이 주는 값
     (supported=true, touch=true)을 이 환경에서는 만들 수 없다**.
-    그래서 "아이폰에서 기본 피커가 선택된다"는 여기서 확인할 수
-    없고 실기기 항목으로 남는다.
+    그래서 "아이폰에서 기본 피커가 선택된다"와 "그 칸을 누르면
+    OS 창이 실제로 뜬다"는 여기서 확인할 수 없고 실기기 항목으로
+    남는다. 아래 검사는 전부 **창이 열렸다고 가정했을 때의 이벤트
+    순서**(input → change)를 그대로 만들어 본문이 어떻게 되는지를
+    본다.
 
-    대신 판정 규칙 자체는 어느 환경에서나 검사할 수 있다 —
-    기본 피커는 **쓸 수 있고 손가락이 주 입력일 때만** 고르고,
-    그 밖에는 전부 커스텀 팝오버로 내려간다. WebKit에서는 이
-    규칙의 폴백 쪽이, Chromium에서는 native 쪽이 실제로 걸린다.
+    판정 규칙 자체는 어느 환경에서나 검사할 수 있다 — 기본 피커는
+    **쓸 수 있고 손가락이 주 입력일 때만** 고르고, 그 밖에는 전부
+    커스텀 팝오버로 내려간다.
   */
 
   const expectedMode =
@@ -1413,61 +1471,87 @@ async function runPickerNative(browser) {
   const selectedText = await selectEditorRange(page, 0, 10);
   const undoBefore = await page.evaluate(() => editorUndoStack.length);
 
-  await page.tap("#postEditorCustomControl");
-  await page.waitForTimeout(250);
+  /* ---- 1단계: 목록. 아직 아무것도 바뀌지 않았다 ---- */
 
-  /* ---- 여는 순간: 자리가 잡히고, 숨은 칸이 준비된다 ---- */
+  await openColorMenu(page, "postEditorCustomControl", true);
 
-  const afterOpen = await page.evaluate(() => {
-    const input = Array.from(
-      document.querySelectorAll(".imory-native-color-input")
-    ).find(el => el.imoryColorSession) ||
-      document.querySelector(".imory-native-color-input");
-    const span = postEditorContent.querySelector(".post-inline-highlight");
+  const menu = await page.evaluate(() => {
+    const input = document.querySelector("input.imory-color-menu-custom-input");
+    const style = input ? getComputedStyle(input) : null;
+    const rect = input ? input.getBoundingClientRect() : null;
     return {
+      swatches: document.querySelectorAll(".imory-color-menu-swatch").length,
       hasInput: Boolean(input),
       inputType: input ? input.type : "",
-      inputHidden: input
-        ? getComputedStyle(input).display === "none" ||
-          getComputedStyle(input).visibility === "hidden"
-        : true,
-      open: isImoryNativeColorPickerOpen(),
+      /* 숨기지 않는다 — 사용자의 손가락이 이 칸에 직접 닿아야 한다 */
+      visible: style
+        ? style.display !== "none" &&
+          style.visibility !== "hidden" &&
+          Number(style.opacity) > 0 &&
+          rect.width >= 20 && rect.height >= 20
+        : false,
       customOpen: isImoryColorPickerOpen(),
-      spanText: span ? span.textContent : "",
-      color: span ? span.dataset.highlight : "",
       undo: editorUndoStack.length,
+      highlights: postEditorContent.querySelectorAll(".post-inline-highlight").length,
       selection: String(window.getSelection())
     };
   });
 
   check(
-    "[picker/native] 기본 피커 경로에서는 커스텀 팝오버가 뜨지 않고 숨은 칸이 열린다",
-    afterOpen.customOpen === false &&
-    afterOpen.hasInput === true &&
-    afterOpen.open === true,
-    JSON.stringify(afterOpen)
+    "[picker/native] 견본을 누르면 프리셋 색 목록이 먼저 뜬다",
+    menu.swatches > 0 && menu.customOpen === false,
+    JSON.stringify(menu)
+  );
+
+  check(
+    "[picker/native] 목록만 연 상태에서는 본문도 undo 기록도 그대로다",
+    menu.undo === undoBefore && menu.highlights === 0,
+    JSON.stringify(menu)
+  );
+
+  check(
+    "[picker/native] 목록 단계에서 본문 선택이 유지된다",
+    menu.selection === selectedText,
+    `기준 "${selectedText}" / 실제 "${menu.selection}"`
   );
 
   /*
-    칸의 type은 브라우저가 그 입력을 지원할 때만 "color"로 남는다.
-    지원하지 않으면 "text"로 떨어지는데(WebKit 빌드), 그 환경은
-    애초에 이 경로를 고르지 않으므로 결함이 아니다 — 우리가
-    요청한 type이 무엇이었는지만 확인한다.
+    ★ 이것이 "눌러도 아무것도 열리지 않던" 버그의 수정 지점이다.
+
+    직접 선택은 코드가 대신 눌러 주는 숨은 칸이 아니라 **진짜
+    보이는 <input type="color">**여야 한다. 사용자의 손가락이 그
+    칸에 직접 닿아야 OS 창이 브라우저의 기본 동작으로 열린다.
   */
 
   check(
-    "[picker/native] 숨은 칸을 <input type=\"color\">로 만든다",
-    auto.supported
-      ? afterOpen.inputType === "color"
-      : afterOpen.inputType === "text",
-    `요청 color / 실제 "${afterOpen.inputType}" (이 브라우저 지원 ${auto.supported})`
+    "[picker/native] 직접 선택이 진짜 보이는 <input type=\"color\">다(숨은 칸을 코드로 누르지 않는다)",
+    menu.hasInput === true &&
+    menu.visible === true &&
+    (auto.supported ? menu.inputType === "color" : menu.inputType === "text"),
+    JSON.stringify(menu)
   );
 
   check(
-    "[picker/native] 숨은 칸을 display:none/visibility:hidden으로 막지 않는다(활성화가 막힌다)",
-    afterOpen.inputHidden === false,
-    JSON.stringify({ hidden: afterOpen.inputHidden })
+    "[picker/native] 화면 밖에 숨겨 두던 옛 칸은 남아 있지 않다",
+    await page.evaluate(() =>
+      document.querySelectorAll(".imory-native-color-input").length === 0 &&
+      typeof window.openImoryNativeColorPicker === "undefined")
   );
+
+  /* ---- 2단계: 창이 열리기 직전 — 자리를 만든다(씨앗) ---- */
+
+  const afterOpen = await page.evaluate(async () => {
+    const input = document.querySelector("input.imory-color-menu-custom-input");
+    input.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve, 120));
+    const span = postEditorContent.querySelector(".post-inline-highlight");
+    return {
+      spanText: span ? span.textContent : "",
+      color: span ? span.dataset.highlight : "",
+      undo: editorUndoStack.length,
+      customOpen: isImoryColorPickerOpen()
+    };
+  });
 
   check(
     "[picker/native] 선택이 살아 있는 동안 지금 색으로 자리를 만들어 둔다(씨앗)",
@@ -1482,13 +1566,16 @@ async function runPickerNative(browser) {
     `${undoBefore} → ${afterOpen.undo}`
   );
 
+  check(
+    "[picker/native] 기본 피커 경로에서는 커스텀 팝오버가 뜨지 않는다",
+    afterOpen.customOpen === false,
+    JSON.stringify(afterOpen)
+  );
+
   /* ---- 조정 중: 본문도 선택도 건드리지 않는다 ---- */
 
   const live = await page.evaluate(async (colors) => {
-    const input = Array.from(
-      document.querySelectorAll(".imory-native-color-input")
-    ).find(el => el.imoryColorSession) ||
-      document.querySelector(".imory-native-color-input");
+    const input = document.querySelector("input.imory-color-menu-custom-input");
     const before = postEditorContent.querySelector(".post-inline-highlight");
 
     let childMutations = 0;
@@ -1509,12 +1596,12 @@ async function runPickerNative(browser) {
 
     /*
       기준선 — 아무 것도 하지 않는 같은 길이의 시간. 이 화면은
-      가만히 두어도 selectionchange가 뜨는지 먼저 본다(브라우저에
-      따라 주기적으로 뜬다). 조정 중의 수를 이 기준선과 비교한다.
+      가만히 두어도 selectionchange가 뜨는지 먼저 본다.
     */
     await new Promise(resolve => setTimeout(resolve, 270));
     const idleSelectionChanges = selectionChanges;
     selectionChanges = 0;
+    childMutations = 0;
 
     const seen = [];
 
@@ -1571,16 +1658,13 @@ async function runPickerNative(browser) {
   /* ---- 닫히며 확정 ---- */
 
   const afterChange = await page.evaluate(async () => {
-    const input = Array.from(
-      document.querySelectorAll(".imory-native-color-input")
-    ).find(el => el.imoryColorSession) ||
-      document.querySelector(".imory-native-color-input");
+    const input = document.querySelector("input.imory-color-menu-custom-input");
     input.value = "#ff9900";
     input.dispatchEvent(new Event("change", { bubbles: true }));
     await new Promise(resolve => setTimeout(resolve, 200));
 
     return {
-      open: isImoryNativeColorPickerOpen(),
+      menuOpen: isImoryColorMenuOpen(),
       color: postEditorContent.querySelector(".post-inline-highlight")
         ?.dataset.highlight,
       undo: editorUndoStack.length,
@@ -1589,8 +1673,8 @@ async function runPickerNative(browser) {
   });
 
   check(
-    "[picker/native] 창이 닫히면 그 색으로 확정되고 세션이 끝난다",
-    afterChange.open === false && afterChange.color === "#ff9900",
+    "[picker/native] 창이 닫히면 그 색으로 확정되고 목록도 함께 닫힌다",
+    afterChange.menuOpen === false && afterChange.color === "#ff9900",
     JSON.stringify(afterChange)
   );
 
@@ -1618,6 +1702,78 @@ async function runPickerNative(browser) {
     JSON.stringify(afterUndo)
   );
 
+  /* ---- 목록에서 프리셋 색을 바로 고르는 길 ---- */
+
+  await selectEditorRange(page, 0, 10);
+  const beforePreset = await page.evaluate(() => editorUndoStack.length);
+
+  await openColorMenu(page, "postEditorCustomControl", true);
+  await page.tap(".imory-color-menu-swatch:nth-child(2)");
+  await page.waitForTimeout(300);
+
+  const afterPreset = await page.evaluate(() => ({
+    menuOpen: isImoryColorMenuOpen(),
+    color: postEditorContent.querySelector(".post-inline-highlight")
+      ?.dataset.highlight,
+    undo: editorUndoStack.length
+  }));
+
+  check(
+    "[picker/native] 목록에서 고른 색은 그 자리에서 확정되고 undo 한 칸이다",
+    afterPreset.menuOpen === false &&
+    /^#[0-9a-f]{6}$/i.test(afterPreset.color || "") &&
+    afterPreset.undo === beforePreset + 1,
+    JSON.stringify(afterPreset)
+  );
+
+  /* ---- 기본 피커가 열리지 않으면 커스텀 팝오버로 잇는다 ---- */
+
+  await page.click("#postEditorUndoButton");
+  await page.waitForTimeout(200);
+  await selectEditorRange(page, 0, 10);
+  const beforeFallback = await page.evaluate(() => editorUndoStack.length);
+
+  await openColorMenu(page, "postEditorCustomControl", true);
+
+  /*
+    창이 떴다면 이 칸이 포커스를 받거나 값이 바뀐다. 둘 다 없는
+    채로 잠깐이 지나는 것이 "감지 가능한 실패"다.
+  */
+  await page.evaluate(() => {
+    const input = document.querySelector("input.imory-color-menu-custom-input");
+    input.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    input.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+    postEditorContent.focus();
+  });
+  await page.waitForTimeout(1100);
+
+  const fallback = await page.evaluate(() => ({
+    customOpen: isImoryColorPickerOpen(),
+    menuOpen: isImoryColorMenuOpen(),
+    undo: editorUndoStack.length
+  }));
+
+  check(
+    "[picker/native] 기본 피커가 열리지 않으면 아무 반응 없이 끝나지 않고 커스텀 팝오버로 잇는다",
+    fallback.customOpen === true && fallback.menuOpen === false,
+    JSON.stringify(fallback)
+  );
+
+  check(
+    "[picker/native] 그 폴백에서도 undo는 한 칸뿐이다(씨앗을 두 번 찍지 않는다)",
+    fallback.undo === beforeFallback + 1,
+    `${beforeFallback} → ${fallback.undo}`
+  );
+
+  await page.click('.imory-color-picker [data-role="cancel"]');
+  await page.waitForTimeout(250);
+
+  check(
+    "[picker/native] 그 폴백의 Cancel이 열기 전 상태로 되돌린다",
+    await page.evaluate(() => editorUndoStack.length) === beforeFallback,
+    `${beforeFallback} → ${await page.evaluate(() => editorUndoStack.length)}`
+  );
+
   /* ---- 강조선도 같은 계약 ----
 
      강조선은 "선택이 걸치는 문단"을 매번 새로 찾는다. 기본 피커가
@@ -1630,16 +1786,15 @@ async function runPickerNative(browser) {
   });
 
   await selectEditorRange(page, 0, 3);
-  await page.tap("#postEditorRuleControl");
-  await page.waitForTimeout(250);
+  await openColorMenu(page, "postEditorRuleControl", true);
 
   const ruleLive = await page.evaluate(async (colors) => {
-    const input = Array.from(
-      document.querySelectorAll(".imory-native-color-input")
-    ).find(el => el.imoryColorSession) ||
-      document.querySelector(".imory-native-color-input");
+    const input = document.querySelector("input.imory-color-menu-custom-input");
 
     postEditorMessage.textContent = "";
+
+    input.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve, 120));
 
     /* 기본 피커가 열리면 본문 선택이 사라진다 — 그 상황을 재현한다 */
     window.getSelection().removeAllRanges();
@@ -2125,13 +2280,38 @@ async function runRule(browser) {
 
   const autoBoxes = await page.evaluate(RULE_BOXES);
 
+  /*
+    ★ 대사 자동 강조선은 BODY의 색·굵기·거리를 쓴다 (요구사항 3).
+
+    예전에는 dialogueRuleColor/Width/Gap 세 벌을 따로 갖고 있어서,
+    같은 글 안에서 수동으로 그은 선과 대사에 자동으로 붙은 선이
+    서로 다른 색·굵기로 나올 수 있었다. 고르는 자리를 BODY 하나로
+    합쳤고, DIALOGUE에는 "자동 적용" 체크만 남는다.
+
+    DECOR_SETTINGS에는 옛 dialogueRule* 값이 그대로 들어 있다
+    (색 #66aa88 · 굵기 5px). 그 값이 **BODY를 이기지 않는다**는
+    것까지 여기서 확인한다.
+  */
+
   check(
     "[rule] 옵션을 켜면 대사 문단에만 자동으로 붙는다",
     autoBoxes.length === 1 &&
-    autoBoxes[0].text.startsWith('"대사') &&
-    autoBoxes[0].width === "5px" &&
-    autoBoxes[0].color === "rgb(102, 170, 136)",
+    autoBoxes[0].text.startsWith('"대사'),
     JSON.stringify(autoBoxes)
+  );
+
+  check(
+    "[rule] 대사 자동 강조선이 BODY의 색·굵기·거리를 따른다(옛 dialogue 값이 이기지 않는다)",
+    autoBoxes.length === 1 &&
+    autoBoxes[0].width === "3px" &&
+    autoBoxes[0].color === "rgb(238, 159, 189)" &&
+    autoBoxes[0].paddingLeft === "12px",
+    JSON.stringify(autoBoxes) +
+      " / 옛 dialogue 값 " +
+      JSON.stringify({
+        color: DECOR_SETTINGS.dialogueRuleColor,
+        width: DECOR_SETTINGS.dialogueRuleWidth
+      })
   );
 
   await renderEditorPreview(page, {
@@ -3070,8 +3250,14 @@ async function runPreset(browser) {
       이 옵션이 생겨도 이미 발행된 글의 모양이 달라지지 않는다.
     */
     legacy.bodyRuleGap === 12 &&
-    legacy.dialogueRuleGap === 12 &&
     legacy.sourceRuleGap === 12 &&
+    /*
+      ★ 대사 강조선의 거리는 이제 고르는 자리가 없다 (요구사항 3).
+      값이 원래 없던 프리셋에는 키를 만들지 않는다 — 기본값을 새로
+      써넣으면 "안 쓰는 설정"이 전 프리셋으로 번진다. 렌더는 BODY
+      값을 쓰므로 외형은 그대로다.
+    */
+    legacy.dialogueRuleGap === undefined &&
     /* 이미지 크기 고정은 옛 프리셋에서 저절로 켜지지 않는다 */
     legacy.fixedSize === false,
     JSON.stringify(legacy)
@@ -4061,23 +4247,42 @@ async function runFixedSize(browser) {
     return page.evaluate(GEOMETRY);
   };
 
-  /* ---- (1) 확대 범위 50~150% ---- */
+  /* ---- (1) 확대 범위 1~200% ---- */
 
   const range = await page.evaluate(() => ({
     min: POST_BACKGROUND_UI_MIN_SCALE,
     max: POST_BACKGROUND_UI_MAX_SCALE,
     /* 저장/렌더가 받아들이는 범위는 더 넓다(옛 값 보존) */
+    clampVeryLow: clampPostBackgroundScale(0.005),
     clampLow: clampPostBackgroundScale(0.2),
     clampMid: clampPostBackgroundScale(0.5),
     clampLegacy: clampPostBackgroundScale(3),
     clampHigh: clampPostBackgroundScale(9)
   }));
 
+  /*
+    ★ 슬라이더를 1~200%로 넓혔다.
+
+    저장/렌더가 받아들이는 범위는 슬라이더보다 넓어야 한다 —
+    좁히면 예전 슬라이더(100~300%)로 저장해둔 프리셋이 **열기만
+    해도** 깎인다. 아래끝도 같은 이유로 0.5에서 0.01로 내렸다:
+    슬라이더가 1%까지 내려가는데 저장이 0.5에서 자르면 사용자가
+    고른 값이 저장에서 사라진다.
+  */
+
   check(
-    "[fixed] 슬라이더 구간은 50~150%, 저장값은 0.5~3까지 살아남는다",
-    range.min === 50 && range.max === 150 &&
-    range.clampLow === 0.5 && range.clampMid === 0.5 &&
-    range.clampLegacy === 3 && range.clampHigh === 3,
+    "[fixed] 슬라이더 구간은 1~200%다",
+    range.min === 1 && range.max === 200,
+    JSON.stringify(range)
+  );
+
+  check(
+    "[fixed] 저장값은 슬라이더보다 넓은 0.01~3에서 잘린다(슬라이더가 고른 값이 저장에서 깎이지 않는다)",
+    range.clampVeryLow === 0.01 &&
+    range.clampLow === 0.2 &&
+    range.clampMid === 0.5 &&
+    range.clampLegacy === 3 &&
+    range.clampHigh === 3,
     JSON.stringify(range)
   );
 
@@ -4392,8 +4597,8 @@ async function runFixedSizeAdmin(browser) {
   }, FIXED_IMAGE);
 
   check(
-    "[fixed/admin] 보통 프리셋에서는 슬라이더가 50~150으로 돌아온다",
-    normalScale.min === 50 && normalScale.max === 150,
+    "[fixed/admin] 보통 프리셋에서는 슬라이더가 1~200으로 돌아온다",
+    normalScale.min === 1 && normalScale.max === 200,
     JSON.stringify(normalScale)
   );
 
@@ -4451,11 +4656,25 @@ async function runRuleGap(browser) {
     sourceRuleGap: 24
   });
 
+  /*
+    ★ 거리는 두 벌이다 — BODY와 SOURCE (요구사항 3).
+
+    예전에는 DIALOGUE도 자기 거리를 가졌다. 지금은 대사에 자동으로
+    붙는 선도 BODY의 거리를 그대로 쓴다 — 위 measure()에 넘긴
+    dialogueRuleGap: 4는 **무시돼야 한다**. SOURCE는 독립 유지.
+  */
+
   check(
-    "[gap] BODY·DIALOGUE·SOURCE가 각자의 거리를 쓴다",
-    withGaps.boxes.some(b => b.pad === "30px") &&
-    withGaps.boxes.some(b => b.pad === "4px") &&
+    "[gap] BODY와 SOURCE가 각자의 거리를 쓴다",
+    withGaps.boxes.length === 2 &&
+    withGaps.boxes.every(b => b.pad === "30px") &&
     withGaps.sourcePad === "24px",
+    JSON.stringify(withGaps)
+  );
+
+  check(
+    "[gap] 대사 자동 강조선은 BODY 거리를 따른다(옛 dialogueRuleGap이 이기지 않는다)",
+    withGaps.boxes.every(b => b.pad !== "4px"),
     JSON.stringify(withGaps)
   );
 
@@ -4532,8 +4751,12 @@ async function runNumberInputs(browser) {
     ["quoteHighlightHeight", "highlightHeight"],
     ["quoteBodyRuleWidth", "bodyRuleWidth"],
     ["quoteBodyRuleGap", "bodyRuleGap"],
-    ["quoteDialogueRuleWidth", "dialogueRuleWidth"],
-    ["quoteDialogueRuleGap", "dialogueRuleGap"],
+    /*
+      ★ quoteDialogueRuleWidth / quoteDialogueRuleGap은 없앴다
+      (요구사항 3) — DIALOGUE에서 고르는 것은 "강조선 자동 적용"
+      체크 하나뿐이고, 생김새는 BODY를 따른다. 아래 [numbers/gone]
+      에서 그 둘이 실제로 사라졌는지 확인한다.
+    */
     ["quoteSourceRuleWidth", "sourceRuleWidth"],
     ["quoteSourceRuleGap", "sourceRuleGap"],
     ["quoteBackgroundOverlayOpacity", null]
@@ -4558,6 +4781,73 @@ async function runNumberInputs(browser) {
     JSON.stringify(shape)
   );
 
+
+  /*
+    ★ DIALOGUE의 색·굵기·거리 칸은 없앴다 (요구사항 3).
+
+    렌더는 BODY 값을 쓴다. 그런데 옛 프리셋에는 그 세 값이 이미
+    저장돼 있으므로, 입력칸이 사라졌다고 해서 저장 때 기본값으로
+    덮어써 버리면 **열고 저장하기만 해도 사용자의 값이 사라진다**.
+    값은 상태 변수가 들고 있다가 그대로 되돌려보낸다
+    (admin/quote/admin-quote-refs.js의 quoteLegacyDialogueRule).
+  */
+
+  const dialogueFields = await page.evaluate(() => ({
+    color: Boolean(document.getElementById("quoteDialogueRuleColor")),
+    width: Boolean(document.getElementById("quoteDialogueRuleWidth")),
+    gap: Boolean(document.getElementById("quoteDialogueRuleGap")),
+    enabled: Boolean(document.getElementById("quoteDialogueRuleEnabled"))
+  }));
+
+  check(
+    "[numbers/gone] DIALOGUE에는 자동 적용 체크만 남고 색·굵기·거리 칸은 없다",
+    dialogueFields.enabled === true &&
+    dialogueFields.color === false &&
+    dialogueFields.width === false &&
+    dialogueFields.gap === false,
+    JSON.stringify(dialogueFields)
+  );
+
+  const legacyDialogue = await page.evaluate(() => {
+    /* 세 값을 가진 옛 프리셋을 연다 */
+    applyQuoteSettings({
+      dialogueRuleEnabled: true,
+      dialogueRuleColor: "#66aa88",
+      dialogueRuleWidth: 5,
+      dialogueRuleGap: 7
+    });
+    const kept = collectQuoteSettings();
+
+    /* 그 값이 한 번도 없던 프리셋은 계속 없는 채로 둔다 */
+    applyQuoteSettings({ dialogueRuleEnabled: true });
+    const fresh = collectQuoteSettings();
+
+    return {
+      keptColor: kept.dialogueRuleColor,
+      keptWidth: kept.dialogueRuleWidth,
+      keptGap: kept.dialogueRuleGap,
+      freshColor: fresh.dialogueRuleColor,
+      freshWidth: fresh.dialogueRuleWidth,
+      freshGap: fresh.dialogueRuleGap
+    };
+  });
+
+  check(
+    "[numbers/gone] 옛 프리셋의 dialogueRule 값은 열고 저장해도 그대로 남는다",
+    legacyDialogue.keptColor === "#66aa88" &&
+    legacyDialogue.keptWidth === 5 &&
+    legacyDialogue.keptGap === 7,
+    JSON.stringify(legacyDialogue)
+  );
+
+  check(
+    "[numbers/gone] 그 값이 없던 프리셋에는 새로 만들어 넣지 않는다",
+    legacyDialogue.freshColor === undefined &&
+    legacyDialogue.freshWidth === undefined &&
+    legacyDialogue.freshGap === undefined,
+    JSON.stringify(legacyDialogue)
+  );
+
   /* ---- 직접 입력한 값이 그대로 수집된다 ---- */
 
   const typed = await page.evaluate(async (fields) => {
@@ -4565,8 +4855,6 @@ async function runNumberInputs(browser) {
       quoteHighlightHeight: 55,
       quoteBodyRuleWidth: 7,
       quoteBodyRuleGap: 26,
-      quoteDialogueRuleWidth: 2,
-      quoteDialogueRuleGap: 3,
       quoteSourceRuleWidth: 5,
       quoteSourceRuleGap: 18,
       quoteBackgroundOverlayOpacity: 40
@@ -4585,8 +4873,6 @@ async function runNumberInputs(browser) {
       highlightHeight: collected.highlightHeight,
       bodyRuleWidth: collected.bodyRuleWidth,
       bodyRuleGap: collected.bodyRuleGap,
-      dialogueRuleWidth: collected.dialogueRuleWidth,
-      dialogueRuleGap: collected.dialogueRuleGap,
       sourceRuleWidth: collected.sourceRuleWidth,
       sourceRuleGap: collected.sourceRuleGap,
       overlay: collected.backgroundOverlayOpacity
@@ -4598,8 +4884,6 @@ async function runNumberInputs(browser) {
     typed.highlightHeight === 55 &&
     typed.bodyRuleWidth === 7 &&
     typed.bodyRuleGap === 26 &&
-    typed.dialogueRuleWidth === 2 &&
-    typed.dialogueRuleGap === 3 &&
     typed.sourceRuleWidth === 5 &&
     typed.sourceRuleGap === 18 &&
     Math.abs(typed.overlay - 0.4) < 0.001,
@@ -4616,7 +4900,6 @@ async function runNumberInputs(browser) {
     const keys = [
       "highlightHeight",
       "bodyRuleWidth", "bodyRuleGap",
-      "dialogueRuleWidth", "dialogueRuleGap",
       "sourceRuleWidth", "sourceRuleGap",
       "backgroundOverlayOpacity"
     ];
@@ -4742,9 +5025,9 @@ async function runToolbar(browser) {
         lineCount: lines.length,
         rowsPerLine: lines.map(rowsOf),
         order: lines.map(order),
-        /* 3행은 오른쪽으로 붙는다 */
+        /* undo/redo는 1행 오른쪽 끝에 붙는다 (요구사항 4) */
         undoRight: Math.round(
-          lines[2].getBoundingClientRect().right -
+          lines[0].getBoundingClientRect().right -
           document.getElementById("postEditorRedoButton")
             .getBoundingClientRect().right
         ),
@@ -4766,17 +5049,33 @@ async function runToolbar(browser) {
       JSON.stringify({ lines: layout.lineCount, rows: layout.rowsPerLine })
     );
 
+    /*
+      ★ undo/redo가 1행 오른쪽으로 올라왔다 (요구사항 4).
+
+      예전에는 이 둘만 쓰는 3행이 따로 있었다. 삽입 줄(3행)이
+      생기면서 줄이 넷이 되는 대신, 1행에 남는 오른쪽 공간으로
+      옮겼다.
+    */
+
     check(
-      `[toolbar/${viewport}] 1행이 page break · H · P · L · clear 순서다`,
+      `[toolbar/${viewport}] 1행이 page break · H · P · L · clear · undo · redo 순서다`,
       JSON.stringify(layout.order[0]) === JSON.stringify([
         "postEditorPageBreak",
         "postEditorCustomControl",
         "postEditorCustomPointControl",
         "postEditorRuleToggle",
         "postEditorRuleControl",
-        "postEditorClearStyle"
+        "postEditorClearStyle",
+        "postEditorUndoButton",
+        "postEditorRedoButton"
       ]),
       JSON.stringify(layout.order[0])
+    );
+
+    check(
+      `[toolbar/${viewport}] undo · redo가 1행 오른쪽 끝에 붙는다`,
+      layout.undoRight <= 1,
+      String(layout.undoRight)
     );
 
     check(
@@ -4792,15 +5091,46 @@ async function runToolbar(browser) {
       JSON.stringify(layout.order[1])
     );
 
+    /*
+      ★ 3행은 블록 삽입이다 (요구사항 4·5·6·7) —
+      copy box · memo · divider 드롭다운.
+    */
+
     check(
-      `[toolbar/${viewport}] 3행은 undo · redo가 오른쪽 정렬이다`,
+      `[toolbar/${viewport}] 3행이 copy box · memo · divider 순서다`,
       JSON.stringify(layout.order[2]) === JSON.stringify([
-        "postEditorUndoButton",
-        "postEditorRedoButton"
-      ]) &&
-      layout.undoRight <= 1,
-      JSON.stringify({ order: layout.order[2], right: layout.undoRight })
+        "postEditorInsertCopyBox",
+        "postEditorInsertMemo",
+        "postEditorInsertDivider"
+      ]),
+      JSON.stringify(layout.order[2])
     );
+
+    /*
+      ★ 세 행의 왼쪽 시작점이 같다 (요구사항 4).
+
+      1행은 버튼(page break)으로, 2·3행은 라벨(FORMAT / INSERT)로
+      시작한다. 버튼에만 있는 좌우 padding 때문에 예전에는 행마다
+      첫 글자가 6px씩 어긋나 보였다.
+    */
+
+    const starts = await page.evaluate(() => {
+      const toolbar = document.getElementById("postEditorToolbar");
+      const base = toolbar.getBoundingClientRect().left;
+      return Array.from(
+        toolbar.querySelectorAll(".post-editor-tool-line")
+      ).map(line =>
+        Math.round(
+          line.firstElementChild.getBoundingClientRect().left - base
+        ));
+    });
+
+    check(
+      `[toolbar/${viewport}] 세 행의 왼쪽 시작점이 같다`,
+      new Set(starts).size === 1,
+      JSON.stringify(starts)
+    );
+
 
     check(
       `[toolbar/${viewport}] 화면 밖으로 넘지 않고 버튼이 지나치게 작지 않다`,
@@ -4842,7 +5172,7 @@ async function runToolbar(browser) {
       /Line/.test(labels.lTitle) &&
       labels.ruleText === "L" &&
       labels.photoText === "photo" &&
-      labels.labelTexts.join(",") === "H,P,FORMAT",
+      labels.labelTexts.join(",") === "H,P,FORMAT,INSERT",
       JSON.stringify(labels)
     );
 
@@ -5288,6 +5618,825 @@ async function runExcerptPanel(browser) {
 
 
 /* =========================================================
+   blocks — 복사 상자 · 메모 · 구분선 (요구사항 5·6·7·8)
+
+   기준 문서: posts/style/posts-body-blocks.js
+
+   확인 범위
+     삽입 · 편집 · 삭제 · undo/redo
+     저장되는 HTML에 조작 UI가 없다
+     재편집에서 조작 UI가 다시 붙는다
+     복사되는 글자가 **내용만**이고 입력한 그대로다
+     공개 뷰어에는 복사 버튼이, 발췌에는 없다
+     상자 안의 따옴표·별표가 대사/지문으로 바뀌지 않는다
+     긴 상자가 페이지를 넘겨도 내용이 유실되지 않는다
+========================================================== */
+
+/*
+  ★ 사용자가 상자에 **치는** 글자다.
+
+  편집창에서 <b>를 타이핑하면 그것은 태그가 아니라 글자이고,
+  붙여넣기도 plain text 하나뿐이다(posts/editor/posts-richtext-events.js).
+  그래서 본문 HTML에는 escape된 글자로 들어간다 — 아래 HTML fixture가
+  &lt;b&gt;를 쓰는 이유다.
+*/
+
+const BLOCK_COPY_BODY =
+  'const a = `tpl`;\n  두  칸  공백\n"따옴표" <b>태그</b>\n\n빈 줄 위';
+
+
+/* 위 글자를 본문 HTML로 적은 것 — 줄바꿈은 <br>, 꺾쇠는 escape */
+
+const BLOCK_COPY_BODY_HTML =
+  BLOCK_COPY_BODY
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .split("\n")
+    .join("<br>");
+
+const BLOCK_BODY_HTML = (copyBody) => [
+  "첫 문단입니다. 상자 앞에 오는 평범한 글입니다.",
+  "<br><br>",
+  '<div class="post-copy-box">',
+  '<div class="post-copy-box-title">프롬프트</div>',
+  '<div class="post-copy-box-body">' + copyBody + "</div>",
+  "</div>",
+  "<br>",
+  '<div class="post-memo">',
+  '<div class="post-memo-title">메모</div>',
+  '<div class="post-memo-body">본문 중간에 놓인 메모지입니다.<br>두 번째 줄.</div>',
+  "</div>",
+  "<br>",
+  '<div class="post-divider" data-divider="dashed"></div>',
+  "<br>",
+  "상자 뒤에 오는 평범한 문단입니다.",
+  '<br><br>"대사도 그대로 대사로 보여야 한다."'
+].join("");
+
+
+async function runBlocks(browser) {
+  console.log("\n[blocks] 복사 상자 · 메모 · 구분선");
+
+  const { ctx, page, errors } = await openPostEditor(browser, {
+    viewport: "mobile"
+  });
+
+  await page.evaluate((settings) => {
+    postStyleSettings = settings;
+    postEditorContent.innerHTML = "머리말입니다";
+    resetEditorUndoHistory();
+  }, DECOR_SETTINGS);
+  await page.waitForTimeout(200);
+
+  /* ---- 삽입 ---- */
+
+  await caretAtText(page, "머리말");
+  await page.tap("#postEditorInsertCopyBox");
+  await page.waitForTimeout(250);
+
+  const inserted = await page.evaluate(() => ({
+    boxes: postEditorContent.querySelectorAll(".post-copy-box").length,
+    tools: postEditorContent.querySelectorAll(".post-block-tool").length,
+    /* 커서가 부제목 칸으로 들어갔는가 */
+    caretInTitle: Boolean(
+      window.getSelection().anchorNode &&
+      (window.getSelection().anchorNode.closest
+        ? window.getSelection().anchorNode
+        : window.getSelection().anchorNode.parentElement
+      ).closest(".post-copy-box-title")
+    ),
+    undo: editorUndoStack.length
+  }));
+
+  check(
+    "[blocks] copy box를 누르면 커서 자리에 상자가 들어가고 부제목으로 커서가 간다",
+    inserted.boxes === 1 &&
+    inserted.tools === 1 &&
+    inserted.caretInTitle === true &&
+    inserted.undo === 1,
+    JSON.stringify(inserted)
+  );
+
+  /* ---- 다섯 가지 구분선 ---- */
+
+  const kinds = ["solid", "dotted", "dashed", "double", "dots"];
+
+  for (const kind of kinds) {
+    await page.evaluate(() => {
+      const range = document.createRange();
+      range.setStart(postEditorContent, postEditorContent.childNodes.length);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      saveEditorSelection();
+    });
+    await page.selectOption("#postEditorInsertDivider", kind);
+    await page.waitForTimeout(160);
+  }
+
+  const dividers = await page.evaluate(() =>
+    Array.from(postEditorContent.querySelectorAll(".post-divider")).map(node => {
+      const style = getComputedStyle(node);
+      return {
+        kind: node.dataset.divider,
+        border: style.borderTopStyle,
+        width: style.borderTopWidth,
+        marginTop: style.marginTop,
+        tool: Boolean(node.querySelector(".post-block-tool"))
+      };
+    }));
+
+  check(
+    "[blocks] 구분선 다섯 가지가 서로 다르게 그려진다",
+    dividers.length === 5 &&
+    dividers.map(d => d.kind).join(",") === kinds.join(",") &&
+    dividers[0].border === "solid" &&
+    dividers[1].border === "dotted" &&
+    dividers[2].border === "dashed" &&
+    dividers[3].border === "double" &&
+    /* 가운데 점 세 개는 테두리가 아니라 글자로 그린다 */
+    dividers[4].border === "none",
+    JSON.stringify(dividers)
+  );
+
+  check(
+    "[blocks] 구분선의 위아래 여백은 종류와 관계없이 같다",
+    new Set(dividers.map(d => d.marginTop)).size === 1,
+    JSON.stringify(dividers.map(d => d.marginTop))
+  );
+
+  check(
+    "[blocks] 드롭다운은 넣은 뒤 안내 문구로 돌아온다(같은 종류를 연달아 넣을 수 있다)",
+    (await page.inputValue("#postEditorInsertDivider")) === ""
+  );
+
+  /* ---- 종류 변경 · 삭제 · undo ---- */
+
+  await page.selectOption(
+    ".post-divider[data-divider='solid'] .post-block-tool-select",
+    "dots"
+  );
+  await page.waitForTimeout(200);
+
+  check(
+    "[blocks] 넣은 뒤에도 구분선 종류를 바꿀 수 있다",
+    (await page.evaluate(() =>
+      postEditorContent.querySelector(".post-divider").dataset.divider)) === "dots"
+  );
+
+  const beforeDelete = await page.evaluate(() =>
+    postEditorContent.querySelectorAll(".post-divider").length);
+
+  await page.click(".post-divider .post-block-tool-button");
+  await page.waitForTimeout(200);
+
+  const afterDelete = await page.evaluate(() =>
+    postEditorContent.querySelectorAll(".post-divider").length);
+
+  await page.click("#postEditorUndoButton");
+  await page.waitForTimeout(250);
+
+  const afterUndo = await page.evaluate(() => ({
+    dividers: postEditorContent.querySelectorAll(".post-divider").length,
+    tools: postEditorContent.querySelectorAll(".post-block-tool").length
+  }));
+
+  check(
+    "[blocks] 삭제와 undo가 기존 편집기와 같은 칸으로 동작한다",
+    afterDelete === beforeDelete - 1 &&
+    afterUndo.dividers === beforeDelete &&
+    /* undo로 본문을 갈아끼워도 조작 UI가 다시 붙는다 */
+    afterUndo.tools === afterUndo.dividers + 1,
+    JSON.stringify({ beforeDelete, afterDelete, afterUndo })
+  );
+
+  /* ---- 저장 · 재편집 ---- */
+
+  await page.evaluate((html) => {
+    setRichEditorContent(html);
+  }, BLOCK_BODY_HTML(BLOCK_COPY_BODY_HTML));
+  await page.waitForTimeout(250);
+
+  const saved = await page.evaluate(() => getRichEditorHTML());
+
+  check(
+    "[blocks] 저장되는 HTML에 조작 UI가 들어가지 않는다",
+    !saved.includes("post-block-tool") &&
+    !saved.includes("contenteditable") &&
+    !saved.includes("post-copy-box-copy"),
+    saved.slice(0, 200)
+  );
+
+  check(
+    "[blocks] 저장 HTML은 왕복해도 그대로다",
+    (await page.evaluate((html) => {
+      setRichEditorContent(html);
+      return getRichEditorHTML();
+    }, saved)) === saved,
+    saved.slice(0, 160)
+  );
+
+  check(
+    "[blocks] 저장된 글을 다시 열면 조작 UI가 붙는다",
+    (await page.evaluate(() =>
+      postEditorContent.querySelectorAll(".post-block-tool").length)) === 3
+  );
+
+  const codeInBox = await page.evaluate(() => {
+    const body = postEditorContent.querySelector(".post-copy-box-body");
+    return {
+      text: body.textContent.includes("<b>태그</b>"),
+      tags: body.querySelectorAll("b, i, span").length
+    };
+  });
+
+  check(
+    "[blocks] 상자 안의 HTML 코드는 실행되지 않고 글자 그대로 보인다",
+    codeInBox.text === true && codeInBox.tags === 0,
+    JSON.stringify(codeInBox)
+  );
+
+  /*
+    ★ 반대 방향도 확인한다.
+
+    손으로 만든 HTML이나 옛 글에서 상자 안에 **진짜 태그**가 들어와
+    있을 수 있다. 사니타이저는 그 껍데기를 벗기고 글자만 남긴다
+    (posts/posts-sanitize.js의 sanitizeBlockTextInto) — 상자 안은
+    "그대로 보여주고 그대로 복사할 글자"이므로, 서식이 살아나면
+    화면과 복사되는 글자가 달라진다. 줄바꿈만 <br>로 남는다.
+  */
+
+  const rawTagInBox = await page.evaluate(() => {
+    setRichEditorContent(
+      '<div class="post-copy-box">' +
+      '<div class="post-copy-box-title">t</div>' +
+      '<div class="post-copy-box-body">앞<b>굵게</b><div>새 줄</div>뒤</div>' +
+      "</div>"
+    );
+    const body = postEditorContent.querySelector(".post-copy-box-body");
+    return {
+      tags: body.querySelectorAll("b, div").length,
+      text: postCopyBoxPlainText(
+        postEditorContent.querySelector(".post-copy-box"))
+    };
+  });
+
+  check(
+    "[blocks] 상자 안에 들어온 진짜 태그는 껍데기가 벗겨지고 글자만 남는다",
+    rawTagInBox.tags === 0 &&
+    rawTagInBox.text === "앞굵게\n새 줄\n뒤",
+    JSON.stringify(rawTagInBox)
+  );
+
+  await page.evaluate((html) => {
+    setRichEditorContent(html);
+  }, BLOCK_BODY_HTML(BLOCK_COPY_BODY_HTML));
+  await page.waitForTimeout(200);
+
+  /* ---- 복사되는 글자 ---- */
+
+  const copied = await page.evaluate(async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    renderStyledPostContentInto(host, getRichEditorHTML(), postStyleSettings);
+
+    const button = host.querySelector(".post-copy-box-copy");
+    let text = null;
+    navigator.clipboard.writeText = async (value) => { text = value; };
+    button.click();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    return {
+      text,
+      label: button.textContent,
+      state: button.dataset.copyState
+    };
+  });
+
+  check(
+    "[blocks] 복사되는 것은 내용뿐이고 입력한 그대로다(백틱·연속 공백·따옴표·HTML 글자·빈 줄)",
+    copied.text === BLOCK_COPY_BODY,
+    JSON.stringify({ copied: copied.text, expected: BLOCK_COPY_BODY })
+  );
+
+  check(
+    "[blocks] 부제목도 버튼 글자도 장식용 백틱도 복사되지 않는다",
+    !copied.text.includes("프롬프트") &&
+    !copied.text.includes("copy") &&
+    !copied.text.startsWith("```") &&
+    !copied.text.endsWith("```"),
+    JSON.stringify(copied.text)
+  );
+
+  check(
+    "[blocks] 복사에 성공하면 짧게 알린다",
+    copied.label === "copied" && copied.state === "ok",
+    JSON.stringify(copied)
+  );
+
+  const failed = await page.evaluate(async () => {
+    const button = document.querySelector(".post-copy-box-copy");
+    navigator.clipboard.writeText = async () => { throw new Error("denied"); };
+    document.execCommand = () => false;
+    button.click();
+    await new Promise(resolve => setTimeout(resolve, 250));
+    return { label: button.textContent, state: button.dataset.copyState };
+  });
+
+  check(
+    "[blocks] 실패했는데 성공으로 표시하지 않는다",
+    failed.state === "failed" && failed.label !== "copied",
+    JSON.stringify(failed)
+  );
+
+  /* ---- 공개 뷰어 ---- */
+
+  const viewer = await page.evaluate((html) => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    renderStyledPostContentInto(host, html, {
+      ...postStyleSettings,
+      dialogueRuleEnabled: true
+    });
+    return {
+      copyButtons: host.querySelectorAll(".post-copy-box-copy").length,
+      memoCopyButtons: host.querySelectorAll(".post-memo .post-copy-box-copy").length,
+      tools: host.querySelectorAll(".post-block-tool").length,
+      editable: host.querySelectorAll("[contenteditable]").length,
+      dividers: host.querySelectorAll(".post-divider").length,
+      dialogue: host.querySelectorAll(".post-dialogue").length,
+      dialogueInBlock: host.querySelectorAll(
+        ".post-copy-box .post-dialogue, .post-memo .post-dialogue"
+      ).length,
+      ruleAroundBlock: host.querySelectorAll(
+        ".post-para-rule-box .post-copy-box, .post-para-rule-box .post-memo"
+      ).length
+    };
+  }, BLOCK_BODY_HTML(BLOCK_COPY_BODY_HTML));
+
+  check(
+    "[blocks] 공개 뷰어에는 복사 버튼만 있고 편집·삭제 UI는 없다",
+    viewer.copyButtons === 1 &&
+    viewer.memoCopyButtons === 0 &&
+    viewer.tools === 0 &&
+    viewer.editable === 0,
+    JSON.stringify(viewer)
+  );
+
+  check(
+    "[blocks] 상자 안의 따옴표가 대사로 바뀌지 않고, 본문의 대사는 그대로 대사다",
+    viewer.dialogueInBlock === 0 && viewer.dialogue === 1,
+    JSON.stringify(viewer)
+  );
+
+  check(
+    "[blocks] 문단 강조선이 상자를 감싸지 않는다",
+    viewer.ruleAroundBlock === 0,
+    JSON.stringify(viewer)
+  );
+
+  /* ---- 발췌 ---- */
+
+  await page.evaluate((args) => {
+    postStyleSettings = { ...args.settings, dialogueRuleEnabled: true };
+    setRichEditorContent(args.html);
+  }, {
+    settings: DECOR_SETTINGS,
+    html: BLOCK_BODY_HTML("짧은 내용<br>두 줄")
+  });
+  await page.evaluate(() => updateEditorPreview());
+  await page.waitForTimeout(900);
+
+  const excerpt = await page.evaluate(() => {
+    const pages = Array.from(document.querySelectorAll(
+      "#postEditorPreviewPages .post-editor-preview-page"));
+    return {
+      pages: pages.length,
+      boxes: document.querySelectorAll("#postEditorPreviewPages .post-copy-box").length,
+      memos: document.querySelectorAll("#postEditorPreviewPages .post-memo").length,
+      dividers: document.querySelectorAll("#postEditorPreviewPages .post-divider").length,
+      copyButtons: document.querySelectorAll(
+        "#postEditorPreviewPages .post-copy-box-copy").length,
+      tools: document.querySelectorAll("#postEditorPreviewPages .post-block-tool").length,
+      titleKept: pages.map(p => p.textContent).join("").includes("프롬프트"),
+      overflowX: pages.some(p => p.scrollWidth > p.clientWidth + 1)
+    };
+  });
+
+  check(
+    "[blocks] 발췌에는 제목·내용·외형이 남고 조작 아이콘은 빠진다",
+    excerpt.boxes === 1 &&
+    excerpt.memos === 1 &&
+    excerpt.dividers === 1 &&
+    excerpt.titleKept === true &&
+    excerpt.copyButtons === 0 &&
+    excerpt.tools === 0,
+    JSON.stringify(excerpt)
+  );
+
+  check(
+    "[blocks] 발췌에서 상자가 가로로 넘치지 않는다",
+    excerpt.overflowX === false,
+    JSON.stringify(excerpt)
+  );
+
+  /* ---- 페이지보다 긴 상자 ---- */
+
+  const longBody = Array.from(
+    { length: 40 },
+    (unused, index) => `${index + 1}번째 줄입니다. 상자가 한 장을 넘길 만큼 길어야 합니다.`
+  );
+
+  const startedAt = Date.now();
+
+  await page.evaluate((html) => {
+    setRichEditorContent(html);
+  }, BLOCK_BODY_HTML(longBody.join("<br>")));
+  await page.evaluate(() => updateEditorPreview());
+  await page.waitForTimeout(2500);
+
+  const elapsed = Date.now() - startedAt;
+
+  const long = await page.evaluate(() => {
+    const pages = Array.from(document.querySelectorAll(
+      "#postEditorPreviewPages .post-editor-preview-page"));
+    const all = pages.map(p => p.textContent).join("");
+    return {
+      pages: pages.length,
+      boxes: document.querySelectorAll("#postEditorPreviewPages .post-copy-box").length,
+      first: all.includes("1번째 줄입니다"),
+      last: all.includes("40번째 줄입니다"),
+      after: all.includes("상자 뒤에 오는 평범한 문단입니다")
+    };
+  });
+
+  check(
+    "[blocks] 페이지보다 긴 상자도 쪼개지지 않고 내용이 유실되지 않는다",
+    long.boxes === 1 && long.first && long.last && long.after,
+    JSON.stringify(long)
+  );
+
+  check(
+    "[blocks] 긴 상자에서 페이지 분할이 무한히 반복되지 않는다",
+    long.pages >= 1 && long.pages <= 12 && elapsed < 20000,
+    `${long.pages}장 / ${elapsed}ms`
+  );
+
+  /* ---- clear가 블록을 지우지 않는다 ---- */
+
+  await page.evaluate((html) => {
+    setRichEditorContent(html);
+    resetEditorUndoHistory();
+  }, BLOCK_BODY_HTML("짧은 내용"));
+  await page.waitForTimeout(200);
+
+  await page.evaluate(() => {
+    postEditorContent.focus();
+    const range = document.createRange();
+    range.selectNodeContents(postEditorContent);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    saveEditorSelection();
+  });
+
+  await page.click("#postEditorClearStyle");
+  await page.waitForTimeout(300);
+
+  const afterClear = await page.evaluate(() => ({
+    boxes: postEditorContent.querySelectorAll(".post-copy-box").length,
+    memos: postEditorContent.querySelectorAll(".post-memo").length,
+    dividers: postEditorContent.querySelectorAll(".post-divider").length,
+    body: postEditorContent.querySelector(".post-copy-box-body")?.textContent
+  }));
+
+  check(
+    "[blocks] clear가 복사 박스·메모·구분선을 임의로 삭제하지 않는다",
+    afterClear.boxes === 1 &&
+    afterClear.memos === 1 &&
+    afterClear.dividers === 1 &&
+    afterClear.body === "짧은 내용",
+    JSON.stringify(afterClear)
+  );
+
+  check("[blocks] 오류 없음", errors.length === 0, errors.join(" | "));
+  await ctx.close();
+}
+
+
+/* =========================================================
+   html — 바깥 코드 울타리 제거 · 디자인 PNG (요구사항 9·10)
+
+   기준 문서
+     posts/posts-format.js          stripOuterHtmlCodeFence
+     posts/export/posts-html-image.js  디자인 → PNG
+
+   확인 범위
+     감싼 울타리만 벗기고 안쪽 백틱·따옴표는 남는다
+     저장된 글자는 고치지 않는다(렌더에서만 벗긴다)
+     여러 번 그려도 더 깎이지 않는다
+     HTML 모드에서 미리보기와 export가 살아난다
+     저장되는 PNG에 OOC·제목·사이트 UI가 들어가지 않는다
+     실제 PNG를 디코드해 크기와 내용(빈 이미지 아님)을 확인한다
+========================================================== */
+
+const HTML_DESIGN_INNER = [
+  '<div style="background:#1b2333;padding:40px;color:#ffd24d;font-family:sans-serif">',
+  '  <div style="font-size:11px;letter-spacing:3px;color:#9fb0c9">CONFIDENTIAL</div>',
+  '  <h1 style="font-size:30px;margin:14px 0">&lt;ARCH&gt; 평가 보고서</h1>',
+  '  <div style="height:3px;background:#ffd24d;margin:18px 0"></div>',
+  '  <p style="color:#e6edf7;line-height:1.9">본 보고서는 `백틱`과 "따옴표"를 포함한다.</p>',
+  '  <div style="background:#27314a;padding:18px;margin-top:18px;border-left:4px solid #ffd24d">',
+  '    <b style="color:#fff">평가 개요</b>',
+  '    <p style="color:#c9d6ea">두 요원은 극초기 불안정한 관계에서 시작하였다.</p>',
+  "  </div>",
+  "</div>"
+].join("\n");
+
+const HTML_DESIGN_FENCED = "```html\n" + HTML_DESIGN_INNER + "\n```";
+
+
+async function runHtmlImage(browser) {
+  console.log("\n[html] 바깥 코드 울타리 · 디자인 PNG");
+
+  const { ctx, page, errors } = await openPostEditor(browser);
+
+  /* ---- 울타리 벗기기 규칙 ---- */
+
+  const fence = await page.evaluate(() => {
+    const cases = {
+      basic: "```html\n<div>hi</div>\n```",
+      spaced: "\n\n  ```HTML  \n<div>hi</div>\n```  \n\n",
+      noLang: "```\n<div>hi</div>\n```",
+      tilde: "~~~html\n<div>hi</div>\n~~~",
+      plain: "<div>hi</div>",
+      innerBacktick: "<div>a `b` c</div>",
+      innerFence: "```html\n<p>code: ```x``` 입니다</p>\n```",
+      mismatched: "```html\n<div>hi</div>\n~~~",
+      twoBlocks: "```html\n<div>a</div>\n```\n\n```html\n<div>b</div>\n```"
+    };
+
+    const out = {};
+    Object.entries(cases).forEach(([key, value]) => {
+      out[key] = stripOuterHtmlCodeFence(value);
+      /* 같은 원본에서 두 번 벗겨도 결과가 같아야 한다 */
+      out[key + "Stable"] =
+        stripOuterHtmlCodeFence(value) === stripOuterHtmlCodeFence(value);
+    });
+    return out;
+  });
+
+  check(
+    "[html] 감싼 울타리(언어 표기·앞뒤 공백 포함)만 벗긴다",
+    fence.basic === "<div>hi</div>" &&
+    fence.spaced === "<div>hi</div>" &&
+    fence.noLang === "<div>hi</div>" &&
+    fence.tilde === "<div>hi</div>",
+    JSON.stringify(fence)
+  );
+
+  check(
+    "[html] 울타리가 아닌 글은 손대지 않고, 안쪽 백틱·따옴표는 남는다",
+    fence.plain === "<div>hi</div>" &&
+    fence.innerBacktick === "<div>a `b` c</div>" &&
+    fence.innerFence === "<p>code: ```x``` 입니다</p>",
+    JSON.stringify(fence)
+  );
+
+  check(
+    "[html] 짝이 맞지 않거나 블록이 둘 이상이면 벗기지 않는다(전역 치환이 아니다)",
+    fence.mismatched.startsWith("```html") &&
+    fence.twoBlocks.startsWith("```html") &&
+    fence.twoBlocks.includes("<div>b</div>"),
+    JSON.stringify(fence)
+  );
+
+  check(
+    "[html] 같은 원본을 몇 번 그려도 더 깎이지 않는다",
+    Object.keys(fence).filter(k => k.endsWith("Stable")).every(k => fence[k] === true),
+    JSON.stringify(fence)
+  );
+
+  /* ---- 공개 화면 ---- */
+
+  const viewer = await page.evaluate(async (html) => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await renderPostBodyInto(host, "html", html, null);
+    return {
+      hasFence: host.textContent.includes("```"),
+      hasDesign: Boolean(host.querySelector("h1")),
+      keepsBacktick: host.textContent.includes("`백틱`"),
+      keepsQuotes: host.textContent.includes('"따옴표"')
+    };
+  }, HTML_DESIGN_FENCED);
+
+  check(
+    "[html] 공개 화면에서 바깥 울타리가 글자로 보이지 않는다",
+    viewer.hasFence === false &&
+    viewer.hasDesign === true &&
+    viewer.keepsBacktick === true &&
+    viewer.keepsQuotes === true,
+    JSON.stringify(viewer)
+  );
+
+  /* ---- HTML 모드의 미리보기 ---- */
+
+  await page.evaluate((html) => {
+    postEditorTitle.value = "html test";
+    postEditorOOC.value = "[OOC: 이 글은 저장되는 이미지에 들어가면 안 된다]";
+    postEditorHtmlContent.value = html;
+    setEditorContentMode("html");
+  }, HTML_DESIGN_FENCED);
+  await page.waitForTimeout(300);
+
+  if (!(await page.evaluate(() => editorPreviewIsOpen()))) {
+    await page.click("#postEditorPreviewToggle");
+  }
+  await page.waitForTimeout(700);
+
+  const panel = await page.evaluate(() => {
+    const stage = document.getElementById("postEditorHtmlPreviewStage");
+    return {
+      toggleVisible: postEditorPreviewToggle.hidden === false,
+      exportVisible: postEditorExportButton.hidden === false,
+      /* copy(발췌 이미지 복사)는 HTML 모드에 없다 */
+      copyVisible: postEditorCopyButton.hidden === false,
+      htmlPreviewVisible: document.getElementById("postEditorHtmlPreview").hidden === false,
+      /* Quote Preset 발췌 대지와 설정은 숨는다 */
+      quoteStage: getComputedStyle(
+        document.getElementById("postEditorPreviewStage")).display,
+      settings: getComputedStyle(
+        document.querySelector(".post-editor-preview-visibility-controls")).display,
+      hasFence: (stage?.textContent || "").includes("```"),
+      hasDesign: Boolean(stage?.querySelector("h1")),
+      /* 캡처 대상 안에 사이트 UI가 없다 */
+      siteUi: stage
+        ? stage.querySelectorAll(
+            ".post-editor-button, .post-editor-toolbar, .post-detail-ooc").length
+        : -1,
+      oocText: (stage?.textContent || "").includes("OOC"),
+      titleText: (stage?.textContent || "").includes("html test"),
+      width: stage?.scrollWidth,
+      height: stage?.scrollHeight
+    };
+  });
+
+  check(
+    "[html] HTML 모드에서도 발췌 여닫기와 export가 살아 있다(별도 사이트로 보내지 않는다)",
+    panel.toggleVisible === true &&
+    panel.exportVisible === true &&
+    panel.htmlPreviewVisible === true,
+    JSON.stringify(panel)
+  );
+
+  check(
+    "[html] Quote Preset 발췌 대지와 설정은 HTML 모드에서 숨는다(디자인을 덮어쓰지 않는다)",
+    panel.quoteStage === "none" &&
+    panel.settings === "none" &&
+    panel.copyVisible === false,
+    JSON.stringify(panel)
+  );
+
+  check(
+    "[html] 미리보기가 울타리 없이 디자인을 그린다",
+    panel.hasFence === false &&
+    panel.hasDesign === true &&
+    panel.width > 0 &&
+    panel.height > 0,
+    JSON.stringify(panel)
+  );
+
+  check(
+    "[html] 캡처 대상 안에 OOC·글 제목·사이트 UI가 없다",
+    panel.siteUi === 0 &&
+    panel.oocText === false &&
+    panel.titleText === false,
+    JSON.stringify(panel)
+  );
+
+  /* ---- 실제 PNG ---- */
+
+  const shot = await page.evaluate(async () => {
+    try {
+      const result = await captureEditorHtmlAsBlob();
+      const bytes = new Uint8Array(await result.blob.arrayBuffer());
+      let binary = "";
+      for (let i = 0; i < bytes.length; i += 8192) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
+      }
+      return {
+        ok: true,
+        width: result.width,
+        height: result.height,
+        failedImages: result.failedImages,
+        capped: result.capped,
+        base64: btoa(binary)
+      };
+    } catch (error) {
+      return { ok: false, message: String(error.message) };
+    }
+  });
+
+  check(
+    "[html] 디자인이 PNG로 저장된다",
+    shot.ok === true,
+    shot.ok ? `${shot.width}×${shot.height}` : shot.message
+  );
+
+  if (shot.ok) {
+    const png = decodePng(Buffer.from(shot.base64, "base64"));
+
+    const pixel = (x, y) => {
+      const at = y * png.stride + x * png.channels;
+      return [png.pixels[at], png.pixels[at + 1], png.pixels[at + 2]];
+    };
+
+    /* 표시 크기가 아니라 레이아웃 크기 × 배율로 저장된다 */
+    check(
+      "[html] 모바일 축소 표시가 아니라 목표 해상도로 저장된다",
+      png.width === 1200 && png.height === shot.height,
+      `${png.width}×${png.height} (레이아웃 ${panel.width}×${panel.height})`
+    );
+
+    const colors = new Set();
+    for (let y = 0; y < png.height; y += 13) {
+      for (let x = 0; x < png.width; x += 13) {
+        colors.add(pixel(x, y).join(","));
+      }
+    }
+
+    check(
+      "[html] 저장된 PNG가 빈 이미지가 아니다",
+      colors.size > 3,
+      `서로 다른 색 ${colors.size}가지`
+    );
+
+    /*
+      맨 아랫줄이 디자인의 배경색이면 아래가 잘리지 않았다는 뜻이다
+      (잘렸다면 캡처 배경인 흰색이 남는다).
+    */
+    const bottom = pixel(Math.floor(png.width / 2), png.height - 3);
+
+    check(
+      "[html] 스크롤 밖 부분까지 포함되고 아래가 잘리지 않는다",
+      Math.abs(bottom[0] - 27) <= 6 &&
+      Math.abs(bottom[1] - 35) <= 6 &&
+      Math.abs(bottom[2] - 51) <= 6,
+      `맨 아래 픽셀 ${bottom.join(",")} (디자인 배경 27,35,51)`
+    );
+
+    check(
+      "[html] 누락 없이 저장됐다고만 말하지 않는다(못 읽은 이미지 수를 센다)",
+      shot.failedImages === 0 && shot.capped === false,
+      JSON.stringify({ failedImages: shot.failedImages, capped: shot.capped })
+    );
+
+    if (process.env.IMORY_HTML_SHOT) {
+      const target = path.join(process.env.IMORY_HTML_SHOT, "html-design.png");
+      fs.writeFileSync(target, Buffer.from(shot.base64, "base64"));
+      console.log(`  INFO  저장된 PNG: ${target}`);
+    }
+  }
+
+  /* ---- 빈 HTML은 실패 이유를 말한다 ---- */
+
+  const empty = await page.evaluate(async () => {
+    postEditorHtmlContent.value = "";
+    renderEditorHtmlPreview();
+    try {
+      await captureEditorHtmlAsBlob();
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: String(error.message) };
+    }
+  });
+
+  check(
+    "[html] 저장할 것이 없으면 조용히 성공하지 않고 이유를 말한다",
+    empty.ok === false && empty.message.length > 0,
+    JSON.stringify(empty)
+  );
+
+  /* ---- 저장된 글자는 고치지 않는다 ---- */
+
+  check(
+    "[html] 편집창의 HTML 칸에는 저장된 글자가 그대로 보인다(데이터를 덮어쓰지 않는다)",
+    (await page.evaluate((html) => {
+      postEditorHtmlContent.value = html;
+      renderEditorHtmlPreview();
+      return postEditorHtmlContent.value;
+    }, HTML_DESIGN_FENCED)) === HTML_DESIGN_FENCED
+  );
+
+  check("[html] 오류 없음", errors.length === 0, errors.join(" | "));
+  await ctx.close();
+}
+
+
+/* =========================================================
    RUN
 ========================================================== */
 
@@ -5311,6 +6460,8 @@ async function runExcerptPanel(browser) {
     if (shouldRun("gap")) await runRuleGap(browser);
     if (shouldRun("toolbar")) await runToolbar(browser);
     if (shouldRun("excerpt")) await runExcerptPanel(browser);
+    if (shouldRun("blocks")) await runBlocks(browser);
+    if (shouldRun("html")) await runHtmlImage(browser);
   } finally {
     await browser.close();
     server.close();

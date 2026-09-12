@@ -134,20 +134,24 @@ postEditorPreviewNext
 /* =========================================================
    색 컨트롤 (HIGHLIGHT · POINT COLOR · 강조선)
 
-   ★ 세 컨트롤이 **완전히 같은 방식**으로 동작한다(요구사항 1).
+   ★ 세 컨트롤이 **완전히 같은 방식**으로 동작한다.
 
      1. pointerdown에서 기본 동작을 막고 지금 선택을 붙잡는다.
         버튼이 포커스를 훔치지 않으므로 본문 선택이 그대로 남는다.
-     2. click에서 우리가 그리는 컬러피커 팝오버를 연다
-        (posts/editor/posts-color-picker.js).
-     3. 팝오버가 열리는 순간 undo 스냅샷을 **한 번만** 찍는다.
-        드래그하는 동안의 색 변화는 전부 live 모드라 스냅샷을
-        더 쌓지 않는다 — 확정 한 번이 undo 한 칸이다.
-     4. Apply  지금 색으로 확정.
-        Cancel / 바깥 클릭 / Escape  → 열기 전 상태로 되돌린다
-        (방금 찍은 스냅샷을 되감고 그 칸도 없앤다 — undo 기록에
-        흔적이 남지 않는다).
-        remove  선택 범위에서 그 서식만 걷어낸다(다른 서식은
+     2. pointerup에서 **프리셋 색 목록**을 연다 (요구사항 2 —
+        openImoryColorMenu, posts/editor/posts-color-picker.js).
+     3. 목록에서 색을 고르면 그 자리에서 확정이고 undo 한 칸이다.
+        목록만 열고 닫으면 undo 기록에 아무 흔적이 없다.
+     4. 목록 안의 **직접 선택**으로 넘어가면 컬러피커가 열린다.
+        손가락이 주 입력인 기기에서는 OS 기본 피커, 그 외에는
+        우리 팝오버다. 어느 쪽이든 조정 전체가 undo 한 칸이다
+        (창이 열리기 직전에 스냅샷을 한 번만 찍는다).
+     5. 커스텀 팝오버에서만
+          Apply   지금 색으로 확정.
+          Cancel / 바깥 클릭 / Escape  → 열기 전 상태로 되돌린다
+          (찍어 둔 스냅샷을 되감고 그 칸도 없앤다).
+        기본 피커에는 Cancel이 없다 — 되돌리는 길은 Undo 한 번이다.
+     6. clear/remove  선택 범위에서 그 서식만 걷어낸다(다른 서식은
         그대로). 이건 되돌릴 수 있는 변경이라 스냅샷을 남긴다.
 ========================================================== */
 
@@ -227,25 +231,36 @@ function revertEditorToLastSnapshot() {
 
 
 /*
-  컬러피커 하나를 여는 공통 경로.
+  색 컨트롤 하나의 전체 흐름 (요구사항 2).
 
     apply(color, live)   색을 실제로 바르는 함수
-    remove()             그 서식만 걷어내는 함수(없으면 remove 버튼 숨김)
+    remove()             그 서식만 걷어내는 함수(없으면 버튼 숨김)
     current()            지금 색
-    preset()             프리셋 기본값(스와치 맨 앞에 고정)
-    remember(color)      확정된 색을 툴바 스와치에 반영
+    preset()             프리셋 기본값(목록 맨 앞에 고정)
+    remember(color)      확정된 색을 툴바 견본에 반영
     requireSelection     텍스트 선택이 반드시 있어야 하는가
+
+  ★ 두 단계다
+
+    1단계  색 견본을 누르면 **프리셋 색 목록**이 뜬다
+           (openImoryColorMenu). 여기서 색을 고르면 그대로
+           확정이고 — undo 한 칸 — 목록이 닫힌다.
+
+    2단계  목록 안의 직접 선택으로 넘어가면 컬러피커가 열린다.
+           손가락이 주 입력인 기기에서는 OS 기본 피커,
+           그 외에는 우리 팝오버다.
+
+  ★ 스냅샷은 "바꾸기 직전"에만 찍는다
+
+    목록만 열고 닫으면 undo 기록에 아무 흔적이 없어야 한다.
+    그래서 목록을 여는 것만으로는 스냅샷을 찍지 않고, 색을
+    고르는 순간(프리셋) 또는 직접 선택 창이 열리기 직전(자리
+    만들기)에 찍는다.
 */
 
-function openEditorFormatColorPicker(
-  anchor,
+function editorColorPickerSelectionReady(
   options
 ) {
-
-  if (!postEditorContent) {
-    return;
-  }
-
 
   if (
     options.requireSelection &&
@@ -260,32 +275,46 @@ function openEditorFormatColorPicker(
     );
 
 
-    return;
+    return false;
 
   }
 
 
-  pushEditorUndoSnapshot(
-    true
-  );
+  return true;
 
+}
+
+
+/*
+  2단계 — 커스텀 팝오버(데스크톱 · 기본 피커를 못 쓰는 환경).
+  Apply/Cancel/Escape/바깥 클릭의 뜻은 예전 그대로다.
+*/
+
+function openEditorCustomColorPicker(
+  anchor,
+  options,
+  seeded
+) {
 
   /*
-    여기부터 창이 닫힐 때까지가 **한 번의 조정**이다. 첫 색만
-    본문 구조를 바꾸고, 그 뒤로는 만들어 둔 자리의 색만 갈아끼운다
-    (posts/editor/format/posts-editor-highlight.js §live).
+    seeded=true면 직접 선택 칸이 이미 스냅샷을 찍고 씨앗을
+    발라 둔 상태다(기본 피커가 열리지 않아 여기로 넘어온
+    경우) — 스냅샷을 또 찍으면 undo가 두 칸이 된다.
   */
 
-  beginEditorInlineColorSession();
+  if (!seeded) {
+
+    pushEditorUndoSnapshot(
+      true
+    );
 
 
-  /*
-    강조선 쪽 세션도 여기서 비운다 — 지난번에 조정하던 문단의
-    마커가 남아 있으면 이번에 고른 문단이 아니라 그 문단의 색이
-    바뀐다.
-  */
+    beginEditorInlineColorSession();
 
-  endEditorParagraphRuleSession();
+
+    endEditorParagraphRuleSession();
+
+  }
 
 
   const finishColorSession =
@@ -297,123 +326,6 @@ function openEditorFormatColorPicker(
       endEditorParagraphRuleSession();
 
     };
-
-
-  /*
-    ★ 기본(OS) 색상 선택기 경로
-
-    손가락이 주 입력인 기기에서는 아이폰이 띄우는 기본 피커를
-    쓴다(posts/editor/posts-color-picker.js). 창이 열리면 포커스와
-    선택이 그쪽으로 가므로, **아직 선택이 살아 있는 지금** 지금
-    색을 한 번 발라 자리를 만들어 둔다. 그 뒤의 색 변화는 그
-    자리의 색만 바꾸므로 본문도 선택도 건드리지 않는다.
-
-    기본 피커에는 Cancel이 없다 — 되돌리는 길은 Undo 한 번이고,
-    방금 찍은 스냅샷 하나가 정확히 그 한 칸이다.
-  */
-
-  if (
-    typeof imoryColorPickerMode === "function" &&
-    imoryColorPickerMode() === "native"
-  ) {
-
-    const startColor =
-      options.current();
-
-
-    options.remember?.(
-      startColor
-    );
-
-
-    const seeded =
-      options.apply(
-        startColor,
-        true
-      );
-
-
-    /*
-      바를 자리가 없으면(강조선인데 문단을 못 찾는 등) 스냅샷을
-      도로 걷어내고 아무 일도 없던 것으로 둔다.
-    */
-
-    if (seeded === false) {
-
-      editorUndoStack.pop();
-
-
-      syncEditorUndoButtonState();
-
-
-      finishColorSession();
-
-
-      return;
-
-    }
-
-
-    const opened =
-      openImoryNativeColorPicker(
-        {
-
-          anchor,
-
-          color:
-            startColor,
-
-          onPreview:
-            color => {
-
-              options.remember?.(
-                color
-              );
-
-
-              options.apply(
-                color,
-                true
-              );
-
-            },
-
-          onApply:
-            color => {
-
-              options.remember?.(
-                color
-              );
-
-
-              options.apply(
-                color,
-                true
-              );
-
-
-              finishColorSession();
-
-            }
-
-        }
-      );
-
-
-    if (opened) {
-
-      return;
-
-    }
-
-
-    /*
-      기본 피커를 열지 못했으면 커스텀 팝오버로 이어간다 —
-      씨앗은 이미 발라 뒀으므로 아래 세션이 그 자리를 그대로
-      이어받는다.
-    */
-
-  }
 
 
   openImoryColorPicker(
@@ -478,6 +390,230 @@ function openEditorFormatColorPicker(
           ? () => {
 
               finishColorSession();
+
+
+              options.remove();
+
+            }
+          : null
+
+    }
+  );
+
+}
+
+
+function openEditorFormatColorPicker(
+  anchor,
+  options
+) {
+
+  if (!postEditorContent) {
+    return;
+  }
+
+
+  if (
+    !editorColorPickerSelectionReady(
+      options
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+    ★ 직접 선택 창이 열리기 직전에 부른다.
+
+    OS 창이 열리면 포커스와 선택이 그쪽으로 가므로, **아직
+    선택이 살아 있는 지금** 지금 색을 한 번 발라 자리를 만들어
+    둔다. 그 뒤의 색 변화는 그 자리의 색만 바꾸므로 본문도
+    선택도 건드리지 않는다 — 조정 중에 DOM이 다시 만들어지거나
+    selectionchange가 반복되지 않는다.
+
+    바를 자리가 없으면(강조선인데 문단을 못 찾는 등) 스냅샷을
+    도로 걷어내고 아무 일도 없던 것으로 둔다.
+  */
+
+  const beginDirect =
+    () => {
+
+      pushEditorUndoSnapshot(
+        true
+      );
+
+
+      beginEditorInlineColorSession();
+
+
+      endEditorParagraphRuleSession();
+
+
+      const startColor =
+        options.current();
+
+
+      options.remember?.(
+        startColor
+      );
+
+
+      const seeded =
+        options.apply(
+          startColor,
+          true
+        );
+
+
+      if (seeded === false) {
+
+        editorUndoStack.pop();
+
+
+        syncEditorUndoButtonState();
+
+
+        endEditorInlineColorSession();
+
+
+        endEditorParagraphRuleSession();
+
+
+        return false;
+
+      }
+
+
+      return true;
+
+    };
+
+
+  openImoryColorMenu(
+    {
+
+      anchor,
+
+      color:
+        options.current(),
+
+      presetColor:
+        options.preset(),
+
+      removeLabel:
+        options.removeLabel,
+
+
+      /*
+        1단계 — 목록에서 고른 색. 그 자리에서 확정이고 undo
+        한 칸이다(apply(color, false)가 스냅샷을 찍는다).
+      */
+
+      onPickPreset:
+        color => {
+
+          endEditorInlineColorSession();
+
+
+          endEditorParagraphRuleSession();
+
+
+          options.remember?.(
+            color
+          );
+
+
+          options.apply(
+            color,
+            false
+          );
+
+        },
+
+
+      /* 2단계 — 기본(OS) 피커 */
+
+      onCustomBegin:
+        beginDirect,
+
+      onCustomPreview:
+        color => {
+
+          options.remember?.(
+            color
+          );
+
+
+          options.apply(
+            color,
+            true
+          );
+
+        },
+
+      onCustomApply:
+        color => {
+
+          options.remember?.(
+            color
+          );
+
+
+          options.apply(
+            color,
+            true
+          );
+
+
+          endEditorInlineColorSession();
+
+
+          endEditorParagraphRuleSession();
+
+        },
+
+
+      /*
+        기본 피커가 열리지 않았다 — 씨앗은 이미 발라 뒀으므로
+        팝오버가 그 자리를 그대로 이어받는다(seeded=true).
+      */
+
+      onCustomFallback:
+        () => {
+
+          openEditorCustomColorPicker(
+            anchor,
+            options,
+            true
+          );
+
+        },
+
+
+      /* 2단계 — 기본 피커를 아예 쓸 수 없는 환경 */
+
+      onCustom:
+        () => {
+
+          openEditorCustomColorPicker(
+            anchor,
+            options,
+            false
+          );
+
+        },
+
+
+      onRemove:
+        options.remove
+          ? () => {
+
+              endEditorInlineColorSession();
+
+
+              endEditorParagraphRuleSession();
 
 
               options.remove();

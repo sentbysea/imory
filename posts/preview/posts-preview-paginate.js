@@ -112,6 +112,13 @@ function renderEditorPreviewPages(
     settings,
     {
       keepPageBreaks:
+        true,
+
+      /*
+        발췌는 이미지로 저장된다 — 복사 버튼 같은 조작 UI가
+        들어가면 안 된다(요구사항 8).
+      */
+      forExcerpt:
         true
     }
   );

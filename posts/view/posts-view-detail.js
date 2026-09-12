@@ -1350,9 +1350,19 @@ async function renderPostBodyInto(
     );
 
 
+    /*
+      ★ 붙여 넣은 HTML을 감싼 마크다운 코드 울타리만 벗긴다
+      (요구사항 9). 저장된 글자는 그대로 두고 **그릴 때** 한 겹만
+      벗기므로 기존 글을 일괄로 고칠 필요가 없고, 매번 같은
+      원본에서 한 겹씩만 벗기니 몇 번을 다시 그려도 결과가 같다
+      (posts/posts-format.js의 stripOuterHtmlCodeFence).
+    */
+
     target.innerHTML =
-      contentText ||
-      "";
+      stripOuterHtmlCodeFence(
+        contentText ||
+        ""
+      );
 
 
     return;
@@ -1451,9 +1461,13 @@ async function renderPostDetailBody(
       );
 
 
+      /* 위와 같은 이유 — 바깥 울타리만 벗긴다(요구사항 9) */
+
       postDetailContent.innerHTML =
-        contentText ||
-        "";
+        stripOuterHtmlCodeFence(
+          contentText ||
+          ""
+        );
 
 
       /*

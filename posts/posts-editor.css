@@ -147,11 +147,6 @@
 }
 
 
-.post-editor-tool-line--end {
-  justify-content: flex-end;
-}
-
-
 .post-editor-tool-group {
   display: flex;
   align-items: center;
@@ -163,10 +158,9 @@
   min-height: 24px;
 
   /*
-    색 버튼이 여는 숨은 <input type="color">가 이 안에 자리잡게
-    한다 — 그 칸에 포커스가 갈 때 브라우저가 화면을 끌어다
-    맞추므로, 엉뚱한 곳에 있으면 툴바가 튄다.
-    (.imory-native-color-input, position: absolute)
+    색 견본이 여는 목록·팝오버의 좌표 기준. 목록 자체는
+    position:fixed라 이 값에 매이지 않지만, 그룹 안에 절대배치
+    요소가 생길 때 기준이 툴바 바깥으로 새지 않게 둔다.
   */
   position: relative;
 }
@@ -183,6 +177,21 @@
 }
 
 
+/*
+  ★ undo/redo를 1행 오른쪽 끝으로 미는 빈 칸 (요구사항 4).
+
+  flex-shrink는 기본값(1) 그대로 둔다 — 행이 좁아지면 이 칸이
+  먼저 0까지 줄어들고, 그 다음에야 가로 스크롤이 생긴다. 버튼을
+  작게 만들지 않고 공간만 양보하는 순서다.
+*/
+
+.post-editor-tool-spacer {
+  flex: 1 1 auto;
+
+  min-width: 0;
+}
+
+
 .post-editor-tool-label {
   margin-right: 2px;
 
@@ -196,6 +205,28 @@
   color: #b3b3b3;
 
   user-select: none;
+}
+
+
+/*
+  ★ 세 행의 왼쪽 시작점을 맞춘다 (요구사항 4).
+
+  1행은 버튼(page break)으로, 2·3행은 라벨(FORMAT / INSERT)로
+  시작한다. .post-editor-tool-button은 좌우 padding 6px를 갖고
+  라벨은 갖지 않아서, 행마다 첫 글자가 6px씩 어긋나 보였다.
+  행의 첫 요소가 라벨일 때만 같은 padding을 준다.
+
+  세로 기준선도 같은 이유로 맞춘다 — 버튼은 padding 4px에
+  line-height 1이라 높이가 17px 남짓인데, 라벨은 line-height 1
+  뿐이라 8px이었다. 행이 align-items:center라 가운데는 맞지만
+  글자 크기가 달라(9px vs 8px) 기준선이 1px씩 놀았다.
+  라벨의 line-height를 버튼의 내용 높이에 맞춘다.
+*/
+
+.post-editor-tool-line > .post-editor-tool-label:first-child {
+  padding-left: 6px;
+
+  line-height: 17px;
 }
 
 
@@ -873,33 +904,6 @@
 }
 
 
-/* =========================================================
-   기본(OS) 색상 선택기를 여는 숨은 칸
-
-   기준 문서: posts/editor/posts-color-picker.js
-
-   손가락이 주 입력인 기기에서 컬러 버튼이 여는 <input type="color">.
-   보이지는 않지만 **살아 있어야** 한다 — display:none이나
-   visibility:hidden을 걸면 활성화 자체가 막히는 브라우저가 있다.
-   그래서 크기를 1px로 두고 투명하게만 만든다. 포인터는 받지
-   않는다(누르는 자리는 어디까지나 옆의 버튼이다).
-========================================================== */
-
-.imory-native-color-input {
-  position: absolute;
-
-  width: 1px;
-  height: 1px;
-
-  padding: 0;
-  margin: 0;
-  border: 0;
-
-  opacity: 0;
-
-  pointer-events: none;
-}
-
 
 /* =========================================================
    컬러피커 팝오버
@@ -946,6 +950,22 @@
      색을 고르는 동안 본문 선택이 흔들리는 것을 막는다. */
   user-select: none;
   -webkit-user-select: none;
+}
+
+
+/*
+  ★ [hidden]만으로는 숨겨지지 않는다.
+
+  UA 스타일시트의 [hidden]{display:none}은 명시도가 0,0,1,0이라
+  바로 위 클래스 선택자(display:grid)에 진다 — 닫힌 팝오버가
+  화면에 그려지지는 않아도(위치가 화면 밖) 레이아웃에는 남아
+  포인터 이벤트를 가로챘다. 프리셋 색 목록(요구사항 2)이 그
+  위에 뜨면서 "목록의 버튼이 눌리지 않는" 형태로 드러났다.
+  같은 명시도로 다시 적는다.
+*/
+
+.imory-color-picker[hidden] {
+  display: none;
 }
 
 
@@ -1220,4 +1240,237 @@
   cursor: move;
 
   touch-action: none;
+}
+
+
+/* =========================================================
+   프리셋 색 목록 (색 고르기 1단계)
+
+   기준 문서: posts/editor/posts-color-picker.js §1단계
+
+   색 견본을 누르면 먼저 이 목록이 뜬다. 색 하나를 고르면 그
+   자리에서 확정이고, "직접 선택"으로 넘어가면 컬러피커가
+   열린다(요구사항 2).
+========================================================== */
+
+.imory-color-menu {
+  position: fixed;
+
+  z-index: 1200;
+
+  display: grid;
+
+  gap: 8px;
+
+  box-sizing: border-box;
+
+  /*
+    컬러피커 팝오버와 같은 규칙 — 좁은 화면에서도 전면 시트처럼
+    커지지 않는다.
+  */
+  width: min(214px, calc(100vw - 32px));
+
+  padding: 10px;
+
+  border: 1px solid #e6e6e6;
+
+  background: #ffffff;
+
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+
+.imory-color-menu[hidden] {
+  display: none;
+}
+
+
+.imory-color-menu-swatches {
+  display: grid;
+
+  /*
+    한 줄에 여섯 개. 터치 목표를 줄이지 않으려고 칸 크기를
+    고정하고 줄 수가 늘어나게 둔다.
+  */
+  grid-template-columns:
+    repeat(6, 1fr);
+
+  gap: 6px;
+}
+
+
+.imory-color-menu-swatch {
+  width: 100%;
+
+  aspect-ratio: 1 / 1;
+
+  min-height: 26px;
+
+  padding: 0;
+
+  border:
+    1px solid
+    rgba(0, 0, 0, 0.10);
+
+  border-radius: 4px;
+
+  cursor: pointer;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+/* 지금 쓰고 있는 색은 테두리로 표시한다 */
+
+.imory-color-menu-swatch[data-current="true"] {
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 3px #d980a2;
+}
+
+
+.imory-color-menu-actions {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.imory-color-menu-spacer {
+  flex: 1 1 auto;
+}
+
+
+.imory-color-menu-custom {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+/*
+  ★ 포인터를 받지 않는다.
+
+  누르는 자리는 어디까지나 옆의 <input type="color"> 자체다 —
+  라벨을 눌러 칸을 대신 활성화하면 다시 프로그램 클릭이 되고,
+  그것이 창이 열리지 않던 경로다(posts/editor/posts-color-picker.js
+  §1단계). 이 글자는 "이 칸이 무엇인가"만 말해 준다.
+*/
+
+.imory-color-menu-custom-label {
+  pointer-events: none;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.04em;
+
+  color: #aaaaaa;
+
+  user-select: none;
+}
+
+
+/*
+  ★ 진짜 <input type="color">다 — 숨겨진 칸이 아니다 (요구사항 2).
+
+  사용자의 손가락이 여기 직접 닿아야 OS 기본 피커가 브라우저의
+  기본 동작으로 열린다. 그래서 보이게 두고, 지금 색이 그대로
+  보이도록 브라우저가 그리는 색 견본만 남긴다.
+
+  크기는 터치 목표(28px)를 지킨다.
+*/
+
+.imory-color-menu-custom-input {
+  width: 34px;
+  height: 28px;
+
+  padding: 2px;
+
+  border:
+    1px solid
+    #e0e0e0;
+
+  border-radius: 4px;
+
+  background: #ffffff;
+
+  cursor: pointer;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.imory-color-menu-custom-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+
+.imory-color-menu-custom-input::-webkit-color-swatch {
+  border: 0;
+
+  border-radius: 2px;
+}
+
+
+.imory-color-menu-custom-input::-moz-color-swatch {
+  border: 0;
+
+  border-radius: 2px;
+}
+
+
+.imory-color-menu-button {
+  min-height: 28px;
+
+  padding:
+    0
+    9px;
+
+  border:
+    1px solid
+    #e5e5e5;
+
+  border-radius: 4px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.04em;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.imory-color-menu-button:hover {
+  border-color: #e6bdcc;
+
+  color: #d980a2;
+}
+
+
+.imory-color-menu-button[hidden] {
+  display: none;
 }

@@ -322,20 +322,29 @@ const quoteDialogueRuleEnabled =
     "quoteDialogueRuleEnabled"
   );
 
-const quoteDialogueRuleColor =
-  document.getElementById(
-    "quoteDialogueRuleColor"
-  );
+/*
+  ★ 옛 프리셋의 대사 강조선 생김새 (요구사항 3)
 
-const quoteDialogueRuleWidth =
-  document.getElementById(
-    "quoteDialogueRuleWidth"
-  );
+  DIALOGUE에서 고르는 것은 이제 "강조선 자동 적용" 하나뿐이고,
+  선의 색·굵기·거리는 BODY 값을 그대로 쓴다
+  (posts/style/posts-body-decor.js의 resolvePostRuleForRun).
 
-const quoteDialogueRuleGap =
-  document.getElementById(
-    "quoteDialogueRuleGap"
-  );
+  그런데 예전 프리셋에는 dialogueRuleColor/Width/Gap 세 값이
+  이미 저장돼 있다. 입력칸이 사라졌다고 해서 저장 때 기본값으로
+  덮어써 버리면, **열고 저장하기만 해도 사용자의 값이 사라진다**.
+
+  그래서 배경 사진 주소/중심과 같은 방식으로 다룬다 — 프리셋을
+  열 때 이 상태 변수에 담아 두고(applyQuoteSettings),
+  collectQuoteSettings()가 그대로 다시 내보낸다. 화면에 보이지도
+  않고 렌더에 쓰이지도 않지만 값은 그대로 남는다.
+*/
+
+let quoteLegacyDialogueRule =
+  {
+    color: null,
+    width: null,
+    gap: null
+  };
 
 
 /* =========================================================

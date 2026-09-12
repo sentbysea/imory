@@ -230,7 +230,43 @@
 }
 
 
+/*
+  ★ margin · gap은 자기 줄에서 시작한다 (요구사항 1)
+
+  둘은 align/body/title/source/rule과 같은 flex 줄에 있어서,
+  앞 컨트롤이 몇 개 들어가느냐에 따라 라벨의 x가 화면 폭마다
+  달라졌다(390px에서는 rule 버튼 뒤). align · margin · size ·
+  image 네 라벨의 시작점을 맞추려면 이 줄만 새 줄로 내리면 된다 —
+  flex-basis 100%면 앞 요소들과 같은 줄에 설 수 없다.
+
+  숨겨져 있을 때는 위 [hidden] 규칙이 이깁니다(display:none).
+*/
+
+#postEditorPreviewSourceBottomOffsetRow,
+#postEditorPreviewSourceSpacingRow {
+  flex: 0 0 100%;
+}
+
+
+/*
+  ★ 행의 설명 라벨 — align · margin · size · image 네 줄이 모두
+  이 클래스를 쓴다.
+
+  min-width를 주는 이유는 하나다. 이 라벨은 각 줄의 첫 요소이므로
+  라벨 시작점은 저절로 같지만, 글자 폭이 제각각이면(align 25px,
+  size 20px, image 26px …) **그 뒤에 오는 첫 컨트롤**의 x가 줄마다
+  달라진다. 가장 긴 라벨이 들어가는 폭으로 고정해 네 줄의 컨트롤이
+  같은 자리에서 시작하게 한다.
+
+  line-height를 컨트롤(패딩 3px + 9px 글자 ≒ 21px)과 맞춰서 높이와
+  세로 기준선도 함께 통일한다.
+*/
+
 .post-editor-preview-subrow-label {
+  flex: 0 0 auto;
+
+  min-width: 30px;
+
   color: #cccccc;
 
   font-family:
@@ -238,6 +274,8 @@
     sans-serif;
 
   font-size: 9px;
+
+  line-height: 21px;
 
   letter-spacing: 0.04em;
 }
@@ -497,8 +535,8 @@
 ========================================================== */
 
 /*
-  undo/redo는 이제 자기 행(.post-editor-tool-line--end)에서
-  오른쪽으로 정렬된다 — 예전의 .post-editor-undo-group은 없앴다
+  undo/redo는 1행 오른쪽 끝으로 밀린다(.post-editor-tool-spacer) —
+  예전의 .post-editor-undo-group도, 그 둘만 쓰던 3행도 없앴다
   (posts/posts-editor.css의 툴바 세 줄 규칙).
 */
 
@@ -1097,3 +1135,121 @@ body.post-editor-mode
 }
 
 
+
+
+/* =========================================================
+   HTML 모드 — 디자인 미리보기 (요구사항 10)
+
+   기준 문서: posts/export/posts-html-image.js
+
+   같은 PREVIEW 패널이 두 가지를 보여준다. HTML 모드에서는 발췌
+   설정·페이지 대지·페이지 이동을 감추고 디자인 상자만 남긴다 —
+   "HTML 디자인만 저장"이 마크업 수준에서 지켜지는 자리다.
+========================================================== */
+
+.post-editor-preview-sheet.is-html-image-mode
+.post-editor-preview-visibility-controls,
+
+.post-editor-preview-sheet.is-html-image-mode
+.post-editor-preview-stage-meta,
+
+/*
+  페이지 이동(.post-editor-preview-pagination)과 확대축소 버튼은
+  이 대지 안에 있으므로 함께 사라진다.
+*/
+
+.post-editor-preview-sheet.is-html-image-mode
+.post-editor-preview-stage {
+  display: none;
+}
+
+
+.post-editor-html-preview {
+  position: relative;
+
+  /*
+    ★ 좌표 기준이자 잘라내는 상자다.
+
+    좁은 화면에서 디자인이 가로로 넘치면 안쪽 상자를 transform
+    으로 줄인다(syncEditorHtmlPreviewScale). transform은 레이아웃
+    크기를 바꾸지 않으므로 저장되는 PNG는 이 축소와 무관하고,
+    캡처 직전에는 이 overflow도 함께 걷어낸다.
+  */
+
+  overflow: hidden;
+
+  width: 100%;
+
+  margin: 0;
+
+  padding: 0;
+
+  background: #ffffff;
+
+  border: 1px solid #eeeeee;
+}
+
+
+.post-editor-html-preview[hidden] {
+  display: none;
+}
+
+
+/*
+  실제로 캡처되는 상자. 사용자의 HTML 말고는 아무것도 들어가지
+  않는다.
+
+  ★ 글자색·배경·문단 간격을 여기서 정하지 않는다.
+
+  Quote Preset의 CSS 변수는 .post-editor-preview-page에만
+  걸려 있고 이 상자는 그 바깥이라, 프리셋이 디자인을 덮어쓸
+  경로가 없다. 배경만 흰색으로 두는데, 그것은 배경을 지정하지
+  않은 디자인이 투명 PNG로 저장되어 글자가 안 보이는 일을
+  막기 위해서다(캡처 쪽도 같은 흰색을 쓴다).
+*/
+
+.post-editor-html-preview-stage {
+  transform-origin: top left;
+
+  width: 520px;
+
+  max-width: none;
+
+  background: #ffffff;
+
+  color: #333333;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 14px;
+
+  line-height: 1.7;
+}
+
+
+.post-editor-html-preview-empty {
+  margin: 0;
+
+  padding:
+    28px
+    16px;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 10px;
+
+  letter-spacing: 0.04em;
+
+  color: #c5c5c5;
+
+  text-align: center;
+}
+
+
+.post-editor-html-preview-empty[hidden] {
+  display: none;
+}

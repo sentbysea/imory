@@ -107,6 +107,13 @@
       [
         "../../posts/view/posts-view-banner.css",
 
+        /*
+          복사 상자 · 메모 · 구분선 — POST region이 그리는 본문에
+          들어갈 수 있으므로 Preview도 같은 CSS를 읽어야
+          공개 화면과 같은 모양이 나온다.
+        */
+        "../../posts/posts-body-blocks.css",
+
         /* 공개 화면과 같은 폭 계약을 Preview에도 건다. iframe은
            독립된 browsing context라 부모 문서의 <link>를 물려받지
            않는다(아래 import map과 같은 이유). */

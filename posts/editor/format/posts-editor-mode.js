@@ -150,11 +150,40 @@ function setEditorContentMode(
    posts/preview/posts-preview-mobile.js).
 ========================================================== */
 
+/*
+  ★ HTML 모드도 미리보기와 저장을 쓴다 (요구사항 10)
+
+  예전에는 HTML 모드에서 이 UI를 통째로 숨겼다 — 글자 발췌 카드가
+  의미 없는 글이라서다. 지금은 같은 진입점(발췌 여닫기 · export)
+  으로 **렌더링된 디자인을 그대로 PNG로** 저장한다. 별도 사이트로
+  보내지 않는다.
+
+  그래서 숨기는 대상은 gallery 하나만 남는다.
+*/
+
 function editorExcerptUiHidden() {
 
   return (
-    editorContentMode === "html" ||
-    (
+    typeof isGalleryEditor === "function" &&
+    isGalleryEditor()
+  );
+
+}
+
+
+/*
+  HTML 모드인가 — 같은 패널 안에서 "무엇을 보여주고 무엇을
+  찍을지"가 갈리는 자리다.
+
+    일반   Quote Preset 발췌 페이지들
+    HTML   디자인 한 장(posts/export/posts-html-image.js)
+*/
+
+function editorHtmlImageMode() {
+
+  return (
+    editorContentMode === "html" &&
+    !(
       typeof isGalleryEditor === "function" &&
       isGalleryEditor()
     )
@@ -191,8 +220,18 @@ function syncEditorExcerptActionButtons() {
     postEditorCopyButton
   ) {
 
+    /*
+      ★ HTML 모드에는 copy가 없다.
+
+      copy는 발췌 **이미지**를 클립보드에 넣는 버튼이다. HTML
+      디자인은 한 장의 높이에 상한이 없어서(긴 디자인은 수천 px)
+      클립보드 이미지로 넣기에 적합하지 않고, 이번 라운드에서
+      확정한 범위는 "PNG로 저장"까지다. 저장은 export가 한다.
+    */
+
     postEditorCopyButton.hidden =
-      hidden;
+      hidden ||
+      editorHtmlImageMode();
 
   }
 
@@ -211,6 +250,46 @@ function syncEditorExcerptControls() {
 
     postEditorPreviewToggle.hidden =
       hideExcerpt;
+
+  }
+
+
+  /*
+    ★ 같은 패널이 두 가지를 보여준다 (요구사항 10)
+
+    클래스 하나로 갈라서, 발췌 설정·페이지 대지·페이지 이동은
+    감추고 디자인 상자만 남긴다(posts/posts-preview-export.css).
+    "HTML 디자인만 저장"이 마크업 수준에서 지켜지는 자리다.
+  */
+
+  const htmlMode =
+    editorHtmlImageMode();
+
+
+  postEditorPreviewSheet
+    ?.classList
+    .toggle(
+      "is-html-image-mode",
+      htmlMode
+    );
+
+
+  if (
+    postEditorHtmlPreview
+  ) {
+
+    postEditorHtmlPreview.hidden =
+      !htmlMode;
+
+  }
+
+
+  if (
+    htmlMode &&
+    typeof renderEditorHtmlPreview === "function"
+  ) {
+
+    renderEditorHtmlPreview();
 
   }
 

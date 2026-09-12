@@ -775,6 +775,24 @@ function isPostRuleBoundaryNode(
   }
 
 
+  /*
+    복사 상자 · 메모 · 구분선도 어느 문단에도 속하지 않는다
+    (요구사항 8). 문단 강조선이 상자를 통째로 감싸 버리면 상자의
+    왼쪽 테두리와 강조선이 겹쳐 두 줄로 보인다.
+  */
+
+  if (
+    typeof isPostBlockNode === "function" &&
+    isPostBlockNode(
+      node
+    )
+  ) {
+
+    return true;
+
+  }
+
+
   return (
     node?.nodeType ===
       Node.ELEMENT_NODE &&
@@ -1004,21 +1022,41 @@ function resolvePostRuleForRun(
   }
 
 
+  /*
+    ★ 대사 자동 강조선은 BODY의 색·굵기·거리를 그대로 쓴다
+    (요구사항 3).
+
+    예전에는 dialogueRuleColor/Width/Gap 세 벌을 따로 갖고 있었다.
+    그런데 같은 글 안에서 수동으로 그은 선과 대사에 자동으로
+    붙은 선이 서로 다른 색·굵기로 나오는 것은 설정이 아니라
+    사고에 가까웠다 — 고르는 자리가 둘이라 한쪽만 고치면
+    한 화면에 두 종류의 선이 섞였다.
+
+    그래서 "대사에 선을 자동으로 붙일 것인가"(dialogueRuleEnabled)
+    하나만 남기고, 생김새는 BODY 한 곳에서만 정한다.
+
+    ★ 옛 프리셋의 dialogueRuleColor/Width/Gap은 **지우지 않는다**.
+    정규화는 값을 그대로 들고 다니고(posts-body-layout.js의
+    허용 키 목록에 남아 있다) 저장도 그대로 하지만, 렌더는 더
+    이상 읽지 않는다. 되돌릴 일이 생기면 값이 아직 거기 있고,
+    지금은 BODY보다 우선하는 자리가 없다.
+  */
+
   return {
 
     color:
-      settings.dialogueRuleColor,
+      settings.bodyRuleColor,
 
     width:
       normalizePostRuleWidth(
-        settings.dialogueRuleWidth,
-        POST_STYLE_DEFAULTS.dialogueRuleWidth
+        settings.bodyRuleWidth,
+        POST_STYLE_DEFAULTS.bodyRuleWidth
       ),
 
     gap:
       normalizePostRuleGap(
-        settings.dialogueRuleGap,
-        POST_STYLE_DEFAULTS.dialogueRuleGap
+        settings.bodyRuleGap,
+        POST_STYLE_DEFAULTS.bodyRuleGap
       )
 
   };

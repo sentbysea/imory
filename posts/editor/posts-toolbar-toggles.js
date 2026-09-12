@@ -553,6 +553,28 @@ postEditorExportButton
     "click",
     async () => {
 
+      /*
+        ★ HTML 모드는 다른 것을 찍는다 (요구사항 10)
+
+        일반 글은 Quote Preset 발췌 페이지들을, HTML 모드는
+        렌더링된 디자인 한 장을 저장한다. 같은 버튼 · 같은
+        저장 경로이고, 찍는 대상만 갈린다
+        (posts/export/posts-html-image.js).
+      */
+
+      if (
+        typeof editorHtmlImageMode === "function" &&
+        editorHtmlImageMode()
+      ) {
+
+        await exportEditorHtmlAsImage();
+
+
+        return;
+
+      }
+
+
       await exportEditorPreviewAsImages();
 
     }

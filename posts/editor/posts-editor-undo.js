@@ -210,6 +210,27 @@ function redoEditorChange() {
 function afterEditorUndoHistoryChange() {
 
   /*
+    ★ 블록의 조작 UI도 다시 붙인다.
+
+    innerHTML을 통째로 갈아끼웠으므로 삭제 버튼·구분선 드롭다운의
+    DOM은 스냅샷에 들어 있던 그대로 돌아오지만, 스냅샷을 찍은
+    시점에 아직 UI가 없던 블록(저장된 글을 막 연 직후 등)은
+    여전히 비어 있다. 없으면 만든다
+    (posts/editor/posts-editor-blocks.js).
+  */
+
+  if (
+    typeof ensureEditorBlockTools === "function"
+  ) {
+
+    ensureEditorBlockTools(
+      postEditorContent
+    );
+
+  }
+
+
+  /*
     본문 HTML을 통째로 갈아끼웠으므로, 진행 중이던 색 조정이
     기억해 둔 span/마커는 버려진 노드가 된다. 세션을 비운다
     (posts/editor/format/posts-editor-highlight.js §live).

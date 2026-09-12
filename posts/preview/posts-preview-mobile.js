@@ -248,6 +248,33 @@ function openEditorPreview(
   syncEditorPreviewToggleButton();
 
 
+  /*
+    ★ HTML 모드는 다른 것을 그린다 (요구사항 10)
+
+    같은 패널이지만 내용이 갈린다 — 일반 글은 Quote Preset 발췌
+    페이지들, HTML 모드는 렌더링된 디자인 한 장이다. 페이지
+    나누기 계산이 필요 없으므로 updateEditorPreview()를 부르지
+    않는다(부르면 빈 대지를 한 장 만들 뿐이다).
+
+    여기서도 섹션에 is-open을 먼저 붙인 뒤에 그린다 — 상자의
+    clientWidth를 재서 좁은 화면의 축소 배율을 정하는데,
+    display:none 상태에서는 그 값이 0이다.
+  */
+
+  if (
+    typeof editorHtmlImageMode === "function" &&
+    editorHtmlImageMode() &&
+    typeof renderEditorHtmlPreview === "function"
+  ) {
+
+    renderEditorHtmlPreview();
+
+
+    return;
+
+  }
+
+
   updateEditorPreview();
 
 }

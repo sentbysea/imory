@@ -532,6 +532,12 @@
         "./posts/posts-editor.css",
 
         /*
+          복사 상자 · 메모 · 구분선 — 편집창 · 공개 본문 · 발췌가
+          한 벌을 같이 쓴다(admin/index.html도 같은 파일을 읽는다).
+        */
+        "./posts/posts-body-blocks.css",
+
+        /*
           에디터 PREVIEW와 Quote Preset 미리보기가 함께 쓰는
           페이지 박스(admin/index.html도 같은 파일을 읽는다).
         */
@@ -3930,6 +3936,14 @@
             "./posts/style/posts-body-layout.js",
 
             /*
+              복사 상자 · 메모 · 구분선 — 블록 셋의 모양·판정·복사
+              규칙. posts-sanitize.js가 저장 단계에서 이 판정을
+              쓰고(같은 화면에서 함께 로드된다), 렌더·발췌·편집이
+              전부 이 파일 하나를 본다.
+            */
+            "./posts/style/posts-body-blocks.js",
+
+            /*
               형광펜 높이 · 문단 강조선 · 캔버스 배경 사진.
               셋 다 posts-body-layout.js의 정규화를 쓰므로 그
               뒤여야 하고, 이들을 호출하는 posts-style-render.js ·
@@ -4046,6 +4060,28 @@
               한다(const는 TDZ라 참조만 해도 에러).
             */
             "./posts/editor/posts-rule-overlay.js",
+
+            /*
+              블록 삽입(복사 상자 · 메모 · 구분선). 최상위에서
+              postEditorContent와 툴바 3행 버튼에 리스너를 걸므로
+              posts-refs.js 뒤여야 하고, bindImoryTapButton을 쓰므로
+              posts-color-picker.js 뒤여야 한다.
+            */
+            "./posts/editor/posts-editor-blocks.js",
+
+            /*
+              HTML 모드의 디자인 → PNG (요구사항 10).
+
+              위쪽 posts/export/posts-preview-export*.js의 캡처
+              헬퍼(stripAncestor*ForCapture ·
+              waitForClonedDocumentFontsBeforeCapture)와 저장 경로
+              (openExportedImageOrDownload)를 그대로 쓴다.
+
+              **posts-refs.js보다 반드시 뒤**여야 한다 — 최상위에서
+              postEditorHtmlContent에 리스너를 걸고, 그 참조는
+              posts-refs.js의 const다(TDZ라 참조만 해도 에러).
+            */
+            "./posts/export/posts-html-image.js",
 
             /*
               발췌 배경 사진 · 출처 강조선(이번 발췌 전용). 같은

@@ -266,8 +266,14 @@ function collectEditorRuleBars() {
           )
         ) {
 
+          /*
+            ★ 대사 자동 강조선도 BODY의 색을 쓴다 (요구사항 3).
+            판정 규칙은 렌더링 쪽(resolvePostRuleForRun)과 같아야
+            하므로 그쪽과 함께 바꿨다.
+          */
+
           color =
-            settings.dialogueRuleColor;
+            settings.bodyRuleColor;
 
         }
 
@@ -307,12 +313,12 @@ function collectEditorRuleBars() {
           {
             color,
 
+            /* 굵기도 수동·자동 구분 없이 BODY 하나를 따른다 */
+
             width:
               typeof normalizePostRuleWidth === "function"
                 ? normalizePostRuleWidth(
-                    mark
-                      ? settings.bodyRuleWidth
-                      : settings.dialogueRuleWidth,
+                    settings.bodyRuleWidth,
                     3
                   )
                 : 3,

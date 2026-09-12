@@ -1,0 +1,483 @@
+/* =========================================================
+   POSTS - BODY BLOCKS (복사 상자 · 메모 · 구분선)
+
+   기준 문서: IMORY_EDITOR_DECOR_DESIGN.md §11
+   모양·판정·복사 규칙: posts/style/posts-body-blocks.js
+
+   ★ 한 벌로 네 화면을 다 그린다
+
+     편집창 · 공개 본문 · 발췌 PREVIEW · export PNG가 같은
+     class를 쓴다. 발췌 이미지가 화면과 같아야 하므로 색·여백·
+     테두리를 화면별로 나누지 않는다. 다른 것은 조작 UI뿐이고,
+     그건 편집창에만 존재한다(.post-block-tool).
+
+   ★ 기준 이미지: 읽기 화면의 OOC 메모(.post-detail-ooc)
+
+     옅은 배경 + 얇은 왼쪽 포인트 선 + 작은 라벨. 본문과 섞여
+     보이지 않도록 글자색을 낮춘다. 같은 토큰을 쓴다.
+========================================================== */
+
+
+/* =========================================================
+   공통
+========================================================== */
+
+.post-copy-box,
+.post-memo {
+  position: relative;
+
+  display: block;
+
+  margin:
+    18px
+    0;
+
+  padding:
+    12px
+    14px;
+
+  border-left:
+    2px solid
+    #f0d3de;
+
+  background: #fbf8f9;
+
+  /*
+    ★ 본문 문단의 들여쓰기(textIndent)를 물려받지 않는다.
+    상자 안은 "입력한 그대로"여야 한다.
+  */
+  text-indent: 0;
+
+  word-break: break-word;
+}
+
+
+/*
+  제목 / 부제목 — 작고 옅게. 본문 글자와 같은 크기면 상자 안에
+  문단이 둘 있는 것처럼 보인다.
+*/
+
+.post-copy-box-title,
+.post-memo-title {
+  display: block;
+
+  margin-bottom: 6px;
+
+  font-size: 8px;
+  font-weight: 500;
+
+  line-height: 1.6;
+
+  letter-spacing: 0.12em;
+
+  color: #c79ab0;
+
+  text-indent: 0;
+
+  white-space: pre-wrap;
+}
+
+
+/*
+  내용 — 공백과 줄바꿈을 입력한 그대로 보여준다(요구사항 5).
+  복사되는 글자도 같은 규칙으로 만든다(postCopyBoxPlainText).
+*/
+
+.post-copy-box-body,
+.post-memo-body {
+  display: block;
+
+  font-size: 12px;
+
+  line-height: 1.75;
+
+  letter-spacing: 0.02em;
+
+  color: #8a8a8a;
+
+  text-indent: 0;
+
+  white-space: pre-wrap;
+
+  word-break: break-word;
+}
+
+
+/*
+  복사 상자의 내용은 코드처럼 읽힌다 — 고정폭 글꼴로 두면
+  공백 수를 눈으로 셀 수 있다.
+*/
+
+.post-copy-box-body {
+  font-family:
+    ui-monospace,
+    "SFMono-Regular",
+    "Menlo",
+    "Consolas",
+    monospace;
+
+  font-size: 11px;
+
+  color: #7a7a7a;
+}
+
+
+/*
+  메모는 본문에 가까운 읽을거리라 본문 글꼴을 그대로 쓴다.
+*/
+
+.post-memo-body {
+  font-family: inherit;
+}
+
+
+/* =========================================================
+   공개 화면의 복사 버튼
+
+   저장되는 HTML에는 없다 — 본문을 그린 뒤 플랫폼 코드가 붙인다
+   (enhancePostBlocksForViewing). 발췌 이미지에는 애초에
+   만들어지지 않는다.
+========================================================== */
+
+.post-copy-box-copy {
+  position: absolute;
+
+  top: 6px;
+  right: 8px;
+
+  padding:
+    3px
+    7px;
+
+  border:
+    1px solid
+    #f0d3de;
+
+  border-radius: 4px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 8px;
+  font-weight: 400;
+
+  line-height: 1.4;
+
+  letter-spacing: 0.08em;
+
+  color: #c79ab0;
+
+  cursor: pointer;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-copy-box-copy:hover {
+  background: #fff5f8;
+}
+
+
+/* 성공/실패를 눈으로 구분한다 — 실패를 성공처럼 보이지 않게 */
+
+.post-copy-box-copy[data-copy-state="ok"] {
+  border-color: #cfe3d5;
+
+  background: #f5fbf7;
+
+  color: #7fa88d;
+}
+
+
+.post-copy-box-copy[data-copy-state="failed"] {
+  border-color: #e8cccc;
+
+  background: #fdf6f6;
+
+  color: #c08585;
+}
+
+
+/* =========================================================
+   구분선 다섯 가지
+
+   위아래 여백은 종류와 관계없이 같다. 색은 본문을 방해하지
+   않는 부드러운 회색 하나다.
+========================================================== */
+
+.post-divider {
+  position: relative;
+
+  display: block;
+
+  height: 0;
+
+  margin:
+    22px
+    0;
+
+  border: 0;
+
+  border-top-width: 1px;
+
+  border-top-color: #e3e3e3;
+
+  border-top-style: solid;
+
+  text-indent: 0;
+}
+
+
+.post-divider[data-divider="dotted"] {
+  border-top-width: 2px;
+
+  border-top-style: dotted;
+}
+
+
+.post-divider[data-divider="dashed"] {
+  border-top-style: dashed;
+}
+
+
+.post-divider[data-divider="double"] {
+  height: 3px;
+
+  border-top-width: 3px;
+
+  border-top-style: double;
+}
+
+
+/*
+  가운데 점 세 개 — 선이 아니라 글자다. 테두리를 없애고
+  ::after로 그린다. 높이를 주어 다른 종류와 위아래 여백이
+  같아 보이게 한다.
+*/
+
+.post-divider[data-divider="dots"] {
+  height: 12px;
+
+  border-top: 0;
+}
+
+
+.post-divider[data-divider="dots"]::after {
+  content: "• • •";
+
+  position: absolute;
+
+  left: 0;
+  right: 0;
+  top: 0;
+
+  font-size: 9px;
+
+  line-height: 12px;
+
+  letter-spacing: 0.35em;
+
+  /* letter-spacing이 마지막 글자 뒤에도 붙어 중심이 왼쪽으로
+     밀리는 것을 그만큼 되민다 */
+  text-indent: 0.35em;
+
+  text-align: center;
+
+  color: #d8d8d8;
+}
+
+
+/* =========================================================
+   편집창 전용 조작 UI
+
+   ★ 저장되지 않는다 — 사니타이저가 .post-block-tool을 통째로
+   버린다(posts/posts-sanitize.js). 그래서 공개 본문과 발췌
+   이미지에는 이 규칙이 걸릴 요소 자체가 없다.
+========================================================== */
+
+.post-block-tool {
+  position: absolute;
+
+  top: 4px;
+  right: 5px;
+
+  display: flex;
+  align-items: center;
+
+  gap: 4px;
+
+  /*
+    편집창의 글자 흐름과 분리한다 — 상자 안의 글자가 이 UI
+    아래로 흐르지 않게 한다.
+  */
+  user-select: none;
+}
+
+
+.post-block-tool-button {
+  width: 18px;
+  height: 18px;
+
+  padding: 0;
+
+  border:
+    1px solid
+    #ececec;
+
+  border-radius: 4px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 11px;
+
+  line-height: 1;
+
+  color: #b5b5b5;
+
+  cursor: pointer;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-block-tool-button:hover {
+  border-color: #e6bdcc;
+
+  color: #d980a2;
+}
+
+
+.post-block-tool-select {
+  max-width: 92px;
+
+  padding:
+    1px
+    3px;
+
+  border:
+    1px solid
+    #ececec;
+
+  border-radius: 4px;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 8px;
+
+  color: #999999;
+
+  cursor: pointer;
+}
+
+
+/*
+  구분선은 높이가 0이라 조작 UI가 얹힐 자리가 없다. 편집창
+  에서만 자리를 만든다 — 저장되는 값(data-divider)은 그대로다.
+*/
+
+.post-editor-richtext .post-divider {
+  min-height: 22px;
+
+  margin:
+    14px
+    0;
+}
+
+
+.post-editor-richtext .post-copy-box,
+.post-editor-richtext .post-memo {
+  /* 조작 UI가 제목 위에 겹치지 않도록 위를 조금 더 연다 */
+  padding-top: 26px;
+}
+
+
+/*
+  빈 칸에 무엇을 쓰는 자리인지 보여준다. 저장되는 글자가
+  아니라 CSS content라, 저장 HTML에도 복사되는 글자에도
+  들어가지 않는다.
+*/
+
+.post-editor-richtext
+.post-copy-box-title:empty::before,
+.post-editor-richtext
+.post-copy-box-body:empty::before,
+.post-editor-richtext
+.post-memo-title:empty::before,
+.post-editor-richtext
+.post-memo-body:empty::before {
+  content: attr(data-placeholder);
+
+  color: #d5d5d5;
+}
+
+
+/* =========================================================
+   모바일
+
+   상자가 화면 폭을 넘지 않게 한다 — 내용은 pre-wrap이라 긴
+   줄도 접히지만, 공백이 많은 코드 한 줄은 접힐 자리가 없을 수
+   있다. 그럴 때만 그 칸 안에서 가로로 민다(본문 전체가 밀리는
+   것보다 낫다).
+========================================================== */
+
+@media (max-width: 768px) {
+
+  .post-copy-box,
+  .post-memo {
+    margin:
+      14px
+      0;
+
+    padding:
+      10px
+      12px;
+  }
+
+
+  .post-editor-richtext .post-copy-box,
+  .post-editor-richtext .post-memo {
+    padding-top: 24px;
+  }
+
+
+  .post-copy-box-body {
+    font-size: 10.5px;
+  }
+
+
+  .post-memo-body {
+    font-size: 11.5px;
+  }
+
+
+  .post-block-tool-select {
+    max-width: 74px;
+  }
+
+}
+
+
+/*
+  긴 한 줄이 상자 밖으로 나가지 않게 한다. 어느 화면에서나
+  같은 규칙이다 — 발췌 이미지에서도 상자 밖으로 넘치면 안 된다.
+*/
+
+.post-copy-box-body,
+.post-memo-body {
+  overflow-wrap: anywhere;
+
+  max-width: 100%;
+}

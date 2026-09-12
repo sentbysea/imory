@@ -108,10 +108,29 @@ function renderStyledPostContentInto(
     처리한다(posts-body-layout.js).
   */
 
+  /*
+    ★ 복사 상자 · 메모 · 구분선은 여기서 뺀다 (요구사항 8).
+
+    셋 다 최상위 <div>라 이 선택자에 걸리는데, 본문 문단용
+    textIndent가 상자 안 글자를 들여쓰고 marginBottom이 상자의
+    자기 여백과 겹쳐 쌓인다. 셋의 여백은 CSS가 정한다.
+  */
+
   const blocks =
-    container.querySelectorAll(
-      ":scope > div, :scope > p"
-    );
+    Array.from(
+      container.querySelectorAll(
+        ":scope > div, :scope > p"
+      )
+    )
+      .filter(
+        block =>
+          !(
+            typeof isPostBlockNode === "function" &&
+            isPostBlockNode(
+              block
+            )
+          )
+      );
 
 
   blocks.forEach(
@@ -179,6 +198,28 @@ function renderStyledPostContentInto(
     container,
     resolved
   );
+
+
+  /*
+    ★ 복사 버튼은 "읽는 화면"에만 붙인다 (요구사항 8).
+
+    발췌 PREVIEW/export는 options.forExcerpt로 들어와서 이
+    단계를 건너뛴다 — 저장되는 이미지에 조작 아이콘이 들어가면
+    안 된다. 버튼은 저장 HTML에 없고 여기서 만들어지며, 누르는
+    동작은 posts/style/posts-body-blocks.js의 위임 리스너가
+    처리한다(인라인 이벤트·스크립트 없음).
+  */
+
+  if (
+    !options.forExcerpt &&
+    typeof enhancePostBlocksForViewing === "function"
+  ) {
+
+    enhancePostBlocksForViewing(
+      container
+    );
+
+  }
 
 }
 

@@ -358,6 +358,25 @@
 }
 
 
+/*
+  설정 줄 아래에 붙는 한 줄 안내. 고를 것이 없는 설명이므로
+  줄 테두리(.quote-setting-row의 border-bottom)를 두지 않고
+  라벨보다 옅게 둔다.
+*/
+
+.quote-setting-note {
+  margin: 8px 14px 12px;
+
+  color: #bbbbbb;
+
+  font-size: 9px;
+
+  line-height: 1.6;
+
+  letter-spacing: 0.04em;
+}
+
+
 .quote-number-input {
   width: 78px;
 

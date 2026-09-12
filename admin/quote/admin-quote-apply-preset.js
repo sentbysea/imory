@@ -219,9 +219,6 @@ function applyQuoteSettings(
 
       [quoteDialogueColor, resolved.dialogueColor],
       [quoteDialogueWeight, resolved.dialogueWeight],
-      [quoteDialogueRuleColor, resolved.dialogueRuleColor],
-      [quoteDialogueRuleWidth, resolved.dialogueRuleWidth],
-      [quoteDialogueRuleGap, resolved.dialogueRuleGap],
 
 
       /* SOURCE */
@@ -261,14 +258,14 @@ function applyQuoteSettings(
   /*
     ★ 확대 슬라이더의 범위를 저장값에 맞춰 넓힌다 (요구사항 2)
 
-    슬라이더는 50~150%지만, 예전 슬라이더는 100~300%였다. 저장된
-    값이 150%를 넘는 프리셋을 열었을 때 슬라이더가 150에서 멈추면
-    **저장 한 번으로 사용자의 값이 깎여 나간다** — 열기만 했는데
-    값이 바뀌는 일은 없어야 한다.
+    슬라이더는 1~200%지만, 예전 슬라이더는 100~300%(그 전에는
+    50~150%)였다. 저장된 값이 200%를 넘는 프리셋을 열었을 때
+    슬라이더가 200에서 멈추면 **저장 한 번으로 사용자의 값이
+    깎여 나간다** — 열기만 했는데 값이 바뀌는 일은 없어야 한다.
 
     그래서 그런 프리셋에서는 이 세션 동안만 최대치를 그 값까지
-    늘린다. 사용자가 슬라이더를 150 이하로 내리면 그 뒤로는
-    보통의 50~150 구간에서 움직인다(내린 값이 곧 사용자의 선택
+    늘린다. 사용자가 슬라이더를 200 이하로 내리면 그 뒤로는
+    보통의 1~200 구간에서 움직인다(내린 값이 곧 사용자의 선택
     이므로 되돌릴 이유가 없다). 다른 프리셋을 고르면 그 프리셋의
     값에 맞춰 다시 정해진다.
   */
@@ -353,6 +350,34 @@ function applyQuoteSettings(
 
     }
   );
+
+
+  /*
+    ★ 대사 강조선의 색·굵기·거리는 입력칸이 없어졌다 (요구사항 3).
+
+    settings에 값이 실제로 들어 있을 때만 담아 둔다 — resolved는
+    없는 값을 기본값으로 채워 주므로, resolved를 그대로 담으면
+    **한 번도 그 값을 가진 적 없는 프리셋**에 기본값 세 개가
+    새로 생겨난다. 원래 없던 프리셋은 계속 없는 채로 둔다
+    (admin-quote-refs.js의 quoteLegacyDialogueRule).
+  */
+
+  quoteLegacyDialogueRule =
+    {
+
+      color:
+        settings?.dialogueRuleColor ??
+        null,
+
+      width:
+        settings?.dialogueRuleWidth ??
+        null,
+
+      gap:
+        settings?.dialogueRuleGap ??
+        null
+
+    };
 
 
   /*

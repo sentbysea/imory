@@ -1814,6 +1814,75 @@ function paginatePostPages(
 
 
   /*
+    복사 상자 · 메모 · 구분선 — 통째로 한 장에 들어간다
+    (요구사항 8).
+
+    ★ 페이지보다 큰 상자를 어떻게 다루는가
+
+      1. 지금 장에 넣어 본다. 안 넘치면 끝.
+      2. 넘치고 이 장에 이미 내용이 있으면 다음 장 맨 위로 옮긴다.
+      3. 빈 장에서도 넘치면 **그대로 둔다**.
+
+      3번이 핵심이다. 여기서 또 새 장을 열면 "빈 장에 넣는다 →
+      넘친다 → 새 장을 연다"가 끝없이 돈다. 내용을 잘라내지도
+      않는다 — 글자가 사라지는 쪽이 넘치는 쪽보다 나쁘다.
+      AUTO/uniform 비율에서는 장의 높이가 내용을 따라 늘어나므로
+      실제로 넘칠 일이 없고, 고정 비율에서만 상자가 카드 밖으로
+      나간다(사진과 달리 글자를 줄여서 맞출 수는 없다).
+  */
+
+  function appendAtomicBlockNode(
+    node
+  ) {
+
+    const clone =
+      node.cloneNode(
+        true
+      );
+
+
+    const hadContent =
+      pageHasRenderedContent();
+
+
+    currentContainer().appendChild(
+      clone
+    );
+
+
+    if (
+      !postPageCurrentIsOverflowing(
+        current
+      )
+    ) {
+
+      return;
+
+    }
+
+
+    if (!hadContent) {
+
+      return;
+
+    }
+
+
+    clone.remove();
+
+
+    startNewPage();
+    rebuildOpenChain();
+
+
+    currentContainer().appendChild(
+      clone
+    );
+
+  }
+
+
+  /*
     노드를 재귀적으로 삽입. 텍스트는 단어 단위 분할, 자식이
     있는 요소(인용구/강조 span 등)는 빈 껍데기만 새로 만들고
     그 안에 자식을 재귀적으로 이어붙인다 — 긴 span도 이렇게
@@ -1897,6 +1966,32 @@ function paginatePostPages(
     ) {
 
       appendPreviewImageNode(
+        node
+      );
+
+
+      return;
+
+    }
+
+
+    /*
+      ★ 복사 상자 · 메모 · 구분선은 쪼개지 않는 한 덩어리다
+      (요구사항 8).
+
+      일반 경로로 보내면 상자 안에서 글자 단위로 잘려서 제목만
+      이 장에, 내용은 다음 장에 남는다 — 상자의 테두리도 두 번
+      그려진다.
+    */
+
+    if (
+      typeof isPostBlockNode === "function" &&
+      isPostBlockNode(
+        node
+      )
+    ) {
+
+      appendAtomicBlockNode(
         node
       );
 

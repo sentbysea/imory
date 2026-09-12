@@ -819,9 +819,22 @@ function collectEditorParagraphRuns() {
       children[index];
 
 
+    /*
+      문단 경계 — 수동 PAGE break와 블록 셋(복사 상자 · 메모 ·
+      구분선). 블록은 어느 문단에도 속하지 않는다(요구사항 8):
+      강조선이 상자를 감싸면 상자의 왼쪽 테두리와 겹쳐 두 줄로
+      보이고, L 토글의 판정도 상자 안 글자에 끌려다닌다.
+    */
+
     if (
       isPostPageBreakNode(
         node
+      ) ||
+      (
+        typeof isPostBlockNode === "function" &&
+        isPostBlockNode(
+          node
+        )
       )
     ) {
 
@@ -1317,6 +1330,21 @@ function applyEditorParagraphRule(
 }
 
 
+/*
+  선택에 걸린 문단에서 강조선을 걷어낸다.
+
+    live   true면 undo 스냅샷을 찍지 않는다 — 컬러피커 조정
+           중이거나, 이미 스냅샷을 찍은 더 큰 동작(clear)의
+           일부로 불릴 때다.
+
+  ★ 되돌아오지 않게 지운다 (요구사항 3)
+
+    대사 문단은 마커를 그냥 지우면 상속 상태로 돌아가서, 대사
+    자동 강조선이 켜져 있는 한 다음 렌더에서 선이 다시 생긴다.
+    그래서 "개별 해제"를 뜻하는 data-rule="off" 마커를 남긴다.
+    대사가 아닌 문단은 되살아날 자리가 없으므로 마커째 지운다.
+*/
+
 function removeEditorParagraphRule(
   live
 ) {
@@ -1393,6 +1421,53 @@ function removeEditorParagraphRule(
       }
 
 
+      /*
+        마커가 run 안 어디에 있든(문단 맨 앞이 보통이지만,
+        사용자가 앞에 글자를 치면 안쪽으로 들어갈 수 있다)
+        전부 걷어낸다 — 하나라도 남으면 다음 판정에서 "아직
+        선이 걸려 있다"가 되어 토글이 겉돈다.
+      */
+
+      run.forEach(
+        node => {
+
+          if (
+            isPostRuleMarkNode(
+              node
+            )
+          ) {
+
+            node.remove();
+
+
+            return;
+
+          }
+
+
+          if (
+            node.nodeType ===
+            Node.ELEMENT_NODE
+          ) {
+
+            node
+              .querySelectorAll(
+                ".post-para-rule"
+              )
+              .forEach(
+                nested => {
+
+                  nested.remove();
+
+                }
+              );
+
+          }
+
+        }
+      );
+
+
       existing?.remove();
 
     }
@@ -1430,13 +1505,29 @@ function toggleEditorParagraphRule() {
   }
 
 
-  const allActive =
-    runs.every(
+  /*
+    ★ "하나라도 걸려 있으면 해제"다 (요구사항 3)
+
+    예전에는 **전부** 걸려 있을 때만 해제했다(every). 그래서 선이
+    걸린 문단에서 L을 다시 눌러도 해제되지 않는 경우가 생겼다 —
+    선택이 그 문단 하나에만 머물지 않고 옆 문단까지 조금 걸치면
+    (드래그 선택이 다음 줄을 물거나, 캐럿이 문단 경계에 있어서
+    두 문단이 잡히거나) 걸린 문단 1 + 안 걸린 문단 1이 되어
+    every가 false가 되고, L이 해제 대신 **나머지 문단까지 선을
+    더 그리는** 동작이 됐다. 사용자 눈에는 "다시 눌렀는데 안
+    지워진다"로 보인다.
+
+    any로 바꾸면 눌렀을 때 선이 보이는 상태면 언제나 지워진다 —
+    토글 버튼에 기대하는 그대로다. 선이 하나도 없을 때만 적용이다.
+  */
+
+  const anyActive =
+    runs.some(
       editorRunHasActiveRule
     );
 
 
-  if (allActive) {
+  if (anyActive) {
 
     removeEditorParagraphRule(
       false
@@ -1546,7 +1637,35 @@ function clearEditorStyle() {
 
 
   /*
+    ★ 강조선도 함께 걷어낸다 (요구사항 3)
+
+    "서식 지우기"에 문단 강조선만 빠져 있으면, 선을 지우는 길이
+    L 토글 하나뿐이라 문단을 여러 개 선택해 한 번에 정리할 수가
+    없었다.
+
+    아직 선택이 살아 있는 **지금** 먼저 처리한다 — 아래에서
+    extractContents로 본문을 들어내고 나면 문단 경계가 잠시
+    흐트러져서 "어느 문단이 선택됐나"를 다시 셀 수 없다.
+
+    live=true로 부르는 이유는 위에서 이미 스냅샷을 하나 찍었기
+    때문이다. 서식 지우기 한 번이 undo 한 칸이어야 한다.
+
+    대사 자동 강조선은 여기서도 data-rule="off" 마커를 남긴다 —
+    지운 선이 다음 렌더에서 되살아나지 않는다.
+  */
+
+  removeEditorParagraphRule(
+    true
+  );
+
+
+  /*
     선택영역 안쪽 스타일 제거
+
+    ★ 복사 박스 · 메모 · 구분선은 stripRichStylesFromFragment의
+    대상이 아니다(감싸는 인라인 서식만 벗긴다). extractContents로
+    들려 나갔다가 그대로 다시 들어오므로, 선택 안에 있어도
+    사라지지 않는다 (요구사항 3).
   */
 
   const fragment =
@@ -1836,9 +1955,16 @@ function syncEditorRuleToggleState() {
       : [];
 
 
+  /*
+    ★ 눌림 표시도 토글과 같은 기준(some)을 쓴다 (요구사항 3).
+
+    toggleEditorParagraphRule은 "하나라도 걸려 있으면 해제"다.
+    여기만 every로 두면, 선이 보이는데 버튼은 안 눌린 것처럼
+    보이고 누르면 지워지는 — 표시와 동작이 어긋난 상태가 된다.
+  */
+
   const active =
-    runs.length > 0 &&
-    runs.every(
+    runs.some(
       editorRunHasActiveRule
     );
 
@@ -1943,6 +2069,26 @@ function setRichEditorContent(
   ) {
 
     flattenNestedPostHighlights(
+      postEditorContent
+    );
+
+  }
+
+
+  /*
+    ★ 저장된 글에는 조작 UI가 없다 (요구사항 5·6·7).
+
+    사니타이저가 .post-block-tool을 버리므로, 저장되고 다시 열린
+    복사 상자·메모·구분선에는 삭제 버튼도 종류 드롭다운도 없다.
+    편집창에 올라온 지금 다시 붙인다
+    (posts/editor/posts-editor-blocks.js).
+  */
+
+  if (
+    typeof ensureEditorBlockTools === "function"
+  ) {
+
+    ensureEditorBlockTools(
       postEditorContent
     );
 

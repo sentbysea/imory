@@ -774,15 +774,31 @@
         <!-- =================================================
              TOOLBAR
 
-             ★ 정확히 세 줄이다 (요구사항 5)
+             ★ 정확히 세 줄이다 (요구사항 4)
 
-               1행  Page break · H · P · L · Clear
+               1행  Page break · H · P · L · Clear   … Undo · Redo
                2행  Format · B · I · U · S · Photo · Preset
-               3행  오른쪽 끝에 Undo · Redo
+               3행  Insert · Copy box · Memo · Divider
 
              예전에는 버튼 묶음 여덟 개가 한 덩어리로 wrap돼서,
              화면 폭에 따라 줄이 제멋대로 갈렸다(모바일에서 특히).
              이제 각 행이 자기 <div>를 갖고, 그 안에서만 정렬한다.
+
+             ★ Undo/Redo가 1행 오른쪽으로 올라왔다
+
+             예전에는 이 둘만 쓰는 3행이 따로 있었다. 삽입(3행)이
+             생기면서 줄이 넷이 되는 대신, 1행에 남는 오른쪽 공간
+             으로 옮겼다 — 1행의 왼쪽 묶음과 밀어내기용 빈
+             칸(.post-editor-tool-spacer)이 그 자리를 만든다.
+
+             ★ 세 행의 왼쪽 시작점을 맞춘다
+
+             1행은 버튼(page break), 2·3행은 라벨(FORMAT/INSERT)로
+             시작한다. 버튼은 padding-left 6px를 갖고 라벨은 갖지
+             않아서 두 행의 글자가 6px 어긋나 보였다 — 행의 첫
+             요소가 라벨일 때 같은 padding을 주어 맞춘다
+             (posts/posts-editor.css의 .post-editor-tool-line >
+             .post-editor-tool-label:first-child).
 
              ★ 라벨은 한 글자로 줄였다.
 
@@ -922,14 +938,57 @@
             </div>
 
 
+            <!--
+              선택한 곳의 글자 서식과 **문단 강조선**을 함께
+              지운다(요구사항 3 — clearEditorStyle).
+            -->
+
             <button
               class="post-editor-tool-button clear"
               id="postEditorClearStyle"
               type="button"
-              title="선택한 곳의 서식 지우기"
+              title="선택한 곳의 서식과 강조선 지우기"
             >
               clear
             </button>
+
+
+            <!--
+              남는 공간을 전부 먹어서 undo/redo를 오른쪽 끝으로
+              민다. 행이 좁아 가로 스크롤이 생기면 0으로 줄어들어
+              버튼들이 잘리지 않는다(flex-shrink 기본값).
+            -->
+
+            <span class="post-editor-tool-spacer"></span>
+
+
+            <div class="post-editor-tool-group">
+
+              <button
+                class="post-editor-tool-button undo"
+                id="postEditorUndoButton"
+                type="button"
+                title="되돌리기 (Ctrl/Cmd+Z)"
+              >
+                undo
+              </button>
+
+
+              <!--
+                되돌린 것을 다시 실행. 컬러피커 확정 한 번이 undo
+                한 칸이므로 redo도 한 칸으로 되돌아온다.
+              -->
+
+              <button
+                class="post-editor-tool-button redo"
+                id="postEditorRedoButton"
+                type="button"
+                title="다시 실행 (Ctrl/Cmd+Shift+Z)"
+              >
+                redo
+              </button>
+
+            </div>
 
 
           </div>
@@ -1058,39 +1117,95 @@
 
 
           <!-- ===============================================
-               3행 — 되돌리기 (오른쪽 정렬)
+               3행 — 블록 삽입 (요구사항 5·6·7)
 
-               데스크톱은 Ctrl/Cmd+Z(posts-editor-undo.js)로도
-               되는데, 모바일은 키보드 단축키가 없으니 버튼도
-               같이 둔다.
+               지금 커서 자리에 "덩어리"를 하나 넣는다. 글자
+               서식(2행)과 달리 선택한 글자를 고치는 것이 아니라
+               새 블록을 끼워 넣는 동작이라 줄을 따로 둔다.
+
+                 copy box  부제목 + 내용, 내용만 복사되는 상자
+                 memo      제목 + 내용, 메모지 모양
+                 divider   구분선 다섯 가지
+
+               삽입·수정·삭제는 전부 본문 DOM 안에서 일어나고,
+               저장되는 HTML은 사니타이저의 화이트리스트를 통과한
+               것뿐이다(posts/posts-sanitize.js).
           ================================================ -->
 
-          <div class="post-editor-tool-line post-editor-tool-line--end">
+          <div class="post-editor-tool-line">
+
+
+            <span class="post-editor-tool-label">
+              INSERT
+            </span>
 
 
             <button
-              class="post-editor-tool-button undo"
-              id="postEditorUndoButton"
+              class="post-editor-tool-button"
+              id="postEditorInsertCopyBox"
               type="button"
-              title="되돌리기 (Ctrl/Cmd+Z)"
+              title="현재 커서 위치에 복사 상자 넣기"
+              aria-label="복사 상자 넣기"
             >
-              undo
+              copy box
+            </button>
+
+
+            <button
+              class="post-editor-tool-button"
+              id="postEditorInsertMemo"
+              type="button"
+              title="현재 커서 위치에 메모 넣기"
+              aria-label="메모 넣기"
+            >
+              memo
             </button>
 
 
             <!--
-              되돌린 것을 다시 실행. 컬러피커 확정 한 번이 undo
-              한 칸이므로 redo도 한 칸으로 되돌아온다.
+              ★ 종류를 고르면 그 자리에 바로 넣는다.
+
+              드롭다운의 값은 "지금 무엇이 골라져 있는가"가 아니라
+              "무엇을 넣을 것인가"다 — 넣고 나면 안내 문구(첫
+              option)로 되돌린다. 그래야 같은 종류를 연달아 두 번
+              넣을 수 있다(change가 다시 뜬다).
+
+              미리보기는 option 글자 안의 선 문자로 준다 —
+              <select>의 목록은 OS가 그리는 창이라 CSS가 닿지
+              않아서, 실제로 어떤 선인지 보여줄 방법이 글자뿐이다.
             -->
 
-            <button
-              class="post-editor-tool-button redo"
-              id="postEditorRedoButton"
-              type="button"
-              title="다시 실행 (Ctrl/Cmd+Shift+Z)"
+            <select
+              class="post-editor-preset-select"
+              id="postEditorInsertDivider"
+              aria-label="구분선 넣기"
             >
-              redo
-            </button>
+
+              <option value="">
+                divider
+              </option>
+
+              <option value="solid">
+                ───  실선
+              </option>
+
+              <option value="dotted">
+                ┈┈┈  점선
+              </option>
+
+              <option value="dashed">
+                ╌╌╌  파선
+              </option>
+
+              <option value="double">
+                ═══  이중선
+              </option>
+
+              <option value="dots">
+                ⋯  가운데 점 세 개
+              </option>
+
+            </select>
 
 
           </div>
@@ -1616,6 +1731,19 @@
 
             <div class="post-editor-preview-row">
 
+              <!--
+                ★ 행의 설명 라벨이다 — 누를 수 있는 버튼이 아니다.
+
+                align / margin / size와 같은 자리·같은 폭에 둬서
+                네 줄의 컨트롤이 같은 x에서 시작하게 한다
+                (.post-editor-preview-subrow-label의 min-width).
+              -->
+
+              <span class="post-editor-preview-subrow-label">
+                image
+              </span>
+
+
               <button
                 class="post-editor-preview-visibility-toggle"
                 id="postEditorPreviewBackgroundPick"
@@ -1689,6 +1817,49 @@
                ★ 레이아웃 너비(520px)와는 다른 축이라, 이 숫자가
                  달라져도 줄바꿈과 페이지 수는 바뀌지 않는다.
           ================================================== -->
+
+          <!-- =================================================
+               HTML 모드 — 디자인 미리보기 (요구사항 10)
+
+               ★ 일반 발췌와 **다른 상자**다.
+
+               HTML 모드에서는 위의 발췌 설정(align/body/size/
+               image)도, 아래의 4:5 페이지 대지도 쓰지 않는다.
+               붙여 넣은 디자인을 그대로 한 장으로 그려서 보여
+               주고, export가 바로 그 상자를 PNG로 찍는다.
+
+               ★ 여기에는 디자인 말고 아무것도 없다.
+
+               상단 OOC · 글 제목/날짜 · 사이트 스킨 · 툴바가
+               캡처에 들어갈 자리가 구조적으로 없다 — 찍는 대상이
+               이 상자 하나뿐이기 때문이다. 디자인 안에 사용자가
+               직접 써넣은 제목·날짜는 디자인의 일부라 남는다.
+
+               ★ Quote Preset은 여기에 관여하지 않는다.
+
+               프리셋 CSS 변수를 쓰는 것은 아래 페이지 대지
+               (.post-editor-preview-page)뿐이고, 이 상자는 그
+               바깥이라 글자색·배경·문단 간격이 디자인을 덮어쓰지
+               않는다.
+
+               동작: posts/export/posts-html-image.js
+          ================================================== -->
+
+          <div
+            class="post-editor-html-preview"
+            id="postEditorHtmlPreview"
+            hidden
+          >
+
+            <p
+              class="post-editor-html-preview-empty"
+              id="postEditorHtmlPreviewEmpty"
+            >
+              HTML을 입력하면 여기에 디자인이 보입니다.
+            </p>
+
+          </div>
+
 
           <div class="post-editor-preview-stage-meta">
 

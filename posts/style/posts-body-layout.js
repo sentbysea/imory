@@ -241,12 +241,12 @@ const POST_STYLE_DEFAULTS =
     /*
       확대 배율. 1 = "캔버스를 빈틈없이 덮는 최소 크기"(= cover).
 
-      ★ 1보다 작아질 수 있다(0.5까지). 그러면 사진이 캔버스보다
+      ★ 1보다 작아질 수 있다(0.01까지). 그러면 사진이 캔버스보다
       작아져서 둘레에 바탕이 드러나고, 그 자리는 배경색으로
       채워진다 — 예전의 "언제나 빈틈없이 덮는다"는 규칙은
       철회됐다(posts/style/posts-canvas-background.js 머리말).
 
-      폼의 슬라이더는 50~150%지만, 그보다 큰 값이 저장된 옛
+      폼의 슬라이더는 1~200%지만, 그보다 큰 값이 저장된 옛
       프리셋은 **로드만으로 깎이지 않는다** — 슬라이더의 최대치를
       그 값까지 늘려서 있는 그대로 보여준다
       (admin/quote/admin-quote-apply-preset.js).
@@ -837,9 +837,30 @@ function applyPostParagraphSpacing(
             Node.ELEMENT_NODE
           ) {
 
-            visit(
-              node
-            );
+            /*
+              ★ 복사 상자 · 메모 안에는 들어가지 않는다
+              (요구사항 8).
+
+              상자 안의 <br><br>은 "문단이 바뀌었다"가 아니라
+              사용자가 친 빈 줄 그대로여야 한다. 여기서 간격
+              블록으로 바꾸면 화면의 줄 수와 복사되는 줄 수가
+              달라지고, 코드 상자에 본문 문단 간격이 끼어든다.
+            */
+
+            if (
+              !(
+                typeof isPostBlockNode === "function" &&
+                isPostBlockNode(
+                  node
+                )
+              )
+            ) {
+
+              visit(
+                node
+              );
+
+            }
 
           }
 

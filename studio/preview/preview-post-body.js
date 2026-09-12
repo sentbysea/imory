@@ -255,8 +255,19 @@ async function buildStudioPostBodyPayload(
 
   if (post.content_type === "html") {
 
+    /*
+      ★ 공개 화면과 같은 규칙 — 붙여 넣은 HTML을 감싼 바깥
+      코드 울타리만 벗긴다(요구사항 9). Preview와 공개 화면이
+      같은 글자를 그려야 하므로 여기서도 같은 함수를 쓴다
+      (posts/posts-format.js).
+    */
+
     return {
-      html: contentText || "",
+      html:
+        stripOuterHtmlCodeFence(
+          contentText ||
+          ""
+        ),
       containerStyle: "",
       isHtmlContent: true
     };
@@ -376,9 +387,19 @@ async function buildStudioFolderBodiesPayload(
 
     if (post.content_type === "html") {
 
+      /*
+        ★ 공개 화면과 같은 규칙 — 붙여 넣은 HTML을 감싼 바깥
+        코드 울타리만 벗긴다(요구사항 9). Preview와 공개 화면이
+        같은 글자를 그려야 하므로 여기서도 같은 함수를 쓴다
+        (posts/posts-format.js).
+      */
+
       bodies.push({
         key,
-        html: contentText,
+        html:
+          stripOuterHtmlCodeFence(
+            contentText
+          ),
         containerStyle: "",
         isHtmlContent: true
       });

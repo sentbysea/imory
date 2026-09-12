@@ -577,6 +577,44 @@ const postEditorPresetSelect =
     "postEditorPresetSelect"
   );
 
+
+/*
+  HTML 모드의 디자인 미리보기 · PNG 저장 (요구사항 10).
+  posts/export/posts-html-image.js가 쓴다.
+*/
+
+const postEditorHtmlPreview =
+  document.getElementById(
+    "postEditorHtmlPreview"
+  );
+
+const postEditorHtmlPreviewEmpty =
+  document.getElementById(
+    "postEditorHtmlPreviewEmpty"
+  );
+
+
+/*
+  툴바 3행 — 블록 삽입(복사 상자 · 메모 · 구분선).
+  posts/editor/posts-editor-blocks.js가 쓴다.
+*/
+
+const postEditorInsertCopyBox =
+  document.getElementById(
+    "postEditorInsertCopyBox"
+  );
+
+const postEditorInsertMemo =
+  document.getElementById(
+    "postEditorInsertMemo"
+  );
+
+const postEditorInsertDivider =
+  document.getElementById(
+    "postEditorInsertDivider"
+  );
+
+
 const postEditorFloatingMenu =
   document.getElementById(
     "postEditorFloatingMenu"

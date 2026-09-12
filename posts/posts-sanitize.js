@@ -177,6 +177,223 @@ function listPostBodyImageIds(
 */
 
 
+/*
+  복사 상자 · 메모의 안쪽 — **글자와 <br>만** 남긴다.
+
+  ★ 왜 여기만 다른가 (요구사항 5·8)
+
+    본문의 나머지는 형광펜·굵게 같은 인라인 서식을 허용한다.
+    이 두 상자는 반대다 — 상자에 넣는 것은 "그대로 보여주고
+    그대로 복사할 글자"이고, 붙여넣기나 옛 글에서 들어온 태그가
+    살아나면 복사되는 글자와 화면이 달라진다.
+
+    그래서 어떤 태그든 껍데기는 버리고 글자만 살린다. 줄바꿈만
+    <br>로 유지한다 — 화면의 줄 수와 복사되는 줄 수가 같아야
+    하기 때문이다. 편집 중 브라우저가 만들어 넣는 <div> 묶음도
+    여기서 <br> 하나로 평평해진다.
+*/
+
+function sanitizeBlockTextInto(
+  node,
+  target
+) {
+
+  Array.from(
+    node.childNodes
+  ).forEach(
+    child => {
+
+      if (
+        child.nodeType ===
+        Node.TEXT_NODE
+      ) {
+
+        target.appendChild(
+          document.createTextNode(
+            child.textContent ||
+            ""
+          )
+        );
+
+
+        return;
+
+      }
+
+
+      if (
+        child.nodeType !==
+        Node.ELEMENT_NODE
+      ) {
+
+        return;
+
+      }
+
+
+      /* 조작 UI와 공개 화면의 복사 버튼은 글자가 아니다 */
+
+      if (
+        isPostBlockToolNode(
+          child
+        ) ||
+        child.classList.contains(
+          POST_COPY_BOX_COPY_CLASS
+        )
+      ) {
+
+        return;
+
+      }
+
+
+      if (
+        child.tagName === "BR"
+      ) {
+
+        target.appendChild(
+          document.createElement(
+            "br"
+          )
+        );
+
+
+        return;
+
+      }
+
+
+      const isBlock =
+        child.tagName === "DIV" ||
+        child.tagName === "P";
+
+
+      /*
+        블록은 자기 줄을 차지한다 — 앞뒤 **양쪽**에서 줄을 바꾼다.
+
+        뒤쪽을 빠뜨리면 블록 다음에 오는 글자가 같은 줄에 붙어서,
+        화면에 보이는 줄 수와 복사되는 줄 수가 달라진다.
+
+        단, 맨 앞이거나 이미 <br>로 끝난 자리에서는 빈 줄을 하나
+        더 만들지 않는다.
+      */
+
+      const breakHere =
+        () => {
+
+          const last =
+            target.lastChild;
+
+
+          if (
+            last &&
+            last.nodeName !== "BR"
+          ) {
+
+            target.appendChild(
+              document.createElement(
+                "br"
+              )
+            );
+
+          }
+
+        };
+
+
+      if (isBlock) {
+
+        breakHere();
+
+      }
+
+
+      sanitizeBlockTextInto(
+        child,
+        target
+      );
+
+
+      if (isBlock) {
+
+        breakHere();
+
+      }
+
+    }
+  );
+
+}
+
+
+/*
+  복사 상자 · 메모를 통째로 다시 만든다. 바깥 class와 두 칸의
+  class만 우리가 정하고, 안쪽은 위 규칙대로 글자만 옮긴다.
+  칸이 없는 옛/망가진 마크업이면 빈 칸을 만들어 구조를 맞춘다.
+*/
+
+function sanitizeRichTextBlock(
+  node,
+  blockClass,
+  titleClass,
+  bodyClass
+) {
+
+  const block =
+    document.createElement(
+      "div"
+    );
+
+
+  block.className =
+    blockClass;
+
+
+  [
+    titleClass,
+    bodyClass
+  ].forEach(
+    partClass => {
+
+      const part =
+        document.createElement(
+          "div"
+        );
+
+
+      part.className =
+        partClass;
+
+
+      const source =
+        node.querySelector(
+          `.${partClass}`
+        );
+
+
+      if (source) {
+
+        sanitizeBlockTextInto(
+          source,
+          part
+        );
+
+      }
+
+
+      block.appendChild(
+        part
+      );
+
+    }
+  );
+
+
+  return block;
+
+}
+
+
 function sanitizeRichNode(
   node,
   target
@@ -303,6 +520,100 @@ function sanitizeRichNode(
     return;
 
   }
+
+  /*
+    편집창 전용 조작 UI (삭제 버튼 · 구분선 종류 드롭다운)
+
+    ★ 통째로 버린다 — 안쪽 글자도 살리지 않는다 (요구사항 8).
+
+    저장되는 HTML · 공개 본문 · 발췌 이미지 어디에도 조작
+    아이콘이 들어갈 자리가 없어야 한다. 화이트리스트에 없는
+    일반 span/div는 아래 기본 경로에서 "껍데기만 벗기고 안쪽
+    글자는 살리는데", 이 UI는 그 반대여야 하므로 여기서 먼저
+    끊는다(posts/style/posts-body-blocks.js).
+  */
+
+  if (
+    isPostBlockToolNode(
+      node
+    )
+  ) {
+
+    return;
+
+  }
+
+
+  /*
+    복사 상자 · 메모 (요구사항 5·6)
+
+    바깥 상자와 제목/내용 두 칸만 다시 만든다. 안쪽은
+    sanitizeBlockTextInto가 **글자와 <br>만** 남기므로,
+    사용자가 써넣은 HTML 코드가 태그로 살아나지 않고 글자
+    그대로 보이고 그대로 복사된다.
+  */
+
+  if (
+    isPostCopyBoxNode(
+      node
+    )
+  ) {
+
+    target.appendChild(
+      sanitizeRichTextBlock(
+        node,
+        POST_COPY_BOX_CLASS,
+        POST_COPY_BOX_TITLE_CLASS,
+        POST_COPY_BOX_BODY_CLASS
+      )
+    );
+
+    return;
+
+  }
+
+
+  if (
+    isPostMemoNode(
+      node
+    )
+  ) {
+
+    target.appendChild(
+      sanitizeRichTextBlock(
+        node,
+        POST_MEMO_CLASS,
+        POST_MEMO_TITLE_CLASS,
+        POST_MEMO_BODY_CLASS
+      )
+    );
+
+    return;
+
+  }
+
+
+  /*
+    구분선 (요구사항 7) — 종류 하나만 남는다.
+    알 수 없는 값은 실선으로 읽힌다.
+  */
+
+  if (
+    isPostDividerNode(
+      node
+    )
+  ) {
+
+    target.appendChild(
+      createPostDivider(
+        node.dataset.divider
+      )
+    );
+
+    return;
+
+  }
+
 
     /*
     수동 PAGE BREAK

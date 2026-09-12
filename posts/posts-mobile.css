@@ -166,6 +166,15 @@
   }
 
 
+  /* 데스크톱과 같은 이유로 첫 라벨만 버튼의 padding·높이에 맞춘다 */
+
+  .post-editor-tool-line > .post-editor-tool-label:first-child {
+    padding-left: 5px;
+
+    line-height: 18px;
+  }
+
+
   .post-editor-tool-button {
     padding: 5px 5px;
 
@@ -173,10 +182,29 @@
   }
 
 
+  /*
+    ★ 드롭다운 두 개(preset · divider)의 폭.
+
+    3행이 생기면서 select가 하나 더 늘었다. 390px 화면에서
+    INSERT + copy box + memo + divider가 한 줄에 들어가야 하므로
+    divider 쪽을 조금 더 좁게 둔다 — 안내 문구("divider")는
+    그대로 읽히고, 고르는 목록은 OS 창이라 이 폭과 무관하다.
+  */
+
   .post-editor-preset-select {
     max-width: 72px;
 
     font-size: 8.5px;
+  }
+
+
+  /*
+    "divider"가 잘리지 않는 최소 폭. 3행에는 아직 오른쪽에 여유가
+    있으므로(390px에서 측정) 안내 문구가 다 보이게 둔다.
+  */
+
+  #postEditorInsertDivider {
+    max-width: 84px;
   }
 
 
@@ -431,7 +459,11 @@
 
 
   .post-editor-preview-subrow-label {
+    min-width: 27px;
+
     font-size: 8px;
+
+    line-height: 19px;
   }
 
 

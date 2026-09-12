@@ -25,12 +25,24 @@
      갈아끼운 탓이다(그리고 `restoreEditorSelection()`이 자리가
      같아도 선택을 다시 설정해 selectionchange가 초당 1만 번 넘게
      돌았다). 그 둘을 고친 뒤로는, 손가락이 주 입력인 기기에서
-     **OS 기본 색상 선택기**를 쓴다 —
-     `imoryColorPickerMode()` / `openImoryNativeColorPicker()`.
+     **OS 기본 색상 선택기**를 쓴다 — `imoryColorPickerMode()`.
 
      이 팝오버는 제거하지 않았다. 데스크톱의 기본이자, 기본
      피커를 쓸 수 없을 때의 대안으로 그대로 남아 있다.
      자세한 내용은 IMORY_EDITOR_DECOR_DESIGN.md §10-9.
+
+   ★ 그 다음 — 색 고르기가 두 단계가 되었다 (요구사항 2)
+
+     색 견본을 누르면 먼저 **프리셋 색 목록**이 뜨고
+     (openImoryColorMenu, 이 파일 맨 아래), 거기서 색을 바로
+     고르거나 "직접 선택"으로 이 팝오버 / OS 기본 피커로 넘어간다.
+
+     그 직접 선택은 **진짜 보이는 <input type="color">**다. 예전에
+     화면 밖에 숨겨 두고 `input.click()`으로 열던 칸은 없앴다 —
+     숨겨진 칸에 대한 프로그램 클릭을 사용자 제스처로 보지 않는
+     브라우저에서 창이 뜨지 않았고, 그 실패를 우리 코드가 알아챌
+     방법도 없어서 "눌러도 아무 일도 일어나지 않는" 상태로
+     끝났다. 자세한 내용은 이 파일 맨 아래 §1단계.
 
    ★ 닫히는 길은 셋, 그중 확정은 하나뿐이다
 
@@ -1835,36 +1847,503 @@ function imoryColorPickerMode() {
 
 
 /*
-  컨트롤 하나에 붙는 숨은 <input type="color">. 버튼 안에 넣을 수
-  없어서(중첩 불가) 바로 옆에 두고 프로그램으로 연다 — 여는 호출이
-  실제 탭(pointerup) 안에서 일어나므로 사용자 제스처 안이다.
+  ★ 예전의 숨은 <input type="color">는 없앴다 (요구사항 2)
 
-  display:none / visibility:hidden은 쓰지 않는다. 그러면 활성화
-  자체가 막히는 브라우저가 있다. 보이지 않게만 한다.
+    컨트롤 옆 화면 밖에 <input type="color">를 하나 숨겨 두고
+    코드로 `input.click()` 해서 OS 창을 열던 길이 있었다. 그
+    호출은 예외를 던지지 않으므로 우리 코드는 언제나 "열었다"고
+    판단했지만, 숨겨진 칸에 대한 프로그램 클릭을 사용자 제스처로
+    보지 않는 브라우저에서는 창이 뜨지 않았다 — 눌러도 아무 일도
+    일어나지 않고 끝나는 버그의 원인이었다.
+
+    지금은 프리셋 색 목록 안의 직접 선택이 **진짜 보이는**
+    <input type="color">다(아래 renderImoryColorMenuCustom).
+    사용자의 손가락이 그 칸에 직접 닿으므로 프로그램 클릭이
+    필요 없고, OS 창이 열리는 것은 브라우저의 기본 동작이다.
 */
 
-const IMORY_NATIVE_COLOR_INPUT_CLASS =
-  "imory-native-color-input";
+
+/* =========================================================
+   1단계 — 프리셋 색 목록 (요구사항 2)
+
+   ★ 무엇이 바뀌었나
+
+     예전에는 H/P/L 견본을 누르면 곧장 색을 "고르는" 단계로
+     갔다 — 데스크톱은 커스텀 팝오버, 손가락 기기는 OS 기본
+     피커였다.
+
+     그런데 실제로 자주 하는 일은 "쓰던 색 중 하나를 다시
+     고르는 것"이다. 그래서 누르면 먼저 **색 목록**이 뜨고,
+     거기서 바로 고르거나, 목록 안의 직접 선택 컨트롤로
+     넘어가게 했다.
+
+   ★ 그리고 눌러도 아무것도 열리지 않던 것을 고쳤다
+
+     예전 경로는 화면 밖에 숨겨 둔 <input type="color">를
+     코드로 `input.click()` 해서 OS 창을 열었다. 그 호출은
+     예외를 던지지 않으므로 우리 코드는 언제나 "열었다"고
+     판단했지만, 실제로는 창이 뜨지 않는 경우가 있었다 —
+     숨겨진 칸에 대한 프로그램 클릭을 사용자 제스처로 보지
+     않는 브라우저가 있다. 그래서 눌러도 아무 일도 일어나지
+     않고 끝났다.
+
+     지금은 목록 안의 "직접 선택"이 **진짜 보이는
+     <input type="color">** 그 자체다. 사용자의 손가락이 그
+     칸에 직접 닿으므로 프로그램 클릭이 필요 없고, OS 창이
+     열리는 것은 브라우저의 기본 동작이다.
+
+     기본 피커를 아예 쓸 수 없는 환경(<input type="color">
+     미지원)에서는 그 자리에 평범한 버튼을 그리고 커스텀
+     팝오버로 잇는다 — **감지 가능한 실패**에서 아무 반응 없이
+     끝나지 않는다. 창이 열렸는지 자체는 어떤 브라우저도
+     알려주지 않으므로, 칸이 포커스도 받지 못하고 값 변화도
+     없는 채로 잠깐이 지나면 그것도 실패로 보고 커스텀
+     팝오버를 연다(아래 watchdog).
+
+   ★ 본문 선택을 잃지 않는다
+
+     목록 안에서 누르는 모든 곳이 pointerdown에서
+     preventDefault를 건다 — 단 하나, 직접 선택 칸만 빼고.
+     그 칸은 포커스를 받아야 OS 창이 열리기 때문이다. 대신
+     포커스가 넘어가기 **전에**(같은 pointerdown에서) 지금
+     색을 한 번 발라 자리를 만들어 둔다. 그 뒤의 색 변화는
+     만들어 둔 자리의 색만 바꾸므로 본문 구조도 문서 선택도
+     건드리지 않는다 — 조정 중에 DOM이 다시 만들어지거나
+     selectionchange가 반복되지 않는다.
+========================================================== */
+
+/*
+  목록에 늘 나오는 색. 서비스의 담백한 톤에 맞춘 한 벌이고,
+  맨 앞에는 이 컨트롤의 Quote Preset 기본값이 따로 붙는다.
+*/
+
+const IMORY_COLOR_MENU_PALETTE =
+  [
+    "#f4dce6",
+    "#ee9fbd",
+    "#f6e0c8",
+    "#e8dcc8",
+    "#d6e7d8",
+    "#9fc6b0",
+    "#cfe0f0",
+    "#5c7cfa",
+    "#ded6ee",
+    "#8a8a8a",
+    "#333333"
+  ];
 
 
-/* 지금 열려 있는 기본 피커의 입력칸(없으면 null) */
+let imoryColorMenuRoot =
+  null;
 
-let imoryNativeColorPickerActive =
+let imoryColorMenuSession =
   null;
 
 
-function ensureImoryNativeColorInput(
-  control
+function imoryColorMenuPart(
+  role
 ) {
 
-  if (
-    control.imoryNativeColorInput
-  ) {
+  return imoryColorMenuRoot
+    ?.querySelector(
+      `[data-role="${role}"]`
+    );
 
-    return control.imoryNativeColorInput;
+}
+
+
+function closeImoryColorMenu() {
+
+  if (imoryColorMenuRoot) {
+
+    imoryColorMenuRoot.hidden =
+      true;
 
   }
 
+
+  imoryColorMenuSession =
+    null;
+
+}
+
+
+function isImoryColorMenuOpen() {
+
+  return Boolean(
+    imoryColorMenuRoot &&
+    !imoryColorMenuRoot.hidden
+  );
+
+}
+
+
+function ensureImoryColorMenu() {
+
+  if (imoryColorMenuRoot) {
+
+    return imoryColorMenuRoot;
+
+  }
+
+
+  const root =
+    document.createElement(
+      "div"
+    );
+
+
+  root.className =
+    "imory-color-menu";
+
+
+  root.setAttribute(
+    "role",
+    "dialog"
+  );
+
+
+  root.setAttribute(
+    "aria-label",
+    "색 고르기"
+  );
+
+
+  root.hidden =
+    true;
+
+
+  root.innerHTML =
+    `
+      <div class="imory-color-menu-swatches" data-role="swatches"></div>
+
+      <div class="imory-color-menu-actions">
+
+        <span class="imory-color-menu-custom" data-role="custom"></span>
+
+        <span class="imory-color-menu-spacer"></span>
+
+        <button
+          class="imory-color-menu-button"
+          data-role="remove"
+          type="button"
+          hidden
+        ></button>
+
+      </div>
+    `;
+
+
+  document.body.appendChild(
+    root
+  );
+
+
+  imoryColorMenuRoot =
+    root;
+
+
+  /*
+    목록 안을 누를 때 본문 선택을 지킨다 — 직접 선택 칸만
+    예외다(포커스를 받아야 OS 창이 열린다).
+  */
+
+  root.addEventListener(
+    "pointerdown",
+    event => {
+
+      if (
+        event.target?.closest?.(
+          ".imory-color-menu-custom-input"
+        )
+      ) {
+
+        return;
+
+      }
+
+
+      event.preventDefault();
+
+    }
+  );
+
+
+  return root;
+
+}
+
+
+/*
+  목록에 그릴 색을 모은다 — 프리셋 기본값이 맨 앞, 그다음
+  최근에 확정한 색, 그다음 기본 팔레트. 중복은 없앤다.
+*/
+
+function imoryColorMenuColors(
+  presetColor
+) {
+
+  const list =
+    [];
+
+
+  const push =
+    color => {
+
+      const safe =
+        imoryColorClampHex(
+          color,
+          ""
+        );
+
+
+      if (
+        /^#[0-9a-f]{6}$/.test(
+          safe
+        ) &&
+        !list.includes(safe)
+      ) {
+
+        list.push(
+          safe
+        );
+
+      }
+
+    };
+
+
+  push(
+    presetColor
+  );
+
+
+  imoryColorPickerRecent.forEach(
+    push
+  );
+
+
+  IMORY_COLOR_MENU_PALETTE.forEach(
+    push
+  );
+
+
+  return list;
+
+}
+
+
+function renderImoryColorMenuSwatches() {
+
+  const host =
+    imoryColorMenuPart(
+      "swatches"
+    );
+
+
+  if (
+    !host ||
+    !imoryColorMenuSession
+  ) {
+
+    return;
+
+  }
+
+
+  host.replaceChildren();
+
+
+  imoryColorMenuColors(
+    imoryColorMenuSession.presetColor
+  )
+    .forEach(
+      (
+        color,
+        index
+      ) => {
+
+        const swatch =
+          document.createElement(
+            "button"
+          );
+
+
+        swatch.type =
+          "button";
+
+
+        swatch.className =
+          "imory-color-menu-swatch";
+
+
+        swatch.style.backgroundColor =
+          color;
+
+
+        swatch.title =
+          index === 0
+            ? `${color} (프리셋 기본값)`
+            : color;
+
+
+        swatch.setAttribute(
+          "aria-label",
+          swatch.title
+        );
+
+
+        if (
+          color ===
+          imoryColorMenuSession.color
+        ) {
+
+          swatch.dataset.current =
+            "true";
+
+        }
+
+
+        /*
+          bindImoryTapButton과 같은 이유로 pointerup에서 실행한다 —
+          WebKit은 터치에서 pointerdown을 막으면 click을 만들지
+          않는다(이 파일 머리말의 실측표).
+        */
+
+        bindImoryTapButton(
+          swatch,
+          {
+
+            onFire:
+              () => {
+
+                const session =
+                  imoryColorMenuSession;
+
+
+                if (!session) {
+
+                  return;
+
+                }
+
+
+                closeImoryColorMenu();
+
+
+                session.onPickPreset?.(
+                  color
+                );
+
+              }
+
+          }
+        );
+
+
+        host.appendChild(
+          swatch
+        );
+
+      }
+    );
+
+}
+
+
+/*
+  직접 선택 컨트롤.
+
+    기본 피커를 쓸 수 있으면  → 진짜 <input type="color">
+    쓸 수 없으면              → 커스텀 팝오버를 여는 버튼
+
+  어느 쪽이든 누르면 반드시 무엇인가 열린다.
+*/
+
+function renderImoryColorMenuCustom() {
+
+  const host =
+    imoryColorMenuPart(
+      "custom"
+    );
+
+
+  if (
+    !host ||
+    !imoryColorMenuSession
+  ) {
+
+    return;
+
+  }
+
+
+  host.replaceChildren();
+
+
+  const session =
+    imoryColorMenuSession;
+
+
+  const useNative =
+    imoryColorPickerMode() ===
+    "native";
+
+
+  if (!useNative) {
+
+    const button =
+      document.createElement(
+        "button"
+      );
+
+
+    button.type =
+      "button";
+
+
+    button.className =
+      "imory-color-menu-button imory-color-menu-custom-button";
+
+
+    button.textContent =
+      "직접 선택";
+
+
+    bindImoryTapButton(
+      button,
+      {
+
+        onFire:
+          () => {
+
+            closeImoryColorMenu();
+
+
+            session.onCustom?.();
+
+          }
+
+      }
+    );
+
+
+    host.appendChild(
+      button
+    );
+
+
+    return;
+
+  }
+
+
+  /*
+    ★ 진짜 <input type="color">다 — 코드가 대신 눌러 주는 숨은
+    칸이 아니다. 사용자의 손가락이 여기 직접 닿으므로 OS 창이
+    열리는 것은 브라우저의 기본 동작이고, "프로그램 클릭이
+    제스처로 인정되지 않아 아무것도 안 열리는" 경우가 없다.
+  */
 
   const input =
     document.createElement(
@@ -1877,30 +2356,120 @@ function ensureImoryNativeColorInput(
 
 
   input.className =
-    IMORY_NATIVE_COLOR_INPUT_CLASS;
+    "imory-color-menu-custom-input";
 
 
-  /*
-    키보드 순서에는 넣지 않는다 — 누르는 자리는 어디까지나
-    라벨이 붙은 버튼이고, 이 칸은 그 버튼이 여는 창일 뿐이다.
-  */
-
-  input.tabIndex =
-    -1;
+  input.value =
+    imoryColorClampHex(
+      session.color,
+      "#000000"
+    );
 
 
   input.setAttribute(
+    "aria-label",
+    "직접 색 고르기"
+  );
+
+
+  input.title =
+    "직접 색 고르기";
+
+
+  /*
+    ★ 이 칸이 "직접 선택"이라는 것을 글자로 말해 준다.
+
+    브라우저가 그리는 <input type="color">는 그냥 색 네모라, 위
+    스와치들과 생김새가 같아서 "여기를 누르면 색을 직접 고를 수
+    있다"가 드러나지 않는다. 누르는 자리는 어디까지나 칸 자체이므로
+    이 글자는 포인터를 받지 않는다(CSS의 pointer-events: none) —
+    라벨을 눌러 칸을 대신 활성화하면 다시 프로그램 클릭이 되고,
+    그것이 바로 창이 열리지 않던 경로다.
+  */
+
+  const label =
+    document.createElement(
+      "span"
+    );
+
+
+  label.className =
+    "imory-color-menu-custom-label";
+
+
+  label.textContent =
+    "custom";
+
+
+  label.setAttribute(
     "aria-hidden",
     "true"
   );
 
 
-  (
-    control.parentNode ||
-    document.body
-  ).insertBefore(
-    input,
-    control
+  let started =
+    false;
+
+  let sawSignal =
+    false;
+
+
+  /*
+    창이 열리기 **전에** 자리를 만든다 — 아직 본문 선택이
+    살아 있는 지금이 마지막 기회다. 여기서 실패하면(바를 자리를
+    못 찾으면) 직접 선택 자체를 포기하고 안내만 남긴다.
+  */
+
+  const begin =
+    () => {
+
+      if (started) {
+
+        return true;
+
+      }
+
+
+      started =
+        true;
+
+
+      return session.onCustomBegin?.() !==
+        false;
+
+    };
+
+
+  input.addEventListener(
+    "pointerdown",
+    () => {
+
+      begin();
+
+    }
+  );
+
+
+  /* 키보드로 여는 길(Tab → Enter/Space)도 같은 자리를 만든다 */
+
+  input.addEventListener(
+    "click",
+    () => {
+
+      begin();
+
+    }
+  );
+
+
+  input.addEventListener(
+    "focus",
+    () => {
+
+      sawSignal =
+        true;
+
+    }
   );
 
 
@@ -1908,16 +2477,11 @@ function ensureImoryNativeColorInput(
     "input",
     () => {
 
-      const session =
-        input.imoryColorSession;
+      sawSignal =
+        true;
 
 
-      if (!session) {
-        return;
-      }
-
-
-      session.onPreview?.(
+      session.onCustomPreview?.(
         imoryColorClampHex(
           input.value,
           session.color
@@ -1930,37 +2494,36 @@ function ensureImoryNativeColorInput(
 
   /*
     change  OS 창을 닫으며 확정했을 때.
-    blur    change가 오지 않는 환경을 위한 보험 — 둘 중 먼저
-            오는 하나만 처리된다(세션을 비우므로).
+    blur    change가 오지 않는 환경을 위한 보험.
+
+    둘 중 먼저 오는 하나만 처리된다.
   */
+
+  let finished =
+    false;
+
 
   const finish =
     () => {
 
-      const session =
-        input.imoryColorSession;
-
-
-      if (!session) {
-        return;
-      }
-
-
-      input.imoryColorSession =
-        null;
-
-
       if (
-        imoryNativeColorPickerActive === input
+        finished ||
+        !started
       ) {
 
-        imoryNativeColorPickerActive =
-          null;
+        return;
 
       }
 
 
-      session.onApply?.(
+      finished =
+        true;
+
+
+      closeImoryColorMenu();
+
+
+      session.onCustomApply?.(
         imoryColorClampHex(
           input.value,
           session.color
@@ -1982,11 +2545,142 @@ function ensureImoryNativeColorInput(
   );
 
 
-  control.imoryNativeColorInput =
-    input;
+  /*
+    ★ watchdog — 감지 가능한 실패만 잡는다 (요구사항 2)
+
+    OS 창이 실제로 떴는지 알려주는 브라우저는 없다. 다만 창이
+    뜨면 이 칸이 포커스를 받거나 값이 바뀐다 — 잠깐이 지나도록
+    그 둘 중 아무것도 없고 포커스도 여기 없으면, 아무 일도
+    일어나지 않은 것으로 보고 보존해 둔 커스텀 팝오버를 연다.
+
+    반대로 창이 열려 있으면 sawSignal이나 activeElement 중
+    하나는 반드시 참이라, 이 길로 들어와 팝오버가 창 위에
+    겹쳐 뜨는 일은 없다.
+  */
+
+  input.addEventListener(
+    "pointerup",
+    () => {
+
+      window.setTimeout(
+        () => {
+
+          if (
+            finished ||
+            sawSignal ||
+            document.activeElement === input
+          ) {
+
+            return;
+
+          }
 
 
-  return input;
+          finished =
+            true;
+
+
+          closeImoryColorMenu();
+
+
+          session.onCustomFallback?.();
+
+        },
+        700
+      );
+
+    }
+  );
+
+
+  host.appendChild(
+    input
+  );
+
+
+  host.appendChild(
+    label
+  );
+
+}
+
+
+function positionImoryColorMenu(
+  anchor
+) {
+
+  const root =
+    imoryColorMenuRoot;
+
+
+  if (!root) {
+
+    return;
+
+  }
+
+
+  const gap =
+    8;
+
+
+  const size =
+    root.getBoundingClientRect();
+
+
+  const rect =
+    anchor
+      ?.getBoundingClientRect?.() ||
+    {
+      top: window.innerHeight / 2,
+      bottom: window.innerHeight / 2,
+      left: window.innerWidth / 2,
+      width: 0
+    };
+
+
+  let top =
+    rect.bottom + gap;
+
+
+  if (
+    top + size.height >
+    window.innerHeight - gap
+  ) {
+
+    top =
+      Math.max(
+        gap,
+        rect.top - size.height - gap
+      );
+
+  }
+
+
+  let left =
+    rect.left +
+    rect.width / 2 -
+    size.width / 2;
+
+
+  left =
+    Math.max(
+      gap,
+      Math.min(
+        left,
+        window.innerWidth -
+          size.width -
+          gap
+      )
+    );
+
+
+  root.style.top =
+    `${top}px`;
+
+
+  root.style.left =
+    `${left}px`;
 
 }
 
@@ -1994,95 +2688,223 @@ function ensureImoryNativeColorInput(
 /*
   options
 
-    anchor     컬러 컨트롤 버튼
-    color      지금 색
-    onPreview  (hex) => void  — 창을 열어 둔 채 색이 바뀔 때마다
-    onApply    (hex) => void  — 창이 닫히며 확정될 때 한 번
+    anchor           색 견본 버튼
+    color            지금 색
+    presetColor      프리셋 기본값(목록 맨 앞)
+    removeLabel      걷어내기 버튼의 글자(없으면 버튼을 숨긴다)
+
+    onPickPreset(color)    목록에서 색을 골랐다 — 그 자리에서 확정
+    onCustomBegin()        직접 선택 창이 열리기 직전(자리 만들기).
+                           false를 돌려주면 바를 자리가 없다는 뜻
+    onCustomPreview(color) 창을 연 채 색이 바뀔 때마다
+    onCustomApply(color)   창이 닫히며 확정될 때 한 번
+    onCustomFallback()     기본 피커가 열리지 않았다 — 커스텀 팝오버로
+    onCustom()             기본 피커를 아예 쓸 수 없는 환경의 직접 선택
+    onRemove()             이 서식만 걷어내기
 */
 
-function openImoryNativeColorPicker(
+function openImoryColorMenu(
   options = {}
 ) {
 
-  const control =
-    options.anchor;
+  const root =
+    ensureImoryColorMenu();
 
 
-  if (!control) {
-
-    return false;
-
-  }
-
-
-  const input =
-    ensureImoryNativeColorInput(
-      control
-    );
-
-
-  const color =
-    imoryColorClampHex(
-      options.color,
-      "#000000"
-    );
-
-
-  input.value =
-    color;
-
-
-  input.imoryColorSession =
+  imoryColorMenuSession =
     {
 
-      color,
-
-      onPreview:
-        options.onPreview ||
+      anchor:
+        options.anchor ||
         null,
 
-      onApply:
-        options.onApply ||
+      color:
+        imoryColorClampHex(
+          options.color,
+          "#000000"
+        ),
+
+      presetColor:
+        options.presetColor,
+
+      onPickPreset:
+        options.onPickPreset ||
+        null,
+
+      onCustomBegin:
+        options.onCustomBegin ||
+        null,
+
+      onCustomPreview:
+        options.onCustomPreview ||
+        null,
+
+      onCustomApply:
+        options.onCustomApply ||
+        null,
+
+      onCustomFallback:
+        options.onCustomFallback ||
+        null,
+
+      onCustom:
+        options.onCustom ||
+        null,
+
+      onRemove:
+        options.onRemove ||
         null
 
     };
 
 
-  imoryNativeColorPickerActive =
-    input;
+  renderImoryColorMenuSwatches();
 
 
-  try {
+  renderImoryColorMenuCustom();
 
-    input.click();
+
+  const remove =
+    imoryColorMenuPart(
+      "remove"
+    );
+
+
+  if (remove) {
+
+    remove.hidden =
+      !options.onRemove;
+
+
+    remove.textContent =
+      options.removeLabel ||
+      "clear";
 
   }
 
-  catch (error) {
 
-    input.imoryColorSession =
-      null;
+  bindImoryColorMenuRemove();
 
 
-    imoryNativeColorPickerActive =
-      null;
+  root.hidden =
+    false;
 
 
-    return false;
-
-  }
-
-
-  return true;
-
-}
-
-
-function isImoryNativeColorPickerOpen() {
-
-  return Boolean(
-    imoryNativeColorPickerActive &&
-    imoryNativeColorPickerActive.imoryColorSession
+  positionImoryColorMenu(
+    options.anchor
   );
 
 }
+
+
+/*
+  걷어내기 버튼 — 목록을 만들 때 한 번만 건다(내용은 바뀌어도
+  이 버튼은 그대로다).
+*/
+
+function bindImoryColorMenuRemove() {
+
+  const remove =
+    imoryColorMenuPart(
+      "remove"
+    );
+
+
+  if (
+    !remove ||
+    remove.imoryBound
+  ) {
+
+    return;
+
+  }
+
+
+  remove.imoryBound =
+    true;
+
+
+  bindImoryTapButton(
+    remove,
+    {
+
+      onFire:
+        () => {
+
+          const session =
+            imoryColorMenuSession;
+
+
+          if (!session) {
+
+            return;
+
+          }
+
+
+          closeImoryColorMenu();
+
+
+          session.onRemove?.();
+
+        }
+
+    }
+  );
+
+}
+
+
+/*
+  바깥을 누르거나 Escape를 누르면 닫는다 — 아무것도 바꾸지
+  않았으므로 undo 기록에도 아무 흔적이 남지 않는다.
+*/
+
+document.addEventListener(
+  "pointerdown",
+  event => {
+
+    if (
+      !isImoryColorMenuOpen()
+    ) {
+
+      return;
+
+    }
+
+
+    if (
+      imoryColorMenuRoot.contains(
+        event.target
+      )
+    ) {
+
+      return;
+
+    }
+
+
+    /* 방금 이 목록을 연 버튼을 다시 누른 경우도 닫기다 */
+
+    closeImoryColorMenu();
+
+  },
+  true
+);
+
+
+document.addEventListener(
+  "keydown",
+  event => {
+
+    if (
+      event.key === "Escape" &&
+      isImoryColorMenuOpen()
+    ) {
+
+      closeImoryColorMenu();
+
+    }
+
+  }
+);

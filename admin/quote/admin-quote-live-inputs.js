@@ -68,9 +68,6 @@ const quoteLiveInputs = [
   quoteDialogueWeight,
   quoteDialogueItalic,
   quoteDialogueRuleEnabled,
-  quoteDialogueRuleColor,
-  quoteDialogueRuleWidth,
-  quoteDialogueRuleGap,
 
   quoteSourceEnabled,
   quoteSourceColor,
@@ -428,23 +425,42 @@ function collectQuoteSettings() {
       quoteDialogueRuleEnabled?.checked ??
       POST_STYLE_DEFAULTS.dialogueRuleEnabled,
 
-    dialogueRuleColor:
-      quoteInputText(
-        quoteDialogueRuleColor,
-        POST_STYLE_DEFAULTS.dialogueRuleColor
-      ),
+    /*
+      ★ 대사 강조선의 색·굵기·거리는 이제 고르는 자리가 없다
+      (요구사항 3) — 렌더는 BODY 값을 쓴다.
 
-    dialogueRuleWidth:
-      quoteInputNumber(
-        quoteDialogueRuleWidth,
-        POST_STYLE_DEFAULTS.dialogueRuleWidth
-      ),
+      옛 프리셋에 들어 있던 값은 연 그대로 되돌려보낸다. 값이
+      원래 없던 프리셋에는 키를 만들지 않는다 — 기본값을 새로
+      써넣으면 "안 쓰는 설정"이 전 프리셋으로 번진다
+      (admin-quote-refs.js의 quoteLegacyDialogueRule).
+    */
 
-    dialogueRuleGap:
-      quoteInputNumber(
-        quoteDialogueRuleGap,
-        POST_STYLE_DEFAULTS.dialogueRuleGap
-      ),
+    ...(
+      quoteLegacyDialogueRule.color !== null
+        ? {
+            dialogueRuleColor:
+              quoteLegacyDialogueRule.color
+          }
+        : {}
+    ),
+
+    ...(
+      quoteLegacyDialogueRule.width !== null
+        ? {
+            dialogueRuleWidth:
+              quoteLegacyDialogueRule.width
+          }
+        : {}
+    ),
+
+    ...(
+      quoteLegacyDialogueRule.gap !== null
+        ? {
+            dialogueRuleGap:
+              quoteLegacyDialogueRule.gap
+          }
+        : {}
+    ),
 
 
     /* SOURCE */
