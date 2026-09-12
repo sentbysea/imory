@@ -1129,7 +1129,16 @@ async function prepareEditorUI() {
 ========================================================== */
 
 function hidePostEditor() {
-  if (typeof resetPostGallery === "function") resetPostGallery();
+
+  /* 폼을 닫으면 아직 안 올린 파일과 미리보기 URL을 놓아준다
+     (posts/editor/posts-body-images.js). */
+
+  if (typeof resetPostBodyImages === "function") {
+
+    resetPostBodyImages();
+
+  }
+
 
   document.body.classList.remove(
     "post-editor-mode"

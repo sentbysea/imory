@@ -2298,8 +2298,18 @@ async function buildCategorySkinContext(
       : new Map();
 
 
+  /*
+    본문에 넣은 사진. 예전에는 gallery 카테고리에서만 읽었는데,
+    이제 post 카테고리도 같은 본문 에디터로 사진을 넣고 COVER
+    업로드 칸은 사라졌다 — 갤러리로 표시되는 post 카테고리의
+    썸네일이 여기서 나온다(기준 문서 IMORY_POST_BODY_IMAGE_DESIGN.md).
+
+    thumbnailUrl 우선순위는 buildSkinGalleryCards에 있다:
+      명시 대표(is_primary) → 본문 첫 사진 → 예전 post_covers.
+  */
+
   const photoMap = new Map();
-  if (galleryActive && category.type === "gallery") {
+  if (galleryActive) {
     const ids = postsRaw.filter(post => post.visibility !== "secret").map(post => post.id);
     if (ids.length) {
       const { data, error } = await supabaseClient.from("post_gallery_images")

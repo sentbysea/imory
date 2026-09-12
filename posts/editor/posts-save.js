@@ -31,9 +31,52 @@ async function savePostContentAndSecret(
   secretPassword
 ) {
 
-  if (typeof savePostGallery === "function") {
-    const galleryError = await savePostGallery(postId);
-    if (galleryError) return galleryError;
+  /*
+    본문 사진을 **먼저** 저장한다(posts/editor/posts-body-images.js).
+
+    순서가 중요하다: 사진 행이 먼저 생기면, 뒤이어 저장되는 본문
+    HTML이 가리키는 사진은 전부 실재한다. 반대 순서면 사진 저장이
+    실패했을 때 본문이 없는 사진을 가리킨 채로 남는다.
+
+    ★ 이 단계는 본문 HTML을 만들지 않는다
+    예전 갤러리 저장은 RPC가 사진 목록으로 본문 전체를 자동
+    생성해 post_contents에 덮어썼다 — 사용자가 사진 사이에 쓴
+    글이 저장할 때마다 사라지는 구조였다. 지금은 사진 행만
+    저장하고, 본문은 아래 upsert_own_post_content가 편집 영역의
+    내용 그대로 저장한다
+    (supabase/migrations/20260912100000_post_body_images.sql).
+  */
+
+  if (typeof savePostBodyImages === "function") {
+
+    const imageError =
+      await savePostBodyImages(postId);
+
+
+    if (imageError) {
+
+      return imageError;
+
+    }
+
+
+    /*
+      위 단계가 "본문에는 있는데 우리가 모르는" 사진을 편집 영역에서
+      걷어냈을 수 있다(드문 방어 경로). 그 결과가 저장되는 본문에도
+      반영되도록 여기서 다시 읽는다 — 그러지 않으면 존재하지 않는
+      사진을 가리키는 <img>가 본문에 남아 404로 깨진다.
+    */
+
+    if (
+      editorContentMode !== "html" &&
+      typeof getRichEditorHTML === "function"
+    ) {
+
+      content =
+        getRichEditorHTML();
+
+    }
+
   }
 
   /*
@@ -131,16 +174,11 @@ postEditorSaveButton
       const title =
         postEditorTitle
           .value
-          .trim() || (isGalleryEditor() ? "Gallery" : "");
-
-      if (isGalleryEditor() && (postGalleryLoading || postGalleryLoadFailed || (postGalleryDirty && !postGalleryImages.length))) {
-        showPostEditorMessage(postGalleryLoading || postGalleryLoadFailed ? "사진을 다시 불러온 뒤 저장해주세요." : "사진을 한 장 이상 추가해주세요.");
-        return;
-      }
+          .trim();
 
 
       const isHtmlMode =
-        (isGalleryEditor() && postGalleryImages.length > 0) || editorContentMode ===
+        editorContentMode ===
         "html";
 
 
@@ -149,22 +187,40 @@ postEditorSaveButton
         그대로 저장한다(뷰어에서도 그대로 출력하는 게
         이 모드의 목적이므로). 아니면 기존처럼
         textarea.value가 아니라 sanitized rich HTML 저장.
+
+        갤러리도 같은 경로다 — 사진과 글이 섞인 본문을 편집한
+        그대로 저장한다(요구사항 1·4절). 사진의 src는 sanitizer가
+        식별자로부터 다시 만들므로, 아직 안 올린 blob: 미리보기가
+        DB에 들어갈 수 없다(posts/posts-sanitize.js).
       */
 
       const content =
-        isGalleryEditor() && postGalleryImages.length
-          ? getPostGalleryContent()
-          : isHtmlMode
+        isHtmlMode
           ? postEditorHtmlContent
               ?.value ||
             ""
           : getRichEditorHTML();
 
 
+      /*
+        사진만 있고 글자가 없는 글도 "본문이 있는 글"이다 —
+        갤러리 글이 그 모양이다. 글자 대신 사진 개수를 본다.
+      */
+
+      const bodyImageCount =
+        isHtmlMode
+          ? (
+              content.match(/<\s*img\b/gi) || []
+            ).length
+          : (
+              postEditorContent
+                ?.querySelectorAll("img")
+                .length || 0
+            );
+
+
       const plainText =
-        isGalleryEditor() && postGalleryImages.length
-          ? "gallery"
-          : isHtmlMode
+        isHtmlMode
           ? content.trim()
           : getRichEditorPlainText()
               .trim();
@@ -200,10 +256,13 @@ postEditorSaveButton
       }
 
 
-      if (!plainText) {
+      if (
+        !plainText &&
+        !bodyImageCount
+      ) {
 
         showPostEditorMessage(
-          "본문을 입력해주세요."
+          "본문을 입력하거나 사진을 넣어주세요."
         );
 
         return;
@@ -243,45 +302,18 @@ postEditorSaveButton
 
 
       /* =====================================================
-         GALLERY-1 — 대표 이미지: 새 경로에 먼저 올린다
+         대표 이미지(COVER) 업로드 단계는 없다
 
-         요구사항 2절의 순서 "새 경로 → 글 저장 성공 → 기존 파일
-         정리"의 첫 단계다. 이 시점에는 기존 대표 이미지도 post_covers
-         행도 전혀 건드리지 않는다 — 아래에서 글 저장이 실패하면
-         방금 올린 파일만 지우고(rollbackPostCoverUpload) 예전 사진은
-         그대로 남는다(posts/editor/posts-cover-image.js).
+         글의 대표 사진은 이제 **본문에 넣은 사진** 중에서 정한다
+         (posts/editor/posts-body-images.js). 그 저장은 본문과 함께
+         savePostContentAndSecret() 안에서 일어나므로, 여기에 따로
+         둘 단계가 없다.
 
-         올릴 파일이 없으면(사진을 안 골랐거나 제거만 요청) uploaded는
-         null이고 아무 왕복도 일어나지 않는다.
+         예전에 올려 둔 post_covers 행과 파일은 **그대로 둔다** —
+         이 저장 경로가 더 이상 그 테이블을 건드리지 않을 뿐이라,
+         본문에 사진이 없는 글은 지금까지처럼 그 사진을 썸네일로
+         쓴다(skin/skin-context.js의 buildSkinGalleryCards).
       ====================================================== */
-
-      const preparedCover =
-        isGalleryEditor() ? { uploaded: null, error: null } : await preparePostCoverUpload();
-
-
-      if (preparedCover.error) {
-
-        console.error(
-          preparedCover.error
-        );
-
-
-        postEditorSaveButton.disabled =
-          false;
-
-
-        postEditorSaveButton.textContent =
-          "save";
-
-
-        showPostEditorMessage(
-          "대표 이미지를 올리지 못했습니다."
-        );
-
-
-        return;
-
-      }
 
 
       /* =====================================================
@@ -376,14 +408,9 @@ postEditorSaveButton
           );
 
 
-          /* 글 저장이 실패했으니 방금 올린 대표 이미지 파일은
-             아무도 참조하지 않는다 — 지운다. 기존 대표 이미지는
-             건드리지 않았으므로 그대로다. */
-
-          await rollbackPostCoverUpload(
-            preparedCover
-          );
-
+          /* 사진 저장이 실패했다면 그 단계가 이미 방금 올린 파일을
+             지웠고, 기존 사진 행/파일은 건드리지 않았다
+             (posts/editor/posts-body-images.js). */
 
           showPostEditorMessage(
             "저장하지 못했습니다."
@@ -395,43 +422,14 @@ postEditorSaveButton
         }
 
 
-        /* 글이 저장됐다 — 이제 대표 이미지를 등록하고 밀려난
-           이전 파일을 정리한다. 여기서 실패해도 글은 이미 저장된
-           상태이므로 안내만 하고 화면은 그대로 진행한다. */
-
-        const coverSaveError =
-          isGalleryEditor() ? null : await finishPostCoverSave(
-            savedId,
-            preparedCover
-          );
-
-
         /*
-          GALLERY-1 후속: 공개 범위가 바뀌었다고 대표 이미지 파일을
-          옮기거나 지우는 단계는 **없다**. 대표 이미지는 비공개
-          버킷에 있고 바이트는 /api/post-cover로만 나가며, 그 요청마다
-          DB가 글의 현재 공개 상태와 요청자를 확인한다 — 이 저장이
-          커밋되는 순간 그 다음 요청부터 새 공개 범위가 적용된다
-          (posts/editor/posts-cover-image.js 상단 주석,
-           supabase/migrations/20260911100000_post_covers_private_access.sql).
+          공개 범위가 바뀌었다고 사진 파일을 옮기거나 지우는 단계는
+          **없다**. 사진은 비공개 버킷에 있고 바이트는 /api/post-cover로만
+          나가며, 그 요청마다 DB가 글의 현재 공개 상태와 요청자를
+          확인한다 — 이 저장이 커밋되는 순간 그 다음 요청부터 새 공개
+          범위가 적용된다
+          (supabase/migrations/20260911100000_post_covers_private_access.sql).
         */
-
-        if (coverSaveError) {
-
-          console.error(
-            coverSaveError
-          );
-
-
-          /* 이 뒤로 화면이 곧 글 읽기로 넘어가므로 폼 안 메시지는
-             보이지 않는다 — 드문 실패이고 사용자가 반드시 알아야
-             하는 내용이라 alert로 알린다. */
-
-          alert(
-            "글은 저장했지만 대표 이미지는 반영하지 못했습니다."
-          );
-
-        }
 
 
         /*
@@ -562,21 +560,28 @@ postEditorSaveButton
         contentSaveError
       ) {
 
-        // A gallery upload can fail after the post row was created. Retry the
-        // same row instead of creating another post on each SAVE attempt.
-        if (data?.id && isGalleryEditor()) {
-          editorSourcePostId = data.id;
-          currentEditorMode = "edit";
+        /*
+          글 행은 만들어졌는데 사진/본문 저장이 실패할 수 있다.
+          그 상태로 save를 다시 누르면 새 글이 또 만들어지므로,
+          같은 행을 고치는 수정 모드로 넘긴다 — 이미 올라간 사진도
+          그 행에 그대로 붙는다.
+        */
+
+        if (data?.id) {
+
+          editorSourcePostId =
+            data.id;
+
+
+          currentEditorMode =
+            "edit";
+
         }
+
 
         console.error(
           error ||
           contentSaveError
-        );
-
-
-        await rollbackPostCoverUpload(
-          preparedCover
         );
 
 
@@ -586,27 +591,6 @@ postEditorSaveButton
 
 
         return;
-
-      }
-
-
-      const newPostCoverError =
-        isGalleryEditor() ? null : await finishPostCoverSave(
-          data.id,
-          preparedCover
-        );
-
-
-      if (newPostCoverError) {
-
-        console.error(
-          newPostCoverError
-        );
-
-
-        alert(
-          "글은 저장했지만 대표 이미지는 반영하지 못했습니다."
-        );
 
       }
 

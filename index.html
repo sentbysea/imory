@@ -3960,13 +3960,16 @@
             "./posts/editor/posts-toolbar-toggles.js",
 
             /*
-              GALLERY-1: 글 대표 이미지(COVER 칸). posts-save.js가
-              저장 순서 안에서 이 파일의 preparePostCoverUpload()/
-              finishPostCoverSave()를 부르므로 그보다 먼저 로드된다.
+              본문 사진(post/gallery 공통). posts-cover-image.js가
+              버킷 이름·허용 형식·업로드 경로 규칙을 선언하고
+              posts-body-images.js가 그것을 쓰므로 순서를 지킨다.
+              posts-save.js는 저장 순서 안에서 savePostBodyImages()를
+              부르므로 둘 다 그보다 먼저 로드된다
+              (기준 문서 IMORY_POST_BODY_IMAGE_DESIGN.md).
             */
 
             "./posts/editor/posts-cover-image.js",
-            "./posts/editor/posts-gallery.js",
+            "./posts/editor/posts-body-images.js",
             "./posts/editor/posts-save.js",
             "./posts/editor/posts-router-init.js"
           ];

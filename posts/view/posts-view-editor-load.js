@@ -146,11 +146,10 @@ async function openNewPostEditor(
   resetEditorVisibility();
 
 
-  /* GALLERY-1: 새 글에는 대표 이미지가 없다. 이전 글의 미리보기가
-     남지 않게 비운다(posts/editor/posts-cover-image.js). */
+  /* 새 글에는 사진이 없다. 이전 글에서 고르다 만 파일과 미리보기가
+     남지 않게 비운다(posts/editor/posts-body-images.js). */
 
-  resetPostCoverImage();
-  resetPostGallery();
+  resetPostBodyImages();
 
 
   if (
@@ -505,19 +504,6 @@ async function openPostEditor(
 
 
   /*
-    GALLERY-1: 이 글에 저장된 대표 이미지를 COVER 칸에 보여준다.
-    await하지 않는다 — 대표 이미지는 폼을 여는 조건이 아니고,
-    한 번의 왕복을 더 기다리면 수정 폼이 그만큼 늦게 열린다.
-    도착하면 그 자리에 채워진다(posts/editor/posts-cover-image.js).
-  */
-
-  loadPostCoverImage(
-    post.id
-  );
-  await loadPostGallery(post.id);
-
-
-  /*
     비밀번호는 절대 다시 불러와서 보여주지 않음(애초에
     해시라서 원문을 알 방법도 없음). 비워두면 "기존
     비밀번호 유지"로 저장 시 처리된다.
@@ -559,9 +545,32 @@ async function openPostEditor(
   }
 
 
+  /*
+    GALLERY-1이 자동 생성해 저장해 둔 예전 갤러리 본문을 공통
+    에디터로 되돌린다.
+
+    그때는 사진 목록으로 본문 HTML을 만들어 content_type을 'html'로
+    저장했다 — 그대로 열면 사진 대신 <img> 태그 글자가 보이는 raw
+    HTML 칸이 뜬다. 그 본문은 "<p><img ...></p>가 이어붙은 것"
+    외에는 아무것도 아니므로, 그 모양일 때만 리치텍스트로 연다.
+    저장된 데이터는 건드리지 않고 **여는 방식만** 바꾸는 것이라,
+    사진도 순서도 그대로 남고 사용자가 그 위에 글을 덧쓸 수 있다
+    (요구사항 2절 "기존 글의 이미지는 ... 유실되면 안 된다").
+
+    사람이 직접 쓴 HTML 글은 이 모양과 일치하지 않으므로 지금까지처럼
+    HTML 모드로 열린다.
+  */
+
+  const isLegacyGeneratedGalleryBody =
+    post.content_type === "html" &&
+    /^(?:\s*<p>\s*<img src="\/api\/post-cover\?image=[0-9a-f-]{36}" alt="">\s*<\/p>\s*)+$/i
+      .test(String(post.content || ""));
+
+
   const isHtmlPost =
     post.content_type ===
-    "html";
+      "html" &&
+    !isLegacyGeneratedGalleryBody;
 
 
   setEditorContentMode(
@@ -616,6 +625,20 @@ async function openPostEditor(
     );
 
   }
+
+
+  /*
+    본문이 편집 영역에 들어간 **뒤에** 사진 정보를 불러온다 —
+    대표 사진 표시는 본문 안의 그 <img>에 붙는다
+    (posts/editor/posts-body-images.js). await하지 않는다: 사진은
+    본문 HTML이 이미 갖고 있어 화면은 이 왕복을 기다릴 이유가 없고,
+    한 번의 왕복을 더 기다리면 수정 폼이 그만큼 늦게 열린다.
+    도착하면 대표 표시가 채워지고 기준 스냅샷도 다시 찍힌다.
+  */
+
+  loadPostBodyImages(
+    post.id
+  );
 
 
   await prepareEditorUI();
@@ -822,19 +845,19 @@ function postEditorHasUnsavedChanges() {
 
 
   return (
-    postGalleryDirty ||
     now.title !== postEditorSnapshot.title ||
     now.content !== postEditorSnapshot.content ||
     now.ooc !== postEditorSnapshot.ooc ||
 
     /*
-      GALLERY-1: 사진만 바꾸고 나가려는 경우에도 확인 창이 떠야
-      한다 — 고른 파일은 아직 어디에도 올라가지 않았으므로 그냥
-      나가면 조용히 사라진다(posts/editor/posts-cover-image.js).
+      사진만 바꾸고 나가려는 경우에도 확인 창이 떠야 한다 — 고른
+      파일은 아직 어디에도 올라가지 않았고, 대표 지정 변경은
+      sanitize된 본문 HTML에 남지 않아 위 비교로는 잡히지 않는다
+      (posts/editor/posts-body-images.js).
     */
     (
-      typeof postCoverHasPendingChange === "function" &&
-      postCoverHasPendingChange()
+      typeof postBodyImagesHavePendingChange === "function" &&
+      postBodyImagesHavePendingChange()
     )
   );
 
@@ -913,12 +936,12 @@ async function cancelPostEditor() {
 
 
   /*
-    GALLERY-1: 고르기만 하고 취소했으므로 Storage에는 아무것도
-    없다 — 미리보기 URL만 해제한다(임시 파일 정리 문제 자체가
-    생기지 않는 설계, posts/editor/posts-cover-image.js 상단).
+    사진을 고르기만 하고 취소했으므로 Storage에는 아무것도 없다 —
+    미리보기 URL만 해제한다(임시 파일 정리 문제 자체가 생기지 않는
+    설계, posts/editor/posts-body-images.js 상단).
   */
 
-  discardPostCoverImage();
+  resetPostBodyImages();
 
 
   hidePostEditor();

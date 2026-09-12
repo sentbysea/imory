@@ -109,7 +109,19 @@ async function loadPostEditorCategories(
 
   }
 
-  if (typeof renderPostGallery === "function") renderPostGallery();
+  /*
+    카테고리를 바꾸면 post/gallery가 바뀔 수 있다 — 본문 편집 UI는
+    그대로지만 발췌 버튼(PREVIEW/export/copy)의 표시 여부가 달라진다
+    (posts/editor/format/posts-editor-mode.js).
+  */
+
+  if (
+    typeof syncEditorExcerptControls === "function"
+  ) {
+
+    syncEditorExcerptControls();
+
+  }
 
 }
 

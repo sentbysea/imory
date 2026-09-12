@@ -6,6 +6,194 @@
    (같은 페이지에서 함께 로드되어야 함).
 ========================================================== */
 
+
+/* =========================================================
+   본문 사진 (BODY IMAGE)
+
+   기준 문서: IMORY_POST_BODY_IMAGE_DESIGN.md
+
+   본문에 들어가는 사진은 **식별자 하나**로만 표현된다.
+
+     <img src="/api/post-cover?image=<uuid>"
+          alt="..."
+          data-imory-image="<uuid>">
+
+   ★ 왜 주소가 아니라 식별자인가
+     파일은 비공개 버킷에 있고 공개 주소가 없다. 화면에 들어가는
+     주소는 우리 도메인 경로뿐이고, 그 요청마다 서버가 글의 현재
+     공개 상태와 요청자를 다시 확인한다(functions/api/post-cover.js).
+     그래서 본문에 저장되는 것은 "어느 사진인가"뿐이고, 주소는
+     여기서 **매번 다시 만든다**. 저장된 HTML에 남은 주소를 그대로
+     믿지 않는다는 뜻이다 — 남이 만든 HTML(HTML 모드로 쓴 글,
+     예전 글)이 외부 주소를 본문 이미지로 끼워 넣을 수 없다.
+
+   ★ 대표 사진 표시는 여기에 없다
+     "이 글의 대표 사진"은 post_gallery_images.is_primary 행이
+     갖는다. 본문 HTML에는 그 표시도, 편집용 컨트롤도 들어가지
+     않는다(요구사항 2절) — 그래서 공개 본문/발췌에 편집 흔적이
+     새어나갈 자리가 구조적으로 없다.
+========================================================== */
+
+const POST_BODY_IMAGE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+
+function buildPostBodyImageUrl(
+  imageId
+) {
+
+  return `/api/post-cover?image=${encodeURIComponent(imageId)}`;
+
+}
+
+
+/*
+  -> uuid | null
+
+  data-imory-image를 먼저 본다. 없으면 src의 ?image= 값을 읽는다 —
+  GALLERY-1이 자동 생성해 저장해 둔 예전 갤러리 본문
+  (<p><img src="/api/post-cover?image=..."></p>)이 그 모양이라,
+  이 한 줄로 예전 글이 공통 에디터에서 그대로 열린다.
+*/
+
+function getPostBodyImageId(
+  node
+) {
+
+  const fromData =
+    node &&
+    typeof node.getAttribute === "function"
+      ? node.getAttribute("data-imory-image")
+      : null;
+
+
+  if (
+    fromData &&
+    POST_BODY_IMAGE_ID_PATTERN.test(fromData)
+  ) {
+
+    return fromData;
+
+  }
+
+
+  const src =
+    node &&
+    typeof node.getAttribute === "function"
+      ? node.getAttribute("src") || ""
+      : "";
+
+
+  const match =
+    /[?&]image=([^&"'\s]+)/.exec(src);
+
+
+  const candidate =
+    match
+      ? decodeURIComponent(match[1])
+      : "";
+
+
+  return POST_BODY_IMAGE_ID_PATTERN.test(candidate)
+    ? candidate
+    : null;
+
+}
+
+
+/*
+  본문 HTML에서 사진만 걷어낸다. 발췌(PREVIEW/export/copy)가 쓴다 —
+  발췌기는 아직 이미지를 지원하지 않으므로(요구사항 5절) 글자만
+  남긴 채 그리게 한다. 저장된 본문은 건드리지 않는다.
+*/
+
+function stripPostBodyImages(
+  html
+) {
+
+  const holder =
+    document.createElement(
+      "div"
+    );
+
+
+  holder.innerHTML =
+    String(
+      html || ""
+    );
+
+
+  holder
+    .querySelectorAll(
+      "img"
+    )
+    .forEach(
+      image => {
+
+        image.remove();
+
+      }
+    );
+
+
+  return holder.innerHTML;
+
+}
+
+
+/*
+  본문에 실제로 들어 있는 사진 식별자를 **나온 순서대로** 돌려준다.
+  저장이 position을 이 순서로 매기고(요구사항 4절 "텍스트와 사진의
+  배치 순서를 저장"), 나중에 발췌기가 이미지를 지원할 때도 같은
+  순서를 쓴다(요구사항 5절).
+*/
+
+function listPostBodyImageIds(
+  root
+) {
+
+  if (!root) {
+
+    return [];
+
+  }
+
+
+  const ids =
+    [];
+
+
+  root
+    .querySelectorAll(
+      "img"
+    )
+    .forEach(
+      image => {
+
+        const id =
+          getPostBodyImageId(
+            image
+          );
+
+
+        if (
+          id &&
+          !ids.includes(id)
+        ) {
+
+          ids.push(id);
+
+        }
+
+      }
+    );
+
+
+  return ids;
+
+}
+
+
 /* =========================================================
    SAFE HTML
 ========================================================== */
@@ -20,6 +208,7 @@
   - span.post-inline-font
   - span.post-inline-highlight
   - span.post-inline-color
+  - img (본문 사진 — 식별자 하나로만, 위 주석 참고)
 */
 
 
@@ -71,6 +260,79 @@ function sanitizeRichNode(
       document.createElement(
         "br"
       )
+    );
+
+    return;
+
+  }
+
+
+  /*
+    본문 사진
+
+    식별자를 읽어내지 못하면 **통째로 버린다** — 외부 주소나
+    data: URL이 본문에 들어올 자리가 없다. 살아남는 경우에도
+    src는 남아 있던 값이 아니라 식별자로 다시 만든 우리 도메인
+    경로다(위 buildPostBodyImageUrl 주석).
+
+    편집 중에는 아직 올리지 않은 파일의 blob: 미리보기가 src에
+    들어 있는데, 그 상태에서 저장을 눌러도 여기서 정식 주소로
+    바뀌므로 blob: 주소가 DB에 들어갈 수 없다.
+  */
+
+  if (
+    tag === "img"
+  ) {
+
+    const imageId =
+      getPostBodyImageId(
+        node
+      );
+
+
+    if (!imageId) {
+
+      return;
+
+    }
+
+
+    const image =
+      document.createElement(
+        "img"
+      );
+
+
+    image.setAttribute(
+      "src",
+      buildPostBodyImageUrl(
+        imageId
+      )
+    );
+
+
+    image.setAttribute(
+      "alt",
+      String(
+        node.getAttribute("alt") || ""
+      ).slice(0, 200)
+    );
+
+
+    image.setAttribute(
+      "data-imory-image",
+      imageId
+    );
+
+
+    image.setAttribute(
+      "loading",
+      "lazy"
+    );
+
+
+    target.appendChild(
+      image
     );
 
     return;
@@ -755,7 +1017,7 @@ function isRichPostContent(
 ) {
 
   return (
-    /<\s*(?:div|p|br|span|b|strong|i|em|u)\b/i
+    /<\s*(?:div|p|br|span|b|strong|i|em|u|img)\b/i
       .test(
         String(
           content || ""

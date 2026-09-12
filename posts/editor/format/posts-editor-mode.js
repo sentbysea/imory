@@ -116,17 +116,51 @@ function setEditorContentMode(
   }
 
 
-  /*
-    HTML 모드는 "글 자체를 HTML 뷰어처럼 보여주는" 용도라
-    발췌 이미지(프리뷰/export) 기능은 의미가 없어서 숨긴다.
-  */
+  syncEditorExcerptControls();
+
+}
+
+
+
+/* =========================================================
+   발췌 컨트롤 (PREVIEW / export / copy)
+
+   본문 편집 UI는 post와 gallery가 **같다**. 다른 것은 이
+   세 버튼뿐이다(요구사항 3절).
+
+     HTML 모드  — 글 자체를 HTML 뷰어처럼 보여주는 용도라
+                  발췌 이미지가 의미가 없다
+     gallery    — 사진이 본문인 글이라 글자 발췌 카드를 만들
+                  일이 없다
+
+   둘 중 하나라도 해당하면 숨긴다. cancel/save/delete는
+   어느 쪽에서도 그대로다.
+
+   여기서 말하는 copy는 **발췌 이미지 복사** 버튼이다 —
+   본문 글자를 선택해 복사하는 브라우저 기본 동작과는
+   아무 관계가 없다.
+========================================================== */
+
+function syncEditorExcerptControls() {
+
+  const isHtml =
+    editorContentMode === "html";
+
+
+  const hideExcerpt =
+    isHtml ||
+    (
+      typeof isGalleryEditor === "function" &&
+      isGalleryEditor()
+    );
+
 
   if (
     postEditorPreviewToggle
   ) {
 
     postEditorPreviewToggle.hidden =
-      isHtml;
+      hideExcerpt;
 
   }
 
@@ -136,7 +170,7 @@ function setEditorContentMode(
   ) {
 
     postEditorExportButton.hidden =
-      isHtml;
+      hideExcerpt;
 
   }
 
@@ -146,12 +180,15 @@ function setEditorContentMode(
   ) {
 
     postEditorCopyButton.hidden =
-      isHtml;
+      hideExcerpt;
 
   }
 
 
-  if (isHtml) {
+  if (
+    hideExcerpt &&
+    typeof closeEditorPreview === "function"
+  ) {
 
     closeEditorPreview();
 

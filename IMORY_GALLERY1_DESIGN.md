@@ -6,7 +6,19 @@
 문서는 세 가지를 구분해서 쓴다 — **현재 구현** / **앞으로 지켜야 할 원칙** /
 **남은 차이**.
 
+> **일부 변경됨 → [IMORY_POST_BODY_IMAGE_DESIGN.md](./IMORY_POST_BODY_IMAGE_DESIGN.md)**
+>
+> 글의 **대표 이미지를 정하는 방법**이 바뀌었다. 이 문서 §3이 설명하는 별도
+> `COVER` 업로드 칸과, 갤러리 전용 사진 목록 패널은 **없어졌다**. post와
+> gallery가 같은 본문 에디터를 쓰고, 대표 사진은 본문에 넣은 사진 중에서
+> 고른다(지정하지 않으면 본문 첫 사진).
+>
+> 그대로인 것: `post_covers` 테이블과 그 안의 기존 데이터(본문에 사진이 없는
+> 글의 fallback 썸네일로 계속 쓰인다), 비공개 버킷 + `/api/post-cover` 접근
+> 경계, `category.gallery` 스킨 계약, `?page=N`, 비밀글 보호.
+
 관련 문서:
+[IMORY_POST_BODY_IMAGE_DESIGN.md](./IMORY_POST_BODY_IMAGE_DESIGN.md) ·
 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) ·
 [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md) ·
 [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md) ·

@@ -54,9 +54,24 @@ function renderEditorPreviewPages(
     );
 
 
+  /*
+    발췌(PREVIEW/export/copy)는 아직 본문 사진을 다루지 않는다
+    (요구사항 5절 — 다음 작업). 그래서 여기서 사진만 걷어내고
+    글자로만 페이지를 나눈다.
+
+    걷어내는 이유는 "지원하지 않아서"만이 아니다 — 페이지 나누기는
+    높이를 재서 자르는데, 이미지는 늦게 도착해 높이가 나중에
+    바뀐다. 그대로 두면 이미 나눈 페이지가 어긋나고 캡처가 빈
+    상자를 찍는다. 저장된 본문은 건드리지 않으므로 식별자와
+    순서는 그대로 남아 있고, 다음 작업이 그것을 그대로 쓴다
+    (posts/posts-sanitize.js의 listPostBodyImageIds).
+  */
+
   renderStyledPostContentInto(
     source,
-    getRichEditorHTML(),
+    stripPostBodyImages(
+      getRichEditorHTML()
+    ),
     settings,
     {
       keepPageBreaks:

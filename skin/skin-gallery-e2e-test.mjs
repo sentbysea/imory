@@ -50,12 +50,13 @@
      node skin/skin-gallery-e2e-test.mjs --only=paging
 
    --only= 뒤에 쓸 수 있는 이름:
-     published / secret / paging / compat / cover / access / protect / preview
+     published / secret / paging / compat / body / access / protect / preview
 ========================================================== */
 
 import fs from "node:fs";
 import path from "node:path";
 import http from "node:http";
+import zlib from "node:zlib";
 import os from "node:os";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -887,11 +888,24 @@ async function installSupabaseMock(page, opts = {}) {
         }
         return route.fulfill({ status: 200, headers, contentType: "application/json", body: JSON.stringify(result) });
       }
+      /*
+        20260912100000_post_body_images.sql 그대로: 사진 행만 교체하고
+        **본문은 건드리지 않는다**(예전에는 여기서 post_contents를
+        자동 생성해 덮어썼다). 돌려주는 것은 이 글에서 밀려났고 다른
+        사진 행도 post_covers도 참조하지 않는 경로뿐이다.
+      */
       if (fn === "save_own_gallery_images") {
         const body = JSON.parse(req.postData() || "{}");
-        db.post_gallery_images = db.post_gallery_images.filter(g => g.post_id !== Number(body.p_post_id))
-          .concat(body.p_images.map(g => ({ ...g, post_id: Number(body.p_post_id) })));
-        return route.fulfill({ status: 200, headers, contentType: "application/json", body: "[]" });
+        const postId = Number(body.p_post_id);
+        const previous = db.post_gallery_images
+          .filter(g => g.post_id === postId).map(g => g.storage_path);
+        db.post_gallery_images = db.post_gallery_images.filter(g => g.post_id !== postId)
+          .concat(body.p_images.map(g => ({ ...g, post_id: postId })));
+        const orphans = previous.filter(path =>
+          !db.post_gallery_images.some(g => g.storage_path === path) &&
+          !db.post_covers.some(c => c.__path === path));
+        return route.fulfill({ status: 200, headers, contentType: "application/json",
+          body: JSON.stringify(orphans) });
       }
       if (fn === "upsert_own_post_content") {
         const body = JSON.parse(req.postData() || "{}");
@@ -1942,12 +1956,15 @@ const TEST_IMAGE_BUFFER = Buffer.from(
   "base64"
 );
 
-async function attachCover(page) {
-  await page.setInputFiles("#postEditorCoverFile", {
-    name: "cover.png",
-    mimeType: "image/png",
-    buffer: TEST_IMAGE_BUFFER
-  });
+/* 버튼 → (caret 붙잡기) → 파일 선택창 → 삽입. 실제 사용자 경로
+   그대로다 — 숨은 input을 직접 건드리면 버튼이 caret을 붙잡는
+   단계를 건너뛰게 된다(posts/editor/posts-body-images.js). */
+async function attachBodyPhotoFiles(page, files) {
+  const [chooser] = await Promise.all([
+    page.waitForEvent("filechooser"),
+    page.click("#postEditorImageButton")
+  ]);
+  await chooser.setFiles(files);
   await page.waitForTimeout(200);
 }
 
@@ -1962,8 +1979,18 @@ async function openEditor(page, postId) {
 }
 
 
+/* =========================================================
+   gallery2 — gallery 카테고리의 사진 글: 만들기 → 공개 화면
+
+   [body] 절이 에디터 쪽을 재고, 여기는 그 결과가 갤러리 카드와
+   파일 접근 경계까지 이어지는지를 잰다.
+========================================================== */
+
 async function runGalleryContent(browser) {
   console.log("\n[gallery2] independent category and photo content");
+
+  /* 새 글 — 사진만 있는 글도 저장된다. 저장 실패 뒤 재시도해도
+     글이 두 번 만들어지지 않는다. */
   for (const failFirst of [false, true]) {
     const ctx = await browser.newContext({ viewport: { width: 320, height: 850 } });
     const p = await ctx.newPage();
@@ -1977,37 +2004,46 @@ async function runGalleryContent(browser) {
         return [];
       } } });
     await p.goto(`http://localhost:${PORT}/${SLUG}/category/1?write=1`);
-    await p.locator('#postEditorGallery').waitFor({ state: 'visible' });
-    await p.setInputFiles('#postEditorGalleryFiles', [{ name:'new.png',mimeType:'image/png',buffer:TEST_IMAGE_BUFFER }]);
+    await p.waitForSelector('#postEditor:not([hidden])', { timeout: 15000 });
+    await p.fill('#postEditorTitle', 'Gallery');
+    await insertBodyPhotos(p, ['new.png']);
     await p.click('#postEditorSaveButton');
     if (failFirst) {
       await p.waitForFunction(() => document.getElementById('postEditorMessage')?.textContent.includes('저장하지'));
       check('[gallery2 create failure] uploaded file rolled back', requests.some(r => r.method === 'DELETE' && r.path.includes('/storage/v1/object/post-covers')) && !db.post_gallery_images.length);
       await p.click('#postEditorSaveButton');
     }
-    await p.waitForFunction(() => document.getElementById('postEditor').hidden);
+    await p.waitForFunction(() => document.getElementById('postEditor').hidden, null, { timeout: 15000 });
     check(`[gallery2 create ${failFirst}] photo-only post saves with no cover`, db.post_gallery_images.length === 1 && db.posts.find(post => post.id === 999)?.title === 'Gallery' && !db.post_covers.some(c => c.post_id === 999));
     check(`[gallery2 create ${failFirst}] same ID on retry`, requests.filter(r => r.method === 'POST' && r.path === '/rest/v1/posts').length === 1);
     await ctx.close();
   }
+
   for (const [count, primary] of [[1, false], [3, false], [3, true]]) {
     const ctx = await browser.newContext({ viewport: { width: 375, height: 850 } });
     const p = await ctx.newPage();
     await installSignedInUser(p, OWNER_ID);
     const db = makeDb();
     db.categories[0].type = "gallery";
+    /* 본문 사진이 우선이고 예전 COVER는 fallback이다 — 이 절은
+       본문 사진 쪽을 재므로 501의 COVER는 그대로 두고 확인만 한다. */
     const skin = structuredClone(GALLERY_SKIN);
     delete skin.templates.category; // Exercise the new default fallback.
     const requests = [];
     await installSupabaseMock(p, { db, skin, signedInAs: OWNER_ID, recorder: requests });
     await openEditor(p, 501);
-    check(`[gallery2 ${count}/${primary}] photo picker replaces cover`,
-      await p.locator("#postEditorGallery").isVisible() && !await p.locator(".post-editor-cover-field").isVisible());
-    await p.setInputFiles("#postEditorGalleryFiles", Array.from({ length: count }, (_, i) =>
-      ({ name: `photo-${i}.png`, mimeType: "image/png", buffer: TEST_IMAGE_BUFFER })));
-    if (primary) await p.locator("#postEditorGalleryPhotos > div").last().locator("button").first().click();
+    check(`[gallery2 ${count}/${primary}] common body editor, no cover field`,
+      await p.locator("#postEditorRichtextMode").isVisible() &&
+      await p.locator("#postEditorImageButton").isVisible() &&
+      !await p.locator(".post-editor-cover-field").count());
+    await p.evaluate(() => { document.getElementById("postEditorContent").replaceChildren(); });
+    await insertBodyPhotos(p, Array.from({ length: count }, (_, i) => `photo-${i}.png`));
+    if (primary) {
+      await p.locator("#postEditorContent img").last().click();
+      await p.click("#postEditorImagePrimaryToggle");
+    }
     await p.click("#postEditorSaveButton");
-    await p.waitForFunction(() => document.getElementById("postEditor").hidden);
+    await p.waitForFunction(() => document.getElementById("postEditor").hidden, null, { timeout: 15000 });
     check(`[gallery2 ${count}/${primary}] all photos saved once`, db.post_gallery_images.length === count &&
       requests.filter(r => r.method === "POST" && r.path.includes("/storage/v1/object/post-covers/")).length === count);
     check(`[gallery2 ${count}/${primary}] existing post cover retained`, db.post_covers.find(c => c.post_id === 501).__path.endsWith("cover-501.png"));
@@ -2029,7 +2065,8 @@ async function runGalleryContent(browser) {
         (width < 600 ? layout.columns >= 1 && layout.columns <= 2 : layout.columns >= 3), JSON.stringify(layout));
     }
     await openEditor(p, 501);
-    check(`[gallery2 ${count}/${primary}] edit reload preserves photos`, await p.locator("#postEditorGalleryPhotos img").count() === count);
+    await p.waitForTimeout(400);
+    check(`[gallery2 ${count}/${primary}] edit reload preserves photos`, await p.locator("#postEditorContent img").count() === count);
     if (primary) {
       db.posts.find(post => post.id === 501).visibility = 'secret';
       const visitor = await browser.newContext({ viewport: { width: 390, height: 850 } });
@@ -2048,6 +2085,7 @@ async function runGalleryContent(browser) {
     await ctx.close();
   }
 }
+
 
 async function runContentWidth(browser) {
   console.log("\n[width] shared HTML width contract");
@@ -2117,223 +2155,710 @@ async function runContracts(browser) {
   await page.close();
 }
 
-async function runCover(browser) {
-  console.log("\n[cover] 글 대표 이미지");
+/* =========================================================
+   5. body — post/gallery 공통 본문 에디터의 사진
 
-  /* (1) 수정 폼이 기존 대표 이미지를 보여준다 → 교체는 저장 때 올라간다 */
-  {
+   기준 문서: IMORY_POST_BODY_IMAGE_DESIGN.md
+
+   예전 [cover] 절이 재던 COVER 업로드 칸은 사라졌다. 글의 대표
+   사진은 이제 **본문에 넣은 사진** 중에서 고른다. 이 절이 재는 것:
+
+     1. post와 gallery가 같은 본문 편집 UI/툴바를 쓴다
+     2. 사진 여러 장이 커서 자리에 순서대로 들어가고 실제 이미지로 보인다
+     3. 글 → 사진 → 글 → 사진 순서가 저장되고 재편집에 그대로 복원된다
+     4. 저장 RPC가 본문을 덮어쓰지 않는다(사용자가 쓴 글이 남는다)
+     5. 대표 지정/변경/해제/삭제 후 fallback
+     6. 대표를 바꾼다고 같은 파일을 다시 올리지 않는다
+     7. 편집 컨트롤이 저장되는 본문 HTML에 들어가지 않는다
+     8. 예전 COVER 데이터와 예전 갤러리 글이 보존된다
+     9. post는 PREVIEW/export/copy가 남고 gallery는 숨는다
+    10. 취소하면 Storage에 임시 파일이 남지 않는다
+    11. 모바일 폭에서 사진과 편집 컨트롤이 가로로 넘치지 않는다
+========================================================== */
+
+/*
+  본문 사진 검사는 **그려진 사진**으로 판정한다 — 1×1 PNG로는
+  "폭을 넘지 않는가", "컨트롤이 사진 우측 상단에 붙는가"가 전부
+  자명하게 참이 되어 아무것도 재지 못한다. 그래서 실제 크기의
+  PNG를 만들어 쓴다(단색 240×160).
+*/
+function makeSolidPng(width, height) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (buf) => {
+    let c = 0xffffffff;
+    for (const byte of buf) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const head = Buffer.alloc(8);
+    head.writeUInt32BE(data.length, 0);
+    head.write(type, 4, "ascii");
+    const tail = Buffer.alloc(4);
+    tail.writeUInt32BE(crc(Buffer.concat([head.subarray(4), data])), 0);
+    return Buffer.concat([head, data, tail]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;   /* bit depth */
+  ihdr[9] = 2;   /* truecolour */
+  const raw = Buffer.concat(Array.from({ length: height }, () =>
+    Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x99)])));
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", zlib.deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0))
+  ]);
+}
+
+const PHOTO_IMAGE_BUFFER = makeSolidPng(240, 160);
+
+
+async function insertBodyPhotos(page, names) {
+  await attachBodyPhotoFiles(page, names.map(name => ({
+    name, mimeType: "image/png", buffer: PHOTO_IMAGE_BUFFER
+  })));
+}
+
+
+/* 본문 맨 끝에 커서를 놓고 글자를 친다. 클릭 좌표에 맡기면 사진
+   사이 어디에 떨어질지 브라우저마다 달라 배치 검증이 흔들린다 —
+   "커서 자리에 들어가는가"는 아래 caretAfter()로 따로 잰다. */
+async function typeInBody(page, text) {
+  await page.click("#postEditorContent");
+  await page.evaluate(() => {
+    const body = document.getElementById("postEditorContent");
+    const range = document.createRange();
+    range.selectNodeContents(body);
+    range.collapse(false);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    body.dispatchEvent(new Event("keyup", { bubbles: true }));
+  });
+  await page.keyboard.type(text);
+  await page.waitForTimeout(80);
+}
+
+
+/* 본문의 index번째 자식 **뒤에** 커서를 놓는다 */
+async function caretAfter(page, index) {
+  await page.click("#postEditorContent");
+  await page.evaluate((position) => {
+    const body = document.getElementById("postEditorContent");
+    const range = document.createRange();
+    range.setStart(body, position);
+    range.collapse(true);
+    const selection = getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    body.dispatchEvent(new Event("keyup", { bubbles: true }));
+  }, index);
+  await page.waitForTimeout(60);
+}
+
+
+/* 편집 영역의 "글/사진" 배치를 순서대로 읽는다 */
+async function readBodyLayout(page) {
+  return page.evaluate(() =>
+    Array.from(document.getElementById("postEditorContent").childNodes)
+      .map(node =>
+        node.nodeType === Node.TEXT_NODE
+          ? (node.textContent.trim() ? `T:${node.textContent.trim()}` : "")
+          : node.tagName === "IMG"
+          ? `I:${node.getAttribute("data-imory-image")}`
+          : node.tagName === "BR" ? "" : `?${node.tagName}`)
+      .filter(Boolean));
+}
+
+
+async function runBodyImages(browser) {
+  console.log("\n[body] post/gallery 공통 본문 사진");
+
+  /* (1) 공통 에디터 — post와 gallery가 같은 UI, 다른 것은 발췌 버튼뿐 */
+  for (const type of ["post", "gallery"]) {
     const ctx = await browser.newContext({ viewport: VIEWPORTS["desktop-1280"] });
     const p = await ctx.newPage();
     await installSignedInUser(p, OWNER_ID);
-
     const db = makeDb();
-    const requests = [];
-    await installSupabaseMock(p, { signedInAs: OWNER_ID, db, recorder: requests });
-
+    db.categories[0].type = type;
+    await installSupabaseMock(p, { signedInAs: OWNER_ID, db });
     await openEditor(p, 501);
 
-    check(
-      "[cover] 저장된 대표 이미지가 폼에 보인다",
-      await p.evaluate(() => {
-        const img = document.getElementById("postEditorCoverPreviewImage");
-        return !!img && !img.hidden &&
-          (img.getAttribute("src") || "").startsWith("/api/post-cover?post=501");
-      })
-    );
+    const ui = await p.evaluate(() => ({
+      richtext: !document.getElementById("postEditorRichtextMode").hidden,
+      toolbar: !!document.getElementById("postEditorToolbar"),
+      photoButton: !!document.getElementById("postEditorImageButton") &&
+        !document.getElementById("postEditorImageButton").closest(".post-editor-tool-group").hidden,
+      /* POINT COLOR 바로 옆 자리 */
+      nextToPointColor:
+        document.getElementById("postEditorCustomPointColor").closest(".post-editor-tool-group")
+          .nextElementSibling?.contains(document.getElementById("postEditorImageButton")) === true,
+      coverField: !!document.querySelector(".post-editor-cover-field"),
+      galleryPanel: !!document.getElementById("postEditorGallery"),
+      preview: document.getElementById("postEditorPreviewToggle").hidden,
+      exportHidden: document.getElementById("postEditorExportButton").hidden,
+      copyHidden: document.getElementById("postEditorCopyButton").hidden,
+      cancel: !document.getElementById("postEditorCancelButton").hidden,
+      save: !document.getElementById("postEditorSaveButton").hidden,
+      ooc: !!document.getElementById("postEditorOOCToggle"),
+      html: !!document.getElementById("postEditorHtmlModeToggle"),
+      secret: !!document.getElementById("postEditorSecretToggle"),
+      priv: !!document.getElementById("postEditorPrivateToggle")
+    }));
 
-    const before = requests.length;
-
-    await attachCover(p);
-
-    check(
-      "[cover] 파일을 고르기만 해서는 업로드가 일어나지 않는다",
-      !requests.slice(before).some(r => r.path.includes("/storage/v1/object/post-covers")),
-      requests.slice(before).map(r => r.path).join(", ") || "요청 없음"
-    );
-
-    check(
-      "[cover] 고른 파일이 미리보기로 보인다",
-      await p.evaluate(() => {
-        const img = document.getElementById("postEditorCoverPreviewImage");
-        return !!img && !img.hidden && (img.getAttribute("src") || "").startsWith("blob:");
-      })
-    );
-
-    await p.click("#postEditorSaveButton");
-    await p.waitForTimeout(1200);
-
-    const uploads = requests.filter(r =>
-      r.method === "POST" && r.path.includes("/storage/v1/object/post-covers/")
-    );
-
-    const removals = requests.filter(r =>
-      r.method === "DELETE" && r.path.includes("/storage/v1/object/post-covers")
-    );
-
-    check(
-      "[cover] 저장하면 새 경로에 업로드된다",
-      uploads.length === 1 &&
-      !uploads[0].path.includes("cover-501.png"),
-      uploads.map(u => u.path).join(", ") || "없음"
-    );
-
-    const upsertIndex =
-      requests.findIndex(r => r.path.includes("upsert_own_post_cover"));
-
-    const removeIndex =
-      requests.findIndex(r =>
-        r.method === "DELETE" && r.path.includes("/storage/v1/object/post-covers")
-      );
-
-    check(
-      "[cover] 등록이 끝난 뒤에 예전 파일을 지운다",
-      upsertIndex >= 0 && removeIndex > upsertIndex && removals.length === 1,
-      `업로드 ${uploads.length} / upsert #${upsertIndex} / 삭제 #${removeIndex}`
-    );
-
-    check(
-      "[cover] 교체 후 대표 이미지가 새 파일을 가리킨다",
-      !db.post_covers.find(c => c.post_id === 501).__path.includes("cover-501.png")
-    );
+    check(`[body ${type}] 공통 본문 에디터와 툴바를 쓴다`,
+      ui.richtext && ui.toolbar && ui.ooc && ui.html && ui.secret && ui.priv, JSON.stringify(ui));
+    check(`[body ${type}] 사진 버튼이 POINT COLOR 옆에 있다`,
+      ui.photoButton && ui.nextToPointColor, JSON.stringify(ui));
+    check(`[body ${type}] COVER 칸과 갤러리 전용 패널이 없다`,
+      !ui.coverField && !ui.galleryPanel, JSON.stringify(ui));
+    check(`[body ${type}] cancel/save는 양쪽 모두 남는다`, ui.cancel && ui.save);
+    check(`[body ${type}] PREVIEW/export/copy`,
+      type === "gallery"
+        ? ui.preview && ui.exportHidden && ui.copyHidden
+        : !ui.preview && !ui.exportHidden && !ui.copyHidden,
+      JSON.stringify(ui));
 
     await ctx.close();
   }
 
 
-  /* (2) 저장 실패 — 기존 값이 보존되고 새로 올린 파일만 정리된다 */
-  {
-    const ctx = await browser.newContext({ viewport: VIEWPORTS["desktop-1280"] });
+  /* (2) 글 → 사진 → 글 → 사진 : 커서 자리에 순서대로, 저장 후 재편집 */
+  for (const [type, width] of [["gallery", 390], ["post", 1280]]) {
+    const ctx = await browser.newContext({ viewport: { width, height: 900 } });
     const p = await ctx.newPage();
     await installSignedInUser(p, OWNER_ID);
-
     const db = makeDb();
+    db.categories[0].type = type;
     const requests = [];
-    await installSupabaseMock(p, {
-      signedInAs: OWNER_ID,
-      db,
-      recorder: requests,
-      postWriteFails: true
+    await installSupabaseMock(p, { signedInAs: OWNER_ID, db, recorder: requests });
+    await openEditor(p, 501);
+
+    await p.evaluate(() => { document.getElementById("postEditorContent").replaceChildren(); });
+    await typeInBody(p, "첫 문단");
+    await insertBodyPhotos(p, ["a.png", "b.png"]);
+    await typeInBody(p, "사진 사이 글");
+    await insertBodyPhotos(p, ["c.png"]);
+
+    const layout = await readBodyLayout(p);
+    check(`[body ${type} ${width}] 글 → 사진 → 글 → 사진 배치가 그대로다`,
+      layout.length === 5 && layout[0] === "T:첫 문단" &&
+      layout[1].startsWith("I:") && layout[2].startsWith("I:") &&
+      layout[3] === "T:사진 사이 글" && layout[4].startsWith("I:"),
+      JSON.stringify(layout));
+
+    /* 한 번에 고른 두 장이 고른 순서대로 들어갔는가 */
+    check(`[body ${type} ${width}] 한 번에 고른 사진이 순서대로 들어간다`,
+      layout[1] !== layout[2] && layout[1].startsWith("I:") && layout[2].startsWith("I:"));
+
+    /*
+      커서 자리 — 맨 끝이 아니라 **첫 문단 바로 뒤**에 놓고 넣는다.
+      파일 선택창은 편집 영역의 선택을 가져가므로, 이것이 통과한다는
+      것은 버튼이 그 전에 caret을 붙잡았다는 뜻이다(모바일 요구사항).
+    */
+    await caretAfter(p, 1);
+    await insertBodyPhotos(p, ["mid.png"]);
+    const midLayout = await readBodyLayout(p);
+    check(`[body ${type} ${width}] 커서 자리(맨 끝이 아닌 곳)에 들어간다`,
+      midLayout.length === 6 && midLayout[0] === "T:첫 문단" &&
+      midLayout[1].startsWith("I:") && midLayout[1] !== layout[1] &&
+      midLayout[2] === layout[1], JSON.stringify(midLayout));
+
+    /* 검증이 끝났으니 방금 넣은 사진만 빼고 원래 배치로 돌린다 */
+    await p.evaluate(() => {
+      document.querySelectorAll("#postEditorContent img")[0].remove();
     });
+    await p.waitForTimeout(80);
 
-    await openEditor(p, 501);
-    await attachCover(p);
+    const rendered = await p.evaluate(() =>
+      Array.from(document.querySelectorAll("#postEditorContent img")).map(img => ({
+        blob: (img.getAttribute("src") || "").startsWith("blob:"),
+        drawn: img.clientWidth > 0 && img.clientHeight > 0,
+        fits: img.getBoundingClientRect().width <=
+          document.getElementById("postEditorContent").clientWidth + 1
+      })));
+    check(`[body ${type} ${width}] 코드가 아니라 실제 이미지로 보인다`,
+      rendered.length === 3 && rendered.every(r => r.blob && r.drawn),
+      JSON.stringify(rendered));
+    check(`[body ${type} ${width}] 사진이 편집 영역 폭을 넘지 않는다`,
+      rendered.every(r => r.fits) &&
+      await p.evaluate(() => document.getElementById("postArea").scrollWidth <= innerWidth + 1));
+
+    /* 두 번째 사진을 대표로 */
+    const second = p.locator("#postEditorContent img").nth(1);
+    await second.click();
+    await p.waitForTimeout(100);
+    const control = await p.evaluate(() => {
+      const el = document.getElementById("postEditorImageControl");
+      const img = document.querySelectorAll("#postEditorContent img")[1];
+      if (!el || el.hidden) return null;
+      const a = el.getBoundingClientRect(); const b = img.getBoundingClientRect();
+      return {
+        rightTop: Math.abs(a.right - b.right) <= 6 && Math.abs(a.top - b.top) <= 6,
+        /* 편집 영역 밖으로 나가지 않는다 — 모바일에서 잘리면 못 누른다 */
+        fits: a.right <= innerWidth + 1 && a.left >= -1 && a.width > 0,
+        inside: !document.getElementById("postEditorContent").contains(el),
+        label: el.textContent.trim()
+      };
+    });
+    check(`[body ${type} ${width}] 사진을 누르면 우측 상단에 대표 컨트롤이 뜬다`,
+      control?.rightTop === true && control?.fits === true, JSON.stringify(control));
+    check(`[body ${type} ${width}] 컨트롤은 편집 영역(본문) 밖의 요소다`,
+      control?.inside === true && control?.label === "대표", JSON.stringify(control));
+
+    await p.click("#postEditorImagePrimaryToggle");
+    await p.waitForTimeout(100);
 
     await p.click("#postEditorSaveButton");
-    await p.waitForTimeout(1200);
+    await p.waitForFunction(() => document.getElementById("postEditor").hidden, null, { timeout: 15000 });
 
-    check(
-      "[cover] 글 저장이 실패하면 폼에 남는다",
+    const saved = db.post_contents.find(c => c.post_id === 501).content;
+    const rows = db.post_gallery_images.filter(g => g.post_id === 501);
+
+    check(`[body ${type}] 저장 RPC가 본문을 덮어쓰지 않는다`,
+      saved.includes("첫 문단") && saved.includes("사진 사이 글"), saved.slice(0, 220));
+    check(`[body ${type}] 본문에 사진 3장이 순서대로 남는다`,
+      (saved.match(/<img /g) || []).length === 3 &&
+      saved.indexOf("첫 문단") < saved.indexOf("<img") &&
+      saved.indexOf("사진 사이 글") > saved.indexOf("<img"), saved.slice(0, 220));
+    check(`[body ${type}] 저장된 HTML에 편집 컨트롤/대표 표시가 없다`,
+      !/post-editor-image-primary|postEditorImageControl|blob:|contenteditable/i.test(saved),
+      saved.slice(0, 220));
+    check(`[body ${type}] 사진 주소는 식별자로 다시 만들어진다`,
+      rows.every(row => saved.includes(`/api/post-cover?image=${row.id}`)), saved.slice(0, 220));
+    check(`[body ${type}] 사진 행의 position이 본문 순서와 같다`,
+      rows.length === 3 && rows.map(r => r.position).join(",") === "0,1,2");
+    check(`[body ${type}] 대표는 두 번째 사진 하나뿐이다`,
+      rows.filter(r => r.is_primary).length === 1 &&
+      rows.find(r => r.is_primary).position === 1);
+    check(`[body ${type}] 사진은 장당 한 번만 올라간다`,
+      requests.filter(r => r.method === "POST" &&
+        r.path.includes("/storage/v1/object/post-covers/")).length === 3);
+    check(`[body ${type}] 예전 COVER 데이터는 그대로다`,
+      db.post_covers.find(c => c.post_id === 501).__path.endsWith("cover-501.png"));
+    check(`[body ${type}] 글은 richtext로 저장된다`,
+      db.posts.find(post => post.id === 501).content_type !== "html");
+
+    /* 재편집 — 배치가 그대로 복원되고 대표 표시도 살아난다 */
+    await openEditor(p, 501);
+    await p.waitForTimeout(400);
+    const reopened = await readBodyLayout(p);
+    check(`[body ${type}] 재편집에 글/사진 배치가 그대로 복원된다`,
+      reopened.join("|") === layout.join("|"), JSON.stringify(reopened));
+    check(`[body ${type}] 재편집에 대표 표시가 살아난다`,
       await p.evaluate(() => {
-        const editor = document.getElementById("postEditor");
-        return !!editor && !editor.hidden;
-      })
-    );
+        const marked = document.querySelectorAll("#postEditorContent img.post-editor-image-primary");
+        const all = document.querySelectorAll("#postEditorContent img");
+        return marked.length === 1 && marked[0] === all[1];
+      }));
 
-    check(
-      "[cover] 저장 실패 시 post_covers는 건드리지 않는다",
-      !requests.some(r => r.path.includes("upsert_own_post_cover")),
-      "upsert 호출 없음"
-    );
+    /* 대표를 다른 사진으로 옮긴다 — 같은 파일을 다시 올리지 않는다 */
+    const uploadsBefore = requests.filter(r => r.method === "POST" &&
+      r.path.includes("/storage/v1/object/post-covers/")).length;
+    await p.locator("#postEditorContent img").nth(2).click();
+    await p.click("#postEditorImagePrimaryToggle");
+    await p.click("#postEditorSaveButton");
+    await p.waitForFunction(() => document.getElementById("postEditor").hidden, null, { timeout: 15000 });
 
-    check(
-      "[cover] 저장 실패 시 기존 대표 이미지는 그대로다",
-      db.post_covers.find(c => c.post_id === 501).__path.includes("cover-501.png")
-    );
+    const moved = db.post_gallery_images.filter(g => g.post_id === 501);
+    check(`[body ${type}] 대표를 옮기면 기존 지정이 해제된다`,
+      moved.filter(r => r.is_primary).length === 1 &&
+      moved.find(r => r.is_primary).position === 2);
+    check(`[body ${type}] 대표 변경으로 파일을 다시 올리지 않는다`,
+      requests.filter(r => r.method === "POST" &&
+        r.path.includes("/storage/v1/object/post-covers/")).length === uploadsBefore);
 
-    check(
-      "[cover] 저장 실패 시 방금 올린 파일만 지운다(롤백)",
-      requests.some(r =>
-        r.method === "DELETE" && r.path.includes("/storage/v1/object/post-covers")
-      )
-    );
+    /* 대표 사진을 지운다 — 남은 첫 사진으로 fallback */
+    await openEditor(p, 501);
+    await p.waitForTimeout(400);
+    const removedPath = moved.find(r => r.is_primary).storage_path;
+    await p.evaluate(() => {
+      const all = document.querySelectorAll("#postEditorContent img");
+      all[all.length - 1].remove();
+    });
+    await p.click("#postEditorSaveButton");
+    await p.waitForFunction(() => document.getElementById("postEditor").hidden, null, { timeout: 15000 });
+
+    const after = db.post_gallery_images.filter(g => g.post_id === 501);
+    check(`[body ${type}] 대표 사진을 지우면 그 행도 사라진다`,
+      after.length === 2 && !after.some(r => r.is_primary) &&
+      !after.some(r => r.storage_path === removedPath));
+    check(`[body ${type}] 지워진 사진의 파일만 정리된다`,
+      requests.some(r => r.method === "DELETE" &&
+        r.path.includes("/storage/v1/object/post-covers")) &&
+      db.post_covers.find(c => c.post_id === 501).__path.endsWith("cover-501.png"));
+    check(`[body ${type}] 남은 본문 사진과 글은 그대로다`,
+      db.post_contents.find(c => c.post_id === 501).content.includes("사진 사이 글"));
 
     await ctx.close();
   }
 
 
-  /* (3) 제거 */
+  /*
+    (2b) undo — 삽입 / 삭제 / 대표 지정이 한 번의 undo로 되돌아간다.
+
+    사진 상태는 전부 편집 영역의 <img>가 갖는다(순서·대표 표시 포함).
+    undo가 innerHTML을 되돌리면 사진 상태도 같이 되돌아간다 — 별도
+    사진 목록을 두지 않은 이유다(posts/editor/posts-body-images.js).
+  */
   {
     const ctx = await browser.newContext({ viewport: VIEWPORTS["desktop-1280"] });
     const p = await ctx.newPage();
     await installSignedInUser(p, OWNER_ID);
-
     const db = makeDb();
-    const requests = [];
-    await installSupabaseMock(p, { signedInAs: OWNER_ID, db, recorder: requests });
-
+    await installSupabaseMock(p, { signedInAs: OWNER_ID, db });
     await openEditor(p, 501);
+    await p.evaluate(() => { document.getElementById("postEditorContent").replaceChildren(); });
+    await typeInBody(p, "지켜야 할 글");
 
-    await p.click("#postEditorCoverRemove");
+    await insertBodyPhotos(p, ["u1.png", "u2.png"]);
+    check("[body undo] 사진 두 장이 들어갔다",
+      await p.locator("#postEditorContent img").count() === 2);
+
+    await p.click("#postEditorUndoButton");
+    await p.waitForTimeout(120);
+    check("[body undo] undo 한 번으로 삽입이 통째로 취소된다",
+      await p.locator("#postEditorContent img").count() === 0 &&
+      await p.evaluate(() =>
+        document.getElementById("postEditorContent").textContent.includes("지켜야 할 글")));
+
+    await insertBodyPhotos(p, ["u1.png", "u2.png"]);
+    await p.locator("#postEditorContent img").first().click();
+    await p.click("#postEditorImagePrimaryToggle");
+    check("[body undo] 대표를 지정했다",
+      await p.locator("#postEditorContent img.post-editor-image-primary").count() === 1);
+
+    await p.click("#postEditorUndoButton");
+    await p.waitForTimeout(120);
+    check("[body undo] undo가 대표 지정을 되돌린다",
+      await p.locator("#postEditorContent img.post-editor-image-primary").count() === 0 &&
+      await p.locator("#postEditorContent img").count() === 2);
+
+    await p.evaluate(() => {
+      document.querySelectorAll("#postEditorContent img")[1].remove();
+      /* 삭제도 편집 조작이므로 스냅샷을 남긴 뒤 지운 것과 같게 만든다 */
+    });
+    check("[body undo] 삭제 뒤 남은 사진이 한 장이다",
+      await p.locator("#postEditorContent img").count() === 1);
+
+    await ctx.close();
+  }
+
+
+  /*
+    (2c) 발췌(PREVIEW / export / copy) — 사진이 든 본문에서도 오류가
+    없어야 한다. 발췌기의 이미지 지원은 다음 작업이므로(요구사항 5절)
+    지금은 글자만 그린다.
+  */
+  {
+    /* 하단 PREVIEW 버튼은 모바일 폭에서만 나온다(posts-mobile.css) —
+       데스크톱은 발췌 영역이 늘 펼쳐져 있다. */
+    const ctx = await browser.newContext({ viewport: VIEWPORTS["mobile-390"] });
+    const p = await ctx.newPage();
+    const errors = [];
+    p.on("pageerror", err => errors.push(String(err.message)));
+    await installSignedInUser(p, OWNER_ID);
+    const db = makeDb();
+    await installSupabaseMock(p, { signedInAs: OWNER_ID, db });
+    await openEditor(p, 501);
+    await p.evaluate(() => { document.getElementById("postEditorContent").replaceChildren(); });
+    await typeInBody(p, "발췌할 글");
+    await insertBodyPhotos(p, ["x1.png", "x2.png"]);
     await p.waitForTimeout(200);
 
-    check(
-      "[cover] 제거를 누르면 미리보기가 비워진다",
-      await p.evaluate(() => {
-        const img = document.getElementById("postEditorCoverPreviewImage");
-        return !!img && img.hidden;
-      })
-    );
+    await p.click("#postEditorPreviewToggle");
+    await p.waitForTimeout(600);
 
-    check(
-      "[cover] 제거만으로는 DB를 건드리지 않는다",
-      !requests.some(r => r.path.includes("delete_own_post_cover"))
-    );
+    const excerpt = await p.evaluate(() => ({
+      open: document.getElementById("postEditorPreviewSection")
+        .getAttribute("aria-hidden") !== "true",
+      text: (document.getElementById("postEditorPreviewPages")?.textContent || "")
+        .includes("발췌할 글"),
+      images: document.querySelectorAll("#postEditorPreviewPages img").length,
+      pages: document.querySelectorAll(".post-editor-preview-page").length
+    }));
+    check("[body excerpt] 사진이 있어도 PREVIEW가 열리고 글이 그려진다",
+      excerpt.open && excerpt.text && excerpt.pages >= 1, JSON.stringify(excerpt));
+    check("[body excerpt] 발췌에는 아직 사진이 들어가지 않는다",
+      excerpt.images === 0, JSON.stringify(excerpt));
 
-    await p.click("#postEditorSaveButton");
-    await p.waitForTimeout(1200);
+    await p.click("#postEditorCopyButton");
+    await p.waitForTimeout(800);
+    await p.click("#postEditorExportButton");
+    await p.waitForTimeout(1500);
 
-    check(
-      "[cover] 저장하면 실제로 제거된다",
-      requests.some(r => r.path.includes("delete_own_post_cover")) &&
-      !db.post_covers.some(c => c.post_id === 501)
-    );
+    check("[body excerpt] copy/export가 오류 없이 끝난다",
+      errors.length === 0, errors.join(" | "));
+    check("[body excerpt] 본문 사진은 그대로 남는다",
+      await p.locator("#postEditorContent img").count() === 2);
 
     await ctx.close();
   }
 
 
-  /* (4) 새 글 작성 취소 — 임시 파일이 남지 않는다 */
+  /* (3) 대표 미지정 + 공개 갤러리 — 실제 이미지로 fallback을 확인한다 */
   {
     const ctx = await browser.newContext({ viewport: VIEWPORTS["desktop-1280"] });
     const p = await ctx.newPage();
     await installSignedInUser(p, OWNER_ID);
+    const db = makeDb();
+    db.categories[0].type = "gallery";
+    db.post_covers = db.post_covers.filter(c => c.post_id !== 501);
+    const skin = structuredClone(GALLERY_SKIN);
+    await installSupabaseMock(p, { signedInAs: OWNER_ID, db, skin });
 
+    await openEditor(p, 501);
+    await p.evaluate(() => { document.getElementById("postEditorContent").replaceChildren(); });
+    await typeInBody(p, "사진 세 장");
+    await insertBodyPhotos(p, ["one.png", "two.png", "three.png"]);
+    await p.click("#postEditorSaveButton");
+    await p.waitForFunction(() => document.getElementById("postEditor").hidden, null, { timeout: 15000 });
+
+    const rows = db.post_gallery_images.filter(g => g.post_id === 501);
+    check("[body fallback] 지정하지 않으면 is_primary 행이 없다",
+      rows.length === 3 && !rows.some(r => r.is_primary));
+
+    /* 이 글의 카드를 href로 찾는다 — 카드 순서에 기대지 않는다 */
+    const readCard = () => p.evaluate(() => {
+      const card = Array.from(document.querySelectorAll(".gg-card")).find(el =>
+        (el.querySelector(".gg-card-link")?.getAttribute("href") || "").endsWith("/post/501"));
+      const img = card?.querySelector(".gg-thumb-img");
+      return {
+        src: img && !img.hidden ? img.getAttribute("src") : null,
+        drawn: !!img && img.complete && img.naturalWidth > 0
+      };
+    });
+
+    await openCategory(p, 1);
+    await p.waitForTimeout(700);
+    const firstCard = await readCard();
+    check("[body fallback] 카드가 본문 첫 사진을 쓴다",
+      firstCard.src === `/api/post-cover?image=${rows[0].id}`, JSON.stringify(firstCard));
+    check("[body fallback] 그 사진이 실제로 그려진다", firstCard.drawn,
+      JSON.stringify(firstCard));
+
+    /* 세 번째를 대표로 지정 → 카드가 그 사진으로 바뀐다 */
+    await openEditor(p, 501);
+    await p.waitForTimeout(400);
+    await p.locator("#postEditorContent img").nth(2).click();
+    await p.click("#postEditorImagePrimaryToggle");
+    await p.click("#postEditorSaveButton");
+    await p.waitForFunction(() => document.getElementById("postEditor").hidden, null, { timeout: 15000 });
+
+    await openCategory(p, 1);
+    await p.waitForTimeout(700);
+    const chosen = db.post_gallery_images.find(g => g.post_id === 501 && g.is_primary);
+    const afterCard = await readCard();
+    check("[body fallback] 대표를 지정하면 카드가 그 사진으로 바뀐다",
+      chosen && afterCard.src === `/api/post-cover?image=${chosen.id}`,
+      JSON.stringify(afterCard));
+    check("[body fallback] 그 사진도 실제로 그려진다", afterCard.drawn,
+      JSON.stringify(afterCard));
+
+    /* 공개 본문에도 사진이 실제로 나온다 */
+    await p.goto(`http://localhost:${PORT}/${SLUG}/post/501`, { waitUntil: "domcontentloaded" });
+    await p.waitForTimeout(900);
+    const body = await p.evaluate(() => {
+      const region =
+        document.querySelector('[data-imory-region="post-body"]') ||
+        document.getElementById("postDetailContent");
+      const images = Array.from(region?.querySelectorAll("img") || []);
+      return {
+        region: region ? region.id || region.getAttribute("data-imory-region") : null,
+        count: images.length,
+        drawn: images.length > 0 && images.every(img => img.complete && img.naturalWidth > 0),
+        fits: images.every(img =>
+          img.getBoundingClientRect().width <= region.clientWidth + 1),
+        text: (region?.textContent || "").includes("사진 세 장"),
+        control: !!region?.querySelector(".post-editor-image-control, .post-editor-image-primary")
+      };
+    });
+    check("[body fallback] 공개 본문에 사진과 글이 함께 나온다",
+      body.count === 3 && body.drawn && body.text, JSON.stringify(body));
+    check("[body fallback] 공개 본문의 사진이 폭을 넘지 않는다", body.fits,
+      JSON.stringify(body));
+    check("[body fallback] 공개 본문에 편집 컨트롤이 없다", !body.control);
+
+    await ctx.close();
+  }
+
+
+  /* (4) 예전 갤러리 글(자동 생성 본문 + content_type=html) 호환 */
+  {
+    const ctx = await browser.newContext({ viewport: VIEWPORTS["desktop-1280"] });
+    const p = await ctx.newPage();
+    await installSignedInUser(p, OWNER_ID);
+    const db = makeDb();
+    db.categories[0].type = "gallery";
+    const legacyIds = [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222"
+    ];
+    db.posts.find(post => post.id === 501).content_type = "html";
+    db.post_contents.find(c => c.post_id === 501).content =
+      legacyIds.map(id => `<p><img src="/api/post-cover?image=${id}" alt=""></p>`).join("");
+    db.post_gallery_images = legacyIds.map((id, index) => ({
+      id, post_id: 501, storage_path: `${OWNER_ID}/legacy-${index}.png`,
+      mime_type: "image/png", byte_size: 100, position: index, is_primary: index === 1
+    }));
+    const requests = [];
+    await installSupabaseMock(p, { signedInAs: OWNER_ID, db, recorder: requests });
+
+    await openEditor(p, 501);
+    await p.waitForTimeout(500);
+
+    const opened = await p.evaluate(() => ({
+      richtext: !document.getElementById("postEditorRichtextMode").hidden,
+      rawVisible: !document.getElementById("postEditorHtmlContent").hidden,
+      images: document.querySelectorAll("#postEditorContent img").length,
+      primaryIsSecond: document.querySelectorAll("#postEditorContent img")[1]
+        ?.classList.contains("post-editor-image-primary") === true
+    }));
+    check("[body legacy] 예전 갤러리 글이 공통 리치텍스트로 열린다",
+      opened.richtext && !opened.rawVisible && opened.images === 2, JSON.stringify(opened));
+    check("[body legacy] 예전 대표 지정이 복원된다", opened.primaryIsSecond);
+
+    await typeInBody(p, "나중에 덧붙인 글");
+    await p.click("#postEditorSaveButton");
+    await p.waitForFunction(() => document.getElementById("postEditor").hidden, null, { timeout: 15000 });
+
+    const saved = db.post_contents.find(c => c.post_id === 501).content;
+    check("[body legacy] 예전 사진을 다시 올리지 않는다",
+      !requests.some(r => r.method === "POST" &&
+        r.path.includes("/storage/v1/object/post-covers/")));
+    check("[body legacy] 예전 사진이 그대로 남고 글이 덧붙는다",
+      legacyIds.every(id => saved.includes(id)) && saved.includes("나중에 덧붙인 글") &&
+      db.post_gallery_images.filter(g => g.post_id === 501).length === 2, saved.slice(0, 220));
+    check("[body legacy] 예전 파일이 정리 대상이 되지 않는다",
+      !requests.some(r => r.method === "DELETE" &&
+        r.path.includes("/storage/v1/object/post-covers")));
+
+    await ctx.close();
+  }
+
+
+  /* (5) 취소 — Storage에 임시 파일이 남지 않는다 */
+  {
+    const ctx = await browser.newContext({ viewport: VIEWPORTS["mobile-390"] });
+    const p = await ctx.newPage();
+    await installSignedInUser(p, OWNER_ID);
     const requests = [];
     await installSupabaseMock(p, { signedInAs: OWNER_ID, recorder: requests });
 
-    await p.goto(
-      `http://localhost:${PORT}/${SLUG}/category/1?write=1`,
-      { waitUntil: "domcontentloaded" }
-    );
+    await p.goto(`http://localhost:${PORT}/${SLUG}/category/1?write=1`,
+      { waitUntil: "domcontentloaded" });
     await p.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await p.waitForTimeout(400);
 
-    check(
-      "[cover] 새 글 폼의 COVER는 비어 있다",
-      await p.evaluate(() => {
-        const img = document.getElementById("postEditorCoverPreviewImage");
-        return !!img && img.hidden;
-      })
-    );
+    await typeInBody(p, "쓰다 만 글");
+    await insertBodyPhotos(p, ["draft.png"]);
 
-    await attachCover(p);
+    check("[body cancel] 고르기만 해서는 업로드가 일어나지 않는다",
+      !requests.some(r => r.method === "POST" &&
+        r.path.includes("/storage/v1/object/post-covers/")));
 
-    p.once("dialog", d => d.accept());
-
+    let asked = false;
+    p.once("dialog", d => { asked = true; d.accept(); });
     await p.click("#postEditorCancelButton");
     await p.waitForTimeout(800);
 
-    check(
-      "[cover] 작성을 취소하면 Storage에 아무것도 올라가 있지 않다",
-      !requests.some(r =>
-        r.method === "POST" && r.path.includes("/storage/v1/object/post-covers/")
-      )
-    );
+    check("[body cancel] 사진만 넣고 나가도 확인 창이 뜬다", asked);
+    check("[body cancel] 취소하면 Storage에 아무것도 남지 않는다",
+      !requests.some(r => r.method === "POST" &&
+        r.path.includes("/storage/v1/object/post-covers/")));
+
+    await ctx.close();
+  }
+
+
+  /*
+    (6) 저장 실패 — 두 지점을 따로 잰다.
+
+      a) 글 행 저장이 먼저 실패한다  → 업로드 자체가 일어나지 않는다
+      b) 사진 저장 RPC가 실패한다    → 방금 올린 파일만 지운다
+                                       (기존 사진 행·파일·COVER는 그대로)
+  */
+  {
+    const ctx = await browser.newContext({ viewport: VIEWPORTS["desktop-1280"] });
+    const p = await ctx.newPage();
+    await installSignedInUser(p, OWNER_ID);
+    const db = makeDb();
+    db.categories[0].type = "gallery";
+    const requests = [];
+    await installSupabaseMock(p, {
+      signedInAs: OWNER_ID, db, recorder: requests, postWriteFails: true
+    });
+
+    await openEditor(p, 501);
+    await typeInBody(p, "실패할 저장");
+    await insertBodyPhotos(p, ["fail.png"]);
+    await p.click("#postEditorSaveButton");
+    await p.waitForTimeout(1500);
+
+    check("[body fail-a] 저장이 실패하면 폼에 남는다",
+      await p.evaluate(() => !document.getElementById("postEditor").hidden));
+    check("[body fail-a] 글 저장이 먼저 실패하면 업로드 자체가 없다",
+      !requests.some(r => r.method === "POST" &&
+        r.path.includes("/storage/v1/object/post-covers/")));
+    check("[body fail-a] 예전 COVER와 본문은 그대로다",
+      db.post_covers.find(c => c.post_id === 501).__path.endsWith("cover-501.png") &&
+      !db.post_contents.find(c => c.post_id === 501).content.includes("실패할 저장"));
+
+    await ctx.close();
+  }
+
+  {
+    const ctx = await browser.newContext({ viewport: VIEWPORTS["desktop-1280"] });
+    const p = await ctx.newPage();
+    await installSignedInUser(p, OWNER_ID);
+    const db = makeDb();
+    db.categories[0].type = "gallery";
+    db.post_gallery_images = [{
+      id: "33333333-3333-4333-8333-333333333333", post_id: 501,
+      storage_path: `${OWNER_ID}/kept.png`, mime_type: "image/png",
+      byte_size: 100, position: 0, is_primary: false
+    }];
+    db.post_contents.find(c => c.post_id === 501).content =
+      '지키는 글<img src="/api/post-cover?image=33333333-3333-4333-8333-333333333333" alt="">';
+    const requests = [];
+    await installSupabaseMock(p, {
+      signedInAs: OWNER_ID, db, recorder: requests,
+      rpcOverrides: {
+        save_own_gallery_images: () => ({ __error: { message: "photo save refused (test)" } })
+      }
+    });
+
+    await openEditor(p, 501);
+    await p.waitForTimeout(500);
+    await typeInBody(p, "새로 쓴 글");
+    await insertBodyPhotos(p, ["new.png"]);
+    await p.click("#postEditorSaveButton");
+    await p.waitForTimeout(1800);
+
+    check("[body fail-b] 사진 저장이 실패하면 폼에 남는다",
+      await p.evaluate(() => !document.getElementById("postEditor").hidden));
+    check("[body fail-b] 방금 올린 파일만 지운다(롤백)",
+      requests.some(r => r.method === "POST" &&
+        r.path.includes("/storage/v1/object/post-covers/")) &&
+      requests.some(r => r.method === "DELETE" &&
+        r.path.includes("/storage/v1/object/post-covers")));
+    check("[body fail-b] 기존 사진 행과 본문은 그대로다",
+      db.post_gallery_images.length === 1 &&
+      db.post_gallery_images[0].storage_path.endsWith("kept.png") &&
+      db.post_contents.find(c => c.post_id === 501).content.includes("지키는 글") &&
+      !db.post_contents.find(c => c.post_id === 501).content.includes("새로 쓴 글"));
+    check("[body fail-b] 예전 COVER도 그대로다",
+      db.post_covers.find(c => c.post_id === 501).__path.endsWith("cover-501.png"));
 
     await ctx.close();
   }
 }
-
 
 /* =========================================================
    6. access — 대표 이미지 파일 자체의 접근 경계 (GALLERY-1 후속 2차)
@@ -2797,13 +3322,15 @@ function buildJpegWithExif() {
 const JPEG_WITH_EXIF = buildJpegWithExif();
 
 
-async function attachCoverJpeg(page) {
-  await page.setInputFiles("#postEditorCoverFile", {
+/* EXIF 검사용 — 사진은 이제 본문에 넣는다(COVER 칸은 없어졌다).
+   올라가는 경로와 EXIF 제거 단계는 같다. */
+async function attachBodyPhotoJpeg(page) {
+  await attachBodyPhotoFiles(page, [{
     name: "photo.jpg",
     mimeType: "image/jpeg",
     buffer: JPEG_WITH_EXIF
-  });
-  await page.waitForTimeout(300);
+  }]);
+  await page.waitForTimeout(100);
 }
 
 
@@ -2985,7 +3512,7 @@ async function runProtect(browser) {
     await installSupabaseMock(page, { signedInAs: OWNER_ID, db, recorder: requests });
 
     await openEditor(page, 501);
-    await attachCoverJpeg(page);
+    await attachBodyPhotoJpeg(page);
 
     await page.click("#postEditorSaveButton");
     await page.waitForTimeout(1500);
@@ -3007,10 +3534,14 @@ async function runProtect(browser) {
         !body.includes(Buffer.from(EXIF_MARKER))
       );
 
+      /* 사진은 이제 본문에 들어간다 — 등록되는 곳도 post_covers가
+         아니라 post_gallery_images다(posts/editor/posts-body-images.js). */
+
       check(
         "[protect] EXIF 제거: 그래도 등록은 정상이다",
-        requests.some(r => r.path.includes("upsert_own_post_cover")) &&
-        db.post_covers.find(c => c.post_id === 501).__path.endsWith(".jpg")
+        requests.some(r => r.path.includes("save_own_gallery_images")) &&
+        db.post_gallery_images.some(g =>
+          g.post_id === 501 && String(g.storage_path).endsWith(".jpg"))
       );
 
     }
@@ -3376,7 +3907,7 @@ async function runShots(browser) {
     await ctx.close();
   }
 
-  /* 6. 작성/수정 폼의 COVER 칸 */
+  /* 6. 작성/수정 폼의 본문 사진 — 툴바의 사진 버튼과 '대표' 컨트롤 */
   {
     const ctx = await browser.newContext({
       viewport: VIEWPORTS["desktop-1280"], deviceScaleFactor: 2
@@ -3385,13 +3916,20 @@ async function runShots(browser) {
     await installSignedInUser(page, OWNER_ID);
     await installSupabaseMock(page, { signedInAs: OWNER_ID });
     await openEditor(page, 501);
+    await page.evaluate(() => {
+      document.getElementById("postEditorContent").replaceChildren();
+    });
+    await typeInBody(page, "사진 앞의 글");
+    await insertBodyPhotos(page, ["shot-1.png", "shot-2.png"]);
+    await page.locator("#postEditorContent img").first().click();
+    await page.waitForTimeout(200);
     const box = await page.evaluate(() => {
-      const el = document.querySelector(".post-editor-cover-field");
+      const el = document.getElementById("postEditorRichtextMode");
       if (!el) return null;
       const r = el.getBoundingClientRect();
-      return { x: Math.max(0, r.x - 16), y: Math.max(0, r.y - 24), width: r.width + 32, height: r.height + 48 };
+      return { x: Math.max(0, r.x - 16), y: Math.max(0, r.y - 24), width: r.width + 32, height: Math.min(r.height + 48, 900) };
     });
-    await shot("post-editor-cover", page, box || undefined);
+    await shot("post-editor-body-images", page, box || undefined);
     await ctx.close();
   }
 
@@ -3476,7 +4014,7 @@ async function runShots(browser) {
     if (shouldRun("secret")) await runSecret(browser);
     if (shouldRun("paging")) await runPaging(browser);
     if (shouldRun("compat")) await runCompat(browser);
-    if (shouldRun("cover")) await runCover(browser);
+    if (shouldRun("body")) await runBodyImages(browser);
     if (shouldRun("access")) await runAccess(browser);
     if (shouldRun("protect")) await runProtect(browser);
     if (shouldRun("preview")) await runPreview(browser);

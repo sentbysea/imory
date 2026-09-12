@@ -561,7 +561,6 @@
 */
 
 .post-editor-content-mode-toggle,
-.post-editor-cover-button,
 .post-editor-ooc-toggle {
   padding:
     4px 10px;
@@ -689,117 +688,108 @@
   color: #df8eac;
 }
 
+.post-editor-field[hidden] { display: none; }
 
 
 /* =========================================================
-   COVER IMAGE (GALLERY-1)
+   본문 사진 (BODY IMAGES)
 
-   갤러리 카드의 썸네일이 될 대표 이미지 한 장. 미리보기는
-   정사각으로 자르지 않고 object-fit: cover로 채운다 — 공개
-   갤러리 카드가 쓰는 규칙과 같아서 "여기서 본 구도"가 카드에서도
-   그대로 나온다(IMORY_GALLERY1_DESIGN.md §3-2).
+   post/gallery 공통. 기준 문서: IMORY_POST_BODY_IMAGE_DESIGN.md
+   코드: posts/editor/posts-body-images.js
 ========================================================== */
 
-.post-editor-cover-row {
-  display: flex;
-  align-items: flex-start;
+/*
+  '대표' 컨트롤이 사진 오른쪽 위에 붙을 수 있게 하는 기준 상자.
+  컨트롤은 contenteditable 밖에 있고 좌표만 사진에 맞춘다.
+*/
 
-  gap: 12px;
-}
-
-
-.post-editor-cover-preview {
+#postEditorRichtextMode {
   position: relative;
-
-  flex: 0 0 auto;
-
-  width: 96px;
-  height: 96px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  border:
-    1px solid #eeeeee;
-
-  background: #fbfbfb;
-
-  overflow: hidden;
 }
 
 
-.post-editor-cover-preview img {
-  width: 100%;
-  height: 100%;
+/*
+  block이라 사진이 늘 자기 줄을 차지한다 — 사진 앞뒤로 글을 쓰는
+  동작이 예측 가능해진다. max-width로 모바일 가로 넘침을 막는다
+  (공개 화면 쪽은 core/content-width.css가 같은 일을 한다).
+*/
 
-  object-fit: cover;
-
+.post-editor-richtext img {
   display: block;
+
+  max-width: 100%;
+
+  height: auto;
+
+  margin-block: 8px;
+
+  border-radius: 2px;
 }
 
 
-.post-editor-cover-preview img[hidden] {
+/*
+  대표로 지정된 사진. 이 class는 **편집 화면에만** 있다 —
+  저장되는 HTML은 sanitizer가 식별자만 보고 img를 새로 만들기
+  때문에 어떤 class도 따라가지 않는다(posts/posts-sanitize.js).
+*/
+
+.post-editor-richtext img.post-editor-image-primary {
+  outline: 2px solid #df8eac;
+
+  outline-offset: 2px;
+}
+
+
+.post-editor-image-control {
+  position: absolute;
+
+  z-index: 5;
+
+  /* 사진 오른쪽 위 모서리 안쪽으로 살짝 겹치게 */
+  transform: translate(-100%, 0);
+
+  padding: 4px;
+}
+
+
+.post-editor-image-control[hidden] {
   display: none;
 }
 
 
-.post-editor-cover-empty {
+.post-editor-image-primary-toggle {
+  padding: 4px 10px;
+
+  border: 1px solid #f0d3de;
+
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.92);
+
   font-size: 10px;
 
   letter-spacing: 0.05em;
 
-  color: #bbbbbb;
-}
-
-
-.post-editor-cover-empty[hidden] {
-  display: none;
-}
-
-
-.post-editor-cover-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-
-  gap: 6px;
-
-  min-width: 0;
-}
-
-
-.post-editor-cover-button[hidden] {
-  display: none;
-}
-
-
-.post-editor-cover-button:hover {
-  border-color: #f0d3de;
-
   color: #d980a2;
+
+  cursor: pointer;
+
+  /* 모바일에서 손가락으로 누를 수 있는 최소 크기 */
+  min-height: 28px;
 }
 
 
-.post-editor-cover-message {
-  flex: 1 0 100%;
+.post-editor-image-primary-toggle[aria-pressed="true"] {
+  border-color: #df8eac;
 
-  margin: 0;
+  background: #df8eac;
 
-  font-size: 10px;
-
-  line-height: 1.5;
-
-  color: #999999;
+  color: #ffffff;
 }
-/* Gallery photos are uploaded once and can optionally be selected as primary. */
-.post-gallery-photos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr));
-  gap: 12px;
+
+
+/* 버튼이 대신 열어 주므로 화면에서는 보이지 않는다 */
+
+.post-editor-image-file-input {
+  display: none;
 }
-.post-gallery-photos > div { min-width: 0; }
-.post-gallery-photos img { width: 100%; aspect-ratio: 1; object-fit: cover; }
-.post-gallery-photos button { display: block; margin-block: 6px; }
-.post-editor-cover-field[hidden], #postEditorGallery[hidden] { display: none; }
-.post-editor-field[hidden] { display: none; }
