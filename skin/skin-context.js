@@ -1507,7 +1507,25 @@ async function buildBaseSkinContext(
         categoryItems.filter(
           (category) =>
             category.type === "banner"
-        )
+        ),
+
+      /*
+        HIGHLIGHT-1: 메모 카테고리로 가는 링크. 어느 화면에서든
+        같은 값이라 base에 둔다 — 스킨이 nav 어디에 놓든 상관없다.
+        하이라이트가 하나도 없어도 주소는 유효하다(빈 상태 화면이
+        나온다, 요구사항 7).
+      */
+
+      memos: {
+        name:
+          "MEMO",
+
+        href:
+          buildSiteMemosPath(slug),
+
+        enabled:
+          true
+      }
 
     },
 
@@ -1557,7 +1575,43 @@ async function buildBaseSkinContext(
       */
 
       manageHref:
-        null
+        null,
+
+      /*
+        HIGHLIGHT-1 — 글 뷰어 도구 메뉴(⋮)를 여는 주소.
+
+        base에서는 항상 null이고 POST context만 자기 주소로 덮는다
+        (manageHref와 같은 규칙). 스킨이
+        data-imory-if="viewer.toolsHref"로 감싸 두면 도구가 없는
+        화면에는 링크가 아예 그려지지 않는다.
+
+        ★ 주인장/방문자 모두 값이 있다 — 이 메뉴는 권한 도구가
+        아니라 읽기 도구이기 때문이다(글자 크기·링크 복사). 메뉴
+        **안**의 항목만 권한에 따라 달라진다
+        (posts/view/posts-view-tools-menu.js).
+      */
+
+      toolsHref:
+        null,
+
+      /*
+        하이라이팅 모드로 곧장 들어가는 주소 — 주인장에게만 값이
+        있다. 스킨이 도구 메뉴를 거치지 않는 지름길을 그리고 싶을
+        때 쓴다.
+      */
+
+      highlightHref:
+        null,
+
+      /*
+        메모 카드를 만들고 고칠 수 있는가(표시용). 실제 권한은
+        post_highlights의 RLS와 소유자 전용 RPC가 강제한다 —
+        스킨이 이 값을 무시하고 도구를 그려도 아무것도 저장되지
+        않는다(요구사항 10 마지막 줄).
+      */
+
+      canManageMemos:
+        isOwner
 
     },
 
@@ -1592,7 +1646,10 @@ function buildSkinPageMeta(
     /* FOLDER-2: 폴더 페이지(Series Viewer). 라우트는
        /:slug/category/:cid/folder/:fid 지만 page.type은 "folder"
        하나뿐이라 isCategory는 false다(banner와 같은 불변식). */
-    isFolder: type === "folder"
+    isFolder: type === "folder",
+    /* HIGHLIGHT-1: 메모 카테고리(/:slug/memos). 라우트도 page.type도
+       독립이라 isCategory는 false다(banner/folder와 같은 불변식). */
+    isMemos: type === "memos"
   };
 
 }
@@ -2854,6 +2911,10 @@ async function buildPostSkinContext(
       : null;
 
 
+  const postPath =
+    buildSitePath(commonData.slug, `/post/${post.id}`);
+
+
   return {
 
     ...base,
@@ -2861,13 +2922,35 @@ async function buildPostSkinContext(
     page:
       buildSkinPageMeta("post"),
 
+    viewer: {
+      ...base.viewer,
+
+      /*
+        HIGHLIGHT-1: 이 글의 도구 메뉴를 여는 주소. 스킨이 이
+        링크를 그리면 플랫폼의 기본 ⋮ 버튼은 접힌다 — 같은 동작을
+        두 번 보여주지 않는다(posts/view/posts-view-tools-menu.js).
+      */
+
+      toolsHref:
+        buildSiteToolsUrl(postPath),
+
+      highlightHref:
+        base.viewer.isOwner
+          ? buildSiteHighlightUrl(postPath)
+          : null
+    },
+
     post: {
       id: String(post.id),
       title: maskSkinPostTitle(post.visibility, post.title),
       publishedAt: post.created_at,
       publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
       categoryName,
-      categoryHref
+      categoryHref,
+
+      /* 정식 공개 주소 — 스킨이 "이 글 링크" 같은 것을 그릴 때 쓴다 */
+      href:
+        postPath
     }
 
   };
@@ -2907,6 +2990,455 @@ async function buildPostSkinContext(
    categoryId가 이 ownerId 소유가 아니거나 존재하지 않으면 null —
    buildCategorySkinContext()와 동일하다.
 ========================================================== */
+
+/* =========================================================
+   buildMemosSkinContext(ownerId, options) -> MEMOS context | null
+   (HIGHLIGHT-1 §7)
+
+   여러 원본 글 카테고리에서 만들어진 하이라이트 카드를 한 화면에
+   모은다. 여기서 말하는 "폴더"는 **원본 글의 카테고리**다 — 별도의
+   중첩 폴더 시스템(post_folders)을 만들지 않는다(요구사항 7).
+
+   ★ 카드를 손으로 옮기지 않아도 된다
+
+   카드가 어느 폴더에 속하는지는 저장된 값이 아니라 **지금의**
+   posts.category_id다(posts-view-highlight-store.js가 posts를 embed해
+   함께 받는다). 그래서 글의 카테고리를 옮기면 카드도 따라 옮겨가고,
+   카테고리가 없는 글의 카드도 "카테고리 없음" 폴더에 모여 누락되지
+   않는다.
+
+   ★ 보이는 것만 온다
+
+   목록도 개수도 전부 post_highlights의 SELECT 정책을 통과한 행으로만
+   만든다 — 비밀글/비공개 글/삭제된 글의 발췌문은 방문자의 목록에도
+   개수에도 나타나지 않는다(요구사항 11).
+
+   options
+     view        "all" | "folders"   (기본 "all")
+     categoryId  폴더 하나를 연 경우 그 카테고리 id("none"이면 무분류)
+========================================================== */
+
+async function buildMemosSkinContext(
+  ownerId,
+  options = {}
+) {
+
+  if (!ownerId) {
+
+    throw new Error(
+      "buildMemosSkinContext: ownerId is required"
+    );
+
+  }
+
+
+  const commonData =
+    await fetchSkinCommonData(ownerId);
+
+
+  const [
+    base,
+    cards,
+    folderSettings
+  ] =
+    await Promise.all([
+      buildBaseSkinContext(ownerId, options, commonData),
+      loadMemoHighlightCards(ownerId),
+      loadMemoFolderSettings(ownerId)
+    ]);
+
+
+  const slug =
+    commonData.slug;
+
+
+  /* 조회 자체가 실패한 경우 — 빈 목록과 구분해서 알린다 */
+
+  const hasError =
+    cards === null;
+
+
+  const list =
+    Array.isArray(cards)
+      ? cards
+      : [];
+
+
+  const categoryById =
+    new Map(
+      commonData.categories.map(
+        (category) =>
+          [category.id, category]
+      )
+    );
+
+
+  const MEMO_UNFILED_ID =
+    "none";
+
+
+  const folderKeyOf =
+    (card) =>
+      card.categoryId === null ||
+      !categoryById.has(card.categoryId)
+        ? MEMO_UNFILED_ID
+        : String(card.categoryId);
+
+
+  const requestedKey =
+    options.categoryId === undefined ||
+    options.categoryId === null ||
+    options.categoryId === ""
+      ? null
+      : String(options.categoryId);
+
+
+  const buildCard =
+    (card) => ({
+
+      id:
+        card.id,
+
+      excerpt:
+        card.excerpt,
+
+      note:
+        card.note ||
+        "",
+
+      hasNote:
+        Boolean(card.note),
+
+      color:
+        card.color,
+
+      date:
+        card.createdAt,
+
+      dateLabel:
+        formatSkinPublishedAtLabel(card.createdAt),
+
+      postId:
+        card.postId === null
+          ? null
+          : String(card.postId),
+
+      postTitle:
+        maskSkinPostTitle(
+          card.postVisibility,
+          card.postTitle
+        ),
+
+      /*
+        원문 이동 — 정식 글 주소만 넣는다. 발췌문도 메모도 주소에
+        싣지 않는다(요구사항 6). 발췌한 자리까지 스크롤하는 것은
+        도착한 화면이 저장된 하이라이트로 찾는다.
+      */
+
+      postHref:
+        card.postId === null
+          ? null
+          : buildSitePath(slug, `/post/${card.postId}`),
+
+      categoryName:
+        categoryById.get(card.categoryId)?.name ||
+        "",
+
+      categoryHref:
+        categoryById.has(card.categoryId)
+          ? buildSitePath(slug, `/category/${card.categoryId}`)
+          : null,
+
+      folderId:
+        folderKeyOf(card),
+
+      folderHref:
+        buildSiteMemosPath(
+          slug,
+          folderKeyOf(card)
+        ),
+
+      /*
+        "원문이 변경되어 위치를 찾을 수 없음"(요구사항 9).
+
+        이 값은 **마지막으로 그 글을 열었을 때 확인된 상태**다. 목록을
+        그리려고 모든 원문 본문을 받아 다시 찾아보지 않는다 — 카드
+        수만큼의 조회가 생기고, 그 판정은 어차피 그 글을 열 때 정확히
+        다시 이뤄진다. 확인한 적이 없으면 false(=아직 모른다)이고,
+        카드와 발췌문·메모는 어느 쪽이든 그대로 보존된다.
+      */
+
+      isMissing:
+        isPostHighlightKnownMissing(card.id)
+
+    });
+
+
+  const allCards =
+    list.map(buildCard);
+
+
+  /*
+    폴더 목록. 카드가 하나라도 있는 카테고리만 낸다 — 빈 폴더를
+    나열할 이유가 없다. 순서는 메모 전용 설정(memo_folder_settings)이
+    있으면 그것, 없으면 원본 카테고리 순서다.
+  */
+
+  const countByKey =
+    new Map();
+
+
+  allCards.forEach(
+    (card) => {
+
+      countByKey.set(
+        card.folderId,
+        (countByKey.get(card.folderId) || 0) + 1
+      );
+
+    }
+  );
+
+
+  const folders =
+    Array.from(countByKey.keys())
+      .map(
+        (key) => {
+
+          const numericId =
+            key === MEMO_UNFILED_ID
+              ? null
+              : Number(key);
+
+          const settings =
+            numericId === null
+              ? null
+              : folderSettings.get(numericId);
+
+          const category =
+            numericId === null
+              ? null
+              : categoryById.get(numericId);
+
+
+          return {
+
+            id:
+              key,
+
+            name:
+              category
+                ? category.name
+                : "카테고리 없음",
+
+            href:
+              buildSiteMemosPath(slug, key),
+
+            count:
+              countByKey.get(key) || 0,
+
+            countLabel:
+              `${countByKey.get(key) || 0}개`,
+
+            /*
+              커버는 메모 화면 전용 설정이다 — 원본 카테고리의
+              갤러리 설정과 완전히 별개다(요구사항 7).
+            */
+
+            coverUrl:
+              settings && numericId !== null
+                ? buildMemoFolderCoverUrl(numericId)
+                : null,
+
+            hasCover:
+              Boolean(settings && settings.hasCover),
+
+            coverRatio:
+              settings
+                ? settings.coverRatio
+                : "original",
+
+            coverFocusX:
+              settings
+                ? settings.coverFocusX
+                : 50,
+
+            coverFocusY:
+              settings
+                ? settings.coverFocusY
+                : 50,
+
+            sortOrder:
+              settings
+                ? settings.sortOrder
+                : null,
+
+            categoryOrder:
+              category
+                ? commonData.categories.indexOf(category)
+                : 9999
+
+          };
+
+        }
+      )
+      .sort(
+        (a, b) => {
+
+          const aOrder =
+            a.sortOrder === null
+              ? a.categoryOrder
+              : a.sortOrder;
+
+          const bOrder =
+            b.sortOrder === null
+              ? b.categoryOrder
+              : b.sortOrder;
+
+
+          if (aOrder !== bOrder) {
+
+            return aOrder - bOrder;
+
+          }
+
+
+          return a.categoryOrder - b.categoryOrder;
+
+        }
+      );
+
+
+  const openFolder =
+    requestedKey === null
+      ? null
+      : (
+          folders.find(
+            (folder) =>
+              folder.id === requestedKey
+          ) ||
+          {
+            id: requestedKey,
+
+            name:
+              categoryById.get(Number(requestedKey))?.name ||
+              (
+                requestedKey === MEMO_UNFILED_ID
+                  ? "카테고리 없음"
+                  : ""
+              ),
+
+            href:
+              buildSiteMemosPath(slug, requestedKey),
+
+            count: 0,
+
+            coverUrl: null,
+            hasCover: false,
+            coverRatio: "original",
+            coverFocusX: 50,
+            coverFocusY: 50
+          }
+        );
+
+
+  const visibleCards =
+    requestedKey === null
+      ? allCards
+      : allCards.filter(
+          (card) =>
+            card.folderId === requestedKey
+        );
+
+
+  return {
+
+    ...base,
+
+    page:
+      buildSkinPageMeta("memos"),
+
+    memos: {
+
+      view: {
+
+        isAll:
+          requestedKey === null &&
+          options.view !== "folders",
+
+        isFolders:
+          requestedKey === null &&
+          options.view === "folders",
+
+        isFolder:
+          requestedKey !== null
+
+      },
+
+      allHref:
+        buildSiteMemosPath(slug),
+
+      foldersHref:
+        buildSiteMemosPath(slug) + "?view=folders",
+
+      /* 보기 전환 버튼의 글자 — 스킨이 자기 문구를 쓰고 싶으면 무시하면 된다 */
+
+      allLabel:
+        "전체",
+
+      foldersLabel:
+        "폴더별",
+
+      cards:
+        visibleCards,
+
+      count:
+        visibleCards.length,
+
+      isEmpty:
+        visibleCards.length === 0 &&
+        !(
+          requestedKey === null &&
+          options.view === "folders"
+        ),
+
+      /*
+        카드 목록을 그릴 차례인가 — 폴더 격자를 보는 중에는 아니다.
+        data-imory-if가 비교 연산을 지원하지 않아 미리 계산해 둔다
+        (page.isHome 등과 같은 이유).
+      */
+
+      showCards:
+        options.view !== "folders" ||
+        requestedKey !== null,
+
+      folders,
+
+      folderCount:
+        folders.length,
+
+      hasFolders:
+        folders.length > 0,
+
+      foldersEmpty:
+        options.view === "folders" &&
+        requestedKey === null &&
+        folders.length === 0,
+
+      folder:
+        openFolder,
+
+      hasError,
+
+      canManage:
+        base.viewer.isOwner
+
+    }
+
+  };
+
+}
+
 
 async function buildBannerSkinContext(
   ownerId,

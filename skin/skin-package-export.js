@@ -36,11 +36,11 @@
 ========================================================== */
 
 const SKIN_PACKAGE_EXPORT_PAGE_TYPES =
-  ["home", "category", "post", "banner", "folder"];
+  ["home", "category", "post", "banner", "folder", "memos"];
 
 /*
   Import 쪽(skin/skin-package-import.js requiredPageTypes)과 같은
-  집합 — banner/folder(FOLDER-2)는 선택이라 빠져 있어도
+  집합 — banner/folder(FOLDER-2)/memos(HIGHLIGHT-1)는 선택이라 빠져 있어도
   missingTemplates에 넣지 않는다.
 */
 const SKIN_PACKAGE_EXPORT_REQUIRED_PAGE_TYPES =

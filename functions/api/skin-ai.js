@@ -25,8 +25,8 @@
      실패  { ok: false, message: string }
 
    ★ 모델이 만드는 범위 (이 파일이 기계적으로 강제한다)
-   모델은 templates.{home,category,post,banner,folder}.html 5종(banner/
-   folder는 선택, FOLDER-2)과 css,
+   모델은 templates.{home,category,post,banner,folder,memos}.html 6종
+   (banner / folder / memos는 선택 — FOLDER-2, HIGHLIGHT-1)과 css,
    그리고 한 줄 summary만 만든다. schemaVersion / imageSlots /
    regions / metadata는 **요청으로 받은 현재 SkinPackage에서 그대로
    가져온다** — 모델이 손댈 수 없다. 이유 두 가지:
@@ -294,9 +294,13 @@ function validateSkinAiReferenceImages(value) {
 const SKIN_AI_MAX_INSTRUCTION_LENGTH = 2000;
 
 /* FOLDER-2: "folder"(폴더 페이지 / Series Viewer)는 banner와 같은
-   선택 템플릿이다 — 스키마에서 null 허용, 결과 병합도 같은 정책. */
+   선택 템플릿이다 — 스키마에서 null 허용, 결과 병합도 같은 정책.
+
+   HIGHLIGHT-1: "memos"(메모 카테고리)도 선택 템플릿이다. 다만 폴백이
+   다르다 — 없으면 플랫폼이 기본 template으로 그리므로(요구사항 10),
+   모델이 null을 돌려줘도 그 화면이 사라지지 않는다. */
 const SKIN_AI_TEMPLATE_PAGE_TYPES =
-  ["home", "category", "post", "banner", "folder"];
+  ["home", "category", "post", "banner", "folder", "memos"];
 
 
 /* =========================================================
@@ -1026,11 +1030,13 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `templates.home`, `templates.category`, `templates.post` are required. Always return all three, even if you changed none of them.",
     "- `templates.banner` is optional. If the current package has a banner template, return it (edited or unchanged). Return null ONLY if the current package has no banner template.",
     "- `templates.folder` is optional (same rule as banner): return the current folder template edited or unchanged; return null ONLY if the current package has no folder template and the user did not ask for a folder page.",
+    "- `templates.memos` is optional (same rule): return the current memos template edited or unchanged; return null ONLY if the current package has no memos template and the user did not ask for the memo page. Returning null does NOT hide the memo page — the platform draws it with a built-in default template instead.",
     "- home  : the blog front page (profile, navigation, recent post list).",
     "- category: one category's post list.",
     "- post  : one post's title/date plus the protected body region.",
     "- banner: one banner-type category's link images.",
     "- folder: one folder's posts read as a series — every post's body flows top to bottom on one page (see \"FOLDER\" below).",
+    "- memos : the blog owner's highlight/memo cards collected from every category (see \"MEMOS\" below).",
     "",
     "## Imory runtime bindings (data-imory-*)",
     "The platform fills these in at render time. Never invent new attribute names and never invent context paths that are not listed here.",
@@ -1110,8 +1116,23 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "Required markup: repeat `folder.posts` and put `data-imory-region=\"post-body\"` INSIDE the repeated element, one per post, e.g. `<article data-imory-repeat=\"folder.posts\"><h2 data-imory-bind=\"item.title\"></h2><div data-imory-region=\"post-body\"></div></article>`. The platform fills each region with that post's body (secret posts get a password form there). A folder template whose region is not inside the `folder.posts` repeat is rejected.",
     "Reading flow: the bodies are the content. Keep per-post chrome minimal (title, date, a thin divider) so the posts read continuously; do not wrap each post in a heavy card and do not link the title to itself unless asked. The title at the top of the page is `folder.name`.",
     "",
+    "### MEMOS (templates.memos — the memo page)",
+    "Route: /:slug/memos (all cards, newest first), /:slug/memos?view=folders (grouped by the ORIGINAL post category), /:slug/memos/category/:id (one of those groups).",
+    "The blog owner highlights sentences while reading their own posts; each highlight becomes one card, with an optional memo. Visitors can read the cards of public posts but never edit them.",
+    "\"Folder\" on this page means the ORIGINAL POST CATEGORY. There is no separate nesting here — never draw a tree.",
+    "memos.view.isAll, memos.view.isFolders, memos.view.isFolder  (exactly one is true)",
+    "memos.allHref, memos.foldersHref, memos.allLabel, memos.foldersLabel  (the two view switches)",
+    "memos.cards[]  (item.id, item.excerpt, item.note, item.hasNote, item.color, item.dateLabel, item.postTitle, item.postHref, item.categoryName, item.categoryHref, item.folderHref, item.isMissing)",
+    "memos.showCards (draw the card list now), memos.isEmpty, memos.count, memos.hasError",
+    "memos.folders[]  (item.id, item.name, item.href, item.count, item.countLabel, item.coverUrl, item.hasCover, item.coverRatio, item.coverFocusX, item.coverFocusY)",
+    "memos.hasFolders, memos.foldersEmpty, memos.folder  (the open folder: .name, .href, .count, .coverUrl, .hasCover, .coverRatio)",
+    "Required markup: put a `data-imory-region=\"memo-tools\"` span INSIDE the `memos.cards` repeat, one per card, at the end of the card. The platform puts the owner's small three-dot menu there (add/edit/delete memo, delete highlight); visitors get an empty span. Leave it empty and never size or border it — a card list without this slot leaves the owner unable to edit their memos.",
+    "Guard the two lists with `data-imory-if=\"memos.showCards\"` (cards) and `data-imory-if=\"memos.view.isFolders\"` (folder grid). `data-imory-if` cannot compare values, so use these precomputed booleans and never test `memos.view` itself.",
+    "item.excerpt is the quoted sentence and item.note is the reader's memo: give the excerpt the visual weight and put the memo in a quieter secondary block guarded by `data-imory-if=\"item.hasNote\"`. item.color is the highlight colour — a left border or a small dot reads better than painting the whole card.",
+    "Folder covers: use `item.coverUrl` only when `item.hasCover`. `item.coverRatio` is one of \"1:1\", \"3:4\", \"4:3\", \"original\"; the platform stylesheet is not loaded for your template, so express the ratio yourself with aspect-ratio rules if you want it.",
+    "",
     "### POST",
-    "post.id, post.title, post.publishedAtLabel, post.categoryName, post.categoryHref",
+    "post.id, post.title, post.publishedAtLabel, post.categoryName, post.categoryHref, post.href",
     "",
     "### BANNER",
     "bannerCategory.id, bannerCategory.name, bannerCategory.href",
@@ -1124,6 +1145,9 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "",
     "## Owner and admin entry points (a validator does NOT check this — you must)",
     "- `viewer.writeHref`, `viewer.adminHref` and `viewer.manageHref` are how the blog owner reaches WRITE / ADMIN / EDIT.",
+    "- `viewer.toolsHref` (POST only) opens the reader tool menu: font size, copy link, and for the owner also highlighting mode and edit. It is NOT owner-only — visitors need it too, so do NOT wrap it in `data-imory-if=\"viewer.isOwner\"`; wrap it in `data-imory-if=\"viewer.toolsHref\"` instead. If you draw this link the platform hides its own three-dot button, so draw it at most once; if you do not draw it, the platform shows its own. Never both.",
+    "- `viewer.highlightHref` (POST, owner only) is a shortcut straight into highlighting mode. Optional.",
+    "- `navigation.memos` ({ name, href }) links to the memo page from any template. Optional, but it is the only way a reader reaches that page.",
     "- If the current templates contain links bound to any of these, KEEP them, in every template that had them.",
     "- Deleting them silently locks the owner out of managing their own blog. Remove them only if the user explicitly asks you to.",
     "- These links are normally wrapped in `data-imory-if=\"viewer.isOwner\"`. Keep that guard.",
@@ -1324,9 +1348,10 @@ function buildSkinAiResponseSchema() {
           category: buildSkinAiTemplateSchema("category", false),
           post: buildSkinAiTemplateSchema("post", false),
           banner: buildSkinAiTemplateSchema("banner", true),
-          folder: buildSkinAiTemplateSchema("folder", true)
+          folder: buildSkinAiTemplateSchema("folder", true),
+          memos: buildSkinAiTemplateSchema("memos", true)
         },
-        required: ["home", "category", "post", "banner", "folder"],
+        required: ["home", "category", "post", "banner", "folder", "memos"],
         additionalProperties: false
       },
 

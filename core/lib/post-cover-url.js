@@ -275,6 +275,42 @@ function buildPostCoverUrl(
 }
 
 
+/*
+  HIGHLIGHT-1: 메모 화면의 폴더 커버. 같은 비공개 버킷('post-covers')에
+  올라가고 같은 프록시가 배달한다 — 다른 점은 어느 행에서 경로를
+  찾느냐뿐이다(memo_folder_settings). 카테고리 장식이라 카테고리와
+  같은 공개 범위다(get_memo_folder_cover_object).
+*/
+
+function buildMemoFolderCoverUrl(
+  categoryId,
+  options
+) {
+
+  if (
+    categoryId === null ||
+    categoryId === undefined ||
+    categoryId === ""
+  ) {
+
+    return null;
+
+  }
+
+
+  const bust =
+    options && options.bust
+      ? `&v=${encodeURIComponent(String(options.bust))}`
+      : "";
+
+
+  return (
+    `${POST_COVER_ENDPOINT}?memo=${encodeURIComponent(String(categoryId))}${bust}`
+  );
+
+}
+
+
 function buildCategoryCoverUrl(
   categoryId,
   options

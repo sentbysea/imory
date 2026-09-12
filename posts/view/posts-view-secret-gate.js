@@ -225,6 +225,37 @@ async function handleSecretGateSubmit(
     secretGatePostQuotePresetId
   );
 
+
+  /*
+    HIGHLIGHT-1: 비밀번호를 맞힌 방문자는 이 글의 하이라이트도 볼 수
+    있어야 한다(요구사항 11 "보호된 원문의 발췌문·메모는 기존 원문
+    열람 조건을 충족해야 읽을 수 있다"). 테이블 직접 조회는 RLS가
+    막으므로 원문과 같은 문(get_secret_post_highlights)을 쓴다 —
+    비밀번호를 다시 실어 보내는 유일한 이유다.
+
+    주인장은 애초에 이 화면을 보지 않으므로(본문이 바로 열린다)
+    여기는 항상 방문자 경로다 — isOwner:false라 편집 도구도 없다.
+  */
+
+  if (typeof renderPostHighlights === "function") {
+
+    await renderPostHighlights({
+      postId:
+        secretGatePostId,
+
+      isOwner:
+        false,
+
+      bodyTarget:
+        currentPostBodyMountTarget ||
+        postDetailContent,
+
+      secretPassword:
+        password
+    });
+
+  }
+
 }
 
 

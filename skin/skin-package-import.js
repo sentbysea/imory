@@ -168,6 +168,34 @@ async function validateSkinPackageImport(rawJsonText) {
     return { ok: false, reason: "folder-template", message: "templates.folder를 포함하려면 templates.folder.html이 문자열이어야 합니다." };
   }
 
+  /*
+    HIGHLIGHT-1 — templates.memos(메모 카테고리)도 banner/folder와 같은
+    **선택** 템플릿이다. 다만 폴백이 다르다: 없으면 그 화면이 사라지는
+    게 아니라 플랫폼 기본 template으로 그려진다
+    (skin/skin-template.js의 getDefaultMemosTemplate). 그래서 여기서
+    강제하는 것은 "넣었으면 모양이 맞아야 한다" 하나뿐이고, POST/FOLDER
+    같은 필수 region 검사는 없다 — 메모 카드 안의 memo-tools 자리는
+    빠져도 화면이 깨지지 않고 주인장의 도구 버튼만 나오지 않는다.
+  */
+
+  const memosTemplateInput =
+    templatesInput.memos;
+
+  const hasMemosTemplate =
+    memosTemplateInput !== undefined &&
+    memosTemplateInput !== null;
+
+  if (
+    hasMemosTemplate &&
+    (
+      typeof memosTemplateInput !== "object" ||
+      Array.isArray(memosTemplateInput) ||
+      typeof memosTemplateInput.html !== "string"
+    )
+  ) {
+    return { ok: false, reason: "memos-template", message: "templates.memos를 포함하려면 templates.memos.html이 문자열이어야 합니다." };
+  }
+
   let cssRaw;
 
   if (typeof parsed.css === "string") {
@@ -203,6 +231,11 @@ async function validateSkinPackageImport(rawJsonText) {
   const sanitizedFolderHtml =
     hasFolderTemplate
       ? sanitizeSkinHTML(folderTemplateInput.html)
+      : null;
+
+  const sanitizedMemosHtml =
+    hasMemosTemplate
+      ? sanitizeSkinHTML(memosTemplateInput.html)
       : null;
 
   if (!htmlHasPostBodyRegion(sanitizedPostHtml)) {
@@ -286,6 +319,10 @@ async function validateSkinPackageImport(rawJsonText) {
 
   if (hasFolderTemplate) {
     templates.folder = { html: sanitizedFolderHtml };
+  }
+
+  if (hasMemosTemplate) {
+    templates.memos = { html: sanitizedMemosHtml };
   }
 
   return {

@@ -592,11 +592,13 @@ async function runServerChecks() {
     );
 
     record(
-      "A6. Structured Output schema가 templates.{home,category,post,banner,folder}.html과 css를 강제한다(banner/folder는 null 허용)",
+      /* HIGHLIGHT-1: memos(메모 카테고리)가 여섯 번째 선택 템플릿으로
+         더해졌다 — banner/folder와 같이 null 허용이다. */
+      "A6. Structured Output schema가 templates.{home,category,post,banner,folder,memos}.html과 css를 강제한다(banner/folder/memos는 null 허용)",
       (() => {
         const schema = body.text.format.schema;
         const t = schema.properties.templates;
-        return t.required.join(",") === "home,category,post,banner,folder" &&
+        return t.required.join(",") === "home,category,post,banner,folder,memos" &&
           t.additionalProperties === false &&
           t.properties.home.required[0] === "html" &&
           t.properties.home.additionalProperties === false &&
@@ -605,6 +607,8 @@ async function runServerChecks() {
           t.properties.banner.type.includes("null") &&
           Array.isArray(t.properties.folder.type) &&
           t.properties.folder.type.includes("null") &&
+          Array.isArray(t.properties.memos.type) &&
+          t.properties.memos.type.includes("null") &&
           schema.properties.css.type === "string" &&
           schema.additionalProperties === false;
       })(),

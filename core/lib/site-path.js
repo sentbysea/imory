@@ -214,6 +214,124 @@ function isSiteEditRequested(
 
 
 /* =========================================================
+   글 뷰어 도구 / 하이라이팅 진입 계약 (HIGHLIGHT-1)
+
+   글 읽기 화면 오른쪽 위의 점 세 개(⋮)가 여는 도구 메뉴와, 그 안의
+   "하이라이팅 모드"다. ?manage=1 / ?write=1 / ?edit=1과 같은 결의
+   **요청 쿼리**이고 권한이 아니다 — 받는 쪽(posts/view/
+   posts-view-tools-menu.js)이 주인장인지 다시 확인해서 정한다.
+
+   - /:slug/post/:id?tools=1     : 도구 메뉴를 연 채로 글을 연다
+   - /:slug/post/:id?highlight=1 : 하이라이팅 모드로 글을 연다(주인장만)
+
+   ★ 왜 주소에 남기는가
+
+   스킨이 자기 자리에 도구 버튼을 그릴 수 있어야 하기 때문이다
+   (요구사항 10). 스킨이 그릴 수 있는 것은 <a href>뿐이고(새니타이저가
+   button/onclick을 지운다, skin/skin-sanitize.js), 그 링크가 무엇을
+   뜻하는지 플랫폼이 알아보는 방법이 이 쿼리다 — EDIT/WRITE를 알아보는
+   방법(skin/skin-owner-entry.js)과 정확히 같다.
+
+   ?highlight=1은 주인장 전용 요청이라 방문자가 주소를 직접 쳐도 그냥
+   평소의 읽기 화면이 나오고 주소가 정리된다.
+========================================================== */
+
+const SITE_TOOLS_QUERY_PARAM =
+  "tools";
+
+
+const SITE_HIGHLIGHT_QUERY_PARAM =
+  "highlight";
+
+
+function buildSiteToolsUrl(
+  path
+) {
+
+  return (
+    path + "?" + SITE_TOOLS_QUERY_PARAM + "=1"
+  );
+
+}
+
+
+function isSiteToolsRequested(
+  search
+) {
+
+  return siteQueryFlagIsSet(
+    search,
+    SITE_TOOLS_QUERY_PARAM
+  );
+
+}
+
+
+function buildSiteHighlightUrl(
+  path
+) {
+
+  return (
+    path + "?" + SITE_HIGHLIGHT_QUERY_PARAM + "=1"
+  );
+
+}
+
+
+function isSiteHighlightRequested(
+  search
+) {
+
+  return siteQueryFlagIsSet(
+    search,
+    SITE_HIGHLIGHT_QUERY_PARAM
+  );
+
+}
+
+
+/* =========================================================
+   메모 카테고리 경로 (HIGHLIGHT-1 §7)
+
+   여러 원본 글 카테고리에서 만들어진 하이라이트 카드를 한 화면에
+   모아 보는 곳. 새 쿼리가 아니라 새 경로다 — 카테고리/글과 나란한
+   독립 화면이고, 주소를 공유하거나 새로고침해도 같은 화면이 나와야
+   하기 때문이다.
+
+     /:slug/memos                  전체 보기
+     /:slug/memos/category/:id     그 원본 카테고리의 카드 목록
+                                   (여기서 "폴더" = 원본 글의 카테고리)
+
+   보기 방식(전체/폴더별)은 경로가 가르고, 별도의 중첩 폴더 시스템은
+   만들지 않는다(요구사항 7).
+========================================================== */
+
+const SITE_MEMOS_SUBPATH =
+  "/memos";
+
+
+function buildSiteMemosPath(
+  slug,
+  categoryId
+) {
+
+  const suffix =
+    categoryId === undefined ||
+    categoryId === null ||
+    categoryId === ""
+      ? SITE_MEMOS_SUBPATH
+      : `${SITE_MEMOS_SUBPATH}/category/${categoryId}`;
+
+
+  return buildSitePath(
+    slug,
+    suffix
+  );
+
+}
+
+
+/* =========================================================
    이어읽기 진입 계약 (FOLDER-2 Series Viewer)
 
    폴더 페이지의 기본 화면은 **목록**이다 — 하위 폴더와 direct 글의

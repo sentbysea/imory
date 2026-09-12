@@ -109,6 +109,62 @@ async function handlePostRoute() {
 
 
   /*
+    HIGHLIGHT-1: /memos — 메모 카테고리.
+
+      /memos                   전체 보기(기본, 최신순)
+      /memos?view=folders      폴더별 보기
+      /memos/category/:id      그 폴더의 카드 목록
+                               (id는 원본 카테고리 id 또는 "none")
+
+    카테고리/글 패턴보다 먼저 본다 — /memos/category/:id 가 아래
+    /category/:id 패턴에 걸리지 않도록(끝 앵커가 있어 실제로 겹치지는
+    않지만, 읽는 순서를 계층대로 둔다).
+  */
+
+  const memoFolderMatch =
+    pathname.match(
+      /^\/memos\/category\/(\d+|none)\/?$/
+    );
+
+
+  if (memoFolderMatch) {
+
+    await openMemoScreen({
+      categoryId:
+        memoFolderMatch[1],
+
+      updateUrl:
+        false
+    });
+
+
+    return;
+
+  }
+
+
+  if (
+    pathname === "/memos" ||
+    pathname === "/memos/"
+  ) {
+
+    await openMemoScreen({
+      view:
+        new URLSearchParams(search).get("view") === "folders"
+          ? "folders"
+          : "all",
+
+      updateUrl:
+        false
+    });
+
+
+    return;
+
+  }
+
+
+  /*
     FOLDER-2: /category/:cid/folder/:fid — 폴더 페이지. ?series=1이면
     이어읽기(Series Viewer), 없으면 목록이다(읽기 모드 요청).
     category 패턴보다 먼저 본다(그 패턴은 끝 앵커가 있어 겹치지

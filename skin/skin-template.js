@@ -32,8 +32,13 @@
    undefined를 받고, 그 경우 플랫폼은 폴더 링크(folderHref)를 아예
    노출하지 않으며 폴더 주소로 들어오면 그 카테고리로 돌려보낸다
    (폴더 전용 폴백 화면을 만들지 않는다). */
+/* HIGHLIGHT-1: "memos"가 여섯 번째 page type이다. banner/folder와 같은
+   **선택** template이지만 폴백이 다르다 — templates.memos가 없으면
+   플랫폼이 아래 getDefaultMemosTemplate()을 쓴다(갤러리와 같은 방식).
+   메모 화면은 legacy 화면이 아예 없어서 "지원하지 않으면 안 보여준다"가
+   성립하지 않기 때문이다. */
 const SKIN_TEMPLATE_PAGE_TYPES =
-  ["home", "category", "post", "banner", "folder"];
+  ["home", "category", "post", "banner", "folder", "memos"];
 
 /* Additive gallery fallback. Existing category templates retain full control. */
 function getDefaultGalleryTemplate() {
@@ -58,6 +63,80 @@ function getDefaultGalleryTemplate() {
       .gallery-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-block: 8px; }
       nav { display: flex; gap: 12px; margin-top: 20px; }`
   };
+}
+
+
+/* =========================================================
+   기본 메모 화면 (HIGHLIGHT-1 §7)
+
+   templates.memos를 가지고 있지 않은 스킨(= 지금 존재하는 모든 스킨)
+   에서도 메모 카테고리가 동작해야 한다. 그래서 갤러리와 같은 방식으로
+   **플랫폼이 들고 있는 기본 template**을 쓴다.
+
+   ★ 고정된 완성 HTML 하나가 아니다 (요구사항 10)
+
+   이 기본값도 여느 스킨과 똑같이 data-imory-* 바인딩으로만 쓰여 있다.
+   스킨 제작자는 이 구조를 그대로 복사해 요소의 순서·태그·클래스를
+   바꾸면 되고, 필요 없는 조각은 빼면 된다. 플랫폼이 뒤에서 채우는
+   자리는 카드마다 하나씩 있는 [data-imory-region="memo-tools"] 뿐이다 —
+   주인장에게는 ⋮ 버튼이 들어가고 방문자에게는 빈 채로 남는다.
+
+   CSS는 posts/posts-highlight.css의 클래스를 그대로 쓰므로 여기서는
+   최소한의 배치만 준다(스킨이 자기 template을 가지면 이 CSS 자체가
+   쓰이지 않는다).
+========================================================== */
+
+function getDefaultMemosTemplate() {
+
+  return {
+
+    html: `<section class="memo-screen">
+
+      <nav class="memo-screen-views">
+        <a class="memo-screen-view" data-imory-href="memos.allHref" data-imory-bind="memos.allLabel"></a>
+        <a class="memo-screen-view" data-imory-href="memos.foldersHref" data-imory-bind="memos.foldersLabel"></a>
+      </nav>
+
+      <h1 class="memo-folder-name" data-imory-if="memos.view.isFolder" data-imory-bind="memos.folder.name"></h1>
+
+      <p class="memo-screen-state" data-imory-if="memos.hasError">메모를 불러오지 못했습니다.</p>
+
+      <div class="memo-folder-grid" data-imory-if="memos.view.isFolders">
+        <a class="memo-folder-card" data-imory-repeat="memos.folders" data-imory-href="item.href">
+          <span class="memo-folder-cover" data-imory-if="item.hasCover">
+            <img data-imory-src="item.coverUrl" alt="">
+          </span>
+          <span class="memo-folder-name" data-imory-bind="item.name"></span>
+          <span class="memo-folder-count" data-imory-bind="item.countLabel"></span>
+        </a>
+      </div>
+
+      <div class="memo-card-list" data-imory-if="memos.showCards">
+        <article class="memo-card" data-imory-repeat="memos.cards">
+          <blockquote class="memo-card-excerpt" data-imory-bind="item.excerpt"></blockquote>
+          <p class="memo-card-note" data-imory-if="item.hasNote" data-imory-bind="item.note"></p>
+          <div class="memo-card-meta">
+            <a data-imory-if="item.postHref" data-imory-href="item.postHref" data-imory-bind="item.postTitle"></a>
+            <span data-imory-if="item.categoryName" data-imory-bind="item.categoryName"></span>
+            <span data-imory-bind="item.dateLabel"></span>
+            <span class="memo-card-missing" data-imory-if="item.isMissing">원문에서 위치를 찾을 수 없음</span>
+          </div>
+          <div class="memo-card-actions">
+            <a class="memo-card-open" data-imory-if="item.postHref" data-imory-href="item.postHref">원문 보기</a>
+            <span data-imory-region="memo-tools"></span>
+          </div>
+        </article>
+      </div>
+
+      <p class="memo-screen-state" data-imory-if="memos.isEmpty">아직 메모가 없습니다.</p>
+      <p class="memo-screen-state" data-imory-if="memos.foldersEmpty">아직 메모가 없습니다.</p>
+
+    </section>`,
+
+    css: ``
+
+  };
+
 }
 
 

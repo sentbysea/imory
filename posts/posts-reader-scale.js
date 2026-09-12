@@ -38,6 +38,61 @@ let postDetailContentBaseFontSize =
   null;
 
 
+/* =========================================================
+   HIGHLIGHT-1 — 크기를 적용할 그릇
+
+   예전에는 legacy #postDetailContent 하나뿐이었다. 지금은 published
+   Skin의 post-body region에도 같은 조절이 걸려야 한다(도구 메뉴의
+   "글자 크기", posts/view/posts-view-tools-menu.js) — 스킨 화면에서도
+   방문자가 글자를 키울 수 있어야 하기 때문이다.
+
+   바꾸는 것은 **이번 읽기 화면의 인라인 font-size 하나**뿐이다.
+   저장된 본문도, Quote Preset도, 스킨 저장값도 건드리지 않는다
+   (요구사항 3). 다음 글을 그리면 그릇이 통째로 다시 만들어지므로
+   따로 되돌릴 것도 없다.
+========================================================== */
+
+let postReaderFontScaleTarget =
+  null;
+
+
+function setReaderFontScaleTarget(
+  target
+) {
+
+  postReaderFontScaleTarget =
+    target ||
+    null;
+
+}
+
+
+function getReaderFontScaleTarget() {
+
+  return (
+    postReaderFontScaleTarget ||
+    (
+      typeof postDetailContent !== "undefined"
+        ? postDetailContent
+        : null
+    )
+  );
+
+}
+
+
+/* 도구 메뉴가 "글자 크기" 줄을 그릴지 판단할 때 쓴다 */
+
+function readerFontScaleAdjustable() {
+
+  return Boolean(
+    postDetailContentBaseFontSize &&
+    getReaderFontScaleTarget()
+  );
+
+}
+
+
 
 /* =========================================================
    READ / WRITE 저장된 비율
@@ -151,8 +206,12 @@ function applyReaderFontScale(
     getReaderFontScale()
 ) {
 
+  const target =
+    getReaderFontScaleTarget();
+
+
   if (
-    !postDetailContent ||
+    !target ||
     !postDetailContentBaseFontSize
   ) {
 
@@ -161,7 +220,7 @@ function applyReaderFontScale(
   }
 
 
-  postDetailContent.style.fontSize =
+  target.style.fontSize =
     `${
       postDetailContentBaseFontSize *
       scale
@@ -214,10 +273,23 @@ function updateReaderFontScaleButtons(
    붙잡아두고, 저장된 비율을 곱해서 적용한다.
 ========================================================== */
 
-function initReaderFontScaleForCurrentPost() {
+function initReaderFontScaleForCurrentPost(
+  target
+) {
+
+  if (target !== undefined) {
+
+    setReaderFontScaleTarget(target);
+
+  }
+
+
+  const host =
+    getReaderFontScaleTarget();
+
 
   if (
-    !postDetailContent
+    !host
   ) {
 
     return;
@@ -225,11 +297,22 @@ function initReaderFontScaleForCurrentPost() {
   }
 
 
+  /*
+    기준값은 "이 그릇이 아무 조절도 없을 때 가질 크기"다 — 이미
+    인라인으로 조절해 둔 값을 다시 기준으로 삼으면 글을 열 때마다
+    배율이 누적된다. 그래서 재기 전에 인라인 값을 지운다.
+  */
+
+  host.style.removeProperty(
+    "font-size"
+  );
+
+
   postDetailContentBaseFontSize =
     parseFloat(
       window
         .getComputedStyle(
-          postDetailContent
+          host
         )
         .fontSize
     ) ||
@@ -263,6 +346,10 @@ function initReaderFontScaleForCurrentPost() {
 function hideReaderFontScaleControl() {
 
   postDetailContentBaseFontSize =
+    null;
+
+
+  postReaderFontScaleTarget =
     null;
 
 

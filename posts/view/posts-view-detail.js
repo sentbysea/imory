@@ -1043,16 +1043,18 @@ async function openPostPage(
       : null;
 
 
-  const needsPostManageTool =
-    isOwnerViewing &&
-    usingSkinPost &&
-    !(skinPostOwnerEntries && skinPostOwnerEntries.edit);
-
+  /*
+    HIGHLIGHT-1: 글 상세의 소유자 진입점은 더 이상 단독 edit 버튼이
+    아니다. 주인장과 방문자 모두에게 같은 자리에 도구 메뉴(⋮)가 서고,
+    예전 edit은 그 메뉴 안의 "글 수정"이다(요구사항 3). 그래서 이
+    화면에서는 postManageToggleButton을 쓰지 않는다 — 요소와 핸들러는
+    다른 화면을 위해 그대로 둔다.
+  */
 
   if (postManageToggleButton) {
 
     postManageToggleButton.hidden =
-      !needsPostManageTool;
+      true;
 
     postManageToggleButton.setAttribute(
       "aria-pressed",
@@ -1062,11 +1064,35 @@ async function openPostPage(
   }
 
 
+  /*
+    스킨이 자기 자리에 ?tools=1 링크를 그렸으면 플랫폼 버튼을 접는다 —
+    같은 동작을 두 번 보여주지 않는다(요구사항 10). 판정과 연결은
+    setupPostViewerTools()가 하고, 여기서는 "떠 있는 자리"가 필요한지만
+    정한다.
+  */
+
+  const skinToolsAnchors =
+    usingSkinPost &&
+    typeof findSkinToolsAnchors === "function"
+      ? findSkinToolsAnchors(postSkinContainer)
+      : [];
+
+
+  const needsFloatingTools =
+    usingSkinPost &&
+    skinToolsAnchors.length === 0;
+
+
   if (postContainer) {
 
+    postContainer.classList.remove(
+      "post-container--owner-tools"
+    );
+
+
     postContainer.classList.toggle(
-      "post-container--owner-tools",
-      needsPostManageTool
+      "post-container--viewer-tools",
+      needsFloatingTools
     );
 
   }
@@ -1079,19 +1105,16 @@ async function openPostPage(
     (posts/view/posts-view-owner-tools.js).
   */
 
-  if (
-    typeof mountPlatformOwnerTools ===
-    "function"
-  ) {
+  /*
+    ★ 자리 재기는 아래 setupPostViewerTools() **뒤**로 미룬다.
 
-    mountPlatformOwnerTools(
-      usingSkinPost
-        ? postSkinContainer
-        : null
-    );
-
-  }
-
+    posts/view/posts-view-owner-tools.js는 .post-header의 실제 높이를
+    재서 그 줄의 세로 가운데에 앉힌다. 그 높이는 안에 무엇이 보이느냐로
+    정해지는데, 도구 버튼(⋮)의 hidden을 푸는 것은 setupPostViewerTools()
+    다 — 여기서 재면 아직 아무것도 안 보이는 헤더를 재게 되어 완성된
+    화면에서 몇 px 어긋난다(mount contract 주석의 "보일지 말지가 정해진
+    뒤라야 잰 값이 의미가 있다"가 이 경우다).
+  */
 
   if (
     post.visibility ===
@@ -1266,6 +1289,115 @@ async function openPostPage(
   await updatePostOwnerActions();
 
 
+  /* =======================================================
+     HIGHLIGHT-1 — 도구 메뉴와 하이라이트
+
+     본문이 완성된 지금 한 번에 붙인다. 비밀글 잠김 화면에서는
+     본문 자체가 없으므로 하이라이트도 없고(잠금을 풀면
+     posts-view-secret-gate.js가 다시 부른다), 도구 메뉴는 그대로
+     쓸 수 있다 — 링크 복사와 글 수정은 본문과 무관하다.
+  ======================================================= */
+
+  const viewerBodyTarget =
+    usingSkinPost
+      ? currentPostBodyMountTarget
+      : postDetailContent;
+
+
+  const postLocked =
+    post.visibility === "secret" &&
+    !isOwnerViewing;
+
+
+  if (typeof setupPostViewerTools === "function") {
+
+    setupPostViewerTools({
+      postId:
+        post.id,
+
+      isOwner:
+        isOwnerViewing,
+
+      bodyTarget:
+        viewerBodyTarget,
+
+      skinRoot:
+        usingSkinPost
+          ? postSkinContainer
+          : null,
+
+      enabled:
+        true
+    });
+
+  }
+
+
+  /*
+    도구의 보임/숨김이 확정된 지금 자리를 잰다(위 주석 참고).
+  */
+
+  if (
+    typeof mountPlatformOwnerTools ===
+    "function"
+  ) {
+
+    mountPlatformOwnerTools(
+      needsFloatingTools
+        ? postSkinContainer
+        : null
+    );
+
+  }
+
+
+  if (typeof renderPostHighlights === "function") {
+
+    await renderPostHighlights({
+      postId:
+        post.id,
+
+      isOwner:
+        isOwnerViewing,
+
+      bodyTarget:
+        postLocked
+          ? null
+          : viewerBodyTarget
+    });
+
+  }
+
+
+  /*
+    ?tools=1 / ?highlight=1로 들어온 경우 — 주소는 여기서 정리하고
+    (아래 pushState가 쿼리 없는 주소로 덮는다) 요청만 실행한다.
+    ?highlight=1은 주인장 전용이라 방문자에게는 아무 일도 없다.
+  */
+
+  if (
+    typeof isSiteHighlightRequested === "function" &&
+    isSiteHighlightRequested(window.location.search) &&
+    isOwnerViewing &&
+    !postLocked &&
+    typeof enterPostHighlightMode === "function"
+  ) {
+
+    enterPostHighlightMode();
+
+  }
+
+  else if (
+    typeof isSiteToolsRequested === "function" &&
+    isSiteToolsRequested(window.location.search) &&
+    typeof openPostToolsMenu === "function"
+  ) {
+
+    openPostToolsMenu();
+
+  }
+
+
   /*
     PHASE 1C-F: "관련 글" 목록은 POST Skin Contract v0.1에
     없는 개념이다(AI_SKIN_PHASE1C_PAGE_CONTRACT.md 6-2절) — Skin이
@@ -1437,6 +1569,29 @@ async function renderPostDetailBody(
     );
 
 
+    /*
+      HIGHLIGHT-1: 글자 크기 조절은 이제 legacy 제목 옆 -/+ 가 아니라
+      도구 메뉴(⋮) 안에 있다 — 스킨으로 그려진 글에서도 같은 조절이
+      되어야 하므로, 그릇만 스킨의 post-body region으로 바꿔 기존
+      계산기(posts/posts-reader-scale.js)를 그대로 쓴다. HTML 모드
+      글은 프리셋 기준 크기가 없어 예전처럼 대상이 아니다.
+    */
+
+    if (contentType === "html") {
+
+      hideReaderFontScaleControl();
+
+    }
+
+    else {
+
+      initReaderFontScaleForCurrentPost(
+        currentPostBodyMountTarget
+      );
+
+    }
+
+
     return;
 
   }
@@ -1535,7 +1690,9 @@ async function renderPostDetailBody(
     );
 
 
-    initReaderFontScaleForCurrentPost();
+    initReaderFontScaleForCurrentPost(
+      postDetailContent
+    );
 
   }
 

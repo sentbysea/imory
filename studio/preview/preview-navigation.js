@@ -110,6 +110,15 @@ function getCurrentPreviewLocation() {
     };
   }
 
+  /* HIGHLIGHT-1: 메모 카테고리 — 보기 방식과 연 폴더까지 "같은 자리" 판정에 쓴다 */
+  if (top.type === "memos") {
+    return {
+      type: "memos",
+      view: top.view === "folders" ? "folders" : "all",
+      categoryId: top.categoryId ?? null
+    };
+  }
+
   return { type: "home" };
 
 }
@@ -991,6 +1000,134 @@ async function renderFolderPreviewFor(categoryId, folderId, series, options) {
 
 
 /* =========================================================
+   MEMOS — 메모 카테고리 Preview (HIGHLIGHT-1)
+
+   공개 화면(skin/skin-memos.js + posts/view/posts-view-memos.js)과
+   같은 계약이다: 같은 buildMemosSkinContext(), 같은 renderSkin(),
+   그리고 templates.memos가 없으면 **플랫폼 기본 template**
+   (getDefaultMemosTemplate)으로 그린다.
+
+   다른 화면과 달리 unsupported overlay가 없다 — 공개 화면에서도
+   폴백이 "안 보여준다"가 아니라 "기본 template으로 그린다"이기
+   때문이다. 그래야 Studio에서 본 화면과 방문자가 볼 화면이 같다.
+
+   카드의 ⋮ 도구는 Preview에 붙이지 않는다. 그 자리
+   ([data-imory-region="memo-tools"])는 공개 화면에서 플랫폼이
+   채우는 곳이고, Studio에서 편집자가 볼 것은 **자리 자체**이지
+   동작하는 버튼이 아니다(POST 본문 region과 같은 결).
+
+   Studio는 항상 소유자 세션이라 비밀글 분기가 없다.
+========================================================== */
+
+async function renderMemosPreviewFor(view, categoryId, options) {
+
+  const viewMode =
+    view === "folders" ? "folders" : "all";
+
+  currentPreviewPageType =
+    "memos";
+
+  updateStudioCodeButtonState();
+
+  updatePreviewBackButtonVisibility();
+
+  if (!currentWorkingSkin) {
+    return;
+  }
+
+  const memosTemplate =
+    resolveSkinTemplate(currentWorkingSkin, "memos") ||
+    getDefaultMemosTemplate();
+
+  setStudioPreviewOverlay(
+    "loading",
+    "메모 미리보기를 불러오는 중..."
+  );
+
+  const token =
+    ++previewNavToken;
+
+  const isCurrent =
+    () => {
+
+      const location =
+        getCurrentPreviewLocation();
+
+      return (
+        token === previewNavToken &&
+        location.type === "memos" &&
+        location.view === viewMode &&
+        (location.categoryId ?? null) === (categoryId ?? null)
+      );
+
+    };
+
+  let context;
+
+  try {
+
+    context =
+      await buildMemosSkinContext(
+        currentOwnerId,
+        {
+          imageSlotNames: currentImageSlotNames,
+          imageSlotValues: currentImageSlotValues,
+          view: viewMode,
+          categoryId
+        }
+      );
+
+  } catch (err) {
+
+    console.error(
+      "[preview-navigation] buildMemosSkinContext failed",
+      err
+    );
+
+    if (isCurrent()) {
+
+      setStudioPreviewOverlay(
+        "error",
+        "메모 미리보기를 불러오지 못했습니다."
+      );
+
+    }
+
+    return;
+
+  }
+
+  if (!isCurrent()) {
+    return;
+  }
+
+  if (!context) {
+
+    reportPreviewEntryUnavailable(
+      options,
+      "empty",
+      "메모를 불러올 수 없습니다."
+    );
+
+    return;
+
+  }
+
+  setStudioPreviewOverlay(
+    "hidden"
+  );
+
+  postRenderToFrame(
+    {
+      skin: memosTemplate,
+      context
+    }
+  );
+
+}
+
+
+/* =========================================================
    renderCurrentPreviewEntry(options)
 
    options.fallbackToHomeIfUnavailable (PHASE AI-5A)
@@ -1024,6 +1161,11 @@ function renderCurrentPreviewEntry(options) {
 
   if (entry.type === "folder") {
     renderFolderPreviewFor(entry.categoryId, entry.folderId, entry.series, options);
+    return;
+  }
+
+  if (entry.type === "memos") {
+    renderMemosPreviewFor(entry.view, entry.categoryId, options);
     return;
   }
 

@@ -1492,6 +1492,14 @@ const READ_POST_SCREEN = `(() => {
     actionsVisible: Boolean(actions) && !actions.hidden,
     manageVisible: Boolean(manage) && !manage.hidden,
     managePressed: manage ? manage.getAttribute("aria-pressed") : null,
+
+    /* HIGHLIGHT-1: 글 상세의 진입점은 ⋮ 도구 메뉴다 — 주인장에게는
+       그 안에 "글 수정"이 있고, 방문자에게도 같은 자리에 뜬다(글자
+       크기·링크 복사). 그래서 컨테이너 클래스도 owner-tools가 아니라
+       viewer-tools다. */
+    toolsVisible: Boolean(document.getElementById("postToolsButton")) &&
+      !document.getElementById("postToolsButton").hidden,
+    viewerTools: container.className.includes("post-container--viewer-tools"),
     editorVisible: Boolean(editor) && !editor.hidden,
     gateVisible: Boolean(gate) && !gate.hidden,
     gateInSkin: Boolean(gate) && Boolean(skinBox) && skinBox.contains(gate),
@@ -1561,7 +1569,7 @@ async function testOwnerToolsSlot(vpName) {
         toolsRight: h.right,
         lineCenter: line.top + line.height / 2,
         toolsCenter: h.top + h.height / 2,
-        manageVisible: !document.getElementById("postManageToggleButton").hidden,
+        manageVisible: !document.getElementById("postToolsButton").hidden,
         slotEmpty: slot.childElementCount === 0
       };
     });
@@ -1588,13 +1596,45 @@ async function testOwnerToolsSlot(vpName) {
     const visitor = await page.evaluate(() => ({
       slotExists: Boolean(document.querySelector('#postSkinContainer [data-imory-region="owner-tools"]')),
       ownerTools: document.getElementById("postContainer").className.includes("post-container--owner-tools"),
-      manageVisible: !document.getElementById("postManageToggleButton").hidden
+      manageVisible: !document.getElementById("postManageToggleButton").hidden,
+      toolsVisible: !document.getElementById("postToolsButton").hidden,
+      slotEmpty: Boolean(document.querySelector('#postSkinContainer [data-imory-region="owner-tools"]')) &&
+        document.querySelector('#postSkinContainer [data-imory-region="owner-tools"]').childElementCount === 0
     }));
 
-    check(`[${vpName}] 방문자에게는 슬롯만 빈 채 남고 도구는 나타나지 않는다`,
-      visitor.slotExists && !visitor.ownerTools && !visitor.manageVisible,
+    /* HIGHLIGHT-1: 방문자에게 없는 것은 **관리** 도구다. 읽기 도구(⋮)는
+       같은 슬롯 자리에 그대로 선다 — 슬롯은 여전히 빈 채로 남는다. */
+    check(`[${vpName}] 방문자에게는 관리 도구가 없고 슬롯은 빈 채 남는다`,
+      visitor.slotExists && !visitor.ownerTools && !visitor.manageVisible &&
+      visitor.slotEmpty,
       JSON.stringify(visitor));
+
+    check(`[${vpName}] 방문자에게도 읽기 도구(⋮)는 그 자리에 선다`,
+      visitor.toolsVisible, JSON.stringify(visitor));
   });
+}
+
+
+/* =========================================================
+   HIGHLIGHT-1 — 도구 메뉴(⋮) 열기
+
+   글 상세의 소유자 진입점은 더 이상 단독 버튼이 아니다. 같은 동작을
+   메뉴 한 겹을 거쳐 부른다(posts/view/posts-view-tools-menu.js).
+========================================================== */
+
+async function postToolsMenuLabels(page) {
+  await page.click("#postToolsButton");
+  await page.waitForSelector(".imory-popover:not([hidden])", { timeout: 10000 });
+  const labels = await page.locator(".imory-popover-item-label").allTextContents();
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+  return labels;
+}
+
+async function openPostToolsItem(page, label) {
+  await page.click("#postToolsButton");
+  await page.waitForSelector(".imory-popover:not([hidden])", { timeout: 10000 });
+  await page.locator(".imory-popover-item", { hasText: label }).click();
 }
 
 
@@ -1628,9 +1668,9 @@ async function testOwnerPostScreen(vpName) {
       `home=${JSON.stringify(home.frame && [home.frame.x, home.frame.y, home.frame.w])} ` +
       `post=${JSON.stringify(readingFrame.frame && [readingFrame.frame.x, readingFrame.frame.y, readingFrame.frame.w])}`);
 
-    check(`[${vpName}] 스킨 위에는 수정 진입점만 떠 있고 legacy 제목/수정 버튼은 없다`,
-      reading.manageVisible && reading.managePressed === "false" &&
-      reading.ownerTools && reading.headerPosition === "absolute" &&
+    check(`[${vpName}] 스킨 위에는 도구 메뉴(⋮)만 떠 있고 legacy 제목/수정 버튼은 없다`,
+      reading.toolsVisible && !reading.manageVisible &&
+      reading.viewerTools && reading.headerPosition === "absolute" &&
       reading.titleDisplay === "none" && !reading.actionsVisible,
       JSON.stringify(reading));
 
@@ -1653,7 +1693,7 @@ async function testOwnerPostScreen(vpName) {
        글 기둥의 첫 줄"로 바뀌었다 — 스킨의 장식 띠 위에 떠 있던 것을
        스킨의 줄에 맞춘다. 여전히 화면 위쪽이어야 하고(중간/아래 아님),
        본문이 시작되기 전이어야 하며, 오른쪽 끝은 본문 기둥과 같다. */
-    check(`[${vpName}] 수정 진입점이 스킨 글 기둥의 첫 줄에 맞춰 앉는다(중간/아래 아님)`,
+    check(`[${vpName}] 도구 메뉴가 스킨 글 기둥의 첫 줄에 맞춰 앉는다(중간/아래 아님)`,
       reading.toolsOffsetTop !== null && reading.toolsOffsetTop >= 0 &&
       reading.bodyOffsetTop !== null &&
       reading.toolsOffsetTop < reading.bodyOffsetTop &&
@@ -1662,13 +1702,13 @@ async function testOwnerPostScreen(vpName) {
       `top=${reading.toolsOffsetTop} bodyTop=${reading.bodyOffsetTop} ` +
       `toolsRight=${reading.toolsRightX} bodyRight=${reading.bodyRightX}`);
 
-    check(`[${vpName}] 수정 진입점이 스킨 안쪽에 있는 게 아니라 문서 흐름 밖(absolute)에 그대로 남는다`,
+    check(`[${vpName}] 도구 메뉴가 스킨 안쪽에 있는 게 아니라 문서 흐름 밖(absolute)에 그대로 남는다`,
       reading.headerPosition === "absolute" &&
       await page.evaluate(() =>
         document.querySelector("#postContainer > .post-header") !== null),
       reading.headerPosition);
 
-    check(`[${vpName}] 수정 진입점은 알약 껍데기 없이 고스트로 놓인다`,
+    check(`[${vpName}] 도구 메뉴는 알약 껍데기 없이 고스트로 놓인다`,
       reading.toolsBorder === "0px" &&
       (reading.toolsBackground === "rgba(0, 0, 0, 0)" ||
        reading.toolsBackground === "transparent"),
@@ -1687,7 +1727,7 @@ async function testOwnerPostScreen(vpName) {
       if (u.pathname.startsWith("/rest/v1/")) editRequests.push(u.pathname + u.search);
     };
     page.on("request", onEditRequest);
-    await page.click("#postManageToggleButton");
+    await openPostToolsItem(page, "글 수정");
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(500);
     page.off("request", onEditRequest);
@@ -1750,7 +1790,7 @@ async function testOwnerPostScreen(vpName) {
     check(`[${vpName}] 수정을 취소하면 POST 스킨으로 돌아온다`,
       cancelled.skinVisible && !cancelled.legacyVisible && !cancelled.editorVisible &&
       (cancelled.skinBody || "").includes("첫 번째 글 본문") &&
-      cancelled.manageVisible && cancelled.ownerTools,
+      cancelled.toolsVisible && cancelled.viewerTools,
       JSON.stringify(cancelled));
 
     check(`[${vpName}] 취소 후 주소에 ?edit=1이 남지 않는다`,
@@ -1761,7 +1801,7 @@ async function testOwnerPostScreen(vpName) {
       `before=${readingScroll} after=${cancelledScroll}`);
 
     /* 다시 수정 → 저장 → POST 스킨 복귀 */
-    await page.click("#postManageToggleButton");
+    await openPostToolsItem(page, "글 수정");
     await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(400);
     await page.fill("#postEditorTitle", "스킨에서 고친 제목");
@@ -1805,7 +1845,7 @@ async function testOwnerPostScreen(vpName) {
 
     check(`[${vpName}] 저장을 마쳐도 POST 스킨으로 돌아온다`,
       saved.skinVisible && !saved.legacyVisible && !saved.editorVisible &&
-      saved.manageVisible && saved.ownerTools,
+      saved.toolsVisible && saved.viewerTools,
       JSON.stringify(saved));
 
     check(`[${vpName}] 저장 후 주소도 그 글의 읽기 주소로 정리된다`,
@@ -1867,6 +1907,13 @@ async function testOwnerPostScreen(vpName) {
       visitor.url === `/${SLUG}/post/101`,
       JSON.stringify(visitor));
 
+    /* HIGHLIGHT-1: 도구 메뉴 자체는 방문자에게도 있다(글자 크기·링크
+       복사). 주인장 전용 항목만 빠진다 — 권한은 메뉴 안에서 갈린다. */
+    check(`[${vpName}] 다른 계정에게도 도구 메뉴는 있지만 주인장 항목은 없다`,
+      visitor.toolsVisible &&
+      !(await postToolsMenuLabels(page)).includes("글 수정"),
+      JSON.stringify(await postToolsMenuLabels(page)));
+
     await page.goto(`${BASE}/${SLUG}/post/101?manage=1`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(700);
@@ -1894,6 +1941,9 @@ async function testOwnerPostScreen(vpName) {
       anon.skinVisible && (anon.skinBody || "").includes("첫 번째 글 본문") &&
       !anon.manageVisible && !anon.ownerTools,
       JSON.stringify(anon));
+
+    check(`[${vpName}] 로그아웃 방문자에게도 읽기 도구(⋮)는 있다`,
+      anon.toolsVisible, JSON.stringify({ toolsVisible: anon.toolsVisible }));
 
     check(`[${vpName}] 로그아웃 방문자: OOC는 화면에도 본문 글자에도 없다`,
       anon.oocCount === 0 &&
@@ -1946,10 +1996,10 @@ async function testOwnerPostScreen(vpName) {
 
     const ownerSecret = await page.evaluate(READ_POST_SCREEN);
 
-    check(`[${vpName}] 소유자의 비밀글: 잠금 없이 스킨 본문 자리에서 읽고, 관리 진입점이 남는다`,
+    check(`[${vpName}] 소유자의 비밀글: 잠금 없이 스킨 본문 자리에서 읽고, 도구 메뉴가 남는다`,
       ownerSecret.skinVisible && !ownerSecret.gateVisible &&
       (ownerSecret.skinTitle || "").includes("비밀 글") &&
-      ownerSecret.manageVisible && ownerSecret.ownerTools,
+      ownerSecret.toolsVisible && ownerSecret.viewerTools,
       JSON.stringify(ownerSecret));
 
     check(`[${vpName}] 소유자 비밀글 경로 콘솔 에러 없음`,

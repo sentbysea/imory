@@ -652,12 +652,42 @@ async function loadCategories(
     [];
 
 
+  /*
+    HIGHLIGHT-1: 메모 화면의 폴더 설정(순서·커버·비율·구도)을 함께
+    읽는다. 별도 테이블이라 카테고리 조회에 컬럼을 더하지 않는다 —
+    migration 이전 배포에서는 그 안에서 판정해 줄을 아예 그리지
+    않는다(admin/settings/admin-settings-memo-folders.js).
+  */
+
+  if (typeof loadMemoFolderSettingsForAdmin === "function") {
+
+    await loadMemoFolderSettingsForAdmin(
+      user.id
+    );
+
+  }
+
+
   renderCategories();
 
 }
 
 
 function renderCategories() {
+
+  /*
+    HIGHLIGHT-1: 메모 폴더 차례를 지금 카테고리 목록에 맞춘다 —
+    카테고리를 더하거나 지운 직후에도 ↑↓ 가 올바른 자리를 가리킨다.
+  */
+
+  if (typeof syncMemoFolderOrder === "function") {
+
+    syncMemoFolderOrder(
+      categories
+    );
+
+  }
+
 
   categoryList.innerHTML =
     "";
@@ -925,6 +955,29 @@ function renderCategories() {
 
         item.appendChild(
           displayRow
+        );
+
+      }
+
+
+      /*
+        HIGHLIGHT-1: 메모 화면의 폴더 설정 줄. 저장된 카테고리(글이
+        들어갈 수 있는 것)에만 붙는다.
+      */
+
+      const memoFolderRow =
+        typeof buildMemoFolderRow === "function"
+          ? buildMemoFolderRow(
+              category,
+              renderCategories
+            )
+          : null;
+
+
+      if (memoFolderRow) {
+
+        item.appendChild(
+          memoFolderRow
         );
 
       }

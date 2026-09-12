@@ -216,6 +216,20 @@ const postManageToggleButton =
 
 
 /*
+  HIGHLIGHT-1: 글 읽기 화면의 도구 메뉴(⋮) 버튼. 주인장과 방문자
+  모두에게 나오고, 메뉴 내용만 권한에 따라 달라진다
+  (posts/view/posts-view-tools-menu.js). 스킨이 자기 자리에
+  ?tools=1 링크를 그렸으면 이 버튼은 숨는다 — 같은 동작을 두 번
+  보여주지 않는다.
+*/
+
+const postToolsButton =
+  document.getElementById(
+    "postToolsButton"
+  );
+
+
+/*
   WRITE를 눌렀는데 글 카테고리가 하나도 없을 때만 뜨는 안내
   패널(posts/view/posts-view-compose.js). 스킨 HTML 밖의
   플랫폼 UI라 스킨은 이 화면의 존재를 몰라도 된다.

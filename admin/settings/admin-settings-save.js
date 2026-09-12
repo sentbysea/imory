@@ -765,6 +765,53 @@ categorySaveButton
       }
 
 
+      /*
+        HIGHLIGHT-1: 메모 화면의 폴더 설정(순서·커버·비율·구도)은
+        별도 테이블이라 카테고리 행이 모두 저장된 **뒤에** 따로
+        저장한다 — 두 설정이 서로를 덮지 않는다는 뜻이기도 하다
+        (요구사항 7). 커버 파일 정리도 그 안에서 저장이 성공한
+        뒤에만 한다.
+      */
+
+      if (
+        typeof saveMemoFolderSettings === "function"
+      ) {
+
+        const memoResult =
+          await saveMemoFolderSettings(
+            user.id,
+            validCategories
+          );
+
+
+        if (!memoResult.ok) {
+
+          /*
+            카테고리는 이미 저장됐다 — 실패를 성공으로 표시하지 않고
+            무엇이 안 됐는지 알린다.
+          */
+
+          categorySaveMessage.textContent =
+            memoResult.message ||
+            "메모 폴더 설정을 저장하지 못했습니다.";
+
+
+          categorySaveButton.disabled =
+            false;
+
+
+          await loadCategories(
+            user
+          );
+
+
+          return;
+
+        }
+
+      }
+
+
       categorySaveMessage.textContent =
         "saved ♡";
 

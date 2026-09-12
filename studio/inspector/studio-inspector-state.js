@@ -215,7 +215,10 @@ const STUDIO_INSPECTOR_PAGE_LABELS = {
   home: "HOME",
   category: "CATEGORY",
   post: "POST",
-  banner: "BANNER"
+  banner: "BANNER",
+  folder: "FOLDER",
+  /* HIGHLIGHT-1 */
+  memos: "MEMO"
 };
 
 const STUDIO_INSPECTOR_KIND_LABELS = {

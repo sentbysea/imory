@@ -6,6 +6,7 @@
 
      /api/post-cover?post=<글 id>
      /api/post-cover?category=<카테고리 id>
+     /api/post-cover?memo=<카테고리 id>      (메모 화면 폴더 커버)
 
    기준 문서: IMORY_GALLERY1_DESIGN.md §3-5
    DB: supabase/migrations/20260911100000_post_covers_private_access.sql
@@ -458,6 +459,15 @@ export async function onRequest(
   const categoryId =
     parsePostCoverId(url.searchParams.get("category"));
 
+  /*
+    HIGHLIGHT-1: 메모 화면의 폴더 커버(memo_folder_settings.cover_path).
+    카테고리 지정 이미지와 같은 성격(카테고리 장식)이라 같은 판정 없는
+    조회를 쓴다 — 다른 행에서 경로를 찾을 뿐이다.
+  */
+
+  const memoCategoryId =
+    parsePostCoverId(url.searchParams.get("memo"));
+
   const rawImageId = url.searchParams.get("image");
   const imageId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawImageId || "")
     ? rawImageId : null;
@@ -466,7 +476,7 @@ export async function onRequest(
   /* 둘 중 정확히 하나 */
 
   if (
-    [postId, categoryId, imageId].filter(value => value !== null).length !== 1
+    [postId, categoryId, imageId, memoCategoryId].filter(value => value !== null).length !== 1
   ) {
 
     return new Response(
@@ -503,6 +513,14 @@ export async function onRequest(
     imageId !== null
       ? await fetchPostCoverObjectRow(supabaseUrl, anonKey, token,
           "get_gallery_image_object", { p_image_id: imageId }, galleryTokens)
+      : memoCategoryId !== null
+      ? await fetchPostCoverObjectRow(
+          supabaseUrl,
+          anonKey,
+          token,
+          "get_memo_folder_cover_object",
+          { p_category_id: memoCategoryId }
+        )
       : postId !== null
       ? await fetchPostCoverObjectRow(
           supabaseUrl,

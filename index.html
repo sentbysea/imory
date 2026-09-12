@@ -411,6 +411,24 @@
         }
       );
 
+    /*
+      MEMOS(HIGHLIGHT-1, skin/skin-memos.js) — 메모 카테고리.
+      posts/view/posts-view-memos.js의 openMemoScreen()이 같은
+      핸드셰이크로 넘겨받는다.
+
+      다른 화면들과 폴백 규칙이 다르다: templates.memos가 없어도
+      플랫폼 기본 template(skin/skin-template.js의
+      getDefaultMemosTemplate)으로 **항상** 그린다 — 메모는 스킨의
+      장식이 아니라 사용자의 데이터라 legacy 화면이 따로 없다.
+    */
+
+    window.skinMemosReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinMemosReady = resolve;
+        }
+      );
+
     loadVersionedScripts(
       [
         "./skin/skin-sanitize.js",
@@ -465,6 +483,10 @@
 
     document.write(
       `<script type="module" src="./skin/skin-folder.js?v=${APP_BUILD_VERSION}"><\/script>`
+    );
+
+    document.write(
+      `<script type="module" src="./skin/skin-memos.js?v=${APP_BUILD_VERSION}"><\/script>`
     );
 
   </script>
@@ -545,6 +567,14 @@
         "./posts/posts-page-canvas.css",
 
         "./posts/posts-preview-export.css",
+        /*
+          HIGHLIGHT-1 — 글 뷰어 도구 메뉴 · 하이라이트 표시 · 말풍선 ·
+          메모 팝업 · 메모 카테고리. posts-mobile.css보다 앞에 둬서
+          모바일 보정이 뒤에서 덮을 수 있게 한다.
+        */
+
+        "./posts/posts-highlight.css",
+
         "./posts/posts-mobile.css"
       ]
     );
@@ -4041,6 +4071,31 @@
 
             "./posts/editor/posts-refs.js",
             "./posts/editor/posts-state.js",
+
+            /*
+              HIGHLIGHT-1 — 글 뷰어 하이라이트 · 메모.
+
+              의존 방향대로 둔다:
+                popover        떠 있는 판(도구 메뉴 · 말풍선 · 카드 메뉴)
+                anchor         발췌 위치 계산(순수 DOM)
+                store          Supabase 왕복과 캐시
+                highlight-mode 모드 · 말풍선 · 메모 팝업
+                tools-menu     ⋮ 버튼과 메뉴
+                memos          메모 카테고리 화면
+
+              posts-refs.js **뒤**여야 한다 — tools-menu가 최상위에서
+              postToolsButton(const, TDZ)에 리스너를 건다. 색 목록
+              (posts-color-picker.js)은 함수 안에서만 쓰므로 앞뒤
+              어느 쪽이든 상관없다.
+            */
+
+            "./posts/view/posts-view-popover.js",
+            "./posts/view/posts-view-highlight-anchor.js",
+            "./posts/view/posts-view-highlight-store.js",
+            "./posts/view/posts-view-highlight-mode.js",
+            "./posts/view/posts-view-tools-menu.js",
+            "./posts/view/posts-view-memos.js",
+
             "./posts/editor/posts-list-detail-nav.js",
             "./posts/editor/posts-richtext-events.js",
             "./posts/editor/posts-editor-undo.js",

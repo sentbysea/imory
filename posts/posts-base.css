@@ -93,7 +93,18 @@
 
 
 /*
-  PHASE 1E — Skin 화면 위의 소유자 전용 도구
+  PHASE 1E — Skin 화면 위에 떠 있는 플랫폼 도구
+
+  ★ HIGHLIGHT-1: 이제 소유자 전용이 아니다
+
+  글 상세에는 주인장과 방문자 모두에게 같은 자리에 도구 메뉴(⋮)가
+  선다(글자 크기 · 링크 복사, 주인장에게는 하이라이팅 모드 · 글
+  수정까지). 그래서 아래 규칙들은 두 상태 중 하나만 있으면 걸린다 —
+  .post-container--owner-tools(＋/edit, 목록·배너 화면)와
+  .post-container--viewer-tools(도구 메뉴, 글 상세). 자리를 재는
+  장치(--tools-anchored)와 좌표 계산은 두 경우가 완전히 같다.
+
+  (아래는 처음 도입 당시의 설명 그대로다.)
 
   배너 카테고리도 글 카테고리도 글 상세도 소유자가 방문자와 같은
   Skin을 본다. 그래도 추가(+)와 관리(edit)는 계속 필요하므로, legacy
@@ -127,7 +138,7 @@
   해제도 없다.
 */
 
-.post-container--skin-active.post-container--owner-tools .post-header {
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -175,8 +186,8 @@
 }
 
 
-.post-container--skin-active.post-container--owner-tools .post-header .post-back-button,
-.post-container--skin-active.post-container--owner-tools .post-header .post-page-title {
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .post-back-button,
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .post-page-title {
   display: none;
 }
 
@@ -186,8 +197,8 @@
   이 도구 안에서는 그냥 나란히 놓는다.
 */
 
-.post-container--skin-active.post-container--owner-tools .post-header .post-add-button,
-.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button {
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .post-add-button,
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .list-edit-toggle-button {
   position: static;
   top: auto;
   right: auto;
@@ -203,7 +214,7 @@
   aria-pressed(관리 패널 열림)는 배경이 아니라 색으로만 나타낸다.
 */
 
-.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button {
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .list-edit-toggle-button {
   padding: 2px 0;
 
   border: 0;
@@ -214,12 +225,12 @@
   color: #aaaaaa;
 }
 
-.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button:hover,
-.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button:focus-visible {
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .list-edit-toggle-button:hover,
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .list-edit-toggle-button:focus-visible {
   color: #ee9fbd;
 }
 
-.post-container--skin-active.post-container--owner-tools .post-header .list-edit-toggle-button[aria-pressed="true"] {
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .list-edit-toggle-button[aria-pressed="true"] {
   border-color: transparent;
 
   background: none;
@@ -228,7 +239,7 @@
 }
 
 
-.post-container--skin-active.post-container--owner-tools .post-header .post-add-button {
+.post-container--skin-active:is(.post-container--owner-tools, .post-container--viewer-tools) .post-header .post-add-button {
   padding: 0;
 
   font-size: 15px;

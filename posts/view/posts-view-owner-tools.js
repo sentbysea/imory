@@ -206,8 +206,17 @@ function placePlatformOwnerTools(
     !header ||
     !postArea ||
     !postContainer ||
-    !postContainer.classList.contains(
-      "post-container--owner-tools"
+    !(
+      postContainer.classList.contains(
+        "post-container--owner-tools"
+      ) ||
+      /*
+        HIGHLIGHT-1: 글 상세의 도구 메뉴(⋮)는 방문자에게도 뜬다 —
+        자리를 재는 규칙은 소유자 도구와 완전히 같다.
+      */
+      postContainer.classList.contains(
+        "post-container--viewer-tools"
+      )
     ) ||
     !skinRoot.isConnected
   ) {
