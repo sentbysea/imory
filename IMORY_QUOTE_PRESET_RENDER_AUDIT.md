@@ -936,3 +936,114 @@ mock한다. 새 절 두 개를 더했다.
   조건을 글/프리셋에 저장할지는 다음 라운드 결정 사항이다.
 - 관리 화면의 나머지 CSS/JS 캐시 규칙, iOS 실기기 확인, 두 미리보기의 완전한 코드 통합은
   그대로 남아 있다(§10.8 · §11.8).
+
+---
+
+## 13. 4단계 — 출력 조건을 프리셋으로 되돌리기 · uniform 정렬 · 발췌 UI (2026-09-12)
+
+§11.8과 §12.7에 "다음 라운드 결정 사항"으로 남겨 뒀던 **출력 조건을 어디에 저장할
+것인가**에 답이 나왔다(사용자 결정, 2026-09-12).
+
+> 출력 조건은 **프리셋에 저장한다.** 비율도 가로 픽셀도 Quote Preset의 CANVAS에서
+> 고치고, 글쓰기 화면의 Preview는 비율만 그 글의 편집 세션 안에서 잠깐 바꿔본다.
+
+### 13.1 어디에서 무엇을 고치는가
+
+| | 고칠 수 있는 것 | 저장되는가 |
+| --- | --- | --- |
+| Quote Preset > CANVAS | 비율(uniform / auto / custom) · 상세 비율 · **내보내기 너비** | **그렇다** — `quote_presets.settings` |
+| 글쓰기 화면의 Preview | 비율 · 세로/가로 정렬 · 제목/출처 표시 · 출처 여백 | 아니다 — 그 글의 편집 세션 한정(§11.5) |
+
+- CANVAS의 비율 옵션은 Preview와 **같은 셋**이다(`uniform` / `auto` / `custom`).
+  §11.2에서 Preview에만 있던 세 옵션을 프리셋에도 그대로 뒀다 — 두 화면이 같은 낱말과
+  같은 값을 쓴다.
+- 옛 고정 비율(`"1:1"` · `"4:5"` · `"3:4"` · `"9:16"`)은 **custom + 가로 비/세로 비**로
+  손실 없이 들어온다. 규칙이 두 곳에 있고 **같아야 한다** —
+  `quoteRatioModeFromSettings` / `quoteRatioPartsFromSettings`
+  ([admin/quote/admin-quote-ratio-parser.js](./admin/quote/admin-quote-ratio-parser.js))와
+  `getPresetPreviewRatioMode` / `getPresetPreviewRatioParts`
+  ([posts/preview/posts-preview-settings.js](./posts/preview/posts-preview-settings.js)).
+- Preview의 **출력 너비 입력칸은 없앴다.** 대신 지금 조건으로 저장하면 몇 픽셀이
+  나오는지를 보여주는 읽기 전용 표시(`size 1200 × 1500`)만 남는다.
+  `previewExportWidth` 변수는 지웠다 없앴다 하지 않고 **null로 남겨 뒀다** —
+  `getPostPreviewExportWidth`의 "고른 값 > 프리셋" 규칙이 그대로라, 나중에 글 단위
+  출력 너비가 생겨도 계산 자리를 다시 만들 필요가 없다.
+
+### 13.2 uniform의 세로 정렬
+
+§11.8에 "uniform에서 세로 정렬은 항상 가운데"라고 적어 뒀던 제한을 없앴다.
+
+- `createPostPageCanvas`가 세 모드에 **같은 값**을 쓴다
+  (`resolvedView.verticalAlign` — 예전에는 `flexibleHeight`면 `"center"`로 못박혔다).
+  늘어난 공간을 흡수하는 본문 묶음(`.post-editor-preview-body-area`)의
+  `justify-content`가 그 값을 그대로 받는다.
+- 고른 값이 실제로 그려진다(실측, 3장 fixture · 통일 높이 279px):
+  `top` 위 0 / 아래 115.2 · `center` 57.59 / 57.61 · `bottom` 115.2 / 0.
+  **정렬을 바꿔도 페이지 높이는 그대로다**(279 / 279 / 279).
+- Preview의 세로 정렬 컨트롤은 이제 **auto에서만** 숨는다(§12.4에서는 custom에서만
+  보였다). auto는 페이지 높이가 곧 콘텐츠 높이라 밀어낼 공간이 0이므로, 눌러도 아무
+  일도 일어나지 않는 컨트롤을 남기지 않는다는 원래 기준은 그대로다.
+- 선택지에 `bottom`을 더했다(프리셋의 세로 정렬은 원래 top/center/bottom 셋이다).
+
+### 13.3 Quote Preset 화면 비율
+
+설정 칸이 340px 고정이고 미리보기가 남는 폭을 전부 가져가던 배치를
+**6 : 4**로 바꿨다(`grid-template-columns: minmax(320px, 6fr) minmax(280px, 4fr)`,
+gap 44 → 32px). 캔버스는 어차피 대지 높이에 맞춰 contain 축소되므로 넓은 폭을 쓰지
+못했고, 설정 칸만 계속 좁았다. 모바일은 예전처럼 한 칸으로 쌓는다.
+
+### 13.4 발췌 UI
+
+| | 예전 | 지금 |
+| --- | --- | --- |
+| 버튼 이름 | `미리보기 ▾` / `미리보기 접기 ▴` | **`발췌 ▾` / `발췌 접기 ▴`** |
+| 버튼 자리 | 왼쪽 정렬 | **가운데 정렬**(`display:flex; width:fit-content; margin-inline:auto`) |
+| export · copy | 항상 보임 | **발췌가 펼쳐져 있을 때만** |
+| 버튼 ↔ 패널 ↔ 캔버스 간격 | 26 / 14 / 12 + 모바일 10+10 | 14 / 8 / 6 + 모바일 2/4 |
+
+- 이 패널이 하는 일은 본문 미리보기가 아니라 **내보낼 발췌 이미지**를 만드는 것이다.
+  그 UI를 통째로 숨기는 자리도 원래 `syncEditorExcerptControls`라는 이름을 쓴다.
+- export/copy의 표시는 실제 상태 하나(섹션의 `is-open`)에서 나온다 —
+  `syncEditorPreviewToggleButton()`이 여닫을 때마다
+  `syncEditorExcerptActionButtons()`를 부른다. 그래서 버튼 클릭 · Escape · 화면 크기
+  기본값 · HTML/gallery 전환 어느 길로 여닫아도 같이 따라온다.
+- **접힌 채로 export하는 경로는 그대로 살아 있다**(`forceOpenSectionIfNeeded` —
+  §12.3). 화면에서 그 버튼을 누를 길이 없어졌을 뿐이다. e2e는 버튼 대신 같은 핸들러를
+  직접 불러 그 경로가 여전히 같은 픽셀을 내는지 확인한다.
+
+### 13.5 검증
+
+`node admin/quote/quote-render-parity-e2e-test.mjs` — **206 PASS / 0 FAIL** (chromium).
+
+| 절 | 이번에 바뀐 확인 |
+| --- | --- |
+| `legacy` | CANVAS에서 비율·내보내기 너비를 **고칠 수 있다**(예전에는 "보이지 않는다"였다) · 옛 `4:5`가 custom 4:5로 손실 없이 들어오고 저장·재열기 왕복에서 값이 또 바뀌지 않는다 |
+| `options` | 출력 너비 입력이 Preview에서 **없어졌다** · 크기 표시는 남는다 · 출력 너비는 프리셋 값을 그대로 쓴다 |
+| `uniform` | 프리셋이 top이면 남는 공간이 전부 아래로 · top/center/bottom이 실제로 그려지고 높이는 그대로 · 정렬 컨트롤이 auto에서만 숨는다 |
+| `panel` | 라벨 `발췌 ▾`/`발췌 접기 ▴` · 버튼 가운데 정렬(데스크톱·모바일) · 접으면 export/copy가 함께 숨고 cancel/save는 남는다 · 접힌 채 캡처해도 장 수·픽셀이 같다 |
+| `labels` | 비율 버튼 셋이 한국어(`같은 높이` / `자동 높이` / `직접 입력`)이고 `data-ratio` 값은 그대로 |
+
+함께 돌린 회귀:
+
+| 스위트 | 결과 |
+| --- | --- |
+| `skin/skin-gallery-e2e-test.mjs` (전체) | 333 PASS / 0 FAIL |
+| `skin/skin-write-manage-e2e-test.mjs` | 155 passed / 0 failed |
+| `skin/skin-banner-page-e2e-test.mjs` | 232 passed / 0 failed |
+| `skin/skin-folder-page-e2e-test.mjs` | 61 passed / 0 failed |
+| `skin/skin-folder-tree-e2e-test.mjs` | 71 passed / 0 failed |
+| `skin/skin-published-frame-e2e-test.mjs` | 64 passed / 0 failed |
+| `admin/admin-settings-e2e-test.mjs` | 38 PASS / 0 FAIL |
+| `studio/images/skin-image-library-e2e-test.mjs` | 95 passed / 0 failed |
+
+**mock 테스트만 했다** — 실제 DB · 배포 · 실기기 확인은 하지 않았다.
+
+`APP_BUILD_VERSION`을 `2026-09-12-6`으로 올렸다.
+
+### 13.6 남은 제한
+
+- Preview 패널의 나머지 라벨(`align` · `body` · `title` · `source` · `margin` · `gap` ·
+  `size`)은 여전히 영어다(§12.8).
+- 출력 조건을 **글 단위**로 저장하는 길은 아직 없다. 프리셋이 그 축이다 — 비율을 자주
+  바꿔 쓰는 사람은 프리셋을 하나 더 만드는 쪽이 된다.
+- 두 미리보기의 완전한 코드 통합 · iOS 실기기 확인은 그대로 남아 있다(§10.8 · §11.8).

@@ -622,6 +622,42 @@ async function runAvatarUpload(
   );
 
 
+  /*
+    올리기 전에 메타데이터를 지우고 용량을 줄인다(모든 업로드 경로
+    공용 — core/lib/image-upload.js). 예전에는 이 경로만 원본을
+    그대로 올렸다.
+
+    저장 경로에는 확장자가 없으므로(createAvatarObjectName) png가
+    jpeg로 바뀌어도 경로는 그대로고, contentType만 따라가면 된다.
+  */
+
+  const prepared =
+    await prepareImoryUploadImage(
+      file,
+      {
+        stripMetadata:
+          typeof imoryEtcStripImageExifEnabled === "function" &&
+            imoryEtcStripImageExifEnabled()
+      }
+    );
+
+
+  if (prepared.error) {
+
+    setAvatarMessage(
+      "사진에서 촬영 정보(EXIF)를 지우지 못해 올리지 않았습니다."
+    );
+
+
+    return;
+
+  }
+
+
+  const upload =
+    prepared.file;
+
+
   const {
     error:
     uploadError
@@ -633,7 +669,7 @@ async function runAvatarUpload(
       )
       .upload(
         storagePath,
-        file,
+        upload,
         {
           /*
             경로가 매번 새로 만들어지므로 덮어쓸 것이 없다 —
@@ -643,7 +679,7 @@ async function runAvatarUpload(
             false,
 
           contentType:
-            file.type,
+            upload.type,
 
           cacheControl:
             "3600"

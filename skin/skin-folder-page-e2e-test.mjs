@@ -47,7 +47,7 @@
      node skin/skin-folder-page-e2e-test.mjs --browser=webkit
      node skin/skin-folder-page-e2e-test.mjs --only=published
 
-   --only= 뒤에 쓸 수 있는 이름: published / preview
+   --only= 뒤에 쓸 수 있는 이름: published / write / preview
 ========================================================== */
 
 import fs from "node:fs";
@@ -1027,6 +1027,143 @@ async function testPublishedNoFolderTemplate() {
 }
 
 
+/* ---------------------------------------------------------
+   FOLDER-3 — 폴더 안에서 바로 쓰기
+
+   폴더 페이지의 WRITE(?write=1)는 그 카테고리 + 그 폴더가 미리
+   골라진 작성 폼을 연다. 예전에는 이 링크가 카테고리의 작성 주소를
+   가리켜서, 폴더 안에서 쓴 글이 카테고리 root에 생기고 관리 화면에서
+   다시 끌어다 놓아야 했다.
+
+   이 스킨(finder v2)은 폴더 템플릿에 viewer.writeHref를 직접 그리므로
+   스킨이 그린 WRITE 링크로 검증한다. 스킨이 안 그리는 경우에는
+   플랫폼 ＋ 가 남고(posts-view-folder.js) 같은 주소로 온다.
+--------------------------------------------------------- */
+
+const READ_EDITOR_FOLDER = `(() => {
+  const category = document.getElementById("postEditorCategory");
+  const folder = document.getElementById("postEditorFolder");
+  const field = document.getElementById("postEditorFolderField");
+  return {
+    editorVisible: !document.getElementById("postEditor").hidden,
+    category: category ? category.value : null,
+    folder: folder ? folder.value : null,
+    fieldHidden: field ? field.hidden : null,
+    options: folder ? Array.from(folder.options).map(o => o.textContent) : [],
+    url: location.pathname + location.search
+  };
+})()`;
+
+async function waitEditor(page) {
+  await page.waitForSelector("#postEditor:not([hidden])", { timeout: 15000 });
+  await page.waitForTimeout(400);
+}
+
+async function testFolderCompose() {
+  console.log("\n[published · FOLDER-3 폴더 안에서 쓰기]");
+
+  await withPage(VIEWPORTS["desktop-1280"], { signedInAs: OWNER_ID }, async (page, { errors }) => {
+
+    /* --- 1) 스킨이 그린 WRITE --- */
+
+    await page.goto(`${BASE}/${SLUG}/category/1/folder/2`, { waitUntil: "domcontentloaded" });
+    await waitFolderPage(page);
+    await waitFolderMode(page, "list");
+
+    const writeHref = await page.evaluate(() => {
+      const a = Array.from(
+        document.querySelectorAll("#postList .imory-skin-root .finder-owner-links a")
+      ).find(el => el.textContent.trim() === "WRITE");
+      return a ? a.getAttribute("href") : null;
+    });
+
+    check("폴더 페이지의 WRITE(viewer.writeHref)는 **그 폴더**의 작성 주소를 가리킨다",
+      writeHref === `/${SLUG}/category/1/folder/2?write=1`, String(writeHref));
+
+    await page.evaluate(() => {
+      Array.from(
+        document.querySelectorAll("#postList .imory-skin-root .finder-owner-links a")
+      ).find(el => el.textContent.trim() === "WRITE").click();
+    });
+    await waitEditor(page);
+
+    const fromPlus = await page.evaluate(READ_EDITOR_FOLDER);
+
+    check("WRITE → 그 카테고리와 **그 폴더**가 미리 골라진 작성 폼 (Sentinel AU=2)",
+      fromPlus.editorVisible && fromPlus.category === "1" && fromPlus.folder === "2" &&
+      fromPlus.fieldHidden === false,
+      JSON.stringify(fromPlus));
+
+    check("주소도 그 폴더의 작성 주소다(/category/1/folder/2?write=1)",
+      fromPlus.url === `/${SLUG}/category/1/folder/2?write=1`, fromPlus.url);
+
+    check("FOLDER 목록은 그 카테고리의 폴더를 계층 순서 + ㄴ 들여쓰기로 보여준다",
+      same(fromPlus.options, [
+        "폴더 없음", "홍차", "ㄴSentinel AU", "ㄴㄴ3단 폴더",
+        "빈 폴더", "2002", "비공개 폴더", "껍데기", "ㄴ속"
+      ]),
+      JSON.stringify(fromPlus.options));
+
+    /* 카테고리를 바꾸면 폴더 목록이 그 카테고리 것으로 갈린다.
+       NOTE(2)에는 폴더가 없으므로 칸 자체가 숨는다. */
+    await page.selectOption("#postEditorCategory", "2");
+    await page.waitForTimeout(500);
+
+    const afterCategory = await page.evaluate(READ_EDITOR_FOLDER);
+
+    check("카테고리를 바꾸면 FOLDER 목록도 그 카테고리 것으로 바뀐다 — 폴더 없는 카테고리에서는 칸이 숨는다",
+      afterCategory.fieldHidden === true && afterCategory.folder === "",
+      JSON.stringify(afterCategory));
+
+    /* --- 2) 취소 → 그 폴더로 복귀 --- */
+
+    await page.selectOption("#postEditorCategory", "1");
+    await page.waitForTimeout(400);
+    await page.click("#postEditorCancelButton");
+    await waitFolderPage(page);
+
+    check("취소하면 시작한 그 폴더 페이지로 돌아온다(카테고리로 떨어지지 않는다)",
+      await page.evaluate(() => location.pathname + location.search) ===
+        `/${SLUG}/category/1/folder/2`,
+      await page.evaluate(() => location.pathname + location.search));
+
+    /* --- 3) 주소로 직접 접속 --- */
+
+    await page.goto(`${BASE}/${SLUG}/category/1/folder/5?write=1`, { waitUntil: "domcontentloaded" });
+    await waitEditor(page);
+
+    const direct = await page.evaluate(READ_EDITOR_FOLDER);
+
+    check("?write=1 주소로 직접 들어와도 그 폴더가 골라진 폼이 열린다(2002=5)",
+      direct.editorVisible && direct.category === "1" && direct.folder === "5" &&
+      direct.url === `/${SLUG}/category/1/folder/5?write=1`,
+      JSON.stringify(direct));
+
+    check("FOLDER-3 소유자 흐름 중 페이지 오류 없음", errors.length === 0, errors.join(" | "));
+  });
+
+
+  /* --- 4) 방문자 --- */
+
+  await withPage(VIEWPORTS["desktop-1280"], {}, async (page, { errors }) => {
+    await page.goto(`${BASE}/${SLUG}/category/1/folder/1?write=1`, { waitUntil: "domcontentloaded" });
+    await waitFolderPage(page);
+    await waitFolderMode(page, "list");
+
+    const visitor = await page.evaluate(() => ({
+      editorVisible: !document.getElementById("postEditor").hidden,
+      url: location.pathname + location.search
+    }));
+
+    check("방문자가 ?write=1 주소로 들어오면 폼은 열리지 않고 그 폴더의 읽기 화면 + 주소 정리",
+      visitor.editorVisible === false && visitor.url === `/${SLUG}/category/1/folder/1`,
+      JSON.stringify(visitor));
+
+    check("FOLDER-3 방문자 흐름 중 페이지 오류 없음", errors.length === 0, errors.join(" | "));
+  });
+}
+
+
 async function testPublishedMobile() {
   console.log("\n[published · mobile-390]");
 
@@ -1285,6 +1422,7 @@ async function testPreview() {
       await testPublishedNoFolderTemplate();
       await testPublishedMobile();
     }
+    if (shouldRun("write")) await testFolderCompose();
     if (shouldRun("preview")) await testPreview();
   } finally {
     server.close();

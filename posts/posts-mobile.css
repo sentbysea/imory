@@ -217,7 +217,10 @@
   ======================================================== */
 
   .post-editor-preview-toggle {
-    margin-top: 18px;
+    margin:
+      12px
+      auto
+      0;
 
     padding:
       8px
@@ -236,7 +239,7 @@
   ======================================================== */
 
   .post-editor-preview-section {
-    margin-top: 16px;
+    margin-top: 8px;
   }
 
 
@@ -377,17 +380,21 @@
      높이·아래 여백도 함께 사라졌다.
   ======================================================== */
 
+  /*
+    ★ 컨트롤 줄과 대지 사이가 벌어져 있었다(margin 10 + padding
+    10 + 각 줄의 margin-bottom 8). 캔버스가 바로 이어지도록
+    전부 좁힌다 — 좁은 화면에서 대지에 줄 만큼 줄여야 한다.
+  */
+
   .post-editor-preview-visibility-controls {
     flex: 0 0 auto;
 
-    margin-top: 4px;
+    margin-top: 2px;
 
-    margin-bottom: 10px;
+    margin-bottom: 4px;
 
     padding:
-      0
-      0
-      10px;
+      0;
   }
 
 
@@ -405,8 +412,8 @@
 
     gap: 5px;
 
-    margin-top: 6px;
-    margin-bottom: 8px;
+    margin-top: 2px;
+    margin-bottom: 2px;
   }
 
 
@@ -444,8 +451,8 @@
     row-gap: 6px;
     column-gap: 5px;
 
-    margin-top: 6px;
-    margin-bottom: 8px;
+    margin-top: 2px;
+    margin-bottom: 2px;
   }
 
 
@@ -462,11 +469,6 @@
     width: 30px;
 
     font-size: 8px;
-  }
-
-
-  .post-editor-preview-export-width {
-    width: 42px;
   }
 
 

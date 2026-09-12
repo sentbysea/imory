@@ -558,6 +558,47 @@
 
 
       <!-- ===================================================
+           FOLDER
+
+           카테고리 안의 폴더(FOLDER-1, 최대 3단계)를 글쓰기/수정
+           폼에서 바로 고른다. 예전에는 새 글이 항상 카테고리 root에
+           생기고 폴더 배치는 ?manage=1 관리 트리에서 끌어다 놓아야만
+           가능했다.
+
+           목록은 위 CATEGORY에서 고른 카테고리의 폴더만 보여주고,
+           카테고리를 바꾸면 다시 채운다(loadPostEditorFolders,
+           posts/editor/format/posts-editor-folder.js). 폴더가 하나도
+           없는 카테고리에서는 이 칸 자체가 숨는다 — 고를 것이 없는
+           빈 드롭다운을 남기지 않는다.
+
+           저장은 posts 테이블에 folder_id를 직접 쓰지 않는다(그
+           컬럼에는 INSERT/UPDATE GRANT가 없다) — move_tree_node()
+           RPC로만 옮긴다(posts/editor/posts-save.js).
+      ==================================================== -->
+
+      <div
+        class="post-editor-field"
+        id="postEditorFolderField"
+        hidden
+      >
+
+        <label
+          for="postEditorFolder"
+        >
+          FOLDER
+        </label>
+
+
+        <select
+          id="postEditorFolder"
+          class="post-editor-input"
+        ></select>
+
+      </div>
+
+
+
+      <!-- ===================================================
            TITLE
       ==================================================== -->
 
@@ -1146,7 +1187,7 @@
       >
 
         <span id="postEditorPreviewToggleLabel">
-          미리보기
+          발췌
         </span>
 
         <span
@@ -1207,7 +1248,13 @@
               <!-- =============================================
                    VERTICAL ALIGN (세션 한정 — "preset"이면
                    QUOTE 프리셋 값을 그대로 따름. 이 글에서만
-                   잠깐 위/가운데로 바꿔보고 싶을 때 사용)
+                   잠깐 위/가운데/아래로 바꿔보고 싶을 때 사용)
+
+                   비율이 auto일 때만 숨는다 — auto는 페이지
+                   높이가 곧 콘텐츠 높이라 밀어낼 공간이 없다.
+                   uniform은 짧은 장에 남는 공간이 생기므로
+                   여기서 고른 정렬이 실제로 그려진다
+                   (posts/preview/posts-preview-css-vars.js).
               ============================================== -->
 
               <div
@@ -1235,6 +1282,10 @@
 
                   <option value="center">
                     center
+                  </option>
+
+                  <option value="bottom">
+                    bottom
                   </option>
 
                 </select>
@@ -1459,28 +1510,21 @@
 
 
               <!-- =============================================
-                   출력 너비 — 저장되는 PNG의 가로 픽셀.
-                   레이아웃 너비(520px)와는 다른 축이라, 이
-                   값을 바꿔도 줄바꿈과 페이지 수는 바뀌지
-                   않는다.
+                   저장되는 PNG의 픽셀 크기 — **읽기 전용**이다.
+
+                   가로 픽셀(내보내기 너비)을 고치는 자리는
+                   Quote Preset의 CANVAS 하나뿐이다. 여기서는
+                   지금 조건으로 저장하면 몇 픽셀이 나오는지만
+                   보여준다. 레이아웃 너비(520px)와는 다른
+                   축이라, 그 값이 달라져도 줄바꿈과 페이지 수는
+                   바뀌지 않는다.
               ============================================== -->
 
               <div class="post-editor-preview-subrow">
 
                 <span class="post-editor-preview-subrow-label">
-                  width
+                  size
                 </span>
-
-
-                <input
-                  class="post-editor-preview-ratio-custom-input post-editor-preview-export-width"
-                  id="postEditorPreviewExportWidth"
-                  type="number"
-                  inputmode="numeric"
-                  min="320"
-                  max="3000"
-                  aria-label="내보내기 너비"
-                >
 
 
                 <span

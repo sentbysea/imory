@@ -540,6 +540,65 @@
 }
 
 
+/* =========================================================
+   OOC 메모 (주인장 전용)
+
+   글을 읽는 화면에서 본문 **위**에 놓인다. 방문자에게는 이
+   요소가 아예 만들어지지 않는다 — 내용도 서버에서 오지
+   않는다(ooc_content는 소유자 전용 RPC로만 읽힌다,
+   posts/view/posts-view-detail.js).
+
+   본문과 섞여 보이면 안 되므로 색·크기를 낮추고 왼쪽에 선을
+   둔다. 줄바꿈은 입력한 그대로(pre-wrap) 보인다 — 에디터의
+   OOC 칸이 textarea라 저장값이 그냥 글자다.
+========================================================== */
+
+.post-detail-ooc {
+  display: block;
+
+  margin:
+    0
+    0
+    26px;
+
+  padding:
+    12px
+    14px;
+
+  border-left:
+    2px solid
+    #f0d3de;
+
+  background: #fbf8f9;
+
+  font-size: 12px;
+
+  line-height: 1.75;
+
+  letter-spacing: 0.02em;
+
+  color: #8a8a8a;
+
+  white-space: pre-wrap;
+
+  word-break: break-word;
+}
+
+
+.post-detail-ooc-label {
+  display: block;
+
+  margin-bottom: 6px;
+
+  font-size: 8px;
+  font-weight: 500;
+
+  letter-spacing: 0.12em;
+
+  color: #c79ab0;
+}
+
+
 /*
   HTML 모드 글이 화면보다 넓을 때 posts-view.js가
   transform: scale()로 축소한다.

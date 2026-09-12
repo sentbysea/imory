@@ -45,6 +45,12 @@ secret/private 글의 접근 규칙을 한 줄도 바꾸지 않는다.
   `viewer.manageHref` / `viewer.writeHref`가 그 **카테고리**의 기존 주소를
   그대로 준다 — 새 글은 어차피 카테고리 root에 생기고(FOLDER-1 §1-5), 배치는
   그 카테고리의 관리 화면에서 한다.
+
+  > **`?write=1` 부분은 FOLDER-3에서 변경됨 →
+  > [IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 2절.** 폴더 주소에
+  > `?write=1`이 **정의됐다** — 그 폴더에 새 글을 쓰는 요청이고, 작성 폼의 FOLDER
+  > 드롭다운이 그 폴더로 미리 맞춰진다. `?manage=1` / `?edit=1`은 여전히 정의되지
+  > 않아 그대로 지운다.
 - history state는 `{ page: "folder", categoryId, folderId }`,
   `currentPostView`에 `"folder"` 값이 추가됐다(`currentPostFolderId`는
   [posts/view/posts-view-folder.js](posts/view/posts-view-folder.js)가 선언).
@@ -102,6 +108,8 @@ folder: {
   postCount
 }
 viewer: { ...base, writeHref: 카테고리 ?write=1, manageHref: 카테고리 ?manage=1 }  // 소유자만, 아니면 null
+                   // ↑ writeHref는 FOLDER-3에서 **이 폴더의 ?write=1**로 변경됨
+                   //   (IMORY_FOLDER3_DESIGN.md 2절)
 ```
 
 - 같은 카테고리의 `category.tree`를 만드는 것과 **같은 조회·정렬·마스킹·

@@ -57,14 +57,23 @@ const SKIN_SANITIZE_BIND_ATTRS = new Set([
 
    나머지 5종과 달리 값이 context path가 아니라 고정 문자열
    식별자다(resolve 대상 아님, skin-render.js가 그대로 통과시킴).
-   v0.1은 "post-body" 하나만 허용 — 그 외 값은 저장 시점에 조용히
-   제거한다(속성 자체가 안 남으므로 렌더러가 이후 이 이름으로
-   region을 찾을 일도 없다). id 속성은 여전히 SKIN_SANITIZE_DENY_ATTRS
+   허용 값은 두 개다 — 그 외 값은 저장 시점에 조용히 제거한다
+   (속성 자체가 안 남으므로 렌더러가 이후 이 이름으로 region을
+   찾을 일도 없다).
+
+   - "post-body": 글 본문이 들어갈 자리(PHASE 1C-E).
+   - "owner-tools": 소유자에게만 보이는 플랫폼 도구(＋ / edit)가
+     들어갈 자리. 스킨이 이 자리를 그려 두면 플랫폼이 자기 버튼을
+     그 안으로 옮겨 스킨의 줄맞춤을 그대로 따른다
+     (posts/view/posts-view-owner-tools.js). 안 그려도 되고, 그때는
+     플랫폼이 스킨의 첫 콘텐츠 줄을 재서 맞춘다. 비소유자에게는
+     이 자리가 항상 비어 있다 — 스킨은 그 안에 아무것도 넣지
+     않는다(넣어도 렌더러가 비운다). id 속성은 여전히 SKIN_SANITIZE_DENY_ATTRS
    에서 전면 금지된 채라 Skin이 표준 id로 system root를 spoof할 수
    없다 — region 식별은 항상 이 전용 속성만으로 이뤄진다.
 ========================================================== */
 const SKIN_SANITIZE_REGION_ATTR = "data-imory-region";
-const SKIN_SANITIZE_ALLOWED_REGION_NAMES = new Set(["post-body"]);
+const SKIN_SANITIZE_ALLOWED_REGION_NAMES = new Set(["post-body", "owner-tools"]);
 
 /* =========================================================
    data-imory-edit-id (PHASE AI-6A, Element Inspector + Direct Edit)

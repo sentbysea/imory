@@ -240,6 +240,23 @@
 
 
 /*
+  ★ 잰 자리 (posts/view/posts-view-owner-tools.js)
+
+  위 기본 규칙(오른쪽 위 12px)은 이제 **아무것도 잴 수 없었을 때의
+  최후 fallback**이다. 평소에는 플랫폼이 스킨이 지정한 자리
+  ([data-imory-region="owner-tools"])나 스킨의 첫 콘텐츠 줄을 재서
+  top/right 두 값을 넣어 준다 — 기준(#postArea 기준 absolute)과
+  나머지 모양은 위 규칙 그대로다.
+*/
+
+.post-container--skin-active.post-container--tools-anchored .post-header {
+  top: var(--imory-owner-tools-top);
+
+  right: var(--imory-owner-tools-right);
+}
+
+
+/*
   PHASE 1D: published Skin 후보 CATEGORY/POST 전환 대기 표시.
   기존 화면을 그대로 둔 채 응답이 오래 걸릴 때만 잠깐 나타나는
   작은 스피너 — pointer-events:none이라 그 아래 화면을 조작해

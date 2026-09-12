@@ -113,8 +113,9 @@ function resolveInSiteSkinRoute(url) {
 
   /*
     FOLDER-2: /:slug/category/:cid/folder/:fid — 폴더 페이지. 이 경로가
-    인정하는 쿼리는 ?series=1(이어읽기) 하나뿐이고 나머지(?write=1 등)는
-    정의되지 않았으므로 전달하지 않는다.
+    인정하는 쿼리는 ?series=1(이어읽기)와, FOLDER-3에서 더해진
+    ?write=1(이 폴더에 새 글) 둘이다. 그 밖의 쿼리는 정의되지
+    않았으므로 전달하지 않는다.
   */
 
   if (
@@ -129,7 +130,8 @@ function resolveInSiteSkinRoute(url) {
       page: "folder",
       id: Number(segments[1]),
       folderId: Number(segments[3]),
-      series: isSiteSeriesRequested(url.search)
+      series: isSiteSeriesRequested(url.search),
+      compose: isSiteComposeRequested(url.search)
     };
 
   }
@@ -303,8 +305,19 @@ document.addEventListener(
 
         await startPostCompose({
           categoryId:
-            route.page === "category"
+            route.page === "category" ||
+            route.page === "folder"
               ? route.id
+              : null,
+
+          /*
+            FOLDER-3: 폴더 경로의 WRITE는 그 폴더까지 전달한다 —
+            작성 폼의 FOLDER 드롭다운이 미리 그 폴더로 맞춰진다.
+          */
+
+          folderId:
+            route.page === "folder"
+              ? route.folderId
               : null
         });
 

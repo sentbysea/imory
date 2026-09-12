@@ -3294,6 +3294,10 @@ async function runAccess(browser) {
                막히지 않는가**. 카테고리·글 화면 모두.
      업로드    EXIF가 든 JPEG를 올리면 Storage로 나가는 바이트에
                EXIF가 없는가(꺼져 있으면 그대로 간다)
+     압축      긴 변이 2048px로 줄어드는가, 투명이 없는 png가
+               jpeg로 바뀌는가(투명이 있으면 png 그대로), 올라간
+               바이트가 원본보다 작아지는가
+               (core/lib/image-upload.js)
      설정 UI   Settings > HOME > ETC의 체크박스와 저장 payload
 
    가운데 것만 되돌릴 수 없는 처리다 — 앞의 것은 브라우저 기본
@@ -3350,6 +3354,129 @@ function buildJpegWithExif() {
 const JPEG_WITH_EXIF = buildJpegWithExif();
 
 
+/* =========================================================
+   압축 검사용 fixture — 진짜 PNG를 만든다
+
+   canvas로 브라우저 안에서 만들면 "우리가 올린 원본"과 "우리가
+   압축한 결과"가 둘 다 브라우저 인코더 산물이라 비교가 흐려진다.
+   Node에서 바이트를 직접 만들어 올린다.
+========================================================== */
+
+function pngCrc32(buffer) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buffer.length; i += 1) {
+    crc = crc ^ buffer[i];
+    for (let bit = 0; bit < 8; bit += 1) {
+      crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+    }
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length, 0);
+  const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(pngCrc32(body), 0);
+  return Buffer.concat([length, body, crc]);
+}
+
+/* colorType 6 = RGBA 8bit. opaque:false면 한 픽셀만 반투명으로 둔다. */
+function buildPng(width, height, { opaque = true } = {}) {
+  const raw = Buffer.alloc(height * (1 + width * 4));
+
+  let offset = 0;
+  for (let y = 0; y < height; y += 1) {
+    raw[offset] = 0;
+    offset += 1;
+    for (let x = 0; x < width; x += 1) {
+      raw[offset] = (x * 7 + y * 3) % 256;
+      raw[offset + 1] = (x * 3 + y * 11) % 256;
+      raw[offset + 2] = (x + y) % 256;
+      raw[offset + 3] = 255;
+      offset += 4;
+    }
+  }
+
+  if (!opaque) {
+    /* 가운데 한 픽셀만 반투명 — "투명이 하나라도 있으면 png 유지" */
+    const y = Math.floor(height / 2);
+    const x = Math.floor(width / 2);
+    raw[y * (1 + width * 4) + 1 + x * 4 + 3] = 128;
+  }
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", zlib.deflateSync(raw)),
+    pngChunk("IEND", Buffer.alloc(0))
+  ]);
+}
+
+function readPngSize(buffer) {
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20)
+  };
+}
+
+/* JPEG의 SOF 세그먼트에서 크기를 읽는다(마커를 따라 건너뛴다) */
+function readJpegSize(buffer) {
+  let offset = 2;
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) {
+      offset += 1;
+      continue;
+    }
+    const marker = buffer[offset + 1];
+    const length = buffer.readUInt16BE(offset + 2);
+    const isSof =
+      marker >= 0xc0 && marker <= 0xcf &&
+      marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+    if (isSof) {
+      return {
+        height: buffer.readUInt16BE(offset + 5),
+        width: buffer.readUInt16BE(offset + 7)
+      };
+    }
+    offset += 2 + length;
+  }
+  return null;
+}
+
+/*
+  Storage 업로드의 요청 본문은 multipart라 앞뒤에 경계 문자열이
+  붙는다 — 이미지 바이트는 그 안에 있다. 시그니처를 찾아 거기서부터
+  자른다(형식 판정도 이 자른 결과로 한다).
+*/
+function imageBytesOf(body) {
+  const png = body.indexOf(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+  );
+  if (png >= 0) return body.subarray(png);
+
+  const jpeg = body.indexOf(Buffer.from([0xff, 0xd8, 0xff]));
+  if (jpeg >= 0) return body.subarray(jpeg);
+
+  return body;
+}
+
+function isJpegBuffer(buffer) {
+  return buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8;
+}
+
+function isPngBuffer(buffer) {
+  return buffer.length > 8 && buffer[0] === 0x89 && buffer[1] === 0x50;
+}
+
+
 /* EXIF 검사용 — 사진은 이제 본문에 넣는다(COVER 칸은 없어졌다).
    올라가는 경로와 EXIF 제거 단계는 같다. */
 async function attachBodyPhotoJpeg(page) {
@@ -3367,6 +3494,21 @@ function uploadedCoverBody(requests) {
     r.method === "POST" && r.path.includes("/storage/v1/object/post-covers/")
   );
   return upload ? (upload.bodyBuffer || Buffer.alloc(0)) : null;
+}
+
+
+/* 올라간 저장 경로까지 함께 본다(확장자가 형식을 따라갔는가) */
+function uploadedCover(requests) {
+  const upload = requests.find(r =>
+    r.method === "POST" && r.path.includes("/storage/v1/object/post-covers/")
+  );
+
+  if (!upload) return null;
+
+  return {
+    path: upload.path,
+    body: imageBytesOf(upload.bodyBuffer || Buffer.alloc(0))
+  };
 }
 
 
@@ -3585,6 +3727,108 @@ async function runProtect(browser) {
 
     await ctx.close();
 
+  }
+
+
+  /* =======================================================
+     (4-1) 압축 — 긴 변 2048px · png → jpeg · 용량
+
+     설정(EXIF 제거)과 **무관하게** 항상 돈다. 여기서는 꺼 둔
+     상태로 재서, 압축이 설정에 딸린 기능이 아니라는 것까지
+     같이 확인한다(core/lib/image-upload.js).
+  ======================================================== */
+  {
+    const cases = [
+      {
+        name: "opaque",
+        label: "투명이 없는 큰 png",
+        file: {
+          name: "big.png",
+          mimeType: "image/png",
+          buffer: buildPng(2600, 1400, { opaque: true })
+        }
+      },
+      {
+        name: "alpha",
+        label: "투명이 있는 큰 png",
+        file: {
+          name: "big-alpha.png",
+          mimeType: "image/png",
+          buffer: buildPng(2600, 1400, { opaque: false })
+        }
+      }
+    ];
+
+    const measured = {};
+
+    for (const item of cases) {
+      const ctx = await browser.newContext({ viewport: VIEWPORTS["desktop-1280"] });
+      const page = await ctx.newPage();
+
+      const db = makeDb({ protection: { strip_image_exif: false } });
+      const requests = [];
+
+      await installSignedInUser(page, OWNER_ID);
+      await installSupabaseMock(page, { signedInAs: OWNER_ID, db, recorder: requests });
+
+      await openEditor(page, 501);
+      await attachBodyPhotoFiles(page, [item.file]);
+
+      await page.click("#postEditorSaveButton");
+      await page.waitForTimeout(2500);
+
+      const upload = uploadedCover(requests);
+
+      measured[item.name] = {
+        label: item.label,
+        originalSize: item.file.buffer.length,
+        upload,
+        size: upload
+          ? (isJpegBuffer(upload.body)
+              ? readJpegSize(upload.body)
+              : readPngSize(upload.body))
+          : null
+      };
+
+      await ctx.close();
+    }
+
+    const report = (pick) =>
+      Object.entries(measured).map(([k, v]) => k + " " + pick(v)).join(" / ");
+
+    check(
+      "[protect] 압축: 큰 사진이 그대로 올라가지 않는다",
+      Boolean(measured.opaque.upload) && Boolean(measured.alpha.upload),
+      report(v => (v.upload ? v.upload.body.length + " bytes" : "업로드 없음"))
+    );
+
+    check(
+      "[protect] ★ 압축: 긴 변이 2048px로 줄어든다",
+      measured.opaque.size?.width === 2048 &&
+      measured.alpha.size?.width === 2048,
+      report(v => v.size ? (v.size.width + "×" + v.size.height) : "(못 읽음)")
+    );
+
+    check(
+      "[protect] ★ 압축: 투명이 없는 png는 jpeg로 바뀐다(경로 확장자도)",
+      isJpegBuffer(measured.opaque.upload.body) &&
+      measured.opaque.upload.path.endsWith(".jpg"),
+      measured.opaque.upload.path
+    );
+
+    check(
+      "[protect] ★ 압축: 투명이 있는 png는 png 그대로다",
+      isPngBuffer(measured.alpha.upload.body) &&
+      measured.alpha.upload.path.endsWith(".png"),
+      measured.alpha.upload.path
+    );
+
+    check(
+      "[protect] 압축: 올라간 바이트가 원본보다 작다",
+      measured.opaque.upload.body.length < measured.opaque.originalSize &&
+      measured.alpha.upload.body.length < measured.alpha.originalSize,
+      report(v => v.originalSize + " → " + v.upload.body.length)
+    );
   }
 
 

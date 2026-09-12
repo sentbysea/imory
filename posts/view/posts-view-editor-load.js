@@ -9,6 +9,17 @@
 ========================================================== */
 
 
+/*
+  FOLDER-3: 지금 작성 폼이 어느 폴더에서 시작됐는지. ?write=1 주소로
+  곧장 들어온 경우에는 "진입 전 화면"이 이 세션에 없어서
+  (rememberPlatformScreenReturn을 건너뛴다) 취소했을 때 돌아갈 자리를
+  이 값으로 정한다 — 없으면 지금까지처럼 그 카테고리로 간다.
+*/
+
+let composeOriginFolderId =
+  null;
+
+
 /* =========================================================
    NEW EDITOR
 
@@ -27,7 +38,15 @@ async function openNewPostEditor(
 ) {
 
   const {
-    updateUrl = true
+    updateUrl = true,
+
+    /*
+      FOLDER-3: 폴더 페이지에서 WRITE를 눌렀으면 그 폴더가 미리
+      골라진 채로 열린다 — 카테고리만 맞고 폴더는 root였던
+      예전 동작을 대체한다(posts/view/posts-view-compose.js).
+    */
+
+    folderId = null
   } = options;
 
 
@@ -86,6 +105,14 @@ async function openNewPostEditor(
 
   editorSourcePostId =
     null;
+
+
+  composeOriginFolderId =
+    folderId
+      ? Number(
+          folderId
+        )
+      : null;
 
 
   currentPostCategoryId =
@@ -172,6 +199,24 @@ async function openNewPostEditor(
   );
 
 
+  /*
+    FOLDER-3: 이 카테고리의 폴더 목록을 채우고, 폴더 페이지에서
+    들어왔으면 그 폴더를 미리 고른다. 새 글은 "원래 있던 폴더"가
+    없으므로 출처는 항상 root(null)다 — 저장할 때 고른 폴더와
+    비교해 옮길지 정한다(posts/editor/format/posts-editor-folder.js).
+  */
+
+  await loadPostEditorFolders(
+    categoryId,
+    folderId
+  );
+
+
+  setPostEditorFolderSource(
+    null
+  );
+
+
   await prepareEditorUI();
 
 
@@ -198,26 +243,45 @@ async function openNewPostEditor(
     (posts/editor/posts-router-init.js). 카테고리가 정해지지 않은
     상태(글 카테고리가 없는 예외)에서는 HOME 작성 주소를
     유지한다.
+
+    FOLDER-3: 폴더에서 들어온 작성은 그 폴더의 주소를 남긴다
+    (/category/:cid/folder/:fid?write=1) — 새로고침·뒤로가기·앞으로
+    가기 어디서 다시 들어와도 같은 폴더가 미리 골라진 폼이 열린다.
   */
 
   if (updateUrl) {
+
+    const composePath =
+      currentPostCategoryId
+        ? (
+            folderId
+              ? buildPostRoute(
+                  `/category/${currentPostCategoryId}/folder/${Number(folderId)}`
+                )
+              : buildPostRoute(
+                  `/category/${currentPostCategoryId}`
+                )
+          )
+        : buildPostRoute(
+            "/"
+          );
+
 
     history.pushState(
       {
         page: "compose",
 
         categoryId:
-          currentPostCategoryId
+          currentPostCategoryId,
+
+        folderId:
+          folderId
+            ? Number(folderId)
+            : null
       },
       "",
       buildSiteComposeUrl(
-        currentPostCategoryId
-          ? buildPostRoute(
-              `/category/${currentPostCategoryId}`
-            )
-          : buildPostRoute(
-              "/"
-            )
+        composePath
       )
     );
 
@@ -290,6 +354,7 @@ async function openPostEditor(
         id,
         user_id,
         category_id,
+        folder_id,
         title,
         content_type,
         visibility,
@@ -408,6 +473,12 @@ async function openPostEditor(
     "edit";
 
 
+  /* 수정은 폴더에서 시작한 작성이 아니다 — 직전 값을 지운다. */
+
+  composeOriginFolderId =
+    null;
+
+
   editorSourcePostId =
     Number(
       post.id
@@ -484,6 +555,25 @@ async function openPostEditor(
 
   await loadPostEditorCategories(
     post.category_id
+  );
+
+
+  /*
+    FOLDER-3: 이 글이 지금 들어 있는 폴더를 그대로 고른 채로 연다.
+    출처를 따로 기억해 두는 이유는 저장할 때 "바뀌었을 때만"
+    move_tree_node()를 부르기 위해서다 — 폴더를 건드리지 않은 저장이
+    그 글의 컨테이너 안 순서를 맨 위로 끌어올리면 안 된다
+    (posts/editor/format/posts-editor-folder.js).
+  */
+
+  await loadPostEditorFolders(
+    post.category_id,
+    post.folder_id
+  );
+
+
+  setPostEditorFolderSource(
+    post.folder_id
   );
 
 
@@ -970,9 +1060,22 @@ async function cancelPostEditor() {
       : (
           categoryId
             ? {
-                view: "category",
+                /*
+                  FOLDER-3: 폴더에서 시작한 작성을 취소하면 그 폴더로
+                  돌아간다 — 카테고리로 떨어뜨리면 보고 있던 자리를
+                  잃는다.
+                */
+
+                view:
+                  composeOriginFolderId
+                    ? "folder"
+                    : "category",
+
                 postId: null,
-                categoryId
+                categoryId,
+
+                folderId:
+                  composeOriginFolderId
               }
             : null
         )

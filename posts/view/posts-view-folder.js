@@ -539,15 +539,38 @@ async function openFolderPage(
 
   }
 
+
+  /*
+    폴더 페이지도 CATEGORY와 같은 규칙으로 ＋ 를 스킨의 줄에 앉힌다
+    (posts/view/posts-view-owner-tools.js). 폴더 스킨도 #postList 안에
+    그려진다.
+  */
+
+  if (
+    typeof mountPlatformOwnerTools ===
+    "function"
+  ) {
+
+    mountPlatformOwnerTools(
+      postList
+    );
+
+  }
+
   postArea.classList.add(
     "post-area--skin-active"
   );
 
 
   /*
-    폴더 주소가 인정하는 쿼리는 ?series=1 하나뿐이다(읽기 모드). 그
-    외(?manage=1 / ?write=1 / ?edit=1)는 이 경로에 정의된 적이 없으므로
-    주소에서 지운다 — 화면과 주소의 불일치를 남기지 않는다(PHASE 1H).
+    이 화면(폴더 읽기)이 인정하는 쿼리는 ?series=1 하나뿐이다.
+    ?write=1도 이 경로에 정의돼 있지만(FOLDER-3, 이 폴더에 새 글)
+    그건 작성 폼으로 가는 요청이라 여기까지 오지 않는다 — 라우터와
+    skin-link-nav가 먼저 startPostCompose()로 보낸다. 그래도 여기
+    도달했다면(소유자가 아니어서 되돌려보내진 경우 등) 읽기 화면이
+    맞으므로 주소에서 지운다. ?manage=1 / ?edit=1은 이 경로에 정의된
+    적이 없어 마찬가지로 지운다 — 화면과 주소의 불일치를 남기지
+    않는다(PHASE 1H).
   */
 
   const folderRoutePath =

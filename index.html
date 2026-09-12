@@ -236,7 +236,15 @@
           카테고리별 보호 설정(우클릭/복사 차단 · 이미지 EXIF 제거).
           supabase-client.js 뒤, 이를 쓰는 posts/view/* 앞이다.
         */
-        "./core/lib/content-protection.js"
+        "./core/lib/content-protection.js",
+
+        /*
+          올리는 이미지의 메타데이터 제거 + 용량 압축. 아무 것에도
+          의존하지 않는 순수 유틸이고, 이를 쓰는 모든 업로드 경로
+          (posts/editor/posts-body-images.js · posts/view/
+          posts-view-banner-form.js …)보다 앞이면 된다.
+        */
+        "./core/lib/image-upload.js"
       ]
     );
 
@@ -3943,6 +3951,14 @@
               posts-router-init.js가 실행될 때 일어남).
             */
 
+            /*
+              스킨 화면 위에서 플랫폼 소유자 도구(＋ / edit)가 앉을
+              자리를 정한다 — 스킨이 지정한 자리가 있으면 거기로,
+              없으면 스킨의 첫 콘텐츠 줄을 재서. 좌표만 만지고
+              무엇을 보일지는 아래 각 렌더러가 정한다.
+            */
+
+            "./posts/view/posts-view-owner-tools.js",
             "./posts/view/posts-view-transition.js",
             "./posts/view/posts-view-list.js",
             "./posts/view/posts-view-list-select.js",
@@ -4002,6 +4018,15 @@
 
             "./posts/editor/posts-cover-image.js",
             "./posts/editor/posts-body-images.js",
+
+            /*
+              폴더 선택 칸(FOLDER-3). 로드 시점에 CATEGORY 드롭다운에
+              change 리스너를 걸므로 posts-refs.js보다 뒤여야 하고,
+              posts-save.js가 movePostToEditorFolder()를 부르므로 그보다
+              앞이어야 한다.
+            */
+
+            "./posts/editor/format/posts-editor-folder.js",
             "./posts/editor/posts-save.js",
             "./posts/editor/posts-router-init.js"
           ];

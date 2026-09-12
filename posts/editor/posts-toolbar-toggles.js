@@ -270,32 +270,14 @@ postEditorPreviewRatioButtons
   );
 
 
-postEditorPreviewExportWidth
-  ?.addEventListener(
-    "input",
-    () => {
+/*
+  ★ 출력 너비(캔버스 가로 픽셀) 입력칸은 이 화면에 없다.
 
-      /*
-        출력 해상도만 바꾼다 — 레이아웃 너비(520px)는 그대로라
-        줄바꿈도 페이지 수도 바뀌지 않으므로 다시 나눌 필요가
-        없다. 표시용 크기 라벨만 갱신한다.
-      */
-
-      previewExportWidth =
-        Math.max(
-          1,
-          Number(
-            postEditorPreviewExportWidth.value
-          ) ||
-          1
-        );
-
-
-      syncPreviewExportSizeLabel();
-
-    }
-  );
-
+  고쳐서 저장하는 자리는 Quote Preset의 CANVAS 하나뿐이고,
+  여기에는 결과 크기를 보여주는 읽기 전용 표시만 남는다
+  (syncPreviewExportSizeLabel). previewExportWidth는 그래서
+  항상 null이다 — posts/preview/posts-preview-settings.js 참고.
+*/
 
 
 /* =========================================================

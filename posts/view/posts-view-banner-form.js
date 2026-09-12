@@ -339,6 +339,52 @@ async function handleBannerEditorFileChange(
 
 
   /*
+    올리기 전에 메타데이터를 지우고 용량을 줄인다(모든 업로드 경로
+    공용 — core/lib/image-upload.js). 예전에는 이 경로만 원본을
+    그대로 올렸다.
+
+    여기는 공개 화면(글쓰기 쪽)이라 admin의
+    imoryEtcStripImageExifEnabled()가 없다. 대신 이 블로그의 보호
+    설정을 그대로 읽는다(core/lib/content-protection.js) — 관리
+    화면에서 켠 그 값이다.
+  */
+
+  const options =
+    await loadImorySiteContentOptions();
+
+
+  const prepared =
+    await prepareImoryUploadImage(
+      file,
+      {
+        stripMetadata:
+          options.stripImageExif
+      }
+    );
+
+
+  if (prepared.error) {
+
+    if (
+      bannerEditorUploadMessage
+    ) {
+
+      bannerEditorUploadMessage.textContent =
+        "사진에서 촬영 정보(EXIF)를 지우지 못해 올리지 않았습니다.";
+
+    }
+
+
+    return;
+
+  }
+
+
+  const upload =
+    prepared.file;
+
+
+  /*
     이미 이 배너에 올려둔 이미지가 있으면 같은 경로에
     덮어쓰고, 처음 올리는 거면 새 uuid로 경로를 만든다.
   */
@@ -362,13 +408,13 @@ async function handleBannerEditorFileChange(
       )
       .upload(
         storagePath,
-        file,
+        upload,
         {
           upsert:
             true,
 
           contentType:
-            file.type,
+            upload.type,
 
           cacheControl:
             "60"

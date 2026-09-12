@@ -177,6 +177,33 @@ const SKIN_PACKAGE = JSON.parse(
   )
 );
 
+/*
+  FOLDER-3: 스킨이 소유자 도구의 자리를 직접 지정한 판
+  ([data-imory-region="owner-tools"]). 브레드크럼 줄(.quiet-post-nav)
+  끝에 빈 자리를 하나 두고, 플랫폼이 자기 버튼을 그 자리에 맞추는지
+  본다 — 스킨이 지정하지 않았을 때의 "재서 맞추기"와 구분되는 경로다
+  (posts/view/posts-view-owner-tools.js).
+*/
+
+const OWNER_SLOT_SKIN = {
+  ...SKIN_PACKAGE,
+  templates: {
+    ...SKIN_PACKAGE.templates,
+    post: {
+      ...SKIN_PACKAGE.templates.post,
+      /* 브레드크럼 줄의 **끝**에 빈 자리를 둔다(space-between이라
+         오른쪽 끝으로 간다). */
+      html: SKIN_PACKAGE.templates.post.html.replace(
+        /(<nav class="quiet-post-nav"[\s\S]*?)(<\/nav>)/,
+        '$1<span data-imory-region="owner-tools"></span>$2'
+      )
+    }
+  },
+  css:
+    SKIN_PACKAGE.css +
+    "\n.quiet-post-nav { display: flex; align-items: center; justify-content: space-between; }\n"
+};
+
 const BANNER_LESS_SKIN = {
   ...SKIN_PACKAGE,
   templates: {
@@ -1446,6 +1473,19 @@ const READ_POST_SCREEN = `(() => {
     skinVisible: Boolean(skinBox) && !skinBox.hidden,
     skinTitle: title ? title.textContent : null,
     skinBody: body ? body.innerText.trim() : null,
+
+    /* 주인장만 보는 OOC 메모(본문 위) — 방문자 화면에는 아예 없다 */
+    oocCount: document.querySelectorAll(".post-detail-ooc").length,
+    oocText: document.querySelector(".post-detail-ooc")
+      ? document.querySelector(".post-detail-ooc").innerText.trim() : null,
+    oocInsideBody: Boolean(
+      body && document.querySelector(".post-detail-ooc") &&
+      body.contains(document.querySelector(".post-detail-ooc"))
+    ),
+    oocIsFirst: Boolean(
+      body && body.firstElementChild &&
+      body.firstElementChild.classList.contains("post-detail-ooc")
+    ),
     legacyVisible: Boolean(detail) && !detail.hidden,
     legacyBody: document.getElementById("postDetailContent")
       ? document.getElementById("postDetailContent").innerText.trim() : null,
@@ -1471,11 +1511,92 @@ const READ_POST_SCREEN = `(() => {
     toolsBorder: header ? getComputedStyle(header).borderTopWidth : null,
     toolsBackground: header ? getComputedStyle(header).backgroundColor : null,
 
+    /* FOLDER-3 라운드: 도구는 이제 스킨이 정한 글 기둥에 맞춰 앉는다
+       (posts/view/posts-view-owner-tools.js). 본문 region이 그 기둥
+       안에 있으므로, 둘의 오른쪽 끝이 같은 x인지로 판정한다. */
+    toolsRightX: header
+      ? header.getBoundingClientRect().right : null,
+    bodyRightX: document.querySelector('#postSkinContainer [data-imory-region="post-body"]')
+      ? document.querySelector('#postSkinContainer [data-imory-region="post-body"]')
+          .getBoundingClientRect().right
+      : null,
+    bodyOffsetTop: document.querySelector('#postSkinContainer [data-imory-region="post-body"]')
+      ? document.querySelector('#postSkinContainer [data-imory-region="post-body"]')
+          .getBoundingClientRect().top - area.getBoundingClientRect().top
+      : null,
+
     titleDisplay: document.querySelector(".post-page-title")
       ? getComputedStyle(document.querySelector(".post-page-title")).display : null,
     url: location.pathname + location.search
   };
 })()`;
+
+/* =========================================================
+   FOLDER-3 — 스킨이 소유자 도구의 자리를 지정한 경우
+
+   [data-imory-region="owner-tools"]를 그린 스킨에서는 플랫폼이 재지
+   않고 **그 자리에** 맞춘다. 여기서 확인하는 것은 두 가지뿐이다 —
+   오른쪽 끝이 슬롯과 같은 x인가, 그 줄의 세로 가운데인가.
+   (방문자에게는 슬롯이 빈 채 남고 버튼은 없다.)
+========================================================== */
+
+async function testOwnerToolsSlot(vpName) {
+  const vp = VIEWPORTS[vpName];
+  console.log(`\n[${vpName}] 스킨이 지정한 소유자 도구 자리(owner-tools region)`);
+
+  await withPage(vp, { signedInAs: OWNER_ID, skin: OWNER_SLOT_SKIN }, async (page) => {
+    await page.goto(`${BASE}/${SLUG}/post/101`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(700);
+
+    const placed = await page.evaluate(() => {
+      const slot = document.querySelector('#postSkinContainer [data-imory-region="owner-tools"]');
+      const header = document.querySelector(".post-header");
+      if (!slot || !header) return null;
+      const s = slot.getBoundingClientRect();
+      const line = slot.parentElement.getBoundingClientRect();
+      const h = header.getBoundingClientRect();
+      return {
+        slotRight: s.right,
+        toolsRight: h.right,
+        lineCenter: line.top + line.height / 2,
+        toolsCenter: h.top + h.height / 2,
+        manageVisible: !document.getElementById("postManageToggleButton").hidden,
+        slotEmpty: slot.childElementCount === 0
+      };
+    });
+
+    check(`[${vpName}] 슬롯을 그린 스킨에서는 도구가 그 슬롯의 오른쪽 끝에 맞는다`,
+      placed && Math.abs(placed.toolsRight - placed.slotRight) <= 2 && placed.manageVisible,
+      JSON.stringify(placed));
+
+    check(`[${vpName}] 도구가 슬롯이 놓인 줄의 세로 가운데에 온다`,
+      placed && Math.abs(placed.toolsCenter - placed.lineCenter) <= 2,
+      JSON.stringify(placed));
+
+    check(`[${vpName}] 슬롯 자체는 비어 있다(플랫폼이 DOM을 그 안으로 옮기지 않는다)`,
+      placed && placed.slotEmpty === true, JSON.stringify(placed));
+  });
+
+
+  /* 방문자: 슬롯은 그대로 있지만 도구는 없다 */
+  await withPage(vp, { skin: OWNER_SLOT_SKIN }, async (page) => {
+    await page.goto(`${BASE}/${SLUG}/post/101`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(600);
+
+    const visitor = await page.evaluate(() => ({
+      slotExists: Boolean(document.querySelector('#postSkinContainer [data-imory-region="owner-tools"]')),
+      ownerTools: document.getElementById("postContainer").className.includes("post-container--owner-tools"),
+      manageVisible: !document.getElementById("postManageToggleButton").hidden
+    }));
+
+    check(`[${vpName}] 방문자에게는 슬롯만 빈 채 남고 도구는 나타나지 않는다`,
+      visitor.slotExists && !visitor.ownerTools && !visitor.manageVisible,
+      JSON.stringify(visitor));
+  });
+}
+
 
 async function testOwnerPostScreen(vpName) {
   const vp = VIEWPORTS[vpName];
@@ -1516,10 +1637,36 @@ async function testOwnerPostScreen(vpName) {
     check(`[${vpName}] 읽기 주소에는 관리/수정 쿼리가 붙지 않는다`,
       reading.url === `/${SLUG}/post/101`, reading.url);
 
-    check(`[${vpName}] 수정 진입점은 표시 공간의 오른쪽 위에 있다(중간/아래 아님)`,
+    /* OOC는 수정 폼에 들어가야만 보이던 것을, 읽는 화면에서도
+       주인장에게만 보여준다(본문 **위**). 스킨의 post-body region
+       안에 들어가므로 스킨이 짠 배치를 건드리지 않는다. */
+    check(`[${vpName}] 주인장 읽기 화면: OOC가 본문 위에 한 번만 보인다`,
+      reading.oocCount === 1 &&
+      (reading.oocText || "").includes("소유자만 보는 OOC 메모") &&
+      reading.oocInsideBody && reading.oocIsFirst,
+      JSON.stringify({
+        count: reading.oocCount, text: reading.oocText,
+        insideBody: reading.oocInsideBody, isFirst: reading.oocIsFirst
+      }));
+
+    /* FOLDER-3: 기준이 "표시 공간의 오른쪽 위 12px"에서 "스킨이 정한
+       글 기둥의 첫 줄"로 바뀌었다 — 스킨의 장식 띠 위에 떠 있던 것을
+       스킨의 줄에 맞춘다. 여전히 화면 위쪽이어야 하고(중간/아래 아님),
+       본문이 시작되기 전이어야 하며, 오른쪽 끝은 본문 기둥과 같다. */
+    check(`[${vpName}] 수정 진입점이 스킨 글 기둥의 첫 줄에 맞춰 앉는다(중간/아래 아님)`,
       reading.toolsOffsetTop !== null && reading.toolsOffsetTop >= 0 &&
-      reading.toolsOffsetTop <= 40 && reading.toolsOffsetRight <= 80,
-      `top=${reading.toolsOffsetTop} right=${reading.toolsOffsetRight}`);
+      reading.bodyOffsetTop !== null &&
+      reading.toolsOffsetTop < reading.bodyOffsetTop &&
+      reading.bodyRightX !== null &&
+      Math.abs(reading.toolsRightX - reading.bodyRightX) <= 2,
+      `top=${reading.toolsOffsetTop} bodyTop=${reading.bodyOffsetTop} ` +
+      `toolsRight=${reading.toolsRightX} bodyRight=${reading.bodyRightX}`);
+
+    check(`[${vpName}] 수정 진입점이 스킨 안쪽에 있는 게 아니라 문서 흐름 밖(absolute)에 그대로 남는다`,
+      reading.headerPosition === "absolute" &&
+      await page.evaluate(() =>
+        document.querySelector("#postContainer > .post-header") !== null),
+      reading.headerPosition);
 
     check(`[${vpName}] 수정 진입점은 알약 껍데기 없이 고스트로 놓인다`,
       reading.toolsBorder === "0px" &&
@@ -1748,6 +1895,34 @@ async function testOwnerPostScreen(vpName) {
       !anon.manageVisible && !anon.ownerTools,
       JSON.stringify(anon));
 
+    check(`[${vpName}] 로그아웃 방문자: OOC는 화면에도 본문 글자에도 없다`,
+      anon.oocCount === 0 &&
+      !(anon.skinBody || "").includes("소유자만 보는 OOC 메모"),
+      JSON.stringify({ count: anon.oocCount, body: anon.skinBody }));
+
+    /* 요소가 없는 것만으로는 부족하다 — 방문자에게는 OOC를 담은
+       응답 자체가 오지 않아야 한다(소유자 전용 RPC를 부르지 않고,
+       post_contents의 content만 읽는다). */
+    const anonBodies = [];
+    const onAnonResponse = async (response) => {
+      const u = new URL(response.url());
+      if (!u.pathname.startsWith("/rest/v1/")) return;
+      try {
+        anonBodies.push({ path: u.pathname, text: await response.text() });
+      } catch (err) { /* 본문을 못 읽는 응답은 건너뛴다 */ }
+    };
+    page.on("response", onAnonResponse);
+    await page.goto(`${BASE}/${SLUG}/post/101`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
+    await page.waitForTimeout(700);
+    page.off("response", onAnonResponse);
+
+    check(`[${vpName}] 로그아웃 방문자: 어떤 응답에도 OOC 글자가 없다`,
+      anonBodies.length > 0 &&
+      !anonBodies.some(r => r.text.includes("소유자만 보는 OOC 메모")) &&
+      !anonBodies.some(r => r.path.includes("rpc/get_own_post_content")),
+      anonBodies.map(r => r.path).join(", "));
+
     await page.goto(`${BASE}/${SLUG}/post/102`, { waitUntil: "domcontentloaded" });
     await page.waitForSelector("#postSkinContainer:not([hidden])", { timeout: 15000 });
     await page.waitForTimeout(600);
@@ -1881,6 +2056,7 @@ try {
     await testOwnerBannerScreen(vpName);
     await testOwnerCategoryScreen(vpName);
     await testOwnerPostScreen(vpName);
+    await testOwnerToolsSlot(vpName);
     await testDateLabels(vpName);
   }
 } finally {

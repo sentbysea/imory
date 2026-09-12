@@ -576,6 +576,24 @@ function enterPlatformScreen() {
   showPostAreaInstant();
 
 
+  /*
+    소유자 도구(.post-header)가 스킨의 줄에 맞춰 잰 자리에 앉아
+    있을 수 있다 — 플랫폼 자기 화면에는 그 좌표가 의미가 없으므로
+    기본 자리로 되돌린다(posts/view/posts-view-owner-tools.js).
+    축소 구성의 테스트 harness에서도 안전하도록 존재 확인 후
+    호출한다.
+  */
+
+  if (
+    typeof restorePlatformOwnerTools ===
+    "function"
+  ) {
+
+    restorePlatformOwnerTools();
+
+  }
+
+
   if (postContainer) {
 
     postContainer.classList.remove(

@@ -422,6 +422,47 @@ postEditorSaveButton
         }
 
 
+        /* =====================================================
+           FOLDER-3: 고른 폴더로 옮기기
+
+           posts.folder_id에는 UPDATE GRANT가 없으므로 위 update에
+           끼워 넣을 수 없다 — 관리 트리의 drag와 **같은 RPC**로만
+           옮긴다(posts/editor/format/posts-editor-folder.js).
+
+           카테고리를 바꾼 저장이면 DB 트리거가 방금 folder_id를
+           null로 되돌렸다(20260908110000 migration 4절 (c)) — 그래서
+           "원래 폴더"를 그대로 비교하면 안 되고 root에서 출발한
+           것으로 본다.
+        ====================================================== */
+
+        const folderMoveError =
+          await movePostToEditorFolder(
+            savedId,
+            categoryId,
+            getPostEditorFolderId(),
+            Number(currentPostCategoryId) === categoryId
+              ? getPostEditorFolderSource()
+              : null
+          );
+
+
+        if (folderMoveError) {
+
+          showPostEditorMessage(
+            "글은 저장했지만 폴더 이동에 실패했습니다. 다시 시도해 주세요."
+          );
+
+
+          return;
+
+        }
+
+
+        setPostEditorFolderSource(
+          getPostEditorFolderId()
+        );
+
+
         /*
           공개 범위가 바뀌었다고 사진 파일을 옮기거나 지우는 단계는
           **없다**. 사진은 비공개 버킷에 있고 바이트는 /api/post-cover로만
@@ -593,6 +634,63 @@ postEditorSaveButton
         return;
 
       }
+
+
+      /* =====================================================
+         FOLDER-3: 고른 폴더로 옮기기
+
+         새 글은 항상 카테고리 root에 만들어진다(posts 트리거가
+         sort_order를 root 맨 위로 준다) — 폴더를 골랐으면 그 다음에
+         move_tree_node()로 옮긴다. 실패하면 글은 이미 있으므로 위
+         저장 실패와 같은 규칙으로 수정 모드로 넘겨 다시 누를 수
+         있게 한다(posts/editor/format/posts-editor-folder.js).
+      ====================================================== */
+
+      const newFolderId =
+        getPostEditorFolderId();
+
+
+      if (newFolderId !== null) {
+
+        const folderMoveError =
+          await movePostToEditorFolder(
+            data.id,
+            categoryId,
+            newFolderId,
+            null
+          );
+
+
+        if (folderMoveError) {
+
+          editorSourcePostId =
+            data.id;
+
+
+          currentEditorMode =
+            "edit";
+
+
+          setPostEditorFolderSource(
+            null
+          );
+
+
+          showPostEditorMessage(
+            "글은 저장했지만 폴더 이동에 실패했습니다. 다시 시도해 주세요."
+          );
+
+
+          return;
+
+        }
+
+      }
+
+
+      setPostEditorFolderSource(
+        newFolderId
+      );
 
 
       invalidateCategoryPageCache(

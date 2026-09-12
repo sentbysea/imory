@@ -123,7 +123,7 @@ function setEditorContentMode(
 
 
 /* =========================================================
-   발췌 컨트롤 (PREVIEW / export / copy)
+   발췌 컨트롤 (발췌 여닫기 / export / copy)
 
    본문 편집 UI는 post와 gallery가 **같다**. 다른 것은 이
    세 버튼뿐이다(요구사항 3절).
@@ -139,20 +139,70 @@ function setEditorContentMode(
    여기서 말하는 copy는 **발췌 이미지 복사** 버튼이다 —
    본문 글자를 선택해 복사하는 브라우저 기본 동작과는
    아무 관계가 없다.
+
+   ★ export/copy는 발췌 패널이 **펼쳐져 있을 때만** 보인다.
+
+   무엇이 저장될지 눈으로 보지 못한 채 누르는 버튼이 되지
+   않도록, 접혀 있으면 cancel/save만 남긴다. 판정은 실제
+   상태 하나(섹션의 is-open)에서 나오므로, 여닫는 모든 길이
+   자동으로 이 표시를 따라온다
+   (syncEditorPreviewToggleButton —
+   posts/preview/posts-preview-mobile.js).
 ========================================================== */
 
-function syncEditorExcerptControls() {
+function editorExcerptUiHidden() {
 
-  const isHtml =
-    editorContentMode === "html";
-
-
-  const hideExcerpt =
-    isHtml ||
+  return (
+    editorContentMode === "html" ||
     (
       typeof isGalleryEditor === "function" &&
       isGalleryEditor()
+    )
+  );
+
+}
+
+
+/*
+  export/copy만 다시 맞춘다 — 발췌를 여닫을 때마다 불린다.
+*/
+
+function syncEditorExcerptActionButtons() {
+
+  const hidden =
+    editorExcerptUiHidden() ||
+    (
+      typeof editorPreviewIsOpen === "function" &&
+      !editorPreviewIsOpen()
     );
+
+
+  if (
+    postEditorExportButton
+  ) {
+
+    postEditorExportButton.hidden =
+      hidden;
+
+  }
+
+
+  if (
+    postEditorCopyButton
+  ) {
+
+    postEditorCopyButton.hidden =
+      hidden;
+
+  }
+
+}
+
+
+function syncEditorExcerptControls() {
+
+  const hideExcerpt =
+    editorExcerptUiHidden();
 
 
   if (
@@ -165,24 +215,7 @@ function syncEditorExcerptControls() {
   }
 
 
-  if (
-    postEditorExportButton
-  ) {
-
-    postEditorExportButton.hidden =
-      hideExcerpt;
-
-  }
-
-
-  if (
-    postEditorCopyButton
-  ) {
-
-    postEditorCopyButton.hidden =
-      hideExcerpt;
-
-  }
+  syncEditorExcerptActionButtons();
 
 
   if (

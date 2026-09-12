@@ -397,6 +397,49 @@ async function installSupabaseMock(page, opts = {}) {
 
     if (url.pathname.startsWith("/rest/v1/rpc/")) {
       const fn = url.pathname.slice("/rest/v1/rpc/".length);
+
+      /* 소유자 전용 본문+OOC RPC. 주인장이 글을 읽을 때는 본문도
+         이 길로 온다(posts/view/posts-view-detail.js) — ooc_content
+         컬럼에는 어느 역할도 SELECT GRANT가 없기 때문이다.
+         비소유자·비로그인에게는 0행이다. */
+      if (fn === "get_own_post_content") {
+        const args = JSON.parse(req.postData() || "{}");
+        const post = (db.posts || []).find(
+          p => String(p.id) === String(args.p_post_id));
+        const owned = post && opts.signedInAs && post.user_id === opts.signedInAs;
+        const row = owned
+          ? (db.post_contents || []).find(
+              c => String(c.post_id) === String(post.id))
+          : null;
+        const single = (req.headers()["accept"] || "").includes("vnd.pgrst.object");
+
+        if (!row) {
+          if (single) {
+            return route.fulfill({
+              status: 406, headers, contentType: "application/json",
+              body: JSON.stringify({ code: "PGRST116", message: "0 rows" })
+            });
+          }
+          return route.fulfill({
+            status: 200, headers, contentType: "application/json",
+            body: "[]"
+          });
+        }
+
+        const payload = {
+          content: row.content ?? null,
+          ooc_content: row.ooc_content ?? null
+        };
+
+        return route.fulfill({
+          status: 200, headers,
+          contentType: single
+            ? "application/vnd.pgrst.object+json"
+            : "application/json",
+          body: JSON.stringify(single ? payload : [payload])
+        });
+      }
+
       const body = fn === "get_published_skin"
         ? { skin, schemaVersion: skin.schemaVersion, imageSlotValues: {} }
         : null;

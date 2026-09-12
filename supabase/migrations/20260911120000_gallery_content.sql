@@ -14,7 +14,7 @@ begin
   if kind not in ('text', 'varchar') or kind is null then
     raise exception 'Review categories.type before migration: expected text/varchar, got %', kind;
   end if;
-  for rule in select conname, pg_get_constraintdef(oid) as definition
+  for rule in ㅁselect conname, pg_get_constraintdef(oid) as definition
     from pg_constraint where conrelid = 'public.categories'::regclass
       and contype = 'c' and conkey = array[col]
   loop

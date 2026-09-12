@@ -5,11 +5,25 @@
 .quote-workspace {
   display: grid;
 
-  grid-template-columns:
-    minmax(280px, 340px)
-    minmax(0, 1fr);
+  /*
+    ★ 설정 6 : 미리보기 4.
 
-  gap: 44px;
+    예전에는 설정 칸이 340px로 고정이고 미리보기가 남는 폭을
+    전부 가져가서, 넓은 화면일수록 설정은 그대로인데 대지만
+    계속 커졌다(설정 항목은 한 줄에 하나씩 좁게 접히는데
+    캔버스는 이미 stage 높이에 맞춰 contain 축소되므로 더 커진
+    폭을 쓰지도 못했다). 지금은 두 칸이 6:4로 같이 늘어난다 —
+    설정 칸에 라벨과 입력이 한 줄에 여유 있게 들어간다.
+
+    미리보기 칸이 너무 좁아지지 않게 최소 폭을 준다. 좁은
+    화면에서는 아래 미디어 쿼리가 한 칸으로 쌓는다.
+  */
+
+  grid-template-columns:
+    minmax(320px, 6fr)
+    minmax(280px, 4fr);
+
+  gap: 32px;
 
   align-items: start;
 
@@ -293,15 +307,17 @@
 
 
 /* =========================================================
-   출력 조건 호환 보관함
+   출력 조건 — 비율 · 내보내기 너비
 
-   비율 · 내보내기 너비 입력칸은 화면에서 빠졌지만(고르는 자리는
-   글쓰기 화면의 PREVIEW), 이미 저장된 값을 들고 다니기 위해
-   폼에는 남아 있다 — admin-quote-panel.html의 주석 참고.
-   [hidden]이 어떤 규칙에도 지지 않도록 못박는다.
+   ★ 상세 비율(가로 비 : 세로 비)은 custom일 때만 보인다.
+     UA의 [hidden]{display:none}은 명시도가 0,0,1,0이라
+     display를 주는 다른 규칙이 생기면 지므로, 같은 명시도의
+     규칙을 여기 못박는다(감사 §12.4에서 Preview 쪽이 정확히
+     이 이유로 한 번도 숨겨지지 않았다).
 ========================================================== */
 
-.quote-canvas-output-compat[hidden] {
+.quote-canvas-output[hidden],
+.quote-custom-ratio[hidden] {
   display: none !important;
 }
 
@@ -936,7 +952,7 @@
     margin: 0;
 
     /*
-      ★ 데스크톱 규칙(gap: 44px, 위 QUOTE WORKSPACE 참고)이
+      ★ 데스크톱 규칙(gap, 위 QUOTE WORKSPACE 참고)이
       모바일에서도 그대로 상속돼서, 대지(.quote-preview-panel)와
       설정창(.quote-controls) 사이가 필요 이상으로 크게 벌어져
       있었다 — 절반(22px)으로 줄이고, 그렇게 확보한 나머지
@@ -967,9 +983,9 @@
       확대해서 볼 수 있으니 32vh로 줄이고, 그만큼 설정창이
       더 넓게 쓰이게 했다.
 
-      ★ + 22px: .quote-workspace의 gap을 44px→22px로 줄이며
-      확보한 나머지 절반을 그대로 돌려받은 몫(위 .quote-workspace
-      모바일 규칙 참고).
+      ★ + 22px: .quote-workspace의 gap을 데스크톱 값의 절반인
+      22px로 줄이며 확보한 나머지 절반을 그대로 돌려받은 몫
+      (위 .quote-workspace 모바일 규칙 참고).
 
       ★ 2026-09-12: 32vh → 48vh.
 

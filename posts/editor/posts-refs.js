@@ -384,6 +384,22 @@ const postEditorCategory =
     "postEditorCategory"
   );
 
+/*
+  카테고리 안의 폴더 선택(FOLDER-1). 폴더가 없는 카테고리에서는
+  field 자체를 숨기므로 두 참조를 함께 둔다
+  (posts/editor/format/posts-editor-folder.js).
+*/
+
+const postEditorFolder =
+  document.getElementById(
+    "postEditorFolder"
+  );
+
+const postEditorFolderField =
+  document.getElementById(
+    "postEditorFolderField"
+  );
+
 const postEditorTitle =
   document.getElementById(
     "postEditorTitle"
@@ -653,13 +669,9 @@ const postEditorPreviewRatioCustomHeight =
     "postEditorPreviewRatioCustomHeight"
   );
 
-/* 출력(내보내기) 너비 — 레이아웃 너비와는 다른 축
+/* 출력 픽셀 크기 표시(읽기 전용). 가로 픽셀을 고르는 입력칸은
+   이 화면에 없다 — Quote Preset의 CANVAS에서만 고친다
    (posts/preview/posts-preview-settings.js) */
-
-const postEditorPreviewExportWidth =
-  document.getElementById(
-    "postEditorPreviewExportWidth"
-  );
 
 const postEditorPreviewExportSize =
   document.getElementById(

@@ -432,20 +432,26 @@ function createImageSettingPanel(
 
 
         /*
-          블로그 설정이 "EXIF 제거"면 올리기 전에 다시 인코딩한다.
-          실패하면 원본을 대신 올리지 않는다
-          (core/lib/content-protection.js).
+          올리기 전에 메타데이터를 지우고 용량을 줄인다
+          (core/lib/image-upload.js). "EXIF 제거"가 켜져 있으면
+          실패했을 때 원본을 대신 올리지 않는다.
+
+          파비콘/커서는 대개 아주 작고 투명이 있는 png라, 크기도
+          형식도 그대로 지나간다(줄일 것도 바꿀 것도 없다).
         */
 
-        const stripped =
-          await stripImageExifIfNeeded(
+        const prepared =
+          await prepareImoryUploadImage(
             file,
-            typeof imoryEtcStripImageExifEnabled === "function" &&
-              imoryEtcStripImageExifEnabled()
+            {
+              stripMetadata:
+                typeof imoryEtcStripImageExifEnabled === "function" &&
+                  imoryEtcStripImageExifEnabled()
+            }
           );
 
 
-        if (stripped.error) {
+        if (prepared.error) {
 
           setUploadMessage(
             "사진에서 촬영 정보(EXIF)를 지우지 못해 올리지 않았습니다."
@@ -458,7 +464,7 @@ function createImageSettingPanel(
 
 
         const upload =
-          stripped.file;
+          prepared.file;
 
 
         const path =

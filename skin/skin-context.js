@@ -2708,14 +2708,24 @@ async function buildFolderSkinContext(
       ...base.viewer,
 
       /*
-        CATEGORY와 같은 진입점이다 — 새 글은 항상 카테고리 root에
-        생기고(FOLDER-1 §1-5) 폴더 배치는 그 카테고리의 관리 화면에서
-        하므로, 폴더 전용 작성/관리 주소를 만들지 않는다.
+        FOLDER-3: WRITE는 **이 폴더**에 쓰는 진입점이다. 폴더 페이지
+        안에서 WRITE를 눌렀는데 글이 카테고리 root에 생기면, 쓰고 나서
+        관리 화면에 다시 들어가 끌어다 놓아야 했다 — 그 두 번째 단계를
+        없앤다. 주소는 폴더 경로 그대로에 쿼리 하나만 붙는다
+        (/category/:cid/folder/:fid?write=1) — 새 경로를 만들지 않는다.
+
+        받는 쪽에서 실제로 여는 것은 지금까지와 같은 작성 폼이고
+        (posts/view/posts-view-compose.js) 폼 안의 FOLDER 드롭다운이
+        이 폴더로 미리 맞춰져 있다. 소유자 검사도 그대로다 —
+        이 주소는 권한이 아니라 요청이다.
+
+        관리(EDIT)는 여전히 카테고리의 관리 화면이다 — 폴더 전용
+        관리 화면은 없다.
       */
 
       writeHref:
         isOwner
-          ? buildSiteComposeUrl(categoryHref)
+          ? buildSiteComposeUrl(folderHref)
           : base.viewer.writeHref,
 
       manageHref:

@@ -648,6 +648,21 @@ function hideBannerSkinListForManagement() {
   }
 
 
+  /*
+    스킨의 줄에 맞춰 잰 좌표도 함께 거둔다
+    (posts/view/posts-view-owner-tools.js).
+  */
+
+  if (
+    typeof restorePlatformOwnerTools ===
+    "function"
+  ) {
+
+    restorePlatformOwnerTools();
+
+  }
+
+
   if (postArea) {
 
     postArea.classList.remove(

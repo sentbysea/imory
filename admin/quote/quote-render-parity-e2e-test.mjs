@@ -599,14 +599,14 @@ async function openPostEditor(browser, opts = {}) {
   updateEditorPreview()를 그대로 쓴다(세션 오버라이드는 건드리지
   않는다 — 프리셋 값을 그대로 따르는 상태).
 */
-async function renderEditorPreview(page, { html, settings, title, mode, exportWidth }) {
+async function renderEditorPreview(page, { html, settings, title, mode, exportWidth, align }) {
   await page.evaluate(async (input) => {
     document.getElementById("postEditorTitle").value = input.title || "";
     document.getElementById("postEditorContent").innerHTML = input.html;
     postStyleSettings = input.settings;
     previewTitleVisible = input.settings.titleEnabled !== false;
     previewSourceVisible = input.settings.sourceEnabled !== false;
-    previewVerticalAlign = null;
+    previewVerticalAlign = input.align || null;
     previewBodyAlign = null;
     previewSourceSpacing = null;
     previewSourceBottomOffset = null;
@@ -616,7 +616,7 @@ async function renderEditorPreview(page, { html, settings, title, mode, exportWi
     previewCustomRatioHeight = null;
     previewExportWidth = input.exportWidth ?? null;
     await updateEditorPreview();
-  }, { html, settings, title, mode, exportWidth });
+  }, { html, settings, title, mode, exportWidth, align });
   await page.waitForTimeout(350);
 }
 
@@ -1355,9 +1355,9 @@ async function runLegacy(browser) {
   );
 
   /*
-    출력 조건 입력칸은 화면에서 빠졌지만(고르는 자리는 글쓰기
-    화면의 PREVIEW), 폼에는 남아 저장값을 들고 다닌다.
-    서식 입력은 그대로 보여야 한다.
+    출력 조건(비율 · 내보내기 너비)을 고치는 자리는 이 화면
+    하나뿐이다 — 입력칸이 실제로 보여야 한다. 서식 입력도
+    그대로 보여야 한다.
   */
   const canvasUi = await page.evaluate(() => {
     const visible = (id) => {
@@ -1367,10 +1367,17 @@ async function runLegacy(browser) {
       return rect.width > 0 && rect.height > 0;
     };
     return {
-      compatExists: Boolean(document.getElementById("quoteCanvasOutputCompat")),
+      outputExists: Boolean(document.getElementById("quoteCanvasOutput")),
       ratioButtons: visible("quoteRatioButtons"),
       exportWidth: visible("quoteWidth"),
       ratioWidthField: visible("quoteRatioWidth"),
+      modes: Array.from(
+        document.querySelectorAll("#quoteRatioButtons .quote-ratio-button")
+      ).map(button => button.dataset.ratio),
+      pressed: Array.from(
+        document.querySelectorAll("#quoteRatioButtons .quote-ratio-button")
+      ).filter(button => button.classList.contains("active"))
+        .map(button => button.dataset.ratio),
       background: visible("quoteBackground"),
       padding: visible("quotePadding"),
       /* BODY 아코디언은 접혀 있을 수 있다 — 존재만 본다 */
@@ -1381,11 +1388,24 @@ async function runLegacy(browser) {
   });
 
   check(
-    "[legacy] Quote Preset에서 비율·출력 너비 입력이 보이지 않는다",
-    canvasUi.compatExists === true &&
-    canvasUi.ratioButtons === false &&
-    canvasUi.exportWidth === false &&
-    canvasUi.ratioWidthField === false,
+    "[legacy] Quote Preset의 CANVAS에서 비율·내보내기 너비를 고칠 수 있다",
+    canvasUi.outputExists === true &&
+    canvasUi.ratioButtons === true &&
+    canvasUi.exportWidth === true,
+    JSON.stringify(canvasUi)
+  );
+
+  check(
+    "[legacy] 비율 옵션이 uniform / auto / custom 셋이다",
+    JSON.stringify(canvasUi.modes) ===
+      JSON.stringify(["uniform", "auto", "custom"]),
+    JSON.stringify(canvasUi.modes)
+  );
+
+  check(
+    "[legacy] 옛 고정 비율(4:5)은 custom으로 눌리고 상세 비율이 보인다",
+    JSON.stringify(canvasUi.pressed) === JSON.stringify(["custom"]) &&
+    canvasUi.ratioWidthField === true,
     JSON.stringify(canvasUi)
   );
 
@@ -1397,12 +1417,22 @@ async function runLegacy(browser) {
     JSON.stringify(canvasUi)
   );
 
+  /*
+    ★ 옛 고정 비율은 **custom + 가로 비/세로 비**로 들어온다.
+    문자열은 바뀌지만 그리는 캔버스는 같다 — 값이 사라지거나
+    다른 비율이 되면 안 된다.
+  */
   check(
-    "[legacy] canvas 저장값(비율/내보내기 너비)이 유지된다",
-    opened.collected.ratio === "4:5" &&
+    "[legacy] 옛 고정 비율(4:5)이 custom 4:5로 손실 없이 들어온다",
+    opened.collected.ratio === "custom" &&
+    Number(opened.collected.ratioWidth) === 4 &&
+    Number(opened.collected.ratioHeight) === 5 &&
     Number(opened.collected.exportWidth) > 0,
     JSON.stringify({
-      ratio: opened.collected.ratio, exportWidth: opened.collected.exportWidth
+      ratio: opened.collected.ratio,
+      ratioWidth: opened.collected.ratioWidth,
+      ratioHeight: opened.collected.ratioHeight,
+      exportWidth: opened.collected.exportWidth
     })
   );
 
@@ -1458,7 +1488,7 @@ function pngSize(buffer) {
   };
 }
 
-async function collectExportedPngs(page) {
+async function collectExportedPngs(page, options = {}) {
   const files = [];
   page.on("download", async (download) => {
     const target = path.join(
@@ -1470,7 +1500,17 @@ async function collectExportedPngs(page) {
     fs.unlinkSync(target);
   });
 
-  await page.click("#postEditorExportButton");
+  /*
+    발췌가 접혀 있으면 export 버튼 자체가 숨는다(2026-09-12).
+    그 상태에서도 캡처 경로가 살아 있는지 보려면 버튼을 누르는
+    대신 같은 핸들러를 직접 부른다 —
+    forceOpenSectionIfNeeded가 여전히 도는지 확인하는 절.
+  */
+  if (options.viaHandler) {
+    await page.evaluate(() => exportEditorPreviewAsImages());
+  } else {
+    await page.click("#postEditorExportButton");
+  }
   await page.waitForFunction(() => {
     const message = document.getElementById("postEditorMessage")?.textContent || "";
     return /saved|실패|없습니다|불러오지/.test(message);
@@ -1876,10 +1916,91 @@ async function runUniform(browser) {
       uniform.map(p => p.sourceBottom).join(" / ")
     );
 
+    /*
+      ★ 늘어난 공간을 어디로 밀지는 **고른 세로 정렬**이 정한다
+      (2026-09-12 이전에는 center로 못박혀 있었다). 여기 fixture는
+      프리셋 verticalAlign이 "top"이므로 남는 공간이 전부 아래에
+      있어야 한다.
+    */
     check(
-      "[uniform] 본문이 제목·출처를 뺀 영역의 세로 가운데에 온다",
-      uniform.every(p => Math.abs(p.padTop - p.padBottom) <= 1),
+      "[uniform] 프리셋이 top이면 남는 공간이 전부 아래로 간다",
+      uniform.every(p => p.padTop <= 1),
       uniform.map(p => `${p.padTop}/${p.padBottom}`).join(" · ")
+    );
+  }
+
+  /* -------------------------------------------------------
+     (3-1) 세로 정렬을 고르면 그대로 그려진다 (uniform 전용)
+  -------------------------------------------------------- */
+  {
+    const byAlign = {};
+
+    for (const align of ["top", "center", "bottom"]) {
+      await renderEditorPreview(page, {
+        html: THREE_PAGE_HTML, settings, title: "", mode: "uniform", align
+      });
+
+      const pages = await page.evaluate(UNIFORM_READ, "#postEditorPreviewPages");
+      const shortest = pages[
+        pages.map(p => p.padTop + p.padBottom)
+          .indexOf(Math.max(...pages.map(p => p.padTop + p.padBottom)))
+      ];
+
+      byAlign[align] = {
+        padTop: shortest.padTop,
+        padBottom: shortest.padBottom,
+        height: shortest.height
+      };
+    }
+
+    check(
+      "[uniform align] top이면 남는 공간이 아래로 간다",
+      byAlign.top.padTop <= 1 && byAlign.top.padBottom > 1,
+      JSON.stringify(byAlign.top)
+    );
+
+    check(
+      "[uniform align] center면 위아래로 반씩 나뉜다",
+      Math.abs(byAlign.center.padTop - byAlign.center.padBottom) <= 1 &&
+      byAlign.center.padTop > 1,
+      JSON.stringify(byAlign.center)
+    );
+
+    check(
+      "[uniform align] bottom이면 남는 공간이 위로 간다",
+      byAlign.bottom.padBottom <= 1 && byAlign.bottom.padTop > 1,
+      JSON.stringify(byAlign.bottom)
+    );
+
+    check(
+      "[uniform align] 정렬을 바꿔도 페이지 높이는 그대로다",
+      byAlign.top.height === byAlign.center.height &&
+      byAlign.center.height === byAlign.bottom.height,
+      [byAlign.top.height, byAlign.center.height, byAlign.bottom.height].join(" / ")
+    );
+  }
+
+  /* -------------------------------------------------------
+     (3-2) 세로 정렬 컨트롤은 auto에서만 숨는다
+  -------------------------------------------------------- */
+  {
+    const rowShown = {};
+
+    for (const mode of ["uniform", "auto", "custom"]) {
+      await renderEditorPreview(page, {
+        html: "짧은 글.", settings, title: "", mode
+      });
+
+      rowShown[mode] = await page.evaluate(() =>
+        !document.getElementById("postEditorPreviewAlignRow").hidden);
+    }
+
+    check(
+      "[uniform align] 세로 정렬 컨트롤이 uniform·custom에서 보이고 auto에서만 숨는다",
+      rowShown.uniform === true &&
+      rowShown.custom === true &&
+      rowShown.auto === false,
+      JSON.stringify(rowShown)
     );
   }
 
@@ -2113,6 +2234,9 @@ async function runOptions(browser) {
       ).map(button => button.dataset.ratio),
       exportWidthInput: Boolean(
         document.getElementById("postEditorPreviewExportWidth")
+      ),
+      exportSizeReadout: Boolean(
+        document.getElementById("postEditorPreviewExportSize")
       )
     };
   });
@@ -2130,9 +2254,20 @@ async function runOptions(browser) {
     controls.trigger === false
   );
 
+  /*
+    ★ 가로 픽셀은 Quote Preset에서만 고친다(사용자 결정,
+    2026-09-12). 여기에는 결과 크기를 보여주는 읽기 전용
+    표시만 남는다.
+  */
   check(
-    "[options] 출력 너비 입력이 Preview에 있다",
-    controls.exportWidthInput === true
+    "[options] 출력 너비 입력이 Preview에서 없어졌다",
+    controls.exportWidthInput === false,
+    JSON.stringify(controls)
+  );
+
+  check(
+    "[options] 대신 저장될 픽셀 크기 표시는 남아 있다",
+    controls.exportSizeReadout === true
   );
 
   /* -------------------------------------------------------
@@ -2153,7 +2288,9 @@ async function runOptions(browser) {
       document.getElementById("postEditorPreviewRatioCustomInputs").hidden,
     width: document.getElementById("postEditorPreviewRatioCustomWidth").value,
     height: document.getElementById("postEditorPreviewRatioCustomHeight").value,
-    exportWidth: document.getElementById("postEditorPreviewExportWidth").value,
+    exportWidth: getPostPreviewExportWidth(postStyleSettings),
+    exportSize:
+      document.getElementById("postEditorPreviewExportSize").textContent.trim(),
     ratio: getPostPreviewRatio(postStyleSettings),
     pageHeight:
       document.querySelector("#postEditorPreviewPages .post-editor-preview-page")
@@ -2175,9 +2312,12 @@ async function runOptions(browser) {
   );
 
   check(
-    "[options] 출력 너비 초기값이 프리셋의 exportWidth다",
-    fromPreset.exportWidth === "1440",
-    fromPreset.exportWidth
+    "[options] 출력 너비는 프리셋의 exportWidth를 그대로 쓴다",
+    fromPreset.exportWidth === 1440 &&
+    fromPreset.exportSize.startsWith("1440"),
+    JSON.stringify({
+      exportWidth: fromPreset.exportWidth, exportSize: fromPreset.exportSize
+    })
   );
 
   /* AUTO로 저장된 프리셋 */
@@ -2204,8 +2344,6 @@ async function runOptions(browser) {
   await page.evaluate(async () => {
     document.querySelector('[data-ratio="uniform"]').click();
     await new Promise(r => setTimeout(r, 200));
-    postEditorPreviewExportWidth.value = "900";
-    postEditorPreviewExportWidth.dispatchEvent(new Event("input"));
     previewVerticalAlign = "center";
     previewBodyAlign = "center";
     previewTitleVisible = false;
@@ -2224,7 +2362,6 @@ async function runOptions(browser) {
       document.querySelectorAll(".post-editor-preview-ratio-button")
     ).filter(b => b.getAttribute("aria-pressed") === "true")
       .map(b => b.dataset.ratio),
-    exportWidth: document.getElementById("postEditorPreviewExportWidth").value,
     align: previewVerticalAlign,
     bodyAlign: previewBodyAlign,
     titleVisible: previewTitleVisible,
@@ -2232,9 +2369,8 @@ async function runOptions(browser) {
   }));
 
   check(
-    "[options] 접었다 펴도 비율·출력 너비·정렬·제목 표시가 그대로다",
+    "[options] 접었다 펴도 비율·정렬·제목 표시가 그대로다",
     JSON.stringify(afterReopen.pressed) === JSON.stringify(["uniform"]) &&
-    afterReopen.exportWidth === "900" &&
     afterReopen.align === "center" &&
     afterReopen.bodyAlign === "center" &&
     afterReopen.titleVisible === false,
@@ -2320,8 +2456,8 @@ async function runOptions(browser) {
         sheetRight: Math.round(sheetRect.right),
         docScroll: document.documentElement.scrollWidth,
         viewport: window.innerWidth,
-        exportWidthVisible: Boolean(
-          document.getElementById("postEditorPreviewExportWidth")
+        exportSizeVisible: Boolean(
+          document.getElementById("postEditorPreviewExportSize")
             ?.getBoundingClientRect().width
         )
       };
@@ -2331,7 +2467,7 @@ async function runOptions(browser) {
       "[options mobile] 출력 조건 줄이 패널 밖으로 넘치지 않는다",
       overflow.rowRight <= overflow.sheetRight + 1 &&
       overflow.docScroll <= overflow.viewport + 1 &&
-      overflow.exportWidthVisible,
+      overflow.exportSizeVisible,
       JSON.stringify(overflow)
     );
 
@@ -2532,7 +2668,8 @@ async function runCache(browser) {
          흐름에 있고, 그림자·큰 둥근 모서리를 쓰지 않으며
          에디터의 다른 버튼과 같은 선·색이다.
      (2) 데스크톱·모바일이 **같은 버튼 하나**로 펼치고 접는다.
-         라벨은 미리보기 ▾ / 미리보기 접기 ▴.
+         라벨은 발췌 ▾ / 발췌 접기 ▴이고, 버튼은 가운데 정렬이다.
+         export/copy는 펼쳐져 있을 때만 보인다.
      (3) aria-expanded가 실제 상태와 같고, aria-controls가
          실제로 열리는 요소를 가리킨다.
      (4) 패널 안에 중복 "PREVIEW" 문구와 닫기 ×가 없다.
@@ -2578,7 +2715,20 @@ const PANEL_READ = () => {
       document.querySelectorAll(".post-editor-preview-backdrop").length,
     alignShown: shown("postEditorPreviewAlignRow"),
     customShown: shown("postEditorPreviewRatioCustomInputs"),
-    widthShown: shown("postEditorPreviewExportWidth"),
+    sizeShown: shown("postEditorPreviewExportSize"),
+    exportShown: shown("postEditorExportButton"),
+    copyShown: shown("postEditorCopyButton"),
+    cancelShown: shown("postEditorCancelButton"),
+    saveShown: shown("postEditorSaveButton"),
+    /* 버튼이 가운데 정렬인지 — 좌우 여백이 같은가 */
+    toggleLeftGap: Math.round(
+      rect.left -
+      toggle.parentElement.getBoundingClientRect().left
+    ),
+    toggleRightGap: Math.round(
+      toggle.parentElement.getBoundingClientRect().right -
+      rect.right
+    ),
     docScroll: document.documentElement.scrollWidth,
     viewport: window.innerWidth
   };
@@ -2638,8 +2788,8 @@ async function runPanel(browser) {
     );
 
     check(
-      "[panel desktop] 펼침 라벨이 '미리보기 접기 ▴'다",
-      opened.label === "미리보기 접기 ▴",
+      "[panel desktop] 펼침 라벨이 '발췌 접기 ▴'다",
+      opened.label === "발췌 접기 ▴",
       opened.label
     );
 
@@ -2684,9 +2834,31 @@ async function runPanel(browser) {
     );
 
     check(
-      "[panel desktop] 접힘 라벨이 '미리보기 ▾'다",
-      closed.label === "미리보기 ▾",
+      "[panel desktop] 접힘 라벨이 '발췌 ▾'다",
+      closed.label === "발췌 ▾",
       closed.label
+    );
+
+    /*
+      ★ export/copy는 발췌가 펼쳐져 있을 때만 보인다.
+      무엇이 저장될지 못 본 채 누르는 버튼을 남기지 않는다.
+    */
+    check(
+      "[panel desktop] 접으면 export/copy가 함께 숨는다",
+      closed.exportShown === false && closed.copyShown === false,
+      JSON.stringify({ export: closed.exportShown, copy: closed.copyShown })
+    );
+
+    check(
+      "[panel desktop] 펼쳐져 있을 때는 export/copy가 보인다",
+      opened.exportShown === true && opened.copyShown === true,
+      JSON.stringify({ export: opened.exportShown, copy: opened.copyShown })
+    );
+
+    check(
+      "[panel desktop] cancel/save는 접든 펴든 그대로 보인다",
+      closed.cancelShown === true && closed.saveShown === true,
+      JSON.stringify({ cancel: closed.cancelShown, save: closed.saveShown })
     );
 
     /* 다시 펼치고, 출력 조건을 고른 뒤, 접었다 편다 */
@@ -2694,11 +2866,6 @@ async function runPanel(browser) {
     await page.waitForTimeout(350);
 
     await page.click("[data-ratio='uniform']");
-    await page.evaluate(() => {
-      const input = document.getElementById("postEditorPreviewExportWidth");
-      input.value = "900";
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-    });
     await page.click("#postEditorPreviewTitleToggle");
     await page.click("#postEditorPreviewSourceToggle");
     await page.waitForTimeout(400);
@@ -2714,7 +2881,8 @@ async function runPanel(browser) {
       pressed: Array.from(document.querySelectorAll("[data-ratio]"))
         .filter(b => b.getAttribute("aria-pressed") === "true")
         .map(b => b.dataset.ratio),
-      exportWidth: document.getElementById("postEditorPreviewExportWidth").value,
+      exportSize: document.getElementById("postEditorPreviewExportSize")
+        .textContent.trim(),
       titlePressed: document.getElementById("postEditorPreviewTitleToggle")
         .getAttribute("aria-pressed"),
       sourcePressed: document.getElementById("postEditorPreviewSourceToggle")
@@ -2734,10 +2902,9 @@ async function runPanel(browser) {
     const kept = await page.evaluate(READ_SESSION);
 
     check(
-      "[panel desktop] 접었다 펴도 비율·출력 너비·정렬·제목·출처가 그대로다",
+      "[panel desktop] 접었다 펴도 비율·정렬·제목·출처가 그대로다",
       kept.open === true &&
       JSON.stringify(kept.pressed) === JSON.stringify(["uniform"]) &&
-      kept.exportWidth === "900" &&
       JSON.stringify({ ...kept, open: null }) ===
         JSON.stringify({ ...beforeCollapse, open: null }),
       `접기 전 ${JSON.stringify(beforeCollapse)} / 편 뒤 ${JSON.stringify(kept)}`
@@ -2752,10 +2919,10 @@ async function runPanel(browser) {
     }
 
     check(
-      "[panel desktop] 세로 정렬은 custom에서만 실제로 보인다",
+      "[panel desktop] 세로 정렬은 auto에서만 숨는다(uniform은 고를 수 있다)",
       byMode.custom.alignShown === true &&
       byMode.auto.alignShown === false &&
-      byMode.uniform.alignShown === false,
+      byMode.uniform.alignShown === true,
       JSON.stringify({
         custom: byMode.custom.alignShown,
         auto: byMode.auto.alignShown,
@@ -2776,13 +2943,19 @@ async function runPanel(browser) {
     );
 
     check(
-      "[panel desktop] 출력 너비는 세 옵션에서 모두 보인다",
-      ["custom", "auto", "uniform"].every(m => byMode[m].widthShown === true),
+      "[panel desktop] 저장될 픽셀 크기 표시는 세 옵션에서 모두 보인다",
+      ["custom", "auto", "uniform"].every(m => byMode[m].sizeShown === true),
       JSON.stringify(
         Object.fromEntries(
-          Object.entries(byMode).map(([k, v]) => [k, v.widthShown])
+          Object.entries(byMode).map(([k, v]) => [k, v.sizeShown])
         )
       )
+    );
+
+    check(
+      "[panel desktop] 발췌 버튼이 가운데 정렬이다",
+      Math.abs(byMode.custom.toggleLeftGap - byMode.custom.toggleRightGap) <= 2,
+      `왼쪽 ${byMode.custom.toggleLeftGap} / 오른쪽 ${byMode.custom.toggleRightGap}`
     );
 
     check("[panel desktop] 오류 없음", errors.length === 0, errors.join(" | "));
@@ -2808,16 +2981,18 @@ async function runPanel(browser) {
 
     const beforeExport = await page.evaluate(PANEL_READ);
 
-    const closedSizes = await collectExportedPngs(page);
+    const closedSizes = await collectExportedPngs(page, { viaHandler: true });
 
     const afterExport = await page.evaluate(PANEL_READ);
 
     check(
-      "[panel export] 접힌 상태에서 눌렀다",
+      "[panel export] 접힌 상태에서 불렀다(버튼은 숨어 있다)",
       beforeExport.open === false &&
-      beforeExport.sectionDisplay === "none",
+      beforeExport.sectionDisplay === "none" &&
+      beforeExport.exportShown === false,
       JSON.stringify({
-        open: beforeExport.open, display: beforeExport.sectionDisplay
+        open: beforeExport.open, display: beforeExport.sectionDisplay,
+        exportShown: beforeExport.exportShown
       })
     );
 
@@ -2866,10 +3041,10 @@ async function runPanel(browser) {
     const initial = await page.evaluate(PANEL_READ);
 
     check(
-      "[panel mobile] 기본은 접힘이고 라벨이 '미리보기 ▾'다(예전과 같다)",
+      "[panel mobile] 기본은 접힘이고 라벨이 '발췌 ▾'다(예전과 같다)",
       initial.open === false &&
       initial.sectionDisplay === "none" &&
-      initial.label === "미리보기 ▾" &&
+      initial.label === "발췌 ▾" &&
       initial.ariaExpanded === "false",
       JSON.stringify({
         open: initial.open, label: initial.label
@@ -2895,10 +3070,28 @@ async function runPanel(browser) {
     check(
       "[panel mobile] 같은 버튼으로 펼쳐진다",
       mobileOpen.open === true &&
-      mobileOpen.label === "미리보기 접기 ▴" &&
+      mobileOpen.label === "발췌 접기 ▴" &&
       mobileOpen.ariaExpanded === "true",
       JSON.stringify({
         open: mobileOpen.open, label: mobileOpen.label
+      })
+    );
+
+    check(
+      "[panel mobile] 버튼이 가운데 정렬이다",
+      Math.abs(mobileOpen.toggleLeftGap - mobileOpen.toggleRightGap) <= 2,
+      `왼쪽 ${mobileOpen.toggleLeftGap} / 오른쪽 ${mobileOpen.toggleRightGap}`
+    );
+
+    check(
+      "[panel mobile] 접혀 있을 때는 export/copy가 숨는다",
+      initial.exportShown === false &&
+      initial.copyShown === false &&
+      mobileOpen.exportShown === true &&
+      mobileOpen.copyShown === true,
+      JSON.stringify({
+        closed: [initial.exportShown, initial.copyShown],
+        open: [mobileOpen.exportShown, mobileOpen.copyShown]
       })
     );
 
@@ -3109,10 +3302,15 @@ async function runLabels(browser) {
       texts.presetButtons.join(" / ")
     );
 
+    /*
+      ★ 비율 옵션은 Preview와 같은 셋(uniform / auto / custom)이다.
+      화면에 보이는 글자만 한국어이고 data-ratio 값은 그대로다
+      (저장되는 enum — [legacy] 절에서 확인).
+    */
     check(
-      "[labels] 비율 버튼의 숫자 값은 그대로, AUTO/CUSTOM만 한국어다",
+      "[labels] 비율 버튼 셋이 한국어다",
       JSON.stringify(texts.ratioButtons) ===
-        JSON.stringify(["1:1", "4:5", "3:4", "9:16", "자동", "직접 입력"]),
+        JSON.stringify(["같은 높이", "자동 높이", "직접 입력"]),
       texts.ratioButtons.join(" / ")
     );
 
@@ -3173,11 +3371,19 @@ async function runLabels(browser) {
   {
     const { ctx, page, errors } = await openQuotePanel(browser);
 
+    /*
+      ★ ratio만은 옛 고정 비율("4:5")이 custom + 가로 비/세로 비로
+      **의도적으로** 바뀐다(손실 없는 대응 — [legacy] 절에서 값이
+      보존되는지 따로 확인한다). 나머지 키는 한 글자도 달라지면
+      안 된다.
+    */
     const roundTrip = await page.evaluate((source) => {
       applyQuoteSettings(source);
       const collected = collectQuoteSettings();
       const differs = Object.keys(source).filter(
-        key => JSON.stringify(collected[key]) !== JSON.stringify(source[key])
+        key =>
+          key !== "ratio" &&
+          JSON.stringify(collected[key]) !== JSON.stringify(source[key])
       );
       return { collected, differs };
     }, BASE_SETTINGS);
@@ -3190,6 +3396,18 @@ async function runLabels(browser) {
             k => `${k}: ${JSON.stringify(roundTrip.collected[k])}`
           ).join(", ")
         : "전부 일치"
+    );
+
+    check(
+      "[labels] 옛 고정 비율은 custom + 같은 비율로만 바뀐다",
+      roundTrip.collected.ratio === "custom" &&
+      Number(roundTrip.collected.ratioWidth) === 4 &&
+      Number(roundTrip.collected.ratioHeight) === 5,
+      JSON.stringify({
+        ratio: roundTrip.collected.ratio,
+        ratioWidth: roundTrip.collected.ratioWidth,
+        ratioHeight: roundTrip.collected.ratioHeight
+      })
     );
 
     check(

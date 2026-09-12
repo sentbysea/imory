@@ -55,8 +55,26 @@ function applyQuoteSettings(
 
   /* CANVAS */
 
+  /*
+    ★ 저장된 ratio를 그대로 버튼 값으로 쓰지 않는다.
+
+    지금 버튼은 uniform / auto / custom 셋뿐인데, 그 전
+    프리셋에는 "1:1" · "4:5" · "9:16" 같은 고정 비율 문자열이
+    들어 있다. 그 값은 **custom + 가로 비/세로 비**로 손실 없이
+    들어온다 — 같은 규칙을 Preview도 쓰므로(감사 §11.2) 두
+    화면이 같은 프리셋에서 다른 캔버스를 그리지 않는다.
+  */
+
   currentQuoteRatio =
-    resolved.ratio;
+    quoteRatioModeFromSettings(
+      resolved
+    );
+
+
+  const ratioParts =
+    quoteRatioPartsFromSettings(
+      resolved
+    );
 
 
   quoteRatioButtons.forEach(
@@ -85,8 +103,8 @@ function applyQuoteSettings(
 
   const fieldValues =
     [
-      [quoteRatioWidth, resolved.ratioWidth],
-      [quoteRatioHeight, resolved.ratioHeight],
+      [quoteRatioWidth, ratioParts.width],
+      [quoteRatioHeight, ratioParts.height],
       [quoteWidth, resolved.exportWidth],
       [quoteBackground, resolved.background],
       [quotePadding, resolved.padding],

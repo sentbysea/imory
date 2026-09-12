@@ -564,15 +564,22 @@ function createPostPageCanvas(
 
 
   /*
-    ratio가 AUTO면 박스 높이가 콘텐츠 높이와 항상 같아서
-    center 지정 자체는 시각적으로 의미 없지만, 명시적으로
-    center로 둔다.
+    ★ 세로 정렬은 세 모드가 같은 값을 쓴다.
+
+      고정 비율  예전 그대로.
+      uniform    모든 페이지가 "가장 높은 페이지"의 높이로
+                 늘어나므로 짧은 장에는 실제로 남는 공간이
+                 생긴다 — 그 공간을 위/가운데/아래 중 어디로
+                 밀지가 여기서 정해진다(예전에는 center로
+                 못박혀 있어 고를 수 없었다).
+      auto       페이지 높이 = 콘텐츠 높이라 남는 공간이 0이다.
+                 무엇을 골라도 그려지는 결과가 같다(그래서
+                 Preview는 auto에서만 이 컨트롤을 숨긴다 —
+                 posts-preview-css-vars.js).
   */
 
   const verticalAlign =
-    flexibleHeight
-      ? "center"
-      : resolvedView.verticalAlign;
+    resolvedView.verticalAlign;
 
 
   const justifyContentValue =
@@ -764,9 +771,10 @@ function createPostPageCanvas(
                     여분 높이를 만들지 않는다).
         uniform   나중에 페이지 높이가 "가장 높은 페이지"로
                   늘어나면, 늘어난 만큼을 이 묶음이 흡수해서
-                  본문이 가운데로 오고 출처는 맨 아래에 남는다.
-                  제목이 차지하는 자리는 묶음 바깥이라 정렬
-                  계산에서 자동으로 빠진다.
+                  본문이 고른 정렬(위/가운데/아래)대로 놓이고
+                  출처는 맨 아래에 남는다. 제목이 차지하는
+                  자리는 묶음 바깥이라 정렬 계산에서 자동으로
+                  빠진다.
     */
 
     bodyArea =
@@ -796,7 +804,7 @@ function createPostPageCanvas(
 
 
     bodyArea.style.justifyContent =
-      "center";
+      justifyContentValue;
 
 
     bodyArea.appendChild(

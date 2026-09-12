@@ -214,21 +214,44 @@ async function uploadSkinImage(file) {
     throw new Error("로그인이 필요합니다.");
   }
 
+  /*
+    올리기 전에 메타데이터를 지우고 용량을 줄인다(모든 업로드 경로
+    공용 — core/lib/image-upload.js). 예전에는 이 경로만 원본을
+    그대로 올렸다.
+
+    Studio는 블로그의 보호 설정을 읽지 않으므로 stripMetadata는
+    끈다 — 실패해도 원본을 올린다. 성공하면 어차피 다시 인코딩된
+    파일이라 메타데이터는 남지 않는다.
+
+    저장 경로를 file.type의 확장자로 만들기 때문에(png → jpeg로
+    바뀔 수 있다) **준비한 뒤에** 경로를 만들어야 한다.
+  */
+
+  const prepared =
+    await prepareImoryUploadImage(
+      file,
+      {
+        stripMetadata: false
+      }
+    );
+
+  const upload = prepared.file || file;
+
   const storagePath =
-    buildSkinImageStoragePath(userData.user.id, file.type);
+    buildSkinImageStoragePath(userData.user.id, upload.type);
 
   const { error: uploadError } =
     await supabaseClient
       .storage
       .from(SKIN_IMAGE_BUCKET)
-      .upload(storagePath, file, {
+      .upload(storagePath, upload, {
         /*
           upsert:false — 경로는 매번 새로 만드므로 덮어쓸 일이
           없어야 하고, 혹시 충돌하면 조용히 덮어쓰는 대신 실패해야
           한다(이미 공개된 이미지를 바꿔치기하는 사고 방지).
         */
         upsert: false,
-        contentType: file.type,
+        contentType: upload.type,
         cacheControl: "31536000"
       });
 
@@ -244,9 +267,10 @@ async function uploadSkinImage(file) {
       .rpc("create_skin_image", {
         p_storage_path: storagePath,
         p_public_url: publicUrl,
+        /* 원본 이름은 사용자가 고른 그 파일 이름을 남긴다 */
         p_original_name: file.name || null,
-        p_mime_type: file.type,
-        p_byte_size: file.size
+        p_mime_type: upload.type,
+        p_byte_size: upload.size
       });
 
   if (error) {

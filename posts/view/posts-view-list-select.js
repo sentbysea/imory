@@ -169,6 +169,22 @@ async function togglePostListEditMode() {
 
 function enterCategoryManageScreen() {
 
+  /*
+    스킨의 줄에 맞춰 잰 소유자 도구 좌표도 함께 거둔다 — 이 화면은
+    스킨이 아니라 legacy 관리 목록이라 그 좌표가 의미가 없다
+    (posts/view/posts-view-owner-tools.js).
+  */
+
+  if (
+    typeof restorePlatformOwnerTools ===
+    "function"
+  ) {
+
+    restorePlatformOwnerTools();
+
+  }
+
+
   if (postContainer) {
 
     postContainer.classList.remove(

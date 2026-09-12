@@ -343,9 +343,9 @@ function updateQuotePreview() {
   exportWidth는 그 위에 곱해지는 배율일 뿐이다 — 표시 배율
   (applyQuotePreviewScale)과는 아무 관계가 없다.
 
-  ★ 여기 쓰이는 비율/너비는 **호환용 출력 조건**이다(프리셋에
-  저장돼 있던 canvas 값). 실제로 글을 쓸 때의 출력 조건은
-  글쓰기 화면의 PREVIEW에서 고른다 —
+  ★ 여기 쓰이는 비율/너비가 곧 저장되는 출력 조건이다.
+  글쓰기 화면의 Preview는 비율만 그 글의 편집 세션 안에서
+  잠깐 바꿔볼 수 있고 가로 픽셀은 이 값을 그대로 쓴다 —
   admin-quote-ratio-parser.js 머리말 참고.
 */
 

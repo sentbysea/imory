@@ -107,10 +107,18 @@ function syncEditorPreviewToggleButton() {
     postEditorPreviewToggleLabel
   ) {
 
+    /*
+      "미리보기"가 아니라 "발췌"다 — 이 패널이 하는 일이
+      본문 미리보기가 아니라 export/copy로 내보낼 **발췌
+      이미지**를 만드는 것이기 때문(gallery 글에서 이 UI를
+      통째로 숨기는 자리도 syncEditorExcerptControls라는
+      이름을 쓴다).
+    */
+
     postEditorPreviewToggleLabel.textContent =
       isOpen
-        ? "미리보기 접기"
-        : "미리보기";
+        ? "발췌 접기"
+        : "발췌";
 
   }
 
@@ -123,6 +131,21 @@ function syncEditorPreviewToggleButton() {
       isOpen
         ? "▴"
         : "▾";
+
+  }
+
+
+  /*
+    export/copy는 발췌가 펼쳐져 있을 때만 보인다. 여닫는 길이
+    여럿이라(버튼 클릭 · Escape · 화면 크기 기본값 · HTML/gallery
+    전환) 실제 상태를 한 자리에서 반영하는 여기서 같이 맞춘다.
+  */
+
+  if (
+    typeof syncEditorExcerptActionButtons === "function"
+  ) {
+
+    syncEditorExcerptActionButtons();
 
   }
 

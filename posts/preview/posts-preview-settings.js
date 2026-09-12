@@ -444,12 +444,19 @@ function applyMobilePreviewTransform() {
 
      QUOTE 프리셋(관리 화면)  배경 · 여백 · 글꼴 · 문단 간격 ·
                               제목/출처 서식 = **본문 서식**
-     Preview(글쓰기 화면)     uniform / auto / custom · 출력
-                              너비 = **출력 조건**
+                              그리고 **출력 조건 전부** —
+                              비율(uniform / auto / custom)과
+                              캔버스 가로 픽셀. 고쳐서 저장하는
+                              자리는 거기 하나뿐이다.
+     Preview(글쓰기 화면)     비율만 이 글의 편집 세션 안에서
+                              잠깐 바꿔본다. **가로 픽셀은 여기서
+                              고를 수 없다** — 프리셋 값을 그대로
+                              쓴다(previewExportWidth는 항상
+                              null이고, 입력칸도 없다).
 
    프리셋에 저장돼 있는 canvas 값(ratio / ratioWidth /
-   ratioHeight / exportWidth)은 이제 이 화면의 **초기값**으로만
-   읽는다(호환). 사용자가 Preview에서 고른 값이 있으면 그것이
+   ratioHeight / exportWidth)이 이 화면의 **기준값**이다.
+   비율만, 사용자가 Preview에서 고른 값이 있으면 그것이
    우선이다.
 
    ★ null의 뜻은 "아직 안 골랐다 = 프리셋 값을 따르는 중"이다.
@@ -473,9 +480,16 @@ let previewCustomRatioHeight =
   null;
 
 /*
-  출력(내보내기) 너비. 레이아웃 너비(POST_PAGE_LAYOUT_WIDTH =
-  520px)와는 다른 축이다 — 이 값을 바꿔도 줄바꿈과 페이지 수는
-  절대 바뀌지 않고, 저장되는 PNG의 해상도만 바뀐다.
+  출력(내보내기) 너비 = 캔버스 가로 픽셀. 레이아웃 너비
+  (POST_PAGE_LAYOUT_WIDTH = 520px)와는 다른 축이다 — 이 값을
+  바꿔도 줄바꿈과 페이지 수는 절대 바뀌지 않고, 저장되는 PNG의
+  해상도만 바뀐다.
+
+  ★ 이 화면에는 이 값을 고르는 입력칸이 없다(Quote Preset의
+  "내보내기 너비" 하나뿐이다). 변수는 남겨 둔다 — 아래
+  getPostPreviewExportWidth의 "고른 값 > 프리셋" 규칙을 그대로
+  두면, 나중에 글 단위 출력 너비가 생기더라도 계산 자리를 다시
+  만들 필요가 없다. 지금은 항상 null이라 프리셋 값이 쓰인다.
 */
 
 let previewExportWidth =
@@ -488,8 +502,12 @@ let previewExportWidth =
 
    옛 프리셋의 고정 비율("4:5" · "9:16" · "custom" + ratioWidth/
    Height)은 **손실 없이 custom의 비율 값으로** 대응된다.
-   "auto"만 auto로 온다. uniform은 프리셋에 없는 새 값이라
-   사용자가 Preview에서 고를 때만 생긴다.
+   "auto"와 "uniform"은 그 값 그대로 온다.
+
+   ★ 관리 화면(admin/quote/admin-quote-ratio-parser.js의
+   quoteRatioModeFromSettings / quoteRatioPartsFromSettings)이
+   **같은 규칙**을 쓴다. 한쪽만 고치면 같은 프리셋에서 두 화면이
+   다른 캔버스를 그린다.
 ========================================================== */
 
 function parsePostRatioParts(
@@ -536,12 +554,27 @@ function parsePostRatioParts(
 }
 
 
+const POST_PREVIEW_RATIO_MODES =
+  [
+    "uniform",
+    "auto",
+    "custom"
+  ];
+
+
 function getPresetPreviewRatioMode(
   settings = {}
 ) {
 
-  return settings.ratio === "auto"
-    ? "auto"
+  const ratio =
+    String(
+      settings.ratio ||
+      ""
+    );
+
+
+  return POST_PREVIEW_RATIO_MODES.includes(ratio)
+    ? ratio
     : "custom";
 
 }
@@ -552,8 +585,12 @@ function getPresetPreviewRatioParts(
 ) {
 
   if (
-    settings.ratio ===
-    "custom"
+    POST_PREVIEW_RATIO_MODES.includes(
+      String(
+        settings.ratio ||
+        ""
+      )
+    )
   ) {
 
     return {

@@ -48,6 +48,16 @@ async function startPostCompose(
 
   const {
     categoryId = null,
+
+    /*
+      FOLDER-3: 폴더 페이지에서 온 요청이면 그 폴더를 미리 고른
+      채로 연다(/category/:cid/folder/:fid?write=1). 폴더는 항상
+      카테고리와 함께 온다 — 폴더만 있고 카테고리가 없는 요청은
+      성립하지 않는다.
+    */
+
+    folderId = null,
+
     updateUrl = true
   } = options;
 
@@ -63,7 +73,8 @@ async function startPostCompose(
   ) {
 
     await leaveComposeRequest(
-      categoryId
+      categoryId,
+      folderId
     );
 
 
@@ -82,7 +93,15 @@ async function startPostCompose(
         categoryId
       ),
       {
-        updateUrl
+        updateUrl,
+
+        folderId:
+          folderId === null ||
+          folderId === undefined
+            ? null
+            : Number(
+                folderId
+              )
       }
     );
 
@@ -138,8 +157,67 @@ async function startPostCompose(
 */
 
 async function leaveComposeRequest(
-  categoryId
+  categoryId,
+  folderId = null
 ) {
+
+  /*
+    FOLDER-3: 폴더 주소로 온 작성 요청을 거절할 때는 그 폴더의
+    읽기 화면으로 돌려보낸다 — 카테고리로 되돌리면 방문자가
+    보고 있던 자리를 잃는다(폴더 페이지의 평소 동작,
+    posts/view/posts-view-folder.js).
+  */
+
+  if (
+    categoryId !== null &&
+    categoryId !== undefined &&
+    folderId !== null &&
+    folderId !== undefined
+  ) {
+
+    const folderRoute =
+      buildPostRoute(
+        `/category/${Number(categoryId)}/folder/${Number(folderId)}`
+      );
+
+
+    history.replaceState(
+      {
+        page: "folder",
+
+        categoryId:
+          Number(
+            categoryId
+          ),
+
+        folderId:
+          Number(
+            folderId
+          )
+      },
+      "",
+      folderRoute
+    );
+
+
+    await openFolderPage(
+      Number(
+        categoryId
+      ),
+      Number(
+        folderId
+      ),
+      {
+        updateUrl:
+          false
+      }
+    );
+
+
+    return;
+
+  }
+
 
   if (
     categoryId !== null &&

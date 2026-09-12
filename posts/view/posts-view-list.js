@@ -1237,6 +1237,23 @@ async function openCategoryPage(
 
 
       /*
+        배너 스킨도 CATEGORY/POST와 같은 규칙으로 소유자 도구를
+        앉힌다(posts/view/posts-view-owner-tools.js).
+      */
+
+      if (
+        typeof mountPlatformOwnerTools ===
+        "function"
+      ) {
+
+        mountPlatformOwnerTools(
+          postList
+        );
+
+      }
+
+
+      /*
         post형 CATEGORY/POST와 동일한 mount contract — legacy
         헤더(제목+뒤로가기)를 숨기고 .post-area의 legacy padding을
         0으로 만들어, Skin이 자기 CSS로 정한 프레임 폭/여백이
@@ -1687,6 +1704,23 @@ async function openCategoryPage(
       postContainer.classList.toggle(
         "post-container--owner-tools",
         needsPlatformOwnerTools
+      );
+
+    }
+
+
+    /*
+      스킨의 줄에 앉힌다(posts/view/posts-view-owner-tools.js).
+      CATEGORY 스킨은 #postList 안에 그려진다.
+    */
+
+    if (
+      typeof mountPlatformOwnerTools ===
+      "function"
+    ) {
+
+      mountPlatformOwnerTools(
+        postList
       );
 
     }

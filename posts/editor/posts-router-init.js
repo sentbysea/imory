@@ -125,6 +125,40 @@ async function handlePostRoute() {
 
   if (folderMatch) {
 
+    /*
+      FOLDER-3: ?write=1이면 이 폴더에 새 글을 쓰는 폼을 곧장 연다 —
+      카테고리와 폴더가 모두 미리 골라진 채로 열린다. 소유자가
+      아니면 startPostCompose()가 주소를 정리하고 평소의 폴더
+      화면으로 돌려보낸다(카테고리 ?write=1과 같은 규칙).
+    */
+
+    if (
+      isSiteComposeRequested(
+        search
+      )
+    ) {
+
+      await startPostCompose({
+        categoryId:
+          Number(
+            folderMatch[1]
+          ),
+
+        folderId:
+          Number(
+            folderMatch[2]
+          ),
+
+        updateUrl:
+          false
+      });
+
+
+      return;
+
+    }
+
+
     await openFolderPage(
       Number(
         folderMatch[1]

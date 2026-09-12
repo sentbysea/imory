@@ -311,6 +311,45 @@ myBannerFileInput
       }
 
 
+      /*
+        올리기 전에 메타데이터를 지우고 용량을 줄인다(모든 업로드
+        경로 공용 — core/lib/image-upload.js). 예전에는 이 경로만
+        원본을 그대로 올려서, "EXIF 제거"를 켜 둬도 배너로 올린
+        사진에는 촬영 정보가 남아 있었다.
+      */
+
+      const prepared =
+        await prepareImoryUploadImage(
+          file,
+          {
+            stripMetadata:
+              typeof imoryEtcStripImageExifEnabled === "function" &&
+                imoryEtcStripImageExifEnabled()
+          }
+        );
+
+
+      if (prepared.error) {
+
+        if (
+          myBannerUploadMessage
+        ) {
+
+          myBannerUploadMessage.textContent =
+            "사진에서 촬영 정보(EXIF)를 지우지 못해 올리지 않았습니다.";
+
+        }
+
+
+        return;
+
+      }
+
+
+      const upload =
+        prepared.file;
+
+
       const path =
         `${user.id}/banner`;
 
@@ -325,13 +364,13 @@ myBannerFileInput
           )
           .upload(
             path,
-            file,
+            upload,
             {
               upsert:
                 true,
 
               contentType:
-                file.type,
+                upload.type,
 
               /*
                 ★ 너무 길게 캐시되면 이미지를 바꿔도

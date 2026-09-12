@@ -239,32 +239,35 @@
 
 
                 <!-- ===========================================
-                     출력 조건(비율 · 내보내기 너비)은 이제
-                     글쓰기 화면의 PREVIEW에서 고른다
-                     (IMORY_QUOTE_PRESET_RENDER_AUDIT.md §6 단계 2).
+                     출력 조건 — 비율(uniform / auto / custom)과
+                     캔버스 가로 픽셀(내보내기 너비).
 
-                     프리셋에는 **서식**만 남는다 — 배경 · 여백 ·
-                     글꼴 · 문단 간격 · 제목/출처 서식.
+                     ★ 여기가 이 값들을 **고쳐서 저장하는** 유일한
+                       자리다. 글쓰기 화면의 Preview에서는 비율만
+                       잠깐 바꿔볼 수 있고(그 글의 편집 세션 한정),
+                       가로 픽셀은 아예 고를 수 없다 — 프리셋에
+                       저장된 값을 그대로 쓴다
+                       (posts/preview/posts-preview-settings.js).
 
-                     ★ 입력칸 자체는 지우지 않고 감추기만 한다.
+                     ★ 세 값의 뜻은 Preview와 완전히 같다.
 
-                       - 이미 저장돼 있는 ratio/ratioWidth/
-                         ratioHeight/exportWidth를 그대로 들고
-                         다녀야 한다(저장 한 번으로 값이 사라지면
-                         안 된다). applyQuoteSettings가 이 칸에
-                         저장값을 되채우고 collectQuoteSettings가
-                         그 값을 그대로 다시 수집하므로, 숨겨진
-                         폼의 기본값이 저장값을 덮어쓰지 않는다.
-                       - 이 화면의 미리보기도 "어떤 캔버스에
-                         그릴지"는 알아야 한다. getQuoteRatio()가
-                         이 값을 **호환용 출력 조건**으로만 읽는다
-                         (admin-quote-ratio-parser.js).
+                       uniform  auto와 똑같이 나눈 뒤 모든 페이지를
+                                가장 높은 페이지의 높이로 통일
+                       auto     페이지마다 자기 높이(수동 PAGE
+                                break로만 나뉨)
+                       custom   지정한 비율의 고정 크기 캔버스
+
+                     ★ 옛 프리셋의 고정 비율("4:5" · "9:16" 등)은
+                       **custom + 가로 비/세로 비**로 손실 없이
+                       들어온다(quoteRatioModeFromSettings /
+                       quoteRatioPartsFromSettings —
+                       admin-quote-ratio-parser.js). Preview도 같은
+                       규칙으로 읽으므로 두 화면이 갈리지 않는다.
                 ============================================ -->
 
                 <div
-                  class="quote-canvas-output-compat"
-                  id="quoteCanvasOutputCompat"
-                  hidden
+                  class="quote-canvas-output"
+                  id="quoteCanvasOutput"
                 >
 
 
@@ -281,35 +284,11 @@
                   >
 
                     <button
-                      class="quote-ratio-button imory-tab imory-tab--boxed imory-tab--boxed-neutral active"
-                      type="button"
-                      data-ratio="1:1"
-                    >
-                      1:1
-                    </button>
-
-                    <button
                       class="quote-ratio-button imory-tab imory-tab--boxed imory-tab--boxed-neutral"
                       type="button"
-                      data-ratio="4:5"
+                      data-ratio="uniform"
                     >
-                      4:5
-                    </button>
-
-                    <button
-                      class="quote-ratio-button imory-tab imory-tab--boxed imory-tab--boxed-neutral"
-                      type="button"
-                      data-ratio="3:4"
-                    >
-                      3:4
-                    </button>
-
-                    <button
-                      class="quote-ratio-button imory-tab imory-tab--boxed imory-tab--boxed-neutral"
-                      type="button"
-                      data-ratio="9:16"
-                    >
-                      9:16
+                      같은 높이
                     </button>
 
                     <button
@@ -317,11 +296,11 @@
                       type="button"
                       data-ratio="auto"
                     >
-                      자동
+                      자동 높이
                     </button>
 
                     <button
-                      class="quote-ratio-button imory-tab imory-tab--boxed imory-tab--boxed-neutral"
+                      class="quote-ratio-button imory-tab imory-tab--boxed imory-tab--boxed-neutral active"
                       type="button"
                       data-ratio="custom"
                     >
@@ -337,7 +316,6 @@
                 <div
                   class="quote-custom-ratio"
                   id="quoteCustomRatioFields"
-                  hidden
                 >
 
                   <div class="quote-pair-grid">
@@ -410,7 +388,7 @@
 
 
                 </div>
-                <!-- /quoteCanvasOutputCompat -->
+                <!-- /quoteCanvasOutput -->
 
 
 

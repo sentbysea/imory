@@ -784,6 +784,13 @@
 
     loadVersionedScripts(
       [
+        /*
+          올리는 이미지의 메타데이터 제거 + 용량 압축. 아무 것에도
+          의존하지 않는 순수 유틸이고, 이를 쓰는
+          skin-image-library.js보다 앞이면 된다
+          (core/lib/image-upload.js).
+        */
+        "../core/lib/image-upload.js",
         "./images/skin-image-library.js",
         "./images/images-panel.js",
         "./studio-preview.js"

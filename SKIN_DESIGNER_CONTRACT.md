@@ -9,7 +9,7 @@
 ## 0. 한눈에 보는 요약
 
 - 스킨은 `schemaVersion: 1`인 **SkinPackage JSON** 하나입니다. HOME/CATEGORY/POST 세 화면을 각각 `templates.home` / `templates.category` / `templates.post`에 담습니다(레거시 단일 `html`/`css` 방식도 여전히 지원 — 1절).
-- HTML에는 일반 태그 + `data-imory-*` 바인딩 속성 5종 + `data-imory-region="post-body"` 1종 + Studio Direct Edit 표식 `data-imory-edit-id` 1종만 씁니다. **인라인 JS, `style` 속성, `id` 속성은 전부 저장 시점에 제거됩니다.**
+- HTML에는 일반 태그 + `data-imory-*` 바인딩 속성 5종 + `data-imory-region` 2종(`"post-body"`, `"owner-tools"`) + Studio Direct Edit 표식 `data-imory-edit-id` 1종만 씁니다. **인라인 JS, `style` 속성, `id` 속성은 전부 저장 시점에 제거됩니다.**
 - CSS는 저장 시점에 파싱되어 `.imory-skin-root` 스코프가 강제로 붙습니다. `@import`, `expression()`, `javascript:`/`data:` 스킴의 `url()`, 특정 "보호 대상 selector"는 제거됩니다.
 - POST 화면은 본문(글 내용) 데이터 자체를 절대 받지 않습니다. `data-imory-region="post-body"`로 "자리"만 표시하면 플랫폼이 그 자리에 실제 본문을 채웁니다. 이 region이 없는 POST 템플릿은 아예 공개되지 않고 레거시 화면으로 대체됩니다.
 - Studio에는 "SkinPackage JSON 전체 붙여넣기(Import)" 기능이 있고, 이 문서 13절이 그 검증 로직이 실제로 요구하는 정확한 shape입니다.
@@ -145,17 +145,21 @@
   인증을 구현하지 않습니다. 비소유자에게는 `isOwner: false`와 함께 세 href가 전부
   `null`이라, `data-imory-if`를 빠뜨려도 링크가 만들어지지 않습니다.
 - `viewer.writeHref`는 화면에 따라 대상이 다릅니다. CATEGORY(글 카테고리)에서는
-  **지금 보고 있는 그 카테고리**, 그 외 화면에서는 글 카테고리가 하나뿐이면 그
-  카테고리, 여러 개거나 없으면 HOME 주소입니다(받는 쪽이 고르게 하거나 안내).
+  **지금 보고 있는 그 카테고리**, FOLDER에서는 **지금 보고 있는 그 폴더**
+  (`/{slug}/category/{cid}/folder/{fid}?write=1` — 작성 폼의 FOLDER 드롭다운이 그
+  폴더로 미리 맞춰집니다), 그 외 화면에서는 글 카테고리가 하나뿐이면 그 카테고리,
+  여러 개거나 없으면 HOME 주소입니다(받는 쪽이 고르게 하거나 안내).
 - `viewer.manageHref`는 **그 화면에 실제로 목록 관리 화면이 있을 때만** 채워집니다 —
   현재는 글 카테고리(CATEGORY)뿐이고 HOME/POST/BANNER에서는 `null`입니다. 배너
   관리는 주소로 표현되는 동작이 아니라 화면 안의 토글이라 스킨이 대신 그릴 수
   없습니다.
 - **스킨이 `manageHref`/`writeHref` 링크를 그리면 플랫폼은 같은 동작의 기본
-  도구(표시 공간 오른쪽 위에 떠 있는 `+` / `edit`)를 접습니다.** 그리지 않으면
-  기본 도구가 그대로 남으므로, 예전 스킨은 아무것도 바뀌지 않습니다. 판정은 렌더된
-  DOM에 그 주소를 가리키는 `<a href>`가 있는지로만 하고, 스킨 이름이나 클래스는
-  전혀 보지 않습니다.
+  도구(`+` / `edit`)를 접습니다.** 그리지 않으면 기본 도구가 그대로 남으므로, 예전
+  스킨은 아무것도 바뀌지 않습니다. 판정은 렌더된 DOM에 그 주소를 가리키는
+  `<a href>`가 있는지로만 하고, 스킨 이름이나 클래스는 전혀 보지 않습니다.
+- 기본 도구가 남는 경우 그 자리는 `data-imory-region="owner-tools"`로 지정할 수
+  있습니다(3절). 지정하지 않으면 플랫폼이 스킨의 글 기둥 첫 줄을 재서 맞춥니다 —
+  자세한 규칙: [IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 4절.
 
 ### 2-2. `page` namespace (공통, 항상 존재)
 
@@ -297,7 +301,7 @@
     ],
     "postCount": 1
   },
-  "viewer": { "isOwner": false, "writeHref": null, "manageHref": null, "...": "..." }  // 소유자면 그 카테고리의 ?write=1 / ?manage=1
+  "viewer": { "isOwner": false, "writeHref": null, "manageHref": null, "...": "..." }  // 소유자면 이 폴더의 ?write=1 / 그 카테고리의 ?manage=1
 }
 ```
 
@@ -360,6 +364,7 @@
 | `data-imory-repeat="path"` | dotted identifier | 값이 배열이면 그 엘리먼트를 템플릿 삼아 item마다 clone. 배열이 아니면(`undefined`/`null`/객체 등) **엘리먼트 자체를 제거**. |
 | `data-imory-if="path"` | dotted identifier | truthy/falsy만 판정해 `el.hidden` 토글. |
 | `data-imory-region="post-body"` | 고정 문자열 `"post-body"` 만 허용 | 값은 resolve 대상이 아님(경로 아니라 식별자). mount 시 이 엘리먼트의 **자식을 전부 비운 뒤**, 플랫폼(Post Viewer)이 실제 글 본문을 그 안에 주입할 자리로 씁니다. POST 템플릿에는 하나, FOLDER 템플릿에는 `folder.posts` 반복 안에 글마다 하나(2-7절) — 반복 안의 region에는 렌더러가 항목 id를 `data-imory-region-key`로 찍습니다(스킨이 직접 쓰는 속성이 아니며, 써도 제거됩니다). |
+| `data-imory-region="owner-tools"` | 고정 문자열 `"owner-tools"` 만 허용 | **비워 두는 자리**입니다. 주인장에게만 보이는 플랫폼 버튼(＋ 새 글 / edit)이 그 자리에 맞춰 놓입니다 — 방문자에게는 아무것도 나타나지 않습니다. 이 자리를 그리지 않아도 되고(그때는 플랫폼이 스킨의 글 기둥을 재서 맞춥니다), 그리면 정확히 그 줄·그 오른쪽 끝에 옵니다. 자세한 규칙: [IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 4절. |
 | `data-imory-edit-id="..."` | 영문으로 시작하는 영문/숫자/`_`/`-` 문자열, 최대 64자 | **렌더러가 해석하지 않는 순수 표식**입니다(PHASE AI-6A). Skin Studio의 Direct Edit이 "이 요소"를 재렌더/재저장 뒤에도 다시 찾기 위해 붙이며, 생성된 CSS 규칙의 `[data-imory-edit-id="..."]` selector가 이 값을 가리킵니다. 디자이너가 직접 쓸 필요는 없고, 형태가 맞지 않으면 저장 시점에 제거됩니다. 자세한 내용: [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) 2절. |
 
 ### 3-1. 속성 값(경로) 문법 제약

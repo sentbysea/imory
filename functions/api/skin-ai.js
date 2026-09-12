@@ -349,7 +349,7 @@ const SKIN_AI_SELECTION_PATH_PATTERN = /^[A-Za-z_][A-Za-z0-9_.]{0,79}$/;
 const SKIN_AI_SELECTION_SLOT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 /* skin-sanitize.js의 SKIN_SANITIZE_ALLOWED_REGION_NAMES와 같다. */
-const SKIN_AI_SELECTION_REGION_NAMES = ["post-body"];
+const SKIN_AI_SELECTION_REGION_NAMES = ["post-body", "owner-tools"];
 
 /* studio/inspector/studio-inspector-model.js describeInspectorElement()
    가 만드는 capability 이름 전부. 그 목록이 늘면 여기도 늘린다 —
@@ -1039,7 +1039,8 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `data-imory-href=\"path\"`   sets an <a> href.",
     "- `data-imory-if=\"path\"`     hides the element when the value is falsy.",
     "- `data-imory-repeat=\"path\"` repeats the element once per array entry; inside it, use `item.*`. Repeats may be nested (a repeat inside a repeat, up to 5 levels); an inner `item` shadows the outer one.",
-    "- `data-imory-region=\"post-body\"` marks the protected post body. Only this one region name exists. It appears once in `templates.post`, and once per repeated post inside `templates.folder` (see FOLDER).",
+    "- `data-imory-region=\"post-body\"` marks the protected post body. It appears once in `templates.post`, and once per repeated post inside `templates.folder` (see FOLDER).",
+    "- `data-imory-region=\"owner-tools\"` marks where the platform's own owner buttons (＋ new post, edit) are placed. Leave the element empty. Only these two region names exist; any other value is stripped.",
     "Keep every binding that already exists unless the user explicitly asks to remove that piece of content.",
     "",
     "### Context paths available on every page",
@@ -1115,6 +1116,11 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "### BANNER",
     "bannerCategory.id, bannerCategory.name, bannerCategory.href",
     "bannerCategory.items[]  (item.id, item.name, item.href, item.imageUrl, item.alt)",
+    "",
+    "## Owner tools slot (put one in every template — a validator does NOT check this)",
+    "- Put `<span data-imory-region=\"owner-tools\"></span>` on the first content line of HOME, CATEGORY, FOLDER, POST and BANNER — the breadcrumb / section-title row, at its right end. Leave it empty; the platform puts its own small ghost buttons (＋ new post, edit) inside it, and only the owner ever sees them.",
+    "- Without this slot the platform has to guess a position and the buttons end up floating over your top decoration. With it they sit on the line you chose and inherit that line's alignment, so give the row `display:flex; align-items:center; justify-content:space-between` (or put the span last in a flex row) rather than styling the buttons themselves.",
+    "- Visitors see an empty span: never size it with a fixed height, and never draw a border or label on it.",
     "",
     "## Owner and admin entry points (a validator does NOT check this — you must)",
     "- `viewer.writeHref`, `viewer.adminHref` and `viewer.manageHref` are how the blog owner reaches WRITE / ADMIN / EDIT.",

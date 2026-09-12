@@ -1294,22 +1294,32 @@ async function savePostBodyImages(
       }
 
 
-      const stripped =
-        await stripImageExifIfNeeded(
+      /*
+        올리기 전에 메타데이터를 지우고 용량을 줄인다(모든 업로드
+        경로 공용 — core/lib/image-upload.js). 압축은 설정과
+        무관하게 항상 돌고, "EXIF 제거"가 켜져 있으면 실패했을 때
+        원본을 대신 올리지 않고 저장을 멈춘다.
+      */
+
+      const prepared =
+        await prepareImoryUploadImage(
           pending.file,
-          options.stripImageExif
+          {
+            stripMetadata:
+              options.stripImageExif
+          }
         );
 
 
-      if (stripped.error) {
+      if (prepared.error) {
 
-        throw stripped.error;
+        throw prepared.error;
 
       }
 
 
       const file =
-        stripped.file;
+        prepared.file;
 
 
       const storagePath =

@@ -645,21 +645,24 @@ async function uploadPendingCategorySecretCovers(
 
 
     /*
-      블로그 설정이 "이미지 EXIF 제거"면 올리기 전에 다시
-      인코딩한다. 실패하면 원본을 대신 올리지 않고 저장을 멈춘다 —
-      지우라고 켜 둔 설정이기 때문이다
-      (core/lib/content-protection.js · admin-etc-settings.js).
+      올리기 전에 메타데이터를 지우고 용량을 줄인다
+      (core/lib/image-upload.js). "이미지 EXIF 제거"가 켜져 있으면
+      실패했을 때 원본을 대신 올리지 않고 저장을 멈춘다 — 지우라고
+      켜 둔 설정이기 때문이다(admin-etc-settings.js).
     */
 
-    const stripped =
-      await stripImageExifIfNeeded(
+    const prepared =
+      await prepareImoryUploadImage(
         category.__pendingSecretCoverFile,
-        typeof imoryEtcStripImageExifEnabled === "function" &&
-          imoryEtcStripImageExifEnabled()
+        {
+          stripMetadata:
+            typeof imoryEtcStripImageExifEnabled === "function" &&
+              imoryEtcStripImageExifEnabled()
+        }
       );
 
 
-    if (stripped.error) {
+    if (prepared.error) {
 
       return {
         ok: false,
@@ -670,7 +673,7 @@ async function uploadPendingCategorySecretCovers(
 
 
     const file =
-      stripped.file;
+      prepared.file;
 
     const storagePath =
       buildCategorySecretCoverPath(userId, file.type);

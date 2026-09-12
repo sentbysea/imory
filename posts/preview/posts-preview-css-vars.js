@@ -329,15 +329,20 @@ function syncPreviewRatioControls() {
 
 
   /*
-    ★ 세로 정렬도 custom에서만 보인다.
+    ★ 세로 정렬은 auto에서만 숨긴다.
 
-    auto·uniform은 페이지 높이가 콘텐츠에서 나오므로 공용
-    레이아웃이 세로 정렬을 항상 center로 못박는다
-    (posts/preview/posts-page-layout.js의 flexibleHeight 분기) —
-    그 상태에서 top/center를 고를 수 있게 두면 눌러도 아무 일도
-    일어나지 않는 컨트롤이 된다. 값 자체(previewVerticalAlign)는
-    지우지 않는다: custom으로 돌아오면 고른 값이 그대로 다시
-    쓰인다.
+    auto는 페이지 높이가 곧 콘텐츠 높이라 남는 세로 공간이
+    0이다 — 무엇을 골라도 그려지는 결과가 같으므로 눌러도
+    아무 일도 일어나지 않는 컨트롤을 남기지 않는다.
+
+    uniform은 다르다. 모든 페이지가 "가장 높은 페이지"의
+    높이로 늘어나므로 짧은 장에는 실제로 남는 공간이 생기고,
+    그 공간을 위/가운데/아래 중 어디로 밀지 고를 수 있어야
+    한다(공용 posts/preview/posts-page-layout.js의 bodyArea가
+    이 값을 그대로 쓴다).
+
+    값 자체(previewVerticalAlign)는 auto에서도 지우지 않는다 —
+    custom/uniform으로 돌아오면 고른 값이 그대로 다시 쓰인다.
   */
 
   if (
@@ -345,7 +350,7 @@ function syncPreviewRatioControls() {
   ) {
 
     postEditorPreviewAlignRow.hidden =
-      !isCustom;
+      mode === "auto";
 
   }
 
@@ -381,20 +386,6 @@ function syncPreviewRatioControls() {
 
     postEditorPreviewRatioCustomHeight.value =
       parts.height;
-
-  }
-
-
-  if (
-    postEditorPreviewExportWidth &&
-    document.activeElement !==
-      postEditorPreviewExportWidth
-  ) {
-
-    postEditorPreviewExportWidth.value =
-      getPostPreviewExportWidth(
-        settings
-      );
 
   }
 

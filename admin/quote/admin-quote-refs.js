@@ -395,8 +395,15 @@ let quotePresetList =
    STATE
 ========================================================== */
 
+/*
+  비율 모드 — "uniform" · "auto" · "custom" 셋 중 하나다.
+  옛 프리셋의 고정 비율 문자열("4:5" 등)은 프리셋을 열 때
+  custom + 가로 비/세로 비로 들어온다
+  (quoteRatioModeFromSettings — admin-quote-ratio-parser.js).
+*/
+
 let currentQuoteRatio =
-  "1:1";
+  "custom";
 
 let currentQuotePresetId =
   null;

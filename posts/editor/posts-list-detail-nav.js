@@ -519,8 +519,21 @@ postAddButton
       }
 
 
+      /*
+        FOLDER-3: 폴더 페이지에서 누른 ＋ 는 그 폴더에 쓴다 —
+        스킨이 그리는 WRITE(viewer.writeHref)와 같은 대상이어야
+        한다(skin/skin-context.js). 다른 화면에서는 지금까지처럼
+        카테고리 root다.
+      */
+
       await openNewPostEditor(
-        currentPostCategoryId
+        currentPostCategoryId,
+        {
+          folderId:
+            currentPostView === "folder"
+              ? currentPostFolderId
+              : null
+        }
       );
 
     }

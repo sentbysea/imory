@@ -1072,6 +1072,27 @@ async function openPostPage(
   }
 
 
+  /*
+    떠 있던 edit을 스킨의 줄에 앉힌다 — 스킨이
+    [data-imory-region="owner-tools"]로 자리를 지정했으면 그 안으로,
+    아니면 스킨의 첫 콘텐츠 줄을 재서
+    (posts/view/posts-view-owner-tools.js).
+  */
+
+  if (
+    typeof mountPlatformOwnerTools ===
+    "function"
+  ) {
+
+    mountPlatformOwnerTools(
+      usingSkinPost
+        ? postSkinContainer
+        : null
+    );
+
+  }
+
+
   if (
     post.visibility ===
       "secret" &&
@@ -1094,22 +1115,57 @@ async function openPostPage(
 
   else {
 
-    const {
+    /*
+      ★ 주인장은 본문과 OOC를 한 번에 받는다.
+
+      ooc_content는 테이블에서 직접 SELECT할 수 없다 —
+      anon/authenticated 어느 역할에도 그 컬럼의 SELECT GRANT가
+      없다(supabase/migrations/
+      20260909100000_lock_down_post_contents_ooc.sql). 소유자
+      전용 SECURITY DEFINER RPC가 auth.uid()로 소유권을 다시
+      확인하고 둘을 함께 돌려준다. 그래서 방문자의 화면에는
+      OOC가 DOM에도, 네트워크 응답에도 없다.
+
+      방문자는 지금까지와 똑같이 post_contents의 content만
+      읽는다 — 조회가 늘지 않는다.
+    */
+
+    const readOwnContent =
+      () =>
+        supabaseClient
+          .rpc(
+            "get_own_post_content",
+            {
+              p_post_id:
+                post.id
+            }
+          )
+          .maybeSingle();
+
+
+    const readTableContent =
+      () =>
+        supabaseClient
+          .from(
+            "post_contents"
+          )
+          .select(
+            "content"
+          )
+          .eq(
+            "post_id",
+            post.id
+          )
+          .maybeSingle();
+
+
+    let {
       data: postContent,
       error: postContentError
     } =
-      await supabaseClient
-        .from(
-          "post_contents"
-        )
-        .select(
-          "content"
-        )
-        .eq(
-          "post_id",
-          post.id
-        )
-        .maybeSingle();
+      isOwnerViewing
+        ? await readOwnContent()
+        : await readTableContent();
 
 
     if (postContentError) {
@@ -1121,11 +1177,51 @@ async function openPostPage(
     }
 
 
+    /*
+      ★ RPC가 실패하면 본문만이라도 예전 길로 읽는다.
+
+      주인장에게 OOC를 보여주려고 읽는 길을 바꾼 것이지, 글이
+      안 보이게 만들려는 것이 아니다. RPC가 없거나(migration
+      미적용) 실패한 배포에서도 **읽기 화면은 그대로** 뜨고,
+      OOC만 안 보인다.
+    */
+
+    if (
+      isOwnerViewing &&
+      postContentError
+    ) {
+
+      const fallback =
+        await readTableContent();
+
+
+      if (!fallback.error) {
+
+        postContent =
+          fallback.data;
+
+      }
+
+    }
+
+
     await renderPostDetailBody(
       post.content_type,
       postContent?.content ||
         "",
       post.quote_preset_id
+    );
+
+
+    /*
+      본문을 그린 뒤에 넣는다 — 본문 렌더가 그릇을 통째로
+      비우기 때문이다(renderOwnerOocNote 머리말).
+    */
+
+    renderOwnerOocNote(
+      isOwnerViewing
+        ? postContent?.ooc_content
+        : ""
     );
 
   }
@@ -1428,6 +1524,132 @@ async function renderPostDetailBody(
     initReaderFontScaleForCurrentPost();
 
   }
+
+}
+
+
+
+/* =========================================================
+   OOC 메모 — 주인장만 본다
+
+   ★ 왜 본문 안에 넣는가
+
+   본문이 그려지는 자리는 두 곳이다 — legacy #postDetailContent와
+   published Skin의 post-body region(currentPostBodyMountTarget).
+   region의 **형제**로 끼워 넣으면 스킨이 짠 배치 한가운데에
+   플랫폼 요소가 하나 끼어들게 된다. 그래서 본문을 그린 **뒤**
+   그 그릇의 첫 번째 자식으로 넣는다 — 스킨이 본문에 준 자리를
+   그대로 쓰고, 다음 글을 그릴 때 본문 innerHTML이 통째로
+   바뀌면서 같이 사라진다(따로 지울 필요가 없다).
+
+   ★ 방문자에게는 요소도 내용도 없다
+
+   ooc_content는 테이블에서 직접 SELECT할 수 없고(GRANT 없음),
+   소유자 전용 RPC(get_own_post_content)만 돌려준다. 호출부도
+   주인일 때만 그 RPC를 부르므로, 방문자의 화면에는 이 함수가
+   빈 문자열로 불려 아무 것도 만들지 않는다.
+
+   ★ 글자 그대로 넣는다
+
+   에디터의 OOC 칸은 textarea라 저장값이 마크업이 아니라 글자다.
+   textContent로 넣고 줄바꿈은 CSS(white-space: pre-wrap)가
+   살린다 — HTML로 해석할 이유가 없다.
+========================================================== */
+
+function renderOwnerOocNote(
+  oocText
+) {
+
+  const host =
+    currentPostBodyMountTarget ||
+    postDetailContent;
+
+
+  if (!host) {
+
+    return;
+
+  }
+
+
+  /* 같은 화면에서 두 번 그려도 하나만 남는다 */
+
+  host
+    .querySelectorAll(
+      ".post-detail-ooc"
+    )
+    .forEach(
+      node => {
+
+        node.remove();
+
+      }
+    );
+
+
+  const text =
+    String(
+      oocText ||
+      ""
+    )
+      .trim();
+
+
+  if (!text) {
+
+    return;
+
+  }
+
+
+  const box =
+    document.createElement(
+      "aside"
+    );
+
+
+  box.className =
+    "post-detail-ooc";
+
+
+  const label =
+    document.createElement(
+      "span"
+    );
+
+
+  label.className =
+    "post-detail-ooc-label";
+
+
+  label.textContent =
+    "OOC";
+
+
+  const body =
+    document.createElement(
+      "span"
+    );
+
+
+  body.textContent =
+    text;
+
+
+  box.appendChild(
+    label
+  );
+
+
+  box.appendChild(
+    body
+  );
+
+
+  host.insertBefore(
+    box,
+    host.firstChild
+  );
 
 }
 
