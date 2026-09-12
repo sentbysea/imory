@@ -136,6 +136,28 @@ const POST_STYLE_DEFAULTS =
     bodyColor: "#555555",
     highlightColor: "#f4dce6",
     pointColor: "#5c7cfa",
+
+
+    /*
+      형광펜 높이 — 글자 크기에 대한 비율(%).
+
+      100 = 예전 그대로 글자 상자를 가득 채운다. 낮추면 글자
+      **아래쪽**에만 얇게 깔린다. 키가 빠진 옛 프리셋은 100으로
+      읽혀서 지금 발행된 글의 모양이 그대로 유지된다
+      (posts/style/posts-body-decor.js).
+    */
+
+    highlightHeight: 100,
+
+
+    /*
+      강조선(문단 왼쪽 세로선) — 에디터에서 수동으로 걸 때의
+      기본 색/굵기. 개별 문단이 자기 색을 지정하지 않았으면
+      이 값을 따른다.
+    */
+
+    bodyRuleColor: "#ee9fbd",
+    bodyRuleWidth: 3,
     bodySize: 16,
     bodyWeight: "400",
     lineHeight: 1.9,
@@ -158,6 +180,20 @@ const POST_STYLE_DEFAULTS =
     dialogueItalic: false,
 
 
+    /*
+      대사 문단에 강조선을 자동으로 붙일지.
+
+      ★ 기본값은 false다 — 새 옵션이 켜진 채로 들어오면 이미
+      저장된 모든 프리셋의 외형이 한 번에 바뀐다. 켜면 기존
+      대사 판별 기준(replaceDialogueTextNode의 따옴표 규칙)에
+      걸리는 문단에 자동으로 붙는다.
+    */
+
+    dialogueRuleEnabled: false,
+    dialogueRuleColor: "#ee9fbd",
+    dialogueRuleWidth: 3,
+
+
     /* SOURCE */
 
     sourceText: "",
@@ -167,7 +203,55 @@ const POST_STYLE_DEFAULTS =
     sourceWeight: "300",
     sourceAlign: "right",
     sourceSpacing: 0,
-    sourceBottomOffset: 0
+    sourceBottomOffset: 0,
+
+
+    /* SOURCE 강조선 — 출처 문구 왼쪽 세로선 */
+
+    sourceRuleEnabled: false,
+    sourceRuleColor: "#ee9fbd",
+    sourceRuleWidth: 3,
+
+
+    /* CANVAS 배경 이미지 — preview/export 전용 */
+
+    /*
+      ★ 공개 URL을 그대로 저장한다(blob:/data: 같은 임시 주소가
+      아니다). 업로드 경로와 권한은 admin/quote/admin-quote-background.js
+      머리말 참고 — 다른 세션/다른 기기에서 열어도 같은 그림이 뜬다.
+    */
+
+    backgroundImageUrl: "",
+
+
+    /*
+      확대 배율. 1 = "캔버스를 빈틈없이 덮는 최소 크기"(= cover).
+      그보다 작을 수 없다.
+    */
+
+    backgroundImageScale: 1,
+
+
+    /*
+      사진에서 보여주고 싶은 중심 — **원본 이미지 기준의 정규화
+      좌표**(0~1)다. 픽셀 이동량이 아니라 이 값을 저장하기 때문에,
+      캔버스 비율/크기가 달라져도 같은 자리가 가운데로 온다
+      (posts/style/posts-canvas-background.js).
+    */
+
+    backgroundImageFocusX: 0.5,
+    backgroundImageFocusY: 0.5,
+
+
+    /* 배경에만 걸리는 흐림(px) — 글자는 흐려지지 않는다 */
+
+    backgroundImageBlur: 0,
+
+
+    /* 이미지 위에 덮는 색과 농도(0~1) */
+
+    backgroundOverlayColor: "#000000",
+    backgroundOverlayOpacity: 0
 
   };
 
@@ -193,7 +277,13 @@ const POST_STYLE_TEXT_KEYS =
     "dialogueWeight",
     "sourceColor",
     "sourceWeight",
-    "sourceAlign"
+    "sourceAlign",
+
+    "bodyRuleColor",
+    "dialogueRuleColor",
+    "sourceRuleColor",
+
+    "backgroundOverlayColor"
   ];
 
 
@@ -215,7 +305,19 @@ const POST_STYLE_NUMBER_KEYS =
     "indent",
     "sourceSize",
     "sourceSpacing",
-    "sourceBottomOffset"
+    "sourceBottomOffset",
+
+    "highlightHeight",
+
+    "bodyRuleWidth",
+    "dialogueRuleWidth",
+    "sourceRuleWidth",
+
+    "backgroundImageScale",
+    "backgroundImageFocusX",
+    "backgroundImageFocusY",
+    "backgroundImageBlur",
+    "backgroundOverlayOpacity"
   ];
 
 
@@ -224,7 +326,10 @@ const POST_STYLE_BOOLEAN_KEYS =
     "titleEnabled",
     "actionItalic",
     "dialogueItalic",
-    "sourceEnabled"
+    "sourceEnabled",
+
+    "dialogueRuleEnabled",
+    "sourceRuleEnabled"
   ];
 
 
@@ -302,6 +407,17 @@ function normalizePostStyleSettings(
 
       }
     );
+
+
+  /*
+    배경 이미지 주소는 "빈 문자열 = 배경 없음"이 유효한 값이다 —
+    POST_STYLE_TEXT_KEYS(빈 값을 기본값으로 되돌림)에 넣으면 안 된다.
+  */
+
+  normalized.backgroundImageUrl =
+    typeof source.backgroundImageUrl === "string"
+      ? source.backgroundImageUrl.trim()
+      : POST_STYLE_DEFAULTS.backgroundImageUrl;
 
 
   /* 빈 문자열도 사용자가 고른 값이다(출처 문구 비우기) */

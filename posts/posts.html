@@ -818,15 +818,22 @@
 
             <!--
               단일 컨트롤. 초기 색은 QUOTE PRESET의 하이라이트
-              색(getPresetHighlightColor)을 따르고, 누르면
-              컬러피커가 열려서 바로 조정할 수 있다
-              (updatePresetHighlightSwatch — posts-style-preset.js).
+              색(getPresetHighlightColor)을 따르고, 누르면 우리가
+              직접 그리는 컬러피커 팝오버가 열린다
+              (posts/editor/posts-color-picker.js).
+
+              ★ <input type="color">를 쓰지 않는 이유
+              OS 컬러피커는 스펙트럼에서 한 번 누르면 그대로 닫혀
+              이어서 조정할 수 없고, 열리는 동안 본문 선택과 포커스를
+              가져간다(요구사항 1).
             -->
 
-            <label
+            <button
               class="post-highlight-custom-control"
-              for="postEditorCustomColor"
+              id="postEditorCustomControl"
+              type="button"
               title="highlight color"
+              aria-label="하이라이트 색상 선택"
             >
 
               <span
@@ -834,16 +841,7 @@
                 id="postEditorCustomSwatch"
               ></span>
 
-            </label>
-
-
-            <input
-              id="postEditorCustomColor"
-              class="post-highlight-color-input"
-              type="color"
-              value="#f4dce6"
-              aria-label="하이라이트 색상 선택"
-            >
+            </button>
 
           </div>
 
@@ -862,14 +860,16 @@
 
             <!--
               단일 컨트롤. 초기 색은 QUOTE PRESET의 포인트 컬러
-              (getPresetPointColor)를 따르고, 누르면 컬러피커가
-              열려서 바로 조정할 수 있다.
+              (getPresetPointColor)를 따르고, 누르면 HIGHLIGHT와
+              **같은 컬러피커**가 열린다.
             -->
 
-            <label
+            <button
               class="post-highlight-custom-control"
-              for="postEditorCustomPointColor"
+              id="postEditorCustomPointControl"
+              type="button"
               title="point color"
+              aria-label="포인트 컬러 선택"
             >
 
               <span
@@ -877,18 +877,10 @@
                 id="postEditorCustomPointSwatch"
               ></span>
 
-            </label>
-
-
-            <input
-              id="postEditorCustomPointColor"
-              class="post-highlight-color-input"
-              type="color"
-              value="#5c7cfa"
-              aria-label="포인트 컬러 선택"
-            >
+            </button>
 
           </div>
+
 
 
 
@@ -934,6 +926,51 @@
 
           </div>
 
+
+
+          <!-- =================================================
+               RULE (강조선)
+
+               문단 왼쪽에 붙는 세로선. 문단 일부만 선택해도 그
+               문단 전체에 걸린다. 굵기는 Quote Preset에서만
+               정하고 여기서는 적용·해제와 색만 다룬다
+               (기준 문서: posts/style/posts-body-decor.js §3).
+          ================================================== -->
+
+          <div class="post-editor-tool-group">
+
+            <span class="post-editor-tool-label">
+              RULE
+            </span>
+
+
+            <button
+              class="post-editor-tool-button rule"
+              id="postEditorRuleToggle"
+              type="button"
+              aria-pressed="false"
+              title="이 문단에 강조선 넣기/빼기"
+            >
+              line
+            </button>
+
+
+            <button
+              class="post-highlight-custom-control"
+              id="postEditorRuleControl"
+              type="button"
+              title="rule color"
+              aria-label="강조선 색상 선택"
+            >
+
+              <span
+                class="post-highlight-swatch"
+                id="postEditorRuleSwatch"
+              ></span>
+
+            </button>
+
+          </div>
 
 
           <!-- =================================================
@@ -1041,6 +1078,21 @@
               undo
             </button>
 
+
+            <!--
+              되돌린 것을 다시 실행. 컬러피커 확정 한 번이 undo
+              한 칸이므로(요구사항 1) redo도 한 칸으로 되돌아온다.
+            -->
+
+            <button
+              class="post-editor-tool-button redo"
+              id="postEditorRedoButton"
+              type="button"
+              title="다시 실행 (Ctrl/Cmd+Shift+Z)"
+            >
+              redo
+            </button>
+
           </div>
 
         </div>
@@ -1109,10 +1161,12 @@
           hidden
         >
 
-          <label
+          <button
             class="post-highlight-custom-control"
-            for="postEditorFloatingCustomColor"
+            id="postEditorFloatingCustomControl"
+            type="button"
             title="highlight color"
+            aria-label="하이라이트 색상 선택"
           >
 
             <span
@@ -1120,22 +1174,15 @@
               id="postEditorFloatingCustomSwatch"
             ></span>
 
-          </label>
+          </button>
 
 
-          <input
-            id="postEditorFloatingCustomColor"
-            class="post-highlight-color-input"
-            type="color"
-            value="#f4dce6"
-            aria-label="하이라이트 색상 선택"
-          >
-
-
-          <label
+          <button
             class="post-highlight-custom-control"
-            for="postEditorFloatingCustomPointColor"
+            id="postEditorFloatingCustomPointControl"
+            type="button"
             title="point color"
+            aria-label="포인트 컬러 선택"
           >
 
             <span
@@ -1143,16 +1190,23 @@
               id="postEditorFloatingCustomPointSwatch"
             ></span>
 
-          </label>
+          </button>
 
 
-          <input
-            id="postEditorFloatingCustomPointColor"
-            class="post-highlight-color-input"
-            type="color"
-            value="#5c7cfa"
-            aria-label="포인트 컬러 선택"
+          <button
+            class="post-highlight-custom-control"
+            id="postEditorFloatingRuleControl"
+            type="button"
+            title="rule color"
+            aria-label="강조선 색상 선택"
           >
+
+            <span
+              class="post-highlight-swatch"
+              id="postEditorFloatingRuleSwatch"
+            ></span>
+
+          </button>
 
         </div>
 
@@ -1357,6 +1411,40 @@
 
 
               <!-- =============================================
+                   SOURCE RULE (출처 강조선 — 세션 한정)
+
+                   켜고 끄는 것과 색만 여기서 다룬다. 굵기는
+                   Quote Preset의 SOURCE 섹션에서만 정한다
+                   (요구사항 5).
+              ============================================== -->
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewSourceRuleToggle"
+                type="button"
+                aria-pressed="false"
+              >
+                rule
+              </button>
+
+
+              <button
+                class="post-highlight-custom-control"
+                id="postEditorPreviewSourceRuleControl"
+                type="button"
+                title="source rule color"
+                aria-label="출처 강조선 색상 선택"
+              >
+
+                <span
+                  class="post-highlight-swatch"
+                  id="postEditorPreviewSourceRuleSwatch"
+                ></span>
+
+              </button>
+
+
+              <!-- =============================================
                    SOURCE BOTTOM MARGIN (세션 한정 — ratio가
                    AUTO가 아닐 때만 표시. source는 캔버스 맨
                    아래에 고정되므로, 그 위치에서 위로 얼마나
@@ -1533,6 +1621,79 @@
                 ></span>
 
               </div>
+
+
+              <!-- =============================================
+                   BACKGROUND (배경 사진 — 진입점 하나)
+
+                   ★ 프리뷰 위에 버튼을 상시로 띄우지 않는다
+                   (요구사항 8). 여기 작은 버튼 하나를 누르면 아래
+                   패널이 열리고, 에디터가 다룰 수 있는 것은
+                   이미지 교체 · 위치 조정 · 프리셋 기본값 복원
+                   셋뿐이다. 확대/흐림/오버레이의 상세 설정은
+                   Quote Preset에만 있다.
+              ============================================== -->
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewBackgroundToggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="postEditorPreviewBackgroundPanel"
+              >
+                background
+              </button>
+
+            </div>
+
+
+            <div
+              class="post-editor-preview-background-panel"
+              id="postEditorPreviewBackgroundPanel"
+              hidden
+            >
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewBackgroundPick"
+                type="button"
+              >
+                image
+              </button>
+
+
+              <input
+                id="postEditorPreviewBackgroundFile"
+                class="post-editor-image-file-input"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                hidden
+              >
+
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewBackgroundMove"
+                type="button"
+                aria-pressed="false"
+              >
+                move
+              </button>
+
+
+              <button
+                class="post-editor-preview-visibility-toggle"
+                id="postEditorPreviewBackgroundReset"
+                type="button"
+              >
+                reset
+              </button>
+
+
+              <span
+                class="post-editor-preview-background-message"
+                id="postEditorPreviewBackgroundMessage"
+              ></span>
 
             </div>
 

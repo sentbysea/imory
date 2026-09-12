@@ -27,6 +27,12 @@ const postEditorUndoButton =
   );
 
 
+const postEditorRedoButton =
+  document.getElementById(
+    "postEditorRedoButton"
+  );
+
+
 const postEditorPreviewPages =
   document.getElementById(
     "postEditorPreviewPages"

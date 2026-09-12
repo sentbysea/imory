@@ -1,0 +1,235 @@
+/* =========================================================
+   Imory Core Components — Range (슬라이더)
+
+   기준: studio/inspector/studio-inspector.css의
+   .studio-inspector-range. 그 파일에만 있던 "담백한" 슬라이더
+   (얇은 회색 막대 + 흰 원 손잡이 + accent 포커스 링)를 이번에
+   Quote Preset과 글쓰기 화면의 컬러피커도 쓰게 되면서 공용
+   컴포넌트로 꺼냈다. 모양·치수·토큰은 그대로다.
+
+   이 파일은 core/design-tokens.css가 먼저 로드되어 있다고
+   가정한다(semantic 토큰을 직접 정의하지 않고 var()로만 참조).
+
+   ★ 채워진 구간
+
+     --imory-range-fill 을 JS가 값이 바뀔 때마다 퍼센트로 넣는다
+     (WebKit은 ::-moz-range-progress 같은 것이 없어서 트랙
+     배경을 gradient로 직접 그린다). 넣지 않으면 0%로 보인다 —
+     동작에는 지장이 없다.
+
+   ★ appearance만 껐지 <input type="range">의 방향키/Home/End
+     동작은 손대지 않았다.
+========================================================== */
+
+.imory-range {
+  /* 채워진 구간의 경계. JS가 값이 바뀔 때마다 다시 넣는다. */
+  --imory-range-fill: 0%;
+
+  --imory-range-track: var(--system-border-strong);
+  --imory-range-progress: var(--imory-gray-400);
+  --imory-range-thumb-border: var(--imory-gray-300);
+
+  flex: 1;
+
+  min-width: 0;
+
+  height: 18px;
+
+  margin: 0;
+  padding: 0;
+
+  -webkit-appearance: none;
+  appearance: none;
+
+  background: transparent;
+
+  cursor: pointer;
+}
+
+
+.imory-range::-webkit-slider-runnable-track {
+  height: 18px;
+
+  border: 0;
+
+  background-color: transparent;
+  background-image:
+    linear-gradient(
+      to right,
+      var(--imory-range-progress) 0 var(--imory-range-fill),
+      var(--imory-range-track) var(--imory-range-fill) 100%
+    );
+  background-repeat: no-repeat;
+  background-position: 0 center;
+  background-size: 100% 3px;
+}
+
+
+.imory-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+
+  width: 12px;
+  height: 12px;
+
+  /* (18 - 12) / 2 — 3px 막대의 가운데에 앉는다 */
+  margin-top: 3px;
+
+  box-sizing: border-box;
+
+  border: 1px solid var(--imory-range-thumb-border);
+  border-radius: 50%;
+
+  background: var(--system-bg);
+
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+
+.imory-range::-moz-range-track {
+  height: 3px;
+
+  border: 0;
+
+  background: var(--imory-range-track);
+}
+
+
+.imory-range::-moz-range-progress {
+  height: 3px;
+
+  background: var(--imory-range-progress);
+}
+
+
+.imory-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+
+  box-sizing: border-box;
+
+  border: 1px solid var(--imory-range-thumb-border);
+  border-radius: 50%;
+
+  background: var(--system-bg);
+
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+
+/* 포커스 링은 손잡이에만 — input 전체에 outline을 주면 18px 판
+   전체가 사각형으로 둘러싸여 슬라이더처럼 보이지 않는다. */
+.imory-range:focus {
+  outline: none;
+}
+
+
+.imory-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--system-accent);
+
+  box-shadow: 0 0 0 3px var(--system-accent-soft), 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+
+.imory-range:focus-visible::-moz-range-thumb {
+  border-color: var(--system-accent);
+
+  box-shadow: 0 0 0 3px var(--system-accent-soft), 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
+
+.imory-range:disabled {
+  --imory-range-track: var(--system-border);
+  --imory-range-progress: var(--system-border-strong);
+  --imory-range-thumb-border: var(--system-border-strong);
+
+  cursor: default;
+}
+
+
+.imory-range:disabled::-webkit-slider-thumb {
+  box-shadow: none;
+}
+
+
+.imory-range:disabled::-moz-range-thumb {
+  box-shadow: none;
+}
+
+
+/* =========================================================
+   HUE 변형 — 컬러피커의 색상환 슬라이더
+
+   막대만 무지개로 바꾸고 손잡이/치수/포커스 규칙은 그대로
+   쓴다. 막대가 얇으면 어느 색을 고르는지 보이지 않으므로 이
+   변형에서만 10px로 둔다.
+========================================================== */
+
+.imory-range--hue::-webkit-slider-runnable-track {
+  background-image:
+    linear-gradient(
+      to right,
+      #ff0000 0%,
+      #ffff00 17%,
+      #00ff00 33%,
+      #00ffff 50%,
+      #0000ff 67%,
+      #ff00ff 83%,
+      #ff0000 100%
+    );
+  background-size: 100% 10px;
+}
+
+
+.imory-range--hue::-moz-range-track {
+  height: 10px;
+
+  background:
+    linear-gradient(
+      to right,
+      #ff0000 0%,
+      #ffff00 17%,
+      #00ff00 33%,
+      #00ffff 50%,
+      #0000ff 67%,
+      #ff00ff 83%,
+      #ff0000 100%
+    );
+}
+
+
+.imory-range--hue::-moz-range-progress {
+  height: 10px;
+
+  background: transparent;
+}
+
+
+/* =========================================================
+   한 줄 배치 — [라벨][슬라이더][값]
+
+   Quote Preset의 설정 줄과 같은 결로 쓰기 위한 최소한의
+   묶음만 둔다.
+========================================================== */
+
+.imory-range-row {
+  display: flex;
+
+  align-items: center;
+
+  gap: 10px;
+}
+
+
+.imory-range-value {
+  flex-shrink: 0;
+
+  min-width: 44px;
+
+  color: var(--imory-gray-500, #888888);
+
+  font-size: var(--imory-font-size-200, 10px);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  text-align: right;
+}

@@ -409,9 +409,20 @@
 
   overflow-y: auto;
 
+  /*
+    ★ 왼쪽만 조금 넓다.
+
+    강조선(문단 왼쪽 세로선)의 편집창 표시는 글자를 밀지 않고
+    이 안쪽 여백에 그려진다(posts/editor/posts-rule-overlay.js).
+    글자 위치와 줄바꿈이 강조선 유무에 따라 흔들리지 않게 하려는
+    선택이다.
+  */
+
   padding:
     12px
-    10px;
+    10px
+    12px
+    18px;
 
   border:
     1px solid #eeeeee;
@@ -482,11 +493,20 @@
     0
     0.12em;
 
-  border-radius: 2px;
+  /* 직각 — posts/posts-list-detail.css의 같은 규칙과 동일 */
+  border-radius: 0;
 
   box-decoration-break: clone;
 
   -webkit-box-decoration-break: clone;
+}
+
+
+/* 강조선 마커는 저장용 표시일 뿐 — 화면에 아무 것도 그리지 않는다 */
+
+.post-editor-richtext
+.post-para-rule {
+  display: none;
 }
 
 
@@ -792,4 +812,326 @@
 
 .post-editor-image-file-input {
   display: none;
+}
+
+
+/* =========================================================
+   컬러피커 팝오버
+
+   기준 문서: posts/editor/posts-color-picker.js
+
+   OS 컬러피커(<input type="color">)를 대신한다 — 한 번 누르면
+   닫혀버리지 않고, 본문 선택을 빼앗지 않으며, Apply/Cancel이
+   분명하다(요구사항 1).
+========================================================== */
+
+.imory-color-picker {
+  position: fixed;
+
+  z-index: 1200;
+
+  display: grid;
+
+  gap: 10px;
+
+  box-sizing: border-box;
+
+  width: 232px;
+
+  padding: 12px;
+
+  border: 1px solid #e6e6e6;
+  border-radius: 0;
+
+  background: #ffffff;
+
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+
+  /* 팝오버 안에서는 글자를 끌어 선택할 일이 없다 — 드래그로
+     색을 고르는 동안 본문 선택이 흔들리는 것을 막는다. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+
+.imory-color-picker-field {
+  position: relative;
+
+  height: 120px;
+
+  cursor: crosshair;
+
+  touch-action: none;
+}
+
+
+.imory-color-picker-field-white,
+.imory-color-picker-field-black {
+  position: absolute;
+
+  inset: 0;
+}
+
+
+.imory-color-picker-field-white {
+  background:
+    linear-gradient(
+      to right,
+      #ffffff,
+      rgba(255, 255, 255, 0)
+    );
+}
+
+
+.imory-color-picker-field-black {
+  background:
+    linear-gradient(
+      to top,
+      #000000,
+      rgba(0, 0, 0, 0)
+    );
+}
+
+
+.imory-color-picker-field-thumb {
+  position: absolute;
+
+  z-index: 1;
+
+  width: 12px;
+  height: 12px;
+
+  margin: -6px 0 0 -6px;
+
+  box-sizing: border-box;
+
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+
+  pointer-events: none;
+}
+
+
+.imory-color-picker-hue {
+  width: 100%;
+}
+
+
+.imory-color-picker-readout {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+}
+
+
+.imory-color-picker-chip {
+  flex-shrink: 0;
+
+  width: 22px;
+  height: 22px;
+
+  border: 1px solid #e0e0e0;
+}
+
+
+.imory-color-picker-hex {
+  flex: 1;
+
+  min-width: 0;
+
+  box-sizing: border-box;
+
+  padding: 5px 8px;
+
+  border: 1px solid #e6e6e6;
+  border-radius: 0;
+
+  outline: none;
+
+  background: #ffffff;
+
+  color: #666666;
+
+  font-family: inherit;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+
+.imory-color-picker-hex:focus {
+  border-color: #e6bdcc;
+}
+
+
+.imory-color-picker-swatches {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 5px;
+}
+
+
+.imory-color-picker-swatch {
+  width: 18px;
+  height: 18px;
+
+  padding: 0;
+
+  border: 1px solid #e0e0e0;
+  border-radius: 0;
+
+  cursor: pointer;
+}
+
+
+.imory-color-picker-actions {
+  display: flex;
+
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+.imory-color-picker-spacer {
+  flex: 1;
+}
+
+
+.imory-color-picker-button {
+  padding: 6px 10px;
+
+  border: 1px solid #e4e4e4;
+  border-radius: 0;
+
+  background: #ffffff;
+
+  color: #888888;
+
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+
+  cursor: pointer;
+}
+
+
+.imory-color-picker-button:hover {
+  border-color: var(--system-accent-border, #e7c7d3);
+
+  color: var(--system-accent, #e39ab5);
+}
+
+
+.imory-color-picker-button.is-primary {
+  border-color: var(--system-accent-border, #e7c7d3);
+
+  color: var(--system-accent, #e39ab5);
+}
+
+
+/* 좁은 화면에서는 화면 폭을 넘지 않게 */
+
+@media (max-width: 400px) {
+
+  .imory-color-picker {
+    width: calc(100vw - 24px);
+  }
+
+}
+
+
+
+/* =========================================================
+   강조선 — 편집창 표시 레이어
+
+   기준 문서: posts/editor/posts-rule-overlay.js
+   (본문 DOM 바깥에 그린다 — 저장되는 HTML에는 마커만 남는다)
+========================================================== */
+
+.post-editor-rule-host {
+  position: relative;
+}
+
+
+.post-editor-rule-overlay {
+  position: absolute;
+
+  z-index: 2;
+
+  overflow: hidden;
+
+  pointer-events: none;
+}
+
+
+.post-editor-rule-bar {
+  position: absolute;
+}
+
+
+/* 강조선 토글 버튼이 켜져 있을 때 */
+
+.post-editor-tool-button.rule.active {
+  border-color: var(--system-accent-border, #e7c7d3);
+
+  color: var(--system-accent, #e39ab5);
+}
+
+
+
+/* =========================================================
+   발췌 배경 사진 — Editor의 최소 진입점
+
+   기준 문서: posts/preview/posts-preview-background.js
+   (프리뷰 위에 상시 버튼을 띄우지 않는다 — 요구사항 8)
+========================================================== */
+
+.post-editor-preview-background-panel {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  align-items: center;
+
+  gap: 6px;
+
+  margin-top: 6px;
+  padding-top: 6px;
+
+  border-top: 1px solid #f2f2f2;
+}
+
+
+.post-editor-preview-background-message {
+  color: #aaaaaa;
+
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+
+/*
+  ★ 위치 조정 모드에서만 프리뷰가 배경 끌기를 받는다.
+
+  평소에는 이 클래스가 없으므로 모바일 스크롤·핀치·본문 선택 등
+  기존 제스처가 전혀 방해받지 않는다. 조정 중이라는 것이 눈에
+  보이도록 테두리를 두르되, **그 테두리는 캡처 대상 페이지가
+  아니라 무대(stage)에 있다** — 저장되는 이미지에 들어갈 자리가
+  없다.
+*/
+
+.post-editor-preview-stage.is-background-move {
+  outline: 1px dashed var(--system-accent, #e39ab5);
+
+  outline-offset: -1px;
+
+  cursor: move;
+
+  touch-action: none;
 }

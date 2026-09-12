@@ -119,126 +119,425 @@ postEditorPreviewNext
   );
 
 /* =========================================================
-   CUSTOM HIGHLIGHT
+   색 컨트롤 (HIGHLIGHT · POINT COLOR · 강조선)
+
+   ★ 세 컨트롤이 **완전히 같은 방식**으로 동작한다(요구사항 1).
+
+     1. pointerdown에서 기본 동작을 막고 지금 선택을 붙잡는다.
+        버튼이 포커스를 훔치지 않으므로 본문 선택이 그대로 남는다.
+     2. click에서 우리가 그리는 컬러피커 팝오버를 연다
+        (posts/editor/posts-color-picker.js).
+     3. 팝오버가 열리는 순간 undo 스냅샷을 **한 번만** 찍는다.
+        드래그하는 동안의 색 변화는 전부 live 모드라 스냅샷을
+        더 쌓지 않는다 — 확정 한 번이 undo 한 칸이다.
+     4. Apply  지금 색으로 확정.
+        Cancel / 바깥 클릭 / Escape  → 열기 전 상태로 되돌린다
+        (방금 찍은 스냅샷을 되감고 그 칸도 없앤다 — undo 기록에
+        흔적이 남지 않는다).
+        remove  선택 범위에서 그 서식만 걷어낸다(다른 서식은
+        그대로). 이건 되돌릴 수 있는 변경이라 스냅샷을 남긴다.
 ========================================================== */
 
 /*
-  ★ 스와치를 누르는 즉시(pointerdown) 지금 색을 먼저
-  적용한다 — 컬러피커(change 이벤트)까지 안 가고 그냥
-  눌러서 끝내는 경우가 대부분이라, "눌렀는데 왜 안
-  먹지" 하는 문제를 없애준다. 컬러피커를 열어서 실제로
-  다른 색을 고르면 change 핸들러가 그 색으로 다시 한 번
-  덮어씌운다. pointerdown 시점에 선택영역을 먼저
-  저장해두는 이유도 동일(포커스가 옮겨가기 전에 붙잡아야
-  함).
+  스냅샷 하나를 되감고 그 칸도 없앤다 — "취소"는 undo 기록에
+  아무 흔적을 남기지 않아야 한다.
 */
 
-postEditorCustomControl
-  ?.addEventListener(
-    "pointerdown",
-    () => {
+function revertEditorToLastSnapshot() {
 
-      captureEditorSelectionBeforeToolbar();
+  if (
+    !postEditorContent ||
+    editorUndoStack.length === 0
+  ) {
+    return;
+  }
 
 
-      if (postEditorCustomColor) {
+  postEditorContent.innerHTML =
+    editorUndoStack.pop();
 
-        applyEditorHighlight(
-          postEditorCustomColor.value
+
+  savedEditorRange =
+    null;
+
+
+  syncEditorUndoButtonState();
+
+
+  if (
+    typeof syncEditorHighlightHeight === "function"
+  ) {
+
+    syncEditorHighlightHeight();
+
+  }
+
+
+  if (
+    typeof syncEditorRuleOverlay === "function"
+  ) {
+
+    syncEditorRuleOverlay();
+
+  }
+
+
+  updateEditorPreview();
+
+  updateEditorToolbarState();
+
+}
+
+
+/*
+  컬러피커 하나를 여는 공통 경로.
+
+    apply(color, live)   색을 실제로 바르는 함수
+    remove()             그 서식만 걷어내는 함수(없으면 remove 버튼 숨김)
+    current()            지금 색
+    preset()             프리셋 기본값(스와치 맨 앞에 고정)
+    remember(color)      확정된 색을 툴바 스와치에 반영
+    requireSelection     텍스트 선택이 반드시 있어야 하는가
+*/
+
+function openEditorFormatColorPicker(
+  anchor,
+  options
+) {
+
+  if (!postEditorContent) {
+    return;
+  }
+
+
+  if (
+    options.requireSelection &&
+    (
+      !savedEditorRange ||
+      savedEditorRange.collapsed
+    )
+  ) {
+
+    showPostEditorMessage(
+      "스타일을 적용할 텍스트를 선택해주세요."
+    );
+
+
+    return;
+
+  }
+
+
+  pushEditorUndoSnapshot(
+    true
+  );
+
+
+  openImoryColorPicker(
+    {
+
+      anchor,
+
+      color:
+        options.current(),
+
+      presetColor:
+        options.preset(),
+
+      removeLabel:
+        options.removeLabel,
+
+      onPreview:
+        color => {
+
+          options.remember?.(
+            color
+          );
+
+
+          options.apply(
+            color,
+            true
+          );
+
+        },
+
+      onApply:
+        color => {
+
+          options.remember?.(
+            color
+          );
+
+
+          options.apply(
+            color,
+            true
+          );
+
+        },
+
+      onCancel:
+        () => {
+
+          revertEditorToLastSnapshot();
+
+        },
+
+      onRemove:
+        options.remove
+          ? () => {
+
+              options.remove();
+
+            }
+          : null
+
+    }
+  );
+
+}
+
+
+/*
+  pointerdown에서 기본 동작을 막아 본문 선택을 지킨다.
+*/
+
+function bindEditorColorControl(
+  control,
+  options
+) {
+
+  control
+    ?.addEventListener(
+      "pointerdown",
+      event => {
+
+        event.preventDefault();
+
+
+        if (
+          options.requireSelection
+        ) {
+
+          captureEditorSelectionBeforeToolbar();
+
+        }
+
+        else {
+
+          captureEditorCaretBeforeToolbar();
+
+        }
+
+      }
+    );
+
+
+  control
+    ?.addEventListener(
+      "click",
+      () => {
+
+        openEditorFormatColorPicker(
+          control,
+          options
         );
 
       }
+    );
 
-    }
-  );
-
-postEditorCustomColor
-  ?.addEventListener(
-    "focus",
-    () => {
-
-      updateCustomHighlightSwatch();
-
-    }
-  );
+}
 
 
-postEditorCustomColor
-  ?.addEventListener(
-    "input",
-    updateCustomHighlightSwatch
-  );
+const EDITOR_HIGHLIGHT_PICKER_OPTIONS =
+  {
+
+    requireSelection: true,
+
+    current:
+      () =>
+        getEditorHighlightColor(),
+
+    preset:
+      () =>
+        getPresetHighlightColor(),
+
+    remember:
+      color => {
+
+        setEditorHighlightColor(
+          color
+        );
+
+      },
+
+    apply:
+      (color, live) => {
+
+        applyEditorHighlight(
+          color,
+          live
+        );
+
+      },
+
+    remove:
+      () => {
+
+        removeEditorInlineColor(
+          "post-inline-highlight",
+          true
+        );
+
+      },
+
+    removeLabel:
+      "clear"
+
+  };
 
 
-postEditorCustomColor
-  ?.addEventListener(
-    "change",
-    () => {
+const EDITOR_POINT_PICKER_OPTIONS =
+  {
 
-      updateCustomHighlightSwatch();
+    requireSelection: true,
+
+    current:
+      () =>
+        getEditorPointColor(),
+
+    preset:
+      () =>
+        getPresetPointColor(),
+
+    remember:
+      color => {
+
+        setEditorPointColor(
+          color
+        );
+
+      },
+
+    apply:
+      (color, live) => {
+
+        applyEditorPointColor(
+          color,
+          live
+        );
+
+      },
+
+    remove:
+      () => {
+
+        removeEditorInlineColor(
+          "post-inline-color",
+          true
+        );
+
+      },
+
+    removeLabel:
+      "clear"
+
+  };
 
 
-      applyEditorHighlight(
-        postEditorCustomColor.value
-      );
+/*
+  ★ 강조선은 문단 단위라 텍스트 선택이 없어도(캐럿만 있어도)
+  동작한다 — requireSelection이 false인 이유.
+*/
 
-    }
-  );
+const EDITOR_RULE_PICKER_OPTIONS =
+  {
 
+    requireSelection: false,
+
+    current:
+      () =>
+        currentEditorParagraphRuleColor(),
+
+    preset:
+      () =>
+        getPresetRuleColor(),
+
+    remember:
+      () => {
+
+        updateEditorRuleSwatch();
+
+      },
+
+    apply:
+      (color, live) => {
+
+        applyEditorParagraphRule(
+          color,
+          live
+        );
+
+      },
+
+    remove:
+      () => {
+
+        removeEditorParagraphRule(
+          true
+        );
+
+      },
+
+    removeLabel:
+      "remove"
+
+  };
+
+
+bindEditorColorControl(
+  postEditorCustomControl,
+  EDITOR_HIGHLIGHT_PICKER_OPTIONS
+);
+
+
+bindEditorColorControl(
+  postEditorCustomPointControl,
+  EDITOR_POINT_PICKER_OPTIONS
+);
+
+
+bindEditorColorControl(
+  postEditorRuleControl,
+  EDITOR_RULE_PICKER_OPTIONS
+);
 
 
 /* =========================================================
-   CUSTOM POINT COLOR
+   RULE 켜고 끄기 (색 팝오버 없이 바로)
 ========================================================== */
 
-postEditorCustomPointControl
+postEditorRuleToggle
   ?.addEventListener(
     "pointerdown",
-    () => {
+    event => {
 
-      captureEditorSelectionBeforeToolbar();
+      event.preventDefault();
 
 
-      if (postEditorCustomPointColor) {
-
-        applyEditorPointColor(
-          postEditorCustomPointColor.value
-        );
-
-      }
-
-    }
-  );
-
-postEditorCustomPointColor
-  ?.addEventListener(
-    "focus",
-    () => {
-
-      updateCustomPointColorSwatch();
+      captureEditorCaretBeforeToolbar();
 
     }
   );
 
 
-postEditorCustomPointColor
+postEditorRuleToggle
   ?.addEventListener(
-    "input",
-    updateCustomPointColorSwatch
-  );
-
-
-postEditorCustomPointColor
-  ?.addEventListener(
-    "change",
+    "click",
     () => {
 
-      updateCustomPointColorSwatch();
-
-
-      applyEditorPointColor(
-        postEditorCustomPointColor.value
-      );
+      toggleEditorParagraphRule();
 
     }
   );
@@ -702,96 +1001,27 @@ window.addEventListener(
 );
 
 
-document
-  .querySelector(
-    'label[for="postEditorFloatingCustomColor"]'
-  )
-  ?.addEventListener(
-    "pointerdown",
-    () => {
+/*
+  모바일 플로팅 메뉴도 위 툴바와 **같은 컨트롤**을 쓴다 —
+  같은 팝오버, 같은 undo 규칙.
+*/
 
-      captureEditorSelectionBeforeToolbar();
-
-
-      if (postEditorFloatingCustomColor) {
-
-        applyEditorHighlight(
-          postEditorFloatingCustomColor.value
-        );
-
-      }
-
-    }
-  );
+bindEditorColorControl(
+  postEditorFloatingCustomControl,
+  EDITOR_HIGHLIGHT_PICKER_OPTIONS
+);
 
 
-document
-  .querySelector(
-    'label[for="postEditorFloatingCustomPointColor"]'
-  )
-  ?.addEventListener(
-    "pointerdown",
-    () => {
-
-      captureEditorSelectionBeforeToolbar();
+bindEditorColorControl(
+  postEditorFloatingCustomPointControl,
+  EDITOR_POINT_PICKER_OPTIONS
+);
 
 
-      if (postEditorFloatingCustomPointColor) {
-
-        applyEditorPointColor(
-          postEditorFloatingCustomPointColor.value
-        );
-
-      }
-
-    }
-  );
-
-
-postEditorFloatingCustomColor
-  ?.addEventListener(
-    "input",
-    updateCustomHighlightSwatch
-  );
-
-
-postEditorFloatingCustomColor
-  ?.addEventListener(
-    "change",
-    () => {
-
-      applyEditorHighlight(
-        postEditorFloatingCustomColor.value
-      );
-
-
-      updateCustomHighlightSwatch();
-
-    }
-  );
-
-
-postEditorFloatingCustomPointColor
-  ?.addEventListener(
-    "input",
-    updateCustomPointColorSwatch
-  );
-
-
-postEditorFloatingCustomPointColor
-  ?.addEventListener(
-    "change",
-    () => {
-
-      applyEditorPointColor(
-        postEditorFloatingCustomPointColor.value
-      );
-
-
-      updateCustomPointColorSwatch();
-
-    }
-  );
+bindEditorColorControl(
+  postEditorFloatingRuleControl,
+  EDITOR_RULE_PICKER_OPTIONS
+);
 
 
 

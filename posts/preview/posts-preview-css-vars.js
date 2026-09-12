@@ -221,6 +221,20 @@ function resetPreviewVisibilityOverrides() {
 
   syncPreviewSourceOffsetControls();
 
+
+  /*
+    배경 사진과 출처 강조선의 이번 발췌 전용 값도 같이 되돌린다
+    (posts/preview/posts-preview-background.js).
+  */
+
+  if (
+    typeof resetPreviewBackgroundOverrides === "function"
+  ) {
+
+    resetPreviewBackgroundOverrides();
+
+  }
+
 }
 
 

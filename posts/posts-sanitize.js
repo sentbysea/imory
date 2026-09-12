@@ -172,6 +172,7 @@ function listPostBodyImageIds(
   - span.post-inline-font
   - span.post-inline-highlight
   - span.post-inline-color
+  - span.post-para-rule (강조선 마커 — 내용 없는 표시 하나)
   - img (본문 사진 — 식별자 하나로만, 위 주석 참고)
 */
 
@@ -461,6 +462,86 @@ function sanitizeRichNode(
       );
 
 
+    /*
+      강조선 마커 (기준 문서: posts/style/posts-body-decor.js §3)
+
+      저장되는 것은 "이 문단에 선을 걸었다/걸지 않았다"는 표시
+      하나뿐이다. 실제로 선을 그리는 상자(.post-para-rule-box)는
+      렌더링 단계에서 만들고 저장하지 않는다 — 여기서 그 상자를
+      따로 막을 필요는 없다. 화이트리스트에 없는 span이라 아래
+      기본 경로에서 껍데기가 벗겨지고 안쪽 내용만 살아남는다.
+
+      ★ 마커는 언제나 **비운 채로** 내보낸다. contenteditable에서
+      사용자가 문단 맨 앞에 글자를 치면 그 글자가 마커 안으로
+      들어갈 수 있는데, 그대로 두면 그 글자까지 마커로 다뤄진다.
+      내용은 마커 **뒤로** 꺼내서 본문에 그대로 남긴다.
+    */
+
+    if (
+      node.classList.contains(
+        "post-para-rule"
+      )
+    ) {
+
+      const mark =
+        document.createElement(
+          "span"
+        );
+
+
+      mark.className =
+        "post-para-rule";
+
+
+      mark.dataset.rule =
+        node.dataset.rule === "off"
+          ? "off"
+          : "on";
+
+
+      const ruleColor =
+        String(
+          node.dataset.ruleColor ||
+          ""
+        );
+
+
+      if (
+        /^#[0-9a-fA-F]{6}$/.test(
+          ruleColor
+        )
+      ) {
+
+        mark.dataset.ruleColor =
+          ruleColor;
+
+      }
+
+
+      target.appendChild(
+        mark
+      );
+
+
+      Array.from(
+        node.childNodes
+      ).forEach(
+        child => {
+
+          sanitizeRichNode(
+            child,
+            target
+          );
+
+        }
+      );
+
+
+      return;
+
+    }
+
+
     if (
       hasFont ||
       hasHighlight ||
@@ -612,6 +693,30 @@ function sanitizeRichHTML(
 
     }
   );
+
+
+  /*
+    ★ 중첩된 형광펜을 여기서 한 번 편다 (요구사항 2).
+
+    형광펜 안에 형광펜이 있으면 두 배경이 겹쳐 보인다. 안쪽이
+    사용자가 나중에 고른 색이므로 안쪽이 이기고, 겹치지 않는
+    양옆은 바깥 색 그대로 남는다(posts/style/posts-body-decor.js의
+    flattenNestedPostHighlights).
+
+    저장된 데이터를 일괄로 훑어 고치는 마이그레이션은 없다 —
+    이 함수를 지나는 경로(에디터가 저장할 HTML을 읽을 때, 글을
+    화면에 그릴 때)에서만 정리된다.
+  */
+
+  if (
+    typeof flattenNestedPostHighlights === "function"
+  ) {
+
+    flattenNestedPostHighlights(
+      clean
+    );
+
+  }
 
 
   return clean.innerHTML;

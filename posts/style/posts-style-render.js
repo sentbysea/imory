@@ -144,6 +144,37 @@ function renderStyledPostContentInto(
   );
 
 
+  /*
+    ★ 장식 세 가지의 순서가 중요하다(posts/style/posts-body-decor.js).
+
+      1. 중첩 형광펜 정리   겹쳐 칠해진 옛 본문을 먼저 펴야
+                            높이 계산이 한 겹에만 걸린다.
+      2. 형광펜 높이        색은 그대로 두고 칠하는 높이만 정한다.
+      3. 문단 강조선        문단 경계는 바로 위에서 만든 간격
+                            블록이므로 applyPostParagraphSpacing
+                            **뒤**여야 한다. 지문/대사 파싱보다는
+                            앞이다 — 감싸는 상자가 생겨도 파싱은
+                            모든 깊이를 훑으므로 결과가 같고,
+                            대사 판별을 위해 문단 원문이 필요하다.
+  */
+
+  flattenNestedPostHighlights(
+    container
+  );
+
+
+  applyPostHighlightHeight(
+    container,
+    resolved
+  );
+
+
+  applyPostParagraphRules(
+    container,
+    resolved
+  );
+
+
   applyActionDialogueStyles(
     container,
     resolved

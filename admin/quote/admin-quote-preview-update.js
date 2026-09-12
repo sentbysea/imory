@@ -206,9 +206,37 @@ function buildQuoteSampleSource(
       index
     ) => {
 
+      /*
+        ★ 프리셋 미리보기에만 있는 표기 하나 더 — 줄 맨 앞의
+        "> "는 그 문단에 강조선을 수동으로 건 것으로 본다
+        (실제 본문에서 에디터가 넣는 마커와 **같은 마커**를
+        만든다). BODY의 강조선 색/굵기를 눈으로 확인하는
+        자리다.
+      */
+
+      const ruleMatch =
+        /^>\s?/.exec(
+          line
+        );
+
+
+      if (ruleMatch) {
+
+        source.appendChild(
+          createPostRuleMark(
+            "on",
+            null
+          )
+        );
+
+      }
+
+
       appendQuoteSampleLine(
         source,
-        line,
+        ruleMatch
+          ? line.slice(ruleMatch[0].length)
+          : line,
         resolved
       );
 
@@ -244,6 +272,29 @@ function buildQuoteSampleSource(
 
 
   applyPostParagraphSpacing(
+    source,
+    resolved
+  );
+
+
+  /*
+    장식(형광펜 높이 · 문단 강조선)도 발행 본문과 같은 순서로
+    같은 공용 함수를 쓴다 — posts/style/posts-style-render.js의
+    renderStyledPostContentInto 주석 참고.
+  */
+
+  flattenNestedPostHighlights(
+    source
+  );
+
+
+  applyPostHighlightHeight(
+    source,
+    resolved
+  );
+
+
+  applyPostParagraphRules(
     source,
     resolved
   );
@@ -317,6 +368,14 @@ function updateQuotePreview() {
             titleText:
               quoteTestTitle?.value ||
               ""
+
+
+            /*
+              ★ 배경 사진과 출처 강조선은 view로 따로 넘기지
+              않는다 — 이 화면에서는 프리셋 값이 곧 최종 값이고,
+              settings 안에 이미 들어 있다(collectQuoteSettings).
+              글쓰기 화면만 "이번 발췌 전용" 오버라이드를 넘긴다.
+            */
           }
       }
     );

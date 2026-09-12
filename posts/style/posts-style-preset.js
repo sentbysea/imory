@@ -431,6 +431,32 @@ async function applyPostPresetById(
   updatePresetPointColorSwatch();
 
 
+  updatePresetRuleSwatch();
+
+
+  /*
+    형광펜 높이는 프리셋 값이다 — 프리셋을 바꿔 끼우면 편집창에
+    이미 칠해진 형광펜도 그 높이로 다시 그려져야 한다.
+  */
+
+  if (
+    typeof syncEditorHighlightHeight === "function"
+  ) {
+
+    syncEditorHighlightHeight();
+
+  }
+
+
+  if (
+    typeof syncEditorRuleOverlay === "function"
+  ) {
+
+    syncEditorRuleOverlay();
+
+  }
+
+
   updateEditorPreview();
 
 }
@@ -485,6 +511,43 @@ function getSafeHighlightColor(
 
 
 /*
+  ★ 지금 툴바가 들고 있는 색
+
+  예전에는 이 값이 <input type="color">의 value였다. 그 입력칸을
+  없앴으므로(요구사항 1 — OS 컬러피커가 한 번 누르면 닫혀버림)
+  값은 여기 변수로 들고, 스와치는 이 값을 보여주기만 한다.
+  컬러피커 팝오버는 posts/editor/posts-color-picker.js.
+*/
+
+let editorHighlightColor =
+  "#f4dce6";
+
+
+function getEditorHighlightColor() {
+
+  return getSafeHighlightColor(
+    editorHighlightColor
+  );
+
+}
+
+
+function setEditorHighlightColor(
+  color
+) {
+
+  editorHighlightColor =
+    getSafeHighlightColor(
+      color
+    );
+
+
+  updateCustomHighlightSwatch();
+
+}
+
+
+/*
   ★ 버튼이 하나(커스텀 컬러피커)뿐이라, 이 컨트롤의 "초기 색"을
   QUOTE PRESET의 하이라이트 색으로 맞춰준다 — 프리셋이 처음
   로드되거나(loadPostStylePreset) 세션 중 다른 프리셋으로
@@ -493,16 +556,8 @@ function getSafeHighlightColor(
 
 function updatePresetHighlightSwatch() {
 
-  const presetColor =
+  editorHighlightColor =
     getPresetHighlightColor();
-
-
-  if (postEditorCustomColor) {
-
-    postEditorCustomColor.value =
-      presetColor;
-
-  }
 
 
   updateCustomHighlightSwatch();
@@ -512,44 +567,25 @@ function updatePresetHighlightSwatch() {
 
 function updateCustomHighlightSwatch() {
 
-  if (
-    !postEditorCustomSwatch ||
-    !postEditorCustomColor
-  ) {
-    return;
-  }
-
-
   const color =
-    getSafeHighlightColor(
-      postEditorCustomColor.value
-    );
+    getEditorHighlightColor();
 
 
-  postEditorCustomSwatch.style.background =
-    color;
-
-
-  if (
+  [
+    postEditorCustomSwatch,
     postEditorFloatingCustomSwatch
-  ) {
+  ].forEach(
+    swatch => {
 
-    postEditorFloatingCustomSwatch.style.background =
-      color;
+      if (swatch) {
 
-  }
+        swatch.style.background =
+          color;
 
+      }
 
-  if (
-    postEditorFloatingCustomColor &&
-    postEditorFloatingCustomColor.value !==
-      postEditorCustomColor.value
-  ) {
-
-    postEditorFloatingCustomColor.value =
-      postEditorCustomColor.value;
-
-  }
+    }
+  );
 
 }
 
@@ -603,6 +639,34 @@ function getSafePointColor(
 }
 
 
+let editorPointColor =
+  "#5c7cfa";
+
+
+function getEditorPointColor() {
+
+  return getSafePointColor(
+    editorPointColor
+  );
+
+}
+
+
+function setEditorPointColor(
+  color
+) {
+
+  editorPointColor =
+    getSafePointColor(
+      color
+    );
+
+
+  updateCustomPointColorSwatch();
+
+}
+
+
 /*
   ★ HIGHLIGHT과 동일 — 버튼이 하나뿐이라 이 컨트롤의 초기
   색을 QUOTE PRESET의 포인트 컬러로 맞춰준다.
@@ -610,16 +674,8 @@ function getSafePointColor(
 
 function updatePresetPointColorSwatch() {
 
-  const presetColor =
+  editorPointColor =
     getPresetPointColor();
-
-
-  if (postEditorCustomPointColor) {
-
-    postEditorCustomPointColor.value =
-      presetColor;
-
-  }
 
 
   updateCustomPointColorSwatch();
@@ -629,44 +685,91 @@ function updatePresetPointColorSwatch() {
 
 function updateCustomPointColorSwatch() {
 
-  if (
-    !postEditorCustomPointSwatch ||
-    !postEditorCustomPointColor
-  ) {
-    return;
-  }
+  const color =
+    getEditorPointColor();
 
+
+  [
+    postEditorCustomPointSwatch,
+    postEditorFloatingCustomPointSwatch
+  ].forEach(
+    swatch => {
+
+      if (swatch) {
+
+        swatch.style.background =
+          color;
+
+      }
+
+    }
+  );
+
+}
+
+
+
+/* =========================================================
+   강조선 (문단 왼쪽 세로선)
+
+   굵기는 프리셋(BODY/DIALOGUE/SOURCE)에서만 정한다 — 에디터는
+   적용·해제와 **색**만 다룬다(요구사항 5).
+========================================================== */
+
+function getPresetRuleColor() {
 
   const color =
-    getSafePointColor(
-      postEditorCustomPointColor.value
-    );
-
-
-  postEditorCustomPointSwatch.style.background =
-    color;
+    postStyleSettings
+      ?.bodyRuleColor;
 
 
   if (
-    postEditorFloatingCustomPointSwatch
+    /^#[0-9a-fA-F]{6}$/.test(
+      color || ""
+    )
   ) {
 
-    postEditorFloatingCustomPointSwatch.style.background =
-      color;
+    return color;
 
   }
 
 
-  if (
-    postEditorFloatingCustomPointColor &&
-    postEditorFloatingCustomPointColor.value !==
-      postEditorCustomPointColor.value
-  ) {
+  return "#ee9fbd";
 
-    postEditorFloatingCustomPointColor.value =
-      postEditorCustomPointColor.value;
+}
 
-  }
+
+function updatePresetRuleSwatch() {
+
+  updateEditorRuleSwatch();
+
+}
+
+
+function updateEditorRuleSwatch() {
+
+  const color =
+    typeof currentEditorParagraphRuleColor === "function" &&
+    savedEditorRange
+      ? currentEditorParagraphRuleColor()
+      : getPresetRuleColor();
+
+
+  [
+    postEditorRuleSwatch,
+    postEditorFloatingRuleSwatch
+  ].forEach(
+    swatch => {
+
+      if (swatch) {
+
+        swatch.style.background =
+          color;
+
+      }
+
+    }
+  );
 
 }
 

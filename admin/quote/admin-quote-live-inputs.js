@@ -44,6 +44,10 @@ const quoteLiveInputs = [
   */
   quoteHighlightColor,
   quotePointColor,
+  quoteHighlightHeight,
+
+  quoteBodyRuleColor,
+  quoteBodyRuleWidth,
 
   quoteFontSize,
   quoteBodyWeight,
@@ -62,6 +66,9 @@ const quoteLiveInputs = [
   quoteDialogueColor,
   quoteDialogueWeight,
   quoteDialogueItalic,
+  quoteDialogueRuleEnabled,
+  quoteDialogueRuleColor,
+  quoteDialogueRuleWidth,
 
   quoteSourceEnabled,
   quoteSourceColor,
@@ -69,7 +76,16 @@ const quoteLiveInputs = [
   quoteSourceWeight,
   quoteSourceAlign,
   quoteSourceSpacing,
-  quoteSourceBottomOffset
+  quoteSourceBottomOffset,
+
+  quoteSourceRuleEnabled,
+  quoteSourceRuleColor,
+  quoteSourceRuleWidth,
+
+  quoteBackgroundScale,
+  quoteBackgroundBlur,
+  quoteBackgroundOverlayOpacity,
+  quoteBackgroundOverlayColor
 
 ];
 
@@ -276,6 +292,30 @@ function collectQuoteSettings() {
       ),
 
 
+    /* 형광펜 높이 — 글자 크기에 대한 비율(%) */
+
+    highlightHeight:
+      quoteInputNumber(
+        quoteHighlightHeight,
+        POST_STYLE_DEFAULTS.highlightHeight
+      ),
+
+
+    /* 강조선(BODY) — 에디터의 수동 적용 기본값 */
+
+    bodyRuleColor:
+      quoteInputText(
+        quoteBodyRuleColor,
+        POST_STYLE_DEFAULTS.bodyRuleColor
+      ),
+
+    bodyRuleWidth:
+      quoteInputNumber(
+        quoteBodyRuleWidth,
+        POST_STYLE_DEFAULTS.bodyRuleWidth
+      ),
+
+
     bodySize:
       quoteInputNumber(
         quoteFontSize,
@@ -369,6 +409,28 @@ function collectQuoteSettings() {
       POST_STYLE_DEFAULTS.dialogueItalic,
 
 
+    /*
+      대사 문단 강조선 자동 적용. 기본값이 false라, 이 체크칸을
+      건드리지 않은 옛 프리셋은 예전과 똑같이 보인다.
+    */
+
+    dialogueRuleEnabled:
+      quoteDialogueRuleEnabled?.checked ??
+      POST_STYLE_DEFAULTS.dialogueRuleEnabled,
+
+    dialogueRuleColor:
+      quoteInputText(
+        quoteDialogueRuleColor,
+        POST_STYLE_DEFAULTS.dialogueRuleColor
+      ),
+
+    dialogueRuleWidth:
+      quoteInputNumber(
+        quoteDialogueRuleWidth,
+        POST_STYLE_DEFAULTS.dialogueRuleWidth
+      ),
+
+
     /* SOURCE */
 
     /*
@@ -427,7 +489,71 @@ function collectQuoteSettings() {
       quoteInputNumber(
         quoteSourceBottomOffset,
         POST_STYLE_DEFAULTS.sourceBottomOffset
-      )
+      ),
+
+
+    /* 출처 강조선 */
+
+    sourceRuleEnabled:
+      quoteSourceRuleEnabled?.checked ??
+      POST_STYLE_DEFAULTS.sourceRuleEnabled,
+
+    sourceRuleColor:
+      quoteInputText(
+        quoteSourceRuleColor,
+        POST_STYLE_DEFAULTS.sourceRuleColor
+      ),
+
+    sourceRuleWidth:
+      quoteInputNumber(
+        quoteSourceRuleWidth,
+        POST_STYLE_DEFAULTS.sourceRuleWidth
+      ),
+
+
+    /* =====================================================
+       CANVAS 배경 사진
+
+       ★ 주소와 중심은 입력칸이 아니라 상태 변수다
+       (admin-quote-refs.js) — 사진은 파일을 올려서, 중심은
+       미리보기를 끌어서 정하기 때문이다. 저장되는 것은
+       **공개 URL**과 **정규화 좌표**이지 임시 주소나 픽셀
+       이동량이 아니다(요구사항 7·9).
+    ====================================================== */
+
+    backgroundImageUrl:
+      quoteBackgroundImageUrl ||
+      "",
+
+    backgroundImageScale:
+      quoteInputNumber(
+        quoteBackgroundScale,
+        100
+      ) / 100,
+
+    backgroundImageFocusX:
+      quoteBackgroundFocusX,
+
+    backgroundImageFocusY:
+      quoteBackgroundFocusY,
+
+    backgroundImageBlur:
+      quoteInputNumber(
+        quoteBackgroundBlur,
+        POST_STYLE_DEFAULTS.backgroundImageBlur
+      ),
+
+    backgroundOverlayColor:
+      quoteInputText(
+        quoteBackgroundOverlayColor,
+        POST_STYLE_DEFAULTS.backgroundOverlayColor
+      ),
+
+    backgroundOverlayOpacity:
+      quoteInputNumber(
+        quoteBackgroundOverlayOpacity,
+        0
+      ) / 100
 
   };
 

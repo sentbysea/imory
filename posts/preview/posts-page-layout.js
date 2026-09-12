@@ -241,7 +241,34 @@ function resolvePostPageView(
       postStyleNumber(
         view.sourceBottomOffset,
         resolved.sourceBottomOffset
-      )
+      ),
+
+
+    /*
+      출처 강조선 — 이번 발췌만 끄거나 색을 바꾼 경우
+      (에디터 세션 오버라이드). 주지 않으면 프리셋 값을 따른다.
+    */
+
+    sourceRuleEnabled:
+      view.sourceRuleEnabled ??
+      resolved.sourceRuleEnabled,
+
+    sourceRuleColor:
+      typeof view.sourceRuleColor === "string" &&
+      view.sourceRuleColor
+        ? view.sourceRuleColor
+        : resolved.sourceRuleColor,
+
+
+    /*
+      배경 이미지의 이번 발췌 전용 설정. 통째로 그대로
+      들고 다닌다 — 해석은 posts/style/posts-canvas-background.js
+      한 곳에서만 한다.
+    */
+
+    background:
+      view.background ||
+      null
 
   };
 
@@ -408,6 +435,25 @@ function createPostPageSource(
     }px`;
 
 
+  /*
+    출처 강조선(왼쪽 세로선) — 공용 구현
+    (posts/style/posts-body-decor.js). 관리 패널·글쓰기 화면·
+    발행 본문이 같은 함수를 쓴다.
+  */
+
+  if (
+    typeof applyPostSourceRule === "function"
+  ) {
+
+    applyPostSourceRule(
+      source,
+      resolved,
+      view
+    );
+
+  }
+
+
   return source;
 
 }
@@ -564,6 +610,36 @@ function createPostPageCanvas(
 
 
   /*
+    ★ 배경 이미지 레이어의 기준 상자.
+
+    레이어는 position:absolute라 이 페이지가 positioned여야
+    자기 자리를 잡는다. 배경이 없을 때도 relative로 두어(레이아웃에
+    아무 영향이 없다) 두 경로의 박스 모델을 갈라놓지 않는다.
+  */
+
+  page.style.position =
+    "relative";
+
+
+  const background =
+    typeof createPostPageBackground === "function"
+      ? createPostPageBackground(
+          resolved,
+          resolvedView
+        )
+      : null;
+
+
+  if (background) {
+
+    page.appendChild(
+      background
+    );
+
+  }
+
+
+  /*
     ★ 세로 정렬은 세 모드가 같은 값을 쓴다.
 
       고정 비율  예전 그대로.
@@ -651,6 +727,32 @@ function createPostPageCanvas(
   );
 
 
+  /*
+    ★ 배경 레이어보다 위에 그려져야 한다.
+
+    배경은 position:absolute이고 본문/제목/출처는 기본 static이라,
+    그대로 두면 positioned 요소인 배경이 **나중에 칠해져서** 글자를
+    덮는다. 본문 쪽도 positioned로 만들면(z-index는 auto 그대로)
+    문서 순서가 쌓임 순서가 되어 배경 → 본문 순으로 칠해진다.
+    레이아웃은 전혀 바뀌지 않는다.
+  */
+
+  [
+    title,
+    content
+  ].forEach(
+    element => {
+
+      element.style.position =
+        "relative";
+
+      element.style.zIndex =
+        "1";
+
+    }
+  );
+
+
   content.style.textAlign =
     resolvedView.bodyAlign;
 
@@ -660,6 +762,14 @@ function createPostPageCanvas(
       resolved,
       resolvedView
     );
+
+
+  source.style.position =
+    "relative";
+
+
+  source.style.zIndex =
+    "1";
 
 
   let contentGroup =
@@ -680,6 +790,14 @@ function createPostPageCanvas(
 
     contentGroup.className =
       "post-editor-preview-content-group";
+
+
+    contentGroup.style.position =
+      "relative";
+
+
+    contentGroup.style.zIndex =
+      "1";
 
 
     contentGroup.style.display =
@@ -785,6 +903,14 @@ function createPostPageCanvas(
 
     bodyArea.className =
       "post-editor-preview-body-area";
+
+
+    bodyArea.style.position =
+      "relative";
+
+
+    bodyArea.style.zIndex =
+      "1";
 
 
     bodyArea.style.display =
@@ -1967,6 +2093,28 @@ function paginatePostPages(
             view.ratio?.uniform
           )
       }
+    );
+
+  }
+
+
+  /*
+    ★ 배경 구도는 **높이가 확정된 뒤**에 계산한다.
+
+    AUTO/uniform은 페이지 높이가 콘텐츠에서 나오므로, 페이지를
+    만드는 순간에는 덮어야 할 상자의 크기를 모른다. 여기서
+    한 번만 계산하면 세 모드(고정 비율·auto·uniform)가 전부
+    같은 길을 지난다.
+  */
+
+  if (
+    typeof applyPostPageBackgrounds === "function"
+  ) {
+
+    applyPostPageBackgrounds(
+      pages,
+      settings,
+      view
     );
 
   }

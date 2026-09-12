@@ -1116,19 +1116,35 @@ async function prepareEditorUI() {
   await loadPostStylePreset();
 
 
+  updatePresetHighlightSwatch();
+
+  updatePresetPointColorSwatch();
+
+  updatePresetRuleSwatch();
+
+
+  /*
+    프리셋이 다시 읽혔으니 편집창의 형광펜 높이와 강조선 표시도
+    그 프리셋 기준으로 다시 그린다.
+  */
+
   if (
-    postEditorCustomColor
+    typeof syncEditorHighlightHeight === "function"
   ) {
 
-    postEditorCustomColor.value =
-      getPresetHighlightColor();
+    syncEditorHighlightHeight();
 
   }
 
 
-  updatePresetHighlightSwatch();
+  if (
+    typeof syncEditorRuleOverlay === "function"
+  ) {
 
-  updateCustomHighlightSwatch();
+    syncEditorRuleOverlay();
+
+  }
+
 
   updateEditorToolbarState();
 

@@ -138,6 +138,13 @@
     loadVersionedStyles(
       [
         "../posts/posts-page-canvas.css",
+
+        /*
+          담백한 슬라이더 한 벌 — index.html(글쓰기 화면)도 같은
+          파일을 읽는다.
+        */
+        "../core/components/range.css",
+
         "./admin-quote.css"
       ]
     );
@@ -1837,8 +1844,23 @@
             */
 
             "../posts/style/posts-body-layout.js",
+
+            /*
+              형광펜 높이 · 문단 강조선 · 캔버스 배경 사진.
+              글쓰기 화면과 **같은 파일**이다(같은 계산으로 같은
+              모양이 나와야 한다).
+            */
+            "../posts/style/posts-body-decor.js",
+            "../posts/style/posts-canvas-background.js",
+
             "../posts/style/posts-style-dialogue.js",
             "../posts/preview/posts-page-layout.js",
+
+            /*
+              배경 사진 업로드(글쓰기 화면과 공용).
+              supabase-client.js · image-upload.js 뒤다.
+            */
+            "../core/lib/quote-background-upload.js",
 
             "./quote/admin-quote-refs.js",
             "./quote/admin-quote-accordion.js",
@@ -1846,6 +1868,14 @@
             "./quote/admin-quote-preview-update.js",
             "./quote/admin-quote-live-inputs.js",
             "./quote/admin-quote-apply-preset.js",
+
+            /*
+              슬라이더 채움 표시 + 배경 사진(올리기/지우기/끌어서
+              구도). 최상위에서 refs의 DOM 참조를 읽으므로
+              admin-quote-refs.js보다 뒤여야 한다.
+            */
+            "./quote/admin-quote-background.js",
+
             "./quote/admin-quote-preset-list.js",
             "./quote/admin-quote-preset-crud.js",
 

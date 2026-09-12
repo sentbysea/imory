@@ -804,14 +804,37 @@ body.post-mode .music-button {
     0
     0.12em;
 
-  border-radius:
-    2px;
+  /* 모서리는 직각으로 통일한다(요구사항 3) — 옵션을 두지 않는다.
+     높이를 낮춘 형광펜은 background-image(gradient)로 그려지는데,
+     둥근 모서리가 남아 있으면 얇게 깔린 띠의 양끝만 깎여 보인다. */
+  border-radius: 0;
 
   box-decoration-break:
     clone;
 
   -webkit-box-decoration-break:
     clone;
+}
+
+
+/* =========================================================
+   강조선 (문단 왼쪽 세로선)
+
+   실제로 선을 그리는 상자는 렌더링 단계에서 만들어지고
+   (posts/style/posts-body-decor.js), 색·굵기·여백은 전부
+   인라인으로 박힌다 — html2canvas가 var()나 외부 규칙을 못
+   읽는 문제를 피하기 위해서다. 여기서는 **저장되는 마커**가
+   화면에 아무 것도 그리지 않게만 해 둔다.
+========================================================== */
+
+.post-para-rule {
+  display: none;
+}
+
+
+.post-para-rule-box {
+  /* display:block / border-left / padding-left는 JS가 인라인으로 */
+  margin: 0;
 }
 
 

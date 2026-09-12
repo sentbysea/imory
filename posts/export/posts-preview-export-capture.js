@@ -406,7 +406,30 @@ function bakeHighlightSpansForCapture(
         span.style.backgroundColor;
 
 
-      if (!bg) {
+      /*
+        ★ 형광펜 높이를 100% 미만으로 정하면 배경이 색이 아니라
+        **gradient**다(posts/style/posts-body-decor.js). 글자 단위로
+        다시 감쌀 때 그 gradient를 그대로 들고 가야 한 글자짜리
+        상자마다 같은 비율로 칠해진다 — 색만 복사하면 높이 설정이
+        export에서만 사라진다.
+      */
+
+      const bgImage =
+        span.style.backgroundImage;
+
+
+      const perCharBackground =
+        bgImage &&
+        bgImage !== "none"
+          ? `background-image:${bgImage};background-repeat:no-repeat;background-size:100% 100%;background-position:0 0;`
+          : (
+              bg
+                ? `background-color:${bg};`
+                : ""
+            );
+
+
+      if (!perCharBackground) {
         return;
       }
 
@@ -419,7 +442,13 @@ function bakeHighlightSpansForCapture(
 
       span.setAttribute(
         "data-original-bg",
-        bg
+        bg || ""
+      );
+
+
+      span.setAttribute(
+        "data-original-bg-image",
+        bgImage || ""
       );
 
 
@@ -457,7 +486,7 @@ function bakeHighlightSpansForCapture(
                   );
 
 
-              return `<span style="background-color:${bg};display:inline;color:inherit;font:inherit;letter-spacing:inherit;">${safe}</span>`;
+              return `<span style="${perCharBackground}display:inline;color:inherit;font:inherit;letter-spacing:inherit;">${safe}</span>`;
 
             }
           )
@@ -472,6 +501,10 @@ function bakeHighlightSpansForCapture(
 
       span.style.backgroundColor =
         "transparent";
+
+
+      span.style.backgroundImage =
+        "none";
 
     }
   );
@@ -503,6 +536,13 @@ function restoreHighlightSpansAfterCapture(
           "";
 
 
+        span.style.backgroundImage =
+          span.getAttribute(
+            "data-original-bg-image"
+          ) ||
+          "";
+
+
         span.removeAttribute(
           "data-original-html"
         );
@@ -510,6 +550,11 @@ function restoreHighlightSpansAfterCapture(
 
         span.removeAttribute(
           "data-original-bg"
+        );
+
+
+        span.removeAttribute(
+          "data-original-bg-image"
         );
 
       }
@@ -733,6 +778,23 @@ async function captureVisiblePageAsBlob(
   );
 
 
+  /*
+    ★ html2canvas는 CSS filter를 구현하지 않는다 — 화면에서는
+    흐린 배경이 저장된 PNG에서만 또렷하게 나온다. 캡처 직전에만
+    **흐림이 이미 적용된 이미지**로 바꿔 끼운다
+    (posts/style/posts-canvas-background.js). 배경이 없거나 흐림이
+    0이면 아무 일도 하지 않는다.
+  */
+
+  const restoreBackgroundBlur =
+    typeof bakePostBackgroundForCapture === "function"
+      ? await bakePostBackgroundForCapture(
+          page,
+          2
+        )
+      : () => {};
+
+
   const strippedTransforms =
     stripAncestorTransformsForCapture(
       page
@@ -941,6 +1003,9 @@ async function captureVisiblePageAsBlob(
       );
 
   } finally {
+
+    restoreBackgroundBlur();
+
 
     restoreHighlightSpansAfterCapture(
       page

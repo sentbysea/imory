@@ -189,6 +189,45 @@ const quotePointColor =
   );
 
 
+/*
+  ★ NEW
+  형광펜 높이 — 글자 크기에 대한 비율(%). 100이면 예전 그대로
+  글자 상자를 가득 채운다(posts/style/posts-body-decor.js).
+*/
+
+const quoteHighlightHeight =
+  document.getElementById(
+    "quoteHighlightHeight"
+  );
+
+const quoteHighlightHeightValue =
+  document.getElementById(
+    "quoteHighlightHeightValue"
+  );
+
+
+/*
+  ★ NEW
+  강조선(문단 왼쪽 세로선)의 BODY 기본값 — 에디터에서 수동으로
+  걸 때 쓰인다.
+*/
+
+const quoteBodyRuleColor =
+  document.getElementById(
+    "quoteBodyRuleColor"
+  );
+
+const quoteBodyRuleWidth =
+  document.getElementById(
+    "quoteBodyRuleWidth"
+  );
+
+const quoteBodyRuleWidthValue =
+  document.getElementById(
+    "quoteBodyRuleWidthValue"
+  );
+
+
 const quoteFontSize =
   document.getElementById(
     "quoteFontSize"
@@ -270,6 +309,29 @@ const quoteDialogueItalic =
   );
 
 
+/* ★ NEW — 대사 문단 강조선 자동 적용 */
+
+const quoteDialogueRuleEnabled =
+  document.getElementById(
+    "quoteDialogueRuleEnabled"
+  );
+
+const quoteDialogueRuleColor =
+  document.getElementById(
+    "quoteDialogueRuleColor"
+  );
+
+const quoteDialogueRuleWidth =
+  document.getElementById(
+    "quoteDialogueRuleWidth"
+  );
+
+const quoteDialogueRuleWidthValue =
+  document.getElementById(
+    "quoteDialogueRuleWidthValue"
+  );
+
+
 /* =========================================================
    SOURCE
 ========================================================== */
@@ -308,6 +370,112 @@ const quoteSourceBottomOffset =
   document.getElementById(
     "quoteSourceBottomOffset"
   );
+
+
+/* ★ NEW — 출처 강조선 */
+
+const quoteSourceRuleEnabled =
+  document.getElementById(
+    "quoteSourceRuleEnabled"
+  );
+
+const quoteSourceRuleColor =
+  document.getElementById(
+    "quoteSourceRuleColor"
+  );
+
+const quoteSourceRuleWidth =
+  document.getElementById(
+    "quoteSourceRuleWidth"
+  );
+
+const quoteSourceRuleWidthValue =
+  document.getElementById(
+    "quoteSourceRuleWidthValue"
+  );
+
+
+/* =========================================================
+   CANVAS 배경 사진 (★ NEW)
+
+   기준 문서: posts/style/posts-canvas-background.js
+========================================================== */
+
+const quoteBackgroundPick =
+  document.getElementById(
+    "quoteBackgroundPick"
+  );
+
+const quoteBackgroundRemove =
+  document.getElementById(
+    "quoteBackgroundRemove"
+  );
+
+const quoteBackgroundFile =
+  document.getElementById(
+    "quoteBackgroundFile"
+  );
+
+const quoteBackgroundMessage =
+  document.getElementById(
+    "quoteBackgroundMessage"
+  );
+
+const quoteBackgroundSettings =
+  document.getElementById(
+    "quoteBackgroundSettings"
+  );
+
+const quoteBackgroundScale =
+  document.getElementById(
+    "quoteBackgroundScale"
+  );
+
+const quoteBackgroundScaleValue =
+  document.getElementById(
+    "quoteBackgroundScaleValue"
+  );
+
+const quoteBackgroundBlur =
+  document.getElementById(
+    "quoteBackgroundBlur"
+  );
+
+const quoteBackgroundBlurValue =
+  document.getElementById(
+    "quoteBackgroundBlurValue"
+  );
+
+const quoteBackgroundOverlayOpacity =
+  document.getElementById(
+    "quoteBackgroundOverlayOpacity"
+  );
+
+const quoteBackgroundOverlayOpacityValue =
+  document.getElementById(
+    "quoteBackgroundOverlayOpacityValue"
+  );
+
+const quoteBackgroundOverlayColor =
+  document.getElementById(
+    "quoteBackgroundOverlayColor"
+  );
+
+
+/*
+  배경 사진의 주소와 중심은 입력칸이 없다(슬라이더/드래그로만
+  정한다) — 폼 값이 아니라 이 상태 변수가 들고 있고,
+  collectQuoteSettings()가 그대로 저장한다.
+*/
+
+let quoteBackgroundImageUrl =
+  "";
+
+let quoteBackgroundFocusX =
+  0.5;
+
+let quoteBackgroundFocusY =
+  0.5;
 
 
 /* =========================================================

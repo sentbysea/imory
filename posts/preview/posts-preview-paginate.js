@@ -141,6 +141,23 @@ function renderEditorPreviewPages(
     );
 
 
+  /*
+    장 수가 줄었으면 없어진 장의 배경 보정은 버린다 — 남겨두면
+    다음에 다시 늘어났을 때 엉뚱한 장에 붙는다
+    (posts/preview/posts-preview-background.js).
+  */
+
+  if (
+    typeof prunePreviewBackgroundPageFocus === "function"
+  ) {
+
+    prunePreviewBackgroundPageFocus(
+      editorPreviewPages.length
+    );
+
+  }
+
+
   showEditorPreviewPage(
     Math.min(
       editorPreviewPageIndex,
@@ -227,6 +244,30 @@ async function updateEditorPreview(
     await preparePostBodyImagesForPreview(
       html
     );
+
+
+  /*
+    ★ 배경 사진도 폰트·본문 사진과 같은 이유로 먼저 기다린다 —
+    원본 크기를 모르면 구도를 계산할 수 없어서, 나중에 로드되는
+    순간 배경만 한 번 더 움직여 보인다.
+  */
+
+  if (
+    typeof whenPostBackgroundReady === "function"
+  ) {
+
+    await whenPostBackgroundReady(
+      postStyleSettings ||
+      {},
+      {
+        background:
+          typeof resolvePreviewBackgroundView === "function"
+            ? resolvePreviewBackgroundView()
+            : null
+      }
+    );
+
+  }
 
 
   if (

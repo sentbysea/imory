@@ -3205,8 +3205,12 @@ async function runLabels(browser) {
           document.querySelectorAll(".quote-accordion-title")
         ).map(t),
         /*
-          헤더 행의 오른쪽 보조 문구. .quote-special-heading small
-          (*text* · "text")은 서식 기호라 제외한다.
+          헤더 행의 오른쪽 보조 문구.
+
+          ★ 지문/대사가 BODY 안의 작은 그리드에서 **독립 섹션**
+          (NARRATION / DIALOGUE)으로 나왔다. 그 둘의 보조 문구는
+          서식 기호(*text* · "text")이고, 이제 헤더 행에 있다 —
+          기호도 영어 취급이므로 이 목록에 그대로 들어온다.
         */
         sectionCaptions: Array.from(
           document.querySelectorAll(".quote-accordion-toggle small")
@@ -3228,9 +3232,26 @@ async function runLabels(browser) {
         ratioButtons: Array.from(
           document.querySelectorAll(".quote-ratio-button")
         ).map(t),
+        /*
+          서식 기호는 NARRATION / DIALOGUE 섹션 헤더의 보조 문구다
+          (예전에는 BODY 안 .quote-special-heading small).
+        */
         syntaxHints: Array.from(
-          document.querySelectorAll(".quote-special-heading small")
-        ).map(t)
+          document.querySelectorAll(".quote-accordion")
+        )
+          .filter(section => {
+
+            const title =
+              t(section.querySelector(".quote-accordion-title"));
+
+
+            return title === "NARRATION" ||
+              title === "DIALOGUE";
+
+          })
+          .map(section =>
+            t(section.querySelector(".quote-accordion-toggle small"))
+          )
       };
     });
 
@@ -3257,7 +3278,7 @@ async function runLabels(browser) {
       "[labels] 헤더 행의 오른쪽 보조 문구도 영어 그대로다",
       JSON.stringify(texts.sectionCaptions) === JSON.stringify(
         ["preview text", "image", "font", "typography", "text",
-         "footer", "save"]
+         "*text*", "\"text\"", "footer", "save"]
       ),
       texts.sectionCaptions.join(" / ")
     );

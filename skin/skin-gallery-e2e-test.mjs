@@ -2323,9 +2323,12 @@ async function runBodyImages(browser) {
       toolbar: !!document.getElementById("postEditorToolbar"),
       photoButton: !!document.getElementById("postEditorImageButton") &&
         !document.getElementById("postEditorImageButton").closest(".post-editor-tool-group").hidden,
-      /* POINT COLOR 바로 옆 자리 */
+      /* POINT COLOR 바로 옆 자리
+         (컬러피커가 <input type="color">에서 스와치 버튼으로 바뀌어
+         기준 요소만 postEditorCustomPointControl로 옮겼다 — 자리
+         자체는 그대로 검사한다) */
       nextToPointColor:
-        document.getElementById("postEditorCustomPointColor").closest(".post-editor-tool-group")
+        document.getElementById("postEditorCustomPointControl").closest(".post-editor-tool-group")
           .nextElementSibling?.contains(document.getElementById("postEditorImageButton")) === true,
       coverField: !!document.querySelector(".post-editor-cover-field"),
       galleryPanel: !!document.getElementById("postEditorGallery"),

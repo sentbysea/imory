@@ -514,19 +514,24 @@ const postEditorUnderlineToggle =
     "postEditorUnderlineToggle"
   );
 
-const postEditorCustomColor =
+/*
+  ★ 색 컨트롤은 더 이상 <input type="color">가 아니다.
+
+  OS 컬러피커는 한 번 누르면 닫혀버려 이어서 조정할 수 없고,
+  열리는 동안 본문 선택/포커스를 가져간다(요구사항 1). 지금은
+  스와치 버튼을 누르면 우리가 그리는 팝오버가 열린다
+  (posts/editor/posts-color-picker.js). "지금 색"은 DOM이 아니라
+  posts/style/posts-style-preset.js의 변수가 들고 있다.
+*/
+
+const postEditorCustomControl =
   document.getElementById(
-    "postEditorCustomColor"
+    "postEditorCustomControl"
   );
 
 const postEditorCustomSwatch =
   document.getElementById(
     "postEditorCustomSwatch"
-  );
-
-const postEditorCustomPointColor =
-  document.getElementById(
-    "postEditorCustomPointColor"
   );
 
 const postEditorCustomPointSwatch =
@@ -535,8 +540,26 @@ const postEditorCustomPointSwatch =
   );
 
 const postEditorCustomPointControl =
-  document.querySelector(
-    'label[for="postEditorCustomPointColor"]'
+  document.getElementById(
+    "postEditorCustomPointControl"
+  );
+
+
+/* 강조선 — 문단 왼쪽 세로선 */
+
+const postEditorRuleToggle =
+  document.getElementById(
+    "postEditorRuleToggle"
+  );
+
+const postEditorRuleControl =
+  document.getElementById(
+    "postEditorRuleControl"
+  );
+
+const postEditorRuleSwatch =
+  document.getElementById(
+    "postEditorRuleSwatch"
   );
 
 const postEditorClearStyle =
@@ -554,9 +577,9 @@ const postEditorFloatingMenu =
     "postEditorFloatingMenu"
   );
 
-const postEditorFloatingCustomColor =
+const postEditorFloatingCustomControl =
   document.getElementById(
-    "postEditorFloatingCustomColor"
+    "postEditorFloatingCustomControl"
   );
 
 const postEditorFloatingCustomSwatch =
@@ -564,19 +587,24 @@ const postEditorFloatingCustomSwatch =
     "postEditorFloatingCustomSwatch"
   );
 
-  const postEditorCustomControl =
-  document.querySelector(
-    ".post-highlight-custom-control"
-  );
-
-const postEditorFloatingCustomPointColor =
+const postEditorFloatingCustomPointControl =
   document.getElementById(
-    "postEditorFloatingCustomPointColor"
+    "postEditorFloatingCustomPointControl"
   );
 
 const postEditorFloatingCustomPointSwatch =
   document.getElementById(
     "postEditorFloatingCustomPointSwatch"
+  );
+
+const postEditorFloatingRuleControl =
+  document.getElementById(
+    "postEditorFloatingRuleControl"
+  );
+
+const postEditorFloatingRuleSwatch =
+  document.getElementById(
+    "postEditorFloatingRuleSwatch"
   );
 
 
@@ -617,6 +645,59 @@ const postEditorPreviewDragHandle =
 const postEditorPreviewStage =
   document.getElementById(
     "postEditorPreviewStage"
+  );
+
+
+/* 배경 사진 · 출처 강조선 (이번 발췌 전용 — posts/preview/posts-preview-background.js) */
+
+const postEditorPreviewBackgroundToggle =
+  document.getElementById(
+    "postEditorPreviewBackgroundToggle"
+  );
+
+const postEditorPreviewBackgroundPanel =
+  document.getElementById(
+    "postEditorPreviewBackgroundPanel"
+  );
+
+const postEditorPreviewBackgroundPick =
+  document.getElementById(
+    "postEditorPreviewBackgroundPick"
+  );
+
+const postEditorPreviewBackgroundFile =
+  document.getElementById(
+    "postEditorPreviewBackgroundFile"
+  );
+
+const postEditorPreviewBackgroundMove =
+  document.getElementById(
+    "postEditorPreviewBackgroundMove"
+  );
+
+const postEditorPreviewBackgroundReset =
+  document.getElementById(
+    "postEditorPreviewBackgroundReset"
+  );
+
+const postEditorPreviewBackgroundMessage =
+  document.getElementById(
+    "postEditorPreviewBackgroundMessage"
+  );
+
+const postEditorPreviewSourceRuleToggle =
+  document.getElementById(
+    "postEditorPreviewSourceRuleToggle"
+  );
+
+const postEditorPreviewSourceRuleControl =
+  document.getElementById(
+    "postEditorPreviewSourceRuleControl"
+  );
+
+const postEditorPreviewSourceRuleSwatch =
+  document.getElementById(
+    "postEditorPreviewSourceRuleSwatch"
   );
 
 const postEditorPreviewTitleToggle =

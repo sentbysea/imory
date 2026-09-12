@@ -78,7 +78,32 @@ function resolveEditorPreviewView(
 
     sourceBottomOffset:
       previewSourceBottomOffset ??
-      resolved.sourceBottomOffset
+      resolved.sourceBottomOffset,
+
+
+    /*
+      출처 강조선 — 이번 발췌만 끄거나 색을 바꾼 값
+      (posts/preview/posts-preview-background.js).
+    */
+
+    sourceRuleEnabled:
+      previewSourceRuleEnabled ??
+      resolved.sourceRuleEnabled,
+
+    sourceRuleColor:
+      previewSourceRuleColor ||
+      resolved.sourceRuleColor,
+
+
+    /*
+      배경 사진 — 프리셋을 고치지 않고 이번 발췌만 바꿔 낀 값.
+      null이면 프리셋 값을 그대로 쓴다.
+    */
+
+    background:
+      typeof resolvePreviewBackgroundView === "function"
+        ? resolvePreviewBackgroundView()
+        : null
 
   };
 

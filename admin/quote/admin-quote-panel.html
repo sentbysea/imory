@@ -492,6 +492,186 @@
                 </div>
 
 
+
+                <!-- ===========================================
+                     배경 사진
+
+                     기준 문서: posts/style/posts-canvas-background.js
+
+                     ★ 저장되는 것은 "원본 이미지 위의 중심"과
+                     "확대 배율"이다 — 픽셀 이동량이 아니다. 그래서
+                     예시 텍스트와 실제 발췌문의 길이·캔버스 비율이
+                     달라도 지정한 자리가 가운데로 온다.
+
+                     ★ 확대 100%는 "캔버스를 빈틈없이 덮는 최소
+                     크기"다. 높이에만 맞춰 양옆이 비거나 비율을
+                     찌그러뜨리는 방식은 쓰지 않는다.
+
+                     ★ 위치는 미리보기를 **직접 끌어서** 정한다.
+                ============================================ -->
+
+                <div class="quote-setting-block">
+
+                  <div class="quote-setting-label">
+                    배경 사진
+                  </div>
+
+
+                  <div class="quote-background-row">
+
+                    <button
+                      class="quote-background-button"
+                      id="quoteBackgroundPick"
+                      type="button"
+                    >
+                      사진 고르기
+                    </button>
+
+
+                    <button
+                      class="quote-background-button"
+                      id="quoteBackgroundRemove"
+                      type="button"
+                    >
+                      삭제
+                    </button>
+
+
+                    <input
+                      id="quoteBackgroundFile"
+                      class="quote-background-file"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      hidden
+                    >
+
+                  </div>
+
+
+                  <div
+                    class="quote-background-message"
+                    id="quoteBackgroundMessage"
+                  ></div>
+
+                </div>
+
+
+                <div
+                  class="quote-background-settings"
+                  id="quoteBackgroundSettings"
+                  hidden
+                >
+
+                  <div class="quote-setting-block">
+
+                    <div class="quote-setting-label">
+                      확대
+                    </div>
+
+                    <div class="imory-range-row">
+
+                      <input
+                        id="quoteBackgroundScale"
+                        class="imory-range"
+                        type="range"
+                        min="100"
+                        max="300"
+                        step="1"
+                        value="100"
+                        aria-label="배경 사진 확대"
+                      >
+
+                      <span
+                        class="imory-range-value"
+                        id="quoteBackgroundScaleValue"
+                      >100%</span>
+
+                    </div>
+
+                  </div>
+
+
+                  <div class="quote-setting-block">
+
+                    <div class="quote-setting-label">
+                      흐림
+                    </div>
+
+                    <div class="imory-range-row">
+
+                      <input
+                        id="quoteBackgroundBlur"
+                        class="imory-range"
+                        type="range"
+                        min="0"
+                        max="40"
+                        step="1"
+                        value="0"
+                        aria-label="배경 사진 흐림"
+                      >
+
+                      <span
+                        class="imory-range-value"
+                        id="quoteBackgroundBlurValue"
+                      >0px</span>
+
+                    </div>
+
+                  </div>
+
+
+                  <div class="quote-setting-block">
+
+                    <div class="quote-setting-label">
+                      덮개 농도
+                    </div>
+
+                    <div class="imory-range-row">
+
+                      <input
+                        id="quoteBackgroundOverlayOpacity"
+                        class="imory-range"
+                        type="range"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value="0"
+                        aria-label="덮개 농도"
+                      >
+
+                      <span
+                        class="imory-range-value"
+                        id="quoteBackgroundOverlayOpacityValue"
+                      >0%</span>
+
+                    </div>
+
+                  </div>
+
+
+                  <div class="quote-setting-row">
+
+                    <label for="quoteBackgroundOverlayColor">
+                      덮개 색
+                    </label>
+
+                    <input
+                      id="quoteBackgroundOverlayColor"
+                      class="quote-color-input"
+                      type="color"
+                      value="#000000"
+                    >
+
+                  </div>
+
+
+                  <p class="quote-background-hint">
+                    미리보기를 끌어서 사진 위치를 맞출 수 있습니다.
+                  </p>
+
+                </div>
+
+
               </div>
 
             </section>
@@ -896,6 +1076,50 @@
 
 
 
+                <!-- ===========================================
+                     형광펜 높이
+
+                     글자 크기에 대한 비율(%). 100이면 예전처럼
+                     글자 상자를 가득 채우고, 낮추면 글자 아래쪽에
+                     얇게 깔린다. 모서리는 항상 직각이고 별도
+                     옵션을 두지 않는다(요구사항 3).
+
+                     ★ 높이를 바꿔도 글자 위치·줄 간격·줄바꿈은
+                     변하지 않는다 — 상자 크기가 아니라 칠하는
+                     범위만 달라지기 때문이다
+                     (posts/style/posts-body-decor.js).
+                ============================================ -->
+
+                <div class="quote-setting-block">
+
+                  <div class="quote-setting-label">
+                    형광펜 높이
+                  </div>
+
+                  <div class="imory-range-row">
+
+                    <input
+                      id="quoteHighlightHeight"
+                      class="imory-range"
+                      type="range"
+                      min="30"
+                      max="100"
+                      step="1"
+                      value="100"
+                      aria-label="형광펜 높이"
+                    >
+
+                    <span
+                      class="imory-range-value"
+                      id="quoteHighlightHeightValue"
+                    >100%</span>
+
+                  </div>
+
+                </div>
+
+
+
                 <div class="quote-pair-grid">
 
                   <div class="quote-pair-field">
@@ -1175,189 +1399,357 @@
 
 
                 <!-- ===========================================
-                     ACTION / DIALOGUE
+                     강조선 (BODY)
+
+                     문단 왼쪽에 붙는 세로선. 여기서 정하는 것은
+                     **에디터에서 수동으로 걸 때의 기본 색과
+                     굵기**다. 굵기는 프리셋에서만 정하고 에디터는
+                     적용·해제와 색만 다룬다(요구사항 5).
+
+                     미리보기의 예시 본문에서는 줄 맨 앞에 "> "를
+                     쓰면 그 문단에 강조선이 걸린 것으로 그린다
+                     (admin-quote-preview-update.js).
                 ============================================ -->
 
-                <div class="quote-special-grid">
+                <div class="quote-setting-row">
 
+                  <label for="quoteBodyRuleColor">
+                    강조선 색
+                  </label>
 
-                  <div class="quote-special-column">
-
-                    <div class="quote-special-heading">
-
-                      <span>
-                        지문
-                      </span>
-
-                      <small>
-                        *text*
-                      </small>
-
-                    </div>
-
-
-                    <div class="quote-special-field">
-
-                      <label for="quoteActionColor">
-                        글자색
-                      </label>
-
-                      <input
-                        id="quoteActionColor"
-                        class="quote-color-input"
-                        type="color"
-                        value="#888888"
-                      >
-
-                    </div>
-
-
-                    <div class="quote-special-field">
-
-                      <label for="quoteActionWeight">
-                        굵기
-                      </label>
-
-                      <select
-                        id="quoteActionWeight"
-                        class="quote-select-input"
-                      >
-
-                        <option value="300">
-                          가늘게
-                        </option>
-
-                        <option
-                          value="400"
-                          selected
-                        >
-                          보통
-                        </option>
-
-                        <option value="500">
-                          조금 굵게
-                        </option>
-
-                        <option value="600">
-                          굵게
-                        </option>
-
-                        <option value="700">
-                          아주 굵게
-                        </option>
-
-                      </select>
-
-                    </div>
-
-
-                    <div class="quote-special-field">
-
-                      <label for="quoteActionItalic">
-                        기울임
-                      </label>
-
-                      <input
-                        id="quoteActionItalic"
-                        class="quote-check-input"
-                        type="checkbox"
-                      >
-
-                    </div>
-
-                  </div>
-
-
-
-                  <div class="quote-special-column">
-
-                    <div class="quote-special-heading">
-
-                      <span>
-                        대사
-                      </span>
-
-                      <small>
-                        "text"
-                      </small>
-
-                    </div>
-
-
-                    <div class="quote-special-field">
-
-                      <label for="quoteDialogueColor">
-                        글자색
-                      </label>
-
-                      <input
-                        id="quoteDialogueColor"
-                        class="quote-color-input"
-                        type="color"
-                        value="#333333"
-                      >
-
-                    </div>
-
-
-                    <div class="quote-special-field">
-
-                      <label for="quoteDialogueWeight">
-                        굵기
-                      </label>
-
-                      <select
-                        id="quoteDialogueWeight"
-                        class="quote-select-input"
-                      >
-
-                        <option value="300">
-                          가늘게
-                        </option>
-
-                        <option value="400">
-                          보통
-                        </option>
-
-                        <option
-                          value="500"
-                          selected
-                        >
-                          조금 굵게
-                        </option>
-
-                        <option value="600">
-                          굵게
-                        </option>
-
-                        <option value="700">
-                          아주 굵게
-                        </option>
-
-                      </select>
-
-                    </div>
-
-
-                    <div class="quote-special-field">
-
-                      <label for="quoteDialogueItalic">
-                        기울임
-                      </label>
-
-                      <input
-                        id="quoteDialogueItalic"
-                        class="quote-check-input"
-                        type="checkbox"
-                      >
-
-                    </div>
-
-                  </div>
-
+                  <input
+                    id="quoteBodyRuleColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#ee9fbd"
+                  >
 
                 </div>
 
+
+                <div class="quote-setting-block">
+
+                  <div class="quote-setting-label">
+                    강조선 굵기
+                  </div>
+
+                  <div class="imory-range-row">
+
+                    <input
+                      id="quoteBodyRuleWidth"
+                      class="imory-range"
+                      type="range"
+                      min="1"
+                      max="12"
+                      step="1"
+                      value="3"
+                      aria-label="강조선 굵기"
+                    >
+
+                    <span
+                      class="imory-range-value"
+                      id="quoteBodyRuleWidthValue"
+                    >3px</span>
+
+                  </div>
+
+                </div>
+
+
+              </div>
+
+            </section>
+
+
+
+            <!-- ===============================================
+                 NARRATION (지문)
+
+                 예전에는 BODY 안에 "지문/대사"가 나란히 들어 있는
+                 작은 그리드였다. BODY가 너무 길어져서 각각 독립
+                 섹션으로 꺼냈다(요구사항 4).
+
+                 ★ 저장 구조는 그대로다 — actionColor/actionWeight/
+                 actionItalic 그대로 저장되고 판별 방식(*지문*)도
+                 바뀌지 않는다. 화면 자리만 옮겼다.
+            ================================================ -->
+
+            <section
+              class="quote-accordion"
+              data-quote-section
+              data-quote-mobile-tab="body"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  NARRATION
+                </span>
+
+                <small>
+                  *text*
+                </small>
+
+                <span class="quote-accordion-icon">
+                  +
+                </span>
+
+              </button>
+
+
+              <div
+                class="quote-accordion-content"
+                hidden
+              >
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteActionColor">
+                    글자색
+                  </label>
+
+                  <input
+                    id="quoteActionColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#888888"
+                  >
+
+                </div>
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteActionWeight">
+                    굵기
+                  </label>
+
+                  <select
+                    id="quoteActionWeight"
+                    class="quote-select-input"
+                  >
+
+                    <option value="300">
+                      가늘게
+                    </option>
+
+                    <option
+                      value="400"
+                      selected
+                    >
+                      보통
+                    </option>
+
+                    <option value="500">
+                      조금 굵게
+                    </option>
+
+                    <option value="600">
+                      굵게
+                    </option>
+
+                    <option value="700">
+                      아주 굵게
+                    </option>
+
+                  </select>
+
+                </div>
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteActionItalic">
+                    기울임
+                  </label>
+
+                  <input
+                    id="quoteActionItalic"
+                    class="quote-check-input"
+                    type="checkbox"
+                  >
+
+                </div>
+
+              </div>
+
+            </section>
+
+
+
+            <!-- ===============================================
+                 DIALOGUE (대사)
+
+                 지문과 같은 이유로 독립 섹션이 되었고, 여기에만
+                 있는 새 설정이 하나 있다 — 대사 문단에 강조선을
+                 **자동으로** 붙이는 옵션(요구사항 5).
+
+                 ★ 기본값은 꺼짐이다. 켜진 채로 들어오면 이미
+                 저장된 모든 프리셋의 외형이 한 번에 바뀐다.
+            ================================================ -->
+
+            <section
+              class="quote-accordion"
+              data-quote-section
+              data-quote-mobile-tab="body"
+            >
+
+              <button
+                class="quote-accordion-toggle"
+                type="button"
+              >
+
+                <span class="quote-accordion-title">
+                  DIALOGUE
+                </span>
+
+                <small>
+                  "text"
+                </small>
+
+                <span class="quote-accordion-icon">
+                  +
+                </span>
+
+              </button>
+
+
+              <div
+                class="quote-accordion-content"
+                hidden
+              >
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteDialogueColor">
+                    글자색
+                  </label>
+
+                  <input
+                    id="quoteDialogueColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#333333"
+                  >
+
+                </div>
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteDialogueWeight">
+                    굵기
+                  </label>
+
+                  <select
+                    id="quoteDialogueWeight"
+                    class="quote-select-input"
+                  >
+
+                    <option value="300">
+                      가늘게
+                    </option>
+
+                    <option value="400">
+                      보통
+                    </option>
+
+                    <option
+                      value="500"
+                      selected
+                    >
+                      조금 굵게
+                    </option>
+
+                    <option value="600">
+                      굵게
+                    </option>
+
+                    <option value="700">
+                      아주 굵게
+                    </option>
+
+                  </select>
+
+                </div>
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteDialogueItalic">
+                    기울임
+                  </label>
+
+                  <input
+                    id="quoteDialogueItalic"
+                    class="quote-check-input"
+                    type="checkbox"
+                  >
+
+                </div>
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteDialogueRuleEnabled">
+                    강조선 자동 적용
+                  </label>
+
+                  <input
+                    id="quoteDialogueRuleEnabled"
+                    class="quote-check-input"
+                    type="checkbox"
+                  >
+
+                </div>
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteDialogueRuleColor">
+                    강조선 색
+                  </label>
+
+                  <input
+                    id="quoteDialogueRuleColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#ee9fbd"
+                  >
+
+                </div>
+
+
+                <div class="quote-setting-block">
+
+                  <div class="quote-setting-label">
+                    강조선 굵기
+                  </div>
+
+                  <div class="imory-range-row">
+
+                    <input
+                      id="quoteDialogueRuleWidth"
+                      class="imory-range"
+                      type="range"
+                      min="1"
+                      max="12"
+                      step="1"
+                      value="3"
+                      aria-label="대사 강조선 굵기"
+                    >
+
+                    <span
+                      class="imory-range-value"
+                      id="quoteDialogueRuleWidthValue"
+                    >3px</span>
+
+                  </div>
+
+                </div>
 
               </div>
 
@@ -1417,6 +1809,66 @@
 
                 </div>
 
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteSourceRuleEnabled">
+                    강조선
+                  </label>
+
+                  <input
+                    id="quoteSourceRuleEnabled"
+                    class="quote-check-input"
+                    type="checkbox"
+                  >
+
+                </div>
+
+
+                <div class="quote-setting-row">
+
+                  <label for="quoteSourceRuleColor">
+                    강조선 색
+                  </label>
+
+                  <input
+                    id="quoteSourceRuleColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#ee9fbd"
+                  >
+
+                </div>
+
+
+                <div class="quote-setting-block">
+
+                  <div class="quote-setting-label">
+                    강조선 굵기
+                  </div>
+
+                  <div class="imory-range-row">
+
+                    <input
+                      id="quoteSourceRuleWidth"
+                      class="imory-range"
+                      type="range"
+                      min="1"
+                      max="12"
+                      step="1"
+                      value="3"
+                      aria-label="출처 강조선 굵기"
+                    >
+
+                    <span
+                      class="imory-range-value"
+                      id="quoteSourceRuleWidthValue"
+                    >3px</span>
+
+                  </div>
+
+                </div>
 
 
                 <div class="quote-setting-row">

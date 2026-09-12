@@ -244,7 +244,13 @@
           (posts/editor/posts-body-images.js · posts/view/
           posts-view-banner-form.js …)보다 앞이면 된다.
         */
-        "./core/lib/image-upload.js"
+        "./core/lib/image-upload.js",
+
+        /*
+          Quote 배경 사진 업로드(관리 패널과 글쓰기 화면 공용).
+          supabase-client.js · image-upload.js 뒤여야 한다.
+        */
+        "./core/lib/quote-background-upload.js"
       ]
     );
 
@@ -504,6 +510,15 @@
     loadVersionedStyles(
       [
         "./core/design-tokens.css",
+
+        /*
+          담백한 슬라이더 한 벌(core/components/range.css) —
+          Quote Preset의 설정 슬라이더와 글쓰기 화면 컬러피커의
+          색상환이 같은 컴포넌트를 쓴다. admin/index.html도 같은
+          파일을 읽는다.
+        */
+        "./core/components/range.css",
+
         "./home/home-base.css",
         "./home/home-skin-prompt.css",
         "./home/bgm.css",
@@ -3913,6 +3928,17 @@
             */
 
             "./posts/style/posts-body-layout.js",
+
+            /*
+              형광펜 높이 · 문단 강조선 · 캔버스 배경 사진.
+              셋 다 posts-body-layout.js의 정규화를 쓰므로 그
+              뒤여야 하고, 이들을 호출하는 posts-style-render.js ·
+              posts-page-layout.js보다는 앞이다. admin/index.html도
+              같은 파일을 읽는다.
+            */
+            "./posts/style/posts-body-decor.js",
+            "./posts/style/posts-canvas-background.js",
+
             "./posts/style/posts-style-render.js",
             "./posts/editor/format/posts-editor.js",
             "./posts/editor/format/posts-editor-highlight.js",
@@ -4004,7 +4030,28 @@
             "./posts/editor/posts-list-detail-nav.js",
             "./posts/editor/posts-richtext-events.js",
             "./posts/editor/posts-editor-undo.js",
+
+            /*
+              색 고르기 팝오버. 최상위 코드가 document에만 리스너를
+              걸고 다른 전역을 읽지 않아서 순서에 민감하지 않지만,
+              이를 쓰는 툴바보다는 앞에 둔다.
+            */
+            "./posts/editor/posts-color-picker.js",
+
             "./posts/editor/posts-highlight-toolbar.js",
+
+            /*
+              강조선 표시 레이어 — 최상위에서 postEditorContent에
+              리스너를 걸므로 posts-refs.js보다 **반드시 뒤**여야
+              한다(const는 TDZ라 참조만 해도 에러).
+            */
+            "./posts/editor/posts-rule-overlay.js",
+
+            /*
+              발췌 배경 사진 · 출처 강조선(이번 발췌 전용). 같은
+              이유로 posts-refs.js 뒤여야 한다.
+            */
+            "./posts/preview/posts-preview-background.js",
             "./posts/editor/posts-toolbar-toggles.js",
 
             /*

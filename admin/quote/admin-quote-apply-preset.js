@@ -128,6 +128,9 @@ function applyQuoteSettings(
       [quoteTextColor, resolved.bodyColor],
       [quoteHighlightColor, resolved.highlightColor],
       [quotePointColor, resolved.pointColor],
+      [quoteHighlightHeight, resolved.highlightHeight],
+      [quoteBodyRuleColor, resolved.bodyRuleColor],
+      [quoteBodyRuleWidth, resolved.bodyRuleWidth],
       [quoteFontSize, resolved.bodySize],
       [quoteBodyWeight, resolved.bodyWeight],
       [quoteLineHeight, resolved.lineHeight],
@@ -149,6 +152,8 @@ function applyQuoteSettings(
 
       [quoteDialogueColor, resolved.dialogueColor],
       [quoteDialogueWeight, resolved.dialogueWeight],
+      [quoteDialogueRuleColor, resolved.dialogueRuleColor],
+      [quoteDialogueRuleWidth, resolved.dialogueRuleWidth],
 
 
       /* SOURCE */
@@ -159,7 +164,27 @@ function applyQuoteSettings(
       [quoteSourceWeight, resolved.sourceWeight],
       [quoteSourceAlign, resolved.sourceAlign],
       [quoteSourceSpacing, resolved.sourceSpacing],
-      [quoteSourceBottomOffset, resolved.sourceBottomOffset]
+      [quoteSourceBottomOffset, resolved.sourceBottomOffset],
+      [quoteSourceRuleColor, resolved.sourceRuleColor],
+      [quoteSourceRuleWidth, resolved.sourceRuleWidth],
+
+
+      /* CANVAS 배경 사진 */
+
+      [
+        quoteBackgroundScale,
+        Math.round(
+          resolved.backgroundImageScale * 100
+        )
+      ],
+      [quoteBackgroundBlur, resolved.backgroundImageBlur],
+      [
+        quoteBackgroundOverlayOpacity,
+        Math.round(
+          resolved.backgroundOverlayOpacity * 100
+        )
+      ],
+      [quoteBackgroundOverlayColor, resolved.backgroundOverlayColor]
     ];
 
 
@@ -190,7 +215,9 @@ function applyQuoteSettings(
       [quoteTitleEnabled, resolved.titleEnabled],
       [quoteActionItalic, resolved.actionItalic],
       [quoteDialogueItalic, resolved.dialogueItalic],
-      [quoteSourceEnabled, resolved.sourceEnabled]
+      [quoteDialogueRuleEnabled, resolved.dialogueRuleEnabled],
+      [quoteSourceEnabled, resolved.sourceEnabled],
+      [quoteSourceRuleEnabled, resolved.sourceRuleEnabled]
     ];
 
 
@@ -212,6 +239,40 @@ function applyQuoteSettings(
 
     }
   );
+
+
+  /*
+    배경 사진의 주소와 중심은 입력칸이 없으므로 따로 되돌린다
+    (admin-quote-refs.js의 상태 변수).
+  */
+
+  quoteBackgroundImageUrl =
+    resolved.backgroundImageUrl ||
+    "";
+
+  quoteBackgroundFocusX =
+    resolved.backgroundImageFocusX;
+
+  quoteBackgroundFocusY =
+    resolved.backgroundImageFocusY;
+
+
+  if (
+    typeof syncQuoteBackgroundControls === "function"
+  ) {
+
+    syncQuoteBackgroundControls();
+
+  }
+
+
+  if (
+    typeof syncAllQuoteRangeInputs === "function"
+  ) {
+
+    syncAllQuoteRangeInputs();
+
+  }
 
 
   updateQuotePreview();

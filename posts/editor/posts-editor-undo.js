@@ -25,6 +25,18 @@
 
 let editorUndoStack = [];
 
+
+/*
+  ★ REDO
+
+  되돌린 내용을 다시 실행한다. undo가 꺼낸 상태를 여기 쌓아두고,
+  **새 변경이 생기면 비운다**(분기된 미래를 들고 있지 않는다).
+  컬러피커는 확정 한 번이 undo 한 칸이므로(요구사항 1) redo도
+  한 칸으로 정확히 되돌아온다.
+*/
+
+let editorRedoStack = [];
+
 let editorUndoLastSnapshotAt = 0;
 
 const EDITOR_UNDO_DEBOUNCE_MS = 800;
@@ -83,6 +95,14 @@ function pushEditorUndoSnapshot(
   );
 
 
+  /*
+    새 변경이 생겼으므로 "다시 실행할 미래"는 더 이상 유효하지
+    않다.
+  */
+
+  editorRedoStack = [];
+
+
   if (
     editorUndoStack.length >
     EDITOR_UNDO_MAX_STEPS
@@ -121,12 +141,90 @@ function undoEditorChange() {
     editorUndoStack.pop();
 
 
+  editorRedoStack.push(
+    postEditorContent.innerHTML
+  );
+
+
+  if (
+    editorRedoStack.length >
+    EDITOR_UNDO_MAX_STEPS
+  ) {
+
+    editorRedoStack.shift();
+
+  }
+
+
   postEditorContent.innerHTML =
     previousHTML;
 
 
   savedEditorRange =
     null;
+
+
+  afterEditorUndoHistoryChange();
+
+}
+
+
+function redoEditorChange() {
+
+  if (
+    !postEditorContent ||
+    editorRedoStack.length === 0
+  ) {
+    return;
+  }
+
+
+  const nextHTML =
+    editorRedoStack.pop();
+
+
+  editorUndoStack.push(
+    postEditorContent.innerHTML
+  );
+
+
+  postEditorContent.innerHTML =
+    nextHTML;
+
+
+  savedEditorRange =
+    null;
+
+
+  afterEditorUndoHistoryChange();
+
+}
+
+
+/*
+  undo/redo 뒤에 공통으로 맞춰야 하는 것들 — 편집창의 형광펜
+  높이와 강조선 표시는 본문 HTML을 통째로 바꾼 뒤 다시 그려야
+  한다(둘 다 저장되는 HTML 바깥에 있는 표시다).
+*/
+
+function afterEditorUndoHistoryChange() {
+
+  if (
+    typeof syncEditorHighlightHeight === "function"
+  ) {
+
+    syncEditorHighlightHeight();
+
+  }
+
+
+  if (
+    typeof syncEditorRuleOverlay === "function"
+  ) {
+
+    syncEditorRuleOverlay();
+
+  }
 
 
   updateEditorPreview();
@@ -151,6 +249,10 @@ function resetEditorUndoHistory() {
     [];
 
 
+  editorRedoStack =
+    [];
+
+
   editorUndoLastSnapshotAt =
     0;
 
@@ -167,13 +269,20 @@ function resetEditorUndoHistory() {
 
 function syncEditorUndoButtonState() {
 
-  if (!postEditorUndoButton) {
-    return;
+  if (postEditorUndoButton) {
+
+    postEditorUndoButton.disabled =
+      editorUndoStack.length === 0;
+
   }
 
 
-  postEditorUndoButton.disabled =
-    editorUndoStack.length === 0;
+  if (postEditorRedoButton) {
+
+    postEditorRedoButton.disabled =
+      editorRedoStack.length === 0;
+
+  }
 
 }
 
@@ -213,17 +322,44 @@ document.addEventListener(
   "keydown",
   event => {
 
+    const withModifier =
+      event.ctrlKey ||
+      event.metaKey;
+
+
+    if (!withModifier) {
+      return;
+    }
+
+
+    const key =
+      event.key.toLowerCase();
+
+
     const isUndoShortcut =
-      (
-        event.ctrlKey ||
-        event.metaKey
-      ) &&
       !event.shiftKey &&
-      event.key.toLowerCase() ===
-        "z";
+      key === "z";
 
 
-    if (!isUndoShortcut) {
+    /*
+      Ctrl/Cmd+Shift+Z(표준) 와 Ctrl+Y(윈도우 관습) 둘 다 받는다.
+    */
+
+    const isRedoShortcut =
+      (
+        event.shiftKey &&
+        key === "z"
+      ) ||
+      (
+        !event.shiftKey &&
+        key === "y"
+      );
+
+
+    if (
+      !isUndoShortcut &&
+      !isRedoShortcut
+    ) {
       return;
     }
 
@@ -239,7 +375,17 @@ document.addEventListener(
     event.preventDefault();
 
 
-    undoEditorChange();
+    if (isUndoShortcut) {
+
+      undoEditorChange();
+
+    }
+
+    else {
+
+      redoEditorChange();
+
+    }
 
   }
 );
@@ -254,6 +400,13 @@ postEditorUndoButton
   ?.addEventListener(
     "click",
     undoEditorChange
+  );
+
+
+postEditorRedoButton
+  ?.addEventListener(
+    "click",
+    redoEditorChange
   );
 
 
