@@ -24,6 +24,10 @@
   캡처 높이로 쓴다(transform:scale은 offsetHeight에 영향을
   안 주므로 여기서 재도 정확함). 모바일 클립보드 경로와
   데스크톱 다중 페이지 저장 경로 양쪽에서 재사용한다.
+
+  ★ uniform도 같은 경로다 — 페이지 높이가 비율이 아니라
+  "가장 높은 페이지"에서 나오므로, 이미 그 높이가 인라인으로
+  박혀 있는 page를 그대로 잰다(applyUniformPostPageHeights).
 */
 
 function resolveExportPageHeight(
@@ -32,7 +36,10 @@ function resolveExportPageHeight(
   pageWidth
 ) {
 
-  if (ratio.auto) {
+  if (
+    ratio.auto ||
+    ratio.uniform
+  ) {
 
     return page.offsetHeight;
 
@@ -46,6 +53,84 @@ function resolveExportPageHeight(
       ratio.width
     )
   );
+
+}
+
+
+/*
+  ★ 출력 픽셀 크기 맞추기
+
+  html2canvas는 캔버스 크기를 floor(길이 × scale)로 잡는다.
+  exportWidth 1200 / 레이아웃 520이면 scale = 2.307692…이고,
+  650 × 2.307692… = 1499.9999999999998 → floor 1499가 되어
+  기대한 1200×1500보다 **세로 1px이 모자란** PNG가 나왔다
+  (IMORY_QUOTE_PRESET_RENDER_AUDIT.md §4 (H), 실측 1200×1499).
+
+  기대 크기는 resolveExportPixelWidth/Height(공용,
+  posts/preview/posts-page-layout.js)가 반올림으로 정하고,
+  캡처 결과가 거기서 어긋나면 그 크기의 캔버스에 한 번 옮겨
+  그린다. 어긋남은 반올림 오차(±1px)뿐이라 그림 자체는
+  그대로다.
+
+  AUTO 비율은 높이를 못박지 않는다(클론이 라이브보다 몇 줄 더
+  필요로 할 수 있어서 — 아래 html2canvas 호출부 주석 참고).
+  그래서 AUTO는 폭만 기대값에 맞추고, 높이는 같은 배율로
+  따라가게 둬서 비율이 틀어지지 않게 한다.
+*/
+
+function normalizeExportCanvasSize(
+  canvas,
+  targetWidth,
+  targetHeight
+) {
+
+  if (
+    !canvas ||
+    !targetWidth ||
+    !targetHeight
+  ) {
+
+    return canvas;
+
+  }
+
+
+  if (
+    canvas.width === targetWidth &&
+    canvas.height === targetHeight
+  ) {
+
+    return canvas;
+
+  }
+
+
+  const fitted =
+    document.createElement(
+      "canvas"
+    );
+
+
+  fitted.width =
+    targetWidth;
+
+
+  fitted.height =
+    targetHeight;
+
+
+  fitted
+    .getContext("2d")
+    .drawImage(
+      canvas,
+      0,
+      0,
+      targetWidth,
+      targetHeight
+    );
+
+
+  return fitted;
 
 }
 
@@ -686,16 +771,47 @@ async function captureVisiblePageAsBlob(
     );
 
 
+  /*
+    ★ 높이가 "정해져 있는가"
+
+    고정 비율은 비율에서, uniform은 통일된 픽셀 높이에서 온다 —
+    둘 다 page.style.height가 실제로 박혀 있어서 클론이 제멋대로
+    늘어날 수 없다. 그래서 캡처 높이를 못박아도 안전하고, 출력
+    픽셀도 정확히 계산할 수 있다. 순수 AUTO만 아래 주석대로
+    높이를 비워 둔다.
+  */
+
+  const hasDefinitePageHeight =
+    !ratio.auto ||
+    Boolean(
+      ratio.uniform
+    );
+
+
   let canvas;
 
   try {
 
+    /*
+      ★ 출력 너비는 Preview에서 고른 값이 우선이고, 없으면
+      프리셋의 exportWidth다(posts/preview/posts-preview-settings.js).
+      레이아웃 너비(pageWidth = 520)와는 다른 축이라 이 값은
+      배율에만 쓰이고 줄바꿈·페이지 수에는 관여하지 않는다.
+    */
+
     const desiredWidth =
       Math.max(
         pageWidth,
-        Number(
-          postStyleSettings
-            ?.exportWidth
+        (
+          typeof getPostPreviewExportWidth === "function"
+            ? getPostPreviewExportWidth(
+                postStyleSettings ||
+                {}
+              )
+            : Number(
+                postStyleSettings
+                  ?.exportWidth
+              )
         ) || pageWidth * 2
       );
 
@@ -739,12 +855,12 @@ async function captureVisiblePageAsBlob(
             pageWidth,
 
           ...(
-            ratio.auto
-              ? {}
-              : {
+            hasDefinitePageHeight
+              ? {
                   height:
                     pageHeight
                 }
+              : {}
           ),
 
           /*
@@ -783,6 +899,45 @@ async function captureVisiblePageAsBlob(
                 clonedDocument
               )
         }
+      );
+
+    /*
+      기대 픽셀 크기로 맞춘다(위 normalizeExportCanvasSize 주석).
+      AUTO는 폭만 맞추고 높이는 같은 배율로 따라간다.
+    */
+
+    const targetWidth =
+      resolveExportPixelWidth(
+        desiredWidth,
+        pageWidth
+      );
+
+
+    canvas =
+      normalizeExportCanvasSize(
+        canvas,
+
+        targetWidth,
+
+        hasDefinitePageHeight
+          ? resolveExportPixelHeight(
+              desiredWidth,
+              pageHeight,
+              pageWidth
+            )
+          : Math.max(
+              1,
+              Math.round(
+                canvas.height *
+                (
+                  targetWidth /
+                  Math.max(
+                    1,
+                    canvas.width
+                  )
+                )
+              )
+            )
       );
 
   } finally {

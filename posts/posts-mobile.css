@@ -208,123 +208,35 @@
   /* =======================================================
      MOBILE PREVIEW BUTTON
 
-     에디터 화면 아래쪽에 표시.
+     ★ 데스크톱과 **같은 버튼**이다.
+
+     예전에는 여기서 sticky 알약(그림자 + backdrop-filter)으로
+     다시 그렸다. 지금은 공용 고스트 버튼
+     (posts/posts-preview-export.css)을 그대로 쓰고, 좁은 화면에
+     맞는 크기만 조정한다 — 모양이 두 화면에서 갈리지 않게.
   ======================================================== */
 
   .post-editor-preview-toggle {
-    position: sticky;
-    bottom: 10px;
-
-    z-index: 72;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    gap: 8px;
-
-    width: max-content;
-
-    min-width: 92px;
-
-    margin:
-      18px
-      auto
-      0;
+    margin-top: 18px;
 
     padding:
       8px
       12px;
-
-    border:
-      1px solid
-      #e8e8e8;
-
-    border-radius:
-      999px;
-
-    background:
-      rgba(
-        255,
-        255,
-        255,
-        0.94
-      );
-
-    backdrop-filter:
-      blur(5px);
-
-    -webkit-backdrop-filter:
-      blur(5px);
-
-    box-shadow:
-      0 3px 14px
-      rgba(
-        0,
-        0,
-        0,
-        0.045
-      );
-
-    color: #999999;
-
-    font-family:
-      "Pretendard",
-      sans-serif;
-
-    font-size: 8.5px;
-    font-weight: 400;
-
-    letter-spacing: 0.08em;
-
-    cursor: pointer;
-
-    -webkit-tap-highlight-color:
-      transparent;
-  }
-
-
-  .post-editor-preview-toggle-icon {
-    font-size: 10px;
-
-    color: #c3a2af;
   }
 
 
   /* =======================================================
      MOBILE PREVIEW PANEL
 
-     더 이상 전체 화면을 덮는 overlay가 아니라,
-     PREVIEW 버튼 바로 아래에 카드 형태로 그냥 "추가되는"
-     블록. 뒤쪽 에디터를 가리지 않고, 페이지 스크롤에
-     자연스럽게 같이 따라옴(고정 안 됨).
+     전체 화면을 덮는 overlay가 아니라, 여닫기 버튼 바로 아래에
+     카드 형태로 그냥 "추가되는" 블록. 뒤쪽 에디터를 가리지
+     않고, 페이지 스크롤에 자연스럽게 같이 따라옴(고정 안 됨).
+
+     보이기/숨기기(is-open)는 공용 CSS에 있다.
   ======================================================== */
 
   .post-editor-preview-section {
-    display: none;
-
-    width: 100%;
-
     margin-top: 16px;
-  }
-
-
-  /*
-    JS가 .is-open을 붙이면 표시.
-  */
-
-  .post-editor-preview-section.is-open {
-    display: block;
-  }
-
-
-  /*
-    더 이상 overlay가 아니므로 배경을 덮는
-    backdrop은 필요 없음.
-  */
-
-  .post-editor-preview-backdrop {
-    display: none;
   }
 
 
@@ -458,18 +370,17 @@
 
 
   /* =======================================================
-     MOBILE PREVIEW HEADER
+     MOBILE PREVIEW CONTROLS
+
+     패널 안의 제목("PREVIEW")과 닫기 ×는 없앴다 — 접는 길은
+     패널 위의 고스트 버튼 하나뿐이고, 그 헤더가 차지하던
+     높이·아래 여백도 함께 사라졌다.
   ======================================================== */
-
-  .post-editor-preview-header {
-    flex: 0 0 auto;
-
-    margin-bottom: 6px;
-  }
-
 
   .post-editor-preview-visibility-controls {
     flex: 0 0 auto;
+
+    margin-top: 4px;
 
     margin-bottom: 10px;
 
@@ -477,11 +388,6 @@
       0
       0
       10px;
-  }
-
-
-  .post-editor-preview-label {
-    font-size: 9px;
   }
 
 
@@ -559,8 +465,13 @@
   }
 
 
-  .post-editor-preview-close {
-    display: block;
+  .post-editor-preview-export-width {
+    width: 42px;
+  }
+
+
+  .post-editor-preview-export-size {
+    font-size: 8px;
   }
 
 

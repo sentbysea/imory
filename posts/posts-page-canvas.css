@@ -1,0 +1,215 @@
+/* =========================================================
+   POST PAGE CANVAS — 두 미리보기 공용
+
+   기준 문서: IMORY_QUOTE_PRESET_RENDER_AUDIT.md
+
+   에디터 PREVIEW(index.html)와 Quote Preset 미리보기
+   (admin/index.html)가 **같은 페이지 박스**를 쓴다. 마크업은
+   posts/preview/posts-page-layout.js가 만든다.
+
+   ★ 여기에는 "페이지 한 장"의 모양만 둔다. 프리뷰 패널
+   툴바/페이지 버튼 등 화면별 UI는 각자의 CSS에 남긴다.
+========================================================== */
+
+
+.post-editor-preview-pages {
+  width: 100%;
+
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+
+/* =========================================================
+   PAGE
+========================================================== */
+
+.post-editor-preview-page {
+  position: relative;
+
+  box-sizing: border-box;
+
+  /*
+    페이지 나누기 계산이 PC/모바일에서 항상 동일하도록
+    실제 레이아웃 너비는 화면 크기와 무관하게 항상 520px로
+    고정한다(posts-page-layout.js가 인라인으로도 못박는다).
+    좁은 화면에서는 JS가 이 캔버스를 통째로 축소해서 보여줄
+    뿐, 레이아웃 계산에는 손대지 않는다.
+  */
+
+  width: 520px;
+
+  aspect-ratio:
+    var(
+      --post-preview-aspect,
+      4 / 5
+    );
+
+  min-height: 0;
+
+  padding:
+    var(
+      --post-preview-padding-y,
+      34px
+    )
+    var(
+      --post-preview-padding-x,
+      30px
+    );
+
+  /*
+    ★ 장식 테두리는 border가 아니라 outline이다.
+
+    border-box라도 border는 안쪽 content 폭을 1px씩 깎는다 —
+    그래서 에디터 PREVIEW의 본문 가용 폭만 398px이고 Quote
+    Preset 미리보기는 400px이어서, 경계에 걸린 어절의 줄바꿈
+    위치가 두 화면에서 갈릴 수 있었다(감사 §4 (A)).
+    outline은 레이아웃에 전혀 참여하지 않으므로 본문 폭이
+    항상 520 - 여백*2 로 같다. outline-offset: -1px이라
+    보이는 자리는 예전 border와 같다.
+  */
+
+  outline: 1px solid #eeeeee;
+
+  outline-offset: -1px;
+
+  background: #ffffff;
+
+  /*
+    ★ 자동 텍스트 확대(iOS Safari 등)를 끈다.
+
+    100%는 "브라우저가 임의로 키우지 말라"는 뜻일 뿐,
+    사용자의 핀치 확대는 그대로 된다(none과 달리).
+    예전에는 이 선언이 에디터 PREVIEW에만 있어서 같은
+    520px 캔버스가 두 화면에서 다른 글자 크기로 보일 수
+    있었다(감사 §4 (F)).
+  */
+
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+
+  overflow: hidden;
+
+  box-shadow:
+    0
+    4px
+    20px
+    rgba(
+      0,
+      0,
+      0,
+      0.035
+    );
+
+  flex: 0 0 auto;
+
+  /*
+    자동 페이지 계산할 때
+    한 페이지 밖 내용이 절대로 삐져나오지 않게.
+  */
+
+  contain: layout paint;
+}
+
+
+.post-editor-preview-page[hidden] {
+  display: none !important;
+}
+
+
+/* =========================================================
+   TITLE
+========================================================== */
+
+.post-editor-preview-title {
+  margin-bottom:
+    var(
+      --post-preview-title-gap,
+      22px
+    );
+
+  font-size: 16px;
+  font-weight: 500;
+
+  line-height: 1.5;
+
+  letter-spacing: 0.03em;
+
+  color: #444444;
+
+  word-break: keep-all;
+}
+
+
+/* =========================================================
+   BODY AREA (auto · uniform)
+
+   제목과 출처 사이에 남는 세로 공간을 차지하고 그 안에서
+   본문을 가운데에 두는 묶음. 실제 값은 posts-page-layout.js가
+   인라인으로 준다(html2canvas가 var()를 못 읽는 것과 같은
+   이유로, 계산에 필요한 값은 전부 인라인이다) — 여기 선언은
+   그 구조를 CSS에서도 읽을 수 있게 남겨 둔 것이다.
+
+   고정 비율(custom)은 이 묶음 대신
+   .post-editor-preview-content-group을 쓴다(출처를 캔버스 맨
+   아래에 고정하는 스페이서 역할까지 겸한다).
+========================================================== */
+
+.post-editor-preview-body-area {
+  display: flex;
+
+  flex-direction: column;
+
+  flex: 1 1 auto;
+
+  min-height: 0;
+
+  justify-content: center;
+}
+
+
+/* =========================================================
+   CONTENT
+========================================================== */
+
+.post-editor-preview-content {
+  width: 100%;
+
+  font-size: 13px;
+  font-weight: 400;
+
+  line-height: 1.9;
+
+  letter-spacing: 0.025em;
+
+  color: #555555;
+
+  white-space: normal;
+
+  word-break: keep-all;
+}
+
+
+.post-editor-preview-content
+.post-body-paragraph {
+  white-space: pre-wrap;
+}
+
+
+/* =========================================================
+   문단 간격 블록
+
+   posts/style/posts-body-layout.js가 문단 경계(연속 <br>
+   두 개)를 이 블록 하나로 바꾼다. height는 인라인으로
+   들어오고(프리셋의 paragraphSpacing), 여기서는 줄 높이가
+   끼어들지 않게만 막는다.
+========================================================== */
+
+.post-body-paragraph-gap {
+  display: block;
+
+  font-size: 0;
+
+  line-height: 0;
+}

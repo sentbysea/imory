@@ -438,159 +438,118 @@ function applyMobilePreviewTransform() {
 
 
 /* =========================================================
-   PREVIEW RATIO OVERRIDE (세션 한정)
+   PREVIEW 출력 조건 (세션 한정)
 
-   프리뷰 헤더의 비율 버튼(4:5 / 4:6 / 1:1 / 4:3 / custom)으로
-   QUOTE 프리셋과 무관하게 잠깐 바꿔볼 수 있는 상태.
-   null이면 프리셋에 저장된 ratio를 그대로 사용.
+   ★ 어디에 무엇이 있는가
+
+     QUOTE 프리셋(관리 화면)  배경 · 여백 · 글꼴 · 문단 간격 ·
+                              제목/출처 서식 = **본문 서식**
+     Preview(글쓰기 화면)     uniform / auto / custom · 출력
+                              너비 = **출력 조건**
+
+   프리셋에 저장돼 있는 canvas 값(ratio / ratioWidth /
+   ratioHeight / exportWidth)은 이제 이 화면의 **초기값**으로만
+   읽는다(호환). 사용자가 Preview에서 고른 값이 있으면 그것이
+   우선이다.
+
+   ★ null의 뜻은 "아직 안 골랐다 = 프리셋 값을 따르는 중"이다.
+   그래서 같은 글을 편집하는 동안 프리셋을 바꾸면 아직 손대지
+   않은 항목만 새 프리셋 값을 따라가고, 사용자가 고른 값은
+   그대로 남는다. 글을 새로 열 때(prepareEditorUI) 전부 null로
+   되돌리므로 이전 글의 임시 설정이 새어 들어가지 않는다.
+
+     uniform   auto와 똑같이 나눈 뒤 모든 페이지를 같은 높이로
+     auto      수동 PAGE break로만 나누고 페이지마다 자기 높이
+     custom    사용자 지정 비율의 고정 크기 캔버스
 ========================================================== */
 
 let previewRatioMode =
   null;
 
 let previewCustomRatioWidth =
-  4;
+  null;
 
 let previewCustomRatioHeight =
-  5;
+  null;
 
 /*
-  ratio 버튼을 눌러야 5개 옵션 줄이 펼쳐짐
-  (기본은 접힌 상태).
+  출력(내보내기) 너비. 레이아웃 너비(POST_PAGE_LAYOUT_WIDTH =
+  520px)와는 다른 축이다 — 이 값을 바꿔도 줄바꿈과 페이지 수는
+  절대 바뀌지 않고, 저장되는 PNG의 해상도만 바뀐다.
 */
 
-let previewRatioRowExpanded =
-  false;
+let previewExportWidth =
+  null;
 
 
 
 /* =========================================================
-   PRESET RATIO
+   프리셋에 저장된 canvas 값 → Preview 옵션 (호환)
+
+   옛 프리셋의 고정 비율("4:5" · "9:16" · "custom" + ratioWidth/
+   Height)은 **손실 없이 custom의 비율 값으로** 대응된다.
+   "auto"만 auto로 온다. uniform은 프리셋에 없는 새 값이라
+   사용자가 Preview에서 고를 때만 생긴다.
 ========================================================== */
 
-function getPostPreviewRatio(
-  settings = {}
+function parsePostRatioParts(
+  value
 ) {
 
-  /*
-    ★ AUTO: 고정 비율이 아니라 콘텐츠 높이를 그대로 쓰라는
-    신호. width/height는 옛 호출부를 위한 안전한 기본값일
-    뿐이고, 실제로는 auto 플래그를 보고 분기해야 한다
-    (posts-preview.js의 createEditorPreviewPage,
-    posts-preview-export.js의 두 캡처 지점,
-    posts-preview-css-vars.js의 --post-preview-aspect 참고).
-  */
-
-  if (
-    previewRatioMode ===
-    "auto"
-  ) {
-
-    return {
-      width: 1,
-      height: 1,
-      auto: true
-    };
-
-  }
-
-
-  /*
-    프리뷰에서 직접 고른 비율이 있으면
-    프리셋보다 우선.
-  */
-
-  if (
-    previewRatioMode ===
-    "custom"
-  ) {
-
-    return {
-
-      width:
-        Math.max(
-          1,
-          Number(
-            previewCustomRatioWidth
-          ) || 1
-        ),
-
-      height:
-        Math.max(
-          1,
-          Number(
-            previewCustomRatioHeight
-          ) || 1
-        )
-
-    };
-
-  }
-
-
-  if (
-    previewRatioMode
-  ) {
-
-    const overrideMatch =
-      previewRatioMode.match(
+  const match =
+    String(
+      value ||
+      ""
+    )
+      .match(
         /^([\d.]+):([\d.]+)$/
       );
 
 
-    if (
-      overrideMatch
-    ) {
+  if (!match) {
 
-      return {
-
-        width:
-          Math.max(
-            1,
-            Number(
-              overrideMatch[1]
-            ) || 1
-          ),
-
-        height:
-          Math.max(
-            1,
-            Number(
-              overrideMatch[2]
-            ) || 1
-          )
-
-      };
-
-    }
+    return null;
 
   }
 
 
-  /*
-    세션 오버라이드가 없을 때(previewRatioMode === null)만
-    QUOTE 프리셋 자체가 AUTO로 저장돼 있는지 확인.
-  */
+  return {
 
-  if (
-    !previewRatioMode &&
-    settings.ratio ===
-    "auto"
-  ) {
+    width:
+      Math.max(
+        1,
+        Number(
+          match[1]
+        ) || 1
+      ),
 
-    return {
-      width: 1,
-      height: 1,
-      auto: true
-    };
+    height:
+      Math.max(
+        1,
+        Number(
+          match[2]
+        ) || 1
+      )
 
-  }
+  };
+
+}
 
 
-  /*
-    custom이면
-    QUOTE의 ratioWidth / ratioHeight 사용
-  */
+function getPresetPreviewRatioMode(
+  settings = {}
+) {
+
+  return settings.ratio === "auto"
+    ? "auto"
+    : "custom";
+
+}
+
+
+function getPresetPreviewRatioParts(
+  settings = {}
+) {
 
   if (
     settings.ratio ===
@@ -620,54 +579,158 @@ function getPostPreviewRatio(
   }
 
 
+  return (
+    parsePostRatioParts(
+      settings.ratio
+    ) ||
+    {
+      width: 1,
+      height: 1
+    }
+  );
+
+}
+
+
+/*
+  지금 실제로 쓰이는 값 — 세션에서 고른 값이 있으면 그것,
+  없으면 프리셋 값. 화면 동기화(syncPreviewRatioControls)와
+  계산(getPostPreviewRatio)이 같은 함수를 쓴다.
+*/
+
+function getEffectivePreviewRatioMode(
+  settings = {}
+) {
+
+  return (
+    previewRatioMode ||
+    getPresetPreviewRatioMode(
+      settings
+    )
+  );
+
+}
+
+
+function getEffectivePreviewRatioParts(
+  settings = {}
+) {
+
+  const preset =
+    getPresetPreviewRatioParts(
+      settings
+    );
+
+
+  return {
+
+    width:
+      Math.max(
+        1,
+        Number(
+          previewCustomRatioWidth ??
+          preset.width
+        ) || 1
+      ),
+
+    height:
+      Math.max(
+        1,
+        Number(
+          previewCustomRatioHeight ??
+          preset.height
+        ) || 1
+      )
+
+  };
+
+}
+
+
+/*
+  출력 너비도 같은 규칙 — 고른 값이 있으면 그것, 없으면
+  프리셋의 exportWidth.
+*/
+
+function getPostPreviewExportWidth(
+  settings = {}
+) {
+
+  return Math.max(
+    1,
+    Math.round(
+      postStyleNumber(
+        previewExportWidth,
+        postStyleNumber(
+          settings.exportWidth,
+          POST_STYLE_DEFAULTS.exportWidth
+        )
+      )
+    )
+  );
+
+}
+
+
+
+/* =========================================================
+   PREVIEW RATIO
+========================================================== */
+
+function getPostPreviewRatio(
+  settings = {}
+) {
+
+  const mode =
+    getEffectivePreviewRatioMode(
+      settings
+    );
+
+
   /*
-    4:5 / 1:1 / 3:4 등
-    QUOTE에 저장된 ratio 그대로 파싱
+    ★ AUTO / UNIFORM: 고정 비율이 아니라 콘텐츠 높이를 쓰라는
+    신호. width/height는 옛 호출부를 위한 안전한 기본값일
+    뿐이고, 실제로는 auto/uniform 플래그를 보고 분기해야 한다
+    (posts-page-layout.js의 createPostPageCanvas,
+    posts-preview-export-capture.js의 resolveExportPageHeight,
+    posts-preview-css-vars.js의 --post-preview-aspect 참고).
+
+    uniform은 나누는 동안에는 auto와 똑같이 굴고(auto: true),
+    다 나눈 뒤에만 모든 페이지의 높이를 통일한다 — 그래서 두
+    플래그를 같이 켠다. 순서 판정이 필요한 자리는 uniform을
+    먼저 본다.
   */
 
-  const match =
-    String(
-      settings.ratio || ""
-    )
-      .match(
-        /^([\d.]+):([\d.]+)$/
-      );
-
-
-  if (match) {
+  if (
+    mode === "uniform"
+  ) {
 
     return {
-
-      width:
-        Math.max(
-          1,
-          Number(
-            match[1]
-          ) || 1
-        ),
-
-      height:
-        Math.max(
-          1,
-          Number(
-            match[2]
-          ) || 1
-        )
-
+      width: 1,
+      height: 1,
+      auto: true,
+      uniform: true
     };
 
   }
 
 
-  /*
-    오래된 프리셋 등에 ratio가 없을 때만
-    안전한 정사각형 fallback.
-  */
+  if (
+    mode === "auto"
+  ) {
 
-  return {
-    width: 1,
-    height: 1
-  };
+    return {
+      width: 1,
+      height: 1,
+      auto: true
+    };
+
+  }
+
+
+  return getEffectivePreviewRatioParts(
+    settings
+  );
 
 }
 

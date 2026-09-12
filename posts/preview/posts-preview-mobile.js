@@ -19,10 +19,119 @@ function isMobilePostEditor() {
 }
 
 
-function openEditorPreview() {
+/*
+  ★ 여기서 세션 오버라이드를 초기화하지 않는다.
 
-  resetPreviewVisibilityOverrides();
+  예전에는 열 때마다 resetPreviewVisibilityOverrides()를 불러서,
+  프리뷰를 접었다 펴기만 해도 비율·정렬·제목/출처·출력 너비가
+  프리셋 값으로 되돌아갔다. 초기화는 글 하나를 여는 시점
+  (prepareEditorUI — posts/view/posts-view-transition.js)에서
+  한 번만 한다. 그래야 같은 글을 쓰는 동안에는 고른 값이 남고,
+  다른 글로 가면 새로 시작된다.
+*/
 
+
+/* =========================================================
+   여닫기 — 데스크톱·모바일 공통
+
+   ★ 예전에는 모바일만 접을 수 있었다.
+
+     데스크톱에서는 섹션이 늘 펼쳐져 있고, 여닫기 버튼 자체가
+     CSS로 숨겨져 있었다(모바일 전용 부유 알약). 지금은 같은
+     고스트 버튼 하나로 두 화면이 같은 동작을 한다 —
+     "펼침"의 유일한 표시는 섹션의 **is-open 클래스**이고,
+     보이기/숨기기는 CSS가 그 클래스로만 정한다.
+
+   ★ 기본값은 화면 크기에 따라 다르다.
+
+     데스크톱  펼침   (예전과 같다 — 들어오면 바로 보인다)
+     모바일    접힘   (예전과 같다 — 좁은 화면에서 에디터를
+                      가리지 않는다)
+
+     그 기본값은 syncEditorPreviewMode()가 정한다. 사용자가
+     한 번이라도 직접 여닫으면 그 선택이 우선이고, 화면 폭이
+     바뀌어도 뒤집지 않는다(previewOpenChosenByUser).
+
+   ★ 접어도 export/copy는 그대로 된다.
+
+     닫힌 섹션은 display:none이라 레이아웃 크기가 0이고, 그
+     상태로 페이지를 나누면 전부 한 장에 들어가 버린다. 그래서
+     캡처 직전에 화면 밖에서만 잠깐 레이아웃을 갖게 하는 기존
+     경로(forceOpenSectionIfNeeded —
+     posts/export/posts-preview-export-section.js)를 그대로
+     쓴다. 그 경로가 이제 데스크톱에서도 돈다.
+========================================================== */
+
+/*
+  null = "아직 사용자가 직접 여닫은 적 없다 = 화면 크기의
+  기본값을 따르는 중". 글을 새로 열 때 다시 null이 된다
+  (prepareEditorUI).
+*/
+
+let previewOpenChosenByUser = null;
+
+
+function editorPreviewIsOpen() {
+
+  return Boolean(
+    postEditorPreviewSection
+      ?.classList
+      .contains(
+        "is-open"
+      )
+  );
+
+}
+
+
+/*
+  라벨 · 화살표 · aria-expanded를 실제 상태에서 한 자리에서 정한다.
+*/
+
+function syncEditorPreviewToggleButton() {
+
+  const isOpen =
+    editorPreviewIsOpen();
+
+
+  postEditorPreviewToggle
+    ?.setAttribute(
+      "aria-expanded",
+      String(
+        isOpen
+      )
+    );
+
+
+  if (
+    postEditorPreviewToggleLabel
+  ) {
+
+    postEditorPreviewToggleLabel.textContent =
+      isOpen
+        ? "미리보기 접기"
+        : "미리보기";
+
+  }
+
+
+  if (
+    postEditorPreviewToggleIcon
+  ) {
+
+    postEditorPreviewToggleIcon.textContent =
+      isOpen
+        ? "▴"
+        : "▾";
+
+  }
+
+}
+
+
+function openEditorPreview(
+  options = {}
+) {
 
   if (!postEditorPreviewSection) {
 
@@ -34,19 +143,12 @@ function openEditorPreview() {
 
 
   if (
-    !isMobilePostEditor()
+    options.byUser !==
+    false
   ) {
 
-    postEditorPreviewSection
-      .setAttribute(
-        "aria-hidden",
-        "false"
-      );
-
-
-    updateEditorPreview();
-
-    return;
+    previewOpenChosenByUser =
+      true;
 
   }
 
@@ -56,10 +158,13 @@ function openEditorPreview() {
   */
 
   if (
-    document.activeElement ===
-    postEditorContent ||
-    document.activeElement ===
-    postEditorTitle
+    isMobilePostEditor() &&
+    (
+      document.activeElement ===
+      postEditorContent ||
+      document.activeElement ===
+      postEditorTitle
+    )
   ) {
 
     document.activeElement.blur();
@@ -68,25 +173,31 @@ function openEditorPreview() {
 
 
   /*
-    매번 열 때마다 기본 높이(70dvh)와
-    확대/이동 상태를 초기화.
+    모바일에서는 열 때마다 기본 높이와 확대/이동 상태를 초기화한다.
+    (데스크톱은 시트 높이 드래그도 핀치도 없다.)
   */
 
-  postEditorPreviewSheet
-    ?.style
-    .removeProperty(
-      "height"
-    );
+  if (
+    isMobilePostEditor()
+  ) {
+
+    postEditorPreviewSheet
+      ?.style
+      .removeProperty(
+        "height"
+      );
 
 
-  resetMobilePreviewZoomPan();
+    resetMobilePreviewZoomPan();
+
+  }
 
 
   /*
     ★ 페이지네이션(줄바꿈/분할) 계산은
     실제 레이아웃 높이가 있어야 정확하다.
 
-    section이 아직 display:none인 상태에서
+    섹션이 아직 display:none인 상태에서
     updateEditorPreview()를 먼저 부르면
     모든 페이지의 scrollHeight/clientHeight가 0으로
     측정되어(previewPageIsOverflowing이 항상 false)
@@ -111,21 +222,7 @@ function openEditorPreview() {
     );
 
 
-  postEditorPreviewToggle
-    ?.setAttribute(
-      "aria-expanded",
-      "true"
-    );
-
-
-  if (
-    postEditorPreviewToggleIcon
-  ) {
-
-    postEditorPreviewToggleIcon.textContent =
-      "↓";
-
-  }
+  syncEditorPreviewToggleButton();
 
 
   updateEditorPreview();
@@ -133,10 +230,23 @@ function openEditorPreview() {
 }
 
 
-function closeEditorPreview() {
+function closeEditorPreview(
+  options = {}
+) {
 
   if (!postEditorPreviewSection) {
     return;
+  }
+
+
+  if (
+    options.byUser ===
+    true
+  ) {
+
+    previewOpenChosenByUser =
+      false;
+
   }
 
 
@@ -147,48 +257,63 @@ function closeEditorPreview() {
     );
 
 
+  postEditorPreviewSection
+    .setAttribute(
+      "aria-hidden",
+      "true"
+    );
+
+
+  syncEditorPreviewToggleButton();
+
+}
+
+
+function toggleEditorPreview() {
+
   if (
-    isMobilePostEditor()
+    editorPreviewIsOpen()
   ) {
 
-    postEditorPreviewSection
-      .setAttribute(
-        "aria-hidden",
-        "true"
-      );
+    closeEditorPreview(
+      {
+        byUser: true
+      }
+    );
 
   }
 
 
   else {
 
-    postEditorPreviewSection
-      .setAttribute(
-        "aria-hidden",
-        "false"
-      );
-
-  }
-
-
-  postEditorPreviewToggle
-    ?.setAttribute(
-      "aria-expanded",
-      "false"
+    openEditorPreview(
+      {
+        byUser: true
+      }
     );
-
-
-  if (
-    postEditorPreviewToggleIcon
-  ) {
-
-    postEditorPreviewToggleIcon.textContent =
-      "↑";
 
   }
 
 }
 
+
+/*
+  글을 새로 열 때(prepareEditorUI) 불린다 — 이전 글에서 접어
+  뒀던 선택이 새 글로 새어 들어가지 않게 한다.
+*/
+
+function resetEditorPreviewOpenChoice() {
+
+  previewOpenChosenByUser =
+    null;
+
+}
+
+
+/*
+  화면 크기가 바뀌었을 때(그리고 처음 들어올 때) 기본값을 맞춘다.
+  사용자가 이미 직접 고른 적이 있으면 그 선택을 그대로 둔다.
+*/
 
 function syncEditorPreviewMode() {
 
@@ -197,60 +322,39 @@ function syncEditorPreviewMode() {
   }
 
 
+  const shouldBeOpen =
+    previewOpenChosenByUser === null
+      ? !isMobilePostEditor()
+      : previewOpenChosenByUser;
+
+
   if (
-    isMobilePostEditor()
+    shouldBeOpen ===
+    editorPreviewIsOpen()
   ) {
 
-    if (
-      !postEditorPreviewSection
-        .classList
-        .contains(
-          "is-open"
-        )
-    ) {
+    syncEditorPreviewToggleButton();
 
-      postEditorPreviewSection
-        .setAttribute(
-          "aria-hidden",
-          "true"
-        );
 
-    }
+    return;
+
+  }
+
+
+  if (shouldBeOpen) {
+
+    openEditorPreview(
+      {
+        byUser: false
+      }
+    );
 
   }
 
 
   else {
 
-    postEditorPreviewSection
-      .classList
-      .remove(
-        "is-open"
-      );
-
-
-    postEditorPreviewSection
-      .setAttribute(
-        "aria-hidden",
-        "false"
-      );
-
-
-    postEditorPreviewToggle
-      ?.setAttribute(
-        "aria-expanded",
-        "false"
-      );
-
-
-    if (
-      postEditorPreviewToggleIcon
-    ) {
-
-      postEditorPreviewToggleIcon.textContent =
-        "↑";
-
-    }
+    closeEditorPreview();
 
   }
 

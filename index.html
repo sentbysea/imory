@@ -507,6 +507,14 @@
         "./posts/view/posts-view-banner.css",
         "./posts/manage/posts-folder-tree.css",
         "./posts/posts-editor.css",
+
+        /*
+          에디터 PREVIEW와 Quote Preset 미리보기가 함께 쓰는
+          페이지 박스(admin/index.html도 같은 파일을 읽는다).
+        */
+
+        "./posts/posts-page-canvas.css",
+
         "./posts/posts-preview-export.css",
         "./posts/posts-mobile.css"
       ]
@@ -3889,12 +3897,27 @@
             "./posts/posts-reader-scale.js",
             "./posts/style/posts-style-preset.js",
             "./posts/style/posts-style-dialogue.js",
+
+            /*
+              설정 정규화 · 본문 스타일 · 문단 간격 — 관리
+              패널(admin/index.html)도 같은 파일을 읽는다.
+              posts-style-render.js보다 먼저여야 한다.
+            */
+
+            "./posts/style/posts-body-layout.js",
             "./posts/style/posts-style-render.js",
             "./posts/editor/format/posts-editor.js",
             "./posts/editor/format/posts-editor-highlight.js",
             "./posts/editor/format/posts-editor-mode.js",
             "./posts/preview/posts-preview-settings.js",
             "./posts/preview/posts-preview-css-vars.js",
+
+            /*
+              페이지 한 장 만들기 + 페이지 나누기(공용).
+              admin/index.html도 같은 파일을 읽는다.
+            */
+
+            "./posts/preview/posts-page-layout.js",
             "./posts/preview/posts-preview.js",
 
             /*

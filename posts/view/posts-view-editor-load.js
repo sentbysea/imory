@@ -672,6 +672,19 @@ async function openPostEditor(
       post.quote_preset_id
     );
 
+
+    /*
+      ★ PREVIEW의 세션 값은 "이 글의 프리셋"에서 시작해야 한다.
+
+      prepareEditorUI()가 이미 한 번 초기화했지만, 그때는 아직
+      사이트 전역 활성 프리셋 기준이었다 — 이 글이 자기 프리셋을
+      가지고 있으면 제목/출처 표시 기본값이 달라질 수 있다.
+      아직 사용자가 아무 것도 건드리기 전인 지금 다시 맞춘다
+      (posts/preview/posts-preview-css-vars.js).
+    */
+
+    resetPreviewVisibilityOverrides();
+
   } else if (
     postEditorPresetSelect
   ) {

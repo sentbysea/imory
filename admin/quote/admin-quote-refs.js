@@ -319,24 +319,36 @@ const quotePreviewStage =
     "quotePreviewStage"
   );
 
+/*
+  ★ 페이지 한 장(제목/본문/출처)은 더 이상 static 마크업이
+  아니다 — 글쓰기 화면과 같은 공용 코드
+  (posts/preview/posts-page-layout.js)가 이 host 안에 만든다.
+  그래서 quotePreviewTitle/Text/Source 참조도 없어졌다.
+*/
+
 const quotePreviewCanvas =
   document.getElementById(
     "quotePreviewCanvas"
   );
 
-const quotePreviewTitle =
+const quotePreviewPagination =
   document.getElementById(
-    "quotePreviewTitle"
+    "quotePreviewPagination"
   );
 
-const quotePreviewText =
+const quotePreviewPrev =
   document.getElementById(
-    "quotePreviewText"
+    "quotePreviewPrev"
   );
 
-const quotePreviewSource =
+const quotePreviewNext =
   document.getElementById(
-    "quotePreviewSource"
+    "quotePreviewNext"
+  );
+
+const quotePreviewPageIndicator =
+  document.getElementById(
+    "quotePreviewPageIndicator"
   );
 
 const quotePreviewSize =
@@ -388,6 +400,20 @@ let currentQuoteRatio =
 
 let currentQuotePresetId =
   null;
+
+
+/*
+  ★ 마지막으로 불러온 프리셋의 settings 원본.
+
+  collectQuoteSettings()가 이 객체를 밑바탕으로 쓴다 — 이
+  화면에 입력칸이 없는 필드(예전 필드, 아직 UI로 옮기지 않은
+  canvas 값, 다른 버전이 적어둔 값)가 저장 한 번으로 사라지지
+  않게 하기 위해서다. 입력칸이 있는 필드는 전부 폼 값으로
+  덮어쓴다.
+*/
+
+let loadedQuotePresetSettings =
+  {};
 
 
 /* =========================================================

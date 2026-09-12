@@ -292,6 +292,20 @@
 }
 
 
+/* =========================================================
+   출력 조건 호환 보관함
+
+   비율 · 내보내기 너비 입력칸은 화면에서 빠졌지만(고르는 자리는
+   글쓰기 화면의 PREVIEW), 이미 저장된 값을 들고 다니기 위해
+   폼에는 남아 있다 — admin-quote-panel.html의 주석 참고.
+   [hidden]이 어떤 규칙에도 지지 않도록 못박는다.
+========================================================== */
+
+.quote-canvas-output-compat[hidden] {
+  display: none !important;
+}
+
+
 
 /* =========================================================
    QUOTE SETTING ROW
@@ -544,165 +558,113 @@
    QUOTE PREVIEW CANVAS
 ========================================================== */
 
+/*
+  ★ 이제 이 요소는 "캔버스" 자체가 아니라 **페이지가 들어가는
+  자리**다.
+
+  실제 페이지 한 장(.post-editor-preview-page — 배경·비율·
+  안쪽 여백·테두리)은 글쓰기 화면과 같은 공용 코드가 만들고
+  (posts/preview/posts-page-layout.js), 그 모양은 공용 CSS
+  (posts/posts-page-canvas.css)에 있다. 여기 남은 것은 host의
+  고정폭뿐이다.
+
+  ★ flex-shrink는 반드시 0이어야 한다. .quote-preview-stage가
+  flex(기본 row)라 flex-basis(520px)가 stage의 여유 폭보다 클 때
+  flex-shrink의 기본값(1)이 stage 폭에 맞춰 이 요소를 "레이아웃
+  단계"에서부터 조용히 찌그러뜨린다 — 그러면 JS가 재는
+  offsetWidth/offsetHeight가 520px가 아니게 되고, AUTO 비율의
+  내보내기 높이 추정과 FIT 계산이 둘 다 틀어진다.
+
+  실제 축소(표시 배율)는 admin-quote-preview-update.js의
+  applyQuotePreviewScale()이고, 레이아웃 계산과는 분리돼 있다.
+*/
+
 .quote-preview-canvas {
   position: relative;
-
-  display: flex;
-
-  flex-direction: column;
-
-  align-items: stretch;
-
-  /*
-    실제 글쓰기 에디터 프리뷰(.post-editor-preview-page)와
-    똑같이 "항상 520px로 레이아웃한 다음, 안 맞으면 JS가
-    transform: scale()로 통째로 축소"하는 방식으로 통일함.
-    예전처럼 width: 100%(CSS가 알아서 줄어듦)로 두면, 좁은
-    화면에서 글자가 줄바꿈만 될 뿐 폰트 자체는 안 작아져서
-    실제 에디터 프리뷰(글자 자체가 작아짐)랑 결과물이
-    달라 보였음 — 그래서 반드시 고정폭 + JS scale이어야 함.
-    실제 축소는 admin-quote-preview-update.js의 applyQuotePreviewScale().
-
-    ★ flex-shrink는 반드시 0이어야 한다. .quote-preview-stage가
-    flex(기본 row)이고 이 캔버스에 overflow:hidden이 걸려있으면,
-    flex-basis(520px)가 stage의 여유 폭보다 클 때 flex-shrink의
-    기본값(1)이 stage 폭에 맞춰 이 요소를 "레이아웃 단계"에서부터
-    조용히 찌그러뜨린다 — JS가 재는 offsetWidth/offsetHeight와
-    실제로 scale(1)일 때 보이는 크기가 520px가 아니게 되고,
-    AUTO 비율의 내보내기 높이 추정(naturalHeight * exportWidth/520,
-    위 updateQuotePreview 참고)과 FIT 계산 둘 다 틀어진다.
-  */
 
   flex-shrink: 0;
 
   width: 520px;
-
-  aspect-ratio:
-    1 / 1;
-
-  padding: 48px;
-
-  background: #ffffff;
-
-  box-shadow:
-    0 4px 18px
-    rgba(
-      0,
-      0,
-      0,
-      0.035
-    );
-
-  overflow: hidden;
-
-  transition:
-    background-color 0.15s ease,
-    aspect-ratio 0.15s ease;
-}
-
-
-
-/* =========================================================
-   QUOTE PREVIEW TITLE
-========================================================== */
-
-.quote-preview-title {
-  width: 100%;
-
-  margin-bottom: 28px;
-
-  color: #222222;
-
-  font-size: 24px;
-
-  font-weight: 400;
-
-  line-height: 1.4;
-
-  letter-spacing: 0;
-
-  text-align: left;
-
-  word-break: keep-all;
-
-  overflow-wrap: break-word;
-}
-
-
-
-/* =========================================================
-   QUOTE PREVIEW BODY
-========================================================== */
-
-.quote-preview-text {
-  width: 100%;
-
-  color: #333333;
-
-  font-size: 16px;
-
-  font-weight: 500;
-
-  line-height: 1.8;
-
-  letter-spacing: 0;
-
-  text-align: left;
-
-  word-break: keep-all;
-
-  overflow-wrap: break-word;
-}
-
-
-.quote-preview-text p {
-  margin-top: 0;
-
-  margin-bottom: 14px;
-}
-
-
-.quote-preview-text p:last-child {
-  margin-bottom: 0;
 }
 
 
 /*
-  ==text== 테스트 문법 렌더 결과.
-  실제 에디터의 .post-inline-highlight(posts.css)와
-  동일한 룩으로 맞춤 — 색상은 JS가 인라인으로 채움.
+  ==text== 샘플 문법은 실제 본문의 형광펜과 같은 클래스
+  (.post-inline-highlight)로 렌더된다 — 색상은 JS가 인라인으로
+  채우고, 모양만 여기서 맞춘다(posts/posts-list-detail.css의
+  같은 규칙과 동일).
 */
 
-.quote-highlight-text {
+.post-inline-highlight {
   padding:
     0
     0.12em;
 
   border-radius: 2px;
+
+  box-decoration-break: clone;
+
+  -webkit-box-decoration-break: clone;
 }
 
 
 
 /* =========================================================
-   QUOTE PREVIEW SOURCE
+   QUOTE PREVIEW PAGINATION
+
+   샘플이 한 장을 넘치면 잘라내지 않고 다음 장으로 넘긴다 —
+   만들어진 장을 실제로 넘겨볼 수 있게 최소한의 이동만 둔다.
+   한 장뿐이면 통째로 숨긴다(JS가 hidden 제어).
 ========================================================== */
 
-.quote-preview-source {
-  width: 100%;
+.quote-preview-pagination {
+  display: flex;
 
-  margin-top: 28px;
+  align-items: center;
+  justify-content: center;
 
-  color: #999999;
+  gap: 10px;
+
+  margin-top: 10px;
+}
+
+
+.quote-preview-page-button {
+  min-width: 26px;
+
+  padding: 3px 8px;
+
+  border: 1px solid var(--system-border);
+
+  background: var(--system-surface);
+
+  color: #888888;
 
   font-size: 11px;
 
-  font-weight: 300;
+  line-height: 1.2;
 
-  line-height: 1.5;
+  cursor: pointer;
+}
 
-  text-align: right;
 
-  word-break: break-word;
+.quote-preview-page-button:disabled {
+  opacity: 0.35;
+
+  cursor: default;
+}
+
+
+.quote-preview-page-indicator {
+  min-width: 36px;
+
+  color: #999999;
+
+  font-size: 9px;
+
+  letter-spacing: 0.06em;
+
+  text-align: center;
 }
 
 
@@ -1008,13 +970,23 @@
       ★ + 22px: .quote-workspace의 gap을 44px→22px로 줄이며
       확보한 나머지 절반을 그대로 돌려받은 몫(위 .quote-workspace
       모바일 규칙 참고).
+
+      ★ 2026-09-12: 32vh → 48vh.
+
+      대지가 너무 낮아서 같은 520px 캔버스가 글쓰기 화면의
+      PREVIEW(모바일 대지 90dvh, 실측 0.585배)보다 훨씬 작게
+      (실측 0.409배) 그려졌다 — 두 화면을 나란히 비교할 수가
+      없었다(IMORY_QUOTE_PRESET_RENDER_AUDIT.md §4 (D)).
+      축소는 여전히 contain(가로/세로 둘 다 고려)이라 비율을
+      왜곡하거나 세로를 잘라내지 않는다. 대지 아래는 그대로
+      설정창이 차지한다.
     */
 
     flex: 0 0 auto;
 
-    height: calc(32vh + 22px);
+    height: calc(48vh + 22px);
 
-    min-height: 160px;
+    min-height: 220px;
     max-height: 78vh;
 
     width: 100%;
@@ -1061,9 +1033,13 @@
   }
 
 
-  .quote-preview-canvas {
-    padding: 36px;
-  }
+  /*
+    ★ 예전에 여기 있던 .quote-preview-canvas { padding: 36px }는
+    없앴다. 안쪽 여백은 프리셋의 padding 값으로 페이지 자신이
+    갖는다(posts/preview/posts-page-layout.js) — 화면 크기에
+    따라 여백이 달라지면 모바일에서만 줄바꿈과 페이지 나눔이
+    달라진다.
+  */
 
 
   /*

@@ -1114,7 +1114,31 @@ async function prepareEditorUI() {
 
   updateEditorToolbarState();
 
+
+  /*
+    ★ PREVIEW의 세션 한정 값(제목/출처 표시 · 정렬 · 출처 여백 ·
+    비율 · 출력 너비)은 **글 하나를 여는 지금 한 번만** 초기화한다.
+    loadPostStylePreset() 다음이어야 그 글의 프리셋 값이 초기값이
+    된다. 프리뷰를 접었다 펴는 것으로는 초기화되지 않고(예전에는
+    openEditorPreview()가 매번 불렀다), 다른 글로 이동하면 여기서
+    다시 초기화되므로 이전 글의 임시 설정이 새어 들어가지 않는다
+    (posts/preview/posts-preview-css-vars.js).
+  */
+
+  resetPreviewVisibilityOverrides();
+
   updateEditorPreview();
+
+
+  /*
+    프리뷰를 접어 뒀는지도 글 단위다 — 이전 글에서 접었다는
+    이유로 새 글이 접힌 채 열리지 않게 한다. 초기화 후
+    syncEditorPreviewMode()가 화면 크기의 기본값(데스크톱 펼침 ·
+    모바일 접힘)을 다시 적용한다
+    (posts/preview/posts-preview-mobile.js).
+  */
+
+  resetEditorPreviewOpenChoice();
 
   closeEditorPreview();
 

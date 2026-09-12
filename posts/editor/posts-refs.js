@@ -573,6 +573,11 @@ const postEditorPreviewToggle =
     "postEditorPreviewToggle"
   );
 
+const postEditorPreviewToggleLabel =
+  document.getElementById(
+    "postEditorPreviewToggleLabel"
+  );
+
 const postEditorPreviewToggleIcon =
   document.getElementById(
     "postEditorPreviewToggleIcon"
@@ -581,11 +586,6 @@ const postEditorPreviewToggleIcon =
 const postEditorPreviewSection =
   document.getElementById(
     "postEditorPreviewSection"
-  );
-
-const postEditorPreviewBackdrop =
-  document.getElementById(
-    "postEditorPreviewBackdrop"
   );
 
 const postEditorPreviewSheet =
@@ -603,11 +603,6 @@ const postEditorPreviewStage =
     "postEditorPreviewStage"
   );
 
-const postEditorPreviewClose =
-  document.getElementById(
-    "postEditorPreviewClose"
-  );
-
 const postEditorPreviewTitleToggle =
   document.getElementById(
     "postEditorPreviewTitleToggle"
@@ -618,6 +613,11 @@ const postEditorPreviewSourceToggle =
     "postEditorPreviewSourceToggle"
   );
 
+const postEditorPreviewAlignRow =
+  document.getElementById(
+    "postEditorPreviewAlignRow"
+  );
+
 const postEditorPreviewAlignSelect =
   document.getElementById(
     "postEditorPreviewAlignSelect"
@@ -626,11 +626,6 @@ const postEditorPreviewAlignSelect =
 const postEditorPreviewBodyAlignSelect =
   document.getElementById(
     "postEditorPreviewBodyAlignSelect"
-  );
-
-const postEditorPreviewRatioTrigger =
-  document.getElementById(
-    "postEditorPreviewRatioTrigger"
   );
 
 const postEditorPreviewRatioControls =
@@ -656,6 +651,19 @@ const postEditorPreviewRatioCustomWidth =
 const postEditorPreviewRatioCustomHeight =
   document.getElementById(
     "postEditorPreviewRatioCustomHeight"
+  );
+
+/* 출력(내보내기) 너비 — 레이아웃 너비와는 다른 축
+   (posts/preview/posts-preview-settings.js) */
+
+const postEditorPreviewExportWidth =
+  document.getElementById(
+    "postEditorPreviewExportWidth"
+  );
+
+const postEditorPreviewExportSize =
+  document.getElementById(
+    "postEditorPreviewExportSize"
   );
 
 const postEditorPreviewSourceBottomOffsetRow =

@@ -155,7 +155,7 @@
                 <div class="quote-test-field">
 
                   <label for="quoteTestTitle">
-                    TITLE
+                    제목
                   </label>
 
                   <input
@@ -172,7 +172,7 @@
                 <div class="quote-test-field">
 
                   <label for="quoteTestBody">
-                    BODY
+                    본문
                   </label>
 
                   <textarea
@@ -238,10 +238,40 @@
               <div class="quote-accordion-content">
 
 
+                <!-- ===========================================
+                     출력 조건(비율 · 내보내기 너비)은 이제
+                     글쓰기 화면의 PREVIEW에서 고른다
+                     (IMORY_QUOTE_PRESET_RENDER_AUDIT.md §6 단계 2).
+
+                     프리셋에는 **서식**만 남는다 — 배경 · 여백 ·
+                     글꼴 · 문단 간격 · 제목/출처 서식.
+
+                     ★ 입력칸 자체는 지우지 않고 감추기만 한다.
+
+                       - 이미 저장돼 있는 ratio/ratioWidth/
+                         ratioHeight/exportWidth를 그대로 들고
+                         다녀야 한다(저장 한 번으로 값이 사라지면
+                         안 된다). applyQuoteSettings가 이 칸에
+                         저장값을 되채우고 collectQuoteSettings가
+                         그 값을 그대로 다시 수집하므로, 숨겨진
+                         폼의 기본값이 저장값을 덮어쓰지 않는다.
+                       - 이 화면의 미리보기도 "어떤 캔버스에
+                         그릴지"는 알아야 한다. getQuoteRatio()가
+                         이 값을 **호환용 출력 조건**으로만 읽는다
+                         (admin-quote-ratio-parser.js).
+                ============================================ -->
+
+                <div
+                  class="quote-canvas-output-compat"
+                  id="quoteCanvasOutputCompat"
+                  hidden
+                >
+
+
                 <div class="quote-setting-block">
 
                   <div class="quote-setting-label">
-                    RATIO
+                    비율
                   </div>
 
 
@@ -287,7 +317,7 @@
                       type="button"
                       data-ratio="auto"
                     >
-                      AUTO
+                      자동
                     </button>
 
                     <button
@@ -295,7 +325,7 @@
                       type="button"
                       data-ratio="custom"
                     >
-                      CUSTOM
+                      직접 입력
                     </button>
 
                   </div>
@@ -315,7 +345,7 @@
                     <div class="quote-pair-field">
 
                       <label for="quoteRatioWidth">
-                        RATIO WIDTH
+                        가로 비
                       </label>
 
                       <input
@@ -333,7 +363,7 @@
                     <div class="quote-pair-field">
 
                       <label for="quoteRatioHeight">
-                        RATIO HEIGHT
+                        세로 비
                       </label>
 
                       <input
@@ -356,7 +386,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteWidth">
-                    EXPORT WIDTH
+                    내보내기 너비
                   </label>
 
                   <div class="quote-input-with-unit">
@@ -379,11 +409,15 @@
                 </div>
 
 
+                </div>
+                <!-- /quoteCanvasOutputCompat -->
+
+
 
                 <div class="quote-setting-row">
 
                   <label for="quoteBackground">
-                    BACKGROUND
+                    배경색
                   </label>
 
                   <input
@@ -400,7 +434,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quotePadding">
-                    PADDING
+                    안쪽 여백
                   </label>
 
                   <div class="quote-input-with-unit">
@@ -429,7 +463,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteVerticalPadding">
-                      VERTICAL EXTRA
+                      위아래 추가 여백
                     </label>
 
                     <div class="quote-input-with-unit">
@@ -455,7 +489,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteHorizontalPadding">
-                      HORIZONTAL EXTRA
+                      좌우 추가 여백
                     </label>
 
                     <div class="quote-input-with-unit">
@@ -528,7 +562,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteBodyFont">
-                    FONT
+                    글꼴
                   </label>
 
                   <select
@@ -597,7 +631,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteTitleEnabled">
-                    DISPLAY
+                    표시
                   </label>
 
                   <input
@@ -613,7 +647,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteTitleColor">
-                    COLOR
+                    글자색
                   </label>
 
                   <input
@@ -632,7 +666,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteTitleSize">
-                      FONT SIZE
+                      글자 크기
                     </label>
 
                     <div class="quote-input-with-unit">
@@ -658,7 +692,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteTitleWeight">
-                      WEIGHT
+                      굵기
                     </label>
 
                     <select
@@ -667,26 +701,26 @@
                     >
 
                       <option value="300">
-                        light
+                        가늘게
                       </option>
 
                       <option
                         value="400"
                         selected
                       >
-                        regular
+                        보통
                       </option>
 
                       <option value="500">
-                        medium
+                        조금 굵게
                       </option>
 
                       <option value="600">
-                        semibold
+                        굵게
                       </option>
 
                       <option value="700">
-                        bold
+                        아주 굵게
                       </option>
 
                     </select>
@@ -700,7 +734,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteTitleAlign">
-                    ALIGN
+                    정렬
                   </label>
 
                   <select
@@ -712,15 +746,15 @@
                       value="left"
                       selected
                     >
-                      left
+                      왼쪽
                     </option>
 
                     <option value="center">
-                      center
+                      가운데
                     </option>
 
                     <option value="right">
-                      right
+                      오른쪽
                     </option>
 
                   </select>
@@ -732,7 +766,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteTitleLetterSpacing">
-                    LETTER SPACING
+                    자간
                   </label>
 
                   <div class="quote-input-with-unit">
@@ -760,7 +794,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteTitleSpacing">
-                    BOTTOM SPACE
+                    아래 여백
                   </label>
 
                   <div class="quote-input-with-unit">
@@ -828,7 +862,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteTextColor">
-                    COLOR
+                    글자색
                   </label>
 
                   <input
@@ -852,7 +886,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteHighlightColor">
-                      HIGHLIGHT
+                      형광펜
                     </label>
 
                     <input
@@ -868,7 +902,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quotePointColor">
-                      POINT COLOR
+                      강조색
                     </label>
 
                     <input
@@ -889,7 +923,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteFontSize">
-                      FONT SIZE
+                      글자 크기
                     </label>
 
                     <div class="quote-input-with-unit">
@@ -915,7 +949,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteBodyWeight">
-                      WEIGHT
+                      굵기
                     </label>
 
                     <select
@@ -924,26 +958,26 @@
                     >
 
                       <option value="300">
-                        light
+                        가늘게
                       </option>
 
                       <option value="400">
-                        regular
+                        보통
                       </option>
 
                       <option
                         value="500"
                         selected
                       >
-                        medium
+                        조금 굵게
                       </option>
 
                       <option value="600">
-                        semibold
+                        굵게
                       </option>
 
                       <option value="700">
-                        bold
+                        아주 굵게
                       </option>
 
                     </select>
@@ -957,7 +991,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteLineHeight">
-                    LINE HEIGHT
+                    줄 간격
                   </label>
 
                   <input
@@ -977,7 +1011,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteLetterSpacing">
-                    LETTER SPACING
+                    자간
                   </label>
 
                   <div class="quote-input-with-unit">
@@ -1005,7 +1039,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteParagraphSpacing">
-                    PARAGRAPH
+                    문단 간격
                   </label>
 
                   <div class="quote-input-with-unit">
@@ -1034,7 +1068,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteBodyAlign">
-                      HORIZONTAL
+                      가로 정렬
                     </label>
 
                     <select
@@ -1046,19 +1080,19 @@
                         value="left"
                         selected
                       >
-                        left
+                        왼쪽
                       </option>
 
                       <option value="center">
-                        center
+                        가운데
                       </option>
 
                       <option value="right">
-                        right
+                        오른쪽
                       </option>
 
                       <option value="justify">
-                        justify
+                        양쪽
                       </option>
 
                     </select>
@@ -1069,7 +1103,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteVerticalAlign">
-                      VERTICAL
+                      세로 정렬
                     </label>
 
                     <select
@@ -1081,15 +1115,15 @@
                         value="top"
                         selected
                       >
-                        top
+                        위
                       </option>
 
                       <option value="center">
-                        center
+                        가운데
                       </option>
 
                       <option value="bottom">
-                        bottom
+                        아래
                       </option>
 
                     </select>
@@ -1105,7 +1139,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteLineBreak">
-                      LINE BREAK
+                      줄바꿈 방식
                     </label>
 
                     <select
@@ -1117,15 +1151,15 @@
                         value="keep"
                         selected
                       >
-                        keep
+                        단어 지키기
                       </option>
 
                       <option value="word">
-                        word
+                        단어 단위
                       </option>
 
                       <option value="char">
-                        char
+                        글자 단위
                       </option>
 
                     </select>
@@ -1136,7 +1170,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteIndent">
-                      FIRST INDENT
+                      첫 줄 들여쓰기
                     </label>
 
                     <div class="quote-input-with-unit">
@@ -1174,7 +1208,7 @@
                     <div class="quote-special-heading">
 
                       <span>
-                        ACTION
+                        지문
                       </span>
 
                       <small>
@@ -1187,7 +1221,7 @@
                     <div class="quote-special-field">
 
                       <label for="quoteActionColor">
-                        COLOR
+                        글자색
                       </label>
 
                       <input
@@ -1203,7 +1237,7 @@
                     <div class="quote-special-field">
 
                       <label for="quoteActionWeight">
-                        WEIGHT
+                        굵기
                       </label>
 
                       <select
@@ -1212,26 +1246,26 @@
                       >
 
                         <option value="300">
-                          light
+                          가늘게
                         </option>
 
                         <option
                           value="400"
                           selected
                         >
-                          regular
+                          보통
                         </option>
 
                         <option value="500">
-                          medium
+                          조금 굵게
                         </option>
 
                         <option value="600">
-                          semibold
+                          굵게
                         </option>
 
                         <option value="700">
-                          bold
+                          아주 굵게
                         </option>
 
                       </select>
@@ -1242,7 +1276,7 @@
                     <div class="quote-special-field">
 
                       <label for="quoteActionItalic">
-                        ITALIC
+                        기울임
                       </label>
 
                       <input
@@ -1262,7 +1296,7 @@
                     <div class="quote-special-heading">
 
                       <span>
-                        DIALOGUE
+                        대사
                       </span>
 
                       <small>
@@ -1275,7 +1309,7 @@
                     <div class="quote-special-field">
 
                       <label for="quoteDialogueColor">
-                        COLOR
+                        글자색
                       </label>
 
                       <input
@@ -1291,7 +1325,7 @@
                     <div class="quote-special-field">
 
                       <label for="quoteDialogueWeight">
-                        WEIGHT
+                        굵기
                       </label>
 
                       <select
@@ -1300,26 +1334,26 @@
                       >
 
                         <option value="300">
-                          light
+                          가늘게
                         </option>
 
                         <option value="400">
-                          regular
+                          보통
                         </option>
 
                         <option
                           value="500"
                           selected
                         >
-                          medium
+                          조금 굵게
                         </option>
 
                         <option value="600">
-                          semibold
+                          굵게
                         </option>
 
                         <option value="700">
-                          bold
+                          아주 굵게
                         </option>
 
                       </select>
@@ -1330,7 +1364,7 @@
                     <div class="quote-special-field">
 
                       <label for="quoteDialogueItalic">
-                        ITALIC
+                        기울임
                       </label>
 
                       <input
@@ -1392,7 +1426,7 @@
                 <div class="quote-test-field">
 
                   <label for="quoteTestSource">
-                    SOURCE TEXT
+                    출처 문구
                   </label>
 
                   <input
@@ -1410,7 +1444,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteSourceEnabled">
-                    DISPLAY
+                    표시
                   </label>
 
                   <input
@@ -1436,7 +1470,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteSourceBottomOffset">
-                    BOTTOM MARGIN
+                    바닥에서 띄우기
                   </label>
 
                   <div class="quote-input-with-unit">
@@ -1463,7 +1497,7 @@
                 <div class="quote-setting-row">
 
                   <label for="quoteSourceColor">
-                    COLOR
+                    글자색
                   </label>
 
                   <input
@@ -1482,7 +1516,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteSourceSize">
-                      FONT SIZE
+                      글자 크기
                     </label>
 
                     <div class="quote-input-with-unit">
@@ -1508,7 +1542,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteSourceWeight">
-                      WEIGHT
+                      굵기
                     </label>
 
                     <select
@@ -1520,15 +1554,15 @@
                         value="300"
                         selected
                       >
-                        light
+                        가늘게
                       </option>
 
                       <option value="400">
-                        regular
+                        보통
                       </option>
 
                       <option value="500">
-                        medium
+                        조금 굵게
                       </option>
 
                     </select>
@@ -1544,7 +1578,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteSourceAlign">
-                      ALIGN
+                      정렬
                     </label>
 
                     <select
@@ -1553,18 +1587,18 @@
                     >
 
                       <option value="left">
-                        left
+                        왼쪽
                       </option>
 
                       <option value="center">
-                        center
+                        가운데
                       </option>
 
                       <option
                         value="right"
                         selected
                       >
-                        right
+                        오른쪽
                       </option>
 
                     </select>
@@ -1575,7 +1609,7 @@
                   <div class="quote-pair-field">
 
                     <label for="quoteSourceSpacing">
-                      TOP SPACE
+                      위 여백
                     </label>
 
                     <div class="quote-input-with-unit">
@@ -1645,7 +1679,7 @@
                   <div class="quote-preset-name-field">
 
                     <label for="quotePresetName">
-                      PRESET NAME
+                      프리셋 이름
                     </label>
 
                     <input
@@ -1667,7 +1701,7 @@
                       type="button"
                       title="목록에 새 프리셋으로 추가"
                     >
-                      new
+                      새로 만들기
                     </button>
 
                     <button
@@ -1677,7 +1711,7 @@
                       title="현재 선택된 프리셋에 덮어쓰기"
                       disabled
                     >
-                      save
+                      덮어쓰기
                     </button>
 
                   </div>
@@ -1695,7 +1729,7 @@
                 <div class="quote-preset-list-wrap">
 
                   <div class="quote-setting-label">
-                    SAVED PRESETS
+                    저장된 프리셋
                   </div>
 
                   <div
@@ -1751,41 +1785,22 @@
               id="quotePreviewStage"
             >
 
+              <!--
+                ★ 페이지 한 장(제목/본문/출처)은 여기 static
+                마크업이 아니라 글쓰기 화면과 **같은 코드**가
+                만든다 — posts/preview/posts-page-layout.js의
+                paginatePostPages()가 이 host 안에
+                .post-editor-preview-page를 채운다
+                (admin-quote-preview-update.js 참고).
+                그래서 본문 폭·줄바꿈·문단 간격·출처 자리·
+                페이지 나눔이 에디터 PREVIEW와 같은 계산을
+                거친다.
+              -->
+
               <div
-                class="quote-preview-canvas"
+                class="quote-preview-canvas post-editor-preview-pages"
                 id="quotePreviewCanvas"
-              >
-
-
-                <div
-                  class="quote-preview-title"
-                  id="quotePreviewTitle"
-                >
-                  비 오는 날
-                </div>
-
-
-                <div
-                  class="quote-preview-text"
-                  id="quotePreviewText"
-                >
-
-                  <p>
-                    홍지원은 창밖을 바라봤다.
-                  </p>
-
-                </div>
-
-
-                <div
-                  class="quote-preview-source"
-                  id="quotePreviewSource"
-                >
-                  @hongcha
-                </div>
-
-
-              </div>
+              ></div>
 
             </div>
 
@@ -1796,6 +1811,44 @@
             >
               두 손가락으로 확대·축소, 두 번 탭하면 전체 보기
             </p>
+
+            </div>
+
+
+            <!--
+              샘플이 한 장을 넘치면 잘라내지 않고 다음 장으로
+              넘긴다 — 만들어진 장을 실제로 넘겨볼 수 있게
+              최소한의 이동만 둔다.
+            -->
+
+            <div
+              class="quote-preview-pagination"
+              id="quotePreviewPagination"
+              hidden
+            >
+
+              <button
+                type="button"
+                class="quote-preview-page-button"
+                id="quotePreviewPrev"
+              >
+                ‹
+              </button>
+
+              <span
+                class="quote-preview-page-indicator"
+                id="quotePreviewPageIndicator"
+              >
+                1 / 1
+              </span>
+
+              <button
+                type="button"
+                class="quote-preview-page-button"
+                id="quotePreviewNext"
+              >
+                ›
+              </button>
 
             </div>
 

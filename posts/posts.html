@@ -1123,7 +1123,18 @@
 
 
       <!-- ===================================================
-           MOBILE PREVIEW BUTTON
+           PREVIEW 여닫기
+
+           데스크톱·모바일이 **같은 버튼 하나**로 펼치고 접는다.
+           부유(sticky·알약·그림자)가 아니라 에디터 바로 아래
+           일반 문서 흐름에 놓인 고스트 버튼이고, 선·색은 아래
+           .post-editor-actions의 버튼과 같은 것을 쓴다.
+
+           라벨(미리보기 ▾ / 미리보기 접기 ▴)과 aria-expanded는
+           syncEditorPreviewToggleButton()이 **실제 상태**에서
+           한 자리에서 정한다
+           (posts/preview/posts-preview-mobile.js).
+           aria-controls는 실제로 펼쳐지는 섹션을 가리킨다.
       ==================================================== -->
 
       <button
@@ -1134,15 +1145,15 @@
         aria-controls="postEditorPreviewSection"
       >
 
-        <span>
-          PREVIEW
+        <span id="postEditorPreviewToggleLabel">
+          미리보기
         </span>
 
         <span
           class="post-editor-preview-toggle-icon"
           id="postEditorPreviewToggleIcon"
         >
-          ↑
+          ▾
         </span>
 
       </button>
@@ -1160,17 +1171,6 @@
       >
 
 
-        <!-- 모바일 배경 -->
-
-        <button
-          class="post-editor-preview-backdrop"
-          id="postEditorPreviewBackdrop"
-          type="button"
-          aria-label="미리보기 닫기"
-        ></button>
-
-
-
         <!-- =================================================
              PREVIEW SHEET
         ================================================== -->
@@ -1181,33 +1181,14 @@
         >
 
 
-          <!-- HEADER -->
-
-          <div class="post-editor-preview-header">
-
-            <span class="post-editor-preview-label">
-              PREVIEW
-            </span>
-
-
-            <button
-              class="post-editor-preview-close"
-              id="postEditorPreviewClose"
-              type="button"
-              aria-label="미리보기 닫기"
-            >
-              ×
-            </button>
-
-          </div>
-
-
           <!-- ===================================================
                PREVIEW CONTROLS
 
-               title/align/body → ratio → source 순서로 한 줄씩
-               (PREVIEW 라벨이 자리를 차지하지 않도록 헤더에서
-               분리해서 여기 따로 둠).
+               ★ 패널 안에 제목(중복 "PREVIEW" 문구)과 닫기 ×를
+               두지 않는다. 접는 길은 패널 바로 위의 고스트 버튼
+               하나뿐이고, 없어진 헤더의 높이·여백도 함께 뺐다.
+
+               align → body → title → source → margin/gap 순서.
           ==================================================== -->
 
           <div class="post-editor-preview-visibility-controls">
@@ -1229,7 +1210,10 @@
                    잠깐 위/가운데로 바꿔보고 싶을 때 사용)
               ============================================== -->
 
-              <div class="post-editor-preview-subrow">
+              <div
+                class="post-editor-preview-subrow"
+                id="postEditorPreviewAlignRow"
+              >
 
                 <span class="post-editor-preview-subrow-label">
                   align
@@ -1384,67 +1368,38 @@
             </div>
 
 
+            <!-- ===============================================
+                 출력 조건 — uniform / auto / custom + 출력 너비
+
+                 세 옵션은 항상 보인다(예전의 "ratio" 펼치기
+                 버튼은 없앴다). 값의 초기값은 이 글의 QUOTE
+                 프리셋에 저장된 canvas 값이고, 여기서 고른 값이
+                 그보다 우선한다
+                 (posts/preview/posts-preview-settings.js).
+
+                   uniform  auto와 똑같이 나눈 뒤 모든 페이지를
+                            가장 높은 페이지의 높이로 통일
+                   auto     페이지마다 자기 높이 (수동 PAGE
+                            break로만 나뉨)
+                   custom   사용자 지정 비율의 고정 크기 캔버스
+                            — 옛 프리셋의 4:5·9:16 같은 고정
+                            비율이 이 값으로 그대로 온다
+            ================================================ -->
+
             <div class="post-editor-preview-row">
-
-              <button
-                class="post-editor-preview-visibility-toggle post-editor-preview-ratio-trigger"
-                id="postEditorPreviewRatioTrigger"
-                type="button"
-                aria-pressed="false"
-                aria-expanded="false"
-                aria-controls="postEditorPreviewRatioControls"
-              >
-                ratio
-              </button>
-
-
-              <!-- =============================================
-                   RATIO ("ratio" 버튼을 눌러야 그 옆에 펼쳐짐)
-              ============================================== -->
 
               <div
                 class="post-editor-preview-ratio-controls"
                 id="postEditorPreviewRatioControls"
-                hidden
               >
 
                 <button
                   class="post-editor-preview-ratio-button"
                   type="button"
-                  data-ratio="4:5"
+                  data-ratio="uniform"
                   aria-pressed="false"
                 >
-                  4:5
-                </button>
-
-
-                <button
-                  class="post-editor-preview-ratio-button"
-                  type="button"
-                  data-ratio="4:6"
-                  aria-pressed="false"
-                >
-                  4:6
-                </button>
-
-
-                <button
-                  class="post-editor-preview-ratio-button"
-                  type="button"
-                  data-ratio="1:1"
-                  aria-pressed="false"
-                >
-                  1:1
-                </button>
-
-
-                <button
-                  class="post-editor-preview-ratio-button"
-                  type="button"
-                  data-ratio="4:3"
-                  aria-pressed="false"
-                >
-                  4:3
+                  uniform
                 </button>
 
 
@@ -1499,6 +1454,39 @@
                   >
 
                 </div>
+
+              </div>
+
+
+              <!-- =============================================
+                   출력 너비 — 저장되는 PNG의 가로 픽셀.
+                   레이아웃 너비(520px)와는 다른 축이라, 이
+                   값을 바꿔도 줄바꿈과 페이지 수는 바뀌지
+                   않는다.
+              ============================================== -->
+
+              <div class="post-editor-preview-subrow">
+
+                <span class="post-editor-preview-subrow-label">
+                  width
+                </span>
+
+
+                <input
+                  class="post-editor-preview-ratio-custom-input post-editor-preview-export-width"
+                  id="postEditorPreviewExportWidth"
+                  type="number"
+                  inputmode="numeric"
+                  min="320"
+                  max="3000"
+                  aria-label="내보내기 너비"
+                >
+
+
+                <span
+                  class="post-editor-preview-export-size"
+                  id="postEditorPreviewExportSize"
+                ></span>
 
               </div>
 

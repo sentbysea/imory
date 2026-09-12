@@ -67,7 +67,7 @@ function renderQuotePresets(
 
 
     empty.textContent =
-      "saved preset 없음";
+      "저장된 프리셋 없음";
 
 
     quotePresetList.appendChild(

@@ -99,11 +99,58 @@ quoteLiveInputs.forEach(
 
 /* =========================================================
    COLLECT PRESET SETTINGS
+
+   ★ 두 가지 규칙
+
+     1. 알 수 없는 필드를 보존한다.
+        마지막으로 불러온 프리셋의 settings(loadedQuotePresetSettings)를
+        밑바탕으로 깔고 그 위에 폼 값을 덮어쓴다 — 이 화면에
+        입력칸이 없는 필드(옛 필드, 아직 UI로 옮기지 않은 canvas
+        값)가 저장 한 번으로 사라지지 않는다.
+
+     2. 명시적으로 저장된 0을 지운 값으로 보지 않는다.
+        postStyleNumber()(posts/style/posts-body-layout.js)가
+        빈 칸만 기본값으로 돌리고 "0"은 0으로 읽는다.
+
+   ★ 누락된 legacy 값의 기본값 자체는 여기 있지 않다.
+     applyQuoteSettings()가 프리셋을 폼에 되채울 때 이미 공용
+     normalizePostStyleSettings()를 거치므로, 여기서 읽는 값은
+     이미 정규화된 값이다(폼 → 저장 → 다시 열기 왕복에서 값이
+     바뀌지 않는다).
 ========================================================== */
+
+function quoteInputNumber(
+  input,
+  fallback
+) {
+
+  return postStyleNumber(
+    input?.value,
+    fallback
+  );
+
+}
+
+
+function quoteInputText(
+  input,
+  fallback
+) {
+
+  return postStyleText(
+    input?.value,
+    fallback
+  );
+
+}
+
 
 function collectQuoteSettings() {
 
   return {
+
+    ...loadedQuotePresetSettings,
+
 
     /* CANVAS */
 
@@ -111,227 +158,277 @@ function collectQuoteSettings() {
       currentQuoteRatio,
 
     ratioWidth:
-      Number(
-        quoteRatioWidth?.value
-      ) || 4,
+      quoteInputNumber(
+        quoteRatioWidth,
+        POST_STYLE_DEFAULTS.ratioWidth
+      ),
 
     ratioHeight:
-      Number(
-        quoteRatioHeight?.value
-      ) || 5,
+      quoteInputNumber(
+        quoteRatioHeight,
+        POST_STYLE_DEFAULTS.ratioHeight
+      ),
 
     exportWidth:
-      Number(
-        quoteWidth?.value
-      ) || 1080,
+      quoteInputNumber(
+        quoteWidth,
+        POST_STYLE_DEFAULTS.exportWidth
+      ),
 
     background:
-      quoteBackground?.value ||
-      "#ffffff",
+      quoteInputText(
+        quoteBackground,
+        POST_STYLE_DEFAULTS.background
+      ),
 
     padding:
-      Number(
-        quotePadding?.value
-      ) || 0,
+      quoteInputNumber(
+        quotePadding,
+        POST_STYLE_DEFAULTS.padding
+      ),
 
     verticalPadding:
-      Number(
-        quoteVerticalPadding?.value
-      ) || 0,
+      quoteInputNumber(
+        quoteVerticalPadding,
+        POST_STYLE_DEFAULTS.verticalPadding
+      ),
 
     horizontalPadding:
-      Number(
-        quoteHorizontalPadding?.value
-      ) || 0,
+      quoteInputNumber(
+        quoteHorizontalPadding,
+        POST_STYLE_DEFAULTS.horizontalPadding
+      ),
 
 
     /* TITLE */
 
     titleEnabled:
       quoteTitleEnabled?.checked ??
-      true,
+      POST_STYLE_DEFAULTS.titleEnabled,
 
     titleColor:
-      quoteTitleColor?.value ||
-      "#222222",
+      quoteInputText(
+        quoteTitleColor,
+        POST_STYLE_DEFAULTS.titleColor
+      ),
 
     titleSize:
-      Number(
-        quoteTitleSize?.value
-      ) || 24,
+      quoteInputNumber(
+        quoteTitleSize,
+        POST_STYLE_DEFAULTS.titleSize
+      ),
 
     titleWeight:
-      quoteTitleWeight?.value ||
-      "400",
+      quoteInputText(
+        quoteTitleWeight,
+        POST_STYLE_DEFAULTS.titleWeight
+      ),
 
     titleAlign:
-      quoteTitleAlign?.value ||
-      "left",
+      quoteInputText(
+        quoteTitleAlign,
+        POST_STYLE_DEFAULTS.titleAlign
+      ),
 
     titleLetterSpacing:
-      Number(
-        quoteTitleLetterSpacing?.value
-      ) || 0,
+      quoteInputNumber(
+        quoteTitleLetterSpacing,
+        POST_STYLE_DEFAULTS.titleLetterSpacing
+      ),
 
     titleSpacing:
-      Number(
-        quoteTitleSpacing?.value
-      ) || 0,
+      quoteInputNumber(
+        quoteTitleSpacing,
+        POST_STYLE_DEFAULTS.titleSpacing
+      ),
 
 
     /* BODY */
 
     bodyFont:
-      quoteBodyFont?.value ||
-      "pretendard",
+      quoteInputText(
+        quoteBodyFont,
+        POST_STYLE_DEFAULTS.bodyFont
+      ),
 
     bodyColor:
-      quoteTextColor?.value ||
-      "#333333",
+      quoteInputText(
+        quoteTextColor,
+        POST_STYLE_DEFAULTS.bodyColor
+      ),
 
 
     /*
-      ★ NEW
-      메인 글 에디터의 PRESET HIGHLIGHT가
-      이 값을 사용하게 된다.
+      메인 글 에디터의 PRESET HIGHLIGHT / POINT COLOR가
+      이 값을 사용한다.
     */
 
     highlightColor:
-      quoteHighlightColor?.value ||
-      "#f4dce6",
-
-
-    /*
-      ★ NEW
-      메인 글 에디터의 POINT COLOR가
-      이 값을 사용하게 된다.
-    */
+      quoteInputText(
+        quoteHighlightColor,
+        POST_STYLE_DEFAULTS.highlightColor
+      ),
 
     pointColor:
-      quotePointColor?.value ||
-      "#5c7cfa",
+      quoteInputText(
+        quotePointColor,
+        POST_STYLE_DEFAULTS.pointColor
+      ),
 
 
     bodySize:
-      Number(
-        quoteFontSize?.value
-      ) || 16,
+      quoteInputNumber(
+        quoteFontSize,
+        POST_STYLE_DEFAULTS.bodySize
+      ),
 
     bodyWeight:
-      quoteBodyWeight?.value ||
-      "500",
+      quoteInputText(
+        quoteBodyWeight,
+        POST_STYLE_DEFAULTS.bodyWeight
+      ),
 
     lineHeight:
-      Number(
-        quoteLineHeight?.value
-      ) || 1.8,
+      quoteInputNumber(
+        quoteLineHeight,
+        POST_STYLE_DEFAULTS.lineHeight
+      ),
 
     letterSpacing:
-      Number(
-        quoteLetterSpacing?.value
-      ) || 0,
+      quoteInputNumber(
+        quoteLetterSpacing,
+        POST_STYLE_DEFAULTS.letterSpacing
+      ),
 
     paragraphSpacing:
-      Number(
-        quoteParagraphSpacing?.value
-      ) || 0,
+      quoteInputNumber(
+        quoteParagraphSpacing,
+        POST_STYLE_DEFAULTS.paragraphSpacing
+      ),
 
     bodyAlign:
-      quoteBodyAlign?.value ||
-      "left",
+      quoteInputText(
+        quoteBodyAlign,
+        POST_STYLE_DEFAULTS.bodyAlign
+      ),
 
     verticalAlign:
-      quoteVerticalAlign?.value ||
-      "top",
+      quoteInputText(
+        quoteVerticalAlign,
+        POST_STYLE_DEFAULTS.verticalAlign
+      ),
 
     lineBreak:
-      quoteLineBreak?.value ||
-      "keep",
+      quoteInputText(
+        quoteLineBreak,
+        POST_STYLE_DEFAULTS.lineBreak
+      ),
 
     indent:
-      Number(
-        quoteIndent?.value
-      ) || 0,
+      quoteInputNumber(
+        quoteIndent,
+        POST_STYLE_DEFAULTS.indent
+      ),
 
 
     /* ACTION */
 
     actionColor:
-      quoteActionColor?.value ||
-      "#888888",
+      quoteInputText(
+        quoteActionColor,
+        POST_STYLE_DEFAULTS.actionColor
+      ),
 
     actionWeight:
-      quoteActionWeight?.value ||
-      "400",
+      quoteInputText(
+        quoteActionWeight,
+        POST_STYLE_DEFAULTS.actionWeight
+      ),
 
     actionItalic:
       quoteActionItalic?.checked ??
-      false,
+      POST_STYLE_DEFAULTS.actionItalic,
 
 
     /* DIALOGUE */
 
     dialogueColor:
-      quoteDialogueColor?.value ||
-      "#333333",
+      quoteInputText(
+        quoteDialogueColor,
+        POST_STYLE_DEFAULTS.dialogueColor
+      ),
 
     dialogueWeight:
-      quoteDialogueWeight?.value ||
-      "500",
+      quoteInputText(
+        quoteDialogueWeight,
+        POST_STYLE_DEFAULTS.dialogueWeight
+      ),
 
     dialogueItalic:
       quoteDialogueItalic?.checked ??
-      false,
+      POST_STYLE_DEFAULTS.dialogueItalic,
 
 
     /* SOURCE */
 
+    /*
+      출처 문구는 빈 문자열도 사용자가 고른 값이다 —
+      기본값으로 되돌리지 않는다.
+    */
+
     sourceText:
-      quoteTestSource?.value ||
-      "",
+      typeof quoteTestSource?.value === "string"
+        ? quoteTestSource.value
+        : POST_STYLE_DEFAULTS.sourceText,
 
     sourceEnabled:
       quoteSourceEnabled?.checked ??
-      true,
+      POST_STYLE_DEFAULTS.sourceEnabled,
 
     sourceColor:
-      quoteSourceColor?.value ||
-      "#999999",
+      quoteInputText(
+        quoteSourceColor,
+        POST_STYLE_DEFAULTS.sourceColor
+      ),
 
     sourceSize:
-      Number(
-        quoteSourceSize?.value
-      ) || 11,
+      quoteInputNumber(
+        quoteSourceSize,
+        POST_STYLE_DEFAULTS.sourceSize
+      ),
 
     sourceWeight:
-      quoteSourceWeight?.value ||
-      "300",
+      quoteInputText(
+        quoteSourceWeight,
+        POST_STYLE_DEFAULTS.sourceWeight
+      ),
 
     sourceAlign:
-      quoteSourceAlign?.value ||
-      "right",
+      quoteInputText(
+        quoteSourceAlign,
+        POST_STYLE_DEFAULTS.sourceAlign
+      ),
 
     sourceSpacing:
-      Number(
-        quoteSourceSpacing?.value
-      ) || 0,
+      quoteInputNumber(
+        quoteSourceSpacing,
+        POST_STYLE_DEFAULTS.sourceSpacing
+      ),
 
 
     /*
-      ★ NEW
       source는 항상 캔버스 맨 아래 고정. 이 값은 그 고정
-      위치에서 캔버스 맨 아래로부터 추가로 얼마나 띄울지
-      (marginBottom)를 정한다 — posts-preview.js의
-      createPreviewSource 참고.
+      위치에서 캔버스 맨 아래로부터 추가로 얼마나 띄울지를
+      정한다 — posts/preview/posts-page-layout.js의
+      createPostPageSource 참고.
     */
 
     sourceBottomOffset:
-      Number(
-        quoteSourceBottomOffset?.value
-      ) || 0
+      quoteInputNumber(
+        quoteSourceBottomOffset,
+        POST_STYLE_DEFAULTS.sourceBottomOffset
+      )
 
   };
 
 }
-
-

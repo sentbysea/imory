@@ -60,11 +60,13 @@
 ========================================================== */
 
 
-/* 발췌 캔버스의 레이아웃 너비. posts-preview-export.css의
-   .post-editor-preview-page와 같은 값이다 — 화면 폭과 무관하게
-   항상 이 값이고, 좁은 화면에서는 통째로 축소해서 보여준다. */
+/* 발췌 캔버스의 레이아웃 너비. 원천은 공용
+   POST_PAGE_LAYOUT_WIDTH(posts/style/posts-body-layout.js)이고
+   posts/posts-page-canvas.css의 .post-editor-preview-page와 같은
+   값이다 — 화면 폭과 무관하게 항상 이 값이고, 좁은 화면에서는
+   통째로 축소해서 보여준다. */
 
-const POST_PREVIEW_PAGE_WIDTH = 520;
+const POST_PREVIEW_PAGE_WIDTH = POST_PAGE_LAYOUT_WIDTH;
 
 
 /* 굳히는 raster의 최대 변. 실제로 필요한 픽셀은
@@ -870,7 +872,9 @@ function previewPagesHaveMissingImages() {
   clientWidth는 transform과 무관한 레이아웃 픽셀이다.
 
   프리뷰가 접혀 있어(display:none) 재지 못하는 경우만 프리셋의
-  padding으로 되계산한다. 페이지 박스는 border-box + 1px 테두리다.
+  padding으로 되계산한다 — 그 계산은 공용 postPageBodyWidth
+  (posts/preview/posts-page-layout.js)에 있다. 페이지 박스의
+  장식 테두리는 outline이라 본문 폭을 깎지 않는다.
 */
 
 function postPreviewPageBodyWidth(
@@ -878,46 +882,9 @@ function postPreviewPageBodyWidth(
   settings = {}
 ) {
 
-  const measured =
-    content?.clientWidth ||
-    0;
-
-
-  if (
-    measured > 0
-  ) {
-
-    return measured;
-
-  }
-
-
-  const basePadding =
-    Math.max(
-      0,
-      Number(
-        settings.padding
-      ) || 0
-    );
-
-
-  const horizontalPadding =
-    Math.max(
-      0,
-      Number(
-        settings.horizontalPadding
-      ) || 0
-    );
-
-
-  return Math.max(
-    1,
-    POST_PREVIEW_PAGE_WIDTH -
-    2 -
-    2 * (
-      basePadding +
-      horizontalPadding
-    )
+  return postPageBodyWidth(
+    content,
+    settings
   );
 
 }
@@ -933,12 +900,16 @@ function postPreviewImageGap(
   settings = {}
 ) {
 
+  const resolved =
+    normalizePostStyleSettings(
+      settings
+    );
+
+
   const paragraphSpacing =
     Math.max(
       0,
-      Number(
-        settings.paragraphSpacing
-      ) || 0
+      resolved.paragraphSpacing
     );
 
 
@@ -952,11 +923,8 @@ function postPreviewImageGap(
 
 
   return Math.round(
-    (
-      Number(
-        settings.bodySize
-      ) || 16
-    ) * 0.75
+    resolved.bodySize *
+    0.75
   );
 
 }

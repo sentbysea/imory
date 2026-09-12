@@ -86,50 +86,17 @@ postEditorPrivateToggle
 
 
 /* =========================================================
-   PREVIEW OPEN / CLOSE
+   PREVIEW 여닫기
+
+   데스크톱·모바일 같은 버튼 하나. 패널 안의 닫기 ×와 모바일
+   배경은 없앴다 — 접는 길이 둘로 갈리지 않게 한다
+   (posts/preview/posts-preview-mobile.js의 toggleEditorPreview).
 ========================================================== */
 
 postEditorPreviewToggle
   ?.addEventListener(
     "click",
-    () => {
-
-      const isOpen =
-        postEditorPreviewSection
-          ?.classList
-          .contains(
-            "is-open"
-          );
-
-
-      if (isOpen) {
-
-        closeEditorPreview();
-
-      }
-
-
-      else {
-
-        openEditorPreview();
-
-      }
-
-    }
-  );
-
-
-postEditorPreviewClose
-  ?.addEventListener(
-    "click",
-    closeEditorPreview
-  );
-
-
-postEditorPreviewBackdrop
-  ?.addEventListener(
-    "click",
-    closeEditorPreview
+    toggleEditorPreview
   );
 
 
@@ -236,24 +203,15 @@ postEditorPreviewBodyAlignSelect
   );
 
 
-postEditorPreviewRatioTrigger
-  ?.addEventListener(
-    "click",
-    () => {
-
-      previewRatioRowExpanded =
-        !previewRatioRowExpanded;
-
-
-      syncPreviewRatioControls();
-
-    }
-  );
-
-
-
 /* =========================================================
-   PREVIEW RATIO CONTROLS
+   PREVIEW 출력 조건 — uniform / auto / custom + 출력 너비
+
+   세 옵션은 항상 보인다(펼치는 단계 없음). custom을 고르면
+   그때만 상세 비율 입력이 나온다.
+
+   ★ custom을 고르는 순간, 그때까지 쓰이던 값(= 프리셋에서 온
+   비율)을 세션 값으로 확정해 둔다. 그래야 이어서 프리셋을
+   바꿔도 사용자가 보고 고른 비율이 그대로 남는다.
 ========================================================== */
 
 postEditorPreviewRatioButtons
@@ -264,8 +222,33 @@ postEditorPreviewRatioButtons
         "click",
         () => {
 
-          previewRatioMode =
+          const mode =
             button.dataset.ratio;
+
+
+          if (
+            mode === "custom"
+          ) {
+
+            const parts =
+              getEffectivePreviewRatioParts(
+                postStyleSettings ||
+                {}
+              );
+
+
+            previewCustomRatioWidth =
+              parts.width;
+
+
+            previewCustomRatioHeight =
+              parts.height;
+
+          }
+
+
+          previewRatioMode =
+            mode;
 
 
           syncPreviewRatioControls();
@@ -282,6 +265,33 @@ postEditorPreviewRatioButtons
 
         }
       );
+
+    }
+  );
+
+
+postEditorPreviewExportWidth
+  ?.addEventListener(
+    "input",
+    () => {
+
+      /*
+        출력 해상도만 바꾼다 — 레이아웃 너비(520px)는 그대로라
+        줄바꿈도 페이지 수도 바뀌지 않으므로 다시 나눌 필요가
+        없다. 표시용 크기 라벨만 갱신한다.
+      */
+
+      previewExportWidth =
+        Math.max(
+          1,
+          Number(
+            postEditorPreviewExportWidth.value
+          ) ||
+          1
+        );
+
+
+      syncPreviewExportSizeLabel();
 
     }
   );
@@ -339,6 +349,12 @@ postEditorPreviewSourceSpacing
   );
 
 
+/*
+  상세 비율 입력은 custom일 때만 보이므로, 값이 바뀌면 곧바로
+  다시 그린다. (프리셋 값을 따르던 중이라도 여기를 건드리면
+  그 순간부터 사용자가 고른 값이다.)
+*/
+
 postEditorPreviewRatioCustomWidth
   ?.addEventListener(
     "input",
@@ -351,18 +367,15 @@ postEditorPreviewRatioCustomWidth
         1;
 
 
-      if (
-        previewRatioMode ===
-        "custom"
-      ) {
+      previewRatioMode =
+        "custom";
 
-        updateEditorPreview(
-          {
-            preserveView: true
-          }
-        );
 
-      }
+      updateEditorPreview(
+        {
+          preserveView: true
+        }
+      );
 
     }
   );
@@ -380,18 +393,15 @@ postEditorPreviewRatioCustomHeight
         1;
 
 
-      if (
-        previewRatioMode ===
-        "custom"
-      ) {
+      previewRatioMode =
+        "custom";
 
-        updateEditorPreview(
-          {
-            preserveView: true
-          }
-        );
 
-      }
+      updateEditorPreview(
+        {
+          preserveView: true
+        }
+      );
 
     }
   );
@@ -472,9 +482,17 @@ document.addEventListener(
   "keydown",
   event => {
 
+    /*
+      ★ 모바일에서만. 데스크톱은 프리뷰가 기본으로 펼쳐져 있고
+      글을 쓰는 도중 Escape를 누르는 일이 흔하다 — 예전에는
+      데스크톱 섹션에 is-open이 붙지 않아 이 핸들러가 아예 돌지
+      않았으므로, 그 감각을 그대로 유지한다.
+    */
+
     if (
       event.key ===
         "Escape" &&
+      isMobilePostEditor() &&
       postEditorPreviewSection
         ?.classList
         .contains(
@@ -482,7 +500,11 @@ document.addEventListener(
         )
     ) {
 
-      closeEditorPreview();
+      closeEditorPreview(
+        {
+          byUser: true
+        }
+      );
 
     }
 

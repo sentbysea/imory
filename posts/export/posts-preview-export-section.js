@@ -44,40 +44,36 @@ function beginExportSectionState() {
 
 /*
   ★ export 버튼은 프리뷰 패널 밖(에디터 하단)에 있어서,
-  모바일에서는 프리뷰 시트를 한 번도 열지 않고도
-  바로 export를 누를 수 있다.
+  프리뷰를 한 번도 열지 않고도 바로 export를 누를 수 있다.
 
-  그런데 모바일 프리뷰 섹션은 열려있지 않으면
-  display:none이라 실제 레이아웃 크기가 0이 되고,
-  그 상태에서 updateEditorPreview()(페이지 분할 계산)가
-  돌면 previewPageIsOverflowing이 항상 false로 나와
-  본문 전체가 한 페이지에 잘못 채워진다.
+  그런데 접힌 프리뷰 섹션은 display:none이라 실제 레이아웃
+  크기가 0이 되고, 그 상태에서 updateEditorPreview()(페이지
+  분할 계산)가 돌면 previewPageIsOverflowing이 항상 false로
+  나와 본문 전체가 한 페이지에 잘못 채워진다.
 
   → export 직전에 (닫혀 있었다면) 화면 밖에서만
   잠깐 레이아웃을 갖게 만들어 정확히 분할되게 하고,
   끝나면 원래 상태로 되돌린다.
+
+  ★ 데스크톱에서도 돈다.
+
+  예전에는 이 강제 오픈이 모바일 전용이었다 — 데스크톱은
+  프리뷰를 접을 수 없어서 섹션이 항상 레이아웃을 갖고 있었기
+  때문이다. 이제는 두 화면이 같은 고스트 버튼으로 접히므로
+  (posts/preview/posts-preview-mobile.js), 판정 기준도 화면
+  크기가 아니라 **지금 접혀 있는가** 하나다. 이미 펼쳐져 있으면
+  (exportWasSectionOpenBeforeExport) 예전처럼 아무 것도 건드리지
+  않으므로, 보고 있던 패널이 export 도중 밀려나는 일도 없다.
 */
 
 function forceOpenSectionIfNeeded() {
 
   if (
     !exportSectionForExport ||
-    exportWasSectionOpenBeforeExport ||
-    !isMobilePostEditor()
+    exportWasSectionOpenBeforeExport
   ) {
     return;
   }
-
-  /*
-    "is-open"은 모바일 미디어쿼리에서만 display:none을
-    풀어주는 클래스라서, 이 강제 오픈은 모바일에서만
-    의미/부작용이 있다.
-
-    데스크톱은 애초에 이 섹션이 항상 레이아웃을 갖고
-    있으므로(=이 문제가 없으므로) 건드리지 않는다 —
-    건드리면 오히려 현재 열려 있는 실제 프리뷰 패널이
-    export 도중 화면 밖으로 잠깐 밀려나 보이게 된다.
-  */
 
   exportSectionForExport
     .classList

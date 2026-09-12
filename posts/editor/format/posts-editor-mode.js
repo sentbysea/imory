@@ -186,11 +186,29 @@ function syncEditorExcerptControls() {
 
 
   if (
-    hideExcerpt &&
-    typeof closeEditorPreview === "function"
+    typeof closeEditorPreview !== "function"
   ) {
 
+    return;
+
+  }
+
+
+  if (hideExcerpt) {
+
     closeEditorPreview();
+
+  }
+
+
+  else {
+
+    /*
+      발췌 UI가 다시 보이면 프리뷰도 원래 상태로 —
+      사용자가 고른 값이 있으면 그것, 없으면 화면 크기의 기본값.
+    */
+
+    syncEditorPreviewMode();
 
   }
 

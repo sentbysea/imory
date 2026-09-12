@@ -1,36 +1,101 @@
 /* =========================================================
-   PREVIEW TOGGLE
-   데스크톱에서는 숨김.
+   PREVIEW 여닫기 버튼
+
+   ★ 부유 알약이 아니다.
+
+   예전에는 모바일 전용으로, 화면 아래에 sticky로 떠 있는
+   둥근 알약(그림자 + backdrop-filter)이었고 데스크톱에서는
+   아예 숨겨져 있었다. 지금은 두 화면 모두 **에디터 바로 아래
+   일반 문서 흐름**에 놓인 고스트 버튼 하나다 — 선·색·글자
+   크기를 아래 .post-editor-button(저장/취소 줄)과 같은 것으로
+   맞췄고, 그림자와 둥근 모서리는 쓰지 않는다.
 ========================================================== */
 
 .post-editor-preview-toggle {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 6px;
+
+  margin-top: 26px;
+
+  padding:
+    7px
+    12px;
+
+  border:
+    1px solid #e8e8e8;
+
+  border-radius: 0;
+
+  background: #ffffff;
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 9px;
+  font-weight: 400;
+
+  letter-spacing: 0.06em;
+
+  color: #999999;
+
+  cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+
+.post-editor-preview-toggle:hover {
+  color: #666666;
+
+  border-color: #dddddd;
+}
+
+
+.post-editor-preview-toggle[hidden] {
   display: none;
+}
+
+
+.post-editor-preview-toggle-icon {
+  font-size: 8px;
+
+  line-height: 1;
+
+  color: #c3a2af;
 }
 
 
 /* =========================================================
    PREVIEW SECTION
-   DESKTOP
+
+   ★ 보이기/숨기기의 유일한 기준은 is-open이다(데스크톱·모바일
+   공통). 기본값(데스크톱 펼침 · 모바일 접힘)은 JS가 정한다
+   (posts/preview/posts-preview-mobile.js의
+   syncEditorPreviewMode).
+
+   구분선은 위 버튼이 대신하므로 border-top을 두지 않는다 —
+   버튼과 패널 사이에 줄이 두 번 그어지지 않게.
 ========================================================== */
 
 .post-editor-preview-section {
+  display: none;
+
   width: 100%;
 
-  margin-top: 38px;
-
-  padding-top: 20px;
-
-  border-top:
-    1px solid #eeeeee;
+  margin-top: 14px;
 }
 
 
-/*
-  데스크톱에서는 overlay 필요 없음.
-*/
-
-.post-editor-preview-backdrop {
-  display: none;
+.post-editor-preview-section.is-open {
+  display: block;
 }
 
 
@@ -41,29 +106,6 @@
 
 .post-editor-preview-sheet {
   width: 100%;
-}
-
-
-/* =========================================================
-   PREVIEW HEADER
-========================================================== */
-
-.post-editor-preview-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-
-  margin-bottom: 8px;
-}
-
-
-.post-editor-preview-label {
-  font-size: 9px;
-  font-weight: 500;
-
-  letter-spacing: 0.10em;
-
-  color: #999999;
 }
 
 
@@ -148,18 +190,6 @@
   color: #cccccc;
 
   text-decoration: line-through;
-}
-
-
-/*
-  ratio 트리거는 on/off가 아니라 "펼침/접힘"이라
-  취소선을 쓰지 않음(꺼짐 = 그냥 접힌 상태).
-*/
-
-.post-editor-preview-ratio-trigger[aria-pressed="false"] {
-  color: #bbbbbb;
-
-  text-decoration: none;
 }
 
 
@@ -296,6 +326,20 @@
 }
 
 
+/*
+  ★ [hidden]만으로는 숨겨지지 않는다.
+
+  UA 스타일시트의 [hidden]{display:none}은 명시도가 0,0,1,0이라
+  바로 위 클래스 선택자(display:flex)에 진다 — 그래서
+  syncPreviewRatioControls()가 hidden을 켜도 상세 비율 입력칸이
+  auto·uniform에서 계속 보였다. 같은 명시도로 다시 적는다.
+*/
+
+.post-editor-preview-ratio-custom-inputs[hidden] {
+  display: none;
+}
+
+
 .post-editor-preview-ratio-custom-input {
   width: 34px;
 
@@ -328,24 +372,27 @@
 }
 
 
-.post-editor-preview-close {
-  display: none;
+/*
+  출력 너비는 비율 숫자보다 자릿수가 많다(1080 · 1200).
+*/
 
-  padding: 2px 4px;
+.post-editor-preview-export-width {
+  width: 46px;
+}
 
-  border: 0;
 
-  background: transparent;
-
-  color: #aaaaaa;
+.post-editor-preview-export-size {
+  color: #cccccc;
 
   font-family:
     "Pretendard",
     sans-serif;
 
-  font-size: 15px;
+  font-size: 9px;
 
-  cursor: pointer;
+  letter-spacing: 0.025em;
+
+  white-space: nowrap;
 }
 
 
@@ -402,141 +449,15 @@
   여기서는 비율을 결정하지 않음.
 */
 
-.post-editor-preview-pages {
-  width: 100%;
-
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-}
-
-
-/* =========================================================
-   PREVIEW PAGE
-========================================================== */
-
-.post-editor-preview-page {
-  position: relative;
-
-  box-sizing: border-box;
-
-  /*
-    페이지 나누기 계산이 PC/모바일에서 항상 동일하도록
-    실제 레이아웃 너비는 화면 크기와 무관하게 항상 520px로 고정.
-    좁은 화면에서는 JS(applyEditorPreviewScale)가
-    이 520px 캔버스를 통째로 축소해서 보여줌.
-  */
-
-  width: 520px;
-
-  aspect-ratio:
-    var(
-      --post-preview-aspect,
-      4 / 5
-    );
-
--webkit-text-size-adjust: 100%;
-text-size-adjust: 100%;
-
-  min-height: 0;
-
-  padding:
-    var(
-      --post-preview-padding-y,
-      34px
-    )
-    var(
-      --post-preview-padding-x,
-      30px
-    );
-
-  border:
-    1px solid #eeeeee;
-
-  background: #ffffff;
-
-  overflow: hidden;
-
-  box-shadow:
-    0
-    4px
-    20px
-    rgba(
-      0,
-      0,
-      0,
-      0.035
-    );
-
-      flex: 0 0 auto;
-  flex-shrink: 0;
-}
-
-.post-editor-preview-page[hidden] {
-  display: none !important;
-}
-
-
-/* =========================================================
-   PREVIEW TITLE
-========================================================== */
-
-.post-editor-preview-title {
-  margin-bottom:
-    var(
-      --post-preview-title-gap,
-      22px
-    );
-
-  font-size: 16px;
-  font-weight: 500;
-
-  line-height: 1.5;
-
-  letter-spacing: 0.03em;
-
-  color: #444444;
-
-  word-break: keep-all;
-}
-
-
-/* =========================================================
-   PREVIEW CONTENT
-========================================================== */
-
-.post-editor-preview-content {
-  width: 100%;
-
-  font-size: 13px;
-  font-weight: 400;
-
-  line-height: 1.9;
-
-  letter-spacing: 0.025em;
-
-  color: #555555;
-
-  white-space: normal;
-
-  word-break: keep-all;
-}
-
-
-.post-editor-preview-content
-.post-body-paragraph {
-  white-space: pre-wrap;
-}
-
-
 /*
-  자동 페이지 계산할 때
-  한 페이지 밖 내용이 절대로 삐져나오지 않게.
+  ★ 페이지 한 장의 모양(.post-editor-preview-pages /
+  .post-editor-preview-page / -title / -content /
+  .post-body-paragraph-gap)은 posts/posts-page-canvas.css로
+  옮겼다 — Quote Preset 미리보기(admin/index.html)가 같은
+  페이지 박스를 쓰기 때문이다. 두 문서 모두 그 파일을
+  로드한다.
 */
 
-.post-editor-preview-page {
-  contain: layout paint;
-}
 
 /* =========================================================
    PAGE BREAK BUTTON
