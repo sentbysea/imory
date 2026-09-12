@@ -25,7 +25,7 @@ postEditorFontToggle
   );
 
 /* =========================================================
-   BOLD / ITALIC / UNDERLINE
+   BOLD / ITALIC / UNDERLINE / STRIKETHROUGH
 ========================================================== */
 
 postEditorBoldToggle
@@ -60,28 +60,41 @@ postEditorUnderlineToggle
     }
   );
 
-/* =========================================================
-   PAGE BREAK
-========================================================== */
 
-postEditorPageBreak
+postEditorStrikeToggle
   ?.addEventListener(
-    "pointerdown",
-    event => {
+    "click",
+    () => {
 
-      captureEditorCaretBeforeToolbar();
-
-      event.preventDefault();
+      toggleEditorStrike();
 
     }
   );
 
+/* =========================================================
+   PAGE BREAK
+========================================================== */
 
-postEditorPageBreak
-  ?.addEventListener(
-    "click",
-    insertEditorPageBreak
-  );
+bindImoryTapButton(
+  postEditorPageBreak,
+  {
+
+    onDown:
+      () => {
+
+        captureEditorCaretBeforeToolbar();
+
+      },
+
+    onFire:
+      () => {
+
+        insertEditorPageBreak();
+
+      }
+
+  }
+);
 
   /* =========================================================
    PREVIEW PAGE NAV
@@ -155,6 +168,30 @@ function revertEditorToLastSnapshot() {
 
   postEditorContent.innerHTML =
     editorUndoStack.pop();
+
+
+  /*
+    본문을 통째로 갈아끼웠다 — 진행 중이던 조정이 기억해 둔
+    span/마커는 전부 버려진 노드다. 세션을 비워서 다음 색이
+    안전한 전체 경로로 가게 한다.
+  */
+
+  if (
+    typeof endEditorInlineColorSession === "function"
+  ) {
+
+    endEditorInlineColorSession();
+
+  }
+
+
+  if (
+    typeof endEditorParagraphRuleSession === "function"
+  ) {
+
+    endEditorParagraphRuleSession();
+
+  }
 
 
   savedEditorRange =
@@ -233,6 +270,152 @@ function openEditorFormatColorPicker(
   );
 
 
+  /*
+    여기부터 창이 닫힐 때까지가 **한 번의 조정**이다. 첫 색만
+    본문 구조를 바꾸고, 그 뒤로는 만들어 둔 자리의 색만 갈아끼운다
+    (posts/editor/format/posts-editor-highlight.js §live).
+  */
+
+  beginEditorInlineColorSession();
+
+
+  /*
+    강조선 쪽 세션도 여기서 비운다 — 지난번에 조정하던 문단의
+    마커가 남아 있으면 이번에 고른 문단이 아니라 그 문단의 색이
+    바뀐다.
+  */
+
+  endEditorParagraphRuleSession();
+
+
+  const finishColorSession =
+    () => {
+
+      endEditorInlineColorSession();
+
+
+      endEditorParagraphRuleSession();
+
+    };
+
+
+  /*
+    ★ 기본(OS) 색상 선택기 경로
+
+    손가락이 주 입력인 기기에서는 아이폰이 띄우는 기본 피커를
+    쓴다(posts/editor/posts-color-picker.js). 창이 열리면 포커스와
+    선택이 그쪽으로 가므로, **아직 선택이 살아 있는 지금** 지금
+    색을 한 번 발라 자리를 만들어 둔다. 그 뒤의 색 변화는 그
+    자리의 색만 바꾸므로 본문도 선택도 건드리지 않는다.
+
+    기본 피커에는 Cancel이 없다 — 되돌리는 길은 Undo 한 번이고,
+    방금 찍은 스냅샷 하나가 정확히 그 한 칸이다.
+  */
+
+  if (
+    typeof imoryColorPickerMode === "function" &&
+    imoryColorPickerMode() === "native"
+  ) {
+
+    const startColor =
+      options.current();
+
+
+    options.remember?.(
+      startColor
+    );
+
+
+    const seeded =
+      options.apply(
+        startColor,
+        true
+      );
+
+
+    /*
+      바를 자리가 없으면(강조선인데 문단을 못 찾는 등) 스냅샷을
+      도로 걷어내고 아무 일도 없던 것으로 둔다.
+    */
+
+    if (seeded === false) {
+
+      editorUndoStack.pop();
+
+
+      syncEditorUndoButtonState();
+
+
+      finishColorSession();
+
+
+      return;
+
+    }
+
+
+    const opened =
+      openImoryNativeColorPicker(
+        {
+
+          anchor,
+
+          color:
+            startColor,
+
+          onPreview:
+            color => {
+
+              options.remember?.(
+                color
+              );
+
+
+              options.apply(
+                color,
+                true
+              );
+
+            },
+
+          onApply:
+            color => {
+
+              options.remember?.(
+                color
+              );
+
+
+              options.apply(
+                color,
+                true
+              );
+
+
+              finishColorSession();
+
+            }
+
+        }
+      );
+
+
+    if (opened) {
+
+      return;
+
+    }
+
+
+    /*
+      기본 피커를 열지 못했으면 커스텀 팝오버로 이어간다 —
+      씨앗은 이미 발라 뒀으므로 아래 세션이 그 자리를 그대로
+      이어받는다.
+    */
+
+  }
+
+
   openImoryColorPicker(
     {
 
@@ -275,6 +458,9 @@ function openEditorFormatColorPicker(
             true
           );
 
+
+          finishColorSession();
+
         },
 
       onCancel:
@@ -282,11 +468,17 @@ function openEditorFormatColorPicker(
 
           revertEditorToLastSnapshot();
 
+
+          finishColorSession();
+
         },
 
       onRemove:
         options.remove
           ? () => {
+
+              finishColorSession();
+
 
               options.remove();
 
@@ -308,44 +500,48 @@ function bindEditorColorControl(
   options
 ) {
 
-  control
-    ?.addEventListener(
-      "pointerdown",
-      event => {
+  /*
+    ★ pointerdown에서 preventDefault를 걸어 본문 선택을 지키되,
+    실행은 pointerup으로 한다 — WebKit은 터치에서 그
+    preventDefault 뒤에 click을 만들지 않는다(공용 헬퍼의 머리말에
+    실측표가 있다: posts/editor/posts-color-picker.js).
+  */
 
-        event.preventDefault();
+  bindImoryTapButton(
+    control,
+    {
 
+      onDown:
+        () => {
 
-        if (
-          options.requireSelection
-        ) {
+          if (
+            options.requireSelection
+          ) {
 
-          captureEditorSelectionBeforeToolbar();
+            captureEditorSelectionBeforeToolbar();
+
+          }
+
+          else {
+
+            captureEditorCaretBeforeToolbar();
+
+          }
+
+        },
+
+      onFire:
+        () => {
+
+          openEditorFormatColorPicker(
+            control,
+            options
+          );
 
         }
 
-        else {
-
-          captureEditorCaretBeforeToolbar();
-
-        }
-
-      }
-    );
-
-
-  control
-    ?.addEventListener(
-      "click",
-      () => {
-
-        openEditorFormatColorPicker(
-          control,
-          options
-        );
-
-      }
-    );
+    }
+  );
 
 }
 
@@ -518,29 +714,26 @@ bindEditorColorControl(
    RULE 켜고 끄기 (색 팝오버 없이 바로)
 ========================================================== */
 
-postEditorRuleToggle
-  ?.addEventListener(
-    "pointerdown",
-    event => {
+bindImoryTapButton(
+  postEditorRuleToggle,
+  {
 
-      event.preventDefault();
+    onDown:
+      () => {
 
+        captureEditorCaretBeforeToolbar();
 
-      captureEditorCaretBeforeToolbar();
+      },
 
-    }
-  );
+    onFire:
+      () => {
 
+        toggleEditorParagraphRule();
 
-postEditorRuleToggle
-  ?.addEventListener(
-    "click",
-    () => {
+      }
 
-      toggleEditorParagraphRule();
-
-    }
-  );
+  }
+);
 
 
 

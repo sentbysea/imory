@@ -14,9 +14,23 @@
          찍어서 드래그 한 번에 undo가 수십 칸 쌓였고,
        - "취소하고 원래대로"라는 길이 아예 없었다.
 
-     그래서 우리가 직접 그리는 팝오버로 바꾼다. 이 파일은 색을
+     그래서 우리가 직접 그리는 팝오버로 바꿨다. 이 파일은 색을
      고르는 일만 하고, 그 색을 본문에 어떻게 바르는지는 전혀
      모른다(호출부가 콜백으로 넘긴다).
+
+   ★ 그 뒤 — 기본 피커가 다시 기본값이 되었다 (이 파일 아래쪽)
+
+     위 네 가지는 전부 **기본 피커 탓이 아니었다**. 색이 바뀔
+     때마다 우리 코드가 contenteditable을 다시 만들고 문서 선택을
+     갈아끼운 탓이다(그리고 `restoreEditorSelection()`이 자리가
+     같아도 선택을 다시 설정해 selectionchange가 초당 1만 번 넘게
+     돌았다). 그 둘을 고친 뒤로는, 손가락이 주 입력인 기기에서
+     **OS 기본 색상 선택기**를 쓴다 —
+     `imoryColorPickerMode()` / `openImoryNativeColorPicker()`.
+
+     이 팝오버는 제거하지 않았다. 데스크톱의 기본이자, 기본
+     피커를 쓸 수 없을 때의 대안으로 그대로 남아 있다.
+     자세한 내용은 IMORY_EDITOR_DECOR_DESIGN.md §10-9.
 
    ★ 닫히는 길은 셋, 그중 확정은 하나뿐이다
 
@@ -37,6 +51,156 @@
 
    classic script. 다른 파일에 의존하지 않는다.
 ========================================================== */
+
+
+/* =========================================================
+   pointerdown을 막은 버튼을 누를 수 있게 (공용)
+
+   ★ 문제
+
+     본문의 선택을 지키려면 툴바 버튼은 pointerdown에서
+     preventDefault()를 걸어야 한다 — 그러지 않으면 버튼이
+     포커스를 가져가면서 contenteditable의 선택이 풀린다.
+
+     그런데 WebKit은 **터치**에서 그 preventDefault를 "이
+     제스처의 합성 마우스 이벤트를 만들지 말라"로 해석해서,
+     뒤따르는 click을 아예 만들지 않는다. Chromium은 만든다.
+     Playwright 실측(390×844, hasTouch):
+
+       webkit  /touch  pointerdown(prevented), pointerup
+       webkit  /mouse  pointerdown(prevented), pointerup, click
+       chromium/touch  pointerdown(prevented), pointerup, click
+       chromium/mouse  pointerdown(prevented), pointerup, click
+
+     그래서 "선택을 지키는 버튼"이 아이폰에서 눌리지 않았다.
+
+   ★ 해법
+
+     pointerup으로 실행하고, 키보드(Tab → Enter/Space)를 위해
+     click도 함께 듣되 같은 누름이 두 번 처리되지 않게 막는다.
+     누른 버튼에서 떼야 실행된다 — 누르고 밖으로 끌어서 놓으면
+     아무 일도 없는, 버튼의 평범한 동작 그대로다.
+
+   -> onDown  포인터가 닿는 순간(선택을 붙잡는 자리)
+      onFire  실제 실행
+========================================================== */
+
+function bindImoryTapButton(
+  element,
+  {
+    onDown,
+    onFire
+  }
+) {
+
+  if (!element) {
+    return;
+  }
+
+
+  let pressed =
+    false;
+
+  let swallowClickUntil =
+    0;
+
+
+  element.addEventListener(
+    "pointerdown",
+    event => {
+
+      event.preventDefault();
+
+
+      pressed =
+        true;
+
+
+      onDown?.(
+        event
+      );
+
+    }
+  );
+
+
+  element.addEventListener(
+    "pointerup",
+    event => {
+
+      if (!pressed) {
+        return;
+      }
+
+
+      pressed =
+        false;
+
+
+      /*
+        버튼 밖에서 손을 뗐으면 실행하지 않는다.
+      */
+
+      if (
+        !element.contains(
+          event.target
+        ) &&
+        event.target !== element
+      ) {
+
+        return;
+
+      }
+
+
+      swallowClickUntil =
+        Date.now() + 700;
+
+
+      onFire(
+        event
+      );
+
+    }
+  );
+
+
+  element.addEventListener(
+    "pointercancel",
+    () => {
+
+      pressed =
+        false;
+
+    }
+  );
+
+
+  element.addEventListener(
+    "click",
+    event => {
+
+      if (
+        Date.now() < swallowClickUntil
+      ) {
+
+        swallowClickUntil =
+          0;
+
+
+        return;
+
+      }
+
+
+      onFire(
+        event
+      );
+
+    }
+  );
+
+}
 
 
 /* =========================================================
@@ -953,52 +1117,164 @@ function bindImoryColorPicker(
   );
 
 
-  root
-    .querySelector(
-      '[data-role="apply"]'
-    )
-    ?.addEventListener(
-      "click",
-      () => {
+  /* =========================================================
+     Apply / Cancel / remove
 
-        closeImoryColorPicker(
-          "apply"
+     ★ 왜 click이 아니라 pointerup인가 (실측)
+
+       바로 위의 root pointerdown 핸들러가 preventDefault()를
+       건다(본문 선택을 지키기 위해서다). WebKit은 **터치**에서
+       그 preventDefault를 "이 제스처의 합성 마우스 이벤트를
+       만들지 말라"로 해석해서, 뒤따르는 click을 아예 만들지
+       않는다. Chromium은 만든다. 실측:
+
+         webkit  /touch  pointerdown(prevented), pointerup
+         webkit  /mouse  pointerdown(prevented), pointerup, click
+         chromium/touch  pointerdown(prevented), pointerup, click
+         chromium/mouse  pointerdown(prevented), pointerup, click
+
+       그래서 아이폰에서는 apply/cancel이 눌리지 않았고 창도
+       닫히지 않았다(바깥 클릭 감지는 팝오버 안을 건너뛰므로).
+       mock 테스트가 chromium이라 이 차이를 못 잡았다.
+
+     ★ pointerup만으로 끝내지 않는 이유
+
+       키보드(Tab → Enter/Space)는 pointer 이벤트를 내지 않고
+       click만 낸다. 그래서 둘 다 듣되, 같은 누름이 두 번
+       처리되지 않게 pointerup이 처리한 직후의 click 한 번은
+       흘려보낸다.
+
+     ★ 누른 버튼에서 떼야 실행된다
+
+       pointerdown 때의 버튼과 pointerup 때의 버튼이 같을 때만
+       동작한다 — 누르고 밖으로 끌어서 놓으면 취소되는, 버튼의
+       평범한 동작 그대로다.
+  ========================================================= */
+
+  let pressedRole =
+    null;
+
+  let swallowClickUntil =
+    0;
+
+
+  const roleAt =
+    target =>
+      target
+        ?.closest?.(
+          '[data-role="apply"],' +
+          '[data-role="cancel"],' +
+          '[data-role="remove"]'
+        )
+        ?.getAttribute(
+          "data-role"
+        ) ||
+      null;
+
+
+  root.addEventListener(
+    "pointerdown",
+    event => {
+
+      pressedRole =
+        roleAt(
+          event.target
         );
 
-      }
-    );
+    }
+  );
 
 
-  root
-    .querySelector(
-      '[data-role="cancel"]'
-    )
-    ?.addEventListener(
-      "click",
-      () => {
+  root.addEventListener(
+    "pointerup",
+    event => {
 
-        closeImoryColorPicker(
-          "cancel"
+      const role =
+        roleAt(
+          event.target
         );
 
+
+      const pressed =
+        pressedRole;
+
+
+      pressedRole =
+        null;
+
+
+      if (
+        !role ||
+        role !== pressed
+      ) {
+        return;
       }
-    );
 
 
-  root
-    .querySelector(
-      '[data-role="remove"]'
-    )
-    ?.addEventListener(
-      "click",
-      () => {
+      swallowClickUntil =
+        Date.now() + 700;
 
-        closeImoryColorPicker(
-          "remove"
+
+      closeImoryColorPicker(
+        role
+      );
+
+    }
+  );
+
+
+  /*
+    포인터가 팝오버 밖에서 떨어지면 "누른 상태"를 푼다 — 다음
+    누름이 엉뚱하게 이어지지 않게.
+  */
+
+  root.addEventListener(
+    "pointercancel",
+    () => {
+
+      pressedRole =
+        null;
+
+    }
+  );
+
+
+  root.addEventListener(
+    "click",
+    event => {
+
+      const role =
+        roleAt(
+          event.target
         );
 
+
+      if (!role) {
+        return;
       }
-    );
+
+
+      /* 방금 pointerup이 처리한 그 누름이면 흘려보낸다 */
+
+      if (
+        Date.now() < swallowClickUntil
+      ) {
+
+        swallowClickUntil =
+          0;
+
+
+        return;
+
+      }
+
+
+      closeImoryColorPicker(
+        role
+      );
+
+    }
+  );
 
 }
 
@@ -1420,6 +1696,393 @@ function isImoryColorPickerOpen() {
 
   return Boolean(
     imoryColorPickerSession
+  );
+
+}
+
+
+/* =========================================================
+   기본(OS) 색상 선택기 — <input type="color">
+
+   ★ 왜 다시 꺼내는가
+
+     사용자의 우선순위는 둘이다.
+
+       1. 아이폰이 띄우는 **기본 색상 선택기**를 쓰는 것
+       2. 색을 조정하는 동안 앱 때문에 그 창이 닫히지 않는 것
+
+     예전에 기본 피커를 버린 이유는 "한 번 고르면 창이 닫힌다 ·
+     본문 선택이 풀린다 · undo가 수십 칸 쌓인다"였다. 그런데 그
+     셋은 전부 **기본 피커 탓이 아니었다**. 색이 바뀔 때마다
+     우리 코드가 contenteditable을 통째로 다시 만들고 문서 선택을
+     두 번 갈아끼운 탓이다(posts/editor/format/posts-editor-highlight.js
+     §live에 무엇이 벌어졌는지 적어 두었다).
+
+     그 원인을 고친 뒤라, 기본 피커는 다음 조건에서 성립한다.
+
+       - 피커를 여는 순간 **선택이 아직 살아 있을 때** 지금 색을
+         한 번 바른다(씨앗). 여기까지가 DOM·선택을 건드리는 전부다.
+       - 그 뒤의 input 이벤트는 만들어 둔 span의 색만 바꾼다.
+         본문 구조도 선택도 건드리지 않으므로 OS 창이 닫힐 이유가
+         없다.
+       - undo 스냅샷은 여는 순간 한 번만 찍는다 — 조정 전체가
+         undo 한 칸이다.
+
+   ★ 기본 피커에 없는 것: Cancel
+
+     OS 창에는 "취소하고 원래대로"가 없다. 그래서 기본 피커에서는
+     **Undo 한 번**이 그 자리를 대신한다(위의 스냅샷 하나).
+     이것이 커스텀 팝오버와의 유일한 의도된 차이다.
+
+   ★ 어느 쪽을 쓰는가
+
+     window.IMORY_COLOR_PICKER_MODE로 강제할 수 있고(native /
+     custom), 정하지 않으면 **손가락이 주 입력**인 기기에서만
+     기본 피커를 쓴다. 데스크톱은 지금까지처럼 커스텀 팝오버다 —
+     거기서는 Apply/Cancel이 있는 편이 낫고, 기본 피커가 별도
+     창으로 떠서 화면을 가리는 문제도 없다.
+========================================================== */
+
+function imoryNativeColorPickerSupported() {
+
+  try {
+
+    const probe =
+      document.createElement(
+        "input"
+      );
+
+
+    probe.setAttribute(
+      "type",
+      "color"
+    );
+
+
+    return probe.type === "color";
+
+  }
+
+  catch (error) {
+
+    return false;
+
+  }
+
+}
+
+
+function imoryTouchPrimaryDevice() {
+
+  try {
+
+    if (
+      typeof window.matchMedia !== "function"
+    ) {
+
+      return false;
+
+    }
+
+
+    return (
+      window.matchMedia(
+        "(pointer: coarse)"
+      ).matches &&
+      (
+        navigator.maxTouchPoints ||
+        0
+      ) > 0
+    );
+
+  }
+
+  catch (error) {
+
+    return false;
+
+  }
+
+}
+
+
+function imoryColorPickerMode() {
+
+  const forced =
+    typeof window !== "undefined"
+      ? window.IMORY_COLOR_PICKER_MODE
+      : null;
+
+
+  if (
+    forced === "native" ||
+    forced === "custom"
+  ) {
+
+    return forced;
+
+  }
+
+
+  return (
+    imoryNativeColorPickerSupported() &&
+    imoryTouchPrimaryDevice()
+  )
+    ? "native"
+    : "custom";
+
+}
+
+
+/*
+  컨트롤 하나에 붙는 숨은 <input type="color">. 버튼 안에 넣을 수
+  없어서(중첩 불가) 바로 옆에 두고 프로그램으로 연다 — 여는 호출이
+  실제 탭(pointerup) 안에서 일어나므로 사용자 제스처 안이다.
+
+  display:none / visibility:hidden은 쓰지 않는다. 그러면 활성화
+  자체가 막히는 브라우저가 있다. 보이지 않게만 한다.
+*/
+
+const IMORY_NATIVE_COLOR_INPUT_CLASS =
+  "imory-native-color-input";
+
+
+/* 지금 열려 있는 기본 피커의 입력칸(없으면 null) */
+
+let imoryNativeColorPickerActive =
+  null;
+
+
+function ensureImoryNativeColorInput(
+  control
+) {
+
+  if (
+    control.imoryNativeColorInput
+  ) {
+
+    return control.imoryNativeColorInput;
+
+  }
+
+
+  const input =
+    document.createElement(
+      "input"
+    );
+
+
+  input.type =
+    "color";
+
+
+  input.className =
+    IMORY_NATIVE_COLOR_INPUT_CLASS;
+
+
+  /*
+    키보드 순서에는 넣지 않는다 — 누르는 자리는 어디까지나
+    라벨이 붙은 버튼이고, 이 칸은 그 버튼이 여는 창일 뿐이다.
+  */
+
+  input.tabIndex =
+    -1;
+
+
+  input.setAttribute(
+    "aria-hidden",
+    "true"
+  );
+
+
+  (
+    control.parentNode ||
+    document.body
+  ).insertBefore(
+    input,
+    control
+  );
+
+
+  input.addEventListener(
+    "input",
+    () => {
+
+      const session =
+        input.imoryColorSession;
+
+
+      if (!session) {
+        return;
+      }
+
+
+      session.onPreview?.(
+        imoryColorClampHex(
+          input.value,
+          session.color
+        )
+      );
+
+    }
+  );
+
+
+  /*
+    change  OS 창을 닫으며 확정했을 때.
+    blur    change가 오지 않는 환경을 위한 보험 — 둘 중 먼저
+            오는 하나만 처리된다(세션을 비우므로).
+  */
+
+  const finish =
+    () => {
+
+      const session =
+        input.imoryColorSession;
+
+
+      if (!session) {
+        return;
+      }
+
+
+      input.imoryColorSession =
+        null;
+
+
+      if (
+        imoryNativeColorPickerActive === input
+      ) {
+
+        imoryNativeColorPickerActive =
+          null;
+
+      }
+
+
+      session.onApply?.(
+        imoryColorClampHex(
+          input.value,
+          session.color
+        )
+      );
+
+    };
+
+
+  input.addEventListener(
+    "change",
+    finish
+  );
+
+
+  input.addEventListener(
+    "blur",
+    finish
+  );
+
+
+  control.imoryNativeColorInput =
+    input;
+
+
+  return input;
+
+}
+
+
+/*
+  options
+
+    anchor     컬러 컨트롤 버튼
+    color      지금 색
+    onPreview  (hex) => void  — 창을 열어 둔 채 색이 바뀔 때마다
+    onApply    (hex) => void  — 창이 닫히며 확정될 때 한 번
+*/
+
+function openImoryNativeColorPicker(
+  options = {}
+) {
+
+  const control =
+    options.anchor;
+
+
+  if (!control) {
+
+    return false;
+
+  }
+
+
+  const input =
+    ensureImoryNativeColorInput(
+      control
+    );
+
+
+  const color =
+    imoryColorClampHex(
+      options.color,
+      "#000000"
+    );
+
+
+  input.value =
+    color;
+
+
+  input.imoryColorSession =
+    {
+
+      color,
+
+      onPreview:
+        options.onPreview ||
+        null,
+
+      onApply:
+        options.onApply ||
+        null
+
+    };
+
+
+  imoryNativeColorPickerActive =
+    input;
+
+
+  try {
+
+    input.click();
+
+  }
+
+  catch (error) {
+
+    input.imoryColorSession =
+      null;
+
+
+    imoryNativeColorPickerActive =
+      null;
+
+
+    return false;
+
+  }
+
+
+  return true;
+
+}
+
+
+function isImoryNativeColorPickerOpen() {
+
+  return Boolean(
+    imoryNativeColorPickerActive &&
+    imoryNativeColorPickerActive.imoryColorSession
   );
 
 }

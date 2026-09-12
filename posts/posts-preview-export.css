@@ -394,7 +394,25 @@
 /*
   저장될 픽셀 크기 표시(읽기 전용). 가로 픽셀을 고치는 입력칸은
   이 화면에 없다 — Quote Preset의 CANVAS에서만 고친다.
+
+  ★ 설정 줄 안이 아니라 **발췌 대지 바로 위, 오른쪽 끝**에 둔다
+  (요구사항 7). 설정 항목 사이에 끼어 있으면 고칠 수 있는 값처럼
+  보였다. 대지 바깥이므로 저장되는 PNG에는 들어가지 않는다 —
+  캡처 대상은 페이지 요소뿐이다.
 */
+
+.post-editor-preview-stage-meta {
+  display: flex;
+  justify-content: flex-end;
+
+  width: 100%;
+
+  margin-bottom: 4px;
+
+  /* 값이 없을 때도 자리가 접히지 않게 */
+  min-height: 12px;
+}
+
 
 .post-editor-preview-export-size {
   color: #cccccc;
@@ -478,9 +496,11 @@
    PAGE BREAK BUTTON
 ========================================================== */
 
-.post-editor-undo-group {
-  margin-left: auto;
-}
+/*
+  undo/redo는 이제 자기 행(.post-editor-tool-line--end)에서
+  오른쪽으로 정렬된다 — 예전의 .post-editor-undo-group은 없앴다
+  (posts/posts-editor.css의 툴바 세 줄 규칙).
+*/
 
 
 .post-editor-tool-button.page-break {

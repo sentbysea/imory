@@ -287,6 +287,26 @@ async function updateEditorPreview(
   );
 
 
+  /*
+    ★ 배경 버튼(move/reset)의 활성 여부는 "지금 배경이 있는가"에
+    달려 있다 — 그 판정은 프리셋 + 이번 발췌의 오버라이드를 합친
+    값이므로, 프리셋이 늦게 도착하거나 바뀌면 다시 재야 한다.
+
+    예전에는 background 패널을 여는 순간 이 동기화가 함께
+    일어났다. 그 패널을 없애면서(요구사항 8) 버튼이 처음 상태
+    (배경 없음 → disabled)에 그대로 머물 수 있게 됐으므로,
+    프리뷰를 다시 그릴 때마다 함께 맞춘다.
+  */
+
+  if (
+    typeof syncPreviewBackgroundControls === "function"
+  ) {
+
+    syncPreviewBackgroundControls();
+
+  }
+
+
   reportPostPreviewImageFailure(
     prepared.failed
   );

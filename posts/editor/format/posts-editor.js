@@ -230,6 +230,56 @@ function restoreEditorSelection() {
     window.getSelection();
 
 
+  if (!selection) {
+
+    return false;
+
+  }
+
+
+  /*
+    ★ 이미 같은 자리면 다시 설정하지 않는다.
+
+    removeAllRanges + addRange는 자리가 그대로여도 selectionchange를
+    띄운다. 그런데 그 selectionchange 핸들러가
+    (posts/editor/posts-richtext-events.js) saveEditorSelection →
+    updateEditorToolbarState → syncEditorRuleToggleState →
+    editorParagraphRunsInSelection → 다시 이 함수로 들어온다.
+    그래서 편집창에 선택이 하나라도 있으면 초당 1만 번이 넘는
+    selectionchange가 쉬지 않고 돌았다(실측: 300ms에 3,800여 회).
+
+    화면에는 잘 드러나지 않지만, **OS가 띄우는 색상 선택기에는
+    치명적이다** — 선택이 끊임없이 다시 설정되는 문서에서는 그
+    창이 열려 있을 수 없다. 아이폰에서 기본 피커가 색을 한 번
+    고르자마자 닫히던 원인 후보이기도 하다.
+
+    고치는 방법은 "바꿀 게 없으면 건드리지 않는다" 하나면 된다.
+  */
+
+  if (
+    selection.rangeCount === 1
+  ) {
+
+    const current =
+      selection.getRangeAt(
+        0
+      );
+
+
+    if (
+      current.startContainer === savedEditorRange.startContainer &&
+      current.startOffset === savedEditorRange.startOffset &&
+      current.endContainer === savedEditorRange.endContainer &&
+      current.endOffset === savedEditorRange.endOffset
+    ) {
+
+      return true;
+
+    }
+
+  }
+
+
   selection.removeAllRanges();
 
 
@@ -705,6 +755,26 @@ function toggleEditorUnderline() {
       "U"
     ],
     "u"
+  );
+
+}
+
+
+/*
+  취소선. B/I/U와 완전히 같은 구조다 — 새로 넣는 태그는 <s>이고,
+  이미 걸려 있는 것을 풀 때는 옛 글의 <strike>/<del>도 함께 본다
+  (사니타이저가 셋을 모두 <s>로 받아들인다 — posts/posts-sanitize.js).
+*/
+
+function toggleEditorStrike() {
+
+  toggleEditorInlineTag(
+    [
+      "S",
+      "STRIKE",
+      "DEL"
+    ],
+    "s"
   );
 
 }

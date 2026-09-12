@@ -22,28 +22,19 @@
    때마다 여기서 넣어 준다.
 ========================================================== */
 
+/*
+  ★ 남은 슬라이더는 둘뿐이다 — 확대와 흐림.
+
+  형광펜 높이 · 강조선 굵기 · 덮개 농도는 네모 숫자 칸으로
+  바뀌었다(요구사항 1·3): 좁은 화면에서 슬라이더가 라벨 아래로
+  떨어져 줄이 두 배로 늘어나는 것을 피하고, 값을 직접 칠 수 있게
+  하기 위해서다. 남긴 둘은 눈으로 훑으며 맞추는 값이라 슬라이더가
+  맞고, 대신 [라벨][슬라이더][값]이 **가로 한 줄**에 온다
+  (.quote-setting-row--slider).
+*/
+
 const QUOTE_RANGE_BINDINGS =
   [
-    [
-      () => quoteHighlightHeight,
-      () => quoteHighlightHeightValue,
-      value => `${value}%`
-    ],
-    [
-      () => quoteBodyRuleWidth,
-      () => quoteBodyRuleWidthValue,
-      value => `${value}px`
-    ],
-    [
-      () => quoteDialogueRuleWidth,
-      () => quoteDialogueRuleWidthValue,
-      value => `${value}px`
-    ],
-    [
-      () => quoteSourceRuleWidth,
-      () => quoteSourceRuleWidthValue,
-      value => `${value}px`
-    ],
     [
       () => quoteBackgroundScale,
       () => quoteBackgroundScaleValue,
@@ -53,11 +44,6 @@ const QUOTE_RANGE_BINDINGS =
       () => quoteBackgroundBlur,
       () => quoteBackgroundBlurValue,
       value => `${value}px`
-    ],
-    [
-      () => quoteBackgroundOverlayOpacity,
-      () => quoteBackgroundOverlayOpacityValue,
-      value => `${value}%`
     ]
   ];
 
@@ -336,6 +322,144 @@ quoteBackgroundRemove
 
 
       syncQuoteBackgroundControls();
+
+
+      updateQuotePreview();
+
+    }
+  );
+
+
+/* =========================================================
+   2-1. 이미지 크기 고정
+
+   ★ 켜는 순간 "지금 보이는 크기"를 그대로 기준으로 잡는다
+     (요구사항 2). 그렇게 하지 않으면 체크 한 번에 사진이
+     껑충 뛰어서, 사용자는 방금 맞춰 둔 구도를 처음부터 다시
+     잡아야 한다.
+
+     저장하는 값은 픽셀이 아니라 **캔버스 너비에 대한 비율**
+     이고, 확대 배율은 따로 곱해지므로 여기서 나눠 둔다 —
+     그래야 확대 슬라이더가 두 모드에서 같은 뜻을 유지한다
+     (posts/style/posts-canvas-background.js).
+
+   ★ 재 볼 사진이 아직 없으면(로드 전) 비율을 건드리지 않는다.
+     저장된 값이 있으면 그 값이 맞고, 없으면 1(= 캔버스 너비)
+     에서 시작한다.
+========================================================== */
+
+/*
+  고정을 켤 때 쓸 기준 비율 — "고정이 아니었다면 지금 그려졌을
+  너비" ÷ 캔버스 너비다.
+
+  ★ 그려진 <img>를 재지 않고 **계산으로** 구한다.
+
+    재는 방식은 두 군데서 어긋난다. (1) 배경 그림의 원본 크기는
+    비동기로 도착하므로 렌더 직후에는 style.width가 아직 비어
+    있을 수 있고, (2) 체크박스를 누르는 순간에는 같은 change에
+    걸린 다른 리스너(quoteLiveInputs)가 먼저 프리뷰를 다시 그려서
+    이미 "고정된 뒤의 크기"가 그려져 있다.
+
+    cover 배율은 상자와 원본 크기만으로 정해지므로 계산이 곧
+    정답이고 타이밍을 타지 않는다(computePostBackgroundGeometry의
+    coverFactor와 같은 식이다). 확대 배율은 고정일 때도 따로
+    곱해지므로 여기서는 빼 둔다 — 그래야 확대 슬라이더가 두
+    모드에서 같은 뜻을 유지한다.
+
+  -> 비율, 또는 아직 알 수 없으면 null
+*/
+
+function quoteLooseBackgroundWidthRatio() {
+
+  const url =
+    quoteBackgroundImageUrl;
+
+
+  if (!url) {
+    return null;
+  }
+
+
+  const natural =
+    postBackgroundNaturalSize(
+      url
+    );
+
+
+  if (!natural) {
+    return null;
+  }
+
+
+  const page =
+    quotePreviewCanvas
+      ?.querySelector(
+        ".post-editor-preview-page:not([hidden])"
+      ) ||
+    quotePreviewCanvas
+      ?.querySelector(
+        ".post-editor-preview-page"
+      );
+
+
+  const boxWidth =
+    page?.offsetWidth ||
+    0;
+
+  const boxHeight =
+    page?.offsetHeight ||
+    0;
+
+
+  if (
+    boxWidth <= 0 ||
+    boxHeight <= 0
+  ) {
+
+    return null;
+
+  }
+
+
+  const coverFactor =
+    Math.max(
+      boxWidth / natural.width,
+      boxHeight / natural.height
+    );
+
+
+  return (
+    natural.width *
+    coverFactor /
+    boxWidth
+  );
+
+}
+
+
+quoteBackgroundFixedSize
+  ?.addEventListener(
+    "change",
+    () => {
+
+      if (
+        quoteBackgroundFixedSize.checked
+      ) {
+
+        const measured =
+          quoteLooseBackgroundWidthRatio();
+
+
+        if (
+          measured !== null
+        ) {
+
+          quoteBackgroundWidthRatio =
+            measured;
+
+        }
+
+      }
 
 
       updateQuotePreview();

@@ -639,18 +639,11 @@
    CANVAS 배경 사진 설정
 ========================================================== */
 
-.quote-background-row {
-  display: flex;
-
-  flex-wrap: wrap;
-
-  align-items: center;
-
-  gap: 6px;
-
-  margin-top: 6px;
-}
-
+/*
+  사진 고르기/삭제 버튼은 이제 배경색과 같은 줄에 있다
+  (.quote-setting-row--split의 .quote-setting-row-controls) —
+  둘만 감싸던 .quote-background-row는 없앴다.
+*/
 
 .quote-background-button {
   padding: 6px 10px;
@@ -685,7 +678,8 @@
 
 
 .quote-background-message {
-  margin-top: 6px;
+  margin:
+    8px 14px 0;
 
   color: #aaaaaa;
 
@@ -694,26 +688,114 @@
 }
 
 
+/*
+  ★ 여백을 다른 구역과 맞춘다 (요구사항 1)
+
+  예전에는 위 구분선에 바싹 붙어 있었다. 설정 줄(.quote-setting-row)이
+  min-height 42px + 아래 구분선으로 만드는 리듬과 같은 간격을 준다.
+*/
+
 .quote-background-settings {
   display: grid;
 
-  gap: 10px;
+  gap: 0;
 
-  margin-top: 10px;
-  padding-top: 10px;
-
-  border-top: 1px solid #f0f0f0;
+  margin-top: 14px;
+  padding-top: 4px;
 }
 
 
 .quote-background-hint {
-  margin: 0;
+  margin:
+    12px 14px 0;
 
   color: #b5b5b5;
 
   font-size: 10px;
   line-height: 1.6;
   letter-spacing: 0.02em;
+}
+
+
+
+/* =========================================================
+   구역 나누기 — CANVAS 안의 Size / Background
+
+   한 아코디언 안에서 성격이 다른 묶음을 가르는 최소한의
+   장치다. 아코디언 제목(.quote-accordion-title)보다 한 단계
+   작고 조용하게.
+========================================================== */
+
+.quote-subsection + .quote-subsection {
+  margin-top: 24px;
+  padding-top: 4px;
+
+  border-top: 1px solid #f1f1f1;
+}
+
+
+.quote-subsection-title {
+  margin:
+    14px 14px 12px;
+
+  color: #999999;
+
+  font-size: 9px;
+  font-weight: 500;
+
+  letter-spacing: 0.14em;
+
+  text-transform: uppercase;
+}
+
+
+
+/* =========================================================
+   한 줄 배치 — [라벨][컨트롤 …] · [라벨][슬라이더][값]
+
+   ★ 라벨 아래로 컨트롤이 내려가지 않게 한다 (요구사항 1)
+
+     예전에는 슬라이더가 .quote-setting-block(라벨 위, 컨트롤
+     아래) 안에 있어서 한 설정이 두 줄을 먹었다. 좁은 화면에서
+     설정 화면이 길어지는 가장 큰 원인이었다.
+========================================================== */
+
+.quote-setting-row--split
+.quote-setting-row-controls {
+  display: flex;
+
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 8px;
+
+  min-width: 0;
+}
+
+
+.quote-setting-row--slider {
+  grid-template-columns:
+    auto
+    minmax(70px, 1fr)
+    auto;
+
+  gap: 12px;
+}
+
+
+.quote-setting-row--slider
+.imory-range {
+  min-width: 0;
+}
+
+
+/*
+  색 견본 옆에 붙는 숫자 칸은 좁게 — 두세 컨트롤이 한 줄에
+  들어가야 하므로 기본 78px로는 넘친다.
+*/
+
+.quote-number-input--compact {
+  width: 58px;
 }
 
 
@@ -1190,6 +1272,29 @@
 
   .quote-number-input {
     width: 74px;
+  }
+
+
+  /*
+    ★ 좁은 화면에서 한 줄 안에 [색][숫자][단위]가 다 들어가야
+    한다 — 넘치면 줄이 접혀서 한 줄 규칙이 깨진다.
+  */
+
+  .quote-number-input--compact {
+    width: 52px;
+  }
+
+
+  .quote-setting-row--slider {
+    gap: 10px;
+  }
+
+
+  .quote-subsection-title,
+  .quote-background-message,
+  .quote-background-hint {
+    margin-left: 22px;
+    margin-right: 22px;
   }
 
 

@@ -48,6 +48,158 @@
     취소하면 그 스냅샷으로 되돌린다.
 */
 
+/* =========================================================
+   §live — 색을 조정하는 동안에는 본문을 다시 만들지 않는다
+
+   ★ 무엇이 문제였나
+
+     색이 한 번 바뀔 때마다 applyEditorInlineColor가 통째로
+     돌았다. 한 번에 이런 일이 벌어진다.
+
+       getEditorRange()      → restoreEditorSelection()
+                               = removeAllRanges + addRange
+       range.extractContents()  선택 범위를 DOM에서 **꺼낸다**
+       range.insertNode()       새 span으로 감싸 다시 넣는다
+       selectWrappedContent()   = removeAllRanges + addRange (두 번째)
+
+     즉 색 한 번에 contenteditable의 노드가 새로 만들어지고
+     문서 선택이 두 번 갈아끼워진다. 커스텀 팝오버에서는 눈에
+     띄지 않았지만(팝오버는 우리가 그린 div라 본문이 바뀌어도
+     사라지지 않는다), OS가 띄우는 기본 색상 선택기에게는
+     치명적이다 — 편집 영역이 다시 만들어지고 선택이 재설정되면
+     포커스가 본문으로 되돌아가면서 선택기 창이 닫힌다.
+
+   ★ 지금
+
+     한 번의 조정(피커를 여는 순간 ~ 닫는 순간)은 **하나의
+     세션**이다. 세션의 첫 색만 위의 전체 경로를 지나고, 그
+     뒤로는 만들어 둔 span의 색 값만 바꾼다. DOM 구조도, 문서
+     선택도 건드리지 않는다.
+
+     - 선택 범위는 그대로 보존된다(아무도 건드리지 않으므로).
+     - undo는 여전히 정확히 한 칸이다(스냅샷은 피커를 열 때
+       한 번만 찍는다 — 이 파일이 아니라 호출부의 몫이다).
+     - 세션이 없거나 만들어 둔 span이 본문에서 사라졌으면
+       (Undo·되돌리기 등) 전체 경로로 안전하게 되돌아간다.
+========================================================== */
+
+let editorInlineColorLive =
+  null;
+
+
+let editorInlineColorSessionOpen =
+  false;
+
+
+function beginEditorInlineColorSession() {
+
+  editorInlineColorSessionOpen =
+    true;
+
+
+  editorInlineColorLive =
+    null;
+
+}
+
+
+function endEditorInlineColorSession() {
+
+  editorInlineColorSessionOpen =
+    false;
+
+
+  editorInlineColorLive =
+    null;
+
+}
+
+
+/*
+  세션이 열려 있는 동안의 색 변경. 첫 번째는 전체 경로,
+  그 뒤로는 색만 갈아끼운다.
+*/
+
+function applyEditorInlineColorLive(
+  options
+) {
+
+  const {
+    className,
+    dataKey,
+    styleProperty,
+    color
+  } =
+    options;
+
+
+  const session =
+    editorInlineColorLive;
+
+
+  const canReuse =
+    editorInlineColorSessionOpen &&
+    session &&
+    session.className === className &&
+    session.wrapper &&
+    postEditorContent &&
+    postEditorContent.contains(
+      session.wrapper
+    );
+
+
+  if (!canReuse) {
+
+    return applyEditorInlineColor(
+      {
+        ...options,
+        live: true
+      }
+    );
+
+  }
+
+
+  const wrapper =
+    session.wrapper;
+
+
+  wrapper.dataset[dataKey] =
+    color;
+
+
+  wrapper.style[styleProperty] =
+    color;
+
+
+  /*
+    형광펜은 높이에 따라 배경을 그라디언트로 그린다 — 색만
+    바꾸면 그 그라디언트가 옛 색으로 남는다. 다시 계산한다.
+    style만 건드리므로 DOM 구조는 그대로다.
+  */
+
+  if (
+    className === "post-inline-highlight" &&
+    typeof applyPostHighlightHeight === "function"
+  ) {
+
+    applyPostHighlightHeight(
+      postEditorContent,
+      postStyleSettings ||
+      {}
+    );
+
+  }
+
+
+  updateEditorPreview();
+
+
+  return true;
+
+}
+
+
 function applyEditorInlineColor(
   options
 ) {
@@ -223,6 +375,29 @@ function applyEditorInlineColor(
   updateEditorPreview();
 
   updateEditorToolbarState();
+
+
+  /*
+    조정이 진행 중이면 방금 만든 span을 기억해 둔다 — 다음
+    색부터는 이 span의 색만 갈아끼운다(아래 §live).
+  */
+
+  if (live) {
+
+    editorInlineColorLive =
+      {
+
+        className,
+
+        dataKey,
+
+        styleProperty,
+
+        wrapper
+
+      };
+
+  }
 
 
   /*
@@ -512,7 +687,7 @@ function applyEditorHighlight(
   live
 ) {
 
-  return applyEditorInlineColor(
+  const options =
     {
       className: "post-inline-highlight",
       dataKey: "highlight",
@@ -522,8 +697,16 @@ function applyEditorHighlight(
           color
         ),
       live
-    }
-  );
+    };
+
+
+  return live
+    ? applyEditorInlineColorLive(
+        options
+      )
+    : applyEditorInlineColor(
+        options
+      );
 
 }
 
@@ -549,7 +732,7 @@ function applyEditorPointColor(
   live
 ) {
 
-  return applyEditorInlineColor(
+  const options =
     {
       className: "post-inline-color",
       dataKey: "pointColor",
@@ -559,8 +742,16 @@ function applyEditorPointColor(
           color
         ),
       live
-    }
-  );
+    };
+
+
+  return live
+    ? applyEditorInlineColorLive(
+        options
+      )
+    : applyEditorInlineColor(
+        options
+      );
 
 }
 
@@ -935,10 +1126,84 @@ function editorRunHasActiveRule(
     live   컬러피커 드래그 중 — undo 스냅샷을 찍지 않는다.
 */
 
+/*
+  §live의 강조선 판 — 조정 중에는 **선택을 다시 읽지 않는다**.
+
+  강조선은 "선택이 걸치는 문단"을 매번 새로 찾는다. 기본 색상
+  선택기가 열리면 포커스가 그쪽으로 가면서 본문 선택이 사라지고,
+  그러면 걸리는 문단이 하나도 없어 "강조선을 넣을 문단에 커서를
+  두세요"만 반복해서 뜬다. 그래서 세션의 첫 호출에서 찾은 마커를
+  기억해 두고, 그 뒤로는 그 마커의 색만 바꾼다.
+*/
+
+let editorParagraphRuleLive =
+  null;
+
+
+function endEditorParagraphRuleSession() {
+
+  editorParagraphRuleLive =
+    null;
+
+}
+
+
 function applyEditorParagraphRule(
   color,
   live
 ) {
+
+  if (live) {
+
+    const marks =
+      editorParagraphRuleLive;
+
+
+    const reusable =
+      marks &&
+      marks.length &&
+      postEditorContent &&
+      marks.every(
+        mark =>
+          postEditorContent.contains(
+            mark
+          )
+      );
+
+
+    if (reusable) {
+
+      marks.forEach(
+        mark => {
+
+          if (color) {
+
+            mark.dataset.ruleColor =
+              color;
+
+          }
+
+          else {
+
+            delete mark.dataset.ruleColor;
+
+          }
+
+        }
+      );
+
+
+      syncEditorRuleOverlay();
+
+      updateEditorPreview();
+
+
+      return true;
+
+    }
+
+  }
+
 
   const runs =
     editorParagraphRunsInSelection();
@@ -963,6 +1228,10 @@ function applyEditorParagraphRule(
     );
 
   }
+
+
+  const touched =
+    [];
 
 
   runs.forEach(
@@ -994,21 +1263,45 @@ function applyEditorParagraphRule(
         }
 
 
+        touched.push(
+          existing
+        );
+
+
         return;
 
       }
 
 
-      postEditorContent.insertBefore(
+      const mark =
         createPostRuleMark(
           "on",
           color
-        ),
+        );
+
+
+      postEditorContent.insertBefore(
+        mark,
         run[0]
+      );
+
+
+      touched.push(
+        mark
       );
 
     }
   );
+
+
+  /* 조정이 진행 중이면 이 마커들을 기억해 둔다(위 §live) */
+
+  if (live) {
+
+    editorParagraphRuleLive =
+      touched;
+
+  }
 
 
   syncEditorRuleOverlay();
@@ -1474,6 +1767,14 @@ function updateEditorToolbarState() {
         postEditorUnderlineToggle,
         [
           "U"
+        ]
+      ],
+      [
+        postEditorStrikeToggle,
+        [
+          "S",
+          "STRIKE",
+          "DEL"
         ]
       ]
     ];

@@ -136,12 +136,23 @@
 
 
   .post-editor-toolbar {
-    gap:
-      7px
-      12px;
+    gap: 6px;
 
     padding:
-      8px;
+      8px 8px;
+  }
+
+
+  /*
+    ★ 좁은 화면에서는 간격과 드롭다운 폭만 줄인다 (요구사항 5).
+
+    버튼 자체는 더 줄이지 않는다 — 이미 터치 목표가 작은 편이라
+    여기서 더 깎으면 누르기 어려워진다. 그래도 넘치면 행이 가로로
+    밀린다(.post-editor-tool-line의 overflow-x).
+  */
+
+  .post-editor-tool-line {
+    gap: 7px;
   }
 
 
@@ -156,12 +167,14 @@
 
 
   .post-editor-tool-button {
+    padding: 5px 5px;
+
     font-size: 8.5px;
   }
 
 
   .post-editor-preset-select {
-    max-width: 84px;
+    max-width: 72px;
 
     font-size: 8.5px;
   }
@@ -433,20 +446,26 @@
 
   .post-editor-preview-ratio-controls {
     /*
-      ★ flex:0 0 auto만 있으면 이 줄 자체의 너비가 자기
-      내용물(버튼 6개 + custom 너비/높이 입력칸)을 한 줄로
-      전부 펼친 "필요한 만큼"으로 정해져서, flex-wrap: wrap이
-      있어도 감쌀 기준 너비 자체가 없어 화면 밖으로 그냥
-      넘쳐버렸다. 부모 줄 폭에 맞춰 100%로 고정해야 실제로
-      다음 줄로 줄바꿈된다.
+      ★ 100% 고정을 풀었다 (요구사항 7)
+
+      예전에는 이 묶음에 버튼 여섯 개 + custom 입력칸이 함께
+      있었다. flex:0 0 auto면 그 전부를 한 줄로 펼친 너비가
+      기준이 되어 flex-wrap이 감쌀 기준 폭 자체가 없었고, 그래서
+      화면 밖으로 넘쳤다 — 100%로 고정해 그 문제를 막았다.
+
+      지금은 uniform/auto/custom 셋뿐이라 "size + 버튼 셋"이
+      한 줄에 들어간다. 100%로 두면 오히려 라벨이 위로 밀려
+      두 줄이 된다. 대신 min-width:0으로 줄어들 수 있게 해서,
+      custom 입력칸이 펼쳐져 좁아지면 그때는 예전처럼 안에서
+      줄바꿈된다 — 넘침을 막던 성질은 그대로 남는다.
     */
 
     flex:
-      0
-      0
-      100%;
+      1
+      1
+      auto;
 
-    width: 100%;
+    min-width: 0;
 
     row-gap: 6px;
     column-gap: 5px;

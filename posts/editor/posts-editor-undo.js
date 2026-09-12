@@ -209,6 +209,30 @@ function redoEditorChange() {
 
 function afterEditorUndoHistoryChange() {
 
+  /*
+    본문 HTML을 통째로 갈아끼웠으므로, 진행 중이던 색 조정이
+    기억해 둔 span/마커는 버려진 노드가 된다. 세션을 비운다
+    (posts/editor/format/posts-editor-highlight.js §live).
+  */
+
+  if (
+    typeof endEditorInlineColorSession === "function"
+  ) {
+
+    endEditorInlineColorSession();
+
+  }
+
+
+  if (
+    typeof endEditorParagraphRuleSession === "function"
+  ) {
+
+    endEditorParagraphRuleSession();
+
+  }
+
+
   if (
     typeof syncEditorHighlightHeight === "function"
   ) {

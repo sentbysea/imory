@@ -773,6 +773,26 @@
 
         <!-- =================================================
              TOOLBAR
+
+             ★ 정확히 세 줄이다 (요구사항 5)
+
+               1행  Page break · H · P · L · Clear
+               2행  Format · B · I · U · S · Photo · Preset
+               3행  오른쪽 끝에 Undo · Redo
+
+             예전에는 버튼 묶음 여덟 개가 한 덩어리로 wrap돼서,
+             화면 폭에 따라 줄이 제멋대로 갈렸다(모바일에서 특히).
+             이제 각 행이 자기 <div>를 갖고, 그 안에서만 정렬한다.
+
+             ★ 라벨은 한 글자로 줄였다.
+
+               HIGHLIGHT   -> H
+               POINT COLOR -> P
+               RULE / line -> L
+
+             줄인 라벨의 뜻은 aria-label과 title로 준다 — 화면
+             낭독기와 툴팁에는 원래 이름이 그대로 나온다.
+             색 견본과 컬러피커는 그대로다.
         ================================================== -->
 
         <div
@@ -781,15 +801,11 @@
         >
 
 
-          <!-- =================================================
-               PAGE BREAK
-          ================================================== -->
+          <!-- ===============================================
+               1행 — 페이지 나누기 · 색 세 가지 · 서식 지우기
+          ================================================ -->
 
-          <div class="post-editor-tool-group">
-
-            <span class="post-editor-tool-label">
-              PAGE
-            </span>
+          <div class="post-editor-tool-line">
 
 
             <button
@@ -798,120 +814,220 @@
               type="button"
               title="현재 위치에서 다음 페이지로 넘기기"
             >
-              break
+              page break
             </button>
-
-          </div>
-
-
-
-          <!-- =================================================
-               HIGHLIGHT
-          ================================================== -->
-
-          <div class="post-editor-tool-group">
-
-            <span class="post-editor-tool-label">
-              HIGHLIGHT
-            </span>
 
 
             <!--
-              단일 컨트롤. 초기 색은 QUOTE PRESET의 하이라이트
+              H = HIGHLIGHT. 초기 색은 QUOTE PRESET의 하이라이트
               색(getPresetHighlightColor)을 따르고, 누르면 우리가
               직접 그리는 컬러피커 팝오버가 열린다
               (posts/editor/posts-color-picker.js).
-
-              ★ <input type="color">를 쓰지 않는 이유
-              OS 컬러피커는 스펙트럼에서 한 번 누르면 그대로 닫혀
-              이어서 조정할 수 없고, 열리는 동안 본문 선택과 포커스를
-              가져간다(요구사항 1).
             -->
 
-            <button
-              class="post-highlight-custom-control"
-              id="postEditorCustomControl"
-              type="button"
-              title="highlight color"
-              aria-label="하이라이트 색상 선택"
-            >
+            <div class="post-editor-tool-group">
 
               <span
-                class="post-highlight-swatch"
-                id="postEditorCustomSwatch"
-              ></span>
-
-            </button>
-
-          </div>
+                class="post-editor-tool-label"
+                aria-hidden="true"
+              >
+                H
+              </span>
 
 
+              <button
+                class="post-highlight-custom-control"
+                id="postEditorCustomControl"
+                type="button"
+                title="Highlight — 형광펜 색"
+                aria-label="형광펜 색상 선택"
+              >
 
-          <!-- =================================================
-               POINT COLOR
-          ================================================== -->
+                <span
+                  class="post-highlight-swatch"
+                  id="postEditorCustomSwatch"
+                ></span>
 
-          <div class="post-editor-tool-group">
+              </button>
 
-            <span class="post-editor-tool-label">
-              POINT COLOR
-            </span>
+            </div>
+
+
+            <!-- P = POINT COLOR. 같은 컬러피커가 열린다. -->
+
+            <div class="post-editor-tool-group">
+
+              <span
+                class="post-editor-tool-label"
+                aria-hidden="true"
+              >
+                P
+              </span>
+
+
+              <button
+                class="post-highlight-custom-control"
+                id="postEditorCustomPointControl"
+                type="button"
+                title="Point color — 글자 강조색"
+                aria-label="글자 강조색 선택"
+              >
+
+                <span
+                  class="post-highlight-swatch"
+                  id="postEditorCustomPointSwatch"
+                ></span>
+
+              </button>
+
+            </div>
 
 
             <!--
-              단일 컨트롤. 초기 색은 QUOTE PRESET의 포인트 컬러
-              (getPresetPointColor)를 따르고, 누르면 HIGHLIGHT와
-              **같은 컬러피커**가 열린다.
+              L = 강조선(문단 왼쪽 세로선). 예전에는 "RULE"
+              라벨 + "line" 버튼 + 색 견본 셋이었는데, 라벨과
+              버튼이 같은 말을 두 번 하고 있었다. L 하나가
+              적용·해제 토글이고, 옆의 견본이 색이다.
             -->
 
+            <div class="post-editor-tool-group">
+
+              <button
+                class="post-editor-tool-button rule"
+                id="postEditorRuleToggle"
+                type="button"
+                aria-pressed="false"
+                title="Line — 이 문단에 강조선 넣기/빼기"
+                aria-label="문단 강조선 넣기 또는 빼기"
+              >
+                L
+              </button>
+
+
+              <button
+                class="post-highlight-custom-control"
+                id="postEditorRuleControl"
+                type="button"
+                title="Line color — 강조선 색"
+                aria-label="문단 강조선 색상 선택"
+              >
+
+                <span
+                  class="post-highlight-swatch"
+                  id="postEditorRuleSwatch"
+                ></span>
+
+              </button>
+
+            </div>
+
+
             <button
-              class="post-highlight-custom-control"
-              id="postEditorCustomPointControl"
+              class="post-editor-tool-button clear"
+              id="postEditorClearStyle"
               type="button"
-              title="point color"
-              aria-label="포인트 컬러 선택"
+              title="선택한 곳의 서식 지우기"
             >
-
-              <span
-                class="post-highlight-swatch"
-                id="postEditorCustomPointSwatch"
-              ></span>
-
+              clear
             </button>
+
 
           </div>
 
 
 
+          <!-- ===============================================
+               2행 — 글자 서식 · 사진 · 프리셋
+          ================================================ -->
 
-          <!-- =================================================
-               PHOTO (본문 사진)
+          <div class="post-editor-tool-line">
 
-               POINT COLOR 바로 옆. 여러 장을 고를 수 있고,
-               고른 순서대로 **지금 커서 자리**에 들어간다.
-               고른 파일은 저장을 눌러야 올라간다
-               (posts/editor/posts-body-images.js).
-
-               파일 입력은 화면에서 감춘다 — 버튼이 caret을
-               먼저 붙잡은 뒤 대신 눌러준다. 모바일에서 파일
-               선택창이 편집 영역의 선택을 가져가도 삽입 자리가
-               유지되는 이유다.
-          ================================================== -->
-
-          <div class="post-editor-tool-group">
 
             <span class="post-editor-tool-label">
-              PHOTO
+              FORMAT
             </span>
 
+
+            <div class="post-editor-tool-group">
+
+              <button
+                class="post-editor-tool-button"
+                id="postEditorBoldToggle"
+                type="button"
+                title="굵게"
+                aria-label="굵게"
+              >
+                <b>B</b>
+              </button>
+
+
+              <button
+                class="post-editor-tool-button"
+                id="postEditorItalicToggle"
+                type="button"
+                title="기울임"
+                aria-label="기울임"
+              >
+                <i>I</i>
+              </button>
+
+
+              <button
+                class="post-editor-tool-button"
+                id="postEditorUnderlineToggle"
+                type="button"
+                title="밑줄"
+                aria-label="밑줄"
+              >
+                <u>U</u>
+              </button>
+
+
+              <!--
+                취소선. B/I/U와 같은 구조다
+                (toggleEditorInlineTag — posts/editor/format/posts-editor.js).
+                저장되는 태그는 <s>이고, 사니타이저가 s/strike/del을
+                모두 s로 받아들인다(posts/posts-sanitize.js).
+              -->
+
+              <button
+                class="post-editor-tool-button"
+                id="postEditorStrikeToggle"
+                type="button"
+                title="취소선"
+                aria-label="취소선"
+              >
+                <s>S</s>
+              </button>
+
+            </div>
+
+
+            <!--
+              PHOTO — 버튼 자체가 사진 삽입이다 (요구사항 5).
+
+              예전에는 "PHOTO" 라벨 옆에 "사진" 버튼이 따로 있어서
+              같은 말이 두 번 나왔다. 라벨을 없애고 버튼 하나로
+              합쳤다.
+
+              여러 장을 고를 수 있고, 고른 순서대로 **지금 커서
+              자리**에 들어간다. 고른 파일은 저장을 눌러야 올라간다
+              (posts/editor/posts-body-images.js).
+
+              파일 입력은 화면에서 감춘다 — 버튼이 caret을 먼저
+              붙잡은 뒤 대신 눌러준다. 모바일에서 파일 선택창이
+              편집 영역의 선택을 가져가도 삽입 자리가 유지되는
+              이유다.
+            -->
 
             <button
               class="post-editor-tool-button photo"
               id="postEditorImageButton"
               type="button"
               title="현재 커서 위치에 사진 넣기"
+              aria-label="사진 넣기"
             >
-              사진
+              photo
             </button>
 
 
@@ -924,150 +1040,33 @@
               hidden
             >
 
-          </div>
 
-
-
-          <!-- =================================================
-               RULE (강조선)
-
-               문단 왼쪽에 붙는 세로선. 문단 일부만 선택해도 그
-               문단 전체에 걸린다. 굵기는 Quote Preset에서만
-               정하고 여기서는 적용·해제와 색만 다룬다
-               (기준 문서: posts/style/posts-body-decor.js §3).
-          ================================================== -->
-
-          <div class="post-editor-tool-group">
-
-            <span class="post-editor-tool-label">
-              RULE
-            </span>
-
-
-            <button
-              class="post-editor-tool-button rule"
-              id="postEditorRuleToggle"
-              type="button"
-              aria-pressed="false"
-              title="이 문단에 강조선 넣기/빼기"
-            >
-              line
-            </button>
-
-
-            <button
-              class="post-highlight-custom-control"
-              id="postEditorRuleControl"
-              type="button"
-              title="rule color"
-              aria-label="강조선 색상 선택"
-            >
-
-              <span
-                class="post-highlight-swatch"
-                id="postEditorRuleSwatch"
-              ></span>
-
-            </button>
-
-          </div>
-
-
-          <!-- =================================================
-               FORMAT (BOLD / ITALIC / UNDERLINE)
-          ================================================== -->
-
-          <div class="post-editor-tool-group">
-
-            <span class="post-editor-tool-label">
-              FORMAT
-            </span>
-
-
-            <button
-              class="post-editor-tool-button"
-              id="postEditorBoldToggle"
-              type="button"
-              title="굵게"
-            >
-              <b>B</b>
-            </button>
-
-
-            <button
-              class="post-editor-tool-button"
-              id="postEditorItalicToggle"
-              type="button"
-              title="기울임"
-            >
-              <i>I</i>
-            </button>
-
-
-            <button
-              class="post-editor-tool-button"
-              id="postEditorUnderlineToggle"
-              type="button"
-              title="밑줄"
-            >
-              <u>U</u>
-            </button>
-
-          </div>
-
-
-
-          <!-- =================================================
-               CLEAR
-          ================================================== -->
-
-          <div class="post-editor-tool-group">
-
-            <button
-              class="post-editor-tool-button clear"
-              id="postEditorClearStyle"
-              type="button"
-            >
-              clear
-            </button>
-
-          </div>
-
-
-
-          <!-- =================================================
-               PRESET
-
-               저장해둔 QUOTE 프리셋을 골라서
-               프리뷰/export 서식을 바꿔 끼움
-               (본문 내용은 그대로).
-          ================================================== -->
-
-          <div class="post-editor-tool-group">
-
-            <span class="post-editor-tool-label">
-              PRESET
-            </span>
-
+            <!--
+              PRESET — 저장해둔 QUOTE 프리셋을 골라서
+              프리뷰/export 서식을 바꿔 낌(본문 내용은 그대로).
+            -->
 
             <select
               class="post-editor-preset-select"
               id="postEditorPresetSelect"
+              aria-label="발췌 프리셋"
             ></select>
+
 
           </div>
 
 
 
-          <!-- =================================================
-               UNDO
+          <!-- ===============================================
+               3행 — 되돌리기 (오른쪽 정렬)
 
                데스크톱은 Ctrl/Cmd+Z(posts-editor-undo.js)로도
                되는데, 모바일은 키보드 단축키가 없으니 버튼도
-               같이 둠 — 예전 PAGE BREAK가 있던 오른쪽 끝 자리.
-          ================================================== -->
+               같이 둔다.
+          ================================================ -->
 
-          <div class="post-editor-tool-group post-editor-undo-group">
+          <div class="post-editor-tool-line post-editor-tool-line--end">
+
 
             <button
               class="post-editor-tool-button undo"
@@ -1081,7 +1080,7 @@
 
             <!--
               되돌린 것을 다시 실행. 컬러피커 확정 한 번이 undo
-              한 칸이므로(요구사항 1) redo도 한 칸으로 되돌아온다.
+              한 칸이므로 redo도 한 칸으로 되돌아온다.
             -->
 
             <button
@@ -1092,6 +1091,7 @@
             >
               redo
             </button>
+
 
           </div>
 
@@ -1413,9 +1413,15 @@
               <!-- =============================================
                    SOURCE RULE (출처 강조선 — 세션 한정)
 
-                   켜고 끄는 것과 색만 여기서 다룬다. 굵기는
-                   Quote Preset의 SOURCE 섹션에서만 정한다
-                   (요구사항 5).
+                   ★ 켜고 끄는 것만 여기서 다룬다 (요구사항 7).
+
+                   색과 굵기·거리는 Quote Preset의 SOURCE
+                   섹션에서만 정하고 이 발췌는 그 값을 그대로
+                   따른다 — 예전에는 여기 색 견본이 하나 더
+                   있어서, 같은 색을 두 자리에서 고칠 수 있었다.
+
+                   ★ 본문 툴바의 H/P/L 색 견본과는 다른 컨트롤
+                   이다. 그쪽은 그대로 남는다.
               ============================================== -->
 
               <button
@@ -1425,22 +1431,6 @@
                 aria-pressed="false"
               >
                 rule
-              </button>
-
-
-              <button
-                class="post-highlight-custom-control"
-                id="postEditorPreviewSourceRuleControl"
-                type="button"
-                title="source rule color"
-                aria-label="출처 강조선 색상 선택"
-              >
-
-                <span
-                  class="post-highlight-swatch"
-                  id="postEditorPreviewSourceRuleSwatch"
-                ></span>
-
               </button>
 
 
@@ -1527,6 +1517,11 @@
 
             <div class="post-editor-preview-row">
 
+              <span class="post-editor-preview-subrow-label">
+                size
+              </span>
+
+
               <div
                 class="post-editor-preview-ratio-controls"
                 id="postEditorPreviewRatioControls"
@@ -1597,68 +1592,37 @@
               </div>
 
 
-              <!-- =============================================
-                   저장되는 PNG의 픽셀 크기 — **읽기 전용**이다.
-
-                   가로 픽셀(내보내기 너비)을 고치는 자리는
-                   Quote Preset의 CANVAS 하나뿐이다. 여기서는
-                   지금 조건으로 저장하면 몇 픽셀이 나오는지만
-                   보여준다. 레이아웃 너비(520px)와는 다른
-                   축이라, 그 값이 달라져도 줄바꿈과 페이지 수는
-                   바뀌지 않는다.
-              ============================================== -->
-
-              <div class="post-editor-preview-subrow">
-
-                <span class="post-editor-preview-subrow-label">
-                  size
-                </span>
-
-
-                <span
-                  class="post-editor-preview-export-size"
-                  id="postEditorPreviewExportSize"
-                ></span>
-
-              </div>
-
-
-              <!-- =============================================
-                   BACKGROUND (배경 사진 — 진입점 하나)
-
-                   ★ 프리뷰 위에 버튼을 상시로 띄우지 않는다
-                   (요구사항 8). 여기 작은 버튼 하나를 누르면 아래
-                   패널이 열리고, 에디터가 다룰 수 있는 것은
-                   이미지 교체 · 위치 조정 · 프리셋 기본값 복원
-                   셋뿐이다. 확대/흐림/오버레이의 상세 설정은
-                   Quote Preset에만 있다.
-              ============================================== -->
-
-              <button
-                class="post-editor-preview-visibility-toggle"
-                id="postEditorPreviewBackgroundToggle"
-                type="button"
-                aria-expanded="false"
-                aria-controls="postEditorPreviewBackgroundPanel"
-              >
-                background
-              </button>
-
             </div>
 
 
-            <div
-              class="post-editor-preview-background-panel"
-              id="postEditorPreviewBackgroundPanel"
-              hidden
-            >
+            <!-- =============================================
+                 BACKGROUND (배경 사진) — 버튼 셋을 바로 둔다
+
+                 ★ 여닫는 단계를 없앴다 (요구사항 8)
+
+                   예전에는 "background" 버튼을 눌러야 아래
+                   패널이 열리고 그제서야 image/move/reset이
+                   나왔다. 세 버튼뿐인데 한 겹을 더 거칠 이유가
+                   없어서 설정의 마지막 줄에 바로 놓는다.
+
+                 ★ 프리뷰 위에 버튼을 겹쳐 띄우지 않는다. 배경을
+                   끄는 것은 move를 켰을 때뿐이고, 평소에는
+                   기존 스크롤·핀치 제스처를 전혀 건드리지 않는다.
+
+                 ★ 에디터가 다룰 수 있는 것은 이 셋뿐이다.
+                   확대/흐림/덮개/크기 정책은 Quote Preset에만
+                   있고, 사진을 바꿔도 그 값들은 그대로 남는다.
+            ============================================== -->
+
+            <div class="post-editor-preview-row">
 
               <button
                 class="post-editor-preview-visibility-toggle"
                 id="postEditorPreviewBackgroundPick"
                 type="button"
+                title="이번 발췌의 배경 사진 바꾸기"
               >
-                image
+                change image
               </button>
 
 
@@ -1676,6 +1640,7 @@
                 id="postEditorPreviewBackgroundMove"
                 type="button"
                 aria-pressed="false"
+                title="켜는 동안에만 프리뷰를 끌어 배경 위치를 맞춘다"
               >
                 move
               </button>
@@ -1685,6 +1650,7 @@
                 class="post-editor-preview-visibility-toggle"
                 id="postEditorPreviewBackgroundReset"
                 type="button"
+                title="이번 발췌의 사진·위치 변경을 취소하고 프리셋 기본값으로"
               >
                 reset
               </button>
@@ -1699,6 +1665,39 @@
 
           </div>
 
+
+
+          <!-- =================================================
+               저장되는 PNG의 픽셀 크기 — **읽기 전용**이다.
+
+               ★ 설정 항목이 아니라 대지 바깥의 표시다 (요구사항 7)
+
+                 예전에는 설정 줄 안에 "size 1200 × 912"가 끼어
+                 있어서, 고칠 수 있는 값처럼 보였다. 가로 픽셀을
+                 고치는 자리는 Quote Preset의 CANVAS 하나뿐이다.
+                 여기서는 지금 조건으로 저장하면 몇 픽셀이
+                 나오는지만 대지 우측 위에 조용히 보여준다.
+
+                 페이지를 넘기면 그 페이지의 크기로 갱신된다
+                 (syncPreviewExportSizeLabel — 페이지마다 높이가
+                 다른 auto에서도 맞는 값이 나온다).
+
+                 이 표시는 대지 **바깥**이므로 저장되는 이미지에
+                 들어가지 않는다 — 캡처 대상은 페이지 요소
+                 (.post-editor-preview-page)뿐이다.
+
+               ★ 레이아웃 너비(520px)와는 다른 축이라, 이 숫자가
+                 달라져도 줄바꿈과 페이지 수는 바뀌지 않는다.
+          ================================================== -->
+
+          <div class="post-editor-preview-stage-meta">
+
+            <span
+              class="post-editor-preview-export-size"
+              id="postEditorPreviewExportSize"
+            ></span>
+
+          </div>
 
 
           <!-- =================================================

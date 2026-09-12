@@ -239,15 +239,14 @@
 
 
                 <!-- ===========================================
-                     출력 조건 — 비율(uniform / auto / custom)과
-                     캔버스 가로 픽셀(내보내기 너비).
+                     SIZE — 캔버스의 크기와 여백
 
-                     ★ 여기가 이 값들을 **고쳐서 저장하는** 유일한
-                       자리다. 글쓰기 화면의 Preview에서는 비율만
-                       잠깐 바꿔볼 수 있고(그 글의 편집 세션 한정),
-                       가로 픽셀은 아예 고를 수 없다 — 프리셋에
-                       저장된 값을 그대로 쓴다
-                       (posts/preview/posts-preview-settings.js).
+                     ★ 출력 조건(비율 · 내보내기 너비)을 **고쳐서
+                       저장하는** 유일한 자리다. 글쓰기 화면의
+                       Preview에서는 비율만 잠깐 바꿔볼 수 있고
+                       (그 글의 편집 세션 한정), 가로 픽셀은 아예
+                       고를 수 없다 — 프리셋에 저장된 값을 그대로
+                       쓴다(posts/preview/posts-preview-settings.js).
 
                      ★ 세 값의 뜻은 Preview와 완전히 같다.
 
@@ -264,6 +263,13 @@
                        admin-quote-ratio-parser.js). Preview도 같은
                        규칙으로 읽으므로 두 화면이 갈리지 않는다.
                 ============================================ -->
+
+                <div class="quote-subsection">
+
+                  <div class="quote-subsection-title">
+                    Size
+                  </div>
+
 
                 <div
                   class="quote-canvas-output"
@@ -394,23 +400,6 @@
 
                 <div class="quote-setting-row">
 
-                  <label for="quoteBackground">
-                    배경색
-                  </label>
-
-                  <input
-                    id="quoteBackground"
-                    class="quote-color-input"
-                    type="color"
-                    value="#ffffff"
-                  >
-
-                </div>
-
-
-
-                <div class="quote-setting-row">
-
                   <label for="quotePadding">
                     안쪽 여백
                   </label>
@@ -491,59 +480,86 @@
 
                 </div>
 
+                </div>
+                <!-- /Size -->
+
 
 
                 <!-- ===========================================
-                     배경 사진
+                     BACKGROUND — 배경색과 배경 사진
 
                      기준 문서: posts/style/posts-canvas-background.js
 
-                     ★ 저장되는 것은 "원본 이미지 위의 중심"과
-                     "확대 배율"이다 — 픽셀 이동량이 아니다. 그래서
-                     예시 텍스트와 실제 발췌문의 길이·캔버스 비율이
-                     달라도 지정한 자리가 가운데로 온다.
+                     ★ 배경색은 사진이 있든 없든 **늘 깔린다**.
+                       사진을 캔버스보다 작게 줄이면 그 둘레에
+                       이 색이 그대로 보이고, 사진을 지우면 이
+                       색만 남는다(요구사항 2).
 
-                     ★ 확대 100%는 "캔버스를 빈틈없이 덮는 최소
-                     크기"다. 높이에만 맞춰 양옆이 비거나 비율을
-                     찌그러뜨리는 방식은 쓰지 않는다.
+                     ★ 저장되는 것은 "원본 이미지 위의 중심"과
+                       "확대 배율"이다 — 픽셀 이동량이 아니다.
+                       그래서 예시 텍스트와 실제 발췌문의 길이·
+                       캔버스 비율이 달라도 지정한 자리가 가운데로
+                       온다.
+
+                     ★ 확대 100%는 "캔버스를 빈틈없이 덮는 크기"다.
+                       50%까지 줄이면 사진이 캔버스보다 작아지고,
+                       150%까지 키울 수 있다.
 
                      ★ 위치는 미리보기를 **직접 끌어서** 정한다.
                 ============================================ -->
 
-                <div class="quote-setting-block">
+                <div class="quote-subsection">
 
-                  <div class="quote-setting-label">
-                    배경 사진
+                  <div class="quote-subsection-title">
+                    Background
                   </div>
 
 
-                  <div class="quote-background-row">
+                  <!-- 배경색과 사진 고르기를 한 줄에 -->
 
-                    <button
-                      class="quote-background-button"
-                      id="quoteBackgroundPick"
-                      type="button"
-                    >
-                      사진 고르기
-                    </button>
+                  <div class="quote-setting-row quote-setting-row--split">
 
+                    <label for="quoteBackground">
+                      배경색
+                    </label>
 
-                    <button
-                      class="quote-background-button"
-                      id="quoteBackgroundRemove"
-                      type="button"
-                    >
-                      삭제
-                    </button>
+                    <div class="quote-setting-row-controls">
+
+                      <input
+                        id="quoteBackground"
+                        class="quote-color-input"
+                        type="color"
+                        value="#ffffff"
+                      >
 
 
-                    <input
-                      id="quoteBackgroundFile"
-                      class="quote-background-file"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      hidden
-                    >
+                      <button
+                        class="quote-background-button"
+                        id="quoteBackgroundPick"
+                        type="button"
+                      >
+                        사진 고르기
+                      </button>
+
+
+                      <button
+                        class="quote-background-button"
+                        id="quoteBackgroundRemove"
+                        type="button"
+                      >
+                        삭제
+                      </button>
+
+
+                      <input
+                        id="quoteBackgroundFile"
+                        class="quote-background-file"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        hidden
+                      >
+
+                    </div>
 
                   </div>
 
@@ -553,8 +569,6 @@
                     id="quoteBackgroundMessage"
                   ></div>
 
-                </div>
-
 
                 <div
                   class="quote-background-settings"
@@ -562,104 +576,122 @@
                   hidden
                 >
 
-                  <div class="quote-setting-block">
+                  <!-- 덮개 색과 농도를 한 줄에 -->
 
-                    <div class="quote-setting-label">
-                      확대
-                    </div>
-
-                    <div class="imory-range-row">
-
-                      <input
-                        id="quoteBackgroundScale"
-                        class="imory-range"
-                        type="range"
-                        min="100"
-                        max="300"
-                        step="1"
-                        value="100"
-                        aria-label="배경 사진 확대"
-                      >
-
-                      <span
-                        class="imory-range-value"
-                        id="quoteBackgroundScaleValue"
-                      >100%</span>
-
-                    </div>
-
-                  </div>
-
-
-                  <div class="quote-setting-block">
-
-                    <div class="quote-setting-label">
-                      흐림
-                    </div>
-
-                    <div class="imory-range-row">
-
-                      <input
-                        id="quoteBackgroundBlur"
-                        class="imory-range"
-                        type="range"
-                        min="0"
-                        max="40"
-                        step="1"
-                        value="0"
-                        aria-label="배경 사진 흐림"
-                      >
-
-                      <span
-                        class="imory-range-value"
-                        id="quoteBackgroundBlurValue"
-                      >0px</span>
-
-                    </div>
-
-                  </div>
-
-
-                  <div class="quote-setting-block">
-
-                    <div class="quote-setting-label">
-                      덮개 농도
-                    </div>
-
-                    <div class="imory-range-row">
-
-                      <input
-                        id="quoteBackgroundOverlayOpacity"
-                        class="imory-range"
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="1"
-                        value="0"
-                        aria-label="덮개 농도"
-                      >
-
-                      <span
-                        class="imory-range-value"
-                        id="quoteBackgroundOverlayOpacityValue"
-                      >0%</span>
-
-                    </div>
-
-                  </div>
-
-
-                  <div class="quote-setting-row">
+                  <div class="quote-setting-row quote-setting-row--split">
 
                     <label for="quoteBackgroundOverlayColor">
-                      덮개 색
+                      덮개
+                    </label>
+
+                    <div class="quote-setting-row-controls">
+
+                      <input
+                        id="quoteBackgroundOverlayColor"
+                        class="quote-color-input"
+                        type="color"
+                        value="#000000"
+                      >
+
+
+                      <div class="quote-input-with-unit">
+
+                        <input
+                          id="quoteBackgroundOverlayOpacity"
+                          class="quote-number-input quote-number-input--compact"
+                          type="number"
+                          inputmode="numeric"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value="50"
+                          aria-label="덮개 농도"
+                        >
+
+                        <span class="quote-unit">
+                          %
+                        </span>
+
+                      </div>
+
+                    </div>
+
+                  </div>
+
+
+                  <div class="quote-setting-row quote-setting-row--slider">
+
+                    <label for="quoteBackgroundScale">
+                      확대
                     </label>
 
                     <input
-                      id="quoteBackgroundOverlayColor"
-                      class="quote-color-input"
-                      type="color"
-                      value="#000000"
+                      id="quoteBackgroundScale"
+                      class="imory-range"
+                      type="range"
+                      min="50"
+                      max="150"
+                      step="1"
+                      value="100"
+                      aria-label="배경 사진 확대"
+                    >
+
+                    <span
+                      class="imory-range-value"
+                      id="quoteBackgroundScaleValue"
+                    >100%</span>
+
+                  </div>
+
+
+                  <div class="quote-setting-row quote-setting-row--slider">
+
+                    <label for="quoteBackgroundBlur">
+                      흐림
+                    </label>
+
+                    <input
+                      id="quoteBackgroundBlur"
+                      class="imory-range"
+                      type="range"
+                      min="0"
+                      max="40"
+                      step="1"
+                      value="0"
+                      aria-label="배경 사진 흐림"
+                    >
+
+                    <span
+                      class="imory-range-value"
+                      id="quoteBackgroundBlurValue"
+                    >0px</span>
+
+                  </div>
+
+
+                  <!-- =======================================
+                       이미지 크기 고정
+
+                       끄면 페이지 크기에 맞춰 덮는다(예전 동작) —
+                       페이지가 길어지면 사진도 커진다.
+
+                       켜면 표시 너비를 캔버스 너비에 대한 비율로
+                       잡아서, 같은 너비라면 페이지 높이가 달라져도
+                       사진 속 사물 크기가 같다. 켜는 순간의 크기를
+                       그대로 기준으로 삼는다
+                       (admin/quote/admin-quote-background.js).
+                  ======================================== -->
+
+                  <div class="quote-setting-row">
+
+                    <label for="quoteBackgroundFixedSize">
+                      이미지 크기 고정
+                    </label>
+
+                    <input
+                      id="quoteBackgroundFixedSize"
+                      class="quote-check-input"
+                      type="checkbox"
                     >
 
                   </div>
@@ -670,6 +702,9 @@
                   </p>
 
                 </div>
+
+                </div>
+                <!-- /Background -->
 
 
               </div>
@@ -1035,17 +1070,30 @@
 
 
                 <!-- ===========================================
-                     HIGHLIGHT / POINT COLOR
-                     에디터 PRESET 하이라이트 · 포인트 컬러에서 사용
+                     HIGHLIGHT — 색과 높이를 한 줄에
+
+                     높이는 글자 크기에 대한 비율(%). 100이면
+                     예전처럼 글자 상자를 가득 채우고, 낮추면 글자
+                     아래쪽에 얇게 깔린다. 모서리는 항상 직각이고
+                     별도 옵션을 두지 않는다.
+
+                     ★ 높이를 바꿔도 글자 위치·줄 간격·줄바꿈은
+                     변하지 않는다 — 상자 크기가 아니라 칠하는
+                     범위만 달라지기 때문이다
+                     (posts/style/posts-body-decor.js).
+
+                     ★ 슬라이더 대신 네모 숫자 칸이다(요구사항 3).
+                     좁은 화면에서 슬라이더가 라벨 아래로 떨어져
+                     줄이 늘어나는 것을 피하고, 값을 직접 칠 수 있다.
                 ============================================ -->
 
-                <div class="quote-pair-grid">
+                <div class="quote-setting-row quote-setting-row--split">
 
-                  <div class="quote-pair-field">
+                  <label for="quoteHighlightColor">
+                    형광펜
+                  </label>
 
-                    <label for="quoteHighlightColor">
-                      형광펜
-                    </label>
+                  <div class="quote-setting-row-controls">
 
                     <input
                       id="quoteHighlightColor"
@@ -1054,21 +1102,26 @@
                       value="#f4dce6"
                     >
 
-                  </div>
 
+                    <div class="quote-input-with-unit">
 
-                  <div class="quote-pair-field">
+                      <input
+                        id="quoteHighlightHeight"
+                        class="quote-number-input quote-number-input--compact"
+                        type="number"
+                        inputmode="numeric"
+                        min="30"
+                        max="100"
+                        step="1"
+                        value="100"
+                        aria-label="형광펜 높이"
+                      >
 
-                    <label for="quotePointColor">
-                      강조색
-                    </label>
+                      <span class="quote-unit">
+                        %
+                      </span>
 
-                    <input
-                      id="quotePointColor"
-                      class="quote-color-input"
-                      type="color"
-                      value="#5c7cfa"
-                    >
+                    </div>
 
                   </div>
 
@@ -1077,44 +1130,21 @@
 
 
                 <!-- ===========================================
-                     형광펜 높이
-
-                     글자 크기에 대한 비율(%). 100이면 예전처럼
-                     글자 상자를 가득 채우고, 낮추면 글자 아래쪽에
-                     얇게 깔린다. 모서리는 항상 직각이고 별도
-                     옵션을 두지 않는다(요구사항 3).
-
-                     ★ 높이를 바꿔도 글자 위치·줄 간격·줄바꿈은
-                     변하지 않는다 — 상자 크기가 아니라 칠하는
-                     범위만 달라지기 때문이다
-                     (posts/style/posts-body-decor.js).
+                     POINT COLOR — 형광펜·높이 묶음과는 분리
                 ============================================ -->
 
-                <div class="quote-setting-block">
+                <div class="quote-setting-row">
 
-                  <div class="quote-setting-label">
-                    형광펜 높이
-                  </div>
+                  <label for="quotePointColor">
+                    강조색
+                  </label>
 
-                  <div class="imory-range-row">
-
-                    <input
-                      id="quoteHighlightHeight"
-                      class="imory-range"
-                      type="range"
-                      min="30"
-                      max="100"
-                      step="1"
-                      value="100"
-                      aria-label="형광펜 높이"
-                    >
-
-                    <span
-                      class="imory-range-value"
-                      id="quoteHighlightHeightValue"
-                    >100%</span>
-
-                  </div>
+                  <input
+                    id="quotePointColor"
+                    class="quote-color-input"
+                    type="color"
+                    value="#5c7cfa"
+                  >
 
                 </div>
 
@@ -1411,45 +1441,77 @@
                      (admin-quote-preview-update.js).
                 ============================================ -->
 
-                <div class="quote-setting-row">
+                <div class="quote-setting-row quote-setting-row--split">
 
                   <label for="quoteBodyRuleColor">
-                    강조선 색
+                    강조선
                   </label>
 
-                  <input
-                    id="quoteBodyRuleColor"
-                    class="quote-color-input"
-                    type="color"
-                    value="#ee9fbd"
-                  >
+                  <div class="quote-setting-row-controls">
+
+                    <input
+                      id="quoteBodyRuleColor"
+                      class="quote-color-input"
+                      type="color"
+                      value="#ee9fbd"
+                    >
+
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteBodyRuleWidth"
+                        class="quote-number-input quote-number-input--compact"
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        max="12"
+                        step="1"
+                        value="3"
+                        aria-label="강조선 굵기"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
 
                 </div>
 
 
-                <div class="quote-setting-block">
+                <!-- =========================================
+                     선과 글자 사이 거리 — 색·굵기와 같은 줄에
+                     넣으면 좁은 화면에서 비좁아지므로 바로 다음
+                     줄에 둔다(요구사항 3). 값이 없는 옛 프리셋은
+                     12px(예전에 상수로 박혀 있던 값)로 읽힌다.
+                ========================================== -->
 
-                  <div class="quote-setting-label">
-                    강조선 굵기
-                  </div>
+                <div class="quote-setting-row">
 
-                  <div class="imory-range-row">
+                  <label for="quoteBodyRuleGap">
+                    강조선 거리
+                  </label>
+
+                  <div class="quote-input-with-unit">
 
                     <input
-                      id="quoteBodyRuleWidth"
-                      class="imory-range"
-                      type="range"
-                      min="1"
-                      max="12"
+                      id="quoteBodyRuleGap"
+                      class="quote-number-input quote-number-input--compact"
+                      type="number"
+                      inputmode="numeric"
+                      min="0"
+                      max="80"
                       step="1"
-                      value="3"
-                      aria-label="강조선 굵기"
+                      value="12"
+                      aria-label="강조선과 글자 사이 거리"
                     >
 
-                    <span
-                      class="imory-range-value"
-                      id="quoteBodyRuleWidthValue"
-                    >3px</span>
+                    <span class="quote-unit">
+                      px
+                    </span>
 
                   </div>
 
@@ -1707,45 +1769,77 @@
                 </div>
 
 
-                <div class="quote-setting-row">
+                <div class="quote-setting-row quote-setting-row--split">
 
                   <label for="quoteDialogueRuleColor">
-                    강조선 색
+                    강조선
                   </label>
 
-                  <input
-                    id="quoteDialogueRuleColor"
-                    class="quote-color-input"
-                    type="color"
-                    value="#ee9fbd"
-                  >
+                  <div class="quote-setting-row-controls">
+
+                    <input
+                      id="quoteDialogueRuleColor"
+                      class="quote-color-input"
+                      type="color"
+                      value="#ee9fbd"
+                    >
+
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteDialogueRuleWidth"
+                        class="quote-number-input quote-number-input--compact"
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        max="12"
+                        step="1"
+                        value="3"
+                        aria-label="대사 강조선 굵기"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
 
                 </div>
 
 
-                <div class="quote-setting-block">
+                <!-- =========================================
+                     선과 글자 사이 거리 — 색·굵기와 같은 줄에
+                     넣으면 좁은 화면에서 비좁아지므로 바로 다음
+                     줄에 둔다(요구사항 3). 값이 없는 옛 프리셋은
+                     12px(예전에 상수로 박혀 있던 값)로 읽힌다.
+                ========================================== -->
 
-                  <div class="quote-setting-label">
-                    강조선 굵기
-                  </div>
+                <div class="quote-setting-row">
 
-                  <div class="imory-range-row">
+                  <label for="quoteDialogueRuleGap">
+                    강조선 거리
+                  </label>
+
+                  <div class="quote-input-with-unit">
 
                     <input
-                      id="quoteDialogueRuleWidth"
-                      class="imory-range"
-                      type="range"
-                      min="1"
-                      max="12"
+                      id="quoteDialogueRuleGap"
+                      class="quote-number-input quote-number-input--compact"
+                      type="number"
+                      inputmode="numeric"
+                      min="0"
+                      max="80"
                       step="1"
-                      value="3"
-                      aria-label="대사 강조선 굵기"
+                      value="12"
+                      aria-label="대사 강조선과 글자 사이 거리"
                     >
 
-                    <span
-                      class="imory-range-value"
-                      id="quoteDialogueRuleWidthValue"
-                    >3px</span>
+                    <span class="quote-unit">
+                      px
+                    </span>
 
                   </div>
 
@@ -1826,45 +1920,77 @@
                 </div>
 
 
-                <div class="quote-setting-row">
+                <div class="quote-setting-row quote-setting-row--split">
 
                   <label for="quoteSourceRuleColor">
-                    강조선 색
+                    강조선
                   </label>
 
-                  <input
-                    id="quoteSourceRuleColor"
-                    class="quote-color-input"
-                    type="color"
-                    value="#ee9fbd"
-                  >
+                  <div class="quote-setting-row-controls">
+
+                    <input
+                      id="quoteSourceRuleColor"
+                      class="quote-color-input"
+                      type="color"
+                      value="#ee9fbd"
+                    >
+
+
+                    <div class="quote-input-with-unit">
+
+                      <input
+                        id="quoteSourceRuleWidth"
+                        class="quote-number-input quote-number-input--compact"
+                        type="number"
+                        inputmode="numeric"
+                        min="1"
+                        max="12"
+                        step="1"
+                        value="3"
+                        aria-label="출처 강조선 굵기"
+                      >
+
+                      <span class="quote-unit">
+                        px
+                      </span>
+
+                    </div>
+
+                  </div>
 
                 </div>
 
 
-                <div class="quote-setting-block">
+                <!-- =========================================
+                     선과 글자 사이 거리 — 색·굵기와 같은 줄에
+                     넣으면 좁은 화면에서 비좁아지므로 바로 다음
+                     줄에 둔다(요구사항 3). 값이 없는 옛 프리셋은
+                     12px(예전에 상수로 박혀 있던 값)로 읽힌다.
+                ========================================== -->
 
-                  <div class="quote-setting-label">
-                    강조선 굵기
-                  </div>
+                <div class="quote-setting-row">
 
-                  <div class="imory-range-row">
+                  <label for="quoteSourceRuleGap">
+                    강조선 거리
+                  </label>
+
+                  <div class="quote-input-with-unit">
 
                     <input
-                      id="quoteSourceRuleWidth"
-                      class="imory-range"
-                      type="range"
-                      min="1"
-                      max="12"
+                      id="quoteSourceRuleGap"
+                      class="quote-number-input quote-number-input--compact"
+                      type="number"
+                      inputmode="numeric"
+                      min="0"
+                      max="80"
                       step="1"
-                      value="3"
-                      aria-label="출처 강조선 굵기"
+                      value="12"
+                      aria-label="출처 강조선과 글자 사이 거리"
                     >
 
-                    <span
-                      class="imory-range-value"
-                      id="quoteSourceRuleWidthValue"
-                    >3px</span>
+                    <span class="quote-unit">
+                      px
+                    </span>
 
                   </div>
 

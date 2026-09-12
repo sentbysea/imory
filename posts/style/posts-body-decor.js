@@ -569,12 +569,61 @@ const POST_RULE_BOX_CLASS =
 
 
 /*
-  선과 글자 사이 여백(px). 별도 옵션을 두지 않기로 했으므로
-  (요구사항 5) 여기 한 자리에서만 정한다.
+  선과 글자 사이 거리(px)의 **기본값**.
+
+  예전에는 옵션이 없어서 이 상수 하나가 곧 값이었다. 지금은
+  BODY/DIALOGUE/SOURCE가 각각 자기 값을 갖고(bodyRuleGap 등),
+  값이 없는 옛 프리셋만 이 12로 읽힌다 — 그래서 옵션이 생겨도
+  이미 발행된 글의 모양은 그대로다.
 */
 
 const POST_RULE_GAP =
   12;
+
+
+const POST_RULE_MIN_GAP =
+  0;
+
+const POST_RULE_MAX_GAP =
+  80;
+
+
+function normalizePostRuleGap(
+  value,
+  fallback
+) {
+
+  const gap =
+    Math.round(
+      postStyleNumber(
+        value,
+        fallback === undefined
+          ? POST_RULE_GAP
+          : fallback
+      )
+    );
+
+
+  if (
+    !Number.isFinite(
+      gap
+    )
+  ) {
+
+    return POST_RULE_GAP;
+
+  }
+
+
+  return Math.min(
+    POST_RULE_MAX_GAP,
+    Math.max(
+      POST_RULE_MIN_GAP,
+      gap
+    )
+  );
+
+}
 
 
 const POST_RULE_MIN_WIDTH =
@@ -920,6 +969,12 @@ function resolvePostRuleForRun(
         normalizePostRuleWidth(
           settings.bodyRuleWidth,
           POST_STYLE_DEFAULTS.bodyRuleWidth
+        ),
+
+      gap:
+        normalizePostRuleGap(
+          settings.bodyRuleGap,
+          POST_STYLE_DEFAULTS.bodyRuleGap
         )
 
     };
@@ -958,6 +1013,12 @@ function resolvePostRuleForRun(
       normalizePostRuleWidth(
         settings.dialogueRuleWidth,
         POST_STYLE_DEFAULTS.dialogueRuleWidth
+      ),
+
+    gap:
+      normalizePostRuleGap(
+        settings.dialogueRuleGap,
+        POST_STYLE_DEFAULTS.dialogueRuleGap
       )
 
   };
@@ -992,7 +1053,12 @@ function applyPostRuleBoxStyle(
 
 
   box.style.paddingLeft =
-    `${POST_RULE_GAP}px`;
+    `${
+      normalizePostRuleGap(
+        rule.gap,
+        POST_RULE_GAP
+      )
+    }px`;
 
 }
 
@@ -1150,10 +1216,73 @@ function applyPostParagraphRules(
 /* =========================================================
    출처 강조선
 
-   출처는 문단이 아니라 요소 하나라 훨씬 단순하다 — 그 요소에
-   직접 테두리를 건다. view(출력 조건)로 이번 발췌만 끄거나
-   색을 바꿀 수 있다(에디터 세션 오버라이드).
+   ★ 선은 출처 **글자 바로 왼쪽**에 붙는다 (요구사항 4)
+
+     예전에는 출처 요소(블록) 자체에 border-left를 걸었다. 그
+     블록은 캔버스 폭을 다 차지하므로, 출처가 오른쪽 정렬이면
+     글자는 오른쪽 끝에 있는데 선만 본문 왼쪽 끝에 덩그러니
+     남았다.
+
+     그래서 글자를 inline-block 상자 하나로 감싸고 그 상자에
+     선을 건다. 상자는 글자 폭만큼만 차지하므로 선이 글자를
+     따라가고, 바깥 블록의 text-align이 왼쪽/가운데/오른쪽
+     정렬을 그대로 결정한다 — 선을 절대좌표로 옮기는 것이
+     아니라 **글자 묶음의 실제 크기와 정렬을 따르는** 구조다.
+
+     출처가 여러 줄이 되어도 상자가 그만큼 높아질 뿐이라 선이
+     떨어지거나 글자와 겹치지 않는다. 오른쪽 정렬이어도 선은
+     글자 왼쪽에 남는다(요구사항 4).
+
+   ★ 상자는 필요할 때만 만든다
+
+     선이 꺼져 있으면 예전과 완전히 같은 DOM(글자만 든 블록)으로
+     되돌린다 — 껐다 켰다를 반복해도 상자가 겹쳐 쌓이지 않는다.
 ========================================================== */
+
+const POST_SOURCE_RULE_BOX_CLASS =
+  "post-source-rule-box";
+
+
+function postSourceRuleBox(
+  source
+) {
+
+  return source.querySelector(
+    `:scope > .${POST_SOURCE_RULE_BOX_CLASS}`
+  );
+
+}
+
+
+function unwrapPostSourceRuleBox(
+  source
+) {
+
+  const box =
+    postSourceRuleBox(
+      source
+    );
+
+
+  if (!box) {
+    return;
+  }
+
+
+  while (box.firstChild) {
+
+    source.insertBefore(
+      box.firstChild,
+      box
+    );
+
+  }
+
+
+  box.remove();
+
+}
+
 
 function applyPostSourceRule(
   source,
@@ -1179,6 +1308,11 @@ function applyPostSourceRule(
 
   if (!enabled) {
 
+    unwrapPostSourceRuleBox(
+      source
+    );
+
+
     source.style.borderLeftStyle =
       "";
 
@@ -1197,6 +1331,24 @@ function applyPostSourceRule(
   }
 
 
+  /*
+    예전 방식으로 요소 자체에 걸려 있던 선은 걷어낸다 — 같은
+    요소에 두 번 그려지지 않게.
+  */
+
+  source.style.borderLeftStyle =
+    "";
+
+  source.style.borderLeftWidth =
+    "";
+
+  source.style.borderLeftColor =
+    "";
+
+  source.style.paddingLeft =
+    "";
+
+
   const color =
     isPostRuleColor(
       view.sourceRuleColor
@@ -1205,16 +1357,88 @@ function applyPostSourceRule(
       : resolved.sourceRuleColor;
 
 
-  applyPostRuleBoxStyle(
-    source,
-    {
-      color,
-      width:
-        normalizePostRuleWidth(
-          resolved.sourceRuleWidth,
-          POST_STYLE_DEFAULTS.sourceRuleWidth
-        )
+  let box =
+    postSourceRuleBox(
+      source
+    );
+
+
+  if (!box) {
+
+    box =
+      document.createElement(
+        "span"
+      );
+
+
+    box.className =
+      POST_SOURCE_RULE_BOX_CLASS;
+
+
+    while (source.firstChild) {
+
+      box.appendChild(
+        source.firstChild
+      );
+
     }
-  );
+
+
+    source.appendChild(
+      box
+    );
+
+  }
+
+
+  /*
+    ★ inline-block이어야 한다.
+
+      block이면 다시 폭을 다 차지해서 예전 문제로 돌아가고,
+      순수 inline이면 border-left가 첫 줄 앞에만 한 번 그려져
+      여러 줄에서 이어지지 않는다.
+  */
+
+  box.style.display =
+    "inline-block";
+
+
+  box.style.maxWidth =
+    "100%";
+
+
+  /*
+    글자 묶음 안쪽의 줄맞춤은 출처 정렬을 그대로 따른다 —
+    여러 줄이 됐을 때 바깥 정렬과 어긋나 보이지 않게.
+  */
+
+  box.style.textAlign =
+    resolved.sourceAlign;
+
+
+  box.style.borderLeftStyle =
+    "solid";
+
+
+  box.style.borderLeftWidth =
+    `${
+      normalizePostRuleWidth(
+        resolved.sourceRuleWidth,
+        POST_STYLE_DEFAULTS.sourceRuleWidth
+      )
+    }px`;
+
+
+  box.style.borderLeftColor =
+    color;
+
+
+  box.style.paddingLeft =
+    `${
+      normalizePostRuleGap(
+        resolved.sourceRuleGap,
+        POST_STYLE_DEFAULTS.sourceRuleGap
+      )
+    }px`;
 
 }

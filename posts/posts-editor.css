@@ -85,14 +85,20 @@
    EDITOR TOOLBAR
 ========================================================== */
 
+/*
+  ★ 정확히 세 줄 (요구사항 5)
+
+  예전에는 이 상자가 flex-wrap이고 버튼 묶음 여덟 개가 그 안에서
+  직접 wrap됐다 — 화면 폭에 따라 줄이 제멋대로 갈렸고, 모바일에서
+  같은 성격의 버튼이 서로 다른 줄로 흩어졌다. 지금은 바깥이 세로
+  방향이고, 각 행(.post-editor-tool-line)이 자기 안에서만 정렬한다.
+*/
+
 .post-editor-toolbar {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
 
-  gap:
-    8px
-    18px;
+  gap: 7px;
 
   width: 100%;
 
@@ -115,13 +121,65 @@
 }
 
 
+/*
+  한 행. 좁은 화면에서도 한 줄로 두는 것이 원칙이라 wrap을 켜지
+  않는다 — 대신 아래 모바일 규칙에서 간격과 드롭다운 폭을 줄인다.
+  그래도 넘치면 잘리는 대신 가로로 밀 수 있게 한다(터치 목표
+  크기를 줄이는 것보다 낫다).
+*/
+
+.post-editor-tool-line {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  min-width: 0;
+
+  overflow-x: auto;
+
+  scrollbar-width: none;
+}
+
+
+.post-editor-tool-line::-webkit-scrollbar {
+  display: none;
+}
+
+
+.post-editor-tool-line--end {
+  justify-content: flex-end;
+}
+
+
 .post-editor-tool-group {
   display: flex;
   align-items: center;
 
-  gap: 7px;
+  gap: 6px;
+
+  flex-shrink: 0;
 
   min-height: 24px;
+
+  /*
+    색 버튼이 여는 숨은 <input type="color">가 이 안에 자리잡게
+    한다 — 그 칸에 포커스가 갈 때 브라우저가 화면을 끌어다
+    맞추므로, 엉뚱한 곳에 있으면 툴바가 튄다.
+    (.imory-native-color-input, position: absolute)
+  */
+  position: relative;
+}
+
+
+/*
+  행에 직접 놓인 버튼·라벨·드롭다운도 줄어들지 않게.
+*/
+
+.post-editor-tool-line > .post-editor-tool-button,
+.post-editor-tool-line > .post-editor-tool-label,
+.post-editor-tool-line > .post-editor-preset-select {
+  flex-shrink: 0;
 }
 
 
@@ -816,13 +874,41 @@
 
 
 /* =========================================================
+   기본(OS) 색상 선택기를 여는 숨은 칸
+
+   기준 문서: posts/editor/posts-color-picker.js
+
+   손가락이 주 입력인 기기에서 컬러 버튼이 여는 <input type="color">.
+   보이지는 않지만 **살아 있어야** 한다 — display:none이나
+   visibility:hidden을 걸면 활성화 자체가 막히는 브라우저가 있다.
+   그래서 크기를 1px로 두고 투명하게만 만든다. 포인터는 받지
+   않는다(누르는 자리는 어디까지나 옆의 버튼이다).
+========================================================== */
+
+.imory-native-color-input {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  padding: 0;
+  margin: 0;
+  border: 0;
+
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+
+/* =========================================================
    컬러피커 팝오버
 
    기준 문서: posts/editor/posts-color-picker.js
 
-   OS 컬러피커(<input type="color">)를 대신한다 — 한 번 누르면
-   닫혀버리지 않고, 본문 선택을 빼앗지 않으며, Apply/Cancel이
-   분명하다(요구사항 1).
+   기본 피커를 쓰지 않는 화면(데스크톱)의 색 고르기 — 한 번
+   누르면 닫혀버리지 않고, 본문 선택을 빼앗지 않으며,
+   Apply/Cancel이 분명하다(요구사항 1).
 ========================================================== */
 
 .imory-color-picker {
@@ -836,7 +922,16 @@
 
   box-sizing: border-box;
 
-  width: 232px;
+  /*
+    ★ 좁은 화면에서 화면 폭을 다 먹지 않게 (요구사항 6)
+
+    예전에는 400px 이하에서 calc(100vw - 24px)로 **늘렸다** —
+    390px 아이폰에서 366px짜리 판이 떠서, 색을 고르는 작은
+    팝오버가 아니라 전면 시트처럼 보였다. 232px를 넘지 않되
+    화면보다 넓어지지도 않게 상한 둘을 함께 건다.
+  */
+
+  width: min(232px, calc(100vw - 32px));
 
   padding: 12px;
 
@@ -1035,12 +1130,16 @@
 }
 
 
-/* 좁은 화면에서는 화면 폭을 넘지 않게 */
+/*
+  좁은 화면에서 폭을 넓히던 규칙은 없앴다 — 위 min()이 두 상한을
+  한꺼번에 처리한다. 대신 손가락으로 색을 고르는 판은 조금 낮춰
+  팝오버 전체가 화면 안에 들어오게 한다.
+*/
 
 @media (max-width: 400px) {
 
-  .imory-color-picker {
-    width: calc(100vw - 24px);
+  .imory-color-picker-field {
+    height: 104px;
   }
 
 }
@@ -1089,24 +1188,11 @@
    발췌 배경 사진 — Editor의 최소 진입점
 
    기준 문서: posts/preview/posts-preview-background.js
-   (프리뷰 위에 상시 버튼을 띄우지 않는다 — 요구사항 8)
+
+   버튼 셋(change image · move · reset)은 설정의 마지막 줄에
+   바로 있다. 예전의 여닫기 패널(.post-editor-preview-background-panel)
+   은 없앴다 — 프리뷰 위에 겹쳐 뜨는 버튼도 없다(요구사항 8).
 ========================================================== */
-
-.post-editor-preview-background-panel {
-  display: flex;
-
-  flex-wrap: wrap;
-
-  align-items: center;
-
-  gap: 6px;
-
-  margin-top: 6px;
-  padding-top: 6px;
-
-  border-top: 1px solid #f2f2f2;
-}
-
 
 .post-editor-preview-background-message {
   color: #aaaaaa;

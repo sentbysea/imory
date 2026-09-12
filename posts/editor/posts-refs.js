@@ -514,6 +514,11 @@ const postEditorUnderlineToggle =
     "postEditorUnderlineToggle"
   );
 
+const postEditorStrikeToggle =
+  document.getElementById(
+    "postEditorStrikeToggle"
+  );
+
 /*
   ★ 색 컨트롤은 더 이상 <input type="color">가 아니다.
 
@@ -650,15 +655,11 @@ const postEditorPreviewStage =
 
 /* 배경 사진 · 출처 강조선 (이번 발췌 전용 — posts/preview/posts-preview-background.js) */
 
-const postEditorPreviewBackgroundToggle =
-  document.getElementById(
-    "postEditorPreviewBackgroundToggle"
-  );
-
-const postEditorPreviewBackgroundPanel =
-  document.getElementById(
-    "postEditorPreviewBackgroundPanel"
-  );
+/*
+  ★ 배경 버튼 셋(change image · move · reset)은 이제 설정의
+  마지막 줄에 바로 있다 — 그것들을 감싸던 "background" 여닫기
+  버튼과 패널은 없앴다(요구사항 8).
+*/
 
 const postEditorPreviewBackgroundPick =
   document.getElementById(
@@ -690,15 +691,12 @@ const postEditorPreviewSourceRuleToggle =
     "postEditorPreviewSourceRuleToggle"
   );
 
-const postEditorPreviewSourceRuleControl =
-  document.getElementById(
-    "postEditorPreviewSourceRuleControl"
-  );
-
-const postEditorPreviewSourceRuleSwatch =
-  document.getElementById(
-    "postEditorPreviewSourceRuleSwatch"
-  );
+/*
+  ★ 출처 강조선의 **색 견본은 없앴다**(요구사항 7) — 이 발췌
+  설정에서는 켜고 끄기만 하고 색은 Quote Preset의 SOURCE 값을
+  그대로 따른다. 본문 툴바의 H/P/L 색 견본은 그대로 남아 있다
+  (postEditorCustomControl / …PointControl / postEditorRuleControl).
+*/
 
 const postEditorPreviewTitleToggle =
   document.getElementById(

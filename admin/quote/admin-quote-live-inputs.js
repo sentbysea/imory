@@ -48,6 +48,7 @@ const quoteLiveInputs = [
 
   quoteBodyRuleColor,
   quoteBodyRuleWidth,
+  quoteBodyRuleGap,
 
   quoteFontSize,
   quoteBodyWeight,
@@ -69,6 +70,7 @@ const quoteLiveInputs = [
   quoteDialogueRuleEnabled,
   quoteDialogueRuleColor,
   quoteDialogueRuleWidth,
+  quoteDialogueRuleGap,
 
   quoteSourceEnabled,
   quoteSourceColor,
@@ -81,11 +83,13 @@ const quoteLiveInputs = [
   quoteSourceRuleEnabled,
   quoteSourceRuleColor,
   quoteSourceRuleWidth,
+  quoteSourceRuleGap,
 
   quoteBackgroundScale,
   quoteBackgroundBlur,
   quoteBackgroundOverlayOpacity,
-  quoteBackgroundOverlayColor
+  quoteBackgroundOverlayColor,
+  quoteBackgroundFixedSize
 
 ];
 
@@ -315,6 +319,12 @@ function collectQuoteSettings() {
         POST_STYLE_DEFAULTS.bodyRuleWidth
       ),
 
+    bodyRuleGap:
+      quoteInputNumber(
+        quoteBodyRuleGap,
+        POST_STYLE_DEFAULTS.bodyRuleGap
+      ),
+
 
     bodySize:
       quoteInputNumber(
@@ -430,6 +440,12 @@ function collectQuoteSettings() {
         POST_STYLE_DEFAULTS.dialogueRuleWidth
       ),
 
+    dialogueRuleGap:
+      quoteInputNumber(
+        quoteDialogueRuleGap,
+        POST_STYLE_DEFAULTS.dialogueRuleGap
+      ),
+
 
     /* SOURCE */
 
@@ -510,6 +526,12 @@ function collectQuoteSettings() {
         POST_STYLE_DEFAULTS.sourceRuleWidth
       ),
 
+    sourceRuleGap:
+      quoteInputNumber(
+        quoteSourceRuleGap,
+        POST_STYLE_DEFAULTS.sourceRuleGap
+      ),
+
 
     /* =====================================================
        CANVAS 배경 사진
@@ -536,6 +558,21 @@ function collectQuoteSettings() {
 
     backgroundImageFocusY:
       quoteBackgroundFocusY,
+
+
+    /*
+      이미지 크기 고정 — 켜면 표시 너비를 캔버스 너비에 대한
+      비율로 저장한다. 그 비율은 입력칸이 아니라 상태 변수가
+      들고 있다(켜는 순간 미리보기에서 재서 잡는다).
+    */
+
+    backgroundImageFixedSize:
+      Boolean(
+        quoteBackgroundFixedSize?.checked
+      ),
+
+    backgroundImageWidthRatio:
+      quoteBackgroundWidthRatio,
 
     backgroundImageBlur:
       quoteInputNumber(

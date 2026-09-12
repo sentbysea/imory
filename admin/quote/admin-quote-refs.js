@@ -200,10 +200,11 @@ const quoteHighlightHeight =
     "quoteHighlightHeight"
   );
 
-const quoteHighlightHeightValue =
-  document.getElementById(
-    "quoteHighlightHeightValue"
-  );
+/*
+  ★ 형광펜 높이·강조선 굵기·덮개 농도는 슬라이더에서 네모 숫자
+  칸으로 바뀌었다(요구사항 3·1) — 값을 따로 보여주는 요소가
+  없어졌으므로 *Value 참조도 함께 사라졌다.
+*/
 
 
 /*
@@ -222,9 +223,14 @@ const quoteBodyRuleWidth =
     "quoteBodyRuleWidth"
   );
 
-const quoteBodyRuleWidthValue =
+/*
+  선과 글자 사이 거리(px). 값이 없는 옛 프리셋은 12px로 읽힌다
+  (posts/style/posts-body-decor.js의 POST_RULE_GAP).
+*/
+
+const quoteBodyRuleGap =
   document.getElementById(
-    "quoteBodyRuleWidthValue"
+    "quoteBodyRuleGap"
   );
 
 
@@ -326,9 +332,9 @@ const quoteDialogueRuleWidth =
     "quoteDialogueRuleWidth"
   );
 
-const quoteDialogueRuleWidthValue =
+const quoteDialogueRuleGap =
   document.getElementById(
-    "quoteDialogueRuleWidthValue"
+    "quoteDialogueRuleGap"
   );
 
 
@@ -389,9 +395,9 @@ const quoteSourceRuleWidth =
     "quoteSourceRuleWidth"
   );
 
-const quoteSourceRuleWidthValue =
+const quoteSourceRuleGap =
   document.getElementById(
-    "quoteSourceRuleWidthValue"
+    "quoteSourceRuleGap"
   );
 
 
@@ -451,9 +457,14 @@ const quoteBackgroundOverlayOpacity =
     "quoteBackgroundOverlayOpacity"
   );
 
-const quoteBackgroundOverlayOpacityValue =
+/*
+  이미지 크기 고정 — 켜면 사진의 표시 너비를 캔버스 너비에 대한
+  비율로 잡는다(posts/style/posts-canvas-background.js).
+*/
+
+const quoteBackgroundFixedSize =
   document.getElementById(
-    "quoteBackgroundOverlayOpacityValue"
+    "quoteBackgroundFixedSize"
   );
 
 const quoteBackgroundOverlayColor =
@@ -476,6 +487,16 @@ let quoteBackgroundFocusX =
 
 let quoteBackgroundFocusY =
   0.5;
+
+
+/*
+  이미지 크기 고정일 때의 "표시 너비 ÷ 캔버스 너비". 입력칸이
+  없다 — 옵션을 켜는 순간 미리보기에 지금 그려져 있는 크기를
+  그대로 재서 잡는다(admin-quote-background.js).
+*/
+
+let quoteBackgroundWidthRatio =
+  1;
 
 
 /* =========================================================

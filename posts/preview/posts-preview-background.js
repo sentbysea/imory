@@ -17,13 +17,26 @@
 
    ★ Editor가 다룰 수 있는 것은 셋뿐이다 (요구사항 8)
 
-       image   이미지 교체
-       move    위치 조정 모드(이 모드에서만 드래그가 배경을 움직인다)
-       reset   프리셋 기본 이미지·위치로 복원
+       change image   이미지 교체
+       move           위치 조정 모드(이 모드에서만 드래그가 배경을 움직인다)
+       reset          프리셋 기본 이미지·위치로 복원
 
-     확대/흐림/오버레이의 상세 설정은 Quote Preset에만 있다.
-     프리뷰 위에 상시로 뜨는 버튼은 없다 — 프리뷰 **바깥**의
-     background 버튼 하나가 이 패널을 연다.
+     세 버튼은 설정의 마지막 줄에 **바로** 있다 — 예전의
+     "background" 여닫기 버튼과 그 아래 패널은 없앴다. 프리뷰
+     위에 겹쳐 뜨는 버튼도 없다.
+
+   ★ 사진을 바꿔도 프리셋의 배경 설정은 그대로다 (요구사항 8)
+
+     이 파일이 건드리는 값은 **사진의 주소와 구도**뿐이다
+     (url · focusX · focusY · pages). 덮개 색/농도 · 흐림 ·
+     확대 · 이미지 크기 고정은 view에 넣지 않으므로,
+     resolvePostBackgroundView()가 언제나 프리셋 값을 읽는다
+     (posts/style/posts-canvas-background.js).
+
+     구도만 가운데로 되돌리는 이유는 새 사진에서 옛 중심이 전혀
+     다른 자리를 가리키기 때문이다 — 그건 이미지에 딸린 값이라
+     같이 초기화하는 것이 맞고, 크기 정책은 이미지에 딸린 값이
+     아니라 프리셋의 것이라 건드리지 않는다.
 
    ★ 여러 장일 때 (요구사항 7)
 
@@ -209,7 +222,7 @@ function currentPreviewBackground() {
 
 
 /* =========================================================
-   패널 여닫기
+   버튼 상태
 ========================================================== */
 
 function syncPreviewBackgroundControls() {
@@ -291,23 +304,6 @@ function syncPreviewBackgroundControls() {
   }
 
 
-  if (
-    postEditorPreviewSourceRuleSwatch
-  ) {
-
-    const resolved =
-      normalizePostStyleSettings(
-        postStyleSettings ||
-        {}
-      );
-
-
-    postEditorPreviewSourceRuleSwatch.style.background =
-      previewSourceRuleColor ||
-      resolved.sourceRuleColor;
-
-  }
-
 }
 
 
@@ -329,59 +325,14 @@ function showPreviewBackgroundMessage(
 }
 
 
-postEditorPreviewBackgroundToggle
-  ?.addEventListener(
-    "click",
-    () => {
-
-      if (
-        !postEditorPreviewBackgroundPanel
-      ) {
-        return;
-      }
-
-
-      const open =
-        postEditorPreviewBackgroundPanel.hidden;
-
-
-      postEditorPreviewBackgroundPanel.hidden =
-        !open;
-
-
-      postEditorPreviewBackgroundToggle
-        .setAttribute(
-          "aria-expanded",
-          String(
-            open
-          )
-        );
-
-
-      /*
-        패널을 닫으면 위치 조정 모드도 반드시 끝난다 — 모드가
-        켜진 줄 모른 채 프리뷰를 만지다 구도가 밀리는 일이
-        없어야 한다(요구사항 8의 "조정 모드 종료가 명확").
-      */
-
-      if (!open) {
-
-        setPreviewBackgroundMoveMode(
-          false
-        );
-
-      }
-
-
-      syncPreviewBackgroundControls();
-
-    }
-  );
-
-
-
 /* =========================================================
    이미지 교체
+
+   ★ 여닫는 패널이 없다 (요구사항 8) — 버튼 셋이 설정의 마지막
+   줄에 바로 있다. 그래서 "패널을 닫을 때 조정 모드도 끈다"는
+   장치도 필요 없어졌다. 조정 모드는 move 버튼 자체로만 켜고
+   끄며, 그 상태가 버튼의 aria-pressed와 대지의 클래스에
+   그대로 드러난다(setPreviewBackgroundMoveMode).
 ========================================================== */
 
 postEditorPreviewBackgroundPick
@@ -967,108 +918,17 @@ postEditorPreviewSourceRuleToggle
   );
 
 
-postEditorPreviewSourceRuleControl
-  ?.addEventListener(
-    "pointerdown",
-    event => {
+/*
+  ★ 출처 강조선의 색 팝오버는 없앴다 (요구사항 7).
 
-      event.preventDefault();
+  이 발췌 설정에서는 강조선을 켜고 끄기만 하고, 색은 Quote
+  Preset의 SOURCE 값을 그대로 따른다 — 같은 색을 두 자리에서
+  고칠 수 있으면 어느 쪽이 이겼는지 알기 어렵다.
 
-    }
-  );
+  previewSourceRuleColor 변수 자체는 남겨 둔다: null이면 "프리셋
+  색을 따른다"는 뜻이고, resolveEditorPreviewView가 그 규칙으로
+  읽는다(posts/preview/posts-preview.js).
 
-
-postEditorPreviewSourceRuleControl
-  ?.addEventListener(
-    "click",
-    () => {
-
-      const resolved =
-        normalizePostStyleSettings(
-          postStyleSettings ||
-          {}
-        );
-
-
-      const before =
-        previewSourceRuleColor;
-
-
-      openImoryColorPicker(
-        {
-
-          anchor:
-            postEditorPreviewSourceRuleControl,
-
-          color:
-            previewSourceRuleColor ||
-            resolved.sourceRuleColor,
-
-          presetColor:
-            resolved.sourceRuleColor,
-
-          onPreview:
-            color => {
-
-              previewSourceRuleColor =
-                color;
-
-
-              syncPreviewBackgroundControls();
-
-
-              updateEditorPreview();
-
-            },
-
-          onApply:
-            color => {
-
-              previewSourceRuleColor =
-                color;
-
-
-              /*
-                색을 고른다는 것은 곧 "켠다"는 뜻이다 — 꺼져
-                있으면 같이 켜 준다.
-              */
-
-              if (
-                !(
-                  previewSourceRuleEnabled ??
-                  resolved.sourceRuleEnabled
-                )
-              ) {
-
-                previewSourceRuleEnabled =
-                  true;
-
-              }
-
-
-              syncPreviewBackgroundControls();
-
-
-              updateEditorPreview();
-
-            },
-
-          onCancel:
-            () => {
-
-              previewSourceRuleColor =
-                before;
-
-
-              syncPreviewBackgroundControls();
-
-
-              updateEditorPreview();
-
-            }
-
-        }
-      );
-
-    }
-  );
+  ★ 본문 툴바의 H/P/L 색 견본은 그대로다 — 다른 컨트롤이다
+  (posts/editor/posts-highlight-toolbar.js).
+*/

@@ -158,6 +158,18 @@ const POST_STYLE_DEFAULTS =
 
     bodyRuleColor: "#ee9fbd",
     bodyRuleWidth: 3,
+
+
+    /*
+      선과 글자 사이의 거리(px).
+
+      ★ 값이 없는 옛 프리셋은 12로 읽힌다 — 예전에 상수 하나로
+      박혀 있던 그 값이다(posts/style/posts-body-decor.js의
+      POST_RULE_GAP). 그래서 이 옵션이 생겨도 이미 발행된 글의
+      모양은 한 픽셀도 달라지지 않는다.
+    */
+
+    bodyRuleGap: 12,
     bodySize: 16,
     bodyWeight: "400",
     lineHeight: 1.9,
@@ -192,6 +204,7 @@ const POST_STYLE_DEFAULTS =
     dialogueRuleEnabled: false,
     dialogueRuleColor: "#ee9fbd",
     dialogueRuleWidth: 3,
+    dialogueRuleGap: 12,
 
 
     /* SOURCE */
@@ -211,6 +224,7 @@ const POST_STYLE_DEFAULTS =
     sourceRuleEnabled: false,
     sourceRuleColor: "#ee9fbd",
     sourceRuleWidth: 3,
+    sourceRuleGap: 12,
 
 
     /* CANVAS 배경 이미지 — preview/export 전용 */
@@ -226,10 +240,48 @@ const POST_STYLE_DEFAULTS =
 
     /*
       확대 배율. 1 = "캔버스를 빈틈없이 덮는 최소 크기"(= cover).
-      그보다 작을 수 없다.
+
+      ★ 1보다 작아질 수 있다(0.5까지). 그러면 사진이 캔버스보다
+      작아져서 둘레에 바탕이 드러나고, 그 자리는 배경색으로
+      채워진다 — 예전의 "언제나 빈틈없이 덮는다"는 규칙은
+      철회됐다(posts/style/posts-canvas-background.js 머리말).
+
+      폼의 슬라이더는 50~150%지만, 그보다 큰 값이 저장된 옛
+      프리셋은 **로드만으로 깎이지 않는다** — 슬라이더의 최대치를
+      그 값까지 늘려서 있는 그대로 보여준다
+      (admin/quote/admin-quote-apply-preset.js).
     */
 
     backgroundImageScale: 1,
+
+
+    /*
+      이미지 크기 고정.
+
+      끄면(기본) 예전처럼 페이지 크기에 맞춰 cover로 덮는다 —
+      페이지가 높아지면 사진도 함께 커진다.
+
+      켜면 사진의 표시 너비를 **캔버스 너비에 대한 비율**로 잡는다
+      (backgroundImageWidthRatio). 같은 캔버스 너비라면 페이지
+      높이가 달라져도 사진 속 사물의 크기가 똑같다 — 1200×912와
+      1200×2160 발췌에서 같은 크기로 나오고, 늘어난 만큼은 배경색
+      바탕이 넓어질 뿐이다.
+
+      ★ 기본값은 false다. 이미 저장된 프리셋을 이 옵션이 생겼다는
+      이유만으로 켜지 않는다.
+    */
+
+    backgroundImageFixedSize: false,
+
+
+    /*
+      고정일 때의 표시 너비 ÷ 캔버스 너비. backgroundImageScale이
+      여기에 곱해지므로 확대 슬라이더는 두 모드에서 같은 뜻을
+      유지한다. 옵션을 켜는 순간 지금 그려진 크기 그대로가 되도록
+      이 값을 잡는다(admin/quote/admin-quote-background.js).
+    */
+
+    backgroundImageWidthRatio: 1,
 
 
     /*
@@ -313,7 +365,12 @@ const POST_STYLE_NUMBER_KEYS =
     "dialogueRuleWidth",
     "sourceRuleWidth",
 
+    "bodyRuleGap",
+    "dialogueRuleGap",
+    "sourceRuleGap",
+
     "backgroundImageScale",
+    "backgroundImageWidthRatio",
     "backgroundImageFocusX",
     "backgroundImageFocusY",
     "backgroundImageBlur",
@@ -329,7 +386,9 @@ const POST_STYLE_BOOLEAN_KEYS =
     "sourceEnabled",
 
     "dialogueRuleEnabled",
-    "sourceRuleEnabled"
+    "sourceRuleEnabled",
+
+    "backgroundImageFixedSize"
   ];
 
 

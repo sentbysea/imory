@@ -2321,15 +2321,26 @@ async function runBodyImages(browser) {
     const ui = await p.evaluate(() => ({
       richtext: !document.getElementById("postEditorRichtextMode").hidden,
       toolbar: !!document.getElementById("postEditorToolbar"),
-      photoButton: !!document.getElementById("postEditorImageButton") &&
-        !document.getElementById("postEditorImageButton").closest(".post-editor-tool-group").hidden,
-      /* POINT COLOR 바로 옆 자리
-         (컬러피커가 <input type="color">에서 스와치 버튼으로 바뀌어
-         기준 요소만 postEditorCustomPointControl로 옮겼다 — 자리
-         자체는 그대로 검사한다) */
-      nextToPointColor:
-        document.getElementById("postEditorCustomPointControl").closest(".post-editor-tool-group")
-          .nextElementSibling?.contains(document.getElementById("postEditorImageButton")) === true,
+      photoButton:
+        document.getElementById("postEditorImageButton")?.offsetParent !== null,
+      /*
+        ★ 자리가 바뀌었다 — 툴바 2행의 서식 묶음 바로 뒤다.
+
+        예전에는 POINT COLOR 옆에 "PHOTO" 라벨 + "사진" 버튼이
+        따로 있었다. 툴바를 세 줄로 정리하면서 라벨을 없애고
+        버튼 자체가 사진 삽입이 됐다
+        (posts/posts.html의 TOOLBAR 주석).
+
+        검사하는 것은 여전히 "누를 수 있는 자리에 하나 있는가"와
+        그 이웃이다.
+      */
+      afterFormatGroup:
+        document.getElementById("postEditorUnderlineToggle")
+          .closest(".post-editor-tool-group")
+          .nextElementSibling ===
+        document.getElementById("postEditorImageButton"),
+      photoLabel:
+        document.getElementById("postEditorImageButton").textContent.trim(),
       coverField: !!document.querySelector(".post-editor-cover-field"),
       galleryPanel: !!document.getElementById("postEditorGallery"),
       preview: document.getElementById("postEditorPreviewToggle").hidden,
@@ -2345,8 +2356,9 @@ async function runBodyImages(browser) {
 
     check(`[body ${type}] 공통 본문 에디터와 툴바를 쓴다`,
       ui.richtext && ui.toolbar && ui.ooc && ui.html && ui.secret && ui.priv, JSON.stringify(ui));
-    check(`[body ${type}] 사진 버튼이 POINT COLOR 옆에 있다`,
-      ui.photoButton && ui.nextToPointColor, JSON.stringify(ui));
+    check(`[body ${type}] 사진 버튼 하나가 서식 묶음 바로 옆에 있다`,
+      ui.photoButton && ui.afterFormatGroup && ui.photoLabel === "photo",
+      JSON.stringify(ui));
     check(`[body ${type}] COVER 칸과 갤러리 전용 패널이 없다`,
       !ui.coverField && !ui.galleryPanel, JSON.stringify(ui));
     check(`[body ${type}] cancel/save는 양쪽 모두 남는다`, ui.cancel && ui.save);

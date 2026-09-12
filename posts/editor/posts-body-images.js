@@ -636,34 +636,20 @@ function validatePostBodyImageFile(
   아니라 "고르러 가기 전에" 저장해야 한다(요구사항 1절).
 */
 
-postEditorImageButton
-  ?.addEventListener(
-    "pointerdown",
-    event => {
+/*
+  ★ 실행이 click이 아니라 pointerup이다 — 버튼이 pointerdown에서
+  preventDefault를 걸기 때문이다(caret 보호). WebKit은 터치에서
+  그 뒤의 click을 만들지 않으므로, click만 듣고 있으면 아이폰에서
+  사진 버튼이 아예 눌리지 않는다. 실측표는 공용 헬퍼의 머리말
+  (posts/editor/posts-color-picker.js — bindImoryTapButton).
+*/
 
-      captureEditorCaretBeforeToolbar();
+bindImoryTapButton(
+  postEditorImageButton,
+  {
 
-
-      postBodyImageInsertRange =
-        savedEditorRange
-          ? savedEditorRange.cloneRange()
-          : null;
-
-
-      /* 버튼이 포커스를 훔쳐 caret이 지워지지 않게 한다 */
-
-      event.preventDefault();
-
-    }
-  );
-
-
-postEditorImageButton
-  ?.addEventListener(
-    "click",
-    () => {
-
-      if (!postBodyImageInsertRange) {
+    onDown:
+      () => {
 
         captureEditorCaretBeforeToolbar();
 
@@ -673,13 +659,30 @@ postEditorImageButton
             ? savedEditorRange.cloneRange()
             : null;
 
+      },
+
+    onFire:
+      () => {
+
+        if (!postBodyImageInsertRange) {
+
+          captureEditorCaretBeforeToolbar();
+
+
+          postBodyImageInsertRange =
+            savedEditorRange
+              ? savedEditorRange.cloneRange()
+              : null;
+
+        }
+
+
+        postEditorImageFiles?.click();
+
       }
 
-
-      postEditorImageFiles?.click();
-
-    }
-  );
+  }
+);
 
 
 postEditorImageFiles
@@ -997,23 +1000,18 @@ postEditorContent
   );
 
 
-postEditorImagePrimaryToggle
-  ?.addEventListener(
-    "pointerdown",
-    event => {
+/*
+  ★ 여기도 pointerup으로 실행한다 — pointerdown에서 preventDefault를
+  걸기 때문에 WebKit 터치에서는 click이 오지 않는다
+  (posts/editor/posts-color-picker.js — bindImoryTapButton).
+*/
 
-      /* 컨트롤을 누르는 동안 편집 영역의 선택이 날아가지 않게 */
+bindImoryTapButton(
+  postEditorImagePrimaryToggle,
+  {
 
-      event.preventDefault();
-
-    }
-  );
-
-
-postEditorImagePrimaryToggle
-  ?.addEventListener(
-    "click",
-    () => {
+    onFire:
+      () => {
 
       if (!postBodyImageSelected) {
 
@@ -1056,8 +1054,10 @@ postEditorImagePrimaryToggle
           : "대표 사진으로 지정했습니다."
       );
 
-    }
-  );
+      }
+
+  }
+);
 
 
 /* 편집 중 본문이 바뀌면(타이핑·삭제·undo) 컨트롤 자리를 다시 맞춘다 */

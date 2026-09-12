@@ -390,13 +390,18 @@ function sanitizeRichNode(
 
 
   /*
-    볼드/이탤릭/밑줄
+    볼드/이탤릭/밑줄/취소선
 
     Ctrl+B/I/U는 별도 JS 없이 브라우저 기본 contenteditable
     동작으로 처리되는데(execCommand 없이도 대부분의 브라우저가
     <b>/<i>/<u>를 직접 삽입함), 화이트리스트에 없어서 저장/
     프리뷰 시점에 통째로 벗겨지고 있었다. 태그 자체를 그대로
     허용해서 프리뷰/발췌/저장된 글 모두에 반영되게 한다.
+
+    ★ 취소선은 <s>로 모은다 — 툴바가 넣는 것도 <s>지만, 붙여넣기나
+    옛 글에서 <strike>/<del>이 들어올 수 있다. 셋을 다 허용하되
+    저장되는 태그는 하나로 통일해서, 툴바의 해제 판정과 뷰어의
+    렌더가 갈리지 않게 한다.
   */
 
   if (
@@ -404,12 +409,18 @@ function sanitizeRichNode(
     tag === "strong" ||
     tag === "i" ||
     tag === "em" ||
-    tag === "u"
+    tag === "u" ||
+    tag === "s" ||
+    tag === "strike" ||
+    tag === "del"
   ) {
 
     const element =
       document.createElement(
-        tag
+        tag === "strike" ||
+        tag === "del"
+          ? "s"
+          : tag
       );
 
 
@@ -1072,7 +1083,7 @@ function legacyMarkupToRichHTML(
 ========================================================== */
 
 /*
-  ★ b/strong/i/em/u도 검사 대상에 포함해야 한다 — 글 전체가
+  ★ b/strong/i/em/u/s도 검사 대상에 포함해야 한다 — 글 전체가
   줄바꿈 하나 없이 볼드/이탤릭/밑줄 서식만 있는 경우(div/p/br/span이
   하나도 없음) 이 태그들을 못 찾으면 legacyMarkupToRichHTML로
   잘못 빠져서, 실제 HTML 태그가 서식으로 해석되지 않고 꺾쇠
@@ -1086,7 +1097,7 @@ function isRichPostContent(
 ) {
 
   return (
-    /<\s*(?:div|p|br|span|b|strong|i|em|u|img)\b/i
+    /<\s*(?:div|p|br|span|b|strong|i|em|u|s|strike|del|img)\b/i
       .test(
         String(
           content || ""
