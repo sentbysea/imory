@@ -428,3 +428,26 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 6. **Studio Preview의 메모 카드에는 ⋮가 붙지 않는다.** 그 자리는 공개 화면에서
    플랫폼이 채우는 곳이고, Studio에서 편집자가 볼 것은 자리 자체이지 동작하는
    버튼이 아니다(POST 본문 region과 같은 결).
+
+
+
+## 11. Reader-tools lifecycle and memo presentation correction (2026-09-13)
+
+- `resetPostViewerTools()` clears the previous post identity, removes skin anchor
+  listeners, hides the platform trigger, closes the popover/highlight UI, and
+  removes the viewer-tools layout flag. Category, folder, memos, editor/platform,
+  HOME and next-post entry paths invoke it. Category/BANNER share the category
+  entry and screen-switch path.
+- Late setup for a previous post and attempts to open tools outside the current
+  post are rejected. The `[hidden]` trigger is explicitly `display:none`.
+- A skin can put `viewer.toolsHref` in its POST template's normal document flow.
+  The platform then hides its fallback trigger; other templates do not need it.
+- Memo repeat roots expose constrained presentation variables to every skin:
+  `memos.cards`: `--imory-memo-color` (validated six-digit hex).
+  `memos.folders`: `--imory-memo-cover-ratio` and
+  `--imory-memo-cover-position` (known ratio, focus clamped to 0–100%).
+  These values are derived by the renderer, not arbitrary saved inline styles.
+- Validation: `node posts/posts-view-tools-lifecycle-test.cjs` covers state and
+  constrained presentation with small DOM doubles; it is not browser, DB,
+  deployment or iOS coverage. Browser attempts in the authoring environment
+  were blocked by missing local executables / a blocked localhost address.

@@ -26,6 +26,10 @@
    보이는 편이 어느 쪽에서도 덜 튄다.
 ========================================================== */
 
+#postToolsButton[hidden] {
+  display: none !important;
+}
+
 .post-tools-button {
   right: 4px;
 
@@ -979,3 +983,4 @@
 
   color: #d980a2;
 }
+

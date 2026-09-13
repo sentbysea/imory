@@ -292,6 +292,12 @@ async function openPostPage(
   currentPostView =
     "post";
 
+  if (typeof resetPostViewerTools === "function") {
+    resetPostViewerTools();
+  }
+
+
+
 
   currentPostId =
     Number(
@@ -1823,6 +1829,7 @@ function renderOwnerOocNote(
   );
 
 }
+
 
 
 

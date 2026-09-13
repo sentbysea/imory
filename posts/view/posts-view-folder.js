@@ -292,6 +292,12 @@ async function openFolderPage(
   currentPostView =
     "folder";
 
+  if (typeof resetPostViewerTools === "function") {
+    resetPostViewerTools();
+  }
+
+
+
   currentPostCategoryId =
     numericCategoryId;
 
@@ -929,3 +935,4 @@ async function fillFolderSeriesBodies(
   }
 
 }
+

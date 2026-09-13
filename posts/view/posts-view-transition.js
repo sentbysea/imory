@@ -573,6 +573,12 @@ function cancelPendingIndicator(
 
 function enterPlatformScreen() {
 
+  if (typeof resetPostViewerTools === "function") {
+    resetPostViewerTools();
+  }
+
+
+
   showPostAreaInstant();
 
 
@@ -1472,6 +1478,9 @@ async function closePostArea(
     animate = true
   } = options;
 
+  if (typeof resetPostViewerTools === "function") {
+    resetPostViewerTools();
+  }
 
   if (updateUrl) {
 
@@ -1616,6 +1625,7 @@ async function closePostArea(
   }
 
 }
+
 
 
 
