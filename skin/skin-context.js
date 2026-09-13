@@ -506,6 +506,44 @@ async function fetchSkinCategoryFolders(
 }
 
 
+/*
+  HIGHLIGHT-1: 메모 카드의 "카테고리 › 폴더 › 글" 출처 경로를
+  현재 폴더 트리에서 계산하기 위한 최소 행. 메모에 폴더명을 복사해
+  저장하지 않으므로 폴더 이름 변경·이동과 글 이동이 즉시 반영된다.
+*/
+
+async function fetchSkinMemoPostFolders(
+  ownerId
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from("post_folders")
+      .select("id, parent_id, category_id, name, depth")
+      .eq("user_id", ownerId);
+
+
+  if (error) {
+
+    console.error(
+      "[skin-context] memo post_folders 조회 실패:",
+      error
+    );
+
+
+    return [];
+
+  }
+
+
+  return data || [];
+
+}
+
+
 /* =========================================================
    GALLERY-1 — 카테고리 표시 설정 컬럼
 
@@ -3018,6 +3056,59 @@ async function buildPostSkinContext(
      categoryId  폴더 하나를 연 경우 그 카테고리 id("none"이면 무분류)
 ========================================================== */
 
+function buildMemoPostFolderPath(
+  folderId,
+  categoryId,
+  foldersById,
+  slug
+) {
+
+  const path = [];
+  const visited = new Set();
+  let currentId =
+    folderId === null || folderId === undefined
+      ? null
+      : String(folderId);
+
+
+  while (currentId && !visited.has(currentId)) {
+
+    visited.add(currentId);
+
+
+    const folder =
+      foldersById.get(currentId);
+
+
+    if (
+      !folder ||
+      String(folder.category_id) !== String(categoryId)
+    ) {
+
+      break;
+
+    }
+
+
+    path.unshift({
+      id: currentId,
+      name: String(folder.name || ""),
+      href: buildSkinFolderHref(slug, categoryId, currentId)
+    });
+
+
+    currentId =
+      folder.parent_id === null || folder.parent_id === undefined
+        ? null
+        : String(folder.parent_id);
+
+  }
+
+
+  return path.filter((item) => item.name);
+
+}
+
 async function buildMemosSkinContext(
   ownerId,
   options = {}
@@ -3039,12 +3130,14 @@ async function buildMemosSkinContext(
   const [
     base,
     cards,
-    folderSettings
+    folderSettings,
+    postFolders
   ] =
     await Promise.all([
       buildBaseSkinContext(ownerId, options, commonData),
       loadMemoHighlightCards(ownerId),
-      loadMemoFolderSettings(ownerId)
+      loadMemoFolderSettings(ownerId),
+      fetchSkinMemoPostFolders(ownerId)
     ]);
 
 
@@ -3073,6 +3166,15 @@ async function buildMemosSkinContext(
     );
 
 
+  const postFolderById =
+    new Map(
+      postFolders.map(
+        (folder) =>
+          [String(folder.id), folder]
+      )
+    );
+
+
   const MEMO_UNFILED_ID =
     "none";
 
@@ -3094,7 +3196,52 @@ async function buildMemosSkinContext(
 
 
   const buildCard =
-    (card) => ({
+    (card) => {
+
+      const postTitle =
+        maskSkinPostTitle(
+          card.postVisibility,
+          card.postTitle
+        );
+
+      const category =
+        categoryById.get(card.categoryId) ||
+        null;
+
+      const postFolderPath =
+        buildMemoPostFolderPath(
+          card.postFolderId,
+          card.categoryId,
+          postFolderById,
+          slug
+        );
+
+      const sourcePath = [
+        category
+          ? {
+              kind: "category",
+              id: String(category.id),
+              name: category.name,
+              href: buildSitePath(slug, `/category/${category.id}`)
+            }
+          : null,
+        ...postFolderPath.map((folder) => ({
+          kind: "folder",
+          ...folder
+        })),
+        {
+          kind: "post",
+          id: card.postId === null ? null : String(card.postId),
+          name: postTitle,
+          href:
+            card.postId === null
+              ? null
+              : buildSitePath(slug, `/post/${card.postId}`)
+        }
+      ].filter((item) => item && item.name);
+
+
+      return {
 
       id:
         card.id,
@@ -3124,10 +3271,7 @@ async function buildMemosSkinContext(
           : String(card.postId),
 
       postTitle:
-        maskSkinPostTitle(
-          card.postVisibility,
-          card.postTitle
-        ),
+        postTitle,
 
       /*
         원문 이동 — 정식 글 주소만 넣는다. 발췌문도 메모도 주소에
@@ -3141,13 +3285,22 @@ async function buildMemosSkinContext(
           : buildSitePath(slug, `/post/${card.postId}`),
 
       categoryName:
-        categoryById.get(card.categoryId)?.name ||
+        category?.name ||
         "",
 
       categoryHref:
-        categoryById.has(card.categoryId)
+        category
           ? buildSitePath(slug, `/category/${card.categoryId}`)
           : null,
+
+      postFolderPath,
+
+      sourcePath,
+
+      sourcePathLabel:
+        sourcePath
+          .map((item) => item.name)
+          .join(" › "),
 
       folderId:
         folderKeyOf(card),
@@ -3171,7 +3324,9 @@ async function buildMemosSkinContext(
       isMissing:
         isPostHighlightKnownMissing(card.id)
 
-    });
+      };
+
+    };
 
 
   const allCards =
