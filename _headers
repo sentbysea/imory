@@ -4,6 +4,8 @@
 #
 #   _headers에 있는 HTML  (/index.html)           -> no-cache
 #   _headers에 없는 HTML  (/admin/index.html)     -> (헤더 없음)
+#     (측정 당시. /admin/은 그 뒤 아래에 규칙을 넣었다 — 진입
+#      문서라 ?t=/?v= 사슬의 시작점이기 때문.)
 #   _headers에 있는 CSS   (/posts/posts-base.css) -> max-age=14400
 #   _headers에 없는 JS    (/skin/skin-render.js)  -> public, max-age=14400, must-revalidate
 #
@@ -30,7 +32,8 @@
 # 이유로 이 규칙은 실제 응답에 반영되지 않는다 — 대신 진입 문서들이
 # 이 파일만 ?t=<Date.now()>로 불러와서 항상 최신 값을 받는다
 # (index.html / auth/index.html / invite/index.html /
-# studio/index.html / studio/preview/preview-frame.html).
+# admin/index.html / studio/index.html /
+# studio/preview/preview-frame.html).
 /core/lib/build-version.js
   Cache-Control: no-cache
 
@@ -57,6 +60,20 @@
   Cache-Control: no-cache
 
 /invite/index.html
+  Cache-Control: no-cache
+
+# 관리 화면 진입 문서. 이 문서도 build-version.js를 ?t= 로 불러오는
+# 시작점이고, 여기서 CSS(loadVersionedStyles)와 admin JS의
+# ?v=APP_BUILD_VERSION 사슬이 전부 만들어진다 — 이 HTML 자체가
+# 낡으면 그 아래가 통째로 옛 버전이 된다. 다른 진입 문서(index /
+# auth / invite / studio / preview-frame)에는 이미 있던 규칙인데
+# admin만 빠져 있었다. 위 실측대로 HTML 규칙은 실제 응답에
+# 도달하므로, 여기서만은 이 파일이 실제로 일한다(CSS/JS 규칙과
+# 달리 의도 표시가 아니다).
+/admin/
+  Cache-Control: no-cache
+
+/admin/index.html
   Cache-Control: no-cache
 
 # Studio chrome(Top Dock 등)은 admin이 iframe으로 계속 재사용하는

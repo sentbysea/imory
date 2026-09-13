@@ -48,9 +48,17 @@
    4시간 대기가 필요 없다).
 
    비용은 페이지 로드마다 2~3KB짜리 요청 하나다.
+
+   진입 문서: index.html · auth/index.html · invite/index.html ·
+   admin/index.html · studio/index.html ·
+   studio/preview/preview-frame.html. 이 문서들은 자기가 쓰는
+   CSS/JS를 **전부** 아래 loader로 걸어야 한다 — 한 문서 안에서
+   버전 붙은 자산과 고정 URL 자산이 섞이면 그 문서만 "새 HTML +
+   새 JS + 옛 CSS"가 된다(admin/index.html의 SHARE > CARD가
+   실기기에서 깨져 보이던 원인).
 ========================================================== */
 
-const APP_BUILD_VERSION = "2026-09-13-7";
+const APP_BUILD_VERSION = "2026-09-13-8";
 
 
 /* =========================================================

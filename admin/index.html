@@ -47,63 +47,14 @@
     href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
   >
 
-  <link
-    rel="stylesheet"
-    href="../core/design-tokens.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="../core/components/button.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="../core/components/input.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="../core/components/label.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="../core/patterns/form-actions.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="../core/patterns/tabs.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="../core/patterns/section-header.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="./admin-shell.css"
-  >
-
-  <link
-    rel="stylesheet"
-    href="./admin-settings.css"
-  >
-
   <!-- =========================================================
        배포 버전 (core/lib/build-version.js)
 
-       이 문서에서 새로 쓰는 두 CSS에 ?v=APP_BUILD_VERSION을
-       붙이기 위해 읽는다. 이 파일 자신만 ?t=<Date.now()>로
-       받는다 — 자기가 정의하는 값으로 자기 URL을 만들 수
-       없기 때문이다(그 파일 상단 주석).
-
-       ★ 이 문서의 나머지 CSS(core/*, admin-shell, admin-settings)와
-       동적으로 불러오는 admin JS는 예전 방식 그대로 둔다. 이번
-       라운드에서 건드리지 않은 자산까지 한꺼번에 바꾸지 않는다 —
-       남은 차이는 IMORY_QUOTE_PRESET_RENDER_AUDIT.md에 적어 둔다.
+       ★ 이 문서의 **모든** CSS/JS에 ?v=APP_BUILD_VERSION을 붙이기
+       위해, CSS 섹션보다 먼저 읽는다. 이 파일 자신만
+       ?t=<Date.now()>로 받는다 — 자기가 정의하는 값으로 자기
+       URL을 만들 수 없기 때문이다(그 파일 상단 주석). Date.now()는
+       이 한 줄에만 쓴다.
   ========================================================== -->
 
   <script>
@@ -116,27 +67,59 @@
 
   </script>
 
-  <!--
-    QUOTE PRESET 미리보기는 글쓰기 화면의 PREVIEW와 **같은
-    페이지 박스**를 쓴다(posts/preview/posts-page-layout.js가
-    같은 마크업을 만든다) — 그 모양을 정의한 공용 CSS.
-    IMORY_QUOTE_PRESET_RENDER_AUDIT.md 참고.
+  <!-- =========================================================
+       CSS
 
-    ★ 고정 URL <link>로 두면 안 된다.
+       ★ 전부 loadVersionedStyles()로 건다. 고정 URL <link>는
+       Cloudflare가 붙이는 max-age(4시간) 동안 옛 CSS가 계속
+       쓰여서, 배포 직후 **새 HTML + 새 JS + 옛 CSS** 조합이
+       실기기에서 그대로 그려진다 — SHARE > CARD의 새 마크업이
+       옛 admin-settings.css로 그려져 글씨·여백·미리보기 크기가
+       깨지고 몇 시간 뒤 캐시가 만료되면 저절로 낫던 증상의
+       실제 원인이다. 이 문서의 admin JS도 같은 값으로 받으므로
+       (아래 loadAdminQuoteModule의 cacheBuster), 한 화면의
+       HTML · CSS · JS가 반드시 같은 배포 버전이다.
+       배경은 core/lib/build-version.js의 함수 주석 참고.
 
-    이 파일은 index.html(글쓰기 화면)도 함께 읽는 공용 CSS이고,
-    거기서는 loadVersionedStyles()가 ?v=APP_BUILD_VERSION을
-    붙인다. 여기만 버전이 없으면 CDN이 붙이는 max-age(4시간)
-    동안 **관리 화면만 옛 CSS**로 그려져서, 같은 페이지 박스를
-    쓴다는 전제가 깨진다(새 JS + 옛 CSS). 두 문서가 같은 절대
-    URL을 쓰므로 캐시 항목도 하나로 공유된다.
-    배경은 core/lib/build-version.js 상단 주석.
-  -->
+       core/*는 index.html · auth · invite · studio 도 읽고,
+       admin-shell.css는 auth/index.html 도 읽는다. 그 문서들은
+       이미 loadVersionedStyles()를 쓰므로, 여기만 버전이 없으면
+       같은 파일이 **서로 다른 캐시 항목 두 개**가 된다. 같은
+       절대 URL(/core/…?v=X)로 맞춰 한 항목을 함께 쓰게 한다.
+
+       아래 순서는 기존 <link> 순서와 정확히 같다 — CSS는 순서에
+       의존하므로 바꾸면 안 된다.
+  ========================================================== -->
 
   <script>
 
     loadVersionedStyles(
       [
+        /*
+          Imory Design Tokens — :root 변수 선언만 있고 어떤
+          셀렉터도 스타일링하지 않으므로, 다른 CSS가 이 변수를
+          참조하기 전에 가장 먼저 둔다
+          (core/design-tokens-mapping.md 참고).
+        */
+        "../core/design-tokens.css",
+
+        "../core/components/button.css",
+        "../core/components/input.css",
+        "../core/components/label.css",
+        "../core/patterns/form-actions.css",
+        "../core/patterns/tabs.css",
+        "../core/patterns/section-header.css",
+
+        "./admin-shell.css",
+        "./admin-settings.css",
+
+        /*
+          QUOTE PRESET 미리보기는 글쓰기 화면의 PREVIEW와 **같은
+          페이지 박스**를 쓴다(posts/preview/posts-page-layout.js가
+          같은 마크업을 만든다) — 그 모양을 정의한 공용 CSS.
+          index.html(글쓰기 화면)도 같은 절대 URL로 읽으므로 캐시
+          항목을 공유한다. IMORY_QUOTE_PRESET_RENDER_AUDIT.md 참고.
+        */
         "../posts/posts-page-canvas.css",
 
         /* 복사 상자 · 메모 · 구분선 (글쓰기 화면과 같은 파일) */
@@ -2071,23 +2054,49 @@
     src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
   ></script>
 
-  <script src="../core/lib/supabase-client.js"></script>
+  <!-- =========================================================
+       공용 core/lib
 
-  <script src="../core/lib/auth-shared.js"></script>
+       ★ 고정 URL <script src>로 두면 안 된다 — 여섯 파일 모두
+       index.html(공개 화면)이 loadVersionedScripts()로 읽는
+       **같은 파일**이다. 여기만 버전이 없으면 같은 파일이 서로
+       다른 캐시 항목 두 개가 되고, CDN이 붙이는 max-age(4시간)
+       동안 이 화면만 옛 코드로 돈다. 순서는 기존 <script> 태그
+       순서 그대로다(supabase-client.js가 먼저, 그 위에 얹히는
+       유틸이 뒤).
 
-  <script src="../core/lib/invite-token.js"></script>
+       loadVersionedScripts()는 document.write라 파서가 이 자리를
+       지나는 순간 같은 자리에 같은 순서로 삽입한다 — 바로 아래
+       captureInviteTokenFromUrl() 인라인 스크립트보다 항상
+       먼저 실행된다(예전 정적 태그와 같은 보장).
+  ========================================================== -->
 
-  <!-- GALLERY-1 후속: 카테고리 비밀글 지정 이미지 미리보기 주소
-       (/api/post-cover?category=<id>) — core/lib/post-cover-url.js -->
-  <script src="../core/lib/post-cover-url.js"></script>
+  <script>
 
-  <!-- 카테고리 보호 설정(EXIF 제거 등)의 공용 유틸
-       — core/lib/content-protection.js -->
-  <script src="../core/lib/content-protection.js"></script>
+    loadVersionedScripts(
+      [
+        "../core/lib/supabase-client.js",
+        "../core/lib/auth-shared.js",
+        "../core/lib/invite-token.js",
 
-  <!-- 올리는 이미지의 메타데이터 제거 + 용량 압축(모든 업로드
-       경로 공용) — core/lib/image-upload.js -->
-  <script src="../core/lib/image-upload.js"></script>
+        /*
+          GALLERY-1 후속: 카테고리 비밀글 지정 이미지 미리보기 주소
+          (/api/post-cover?category=<id>).
+        */
+        "../core/lib/post-cover-url.js",
+
+        /* 카테고리 보호 설정(EXIF 제거 등)의 공용 유틸 */
+        "../core/lib/content-protection.js",
+
+        /*
+          올리는 이미지의 메타데이터 제거 + 용량 압축(모든 업로드
+          경로 공용).
+        */
+        "../core/lib/image-upload.js"
+      ]
+    );
+
+  </script>
 
   <!-- =========================================================
        INVITE TOKEN 진입점 (하위호환)
@@ -2134,8 +2143,30 @@
 
     async function loadAdminQuoteModule() {
 
+      /* ---------------------------------------------
+         자산 버전 — 이 문서의 CSS와 **같은** 값
+
+         예전에는 admin 전용 파일만 Date.now()로 받았다. 그러면
+         admin JS/HTML은 늘 최신인데 CSS는 CDN이 붙이는
+         max-age(4시간) 동안 옛 것이라, 배포 직후 "새 마크업 +
+         새 JS + 옛 CSS"가 실기기에서 그대로 그려졌다.
+
+         이제 head의 loadVersionedStyles()와 같은
+         APP_BUILD_VERSION을 쓴다 — 한 화면의 HTML · CSS · JS가
+         반드시 같은 배포 버전이고, 새 배포에서는
+         core/lib/build-version.js의 그 문자열 하나만 올리면
+         셋이 함께 새로 받아진다.
+
+         build-version.js 자체를 못 읽은 예외 상황에서만
+         Date.now()로 물러난다(그때는 loadVersionedStyles()도
+         없어 CSS가 아예 안 걸리므로, 화면이 조용히 반쪽으로
+         그려지는 것보다 낫다).
+      ---------------------------------------------- */
+
       const cacheBuster =
-        Date.now();
+        typeof APP_BUILD_VERSION === "string"
+          ? APP_BUILD_VERSION
+          : Date.now();
 
 
       const quotePanelMount =
@@ -2316,8 +2347,8 @@
               posts-page-layout.js가 막아 두었다 — 샘플 본문에는
               사진이 없으므로 여기서는 로드하지 않는다.
 
-              ★ 캐시: 이 셋만 ?v=APP_BUILD_VERSION으로 받는다
-              (아래 resolveDependencyVersion).
+              ★ 캐시: 이 목록은 전부 ?v=APP_BUILD_VERSION으로
+              받는다(아래 cacheBuster) — 이 문서의 CSS와 같은 값.
 
               이 문서 안에는 Skin Studio가 iframe으로 들어오는데
               (studio/index.html), 그 문서도 같은
@@ -2383,32 +2414,6 @@
           ];
 
 
-        /* ---------------------------------------------
-           자산 버전
-
-           admin 전용 파일은 예전처럼 매 로드마다 바뀌는
-           쿼리로 받는다(이 화면은 주인장 혼자 쓰고, 배포
-           직후 바로 최신이어야 한다).
-
-           반면 posts/*의 공용 렌더러는 이 문서의 Studio
-           iframe과 글쓰기 화면이 함께 쓰는 파일이라
-           ?v=APP_BUILD_VERSION으로 맞춘다 — 위 주석 참고.
-        ---------------------------------------------- */
-
-        function resolveDependencyVersion(
-          src
-        ) {
-
-          return (
-            src.startsWith("../posts/") &&
-            typeof APP_BUILD_VERSION === "string"
-          )
-            ? APP_BUILD_VERSION
-            : cacheBuster;
-
-        }
-
-
         for (
           const src of adminDependencyScripts
         ) {
@@ -2420,7 +2425,7 @@
 
 
           dependencyScript.src =
-            `${src}?v=${resolveDependencyVersion(src)}`;
+            `${src}?v=${cacheBuster}`;
 
 
           await new Promise(

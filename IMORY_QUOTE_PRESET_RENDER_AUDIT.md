@@ -571,6 +571,9 @@ paragraphSpacing 14 · 제목 off · 출처 on):
 - (F) iOS 실기기 확인 · 실제 DB · 배포 확인은 하지 않았다.
 - 관리 패널(`admin/index.html`)은 여전히 `Date.now()` 캐시 버스터와 고정 URL `<link>`를 쓴다.
   새 CSS/JS도 그 파일의 기존 방식을 따랐다 — `APP_BUILD_VERSION` 적용은 별도 라운드다.
+  → **해소됨(2026-09-13)**: 관리 화면의 CSS·JS·HTML 조각이 전부
+  `?v=APP_BUILD_VERSION` 한 축이 되었다. 기준은 [core/lib/build-version.js](./core/lib/build-version.js)
+  상단 주석, 검증은 `admin/admin-asset-version-e2e-test.mjs`.
 - 문단 간격 블록은 인라인 서식 span **안에서** 문단이 나뉘면 block-in-inline이 된다.
   Chromium/WebKit과 html2canvas 캡처에서 문제없는 것을 확인했지만, 드문 구조라 눈으로도
   한 번 볼 만하다.
@@ -705,6 +708,11 @@ paragraphSpacing 14 · 제목 off · 출처 on):
   (custom)에만 적용된다. → **§12.4에서 auto·uniform일 때 그 컨트롤을 아예 숨겼다.**
 - 관리 화면의 나머지 CSS(`core/*` · `admin-shell.css` · `admin-settings.css`)와 admin 전용
   JS는 여전히 고정 URL / `Date.now()`다. 이번 라운드에서 건드린 자산만 버전 규칙으로 옮겼다.
+  → **해소됨(2026-09-13)**: 그 CSS 아홉 장과 `core/lib/*` 정적 `<script>` 여섯 개,
+  동적 admin JS 로더, `admin-quote-panel.html` fetch, 그리고 이 문서 안의 CUSTOMIZE
+  iframe까지 전부 `?v=APP_BUILD_VERSION`으로 모았다(`resolveDependencyVersion` 분기는
+  더 이상 필요 없어 지웠다). 실기기에서 배포 직후 SHARE > CARD가 옛 CSS로 그려지던
+  증상의 원인이다.
 - `index.html`의 posts 모듈 로더도 여전히 `Date.now()`다(항상 최신이라 옛 파일이 남지는
   않지만, `APP_BUILD_VERSION` 한 축으로 모으려면 별도 라운드).
 - 고스트 버튼 디자인 · 한국어 라벨(§9) → **§12.3 · §12.5에서 적용됨.**
@@ -935,7 +943,8 @@ mock한다. 새 절 두 개를 더했다.
 - 옛 프리셋의 canvas 값은 여전히 **Preview에서 골라도 저장되지 않는다**(§11.8). 출력
   조건을 글/프리셋에 저장할지는 다음 라운드 결정 사항이다.
 - 관리 화면의 나머지 CSS/JS 캐시 규칙, iOS 실기기 확인, 두 미리보기의 완전한 코드 통합은
-  그대로 남아 있다(§10.8 · §11.8).
+  그대로 남아 있다(§10.8 · §11.8). → 캐시 규칙은 **2026-09-13에 해소됨**(§11.8 참고).
+  iOS 실기기 확인과 코드 통합은 그대로 남아 있다.
 
 ---
 

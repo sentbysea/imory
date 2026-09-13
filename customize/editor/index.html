@@ -25,25 +25,49 @@
     href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
   >
 
-  <link
-    rel="stylesheet"
-    href="../../core/design-tokens.css"
-  >
+  <!-- =========================================================
+       배포 버전 (core/lib/build-version.js)
 
-  <link
-    rel="stylesheet"
-    href="../../core/components/button.css"
-  >
+       이 문서는 admin/index.html 안의 iframe이지만 **독립된
+       browsing context**라 부모의 import map도 캐시 상태도 물려받지
+       않는다 — 자기 몫을 따로 선언한다. 이 파일만 ?t=<Date.now()>로
+       받는다(자기가 정의하는 값으로 자기 URL을 만들 수 없다 —
+       그 파일 상단 주석).
+  ========================================================== -->
 
-  <link
-    rel="stylesheet"
-    href="../../core/patterns/tabs.css"
-  >
+  <script>
 
-  <link
-    rel="stylesheet"
-    href="./editor.css"
-  >
+    document.write(
+      '<script src="../../core/lib/build-version.js?t=' +
+      Date.now() +
+      '"><' + '/script>'
+    );
+
+  </script>
+
+  <!-- =========================================================
+       CSS
+
+       ★ 고정 URL <link>로 두면 안 된다. 위 세 파일은 부모
+       문서(admin/index.html)와 공개 화면(index.html)도 읽는
+       **같은 파일**이다. 여기만 버전이 없으면 admin 한 화면에서
+       같은 CSS를 서로 다른 두 주소로 두 번 받고, 그 둘이 서로
+       다른 캐시 항목이 되어 버전이 갈린다.
+       배경은 core/lib/build-version.js 상단 주석.
+  ========================================================== -->
+
+  <script>
+
+    loadVersionedStyles(
+      [
+        "../../core/design-tokens.css",
+        "../../core/components/button.css",
+        "../../core/patterns/tabs.css",
+        "./editor.css"
+      ]
+    );
+
+  </script>
 
 </head>
 
@@ -794,21 +818,30 @@
   ========================================================== -->
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../core/lib/supabase-client.js"></script>
-
 
   <!-- =========================================================
+       나머지는 전부 ?v=APP_BUILD_VERSION으로 받는다.
        renderer 스크립트 로드 순서 중요
-       (customize/renderer/renderer-test.html과 동일 순서)
+       (customize/renderer/renderer-test.html과 동일 순서).
   ========================================================== -->
 
-  <script src="../renderer/block-defaults.js"></script>
-  <script src="../renderer/theme-tokens.js"></script>
-  <script src="../renderer/validate-layout.js"></script>
-  <script src="../renderer/render-layout.js"></script>
-  <script src="../renderer/default-layout.js"></script>
+  <script>
 
-  <script src="./editor.js"></script>
+    loadVersionedScripts(
+      [
+        "../../core/lib/supabase-client.js",
+
+        "../renderer/block-defaults.js",
+        "../renderer/theme-tokens.js",
+        "../renderer/validate-layout.js",
+        "../renderer/render-layout.js",
+        "../renderer/default-layout.js",
+
+        "./editor.js"
+      ]
+    );
+
+  </script>
 
 </body>
 

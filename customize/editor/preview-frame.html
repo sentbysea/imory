@@ -160,6 +160,26 @@
 
   </style>
 
+  <!-- =========================================================
+       배포 버전 (core/lib/build-version.js)
+
+       이 문서는 admin/index.html 안의 iframe이지만 **독립된
+       browsing context**라 부모의 import map도 캐시 상태도 물려받지
+       않는다 — 자기 몫을 따로 선언한다. 이 파일만 ?t=<Date.now()>로
+       받는다(자기가 정의하는 값으로 자기 URL을 만들 수 없다 —
+       그 파일 상단 주석).
+  ========================================================== -->
+
+  <script>
+
+    document.write(
+      '<script src="../../core/lib/build-version.js?t=' +
+      Date.now() +
+      '"><' + '/script>'
+    );
+
+  </script>
+
 </head>
 
 
@@ -167,11 +187,22 @@
 
   <div id="previewMount"></div>
 
-  <!-- renderer 스크립트 로드 순서 중요 -->
-  <script src="../renderer/block-defaults.js"></script>
-  <script src="../renderer/theme-tokens.js"></script>
-  <script src="../renderer/validate-layout.js"></script>
-  <script src="../renderer/render-layout.js"></script>
+  <!-- renderer 스크립트 로드 순서 중요.
+       부모(editor/index.html)와 **같은 주소**로 받아야 한 화면에서
+       같은 파일을 두 번 받지 않는다. -->
+
+  <script>
+
+    loadVersionedScripts(
+      [
+        "../renderer/block-defaults.js",
+        "../renderer/theme-tokens.js",
+        "../renderer/validate-layout.js",
+        "../renderer/render-layout.js"
+      ]
+    );
+
+  </script>
 
 </body>
 
