@@ -1151,8 +1151,17 @@ const SHARE_CARD_RENDER_ATTEMPTS =
 
 /* 재시도 사이 대기(ms) — 한도 초과가 가라앉을 만큼만 */
 
+/*
+  2026-09-13 배포 실측: 실패는 전부 `render-429`(한도 초과)였고, 빠르게
+  이어 부르면 성공과 실패가 번갈아 났다 — 한도가 풀리는 데 1초를 훌쩍
+  넘는다는 뜻이다. 처음 잡았던 250ms · 750ms 로는 세 번을 1초 안에 다
+  써 버려서, 한 번의 크롤에서 건질 수 있는 것을 놓쳤다.
+
+  응답이 Retry-After 를 주면 그 값이 이긴다(아래 shareCardRetryAfterMs).
+*/
+
 const SHARE_CARD_RENDER_BACKOFF =
-  [250, 750];
+  [1200, 3500];
 
 
 /*
@@ -1207,21 +1216,25 @@ async function renderShareCardPng(
 
   for (let attempt = 0; attempt < SHARE_CARD_RENDER_ATTEMPTS; attempt += 1) {
 
-    if (attempt > 0 && Date.now() > deadline) {
-
-      return last;
-
-    }
-
-
     if (attempt > 0) {
 
+      const wait =
+        last.retryAfter ||
+        SHARE_CARD_RENDER_BACKOFF[attempt - 1] ||
+        3500;
+
+
+      /* 기다린 끝이 예산을 넘으면 기다리지 않고 포기한다 */
+
+      if (Date.now() + wait > deadline) {
+
+        return last;
+
+      }
+
+
       await new Promise(
-        (resolve) =>
-          setTimeout(
-            resolve,
-            SHARE_CARD_RENDER_BACKOFF[attempt - 1] || 750
-          )
+        (resolve) => setTimeout(resolve, wait)
       );
 
     }
@@ -1356,8 +1369,58 @@ async function renderShareCardPngOnce(
 
   return {
     ok: false,
-    reason: `render-${response.status}`
+    reason: `render-${response.status}`,
+
+    /* 한도 초과면 "언제 다시 오라"는 값이 올 수 있다 */
+
+    retryAfter:
+      shareCardRetryAfterMs(response.headers.get("retry-after"))
   };
+
+}
+
+
+/*
+  Retry-After 는 초 단위 숫자이거나 HTTP 날짜다. 둘 다 받고, 우리가
+  기다릴 수 있는 범위(재시도 예산)를 넘으면 0 을 준다 — 그때는
+  기다리는 것보다 기본 카드를 빨리 주고 다음 요청에 맡기는 편이 낫다.
+*/
+
+export function shareCardRetryAfterMs(
+  value
+) {
+
+  const raw =
+    String(value === null || value === undefined ? "" : value).trim();
+
+
+  if (!raw) {
+
+    return 0;
+
+  }
+
+
+  const seconds =
+    /^[0-9]+$/.test(raw)
+      ? Number(raw)
+      : (Date.parse(raw) - Date.now()) / 1000;
+
+
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+
+    return 0;
+
+  }
+
+
+  const ms =
+    Math.ceil(seconds * 1000);
+
+
+  return ms <= SHARE_CARD_RENDER_BUDGET
+    ? ms
+    : 0;
 
 }
 

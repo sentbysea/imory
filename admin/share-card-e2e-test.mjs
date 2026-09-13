@@ -675,6 +675,9 @@ const serverFixture = {
   */
   renderFailures: [],
 
+  /* 그 실패 응답에 붙일 Retry-After(초). 0이면 붙이지 않는다 */
+  renderRetryAfter: 0,
+
   /*
     posts.share_label_seq migration 이 아직 적용되지 않은 배포를
     흉내 낸다 — 그 컬럼을 고른 select 는 PostgREST 가 통째로
@@ -775,7 +778,11 @@ async function handleFakeRenderer(req, res) {
   /* 미리 넣어 둔 실패를 하나 꺼낸다(재시도 확인) */
   if (serverFixture.renderFailures.length) {
     const status = serverFixture.renderFailures.shift();
-    res.writeHead(status, { "Content-Type": "application/json" });
+    const headers = { "Content-Type": "application/json" };
+    if (serverFixture.renderRetryAfter) {
+      headers["Retry-After"] = String(serverFixture.renderRetryAfter);
+    }
+    res.writeHead(status, headers);
     res.end(JSON.stringify({ success: false, errors: [{ message: `status ${status}` }] }));
     return;
   }
@@ -3187,6 +3194,39 @@ async function runPhoto(browser) {
     "[photo] ★ 그 기본 카드를 캐시하지 않는다(다음 요청이 다시 그릴 수 있다)",
     gaveUp.cacheControl === "no-store",
     gaveUp.cacheControl
+  );
+
+  /* ---- Retry-After 를 주면 그 값을 따른다 ---- */
+
+  check(
+    "[photo] Retry-After 초 단위를 ms 로 읽는다",
+    ogFunction.shareCardRetryAfterMs("2") === 2000,
+    String(ogFunction.shareCardRetryAfterMs("2"))
+  );
+
+  check(
+    "[photo] ★ 기다릴 수 있는 범위를 넘는 Retry-After 는 따르지 않는다(기본 카드를 빨리 준다)",
+    ogFunction.shareCardRetryAfterMs("600") === 0 &&
+    ogFunction.shareCardRetryAfterMs("") === 0 &&
+    ogFunction.shareCardRetryAfterMs("나중에") === 0
+  );
+
+  serverFixture.renders = [];
+  serverFixture.renderFailures = [429];
+  serverFixture.renderRetryAfter = 1;
+
+  const waited = Date.now();
+  const honoured = await requestOgImage("?post=14&v=retryafter");
+  const elapsed = Date.now() - waited;
+
+  serverFixture.renderRetryAfter = 0;
+
+  check(
+    "[photo] ★ Retry-After 가 있으면 그만큼 기다렸다가 다시 그린다",
+    honoured.cardStatus === "render" &&
+    honoured.cardAttempts === "2" &&
+    elapsed >= 1000,
+    `attempts=${honoured.cardAttempts} elapsed=${elapsed}ms`
   );
 
   serverFixture.renders = [];
