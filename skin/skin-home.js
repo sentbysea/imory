@@ -134,7 +134,18 @@ export async function renderPublishedSkinHome({ ownerId, container }) {
 
     context = await buildSkinContext(ownerId, {
       imageSlotNames,
-      imageSlotValues
+      imageSlotValues,
+
+      /*
+        재료 일치 라운드 — HOME 의 발췌 카드 자리(home.highlights)는
+        조회를 두 번 더 부른다. 그 자리를 그리지 않는 스킨에서는
+        켜지 않는다(skin/skin-template.js skinTemplateUsesHomeHighlights,
+        skin/skin-context.js buildHomeSkinContext). Studio Preview 는
+        이 값을 넘기지 않으므로 항상 조회한다 — 편집 중에 막 붙인
+        마크업이 곧바로 살아나야 하기 때문이다.
+      */
+      supportsHomeHighlights:
+        skinTemplateUsesHomeHighlights(homeTemplate)
     });
 
   } catch (err) {

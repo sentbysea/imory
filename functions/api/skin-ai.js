@@ -1049,6 +1049,7 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `templates.banner` is optional. If the current package has a banner template, return it (edited or unchanged). Return null ONLY if the current package has no banner template.",
     "- `templates.folder` is optional (same rule as banner): return the current folder template edited or unchanged; return null ONLY if the current package has no folder template and the user did not ask for a folder page.",
     "- `templates.highlights` is optional (same rule): return the current highlights template edited or unchanged; return null ONLY if the current package has no highlights template and the user did not ask for the highlights page. Returning null does NOT hide the highlights page — the platform draws it with a built-in default template instead.",
+    "- Never declare support for a page you did not actually write. If the package's `metadata.supports` claims a page (for example `supports.highlights: true`), that page MUST have a real template with real bindings; a stub of links or buttons is not one. The mismatch is reported to the owner when they save.",
     "- home  : the blog front page (profile, navigation, recent post list).",
     "- category: one category's post list.",
     "- post  : one post's title/date plus the protected body region.",
@@ -1063,6 +1064,8 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `data-imory-href=\"path\"`   sets an <a> href.",
     "- `data-imory-if=\"path\"`     hides the element when the value is falsy.",
     "- `data-imory-repeat=\"path\"` repeats the element once per array entry; inside it, use `item.*`. Repeats may be nested (a repeat inside a repeat, up to 5 levels); an inner `item` shadows the outer one.",
+    "- `data-imory-kind=\"path\"`   writes the resolved kind token into a `data-kind` attribute on the same element, so CSS can style by KIND: `[data-kind=\"image\"]::before { ... }`. Use it for category icons and any other per-kind decoration.",
+    "- `data-imory-color=\"path\"`  writes the resolved `#rgb`/`#rrggbb` value into the CSS custom property `--imory-color` on that element. Read it back with `var(--imory-color, <your fallback>)`. This is the ONLY way to use a per-item colour, because the `style` attribute is forbidden.",
     "- `data-imory-region=\"post-body\"` marks the protected post body. It appears once in `templates.post`, and once per repeated post inside `templates.folder` (see FOLDER).",
     "- `data-imory-region=\"owner-tools\"` marks where the platform's own owner buttons (＋ new post, edit) are placed. Leave the element empty. Only these two region names exist; any other value is stripped.",
     "Keep every binding that already exists unless the user explicitly asks to remove that piece of content.",
@@ -1070,19 +1073,31 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "### Context paths available on every page",
     "site.title, site.language",
     "profile.nickname, profile.bio, profile.avatarUrl",
-    "navigation.home.name, navigation.home.href, navigation.home.enabled",
-    "navigation.categories[], navigation.postCategories[], navigation.textPostCategories[], navigation.galleryCategories[], navigation.bannerCategories[] (each item: item.id, item.name, item.href, item.type). postCategories is the backwards-compatible post+gallery group. For separate menus use textPostCategories and galleryCategories; do not repeat postCategories and galleryCategories together.",
+    "navigation.home.name, navigation.home.href, navigation.home.enabled, navigation.home.iconKind (\"home\")",
+    "navigation.categories[], navigation.postCategories[], navigation.textPostCategories[], navigation.galleryCategories[], navigation.bannerCategories[] (each item: item.id, item.name, item.href, item.type, item.iconKind). postCategories is the backwards-compatible post+gallery group. For separate menus use textPostCategories and galleryCategories; do not repeat postCategories and galleryCategories together.",
+    "- `item.iconKind` is the stable KIND token for menu decoration: \"document\" (post category), \"image\" (gallery), \"quote\" (highlight), \"link\" (banner). An unknown future category type falls back to \"document\", so every item always has one.",
+    "- Draw category icons from that token and NOTHING else: `<a data-imory-kind=\"item.iconKind\" ...>` plus CSS `[data-kind=\"image\"]::before`. NEVER decide an icon by position (`li:nth-child(2)`, `:first-child`, `:last-child`) and never bake a glyph character (▤ ◉ 📁) into the HTML — the owner reorders, renames and deletes categories, and a different screen shows a different number of them, so order-based icons drift and end up on the wrong rows.",
+    "- Icon shape, size and colour are yours: draw them with CSS (borders, radius, pseudo-elements) so the owner can restyle them without new markup.",
     "viewer.isOwner, viewer.writeHref, viewer.adminHref, viewer.manageHref",
     "images.<slotName>  (only slot names that already exist in the package's imageSlots)",
     "",
     "### HOME",
     "home.recentPosts[]  (item.id, item.title, item.href, item.publishedAtLabel, item.categoryId, item.categoryName, item.isSecret)",
+    "home.highlights  — the owner's saved excerpts, ready to be shown ON HOME (not only linked to).",
+    "- `home.highlights.cards[]` newest first (a few of them). Each item has the SAME fields as a card on the highlights page: item.excerpt, item.note, item.hasNote, item.color, item.dateLabel, item.postTitle, item.postHref, item.hasNoPostLink, item.categoryName, item.sourcePathLabel.",
+    "- `home.highlights.featured[]` is that same list cut to the newest ONE. Use it to show a single excerpt with the same card markup — never hide the rest with `:nth-child` or `:first-child`, because order-based hiding breaks the moment the list length changes.",
+    "- `home.highlights.card` is that one card as an object, for binding without a repeat: `data-imory-bind=\"home.highlights.card.excerpt\"`.",
+    "- `home.highlights.hasCard`, `.count`, `.isEmpty`, `.hasError` (guard the block with `data-imory-if=\"home.highlights.hasCard\"`; `data-imory-if` cannot negate or compare).",
+    "- Colour the card from the excerpt's own colour: put `data-imory-color=\"item.color\"` on the card element and read it in CSS as `var(--imory-color, <your fallback>)`. Never hard-code one highlight colour.",
+    "- A HOME slot that only renders a \"see my highlights\" button is a weaker design than one that shows a real excerpt — when the owner asks for a highlights area on HOME, draw a card and keep the link as a small `ALL` next to it.",
+    "- Do NOT put `data-imory-region=\"highlight-tools\"` on HOME. That owner menu belongs to the highlights page only.",
     "",
     "### CATEGORY",
     "category.id, category.name, category.type, category.href",
     "category.posts[]  (item.id, item.title, item.href, item.publishedAtLabel, item.isSecret)",
     "category.hasFolders  (boolean: the category has at least one folder with visible posts)",
     "category.tree[]  (folder-aware hierarchy; see \"Category folders\" below)",
+    "category.showPostsList  (boolean: draw `category.posts` IN ADDITION to `category.tree` on this render; see \"Category folders\" below)",
     "category.listStyle, category.pageSize, category.isGallery, category.isList  (display mode; see \"Category gallery\" below)",
     "category.gallery  (null unless this render is a gallery)",
     "category.pagination  (null unless this render is a gallery)",
@@ -1097,6 +1112,8 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `data-imory-if` cannot compare values, so do not test `item.kind`. Branch on which fields exist instead: a folder has `item.name` and `item.children`; a post has `item.title` and `item.href` (`item.href` exists ONLY on post nodes — this is how skins tell posts from folders, keep it that way). Put both branches inside the same repeated element, e.g. `<section data-imory-if=\"item.name\">…folder…</section><a data-imory-if=\"item.href\" data-imory-href=\"item.href\">…post…</a>`. The branch that does not apply is hidden automatically, so the skin CSS must contain `[hidden] { display: none; }`.",
     "- Draw deeper levels with a nested `data-imory-repeat=\"item.children\"` inside the folder branch; repeat that pattern once per level (3 folder levels + the posts inside the deepest folder = 4 nested repeats at most).",
     "- Which one to use: use `category.tree` ONLY when the user asks for folders to be shown (e.g. \"show folders as big cards and the posts inside them as a small list\"). For a plain request such as \"just show the posts as a simple newest-first list\", `category.posts` is the right choice. Never convert an existing `category.posts` skin to `category.tree` unless the user asked for folders; a skin that ignores folders is valid and must keep working unchanged.",
+    "- REQUIRED when you draw `category.tree`: draw `category.posts` as well, in a second block guarded by `data-imory-if=\"category.showPostsList\"`. The owner can turn on numbered pages for a post category, and on a paged render `category.tree` holds ONLY folder nodes — the posts that are in no folder arrive on `category.posts` alone. A folder-tree-only template therefore makes those root posts vanish from the public page while the owner still sees them in their admin screen. The two guards together (`category.hasFolders` on the tree block, `category.showPostsList` on the flat list) show every post exactly once in all four combinations of folders x paging, so never guard the flat list with anything else and never draw it unguarded next to a tree.",
+    "- A CATEGORY template that draws `category.pagination` but never `category.posts` is treated as \"cannot show root posts\" and the platform silently turns paging off for it, so the owner's page-size setting stops working. Keep both or neither.",
     "",
     "#### Category gallery — photo grid + numbered pages",
     "Category kinds are post, gallery and banner. post defaults to a title/date list; gallery contains uploaded photos and defaults to a responsive image grid; banner retains its image/external-link behavior. Category kind is data, while columns, spacing, proportions and card design belong to the skin. Never add a separate category display-style selector. Existing post URLs and IDs remain stable.",
@@ -1141,7 +1158,11 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "\"Folder\" on this page means the ORIGINAL POST CATEGORY. There is no separate nesting here — never draw a tree.",
     "highlights.view.isAll, highlights.view.isFolders, highlights.view.isFolder  (exactly one is true)",
     "highlights.allHref, highlights.foldersHref, highlights.allLabel, highlights.foldersLabel  (the two view switches)",
-    "highlights.cards[]  (item.id, item.excerpt, item.note, item.hasNote, item.color, item.dateLabel, item.postTitle, item.postHref, item.categoryName, item.categoryHref, item.folderHref, item.isMissing)",
+    "highlights.cards[]  (item.id, item.excerpt, item.note, item.hasNote, item.color, item.dateLabel, item.postTitle, item.postHref, item.hasNoPostLink, item.categoryName, item.categoryHref, item.folderName, item.sourcePathLabel, item.folderHref, item.isMissing, item.isPlacementUnknown)",
+    "- `item.sourcePathLabel` is the ready-made \"where this came from\" line: category > folder > post title (e.g. \"TXT > 2002 > 1\"); empty segments are already dropped. Prefer it over gluing `item.categoryName` and `item.postTitle` together yourself — `data-imory-bind` cannot concatenate.",
+    "- `item.postHref` is null for a highlight whose post is gone; `item.hasNoPostLink` is the precomputed opposite, so draw the source line as an `<a data-imory-if=\"item.postHref\">` and repeat it as a plain `<span data-imory-if=\"item.hasNoPostLink\">`.",
+    "- `item.color` is the colour the owner highlighted with. Bind it with `data-imory-color=\"item.color\"` on the card element and use `var(--imory-color, <fallback>)` for the card's accent (a left rule, a underline, a dot). Never hard-code one accent colour for every card, and never try to read the colour with `data-imory-bind`.",
+    "- A complete card shows: the excerpt, the note when `item.hasNote`, the date, the accent colour, the source path, the post link, the \"not found in the original\" state (`item.isMissing`) and the `highlight-tools` slot. A highlights template that only draws links or buttons is not a highlights page.",
     "highlights.showCards (draw the card list now), highlights.isEmpty, highlights.count, highlights.hasError",
     "highlights.folders[]  (item.id, item.name, item.href, item.count, item.countLabel, item.coverUrl, item.hasCover, item.coverRatio, item.coverFocusX, item.coverFocusY)",
     "highlights.hasFolders, highlights.foldersEmpty, highlights.folder  (the open folder: .name, .href, .count, .coverUrl, .hasCover, .coverRatio)",
@@ -1166,7 +1187,9 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `viewer.writeHref`, `viewer.adminHref` and `viewer.manageHref` are how the blog owner reaches WRITE / ADMIN / EDIT.",
     "- `viewer.toolsHref` (POST only) opens the reader tool menu: font size, copy link, and for the owner also highlighting mode and edit. It is NOT owner-only — visitors need it too, so do NOT wrap it in `data-imory-if=\"viewer.isOwner\"`; wrap it in `data-imory-if=\"viewer.toolsHref\"` instead. If you draw this link the platform hides its own three-dot button, so draw it at most once; if you do not draw it, the platform shows its own. Never both.",
     "- `viewer.highlightHref` (POST, owner only) is a shortcut straight into highlighting mode. Optional.",
-    "- `navigation.highlights` ({ name, href, enabled, hasCategory }) links to the highlights page from any template. A HIGHLIGHT category, when the owner made one, is ALSO in `navigation.categories` with the same href — link it from one of the two, never both.",
+    "- `navigation.highlights` ({ name, href, enabled, hasCategory, showStandaloneLink, type, iconKind }) links to the highlights page from any template. A HIGHLIGHT category, when the owner made one, is ALSO in `navigation.categories` with the same href — link it from one of the two, never both.",
+    "- ALWAYS label that link with `data-imory-bind=\"navigation.highlights.name\"`. The owner renames that category (it is often not the word \"HIGHLIGHTS\"), and a hard-coded label shows the wrong name on their blog. Same for its icon: `data-imory-kind=\"navigation.highlights.iconKind\"`.",
+    "- The canonical name of this page everywhere is `highlights` (`templates.highlights`, `navigation.highlights`, `highlights.*`, `data-imory-region=\"highlight-tools\"`). `memos` / `memo-tools` are legacy aliases that keep old saved skins rendering — never write them into a new or edited template.",
     "- If the current templates contain links bound to any of these, KEEP them, in every template that had them.",
     "- Deleting them silently locks the owner out of managing their own blog. Remove them only if the user explicitly asks you to.",
     "- These links are normally wrapped in `data-imory-if=\"viewer.isOwner\"`. Keep that guard.",
@@ -1178,7 +1201,7 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- If you return `templates.folder`, it MUST contain `data-imory-region=\"post-body\"` inside the `folder.posts` repeat (one region per post). Same rejection rule.",
     "",
     "## HTML restrictions (a sanitizer enforces these; anything else is silently stripped)",
-    "- Allowed tags: div, section, article, header, footer, nav, main, aside, figure, figcaption, h1-h6, p, span, br, hr, b, strong, i, em, u, small, mark, blockquote, cite, sub, sup, ul, ol, li, dl, dt, dd, a, img, details, summary.",
+    "- Allowed tags: div, section, article, header, footer, nav, main, aside, figure, figcaption, h1-h6, p, span, br, hr, b, strong, i, em, u, small, mark, blockquote, cite, sub, sup, ul, ol, li, dl, dt, dd, a, img, time, details, summary.",
     "- Forbidden entirely: script, style, iframe, object, embed, link, meta, form, input, button, select, textarea, video, audio, canvas, svg, template, noscript.",
     "- No JavaScript of any kind. No event handler attributes (onclick, onload, ...).",
     "- No `style` attribute and no `id` attribute. Style everything through classes in the `css` field.",
@@ -1633,8 +1656,8 @@ function extractSkinAiModelOutput(payload) {
 /* =========================================================
    모델 결과 + 현재 SkinPackage -> 돌려줄 SkinPackage
 
-   모델이 만든 것은 templates.html 5종(banner/folder 선택)과 css뿐이다. 나머지는 요청
-   으로 받은 현재 SkinPackage 값을 그대로 옮긴다.
+   모델이 만든 것은 templates.html 6종(banner/folder/highlights 선택)과
+   css뿐이다. 나머지는 요청으로 받은 현재 SkinPackage 값을 그대로 옮긴다.
 
    banner는 한 방향으로만 관대하다: 모델이 null을 줬는데 현재
    패키지에 banner가 있으면 **현재 것을 유지한다**. 반대로 현재
@@ -1684,6 +1707,35 @@ function buildSkinAiResultPackage(currentPackage, edit) {
   ) {
 
     templates.folder = { html: currentPackage.templates.folder.html };
+
+  }
+
+  /*
+     HIGHLIGHT-2 / 재료 일치 라운드: highlights 도 banner/folder 와 같은
+     한 방향 관대함을 받는다. 이 분기가 없던 동안에는 모델이 무엇을
+     돌려주든 **하이라이트 template 이 결과에서 통째로 사라졌다** —
+     스킨이 이미 갖고 있던 하이라이트 화면 디자인이 AI 수정 한 번에
+     플랫폼 기본 template 으로 되돌아갔고(그 화면만 다른 스킨처럼
+     보인다), 모델이 새로 그려 준 카드 목록도 저장되지 않았다.
+
+     이름은 언제나 canonical 한 highlights 다 — 들어올 때
+     normalizeSkinAiInputPackage 가 옛 이름(memos)을 이미 이 이름으로
+     바꿔 놓았으므로, 여기서 memos 를 따로 다룰 일이 없다.
+  */
+
+  const highlightsFromModel =
+    edit.templates.highlights;
+
+  if (isSkinAiPlainObject(highlightsFromModel) && typeof highlightsFromModel.html === "string") {
+
+    templates.highlights = { html: highlightsFromModel.html };
+
+  } else if (
+    isSkinAiPlainObject(currentPackage.templates.highlights) &&
+    typeof currentPackage.templates.highlights.html === "string"
+  ) {
+
+    templates.highlights = { html: currentPackage.templates.highlights.html };
 
   }
 

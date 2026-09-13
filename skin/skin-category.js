@@ -151,6 +151,10 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
       /* HIGHLIGHT-2: 글 목록 페이지네이션도 같은 방식으로 스킨이
          category.pagination 을 실제로 그릴 때만 켜진다. */
       supportsPagination: skinTemplateUsesPagination(categoryTemplate),
+      /* 재료 일치 라운드: 페이지를 나누면 루트 글이 category.tree 에서
+         빠지고 category.posts 로만 온다 — 그것을 그리지 않는 스킨에서는
+         나누지 않는다(skin/skin-template.js skinTemplateUsesRootPostList). */
+      supportsRootPostList: skinTemplateUsesRootPostList(categoryTemplate),
       page
     });
 

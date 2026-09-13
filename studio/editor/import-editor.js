@@ -732,8 +732,21 @@ async function handleImportEditorValidate() {
   importEditorApplyButton.disabled =
     false;
 
+  /*
+    경고는 실패가 아니다 — Apply 버튼은 그대로 열려 있고, 다만 "이
+    스킨은 이러이러하게 보일 것"을 먼저 알린다
+    (skin/skin-template.js auditSkinPackageMaterials).
+  */
+
+  const warnings =
+    Array.isArray(result.warnings)
+      ? result.warnings
+      : [];
+
   setImportEditorMessage(
-    "검증 성공 — HOME/CATEGORY/POST 템플릿과 CSS를 확인했습니다. Apply to Draft를 누르면 현재 draft에 반영됩니다.",
+    warnings.length
+      ? "검증 성공 — 다만 확인할 점이 있습니다: " + warnings.join(" / ")
+      : "검증 성공 — HOME/CATEGORY/POST 템플릿과 CSS를 확인했습니다. Apply to Draft를 누르면 현재 draft에 반영됩니다.",
     false
   );
 

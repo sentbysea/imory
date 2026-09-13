@@ -1607,8 +1607,31 @@ async function handleStudioSaveClick() {
 
     }
 
+    /*
+      재료 일치 라운드 — 저장은 막지 않되, "저장은 됐지만 화면에서
+      조용히 잘못 나올" 조합은 저장 직후에 알린다(Import 검증과
+      **같은 함수**, skin/skin-template.js auditSkinPackageMaterials).
+      막지 않는 이유는 그 파일 주석에 있다.
+    */
+
+    const auditWarnings =
+      typeof auditSkinPackageMaterials === "function"
+        ? auditSkinPackageMaterials(normalizedSnapshot)
+        : [];
+
+    if (auditWarnings.length) {
+
+      console.warn(
+        "[studio-preview] skin package audit",
+        auditWarnings
+      );
+
+    }
+
     showStudioToast(
-      "저장되었습니다."
+      auditWarnings.length
+        ? "저장되었습니다 — 확인할 점: " + auditWarnings[0]
+        : "저장되었습니다."
     );
 
   } catch (err) {

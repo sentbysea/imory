@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "templates": {
+    "home": {
+      "html": "<div class=\"lm-page\"><ul class=\"lm-nav\"><li class=\"lm-nav-item\" data-imory-repeat=\"navigation.categories\"><a class=\"lm-nav-link\" data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></li><li class=\"lm-nav-item lm-nav-item--memos\" data-imory-if=\"navigation.memos.showStandaloneLink\"><a class=\"lm-memos-link\" data-imory-href=\"navigation.memos.href\" data-imory-bind=\"navigation.memos.name\"></a></li></ul><h1 class=\"lm-title\" data-imory-bind=\"site.title\"></h1></div>"
+    },
+    "category": {
+      "html": "<div class=\"lm-page\"><h1 class=\"lm-category-name\" data-imory-bind=\"category.name\"></h1><ul class=\"lm-posts\"><li data-imory-repeat=\"category.posts\"><a class=\"lm-post-link\" data-imory-href=\"item.href\" data-imory-bind=\"item.title\"></a></li></ul></div>"
+    },
+    "post": {
+      "html": "<div class=\"lm-page\"><h1 class=\"lm-post-title\" data-imory-bind=\"post.title\"></h1><div class=\"lm-post-body\" data-imory-region=\"post-body\"></div></div>"
+    },
+    "memos": {
+      "html": "<div class=\"lm-page\"><h1 class=\"lm-memos-title\" data-imory-bind=\"memos.allLabel\"></h1><div class=\"lm-cards\" data-imory-if=\"memos.showCards\"><article class=\"lm-memo-card\" data-imory-repeat=\"memos.cards\"><blockquote class=\"lm-memo-excerpt\" data-imory-bind=\"item.excerpt\"></blockquote><a class=\"lm-memo-post\" data-imory-if=\"item.postHref\" data-imory-href=\"item.postHref\" data-imory-bind=\"item.postTitle\"></a><span class=\"lm-memo-tools\" data-imory-region=\"memo-tools\"></span></article></div></div>"
+    }
+  },
+  "css": ".lm-page { max-width: 720px; margin: 0 auto; padding: 20px 16px; font-family: system-ui, sans-serif; }\n.lm-page [hidden] { display: none; }\n.lm-nav, .lm-posts { list-style: none; margin: 0; padding: 0; }\n.lm-memo-card { margin: 0 0 14px; }\n.lm-memo-excerpt { margin: 0 0 4px; overflow-wrap: anywhere; }",
+  "imageSlots": [],
+  "regions": [],
+  "metadata": {
+    "title": "Imory Material Parity — legacy memos alias",
+    "generatedBy": "manual"
+  }
+}

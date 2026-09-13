@@ -1430,6 +1430,7 @@ async function loadHighlightCards(
         id,
         title,
         category_id,
+        folder_id,
         visibility${
           withPostUpdatedAt
             ? ",\n        updated_at"
@@ -1538,6 +1539,23 @@ async function loadHighlightCards(
             categoryId:
               post && post.category_id !== null && post.category_id !== undefined
                 ? Number(post.category_id)
+                : null,
+
+            /*
+              그 글이 들어 있는 폴더(FOLDER-1). 카드에 "카테고리 >
+              폴더 > 글 제목" 위치를 적기 위한 것뿐이라, 값이 없거나
+              폴더 이름을 못 읽어도 카드는 그대로 나온다
+              (skin/skin-context.js buildHighlightsSkinContext).
+
+              이름이 postFolderId 인 이유 — 하이라이트 화면의 Context
+              가 내보내는 card.folderId 는 **하이라이트 화면의 폴더**
+              (= 원본 카테고리)다. 글이 들어 있는 진짜 폴더와 이름이
+              같으면 두 값이 조용히 섞인다.
+            */
+
+            postFolderId:
+              post && post.folder_id !== null && post.folder_id !== undefined
+                ? Number(post.folder_id)
                 : null,
 
             /*

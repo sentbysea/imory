@@ -9,7 +9,7 @@
 ## 0. 한눈에 보는 요약
 
 - 스킨은 `schemaVersion: 1`인 **SkinPackage JSON** 하나입니다. HOME/CATEGORY/POST 세 화면을 각각 `templates.home` / `templates.category` / `templates.post`에 담습니다(레거시 단일 `html`/`css` 방식도 여전히 지원 — 1절).
-- HTML에는 일반 태그 + `data-imory-*` 바인딩 속성 5종 + `data-imory-region` 3종(`"post-body"`, `"owner-tools"`, `"highlight-tools"`) + Studio Direct Edit 표식 `data-imory-edit-id` 1종만 씁니다. **인라인 JS, `style` 속성, `id` 속성은 전부 저장 시점에 제거됩니다.**
+- HTML에는 일반 태그 + `data-imory-*` 바인딩 속성 7종 + `data-imory-region` 3종(`"post-body"`, `"owner-tools"`, `"highlight-tools"`) + Studio Direct Edit 표식 `data-imory-edit-id` 1종만 씁니다. **인라인 JS, `style` 속성, `id` 속성은 전부 저장 시점에 제거됩니다.**
 - CSS는 저장 시점에 파싱되어 `.imory-skin-root` 스코프가 강제로 붙습니다. `@import`, `expression()`, `javascript:`/`data:` 스킴의 `url()`, 특정 "보호 대상 selector"는 제거됩니다.
 - POST 화면은 본문(글 내용) 데이터 자체를 절대 받지 않습니다. `data-imory-region="post-body"`로 "자리"만 표시하면 플랫폼이 그 자리에 실제 본문을 채웁니다. 이 region이 없는 POST 템플릿은 아예 공개되지 않고 레거시 화면으로 대체됩니다.
 - Studio에는 "SkinPackage JSON 전체 붙여넣기(Import)" 기능이 있고, 이 문서 13절이 그 검증 로직이 실제로 요구하는 정확한 shape입니다.
@@ -117,10 +117,10 @@
     "avatarUrl": null                    // imageSlots에 "profile" 슬롯이 없으면 항상 null
   },
   "navigation": {
-    "home": { "name": "민지의 다이어리", "href": "/minji", "enabled": true },
+    "home": { "name": "민지의 다이어리", "href": "/minji", "enabled": true, "type": "home", "iconKind": "home" },
     "categories": [
-      { "id": "3", "name": "일상", "type": "post", "href": "/minji/category/3", "itemCount": null },
-      { "id": "5", "name": "링크", "type": "banner", "href": "/minji/category/5", "itemCount": null }
+      { "id": "3", "name": "일상", "type": "post", "iconKind": "document", "href": "/minji/category/3", "itemCount": null },
+      { "id": "5", "name": "링크", "type": "banner", "iconKind": "link", "href": "/minji/category/5", "itemCount": null }
     ],
     "postCategories":  [ /* categories 중 type==="post" 만 필터, item shape 동일 */ ],
     "bannerCategories": [ /* categories 중 type==="banner" 만 필터, item shape 동일 */ ]
@@ -144,6 +144,9 @@
 
 - `navigation.categories`는 원본 순서를 보존합니다. 기존 스킨의 메뉴 호환을 위해 `postCategories`는 post와 gallery를 포함합니다. 종류별 메뉴는 `textPostCategories`(post만), `galleryCategories`, `bannerCategories`를 사용합니다. 알 수 없는 미래 타입은 전체 `categories`에 유지됩니다.
 - `itemCount`는 항상 `null`입니다(계산 로직 없음).
+- `iconKind`는 **메뉴 아이콘을 순서가 아니라 종류로 그리기 위한 재료**입니다. 값은 `"document"`(post) / `"image"`(gallery) / `"quote"`(highlight) / `"link"`(banner) 넷이고, 모르는 미래 타입은 `"document"`로 떨어지므로 항상 무언가가 들어 있습니다. `data-imory-kind="item.iconKind"`(3절)로 얹고 CSS `[data-kind="image"]::before`로 그립니다.
+
+  `li:nth-child(2)` 같은 **순서 기반 아이콘을 쓰지 마세요.** 사용자가 카테고리를 재정렬·이름변경·삭제하는 순간 아이콘이 통째로 어긋나고, 목록 길이가 다른 화면(예: Studio Preview와 공개 화면의 데이터가 조금 다를 때)에서 서로 다른 그림이 나옵니다. 저장/Import 검증이 이 경우를 **경고**합니다(13절).
 - `banners.items[].href`는 사용자가 직접 입력한 외부 URL일 수 있고, `https://`만 통과합니다(없으면 `null`).
 - `viewer`는 **링크를 그릴지만** 정합니다. 실제 권한 검사는 그 주소를 받은
   플랫폼이 다시 하고, 쓰기 권한은 DB(RLS)가 강제합니다 — 스킨은 작성·수정·삭제·
@@ -199,6 +202,43 @@
 
 - `publishedAt`은 DB `created_at`(UTC) ISO 문자열 원본이고, `publishedAtLabel`은 그 값을 **Asia/Seoul(한국 시간)** 기준으로 변환해 `"YYYY. MM. DD"` 형태로 만든 화면 표시용 문자열이다(`skin/skin-context.js` `formatSkinPublishedAtLabel()`, 공용 순수 함수 하나로 세 namespace 모두 처리). 단순 UTC 날짜 슬라이싱이 아니라 실제 타임존 변환이므로, UTC 자정 근처 값(예: `2026-09-05T15:16:11+00:00`)은 한국 시간으로는 다음 날(`2026. 09. 06`)로 정확히 넘어간다 — 날짜가 하루 밀리는 문제를 피하기 위한 의도적 설계다.
 - `publishedAt`이 `null`/`undefined`이거나 파싱 불가능한 날짜 문자열이면 `publishedAtLabel`은 에러 없이 빈 문자열(`""`)이다.
+
+#### `home.highlights` — HOME에 놓는 발췌 카드 (재료 일치 라운드)
+
+```jsonc
+{
+  "home": {
+    "highlights": {
+      "cards": [ /* 하이라이트 화면의 카드와 **같은 모양** — 2-8절 참고 */ ],
+      "featured": [ /* 그중 맨 앞 한 장만 담은 배열 */ ],
+      "card": { /* 그 한 장을 객체로. 없으면 null */ },
+      "hasCard": true,
+      "count": 1,
+      "isEmpty": false,
+      "hasError": false
+    }
+  }
+}
+```
+
+HOME의 하이라이트 자리를 "하이라이트 보기" 링크 하나로 퉁치지 않고 **실제
+발췌문 한 장**으로 그릴 수 있게 하는 재료다. 카드의 `item.*` 필드는 하이라이트
+화면의 카드(2-8절 `highlights.cards`)와 글자 하나 다르지 않다 — 두 화면 모두
+`skin/skin-context.js`의 `createSkinHighlightCardBuilder()` 하나가 만든다.
+
+- `cards`는 최신순 최대 5장이다. **한 장만** 그리고 싶으면 `featured`를 repeat
+  하라 — CSS `:nth-child`로 두 번째부터 숨기는 방식은 목록 길이가 바뀌는 순간
+  어긋난다.
+- 반복 없이 곧바로 쓰려면 `home.highlights.card.excerpt`처럼 `card`를 바인딩한다.
+- 카드 강조선은 `data-imory-color="item.color"`로 그 하이라이트의 색을 받아
+  CSS에서 `var(--imory-color, <기본색>)`로 읽는다(3절).
+- 자리 전체는 `data-imory-if="home.highlights.hasCard"`로 감싼다. 하이라이트가
+  하나도 없으면 접히고, Studio Preview에서는 샘플 카드 한 장이 대신 보인다.
+- `data-imory-region="highlight-tools"`(주인장 ⋮ 메뉴)는 **HOME에 두지 않는다** —
+  하이라이트 화면 전용이다.
+- 플랫폼은 HOME template이 `home.highlights`를 실제로 그릴 때만 이 조회를 한다
+  (`skin/skin-template.js` `skinTemplateUsesHomeHighlights()`). 안 그리는 스킨은
+  지금까지와 동일하게 추가 조회가 없다.
 
 ### 2-4. `category` namespace (CATEGORY 페이지에서만 채워짐)
 
@@ -262,6 +302,28 @@
 - **폴더에는 `href`가 없습니다.** 폴더 페이지 링크는 별도 키 **`item.folderHref`** 로 옵니다(FOLDER-2). 이 값은 스킨에 `templates.folder`가 있고 그 폴더에 직접 든 보이는 글이 하나 이상일 때만 문자열이고, 그 외에는 `null`입니다 — 반드시 `<a data-imory-if="item.folderHref" data-imory-href="item.folderHref">`처럼 가드하세요. `item.href`는 글 노드에만 있으므로 글/폴더 판정에 계속 쓸 수 있습니다.
 - **`kind` 값으로 분기할 수 없습니다**(`data-imory-if`는 값 비교를 못 합니다). 대신 필드 존재로 갈라 쓰세요: 폴더는 `item.name`/`item.children`, 글은 `item.title`/`item.href`.
 - 폴더가 하나도 없으면 `hasFolders`는 `false`이고, `tree`에는 root 글 노드만 관리 화면 순서(`sort_order`)로 옵니다(글이 없으면 빈 배열). 그래서 `category.tree`만 쓰는 스킨도 폴더가 없는 카테고리를 그릴 수 있습니다. 최신순 목록이 필요하면 `category.posts`를 쓰세요.
+
+- **★ `category.tree`를 그리는 스킨은 `category.posts`도 함께 그려야 합니다 — `category.showPostsList` 가드로.**
+
+  주인장이 그 카테고리에 **번호 페이지**를 켜면(2-6-b절) `category.tree`에서 **루트 글(폴더에 들어 있지 않은 글)이 빠집니다.** 트리에는 폴더 노드만 남고 루트 글은 `category.posts`로만 옵니다. 그래서 트리만 그리는 스킨에서는 관리 화면에도 있고 Studio에도 보이는 글이 **공개 화면에서만 사라집니다.**
+
+  `category.showPostsList`는 "지금 이 렌더에서 `category.posts`를 **추가로** 그려야 하는가"입니다. 두 블록에 각각 가드를 걸면 네 경우 모두 같은 글이 정확히 한 번 나옵니다.
+
+  | | 페이지 안 나눔 | 페이지 나눔 |
+  |---|---|---|
+  | 폴더 없음 | 트리 없음 / 목록 O | 트리 없음 / 목록 O(그 페이지) |
+  | 폴더 있음 | 트리 O(루트 글 포함) / 목록 없음 | 트리 O(폴더만) / 목록 O(그 페이지) |
+
+  ```html
+  <ul data-imory-if="category.hasFolders"> …category.tree… </ul>
+  <ul data-imory-if="category.showPostsList">
+    <li data-imory-repeat="category.posts">…</li>
+  </ul>
+  ```
+
+  `category.posts`를 아예 그리지 않는 스킨에서는 플랫폼이 **페이지 나누기를 켜지 않습니다**(갤러리·페이지네이션 때와 같은 "그 재료를 실제로 그리는 스킨에서만 켠다" 규칙) — 글이 사라지는 대신 설정이 잠자고, `category.posts`를 그리는 스킨으로 바꾸면 그때 살아납니다. 저장/Import 검증이 이 경우를 **경고**합니다(13절).
+
+  `category.posts`만 쓰는(폴더를 모르는) 스킨은 이 값을 볼 필요가 없습니다 — 지금까지와 완전히 같습니다.
 - **방문자에게 보이는 글이 하나도 없는 폴더는 `tree`에 아예 오지 않습니다** — 빈 폴더 이름이 화면에 남지 않습니다.
 - **한 repeat 안에서 폴더 가지와 글 가지를 둘 다 두고 `data-imory-if`로 가릅니다.** 해당 없는 가지는 `hidden`이 되므로 스킨 CSS에 `[hidden] { display: none; }`이 있어야 합니다. 완성 예시: [skin/test-skins/imory-finder-folders-v1.json](skin/test-skins/imory-finder-folders-v1.json) — 1단계 폴더는 큰 폴더 카드, 그 안의 글은 작은 항목, 2·3단계 폴더는 카드 안의 들여쓴 묶음, root 글은 작은 항목입니다(글 하나하나가 폴더 카드가 되지 않습니다).
 
@@ -446,8 +508,13 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
         "postId": "42",
         "postTitle": "오늘의 일기",
         "postHref": "/minji/post/42",
+        "hasNoPostLink": false,  // postHref가 null일 때 true — data-imory-if가 부정을 못 하므로 반대쪽도 준다
         "categoryName": "일상",
         "categoryHref": "/minji/category/3",
+        "folderName": "2026",                  // 그 글이 든 폴더(없으면 "")
+        "folderNamePath": ["2026"],            // 중첩 폴더면 위에서부터
+        "sourcePathLabel": "일상 > 2026 > 오늘의 일기",  // 카테고리 > 폴더 > 글 제목
+        "sourcePathSegments": ["일상", "2026", "오늘의 일기"],
         "folderId": "3",
         "folderHref": "/minji/highlights/category/3",
         "isMissing": false   // 원문이 바뀌어 그 자리를 찾지 못한 상태
@@ -482,18 +549,32 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 - 목록도 개수도 "지금 이 사람이 볼 수 있는" 카드로만 만들어집니다. 비밀글·비공개 글의 발췌문은 어떤 경로로도 오지 않습니다.
 - `data-imory-if`는 값을 비교할 수 없으므로 `highlights.view`를 직접 검사하지 말고 `highlights.showCards` / `highlights.view.isFolders` 같은 미리 계산된 boolean을 쓰세요.
 - `coverRatio`를 실제 비율로 표현하는 것은 스킨 CSS의 몫입니다(플랫폼 CSS는 스킨 template에 적용되지 않습니다).
+- `sourcePathLabel`은 이미 이어 붙여진 한 줄입니다 — `data-imory-bind`는 문자열을 이어 붙일 수 없으므로 조각(`categoryName`/`folderName`/`postTitle`)을 직접 조립하려 하지 마세요. 폴더에 들어 있지 않은 글은 `"일상 > 오늘의 일기"`처럼 그 칸만 빠집니다. 비밀글의 제목은 여기서도 마스킹된 제목입니다.
+- **카드 강조선은 `item.color`와 이어야 합니다.** `data-imory-color="item.color"`(3절)를 카드 엘리먼트에 걸고 CSS에서 `var(--imory-color, <기본색>)`으로 받으세요. 모든 카드에 같은 색을 박아 두면 주인장이 색을 나눠 칠한 의미가 사라집니다.
 
-**필수 마크업 — `highlight-tools` region**
+**최소한 한 장의 카드를 표현할 수 있어야 합니다**
+
+발췌문 · 노트(`hasNote`) · 날짜 · 색 · 원문 위치 · 원문 링크 · 못 찾음 상태 · `highlight-tools` 자리 — 이 여덟이 하이라이트 화면의 재료입니다. 링크나 버튼만 있는 template은 하이라이트 화면이 아닙니다.
 
 ```html
-<article data-imory-repeat="highlights.cards">
+<article data-imory-repeat="highlights.cards" data-imory-color="item.color">
   <blockquote data-imory-bind="item.excerpt"></blockquote>
   <p data-imory-if="item.hasNote" data-imory-bind="item.note"></p>
-  <a data-imory-if="item.postHref" data-imory-href="item.postHref">원문 보기</a>
+
+  <!-- 원문 위치: 링크가 있으면 <a>, 없으면 같은 글자를 <span>으로 -->
+  <a data-imory-if="item.postHref" data-imory-href="item.postHref" data-imory-bind="item.sourcePathLabel"></a>
+  <span data-imory-if="item.hasNoPostLink" data-imory-bind="item.sourcePathLabel"></span>
+
+  <time data-imory-bind="item.dateLabel"></time>
+  <span data-imory-if="item.isMissing">원문에서 위치를 찾을 수 없음</span>
 
   <!-- 카드마다 하나. 비워 둡니다. -->
   <span data-imory-region="highlight-tools"></span>
 </article>
+```
+
+```css
+article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 ```
 
 스킨 HTML에는 `<button>`이 들어갈 수 없으므로(8절), 주인장의 ⋮ 메뉴(노트 추가/수정/삭제, 하이라이트 삭제)는 플랫폼이 이 자리에 넣습니다. `highlights.cards` repeat **안에** 두어야 하며, 렌더러가 그 자리에 카드 id를 키로 찍어 주므로 DOM 순서가 아니라 키로 짝지어집니다. 방문자에게는 빈 채로 남습니다 — 크기를 주거나 테두리를 그리지 마세요. 이 자리가 없으면 화면은 정상이지만 주인장이 자기 노트를 고칠 수 없습니다.
@@ -501,10 +582,22 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 ### 2-9. `navigation.highlights` (공통)
 
 ```jsonc
-{ "navigation": { "highlights": { "name": "HIGHLIGHTS", "href": "/minji/highlights", "enabled": true, "hasCategory": true } } }
+{ "navigation": { "highlights": {
+  "name": "HIGHLIGHTS",          // HIGHLIGHT 카테고리가 있으면 사용자가 붙인 그 이름
+  "href": "/minji/highlights",
+  "enabled": true,
+  "hasCategory": true,
+  "showStandaloneLink": false,   // categories[] 에 이미 같은 href가 있으면 false
+  "type": "highlight",
+  "iconKind": "quote"
+} } }
 ```
 
-어느 화면에서든 메모 카테고리로 가는 링크입니다. **이 링크를 그리지 않으면 독자가 그 화면에 닿을 방법이 주소를 직접 치는 것뿐입니다.**
+어느 화면에서든 하이라이트 화면으로 가는 링크입니다. **이 링크를 그리지 않으면 독자가 그 화면에 닿을 방법이 주소를 직접 치는 것뿐입니다.**
+
+- **`name`을 반드시 바인딩하세요.** 사용자는 이 카테고리 이름을 자유롭게 바꿉니다(`MEMOS`, `밑줄`, `기록`…). `HIGHLIGHTS`를 글자로 박아 두면 그 블로그에서는 없는 이름이 나옵니다.
+- HIGHLIGHT 카테고리를 만든 사용자는 그 행이 `navigation.categories[]`에도 **같은 href**로 들어 있습니다. 그래서 `categories[]`를 돌려 그리면 링크가 한 개고, 그 위에 이 링크까지 그리면 두 개가 됩니다 — `showStandaloneLink`로 가드하세요.
+- `type`/`iconKind`는 `categories[]` 항목과 같은 재료입니다(2-1절) — 어느 쪽으로 그리든 같은 아이콘을 쓸 수 있습니다.
 
 ### 2-6. 값이 없을 때의 규칙
 
@@ -517,7 +610,7 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 
 근거: [skin/skin-sanitize.js](skin/skin-sanitize.js) `SKIN_SANITIZE_BIND_ATTRS`/`SKIN_SANITIZE_REGION_ATTR`, [skin/skin-render.js](skin/skin-render.js)
 
-**정확히 7개**만 존재합니다(그중 6개가 렌더러가 해석하는 것이고, 마지막 하나는 Studio 전용 표식입니다). 이 외의 `data-imory-*` 속성은 이름 자체를 아예 인식하지 않고, 저장 시점에 조용히 제거됩니다(경고 로그만 남김).
+**정확히 9개**만 존재합니다(그중 8개가 렌더러가 해석하는 것이고, 마지막 하나는 Studio 전용 표식입니다). 이 외의 `data-imory-*` 속성은 이름 자체를 아예 인식하지 않고, 저장 시점에 조용히 제거됩니다(경고 로그만 남김).
 
 | 속성 | 값 형식 | 동작 |
 |---|---|---|
@@ -526,6 +619,8 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 | `data-imory-src="path"` | dotted identifier | `data-imory-href`와 동일 로직, `src` 속성 대상. |
 | `data-imory-repeat="path"` | dotted identifier | 값이 배열이면 그 엘리먼트를 템플릿 삼아 item마다 clone. 배열이 아니면(`undefined`/`null`/객체 등) **엘리먼트 자체를 제거**. |
 | `data-imory-if="path"` | dotted identifier | truthy/falsy만 판정해 `el.hidden` 토글. |
+| `data-imory-kind="path"` | dotted identifier | resolve한 값이 종류 토큰(소문자로 시작, 소문자/숫자/하이픈, 32자 이내)이면 같은 엘리먼트에 **`data-kind="<값>"`** 을 씁니다. CSS에서 `[data-kind="image"]::before { ... }` 처럼 **종류별로** 아이콘·장식을 그리기 위한 것입니다. 값이 없거나 모양이 틀리면 `data-kind`를 지웁니다. 주로 `navigation.*` 항목의 `item.iconKind`(2-1절)와 함께 씁니다. |
+| `data-imory-color="path"` | dotted identifier | resolve한 값이 `#rgb` 또는 `#rrggbb`면 그 엘리먼트에 **CSS custom property `--imory-color`** 를 설정합니다. CSS에서 `var(--imory-color, <기본색>)`으로 받습니다. `style` 속성이 전면 금지라(8-4절) **항목마다 다른 색을 쓰는 유일한 방법**입니다 — 하이라이트 카드의 강조선(`item.color`, 2-8절)이 대표 용례입니다. |
 | `data-imory-region="post-body"` | 고정 문자열 `"post-body"` 만 허용 | 값은 resolve 대상이 아님(경로 아니라 식별자). mount 시 이 엘리먼트의 **자식을 전부 비운 뒤**, 플랫폼(Post Viewer)이 실제 글 본문을 그 안에 주입할 자리로 씁니다. POST 템플릿에는 하나, FOLDER 템플릿에는 `folder.posts` 반복 안에 글마다 하나(2-7절) — 반복 안의 region에는 렌더러가 항목 id를 `data-imory-region-key`로 찍습니다(스킨이 직접 쓰는 속성이 아니며, 써도 제거됩니다). |
 | `data-imory-region="highlight-tools"` | 고정 문자열 `"highlight-tools"`(레거시 `"memo-tools"` 도 허용) | **비워 두는 자리**입니다. 하이라이트 화면의 카드마다 하나씩 `highlights.cards` repeat 안에 둡니다 — 주인장에게만 카드 도구(⋮: 노트 추가/수정/삭제, 하이라이트 삭제)가 그 자리에 들어가고 방문자에게는 빈 채로 남습니다. 렌더러가 그 자리에 카드 id를 키로 찍어 주므로 DOM 순서가 아니라 키로 짝지어집니다. 자세한 규칙: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) §11. |
 | `data-imory-region="owner-tools"` | 고정 문자열 `"owner-tools"` 만 허용 | **비워 두는 자리**입니다. 주인장에게만 보이는 플랫폼 버튼(＋ 새 글 / edit)이 그 자리에 맞춰 놓입니다 — 방문자에게는 아무것도 나타나지 않습니다. 이 자리를 그리지 않아도 되고(그때는 플랫폼이 스킨의 글 기둥을 재서 맞춥니다), 그리면 정확히 그 줄·그 오른쪽 끝에 옵니다. 자세한 규칙: [IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 4절. |
@@ -533,7 +628,7 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 
 ### 3-1. 속성 값(경로) 문법 제약
 
-`data-imory-bind`/`href`/`src`/`repeat`/`if`의 값은 이 정규식만 통과합니다:
+`data-imory-bind`/`href`/`src`/`repeat`/`if`/`kind`/`color`의 값은 이 정규식만 통과합니다:
 
 ```
 ^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$
@@ -557,6 +652,7 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 |---|---|
 | `navigation.categories` / `navigation.postCategories` / `navigation.bannerCategories` | `item.id`, `item.name`, `item.type`, `item.href`, `item.itemCount`(항상 null) |
 | `home.recentPosts` | `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.publishedAtLabel`, `item.categoryId`, `item.categoryName`, `item.isSecret` |
+| `home.highlights.cards` / `home.highlights.featured` | 하이라이트 화면의 카드와 같은 필드 — `item.excerpt`, `item.note`, `item.hasNote`, `item.color`, `item.dateLabel`, `item.postTitle`, `item.postHref`, `item.hasNoPostLink`, `item.categoryName`, `item.sourcePathLabel` (2-8절) |
 | `banners.items` | `item.id`, `item.imageUrl`, `item.href`, `item.alt` |
 | `category.posts` | `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.publishedAtLabel`, `item.isSecret` |
 | `category.tree` / `item.children` | 폴더: `item.kind`, `item.id`, `item.name`, `item.depth`, `item.children` · 글: `item.kind`, `item.id`, `item.title`, `item.href`, `item.publishedAt`, `item.publishedAtLabel`, `item.isSecret`, `item.depth` |
@@ -673,9 +769,11 @@ div section article header footer nav main aside figure figcaption
 h1 h2 h3 h4 h5 h6 p span br hr
 b strong i em u small mark blockquote cite sub sup
 ul ol li dl dt dd
-a img
+a img time
 details summary
 ```
+
+> `time`은 재료 일치 라운드에서 뒤늦게 더해졌습니다. 그 전에는 허용 목록에 없어서 8-3절의 unwrap 대상이었고, `<time data-imory-bind="item.publishedAtLabel">`처럼 쓰면 **태그와 함께 바인딩 속성까지 사라져 날짜가 아무 데서도 나오지 않았습니다**. 이미 그렇게 쓰고 있던 스킨들은 재저장 없이 그대로 날짜가 나옵니다.
 
 ### 8-2. 완전 제거 태그 (내용까지 통째로 삭제 — 자식 텍스트도 새어나오지 않음)
 
@@ -932,6 +1030,19 @@ Studio의 "SkinPackage Import"는 아래 최소 shape만 만족하면 통과합�
 ```
 
 이 JSON을 Studio Import 창에 그대로 붙여넣으면 통과합니다. `imageSlots`/`regions`/`metadata`는 생략(undefined)해도 각각 `[]`/`[]`/`{}`로 안전하게 채워집니다.
+
+### 13-1. 통과하지만 **경고가 붙는** 경우
+
+근거: [skin/skin-template.js](skin/skin-template.js) `auditSkinPackageMaterials()`
+
+검증을 통과해도, "저장은 되지만 화면에서 조용히 잘못 나오는" 조합은 Import 창(검증 성공 문구)과 Save 직후 토스트에 한 줄로 알립니다. **거부가 아닙니다** — 이미 저장된 스킨을 다시 가져올 수 없게 만들지 않기 위해서이고, 일부는 의도한 선택일 수도 있습니다.
+
+| 경고 | 왜 |
+|---|---|
+| `metadata.supports.highlights`가 true인데 `templates.highlights`가 없음 | 그 화면만 이 스킨의 디자인이 아니라 플랫폼 기본 template으로 그려집니다(1-1절). |
+| CATEGORY가 `category.pagination`은 그리는데 `category.posts`를 안 그림 | 플랫폼이 그 스킨에서 페이지 나누기를 켜지 않아 주인장의 페이지 설정이 잠자게 됩니다(2-4절). |
+| 카테고리 메뉴 클래스에 `nth-child` CSS 규칙이 걸려 있음 | 아이콘이 순서에 묶여 있어 재정렬·삭제에 어긋납니다. `data-imory-kind`로 바꾸세요(2-1절). |
+| Studio 미리보기 전용 샘플 문구가 template 안에 박혀 있음 | 편집자가 화면에서 본 예시 문장을 그대로 적어 둔 경우입니다 — 공개 화면에도 그대로 나옵니다. |
 
 실제로 완성도 있는 3페이지 스킨 예시는 14절의 `imory-diary-v0.1.json` 전체가 바로 이 Import 기능을 그대로 통과하는 실물 예시입니다.
 

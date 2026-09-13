@@ -110,6 +110,57 @@ const SKIN_CONTEXT_ADMIN_SUBPATH =
 
 
 /* =========================================================
+   NAVIGATION ICON KIND (Skin/Studio/Public 재료 일치 라운드)
+
+   "이 메뉴 항목은 어떤 종류인가"를 스킨이 **순서가 아니라 종류로**
+   그릴 수 있게 하는 재료다. 카테고리 타입(post/gallery/highlight/
+   banner)은 제품의 DB 값이고 앞으로도 늘어날 수 있는 반면, 스킨이
+   그리고 싶은 것은 "문서/사진/인용/링크" 같은 **그림의 종류**다.
+   그래서 두 값을 따로 낸다:
+
+     item.type      "post" | "gallery" | "highlight" | "banner" | ...
+                    제품의 카테고리 타입 그대로(기존 계약, 변경 없음)
+     item.iconKind  "document" | "image" | "quote" | "link"
+                    스킨이 아이콘을 고를 때 쓰는 안정된 종류 토큰
+
+   왜 iconKind 를 따로 두는가 — 나중에 카테고리 타입이 하나 더 늘어도
+   기존 스킨의 아이콘이 갑자기 사라지면 안 된다. 모르는 타입은
+   "document" 로 떨어지므로(아래 기본값) 스킨은 항상 무언가를 그린다.
+
+   스킨은 이 값을 data-imory-kind 로 받아 data-kind 속성으로 얹고
+   (skin/skin-render.js) CSS 에서 `[data-kind="image"]` 로 색·크기·
+   모양을 자유롭게 바꾼다. 순서(nth-child)나 본문에 박은 글자에
+   의존하지 않으므로, 사용자가 카테고리를 재정렬하거나 이름을 바꿔도
+   아이콘 종류가 그대로 유지된다.
+========================================================== */
+
+const SKIN_NAV_ICON_KIND_BY_CATEGORY_TYPE =
+  {
+    post: "document",
+    gallery: "image",
+    highlight: "quote",
+    banner: "link"
+  };
+
+const SKIN_NAV_ICON_KIND_FALLBACK =
+  "document";
+
+
+function resolveSkinNavIconKind(
+  categoryType
+) {
+
+  return (
+    SKIN_NAV_ICON_KIND_BY_CATEGORY_TYPE[
+      String(categoryType || "")
+    ] ||
+    SKIN_NAV_ICON_KIND_FALLBACK
+  );
+
+}
+
+
+/* =========================================================
    POST TITLE MASKING
 
    posts/posts-format.js의 applyPostVisibilityTitle과 동일한
@@ -513,6 +564,206 @@ async function fetchSkinCategoryFolders(
 
 
   return data || [];
+
+}
+
+
+/*
+  하이라이트 카드의 "원문 위치"(카테고리 > 폴더 > 글 제목)를 만들기
+  위한 조회 — 카테고리 하나가 아니라 **그 사용자의 폴더 전체**를
+  받는다(카드가 여러 카테고리에 흩어져 있다). 이름과 부모만 있으면
+  되므로 세 컬럼만 읽고, 실패하면 빈 배열이다 — 위치 표시가 짧아질
+  뿐 카드 목록은 그대로 나가야 한다.
+*/
+
+async function fetchSkinOwnerFolders(
+  ownerId
+) {
+
+  const {
+    data,
+    error
+  } =
+    await supabaseClient
+      .from("post_folders")
+      .select("id, parent_id, name")
+      .eq("user_id", ownerId);
+
+
+  if (error) {
+
+    console.error(
+      "[skin-context] post_folders(owner) 조회 실패:",
+      error
+    );
+
+
+    return [];
+
+  }
+
+
+  return data || [];
+
+}
+
+
+/* =========================================================
+   HOME 의 하이라이트 자리 — 최근 발췌 몇 줄
+
+   왜 loadHighlightCards()(posts/view/posts-view-highlight-store.js)를
+   쓰지 않는가 — 그 파일은 **글 화면 묶음과 함께 나중에** 로드된다
+   (index.html의 loadPostsModule). HOME 은 그 묶음을 부르지 않으므로
+   거기서는 그 함수가 아예 없다. 하이라이트 화면은 이미 그 묶음
+   안이라 그대로 쓰고, HOME 만 여기서 직접 묻는다.
+
+   같은 테이블·같은 정책이다 — 비밀글/비공개 글/삭제된 글의 발췌문은
+   post_highlights 의 SELECT 정책에서 걸러지므로 방문자의 HOME 에도
+   나타나지 않는다. 다른 점은 둘뿐이다:
+
+     · posts.updated_at 을 읽지 않는다. 그 컬럼은 "원문에서 위치를
+       찾았는가"를 판정할 때만 쓰는데, HOME 카드에는 그 표시가 없다.
+       권한 migration 이전 배포에서 한 번 더 물어보는 분기도 함께
+       사라진다.
+     · 개수를 처음부터 제한한다(limit) — HOME 은 맛보기 자리다.
+
+   실패하면 null 이다(빈 목록과 구분) — 호출자가 hasError 로 알린다.
+========================================================== */
+
+/* HOME 이 받아 두는 최대 카드 수. 스킨이 한 장만 그리든 몇 장을
+   그리든 이 개수 안에서 고른다(home.highlights.cards). */
+
+const SKIN_HOME_HIGHLIGHT_LIMIT = 5;
+
+
+async function fetchSkinHomeHighlights(
+  ownerId
+) {
+
+  if (!ownerId) {
+
+    return [];
+
+  }
+
+
+  try {
+
+    const {
+      data,
+      error
+    } =
+      await supabaseClient
+        .from("post_highlights")
+        .select(
+          `
+          id,
+          post_id,
+          color,
+          excerpt,
+          note,
+          created_at,
+          posts!inner (
+            id,
+            title,
+            category_id,
+            folder_id,
+            visibility
+          )
+          `
+        )
+        .eq("user_id", ownerId)
+        .order("created_at", { ascending: false })
+        .limit(SKIN_HOME_HIGHLIGHT_LIMIT);
+
+
+    if (error) {
+
+      throw error;
+
+    }
+
+
+    return (Array.isArray(data) ? data : []).map(
+      (row) => {
+
+        const post =
+          Array.isArray(row.posts)
+            ? row.posts[0]
+            : row.posts;
+
+
+        return {
+
+          id:
+            String(row.id),
+
+          excerpt:
+            typeof row.excerpt === "string"
+              ? row.excerpt
+              : "",
+
+          note:
+            typeof row.note === "string" && row.note
+              ? row.note
+              : "",
+
+          color:
+            typeof row.color === "string"
+              ? row.color
+              : "#f6e0c8",
+
+          createdAt:
+            row.created_at ||
+            null,
+
+          postId:
+            row.post_id === null || row.post_id === undefined
+              ? null
+              : Number(row.post_id),
+
+          postTitle:
+            post && typeof post.title === "string"
+              ? post.title
+              : "",
+
+          postVisibility:
+            post && post.visibility
+              ? String(post.visibility)
+              : "public",
+
+          categoryId:
+            post && post.category_id !== null && post.category_id !== undefined
+              ? Number(post.category_id)
+              : null,
+
+          postFolderId:
+            post && post.folder_id !== null && post.folder_id !== undefined
+              ? Number(post.folder_id)
+              : null,
+
+          /* HOME 카드에는 위치 확인 표시가 없다(위 주석) */
+          postUpdatedAt:
+            null
+
+        };
+
+      }
+    );
+
+  }
+
+  catch (err) {
+
+    console.warn(
+      "[skin-context] HOME 하이라이트 조회 실패:",
+      err
+    );
+
+
+    return null;
+
+  }
 
 }
 
@@ -1447,6 +1698,13 @@ async function buildBaseSkinContext(
         type: category.type,
 
         /*
+          종류별 아이콘 재료(위 resolveSkinNavIconKind 주석). type 과
+          함께 항상 나간다 — 스킨은 둘 중 편한 쪽을 쓰면 된다.
+        */
+        iconKind:
+          resolveSkinNavIconKind(category.type),
+
+        /*
           HIGHLIGHT-2: highlight 카테고리의 정규 주소는 /:slug/highlights
           다. 메뉴에서도 그 주소를 쓴다 — /category/:id 로 들어와도 같은
           화면이 열리지만(posts/view/posts-view-list.js), 한 화면에 두
@@ -1485,6 +1743,19 @@ async function buildBaseSkinContext(
 
       href:
         buildSiteHighlightsPath(slug),
+
+      /*
+        카테고리 목록의 항목과 **같은 재료**를 갖는다 — 스킨이
+        navigation.categories 를 돌려 그리든 이 링크를 따로 그리든
+        같은 아이콘을 쓸 수 있어야 한다. HIGHLIGHT 카테고리 행이
+        없어도(= 아직 안 만든 사용자) 하이라이트 화면은 존재하므로
+        type/iconKind 는 항상 채운다.
+      */
+      type:
+        "highlight",
+
+      iconKind:
+        resolveSkinNavIconKind("highlight"),
 
       /* 실제 카테고리 행이 있는가 — 스킨이 메뉴 자리를 고를 때 쓴다 */
       hasCategory:
@@ -1617,7 +1888,14 @@ async function buildBaseSkinContext(
         href:
           buildSitePath(slug, "/"),
         enabled:
-          true
+          true,
+
+        /* 카테고리 항목과 같은 재료 — 홈만 다른 아이콘을 그릴 수 있다 */
+        type:
+          "home",
+
+        iconKind:
+          "home"
       },
 
       categories:
@@ -1832,13 +2110,43 @@ async function buildHomeSkinContext(
     await fetchSkinCommonData(ownerId);
 
 
+  /* =====================================================
+     HOME 의 하이라이트 자리 — 그릴 스킨에서만 조회한다
+
+     갤러리/페이지네이션과 같은 방식이다: 받아 그릴 자리가 없는
+     스킨에서 두 번의 추가 조회를 매 HOME 마다 하지 않는다. 판정은
+     호출자가 template 마크업을 보고 한다(skin/skin-template.js 의
+     skinTemplateUsesHomeHighlights → skin/skin-home.js).
+
+     **undefined 는 "판정하지 않았다"이지 "안 그린다"가 아니다** —
+     Studio Preview 는 이 값을 넘기지 않으므로 항상 조회한다. 편집
+     중에 하이라이트 마크업을 막 붙인 순간에도 재료가 이미 와 있어야
+     한다(다시 열어야 보이면 그건 고장으로 읽힌다).
+  ====================================================== */
+
+  const wantsHighlights =
+    options.supportsHomeHighlights !== false;
+
+
   const [
     base,
-    recentPostsRaw
+    recentPostsRaw,
+    highlightRows,
+    postFolders
   ] =
     await Promise.all([
       buildBaseSkinContext(ownerId, options, commonData),
-      fetchSkinRecentPosts(ownerId)
+      fetchSkinRecentPosts(ownerId),
+
+      wantsHighlights
+        ? fetchSkinHomeHighlights(ownerId)
+        : Promise.resolve([]),
+
+      /* 카드의 "원문 위치"(카테고리 > 폴더 > 글 제목)에만 쓴다 —
+         실패해도 폴더 칸만 빠진다(fetchSkinOwnerFolders 주석). */
+      wantsHighlights
+        ? fetchSkinOwnerFolders(ownerId)
+        : Promise.resolve([])
     ]);
 
 
@@ -1851,6 +2159,29 @@ async function buildHomeSkinContext(
     );
 
 
+  /* 카드 한 장을 만드는 일은 하이라이트 화면과 **같은 함수**가 한다
+     — createSkinHighlightCardBuilder() 주석 참고. 그래서 스킨이 HOME
+     에 쓰는 item.* 과 하이라이트 화면의 item.* 이 갈라지지 않는다. */
+
+  const highlightCards =
+    (Array.isArray(highlightRows) ? highlightRows : []).map(
+      createSkinHighlightCardBuilder({
+        slug:
+          commonData.slug,
+
+        categoryById:
+          new Map(
+            commonData.categories.map(
+              (category) =>
+                [category.id, category]
+            )
+          ),
+
+        postFolders
+      }).buildCard
+    );
+
+
   return {
 
     ...base,
@@ -1859,6 +2190,53 @@ async function buildHomeSkinContext(
       buildSkinPageMeta("home"),
 
     home: {
+
+      /* =====================================================
+         home.highlights — 발췌 카드 맛보기 (재료 일치 라운드)
+
+         HOME 에 "하이라이트 보기" 버튼만 놓을 수 있던 자리에, 실제
+         발췌문 한 장을 그대로 놓을 수 있게 하는 재료다. 카드의 모양
+         (item.*)은 하이라이트 화면과 **글자 하나 다르지 않다**.
+
+           cards[]    최신순, 최대 SKIN_HOME_HIGHLIGHT_LIMIT 장
+           featured[] 그중 맨 앞 한 장만 담은 배열 — 같은 카드
+                      마크업을 data-imory-repeat 으로 한 장만 그릴 때
+                      쓴다. CSS 로 두 번째부터 숨기는(nth-child) 순서
+                      의존 장식을 쓰지 않아도 되게 하는 것이 목적이다.
+           card       그 한 장을 객체로 — 반복 없이 곧바로
+                      home.highlights.card.excerpt 로 바인딩할 때.
+           hasCard    data-imory-if 는 부정도 비교도 못 하므로 미리 낸다.
+           hasError   조회 자체가 실패했다(빈 목록과 구분).
+
+         하이라이트가 하나도 없으면 cards 는 빈 배열이고 hasCard 는
+         false 다 — 스킨은 그 자리를 접거나 안내 문구를 보이면 된다.
+      ====================================================== */
+
+      highlights: {
+
+        cards:
+          highlightCards,
+
+        featured:
+          highlightCards.slice(0, 1),
+
+        card:
+          highlightCards[0] || null,
+
+        hasCard:
+          highlightCards.length > 0,
+
+        count:
+          highlightCards.length,
+
+        isEmpty:
+          highlightCards.length === 0,
+
+        hasError:
+          highlightRows === null
+
+      },
+
       recentPosts:
         recentPostsRaw.map(
           (post) => ({
@@ -2532,11 +2910,33 @@ async function buildCategorySkinContext(
      (요구사항 8: "실제 DB 조회부터 해당 페이지 범위만").
   ====================================================== */
 
+  /*
+     재료 일치 라운드 — 조건이 하나 더 있다.
+
+       3) 렌더 중인 스킨이 category.posts 를 실제로 그린다
+          (options.supportsRootPostList — 호출자가
+           skinTemplateUsesRootPostList()로 판정해 넘긴다,
+           skin/skin-template.js)
+
+     페이지를 나누면 category.tree 에서 **루트 글이 빠진다**(아래
+     treePosts 참고) — 그 글은 category.posts 로만 온다. 폴더 트리만
+     그리는 스킨에서는 그 순간 카테고리 루트 글이 공개 화면에서
+     통째로 사라진다(관리 화면에도 있고 Studio 에서도 보이는데
+     공개 화면에서만 없어진다 — 실제로 사용자 스킨에서 난 일이다).
+
+     (1)/(2)와 같은 처리를 한다: 받아 그릴 자리가 없는 스킨에서는
+     페이지 나누기를 켜지 않고 지금까지와 동일한 조회를 한다.
+     supportsRootPostList 를 아예 넘기지 않는 호출자(옛 코드)에서는
+     이 조건을 적용하지 않는다 — undefined 는 "판정하지 않았다"이지
+     "안 그린다"가 아니다.
+  */
+
   const paginationActive =
     galleryActive ||
     (
       options.supportsPagination === true &&
-      display.paginatePosts === true
+      display.paginatePosts === true &&
+      options.supportsRootPostList !== false
     );
 
 
@@ -2765,6 +3165,37 @@ async function buildCategorySkinContext(
 
       tree:
         folderTree.tree,
+
+      /* =====================================================
+         showPostsList — "category.tree 와 함께 category.posts 도
+         그려야 하는가" (재료 일치 라운드)
+
+         두 배열의 관계는 페이지네이션 여부에 따라 달라진다:
+
+           나누지 않을 때 : tree 안에 루트 글이 **들어 있다**.
+                            그래서 tree 를 그리는 스킨이 posts 까지
+                            그리면 같은 글이 두 번 나온다.
+           나눌 때        : tree 에는 폴더만 남고 루트 글은 posts
+                            로만 온다. posts 를 안 그리면 루트 글이
+                            화면에서 사라진다.
+
+         data-imory-if 는 "A이고 B" 도 부정도 표현할 수 없으므로
+         이 판단을 Context 가 미리 해 둔다. 스킨은 폴더 트리 블록에
+         hasFolders 를, 평평한 글 목록 블록에 showPostsList 를 걸면
+         **네 경우 모두** 루트 글이 정확히 한 번 나온다:
+
+           폴더 없음 + 안 나눔 : 트리 없음 / 목록 O   (지금까지와 동일)
+           폴더 없음 + 나눔    : 트리 없음 / 목록 O(그 페이지)
+           폴더 있음 + 안 나눔 : 트리 O(루트 글 포함) / 목록 없음
+           폴더 있음 + 나눔    : 트리 O(폴더만) / 목록 O(그 페이지)
+
+         폴더를 모르는 옛 스킨은 이 값을 보지 않고 category.posts 만
+         그리므로 아무 영향이 없다.
+      ====================================================== */
+
+      showPostsList:
+        paginationActive ||
+        !folderTree.hasFolders,
 
       /* =====================================================
          GALLERY-1 — 표시 방식
@@ -3280,89 +3711,102 @@ async function buildPostSkinContext(
 ========================================================== */
 
 /* =========================================================
-   buildHighlightsSkinContext(ownerId, options) -> MEMOS context | null
-   (HIGHLIGHT-1 §7)
+   하이라이트 카드 재료 — 공개 하이라이트 화면과 HOME 이 **같은
+   함수**로 만든다 (재료 일치 라운드)
 
-   여러 원본 글 카테고리에서 만들어진 하이라이트 카드를 한 화면에
-   모은다. 여기서 말하는 "폴더"는 **원본 글의 카테고리**다 — 별도의
-   중첩 폴더 시스템(post_folders)을 만들지 않는다(요구사항 7).
+   HOME 의 하이라이트 자리(home.highlights)와 하이라이트 화면
+   (highlights.cards)은 같은 발췌 카드를 보여준다. 조립을 두 벌
+   두면 한쪽에만 필드가 늘거나 sourcePathLabel 의 모양이 갈라진다
+   — 스킨 입장에서는 같은 `item.*` 인데 화면마다 다르게 나오는
+   것이라 가장 알아채기 어려운 종류의 어긋남이다. 그래서 카드
+   하나를 만드는 일은 여기 한 곳에만 둔다.
 
-   ★ 카드를 손으로 옮기지 않아도 된다
+   호출자가 주는 것
+     slug          링크(postHref/categoryHref/folderHref)의 앞부분
+     categoryById  카테고리 id -> 행 (commonData.categories)
+     postFolders   그 사용자의 폴더 전체 (fetchSkinOwnerFolders)
 
-   카드가 어느 폴더에 속하는지는 저장된 값이 아니라 **지금의**
-   posts.category_id다(posts-view-highlight-store.js가 posts를 embed해
-   함께 받는다). 그래서 글의 카테고리를 옮기면 카드도 따라 옮겨가고,
-   카테고리가 없는 글의 카드도 "카테고리 없음" 폴더에 모여 누락되지
-   않는다.
-
-   ★ 보이는 것만 온다
-
-   목록도 개수도 전부 post_highlights의 SELECT 정책을 통과한 행으로만
-   만든다 — 비밀글/비공개 글/삭제된 글의 발췌문은 방문자의 목록에도
-   개수에도 나타나지 않는다(요구사항 11).
-
-   options
-     view        "all" | "folders"   (기본 "all")
-     categoryId  폴더 하나를 연 경우 그 카테고리 id("none"이면 무분류)
+   돌려주는 것
+     buildCard(card)   저장된 하이라이트 한 줄 -> 스킨이 받는 카드
+     folderKeyOf(card) 그 카드가 속한 하이라이트 폴더 키
 ========================================================== */
 
-async function buildHighlightsSkinContext(
-  ownerId,
-  options = {}
+/* 원본 글에 카테고리가 없는 카드가 모이는 자리 */
+
+const SKIN_HIGHLIGHT_UNFILED_ID =
+  "none";
+
+
+function createSkinHighlightCardBuilder(
+  {
+    slug,
+    categoryById,
+    postFolders
+  }
 ) {
 
-  if (!ownerId) {
+  const HIGHLIGHT_UNFILED_ID =
+    SKIN_HIGHLIGHT_UNFILED_ID;
 
-    throw new Error(
-      "buildHighlightsSkinContext: ownerId is required"
-    );
+  /* =====================================================
+     원문 위치 표시 — "카테고리 > 폴더 > 글 제목"
 
-  }
+     카드만 보고도 그 발췌문이 어디에서 왔는지 알 수 있어야 한다.
+     조각(categoryName/folderName/postTitle)을 각각 내보내되, 대부분의
+     스킨이 그냥 한 줄로 쓰므로 완성된 문장(sourcePathLabel)도 함께
+     준다 — data-imory-bind 는 문자열을 이어붙일 수 없기 때문이다.
 
+     폴더는 3단계까지 중첩될 수 있으므로(IMORY_FOLDER1_DESIGN.md)
+     부모를 따라 올라가 전부 적는다. 폴더 이름을 못 읽었거나 글이
+     폴더에 들어 있지 않으면 그 칸만 빠진다.
 
-  const commonData =
-    await fetchSkinCommonData(ownerId);
+     제목은 **마스킹된 제목**을 쓴다 — 비밀글의 진짜 제목이 위치
+     표시로 새어 나가면 안 된다(maskSkinPostTitle).
+  ====================================================== */
 
-
-  const [
-    base,
-    cards,
-    folderSettings
-  ] =
-    await Promise.all([
-      buildBaseSkinContext(ownerId, options, commonData),
-      loadHighlightCards(ownerId),
-      loadHighlightFolderSettings(ownerId)
-    ]);
-
-
-  const slug =
-    commonData.slug;
-
-
-  /* 조회 자체가 실패한 경우 — 빈 목록과 구분해서 알린다 */
-
-  const hasError =
-    cards === null;
-
-
-  const list =
-    Array.isArray(cards)
-      ? cards
-      : [];
-
-
-  const categoryById =
+  const folderById =
     new Map(
-      commonData.categories.map(
-        (category) =>
-          [category.id, category]
+      (postFolders || []).map(
+        (folder) =>
+          [Number(folder.id), folder]
       )
     );
 
 
-  const HIGHLIGHT_UNFILED_ID =
-    "none";
+  const folderNamePath =
+    (folderId) => {
+
+      const names = [];
+
+      let cursor =
+        folderId === null || folderId === undefined
+          ? null
+          : folderById.get(Number(folderId));
+
+      /* 3단계가 상한이지만 데이터가 깨져도 멈추게 횟수를 제한한다 */
+      let guard = 0;
+
+      while (cursor && guard < 8) {
+
+        if (cursor.name) {
+
+          names.unshift(cursor.name);
+
+        }
+
+        cursor =
+          cursor.parent_id === null || cursor.parent_id === undefined
+            ? null
+            : folderById.get(Number(cursor.parent_id));
+
+        guard += 1;
+
+      }
+
+
+      return names;
+
+    };
 
 
   const folderKeyOf =
@@ -3373,16 +3817,32 @@ async function buildHighlightsSkinContext(
         : String(card.categoryId);
 
 
-  const requestedKey =
-    options.categoryId === undefined ||
-    options.categoryId === null ||
-    options.categoryId === ""
-      ? null
-      : String(options.categoryId);
-
-
   const buildCard =
     (card) => {
+
+  const cardCategoryName =
+    categoryById.get(card.categoryId)?.name ||
+    "";
+
+  const cardPostTitle =
+    maskSkinPostTitle(
+      card.postVisibility,
+      card.postTitle
+    );
+
+  const cardFolderNames =
+    folderNamePath(card.postFolderId);
+
+  const cardSourceSegments =
+    [
+      cardCategoryName,
+      ...cardFolderNames,
+      cardPostTitle
+    ].filter(
+      (segment) =>
+        typeof segment === "string" &&
+        segment.trim() !== ""
+    );
 
   /*
     이 카드의 위치 확인 상태. 기록에 남은 확인 시각과 지금 글의
@@ -3430,10 +3890,7 @@ async function buildHighlightsSkinContext(
           : String(card.postId),
 
       postTitle:
-        maskSkinPostTitle(
-          card.postVisibility,
-          card.postTitle
-        ),
+        cardPostTitle,
 
       /*
         원문 이동 — 정식 글 주소만 넣는다. 발췌문도 메모도 주소에
@@ -3446,9 +3903,34 @@ async function buildHighlightsSkinContext(
           ? null
           : buildSitePath(slug, `/post/${card.postId}`),
 
+      /*
+        data-imory-if 는 부정을 표현할 수 없다 — 원문 링크가 없는
+        카드(삭제된 글, Preview 샘플)에서도 위치 표시는 그대로
+        보여야 하므로 반대쪽 boolean 을 함께 준다.
+      */
+      hasNoPostLink:
+        card.postId === null,
+
       categoryName:
-        categoryById.get(card.categoryId)?.name ||
-        "",
+        cardCategoryName,
+
+      /* 글이 들어 있는 폴더 — 없으면 빈 문자열(위 folderNamePath 주석) */
+
+      folderName:
+        cardFolderNames.length
+          ? cardFolderNames[cardFolderNames.length - 1]
+          : "",
+
+      folderNamePath:
+        cardFolderNames,
+
+      /* "TXT > 2002 > 1" — 카테고리 > 폴더 > 글 제목 */
+
+      sourcePathLabel:
+        cardSourceSegments.join(" > "),
+
+      sourcePathSegments:
+        cardSourceSegments,
 
       categoryHref:
         categoryById.has(card.categoryId)
@@ -3510,6 +3992,130 @@ async function buildHighlightsSkinContext(
     });
 
     };
+
+
+
+  return {
+    buildCard,
+    folderKeyOf
+  };
+
+}
+
+
+/* =========================================================
+   buildHighlightsSkinContext(ownerId, options) -> MEMOS context | null
+   (HIGHLIGHT-1 §7)
+
+   여러 원본 글 카테고리에서 만들어진 하이라이트 카드를 한 화면에
+   모은다. 여기서 말하는 "폴더"는 **원본 글의 카테고리**다 — 별도의
+   중첩 폴더 시스템(post_folders)을 만들지 않는다(요구사항 7).
+
+   ★ 카드를 손으로 옮기지 않아도 된다
+
+   카드가 어느 폴더에 속하는지는 저장된 값이 아니라 **지금의**
+   posts.category_id다(posts-view-highlight-store.js가 posts를 embed해
+   함께 받는다). 그래서 글의 카테고리를 옮기면 카드도 따라 옮겨가고,
+   카테고리가 없는 글의 카드도 "카테고리 없음" 폴더에 모여 누락되지
+   않는다.
+
+   ★ 보이는 것만 온다
+
+   목록도 개수도 전부 post_highlights의 SELECT 정책을 통과한 행으로만
+   만든다 — 비밀글/비공개 글/삭제된 글의 발췌문은 방문자의 목록에도
+   개수에도 나타나지 않는다(요구사항 11).
+
+   options
+     view        "all" | "folders"   (기본 "all")
+     categoryId  폴더 하나를 연 경우 그 카테고리 id("none"이면 무분류)
+========================================================== */
+
+async function buildHighlightsSkinContext(
+  ownerId,
+  options = {}
+) {
+
+  if (!ownerId) {
+
+    throw new Error(
+      "buildHighlightsSkinContext: ownerId is required"
+    );
+
+  }
+
+
+  const commonData =
+    await fetchSkinCommonData(ownerId);
+
+
+  const [
+    base,
+    cards,
+    folderSettings,
+    postFolders
+  ] =
+    await Promise.all([
+      buildBaseSkinContext(ownerId, options, commonData),
+      loadHighlightCards(ownerId),
+      loadHighlightFolderSettings(ownerId),
+
+      /*
+        글이 들어 있는 폴더 이름 — 카드의 "원문 위치" 표시에만 쓴다.
+        실패하면 빈 배열이고 위치 표시가 "카테고리 > 글 제목"으로
+        짧아질 뿐이다(위 fetchSkinOwnerFolders 주석).
+      */
+      fetchSkinOwnerFolders(ownerId)
+    ]);
+
+
+  const slug =
+    commonData.slug;
+
+
+  /* 조회 자체가 실패한 경우 — 빈 목록과 구분해서 알린다 */
+
+  const hasError =
+    cards === null;
+
+
+  const list =
+    Array.isArray(cards)
+      ? cards
+      : [];
+
+
+  const categoryById =
+    new Map(
+      commonData.categories.map(
+        (category) =>
+          [category.id, category]
+      )
+    );
+
+
+  /* 카드 조립은 HOME 과 공유한다 — 위
+     createSkinHighlightCardBuilder() 주석 참고. */
+
+  const HIGHLIGHT_UNFILED_ID =
+    SKIN_HIGHLIGHT_UNFILED_ID;
+
+
+  const {
+    buildCard,
+    folderKeyOf
+  } =
+    createSkinHighlightCardBuilder({
+      slug,
+      categoryById,
+      postFolders
+    });
+
+  const requestedKey =
+    options.categoryId === undefined ||
+    options.categoryId === null ||
+    options.categoryId === ""
+      ? null
+      : String(options.categoryId);
 
 
   const allCards =

@@ -397,6 +397,103 @@ function applySkinUrlBinding(el, prop, resolvePath) {
 }
 
 /* =========================================================
+   data-imory-kind — "이 항목이 어떤 종류인가"를 CSS가 볼 수 있게
+   한다(SKIN_SURFACE_AND_TRANSITION_CONTRACT.md 재료 일치 라운드).
+
+   왜 필요한가 — 카테고리 아이콘처럼 "종류에 따라 다르게 그리는"
+   장식을 지금까지 스킨은 `li:nth-child(2)` 같은 **순서**나 본문에
+   박은 글자(▤)로 흉내 낼 수밖에 없었다. 그러면 사용자가 카테고리
+   순서를 바꾸거나 하나를 지우는 순간 아이콘이 통째로 어긋나고,
+   목록 길이가 조금만 달라도 Studio와 공개 화면이 서로 다른 그림을
+   그린다. 종류는 Context가 이미 알고 있으므로(navigation.*.iconKind)
+   그 값을 속성 하나로 DOM에 얹어 CSS 선택자에 넘긴다.
+
+     directive : data-imory-kind="item.iconKind"   (값은 context path)
+     결과      : data-kind="document"              (해석된 종류 토큰)
+
+   src/href와 같은 결이다 — 지시 속성과 결과 속성의 이름이 다르므로
+   같은 DOM을 다시 렌더해도 경로가 값으로 덮어써지지 않는다.
+
+   토큰은 아주 좁게 제한한다(소문자로 시작, 소문자/숫자/하이픈,
+   32자) — 스킨 CSS의 attribute selector에 그대로 들어갈 값이라
+   따옴표·대괄호·공백이 원천적으로 섞일 수 없어야 한다. 형태가
+   맞지 않으면 속성을 지운다(스킨이 적어 둔 기본 모양이 남는다).
+========================================================== */
+
+const SKIN_KIND_TOKEN_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+
+function applySkinKind(el, resolvePath) {
+
+  const path = el.getAttribute("data-imory-kind");
+
+  let value;
+
+  try {
+    value = resolvePath(path);
+  } catch (err) {
+    console.warn(`[skin-render] failed to resolve data-imory-kind path "${path}"`, err);
+    value = undefined;
+  }
+
+  if (typeof value !== "string" || !SKIN_KIND_TOKEN_PATTERN.test(value)) {
+
+    el.removeAttribute("data-kind");
+    return;
+
+  }
+
+  el.setAttribute("data-kind", value);
+
+}
+
+/* =========================================================
+   data-imory-color — 항목마다 다른 색을 CSS 변수로 넘긴다.
+
+   하이라이트 카드처럼 "저장된 색"이 있는 항목은 그 색으로 강조선을
+   그릴 수 있어야 하는데, 스킨은 style 속성을 쓸 수 없고(sanitizer가
+   전면 금지, skin/skin-sanitize.js) CSS만으로는 데이터에 있는 색을
+   알 방법이 없다. 그래서 렌더러가 그 요소에 custom property 하나만
+   얹어 준다.
+
+     directive : data-imory-color="item.color"
+     결과      : style="--imory-color: #f6e0c8"
+
+   스킨 CSS는 `var(--imory-color, <기본색>)`로 받는다 — 값이 없거나
+   모양이 틀리면 변수 자체가 없으므로 스킨이 적어 둔 기본색이 그대로
+   쓰인다. 값은 #rgb / #rrggbb 만 받는다: setProperty에 넘기는
+   문자열이라 함수·url·세미콜론이 섞이면 안 된다.
+========================================================== */
+
+const SKIN_COLOR_VALUE_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+
+function applySkinColor(el, resolvePath) {
+
+  const path = el.getAttribute("data-imory-color");
+
+  let value;
+
+  try {
+    value = resolvePath(path);
+  } catch (err) {
+    console.warn(`[skin-render] failed to resolve data-imory-color path "${path}"`, err);
+    value = undefined;
+  }
+
+  const trimmed =
+    typeof value === "string" ? value.trim() : "";
+
+  if (!SKIN_COLOR_VALUE_PATTERN.test(trimmed)) {
+
+    el.style.removeProperty("--imory-color");
+    return;
+
+  }
+
+  el.style.setProperty("--imory-color", trimmed);
+
+}
+
+/* =========================================================
    data-imory-region — protected post-body contract
    (AI_SKIN_PHASE1C_PAGE_CONTRACT.md 7절/Slice 1C-E).
 
@@ -456,6 +553,14 @@ function walkSkinTree(el, resolvePath, repeatDepth) {
 
   if (el.hasAttribute("data-imory-href")) {
     applySkinUrlBinding(el, "href", resolvePath);
+  }
+
+  if (el.hasAttribute("data-imory-kind")) {
+    applySkinKind(el, resolvePath);
+  }
+
+  if (el.hasAttribute("data-imory-color")) {
+    applySkinColor(el, resolvePath);
   }
 
   Array.from(el.children).forEach((child) => walkSkinTree(child, resolvePath, repeatDepth));

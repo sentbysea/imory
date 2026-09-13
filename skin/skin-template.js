@@ -131,12 +131,12 @@ function getDefaultHighlightsTemplate() {
       </div>
 
       <div class="highlight-card-list" data-imory-if="highlights.showCards">
-        <article class="highlight-card" data-imory-repeat="highlights.cards">
+        <article class="highlight-card" data-imory-repeat="highlights.cards" data-imory-color="item.color">
           <blockquote class="highlight-card-excerpt" data-imory-bind="item.excerpt"></blockquote>
           <p class="highlight-card-note" data-imory-if="item.hasNote" data-imory-bind="item.note"></p>
           <div class="highlight-card-meta">
-            <a data-imory-if="item.postHref" data-imory-href="item.postHref" data-imory-bind="item.postTitle"></a>
-            <span data-imory-if="item.categoryName" data-imory-bind="item.categoryName"></span>
+            <a class="highlight-card-source" data-imory-if="item.postHref" data-imory-href="item.postHref" data-imory-bind="item.sourcePathLabel"></a>
+            <span class="highlight-card-source" data-imory-if="item.hasNoPostLink" data-imory-bind="item.sourcePathLabel"></span>
             <span data-imory-bind="item.dateLabel"></span>
             <span class="highlight-card-missing" data-imory-if="item.isMissing">원문에서 위치를 찾을 수 없음</span>
             <span class="highlight-card-unchecked" data-imory-if="item.isPlacementUnknown">원문 위치 확인 전</span>
@@ -153,7 +153,16 @@ function getDefaultHighlightsTemplate() {
 
     </section>`,
 
-    css: ``
+    /*
+      카드 왼쪽 강조선은 **그 하이라이트의 색**이다 — 렌더러가 카드
+      요소에 --imory-color 를 얹어 준다(data-imory-color, skin/
+      skin-render.js). 색이 없거나 모양이 틀린 카드에서는 변수 자체가
+      없으므로 아래 기본색이 그대로 쓰인다. 나머지 배치는
+      posts/posts-highlight.css 가 담당한다(스킨이 자기 template 을
+      가지면 이 CSS 는 아예 쓰이지 않는다).
+    */
+    css: `.highlight-card { border-left: 3px solid var(--imory-color, #e6e3e6); padding-left: 12px; }
+      .highlight-card-source { display: block; }`
 
   };
 
@@ -343,7 +352,12 @@ const SKIN_GALLERY_BINDING_ATTRS =
     "data-imory-if",
     "data-imory-bind",
     "data-imory-src",
-    "data-imory-href"
+    "data-imory-href",
+    /* 재료 일치 라운드에서 더해진 두 종(skin/skin-render.js) — 이
+       속성만으로 어떤 Context 경로를 쓰는 스킨도 있을 수 있으므로
+       판정 대상에 함께 넣는다. */
+    "data-imory-kind",
+    "data-imory-color"
   ];
 
 const SKIN_GALLERY_CONTEXT_PREFIXES =
@@ -354,6 +368,21 @@ const SKIN_GALLERY_CONTEXT_PREFIXES =
 
 const SKIN_PAGINATION_CONTEXT_PREFIXES =
   ["category.pagination"];
+
+
+/* 재료 일치 라운드: "이 CATEGORY template 이 루트 글 목록
+   (category.posts)을 실제로 그리는가" — 아래
+   skinTemplateUsesRootPostList() 주석 참고. */
+
+const SKIN_ROOT_POST_LIST_CONTEXT_PREFIXES =
+  ["category.posts"];
+
+
+/* 재료 일치 라운드: "이 HOME template 이 발췌 카드 자리를 그리는가"
+   — 아래 skinTemplateUsesHomeHighlights() 주석 참고. */
+
+const SKIN_HOME_HIGHLIGHT_CONTEXT_PREFIXES =
+  ["home.highlights"];
 
 
 /*
@@ -492,6 +521,78 @@ function skinPackageUsesPagination(
 }
 
 
+/* =========================================================
+   skinTemplateUsesRootPostList(template) -> boolean
+   (Skin/Studio/Public 재료 일치 라운드)
+
+   "이 CATEGORY template 이 category.posts 를 실제로 그리는가".
+
+   왜 필요한가 — 페이지네이션이 켜지면 category.tree 에서 **루트 글이
+   빠진다**(폴더 노드만 남는다, skin/skin-context.js). 루트 글은 그때
+   category.posts 로만 온다. 그래서 폴더 트리만 그리고 category.posts
+   는 그리지 않는 스킨에서 페이지네이션을 켜면, 관리 화면에도 있고
+   Studio 에서도 보이는 카테고리 루트 글이 공개 화면에서만 통째로
+   사라진다(실제로 사용자 스킨에서 이 일이 났다).
+
+   플랫폼이 남의 스킨 마크업을 고칠 수는 없으므로, 갤러리/페이지네이션
+   때와 **같은 방식**으로 조건을 하나 더 단다: 루트 글을 받아 그릴
+   자리가 없는 스킨에서는 페이지 나누기 자체를 켜지 않는다. 그러면
+   그 스킨은 지금까지와 100% 동일한 조회(tree 에 루트 글 포함)를
+   하고, 설정은 남아 있다가 category.posts 를 그리는 스킨으로 바꾸면
+   그때 살아난다.
+========================================================== */
+
+function skinTemplateUsesRootPostList(
+  template
+) {
+
+  return skinTemplateUsesContextPrefixes(
+    template,
+    SKIN_ROOT_POST_LIST_CONTEXT_PREFIXES
+  );
+
+}
+
+
+function skinPackageUsesRootPostList(
+  skinPackage
+) {
+
+  return skinTemplateUsesRootPostList(
+    resolveSkinTemplate(skinPackage, "category")
+  );
+
+}
+
+
+/* =========================================================
+   skinTemplateUsesHomeHighlights(template) -> boolean
+   (Skin/Studio/Public 재료 일치 라운드)
+
+   "이 HOME template 이 home.highlights 를 실제로 그리는가".
+
+   HOME 의 하이라이트 재료는 조회 두 번(post_highlights + post_folders)을
+   더 부른다. 그 자리를 그리지 않는 대다수의 스킨에서 그 두 번을 매
+   HOME 마다 치르게 할 이유가 없다 — 갤러리/페이지네이션과 같은
+   방식으로, 받아 그릴 자리가 있는 스킨에서만 조회한다
+   (skin/skin-context.js buildHomeSkinContext 의 wantsHighlights).
+
+   Studio Preview 는 이 판정을 하지 않고 항상 조회한다 — 편집 중에
+   마크업을 막 붙인 순간에도 재료가 와 있어야 하기 때문이다.
+========================================================== */
+
+function skinTemplateUsesHomeHighlights(
+  template
+) {
+
+  return skinTemplateUsesContextPrefixes(
+    template,
+    SKIN_HOME_HIGHLIGHT_CONTEXT_PREFIXES
+  );
+
+}
+
+
 /*
   SkinPackage 단위 편의 함수 — templates.category를 뽑아 위 판정에
   넘긴다. 호출자(skin/skin-category.js, studio/preview/
@@ -510,10 +611,294 @@ function skinPackageUsesGallery(
 }
 
 
+/* =========================================================
+   auditSkinPackageMaterials(skinPackage) -> string[]
+   (Skin/Studio/Public 재료 일치 라운드)
+
+   "저장은 되지만 화면에서 조용히 잘못 나오는" SkinPackage를 사람이
+   읽을 수 있는 문장으로 알려준다. **거부하지 않는다** — 여기서
+   막으면 이미 저장돼 있는 스킨을 다시 가져올 수 없게 되고, 그중
+   상당수는 의도한 선택일 수도 있다(요구사항 "기존 호환성을 깨지
+   않는 범위"). Import/Save 화면이 이 문장들을 그대로 보여준다.
+
+   판정은 전부 마크업/CSS 자체를 보고 한다 — metadata.supports 를
+   신뢰 경계로 쓰지 않는다는 원칙(skinPackageSupportsPageType 주석)은
+   그대로다. supports 는 여기서 "작성자가 그렇게 주장했다"는 입력일
+   뿐이고, 실제 template 과 어긋날 때 그 어긋남을 알리는 데만 쓴다.
+========================================================== */
+
+/* nth-child 규칙이 걸려 있으면 순서 의존 장식으로 의심할 nav 반복 경로 */
+
+const SKIN_AUDIT_NAV_REPEAT_PREFIXES =
+  [
+    "navigation.categories",
+    "navigation.postCategories",
+    "navigation.galleryCategories",
+    "navigation.textPostCategories",
+    "navigation.bannerCategories"
+  ];
+
+
+function collectSkinAuditNavClassNames(html) {
+
+  const names = new Set();
+
+  let parsed;
+
+  try {
+
+    parsed =
+      new DOMParser().parseFromString(
+        String(html || ""),
+        "text/html"
+      );
+
+  }
+
+  catch (err) {
+
+    return names;
+
+  }
+
+
+  Array.from(
+    parsed.querySelectorAll("[data-imory-repeat]")
+  ).forEach(
+    (el) => {
+
+      const path =
+        el.getAttribute("data-imory-repeat") || "";
+
+
+      if (
+        !SKIN_AUDIT_NAV_REPEAT_PREFIXES.includes(path)
+      ) {
+
+        return;
+
+      }
+
+
+      /* 반복되는 요소 자신과 그 안쪽의 class 전부가 후보다 */
+
+      [el, ...Array.from(el.querySelectorAll("*"))].forEach(
+        (node) => {
+
+          String(node.getAttribute("class") || "")
+            .split(/\s+/)
+            .filter(Boolean)
+            .forEach(
+              (name) => names.add(name)
+            );
+
+        }
+      );
+
+    }
+  );
+
+
+  return names;
+
+}
+
+
+function auditSkinPackageMaterials(skinPackage) {
+
+  const warnings = [];
+
+
+  if (!skinPackage || typeof skinPackage !== "object") {
+
+    return warnings;
+
+  }
+
+
+  const templates =
+    (skinPackage.templates && typeof skinPackage.templates === "object")
+      ? skinPackage.templates
+      : {};
+
+  const supports =
+    (
+      skinPackage.metadata &&
+      typeof skinPackage.metadata === "object" &&
+      skinPackage.metadata.supports &&
+      typeof skinPackage.metadata.supports === "object"
+    )
+      ? skinPackage.metadata.supports
+      : {};
+
+
+  /* 1) supports 만 선언하고 실제 template 을 빼먹은 경우 */
+
+  const claimsHighlights =
+    supports.highlights === true ||
+    supports.memos === true;
+
+  const hasHighlightsTemplate =
+    SKIN_HIGHLIGHTS_TEMPLATE_NAMES.some(
+      (name) =>
+        templates[name] &&
+        typeof templates[name].html === "string"
+    );
+
+  if (claimsHighlights && !hasHighlightsTemplate) {
+
+    warnings.push(
+      "metadata.supports.highlights 가 true 인데 templates.highlights 가 없습니다 — 하이라이트 화면은 플랫폼 기본 template 으로 그려집니다(이 스킨의 디자인이 아닙니다)."
+    );
+
+  }
+
+
+  /* 2) 페이지 링크는 그리면서 루트 글 목록은 그리지 않는 CATEGORY */
+
+  const categoryTemplate =
+    resolveSkinTemplate(skinPackage, "category");
+
+  if (
+    categoryTemplate &&
+    skinTemplateUsesPagination(categoryTemplate) &&
+    !skinTemplateUsesRootPostList(categoryTemplate)
+  ) {
+
+    warnings.push(
+      "CATEGORY 템플릿이 category.pagination 은 그리는데 category.posts 를 그리지 않습니다 — 페이지를 나누면 폴더에 들어 있지 않은 글이 화면에서 사라지므로, 플랫폼은 이 스킨에서 페이지 나누기를 켜지 않습니다."
+    );
+
+  }
+
+
+  /* 3) 카테고리 아이콘을 순서(nth-child)로 결정하는 CSS */
+
+  const css =
+    typeof skinPackage.css === "string"
+      ? skinPackage.css
+      : "";
+
+  if (css.includes("nth-child")) {
+
+    const navClassNames =
+      new Set();
+
+    ["home", "category", "post", "banner", "folder", ...SKIN_HIGHLIGHTS_TEMPLATE_NAMES].forEach(
+      (pageType) => {
+
+        const template =
+          templates[pageType];
+
+
+        if (template && typeof template.html === "string") {
+
+          collectSkinAuditNavClassNames(template.html).forEach(
+            (name) => navClassNames.add(name)
+          );
+
+        }
+
+      }
+    );
+
+    if (typeof skinPackage.html === "string") {
+
+      collectSkinAuditNavClassNames(skinPackage.html).forEach(
+        (name) => navClassNames.add(name)
+      );
+
+    }
+
+
+    /* selector(={ 앞) 안에 nth-child 와 nav class 가 함께 있는 규칙만 */
+
+    const orderDependentSelector =
+      css
+        .split("}")
+        .map(
+          (chunk) => chunk.split("{")[0] || ""
+        )
+        .find(
+          (selector) =>
+            selector.includes("nth-child") &&
+            Array.from(navClassNames).some(
+              (name) =>
+                selector.includes(`.${name}`)
+            )
+        );
+
+    if (orderDependentSelector) {
+
+      warnings.push(
+        `카테고리 메뉴의 모양이 순서에 묶여 있습니다(${orderDependentSelector.trim()}) — 사용자가 카테고리 순서를 바꾸거나 하나를 지우면 아이콘이 어긋납니다. data-imory-kind="item.iconKind" 로 종류를 얹고 [data-kind="..."] 로 그리세요.`
+      );
+
+    }
+
+  }
+
+
+  /* 4) Studio 에서만 존재하는 샘플 문구가 template 에 박힌 경우
+
+     Preview 는 계정에 하이라이트가 하나도 없을 때 샘플 카드를 끼워
+     넣는다(studio/preview/preview-navigation.js). 그 문장을 보고
+     template 에 그대로 적어 두면 방문자 화면에도 남는다. 샘플 목록의
+     소유자는 Preview 쪽이므로 전역이 있으면 그것을 읽는다 — 여기에
+     문장을 복사해 두면 두 벌이 갈라진다. */
+
+  const sampleTexts =
+    (
+      typeof window !== "undefined" &&
+      Array.isArray(window.STUDIO_HIGHLIGHT_SAMPLE_TEXTS)
+    )
+      ? window.STUDIO_HIGHLIGHT_SAMPLE_TEXTS
+      : [];
+
+  if (sampleTexts.length) {
+
+    const allHtml =
+      [
+        typeof skinPackage.html === "string" ? skinPackage.html : "",
+        ...Object.keys(templates).map(
+          (pageType) =>
+            (templates[pageType] && typeof templates[pageType].html === "string")
+              ? templates[pageType].html
+              : ""
+        )
+      ].join("\n");
+
+    const leaked =
+      sampleTexts.find(
+        (text) =>
+          typeof text === "string" &&
+          text.trim() &&
+          allHtml.includes(text)
+      );
+
+    if (leaked) {
+
+      warnings.push(
+        `Studio 미리보기 전용 샘플 문구가 템플릿에 들어 있습니다("${leaked.slice(0, 20)}…") — 공개 화면에도 그대로 나옵니다. 바인딩(data-imory-bind)으로 바꾸세요.`
+      );
+
+    }
+
+  }
+
+
+  return warnings;
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.skinTemplateUsesGallery =
     skinTemplateUsesGallery;
+
+  window.auditSkinPackageMaterials =
+    auditSkinPackageMaterials;
 
   window.skinPackageUsesGallery =
     skinPackageUsesGallery;
@@ -523,6 +908,12 @@ if (typeof window !== "undefined") {
 
   window.skinPackageUsesPagination =
     skinPackageUsesPagination;
+
+  window.skinTemplateUsesRootPostList =
+    skinTemplateUsesRootPostList;
+
+  window.skinPackageUsesRootPostList =
+    skinPackageUsesRootPostList;
 
   window.resolveSkinHighlightsTemplate =
     resolveSkinHighlightsTemplate;

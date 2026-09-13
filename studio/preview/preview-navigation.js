@@ -168,7 +168,11 @@ function renderHomePreview() {
   postRenderToFrame(
     {
       skin: buildStudioHomePreviewSkin(currentWorkingSkin),
-      context: currentSkinContext
+
+      /* 하이라이트가 0건인 계정에서도 발췌 카드 자리를 볼 수 있게
+         샘플을 끼운다 — 위 buildStudioHomeHighlightSampleContext 주석 */
+      context:
+        buildStudioHomeHighlightSampleContext(currentSkinContext)
     }
   );
 
@@ -356,6 +360,10 @@ async function renderCategoryPreviewFor(categoryId, options, page) {
           supportsFolderPage: !!resolveSkinTemplate(currentWorkingSkin, "folder"),
           supportsGallery: skinTemplateUsesGallery(categoryTemplate),
           supportsPagination: skinTemplateUsesPagination(categoryTemplate),
+          /* 공개 화면(skin/skin-category.js)과 **같은 판정**을 넘긴다 —
+             하나라도 빠지면 Studio 와 공개 화면이 서로 다른 목록을
+             받는다(재료 일치 라운드). */
+          supportsRootPostList: skinTemplateUsesRootPostList(categoryTemplate),
           page: page || 1
         }
       );
@@ -1054,8 +1062,14 @@ const STUDIO_MEMO_SAMPLE_CARDS =
         "여름의 끝",
 
       categoryName:
-        "에세이"
+        "에세이",
+
+      /* 폴더 안의 글도 한 장 — "카테고리 > 폴더 > 제목"이 실제로
+         어떻게 보이는지 편집자가 확인할 수 있어야 한다. */
+      folderNames:
+        ["2024"]
     },
+
     {
       excerpt:
         "문을 닫고 나서야 그 방이 얼마나 조용했는지 알았다.",
@@ -1091,28 +1105,54 @@ const STUDIO_MEMO_SAMPLE_CARDS =
   ];
 
 
-function buildStudioHighlightSampleContext(
-  context
-) {
+/*
+  이 샘플 문구는 **Preview 안에서만** 존재한다. 편집자가 화면에서 본
+  문장을 template 에 그대로 적어 두면 방문자 화면에도 남으므로,
+  Import/Save 감사가 그것을 알아볼 수 있게 목록을 내보낸다
+  (skin/skin-template.js auditSkinPackageMaterials). 목록의 소유자는
+  이 파일 하나다 — 감사 쪽에 문장을 복사해 두지 않는다.
+*/
 
-  const highlights =
-    context?.highlights;
+if (typeof window !== "undefined") {
+
+  window.STUDIO_HIGHLIGHT_SAMPLE_TEXTS =
+    STUDIO_MEMO_SAMPLE_CARDS.flatMap(
+      (sample) =>
+        [sample.excerpt, sample.note].filter(Boolean)
+    );
+
+}
 
 
-  if (
-    !highlights ||
-    highlights.hasError ||
-    (highlights.cards || []).length > 0
-  ) {
+/* 샘플 카드 배열 — 하이라이트 화면과 HOME 의 발췌 자리가 같은 것을
+   쓴다(공개 Context 가 두 곳에 같은 카드 모양을 내보내는 것과 같은
+   이유, skin/skin-context.js createSkinHighlightCardBuilder). */
 
-    return context;
+function buildStudioHighlightSampleCards() {
 
-  }
+  return STUDIO_MEMO_SAMPLE_CARDS.map(
+      (sample, index) => {
+
+      /*
+        공개 Context 의 buildCard()와 **같은 조립**이다
+        (skin/skin-context.js) — 카테고리 > 폴더 > 글 제목을 이어
+        붙이고 빈 칸은 뺀다. 스킨이 sourcePathLabel 하나만 그려도
+        Studio 와 공개 화면이 같은 모양이어야 한다.
+      */
+
+      const sourcePathSegments =
+        [
+          sample.categoryName,
+          ...(sample.folderNames || []),
+          sample.postTitle
+        ].filter(
+          (segment) =>
+            typeof segment === "string" &&
+            segment.trim() !== ""
+        );
 
 
-  const cards =
-    STUDIO_MEMO_SAMPLE_CARDS.map(
-      (sample, index) => ({
+      return ({
         id:
           `preview-sample-${index + 1}`,
 
@@ -1148,11 +1188,27 @@ function buildStudioHighlightSampleContext(
         postHref:
           null,
 
+        hasNoPostLink:
+          true,
+
         categoryName:
           sample.categoryName,
 
         categoryHref:
           null,
+
+        folderName:
+          (sample.folderNames || []).length
+            ? sample.folderNames[sample.folderNames.length - 1]
+            : "",
+
+        folderNamePath:
+          sample.folderNames || [],
+
+        sourcePathLabel:
+          sourcePathSegments.join(" > "),
+
+        sourcePathSegments,
 
         folderId:
           "sample",
@@ -1174,8 +1230,35 @@ function buildStudioHighlightSampleContext(
 
         placementLabel:
           "원문 위치 확인 전"
-      })
+      });
+
+      }
     );
+
+}
+
+
+function buildStudioHighlightSampleContext(
+  context
+) {
+
+  const highlights =
+    context?.highlights;
+
+
+  if (
+    !highlights ||
+    highlights.hasError ||
+    (highlights.cards || []).length > 0
+  ) {
+
+    return context;
+
+  }
+
+
+  const cards =
+    buildStudioHighlightSampleCards();
 
 
   /*
@@ -1211,6 +1294,74 @@ function buildStudioHighlightSampleContext(
 
     /* DEPRECATED alias — 같은 객체(공개 Context 와 같은 모양) */
     memos: sampleHighlights
+  };
+
+}
+
+
+/* =========================================================
+   HOME 의 발췌 자리 Preview (재료 일치 라운드)
+
+   하이라이트 화면과 같은 이유로 샘플을 쓴다 — 하이라이트가 하나도
+   없는 계정에서 HOME 을 꾸미면, 발췌 카드 자리가 통째로 접혀 무엇을
+   만들고 있는지 볼 수가 없다. **읽기에 성공했는데 0건일 때만** 넣고
+   (hasError 면 절대 넣지 않는다), 카드 모양은 하이라이트 화면의
+   샘플과 같은 함수가 만든다.
+========================================================== */
+
+function buildStudioHomeHighlightSampleContext(
+  context
+) {
+
+  const highlights =
+    context?.home?.highlights;
+
+
+  if (
+    !highlights ||
+    highlights.hasError ||
+    (highlights.cards || []).length > 0
+  ) {
+
+    return context;
+
+  }
+
+
+  const cards =
+    buildStudioHighlightSampleCards();
+
+
+  return {
+    ...context,
+
+    home: {
+      ...context.home,
+
+      highlights: {
+        ...highlights,
+
+        cards,
+
+        featured:
+          cards.slice(0, 1),
+
+        card:
+          cards[0] || null,
+
+        hasCard:
+          cards.length > 0,
+
+        count:
+          cards.length,
+
+        isEmpty:
+          false,
+
+        isSample:
+          true
+      }
+    }
   };
 
 }

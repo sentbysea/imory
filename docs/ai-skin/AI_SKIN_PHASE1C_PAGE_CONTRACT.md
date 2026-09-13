@@ -305,6 +305,11 @@ Post Viewer(실제 페이지 컨트롤러)가 `renderSkin()`으로 Skin을 먼�
 
 ## 8. Binding 문법 표 (v0.1 — 기존 5종 그대로, 신규 제안 1종 별도 표기)
 
+> **변경됨 → [AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md](./AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md) 1절.**
+> 재료 일치 라운드에서 `data-imory-kind`(종류 토큰 → `data-kind`)와
+> `data-imory-color`(색 → `--imory-color`) 두 종이 더해졌다. 이 표의 5종은
+> 그대로다.
+
 | 문법 | 상태 | 값/제약 |
 |---|---|---|
 | `data-imory-bind="path"` | **기존, 변경 없음** | textContent만. `undefined`/`null` → 빈 문자열 |

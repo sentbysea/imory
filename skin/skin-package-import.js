@@ -344,16 +344,34 @@ async function validateSkinPackageImport(rawJsonText) {
     templates[highlightsTemplateKey] = { html: sanitizedHighlightsHtml };
   }
 
-  return {
-    ok: true,
-    skinPackage: {
+  const skinPackage =
+    {
       schemaVersion: 1,
       templates,
       css: cssRaw,
       imageSlots,
       regions,
       metadata
-    }
+    };
+
+  /*
+    재료 일치 라운드 — "저장은 되지만 화면에서 조용히 잘못 나오는"
+    조합을 사람이 읽을 문장으로 함께 돌려준다. **거부가 아니다**:
+    이미 저장돼 있는 스킨을 다시 가져올 수 없게 만들면 안 되고,
+    경고 중 일부는 의도한 선택일 수도 있다. 판정은
+    auditSkinPackageMaterials 한 곳에만 있다(skin/skin-template.js) —
+    Save 경로도 같은 함수를 쓴다.
+  */
+
+  const warnings =
+    typeof auditSkinPackageMaterials === "function"
+      ? auditSkinPackageMaterials(skinPackage)
+      : [];
+
+  return {
+    ok: true,
+    warnings,
+    skinPackage
   };
 
 }

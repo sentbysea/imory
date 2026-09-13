@@ -26,7 +26,20 @@ const SKIN_SANITIZE_ALLOWED_TAGS = new Set([
   "b", "strong", "i", "em", "u", "small", "mark", "blockquote", "cite", "sub", "sup",
   "ul", "ol", "li", "dl", "dt", "dd",
   "a", "img",
-  "details", "summary"
+  "details", "summary",
+  /*
+    time — 날짜/시각을 감싸는 의미 태그. 스크립트도 상호작용도 없는
+    순수 인라인 요소라 다른 인라인 태그와 위험도가 같다.
+
+    왜 뒤늦게 더했나: 플랫폼이 들고 있는 기본 template 과 생성기,
+    그리고 실제 사용자 스킨들이 전부 `<time data-imory-bind=
+    "item.publishedAtLabel">` 로 날짜를 그리고 있었다. 허용 목록에
+    없으면 sanitizer 가 껍데기를 벗기면서 **그 바인딩 속성까지**
+    함께 사라져(위 "미지의 태그" 분기) 날짜가 아무 데서도 나오지
+    않았다. 태그를 바꾸는 것보다 이 목록에 한 줄 더하는 쪽이 이미
+    저장된 스킨들까지 한 번에 고친다.
+  */
+  "time"
 ]);
 
 /* 내용까지 통째로 제거(unwrap 아님) — posts-sanitize.js의 unwrap
@@ -43,13 +56,27 @@ const SKIN_SANITIZE_REMOVE_WITH_CONTENT_TAGS = new Set([
 /* 태그 무관 공통 허용 속성(값 검증 불필요) */
 const SKIN_SANITIZE_ALLOWED_COMMON_ATTRS = new Set(["class", "lang", "dir", "title", "role"]);
 
-/* v0.1 바인딩 속성 5종 — 값은 URL이 아니라 context path 문자열 */
+/* 바인딩 속성 — 값은 URL이 아니라 context path 문자열.
+
+   v0.1의 5종(bind/src/href/repeat/if)에 재료 일치 라운드에서 두 종이
+   더해졌다. 둘 다 값은 여전히 dotted context path이고, 렌더러가
+   해석한 결과는 **다른 이름**으로 나간다(skin/skin-render.js):
+
+     data-imory-kind  -> data-kind="<종류 토큰>"     종류별 아이콘/장식
+     data-imory-color -> style="--imory-color: #..." 항목별 색
+
+   그래서 여기서는 기존 5종과 완전히 같은 규칙(path 형태 검사)으로
+   통과시키면 되고, 결과 속성(data-kind / style)은 저장되는 HTML에
+   남지 않는다 — style은 여전히 SKIN_SANITIZE_DENY_ATTRS로 전면
+   금지이고 data-kind는 화이트리스트에 없어 조용히 제거된다. */
 const SKIN_SANITIZE_BIND_ATTRS = new Set([
   "data-imory-bind",
   "data-imory-src",
   "data-imory-href",
   "data-imory-repeat",
-  "data-imory-if"
+  "data-imory-if",
+  "data-imory-kind",
+  "data-imory-color"
 ]);
 
 /* =========================================================

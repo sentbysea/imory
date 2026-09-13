@@ -90,10 +90,10 @@ const SKIN_GENERATOR_NAV_HTML =
   `<nav class="skin-block skin-block--nav skin-nav">` +
   `<ul class="skin-nav-list">` +
   `<li class="skin-nav-item" data-imory-repeat="navigation.categories">` +
-  `<a class="skin-nav-link" data-imory-href="item.href" data-imory-bind="item.name"></a>` +
+  `<a class="skin-nav-link" data-imory-kind="item.iconKind" data-imory-href="item.href" data-imory-bind="item.name"></a>` +
   `</li>` +
   `<li class="skin-nav-item skin-nav-item--highlights" data-imory-if="navigation.highlights.showStandaloneLink">` +
-  `<a class="skin-nav-link" data-imory-href="navigation.highlights.href" data-imory-bind="navigation.highlights.name"></a>` +
+  `<a class="skin-nav-link" data-imory-kind="navigation.highlights.iconKind" data-imory-href="navigation.highlights.href" data-imory-bind="navigation.highlights.name"></a>` +
   `</li>` +
   `</ul>` +
   `</nav>`;
@@ -113,6 +113,28 @@ const SKIN_GENERATOR_HOME_PROFILE_HTML =
   `<p class="skin-profile-bio" data-imory-if="profile.bio" data-imory-bind="profile.bio"></p>` +
   `</section>`;
 
+/*
+  재료 일치 라운드: HOME 의 하이라이트 자리는 링크 한 줄이 아니라
+  **실제 발췌 카드 한 장**이다. home.highlights.featured 는 최신 카드
+  하나만 담은 배열이라 같은 카드 마크업을 그대로 쓰면서 한 장만
+  그린다 — CSS 로 두 번째부터 숨기는 순서 의존 장식이 필요 없다.
+
+  하이라이트가 없으면 home.highlights.hasCard 가 false 라 이 블록이
+  통째로 빠진다(빈 카드 껍데기가 남지 않는다).
+*/
+
+const SKIN_GENERATOR_HOME_HIGHLIGHT_HTML =
+  `<section class="skin-block skin-block--main skin-home-highlight" data-imory-if="home.highlights.hasCard">` +
+  `<h2 class="skin-home-highlight-title" data-imory-bind="navigation.highlights.name"></h2>` +
+  `<article class="skin-home-highlight-card" data-imory-repeat="home.highlights.featured" data-imory-color="item.color">` +
+  `<blockquote class="skin-home-highlight-excerpt" data-imory-bind="item.excerpt"></blockquote>` +
+  `<p class="skin-home-highlight-note" data-imory-if="item.hasNote" data-imory-bind="item.note"></p>` +
+  `<a class="skin-home-highlight-source" data-imory-if="item.postHref" data-imory-href="item.postHref" data-imory-bind="item.sourcePathLabel"></a>` +
+  `<span class="skin-home-highlight-source" data-imory-if="item.hasNoPostLink" data-imory-bind="item.sourcePathLabel"></span>` +
+  `</article>` +
+  `<a class="skin-home-highlight-all" data-imory-if="navigation.highlights.enabled" data-imory-href="navigation.highlights.href">ALL</a>` +
+  `</section>`;
+
 const SKIN_GENERATOR_HOME_MAIN_HTML =
   `<section class="skin-block skin-block--main skin-posts">` +
   `<h2 class="skin-posts-title">Recent Posts</h2>` +
@@ -121,7 +143,8 @@ const SKIN_GENERATOR_HOME_MAIN_HTML =
   `<a data-imory-href="item.href" data-imory-bind="item.title"></a>` +
   `</li>` +
   `</ul>` +
-  `</section>`;
+  `</section>` +
+  SKIN_GENERATOR_HOME_HIGHLIGHT_HTML;
 
 
 /* ---- CATEGORY 전용 meta/main 조각 ---- */
@@ -131,14 +154,51 @@ const SKIN_GENERATOR_CATEGORY_META_HTML =
   `<h2 class="skin-category-title" data-imory-bind="category.name"></h2>` +
   `</header>`;
 
+/*
+  ★ 폴더 트리와 루트 글 목록을 **둘 다** 그린다
+
+  카테고리 안에는 폴더(category.tree)와 폴더에 들어 있지 않은 루트 글
+  (category.posts)이 함께 있을 수 있다. 페이지를 나누면 tree 에서
+  루트 글이 빠지므로, 트리만 그리는 스킨에서는 관리 화면에도 있는
+  루트 글이 공개 화면에서만 사라진다.
+
+  그래서 두 블록을 나란히 두고 각각 조건을 건다:
+    · 폴더 블록  — category.hasFolders
+    · 루트 글 블록 — category.showPostsList
+  이 조합이면 페이지네이션을 켜든 끄든 같은 글이 정확히 한 번 나온다
+  (skin/skin-context.js showPostsList 주석의 네 경우 표).
+*/
+
+const SKIN_GENERATOR_CATEGORY_FOLDER_TREE_HTML =
+  `<ul class="skin-category-folders" data-imory-if="category.hasFolders">` +
+  `<li class="skin-category-folder" data-imory-repeat="category.tree">` +
+  `<span class="skin-category-folder-name" data-imory-if="item.name" data-imory-bind="item.name"></span>` +
+  `<a class="skin-category-posts-link" data-imory-if="item.href" data-imory-href="item.href" data-imory-bind="item.title"></a>` +
+  `<ul><li data-imory-repeat="item.children">` +
+  `<span class="skin-category-folder-name" data-imory-if="item.name" data-imory-bind="item.name"></span>` +
+  `<a class="skin-category-posts-link" data-imory-if="item.href" data-imory-href="item.href" data-imory-bind="item.title"></a>` +
+  `<ul><li data-imory-repeat="item.children">` +
+  `<span class="skin-category-folder-name" data-imory-if="item.name" data-imory-bind="item.name"></span>` +
+  `<a class="skin-category-posts-link" data-imory-if="item.href" data-imory-href="item.href" data-imory-bind="item.title"></a>` +
+  `</li></ul>` +
+  `</li></ul>` +
+  `</li>` +
+  `</ul>`;
+
 const SKIN_GENERATOR_CATEGORY_MAIN_HTML =
   `<section class="skin-block skin-block--main skin-category-list">` +
-  `<ul class="skin-category-posts-list" data-imory-if="category.isList">` +
+  /* 목록 모드 전체를 한 번 감싼다 — 갤러리 카테고리에서는 이 블록이
+     통째로 접히고(data-imory-if 는 부정/AND 를 표현할 수 없다),
+     안쪽 두 블록이 각자의 조건으로 다시 갈린다. */
+  `<div class="skin-category-list-mode" data-imory-if="category.isList">` +
+  SKIN_GENERATOR_CATEGORY_FOLDER_TREE_HTML +
+  `<ul class="skin-category-posts-list" data-imory-if="category.showPostsList">` +
   `<li class="skin-category-posts-item" data-imory-repeat="category.posts">` +
   `<a class="skin-category-posts-link" data-imory-href="item.href" data-imory-bind="item.title"></a>` +
   `<time class="skin-category-posts-date" data-imory-bind="item.publishedAt"></time>` +
   `</li>` +
   `</ul>` +
+  `</div>` +
   `<div class="skin-gallery" data-imory-if="category.isGallery">` +
   `<article class="skin-gallery-card" data-imory-repeat="category.gallery.cards">` +
   `<a data-imory-href="item.href">` +
@@ -341,6 +401,36 @@ function createSkinGeneratorBaseCss() {
     `.skin-nav-list { list-style: none; margin: 0; padding: 0; }` +
     `.skin-nav-item { margin: 0 0 8px; }` +
 
+    /*
+      카테고리 아이콘은 **종류**로 그린다 — 순서(nth-child)나 본문에
+      박은 글자가 아니라 data-kind 속성이다. 그 값은 렌더러가
+      navigation.*.iconKind 를 해석해 얹어 준다(data-imory-kind,
+      skin/skin-render.js). 사용자가 카테고리를 재정렬하거나 이름을
+      바꿔도 아이콘이 어긋나지 않고, 목록 길이가 다른 화면끼리도
+      같은 그림이 나온다.
+
+      아이콘 자체는 순수 CSS 도형이다(::before) — 색·크기·모양은
+      스킨이 이 규칙만 덮어쓰면 자유롭게 바꿀 수 있다.
+    */
+    `.skin-nav-link { position: relative; padding-left: 22px; }` +
+    `.skin-nav-link::before {` +
+    `content: ""; position: absolute; left: 0; top: 50%;` +
+    `width: 11px; height: 13px; margin-top: -7px;` +
+    `border: 1px solid currentColor; border-radius: 2px; opacity: .55;` +
+    `}` +
+    /* document(post) — 세로로 긴 종이. 위 기본값 그대로. */
+    /* image(gallery) — 가로로 넓은 사진 */
+    `.skin-nav-link[data-kind="image"]::before { width: 14px; height: 11px; margin-top: -6px; }` +
+    /* quote(highlight) — 접힌 모서리처럼 아래쪽만 남긴 인용 부호 */
+    `.skin-nav-link[data-kind="quote"]::before {` +
+    `width: 12px; height: 10px; margin-top: -5px;` +
+    `border-top: 0; border-right: 0; border-radius: 0 0 0 3px;` +
+    `}` +
+    /* link(banner) — 눕힌 고리 */
+    `.skin-nav-link[data-kind="link"]::before {` +
+    `width: 13px; height: 7px; margin-top: -4px; border-radius: 999px;` +
+    `}` +
+
     `.skin-nav-link, .skin-posts-list a, .skin-category-posts-link, .skin-post-category-link {` +
     `color: var(--skin-text);` +
     `text-decoration: none;` +
@@ -350,9 +440,26 @@ function createSkinGeneratorBaseCss() {
     `color: var(--skin-accent);` +
     `}` +
 
-    `.skin-posts-list, .skin-category-posts-list { list-style: none; margin: 0; padding: 0; }` +
+    `.skin-posts-list, .skin-category-posts-list, .skin-category-folders, .skin-category-folders ul { list-style: none; margin: 0; padding: 0; }` +
+    `.skin-category-folders ul { padding-left: 16px; }` +
+    `.skin-category-folder-name { display: block; color: var(--skin-muted); font-size: 13px; }` +
+    `.skin-category-folders + .skin-category-posts-list { margin-top: 12px; }` +
     `.skin-posts-item, .skin-category-posts-item { margin: 0 0 8px; }` +
     `.skin-posts-title { margin: 0 0 12px; font-size: 15px; color: var(--skin-muted); }` +
+
+    /* 카드 왼쪽 강조선은 **그 하이라이트의 색**이다 — 렌더러가
+       data-imory-color 로 --imory-color 를 얹어 준다(skin/skin-render.js).
+       값이 없으면 아래 기본색이 그대로 쓰인다. */
+    `.skin-home-highlight { margin-top: 24px; }` +
+    `.skin-home-highlight-title { margin: 0 0 12px; font-size: 15px; color: var(--skin-muted); }` +
+    `.skin-home-highlight-card {` +
+    `padding-left: 12px;` +
+    `border-left: 3px solid var(--imory-color, var(--skin-border));` +
+    `}` +
+    `.skin-home-highlight-excerpt { margin: 0; font-size: 14px; line-height: 1.8; }` +
+    `.skin-home-highlight-note { margin: 8px 0 0; font-size: 13px; color: var(--skin-muted); }` +
+    `.skin-home-highlight-source { display: block; margin-top: 8px; font-size: 12px; color: var(--skin-muted); }` +
+    `.skin-home-highlight-all { display: inline-block; margin-top: 12px; font-size: 12px; color: var(--skin-muted); }` +
 
     `.skin-category-title { margin: 0; font-size: 20px; font-weight: 600; }` +
     `.skin-category-posts-date { display: block; font-size: 12px; color: var(--skin-muted); }` +
