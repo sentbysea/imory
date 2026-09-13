@@ -650,7 +650,8 @@
 
 /* =========================================================
    COMING SOON
-   (CUSTOMIZE / INQUIRY 준비 화면)
+   (준비 화면 공용 — INQUIRY가 실제 폼으로 바뀐 뒤로는 현재
+    쓰는 화면이 없다. 다음 준비 화면을 위해 남겨둔다.)
 ========================================================== */
 
 .coming-soon {
@@ -669,6 +670,141 @@
   font-size: 11px;
 
   letter-spacing: 0.1em;
+}
+
+
+
+/* =========================================================
+   INQUIRY (사용자 → 운영자 문의)
+
+   admin-inquiry.js 참고. 좌우 여백은 이 화면의 다른 설정 줄과
+   같은 14px inset을 그대로 쓴다(.editor-block / .setting-line과
+   같은 시작선). 본문 입력칸은 .editor-block textarea를 그대로
+   재사용하므로 여기서 다시 정의하지 않는다.
+========================================================== */
+
+.inquiry-group {
+  margin-top: 0;
+}
+
+
+.inquiry-guide {
+  margin: 0 0 20px;
+
+  padding: 0 14px;
+
+  color: #888888;
+
+  font-size: 12px;
+
+  line-height: 1.8;
+}
+
+
+.inquiry-guide strong {
+  color: #666666;
+
+  font-weight: 500;
+}
+
+
+.inquiry-attach-row {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  padding: 0 14px;
+}
+
+
+.inquiry-attach-hint {
+  color: #bbbbbb;
+
+  font-size: 11px;
+
+  letter-spacing: 0.04em;
+}
+
+
+/*
+  고른 사진들. 아직 올라가지 않은 상태(보내기를 누를 때 한꺼번에
+  올라간다)라 미리보기는 브라우저 안의 objectURL이다.
+*/
+
+.inquiry-preview-list {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 8px;
+
+  padding: 0 14px;
+
+  margin-top: 12px;
+}
+
+
+.inquiry-preview-list:empty {
+  margin-top: 0;
+}
+
+
+.inquiry-preview-item {
+  position: relative;
+
+  width: 72px;
+  height: 72px;
+}
+
+
+.inquiry-preview-image {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  border: 1px solid var(--system-border);
+  border-radius: 6px;
+
+  background: #f6f6f6;
+
+  object-fit: cover;
+}
+
+
+.inquiry-preview-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+
+  width: 20px;
+  height: 20px;
+
+  padding: 0;
+
+  border: 1px solid var(--system-border);
+  border-radius: 50%;
+
+  background: #ffffff;
+
+  color: #888888;
+
+  font-size: 12px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+
+.inquiry-preview-remove:hover {
+  color: #c66f8e;
+
+  border-color: #e0bdca;
+}
+
+
+.inquiry-body-block {
+  margin-top: 20px;
 }
 
 

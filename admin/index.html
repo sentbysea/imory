@@ -2085,11 +2085,78 @@
         </div>
 
 
-        <section class="coming-soon">
+        <section
+          class="settings-group inquiry-group"
+          id="inquiryForm"
+        >
 
-          <p class="coming-soon-text">
-            coming soon
+          <p class="inquiry-guide">
+            문제가 생긴 화면은 <strong>캡처해서 함께 보내주시고</strong>,
+            어떤 상황에서 생겼는지 적어주세요.<br>
+            원하는 기능을 보내주시면 다음 패치 때 참고합니다.
           </p>
+
+
+          <div class="inquiry-attach-row">
+
+            <label
+              class="inquiry-attach-button imory-button imory-button--primary imory-button--md"
+              for="inquiryFileInput"
+            >
+              사진 첨부
+            </label>
+
+            <input
+              class="inquiry-file-input"
+              id="inquiryFileInput"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              multiple
+              hidden
+            >
+
+            <span
+              class="inquiry-attach-hint"
+              id="inquiryAttachHint"
+            ></span>
+
+          </div>
+
+
+          <div
+            class="inquiry-preview-list"
+            id="inquiryPreviewList"
+          ></div>
+
+
+          <div class="editor-block inquiry-body-block">
+
+            <textarea
+              id="inquiryBodyInput"
+              maxlength="5000"
+              placeholder="어떤 문제가 있었는지, 또는 어떤 기능을 원하시는지 적어주세요."
+            ></textarea>
+
+          </div>
+
+
+          <div class="imory-form-actions">
+
+            <button
+              class="save-button imory-button imory-button--primary imory-button--md"
+              id="inquirySendButton"
+              type="button"
+            >
+              send
+            </button>
+
+          </div>
+
+
+          <p
+            class="save-message"
+            id="inquiryMessage"
+          ></p>
 
         </section>
 
@@ -2374,6 +2441,20 @@
 
             "./admin.js",
             "./admin-session.js",
+
+            /*
+              INQUIRY 화면(사용자 → 운영자 문의). 최상위에서
+              #inquiryPanel 안의 요소를 참조하므로 DOM 파싱이 끝난
+              뒤에 로드되어야 하는데, 이 목록 전체가 이미 그 조건을
+              만족한다. supabaseClient · prepareImoryUploadImage ·
+              imoryEtcStripImageExifEnabled 를 쓰므로
+              core/lib/* (위 loadVersionedScripts) 와
+              admin-etc-settings.js 뒤에 실제로 호출된다 — 호출은
+              전부 send 버튼을 누른 뒤라 로드 순서와 무관하다.
+            */
+
+            "./admin-inquiry.js",
+
             "./settings/admin-settings-load.js",
 
             /*
