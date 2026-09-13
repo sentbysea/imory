@@ -981,6 +981,7 @@ async function loadMemoHighlightCards(
             id,
             title,
             category_id,
+            folder_id,
             visibility
           )
           `
@@ -1045,6 +1046,11 @@ async function loadMemoHighlightCards(
             categoryId:
               post && post.category_id !== null && post.category_id !== undefined
                 ? Number(post.category_id)
+                : null,
+
+            postFolderId:
+              post && post.folder_id !== null && post.folder_id !== undefined
+                ? String(post.folder_id)
                 : null
           };
 
