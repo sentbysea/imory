@@ -105,6 +105,19 @@ DOM 노드도 HTML 문자열도 올라가지 않는다(AI-6A 계약 유지).
   줄 때 세로가 따라 줄지 않아 이미지가 찌그러진다.
 - **가로 넘침.** 슬라이더 상한은 iframe이 잰 **부모 안쪽 폭**이고, 확정
   규칙에는 항상 `max-width: 100%`가 함께 들어간다(두 겹).
+
+  > **변경됨 → 재료 일치 라운드
+  > ([AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md](./AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md)).**
+  > 상한을 부모 안쪽 폭 그 자체로 두었더니, 실제 사이트보다 좁은 Preview
+  > (Studio 사이드바·창 폭·Mobile 축소)에서는 **꽉 찬 너비를 만들 방법이
+  > 아예 없었다** — 공개 화면에서 755px까지 늘어나는 이미지가 Studio
+  > 슬라이더에서는 613px에서 멈췄다. 가로 넘침을 실제로 막는 것은 이
+  > 상한이 아니라 확정 규칙의 `max-width: 100%`이므로(부모보다 큰 값은
+  > "자리에 꽉 참"이 될 뿐이다), 지금 상한은 `부모 폭 × 2`(최소 1200px,
+  > 절대 상한 2000px)다. 부모 폭은 상한이 아니라 **안내**로만 쓴다 —
+  > 슬라이더 아래에 "지금 미리보기에서는 N px이면 자리에 꽉 차요"가 나온다
+  > ([studio/inspector/studio-inspector-image-size.js](../../studio/inspector/studio-inspector-image-size.js)
+  > `studioInspectorSizeMax` / `studioInspectorSizeFullWidth`).
 - **초기값**은 "지금 화면에 실제로 보이는 폭"이다. 이미 이 요소에 크기
   규칙이 있으면 그 값이 곧 보이는 폭이므로 둘은 자연히 같다.
 - **초기화("기본")** 는 이번 직접 편집으로 넣은 네 선언만 규칙에서 뺀다 —

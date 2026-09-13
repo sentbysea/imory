@@ -1318,9 +1318,13 @@ async function runGeometry(context) {
     };
   });
 
+  /* 상한은 더 이상 부모 폭이 아니다 — 꽉 찬 너비를 훌쩍 넘겨 고를 수
+     있어야 하고(Preview는 공개 화면보다 좁다), 가로 넘침을 막는 것은
+     상한이 아니라 확정 규칙의 max-width:100%다. */
   record(
-    "H. 슬라이더 상한이 부모 폭으로 눌리고, 큰 값을 넣어도 모바일에서 가로 넘침이 생기지 않는다",
-    sliderMax <= 400 &&
+    "H. 슬라이더 상한이 꽉 찬 너비보다 넉넉하고, 큰 값을 넣어도 모바일에서 가로 넘침이 생기지 않는다",
+    sliderMax >= 1200 &&
+      sliderMax > overflow.docWidth &&
       overflow.imageWidth <= overflow.docWidth &&
       overflow.scrollWidth <= overflow.docWidth + 1 &&
       overflow.bodyScrollWidth <= overflow.docWidth + 1 &&

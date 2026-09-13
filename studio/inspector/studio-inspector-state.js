@@ -193,11 +193,29 @@ let studioInspectorCropLimited = false;
 let studioInspectorCropLimitNote = null;
 
 
-/* 크기 조절 하한/상한. 상한은 항상 "부모 안쪽 폭"으로 한 번 더
-   눌린다(studioInspectorSizeMax) — 모바일 가로 넘침 방지. */
+/* 크기 조절 하한/상한 — studioInspectorSizeMax()가 이 값들과 부모
+   폭으로 실제 상한을 정한다.
+
+   ★ 예전에는 상한이 **부모 안쪽 폭 그 자체**였다. 그런데 Preview는
+   실제 사이트보다 좁다(Studio 사이드바·창 폭·Mobile 축소) — 같은
+   이미지를 공개 화면에서는 755px까지 늘릴 수 있는데 Studio 슬라이더는
+   613px에서 멈춰, "꽉 찬 너비"를 만들 방법이 아예 없었다.
+
+   가로 넘침을 실제로 막는 것은 이 상한이 아니라 확정 규칙에 늘 함께
+   들어가는 max-width:100%다(studio-inspector-model.js의 size) — 부모보다
+   큰 값을 넣어도 자리에 맞춰 꽉 찰 뿐 넘치지 않는다.
+
+   그래서 상한은 "부모 폭"이 아니라 "부모 폭 × HEADROOM(최소
+   MIN_RANGE)"이고, 절대 상한 MAX로 한 번 더 눌린다. 슬라이더 한 칸이
+   쓸 수 없을 만큼 커지지 않으면서도 꽉 찬 너비를 훌쩍 넘겨 고를 수
+   있는 폭이다. */
 const STUDIO_INSPECTOR_SIZE_MIN = 16;
 
 const STUDIO_INSPECTOR_SIZE_MAX = 2000;
+
+const STUDIO_INSPECTOR_SIZE_HEADROOM = 2;
+
+const STUDIO_INSPECTOR_SIZE_MIN_RANGE = 1200;
 
 const STUDIO_INSPECTOR_HANDLE_CORNERS = ["nw", "ne", "sw", "se"];
 

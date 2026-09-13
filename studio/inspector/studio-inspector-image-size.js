@@ -56,10 +56,13 @@
    이미 이 요소에 크기 규칙을 써 둔 적이 있으면 그 값이 곧 보이는
    폭이므로 둘은 자연히 같다.
 
-   상한은 부모 안쪽 폭이다 — 그보다 크게 만들 수 있게 두면 모바일
-   Preview에서 곧바로 가로 넘침이 생긴다. (그래도 넘치지 않도록
-   확정 규칙에는 max-width: 100%가 늘 함께 들어간다 —
-   studio-inspector-model.js size 참고.)
+   상한은 부모 안쪽 폭이 **아니다**. 확정 규칙에 max-width:100%가 늘
+   함께 들어가므로(studio-inspector-model.js size) 부모보다 큰 값도
+   가로 넘침을 만들지 않고 "자리에 꽉 참"이 될 뿐이다. 부모 폭으로
+   상한을 눌렀더니, 실제 사이트보다 좁은 Preview에서 꽉 찬 너비를
+   아예 고를 수 없었다 — 그래서 지금은 부모 폭의 몇 배까지 열어 두고
+   (STUDIO_INSPECTOR_SIZE_HEADROOM), 그 부모 폭은 "여기가 꽉 참"이라는
+   안내로만 쓴다(studioInspectorSizeFullWidth).
 ========================================================== */
 
 /* 크기 컨트롤이 읽고 써야 할 선언. 자른 이미지에서는 이미지가
@@ -124,23 +127,44 @@ function studioInspectorSizeBaseline(declarations) {
 }
 
 
-function studioInspectorSizeMax(currentWidth) {
+/* 이 자리에서 "꽉 참"이 되는 폭 — 부모 안쪽 폭이다. 상한이 아니라
+   안내용이고, 못 쟀으면 0이다. */
+function studioInspectorSizeFullWidth() {
 
   const metrics =
     studioInspectorMetrics;
 
-  const parentWidth =
-    metrics && metrics.parentWidth > 0 ? metrics.parentWidth : 0;
+  return metrics && metrics.parentWidth > 0
+    ? Math.round(metrics.parentWidth)
+    : 0;
 
+}
+
+
+function studioInspectorSizeMax(currentWidth) {
+
+  const parentWidth =
+    studioInspectorSizeFullWidth();
+
+  /* 부모 폭의 몇 배까지 — 꽉 찬 너비를 훌쩍 넘겨 고를 수 있으면서도
+     슬라이더 한 칸이 쓸 수 없을 만큼 커지지는 않는 폭이다. 아주 좁은
+     자리(작은 칸 안의 아이콘 등)에서는 MIN_RANGE가 바닥을 받쳐 준다.
+     부모를 못 쟀으면 절대 상한을 그대로 쓴다. */
   const limit =
-    Math.min(
-      STUDIO_INSPECTOR_SIZE_MAX,
-      parentWidth || STUDIO_INSPECTOR_SIZE_MAX
-    );
+    parentWidth
+      ? Math.max(
+          parentWidth * STUDIO_INSPECTOR_SIZE_HEADROOM,
+          STUDIO_INSPECTOR_SIZE_MIN_RANGE
+        )
+      : STUDIO_INSPECTOR_SIZE_MAX;
 
   /* 이미 그보다 큰 값이 들어 있으면(스킨이 원래 그렇게 만들었다면)
      슬라이더가 그 값을 표현조차 못 하는 일이 없게 한다. */
-  return Math.max(limit, currentWidth || 0, STUDIO_INSPECTOR_SIZE_MIN + 1);
+  return Math.max(
+    Math.round(Math.min(limit, STUDIO_INSPECTOR_SIZE_MAX)),
+    currentWidth || 0,
+    STUDIO_INSPECTOR_SIZE_MIN + 1
+  );
 
 }
 
@@ -259,6 +283,27 @@ function renderStudioInspectorSizeBlock(spec, info, declarations) {
 
   block.appendChild(head);
   block.appendChild(row);
+
+  /* "왜 여기서 안 늘어나지"의 답을 슬라이더 옆에 적어 둔다 — 꽉 차는
+     폭은 Preview 폭에 따라 달라지고(공개 화면은 더 넓다), 그보다 큰
+     값도 넘치지 않고 꽉 찬 채로 보인다. 부모를 못 쟀으면 생략한다. */
+  const fullWidth =
+    studioInspectorSizeFullWidth();
+
+  if (fullWidth) {
+
+    const note =
+      document.createElement("p");
+
+    note.className = "studio-inspector-block-note";
+    note.id = "studioInspectorSizeNote";
+    note.textContent =
+      `지금 미리보기에서는 ${fullWidth}px이면 자리에 꽉 차요 — ` +
+      `더 크게 두어도 넘치지 않고 꽉 찬 채로 보여요.`;
+
+    block.appendChild(note);
+
+  }
 
   studioInspectorFields.appendChild(block);
 
