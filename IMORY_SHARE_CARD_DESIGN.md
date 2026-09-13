@@ -330,15 +330,33 @@ Browser Rendering과 같은 방식으로 최소 구현을 끼운다(`installCach
 
 ## 9. 남은 차이 · 확인이 필요한 것
 
-1. **Browser Rendering 환경 변수가 없으면 카드에 글자가 없다.**
-   `CF_ACCOUNT_ID` / `CF_BROWSER_RENDERING_TOKEN`을 Pages에 넣어야
-   실제 카드가 그려진다. 그때까지는 기본 그라데이션 카드다.
-   (mock으로 검증한 것은 "요청 모양과 실패 시 동작"이고, Cloudflare
-   응답 자체는 실배포에서 확인해야 한다.)
-2. **migration 미적용.** `20260913170000_create_user_share_cards_bucket.sql`
-   을 Supabase SQL Editor에 붙여 넣어야 기본 카드 사진 업로드가
-   동작한다(버킷이 없으면 업로드가 실패한다). 그 전에도 오버레이·폰트
-   설정과 대표 이미지 배경은 동작한다.
+1. **Browser Rendering 환경 변수 — 적용됨**(2026-09-13, 사용자가
+   Pages에 입력). `CF_ACCOUNT_ID` / `CF_BROWSER_RENDERING_TOKEN`이
+   없으면 카드는 글자 없는 기본 그라데이션으로 나간다. 환경 변수는
+   **새 배포부터** 적용되므로, 넣은 뒤 한 번 더 배포해야 한다.
+
+   저장소에서 검증한 것은 "요청 모양과 실패 시 동작"(mock)까지다 —
+   Cloudflare가 실제로 돌려주는 PNG는 배포 뒤 눈으로 확인해야 한다.
+2. **버킷 migration — 적용됨**(2026-09-13, 사용자가 Supabase SQL
+   Editor에서 실행). `20260913170000_create_user_share_cards_bucket.sql`.
+   버킷이 없으면 기본 카드 사진 업로드만 실패하고, 오버레이·폰트
+   설정과 대표 이미지 배경은 그 전에도 동작한다.
+
+   ### 배포 확인 방법 (2026-09-13 기준)
+
+   `_redirects`의 `/* /index.html 200` 때문에 **HTTP 200은 아무
+   의미가 없다** — 없는 경로도 index.html을 200으로 돌려준다. 그래서
+   `Content-Type`으로 판정한다:
+
+   ```
+   curl -sI https://imory.me/core/lib/share-card.js      -> text/javascript 여야 함
+   curl -sI https://imory.me/images/share-card-default.png -> image/png 여야 함
+   curl -sI "https://imory.me/api/og/post?post=<공개 글 id>" -> image/png 여야 함
+   ```
+
+   `text/html`이 나오면 그 파일이 아직 배포되지 않은 것이다(SPA
+   fallback을 받고 있다). 이 확인은 `reference_imory_deploy_verification`
+   과 같은 규칙이다.
 3. **줄바꿈 위치의 엔진 차이.** 미리보기는 보는 사람의 브라우저,
    실제 카드는 Chromium 계열 헤드리스다. 같은 CSS·같은 폰트지만
    Safari에서 본 미리보기의 줄바꿈 지점이 1~2글자 다를 수 있다.
