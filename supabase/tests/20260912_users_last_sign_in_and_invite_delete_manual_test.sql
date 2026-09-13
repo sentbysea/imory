@@ -179,3 +179,85 @@ begin;
   select public.admin_delete_invite_link('55555555-5555-5555-5555-555555555555'); -- 예외 기대
 
 rollback;
+
+
+-- =========================================================
+-- E) last_active_at — 최종 활동 시각 (추가 검증)
+--
+-- 검증 대상:
+--   [[20260913150000_add_last_active_to_admin_list_recent_signups.sql]]
+--
+-- last_active_at = greatest(로그인, 프로필 변경, 홈 꾸미기, 글 수정,
+-- 스킨 수정, 스킨 버전 저장). 아래 두 쿼리 결과가 사용자별로 일치해야
+-- 한다(RPC가 계산한 값 vs 소스에서 직접 계산한 값).
+-- =========================================================
+
+-- E-1) 컬럼이 7개로 늘었는지 + 오버로드가 안 남았는지.
+-- 기대: row 1개, returns에 last_active_at 포함.
+select
+  p.oid::regprocedure as signature,
+  pg_catalog.pg_get_function_result(p.oid) as returns
+from pg_catalog.pg_proc p
+join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+where n.nspname = 'public'
+  and p.proname = 'admin_list_recent_signups';
+
+-- E-2) RPC가 계산한 값. OPERATOR_UUID를 실제 값으로 바꿔 실행할 것.
+begin;
+
+  set local role authenticated;
+  set local request.jwt.claims = '{"sub": "OPERATOR_UUID"}';
+
+  select nickname, created_at, last_sign_in_at, last_active_at
+  from public.admin_list_recent_signups(20, 0);
+
+rollback;
+
+-- E-3) 교차 검증 — superuser로 소스에서 직접 계산해 비교한다.
+-- E-2의 last_active_at과 이 쿼리의 last_active_at이 같아야 한다.
+select
+  p.nickname,
+  greatest(
+    u.last_sign_in_at,
+    p.updated_at,
+    hc.updated_at,
+    (select max(t.updated_at) from public.posts t where t.user_id = p.user_id),
+    (select max(t.updated_at) from public.skins t where t.user_id = p.user_id),
+    (select max(t.created_at) from public.skin_versions t where t.created_by = p.user_id)
+  ) as last_active_at,
+  -- 어느 소스가 최대값인지 눈으로 확인하고 싶을 때.
+  u.last_sign_in_at as src_login,
+  p.updated_at       as src_profile,
+  hc.updated_at      as src_home,
+  (select max(t.updated_at) from public.posts t where t.user_id = p.user_id)        as src_posts,
+  (select max(t.updated_at) from public.skins t where t.user_id = p.user_id)        as src_skins,
+  (select max(t.created_at) from public.skin_versions t where t.created_by = p.user_id) as src_skin_versions
+from public.profiles p
+left join auth.users u on u.id = p.user_id
+left join public.home_customize hc on hc.user_id = p.user_id
+order by p.created_at desc
+limit 20;
+
+-- E-4) last_active_at은 절대 NULL이면 안 된다
+-- (profiles.updated_at이 가입 시점에 채워지므로 최소한 가입 시각).
+-- 기대: 0 row.
+select p.user_id, p.nickname
+from public.profiles p
+left join auth.users u on u.id = p.user_id
+left join public.home_customize hc on hc.user_id = p.user_id
+where greatest(
+        u.last_sign_in_at,
+        p.updated_at,
+        hc.updated_at,
+        (select max(t.updated_at) from public.posts t where t.user_id = p.user_id),
+        (select max(t.updated_at) from public.skins t where t.user_id = p.user_id),
+        (select max(t.created_at) from public.skin_versions t where t.created_by = p.user_id)
+      ) is null;
+
+-- E-5) 미래 시각이 들어온 사용자가 있는지(posts.updated_at은
+-- 클라이언트가 직접 쓰는 값이라 이론상 가능 — 있으면 값 자체가 신호다).
+-- 기대: 보통 0 row.
+select t.user_id, max(t.updated_at) as max_updated_at
+from public.posts t
+where t.updated_at > now()
+group by t.user_id;
