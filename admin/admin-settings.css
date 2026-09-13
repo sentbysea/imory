@@ -1366,3 +1366,244 @@
 
   outline-offset: 2px;
 }
+
+
+/* =========================================================
+   SHARE > CARD — 글 공유 카드 (IMORY_SHARE_CARD_DESIGN.md)
+
+   설정 줄들은 이 화면의 기존 .setting-line 규칙을 그대로 쓰고,
+   여기서는 카드 전용 요소(기본 사진 · 선택 버튼 두 개 · 1200×628
+   미리보기 대지)만 정의한다.
+
+   구현: admin/settings/admin-share-card.js
+========================================================== */
+
+.settings-subtabs {
+  display: flex;
+
+  align-items: center;
+
+  gap: 7px;
+
+  margin: 0 14px 18px;
+}
+
+
+.share-card-group {
+  margin-top: 0;
+}
+
+
+.share-card-photo-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 12px;
+
+  padding: 0 14px 12px;
+}
+
+
+/* 카드 비율 그대로 작게 — 무엇이 배경이 되는지 바로 보이게 */
+
+.share-card-photo-preview {
+  width: 132px;
+  height: 69px;
+
+  object-fit: cover;
+
+  border: 1px solid var(--system-border, #eeeeee);
+  border-radius: var(--imory-radius-300, 6px);
+
+  background: var(--system-surface, #fafafa);
+}
+
+
+.share-card-photo-preview[hidden] {
+  display: none;
+}
+
+
+.share-card-photo-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 132px;
+  height: 69px;
+
+  border: 1px dashed var(--system-border-strong, #dddddd);
+  border-radius: var(--imory-radius-300, 6px);
+
+  color: var(--system-text-disabled, #aaaaaa);
+
+  font-size: var(--imory-font-size-200, 10px);
+  letter-spacing: 0.04em;
+}
+
+
+.share-card-photo-empty[hidden] {
+  display: none;
+}
+
+
+.share-card-photo-remove[hidden] {
+  display: none;
+}
+
+
+.share-card-upload-message {
+  margin: 0;
+
+  padding: 0 14px;
+
+  min-height: 14px;
+
+  color: var(--system-accent, #e39ab5);
+
+  font-size: var(--imory-font-size-200, 10px);
+  line-height: 1.6;
+}
+
+
+.share-card-hint {
+  margin: 6px 0 18px;
+
+  padding: 0 14px;
+
+  color: var(--system-text-muted, #999999);
+
+  font-size: var(--imory-font-size-200, 10px);
+  line-height: 1.7;
+}
+
+
+/* 오버레이 색/강도/폰트 줄 */
+
+.share-card-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 10px;
+}
+
+
+.share-card-line--slider {
+  flex-wrap: nowrap;
+}
+
+
+.share-card-line--slider .imory-range {
+  flex: 1 1 120px;
+
+  min-width: 0;
+}
+
+
+/* 슬라이더 값 표시(.imory-range-value)는 core/components/range.css의
+   공용 스타일을 그대로 쓴다 — 여기서 다시 정의하지 않는다. */
+
+
+.share-card-choice {
+  display: flex;
+
+  gap: 6px;
+}
+
+
+.share-card-choice-button {
+  min-width: 62px;
+
+  padding: 5px 10px;
+
+  border-radius: var(--imory-radius-300, 6px);
+
+  font-size: var(--imory-font-size-100, 9px);
+  letter-spacing: 0.1em;
+}
+
+
+.share-card-select {
+  flex: 0 1 160px;
+
+  min-width: 0;
+  max-width: 100%;
+}
+
+
+/* =========================================================
+   미리보기 — 항상 1200 : 628
+
+   안쪽 iframe 문서는 1200 × 628 고정이고 JS가 transform: scale()
+   로만 줄인다(admin-share-card.js). 그래서 좁은 화면에서도 비율이
+   변하지 않고, 실제 카드와 같은 배치가 나온다.
+========================================================== */
+
+.share-card-preview-heading {
+  margin: 10px 14px 8px;
+}
+
+
+.share-card-preview-heading span {
+  font-size: var(--imory-font-size-100, 9px);
+  letter-spacing: 0.1em;
+
+  color: var(--imory-gray-600, #777777);
+}
+
+
+.share-card-preview-heading small {
+  font-size: 9px;
+
+  color: #b5b5b5;
+}
+
+
+.share-card-preview {
+  position: relative;
+
+  width: calc(100% - 28px);
+  aspect-ratio: 1200 / 628;
+
+  margin: 0 14px;
+
+  overflow: hidden;
+
+  border: 1px solid var(--system-border, #eeeeee);
+  border-radius: var(--imory-radius-300, 6px);
+
+  background: var(--system-surface, #fafafa);
+}
+
+
+.share-card-preview-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+
+  width: 1200px;
+  height: 628px;
+
+  border: 0;
+
+  transform-origin: top left;
+
+  /* 스케일이 붙기 전 한순간 카드가 대지를 넘지 않도록 */
+  transform: scale(0.1);
+
+  pointer-events: none;
+}
+
+
+.share-card-preview-note {
+  margin: 8px 0 0;
+
+  padding: 0 14px;
+
+  color: var(--system-text-muted, #999999);
+
+  font-size: var(--imory-font-size-200, 10px);
+  line-height: 1.7;
+}

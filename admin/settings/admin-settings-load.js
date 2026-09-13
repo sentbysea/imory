@@ -55,9 +55,12 @@ const homeTabButton =
   );
 
 
-const bannerTabButton =
+/* 예전 이름은 bannerTabButton 이었다 — 안쪽에 CARD 가 들어오면서
+   SHARE 로 바뀌었다(IMORY_SHARE_CARD_DESIGN.md §2). */
+
+const shareTabButton =
   document.getElementById(
-    "bannerTabButton"
+    "shareTabButton"
   );
 
 
@@ -85,9 +88,9 @@ const homeSettingsPanel =
   );
 
 
-const bannerSettingsPanel =
+const shareSettingsPanel =
   document.getElementById(
-    "bannerSettingsPanel"
+    "shareSettingsPanel"
   );
 
 
@@ -236,7 +239,19 @@ let deletedCategoryIds =
 ========================================================== */
 
 const SETTINGS_SECTIONS =
-  ["profile", "home", "category", "banner", "data"];
+  ["profile", "home", "category", "share", "data"];
+
+
+/*
+  예전에는 "banner"였다. sessionStorage에 그 값을 들고 있는 탭이
+  돌아왔을 때 첫 탭으로 튀지 않도록 같은 자리로 옮겨 읽는다
+  (기억해 둔 탭을 유지한다는 이 함수의 목적 그대로).
+*/
+
+const SETTINGS_SECTION_ALIASES =
+  {
+    banner: "share"
+  };
 
 
 function currentSettingsSection() {
@@ -247,8 +262,12 @@ function currentSettingsSection() {
     );
 
 
-  return SETTINGS_SECTIONS.includes(saved)
-    ? saved
+  const resolved =
+    SETTINGS_SECTION_ALIASES[saved] || saved;
+
+
+  return SETTINGS_SECTIONS.includes(resolved)
+    ? resolved
     : "profile";
 
 }
@@ -280,8 +299,8 @@ function showSettingsSection(
     section !== "home";
 
 
-  bannerSettingsPanel.hidden =
-    section !== "banner";
+  shareSettingsPanel.hidden =
+    section !== "share";
 
 
   dataSettingsPanel.hidden =
@@ -306,9 +325,9 @@ function showSettingsSection(
   );
 
 
-  bannerTabButton.classList.toggle(
+  shareTabButton.classList.toggle(
     "active",
-    section === "banner"
+    section === "share"
   );
 
 
@@ -356,15 +375,166 @@ homeTabButton.addEventListener(
 );
 
 
-bannerTabButton.addEventListener(
+shareTabButton.addEventListener(
   "click",
   () => {
 
     showSettingsSection(
-      "banner"
+      "share"
     );
 
   }
+);
+
+
+/* =========================================================
+   SHARE 안쪽 탭 — BANNER / CARD
+
+   바깥 탭과 같은 규칙이다: 지금 보고 있는 것을 sessionStorage에
+   기억해서, 다른 앱에 갔다 돌아왔을 때(restoreAdminView) 보고
+   있던 자리가 유지된다.
+========================================================== */
+
+const SHARE_SECTIONS =
+  ["banner", "card"];
+
+
+const shareBannerTabButton =
+  document.getElementById(
+    "shareBannerTabButton"
+  );
+
+
+const shareCardTabButton =
+  document.getElementById(
+    "shareCardTabButton"
+  );
+
+
+const shareBannerInnerPanel =
+  document.getElementById(
+    "shareBannerInnerPanel"
+  );
+
+
+const shareCardInnerPanel =
+  document.getElementById(
+    "shareCardInnerPanel"
+  );
+
+
+function currentShareSection() {
+
+  const saved =
+    sessionStorage.getItem(
+      "admin-share-section"
+    );
+
+
+  return SHARE_SECTIONS.includes(saved)
+    ? saved
+    : "banner";
+
+}
+
+
+function showShareSection(
+  section
+) {
+
+  const next =
+    SHARE_SECTIONS.includes(section)
+      ? section
+      : "banner";
+
+
+  sessionStorage.setItem(
+    "admin-share-section",
+    next
+  );
+
+
+  if (shareBannerInnerPanel) {
+
+    shareBannerInnerPanel.hidden =
+      next !== "banner";
+
+  }
+
+
+  if (shareCardInnerPanel) {
+
+    shareCardInnerPanel.hidden =
+      next !== "card";
+
+  }
+
+
+  if (shareBannerTabButton) {
+
+    shareBannerTabButton.classList.toggle(
+      "active",
+      next === "banner"
+    );
+
+  }
+
+
+  if (shareCardTabButton) {
+
+    shareCardTabButton.classList.toggle(
+      "active",
+      next === "card"
+    );
+
+  }
+
+
+  /*
+    카드 미리보기는 숨어 있는 동안 크기를 잴 수 없다(폭이 0이다).
+    CARD를 열 때 다시 맞춘다(admin/settings/admin-share-card.js).
+  */
+
+  if (
+    next === "card" &&
+    typeof refreshShareCardPreviewScale === "function"
+  ) {
+
+    refreshShareCardPreviewScale();
+
+  }
+
+}
+
+
+shareBannerTabButton
+  ?.addEventListener(
+    "click",
+    () => {
+
+      showShareSection(
+        "banner"
+      );
+
+    }
+  );
+
+
+shareCardTabButton
+  ?.addEventListener(
+    "click",
+    () => {
+
+      showShareSection(
+        "card"
+      );
+
+    }
+  );
+
+
+showShareSection(
+  currentShareSection()
 );
 
 

@@ -93,6 +93,42 @@
   <title>imory</title>
 
 
+  <!-- =========================================================
+       공유 카드 meta (IMORY_SHARE_CARD_DESIGN.md)
+
+       ★ 이 블록은 아래 두 표시 사이를 서버가 **교체**한다.
+
+       공개 글 주소(/:slug/post/:id)로 들어온 요청에서는
+       functions/_middleware.js 가 그 글의 제목·발췌·카드 이미지로
+       이 블록을 바꿔 끼운다(functions/api/og/post.js). 여기 적힌
+       값은 그 밖의 모든 주소(홈·카테고리·직접 진입)에서 쓰이는
+       **사이트 기본 카드**다.
+
+       크롤러는 JS 를 실행하지 않으므로 이 값을 클라이언트에서
+       고치는 방법은 없다 — 그래서 서버가 바꿔 끼운다.
+
+       표시 문자열(imory:share-card-meta)을 바꾸면 주입이 멈춘다.
+       바꿀 때는 functions/api/og/post.js 의 상수도 같이 고친다.
+
+       og:image 는 절대 URL 이어야 한다(크롤러가 받아가는 주소다).
+  ========================================================== -->
+
+  <!-- imory:share-card-meta -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="imory">
+  <meta property="og:url" content="https://imory.me/">
+  <meta property="og:title" content="imory">
+  <meta property="og:description" content="imory에서 쓰고 모으는 기록.">
+  <meta property="og:image" content="https://imory.me/images/share-card-default.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="628">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="imory">
+  <meta name="twitter:description" content="imory에서 쓰고 모으는 기록.">
+  <meta name="twitter:image" content="https://imory.me/images/share-card-default.png">
+  <!-- /imory:share-card-meta -->
+
+
   <!--
     /:slug, /:slug/post/:id, /:slug/category/:id 경로형 주소로
     새로고침/직접 진입해도(Cloudflare Pages _redirects가

@@ -64,6 +64,13 @@ async function loadAdminSettings(
     user
   );
 
+
+  /* SHARE > CARD (admin/settings/admin-share-card.js) */
+
+  await loadShareCardSettings(
+    user
+  );
+
 }
 
 

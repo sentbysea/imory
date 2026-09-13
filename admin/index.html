@@ -482,12 +482,20 @@
                 |
               </span>
 
+              <!--
+                예전 이름은 BANNER 였다. 안쪽에 공유 카드(CARD)
+                설정이 들어오면서, 두 기능을 아우르는 이름으로
+                바꿨다 — 바뀐 것은 탭 이름과 안쪽 탭 구조뿐이고
+                배너 기능/데이터/UI 의미는 그대로다
+                (IMORY_SHARE_CARD_DESIGN.md §2).
+              -->
+
               <button
                 class="settings-tab imory-tab imory-tab--text"
-                id="bannerTabButton"
+                id="shareTabButton"
                 type="button"
               >
-                BANNER
+                SHARE
               </button>
 
               <span class="settings-tab-divider imory-tab-divider">
@@ -1273,20 +1281,63 @@
 
 
         <!-- =================================================
-             BANNER
+             SHARE — BANNER · CARD
 
-             다른 사람들이 자기 사이트에 내 배너를 심어두면,
-             내가 나중에 이미지를 바꿔도 그쪽 코드는 안 건드려도
-             자동으로 새 이미지가 보이게 하는 기능
-             (admin-my-banner.js 참고). 이미지는 Supabase
-             Storage의 항상 같은 경로에 덮어쓰기(upsert)됨.
+             예전 BANNER 탭이다. 이름만 SHARE 로 바꾸고 안에
+             내부 탭 두 개를 뒀다:
+
+               BANNER  기존 배너 기능(아래 MY BANNER 그룹).
+                       동작·데이터·UI 의미를 바꾸지 않았다.
+               CARD    글 공유 카드 설정(이번 라운드).
+
+             기준 문서: IMORY_SHARE_CARD_DESIGN.md
         ================================================== -->
 
         <section
           class="settings-subpanel"
-          id="bannerSettingsPanel"
+          id="shareSettingsPanel"
           hidden
         >
+
+          <nav
+            class="settings-subtabs"
+            aria-label="share"
+          >
+
+            <button
+              class="settings-tab imory-tab imory-tab--text active"
+              id="shareBannerTabButton"
+              type="button"
+            >
+              BANNER
+            </button>
+
+            <span class="settings-tab-divider imory-tab-divider">
+              |
+            </span>
+
+            <button
+              class="settings-tab imory-tab imory-tab--text"
+              id="shareCardTabButton"
+              type="button"
+            >
+              CARD
+            </button>
+
+          </nav>
+
+
+          <!-- ===============================================
+               BANNER
+
+               다른 사람들이 자기 사이트에 내 배너를 심어두면,
+               내가 나중에 이미지를 바꿔도 그쪽 코드는 안 건드려도
+               자동으로 새 이미지가 보이게 하는 기능
+               (admin-my-banner.js 참고). 이미지는 Supabase
+               Storage의 항상 같은 경로에 덮어쓰기(upsert)됨.
+          ================================================ -->
+
+          <div id="shareBannerInnerPanel">
 
           <section
             class="settings-group my-banner-group"
@@ -1410,6 +1461,268 @@
             ></p>
 
           </section>
+
+          </div>
+
+
+          <!-- ===============================================
+               CARD — 글 공유 카드
+
+               공개 글 주소를 X(Twitter)에 붙여 넣었을 때 뜨는
+               카드 한 장(1200 × 628)의 설정이다.
+
+               · 기본 카드 사진 — 글 대표 이미지가 없을 때만 쓰는
+                 fallback. 글 대표 이미지(post_covers)는 그대로
+                 우선한다.
+               · 오버레이 색/강도 · 폰트
+               · 아래 미리보기는 실제 카드와 **같은 HTML/CSS**로
+                 그린다(core/lib/share-card.js).
+
+               저장을 눌러야 서버에 반영되고, 그때 카드 version이
+               갱신되어 SNS 캐시가 새 카드를 받아간다.
+
+               구현: admin/settings/admin-share-card.js
+               서버: functions/api/og/post.js
+          ================================================ -->
+
+          <div
+            id="shareCardInnerPanel"
+            hidden
+          >
+
+            <section
+              class="settings-group share-card-group"
+              id="shareCardSettingsPanel"
+            >
+
+              <div class="settings-group-title imory-section-header imory-section-header--divider">
+
+                <span>
+                  SHARE CARD
+                </span>
+
+                <small>
+                  x large image
+                </small>
+
+              </div>
+
+
+              <!-- 기본 카드 사진 -->
+
+              <div class="share-card-photo-row">
+
+                <img
+                  class="share-card-photo-preview"
+                  id="shareCardPhotoPreview"
+                  alt="기본 공유 카드 사진"
+                  hidden
+                >
+
+                <div
+                  class="share-card-photo-empty"
+                  id="shareCardPhotoEmpty"
+                >
+                  기본 사진 없음
+                </div>
+
+                <label
+                  class="share-card-photo-button imory-button imory-button--primary imory-button--md"
+                  for="shareCardPhotoInput"
+                >
+                  change
+                </label>
+
+                <input
+                  class="share-card-photo-input"
+                  id="shareCardPhotoInput"
+                  type="file"
+                  accept="image/*"
+                  hidden
+                >
+
+                <button
+                  class="share-card-photo-remove imory-button imory-button--secondary imory-button--md"
+                  id="shareCardPhotoRemoveButton"
+                  type="button"
+                  hidden
+                >
+                  remove
+                </button>
+
+              </div>
+
+
+              <p
+                class="share-card-upload-message"
+                id="shareCardUploadMessage"
+              ></p>
+
+
+              <p class="share-card-hint">
+                글에 대표 이미지가 있으면 그 사진을 쓰고, 없을 때만
+                이 사진을 씁니다.
+              </p>
+
+
+              <!-- 오버레이 색상 -->
+
+              <div class="setting-line share-card-line">
+
+                <span class="imory-label">
+                  오버레이 색
+                </span>
+
+                <div
+                  class="share-card-choice"
+                  role="group"
+                  aria-label="오버레이 색"
+                >
+
+                  <button
+                    class="share-card-choice-button imory-tab imory-tab--boxed imory-tab--boxed-accent"
+                    id="shareCardOverlayBlackButton"
+                    type="button"
+                    data-overlay="black"
+                    aria-pressed="true"
+                  >
+                    BLACK
+                  </button>
+
+                  <button
+                    class="share-card-choice-button imory-tab imory-tab--boxed imory-tab--boxed-accent"
+                    id="shareCardOverlayWhiteButton"
+                    type="button"
+                    data-overlay="white"
+                    aria-pressed="false"
+                  >
+                    WHITE
+                  </button>
+
+                </div>
+
+              </div>
+
+
+              <!-- 오버레이 강도 -->
+
+              <div class="setting-line share-card-line share-card-line--slider">
+
+                <label
+                  class="imory-label"
+                  for="shareCardOverlayStrength"
+                >
+                  오버레이 강도
+                </label>
+
+                <input
+                  id="shareCardOverlayStrength"
+                  class="imory-range"
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="55"
+                  aria-label="오버레이 강도"
+                >
+
+                <span
+                  class="imory-range-value"
+                  id="shareCardOverlayStrengthValue"
+                >55%</span>
+
+              </div>
+
+
+              <!-- 폰트 -->
+
+              <div class="setting-line share-card-line">
+
+                <label
+                  class="imory-label"
+                  for="shareCardFontSelect"
+                >
+                  폰트
+                </label>
+
+                <select
+                  class="share-card-select imory-field imory-field--sm"
+                  id="shareCardFontSelect"
+                >
+                  <option value="pretendard">
+                    Pretendard
+                  </option>
+
+                  <option value="nanum-myeongjo">
+                    나눔명조
+                  </option>
+                </select>
+
+              </div>
+
+
+              <div class="imory-form-actions">
+
+                <button
+                  class="save-button imory-button imory-button--primary imory-button--md"
+                  id="shareCardSaveButton"
+                  type="button"
+                >
+                  save
+                </button>
+
+              </div>
+
+
+              <p
+                class="save-message"
+                id="shareCardSaveMessage"
+              ></p>
+
+
+              <!-- ===========================================
+                   미리보기 — 1200 × 628 을 그대로 줄여 보여준다
+
+                   iframe 안의 문서는 항상 1200 × 628 이고, 여기서는
+                   transform: scale() 로만 줄인다. 그래서 모바일에서도
+                   비율이 절대 변하지 않고, 실제 카드와 같은 배치가
+                   나온다(레이아웃이 다시 계산되지 않는다).
+              ============================================ -->
+
+              <div class="share-card-preview-heading imory-section-header">
+
+                <span>
+                  PREVIEW
+                </span>
+
+                <small>
+                  1200 × 628
+                </small>
+
+              </div>
+
+              <div
+                class="share-card-preview"
+                id="shareCardPreviewBox"
+              >
+
+                <iframe
+                  class="share-card-preview-frame"
+                  id="shareCardPreviewFrame"
+                  title="공유 카드 미리보기"
+                  scrolling="no"
+                ></iframe>
+
+              </div>
+
+              <p
+                class="share-card-preview-note"
+                id="shareCardPreviewNote"
+              ></p>
+
+            </section>
+
+          </div>
 
         </section>
 
@@ -1964,6 +2277,19 @@
             "./settings/admin-image-setting.js",
             "./settings/admin-favicon.js",
             "./settings/admin-cursor.js",
+
+            /*
+              SHARE > CARD — 글 공유 카드 설정과 실시간 미리보기.
+              레이아웃은 서버(/api/og/post)와 같은 ES 모듈
+              (core/lib/share-card.js)을 동적 import 로 읽는다.
+
+              업로드 경로/공개 URL 헬퍼는 admin-image-setting.js의
+              것을 그대로 쓰므로 그 뒤이고, loadAdminSettings()가
+              loadShareCardSettings()를 부르므로
+              admin-settings-save.js보다는 앞이다.
+            */
+
+            "./settings/admin-share-card.js",
 
             "./settings/admin-settings-avatar.js",
             "./settings/admin-settings-save.js",
