@@ -199,6 +199,133 @@ function makePng(width, height) {
   ]);
 }
 
+/* =========================================================
+   진짜 사진 fixture — 1×1 mock 이 아니다
+
+   "기본 사진이 카드에 실제로 그려지는가"는 1×1 투명 PNG 로는
+   확인할 수 없다. 그래서 **위/아래 색이 다른 큰 사진**을 만든다:
+
+     1200 × 1256 (카드의 두 배 높이)
+       위쪽 절반  초록
+       아래쪽 절반 파랑
+
+   카드는 1200 × 628 이고 background-size:cover 라 세로로만 잘린다
+   — image_position_y 가 0 이면 초록, 100 이면 파랑이 보인다.
+   그래서 "사진이 깔렸는가"와 "구도가 적용됐는가"를 **찍힌 픽셀**
+   로 판정할 수 있다.
+========================================================== */
+
+function makeBandedPng(width, height, bands) {
+  const stride = width * 3;
+  const raw = Buffer.alloc((stride + 1) * height);
+
+  for (let y = 0; y < height; y += 1) {
+    const at = y * (stride + 1);
+    raw[at] = 0;
+    const band = bands.find(b => y < b.until) || bands[bands.length - 1];
+    for (let x = 0; x < width; x += 1) {
+      raw[at + 1 + x * 3] = band.rgb[0];
+      raw[at + 2 + x * 3] = band.rgb[1];
+      raw[at + 3 + x * 3] = band.rgb[2];
+    }
+  }
+
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", zlib.deflateSync(raw)),
+    pngChunk("IEND", Buffer.alloc(0))
+  ]);
+}
+
+const PHOTO_GREEN = [0, 170, 90];
+const PHOTO_BLUE = [20, 70, 200];
+const PHOTO_ORANGE = [235, 130, 20];
+
+/* 첫 번째 기본 사진 — 위 초록 / 아래 파랑 */
+const PHOTO_FIXTURE = makeBandedPng(1200, 1256, [
+  { until: 628, rgb: PHOTO_GREEN },
+  { until: 1256, rgb: PHOTO_BLUE }
+]);
+
+/* 두 번째 기본 사진 — 사진을 바꿨을 때를 구분하려고 색이 다르다 */
+const PHOTO_FIXTURE_2 = makeBandedPng(1200, 1256, [
+  { until: 1256, rgb: PHOTO_ORANGE }
+]);
+
+
+/* PNG 를 픽셀로 푼다(skin-gallery-e2e-test.mjs 와 같은 구현) */
+function decodePng(buffer) {
+  let pos = 8;
+  let width = 0, height = 0, depth = 0, colourType = 0;
+  const idat = [];
+  while (pos + 8 <= buffer.length) {
+    const length = buffer.readUInt32BE(pos);
+    const kind = buffer.toString("ascii", pos + 4, pos + 8);
+    const data = buffer.subarray(pos + 8, pos + 8 + length);
+    if (kind === "IHDR") {
+      width = data.readUInt32BE(0);
+      height = data.readUInt32BE(4);
+      depth = data[8];
+      colourType = data[9];
+      if (data[12] !== 0) throw new Error("인터레이스 PNG는 지원하지 않습니다");
+    }
+    if (kind === "IDAT") idat.push(data);
+    pos += 12 + length;
+    if (kind === "IEND") break;
+  }
+  const channels = colourType === 6 ? 4 : colourType === 2 ? 3 : 0;
+  if (!channels || depth !== 8) {
+    throw new Error(`지원하지 않는 PNG(type ${colourType}, depth ${depth})`);
+  }
+  const raw = zlib.inflateSync(Buffer.concat(idat));
+  const stride = width * channels;
+  const pixels = Buffer.alloc(height * stride);
+  let previous = Buffer.alloc(stride);
+  for (let y = 0; y < height; y += 1) {
+    const at = y * (stride + 1);
+    const filter = raw[at];
+    const line = Buffer.from(raw.subarray(at + 1, at + 1 + stride));
+    for (let i = 0; i < stride; i += 1) {
+      const left = i >= channels ? line[i - channels] : 0;
+      const up = previous[i];
+      const upLeft = i >= channels ? previous[i - channels] : 0;
+      if (filter === 1) line[i] = (line[i] + left) & 0xff;
+      else if (filter === 2) line[i] = (line[i] + up) & 0xff;
+      else if (filter === 3) line[i] = (line[i] + ((left + up) >> 1)) & 0xff;
+      else if (filter === 4) {
+        const p = left + up - upLeft;
+        const pa = Math.abs(p - left), pb = Math.abs(p - up), pc = Math.abs(p - upLeft);
+        line[i] = (line[i] + (pa <= pb && pa <= pc ? left : pb <= pc ? up : upLeft)) & 0xff;
+      }
+    }
+    line.copy(pixels, y * stride);
+    previous = line;
+  }
+  return { width, height, channels, stride, pixels };
+}
+
+
+function pixelAt(png, x, y) {
+  const at = y * png.stride + x * png.channels;
+  return [png.pixels[at], png.pixels[at + 1], png.pixels[at + 2]];
+}
+
+
+/* 오버레이가 얹혀도 "어느 색 계열인가"는 남는다 */
+function nearColour(rgb, target, tolerance = 60) {
+  return Math.abs(rgb[0] - target[0]) <= tolerance &&
+    Math.abs(rgb[1] - target[1]) <= tolerance &&
+    Math.abs(rgb[2] - target[2]) <= tolerance;
+}
+
+
 /* PNG 머리에서 실제 픽셀 크기를 읽는다 */
 function pngSize(buffer) {
   if (buffer.length < 24 || buffer.readUInt32BE(0) !== 0x89504e47) return null;
@@ -312,7 +439,13 @@ async function installSupabaseMock(page, opts = {}) {
     recorder = null,
     storageObjects = new Set(),
     settingsWriteFails = false,
-    missingShareLabelSeq = false
+    missingShareLabelSeq = false,
+
+    /*
+      버킷이 돌려줄 바이트. 기본은 1×1 이지만, 기본 사진이 실제로
+      미리보기에 그려지는지 보는 절에서는 진짜 사진을 준다.
+    */
+    storagePhoto = null
   } = opts;
 
   if (VERBOSE) {
@@ -357,7 +490,10 @@ async function installSupabaseMock(page, opts = {}) {
             body: JSON.stringify({ statusCode: "404", error: "not_found" })
           });
         }
-        return route.fulfill({ status: 200, headers, contentType: "image/png", body: PNG_1X1 });
+        return route.fulfill({
+          status: 200, headers, contentType: "image/png",
+          body: storagePhoto || PNG_1X1
+        });
       }
 
       if (req.method() === "DELETE") {
@@ -519,6 +655,27 @@ const serverFixture = {
   rendererEnabled: true,
 
   /*
+    "real" 이면 넘어온 HTML 을 **진짜 브라우저로 그려서** PNG 를
+    돌려준다(아래 renderBrowser). 배포의 Browser Rendering 이 하는
+    일과 같다 — 그래야 "배경 사진이 실제로 찍히는가"를 픽셀로
+    확인할 수 있다.
+  */
+  renderMode: "stub",
+  renderBrowser: null,
+
+  /* 진짜 사진 fixture 를 실제로 받아 갔는가 */
+  photoRequests: [],
+
+  /* 글 대표 이미지 프록시가 돌려줄 바이트(기본은 1×1) */
+  coverPhoto: null,
+
+  /*
+    다음 렌더 요청들이 돌려줄 HTTP 상태(앞에서부터 하나씩 꺼낸다).
+    비면 정상 응답. 일시적 실패의 재시도를 확인하는 자리다.
+  */
+  renderFailures: [],
+
+  /*
     posts.share_label_seq migration 이 아직 적용되지 않은 배포를
     흉내 낸다 — 그 컬럼을 고른 select 는 PostgREST 가 통째로
     400 으로 거절한다.
@@ -615,12 +772,60 @@ async function handleFakeRenderer(req, res) {
     return;
   }
 
-  const png = makePng(
-    (body.viewport && body.viewport.width) || 1200,
-    (body.viewport && body.viewport.height) || 628
-  );
+  /* 미리 넣어 둔 실패를 하나 꺼낸다(재시도 확인) */
+  if (serverFixture.renderFailures.length) {
+    const status = serverFixture.renderFailures.shift();
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ success: false, errors: [{ message: `status ${status}` }] }));
+    return;
+  }
+
+  const width = (body.viewport && body.viewport.width) || 1200;
+  const height = (body.viewport && body.viewport.height) || 628;
+
+  const png =
+    (serverFixture.renderMode === "real" && serverFixture.renderBrowser)
+      ? await realRender(serverFixture.renderBrowser, body.html || "", width, height)
+      : makePng(width, height);
+
   res.writeHead(200, { "Content-Type": "image/png", "Content-Length": String(png.length) });
   res.end(png);
+}
+
+
+/*
+  진짜 렌더 — 배포의 Browser Rendering 자리에 Playwright 를 끼운다.
+
+  웹폰트 CDN 은 막는다(글자 모양은 이 절의 관심사가 아니고, 바깥
+  네트워크에 기대면 결과가 흔들린다). 배경 사진은 **막지 않는다**
+  — 그 사진이 실제로 찍히는지가 이 절의 전부다.
+*/
+async function realRender(browser, html, width, height) {
+  const ctx = await browser.newContext({
+    viewport: { width, height },
+    deviceScaleFactor: 1
+  });
+
+  await ctx.route("**://cdn.jsdelivr.net/**", r =>
+    r.fulfill({ status: 200, contentType: "text/css", body: "" }));
+  await ctx.route("**://fonts.googleapis.com/**", r =>
+    r.fulfill({ status: 200, contentType: "text/css", body: "" }));
+  await ctx.route("**://fonts.gstatic.com/**", r =>
+    r.fulfill({ status: 200, contentType: "font/woff2", body: "" }));
+
+  const page = await ctx.newPage();
+
+  try {
+    await page.setContent(html, { waitUntil: "networkidle", timeout: 20000 });
+  } catch {
+    /* networkidle 이 안 와도 그려진 것을 찍는다 */
+  }
+
+  const png = await page.screenshot({ type: "png" });
+
+  await ctx.close();
+
+  return png;
 }
 
 
@@ -678,6 +883,12 @@ async function requestOgImage(query, envOverrides = {}) {
     status: response.status,
     contentType: response.headers.get("content-type") || "",
     cacheControl: response.headers.get("cache-control") || "",
+
+    /* 진단 헤더 — 기본 카드로 내려갔으면 왜 인지가 여기 적힌다 */
+    cardStatus: response.headers.get("x-imory-share-card") || "",
+    cardBackground: response.headers.get("x-imory-share-card-background") || "",
+    cardAttempts: response.headers.get("x-imory-share-card-attempts") || "",
+
     bytes: Buffer.from(await response.arrayBuffer())
   };
 }
@@ -701,10 +912,30 @@ function startServer() {
       return;
     }
 
-    /* 대표 이미지 프록시는 이 테스트의 대상이 아니다 — 있다고만 해 둔다 */
+    /*
+      진짜 사진 fixture — 저장된 기본 사진이 놓이는 자리
+      (배포에서는 user-share-cards 버킷의 공개 주소다).
+    */
+    if (rel === "/__fixtures/share-photo.png" || rel === "/__fixtures/share-photo-2.png") {
+      const bytes = rel.endsWith("-2.png") ? PHOTO_FIXTURE_2 : PHOTO_FIXTURE;
+      serverFixture.photoRequests.push(rel);
+      res.writeHead(200, {
+        "Content-Type": "image/png",
+        "Content-Length": String(bytes.length),
+        "Cache-Control": "public, max-age=31536000"
+      });
+      res.end(req.method === "HEAD" ? undefined : bytes);
+      return;
+    }
+
+    /*
+      대표 이미지 프록시는 이 테스트의 대상이 아니다 — 있다고만 해 둔다.
+      (우선순위를 픽셀로 보는 절에서만 진짜 사진을 돌려준다)
+    */
     if (rel === "/api/post-cover") {
-      res.writeHead(200, { "Content-Type": "image/png" });
-      res.end(PNG_1X1);
+      const bytes = serverFixture.coverPhoto || PNG_1X1;
+      res.writeHead(200, { "Content-Type": "image/png", "Content-Length": String(bytes.length) });
+      res.end(req.method === "HEAD" ? undefined : bytes);
       return;
     }
 
@@ -2379,9 +2610,15 @@ async function runImage() {
   );
 
   check(
-    "[image] 그때 캐시는 짧다(설정이 채워지면 곧 실제 카드가 된다)",
-    unconfigured.cacheControl.includes("max-age=300"),
+    "[image] ★ 그때 응답을 캐시하지 않는다(환경 변수를 채우면 다음 요청이 진짜 카드)",
+    unconfigured.cacheControl === "no-store",
     unconfigured.cacheControl
+  );
+
+  check(
+    "[image] ★ 왜 기본 카드인지 헤더로 말한다(설정 없음)",
+    unconfigured.cardStatus === "fallback:not-configured",
+    unconfigured.cardStatus
   );
 
   /* ---- 렌더가 실패할 때 ---- */
@@ -2654,6 +2891,441 @@ async function runCache() {
 
 
 /* =========================================================
+   9. photo — 저장한 기본 사진이 **실제 카드에 그려지는가**
+
+   왜 이 절이 따로 있나 (2026-09-13)
+
+   "설정 미리보기에는 기본 사진이 보이는데 트윗 카드는 기본
+   그라데이션" 이라는 보고가 있었다. 저장도 됐고(site_settings),
+   사진 주소도 공개였고, 미리보기도 맞았다. 실제로 틀어진 곳은
+   **렌더 한 번이 실패했을 때의 처리**였다 — 그 한 번이 크롤러가
+   긁어가는 그 순간이면, 주소에 버전이 박혀 있어(immutable) 그
+   트윗의 카드는 영영 기본 그라데이션이었다.
+
+   그래서 여기서는 1×1 mock 을 쓰지 않는다:
+
+     · 진짜 사진(1200 × 1256, 위 초록 / 아래 파랑)을 HTTP 로 서빙하고
+     · 넘어온 카드 HTML 을 **진짜 브라우저로 그려서**
+     · 나온 PNG 를 디코드해 **찍힌 픽셀**로 판정한다.
+========================================================== */
+
+const PHOTO_URL = `http://localhost:${PORT}/__fixtures/share-photo.png`;
+const PHOTO_URL_2 = `http://localhost:${PORT}/__fixtures/share-photo-2.png`;
+
+/* 서비스 기본 그라데이션의 윗부분(사진이 없을 때) */
+const GRADIENT_TOP = [243, 224, 234];
+
+
+function shareCardSettingsRow(overrides = {}) {
+  return {
+    user_id: OWNER_ID,
+    key: "share_card",
+    value: JSON.stringify({
+      image_url: PHOTO_URL,
+      image_position_x: 50,
+      image_position_y: 0,
+      overlay_color: "#000000",
+      overlay_strength: 30,
+      font: "pretendard",
+      title_size: 46,
+      card_label: "",
+      frame: "none",
+      version: "1757800000000",
+      ...overrides
+    })
+  };
+}
+
+
+async function runPhoto(browser) {
+  console.log("\n[photo] 기본 사진 — 저장 → 재로드 → 실제 렌더");
+
+  /* =======================================================
+     1) 올리고 저장하면 그 주소가 남고, 새로고침해도 그대로다
+  ======================================================= */
+
+  const db = makeDb();
+  const storage = new Set();
+
+  const first = await openSettings(browser, {
+    db, storageObjects: storage, storagePhoto: PHOTO_FIXTURE
+  });
+
+  await openShareCard(first.page);
+
+  await first.page.setInputFiles("#shareCardPhotoInput", {
+    name: "card.png", mimeType: "image/png", buffer: PHOTO_FIXTURE
+  });
+  await first.page.waitForTimeout(900);
+
+  check(
+    "[photo] 저장 전에는 saved 로 표시하지 않는다(아직 서버에 없다)",
+    !((await first.page.textContent("#shareCardSaveMessage")) || "").includes("saved") &&
+    ((await first.page.textContent("#shareCardUploadMessage")) || "").includes("save"),
+    (await first.page.textContent("#shareCardSaveMessage")) || "(비어 있음)"
+  );
+
+  check(
+    "[photo] 저장 전에는 site_settings 에 share_card 행이 없다",
+    !db.site_settings.some(s => s.key === "share_card")
+  );
+
+  await first.page.click("#shareCardSaveButton");
+  await first.page.waitForTimeout(900);
+
+  const savedRow = db.site_settings.find(s => s.key === "share_card");
+  const savedValue = JSON.parse(savedRow ? savedRow.value : "{}");
+
+  check(
+    "[photo] ★ 저장이 성공한 뒤에야 saved 가 뜬다",
+    ((await first.page.textContent("#shareCardSaveMessage")) || "").includes("saved") &&
+    typeof savedValue.image_url === "string" &&
+    savedValue.image_url.includes("user-share-cards"),
+    savedValue.image_url
+  );
+
+  await first.ctx.close();
+
+  /* ---- 새로고침 ---- */
+
+  const again = await openSettings(browser, {
+    db, storageObjects: storage, storagePhoto: PHOTO_FIXTURE
+  });
+  await openShareCard(again.page);
+
+  const frame = await cardFrame(again.page);
+
+  const restoredUrl = await frame.evaluate(() => {
+    const image = getComputedStyle(
+      document.getElementById("shareCardBackground")
+    ).backgroundImage;
+    const hit = /url\(["']?([^"')]+)["']?\)/.exec(image);
+    return hit ? hit[1] : "";
+  });
+
+  check(
+    "[photo] ★ 새로고침 뒤 미리보기 배경이 **저장된 그 주소** 그대로다",
+    restoredUrl === savedValue.image_url,
+    `${restoredUrl} / ${savedValue.image_url}`
+  );
+
+  check(
+    "[photo] ★ 그 주소는 blob:/data: 가 아니라 버킷의 공개 주소다",
+    /^https?:\/\//.test(restoredUrl) && restoredUrl.includes("/storage/v1/object/public/"),
+    restoredUrl
+  );
+
+  const loaded = await frame.evaluate((url) => new Promise((resolve) => {
+    const probe = new Image();
+    probe.onload = () => resolve({ w: probe.naturalWidth, h: probe.naturalHeight });
+    probe.onerror = () => resolve({ w: 0, h: 0 });
+    probe.src = url;
+  }), restoredUrl);
+
+  check(
+    "[photo] ★ 그 주소가 실제로 사진을 돌려준다(1×1 이 아니다)",
+    loaded.w === 1200 && loaded.h === 1256,
+    JSON.stringify(loaded)
+  );
+
+  if (SHOT_DIR) {
+    fs.mkdirSync(SHOT_DIR, { recursive: true });
+    await again.page.screenshot({
+      path: path.join(SHOT_DIR, "photo-settings-reloaded.png"),
+      fullPage: true
+    });
+  }
+
+  await again.ctx.close();
+
+  /* ---- 서버가 읽는 것이 같은 행인가 ---- */
+
+  serverFixture.db = db;
+
+  const serverSide = await ogFunction.loadShareCardPost(
+    serverEnv(), OWNER_SLUG, "14"
+  );
+
+  check(
+    "[photo] ★ /api/og/post 가 같은 사용자의 같은 share_card 행을 읽는다",
+    serverSide.card.imageUrl === savedValue.image_url,
+    serverSide.card.imageUrl
+  );
+
+  /* =======================================================
+     2) 대표 이미지가 없는 글 — 저장한 기본 사진이 실제로 그려진다
+  ======================================================= */
+
+  serverFixture.renderMode = "real";
+  serverFixture.renderBrowser = browser;
+
+  serverFixture.db = makeDb({ settings: [shareCardSettingsRow()] });
+  serverFixture.renders = [];
+  serverFixture.photoRequests = [];
+
+  const painted = await requestOgImage("?post=14&v=photo1");
+  const paintedPng = decodePng(painted.bytes);
+
+  if (SHOT_DIR) {
+    fs.mkdirSync(SHOT_DIR, { recursive: true });
+    fs.writeFileSync(path.join(SHOT_DIR, "photo-og-card.png"), painted.bytes);
+  }
+
+  check(
+    "[photo] ★ 1200 × 628 PNG 를 그린다(기본 카드 자산이 아니다)",
+    painted.status === 200 &&
+    paintedPng.width === 1200 && paintedPng.height === 628 &&
+    painted.cardStatus === "render",
+    `${painted.cardStatus} ${paintedPng.width}×${paintedPng.height}`
+  );
+
+  check(
+    "[photo] ★ 헤드리스 브라우저가 그 사진 주소를 실제로 받아 갔다",
+    serverFixture.photoRequests.some(p => p.endsWith("share-photo.png")),
+    serverFixture.photoRequests.join(" ")
+  );
+
+  const topPixel = pixelAt(paintedPng, 600, 140);
+
+  check(
+    "[photo] ★ 카드 배경이 저장한 사진이다(그라데이션이 아니다)",
+    nearColour(topPixel, PHOTO_GREEN, 70) && !nearColour(topPixel, GRADIENT_TOP, 40),
+    `rgb(${topPixel.join(",")})`
+  );
+
+  check(
+    "[photo] 배경이 닿았다고 헤더가 말한다",
+    painted.cardBackground === "ok",
+    painted.cardBackground
+  );
+
+  /* ---- 구도(image_position_y)가 실제 픽셀을 바꾼다 ---- */
+
+  serverFixture.db = makeDb({
+    settings: [shareCardSettingsRow({ image_position_y: 100 })]
+  });
+
+  const moved = await requestOgImage("?post=14&v=photo2");
+  const movedPixel = pixelAt(decodePng(moved.bytes), 600, 140);
+
+  check(
+    "[photo] ★ 사진 위치를 아래로 주면 아래쪽이 보인다(구도가 카드에 적용된다)",
+    nearColour(movedPixel, PHOTO_BLUE, 70) && !nearColour(movedPixel, PHOTO_GREEN, 70),
+    `rgb(${movedPixel.join(",")})`
+  );
+
+  /* ---- 글 대표 이미지가 있으면 그쪽이 이긴다 ---- */
+
+  serverFixture.coverPhoto = PHOTO_FIXTURE_2;
+  serverFixture.db = makeDb({
+    settings: [shareCardSettingsRow()],
+    post_covers: [{ post_id: 14, mime_type: "image/png" }]
+  });
+
+  const cover = await requestOgImage("?post=14&v=photo3");
+  const coverPixel = pixelAt(decodePng(cover.bytes), 600, 140);
+
+  check(
+    "[photo] ★ 글 대표 이미지가 있으면 기본 사진보다 그쪽을 쓴다(기존 정책)",
+    nearColour(coverPixel, PHOTO_ORANGE, 70) && !nearColour(coverPixel, PHOTO_GREEN, 70),
+    `rgb(${coverPixel.join(",")})`
+  );
+
+  serverFixture.coverPhoto = null;
+
+  /* ---- 저장된 기본 사진이 없을 때만 그라데이션 ---- */
+
+  serverFixture.db = makeDb({ settings: [shareCardSettingsRow({ image_url: "" })] });
+
+  const bare = await requestOgImage("?post=14&v=photo4");
+  const barePixel = pixelAt(decodePng(bare.bytes), 600, 140);
+
+  check(
+    "[photo] 사진이 하나도 없을 때만 서비스 기본 그라데이션이다",
+    nearColour(barePixel, GRADIENT_TOP, 30) && bare.cardBackground === "none",
+    `rgb(${barePixel.join(",")}) ${bare.cardBackground}`
+  );
+
+  /* =======================================================
+     3) ★ 렌더가 한 번 실패했다고 그 카드가 굳지 않는다
+
+     이것이 보고된 증상의 실제 원인이다.
+  ======================================================= */
+
+  serverFixture.db = makeDb({ settings: [shareCardSettingsRow()] });
+
+  serverFixture.renders = [];
+  serverFixture.renderFailures = [429, 429];
+
+  const retried = await requestOgImage("?post=14&v=retry1");
+  const retriedPixel = pixelAt(decodePng(retried.bytes), 600, 140);
+
+  check(
+    "[photo] ★ 일시적 렌더 실패(429)는 다시 시도해서 진짜 카드를 낸다",
+    retried.status === 200 &&
+    retried.cardStatus === "render" &&
+    retried.cardAttempts === "3" &&
+    serverFixture.renders.length === 3 &&
+    nearColour(retriedPixel, PHOTO_GREEN, 70),
+    `attempts=${retried.cardAttempts} renders=${serverFixture.renders.length}`
+  );
+
+  serverFixture.renders = [];
+  serverFixture.renderFailures = [429, 429, 429];
+
+  const gaveUp = await requestOgImage("?post=14&v=retry2");
+
+  check(
+    "[photo] 계속 실패하면 기본 카드를 주되 **이유를 말한다**",
+    gaveUp.status === 200 &&
+    gaveUp.cardStatus === "fallback:render-429" &&
+    serverFixture.renders.length === 3,
+    `${gaveUp.cardStatus} renders=${serverFixture.renders.length}`
+  );
+
+  check(
+    "[photo] ★ 그 기본 카드를 캐시하지 않는다(다음 요청이 다시 그릴 수 있다)",
+    gaveUp.cacheControl === "no-store",
+    gaveUp.cacheControl
+  );
+
+  serverFixture.renders = [];
+  serverFixture.renderFailures = [403];
+
+  const refused = await requestOgImage("?post=14&v=retry3");
+
+  check(
+    "[photo] 자격 증명 오류(4xx)는 다시 시도하지 않는다",
+    refused.cardStatus === "fallback:render-403" &&
+    serverFixture.renders.length === 1,
+    `${refused.cardStatus} renders=${serverFixture.renders.length}`
+  );
+
+  /* ---- 실패한 주소가 다음 요청에서 회복된다 ---- */
+
+  const shim = installCacheShim();
+
+  try {
+
+    serverFixture.renders = [];
+    serverFixture.renderFailures = [429, 429, 429];
+
+    const crawled = await requestOgImage("?post=14&v=recover");
+
+    check(
+      "[photo] 크롤러가 실패에 걸린 그 순간에는 기본 카드가 나간다",
+      crawled.cardStatus.startsWith("fallback:") && shim.store.size === 0,
+      `${crawled.cardStatus} store=${shim.store.size}`
+    );
+
+    serverFixture.renderFailures = [];
+
+    const recovered = await requestOgImage("?post=14&v=recover");
+    const recoveredPixel = pixelAt(decodePng(recovered.bytes), 600, 140);
+
+    check(
+      "[photo] ★ 같은 주소의 다음 요청은 진짜 카드를 받는다(영영 굳지 않는다)",
+      recovered.cardStatus === "render" &&
+      recovered.cacheControl === "public, max-age=31536000, immutable" &&
+      nearColour(recoveredPixel, PHOTO_GREEN, 70),
+      `${recovered.cardStatus} ${recovered.cacheControl}`
+    );
+
+    /* =====================================================
+       4) 사진을 바꾸면 주소의 v 가 바뀌고, 예전 카드가 재사용되지 않는다
+    ===================================================== */
+
+    serverFixture.db = makeDb({ settings: [shareCardSettingsRow()] });
+
+    const beforePage = await requestPage(`/${OWNER_SLUG}/post/14`);
+    const beforeImage = ogImageFromHtml(beforePage.html);
+
+    /* 사진을 바꾸기 **전에** 그 주소의 카드를 받아 캐시에 담는다 */
+
+    const beforeCard = await requestOgImage(
+      beforeImage.slice(beforeImage.indexOf("?"))
+    );
+
+    check(
+      "[photo] 바꾸기 전 주소의 카드는 예전 사진이다",
+      nearColour(pixelAt(decodePng(beforeCard.bytes), 600, 140), PHOTO_GREEN, 70)
+    );
+
+    serverFixture.db = makeDb({
+      settings: [
+        shareCardSettingsRow({
+          image_url: PHOTO_URL_2,
+          version: "1757900000000"
+        })
+      ]
+    });
+
+    const afterPage = await requestPage(`/${OWNER_SLUG}/post/14`);
+    const afterImage = ogImageFromHtml(afterPage.html);
+
+    check(
+      "[photo] ★ 기본 사진을 바꾸면 og:image 의 v 가 바뀐다",
+      Boolean(beforeImage) && Boolean(afterImage) && beforeImage !== afterImage,
+      `${beforeImage} → ${afterImage}`
+    );
+
+    const afterCard = await requestOgImage(
+      afterImage.slice(afterImage.indexOf("?"))
+    );
+
+    const afterPixel = pixelAt(decodePng(afterCard.bytes), 600, 140);
+
+    check(
+      "[photo] ★ 새 주소는 예전 캐시를 쓰지 않고 새 사진으로 그린다",
+      nearColour(afterPixel, PHOTO_ORANGE, 70) &&
+      !afterCard.bytes.equals(beforeCard.bytes),
+      `rgb(${afterPixel.join(",")})`
+    );
+
+  } finally {
+
+    shim.uninstall();
+
+  }
+
+  /* ---- 닿지 않는 사진 주소는 굳히지 않는다 ---- */
+
+  serverFixture.db = makeDb({
+    settings: [
+      shareCardSettingsRow({
+        image_url: `http://localhost:${PORT}/__fixtures/gone.png`
+      })
+    ]
+  });
+
+  const broken = await requestOgImage("?post=14&v=broken1");
+
+  check(
+    "[photo] ★ 저장된 사진 주소가 닿지 않으면 조용히 넘어가지 않고 상태를 말한다",
+    broken.status === 200 && broken.cardBackground === "missing-404",
+    broken.cardBackground
+  );
+
+  check(
+    "[photo] ★ 사진 없이 그려진 카드는 1년 immutable 로 굳히지 않는다",
+    broken.cacheControl === "public, max-age=300",
+    broken.cacheControl
+  );
+
+  serverFixture.renderMode = "stub";
+  serverFixture.renderBrowser = null;
+  serverFixture.renderFailures = [];
+}
+
+
+/* 응답 HTML 에서 og:image 주소 하나 */
+function ogImageFromHtml(html) {
+  const hit = /<meta property="og:image" content="([^"]+)">/.exec(html);
+  return hit ? hit[1].replace(/&amp;/g, "&") : "";
+}
+
+
+/* =========================================================
    MAIN
 ========================================================== */
 
@@ -2664,7 +3336,8 @@ async function runCache() {
 
   const needsBrowser =
     shouldRun("settings") || shouldRun("card") ||
-    shouldRun("crop") || shouldRun("preview") || Boolean(SHOT_DIR);
+    shouldRun("crop") || shouldRun("preview") ||
+    shouldRun("photo") || Boolean(SHOT_DIR);
 
   let browser = null;
 
@@ -2682,6 +3355,7 @@ async function runCache() {
     if (shouldRun("meta")) await runMeta();
     if (shouldRun("image")) await runImage();
     if (shouldRun("cache")) await runCache();
+    if (shouldRun("photo")) await runPhoto(browser);
     if (SHOT_DIR) await runShots(browser, SHOT_DIR);
 
   } catch (err) {

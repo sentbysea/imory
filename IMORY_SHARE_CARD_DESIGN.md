@@ -402,6 +402,15 @@ twitter:image · twitter:image:alt
 `twitter:player`·`og:video`·영상 카드 meta는 **넣지 않는다** — 정적 large
 image 카드로만 제공해서 X가 영상형 회색 바를 얹을 여지를 만들지 않는다.
 
+#### 조회 캐시는 60초 — 단, 카드 설정은 매번 다시 읽는다
+
+meta 조회 결과는 Workers Cache에 60초 담는다(같은 글의 연속 요청).
+그런데 **카드 설정만은 적중해도 다시 읽는다**(질의 하나,
+`loadShareCardSettings`). 설정을 저장하자마자 링크를 붙여 넣었을 때
+그 사이 크롤러가 받아가는 `og:image`가 아직 옛 `v`이면, 크롤러는 그
+한 번을 자기 쪽에 오래 담아 두므로 그 트윗이 옛 카드로 굳는다.
+카드 라벨도 설정값이므로 함께 다시 만든다.
+
 #### og:title 과 twitter:title 이 다르다
 
 X 앱은 카드 **아래에** 자기 검은 반투명 바를 얹고 거기에
@@ -491,10 +500,59 @@ CF_BROWSER_RENDERING_TOKEN   Browser Rendering 권한 API 토큰
 
 #### 설정이 없거나 렌더가 실패하면
 
-`/images/share-card-default.png`(1200 × 628)를 `max-age=300`으로 준다.
-카드가 깨진 이미지로 뜨는 일은 없고, 환경 변수가 채워지면 5분 안에
-실제 카드로 바뀐다. **이 기본 카드에는 글자가 없다** — 브랜드 색
+`/images/share-card-default.png`(1200 × 628)를 준다. 카드가 깨진
+이미지로 뜨는 일은 없다. **이 기본 카드에는 글자가 없다** — 브랜드 색
 그라데이션 한 장이다.
+
+| 갈래 | `Cache-Control` | 왜 |
+| --- | --- | --- |
+| 비공개 · 비밀글 | `public, max-age=300` | 공개로 되돌리면 5분 안에 바뀐다 |
+| 렌더 실패 · 설정 없음 · 조회 실패 | `no-store` | **다음 요청이 다시 그려야 한다** (아래) |
+
+#### 렌더 실패는 굳지 않는다 (2026-09-13)
+
+실측: 같은 공개 글의 카드를 연달아 새 버전으로 부르면 **세 번에 한 번쯤**
+기본 그라데이션이 나왔다. 그 실패는 1초 안에 돌아온다 — 타임아웃이 아니라
+Browser Rendering이 즉시 돌려준 오류다(한도 초과 등). 같은 조건에서
+Supabase 읽기는 25/25 정상이었고 저장된 기본 사진 주소도 200이었다.
+
+이것이 "설정 미리보기에는 사진이 보이는데 트윗 카드는 기본 그라데이션"의
+정체였다. 크롤러는 글을 올린 **그 순간 한 번** 긁어간다. 그 한 번이
+실패에 걸리면, 주소에 버전이 박혀 있어(immutable) 그 트윗의 카드는 계속
+기본 그라데이션이다.
+
+- 일시적 실패(fetch 실패 · 408 · 425 · 429 · 5xx)는 **최대 3번까지 다시
+  시도한다**(250ms · 750ms 간격). 설정 없음(`not-configured`)과 4xx는
+  다시 해도 같으므로 바로 포기한다.
+- 재시도에는 **15초 상한**이 있다. 측정된 실패는 1초 안에 돌아오므로
+  세 번이 2초도 안 걸린다. 반대로 렌더가 느려서 실패하는 경우라면 다시
+  해도 느릴 것이고, 그동안 크롤러를 붙잡고 있는 것이 기본 카드를 빨리
+  주는 것보다 나쁘다.
+- 그래도 실패하면 그 응답은 **캐시하지 않는다**(`no-store` + Workers
+  Cache에 담지 않음). 같은 주소의 다음 요청이 진짜 카드를 받는다.
+
+#### 왜 기본 카드인지 응답이 말한다
+
+네 갈래가 전부 같은 PNG를 같은 헤더로 돌려주던 것을 고쳤다. `curl -I`
+한 번으로 원인이 보인다.
+
+```
+X-Imory-Share-Card: render | cache
+                  | fallback:not-public | fallback:no-owner | fallback:no-post
+                  | fallback:not-configured | fallback:render-429 | fallback:fetch-failed
+X-Imory-Share-Card-Background: ok | none | missing-404 | unreachable
+X-Imory-Share-Card-Attempts:   1 | 2 | 3
+```
+
+배경 확인(`probeShareCardBackground`)은 렌더와 **동시에** 보내는 HEAD
+한 번이라 카드가 늦어지지 않고, 결과는 헤더와 캐시 판단에만 쓴다.
+CSS `background-image`에는 `onerror`가 없어서, 사진 주소가 죽으면 카드는
+조용히 "그라데이션 + 글자"가 된다 — 그 경우와 "사진을 설정하지 않았다"를
+구분할 방법이 이 헤더다.
+
+**사진이 닿지 않은 채로 그려진 카드는 굳히지 않는다**: `max-age=300`으로
+주고 Workers Cache에도 담지 않는다. 1년 immutable로 굳히면 사진이
+돌아와도 그 주소는 영영 사진 없는 카드다.
 
 ### 6-3. 버전 (SNS 캐시)
 
@@ -526,7 +584,7 @@ CF_BROWSER_RENDERING_TOKEN   Browser Rendering 권한 API 토큰
 ## 8. 테스트
 
 ```
-node admin/share-card-e2e-test.mjs                # 전부 (139 PASS)
+node admin/share-card-e2e-test.mjs                # 전부 (165 PASS)
 node admin/share-card-e2e-test.mjs --only=meta    # 브라우저 불필요
 node admin/share-card-e2e-test.mjs --only=image   # 브라우저 불필요
 node admin/share-card-e2e-test.mjs --only=cache   # 브라우저 불필요
@@ -534,6 +592,7 @@ node admin/share-card-e2e-test.mjs --only=settings
 node admin/share-card-e2e-test.mjs --only=card
 node admin/share-card-e2e-test.mjs --only=crop
 node admin/share-card-e2e-test.mjs --only=preview
+node admin/share-card-e2e-test.mjs --only=photo    # 진짜 사진 + 진짜 렌더
 
 node supabase/share-label-seq-migration-test.mjs  # 실제 Postgres(PGlite)
 ```
@@ -550,6 +609,7 @@ node supabase/share-label-seq-migration-test.mjs  # 실제 Postgres(PGlite)
 | `preview` | 데스크톱/모바일 1200:628 유지 · 가로 넘침 0 · **오버레이(색+강도)와 폰트(폰트+제목 크기)가 390px에서도 한 줄** · 슬라이더가 문서 재생성 없이 즉시 반영 |
 | `meta` | **실제 `_middleware.js` 응답** — summary_large_image · og:image 절대 URL · 1200×628 · 발췌 · twitter:player 없음 · og:title 한 번 · **`og:title` = 글 제목 / `twitter:title` = 블로그 제목만**(글 제목·slug·카테고리·`|` 없음) · 블로그 제목이 비면 `imory.me` · 비밀글/비공개 글의 제목·발췌·대표 이미지 없음 · 글이 아닌 주소는 무변경 |
 | `image` | **실제 `api/og/post.js`** — 1200×628 PNG · 렌더러에 넘긴 HTML이 설정 화면과 같은 문서(색·글자색·제목 크기·frame) · **기본 사진의 `image_position_x/y`가 그대로 들어가고 설정 화면과 같은 함수에서 나옴** · 글 대표 이미지는 가운데 · 자동/사용자 지정 라벨 · **slug·카테고리 메타 줄 없음** · 빈 라벨은 그리지 않음 · **share_label_seq 컬럼이 없어도 카드가 그려짐** · 배경이 프록시 주소(버킷/서명 URL 아님) · 비밀글은 렌더 호출 0 · 설정 없음/렌더 실패 시 기본 카드 · 버전은 실제 변경 때만 달라짐 |
+| `photo` | ★ **저장한 기본 사진이 실제 카드에 그려지는가** — 1×1 mock이 아니라 **진짜 사진**(1200 × 1256, 위 초록/아래 파랑)을 HTTP로 서빙하고, 넘어온 카드 HTML을 **진짜 브라우저로 그려서** 나온 PNG를 디코드해 **찍힌 픽셀**로 판정한다. 저장 전에는 `saved`로 표시하지 않음(저장 성공 뒤에만) · **새로고침 뒤 미리보기 배경이 저장된 그 주소 그대로**(blob:/data: 아니고, 실제로 1200×1256을 돌려주는 주소) · 서버가 **같은 사용자의 같은 `share_card` 행**을 읽음 · 대표 이미지 없는 글의 카드 배경이 그 사진(그라데이션 아님) · 헤드리스 브라우저가 그 주소를 실제로 받아 감 · `image_position_y`가 찍힌 픽셀을 바꿈 · **대표 이미지가 있으면 그쪽이 이김** · 사진이 하나도 없을 때만 그라데이션 · **일시적 렌더 실패(429)는 재시도해서 진짜 카드** · 계속 실패하면 이유를 헤더로 말하고 `no-store` · 4xx는 재시도 없음 · **실패한 주소의 다음 요청이 진짜 카드를 받음(영영 굳지 않음)** · 사진을 바꾸면 `og:image`의 `v`가 바뀌고 새 주소는 예전 캐시를 쓰지 않음 · 닿지 않는 사진 주소는 `missing-404`로 말하고 immutable로 굳히지 않음 |
 | `cache` | 같은 `post + v` 재요청에 **Browser Rendering 호출 0** · `immutable` 응답 · HEAD도 캐시 사용(본문 없음) · **캐시가 권한 검사를 건너뛰지 않음**(비공개로 바꾸면 캐시된 카드가 나가지 않고 항목이 지워지며, 다시 공개로 바꾸면 같은 주소에서 즉시 실제 카드) · 기본 카드와 버전 없는 주소는 담지 않음 · `caches` 없는 런타임에서도 동작 |
 
 `meta`/`image`/`cache` 절은 배포되는 그 파일(`functions/**`)을 node에서
@@ -588,6 +648,23 @@ folder/sort_order migration도 함께 올려서 **트리거 실행 순서**를 �
 
    저장소에서 검증한 것은 "요청 모양과 실패 시 동작"(mock)까지다 —
    Cloudflare가 실제로 돌려주는 PNG는 배포 뒤 눈으로 확인해야 한다.
+
+1-1. **렌더러가 왜 가끔 실패하는지는 Cloudflare 쪽에서 봐야 한다**
+   (2026-09-13 실측: 같은 공개 글을 새 버전으로 연달아 부르면 세 번에
+   한 번쯤 실패, 실패는 1초 안에 돌아옴 → 타임아웃이 아니라 즉시 오류).
+   저장소 코드가 할 수 있는 것은 다시 시도하고, 실패를 굳히지 않고,
+   이유를 헤더에 적는 것까지다(§6-2). **어떤 상태 코드인지**는 배포
+   뒤 이 한 줄로 확인한다:
+
+   ```
+   curl -sI "https://imory.me/api/og/post?post=<공개 글 id>&v=probe$(date +%s)" \
+     | grep -i x-imory-share-card
+   ```
+
+   `fallback:render-429`면 Browser Rendering 한도다(Cloudflare 대시보드
+   → Workers & Pages → Browser Rendering의 사용량/한도). `render-5xx`면
+   그쪽 일시 장애다. 어느 쪽이든 재시도가 흡수하는 범위를 넘으면
+   한도를 올리는 것이 답이고, 저장소에서 더 좁힐 수 없다.
 2. **버킷 migration — 적용됨**(2026-09-13, 사용자가 Supabase SQL
    Editor에서 실행). `20260913170000_create_user_share_cards_bucket.sql`.
    버킷이 없으면 기본 카드 사진 업로드만 실패하고, 오버레이·폰트

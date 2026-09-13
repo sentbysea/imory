@@ -359,6 +359,49 @@ export function shareCardExcerpt(
      postId        문자열 id
 ========================================================== */
 
+/* =========================================================
+   카드 설정 한 줄 읽기
+
+   따로 떼어 둔 이유는 아래 injectShareCardMeta 다. 글에서 온
+   값(제목 · 카테고리 · 순번)은 잘 안 바뀌지만 **카드 설정은
+   사용자가 방금 저장한 그 값**이어야 한다 — 저장하자마자 글
+   주소의 og:image 가 새 v 를 달아야, 그 뒤에 붙여 넣은 링크가
+   새 카드를 받아간다. 그래서 meta 캐시가 적중해도 이 한 줄은
+   매번 다시 읽는다(질의 하나).
+========================================================== */
+
+export async function loadShareCardSettings(
+  env,
+  userId
+) {
+
+  const rows =
+    await ogSupabaseSelect(
+      env,
+      `site_settings?user_id=eq.${encodeURIComponent(userId)}` +
+      `&key=in.(share_card,blog_title)&select=key,value`
+    );
+
+
+  const settings =
+    new Map(
+      rows.map((row) => [row.key, row.value])
+    );
+
+
+  return {
+
+    blogTitle:
+      collapseShareCardText(settings.get("blog_title")),
+
+    card:
+      normalizeShareCardSettings(settings.get("share_card"))
+
+  };
+
+}
+
+
 export async function loadShareCardPost(
   env,
   slug,
@@ -369,6 +412,7 @@ export async function loadShareCardPost(
     {
       ok: false,
       slug: slug || "",
+      ownerId: "",
       blogTitle: "",
       card: normalizeShareCardSettings(null),
       title: "",
@@ -424,14 +468,10 @@ export async function loadShareCardPost(
     `&user_id=eq.${encodeURIComponent(profile.user_id)}`;
 
 
-  const [settingsRows, postRowsOrNull] =
+  const [settings, postRowsOrNull] =
     await Promise.all([
 
-      ogSupabaseSelect(
-        env,
-        `site_settings?user_id=eq.${encodeURIComponent(profile.user_id)}` +
-        `&key=in.(share_card,blog_title)&select=key,value`
-      ),
+      loadShareCardSettings(env, profile.user_id),
 
       ogSupabaseSelectOrNull(
         env,
@@ -457,21 +497,18 @@ export async function loadShareCardPost(
     );
 
 
-  const settings =
-    new Map(
-      settingsRows.map((row) => [row.key, row.value])
-    );
-
-
   const base =
     {
       ...empty,
 
+      ownerId:
+        profile.user_id,
+
       blogTitle:
-        collapseShareCardText(settings.get("blog_title")),
+        settings.blogTitle,
 
       card:
-        normalizeShareCardSettings(settings.get("share_card"))
+        settings.card
     };
 
 
@@ -928,6 +965,9 @@ export async function injectShareCardMeta(
   let context =
     null;
 
+  let fromCache =
+    false;
+
 
   if (cache) {
 
@@ -942,6 +982,9 @@ export async function injectShareCardMeta(
         context =
           await hit.json();
 
+        fromCache =
+          true;
+
       }
 
     }
@@ -950,6 +993,9 @@ export async function injectShareCardMeta(
 
       context =
         null;
+
+      fromCache =
+        false;
 
     }
 
@@ -998,6 +1044,46 @@ export async function injectShareCardMeta(
 
 
   /*
+    ★ 카드 설정만은 캐시에서 꺼내 쓰지 않는다
+
+    이 캐시는 글에서 온 값(제목 · 카테고리 · 순번)을 60초 아끼려고
+    있다. 그런데 카드 설정까지 60초를 물고 있으면, 사용자가 기본
+    사진을 저장하고 **바로** 링크를 붙여 넣었을 때 그 사이 크롤러가
+    받아가는 og:image 는 아직 옛 v 다. 크롤러는 그 한 번을 자기
+    쪽에 오래 담아 두므로, 그 트윗은 옛 카드로 굳는다.
+
+    그래서 적중했으면 설정 한 줄만 다시 읽어 덮는다(질의 하나).
+    라벨도 카드 설정(card_label)을 쓰므로 함께 다시 만든다.
+  */
+
+  if (fromCache && context.ownerId) {
+
+    const fresh =
+      await loadShareCardSettings(env, context.ownerId);
+
+
+    context.blogTitle =
+      fresh.blogTitle;
+
+    context.card =
+      fresh.card;
+
+
+    if (context.ok) {
+
+      context.label =
+        resolveShareCardLabel(
+          fresh.card.cardLabel,
+          context.containerName,
+          context.sequence
+        );
+
+    }
+
+  }
+
+
+  /*
     캐시에서 온 값도 정규화된 모양을 유지한다. JSON 을 한 번
     거치면서 모르는 값이 섞였을 수 있으므로, 저장 모양으로
     되돌렸다가(serialize) 다시 정규화한다 — 규칙이 한 쌍의
@@ -1028,9 +1114,142 @@ export async function injectShareCardMeta(
    Cloudflare Browser Rendering REST API. 응답이 이미지면 그
    바이트가 카드다. 아니면(설정 없음·권한 없음·타임아웃) 이유를
    달아 실패로 돌려준다 — 호출자가 기본 카드로 내려간다.
+
+   ★ 한 번 실패했다고 기본 카드로 내려가지 않는다 (2026-09-13)
+
+   실측: 같은 공개 글의 같은 카드를 **연달아 새 버전으로** 부르면
+   세 번에 한 번쯤 기본 그라데이션이 나왔다. 그 실패는 1초 안에
+   돌아온다 — 타임아웃이 아니라 Browser Rendering 이 즉시 돌려준
+   오류(한도 초과 등)다. Supabase 읽기는 같은 조건에서 25/25
+   정상이었고 저장된 기본 사진 주소도 200 이었다.
+
+   이것이 "설정 미리보기에는 사진이 보이는데 트윗 카드는 기본
+   그라데이션"의 정체다. 크롤러는 글을 올린 **그 순간 한 번**
+   긁어 간다. 그 한 번이 실패에 걸리면, 주소에 버전이 박혀 있어
+   내용이 영영 바뀌지 않으므로(immutable) 그 트윗의 카드는 계속
+   기본 그라데이션이다.
+
+   그래서 두 가지를 바꿨다:
+
+     · 일시적 실패(fetch 실패 · 429 · 5xx)는 **다시 시도한다.**
+       설정이 없거나(not-configured) 자격 증명이 틀린 것(4xx)은
+       다시 시도해도 같으므로 바로 포기한다.
+     · 그래도 실패하면 그 응답은 **캐시하지 않는다**(no-store).
+       아래 onRequest 참고 — 다음 요청이 다시 시도할 수 있어야
+       한다.
 ========================================================== */
 
+/* 다시 시도할 값어치가 있는 실패인가 */
+
+const SHARE_CARD_RETRY_STATUS =
+  new Set([408, 425, 429, 500, 502, 503, 504]);
+
+
+const SHARE_CARD_RENDER_ATTEMPTS =
+  3;
+
+
+/* 재시도 사이 대기(ms) — 한도 초과가 가라앉을 만큼만 */
+
+const SHARE_CARD_RENDER_BACKOFF =
+  [250, 750];
+
+
+/*
+  재시도에 쓸 시간 상한(ms).
+
+  실패가 **즉시** 돌아오는 경우(측정된 그 경우)에는 세 번이 2초도
+  걸리지 않는다. 반대로 렌더가 느려서 실패하는 경우라면 다시 해도
+  느릴 것이고, 그동안 크롤러를 붙잡고 있는 것이 기본 카드를 빨리
+  주는 것보다 나쁘다. 그래서 이 시간을 넘겼으면 더 시도하지 않는다.
+*/
+
+const SHARE_CARD_RENDER_BUDGET =
+  15000;
+
+
+function shareCardRenderIsTransient(
+  outcome
+) {
+
+  if (outcome.reason === "fetch-failed") {
+
+    return true;
+
+  }
+
+
+  const status =
+    /^render-([0-9]{3})$/.exec(outcome.reason || "");
+
+
+  return Boolean(status) &&
+    SHARE_CARD_RETRY_STATUS.has(Number(status[1]));
+
+}
+
+
 async function renderShareCardPng(
+  env,
+  html
+) {
+
+  let last =
+    {
+      ok: false,
+      reason: "not-configured"
+    };
+
+
+  const deadline =
+    Date.now() + SHARE_CARD_RENDER_BUDGET;
+
+
+  for (let attempt = 0; attempt < SHARE_CARD_RENDER_ATTEMPTS; attempt += 1) {
+
+    if (attempt > 0 && Date.now() > deadline) {
+
+      return last;
+
+    }
+
+
+    if (attempt > 0) {
+
+      await new Promise(
+        (resolve) =>
+          setTimeout(
+            resolve,
+            SHARE_CARD_RENDER_BACKOFF[attempt - 1] || 750
+          )
+      );
+
+    }
+
+
+    last =
+      await renderShareCardPngOnce(env, html);
+
+
+    last.attempts =
+      attempt + 1;
+
+
+    if (last.ok || !shareCardRenderIsTransient(last)) {
+
+      return last;
+
+    }
+
+  }
+
+
+  return last;
+
+}
+
+
+async function renderShareCardPngOnce(
   env,
   html
 ) {
@@ -1144,6 +1363,116 @@ async function renderShareCardPng(
 
 
 /* =========================================================
+   진단 — 기본 카드로 내려갔으면 **왜** 인지 말한다
+
+   예전에는 네 갈래(비공개 · 주인 없음 · 조회 실패 · 렌더 실패)가
+   전부 똑같은 PNG 를 똑같은 헤더로 돌려줬다. 바깥에서 보면
+   구분할 방법이 없어서, "카드가 기본 그라데이션으로 나온다"를
+   추측으로만 좁혀야 했다.
+
+   그래서 모든 응답에 한 줄을 붙인다:
+
+     X-Imory-Share-Card: render                (방금 그렸다)
+     X-Imory-Share-Card: cache                 (캐시에서 그대로)
+     X-Imory-Share-Card: fallback:not-public
+     X-Imory-Share-Card: fallback:no-owner
+     X-Imory-Share-Card: fallback:no-post
+     X-Imory-Share-Card: fallback:not-configured
+     X-Imory-Share-Card: fallback:render-429   (렌더러가 준 상태)
+     X-Imory-Share-Card: fallback:fetch-failed
+
+   그리는 데 성공했을 때는 배경 사진이 실제로 닿는 주소였는지도
+   함께 말한다(아래 probeShareCardBackground):
+
+     X-Imory-Share-Card-Background: ok | missing-404 | unreachable | none
+
+   이미지 응답에 붙는 헤더일 뿐이라 카드 그림에는 영향이 없고,
+   크롤러도 무시한다. `curl -I` 한 번으로 원인이 보인다.
+========================================================== */
+
+const SHARE_CARD_STATUS_HEADER =
+  "X-Imory-Share-Card";
+
+const SHARE_CARD_BACKGROUND_HEADER =
+  "X-Imory-Share-Card-Background";
+
+const SHARE_CARD_ATTEMPTS_HEADER =
+  "X-Imory-Share-Card-Attempts";
+
+
+/* =========================================================
+   배경 사진이 닿는 주소인가
+
+   렌더가 **성공해도** 배경 사진만 못 받아오면 카드는 조용히
+   기본 그라데이션 + 글자가 된다(CSS background-image 에는 onerror
+   가 없다). 그 경우와 "설정에 사진이 없다"를 바깥에서 구분할 수
+   없으면, 지금처럼 "저장은 됐는데 카드에 안 나온다"를 또 추측으로
+   좁히게 된다.
+
+   그래서 렌더와 **동시에**(Promise.all) 한 번 찔러 본다. 결과는
+   응답 헤더로만 쓰고 카드 내용은 바꾸지 않는다 — 이 확인이 실패해도
+   카드는 그대로 나간다.
+
+   닿지 않는 배경으로 그린 카드는 **캐시하지 않는다**(onRequest).
+   그 카드를 1년 immutable 로 굳혀 두면, 사진이 돌아와도 그 주소는
+   영영 사진 없는 카드다.
+========================================================== */
+
+async function probeShareCardBackground(
+  url
+) {
+
+  if (!url) {
+
+    return "none";
+
+  }
+
+
+  let response;
+
+
+  try {
+
+    /* 바이트 전체는 필요 없다 — 닿는지만 본다 */
+
+    response =
+      await fetch(url, { method: "HEAD" });
+
+  }
+
+  catch (err) {
+
+    return "unreachable";
+
+  }
+
+
+  if (response.ok || response.status === 206) {
+
+    return "ok";
+
+  }
+
+
+  /*
+    HEAD 를 거절하는 곳은 판정하지 않는다 — 확인 방법이 없는 것을
+    "사진이 없다"로 읽으면 멀쩡한 카드를 캐시하지 않게 된다.
+  */
+
+  if (response.status === 405 || response.status === 501) {
+
+    return "ok";
+
+  }
+
+
+  return `missing-${response.status}`;
+
+}
+
+
+/* =========================================================
    기본 카드 배달
 
    /images/share-card-default.png 는 저장소의 정적 자산이다.
@@ -1153,15 +1482,17 @@ async function renderShareCardPng(
 
 async function shareCardDefaultResponse(
   origin,
-  maxAge,
-  method
+  cacheControl,
+  method,
+  reason
 ) {
 
   const headers =
     {
       "Content-Type": "image/png",
-      "Cache-Control": `public, max-age=${maxAge}`,
-      "X-Content-Type-Options": "nosniff"
+      "Cache-Control": cacheControl,
+      "X-Content-Type-Options": "nosniff",
+      [SHARE_CARD_STATUS_HEADER]: `fallback:${reason || "unknown"}`
     };
 
 
@@ -1201,7 +1532,8 @@ async function shareCardDefaultResponse(
     {
       status: 404,
       headers: {
-        "Cache-Control": "public, max-age=60"
+        "Cache-Control": "no-store",
+        [SHARE_CARD_STATUS_HEADER]: `fallback:${reason || "unknown"}:no-default-asset`
       }
     }
   );
@@ -1430,7 +1762,12 @@ export async function onRequest(
     }
 
 
-    return shareCardDefaultResponse(url.origin, 300, request.method);
+    return shareCardDefaultResponse(
+      url.origin,
+      "public, max-age=300",
+      request.method,
+      "not-public"
+    );
 
   }
 
@@ -1439,9 +1776,23 @@ export async function onRequest(
 
   if (cached) {
 
-    return request.method === "HEAD"
-      ? new Response(null, { status: 200, headers: cached.headers })
-      : cached;
+    const hit =
+      new Response(
+        request.method === "HEAD" ? null : cached.body,
+        {
+          status: 200,
+          headers: cached.headers
+        }
+      );
+
+
+    hit.headers.set(
+      SHARE_CARD_STATUS_HEADER,
+      "cache"
+    );
+
+
+    return hit;
 
   }
 
@@ -1452,7 +1803,12 @@ export async function onRequest(
 
   if (!ownerId) {
 
-    return shareCardDefaultResponse(url.origin, 300, request.method);
+    return shareCardDefaultResponse(
+      url.origin,
+      "no-store",
+      request.method,
+      "no-owner"
+    );
 
   }
 
@@ -1476,7 +1832,17 @@ export async function onRequest(
 
   if (!cardContext.ok) {
 
-    return shareCardDefaultResponse(url.origin, 300, request.method);
+    /*
+      공개 확인(loadShareCardPostOwner)은 통과했는데 여기서 못 찾았다
+      — 조회가 일시적으로 실패했을 가능성이 크다. 담지 않는다.
+    */
+
+    return shareCardDefaultResponse(
+      url.origin,
+      "no-store",
+      request.method,
+      "no-post"
+    );
 
   }
 
@@ -1502,20 +1868,59 @@ export async function onRequest(
     });
 
 
-  const rendered =
-    await renderShareCardPng(env, html);
+  const backgroundUrl =
+    shareCardBackgroundUrl(cardContext, url.origin);
+
+
+  /*
+    렌더와 배경 확인을 함께 보낸다 — 확인 때문에 카드가 늦어지지
+    않는다. 결과는 헤더와 캐시 판단에만 쓴다.
+  */
+
+  const [rendered, background] =
+    await Promise.all([
+
+      renderShareCardPng(env, html),
+
+      probeShareCardBackground(backgroundUrl)
+
+    ]);
 
 
   if (!rendered.ok) {
 
     /*
-      설정이 아직 없거나 렌더가 실패했다. 기본 카드를 짧게 캐시해서
-      설정이 채워지면 곧 실제 카드로 바뀌게 한다.
+      ★ 이 응답은 캐시하지 않는다.
+
+      예전에는 `public, max-age=300` 이었다. 그러면 크롤러가 글을
+      올린 그 순간 한 번 긁어가다 일시적 실패에 걸렸을 때, 우리
+      edge 까지 5분 동안 같은 기본 카드를 돌려줘서 재시도조차
+      기본 카드를 받았다. 렌더 실패는 대개 일시적이므로(위
+      renderShareCardPng 주석) 다음 요청이 다시 그릴 수 있어야
+      한다.
+
+      설정이 아예 없는 경우(not-configured)도 같다 — 환경 변수를
+      채우자마자 다음 요청이 진짜 카드를 받는다.
     */
 
-    return shareCardDefaultResponse(url.origin, 300, request.method);
+    return shareCardDefaultResponse(
+      url.origin,
+      "no-store",
+      request.method,
+      rendered.reason || "render-failed"
+    );
 
   }
+
+
+  /*
+    배경 사진이 있다고 했는데 닿지 않았다 — 그린 카드는 사진 없는
+    카드다. 내보내되 굳히지는 않는다(아래 shouldStore).
+  */
+
+  const backgroundOk =
+    background === "ok" ||
+    background === "none";
 
 
   const response =
@@ -1529,6 +1934,15 @@ export async function onRequest(
           "Content-Type":
             "image/png",
 
+          [SHARE_CARD_STATUS_HEADER]:
+            "render",
+
+          [SHARE_CARD_BACKGROUND_HEADER]:
+            background,
+
+          [SHARE_CARD_ATTEMPTS_HEADER]:
+            String(rendered.attempts || 1),
+
           /*
             주소에 버전이 붙어 있으면 그 주소의 내용은 바뀔 수
             없다(내용이 바뀌면 버전이 바뀌고, 그러면 다른 주소다).
@@ -1540,7 +1954,7 @@ export async function onRequest(
           */
 
           "Cache-Control":
-            versioned
+            (versioned && backgroundOk)
               ? "public, max-age=31536000, immutable"
               : "public, max-age=300",
 
@@ -1555,9 +1969,12 @@ export async function onRequest(
   /*
     저장 — 버전이 붙은 주소만(cache 가 null 이 아닌 경우가 그때뿐이다).
     다음 요청은 공개 확인 한 번만 하고 이 바이트를 그대로 쓴다.
+
+    배경이 닿지 않은 카드는 담지 않는다 — 사진이 돌아오면 다음
+    요청이 제대로 된 카드를 그려야 한다.
   */
 
-  if (cache) {
+  if (cache && backgroundOk) {
 
     try {
 
