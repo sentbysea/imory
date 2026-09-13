@@ -137,6 +137,62 @@ function resolveInSiteSkinRoute(url) {
   }
 
 
+  /*
+    HIGHLIGHT-1: /:slug/memos — 메모 카테고리.
+
+      /memos                    전체 보기 (?view=folders면 폴더별)
+      /memos/category/:id       그 폴더(= 원본 글 카테고리)의 카드 목록
+                                id는 숫자이거나 "none"(카테고리 없음)
+
+    이 갈래가 없으면 스킨이 그린 메모 링크도, 플랫폼이 얹은 기본
+    진입점도 SPA로 처리되지 못하고 문서 전체를 다시 받는다 — 흰
+    화면을 한 번 거치게 된다(이 파일 상단 주석).
+  */
+
+  if (segments[0] === "memos") {
+
+    if (segments.length === 1) {
+
+      return {
+        page: "memos",
+
+        view:
+          url.searchParams.get("view") === "folders"
+            ? "folders"
+            : "all",
+
+        categoryId: null
+      };
+
+    }
+
+
+    if (
+      segments.length === 3 &&
+      segments[1] === "category" &&
+      (
+        /^\d+$/.test(segments[2]) ||
+        segments[2] === "none"
+      )
+    ) {
+
+      return {
+        page: "memos",
+
+        view: "all",
+
+        categoryId:
+          segments[2]
+      };
+
+    }
+
+
+    return null;
+
+  }
+
+
   if (
     segments.length === 2 &&
     /^\d+$/.test(segments[1])
@@ -239,7 +295,18 @@ document.addEventListener(
       쓰는 클래스명(.quiet-* 등)에는 절대 의존하지 않는다.
     */
 
-    if (!anchor.closest(".imory-skin-root")) {
+    /*
+      HIGHLIGHT-1 후속: 플랫폼이 스킨 바깥에 얹은 chrome 링크
+      (skin/skin-memo-entry.js의 메모 진입점)도 같은 라우터를 쓴다.
+      표식은 플랫폼 소유 속성 하나뿐이고, 스킨 마크업에는 이 속성이
+      들어갈 수 없다(skin/skin-sanitize.js가 허용 목록만 남긴다) —
+      스킨이 이 경로를 흉내 낼 수 없다는 뜻이다.
+    */
+
+    if (
+      !anchor.closest(".imory-skin-root") &&
+      !anchor.hasAttribute("data-imory-platform-nav")
+    ) {
       return;
     }
 
@@ -368,6 +435,25 @@ document.addEventListener(
             series: route.series
           }
         );
+
+        return;
+
+      }
+
+
+      if (route.page === "memos") {
+
+        if (typeof openMemoScreen !== "function") {
+          throw new Error("openMemoScreen unavailable");
+        }
+
+        await openMemoScreen({
+          view:
+            route.view,
+
+          categoryId:
+            route.categoryId
+        });
 
         return;
 

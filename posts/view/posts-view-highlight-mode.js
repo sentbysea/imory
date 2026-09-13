@@ -39,7 +39,8 @@
    의존(classic script, 먼저 로드돼야 함):
    posts-view-popover.js · posts-view-highlight-anchor.js ·
    posts-view-highlight-store.js · posts/editor/posts-color-picker.js ·
-   posts/view/posts-view-tools-menu.js(showPostViewerToast).
+   posts/view/posts-view-memo-card-tools.js(openPostMemoPopup ·
+   closePostMemoPopup · showPostViewerToast).
 ========================================================== */
 
 
@@ -118,6 +119,36 @@ async function renderPostHighlights(
       isOwner:
         Boolean(options.isOwner),
 
+      /*
+        이 글이 마지막으로 저장된 시각. 위치 확인 기록이 "이전
+        본문에 대한 결과"로 남지 않도록 기록에 함께 적는다
+        (posts-view-highlight-store.js). 목록을 읽을 때 같은 응답에
+        실려 오므로 호출자가 넘겨 주지 않아도 된다 — 못 받았으면
+        null이고, 그때는 기록에 시각이 비어 대조를 건너뛴다.
+      */
+
+      postUpdatedAt:
+        options.postUpdatedAt ??
+        null,
+
+      /*
+        하이라이트를 실제로 읽어 왔는가. 못 읽은 것을 "없다"로
+        취급하지 않기 위한 값이다(요구사항 5).
+      */
+
+      loadStatus:
+        "idle",
+
+      /*
+        비밀글을 비밀번호로 연 화면이라면 그 값. 다시 시도할 때
+        같은 문으로 다시 물어봐야 하기 때문에 들고 있는다 — 주소나
+        저장소에는 남기지 않는다(이 화면이 닫히면 함께 사라진다).
+      */
+
+      secretPassword:
+        options.secretPassword ||
+        null,
+
       placed:
         new Set()
     };
@@ -159,6 +190,27 @@ async function renderPostHighlights(
   }
 
 
+  postHighlightContext.loadStatus =
+    typeof getPostHighlightLoadStatus === "function"
+      ? getPostHighlightLoadStatus(
+          postHighlightContext.postId
+        )
+      : "ok";
+
+
+  if (
+    postHighlightContext.postUpdatedAt === null &&
+    typeof getCachedPostHighlightPostStamp === "function"
+  ) {
+
+    postHighlightContext.postUpdatedAt =
+      getCachedPostHighlightPostStamp(
+        postHighlightContext.postId
+      );
+
+  }
+
+
   postHighlightContext.placed =
     applyPostHighlights(
       root,
@@ -168,14 +220,25 @@ async function renderPostHighlights(
 
   /*
     이번에 어떤 카드가 자리를 찾았고 못 찾았는지 적어 둔다 — 메모
-    카테고리의 카드가 "원문에서 위치를 찾을 수 없음"을 표시할 때
-    쓰는 마지막 확인 결과다(posts-view-highlight-store.js).
+    카테고리의 카드가 위치 확인 상태를 표시할 때 쓰는 마지막 확인
+    결과다(posts-view-highlight-store.js).
+
+    ★ 조회에 실패했으면 적지 않는다. 못 받은 목록으로 판정하면
+      모든 카드를 "못 찾았다"로 적게 되고, 그건 실패를 결과로
+      둔갑시키는 일이다(요구사항 5). 그 글의 카드는 "아직 확인하지
+      않음"에 그대로 머문다.
   */
 
-  recordPostHighlightPlacement(
-    items,
-    postHighlightContext.placed
-  );
+  if (postHighlightContext.loadStatus === "ok") {
+
+    recordPostHighlightPlacement(
+      postHighlightContext.postId,
+      postHighlightContext.postUpdatedAt,
+      items,
+      postHighlightContext.placed
+    );
+
+  }
 
 
   /* 메모 카드에서 "원문 보기"로 들어왔으면 그 자리까지 데려간다 */
@@ -244,6 +307,135 @@ function teardownPostHighlightScreen() {
    하이라이팅 모드
 ========================================================== */
 
+/* =========================================================
+   하이라이트를 못 읽은 상태에서 모드를 켜려 할 때 (요구사항 5)
+
+   방문자에게는 아무 말도 하지 않는다 — 하이라이트가 안 보일 뿐이고,
+   DB 오류를 읽는 사람에게 보여줄 이유가 없다. 주인장이 **기능을
+   쓰려는 순간**에만 "지금은 쓸 수 없다"와 다시 시도할 방법을 준다.
+
+   지금 그은 하이라이트가 기존 것과 겹치는지 판정할 근거가 없는
+   채로 모드를 열면, 저장은 DB가 거절하지만(겹침 판정은 RPC 안에
+   있다) 사용자는 왜 안 되는지 알 수 없다. 그래서 아예 열지 않는다.
+========================================================== */
+
+async function retryPostHighlightLoad() {
+
+  const root =
+    postHighlightRoot;
+
+
+  if (
+    !root ||
+    postHighlightContext.postId === null
+  ) {
+
+    return false;
+
+  }
+
+
+  const items =
+    await loadPostHighlights(
+      postHighlightContext.postId,
+      {
+        secretPassword:
+          postHighlightContext.secretPassword ||
+          null
+      }
+    );
+
+
+  postHighlightContext.loadStatus =
+    typeof getPostHighlightLoadStatus === "function"
+      ? getPostHighlightLoadStatus(
+          postHighlightContext.postId
+        )
+      : "ok";
+
+
+  if (postHighlightContext.loadStatus !== "ok") {
+
+    return false;
+
+  }
+
+
+  if (typeof getCachedPostHighlightPostStamp === "function") {
+
+    postHighlightContext.postUpdatedAt =
+      getCachedPostHighlightPostStamp(
+        postHighlightContext.postId
+      );
+
+  }
+
+
+  if (
+    postHighlightRoot !== root ||
+    !root.isConnected
+  ) {
+
+    return false;
+
+  }
+
+
+  postHighlightContext.placed =
+    applyPostHighlights(
+      root,
+      items
+    );
+
+
+  recordPostHighlightPlacement(
+    postHighlightContext.postId,
+    postHighlightContext.postUpdatedAt,
+    items,
+    postHighlightContext.placed
+  );
+
+
+  return true;
+
+}
+
+
+function warnPostHighlightUnavailable() {
+
+  showPostViewerToast(
+    "하이라이트를 불러오지 못해 지금은 쓸 수 없습니다",
+    "error",
+    {
+      label:
+        "다시 시도",
+
+      onSelect:
+        async () => {
+
+          const ok =
+            await retryPostHighlightLoad();
+
+
+          if (ok) {
+
+            enterPostHighlightMode();
+
+
+            return;
+
+          }
+
+
+          warnPostHighlightUnavailable();
+
+        }
+    }
+  );
+
+}
+
+
 function enterPostHighlightMode() {
 
   if (
@@ -251,6 +443,16 @@ function enterPostHighlightMode() {
     !postHighlightContext.isOwner ||
     postHighlightModeOn
   ) {
+
+    return;
+
+  }
+
+
+  if (postHighlightContext.loadStatus === "failed") {
+
+    warnPostHighlightUnavailable();
+
 
     return;
 
@@ -1082,7 +1284,7 @@ function openPostHighlightBubble(
               onSelect:
                 () => {
 
-                  openPostMemoPopup(item);
+                  openOwnPostMemoPopup(item);
 
                 }
             },
@@ -1204,413 +1406,74 @@ async function confirmDeletePostHighlight(
 
 }
 
-
-
 /* =========================================================
-   메모 작성 팝업 (요구사항 6)
+   메모 작성 팝업은 여기 없다
 
-     위쪽  선택한 발췌문
-     아래쪽 메모 입력 textarea
-     오른쪽 아래 SAVE
+   openPostMemoPopup() / closePostMemoPopup() 은
+   posts/view/posts-view-memo-card-tools.js 로 옮겼다. 그 UI를
+   메모 카테고리 화면과 **Studio Preview**도 그대로 써야 하는데,
+   이 파일은 저장소·앵커 계산·모드 상태에 묶여 있어 Preview 문서에
+   실을 수 없기 때문이다.
 
-   기존 메모가 있으면 그 내용을 불러온다. 저장에 실패하면 쓴 내용을
-   그대로 남긴다 — 팝업을 닫지 않는다.
+   여기서는 그 팝업을 부를 때 "저장은 이렇게 한다"만 넘긴다
+   (openOwnPostMemoPopup 아래).
 ========================================================== */
 
-let postMemoPopupRoot =
-  null;
+/*
+  글 뷰어(말풍선)에서 여는 메모 팝업. 저장은 소유자 전용 RPC 하나로
+  하고, 성공하면 본문의 그 표시에 "메모 있음" 상태를 다시 찍는다.
+*/
 
-
-let postMemoPopupSession =
-  null;
-
-
-function openPostMemoPopup(
+function openOwnPostMemoPopup(
   item,
   options = {}
 ) {
 
-  closeImoryPopover({
-    silent: true
-  });
-
-
-  closePostMemoPopup({
-    silent: true
-  });
-
-
-  const overlay =
-    document.createElement("div");
-
-
-  overlay.className =
-    "post-memo-popup";
-
-
-  overlay.setAttribute(
-    "data-post-hl-ui",
-    "1"
-  );
-
-
-  const panel =
-    document.createElement("div");
-
-
-  panel.className =
-    "post-memo-popup-panel";
-
-
-  panel.setAttribute(
-    "role",
-    "dialog"
-  );
-
-
-  panel.setAttribute(
-    "aria-label",
-    "메모"
-  );
-
-
-  const excerpt =
-    document.createElement("blockquote");
-
-
-  excerpt.className =
-    "post-memo-popup-excerpt";
-
-
-  excerpt.style.borderLeftColor =
-    item.color ||
-    POST_HIGHLIGHT_DEFAULT_COLOR;
-
-
-  excerpt.textContent =
-    item.excerpt;
-
-
-  const field =
-    document.createElement("textarea");
-
-
-  field.className =
-    "post-memo-popup-field";
-
-
-  field.placeholder =
-    "메모";
-
-
-  field.value =
-    item.note ||
-    "";
-
-
-  field.setAttribute(
-    "data-popover-focus",
-    "1"
-  );
-
-
-  const footer =
-    document.createElement("div");
-
-
-  footer.className =
-    "post-memo-popup-footer";
-
-
-  const status =
-    document.createElement("span");
-
-
-  status.className =
-    "post-memo-popup-status";
-
-
-  const cancel =
-    document.createElement("button");
-
-
-  cancel.type =
-    "button";
-
-
-  cancel.className =
-    "post-memo-popup-cancel";
-
-
-  cancel.textContent =
-    "취소";
-
-
-  const save =
-    document.createElement("button");
-
-
-  save.type =
-    "button";
-
-
-  save.className =
-    "post-memo-popup-save";
-
-
-  save.textContent =
-    "SAVE";
-
-
-  footer.appendChild(status);
-
-  footer.appendChild(cancel);
-
-  footer.appendChild(save);
-
-
-  panel.appendChild(excerpt);
-
-  panel.appendChild(field);
-
-  panel.appendChild(footer);
-
-
-  overlay.appendChild(panel);
-
-
-  document.body.appendChild(overlay);
-
-
-  postMemoPopupRoot =
-    overlay;
-
-
-  postMemoPopupSession =
+  openPostMemoPopup(
+    item,
     {
-      id:
-        item.id,
-
       onSaved:
         options.onSaved ||
-        null
-    };
+        null,
+
+      onSave:
+        async (target, text) => {
+
+          const result =
+            await updatePostHighlightNote(
+              target.id,
+              text
+            );
 
 
-  cancel.addEventListener(
-    "click",
-    () => {
+          if (!result.ok) {
 
-      closePostMemoPopup();
-
-    }
-  );
+            console.error(
+              "[post-highlights] 메모 저장 실패:",
+              result.error
+            );
 
 
-  overlay.addEventListener(
-    "pointerdown",
-    (event) => {
-
-      if (event.target === overlay) {
-
-        closePostMemoPopup();
-
-      }
-
-    }
-  );
-
-
-  overlay.addEventListener(
-    "keydown",
-    (event) => {
-
-      if (event.key === "Escape") {
-
-        event.preventDefault();
-
-
-        closePostMemoPopup();
-
-      }
-
-    }
-  );
-
-
-  /*
-    모바일 키보드가 올라와도 입력창과 SAVE에 닿아야 한다(요구사항 6).
-    키보드가 열리면 visualViewport가 줄어드는데, 그때 패널을 화면 안으로
-    다시 끌어온다.
-  */
-
-  field.addEventListener(
-    "focus",
-    () => {
-
-      window.setTimeout(
-        () => {
-
-          try {
-
-            panel.scrollIntoView({
-              block: "nearest",
-
-              behavior: "smooth"
-            });
+            return {
+              ok: false
+            };
 
           }
 
-          catch (err) {
 
-            /* 무시 */
+          markPostHighlightHasNote(
+            postHighlightRoot,
+            target.id,
+            Boolean(text.trim())
+          );
 
-          }
 
-        },
-        200
-      );
+          return {
+            ok: true
+          };
 
+        }
     }
   );
-
-
-  save.addEventListener(
-    "click",
-    async () => {
-
-      if (save.disabled) {
-
-        return;
-
-      }
-
-
-      save.disabled =
-        true;
-
-
-      status.textContent =
-        "저장 중...";
-
-
-      status.setAttribute(
-        "data-tone",
-        "pending"
-      );
-
-
-      const result =
-        await updatePostHighlightNote(
-          item.id,
-          field.value
-        );
-
-
-      if (!result.ok) {
-
-        /* 쓴 내용을 그대로 남긴다 — 팝업을 닫지 않는다 */
-
-        console.error(
-          "[post-highlights] 메모 저장 실패:",
-          result.error
-        );
-
-
-        status.textContent =
-          "저장하지 못했습니다";
-
-
-        status.setAttribute(
-          "data-tone",
-          "error"
-        );
-
-
-        save.disabled =
-          false;
-
-
-        return;
-
-      }
-
-
-      const note =
-        field.value.trim();
-
-
-      item.note =
-        note;
-
-
-      markPostHighlightHasNote(
-        postHighlightRoot,
-        item.id,
-        Boolean(note)
-      );
-
-
-      postMemoPopupSession?.onSaved?.(note);
-
-
-      closePostMemoPopup();
-
-
-      showPostViewerToast(
-        note
-          ? "메모를 저장했습니다"
-          : "메모를 지웠습니다",
-        "ok"
-      );
-
-    }
-  );
-
-
-  window.setTimeout(
-    () => {
-
-      try {
-
-        field.focus({
-          preventScroll: true
-        });
-
-      }
-
-      catch (err) {
-
-        field.focus();
-
-      }
-
-    },
-    0
-  );
-
-}
-
-
-function closePostMemoPopup(
-  options = {}
-) {
-
-  if (postMemoPopupRoot) {
-
-    postMemoPopupRoot.remove();
-
-
-    postMemoPopupRoot =
-      null;
-
-  }
-
-
-  postMemoPopupSession =
-    null;
-
-
-  void options;
 
 }

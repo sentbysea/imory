@@ -1,0 +1,74 @@
+/* =========================================================
+   STUDIO PREVIEW — 주인장 / 방문자 칩
+
+   studio/preview/preview-memo-tools.js
+
+   Preview에만 있는 chrome이다. 스킨이 그린 것으로 오해되지 않도록
+   "미리보기"를 먼저 적고, 스킨 색과 섞이지 않는 어두운 판에 둔다.
+   메모 화면에서만 나타난다.
+
+   자리: 왼쪽 아래. 오른쪽 아래는 플랫폼 기본 메모 진입점 칩
+   (.platform-memo-entry, posts/posts-highlight.css)이 쓴다.
+========================================================== */
+
+.preview-memo-viewer-chip {
+  position: fixed;
+
+  left: 12px;
+
+  bottom: 12px;
+
+  z-index: 70;
+
+  display: inline-flex;
+  align-items: center;
+
+  gap: 2px;
+
+  padding: 3px 4px 3px 10px;
+
+  border-radius: 999px;
+
+  background: rgba(38, 34, 36, 0.9);
+
+  font-family:
+    "Pretendard",
+    sans-serif;
+
+  font-size: 11px;
+
+  color: #ffffff;
+}
+
+.preview-memo-viewer-chip-label {
+  margin-right: 6px;
+
+  opacity: 0.6;
+}
+
+.preview-memo-viewer-chip-option {
+  padding: 3px 9px;
+
+  border: 0;
+  border-radius: 999px;
+
+  background: none;
+
+  font-family: inherit;
+  font-size: 11px;
+
+  color: rgba(255, 255, 255, 0.7);
+
+  cursor: pointer;
+}
+
+.preview-memo-viewer-chip-option.is-active {
+  background: rgba(255, 255, 255, 0.18);
+
+  color: #ffffff;
+}
+
+.preview-memo-viewer-chip-option:hover,
+.preview-memo-viewer-chip-option:focus-visible {
+  color: #ffffff;
+}

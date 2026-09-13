@@ -85,8 +85,15 @@ const SKIN_HOME_RECENT_POSTS_LIMIT =
   직접 알지 못하고 profile.avatarUrl / images.profile로만 본다
   — 아래 buildBaseSkinContext() 참고.
 */
+/*
+  hide_memo_entry — Settings > HOME > ETC의 "메모 진입점 숨기기".
+  값은 "on"/"off" 문자열이고(다른 ETC 설정과 같은 자리), Context에는
+  navigation.memos.enabled의 반대로 실린다. 스킨이 그 값을 보고 자기
+  링크를 감출 수 있고, 플랫폼의 기본 진입점도 같은 값을 따른다
+  (skin/skin-memo-entry.js).
+*/
 const SKIN_CONTEXT_SITE_SETTINGS_KEYS =
-  ["blog_title", "favicon_url", "avatar_url"];
+  ["blog_title", "favicon_url", "avatar_url", "hide_memo_entry"];
 
 /*
   관리 화면 경로 — home/home-skin-prompt.js가 Skin Studio로 보낼 때
@@ -1523,8 +1530,20 @@ async function buildBaseSkinContext(
         href:
           buildSiteMemosPath(slug),
 
+        /*
+          사용자가 Settings > HOME > ETC에서 껐으면 false다. 스킨은
+          이 값으로 자기 링크를 감출 수 있고(data-imory-if), 스킨이
+          링크를 그리지 않은 경우 플랫폼이 얹는 기본 진입점도 같은
+          값을 따른다(skin/skin-memo-entry.js). "숨김"은 표시
+          설정일 뿐이라 주소 자체는 그대로 유효하다 — 주인장이
+          주소를 알고 있으면 계속 쓸 수 있어야 한다.
+        */
+
         enabled:
-          true
+          String(
+            siteSettings?.hide_memo_entry ??
+            ""
+          ).trim() !== "on"
       }
 
     },
@@ -3094,7 +3113,25 @@ async function buildMemosSkinContext(
 
 
   const buildCard =
-    (card) => ({
+    (card) => {
+
+  /*
+    이 카드의 위치 확인 상태. 기록에 남은 확인 시각과 지금 글의
+    수정 시각(card.postUpdatedAt)을 대조하므로, 원문을 고치면 그
+    기록은 자동으로 "아직 확인하지 않음"이 된다.
+  */
+
+  const cardPlacement =
+    typeof getPostHighlightPlacementState === "function"
+      ? getPostHighlightPlacementState(
+          card.id,
+          card.postId,
+          card.postUpdatedAt
+        )
+      : "unknown";
+
+
+  return ({
 
       id:
         card.id,
@@ -3159,19 +3196,51 @@ async function buildMemosSkinContext(
         ),
 
       /*
-        "원문이 변경되어 위치를 찾을 수 없음"(요구사항 9).
+        원문에서 그 자리를 찾았는가 — **세 가지 상태**다(요구사항 9).
 
-        이 값은 **마지막으로 그 글을 열었을 때 확인된 상태**다. 목록을
-        그리려고 모든 원문 본문을 받아 다시 찾아보지 않는다 — 카드
-        수만큼의 조회가 생기고, 그 판정은 어차피 그 글을 열 때 정확히
-        다시 이뤄진다. 확인한 적이 없으면 false(=아직 모른다)이고,
-        카드와 발췌문·메모는 어느 쪽이든 그대로 보존된다.
+          "unknown"  아직 확인하지 않음(이 기기에서 그 글을 연 적이
+                     없거나, 연 뒤에 본문이 수정됐거나, 그 카드가
+                     확인 뒤에 생겼다)
+          "found"    마지막 확인에서 찾았다
+          "missing"  마지막 확인에서 찾지 못했다
+
+        판정은 그 글을 열 때 본문 위에서 정확히 이뤄지고, 그 결과만
+        이 브라우저에 남는다(posts-view-highlight-store.js). 목록을
+        그리려고 카드마다 원문을 다시 받지 않는다 — 그건 카드 수만큼의
+        조회다. 대신 기록에 **그때의 글 수정 시각**이 함께 있어, 그
+        뒤에 원문이 바뀌었으면 자동으로 unknown으로 돌아간다(아래
+        postUpdatedAt).
+
+        "확인한 적 없음"을 "정상"으로 단정하지 않는다 — 그래서 상태가
+        둘이 아니라 셋이다. 어느 쪽이든 발췌문·메모·카드는 그대로
+        보존된다.
+
+        isMissing은 이전 계약 그대로 남긴다(기존 스킨이 쓰고 있다) —
+        missing일 때만 true이고 unknown은 false다.
       */
 
+      placement:
+        cardPlacement,
+
       isMissing:
-        isPostHighlightKnownMissing(card.id)
+        cardPlacement === "missing",
+
+      isPlacementUnknown:
+        cardPlacement === "unknown",
+
+      isPlaced:
+        cardPlacement === "found",
+
+      placementLabel:
+        cardPlacement === "missing"
+          ? "원문에서 위치를 찾을 수 없음"
+          : cardPlacement === "unknown"
+            ? "원문 위치 확인 전"
+            : ""
 
     });
+
+    };
 
 
   const allCards =

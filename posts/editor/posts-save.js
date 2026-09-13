@@ -502,6 +502,23 @@ postEditorSaveButton
         forgetPlatformScreenReturn();
 
 
+        /*
+          HIGHLIGHT-1 후속: 본문이 바뀌었으니 이 글의 "하이라이트
+          위치 확인" 기록은 이전 본문에 대한 결과다. 지워 두면
+          아래에서 글을 다시 열 때 그 자리에서 새로 판정된다 —
+          고친 뒤에도 예전 판정이 현재 상태인 것처럼 남지 않는다
+          (posts/view/posts-view-highlight-store.js).
+        */
+
+        if (typeof invalidatePostHighlightPlacement === "function") {
+
+          invalidatePostHighlightPlacement(
+            savedId
+          );
+
+        }
+
+
         history.replaceState(
           {
             page: "post",

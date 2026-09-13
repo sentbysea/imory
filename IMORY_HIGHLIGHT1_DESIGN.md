@@ -5,16 +5,20 @@
 
 | 구분 | 내용 |
 | --- | --- |
-| DB | [supabase/migrations/20260913100000_post_highlights_and_memo_folders.sql](./supabase/migrations/20260913100000_post_highlights_and_memo_folders.sql) |
+| DB | [supabase/migrations/20260913100000_post_highlights_and_memo_folders.sql](./supabase/migrations/20260913100000_post_highlights_and_memo_folders.sql) · [20260913110000_grant_posts_updated_at_select.sql](./supabase/migrations/20260913110000_grant_posts_updated_at_select.sql) |
 | 위치 계산 | [posts/view/posts-view-highlight-anchor.js](./posts/view/posts-view-highlight-anchor.js) |
 | 저장소 | [posts/view/posts-view-highlight-store.js](./posts/view/posts-view-highlight-store.js) |
 | 화면·조작 | [posts/view/posts-view-highlight-mode.js](./posts/view/posts-view-highlight-mode.js) |
 | 도구 메뉴 | [posts/view/posts-view-tools-menu.js](./posts/view/posts-view-tools-menu.js) |
 | 팝오버 | [posts/view/posts-view-popover.js](./posts/view/posts-view-popover.js) |
 | 메모 화면 | [posts/view/posts-view-memos.js](./posts/view/posts-view-memos.js) · [skin/skin-memos.js](./skin/skin-memos.js) |
+| 카드 ⋮ · 메모 팝업 · 토스트 | [posts/view/posts-view-memo-card-tools.js](./posts/view/posts-view-memo-card-tools.js) (공개 화면과 Studio Preview가 같이 쓴다) |
+| 메모 진입점 | [skin/skin-memo-entry.js](./skin/skin-memo-entry.js) |
 | 폴더 설정 | [admin/settings/admin-settings-memo-folders.js](./admin/settings/admin-settings-memo-folders.js) |
+| 폴더 차례(끌기) | [admin/settings/admin-settings-memo-folder-order.js](./admin/settings/admin-settings-memo-folder-order.js) |
+| Studio Preview | [studio/preview/preview-memo-tools.js](./studio/preview/preview-memo-tools.js) |
 | 스타일 | [posts/posts-highlight.css](./posts/posts-highlight.css) |
-| 테스트 | [posts/posts-highlight-e2e-test.mjs](./posts/posts-highlight-e2e-test.mjs) (포트 8952) |
+| 테스트 | [posts/posts-highlight-e2e-test.mjs](./posts/posts-highlight-e2e-test.mjs) (8952) · [studio/studio-memo-preview-e2e-test.mjs](./studio/studio-memo-preview-e2e-test.mjs) (8953) · [admin/admin-settings-e2e-test.mjs](./admin/admin-settings-e2e-test.mjs) `--only=memofolder` (8949) |
 
 ---
 
@@ -345,14 +349,14 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 | 경로 | 값 |
 | --- | --- |
 | `page.isMemos` | 메모 화면인가 |
-| `navigation.memos` | `{ name, href }` — 어느 화면에서든 메모 화면으로 |
+| `navigation.memos` | `{ name, href, enabled }` — 어느 화면에서든 메모 화면으로. `enabled`는 Settings > HOME > ETC의 "메모 진입점 숨기기"가 꺼져 있는가(§11-1) |
 | `viewer.toolsHref` | (POST) 도구 메뉴를 여는 주소. 주인장/방문자 모두 값이 있다 |
 | `viewer.highlightHref` | (POST, 주인장) 하이라이팅 모드 지름길 |
 | `viewer.canManageMemos` | 표시용. 실제 권한은 DB가 강제한다 |
 | `post.href` | 그 글의 정식 공개 주소 |
 | `memos.view.{isAll,isFolders,isFolder}` | 보기 방식(정확히 하나만 true) |
 | `memos.allHref` / `foldersHref` / `allLabel` / `foldersLabel` | 보기 전환 |
-| `memos.cards[]` | `id, excerpt, note, hasNote, color, dateLabel, postTitle, postHref, categoryName, categoryHref, folderHref, isMissing` |
+| `memos.cards[]` | `id, excerpt, note, hasNote, color, dateLabel, postTitle, postHref, categoryName, categoryHref, folderHref, isMissing, placement, isPlacementUnknown, isPlaced, placementLabel` (§11-2) |
 | `memos.showCards` / `isEmpty` / `count` / `hasError` | 상태 |
 | `memos.folders[]` | `id, name, href, count, countLabel, coverUrl, hasCover, coverRatio, coverFocusX, coverFocusY` |
 | `memos.hasFolders` / `foldersEmpty` / `folder` | 폴더 상태 |
@@ -407,24 +411,166 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 
 ---
 
-## 11. 남은 차이 (아직 구현되지 않은 것)
+## 11. 후속 라운드에서 메운 것 (2026-09-13)
 
-1. **"원문에서 위치를 찾을 수 없음"은 마지막으로 그 글을 열었을 때의 결과다.**
-   메모 목록을 그리려고 카드 수만큼의 원문 본문을 받아 다시 판정하지 않는다.
-   확인한 적이 없으면 `isMissing`은 false(= 아직 모른다)이고, 그 기록은 이
-   브라우저의 localStorage에 있어 다른 기기에서는 그 글을 한 번 열기 전까지
-   표시가 없다. 발췌문과 메모는 어느 쪽이든 보존된다.
-2. **메모 화면으로 가는 링크는 스킨이 그려야 한다.** `navigation.memos`를
-   제공하지만 기존 스킨들은 그 링크를 갖고 있지 않다 — 주소를 직접 치거나
-   스킨을 고쳐야 닿는다. 플랫폼 전역 내비게이션에 넣는 것은 다음 라운드다.
-3. **메모 폴더 순서는 ↑↓ 조작이다.** 폴더 트리의 "꾹 눌러 끌기"
-   ([posts/manage/posts-folder-sortable.js](./posts/manage/posts-folder-sortable.js))는
-   `#postArea` 안의 트리 DOM에 묶여 있어 Settings 화면에 그대로 재사용할 수
-   없었다. 조작 자체는 기존 카테고리 순서 변경과 같은 모양(↑↓)을 썼다.
-4. **Studio Preview로 메모 화면에 가려면 스킨에 그 링크가 있어야 한다.**
-   폴더 페이지와 같은 제약이다(페이지 선택 드롭다운이 따로 없다).
-5. **카드 목록의 페이지 나누기가 없다.** 하이라이트가 수천 개가 되면 한 번에
+첫 라운드의 "남은 차이" 1~4·6이 이 라운드에서 해소됐다. 아래는 그 결과이고,
+남아 있는 차이는 §12에 있다.
+
+### 11-1. 메모 화면 기본 진입점 (첫 라운드 §11-2 해소)
+
+`navigation.memos`만으로는 **기존 스킨**에서 메모 화면에 닿을 수 없었다. 그
+빈자리를 플랫폼이 메운다 — 남의 스킨 코드를 고쳐 쓰지 않고, 화면 오른쪽 아래에
+작은 칩 하나를 얹는다([skin/skin-memo-entry.js](./skin/skin-memo-entry.js)).
+
+세 가지 규칙이 전부다.
+
+| | |
+| --- | --- |
+| 스킨이 이미 메모 링크를 그렸으면 | 얹지 않는다 |
+| 사용자가 껐으면 | 얹지 않는다 |
+| 메모 화면 자신에서는 | 얹지 않는다 |
+
+- 판정 근거는 **주소**뿐이다 — 렌더된 DOM 안의 `<a href>`가 이 사이트의
+  `/memos` 경로(그 아래 폴더 경로 포함)를 가리키는가. 스킨 이름도 클래스도
+  보지 않는다(`skin/skin-owner-entry.js`가 EDIT/WRITE를 알아보는 방법과 같다).
+- 끄는 스위치는 Settings > HOME > ETC의 "메모 진입점 숨기기"다. 값은
+  `site_settings.hide_memo_entry`("on"/"off")이고 Context에는
+  `navigation.memos.enabled`의 반대로 실린다 — 스킨도 그 값으로 자기 링크를
+  감출 수 있다. 감춰도 `/memos` 주소 자체는 그대로 유효하다(표시 설정이지
+  접근 통제가 아니다).
+- 스킨 DOM에는 한 글자도 들어가지 않는다. `.menu-button` / `.music-button`과
+  같은 결의 떠 있는 플랫폼 chrome이고, 자리는 셋 중 아무도 쓰지 않는 오른쪽
+  아래다(왼쪽 위 · 오른쪽 위는 이미 쓰인다). 작성 폼이 열려 있는 동안에는
+  CSS 한 줄로 내린다.
+- **버튼이 아니라 링크**다 — 새 탭으로 열기·주소 복사·수정키 클릭 같은 브라우저
+  기본 동작이 그대로 산다. 평소 클릭은 `data-imory-platform-nav` 표식을 보고
+  기존 SPA 라우터가 가로챈다([skin/skin-link-nav.js](./skin/skin-link-nav.js)).
+  그 표식은 스킨 마크업에 들어갈 수 없다(새니타이저 허용 목록 밖).
+
+**`/memos`가 SPA 라우트가 됐다.** 그 전에는 스킨이 `navigation.memos.href`를
+그려도 라우터가 그 경로를 몰라 문서 전체를 다시 받았다(흰 화면을 한 번 거쳤다).
+이제 `resolveInSiteSkinRoute()`가 `/memos`와 `/memos/category/:id`를 알아보고
+`openMemoScreen()`으로 넘긴다.
+
+**새로 만드는 스킨**은 처음부터 메모 링크를 갖는다 —
+[skin/skin-generator.js](./skin/skin-generator.js)의 nav 조각에 한 줄이 붙었고,
+`navigation.memos.enabled`가 false면 렌더 단계에서 통째로 빠진다.
+
+**Studio Preview**도 같은 칩을 그린다(첫 라운드 §11-4 해소). Preview 문서가
+같은 파일을 읽으므로 편집자가 공개 화면과 같은 진입점을 보고, 그 칩으로 메모
+화면 미리보기에 들어갈 수 있다.
+
+### 11-2. 원문 위치 확인 — 세 가지 상태 (첫 라운드 §11-1 보강)
+
+예전에는 "못 찾은 id 목록" 하나만 두고 그 안에 없으면 전부 정상으로 그렸다.
+그러면 **한 번도 열어 본 적 없는 글**의 카드가 확인된 정상처럼 보인다. 상태를
+셋으로 나눈다.
+
+| `memos.cards[].placement` | 뜻 |
+| --- | --- |
+| `"unknown"` | 아직 확인하지 않음 |
+| `"found"` | 마지막 확인에서 찾았다 |
+| `"missing"` | 마지막 확인에서 찾지 못했다 |
+
+스킨 재료로 `placement` · `isPlacementUnknown` · `isPlaced` · `placementLabel`이
+함께 나온다. `isMissing`은 이전 계약 그대로 남는다(missing일 때만 true) —
+기존 스킨이 쓰고 있기 때문이다.
+
+- 기록은 이 브라우저의 localStorage 하나(`imory-highlight-placement`)이고,
+  모양은 `{ "<postId>": { v: <그때의 글 수정 시각>, f: [...], m: [...] } }`다.
+  f/m 어느 쪽에도 없는 id는 unknown이다(확인 뒤에 만들어진 카드).
+- **원문을 고치면 그 기록은 그 순간 무효다.** 지금 글의 `posts.updated_at`이
+  기록에 적힌 값과 다르면 unknown으로 돌아간다 — 이전 본문에 대한 판정이
+  현재 상태인 것처럼 남지 않는다. 주인장이 글을 저장할 때 그 글의 기록을
+  아예 버리기도 한다(posts/editor/posts-save.js).
+- 그 대조에 필요한 컬럼 하나(`posts.updated_at`)의 SELECT 권한을 여는 것이
+  [20260913110000_grant_posts_updated_at_select.sql](./supabase/migrations/20260913110000_grant_posts_updated_at_select.sql)이다.
+  카드 목록 쿼리가 이미 `posts`를 embed하므로 **추가 요청이 생기지 않는다** —
+  카드마다 원문 본문을 받아 다시 판정하는 방식은 여전히 쓰지 않는다.
+- 그 migration이 적용되지 않은 배포에서는 그 컬럼만 빼고 한 번 더 물어본다.
+  카드는 전부 보이고 상태만 unknown에 머문다.
+
+### 11-3. 조회 실패를 "없음"으로 표시하지 않는다
+
+`loadPostHighlights()`가 실패하면 캐시에 `status: "failed"`가 남는다. 빈 배열과
+구분되는 값이라 화면이 다르게 말할 수 있다.
+
+| | |
+| --- | --- |
+| 방문자 | 아무 말도 하지 않는다. 글은 그대로 열리고 하이라이트만 없다. DB 오류는 어디에도 노출하지 않는다 |
+| 주인장이 하이라이팅 모드를 켤 때 | "하이라이트를 불러오지 못해 지금은 쓸 수 없습니다" + **다시 시도** 버튼. 모드는 열리지 않는다 |
+| 주인장의 메모 화면(`memos.hasError`) | "메모를 불러오지 못했습니다" + **다시 시도** |
+
+읽어 오지 못한 목록으로 위치 판정을 기록하지도 않는다 — 못 받은 것을 "못
+찾았다"로 적으면 실패가 결과로 둔갑한다.
+
+토스트에 동작 버튼을 붙일 수 있게 됐다(`showPostViewerToast(message, tone, action)`).
+버튼이 있는 동안에는 토스트가 더 오래 남고 클릭을 받는다.
+
+### 11-4. 메모 폴더 차례 — 꾹 눌러 끌기 (첫 라운드 §11-3 해소)
+
+Settings의 카테고리 목록 **아래**에 메모 폴더만 모은 목록이 따로 생겼다
+([admin/settings/admin-settings-memo-folder-order.js](./admin/settings/admin-settings-memo-folder-order.js)).
+카테고리 줄마다 흩어져 있던 ↑↓는 그 목록으로 옮겼다 — 움직이는 배열이 다른데
+조작이 같은 자리에 섞여 있으면 무엇이 움직이는지 알 수 없다.
+
+- 데스크톱은 손잡이(≡)를 잡고 바로 끌고, 모바일은 **꾹 눌러야**(400ms) 시작한다.
+  그 전에 손가락이 6px 이상 움직이면 스크롤로 보고 즉시 물러난다.
+- `touch-action: none`은 28px짜리 손잡이 하나에만 건다. touch-action은 제스처가
+  시작될 때 한 번 읽히고 도중에 바꿔도 적용되지 않으므로 "일단 스크롤로
+  두었다가 꾹 누르면 끌기로 바꾼다"는 만들 수 없다 — 시작점을 좁히는 것이
+  그 제약 안에서의 답이다. 줄의 나머지도 설정 화면의 다른 곳도 평소대로
+  스크롤된다.
+- ↑↓ 버튼은 그 목록 안에 남는다(키보드·보조기기용). 끌기와 같은 배열을 움직인다.
+- **폴더 트리의 drag 코드를 재사용하지 않았다.** SortableJS 기반의
+  `posts/manage/posts-folder-sortable.js`는 트리 DOM과 `#postArea`에 묶여 있고,
+  여기 필요한 것은 한 겹짜리 목록의 자리 바꾸기 하나다. 그것을 위해 admin
+  문서에 새 CDN 의존을 들이지 않는다.
+- 원본 카테고리 순서(`categories.sort_order`)는 여전히 한 글자도 바뀌지 않는다.
+
+### 11-5. Studio Preview의 메모 카드 ⋮ (첫 라운드 §11-6 철회)
+
+첫 라운드는 "Preview에서 볼 것은 자리 자체"라고 적었다. 실제로는 그 자리가
+비어 있으면 편집자가 자기 스킨에서 메뉴와 메모 팝업이 어떻게 보이는지 확인할
+방법이 없다. 그래서 **실제로 열리게** 바꾼다.
+
+- 모양과 조작은 공개 화면과 **같은 코드**다
+  ([posts/view/posts-view-memo-card-tools.js](./posts/view/posts-view-memo-card-tools.js)를
+  Preview 문서도 읽는다). Preview용 복제본을 만들지 않는다.
+- **아무것도 저장하지 않는다.** Preview가 넘기는 handlers는 supabase를 전혀
+  부르지 않고 화면의 카드 객체만 고친다. 매번 "미리보기에서는 저장되지
+  않습니다"라고 말한다.
+- 주인장/방문자는 Preview 안의 칩으로 전환한다(Studio는 언제나 소유자
+  세션이라 그 차이가 화면에 나타나지 않았다). 방문자 상태에서는 그 자리가
+  **빈 채로** 남는다 — 공개 화면에서 방문자가 보는 것과 같다.
+- 하이라이트가 하나도 없는 계정에서는 **샘플 카드 세 장**을 끼워 넣고 그
+  사실을 화면에 밝힌다. 조회가 실패한 경우(`memos.hasError`)에는 절대 끼워
+  넣지 않는다 — 오류를 그럴듯한 데이터로 덮지 않는다.
+
+### 11-6. 파일이 갈라진 자리
+
+| 옮긴 것 | 어디서 | 어디로 | 왜 |
+| --- | --- | --- | --- |
+| `openPostMemoPopup` / `closePostMemoPopup` | posts-view-highlight-mode.js | posts-view-memo-card-tools.js | Preview 문서에도 실어야 하는데 원래 파일은 저장소·앵커 계산에 묶여 있다 |
+| `openMemoCardMenu` · ⋮ 붙이기 | posts-view-memos.js | posts-view-memo-card-tools.js | 같은 이유 |
+| `showPostViewerToast` | posts-view-tools-menu.js | posts-view-memo-card-tools.js | 토스트 자체는 의존이 없는데 원래 파일은 ⋮ 버튼 전역과 라우팅에 묶여 있다 |
+
+옮긴 쪽은 **모양만** 만들고 저장은 주입받는다(`handlers.saveNote` /
+`deleteNote` / `deleteHighlight`). 각 핸들러는 `{ ok, notice? }`를 돌려주고,
+`notice`가 있으면 그 문구가 대신 나간다 — Preview가 "저장되지 않습니다"라고
+말하는 자리가 그것이다. `ok`가 false면 어느 쪽이든 실패 문구가 나가고 메모
+팝업은 쓴 내용을 남긴 채 닫히지 않는다.
+
+---
+
+## 12. 남은 차이 (아직 구현되지 않은 것)
+
+1. **카드 목록의 페이지 나누기가 없다.** 하이라이트가 수천 개가 되면 한 번에
    받는다. 갤러리와 같은 `?page=N` 계약을 붙이는 것은 다음 라운드다.
-6. **Studio Preview의 메모 카드에는 ⋮가 붙지 않는다.** 그 자리는 공개 화면에서
-   플랫폼이 채우는 곳이고, Studio에서 편집자가 볼 것은 자리 자체이지 동작하는
-   버튼이 아니다(POST 본문 region과 같은 결).
+2. **위치 확인 기록은 기기별이다.** 세 가지 상태로 나뉘었지만 저장소는 여전히
+   그 브라우저의 localStorage다 — 다른 기기에서는 그 글을 한 번 열기 전까지
+   "아직 확인하지 않음"이다. 서버에 두려면 판정 시점(본문을 실제로 그린
+   그 화면)을 서버가 알 수 없다는 문제부터 풀어야 한다.
+3. **Studio Preview의 주인장/방문자 전환은 메모 화면에만 있다.** 다른 페이지의
+   소유자 전용 재료(`viewer.manageHref` 등)는 여전히 소유자 상태로만 그려진다.
+4. **카드별 비밀번호는 §10 그대로 미구현이다.**

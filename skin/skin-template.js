@@ -100,6 +100,7 @@ function getDefaultMemosTemplate() {
       <h1 class="memo-folder-name" data-imory-if="memos.view.isFolder" data-imory-bind="memos.folder.name"></h1>
 
       <p class="memo-screen-state" data-imory-if="memos.hasError">메모를 불러오지 못했습니다.</p>
+      <p class="memo-screen-sample" data-imory-if="memos.isSample">아직 메모가 없어 샘플 카드를 보여 주고 있습니다. 공개 화면에는 나오지 않습니다.</p>
 
       <div class="memo-folder-grid" data-imory-if="memos.view.isFolders">
         <a class="memo-folder-card" data-imory-repeat="memos.folders" data-imory-href="item.href">
@@ -120,6 +121,7 @@ function getDefaultMemosTemplate() {
             <span data-imory-if="item.categoryName" data-imory-bind="item.categoryName"></span>
             <span data-imory-bind="item.dateLabel"></span>
             <span class="memo-card-missing" data-imory-if="item.isMissing">원문에서 위치를 찾을 수 없음</span>
+            <span class="memo-card-unchecked" data-imory-if="item.isPlacementUnknown">원문 위치 확인 전</span>
           </div>
           <div class="memo-card-actions">
             <a class="memo-card-open" data-imory-if="item.postHref" data-imory-href="item.postHref">원문 보기</a>

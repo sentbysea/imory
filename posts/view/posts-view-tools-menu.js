@@ -724,89 +724,15 @@ function buildPostFontScaleRow() {
 
 
 /* =========================================================
-   토스트 — 성공/실패를 구분해 알린다
+   토스트는 여기 없다
+
+   showPostViewerToast() 는
+   posts/view/posts-view-memo-card-tools.js 로 옮겼다. 같은 토스트를
+   Studio Preview의 메모 화면도 써야 하는데, 이 파일은 글 뷰어의
+   ⋮ 버튼(최상위 const postToolsButton)과 이 사이트의 라우팅에 묶여
+   있어 Preview 문서에 실을 수 없기 때문이다. 토스트 자체는 의존이
+   하나도 없다.
 ========================================================== */
-
-let postViewerToastTimer =
-  0;
-
-
-function showPostViewerToast(
-  message,
-  tone
-) {
-
-  let toast =
-    document.getElementById(
-      "postViewerToast"
-    );
-
-
-  if (!toast) {
-
-    toast =
-      document.createElement("div");
-
-
-    toast.id =
-      "postViewerToast";
-
-
-    toast.className =
-      "post-viewer-toast";
-
-
-    toast.setAttribute(
-      "role",
-      "status"
-    );
-
-
-    toast.setAttribute(
-      "data-post-hl-ui",
-      "1"
-    );
-
-
-    document.body.appendChild(toast);
-
-  }
-
-
-  toast.textContent =
-    message;
-
-
-  toast.setAttribute(
-    "data-tone",
-    tone ||
-    "ok"
-  );
-
-
-  toast.classList.add(
-    "is-visible"
-  );
-
-
-  window.clearTimeout(
-    postViewerToastTimer
-  );
-
-
-  postViewerToastTimer =
-    window.setTimeout(
-      () => {
-
-        toast.classList.remove(
-          "is-visible"
-        );
-
-      },
-      2200
-    );
-
-}
 
 
 

@@ -1013,3 +1013,152 @@
 
   color: var(--imory-gray-650, #888888);
 }
+
+
+/* =========================================================
+   메모 폴더 차례 (HIGHLIGHT-1 후속)
+
+   admin/settings/admin-settings-memo-folder-order.js
+
+   카테고리 목록과 **다른 배열**을 움직이는 목록이라 시각적으로도
+   떨어뜨려 둔다 — 한 줄을 끌었을 때 무엇이 움직이는지가 분명해야
+   한다.
+========================================================== */
+
+.memo-folder-order {
+  margin-top: 18px;
+
+  padding-top: 14px;
+
+  border-top: 1px solid #f0eaec;
+}
+
+.memo-folder-order-title {
+  margin-bottom: 4px;
+
+  font-size: 12px;
+  letter-spacing: 0.04em;
+
+  color: #8d8489;
+}
+
+.memo-folder-order-hint {
+  margin: 0 0 10px;
+
+  font-size: 11px;
+  line-height: 1.5;
+
+  color: #aaa2a6;
+}
+
+.memo-folder-order-list {
+  list-style: none;
+
+  margin: 0;
+  padding: 0;
+}
+
+/*
+  끌기가 실제로 시작된 뒤에만 세로 제스처를 가로챈다. 그 전에는
+  목록 위에서도 페이지가 평소대로 스크롤된다(모바일에서 설정
+  화면을 넘길 수 없게 되면 안 된다).
+*/
+
+.memo-folder-order-list.is-dragging {
+  touch-action: none;
+}
+
+.memo-folder-order-item {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  margin: 0 0 6px;
+
+  padding: 7px 10px;
+
+  border: 1px solid #f0eaec;
+  border-radius: 10px;
+
+  background: #ffffff;
+}
+
+.memo-folder-order-item.is-dragging {
+  border-color: #e6c3d1;
+
+  background: #fdf7f9;
+
+  opacity: 0.85;
+}
+
+/* 놓일 자리 */
+
+.memo-folder-order-item.is-drop-target {
+  border-color: #d980a2;
+}
+
+.memo-folder-order-handle {
+  flex: 0 0 auto;
+
+  width: 28px;
+  height: 28px;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 8px;
+
+  background: none;
+
+  font-size: 14px;
+
+  color: #b7aeb2;
+
+  cursor: grab;
+
+  /*
+    손잡이 위에서만 제스처를 우리 쪽으로 넘긴다.
+
+    touch-action은 제스처가 시작되는 순간 한 번 읽히고, 그 뒤에
+    클래스로 바꿔도 진행 중인 제스처에는 적용되지 않는다. 그래서
+    "일단 스크롤로 두었다가 꾹 누르면 끌기로 바꾼다"는 만들 수
+    없다 — 시작점에서 정해야 한다.
+
+    대신 그 시작점을 28px짜리 손잡이 하나로 좁혔다. 줄의 나머지도,
+    설정 화면의 다른 곳도 평소대로 스크롤된다. 손잡이를 눌렀다가
+    그냥 움직이면(꾹 누르기 전) 끌기는 취소되고 아무 일도 일어나지
+    않는다(admin-settings-memo-folder-order.js).
+  */
+  touch-action: none;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+.memo-folder-order-handle:active {
+  cursor: grabbing;
+}
+
+.memo-folder-order-name {
+  flex: 1 1 auto;
+
+  min-width: 0;
+
+  overflow: hidden;
+
+  font-size: 13px;
+
+  color: #5f585c;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-folder-order-actions {
+  flex: 0 0 auto;
+
+  display: flex;
+
+  gap: 4px;
+}

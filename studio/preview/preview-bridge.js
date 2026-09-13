@@ -159,6 +159,56 @@ function handleRenderMessage(data) {
     }
 
     /*
+      HIGHLIGHT-1 후속 — 메모 화면 기본 진입점을 Preview에도 그린다.
+
+      공개 화면에서 스킨이 메모 링크를 그리지 않았을 때 플랫폼이
+      얹는 바로 그 칩이다(skin/skin-memo-entry.js, 이 문서도 같은
+      파일을 읽는다). Preview에 없으면 편집자는 "내 방문자가 실제로
+      보는 화면"과 다른 것을 보게 되고, 메모 화면 미리보기로 들어갈
+      길도 없다(§11-4 — 스킨에 링크가 없으면 닿지 못하던 제약).
+
+      클릭은 아래의 위임 리스너가 그대로 가로채 parent에 넘긴다 —
+      이 칩도 결국 평범한 <a href>다.
+    */
+    /*
+      HIGHLIGHT-1 후속 — 메모 카드의 ⋮ 를 Preview에서도 실제로 연다.
+      공개 화면과 같은 UI 코드를 쓰되 저장은 하지 않는다
+      (studio/preview/preview-memo-tools.js).
+    */
+    if (typeof mountPreviewMemoTools === "function") {
+
+      mountPreviewMemoTools({
+        instance:
+          renderInstance,
+
+        context:
+          data.context
+      });
+
+    }
+
+    if (typeof refreshPlatformMemoEntry === "function") {
+
+      refreshPlatformMemoEntry({
+        href:
+          data.context?.navigation?.memos?.href || "",
+
+        enabled:
+          data.context?.navigation?.memos?.enabled !== false,
+
+        label:
+          data.context?.navigation?.memos?.name || "MEMO",
+
+        skinRoot:
+          previewRoot,
+
+        isMemosScreen:
+          data.context?.page?.isMemos === true
+      });
+
+    }
+
+    /*
       post-body region 존재 여부(PHASE1C 7/13절)는 parent가 판단할 수
       없다 — 실제 mount된 DOM은 이 iframe 안에만 있으므로, 매 렌더마다
       알려준다(HOME/CATEGORY 렌더에서는 studio-preview.js가 이 값을

@@ -1011,13 +1011,196 @@ async function renderFolderPreviewFor(categoryId, folderId, series, options) {
    폴백이 "안 보여준다"가 아니라 "기본 template으로 그린다"이기
    때문이다. 그래야 Studio에서 본 화면과 방문자가 볼 화면이 같다.
 
-   카드의 ⋮ 도구는 Preview에 붙이지 않는다. 그 자리
-   ([data-imory-region="memo-tools"])는 공개 화면에서 플랫폼이
-   채우는 곳이고, Studio에서 편집자가 볼 것은 **자리 자체**이지
-   동작하는 버튼이 아니다(POST 본문 region과 같은 결).
+   카드의 ⋮ 도구도 Preview에서 실제로 열린다 — 자리만 차지하고
+   아무것도 열리지 않으면 편집자가 자기 스킨에서 그 메뉴와 메모
+   팝업이 어떻게 보이는지 확인할 수 없기 때문이다. 모양은 공개
+   화면과 같은 코드가 만들고(posts/view/posts-view-memo-card-tools.js),
+   조작은 화면 안에서만 끝난다 — supabase를 부르는 경로가 없다
+   (studio/preview/preview-memo-tools.js).
 
-   Studio는 항상 소유자 세션이라 비밀글 분기가 없다.
+   Studio는 항상 소유자 세션이라 비밀글 분기가 없다. 주인장/방문자
+   차이는 Preview 안의 칩으로 전환해 본다(같은 파일).
+
+   ★ 카드가 하나도 없는 계정에서는 샘플을 넣는다
+
+   스킨을 만드는 사람의 계정에 하이라이트가 하나도 없는 것이 오히려
+   보통이다. 그때 빈 화면만 보여 주면 카드·폴더·⋮ 의 모양을 아예
+   확인할 수 없다. 그래서 **읽기에 성공했는데 결과가 0건일 때만**
+   샘플 카드를 끼워 넣고, 그 사실을 Preview 화면에 밝힌다. 조회가
+   실패한 경우(memos.hasError)에는 절대 끼워 넣지 않는다 — 오류를
+   그럴듯한 데이터로 덮으면 안 된다.
 ========================================================== */
+
+
+/*
+  Preview 전용 샘플. 실제 데이터가 0건일 때만 쓰인다.
+  id는 공개 화면의 uuid와 겹치지 않도록 접두사를 둔다.
+*/
+
+const STUDIO_MEMO_SAMPLE_CARDS =
+  [
+    {
+      excerpt:
+        "그 문장을 오래 들여다보았다. 읽는 속도가 저절로 느려지는 자리가 있다.",
+
+      note:
+        "여기서 화자의 마음이 처음으로 흔들린다.",
+
+      color:
+        "#f6e0c8",
+
+      postTitle:
+        "여름의 끝",
+
+      categoryName:
+        "에세이"
+    },
+    {
+      excerpt:
+        "문을 닫고 나서야 그 방이 얼마나 조용했는지 알았다.",
+
+      note:
+        "",
+
+      color:
+        "#d8ecf3",
+
+      postTitle:
+        "빈 방",
+
+      categoryName:
+        "에세이"
+    },
+    {
+      excerpt:
+        "아무 말도 하지 않는 것이 그날의 대답이었다.",
+
+      note:
+        "메모가 두 줄 이상일 때 카드가 어떻게 늘어나는지 보려고 조금 길게 적어 둔 문장입니다.",
+
+      color:
+        "#efe0f2",
+
+      postTitle:
+        "대화",
+
+      categoryName:
+        "소설"
+    }
+  ];
+
+
+function buildStudioMemoSampleContext(
+  context
+) {
+
+  const memos =
+    context?.memos;
+
+
+  if (
+    !memos ||
+    memos.hasError ||
+    (memos.cards || []).length > 0
+  ) {
+
+    return context;
+
+  }
+
+
+  const cards =
+    STUDIO_MEMO_SAMPLE_CARDS.map(
+      (sample, index) => ({
+        id:
+          `preview-sample-${index + 1}`,
+
+        excerpt:
+          sample.excerpt,
+
+        note:
+          sample.note,
+
+        hasNote:
+          Boolean(sample.note),
+
+        color:
+          sample.color,
+
+        date:
+          null,
+
+        dateLabel:
+          "샘플",
+
+        postId:
+          null,
+
+        postTitle:
+          sample.postTitle,
+
+        /*
+          샘플 카드에는 원문이 없다 — 링크를 만들면 눌렀을 때
+          있지도 않은 글로 이동한다. 스킨의 data-imory-if가
+          그 자리를 알아서 접는다.
+        */
+        postHref:
+          null,
+
+        categoryName:
+          sample.categoryName,
+
+        categoryHref:
+          null,
+
+        folderId:
+          "sample",
+
+        folderHref:
+          null,
+
+        placement:
+          "unknown",
+
+        isMissing:
+          false,
+
+        isPlacementUnknown:
+          true,
+
+        isPlaced:
+          false,
+
+        placementLabel:
+          "원문 위치 확인 전"
+      })
+    );
+
+
+  return {
+    ...context,
+
+    memos:
+      {
+        ...memos,
+
+        cards,
+
+        count:
+          cards.length,
+
+        countLabel:
+          `${cards.length}개`,
+
+        isEmpty:
+          false,
+
+        isSample:
+          true
+      }
+  };
+
+}
 
 async function renderMemosPreviewFor(view, categoryId, options) {
 
@@ -1120,7 +1303,11 @@ async function renderMemosPreviewFor(view, categoryId, options) {
   postRenderToFrame(
     {
       skin: memosTemplate,
-      context
+
+      context:
+        buildStudioMemoSampleContext(
+          context
+        )
     }
   );
 

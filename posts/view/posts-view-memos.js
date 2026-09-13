@@ -36,7 +36,8 @@
    posts/view/posts-view-list.js(switchToCategoryScreen) ·
    posts/view/posts-view-popover.js ·
    posts/view/posts-view-highlight-store.js ·
-   posts/view/posts-view-highlight-mode.js(openPostMemoPopup).
+   posts/view/posts-view-memo-card-tools.js(mountMemoCardTools ·
+   openMemoCardMenu · openPostMemoPopup · showPostViewerToast).
 ========================================================== */
 
 
@@ -440,6 +441,46 @@ function attachMemoScreenTools(
 
 
   /*
+    조회에 실패한 경우 (요구사항 5)
+
+    화면에는 이미 "메모를 불러오지 못했습니다"가 그려져 있다 —
+    "아직 메모가 없습니다"와 다른 문구이고, DB 오류 내용은 어디에도
+    싣지 않는다(방문자에게 내부 사정을 보여줄 이유가 없다).
+
+    주인장에게만 한 걸음 더 준다: 다시 시도할 방법. 목록이 비어
+    보이는 것이 "정말 없다"인지 "못 읽었다"인지는 주인장이 가장
+    알아야 할 사람이다.
+  */
+
+  if (context?.memos?.hasError) {
+
+    if (context?.memos?.canManage) {
+
+      showPostViewerToast(
+        "메모를 불러오지 못했습니다",
+        "error",
+        {
+          label:
+            "다시 시도",
+
+          onSelect:
+            () => {
+
+              refreshMemoScreen();
+
+            }
+        }
+      );
+
+    }
+
+
+    return;
+
+  }
+
+
+  /*
     원문 이동 — 주소에는 발췌문도 메모도 싣지 않는다(요구사항 6).
     "이 카드로 간다"만 이 세션에 적어 두고 도착한 글이 그 카드를
     실제로 찾았을 때만 그 자리로 스크롤한다
@@ -483,87 +524,81 @@ function attachMemoScreenTools(
       }
     );
 
+  /*
+    카드마다 하나씩 있는 memo-tools 자리에 ⋮ 를 넣는다. 만드는 쪽은
+    공용(posts/view/posts-view-memo-card-tools.js)이고, 이 파일은
+    "저장은 이렇게 한다"만 넘긴다 — Studio Preview는 같은 UI에 다른
+    handlers(아무것도 저장하지 않는 것)를 넘긴다.
 
-  if (!context?.memos?.canManage) {
+    방문자에게는 canManage가 false라 그 자리가 빈 채로 남는다.
+  */
 
-    return;
+  mountMemoCardTools({
+    regions:
+      typeof memoScreenInstance?.getRegions === "function"
+        ? memoScreenInstance.getRegions("memo-tools")
+        : [],
 
-  }
+    cards,
+
+    canManage:
+      Boolean(context?.memos?.canManage),
+
+    handlers:
+      {
+        saveNote:
+          async (card, text) => {
+
+            const result =
+              await updatePostHighlightNote(
+                card.id,
+                text
+              );
 
 
-  const regions =
-    typeof memoScreenInstance?.getRegions === "function"
-      ? memoScreenInstance.getRegions("memo-tools")
-      : [];
+            return {
+              ok:
+                result.ok === true
+            };
+
+          },
+
+        deleteNote:
+          async (card) => {
+
+            const result =
+              await updatePostHighlightNote(
+                card.id,
+                ""
+              );
 
 
-  regions.forEach(
-    (region) => {
+            return {
+              ok:
+                result.ok === true
+            };
 
-      const card =
-        cards.get(
-          String(region.key)
-        );
+          },
+
+        deleteHighlight:
+          async (card) => {
+
+            const result =
+              await deletePostHighlight(
+                card.id
+              );
 
 
-      if (
-        !card ||
-        !region.element
-      ) {
+            return {
+              ok:
+                result.ok === true
+            };
 
-        return;
-
+          }
       }
-
-
-      const button =
-        document.createElement("button");
-
-
-      button.type =
-        "button";
-
-
-      button.className =
-        "memo-card-menu";
-
-
-      button.textContent =
-        "⋮";
-
-
-      button.setAttribute(
-        "aria-label",
-        "메모 카드 도구"
-      );
-
-
-      button.setAttribute(
-        "aria-haspopup",
-        "menu"
-      );
-
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          openMemoCardMenu(
-            button,
-            card
-          );
-
-        }
-      );
-
-
-      region.element.replaceChildren(button);
-
-    }
-  );
+  });
 
 }
-
 
 /*
   이 요소가 어느 카드 안에 있는가 — region 키가 찍힌 가장 가까운
@@ -631,196 +666,14 @@ function findMemoCardForElement(
 
 
 /* =========================================================
-   카드의 ⋮ 메뉴 (요구사항 6)
+   카드의 ⋮ 메뉴는 여기 없다
 
-     메모 없음 → 메모 추가
-     메모 있음 → 메모 수정 · 메모 삭제
-     항상        하이라이트 삭제
-
-   "메모 삭제"는 메모 글자만 지우고 하이라이트와 카드는 남긴다.
-   "하이라이트 삭제"는 하이라이트와 카드를 함께 지운다.
+   openMemoCardMenu() 는
+   posts/view/posts-view-memo-card-tools.js 로 옮겼다 — 같은 메뉴를
+   Studio Preview의 메모 화면도 그대로 열어야 하기 때문이다(그쪽은
+   아무것도 저장하지 않는 handlers를 넘긴다). 이 파일이 넘기는
+   handlers는 위 mountMemoCardTools() 호출에 있다.
 ========================================================== */
-
-function openMemoCardMenu(
-  button,
-  card
-) {
-
-  if (isImoryPopoverOpen("memo-card")) {
-
-    closeImoryPopover();
-
-
-    return;
-
-  }
-
-
-  openImoryPopover({
-    name:
-      "memo-card",
-
-    className:
-      "imory-popover--menu",
-
-    anchorRect:
-      imoryPopoverRectOf(button),
-
-    returnFocus:
-      button,
-
-    render:
-      (body) => {
-
-        const items =
-          [];
-
-
-        items.push({
-          label:
-            card.hasNote
-              ? "메모 수정"
-              : "메모 추가",
-
-          onSelect:
-            () => {
-
-              openPostMemoPopup(
-                {
-                  id:
-                    card.id,
-
-                  excerpt:
-                    card.excerpt,
-
-                  note:
-                    card.note,
-
-                  color:
-                    card.color
-                },
-                {
-                  /* 저장 성공은 store가 변경 이벤트로 알린다 — 이 화면은
-                     그 이벤트 하나로만 다시 그린다(두 번 그리지 않는다). */
-                }
-              );
-
-            }
-        });
-
-
-        if (card.hasNote) {
-
-          items.push({
-            label:
-              "메모 삭제",
-
-            hint:
-              "카드는 남습니다",
-
-            onSelect:
-              async () => {
-
-                const result =
-                  await updatePostHighlightNote(
-                    card.id,
-                    ""
-                  );
-
-
-                if (!result.ok) {
-
-                  showPostViewerToast(
-                    "메모를 지우지 못했습니다",
-                    "error"
-                  );
-
-
-                  return;
-
-                }
-
-
-                showPostViewerToast(
-                  "메모를 지웠습니다",
-                  "ok"
-                );
-
-              }
-          });
-
-        }
-
-
-        items.push(null);
-
-
-        items.push({
-          label:
-            "하이라이트 삭제",
-
-          danger:
-            true,
-
-          hint:
-            card.hasNote
-              ? "메모도 함께"
-              : "",
-
-          onSelect:
-            async () => {
-
-              const message =
-                card.hasNote
-                  ? "이 하이라이트와 메모 카드를 함께 지웁니다. 계속할까요?"
-                  : "이 하이라이트를 지웁니다. 계속할까요?";
-
-
-              if (!window.confirm(message)) {
-
-                return;
-
-              }
-
-
-              const result =
-                await deletePostHighlight(
-                  card.id
-                );
-
-
-              if (!result.ok) {
-
-                showPostViewerToast(
-                  "삭제하지 못했습니다",
-                  "error"
-                );
-
-
-                return;
-
-              }
-
-
-              showPostViewerToast(
-                "지웠습니다",
-                "ok"
-              );
-
-            }
-        });
-
-
-        renderImoryPopoverMenu(
-          body,
-          items
-        );
-
-      }
-  });
-
-}
-
 
 /*
   목록을 다시 그린다. 주소는 그대로다(같은 화면이다).

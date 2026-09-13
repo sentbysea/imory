@@ -164,13 +164,28 @@ function makeDb(overrides = {}) {
       { user_id: OWNER_ID, key: "blog_title", value: "IMORY ADMIN E2E" },
       ...(overrides.settings || [])
     ],
-    categories: [{
+    categories: overrides.categories || [{
       id: 1, user_id: OWNER_ID, name: "PHOTO", type: "post", sort_order: 1, slug: "photo",
       list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null
     }],
     posts: [],
-    banners: []
+    banners: [],
+
+    /* HIGHLIGHT-1: 메모 폴더 표시 설정(순서 · 커버 · 비율 · 구도) */
+    memo_folder_settings: overrides.memo_folder_settings || []
   };
+}
+
+
+/* 메모 폴더 차례를 볼 수 있는 만큼의 카테고리 */
+
+function makeMemoFolderCategories() {
+  return [
+    { id: 1, user_id: OWNER_ID, name: "일기", type: "post", sort_order: 1, slug: "diary", list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null },
+    { id: 2, user_id: OWNER_ID, name: "소설", type: "post", sort_order: 2, slug: "novel", list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null },
+    { id: 3, user_id: OWNER_ID, name: "사진", type: "gallery", sort_order: 3, slug: "photo", list_style: "gallery", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null },
+    { id: 4, user_id: OWNER_ID, name: "배너", type: "banner", sort_order: 4, slug: "banner", list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null }
+  ];
 }
 
 const RESERVED = new Set(["select", "order", "limit", "offset", "on_conflict", "columns"]);
@@ -655,7 +670,8 @@ async function runEtc(browser) {
     settings: [
       { user_id: OWNER_ID, key: "block_text_copy", value: "on" },
       { user_id: OWNER_ID, key: "block_context_menu", value: "off" },
-      { user_id: OWNER_ID, key: "strip_image_exif", value: "off" }
+      { user_id: OWNER_ID, key: "strip_image_exif", value: "off" },
+      { user_id: OWNER_ID, key: "hide_memo_entry", value: "on" }
     ]
   });
 
@@ -666,7 +682,8 @@ async function runEtc(browser) {
   const state = await page.evaluate(() => ({
     exif: document.getElementById("stripImageExifToggle")?.checked,
     menu: document.getElementById("blockContextMenuToggle")?.checked,
-    copy: document.getElementById("blockTextCopyToggle")?.checked
+    copy: document.getElementById("blockTextCopyToggle")?.checked,
+    memo: document.getElementById("hideMemoEntryToggle")?.checked
   }));
 
   check(
@@ -675,15 +692,24 @@ async function runEtc(browser) {
     JSON.stringify(state)
   );
 
+  check(
+    "[etc] 메모 진입점 숨기기도 같은 자리에서 읽어 온다",
+    state.memo === true,
+    JSON.stringify(state)
+  );
+
   await page.click("#stripImageExifToggle");
   await page.click("#blockTextCopyToggle");
+  await page.click("#hideMemoEntryToggle");
 
   await page.click("#etcSaveButton");
   await page.waitForTimeout(900);
 
   const saved = Object.fromEntries(
     db.site_settings
-      .filter(s => ["strip_image_exif", "block_context_menu", "block_text_copy"].includes(s.key))
+      .filter(s => [
+        "strip_image_exif", "block_context_menu", "block_text_copy", "hide_memo_entry"
+      ].includes(s.key))
       .map(s => [s.key, s.value])
   );
 
@@ -692,6 +718,12 @@ async function runEtc(browser) {
     saved.strip_image_exif === "on" &&
     saved.block_text_copy === "off" &&
     saved.block_context_menu === "off",
+    JSON.stringify(saved)
+  );
+
+  check(
+    "[etc] 메모 진입점 숨기기도 같은 저장에 실린다",
+    saved.hide_memo_entry === "off",
     JSON.stringify(saved)
   );
 
@@ -783,6 +815,207 @@ async function runCategory(browser) {
 
 
 /* =========================================================
+   5. memofolder — 메모 폴더 차례 (꾹 눌러 끌기 · 드래그 · ↑↓)
+
+   admin/settings/admin-settings-memo-folder-order.js
+
+   움직이는 것은 메모 화면 전용 배열이다 — 같은 화면에 있는 카테고리
+   목록의 순서(categories.sort_order)는 한 글자도 바뀌면 안 된다.
+========================================================== */
+
+const ORDER_ITEM = ".memo-folder-order-item";
+
+async function memoFolderNames(page) {
+  return page.locator(".memo-folder-order-name").allTextContents();
+}
+
+/*
+  터치의 "꾹 눌러 끌기"를 실제 이벤트로 재현한다. Playwright의
+  touchscreen에는 drag가 없어서 PointerEvent를 직접 만든다 —
+  구현이 듣는 것이 pointerdown/pointermove/pointerup 셋뿐이라
+  이 방식으로 실제 손짓과 같은 경로를 지난다.
+*/
+async function touchDrag(page, fromIndex, toIndex, opts = {}) {
+  const holdMs = opts.holdMs ?? 550;
+
+  const boxes = await page.locator(ORDER_ITEM).evaluateAll(nodes =>
+    nodes.map(n => {
+      const r = n.getBoundingClientRect();
+      const h = n.querySelector(".memo-folder-order-handle").getBoundingClientRect();
+      return {
+        /* 그 줄의 위쪽 절반 — 실제 사람이 "이 줄 앞에 놓는다"고 느끼는 자리 */
+        dropY: r.top + 3,
+        handleX: h.left + h.width / 2,
+        handleY: h.top + h.height / 2
+      };
+    })
+  );
+
+  const from = boxes[fromIndex];
+  const to = boxes[toIndex];
+
+  await page.evaluate(([index, x, y]) => {
+    const handle = document
+      .querySelectorAll(".memo-folder-order-handle")[index];
+    handle.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true, pointerId: 7, pointerType: "touch", clientX: x, clientY: y, button: 0
+    }));
+  }, [fromIndex, from.handleX, from.handleY]);
+
+  /* 꾹 누르는 동안 손가락이 움직이지 않는다 */
+  await page.waitForTimeout(holdMs);
+
+  if (opts.moveBeforeHold) return;
+
+  await page.evaluate(([x, y]) => {
+    window.dispatchEvent(new PointerEvent("pointermove", {
+      bubbles: true, cancelable: true, pointerId: 7, pointerType: "touch", clientX: x, clientY: y
+    }));
+  }, [from.handleX, to.dropY]);
+
+  await page.waitForTimeout(80);
+
+  await page.evaluate(([x, y]) => {
+    window.dispatchEvent(new PointerEvent("pointerup", {
+      bubbles: true, pointerId: 7, pointerType: "touch", clientX: x, clientY: y
+    }));
+  }, [from.handleX, to.dropY]);
+
+  await page.waitForTimeout(300);
+}
+
+async function runMemoFolder(browser) {
+  console.log("\n[memofolder] 메모 폴더 차례");
+
+  const requests = [];
+  const db = makeDb({ categories: makeMemoFolderCategories() });
+  const { ctx, page } = await openSettings(browser, { db, recorder: requests });
+
+  await openTab(page, "CATEGORY");
+  await page.waitForSelector(ORDER_ITEM, { timeout: 20000 });
+
+  const initial = await memoFolderNames(page);
+
+  check("[memofolder] 배너를 뺀 카테고리만 줄로 나온다",
+    initial.join(",") === "일기,소설,사진", initial.join(","));
+
+  check("[memofolder] 카테고리 줄에는 더 이상 순서 버튼이 없다",
+    (await page.locator('.memo-folder-row [aria-label*="순서"]').count()) === 0);
+
+  /* --- 데스크톱: 손잡이를 잡고 바로 끈다 --- */
+
+  {
+    const boxes = await page.locator(ORDER_ITEM).evaluateAll(nodes =>
+      nodes.map(n => {
+        const r = n.getBoundingClientRect();
+        const h = n.querySelector(".memo-folder-order-handle").getBoundingClientRect();
+        return { centerY: r.top + r.height / 2, hx: h.left + h.width / 2, hy: h.top + h.height / 2 };
+      })
+    );
+
+    await page.mouse.move(boxes[0].hx, boxes[0].hy);
+    await page.mouse.down();
+    await page.mouse.move(boxes[0].hx, boxes[2].centerY, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+
+    const after = await memoFolderNames(page);
+    check("[memofolder] ★ 데스크톱: 끌어서 맨 아래로 옮긴다",
+      after.join(",") === "소설,사진,일기", after.join(","));
+  }
+
+  /* --- 모바일(터치): 꾹 눌러야 시작된다 --- */
+
+  {
+    /* (a) 꾹 누르기 전에 움직이면 아무 일도 없다 = 스크롤이다 */
+    const before = await memoFolderNames(page);
+
+    const boxes = await page.locator(ORDER_ITEM).evaluateAll(nodes =>
+      nodes.map(n => {
+        const r = n.getBoundingClientRect();
+        const h = n.querySelector(".memo-folder-order-handle").getBoundingClientRect();
+        return { centerY: r.top + r.height / 2, hx: h.left + h.width / 2, hy: h.top + h.height / 2 };
+      })
+    );
+
+    await page.evaluate(([x, y, y2]) => {
+      const el = document.querySelector(".memo-folder-order-handle");
+      el.dispatchEvent(new PointerEvent("pointerdown", {
+        bubbles: true, pointerId: 9, pointerType: "touch", clientX: x, clientY: y, button: 0
+      }));
+      /* 곧바로 세로로 크게 움직인다 — 스크롤하려는 손짓 */
+      window.dispatchEvent(new PointerEvent("pointermove", {
+        bubbles: true, cancelable: true, pointerId: 9, pointerType: "touch", clientX: x, clientY: y2
+      }));
+      window.dispatchEvent(new PointerEvent("pointerup", {
+        bubbles: true, pointerId: 9, pointerType: "touch", clientX: x, clientY: y2
+      }));
+    }, [boxes[0].hx, boxes[0].hy, boxes[2].centerY]);
+
+    await page.waitForTimeout(250);
+
+    check("[memofolder] ★ 꾹 누르기 전에 움직이면 순서가 바뀌지 않는다(스크롤)",
+      (await memoFolderNames(page)).join(",") === before.join(","),
+      (await memoFolderNames(page)).join(","));
+
+    check("[memofolder] 끌기 상태가 남지 않는다",
+      (await page.locator(".memo-folder-order-list.is-dragging").count()) === 0);
+
+    /* (b) 꾹 누른 뒤에는 끌린다 */
+    await touchDrag(page, 2, 0);
+
+    const after = await memoFolderNames(page);
+    check("[memofolder] ★ 모바일: 꾹 눌러 끌면 맨 위로 옮겨진다",
+      after.join(",") === "일기,소설,사진", after.join(","));
+  }
+
+  /* --- 키보드용 ↑↓ 도 그대로 움직인다 --- */
+
+  {
+    await page.locator(`${ORDER_ITEM} button[aria-label="일기 아래로"]`).click();
+    await page.waitForTimeout(200);
+
+    const after = await memoFolderNames(page);
+    check("[memofolder] ↑↓ 로도 같은 배열을 움직인다",
+      after.join(",") === "소설,일기,사진", after.join(","));
+
+    const first = page.locator(`${ORDER_ITEM}`).first();
+    check("[memofolder] 맨 위의 ↑ 는 비활성",
+      await first.locator('button[aria-label*="위로"]').isDisabled());
+  }
+
+  /* --- 저장: 메모 폴더만 바뀌고 카테고리 순서는 그대로 --- */
+
+  const beforeSortOrders = db.categories.map(c => `${c.id}:${c.sort_order}`).join(",");
+
+  requests.length = 0;
+  await page.click("#categorySaveButton");
+  await page.waitForTimeout(1200);
+
+  const memoWrites = requests
+    .filter(r => r.path.includes("/rest/v1/rpc/upsert_own_memo_folder_settings"))
+    .map(r => JSON.parse(r.body || "{}"));
+
+  check("[memofolder] 저장에서 메모 폴더 3개가 각각 올라간다",
+    memoWrites.length === 3, `n=${memoWrites.length}`);
+
+  const orderById = Object.fromEntries(
+    memoWrites.map(w => [String(w.p_category_id), w.p_sort_order])
+  );
+
+  check("[memofolder] ★ 화면에서 만든 차례 그대로 저장된다",
+    orderById["2"] === 0 && orderById["1"] === 1 && orderById["3"] === 2,
+    JSON.stringify(orderById));
+
+  check("[memofolder] ★ 원본 카테고리 순서는 건드리지 않는다",
+    db.categories.map(c => `${c.id}:${c.sort_order}`).join(",") === beforeSortOrders,
+    db.categories.map(c => `${c.id}:${c.sort_order}`).join(","));
+
+  await ctx.close();
+}
+
+
+/* =========================================================
    MAIN
 ========================================================== */
 
@@ -800,6 +1033,7 @@ async function runCategory(browser) {
     if (shouldRun("etc")) await runEtc(browser);
     if (shouldRun("tab")) await runTab(browser);
     if (shouldRun("category")) await runCategory(browser);
+    if (shouldRun("memofolder")) await runMemoFolder(browser);
 
   } catch (err) {
 

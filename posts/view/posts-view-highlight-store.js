@@ -43,14 +43,34 @@ const POST_HIGHLIGHT_SELECT_COLUMNS =
 
 /*
   지금 열려 있는 글의 하이라이트. 화면 여러 곳이 같은 배열을 본다.
-  { postId, items }
+  { postId, items, status }
+
+  ★ status — "빈 목록"과 "못 읽었다"를 구분한다
+
+  migration이 적용되지 않은 배포나 일시적인 조회 실패에서도 글은
+  그대로 열려야 한다. 그렇다고 그 화면이 "저장된 하이라이트가 없다"가
+  되면 안 된다 — 주인장이 그 위에 새 하이라이트를 그으면 실제로는
+  겹치는 것을 못 보고 저장하게 되고, 메모가 사라진 것처럼 보인다.
+  그래서 실패를 값으로 남긴다.
+
+    "idle"   아직 아무 글도 읽지 않았다
+    "ok"     읽었다(items가 그 글의 전부다. 빈 배열이면 정말 없다)
+    "failed" 읽지 못했다(items는 빈 배열이지만 "없다"는 뜻이 아니다)
+
+  방문자 화면은 이 값으로 아무것도 하지 않는다 — 하이라이트가 안
+  보일 뿐이고, DB 오류 문구를 방문자에게 보여주지 않는다. 주인장이
+  기능을 쓰려는 순간(하이라이팅 모드)에만 "지금은 쓸 수 없다 +
+  다시 시도"를 알린다.
 */
 
 let postHighlightCache =
   {
     postId: null,
 
-    items: []
+    items: [],
+
+    status:
+      "idle"
   };
 
 
@@ -178,7 +198,10 @@ async function loadPostHighlights(
       {
         postId: null,
 
-        items: []
+        items: [],
+
+        status:
+          "idle"
       };
 
 
@@ -233,27 +256,63 @@ async function loadPostHighlights(
 
     else {
 
-      const {
+      /*
+        posts(updated_at)을 함께 받는다 — 이번 판정 결과를 적을 때
+        "어느 본문에 대한 판정인가"를 같이 적기 위해서다. 그 컬럼의
+        SELECT 권한이 아직 없는 배포에서는 이 쿼리가 통째로 실패하니
+        한 번 더, 그 부분만 빼고 물어본다(메모 목록과 같은 규칙).
+
+        하이라이트가 하나도 없는 글에서는 행이 오지 않아 시각도
+        알 수 없다 — 그때는 적을 판정 자체가 없으므로 상관없다.
+      */
+
+      const runQuery =
+        (withPostStamp) =>
+          supabaseClient
+            .from(
+              "post_highlights"
+            )
+            .select(
+              withPostStamp
+                ? POST_HIGHLIGHT_SELECT_COLUMNS + ", posts!inner (updated_at)"
+                : POST_HIGHLIGHT_SELECT_COLUMNS
+            )
+            .eq(
+              "post_id",
+              numericId
+            )
+            .order(
+              "text_start",
+              {
+                ascending: true
+              }
+            );
+
+
+      let {
         data,
         error
       } =
-        await supabaseClient
-          .from(
-            "post_highlights"
-          )
-          .select(
-            POST_HIGHLIGHT_SELECT_COLUMNS
-          )
-          .eq(
-            "post_id",
-            numericId
-          )
-          .order(
-            "text_start",
-            {
-              ascending: true
-            }
-          );
+        await runQuery(true);
+
+
+      if (error) {
+
+        const retry =
+          await runQuery(false);
+
+
+        if (!retry.error) {
+
+          data =
+            retry.data;
+
+          error =
+            null;
+
+        }
+
+      }
 
 
       if (error) {
@@ -277,6 +336,11 @@ async function loadPostHighlights(
     /*
       migration이 적용되지 않은 배포(테이블/RPC 없음)에서도 글은
       그대로 열려야 한다 — 하이라이트만 없는 화면이 된다.
+
+      다만 그것을 "저장된 항목이 없다"로 남기지는 않는다. status를
+      "failed"로 적어 두면 (1) 이번 화면의 판정 결과를 기록하지 않고
+      (없는 것을 "못 찾았다"로 적지 않는다), (2) 주인장이 하이라이팅
+      모드를 켤 때 지금은 쓸 수 없다고 알릴 수 있다.
     */
 
     console.warn(
@@ -289,13 +353,46 @@ async function loadPostHighlights(
       {
         postId: numericId,
 
-        items: []
+        items: [],
+
+        status:
+          "failed"
       };
 
 
     return postHighlightCache.items;
 
   }
+
+
+  /*
+    함께 실려 온 글 수정 시각(있으면). 행마다 같은 값이라 첫 행에서
+    읽는다. 비밀글 RPC 경로와 하이라이트가 없는 글에서는 null이고,
+    그때는 판정 기록에 시각이 비어 대조를 건너뛴다.
+  */
+
+  const postStamp =
+    rows.reduce(
+      (found, row) => {
+
+        if (found) {
+
+          return found;
+
+        }
+
+
+        const embedded =
+          Array.isArray(row.posts)
+            ? row.posts[0]
+            : row.posts;
+
+
+        return embedded?.updated_at || null;
+
+      },
+      null
+    );
 
 
   postHighlightCache =
@@ -305,7 +402,13 @@ async function loadPostHighlights(
       items:
         rows
           .map(normalizePostHighlightRow)
-          .filter(Boolean)
+          .filter(Boolean),
+
+      postUpdatedAt:
+        postStamp,
+
+      status:
+        "ok"
     };
 
 
@@ -354,8 +457,59 @@ function clearPostHighlightCache() {
     {
       postId: null,
 
-      items: []
+      items: [],
+
+      status:
+        "idle"
     };
+
+}
+
+
+/*
+  이 글의 하이라이트를 실제로 읽어 왔는가 — "ok" | "failed" | "idle".
+  화면이 "없다"와 "못 읽었다"를 구분해 말하기 위한 유일한 근거다.
+*/
+
+function getPostHighlightLoadStatus(
+  postId
+) {
+
+  if (
+    postId !== undefined &&
+    Number(postId) !== postHighlightCache.postId
+  ) {
+
+    return "idle";
+
+  }
+
+
+  return postHighlightCache.status || "idle";
+
+}
+
+
+/*
+  방금 읽은 목록과 함께 온 글 수정 시각(모르면 null).
+  판정 결과를 적을 때 "어느 본문에 대한 판정인가"로 쓴다.
+*/
+
+function getCachedPostHighlightPostStamp(
+  postId
+) {
+
+  if (
+    postId !== undefined &&
+    Number(postId) !== postHighlightCache.postId
+  ) {
+
+    return null;
+
+  }
+
+
+  return postHighlightCache.postUpdatedAt || null;
 
 }
 
@@ -814,80 +968,274 @@ async function deletePostHighlight(
 
 
 /* =========================================================
-   "원문에서 위치를 찾을 수 없음" 기록 (요구사항 9)
+   "원문에서 위치를 찾았는가" 기록 — 세 가지 상태
 
    판정 자체는 글을 열 때 정확히 이뤄진다(posts-view-highlight-anchor.js).
-   메모 카테고리는 카드 수만큼의 본문을 다시 받아 판정할 수 없으므로,
-   **마지막으로 그 글을 열었을 때** 확인된 결과만 이 브라우저에 적어
-   두고 카드에 표시한다.
+   메모 카테고리는 카드 수만큼의 본문을 다시 받아 판정할 수 없으므로
+   (그건 카드 한 장마다 원문 한 벌을 더 받는 일이다), **마지막으로
+   그 글을 열었을 때** 확인된 결과를 이 브라우저에 적어 두고 카드에
+   표시한다.
 
-   이 값은 화면 표시일 뿐이고 발췌문·메모·카드는 어느 쪽이든 그대로
-   보존된다. 다른 기기에서는 그 글을 한 번 열기 전까지 표시가 없다 —
-   "모른다"를 "잘못됐다"로 바꾸지 않기 위해 기본값은 항상 false다.
+   ★ "모른다"와 "찾았다"와 "못 찾았다"는 서로 다른 상태다
+
+   예전에는 "못 찾은 id 목록" 하나만 두고 그 안에 없으면 전부
+   "정상"으로 그렸다. 그러면 한 번도 열어 본 적 없는 글의 카드가
+   **확인된 정상**처럼 보인다 — 다른 기기에서 만든 카드가 전부
+   그렇다. 그래서 상태를 셋으로 나눈다.
+
+     unknown  아직 확인하지 않음 (이 기기에서 그 글을 연 적이 없거나,
+              연 뒤에 본문이 수정됐거나, 그 카드가 확인 뒤에 생겼다)
+     found    마지막 확인에서 본문의 그 자리를 찾았다
+     missing  마지막 확인에서 찾지 못했다(원문이 바뀌었을 가능성)
+
+   어느 쪽이든 발췌문·메모·카드는 그대로 보존된다. 이 값은 표시일
+   뿐이고 데이터를 지우지 않는다.
+
+   ★ 본문이 수정되면 기록은 그 순간 무효다
+
+   기록에는 확인 당시의 **글 수정 시각**(posts.updated_at)을 함께
+   적는다. 지금 글의 수정 시각이 그때와 다르면 그 기록은 "이전
+   본문에 대한 결과"이므로 그대로 쓰지 않고 unknown으로 돌린다 —
+   글을 고쳤는데 예전 판정이 현재 상태인 것처럼 남는 일을 막는다.
+   다시 그 글을 열면 그 자리에서 새로 판정되어 기록이 갱신된다.
+
+   ★ 저장 형태
+
+     imory-highlight-placement
+     { "<postId>": { v: "<그때의 updated_at>", f: [...id], m: [...id] } }
+
+   f/m 어느 쪽에도 없는 id는 unknown이다(확인 뒤에 만들어진 카드).
+   글 수가 늘어도 무한정 쌓이지 않도록 최근 글 위주로 자른다.
 ========================================================== */
 
-const POST_HIGHLIGHT_MISSING_KEY =
-  "imory-highlight-missing";
+const POST_HIGHLIGHT_PLACEMENT_KEY =
+  "imory-highlight-placement";
 
 
-function readPostHighlightMissingSet() {
+/* 기록을 유지할 글 수 상한 */
+
+const POST_HIGHLIGHT_PLACEMENT_MAX_POSTS =
+  300;
+
+
+const POST_HIGHLIGHT_PLACEMENT_UNKNOWN =
+  "unknown";
+
+const POST_HIGHLIGHT_PLACEMENT_FOUND =
+  "found";
+
+const POST_HIGHLIGHT_PLACEMENT_MISSING =
+  "missing";
+
+
+function readPostHighlightPlacementMap() {
 
   try {
 
     const raw =
       window.localStorage.getItem(
-        POST_HIGHLIGHT_MISSING_KEY
+        POST_HIGHLIGHT_PLACEMENT_KEY
       );
 
 
     const parsed =
       raw
         ? JSON.parse(raw)
-        : [];
+        : null;
 
 
-    return new Set(
-      Array.isArray(parsed)
-        ? parsed.map(String)
-        : []
-    );
+    return (
+      parsed &&
+      typeof parsed === "object" &&
+      !Array.isArray(parsed)
+    )
+      ? parsed
+      : {};
 
   }
 
   catch (err) {
 
-    return new Set();
+    return {};
 
   }
 
 }
 
 
-function isPostHighlightKnownMissing(
-  id
+/*
+  글 수정 시각을 문자열 하나로 맞춘다 — DB가 주는 값(timestamptz)의
+  표기가 경로마다 조금씩 다를 수 있어서, 비교는 항상 이 함수를 통과한
+  값끼리 한다. 값이 없으면 빈 문자열이고, 그때는 "판별할 수 없음"이라
+  아래에서 기록을 신뢰하지 않는다.
+*/
+
+function normalizePostHighlightStamp(
+  value
 ) {
 
-  return readPostHighlightMissingSet().has(
-    String(id)
-  );
+  if (!value) {
+
+    return "";
+
+  }
+
+
+  const time =
+    Date.parse(value);
+
+
+  return Number.isFinite(time)
+    ? String(time)
+    : String(value);
+
+}
+
+
+/* =========================================================
+   getPostHighlightPlacementState(id, postId, postUpdatedAt)
+     -> "unknown" | "found" | "missing"
+
+   postUpdatedAt을 모르면(옛 배포처럼 그 컬럼을 못 읽는 경우)
+   "확인 시각을 대조할 수 없다"는 뜻이므로 기록을 그대로 쓴다 —
+   없는 것보다는 마지막 확인 결과가 낫고, 이 값이 데이터를 바꾸지는
+   않는다. 대신 기록에 시각이 남아 있는데 지금 값과 다르면 반드시
+   unknown이다.
+========================================================== */
+
+function getPostHighlightPlacementState(
+  id,
+  postId,
+  postUpdatedAt
+) {
+
+  const key =
+    String(id);
+
+
+  const map =
+    readPostHighlightPlacementMap();
+
+
+  const entry =
+    map[String(postId)];
+
+
+  if (!entry) {
+
+    return POST_HIGHLIGHT_PLACEMENT_UNKNOWN;
+
+  }
+
+
+  const now =
+    normalizePostHighlightStamp(
+      postUpdatedAt
+    );
+
+
+  if (
+    now &&
+    entry.v &&
+    entry.v !== now
+  ) {
+
+    /* 확인한 뒤에 본문이 바뀌었다 — 그때의 결과는 지금 상태가 아니다 */
+
+    return POST_HIGHLIGHT_PLACEMENT_UNKNOWN;
+
+  }
+
+
+  if (
+    Array.isArray(entry.m) &&
+    entry.m.includes(key)
+  ) {
+
+    return POST_HIGHLIGHT_PLACEMENT_MISSING;
+
+  }
+
+
+  if (
+    Array.isArray(entry.f) &&
+    entry.f.includes(key)
+  ) {
+
+    return POST_HIGHLIGHT_PLACEMENT_FOUND;
+
+  }
+
+
+  /* 마지막 확인 이후에 만들어진 카드 */
+
+  return POST_HIGHLIGHT_PLACEMENT_UNKNOWN;
 
 }
 
 
 /*
-  한 글을 열어 판정이 끝난 시점에 부른다 — 그 글에 속한 id만 다시 쓴다.
-  다른 글의 기록은 건드리지 않는다.
+  예전 이름. 남아 있는 호출자를 위해 "마지막 확인에서 못 찾았다"만
+  true로 돌려준다 — unknown은 false다(모른다를 잘못됐다로 바꾸지
+  않는다는 규칙 그대로).
 */
 
+function isPostHighlightKnownMissing(
+  id,
+  postId,
+  postUpdatedAt
+) {
+
+  return (
+    getPostHighlightPlacementState(
+      id,
+      postId,
+      postUpdatedAt
+    ) === POST_HIGHLIGHT_PLACEMENT_MISSING
+  );
+
+}
+
+
+/* =========================================================
+   recordPostHighlightPlacement(postId, postUpdatedAt, items, placedIds)
+
+   한 글을 열어 판정이 끝난 시점에 부른다 — 그 글의 기록만 다시
+   쓰고 다른 글의 기록은 건드리지 않는다.
+
+   판정 자체를 하지 못한 경우(하이라이트 조회 실패)에는 부르지
+   않는다. 못 받은 것을 "못 찾았다"로 적으면 안 되기 때문이다
+   (posts/view/posts-view-highlight-mode.js).
+========================================================== */
+
 function recordPostHighlightPlacement(
+  postId,
+  postUpdatedAt,
   items,
   placedIds
 ) {
 
+  if (
+    postId === null ||
+    postId === undefined
+  ) {
+
+    return;
+
+  }
+
+
   try {
 
-    const set =
-      readPostHighlightMissingSet();
+    const map =
+      readPostHighlightPlacementMap();
+
+
+    const found =
+      [];
+
+    const missing =
+      [];
 
 
     (items || []).forEach(
@@ -899,13 +1247,13 @@ function recordPostHighlightPlacement(
 
         if (placedIds && placedIds.has(key)) {
 
-          set.delete(key);
+          found.push(key);
 
         }
 
         else {
 
-          set.add(key);
+          missing.push(key);
 
         }
 
@@ -913,11 +1261,54 @@ function recordPostHighlightPlacement(
     );
 
 
+    map[String(postId)] =
+      {
+        v:
+          normalizePostHighlightStamp(
+            postUpdatedAt
+          ),
+
+        f:
+          found,
+
+        m:
+          missing,
+
+        /* 오래된 글 기록을 먼저 버리기 위한 값 */
+        t:
+          Date.now()
+      };
+
+
+    const keys =
+      Object.keys(map);
+
+
+    if (keys.length > POST_HIGHLIGHT_PLACEMENT_MAX_POSTS) {
+
+      keys
+        .sort(
+          (a, b) =>
+            (map[a]?.t || 0) - (map[b]?.t || 0)
+        )
+        .slice(
+          0,
+          keys.length - POST_HIGHLIGHT_PLACEMENT_MAX_POSTS
+        )
+        .forEach(
+          (key) => {
+
+            delete map[key];
+
+          }
+        );
+
+    }
+
+
     window.localStorage.setItem(
-      POST_HIGHLIGHT_MISSING_KEY,
-      JSON.stringify(
-        Array.from(set).slice(-2000)
-      )
+      POST_HIGHLIGHT_PLACEMENT_KEY,
+      JSON.stringify(map)
     );
 
   }
@@ -925,6 +1316,55 @@ function recordPostHighlightPlacement(
   catch (err) {
 
     /* 저장이 막혀도 화면은 그대로 동작한다 */
+
+  }
+
+}
+
+
+/*
+  그 글의 기록을 통째로 버린다 — 본문을 저장한 직후처럼 "이전
+  판정이 더는 유효하지 않다"가 확실한 순간에 부른다. 다음에 그 글을
+  열면 그 자리에서 다시 판정된다.
+*/
+
+function invalidatePostHighlightPlacement(
+  postId
+) {
+
+  if (
+    postId === null ||
+    postId === undefined
+  ) {
+
+    return;
+
+  }
+
+
+  try {
+
+    const map =
+      readPostHighlightPlacementMap();
+
+
+    if (map[String(postId)]) {
+
+      delete map[String(postId)];
+
+
+      window.localStorage.setItem(
+        POST_HIGHLIGHT_PLACEMENT_KEY,
+        JSON.stringify(map)
+      );
+
+    }
+
+  }
+
+  catch (err) {
+
+    /* 무시 — 다음 열람에서 어차피 다시 쓴다 */
 
   }
 
@@ -942,6 +1382,15 @@ function recordPostHighlightPlacement(
 
    카드의 원본 카테고리는 **지금의** posts.category_id다 — 글의
    카테고리를 옮기면 카드도 따라 옮겨간다(요구사항 7).
+
+   ★ posts.updated_at을 함께 받는 이유
+
+   "원문에서 위치를 찾았는가"의 마지막 확인 결과가 아직 유효한지를
+   판정하려면 그 글이 그 뒤에 수정됐는지를 알아야 한다. 컬럼 하나가
+   목록 쿼리에 함께 실려 오므로 추가 요청이 생기지 않는다 — 카드마다
+   원문 본문을 다시 받아 판정하는 일은 여전히 하지 않는다
+   (그 컬럼의 SELECT 권한은
+   supabase/migrations/20260913110000_grant_posts_updated_at_select.sql).
 ========================================================== */
 
 async function loadMemoHighlightCards(
@@ -955,35 +1404,51 @@ async function loadMemoHighlightCards(
   }
 
 
-  try {
+  /*
+    posts.updated_at은 나중에 SELECT 권한이 열린 컬럼이다
+    (20260913110000). 그 migration이 아직 적용되지 않은 배포에서는
+    이 컬럼 하나 때문에 목록 전체가 실패하는데, 그건 "메모를
+    못 읽는다"가 되어 버린다. 그래서 한 번 더, 그 컬럼만 빼고
+    물어본다 — 그때는 위치 확인 상태가 "아직 확인하지 않음"으로
+    남을 뿐 카드는 전부 보인다.
+  */
 
-    const {
-      data,
-      error
-    } =
-      await supabaseClient
+  const buildMemoCardSelect =
+    (withPostUpdatedAt) =>
+      `
+      id,
+      post_id,
+      color,
+      excerpt,
+      prefix,
+      suffix,
+      text_start,
+      note,
+      created_at,
+      updated_at,
+      posts!inner (
+        id,
+        title,
+        category_id,
+        visibility${
+          withPostUpdatedAt
+            ? ",\n        updated_at"
+            : ""
+        }
+      )
+      `;
+
+
+  const runMemoCardQuery =
+    (withPostUpdatedAt) =>
+      supabaseClient
         .from(
           "post_highlights"
         )
         .select(
-          `
-          id,
-          post_id,
-          color,
-          excerpt,
-          prefix,
-          suffix,
-          text_start,
-          note,
-          created_at,
-          updated_at,
-          posts!inner (
-            id,
-            title,
-            category_id,
-            visibility
+          buildMemoCardSelect(
+            withPostUpdatedAt
           )
-          `
         )
         .eq(
           "user_id",
@@ -995,6 +1460,34 @@ async function loadMemoHighlightCards(
             ascending: false
           }
         );
+
+
+  try {
+
+    let {
+      data,
+      error
+    } =
+      await runMemoCardQuery(true);
+
+
+    if (error) {
+
+      const retry =
+        await runMemoCardQuery(false);
+
+
+      if (!retry.error) {
+
+        data =
+          retry.data;
+
+        error =
+          null;
+
+      }
+
+    }
 
 
     if (error) {
@@ -1045,6 +1538,18 @@ async function loadMemoHighlightCards(
             categoryId:
               post && post.category_id !== null && post.category_id !== undefined
                 ? Number(post.category_id)
+                : null,
+
+            /*
+              그 글이 마지막으로 수정된 시각. 카드의 "위치 확인"
+              기록이 아직 유효한지 판정하는 데만 쓴다. 이 컬럼을
+              읽을 수 없는 배포(권한 migration 이전)에서는 null이고,
+              그때는 기록을 그대로 쓴다.
+            */
+
+            postUpdatedAt:
+              post && post.updated_at
+                ? post.updated_at
                 : null
           };
 

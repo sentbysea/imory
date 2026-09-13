@@ -705,6 +705,26 @@
           </button>
 
 
+          <!--
+               HIGHLIGHT-1 후속 — 메모 화면의 폴더 차례.
+
+               카테고리 목록과 **다른 배열**이다(메모 화면에서만
+               쓰는 순서다, IMORY_HIGHLIGHT1_DESIGN.md §7-1). 그래서
+               카테고리 줄 안이 아니라 따로 떨어진 목록으로 둔다 —
+               한 줄을 끌었을 때 무엇이 움직이는지가 분명해야 한다.
+
+               migration이 적용되지 않았거나 대상 카테고리가 없으면
+               이 블록은 통째로 비어 있고 화면에도 나오지 않는다
+               (admin/settings/admin-settings-memo-folder-order.js).
+          -->
+
+          <div
+            class="memo-folder-order"
+            id="memoFolderOrderPanel"
+            hidden
+          ></div>
+
+
           <div class="imory-form-actions">
 
             <button
@@ -1132,6 +1152,37 @@
 
               <span class="etc-option-hint">
                 방문자의 본문 선택·복사를 막습니다(주인장 제외). 입력칸은 그대로 쓸 수 있습니다.
+              </span>
+
+            </span>
+
+          </label>
+
+
+          <!--
+               HIGHLIGHT-1 후속: 메모 화면 진입점.
+
+               스킨이 메모 링크를 그리지 않았을 때 플랫폼이 화면
+               오른쪽 아래에 작은 MEMO 칩을 얹는다
+               (skin/skin-memo-entry.js). 그 칩이 싫은 사람을 위한
+               스위치다 — 켜도 주소(/memos)는 그대로 유효하다.
+          -->
+
+          <label class="etc-option">
+
+            <input
+              type="checkbox"
+              id="hideMemoEntryToggle"
+            >
+
+            <span class="etc-option-text">
+
+              <span class="etc-option-title">
+                메모 진입점 숨기기
+              </span>
+
+              <span class="etc-option-hint">
+                화면 오른쪽 아래의 MEMO 버튼을 감춥니다. 스킨이 자체 메모 링크를 그린 경우에는 원래 나오지 않습니다. 감춰도 /memos 주소는 그대로 열립니다.
               </span>
 
             </span>
@@ -1798,6 +1849,17 @@
             */
 
             "./settings/admin-settings-memo-folders.js",
+
+            /*
+              HIGHLIGHT-1 후속: 메모 폴더 차례 목록(꾹 눌러 끌기 + ↑↓).
+              memoFolderOrder / memoFolderTableAvailable /
+              moveMemoFolder 를 쓰므로 위 파일 **뒤**여야 하고,
+              renderCategories()가 이 파일의 renderMemoFolderOrderList()
+              를 부른다(typeof 가드가 있어 순서가 어긋나도 깨지지는
+              않지만, 제자리는 여기다).
+            */
+
+            "./settings/admin-settings-memo-folder-order.js",
 
             /*
               HOME > ETC 보호 설정. 업로드 경로들이

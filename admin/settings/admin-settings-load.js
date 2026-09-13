@@ -677,7 +677,8 @@ function renderCategories() {
 
   /*
     HIGHLIGHT-1: 메모 폴더 차례를 지금 카테고리 목록에 맞춘다 —
-    카테고리를 더하거나 지운 직후에도 ↑↓ 가 올바른 자리를 가리킨다.
+    카테고리를 더하거나 지운 직후에도 아래 순서 목록이 올바른
+    자리를 가리킨다.
   */
 
   if (typeof syncMemoFolderOrder === "function") {
@@ -989,6 +990,23 @@ function renderCategories() {
 
     }
   );
+
+
+  /*
+    HIGHLIGHT-1 후속: 메모 화면의 폴더 차례 목록(꾹 눌러 끌기 + ↑↓).
+    카테고리 목록과 다른 배열을 움직이므로 카테고리 줄 안이 아니라
+    목록 아래에 따로 그린다
+    (admin/settings/admin-settings-memo-folder-order.js).
+  */
+
+  if (typeof renderMemoFolderOrderList === "function") {
+
+    renderMemoFolderOrderList(
+      categories,
+      renderCategories
+    );
+
+  }
 
 }
 

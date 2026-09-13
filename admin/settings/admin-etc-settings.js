@@ -34,7 +34,14 @@ const IMORY_ETC_SETTING_KEYS =
   [
     "strip_image_exif",
     "block_context_menu",
-    "block_text_copy"
+    "block_text_copy",
+
+    /*
+      HIGHLIGHT-1 후속 — 보호 설정은 아니지만 같은 사이트 단위
+      표시 설정이라 같은 자리에 둔다. 공개 화면에서 읽는 곳은
+      skin/skin-context.js(navigation.memos.enabled) 하나다.
+    */
+    "hide_memo_entry"
   ];
 
 
@@ -53,6 +60,11 @@ const blockTextCopyToggle =
     "blockTextCopyToggle"
   );
 
+const hideMemoEntryToggle =
+  document.getElementById(
+    "hideMemoEntryToggle"
+  );
+
 const etcSaveButton =
   document.getElementById(
     "etcSaveButton"
@@ -68,7 +80,8 @@ const etcToggleByKey =
   {
     strip_image_exif: stripImageExifToggle,
     block_context_menu: blockContextMenuToggle,
-    block_text_copy: blockTextCopyToggle
+    block_text_copy: blockTextCopyToggle,
+    hide_memo_entry: hideMemoEntryToggle
   };
 
 
@@ -217,7 +230,7 @@ etcSaveButton
 
 
       /*
-        세 값을 한 번에 upsert한다 — 하나만 성공하고 나머지가
+        이 화면의 값을 한 번에 upsert한다 — 하나만 성공하고 나머지가
         실패하는 상태를 만들지 않는다.
       */
 

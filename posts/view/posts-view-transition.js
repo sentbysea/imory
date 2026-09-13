@@ -322,6 +322,32 @@ async function revealPostArea(
   }
 
 
+  /*
+    HIGHLIGHT-1 후속 — 메모 화면 기본 진입점.
+
+    각 렌더러(목록/상세/폴더/메모/배너)마다 부르지 않고 여기
+    한 군데에서 한다. 표시 공간이 보이게 되는 유일한 지점이고,
+    그 시점에는 스킨 DOM이 이미 #postArea 안에 들어와 있어
+    "스킨이 자기 메모 링크를 그렸는가"를 실제로 그려진 화면에서
+    판정할 수 있다(skin/skin-memo-entry.js).
+
+    await하지 않는다 — 진입점 하나 때문에 화면이 늦게 드러나면
+    안 된다.
+  */
+
+  if (typeof syncPlatformMemoEntryForScreen === "function") {
+
+    syncPlatformMemoEntryForScreen({
+      skinRoot:
+        postArea,
+
+      isMemosScreen:
+        currentPostView === "memos"
+    });
+
+  }
+
+
   if (useSkinTransition) {
 
     showPostAreaInstant();
@@ -1520,6 +1546,25 @@ async function closePostArea(
 
   currentPostOwnerId =
     null;
+
+
+  /*
+    HOME으로 돌아왔다 — HOME은 이미 그려져 있으므로(표시 공간만
+    접는다) 초기 렌더의 판정이 다시 일어나지 않는다. 그래서 여기서
+    한 번 더 맞춘다: HOME 스킨이 자기 메모 링크를 그렸으면 칩은
+    나오지 않고, 아니면 다시 나온다.
+  */
+
+  if (typeof syncPlatformMemoEntryForScreen === "function") {
+
+    syncPlatformMemoEntryForScreen({
+      skinRoot:
+        document.getElementById(
+          "themeMount"
+        )
+    });
+
+  }
 
 
 

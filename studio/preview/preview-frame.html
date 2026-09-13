@@ -117,7 +117,18 @@
         /* 공개 화면과 같은 폭 계약을 Preview에도 건다. iframe은
            독립된 browsing context라 부모 문서의 <link>를 물려받지
            않는다(아래 import map과 같은 이유). */
-        "../../core/content-width.css"
+        "../../core/content-width.css",
+
+        /*
+          HIGHLIGHT-1 후속 — 메모 카드의 ⋮ · 메뉴 · 메모 팝업 ·
+          토스트, 그리고 플랫폼 기본 메모 진입점 칩. Preview에서
+          그것들이 공개 화면과 **같은 모양**으로 보여야 하므로
+          같은 스타일시트를 읽는다.
+        */
+        "../../posts/posts-highlight.css",
+
+        /* Preview에만 있는 chrome(주인장/방문자 칩) */
+        "./preview-memo-tools.css"
       ]
     );
 
@@ -185,7 +196,26 @@
           눌렀더니 구도가 달라졌다"가 된다. 위와 같은 이유로 의존
           없는 순수 함수 파일만 따로 로드한다.
         */
-        "../../studio/inspector/studio-inspector-crop-model.js"
+        "../../studio/inspector/studio-inspector-crop-model.js",
+
+        /*
+          HIGHLIGHT-1 후속 — 메모 화면 재료.
+
+          셋 다 의존이 얕아서 그대로 실을 수 있다:
+            posts-view-popover.js         순수 DOM(의존 없음)
+            posts-view-memo-card-tools.js popover 하나만 본다
+            skin-memo-entry.js            앞부분(칩 만들기)은 의존 없음.
+                                          뒷부분(공개 화면 컨트롤러)은
+                                          supabaseClient/getSiteOwner가
+                                          없으면 실행되지 않는다.
+
+          공개 화면과 **같은 파일**을 읽는 것이 핵심이다 — Preview용
+          복제본을 만들면 두 화면이 서서히 달라진다.
+        */
+        "../../posts/view/posts-view-popover.js",
+        "../../posts/view/posts-view-memo-card-tools.js",
+        "../../skin/skin-memo-entry.js",
+        "./preview-memo-tools.js"
       ]
     );
 

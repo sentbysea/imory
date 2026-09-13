@@ -17,7 +17,18 @@
      node posts/posts-highlight-e2e-test.mjs
      node posts/posts-highlight-e2e-test.mjs --browser=webkit
      node posts/posts-highlight-e2e-test.mjs --only=menu
+     node posts/posts-highlight-e2e-test.mjs --only=entry
+     node posts/posts-highlight-e2e-test.mjs --only=state
      node posts/posts-highlight-e2e-test.mjs --keep-shots
+
+   구역
+     menu       글 뷰어 ⋮ 도구 메뉴
+     highlight  하이라이팅 모드 · 저장 · 겹침
+     memo       말풍선 · 메모 팝업
+     memos      메모 카테고리 화면
+     entry      메모 화면으로 가는 기본 진입점(플랫폼 칩)
+     state      원문 위치 확인 3상태 · 조회 실패 처리
+     protect    보호된 원문의 발췌문 — 차단 **과** 정상 해제
 ========================================================== */
 
 import fs from "node:fs";
@@ -181,7 +192,7 @@ function makeDb() {
       { id: 1, user_id: OWNER_ID, name: "일기", type: "post", sort_order: 1 }
     ],
     posts: [
-      { id: 101, user_id: OWNER_ID, category_id: 1, title: "첫 번째 글", content_type: "text", visibility: "public", created_at: "2026-09-01T02:00:00Z", quote_preset_id: null }
+      { id: 101, user_id: OWNER_ID, category_id: 1, title: "첫 번째 글", content_type: "text", visibility: "public", created_at: "2026-09-01T02:00:00Z", updated_at: "2026-09-01T02:00:00Z", quote_preset_id: null }
     ],
     post_contents: [
       { post_id: 101, content: POST_BODY, ooc_content: null }
@@ -236,11 +247,24 @@ function queryTable(DB, table, params) {
 }
 
 
-/* post_highlights + posts embed (memo 화면이 쓰는 모양) */
+/* post_highlights + posts embed (memo 화면 · 글 화면이 쓰는 모양)
 
-function queryHighlightsWithPosts(DB, params) {
+   opts.noPostUpdatedAt
+     posts.updated_at 의 SELECT 권한이 아직 없는 배포를 흉내 낸다
+     (20260913110000 migration 이전). 실제 PostgREST 는 그 컬럼을
+     요청하면 42501 로 쿼리 전체를 거절하므로 여기서도 그렇게 한다 —
+     프론트가 "그 컬럼만 빼고 다시 물어보기"로 살아남는지 본다. */
+
+function queryHighlightsWithPosts(DB, params, opts = {}) {
   const select = params.get("select") || "";
   const wantsPosts = select.includes("posts");
+  const wantsPostUpdatedAt = /posts!inner\s*\(([^)]*)\)/.test(select)
+    ? /updated_at/.test(/posts!inner\s*\(([^)]*)\)/.exec(select)[1])
+    : false;
+
+  if (wantsPostUpdatedAt && opts.noPostUpdatedAt) {
+    return { error: { code: "42501", message: "permission denied for column updated_at" } };
+  }
 
   let rows = queryTable(DB, "post_highlights", params);
 
@@ -250,15 +274,15 @@ function queryHighlightsWithPosts(DB, params) {
     .map(row => {
       const post = DB.posts.find(p => String(p.id) === String(row.post_id));
       if (!post) return null;
-      return {
-        ...row,
-        posts: {
-          id: post.id,
-          title: post.title,
-          category_id: post.category_id,
-          visibility: post.visibility
-        }
+      const embedded = {
+        id: post.id,
+        title: post.title,
+        category_id: post.category_id,
+        visibility: post.visibility
       };
+      /* PostgREST 는 요청한 컬럼만 돌려준다 */
+      if (wantsPostUpdatedAt) embedded.updated_at = post.updated_at ?? null;
+      return { ...row, posts: embedded };
     })
     .filter(Boolean);
 }
@@ -402,8 +426,38 @@ async function installSupabaseMock(page, DB, opts = {}) {
         return json(null);
       }
 
+      /* ---- 비밀글: 원문과 같은 문(같은 비밀번호 판정) ---- */
+
+      if (fn === "get_secret_post_content") {
+        const post = DB.posts.find(p => String(p.id) === String(a.p_post_id));
+        if (!post || post.visibility !== "secret" ||
+            String(a.p_password) !== String(post.secret_password || "")) {
+          return json([]);
+        }
+        const row = DB.post_contents.find(c => String(c.post_id) === String(post.id));
+        return json([{ content: row ? row.content : "" }]);
+      }
+
+      /*
+        실제 SQL과 같은 구조다 — 비밀번호를 직접 대조하지 않고
+        get_secret_post_content 가 행을 돌려주는지만 본다.
+      */
       if (fn === "get_secret_post_highlights") {
-        return json([]);
+        const post = DB.posts.find(p => String(p.id) === String(a.p_post_id));
+        if (!post || post.visibility !== "secret" ||
+            String(a.p_password) !== String(post.secret_password || "")) {
+          return json([]);
+        }
+        return json(
+          DB.post_highlights
+            .filter(h => String(h.post_id) === String(post.id))
+            .sort((x, y) => x.text_start - y.text_start)
+            .map(h => ({
+              id: h.id, post_id: h.post_id, color: h.color, excerpt: h.excerpt,
+              prefix: h.prefix, suffix: h.suffix, text_start: h.text_start,
+              note: h.note, created_at: h.created_at, updated_at: h.updated_at
+            }))
+        );
       }
 
       return json(null);
@@ -417,13 +471,29 @@ async function installSupabaseMock(page, DB, opts = {}) {
         경계를 mock에서도 강제한다(비밀글이 섞이면 테스트가 실제
         배포보다 느슨해진다).
       */
-      let rows =
-        table === "post_highlights"
-          ? queryHighlightsWithPosts(DB, url.searchParams).filter(row => {
-              const post = DB.posts.find(p => String(p.id) === String(row.post_id));
-              return post && (post.visibility === "public" || post.user_id === opts.signedInAs);
-            })
-          : queryTable(DB, table, url.searchParams);
+      /*
+        하이라이트 조회가 실패하는 배포/순간을 흉내 낸다 —
+        migration 미적용, 일시적 장애 등. 화면이 그것을 "저장된
+        항목 없음"으로 표시하지 않는지 보기 위한 스위치다.
+      */
+      if (table === "post_highlights" && opts.failHighlightSelect) {
+        return json({ code: "42P01", message: "relation does not exist" }, 500);
+      }
+
+      let rows;
+
+      if (table === "post_highlights") {
+        const result = queryHighlightsWithPosts(DB, url.searchParams, opts);
+        if (result && result.error) {
+          return json(result.error, 403);
+        }
+        rows = result.filter(row => {
+          const post = DB.posts.find(p => String(p.id) === String(row.post_id));
+          return post && (post.visibility === "public" || post.user_id === opts.signedInAs);
+        });
+      } else {
+        rows = queryTable(DB, table, url.searchParams);
+      }
 
       const single = (req.headers()["accept"] || "").includes("vnd.pgrst.object");
       if (single && rows.length === 0) {
@@ -1041,6 +1111,394 @@ async function testProtection() {
     check("[protect] 같은 순간 주인장에게는 보인다",
       (text || "").includes("비밀 발췌문입니다"));
   });
+
+
+  /* =========================================================
+     차단만 확인하면 반쪽이다 — **정상 해제한 방문자**가 허용된
+     발췌문·메모를 읽을 수 있어야 기능이 성립한다.
+
+     해제 경로는 기존 그대로다: 비밀번호 폼 → get_secret_post_content.
+     하이라이트는 그 통과 여부를 다시 쓰는 RPC 하나로만 온다
+     (get_secret_post_highlights) — 이 테스트가 그 두 경로를 함께
+     지나간다.
+  ========================================================== */
+
+  {
+    const unlockDb = makeDb();
+
+    unlockDb.posts.push({
+      id: 103, user_id: OWNER_ID, category_id: 1, title: "잠긴 글",
+      content_type: "text", visibility: "secret", secret_password: "letmein",
+      created_at: "2026-09-04T02:00:00Z", updated_at: "2026-09-04T02:00:00Z",
+      quote_preset_id: null
+    });
+
+    unlockDb.post_contents.push({
+      post_id: 103,
+      content: "잠긴 본문의 첫 문장입니다. 두 번째 문장입니다.",
+      ooc_content: null
+    });
+
+    unlockDb.post_highlights.push({
+      id: "hl-unlock", post_id: 103, user_id: OWNER_ID, color: "#f6e0c8",
+      excerpt: "잠긴 본문의 첫 문장입니다", prefix: "", suffix: ". 두 번째",
+      text_start: 0, note: "해제하면 읽히는 메모",
+      created_at: "2026-09-07T03:00:00Z", updated_at: "2026-09-07T03:00:00Z"
+    });
+
+    await withPage({ width: 1280, height: 900 }, { db: unlockDb, signedInAs: null }, async (page) => {
+      await page.goto(`${BASE}/${SLUG}/post/103`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector("#postSecretGateInput", { timeout: 20000 });
+
+      /* --- 틀린 비밀번호로는 아무것도 오지 않는다 --- */
+
+      await page.fill("#postSecretGateInput", "nope");
+      await page.click("#postSecretGateSubmit");
+      await page.waitForTimeout(900);
+
+      check("[protect] 오답이면 본문이 열리지 않는다",
+        !(await page.locator("body").innerText()).includes("잠긴 본문의 첫 문장"));
+
+      check("[protect] 오답 상태에서 발췌문도 메모도 없다",
+        !(await page.content()).includes("해제하면 읽히는 메모"));
+
+      /* --- 정답 --- */
+
+      await page.fill("#postSecretGateInput", "letmein");
+      await page.click("#postSecretGateSubmit");
+      await page.waitForFunction(
+        () => document.body.innerText.includes("잠긴 본문의 첫 문장"),
+        null,
+        { timeout: 20000 }
+      );
+      await page.waitForTimeout(900);
+
+      const spans = await page.locator(".post-highlight").count();
+      check("[protect] ★ 정상 해제한 방문자는 발췌문 표시를 본다",
+        spans === 1, `spans=${spans}`);
+
+      await page.locator(".post-highlight").first().click();
+      await page.waitForTimeout(500);
+
+      const bubble = await page.locator(".imory-popover").innerText();
+      check("[protect] ★ 그 메모도 읽을 수 있다",
+        bubble.includes("해제하면 읽히는 메모"), bubble.slice(0, 60));
+
+      check("[protect] 방문자에게는 편집 도구가 없다",
+        !bubble.includes("삭제"), bubble.slice(0, 60));
+    });
+  }
+}
+
+
+/* =========================================================
+   [entry] 메모 화면으로 가는 기본 진입점
+
+   기존 스킨은 navigation.memos를 그리지 않는다. 그때만 플랫폼이
+   작은 칩을 얹고, 스킨이 이미 그렸거나 사용자가 껐으면 얹지 않는다
+   (skin/skin-memo-entry.js).
+========================================================== */
+
+const MEMO_ENTRY = "#imoryPlatformMemoEntry";
+
+async function testMemoEntry() {
+  console.log("\n[entry] 메모 진입점");
+
+  /* --- 1) 메모 링크가 없는 스킨: HOME에 칩이 나온다 --- */
+
+  await withPage({ width: 1280, height: 900 }, { db: makeDb(), signedInAs: null }, async (page) => {
+    await page.goto(`${BASE}/${SLUG}/`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(MEMO_ENTRY, { timeout: 20000 });
+
+    const href = await page.locator(MEMO_ENTRY).getAttribute("href");
+    check("[entry] 스킨에 메모 링크가 없으면 플랫폼이 칩을 얹는다",
+      href === `/${SLUG}/memos`, href);
+
+    /* 문서 전체 리로드가 아니라 기존 SPA 라우터를 탄다 */
+    await page.evaluate(() => { window.__imoryNoReload = true; });
+    await page.locator(MEMO_ENTRY).click();
+    await page.waitForFunction(
+      () => location.pathname.endsWith("/memos"),
+      null,
+      { timeout: 20000 }
+    );
+    await page.waitForTimeout(1200);
+
+    check("[entry] ★ 기존 SPA 라우터로 간다(문서를 새로 받지 않는다)",
+      (await page.evaluate(() => window.__imoryNoReload === true)) === true);
+
+    check("[entry] 메모 화면이 열린다",
+      (await page.locator(".memo-screen").count()) === 1);
+
+    check("[entry] 메모 화면에서는 칩이 사라진다",
+      (await page.locator(MEMO_ENTRY).count()) === 0);
+
+    await page.goBack();
+    await page.waitForTimeout(1500);
+    check("[entry] HOME으로 돌아오면 다시 나온다",
+      (await page.locator(MEMO_ENTRY).count()) === 1);
+  });
+
+
+  /* --- 2) 사용자가 껐으면 나오지 않는다 --- */
+
+  {
+    const db = makeDb();
+    db.site_settings.push({ user_id: OWNER_ID, key: "hide_memo_entry", value: "on" });
+
+    await withPage({ width: 1280, height: 900 }, { db, signedInAs: null }, async (page) => {
+      await page.goto(`${BASE}/${SLUG}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(2500);
+      check("[entry] ★ Settings에서 껐으면 얹지 않는다",
+        (await page.locator(MEMO_ENTRY).count()) === 0);
+    });
+  }
+
+
+  /* --- 3) 스킨이 자기 메모 링크를 그렸으면 중복 표시하지 않는다 --- */
+
+  {
+    const skin = JSON.parse(JSON.stringify(SKIN_PACKAGE));
+    skin.templates.home.html +=
+      `<a class="skin-own-memos" data-imory-href="navigation.memos.href" data-imory-bind="navigation.memos.name"></a>`;
+
+    await withPage({ width: 1280, height: 900 }, { db: makeDb(), signedInAs: null, skin }, async (page) => {
+      await page.waitForTimeout(0);
+      await page.goto(`${BASE}/${SLUG}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".skin-own-memos", { timeout: 20000 });
+      await page.waitForTimeout(1000);
+
+      check("[entry] 스킨이 그린 메모 링크가 실제로 있다",
+        (await page.locator(".skin-own-memos").getAttribute("href")) === `/${SLUG}/memos`);
+
+      check("[entry] ★ 스킨이 그렸으면 플랫폼 칩은 얹지 않는다(중복 없음)",
+        (await page.locator(MEMO_ENTRY).count()) === 0);
+    });
+  }
+
+
+  /* --- 4) 글 읽기 화면에서도 닿고, 모바일에서 넘치지 않는다 --- */
+
+  await withPage({ width: 390, height: 780 }, { db: makeDb(), signedInAs: null }, async (page) => {
+    await gotoPost(page);
+    await page.waitForTimeout(600);
+
+    check("[entry] 글 읽기 화면에도 있다",
+      (await page.locator(MEMO_ENTRY).count()) === 1);
+
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth
+    );
+    check("[entry] 모바일에서 가로로 넘치지 않는다", overflow <= 1, `overflow=${overflow}`);
+  });
+}
+
+
+/* =========================================================
+   [state] 원문 위치 확인 — 세 가지 상태
+
+     unknown  아직 확인하지 않음(다른 기기 / 확인 뒤 본문 수정)
+     found    마지막 확인에서 찾았다
+     missing  마지막 확인에서 찾지 못했다
+
+   그리고 "조회 실패"를 "저장된 항목 없음"으로 표시하지 않는다.
+========================================================== */
+
+const MISSING_LABEL = ".memo-card-missing:visible";
+const UNCHECKED_LABEL = ".memo-card-unchecked:visible";
+
+function seedTwoHighlights(db) {
+  db.post_highlights.push({
+    id: "hl-found", post_id: 101, user_id: OWNER_ID, color: "#f6e0c8",
+    excerpt: "첫 문장입니다", prefix: "", suffix: ". 두 번째 문장입니다.", text_start: 0,
+    note: "찾히는 카드",
+    created_at: "2026-09-07T01:00:00Z", updated_at: "2026-09-07T01:00:00Z"
+  });
+  db.post_highlights.push({
+    id: "hl-gone", post_id: 101, user_id: OWNER_ID, color: "#d8ecf3",
+    excerpt: "지금은 본문에 없는 문장", prefix: "", suffix: "", text_start: 400,
+    note: "사라진 카드",
+    created_at: "2026-09-07T02:00:00Z", updated_at: "2026-09-07T02:00:00Z"
+  });
+}
+
+async function testPlacementState() {
+  console.log("\n[state] 원문 위치 확인 상태");
+
+  /* --- 1) 한 번도 열어 본 적 없는 기기: 전부 "확인 전" --- */
+
+  {
+    const db = makeDb();
+    seedTwoHighlights(db);
+
+    await withPage({ width: 1280, height: 900 }, { db, signedInAs: OWNER_ID }, async (page) => {
+      await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".memo-card", { timeout: 20000 });
+      await page.waitForTimeout(500);
+
+      const missing = await page.locator(MISSING_LABEL).count();
+      const unchecked = await page.locator(UNCHECKED_LABEL).count();
+
+      check("[state] 확인 전에는 '찾을 수 없음'을 붙이지 않는다",
+        missing === 0, `n=${missing}`);
+
+      check("[state] ★ 대신 '확인 전'이라고 말한다(모른다 ≠ 정상)",
+        unchecked === 2, `n=${unchecked}`);
+    });
+  }
+
+
+  /* --- 2) 글을 열면 그 자리에서 판정된다 → found / missing --- */
+
+  {
+    const db = makeDb();
+    seedTwoHighlights(db);
+
+    await withPage({ width: 1280, height: 900 }, { db, signedInAs: OWNER_ID }, async (page) => {
+      await gotoPost(page);
+      await page.waitForTimeout(900);
+
+      const stored = await page.evaluate(() =>
+        window.localStorage.getItem("imory-highlight-placement")
+      );
+      const parsed = JSON.parse(stored || "{}");
+
+      check("[state] 글을 열면 그 글의 판정이 기록된다",
+        Array.isArray(parsed["101"]?.f) && Array.isArray(parsed["101"]?.m),
+        stored);
+
+      check("[state] 찾은 것은 f, 못 찾은 것은 m",
+        parsed["101"]?.f?.includes("hl-found") === true &&
+        parsed["101"]?.m?.includes("hl-gone") === true,
+        JSON.stringify(parsed["101"]));
+
+      check("[state] ★ 기록에 그때의 글 수정 시각이 함께 남는다",
+        Boolean(parsed["101"]?.v), String(parsed["101"]?.v));
+
+      await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".memo-card", { timeout: 20000 });
+      await page.waitForTimeout(500);
+
+      const missing = await page.locator(MISSING_LABEL).count();
+      const unchecked = await page.locator(UNCHECKED_LABEL).count();
+
+      check("[state] 못 찾은 카드 하나만 '찾을 수 없음'", missing === 1, `n=${missing}`);
+      check("[state] 찾은 카드에는 아무 표시도 없다", unchecked === 0, `n=${unchecked}`);
+    });
+  }
+
+
+  /* --- 3) 그 뒤 원문을 고치면 예전 판정은 현재 상태가 아니다 --- */
+
+  {
+    const db = makeDb();
+    seedTwoHighlights(db);
+
+    await withPage({ width: 1280, height: 900 }, { db, signedInAs: OWNER_ID }, async (page) => {
+      await gotoPost(page);
+      await page.waitForTimeout(900);
+
+      /* 주인장이 본문을 고쳤다 — updated_at이 올라간다 */
+      db.posts[0].updated_at = "2027-01-01T00:00:00Z";
+
+      await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".memo-card", { timeout: 20000 });
+      await page.waitForTimeout(500);
+
+      const missing = await page.locator(MISSING_LABEL).count();
+      const unchecked = await page.locator(UNCHECKED_LABEL).count();
+
+      check("[state] ★ 본문을 고치면 예전 '찾을 수 없음'이 남지 않는다",
+        missing === 0, `n=${missing}`);
+
+      check("[state] ★ 두 장 모두 '확인 전'으로 돌아간다",
+        unchecked === 2, `n=${unchecked}`);
+    });
+  }
+
+
+  /* --- 4) updated_at SELECT 권한이 없는 배포에서도 목록은 나온다 --- */
+
+  {
+    const db = makeDb();
+    seedTwoHighlights(db);
+
+    await withPage(
+      { width: 1280, height: 900 },
+      { db, signedInAs: OWNER_ID, noPostUpdatedAt: true },
+      async (page) => {
+        await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
+        await page.waitForSelector(".memo-card", { timeout: 20000 });
+        await page.waitForTimeout(500);
+
+        const cards = await page.locator(".memo-card").count();
+        check("[state] ★ migration 이전 배포에서도 카드는 전부 보인다",
+          cards === 2, `n=${cards}`);
+      }
+    );
+  }
+
+
+  /* --- 5) 조회 실패를 "없음"으로 표시하지 않는다 --- */
+
+  {
+    const db = makeDb();
+    seedTwoHighlights(db);
+
+    await withPage(
+      { width: 1280, height: 900 },
+      { db, signedInAs: null, failHighlightSelect: true },
+      async (page) => {
+        await gotoPost(page);
+        await page.waitForTimeout(1000);
+
+        const bodyText = await page.locator("body").innerText();
+
+        check("[state] 방문자: 글은 그대로 열린다",
+          bodyText.includes("첫 문장입니다"));
+
+        check("[state] ★ 방문자에게 DB 오류를 노출하지 않는다",
+          !/PGRST|permission denied|does not exist|하이라이트를 불러오지 못/i.test(bodyText),
+          bodyText.slice(0, 80));
+      }
+    );
+
+    const ownerOpts = { db, signedInAs: OWNER_ID, failHighlightSelect: true };
+
+    await withPage({ width: 1280, height: 900 }, ownerOpts, async (page) => {
+      await gotoPost(page);
+      await page.waitForTimeout(1000);
+
+      await page.locator("#postToolsButton").click();
+      await page.waitForSelector(".imory-popover:not([hidden])", { timeout: 5000 });
+      await page.locator(".imory-popover-item-label", { hasText: "하이라이팅 모드" }).click();
+      await page.waitForTimeout(600);
+
+      const toast = await page.locator("#postViewerToast").innerText();
+
+      check("[state] ★ 주인장에게는 '지금은 쓸 수 없다'를 알린다",
+        toast.includes("불러오지 못해"), toast);
+
+      check("[state] ★ 다시 시도할 방법을 준다",
+        (await page.locator(".post-viewer-toast-action").count()) === 1);
+
+      check("[state] 모드가 열리지 않는다",
+        (await page.locator(".post-highlight-mode-bar").count()) === 0);
+
+      /* 조회가 되게 바꾼 뒤 '다시 시도' */
+      ownerOpts.failHighlightSelect = false;
+
+      await page.locator(".post-viewer-toast-action").click();
+      await page.waitForTimeout(1200);
+
+      check("[state] ★ 다시 시도하면 모드가 열린다",
+        (await page.locator(".post-highlight-mode-bar").count()) === 1);
+
+      check("[state] 다시 시도 뒤에는 하이라이트도 칠해진다",
+        (await page.locator(".post-highlight").count()) === 1,
+        `n=${await page.locator(".post-highlight").count()}`);
+    });
+  }
 }
 
 
@@ -1058,6 +1516,8 @@ async function testProtection() {
     if (wants("highlight")) await testHighlighting();
     if (wants("memo")) await testMemo();
     if (wants("memos")) await testMemoScreen();
+    if (wants("entry")) await testMemoEntry();
+    if (wants("state")) await testPlacementState();
     if (wants("protect")) await testProtection();
   } finally {
     server.close();

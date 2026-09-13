@@ -497,6 +497,26 @@
 }
 
 
+/*
+  "이 화면의 조작은 저장되지 않는다"를 미리 말해 두는 줄. 지금은
+  Studio Preview만 쓴다(공개 화면에서는 붙지 않는다).
+*/
+
+.post-memo-popup-notice {
+  margin: 0 0 10px;
+
+  padding: 6px 10px;
+
+  border-radius: 8px;
+
+  background: #f6f2f3;
+
+  font-size: 11px;
+
+  color: #8d8489;
+}
+
+
 .post-memo-popup-excerpt {
   max-height: 30vh;
 
@@ -679,6 +699,42 @@
   background: rgba(169, 74, 102, 0.95);
 }
 
+/*
+  실패를 되돌릴 방법이 있을 때만 붙는 버튼("다시 시도").
+  버튼이 붙은 동안에는 토스트가 눌려야 하므로 pointer-events를
+  되살린다 — 문구만 있을 때는 지금까지처럼 클릭을 통과시킨다.
+*/
+
+.post-viewer-toast[data-has-action="1"].is-visible {
+  pointer-events: auto;
+}
+
+.post-viewer-toast-action {
+  margin-left: 10px;
+
+  padding: 3px 10px;
+
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+
+  background: none;
+
+  font-family: inherit;
+  font-size: 12px;
+
+  color: #ffffff;
+
+  cursor: pointer;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+.post-viewer-toast-action:hover,
+.post-viewer-toast-action:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+}
+
 
 
 /* =========================================================
@@ -750,6 +806,27 @@
   font-size: 13px;
 
   color: #aaaaaa;
+
+  text-align: center;
+}
+
+/*
+  Studio Preview에서 샘플 카드를 보여 주는 동안의 한 줄. 공개 화면
+  Context에는 memos.isSample 자체가 없어 절대 나타나지 않는다.
+*/
+
+.memo-screen-sample {
+  margin: 0 0 12px;
+
+  padding: 8px 12px;
+
+  border-radius: 10px;
+
+  background: #f6f2f3;
+
+  font-size: 12px;
+
+  color: #8d8489;
 
   text-align: center;
 }
@@ -939,6 +1016,18 @@
   color: #c2607f;
 }
 
+/*
+  "아직 확인하지 않음"은 문제가 아니라 **모른다**는 뜻이다 —
+  못 찾았다는 표시(붉은 계열)와 같은 무게로 보이면 안 되므로
+  옅은 회색으로 둔다.
+*/
+
+.memo-card-unchecked {
+  font-size: 11px;
+
+  color: #b5b5b5;
+}
+
 
 .memo-card-actions {
   display: flex;
@@ -978,4 +1067,89 @@
   background: #fbf7f8;
 
   color: #d980a2;
+}
+
+
+/* =========================================================
+   플랫폼 기본 메모 진입점 (skin/skin-memo-entry.js)
+
+   스킨이 자기 메모 링크를 그리지 않았을 때만 나타나는 떠 있는 칩.
+   .menu-button / .music-button과 같은 결의 플랫폼 chrome이고,
+   스킨 DOM에는 한 글자도 들어가지 않는다.
+
+   자리: 오른쪽 아래. 왼쪽 위는 .menu-button, 오른쪽 위는
+   .music-button과 표시 공간의 소유자 도구(＋/edit/⋮)가 이미 쓰는
+   자리다 — 셋 중 아무도 쓰지 않는 모서리가 오른쪽 아래뿐이다.
+   safe area를 더해 아이폰 홈 인디케이터 위로 띄운다.
+========================================================== */
+
+.platform-memo-entry {
+  position: fixed;
+
+  right:
+    max(
+      16px,
+      env(safe-area-inset-right)
+    );
+
+  bottom:
+    calc(
+      16px +
+      env(safe-area-inset-bottom)
+    );
+
+  z-index: 60;
+
+  display: inline-flex;
+
+  align-items: center;
+
+  min-height: 32px;
+
+  padding: 0 14px;
+
+  border: 1px solid #f0e2e7;
+  border-radius: 999px;
+
+  background: rgba(255, 255, 255, 0.92);
+
+  box-shadow:
+    0 2px 10px rgba(0, 0, 0, 0.08);
+
+  font-family: inherit;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+
+  color: #b9849a;
+
+  text-decoration: none;
+
+  -webkit-tap-highlight-color:
+    transparent;
+}
+
+.platform-memo-entry:hover,
+.platform-memo-entry:focus-visible {
+  border-color: #e6c3d1;
+
+  color: #d980a2;
+}
+
+/*
+  글을 읽는 동안에는 본문을 가리지 않도록 한 단계 옅게 둔다 —
+  없애지는 않는다(읽다가 메모 화면으로 가는 것이 가장 잦은 동선이다).
+*/
+
+[data-post-highlight-mode="on"] .platform-memo-entry {
+  opacity: 0.35;
+}
+
+/*
+  작성/수정 폼이 열려 있는 동안에는 내린다 — 미저장 입력을 두고
+  다른 화면으로 가는 링크를 띄워 둘 이유가 없다. 폼의 열림/닫힘은
+  이미 body의 클래스 하나로 표현돼 있다(posts-view-transition.js).
+*/
+
+body.post-editor-mode .platform-memo-entry {
+  display: none;
 }

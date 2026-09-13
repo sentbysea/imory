@@ -367,82 +367,14 @@ function buildMemoFolderRow(
   row.appendChild(caption);
 
 
-  /* --- 순서 --- */
+  /* --- 순서 ---
 
-  const orderWrap =
-    document.createElement("div");
-
-
-  orderWrap.className =
-    "category-display-control";
-
-
-  const index =
-    memoFolderOrder.indexOf(
-      Number(category.id)
-    );
-
-
-  [
-    { label: "↑", delta: -1 },
-    { label: "↓", delta: 1 }
-  ].forEach(
-    (spec) => {
-
-      const button =
-        document.createElement("button");
-
-
-      button.type =
-        "button";
-
-
-      button.className =
-        "imory-button imory-button--ghost imory-button--sm";
-
-
-      button.textContent =
-        spec.label;
-
-
-      button.setAttribute(
-        "aria-label",
-        spec.delta < 0
-          ? "메모 폴더 순서 위로"
-          : "메모 폴더 순서 아래로"
-      );
-
-
-      button.disabled =
-        index < 0 ||
-        index + spec.delta < 0 ||
-        index + spec.delta >= memoFolderOrder.length;
-
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          moveMemoFolder(
-            index,
-            spec.delta
-          );
-
-
-          onChanged();
-
-        }
-      );
-
-
-      orderWrap.appendChild(button);
-
-    }
-  );
-
-
-  row.appendChild(orderWrap);
-
+     차례는 이 줄에 없다. 카테고리 줄마다 ↑↓ 를 흩어 두면 "지금
+     무엇의 차례를 바꾸고 있는가"가 흐려지고, 끌어서 옮기는 조작을
+     붙일 자리도 없다. 대신 카테고리 목록 아래에 메모 폴더만 모은
+     목록이 따로 있다
+     (admin/settings/admin-settings-memo-folder-order.js).
+     이 줄은 커버/비율/구도만 맡는다. */
 
   /* --- 커버 --- */
 
