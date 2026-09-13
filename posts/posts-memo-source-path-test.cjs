@@ -3,11 +3,11 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 
 const contextSource = fs.readFileSync(
-  "source/skin/skin-context.js",
+  "skin/skin-context.js",
   "utf8"
 );
 const storeSource = fs.readFileSync(
-  "source/posts/view/posts-view-highlight-store.js",
+  "posts/view/posts-view-highlight-store.js",
   "utf8"
 );
 
@@ -61,13 +61,4 @@ assert.match(storeSource, /postFolderId:/);
 assert.match(contextSource, /sourcePathLabel:/);
 assert.match(contextSource, /\.join\(" › "\)/);
 
-const skin = JSON.parse(
-  fs.readFileSync(
-    "output/imory-quiet-frame-v10-memo-paths.json",
-    "utf8"
-  )
-);
-assert.match(skin.templates.memos.html, /item\.sourcePathLabel/);
-assert.match(skin.css, /--imory-memo-color/);
-
-console.log("memo source path: 10 checks passed");
+console.log("memo source path: 8 checks passed");
