@@ -592,15 +592,16 @@ folder/sort_order migration도 함께 올려서 **트리거 실행 순서**를 �
    Editor에서 실행). `20260913170000_create_user_share_cards_bucket.sql`.
    버킷이 없으면 기본 카드 사진 업로드만 실패하고, 오버레이·폰트
    설정과 대표 이미지 배경은 그 전에도 동작한다.
-2-1. **`share_label_seq` migration — 아직 적용 안 됨**
-   (`20260913180000_add_posts_share_label_seq.sql`). 이 저장소에는 DDL을
-   보낼 수단이 없으므로 **사용자가 Supabase SQL Editor에 붙여넣어**
-   실행해야 한다. 검증한 것은 PGlite(실제 Postgres 엔진) 실행까지다 —
-   프로덕션 데이터에 대한 backfill 결과는 적용 뒤 확인 항목이다.
+2-1. **`share_label_seq` migration — 적용됨**(2026-09-13, 사용자가
+   Supabase SQL Editor에서 실행).
+   `20260913180000_add_posts_share_label_seq.sql`.
 
-   적용 전에도 카드는 정상으로 나온다(§4-3 "migration이 아직 없는
-   배포"). 다만 자동 라벨의 번호가 그때그때 세는 값이라 앞 글을 지우면
-   달라질 수 있다.
+   저장소에서 검증한 것은 PGlite(실제 Postgres 엔진) 실행까지다 —
+   **프로덕션 데이터의 backfill 결과**(기존 공개 글이 컨테이너별로
+   1·2·3 …을 받았는가)는 실제 카드에서 눈으로 확인할 항목이다.
+
+   적용 전에도 카드는 정상으로 나왔다(§4-3 "migration이 아직 없는
+   배포"). 그 길은 컬럼이 없는 배포를 위해 그대로 남겨 둔다.
 
    ### 배포 확인 방법 (2026-09-13 기준)
 
