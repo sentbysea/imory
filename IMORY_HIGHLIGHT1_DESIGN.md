@@ -263,8 +263,11 @@ null을 돌려주어 저장 대상이 되지 않는다.
 닫지 않는다**. 글자 수 제한은 500자가 아니라 5000자다(참고 이미지의 제한을
 그대로 들여오지 않는다). 모바일 키보드가 열리면 패널을 화면 안으로 끌어온다.
 
-카드에 들어가는 것: 발췌문 · (있을 때만) 메모 · 원본 글 제목 · 원래 카테고리명 ·
-날짜 · 하이라이트 색 · 원문 이동 · (주인장) ⋮.
+카드에 들어가는 것: 발췌문 · (있을 때만) 메모 · 원래 카테고리명 · 현재 글 폴더
+경로 · 원본 글 제목 · 날짜 · 하이라이트 색 · 원문 이동 · (주인장) ⋮. 출처는
+`TXT › 2002 › 1`처럼 표시하며 중첩 폴더는 상위부터 모두 이어진다. 이 경로는
+하이라이트 행에 복사해 저장하지 않고 현재 `posts.folder_id`와 `post_folders`로
+계산하므로 폴더 이름 변경·이동과 글 이동을 바로 따라간다.
 
 ⋮ 메뉴:
 
@@ -352,7 +355,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 | `post.href` | 그 글의 정식 공개 주소 |
 | `memos.view.{isAll,isFolders,isFolder}` | 보기 방식(정확히 하나만 true) |
 | `memos.allHref` / `foldersHref` / `allLabel` / `foldersLabel` | 보기 전환 |
-| `memos.cards[]` | `id, excerpt, note, hasNote, color, dateLabel, postTitle, postHref, categoryName, categoryHref, folderHref, isMissing` |
+| `memos.cards[]` | 기존 필드 + `postFolderPath[]`, `sourcePath[]`, `sourcePathLabel` (`TXT › 2002 › 1`) |
 | `memos.showCards` / `isEmpty` / `count` / `hasError` | 상태 |
 | `memos.folders[]` | `id, name, href, count, countLabel, coverUrl, hasCover, coverRatio, coverFocusX, coverFocusY` |
 | `memos.hasFolders` / `foldersEmpty` / `folder` | 폴더 상태 |
