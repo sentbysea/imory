@@ -58,6 +58,23 @@ let postViewerToolsState =
   };
 
 
+function resetPostViewerTools() {
+  setupPostViewerTools({ enabled: false });
+  if (typeof teardownPostHighlightScreen === "function") {
+    teardownPostHighlightScreen();
+  }
+  if (typeof postContainer !== "undefined" && postContainer) {
+    postContainer.classList.remove("post-container--viewer-tools");
+  }
+}
+
+function isPostViewerToolsCurrent() {
+  return postViewerToolsState.postId !== null &&
+    (typeof currentPostView === "undefined" || currentPostView === "post") &&
+    (typeof currentPostId === "undefined" ||
+      String(currentPostId) === String(postViewerToolsState.postId));
+}
+
 function getPostViewerToolsState() {
 
   return postViewerToolsState;
@@ -80,6 +97,15 @@ function getPostViewerToolsState() {
 function setupPostViewerTools(
   options = {}
 ) {
+
+  // A late post render must not reactivate tools after leaving that post.
+  if (options.enabled && (
+    (typeof currentPostView !== "undefined" && currentPostView !== "post") ||
+    (typeof currentPostId !== "undefined" &&
+      String(currentPostId) !== String(options.postId))
+  )) {
+    return;
+  }
 
   closeImoryPopover({
     silent: true
@@ -314,6 +340,11 @@ function togglePostToolsMenu(
 function openPostToolsMenu(
   anchor
 ) {
+
+  if (!isPostViewerToolsCurrent()) {
+    resetPostViewerTools();
+    return;
+  }
 
   const trigger =
     anchor ||
@@ -825,3 +856,4 @@ postToolsButton
 
     }
   );
+

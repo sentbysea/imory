@@ -119,6 +119,12 @@ async function openMemoScreen(
   currentPostView =
     "memos";
 
+  if (typeof resetPostViewerTools === "function") {
+    resetPostViewerTools();
+  }
+
+
+
   currentPostId =
     null;
 
@@ -866,3 +872,4 @@ window.addEventListener(
 
   }
 );
+

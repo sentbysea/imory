@@ -253,6 +253,26 @@ function stampSkinRepeatRegionKeys(clone, item) {
    상한을 넘으면 지금까지와 같이 경고 후 그 요소를 제거한다.
 ========================================================== */
 
+function applySkinMemoPresentation(element, item, path) {
+  if (path === "memos.cards") {
+    const color = /^#[0-9a-f]{6}$/i.test(item?.color || "")
+      ? item.color : "#e6d4dc";
+    element.style.setProperty("--imory-memo-color", color);
+  }
+  if (path === "memos.folders") {
+    const ratios = { "1:1": "1 / 1", "3:4": "3 / 4", "4:3": "4 / 3",
+      "16:9": "16 / 9", "9:16": "9 / 16", original: "auto" };
+    const ratio = ratios[item?.coverRatio] || "auto";
+    const focus = value => {
+      const n = Number(value);
+      return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 50;
+    };
+    element.style.setProperty("--imory-memo-cover-ratio", ratio);
+    element.style.setProperty("--imory-memo-cover-position",
+      `${focus(item?.coverFocusX)}% ${focus(item?.coverFocusY)}%`);
+  }
+}
+
 function applySkinRepeat(templateEl, resolvePath, repeatDepth) {
 
   const path = templateEl.getAttribute("data-imory-repeat");
@@ -305,6 +325,7 @@ function applySkinRepeat(templateEl, resolvePath, repeatDepth) {
     walkSkinTree(clone, itemResolve, repeatDepth + 1);
 
     stampSkinRepeatRegionKeys(clone, item);
+    applySkinMemoPresentation(clone, item, path);
 
   });
 
@@ -634,3 +655,4 @@ export function renderSkin({ container, skin, context, mode = "view" } = {}) {
 if (typeof window !== "undefined") {
   window.renderSkin = renderSkin;
 }
+

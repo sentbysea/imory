@@ -481,6 +481,12 @@ async function tryRenderPublishedSkinBanner(
 
 function switchToCategoryScreen() {
 
+  if (typeof resetPostViewerTools === "function") {
+    resetPostViewerTools();
+  }
+
+
+
   if (postDetail) {
 
     postDetail.hidden =
@@ -794,6 +800,12 @@ async function openCategoryPage(
 
   currentPostView =
     "category";
+
+  if (typeof resetPostViewerTools === "function") {
+    resetPostViewerTools();
+  }
+
+
 
 
   closePostMenu();
@@ -1995,6 +2007,7 @@ function createPostListItem(
   return item;
 
 }
+
 
 
 
