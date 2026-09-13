@@ -67,6 +67,9 @@ const BROWSER = argOf("browser", "chromium");
 const ONLY = argOf("only", "");
 const VERBOSE = args.includes("--verbose");
 
+/* IMORY_SHARE_SHOT=<디렉터리> — 눈으로 볼 스크린샷을 남긴다 */
+const SHOT_DIR = process.env.IMORY_SHARE_SHOT || "";
+
 const shouldRun = (name) => !ONLY || ONLY === name;
 
 let passed = 0;
@@ -228,11 +231,14 @@ function makeDb(overrides = {}) {
 
     posts: overrides.posts || [
       {
-        id: 14, user_id: OWNER_ID, category_id: 1, title: "여름의 리허설",
-        visibility: "public", content_type: "post",
+        id: 14, user_id: OWNER_ID, category_id: 1, folder_id: null,
+        title: "여름의 리허설",
+        visibility: "public", content_type: "post", share_label_seq: 34,
         created_at: "2026-09-10T00:00:00Z", updated_at: "2026-09-11T00:00:00Z"
       }
     ],
+
+    post_folders: overrides.post_folders || [],
 
     post_covers: overrides.post_covers || [],
 
@@ -253,10 +259,14 @@ function makeDb(overrides = {}) {
 const RESERVED = new Set(["select", "order", "limit", "offset", "on_conflict", "columns"]);
 
 function matches(row, key, raw) {
-  const m = /^(eq|in|is|neq)\.(.*)$/s.exec(raw);
+  const m = /^(eq|in|is|neq|lte|gte|lt|gt)\.(.*)$/s.exec(raw);
   if (!m) return true;
   const [, op, val] = m;
   const cur = row[key];
+  if (op === "lte") return String(cur) <= val;
+  if (op === "gte") return String(cur) >= val;
+  if (op === "lt") return String(cur) < val;
+  if (op === "gt") return String(cur) > val;
   if (op === "in") {
     const list = val.replace(/^\(|\)$/g, "").split(",").map(v => v.replace(/^"|"$/g, ""));
     return list.includes(String(cur));
@@ -301,7 +311,8 @@ async function installSupabaseMock(page, opts = {}) {
     db = makeDb(),
     recorder = null,
     storageObjects = new Set(),
-    settingsWriteFails = false
+    settingsWriteFails = false,
+    missingShareLabelSeq = false
   } = opts;
 
   if (VERBOSE) {
@@ -402,6 +413,20 @@ async function installSupabaseMock(page, opts = {}) {
 
       if (req.method() === "DELETE") return route.fulfill({ status: 204, headers, body: "" });
 
+      /* migration 이 아직 없는 배포 */
+      if (
+        missingShareLabelSeq &&
+        (url.searchParams.get("select") || "").includes("share_label_seq")
+      ) {
+        return route.fulfill({
+          status: 400, headers, contentType: "application/json",
+          body: JSON.stringify({
+            code: "42703",
+            message: "column posts.share_label_seq does not exist"
+          })
+        });
+      }
+
       const rows = queryTable(db, table, url.searchParams);
       const single = (req.headers()["accept"] || "").includes("vnd.pgrst.object");
 
@@ -491,7 +516,14 @@ const serverFixture = {
   /* 헤드리스 렌더러에 넘어온 요청을 여기 담는다 */
   renders: [],
   /* 렌더러를 꺼 둘 수 있다(설정 없음 상황) */
-  rendererEnabled: true
+  rendererEnabled: true,
+
+  /*
+    posts.share_label_seq migration 이 아직 적용되지 않은 배포를
+    흉내 낸다 — 그 컬럼을 고른 select 는 PostgREST 가 통째로
+    400 으로 거절한다.
+  */
+  missingShareLabelSeq: false
 };
 
 function readServerJsonBody(req) {
@@ -549,6 +581,19 @@ const SERVER_SUPABASE_PREFIX = "/__supabase/rest/v1/";
 
 function handleServerSupabase(req, res, rel, search) {
   const table = rel.slice(SERVER_SUPABASE_PREFIX.length);
+
+  if (
+    serverFixture.missingShareLabelSeq &&
+    (search.get("select") || "").includes("share_label_seq")
+  ) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({
+      code: "42703",
+      message: 'column posts.share_label_seq does not exist'
+    }));
+    return;
+  }
+
   const rows = serverRestQuery(table, search);
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify(rows));
@@ -803,11 +848,43 @@ async function runSettings(browser) {
     r => r.method === "POST" && r.path.includes("/rest/v1/site_settings")
   ).length;
 
-  await page.click("#shareCardOverlayWhiteButton");
+  check(
+    "[settings] ★ 예전 BLACK / WHITE 버튼은 없고 네모 컬러 피커가 있다",
+    await page.evaluate(() => {
+      const picker = document.getElementById("shareCardOverlayColor");
+      return !document.getElementById("shareCardOverlayBlackButton") &&
+        !document.getElementById("shareCardOverlayWhiteButton") &&
+        !!picker && picker.type === "color" &&
+        picker.classList.contains("quote-color-input");
+    })
+  );
+
+  check(
+    "[settings] ★ PREVIEW 가 기본 사진 · 오버레이 · 폰트보다 **위에** 있다",
+    await page.evaluate(() => {
+      const order = (id) => {
+        const node = document.getElementById(id);
+        return node ? node.getBoundingClientRect().top : -1;
+      };
+      const preview = order("shareCardPreviewBox");
+      return preview > 0 &&
+        preview < order("shareCardPhotoEditButton") &&
+        preview < order("shareCardOverlayColor") &&
+        preview < order("shareCardFontSelect") &&
+        preview < order("shareCardLabelInput");
+    })
+  );
+
   await page.evaluate(() => {
-    const slider = document.getElementById("shareCardOverlayStrength");
-    slider.value = "30";
-    slider.dispatchEvent(new Event("input", { bubbles: true }));
+    const set = (id, value, type) => {
+      const node = document.getElementById(id);
+      node.value = value;
+      node.dispatchEvent(new Event(type || "input", { bubbles: true }));
+    };
+    set("shareCardOverlayColor", "#2b1a55");
+    set("shareCardOverlayStrength", "30");
+    set("shareCardTitleSize", "58");
+    set("shareCardLabelInput", "SUMMER 2028");
   });
   await page.selectOption("#shareCardFontSelect", "nanum-myeongjo");
   await page.waitForTimeout(400);
@@ -865,12 +942,27 @@ async function runSettings(browser) {
   check(
     "[settings] ★ share_card 한 칸에 구조화된 JSON 으로 저장된다",
     !!savedValue &&
-    savedValue.overlay === "white" &&
+    savedValue.overlay_color === "#2b1a55" &&
     savedValue.overlay_strength === 30 &&
     savedValue.font === "nanum-myeongjo" &&
+    savedValue.title_size === 58 &&
+    savedValue.card_label === "SUMMER 2028" &&
     typeof savedValue.image_url === "string" &&
     savedValue.image_url.includes("user-share-cards"),
     savedRow && savedRow.value
+  );
+
+  check(
+    "[settings] ★ frame 은 기본값 none 으로 저장된다(나중에 늘어날 자리)",
+    !!savedValue && savedValue.frame === "none",
+    savedValue && String(savedValue.frame)
+  );
+
+  check(
+    "[settings] 사진 위치가 함께 저장된다(기본 가운데)",
+    !!savedValue &&
+    savedValue.image_position_x === 50 &&
+    savedValue.image_position_y === 50
   );
 
   check(
@@ -887,26 +979,84 @@ async function runSettings(browser) {
   await openShareCard(reopened.page);
 
   const restored = await reopened.page.evaluate(() => ({
-    white: document.getElementById("shareCardOverlayWhiteButton").getAttribute("aria-pressed"),
-    black: document.getElementById("shareCardOverlayBlackButton").getAttribute("aria-pressed"),
+    color: document.getElementById("shareCardOverlayColor").value,
     strength: document.getElementById("shareCardOverlayStrength").value,
     font: document.getElementById("shareCardFontSelect").value,
-    photo: !document.getElementById("shareCardPhotoPreview").hidden
+    titleSize: document.getElementById("shareCardTitleSize").value,
+    label: document.getElementById("shareCardLabelInput").value,
+    editEnabled: !document.getElementById("shareCardPhotoEditButton").disabled,
+    removeEnabled: !document.getElementById("shareCardPhotoRemoveButton").disabled
   }));
 
   check(
-    "[settings] ★ 새로고침 뒤에도 BLACK/WHITE · 강도 · 폰트가 그대로다",
-    restored.white === "true" && restored.black === "false" &&
-    restored.strength === "30" && restored.font === "nanum-myeongjo",
+    "[settings] ★ 새로고침 뒤에도 오버레이 색 · 강도 · 폰트 · 제목 크기 · 라벨이 그대로다",
+    restored.color === "#2b1a55" && restored.strength === "30" &&
+    restored.font === "nanum-myeongjo" && restored.titleSize === "58" &&
+    restored.label === "SUMMER 2028",
     JSON.stringify(restored)
   );
 
   check(
-    "[settings] 저장된 기본 사진이 미리보기에 뜬다",
-    restored.photo
+    "[settings] 저장된 기본 사진이 있으면 edit · remove 를 쓸 수 있다",
+    restored.editEnabled && restored.removeEnabled
+  );
+
+  const previewBackground = await (await cardFrame(reopened.page)).evaluate(
+    () => getComputedStyle(document.getElementById("shareCardBackground")).backgroundImage
+  );
+
+  check(
+    "[settings] 저장된 기본 사진이 미리보기 배경에 깔린다",
+    previewBackground.includes("user-share-cards"),
+    previewBackground.slice(0, 80)
   );
 
   await reopened.ctx.close();
+
+
+  /* ---- 기본 사진이 없으면 edit · remove 를 쓸 수 없다 ---- */
+
+  const bare = await openSettings(browser, { db: makeDb() });
+  await openShareCard(bare.page);
+
+  check(
+    "[settings] ★ 기본 사진이 없으면 edit · remove 가 잠겨 있다",
+    await bare.page.evaluate(() =>
+      document.getElementById("shareCardPhotoEditButton").disabled === true &&
+      document.getElementById("shareCardPhotoRemoveButton").disabled === true
+    )
+  );
+
+  check(
+    "[settings] 예전 작은 썸네일 상자는 없다",
+    await bare.page.evaluate(() =>
+      !document.getElementById("shareCardPhotoPreview") &&
+      !document.getElementById("shareCardPhotoEmpty")
+    )
+  );
+
+  await bare.ctx.close();
+
+
+  /* ---- share_label_seq migration 이 없는 배포에서도 화면이 뜬다 ---- */
+
+  const legacy = await openSettings(browser, {
+    db: makeDb(),
+    missingShareLabelSeq: true
+  });
+
+  await openShareCard(legacy.page);
+
+  const legacyFrame = await cardFrame(legacy.page);
+
+  check(
+    "[settings] ★ share_label_seq 컬럼이 없는 배포에서도 미리보기가 뜬다(번호만 빠진다)",
+    (await legacyFrame.textContent("#shareCardTitle") || "").includes("여름의 리허설") &&
+    (await legacyFrame.textContent("#shareCardLabel") || "").trim() === "기록",
+    await legacyFrame.textContent("#shareCardLabel")
+  );
+
+  await legacy.ctx.close();
 }
 
 
@@ -920,10 +1070,10 @@ async function runCard(browser) {
   /* 대표 이미지가 있는 공개 글 + 아주 긴 제목 */
   const db = makeDb({
     posts: [{
-      id: 14, user_id: OWNER_ID, category_id: 1,
+      id: 14, user_id: OWNER_ID, category_id: 1, folder_id: null,
       title: "여름의 리허설 그리고 아주 길어서 두 줄을 넘기고도 남는 제목 " +
              "한참 더 이어지는 문장 그리고 또 더",
-      visibility: "public", content_type: "post",
+      visibility: "public", content_type: "post", share_label_seq: 34,
       created_at: "2026-09-10T00:00:00Z", updated_at: "2026-09-11T00:00:00Z"
     }],
     post_covers: [{ post_id: 14, mime_type: "image/png" }]
@@ -937,10 +1087,8 @@ async function runCard(browser) {
   const geometry = await frame.evaluate(() => {
     const card = document.getElementById("shareCard");
     const title = document.getElementById("shareCardTitle");
-    const meta = document.getElementById("shareCardMeta");
     const domain = document.getElementById("shareCardDomain");
     const label = document.getElementById("shareCardLabel");
-    const category = document.getElementById("shareCardCategory");
 
     const rect = (node) => {
       const r = node.getBoundingClientRect();
@@ -952,12 +1100,11 @@ async function runCard(browser) {
     return {
       card: rect(card),
       title: rect(title),
-      meta: rect(meta),
       domain: rect(domain),
       label: rect(label),
-      category: rect(category),
       lineHeight: parseFloat(titleStyle.lineHeight),
       titleColor: titleStyle.color,
+      bodyText: document.body.innerText.replace(/\s+/g, " ").trim(),
       background: getComputedStyle(document.getElementById("shareCardBackground")).backgroundImage
     };
   });
@@ -970,19 +1117,19 @@ async function runCard(browser) {
   );
 
   const lowest = Math.max(
-    geometry.title.bottom, geometry.meta.bottom, geometry.domain.bottom
+    geometry.title.bottom, geometry.domain.bottom
   );
 
   check(
-    "[card] ★ 제목·메타·도메인의 바닥 기준선이 캔버스 바닥에서 100px 이상 위다",
-    628 - lowest >= 100,
+    "[card] ★ 제목·도메인의 바닥 기준선이 캔버스 바닥에서 110~120px 위다",
+    628 - lowest >= 110 && 628 - lowest <= 120,
     `바닥에서 ${(628 - lowest).toFixed(1)}px`
   );
 
   check(
-    "[card] ★ 핵심 글자가 y = 350~525 범위에 있다",
-    geometry.category.top >= 340 && lowest <= 528,
-    `top=${geometry.category.top.toFixed(1)} bottom=${lowest.toFixed(1)}`
+    "[card] ★ X 검은 링크 바(바닥 100px) 안에는 아무 글자도 없다",
+    628 - lowest >= 100,
+    `바닥에서 ${(628 - lowest).toFixed(1)}px`
   );
 
   check(
@@ -998,10 +1145,45 @@ async function runCard(browser) {
     `높이 ${geometry.title.height.toFixed(1)}px / 한 줄 ${geometry.lineHeight}px`
   );
 
+  /* ---- §2 카드 안에서 걷어낸 글자들 ---- */
+
   check(
-    "[card] 우상단 라벨이 POST + 세 자리 번호다",
-    /^POST 0*14$/.test((await frame.textContent("#shareCardLabel") || "").trim()),
+    "[card] ★ 좌하단 카테고리 라벨(TXT 자리)이 카드에서 사라졌다",
+    await frame.evaluate(() => !document.getElementById("shareCardCategory"))
+  );
+
+  check(
+    "[card] ★ 제목 아래 `@slug · 카테고리` 메타 줄이 사라졌다",
+    await frame.evaluate(() => !document.getElementById("shareCardMeta")) &&
+    !geometry.bodyText.includes("@") &&
+    !geometry.bodyText.includes(`@${OWNER_SLUG}`),
+    geometry.bodyText.slice(0, 120)
+  );
+
+  check(
+    "[card] ★ 카드에 남는 글자는 제목 · 라벨 · 도메인 셋뿐이다",
+    await frame.evaluate(() => {
+      const expected = [
+        document.getElementById("shareCardTitle"),
+        document.getElementById("shareCardLabel"),
+        document.getElementById("shareCardDomain")
+      ];
+      const withText = [...document.querySelectorAll(".share-card *")]
+        .filter(node => node.children.length === 0 && (node.textContent || "").trim());
+      return withText.length === expected.length &&
+        withText.every(node => expected.includes(node));
+    })
+  );
+
+  check(
+    "[card] ★ 자동 라벨이 `카테고리 · 세 자리 번호` 다",
+    (await frame.textContent("#shareCardLabel") || "").trim() === "기록 · 034",
     (await frame.textContent("#shareCardLabel") || "").trim()
+  );
+
+  check(
+    "[card] 우하단은 도메인이다",
+    (await frame.textContent("#shareCardDomain") || "").trim().length > 0
   );
 
   check(
@@ -1009,6 +1191,92 @@ async function runCard(browser) {
     geometry.background.includes("/api/post-cover?post=14"),
     geometry.background.slice(0, 80)
   );
+
+
+  /* ---- 카드 라벨: 사용자가 적으면 그 문구, 비우면 자동 ---- */
+
+  await page.evaluate(() => {
+    const node = document.getElementById("shareCardLabelInput");
+    node.value = "ARCHIVE";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.waitForTimeout(300);
+
+  check(
+    "[card] ★ CARD LABEL 에 적은 문구가 우상단에 그대로 나온다",
+    (await frame.textContent("#shareCardLabel") || "").trim() === "ARCHIVE"
+  );
+
+  await page.evaluate(() => {
+    const node = document.getElementById("shareCardLabelInput");
+    node.value = "";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.waitForTimeout(300);
+
+  check(
+    "[card] ★ 비우면 자동 라벨로 돌아간다",
+    (await frame.textContent("#shareCardLabel") || "").trim() === "기록 · 034"
+  );
+
+
+  /* ---- 제목 크기 ---- */
+
+  await page.evaluate(() => {
+    const node = document.getElementById("shareCardTitleSize");
+    node.value = "64";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.waitForTimeout(300);
+
+  const bigTitle = await frame.evaluate(() => {
+    const title = document.getElementById("shareCardTitle");
+    const rect = title.getBoundingClientRect();
+    return {
+      size: parseFloat(getComputedStyle(title).fontSize),
+      bottom: rect.bottom,
+      top: rect.top
+    };
+  });
+
+  check(
+    "[card] ★ 제목 크기를 바꾸면 제목만 커지고 기준선은 그대로다",
+    Math.abs(bigTitle.size - 64) < 0.5 &&
+    Math.abs(bigTitle.bottom - geometry.title.bottom) < 0.5 &&
+    628 - bigTitle.bottom >= 110,
+    `${bigTitle.size}px bottom=${bigTitle.bottom.toFixed(1)}`
+  );
+
+  check(
+    "[card] 커진 제목도 라벨(top 40)을 침범하지 않는다",
+    bigTitle.top > geometry.label.bottom,
+    `title.top=${bigTitle.top.toFixed(1)} label.bottom=${geometry.label.bottom.toFixed(1)}`
+  );
+
+  await page.evaluate(() => {
+    const node = document.getElementById("shareCardTitleSize");
+    node.value = "400";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+    node.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await page.waitForTimeout(400);
+
+  const clamped = await page.evaluate(
+    () => document.getElementById("shareCardTitleSize").value
+  );
+
+  check(
+    "[card] ★ 제목 크기가 레이아웃이 깨지지 않는 범위로 잘린다",
+    clamped === "72",
+    clamped
+  );
+
+  await page.evaluate(() => {
+    const node = document.getElementById("shareCardTitleSize");
+    node.value = "46";
+    node.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await page.waitForTimeout(200);
 
   /* ---- 사진 구도와 무관하게 제목 자리는 고정 ---- */
 
@@ -1025,33 +1293,49 @@ async function runCard(browser) {
     `${geometry.title.top.toFixed(1)} → ${movedTitleTop.toFixed(1)}`
   );
 
-  /* ---- WHITE 는 짙은 회색, 순검정 아님 ---- */
+  /* ---- 오버레이 색의 밝기가 글자색을 정한다 ---- */
 
-  await page.click("#shareCardOverlayWhiteButton");
-  await page.waitForTimeout(400);
+  const setOverlayColor = async (value) => {
+    await page.evaluate((color) => {
+      const node = document.getElementById("shareCardOverlayColor");
+      node.value = color;
+      node.dispatchEvent(new Event("input", { bubbles: true }));
+    }, value);
+    await page.waitForTimeout(350);
+    return frame.evaluate(() => ({
+      title: getComputedStyle(document.getElementById("shareCardTitle")).color,
+      sub: getComputedStyle(document.getElementById("shareCardDomain")).color,
+      rgb: getComputedStyle(document.documentElement)
+        .getPropertyValue("--share-card-rgb").trim()
+    }));
+  };
 
-  const whiteColors = await frame.evaluate(() => ({
-    title: getComputedStyle(document.getElementById("shareCardTitle")).color,
-    meta: getComputedStyle(document.getElementById("shareCardMeta")).color
-  }));
-
-  check(
-    "[card] ★ WHITE 오버레이의 글자는 짙은 회색이고 순검정이 아니다",
-    whiteColors.title === "rgb(51, 51, 51)" && whiteColors.meta === "rgb(85, 85, 85)",
-    JSON.stringify(whiteColors)
-  );
-
-  await page.click("#shareCardOverlayBlackButton");
-  await page.waitForTimeout(400);
-
-  const blackTitle = await frame.evaluate(
-    () => getComputedStyle(document.getElementById("shareCardTitle")).color
-  );
+  const lightOverlay = await setOverlayColor("#f7f3ea");
 
   check(
-    "[card] BLACK 오버레이의 글자는 흰색 계열이다",
-    blackTitle === "rgb(255, 255, 255)",
-    blackTitle
+    "[card] ★ 밝은 오버레이에서는 글자가 짙은 회색이고 순검정이 아니다",
+    lightOverlay.title === "rgb(51, 51, 51)" && lightOverlay.sub === "rgb(85, 85, 85)",
+    JSON.stringify(lightOverlay)
+  );
+
+  check(
+    "[card] 고른 색이 그대로 오버레이에 들어간다",
+    lightOverlay.rgb === "247, 243, 234",
+    lightOverlay.rgb
+  );
+
+  const darkOverlay = await setOverlayColor("#2b1a55");
+
+  check(
+    "[card] ★ 어두운 오버레이에서는 글자가 흰색 계열이다",
+    darkOverlay.title === "rgb(255, 255, 255)",
+    darkOverlay.title
+  );
+
+  check(
+    "[card] 고른 색이 그대로 오버레이에 들어간다(어두운 쪽)",
+    darkOverlay.rgb === "43, 26, 85",
+    darkOverlay.rgb
   );
 
   await ctx.close();
@@ -1069,7 +1353,7 @@ async function runCard(browser) {
       key: "share_card",
       value: JSON.stringify({
         image_url: cardImageUrl,
-        overlay: "black",
+        overlay_color: "#000000",
         overlay_strength: 60,
         font: "pretendard",
         version: "1757800000000"
@@ -1114,6 +1398,265 @@ async function runCard(browser) {
   );
 
   await third.ctx.close();
+
+
+  /* ---- 폴더 안의 글이면 자동 라벨이 폴더 이름을 쓴다 ---- */
+
+  const db4 = makeDb({
+    posts: [{
+      id: 21, user_id: OWNER_ID, category_id: 1, folder_id: 7,
+      title: "여름의 리허설",
+      visibility: "public", content_type: "post", share_label_seq: 3,
+      created_at: "2026-09-10T00:00:00Z", updated_at: "2026-09-11T00:00:00Z"
+    }],
+    post_folders: [
+      { id: 7, user_id: OWNER_ID, category_id: 1, parent_id: null, name: "MUSIC" }
+    ],
+    post_contents: []
+  });
+
+  const fourth = await openSettings(browser, { db: db4 });
+  await openShareCard(fourth.page);
+
+  const frame4 = await cardFrame(fourth.page);
+
+  check(
+    "[card] ★ 폴더 안의 글은 가장 안쪽 이름(폴더)을 라벨에 쓴다",
+    (await frame4.textContent("#shareCardLabel") || "").trim() === "MUSIC · 003",
+    (await frame4.textContent("#shareCardLabel") || "").trim()
+  );
+
+  await fourth.ctx.close();
+}
+
+
+/* =========================================================
+   2-2. crop — 기본 사진 위치 조정 모달
+
+   모달의 object-position 과 카드의 background-position 이 **같은
+   값**이어야 한다(요구 §1-C). 여기서는 화면 쪽 일치를 재고,
+   서버 PNG 와의 일치는 [image] 절에서 렌더러에 넘어간 HTML 로
+   확인한다.
+========================================================== */
+
+async function runCrop(browser) {
+  console.log("\n[crop] 기본 사진 위치 조정");
+
+  const cardImageUrl =
+    `https://${SUPABASE_HOST}/storage/v1/object/public/user-share-cards/${OWNER_ID}/default`;
+
+  const db = makeDb({
+    post_covers: [{ post_id: 14, mime_type: "image/png" }],
+    settings: [{
+      user_id: OWNER_ID,
+      key: "share_card",
+      value: JSON.stringify({
+        image_url: cardImageUrl,
+        overlay_color: "#000000",
+        overlay_strength: 55,
+        font: "pretendard",
+        version: "1757800000000"
+      })
+    }]
+  });
+
+  const requests = [];
+
+  const { ctx, page } = await openSettings(browser, {
+    db,
+    recorder: requests,
+    storageObjects: new Set([`user-share-cards/${OWNER_ID}/default`])
+  });
+
+  await openShareCard(page);
+
+  check(
+    "[crop] 기본 사진이 있으면 edit 을 누를 수 있다",
+    await page.evaluate(() =>
+      document.getElementById("shareCardPhotoEditButton").disabled === false
+    )
+  );
+
+  await page.click("#shareCardPhotoEditButton");
+  await page.waitForTimeout(400);
+
+  const dialog = await page.evaluate(() => {
+    const overlay = document.getElementById("shareCardCropOverlay");
+    const frame = document.getElementById("shareCardCropFrame");
+    const rect = frame.getBoundingClientRect();
+    return {
+      open: overlay.hidden === false,
+      ratio: rect.width / rect.height,
+      objectFit: getComputedStyle(document.getElementById("shareCardCropImage")).objectFit,
+      touchAction: getComputedStyle(frame).touchAction,
+      src: document.getElementById("shareCardCropImage").getAttribute("src") || ""
+    };
+  });
+
+  check(
+    "[crop] ★ 모달 안 프레임이 정확히 1200 : 628 비율이다",
+    dialog.open && Math.abs(dialog.ratio - 1200 / 628) < 0.02,
+    `${dialog.ratio.toFixed(3)}`
+  );
+
+  check(
+    "[crop] 프레임이 카드와 같은 규칙(cover)으로 사진을 담는다",
+    dialog.objectFit === "cover"
+  );
+
+  check(
+    "[crop] ★ 터치 드래그가 화면 스크롤로 가로채이지 않는다(touch-action: none)",
+    dialog.touchAction === "none",
+    dialog.touchAction
+  );
+
+  check(
+    "[crop] 편집 대상은 기본 카드 사진이다",
+    dialog.src.includes("user-share-cards")
+  );
+
+  check(
+    "[crop] ★ 편집하는 동안 미리보기가 기본 사진으로 바뀐다(대표 이미지가 있어도)",
+    (await (await cardFrame(page)).evaluate(
+      () => getComputedStyle(document.getElementById("shareCardBackground")).backgroundImage
+    )).includes("user-share-cards")
+  );
+
+  /*
+    사진이 가로로 긴 상황을 만들어(프레임보다 넓게) 드래그가
+    실제로 구도를 옮기는지 본다. mock 이 돌려주는 1×1 PNG 로는
+    넘치는 폭이 0이라 움직일 수 없으므로, 자연 크기를 직접
+    지정한 <img> 로 바꿔 끼운다.
+  */
+
+  const drag = await page.evaluate(async () => {
+    const image = document.getElementById("shareCardCropImage");
+    const frame = document.getElementById("shareCardCropFrame");
+
+    /* 3000 × 628 비율의 아주 넓은 그림 — 가로로만 넘친다 */
+    const canvas = document.createElement("canvas");
+    canvas.width = 3000;
+    canvas.height = 628;
+    const ctx2d = canvas.getContext("2d");
+    ctx2d.fillStyle = "#c0d8ee";
+    ctx2d.fillRect(0, 0, 3000, 628);
+
+    await new Promise((resolve) => {
+      image.onload = resolve;
+      image.src = canvas.toDataURL("image/png");
+    });
+
+    const rect = frame.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    const fire = (type, x, y) => {
+      frame.dispatchEvent(new PointerEvent(type, {
+        pointerId: 1, pointerType: "touch", bubbles: true, cancelable: true,
+        clientX: x, clientY: y
+      }));
+    };
+
+    fire("pointerdown", cx, cy);
+    fire("pointermove", cx - rect.width * 0.25, cy);
+    fire("pointerup", cx - rect.width * 0.25, cy);
+
+    return {
+      objectPosition: image.style.objectPosition,
+      overflowX: image.naturalWidth * (rect.height / image.naturalHeight) - rect.width
+    };
+  });
+
+  check(
+    "[crop] ★ 끄는 대로 구도가 움직인다(오른쪽 → 왼쪽으로 끌면 오른쪽이 보인다)",
+    /^(\d+)% 50%$/.test(drag.objectPosition) &&
+    Number(drag.objectPosition.split("%")[0]) > 50,
+    `${drag.objectPosition} (넘침 ${drag.overflowX.toFixed(1)}px)`
+  );
+
+  const dragged = Number(drag.objectPosition.split("%")[0]);
+
+  /* ---- 모달 save → 카드에 그대로 반영 ---- */
+
+  await page.click("#shareCardCropSaveButton");
+  await page.waitForTimeout(500);
+
+  const cardPosition = await (await cardFrame(page)).evaluate(
+    () => getComputedStyle(document.getElementById("shareCardBackground")).backgroundPosition
+  );
+
+  check(
+    "[crop] ★ 모달의 위치와 카드 배경의 위치가 같다",
+    cardPosition.startsWith(`${dragged}%`),
+    `모달 ${dragged}% / 카드 ${cardPosition}`
+  );
+
+  check(
+    "[crop] 모달이 닫히고 미리보기는 기본 사진으로 남는다(결과를 보라고)",
+    await page.evaluate(() =>
+      document.getElementById("shareCardCropOverlay").hidden === true &&
+      document.getElementById("shareCardPreviewDefaultToggle").checked === true
+    )
+  );
+
+  check(
+    "[crop] ★ 모달 save 만으로는 서버에 쓰지 않는다(설정 save 에서만)",
+    requests.filter(
+      r => r.method === "POST" && r.path.includes("/rest/v1/site_settings")
+    ).length === 0
+  );
+
+  /* ---- 다시 열어 끌었다가 cancel 하면 되돌아간다 ---- */
+
+  await page.click("#shareCardPhotoEditButton");
+  await page.waitForTimeout(300);
+
+  await page.evaluate(() => {
+    const frame = document.getElementById("shareCardCropFrame");
+    const rect = frame.getBoundingClientRect();
+    const cy = rect.top + rect.height / 2;
+    const fire = (type, x) => {
+      frame.dispatchEvent(new PointerEvent(type, {
+        pointerId: 3, pointerType: "mouse", bubbles: true, cancelable: true,
+        clientX: x, clientY: cy
+      }));
+    };
+    fire("pointerdown", rect.left + rect.width / 2);
+    fire("pointermove", rect.left + rect.width);
+    fire("pointerup", rect.left + rect.width);
+  });
+
+  await page.click("#shareCardCropCancelButton");
+  await page.waitForTimeout(400);
+
+  const afterCancel = await (await cardFrame(page)).evaluate(
+    () => getComputedStyle(document.getElementById("shareCardBackground")).backgroundPosition
+  );
+
+  check(
+    "[crop] ★ cancel 은 끌던 구도를 버린다(직전에 save 한 자리로 돌아온다)",
+    afterCancel.startsWith(`${dragged}%`),
+    afterCancel
+  );
+
+  /* ---- 설정 save 로 저장된다 ---- */
+
+  await page.click("#shareCardSaveButton");
+  await page.waitForTimeout(900);
+
+  const savedRow = db.site_settings.find(s => s.key === "share_card");
+  let savedValue = null;
+  try { savedValue = JSON.parse(savedRow ? savedRow.value : "null"); } catch { /* noop */ }
+
+  check(
+    "[crop] ★ image_position_x / y 로 저장된다",
+    !!savedValue &&
+    savedValue.image_position_x === dragged &&
+    savedValue.image_position_y === 50,
+    savedRow && savedRow.value
+  );
+
+  await ctx.close();
 }
 
 
@@ -1169,6 +1712,46 @@ async function runPreview(browser) {
       box.overflowX === false
     );
 
+    /*
+      요구 §1-D/E — 오버레이(색+강도)와 폰트(폰트+제목 크기)는
+      한 줄이다. 모바일에서도 같은 줄에 들어가야 한다.
+    */
+
+    const rows = await page.evaluate(() => {
+      /* 높이가 서로 달라도 "같은 줄"이면 세로로 겹친다 */
+      const sameLine = (a, b) => {
+        const ra = document.getElementById(a).getBoundingClientRect();
+        const rb = document.getElementById(b).getBoundingClientRect();
+        return ra.top < rb.bottom && rb.top < ra.bottom;
+      };
+
+      return {
+        overlaySameLine:
+          sameLine("shareCardOverlayColor", "shareCardOverlayStrength") &&
+          sameLine("shareCardOverlayStrength", "shareCardOverlayStrengthValue"),
+        fontSameLine:
+          sameLine("shareCardFontSelect", "shareCardTitleSize"),
+        panelOverflow:
+          document.getElementById("shareCardSettingsPanel").scrollWidth >
+            document.getElementById("shareCardSettingsPanel").clientWidth
+      };
+    });
+
+    check(
+      `[preview/${viewport.name}] ★ 오버레이 색 + 강도가 한 줄이다`,
+      rows.overlaySameLine
+    );
+
+    check(
+      `[preview/${viewport.name}] ★ 폰트 + 제목 크기가 한 줄이다`,
+      rows.fontSameLine
+    );
+
+    check(
+      `[preview/${viewport.name}] 설정 패널이 가로로 넘치지 않는다`,
+      rows.panelOverflow === false
+    );
+
     await ctx.close();
   }
 
@@ -1200,6 +1783,118 @@ async function runPreview(browser) {
   );
 
   await ctx.close();
+}
+
+
+/* =========================================================
+   3-2. shots — 눈으로 볼 그림 (IMORY_SHARE_SHOT=<디렉터리>)
+
+   판정하지 않는다. 모바일 설정 화면과 실제 1200 × 628 카드를
+   PNG 로 남긴다 — 리뷰에 붙이는 용도다.
+========================================================== */
+
+async function runShots(browser, outDir) {
+  console.log(`\n[shots] ${outDir}`);
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  const cardImageUrl =
+    `https://${SUPABASE_HOST}/storage/v1/object/public/user-share-cards/${OWNER_ID}/default`;
+
+  const db = makeDb({
+    settings: [{
+      user_id: OWNER_ID,
+      key: "share_card",
+      value: JSON.stringify({
+        image_url: cardImageUrl,
+        image_position_x: 62,
+        image_position_y: 38,
+        overlay_color: "#241a33",
+        overlay_strength: 58,
+        font: "pretendard",
+        title_size: 52,
+        card_label: "",
+        frame: "none",
+        version: "1757800000000"
+      })
+    }]
+  });
+
+  /* ---- 모바일 설정 화면 ---- */
+
+  for (const shot of [
+    { name: "settings-mobile", width: 390, height: 1200 },
+    { name: "settings-desktop", width: 1280, height: 1000 }
+  ]) {
+    const { ctx, page } = await openSettings(browser, {
+      db,
+      viewport: { width: shot.width, height: shot.height },
+      storageObjects: new Set([`user-share-cards/${OWNER_ID}/default`])
+    });
+
+    await openShareCard(page);
+    await page.waitForTimeout(900);
+
+    await page.screenshot({
+      path: path.join(outDir, `${shot.name}.png`),
+      fullPage: true
+    });
+
+    /* 사진 위치 조정 모달도 한 장 */
+    if (shot.name === "settings-mobile") {
+      await page.click("#shareCardPhotoEditButton");
+      await page.waitForTimeout(500);
+      await page.screenshot({ path: path.join(outDir, "crop-modal-mobile.png") });
+      await page.click("#shareCardCropCancelButton");
+    }
+
+    console.log(`  saved ${shot.name}.png`);
+    await ctx.close();
+  }
+
+  /* ---- 실제 1200 × 628 카드 ---- */
+
+  const cardCtx = await browser.newContext({ viewport: { width: 1200, height: 628 } });
+  const cardPage = await cardCtx.newPage();
+
+  await cardPage.route("**/*", (route) => {
+    const url = route.request().url();
+    if (url.includes("user-share-cards") || url.includes("example.test")) {
+      return route.fulfill({ status: 200, contentType: "image/png", body: PNG_1X1 });
+    }
+    if (/^https?:/.test(url) && !url.startsWith(`http://localhost:${PORT}`)) {
+      return route.abort();
+    }
+    return route.continue();
+  });
+
+  for (const variant of [
+    { name: "card-auto-label", label: "기록 · 034", color: "#241a33", size: 52 },
+    { name: "card-custom-label", label: "SUMMER 2028", color: "#f2ece1", size: 46 }
+  ]) {
+    const html = shareCard.buildShareCardHtml({
+      card: shareCard.normalizeShareCardSettings(JSON.stringify({
+        image_url: cardImageUrl,
+        image_position_x: 62,
+        image_position_y: 38,
+        overlay_color: variant.color,
+        overlay_strength: 58,
+        font: "pretendard",
+        title_size: variant.size
+      })),
+      backgroundUrl: cardImageUrl,
+      title: "여름의 리허설, 그리고 아무도 모르는 두 번째 악장",
+      label: variant.label,
+      domain: "imory.me"
+    });
+
+    await cardPage.setContent(html, { waitUntil: "domcontentloaded" });
+    await cardPage.waitForTimeout(400);
+    await cardPage.screenshot({ path: path.join(outDir, `${variant.name}.png`) });
+    console.log(`  saved ${variant.name}.png`);
+  }
+
+  await cardCtx.close();
 }
 
 
@@ -1270,10 +1965,27 @@ async function runMeta() {
   );
 
   check(
-    "[meta] og:title / twitter:title 에 글 제목이 들어간다",
-    (metaOf(page.html, "og:title") || "").includes("여름의 리허설") &&
-    (metaOf(page.html, "twitter:title") || "").includes("여름의 리허설"),
+    "[meta] ★ og:title 은 실제 글 제목이다",
+    metaOf(page.html, "og:title") === "여름의 리허설",
     metaOf(page.html, "og:title")
+  );
+
+  check(
+    "[meta] ★ twitter:title 은 블로그 제목만이다(X 검은 링크 바)",
+    metaOf(page.html, "twitter:title") === "테스트 블로그",
+    metaOf(page.html, "twitter:title")
+  );
+
+  check(
+    "[meta] ★ twitter:title 에 글 제목 · slug · 카테고리 · 구분자가 없다",
+    (() => {
+      const value = metaOf(page.html, "twitter:title") || "";
+      return !value.includes("여름의 리허설") &&
+        !value.includes(OWNER_SLUG) &&
+        !value.includes("기록") &&
+        !value.includes("|");
+    })(),
+    metaOf(page.html, "twitter:title")
   );
 
   check(
@@ -1303,6 +2015,31 @@ async function runMeta() {
   check(
     "[meta] content-length / etag 를 남겨두지 않는다(본문을 고쳤으므로)",
     !page.headers.get("content-length") && !page.headers.get("etag")
+  );
+
+
+  /* ---- 블로그 제목이 비어 있으면 imory.me ---- */
+
+  const untitled = makeDb({
+    post_covers: [{ post_id: 14, mime_type: "image/png" }]
+  });
+
+  untitled.site_settings = untitled.site_settings.filter(s => s.key !== "blog_title");
+
+  serverFixture.db = untitled;
+
+  const noTitle = await requestPage(`/${OWNER_SLUG}/post/14`);
+
+  check(
+    "[meta] ★ 사이트 제목이 비어 있으면 twitter:title 은 imory.me 다",
+    metaOf(noTitle.html, "twitter:title") === "imory.me",
+    metaOf(noTitle.html, "twitter:title")
+  );
+
+  check(
+    "[meta] 그때도 og:title 은 글 제목 그대로다",
+    metaOf(noTitle.html, "og:title") === "여름의 리허설",
+    metaOf(noTitle.html, "og:title")
   );
 
 
@@ -1395,9 +2132,13 @@ async function runImage() {
       key: "share_card",
       value: JSON.stringify({
         image_url: "https://example.test/card.png",
-        overlay: "white",
+        image_position_x: 18,
+        image_position_y: 72,
+        overlay_color: "#f7f3ea",
         overlay_strength: 42,
         font: "nanum-myeongjo",
+        title_size: 58,
+        card_label: "",
         version: "1757800000000"
       })
     }]
@@ -1439,9 +2180,33 @@ async function runImage() {
     !!render &&
     render.html.includes('id="shareCard"') &&
     render.html.includes("여름의 리허설") &&
-    render.html.includes('data-overlay="white"') &&
+    render.html.includes('data-overlay="light"') &&
     render.html.includes('data-font="nanum-myeongjo"') &&
-    render.html.includes("--share-card-alpha:0.420")
+    render.html.includes('data-frame="none"') &&
+    render.html.includes("--share-card-alpha:0.420") &&
+    render.html.includes("--share-card-title-size:58px"),
+    render && render.html.slice(0, 320)
+  );
+
+  check(
+    "[image] ★ 고른 오버레이 색과 그 밝기에 맞춘 글자색이 문서에 박혀 있다",
+    !!render &&
+    render.html.includes("--share-card-rgb:247, 243, 234") &&
+    render.html.includes("--share-card-title:#333333")
+  );
+
+  check(
+    "[image] ★ 자동 라벨이 카드에 들어간다(카테고리 · 세 자리)",
+    !!render && render.html.includes(">기록 · 034<"),
+    render && (render.html.match(/shareCardLabel">([^<]*)</) || [])[1]
+  );
+
+  check(
+    "[image] ★ 카드 HTML 에 slug · 카테고리 메타 줄이 더는 없다",
+    !!render &&
+    !render.html.includes("shareCardMeta") &&
+    !render.html.includes("shareCardCategory") &&
+    !render.html.includes(`@${OWNER_SLUG}`)
   );
 
   check(
@@ -1469,6 +2234,103 @@ async function runImage() {
     "[image] ★ 대표 이미지가 없으면 기본 카드 사진을 배경으로 쓴다",
     serverFixture.renders[0].html.includes("https://example.test/card.png")
   );
+
+  /*
+    요구 §1-C — 설정 미리보기와 실제 PNG 렌더러가 같은 crop 값을
+    쓴다. 두 화면이 같은 함수(shareCardBackgroundPosition)를 거치는지
+    직접 확인한다.
+  */
+
+  check(
+    "[image] ★ 기본 사진의 위치(image_position_x/y)가 렌더 문서에 그대로 들어간다",
+    serverFixture.renders[0].html.includes("--share-card-bg-position:18% 72%"),
+    (serverFixture.renders[0].html.match(/--share-card-bg-position:[^;"]*/) || [])[0]
+  );
+
+  check(
+    "[image] ★ 그 값은 설정 화면이 쓰는 것과 같은 함수에서 나온다",
+    shareCard.shareCardBackgroundPosition(
+      shareCard.normalizeShareCardSettings(
+        serverFixture.db.site_settings.find(s => s.key === "share_card").value
+      ),
+      "https://example.test/card.png"
+    ) === "18% 72%"
+  );
+
+  check(
+    "[image] ★ 글 대표 이미지에는 기본 사진의 위치를 쓰지 않는다(가운데)",
+    render.html.includes("--share-card-bg-position:50% 50%"),
+    (render.html.match(/--share-card-bg-position:[^;"]*/) || [])[0]
+  );
+
+  /* ---- 사용자가 적은 카드 라벨이 자동 라벨을 이긴다 ---- */
+
+  serverFixture.db = makeDb({
+    settings: [{
+      user_id: OWNER_ID,
+      key: "share_card",
+      value: JSON.stringify({
+        overlay_color: "#000000",
+        overlay_strength: 55,
+        card_label: "LOG 034",
+        version: "1757800000000"
+      })
+    }]
+  });
+
+  serverFixture.renders = [];
+
+  await requestOgImage("?post=14&v=label1");
+
+  check(
+    "[image] ★ CARD LABEL 이 있으면 그 문구가 카드에 들어간다",
+    serverFixture.renders[0].html.includes(">LOG 034<") &&
+    !serverFixture.renders[0].html.includes("기록 · 034")
+  );
+
+
+  /* ---- 라벨이 비면 카드에 라벨 요소가 비어 있다 ---- */
+
+  check(
+    "[image] ★ 이름도 번호도 없으면 라벨은 빈 문자열이다",
+    shareCard.resolveShareCardLabel("", "", 0) === "" &&
+    shareCard.resolveShareCardLabel(null, null, null) === ""
+  );
+
+  const emptyLabelHtml = shareCard.buildShareCardHtml({
+    card: shareCard.normalizeShareCardSettings(null),
+    backgroundUrl: "",
+    title: "여름의 리허설",
+    label: "",
+    domain: "imory.me"
+  });
+
+  check(
+    "[image] ★ 빈 라벨은 카드에 글자로도 자리로도 나오지 않는다",
+    emptyLabelHtml.includes('id="shareCardLabel"></div>') &&
+    /\.share-card-label:empty\s*\{\s*display:\s*none/.test(emptyLabelHtml),
+    (emptyLabelHtml.match(/shareCardLabel">([^<]*)</) || [])[1]
+  );
+
+
+  /* ---- share_label_seq 컬럼이 없는 배포 ---- */
+
+  serverFixture.db = makeDb();
+  serverFixture.renders = [];
+  serverFixture.missingShareLabelSeq = true;
+
+  const legacyColumn = await requestOgImage("?post=14&v=legacy1");
+
+  check(
+    "[image] ★ share_label_seq 컬럼이 없어도 카드는 그려진다(번호는 그때 센다)",
+    legacyColumn.status === 200 &&
+    serverFixture.renders.length === 1 &&
+    serverFixture.renders[0].html.includes("여름의 리허설"),
+    String(legacyColumn.status)
+  );
+
+  serverFixture.missingShareLabelSeq = false;
+
 
   /* ---- 비밀글 ---- */
 
@@ -1801,7 +2663,8 @@ async function runCache() {
   console.log(`정적 서버: http://localhost:${PORT}`);
 
   const needsBrowser =
-    shouldRun("settings") || shouldRun("card") || shouldRun("preview");
+    shouldRun("settings") || shouldRun("card") ||
+    shouldRun("crop") || shouldRun("preview") || Boolean(SHOT_DIR);
 
   let browser = null;
 
@@ -1814,10 +2677,12 @@ async function runCache() {
 
     if (shouldRun("settings")) await runSettings(browser);
     if (shouldRun("card")) await runCard(browser);
+    if (shouldRun("crop")) await runCrop(browser);
     if (shouldRun("preview")) await runPreview(browser);
     if (shouldRun("meta")) await runMeta();
     if (shouldRun("image")) await runImage();
     if (shouldRun("cache")) await runCache();
+    if (SHOT_DIR) await runShots(browser, SHOT_DIR);
 
   } catch (err) {
 

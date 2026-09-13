@@ -90,7 +90,8 @@ import {
   SHARE_CARD_HEIGHT,
   buildShareCardHtml,
   normalizeShareCardSettings,
-  shareCardPostLabel,
+  serializeShareCardSettings,
+  resolveShareCardLabel,
   collapseShareCardText,
   escapeShareCardHtml
 } from "../../../core/lib/share-card.js";
@@ -146,7 +147,18 @@ function ogSupabaseConfig(
 }
 
 
-async function ogSupabaseSelect(
+/*
+  질의가 **실패**한 것과 **결과가 없는** 것을 구분해서 돌려준다.
+  실패는 null, 없음은 [] 다.
+
+  이 구분이 필요한 곳은 하나다: posts.share_label_seq 는 나중에
+  추가된 컬럼이라, migration 이 아직 적용되지 않은 배포에서는
+  그 컬럼을 고른 select 가 통째로 400 이 된다. 그때 "글이 없다"로
+  끝내면 카드가 기본 그라데이션이 되어 버린다 — 컬럼 없이 한 번
+  더 물어보고 라벨 번호만 포기해야 한다(아래 loadShareCardPost).
+*/
+
+async function ogSupabaseSelectOrNull(
   env,
   resource
 ) {
@@ -158,23 +170,36 @@ async function ogSupabaseSelect(
     ogSupabaseConfig(env);
 
 
-  const response =
-    await fetch(
-      `${url}/rest/v1/${resource}`,
-      {
-        method: "GET",
-        headers: {
-          "apikey": anonKey,
-          "Authorization": `Bearer ${anonKey}`,
-          "Accept": "application/json"
+  let response;
+
+
+  try {
+
+    response =
+      await fetch(
+        `${url}/rest/v1/${resource}`,
+        {
+          method: "GET",
+          headers: {
+            "apikey": anonKey,
+            "Authorization": `Bearer ${anonKey}`,
+            "Accept": "application/json"
+          }
         }
-      }
-    );
+      );
+
+  }
+
+  catch (err) {
+
+    return null;
+
+  }
 
 
   if (!response.ok) {
 
-    return [];
+    return null;
 
   }
 
@@ -193,9 +218,21 @@ async function ogSupabaseSelect(
 
   catch (err) {
 
-    return [];
+    return null;
 
   }
+
+}
+
+
+async function ogSupabaseSelect(
+  env,
+  resource
+) {
+
+  return (
+    await ogSupabaseSelectOrNull(env, resource)
+  ) || [];
 
 }
 
@@ -313,6 +350,9 @@ export function shareCardExcerpt(
      card          normalizeShareCardSettings() 결과
      title         공개 글일 때만 실제 제목
      categoryName  공개 글일 때만 카테고리 이름
+     containerName 글이 든 가장 안쪽 이름(폴더 > 카테고리)
+     sequence      컨테이너 안의 공개 순번(posts.share_label_seq)
+     label         우상단 라벨(사용자 지정 > 자동)
      excerpt       공개 글일 때만 본문 발췌
      hasCover      공개 글의 대표 이미지(post_covers) 유무
      updatedAt     버전 계산용
@@ -333,6 +373,9 @@ export async function loadShareCardPost(
       card: normalizeShareCardSettings(null),
       title: "",
       categoryName: "",
+      containerName: "",
+      sequence: 0,
+      label: "",
       excerpt: "",
       hasCover: false,
       updatedAt: "",
@@ -371,7 +414,17 @@ export async function loadShareCardPost(
     제목은 들어갈 수 있다.
   */
 
-  const [settingsRows, postRows] =
+  /*
+    글 주인까지 조건에 넣는다 — 주소의 slug 와 다른 사람의 글
+    id 를 붙여 놓은 요청은 "없는 글"로 끝난다.
+  */
+
+  const postQuery =
+    `posts?id=eq.${encodeURIComponent(postId)}` +
+    `&user_id=eq.${encodeURIComponent(profile.user_id)}`;
+
+
+  const [settingsRows, postRowsOrNull] =
     await Promise.all([
 
       ogSupabaseSelect(
@@ -380,19 +433,28 @@ export async function loadShareCardPost(
         `&key=in.(share_card,blog_title)&select=key,value`
       ),
 
-      /*
-        글 주인까지 조건에 넣는다 — 주소의 slug 와 다른 사람의 글
-        id 를 붙여 놓은 요청은 "없는 글"로 끝난다.
-      */
-
-      ogSupabaseSelect(
+      ogSupabaseSelectOrNull(
         env,
-        `posts?id=eq.${encodeURIComponent(postId)}` +
-        `&user_id=eq.${encodeURIComponent(profile.user_id)}` +
-        `&select=id,title,category_id,visibility,updated_at&limit=1`
+        `${postQuery}&select=id,user_id,title,category_id,folder_id,visibility,` +
+        `created_at,updated_at,share_label_seq&limit=1`
       )
 
     ]);
+
+
+  /*
+    share_label_seq 는 나중에 생긴 컬럼이다. 아직 migration 이
+    적용되지 않은 배포에서는 위 select 가 통째로 실패한다 —
+    그때는 번호만 포기하고 나머지는 그대로 그린다.
+  */
+
+  const postRows =
+    postRowsOrNull ||
+    await ogSupabaseSelect(
+      env,
+      `${postQuery}&select=id,user_id,title,category_id,folder_id,visibility,` +
+      `created_at,updated_at&limit=1`
+    );
 
 
   const settings =
@@ -431,13 +493,20 @@ export async function loadShareCardPost(
   }
 
 
-  const [categoryRows, coverRows, contentRows] =
+  const [categoryRows, folderRows, coverRows, contentRows] =
     await Promise.all([
 
       post.category_id
         ? ogSupabaseSelect(
             env,
             `categories?id=eq.${encodeURIComponent(post.category_id)}&select=name&limit=1`
+          )
+        : Promise.resolve([]),
+
+      post.folder_id
+        ? ogSupabaseSelect(
+            env,
+            `post_folders?id=eq.${encodeURIComponent(post.folder_id)}&select=name&limit=1`
           )
         : Promise.resolve([]),
 
@@ -454,6 +523,23 @@ export async function loadShareCardPost(
     ]);
 
 
+  const categoryName =
+    collapseShareCardText(categoryRows[0] && categoryRows[0].name);
+
+  const folderName =
+    collapseShareCardText(folderRows[0] && folderRows[0].name);
+
+
+  /* 가장 안쪽 이름 — 폴더 안의 글이면 폴더 이름이 이긴다 */
+
+  const containerName =
+    folderName || categoryName;
+
+
+  const sequence =
+    await loadShareCardSequence(env, post);
+
+
   return {
 
     ...base,
@@ -464,8 +550,18 @@ export async function loadShareCardPost(
     title:
       collapseShareCardText(post.title),
 
-    categoryName:
-      collapseShareCardText(categoryRows[0] && categoryRows[0].name),
+    categoryName,
+
+    containerName,
+
+    sequence,
+
+    label:
+      resolveShareCardLabel(
+        base.card.cardLabel,
+        containerName,
+        sequence
+      ),
 
     excerpt:
       shareCardExcerpt(contentRows[0] && contentRows[0].content),
@@ -477,6 +573,60 @@ export async function loadShareCardPost(
       String(post.updated_at || "")
 
   };
+
+}
+
+
+/* =========================================================
+   자동 라벨의 번호
+
+   정상 경로는 **컬럼을 읽는 것 한 번**이다 —
+   posts.share_label_seq 는 글이 공개되는 순간 굳고, 그 뒤로는
+   앞 글을 지워도 바뀌지 않는다
+   (supabase/migrations/20260913180000_add_posts_share_label_seq.sql).
+
+   그 컬럼이 아직 없는 배포(migration 미적용)에서만 그때그때
+   센다 — "같은 컨테이너의 공개 글 중 이 글보다 먼저 쓰인 것 +
+   자기 자신". 이 값은 앞 글이 지워지면 달라진다. 그래서 이것은
+   컬럼이 채워질 때까지의 임시 값이고, 정상 경로가 아니다.
+========================================================== */
+
+async function loadShareCardSequence(
+  env,
+  post
+) {
+
+  const stored =
+    Number(post.share_label_seq);
+
+
+  if (Number.isFinite(stored) && stored > 0) {
+
+    return Math.floor(stored);
+
+  }
+
+
+  if (!post.created_at) {
+
+    return 0;
+
+  }
+
+
+  const rows =
+    await ogSupabaseSelect(
+      env,
+      `posts?user_id=eq.${encodeURIComponent(post.user_id || "")}` +
+      `&category_id=${post.category_id ? `eq.${encodeURIComponent(post.category_id)}` : "is.null"}` +
+      `&folder_id=${post.folder_id ? `eq.${encodeURIComponent(post.folder_id)}` : "is.null"}` +
+      `&visibility=eq.public` +
+      `&created_at=lte.${encodeURIComponent(post.created_at)}` +
+      `&select=id`
+    );
+
+
+  return rows.length;
 
 }
 
@@ -535,7 +685,14 @@ export function shareCardImageEndpoint(
       context.card.version,
       context.card.imageUrl,
       context.updatedAt,
-      context.hasCover ? "1" : "0"
+      context.hasCover ? "1" : "0",
+
+      /*
+        라벨은 글 밖에서도 바뀐다 — 카테고리/폴더 이름을 고치면
+        posts.updated_at 은 그대로인데 카드 글자는 달라진다.
+      */
+
+      context.label
     ]);
 
 
@@ -554,7 +711,29 @@ export function shareCardImageEndpoint(
    twitter:player · 영상 카드 meta 는 넣지 않는다 — 정적 large
    image 카드로만 제공해서 X 가 영상형 회색 바를 얹을 여지를
    만들지 않는다.
+
+   ★ og:title 과 twitter:title 이 다르다
+
+   X 앱은 카드 **아래에** 자기 검은 반투명 바를 얹고 거기에
+   twitter:title 을 쓴다. 그 바의 자리와 디자인은 우리가 제어할
+   수 없다. 그래서 역할을 나눈다:
+
+     카드 이미지 안   글 제목 (좌하단)
+     X 검은 링크 바   블로그 제목만
+     카드 우하단      imory.me
+
+   그러려면 twitter:title 에 글 제목 · slug · 카테고리 ·
+   구분자(`|`)가 **하나도** 들어가면 안 된다 — 들어가면 카드
+   안의 글 제목과 같은 말이 두 번 보인다.
+
+   og:title 은 반대로 실제 글 제목 그대로다. 페이스북/카카오 등
+   다른 크롤러와 검색엔진이 글을 식별하는 값이고, 그쪽에는 우리가
+   제어하지 못하는 링크 바가 없다.
 ========================================================== */
+
+export const SHARE_CARD_SITE_TITLE_FALLBACK =
+  "imory.me";
+
 
 export function renderShareCardMetaTags(
   context,
@@ -566,9 +745,15 @@ export function renderShareCardMetaTags(
     context.blogTitle || "imory";
 
 
+  /* X 검은 링크 바 — 블로그 제목만 */
+
+  const linkBarTitle =
+    context.blogTitle || SHARE_CARD_SITE_TITLE_FALLBACK;
+
+
   const title =
     context.ok
-      ? [context.title, siteName].filter(Boolean).join(" | ")
+      ? (context.title || siteName)
       : siteName;
 
 
@@ -608,7 +793,7 @@ export function renderShareCardMetaTags(
       .concat(
         [
           ["twitter:card", "summary_large_image"],
-          ["twitter:title", title],
+          ["twitter:title", linkBarTitle],
           ["twitter:description", description],
           ["twitter:image", imageUrl],
           ["twitter:image:alt", title]
@@ -812,16 +997,17 @@ export async function injectShareCardMeta(
   }
 
 
-  /* 캐시에서 온 값도 정규화된 모양을 유지한다 */
+  /*
+    캐시에서 온 값도 정규화된 모양을 유지한다. JSON 을 한 번
+    거치면서 모르는 값이 섞였을 수 있으므로, 저장 모양으로
+    되돌렸다가(serialize) 다시 정규화한다 — 규칙이 한 쌍의
+    함수에만 있다.
+  */
 
   context.card =
-    normalizeShareCardSettings({
-      overlay: context.card && context.card.overlay,
-      overlay_strength: context.card && context.card.overlayStrength,
-      font: context.card && context.card.font,
-      image_url: context.card && context.card.imageUrl,
-      version: context.card && context.card.version
-    });
+    normalizeShareCardSettings(
+      serializeShareCardSettings(context.card || {})
+    );
 
 
   const pageUrl =
@@ -1307,14 +1493,8 @@ export async function onRequest(
       title:
         cardContext.title,
 
-      categoryName:
-        cardContext.categoryName,
-
-      slug:
-        cardContext.slug,
-
-      postLabel:
-        shareCardPostLabel(postId),
+      label:
+        cardContext.label,
 
       domain:
         url.hostname

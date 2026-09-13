@@ -30,6 +30,16 @@
    파일의 일이 아니다 — 부르는 쪽(서버 함수)이 공개 글일 때만
    실제 제목을 넣는다. 이 파일은 받은 글자를 이스케이프해서 그릴
    뿐이다.
+
+   ★ 카드 위의 글자는 셋뿐이다
+
+     좌하단  글 제목
+     우하단  도메인(imory.me)
+     우상단  카드 라벨(사용자 지정 · 없으면 `카테고리 · 001`)
+
+   `@slug`· 카테고리 메타 줄과 제목 위 카테고리 라벨은 없다 —
+   X 가 카드 아래에 자기 링크 바로 블로그 제목을 이미 얹기
+   때문에 같은 정보가 두 번 보이던 것을 걷어냈다.
 ========================================================== */
 
 
@@ -45,17 +55,22 @@ export const SHARE_CARD_HEIGHT =
 /* =========================================================
    X UI 데드존
 
-   카드 왼쪽 아래에는 X 가 자기 UI(재생 표시 · 도메인 칩 · 링크
-   바)를 얹는 경우가 있다. 그래서 **바닥 100px 안에는 글자를 두지
-   않는다** — 제목/메타/도메인의 가장 아래 기준선이 바닥에서
-   100px 위(y = 528)이고, 실제 글자 덩어리는 y = 350~525 사이에
-   들어간다.
+   카드 왼쪽 아래에는 X 가 자기 UI(재생 표시 · 도메인 칩 · 검은
+   링크 바)를 얹는다. 그래서 **바닥 100px 안에는 글자를 두지
+   않는다**.
+
+   글자 덩어리의 기준선은 바닥에서 115px 위다 — 데드존(100px)을
+   넘지 않으면서, 예전처럼 지나치게 위로 띄우지도 않는다
+   (요구: 110~120px).
 
    좌우 여백은 64px(요구 최소 48px보다 넉넉하게).
 ========================================================== */
 
 export const SHARE_CARD_BOTTOM_SAFE_ZONE =
   100;
+
+export const SHARE_CARD_BASELINE =
+  115;
 
 export const SHARE_CARD_SIDE_PADDING =
   64;
@@ -98,16 +113,165 @@ export const SHARE_CARD_FONT_KEYS =
   ["pretendard", "nanum-myeongjo"];
 
 
-export const SHARE_CARD_OVERLAY_KEYS =
-  ["black", "white"];
+/* =========================================================
+   제목 크기
+
+   카드 레이아웃이 깨지지 않는 범위. 최대(72px)에서도 두 줄
+   (72 × 1.2 × 2 = 172.8px)이 라벨(top 40) 아래에 들어간다:
+
+     628 - 115(기준선) - 172.8 = y 340.2 에서 시작한다.
+========================================================== */
+
+export const SHARE_CARD_TITLE_SIZE_MIN =
+  32;
+
+export const SHARE_CARD_TITLE_SIZE_MAX =
+  72;
+
+
+/* 우상단 라벨 — 한 줄에 들어가야 한다 */
+
+export const SHARE_CARD_LABEL_MAX_LENGTH =
+  24;
+
+
+/* =========================================================
+   프레임 — 지금은 none 만 그린다
+
+   나중에 border / polaroid / camera 를 붙일 자리다. 레이아웃
+   분기는 **이 파일 한 곳**(shareCardFrameCss)에서만 늘어난다 —
+   설정 정규화(normalizeShareCardSettings)와 카드 마크업은 이미
+   frame 값을 실어 나르고 있으므로, 새 프레임을 더할 때 화면 코드나
+   서버 코드를 고칠 일이 없다.
+========================================================== */
+
+export const SHARE_CARD_FRAME_KEYS =
+  ["none", "border", "polaroid", "camera"];
+
+
+/* =========================================================
+   오버레이 색
+
+   예전에는 BLACK / WHITE 두 개뿐이었다. 지금은 사용자가 고른
+   색(hex)이 들어오고, 그 색의 밝기로 **카드 안 글자색을 자동으로**
+   정한다(흰색 / 짙은 회색).
+========================================================== */
+
+export const SHARE_CARD_DEFAULT_OVERLAY_COLOR =
+  "#000000";
+
+
+/* 예전 값과의 다리 */
+
+const SHARE_CARD_LEGACY_OVERLAY =
+  {
+    black: "#000000",
+    white: "#ffffff"
+  };
+
+
+export function normalizeShareCardColor(
+  value
+) {
+
+  const raw =
+    String(value === null || value === undefined ? "" : value).trim();
+
+
+  const short =
+    /^#?([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(raw);
+
+
+  if (short) {
+
+    return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`
+      .toLowerCase();
+
+  }
+
+
+  const long =
+    /^#?([0-9a-f]{6})$/i.exec(raw);
+
+
+  return long
+    ? `#${long[1].toLowerCase()}`
+    : "";
+
+}
+
+
+/*
+  오버레이 색 하나에서 카드가 쓰는 값 네 개를 만든다.
+
+  밝기 판정은 인지 밝기(0.299 / 0.587 / 0.114)다. 밝은 오버레이
+  위에서는 **짙은 회색**을 쓴다 — 순검정은 쓰지 않는다
+  (core/design-tokens.css 의 --imory-gray-800 / -700 값).
+*/
+
+export function shareCardOverlayPalette(
+  value
+) {
+
+  const color =
+    normalizeShareCardColor(value) ||
+    SHARE_CARD_DEFAULT_OVERLAY_COLOR;
+
+
+  const r =
+    parseInt(color.slice(1, 3), 16);
+
+  const g =
+    parseInt(color.slice(3, 5), 16);
+
+  const b =
+    parseInt(color.slice(5, 7), 16);
+
+
+  const brightness =
+    (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+
+
+  const isLight =
+    brightness > 0.6;
+
+
+  return {
+
+    color,
+
+    rgb:
+      `${r}, ${g}, ${b}`,
+
+    isLight,
+
+    title:
+      isLight ? "#333333" : "#ffffff",
+
+    sub:
+      isLight ? "#555555" : "rgba(255, 255, 255, 0.86)",
+
+    shadow:
+      isLight
+        ? "0 1px 12px rgba(255, 255, 255, 0.65)"
+        : "0 2px 14px rgba(0, 0, 0, 0.45)"
+
+  };
+
+}
 
 
 export const SHARE_CARD_DEFAULT_SETTINGS =
   {
-    overlay: "black",
+    overlayColor: SHARE_CARD_DEFAULT_OVERLAY_COLOR,
     overlayStrength: 55,
     font: "pretendard",
+    titleSize: 46,
     imageUrl: "",
+    imagePositionX: 50,
+    imagePositionY: 50,
+    cardLabel: "",
+    frame: "none",
     version: "0"
   };
 
@@ -120,9 +284,14 @@ export const SHARE_CARD_DEFAULT_SETTINGS =
 
      {
        "image_url": "https://.../user-share-cards/<uid>/<uuid>",
-       "overlay": "black" | "white",
-       "overlay_strength": 0..100,
+       "image_position_x": 50,
+       "image_position_y": 50,
+       "overlay_color": "#000000",
+       "overlay_strength": 55,
        "font": "pretendard" | "nanum-myeongjo",
+       "title_size": 46,
+       "card_label": "",
+       "frame": "none",
        "version": "1757800000000"
      }
 
@@ -130,7 +299,31 @@ export const SHARE_CARD_DEFAULT_SETTINGS =
    카드가 안 나오는 것보다 기본 모양으로라도 나오는 것이 낫다.
    version 은 저장할 때만 바뀌는 숫자 문자열이고, OG 이미지 주소의
    ?v= 에 섞여 SNS 캐시를 갱신하는 데 쓰인다.
+
+   ★ 예전 값: overlay: "black" | "white"
+
+   컬러 피커로 바뀌기 전에 저장된 카드가 이미 있다. overlay_color
+   가 없으면 그 두 값을 #000000 / #ffffff 로 옮겨 읽는다 — 예전
+   카드가 저장 한 번 없이도 그대로 보인다.
 ========================================================== */
+
+function clampShareCardNumber(
+  value,
+  min,
+  max,
+  fallback
+) {
+
+  const number =
+    Number(value);
+
+
+  return Number.isFinite(number)
+    ? Math.min(max, Math.max(min, Math.round(number)))
+    : fallback;
+
+}
+
 
 export function normalizeShareCardSettings(
   raw
@@ -165,10 +358,6 @@ export function normalizeShareCardSettings(
       : {};
 
 
-  const strength =
-    Number(source.overlay_strength);
-
-
   const version =
     (
       typeof source.version === "string" &&
@@ -182,27 +371,73 @@ export function normalizeShareCardSettings(
         );
 
 
+  /* 새 값 → 예전 값 → 기본값 */
+
+  const overlayColor =
+    normalizeShareCardColor(source.overlay_color) ||
+    normalizeShareCardColor(source.overlayColor) ||
+    SHARE_CARD_LEGACY_OVERLAY[source.overlay] ||
+    normalizeShareCardColor(source.overlay) ||
+    SHARE_CARD_DEFAULT_SETTINGS.overlayColor;
+
+
+  const cardLabel =
+    collapseShareCardText(source.card_label)
+      .slice(0, SHARE_CARD_LABEL_MAX_LENGTH);
+
+
   return {
 
-    overlay:
-      SHARE_CARD_OVERLAY_KEYS.includes(source.overlay)
-        ? source.overlay
-        : SHARE_CARD_DEFAULT_SETTINGS.overlay,
+    overlayColor,
 
     overlayStrength:
-      Number.isFinite(strength)
-        ? Math.min(100, Math.max(0, Math.round(strength)))
-        : SHARE_CARD_DEFAULT_SETTINGS.overlayStrength,
+      clampShareCardNumber(
+        source.overlay_strength,
+        0,
+        100,
+        SHARE_CARD_DEFAULT_SETTINGS.overlayStrength
+      ),
 
     font:
       SHARE_CARD_FONT_KEYS.includes(source.font)
         ? source.font
         : SHARE_CARD_DEFAULT_SETTINGS.font,
 
+    titleSize:
+      clampShareCardNumber(
+        source.title_size,
+        SHARE_CARD_TITLE_SIZE_MIN,
+        SHARE_CARD_TITLE_SIZE_MAX,
+        SHARE_CARD_DEFAULT_SETTINGS.titleSize
+      ),
+
     imageUrl:
       typeof source.image_url === "string"
         ? source.image_url.trim()
         : "",
+
+    imagePositionX:
+      clampShareCardNumber(
+        source.image_position_x,
+        0,
+        100,
+        SHARE_CARD_DEFAULT_SETTINGS.imagePositionX
+      ),
+
+    imagePositionY:
+      clampShareCardNumber(
+        source.image_position_y,
+        0,
+        100,
+        SHARE_CARD_DEFAULT_SETTINGS.imagePositionY
+      ),
+
+    cardLabel,
+
+    frame:
+      SHARE_CARD_FRAME_KEYS.includes(source.frame)
+        ? source.frame
+        : SHARE_CARD_DEFAULT_SETTINGS.frame,
 
     version
 
@@ -220,10 +455,15 @@ export function serializeShareCardSettings(
 
   const normalized =
     normalizeShareCardSettings({
-      overlay: card.overlay,
+      overlay_color: card.overlayColor,
       overlay_strength: card.overlayStrength,
       font: card.font,
+      title_size: card.titleSize,
       image_url: card.imageUrl,
+      image_position_x: card.imagePositionX,
+      image_position_y: card.imagePositionY,
+      card_label: card.cardLabel,
+      frame: card.frame,
       version: card.version
     });
 
@@ -233,14 +473,29 @@ export function serializeShareCardSettings(
     image_url:
       normalized.imageUrl,
 
-    overlay:
-      normalized.overlay,
+    image_position_x:
+      normalized.imagePositionX,
+
+    image_position_y:
+      normalized.imagePositionY,
+
+    overlay_color:
+      normalized.overlayColor,
 
     overlay_strength:
       normalized.overlayStrength,
 
     font:
       normalized.font,
+
+    title_size:
+      normalized.titleSize,
+
+    card_label:
+      normalized.cardLabel,
+
+    frame:
+      normalized.frame,
 
     version:
       typeof version === "string" && /^[0-9]{1,20}$/.test(version)
@@ -271,34 +526,6 @@ export function escapeShareCardHtml(
 
 
 /*
-  우상단 라벨. 표시 번호를 따로 저장하는 구조가 없으므로 **글 id**를
-  그대로 쓴다 — 이미 주소(/:slug/post/:id)에 드러나 있는 값이고,
-  글을 지우거나 옮겨도 달라지지 않는다(카드가 예측 가능해야 한다).
-  세 자리로 채워서 `POST 014` 모양을 만든다.
-*/
-
-export function shareCardPostLabel(
-  postId
-) {
-
-  const digits =
-    String(postId === null || postId === undefined ? "" : postId)
-      .replace(/[^0-9]/g, "");
-
-
-  if (!digits) {
-
-    return "POST";
-
-  }
-
-
-  return `POST ${digits.padStart(3, "0")}`;
-
-}
-
-
-/*
   카드 위 두 줄짜리 제목에 들어갈 수 없는 글자(줄바꿈·연속 공백)를
   한 칸으로 정리한다. 실제 두 줄 자르기는 CSS(-webkit-line-clamp)가
   한다 — 미리보기와 서버 렌더가 같은 규칙이어야 하므로 글자 수로
@@ -317,15 +544,119 @@ export function collapseShareCardText(
 
 
 /* =========================================================
+   우상단 라벨
+
+   사용자가 CARD LABEL 에 적어 둔 문구가 있으면 **그 문구 그대로**
+   (ARCHIVE · SUMMER 2028 · LOG 034). 비워 두면 자동 라벨을 만든다:
+
+     `카테고리 · 001`
+
+   · 이름은 글이 실제로 들어 있는 가장 안쪽 컨테이너다 —
+     폴더 안의 글이면 폴더 이름, 아니면 카테고리 이름.
+   · 번호는 그 컨테이너 안에서 공개된 글을 created_at 오름차순으로
+     센 순번이고, **게시 시점에 posts.share_label_seq 에 굳는다**
+     (supabase/migrations/20260913180000_add_posts_share_label_seq.sql).
+     그래서 앞 글을 지우거나 비공개로 돌려도 이미 나간 카드의
+     번호가 뒤바뀌지 않는다.
+   · 사용자 지정 목록 정렬(sort_order)은 쓰지 않는다.
+
+   컨테이너 이름도 번호도 없으면 빈 문자열을 돌려준다 — 그때는
+   카드에 라벨을 그리지 않는다.
+========================================================== */
+
+export function shareCardSequenceLabel(
+  sequence
+) {
+
+  const number =
+    Number(sequence);
+
+
+  if (!Number.isFinite(number) || number <= 0) {
+
+    return "";
+
+  }
+
+
+  return String(Math.floor(number)).padStart(3, "0");
+
+}
+
+
+export function shareCardAutoLabel(
+  containerName,
+  sequence
+) {
+
+  return [
+    collapseShareCardText(containerName),
+    shareCardSequenceLabel(sequence)
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+}
+
+
+export function resolveShareCardLabel(
+  cardLabel,
+  containerName,
+  sequence
+) {
+
+  const custom =
+    collapseShareCardText(cardLabel)
+      .slice(0, SHARE_CARD_LABEL_MAX_LENGTH);
+
+
+  return custom ||
+    shareCardAutoLabel(containerName, sequence);
+
+}
+
+
+/* =========================================================
+   배경 구도
+
+   기본 카드 사진에는 위치 조정(image_position_x/y)이 있다.
+   글 대표 이미지에는 없다 — 그 사진은 글이 스스로 고른 것이고,
+   카드 설정과 함께 움직이면 글마다 구도가 어긋난다.
+
+   그래서 "지금 깔린 배경이 기본 카드 사진인가"로 판정한다.
+   부르는 쪽(미리보기 · 서버)이 같은 규칙을 쓰도록 이 파일이
+   정한다.
+========================================================== */
+
+export function shareCardBackgroundPosition(
+  card,
+  backgroundUrl
+) {
+
+  const url =
+    typeof backgroundUrl === "string" ? backgroundUrl.trim() : "";
+
+
+  if (!url || !card.imageUrl || url !== card.imageUrl) {
+
+    return "50% 50%";
+
+  }
+
+
+  return `${card.imagePositionX}% ${card.imagePositionY}%`;
+
+}
+
+
+/* =========================================================
    카드 HTML 한 장
 
    fields:
      card            normalizeShareCardSettings() 결과
      backgroundUrl   배경 사진(글 대표 → 기본 카드 사진 → 빈 값)
      title           글 제목(공개 글일 때만 실제 제목이 온다)
-     categoryName    카테고리 이름
-     slug            주인장 slug (@slug)
-     postLabel       'POST 014'
+     label           우상단 라벨(resolveShareCardLabel 결과)
      domain          우측 아래 도메인 글자
 
    배경이 빈 값이면 서비스 기본 그라데이션이 깔린다.
@@ -337,27 +668,29 @@ export function buildShareCardHtml(
 
   const card =
     normalizeShareCardSettings({
-      overlay: fields.card && fields.card.overlay,
+      overlay_color: fields.card && fields.card.overlayColor,
       overlay_strength: fields.card && fields.card.overlayStrength,
       font: fields.card && fields.card.font,
+      title_size: fields.card && fields.card.titleSize,
       image_url: fields.card && fields.card.imageUrl,
+      image_position_x: fields.card && fields.card.imagePositionX,
+      image_position_y: fields.card && fields.card.imagePositionY,
+      card_label: fields.card && fields.card.cardLabel,
+      frame: fields.card && fields.card.frame,
       version: fields.card && fields.card.version
     });
+
+
+  const palette =
+    shareCardOverlayPalette(card.overlayColor);
 
 
   const title =
     collapseShareCardText(fields.title) ||
     "제목 없는 글";
 
-  const categoryName =
-    collapseShareCardText(fields.categoryName);
-
-  const slug =
-    collapseShareCardText(fields.slug);
-
-  const postLabel =
-    collapseShareCardText(fields.postLabel) ||
-    "POST";
+  const label =
+    collapseShareCardText(fields.label);
 
   const domain =
     collapseShareCardText(fields.domain) ||
@@ -370,23 +703,32 @@ export function buildShareCardHtml(
       : "";
 
 
-  const meta =
+  const backgroundPosition =
+    shareCardBackgroundPosition(card, backgroundUrl);
+
+
+  const rootStyle =
     [
-      slug ? `@${slug}` : "",
-      categoryName
+      `--share-card-alpha:${(card.overlayStrength / 100).toFixed(3)}`,
+      `--share-card-rgb:${palette.rgb}`,
+      `--share-card-title:${palette.title}`,
+      `--share-card-sub:${palette.sub}`,
+      `--share-card-shadow:${palette.shadow}`,
+      `--share-card-title-size:${card.titleSize}px`,
+      `--share-card-bg-position:${backgroundPosition}`
     ]
-      .filter(Boolean)
-      .join(" · ");
+      .join(";");
 
 
   return `<!DOCTYPE html>
-<html lang="ko" data-overlay="${escapeShareCardHtml(card.overlay)}" data-font="${escapeShareCardHtml(card.font)}" style="--share-card-alpha:${(card.overlayStrength / 100).toFixed(3)}">
+<html lang="ko" data-overlay="${palette.isLight ? "light" : "dark"}" data-font="${escapeShareCardHtml(card.font)}" data-frame="${escapeShareCardHtml(card.frame)}" style="${escapeShareCardHtml(rootStyle)}">
 <head>
 <meta charset="utf-8">
 <link rel="stylesheet" href="${escapeShareCardHtml(SHARE_CARD_FONTS["pretendard"].stylesheet)}">
 <link rel="stylesheet" href="${escapeShareCardHtml(SHARE_CARD_FONTS["nanum-myeongjo"].stylesheet)}">
 <style>
 ${shareCardCss()}
+${shareCardFrameCss()}
 </style>
 </head>
 <body>
@@ -401,15 +743,13 @@ ${shareCardCss()}
 
   <div class="share-card-scrim"></div>
 
-  <div class="share-card-label" id="shareCardLabel">${escapeShareCardHtml(postLabel)}</div>
+  <div class="share-card-frame" id="shareCardFrame"></div>
+
+  <div class="share-card-label" id="shareCardLabel">${escapeShareCardHtml(label)}</div>
 
   <div class="share-card-block">
 
-    <div class="share-card-category" id="shareCardCategory">${escapeShareCardHtml(categoryName)}</div>
-
     <h1 class="share-card-title" id="shareCardTitle">${escapeShareCardHtml(title)}</h1>
-
-    <div class="share-card-meta" id="shareCardMeta">${escapeShareCardHtml(meta)}</div>
 
   </div>
 
@@ -437,7 +777,7 @@ ${shareCardLiveScript()}
    달라질 여지를 만들지 않기 위해서다.
 
    사진 구도에 따라 글자가 움직이지 않는다. 제목 덩어리는 항상
-   같은 자리(바닥에서 103px 위)에 있다.
+   같은 자리(바닥에서 115px 위)에 있다.
 ========================================================== */
 
 function shareCardCss() {
@@ -445,23 +785,12 @@ function shareCardCss() {
   return `
 :root {
   --share-card-alpha: 0.55;
-}
-
-html[data-overlay="black"] {
   --share-card-rgb: 0, 0, 0;
   --share-card-title: #ffffff;
   --share-card-sub: rgba(255, 255, 255, 0.86);
   --share-card-shadow: 0 2px 14px rgba(0, 0, 0, 0.45);
-}
-
-/* WHITE 는 짙은 회색이다 — 순검정은 쓰지 않는다
-   (core/design-tokens.css 의 --imory-gray-800 / -700 값). */
-
-html[data-overlay="white"] {
-  --share-card-rgb: 255, 255, 255;
-  --share-card-title: #333333;
-  --share-card-sub: #555555;
-  --share-card-shadow: 0 1px 12px rgba(255, 255, 255, 0.65);
+  --share-card-title-size: 46px;
+  --share-card-bg-position: 50% 50%;
 }
 
 html[data-font="pretendard"] {
@@ -509,7 +838,7 @@ body {
   position: absolute;
   inset: 0;
 
-  background-position: center;
+  background-position: var(--share-card-bg-position);
   background-repeat: no-repeat;
   background-size: cover;
 }
@@ -538,45 +867,12 @@ body {
   top: 40px;
   right: ${SHARE_CARD_SIDE_PADDING}px;
 
+  max-width: 520px;
+
   font-size: 20px;
   font-weight: 500;
   line-height: 1.1;
   letter-spacing: 0.22em;
-
-  color: var(--share-card-sub);
-
-  text-shadow: var(--share-card-shadow);
-}
-
-/* =========================================================
-   글자 덩어리 — 바닥에서 103px 위에서 끝난다
-
-     y 355 카테고리 라벨
-     y 383 제목(최대 2줄 · 110.4px)
-     y 503 @slug · 카테고리
-     y 525 덩어리 끝
-     y 528~628 아무 글자도 없는 안전영역
-
-   글자 크기와 line-height 를 모두 못박아 둔 이유: 브라우저 기본
-   line-height(normal)는 폰트마다 다르고, 그러면 이 좌표가 폰트
-   선택에 따라 흔들린다. 데드존은 흔들려선 안 되는 값이다.
-========================================================== */
-
-.share-card-block {
-  position: absolute;
-  left: ${SHARE_CARD_SIDE_PADDING}px;
-  bottom: 103px;
-
-  width: 760px;
-}
-
-.share-card-category {
-  margin: 0 0 8px;
-
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 1.1;
-  letter-spacing: 0.2em;
 
   color: var(--share-card-sub);
 
@@ -587,14 +883,42 @@ body {
   text-overflow: ellipsis;
 }
 
-.share-card-category:empty {
+/* 라벨이 비면 아무것도 그리지 않는다 */
+
+.share-card-label:empty {
   display: none;
+}
+
+/* =========================================================
+   글자 덩어리 — 바닥에서 115px 위에서 끝난다
+
+     y 348 제목 시작(기본 46px · 두 줄일 때)
+     y 513 덩어리 끝
+     y 528~628 아무 글자도 없는 안전영역(X 검은 링크 바)
+
+   글자 크기와 line-height 를 모두 못박아 둔 이유: 브라우저 기본
+   line-height(normal)는 폰트마다 다르고, 그러면 이 좌표가 폰트
+   선택에 따라 흔들린다. 데드존은 흔들려선 안 되는 값이다.
+
+   제목 크기는 사용자 설정이지만 line-height 배수(1.2)와 두 줄
+   제한은 고정이다 — 그래서 어떤 크기에서도 덩어리의 바닥은
+   같은 자리다.
+========================================================== */
+
+.share-card-block {
+  position: absolute;
+  left: ${SHARE_CARD_SIDE_PADDING}px;
+  bottom: ${SHARE_CARD_BASELINE}px;
+
+  width: 860px;
+
+  max-width: calc(100% - ${SHARE_CARD_SIDE_PADDING * 2}px - 200px);
 }
 
 .share-card-title {
   margin: 0;
 
-  font-size: 46px;
+  font-size: var(--share-card-title-size);
   font-weight: 700;
   line-height: 1.2;
   letter-spacing: -0.01em;
@@ -609,34 +933,17 @@ body {
   -webkit-line-clamp: 2;
   overflow: hidden;
 
-  max-height: 110.4px;
+  max-height: calc(var(--share-card-title-size) * 2.4);
 
   /* 한글은 단어 안에서 끊지 않는다(긴 URL 같은 것만 강제로 끊음) */
   word-break: keep-all;
   overflow-wrap: anywhere;
 }
 
-.share-card-meta {
-  margin: 10px 0 0;
-
-  font-size: 20px;
-  font-weight: 500;
-  line-height: 1.1;
-  letter-spacing: 0.02em;
-
-  color: var(--share-card-sub);
-
-  text-shadow: var(--share-card-shadow);
-
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .share-card-domain {
   position: absolute;
   right: ${SHARE_CARD_SIDE_PADDING}px;
-  bottom: 103px;
+  bottom: ${SHARE_CARD_BASELINE}px;
 
   font-size: 22px;
   font-weight: 500;
@@ -653,12 +960,48 @@ body {
 
 
 /* =========================================================
+   프레임 — 나중에 늘어날 자리
+
+   지금은 `none` 뿐이라 아무것도 그리지 않는다. 새 프레임이
+   생기면 여기에 `html[data-frame="border"] .share-card-frame { ... }`
+   식으로 한 벌씩 더한다. 프레임이 글자 자리를 바꿔야 하면 같은
+   블록에서 .share-card-block / .share-card-domain 의 좌표를
+   함께 밀어 준다 — 좌표를 아는 곳이 이 파일 하나로 유지된다.
+========================================================== */
+
+function shareCardFrameCss() {
+
+  return `
+.share-card-frame {
+  position: absolute;
+  inset: 0;
+
+  pointer-events: none;
+}
+
+/* none — 프레임 없음(기본) */
+
+html[data-frame="none"] .share-card-frame {
+  display: none;
+}
+`;
+
+}
+
+
+/* =========================================================
    미리보기 전용 — 값이 바뀔 때 문서를 다시 만들지 않는다
 
    설정 화면은 슬라이더를 끌 때마다 iframe 을 다시 로드하지 않고
    이 문서에 postMessage 를 보낸다(깜빡임 없음 · 배경 사진 재요청
    없음). 서버 렌더에는 메시지가 오지 않으므로 이 스크립트는 아무
    일도 하지 않는다 — 그래도 **같은 문서**를 쓰기 위해 항상 넣는다.
+
+   ★ 색 계산을 여기서 하지 않는다
+
+   오버레이 색 → 글자색/그림자 판정은 shareCardOverlayPalette()
+   한 곳에만 있다. 부모가 그 함수를 부르고 결과(palette)를 그대로
+   보낸다 — 같은 규칙이 두 군데에 적히는 것을 막는다.
 
    srcdoc iframe 은 부모와 같은 origin 이다. 그래도 우리가 정한
    type 이 아닌 메시지는 무시한다.
@@ -682,15 +1025,38 @@ function shareCardLiveScript() {
 
     var root = document.documentElement;
     var card = payload.card || {};
+    var palette = payload.palette || null;
     var text = payload.text || {};
 
-    if (card.overlay) { root.setAttribute("data-overlay", card.overlay); }
     if (card.font) { root.setAttribute("data-font", card.font); }
+    if (card.frame) { root.setAttribute("data-frame", card.frame); }
+
+    if (palette) {
+      root.setAttribute("data-overlay", palette.isLight ? "light" : "dark");
+      root.style.setProperty("--share-card-rgb", palette.rgb);
+      root.style.setProperty("--share-card-title", palette.title);
+      root.style.setProperty("--share-card-sub", palette.sub);
+      root.style.setProperty("--share-card-shadow", palette.shadow);
+    }
 
     if (typeof card.overlayStrength === "number") {
       root.style.setProperty(
         "--share-card-alpha",
         (Math.min(100, Math.max(0, card.overlayStrength)) / 100).toFixed(3)
+      );
+    }
+
+    if (typeof card.titleSize === "number") {
+      root.style.setProperty(
+        "--share-card-title-size",
+        Math.round(card.titleSize) + "px"
+      );
+    }
+
+    if (typeof payload.backgroundPosition === "string") {
+      root.style.setProperty(
+        "--share-card-bg-position",
+        payload.backgroundPosition
       );
     }
 
@@ -705,9 +1071,7 @@ function shareCardLiveScript() {
     }
 
     if ("title" in text) { setText("shareCardTitle", text.title); }
-    if ("categoryName" in text) { setText("shareCardCategory", text.categoryName); }
-    if ("meta" in text) { setText("shareCardMeta", text.meta); }
-    if ("postLabel" in text) { setText("shareCardLabel", text.postLabel); }
+    if ("label" in text) { setText("shareCardLabel", text.label); }
     if ("domain" in text) { setText("shareCardDomain", text.domain); }
 
   });

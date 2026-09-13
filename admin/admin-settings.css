@@ -1372,8 +1372,13 @@
    SHARE > CARD — 글 공유 카드 (IMORY_SHARE_CARD_DESIGN.md)
 
    설정 줄들은 이 화면의 기존 .setting-line 규칙을 그대로 쓰고,
-   여기서는 카드 전용 요소(기본 사진 · 선택 버튼 두 개 · 1200×628
-   미리보기 대지)만 정의한다.
+   여기서는 카드 전용 요소(1200×628 미리보기 대지 · 기본 사진
+   버튼 줄 · 사진 위치 조정 모달)만 정의한다.
+
+   네모 컬러 피커(.quote-color-input)와 네모 숫자 칸
+   (.quote-number-input)은 Quote Preset 화면의 것을 **그대로**
+   쓴다(admin/admin-quote.css). 이 화면에서는 폭만 맞춘다 —
+   같은 모양의 컨트롤이 두 벌 생기지 않게 하려는 것이다.
 
    구현: admin/settings/admin-share-card.js
 ========================================================== */
@@ -1394,172 +1399,13 @@
 }
 
 
-.share-card-photo-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-
-  gap: 12px;
-
-  padding: 0 14px 12px;
-}
-
-
-/* 카드 비율 그대로 작게 — 무엇이 배경이 되는지 바로 보이게 */
-
-.share-card-photo-preview {
-  width: 132px;
-  height: 69px;
-
-  object-fit: cover;
-
-  border: 1px solid var(--system-border, #eeeeee);
-  border-radius: var(--imory-radius-300, 6px);
-
-  background: var(--system-surface, #fafafa);
-}
-
-
-.share-card-photo-preview[hidden] {
-  display: none;
-}
-
-
-.share-card-photo-empty {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  width: 132px;
-  height: 69px;
-
-  border: 1px dashed var(--system-border-strong, #dddddd);
-  border-radius: var(--imory-radius-300, 6px);
-
-  color: var(--system-text-disabled, #aaaaaa);
-
-  font-size: var(--imory-font-size-200, 10px);
-  letter-spacing: 0.04em;
-}
-
-
-.share-card-photo-empty[hidden] {
-  display: none;
-}
-
-
-.share-card-photo-remove[hidden] {
-  display: none;
-}
-
-
-.share-card-upload-message {
-  margin: 0;
-
-  padding: 0 14px;
-
-  min-height: 14px;
-
-  color: var(--system-accent, #e39ab5);
-
-  font-size: var(--imory-font-size-200, 10px);
-  line-height: 1.6;
-}
-
-
-.share-card-hint {
-  margin: 6px 0 18px;
-
-  padding: 0 14px;
-
-  color: var(--system-text-muted, #999999);
-
-  font-size: var(--imory-font-size-200, 10px);
-  line-height: 1.7;
-}
-
-
-/* 오버레이 색/강도/폰트 줄 */
-
-.share-card-line {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-
-  gap: 10px;
-}
-
-
-.share-card-line--slider {
-  flex-wrap: nowrap;
-}
-
-
-.share-card-line--slider .imory-range {
-  flex: 1 1 120px;
-
-  min-width: 0;
-}
-
-
-/* 슬라이더 값 표시(.imory-range-value)는 core/components/range.css의
-   공용 스타일을 그대로 쓴다 — 여기서 다시 정의하지 않는다. */
-
-
-.share-card-choice {
-  display: flex;
-
-  gap: 6px;
-}
-
-
-.share-card-choice-button {
-  min-width: 62px;
-
-  padding: 5px 10px;
-
-  border-radius: var(--imory-radius-300, 6px);
-
-  font-size: var(--imory-font-size-100, 9px);
-  letter-spacing: 0.1em;
-}
-
-
-.share-card-select {
-  flex: 0 1 160px;
-
-  min-width: 0;
-  max-width: 100%;
-}
-
-
 /* =========================================================
-   미리보기 — 항상 1200 : 628
+   미리보기 — 항상 1200 : 628, 그리고 맨 위
 
    안쪽 iframe 문서는 1200 × 628 고정이고 JS가 transform: scale()
    로만 줄인다(admin-share-card.js). 그래서 좁은 화면에서도 비율이
    변하지 않고, 실제 카드와 같은 배치가 나온다.
 ========================================================== */
-
-.share-card-preview-heading {
-  margin: 10px 14px 8px;
-}
-
-
-.share-card-preview-heading span {
-  font-size: var(--imory-font-size-100, 9px);
-  letter-spacing: 0.1em;
-
-  color: var(--imory-gray-600, #777777);
-}
-
-
-.share-card-preview-heading small {
-  font-size: 9px;
-
-  color: #b5b5b5;
-}
-
 
 .share-card-preview {
   position: relative;
@@ -1597,8 +1443,113 @@
 }
 
 
+/* 미리보기 아래 한 줄 — 설명 + 기본 사진 보기 토글 */
+
+.share-card-preview-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+
+  gap: 8px;
+
+  margin: 8px 14px 18px;
+}
+
+
 .share-card-preview-note {
-  margin: 8px 0 0;
+  margin: 0;
+
+  flex: 1 1 140px;
+
+  min-width: 0;
+
+  color: var(--system-text-muted, #999999);
+
+  font-size: var(--imory-font-size-200, 10px);
+  line-height: 1.7;
+}
+
+
+.share-card-preview-toggle {
+  display: flex;
+  align-items: center;
+
+  gap: 5px;
+
+  color: var(--system-text-muted, #999999);
+
+  font-size: var(--imory-font-size-200, 10px);
+
+  cursor: pointer;
+
+  white-space: nowrap;
+}
+
+
+.share-card-preview-toggle[hidden] {
+  display: none;
+}
+
+
+.share-card-preview-toggle input {
+  width: 13px;
+  height: 13px;
+
+  accent-color: var(--system-accent, #e39ab5);
+
+  cursor: pointer;
+}
+
+
+/* =========================================================
+   기본 사진 — change · edit · remove 한 줄
+
+   썸네일 상자를 두지 않는다. 어떤 사진인지는 위 미리보기가
+   실제 카드 모양으로 보여준다.
+========================================================== */
+
+.share-card-photo-row {
+  gap: 10px;
+}
+
+
+.share-card-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 6px;
+
+  margin-left: auto;
+}
+
+
+/* 쓸 수 없는 버튼(기본 사진이 없을 때의 edit/remove) */
+
+.share-card-photo-actions button[disabled] {
+  opacity: 0.4;
+
+  cursor: default;
+}
+
+
+.share-card-upload-message {
+  margin: 0;
+
+  padding: 0 14px;
+
+  min-height: 14px;
+
+  color: var(--system-accent, #e39ab5);
+
+  font-size: var(--imory-font-size-200, 10px);
+  line-height: 1.6;
+}
+
+
+.share-card-hint {
+  margin: 6px 0 18px;
 
   padding: 0 14px;
 
@@ -1606,4 +1557,209 @@
 
   font-size: var(--imory-font-size-200, 10px);
   line-height: 1.7;
+}
+
+
+/* =========================================================
+   설정 줄 — 좁은 화면에서도 되도록 한 줄
+
+   아주 좁을 때만 자연스럽게 접히도록 flex-wrap 은 열어 두고,
+   가운데 요소(슬라이더 · 드롭다운)가 남는 폭을 먹게 한다.
+========================================================== */
+
+.share-card-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+
+  gap: 10px;
+}
+
+
+.share-card-line--overlay .imory-range {
+  flex: 1 1 90px;
+
+  min-width: 60px;
+}
+
+
+/* 슬라이더 값 표시(.imory-range-value)는 core/components/range.css의
+   공용 스타일을 그대로 쓴다 — 여기서 다시 정의하지 않는다. */
+
+
+.share-card-color-input {
+  flex: 0 0 auto;
+
+  width: 34px;
+  height: 28px;
+}
+
+
+/* 폰트 드롭다운은 폭을 줄여 제목 크기와 같은 줄에 둔다 */
+
+.share-card-select {
+  flex: 1 1 92px;
+
+  width: auto;
+  min-width: 0;
+  max-width: 150px;
+}
+
+
+.share-card-line-label {
+  margin-left: auto;
+
+  white-space: nowrap;
+}
+
+
+.share-card-number {
+  flex: 0 0 auto;
+}
+
+
+.share-card-number-input {
+  width: 62px;
+}
+
+
+.share-card-label-input {
+  flex: 1 1 140px;
+
+  min-width: 0;
+}
+
+
+/* =========================================================
+   사진 위치 조정 모달
+
+   카드와 같은 1200 × 628 프레임 안에서 사진을 끌어 구도를 정한다.
+   프레임은 폭에 맞춰 줄어들지만 비율은 고정이다 — 여기서 보이는
+   자리가 카드에서 보이는 자리다.
+========================================================== */
+
+.share-card-crop-overlay {
+  position: fixed;
+  inset: 0;
+
+  z-index: 1200;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 16px;
+
+  background: rgba(0, 0, 0, 0.45);
+}
+
+
+.share-card-crop-overlay[hidden] {
+  display: none;
+}
+
+
+.share-card-crop-dialog {
+  width: 100%;
+  max-width: 520px;
+
+  padding: 16px;
+
+  border-radius: var(--imory-radius-400, 8px);
+
+  background: var(--system-bg, #ffffff);
+
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.24);
+}
+
+
+.share-card-crop-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+
+  gap: 8px;
+
+  margin-bottom: 10px;
+}
+
+
+.share-card-crop-head span {
+  color: var(--imory-gray-600, #777777);
+
+  font-size: var(--imory-font-size-300, 11px);
+  letter-spacing: 0.08em;
+}
+
+
+.share-card-crop-head small {
+  color: #b5b5b5;
+
+  font-size: 9px;
+}
+
+
+.share-card-crop-frame {
+  position: relative;
+
+  width: 100%;
+  aspect-ratio: 1200 / 628;
+
+  overflow: hidden;
+
+  border: 1px solid var(--system-border, #eeeeee);
+  border-radius: var(--imory-radius-300, 6px);
+
+  background: var(--system-surface, #fafafa);
+
+  cursor: grab;
+
+  /* 터치 드래그가 화면 스크롤로 가로채이지 않게 한다 */
+  touch-action: none;
+
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+
+.share-card-crop-frame.dragging {
+  cursor: grabbing;
+}
+
+
+.share-card-crop-image {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+
+  /* JS가 넣는다 — 카드 CSS의 background-position과 같은 값 */
+  object-position: 50% 50%;
+
+  pointer-events: none;
+
+  -webkit-user-drag: none;
+}
+
+
+.share-card-crop-hint {
+  margin: 8px 0 12px;
+
+  color: var(--system-text-muted, #999999);
+
+  font-size: var(--imory-font-size-200, 10px);
+  line-height: 1.7;
+}
+
+
+/* save 는 오른쪽 아래 */
+
+.share-card-crop-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+
+  gap: 6px;
 }
