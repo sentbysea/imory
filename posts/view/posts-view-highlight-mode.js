@@ -1160,17 +1160,129 @@ function handlePostHighlightClick(
     고른다 — 없으면 그 조각의 첫 줄.
   */
 
+  /*
+    ★ 단, 메모를 **읽기만** 하는 말풍선은 하이라이트 덩어리 전체를
+    기준으로 삼는다 (사용자 요청).
+
+    누른 줄 바로 위에 띄우면 말풍선이 그 하이라이트의 나머지 줄을
+    덮어 버린다 — 메모를 읽는 동안 무엇에 단 메모인지가 가려지는
+    셈이다. 덩어리 전체의 위쪽에 놓으면 원문과 메모가 같이 보인다.
+    반대로 주인장의 메모/삭제 메뉴는 지금처럼 누른 줄을 따라간다
+    (어느 줄을 눌렀는지가 곧 조작 대상이다).
+  */
+
   postHighlightBubbleAnchor =
-    resolvePostHighlightLineAnchor(
-      span,
-      event.clientX,
-      event.clientY
-    );
+    (
+      !postHighlightModeOn ||
+      !postHighlightContext.isOwner
+    )
+      ? resolvePostHighlightBlockAnchor(id)
+      : resolvePostHighlightLineAnchor(
+          span,
+          event.clientX,
+          event.clientY
+        );
 
 
   openPostHighlightBubble(
     item
   );
+
+}
+
+
+/*
+  같은 id로 칠해진 조각 전부를 감싼 사각형. 여러 문단에 걸친
+  하이라이트는 <span>이 여럿이고 한 조각도 줄바꿈되면 rect가
+  여럿이라, 요소 하나의 getBoundingClientRect로는 부족하다.
+*/
+
+function resolvePostHighlightBlockAnchor(
+  id
+) {
+
+  return () => {
+
+    if (!postHighlightRoot) {
+
+      return null;
+
+    }
+
+
+    const spans =
+      Array.from(
+        postHighlightRoot.querySelectorAll(
+          `[${POST_HIGHLIGHT_ID_ATTR}="${CSS.escape(String(id))}"]`
+        )
+      );
+
+
+    let top =
+      Infinity;
+
+    let bottom =
+      -Infinity;
+
+    let left =
+      Infinity;
+
+    let right =
+      -Infinity;
+
+
+    for (const span of spans) {
+
+      for (const rect of span.getClientRects()) {
+
+        if (
+          rect.width === 0 &&
+          rect.height === 0
+        ) {
+
+          continue;
+
+        }
+
+
+        top =
+          Math.min(top, rect.top);
+
+        bottom =
+          Math.max(bottom, rect.bottom);
+
+        left =
+          Math.min(left, rect.left);
+
+        right =
+          Math.max(right, rect.right);
+
+      }
+
+    }
+
+
+    if (!Number.isFinite(top)) {
+
+      return null;
+
+    }
+
+
+    return {
+      top,
+      bottom,
+      left,
+      right,
+
+      width:
+        right - left,
+
+      height:
+        bottom - top
+    };
+
+  };
 
 }
 

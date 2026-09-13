@@ -74,7 +74,9 @@
   padding: 6px;
 
   border: 1px solid #eeeeee;
-  border-radius: 12px;
+
+  border-radius:
+    var(--imory-radius-300, 6px);
 
   background: #ffffff;
 
@@ -262,11 +264,79 @@
 }
 
 
-/* 읽기 상태의 메모 말풍선 */
+/* =========================================================
+   읽기 상태의 메모 말풍선
+
+   메뉴 판과 달리 **말풍선**이다 — 꼬랑지가 어느 하이라이트에 달린
+   메모인지를 가리키고, 판이 한 겹 비쳐 그 아래 원문이 없어지지
+   않는다(사용자 요청). 꼬랑지의 가로 자리는 팝오버가 재 놓은
+   --imory-popover-arrow-x가 정한다(posts/view/posts-view-popover.js)
+   — 판이 화면 안으로 당겨져도 꼬랑지는 기준 사각형의 가운데를
+   계속 가리킨다.
+========================================================== */
 
 .imory-popover--note {
   max-width:
     min(320px, calc(100vw - 24px));
+
+  /*
+    반투명 판에 테두리를 두면 꼬랑지 밑동에 실선이 가로질러 남는다.
+    테두리 대신 그림자 하나로 배경에서 떼어 놓는다.
+  */
+
+  border-color: transparent;
+
+  background:
+    var(--post-note-bubble-bg, rgba(255, 255, 255, 0.88));
+
+  /*
+    비치는 것은 "아래에 글이 있다"는 정도여야 하고 글자가 겹쳐
+    읽히면 안 된다 — 살짝 흐려 두면 메모 글씨가 또렷하게 남는다.
+  */
+
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+
+  box-shadow:
+    0 6px 20px rgba(0, 0, 0, 0.16);
+}
+
+
+.imory-popover--note::after {
+  content: "";
+
+  position: absolute;
+
+  left:
+    var(--imory-popover-arrow-x, 50%);
+
+  width: 0;
+  height: 0;
+
+  margin-left: -7px;
+
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+}
+
+
+/* 판이 기준 위에 있으면 꼬랑지는 아래를 가리킨다 */
+
+.imory-popover--note[data-placement="top"]::after {
+  top: 100%;
+
+  border-top:
+    7px solid
+    var(--post-note-bubble-bg, rgba(255, 255, 255, 0.88));
+}
+
+
+.imory-popover--note[data-placement="bottom"]::after {
+  bottom: 100%;
+
+  border-bottom:
+    7px solid
+    var(--post-note-bubble-bg, rgba(255, 255, 255, 0.88));
 }
 
 .imory-popover-note {
@@ -295,19 +365,22 @@
 ========================================================== */
 
 .post-highlight {
-  border-radius: 2px;
+  border-radius: 0;
 
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
 }
 
 
-/* 메모가 달린 하이라이트에는 누를 수 있다는 표시를 한 겹 준다 */
+/*
+  메모가 달린 하이라이트는 누를 수 있다 — 표시는 커서뿐이다.
+  예전에는 점선 밑줄을 한 겹 더 그었는데, 본문 글줄 사이에 실선도
+  점선도 아닌 줄이 하나 더 생겨 읽는 흐름을 끊었다. 칠해진 색만으로
+  이미 충분히 보인다.
+*/
 
 .post-highlight[data-post-highlight-note] {
   cursor: pointer;
-
-  border-bottom: 1px dotted rgba(0, 0, 0, 0.28);
 }
 
 
@@ -324,14 +397,14 @@
 }
 
 
-/* 하이라이팅 모드에서는 저장된 표시가 전부 눌린다 */
+/*
+  하이라이팅 모드에서는 저장된 표시가 전부 눌린다. 여기서도 점선
+  테두리를 두르지 않는다 — 모드 띠가 이미 "지금은 고치는 중"을
+  말하고 있고, 칠해진 색이 누를 곳을 그대로 가리킨다.
+*/
 
 :root[data-post-highlight-mode="on"] .post-highlight {
   cursor: pointer;
-
-  outline: 1px dashed rgba(0, 0, 0, 0.15);
-
-  outline-offset: 1px;
 }
 
 
@@ -484,7 +557,15 @@
 
   padding: 16px;
 
-  border-radius: 16px;
+  /*
+    Imory의 판은 각지다 — radius 토큰은 2/4/6px뿐이고 알약은
+    칩·토스트처럼 "떠 있는 한 줄"에만 쓴다. 이 문서는 design
+    tokens를 읽지 않는 곳(studio/preview/preview-frame.html)에도
+    로드되므로 토큰에는 항상 같은 값의 fallback을 같이 적는다.
+  */
+
+  border-radius:
+    var(--imory-radius-300, 6px);
 
   background: #ffffff;
 
@@ -507,7 +588,8 @@
 
   padding: 6px 10px;
 
-  border-radius: 8px;
+  border-radius:
+    var(--imory-radius-200, 4px);
 
   background: #f6f2f3;
 
@@ -548,8 +630,12 @@
 
   padding: 10px 12px;
 
-  border: 1px solid #eeeeee;
-  border-radius: 10px;
+  border:
+    1px solid
+    var(--system-border, #eeeeee);
+
+  border-radius:
+    var(--imory-radius-200, 4px);
 
   background: #fcfcfc;
 
@@ -599,44 +685,115 @@
 }
 
 
+/*
+  취소/SAVE — core/components/button.css의 .imory-button 패턴
+  (각진 사각형 · 얇은 테두리 · 흰 배경 · 토큰 색)을 그대로 따른다.
+  그 파일을 여기서 읽지 않는 이유는 위 panel 주석과 같다: 이
+  스타일시트는 design tokens가 없는 Preview 문서에도 로드되므로,
+  var()마다 같은 값의 fallback을 적어 두 곳이 같은 모양으로 나오게
+  한다.
+
+  다른 점 하나 — 기본 .imory-button--primary는 평소 회색이고
+  hover에서만 핑크가 드러나지만, 이 둘은 손가락으로 쓰는 팝업 안에
+  나란히 서 있어 hover가 없다. 그래서 SAVE만 그 hover 상태를
+  평상시 모습으로 올려 둘을 구별한다(토큰 밖의 새 색은 쓰지 않는다).
+*/
+
 .post-memo-popup-cancel,
 .post-memo-popup-save {
   flex: 0 0 auto;
 
-  padding: 8px 16px;
+  box-sizing: border-box;
 
-  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 30px;
+
+  padding: 6px 14px;
+
+  border:
+    var(--imory-border-width, 1px)
+    solid
+    transparent;
+
+  border-radius:
+    var(--imory-radius-100, 2px);
 
   font-family: inherit;
   font-size: 12px;
-  font-weight: 600;
 
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+
+  white-space: nowrap;
 
   cursor: pointer;
+
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
 
   -webkit-tap-highlight-color:
     transparent;
 }
 
+
+/* secondary — 조용한 회색 */
+
 .post-memo-popup-cancel {
-  border: 1px solid #eeeeee;
+  border-color:
+    var(--system-border, #eeeeee);
 
-  background: #ffffff;
+  background:
+    var(--system-bg, #ffffff);
 
-  color: #999999;
+  color:
+    var(--system-text-muted, #999999);
 }
 
+.post-memo-popup-cancel:hover,
+.post-memo-popup-cancel:focus-visible {
+  border-color:
+    var(--system-border-strong, #dddddd);
+
+  background:
+    var(--system-surface, #fafafa);
+
+  color:
+    var(--system-text, #333333);
+
+  outline: none;
+}
+
+
+/* primary — accent 테두리/글씨 */
+
 .post-memo-popup-save {
-  border: 0;
+  border-color:
+    var(--system-accent-border, #e7c7d3);
 
-  background: #ee9fbd;
+  background:
+    var(--system-accent-soft, #fffafb);
 
-  color: #ffffff;
+  color:
+    var(--system-accent, #e39ab5);
+}
+
+.post-memo-popup-save:hover:not([disabled]),
+.post-memo-popup-save:focus-visible:not([disabled]) {
+  border-color:
+    var(--system-accent-hover, #c66f8e);
+
+  color:
+    var(--system-accent-hover, #c66f8e);
+
+  outline: none;
 }
 
 .post-memo-popup-save[disabled] {
-  background: #f3d3de;
+  opacity: 0.5;
 
   cursor: default;
 }
@@ -669,7 +826,23 @@
 
   border-radius: 999px;
 
-  background: rgba(51, 51, 51, 0.92);
+  /*
+    아이모리 핑크. 회색 판이던 것을 서비스 포인트 컬러로 바꾸고
+    한 단계 더 비치게 뒀다 — 토스트는 잠깐 떴다 사라지는 알림이라
+    아래 본문이 살짝 보이는 편이 덜 가린다.
+
+    ★ 값을 변수로 받는 이유: 나중에 Settings에서 admin background /
+    point color를 고르게 되면 이 판도 그 범위에 들어간다. 그때
+    :root에 --system-toast-bg 하나만 얹으면 되고, 이 파일은 고치지
+    않는다. (design tokens가 없는 Preview 문서에서도 같은 모양이
+    나오도록 fallback을 같이 적는다 — 위 팝업 주석 참고)
+  */
+
+  background:
+    var(
+      --system-toast-bg,
+      rgba(217, 128, 162, 0.85)
+    );
 
   font-family:
     "Pretendard",
@@ -695,8 +868,17 @@
     translateX(-50%) translateY(0);
 }
 
+/*
+  실패는 알림이 아니라 결과다 — 읽히지 않으면 안 되므로 여기만
+  진한 톤을 유지한다.
+*/
+
 .post-viewer-toast[data-tone="error"] {
-  background: rgba(169, 74, 102, 0.95);
+  background:
+    var(
+      --system-toast-error-bg,
+      rgba(169, 74, 102, 0.95)
+    );
 }
 
 /*

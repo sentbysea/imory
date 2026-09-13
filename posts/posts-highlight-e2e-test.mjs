@@ -17,6 +17,7 @@
      node posts/posts-highlight-e2e-test.mjs
      node posts/posts-highlight-e2e-test.mjs --browser=webkit
      node posts/posts-highlight-e2e-test.mjs --only=menu
+     node posts/posts-highlight-e2e-test.mjs --only=break
      node posts/posts-highlight-e2e-test.mjs --only=entry
      node posts/posts-highlight-e2e-test.mjs --only=state
      node posts/posts-highlight-e2e-test.mjs --keep-shots
@@ -25,6 +26,7 @@
      menu       글 뷰어 ⋮ 도구 메뉴
      highlight  하이라이팅 모드 · 저장 · 겹침
      memo       말풍선 · 메모 팝업
+     break      발췌문의 줄바꿈 · 말풍선 자리/모양 · 각진 판과 버튼 · 토스트 색
      memos      메모 카테고리 화면
      entry      메모 화면으로 가는 기본 진입점(플랫폼 칩)
      state      원문 위치 확인 3상태 · 조회 실패 처리
@@ -965,6 +967,230 @@ async function testMemo() {
 
 
 /* =========================================================
+   [break] 발췌문의 줄바꿈 · 말풍선 자리와 모양 · 판/버튼의 각
+
+   1) 두 문단에 걸쳐 고른 발췌문이 한 덩어리로 붙지 않는다 —
+      저장에도 팝업에도 카드에도 원래의 빈 줄이 남는다.
+   2) 줄바꿈이 평문에 들어오기 **전에** 저장된 발췌문(문단 사이가
+      비어 있다)도 그대로 찾아 칠한다.
+   3) 읽기 상태의 메모 말풍선은 누른 줄이 아니라 하이라이트 덩어리
+      전체 위에 서고, 꼬랑지가 그 덩어리를 가리키며, 판이 한 겹
+      비친다.
+   4) 팝업·판·버튼이 알약이 아니라 각진 모서리다.
+   5) 토스트가 아이모리 핑크다.
+========================================================== */
+
+async function testExcerptBreaks() {
+  console.log("\n[break] 줄바꿈 · 말풍선 · 각");
+
+  /* --- 1) 두 문단에 걸친 선택 --- */
+
+  const db = makeDb();
+
+  await withPage({ width: 1280, height: 900 }, { db, signedInAs: OWNER_ID }, async (page, { errors }) => {
+    await gotoPost(page);
+
+    await page.locator("#postToolsButton").click();
+    await page.locator(".imory-popover-item", { hasText: "하이라이팅 모드" }).click();
+    await page.waitForSelector(".post-highlight-mode-bar", { timeout: 5000 });
+
+    /* 평문 offset은 예전 모델(줄바꿈 없음) 기준이다 — 선택 자체는
+       DOM 범위이므로 그대로 두 문단을 건넌다. */
+    const sel = await selectRange(page, 9, 35);
+    check("[break] 두 문단에 걸쳐 고른다",
+      sel.ok && sel.selected.includes("두 번째") && sel.selected.includes("다음 문단의"),
+      JSON.stringify(sel.selected));
+
+    await pickFirstColor(page);
+
+    const saved = db.post_highlights[0];
+    check("[break] ★ 저장된 발췌문에 문단 사이 빈 줄이 남는다",
+      saved && saved.excerpt === "두 번째 문장입니다.\n\n다음 문단의 첫 문장입니다.",
+      JSON.stringify(saved?.excerpt));
+
+    check("[break] 문단을 건넌 만큼 조각도 여럿이다",
+      (await page.locator(".post-highlight").count()) >= 2,
+      `spans=${await page.locator(".post-highlight").count()}`);
+
+    /* 팝업의 발췌문도 같은 줄로 보인다 */
+
+    await page.locator(".post-highlight").first().click();
+    await page.waitForSelector(".imory-popover:not([hidden])", { timeout: 5000 });
+    await page.locator(".imory-popover-item", { hasText: "메모" }).first().click();
+    await page.waitForSelector(".post-memo-popup-field", { timeout: 5000 });
+
+    const popupExcerpt = await page.locator(".post-memo-popup-excerpt").textContent();
+    check("[break] ★ 메모 팝업의 발췌문에도 줄바꿈이 남는다",
+      (popupExcerpt || "").includes("문장입니다.\n\n다음 문단"),
+      JSON.stringify(popupExcerpt));
+
+    const excerptWhiteSpace = await page.evaluate(() =>
+      getComputedStyle(document.querySelector(".post-memo-popup-excerpt")).whiteSpace
+    );
+    check("[break] 그 줄바꿈이 실제로 그려진다(pre-wrap)",
+      excerptWhiteSpace.startsWith("pre"), excerptWhiteSpace);
+
+    /* --- 4) 각진 판 · 각진 버튼 --- */
+
+    const shape = await page.evaluate(() => {
+      const px = (el, prop) => parseFloat(getComputedStyle(el)[prop]);
+      const panel = document.querySelector(".post-memo-popup-panel");
+      const field = document.querySelector(".post-memo-popup-field");
+      const cancel = document.querySelector(".post-memo-popup-cancel");
+      const save = document.querySelector(".post-memo-popup-save");
+      return {
+        panel: px(panel, "borderTopLeftRadius"),
+        field: px(field, "borderTopLeftRadius"),
+        cancel: px(cancel, "borderTopLeftRadius"),
+        save: px(save, "borderTopLeftRadius"),
+        cancelH: cancel.getBoundingClientRect().height,
+        saveBg: getComputedStyle(save).backgroundColor,
+        saveBorder: getComputedStyle(save).borderTopColor
+      };
+    });
+
+    check("[break] ★ 팝업 모서리가 각졌다", shape.panel <= 6, `${shape.panel}px`);
+    check("[break] ★ textarea 모서리가 각졌다", shape.field <= 4, `${shape.field}px`);
+    check("[break] ★ 취소가 알약이 아니다",
+      shape.cancel <= 2 && shape.cancel < shape.cancelH / 2, `${shape.cancel}px`);
+    check("[break] ★ SAVE가 알약이 아니다", shape.save <= 2, `${shape.save}px`);
+    check("[break] SAVE는 토큰 버튼처럼 흰 판 + accent 테두리",
+      shape.saveBg.includes("255, 250, 251") && shape.saveBorder.includes("231, 199, 211"),
+      `${shape.saveBg} / ${shape.saveBorder}`);
+
+    await page.locator(".post-memo-popup-field").fill("덩어리 위에 뜨는 메모");
+    await page.locator(".post-memo-popup-save").click();
+    await page.waitForTimeout(600);
+
+    /* --- 3) 읽기 상태 말풍선 --- */
+
+    await page.locator(".post-highlight-mode-done").click();
+    await page.waitForTimeout(300);
+
+    /* 덩어리의 **마지막** 조각을 누른다 — 예전이라면 말풍선이
+       그 줄 바로 위, 즉 덩어리 한가운데에 떠서 원문을 덮었다. */
+    await page.locator(".post-highlight").last().click();
+    await page.waitForSelector(".imory-popover-note", { timeout: 5000 });
+
+    const placed = await page.evaluate(() => {
+      const pop = document.querySelector(".imory-popover");
+      const spans = Array.from(document.querySelectorAll(".post-highlight"));
+      const rects = spans.flatMap(s => Array.from(s.getClientRects()));
+      const blockTop = Math.min(...rects.map(r => r.top));
+      const blockBottom = Math.max(...rects.map(r => r.bottom));
+      const box = pop.getBoundingClientRect();
+      const tail = getComputedStyle(pop, "::after");
+      return {
+        popBottom: box.bottom,
+        blockTop,
+        blockBottom,
+        placement: pop.getAttribute("data-placement"),
+        arrowX: getComputedStyle(pop).getPropertyValue("--imory-popover-arrow-x").trim(),
+        tailWidth: tail.borderLeftWidth,
+        tailColor: tail.borderTopColor,
+        bg: getComputedStyle(pop).backgroundColor
+      };
+    });
+
+    check("[break] ★ 말풍선이 덩어리 전체 위에 선다(마지막 줄을 눌러도)",
+      placed.popBottom <= placed.blockTop + 1,
+      `pop.bottom=${placed.popBottom.toFixed(0)} block.top=${placed.blockTop.toFixed(0)} block.bottom=${placed.blockBottom.toFixed(0)}`);
+
+    check("[break] 덩어리를 가리키는 꼬랑지가 있다",
+      placed.placement === "top" &&
+      parseFloat(placed.tailWidth) > 0 &&
+      /rgba?\(255, 255, 255/.test(placed.tailColor),
+      `${placed.placement} / ${placed.tailWidth} / ${placed.tailColor}`);
+
+    check("[break] 꼬랑지 자리를 팝오버가 재어 넘긴다",
+      /^\d/.test(placed.arrowX), placed.arrowX || "(없음)");
+
+    check("[break] ★ 판이 한 겹 비친다(불투명 흰색이 아니다)",
+      /rgba\(255, 255, 255, 0\.\d+\)/.test(placed.bg), placed.bg);
+
+    check("[break] 하이라이트에 점선 밑줄이 없다",
+      await page.evaluate(() => {
+        const s = document.querySelector(".post-highlight[data-post-highlight-note]");
+        const css = getComputedStyle(s);
+        return css.borderBottomStyle === "none" &&
+          css.borderTopLeftRadius === "0px" &&
+          css.outlineStyle !== "dashed";
+      }));
+
+    check("[break] 콘솔 오류 없음", errors.length === 0, errors.join(" | "));
+    await shot(page, "break");
+  });
+
+  /* --- 2) 줄바꿈 이전에 저장된 발췌문 --- */
+
+  const legacy = makeDb();
+  legacy.post_highlights.push({
+    id: "hl-legacy", post_id: 101, user_id: OWNER_ID, color: "#cfe0f0",
+    /* 문단 사이가 붙어 있는 옛 발췌문/문맥/위치 */
+    excerpt: "두 번째 문장입니다.다음 문단의 첫 문장입니다.",
+    prefix: "첫 문장입니다. ", suffix: " 반복되는 문장입니다.",
+    text_start: 9, note: "옛 메모",
+    created_at: "2026-09-05T01:00:00Z", updated_at: "2026-09-05T01:00:00Z"
+  });
+
+  await withPage({ width: 1280, height: 900 }, { db: legacy, signedInAs: OWNER_ID }, async (page, { errors }) => {
+    await gotoPost(page);
+    await page.waitForSelector(".post-highlight", { timeout: 10000 });
+
+    const painted = await page.evaluate(() =>
+      Array.from(document.querySelectorAll(".post-highlight"))
+        .map(s => s.textContent).join("|")
+    );
+
+    check("[break] ★ 옛 발췌문도 그대로 찾아 칠한다",
+      painted.includes("두 번째 문장입니다.") && painted.includes("다음 문단의 첫 문장입니다."),
+      painted);
+
+    check("[break] 옛 발췌문이 그 뒤 문장까지 먹지 않는다",
+      !painted.includes("반복되는"), painted);
+
+    check("[break] 옛 발췌문의 메모도 읽힌다", await (async () => {
+      await page.locator(".post-highlight").first().click();
+      await page.waitForSelector(".imory-popover-note", { timeout: 5000 });
+      return (await page.locator(".imory-popover-note").textContent() || "").includes("옛 메모");
+    })());
+
+    check("[break] 콘솔 오류 없음", errors.length === 0, errors.join(" | "));
+  });
+
+  /* --- 5) 토스트 색 --- */
+
+  await withPage({ width: 390, height: 844 }, { db: makeDb(), signedInAs: OWNER_ID }, async (page) => {
+    await gotoPost(page);
+
+    await page.locator("#postToolsButton").click();
+    await page.waitForSelector(".imory-popover:not([hidden])", { timeout: 5000 });
+    await page.locator(".imory-popover-item", { hasText: "글 링크 복사" }).click();
+    await page.waitForSelector(".post-viewer-toast.is-visible", { timeout: 5000 });
+
+    const toast = await page.evaluate(() => {
+      const el = document.querySelector(".post-viewer-toast");
+      return {
+        text: el.textContent,
+        bg: getComputedStyle(el).backgroundColor
+      };
+    });
+
+    const rgba = /rgba?\((\d+), (\d+), (\d+)(?:, ([\d.]+))?\)/.exec(toast.bg) || [];
+    const [, r, g, b, a] = rgba.map(Number);
+
+    check("[break] ★ 토스트가 아이모리 핑크다",
+      r > g && r > b && b > g, toast.bg);
+
+    check("[break] ★ 예전(0.92)보다 한 겹 더 비친다",
+      Number.isFinite(a) && a < 0.92, String(a));
+
+    check("[break] 문구는 그대로", (toast.text || "").includes("링크를 복사"), toast.text);
+  });
+}
+
+
+/* =========================================================
    [memos] 메모 카테고리
 ========================================================== */
 
@@ -1515,6 +1741,7 @@ async function testPlacementState() {
     if (wants("menu")) await testToolsMenu();
     if (wants("highlight")) await testHighlighting();
     if (wants("memo")) await testMemo();
+    if (wants("break")) await testExcerptBreaks();
     if (wants("memos")) await testMemoScreen();
     if (wants("entry")) await testMemoEntry();
     if (wants("state")) await testPlacementState();

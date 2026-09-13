@@ -26,7 +26,15 @@
    기준은 요소가 아니라 **사각형을 돌려주는 함수**로 받는다. 여러 줄에
    걸친 하이라이트에서 "누른 줄"을 기준으로 삼으려면 요소 하나의
    getBoundingClientRect로는 부족하기 때문이다(그 값은 여러 줄 전체를
-   감싼 사각형이다).
+   감싼 사각형이다). 반대로 여러 <span>에 흩어진 하이라이트 **덩어리
+   전체**를 기준으로 삼는 쪽도 같은 이유로 함수를 쓴다
+   (posts-view-highlight-mode.js의 resolvePostHighlightBlockAnchor).
+
+   ★ 꼬랑지
+
+   판이 화면 안으로 당겨지면 기준의 가운데와 판의 가운데가 어긋난다.
+   그 차이를 매번 재어 --imory-popover-arrow-x(판의 왼쪽 끝에서의 거리)로
+   넘긴다 — 말풍선을 그리는 쪽만 쓴다(메뉴 판에는 꼬랑지가 없다).
 
    ★ 키보드
 
@@ -59,6 +67,12 @@ const IMORY_POPOVER_EDGE_GAP =
 
 const IMORY_POPOVER_ANCHOR_GAP =
   8;
+
+
+/* 말풍선 꼬랑지를 판의 모서리에서 떼어 놓을 최소 거리 */
+
+const IMORY_POPOVER_ARROW_INSET =
+  16;
 
 
 function ensureImoryPopover() {
@@ -463,6 +477,34 @@ function positionImoryPopover() {
     above >= IMORY_POPOVER_EDGE_GAP
       ? "top"
       : "bottom"
+  );
+
+
+  /*
+    꼬랑지가 가리킬 자리 — 판의 왼쪽 끝에서 몇 px인가.
+
+    판은 화면 안으로 당겨지므로 기준의 가운데와 판의 가운데가 늘
+    같지는 않다. 그 차이를 여기서 계산해 CSS 변수 하나로 넘긴다
+    (말풍선을 그리는 쪽만 쓴다 — 메뉴 판은 꼬랑지가 없다).
+    양 끝에서는 모서리를 파고들지 않게 안으로 묶는다.
+  */
+
+  const arrowX =
+    Math.min(
+      Math.max(
+        rect.left + rect.width / 2 - left,
+        IMORY_POPOVER_ARROW_INSET
+      ),
+      Math.max(
+        IMORY_POPOVER_ARROW_INSET,
+        own.width - IMORY_POPOVER_ARROW_INSET
+      )
+    );
+
+
+  imoryPopoverRoot.style.setProperty(
+    "--imory-popover-arrow-x",
+    `${Math.round(arrowX)}px`
   );
 
 }

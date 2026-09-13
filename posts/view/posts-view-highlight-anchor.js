@@ -92,12 +92,92 @@ const POST_HIGHLIGHT_ID_ATTR =
   "data-post-highlight-id";
 
 
+/*
+  줄이 바뀌는 자리 — 평문에 "\n"을 넣을 요소들.
+
+  이 에디터는 Enter를 눌러도 <p>를 만들지 않고 <br>만 만든다. 문단
+  경계(<br><br>)는 그릴 때 간격 span 하나로 바뀌므로, 그 둘을 모두
+  봐야 사람이 본 줄바꿈이 발췌문에도 그대로 남는다
+  (posts/style/posts-body-layout.js의 applyPostParagraphSpacing).
+  옛 글에만 있는 <div>/<p> 문단과 복사 상자·구분선 같은 블록도
+  같은 규칙으로 한 줄 띄운다.
+*/
+
+const POST_HIGHLIGHT_PARAGRAPH_GAP_CLASS =
+  "post-body-paragraph-gap";
+
+const POST_HIGHLIGHT_BLOCK_TAGS =
+  new Set([
+    "ADDRESS", "ARTICLE", "ASIDE", "BLOCKQUOTE", "DD", "DIV", "DL", "DT",
+    "FIGCAPTION", "FIGURE", "FOOTER", "H1", "H2", "H3", "H4", "H5", "H6",
+    "HEADER", "HR", "LI", "MAIN", "NAV", "OL", "P", "PRE", "SECTION",
+    "TABLE", "TD", "TH", "TR", "UL"
+  ]);
+
+
+/*
+  이 요소가 만드는 줄바꿈. 0이면 줄이 바뀌지 않는다
+  (<em>·<strong>·형광펜 같은 인라인 서식).
+
+  lines  실제로 사용자가 친 줄바꿈 — 쌓인다(빈 줄 세 개는 세 줄).
+  block  요소 경계 — 쌓이지 않는다(<div><p>가 두 줄이 되면 안 된다).
+*/
+
+function postHighlightBreakOf(
+  element
+) {
+
+  if (element.nodeName === "BR") {
+
+    return {
+      lines: 1,
+      block: false
+    };
+
+  }
+
+
+  if (
+    element.classList &&
+    element.classList.contains(
+      POST_HIGHLIGHT_PARAGRAPH_GAP_CLASS
+    )
+  ) {
+
+    return {
+      lines: 2,
+      block: false
+    };
+
+  }
+
+
+  return {
+    lines: 0,
+
+    block:
+      POST_HIGHLIGHT_BLOCK_TAGS.has(
+        element.nodeName
+      )
+  };
+
+}
+
+
 
 /* =========================================================
    평문 색인
 
    { text, entries } — entries는 [{ node, start, end }] (end 제외).
    start/end는 text 안의 문자 위치다.
+
+   ★ 줄바꿈은 평문에도 들어간다
+
+   화면에서 줄이 바뀌는 자리(<br>, 문단 간격 span, 블록 요소)에는
+   "\n"을 넣는다 — 그렇지 않으면 두 문단에 걸쳐 고른 발췌문이 메모
+   카드와 팝업에서 한 덩어리로 붙어 나온다. 이 "\n"은 어떤 텍스트
+   노드에도 속하지 않으므로 breaks에 그 위치를 따로 적어 둔다
+   (아래 legacy 대응이 그 수를 빼서 옛 offset을 복원한다).
 ========================================================== */
 
 function buildPostHighlightTextIndex(
@@ -105,6 +185,9 @@ function buildPostHighlightTextIndex(
 ) {
 
   const entries =
+    [];
+
+  const breaks =
     [];
 
 
@@ -119,7 +202,8 @@ function buildPostHighlightTextIndex(
 
     return {
       text,
-      entries
+      entries,
+      breaks
     };
 
   }
@@ -128,14 +212,27 @@ function buildPostHighlightTextIndex(
   const walker =
     document.createTreeWalker(
       root,
-      NodeFilter.SHOW_TEXT,
+      NodeFilter.SHOW_TEXT |
+        NodeFilter.SHOW_ELEMENT,
       {
         acceptNode(node) {
 
           /*
             플랫폼이 끼워 넣은 UI 안의 글자는 본문이 아니다.
-            closest는 Element에만 있으므로 부모에서 본다.
+            요소에 대한 FILTER_REJECT는 그 안쪽까지 통째로
+            건너뛴다.
           */
+
+          if (node.nodeType === Node.ELEMENT_NODE) {
+
+            return node.matches(
+              POST_HIGHLIGHT_SKIP_SELECTOR
+            )
+              ? NodeFilter.FILTER_REJECT
+              : NodeFilter.FILTER_ACCEPT;
+
+          }
+
 
           const parent =
             node.parentElement;
@@ -171,11 +268,80 @@ function buildPostHighlightTextIndex(
     walker.nextNode();
 
 
+  /*
+    "다음 글자 앞에서 몇 줄을 띄울지"만 들고 다닌다 — 글자가 더
+    나오지 않으면 버린다. 그래서 본문 끝의 <br>이 발췌문 뒤에
+    빈 줄을 남기지 않는다.
+  */
+
+  let pendingLines =
+    0;
+
+  let pendingBlock =
+    false;
+
+
   while (node) {
+
+    if (node.nodeType === Node.ELEMENT_NODE) {
+
+      const breakOf =
+        postHighlightBreakOf(node);
+
+
+      pendingLines +=
+        breakOf.lines;
+
+
+      pendingBlock =
+        pendingBlock ||
+        breakOf.block;
+
+
+      node =
+        walker.nextNode();
+
+
+      continue;
+
+    }
+
 
     const value =
       node.nodeValue ||
       "";
+
+
+    const pendingBreaks =
+      Math.max(
+        pendingLines,
+        pendingBlock
+          ? 1
+          : 0
+      );
+
+
+    if (
+      pendingBreaks > 0 &&
+      text.length > 0
+    ) {
+
+      for (let i = 0; i < pendingBreaks; i += 1) {
+
+        breaks.push(text.length);
+
+        text += "\n";
+
+      }
+
+    }
+
+
+    pendingLines =
+      0;
+
+    pendingBlock =
+      false;
 
 
     entries.push({
@@ -200,8 +366,41 @@ function buildPostHighlightTextIndex(
 
   return {
     text,
-    entries
+    entries,
+    breaks
   };
+
+}
+
+
+/* 위치 앞에 끼워 넣은 "\n"이 몇 개인가 (legacy offset 복원용) */
+
+function postHighlightBreaksBefore(
+  index,
+  position
+) {
+
+  const breaks =
+    index.breaks ||
+    [];
+
+
+  let count =
+    0;
+
+
+  for (const at of breaks) {
+
+    if (at < position) {
+
+      count += 1;
+
+    }
+
+  }
+
+
+  return count;
 
 }
 
@@ -548,15 +747,19 @@ function findPostHighlightRange(
   index
 ) {
 
-  const resolved =
-    findPostHighlightTextStart(
-      index ||
-        buildPostHighlightTextIndex(root),
+  const resolvedIndex =
+    index ||
+    buildPostHighlightTextIndex(root);
+
+
+  const span =
+    findPostHighlightSpan(
+      resolvedIndex,
       anchor
     );
 
 
-  if (resolved === null) {
+  if (!span) {
 
     return null;
 
@@ -564,10 +767,9 @@ function findPostHighlightRange(
 
 
   return postHighlightRangeAt(
-    index ||
-      buildPostHighlightTextIndex(root),
-    resolved,
-    resolved + anchor.excerpt.length
+    resolvedIndex,
+    span.start,
+    span.end
   );
 
 }
@@ -578,6 +780,33 @@ function findPostHighlightRange(
 */
 
 function findPostHighlightTextStart(
+  index,
+  anchor
+) {
+
+  const span =
+    findPostHighlightSpan(
+      index,
+      anchor
+    );
+
+
+  return span
+    ? span.start
+    : null;
+
+}
+
+
+/*
+  findPostHighlightSpan(index, anchor) -> { start, end } | null
+
+  end를 함께 돌려주는 이유: 줄바꿈이 평문에 들어오기 전에 저장된
+  발췌문은 지금 본문보다 짧다(문단 사이의 "\n"이 빠져 있다). 그런
+  발췌문을 찾아 주더라도 start + excerpt.length는 실제 끝이 아니다.
+*/
+
+function findPostHighlightSpan(
   index,
   anchor
 ) {
@@ -597,24 +826,39 @@ function findPostHighlightTextStart(
     index.text;
 
 
-  const candidates =
-    [];
+  let candidates =
+    postHighlightExactMatches(
+      text,
+      anchor.excerpt
+    );
 
 
-  let at =
-    text.indexOf(anchor.excerpt);
+  let legacy =
+    false;
 
 
-  while (at !== -1) {
+  /*
+    ★ 줄바꿈이 들어오기 전에 저장된 발췌문
 
-    candidates.push(at);
+    그때는 문단 경계가 평문에 아무 흔적도 남기지 않았으므로, 지금
+    본문의 "\n"을 건너뛰면서 맞춰 본다. 저장된 발췌문에 이미
+    줄바꿈이 있으면 최신 규칙으로 저장된 것이니 그냥 못 찾은 것이다.
+  */
 
+  if (
+    !candidates.length &&
+    anchor.excerpt.indexOf("\n") === -1
+  ) {
 
-    at =
-      text.indexOf(
-        anchor.excerpt,
-        at + 1
+    candidates =
+      postHighlightLenientMatches(
+        text,
+        anchor.excerpt
       );
+
+
+    legacy =
+      candidates.length > 0;
 
   }
 
@@ -633,12 +877,13 @@ function findPostHighlightTextStart(
 
   const contextual =
     candidates.filter(
-      (start) =>
+      (span) =>
         postHighlightContextMatches(
           text,
-          start,
-          start + anchor.excerpt.length,
-          anchor
+          span.start,
+          span.end,
+          anchor,
+          legacy
         )
     );
 
@@ -659,12 +904,19 @@ function findPostHighlightTextStart(
   /*
     여럿 남았으면 저장된 위치와 정확히 같은 것만 인정한다. 그것도
     없으면 연결하지 않는다 — 임의의 하나를 고르지 않는다.
+
+    legacy 발췌문의 textStart는 "\n"을 세지 않은 값이므로, 그 앞에
+    끼워 넣은 "\n" 수를 빼고 비교한다.
   */
 
   const exact =
     pool.find(
-      (start) =>
-        start === anchor.textStart
+      (span) =>
+        (
+          legacy
+            ? span.start - postHighlightBreaksBefore(index, span.start)
+            : span.start
+        ) === anchor.textStart
     );
 
 
@@ -675,11 +927,131 @@ function findPostHighlightTextStart(
 }
 
 
+function postHighlightExactMatches(
+  text,
+  excerpt
+) {
+
+  const found =
+    [];
+
+
+  let at =
+    text.indexOf(excerpt);
+
+
+  while (at !== -1) {
+
+    found.push({
+      start: at,
+
+      end:
+        at + excerpt.length
+    });
+
+
+    at =
+      text.indexOf(
+        excerpt,
+        at + 1
+      );
+
+  }
+
+
+  return found;
+
+}
+
+
+/*
+  본문 쪽의 "\n"만 건너뛰면서 발췌문을 맞춘다. 발췌문에는 "\n"이
+  없다는 것이 호출 조건이다.
+*/
+
+function postHighlightLenientMatches(
+  text,
+  excerpt
+) {
+
+  const found =
+    [];
+
+
+  const first =
+    excerpt.charAt(0);
+
+
+  for (let start = 0; start < text.length; start += 1) {
+
+    if (text.charAt(start) !== first) {
+
+      continue;
+
+    }
+
+
+    let cursor =
+      start;
+
+    let i =
+      0;
+
+
+    while (
+      i < excerpt.length &&
+      cursor < text.length
+    ) {
+
+      if (text.charAt(cursor) === "\n") {
+
+        cursor += 1;
+
+
+        continue;
+
+      }
+
+
+      if (text.charAt(cursor) !== excerpt.charAt(i)) {
+
+        break;
+
+      }
+
+
+      cursor += 1;
+
+      i += 1;
+
+    }
+
+
+    if (i === excerpt.length) {
+
+      found.push({
+        start,
+
+        end:
+          cursor
+      });
+
+    }
+
+  }
+
+
+  return found;
+
+}
+
+
 function postHighlightContextMatches(
   text,
   start,
   end,
-  anchor
+  anchor,
+  legacy = false
 ) {
 
   const prefix =
@@ -687,6 +1059,52 @@ function postHighlightContextMatches(
 
   const suffix =
     String(anchor.suffix || "");
+
+
+  /*
+    legacy 문맥에도 "\n"이 없다 — 본문 쪽에서 "\n"을 걷어낸 뒤
+    저장된 길이만큼 잘라 비교한다.
+  */
+
+  if (legacy) {
+
+    if (prefix) {
+
+      const before =
+        text
+          .slice(0, start)
+          .replace(/\n/g, "");
+
+
+      if (before.slice(-prefix.length) !== prefix) {
+
+        return false;
+
+      }
+
+    }
+
+
+    if (suffix) {
+
+      const after =
+        text
+          .slice(end)
+          .replace(/\n/g, "");
+
+
+      if (after.slice(0, suffix.length) !== suffix) {
+
+        return false;
+
+      }
+
+    }
+
+
+    return true;
+
+  }
 
 
   if (prefix) {
@@ -859,14 +1277,14 @@ function applyPostHighlights(
 
   for (const item of list) {
 
-    const start =
-      findPostHighlightTextStart(
+    const span =
+      findPostHighlightSpan(
         index,
         item
       );
 
 
-    if (start === null) {
+    if (!span) {
 
       continue;
 
@@ -876,10 +1294,11 @@ function applyPostHighlights(
     resolved.push({
       item,
 
-      start,
+      start:
+        span.start,
 
       end:
-        start + item.excerpt.length
+        span.end
     });
 
   }
