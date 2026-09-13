@@ -369,6 +369,12 @@ function makeDb(overrides = {}) {
 
     post_covers: overrides.post_covers || [],
 
+    /*
+      지금의 대표 사진은 본문에 넣은 사진 한 장이다(COVER 업로드 칸은
+      없어졌다). post_covers 는 그 칸이 있던 시절의 행만 남아 있다.
+    */
+    post_gallery_images: overrides.post_gallery_images || [],
+
     post_contents: overrides.post_contents || [
       { post_id: 14, content: "<p>무대 뒤에서 기다리는 동안 들리는 소리들.</p>" }
     ],
@@ -723,13 +729,13 @@ function serverRestQuery(table, params) {
     );
   }
 
-  if (table === "post_covers") {
+  if (table === "post_covers" || table === "post_gallery_images") {
     const publicIds = new Set(
       (db.posts || []).filter(p => p.visibility === "public").map(p => String(p.id))
     );
     return queryTable(
-      { post_covers: (db.post_covers || []).filter(r => publicIds.has(String(r.post_id))) },
-      "post_covers",
+      { [table]: (db[table] || []).filter(r => publicIds.has(String(r.post_id))) },
+      table,
       params
     );
   }
@@ -2501,6 +2507,140 @@ async function runImage() {
     (render.html.match(/--share-card-bg-position:[^;"]*/) || [])[0]
   );
 
+  /* ---- 지금의 대표 사진: 본문에 넣은 사진 ---- */
+
+  /*
+    실제로 나온 버그(2026-09-13). COVER 업로드 칸이 없어진 뒤로 글의
+    대표 사진은 post_gallery_images 의 is_primary 한 장인데, 카드는
+    예전 post_covers 만 보고 있었다. 그래서 새 글은 하나도 빠짐없이
+    기본 사진(그마저 없으면 서비스 기본 그라데이션)으로 나갔다.
+
+    우선순위는 갤러리 카드와 같다:
+      명시 대표 → 본문 첫 사진 → 예전 post_covers → 기본 카드 사진
+  */
+
+  const PRIMARY_IMAGE_ID = "4cdaeb8d-1957-4015-9b8d-c466aabb75a8";
+  const FIRST_IMAGE_ID = "21c413db-fb81-4c98-bd7d-9fb2a5cd3757";
+  const LATER_IMAGE_ID = "c73a1e8a-aac8-4535-a219-b7605c7770c6";
+
+  const bodyPhotoSettings = [{
+    user_id: OWNER_ID,
+    key: "share_card",
+    value: JSON.stringify({
+      image_url: "https://example.test/card.png",
+      overlay_color: "#000000",
+      overlay_strength: 55,
+      version: "1757800000000"
+    })
+  }];
+
+  serverFixture.db = makeDb({
+    post_covers: [],
+    post_gallery_images: [
+      { id: FIRST_IMAGE_ID, post_id: 14, position: 0, is_primary: false },
+      { id: LATER_IMAGE_ID, post_id: 14, position: 1, is_primary: false },
+      { id: PRIMARY_IMAGE_ID, post_id: 14, position: 2, is_primary: true }
+    ],
+    settings: bodyPhotoSettings
+  });
+
+  serverFixture.renders = [];
+
+  await requestOgImage("?post=14&v=body1");
+
+  check(
+    "[image] ★ 본문 사진 중 '대표'로 지정한 한 장이 카드 배경이 된다",
+    serverFixture.renders[0].html.includes(
+      `/api/post-cover?image=${PRIMARY_IMAGE_ID}`
+    ) &&
+    !serverFixture.renders[0].html.includes("https://example.test/card.png"),
+    (serverFixture.renders[0].html.match(/background-image:url\([^)]*\)/) || [])[0]
+  );
+
+  check(
+    "[image] ★ 그 주소도 프록시다(버킷 주소·서명 URL 이 아니다)",
+    !serverFixture.renders[0].html.includes("storage/v1/object") &&
+    !serverFixture.renders[0].html.includes("token=")
+  );
+
+  /* 대표 지정이 없으면 본문 첫 사진 */
+
+  serverFixture.db.post_gallery_images = [
+    { id: LATER_IMAGE_ID, post_id: 14, position: 1, is_primary: false },
+    { id: FIRST_IMAGE_ID, post_id: 14, position: 0, is_primary: false }
+  ];
+
+  serverFixture.renders = [];
+
+  await requestOgImage("?post=14&v=body2");
+
+  check(
+    "[image] ★ 대표 지정이 없으면 본문 첫 사진(position)이 배경이 된다",
+    serverFixture.renders[0].html.includes(
+      `/api/post-cover?image=${FIRST_IMAGE_ID}`
+    ),
+    (serverFixture.renders[0].html.match(/background-image:url\([^)]*\)/) || [])[0]
+  );
+
+  /* 본문 사진이 예전 post_covers 를 이긴다 */
+
+  serverFixture.db.post_covers = [{ post_id: 14, mime_type: "image/png" }];
+  serverFixture.renders = [];
+
+  await requestOgImage("?post=14&v=body3");
+
+  check(
+    "[image] ★ 본문 사진이 있으면 예전 COVER 업로드보다 먼저 쓴다",
+    serverFixture.renders[0].html.includes(
+      `/api/post-cover?image=${FIRST_IMAGE_ID}`
+    ) &&
+    !serverFixture.renders[0].html.includes("/api/post-cover?post=14")
+  );
+
+  /* 본문 사진이 하나도 없으면 예전 경로 그대로 */
+
+  serverFixture.db.post_gallery_images = [];
+  serverFixture.renders = [];
+
+  await requestOgImage("?post=14&v=body4");
+
+  check(
+    "[image] ★ 본문 사진이 없으면 예전 COVER 업로드로 내려간다",
+    serverFixture.renders[0].html.includes("/api/post-cover?post=14")
+  );
+
+  /* 대표를 바꾸면 카드 주소의 v 가 달라진다(크롤러가 다시 받아간다) */
+
+  serverFixture.db.post_covers = [];
+  serverFixture.db.post_gallery_images = [
+    { id: FIRST_IMAGE_ID, post_id: 14, position: 0, is_primary: true },
+    { id: PRIMARY_IMAGE_ID, post_id: 14, position: 1, is_primary: false }
+  ];
+
+  const firstVersion = metaOf(
+    (await requestPage(`/${OWNER_SLUG}/post/14`)).html,
+    "og:image"
+  );
+
+  serverFixture.db.post_gallery_images = [
+    { id: FIRST_IMAGE_ID, post_id: 14, position: 0, is_primary: false },
+    { id: PRIMARY_IMAGE_ID, post_id: 14, position: 1, is_primary: true }
+  ];
+
+  const secondVersion = metaOf(
+    (await requestPage(`/${OWNER_SLUG}/post/14`)).html,
+    "og:image"
+  );
+
+  check(
+    "[image] ★ 대표 사진을 바꾸면 og:image 의 v 가 달라진다",
+    Boolean(firstVersion) &&
+    Boolean(secondVersion) &&
+    firstVersion !== secondVersion,
+    `${firstVersion} → ${secondVersion}`
+  );
+
+
   /* ---- 사용자가 적은 카드 라벨이 자동 라벨을 이긴다 ---- */
 
   serverFixture.db = makeDb({
@@ -2578,12 +2718,21 @@ async function runImage() {
       visibility: "secret", content_type: "post",
       created_at: "2026-09-10T00:00:00Z", updated_at: "2026-09-11T00:00:00Z"
     }],
-    post_covers: [{ post_id: 14, mime_type: "image/png" }]
+    post_covers: [{ post_id: 14, mime_type: "image/png" }],
+    post_gallery_images: [
+      { id: PRIMARY_IMAGE_ID, post_id: 14, position: 0, is_primary: true }
+    ]
   });
 
   serverFixture.renders = [];
 
   const secret = await requestOgImage("?post=14&v=abc123");
+
+  check(
+    "[image] ★ 비밀글의 본문 사진 id 는 어디에도 나가지 않는다",
+    !secret.bytes.includes(PRIMARY_IMAGE_ID) &&
+    serverFixture.renders.length === 0
+  );
 
   check(
     "[image] ★ 비밀글은 카드를 그리지 않는다(렌더러를 아예 부르지 않는다)",

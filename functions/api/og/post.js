@@ -354,7 +354,8 @@ export function shareCardExcerpt(
      sequence      컨테이너 안의 공개 순번(posts.share_label_seq)
      label         우상단 라벨(사용자 지정 > 자동)
      excerpt       공개 글일 때만 본문 발췌
-     hasCover      공개 글의 대표 이미지(post_covers) 유무
+     hasCover      공개 글의 예전 COVER 업로드(post_covers) 유무
+     coverImageId  공개 글의 대표 사진(본문 사진 중 한 장) id
      updatedAt     버전 계산용
      postId        문자열 id
 ========================================================== */
@@ -402,6 +403,69 @@ export async function loadShareCardSettings(
 }
 
 
+/* =========================================================
+   본문 사진 중 대표 한 장
+
+   순서는 갤러리 카드와 같다 — 명시 대표(is_primary) 한 장,
+   없으면 본문 첫 사진(position → id). position 은 같은 값이
+   겹칠 수 있으므로 id 로 한 번 더 가른다: 같은 글은 언제 물어도
+   같은 사진을 골라야 카드 주소의 버전이 흔들리지 않는다.
+
+   PostgREST 의 order 를 그대로 믿지 않고 여기서 다시 정렬한다
+   (질의가 실패하면 [] 이 오고, 그때는 예전 post_covers 로 내려간다).
+========================================================== */
+
+const SHARE_CARD_IMAGE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+
+export function pickShareCardCoverImageId(
+  rows
+) {
+
+  const images =
+    (rows || [])
+      .filter(
+        (row) =>
+          row &&
+          typeof row.id === "string" &&
+          SHARE_CARD_IMAGE_ID_PATTERN.test(row.id)
+      )
+      .sort((a, b) => {
+
+        const left =
+          Number.isFinite(Number(a.position))
+            ? Number(a.position)
+            : Number.MAX_SAFE_INTEGER;
+
+        const right =
+          Number.isFinite(Number(b.position))
+            ? Number(b.position)
+            : Number.MAX_SAFE_INTEGER;
+
+
+        if (left !== right) {
+
+          return left - right;
+
+        }
+
+
+        return a.id < b.id ? -1 : (a.id > b.id ? 1 : 0);
+
+      });
+
+
+  const chosen =
+    images.find((image) => image.is_primary === true) ||
+    images[0];
+
+
+  return (chosen && chosen.id) || "";
+
+}
+
+
 export async function loadShareCardPost(
   env,
   slug,
@@ -422,6 +486,7 @@ export async function loadShareCardPost(
       label: "",
       excerpt: "",
       hasCover: false,
+      coverImageId: "",
       updatedAt: "",
       postId: postId || ""
     };
@@ -530,7 +595,7 @@ export async function loadShareCardPost(
   }
 
 
-  const [categoryRows, folderRows, coverRows, contentRows] =
+  const [categoryRows, folderRows, coverRows, photoRows, contentRows] =
     await Promise.all([
 
       post.category_id
@@ -550,6 +615,25 @@ export async function loadShareCardPost(
       ogSupabaseSelect(
         env,
         `post_covers?post_id=eq.${encodeURIComponent(postId)}&select=post_id&limit=1`
+      ),
+
+      /*
+        ★ 지금의 대표 사진은 여기에 있다 — 본문에 넣은 사진 중 한 장.
+
+        COVER 업로드 칸이 없어진 뒤로 post_covers 에는 새 행이
+        생기지 않는다(posts/editor/posts-cover-image.js). 갤러리
+        카드가 쓰는 것과 같은 순서로 고른다:
+        명시 대표(is_primary) → 본문 첫 사진 → 예전 post_covers
+        (skin/skin-context.js 의 buildSkinGalleryCards).
+
+        anon 에게 GRANT 된 컬럼만 고른다(id · post_id · position ·
+        is_primary). 행 자체는 RLS 가 공개 글일 때만 준다.
+      */
+
+      ogSupabaseSelect(
+        env,
+        `post_gallery_images?post_id=eq.${encodeURIComponent(postId)}` +
+        `&select=id,position,is_primary&order=position.asc&limit=200`
       ),
 
       ogSupabaseSelect(
@@ -605,6 +689,9 @@ export async function loadShareCardPost(
 
     hasCover:
       Boolean(coverRows[0]),
+
+    coverImageId:
+      pickShareCardCoverImageId(photoRows),
 
     updatedAt:
       String(post.updated_at || "")
@@ -671,20 +758,30 @@ async function loadShareCardSequence(
 /* =========================================================
    배경 사진 우선순위
 
-     1) 글 대표 이미지(post_covers) — 공개 글일 때만
+     1) 글의 대표 사진 — 공개 글일 때만
+        1-1) 본문 사진 중 대표(post_gallery_images) ← 지금 경로
+        1-2) 예전 COVER 업로드(post_covers)
      2) 카드 설정의 기본 공유 카드 사진
      3) 없음 → share-card.js 의 서비스 기본 그라데이션
 
    1) 은 비공개 버킷에 있어서 공개 주소가 없다. 헤드리스 브라우저도
    다른 방문자와 똑같이 **기존 프록시**로 받는다
-   (/api/post-cover?post=<id> — 그 프록시가 요청 시점의 공개 상태를
-   다시 본다). 버킷 주소나 서명 URL 을 새로 만들지 않는다.
+   (/api/post-cover?image=<사진 id> · ?post=<글 id> — 그 프록시가
+   요청 시점의 공개 상태를 다시 본다). 버킷 주소나 서명 URL 을
+   새로 만들지 않는다.
 ========================================================== */
 
 export function shareCardBackgroundUrl(
   context,
   origin
 ) {
+
+  if (context.ok && context.coverImageId) {
+
+    return `${origin}/api/post-cover?image=${encodeURIComponent(context.coverImageId)}`;
+
+  }
+
 
   if (context.ok && context.hasCover) {
 
@@ -722,7 +819,14 @@ export function shareCardImageEndpoint(
       context.card.version,
       context.card.imageUrl,
       context.updatedAt,
-      context.hasCover ? "1" : "0",
+
+      /*
+        대표 사진이 바뀌면 카드도 달라진다 — 어느 사진인지까지
+        섞는다. 본문 글자를 건드리지 않고 대표만 바꾼 경우
+        posts.updated_at 만으로는 구분되지 않는다.
+      */
+
+      context.coverImageId || (context.hasCover ? "1" : "0"),
 
       /*
         라벨은 글 밖에서도 바뀐다 — 카테고리/폴더 이름을 고치면
