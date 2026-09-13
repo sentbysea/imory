@@ -1,7 +1,7 @@
 /* =========================================================
-   SKIN MEMO ENTRY — 메모 화면으로 가는 기본 진입점 (HIGHLIGHT-1 후속)
+   SKIN HIGHLIGHT ENTRY — 하이라이트 화면으로 가는 기본 진입점
 
-   메모 카테고리(/:slug/memos)는 스킨이 navigation.memos를 그려야만
+   하이라이트 화면(/:slug/highlights)은 스킨이 navigation.highlights를 그려야만
    닿을 수 있었다. 기존 스킨들은 그 링크를 갖고 있지 않으므로 주소를
    직접 치지 않으면 자기 메모를 볼 수 없었다
    (IMORY_HIGHLIGHT1_DESIGN.md §11-2).
@@ -12,12 +12,12 @@
    ── 세 가지 규칙 ───────────────────────────────────────
    1) 스킨이 이미 메모 링크를 그렸으면 얹지 않는다. 판정 근거는
       스킨 이름도 클래스도 아니고 **주소**뿐이다 — 렌더된 DOM 안의
-      <a href>가 그 사이트의 /memos 경로를 가리키는가
+      <a href>가 그 사이트의 /highlights 경로를 가리키는가
       (skin/skin-owner-entry.js가 EDIT/WRITE를 알아보는 방법과 같다).
    2) 사용자가 껐으면 얹지 않는다. Settings > HOME > ETC의
-      "메모 진입점 숨기기"(site_settings.hide_memo_entry)가 그 스위치이고,
-      Context에는 navigation.memos.enabled로 온다.
-   3) 메모 화면 자신에서는 얹지 않는다(자기 자신으로 가는 링크).
+      "하이라이트 진입점 숨기기"(site_settings.hide_memo_entry)가 그 스위치이고,
+      Context에는 navigation.highlights.enabled로 온다.
+   3) 하이라이트 화면 자신에서는 얹지 않는다(자기 자신으로 가는 링크).
 
    ── 왜 스킨 DOM 안이 아니라 떠 있는 칩인가 ──────────────
    스킨마다 내비게이션의 모양도 자리도 다르다. 남의 <nav> 안에
@@ -45,33 +45,33 @@
 
 /* 플랫폼이 얹은 칩임을 나타내는 유일한 표식 */
 
-const PLATFORM_MEMO_ENTRY_ID =
-  "imoryPlatformMemoEntry";
+const PLATFORM_HIGHLIGHT_ENTRY_ID =
+  "imoryPlatformHighlightEntry";
 
 
-let platformMemoEntryNode =
+let platformHighlightEntryNode =
   null;
 
 
 /* =========================================================
-   skinHasMemosLink(root, memosHref) -> boolean
+   skinHasHighlightsLink(root, highlightsHref) -> boolean
 
-   렌더된 스킨 DOM이 이미 메모 화면으로 가는 링크를 갖고 있는가.
+   렌더된 스킨 DOM이 이미 하이라이트 화면으로 가는 링크를 갖고 있는가.
 
    root는 아직 화면에 붙이기 전의 detached 엘리먼트도 된다 —
    anchor.getAttribute가 아니라 anchor.href(절대 URL)를 읽으므로
    문서 base 기준으로 해석된다(skin/skin-owner-entry.js와 같은 이유).
 ========================================================== */
 
-function skinHasMemosLink(
+function skinHasHighlightsLink(
   root,
-  memosHref
+  highlightsHref
 ) {
 
   if (
     !root ||
     typeof root.querySelectorAll !== "function" ||
-    !memosHref
+    !highlightsHref
   ) {
 
     return false;
@@ -85,7 +85,7 @@ function skinHasMemosLink(
 
     wanted =
       new URL(
-        memosHref,
+        highlightsHref,
         window.location.href
       );
 
@@ -147,8 +147,8 @@ function skinHasMemosLink(
 
 
     /*
-      /memos 자신과 그 아래(폴더별 보기, 폴더 하나)까지 인정한다 —
-      스킨이 "메모 · 폴더별"만 그렸어도 진입점은 이미 있는 것이다.
+      /highlights 자신과 그 아래(폴더별 보기, 폴더 하나)까지 인정한다 —
+      스킨이 "하이라이트 · 폴더별"만 그렸어도 진입점은 이미 있는 것이다.
     */
 
     if (
@@ -169,20 +169,20 @@ function skinHasMemosLink(
 
 
 /* =========================================================
-   refreshPlatformMemoEntry(options)
+   refreshPlatformHighlightEntry(options)
 
-     href       메모 화면 주소(navigation.memos.href). 없으면 내린다.
-     enabled    navigation.memos.enabled — 사용자가 끈 경우 false
+     href       하이라이트 화면 주소(navigation.highlights.href). 없으면 내린다.
+     enabled    navigation.highlights.enabled — 사용자가 끈 경우 false
      skinRoot   이번 화면에 렌더된 스킨 루트(있으면 중복 판정에 쓴다)
-     isMemosScreen  지금 화면이 메모 화면인가
-     label      칩에 쓸 글자(기본 "MEMO")
+     isHighlightsScreen  지금 화면이 하이라이트 화면인가
+     label      칩에 쓸 글자(기본 "HIGHLIGHTS")
      document   Preview iframe에서 부를 때 그 문서
 
    화면이 바뀔 때마다 부른다. 조건이 맞으면 하나만 만들고, 맞지
    않으면 지운다 — 같은 칩이 두 개 생기는 경로가 없다.
 ========================================================== */
 
-function refreshPlatformMemoEntry(
+function refreshPlatformHighlightEntry(
   options = {}
 ) {
 
@@ -193,7 +193,7 @@ function refreshPlatformMemoEntry(
 
   const existing =
     doc.getElementById(
-      PLATFORM_MEMO_ENTRY_ID
+      PLATFORM_HIGHLIGHT_ENTRY_ID
     );
 
 
@@ -207,8 +207,8 @@ function refreshPlatformMemoEntry(
   const shouldShow =
     Boolean(href) &&
     options.enabled !== false &&
-    options.isMemosScreen !== true &&
-    !skinHasMemosLink(
+    options.isHighlightsScreen !== true &&
+    !skinHasHighlightsLink(
       options.skinRoot,
       href
     );
@@ -223,9 +223,9 @@ function refreshPlatformMemoEntry(
     }
 
 
-    if (platformMemoEntryNode === existing) {
+    if (platformHighlightEntryNode === existing) {
 
-      platformMemoEntryNode =
+      platformHighlightEntryNode =
         null;
 
     }
@@ -242,11 +242,11 @@ function refreshPlatformMemoEntry(
 
 
   anchor.id =
-    PLATFORM_MEMO_ENTRY_ID;
+    PLATFORM_HIGHLIGHT_ENTRY_ID;
 
 
   anchor.className =
-    "platform-memo-entry";
+    "platform-highlight-entry";
 
 
   /*
@@ -257,7 +257,7 @@ function refreshPlatformMemoEntry(
 
   anchor.setAttribute(
     "data-imory-platform-nav",
-    "memos"
+    "highlights"
   );
 
 
@@ -269,12 +269,12 @@ function refreshPlatformMemoEntry(
 
   anchor.textContent =
     options.label ||
-    "MEMO";
+    "HIGHLIGHTS";
 
 
   anchor.setAttribute(
     "aria-label",
-    "메모 모아보기"
+    "하이라이트 모아보기"
   );
 
 
@@ -285,7 +285,7 @@ function refreshPlatformMemoEntry(
   }
 
 
-  platformMemoEntryNode =
+  platformHighlightEntryNode =
     anchor;
 
 
@@ -302,7 +302,7 @@ function hidePlatformMemoEntry(
   targetDocument
 ) {
 
-  return refreshPlatformMemoEntry({
+  return refreshPlatformHighlightEntry({
     href: "",
 
     document:
@@ -467,17 +467,17 @@ function fetchPlatformMemoEntrySetting() {
 
 
 /* =========================================================
-   syncPlatformMemoEntryForScreen(options)
+   syncPlatformHighlightEntryForScreen(options)
 
      skinRoot       이번 화면에 렌더된 스킨 루트(중복 판정용)
-     isMemosScreen  메모 화면 자신인가
+     isHighlightsScreen  하이라이트 화면 자신인가
      active         false면 조건과 무관하게 내린다
 
    각 화면이 "이 화면을 그렸다"를 확정한 직후 부른다. await하지
    않아도 된다 — 늦게 끝나도 그때의 화면 상태를 다시 확인한다.
 ========================================================== */
 
-async function syncPlatformMemoEntryForScreen(
+async function syncPlatformHighlightEntryForScreen(
   options = {}
 ) {
 
@@ -502,7 +502,7 @@ async function syncPlatformMemoEntryForScreen(
   }
 
 
-  return refreshPlatformMemoEntry({
+  return refreshPlatformHighlightEntry({
     href:
       buildSiteMemosPath(setting.slug),
 
@@ -513,8 +513,8 @@ async function syncPlatformMemoEntryForScreen(
       options.skinRoot ||
       null,
 
-    isMemosScreen:
-      options.isMemosScreen === true
+    isHighlightsScreen:
+      options.isHighlightsScreen === true
   });
 
 }

@@ -39,8 +39,8 @@
    의존(classic script, 먼저 로드돼야 함):
    posts-view-popover.js · posts-view-highlight-anchor.js ·
    posts-view-highlight-store.js · posts/editor/posts-color-picker.js ·
-   posts/view/posts-view-memo-card-tools.js(openPostMemoPopup ·
-   closePostMemoPopup · showPostViewerToast).
+   posts/view/posts-view-highlight-card-tools.js(openPostHighlightNotePopup ·
+   closePostHighlightNotePopup · showPostViewerToast).
 ========================================================== */
 
 
@@ -241,7 +241,7 @@ async function renderPostHighlights(
   }
 
 
-  /* 메모 카드에서 "원문 보기"로 들어왔으면 그 자리까지 데려간다 */
+  /* 하이라이트 카드에서 "원문 보기"로 들어왔으면 그 자리까지 데려간다 */
 
   focusRequestedPostHighlight();
 
@@ -272,7 +272,7 @@ function teardownPostHighlightScreen() {
   });
 
 
-  closePostMemoPopup({
+  closePostHighlightNotePopup({
     silent: true
   });
 
@@ -895,7 +895,7 @@ async function commitPostHighlight(
   showPostViewerToast(
     result.status === "recolored"
       ? "색을 바꿨습니다"
-      : "메모 카드를 만들었습니다",
+      : "하이라이트 카드를 만들었습니다",
     "ok"
   );
 
@@ -933,7 +933,7 @@ function repaintPostHighlights() {
 
 
 /* =========================================================
-   메모 카드 → 원문의 그 자리 (요구사항 6)
+   하이라이트 카드 → 원문의 그 자리 (요구사항 6)
 
    주소에는 발췌문도 메모도 싣지 않는다. 카드를 누를 때 "이 카드로
    간다"만 이 세션에 적어 두고(sessionStorage), 도착한 글이 그 카드를
@@ -1390,7 +1390,7 @@ function openPostHighlightBubble(
             {
               label:
                 item.note
-                  ? "메모 수정"
+                  ? "노트 수정"
                   : "메모",
 
               onSelect:
@@ -1414,7 +1414,7 @@ function openPostHighlightBubble(
               */
               hint:
                 item.note
-                  ? "메모도 함께"
+                  ? "노트도 함께"
                   : "",
 
               onSelect:
@@ -1464,7 +1464,7 @@ async function confirmDeletePostHighlight(
 
   const message =
     item.note
-      ? "이 하이라이트와 메모 카드를 함께 지웁니다. 계속할까요?"
+      ? "이 하이라이트와 노트를 함께 지웁니다. 계속할까요?"
       : "이 하이라이트를 지웁니다. 계속할까요?";
 
 
@@ -1521,9 +1521,9 @@ async function confirmDeletePostHighlight(
 /* =========================================================
    메모 작성 팝업은 여기 없다
 
-   openPostMemoPopup() / closePostMemoPopup() 은
-   posts/view/posts-view-memo-card-tools.js 로 옮겼다. 그 UI를
-   메모 카테고리 화면과 **Studio Preview**도 그대로 써야 하는데,
+   openPostHighlightNotePopup() / closePostHighlightNotePopup() 은
+   posts/view/posts-view-highlight-card-tools.js 로 옮겼다. 그 UI를
+   하이라이트 화면과 **Studio Preview**도 그대로 써야 하는데,
    이 파일은 저장소·앵커 계산·모드 상태에 묶여 있어 Preview 문서에
    실을 수 없기 때문이다.
 
@@ -1533,7 +1533,7 @@ async function confirmDeletePostHighlight(
 
 /*
   글 뷰어(말풍선)에서 여는 메모 팝업. 저장은 소유자 전용 RPC 하나로
-  하고, 성공하면 본문의 그 표시에 "메모 있음" 상태를 다시 찍는다.
+  하고, 성공하면 본문의 그 표시에 "노트 있음" 상태를 다시 찍는다.
 */
 
 function openOwnPostMemoPopup(
@@ -1541,7 +1541,7 @@ function openOwnPostMemoPopup(
   options = {}
 ) {
 
-  openPostMemoPopup(
+  openPostHighlightNotePopup(
     item,
     {
       onSaved:
@@ -1561,7 +1561,7 @@ function openOwnPostMemoPopup(
           if (!result.ok) {
 
             console.error(
-              "[post-highlights] 메모 저장 실패:",
+              "[post-highlights] 노트 저장 실패:",
               result.error
             );
 

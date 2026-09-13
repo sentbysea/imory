@@ -1,13 +1,13 @@
 /* =========================================================
-   SETTINGS — 메모 폴더 차례 (꾹 눌러 끌기)
+   SETTINGS — 하이라이트 폴더 차례 (꾹 눌러 끌기)
 
-   메모 화면(/memos?view=folders)에 폴더가 놓이는 순서를 정한다.
+   하이라이트 화면(/memos?view=folders)에 폴더가 놓이는 순서를 정한다.
    여기서 폴더 = 원본 글의 카테고리이고, 움직이는 배열은 메모 전용
-   (memoFolderOrder)이라 카테고리 목록의 순서(categories.sort_order)는
+   (highlightFolderOrder)이라 카테고리 목록의 순서(categories.sort_order)는
    한 글자도 바뀌지 않는다(IMORY_HIGHLIGHT1_DESIGN.md §7-1).
 
    기준 문서: IMORY_HIGHLIGHT1_DESIGN.md §7-1
-   저장: admin/settings/admin-settings-memo-folders.js (같은 SAVE)
+   저장: admin/settings/admin-settings-highlight-folders.js (같은 SAVE)
 
    ── 왜 폴더 트리의 drag 코드를 재사용하지 않는가 ─────────
    posts/manage/posts-folder-sortable.js는 SortableJS 인스턴스를
@@ -35,60 +35,60 @@
 
    ── 키보드 ──────────────────────────────────────────────
    ↑↓ 버튼을 함께 둔다. 끌기를 쓸 수 없는 사람(키보드/보조기기)에게
-   같은 일을 할 방법이 있어야 한다 — 두 조작 모두 같은 moveMemoFolder()
+   같은 일을 할 방법이 있어야 한다 — 두 조작 모두 같은 moveHighlightFolder()
    한 곳을 부른다.
 
-   classic script. admin-settings-memo-folders.js **뒤**에,
-   admin-settings-save.js **앞**에 로드된다(memoFolderOrder /
-   memoFolderTableAvailable / moveMemoFolder를 쓴다).
+   classic script. admin-settings-highlight-folders.js **뒤**에,
+   admin-settings-save.js **앞**에 로드된다(highlightFolderOrder /
+   highlightFolderTableAvailable / moveHighlightFolder를 쓴다).
 ========================================================== */
 
 
-const memoFolderOrderPanel =
+const highlightFolderOrderPanel =
   document.getElementById(
-    "memoFolderOrderPanel"
+    "highlightFolderOrderPanel"
   );
 
 
 /* 터치에서 끌기로 인정하기까지 눌러야 하는 시간 */
 
-const MEMO_FOLDER_DRAG_HOLD_MS =
+const HIGHLIGHT_FOLDER_DRAG_HOLD_MS =
   400;
 
 
 /* 그 시간 안에 이만큼 움직이면 스크롤로 본다 */
 
-const MEMO_FOLDER_DRAG_SLOP_PX =
+const HIGHLIGHT_FOLDER_DRAG_SLOP_PX =
   6;
 
 
-let memoFolderDragSession =
+let highlightFolderDragSession =
   null;
 
 
 /* =========================================================
-   renderMemoFolderOrderList(categories, onChanged)
+   renderHighlightFolderOrderList(categories, onChanged)
 
    renderCategories()가 목록을 다시 그릴 때마다 부른다.
    대상이 없으면 패널을 감춘다 — 빈 상자를 남기지 않는다.
 ========================================================== */
 
-function renderMemoFolderOrderList(
+function renderHighlightFolderOrderList(
   categories,
   onChanged
 ) {
 
-  if (!memoFolderOrderPanel) {
+  if (!highlightFolderOrderPanel) {
 
     return;
 
   }
 
 
-  cancelMemoFolderDrag();
+  cancelHighlightFolderDrag();
 
 
-  memoFolderOrderPanel.innerHTML =
+  highlightFolderOrderPanel.innerHTML =
     "";
 
 
@@ -98,7 +98,9 @@ function renderMemoFolderOrderList(
         .filter(
           (category) =>
             category.id &&
-            category.type !== "banner"
+            /* HIGHLIGHT-2: 폴더 = 글이 들어갈 수 있는 카테고리다.
+               배너에도, HIGHLIGHT 카테고리 자신에도 글이 없다. */
+            isPostBearingCategoryType(category.type)
         )
         .map(
           (category) =>
@@ -112,9 +114,9 @@ function renderMemoFolderOrderList(
 
   const ids =
     (
-      typeof memoFolderOrder !== "undefined" &&
-      Array.isArray(memoFolderOrder)
-        ? memoFolderOrder
+      typeof highlightFolderOrder !== "undefined" &&
+      Array.isArray(highlightFolderOrder)
+        ? highlightFolderOrder
         : []
     ).filter(
       (id) =>
@@ -123,8 +125,8 @@ function renderMemoFolderOrderList(
 
 
   const available =
-    typeof memoFolderTableAvailable === "undefined" ||
-    memoFolderTableAvailable !== false;
+    typeof highlightFolderTableAvailable === "undefined" ||
+    highlightFolderTableAvailable !== false;
 
 
   if (
@@ -136,7 +138,7 @@ function renderMemoFolderOrderList(
       migration 이전 배포이거나 폴더가 하나뿐이면 정할 차례가 없다.
     */
 
-    memoFolderOrderPanel.hidden =
+    highlightFolderOrderPanel.hidden =
       true;
 
 
@@ -145,7 +147,7 @@ function renderMemoFolderOrderList(
   }
 
 
-  memoFolderOrderPanel.hidden =
+  highlightFolderOrderPanel.hidden =
     false;
 
 
@@ -154,14 +156,14 @@ function renderMemoFolderOrderList(
 
 
   title.className =
-    "memo-folder-order-title";
+    "highlight-folder-order-title";
 
 
   title.textContent =
-    "메모 폴더 차례";
+    "하이라이트 폴더 차례";
 
 
-  memoFolderOrderPanel.appendChild(title);
+  highlightFolderOrderPanel.appendChild(title);
 
 
   const hint =
@@ -169,14 +171,14 @@ function renderMemoFolderOrderList(
 
 
   hint.className =
-    "memo-folder-order-hint";
+    "highlight-folder-order-hint";
 
 
   hint.textContent =
-    "메모 화면에서 폴더가 놓이는 순서입니다. 손잡이를 끌어(모바일은 꾹 눌러 끌어) 바꾸거나 ↑↓를 쓰세요. 카테고리 목록의 순서는 바뀌지 않습니다.";
+    "하이라이트 화면에서 폴더가 놓이는 순서입니다. 손잡이를 끌어(모바일은 꾹 눌러 끌어) 바꾸거나 ↑↓를 쓰세요. 카테고리 목록의 순서는 바뀌지 않습니다.";
 
 
-  memoFolderOrderPanel.appendChild(hint);
+  highlightFolderOrderPanel.appendChild(hint);
 
 
   const list =
@@ -184,7 +186,7 @@ function renderMemoFolderOrderList(
 
 
   list.className =
-    "memo-folder-order-list";
+    "highlight-folder-order-list";
 
 
   list.setAttribute(
@@ -197,7 +199,7 @@ function renderMemoFolderOrderList(
     (id, index) => {
 
       list.appendChild(
-        buildMemoFolderOrderItem(
+        buildHighlightFolderOrderItem(
           Number(id),
           nameById.get(Number(id)) || "(이름 없음)",
           index,
@@ -210,12 +212,12 @@ function renderMemoFolderOrderList(
   );
 
 
-  memoFolderOrderPanel.appendChild(list);
+  highlightFolderOrderPanel.appendChild(list);
 
 }
 
 
-function buildMemoFolderOrderItem(
+function buildHighlightFolderOrderItem(
   id,
   name,
   index,
@@ -228,7 +230,7 @@ function buildMemoFolderOrderItem(
 
 
   item.className =
-    "memo-folder-order-item";
+    "highlight-folder-order-item";
 
 
   item.setAttribute(
@@ -252,7 +254,7 @@ function buildMemoFolderOrderItem(
 
 
   handle.className =
-    "memo-folder-order-handle";
+    "highlight-folder-order-handle";
 
 
   handle.textContent =
@@ -280,7 +282,7 @@ function buildMemoFolderOrderItem(
     "pointerdown",
     (event) => {
 
-      beginMemoFolderDrag(
+      beginHighlightFolderDrag(
         event,
         item,
         onChanged
@@ -298,7 +300,7 @@ function buildMemoFolderOrderItem(
 
 
   label.className =
-    "memo-folder-order-name";
+    "highlight-folder-order-name";
 
 
   label.textContent =
@@ -313,7 +315,7 @@ function buildMemoFolderOrderItem(
 
 
   actions.className =
-    "memo-folder-order-actions";
+    "highlight-folder-order-actions";
 
 
   [
@@ -353,7 +355,7 @@ function buildMemoFolderOrderItem(
         "click",
         () => {
 
-          moveMemoFolder(
+          moveHighlightFolder(
             index,
             spec.delta
           );
@@ -390,7 +392,7 @@ function buildMemoFolderOrderItem(
    남지 않는다.
 ========================================================== */
 
-function beginMemoFolderDrag(
+function beginHighlightFolderDrag(
   event,
   item,
   onChanged
@@ -406,7 +408,7 @@ function beginMemoFolderDrag(
   }
 
 
-  cancelMemoFolderDrag();
+  cancelHighlightFolderDrag();
 
 
   const list =
@@ -425,7 +427,7 @@ function beginMemoFolderDrag(
     event.pointerType === "pen";
 
 
-  memoFolderDragSession =
+  highlightFolderDragSession =
     {
       pointerId:
         event.pointerId,
@@ -460,17 +462,17 @@ function beginMemoFolderDrag(
 
 
   const session =
-    memoFolderDragSession;
+    highlightFolderDragSession;
 
 
   session.moveHandler =
     (moveEvent) =>
-      handleMemoFolderDragMove(moveEvent);
+      handleHighlightFolderDragMove(moveEvent);
 
 
   session.endHandler =
     (endEvent) =>
-      finishMemoFolderDrag(endEvent);
+      finishHighlightFolderDrag(endEvent);
 
 
   window.addEventListener(
@@ -495,7 +497,7 @@ function beginMemoFolderDrag(
 
   if (session.armed) {
 
-    armMemoFolderDrag();
+    armHighlightFolderDrag();
 
   }
 
@@ -505,10 +507,10 @@ function beginMemoFolderDrag(
       window.setTimeout(
         () => {
 
-          armMemoFolderDrag();
+          armHighlightFolderDrag();
 
         },
-        MEMO_FOLDER_DRAG_HOLD_MS
+        HIGHLIGHT_FOLDER_DRAG_HOLD_MS
       );
 
   }
@@ -516,10 +518,10 @@ function beginMemoFolderDrag(
 }
 
 
-function armMemoFolderDrag() {
+function armHighlightFolderDrag() {
 
   const session =
-    memoFolderDragSession;
+    highlightFolderDragSession;
 
 
   if (
@@ -568,12 +570,12 @@ function armMemoFolderDrag() {
 }
 
 
-function handleMemoFolderDragMove(
+function handleHighlightFolderDragMove(
   event
 ) {
 
   const session =
-    memoFolderDragSession;
+    highlightFolderDragSession;
 
 
   if (
@@ -596,10 +598,10 @@ function handleMemoFolderDragMove(
 
     if (
       Math.abs(event.clientY - session.startY) >
-      MEMO_FOLDER_DRAG_SLOP_PX
+      HIGHLIGHT_FOLDER_DRAG_SLOP_PX
     ) {
 
-      cancelMemoFolderDrag();
+      cancelHighlightFolderDrag();
 
     }
 
@@ -669,12 +671,12 @@ function handleMemoFolderDragMove(
 }
 
 
-function finishMemoFolderDrag(
+function finishHighlightFolderDrag(
   event
 ) {
 
   const session =
-    memoFolderDragSession;
+    highlightFolderDragSession;
 
 
   if (
@@ -708,7 +710,7 @@ function finishMemoFolderDrag(
     session.onChanged;
 
 
-  cancelMemoFolderDrag();
+  cancelHighlightFolderDrag();
 
 
   if (
@@ -723,7 +725,7 @@ function finishMemoFolderDrag(
   }
 
 
-  moveMemoFolderTo(
+  moveHighlightFolderTo(
     from,
     to
   );
@@ -734,10 +736,10 @@ function finishMemoFolderDrag(
 }
 
 
-function cancelMemoFolderDrag() {
+function cancelHighlightFolderDrag() {
 
   const session =
-    memoFolderDragSession;
+    highlightFolderDragSession;
 
 
   if (!session) {
@@ -747,7 +749,7 @@ function cancelMemoFolderDrag() {
   }
 
 
-  memoFolderDragSession =
+  highlightFolderDragSession =
     null;
 
 
@@ -813,20 +815,20 @@ function cancelMemoFolderDrag() {
 
 
 /*
-  한 칸씩이 아니라 목적지까지 한 번에 옮긴다. moveMemoFolder()는
+  한 칸씩이 아니라 목적지까지 한 번에 옮긴다. moveHighlightFolder()는
   인접한 두 칸을 맞바꾸는 함수라 여러 칸을 건너뛰면 사이의 차례가
   뒤섞인다 — 끌어서 놓는 조작에서는 "뽑아서 그 자리에 끼운다"가
   맞다(카테고리 ↑↓ 와 다른 점은 이것 하나뿐이다).
 */
 
-function moveMemoFolderTo(
+function moveHighlightFolderTo(
   from,
   to
 ) {
 
   if (
-    typeof memoFolderOrder === "undefined" ||
-    !Array.isArray(memoFolderOrder)
+    typeof highlightFolderOrder === "undefined" ||
+    !Array.isArray(highlightFolderOrder)
   ) {
 
     return;
@@ -836,9 +838,9 @@ function moveMemoFolderTo(
 
   if (
     from < 0 ||
-    from >= memoFolderOrder.length ||
+    from >= highlightFolderOrder.length ||
     to < 0 ||
-    to >= memoFolderOrder.length
+    to >= highlightFolderOrder.length
   ) {
 
     return;
@@ -847,13 +849,13 @@ function moveMemoFolderTo(
 
 
   const [moved] =
-    memoFolderOrder.splice(
+    highlightFolderOrder.splice(
       from,
       1
     );
 
 
-  memoFolderOrder.splice(
+  highlightFolderOrder.splice(
     to,
     0,
     moved

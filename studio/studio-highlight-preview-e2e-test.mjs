@@ -1,11 +1,11 @@
 /* =========================================================
-   STUDIO PREVIEW — 메모 카드 도구 E2E (HIGHLIGHT-1 후속)
+   STUDIO PREVIEW — 하이라이트 카드 도구 E2E (HIGHLIGHT-1 후속)
 
    기준 문서: IMORY_HIGHLIGHT1_DESIGN.md §11-6 (해소)
 
    무엇을 보는가
    -------------
-   Preview의 메모 화면에서 카드의 ⋮ 가 **자리만 차지하지 않는가**.
+   Preview의 하이라이트 화면에서 카드의 ⋮ 가 **자리만 차지하지 않는가**.
    메뉴가 열리고, 메모 팝업이 뜨고, 그 조작이 실제 데이터에는 닿지
    않으며, 주인장/방문자 차이를 눈으로 볼 수 있는가.
 
@@ -14,8 +14,8 @@
    studio/preview/preview-frame.html은 독립된 문서다(iframe으로 쓰이지만
    그 자체로 완결된 browsing context). Studio 전체를 띄우지 않고 이
    문서 하나만 열어 실제 "preview:render" 메시지를 보내면, 검사 대상
-   (preview-bridge.js + preview-memo-tools.js + 공개 화면과 **같은**
-   posts-view-memo-card-tools.js)이 production과 정확히 같은 구성으로
+   (preview-bridge.js + preview-highlight-tools.js + 공개 화면과 **같은**
+   posts-view-highlight-card-tools.js)이 production과 정확히 같은 구성으로
    돈다. 부모는 자기 자신이다 — bridge의 origin/source 검증
    (event.source === window.parent)이 그대로 통과한다.
 
@@ -25,8 +25,8 @@
    판정한다.
 
    실행
-     node studio/studio-memo-preview-e2e-test.mjs
-     node studio/studio-memo-preview-e2e-test.mjs --browser=webkit
+     node studio/studio-highlight-preview-e2e-test.mjs
+     node studio/studio-highlight-preview-e2e-test.mjs --browser=webkit
 ========================================================== */
 
 import fs from "node:fs";
@@ -190,33 +190,48 @@ function startServer() {
 
 
 /* =========================================================
-   fixture — 스킨 제작자가 쓸 법한 메모 template 하나
+   fixture — 스킨 제작자가 쓸 법한 하이라이트 template
 
-   memo-tools region을 repeat 안에 둔다. 그 자리가 카드마다 하나씩
-   생기고, 렌더러가 카드 id를 키로 찍는다.
+   HIGHLIGHT-2 부터 공식 이름은 highlights.cards / highlight-tools 다.
+   HIGHLIGHT-1 이 쓰던 memos.cards / memo-tools 도 **그대로 동작해야**
+   하므로 두 벌을 모두 만들어 같은 검사를 돌린다 — 그 스킨을 다시
+   저장하지 않아도 주인장이 자기 카드를 고칠 수 있어야 한다.
+
+   region 은 repeat 안에 둔다. 그 자리가 카드마다 하나씩 생기고,
+   렌더러가 카드 id를 키로 찍는다.
 ========================================================== */
 
-const MEMOS_TEMPLATE = {
-  html:
-    '<section class="memo-screen">' +
-    '<div class="memo-card-list">' +
-    '<article class="memo-card" data-imory-repeat="memos.cards">' +
-    '<blockquote class="memo-card-excerpt" data-imory-bind="item.excerpt"></blockquote>' +
-    '<p class="memo-card-note" data-imory-if="item.hasNote" data-imory-bind="item.note"></p>' +
-    '<span data-imory-region="memo-tools"></span>' +
-    '</article>' +
-    '</div>' +
-    '</section>',
-  css: ".memo-card { padding: 8px; }"
-};
+function makeHighlightsTemplate(namespace, regionName) {
+  return {
+    html:
+      '<section class="highlight-screen">' +
+      '<div class="highlight-card-list">' +
+      `<article class="highlight-card" data-imory-repeat="${namespace}.cards">` +
+      '<blockquote class="highlight-card-excerpt" data-imory-bind="item.excerpt"></blockquote>' +
+      '<p class="highlight-card-note" data-imory-if="item.hasNote" data-imory-bind="item.note"></p>' +
+      `<span data-imory-region="${regionName}"></span>` +
+      '</article>' +
+      '</div>' +
+      '</section>',
+    css: ".highlight-card { padding: 8px; }"
+  };
+}
 
-function makeMemosContext(overrides = {}) {
+const MEMOS_TEMPLATE =
+  makeHighlightsTemplate("highlights", "highlight-tools");
+
+const LEGACY_MEMOS_TEMPLATE =
+  makeHighlightsTemplate("memos", "memo-tools");
+
+function makeHighlightsContextRaw(overrides = {}) {
   return {
     page: {
-      type: "memos",
+      type: "highlights",
       isHome: false,
       isCategory: false,
       isPost: false,
+      /* 공개 Context 와 같은 모양: 공식 이름 + 레거시 alias */
+      isHighlights: true,
       isMemos: true
     },
     site: { title: "PREVIEW E2E", language: "ko" },
@@ -224,12 +239,19 @@ function makeMemosContext(overrides = {}) {
     navigation: {
       home: { name: "PREVIEW E2E", href: "/preview/", enabled: true },
       categories: [],
-      memos: { name: "MEMO", href: "/preview/memos", enabled: true }
+      highlights: { name: "HIGHLIGHTS", href: "/preview/highlights", enabled: true },
+      memos: { name: "HIGHLIGHTS", href: "/preview/highlights", enabled: true }
     },
     banners: { items: [] },
     images: {},
     viewer: { isOwner: true },
-    memos: {
+
+    /*
+      공개 Context 와 같은 모양: 같은 객체를 highlights(공식) 와
+      memos(레거시 alias) 두 이름으로 내보낸다. 아래 return 에서 둘을
+      같은 참조로 묶는다.
+    */
+    highlights: {
       cards: [
         {
           id: "card-1",
@@ -272,6 +294,19 @@ function makeMemosContext(overrides = {}) {
       ...overrides
     }
   };
+}
+
+
+/*
+  highlights 와 memos 를 **같은 객체**로 묶는다 — 공개 Context 가
+  그렇게 주고(skin/skin-context.js), 그래야 레거시 바인딩을 쓴 스킨이
+  미리보기에서도 공개 화면과 같은 값을 본다.
+*/
+
+function makeHighlightsContext(overrides = {}) {
+  const context = makeHighlightsContextRaw(overrides);
+  context.memos = context.highlights;
+  return context;
 }
 
 
@@ -340,12 +375,12 @@ async function openPreview(browser, opts = {}) {
 
   await page.evaluate(
     ([skin, context]) => window.__render(skin, context),
-    [MEMOS_TEMPLATE, opts.context || makeMemosContext()]
+    [opts.template || MEMOS_TEMPLATE, opts.context || makeHighlightsContext()]
   );
 
   const frame = page.frameLocator("#previewFrame");
 
-  await frame.locator(".memo-card").first().waitFor({ timeout: 20000 });
+  await frame.locator(".highlight-card").first().waitFor({ timeout: 20000 });
   await page.waitForTimeout(400);
 
   return { ctx, page, frame, supabaseCalls, errors };
@@ -357,34 +392,34 @@ async function openPreview(browser, opts = {}) {
 ========================================================== */
 
 async function runTools(browser) {
-  console.log("\n[preview] 메모 카드 ⋮");
+  console.log("\n[preview] 하이라이트 카드 ⋮");
 
   const { ctx, page, frame, supabaseCalls, errors } = await openPreview(browser);
 
-  const menus = await frame.locator(".memo-card-menu").count();
+  const menus = await frame.locator(".highlight-card-menu").count();
   check("[preview] 카드마다 ⋮ 가 놓인다", menus === 2, `n=${menus}`);
 
   /* 자리만 차지하지 않는다 — 눌리고 메뉴가 뜬다 */
 
-  await frame.locator(".memo-card-menu").first().click();
+  await frame.locator(".highlight-card-menu").first().click();
   await frame.locator(".imory-popover").first().waitFor({ timeout: 5000 });
 
   const items = await frame.locator(".imory-popover-item-label").allTextContents();
   check("[preview] ★ 눌러서 메뉴가 열린다(메모 있는 카드)",
-    items.includes("메모 수정") &&
-    items.includes("메모 삭제") &&
+    items.includes("노트 수정") &&
+    items.includes("노트 삭제") &&
     items.includes("하이라이트 삭제"),
     items.join(" | "));
 
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
 
-  await frame.locator(".memo-card-menu").nth(1).click();
+  await frame.locator(".highlight-card-menu").nth(1).click();
   await page.waitForTimeout(400);
 
   const items2 = await frame.locator(".imory-popover-item-label").allTextContents();
-  check("[preview] 메모 없는 카드는 '메모 추가'",
-    items2.includes("메모 추가") && !items2.includes("메모 삭제"),
+  check("[preview] 메모 없는 카드는 '노트 추가'",
+    items2.includes("노트 추가") && !items2.includes("노트 삭제"),
     items2.join(" | "));
 
   await page.keyboard.press("Escape");
@@ -392,28 +427,28 @@ async function runTools(browser) {
 
   /* --- 메모 팝업 --- */
 
-  await frame.locator(".memo-card-menu").first().click();
+  await frame.locator(".highlight-card-menu").first().click();
   await page.waitForTimeout(400);
-  await frame.locator(".imory-popover-item-label", { hasText: "메모 수정" }).click();
-  await frame.locator(".post-memo-popup").waitFor({ timeout: 5000 });
+  await frame.locator(".imory-popover-item-label", { hasText: "노트 수정" }).click();
+  await frame.locator(".post-highlight-note-popup").waitFor({ timeout: 5000 });
 
   check("[preview] ★ 메모 팝업이 실제 외형 그대로 뜬다",
-    (await frame.locator(".post-memo-popup-excerpt").textContent() || "")
+    (await frame.locator(".post-highlight-note-popup-excerpt").textContent() || "")
       .includes("메모가 달린 카드입니다"));
 
   check("[preview] 기존 메모가 채워져 있다",
-    (await frame.locator(".post-memo-popup-field").inputValue()) === "이미 적어 둔 메모");
+    (await frame.locator(".post-highlight-note-popup-field").inputValue()) === "이미 적어 둔 메모");
 
   check("[preview] ★ '저장되지 않는다'고 미리 말한다",
-    (await frame.locator(".post-memo-popup-notice").textContent() || "")
+    (await frame.locator(".post-highlight-note-popup-notice").textContent() || "")
       .includes("미리보기에서는 저장되지 않습니다"));
 
-  await frame.locator(".post-memo-popup-field").fill("미리보기에서 고쳐 본 메모");
-  await frame.locator(".post-memo-popup-save").click();
+  await frame.locator(".post-highlight-note-popup-field").fill("미리보기에서 고쳐 본 메모");
+  await frame.locator(".post-highlight-note-popup-save").click();
   await page.waitForTimeout(700);
 
   check("[preview] 저장을 누르면 팝업이 닫힌다",
-    (await frame.locator(".post-memo-popup").count()) === 0);
+    (await frame.locator(".post-highlight-note-popup").count()) === 0);
 
   const toast = await frame.locator("#postViewerToast").innerText();
   check("[preview] ★ 저장되지 않았다고 알린다",
@@ -447,22 +482,22 @@ async function runViewerModes(browser) {
   await page.waitForTimeout(500);
 
   check("[preview] ★ 방문자로 바꾸면 ⋮ 가 사라진다",
-    (await frame.locator(".memo-card-menu").count()) === 0);
+    (await frame.locator(".highlight-card-menu").count()) === 0);
 
   check("[preview] 카드 자체는 그대로다",
-    (await frame.locator(".memo-card").count()) === 2);
+    (await frame.locator(".highlight-card").count()) === 2);
 
   await frame.locator(".preview-memo-viewer-chip-option", { hasText: "주인장" }).click();
   await page.waitForTimeout(500);
 
   check("[preview] ★ 주인장으로 되돌리면 다시 나온다",
-    (await frame.locator(".memo-card-menu").count()) === 2);
+    (await frame.locator(".highlight-card-menu").count()) === 2);
 
   /* 삭제도 화면 안에서만 끝난다 */
 
   page.on("dialog", d => d.accept());
 
-  await frame.locator(".memo-card-menu").first().click();
+  await frame.locator(".highlight-card-menu").first().click();
   await page.waitForTimeout(400);
   await frame.locator(".imory-popover-item-label", { hasText: "하이라이트 삭제" }).click();
   await page.waitForTimeout(900);
@@ -479,7 +514,7 @@ async function runViewerModes(browser) {
 
 
 /* =========================================================
-   3) 메모 화면이 아니면 아무것도 얹지 않는다
+   3) 하이라이트 화면이 아니면 아무것도 얹지 않는다
 ========================================================== */
 
 async function runOtherPage(browser) {
@@ -499,8 +534,8 @@ async function runOtherPage(browser) {
     { timeout: 20000 }
   );
 
-  const homeContext = makeMemosContext();
-  homeContext.page = { type: "home", isHome: true, isMemos: false };
+  const homeContext = makeHighlightsContext();
+  homeContext.page = { type: "home", isHome: true, isHighlights: false, isMemos: false };
 
   await page.evaluate(
     (context) => window.__render(
@@ -518,8 +553,8 @@ async function runOtherPage(browser) {
   check("[preview] HOME에서는 주인장/방문자 칩이 없다",
     (await frame.locator("#previewMemoViewerChip").count()) === 0);
 
-  check("[preview] HOME에서는 기본 메모 진입점이 나온다",
-    (await frame.locator("#imoryPlatformMemoEntry").count()) === 1);
+  check("[preview] HOME에서는 기본 하이라이트 진입점이 나온다",
+    (await frame.locator("#imoryPlatformHighlightEntry").count()) === 1);
 
   await ctx.close();
 }
@@ -528,6 +563,34 @@ async function runOtherPage(browser) {
 /* =========================================================
    RUN
 ========================================================== */
+
+/* =========================================================
+   [legacy] HIGHLIGHT-1 스킨(memos.cards + memo-tools)도 그대로
+
+   그 이름으로 저장된 스킨이 이미 있다. 다시 저장하지 않아도 카드가
+   그려지고 주인장의 ⋮ 가 제자리에 들어가야 한다
+   (skin/skin-sanitize.js 가 두 region 이름을 모두 허용하고,
+    posts-view-highlight-card-tools.js 가 둘을 함께 모은다).
+========================================================== */
+
+async function runLegacyTemplate(browser) {
+  console.log("\n[legacy] 옛 이름(memos.cards / memo-tools) 스킨");
+
+  const { ctx, frame } = await openPreview(browser, {
+    template: LEGACY_MEMOS_TEMPLATE
+  });
+
+  check("[legacy] 옛 바인딩으로도 카드가 그려진다",
+    (await frame.locator(".highlight-card").count()) === 2,
+    String(await frame.locator(".highlight-card").count()));
+
+  check("[legacy] ★ 옛 region 이름에도 ⋮ 가 들어간다",
+    (await frame.locator(".highlight-card-menu").count()) === 2,
+    String(await frame.locator(".highlight-card-menu").count()));
+
+  await ctx.close();
+}
+
 
 (async () => {
   playwright = await loadPlaywright(BROWSER);
@@ -540,6 +603,7 @@ async function runOtherPage(browser) {
     await runTools(browser);
     await runViewerModes(browser);
     await runOtherPage(browser);
+    await runLegacyTemplate(browser);
   } catch (err) {
     console.error("\n실행 중 오류:", err);
     failed += 1;

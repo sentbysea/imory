@@ -59,7 +59,7 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
   async function galleryFallback() {
     try {
       const context = await buildCategorySkinContext(ownerId, categoryId, {
-        supportsGallery: true, supportsFolderPage: !!resolveSkinTemplate(rpcData?.skin, "folder"), page
+        supportsGallery: true, supportsPagination: true, supportsFolderPage: !!resolveSkinTemplate(rpcData?.skin, "folder"), page
       });
       if (context?.category.type !== "gallery") return false;
       renderSkin({ container, skin: getDefaultGalleryTemplate(), context, mode: "view" });
@@ -148,6 +148,9 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
       imageSlotValues,
       supportsFolderPage: skinPackageSupportsPageType(skinPackage, "folder"),
       supportsGallery: skinTemplateUsesGallery(categoryTemplate),
+      /* HIGHLIGHT-2: 글 목록 페이지네이션도 같은 방식으로 스킨이
+         category.pagination 을 실제로 그릴 때만 켜진다. */
+      supportsPagination: skinTemplateUsesPagination(categoryTemplate),
       page
     });
 

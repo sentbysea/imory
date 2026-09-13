@@ -588,7 +588,7 @@ categorySaveButton
           (
             typeof categoryDisplayColumnsAvailable === "boolean" &&
             categoryDisplayColumnsAvailable &&
-            ["post", "gallery"].includes(category.type || "post")
+            ["post", "gallery"].includes(normalizeCategoryType(category.type))
           )
             ? {
                 list_style:
@@ -597,9 +597,34 @@ categorySaveButton
                     : "list",
 
                 page_size:
-                  [6, 12, 18, 24].includes(Number(category.page_size))
-                    ? Number(category.page_size)
+                  typeof normalizeCategoryPageSize === "function"
+                    ? normalizeCategoryPageSize(category.page_size)
                     : 12,
+
+                /*
+                  HIGHLIGHT-2: post 와 gallery 가 같은 페이지 계산기를
+                  쓴다. migration 이전 배포에서는 이 두 컬럼이 없어
+                  42703 이 나므로, 아래 categoryDisplayColumnsAvailable
+                  판정 안에서만 실린다(위 조건과 같은 자리).
+                */
+
+                /*
+                  gallery 는 언제나 페이지를 나눈다 — 이 값은 글 목록
+                  전용 스위치라 gallery 에서는 켜 둔 것으로 저장해도
+                  읽는 쪽이 무시한다. 사용자가 고른 값을 그대로 둔다.
+                */
+                paginate_posts:
+                  category.paginate_posts === true,
+
+                pagination_style:
+                  typeof normalizePaginationStyle === "function"
+                    ? normalizePaginationStyle(category.pagination_style)
+                    : "decimal",
+
+                pagination_window_size:
+                  typeof normalizePaginationWindowSize === "function"
+                    ? normalizePaginationWindowSize(category.pagination_window_size)
+                    : 7,
 
                 secret_cover_mode:
                   category.secret_cover_mode === "image"
@@ -638,6 +663,56 @@ categorySaveButton
           category.id
         ) {
 
+          /* =====================================================
+             HIGHLIGHT-2 — 타입이 바뀌었으면 RPC 가 먼저다
+
+             change_own_category_type 이 한 트랜잭션 안에서
+             글 이동 → 폴더 이동 → 타입 변경을 한다. 여기서 type 을
+             직접 update 하면 그 이동이 빠진 채 타입만 바뀌어 글이
+             어느 화면에도 나오지 않는 상태가 된다. singleton 중복도
+             이 RPC 와 DB 인덱스가 거절한다.
+
+             그래서 아래 update payload 에서 type 을 뺀다 — 두 경로가
+             같은 값을 두 번 쓰지 않는다.
+          ====================================================== */
+
+          const needsTypeRpc =
+            typeof categoryTypeChangeNeedsRpc === "function" &&
+            categoryTypeChangeNeedsRpc(category);
+
+
+          if (needsTypeRpc) {
+
+            const typeResult =
+              await applyCategoryTypeChange(category);
+
+
+            if (!typeResult.ok) {
+
+              await failCategorySave(
+                typeResult.message ||
+                "카테고리 종류를 바꾸지 못했습니다."
+              );
+
+
+              await loadCategories(user);
+
+
+              return;
+
+            }
+
+
+            category.__savedType =
+              category.type;
+
+
+            category.__moveTargetCategoryId =
+              null;
+
+          }
+
+
           const {
             error:
             updateError
@@ -655,9 +730,22 @@ categorySaveButton
                 sort_order:
                   sortOrder,
 
-                type:
-                  category.type ||
-                  "post",
+                /*
+                  RPC 를 거친 변경에서는 type 을 여기서 다시 쓰지
+                  않는다 — 같은 값을 두 경로가 쓰면 어느 쪽이 이겼는지
+                  알 수 없다. 그 외(post <-> gallery)는 지금까지처럼
+                  이 payload 가 타입을 바꾼다.
+                */
+
+                ...(
+                  needsTypeRpc
+                    ? {}
+                    : {
+                        type:
+                          category.type ||
+                          "post"
+                      }
+                ),
 
                 ...categoryDisplayPayload(category)
 
@@ -766,7 +854,7 @@ categorySaveButton
 
 
       /*
-        HIGHLIGHT-1: 메모 화면의 폴더 설정(순서·커버·비율·구도)은
+        HIGHLIGHT-1: 하이라이트 화면의 폴더 설정(순서·커버·비율·구도)은
         별도 테이블이라 카테고리 행이 모두 저장된 **뒤에** 따로
         저장한다 — 두 설정이 서로를 덮지 않는다는 뜻이기도 하다
         (요구사항 7). 커버 파일 정리도 그 안에서 저장이 성공한
@@ -774,17 +862,17 @@ categorySaveButton
       */
 
       if (
-        typeof saveMemoFolderSettings === "function"
+        typeof saveHighlightFolderSettings === "function"
       ) {
 
-        const memoResult =
-          await saveMemoFolderSettings(
+        const highlightFolderResult =
+          await saveHighlightFolderSettings(
             user.id,
             validCategories
           );
 
 
-        if (!memoResult.ok) {
+        if (!highlightFolderResult.ok) {
 
           /*
             카테고리는 이미 저장됐다 — 실패를 성공으로 표시하지 않고
@@ -792,8 +880,8 @@ categorySaveButton
           */
 
           categorySaveMessage.textContent =
-            memoResult.message ||
-            "메모 폴더 설정을 저장하지 못했습니다.";
+            highlightFolderResult.message ||
+            "하이라이트 폴더 설정을 저장하지 못했습니다.";
 
 
           categorySaveButton.disabled =

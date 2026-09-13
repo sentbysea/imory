@@ -10,7 +10,7 @@
      4) 하이라이팅 모드 띠
      5) 메모 작성 팝업
      6) 토스트
-     7) 메모 카테고리(전체/폴더별 · 카드 · 폴더 커버)
+     7) 하이라이트 화면(전체/폴더별 · 카드 · 폴더 커버)
 
    모바일 우선. 어떤 판도 화면 너비를 넘지 않는다 — 팝오버는
    max-width를 JS가 화면 크기로 묶고(posts/view/posts-view-popover.js),
@@ -385,7 +385,7 @@
 
 
 /*
-  메모 카드에서 "원문 보기"로 도착했을 때 잠깐 눈에 띄게 한다 —
+  하이라이트 카드에서 "원문 보기"로 도착했을 때 잠깐 눈에 띄게 한다 —
   그 자리로 데려가 놓고 어디를 봐야 하는지 말해 주지 않으면 소용이
   없다(posts/view/posts-view-highlight-mode.js).
 */
@@ -524,7 +524,7 @@
    5) 메모 작성 팝업
 ========================================================== */
 
-.post-memo-popup {
+.post-highlight-note-popup {
   position: fixed;
   inset: 0;
 
@@ -542,7 +542,7 @@
 }
 
 
-.post-memo-popup-panel {
+.post-highlight-note-popup-panel {
   box-sizing: border-box;
 
   display: flex;
@@ -583,7 +583,7 @@
   Studio Preview만 쓴다(공개 화면에서는 붙지 않는다).
 */
 
-.post-memo-popup-notice {
+.post-highlight-note-popup-notice {
   margin: 0 0 10px;
 
   padding: 6px 10px;
@@ -599,7 +599,7 @@
 }
 
 
-.post-memo-popup-excerpt {
+.post-highlight-note-popup-excerpt {
   max-height: 30vh;
 
   margin: 0;
@@ -621,7 +621,7 @@
 }
 
 
-.post-memo-popup-field {
+.post-highlight-note-popup-field {
   box-sizing: border-box;
 
   width: 100%;
@@ -648,14 +648,14 @@
   resize: vertical;
 }
 
-.post-memo-popup-field:focus {
+.post-highlight-note-popup-field:focus {
   border-color: #f0d3de;
 
   outline: none;
 }
 
 
-.post-memo-popup-footer {
+.post-highlight-note-popup-footer {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -664,7 +664,7 @@
 }
 
 
-.post-memo-popup-status {
+.post-highlight-note-popup-status {
   flex: 1 1 auto;
 
   min-width: 0;
@@ -680,7 +680,7 @@
   color: #999999;
 }
 
-.post-memo-popup-status[data-tone="error"] {
+.post-highlight-note-popup-status[data-tone="error"] {
   color: #c2607f;
 }
 
@@ -699,8 +699,8 @@
   평상시 모습으로 올려 둘을 구별한다(토큰 밖의 새 색은 쓰지 않는다).
 */
 
-.post-memo-popup-cancel,
-.post-memo-popup-save {
+.post-highlight-note-popup-cancel,
+.post-highlight-note-popup-save {
   flex: 0 0 auto;
 
   box-sizing: border-box;
@@ -742,7 +742,7 @@
 
 /* secondary — 조용한 회색 */
 
-.post-memo-popup-cancel {
+.post-highlight-note-popup-cancel {
   border-color:
     var(--system-border, #eeeeee);
 
@@ -753,8 +753,8 @@
     var(--system-text-muted, #999999);
 }
 
-.post-memo-popup-cancel:hover,
-.post-memo-popup-cancel:focus-visible {
+.post-highlight-note-popup-cancel:hover,
+.post-highlight-note-popup-cancel:focus-visible {
   border-color:
     var(--system-border-strong, #dddddd);
 
@@ -770,7 +770,7 @@
 
 /* primary — accent 테두리/글씨 */
 
-.post-memo-popup-save {
+.post-highlight-note-popup-save {
   border-color:
     var(--system-accent-border, #e7c7d3);
 
@@ -781,8 +781,8 @@
     var(--system-accent, #e39ab5);
 }
 
-.post-memo-popup-save:hover:not([disabled]),
-.post-memo-popup-save:focus-visible:not([disabled]) {
+.post-highlight-note-popup-save:hover:not([disabled]),
+.post-highlight-note-popup-save:focus-visible:not([disabled]) {
   border-color:
     var(--system-accent-hover, #c66f8e);
 
@@ -792,7 +792,7 @@
   outline: none;
 }
 
-.post-memo-popup-save[disabled] {
+.post-highlight-note-popup-save[disabled] {
   opacity: 0.5;
 
   cursor: default;
@@ -920,17 +920,17 @@
 
 
 /* =========================================================
-   7) 메모 카테고리
+   7) 하이라이트 화면
 
    전체/폴더별은 "보기 방식"이고, 카드 목록의 기본 정렬은
    최신순이다(요구사항 7).
 
    ★ 여기 규칙은 전부 **플랫폼 기본 화면**의 것이다. 스킨이
    templates.memos를 가지고 있으면 이 화면 대신 스킨이 그린다 —
-   그때 이 CSS는 쓰이지 않는다(skin/skin-memos.js).
+   그때 이 CSS는 쓰이지 않는다(skin/skin-highlights.js).
 ========================================================== */
 
-.memo-screen {
+.highlight-screen {
   box-sizing: border-box;
 
   width: 100%;
@@ -946,7 +946,7 @@
 }
 
 
-.memo-screen-views {
+.highlight-screen-views {
   display: flex;
 
   gap: 6px;
@@ -954,7 +954,7 @@
   margin-bottom: 18px;
 }
 
-.memo-screen-view {
+.highlight-screen-view {
   padding: 6px 14px;
 
   border: 1px solid #eeeeee;
@@ -973,7 +973,7 @@
     transparent;
 }
 
-.memo-screen-view[aria-pressed="true"] {
+.highlight-screen-view[aria-pressed="true"] {
   border-color: #f0d3de;
 
   background: #fff5f8;
@@ -982,7 +982,7 @@
 }
 
 
-.memo-screen-state {
+.highlight-screen-state {
   padding: 40px 0;
 
   font-size: 13px;
@@ -997,7 +997,7 @@
   Context에는 memos.isSample 자체가 없어 절대 나타나지 않는다.
 */
 
-.memo-screen-sample {
+.highlight-screen-sample {
   margin: 0 0 12px;
 
   padding: 8px 12px;
@@ -1016,7 +1016,7 @@
 
 /* --- 폴더 격자 --- */
 
-.memo-folder-grid {
+.highlight-folder-grid {
   display: grid;
 
   grid-template-columns:
@@ -1026,7 +1026,7 @@
 }
 
 
-.memo-folder-card {
+.highlight-folder-card {
   display: flex;
   flex-direction: column;
 
@@ -1040,7 +1040,7 @@
 }
 
 
-.memo-folder-cover {
+.highlight-folder-cover {
   position: relative;
 
   width: 100%;
@@ -1052,19 +1052,19 @@
   background: #f4f4f4;
 }
 
-.memo-folder-cover[data-ratio="1:1"] {
+.highlight-folder-cover[data-ratio="1:1"] {
   aspect-ratio: 1 / 1;
 }
 
-.memo-folder-cover[data-ratio="3:4"] {
+.highlight-folder-cover[data-ratio="3:4"] {
   aspect-ratio: 3 / 4;
 }
 
-.memo-folder-cover[data-ratio="4:3"] {
+.highlight-folder-cover[data-ratio="4:3"] {
   aspect-ratio: 4 / 3;
 }
 
-.memo-folder-cover img {
+.highlight-folder-cover img {
   display: block;
 
   width: 100%;
@@ -1075,18 +1075,18 @@
 
 /* 원본 비율에서는 높이를 사진이 정한다 */
 
-.memo-folder-cover[data-ratio="original"] {
+.highlight-folder-cover[data-ratio="original"] {
   aspect-ratio: auto;
 }
 
-.memo-folder-cover[data-ratio="original"] img {
+.highlight-folder-cover[data-ratio="original"] img {
   height: auto;
 
   object-fit: contain;
 }
 
 
-.memo-folder-name {
+.highlight-folder-name {
   font-size: 13px;
   font-weight: 600;
 
@@ -1095,7 +1095,7 @@
   overflow-wrap: anywhere;
 }
 
-.memo-folder-count {
+.highlight-folder-count {
   font-size: 11px;
 
   color: #aaaaaa;
@@ -1104,7 +1104,7 @@
 
 /* --- 카드 목록 --- */
 
-.memo-card-list {
+.highlight-card-list {
   display: flex;
   flex-direction: column;
 
@@ -1112,7 +1112,7 @@
 }
 
 
-.memo-card {
+.highlight-card {
   position: relative;
 
   box-sizing: border-box;
@@ -1134,7 +1134,7 @@
 }
 
 
-.memo-card-excerpt {
+.highlight-card-excerpt {
   margin: 0;
 
   font-size: 14px;
@@ -1148,7 +1148,7 @@
 }
 
 
-.memo-card-note {
+.highlight-card-note {
   margin: 0;
 
   padding: 8px 10px;
@@ -1168,7 +1168,7 @@
 }
 
 
-.memo-card-meta {
+.highlight-card-meta {
   display: flex;
   align-items: center;
 
@@ -1181,18 +1181,18 @@
   color: #aaaaaa;
 }
 
-.memo-card-meta a {
+.highlight-card-meta a {
   color: #999999;
 
   text-decoration: none;
 }
 
-.memo-card-meta a:hover {
+.highlight-card-meta a:hover {
   color: #d980a2;
 }
 
 
-.memo-card-missing {
+.highlight-card-missing {
   font-size: 11px;
 
   color: #c2607f;
@@ -1204,14 +1204,14 @@
   옅은 회색으로 둔다.
 */
 
-.memo-card-unchecked {
+.highlight-card-unchecked {
   font-size: 11px;
 
   color: #b5b5b5;
 }
 
 
-.memo-card-actions {
+.highlight-card-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1220,8 +1220,8 @@
 }
 
 
-.memo-card-open,
-.memo-card-menu {
+.highlight-card-open,
+.highlight-card-menu {
   padding: 4px 8px;
 
   border: 0;
@@ -1242,10 +1242,10 @@
     transparent;
 }
 
-.memo-card-open:hover,
-.memo-card-menu:hover,
-.memo-card-open:focus-visible,
-.memo-card-menu:focus-visible {
+.highlight-card-open:hover,
+.highlight-card-menu:hover,
+.highlight-card-open:focus-visible,
+.highlight-card-menu:focus-visible {
   background: #fbf7f8;
 
   color: #d980a2;
@@ -1253,7 +1253,7 @@
 
 
 /* =========================================================
-   플랫폼 기본 메모 진입점 (skin/skin-memo-entry.js)
+   플랫폼 기본 하이라이트 진입점 (skin/skin-highlight-entry.js)
 
    스킨이 자기 메모 링크를 그리지 않았을 때만 나타나는 떠 있는 칩.
    .menu-button / .music-button과 같은 결의 플랫폼 chrome이고,
@@ -1265,7 +1265,7 @@
    safe area를 더해 아이폰 홈 인디케이터 위로 띄운다.
 ========================================================== */
 
-.platform-memo-entry {
+.platform-highlight-entry {
   position: fixed;
 
   right:
@@ -1310,8 +1310,8 @@
     transparent;
 }
 
-.platform-memo-entry:hover,
-.platform-memo-entry:focus-visible {
+.platform-highlight-entry:hover,
+.platform-highlight-entry:focus-visible {
   border-color: #e6c3d1;
 
   color: #d980a2;
@@ -1319,10 +1319,10 @@
 
 /*
   글을 읽는 동안에는 본문을 가리지 않도록 한 단계 옅게 둔다 —
-  없애지는 않는다(읽다가 메모 화면으로 가는 것이 가장 잦은 동선이다).
+  없애지는 않는다(읽다가 하이라이트 화면으로 가는 것이 가장 잦은 동선이다).
 */
 
-[data-post-highlight-mode="on"] .platform-memo-entry {
+[data-post-highlight-mode="on"] .platform-highlight-entry {
   opacity: 0.35;
 }
 
@@ -1332,6 +1332,6 @@
   이미 body의 클래스 하나로 표현돼 있다(posts-view-transition.js).
 */
 
-body.post-editor-mode .platform-memo-entry {
+body.post-editor-mode .platform-highlight-entry {
   display: none;
 }

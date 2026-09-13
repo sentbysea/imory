@@ -138,23 +138,29 @@ function resolveInSiteSkinRoute(url) {
 
 
   /*
-    HIGHLIGHT-1: /:slug/memos — 메모 카테고리.
+    HIGHLIGHT-2: /:slug/highlights — 하이라이트 화면.
 
-      /memos                    전체 보기 (?view=folders면 폴더별)
-      /memos/category/:id       그 폴더(= 원본 글 카테고리)의 카드 목록
-                                id는 숫자이거나 "none"(카테고리 없음)
+      /highlights                    전체 보기 (?view=folders면 폴더별)
+      /highlights/category/:id       그 폴더(= 원문 글의 현재 카테고리)의
+                                     카드 목록. id는 숫자이거나
+                                     "none"(카테고리 없음)
 
-    이 갈래가 없으면 스킨이 그린 메모 링크도, 플랫폼이 얹은 기본
+    옛 주소 /:slug/memos 도 같은 화면이라 여기서 함께 받는다 —
+    HIGHLIGHT-1 때 공유한 주소나 그때 만든 스킨의 링크가 흰 화면을
+    거치지 않고 SPA 로 열려야 한다. 최종 주소 정리는 화면을 그리는
+    쪽이 한다(posts/view/posts-view-highlights.js).
+
+    이 갈래가 없으면 스킨이 그린 하이라이트 링크도, 플랫폼이 얹은 기본
     진입점도 SPA로 처리되지 못하고 문서 전체를 다시 받는다 — 흰
     화면을 한 번 거치게 된다(이 파일 상단 주석).
   */
 
-  if (segments[0] === "memos") {
+  if (segments[0] === "highlights" || segments[0] === "memos") {
 
     if (segments.length === 1) {
 
       return {
-        page: "memos",
+        page: "highlights",
 
         view:
           url.searchParams.get("view") === "folders"
@@ -177,7 +183,7 @@ function resolveInSiteSkinRoute(url) {
     ) {
 
       return {
-        page: "memos",
+        page: "highlights",
 
         view: "all",
 
@@ -297,7 +303,7 @@ document.addEventListener(
 
     /*
       HIGHLIGHT-1 후속: 플랫폼이 스킨 바깥에 얹은 chrome 링크
-      (skin/skin-memo-entry.js의 메모 진입점)도 같은 라우터를 쓴다.
+      (skin/skin-highlight-entry.js의 하이라이트 진입점)도 같은 라우터를 쓴다.
       표식은 플랫폼 소유 속성 하나뿐이고, 스킨 마크업에는 이 속성이
       들어갈 수 없다(skin/skin-sanitize.js가 허용 목록만 남긴다) —
       스킨이 이 경로를 흉내 낼 수 없다는 뜻이다.
@@ -441,13 +447,13 @@ document.addEventListener(
       }
 
 
-      if (route.page === "memos") {
+      if (route.page === "highlights") {
 
-        if (typeof openMemoScreen !== "function") {
-          throw new Error("openMemoScreen unavailable");
+        if (typeof openHighlightsScreen !== "function") {
+          throw new Error("openHighlightsScreen unavailable");
         }
 
-        await openMemoScreen({
+        await openHighlightsScreen({
           view:
             route.view,
 

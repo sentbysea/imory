@@ -139,19 +139,23 @@ function resolveStudioPreviewTarget(href, currentSlug) {
   }
 
   /*
-    HIGHLIGHT-1: /:slug/memos — 메모 카테고리.
-    /:slug/memos/category/:id 는 그 폴더(= 원본 글 카테고리)의 카드
-    목록이고, id는 숫자이거나 "none"(카테고리 없는 글)이다. 공개
-    라우터(posts-router-init.js)와 같은 패턴이다. 인정하는 쿼리는
+    HIGHLIGHT-2: /:slug/highlights — 하이라이트 화면.
+    /:slug/highlights/category/:id 는 그 폴더(= 원문 글의 현재
+    카테고리)의 카드 목록이고, id는 숫자이거나 "none"(카테고리 없는
+    글)이다. 공개 라우터(posts-router-init.js)와 같은 패턴이고, 옛
+    주소 /:slug/memos 도 같은 화면으로 받는다. 인정하는 쿼리는
     ?view=folders 하나뿐이다.
   */
 
+  const isHighlightsSegment =
+    (value) => value === "highlights" || value === "memos";
+
   if (
     rest.length === 1 &&
-    rest[0] === "memos"
+    isHighlightsSegment(rest[0])
   ) {
     return {
-      type: "memos",
+      type: "highlights",
       view: parsed.searchParams.get("view") === "folders" ? "folders" : "all",
       categoryId: null
     };
@@ -159,12 +163,12 @@ function resolveStudioPreviewTarget(href, currentSlug) {
 
   if (
     rest.length === 3 &&
-    rest[0] === "memos" &&
+    isHighlightsSegment(rest[0]) &&
     rest[1] === "category" &&
     (/^\d+$/.test(rest[2]) || rest[2] === "none")
   ) {
     return {
-      type: "memos",
+      type: "highlights",
       view: "all",
       categoryId: rest[2]
     };

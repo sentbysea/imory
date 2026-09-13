@@ -1,13 +1,13 @@
 /* =========================================================
-   POSTS VIEW — 메모 카드 도구 (⋮ · 메뉴 · 메모 팝업 · 토스트)
+   POSTS VIEW — 하이라이트 카드 도구 (⋮ · 메뉴 · 노트 팝업 · 토스트)
 
    기준 문서: IMORY_HIGHLIGHT1_DESIGN.md §6
 
    한 벌의 UI를 **두 곳**이 쓴다.
 
-     공개 화면   posts/view/posts-view-memos.js (메모 카테고리)
+     공개 화면   posts/view/posts-view-highlights.js (하이라이트 화면)
                  posts/view/posts-view-highlight-mode.js (말풍선의 메모)
-     Studio      studio/preview/preview-memo-tools.js (메모 화면 미리보기)
+     Studio      studio/preview/preview-highlight-tools.js (하이라이트 화면 미리보기)
 
    Studio Preview에서 카드의 ⋮가 자리만 차지하고 아무것도 열리지
    않으면, 편집자는 자기가 만든 스킨에서 그 메뉴와 메모 팝업이 실제로
@@ -38,7 +38,7 @@
 
 /* 색을 못 받았을 때의 기본값(본문 강조 서식과 같은 계열) */
 
-const MEMO_CARD_DEFAULT_COLOR =
+const HIGHLIGHT_CARD_DEFAULT_COLOR =
   "#f6e0c8";
 
 
@@ -218,7 +218,7 @@ let postMemoPopupSession =
   null;
 
 
-function openPostMemoPopup(
+function openPostHighlightNotePopup(
   item,
   options = {}
 ) {
@@ -228,7 +228,7 @@ function openPostMemoPopup(
   });
 
 
-  closePostMemoPopup({
+  closePostHighlightNotePopup({
     silent: true
   });
 
@@ -238,7 +238,7 @@ function openPostMemoPopup(
 
 
   overlay.className =
-    "post-memo-popup";
+    "post-highlight-note-popup";
 
 
   overlay.setAttribute(
@@ -252,7 +252,7 @@ function openPostMemoPopup(
 
 
   panel.className =
-    "post-memo-popup-panel";
+    "post-highlight-note-popup-panel";
 
 
   panel.setAttribute(
@@ -279,7 +279,7 @@ function openPostMemoPopup(
 
 
     notice.className =
-      "post-memo-popup-notice";
+      "post-highlight-note-popup-notice";
 
 
     notice.textContent =
@@ -296,12 +296,12 @@ function openPostMemoPopup(
 
 
   excerpt.className =
-    "post-memo-popup-excerpt";
+    "post-highlight-note-popup-excerpt";
 
 
   excerpt.style.borderLeftColor =
     item.color ||
-    MEMO_CARD_DEFAULT_COLOR;
+    HIGHLIGHT_CARD_DEFAULT_COLOR;
 
 
   excerpt.textContent =
@@ -313,7 +313,7 @@ function openPostMemoPopup(
 
 
   field.className =
-    "post-memo-popup-field";
+    "post-highlight-note-popup-field";
 
 
   field.placeholder =
@@ -336,7 +336,7 @@ function openPostMemoPopup(
 
 
   footer.className =
-    "post-memo-popup-footer";
+    "post-highlight-note-popup-footer";
 
 
   const status =
@@ -344,7 +344,7 @@ function openPostMemoPopup(
 
 
   status.className =
-    "post-memo-popup-status";
+    "post-highlight-note-popup-status";
 
 
   const cancel =
@@ -356,7 +356,7 @@ function openPostMemoPopup(
 
 
   cancel.className =
-    "post-memo-popup-cancel";
+    "post-highlight-note-popup-cancel";
 
 
   cancel.textContent =
@@ -372,7 +372,7 @@ function openPostMemoPopup(
 
 
   save.className =
-    "post-memo-popup-save";
+    "post-highlight-note-popup-save";
 
 
   save.textContent =
@@ -418,7 +418,7 @@ function openPostMemoPopup(
     "click",
     () => {
 
-      closePostMemoPopup();
+      closePostHighlightNotePopup();
 
     }
   );
@@ -430,7 +430,7 @@ function openPostMemoPopup(
 
       if (event.target === overlay) {
 
-        closePostMemoPopup();
+        closePostHighlightNotePopup();
 
       }
 
@@ -447,7 +447,7 @@ function openPostMemoPopup(
         event.preventDefault();
 
 
-        closePostMemoPopup();
+        closePostHighlightNotePopup();
 
       }
 
@@ -564,15 +564,15 @@ function openPostMemoPopup(
       postMemoPopupSession?.onSaved?.(note);
 
 
-      closePostMemoPopup();
+      closePostHighlightNotePopup();
 
 
       showPostViewerToast(
         result.notice ||
         (
           note
-            ? "메모를 저장했습니다"
-            : "메모를 지웠습니다"
+            ? "노트를 저장했습니다"
+            : "노트를 지웠습니다"
         ),
         "ok"
       );
@@ -605,7 +605,7 @@ function openPostMemoPopup(
 }
 
 
-function closePostMemoPopup(
+function closePostHighlightNotePopup(
   options = {}
 ) {
 
@@ -633,22 +633,22 @@ function closePostMemoPopup(
 /* =========================================================
    카드의 ⋮ 메뉴 (요구사항 6)
 
-     메모 없음 → 메모 추가
-     메모 있음 → 메모 수정 · 메모 삭제
+     메모 없음 → 노트 추가
+     노트 있음 → 노트 수정 · 노트 삭제
      항상        하이라이트 삭제
 
-   "메모 삭제"는 메모 글자만 지우고 하이라이트와 카드는 남긴다.
+   "노트 삭제"는 메모 글자만 지우고 하이라이트와 카드는 남긴다.
    "하이라이트 삭제"는 하이라이트와 카드를 함께 지운다 — 지우는
    범위를 확인 대화상자에서 분명히 알린다.
 ========================================================== */
 
-function openMemoCardMenu(
+function openHighlightCardMenu(
   button,
   card,
   handlers = {}
 ) {
 
-  if (isImoryPopoverOpen("memo-card")) {
+  if (isImoryPopoverOpen("highlight-card")) {
 
     closeImoryPopover();
 
@@ -660,7 +660,7 @@ function openMemoCardMenu(
 
   openImoryPopover({
     name:
-      "memo-card",
+      "highlight-card",
 
     className:
       "imory-popover--menu",
@@ -681,13 +681,13 @@ function openMemoCardMenu(
         items.push({
           label:
             card.hasNote
-              ? "메모 수정"
-              : "메모 추가",
+              ? "노트 수정"
+              : "노트 추가",
 
           onSelect:
             () => {
 
-              openPostMemoPopup(
+              openPostHighlightNotePopup(
                 {
                   id:
                     card.id,
@@ -726,7 +726,7 @@ function openMemoCardMenu(
 
           items.push({
             label:
-              "메모 삭제",
+              "노트 삭제",
 
             hint:
               "카드는 남습니다",
@@ -746,7 +746,7 @@ function openMemoCardMenu(
                 ) {
 
                   showPostViewerToast(
-                    "메모를 지우지 못했습니다",
+                    "노트를 지우지 못했습니다",
                     "error"
                   );
 
@@ -758,7 +758,7 @@ function openMemoCardMenu(
 
                 showPostViewerToast(
                   result.notice ||
-                  "메모를 지웠습니다",
+                  "노트를 지웠습니다",
                   "ok"
                 );
 
@@ -780,7 +780,7 @@ function openMemoCardMenu(
 
           hint:
             card.hasNote
-              ? "메모도 함께"
+              ? "노트도 함께"
               : "",
 
           onSelect:
@@ -788,7 +788,7 @@ function openMemoCardMenu(
 
               const message =
                 card.hasNote
-                  ? "이 하이라이트와 메모 카드를 함께 지웁니다. 계속할까요?"
+                  ? "이 하이라이트와 노트를 함께 지웁니다. 계속할까요?"
                   : "이 하이라이트를 지웁니다. 계속할까요?";
 
 
@@ -844,22 +844,97 @@ function openMemoCardMenu(
 
 
 /* =========================================================
-   mountMemoCardTools({ regions, cards, canManage, handlers })
+   HIGHLIGHT_TOOL_REGION_NAMES / collectHighlightToolRegions(instance)
+
+   카드 도구가 들어갈 자리의 공식 이름은 "highlight-tools" 다.
+   HIGHLIGHT-1 이 쓴 "memo-tools" 도 계속 인정한다 — 그 이름으로
+   슬롯을 그려 둔 스킨이 이미 있고, 그 스킨을 다시 저장하지 않아도
+   주인장이 자기 카드를 고칠 수 있어야 하기 때문이다
+   (skin/skin-sanitize.js 도 두 이름을 모두 허용한다).
+
+   ★ 같은 자리에 두 번 붙지 않는다
+   한 스킨이 두 이름을 모두 썼다면 자리가 **둘**이고 각각 한 번씩
+   채워진다(그건 스킨이 슬롯을 두 개 그린 것이다). 같은 element 가
+   두 이름을 동시에 가질 수는 없지만, 혹시 모를 중복을 막으려고
+   element 기준으로 한 번 걸러 낸다 — 플랫폼이 같은 자리에 ⋮ 를
+   두 번 넣는 경로는 없다.
+========================================================== */
+
+const HIGHLIGHT_TOOL_REGION_NAMES =
+  ["highlight-tools", "memo-tools"];
+
+
+function collectHighlightToolRegions(
+  instance
+) {
+
+  if (
+    !instance ||
+    typeof instance.getRegions !== "function"
+  ) {
+
+    return [];
+
+  }
+
+
+  const seen =
+    new Set();
+
+  const regions =
+    [];
+
+
+  HIGHLIGHT_TOOL_REGION_NAMES.forEach(
+    (name) => {
+
+      (instance.getRegions(name) || []).forEach(
+        (region) => {
+
+          if (
+            !region ||
+            !region.element ||
+            seen.has(region.element)
+          ) {
+
+            return;
+
+          }
+
+
+          seen.add(region.element);
+
+          regions.push(region);
+
+        }
+      );
+
+    }
+  );
+
+
+  return regions;
+
+}
+
+
+/* =========================================================
+   mountHighlightCardTools({ regions, cards, canManage, handlers })
 
    스킨 HTML에는 <button>이 들어갈 수 없다(새니타이저가 지운다).
    그래서 주인장의 ⋮ 는 카드마다 하나씩 있는
-   [data-imory-region="memo-tools"] 자리에 플랫폼이 넣는다. 그 자리는
-   repeat 안에 있어 렌더러가 카드 id를 키로 찍어 두므로 DOM 순서가
-   아니라 **키로** 카드와 짝지어진다.
+   [data-imory-region="highlight-tools"](레거시 "memo-tools") 자리에
+   플랫폼이 넣는다. 그 자리는 repeat 안에 있어 렌더러가 카드 id를
+   키로 찍어 두므로 DOM 순서가 아니라 **키로** 카드와 짝지어진다.
 
    canManage가 false면 그 자리를 **비운다** — 방문자 화면과 같은
    상태다(빈 자리도 스킨이 그린 그대로 남는다).
 
-     regions   renderSkin 인스턴스의 getRegions("memo-tools") 결과
+     regions   collectHighlightToolRegions(instance) 결과
      cards     Map<cardId, card>
 ========================================================== */
 
-function mountMemoCardTools(
+function mountHighlightCardTools(
   options = {}
 ) {
 
@@ -917,7 +992,7 @@ function mountMemoCardTools(
 
 
       button.className =
-        "memo-card-menu";
+        "highlight-card-menu";
 
 
       button.textContent =
@@ -926,7 +1001,7 @@ function mountMemoCardTools(
 
       button.setAttribute(
         "aria-label",
-        "메모 카드 도구"
+        "하이라이트 카드 도구"
       );
 
 
@@ -940,7 +1015,7 @@ function mountMemoCardTools(
         "click",
         () => {
 
-          openMemoCardMenu(
+          openHighlightCardMenu(
             button,
             card,
             options.handlers || {}

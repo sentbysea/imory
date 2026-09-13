@@ -1,7 +1,31 @@
-# HIGHLIGHT-1 — 글 뷰어 도구 · 하이라이트 · 메모 카테고리
+# HIGHLIGHT-1 — 글 뷰어 도구 · 하이라이트 · 하이라이트 화면
 
-글 읽기 화면에서 문장을 하이라이트하고 메모를 남기는 기능, 그리고 그 카드를
-한 화면에 모아 보는 메모 카테고리의 기준 문서.
+글 읽기 화면에서 문장을 하이라이트하고 노트를 남기는 기능, 그리고 그 카드를
+한 화면에 모아 보는 화면의 **라운드 기록**이다.
+
+> ## ⚠️ 이 문서는 기록이다 — 이름과 카테고리 계약은 HIGHLIGHT-2 가 대체했다
+>
+> 이 라운드는 이 기능을 "메모"라고 불렀다. 그 이름은 나중에 사용자가
+> 하이라이트와 무관하게 직접 쓰는 짧은 글 기능을 위해 비워 두기로 했고,
+> 지금 이 기능의 공식 이름은 전부 **highlight** 다.
+>
+> **변경됨 →
+> [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md)**
+>
+> | 이 문서가 쓴 이름 | 지금의 공식 이름 |
+> | --- | --- |
+> | `/:slug/memos` | `/:slug/highlights` (옛 주소도 계속 열린다) |
+> | `templates.memos` / `memos.*` Context | `templates.highlights` / `highlights.*` |
+> | `navigation.memos` | `navigation.highlights` |
+> | `memo-tools` region | `highlight-tools` (옛 이름도 계속 허용) |
+> | `memo_folder_settings` 테이블 | `highlight_folder_settings` (옛 이름은 읽기 view) |
+> | "메모 카테고리" | 하이라이트 화면 (+ `categories.type='highlight'` 행) |
+> | "메모"(카드에 붙는 글) | 하이라이트 노트 |
+> | 파일 `posts-view-memos.js` 등 | `posts-view-highlights.js` 등 (아래 표는 새 경로) |
+>
+> 아래 본문의 **동작 설명은 그대로 유효하다.** 이름만 위 표대로 읽으면 된다.
+> 카테고리 타입·singleton 규칙·Settings 구조·페이지네이션은 이 문서에 없고
+> HIGHLIGHT-2 문서에만 있다.
 
 | 구분 | 내용 |
 | --- | --- |
@@ -11,14 +35,14 @@
 | 화면·조작 | [posts/view/posts-view-highlight-mode.js](./posts/view/posts-view-highlight-mode.js) |
 | 도구 메뉴 | [posts/view/posts-view-tools-menu.js](./posts/view/posts-view-tools-menu.js) |
 | 팝오버 | [posts/view/posts-view-popover.js](./posts/view/posts-view-popover.js) |
-| 메모 화면 | [posts/view/posts-view-memos.js](./posts/view/posts-view-memos.js) · [skin/skin-memos.js](./skin/skin-memos.js) |
-| 카드 ⋮ · 메모 팝업 · 토스트 | [posts/view/posts-view-memo-card-tools.js](./posts/view/posts-view-memo-card-tools.js) (공개 화면과 Studio Preview가 같이 쓴다) |
-| 메모 진입점 | [skin/skin-memo-entry.js](./skin/skin-memo-entry.js) |
-| 폴더 설정 | [admin/settings/admin-settings-memo-folders.js](./admin/settings/admin-settings-memo-folders.js) |
-| 폴더 차례(끌기) | [admin/settings/admin-settings-memo-folder-order.js](./admin/settings/admin-settings-memo-folder-order.js) |
-| Studio Preview | [studio/preview/preview-memo-tools.js](./studio/preview/preview-memo-tools.js) |
+| 하이라이트 화면 | [posts/view/posts-view-highlights.js](./posts/view/posts-view-highlights.js) · [skin/skin-highlights.js](./skin/skin-highlights.js) |
+| 카드 ⋮ · 노트 팝업 · 토스트 | [posts/view/posts-view-highlight-card-tools.js](./posts/view/posts-view-highlight-card-tools.js) (공개 화면과 Studio Preview가 같이 쓴다) |
+| 진입점 칩 | [skin/skin-highlight-entry.js](./skin/skin-highlight-entry.js) |
+| 폴더 설정 | [admin/settings/admin-settings-highlight-folders.js](./admin/settings/admin-settings-highlight-folders.js) |
+| 폴더 차례(끌기) | [admin/settings/admin-settings-highlight-folder-order.js](./admin/settings/admin-settings-highlight-folder-order.js) |
+| Studio Preview | [studio/preview/preview-highlight-tools.js](./studio/preview/preview-highlight-tools.js) |
 | 스타일 | [posts/posts-highlight.css](./posts/posts-highlight.css) |
-| 테스트 | [posts/posts-highlight-e2e-test.mjs](./posts/posts-highlight-e2e-test.mjs) (8952) · [studio/studio-memo-preview-e2e-test.mjs](./studio/studio-memo-preview-e2e-test.mjs) (8953) · [admin/admin-settings-e2e-test.mjs](./admin/admin-settings-e2e-test.mjs) `--only=memofolder` (8949) |
+| 테스트 | [posts/posts-highlight-e2e-test.mjs](./posts/posts-highlight-e2e-test.mjs) (8952) · [studio/studio-highlight-preview-e2e-test.mjs](./studio/studio-highlight-preview-e2e-test.mjs) (8953) · [admin/admin-settings-e2e-test.mjs](./admin/admin-settings-e2e-test.mjs) `--only=memofolder` (8949) |
 
 ---
 
@@ -420,7 +444,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 
 `navigation.memos`만으로는 **기존 스킨**에서 메모 화면에 닿을 수 없었다. 그
 빈자리를 플랫폼이 메운다 — 남의 스킨 코드를 고쳐 쓰지 않고, 화면 오른쪽 아래에
-작은 칩 하나를 얹는다([skin/skin-memo-entry.js](./skin/skin-memo-entry.js)).
+작은 칩 하나를 얹는다([skin/skin-highlight-entry.js](./skin/skin-highlight-entry.js)).
 
 세 가지 규칙이 전부다.
 
@@ -510,7 +534,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 ### 11-4. 메모 폴더 차례 — 꾹 눌러 끌기 (첫 라운드 §11-3 해소)
 
 Settings의 카테고리 목록 **아래**에 메모 폴더만 모은 목록이 따로 생겼다
-([admin/settings/admin-settings-memo-folder-order.js](./admin/settings/admin-settings-memo-folder-order.js)).
+([admin/settings/admin-settings-highlight-folder-order.js](./admin/settings/admin-settings-highlight-folder-order.js)).
 카테고리 줄마다 흩어져 있던 ↑↓는 그 목록으로 옮겼다 — 움직이는 배열이 다른데
 조작이 같은 자리에 섞여 있으면 무엇이 움직이는지 알 수 없다.
 
@@ -535,7 +559,7 @@ Settings의 카테고리 목록 **아래**에 메모 폴더만 모은 목록이 
 방법이 없다. 그래서 **실제로 열리게** 바꾼다.
 
 - 모양과 조작은 공개 화면과 **같은 코드**다
-  ([posts/view/posts-view-memo-card-tools.js](./posts/view/posts-view-memo-card-tools.js)를
+  ([posts/view/posts-view-highlight-card-tools.js](./posts/view/posts-view-highlight-card-tools.js)를
   Preview 문서도 읽는다). Preview용 복제본을 만들지 않는다.
 - **아무것도 저장하지 않는다.** Preview가 넘기는 handlers는 supabase를 전혀
   부르지 않고 화면의 카드 객체만 고친다. 매번 "미리보기에서는 저장되지
@@ -551,9 +575,9 @@ Settings의 카테고리 목록 **아래**에 메모 폴더만 모은 목록이 
 
 | 옮긴 것 | 어디서 | 어디로 | 왜 |
 | --- | --- | --- | --- |
-| `openPostMemoPopup` / `closePostMemoPopup` | posts-view-highlight-mode.js | posts-view-memo-card-tools.js | Preview 문서에도 실어야 하는데 원래 파일은 저장소·앵커 계산에 묶여 있다 |
-| `openMemoCardMenu` · ⋮ 붙이기 | posts-view-memos.js | posts-view-memo-card-tools.js | 같은 이유 |
-| `showPostViewerToast` | posts-view-tools-menu.js | posts-view-memo-card-tools.js | 토스트 자체는 의존이 없는데 원래 파일은 ⋮ 버튼 전역과 라우팅에 묶여 있다 |
+| `openPostMemoPopup` / `closePostMemoPopup` | posts-view-highlight-mode.js | posts-view-highlight-card-tools.js | Preview 문서에도 실어야 하는데 원래 파일은 저장소·앵커 계산에 묶여 있다 |
+| `openMemoCardMenu` · ⋮ 붙이기 | posts-view-highlights.js | posts-view-highlight-card-tools.js | 같은 이유 |
+| `showPostViewerToast` | posts-view-tools-menu.js | posts-view-highlight-card-tools.js | 토스트 자체는 의존이 없는데 원래 파일은 ⋮ 버튼 전역과 라우팅에 묶여 있다 |
 
 옮긴 쪽은 **모양만** 만들고 저장은 주입받는다(`handlers.saveNote` /
 `deleteNote` / `deleteHighlight`). 각 핸들러는 `{ ok, notice? }`를 돌려주고,

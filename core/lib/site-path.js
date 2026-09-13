@@ -291,26 +291,42 @@ function isSiteHighlightRequested(
 
 
 /* =========================================================
-   메모 카테고리 경로 (HIGHLIGHT-1 §7)
+   하이라이트 화면 경로 (HIGHLIGHT-2 §11 — 구 "하이라이트 화면")
 
    여러 원본 글 카테고리에서 만들어진 하이라이트 카드를 한 화면에
    모아 보는 곳. 새 쿼리가 아니라 새 경로다 — 카테고리/글과 나란한
    독립 화면이고, 주소를 공유하거나 새로고침해도 같은 화면이 나와야
    하기 때문이다.
 
-     /:slug/memos                  전체 보기
-     /:slug/memos/category/:id     그 원본 카테고리의 카드 목록
-                                   (여기서 "폴더" = 원본 글의 카테고리)
+     /:slug/highlights                  전체 보기
+     /:slug/highlights?view=folders     폴더별 보기
+     /:slug/highlights/category/:id     그 원본 카테고리의 카드 목록
+                                        (여기서 "폴더" = 원문 글의
+                                         현재 카테고리)
 
-   보기 방식(전체/폴더별)은 경로가 가르고, 별도의 중첩 폴더 시스템은
-   만들지 않는다(요구사항 7).
+   보기 방식(전체/폴더별)은 경로·쿼리가 가르고, 별도의 중첩 폴더
+   시스템은 만들지 않는다.
+
+   ★ 옛 주소 /:slug/memos
+   HIGHLIGHT-1 에서는 이 화면의 주소가 /memos 였다. 그 주소를 이미
+   공유했거나 스킨에 적어 둔 사람이 있으므로 **같은 화면으로 계속
+   연결한다**(posts/editor/posts-router-init.js). 다만 새로 만드는
+   링크는 전부 아래 canonical 쪽이다 — 'memo' 라는 이름은 나중에
+   사용자가 직접 쓰는 짧은 글 기능을 위해 비워 둔다.
+   alias 제거 가능 시점: IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md §12.
 ========================================================== */
 
-const SITE_MEMOS_SUBPATH =
+const SITE_HIGHLIGHTS_SUBPATH =
+  "/highlights";
+
+
+/* 옛 주소. 링크를 **만드는** 데는 쓰지 않는다 — 알아보기 위해서만 둔다. */
+
+const SITE_LEGACY_HIGHLIGHTS_SUBPATH =
   "/memos";
 
 
-function buildSiteMemosPath(
+function buildSiteHighlightsPath(
   slug,
   categoryId
 ) {
@@ -319,13 +335,58 @@ function buildSiteMemosPath(
     categoryId === undefined ||
     categoryId === null ||
     categoryId === ""
-      ? SITE_MEMOS_SUBPATH
-      : `${SITE_MEMOS_SUBPATH}/category/${categoryId}`;
+      ? SITE_HIGHLIGHTS_SUBPATH
+      : `${SITE_HIGHLIGHTS_SUBPATH}/category/${categoryId}`;
 
 
   return buildSitePath(
     slug,
     suffix
+  );
+
+}
+
+
+/*
+  옛 주소를 만드는 함수 — 테스트와 "legacy 주소가 살아 있는가" 확인
+  용도다. 제품 코드는 canonical 쪽만 쓴다.
+*/
+
+function buildSiteLegacyHighlightsPath(
+  slug,
+  categoryId
+) {
+
+  const suffix =
+    categoryId === undefined ||
+    categoryId === null ||
+    categoryId === ""
+      ? SITE_LEGACY_HIGHLIGHTS_SUBPATH
+      : `${SITE_LEGACY_HIGHLIGHTS_SUBPATH}/category/${categoryId}`;
+
+
+  return buildSitePath(
+    slug,
+    suffix
+  );
+
+}
+
+
+/*
+  DEPRECATED alias. 옛 이름을 부르는 곳이 남아 있어도 **canonical
+  주소**가 나오게 해 둔다 — 그래야 놓친 호출 하나가 옛 주소를 새로
+  퍼뜨리지 않는다.
+*/
+
+function buildSiteMemosPath(
+  slug,
+  categoryId
+) {
+
+  return buildSiteHighlightsPath(
+    slug,
+    categoryId
   );
 
 }

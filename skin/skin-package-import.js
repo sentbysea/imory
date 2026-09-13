@@ -169,31 +169,50 @@ async function validateSkinPackageImport(rawJsonText) {
   }
 
   /*
-    HIGHLIGHT-1 — templates.memos(메모 카테고리)도 banner/folder와 같은
+    HIGHLIGHT-2 — 하이라이트 화면 template 도 banner/folder와 같은
     **선택** 템플릿이다. 다만 폴백이 다르다: 없으면 그 화면이 사라지는
     게 아니라 플랫폼 기본 template으로 그려진다
-    (skin/skin-template.js의 getDefaultMemosTemplate). 그래서 여기서
+    (skin/skin-template.js의 getDefaultHighlightsTemplate). 그래서 여기서
     강제하는 것은 "넣었으면 모양이 맞아야 한다" 하나뿐이고, POST/FOLDER
-    같은 필수 region 검사는 없다 — 메모 카드 안의 memo-tools 자리는
+    같은 필수 region 검사는 없다 — 카드 안의 highlight-tools 자리는
     빠져도 화면이 깨지지 않고 주인장의 도구 버튼만 나오지 않는다.
+
+    공식 이름은 templates.highlights 이고, HIGHLIGHT-1 이 쓴
+    templates.memos 로 export 된 파일도 그대로 받는다 — 받은 이름을
+    그대로 보존한다(memos 로 들어온 것을 highlights 로 고쳐 쓰지
+    않는다). 둘 다 들어 있으면 highlights 만 쓰고 memos 는 버린다:
+    같은 화면의 template 이 두 벌이면 어느 쪽이 그려질지 파일만
+    보고는 알 수 없고, 렌더 우선순위(highlights 먼저)와 어긋나는
+    쪽을 남겨 둘 이유가 없다.
   */
 
-  const memosTemplateInput =
-    templatesInput.memos;
+  const highlightsTemplateInput =
+    templatesInput.highlights !== undefined && templatesInput.highlights !== null
+      ? templatesInput.highlights
+      : templatesInput.memos;
 
-  const hasMemosTemplate =
-    memosTemplateInput !== undefined &&
-    memosTemplateInput !== null;
+  const highlightsTemplateKey =
+    templatesInput.highlights !== undefined && templatesInput.highlights !== null
+      ? "highlights"
+      : "memos";
+
+  const hasHighlightsTemplate =
+    highlightsTemplateInput !== undefined &&
+    highlightsTemplateInput !== null;
 
   if (
-    hasMemosTemplate &&
+    hasHighlightsTemplate &&
     (
-      typeof memosTemplateInput !== "object" ||
-      Array.isArray(memosTemplateInput) ||
-      typeof memosTemplateInput.html !== "string"
+      typeof highlightsTemplateInput !== "object" ||
+      Array.isArray(highlightsTemplateInput) ||
+      typeof highlightsTemplateInput.html !== "string"
     )
   ) {
-    return { ok: false, reason: "memos-template", message: "templates.memos를 포함하려면 templates.memos.html이 문자열이어야 합니다." };
+    return {
+      ok: false,
+      reason: "highlights-template",
+      message: `templates.${highlightsTemplateKey}를 포함하려면 templates.${highlightsTemplateKey}.html이 문자열이어야 합니다.`
+    };
   }
 
   let cssRaw;
@@ -233,9 +252,9 @@ async function validateSkinPackageImport(rawJsonText) {
       ? sanitizeSkinHTML(folderTemplateInput.html)
       : null;
 
-  const sanitizedMemosHtml =
-    hasMemosTemplate
-      ? sanitizeSkinHTML(memosTemplateInput.html)
+  const sanitizedHighlightsHtml =
+    hasHighlightsTemplate
+      ? sanitizeSkinHTML(highlightsTemplateInput.html)
       : null;
 
   if (!htmlHasPostBodyRegion(sanitizedPostHtml)) {
@@ -321,8 +340,8 @@ async function validateSkinPackageImport(rawJsonText) {
     templates.folder = { html: sanitizedFolderHtml };
   }
 
-  if (hasMemosTemplate) {
-    templates.memos = { html: sanitizedMemosHtml };
+  if (hasHighlightsTemplate) {
+    templates[highlightsTemplateKey] = { html: sanitizedHighlightsHtml };
   }
 
   return {

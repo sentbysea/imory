@@ -1,7 +1,7 @@
 /* =========================================================
-   STUDIO PREVIEW — 메모 카드 도구 (HIGHLIGHT-1 후속)
+   STUDIO PREVIEW — 하이라이트 카드 도구 (HIGHLIGHT-1 후속)
 
-   Preview의 메모 화면에서 카드의 ⋮ 를 **실제로 열리게** 한다.
+   Preview의 하이라이트 화면에서 카드의 ⋮ 를 **실제로 열리게** 한다.
 
    ── 왜 바꿨나 ───────────────────────────────────────────
    지금까지 Preview의 memo-tools region은 빈 자리였다(§11-6). 편집자
@@ -11,7 +11,7 @@
 
    ── 무엇을 보장하나 ─────────────────────────────────────
    1) 모양과 조작은 공개 화면과 **같은 코드**다
-      (posts/view/posts-view-memo-card-tools.js를 이 문서도 읽는다).
+      (posts/view/posts-view-highlight-card-tools.js를 이 문서도 읽는다).
       Preview용으로 비슷한 UI를 따로 만들지 않는다 — 그러면 둘이
       서서히 어긋난다.
    2) **아무것도 저장하지 않는다.** 여기서 넘기는 handlers는 supabase를
@@ -28,7 +28,7 @@
 
    의존(classic script, 이 파일보다 먼저 로드돼야 함):
    posts/view/posts-view-popover.js ·
-   posts/view/posts-view-memo-card-tools.js.
+   posts/view/posts-view-highlight-card-tools.js.
 ========================================================== */
 
 
@@ -51,13 +51,13 @@ const PREVIEW_MEMO_NOTICE =
 
 
 /* =========================================================
-   mountPreviewMemoTools({ instance, context })
+   mountPreviewHighlightTools({ instance, context })
 
-   preview-bridge가 렌더 직후 매번 부른다. 메모 화면이 아니면
+   preview-bridge가 렌더 직후 매번 부른다. 하이라이트 화면이 아니면
    칩을 걷고 아무것도 하지 않는다.
 ========================================================== */
 
-function mountPreviewMemoTools(
+function mountPreviewHighlightTools(
   options = {}
 ) {
 
@@ -66,12 +66,12 @@ function mountPreviewMemoTools(
     null;
 
 
-  const isMemos =
-    context?.page?.isMemos === true;
+  const isHighlights =
+    context?.page?.isHighlights === true;
 
 
   if (
-    !isMemos ||
+    !isHighlights ||
     !options.instance
   ) {
 
@@ -108,7 +108,7 @@ function applyPreviewMemoTools() {
 
   if (
     !previewMemoLastMount ||
-    typeof mountMemoCardTools !== "function"
+    typeof mountHighlightCardTools !== "function"
   ) {
 
     return;
@@ -125,7 +125,7 @@ function applyPreviewMemoTools() {
 
   const cards =
     new Map(
-      (context?.memos?.cards || []).map(
+      (context?.highlights?.cards || []).map(
         (card) =>
           [String(card.id), card]
       )
@@ -134,23 +134,23 @@ function applyPreviewMemoTools() {
 
   const regions =
     typeof instance.getRegions === "function"
-      ? instance.getRegions("memo-tools")
+      ? collectHighlightToolRegions(instance)
       : [];
 
 
-  mountMemoCardTools({
+  mountHighlightCardTools({
     regions,
 
     cards,
 
     /*
-      공개 화면에서는 memos.canManage(=주인장인가)가 정한다.
+      공개 화면에서는 highlights.canManage(=주인장인가)가 정한다.
       Preview는 언제나 소유자 세션이므로 그 값이 항상 true다 —
       그래서 여기서는 칩이 고른 상태를 함께 본다.
     */
 
     canManage:
-      context?.memos?.canManage !== false &&
+      context?.highlights?.canManage !== false &&
       previewMemoViewerMode === "owner",
 
     handlers:
@@ -342,9 +342,9 @@ function renderPreviewMemoViewerChip() {
           }
 
 
-          if (typeof closePostMemoPopup === "function") {
+          if (typeof closePostHighlightNotePopup === "function") {
 
-            closePostMemoPopup({
+            closePostHighlightNotePopup({
               silent: true
             });
 

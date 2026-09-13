@@ -27,8 +27,8 @@
      highlight  하이라이팅 모드 · 저장 · 겹침
      memo       말풍선 · 메모 팝업
      break      발췌문의 줄바꿈 · 말풍선 자리/모양 · 각진 판과 버튼 · 토스트 색
-     memos      메모 카테고리 화면
-     entry      메모 화면으로 가는 기본 진입점(플랫폼 칩)
+     memos      하이라이트 화면
+     entry      하이라이트 화면으로 가는 기본 진입점(플랫폼 칩)
      state      원문 위치 확인 3상태 · 조회 실패 처리
      protect    보호된 원문의 발췌문 — 차단 **과** 정상 해제
 ========================================================== */
@@ -200,7 +200,7 @@ function makeDb() {
       { post_id: 101, content: POST_BODY, ooc_content: null }
     ],
     post_highlights: [],
-    memo_folder_settings: [],
+    highlight_folder_settings: [],
     banners: [],
     quote_presets: [],
     skins: [{ id: 1, user_id: OWNER_ID, is_active: true }]
@@ -871,7 +871,7 @@ async function testHighlighting() {
 
 
 /* =========================================================
-   [memo] 말풍선 · 메모 저장 · 메모 삭제와 하이라이트 삭제의 차이
+   [memo] 말풍선 · 메모 저장 · 노트 삭제와 하이라이트 삭제의 차이
 ========================================================== */
 
 async function testMemo() {
@@ -917,19 +917,19 @@ async function testMemo() {
 
     /* 메모 작성 */
     await page.locator(".imory-popover-item", { hasText: "메모" }).first().click();
-    await page.waitForSelector(".post-memo-popup-field", { timeout: 5000 });
+    await page.waitForSelector(".post-highlight-note-popup-field", { timeout: 5000 });
 
-    const excerptShown = await page.locator(".post-memo-popup-excerpt").textContent();
+    const excerptShown = await page.locator(".post-highlight-note-popup-excerpt").textContent();
     check("[memo] 팝업 위쪽에 발췌문", (excerptShown || "").includes("첫 문장입니다"), excerptShown);
 
-    await page.locator(".post-memo-popup-field").fill("여기에 메모를 씁니다");
-    await page.locator(".post-memo-popup-save").click();
+    await page.locator(".post-highlight-note-popup-field").fill("여기에 메모를 씁니다");
+    await page.locator(".post-highlight-note-popup-save").click();
     await page.waitForTimeout(600);
 
     check("[memo] 메모가 저장된다", db.post_highlights[0].note === "여기에 메모를 씁니다",
       String(db.post_highlights[0].note));
 
-    check("[memo] 팝업이 닫힌다", await page.locator(".post-memo-popup").count() === 0);
+    check("[memo] 팝업이 닫힌다", await page.locator(".post-highlight-note-popup").count() === 0);
 
     /* 메모가 생기면 읽기 상태에서 읽을 수 있다 */
     await page.locator(".post-highlight-mode-done").click();
@@ -1017,15 +1017,15 @@ async function testExcerptBreaks() {
     await page.locator(".post-highlight").first().click();
     await page.waitForSelector(".imory-popover:not([hidden])", { timeout: 5000 });
     await page.locator(".imory-popover-item", { hasText: "메모" }).first().click();
-    await page.waitForSelector(".post-memo-popup-field", { timeout: 5000 });
+    await page.waitForSelector(".post-highlight-note-popup-field", { timeout: 5000 });
 
-    const popupExcerpt = await page.locator(".post-memo-popup-excerpt").textContent();
+    const popupExcerpt = await page.locator(".post-highlight-note-popup-excerpt").textContent();
     check("[break] ★ 메모 팝업의 발췌문에도 줄바꿈이 남는다",
       (popupExcerpt || "").includes("문장입니다.\n\n다음 문단"),
       JSON.stringify(popupExcerpt));
 
     const excerptWhiteSpace = await page.evaluate(() =>
-      getComputedStyle(document.querySelector(".post-memo-popup-excerpt")).whiteSpace
+      getComputedStyle(document.querySelector(".post-highlight-note-popup-excerpt")).whiteSpace
     );
     check("[break] 그 줄바꿈이 실제로 그려진다(pre-wrap)",
       excerptWhiteSpace.startsWith("pre"), excerptWhiteSpace);
@@ -1034,10 +1034,10 @@ async function testExcerptBreaks() {
 
     const shape = await page.evaluate(() => {
       const px = (el, prop) => parseFloat(getComputedStyle(el)[prop]);
-      const panel = document.querySelector(".post-memo-popup-panel");
-      const field = document.querySelector(".post-memo-popup-field");
-      const cancel = document.querySelector(".post-memo-popup-cancel");
-      const save = document.querySelector(".post-memo-popup-save");
+      const panel = document.querySelector(".post-highlight-note-popup-panel");
+      const field = document.querySelector(".post-highlight-note-popup-field");
+      const cancel = document.querySelector(".post-highlight-note-popup-cancel");
+      const save = document.querySelector(".post-highlight-note-popup-save");
       return {
         panel: px(panel, "borderTopLeftRadius"),
         field: px(field, "borderTopLeftRadius"),
@@ -1058,8 +1058,8 @@ async function testExcerptBreaks() {
       shape.saveBg.includes("255, 250, 251") && shape.saveBorder.includes("231, 199, 211"),
       `${shape.saveBg} / ${shape.saveBorder}`);
 
-    await page.locator(".post-memo-popup-field").fill("덩어리 위에 뜨는 메모");
-    await page.locator(".post-memo-popup-save").click();
+    await page.locator(".post-highlight-note-popup-field").fill("덩어리 위에 뜨는 메모");
+    await page.locator(".post-highlight-note-popup-save").click();
     await page.waitForTimeout(600);
 
     /* --- 3) 읽기 상태 말풍선 --- */
@@ -1191,11 +1191,11 @@ async function testExcerptBreaks() {
 
 
 /* =========================================================
-   [memos] 메모 카테고리
+   [memos] 하이라이트 화면
 ========================================================== */
 
 async function testMemoScreen() {
-  console.log("\n[memos] 메모 카테고리");
+  console.log("\n[memos] 하이라이트 화면");
 
   const db = makeDb();
   db.post_highlights.push(
@@ -1215,26 +1215,26 @@ async function testMemoScreen() {
 
   await withPage({ width: 390, height: 844 }, { db, signedInAs: OWNER_ID }, async (page, { errors }) => {
     await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector(".memo-card", { timeout: 20000 });
+    await page.waitForSelector(".highlight-card", { timeout: 20000 });
 
-    const cards = await page.locator(".memo-card").count();
+    const cards = await page.locator(".highlight-card").count();
     check("[memos] 카드 목록", cards === 2, `n=${cards}`);
 
-    const firstExcerpt = await page.locator(".memo-card-excerpt").first().textContent();
+    const firstExcerpt = await page.locator(".highlight-card-excerpt").first().textContent();
     check("[memos] 최신순 정렬", (firstExcerpt || "").includes("두 번째 문장"), firstExcerpt);
 
-    const notes = await page.locator(".memo-card-note:visible").count();
+    const notes = await page.locator(".highlight-card-note:visible").count();
     check("[memos] 메모가 있는 카드에만 메모 영역", notes === 1, `n=${notes}`);
 
-    const missing = await page.locator(".memo-card-missing:visible").count();
+    const missing = await page.locator(".highlight-card-missing:visible").count();
     check("[memos] 위치를 확인한 적이 없으면 '찾을 수 없음'을 붙이지 않는다",
       missing === 0, `n=${missing}`);
 
-    const meta = await page.locator(".memo-card-meta").first().textContent();
+    const meta = await page.locator(".highlight-card-meta").first().textContent();
     check("[memos] 원본 글 제목과 카테고리명",
       (meta || "").includes("첫 번째 글") && (meta || "").includes("일기"), meta);
 
-    const ownerMenus = await page.locator(".memo-card-menu").count();
+    const ownerMenus = await page.locator(".highlight-card-menu").count();
     check("[memos] 주인장에게 카드 ⋮", ownerMenus === 2, `n=${ownerMenus}`);
 
     /* 가로 넘침 없음 */
@@ -1243,25 +1243,25 @@ async function testMemoScreen() {
     );
     check("[memos] 모바일 가로 넘침 없음", overflow <= 1, `overflow=${overflow}`);
 
-    /* 메모 삭제 vs 하이라이트 삭제 */
+    /* 노트 삭제 vs 하이라이트 삭제 */
     page.on("dialog", d => d.accept());
 
-    await page.locator(".memo-card-menu").nth(1).click();
+    await page.locator(".highlight-card-menu").nth(1).click();
     await page.waitForSelector(".imory-popover:not([hidden])");
     const cardItems = await page.locator(".imory-popover-item-label").allTextContents();
-    check("[memos] 메모 있는 카드 메뉴 = 수정/메모 삭제/하이라이트 삭제",
-      cardItems.includes("메모 수정") && cardItems.includes("메모 삭제") && cardItems.includes("하이라이트 삭제"),
+    check("[memos] 메모 있는 카드 메뉴 = 수정/노트 삭제/하이라이트 삭제",
+      cardItems.includes("노트 수정") && cardItems.includes("노트 삭제") && cardItems.includes("하이라이트 삭제"),
       cardItems.join(" | "));
 
-    await page.locator(".imory-popover-item", { hasText: "메모 삭제" }).click();
+    await page.locator(".imory-popover-item", { hasText: "노트 삭제" }).click();
     await page.waitForTimeout(800);
 
-    check("[memos] 메모 삭제는 카드를 남긴다",
+    check("[memos] 노트 삭제는 카드를 남긴다",
       db.post_highlights.length === 2 && db.post_highlights.find(h => h.id === "hl-1").note === null,
       `n=${db.post_highlights.length}`);
 
-    await page.waitForSelector(".memo-card", { timeout: 10000 });
-    await page.locator(".memo-card-menu").nth(1).click();
+    await page.waitForSelector(".highlight-card", { timeout: 10000 });
+    await page.locator(".highlight-card-menu").nth(1).click();
     await page.waitForSelector(".imory-popover:not([hidden])");
     await page.locator(".imory-popover-item", { hasText: "하이라이트 삭제" }).click();
     await page.waitForTimeout(900);
@@ -1271,9 +1271,9 @@ async function testMemoScreen() {
 
     /* 폴더별 보기 */
     await page.goto(`${BASE}/${SLUG}/memos?view=folders`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector(".memo-folder-card", { timeout: 20000 });
-    const folderName = await page.locator(".memo-folder-card .memo-folder-name:visible").first().textContent();
-    const folderCount = await page.locator(".memo-folder-count:visible").first().textContent();
+    await page.waitForSelector(".highlight-folder-card", { timeout: 20000 });
+    const folderName = await page.locator(".highlight-folder-card .highlight-folder-name:visible").first().textContent();
+    const folderCount = await page.locator(".highlight-folder-count:visible").first().textContent();
     check("[memos] 폴더별 보기 = 원본 카테고리", (folderName || "").includes("일기"), folderName);
     check("[memos] 열람 가능한 개수", (folderCount || "").includes("1개"), folderCount);
 
@@ -1285,9 +1285,9 @@ async function testMemoScreen() {
 
   await withPage({ width: 390, height: 844 }, { db, signedInAs: null }, async (page) => {
     await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector(".memo-card", { timeout: 20000 });
+    await page.waitForSelector(".highlight-card", { timeout: 20000 });
     check("[memos] 방문자에게 카드 ⋮ 없음",
-      await page.locator(".memo-card-menu").count() === 0);
+      await page.locator(".highlight-card-menu").count() === 0);
   });
 }
 
@@ -1332,8 +1332,8 @@ async function testProtection() {
 
   await withPage({ width: 1280, height: 900 }, { db, signedInAs: OWNER_ID }, async (page) => {
     await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
-    await page.waitForSelector(".memo-card", { timeout: 20000 });
-    const text = await page.locator(".memo-card-list").textContent();
+    await page.waitForSelector(".highlight-card", { timeout: 20000 });
+    const text = await page.locator(".highlight-card-list").textContent();
     check("[protect] 같은 순간 주인장에게는 보인다",
       (text || "").includes("비밀 발췌문입니다"));
   });
@@ -1417,18 +1417,89 @@ async function testProtection() {
 }
 
 
-/* =========================================================
-   [entry] 메모 화면으로 가는 기본 진입점
 
-   기존 스킨은 navigation.memos를 그리지 않는다. 그때만 플랫폼이
-   작은 칩을 얹고, 스킨이 이미 그렸거나 사용자가 껐으면 얹지 않는다
-   (skin/skin-memo-entry.js).
+/* =========================================================
+   [legacy] /:slug/memos 와 /:slug/highlights
+
+   HIGHLIGHT-1 때의 주소를 이미 공유했거나 스킨에 적어 둔 사람이
+   있다. 같은 데이터가 나와야 하고, 한 화면이 두 번 그려지면 안 된다
+   (posts/editor/posts-router-init.js · skin/skin-link-nav.js).
 ========================================================== */
 
-const MEMO_ENTRY = "#imoryPlatformMemoEntry";
+async function testLegacyHighlightRoute() {
+  console.log("\n[legacy] 옛 주소 /memos 와 새 주소 /highlights");
+
+  const legacyDb = () => {
+    const db = makeDb();
+    db.post_highlights.push(
+      {
+        id: "hl-1", post_id: 101, user_id: OWNER_ID, color: "#f6e0c8",
+        excerpt: "첫 문장입니다", prefix: "", suffix: ".", text_start: 0,
+        note: "노트가 있는 카드",
+        created_at: "2026-09-05T01:00:00Z", updated_at: "2026-09-05T01:00:00Z"
+      },
+      {
+        id: "hl-2", post_id: 101, user_id: OWNER_ID, color: "#cfe0f0",
+        excerpt: "두 번째 문장입니다", prefix: ". ", suffix: "", text_start: 9,
+        note: null,
+        created_at: "2026-09-06T01:00:00Z", updated_at: "2026-09-06T01:00:00Z"
+      }
+    );
+    return db;
+  };
+
+
+  for (const path of ["highlights", "memos"]) {
+
+    await withPage({ width: 1280, height: 900 }, { db: legacyDb(), signedInAs: OWNER_ID }, async (page) => {
+      await page.goto(`${BASE}/${SLUG}/${path}`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".highlight-card", { timeout: 20000 });
+      await page.waitForTimeout(600);
+
+      check(`[legacy] /${path} 가 같은 카드 목록을 연다`,
+        (await page.locator(".highlight-card").count()) === 2,
+        String(await page.locator(".highlight-card").count()));
+
+      check(`[legacy] /${path} 에서 화면은 한 번만 그려진다`,
+        (await page.locator(".highlight-screen").count()) === 1,
+        String(await page.locator(".highlight-screen").count()));
+
+      check(`[legacy] /${path} 에서 카드 도구도 한 벌뿐이다`,
+        (await page.locator(".highlight-card-tools").count()) <= 2,
+        String(await page.locator(".highlight-card-tools").count()));
+    });
+
+  }
+
+
+  /* 폴더별 보기와 폴더 하나도 옛 주소로 열린다 */
+
+  await withPage({ width: 1280, height: 900 }, { db: legacyDb(), signedInAs: OWNER_ID }, async (page) => {
+    await page.goto(`${BASE}/${SLUG}/memos?view=folders`, { waitUntil: "domcontentloaded" });
+    await page.waitForSelector(".highlight-folder-card", { timeout: 20000 });
+
+    check("[legacy] /memos?view=folders 도 그대로 동작한다",
+      (await page.locator(".highlight-folder-card").count()) >= 1);
+
+    const href = await page.locator(".highlight-folder-card").first().getAttribute("href");
+
+    check("[legacy] ★ 그 안에서 새로 만드는 링크는 정규 주소다",
+      String(href).includes("/highlights/category/"), String(href));
+  });
+}
+
+/* =========================================================
+   [entry] 하이라이트 화면으로 가는 기본 진입점
+
+   기존 스킨은 navigation.highlights 를 그리지 않는다. 그때만 플랫폼이
+   작은 칩을 얹고, 스킨이 이미 그렸거나 사용자가 껐으면 얹지 않는다
+   (skin/skin-highlight-entry.js).
+========================================================== */
+
+const MEMO_ENTRY = "#imoryPlatformHighlightEntry";
 
 async function testMemoEntry() {
-  console.log("\n[entry] 메모 진입점");
+  console.log("\n[entry] 하이라이트 진입점");
 
   /* --- 1) 메모 링크가 없는 스킨: HOME에 칩이 나온다 --- */
 
@@ -1437,14 +1508,14 @@ async function testMemoEntry() {
     await page.waitForSelector(MEMO_ENTRY, { timeout: 20000 });
 
     const href = await page.locator(MEMO_ENTRY).getAttribute("href");
-    check("[entry] 스킨에 메모 링크가 없으면 플랫폼이 칩을 얹는다",
-      href === `/${SLUG}/memos`, href);
+    check("[entry] 스킨에 하이라이트 링크가 없으면 플랫폼이 칩을 얹는다",
+      href === `/${SLUG}/highlights`, href);
 
     /* 문서 전체 리로드가 아니라 기존 SPA 라우터를 탄다 */
     await page.evaluate(() => { window.__imoryNoReload = true; });
     await page.locator(MEMO_ENTRY).click();
     await page.waitForFunction(
-      () => location.pathname.endsWith("/memos"),
+      () => location.pathname.endsWith("/highlights"),
       null,
       { timeout: 20000 }
     );
@@ -1453,10 +1524,10 @@ async function testMemoEntry() {
     check("[entry] ★ 기존 SPA 라우터로 간다(문서를 새로 받지 않는다)",
       (await page.evaluate(() => window.__imoryNoReload === true)) === true);
 
-    check("[entry] 메모 화면이 열린다",
-      (await page.locator(".memo-screen").count()) === 1);
+    check("[entry] 하이라이트 화면이 열린다",
+      (await page.locator(".highlight-screen").count()) === 1);
 
-    check("[entry] 메모 화면에서는 칩이 사라진다",
+    check("[entry] 하이라이트 화면에서는 칩이 사라진다",
       (await page.locator(MEMO_ENTRY).count()) === 0);
 
     await page.goBack();
@@ -1481,12 +1552,13 @@ async function testMemoEntry() {
   }
 
 
-  /* --- 3) 스킨이 자기 메모 링크를 그렸으면 중복 표시하지 않는다 --- */
+  /* --- 3) 스킨이 자기 하이라이트 링크를 그렸으면 중복 표시하지 않는다 --- */
 
-  {
+  for (const contextPath of ["navigation.highlights", "navigation.memos"]) {
+
     const skin = JSON.parse(JSON.stringify(SKIN_PACKAGE));
     skin.templates.home.html +=
-      `<a class="skin-own-memos" data-imory-href="navigation.memos.href" data-imory-bind="navigation.memos.name"></a>`;
+      `<a class="skin-own-memos" data-imory-href="${contextPath}.href" data-imory-bind="${contextPath}.name"></a>`;
 
     await withPage({ width: 1280, height: 900 }, { db: makeDb(), signedInAs: null, skin }, async (page) => {
       await page.waitForTimeout(0);
@@ -1494,10 +1566,39 @@ async function testMemoEntry() {
       await page.waitForSelector(".skin-own-memos", { timeout: 20000 });
       await page.waitForTimeout(1000);
 
-      check("[entry] 스킨이 그린 메모 링크가 실제로 있다",
-        (await page.locator(".skin-own-memos").getAttribute("href")) === `/${SLUG}/memos`);
+      check(`[entry] 스킨이 그린 링크(${contextPath})가 정규 주소를 가리킨다`,
+        (await page.locator(".skin-own-memos").getAttribute("href")) === `/${SLUG}/highlights`,
+        String(await page.locator(".skin-own-memos").getAttribute("href")));
 
-      check("[entry] ★ 스킨이 그렸으면 플랫폼 칩은 얹지 않는다(중복 없음)",
+      check(`[entry] ★ 스킨이 그렸으면 플랫폼 칩은 얹지 않는다(${contextPath})`,
+        (await page.locator(MEMO_ENTRY).count()) === 0);
+    });
+
+  }
+
+
+  /* --- 3-b) 레거시 alias 와 새 이름이 같은 값이라 두 번 그려지지 않는다 --- */
+
+  {
+    const skin = JSON.parse(JSON.stringify(SKIN_PACKAGE));
+    skin.templates.home.html +=
+      `<a class="skin-own-memos" data-imory-href="navigation.highlights.href" data-imory-bind="navigation.highlights.name"></a>` +
+      `<a class="skin-legacy-memos" data-imory-href="navigation.memos.href" data-imory-bind="navigation.memos.name"></a>`;
+
+    await withPage({ width: 1280, height: 900 }, { db: makeDb(), signedInAs: null, skin }, async (page) => {
+      await page.goto(`${BASE}/${SLUG}/`, { waitUntil: "domcontentloaded" });
+      await page.waitForSelector(".skin-legacy-memos", { timeout: 20000 });
+      await page.waitForTimeout(800);
+
+      const hrefs = await page.evaluate(() => [
+        document.querySelector(".skin-own-memos").getAttribute("href"),
+        document.querySelector(".skin-legacy-memos").getAttribute("href")
+      ]);
+
+      check("[entry] ★ highlights 와 memos alias 가 같은 값이다",
+        hrefs[0] === hrefs[1] && hrefs[0] === `/${SLUG}/highlights`, JSON.stringify(hrefs));
+
+      check("[entry] 두 이름을 다 써도 플랫폼 칩이 더 생기지는 않는다",
         (await page.locator(MEMO_ENTRY).count()) === 0);
     });
   }
@@ -1530,8 +1631,8 @@ async function testMemoEntry() {
    그리고 "조회 실패"를 "저장된 항목 없음"으로 표시하지 않는다.
 ========================================================== */
 
-const MISSING_LABEL = ".memo-card-missing:visible";
-const UNCHECKED_LABEL = ".memo-card-unchecked:visible";
+const MISSING_LABEL = ".highlight-card-missing:visible";
+const UNCHECKED_LABEL = ".highlight-card-unchecked:visible";
 
 function seedTwoHighlights(db) {
   db.post_highlights.push({
@@ -1559,7 +1660,7 @@ async function testPlacementState() {
 
     await withPage({ width: 1280, height: 900 }, { db, signedInAs: OWNER_ID }, async (page) => {
       await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
-      await page.waitForSelector(".memo-card", { timeout: 20000 });
+      await page.waitForSelector(".highlight-card", { timeout: 20000 });
       await page.waitForTimeout(500);
 
       const missing = await page.locator(MISSING_LABEL).count();
@@ -1602,7 +1703,7 @@ async function testPlacementState() {
         Boolean(parsed["101"]?.v), String(parsed["101"]?.v));
 
       await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
-      await page.waitForSelector(".memo-card", { timeout: 20000 });
+      await page.waitForSelector(".highlight-card", { timeout: 20000 });
       await page.waitForTimeout(500);
 
       const missing = await page.locator(MISSING_LABEL).count();
@@ -1628,7 +1729,7 @@ async function testPlacementState() {
       db.posts[0].updated_at = "2027-01-01T00:00:00Z";
 
       await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
-      await page.waitForSelector(".memo-card", { timeout: 20000 });
+      await page.waitForSelector(".highlight-card", { timeout: 20000 });
       await page.waitForTimeout(500);
 
       const missing = await page.locator(MISSING_LABEL).count();
@@ -1654,10 +1755,10 @@ async function testPlacementState() {
       { db, signedInAs: OWNER_ID, noPostUpdatedAt: true },
       async (page) => {
         await page.goto(`${BASE}/${SLUG}/memos`, { waitUntil: "domcontentloaded" });
-        await page.waitForSelector(".memo-card", { timeout: 20000 });
+        await page.waitForSelector(".highlight-card", { timeout: 20000 });
         await page.waitForTimeout(500);
 
-        const cards = await page.locator(".memo-card").count();
+        const cards = await page.locator(".highlight-card").count();
         check("[state] ★ migration 이전 배포에서도 카드는 전부 보인다",
           cards === 2, `n=${cards}`);
       }
@@ -1743,6 +1844,7 @@ async function testPlacementState() {
     if (wants("memo")) await testMemo();
     if (wants("break")) await testExcerptBreaks();
     if (wants("memos")) await testMemoScreen();
+    if (wants("legacy")) await testLegacyHighlightRoute();
     if (wants("entry")) await testMemoEntry();
     if (wants("state")) await testPlacementState();
     if (wants("protect")) await testProtection();

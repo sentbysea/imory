@@ -46,8 +46,9 @@
 
 const SKIN_PACKAGE_NORMALIZE_CSS_CHECK_NAMESPACE = "package-normalize-check";
 /* FOLDER-2: templates.folder(선택)도 같은 sanitize를 거친다.
-   HIGHLIGHT-1: templates.memos(선택)도 마찬가지다. */
-const SKIN_PACKAGE_NORMALIZE_PAGE_TYPES = ["home", "category", "post", "banner", "folder", "memos"];
+   HIGHLIGHT-1/2: 하이라이트 화면 template(templates.highlights, 그리고
+   레거시 이름 templates.memos)도 마찬가지다. */
+const SKIN_PACKAGE_NORMALIZE_PAGE_TYPES = ["home", "category", "post", "banner", "folder", "highlights", "memos"];
 
 async function normalizeSkinPackageForDraft(skinPackage) {
 

@@ -323,26 +323,26 @@ async function revealPostArea(
 
 
   /*
-    HIGHLIGHT-1 후속 — 메모 화면 기본 진입점.
+    HIGHLIGHT-1 후속 — 하이라이트 화면 기본 진입점.
 
     각 렌더러(목록/상세/폴더/메모/배너)마다 부르지 않고 여기
     한 군데에서 한다. 표시 공간이 보이게 되는 유일한 지점이고,
     그 시점에는 스킨 DOM이 이미 #postArea 안에 들어와 있어
     "스킨이 자기 메모 링크를 그렸는가"를 실제로 그려진 화면에서
-    판정할 수 있다(skin/skin-memo-entry.js).
+    판정할 수 있다(skin/skin-highlight-entry.js).
 
     await하지 않는다 — 진입점 하나 때문에 화면이 늦게 드러나면
     안 된다.
   */
 
-  if (typeof syncPlatformMemoEntryForScreen === "function") {
+  if (typeof syncPlatformHighlightEntryForScreen === "function") {
 
-    syncPlatformMemoEntryForScreen({
+    syncPlatformHighlightEntryForScreen({
       skinRoot:
         postArea,
 
-      isMemosScreen:
-        currentPostView === "memos"
+      isHighlightsScreen:
+        currentPostView === "highlights"
     });
 
   }
@@ -1555,9 +1555,9 @@ async function closePostArea(
     나오지 않고, 아니면 다시 나온다.
   */
 
-  if (typeof syncPlatformMemoEntryForScreen === "function") {
+  if (typeof syncPlatformHighlightEntryForScreen === "function") {
 
-    syncPlatformMemoEntryForScreen({
+    syncPlatformHighlightEntryForScreen({
       skinRoot:
         document.getElementById(
           "themeMount"

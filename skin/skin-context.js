@@ -86,11 +86,15 @@ const SKIN_HOME_RECENT_POSTS_LIMIT =
   — 아래 buildBaseSkinContext() 참고.
 */
 /*
-  hide_memo_entry — Settings > HOME > ETC의 "메모 진입점 숨기기".
+  hide_memo_entry — Settings > HOME > ETC의 "하이라이트 진입점 숨기기".
   값은 "on"/"off" 문자열이고(다른 ETC 설정과 같은 자리), Context에는
-  navigation.memos.enabled의 반대로 실린다. 스킨이 그 값을 보고 자기
-  링크를 감출 수 있고, 플랫폼의 기본 진입점도 같은 값을 따른다
-  (skin/skin-memo-entry.js).
+  navigation.highlights.enabled(및 레거시 alias navigation.memos.enabled)
+  의 반대로 실린다. 스킨이 그 값을 보고 자기 링크를 감출 수 있고,
+  플랫폼의 기본 진입점도 같은 값을 따른다(skin/skin-highlight-entry.js).
+
+  ★ 키 이름은 HIGHLIGHT-1 의 hide_memo_entry 그대로 둔다 — 이미 저장된
+  사용자 설정이라 키를 바꾸면 이 진입점을 껐던 사람의 설정이 조용히
+  풀린다. 바뀐 것은 화면 문구와 Context 이름뿐이다.
 */
 const SKIN_CONTEXT_SITE_SETTINGS_KEYS =
   ["blog_title", "favicon_url", "avatar_url", "hide_memo_entry"];
@@ -537,8 +541,16 @@ const SKIN_CATEGORY_BASE_COLUMNS =
   경로의 유무만 읽는다(IMORY_GALLERY1_DESIGN.md §3-5).
 */
 
+/*
+  HIGHLIGHT-2: pagination_style / pagination_window_size 두 컬럼이
+  같은 묶음에 들어간다 — 아래 42703 폴백이 "표시 설정 컬럼이 아직
+  없는 배포"를 이미 처리하므로, 새 컬럼을 여기 더하는 것만으로
+  migration 이전 배포에서도 지금까지와 똑같이 동작한다.
+*/
+
 const SKIN_CATEGORY_GALLERY_COLUMNS =
-  "list_style, page_size, secret_cover_mode, secret_cover_path";
+  "list_style, page_size, secret_cover_mode, secret_cover_path, " +
+  "pagination_style, pagination_window_size, paginate_posts";
 
 
 /*
@@ -610,8 +622,13 @@ function selectSkinCategoryRow(
   쓰지만, 신뢰 경계는 DB이고 여기는 화면이 깨지지 않게 하는 방어다.
 */
 
-const SKIN_GALLERY_PAGE_SIZES =
-  [6, 12, 18, 24];
+/*
+  HIGHLIGHT-2: page_size 의 허용 범위가 갤러리용 네 값에서 1..100 으로
+  넓어졌다(글 목록도 같은 계산기를 쓴다). 정규화는 공용 상수 파일
+  하나에만 둔다 — core/lib/category-types.js 의
+  normalizeCategoryPageSize / normalizePaginationStyle /
+  normalizePaginationWindowSize.
+*/
 
 const SKIN_GALLERY_DEFAULT_PAGE_SIZE =
   12;
@@ -632,9 +649,34 @@ function normalizeSkinCategoryDisplay(
     Number(category && category.page_size);
 
   const pageSize =
-    SKIN_GALLERY_PAGE_SIZES.includes(rawPageSize)
-      ? rawPageSize
+    Number.isFinite(rawPageSize) && rawPageSize >= 1
+      ? normalizeCategoryPageSize(rawPageSize)
       : SKIN_GALLERY_DEFAULT_PAGE_SIZE;
+
+
+  /*
+    HIGHLIGHT-2 — 글 목록을 페이지로 나눌지. 기본은 false 다.
+    gallery 는 이 값과 무관하게 나뉜다(아래 paginationActive 주석).
+  */
+
+  const paginatePosts =
+    category && category.paginate_posts === true;
+
+
+  /* HIGHLIGHT-2 — 페이지 번호 표기와 창 크기 */
+
+  const paginationStyle =
+    normalizePaginationStyle(
+      category && category.pagination_style
+    );
+
+  const paginationWindowSize =
+    normalizePaginationWindowSize(
+      category && category.pagination_window_size !== undefined &&
+      category.pagination_window_size !== null
+        ? category.pagination_window_size
+        : PAGINATION_DEFAULT_WINDOW_SIZE
+    );
 
 
   /*
@@ -661,6 +703,9 @@ function normalizeSkinCategoryDisplay(
   return {
     listStyle,
     pageSize,
+    paginatePosts,
+    paginationStyle,
+    paginationWindowSize,
     secretCoverMode,
     secretCoverUrl:
       secretCoverMode === "image"
@@ -1400,10 +1445,87 @@ async function buildBaseSkinContext(
         id: String(category.id),
         name: category.name,
         type: category.type,
-        href: buildSitePath(slug, `/category/${category.id}`),
+
+        /*
+          HIGHLIGHT-2: highlight 카테고리의 정규 주소는 /:slug/highlights
+          다. 메뉴에서도 그 주소를 쓴다 — /category/:id 로 들어와도 같은
+          화면이 열리지만(posts/view/posts-view-list.js), 한 화면에 두
+          주소가 살아 있으면 뒤로가기·공유가 갈라지고 플랫폼의 진입점
+          칩이 "스킨이 이미 링크를 그렸다"를 못 알아본다(그 판정은
+          주소로만 한다, skin/skin-highlight-entry.js).
+        */
+        href:
+          category.type === "highlight"
+            ? buildSiteHighlightsPath(slug)
+            : buildSitePath(slug, `/category/${category.id}`),
+
         itemCount: null
       })
     );
+
+
+  /*
+    HIGHLIGHT-2: 하이라이트 화면 링크 하나. navigation.highlights 와
+    (레거시) navigation.memos 가 **같은 객체**를 가리키므로 값이
+    갈라질 수 없다.
+  */
+
+  const highlightCategory =
+    categories.find(
+      (category) =>
+        category.type === "highlight"
+    ) || null;
+
+
+  const highlightsNavigation =
+    {
+      name:
+        highlightCategory?.name ||
+        "HIGHLIGHTS",
+
+      href:
+        buildSiteHighlightsPath(slug),
+
+      /* 실제 카테고리 행이 있는가 — 스킨이 메뉴 자리를 고를 때 쓴다 */
+      hasCategory:
+        Boolean(highlightCategory),
+
+      /*
+        "카테고리 목록과 **별개로** 링크를 한 줄 더 그릴 차례인가".
+
+        HIGHLIGHT 카테고리가 있으면 그 행이 이미 navigation.categories
+        안에 같은 href 로 들어 있으므로 false 다 — 한 메뉴에 같은 곳으로
+        가는 링크가 두 개 생기지 않게 하는 값이다. data-imory-if 는
+        "A이고 B"를 표현할 수 없어서 미리 계산해 둔다.
+      */
+      showStandaloneLink:
+        !highlightCategory &&
+        String(siteSettings?.hide_memo_entry ?? "").trim() !== "on",
+
+      categoryId:
+        highlightCategory
+          ? String(highlightCategory.id)
+          : null,
+
+      /*
+        사용자가 Settings > HOME > ETC에서 껐으면 false다. 스킨은
+        이 값으로 자기 링크를 감출 수 있고(data-imory-if), 스킨이
+        링크를 그리지 않은 경우 플랫폼이 얹는 기본 진입점도 같은
+        값을 따른다(skin/skin-highlight-entry.js). "숨김"은 표시
+        설정일 뿐이라 주소 자체는 그대로 유효하다 — 주인장이
+        주소를 알고 있으면 계속 쓸 수 있어야 한다.
+
+        DB 키 이름은 hide_memo_entry 그대로다. 이미 저장된 사용자
+        설정이고, 키를 바꾸면 껐던 사람의 설정이 조용히 풀린다 —
+        화면 문구만 "하이라이트 진입점 숨기기"로 바뀌었다.
+      */
+
+      enabled:
+        String(
+          siteSettings?.hide_memo_entry ??
+          ""
+        ).trim() !== "on"
+    };
 
 
   /*
@@ -1517,34 +1639,35 @@ async function buildBaseSkinContext(
         ),
 
       /*
-        HIGHLIGHT-1: 메모 카테고리로 가는 링크. 어느 화면에서든
+        HIGHLIGHT-2: 하이라이트 화면으로 가는 링크. 어느 화면에서든
         같은 값이라 base에 둔다 — 스킨이 nav 어디에 놓든 상관없다.
         하이라이트가 하나도 없어도 주소는 유효하다(빈 상태 화면이
-        나온다, 요구사항 7).
+        나온다).
+
+        ★ navigation.categories 와 중복되지 않는가
+        HIGHLIGHT 카테고리를 만든 사용자는 그 행이 categories[] 에도
+        **한 번** 들어 있고, 거기서도 href 는 canonical /highlights 다
+        (위 categoryItems). 그래서 스킨이 categories[] 를 돌려 그리면
+        링크가 한 개, navigation.highlights 만 쓰면 한 개다. 둘 다
+        쓰면 스킨이 스스로 두 개를 그린 것이고, 그 경우 플랫폼은
+        진입점 칩을 얹지 않는다 — 칩은 "화면에 그 주소를 가리키는
+        <a>가 하나도 없을 때"만 나온다(skin/skin-highlight-entry.js).
+        즉 플랫폼이 자동으로 두 번 그리는 경로는 없다.
+
+        name 은 HIGHLIGHT 카테고리가 있으면 그 카테고리의 표시 이름,
+        없으면 기본값 HIGHLIGHTS 다 — 사용자가 Settings 에서 고친
+        이름이 스킨의 메뉴에도 그대로 나오게 한다.
       */
 
-      memos: {
-        name:
-          "MEMO",
+      highlights: highlightsNavigation,
 
-        href:
-          buildSiteMemosPath(slug),
+      /*
+        DEPRECATED alias — HIGHLIGHT-1 스킨의 navigation.memos 가
+        계속 동작하게 **같은 객체**를 가리킨다. 새 수동 MEMO 기능과는
+        아무 관계가 없다(IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md §12).
+      */
 
-        /*
-          사용자가 Settings > HOME > ETC에서 껐으면 false다. 스킨은
-          이 값으로 자기 링크를 감출 수 있고(data-imory-if), 스킨이
-          링크를 그리지 않은 경우 플랫폼이 얹는 기본 진입점도 같은
-          값을 따른다(skin/skin-memo-entry.js). "숨김"은 표시
-          설정일 뿐이라 주소 자체는 그대로 유효하다 — 주인장이
-          주소를 알고 있으면 계속 쓸 수 있어야 한다.
-        */
-
-        enabled:
-          String(
-            siteSettings?.hide_memo_entry ??
-            ""
-          ).trim() !== "on"
-      }
+      memos: highlightsNavigation
 
     },
 
@@ -1623,12 +1746,16 @@ async function buildBaseSkinContext(
         null,
 
       /*
-        메모 카드를 만들고 고칠 수 있는가(표시용). 실제 권한은
+        하이라이트 카드를 만들고 고칠 수 있는가(표시용). 실제 권한은
         post_highlights의 RLS와 소유자 전용 RPC가 강제한다 —
         스킨이 이 값을 무시하고 도구를 그려도 아무것도 저장되지
         않는다(요구사항 10 마지막 줄).
       */
 
+      canManageHighlights:
+        isOwner,
+
+      /* DEPRECATED alias — HIGHLIGHT-1 스킨 호환 */
       canManageMemos:
         isOwner
 
@@ -1666,9 +1793,15 @@ function buildSkinPageMeta(
        /:slug/category/:cid/folder/:fid 지만 page.type은 "folder"
        하나뿐이라 isCategory는 false다(banner와 같은 불변식). */
     isFolder: type === "folder",
-    /* HIGHLIGHT-1: 메모 카테고리(/:slug/memos). 라우트도 page.type도
-       독립이라 isCategory는 false다(banner/folder와 같은 불변식). */
-    isMemos: type === "memos"
+    /* HIGHLIGHT-2: 하이라이트 화면(/:slug/highlights). 라우트도 page.type도
+       독립이라 isCategory는 false다(banner/folder와 같은 불변식).
+       page.type 의 공식 값은 "highlights" 이고, HIGHLIGHT-1 이 쓴
+       page.isMemos 는 아래처럼 **같은 값의 alias** 로만 남는다 —
+       예전 스킨이 data-imory-if="page.isMemos" 로 감싼 블록이 계속
+       그려져야 하기 때문이다. 둘은 언제나 같은 boolean 이라 한 스킨이
+       둘 다 써도 같은 블록이 두 번 그려지지는 않는다. */
+    isHighlights: type === "highlights",
+    isMemos: type === "highlights"
   };
 
 }
@@ -2125,25 +2258,60 @@ function buildSkinGalleryCards(
 }
 
 
-/*
-  페이지 번호 목록은 플랫폼이 계산해서 완성된 링크와 함께 준다
-  (요구사항 5절 "페이지 계산·데이터 조회·권한 처리는 플랫폼").
-  스킨은 pages[]를 repeat으로 그리기만 하면 된다.
+/* =========================================================
+   category.pagination — post 와 gallery 공용 (HIGHLIGHT-2 §9)
 
-  1페이지 링크에는 ?page=가 붙지 않는다(정규 주소,
-  core/lib/site-path.js의 buildSiteCategoryPageUrl 주석).
-*/
+   페이지 번호 목록은 플랫폼이 계산해서 **완성된 글자와 링크**로 준다
+   (GALLERY-1 요구사항 5절 "페이지 계산·데이터 조회·권한 처리는
+   플랫폼"). 스킨은 pages[]를 repeat 으로 그리기만 하면 된다 — 로마
+   숫자를 스킨이 계산하지 않는다.
+
+   1페이지 링크에는 ?page= 가 붙지 않는다(정규 주소,
+   core/lib/site-path.js 의 buildSiteCategoryPageUrl 주석).
+
+   ★ 창(window) — 한 번에 보여 줄 번호 개수
+     windowSize 개만 지금 페이지 주변으로 잘라 낸다. 잘린 쪽에는
+     hasLeadingEllipsis / hasTrailingEllipsis 가 true 로 오고, 스킨은
+     그 자리에 자기 기호를 그린다. 전체 페이지가 windowSize 보다
+     적으면 전부 나오고 두 플래그는 false 다.
+
+     창 계산은 core/lib/category-types.js 의 buildPaginationWindow
+     하나만 쓴다 — 관리 화면의 미리보기와 공개 화면이 같은 답을
+     내야 하기 때문이다.
+
+   ★ allPages 도 함께 준다
+     창을 쓰지 않고 전체 번호를 그리고 싶은 스킨(GALLERY-1 때의 기본
+     갤러리 template 이 그랬다)이 깨지지 않게, pages[] 는 **창이
+     적용된** 목록이고 allPages[] 는 전체 목록이다. 기본 windowSize 가
+     7 이라 페이지가 7개 이하인 지금까지의 갤러리에서는 두 배열이
+     같은 값이다.
+========================================================== */
 
 function buildSkinCategoryPagination(
   slug,
   categoryId,
   currentPage,
   pageSize,
-  totalCount
+  totalCount,
+  display
 ) {
 
   const basePath =
     buildSitePath(slug, `/category/${categoryId}`);
+
+
+  const style =
+    normalizePaginationStyle(
+      display && display.paginationStyle
+    );
+
+
+  const windowSize =
+    normalizePaginationWindowSize(
+      display && display.paginationWindowSize !== undefined
+        ? display.paginationWindowSize
+        : PAGINATION_DEFAULT_WINDOW_SIZE
+    );
 
 
   const totalPages =
@@ -2165,19 +2333,35 @@ function buildSkinCategoryPagination(
       buildSiteCategoryPageUrl(basePath, n);
 
 
-  const pages =
-    [];
-
-  for (let n = 1; n <= totalPages; n += 1) {
-
-    pages.push({
+  const itemFor =
+    (n) => ({
       number: n,
-      label: String(n),
+      label: formatPaginationLabel(n, style),
       href: hrefFor(n),
       isCurrent: n === page
     });
 
+
+  const allPages =
+    [];
+
+  for (let n = 1; n <= totalPages; n += 1) {
+
+    allPages.push(itemFor(n));
+
   }
+
+
+  const visibleWindow =
+    buildPaginationWindow(
+      page,
+      totalPages,
+      windowSize
+    );
+
+
+  const pages =
+    visibleWindow.pages.map(itemFor);
 
 
   return {
@@ -2185,7 +2369,7 @@ function buildSkinCategoryPagination(
     currentPage: page,
 
     currentPageLabel:
-      String(page),
+      formatPaginationLabel(page, style),
 
     pageSize,
 
@@ -2194,7 +2378,24 @@ function buildSkinCategoryPagination(
     totalPages,
 
     totalPagesLabel:
-      String(totalPages),
+      formatPaginationLabel(totalPages, style),
+
+    /* 번호 표기 — 스킨이 자기 기호를 고를 때 쓸 수 있게 그대로 준다 */
+    style,
+
+    isDecimal:
+      style === "decimal",
+
+    isRomanLower:
+      style === "roman_lower",
+
+    windowSize,
+
+    hasLeadingEllipsis:
+      visibleWindow.hasLeadingEllipsis,
+
+    hasTrailingEllipsis:
+      visibleWindow.hasTrailingEllipsis,
 
     /* 페이지가 하나뿐이면 스킨이 이동 영역 자체를 접을 수 있다 */
     hasPages:
@@ -2222,7 +2423,9 @@ function buildSkinCategoryPagination(
     lastHref:
       hrefFor(totalPages),
 
-    pages
+    pages,
+
+    allPages
 
   };
 
@@ -2299,11 +2502,49 @@ async function buildCategorySkinContext(
     options.supportsGallery === true;
 
 
+  /* =====================================================
+     HIGHLIGHT-2 — 글 목록(post)도 같은 페이지 계산기를 쓴다
+
+     조건이 **두 개** 다 맞아야 켜진다:
+
+       1) 카테고리 설정이 그렇다 (categories.paginate_posts, 기본 false)
+       2) 렌더 중인 스킨이 category.pagination 을 실제로 그린다
+          (options.supportsPagination — 호출자가
+           skinTemplateUsesPagination()으로 판정해 넘긴다,
+           skin/skin-template.js)
+
+     갤러리가 (1) list_style, (2) 스킨이 category.gallery 를 쓰는가
+     두 개를 보는 것과 같은 구조다.
+
+     왜 둘 다 필요한가 — 페이지를 나누면 category.posts 가 "그 페이지의
+     root 글"이 된다.
+       · (2)만 보면: 갤러리용으로 페이지 링크를 그려 둔 스킨에서
+         **글 목록 카테고리까지** 갑자기 잘리고 폴더 안 글이 사라진다.
+         실제로 skin/skin-gallery-e2e-test.mjs 의 [list] 절이 이것을
+         잡았다.
+       · (1)만 보면: 페이지 링크를 그리지 않는 스킨에서 나머지 글로 갈
+         방법이 없어진다.
+     둘 중 하나라도 아니면 아래 else 가지가 지금까지와 **완전히 동일한**
+     조회를 한다.
+
+     조회 자체가 페이지 범위만 가져온다(PostgREST Range +
+     count=exact) — 전체를 받아 CSS 로 숨기지 않는다
+     (요구사항 8: "실제 DB 조회부터 해당 페이지 범위만").
+  ====================================================== */
+
+  const paginationActive =
+    galleryActive ||
+    (
+      options.supportsPagination === true &&
+      display.paginatePosts === true
+    );
+
+
   let postsRaw;
   let treePosts;
   let galleryPage = null;
 
-  if (galleryActive) {
+  if (paginationActive) {
 
     galleryPage =
       await fetchSkinCategoryRootPostsPage(
@@ -2317,7 +2558,7 @@ async function buildCategorySkinContext(
       galleryPage.rows;
 
     /*
-      트리는 "폴더 안의 글"만으로 세운다 — root 글은 갤러리 카드가
+      트리는 "폴더 안의 글"만으로 세운다 — root 글은 카드/목록이
       담당하므로 트리에는 폴더 노드만 남고, 같은 글이 두 영역에
       동시에 나올 수 없다. 폴더가 없으면 조회 자체를 생략한다.
     */
@@ -2412,14 +2653,22 @@ async function buildCategorySkinContext(
       : null;
 
 
+  /*
+    HIGHLIGHT-2: 갤러리든 글 목록이든 **같은 계산기**를 쓴다. 페이지를
+    나누지 않는 경로(스킨이 category.pagination 을 그리지 않음)에서는
+    지금까지처럼 null 이라, 그 스킨의 Context 는 한 글자도 달라지지
+    않는다.
+  */
+
   const pagination =
-    galleryActive
+    paginationActive
       ? buildSkinCategoryPagination(
           commonData.slug,
           category.id,
           galleryPage.page,
           display.pageSize,
-          galleryPage.totalCount
+          galleryPage.totalCount,
+          display
         )
       : null;
 
@@ -2532,6 +2781,26 @@ async function buildCategorySkinContext(
 
       pageSize:
         display.pageSize,
+
+      /*
+        HIGHLIGHT-2: 설정값 그대로(listStyle/pageSize와 같은 결).
+        실제로 페이지가 나뉘었는지는 category.pagination 이 null 인지로
+        알 수 있고, 편의를 위해 hasPagination 도 함께 준다.
+      */
+
+      paginationStyle:
+        display.paginationStyle,
+
+      paginationWindowSize:
+        display.paginationWindowSize,
+
+      /* 카테고리 설정 그대로(스킨 지원과 무관) */
+      paginatePosts:
+        display.paginatePosts,
+
+      /* 이번 렌더가 실제로 페이지를 나눴는가 */
+      hasPagination:
+        paginationActive,
 
       isGallery:
         galleryActive,
@@ -3011,7 +3280,7 @@ async function buildPostSkinContext(
 ========================================================== */
 
 /* =========================================================
-   buildMemosSkinContext(ownerId, options) -> MEMOS context | null
+   buildHighlightsSkinContext(ownerId, options) -> MEMOS context | null
    (HIGHLIGHT-1 §7)
 
    여러 원본 글 카테고리에서 만들어진 하이라이트 카드를 한 화면에
@@ -3037,7 +3306,7 @@ async function buildPostSkinContext(
      categoryId  폴더 하나를 연 경우 그 카테고리 id("none"이면 무분류)
 ========================================================== */
 
-async function buildMemosSkinContext(
+async function buildHighlightsSkinContext(
   ownerId,
   options = {}
 ) {
@@ -3045,7 +3314,7 @@ async function buildMemosSkinContext(
   if (!ownerId) {
 
     throw new Error(
-      "buildMemosSkinContext: ownerId is required"
+      "buildHighlightsSkinContext: ownerId is required"
     );
 
   }
@@ -3062,8 +3331,8 @@ async function buildMemosSkinContext(
   ] =
     await Promise.all([
       buildBaseSkinContext(ownerId, options, commonData),
-      loadMemoHighlightCards(ownerId),
-      loadMemoFolderSettings(ownerId)
+      loadHighlightCards(ownerId),
+      loadHighlightFolderSettings(ownerId)
     ]);
 
 
@@ -3092,7 +3361,7 @@ async function buildMemosSkinContext(
     );
 
 
-  const MEMO_UNFILED_ID =
+  const HIGHLIGHT_UNFILED_ID =
     "none";
 
 
@@ -3100,7 +3369,7 @@ async function buildMemosSkinContext(
     (card) =>
       card.categoryId === null ||
       !categoryById.has(card.categoryId)
-        ? MEMO_UNFILED_ID
+        ? HIGHLIGHT_UNFILED_ID
         : String(card.categoryId);
 
 
@@ -3190,7 +3459,7 @@ async function buildMemosSkinContext(
         folderKeyOf(card),
 
       folderHref:
-        buildSiteMemosPath(
+        buildSiteHighlightsPath(
           slug,
           folderKeyOf(card)
         ),
@@ -3249,7 +3518,7 @@ async function buildMemosSkinContext(
 
   /*
     폴더 목록. 카드가 하나라도 있는 카테고리만 낸다 — 빈 폴더를
-    나열할 이유가 없다. 순서는 메모 전용 설정(memo_folder_settings)이
+    나열할 이유가 없다. 순서는 메모 전용 설정(highlight_folder_settings)이
     있으면 그것, 없으면 원본 카테고리 순서다.
   */
 
@@ -3275,7 +3544,7 @@ async function buildMemosSkinContext(
         (key) => {
 
           const numericId =
-            key === MEMO_UNFILED_ID
+            key === HIGHLIGHT_UNFILED_ID
               ? null
               : Number(key);
 
@@ -3301,7 +3570,7 @@ async function buildMemosSkinContext(
                 : "카테고리 없음",
 
             href:
-              buildSiteMemosPath(slug, key),
+              buildSiteHighlightsPath(slug, key),
 
             count:
               countByKey.get(key) || 0,
@@ -3310,13 +3579,13 @@ async function buildMemosSkinContext(
               `${countByKey.get(key) || 0}개`,
 
             /*
-              커버는 메모 화면 전용 설정이다 — 원본 카테고리의
+              커버는 하이라이트 화면 전용 설정이다 — 원본 카테고리의
               갤러리 설정과 완전히 별개다(요구사항 7).
             */
 
             coverUrl:
               settings && numericId !== null
-                ? buildMemoFolderCoverUrl(numericId)
+                ? buildHighlightFolderCoverUrl(numericId)
                 : null,
 
             hasCover:
@@ -3392,13 +3661,13 @@ async function buildMemosSkinContext(
             name:
               categoryById.get(Number(requestedKey))?.name ||
               (
-                requestedKey === MEMO_UNFILED_ID
+                requestedKey === HIGHLIGHT_UNFILED_ID
                   ? "카테고리 없음"
                   : ""
               ),
 
             href:
-              buildSiteMemosPath(slug, requestedKey),
+              buildSiteHighlightsPath(slug, requestedKey),
 
             count: 0,
 
@@ -3420,14 +3689,13 @@ async function buildMemosSkinContext(
         );
 
 
-  return {
+  /*
+    HIGHLIGHT-2: 공식 namespace 는 `highlights` 다. 아래 return 이 같은
+    객체를 `memos` 라는 레거시 이름으로도 함께 내보낸다.
+  */
 
-    ...base,
-
-    page:
-      buildSkinPageMeta("memos"),
-
-    memos: {
+  const highlightsNamespace =
+    {
 
       view: {
 
@@ -3445,10 +3713,10 @@ async function buildMemosSkinContext(
       },
 
       allHref:
-        buildSiteMemosPath(slug),
+        buildSiteHighlightsPath(slug),
 
       foldersHref:
-        buildSiteMemosPath(slug) + "?view=folders",
+        buildSiteHighlightsPath(slug) + "?view=folders",
 
       /* 보기 전환 버튼의 글자 — 스킨이 자기 문구를 쓰고 싶으면 무시하면 된다 */
 
@@ -3502,7 +3770,27 @@ async function buildMemosSkinContext(
       canManage:
         base.viewer.isOwner
 
-    }
+    };
+
+
+  return {
+
+    ...base,
+
+    page:
+      buildSkinPageMeta("highlights"),
+
+    highlights: highlightsNamespace,
+
+    /*
+      DEPRECATED alias — HIGHLIGHT-1 스킨의 memos.cards / memos.folders /
+      memos.view 가 그대로 동작하게 **같은 객체**를 가리킨다. 두 경로가
+      같은 값이므로 어느 쪽을 써도 목록이 한 번만 그려지고 값이 갈라질
+      수도 없다. 새 수동 MEMO 기능과는 아무 관계가 없다
+      (IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md §12).
+    */
+
+    memos: highlightsNamespace
 
   };
 

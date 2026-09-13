@@ -690,6 +690,14 @@
     loadVersionedScripts(
       [
         "../core/lib/site-path.js",
+        /*
+          HIGHLIGHT-2: 카테고리 타입(post/gallery/banner/highlight)과
+          페이지네이션 공용 상수. 관리 화면과 Skin Context 가 같은 목록·
+          같은 정규화·같은 페이지 번호 계산기를 쓰게 하는 유일한 출처다
+          (core/lib/category-types.js). 의존이 없으므로 아무 곳이나
+          되지만, 이 값을 쓰는 skin/skin-context.js 보다 앞이어야 한다.
+        */
+        "../core/lib/category-types.js",
 
         /*
           GALLERY-1 후속: skin-context.js가 갤러리 카드의 대표 이미지
@@ -699,10 +707,10 @@
         "../core/lib/post-cover-url.js",
 
         /*
-          HIGHLIGHT-1: skin-context.js의 buildMemosSkinContext()가
-          하이라이트/메모 폴더 설정을 이 파일의 함수로 읽는다
-          (loadMemoHighlightCards / loadMemoFolderSettings /
-          getPostHighlightPlacementState) — Studio Preview의 메모 화면도
+          HIGHLIGHT-1: skin-context.js의 buildHighlightsSkinContext()가
+          하이라이트/하이라이트 폴더 설정을 이 파일의 함수로 읽는다
+          (loadHighlightCards / loadHighlightFolderSettings /
+          getPostHighlightPlacementState) — Studio Preview의 하이라이트 화면도
           공개 화면과 **같은 Context 빌더**를 쓰므로 여기에도 있어야
           한다. 최상위에서 하는 일이 없고 supabaseClient 외 의존도
           없어서 이 자리면 충분하다.

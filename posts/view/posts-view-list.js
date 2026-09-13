@@ -993,6 +993,53 @@ async function openCategoryPage(
     "post";
 
 
+  /*
+    HIGHLIGHT-2: highlight 카테고리의 정규 주소는 /:slug/highlights 다.
+    메뉴에 적힌 일반 카테고리 주소(/category/:id)로 들어와도 같은
+    화면이 열려야 하므로 여기서 넘긴다 — 타입을 알아야 하는 판정이라
+    라우터가 아니라 카테고리를 실제로 읽은 이 지점이 자리다
+    (banner 분기와 같은 이유·같은 자리).
+
+    이 경우에는 주소를 canonical 로 **정리한다**. 한 화면에 두 개의
+    주소가 살아 있으면 뒤로가기·공유·새로고침이 갈라지고, 스킨이
+    그린 링크와 플랫폼이 얹는 진입점이 서로를 못 알아본다
+    (skin/skin-highlight-entry.js 는 주소로만 판정한다).
+  */
+
+  if (
+    currentPostCategoryType ===
+    "highlight"
+  ) {
+
+    if (requestId !== categoryPageRequestSeq) {
+
+      return;
+
+    }
+
+
+    /*
+      updateUrl 을 그대로 넘긴다. 클릭으로 들어온 경우(true)에는
+      아직 /category/:id 를 history 에 밀어 넣기 전이라(그 pushState
+      는 이 아래에 있다) canonical 주소 하나만 쌓이고, 직접 접속·
+      새로고침·뒤로가기(false)에서는 replaceState 로 주소만 정리된다.
+    */
+
+    await openHighlightsScreen({
+      view:
+        new URLSearchParams(window.location.search).get("view") === "folders"
+          ? "folders"
+          : "all",
+
+      updateUrl
+    });
+
+
+    return;
+
+  }
+
+
 
   /*
     로그인 여부 확인(글쓰기 버튼 노출용)은 목록 표시와

@@ -73,13 +73,20 @@ const SKIN_SANITIZE_BIND_ATTRS = new Set([
    없다 — region 식별은 항상 이 전용 속성만으로 이뤄진다.
 ========================================================== */
 const SKIN_SANITIZE_REGION_ATTR = "data-imory-region";
-/* HIGHLIGHT-1: "memo-tools" — 메모 카드 안에 주인장 전용 도구(⋮)가
-   들어갈 자리. post-body/owner-tools와 같은 성격의 고정 식별자이고,
-   repeat 안에 두면 렌더러가 항목 키(data-imory-region-key = 카드 id)를
-   찍어 주므로(skin/skin-render.js) 플랫폼이 "어느 카드의 자리인지"를
-   DOM 순서가 아니라 키로 안다. 방문자에게는 항상 비어 있다 — 스킨이
-   무엇을 넣어도 렌더러가 비운다. */
-const SKIN_SANITIZE_ALLOWED_REGION_NAMES = new Set(["post-body", "owner-tools", "memo-tools"]);
+/* HIGHLIGHT-2: "highlight-tools" — 하이라이트 카드 안에 주인장 전용
+   도구(⋮)가 들어갈 자리. post-body/owner-tools와 같은 성격의 고정
+   식별자이고, repeat 안에 두면 렌더러가 항목 키(data-imory-region-key =
+   카드 id)를 찍어 주므로(skin/skin-render.js) 플랫폼이 "어느 카드의
+   자리인지"를 DOM 순서가 아니라 키로 안다. 방문자에게는 항상 비어
+   있다 — 스킨이 무엇을 넣어도 렌더러가 비운다.
+
+   HIGHLIGHT-1 이 쓴 "memo-tools" 도 **계속 허용한다**. 그 이름으로
+   슬롯을 그려 둔 스킨이 이미 저장돼 있고, 여기서 지우면 sanitize 가
+   그 자리를 없애 버려 주인장이 자기 카드를 고칠 수 없게 된다. 새로
+   만드는 스킨과 AI 가 쓰는 이름은 highlight-tools 하나다
+   (제거 가능 시점: IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md §12). */
+const SKIN_SANITIZE_ALLOWED_REGION_NAMES =
+  new Set(["post-body", "owner-tools", "highlight-tools", "memo-tools"]);
 
 /* =========================================================
    data-imory-edit-id (PHASE AI-6A, Element Inspector + Direct Edit)

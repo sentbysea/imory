@@ -171,21 +171,40 @@ function makeDb(overrides = {}) {
     posts: [],
     banners: [],
 
-    /* HIGHLIGHT-1: 메모 폴더 표시 설정(순서 · 커버 · 비율 · 구도) */
-    memo_folder_settings: overrides.memo_folder_settings || []
+    /* HIGHLIGHT-1: 하이라이트 폴더 표시 설정(순서 · 커버 · 비율 · 구도) */
+    highlight_folder_settings: overrides.highlight_folder_settings || []
   };
 }
 
 
-/* 메모 폴더 차례를 볼 수 있는 만큼의 카테고리 */
+/* 하이라이트 폴더 차례를 볼 수 있는 만큼의 카테고리 */
 
 function makeMemoFolderCategories() {
   return [
     { id: 1, user_id: OWNER_ID, name: "일기", type: "post", sort_order: 1, slug: "diary", list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null },
     { id: 2, user_id: OWNER_ID, name: "소설", type: "post", sort_order: 2, slug: "novel", list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null },
     { id: 3, user_id: OWNER_ID, name: "사진", type: "gallery", sort_order: 3, slug: "photo", list_style: "gallery", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null },
-    { id: 4, user_id: OWNER_ID, name: "배너", type: "banner", sort_order: 4, slug: "banner", list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null }
+    { id: 4, user_id: OWNER_ID, name: "배너", type: "banner", sort_order: 4, slug: "banner", list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null },
+
+    /*
+      HIGHLIGHT-2: 폴더 차례는 이제 ADVANCED SETTINGS 의 HIGHLIGHT
+      패널 안에 있다. 그 패널을 열려면 HIGHLIGHT 카테고리가 있어야
+      한다(카테고리 줄에 흩어져 있던 예전 자리와 달라진 점).
+    */
+    { id: 5, user_id: OWNER_ID, name: "HIGHLIGHTS", type: "highlight", sort_order: 5, slug: "highlights", list_style: "list", page_size: 12, secret_cover_mode: "lock", secret_cover_path: null }
   ];
+}
+
+
+/*
+  ADVANCED SETTINGS 에서 카테고리 하나를 고른다. 값은 저장된
+  카테고리의 id 문자열이다(admin/settings/admin-settings-advanced.js).
+*/
+
+async function pickAdvancedCategory(page, id) {
+  await page.waitForSelector("#advancedCategorySelect", { timeout: 20000 });
+  await page.selectOption("#advancedCategorySelect", String(id));
+  await page.waitForTimeout(250);
 }
 
 const RESERVED = new Set(["select", "order", "limit", "offset", "on_conflict", "columns"]);
@@ -693,7 +712,7 @@ async function runEtc(browser) {
   );
 
   check(
-    "[etc] 메모 진입점 숨기기도 같은 자리에서 읽어 온다",
+    "[etc] 하이라이트 진입점 숨기기도 같은 자리에서 읽어 온다",
     state.memo === true,
     JSON.stringify(state)
   );
@@ -722,7 +741,7 @@ async function runEtc(browser) {
   );
 
   check(
-    "[etc] 메모 진입점 숨기기도 같은 저장에 실린다",
+    "[etc] 하이라이트 진입점 숨기기도 같은 저장에 실린다",
     saved.hide_memo_entry === "off",
     JSON.stringify(saved)
   );
@@ -802,31 +821,200 @@ async function runCategory(browser) {
   const { ctx, page } = await openSettings(browser, { db, recorder: requests });
   await openTab(page, 'CATEGORY');
   const select = page.locator('.category-type-select').first();
-  check('[category] 종류 post/gallery/banner 제공', (await select.locator('option').evaluateAll(nodes => nodes.map(n => n.value))).join(',') === 'post,gallery,banner');
+  const values = await select.locator('option').evaluateAll(nodes => nodes.map(n => n.value));
+
+  check('[category] 종류 post/gallery/banner/highlight 제공',
+    values.join(',') === 'post,gallery,banner,highlight', values.join(','));
+
+  check('[category] ★ memo 는 목록에 없다 (수동 MEMO 기능의 이름이다)',
+    !values.includes('memo'));
+
   await select.selectOption('gallery');
+  await page.waitForTimeout(200);
+
+  await pickAdvancedCategory(page, 1);
+
   check('[category] 별도 표시 선택 제거', await page.locator('.category-display-row option[value="list"]').count() === 0 && await page.locator('.category-display-row option[value="gallery"]').count() === 0);
   await page.click('#categorySaveButton');
   await page.waitForTimeout(800);
   const updates = requests.filter(r => r.method === 'PATCH' && r.path.includes('/rest/v1/categories'))
     .map(r => JSON.parse(r.body || '{}'));
   check('[category] gallery 타입과 호환 mirror 저장', updates.some(row => row.type === 'gallery' && row.list_style === 'gallery'));
+
+  check('[category] 페이지네이션 설정도 같은 저장에 실린다',
+    updates.some(row => row.pagination_style === 'decimal' && Number(row.pagination_window_size) === 7),
+    JSON.stringify(updates));
+
   await ctx.close();
 }
 
 
 /* =========================================================
-   5. memofolder — 메모 폴더 차례 (꾹 눌러 끌기 · 드래그 · ↑↓)
+   singleton — BANNER / HIGHLIGHT 는 블로그당 하나
 
-   admin/settings/admin-settings-memo-folder-order.js
+   프런트는 안내만 한다(disabled option). 실제 거절은 DB 의
+   categories_singleton_type_idx 가 하고, 그쪽은
+   supabase/highlight2-migration-test.mjs 가 실제 Postgres 로 확인한다.
+========================================================== */
 
-   움직이는 것은 메모 화면 전용 배열이다 — 같은 화면에 있는 카테고리
+async function runSingleton(browser) {
+  console.log("\n[singleton] BANNER / HIGHLIGHT 는 하나씩");
+
+  const db = makeDb({ categories: makeMemoFolderCategories() });
+  const { ctx, page } = await openSettings(browser, { db });
+  await openTab(page, 'CATEGORY');
+  await page.waitForSelector('.category-type-select', { timeout: 20000 });
+
+  const state = await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('.category-type-select'));
+    return rows.map(select => ({
+      value: select.value,
+      disabled: Array.from(select.options)
+        .filter(option => option.disabled)
+        .map(option => option.value)
+    }));
+  });
+
+  /* 1행은 post(일기) — banner 도 highlight 도 이미 남이 쓰고 있다 */
+  check('[singleton] ★ 이미 쓰는 singleton 은 다른 줄에서 disabled',
+    state[0].disabled.sort().join(',') === 'banner,highlight',
+    JSON.stringify(state[0]));
+
+  /* 배너 줄에서는 자기 타입(banner)이 잠기면 안 된다 */
+  const bannerRow = state.find(row => row.value === 'banner');
+  check('[singleton] 자기 자신의 타입은 잠기지 않는다',
+    bannerRow && !bannerRow.disabled.includes('banner'),
+    JSON.stringify(bannerRow));
+
+  const highlightRow = state.find(row => row.value === 'highlight');
+  check('[singleton] HIGHLIGHT 줄도 마찬가지다',
+    highlightRow && !highlightRow.disabled.includes('highlight'),
+    JSON.stringify(highlightRow));
+
+  /* 프런트를 우회해 고르면 되돌려지고 이유가 나온다 */
+  const reverted = await page.evaluate(async () => {
+    const select = document.querySelectorAll('.category-type-select')[0];
+    const option = Array.from(select.options).find(o => o.value === 'highlight');
+    option.disabled = false;
+    select.value = 'highlight';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await new Promise(r => setTimeout(r, 600));
+    return {
+      value: document.querySelectorAll('.category-type-select')[0].value,
+      message: document.getElementById('categorySaveMessage').textContent
+    };
+  });
+
+  check('[singleton] ★ disabled 를 우회해도 값이 되돌아간다',
+    reverted.value === 'post', JSON.stringify(reverted));
+
+  check('[singleton] 왜 안 되는지 알린다',
+    reverted.message.includes('HIGHLIGHT'), reverted.message);
+
+  await ctx.close();
+}
+
+
+/* =========================================================
+   advanced — ADVANCED SETTINGS (타입별 패널 · draft 유지 · 모바일)
+========================================================== */
+
+async function runAdvanced(browser) {
+  console.log("\n[advanced] ADVANCED SETTINGS");
+
+  const db = makeDb({ categories: makeMemoFolderCategories() });
+  const { ctx, page } = await openSettings(browser, { db });
+  await openTab(page, 'CATEGORY');
+  await page.waitForSelector('#advancedCategorySelect', { timeout: 20000 });
+
+  const options = await page.locator('#advancedCategorySelect option').allTextContents();
+  check('[advanced] 카테고리명과 타입을 함께 보여 준다',
+    options.join(' | ').includes('일기 · 글') &&
+    options.join(' | ').includes('사진 · 갤러리') &&
+    options.join(' | ').includes('HIGHLIGHTS · 하이라이트'),
+    options.join(' | '));
+
+  check('[advanced] CATEGORIES 줄에는 고급 설정이 남아 있지 않다',
+    await page.locator('#categoryList .category-display-row').count() === 0);
+
+  /* --- post --- */
+  await pickAdvancedCategory(page, 1);
+
+  check('[advanced] post 패널: 페이지 설정만 나온다',
+    await page.locator('#advancedSettingsBody .advanced-pagination-row').count() === 1 &&
+    await page.locator('#advancedSettingsBody .highlight-folder-order-item').count() === 0);
+
+  check('[advanced] 비밀글 커버는 post 패널에 없다',
+    await page.locator('#advancedSettingsBody option[value="lock"]').count() === 0);
+
+  /* draft: 값을 바꾸고 다른 카테고리를 들렀다 돌아온다 */
+  await page.locator('#advancedSettingsBody .category-display-select').nth(1).selectOption('roman_lower');
+  await page.waitForTimeout(200);
+
+  await pickAdvancedCategory(page, 3);
+  await pickAdvancedCategory(page, 1);
+
+  check('[advanced] ★ 카테고리를 바꿔도 저장 안 한 값이 남아 있다',
+    await page.locator('#advancedSettingsBody .category-display-select').nth(1).inputValue() === 'roman_lower');
+
+  const preview = await page.locator('.advanced-pagination-preview').textContent();
+  check('[advanced] 로마자 미리보기가 실제 로마 숫자다',
+    /\bi{1,3}\b|\bv\b|\bx\b/.test(preview) && !/\d/.test(preview), preview);
+
+  /* --- gallery --- */
+  await pickAdvancedCategory(page, 3);
+
+  check('[advanced] gallery 패널: 페이지 설정 + 비밀글 커버',
+    await page.locator('#advancedSettingsBody .advanced-pagination-row').count() === 1 &&
+    await page.locator('#advancedSettingsBody option[value="lock"]').count() === 1);
+
+  /* --- banner --- */
+  await pickAdvancedCategory(page, 4);
+
+  check('[advanced] banner 패널: 추가 설정 없음',
+    (await page.locator('#advancedSettingsBody').textContent()).includes('추가 설정 없음'));
+
+  /* --- highlight --- */
+  await pickAdvancedCategory(page, 5);
+
+  check('[advanced] highlight 패널: 폴더 차례가 여기 있다',
+    await page.locator('#advancedSettingsBody .highlight-folder-order-item').count() >= 2);
+
+  check('[advanced] highlight 패널에는 페이지 설정이 없다',
+    await page.locator('#advancedSettingsBody .advanced-pagination-row').count() === 0);
+
+  /* --- 모바일 390px --- */
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.waitForTimeout(300);
+
+  const overflow = await page.evaluate(() => {
+    const panel = document.getElementById('advancedSettingsPanel');
+    return {
+      panel: panel.scrollWidth - panel.clientWidth,
+      doc: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    };
+  });
+
+  check('[advanced] 모바일 390px 가로 넘침 없음',
+    overflow.panel <= 1 && overflow.doc <= 1, JSON.stringify(overflow));
+
+  await ctx.close();
+}
+
+
+/* =========================================================
+   5. memofolder — 하이라이트 폴더 차례 (꾹 눌러 끌기 · 드래그 · ↑↓)
+
+   admin/settings/admin-settings-highlight-folder-order.js
+
+   움직이는 것은 하이라이트 화면 전용 배열이다 — 같은 화면에 있는 카테고리
    목록의 순서(categories.sort_order)는 한 글자도 바뀌면 안 된다.
 ========================================================== */
 
-const ORDER_ITEM = ".memo-folder-order-item";
+const ORDER_ITEM = ".highlight-folder-order-item";
 
 async function memoFolderNames(page) {
-  return page.locator(".memo-folder-order-name").allTextContents();
+  return page.locator(".highlight-folder-order-name").allTextContents();
 }
 
 /*
@@ -841,7 +1029,7 @@ async function touchDrag(page, fromIndex, toIndex, opts = {}) {
   const boxes = await page.locator(ORDER_ITEM).evaluateAll(nodes =>
     nodes.map(n => {
       const r = n.getBoundingClientRect();
-      const h = n.querySelector(".memo-folder-order-handle").getBoundingClientRect();
+      const h = n.querySelector(".highlight-folder-order-handle").getBoundingClientRect();
       return {
         /* 그 줄의 위쪽 절반 — 실제 사람이 "이 줄 앞에 놓는다"고 느끼는 자리 */
         dropY: r.top + 3,
@@ -856,7 +1044,7 @@ async function touchDrag(page, fromIndex, toIndex, opts = {}) {
 
   await page.evaluate(([index, x, y]) => {
     const handle = document
-      .querySelectorAll(".memo-folder-order-handle")[index];
+      .querySelectorAll(".highlight-folder-order-handle")[index];
     handle.dispatchEvent(new PointerEvent("pointerdown", {
       bubbles: true, pointerId: 7, pointerType: "touch", clientX: x, clientY: y, button: 0
     }));
@@ -885,22 +1073,27 @@ async function touchDrag(page, fromIndex, toIndex, opts = {}) {
 }
 
 async function runMemoFolder(browser) {
-  console.log("\n[memofolder] 메모 폴더 차례");
+  console.log("\n[memofolder] 하이라이트 폴더 차례");
 
   const requests = [];
   const db = makeDb({ categories: makeMemoFolderCategories() });
   const { ctx, page } = await openSettings(browser, { db, recorder: requests });
 
   await openTab(page, "CATEGORY");
+
+  /*
+    HIGHLIGHT-2: 폴더 차례는 ADVANCED SETTINGS 의 HIGHLIGHT 패널 안이다.
+  */
+  await pickAdvancedCategory(page, 5);
   await page.waitForSelector(ORDER_ITEM, { timeout: 20000 });
 
   const initial = await memoFolderNames(page);
 
-  check("[memofolder] 배너를 뺀 카테고리만 줄로 나온다",
+  check("[memofolder] 글이 들어갈 수 있는 카테고리만 줄로 나온다(배너·하이라이트 제외)",
     initial.join(",") === "일기,소설,사진", initial.join(","));
 
   check("[memofolder] 카테고리 줄에는 더 이상 순서 버튼이 없다",
-    (await page.locator('.memo-folder-row [aria-label*="순서"]').count()) === 0);
+    (await page.locator('#categoryList [aria-label*="순서"]').count()) === 0);
 
   /* --- 데스크톱: 손잡이를 잡고 바로 끈다 --- */
 
@@ -908,7 +1101,7 @@ async function runMemoFolder(browser) {
     const boxes = await page.locator(ORDER_ITEM).evaluateAll(nodes =>
       nodes.map(n => {
         const r = n.getBoundingClientRect();
-        const h = n.querySelector(".memo-folder-order-handle").getBoundingClientRect();
+        const h = n.querySelector(".highlight-folder-order-handle").getBoundingClientRect();
         return { centerY: r.top + r.height / 2, hx: h.left + h.width / 2, hy: h.top + h.height / 2 };
       })
     );
@@ -933,13 +1126,13 @@ async function runMemoFolder(browser) {
     const boxes = await page.locator(ORDER_ITEM).evaluateAll(nodes =>
       nodes.map(n => {
         const r = n.getBoundingClientRect();
-        const h = n.querySelector(".memo-folder-order-handle").getBoundingClientRect();
+        const h = n.querySelector(".highlight-folder-order-handle").getBoundingClientRect();
         return { centerY: r.top + r.height / 2, hx: h.left + h.width / 2, hy: h.top + h.height / 2 };
       })
     );
 
     await page.evaluate(([x, y, y2]) => {
-      const el = document.querySelector(".memo-folder-order-handle");
+      const el = document.querySelector(".highlight-folder-order-handle");
       el.dispatchEvent(new PointerEvent("pointerdown", {
         bubbles: true, pointerId: 9, pointerType: "touch", clientX: x, clientY: y, button: 0
       }));
@@ -959,7 +1152,7 @@ async function runMemoFolder(browser) {
       (await memoFolderNames(page)).join(","));
 
     check("[memofolder] 끌기 상태가 남지 않는다",
-      (await page.locator(".memo-folder-order-list.is-dragging").count()) === 0);
+      (await page.locator(".highlight-folder-order-list.is-dragging").count()) === 0);
 
     /* (b) 꾹 누른 뒤에는 끌린다 */
     await touchDrag(page, 2, 0);
@@ -984,7 +1177,7 @@ async function runMemoFolder(browser) {
       await first.locator('button[aria-label*="위로"]').isDisabled());
   }
 
-  /* --- 저장: 메모 폴더만 바뀌고 카테고리 순서는 그대로 --- */
+  /* --- 저장: 하이라이트 폴더만 바뀌고 카테고리 순서는 그대로 --- */
 
   const beforeSortOrders = db.categories.map(c => `${c.id}:${c.sort_order}`).join(",");
 
@@ -992,15 +1185,15 @@ async function runMemoFolder(browser) {
   await page.click("#categorySaveButton");
   await page.waitForTimeout(1200);
 
-  const memoWrites = requests
-    .filter(r => r.path.includes("/rest/v1/rpc/upsert_own_memo_folder_settings"))
+  const folderWrites = requests
+    .filter(r => r.path.includes("/rest/v1/rpc/upsert_own_highlight_folder_settings"))
     .map(r => JSON.parse(r.body || "{}"));
 
-  check("[memofolder] 저장에서 메모 폴더 3개가 각각 올라간다",
-    memoWrites.length === 3, `n=${memoWrites.length}`);
+  check("[memofolder] 저장에서 하이라이트 폴더 3개가 각각 올라간다",
+    folderWrites.length === 3, `n=${folderWrites.length}`);
 
   const orderById = Object.fromEntries(
-    memoWrites.map(w => [String(w.p_category_id), w.p_sort_order])
+    folderWrites.map(w => [String(w.p_category_id), w.p_sort_order])
   );
 
   check("[memofolder] ★ 화면에서 만든 차례 그대로 저장된다",
@@ -1033,6 +1226,8 @@ async function runMemoFolder(browser) {
     if (shouldRun("etc")) await runEtc(browser);
     if (shouldRun("tab")) await runTab(browser);
     if (shouldRun("category")) await runCategory(browser);
+    if (shouldRun("singleton")) await runSingleton(browser);
+    if (shouldRun("advanced")) await runAdvanced(browser);
     if (shouldRun("memofolder")) await runMemoFolder(browser);
 
   } catch (err) {

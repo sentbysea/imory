@@ -109,29 +109,35 @@ async function handlePostRoute() {
 
 
   /*
-    HIGHLIGHT-1: /memos — 메모 카테고리.
+    HIGHLIGHT-2: /highlights — 하이라이트 화면.
 
-      /memos                   전체 보기(기본, 최신순)
-      /memos?view=folders      폴더별 보기
-      /memos/category/:id      그 폴더의 카드 목록
-                               (id는 원본 카테고리 id 또는 "none")
+      /highlights                   전체 보기(기본, 최신순)
+      /highlights?view=folders      폴더별 보기
+      /highlights/category/:id      그 폴더의 카드 목록
+                                    (id는 원문 카테고리 id 또는 "none")
 
-    카테고리/글 패턴보다 먼저 본다 — /memos/category/:id 가 아래
+    옛 주소 /memos 도 **같은 화면**을 연다(HIGHLIGHT-1 때의 주소를
+    공유했거나 스킨에 적어 둔 사람이 있다). 두 갈래를 따로 처리하지
+    않고 정규식 하나가 둘을 받는다 — 화면도 이벤트도 한 번만 그려야
+    하기 때문이다. 주소는 고치지 않는다(updateUrl: false): 방문자가
+    준 주소를 조용히 바꿔치기하면 뒤로가기가 어긋난다.
+
+    카테고리/글 패턴보다 먼저 본다 — /highlights/category/:id 가 아래
     /category/:id 패턴에 걸리지 않도록(끝 앵커가 있어 실제로 겹치지는
     않지만, 읽는 순서를 계층대로 둔다).
   */
 
-  const memoFolderMatch =
+  const highlightFolderMatch =
     pathname.match(
-      /^\/memos\/category\/(\d+|none)\/?$/
+      /^\/(?:highlights|memos)\/category\/(\d+|none)\/?$/
     );
 
 
-  if (memoFolderMatch) {
+  if (highlightFolderMatch) {
 
-    await openMemoScreen({
+    await openHighlightsScreen({
       categoryId:
-        memoFolderMatch[1],
+        highlightFolderMatch[1],
 
       updateUrl:
         false
@@ -144,11 +150,10 @@ async function handlePostRoute() {
 
 
   if (
-    pathname === "/memos" ||
-    pathname === "/memos/"
+    /^\/(?:highlights|memos)\/?$/.test(pathname)
   ) {
 
-    await openMemoScreen({
+    await openHighlightsScreen({
       view:
         new URLSearchParams(search).get("view") === "folders"
           ? "folders"

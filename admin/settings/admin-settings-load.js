@@ -560,8 +560,16 @@ async function loadCategories(
     받는다(core/lib/post-cover-url.js).
   */
 
+  /*
+    HIGHLIGHT-2: pagination_style / pagination_window_size 두 컬럼이
+    같은 묶음에 들어간다 — 아래 42703 폴백이 "표시 설정 컬럼이 아직
+    없는 배포"를 이미 처리하므로, 새 컬럼을 여기 더하는 것만으로
+    migration 이전 배포에서도 지금까지와 똑같이 동작한다.
+  */
+
   const GALLERY_COLUMNS =
-    "list_style, page_size, secret_cover_mode, secret_cover_path";
+    "list_style, page_size, secret_cover_mode, secret_cover_path, " +
+    "pagination_style, pagination_window_size, paginate_posts";
 
 
   const runCategoryQuery =
@@ -648,20 +656,34 @@ async function loadCategories(
   });
 
 
+  /*
+    HIGHLIGHT-2: 읽어 온 순간의 타입을 적어 둔다. 저장할 때 그 값과
+    다르면 categories.update 가 아니라 change_own_category_type RPC 를
+    부른다 — 글/폴더 이동과 타입 변경이 한 트랜잭션이어야 한다
+    (admin/settings/admin-settings-category-type.js).
+  */
+
+  if (typeof markSavedCategoryTypes === "function") {
+
+    markSavedCategoryTypes(categories);
+
+  }
+
+
   deletedCategoryIds =
     [];
 
 
   /*
-    HIGHLIGHT-1: 메모 화면의 폴더 설정(순서·커버·비율·구도)을 함께
+    HIGHLIGHT-1: 하이라이트 화면의 폴더 설정(순서·커버·비율·구도)을 함께
     읽는다. 별도 테이블이라 카테고리 조회에 컬럼을 더하지 않는다 —
     migration 이전 배포에서는 그 안에서 판정해 줄을 아예 그리지
-    않는다(admin/settings/admin-settings-memo-folders.js).
+    않는다(admin/settings/admin-settings-highlight-folders.js).
   */
 
-  if (typeof loadMemoFolderSettingsForAdmin === "function") {
+  if (typeof loadHighlightFolderSettingsForAdmin === "function") {
 
-    await loadMemoFolderSettingsForAdmin(
+    await loadHighlightFolderSettingsForAdmin(
       user.id
     );
 
@@ -676,14 +698,14 @@ async function loadCategories(
 function renderCategories() {
 
   /*
-    HIGHLIGHT-1: 메모 폴더 차례를 지금 카테고리 목록에 맞춘다 —
+    HIGHLIGHT-1: 하이라이트 폴더 차례를 지금 카테고리 목록에 맞춘다 —
     카테고리를 더하거나 지운 직후에도 아래 순서 목록이 올바른
     자리를 가리킨다.
   */
 
-  if (typeof syncMemoFolderOrder === "function") {
+  if (typeof syncHighlightFolderOrder === "function") {
 
-    syncMemoFolderOrder(
+    syncHighlightFolderOrder(
       categories
     );
 
@@ -749,21 +771,48 @@ function renderCategories() {
         "category-type-select imory-field imory-field--sm";
 
 
-      [
-        {
-          value: "post",
-          label: "post"
-        },
-        {
-          value: "gallery",
-          label: "gallery"
-        },
-        {
-          value: "banner",
-          label: "banner"
+      /* =====================================================
+         HIGHLIGHT-2 — 타입 목록과 singleton 안내
+
+         목록은 core/lib/category-types.js 하나에서 온다(DB 의
+         check 제약과 같은 집합). 'memo' 는 여기 없다 — 그 이름은
+         나중에 사용자가 직접 쓰는 짧은 글 기능을 위해 비워 둔다.
+
+         이미 쓰고 있는 singleton 타입(banner / highlight)은 **감추지
+         않고 disabled** 로 둔다. 감추면 "왜 없지?"가 되고, 눌리는
+         채로 두면 저장할 때야 실패한다. 이유는 title 로 붙인다.
+
+         프런트의 이 판정은 안내일 뿐이다 — 실제 거절은 DB 의
+         categories_singleton_type_idx 가 한다
+         (supabase/migrations/20260913160000_*.sql).
+      ====================================================== */
+
+      const singletonOwner =
+        {};
+
+      categories.forEach(
+        (other) => {
+
+          const otherType =
+            normalizeCategoryType(other.type);
+
+
+          if (
+            isSingletonCategoryType(otherType) &&
+            !singletonOwner[otherType]
+          ) {
+
+            singletonOwner[otherType] =
+              other;
+
+          }
+
         }
-      ].forEach(
-        option => {
+      );
+
+
+      CATEGORY_TYPES.forEach(
+        (value) => {
 
           const optionElement =
             document.createElement(
@@ -772,11 +821,29 @@ function renderCategories() {
 
 
           optionElement.value =
-            option.value;
+            value;
 
 
           optionElement.textContent =
-            option.label;
+            `${value} · ${categoryTypeLabel(value)}`;
+
+
+          const taken =
+            isSingletonCategoryType(value) &&
+            singletonOwner[value] &&
+            singletonOwner[value] !== category;
+
+
+          if (taken) {
+
+            optionElement.disabled =
+              true;
+
+
+            optionElement.title =
+              `이미 ${value.toUpperCase()} 카테고리가 있습니다`;
+
+          }
 
 
           typeSelect.appendChild(
@@ -788,22 +855,133 @@ function renderCategories() {
 
 
       typeSelect.value =
-        category.type ||
-        "post";
+        normalizeCategoryType(category.type);
+
+
+      /*
+        같은 안내를 드롭다운 옆에도 남긴다 — disabled option 의 title
+        은 마우스를 올려야 보이고, 모바일에서는 아예 보이지 않는다.
+      */
+
+      const takenTypes =
+        SINGLETON_CATEGORY_TYPES.filter(
+          (value) =>
+            singletonOwner[value] &&
+            singletonOwner[value] !== category
+        );
+
+
+      typeSelect.setAttribute(
+        "aria-label",
+        "카테고리 종류"
+      );
+
+
+      if (takenTypes.length) {
+
+        typeSelect.title =
+          takenTypes
+            .map(
+              (value) =>
+                `이미 ${value.toUpperCase()} 카테고리가 있습니다`
+            )
+            .join(" · ");
+
+      }
 
 
       typeSelect.addEventListener(
         "change",
-        () => {
+        async () => {
+
+          const next =
+            normalizeCategoryType(typeSelect.value);
+
+
+          /*
+            판정 중에는 칸을 잠근다 — 개수를 세는 동안 다시 고르면
+            두 판정이 엇갈린 채 적용될 수 있다.
+          */
+
+          typeSelect.disabled =
+            true;
+
+
+          /*
+            HIGHLIGHT-2 요구사항 10 — singleton 으로 바꾸는데 글이나
+            폴더가 남아 있으면 어디로 옮길지 먼저 고르게 한다. 고르지
+            않으면 타입을 바꾸지 않는다(값을 되돌린다).
+
+            실제 이동과 타입 변경은 한 트랜잭션 안에서 DB 가 한다
+            (change_own_category_type RPC) — 저장할 때 호출된다.
+          */
+
+          if (typeof requestCategoryTypeChange === "function") {
+
+            let decision;
+
+            try {
+
+              decision =
+                await requestCategoryTypeChange(
+                  category,
+                  next
+                );
+
+            }
+
+            catch (err) {
+
+              console.error("[category-type] 판정 실패:", err);
+
+              decision =
+                {
+                  ok: false,
+                  message: "지금은 종류를 바꿀 수 없습니다. 잠시 뒤 다시 시도해 주세요."
+                };
+
+            }
+
+
+            typeSelect.disabled =
+              false;
+
+
+            if (!decision.ok) {
+
+              typeSelect.value =
+                normalizeCategoryType(category.type);
+
+
+              categorySaveMessage.textContent =
+                decision.message || "종류를 바꾸지 못했습니다.";
+
+
+              return;
+
+            }
+
+
+            categorySaveMessage.textContent =
+              "";
+
+          }
+
+          else {
+
+            typeSelect.disabled =
+              false;
+
+          }
+
 
           category.type =
-            typeSelect.value;
+            next;
 
           category.list_style = category.type === "gallery" ? "gallery" : "list";
 
 
-          /* GALLERY-1: post ↔ banner를 바꾸면 표시 설정 줄이
-             나타나거나 사라진다 — 전체를 다시 그린다. */
+          /* 타입이 바뀌면 고급 설정의 내용도 달라진다 — 전체를 다시 그린다. */
 
           renderCategories();
 
@@ -937,52 +1115,17 @@ function renderCategories() {
 
 
       /*
-        GALLERY-1: post형 카테고리에만 표시 설정 줄을 붙인다
-        (admin/settings/admin-settings-category-display.js).
-        migration 이전 배포에서는 null이 돌아와 아무것도 붙지 않고,
-        지금까지와 완전히 같은 화면이 된다.
+        HIGHLIGHT-2 §7 — 고급 설정은 더 이상 이 줄에 붙지 않는다.
+
+        표시 설정(페이지 · 비밀글 커버)과 하이라이트 폴더 설정은 아래
+        ADVANCED SETTINGS 영역으로 옮겼다
+        (admin/settings/admin-settings-advanced.js). 카테고리가 몇 개만
+        돼도 이 목록이 설정 줄로 가득 차서, 이름을 고치러 온 사람이
+        무엇을 보고 있는지 알기 어려웠다.
+
+        같은 category 객체를 두 영역이 함께 고치므로 저장 버튼은
+        하나 그대로다.
       */
-
-      const displayRow =
-        typeof buildCategoryDisplayRow === "function"
-          ? buildCategoryDisplayRow(
-              category,
-              renderCategories
-            )
-          : null;
-
-
-      if (displayRow) {
-
-        item.appendChild(
-          displayRow
-        );
-
-      }
-
-
-      /*
-        HIGHLIGHT-1: 메모 화면의 폴더 설정 줄. 저장된 카테고리(글이
-        들어갈 수 있는 것)에만 붙는다.
-      */
-
-      const memoFolderRow =
-        typeof buildMemoFolderRow === "function"
-          ? buildMemoFolderRow(
-              category,
-              renderCategories
-            )
-          : null;
-
-
-      if (memoFolderRow) {
-
-        item.appendChild(
-          memoFolderRow
-        );
-
-      }
-
 
       categoryList.appendChild(
         item
@@ -993,15 +1136,31 @@ function renderCategories() {
 
 
   /*
-    HIGHLIGHT-1 후속: 메모 화면의 폴더 차례 목록(꾹 눌러 끌기 + ↑↓).
+    HIGHLIGHT-1 후속: 하이라이트 폴더 차례 목록(꾹 눌러 끌기 + ↑↓).
     카테고리 목록과 다른 배열을 움직이므로 카테고리 줄 안이 아니라
-    목록 아래에 따로 그린다
-    (admin/settings/admin-settings-memo-folder-order.js).
+    따로 그린다(admin/settings/admin-settings-highlight-folder-order.js).
+    HIGHLIGHT-2 부터 그 목록이 놓이는 자리는 ADVANCED SETTINGS 의
+    HIGHLIGHT 패널 안이다.
   */
 
-  if (typeof renderMemoFolderOrderList === "function") {
+  if (typeof renderHighlightFolderOrderList === "function") {
 
-    renderMemoFolderOrderList(
+    renderHighlightFolderOrderList(
+      categories,
+      renderCategories
+    );
+
+  }
+
+
+  /*
+    HIGHLIGHT-2 §7: 고급 설정. 고른 카테고리 하나의, 그 타입에 필요한
+    설정만 그린다(admin/settings/admin-settings-advanced.js).
+  */
+
+  if (typeof renderAdvancedCategorySettings === "function") {
+
+    renderAdvancedCategorySettings(
       categories,
       renderCategories
     );
@@ -1051,6 +1210,28 @@ function removeCategory(
 
   const category =
     categories[index];
+
+
+  /*
+    HIGHLIGHT-2: HIGHLIGHT 카테고리를 지워도 하이라이트 데이터는
+    남는다 — post_highlights 는 posts 를 부모로 두고 있고, 이 행은
+    표시·내비게이션 설정일 뿐이다. 그 사실을 확인창에 적는다:
+    적지 않으면 "내 하이라이트가 전부 지워지는구나"로 읽힌다.
+  */
+
+  if (
+    normalizeCategoryType(category.type) === "highlight" &&
+    category.id &&
+    !window.confirm(
+      "HIGHLIGHT 카테고리를 목록에서 지웁니다.\n\n" +
+      "하이라이트·발췌문·노트는 지워지지 않습니다. 지워지는 것은 이 화면을 메뉴에 보여 주고 꾸미는 설정뿐이고, 나중에 HIGHLIGHT 카테고리를 다시 만들면 기존 카드가 그대로 다시 보입니다.\n\n" +
+      "계속할까요?"
+    )
+  ) {
+
+    return;
+
+  }
 
 
   if (category.id) {

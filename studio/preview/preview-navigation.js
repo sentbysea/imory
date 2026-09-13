@@ -110,10 +110,10 @@ function getCurrentPreviewLocation() {
     };
   }
 
-  /* HIGHLIGHT-1: 메모 카테고리 — 보기 방식과 연 폴더까지 "같은 자리" 판정에 쓴다 */
-  if (top.type === "memos") {
+  /* HIGHLIGHT-1: 하이라이트 화면 — 보기 방식과 연 폴더까지 "같은 자리" 판정에 쓴다 */
+  if (top.type === "highlights") {
     return {
-      type: "memos",
+      type: "highlights",
       view: top.view === "folders" ? "folders" : "all",
       categoryId: top.categoryId ?? null
     };
@@ -355,6 +355,7 @@ async function renderCategoryPreviewFor(categoryId, options, page) {
           imageSlotValues: currentImageSlotValues,
           supportsFolderPage: !!resolveSkinTemplate(currentWorkingSkin, "folder"),
           supportsGallery: skinTemplateUsesGallery(categoryTemplate),
+          supportsPagination: skinTemplateUsesPagination(categoryTemplate),
           page: page || 1
         }
       );
@@ -1000,12 +1001,12 @@ async function renderFolderPreviewFor(categoryId, folderId, series, options) {
 
 
 /* =========================================================
-   MEMOS — 메모 카테고리 Preview (HIGHLIGHT-1)
+   MEMOS — 하이라이트 화면 Preview (HIGHLIGHT-1)
 
-   공개 화면(skin/skin-memos.js + posts/view/posts-view-memos.js)과
-   같은 계약이다: 같은 buildMemosSkinContext(), 같은 renderSkin(),
-   그리고 templates.memos가 없으면 **플랫폼 기본 template**
-   (getDefaultMemosTemplate)으로 그린다.
+   공개 화면(skin/skin-highlights.js + posts/view/posts-view-highlights.js)과
+   같은 계약이다: 같은 buildHighlightsSkinContext(), 같은 renderSkin(),
+   그리고 하이라이트 template이 없으면 **플랫폼 기본 template**
+   (getDefaultHighlightsTemplate)으로 그린다.
 
    다른 화면과 달리 unsupported overlay가 없다 — 공개 화면에서도
    폴백이 "안 보여준다"가 아니라 "기본 template으로 그린다"이기
@@ -1014,9 +1015,9 @@ async function renderFolderPreviewFor(categoryId, folderId, series, options) {
    카드의 ⋮ 도구도 Preview에서 실제로 열린다 — 자리만 차지하고
    아무것도 열리지 않으면 편집자가 자기 스킨에서 그 메뉴와 메모
    팝업이 어떻게 보이는지 확인할 수 없기 때문이다. 모양은 공개
-   화면과 같은 코드가 만들고(posts/view/posts-view-memo-card-tools.js),
+   화면과 같은 코드가 만들고(posts/view/posts-view-highlight-card-tools.js),
    조작은 화면 안에서만 끝난다 — supabase를 부르는 경로가 없다
-   (studio/preview/preview-memo-tools.js).
+   (studio/preview/preview-highlight-tools.js).
 
    Studio는 항상 소유자 세션이라 비밀글 분기가 없다. 주인장/방문자
    차이는 Preview 안의 칩으로 전환해 본다(같은 파일).
@@ -1027,7 +1028,7 @@ async function renderFolderPreviewFor(categoryId, folderId, series, options) {
    보통이다. 그때 빈 화면만 보여 주면 카드·폴더·⋮ 의 모양을 아예
    확인할 수 없다. 그래서 **읽기에 성공했는데 결과가 0건일 때만**
    샘플 카드를 끼워 넣고, 그 사실을 Preview 화면에 밝힌다. 조회가
-   실패한 경우(memos.hasError)에는 절대 끼워 넣지 않는다 — 오류를
+   실패한 경우(highlights.hasError)에는 절대 끼워 넣지 않는다 — 오류를
    그럴듯한 데이터로 덮으면 안 된다.
 ========================================================== */
 
@@ -1076,7 +1077,7 @@ const STUDIO_MEMO_SAMPLE_CARDS =
         "아무 말도 하지 않는 것이 그날의 대답이었다.",
 
       note:
-        "메모가 두 줄 이상일 때 카드가 어떻게 늘어나는지 보려고 조금 길게 적어 둔 문장입니다.",
+        "노트가 두 줄 이상일 때 카드가 어떻게 늘어나는지 보려고 조금 길게 적어 둔 문장입니다.",
 
       color:
         "#efe0f2",
@@ -1090,18 +1091,18 @@ const STUDIO_MEMO_SAMPLE_CARDS =
   ];
 
 
-function buildStudioMemoSampleContext(
+function buildStudioHighlightSampleContext(
   context
 ) {
 
-  const memos =
-    context?.memos;
+  const highlights =
+    context?.highlights;
 
 
   if (
-    !memos ||
-    memos.hasError ||
-    (memos.cards || []).length > 0
+    !highlights ||
+    highlights.hasError ||
+    (highlights.cards || []).length > 0
   ) {
 
     return context;
@@ -1177,12 +1178,15 @@ function buildStudioMemoSampleContext(
     );
 
 
-  return {
-    ...context,
+  /*
+    HIGHLIGHT-2: 샘플 카드도 두 이름(highlights / memos)으로 함께
+    내보낸다 — 공개 Context 와 같은 모양이라야 레거시 스킨의 Preview 가
+    공개 화면과 어긋나지 않는다. 아래에서 같은 객체를 두 키에 넣는다.
+  */
 
-    memos:
+  const sampleHighlights =
       {
-        ...memos,
+        ...highlights,
 
         cards,
 
@@ -1197,18 +1201,27 @@ function buildStudioMemoSampleContext(
 
         isSample:
           true
-      }
+      };
+
+
+  return {
+    ...context,
+
+    highlights: sampleHighlights,
+
+    /* DEPRECATED alias — 같은 객체(공개 Context 와 같은 모양) */
+    memos: sampleHighlights
   };
 
 }
 
-async function renderMemosPreviewFor(view, categoryId, options) {
+async function renderHighlightsPreviewFor(view, categoryId, options) {
 
   const viewMode =
     view === "folders" ? "folders" : "all";
 
   currentPreviewPageType =
-    "memos";
+    "highlights";
 
   updateStudioCodeButtonState();
 
@@ -1218,13 +1231,13 @@ async function renderMemosPreviewFor(view, categoryId, options) {
     return;
   }
 
-  const memosTemplate =
-    resolveSkinTemplate(currentWorkingSkin, "memos") ||
-    getDefaultMemosTemplate();
+  const highlightsTemplate =
+    resolveSkinHighlightsTemplate(currentWorkingSkin) ||
+    getDefaultHighlightsTemplate();
 
   setStudioPreviewOverlay(
     "loading",
-    "메모 미리보기를 불러오는 중..."
+    "하이라이트 미리보기를 불러오는 중..."
   );
 
   const token =
@@ -1238,7 +1251,7 @@ async function renderMemosPreviewFor(view, categoryId, options) {
 
       return (
         token === previewNavToken &&
-        location.type === "memos" &&
+        location.type === "highlights" &&
         location.view === viewMode &&
         (location.categoryId ?? null) === (categoryId ?? null)
       );
@@ -1250,7 +1263,7 @@ async function renderMemosPreviewFor(view, categoryId, options) {
   try {
 
     context =
-      await buildMemosSkinContext(
+      await buildHighlightsSkinContext(
         currentOwnerId,
         {
           imageSlotNames: currentImageSlotNames,
@@ -1263,7 +1276,7 @@ async function renderMemosPreviewFor(view, categoryId, options) {
   } catch (err) {
 
     console.error(
-      "[preview-navigation] buildMemosSkinContext failed",
+      "[preview-navigation] buildHighlightsSkinContext failed",
       err
     );
 
@@ -1271,7 +1284,7 @@ async function renderMemosPreviewFor(view, categoryId, options) {
 
       setStudioPreviewOverlay(
         "error",
-        "메모 미리보기를 불러오지 못했습니다."
+        "하이라이트 미리보기를 불러오지 못했습니다."
       );
 
     }
@@ -1289,7 +1302,7 @@ async function renderMemosPreviewFor(view, categoryId, options) {
     reportPreviewEntryUnavailable(
       options,
       "empty",
-      "메모를 불러올 수 없습니다."
+      "하이라이트를 불러올 수 없습니다."
     );
 
     return;
@@ -1302,10 +1315,10 @@ async function renderMemosPreviewFor(view, categoryId, options) {
 
   postRenderToFrame(
     {
-      skin: memosTemplate,
+      skin: highlightsTemplate,
 
       context:
-        buildStudioMemoSampleContext(
+        buildStudioHighlightSampleContext(
           context
         )
     }
@@ -1351,8 +1364,8 @@ function renderCurrentPreviewEntry(options) {
     return;
   }
 
-  if (entry.type === "memos") {
-    renderMemosPreviewFor(entry.view, entry.categoryId, options);
+  if (entry.type === "highlights") {
+    renderHighlightsPreviewFor(entry.view, entry.categoryId, options);
     return;
   }
 

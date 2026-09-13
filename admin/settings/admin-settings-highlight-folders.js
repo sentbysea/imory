@@ -1,10 +1,10 @@
 /* =========================================================
-   SETTINGS — 메모 폴더 (HIGHLIGHT-1 §7)
+   SETTINGS — 하이라이트 폴더 (HIGHLIGHT-1 §7)
 
-   카테고리 한 줄 아래에 붙는 "메모 화면에서 이 카테고리를 어떻게
+   카테고리 한 줄 아래에 붙는 "하이라이트 화면에서 이 카테고리를 어떻게
    보여줄까" 설정.
 
-     메모 순서   메모 화면의 폴더 차례 (↑ ↓)
+     메모 순서   하이라이트 화면의 폴더 차례 (↑ ↓)
      커버        폴더 카드의 사진
      비율        1:1 | 3:4 | 4:3 | 원본
      구도        커버가 잘리는 위치 (가로/세로 %)
@@ -14,8 +14,8 @@
 
    ★ 원본 카테고리 설정과 분리돼 있다 (요구사항 7)
 
-   이 줄이 만지는 것은 categories가 아니라 memo_folder_settings의
-   행이다. 그래서 메모 폴더의 순서·커버를 바꿔도 카테고리 목록의
+   이 줄이 만지는 것은 categories가 아니라 highlight_folder_settings의
+   행이다. 그래서 하이라이트 폴더의 순서·커버를 바꿔도 카테고리 목록의
    순서(categories.sort_order)나 갤러리 커버(secret_cover_path)는
    한 글자도 바뀌지 않는다. 반대도 마찬가지다.
 
@@ -23,9 +23,9 @@
 
    카테고리 순서를 바꾸는 것과 **같은 ↑↓ 조작**이다
    (admin-settings-load.js의 moveCategory와 같은 모양). 다만 움직이는
-   배열이 다르다 — memoFolderOrder는 메모 화면 전용 순서고, 원본
+   배열이 다르다 — highlightFolderOrder는 하이라이트 화면 전용 순서고, 원본
    카테고리 배열은 건드리지 않는다. 설정을 한 번도 만지지 않은
-   카테고리는 memo_folder_settings에 행 자체가 없고, 그때는 메모
+   카테고리는 highlight_folder_settings에 행 자체가 없고, 그때는 메모
    화면이 원본 카테고리 순서를 그대로 쓴다.
 
    ★ 이미지 업로드 시점
@@ -37,19 +37,19 @@
 
    ★ migration이 적용되지 않은 배포
 
-   memo_folder_settings가 없으면 이 줄을 아예 그리지 않는다 —
-   첫 조회에서 한 번 판정한다(아래 loadMemoFolderSettingsForAdmin).
+   highlight_folder_settings가 없으면 이 줄을 아예 그리지 않는다 —
+   첫 조회에서 한 번 판정한다(아래 loadHighlightFolderSettingsForAdmin).
 
    classic script. admin-settings-category-display.js **뒤에**,
    admin-settings-save.js **앞에** 로드된다.
 ========================================================== */
 
 
-const MEMO_FOLDER_COVER_BUCKET =
+const HIGHLIGHT_FOLDER_COVER_BUCKET =
   "post-covers";
 
 
-const MEMO_FOLDER_COVER_ALLOWED_MIME =
+const HIGHLIGHT_FOLDER_COVER_ALLOWED_MIME =
   [
     "image/png",
     "image/jpeg",
@@ -58,11 +58,11 @@ const MEMO_FOLDER_COVER_ALLOWED_MIME =
   ];
 
 
-const MEMO_FOLDER_COVER_MAX_BYTES =
+const HIGHLIGHT_FOLDER_COVER_MAX_BYTES =
   5 * 1024 * 1024;
 
 
-const MEMO_FOLDER_COVER_EXTENSION_BY_MIME =
+const HIGHLIGHT_FOLDER_COVER_EXTENSION_BY_MIME =
   {
     "image/png": "png",
     "image/jpeg": "jpg",
@@ -71,7 +71,7 @@ const MEMO_FOLDER_COVER_EXTENSION_BY_MIME =
   };
 
 
-const MEMO_FOLDER_RATIOS =
+const HIGHLIGHT_FOLDER_RATIOS =
   [
     { value: "original", label: "원본" },
     { value: "1:1", label: "1:1" },
@@ -80,27 +80,27 @@ const MEMO_FOLDER_RATIOS =
   ];
 
 
-/* 이 배포에 memo_folder_settings가 있는가 */
+/* 이 배포에 highlight_folder_settings가 있는가 */
 
-let memoFolderTableAvailable =
+let highlightFolderTableAvailable =
   true;
 
 
 /* category.id -> 저장된 설정 */
 
-let memoFolderSettingsById =
+let highlightFolderSettingsById =
   new Map();
 
 
-/* 메모 화면의 폴더 차례(카테고리 id 배열) */
+/* 하이라이트 화면의 폴더 차례(카테고리 id 배열) */
 
-let memoFolderOrder =
+let highlightFolderOrder =
   [];
 
 
 /* 이번 SAVE에서 지울 이전 파일들 */
 
-let memoFolderReplacedPaths =
+let highlightFolderReplacedPaths =
   [];
 
 
@@ -109,15 +109,15 @@ let memoFolderReplacedPaths =
    불러오기 — loadCategories() 직후에 부른다
 ========================================================== */
 
-async function loadMemoFolderSettingsForAdmin(
+async function loadHighlightFolderSettingsForAdmin(
   userId
 ) {
 
-  memoFolderSettingsById =
+  highlightFolderSettingsById =
     new Map();
 
 
-  memoFolderOrder =
+  highlightFolderOrder =
     [];
 
 
@@ -134,7 +134,7 @@ async function loadMemoFolderSettingsForAdmin(
   } =
     await supabaseClient
       .from(
-        "memo_folder_settings"
+        "highlight_folder_settings"
       )
       .select(
         "category_id, sort_order, has_cover, cover_ratio, cover_focus_x, cover_focus_y"
@@ -154,12 +154,12 @@ async function loadMemoFolderSettingsForAdmin(
     */
 
     console.warn(
-      "memo folder settings load error:",
+      "highlight folder settings load error:",
       error
     );
 
 
-    memoFolderTableAvailable =
+    highlightFolderTableAvailable =
       false;
 
 
@@ -168,7 +168,7 @@ async function loadMemoFolderSettingsForAdmin(
   }
 
 
-  memoFolderTableAvailable =
+  highlightFolderTableAvailable =
     true;
 
 
@@ -179,7 +179,7 @@ async function loadMemoFolderSettingsForAdmin(
   ).forEach(
     (row) => {
 
-      memoFolderSettingsById.set(
+      highlightFolderSettingsById.set(
         Number(row.category_id),
         {
           sortOrder:
@@ -208,12 +208,12 @@ async function loadMemoFolderSettingsForAdmin(
 
 
 /*
-  카테고리 배열이 정해진 뒤 메모 폴더 차례를 만든다. 저장된 순서가
+  카테고리 배열이 정해진 뒤 하이라이트 폴더 차례를 만든다. 저장된 순서가
   있는 카테고리가 먼저, 없는 카테고리는 원본 카테고리 순서대로 뒤에
   붙는다 — 한 번도 만지지 않았으면 두 순서가 같다.
 */
 
-function syncMemoFolderOrder(
+function syncHighlightFolderOrder(
   list
 ) {
 
@@ -222,7 +222,9 @@ function syncMemoFolderOrder(
       .filter(
         (category) =>
           category.id &&
-          category.type !== "banner"
+          /* HIGHLIGHT-2: 폴더 = 글이 들어갈 수 있는 카테고리다.
+             배너에도, HIGHLIGHT 카테고리 자신에도 글이 없다. */
+          isPostBearingCategoryType(category.type)
       )
       .map(
         (category) =>
@@ -233,21 +235,21 @@ function syncMemoFolderOrder(
   const known =
     ids.filter(
       (id) =>
-        memoFolderSettingsById.has(id)
+        highlightFolderSettingsById.has(id)
     );
 
 
   known.sort(
     (a, b) =>
-      (memoFolderSettingsById.get(a).sortOrder || 0) -
-      (memoFolderSettingsById.get(b).sortOrder || 0)
+      (highlightFolderSettingsById.get(a).sortOrder || 0) -
+      (highlightFolderSettingsById.get(b).sortOrder || 0)
   );
 
 
   const rest =
     ids.filter(
       (id) =>
-        !memoFolderSettingsById.has(id)
+        !highlightFolderSettingsById.has(id)
     );
 
 
@@ -257,15 +259,15 @@ function syncMemoFolderOrder(
   */
 
   const base =
-    memoFolderOrder.length
-      ? memoFolderOrder.filter(
+    highlightFolderOrder.length
+      ? highlightFolderOrder.filter(
           (id) =>
             ids.includes(id)
         )
       : known.concat(rest);
 
 
-  memoFolderOrder =
+  highlightFolderOrder =
     base.concat(
       ids.filter(
         (id) =>
@@ -276,7 +278,7 @@ function syncMemoFolderOrder(
 }
 
 
-function memoFolderSettingsFor(
+function highlightFolderSettingsFor(
   category
 ) {
 
@@ -284,9 +286,9 @@ function memoFolderSettingsFor(
     Number(category.id);
 
 
-  if (!memoFolderSettingsById.has(id)) {
+  if (!highlightFolderSettingsById.has(id)) {
 
-    memoFolderSettingsById.set(
+    highlightFolderSettingsById.set(
       id,
       {
         sortOrder:
@@ -309,7 +311,7 @@ function memoFolderSettingsFor(
   }
 
 
-  return memoFolderSettingsById.get(id);
+  return highlightFolderSettingsById.get(id);
 
 }
 
@@ -319,20 +321,21 @@ function memoFolderSettingsFor(
    줄 그리기
 ========================================================== */
 
-function buildMemoFolderRow(
+function buildHighlightFolderRow(
   category,
   onChanged
 ) {
 
   if (
-    !memoFolderTableAvailable ||
+    !highlightFolderTableAvailable ||
     !category.id ||
-    category.type === "banner"
+    !isPostBearingCategoryType(category.type)
   ) {
 
     /*
-      배너 카테고리에는 글이 없으니 하이라이트도 없다. 아직 저장되지
-      않은 새 카테고리도 대상이 아니다 — 저장된 뒤 다시 열면 나온다.
+      배너와 HIGHLIGHT 카테고리에는 글이 없으니 하이라이트도 없다.
+      아직 저장되지 않은 새 카테고리도 대상이 아니다 — 저장된 뒤 다시
+      열면 나온다.
     */
 
     return null;
@@ -341,7 +344,7 @@ function buildMemoFolderRow(
 
 
   const settings =
-    memoFolderSettingsFor(category);
+    highlightFolderSettingsFor(category);
 
 
   const row =
@@ -361,7 +364,7 @@ function buildMemoFolderRow(
 
 
   caption.textContent =
-    "메모 폴더";
+    "하이라이트 폴더";
 
 
   row.appendChild(caption);
@@ -371,15 +374,15 @@ function buildMemoFolderRow(
 
      차례는 이 줄에 없다. 카테고리 줄마다 ↑↓ 를 흩어 두면 "지금
      무엇의 차례를 바꾸고 있는가"가 흐려지고, 끌어서 옮기는 조작을
-     붙일 자리도 없다. 대신 카테고리 목록 아래에 메모 폴더만 모은
+     붙일 자리도 없다. 대신 카테고리 목록 아래에 하이라이트 폴더만 모은
      목록이 따로 있다
-     (admin/settings/admin-settings-memo-folder-order.js).
+     (admin/settings/admin-settings-highlight-folder-order.js).
      이 줄은 커버/비율/구도만 맡는다. */
 
   /* --- 커버 --- */
 
   row.appendChild(
-    buildMemoFolderCoverControl(
+    buildHighlightFolderCoverControl(
       category,
       settings,
       onChanged
@@ -417,7 +420,7 @@ function buildMemoFolderRow(
     "category-display-select imory-field imory-field--sm";
 
 
-  MEMO_FOLDER_RATIOS.forEach(
+  HIGHLIGHT_FOLDER_RATIOS.forEach(
     (option) => {
 
       const optionElement =
@@ -527,7 +530,7 @@ function buildMemoFolderRow(
 
       range.disabled =
         settings.coverRatio === "original" ||
-        !memoFolderHasCoverPreview(category, settings);
+        !highlightFolderHasCoverPreview(category, settings);
 
 
       range.addEventListener(
@@ -555,7 +558,7 @@ function buildMemoFolderRow(
 }
 
 
-function moveMemoFolder(
+function moveHighlightFolder(
   index,
   delta
 ) {
@@ -567,7 +570,7 @@ function moveMemoFolder(
   if (
     index < 0 ||
     next < 0 ||
-    next >= memoFolderOrder.length
+    next >= highlightFolderOrder.length
   ) {
 
     return;
@@ -576,19 +579,19 @@ function moveMemoFolder(
 
 
   const moved =
-    memoFolderOrder[index];
+    highlightFolderOrder[index];
 
 
-  memoFolderOrder[index] =
-    memoFolderOrder[next];
+  highlightFolderOrder[index] =
+    highlightFolderOrder[next];
 
-  memoFolderOrder[next] =
+  highlightFolderOrder[next] =
     moved;
 
 }
 
 
-function memoFolderHasCoverPreview(
+function highlightFolderHasCoverPreview(
   category,
   settings
 ) {
@@ -597,14 +600,14 @@ function memoFolderHasCoverPreview(
     category.__pendingMemoCoverFile ||
     (
       settings.hasCover &&
-      !category.__memoCoverRemoveRequested
+      !category.__highlightCoverRemoveRequested
     )
   );
 
 }
 
 
-function buildMemoFolderCoverControl(
+function buildHighlightFolderCoverControl(
   category,
   settings,
   onChanged
@@ -649,16 +652,16 @@ function buildMemoFolderCoverControl(
 
   else if (
     settings.hasCover &&
-    !category.__memoCoverRemoveRequested &&
-    typeof buildMemoFolderCoverUrl === "function"
+    !category.__highlightCoverRemoveRequested &&
+    typeof buildHighlightFolderCoverUrl === "function"
   ) {
 
     previewUrl =
-      buildMemoFolderCoverUrl(
+      buildHighlightFolderCoverUrl(
         category.id,
         {
           bust:
-            category.__memoCoverBust ||
+            category.__highlightCoverBust ||
             undefined
         }
       );
@@ -677,7 +680,7 @@ function buildMemoFolderCoverControl(
 
 
     image.alt =
-      "메모 폴더 커버";
+      "하이라이트 폴더 커버";
 
 
     preview.appendChild(image);
@@ -712,7 +715,7 @@ function buildMemoFolderCoverControl(
 
 
   fileInput.accept =
-    MEMO_FOLDER_COVER_ALLOWED_MIME.join(",");
+    HIGHLIGHT_FOLDER_COVER_ALLOWED_MIME.join(",");
 
 
   fileInput.hidden =
@@ -763,7 +766,7 @@ function buildMemoFolderCoverControl(
 
 
       if (
-        !MEMO_FOLDER_COVER_ALLOWED_MIME.includes(file.type)
+        !HIGHLIGHT_FOLDER_COVER_ALLOWED_MIME.includes(file.type)
       ) {
 
         window.alert(
@@ -776,7 +779,7 @@ function buildMemoFolderCoverControl(
       }
 
 
-      if (file.size > MEMO_FOLDER_COVER_MAX_BYTES) {
+      if (file.size > HIGHLIGHT_FOLDER_COVER_MAX_BYTES) {
 
         window.alert(
           "5MB 이하 이미지만 올릴 수 있습니다."
@@ -788,14 +791,14 @@ function buildMemoFolderCoverControl(
       }
 
 
-      releaseMemoFolderCoverObjectUrl(category);
+      releaseHighlightFolderCoverObjectUrl(category);
 
 
       category.__pendingMemoCoverFile =
         file;
 
 
-      category.__memoCoverRemoveRequested =
+      category.__highlightCoverRemoveRequested =
         false;
 
 
@@ -834,14 +837,14 @@ function buildMemoFolderCoverControl(
       "click",
       () => {
 
-        releaseMemoFolderCoverObjectUrl(category);
+        releaseHighlightFolderCoverObjectUrl(category);
 
 
         category.__pendingMemoCoverFile =
           null;
 
 
-        category.__memoCoverRemoveRequested =
+        category.__highlightCoverRemoveRequested =
           true;
 
 
@@ -861,7 +864,7 @@ function buildMemoFolderCoverControl(
 }
 
 
-function releaseMemoFolderCoverObjectUrl(
+function releaseHighlightFolderCoverObjectUrl(
   category
 ) {
 
@@ -901,12 +904,12 @@ function releaseMemoFolderCoverObjectUrl(
    -> { ok: true } | { ok: false, message }
 ========================================================== */
 
-async function saveMemoFolderSettings(
+async function saveHighlightFolderSettings(
   userId,
   list
 ) {
 
-  if (!memoFolderTableAvailable) {
+  if (!highlightFolderTableAvailable) {
 
     return {
       ok: true
@@ -915,7 +918,7 @@ async function saveMemoFolderSettings(
   }
 
 
-  memoFolderReplacedPaths =
+  highlightFolderReplacedPaths =
     [];
 
 
@@ -923,14 +926,14 @@ async function saveMemoFolderSettings(
     list.filter(
       (category) =>
         category.id &&
-        category.type !== "banner"
+        isPostBearingCategoryType(category.type)
     );
 
 
   for (const category of targets) {
 
     const settings =
-      memoFolderSettingsFor(category);
+      highlightFolderSettingsFor(category);
 
 
     let coverPath =
@@ -959,7 +962,7 @@ async function saveMemoFolderSettings(
           ok: false,
 
           message:
-            "메모 폴더 커버에서 촬영 정보(EXIF)를 지우지 못해 올리지 않았습니다."
+            "하이라이트 폴더 커버에서 촬영 정보(EXIF)를 지우지 못해 올리지 않았습니다."
         };
 
       }
@@ -970,7 +973,7 @@ async function saveMemoFolderSettings(
 
 
       const storagePath =
-        buildMemoFolderCoverPath(
+        buildHighlightFolderCoverPath(
           userId,
           file.type
         );
@@ -981,7 +984,7 @@ async function saveMemoFolderSettings(
       } =
         await supabaseClient
           .storage
-          .from(MEMO_FOLDER_COVER_BUCKET)
+          .from(HIGHLIGHT_FOLDER_COVER_BUCKET)
           .upload(
             storagePath,
             file,
@@ -1000,7 +1003,7 @@ async function saveMemoFolderSettings(
       if (uploadError) {
 
         console.error(
-          "memo folder cover upload error:",
+          "highlight folder cover upload error:",
           uploadError
         );
 
@@ -1009,7 +1012,7 @@ async function saveMemoFolderSettings(
           ok: false,
 
           message:
-            "메모 폴더 커버를 올리지 못했습니다."
+            "하이라이트 폴더 커버를 올리지 못했습니다."
         };
 
       }
@@ -1023,7 +1026,7 @@ async function saveMemoFolderSettings(
 
     }
 
-    else if (category.__memoCoverRemoveRequested) {
+    else if (category.__highlightCoverRemoveRequested) {
 
       coverPath =
         null;
@@ -1040,7 +1043,7 @@ async function saveMemoFolderSettings(
     } =
       await supabaseClient
         .rpc(
-          "upsert_own_memo_folder_settings",
+          "upsert_own_highlight_folder_settings",
           {
             p_category_id:
               Number(category.id),
@@ -1048,7 +1051,7 @@ async function saveMemoFolderSettings(
             p_sort_order:
               Math.max(
                 0,
-                memoFolderOrder.indexOf(Number(category.id))
+                highlightFolderOrder.indexOf(Number(category.id))
               ),
 
             p_cover_ratio:
@@ -1072,7 +1075,7 @@ async function saveMemoFolderSettings(
     if (error) {
 
       console.error(
-        "memo folder settings save error:",
+        "highlight folder settings save error:",
         error
       );
 
@@ -1081,7 +1084,7 @@ async function saveMemoFolderSettings(
         ok: false,
 
         message:
-          "메모 폴더 설정을 저장하지 못했습니다."
+          "하이라이트 폴더 설정을 저장하지 못했습니다."
       };
 
     }
@@ -1094,7 +1097,7 @@ async function saveMemoFolderSettings(
 
     if (typeof data === "string" && data) {
 
-      memoFolderReplacedPaths.push(data);
+      highlightFolderReplacedPaths.push(data);
 
     }
 
@@ -1105,27 +1108,27 @@ async function saveMemoFolderSettings(
         : Boolean(coverPath);
 
 
-    releaseMemoFolderCoverObjectUrl(category);
+    releaseHighlightFolderCoverObjectUrl(category);
 
 
     category.__pendingMemoCoverFile =
       null;
 
-    category.__memoCoverRemoveRequested =
+    category.__highlightCoverRemoveRequested =
       false;
 
-    category.__memoCoverBust =
+    category.__highlightCoverBust =
       Date.now();
 
   }
 
 
-  await removeMemoFolderCoverObjects(
-    memoFolderReplacedPaths
+  await removeHighlightFolderCoverObjects(
+    highlightFolderReplacedPaths
   );
 
 
-  memoFolderReplacedPaths =
+  highlightFolderReplacedPaths =
     [];
 
 
@@ -1136,13 +1139,13 @@ async function saveMemoFolderSettings(
 }
 
 
-function buildMemoFolderCoverPath(
+function buildHighlightFolderCoverPath(
   userId,
   mimeType
 ) {
 
   const extension =
-    MEMO_FOLDER_COVER_EXTENSION_BY_MIME[mimeType] ||
+    HIGHLIGHT_FOLDER_COVER_EXTENSION_BY_MIME[mimeType] ||
     "bin";
 
 
@@ -1160,7 +1163,7 @@ function buildMemoFolderCoverPath(
 }
 
 
-async function removeMemoFolderCoverObjects(
+async function removeHighlightFolderCoverObjects(
   paths
 ) {
 
@@ -1180,7 +1183,7 @@ async function removeMemoFolderCoverObjects(
   } =
     await supabaseClient
       .storage
-      .from(MEMO_FOLDER_COVER_BUCKET)
+      .from(HIGHLIGHT_FOLDER_COVER_BUCKET)
       .remove(targets);
 
 
@@ -1192,7 +1195,7 @@ async function removeMemoFolderCoverObjects(
     */
 
     console.warn(
-      "memo folder cover cleanup error:",
+      "highlight folder cover cleanup error:",
       error
     );
 

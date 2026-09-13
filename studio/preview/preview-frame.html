@@ -120,15 +120,15 @@
         "../../core/content-width.css",
 
         /*
-          HIGHLIGHT-1 후속 — 메모 카드의 ⋮ · 메뉴 · 메모 팝업 ·
-          토스트, 그리고 플랫폼 기본 메모 진입점 칩. Preview에서
+          HIGHLIGHT-1 후속 — 하이라이트 카드의 ⋮ · 메뉴 · 메모 팝업 ·
+          토스트, 그리고 플랫폼 기본 하이라이트 진입점 칩. Preview에서
           그것들이 공개 화면과 **같은 모양**으로 보여야 하므로
           같은 스타일시트를 읽는다.
         */
         "../../posts/posts-highlight.css",
 
         /* Preview에만 있는 chrome(주인장/방문자 칩) */
-        "./preview-memo-tools.css"
+        "./preview-highlight-tools.css"
       ]
     );
 
@@ -199,12 +199,12 @@
         "../../studio/inspector/studio-inspector-crop-model.js",
 
         /*
-          HIGHLIGHT-1 후속 — 메모 화면 재료.
+          HIGHLIGHT-1 후속 — 하이라이트 화면 재료.
 
           셋 다 의존이 얕아서 그대로 실을 수 있다:
             posts-view-popover.js         순수 DOM(의존 없음)
-            posts-view-memo-card-tools.js popover 하나만 본다
-            skin-memo-entry.js            앞부분(칩 만들기)은 의존 없음.
+            posts-view-highlight-card-tools.js popover 하나만 본다
+            skin-highlight-entry.js            앞부분(칩 만들기)은 의존 없음.
                                           뒷부분(공개 화면 컨트롤러)은
                                           supabaseClient/getSiteOwner가
                                           없으면 실행되지 않는다.
@@ -212,10 +212,11 @@
           공개 화면과 **같은 파일**을 읽는 것이 핵심이다 — Preview용
           복제본을 만들면 두 화면이 서서히 달라진다.
         */
+        "../../core/lib/category-types.js",
         "../../posts/view/posts-view-popover.js",
-        "../../posts/view/posts-view-memo-card-tools.js",
-        "../../skin/skin-memo-entry.js",
-        "./preview-memo-tools.js"
+        "../../posts/view/posts-view-highlight-card-tools.js",
+        "../../skin/skin-highlight-entry.js",
+        "./preview-highlight-tools.js"
       ]
     );
 

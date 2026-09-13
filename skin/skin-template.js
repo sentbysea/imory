@@ -32,13 +32,25 @@
    undefined를 받고, 그 경우 플랫폼은 폴더 링크(folderHref)를 아예
    노출하지 않으며 폴더 주소로 들어오면 그 카테고리로 돌려보낸다
    (폴더 전용 폴백 화면을 만들지 않는다). */
-/* HIGHLIGHT-1: "memos"가 여섯 번째 page type이다. banner/folder와 같은
-   **선택** template이지만 폴백이 다르다 — templates.memos가 없으면
-   플랫폼이 아래 getDefaultMemosTemplate()을 쓴다(갤러리와 같은 방식).
-   메모 화면은 legacy 화면이 아예 없어서 "지원하지 않으면 안 보여준다"가
-   성립하지 않기 때문이다. */
+/* HIGHLIGHT-1: 하이라이트 화면이 여섯 번째 page type이다. banner/folder와
+   같은 **선택** template이지만 폴백이 다르다 — template이 없으면 플랫폼이
+   아래 getDefaultHighlightsTemplate()을 쓴다(갤러리와 같은 방식).
+   하이라이트 화면은 legacy 화면이 아예 없어서 "지원하지 않으면 안 보여준다"가
+   성립하지 않기 때문이다.
+
+   HIGHLIGHT-2: 그 page type 의 공식 이름은 "highlights" 다. HIGHLIGHT-1 이
+   쓴 "memos" 는 **레거시 alias**로만 남는다 — 이미 templates.memos 를 담아
+   저장·export 한 스킨이 있고, 그 파일을 다시 저장하지 않아도 계속 그려져야
+   한다. 새로 만드는 스킨과 AI 가 쓰는 이름은 templates.highlights 하나다.
+   alias 제거 가능 시점: IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md §12. */
 const SKIN_TEMPLATE_PAGE_TYPES =
-  ["home", "category", "post", "banner", "folder", "memos"];
+  ["home", "category", "post", "banner", "folder", "highlights", "memos"];
+
+
+/* 하이라이트 화면 template 의 공식 이름과 레거시 alias (우선순위 순) */
+
+const SKIN_HIGHLIGHTS_TEMPLATE_NAMES =
+  ["highlights", "memos"];
 
 /* Additive gallery fallback. Existing category templates retain full control. */
 function getDefaultGalleryTemplate() {
@@ -67,77 +79,118 @@ function getDefaultGalleryTemplate() {
 
 
 /* =========================================================
-   기본 메모 화면 (HIGHLIGHT-1 §7)
+   기본 하이라이트 화면 (HIGHLIGHT-1 §7 · HIGHLIGHT-2 §11)
 
-   templates.memos를 가지고 있지 않은 스킨(= 지금 존재하는 모든 스킨)
-   에서도 메모 카테고리가 동작해야 한다. 그래서 갤러리와 같은 방식으로
-   **플랫폼이 들고 있는 기본 template**을 쓴다.
+   하이라이트 template 을 가지고 있지 않은 스킨(= HIGHLIGHT-2 이전의
+   모든 스킨)에서도 이 화면이 동작해야 한다. 그래서 갤러리와 같은
+   방식으로 **플랫폼이 들고 있는 기본 template**을 쓴다.
 
-   ★ 고정된 완성 HTML 하나가 아니다 (요구사항 10)
+   ★ 고정된 완성 HTML 하나가 아니다
 
    이 기본값도 여느 스킨과 똑같이 data-imory-* 바인딩으로만 쓰여 있다.
    스킨 제작자는 이 구조를 그대로 복사해 요소의 순서·태그·클래스를
    바꾸면 되고, 필요 없는 조각은 빼면 된다. 플랫폼이 뒤에서 채우는
-   자리는 카드마다 하나씩 있는 [data-imory-region="memo-tools"] 뿐이다 —
-   주인장에게는 ⋮ 버튼이 들어가고 방문자에게는 빈 채로 남는다.
+   자리는 카드마다 하나씩 있는 [data-imory-region="highlight-tools"]
+   뿐이다 — 주인장에게는 ⋮ 버튼이 들어가고 방문자에게는 빈 채로 남는다
+   (HIGHLIGHT-1 의 "memo-tools" 도 계속 인정된다, skin/skin-sanitize.js).
+
+   바인딩 경로는 공식 이름인 `highlights.*` 를 쓴다. Context 는 같은
+   객체를 `memos` 로도 내보내므로 예전 스킨의 `memos.*` 도 그대로
+   동작한다 — 두 경로가 **같은 값**을 가리키므로 어느 쪽을 쓰든 화면은
+   한 번만 그려진다.
 
    CSS는 posts/posts-highlight.css의 클래스를 그대로 쓰므로 여기서는
    최소한의 배치만 준다(스킨이 자기 template을 가지면 이 CSS 자체가
    쓰이지 않는다).
 ========================================================== */
 
-function getDefaultMemosTemplate() {
+function getDefaultHighlightsTemplate() {
 
   return {
 
-    html: `<section class="memo-screen">
+    html: `<section class="highlight-screen">
 
-      <nav class="memo-screen-views">
-        <a class="memo-screen-view" data-imory-href="memos.allHref" data-imory-bind="memos.allLabel"></a>
-        <a class="memo-screen-view" data-imory-href="memos.foldersHref" data-imory-bind="memos.foldersLabel"></a>
+      <nav class="highlight-screen-views">
+        <a class="highlight-screen-view" data-imory-href="highlights.allHref" data-imory-bind="highlights.allLabel"></a>
+        <a class="highlight-screen-view" data-imory-href="highlights.foldersHref" data-imory-bind="highlights.foldersLabel"></a>
       </nav>
 
-      <h1 class="memo-folder-name" data-imory-if="memos.view.isFolder" data-imory-bind="memos.folder.name"></h1>
+      <h1 class="highlight-folder-name" data-imory-if="highlights.view.isFolder" data-imory-bind="highlights.folder.name"></h1>
 
-      <p class="memo-screen-state" data-imory-if="memos.hasError">메모를 불러오지 못했습니다.</p>
-      <p class="memo-screen-sample" data-imory-if="memos.isSample">아직 메모가 없어 샘플 카드를 보여 주고 있습니다. 공개 화면에는 나오지 않습니다.</p>
+      <p class="highlight-screen-state" data-imory-if="highlights.hasError">하이라이트를 불러오지 못했습니다.</p>
+      <p class="highlight-screen-sample" data-imory-if="highlights.isSample">아직 하이라이트가 없어 샘플 카드를 보여 주고 있습니다. 공개 화면에는 나오지 않습니다.</p>
 
-      <div class="memo-folder-grid" data-imory-if="memos.view.isFolders">
-        <a class="memo-folder-card" data-imory-repeat="memos.folders" data-imory-href="item.href">
-          <span class="memo-folder-cover" data-imory-if="item.hasCover">
+      <div class="highlight-folder-grid" data-imory-if="highlights.view.isFolders">
+        <a class="highlight-folder-card" data-imory-repeat="highlights.folders" data-imory-href="item.href">
+          <span class="highlight-folder-cover" data-imory-if="item.hasCover">
             <img data-imory-src="item.coverUrl" alt="">
           </span>
-          <span class="memo-folder-name" data-imory-bind="item.name"></span>
-          <span class="memo-folder-count" data-imory-bind="item.countLabel"></span>
+          <span class="highlight-folder-name" data-imory-bind="item.name"></span>
+          <span class="highlight-folder-count" data-imory-bind="item.countLabel"></span>
         </a>
       </div>
 
-      <div class="memo-card-list" data-imory-if="memos.showCards">
-        <article class="memo-card" data-imory-repeat="memos.cards">
-          <blockquote class="memo-card-excerpt" data-imory-bind="item.excerpt"></blockquote>
-          <p class="memo-card-note" data-imory-if="item.hasNote" data-imory-bind="item.note"></p>
-          <div class="memo-card-meta">
+      <div class="highlight-card-list" data-imory-if="highlights.showCards">
+        <article class="highlight-card" data-imory-repeat="highlights.cards">
+          <blockquote class="highlight-card-excerpt" data-imory-bind="item.excerpt"></blockquote>
+          <p class="highlight-card-note" data-imory-if="item.hasNote" data-imory-bind="item.note"></p>
+          <div class="highlight-card-meta">
             <a data-imory-if="item.postHref" data-imory-href="item.postHref" data-imory-bind="item.postTitle"></a>
             <span data-imory-if="item.categoryName" data-imory-bind="item.categoryName"></span>
             <span data-imory-bind="item.dateLabel"></span>
-            <span class="memo-card-missing" data-imory-if="item.isMissing">원문에서 위치를 찾을 수 없음</span>
-            <span class="memo-card-unchecked" data-imory-if="item.isPlacementUnknown">원문 위치 확인 전</span>
+            <span class="highlight-card-missing" data-imory-if="item.isMissing">원문에서 위치를 찾을 수 없음</span>
+            <span class="highlight-card-unchecked" data-imory-if="item.isPlacementUnknown">원문 위치 확인 전</span>
           </div>
-          <div class="memo-card-actions">
-            <a class="memo-card-open" data-imory-if="item.postHref" data-imory-href="item.postHref">원문 보기</a>
-            <span data-imory-region="memo-tools"></span>
+          <div class="highlight-card-actions">
+            <a class="highlight-card-open" data-imory-if="item.postHref" data-imory-href="item.postHref">원문 보기</a>
+            <span data-imory-region="highlight-tools"></span>
           </div>
         </article>
       </div>
 
-      <p class="memo-screen-state" data-imory-if="memos.isEmpty">아직 메모가 없습니다.</p>
-      <p class="memo-screen-state" data-imory-if="memos.foldersEmpty">아직 메모가 없습니다.</p>
+      <p class="highlight-screen-state" data-imory-if="highlights.isEmpty">아직 하이라이트가 없습니다.</p>
+      <p class="highlight-screen-state" data-imory-if="highlights.foldersEmpty">아직 하이라이트가 없습니다.</p>
 
     </section>`,
 
     css: ``
 
   };
+
+}
+
+
+/* =========================================================
+   resolveSkinHighlightsTemplate(skinPackage) -> { html, css } | undefined
+
+   렌더 우선순위(HIGHLIGHT-2 §11):
+     1. templates.highlights   — 공식 이름
+     2. templates.memos        — HIGHLIGHT-1 스킨 호환
+     (없으면 호출자가 getDefaultHighlightsTemplate()을 쓴다)
+
+   두 이름을 동시에 그리지 않는다 — 먼저 찾은 하나만 돌려준다.
+========================================================== */
+
+function resolveSkinHighlightsTemplate(
+  skinPackage
+) {
+
+  for (const name of SKIN_HIGHLIGHTS_TEMPLATE_NAMES) {
+
+    const template =
+      resolveSkinTemplate(skinPackage, name);
+
+
+    if (template) {
+
+      return template;
+
+    }
+
+  }
+
+
+  return undefined;
 
 }
 
@@ -297,8 +350,21 @@ const SKIN_GALLERY_CONTEXT_PREFIXES =
   ["category.gallery", "category.pagination"];
 
 
-function skinTemplateUsesGallery(
-  template
+/* HIGHLIGHT-2: 페이지네이션만 따로 판정한다 — 아래 주석 참고 */
+
+const SKIN_PAGINATION_CONTEXT_PREFIXES =
+  ["category.pagination"];
+
+
+/*
+  "이 template 이 이 Context 경로들을 실제로 그리는가".
+  skinTemplateUsesGallery / skinTemplateUsesPagination 이 공유한다 —
+  판정 방법(DOMParser + 바인딩 속성만 본다)은 한 곳에만 둔다.
+*/
+
+function skinTemplateUsesContextPrefixes(
+  template,
+  prefixes
 ) {
 
   const html =
@@ -317,7 +383,7 @@ function skinTemplateUsesGallery(
   /* 빠른 사전 판정 — 문자열에 아예 없으면 파싱하지 않는다. */
 
   if (
-    !SKIN_GALLERY_CONTEXT_PREFIXES.some(
+    !prefixes.some(
       (prefix) => html.includes(prefix)
     )
   ) {
@@ -361,13 +427,66 @@ function skinTemplateUsesGallery(
         const value =
           el.getAttribute(attr) || "";
 
-        return SKIN_GALLERY_CONTEXT_PREFIXES.some(
+        return prefixes.some(
           (prefix) =>
             value === prefix ||
             value.startsWith(`${prefix}.`)
         );
 
       })
+  );
+
+}
+
+
+function skinTemplateUsesGallery(
+  template
+) {
+
+  return skinTemplateUsesContextPrefixes(
+    template,
+    SKIN_GALLERY_CONTEXT_PREFIXES
+  );
+
+}
+
+
+/* =========================================================
+   skinTemplateUsesPagination(template) -> boolean (HIGHLIGHT-2)
+
+   "이 CATEGORY template 이 category.pagination 을 실제로 그리는가".
+
+   왜 필요한가 — 갤러리 때와 정확히 같은 이유다(위
+   skinTemplateUsesGallery 주석). 페이지네이션을 켜면 category.posts 가
+   "그 페이지의 글"이 되므로, 페이지 링크를 그리지 않는 기존 스킨이
+   그 데이터를 받으면 아무것도 바꾸지 않았는데 목록이 12개로 잘려
+   보이고 나머지 글로 갈 방법이 없다. 그래서 페이지 링크를 실제로
+   그리는 스킨에서만 페이지 단위 조회를 켠다 — 설정(page_size /
+   pagination_style)은 남아 있고, 그런 스킨으로 바꾸면 그때 살아난다.
+
+   갤러리 판정과 따로 두는 이유: 갤러리 쪽은 category.gallery 만 써도
+   켜져야 하고(카드 목록 자체가 갤러리 계약이다), post 목록 쪽은
+   category.pagination 이 **반드시** 있어야 한다.
+========================================================== */
+
+function skinTemplateUsesPagination(
+  template
+) {
+
+  return skinTemplateUsesContextPrefixes(
+    template,
+    SKIN_PAGINATION_CONTEXT_PREFIXES
+  );
+
+}
+
+
+function skinPackageUsesPagination(
+  skinPackage
+) {
+
+  return skinTemplateUsesPagination(
+    resolveSkinTemplate(skinPackage, "category")
   );
 
 }
@@ -398,5 +517,20 @@ if (typeof window !== "undefined") {
 
   window.skinPackageUsesGallery =
     skinPackageUsesGallery;
+
+  window.skinTemplateUsesPagination =
+    skinTemplateUsesPagination;
+
+  window.skinPackageUsesPagination =
+    skinPackageUsesPagination;
+
+  window.resolveSkinHighlightsTemplate =
+    resolveSkinHighlightsTemplate;
+
+  window.getDefaultHighlightsTemplate =
+    getDefaultHighlightsTemplate;
+
+  window.SKIN_HIGHLIGHTS_TEMPLATE_NAMES =
+    SKIN_HIGHLIGHTS_TEMPLATE_NAMES;
 
 }

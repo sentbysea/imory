@@ -74,13 +74,15 @@ const SKIN_GENERATOR_HEADER_HTML =
   `<header class="skin-header"><h1 class="skin-header-title" data-imory-bind="site.title"></h1></header>`;
 
 /*
-  HIGHLIGHT-1 후속: 새로 만드는 스킨은 처음부터 메모 화면 링크를
+  HIGHLIGHT-1 후속: 새로 만드는 스킨은 처음부터 하이라이트 화면 링크를
   갖는다. 카테고리 목록 아래에 한 줄 더 붙이는 것뿐이고,
-  navigation.memos.enabled가 false면(사용자가 Settings에서 껐으면)
-  렌더 단계에서 통째로 빠진다.
+  navigation.highlights.showStandaloneLink 가 false 면 렌더 단계에서
+  통째로 빠진다 — 사용자가 Settings 에서 껐거나, HIGHLIGHT 카테고리를
+  만들어서 그 링크가 이미 위 카테고리 목록 안에 있을 때다(같은 곳으로
+  가는 링크를 두 줄 그리지 않는다).
 
   기존 스킨은 이 조각을 갖고 있지 않다 — 그쪽은 플랫폼이 얹는 기본
-  진입점이 맡는다(skin/skin-memo-entry.js). 남의 스킨 코드를
+  진입점이 맡는다(skin/skin-highlight-entry.js). 남의 스킨 코드를
   일괄로 고쳐 쓰지 않는다.
 */
 
@@ -90,8 +92,8 @@ const SKIN_GENERATOR_NAV_HTML =
   `<li class="skin-nav-item" data-imory-repeat="navigation.categories">` +
   `<a class="skin-nav-link" data-imory-href="item.href" data-imory-bind="item.name"></a>` +
   `</li>` +
-  `<li class="skin-nav-item skin-nav-item--memos" data-imory-if="navigation.memos.enabled">` +
-  `<a class="skin-nav-link" data-imory-href="navigation.memos.href" data-imory-bind="navigation.memos.name"></a>` +
+  `<li class="skin-nav-item skin-nav-item--highlights" data-imory-if="navigation.highlights.showStandaloneLink">` +
+  `<a class="skin-nav-link" data-imory-href="navigation.highlights.href" data-imory-bind="navigation.highlights.name"></a>` +
   `</li>` +
   `</ul>` +
   `</nav>`;

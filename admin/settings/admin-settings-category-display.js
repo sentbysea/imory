@@ -103,12 +103,31 @@ function normalizeCategoryDisplayFields(
       : "list";
 
 
+  /*
+    HIGHLIGHT-2: page_size 의 허용 범위가 갤러리용 네 값에서 1..100 으로
+    넓어졌다(post 목록도 같은 계산기를 쓴다). 정규화는 공용 상수 파일
+    하나에만 둔다 — core/lib/category-types.js.
+  */
+
   category.page_size =
-    CATEGORY_PAGE_SIZE_OPTIONS.includes(
-      Number(category.page_size)
-    )
-      ? Number(category.page_size)
-      : 12;
+    normalizeCategoryPageSize(category.page_size);
+
+
+  category.paginate_posts =
+    category.paginate_posts === true;
+
+
+  category.pagination_style =
+    normalizePaginationStyle(category.pagination_style);
+
+
+  category.pagination_window_size =
+    normalizePaginationWindowSize(
+      category.pagination_window_size === undefined ||
+      category.pagination_window_size === null
+        ? PAGINATION_DEFAULT_WINDOW_SIZE
+        : category.pagination_window_size
+    );
 
 
   category.secret_cover_mode =
@@ -225,31 +244,15 @@ function buildCategoryDisplayRow(
     };
 
 
-  const pageSizeSelect =
-    makeSelect(
-      "페이지당",
-      CATEGORY_PAGE_SIZE_OPTIONS.map(
-        (size) => ({ value: size, label: `${size}개` })
-      ),
-      category.page_size,
-      (value) => {
-
-        category.page_size =
-          Number(value);
-
-      }
-    );
-
-
   /*
-    페이지 수는 갤러리에서만 의미가 있다 — 목록 표시는 지금까지처럼
-    페이지를 나누지 않는다. 값은 지우지 않고 비활성만 한다(갤러리로
-    되돌리면 고른 값이 그대로 살아난다).
+    HIGHLIGHT-2: "페이지당 개수"는 여기 없다. post 와 gallery 가 같은
+    페이지 계산기를 쓰게 되면서 그 칸이 페이지네이션 줄로 옮겨갔다
+    (admin/settings/admin-settings-advanced.js 의
+     buildAdvancedPaginationRow). 같은 값을 고치는 칸이 한 화면에 두
+    개 있으면 어느 쪽이 이겼는지 알 수 없다.
+
+    이 줄에 남는 것은 **갤러리에만 있는** 설정뿐이다.
   */
-
-  pageSizeSelect.disabled =
-    category.type !== "gallery";
-
 
   makeSelect(
     "비밀글",

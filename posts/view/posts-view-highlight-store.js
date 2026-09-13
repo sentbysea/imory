@@ -2,7 +2,7 @@
    POSTS VIEW — 하이라이트 저장소 (HIGHLIGHT-1)
 
    하이라이트/메모를 DB와 주고받는 **유일한** 곳. 화면(뷰어, 말풍선,
-   메모 카테고리)은 전부 이 파일을 통해서만 읽고 쓴다 — 그래서 한쪽에서
+   하이라이트 화면)은 전부 이 파일을 통해서만 읽고 쓴다 — 그래서 한쪽에서
    고친 내용이 다른 쪽에도 그대로 반영된다(요구사항 6 마지막 줄).
 
    기준 문서: IMORY_HIGHLIGHT1_DESIGN.md §4
@@ -260,7 +260,7 @@ async function loadPostHighlights(
         posts(updated_at)을 함께 받는다 — 이번 판정 결과를 적을 때
         "어느 본문에 대한 판정인가"를 같이 적기 위해서다. 그 컬럼의
         SELECT 권한이 아직 없는 배포에서는 이 쿼리가 통째로 실패하니
-        한 번 더, 그 부분만 빼고 물어본다(메모 목록과 같은 규칙).
+        한 번 더, 그 부분만 빼고 물어본다(하이라이트 목록과 같은 규칙).
 
         하이라이트가 하나도 없는 글에서는 행이 오지 않아 시각도
         알 수 없다 — 그때는 적을 판정 자체가 없으므로 상관없다.
@@ -821,7 +821,7 @@ async function updatePostHighlightColor(
 
 
 /*
-  note에 빈 값을 주면 "메모만 지우기"다 — 하이라이트와 카드는 남는다
+  note에 빈 값을 주면 "노트만 지우기"다 — 하이라이트와 카드는 남는다
   (요구사항 6).
 */
 
@@ -971,7 +971,7 @@ async function deletePostHighlight(
    "원문에서 위치를 찾았는가" 기록 — 세 가지 상태
 
    판정 자체는 글을 열 때 정확히 이뤄진다(posts-view-highlight-anchor.js).
-   메모 카테고리는 카드 수만큼의 본문을 다시 받아 판정할 수 없으므로
+   하이라이트 화면은 카드 수만큼의 본문을 다시 받아 판정할 수 없으므로
    (그건 카드 한 장마다 원문 한 벌을 더 받는 일이다), **마지막으로
    그 글을 열었을 때** 확인된 결과를 이 브라우저에 적어 두고 카드에
    표시한다.
@@ -1373,7 +1373,7 @@ function invalidatePostHighlightPlacement(
 
 
 /* =========================================================
-   읽기 — 메모 카테고리(여러 글에 걸친 카드 목록)
+   읽기 — 하이라이트 화면(여러 글에 걸친 카드 목록)
 
    posts를 embed해서 원본 글 제목/카테고리/공개 범위를 함께 받는다.
    !inner라 "지금 내가 볼 수 있는 글"의 카드만 온다 — 원문이 지워졌거나
@@ -1393,7 +1393,7 @@ function invalidatePostHighlightPlacement(
    supabase/migrations/20260913110000_grant_posts_updated_at_select.sql).
 ========================================================== */
 
-async function loadMemoHighlightCards(
+async function loadHighlightCards(
   ownerId
 ) {
 
@@ -1562,7 +1562,7 @@ async function loadMemoHighlightCards(
   catch (err) {
 
     console.warn(
-      "[post-highlights] 메모 목록 불러오기 실패:",
+      "[post-highlights] 하이라이트 목록 불러오기 실패:",
       err
     );
 
@@ -1576,13 +1576,13 @@ async function loadMemoHighlightCards(
 
 
 /* =========================================================
-   메모 폴더 표시 설정 (순서 / 커버 / 비율 / 구도)
+   하이라이트 폴더 표시 설정 (순서 / 커버 / 비율 / 구도)
 
-   categories가 아니라 memo_folder_settings를 읽는다 — 원본 카테고리
+   categories가 아니라 highlight_folder_settings를 읽는다 — 원본 카테고리
    설정과 완전히 분리돼 있다(요구사항 7).
 ========================================================== */
 
-async function loadMemoFolderSettings(
+async function loadHighlightFolderSettings(
   ownerId
 ) {
 
@@ -1605,7 +1605,7 @@ async function loadMemoFolderSettings(
     } =
       await supabaseClient
         .from(
-          "memo_folder_settings"
+          "highlight_folder_settings"
         )
         .select(
           "category_id, sort_order, has_cover, cover_ratio, cover_focus_x, cover_focus_y, updated_at"

@@ -3897,9 +3897,11 @@ async function runProtect(browser) {
     );
 
     check(
-      "[protect] 보호 옵션 3개가 있다",
+      /* HIGHLIGHT-1 후속이 네 번째 스위치를 더했다(하이라이트 진입점 숨기기).
+         보호 설정 세 개는 그대로 앞자리에 있어야 한다. */
+      "[protect] 보호 옵션 3개 + 하이라이트 진입점 스위치",
       !!etc &&
-      etc.titles.join(",") === "이미지 EXIF 제거,우클릭 방지,텍스트 복사 방지",
+      etc.titles.join(",") === "이미지 EXIF 제거,우클릭 방지,텍스트 복사 방지,하이라이트 진입점 숨기기",
       etc ? etc.titles.join(",") : "(없음)"
     );
 
@@ -3923,11 +3925,12 @@ async function runProtect(browser) {
       .flat();
 
     check(
+      /* 보호 세 값은 on 으로, 진입점 스위치는 건드리지 않았으니 기본값으로 함께 간다 */
       "[protect] 저장이 세 값을 한 번에 보낸다",
-      saved.length === 3 &&
-      saved.every(row => row.value === "on") &&
+      saved.length === 4 &&
       ["strip_image_exif", "block_context_menu", "block_text_copy"]
-        .every(key => saved.some(row => row.key === key)),
+        .every(key => saved.some(row => row.key === key && row.value === "on")) &&
+      saved.some(row => row.key === "hide_memo_entry"),
       JSON.stringify(saved)
     );
 

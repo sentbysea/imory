@@ -1,9 +1,15 @@
 /* =========================================================
-   POSTS VIEW — 메모 카테고리 (HIGHLIGHT-1 §7)
+   POSTS VIEW — 하이라이트 화면 (HIGHLIGHT-1 §7)
 
-   /:slug/memos            전체 보기 (기본, 최신순)
-   /:slug/memos?view=folders   폴더별 보기
-   /:slug/memos/category/:id   그 폴더(=원본 글 카테고리)의 카드 목록
+   /:slug/highlights                전체 보기 (기본, 최신순)
+   /:slug/highlights?view=folders   폴더별 보기
+   /:slug/highlights/category/:id   그 폴더(= 원문 글의 현재 카테고리)의
+                                    카드 목록
+
+   옛 주소 /:slug/memos 도 같은 화면을 연다(라우터가 두 갈래를 함께
+   받는다, posts/editor/posts-router-init.js). 아래 history 정리는
+   언제나 canonical 주소로 쓴다 — 한 화면에 두 주소가 살아 있으면
+   뒤로가기·공유·플랫폼 진입점 판정이 갈라진다.
 
    기준 문서: IMORY_HIGHLIGHT1_DESIGN.md §7
 
@@ -11,8 +17,9 @@
    ★ 화면을 그리는 것은 스킨 렌더러다
 
    이 파일은 카테고리/폴더 화면과 같은 뼈대(진입 정리 → 렌더 →
-   확정)만 맡고, 실제 HTML은 skin/skin-memos.js가 그린다 —
-   templates.memos가 있으면 스킨이, 없으면 플랫폼 기본 template이
+   확정)만 맡고, 실제 HTML은 skin/skin-highlights.js가 그린다 —
+   하이라이트 template(templates.highlights, 레거시 templates.memos)이
+   있으면 스킨이, 없으면 플랫폼 기본 template이
    같은 Context를 같은 renderer로 그린다. 그래서 "고정된 완성 HTML
    하나"가 아니다(요구사항 10).
 
@@ -20,7 +27,8 @@
 
    스킨 HTML에는 <button>이 들어갈 수 없다(새니타이저가 지운다).
    그래서 주인장용 ⋮ 는 카드마다 하나씩 있는
-   [data-imory-region="memo-tools"] 자리에 플랫폼이 넣는다. 그 자리는
+   [data-imory-region="highlight-tools"] (레거시 "memo-tools") 자리에
+   플랫폼이 넣는다. 그 자리는
    repeat 안에 있어 렌더러가 카드 id를 키로 찍어 두므로
    (data-imory-region-key, skin/skin-render.js) DOM 순서가 아니라
    **키로** 카드와 짝지어진다. 방문자에게는 그 자리가 빈 채로 남는다.
@@ -36,16 +44,16 @@
    posts/view/posts-view-list.js(switchToCategoryScreen) ·
    posts/view/posts-view-popover.js ·
    posts/view/posts-view-highlight-store.js ·
-   posts/view/posts-view-memo-card-tools.js(mountMemoCardTools ·
-   openMemoCardMenu · openPostMemoPopup · showPostViewerToast).
+   posts/view/posts-view-highlight-card-tools.js(mountHighlightCardTools ·
+   openHighlightCardMenu · openPostHighlightNotePopup · showPostViewerToast).
 ========================================================== */
 
 
-let memoScreenRequestSeq =
+let highlightsScreenRequestSeq =
   0;
 
 
-let memoScreenState =
+let highlightsScreenState =
   {
     view: "all",
 
@@ -55,20 +63,20 @@ let memoScreenState =
 
 /* 이번 렌더의 renderSkin 인스턴스(메모 도구를 붙일 때 쓴다) */
 
-let memoScreenInstance =
+let highlightsScreenInstance =
   null;
 
 
 
 /* =========================================================
-   openMemoScreen(options)
+   openHighlightsScreen(options)
 
      view        "all" | "folders"
      categoryId  폴더 하나를 열었으면 그 카테고리 id("none" 포함)
      updateUrl   주소를 새로 밀어 넣을지
 ========================================================== */
 
-async function openMemoScreen(
+async function openHighlightsScreen(
   options = {}
 ) {
 
@@ -99,7 +107,7 @@ async function openMemoScreen(
   ) {
 
     /*
-      소유자를 알 수 없는 배포에는 메모 화면이 없다 — HOME으로
+      소유자를 알 수 없는 배포에는 하이라이트 화면이 없다 — HOME으로
       돌려보낸다(폴더 페이지가 카테고리로 돌아가는 것과 같은 결).
     */
 
@@ -118,13 +126,13 @@ async function openMemoScreen(
 
 
   currentPostView =
-    "memos";
+    "highlights";
 
   currentPostId =
     null;
 
 
-  memoScreenState =
+  highlightsScreenState =
     {
       view,
 
@@ -138,13 +146,13 @@ async function openMemoScreen(
 
 
   const requestId =
-    ++memoScreenRequestSeq;
+    ++highlightsScreenRequestSeq;
 
 
   const isStale =
     () =>
-      requestId !== memoScreenRequestSeq ||
-      currentPostView !== "memos";
+      requestId !== highlightsScreenRequestSeq ||
+      currentPostView !== "highlights";
 
 
   closePostMenu();
@@ -160,7 +168,7 @@ async function openMemoScreen(
 
 
   /*
-    진입 정리 — 카테고리/폴더 화면과 같다. 메모 화면은 자기 프레임을
+    진입 정리 — 카테고리/폴더 화면과 같다. 하이라이트 화면은 자기 프레임을
     직접 그리므로 스킨 mount 계약을 그대로 켠다.
   */
 
@@ -214,8 +222,8 @@ async function openMemoScreen(
   try {
 
     renderMemos =
-      window.renderPublishedSkinMemos ||
-      await window.skinMemosReady;
+      window.renderPublishedSkinHighlights ||
+      await window.skinHighlightsReady;
 
   }
 
@@ -245,10 +253,10 @@ async function openMemoScreen(
             target,
 
           view:
-            memoScreenState.view,
+            highlightsScreenState.view,
 
           categoryId:
-            memoScreenState.categoryId,
+            highlightsScreenState.categoryId,
 
           outcome
         })
@@ -286,17 +294,17 @@ async function openMemoScreen(
 
 
     failure.className =
-      "memo-screen-state";
+      "highlight-screen-state";
 
 
     failure.textContent =
-      "메모를 불러오지 못했습니다.";
+      "하이라이트를 불러오지 못했습니다.";
 
 
     postList.appendChild(failure);
 
 
-    memoScreenInstance =
+    highlightsScreenInstance =
       null;
 
   }
@@ -312,12 +320,12 @@ async function openMemoScreen(
     }
 
 
-    memoScreenInstance =
+    highlightsScreenInstance =
       outcome.instance ||
       null;
 
 
-    attachMemoScreenTools(
+    attachHighlightsScreenTools(
       outcome.context
     );
 
@@ -327,13 +335,14 @@ async function openMemoScreen(
   if (postPageTitle) {
 
     postPageTitle.textContent =
-      outcome.context?.memos?.folder?.name ||
-      "MEMO";
+      outcome.context?.highlights?.folder?.name ||
+      outcome.context?.navigation?.highlights?.name ||
+      "HIGHLIGHTS";
 
   }
 
 
-  /* 메모 화면에는 플랫폼 소유자 도구(＋/edit)가 없다 */
+  /* 하이라이트 화면에는 플랫폼 소유자 도구(＋/edit)가 없다 */
 
   [
     postAddButton,
@@ -367,14 +376,14 @@ async function openMemoScreen(
 
   const routePath =
     buildPostRoute(
-      memoScreenState.categoryId
-        ? `/memos/category/${memoScreenState.categoryId}`
-        : "/memos"
+      highlightsScreenState.categoryId
+        ? `/highlights/category/${highlightsScreenState.categoryId}`
+        : "/highlights"
     );
 
 
   const routeUrl =
-    !memoScreenState.categoryId && memoScreenState.view === "folders"
+    !highlightsScreenState.categoryId && highlightsScreenState.view === "folders"
       ? `${routePath}?view=folders`
       : routePath;
 
@@ -382,13 +391,13 @@ async function openMemoScreen(
   const historyState =
     {
       page:
-        "memos",
+        "highlights",
 
       view:
-        memoScreenState.view,
+        highlightsScreenState.view,
 
       categoryId:
-        memoScreenState.categoryId
+        highlightsScreenState.categoryId
     };
 
 
@@ -420,7 +429,7 @@ async function openMemoScreen(
    렌더 뒤에 붙이는 것들
 ========================================================== */
 
-function attachMemoScreenTools(
+function attachHighlightsScreenTools(
   context
 ) {
 
@@ -433,7 +442,7 @@ function attachMemoScreenTools(
 
   const cards =
     new Map(
-      (context?.memos?.cards || []).map(
+      (context?.highlights?.cards || []).map(
         (card) =>
           [String(card.id), card]
       )
@@ -443,8 +452,8 @@ function attachMemoScreenTools(
   /*
     조회에 실패한 경우 (요구사항 5)
 
-    화면에는 이미 "메모를 불러오지 못했습니다"가 그려져 있다 —
-    "아직 메모가 없습니다"와 다른 문구이고, DB 오류 내용은 어디에도
+    화면에는 이미 "하이라이트를 불러오지 못했습니다"가 그려져 있다 —
+    "아직 하이라이트가 없습니다"와 다른 문구이고, DB 오류 내용은 어디에도
     싣지 않는다(방문자에게 내부 사정을 보여줄 이유가 없다).
 
     주인장에게만 한 걸음 더 준다: 다시 시도할 방법. 목록이 비어
@@ -452,12 +461,12 @@ function attachMemoScreenTools(
     알아야 할 사람이다.
   */
 
-  if (context?.memos?.hasError) {
+  if (context?.highlights?.hasError) {
 
-    if (context?.memos?.canManage) {
+    if (context?.highlights?.canManage) {
 
       showPostViewerToast(
-        "메모를 불러오지 못했습니다",
+        "하이라이트를 불러오지 못했습니다",
         "error",
         {
           label:
@@ -525,24 +534,25 @@ function attachMemoScreenTools(
     );
 
   /*
-    카드마다 하나씩 있는 memo-tools 자리에 ⋮ 를 넣는다. 만드는 쪽은
-    공용(posts/view/posts-view-memo-card-tools.js)이고, 이 파일은
+    카드마다 하나씩 있는 highlight-tools(레거시 memo-tools) 자리에
+    ⋮ 를 넣는다. 만드는 쪽은
+    공용(posts/view/posts-view-highlight-card-tools.js)이고, 이 파일은
     "저장은 이렇게 한다"만 넘긴다 — Studio Preview는 같은 UI에 다른
     handlers(아무것도 저장하지 않는 것)를 넘긴다.
 
     방문자에게는 canManage가 false라 그 자리가 빈 채로 남는다.
   */
 
-  mountMemoCardTools({
+  mountHighlightCardTools({
     regions:
-      typeof memoScreenInstance?.getRegions === "function"
-        ? memoScreenInstance.getRegions("memo-tools")
+      typeof highlightsScreenInstance?.getRegions === "function"
+        ? collectHighlightToolRegions(highlightsScreenInstance)
         : [],
 
     cards,
 
     canManage:
-      Boolean(context?.memos?.canManage),
+      Boolean(context?.highlights?.canManage),
 
     handlers:
       {
@@ -668,11 +678,11 @@ function findMemoCardForElement(
 /* =========================================================
    카드의 ⋮ 메뉴는 여기 없다
 
-   openMemoCardMenu() 는
-   posts/view/posts-view-memo-card-tools.js 로 옮겼다 — 같은 메뉴를
-   Studio Preview의 메모 화면도 그대로 열어야 하기 때문이다(그쪽은
+   openHighlightCardMenu() 는
+   posts/view/posts-view-highlight-card-tools.js 로 옮겼다 — 같은 메뉴를
+   Studio Preview의 하이라이트 화면도 그대로 열어야 하기 때문이다(그쪽은
    아무것도 저장하지 않는 handlers를 넘긴다). 이 파일이 넘기는
-   handlers는 위 mountMemoCardTools() 호출에 있다.
+   handlers는 위 mountHighlightCardTools() 호출에 있다.
 ========================================================== */
 
 /*
@@ -681,19 +691,19 @@ function findMemoCardForElement(
 
 async function refreshMemoScreen() {
 
-  if (currentPostView !== "memos") {
+  if (currentPostView !== "highlights") {
 
     return;
 
   }
 
 
-  await openMemoScreen({
+  await openHighlightsScreen({
     view:
-      memoScreenState.view,
+      highlightsScreenState.view,
 
     categoryId:
-      memoScreenState.categoryId,
+      highlightsScreenState.categoryId,
 
     updateUrl:
       false
@@ -703,7 +713,7 @@ async function refreshMemoScreen() {
 
 
 /*
-  글 뷰어에서 고친 내용이 메모 화면에도 반영돼야 한다 — 반대 방향은
+  글 뷰어에서 고친 내용이 하이라이트 화면에도 반영돼야 한다 — 반대 방향은
   뷰어가 다시 열릴 때 어차피 새로 읽는다.
 */
 
@@ -711,7 +721,7 @@ window.addEventListener(
   "imory:post-highlights-changed",
   () => {
 
-    if (currentPostView === "memos") {
+    if (currentPostView === "highlights") {
 
       refreshMemoScreen();
 

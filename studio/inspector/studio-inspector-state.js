@@ -217,8 +217,8 @@ const STUDIO_INSPECTOR_PAGE_LABELS = {
   post: "POST",
   banner: "BANNER",
   folder: "FOLDER",
-  /* HIGHLIGHT-1 */
-  memos: "MEMO"
+  /* HIGHLIGHT-2 (구 memos) */
+  highlights: "HIGHLIGHTS"
 };
 
 const STUDIO_INSPECTOR_KIND_LABELS = {

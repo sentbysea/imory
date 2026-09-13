@@ -36,7 +36,7 @@
 ========================================================== */
 
 const SKIN_PACKAGE_EXPORT_PAGE_TYPES =
-  ["home", "category", "post", "banner", "folder", "memos"];
+  ["home", "category", "post", "banner", "folder", "highlights", "memos"];
 
 /*
   Import 쪽(skin/skin-package-import.js requiredPageTypes)과 같은

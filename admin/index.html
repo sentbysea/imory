@@ -705,24 +705,80 @@
           </button>
 
 
-          <!--
-               HIGHLIGHT-1 후속 — 메모 화면의 폴더 차례.
+          <!-- =========================================================
+               ADVANCED SETTINGS (HIGHLIGHT-2 §7)
 
-               카테고리 목록과 **다른 배열**이다(메모 화면에서만
-               쓰는 순서다, IMORY_HIGHLIGHT1_DESIGN.md §7-1). 그래서
-               카테고리 줄 안이 아니라 따로 떨어진 목록으로 둔다 —
-               한 줄을 끌었을 때 무엇이 움직이는지가 분명해야 한다.
+               카테고리 줄마다 고급 설정이 길게 붙어 있던 것을 여기로
+               모은다. 위쪽 CATEGORIES 는 기본 관리(이름·타입·순서·
+               삭제·추가)만 맡는다.
 
-               migration이 적용되지 않았거나 대상 카테고리가 없으면
-               이 블록은 통째로 비어 있고 화면에도 나오지 않는다
-               (admin/settings/admin-settings-memo-folder-order.js).
-          -->
+               맨 위의 드롭다운으로 카테고리 하나를 고르면 **그 타입에
+               필요한 설정만** 아래에 나온다 — 모든 설정을 한꺼번에
+               펼치지 않는다. 실제 내용은
+               admin/settings/admin-settings-advanced.js 가 그린다.
 
-          <div
-            class="memo-folder-order"
-            id="memoFolderOrderPanel"
-            hidden
-          ></div>
+               저장 버튼은 아래 하나를 CATEGORIES 와 함께 쓴다. 두
+               영역이 같은 categories 배열을 고치고 있어서, 저장을
+               나누면 "이름은 저장됐는데 페이지 설정은 아직"이라는
+               반쪽 상태가 생긴다.
+          ========================================================== -->
+
+          <section
+            class="settings-group advanced-settings-group"
+            id="advancedSettingsPanel"
+          >
+
+            <div class="settings-group-title imory-section-header imory-section-header--divider">
+
+              <span>
+                ADVANCED SETTINGS
+              </span>
+
+              <small>
+                per category
+              </small>
+
+            </div>
+
+            <label
+              class="advanced-settings-picker"
+              for="advancedCategorySelect"
+            >
+
+              <span class="advanced-settings-picker-label">
+                카테고리
+              </span>
+
+              <select
+                class="advanced-settings-select imory-field imory-field--sm"
+                id="advancedCategorySelect"
+              ></select>
+
+            </label>
+
+            <div
+              class="advanced-settings-body"
+              id="advancedSettingsBody"
+            ></div>
+
+            <!--
+                 하이라이트 폴더 차례. HIGHLIGHT 카테고리를 고른
+                 경우에만 위 body 안으로 옮겨 붙는다 — 카테고리 목록과
+                 **다른 배열**이라(하이라이트 화면에서만 쓰는 순서)
+                 한 줄을 끌었을 때 무엇이 움직이는지가 분명해야 한다.
+
+                 migration이 적용되지 않았거나 대상 카테고리가 없으면
+                 이 블록은 통째로 비어 있고 화면에도 나오지 않는다
+                 (admin/settings/admin-settings-highlight-folder-order.js).
+            -->
+
+            <div
+              class="highlight-folder-order"
+              id="highlightFolderOrderPanel"
+              hidden
+            ></div>
+
+          </section>
 
 
           <div class="imory-form-actions">
@@ -1160,11 +1216,11 @@
 
 
           <!--
-               HIGHLIGHT-1 후속: 메모 화면 진입점.
+               HIGHLIGHT-1 후속: 하이라이트 화면 진입점.
 
                스킨이 메모 링크를 그리지 않았을 때 플랫폼이 화면
                오른쪽 아래에 작은 MEMO 칩을 얹는다
-               (skin/skin-memo-entry.js). 그 칩이 싫은 사람을 위한
+               (skin/skin-highlight-entry.js). 그 칩이 싫은 사람을 위한
                스위치다 — 켜도 주소(/memos)는 그대로 유효하다.
           -->
 
@@ -1178,7 +1234,7 @@
             <span class="etc-option-text">
 
               <span class="etc-option-title">
-                메모 진입점 숨기기
+                하이라이트 진입점 숨기기
               </span>
 
               <span class="etc-option-hint">
@@ -1825,6 +1881,15 @@
 
         const adminDependencyScripts =
           [
+            /*
+              HIGHLIGHT-2: 카테고리 타입(post/gallery/banner/highlight)과
+              페이지네이션 공용 상수. 타입 드롭다운·ADVANCED SETTINGS·
+              Skin Context 가 같은 목록과 같은 정규화를 쓰게 하는 유일한
+              출처다(core/lib/category-types.js). 의존이 없으므로 맨
+              앞이고, 이 값을 쓰는 settings/* 보다 반드시 먼저다.
+            */
+            "../core/lib/category-types.js",
+
             "./admin.js",
             "./admin-session.js",
             "./settings/admin-settings-load.js",
@@ -1840,26 +1905,45 @@
             "./settings/admin-settings-category-display.js",
 
             /*
-              HIGHLIGHT-1: 메모 화면의 폴더(=원본 카테고리) 설정 줄
+              HIGHLIGHT-1: 하이라이트 화면의 폴더(=원본 카테고리) 설정 줄
               (순서 · 커버 · 비율 · 구도). 카테고리 표시 설정과 같은
-              자리에 붙지만 **다른 테이블**(memo_folder_settings)을
-              만진다 — 메모 폴더를 고쳐도 원본 카테고리 설정이 바뀌지
+              자리에 붙지만 **다른 테이블**(highlight_folder_settings)을
+              만진다 — 하이라이트 폴더를 고쳐도 원본 카테고리 설정이 바뀌지
               않는다(요구사항 7). admin-settings-save.js가 이 파일의
               저장 함수를 부르므로 그보다 앞이다.
             */
 
-            "./settings/admin-settings-memo-folders.js",
+            "./settings/admin-settings-highlight-folders.js",
 
             /*
-              HIGHLIGHT-1 후속: 메모 폴더 차례 목록(꾹 눌러 끌기 + ↑↓).
-              memoFolderOrder / memoFolderTableAvailable /
-              moveMemoFolder 를 쓰므로 위 파일 **뒤**여야 하고,
-              renderCategories()가 이 파일의 renderMemoFolderOrderList()
+              HIGHLIGHT-1 후속: 하이라이트 폴더 차례 목록(꾹 눌러 끌기 + ↑↓).
+              highlightFolderOrder / highlightFolderTableAvailable /
+              moveHighlightFolder 를 쓰므로 위 파일 **뒤**여야 하고,
+              renderCategories()가 이 파일의 renderHighlightFolderOrderList()
               를 부른다(typeof 가드가 있어 순서가 어긋나도 깨지지는
               않지만, 제자리는 여기다).
             */
 
-            "./settings/admin-settings-memo-folder-order.js",
+            "./settings/admin-settings-highlight-folder-order.js",
+
+            /*
+              HIGHLIGHT-2: 카테고리 타입 변경 안전장치(글/폴더 이동 대화
+              상자 + change_own_category_type 호출). admin-settings-load.js
+              의 타입 드롭다운이 부르고 admin-settings-save.js 가 저장할 때
+              부른다 — 둘 사이 어디든 되지만 제자리는 여기다.
+            */
+
+            "./settings/admin-settings-category-type.js",
+
+            /*
+              HIGHLIGHT-2: ADVANCED SETTINGS(카테고리 하나를 골라 그 타입의
+              설정만 본다). buildCategoryDisplayRow / buildHighlightFolderRow /
+              renderHighlightFolderOrderList 를 쓰므로 **그 셋보다 뒤**여야
+              하고, renderCategories() 가 이 파일의
+              renderAdvancedCategorySettings() 를 부른다.
+            */
+
+            "./settings/admin-settings-advanced.js",
 
             /*
               HOME > ETC 보호 설정. 업로드 경로들이

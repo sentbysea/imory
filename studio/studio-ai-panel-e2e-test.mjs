@@ -592,13 +592,13 @@ async function runServerChecks() {
     );
 
     record(
-      /* HIGHLIGHT-1: memos(메모 카테고리)가 여섯 번째 선택 템플릿으로
+      /* HIGHLIGHT-1: memos(하이라이트 화면)가 여섯 번째 선택 템플릿으로
          더해졌다 — banner/folder와 같이 null 허용이다. */
-      "A6. Structured Output schema가 templates.{home,category,post,banner,folder,memos}.html과 css를 강제한다(banner/folder/memos는 null 허용)",
+      "A6. Structured Output schema가 templates.{home,category,post,banner,folder,highlights}.html과 css를 강제한다(banner/folder/highlights는 null 허용)",
       (() => {
         const schema = body.text.format.schema;
         const t = schema.properties.templates;
-        return t.required.join(",") === "home,category,post,banner,folder,memos" &&
+        return t.required.join(",") === "home,category,post,banner,folder,highlights" &&
           t.additionalProperties === false &&
           t.properties.home.required[0] === "html" &&
           t.properties.home.additionalProperties === false &&
@@ -607,8 +607,10 @@ async function runServerChecks() {
           t.properties.banner.type.includes("null") &&
           Array.isArray(t.properties.folder.type) &&
           t.properties.folder.type.includes("null") &&
-          Array.isArray(t.properties.memos.type) &&
-          t.properties.memos.type.includes("null") &&
+          Array.isArray(t.properties.highlights.type) &&
+          t.properties.highlights.type.includes("null") &&
+          /* HIGHLIGHT-2: 모델에게 보여 주는 이름은 highlights 하나다 */
+          t.properties.memos === undefined &&
           schema.properties.css.type === "string" &&
           schema.additionalProperties === false;
       })(),

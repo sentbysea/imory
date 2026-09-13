@@ -9,7 +9,7 @@
 ## 0. 한눈에 보는 요약
 
 - 스킨은 `schemaVersion: 1`인 **SkinPackage JSON** 하나입니다. HOME/CATEGORY/POST 세 화면을 각각 `templates.home` / `templates.category` / `templates.post`에 담습니다(레거시 단일 `html`/`css` 방식도 여전히 지원 — 1절).
-- HTML에는 일반 태그 + `data-imory-*` 바인딩 속성 5종 + `data-imory-region` 3종(`"post-body"`, `"owner-tools"`, `"memo-tools"`) + Studio Direct Edit 표식 `data-imory-edit-id` 1종만 씁니다. **인라인 JS, `style` 속성, `id` 속성은 전부 저장 시점에 제거됩니다.**
+- HTML에는 일반 태그 + `data-imory-*` 바인딩 속성 5종 + `data-imory-region` 3종(`"post-body"`, `"owner-tools"`, `"highlight-tools"`) + Studio Direct Edit 표식 `data-imory-edit-id` 1종만 씁니다. **인라인 JS, `style` 속성, `id` 속성은 전부 저장 시점에 제거됩니다.**
 - CSS는 저장 시점에 파싱되어 `.imory-skin-root` 스코프가 강제로 붙습니다. `@import`, `expression()`, `javascript:`/`data:` 스킴의 `url()`, 특정 "보호 대상 selector"는 제거됩니다.
 - POST 화면은 본문(글 내용) 데이터 자체를 절대 받지 않습니다. `data-imory-region="post-body"`로 "자리"만 표시하면 플랫폼이 그 자리에 실제 본문을 채웁니다. 이 region이 없는 POST 템플릿은 아예 공개되지 않고 레거시 화면으로 대체됩니다.
 - Studio에는 "SkinPackage JSON 전체 붙여넣기(Import)" 기능이 있고, 이 문서 13절이 그 검증 로직이 실제로 요구하는 정확한 shape입니다.
@@ -34,7 +34,7 @@
     "post":     { "html": "<!-- POST 페이지 전체 마크업 (post-body region 필수) -->" },
     "banner":   { "html": "<!-- (선택) 배너 카테고리 페이지 -->" },
     "folder":   { "html": "<!-- (선택) 폴더 페이지 / Series Viewer — folder.posts 반복 안에 post-body region 필수 (2-7절) -->" },
-    "memos":    { "html": "<!-- (선택) 메모 카테고리 — 없으면 플랫폼 기본 template으로 그려진다 (2-8절) -->" }
+    "highlights": { "html": "<!-- (선택) 하이라이트 화면 — 없으면 플랫폼 기본 template으로 그려진다 (2-8절) -->" }
   },
 
   "css": "/* 모든 화면이 공유하는 CSS 하나 */",
@@ -55,9 +55,11 @@
 ```
 
 - `templates.<page>.css`처럼 페이지별 `css` 필드를 넣는 것 **자체는 구조상 허용**되지만(`resolveSkinTemplate`이 있으면 그걸 쓰고 없으면 공유 `css`로 폴백), 저장 검증(`normalizeSkinPackageForDraft`)은 오직 공유 `css` 하나만 CSS validator에 통과시킵니다. 즉 페이지별 CSS를 넣어도 **검증되지 않은 채 그대로 저장**됩니다 — 현재 도구 체인은 "세 화면이 CSS 하나를 공유한다"는 전제로 만들어져 있으므로, 페이지별 CSS는 쓰지 않는 것을 권장합니다.
-- Studio의 "SkinPackage Import" 기능(13절)은 **`templates.home`/`templates.category`/`templates.post` 세 개가 전부 존재하고 각각 `.html` 문자열을 가질 것**을 요구합니다. 셋 중 하나라도 없으면 Import 자체가 거부됩니다. `templates.banner`와 `templates.folder`, `templates.memos`는 **선택**입니다 — 있으면 함께 검증되고(folder는 post-body region 필수), 없으면 그 화면은 각각 legacy 배너 화면 / "폴더 페이지 없음"(폴더 링크가 그려지지 않음) / **플랫폼 기본 메모 화면**으로 동작합니다.
+- Studio의 "SkinPackage Import" 기능(13절)은 **`templates.home`/`templates.category`/`templates.post` 세 개가 전부 존재하고 각각 `.html` 문자열을 가질 것**을 요구합니다. 셋 중 하나라도 없으면 Import 자체가 거부됩니다. `templates.banner`와 `templates.folder`, `templates.highlights`는 **선택**입니다 — 있으면 함께 검증되고(folder는 post-body region 필수), 없으면 그 화면은 각각 legacy 배너 화면 / "폴더 페이지 없음"(폴더 링크가 그려지지 않음) / **플랫폼 기본 하이라이트 화면**으로 동작합니다.
 
-  `templates.memos`만 폴백이 다릅니다. 메모 카테고리에는 legacy 화면이 없어서 "지원하지 않으면 안 보여준다"가 성립하지 않기 때문에, 없으면 플랫폼이 들고 있는 기본 template(`getDefaultMemosTemplate()`, [skin/skin-template.js](skin/skin-template.js))으로 **같은 Context를 같은 renderer로** 그립니다. 그 기본값도 고정된 완성 HTML이 아니라 다른 스킨과 똑같은 `data-imory-*` 바인딩 마크업이므로, 그대로 복사해 고치는 것이 가장 빠른 출발점입니다.
+  `templates.highlights`만 폴백이 다릅니다. 하이라이트 화면에는 legacy 화면이 없어서 "지원하지 않으면 안 보여준다"가 성립하지 않기 때문에, 없으면 플랫폼이 들고 있는 기본 template(`getDefaultHighlightsTemplate()`, [skin/skin-template.js](skin/skin-template.js))으로 **같은 Context를 같은 renderer로** 그립니다. 그 기본값도 고정된 완성 HTML이 아니라 다른 스킨과 똑같은 `data-imory-*` 바인딩 마크업이므로, 그대로 복사해 고치는 것이 가장 빠른 출발점입니다.
+
+  > **옛 이름 `templates.memos`** — HIGHLIGHT-1 때 저장·export 된 스킨은 같은 화면의 template을 `templates.memos` 라는 이름으로 갖고 있습니다. 그 파일도 **그대로 동작합니다**(우선순위: `highlights` → `memos` → 플랫폼 기본). 새로 만드는 스킨은 `templates.highlights` 하나만 쓰세요. 자세한 내용과 제거 시점: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) §2.
 
 ### 1-2. 레거시 단일 페이지 shape (HOME 전용, 여전히 지원됨)
 
@@ -281,6 +283,61 @@
 </ul>
 ```
 
+### 2-6-b. `category.pagination` (글 목록과 갤러리 공용)
+
+기준 문서: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) §9
+
+주인장이 Settings > CATEGORY > ADVANCED SETTINGS 에서 카테고리마다 정합니다:
+한 페이지당 개수 · 번호 표기(숫자 / 소문자 로마자) · 한 번에 보여 줄 번호 개수(기본 7).
+**로마 숫자를 스킨이 계산하지 않습니다** — 플랫폼이 완성된 글자를 줍니다.
+
+```jsonc
+{
+  "category": {
+    "paginationStyle": "roman_lower",       // 설정값 그대로
+    "paginationWindowSize": 7,
+    "hasPagination": true,
+
+    "pagination": {
+      "pages": [                            // 창(window)이 적용된 번호
+        { "number": 4, "label": "iv", "href": "/minji/category/1?page=4", "isCurrent": false },
+        { "number": 5, "label": "v",  "href": "/minji/category/1?page=5", "isCurrent": true  }
+      ],
+      "allPages": [ "... 창을 쓰지 않고 전체 번호를 그리고 싶을 때 ..." ],
+
+      "style": "roman_lower", "isDecimal": false, "isRomanLower": true,
+      "windowSize": 7,
+      "hasLeadingEllipsis": true, "hasTrailingEllipsis": true,
+
+      "currentPage": 5, "currentPageLabel": "v",
+      "totalPages": 12, "totalPagesLabel": "xii",
+      "totalCount": 138, "pageSize": 12,
+
+      "hasPages": true, "hasPrev": true, "hasNext": true,
+      "prevHref":  "/minji/category/1?page=4",
+      "nextHref":  "/minji/category/1?page=6",
+      "firstHref": "/minji/category/1",
+      "lastHref":  "/minji/category/1?page=12"
+    }
+  }
+}
+```
+
+```html
+<nav data-imory-if="category.pagination.hasPages">
+  <a data-imory-if="category.pagination.prevHref" data-imory-href="category.pagination.prevHref">이전</a>
+  <span data-imory-if="category.pagination.hasLeadingEllipsis">…</span>
+  <a data-imory-repeat="category.pagination.pages" data-imory-href="item.href" data-imory-bind="item.label"></a>
+  <span data-imory-if="category.pagination.hasTrailingEllipsis">…</span>
+  <a data-imory-if="category.pagination.nextHref" data-imory-href="category.pagination.nextHref">다음</a>
+</nav>
+```
+
+- **이 값을 실제로 그리는 스킨에서만 페이지가 나뉩니다.** 페이지 링크를 그리지 않는 스킨에서는 `category.pagination` 이 `null` 이고 `category.posts` 가 지금까지처럼 **전체 목록**입니다 — 아무것도 고치지 않은 기존 스킨의 목록이 갑자기 잘리지 않게 하는 규칙입니다(갤러리와 같은 판정).
+- 페이지가 나뉘면 `category.posts` 는 **그 페이지의 root 글**이고, 폴더 안의 글은 `category.tree` 가 맡습니다 — 같은 글이 두 영역에 동시에 나오지 않습니다.
+- 1페이지 링크에는 `?page=` 가 붙지 않습니다(정규 주소).
+- `item.isCurrent` 로 현재 페이지를 표시하세요(값 비교는 할 수 없습니다).
+
 ### 2-7. `folder` namespace (FOLDER 페이지 — Series Viewer, `templates.folder`가 있을 때만)
 
 기준 문서: [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md)
@@ -358,17 +415,17 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 
 **`post.content`(본문)는 이 Context 어디에도 존재하지 않습니다.** 본문 데이터를 select조차 하지 않으므로 실수로도 노출될 수 없습니다 — 7절 참고.
 
-### 2-8. `memos` namespace (메모 카테고리 — `/:slug/memos`)
+### 2-8. `highlights` namespace (하이라이트 화면 — `/:slug/highlights`)
 
 하이라이트/메모 카드를 모아 보는 화면입니다. 여기서 말하는 **"폴더"는 원본 글의 카테고리**이고, 별도의 중첩 폴더 시스템이 아닙니다.
 
 ```jsonc
 {
-  "memos": {
+  "highlights": {
     "view": { "isAll": true, "isFolders": false, "isFolder": false },  // 정확히 하나만 true
 
-    "allHref": "/minji/memos",
-    "foldersHref": "/minji/memos?view=folders",
+    "allHref": "/minji/highlights",
+    "foldersHref": "/minji/highlights?view=folders",
     "allLabel": "전체",
     "foldersLabel": "폴더별",
 
@@ -392,7 +449,7 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
         "categoryName": "일상",
         "categoryHref": "/minji/category/3",
         "folderId": "3",
-        "folderHref": "/minji/memos/category/3",
+        "folderHref": "/minji/highlights/category/3",
         "isMissing": false   // 원문이 바뀌어 그 자리를 찾지 못한 상태
       }
     ],
@@ -403,10 +460,10 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
       {
         "id": "3",                 // 원본 카테고리 id, 카테고리 없는 글은 "none"
         "name": "일상",
-        "href": "/minji/memos/category/3",
+        "href": "/minji/highlights/category/3",
         "count": 7,
         "countLabel": "7개",
-        "coverUrl": "/api/post-cover?memo=3",   // hasCover가 false면 null
+        "coverUrl": "/api/post-cover?highlight=3",   // hasCover가 false면 null
         "hasCover": true,
         "coverRatio": "3:4",       // "1:1" | "3:4" | "4:3" | "original"
         "coverFocusX": 50,
@@ -423,28 +480,28 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 
 - 카드가 어느 폴더에 속하는지는 **지금의** `posts.category_id`입니다 — 글의 카테고리를 옮기면 카드도 따라 옮겨갑니다.
 - 목록도 개수도 "지금 이 사람이 볼 수 있는" 카드로만 만들어집니다. 비밀글·비공개 글의 발췌문은 어떤 경로로도 오지 않습니다.
-- `data-imory-if`는 값을 비교할 수 없으므로 `memos.view`를 직접 검사하지 말고 `memos.showCards` / `memos.view.isFolders` 같은 미리 계산된 boolean을 쓰세요.
+- `data-imory-if`는 값을 비교할 수 없으므로 `highlights.view`를 직접 검사하지 말고 `highlights.showCards` / `highlights.view.isFolders` 같은 미리 계산된 boolean을 쓰세요.
 - `coverRatio`를 실제 비율로 표현하는 것은 스킨 CSS의 몫입니다(플랫폼 CSS는 스킨 template에 적용되지 않습니다).
 
-**필수 마크업 — `memo-tools` region**
+**필수 마크업 — `highlight-tools` region**
 
 ```html
-<article data-imory-repeat="memos.cards">
+<article data-imory-repeat="highlights.cards">
   <blockquote data-imory-bind="item.excerpt"></blockquote>
   <p data-imory-if="item.hasNote" data-imory-bind="item.note"></p>
   <a data-imory-if="item.postHref" data-imory-href="item.postHref">원문 보기</a>
 
   <!-- 카드마다 하나. 비워 둡니다. -->
-  <span data-imory-region="memo-tools"></span>
+  <span data-imory-region="highlight-tools"></span>
 </article>
 ```
 
-스킨 HTML에는 `<button>`이 들어갈 수 없으므로(8절), 주인장의 ⋮ 메뉴(메모 추가/수정/삭제, 하이라이트 삭제)는 플랫폼이 이 자리에 넣습니다. `memos.cards` repeat **안에** 두어야 하며, 렌더러가 그 자리에 카드 id를 키로 찍어 주므로 DOM 순서가 아니라 키로 짝지어집니다. 방문자에게는 빈 채로 남습니다 — 크기를 주거나 테두리를 그리지 마세요. 이 자리가 없으면 화면은 정상이지만 주인장이 자기 메모를 고칠 수 없습니다.
+스킨 HTML에는 `<button>`이 들어갈 수 없으므로(8절), 주인장의 ⋮ 메뉴(노트 추가/수정/삭제, 하이라이트 삭제)는 플랫폼이 이 자리에 넣습니다. `highlights.cards` repeat **안에** 두어야 하며, 렌더러가 그 자리에 카드 id를 키로 찍어 주므로 DOM 순서가 아니라 키로 짝지어집니다. 방문자에게는 빈 채로 남습니다 — 크기를 주거나 테두리를 그리지 마세요. 이 자리가 없으면 화면은 정상이지만 주인장이 자기 노트를 고칠 수 없습니다.
 
-### 2-9. `navigation.memos` (공통)
+### 2-9. `navigation.highlights` (공통)
 
 ```jsonc
-{ "navigation": { "memos": { "name": "MEMO", "href": "/minji/memos", "enabled": true } } }
+{ "navigation": { "highlights": { "name": "HIGHLIGHTS", "href": "/minji/highlights", "enabled": true, "hasCategory": true } } }
 ```
 
 어느 화면에서든 메모 카테고리로 가는 링크입니다. **이 링크를 그리지 않으면 독자가 그 화면에 닿을 방법이 주소를 직접 치는 것뿐입니다.**
@@ -470,7 +527,7 @@ POST에서만 `viewer`에 두 값이 더 채워집니다(HIGHLIGHT-1).
 | `data-imory-repeat="path"` | dotted identifier | 값이 배열이면 그 엘리먼트를 템플릿 삼아 item마다 clone. 배열이 아니면(`undefined`/`null`/객체 등) **엘리먼트 자체를 제거**. |
 | `data-imory-if="path"` | dotted identifier | truthy/falsy만 판정해 `el.hidden` 토글. |
 | `data-imory-region="post-body"` | 고정 문자열 `"post-body"` 만 허용 | 값은 resolve 대상이 아님(경로 아니라 식별자). mount 시 이 엘리먼트의 **자식을 전부 비운 뒤**, 플랫폼(Post Viewer)이 실제 글 본문을 그 안에 주입할 자리로 씁니다. POST 템플릿에는 하나, FOLDER 템플릿에는 `folder.posts` 반복 안에 글마다 하나(2-7절) — 반복 안의 region에는 렌더러가 항목 id를 `data-imory-region-key`로 찍습니다(스킨이 직접 쓰는 속성이 아니며, 써도 제거됩니다). |
-| `data-imory-region="memo-tools"` | 고정 문자열 `"memo-tools"` 만 허용 | **비워 두는 자리**입니다. 메모 카테고리의 카드마다 하나씩 `memos.cards` repeat 안에 둡니다 — 주인장에게만 카드 도구(⋮: 메모 추가/수정/삭제, 하이라이트 삭제)가 그 자리에 들어가고 방문자에게는 빈 채로 남습니다. 렌더러가 그 자리에 카드 id를 키로 찍어 주므로 DOM 순서가 아니라 키로 짝지어집니다. 자세한 규칙: [IMORY_HIGHLIGHT1_DESIGN.md](./IMORY_HIGHLIGHT1_DESIGN.md) §8-3. |
+| `data-imory-region="highlight-tools"` | 고정 문자열 `"highlight-tools"`(레거시 `"memo-tools"` 도 허용) | **비워 두는 자리**입니다. 하이라이트 화면의 카드마다 하나씩 `highlights.cards` repeat 안에 둡니다 — 주인장에게만 카드 도구(⋮: 노트 추가/수정/삭제, 하이라이트 삭제)가 그 자리에 들어가고 방문자에게는 빈 채로 남습니다. 렌더러가 그 자리에 카드 id를 키로 찍어 주므로 DOM 순서가 아니라 키로 짝지어집니다. 자세한 규칙: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) §11. |
 | `data-imory-region="owner-tools"` | 고정 문자열 `"owner-tools"` 만 허용 | **비워 두는 자리**입니다. 주인장에게만 보이는 플랫폼 버튼(＋ 새 글 / edit)이 그 자리에 맞춰 놓입니다 — 방문자에게는 아무것도 나타나지 않습니다. 이 자리를 그리지 않아도 되고(그때는 플랫폼이 스킨의 글 기둥을 재서 맞춥니다), 그리면 정확히 그 줄·그 오른쪽 끝에 옵니다. 자세한 규칙: [IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 4절. |
 | `data-imory-edit-id="..."` | 영문으로 시작하는 영문/숫자/`_`/`-` 문자열, 최대 64자 | **렌더러가 해석하지 않는 순수 표식**입니다(PHASE AI-6A). Skin Studio의 Direct Edit이 "이 요소"를 재렌더/재저장 뒤에도 다시 찾기 위해 붙이며, 생성된 CSS 규칙의 `[data-imory-edit-id="..."]` selector가 이 값을 가리킵니다. 디자이너가 직접 쓸 필요는 없고, 형태가 맞지 않으면 저장 시점에 제거됩니다. 자세한 내용: [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) 2절. |
 
