@@ -94,6 +94,13 @@
 # 된다. 실제 배포에서는 functions/_middleware.js가 이 문서에
 # Cache-Control: no-store를 다시 씌운다(요청마다 CSP nonce가 바뀌므로
 # 캐시하면 안 된다). 이 줄은 그 함수가 꺼져 있는 경우의 안전망이다.
+#
+# 주소가 둘인 이유: Cloudflare Pages가 `/foo.html`을 308로 `/foo`에
+# 보낸다(2026-09-15 실측). 실제로 본문이 나오는 정본은 확장자 없는
+# 쪽이고, `.html` 쪽은 리다이렉트만 낸다 — 둘 다 적어 둔다.
+/skin/sandbox/frame
+  Cache-Control: no-cache
+
 /skin/sandbox/frame.html
   Cache-Control: no-cache
 

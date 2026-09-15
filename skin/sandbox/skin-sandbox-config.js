@@ -46,8 +46,15 @@
    상수
 ========================================================== */
 
+/*
+  ★ 확장자가 없다. Cloudflare Pages는 `/foo.html`을 308로 `/foo`에
+  보낸다(2026-09-15 배포 실측 — core/lib/skin-sandbox-server.js
+  주석에 근거). 정본 주소를 쓰면 iframe이 리다이렉트를 한 번 덜
+  탄다. `.html` 주소도 계속 열리기는 한다(308을 거쳐서).
+*/
+
 var SANDBOX_SKIN_FRAME_PATH =
-  "/skin/sandbox/frame.html";
+  "/skin/sandbox/frame";
 
 
 /*

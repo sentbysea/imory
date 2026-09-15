@@ -394,8 +394,10 @@ check("[safe] IMORY_EXTRA_HOSTS 를 안 넣어도 imory.me 와 pages.dev 는 통
 
 console.log("\n[path] 경로 allowlist");
 
-check("[path] frame.html 은 sandbox origin 에서 허용",
-  server.isSandboxAllowedPath("/skin/sandbox/frame.html") === true);
+check("[path] frame 문서의 두 주소가 모두 sandbox origin 에서 허용",
+  server.isSandboxAllowedPath("/skin/sandbox/frame") === true &&
+  server.isSandboxAllowedPath("/skin/sandbox/frame.html") === true,
+  "Pages 가 .html 을 308 로 확장자 없는 주소에 보낸다(2026-09-15 실측)");
 
 check("[path] frame 이 쓰는 스크립트 넷이 전부 allowlist 에 있다",
   ["/core/lib/build-version.js",
@@ -414,9 +416,14 @@ check("[path] ★ supabase client 도 허용되지 않는다",
 check("[path] skin-render.js 는 아직 허용되지 않는다 (SANDBOX-1)",
   server.isSandboxAllowedPath("/skin/skin-render.js") === false);
 
-check("[path] isSandboxFramePath 는 정확히 그 경로만",
-  server.isSandboxFramePath("/skin/sandbox/frame.html") === true &&
-  server.isSandboxFramePath("/skin/sandbox/frame.html/") === false);
+check("[path] ★ isSandboxFramePath 는 두 주소를 모두 frame 으로 본다",
+  server.isSandboxFramePath("/skin/sandbox/frame") === true &&
+  server.isSandboxFramePath("/skin/sandbox/frame.html") === true,
+  "한쪽만 보면 메인 origin 에서 막지 않은 쪽으로 프레임이 열린다");
+
+check("[path] 비슷하게 생긴 다른 경로는 frame 이 아니다",
+  server.isSandboxFramePath("/skin/sandbox/frame.html/") === false &&
+  server.isSandboxFramePath("/skin/sandbox/frame2") === false);
 
 
 /* =========================================================

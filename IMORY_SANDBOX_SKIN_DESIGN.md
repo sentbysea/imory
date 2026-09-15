@@ -935,8 +935,8 @@ allowlist 5개 경로만 남는다)인데, `resolveSandboxServerConfig()`가 그
 
 | 종류 | 결과 |
 | --- | --- |
-| 단위 테스트 (node) | `skin/sandbox/skin-sandbox-unit-test.mjs` **78/78** |
-| E2E (mock, Playwright chromium) | `skin/sandbox/skin-sandbox-e2e-test.mjs` **116/116** |
+| 단위 테스트 (node) | `skin/sandbox/skin-sandbox-unit-test.mjs` **79/79** |
+| E2E (mock, Playwright chromium) | `skin/sandbox/skin-sandbox-e2e-test.mjs` **119/119** |
 | E2E (mock, Playwright webkit) | 같은 파일 (초판 74/74; `[regress]`/`[env]` 추가 후 chromium으로 재확인) |
 | 기존 회귀 (mock) | 8934 **64/64** · 8942 **71/71** · 8956 **58/58** · 8954(share-card, 같은 `_middleware.js`) **175/175** · 8944 **70/1 실패** — 그 1건은 이 라운드 **이전부터** 실패하던 것(변경을 stash하고 돌려 동일 결과 확인) |
 | 실제 DB 검증 | **해당 없음** — DB도 스키마도 건드리지 않았다 |

@@ -293,6 +293,22 @@ async function handleSandboxHost(
     await next();
 
 
+  /*
+    ★ Cloudflare Pages의 HTML URL handling.
+    `/skin/sandbox/frame.html`은 **308로 `/skin/sandbox/frame`**에
+    보내진다(실측 근거는 core/lib/skin-sandbox-server.js 주석).
+    그 리다이렉트를 그대로 흘려보낸다 — 여기서 404로 접으면
+    확장자 주소로 들어온 사람이 프레임을 못 연다. 목적지도
+    allowlist 안이라 새로 열리는 문은 없다.
+  */
+
+  if (response.status >= 300 && response.status < 400) {
+
+    return response;
+
+  }
+
+
   if (response.status !== 200) {
 
     return sandboxNotFoundResponse();

@@ -43,18 +43,48 @@ export const IMORY_MAIN_HOST =
   "imory.me";
 
 
+/* =========================================================
+   ★ frame 문서의 경로가 둘인 이유 — Cloudflare Pages의
+     "HTML URL handling" (2026-09-15 배포 실측)
+
+   Pages는 `/foo.html` 요청을 **308로 `/foo`에 리다이렉트**한다.
+   실측:
+
+     GET https://imory.me/admin/index.html
+       -> 308 Permanent Redirect, Location: /admin/
+
+   그래서 저장소에 `skin/sandbox/frame.html`이 있어도 실제로
+   200 본문이 나오는 정본 주소는 확장자 없는 `/skin/sandbox/frame`
+   이다. 처음 배포에서 frame 문서만 404였던 원인이 이것이다 —
+   `next()`가 308을 돌려줬는데 handleSandboxHost가 "200이 아니면
+   404"로 접어 버렸다. 로컬 테스트 서버는 파일을 그대로 줬기 때문에
+   이 차이를 못 잡았다(지금은 e2e가 Pages와 같이 308을 흉내낸다).
+
+   그래서:
+     - 정본(iframe src가 쓰는 주소)  : /skin/sandbox/frame
+     - 확장자 형태(308로 위로 보냄)  : /skin/sandbox/frame.html
+   **둘 다** sandbox origin에서 허용하고, **둘 다** 메인 origin에서
+   막는다. 하나만 막으면 막지 않은 쪽으로 frame 문서가 부모와 같은
+   origin에 열린다.
+========================================================== */
+
 export const SANDBOX_FRAME_PATH =
+  "/skin/sandbox/frame";
+
+
+export const SANDBOX_FRAME_PATH_WITH_EXTENSION =
   "/skin/sandbox/frame.html";
 
 
 /*
-  sandbox origin에서 **200으로 나갈 수 있는 경로 전부**.
+  sandbox origin에서 **나갈 수 있는 경로 전부**.
   allowlist다 — 새 파일이 필요하면 여기에 적어야 한다.
-  (frame.html이 실제로 로드하는 것과 정확히 일치해야 한다.)
+  (frame 문서가 실제로 로드하는 것과 정확히 일치해야 한다.)
 */
 
 export const SANDBOX_ALLOWED_PATHS = [
   SANDBOX_FRAME_PATH,
+  SANDBOX_FRAME_PATH_WITH_EXTENSION,
   "/core/lib/build-version.js",
   "/skin/sandbox/skin-sandbox-config.js",
   "/skin/sandbox/skin-sandbox-protocol.js",
@@ -238,7 +268,10 @@ export function classifyImoryHost(url, config) {
 
 export function isSandboxFramePath(pathname) {
 
-  return pathname === SANDBOX_FRAME_PATH;
+  return (
+    pathname === SANDBOX_FRAME_PATH ||
+    pathname === SANDBOX_FRAME_PATH_WITH_EXTENSION
+  );
 
 }
 

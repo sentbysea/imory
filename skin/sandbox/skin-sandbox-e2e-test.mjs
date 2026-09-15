@@ -173,10 +173,59 @@ const PROBE_HTML = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <\/script></body></html>`;
 
 
-function staticResponse(pathname) {
+/* =========================================================
+   staticResponse — Cloudflare Pages의 정적 서빙을 흉내낸다
+
+   ★ HTML URL handling (2026-09-15 배포 실측)
+   Pages는 `/foo.html` 요청을 **308로 `/foo`에 리다이렉트**한다:
+
+     GET https://imory.me/admin/index.html -> 308, Location: /admin/
+
+   처음에는 이 테스트 서버가 `.html` 파일을 그대로 200으로 줬고,
+   그래서 "frame 문서만 배포에서 404"를 로컬에서 못 잡았다
+   (handleSandboxHost가 308을 404로 접고 있었다). 배포 동작을
+   흉내내야 그 계열의 버그가 로컬에서 잡힌다.
+========================================================== */
+
+function staticResponse(pathname, search) {
 
   let rel = decodeURIComponent(pathname);
+
+
+  /*
+    /foo/index.html -> 308 /foo/   ·   /foo.html -> 308 /foo
+    질의 문자열은 **그대로 옮겨진다** — 실측:
+      GET /admin/index.html?cb=1789460368
+        -> 308, Location: /admin/?cb=1789460368
+    (이걸 빼먹으면 ?sandboxSkin=1 같은 플래그가 리다이렉트에서
+     증발해서, 실제로는 나지 않는 실패가 테스트에서만 난다.)
+  */
+
+  const query =
+    search || "";
+
+  if (rel.endsWith("/index.html")) {
+    return new Response(null, {
+      status: 308,
+      headers: { "Location": rel.slice(0, -"index.html".length) + query }
+    });
+  }
+
+  if (rel.endsWith(".html")) {
+    return new Response(null, {
+      status: 308,
+      headers: { "Location": rel.slice(0, -".html".length) + query }
+    });
+  }
+
+
   if (rel.endsWith("/")) rel += "index.html";
+
+  /* 확장자 없는 주소로 오면 .html 파일을 찾아 준다(Pages와 같다) */
+
+  if (!path.extname(rel) && fs.existsSync(path.join(ROOT, rel + ".html"))) {
+    rel += ".html";
+  }
 
   const abs = path.join(ROOT, rel);
 
@@ -224,7 +273,7 @@ function startServer(port) {
       response = await middleware.onRequest({
         request: new Request(url.toString(), { method: req.method }),
         env: FUNCTION_ENV,
-        next: async () => staticResponse(url.pathname)
+        next: async () => staticResponse(url.pathname, url.search)
       });
     } catch (err) {
       res.writeHead(500, { "Content-Type": "text/plain" });
@@ -248,6 +297,29 @@ function startServer(port) {
 /* =========================================================
    raw HTTP — Host 헤더를 직접 조작해서 재 본다
 ========================================================== */
+
+/*
+  Pages가 `.html` 주소를 308로 보내므로, 상태만 재는 절에서는
+  리다이렉트를 한 번 따라가 준다(브라우저·크롤러가 하는 대로).
+  `follow: false`를 주면 리다이렉트 그 자체를 본다.
+*/
+
+async function rawRequestFollow(port, pathname, hostHeader, method = "GET") {
+
+  const first =
+    await rawRequest(port, pathname, hostHeader, method);
+
+  if (first.status < 300 || first.status >= 400 || !first.headers.location) {
+    return first;
+  }
+
+  const next =
+    await rawRequest(port, first.headers.location, hostHeader, method);
+
+  return { ...next, redirectedFrom: first.status };
+
+}
+
 
 function rawRequest(port, pathname, hostHeader, method = "GET") {
 
@@ -294,9 +366,9 @@ async function runHost() {
   console.log("\n[host] 호스트 분기 (실제 Pages Function)");
 
   const frameOnSandbox =
-    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame.html");
+    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame");
 
-  check("[host] sandbox origin 의 frame.html 이 200",
+  check("[host] sandbox origin 의 frame 문서가 200",
     frameOnSandbox.status === 200,
     String(frameOnSandbox.status));
 
@@ -304,12 +376,41 @@ async function runHost() {
     frameOnSandbox.body.includes("sandboxFrameRoot"));
 
 
+  /*
+    ★ Pages의 HTML URL handling. `.html` 주소는 308로 정본 주소에
+    보내지고, 따라가면 200이 나와야 한다. 배포 1차에서 이 308을
+    404로 접는 바람에 프레임만 안 열렸다.
+  */
+
+  const frameHtmlOnSandbox =
+    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame.html");
+
+  check("[host] ★ .html 주소는 308로 정본 주소에 보낸다 (404로 접지 않는다)",
+    frameHtmlOnSandbox.status === 308 &&
+    frameHtmlOnSandbox.headers.location === "/skin/sandbox/frame",
+    `${frameHtmlOnSandbox.status} -> ${frameHtmlOnSandbox.headers.location || "(없음)"}`);
+
+  const frameHtmlFollowed =
+    await rawRequestFollow(SANDBOX_PORT, "/skin/sandbox/frame.html");
+
+  check("[host] 그 308을 따라가면 프레임 문서가 나온다",
+    frameHtmlFollowed.status === 200 &&
+    frameHtmlFollowed.body.includes("sandboxFrameRoot"));
+
+
   const frameOnMain =
-    await rawRequest(PARENT_PORT, "/skin/sandbox/frame.html");
+    await rawRequestFollow(PARENT_PORT, "/skin/sandbox/frame.html");
 
   check("[host] ★ 메인 origin 의 /skin/sandbox/frame.html 이 404",
     frameOnMain.status === 404,
     `${frameOnMain.status} (이 분기가 없으면 SPA fallback 때문에 200 index.html 이다 — 2026-09-15 실측)`);
+
+  const frameCanonicalOnMain =
+    await rawRequestFollow(PARENT_PORT, "/skin/sandbox/frame");
+
+  check("[host] ★ 메인 origin 의 확장자 없는 /skin/sandbox/frame 도 404",
+    frameCanonicalOnMain.status === 404,
+    `${frameCanonicalOnMain.status} — 한쪽만 막으면 그쪽으로 프레임이 부모 origin 에 열린다`);
 
 
   const appOnSandbox =
@@ -361,7 +462,7 @@ async function runHost() {
 
 
   const postToFrame =
-    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame.html", null, "POST");
+    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame", null, "POST");
 
   check("[host] sandbox origin 은 GET/HEAD 외 메서드를 거부한다",
     postToFrame.status === 404,
@@ -394,7 +495,7 @@ async function runCsp() {
   console.log("\n[csp] frame 문서의 CSP (실제 응답 헤더)");
 
   const first =
-    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame.html");
+    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame");
 
   const csp =
     first.headers["content-security-policy"] || "";
@@ -431,7 +532,7 @@ async function runCsp() {
     first.headers["cache-control"]);
 
   const second =
-    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame.html");
+    await rawRequest(SANDBOX_PORT, "/skin/sandbox/frame");
 
   const secondNonce =
     (second.headers["content-security-policy"] || "").match(/'nonce-([A-Za-z0-9_-]+)'/);
@@ -899,14 +1000,14 @@ async function runRegress() {
 
   console.log("\n[regress] 메인 origin 회귀");
 
-  const index = await rawRequest(PARENT_PORT, "/index.html");
+  const index = await rawRequestFollow(PARENT_PORT, "/index.html");
 
   check("[regress] /index.html 이 그대로 200 HTML",
     index.status === 200 &&
     (index.headers["content-type"] || "").includes("text/html"),
     String(index.status));
 
-  const spa = await rawRequest(PARENT_PORT, "/someslug/post/123");
+  const spa = await rawRequestFollow(PARENT_PORT, "/someslug/post/123");
 
   check("[regress] SPA fallback 경로가 그대로 200 HTML",
     spa.status === 200 &&
@@ -947,7 +1048,12 @@ async function runRegress() {
 
   for (const [label, pathname] of entryDocuments) {
 
-    const res = await rawRequest(PARENT_PORT, pathname);
+    /*
+      Pages는 `.html` 주소를 308로 확장자 없는 주소에 보낸다.
+      사용자가 보는 것은 그 끝의 문서이므로 따라가서 잰다.
+    */
+
+    const res = await rawRequestFollow(PARENT_PORT, pathname);
 
     check(`[regress] ★ ${label} (${pathname}) 이 200 HTML`,
       res.status === 200 &&
@@ -1024,15 +1130,15 @@ async function runEnv() {
     deployedMain.status === 200, String(deployedMain.status));
 
   const deployedFrameOnMain =
-    await call("imory.me", "/skin/sandbox/frame.html", DEPLOYED_ENV);
+    await call("imory.me", "/skin/sandbox/frame", DEPLOYED_ENV);
 
-  check("[env] 배포 env 로 imory.me 의 frame.html 이 404",
+  check("[env] 배포 env 로 imory.me 의 frame 문서가 404",
     deployedFrameOnMain.status === 404, String(deployedFrameOnMain.status));
 
   const deployedFrame =
-    await call("skin-frame.imory.me", "/skin/sandbox/frame.html", DEPLOYED_ENV);
+    await call("skin-frame.imory.me", "/skin/sandbox/frame", DEPLOYED_ENV);
 
-  check("[env] 배포 env 로 skin-frame.imory.me 의 frame.html 이 200 + CSP",
+  check("[env] 배포 env 로 skin-frame.imory.me 의 frame 문서가 200 + CSP",
     deployedFrame.status === 200 &&
     Boolean(deployedFrame.headers.get("content-security-policy")),
     String(deployedFrame.status));
