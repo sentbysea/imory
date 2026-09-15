@@ -899,9 +899,15 @@ async function returnToPlatformScreenOrigin(
           )
       },
       "",
+      /*
+        PUBLIC-NUMBER-1: 기억해 둔 주소(path)가 있으면 그걸 쓰고,
+        없으면 공개 번호로 다시 만든다.
+      */
       path ||
         buildPostRoute(
-          `/post/${origin.postId}`
+          await publicPostRoute(
+            origin.postId
+          ) || "/"
         )
     );
 
@@ -949,7 +955,10 @@ async function returnToPlatformScreenOrigin(
       "",
       path ||
         buildPostRoute(
-          `/category/${origin.categoryId}/folder/${origin.folderId}`
+          await publicFolderRoute(
+            origin.categoryId,
+            origin.folderId
+          ) || "/"
         )
     );
 
@@ -1001,7 +1010,9 @@ async function returnToPlatformScreenOrigin(
       "",
       path ||
         buildPostRoute(
-          `/category/${origin.categoryId}`
+          await publicCategoryRoute(
+            origin.categoryId
+          ) || "/"
         )
     );
 

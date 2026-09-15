@@ -430,10 +430,28 @@ async function openHighlightsScreen(
   await revealPostArea(true);
 
 
+  /*
+    PUBLIC-NUMBER-1: /highlights/category/:n 의 n 도 카테고리의
+    공개 번호다. "none"(카테고리가 없는 글의 하이라이트)은 번호가
+    아니라 이름표라 그대로 둔다. 번호를 못 찾으면 전체 보기 주소로
+    떨어뜨린다 — 내부 id 를 주소에 적지 않는다.
+  */
+
+  const highlightsCategoryNo =
+    !highlightsScreenState.categoryId
+      ? null
+      : highlightsScreenState.categoryId === "none"
+        ? "none"
+        : await resolveIdToPublicNo(
+            PUBLIC_NO_CATEGORY,
+            highlightsScreenState.categoryId
+          );
+
+
   const routePath =
     buildPostRoute(
-      highlightsScreenState.categoryId
-        ? `/highlights/category/${highlightsScreenState.categoryId}`
+      highlightsCategoryNo
+        ? `/highlights/category/${highlightsCategoryNo}`
         : "/highlights"
     );
 

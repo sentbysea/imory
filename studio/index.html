@@ -691,6 +691,18 @@
       [
         "../core/lib/site-path.js",
         /*
+          PUBLIC-NUMBER-1: 공개 주소의 번호(categories.public_no /
+          posts.public_no)와 내부 PK 를 잇는 환전소. Studio Preview 의
+          가상 이동도 공개 화면과 **같은 주소 모양**을 써야 하므로
+          여기서도 필요하다(core/lib/public-number.js). skin-context.js
+          가 이 파일의 함수로 href 를 만들므로 그보다 앞이어야 한다.
+
+          Studio 에는 home/site-owner.js 가 없다 — 그래서 주인을
+          명시적으로 넘기는 ...ForOwner 변형을 쓴다
+          (studio/preview/preview-navigation.js).
+        */
+        "../core/lib/public-number.js",
+        /*
           HIGHLIGHT-2: 카테고리 타입(post/gallery/banner/highlight)과
           페이지네이션 공용 상수. 관리 화면과 Skin Context 가 같은 목록·
           같은 정규화·같은 페이지 번호 계산기를 쓰게 하는 유일한 출처다

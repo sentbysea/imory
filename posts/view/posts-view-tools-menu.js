@@ -509,6 +509,11 @@ function buildPostToolsMenuItems() {
 /*
   정식 공개 글 주소. 기존 경로 생성 로직(buildPostRoute)만 쓰고
   쿼리는 하나도 붙이지 않는다.
+
+  PUBLIC-NUMBER-1: 주소의 숫자는 이 블로그 안의 공개 번호다. 이
+  메뉴는 방금 연 글 위에서만 뜨므로 그 번호는 이미 표에 있다
+  (posts-view-detail.js 가 글을 읽으면서 적는다). 없으면 링크를
+  만들지 않는다 — 내부 id 를 대신 적지 않는다.
 */
 
 function buildCanonicalPostUrl(
@@ -518,8 +523,23 @@ function buildCanonicalPostUrl(
   if (
     postId === null ||
     postId === undefined ||
-    typeof buildPostRoute !== "function"
+    typeof buildPostRoute !== "function" ||
+    typeof publicRouteForKnownId !== "function"
   ) {
+
+    return null;
+
+  }
+
+
+  const route =
+    publicRouteForKnownId(
+      PUBLIC_NO_POST,
+      postId
+    );
+
+
+  if (!route) {
 
     return null;
 
@@ -529,7 +549,7 @@ function buildCanonicalPostUrl(
   return (
     window.location.origin +
     buildPostRoute(
-      `/post/${postId}`
+      route
     )
   );
 

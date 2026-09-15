@@ -155,7 +155,9 @@ async function fallbackFolderPageToCategory(
       },
       "",
       buildPostRoute(
-        `/category/${categoryId}`
+        await publicCategoryRoute(
+          categoryId
+        ) || "/"
       )
     );
 
@@ -573,9 +575,17 @@ async function openFolderPage(
     않는다(PHASE 1H).
   */
 
+  /*
+    PUBLIC-NUMBER-1: 카테고리 자리는 공개 번호다(폴더 번호는 아직
+    내부 id 다 — IMORY_PUBLIC_NUMBER_DESIGN.md §남은 차이).
+  */
+
   const folderRoutePath =
     buildPostRoute(
-      `/category/${numericCategoryId}/folder/${numericFolderId}`
+      await publicFolderRoute(
+        numericCategoryId,
+        numericFolderId
+      ) || "/"
     );
 
   const folderRouteUrl =

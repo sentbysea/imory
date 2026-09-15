@@ -519,6 +519,18 @@ postEditorSaveButton
         }
 
 
+        /*
+          PUBLIC-NUMBER-1: 수정은 번호를 바꾸지 않는다(DB 트리거가
+          UPDATE 를 되돌린다) — 이 글을 열 때 이미 표에 적힌 번호를
+          그대로 쓴다.
+        */
+
+        const savedRoute =
+          await publicPostRoute(
+            savedId
+          );
+
+
         history.replaceState(
           {
             page: "post",
@@ -530,7 +542,7 @@ postEditorSaveButton
           },
           "",
           buildPostRoute(
-            `/post/${savedId}`
+            savedRoute || "/"
           )
         );
 
@@ -586,7 +598,13 @@ postEditorSaveButton
                 .toISOString()
           })
           .select(
-            "id"
+            /*
+              PUBLIC-NUMBER-1: 방금 만든 글의 공개 번호를 함께
+              받아 온다. DB 트리거가 INSERT 때 발급하므로 여기서
+              읽는 것이 처음 알 수 있는 순간이고, 이 값이 있어야
+              저장 직후의 주소를 왕복 없이 만든다.
+            */
+            "id, public_no"
           )
           .single();
 
@@ -728,6 +746,20 @@ postEditorSaveButton
       forgetPlatformScreenReturn();
 
 
+      /*
+        PUBLIC-NUMBER-1: 주소는 방금 발급된 공개 번호로 쓴다
+        (insert ... select 가 함께 받아 왔다). 표에도 적어 둬서
+        이후 이 글의 링크가 왕복 없이 만들어지게 한다.
+      */
+
+      rememberPublicNo(
+        PUBLIC_NO_POST,
+        user.id,
+        data.id,
+        data.public_no
+      );
+
+
       history.replaceState(
         {
           page: "post",
@@ -739,7 +771,10 @@ postEditorSaveButton
         },
         "",
         buildPostRoute(
-          `/post/${data.id}`
+          publicRouteFromRow(
+            PUBLIC_NO_POST,
+            data
+          ) || "/"
         )
       );
 

@@ -259,6 +259,14 @@
         "./core/lib/reserved-slugs.js",
         "./core/lib/site-path.js",
         /*
+          PUBLIC-NUMBER-1: 공개 주소의 번호(categories.public_no /
+          posts.public_no)와 내부 PK 를 잇는 환전소. supabaseClient 와
+          getSiteOwner 를 **함수 안에서만** 쓰므로 여기(site-path.js
+          바로 뒤)면 충분하고, 주소를 만드는 모든 코드(home/categories.js ·
+          posts/** · skin/skin-context.js)보다는 앞이어야 한다.
+        */
+        "./core/lib/public-number.js",
+        /*
           HIGHLIGHT-2: 카테고리 타입(post/gallery/banner/highlight)과
           페이지네이션 공용 상수. 관리 화면과 Skin Context 가 같은 목록·
           같은 정규화·같은 페이지 번호 계산기를 쓰게 하는 유일한 출처다

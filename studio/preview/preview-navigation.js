@@ -1617,16 +1617,129 @@ function popPreviewNavigation() {
    있으면 재진입하지 않는다(중복 push 방지).
 ========================================================== */
 
-function handlePreviewNavigateMessage(href) {
+/*
+  PUBLIC-NUMBER-1: 공개 번호 -> 내부 id.
+
+  resolveStudioPreviewTarget()(studio/preview/preview-route.js)은
+  주소만 보는 순수 함수라 DB 를 모른다 — 그래서 번호를 그대로
+  담아 돌려준다. 그 숫자를 화면이 쓸 id 로 바꾸는 것이 이 함수다.
+
+  못 찾은 번호는 PUBLIC_NO_MISSING_ID(0)가 되고, 그러면 아래 렌더가
+  "그 카테고리/글을 찾을 수 없다" 경로로 간다 — 다른 사용자의 같은
+  번호로 넘어가지 않는다.
+
+  ★ 결과를 **문자열**로 돌려준다
+
+  resolveStudioPreviewTarget()이 주소에서 뜯어낸 값이 원래 문자열
+  이었고, previewHistory 의 같은 자리 판정(isSameLocation)과 외부에
+  노출되는 getCurrentPreviewLocation()이 그 타입을 그대로 쓴다.
+  여기서 숫자로 바꾸면 환전과 무관한 곳이 조용히 달라진다.
+*/
+
+async function resolveStudioPreviewTargetIds(target) {
+
+  if (
+    !target ||
+    target.type === "home" ||
+    typeof publicNoToScreenIdForOwner !== "function"
+  ) {
+
+    return target;
+
+  }
+
+
+  const resolved =
+    { ...target };
+
+
+  const toScreenId =
+    async (kind, publicNo) =>
+      String(
+        await publicNoToScreenIdForOwner(
+          kind,
+          currentOwnerId,
+          publicNo
+        )
+      );
+
+
+  if (target.type === "post") {
+
+    resolved.postId =
+      await toScreenId(
+        PUBLIC_NO_POST,
+        target.postId
+      );
+
+  }
+
+
+  else if (
+    target.type === "category" ||
+    target.type === "folder"
+  ) {
+
+    resolved.categoryId =
+      await toScreenId(
+        PUBLIC_NO_CATEGORY,
+        target.categoryId
+      );
+
+  }
+
+
+  else if (
+    target.type === "highlights" &&
+    target.categoryId !== null &&
+    target.categoryId !== undefined &&
+    target.categoryId !== "none"
+  ) {
+
+    resolved.categoryId =
+      await toScreenId(
+        PUBLIC_NO_CATEGORY,
+        target.categoryId
+      );
+
+  }
+
+
+  return resolved;
+
+}
+
+
+async function handlePreviewNavigateMessage(href) {
 
   if (!currentSkinContext) {
     return;
   }
 
-  const target =
+  const parsed =
     resolveStudioPreviewTarget(
       href,
       currentSkinContext.site.slug
+    );
+
+  if (!parsed) {
+    return;
+  }
+
+  /*
+    PUBLIC-NUMBER-1: 주소에 적힌 숫자는 **공개 번호**다
+    (categories.public_no / posts.public_no — 블로그마다 1 부터).
+    이 아래의 렌더 함수들은 공개 화면과 똑같이 내부 id 를 받으므로
+    여기서 한 번 환전한다.
+
+    Studio 에는 home/site-owner.js 가 없어서 "지금 누구의 스킨을
+    보고 있는가"를 직접 넘긴다(currentOwnerId) — 그래야 다른
+    사용자의 같은 번호가 섞이지 않는다.
+  */
+
+  const target =
+    await resolveStudioPreviewTargetIds(
+      parsed
     );
 
   if (!target) {

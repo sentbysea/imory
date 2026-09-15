@@ -377,7 +377,8 @@ async function fetchSkinCategories(
   } =
     await supabaseClient
       .from("categories")
-      .select("id, name, type, sort_order")
+      /* PUBLIC-NUMBER-1: public_no 가 메뉴 링크의 주소다 */
+      .select("id, public_no, name, type, sort_order")
       .eq("user_id", ownerId)
       .order("sort_order", { ascending: true });
 
@@ -395,7 +396,11 @@ async function fetchSkinCategories(
   }
 
 
-  return data || [];
+  return rememberPublicNoRows(
+    PUBLIC_NO_CATEGORY,
+    ownerId,
+    data || []
+  );
 
 }
 
@@ -410,7 +415,8 @@ async function fetchSkinRecentPosts(
   } =
     await supabaseClient
       .from("posts")
-      .select("id, title, created_at, visibility, category_id")
+      /* PUBLIC-NUMBER-1: public_no 가 최근 글 링크의 주소다 */
+      .select("id, public_no, title, created_at, visibility, category_id")
       .eq("user_id", ownerId)
       .order("created_at", { ascending: false })
       .limit(SKIN_HOME_RECENT_POSTS_LIMIT);
@@ -429,7 +435,11 @@ async function fetchSkinRecentPosts(
   }
 
 
-  return data || [];
+  return rememberPublicNoRows(
+    PUBLIC_NO_POST,
+    ownerId,
+    data || []
+  );
 
 }
 
@@ -478,6 +488,18 @@ async function fetchSkinCategoryById(
   }
 
 
+  if (data) {
+
+    rememberPublicNo(
+      PUBLIC_NO_CATEGORY,
+      ownerId,
+      data.id,
+      data.public_no
+    );
+
+  }
+
+
   return data;
 
 }
@@ -503,7 +525,7 @@ async function fetchSkinCategoryPosts(
         category.posts의 의미가 바뀌면 폴더를 모르는 기존 스킨의
         목록 순서가 폴더 생성만으로 달라진다(사용자 결정, 설계 수정 2).
       */
-      .select("id, title, created_at, visibility, folder_id, sort_order")
+      .select(SKIN_CATEGORY_POST_COLUMNS)
       .eq("user_id", ownerId)
       .eq("category_id", categoryId)
       .order("created_at", { ascending: false });
@@ -522,7 +544,11 @@ async function fetchSkinCategoryPosts(
   }
 
 
-  return data || [];
+  return rememberPublicNoRows(
+    PUBLIC_NO_POST,
+    ownerId,
+    data || []
+  );
 
 }
 
@@ -665,6 +691,7 @@ async function fetchSkinHomeHighlights(
           created_at,
           posts!inner (
             id,
+            public_no,
             title,
             category_id,
             folder_id,
@@ -691,6 +718,19 @@ async function fetchSkinHomeHighlights(
           Array.isArray(row.posts)
             ? row.posts[0]
             : row.posts;
+
+
+        /*
+          PUBLIC-NUMBER-1: 원문 글의 (id, public_no) 짝을 표에 적는다 —
+          카드의 postHref 는 이 표를 보고 만들어진다(skinPostHrefById).
+        */
+
+        rememberPublicNo(
+          PUBLIC_NO_POST,
+          ownerId,
+          post && post.id,
+          post && post.public_no
+        );
 
 
         return {
@@ -782,8 +822,14 @@ async function fetchSkinHomeHighlights(
    판정은 세션당 한 번이고 결과는 Promise로 캐시한다.
 ========================================================== */
 
+/*
+  PUBLIC-NUMBER-1: public_no 는 "표시 설정" 묶음이 아니라 기본
+  묶음에 넣는다 — 이 값 없이는 이 카테고리의 어떤 링크도 만들 수
+  없기 때문이다(아래 42703 폴백으로 빠져도 주소는 나와야 한다).
+*/
+
 const SKIN_CATEGORY_BASE_COLUMNS =
-  "id, name, type";
+  "id, public_no, name, type";
 
 /*
   GALLERY-1 후속: secret_cover_url(공개 https 주소)은 사라졌다.
@@ -994,8 +1040,13 @@ function normalizeSkinCategoryDisplay(
    맞춰 다시 조회한다 — 정상 경로에는 추가 왕복이 없다.
 ========================================================== */
 
+/*
+  PUBLIC-NUMBER-1: public_no 가 목록의 각 링크 주소가 된다 —
+  스킨이 그리는 <a href> 는 전부 이 값으로 만들어진다.
+*/
+
 const SKIN_CATEGORY_POST_COLUMNS =
-  "id, title, created_at, visibility, folder_id, sort_order";
+  "id, public_no, title, created_at, visibility, folder_id, sort_order";
 
 
 function skinCategoryPostsPageQuery(
@@ -1044,7 +1095,11 @@ async function fetchSkinCategoryRootPostsPage(
   if (!error) {
 
     return {
-      rows: data || [],
+      rows: rememberPublicNoRows(
+        PUBLIC_NO_POST,
+        ownerId,
+        data || []
+      ),
       totalCount: Number(count || 0),
       page
     };
@@ -1144,7 +1199,11 @@ async function fetchSkinCategoryRootPostsPage(
 
 
   return {
-    rows: lastData || [],
+    rows: rememberPublicNoRows(
+      PUBLIC_NO_POST,
+      ownerId,
+      lastData || []
+    ),
     totalCount: total,
     page: lastPage
   };
@@ -1192,7 +1251,11 @@ async function fetchSkinCategoryFolderPosts(
   }
 
 
-  return data || [];
+  return rememberPublicNoRows(
+    PUBLIC_NO_POST,
+    ownerId,
+    data || []
+  );
 
 }
 
@@ -1316,7 +1379,8 @@ async function fetchSkinPostById(
   } =
     await supabaseClient
       .from("posts")
-      .select("id, title, created_at, visibility, category_id")
+      /* PUBLIC-NUMBER-1: public_no 가 이 글의 정규 주소다 */
+      .select("id, public_no, title, created_at, visibility, category_id")
       .eq("user_id", ownerId)
       .eq("id", postId)
       .maybeSingle();
@@ -1331,6 +1395,18 @@ async function fetchSkinPostById(
 
 
     return null;
+
+  }
+
+
+  if (data) {
+
+    rememberPublicNo(
+      PUBLIC_NO_POST,
+      ownerId,
+      data.id,
+      data.public_no
+    );
 
   }
 
@@ -1715,7 +1791,14 @@ async function buildBaseSkinContext(
         href:
           category.type === "highlight"
             ? buildSiteHighlightsPath(slug)
-            : buildSitePath(slug, `/category/${category.id}`),
+            : buildSitePath(
+                slug,
+                /* PUBLIC-NUMBER-1: 주소의 숫자는 category.public_no 다 */
+                publicRouteFromRow(
+                  PUBLIC_NO_CATEGORY,
+                  category
+                ) || "/"
+              ),
 
         itemCount: null
       })
@@ -2242,7 +2325,11 @@ async function buildHomeSkinContext(
           (post) => ({
             id: String(post.id),
             title: maskSkinPostTitle(post.visibility, post.title),
-            href: buildSitePath(commonData.slug, `/post/${post.id}`),
+            href: buildSitePath(
+              commonData.slug,
+              /* PUBLIC-NUMBER-1 */
+              publicRouteFromRow(PUBLIC_NO_POST, post) || "/"
+            ),
             publishedAt: post.created_at,
             publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
             categoryId:
@@ -2326,15 +2413,166 @@ async function buildHomeSkinContext(
      범위는 기존 RLS가 그대로 가린다.
 ========================================================== */
 
+/* =========================================================
+   PUBLIC-NUMBER-1 — 스킨이 받는 주소를 만드는 네 함수
+
+   스킨 Context 안의 모든 href 는 이 네 개를 거친다. 내부 id 를
+   주소 문자열에 직접 끼워 넣는 자리가 이 파일에 남지 않게 하는
+   것이 목적이다.
+
+   * ...Href(slug, row)     행을 손에 들고 있을 때(대부분) — 왕복 0
+   * ...HrefById(slug, id)  id 만 있을 때. 그 행은 같은 Context 를
+                            만들면서 이미 읽었으므로 표에 있다
+                            (core/lib/public-number.js).
+
+   번호를 못 찾으면 사이트 루트로 떨어뜨린다 — 깨진 링크보다는
+   홈이 낫고, 무엇보다 내부 id 가 주소로 새어 나가지 않는다.
+========================================================== */
+
+function skinCategoryHref(
+  slug,
+  category
+) {
+
+  return buildSitePath(
+    slug,
+    publicRouteFromRow(
+      PUBLIC_NO_CATEGORY,
+      category
+    ) || "/"
+  );
+
+}
+
+
+function skinCategoryHrefById(
+  slug,
+  categoryId
+) {
+
+  return buildSitePath(
+    slug,
+    publicRouteForKnownId(
+      PUBLIC_NO_CATEGORY,
+      categoryId
+    ) || "/"
+  );
+
+}
+
+
+function skinPostHref(
+  slug,
+  post
+) {
+
+  return buildSitePath(
+    slug,
+    publicRouteFromRow(
+      PUBLIC_NO_POST,
+      post
+    ) || "/"
+  );
+
+}
+
+
+function skinPostHrefById(
+  slug,
+  postId
+) {
+
+  return buildSitePath(
+    slug,
+    publicRouteForKnownId(
+      PUBLIC_NO_POST,
+      postId
+    ) || "/"
+  );
+
+}
+
+
+/*
+  /:slug/highlights/category/:n 의 n 도 카테고리의 공개 번호다.
+
+  하이라이트 "폴더 키"는 화면 안에서 카드를 묶는 데 쓰는 값이라
+  내부 id 그대로 둔다(요청 키와 카드 키를 맞춰야 한다) — 주소로
+  나갈 때만 여기서 번호로 바꾼다. "none"(카테고리 없는 글)은
+  번호가 아니라 이름표라 그대로 나간다.
+*/
+
+function skinHighlightsFolderHref(
+  slug,
+  folderKey
+) {
+
+  if (
+    folderKey === null ||
+    folderKey === undefined ||
+    folderKey === ""
+  ) {
+
+    return buildSiteHighlightsPath(slug);
+
+  }
+
+
+  if (folderKey === SKIN_HIGHLIGHT_UNFILED_ID) {
+
+    return buildSiteHighlightsPath(
+      slug,
+      SKIN_HIGHLIGHT_UNFILED_ID
+    );
+
+  }
+
+
+  const no =
+    publicNoForId(
+      PUBLIC_NO_CATEGORY,
+      folderKey
+    );
+
+
+  return (
+    no
+      ? buildSiteHighlightsPath(slug, no)
+      : buildSiteHighlightsPath(slug)
+  );
+
+}
+
+
 function buildSkinFolderHref(
   slug,
   categoryId,
   folderId
 ) {
 
+  /*
+    PUBLIC-NUMBER-1: 카테고리 자리만 공개 번호로 바뀐다(폴더 번호는
+    아직 내부 id 다). 이 카테고리의 행은 이미 읽은 뒤라 표에 있다 —
+    없으면 폴더 링크를 만들지 않는다.
+  */
+
+  const categoryRoute =
+    publicRouteForKnownId(
+      PUBLIC_NO_CATEGORY,
+      categoryId
+    );
+
+
+  if (!categoryRoute) {
+
+    return "";
+
+  }
+
+
   return buildSitePath(
     slug,
-    `/category/${categoryId}/folder/${folderId}`
+    `${categoryRoute}/folder/${folderId}`
   );
 
 }
@@ -2396,7 +2634,11 @@ function buildSkinCategoryTree(
       kind: "post",
       id: String(post.id),
       title: maskSkinPostTitle(post.visibility, post.title),
-      href: buildSitePath(slug, `/post/${post.id}`),
+      /* PUBLIC-NUMBER-1 */
+      href: buildSitePath(
+        slug,
+        publicRouteFromRow(PUBLIC_NO_POST, post) || "/"
+      ),
       publishedAt: post.created_at,
       publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
       isSecret: post.visibility === "secret",
@@ -2592,7 +2834,11 @@ function buildSkinGalleryCards(
         maskSkinPostTitle(post.visibility, post.title),
 
       href:
-        buildSitePath(slug, `/post/${post.id}`),
+        /* PUBLIC-NUMBER-1 */
+        buildSitePath(
+          slug,
+          publicRouteFromRow(PUBLIC_NO_POST, post) || "/"
+        ),
 
       publishedAt:
         post.created_at,
@@ -2674,8 +2920,19 @@ function buildSkinCategoryPagination(
   display
 ) {
 
+  /*
+    PUBLIC-NUMBER-1: 페이지 링크의 바탕 주소도 공개 번호다. 이
+    카테고리는 방금 읽은 그 카테고리라 표에 있다.
+  */
+
   const basePath =
-    buildSitePath(slug, `/category/${categoryId}`);
+    buildSitePath(
+      slug,
+      publicRouteForKnownId(
+        PUBLIC_NO_CATEGORY,
+        categoryId
+      ) || "/"
+    );
 
 
   const style =
@@ -3112,7 +3369,7 @@ async function buildCategorySkinContext(
         base.viewer.isOwner &&
         ["post", "gallery"].includes(category.type || "post")
           ? buildSiteComposeUrl(
-              buildSitePath(commonData.slug, `/category/${category.id}`)
+              skinCategoryHref(commonData.slug, category)
             )
           : base.viewer.writeHref,
 
@@ -3120,7 +3377,7 @@ async function buildCategorySkinContext(
         base.viewer.isOwner &&
         ["post", "gallery"].includes(category.type || "post")
           ? buildSiteManageUrl(
-              buildSitePath(commonData.slug, `/category/${category.id}`)
+              skinCategoryHref(commonData.slug, category)
             )
           : null
     },
@@ -3129,7 +3386,7 @@ async function buildCategorySkinContext(
       id: String(category.id),
       name: category.name,
       type: category.type,
-      href: buildSitePath(commonData.slug, `/category/${category.id}`),
+      href: skinCategoryHref(commonData.slug, category),
 
       /*
         폴더를 모르는 기존 스킨용. FOLDER-1 이전과 완전히 같다 —
@@ -3151,7 +3408,7 @@ async function buildCategorySkinContext(
           (post) => ({
             id: String(post.id),
             title: maskSkinPostTitle(post.visibility, post.title),
-            href: buildSitePath(commonData.slug, `/post/${post.id}`),
+            href: skinPostHref(commonData.slug, post),
             publishedAt: post.created_at,
             publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
             isSecret: post.visibility === "secret"
@@ -3450,7 +3707,7 @@ async function buildFolderSkinContext(
     found.path.map(toFolderSummary);
 
   const categoryHref =
-    buildSitePath(commonData.slug, `/category/${category.id}`);
+    skinCategoryHref(commonData.slug, category);
 
   const openableAncestor =
     [...ancestors].reverse().find((node) => node.folderHref);
@@ -3626,12 +3883,12 @@ async function buildPostSkinContext(
 
   const categoryHref =
     post.category_id != null
-      ? buildSitePath(commonData.slug, `/category/${post.category_id}`)
+      ? skinCategoryHrefById(commonData.slug, post.category_id)
       : null;
 
 
   const postPath =
-    buildSitePath(commonData.slug, `/post/${post.id}`);
+    skinPostHref(commonData.slug, post);
 
 
   return {
@@ -3901,7 +4158,7 @@ function createSkinHighlightCardBuilder(
       postHref:
         card.postId === null
           ? null
-          : buildSitePath(slug, `/post/${card.postId}`),
+          : skinPostHrefById(slug, card.postId),
 
       /*
         data-imory-if 는 부정을 표현할 수 없다 — 원문 링크가 없는
@@ -3934,14 +4191,14 @@ function createSkinHighlightCardBuilder(
 
       categoryHref:
         categoryById.has(card.categoryId)
-          ? buildSitePath(slug, `/category/${card.categoryId}`)
+          ? skinCategoryHrefById(slug, card.categoryId)
           : null,
 
       folderId:
         folderKeyOf(card),
 
       folderHref:
-        buildSiteHighlightsPath(
+        skinHighlightsFolderHref(
           slug,
           folderKeyOf(card)
         ),
@@ -4176,7 +4433,7 @@ async function buildHighlightsSkinContext(
                 : "카테고리 없음",
 
             href:
-              buildSiteHighlightsPath(slug, key),
+              skinHighlightsFolderHref(slug, key),
 
             count:
               countByKey.get(key) || 0,
@@ -4273,7 +4530,7 @@ async function buildHighlightsSkinContext(
               ),
 
             href:
-              buildSiteHighlightsPath(slug, requestedKey),
+              skinHighlightsFolderHref(slug, requestedKey),
 
             count: 0,
 
@@ -4458,7 +4715,7 @@ async function buildBannerSkinContext(
       id: String(category.id),
       name: category.name,
       type: category.type,
-      href: buildSitePath(commonData.slug, `/category/${category.id}`),
+      href: skinCategoryHref(commonData.slug, category),
 
       items:
         bannersRaw.map(

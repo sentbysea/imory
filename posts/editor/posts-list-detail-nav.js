@@ -448,6 +448,17 @@ async function deleteCurrentPost() {
 
   if (categoryId) {
 
+    /*
+      PUBLIC-NUMBER-1: history 의 state 에는 내부 id 를, 주소에는
+      공개 번호를 쓴다. state 는 우리만 읽고, 주소는 남에게 보인다.
+    */
+
+    const categoryRoute =
+      await publicCategoryRoute(
+        categoryId
+      );
+
+
     history.replaceState(
       {
         page: "category",
@@ -459,7 +470,7 @@ async function deleteCurrentPost() {
       },
       "",
       buildPostRoute(
-        `/category/${categoryId}`
+        categoryRoute || "/"
       )
     );
 

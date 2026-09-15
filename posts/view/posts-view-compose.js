@@ -175,9 +175,17 @@ async function leaveComposeRequest(
     folderId !== undefined
   ) {
 
+    /*
+      PUBLIC-NUMBER-1: 카테고리 자리는 공개 번호다(폴더 번호는
+      아직 내부 id 다).
+    */
+
     const folderRoute =
       buildPostRoute(
-        `/category/${Number(categoryId)}/folder/${Number(folderId)}`
+        await publicFolderRoute(
+          categoryId,
+          folderId
+        ) || "/"
       );
 
 
@@ -235,7 +243,9 @@ async function leaveComposeRequest(
       },
       "",
       buildPostRoute(
-        `/category/${categoryId}`
+        await publicCategoryRoute(
+          categoryId
+        ) || "/"
       )
     );
 
@@ -313,7 +323,12 @@ async function fetchOwnerPostCategories(
         "categories"
       )
       .select(
-        "id, name, type, sort_order"
+        /*
+          PUBLIC-NUMBER-1: 여기서 고른 카테고리가 곧 작성 폼의 주소
+          (/:slug/category/:public_no?write=1)가 된다 — 번호를 함께
+          읽어 두면 그 주소를 만들 때 왕복이 없다.
+        */
+        "id, public_no, name, type, sort_order"
       );
 
 
@@ -351,6 +366,15 @@ async function fetchOwnerPostCategories(
     return [];
 
   }
+
+
+  /* PUBLIC-NUMBER-1: 읽은 (id, public_no) 짝을 표에 적어 둔다 */
+
+  rememberPublicNoRows(
+    PUBLIC_NO_CATEGORY,
+    owner.ownerId,
+    data
+  );
 
 
   const kept =

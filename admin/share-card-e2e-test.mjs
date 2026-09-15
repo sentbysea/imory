@@ -411,6 +411,23 @@ function matches(row, key, raw) {
 
 function queryTable(db, table, params) {
   let rows = (db[table] || []).slice();
+
+  /*
+    PUBLIC-NUMBER-1: 공개 주소의 번호(categories.public_no /
+    posts.public_no)를 이 mock 이 대신 채운다. 실제 DB 에서는 트리거가
+    블로그마다 1 부터 매기지만, 여기서는 **id 와 같은 값**을 준다 —
+    그래야 이 파일이 원래 확인하던 주소(/post/101 …)가 그대로 유지되고,
+    검사의 초점이 번호 체계 변경에 가려지지 않는다. 번호와 id 가
+    **다를 때** 어떻게 동작하는지는 skin/skin-public-number-e2e-test.mjs
+    가 따로 본다(거기서는 일부러 다른 값을 준다).
+  */
+  if (table === "posts" || table === "categories") {
+    rows = rows.map(row => (
+      row && row.public_no === undefined && row.id !== undefined
+        ? { ...row, public_no: row.id }
+        : row
+    ));
+  }
   for (const [key, raw] of params.entries()) {
     if (RESERVED.has(key)) continue;
     rows = rows.filter(row => matches(row, key, raw));
@@ -884,8 +901,23 @@ async function requestPage(pathname, envOverrides = {}) {
   };
 }
 
+/*
+  PUBLIC-NUMBER-1: /api/og/post 는 이제 slug 를 함께 받는다 —
+  ?post= 가 **그 블로그 안의 공개 번호**라 혼자서는 글을 가리키지
+  못한다(IMORY_PUBLIC_NUMBER_DESIGN.md §2-8).
+
+  아래 호출들은 원래 확인하던 것(카드 그림 · 캐시 · 진단 헤더)에
+  집중하도록 slug 를 여기서 채워 준다. slug 가 **없을 때** 거절되는지는
+  [image] 절이 따로 본다.
+*/
+
 async function requestOgImage(query, envOverrides = {}) {
-  const request = new Request(`http://localhost:${PORT}/api/og/post${query}`, { method: "GET" });
+  const withSlug =
+    (query.includes("post=") && !query.includes("slug="))
+      ? `${query}&slug=${encodeURIComponent(OWNER_SLUG)}`
+      : query;
+
+  const request = new Request(`http://localhost:${PORT}/api/og/post${withSlug}`, { method: "GET" });
 
   const response = await ogFunction.onRequest({
     request,
@@ -2189,9 +2221,14 @@ async function runMeta() {
     metaOf(page.html, "twitter:card") === "summary_large_image"
   );
 
+  /*
+    PUBLIC-NUMBER-1: ?post= 는 그 블로그 안의 공개 번호이고, 번호만으로는
+    글이 특정되지 않으므로 ?slug= 가 함께 실린다.
+  */
+
   check(
     "[meta] ★ og:image 가 크롤러가 받을 수 있는 절대 URL 이다",
-    /^http:\/\/localhost:\d+\/api\/og\/post\?post=14&v=[a-z0-9]+$/.test(
+    /^http:\/\/localhost:\d+\/api\/og\/post\?slug=testuser&post=14&v=[a-z0-9]+$/.test(
       metaOf(page.html, "og:image") || ""
     ),
     metaOf(page.html, "og:image")
@@ -2802,6 +2839,26 @@ async function runImage() {
   );
 
 
+  /* ---- PUBLIC-NUMBER-1: slug 없이는 글을 가리킬 수 없다 ---- */
+
+  const noSlug = await requestOgImage("?post=14&v=abc123&slug=");
+
+  check(
+    "[image] ★ slug 가 없으면 400(공개 번호만으로는 글이 특정되지 않는다)",
+    noSlug.status === 400,
+    String(noSlug.status)
+  );
+
+  const otherSlug = await requestOgImage("?post=14&v=abc123&slug=someoneelse");
+
+  check(
+    "[image] ★ 남의 slug 에 이 블로그의 번호를 붙이면 기본 카드다",
+    otherSlug.status === 200 &&
+    otherSlug.cardStatus.includes("not-public"),
+    `${otherSlug.status} / ${otherSlug.cardStatus}`
+  );
+
+
   /* ---- 버전은 실제 변경 때만 달라진다 ---- */
 
   const tokenA = ogFunction.shareCardVersionToken(["1", "", "2026-09-11T00:00:00Z", "0"]);
@@ -2928,8 +2985,13 @@ async function runCache() {
 
     /* ---- 3) HEAD 도 캐시를 쓰고 본문을 싣지 않는다 ---- */
 
+    /*
+      PUBLIC-NUMBER-1: 위 requestOgImage 가 채워 주는 것과 **같은
+      주소**여야 캐시가 적중한다 — slug 가 캐시 키의 일부다.
+    */
+
     const headRequest = new Request(
-      `http://localhost:${PORT}/api/og/post?post=14&v=aaa111`,
+      `http://localhost:${PORT}/api/og/post?post=14&v=aaa111&slug=${OWNER_SLUG}`,
       { method: "HEAD" }
     );
 

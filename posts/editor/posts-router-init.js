@@ -4,10 +4,21 @@
    posts.js 분할본 중 마지막. DOM 참조/상태는
    posts-refs.js에 있음(반드시 먼저 로드돼야 함).
 
-   내용: URL 라우팅(/post/:id, /category/:id 등) 처리,
+   내용: URL 라우팅(/post/:public_no, /category/:public_no 등) 처리,
    브라우저 뒤로/앞으로가기, 페이지 로드 시 초기 실행부
    (여기서 startPostRouter() 등을 실제로 호출함 — 이
    파일이 posts/editor/ 안에서 제일 마지막에 로드돼야 함).
+
+   ★ PUBLIC-NUMBER-1 — 주소의 숫자는 PK 가 아니다
+
+   경로에 들어 있는 숫자는 이제 categories.public_no /
+   posts.public_no 다(블로그마다 1 부터). 화면을 여는 함수들
+   (openPostPage / openCategoryPage / openFolderPage)은 예전 그대로
+   **내부 id** 를 받으므로, 이 파일이 그 경계에서 한 번 환전한다
+   (core/lib/public-number.js).
+
+   없는 번호는 PUBLIC_NO_MISSING_ID(0)로 내려간다 — 다른 사용자의
+   같은 번호로 넘어가지 않고 기존 "없는 글/카테고리" 화면이 나온다.
 ========================================================== */
 
 
@@ -33,9 +44,22 @@ async function handlePostRoute() {
 
   if (postMatch) {
 
-    const postId =
+    /*
+      주소의 숫자는 이 블로그 안의 공개 번호다. 내부 id 로 바꿔서
+      아래 화면 함수들에 넘긴다 — 없는 번호면 0 이 되어 "없는 글"
+      화면이 나온다(이 파일 상단 주석).
+    */
+
+    const postPublicNo =
       Number(
         postMatch[1]
+      );
+
+
+    const postId =
+      await publicNoToScreenId(
+        PUBLIC_NO_POST,
+        postPublicNo
       );
 
 
@@ -87,7 +111,7 @@ async function handlePostRoute() {
         },
         "",
         buildPostRoute(
-          `/post/${postId}`
+          `/post/${postPublicNo}`
         )
       );
 
@@ -111,10 +135,11 @@ async function handlePostRoute() {
   /*
     HIGHLIGHT-2: /highlights — 하이라이트 화면.
 
-      /highlights                   전체 보기(기본, 최신순)
-      /highlights?view=folders      폴더별 보기
-      /highlights/category/:id      그 폴더의 카드 목록
-                                    (id는 원문 카테고리 id 또는 "none")
+      /highlights                        전체 보기(기본, 최신순)
+      /highlights?view=folders           폴더별 보기
+      /highlights/category/:public_no    그 폴더의 카드 목록
+                                         (원문 카테고리의 공개 번호
+                                          또는 "none")
 
     옛 주소 /memos 도 **같은 화면**을 연다(HIGHLIGHT-1 때의 주소를
     공유했거나 스킨에 적어 둔 사람이 있다). 두 갈래를 따로 처리하지
@@ -135,9 +160,19 @@ async function handlePostRoute() {
 
   if (highlightFolderMatch) {
 
+    /*
+      "none"(카테고리 없는 글의 하이라이트)은 번호가 아니라 이름표라
+      그대로 넘긴다. 숫자면 공개 번호이므로 내부 id 로 바꾼다.
+    */
+
     await openHighlightsScreen({
       categoryId:
-        highlightFolderMatch[1],
+        highlightFolderMatch[1] === "none"
+          ? "none"
+          : await publicNoToScreenId(
+              PUBLIC_NO_CATEGORY,
+              highlightFolderMatch[1]
+            ),
 
       updateUrl:
         false
@@ -187,6 +222,19 @@ async function handlePostRoute() {
   if (folderMatch) {
 
     /*
+      경로의 첫 숫자만 공개 번호다 — 폴더 번호는 지금도 내부 id 다
+      (PUBLIC-NUMBER-1 의 범위는 카테고리와 글이다,
+       IMORY_PUBLIC_NUMBER_DESIGN.md §남은 차이).
+    */
+
+    const folderCategoryId =
+      await publicNoToScreenId(
+        PUBLIC_NO_CATEGORY,
+        folderMatch[1]
+      );
+
+
+    /*
       FOLDER-3: ?write=1이면 이 폴더에 새 글을 쓰는 폼을 곧장 연다 —
       카테고리와 폴더가 모두 미리 골라진 채로 열린다. 소유자가
       아니면 startPostCompose()가 주소를 정리하고 평소의 폴더
@@ -201,9 +249,7 @@ async function handlePostRoute() {
 
       await startPostCompose({
         categoryId:
-          Number(
-            folderMatch[1]
-          ),
+          folderCategoryId,
 
         folderId:
           Number(
@@ -221,9 +267,7 @@ async function handlePostRoute() {
 
 
     await openFolderPage(
-      Number(
-        folderMatch[1]
-      ),
+      folderCategoryId,
       Number(
         folderMatch[2]
       ),
@@ -253,7 +297,8 @@ async function handlePostRoute() {
   if (categoryMatch) {
 
     const categoryId =
-      Number(
+      await publicNoToScreenId(
+        PUBLIC_NO_CATEGORY,
         categoryMatch[1]
       );
 
@@ -421,6 +466,28 @@ window.addEventListener(
       )
     ) {
 
+      /*
+        PUBLIC-NUMBER-1: 되돌려 놓을 주소도 공개 번호로 쓴다. 번호를
+        못 찾으면(있을 수 없지만) 홈 경로로 떨어뜨린다 — 내부 id 를
+        주소에 적는 길을 남겨 두지 않는다.
+      */
+
+      const editRoute =
+        currentEditorMode === "edit" && editorSourcePostId
+          ? await publicPostRoute(
+              editorSourcePostId
+            )
+          : null;
+
+
+      const composeRoute =
+        currentPostCategoryId
+          ? await publicCategoryRoute(
+              currentPostCategoryId
+            )
+          : null;
+
+
       history.pushState(
         {
           page:
@@ -429,20 +496,16 @@ window.addEventListener(
               : "compose"
         },
         "",
-        currentEditorMode === "edit" && editorSourcePostId
+        editRoute
           ? buildSiteEditUrl(
               buildPostRoute(
-                `/post/${editorSourcePostId}`
+                editRoute
               )
             )
           : buildSiteComposeUrl(
-              currentPostCategoryId
-                ? buildPostRoute(
-                    `/category/${currentPostCategoryId}`
-                  )
-                : buildPostRoute(
-                    "/"
-                  )
+              buildPostRoute(
+                composeRoute || "/"
+              )
             )
       );
 

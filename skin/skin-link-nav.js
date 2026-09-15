@@ -49,6 +49,14 @@
    getSitePathAfterSlug()/handlePostRoute()가 쓰는 규칙과 동일한
    패턴만 인정한다(core/lib/site-path.js,
    posts/editor/posts-router-init.js).
+
+   ★ PUBLIC-NUMBER-1 — 여기서 나오는 id 는 **공개 번호**다
+
+   주소에 적힌 숫자를 그대로 담는다. 그 숫자는 이 블로그 안에서만
+   뜻이 있는 categories.public_no / posts.public_no 이고 내부 PK 가
+   아니다. 이 함수는 순수 함수(DB 를 보지 않는다)라 환전을 하지
+   않는다 — 내부 id 로 바꾸는 일은 화면을 여는 쪽
+   (navigateToSkinRoute)이 한 번에 한다.
 ========================================================== */
 
 function resolveInSiteSkinRoute(url) {
@@ -252,6 +260,96 @@ function resolveInSiteSkinRoute(url) {
 }
 
 /* =========================================================
+   resolveSkinRoutePublicNumbers(route) -> Promise<route>
+
+   PUBLIC-NUMBER-1: 판정에 담긴 **공개 번호**를 내부 id 로 바꾼
+   복사본을 돌려준다. 원본은 건드리지 않는다 — sandbox 의 nav 표는
+   같은 route 객체를 계속 들고 있고(skin/sandbox/skin-sandbox-nav.js),
+   그 표는 주소를 뜻하는 값이어야 한다.
+
+   page 별로 어떤 칸이 공개 번호인가:
+
+     post        id           글의 공개 번호
+     category    id           카테고리의 공개 번호
+     folder      id           카테고리의 공개 번호
+                 folderId     폴더의 내부 id (아직 번호가 없다)
+     highlights  categoryId   원문 카테고리의 공개 번호 또는 "none"
+     home        —            없음
+========================================================== */
+
+async function resolveSkinRoutePublicNumbers(route) {
+
+  if (!route) {
+    return route;
+  }
+
+
+  if (typeof publicNoToScreenId !== "function") {
+
+    /*
+      환전소가 아직 로드되지 않았다면(있을 수 없는 배포 상태) 그냥
+      원본을 넘긴다 — 여기서 throw 하면 바깥 catch 가 문서 이동으로
+      떨어뜨려 흰 화면이 한 번 보인다.
+    */
+
+    return route;
+
+  }
+
+
+  const resolved =
+    { ...route };
+
+
+  if (
+    route.page === "post"
+  ) {
+
+    resolved.id =
+      await publicNoToScreenId(
+        PUBLIC_NO_POST,
+        route.id
+      );
+
+  }
+
+
+  else if (
+    route.page === "category" ||
+    route.page === "folder"
+  ) {
+
+    resolved.id =
+      await publicNoToScreenId(
+        PUBLIC_NO_CATEGORY,
+        route.id
+      );
+
+  }
+
+
+  else if (
+    route.page === "highlights" &&
+    route.categoryId !== null &&
+    route.categoryId !== undefined &&
+    route.categoryId !== "none"
+  ) {
+
+    resolved.categoryId =
+      await publicNoToScreenId(
+        PUBLIC_NO_CATEGORY,
+        route.categoryId
+      );
+
+  }
+
+
+  return resolved;
+
+}
+
+
+/* =========================================================
    navigateToSkinRoute(route, url) -> Promise<void>
 
    ★ 스킨에서 시작된 이동의 **유일한 출구**다.
@@ -291,6 +389,24 @@ async function navigateToSkinRoute(route, url) {
       await loadPostsModule();
 
     }
+
+
+    /*
+      PUBLIC-NUMBER-1: 여기서 딱 한 번 환전한다. 위 판정이 돌려준
+      route.id / route.categoryId 는 주소에 적힌 공개 번호이고,
+      아래 화면 함수들(openPostPage / openCategoryPage /
+      openFolderPage / startPostCompose / openPostEditor)은 전부
+      내부 id 를 받는다.
+
+      없는 번호는 PUBLIC_NO_MISSING_ID(0)가 되어 각 화면의 "없음"
+      경로로 간다 — 다른 블로그의 같은 번호로 넘어가지 않는다
+      (core/lib/public-number.js).
+    */
+
+    route =
+      await resolveSkinRoutePublicNumbers(
+        route
+      );
 
 
     /*

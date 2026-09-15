@@ -251,20 +251,29 @@ async function openNewPostEditor(
 
   if (updateUrl) {
 
-    const composePath =
+    /*
+      PUBLIC-NUMBER-1: 주소의 카테고리 자리는 공개 번호다.
+    */
+
+    const composeRoute =
       currentPostCategoryId
         ? (
             folderId
-              ? buildPostRoute(
-                  `/category/${currentPostCategoryId}/folder/${Number(folderId)}`
+              ? await publicFolderRoute(
+                  currentPostCategoryId,
+                  folderId
                 )
-              : buildPostRoute(
-                  `/category/${currentPostCategoryId}`
+              : await publicCategoryRoute(
+                  currentPostCategoryId
                 )
           )
-        : buildPostRoute(
-            "/"
-          );
+        : null;
+
+
+    const composePath =
+      buildPostRoute(
+        composeRoute || "/"
+      );
 
 
     history.pushState(
@@ -350,8 +359,10 @@ async function openPostEditor(
         "posts"
       )
       .select(
+        /* PUBLIC-NUMBER-1: 저장 후 되돌아갈 주소를 이 값으로 만든다 */
         `
         id,
+        public_no,
         user_id,
         category_id,
         folder_id,
@@ -805,7 +816,10 @@ async function openPostEditor(
       "",
       buildSiteEditUrl(
         buildPostRoute(
-          `/post/${post.id}`
+          publicRouteFromRow(
+            PUBLIC_NO_POST,
+            post
+          ) || "/"
         )
       )
     );
@@ -836,6 +850,17 @@ async function leavePostEditRequest(
   postId
 ) {
 
+  /*
+    PUBLIC-NUMBER-1: 지워진 글이면 번호를 찾지 못한다 — 그때는
+    홈 경로로 떨어뜨린다(내부 id 를 주소에 적지 않는다).
+  */
+
+  const postRoute =
+    await publicPostRoute(
+      postId
+    );
+
+
   history.replaceState(
     {
       page: "post",
@@ -847,7 +872,7 @@ async function leavePostEditRequest(
     },
     "",
     buildPostRoute(
-      `/post/${postId}`
+      postRoute || "/"
     )
   );
 

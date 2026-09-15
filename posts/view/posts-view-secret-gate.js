@@ -682,8 +682,10 @@ async function loadRelatedPosts(
         "posts"
       )
       .select(
+        /* PUBLIC-NUMBER-1: 관련 글 링크의 주소가 이 값이다 */
         `
         id,
+        public_no,
         title,
         created_at,
         visibility
@@ -752,7 +754,10 @@ async function loadRelatedPosts(
 
         item.href =
           buildPostRoute(
-            `/post/${post.id}`
+            publicRouteFromRow(
+              PUBLIC_NO_POST,
+              post
+            ) || "/"
           );
 
 

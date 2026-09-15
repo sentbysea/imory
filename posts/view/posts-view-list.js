@@ -99,7 +99,8 @@ function fetchCategoryPageData(
             "categories"
           )
           .select(
-            "id, name, type"
+            /* PUBLIC-NUMBER-1: 이 화면의 정규 주소를 만드는 값 */
+            "id, public_no, name, type"
           )
           .eq(
             "id",
@@ -141,6 +142,20 @@ function fetchCategoryPageData(
 
 
       /*
+        PUBLIC-NUMBER-1: 이 카테고리의 (id, public_no) 짝을 표에
+        적는다 — 아래 배너 분기로 빠지는 경우에도 이 화면의 주소를
+        만들어야 하므로 그 앞이다(core/lib/public-number.js).
+      */
+
+      rememberPublicNo(
+        PUBLIC_NO_CATEGORY,
+        owner.ownerId,
+        category.id,
+        category.public_no
+      );
+
+
+      /*
         배너 카테고리는 posts를 쓰지 않으므로 원래도
         조회하지 않았음 — 그대로 유지.
       */
@@ -175,8 +190,13 @@ function fetchCategoryPageData(
               두 컬럼 모두 SELECT GRANT에 추가돼 있다
               (20260908110000_add_posts_folder_id_sort_order.sql).
             */
+            /*
+              PUBLIC-NUMBER-1: public_no 를 함께 읽는다 — 목록의
+              각 링크 주소가 이 값이다(createPostListItem).
+            */
             `
             id,
+            public_no,
             title,
             created_at,
             visibility,
@@ -212,6 +232,18 @@ function fetchCategoryPageData(
               false
           }
         );
+
+
+      /*
+        PUBLIC-NUMBER-1: 목록의 글들도 표에 적어 둔다 — 각 글 링크가
+        왕복 없이 번호를 찾는다(createPostListItem).
+      */
+
+      rememberPublicNoRows(
+        PUBLIC_NO_POST,
+        owner.ownerId,
+        posts
+      );
 
 
       return {
@@ -1052,6 +1084,19 @@ async function openCategoryPage(
   updatePostAddButton();
 
 
+  /*
+    PUBLIC-NUMBER-1: 이 화면의 정규 주소. 카테고리 자리는 공개
+    번호이고, 번호를 못 찾으면(지워진 카테고리) 홈 경로다.
+  */
+
+  const categoryRoutePath =
+    buildPostRoute(
+      await publicCategoryRoute(
+        categoryId
+      ) || "/"
+    );
+
+
   if (updateUrl) {
 
     history.pushState(
@@ -1065,9 +1110,7 @@ async function openCategoryPage(
       "",
       wantsManageScreen
         ? buildSiteManageUrl(
-            buildPostRoute(
-              `/category/${categoryId}`
-            )
+            categoryRoutePath
           )
         : /*
             GALLERY-1: 갤러리 페이지 이동도 평범한 카테고리 이동이다 —
@@ -1075,9 +1118,7 @@ async function openCategoryPage(
             렌더 결과에 따라 유효 범위로 다시 정정될 수 있다.
           */
           buildSiteCategoryPageUrl(
-            buildPostRoute(
-              `/category/${categoryId}`
-            ),
+            categoryRoutePath,
             requestedPage
           )
     );
@@ -1110,9 +1151,7 @@ async function openCategoryPage(
           numericCategoryId
       },
       "",
-      buildPostRoute(
-        `/category/${categoryId}`
-      )
+      categoryRoutePath
     );
 
   }
@@ -1708,9 +1747,7 @@ async function openCategoryPage(
       },
       "",
       buildSiteCategoryPageUrl(
-        buildPostRoute(
-          `/category/${categoryId}`
-        ),
+        categoryRoutePath,
         effectivePage
       )
     );
@@ -2097,9 +2134,17 @@ function createPostListItem(
     "post-list-item";
 
 
+  /*
+    PUBLIC-NUMBER-1: 주소는 post.public_no 다. 목록 조회가 그 값을
+    함께 읽어 오므로 왕복이 없다.
+  */
+
   item.href =
     buildPostRoute(
-      `/post/${post.id}`
+      publicRouteFromRow(
+        PUBLIC_NO_POST,
+        post
+      ) || "/"
     );
 
 

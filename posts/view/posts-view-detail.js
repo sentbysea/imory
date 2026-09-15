@@ -620,8 +620,14 @@ async function openPostPage(
           "posts"
         )
         .select(
+          /*
+            PUBLIC-NUMBER-1: public_no 를 함께 읽는다 — 이 글의
+            정규 주소(pushState / 공유 링크 / 도구 메뉴)를 만드는
+            근거가 이 한 값이고, 내부 id 는 주소에 쓰지 않는다.
+          */
           `
           id,
+          public_no,
           category_id,
           user_id,
           title,
@@ -781,6 +787,20 @@ async function openPostPage(
   currentPostOwnerId =
     post.user_id ||
     null;
+
+
+  /*
+    PUBLIC-NUMBER-1: 이 글의 (id, public_no) 짝을 표에 적는다 —
+    이 화면에서 만들어지는 모든 주소(도구 메뉴 · 공유 · 비밀글
+    해제 후 pushState)가 왕복 없이 번호를 찾는다.
+  */
+
+  rememberPublicNo(
+    PUBLIC_NO_POST,
+    post.user_id,
+    post.id,
+    post.public_no
+  );
 
 
 
@@ -1534,7 +1554,10 @@ async function openPostPage(
       },
       "",
       buildPostRoute(
-        `/post/${post.id}`
+        publicRouteFromRow(
+          PUBLIC_NO_POST,
+          post
+        ) || "/"
       )
     );
 

@@ -5,7 +5,7 @@
    준다. X(Twitter)·카카오톡 같은 크롤러가 og:image 로 받아가는
    주소다.
 
-     /api/og/post?post=<글 id>&v=<버전>
+     /api/og/post?slug=<블로그>&post=<글 공개 번호>&v=<버전>
 
    기준 문서: IMORY_SHARE_CARD_DESIGN.md
    레이아웃:  core/lib/share-card.js (설정 화면 미리보기와 같은 파일)
@@ -253,6 +253,33 @@ export function parseShareCardPostId(
 }
 
 
+/*
+  PUBLIC-NUMBER-1: ?slug= 는 어느 블로그의 번호인지를 정한다.
+  규칙은 profiles_slug_format/length 제약과 같다(소문자·숫자·
+  하이픈, 3~30자) — 위 SHARE_CARD_POST_ROUTE 와 같은 모양이다.
+*/
+
+export function parseShareCardSlug(
+  raw
+) {
+
+  if (
+    typeof raw !== "string" ||
+    raw.length < 3 ||
+    raw.length > 30 ||
+    !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(raw)
+  ) {
+
+    return null;
+
+  }
+
+
+  return raw;
+
+}
+
+
 /* =========================================================
    버전 — 실제로 바뀔 때만 달라진다
 
@@ -357,7 +384,9 @@ export function shareCardExcerpt(
      hasCover      공개 글의 예전 COVER 업로드(post_covers) 유무
      coverImageId  공개 글의 대표 사진(본문 사진 중 한 장) id
      updatedAt     버전 계산용
-     postId        문자열 id
+     postId        주소에 쓰는 **공개 번호**(posts.public_no) 문자열
+     postRowId     그 글의 내부 id 문자열 — /api/post-cover 처럼 PK 를
+                   받는 곳에만 쓴다(PUBLIC-NUMBER-1)
 ========================================================== */
 
 /* =========================================================
@@ -488,7 +517,8 @@ export async function loadShareCardPost(
       hasCover: false,
       coverImageId: "",
       updatedAt: "",
-      postId: postId || ""
+      postId: postId || "",
+      postRowId: ""
     };
 
 
@@ -524,12 +554,18 @@ export async function loadShareCardPost(
   */
 
   /*
-    글 주인까지 조건에 넣는다 — 주소의 slug 와 다른 사람의 글
-    id 를 붙여 놓은 요청은 "없는 글"로 끝난다.
+    PUBLIC-NUMBER-1: 주소의 숫자는 이 블로그 안의 공개 번호
+    (posts.public_no)이고 PK 가 아니다. 그래서 주인과 **한 쌍으로만**
+    조회한다 — 번호만으로는 행이 특정되지 않는다(다른 블로그에도
+    같은 번호가 있다).
+
+    이것이 "다른 사용자의 글로 fallback 하지 않는다"를 지키는
+    지점이다: 이 블로그에 그 번호가 없으면 아래에서 post 가
+    undefined 가 되고 기본 카드로 끝난다.
   */
 
   const postQuery =
-    `posts?id=eq.${encodeURIComponent(postId)}` +
+    `posts?public_no=eq.${encodeURIComponent(postId)}` +
     `&user_id=eq.${encodeURIComponent(profile.user_id)}`;
 
 
@@ -595,6 +631,17 @@ export async function loadShareCardPost(
   }
 
 
+  /*
+    PUBLIC-NUMBER-1: 여기서부터는 **내부 id** 다. post_covers /
+    post_gallery_images / post_contents 의 post_id 는 전부
+    posts.id 를 가리키는 FK 이고, 공개 번호와는 다른 값이다.
+    위에서 확정된 행의 id 를 쓴다(주소의 숫자가 아니다).
+  */
+
+  const postRowId =
+    post.id;
+
+
   const [categoryRows, folderRows, coverRows, photoRows, contentRows] =
     await Promise.all([
 
@@ -614,7 +661,7 @@ export async function loadShareCardPost(
 
       ogSupabaseSelect(
         env,
-        `post_covers?post_id=eq.${encodeURIComponent(postId)}&select=post_id&limit=1`
+        `post_covers?post_id=eq.${encodeURIComponent(postRowId)}&select=post_id&limit=1`
       ),
 
       /*
@@ -632,13 +679,13 @@ export async function loadShareCardPost(
 
       ogSupabaseSelect(
         env,
-        `post_gallery_images?post_id=eq.${encodeURIComponent(postId)}` +
+        `post_gallery_images?post_id=eq.${encodeURIComponent(postRowId)}` +
         `&select=id,position,is_primary&order=position.asc&limit=200`
       ),
 
       ogSupabaseSelect(
         env,
-        `post_contents?post_id=eq.${encodeURIComponent(postId)}&select=content&limit=1`
+        `post_contents?post_id=eq.${encodeURIComponent(postRowId)}&select=content&limit=1`
       )
 
     ]);
@@ -692,6 +739,16 @@ export async function loadShareCardPost(
 
     coverImageId:
       pickShareCardCoverImageId(photoRows),
+
+    /*
+      PUBLIC-NUMBER-1: 주소에 쓰는 번호(postId)와 별개로, 내부
+      id 도 함께 들고 간다 — /api/post-cover 는 글의 **PK** 를
+      받는 프록시라 공개 번호를 주면 다른 글의 사진이 나오거나
+      404 가 된다(functions/api/post-cover.js).
+    */
+
+    postRowId:
+      String(post.id || ""),
 
     updatedAt:
       String(post.updated_at || "")
@@ -785,7 +842,8 @@ export function shareCardBackgroundUrl(
 
   if (context.ok && context.hasCover) {
 
-    return `${origin}/api/post-cover?post=${encodeURIComponent(context.postId)}`;
+    /* PUBLIC-NUMBER-1: 이 프록시는 글의 내부 id 를 받는다 */
+    return `${origin}/api/post-cover?post=${encodeURIComponent(context.postRowId)}`;
 
   }
 
@@ -837,9 +895,17 @@ export function shareCardImageEndpoint(
     ]);
 
 
+  /*
+    PUBLIC-NUMBER-1: ?post= 는 이제 **그 블로그 안의 공개 번호**다.
+    번호만으로는 글이 특정되지 않으므로 slug 를 함께 싣는다 —
+    이 주소를 받은 쪽(아래 onRequest)이 (slug 주인, 번호) 한 쌍으로
+    다시 찾는다. 예전처럼 번호 하나로 주인을 거꾸로 찾을 수는 없다.
+  */
+
   return (
     `${origin}/api/og/post` +
-    `?post=${encodeURIComponent(context.postId)}` +
+    `?slug=${encodeURIComponent(context.slug)}` +
+    `&post=${encodeURIComponent(context.postId)}` +
     `&v=${encodeURIComponent(version)}`
   );
 
@@ -1764,13 +1830,53 @@ function shareCardCacheStore() {
 
 async function loadShareCardPostOwner(
   env,
+  slug,
   postId
 ) {
+
+  /*
+    PUBLIC-NUMBER-1: 번호만으로는 글을 찾을 수 없다 — 먼저 slug 로
+    블로그 주인을 정하고, 그 주인 안에서 번호를 본다. 이 순서가
+    "남의 블로그 번호로 카드를 받아 가는" 길을 막는다.
+  */
+
+  if (!slug) {
+
+    return {
+      isPublic: false,
+      ownerId: ""
+    };
+
+  }
+
+
+  const profiles =
+    await ogSupabaseSelect(
+      env,
+      `profiles?slug=eq.${encodeURIComponent(slug)}&select=user_id&limit=1`
+    );
+
+
+  const ownerId =
+    (profiles[0] && profiles[0].user_id) || "";
+
+
+  if (!ownerId) {
+
+    return {
+      isPublic: false,
+      ownerId: ""
+    };
+
+  }
+
 
   const rows =
     await ogSupabaseSelect(
       env,
-      `posts?id=eq.${encodeURIComponent(postId)}&select=user_id,visibility&limit=1`
+      `posts?public_no=eq.${encodeURIComponent(postId)}` +
+      `&user_id=eq.${encodeURIComponent(ownerId)}` +
+      `&select=user_id,visibility&limit=1`
     );
 
 
@@ -1792,10 +1898,12 @@ async function loadShareCardPostOwner(
 
 
 /* =========================================================
-   GET /api/og/post?post=<id>&v=<버전>
+   GET /api/og/post?slug=<블로그>&post=<공개 번호>&v=<버전>
 
-   slug 를 받지 않는다 — 크롤러가 받아가는 주소를 짧게 유지하고,
-   글 id 하나로 주인을 거꾸로 찾는다.
+   PUBLIC-NUMBER-1 이전에는 slug 를 받지 않고 글 id 하나로 주인을
+   거꾸로 찾았다. 지금은 ?post= 가 **그 블로그 안에서만 뜻이 있는
+   번호**라(블로그마다 1 부터 다시 센다) 혼자서는 글을 가리키지
+   못한다 — slug 와 번호가 한 쌍이어야 한다.
 ========================================================== */
 
 export async function onRequest(
@@ -1836,7 +1944,16 @@ export async function onRequest(
     parseShareCardPostId(url.searchParams.get("post"));
 
 
-  if (!postId) {
+  /*
+    PUBLIC-NUMBER-1: slug 가 필수가 됐다. ?post= 는 그 블로그 안의
+    공개 번호라 혼자서는 글을 가리키지 못한다 — 둘이 한 쌍이다.
+  */
+
+  const slug =
+    parseShareCardSlug(url.searchParams.get("slug"));
+
+
+  if (!postId || !slug) {
 
     return new Response(
       "",
@@ -1901,7 +2018,7 @@ export async function onRequest(
   */
 
   const owner =
-    await loadShareCardPostOwner(env, postId);
+    await loadShareCardPostOwner(env, slug, postId);
 
 
   if (!owner.isPublic) {
@@ -1980,16 +2097,10 @@ export async function onRequest(
   }
 
 
-  const profiles =
-    await ogSupabaseSelect(
-      env,
-      `profiles?user_id=eq.${encodeURIComponent(ownerId)}&select=slug&limit=1`
-    );
-
-
-  const slug =
-    profiles[0] && profiles[0].slug;
-
+  /*
+    PUBLIC-NUMBER-1: slug 는 이제 요청이 들고 온다 — 주인을 거꾸로
+    찾아 slug 를 알아내던 왕복 하나가 없어졌다.
+  */
 
   const cardContext =
     await loadShareCardPost(env, slug, postId);

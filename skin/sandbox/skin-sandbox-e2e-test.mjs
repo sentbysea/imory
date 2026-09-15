@@ -2170,6 +2170,22 @@ function homeQueryTable(table, params) {
 
   let rows = (HOME_DB[table] || []).map(r => ({ ...r }));
 
+  /*
+    PUBLIC-NUMBER-1: 공개 주소의 번호(categories.public_no /
+    posts.public_no)를 이 mock 이 대신 채운다. 실제 DB 에서는 트리거가
+    블로그마다 1 부터 매기지만, 여기서는 **id 와 같은 값**을 준다 —
+    그래야 이 파일이 원래 확인하던 주소가 그대로 유지되고, 검사의
+    초점이 번호 체계 변경에 가려지지 않는다. 번호와 id 가 **다를
+    때**의 동작은 skin/skin-public-number-e2e-test.mjs 가 따로 본다.
+  */
+  if (table === "posts" || table === "categories") {
+    rows = rows.map(row => (
+      row && row.public_no === undefined && row.id !== undefined
+        ? { ...row, public_no: row.id }
+        : row
+    ));
+  }
+
   for (const [key, raw] of params.entries()) {
     if (HOME_RESERVED_PARAMS.has(key)) continue;
     const m = /^(eq|neq|in|gt|gte|lt|lte)\.(.*)$/s.exec(raw);

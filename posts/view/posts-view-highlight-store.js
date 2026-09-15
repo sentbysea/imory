@@ -1428,6 +1428,7 @@ async function loadHighlightCards(
       updated_at,
       posts!inner (
         id,
+        public_no,
         title,
         category_id,
         folder_id,
@@ -1521,6 +1522,24 @@ async function loadHighlightCards(
             Array.isArray(row.posts)
               ? row.posts[0]
               : row.posts;
+
+
+          /*
+            PUBLIC-NUMBER-1: 원문 글의 (id, public_no) 짝을 표에
+            적는다 — 카드의 "원문 보기" 링크가 이 표에서 나온다
+            (core/lib/public-number.js).
+          */
+
+          if (typeof rememberPublicNo === "function") {
+
+            rememberPublicNo(
+              PUBLIC_NO_POST,
+              ownerId,
+              post && post.id,
+              post && post.public_no
+            );
+
+          }
 
 
           return {
