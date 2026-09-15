@@ -1315,6 +1315,18 @@ async function runBodyParity(browser) {
     const s = getComputedStyle(el);
     const hl = el.querySelector(".post-inline-highlight");
     const pc = el.querySelector(".post-inline-color");
+
+    /*
+      ★ SANDBOX-3.2 — 아래 네 값은 **인라인이 아니라 class 규칙**에서
+      온다(posts/posts-body-shared.css). 프레임이 그 CSS 를 읽지
+      않으면 서식이 다 맞는데 이 넷만 어긋난다 — 형광펜이 글자에
+      딱 붙고, 줄이 바뀔 때 띠가 잘리고, 저장용 강조선 마커가
+      인라인 상자로 남는다.
+    */
+    const rm = el.querySelector(".post-para-rule");
+    const rb = el.querySelector(".post-para-rule-box");
+    const rbs = rb ? getComputedStyle(rb) : null;
+
     return {
       fontFamily: s.fontFamily,
       fontSize: s.fontSize,
@@ -1325,6 +1337,18 @@ async function runBodyParity(browser) {
       textAlign: s.textAlign,
       wordBreak: s.wordBreak,
       highlightImage: hl ? getComputedStyle(hl).backgroundImage : "",
+      highlightPadding: hl ? getComputedStyle(hl).paddingLeft : "",
+      highlightDecorationBreak:
+        hl
+          ? (getComputedStyle(hl).boxDecorationBreak ||
+             getComputedStyle(hl).webkitBoxDecorationBreak || "")
+          : "",
+      ruleMarkerDisplay: rm ? getComputedStyle(rm).display : "(없음)",
+      ruleBoxBorder:
+        rbs
+          ? rbs.borderLeftWidth + " " + rbs.borderLeftStyle + " " +
+            rbs.borderLeftColor
+          : "(없음)",
       pointColor: pc ? getComputedStyle(pc).color : "",
       text: el.innerText.replace(/\s+/g, " ").trim()
     };
@@ -1383,6 +1407,10 @@ async function runBodyParity(browser) {
     ["textAlign", "정렬"],
     ["wordBreak", "줄바꿈"],
     ["highlightImage", "형광펜"],
+    ["highlightPadding", "형광펜 좌우 여백"],
+    ["highlightDecorationBreak", "형광펜 줄바꿈 처리"],
+    ["ruleMarkerDisplay", "강조선 마커 숨김"],
+    ["ruleBoxBorder", "강조선 굵기·색"],
     ["pointColor", "포인트 색"],
     ["text", "본문 글자"]
   ];
@@ -1392,6 +1420,26 @@ async function runBodyParity(browser) {
       nativeValues[key] === frameValues[key],
       `native=${String(nativeValues[key]).slice(0, 60)} / frame=${String(frameValues[key]).slice(0, 60)}`);
   }
+
+
+  /*
+    ★ "둘 다 똑같이 빠진" 경우를 위 비교만으로는 못 잡는다.
+    class 규칙이 실제로 걸렸다는 것을 절대값으로도 확인한다.
+  */
+
+  check("[bodyparity] ★ 형광펜이 class 규칙을 실제로 받았다 (여백·clone)",
+    parseFloat(frameValues.highlightPadding) > 0 &&
+    frameValues.highlightDecorationBreak === "clone",
+    frameValues.highlightPadding + " / " + frameValues.highlightDecorationBreak);
+
+  check("[bodyparity] ★ 강조선 마커는 양쪽에서 display:none",
+    nativeValues.ruleMarkerDisplay === "none" &&
+    frameValues.ruleMarkerDisplay === "none",
+    nativeValues.ruleMarkerDisplay + " / " + frameValues.ruleMarkerDisplay);
+
+  check("[bodyparity] ★ 강조선이 양쪽에서 실제로 그려진다",
+    /^3px solid/.test(frameValues.ruleBoxBorder),
+    frameValues.ruleBoxBorder);
 
 }
 

@@ -2382,6 +2382,134 @@ CSP 실측(§M-3)도 두 엔진에서 같은 표가 나왔다 — 이 라운드�
 
 ---
 
+## N. SANDBOX-3.2 구현 기록 (2026-09-15) — 본문이 기대는 **class 규칙**
+
+기준 테스트: `skin/sandbox/skin-sandbox-e2e-test.mjs --only=bodyparity` (8957) ·
+`studio/studio-sandbox-preview-e2e-test.mjs --only=bodyparity` (8959)
+
+### N-1. 증상
+
+§M(SANDBOX-3.1)로 Quote Preset 의 글꼴·크기·색·행간·형광펜 색이 프레임에
+도착하게 됐는데도, 같은 글이 공개 native 화면과 프레임에서 여전히 다르게
+보였다. 2026-09-15 실측(같은 글·같은 스킨·renderMode 만 다르게 두 번 열어
+계산값 비교):
+
+| 대상 | native | 프레임 |
+| --- | --- | --- |
+| 형광펜 좌우 여백 | `2.28px` (0.12em) | `0px` |
+| 형광펜 줄바꿈 처리 | `box-decoration-break: clone` | `slice` |
+| 강조선 **마커** `.post-para-rule` | `display: none` | `display: inline` |
+| 복사 상자 `.post-copy-box` | 옅은 배경 + 왼쪽 포인트 선 | 아무 모양 없음 |
+| 구분선 `.post-divider` | 점선 | 아무 모양 없음 |
+
+### N-2. 원인 — 본문은 **두 종류**의 스타일에 기댄다
+
+1. **인라인 선언** — 프리셋에서 계산되는 값(글꼴·크기·색·행간·형광펜
+   그라디언트·강조선 두께). `renderStyledPostContentInto()` 가 요소마다
+   직접 적는다. §M 이 이것을 stylesheet 로 옮겨 CSP 를 통과시켰다.
+2. **class 규칙** — 프리셋과 무관한 고정 규칙(위 표의 다섯 가지).
+   스타일시트에만 있다.
+
+2) 는 `posts/posts-list-detail.css` 와 `posts/posts-body-blocks.css` 안에
+있었고, 프레임은 둘 다 읽지 않는다. §M 은 1) 만 다뤘으므로 2) 는 그대로
+빠져 있었다.
+
+같은 원인으로 **두 화면이 더** 어긋나 있었다 —
+`studio/preview/preview-frame.html` 은 `posts-body-blocks.css` 만 읽었고,
+`admin/index.html`(Quote Preset 미리보기)도 마찬가지였다. 즉 형광펜 여백과
+강조선 마커는 **네 화면 중 둘**에서만 맞고 있었다.
+
+### N-3. 고친 방향 — 한 파일을 네 화면이 같이 읽는다
+
+`posts/posts-body-shared.css` 를 새로 만들고, `posts-list-detail.css` 에
+있던 본문 공용 규칙을 **옮겼다**(복사하지 않았다 — 기준은 한 곳이다,
+CLAUDE.md §5).
+
+읽는 문서 넷:
+
+| 문서 | 무엇을 그리나 |
+| --- | --- |
+| `index.html` | 공개 글 뷰어 · 에디터 PREVIEW · 발췌 export |
+| `admin/index.html` | Quote Preset 미리보기 |
+| `studio/preview/preview-frame.html` | Studio Preview(native) |
+| `skin/sandbox/frame.html` | sandbox 프레임(공개 · Studio Preview 공용) |
+
+프레임은 `posts-body-shared.css` 와 `posts-body-blocks.css` 를 **자기
+origin 에서** `<link>` 로 읽는다. CSP 의 `style-src 'self'` 가 이미
+허용하므로 **CSP 는 한 글자도 바뀌지 않았다**. 두 경로를
+`SANDBOX_ALLOWED_PATHS`(`core/lib/skin-sandbox-server.js`)에 더했다 —
+그 목록에 없으면 404 라, "링크는 걸었는데 안 나온다"가 조용히 생기지
+않게 단위 테스트가 frame.html 의 `.css` 참조도 allowlist 와 대조한다.
+
+순서: `<link>` 는 파싱 시점에 head 에 들어가고, 스킨 CSS 는
+`renderSkin()` 이 렌더 시점에 `<style>` 로 붙이므로 **항상 뒤**다.
+같은 특정도면 스킨이 이긴다 — native 와 같은 관계다. 프리셋에서 온
+선언(`#sandboxFrameRoot .imory-pb-N`)은 둘 다 이긴다.
+
+### N-4. 곁다리로 드러난 것 — 공개 뷰어가 프리셋 **글자 크기**를 버리고 있었다
+
+위 비교를 붙이자 프레임이 아니라 **native 쪽**이 틀렸다. 프리셋
+`bodySize: 19` 인 글이 공개 화면에서 16px 로 그려졌다.
+
+`initReaderFontScaleForCurrentPost()`(`posts/posts-reader-scale.js`)가
+기준 크기를 재려고 `host.style.removeProperty("font-size")` 를 했는데,
+그 인라인 값이 바로 **`applyPostBodyStyles()` 가 방금 적은 프리셋
+크기**였다. 지우고 나면 그릇이 주변에서 물려받는 크기가 기준이 된다 —
+legacy 에서는 `.post-detail-content` 의 13px, 스킨 region 에서는 그
+문서의 기본값. 배율 1 에서도 그 값이 다시 인라인으로 적히므로 프리셋의
+`bodySize` 는 **항상** 버려졌다. sandbox 경로는 이 함수를 부르지 않아서
+(조절할 DOM 이 없다) 프레임 쪽만 맞고 있었던 것이다.
+
+고친 방법: `applyPostBodyStyles()` 가 그릇에
+`data-post-body-base-font-size` 로 **조절 전 크기**를 적어 두고,
+reader-scale 이 지우는 대신 그 값을 읽는다. 누적 방지(원래 지우던 이유)는
+그대로다 — 적히는 값이 언제나 "조절 전" 이기 때문이다. 그 값이 없는
+그릇에서는 예전 동작 그대로다. data 속성이라 프레임으로 나가는
+`containerStyle` 에도, 발췌 export 그림에도 실리지 않는다.
+
+### N-5. 고친 파일
+
+| 파일 | 무엇을 |
+| --- | --- |
+| `posts/posts-body-shared.css` | **새 파일** — 본문 공용 class 규칙 |
+| `posts/posts-list-detail.css` | 그 규칙을 덜어내고 옮긴 자리를 적음 |
+| `index.html` · `admin/index.html` · `studio/preview/preview-frame.html` | 새 파일을 읽는다 |
+| `skin/sandbox/frame.html` | 본문 CSS 두 벌을 `<link>` 로 읽는다 |
+| `core/lib/skin-sandbox-server.js` | 그 두 경로를 allowlist 에 추가 |
+| `posts/style/posts-body-layout.js` | 조절 전 글자 크기를 그릇에 적는다 |
+| `posts/posts-reader-scale.js` | 지우고 재는 대신 그 값을 읽는다 |
+
+### N-6. 검증 (mock e2e — 실제 DB·배포 확인 아님)
+
+- `skin/sandbox/skin-sandbox-e2e-test.mjs --only=bodyparity` —
+  같은 글을 renderMode 만 바꿔 두 번 열고, 컨테이너·형광펜·강조선
+  마커·강조선 상자·포인트 색·문단 간격·복사 상자·구분선의 **계산
+  스타일**과 DOM 구조를 견준다. 전 항목 일치.
+  전체 8957: 390 passed / 0 failed.
+- `studio/studio-sandbox-preview-e2e-test.mjs --only=bodyparity` —
+  Studio Preview 의 native 와 프레임. 형광펜 여백·줄바꿈 처리·강조선
+  마커·강조선 굵기까지 견준다. 전체 8959: 88 passed / 0 failed.
+- 회귀: 8952 하이라이트(122) · 8935 배너/POST(248) · 8950 Quote 렌더
+  일치(206) · 8951 본문 장식(256) · 8948 `--only=excerpt`(62) ·
+  8944 폴더 페이지(71) · 8955 배포 버전(37) · sandbox 단위 테스트(202).
+
+### N-7. 남은 차이
+
+- **읽는 이의 하이라이트 표시(`.post-highlight`)는 프레임에 덧칠되지
+  않는다.** native 는 본문을 그린 뒤
+  `renderPostHighlights()` 로 덧칠하는데, 프레임 안에서는 그 표시도
+  말풍선도 없다 — §K-6 의 같은 뿌리(cross-origin 에서 region 을 채우지
+  못한다)다. `--only=bodyparity` 가 이 차이를 `1 / 0` 으로 못박아
+  두어서, 조용히 고쳐지거나 조용히 더 벌어지면 먼저 실패한다.
+- **글자 크기 조절(도구 메뉴)도 프레임에는 걸리지 않는다**(§SANDBOX-2
+  때부터의 차이). 기본 배율에서는 두 화면이 같지만, 방문자가 크기를
+  바꾸면 native 만 따라간다.
+- 본문 파이프라인이 새 class 를 만들기 시작하면 그 규칙도
+  `posts-body-shared.css` 에 넣어야 한다. 넣지 않으면 프레임에서만
+  모양이 빠진다.
+
+---
+
 ## 남은 차이 (아직 정하지 않은 것)
 
 - 비밀글 gate를 프레임 안/밖 어디에 둘 것인가 (SANDBOX-3)

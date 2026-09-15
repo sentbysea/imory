@@ -494,6 +494,22 @@ check("[path] ★ 그래도 다른 skin 파일은 허용되지 않는다",
   server.isSandboxAllowedPath("/skin/skin-template.js") === false &&
   server.isSandboxAllowedPath("/studio/studio-preview.js") === false);
 
+
+/*
+  SANDBOX-3.2 — 본문 class 규칙 두 벌. 공개 화면과 같은 파일이라
+  프레임이 같은 본문을 같은 모양으로 그린다.
+*/
+check("[path] ★ SANDBOX-3.2: 본문 공용 CSS 두 벌이 허용된다",
+  server.isSandboxAllowedPath("/posts/posts-body-shared.css") === true &&
+  server.isSandboxAllowedPath("/posts/posts-body-blocks.css") === true);
+
+check("[path] ★ 그래도 나머지 posts CSS/JS 는 허용되지 않는다",
+  server.isSandboxAllowedPath("/posts/posts-list-detail.css") === false &&
+  server.isSandboxAllowedPath("/posts/posts-base.css") === false &&
+  server.isSandboxAllowedPath("/posts/posts-editor.css") === false &&
+  server.isSandboxAllowedPath("/posts/style/posts-style-render.js") === false,
+  "본문이 쓰는 두 파일만 열었다 — posts 디렉터리를 연 것이 아니다");
+
 check("[path] ★ isSandboxFramePath 는 두 주소를 모두 frame 으로 본다",
   server.isSandboxFramePath("/skin/sandbox/frame") === true &&
   server.isSandboxFramePath("/skin/sandbox/frame.html") === true,
@@ -617,6 +633,26 @@ const referenced = [...frameCode.matchAll(/["'](\/[^"']+\.js)(\?|["'])/g)]
 check("[frame] frame.html 이 참조하는 스크립트가 전부 allowlist 안이다",
   referenced.length > 0 && referenced.every(server.isSandboxAllowedPath),
   referenced.join(", "));
+
+
+/*
+  SANDBOX-3.2 — 스타일시트도 같은 규칙이다. 스크립트만 보면
+  "링크는 걸었는데 서버가 404" 라는 조용한 실패를 못 잡는다
+  (그때 본문은 나오되 형광펜 여백과 강조선 마커만 달라진다).
+*/
+
+const referencedStyles = [...frameCode.matchAll(/["'](\/[^"']+\.css)(\?|["'])/g)]
+  .map(m => m[1]);
+
+check("[frame] ★ frame.html 이 읽는 스타일시트도 전부 allowlist 안이다",
+  referencedStyles.length > 0 &&
+  referencedStyles.every(server.isSandboxAllowedPath),
+  referencedStyles.join(", "));
+
+check("[frame] ★ 본문 공용 CSS 두 벌을 실제로 읽는다",
+  referencedStyles.includes("/posts/posts-body-shared.css") &&
+  referencedStyles.includes("/posts/posts-body-blocks.css"),
+  referencedStyles.join(", "));
 
 check("[frame] ★ supabase / 인증 / studio 코드를 로드하지 않는다",
   !/supabase|auth\/|admin\/|studio\/|skin-context/.test(frameCode));

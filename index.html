@@ -664,6 +664,18 @@
         "./themes/sua/heart-interaction.css",
         "./themes/sua/cover-profile.css",
         "./posts/posts-base.css",
+
+        /*
+          본문이 그려지는 모든 화면의 공용 CSS — 형광펜 여백 ·
+          강조선 마커 숨김 · 대사/지문의 글자 상속. 원래
+          posts-list-detail.css 안에 있었는데, 그 파일을 읽지 않는
+          화면(sandbox 프레임 · Studio Preview · Quote Preset
+          미리보기)에서 같은 본문이 다르게 보여서 따로 뺐다.
+          ★ posts-list-detail.css **바로 앞**이어야 한다 — 옮기기
+          전과 같은 자리라야 뒤 규칙과의 우선순위가 그대로다.
+        */
+        "./posts/posts-body-shared.css",
+
         "./posts/posts-list-detail.css",
         "./posts/view/posts-view-banner.css",
         "./posts/manage/posts-folder-tree.css",

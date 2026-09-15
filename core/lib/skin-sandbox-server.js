@@ -109,7 +109,29 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/skin/skin-render.js",
   "/skin/skin-css-validate.js",
   "/core/content-width.js",
-  "/core/content-width.css"
+  "/core/content-width.css",
+
+  /* =====================================================
+     SANDBOX-3.2 — POST 본문의 class 규칙. 공개 화면과 **같은
+     파일**이다.
+
+     본문은 프리셋에서 계산된 값을 인라인으로 달고 오지만
+     (부모가 stylesheet 로 옮긴다 —
+      posts/style/posts-body-style-extract.js), 프리셋과 무관한
+     고정 규칙은 스타일시트에만 있다: 형광펜 좌우 여백과
+     box-decoration-break, 강조선 마커 숨김, 대사/지문의 글자
+     상속, 복사 상자·메모·구분선의 모양.
+
+     이 둘이 없으면 같은 글이 프레임에서만 다르게 보인다
+     (2026-09-15 실측 — posts/posts-body-shared.css 머리말).
+
+     ★ CSS 파일은 스크립트를 실행하지 못한다. 열어 주는 것은
+       "이 문서가 실제로 읽는 두 파일"뿐이고, 앱·인증·
+       supabase client·관리자·Studio는 여전히 404다.
+  ====================================================== */
+
+  "/posts/posts-body-shared.css",
+  "/posts/posts-body-blocks.css"
 ];
 
 

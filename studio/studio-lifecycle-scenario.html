@@ -869,7 +869,20 @@
                   '<span class="post-inline-highlight" data-highlight="#ffe08a" style="background-color:#ffe08a">형광펜 구간</span> ' +
                   '<span class="post-inline-color" data-point-color="#cc0033" style="color:#cc0033">포인트 색</span> ' +
                   '<span id="sbEvil" style="background-image:url(https://evil.example/leak.png);position:fixed;top:0;z-index:99999">주입 시도</span>' +
-                  '<br><br>두 번째 문단이다.'
+                  '<br><br>' +
+                  /*
+                    SANDBOX-3.2 — class 규칙에 기대는 것들.
+
+                    강조선 마커(.post-para-rule)는 저장용 표시라
+                    화면에 아무 것도 그리지 않아야 하고(display:none),
+                    실제 선은 렌더가 만드는 .post-para-rule-box 가
+                    그린다. 그 둘과 형광펜의 좌우 여백은 인라인이
+                    아니라 스타일시트에 있다 —
+                    posts/posts-body-shared.css 가 없으면 여기서만
+                    모양이 달라진다.
+                  */
+                  '<span class="post-para-rule" data-rule="on" data-rule-color="#ee9fbd"></span>' +
+                  '두 번째 문단이다.'
               },
               { post_id: "402", content: "비밀 본문입니다." }
             ],
@@ -895,7 +908,12 @@
                   bodyAlign: "justify",
                   lineBreak: "char",
                   paragraphSpacing: 22,
-                  highlightHeight: 45
+                  highlightHeight: 45,
+
+                  /* 문단 강조선 — .post-para-rule-box 가 실제로 그려지도록 */
+                  bodyRuleColor: "#ee9fbd",
+                  bodyRuleWidth: 3,
+                  bodyRuleGap: 12
                 }
               }
             ],

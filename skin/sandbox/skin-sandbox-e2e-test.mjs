@@ -2046,7 +2046,19 @@ const HOME_DB = {
       created_at: "2026-08-20T02:00:00Z", quote_preset_id: null }
   ],
   post_contents: [
-    { post_id: 101, content: "<p>첫 번째 글의 본문이다.</p>" },
+    /*
+      ★ SANDBOX-3.2 — 장식이 든 진짜 글 한 벌.
+
+      형광펜(.post-inline-highlight) · 강조선 마커(.post-para-rule) ·
+      포인트 색(.post-inline-color) · 복사 상자 · 구분선. 이 다섯이
+      본문 파이프라인이 만드는 결과 중 **class 규칙에 기대는**
+      것들이라(posts/posts-body-shared.css · posts-body-blocks.css),
+      프레임이 그 CSS 를 읽지 않으면 여기서만 모양이 달라진다.
+
+      기존 절들은 "첫 번째 글의 본문" 문장만 보므로 그 문장은
+      그대로 두고 장식만 둘렀다.
+    */
+    { post_id: 101, content: "<span class=\"post-inline-highlight\" data-highlight=\"#f4dce6\" style=\"background-color: rgb(244, 220, 230);\">첫 번째 글의 본문이다.</span><br><br><span class=\"post-para-rule\" data-rule=\"on\" data-rule-color=\"#ee9fbd\"></span><span class=\"post-inline-color\" data-point-color=\"#ff8c82\" style=\"color: rgb(255, 140, 130);\">강조선</span>이 걸린 문단이다.<br>두 번째 줄.<div class=\"post-copy-box\"><span class=\"post-copy-box-title\">COPY</span><span class=\"post-copy-box-body\">copy me</span></div><div class=\"post-divider\" data-divider=\"dotted\"></div>" },
     { post_id: 102, content: "<p>두 번째 글의 본문이다.</p>" },
     { post_id: 103, content: "<p>비밀 본문</p>" },
     { post_id: 201, content: "<p>사진 글의 본문이다.</p>" }
@@ -2097,7 +2109,13 @@ const HOME_DB = {
         letterSpacing: 0.4,
         bodyAlign: "justify",
         lineBreak: "char",
-        highlightHeight: 45
+        highlightHeight: 45,
+
+        /* 문단 강조선 — .post-para-rule-box 가 실제로 그려지도록 */
+        bodyRuleColor: "#ee9fbd",
+        bodyRuleWidth: 3,
+        bodyRuleGap: 12,
+        paragraphSpacing: 14
       }
     }
   ]
@@ -3595,6 +3613,373 @@ async function runNav(browser) {
 }
 
 
+
+
+/* =========================================================
+   [bodyparity] 같은 글이 native 와 프레임에서 같은 모양인가
+             — SANDBOX-3.2
+
+   기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §M-3
+
+   ★ 무엇을 보는가
+
+   본문은 두 종류의 스타일에 기댄다.
+
+     1) 인라인 선언   프리셋에서 계산되는 글꼴·크기·색·행간·
+                      형광펜 그라디언트·강조선 두께. 부모가 검증해
+                      nonce 붙은 <style> 로 옮긴다(SANDBOX-3.1,
+                      posts/style/posts-body-style-extract.js).
+     2) class 규칙    프리셋과 무관한 고정 규칙 — 형광펜 좌우
+                      여백과 box-decoration-break, 강조선 **마커**
+                      숨김, 대사/지문의 글자 상속, 복사 상자·
+                      구분선의 모양.
+
+   2) 는 스타일시트에만 있고 프레임은 그것을 읽지 않았다. 그래서
+   SANDBOX-3.1 뒤에도 같은 글이 프레임에서만 달랐다 — 형광펜 좌우
+   여백 0, 줄이 바뀌면 띠가 잘림(box-decoration-break: slice),
+   강조선 마커가 display:none 이 아니라 인라인 상자로 남음, 복사
+   상자와 구분선은 아무 모양도 없음.
+
+   ★ 어떻게 판정하는가
+
+   같은 글(post 101)을 **같은 스킨**으로 두 번 연다 — 한 번은
+   renderMode 를 뺀 native 로, 한 번은 sandbox 로. 그리고
+   **계산값**을 요소별로 맞춰 본다. "CSS 를 읽었는가"가 아니라
+   "화면이 같은가"를 보는 것이다.
+
+   DOM 도 비교한다. 프레임 쪽은 inline style 이 클래스로 바뀌어
+   있으므로(imory-pb-N) 그 둘만 지우고 글자 단위로 견준다 —
+   구조가 달라지면 여기서 걸린다.
+========================================================== */
+
+/*
+  두 화면에서 **같은 함수**로 같은 것을 읽는다. 여기 있는 속성은
+  전부 본문 파이프라인이 실제로 정하는 것들이다.
+*/
+
+const BODY_PARITY_PROBE = () => {
+
+  /*
+    ★ 보이는 것만 고른다. 화면을 옮겨도 이전 화면의 컨테이너는
+    hidden 으로 남아 있을 뿐 비워지지 않아서(위 waitForSandboxPage
+    주석과 같은 이유), 첫 번째 region 을 집으면 옛 화면의 빈 자리를
+    재게 된다.
+  */
+
+  const all =
+    [...document.querySelectorAll('[data-imory-region="post-body"]')];
+
+  const root =
+    all.find(el => el.getClientRects().length > 0) ||
+    all[all.length - 1];
+
+  if (!root) {
+    return { missing: true };
+  }
+
+  const pick = (el) => {
+
+    if (!el) return null;
+
+    const s = getComputedStyle(el);
+
+    return {
+      tag: el.tagName,
+      fontFamily: s.fontFamily,
+      fontSize: s.fontSize,
+      fontWeight: s.fontWeight,
+      color: s.color,
+      lineHeight: s.lineHeight,
+      letterSpacing: s.letterSpacing,
+      textAlign: s.textAlign,
+      textIndent: s.textIndent,
+      wordBreak: s.wordBreak,
+      whiteSpace: s.whiteSpace,
+      display: s.display,
+      backgroundColor: s.backgroundColor,
+      backgroundImage: s.backgroundImage,
+      backgroundSize: s.backgroundSize,
+      backgroundRepeat: s.backgroundRepeat,
+      borderLeft:
+        s.borderLeftWidth + " " + s.borderLeftStyle + " " + s.borderLeftColor,
+      borderTop:
+        s.borderTopWidth + " " + s.borderTopStyle + " " + s.borderTopColor,
+      paddingTop: s.paddingTop,
+      paddingRight: s.paddingRight,
+      paddingBottom: s.paddingBottom,
+      paddingLeft: s.paddingLeft,
+      marginTop: s.marginTop,
+      marginBottom: s.marginBottom,
+      boxDecorationBreak:
+        s.boxDecorationBreak || s.webkitBoxDecorationBreak || "",
+      height: Math.round(el.getBoundingClientRect().height),
+      width: Math.round(el.getBoundingClientRect().width)
+    };
+
+  };
+
+  /*
+    ★ 견주기 전에 두 가지를 걷어낸다.
+
+    1) imory-pb-N 클래스와 style 속성
+       같은 선언이 프레임에서는 클래스로, native 에서는 inline 으로
+       있을 뿐이다(SANDBOX-3.1). 표현 방식이 아니라 구조를 본다.
+
+    2) 읽는 이의 하이라이트 표시(.post-highlight)
+       native 는 본문을 그린 **뒤** 이 표시를 덧칠한다
+       (posts/view/posts-view-highlight-anchor.js). 프레임 안에서는
+       아직 덧칠하지 않는다 — 설계 문서 §K-6 의 알려진 차이이고,
+       본문 렌더 계약과는 별개다. 여기서는 감싼 span 만 벗겨 견주고,
+       그 차이 자체는 아래에서 따로 기록한다.
+  */
+
+  const shapeOf = (el) => {
+
+    const clone = el.cloneNode(true);
+
+    clone.querySelectorAll(".post-highlight").forEach(mark => {
+      while (mark.firstChild) mark.parentNode.insertBefore(mark.firstChild, mark);
+      mark.remove();
+    });
+
+    return clone.innerHTML
+      .replace(/ ?imory-pb-[a-z0-9-]+/g, "")
+      .replace(/ style="[^"]*"/g, "")
+      .replace(/ class=""/g, "");
+
+  };
+
+
+  return {
+    shape: shapeOf(root),
+
+    /* 알려진 차이(§K-6)를 숫자로 남긴다 */
+    readerHighlights: root.querySelectorAll(".post-highlight").length,
+
+    container: pick(root),
+    highlight: pick(root.querySelector(".post-inline-highlight")),
+    ruleMarker: pick(root.querySelector(".post-para-rule")),
+    ruleBox: pick(root.querySelector(".post-para-rule-box")),
+    pointColor: pick(root.querySelector(".post-inline-color")),
+    gap: pick(root.querySelector(".post-body-paragraph-gap")),
+    copyBox: pick(root.querySelector(".post-copy-box")),
+    copyBoxBody: pick(root.querySelector(".post-copy-box-body")),
+    divider: pick(root.querySelector(".post-divider")),
+
+    /* 조작 UI 는 읽는 화면에만 붙는다 — 양쪽 다 있어야 한다 */
+    copyButtons: root.querySelectorAll(".post-copy-box-copy").length
+  };
+
+};
+
+
+function bodyParityDiff(a, b) {
+
+  if (!a || !b) return ["(한쪽이 없다)"];
+
+  const keys =
+    new Set([...Object.keys(a), ...Object.keys(b)]);
+
+  return [...keys].filter(
+    k => JSON.stringify(a[k]) !== JSON.stringify(b[k])
+  ).map(
+    k => k + ": native=" + JSON.stringify(a[k]) +
+         " / sandbox=" + JSON.stringify(b[k])
+  );
+
+}
+
+
+async function runBodyParity(browser) {
+
+  console.log("\n[bodyparity] 같은 글, native 와 프레임의 본문");
+
+  const sandboxPkg = readSandboxPkg();
+
+  const nativePkg = JSON.parse(JSON.stringify(sandboxPkg));
+  delete nativePkg.renderMode;
+
+
+  /* --- native (같은 스킨, renderMode 만 뺐다) ------------ */
+
+  const native =
+    await openPublicPath(
+      browser, nativePkg, "/post/101", { sandbox: false }
+    );
+
+  await native.page.waitForFunction(
+    () => {
+      const el = document.querySelector('[data-imory-region="post-body"]');
+      return el && el.textContent.indexOf('첫 번째 글의 본문') !== -1;
+    },
+    null,
+    { timeout: 20000 }
+  ).catch(() => {});
+
+  /*
+    ★ 읽는 이의 하이라이트 표시는 본문을 그린 **뒤** 비동기로
+    덧칠된다(renderPostHighlights). 본문 글자만 기다리고 재면
+    덧칠 전에 찍히는 바퀴가 생겨서 아래 "알려진 차이" 절이
+    가끔 0/0 으로 보인다 — 그 표시까지 기다린다.
+  */
+
+  await native.page.waitForFunction(
+    () => document.querySelectorAll(".post-highlight").length > 0,
+    null,
+    { timeout: 20000 }
+  ).catch(() => {});
+
+  const nativeData =
+    await native.page.evaluate(BODY_PARITY_PROBE);
+
+  check("[bodyparity] native 가 스킨의 post-body region 에 본문을 그렸다",
+    !nativeData.missing && Boolean(nativeData.highlight),
+    JSON.stringify(nativeData).slice(0, 120));
+
+  check("[bodyparity] native 페이지 오류 없음",
+    native.pageErrors.length === 0, native.pageErrors.join(" | "));
+
+  await native.ctx.close();
+
+
+  /* --- sandbox ------------------------------------------ */
+
+  const sandbox =
+    await openPublicPath(browser, sandboxPkg, "/post/101");
+
+  const frame =
+    await waitForSandboxPage(sandbox.page, "post");
+
+  check("[bodyparity] POST 가 프레임에서 그려진다", Boolean(frame));
+
+  if (!frame) {
+    await sandbox.ctx.close();
+    return;
+  }
+
+  await frame.waitForFunction(
+    () => {
+      const el = document.querySelector('[data-imory-region="post-body"]');
+      return el && el.textContent.indexOf('첫 번째 글의 본문') !== -1;
+    },
+    null,
+    { timeout: 20000 }
+  ).catch(() => {});
+
+  const frameData =
+    await frame.evaluate(BODY_PARITY_PROBE);
+
+
+  /* --- 비교 --------------------------------------------- */
+
+  check("[bodyparity] ★ 본문 DOM 구조가 글자 단위로 같다",
+    nativeData.shape === frameData.shape,
+    (nativeData.shape || "").slice(0, 120) + "\n   vs\n   " +
+    (frameData.shape || "").slice(0, 120));
+
+  const parts = [
+    ["컨테이너", "container"],
+    ["형광펜", "highlight"],
+    ["강조선 마커", "ruleMarker"],
+    ["강조선 상자", "ruleBox"],
+    ["포인트 색", "pointColor"],
+    ["문단 간격", "gap"],
+    ["복사 상자", "copyBox"],
+    ["복사 상자 내용", "copyBoxBody"],
+    ["구분선", "divider"]
+  ];
+
+  for (const [label, key] of parts) {
+
+    const diffs =
+      bodyParityDiff(nativeData[key], frameData[key]);
+
+    check("[bodyparity] ★ " + label + "의 계산 스타일이 같다",
+      diffs.length === 0,
+      diffs.join("\n     "));
+
+  }
+
+
+  /*
+    ★ 회귀 표지 — 이 두 값이 기본값으로 돌아가면 CSS 가 안 왔다는
+    뜻이다. 위 비교만으로는 "둘 다 똑같이 빠진" 경우를 못 잡는다.
+  */
+
+  check("[bodyparity] ★ 형광펜이 실제로 class 규칙을 받았다 (여백·clone)",
+    frameData.highlight &&
+    parseFloat(frameData.highlight.paddingLeft) > 0 &&
+    frameData.highlight.boxDecorationBreak === "clone",
+    JSON.stringify(frameData.highlight &&
+      {
+        paddingLeft: frameData.highlight.paddingLeft,
+        boxDecorationBreak: frameData.highlight.boxDecorationBreak
+      }));
+
+  check("[bodyparity] ★ 강조선 마커는 프레임에서도 display:none",
+    frameData.ruleMarker && frameData.ruleMarker.display === "none",
+    frameData.ruleMarker && frameData.ruleMarker.display);
+
+  check("[bodyparity] ★ 복사 상자가 프레임에서도 상자로 그려진다",
+    frameData.copyBox &&
+    parseFloat(frameData.copyBox.borderLeft) > 0 &&
+    frameData.copyBox.backgroundColor !== "rgba(0, 0, 0, 0)",
+    JSON.stringify(frameData.copyBox &&
+      {
+        borderLeft: frameData.copyBox.borderLeft,
+        backgroundColor: frameData.copyBox.backgroundColor
+      }));
+
+  check("[bodyparity] ★ 복사 버튼은 양쪽에 같은 개수로 붙는다",
+    nativeData.copyButtons === frameData.copyButtons &&
+    frameData.copyButtons === 1,
+    nativeData.copyButtons + " / " + frameData.copyButtons);
+
+
+  /*
+    ★ inline style 은 여전히 하나도 없어야 한다. class 규칙을
+    들여왔다고 SANDBOX-3.1 의 결론이 느슨해지지 않았는지 본다.
+  */
+
+  check("[bodyparity] ★ 프레임에 style 속성이 하나도 없다",
+    (await frame.evaluate(
+      () => document.querySelectorAll("#sandboxFrameRoot [style]").length
+    )) === 0);
+
+  check("[bodyparity] ★ 본문 CSS 두 벌을 프레임이 실제로 읽었다",
+    (await frame.evaluate(() =>
+      [...document.styleSheets]
+        .map(s => s.href || "")
+        .filter(h => /posts-body-(shared|blocks)\.css/.test(h)).length
+    )) === 2);
+
+  /*
+    ★ 알려진 차이 — 읽는 이의 하이라이트 표시(§K-6).
+
+    native 는 본문을 그린 뒤 덧칠하고, 프레임 안에서는 아직
+    덧칠하지 않는다. "언젠가 고칠 것"이 조용히 "고쳐진 줄 알았던
+    것"으로 바뀌지 않도록 숫자로 못박아 둔다 — 프레임에서 표시가
+    보이기 시작하면 이 줄이 먼저 실패한다.
+  */
+
+  check("[bodyparity] (알려진 차이) 하이라이트 표시는 native 에만 덧칠된다",
+    nativeData.readerHighlights === 1 &&
+    frameData.readerHighlights === 0,
+    nativeData.readerHighlights + " / " + frameData.readerHighlights);
+
+
+  check("[bodyparity] inline style CSP 위반이 없다",
+    sandbox.pageErrors.filter(t => /inline style/i.test(t)).length === 0,
+    sandbox.pageErrors.join(" | ").slice(0, 160));
+
+  check("[bodyparity] 프레임 페이지 오류 없음",
+    sandbox.pageErrors.length === 0, sandbox.pageErrors.join(" | "));
+
+  await sandbox.ctx.close();
+
+}
+
+
 /* =========================================================
    RUN
 ========================================================== */
@@ -3645,6 +4030,7 @@ async function runNav(browser) {
     /* --- SANDBOX-2 --- */
 
     if (shouldRun("pages")) await runPages(browser);
+    if (shouldRun("bodyparity")) await runBodyParity(browser);
     if (shouldRun("surfaces")) await runSurfaces(browser);
     if (shouldRun("nav")) await runNav(browser);
 

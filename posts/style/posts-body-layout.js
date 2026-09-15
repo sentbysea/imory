@@ -551,6 +551,28 @@ function applyPostBodyStyles(
     `${resolved.bodySize}px`;
 
 
+  /*
+    ★ 읽는 화면의 글자 크기 조절이 되돌아갈 **기준값**.
+
+    도구 메뉴의 글자 크기(posts/posts-reader-scale.js)는 이 값에
+    비율을 곱해 같은 인라인 font-size 를 덮어쓴다. 예전에는 그
+    함수가 인라인 값을 지우고 다시 재서 기준을 잡았는데, 그러면
+    지우는 순간 프리셋 크기가 사라지고 그릇이 주변에서 물려받는
+    크기가 기준이 되어 bodySize 가 무시됐다. 여기서 "조절 전
+    크기"를 한 번 적어 두면 그 함수가 지우지 않고도 같은 기준을
+    얻는다(누적 없음).
+
+    ★ style 속성이 아니라 data 속성이다 — sandbox 프레임으로
+    나가는 것은 containerStyle(=style 속성)뿐이라, 이 값이 wire
+    에 실리지 않는다. 발췌 export 에도 그림으로 남지 않는다.
+  */
+
+  container.dataset.postBodyBaseFontSize =
+    String(
+      resolved.bodySize
+    );
+
+
   container.style.fontWeight =
     String(
       resolved.bodyWeight

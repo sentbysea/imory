@@ -1,0 +1,141 @@
+/* =========================================================
+   POSTS - BODY SHARED (본문이 그려지는 모든 화면의 공용 CSS)
+
+   기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §M ·
+             IMORY_EDITOR_DECOR_DESIGN.md
+
+   ---------------------------------------------------------
+   ★ 왜 별도 파일인가
+
+   본문 렌더 파이프라인(posts/style/posts-style-render.js)이 만드는
+   결과는 두 종류의 스타일에 기댄다.
+
+     1) 인라인 선언   글꼴·크기·색·행간·형광펜 그라디언트·강조선
+                      두께처럼 **Quote Preset 값에서 계산되는 것**.
+                      renderStyledPostContentInto()가 요소마다 직접
+                      적는다. 그래서 어느 문서에 붙여도 따라간다.
+
+     2) class 규칙    형광펜의 좌우 여백과 줄바꿈 처리, 강조선
+                      **마커**를 숨기는 것, 대사/지문이 본문 글자를
+                      물려받게 하는 것처럼 **프리셋과 무관한 고정
+                      규칙**. 이것은 스타일시트에만 있었다.
+
+   2)가 posts/posts-list-detail.css 안에 있었기 때문에, 그 파일을
+   읽지 않는 화면에서는 같은 본문이 다르게 보였다 — 2026-09-15 실측:
+
+     · sandbox 프레임(skin/sandbox/frame.html)
+         형광펜 좌우 여백 0, box-decoration-break 가 slice 라
+         줄이 바뀌는 형광펜의 끝이 잘려 보이고, 강조선 마커
+         <span class="post-para-rule"> 가 display:none 이 아니라서
+         인라인 상자로 남았다.
+     · Studio Preview(studio/preview/preview-frame.html)
+     · Quote Preset 미리보기(admin/index.html)
+
+   그래서 "본문이 그려지는 자리라면 어디든 함께 읽어야 하는 것"만
+   이 파일로 모았다. 여기 있는 규칙은 **네 화면이 같은 파일 하나**를
+   읽는다: index.html(공개 글 뷰어 · 에디터 PREVIEW · 발췌 export) ·
+   admin/index.html · studio/preview/preview-frame.html ·
+   skin/sandbox/frame.html.
+
+   ---------------------------------------------------------
+   ★ 여기에 넣지 않는 것
+
+   · 글 목록 · 상세 화면의 chrome(제목 줄 · 버튼 · gate 등)
+     → posts/posts-list-detail.css 에 그대로 남는다. 스킨이 그리는
+       화면에 플랫폼 장식이 끼어들면 안 된다(CLAUDE.md §2).
+   · 편집창 전용 규칙(.post-editor-richtext …, .post-block-tool)
+     → posts/posts-editor.css · posts/posts-body-blocks.css.
+   · 발췌 대지(캔버스) 전용 규칙
+     → posts/posts-page-canvas.css · posts/posts-preview-export.css.
+
+   ★ 복사 상자 · 메모 · 구분선은 이 파일이 아니라
+     posts/posts-body-blocks.css 한 벌이 이미 담당한다 — 본문을
+     그리는 화면은 그 파일도 함께 읽는다.
+
+   ---------------------------------------------------------
+   ★ 우선순위
+
+   전부 class 하나짜리(0,1,0)다. 스킨 CSS 는 이 파일 뒤에 붙으므로
+   같은 특정도면 스킨이 이긴다 — native 공개 화면과 같은 관계다.
+   프리셋에서 나온 인라인 선언(sandbox 에서는 #sandboxFrameRoot 가
+   붙은 규칙)은 둘 다 이긴다.
+========================================================== */
+
+
+/* =========================================================
+   문단
+========================================================== */
+
+.post-body-paragraph {
+  white-space: pre-wrap;
+}
+
+
+.post-body-paragraph:last-child {
+  margin-bottom: 0 !important;
+}
+
+
+/*
+  대사/지문은 본문 글자를 그대로 물려받는다 — 색만 다르다
+  (색은 프리셋에서 나와 인라인으로 붙는다,
+   posts/style/posts-style-dialogue.js).
+*/
+
+.post-action,
+.post-dialogue {
+  font-size: inherit;
+
+  line-height: inherit;
+
+  letter-spacing: inherit;
+}
+
+
+/* =========================================================
+   형광펜
+
+   색과 높이는 프리셋에서 나와 인라인 background-image 로 붙는다
+   (posts/style/posts-body-decor.js). 여기서 정하는 것은 프리셋과
+   무관한 두 가지다.
+
+   · 좌우 여백    글자에 딱 붙지 않게 0.12em.
+   · 모서리 직각  높이를 낮춘 형광펜은 gradient 로 그려지는데,
+                  둥근 모서리가 남으면 얇은 띠의 양끝만 깎여 보인다.
+   · clone        줄이 바뀌어도 각 줄이 자기 배경을 온전히 갖는다.
+                  slice 면 두 번째 줄부터 띠가 잘려 보인다.
+========================================================== */
+
+.post-inline-highlight {
+  padding:
+    0
+    0.12em;
+
+  border-radius: 0;
+
+  box-decoration-break:
+    clone;
+
+  -webkit-box-decoration-break:
+    clone;
+}
+
+
+/* =========================================================
+   문단 강조선 (문단 왼쪽 세로선)
+
+   실제로 선을 그리는 상자(.post-para-rule-box)는 렌더링 단계에서
+   만들어지고, 색·굵기·여백은 전부 인라인으로 박힌다 — html2canvas
+   가 var() 나 외부 규칙을 못 읽는 문제를 피하기 위해서다. 여기서는
+   **저장되는 마커**가 화면에 아무 것도 그리지 않게만 해 둔다.
+========================================================== */
+
+.post-para-rule {
+  display: none;
+}
+
+
+.post-para-rule-box {
+  /* display:block / border-left / padding-left는 JS가 인라인으로 */
+  margin: 0;
+}

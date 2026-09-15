@@ -297,26 +297,61 @@ function initReaderFontScaleForCurrentPost(
   }
 
 
-  /*
-    기준값은 "이 그릇이 아무 조절도 없을 때 가질 크기"다 — 이미
-    인라인으로 조절해 둔 값을 다시 기준으로 삼으면 글을 열 때마다
-    배율이 누적된다. 그래서 재기 전에 인라인 값을 지운다.
-  */
+  /* =====================================================
+     기준값 — "이 글의 프리셋이 정한 크기"
 
-  host.style.removeProperty(
-    "font-size"
-  );
+     ★ 2026-09-15 수정. 예전에는 인라인 font-size 를 **지우고**
+     computed 값을 쟀다. 배율이 누적되는 것을 막으려던 것인데,
+     그 인라인 값이 바로 **프리셋이 방금 적어 둔 본문 크기**다
+     (applyPostBodyStyles, posts/style/posts-body-layout.js).
+     지우고 재면 그릇이 주변에서 물려받는 크기가 기준이 되어
+     — legacy 는 .post-detail-content 의 13px, 스킨 region 은
+     그 문서의 기본값 — 프리셋의 bodySize 가 통째로 버려졌다.
+     같은 글이 에디터 PREVIEW 와 공개 화면에서 다른 크기로
+     보이던 실제 원인이다.
 
+     그래서 파이프라인이 그릇에 적어 둔 기준값을 먼저 읽는다.
+     그 값은 **조절 전 크기**라 몇 번을 다시 열어도 누적되지
+     않는다 — 예전 방식이 지우기로 막으려던 것과 같은 보장을,
+     지우지 않고 얻는다.
 
-  postDetailContentBaseFontSize =
+     파이프라인을 거치지 않은 그릇(값이 없는 경우)에서는 예전과
+     똑같이 동작한다.
+  ====================================================== */
+
+  const declaredBase =
     parseFloat(
-      window
-        .getComputedStyle(
-          host
-        )
-        .fontSize
-    ) ||
-    null;
+      (host.dataset &&
+        host.dataset.postBodyBaseFontSize) ||
+      ""
+    );
+
+
+  if (declaredBase > 0) {
+
+    postDetailContentBaseFontSize =
+      declaredBase;
+
+  }
+
+  else {
+
+    host.style.removeProperty(
+      "font-size"
+    );
+
+
+    postDetailContentBaseFontSize =
+      parseFloat(
+        window
+          .getComputedStyle(
+            host
+          )
+          .fontSize
+      ) ||
+      null;
+
+  }
 
 
   if (

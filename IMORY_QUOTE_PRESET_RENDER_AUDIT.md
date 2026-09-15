@@ -1056,3 +1056,75 @@ gap 44 → 32px). 캔버스는 어차피 대지 높이에 맞춰 contain 축소�
 - 출력 조건을 **글 단위**로 저장하는 길은 아직 없다. 프리셋이 그 축이다 — 비율을 자주
   바꿔 쓰는 사람은 프리셋을 하나 더 만드는 쪽이 된다.
 - 두 미리보기의 완전한 코드 통합 · iOS 실기기 확인은 그대로 남아 있다(§10.8 · §11.8).
+
+
+---
+
+## 14. 5단계 — 공개 글 뷰어가 프리셋 **글자 크기**를 버리고 있었다 (2026-09-15)
+
+기준 테스트: `skin/sandbox/skin-sandbox-e2e-test.mjs --only=bodyparity` (8957)
+
+### 14.1 증상
+
+같은 글이 에디터 PREVIEW 에서는 프리셋 그대로인데 공개 `/:slug/post/:id`
+에서는 글자가 작았다. 실측(preset `bodySize: 19`):
+
+| 화면 | 본문 그릇의 계산 `font-size` |
+| --- | --- |
+| 에디터 PREVIEW · 발췌 export | 19px |
+| 공개 뷰어 (legacy `#postDetailContent`) | 13px |
+| 공개 뷰어 (스킨 `post-body` region) | 16px |
+| sandbox 프레임 | 19px |
+
+세 번째 열의 값이 각각 `.post-detail-content` 의 CSS 크기와 그 문서의
+기본 글자 크기다 — 즉 **프리셋 값이 아니라 그릇이 물려받는 크기**였다.
+
+### 14.2 원인
+
+본문 렌더는 `applyPostBodyStyles()`(`posts/style/posts-body-layout.js`)가
+그릇에 `style.fontSize = bodySize + "px"` 를 직접 적는다. 바로 뒤에
+`initReaderFontScaleForCurrentPost()`(`posts/posts-reader-scale.js`)가
+도구 메뉴의 글자 크기 조절을 준비하면서
+
+```js
+host.style.removeProperty("font-size");   // 기준을 재기 전에 지운다
+base = getComputedStyle(host).fontSize;   // <- 프리셋이 아니라 상속값
+host.style.fontSize = base * scale;       // 배율 1 에서도 상속값이 적힌다
+```
+
+를 했다. 지우던 이유는 "이미 조절해 둔 값을 다시 기준으로 삼으면 글을 열
+때마다 배율이 누적된다" 였는데, 그 자리에 있던 인라인 값은 조절된 값이
+아니라 **방금 적힌 프리셋 값**이었다. 그래서 배율이 1 이어도 프리셋의
+`bodySize` 가 매번 버려졌다.
+
+sandbox 경로만 맞았던 것은 그 경로가 이 함수를 부르지 않기 때문이다
+(프레임 안 본문은 부모 문서에 없어서 조절할 대상이 없다).
+
+### 14.3 고친 방법 — 기준값을 지워서 재지 말고 적어 둔다
+
+`applyPostBodyStyles()` 가 그릇에 `data-post-body-base-font-size` 로
+**조절 전 크기**를 남기고, reader-scale 이 그 값을 기준으로 쓴다.
+
+- 누적 방지는 그대로다 — 적히는 값이 언제나 "조절 전" 이라, 몇 번을 다시
+  열어도 같은 기준이다.
+- 그 값이 없는 그릇(파이프라인을 거치지 않은 DOM)에서는 예전처럼 지우고
+  잰다 — 동작이 바뀌지 않는다.
+- `style` 이 아니라 `data` 속성이라 sandbox 프레임으로 나가는
+  `containerStyle` 에도, 발췌 export 그림에도 실리지 않는다.
+- 도구 메뉴의 −/+ 는 그대로 동작한다. 달라진 것은 **배율을 곱하는 대상**
+  뿐이다.
+
+### 14.4 검증 (mock e2e — 실제 DB·배포 확인 아님)
+
+- 8957 `--only=bodyparity`: 공개 native 와 프레임의 본문 계산값이 전 항목
+  일치(그 전에는 `font-size` 16px vs 19px).
+- 회귀: 8950 Quote 렌더 일치 206 PASS / 0 FAIL · 8951 본문 장식 256 PASS ·
+  8948 `--only=excerpt` 62 PASS · 8952 하이라이트(도구 메뉴 글자 크기 포함)
+  122 PASS · 8935 배너/POST 248 PASS · 8936 155 PASS.
+
+### 14.5 남은 제한
+
+- 방문자가 도구 메뉴에서 글자 크기를 바꾸면 **native 만** 따라간다.
+  sandbox 프레임 본문에는 같은 조절이 아직 걸리지 않는다
+  (IMORY_SANDBOX_SKIN_DESIGN.md §N-7).
+- HTML 모드 글은 예전처럼 이 조절의 대상이 아니다(프리셋 기준 크기가 없다).
