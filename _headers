@@ -88,6 +88,15 @@
 /studio/index.html
   Cache-Control: no-cache
 
+# Sandbox 스킨의 frame 진입 문서(IMORY_SANDBOX_SKIN_DESIGN.md §E).
+# preview-frame.html과 같은 이유로 자기 몫의 ?t= -> ?v= 사슬을 스스로
+# 선언하는 진입 문서다 — 이 HTML이 낡으면 그 아래가 통째로 옛 버전이
+# 된다. 실제 배포에서는 functions/_middleware.js가 이 문서에
+# Cache-Control: no-store를 다시 씌운다(요청마다 CSP nonce가 바뀌므로
+# 캐시하면 안 된다). 이 줄은 그 함수가 꺼져 있는 경우의 안전망이다.
+/skin/sandbox/frame.html
+  Cache-Control: no-cache
+
 # Studio 안의 Preview iframe 문서. 독립된 browsing context라
 # 부모의 import map도 캐시 상태도 물려받지 않는다 — 이 문서 자신이
 # build-version.js를 ?t= 로 불러오므로 문서만 최신이면 된다.

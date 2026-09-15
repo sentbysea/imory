@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Imory Skin Sandbox Frame</title>
+
+  <!--
+    =========================================================
+    IMORY SKIN SANDBOX — FRAME 문서 (SANDBOX-0)
+
+    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §E SANDBOX-0
+
+    ★ 이 문서는 **별도 origin에서만** 서빙된다.
+      functions/_middleware.js가
+        - sandbox host: /skin/sandbox/ 아래 허용 목록만 200,
+          나머지(앱 전체 포함)는 404
+        - 메인 origin(imory.me): 이 경로를 404
+      로 갈라 준다. 그 분기는 정리정돈이 아니라 **보안 장치**다 —
+      allow-scripts + allow-same-origin의 안전성이 전적으로
+      "origin이 실제로 다르다"에 달려 있기 때문이다(설계 문서 §D-4).
+
+    ★ 이 문서에 없는 것 (의도적)
+      supabase client · 인증 · 관리자 코드 · skin-context builder ·
+      renderSkin(아직). 여기는 렌더러 자리이지 데이터 클라이언트가
+      아니다. CSP의 connect-src 'none'이 그 원칙을 헤더로도 못박는다.
+
+    ★ 인라인 <script> / <style>과 nonce
+      아래 인라인 블록들은 **속성 없이** `<script>` · `<style>`로
+      적어야 한다. functions/_middleware.js가 응답을 내보낼 때
+      그 형태를 찾아 nonce를 끼우고, 같은 nonce를 CSP 헤더에
+      넣는다. 속성을 붙이면 nonce가 안 들어가고 CSP가 그 블록을
+      막아 프레임이 아예 뜨지 않는다.
+    =========================================================
+  -->
+
+  <style>
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+
+      /*
+        이중 스크롤 금지(CLAUDE.md §2). 부모 iframe은
+        scrolling="no"이고, 높이는 SANDBOX-1의 IMORY_HEIGHT가
+        맞춘다.
+      */
+      overflow: hidden;
+    }
+
+    body {
+      background: #ffffff;
+      color: #333333;
+
+      font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        sans-serif;
+
+      font-size: 13px;
+      letter-spacing: 0.08em;
+    }
+
+    #sandboxFrameRoot {
+      /*
+        모바일 390px에서도 가로로 넘치지 않게. 상용 디자인이
+        아니라 진단 문구 자리다.
+      */
+      max-width: 100%;
+      overflow-wrap: anywhere;
+
+      padding: 16px;
+      text-align: center;
+    }
+
+  </style>
+
+  <!-- =========================================================
+       배포 버전 원천 — 이 파일만 ?t= 로 받는다
+
+       iframe은 독립된 browsing context라 부모의 import map도
+       캐시 상태도 물려받지 않는다(studio/preview/preview-frame.html이
+       이미 겪은 함정). 그래서 이 문서가 자기 몫의 ?t= -> ?v= 사슬을
+       **스스로** 선언한다. 배경: core/lib/build-version.js 상단 주석.
+  ========================================================== -->
+
+  <script>
+
+    document.write(
+      '<script src="/core/lib/build-version.js?t=' +
+      Date.now() +
+      '"><' + '/script>'
+    );
+
+  </script>
+
+
+  <script>
+
+    /*
+      순수 classic script 셋. ES 모듈이 없으므로 import map도
+      필요 없다(그래서 CSP에 인라인 script 허용을 더 넓히지 않아도
+      된다 — skin/sandbox/skin-sandbox-frame.js 상단 주석 참고).
+    */
+
+    loadVersionedScripts(
+      [
+        "/skin/sandbox/skin-sandbox-config.js",
+        "/skin/sandbox/skin-sandbox-protocol.js",
+        "/skin/sandbox/skin-sandbox-frame.js"
+      ]
+    );
+
+  </script>
+
+</head>
+
+
+<body>
+
+  <div id="sandboxFrameRoot"></div>
+
+</body>
+
+</html>

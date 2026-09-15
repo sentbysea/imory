@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>SKIN SANDBOX — 부모 쪽 하네스 (SANDBOX-0)</title>
+
+  <!--
+    =========================================================
+    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §E SANDBOX-0
+
+    이 문서는 **부모 쪽**이다. skin/sandbox/skin-sandbox-host.js를
+    실제로 불러 빈 프레임을 띄우고 READY -> ACK 왕복을 눈으로
+    확인한다. index.html도 skin-home.js도 이번 라운드에서는 고치지
+    않으므로(기존 렌더링 경로 무변경), 호출자는 이 하네스와 e2e뿐이다.
+
+    ★ 켜는 법 (로컬 개발에서만)
+      1. 저장소 루트에서 정적 서버 둘을 띄운다. 포트가 다르면
+         origin이 갈린다(같은 localhost라도).
+      2. 부모:  http://localhost:8957/skin/skin-sandbox-test.html
+                  ?sandboxSkin=1
+                  &sandboxSkinOrigin=http://localhost:8958
+      3. frame: http://localhost:8958/skin/sandbox/frame.html
+
+      배포된 imory.me에서 같은 주소를 열면 플래그가 **꺼진 채**
+      뜬다 — isSandboxSkinEnabled()가 hostname부터 본다
+      (skin/sandbox/skin-sandbox-config.js).
+
+      자동화된 왕복 검증은 skin/sandbox/skin-sandbox-e2e-test.mjs
+      (포트 8957/8958)가 한다.
+    =========================================================
+  -->
+
+  <style>
+
+    body {
+      margin: 0;
+      padding: 24px;
+
+      font-family:
+        system-ui,
+        -apple-system,
+        "Segoe UI",
+        sans-serif;
+
+      font-size: 14px;
+      line-height: 1.7;
+      color: #222;
+    }
+
+    h1 {
+      font-size: 16px;
+      letter-spacing: 0.06em;
+      margin: 0 0 16px;
+    }
+
+    dl {
+      margin: 0 0 20px;
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 4px 16px;
+      max-width: 100%;
+    }
+
+    dt {
+      color: #777;
+    }
+
+    dd {
+      margin: 0;
+      overflow-wrap: anywhere;
+    }
+
+    #sandboxMount {
+      border: 1px dashed #bbb;
+      min-height: 60px;
+      max-width: 100%;
+    }
+
+    .state-on {
+      color: #0a7;
+    }
+
+    .state-off {
+      color: #a33;
+    }
+
+  </style>
+
+  <script>
+
+    document.write(
+      '<script src="../core/lib/build-version.js?t=' +
+      Date.now() +
+      '"><' + '/script>'
+    );
+
+  </script>
+
+
+  <script>
+
+    /*
+      index.html이 SANDBOX-1에서 쓸 핸드셰이크와 같은 모양
+      (skin/skin-home.js의 skinHomeReady 패턴).
+    */
+
+    window.skinSandboxHostReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinSandboxHostReady = resolve;
+        }
+      );
+
+  </script>
+
+</head>
+
+
+<body>
+
+  <h1>SKIN SANDBOX — 부모 쪽 하네스 (SANDBOX-0)</h1>
+
+  <dl>
+    <dt>기능 플래그</dt>
+    <dd id="outFlag">…</dd>
+
+    <dt>부모 origin</dt>
+    <dd id="outParentOrigin">…</dd>
+
+    <dt>frame origin</dt>
+    <dd id="outFrameOrigin">…</dd>
+
+    <dt>mount 결과</dt>
+    <dd id="outMount">…</dd>
+
+    <dt>ACK 왕복</dt>
+    <dd id="outAck">…</dd>
+  </dl>
+
+  <div id="sandboxMount"></div>
+
+
+  <script>
+
+    loadVersionedScripts(
+      [
+        "./sandbox/skin-sandbox-config.js",
+        "./sandbox/skin-sandbox-protocol.js"
+      ]
+    );
+
+    loadVersionedModules(
+      [
+        "./sandbox/skin-sandbox-host.js"
+      ]
+    );
+
+  </script>
+
+
+  <script>
+
+    window.addEventListener(
+      "load",
+      async function () {
+
+        const flagOn =
+          isSandboxSkinEnabled(window);
+
+        const frameOrigin =
+          resolveSandboxSkinFrameOrigin(window);
+
+
+        const flagEl =
+          document.getElementById("outFlag");
+
+        flagEl.textContent =
+          flagOn ? "ON" : "OFF (기본값)";
+
+        flagEl.className =
+          flagOn ? "state-on" : "state-off";
+
+        document.getElementById("outParentOrigin").textContent =
+          window.location.origin;
+
+        document.getElementById("outFrameOrigin").textContent =
+          frameOrigin || "(없음 — sandbox 경로를 쓰지 않는다)";
+
+
+        const host =
+          await window.skinSandboxHostReady;
+
+        /*
+          거부된 메시지를 눈으로/테스트로 볼 수 있게 모아 둔다.
+          상대에게 돌려주는 것은 여전히 아무것도 없다 — 이 배열은
+          이 문서 안에만 있다(skin/sandbox/skin-sandbox-protocol.js
+          상단 "실패는 조용하다" 참고).
+        */
+
+        window.__sandboxHarnessErrors = [];
+
+        const result =
+          await host.mountSandboxSkinFrame({
+            container: document.getElementById("sandboxMount"),
+            onError: (reason) => {
+              window.__sandboxHarnessErrors.push(reason);
+            }
+          });
+
+        document.getElementById("outMount").textContent =
+          result.ok ? "ok" : ("폴백 — reason: " + result.reason);
+
+
+        /* ACK는 프레임 문서 안의 속성으로 확인한다(같은 origin이
+           아니므로 사람이 눈으로 볼 때는 프레임 화면의 문구로
+           확인한다 — 자동 판정은 e2e가 한다). */
+
+        document.getElementById("outAck").textContent =
+          result.ok
+            ? "프레임에 SANDBOX FRAME READY가 보이면 성립"
+            : "-";
+
+        window.__sandboxHarnessResult = result;
+
+      }
+    );
+
+  </script>
+
+</body>
+
+</html>
