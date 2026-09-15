@@ -508,6 +508,24 @@ check("[frame] 인라인 블록이 속성 없이 적혀 있다 (nonce 주입 전
   frameCode.indexOf("<style>") !== -1 &&
   (frameCode.match(/<script>/g) || []).length >= 2);
 
+/*
+  ★ 배포 실측에서 발견한 것: 주입기는 문자열을 그대로 찾으므로
+  주석 안에 적힌 여는 태그에도 nonce를 끼운다. 서빙되는 문서에
+  쓸데없는 값이 남지 않도록, 주입 결과가 **실제 블록 수와 정확히
+  같아야** 한다.
+*/
+
+const nonced =
+  server.injectSandboxNonce(frameHtml, "TESTNONCE");
+
+const realBlocks =
+  (frameCode.match(/<style>/g) || []).length +
+  (frameCode.match(/<script>/g) || []).length;
+
+check("[frame] ★ nonce 가 실제 인라인 블록 수만큼만 들어간다 (주석에는 안 들어간다)",
+  (nonced.match(/nonce="TESTNONCE"/g) || []).length === realBlocks,
+  `${(nonced.match(/nonce="TESTNONCE"/g) || []).length} vs 실제 블록 ${realBlocks}`);
+
 
 /* =========================================================
    결과

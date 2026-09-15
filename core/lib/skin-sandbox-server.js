@@ -402,7 +402,15 @@ export function buildSandboxCsp(nonce, parentOrigins) {
     "media-src 'none'",
 
     /* ★ iframe이 데이터를 어디로도 못 보낸다. 유출 경로를 부모와의
-       메시지 채널 하나로 좁히는 핵심 조항이다. */
+       메시지 채널 하나로 좁히는 핵심 조항이다.
+
+       배포 실측(2026-09-15): Cloudflare가 이 함수가 돌려준 HTML에
+       Web Analytics beacon(`/cdn-cgi/.../beacon.min.js`)을 **나중에**
+       끼워 넣는다. 스크립트 자체는 same-origin이라 'self'로 받지만,
+       그 beacon이 `/cdn-cgi/rum`으로 보내려는 요청은 이 조항에
+       막힌다 — 프레임 콘솔에 CSP 위반이 한 줄 남는다.
+       그 한 줄은 고장이 아니라 이 조항이 일하고 있다는 증거다.
+       분석을 살리자고 connect-src를 열지 않는다. */
     "connect-src 'none'",
 
     "frame-src 'none'",

@@ -935,7 +935,7 @@ allowlist 5개 경로만 남는다)인데, `resolveSandboxServerConfig()`가 그
 
 | 종류 | 결과 |
 | --- | --- |
-| 단위 테스트 (node) | `skin/sandbox/skin-sandbox-unit-test.mjs` **79/79** |
+| 단위 테스트 (node) | `skin/sandbox/skin-sandbox-unit-test.mjs` **80/80** |
 | E2E (mock, Playwright chromium) | `skin/sandbox/skin-sandbox-e2e-test.mjs` **119/119** |
 | E2E (mock, Playwright webkit) | 같은 파일 (초판 74/74; `[regress]`/`[env]` 추가 후 chromium으로 재확인) |
 | 기존 회귀 (mock) | 8934 **64/64** · 8942 **71/71** · 8956 **58/58** · 8954(share-card, 같은 `_middleware.js`) **175/175** · 8944 **70/1 실패** — 그 1건은 이 라운드 **이전부터** 실패하던 것(변경을 stash하고 돌려 동일 결과 확인) |
@@ -946,6 +946,60 @@ allowlist 5개 경로만 남는다)인데, `resolveSandboxServerConfig()`가 그
 E2E가 쓰는 origin 두 개는 **포트로 가른 실제 다른 origin**이고, 두 서버 모두
 요청을 **배포되는 그 `functions/_middleware.js`에 그대로 통과**시킨다 —
 호스트 분기와 CSP가 테스트용 복제본이 아니다.
+
+### G-10. 배포 확인 (2026-09-15, 실제 네트워크)
+
+커밋 `aeb974d`(SANDBOX-0) + `cd98c90`(Pages 리다이렉트 대응) 배포 후,
+캐시 우회 질의와 `Cache-Control: no-cache`로 직접 재었다.
+
+| 주소 | 결과 |
+| --- | --- |
+| `https://imory.me/` | **200** |
+| `https://imory.me/skin/sandbox/frame.html` | **404** |
+| `https://imory.me/skin/sandbox/frame` | **404** |
+| `https://skin-frame.imory.me/skin/sandbox/frame` | **200** (정본) |
+| `https://skin-frame.imory.me/skin/sandbox/frame.html` | **308** → `/skin/sandbox/frame` |
+| `https://skin-frame.imory.me/` | **404** |
+| `https://skin-frame.imory.me/index.html` | **404** |
+| `https://skin-frame.imory.me/core/lib/supabase-client.js` | **404** |
+| `https://skin-frame.imory.me/skin/skin-render.js` | **404** |
+| `https://skin-frame.imory.me/skin/sandbox/skin-sandbox-config.js` | **200** + `nosniff` |
+
+frame 문서 응답 헤더: `Cache-Control: no-store` · `X-Content-Type-Options: nosniff` ·
+`Referrer-Policy: no-referrer` · CSP 전문은 §G-6과 **글자 그대로 동일**.
+nonce는 요청마다 달랐고(`x4Qc…` / `Bdua…`), 문서 안의 인라인 블록 셋에
+같은 값으로 들어갔다.
+
+실제 브라우저(Chromium)로 배포된 두 origin을 열어 확인한 것:
+
+- 공개 홈 · `/admin/` · `/auth/` · `/invite/` 전부 200, 페이지 오류 0
+- `imory.me`에서 플래그가 **OFF**이고 iframe이 **0개**
+- 플래그만 덮어 배포된 host 모듈을 부르면
+  `imory.me` → `skin-frame.imory.me` **cross-origin iframe**이 뜨고
+  화면에 `SANDBOX FRAME READY`, **READY → ACK 왕복 성립**
+- 프레임에서 `parent.document` / `parent.localStorage` → **SecurityError**
+- 프레임 `localStorage`가 **비어 있다**(Imory 세션 키 없음)
+- 프레임 안 `fetch()` → CSP로 **차단**
+- 프레임에 `supabase` 전역 **없음**
+- 390px에서 부모·프레임·공개 홈 모두 가로 넘침 **0**
+
+#### 배포에서만 드러난 것 둘
+
+**① Cloudflare Pages의 HTML URL handling** — `/foo.html`은 200이 아니라
+**308 → `/foo`**다(`/admin/index.html` → `308 /admin/`으로 실측). 1차 배포에서
+frame 문서만 404였던 원인이 이것이다. 로컬 테스트 서버가 `.html` 파일을 그대로
+줬기 때문에 로컬에서는 잡히지 않았다 — 지금은 e2e 서버가 질의 문자열까지
+포함해 Pages와 같이 308을 낸다. 정본 주소는 확장자 없는 쪽이고, **두 주소 모두**
+sandbox origin에서 허용되고 메인 origin에서 막힌다.
+
+**② Cloudflare Web Analytics beacon** — Cloudflare가 이 Function이 돌려준 HTML에
+`/cdn-cgi/.../beacon.min.js`를 **나중에** 끼워 넣는다. 스크립트는 same-origin이라
+`script-src 'self'`로 받지만, beacon이 `/cdn-cgi/rum`으로 보내려는 요청은
+`connect-src 'none'`에 막혀 프레임 콘솔에 CSP 위반이 한 줄 남는다.
+**고장이 아니라 그 조항이 일하고 있다는 증거다** — 분석을 살리자고
+connect-src를 열지 않는다. (`/cdn-cgi/*`는 우리 Function보다 앞단의
+Cloudflare 인프라 경로이고, `/cdn-cgi/rum` 자체는 이 호스트에서 404다.)
+
 
 ## 남은 차이 (아직 정하지 않은 것)
 
