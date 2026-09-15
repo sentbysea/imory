@@ -760,6 +760,61 @@ const dirtyContext = {
     recentPosts: [{ id: "1", title: "글", href: "/demo/post/1", isSecret: false }]
   },
 
+  /*
+    SANDBOX-3 — banner / highlights 화면의 재료. 여기에도 넘어가면
+    안 되는 값을 섞어 둔다(아래 [payload3] 절이 확인한다).
+  */
+
+  bannerCategory: {
+    id: 3,
+    name: "BAN",
+    type: "banner",
+    href: "/demo/category/3",
+    items: [
+      {
+        id: "b9", name: "띠", alt: "띠",
+        href: "/demo/category/1",
+        imageUrl: "/storage/b.png",
+
+        /* 계약에 없는 칸 */
+        ownerId: FORBIDDEN.ownerId,
+        rawRow: { user_id: FORBIDDEN.ownerId }
+      }
+    ],
+    ownerId: FORBIDDEN.ownerId
+  },
+
+  highlights: {
+    view: { isAll: true, isFolders: false, isFolder: false },
+    allHref: "/demo/highlights",
+    foldersHref: "/demo/highlights?view=folders",
+    allLabel: "전체",
+    foldersLabel: "폴더별",
+    cards: [
+      {
+        id: "h2", excerpt: "E2", note: "N2", hasNote: true,
+        color: "#f3a", postId: "1", postTitle: "글",
+        postHref: "/demo/post/1", sourcePathLabel: "TXT > 글",
+
+        /* 계약에 없는 칸 */
+        secretBody: FORBIDDEN.secretBody,
+        userId: FORBIDDEN.ownerId
+      }
+    ],
+    folders: [
+      { id: "1", name: "TXT", href: "/demo/highlights/category/1", count: 1, countLabel: "1개",
+        coverUrl: "/storage/cover.png", hasCover: true, coverRatio: "original",
+        coverFocusX: 50, coverFocusY: 50,
+        secretBody: FORBIDDEN.secretBody }
+    ],
+    folder: null,
+    showCards: true,
+    count: 99,
+    isEmpty: true,
+    hasError: false,
+    canManage: true
+  },
+
   /* 넘어가면 안 되는 것 */
   ownerId: FORBIDDEN.ownerId,
   accessToken: FORBIDDEN.accessToken,
@@ -836,20 +891,70 @@ check("[payload] navigation.memos 는 highlights 와 같은 객체다",
   projected.navigation.memos === projected.navigation.highlights);
 
 /*
-  SANDBOX-2 에서 category/post 가 계약에 들어왔다. 나머지는 여전히
-  투영하지 않는다 — 모르는 화면을 sandbox 로 추측하지 않는다.
+  SANDBOX-2 에서 category/post 가, SANDBOX-3 에서 banner/highlights 가
+  계약에 들어왔다. 나머지는 여전히 투영하지 않는다 — 모르는 화면을
+  sandbox 로 추측하지 않는다.
+
+  ★ "memos" 는 **page type 이 아니다**. templates.memos 는 하이라이트
+  template 의 레거시 alias 일 뿐이고, 화면 이름은 highlights 하나다.
 */
 
 check("[payload] ★ 계약에 없는 page type 은 여전히 투영하지 않는다",
-  ["folder", "banner", "highlights", "memos", "HOME", "", null, undefined]
+  ["folder", "memos", "HIGHLIGHTS", "HOME", "", null, undefined]
     .every((t) => sandboxContext.projectSkinContextForSandbox(dirtyContext, t) === null));
 
-check("[payload] ★ SANDBOX-2 의 세 page type 은 투영된다",
-  ["home", "category", "post"]
+check("[payload] ★ SANDBOX-3 의 다섯 page type 은 투영된다",
+  ["home", "category", "post", "banner", "highlights"]
     .every((t) => {
       const out = sandboxContext.projectSkinContextForSandbox(dirtyContext, t);
       return out !== null && out.pageType === t && out.page.type === t;
     }));
+
+check("[payload] ★ banner/highlights 화면에서도 그 페이지의 namespace 만 채운다",
+  (() => {
+    const ban = sandboxContext.projectSkinContextForSandbox(dirtyContext, "banner");
+    const hl = sandboxContext.projectSkinContextForSandbox(dirtyContext, "highlights");
+    return ban.bannerCategory !== null && ban.highlights === null &&
+      ban.home === null && ban.category === null && ban.post === null &&
+      hl.highlights !== null && hl.bannerCategory === null &&
+      hl.home === null && hl.category === null && hl.post === null;
+  })());
+
+check("[payload] ★ highlights 와 memos 는 같은 객체다 (값이 갈라질 수 없다)",
+  (() => {
+    const hl = sandboxContext.projectSkinContextForSandbox(dirtyContext, "highlights");
+    const ban = sandboxContext.projectSkinContextForSandbox(dirtyContext, "banner");
+    return hl.highlights === hl.memos && ban.highlights === ban.memos;
+  })());
+
+check("[payload] ★ 프레임 안 하이라이트는 주인장에게도 읽기 전용이다 (canManage 고정 false)",
+  (() => {
+    const hl = sandboxContext.projectSkinContextForSandbox(
+      { ...dirtyContext, highlights: { canManage: true, cards: [], showCards: true } },
+      "highlights"
+    );
+    return hl.highlights.canManage === false;
+  })(),
+  "입력은 canManage:true 였다");
+
+check("[payload] ★ page.isMemos 는 isHighlights 의 alias 다 (그 밖에는 하나만 true)",
+  (() => {
+    const hl = sandboxContext.projectSkinContextForSandbox(dirtyContext, "highlights");
+    const ban = sandboxContext.projectSkinContextForSandbox(dirtyContext, "banner");
+    const trueCount = (p) =>
+      Object.entries(p).filter(([k, v]) => k !== "type" && v === true).length;
+    return hl.page.isHighlights === true && hl.page.isMemos === true &&
+      trueCount(hl.page) === 2 &&
+      ban.page.isBanner === true && trueCount(ban.page) === 1;
+  })());
+
+check("[payload] ★ banner 투영은 native context 에 없는 칸을 만들지 않는다",
+  (() => {
+    const ban = sandboxContext.projectSkinContextForSandbox(dirtyContext, "banner");
+    return JSON.stringify(Object.keys(ban.bannerCategory).sort()) ===
+      JSON.stringify(["href", "id", "items", "name", "type"]);
+  })(),
+  "재료 일치 — count/isEmpty 같은 편의 칸을 sandbox 쪽에만 두면 스킨이 다르게 그려진다");
 
 check("[payload] ★ 그 페이지의 namespace 만 채운다 (나머지는 null)",
   (() => {
@@ -881,6 +986,89 @@ check("[payload] ★ contract / pageType 이 어긋나면 거부한다",
     return sandboxContext.isSandboxContextShape(a) === false &&
       sandboxContext.isSandboxContextShape(b) === false;
   })());
+
+
+/* =========================================================
+   [payload3] SANDBOX-3 — banner / highlights payload
+
+   위 [payload] 절이 HOME 으로 확인한 것과 같은 질문을 새 두 화면에
+   던진다: 계약에 없는 칸이 프레임에 도착하지 않는가.
+========================================================== */
+
+console.log("\n[payload3] SANDBOX-3 banner / highlights payload");
+
+{
+  const bannerJson =
+    JSON.stringify(
+      sandboxContext.projectSkinContextForSandbox(dirtyContext, "banner"));
+
+  const hlJson =
+    JSON.stringify(
+      sandboxContext.projectSkinContextForSandbox(dirtyContext, "highlights"));
+
+  for (const [name, value] of Object.entries(FORBIDDEN)) {
+
+    check(`[payload3] ★ banner payload 에 ${name} 이(가) 없다`,
+      bannerJson.indexOf(value) === -1);
+
+    check(`[payload3] ★ highlights payload 에 ${name} 이(가) 없다`,
+      hlJson.indexOf(value) === -1);
+
+  }
+
+  check("[payload3] ★ 배너 항목은 알려진 다섯 칸뿐이다",
+    (() => {
+      const ban = sandboxContext.projectSkinContextForSandbox(dirtyContext, "banner");
+      return JSON.stringify(Object.keys(ban.bannerCategory.items[0]).sort()) ===
+        JSON.stringify(["alt", "href", "id", "imageUrl", "name"]);
+    })());
+
+  check("[payload3] ★ 하이라이트 개수는 cards 에서 다시 센다 (입력의 99 를 믿지 않는다)",
+    (() => {
+      const hl = sandboxContext.projectSkinContextForSandbox(dirtyContext, "highlights");
+      return hl.highlights.count === 1 && hl.highlights.isEmpty === false;
+    })(),
+    "입력은 count:99 isEmpty:true 였다");
+
+  check("[payload3] ★ 폴더 커버/배너 이미지는 부모 origin 기준 절대 주소가 된다",
+    (() => {
+      const hl = sandboxContext.projectSkinContextForSandbox(
+        dirtyContext, "highlights", { origin: "https://parent.example" });
+      const ban = sandboxContext.projectSkinContextForSandbox(
+        dirtyContext, "banner", { origin: "https://parent.example" });
+      return hl.highlights.folders[0].coverUrl === "https://parent.example/storage/cover.png" &&
+        ban.bannerCategory.items[0].imageUrl === "https://parent.example/storage/b.png";
+    })());
+
+  check("[payload3] ★ 두 화면의 투영 결과도 받는 쪽 shape 검사를 통과한다",
+    sandboxContext.isSandboxContextShape(
+      sandboxContext.projectSkinContextForSandbox(dirtyContext, "banner")) === true &&
+    sandboxContext.isSandboxContextShape(
+      sandboxContext.projectSkinContextForSandbox(dirtyContext, "highlights")) === true);
+
+  check("[payload3] ★ 두 화면의 payload 도 구조화 복사가 된다 (함수 없음)",
+    (() => {
+      try {
+        structuredClone(
+          sandboxContext.projectSkinContextForSandbox(dirtyContext, "banner"));
+        structuredClone(
+          sandboxContext.projectSkinContextForSandbox(dirtyContext, "highlights"));
+        return true;
+      }
+      catch (err) { return false; }
+    })());
+
+  check("[payload3] ★ 레거시 memos.cards 만 있는 context 도 같은 카드를 만든다",
+    (() => {
+      const legacy = { ...dirtyContext };
+      legacy.memos = legacy.highlights;
+      delete legacy.highlights;
+      const out = sandboxContext.projectSkinContextForSandbox(legacy, "highlights");
+      return out.highlights.cards.length === 1 &&
+        out.highlights.cards[0].excerpt === "E2" &&
+        out.highlights === out.memos;
+    })());
+}
 
 
 /* =========================================================
@@ -1257,22 +1445,22 @@ const goodPage = {
   data: {}
 };
 
-check("[msg2] RENDER_PAGE 는 home/category/post 를 받는다",
-  ["home", "category", "post"].every((t) =>
+check("[msg2] RENDER_PAGE 는 home/category/post/banner/highlights 를 받는다",
+  ["home", "category", "post", "banner", "highlights"].every((t) =>
     protocol.validateSandboxMessage(
       toFrame2("IMORY_RENDER_PAGE", { ...goodPage, pageType: t }),
       frameRules2
     ).ok === true));
 
 check("[msg2] ★ RENDER_PAGE 도 계약에 없는 page type 은 거부",
-  ["folder", "banner", "highlights", "HOME", "", 1, null].every((t) =>
+  ["folder", "memos", "HOME", "", 1, null].every((t) =>
     protocol.validateSandboxMessage(
       toFrame2("IMORY_RENDER_PAGE", { ...goodPage, pageType: t }),
       frameRules2
     ).reason === "bad-payload-value"));
 
 check("[msg2] ★ 옛 RENDER_HOME 은 여전히 home 만 받는다 (넓히지 않았다)",
-  ["category", "post"].every((t) =>
+  ["category", "post", "banner", "highlights"].every((t) =>
     protocol.validateSandboxMessage(
       toFrame2("IMORY_RENDER_HOME", { ...goodPage, pageType: t }),
       frameRules2
@@ -1303,8 +1491,8 @@ check("[msg2] ★ 부모는 POST_BODY 를 받지 않는다 (방향)",
     toParent2("IMORY_POST_BODY", goodBody), navRules
   ).reason === "wrong-direction");
 
-check("[msg2] ★ RENDERED 는 세 page type 을 받는다 (RENDER_PAGE 와 짝)",
-  ["home", "category", "post"].every((t) =>
+check("[msg2] ★ RENDERED 는 다섯 page type 을 받는다 (RENDER_PAGE 와 짝)",
+  ["home", "category", "post", "banner", "highlights"].every((t) =>
     protocol.validateSandboxMessage(
       toParent2("IMORY_RENDERED",
         { contract: 1, pageType: t, renderSeq: 1, height: 10 }),

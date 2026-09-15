@@ -72,7 +72,14 @@ var SANDBOX_VIEWER_VISITOR_ONLY = true;
 
 /* 이번 라운드가 투영할 수 있는 page type */
 
-var SANDBOX_CONTEXT_PAGE_TYPES = ["home", "category", "post"];
+/*
+  SANDBOX-3 — banner / highlights 가 더해졌다. folder 는 아직 아니다
+  (그 화면은 native 로 그려진다). 여기 없는 값으로 부르면 이 파일은
+  null 을 돌려주고, 호출자는 sandbox 경로를 아예 쓰지 않는다.
+*/
+
+var SANDBOX_CONTEXT_PAGE_TYPES =
+  ["home", "category", "post", "banner", "highlights"];
 
 
 /*
@@ -582,8 +589,13 @@ function projectSandboxImages(images) {
 
 
 /*
-  page — 항상 정확히 하나만 true 라는 불변식을 여기서 **다시
-  세운다**. 입력을 그대로 옮기지 않고 pageType 하나로부터 만든다.
+  page — 어느 화면인가를 여기서 **다시 세운다**. 입력을 그대로
+  옮기지 않고 pageType 하나로부터 만든다.
+
+  ★ isMemos 는 isHighlights 의 **alias** 다(둘은 언제나 같은 값).
+  그래서 highlights 화면에서만 true 가 둘이고, 나머지 화면에서는
+  정확히 하나다 — native 의 buildSkinPageMeta() 와 같은 규칙이다
+  (skin/skin-context.js).
 */
 
 function projectSandboxPageMeta(pageType) {
@@ -593,10 +605,10 @@ function projectSandboxPageMeta(pageType) {
     isHome: pageType === "home",
     isCategory: pageType === "category",
     isPost: pageType === "post",
-    isBanner: false,
+    isBanner: pageType === "banner",
     isFolder: false,
-    isHighlights: false,
-    isMemos: false
+    isHighlights: pageType === "highlights",
+    isMemos: pageType === "highlights"
   };
 
 }
@@ -900,6 +912,166 @@ function projectSandboxPost(post) {
 }
 
 
+/* =========================================================
+   SANDBOX-3 — BANNER
+
+   원본 shape: skin/skin-context.js buildBannerSkinContext() 의
+   context.bannerCategory. 배너 한 줄은 이름·대체문구·주소·이미지
+   주소뿐이다 — 배너를 **고치는** 길(소유자 도구)은 프레임에
+   들어가지 않는다. 그 버튼은 오늘처럼 부모가 #postArea 에 띄운다
+   (posts/view/posts-view-list.js 의 banner 분기).
+========================================================== */
+
+function projectSandboxBannerItem(item) {
+
+  if (!sandboxPlainObject(item)) {
+    return null;
+  }
+
+
+  return {
+    id: sandboxStr(item.id),
+    name: sandboxStr(item.name),
+    alt: sandboxStr(item.alt),
+    href: sandboxHref(item.href),
+    imageUrl: sandboxImageUrl(item.imageUrl)
+  };
+
+}
+
+
+function projectSandboxBannerCategory(bannerCategory) {
+
+  const value =
+    sandboxPlainObject(bannerCategory) ? bannerCategory : {};
+
+  const items =
+    sandboxMap(value.items, projectSandboxBannerItem);
+
+
+  return {
+    id: sandboxStr(value.id),
+    name: sandboxStr(value.name),
+    type: sandboxStr(value.type),
+    href: sandboxHref(value.href),
+
+    /*
+      ★ native context(buildBannerSkinContext)에 있는 칸만 옮긴다 —
+      count/isEmpty 같은 편의 칸을 여기서 새로 만들면 같은 스킨이
+      native 와 sandbox 에서 다르게 그려진다
+      (AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md).
+    */
+
+    items: items
+  };
+
+}
+
+
+/* =========================================================
+   SANDBOX-3 — HIGHLIGHTS (하이라이트 화면)
+
+   원본 shape: skin/skin-context.js buildHighlightsSkinContext() 의
+   context.highlights (= 레거시 context.memos, **같은 객체**).
+
+   ★ 카드의 발췌문·메모는 이미 "이 뷰어가 볼 수 있는 것"뿐이다 —
+     비밀글 gate 를 통과하지 못한 카드는 Context 단계에서 이미
+     빠져 있다(IMORY_HIGHLIGHT1_DESIGN.md · posts-highlight e2e
+     --only=protect). 여기서 다시 가리지 않는다. 가리는 일을 두
+     곳에서 하면 한쪽이 빠졌을 때 알기 어렵다.
+
+   ★ canManage 는 **언제나 false** 다. 프레임에는 viewer 를 보내지
+     않고(SANDBOX_VIEWER_VISITOR_ONLY), 카드 ⋮ 도구는 부모가 DOM
+     을 심어 넣는 자리라 cross-origin 에서 채울 방법이 아직 없다
+     (IMORY_SANDBOX_SKIN_DESIGN.md 남은 차이). 그래서 프레임 안
+     하이라이트 화면은 주인장에게도 읽기 전용이다.
+========================================================== */
+
+function projectSandboxHighlightFolder(folder) {
+
+  if (!sandboxPlainObject(folder)) {
+    return null;
+  }
+
+
+  return {
+    id: sandboxStr(folder.id),
+    name: sandboxStr(folder.name),
+    href: sandboxHref(folder.href),
+    count: sandboxInt(folder.count),
+    countLabel: sandboxStr(folder.countLabel),
+    coverUrl: sandboxImageUrl(folder.coverUrl),
+    hasCover: sandboxBool(folder.hasCover),
+    coverRatio: sandboxStr(folder.coverRatio),
+    coverFocusX: sandboxInt(folder.coverFocusX),
+    coverFocusY: sandboxInt(folder.coverFocusY)
+  };
+
+}
+
+
+function projectSandboxHighlights(highlights) {
+
+  const value =
+    sandboxPlainObject(highlights) ? highlights : {};
+
+  const view =
+    sandboxPlainObject(value.view) ? value.view : {};
+
+  const cards =
+    sandboxMap(value.cards, projectSandboxHighlightCard);
+
+  const folders =
+    sandboxMap(value.folders, projectSandboxHighlightFolder);
+
+
+  return {
+
+    /* 보기 상태 — 정확히 하나만 true 여야 하므로 그대로 옮기되 boolean 으로 */
+
+    view: {
+      isAll: sandboxBool(view.isAll),
+      isFolders: sandboxBool(view.isFolders),
+      isFolder: sandboxBool(view.isFolder)
+    },
+
+    allHref: sandboxHref(value.allHref),
+    foldersHref: sandboxHref(value.foldersHref),
+    allLabel: sandboxStr(value.allLabel),
+    foldersLabel: sandboxStr(value.foldersLabel),
+
+    cards: cards,
+
+    /*
+      개수·빈 여부는 cards / folders 에서 다시 센다.
+
+      isEmpty 는 native 와 같은 식이다 — 폴더 격자를 보는 중
+      (showCards=false)에는 "하이라이트가 없다"가 아니다
+      (skin/skin-context.js highlightsNamespace).
+    */
+
+    count: cards.length,
+    isEmpty: cards.length === 0 && sandboxBool(value.showCards),
+    showCards: sandboxBool(value.showCards),
+
+    folders: folders,
+    folderCount: folders.length,
+    hasFolders: folders.length > 0,
+    foldersEmpty: sandboxBool(value.foldersEmpty),
+
+    folder: projectSandboxHighlightFolder(value.folder),
+
+    hasError: sandboxBool(value.hasError),
+
+    /* ★ 위 주석 — 프레임 안에서는 관리 도구가 없다 */
+
+    canManage: false
+
+  };
+
+}
+
+
 function projectSandboxHome(home) {
 
   const value =
@@ -970,6 +1142,19 @@ function projectSkinContextForSandbox(context, pageType, options) {
 
   try {
 
+    /*
+      ★ 하이라이트 namespace 는 **한 번만** 만들어 두 이름이 같은
+      객체를 가리키게 한다. 공식 이름은 highlights 이고, 옛 스킨이
+      쓴 memos 는 alias 다 — 원본 context 도 같은 관계다
+      (skin/skin-context.js highlightsNamespace).
+    */
+
+    const sandboxHighlightsNamespace =
+      pageType === "highlights"
+        ? projectSandboxHighlights(context.highlights || context.memos)
+        : null;
+
+
     const projected = {
 
       contract: SANDBOX_CONTEXT_CONTRACT,
@@ -1008,6 +1193,21 @@ function projectSkinContextForSandbox(context, pageType, options) {
         pageType === "post"
           ? projectSandboxPost(context.post)
           : null,
+
+      bannerCategory:
+        pageType === "banner"
+          ? projectSandboxBannerCategory(context.bannerCategory)
+          : null,
+
+      /*
+        ★ highlights / memos 는 **같은 객체**다(아래 alias 대입).
+        native context 의 불변식과 같아서, 스킨이 어느 이름을 써도
+        같은 카드가 한 번만 그려진다.
+      */
+
+      highlights: sandboxHighlightsNamespace,
+
+      memos: sandboxHighlightsNamespace,
 
       /*
         nav 표. 위 투영이 도는 동안 mint() 가 채운 것을 마지막에
@@ -1110,6 +1310,17 @@ var SANDBOX_CONTEXT_TOP_LEVEL_KEYS = [
   "home",
   "category",
   "post",
+
+  /* SANDBOX-3 — BANNER / HIGHLIGHTS */
+  "bannerCategory",
+  "highlights",
+
+  /*
+    ★ 레거시 alias. HIGHLIGHT-1 스킨이 memos.cards 로 그린 목록이
+    프레임에서도 그대로 그려져야 한다 — native context 와 똑같이
+    highlights 와 **같은 객체**를 가리킨다(값이 갈라질 수 없다).
+  */
+  "memos",
 
   /* SANDBOX-2 — 부모가 발급한 navId 표 */
   "nav"

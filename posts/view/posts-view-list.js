@@ -412,7 +412,8 @@ async function tryRenderPublishedSkinCategory(
 
 async function tryRenderPublishedSkinBanner(
   categoryId,
-  container
+  container,
+  outcome
 ) {
 
   const ownerId =
@@ -449,7 +450,8 @@ async function tryRenderPublishedSkinBanner(
     return await renderPublishedSkinBanner({
       ownerId,
       categoryId,
-      container
+      container,
+      outcome
     });
 
   } catch (err) {
@@ -1153,10 +1155,22 @@ async function openCategoryPage(
         "div"
       );
 
+
+    /*
+      SANDBOX-3: post형 CATEGORY와 같은 계약이다 — renderMode가
+      "sandbox"인 스킨이면 skin/skin-banner.js가 여기에 mount 함수를
+      실어 보낸다(그 파일 trySandboxSkinBanner 주석). 그 밖의 스킨은
+      이 객체가 빈 채로 남고 아래 경로가 이전과 동일하다.
+    */
+
+    const bannerSkinOutcome =
+      {};
+
     const renderedPublishedSkinBanner =
       await tryRenderPublishedSkinBanner(
         numericCategoryId,
-        bannerSkinRenderTarget
+        bannerSkinRenderTarget,
+        bannerSkinOutcome
       );
 
 
@@ -1266,6 +1280,52 @@ async function openCategoryPage(
 
       postList.innerHTML =
         "";
+
+
+      /* =====================================================
+         SANDBOX-3 — 별도 origin iframe 으로 그리는 배너 스킨
+
+         이 경우 bannerSkinRenderTarget 은 비어 있다. iframe 은 DOM
+         에서 옮기는 순간 문서가 다시 로드되므로 "스크래치에 그려
+         두고 옮긴다"를 쓸 수 없어서, skin/skin-banner.js 가 준비만
+         해 두고 실제 생성을 여기로 미뤘다. 요청 순번 검사는 이미
+         위에서 끝났으므로 여기서 만드는 프레임은 언제나 최신
+         화면의 것이다(post형 CATEGORY 와 같은 구조).
+
+         프레임이 안 뜨면 **같은 스킨을 native 로** 그린다 —
+         legacy 배너 그리드로 되돌리지 않는다.
+      ====================================================== */
+
+      if (typeof bannerSkinOutcome.sandboxMount === "function") {
+
+        const mounted =
+          await bannerSkinOutcome.sandboxMount(postList);
+
+        if (!mounted || !mounted.ok) {
+
+          console.warn(
+            "[posts-view-list] sandbox banner mount failed, falling back to native skin render:",
+            mounted ? mounted.reason : "no-result"
+          );
+
+          postList.innerHTML =
+            "";
+
+          try {
+
+            bannerSkinOutcome.sandboxRenderNative(postList);
+
+          }
+
+          catch (err) {
+
+            console.error("[posts-view-list] native skin fallback failed", err);
+
+          }
+
+        }
+
+      }
 
 
       while (

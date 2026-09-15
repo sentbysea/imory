@@ -15,7 +15,7 @@
 
    SANDBOX-2에서 더해진 셋:
 
-     parent -> frame    IMORY_RENDER_PAGE  { contract, pageType,
+     parent -> frame    IMORY_RENDER_PAGE  { contract, pageType,   // home|category|post|banner|highlights
                                              renderSeq, template, data }
      parent -> frame    IMORY_POST_BODY    { contract, renderSeq, html,
                                              containerStyle, isHtmlContent }
@@ -136,7 +136,20 @@ var SANDBOX_MAX_FRAME_HEIGHT = 200000;
 
 var SANDBOX_MAX_TEMPLATE_CHARS = 2000000;
 
-var SANDBOX_PAGE_TYPES = ["home", "category", "post"];
+/*
+  SANDBOX-3 — banner / highlights 가 더해졌다. 이 배열은 **새 메시지
+  (RENDER_PAGE)와 그 짝인 RENDERED 에만** 쓰인다 — 아래
+  SANDBOX_HOME_PAGE_TYPE 은 여전히 home 하나다(옛 RENDER_HOME 은 옛
+  약속 그대로).
+
+  folder(Series Viewer)는 아직 들어오지 않았다 — 그 화면은 계속
+  native 로 그려진다(IMORY_SANDBOX_SKIN_DESIGN.md 남은 차이). 여기
+  이름을 적지 않은 pageType 은 메시지 단계에서 거부된다 — 모르는
+  화면을 sandbox 로 추측하지 않는다.
+*/
+
+var SANDBOX_PAGE_TYPES =
+  ["home", "category", "post", "banner", "highlights"];
 
 
 /*

@@ -1,10 +1,11 @@
 # IMORY SANDBOX SKIN — 0단계 조사 및 구현 설계
 
 **상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기 ·
-§J SANDBOX-2).**
+§J SANDBOX-2 · §K SANDBOX-3).**
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
-§G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2)에만 적혀 있다.** 섞어
+§G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2) · §K(SANDBOX-3)에만
+적혀 있다.** 섞어
 읽지 말 것 (CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 /
 남은 차이"를 구분한다).
 
@@ -18,6 +19,7 @@
 | viewer | §D-1: `isOwner` · `adminHref` · `writeHref` 를 보낸다 | **방문자 값으로 고정**(§H-5) — SANDBOX-2 에서도 그대로 |
 | `IMORY_NAVIGATE` | §D-2: `{ href }` 를 보내고 부모가 파싱한다 | **href 를 보내지 않는다.** 부모가 발급한 정수 `navId` 하나뿐 (§J-2) |
 | CATEGORY / POST | §E: SANDBOX-3 | **SANDBOX-2 에서 함께 했다** (§J-4) |
+| GALLERY / BANNER / HIGHLIGHTS | §E: 뒤로 미룸 | **SANDBOX-3 에서 했다** (§K). FOLDER 만 남았다 |
 
 목표: 기존 `SkinPackage`·native 렌더링을 **한 byte도 바꾸지 않은 채**,
 `renderMode: "sandbox"`인 스킨만 별도 origin의 iframe에서 그리는 경로를
@@ -1755,6 +1757,9 @@ slug allowlist 만 보고 쿼리도 localStorage 도 읽지 않는다.
 - 저자 JS (SANDBOX-5)
 - FOLDER / HIGHLIGHTS / BANNER 페이지의 sandbox 렌더 — **이동은 된다**
   (그 주소들이 nav 표에 들어간다). 도착한 화면은 native 로 그려진다.
+  → **변경됨: §K(SANDBOX-3)** 가 BANNER / HIGHLIGHTS 를 프레임으로
+  가져갔다(GALLERY 는 SANDBOX-2 의 CATEGORY 경로로 이미 됐다).
+  FOLDER 만 여전히 native 다.
 - 외부 링크를 부모가 새 창으로 여는 것 (`IMORY_COPY_LINK` 도 없다)
 - 프레임 안 본문의 글자 크기 조절·하이라이트·소유자 OOC
 - commit / push
@@ -1762,10 +1767,214 @@ slug allowlist 만 보고 쿼리도 localStorage 도 읽지 않는다.
 ---
 
 
+## K. SANDBOX-3 구현 기록 (2026-09-15) — GALLERY·BANNER·HIGHLIGHTS
+
+SANDBOX-2 가 CATEGORY/POST 를 가져간 뒤에도 **배너 화면은 legacy 배너
+그리드로, 하이라이트 화면은 native 로** 나왔다. 이 라운드는 그
+누락을 메운다. 렌더 경로를 새로 만들지 않고, 이미 있는 공용
+sandbox mount 경로(`skin/sandbox/skin-sandbox-host.js`
+`prepareSandboxSkin()`)에 두 진입 모듈을 잇는 것이 전부다.
+
+### K-1. 원인 — 화면마다 있던 것과 없던 것
+
+`renderMode` 분기는 **진입 모듈**에 하나씩 있다. SANDBOX-1/2 는 셋만
+고쳤다.
+
+| 화면 | 진입 모듈 | SANDBOX-2 까지 | 이 라운드 |
+| --- | --- | --- | --- |
+| HOME | `skin/skin-home.js` | sandbox | 그대로 |
+| CATEGORY(post) | `skin/skin-category.js` | sandbox | 그대로 |
+| CATEGORY(gallery) | `skin/skin-category.js` | **sandbox (이미 됐다)** | 그대로 |
+| POST | `skin/skin-post.js` | sandbox (비밀글은 native) | 그대로 |
+| BANNER | `skin/skin-banner.js` | **분기 없음** | sandbox |
+| HIGHLIGHTS | `skin/skin-highlights.js` | **분기 없음** | sandbox |
+| FOLDER | `skin/skin-folder.js` | 분기 없음 | **그대로 native** (범위 밖) |
+
+즉 누락의 원인은 세 겹이었고, 화면마다 달랐다:
+
+1. **진입 모듈에 분기가 없다** — BANNER/HIGHLIGHTS. `resolveSkinRenderMode()`
+   를 부르지 않으니 `renderMode:"sandbox"` 를 적어도 아무 일이 없었다.
+2. **계약이 좁다** — `SANDBOX_CONTEXT_PAGE_TYPES` 와
+   `SANDBOX_PAGE_TYPES` 가 `home|category|post` 셋이라, 분기를 넣어도
+   투영 함수가 `null` 을, 메시지 검증이 `bad-payload-value` 를
+   돌려줬다.
+3. **fixture 에 template 이 없다** — `skin/test-skins/imory-sandbox-home-v1.json`
+   에 `templates.banner`/`templates.highlights` 가 없었다. BANNER 는
+   그것만으로도 legacy 배너 그리드로 떨어진다(그 계약은 그대로다 —
+   HOME html 을 배너에 재사용하지 않는다).
+
+**GALLERY(Pic)는 원인이 달랐다** — 갤러리 카테고리는 post형과 같은
+`skin/skin-category.js` 를 타고, 그 파일은 SANDBOX-2 에서 이미 sandbox
+분기를 갖고 있었다. 투영기에도 `category.gallery`/`category.pagination`
+칸이 이미 있었다. 그래서 이 라운드에서 갤러리 쪽은 **코드를 고치지
+않았고**, e2e 절(`--only=surfaces`)만 그 사실을 고정한다.
+
+### K-2. 고친 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/sandbox/skin-sandbox-protocol.js` | `SANDBOX_PAGE_TYPES` 에 `banner`/`highlights`. 옛 `IMORY_RENDER_HOME` 은 **넓히지 않았다**(여전히 `home` 만) |
+| `skin/sandbox/skin-sandbox-context.js` | `SANDBOX_CONTEXT_PAGE_TYPES` 확장 · `projectSandboxBannerCategory()` · `projectSandboxHighlights()` / `projectSandboxHighlightFolder()` · 최상위 키에 `bannerCategory`/`highlights`/`memos` · `page.isBanner`/`isHighlights`/`isMemos` 를 pageType 에서 다시 세움 |
+| `skin/skin-banner.js` | `trySandboxSkinBanner()` + `outcome` 파라미터 |
+| `posts/view/posts-view-list.js` | banner 분기에서 `outcome` 전달 + `sandboxMount(postList)` |
+| `skin/skin-highlights.js` | `trySandboxSkinHighlights()` + sandbox 분기 |
+| `posts/view/posts-view-highlights.js` | `sandboxMount(postList)` + 실패 시 native 폴백 |
+| `skin/test-skins/imory-sandbox-home-v1.json` | `templates.banner` / `templates.highlights`(진단용, HOME 이 쓰는 `sb-*` 클래스 재사용 — 새 CSS 없음) |
+
+native 렌더 경로는 한 줄도 바뀌지 않았다. `renderMode` 가 없는
+스킨에서는 두 진입 모듈의 새 `if` 가 곧바로 거짓이다.
+
+### K-3. 페이지별 실제 렌더 경로
+
+```
+BANNER    /:slug/category/:id  (category.type = "banner")
+  posts-view-list.js openCategoryPage()
+    -> tryRenderPublishedSkinBanner(id, scratch, outcome)
+       -> skin/skin-banner.js renderPublishedSkinBanner()
+            get_published_skin -> resolveSkinTemplate(pkg,"banner")
+            -> buildBannerSkinContext -> resolveSkinRenderMode
+            -> trySandboxSkinBanner -> prepareSandboxSkin({pageType:"banner"})
+    -> (요청 순번 확인) -> outcome.sandboxMount(#postList)
+         READY -> ACK -> RENDER_PAGE(banner) -> RENDERED -> HEIGHT
+
+HIGHLIGHTS  /:slug/highlights  ·  /:slug/memos(옛 주소)  ·  /:slug/category/:id(highlight 타입 -> 정규 주소로 정리)
+  posts-view-highlights.js openHighlightsScreen()
+    -> skin/skin-highlights.js renderPublishedSkinHighlights()
+         get_published_skin -> resolveSkinHighlightsTemplate
+         -> buildHighlightsSkinContext -> resolveSkinRenderMode
+         -> trySandboxSkinHighlights -> prepareSandboxSkin({pageType:"highlights"})
+    -> (isStale 확인) -> outcome.sandboxMount(#postList)
+
+GALLERY   /:slug/category/:id  (category.type = "gallery")
+  posts-view-list.js openCategoryPage()  ← post형과 **같은 경로**
+    -> skin/skin-category.js  (SANDBOX-2 부터 이미 sandbox)
+```
+
+컨테이너는 셋 다 `#postList` 다. `#themeMount` 의 HOME 프레임은
+그 위로 화면이 열려도 그대로 남는다 — native 에서 HOME 스킨 DOM 이
+남아 있는 것과 같다.
+
+### K-4. 데이터 — 프레임에 새로 가는 것
+
+`bannerCategory` 는 native `buildBannerSkinContext()` 의 칸만 옮긴다
+(`id`/`name`/`type`/`href`/`items[]{id,name,alt,href,imageUrl}`).
+`count`/`isEmpty` 같은 편의 칸을 sandbox 쪽에만 만들지 **않는다** —
+만들면 같은 스킨이 native 와 sandbox 에서 다르게 그려진다
+(`docs/ai-skin/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md`).
+
+`highlights` 는 `view`/`allHref`/`foldersHref`/라벨/`cards[]`/`folders[]`/
+`folder`/`showCards`/`hasError` 를 옮기고, `count`·`isEmpty` 는
+**cards 에서 다시 센다**(입력의 숫자를 믿지 않는다 — `home.highlights`
+의 `featured`/`card` 와 같은 규칙). 카드 재료는 SANDBOX-1 이 HOME 용으로
+이미 갖고 있던 `projectSandboxHighlightCard()` 를 그대로 쓴다.
+
+`memos` 는 `highlights` 와 **같은 객체**를 가리킨다(native context 와
+같은 불변식) — 옛 스킨의 `memos.cards` 가 프레임에서도 그려지고, 두
+이름을 다 써도 목록이 두 번 그려지지 않는다.
+
+발췌문·메모의 비밀글 gate 는 **Context 단계에서 이미 끝나 있다** —
+볼 수 없는 카드는 목록에 들어오지도 않는다. 투영기가 다시 가리지
+않는다(가리는 일을 두 곳에서 하면 한쪽이 빠졌을 때 알기 어렵다).
+
+### K-5. 프레임이 아닌 경우 (그대로 둔 것)
+
+| 경우 | 결과 |
+| --- | --- |
+| `templates.banner` 없음 | 지금까지처럼 **legacy 배너 그리드**. HOME html 을 배너에 재사용하지 않는다 |
+| `templates.highlights`(및 옛 `templates.memos`) 없음 | **플랫폼 기본 template 을 native 로.** 그 template 은 부모 문서의 `highlight-*` CSS 로 그려지므로 프레임에 넣으면 글자만 남는다 |
+| 프레임이 안 뜸(READY timeout·origin 없음·플래그 OFF) | **같은 스킨을 native 로.** 배너도 legacy 로 되돌리지 않는다. 다시 시도하지 않는다 |
+| FOLDER 페이지(Series Viewer) | native. 이동은 된다(그 주소가 nav 표에 있다) |
+| `?write=1` `?edit=1` `?manage=1` 등 관리 진입 | 프레임과 무관 — 그 주소는 nav 표에 들어가지 않는다(SANDBOX-2) |
+
+### K-6. 알려진 차이 — 하이라이트 카드 도구(⋮)
+
+프레임 안 하이라이트 화면은 **주인장에게도 읽기 전용**이다.
+
+카드 ⋮ 도구와 "원문 위치로 스크롤" 요청은 부모가 렌더된 DOM 을 훑어
+심는 장치다(`posts/view/posts-view-highlights.js`
+`attachHighlightsScreenTools()`, `highlight-tools` region). cross-origin
+프레임에서 그 자리를 채우는 방법은 아직 정하지 않았다(아래 "남은
+차이"). 그래서:
+
+- 투영기가 `highlights.canManage` 를 **false 로 고정**한다 — 스킨이
+  그 값으로 감싼 편집 UI 를 그리다가 눌러도 아무 일이 없는 상태가
+  되지 않게.
+- 카드 → 원문 글로 가는 **이동은 된다**(`postHref` 가 nav 표에
+  있다). 도착한 글에서 그 하이라이트 자리로 자동 스크롤되는 것만
+  빠진다.
+- `hasError` 토스트(주인장에게 "다시 시도")는 프레임 여부와 무관하게
+  부모가 그대로 띄운다.
+
+배너 쪽에는 같은 문제가 없다 — 배너 추가/수정 진입점(＋ / EDIT)은
+스킨 마크업 밖, `#postArea` 가 소유한 플랫폼 UI 라 프레임과 무관하게
+그대로 남는다.
+
+### K-7. 검증
+
+`node skin/sandbox/skin-sandbox-e2e-test.mjs --only=surfaces` (8957+8958)
+— 진짜 `index.html` 로 공개 주소를 타고, supabase 만 mock 이다.
+
+- GALLERY(`/category/2`) · BANNER(`/category/3`) · HIGHLIGHT(`/highlights`) ·
+  HIGHLIGHT 를 카테고리 주소(`/category/4`)로 진입 → 네 화면 모두
+  **그 화면의 프레임 정확히 1개**, 문서 전체로는 HOME + 그 화면 둘뿐
+- 프레임 안에 실제 데이터(`LINKS`/`첫 배너`, `밑줄`/발췌문/메모,
+  `PIC`/`사진 글`)
+- HOME 과 **같은 스킨 CSS** 가 프레임에 적용됐다(`.sb-page` 의
+  `max-width: 720px` 계산값 — 프레임에 플랫폼 CSS 가 없으므로 이 값이
+  나오는 길은 스킨 CSS 하나뿐이다)
+- 그 화면의 namespace 만 도착한다(배너 화면에 글 목록 없음,
+  하이라이트 화면에 배너 없음, `highlights === memos`)
+- 하이라이트 카테고리 주소가 `/highlights` 로 정리된다
+- 직접 접속 · 새로고침 · 뒤로가기 → 프레임이 쌓이지 않는다
+- 모바일 390px — 부모와 프레임 **양쪽** 가로 넘침 0
+- native 회귀: `renderMode` 를 지운 같은 스킨은 세 화면 모두 같은
+  문서에 그려지고 iframe 0개
+- `templates.banner`/`templates.highlights` 를 지운 sandbox 스킨은
+  프레임이 아니라 legacy 배너 / 플랫폼 기본 template 으로 가고,
+  **카드는 그대로 보인다**
+
+`node skin/sandbox/skin-sandbox-unit-test.mjs` — `[payload3]` 절이
+새로 붙었다: 두 화면 payload 에 토큰·UUID·이메일·비밀 본문·DB row
+키가 없다 · 배너 항목은 알려진 다섯 칸뿐 · 개수를 다시 센다 ·
+이미지 주소가 부모 origin 기준 절대 주소가 된다 · `canManage` 고정
+false · 옛 `memos.cards` 만 있는 context 도 같은 카드를 만든다.
+`RENDER_PAGE`/`RENDERED` 는 다섯 pageType 을 받고, 옛
+`RENDER_HOME` 은 여전히 `home` 만 받는다.
+
+**실행 결과 (2026-09-15, chromium)**
+
+| 테스트 | 결과 |
+| --- | --- |
+| `skin/sandbox/skin-sandbox-unit-test.mjs` | 197 passed, 0 failed |
+| `skin/sandbox/skin-sandbox-e2e-test.mjs --only=surfaces` | 83 passed, 0 failed |
+| `skin/sandbox/skin-sandbox-e2e-test.mjs` (전체) | 357 passed, 0 failed |
+| `skin/skin-banner-page-e2e-test.mjs` (8935) | 248 passed, 0 failed |
+| `posts/posts-highlight-e2e-test.mjs` (8952) | 122 passed, 0 failed |
+| `skin/skin-material-parity-e2e-test.mjs` (8956) | 58 passed, 0 failed |
+| `skin/skin-write-manage-e2e-test.mjs` (8936) | 155 passed, 0 failed |
+
+**하지 않은 것**: 실제 DB 검증 · 배포 확인 · 실기기 확인 ·
+webkit 실행 · commit/push.
+
+### K-8. 이 라운드에서 하지 않은 것
+
+- FOLDER 페이지(Series Viewer)의 sandbox 렌더 — 같은 누락 원인이지만
+  이번 범위가 아니다. 이동은 되고 도착 화면은 native 다.
+- `highlight-tools` / `owner-tools` region 을 cross-origin 에서 채우는 방법
+  (§K-6)
+- Studio Preview 통합(SANDBOX-4) · 저자 JS(SANDBOX-5)
+- 비밀글 gate 를 프레임 안으로 옮기는 것 — POST 는 여전히 native 폴백
+- fixture 디자인 개선 — `templates.banner`/`highlights` 는 진단용이고
+  HOME 이 이미 쓰는 `sb-*` 클래스만 재사용한다(새 CSS 없음)
+
+---
+
 ## 남은 차이 (아직 정하지 않은 것)
 
 - 비밀글 gate를 프레임 안/밖 어디에 둘 것인가 (SANDBOX-3)
 - `owner-tools` / `highlight-tools` region을 cross-origin에서 어떻게 채울 것인가
+  — SANDBOX-3 이후 이것이 **실제로 눈에 보이는 차이**가 됐다: 프레임 안
+  하이라이트 화면은 주인장에게도 읽기 전용이다(§K-6)
 - Studio Inspector/Direct Edit/크롭의 sandbox 대응 (SANDBOX-4)
 - 저자 JS를 켤 때의 origin 전략과 리소스 상한 (SANDBOX-5)
   — **여러 사용자의 임의 JS를 같은 origin에서 실행하지 않는다**가 그 단계의
@@ -1776,7 +1985,8 @@ slug allowlist 만 보고 쿼리도 localStorage 도 읽지 않는다.
 - **외부 자유 이미지·웹폰트를 sandbox CSP 가 허용할 것인가** — SANDBOX-1은
   지금 쓰는 출처만 열었다(§H-7). 실제 사용자 스킨을 올려 보기 전에 정한다.
 - HOME만 프레임이고 나머지 화면은 같은 문서라는 **혼합 상태**(§H-3) —
-  SANDBOX-3이 나머지를 가져가면 사라진다.
+  SANDBOX-2 가 CATEGORY/POST 를, SANDBOX-3(§K)이 GALLERY/BANNER/
+  HIGHLIGHTS 를 가져갔다. **남은 것은 FOLDER 한 장**이다.
 
 ---
 

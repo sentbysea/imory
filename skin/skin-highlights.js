@@ -37,6 +37,94 @@ import { renderSkin } from "./skin-render.js";
 const SKIN_HIGHLIGHTS_SUPPORTED_SCHEMA_VERSION = 1;
 
 /* =========================================================
+   trySandboxSkinHighlights({ template, context, container })
+     -> Promise<false | { sandbox:true, mount, renderNative }>
+
+   SANDBOX-3. renderMode:"sandbox" 인 스킨의 하이라이트 화면을 별도
+   origin iframe 에 그릴 준비를 한다. skin/skin-category.js /
+   skin-banner.js 와 **같은 함수** 모양이고 pageType 문자열만 다르다.
+
+   ★ 이 경로는 스킨이 자기 templates.highlights 를 가진 경우에만
+   열린다(아래 호출부). 플랫폼 기본 template 은 highlight-* CSS
+   클래스로 그려지고 그 CSS 는 부모 문서에만 있다 — 프레임에는
+   스킨 CSS 만 들어가므로, 기본 template 을 프레임에 넣으면 글자만
+   남은 화면이 된다.
+
+   이 함수는 절대 throw 하지 않는다(이 파일의 계약).
+========================================================== */
+
+async function trySandboxSkinHighlights({ template, context, container }) {
+
+  try {
+
+    if (
+      typeof resolveSkinRenderMode !== "function" ||
+      typeof isSandboxSkinEnabled !== "function" ||
+      isSandboxSkinEnabled(window) !== true ||
+      !window.skinSandboxHostReady
+    ) {
+      return false;
+    }
+
+
+    const host =
+      await window.skinSandboxHostReady;
+
+    if (!host || typeof host.prepareSandboxSkin !== "function") {
+      return false;
+    }
+
+
+    const prepared =
+      host.prepareSandboxSkin({
+        container,
+        pageType: "highlights",
+        template,
+        context
+      });
+
+    if (!prepared || !prepared.ok) {
+
+      console.warn(
+        "[skin-highlights] sandbox prepare failed, falling back to native skin render:",
+        prepared ? prepared.reason : "no-result"
+      );
+
+      return false;
+
+    }
+
+
+    return {
+      sandbox: true,
+      mount: prepared.mount,
+
+      renderNative: function (target) {
+
+        return renderSkin({
+          container: target,
+          skin: template,
+          context,
+          mode: "view"
+        });
+
+      }
+    };
+
+  }
+
+  catch (err) {
+
+    console.error("[skin-highlights] sandbox prepare threw", err);
+
+    return false;
+
+  }
+
+}
+
+
+/* =========================================================
    renderPublishedSkinHighlights({ ownerId, container, view, categoryId, outcome })
    -> Promise<boolean>
 ========================================================== */
@@ -82,8 +170,11 @@ export async function renderPublishedSkinHighlights({ ownerId, container, view, 
     templates.highlights -> templates.memos(레거시) -> 플랫폼 기본
     (skin/skin-template.js 의 resolveSkinHighlightsTemplate).
   */
+  const skinHighlightsTemplate =
+    skinPackage ? resolveSkinHighlightsTemplate(skinPackage) : undefined;
+
   const highlightsTemplate =
-    (skinPackage && resolveSkinHighlightsTemplate(skinPackage)) ||
+    skinHighlightsTemplate ||
     getDefaultHighlightsTemplate();
 
   const imageSlotNames =
@@ -111,6 +202,75 @@ export async function renderPublishedSkinHighlights({ ownerId, container, view, 
     return false;
   }
 
+  /* =====================================================
+     SANDBOX-3 — renderMode:"sandbox" 인 스킨만 별도 origin의
+     iframe에서 그린다 (IMORY_SANDBOX_SKIN_DESIGN.md).
+
+     ★ 두 조건이 함께 참일 때만 열린다:
+       · 스킨이 자기 templates.highlights 를 갖고 있다
+         (플랫폼 기본 template 은 부모 CSS 에 의존한다 —
+          위 trySandboxSkinHighlights 주석)
+       · 호출자가 outcome 을 줬다 (mount 를 받을 방법)
+
+     ★ 알려진 차이: 프레임 안에서는 카드 ⋮ 도구(메모 편집)와
+     "원문 위치로 스크롤" 요청이 동작하지 않는다. 둘 다 부모가
+     렌더된 DOM 에 심어 넣는 장치이고(posts/view/
+     posts-view-highlights.js attachHighlightsScreenTools),
+     cross-origin 프레임에서 그 자리를 채우는 방법은 아직 정하지
+     않았다(설계 문서 "남은 차이"의 highlight-tools 항목).
+     그래서 프레임 안 하이라이트 화면은 주인장에게도 읽기
+     전용이고, 투영 단계에서 canManage 를 false 로 고정한다
+     (skin/sandbox/skin-sandbox-context.js).
+  ====================================================== */
+
+  const renderMode =
+    typeof resolveSkinRenderMode === "function" && skinPackage
+      ? resolveSkinRenderMode(skinPackage)
+      : "native";
+
+  if (
+    renderMode === "sandbox" &&
+    skinHighlightsTemplate &&
+    outcome &&
+    typeof outcome === "object"
+  ) {
+
+    const prepared =
+      await trySandboxSkinHighlights({
+        template: highlightsTemplate,
+        context,
+        container
+      });
+
+    if (prepared) {
+
+      outcome.context = context;
+
+      /*
+        ★ instance 는 없다 — 그려지는 DOM 이 이 realm 에 없다.
+        호출자는 이 값이 없으면 카드 도구를 앉히지 않는다(빈 자리
+        목록으로 no-op 이 되는 것과 같은 결과지만, 의도를 분명히
+        하려고 명시한다).
+      */
+
+      outcome.instance = null;
+
+      outcome.usedSkinTemplate = true;
+
+      outcome.sandboxMount =
+        prepared.mount;
+
+      outcome.sandboxRenderNative =
+        prepared.renderNative;
+
+      return true;
+
+    }
+
+    /* 준비에 실패하면 같은 스킨을 native 로 — 다시 시도하지 않는다 */
+
+  }
+
   try {
 
     const instance = renderSkin({
@@ -123,7 +283,7 @@ export async function renderPublishedSkinHighlights({ ownerId, container, view, 
     if (outcome && typeof outcome === "object") {
       outcome.context = context;
       outcome.instance = instance;
-      outcome.usedSkinTemplate = Boolean(skinPackage && resolveSkinHighlightsTemplate(skinPackage));
+      outcome.usedSkinTemplate = Boolean(skinHighlightsTemplate);
     }
 
   } catch (err) {

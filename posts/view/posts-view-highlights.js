@@ -311,6 +311,53 @@ async function openHighlightsScreen(
 
   else {
 
+    /* =====================================================
+       SANDBOX-3 — 별도 origin iframe 으로 그리는 스킨
+
+       이 경우 target 은 비어 있다. iframe 은 DOM 에서 옮기는 순간
+       문서가 다시 로드되므로 "스크래치에 그려 두고 옮긴다"를 쓸 수
+       없어서, skin/skin-highlights.js 가 준비만 해 두고 실제 생성을
+       여기로 미뤘다(CATEGORY/BANNER 와 같은 구조). 최신 화면인지는
+       이미 위 isStale() 에서 확인했다.
+
+       프레임이 안 뜨면 **같은 스킨을 native 로** 그린다 — 그때는
+       instance 가 생기므로 카드 ⋮ 도구도 평소처럼 앉는다.
+    ====================================================== */
+
+    if (typeof outcome.sandboxMount === "function") {
+
+      const mounted =
+        await outcome.sandboxMount(postList);
+
+      if (!mounted || !mounted.ok) {
+
+        console.warn(
+          "[posts-view-highlights] sandbox mount failed, falling back to native skin render:",
+          mounted ? mounted.reason : "no-result"
+        );
+
+        postList.innerHTML =
+          "";
+
+        try {
+
+          outcome.instance =
+            outcome.sandboxRenderNative(postList) ||
+            null;
+
+        }
+
+        catch (err) {
+
+          console.error("[posts-view-highlights] native skin fallback failed", err);
+
+        }
+
+      }
+
+    }
+
+
     while (target.firstChild) {
 
       postList.appendChild(
@@ -324,6 +371,15 @@ async function openHighlightsScreen(
       outcome.instance ||
       null;
 
+
+    /*
+      프레임에서 그려진 경우 instance 가 없고 postList 에는 iframe
+      하나뿐이라, 이 호출은 카드 도구도 원문 이동 핸들러도 앉히지
+      못한다(둘 다 이 realm 의 DOM 을 훑는다). 그것이 sandbox 화면의
+      알려진 차이다 — skin/skin-highlights.js 의 sandbox 분기 주석과
+      IMORY_SANDBOX_SKIN_DESIGN.md "남은 차이"의 highlight-tools 항목.
+      hasError 토스트는 프레임 여부와 무관하게 그대로 뜬다.
+    */
 
     attachHighlightsScreenTools(
       outcome.context

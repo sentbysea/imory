@@ -1640,8 +1640,9 @@ async function runPayload(browser) {
 
   check("[payload] ★ 도착한 최상위 키가 계약 그대로다",
     receivedKeys === [
-      "banners", "category", "contract", "home", "images", "nav",
-      "navigation", "page", "pageType", "post", "profile", "site", "viewer"
+      "bannerCategory", "banners", "category", "contract", "highlights",
+      "home", "images", "memos", "nav", "navigation", "page", "pageType",
+      "post", "profile", "site", "viewer"
     ].join(","),
     receivedKeys);
 
@@ -2001,7 +2002,15 @@ const HOME_DB = {
   ],
   categories: [
     { id: 1, user_id: HOME_OWNER_ID, name: "TXT", type: "post", sort_order: 1 },
-    { id: 2, user_id: HOME_OWNER_ID, name: "PIC", type: "gallery", sort_order: 2 }
+    { id: 2, user_id: HOME_OWNER_ID, name: "PIC", type: "gallery", sort_order: 2 },
+
+    /*
+      SANDBOX-3 — BANNER / HIGHLIGHT 화면도 프레임에서 그려진다.
+      두 타입은 블로그당 하나뿐이다
+      (IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md singleton).
+    */
+    { id: 3, user_id: HOME_OWNER_ID, name: "LINKS", type: "banner", sort_order: 3 },
+    { id: 4, user_id: HOME_OWNER_ID, name: "밑줄", type: "highlight", sort_order: 4 }
   ],
   posts: [
     { id: 101, user_id: HOME_OWNER_ID, category_id: 1, title: "첫 번째 글",
@@ -2023,25 +2032,99 @@ const HOME_DB = {
     */
     { id: 103, user_id: HOME_OWNER_ID, category_id: 1, title: "잠긴 글",
       content_type: "text", visibility: "secret",
-      created_at: "2026-09-03T02:00:00Z", quote_preset_id: null }
+      created_at: "2026-09-03T02:00:00Z", quote_preset_id: null },
+
+    /*
+      SANDBOX-3 — 갤러리 카테고리(PIC)의 글. 이 fixture 의
+      templates.category 는 category.gallery 를 쓰지 않으므로 갤러리
+      모드가 켜지지 않고 평면 목록으로 그려진다
+      (skinTemplateUsesGallery, IMORY_GALLERY1_DESIGN.md §4) —
+      여기서 보려는 것은 "갤러리 타입도 같은 프레임 경로를 탄다"다.
+    */
+    { id: 201, user_id: HOME_OWNER_ID, category_id: 2, title: "사진 글",
+      content_type: "text", visibility: "public",
+      created_at: "2026-08-20T02:00:00Z", quote_preset_id: null }
   ],
   post_contents: [
     { post_id: 101, content: "<p>첫 번째 글의 본문이다.</p>" },
     { post_id: 102, content: "<p>두 번째 글의 본문이다.</p>" },
-    { post_id: 103, content: "<p>비밀 본문</p>" }
+    { post_id: 103, content: "<p>비밀 본문</p>" },
+    { post_id: 201, content: "<p>사진 글의 본문이다.</p>" }
   ],
   post_folders: [],
   post_gallery_images: [],
   post_covers: [],
-  post_highlights: [],
-  banners: [],
+
+  /*
+    SANDBOX-3 — 하이라이트 카드 한 장. 공개 글(101)에 걸려 있어서
+    방문자도 본다. 비밀글(103)에는 걸지 않는다 — 그 gate 는
+    posts/posts-highlight-e2e-test.mjs --only=protect 가 본다.
+  */
+  post_highlights: [
+    {
+      id: "hl-1", user_id: HOME_OWNER_ID, post_id: 101,
+      color: "#ffd400",
+      excerpt: "첫 번째 글의", prefix: "", suffix: " 본문이다.",
+      text_start: 0, note: "여기 메모가 있다",
+      created_at: "2026-09-04T02:00:00Z", updated_at: "2026-09-04T02:00:00Z"
+    }
+  ],
+
+  banners: [
+    { id: 11, user_id: HOME_OWNER_ID, category_id: 3, name: "첫 배너",
+      url: "/testuser/category/1", image_url: "/skin/test-skins/imory-diary-avatar-placeholder.svg",
+      sort_order: 1 }
+  ],
+
   quote_presets: []
 };
 
 const HOME_RESERVED_PARAMS =
   new Set(["select", "order", "limit", "offset", "on_conflict", "columns"]);
 
+/*
+  post_highlights 는 embed select(posts!inner (...)) 로 조회된다
+  (posts/view/posts-view-highlight-store.js loadHighlightCards).
+  아래 평면 select 처리로는 그 모양을 만들 수 없어서 이 표만
+  따로 조립한다 — 카드가 가리키는 글의 제목/카테고리/공개 여부가
+  같은 행에 붙어 와야 Context 가 카드를 만들 수 있다.
+*/
+
+function homeHighlightRows(params) {
+
+  const owner = params.get("user_id");
+
+  return (HOME_DB.post_highlights || [])
+    .filter(r => !owner || ("eq." + r.user_id) === owner)
+    .map(r => {
+
+      const post =
+        (HOME_DB.posts || []).find(p => String(p.id) === String(r.post_id));
+
+      if (!post) return null;
+
+      return {
+        id: r.id, post_id: r.post_id, color: r.color, excerpt: r.excerpt,
+        prefix: r.prefix, suffix: r.suffix, text_start: r.text_start,
+        note: r.note, created_at: r.created_at, updated_at: r.updated_at,
+        posts: {
+          id: post.id, title: post.title, category_id: post.category_id,
+          folder_id: post.folder_id === undefined ? null : post.folder_id,
+          visibility: post.visibility, updated_at: post.created_at
+        }
+      };
+
+    })
+    .filter(Boolean);
+
+}
+
+
 function homeQueryTable(table, params) {
+
+  if (table === "post_highlights") {
+    return homeHighlightRows(params);
+  }
 
   let rows = (HOME_DB[table] || []).map(r => ({ ...r }));
 
@@ -2645,6 +2728,431 @@ async function runPages(browser) {
 
 
 /* =========================================================
+   [surfaces] SANDBOX-3 — GALLERY / BANNER / HIGHLIGHTS
+
+   SANDBOX-2 는 post형 CATEGORY 와 POST 만 프레임으로 가져갔다.
+   나머지 공개 화면은 진입 모듈에 분기가 없어서 renderMode 를
+   보지도 않았고, 그래서 sandbox 스킨인데도 native(배너는 legacy
+   그리드)로 그려졌다. 이 절이 그 누락을 화면 단위로 잰다.
+
+   보는 것:
+     · 각 화면이 **보이는 sandbox 프레임 정확히 하나**로 그려진다
+     · HOME 과 **같은 SkinPackage 의 디자인 체계**(sb-* 클래스 ·
+       스킨 CSS)가 프레임 안에 적용된다
+     · 직접 접속 / 새로고침 / 뒤로가기
+     · 모바일 390px 가로 넘침 0
+     · renderMode 없는 같은 스킨은 오늘과 똑같이 같은 문서에
+       그려진다(native 회귀)
+========================================================== */
+
+/*
+  한 컨테이너 안의 **보이는** sandbox 프레임 개수 — "1개" 를 판정하는
+  자리. waitForSandboxPage 와 같은 이유로 보이는 것만 센다(옛 화면의
+  컨테이너는 hidden 으로 남을 뿐 비워지지 않는다).
+
+  ★ 왜 문서 전체가 아니라 컨테이너인가
+
+  공개 HOME 은 #themeMount 에 먼저 그려지고 그 위로 글/카테고리
+  화면이 열린다 — sandbox 스킨이면 HOME 프레임이 그 자리에 계속
+  떠 있다(native 에서 HOME 스킨 DOM 이 남아 있는 것과 같다,
+  SANDBOX-2 의 [pages] 절 주석). 그래서 "이 화면이 프레임 하나로
+  그려졌는가"는 그 화면이 그려지는 컨테이너 안에서 세야 한다.
+*/
+
+async function countVisibleSandboxFrames(page, selector) {
+
+  const elements =
+    await page.$$((selector ? selector + " " : "") + "iframe.imory-skin-sandbox-frame");
+
+  let n = 0;
+
+  for (const element of elements) {
+
+    try {
+      if (await element.isVisible()) n += 1;
+    }
+    catch (err) { /* 그 사이 사라졌다 */ }
+
+  }
+
+  return n;
+
+}
+
+
+async function runSurfaces(browser) {
+
+  console.log("\n[surfaces] GALLERY / BANNER / HIGHLIGHTS 렌더");
+
+  const sandboxPkg = readSandboxPkg();
+
+
+  /*
+    화면 셋을 같은 방식으로 잰다.
+
+    needles  : 프레임 안에 반드시 있어야 하는 글자
+    pageType : 프레임이 스스로 밝히는 화면 이름
+    canonical: 직접 접속한 주소가 정리된 뒤의 경로(없으면 그대로)
+  */
+
+  const SURFACES = [
+    {
+      label: "GALLERY(Pic)",
+      sub: "/category/2",
+      pageType: "category",
+      needles: ["PIC", "사진 글"]
+    },
+    {
+      label: "BANNER",
+      sub: "/category/3",
+      pageType: "banner",
+      needles: ["LINKS", "첫 배너"]
+    },
+    {
+      label: "HIGHLIGHT",
+      sub: "/highlights",
+      pageType: "highlights",
+      needles: ["밑줄", "첫 번째 글의", "여기 메모가 있다"]
+    },
+    {
+      /*
+        하이라이트 카테고리를 메뉴의 일반 주소(/category/4)로 열어도
+        같은 화면이 열리고 주소가 정규형으로 정리된다
+        (IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md).
+      */
+      label: "HIGHLIGHT(카테고리 주소로 진입)",
+      sub: "/category/4",
+      pageType: "highlights",
+      needles: ["밑줄", "첫 번째 글의"],
+      canonical: "/highlights"
+    }
+  ];
+
+
+  for (const surface of SURFACES) {
+
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, surface.sub);
+
+    const frame =
+      await waitForSandboxPage(page, surface.pageType);
+
+    check(`[surfaces] ★ ${surface.label} 이 별도 origin 프레임에서 그려진다`,
+      Boolean(frame));
+
+    if (frame) {
+
+      const text =
+        await frame.locator("#sandboxFrameRoot").innerText();
+
+      for (const needle of surface.needles) {
+
+        check(`[surfaces] ★ ${surface.label} — 프레임에 "${needle}" 이(가) 그려졌다`,
+          text.includes(needle), text.slice(0, 160));
+
+      }
+
+      const visible =
+        await countVisibleSandboxFrames(page, "#postList");
+
+      check(`[surfaces] ★ ${surface.label} — 이 화면의 sandbox 프레임이 정확히 1개다`,
+        visible === 1, String(visible));
+
+      /*
+        HOME 프레임은 #themeMount 에 그대로 남는다(위 함수 주석) —
+        그러나 화면당 프레임은 하나여야 하므로 문서 전체도 둘을
+        넘지 않는다.
+      */
+
+      const visibleAll =
+        await countVisibleSandboxFrames(page);
+
+      check(`[surfaces] ${surface.label} — 문서 전체로도 HOME + 이 화면 둘뿐이다`,
+        visibleAll === 2, String(visibleAll));
+
+      /*
+        HOME 과 같은 SkinPackage 의 디자인 체계인가 — 스킨이 선언한
+        sb-page 컨테이너가 있고, 그 CSS(max-width 720px)가 실제로
+        먹었는지 계산값으로 본다. 프레임에는 플랫폼 CSS 가 없으므로
+        이 값이 나오는 길은 스킨 CSS 하나뿐이다.
+      */
+
+      const sbPage =
+        await frame.evaluate(() => {
+          const el = document.querySelector(".sb-page");
+          if (!el) return null;
+          const cs = getComputedStyle(el);
+          return { maxWidth: cs.maxWidth };
+        });
+
+      check(`[surfaces] ★ ${surface.label} — HOME 과 같은 스킨 CSS 가 프레임에 적용됐다`,
+        Boolean(sbPage) && sbPage.maxWidth === "720px",
+        JSON.stringify(sbPage));
+
+      check(`[surfaces] ★ ${surface.label} — 프레임에 supabase 전역이 없다`,
+        (await frame.evaluate(() => typeof window.supabaseClient)) === "undefined");
+
+      /*
+        ★ 높이가 콘텐츠를 따라왔는가.
+
+        이 세 화면은 컨테이너(#postList)가 아직 hidden 인 동안
+        iframe 이 만들어진다(기존 렌더 순서 — 스크래치 내용을 옮긴
+        **뒤에** 화면을 드러낸다). 그 상태에서 프레임이 높이를 0 으로
+        보고하고 끝나면 화면이 드러난 뒤에도 납작한 채 남는다.
+        그래서 실제로 잰다.
+      */
+
+      const box =
+        await page.evaluate(() => {
+          const el = document.querySelector("#postList iframe.imory-skin-sandbox-frame");
+          return el ? Math.round(el.getBoundingClientRect().height) : -1;
+        });
+
+      const contentHeight =
+        await frame.evaluate(() =>
+          Math.round(document.documentElement.scrollHeight));
+
+      check(`[surfaces] ★ ${surface.label} — iframe 높이가 콘텐츠를 따라온다 (납작하지 않다)`,
+        box > 40 && Math.abs(box - contentHeight) <= 8,
+        `iframe=${box} content=${contentHeight}`);
+
+      /*
+        그 화면의 namespace 만 도착했는가 — banner 화면에 글 목록을,
+        하이라이트 화면에 배너 목록을 보내지 않는다.
+      */
+
+      const ns =
+        await frame.evaluate(() => {
+          const d = window.__imorySandboxLastReceived || {};
+          return {
+            pageType: d.pageType,
+            homeNull: d.home === null,
+            categoryNull: d.category === null,
+            postNull: d.post === null,
+            bannerNull: d.bannerCategory === null,
+            highlightsNull: d.highlights === null,
+            aliasSame: d.highlights === d.memos
+          };
+        });
+
+      const expected = {
+        category: { categoryNull: false, bannerNull: true, highlightsNull: true },
+        banner: { categoryNull: true, bannerNull: false, highlightsNull: true },
+        highlights: { categoryNull: true, bannerNull: true, highlightsNull: false }
+      }[surface.pageType];
+
+      check(`[surfaces] ★ ${surface.label} — 그 페이지의 namespace 만 채워 보낸다`,
+        ns.pageType === surface.pageType &&
+        ns.homeNull === true &&
+        ns.postNull === true &&
+        ns.categoryNull === expected.categoryNull &&
+        ns.bannerNull === expected.bannerNull &&
+        ns.highlightsNull === expected.highlightsNull,
+        JSON.stringify(ns));
+
+      check(`[surfaces] ${surface.label} — highlights 와 memos 는 같은 객체다`,
+        ns.aliasSame === true);
+
+    }
+
+    check(`[surfaces] ★ ${surface.label} — 같은 문서에 스킨이 중복으로 그려지지 않는다`,
+      (await page.locator("#postList > .imory-skin-root").count()) === 0);
+
+    if (surface.canonical) {
+
+      await page.waitForURL(
+        `**/${HOME_SLUG}${surface.canonical}`, { timeout: 10000 }
+      ).catch(() => {});
+
+      check(`[surfaces] ★ ${surface.label} — 주소가 정규형으로 정리된다`,
+        new URL(page.url()).pathname === `/${HOME_SLUG}${surface.canonical}`,
+        page.url());
+
+    }
+
+    check(`[surfaces] ${surface.label} — 부모 문서에 가로 넘침이 없다`,
+      (await page.evaluate(() =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth)) <= 0);
+
+    check(`[surfaces] ${surface.label} — 페이지 오류 없음`,
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+
+  }
+
+
+  /* --- 새로고침 / 뒤로가기 ------------------------------ */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, "/category/3");
+
+    check("[surfaces] ★ BANNER 직접 접속이 프레임으로 열린다",
+      Boolean(await waitForSandboxPage(page, "banner")));
+
+    await page.reload({ waitUntil: "load" });
+
+    check("[surfaces] ★ 새로고침해도 같은 화면이 프레임으로 다시 열린다",
+      Boolean(await waitForSandboxPage(page, "banner")));
+
+    await page.goto(
+      PARENT_ORIGIN + "/" + HOME_SLUG + "/highlights",
+      { waitUntil: "load" }
+    );
+
+    check("[surfaces] HIGHLIGHT 로 옮겨 갔다",
+      Boolean(await waitForSandboxPage(page, "highlights")));
+
+    await page.goBack({ waitUntil: "load" });
+
+    check("[surfaces] ★ 뒤로가기로 BANNER 프레임이 돌아온다",
+      Boolean(await waitForSandboxPage(page, "banner")));
+
+    const visibleBack =
+      await countVisibleSandboxFrames(page, "#postList");
+
+    check("[surfaces] ★ 뒤로가기 뒤에도 이 화면의 프레임이 1개다 (쌓이지 않는다)",
+      visibleBack === 1, String(visibleBack));
+
+    check("[surfaces] 새로고침/뒤로가기 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- 모바일 390px ------------------------------------- */
+
+  for (const surface of SURFACES.slice(0, 3)) {
+
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, surface.sub, {
+        viewport: { width: 390, height: 780 }
+      });
+
+    const frame =
+      await waitForSandboxPage(page, surface.pageType);
+
+    check(`[surfaces] ★ 390px — ${surface.label} 이 프레임에서 그려진다`,
+      Boolean(frame));
+
+    check(`[surfaces] ★ 390px — ${surface.label} 부모 가로 넘침 0`,
+      (await page.evaluate(() =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth)) <= 0);
+
+    if (frame) {
+
+      check(`[surfaces] ★ 390px — ${surface.label} 프레임 안 가로 넘침 0`,
+        (await frame.evaluate(() =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth)) <= 0);
+
+    }
+
+    check(`[surfaces] 390px — ${surface.label} 페이지 오류 없음`,
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+
+  }
+
+
+  /* --- native 회귀: renderMode 를 지우면 오늘과 같다 ----- */
+
+  {
+    const nativePkg = readSandboxPkg();
+    delete nativePkg.renderMode;
+
+    for (const [sub, needle] of [
+      ["/category/2", "PIC"],
+      ["/category/3", "LINKS"],
+      ["/highlights", "밑줄"]
+    ]) {
+
+      const { ctx, page, pageErrors } =
+        await openPublicPath(browser, nativePkg, sub);
+
+      await page.waitForSelector("#postList .imory-skin-root", { timeout: 20000 });
+
+      check(`[surfaces] ★ native 회귀 — ${sub} 는 같은 문서에 그려진다`,
+        (await page.locator("iframe.imory-skin-sandbox-frame").count()) === 0 &&
+        (await page.locator("#postList .imory-skin-root").first().innerText())
+          .includes(needle));
+
+      check(`[surfaces] native 회귀 — ${sub} 페이지 오류 없음`,
+        realPageErrors(pageErrors).length === 0,
+        realPageErrors(pageErrors).join(" | "));
+
+      await ctx.close();
+
+    }
+  }
+
+
+  /*
+    --- 배너/하이라이트 template 이 없는 sandbox 스킨 -------
+
+    ★ 이 경우는 프레임이 아니다.
+
+    BANNER   : templates.banner 가 없으면 지금까지처럼 legacy 배너
+               그리드로 간다(skin/skin-banner.js 의 계약 — HOME html
+               을 배너에 재사용하지 않는다).
+    HIGHLIGHT: 플랫폼 기본 template 은 부모 문서의 highlight-* CSS
+               로 그려진다. 그것을 프레임에 넣으면 글자만 남으므로
+               native 로 그린다(skin/skin-highlights.js 주석).
+  */
+
+  {
+    const thinPkg = readSandboxPkg();
+    delete thinPkg.templates.banner;
+    delete thinPkg.templates.highlights;
+
+    {
+      const { ctx, page, pageErrors } =
+        await openPublicPath(browser, thinPkg, "/category/3");
+
+      check("[surfaces] ★ templates.banner 가 없으면 프레임이 아니라 legacy 배너다",
+        (await waitForSandboxPage(page, "banner", 3000)) === null);
+
+      check("[surfaces] templates.banner 없음 — 페이지 오류 없음",
+        realPageErrors(pageErrors).length === 0,
+        realPageErrors(pageErrors).join(" | "));
+
+      await ctx.close();
+    }
+
+    {
+      const { ctx, page, pageErrors } =
+        await openPublicPath(browser, thinPkg, "/highlights");
+
+      await page.waitForSelector("#postList .highlight-screen", { timeout: 20000 });
+
+      check("[surfaces] ★ templates.highlights 가 없으면 플랫폼 기본 template 을 native 로 그린다",
+        (await waitForSandboxPage(page, "highlights", 2000)) === null &&
+        (await page.locator("#postList .highlight-screen").count()) === 1);
+
+      check("[surfaces] ★ 그때 카드는 그대로 보인다 (데이터가 사라지지 않는다)",
+        (await page.locator("#postList .highlight-screen").first().innerText())
+          .includes("첫 번째 글의"));
+
+      check("[surfaces] templates.highlights 없음 — 페이지 오류 없음",
+        realPageErrors(pageErrors).length === 0,
+        realPageErrors(pageErrors).join(" | "));
+
+      await ctx.close();
+    }
+  }
+
+}
+
+
+/* =========================================================
    [nav] SANDBOX-2 — 프레임 안 링크가 실제로 눌린다
 
    여기서 보는 것은 "부모가 화면을 바꿨는가"와 "주소가 따라왔는가"
@@ -3046,6 +3554,7 @@ async function runNav(browser) {
     /* --- SANDBOX-2 --- */
 
     if (shouldRun("pages")) await runPages(browser);
+    if (shouldRun("surfaces")) await runSurfaces(browser);
     if (shouldRun("nav")) await runNav(browser);
 
     if (shouldRun("regress")) await runRegress();
