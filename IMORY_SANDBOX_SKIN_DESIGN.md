@@ -1,6 +1,6 @@
 # IMORY SANDBOX SKIN — 0단계 조사 및 구현 설계
 
-**상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1).**
+**상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기).**
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
 §G(SANDBOX-0)와 §H(SANDBOX-1)에만 적혀 있다.** 둘을 섞어 읽지 말 것
@@ -764,6 +764,11 @@ frame-ancestors https://imory.me;
 
 ### G-2. 기능 플래그
 
+> **변경됨 → §I.** 아래는 SANDBOX-0 시점의 기록이다. 2026-09-15에
+> production 관문이 "opt-in 신호"에서 **"블로그 slug allowlist"**로
+> 바뀌었고, `SANDBOX_SKIN_ENABLED_HOSTS`도 더 이상 비어 있지 않다.
+> 쿼리·localStorage opt-in은 **로컬 개발 호스트 전용**으로 남았다.
+
 `isSandboxSkinEnabled()`는 **두 관문을 모두** 통과해야 true다.
 
 1. hostname이 로컬 개발 호스트이거나 `SANDBOX_SKIN_ENABLED_HOSTS`에
@@ -1482,6 +1487,9 @@ SANDBOX-0과 달리 이번에는 기존 자산을 고쳤다 — `skin/skin-rende
 배열이라 `imory.me`에서는 `?sandboxSkin=1`을 붙여도 아무 일도
 일어나지 않는다. production에서 켜려면 그 파일을 고쳐 배포해야 한다.
 
+> **변경됨 → §I.** 그 뒤 같은 날, 테스트 계정 `test1` 하나에만
+> 켜는 배포를 했다.
+
 ### H-13. SANDBOX-2 진행 가능 여부
 
 **가능하다.** 이 라운드가 남긴 전제가 다 섰다 — 별도 origin, 메시지
@@ -1505,6 +1513,80 @@ SANDBOX-2(네비게이션)가 먼저 할 일:
   주인장이 sandbox HOME에서 자기 도구를 못 쓴다.
 - **img-src/font-src를 넓힐 것인가**(§H-7). 실제 사용자 스킨을
   올려 보기 전에 정해야 한다.
+
+---
+
+
+## I. 켜기 — production 에서 test1 하나만 (2026-09-15)
+
+**상태: 현재 구현.** §G-2의 플래그 계약을 대체한다. 코드는
+`skin/sandbox/skin-sandbox-config.js` 한 파일이고, 렌더링 경로
+(`skin/skin-home.js`·`skin/sandbox/skin-sandbox-host.js`)는
+**한 줄도 고치지 않았다** — 무엇이 켜지는가만 바뀌었다.
+
+### I-1. 무엇이 바뀌었나
+
+`isSandboxSkinEnabled(win)`이 호스트 종류에 따라 갈린다.
+
+| 호스트 | 관문 |
+| --- | --- |
+| production (`SANDBOX_SKIN_ENABLED_HOSTS` = `["imory.me"]`) | 경로 첫 칸(= 블로그 slug)이 `SANDBOX_SKIN_ENABLED_SLUGS` = `["test1"]` 에 있는가. **쿼리도 localStorage도 읽지 않는다.** |
+| 그 밖의 production 호스트(`*.pages.dev` 포함) | 언제나 false |
+| 로컬 개발(`localhost` 등) | 예전 그대로 `?sandboxSkin=1` · `localStorage["imory.sandboxSkin"]`. 하네스 경로에는 slug가 없어서 slug로 가를 수 없다 |
+
+새 함수 둘: `readSandboxSkinSlug(win)`(경로 첫 칸, 소문자),
+`isSandboxSkinEnabledSlug(slug)`(목록 대조 — 목록이 비면 "아무 제한
+없음"이 아니라 **"아무도 아님"**이다).
+
+`getSiteOwnerSlugFromPath()`(`core/lib/site-path.js`)를 부르지
+않는다 — 그 함수는 `RESERVED_SLUGS` 로드 순서에 묶인 classic 전역이고,
+이 파일은 node 단위 테스트에서도 그대로 읽히는 독립 파일이다. 예약어는
+어차피 slug 목록에 없으므로 결과가 같다.
+
+### I-2. 왜 DB 컬럼이 아니라 배열인가
+
+"누가 이 실험을 받는가"는 블로그 주인이 고르는 설정이 아니라 배포하는
+사람이 고르는 것이다. 사용자 설정으로 만들면 되돌릴 때도 migration이
+필요해진다. 이 라운드는 **migration을 만들지 않았다.**
+
+### I-3. 무엇이 그대로인가
+
+- `renderMode`가 없거나 `"native"`인 스킨은 이 플래그와 무관하게
+  오늘과 같은 경로다(판정은 `skin/skin-home.js`). 플래그는 "프레임을
+  써도 되는가"이고, 프레임을 **쓰는가**는 SkinPackage가 정한다.
+- HOME 한 장만 프레임이다(§H-3). CATEGORY/POST/FOLDER/HIGHLIGHTS/
+  BANNER는 sandbox 스킨이어도 native 렌더다.
+- 저자 JS는 여전히 실행하지 않는다(`js` 필드는 스키마에만 있다).
+- 프레임이 안 뜨면 **같은 스킨을 native로** 그린다(§H-9 폴백).
+
+### I-4. 검증
+
+| 종류 | 결과 |
+| --- | --- |
+| 단위 (`node skin/sandbox/skin-sandbox-unit-test.mjs`) | 141 passed / 0 failed. `[flag]` 절을 새 계약으로 다시 씀 — 허용 slug ON, 다른 블로그는 `?sandboxSkin=1`·localStorage 에도 OFF, 허용 목록 밖 호스트는 slug가 맞아도 OFF, `pathname` 없는 window는 OFF |
+| e2e mock (`node skin/sandbox/skin-sandbox-e2e-test.mjs`, 8957+8958) | 226 passed / 0 failed (`--only=home` 23 passed 포함) |
+| 배포 확인 | §I-5 |
+| 실기기 | 사람이 `https://imory.me/test1` 에서 확인 (§I-5) |
+
+**production 판정 자체는 e2e로 못 돈다** — 로컬 e2e의 호스트가
+`localhost`라 언제나 dev 분기다. 그래서 그 갈림은 순수 함수로 떼어
+단위 테스트가 판정한다.
+
+### I-5. 켜졌는지 확인하는 법
+
+`https://imory.me/test1` 을 열고 (브라우저 개발자 도구)
+
+```js
+document.querySelectorAll("iframe.imory-skin-sandbox-frame").length   // 1
+document.querySelector("iframe.imory-skin-sandbox-frame").src          // https://skin-frame.imory.me/skin/sandbox/frame?v=...
+document.querySelectorAll("#themeMount .imory-skin-root").length       // 0 (중복 렌더 없음)
+isSandboxSkinEnabled(window)                                           // true
+```
+
+Network 탭에서는 `skin-frame.imory.me` 문서 요청 하나가 보이고,
+그 응답에 `Content-Security-Policy: ... frame-ancestors https://imory.me`
+가 붙어 있다. 다른 블로그(`https://imory.me/<다른 slug>`)에서는 같은
+선택자가 0개이고 `.imory-skin-root`가 1개다.
 
 ---
 

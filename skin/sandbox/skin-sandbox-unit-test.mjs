@@ -67,6 +67,7 @@ function fakeWindow(href, storage) {
   return {
     location: {
       hostname: url.hostname,
+      pathname: url.pathname,
       search: url.search,
       origin: url.origin
     },
@@ -80,24 +81,49 @@ function fakeWindow(href, storage) {
 
 
 /* =========================================================
-   [flag] 기능 플래그 — 기본 OFF, URL만으로는 안 켜진다
+   [flag] 기능 플래그
+
+   production 에서는 **호스트 + 블로그 slug** allowlist 둘 다다.
+   쿼리·localStorage 로 켜는 길은 로컬 개발 호스트에만 있다.
 ========================================================== */
 
 console.log("\n[flag] 기능 플래그");
 
-check("[flag] production + opt-in 없음 -> OFF",
+check("[flag] ★ production + 허용 slug -> ON",
+  config.isSandboxSkinEnabled(fakeWindow("https://imory.me/test1")) === true,
+  "이 배포에서 켜기로 한 블로그 하나");
+
+check("[flag] ★ production + 허용 slug + 뒤에 / -> ON",
+  config.isSandboxSkinEnabled(fakeWindow("https://imory.me/test1/")) === true);
+
+check("[flag] ★ production + 다른 블로그 -> OFF",
+  config.isSandboxSkinEnabled(fakeWindow("https://imory.me/someone")) === false,
+  "다른 사람 블로그는 오늘 그대로다");
+
+check("[flag] production 루트(/) -> OFF",
   config.isSandboxSkinEnabled(fakeWindow("https://imory.me/")) === false);
 
-check("[flag] ★ production + ?sandboxSkin=1 -> 여전히 OFF",
+check("[flag] ★ production + 다른 블로그 + ?sandboxSkin=1 -> 여전히 OFF",
   config.isSandboxSkinEnabled(
-    fakeWindow("https://imory.me/?sandboxSkin=1")
+    fakeWindow("https://imory.me/someone?sandboxSkin=1")
   ) === false,
   "공개 방문자가 주소만으로 켤 수 없다");
 
-check("[flag] ★ production + localStorage opt-in -> 여전히 OFF",
+check("[flag] ★ production + 다른 블로그 + localStorage opt-in -> 여전히 OFF",
   config.isSandboxSkinEnabled(
-    fakeWindow("https://imory.me/", { "imory.sandboxSkin": "1" })
+    fakeWindow("https://imory.me/someone", { "imory.sandboxSkin": "1" })
   ) === false);
+
+check("[flag] ★ 허용 목록에 없는 production 호스트는 slug 가 맞아도 OFF",
+  config.isSandboxSkinEnabled(
+    fakeWindow("https://imory-me.pages.dev/test1")
+  ) === false);
+
+check("[flag] 허용 slug 의 하위 경로(POST 등)도 같은 판정",
+  config.isSandboxSkinEnabled(
+    fakeWindow("https://imory.me/test1/post/123")
+  ) === true,
+  "HOME 인지는 skin-home.js 가 가른다");
 
 check("[flag] localhost + opt-in 없음 -> OFF (기본값)",
   config.isSandboxSkinEnabled(
@@ -109,18 +135,42 @@ check("[flag] localhost + ?sandboxSkin=1 -> ON",
     fakeWindow("http://localhost:8957/?sandboxSkin=1")
   ) === true);
 
+check("[flag] ★ localhost 는 slug 를 보지 않는다 (하네스 경로에 slug 가 없다)",
+  config.isSandboxSkinEnabled(
+    fakeWindow("http://localhost:8957/skin/skin-sandbox-test.html?sandboxSkin=1")
+  ) === true);
+
 check("[flag] localhost + localStorage opt-in -> ON",
   config.isSandboxSkinEnabled(
     fakeWindow("http://127.0.0.1:8957/", { "imory.sandboxSkin": "1" })
   ) === true);
 
-check("[flag] SANDBOX_SKIN_ENABLED_HOSTS 가 비어 있다 (배포 기본값)",
+check("[flag] SANDBOX_SKIN_ENABLED_HOSTS 는 imory.me 하나다",
   Array.isArray(config.SANDBOX_SKIN_ENABLED_HOSTS) &&
-  config.SANDBOX_SKIN_ENABLED_HOSTS.length === 0);
+  config.SANDBOX_SKIN_ENABLED_HOSTS.length === 1 &&
+  config.SANDBOX_SKIN_ENABLED_HOSTS[0] === "imory.me");
+
+check("[flag] SANDBOX_SKIN_ENABLED_SLUGS 는 test1 하나다",
+  Array.isArray(config.SANDBOX_SKIN_ENABLED_SLUGS) &&
+  config.SANDBOX_SKIN_ENABLED_SLUGS.length === 1 &&
+  config.SANDBOX_SKIN_ENABLED_SLUGS[0] === "test1");
+
+check("[flag] slug 목록이 비면 '아무도 아님'이다",
+  config.isSandboxSkinEnabledSlug("") === false &&
+  config.isSandboxSkinEnabledSlug(null) === false);
+
+check("[flag] readSandboxSkinSlug: 경로 첫 칸, 소문자",
+  config.readSandboxSkinSlug(fakeWindow("https://imory.me/Test1/post/9")) === "test1" &&
+  config.readSandboxSkinSlug(fakeWindow("https://imory.me/")) === "");
+
+check("[flag] pathname 이 없는 window 는 OFF 로 떨어진다",
+  config.isSandboxSkinEnabled({
+    location: { hostname: "imory.me", search: "", origin: "https://imory.me" }
+  }) === false);
 
 check("[flag] localStorage 가 던져도 OFF 로 떨어진다",
   config.isSandboxSkinEnabled({
-    location: { hostname: "localhost", search: "", origin: "http://localhost:1" },
+    location: { hostname: "localhost", pathname: "/", search: "", origin: "http://localhost:1" },
     get localStorage() { throw new Error("blocked"); }
   }) === false);
 
@@ -135,9 +185,9 @@ check("[origin] production frame origin 이 배포된 커스텀 도메인이다"
   config.resolveSandboxSkinFrameOrigin(fakeWindow("https://imory.me/"))
   === "https://skin-frame.imory.me");
 
-check("[origin] ★ 그래도 imory.me 에서 플래그는 여전히 OFF 다",
-  config.isSandboxSkinEnabled(fakeWindow("https://imory.me/?sandboxSkin=1")) === false,
-  "origin 상수가 채워진 것은 스위치가 아니다");
+check("[origin] ★ origin 상수가 채워진 것은 스위치가 아니다",
+  config.isSandboxSkinEnabled(fakeWindow("https://imory.me/someone?sandboxSkin=1")) === false,
+  "켜지는 것은 SANDBOX_SKIN_ENABLED_SLUGS 에 적힌 블로그뿐이다");
 
 check("[origin] dev: ?sandboxSkinOrigin 으로 다른 포트를 받는다",
   config.resolveSandboxSkinFrameOrigin(

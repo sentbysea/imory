@@ -481,10 +481,11 @@
 
       ★ 이 블록이 있다고 sandbox 경로가 켜지는 것이 아니다.
       스위치는 skin/sandbox/skin-sandbox-config.js의
-      isSandboxSkinEnabled() 하나뿐이고, 그 함수는 hostname부터
-      본다(SANDBOX_SKIN_ENABLED_HOSTS가 비어 있는 한 imory.me
-      에서는 언제나 false). renderMode가 없는 기존 스킨은 이
-      경로를 아예 타지 않는다.
+      isSandboxSkinEnabled() 하나뿐이고, production에서는 그 함수가
+      hostname allowlist와 블로그 slug allowlist를 본다
+      (SANDBOX_SKIN_ENABLED_HOSTS · SANDBOX_SKIN_ENABLED_SLUGS —
+      2026-09-15 현재 imory.me 의 test1 하나). renderMode가 없는
+      기존 스킨은 그 뒤로도 이 경로를 아예 타지 않는다.
     */
 
     window.skinSandboxHostReady =

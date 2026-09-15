@@ -60,9 +60,10 @@ const SKIN_HOME_SUPPORTED_SCHEMA_VERSION = 1;
 
    ★ 기능 플래그가 꺼져 있으면 아무 일도 하지 않는다.
      판정은 skin/sandbox/skin-sandbox-config.js의
-     isSandboxSkinEnabled() 하나뿐이고, 그 함수는 hostname부터
-     본다 — 공개 방문자가 주소에 쿼리를 붙이는 것만으로는 켜지지
-     않는다. 여기서 먼저 보는 이유는 플래그가 꺼진 배포에서
+     isSandboxSkinEnabled() 하나뿐이고, production에서는 그 함수가
+     hostname과 **블로그 slug** allowlist만 본다 — 공개 방문자가
+     주소에 쿼리를 붙이는 것으로는 켜지지 않는다(그 opt-in 경로는
+     로컬 개발 호스트에만 있다). 여기서 먼저 보는 이유는 플래그가 꺼진 배포에서
      window.skinSandboxHostReady를 기다리지 않게 하기 위해서다
      (index.html이 그 Promise를 선언만 하고 모듈 로드에 실패하면
       영원히 pending일 수 있다).

@@ -2,42 +2,50 @@
    SKIN SANDBOX - CONFIG (classic script)
 
    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §B-1 / §D-4
-   단계: SANDBOX-0 (빈 프레임 + origin 격리 검증)
+   단계: SANDBOX-1 (별도 origin 프레임에 HOME 렌더)
 
    이 파일은 sandbox 스킨 경로의 **유일한 기능 플래그**이자
    **유일한 origin 상수**다. 다른 파일이 origin 문자열을 직접
    적지 않는다 — 한 곳만 고치면 배포 구성이 바뀌도록.
 
    ---------------------------------------------------------
-   ★ 기본값은 OFF다. 그리고 URL만으로는 공개 사용자에게 켜지지
-     않는다.
+   ★ 스위치는 isSandboxSkinEnabled() 하나이고, 두 갈래다.
 
-   isSandboxSkinEnabled()는 두 관문을 **모두** 통과해야 true다:
+   (A) production 호스트 — 켜는 방법은 **이 파일을 고쳐 배포하는
+       것뿐**이다. 주소창 쿼리도, localStorage도 보지 않는다.
 
-     1) 지금 문서의 hostname이 "켜도 되는 호스트"인가
-        - 로컬 개발 호스트(localhost / 127.0.0.1 / [::1])
-        - 또는 SANDBOX_SKIN_ENABLED_HOSTS 에 사람이 직접 적어 넣은 호스트
-          (지금은 빈 배열 = 어떤 production 호스트에서도 켜지지 않는다)
-     2) 그 호스트에서 명시적 opt-in 신호가 있는가
-        - ?sandboxSkin=1  또는  localStorage["imory.sandboxSkin"] === "1"
+         1) hostname 이 SANDBOX_SKIN_ENABLED_HOSTS 에 있는가
+         2) 지금 보고 있는 블로그의 slug(경로 첫 칸)가
+            SANDBOX_SKIN_ENABLED_SLUGS 에 있는가
 
-   (2)만 있고 (1)이 없으면 false다. 그래서 imory.me 방문자가
-   주소창에 ?sandboxSkin=1 을 붙여도 아무 일도 일어나지 않는다.
-   production에서 켜려면 **이 파일을 고쳐 배포**해야 한다 —
-   그것이 "명시적인 내부 설정"이다.
+       둘 다 통과해야 true다. 그래서 2026-09-15 현재
+       https://imory.me/test1 에서만 켜지고, imory.me 의 다른
+       블로그는 ?sandboxSkin=1 을 붙이든 말든 오늘 그대로다.
+       (slug 목록이 비면 그 호스트 전체가 꺼진다 — 실수로 전면
+        공개되는 방향이 아니라 꺼지는 방향으로 넘어진다.)
+
+   (B) 로컬 개발 호스트(localhost / 127.0.0.1 / [::1]) — 여기서만
+       ?sandboxSkin=1 · localStorage["imory.sandboxSkin"]="1" 로
+       켠다. e2e 하네스가 쓰는 길이고, 공개 배포에는 이 분기가
+       닿지 않는다(판정이 런타임 hostname 기준이므로).
+
+   ★ renderMode 와의 관계
+
+   이 플래그가 켜졌다고 모든 스킨이 프레임에 들어가지 않는다.
+   프레임을 쓰는 것은 SkinPackage 가 renderMode:"sandbox" 인
+   경우뿐이고(skin/skin-home.js), renderMode 가 없거나 "native"
+   인 스킨은 이 파일과 무관하게 오늘과 같은 경로로 그려진다.
 
    ---------------------------------------------------------
    ★ frame origin
 
-   SANDBOX_SKIN_PRODUCTION_ORIGIN 은 지금 빈 문자열이다. 2026-09-15
-   실측으로 skin-frame.imory.me 는 DNS에 존재하지 않는다(NXDOMAIN).
-   사람이 Cloudflare에서 커스텀 도메인을 붙인 뒤 이 값을 채운다.
-   비어 있는 동안 resolveSandboxSkinFrameOrigin()은 ""를 돌려주고,
+   SANDBOX_SKIN_PRODUCTION_ORIGIN 은 배포된 커스텀 도메인이다.
+   비어 있으면 resolveSandboxSkinFrameOrigin()이 ""를 돌려주고,
    host 모듈은 그것을 보고 **iframe을 만들지 않는다**(조용한 폴백).
 
    로컬 개발에서는 부모와 frame이 **다른 포트**여야 origin이 갈린다
    (같은 localhost라도 포트가 다르면 다른 origin이다). 그 값은
-   ?sandboxSkinOrigin= 로 준다 — 단, (1)의 dev 호스트에서만,
+   ?sandboxSkinOrigin= 로 준다 — 단, (B)의 dev 호스트에서만,
    그리고 준 값 자체도 dev 호스트일 때만 받는다.
 ========================================================== */
 
@@ -65,10 +73,8 @@ var SANDBOX_SKIN_FRAME_PATH =
   없었으므로).
 
   ★ 이 값이 채워졌다고 sandbox 경로가 켜지는 것이 아니다.
-  스위치는 어디까지나 isSandboxSkinEnabled()이고, 그 함수는
-  hostname부터 본다 — SANDBOX_SKIN_ENABLED_HOSTS가 비어 있는 한
-  imory.me에서는 계속 false다. 이 상수는 "플래그가 켜졌을 때 어디로
-  띄우는가"만 정한다.
+  스위치는 어디까지나 isSandboxSkinEnabled()이다. 이 상수는
+  "플래그가 켜졌을 때 어디로 띄우는가"만 정한다.
 */
 
 var SANDBOX_SKIN_PRODUCTION_ORIGIN =
@@ -88,12 +94,39 @@ var SANDBOX_SKIN_PRODUCTION_PARENT_ORIGINS =
 
 
 /*
-  production에서 플래그를 켤 호스트. 비어 있는 것이 기본이고,
-  비어 있는 한 어떤 공개 방문자도 sandbox 경로를 켤 수 없다.
+  production에서 플래그를 켤 호스트. 여기 없는 호스트에서는 아래
+  slug 목록이 무엇이든 sandbox 경로가 열리지 않는다.
 */
 
 var SANDBOX_SKIN_ENABLED_HOSTS =
-  [];
+  [
+    "imory.me"
+  ];
+
+
+/*
+  ★ production에서 sandbox 경로를 쓸 블로그 slug(경로 첫 칸).
+
+  2026-09-15: 테스트 계정 test1 하나. https://imory.me/test1 의
+  HOME만 프레임을 쓰고, imory.me 의 다른 블로그는 오늘 그대로다.
+  (그 slug의 스킨이 renderMode:"sandbox"일 때만이다 — 그 판정은
+   skin/skin-home.js 가 한다.)
+
+  ★ 왜 DB 컬럼이 아니라 이 배열인가
+
+  "누가 이 실험을 받는가"는 블로그 주인이 고르는 설정이 아니라
+  **배포하는 사람이 고르는 것**이다. 지금 단계에서 사용자 설정으로
+  만들면 되돌릴 때도 migration이 필요해진다. 이 배열은 배포 한
+  번으로 켜고 끈다.
+
+  비어 있으면 production 전체가 꺼진다(넘어지는 방향이 "꺼짐"이다).
+  slug는 소문자로 적는다 — 비교 전에 경로를 소문자로 만든다.
+*/
+
+var SANDBOX_SKIN_ENABLED_SLUGS =
+  [
+    "test1"
+  ];
 
 
 var SANDBOX_SKIN_OPT_IN_QUERY_KEY =
@@ -139,7 +172,8 @@ function isSandboxSkinDevHost(hostname) {
 /* =========================================================
    isSandboxSkinFlagHost(hostname)
 
-   "이 호스트에서 플래그를 켜는 것이 허용되는가" — (1)번 관문.
+   "이 호스트에서 플래그를 켜는 것이 허용되는가" — 첫 관문.
+   여기를 통과한 뒤 production은 slug를, dev 호스트는 opt-in을 본다.
 ========================================================== */
 
 function isSandboxSkinFlagHost(hostname) {
@@ -164,7 +198,10 @@ function isSandboxSkinFlagHost(hostname) {
 /* =========================================================
    readSandboxSkinOptIn(win) -> boolean
 
-   (2)번 관문. 호출하는 쪽이 (1)을 먼저 통과시킨 뒤에만 부른다.
+   ★ 로컬 개발 호스트 전용 관문이다. isSandboxSkinEnabled()는
+   dev 호스트일 때만 이 함수를 부른다 — production에서는 쿼리도
+   localStorage도 보지 않는다.
+
    localStorage는 없거나 던질 수 있다(사생활 보호 모드 등) —
    던지면 "opt-in 없음"으로 본다.
 ========================================================== */
@@ -217,9 +254,71 @@ function readSandboxSkinOptIn(win) {
 
 
 /* =========================================================
+   readSandboxSkinSlug(win) -> "" | "test1"
+
+   지금 문서가 보고 있는 블로그의 slug. 공개 주소가 /:slug,
+   /:slug/post/:id 꼴이므로(core/lib/site-path.js) 경로의 첫 칸이
+   곧 slug다.
+
+   ★ 왜 getSiteOwnerSlugFromPath()를 부르지 않는가
+
+   그 함수는 classic script 전역이고 RESERVED_SLUGS 로드 순서에
+   묶여 있다. 이 파일은 node 단위 테스트에서도 그대로 읽히는
+   독립 모듈이라 그 사슬을 끌고 오지 않는다. 여기서 필요한 것은
+   "첫 칸이 허용 목록에 있는가" 하나뿐이고, 예약어(admin 등)는
+   어차피 목록에 없으므로 결과가 같다.
+========================================================== */
+
+function readSandboxSkinSlug(win) {
+
+  const w =
+    win || (typeof window !== "undefined" ? window : null);
+
+  if (!w || !w.location || typeof w.location.pathname !== "string") {
+    return "";
+  }
+
+
+  const segments =
+    w.location.pathname
+      .split("/")
+      .filter(function (part) { return part !== ""; });
+
+
+  return (segments[0] || "").toLowerCase();
+
+}
+
+
+/* =========================================================
+   isSandboxSkinEnabledSlug(slug) -> boolean
+
+   목록이 비어 있으면 false다 — "아무 제한 없음"이 아니라
+   "아무도 아님"이다.
+========================================================== */
+
+function isSandboxSkinEnabledSlug(slug) {
+
+  if (typeof slug !== "string" || !slug) {
+    return false;
+  }
+
+
+  return SANDBOX_SKIN_ENABLED_SLUGS.indexOf(
+    slug.toLowerCase()
+  ) !== -1;
+
+}
+
+
+/* =========================================================
    isSandboxSkinEnabled(win) -> boolean
 
    ★ 이 함수 하나가 sandbox 경로 전체의 스위치다.
+
+   production:  호스트 allowlist + slug allowlist (파일을 고쳐야
+                바뀐다 — 쿼리·localStorage를 보지 않는다)
+   dev 호스트:  ?sandboxSkin=1 · localStorage opt-in
 ========================================================== */
 
 function isSandboxSkinEnabled(win) {
@@ -237,7 +336,25 @@ function isSandboxSkinEnabled(win) {
   }
 
 
-  return readSandboxSkinOptIn(w) === true;
+  /*
+    로컬 개발에서는 하네스가 slug 없는 경로(/skin/...-test.html)에
+    있으므로 slug로 가를 수 없다. 대신 명시적 opt-in을 요구한다.
+  */
+
+  if (isSandboxSkinDevHost(w.location.hostname)) {
+    return readSandboxSkinOptIn(w) === true;
+  }
+
+
+  /*
+    ★ production. 여기서부터 opt-in 신호는 아예 읽지 않는다 —
+    imory.me 방문자가 주소에 무엇을 붙여도 자기 블로그를 sandbox
+    경로로 밀어 넣을 수 없다.
+  */
+
+  return isSandboxSkinEnabledSlug(
+    readSandboxSkinSlug(w)
+  );
 
 }
 
@@ -491,9 +608,12 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_SKIN_PRODUCTION_ORIGIN,
     SANDBOX_SKIN_PRODUCTION_PARENT_ORIGINS,
     SANDBOX_SKIN_ENABLED_HOSTS,
+    SANDBOX_SKIN_ENABLED_SLUGS,
     isSandboxSkinDevHost,
     isSandboxSkinFlagHost,
     readSandboxSkinOptIn,
+    readSandboxSkinSlug,
+    isSandboxSkinEnabledSlug,
     isSandboxSkinEnabled,
     resolveSandboxSkinFrameOrigin,
     resolveSandboxSkinParentOrigins,
