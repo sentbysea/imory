@@ -31,7 +31,7 @@
    와 동일한 문자열을 하드코딩 — 두 문서는 서로 다른 browsing
    context라 상수를 import로 공유할 수 없다. 값을 바꿀 땐 두 파일을
    함께 고친다):
-     parent -> iframe  "preview:render"        { type, skin, context }
+     parent -> iframe  "preview:render"        { type, skin, renderMode, context }
      parent -> iframe  "preview:render-banner" { type, categoryName, items }
      parent -> iframe  "preview:ping"          { type }
      iframe -> parent  "preview:ready"         { type }
@@ -563,11 +563,33 @@ function updateStudioInspectorButtonState() {
     return;
   }
 
+  /* =====================================================
+     SANDBOX-4 — sandbox 스킨에서는 Select 를 잠근다.
+
+     Inspector 는 Preview 문서의 DOM 을 직접 읽어 hover/선택
+     좌표를 올려보낸다(studio/preview/preview-bridge.js). sandbox
+     스킨의 DOM 은 **다른 origin 의 프레임 안**에 있어 그 문서가
+     읽을 수 없다 — 켜면 크로스헤어 커서만 생기고 아무것도 잡히지
+     않는다. 그래서 "되는 척"하지 않고 잠근다.
+
+     남은 차이로 문서에 적었다(IMORY_SANDBOX_SKIN_DESIGN.md).
+  ====================================================== */
+
+  const isSandboxSkin =
+    !!currentWorkingSkin &&
+    typeof resolveSkinRenderMode === "function" &&
+    resolveSkinRenderMode(currentWorkingSkin) === "sandbox";
+
   studioInspectorButton.disabled =
-    !currentWorkingSkin;
+    !currentWorkingSkin || isSandboxSkin;
+
+  studioInspectorButton.title =
+    isSandboxSkin
+      ? "sandbox 스킨은 직접 편집을 지원하지 않습니다"
+      : "";
 
   if (
-    !currentWorkingSkin &&
+    studioInspectorButton.disabled &&
     typeof window.setStudioInspectorEnabled === "function"
   ) {
 
@@ -1035,6 +1057,14 @@ function applyImportedSkinPackage(skinPackage, options) {
   updateStudioSaveButtonState();
 
   updateStudioPublishButtonState();
+
+  /*
+    SANDBOX-4 — Import/AI 로 renderMode 가 바뀔 수 있다. Select 는
+    sandbox 스킨에서 잠기므로(updateStudioInspectorButtonState
+    주석) 여기서도 상태를 다시 맞춘다.
+  */
+
+  updateStudioInspectorButtonState();
 
   if (options && options.preserveNavigation) {
 
@@ -1822,10 +1852,31 @@ function postRenderToFrame(payload) {
       ? window.stampSkinForInspector(payload.skin)
       : payload.skin;
 
+  /* =====================================================
+     SANDBOX-4 — renderMode 한 칸
+
+     payload.skin 은 **이미 고른 template 한 장**이라(html/css)
+     SkinPackage 최상위의 renderMode 가 들어 있지 않다. Preview
+     문서가 "이 스킨은 별도 origin 프레임에서 그려야 하는가"를
+     알려면 그 값이 필요하므로 봉투에 같이 싣는다.
+
+     판정 자체는 공개 화면과 같은 함수다(skin/skin-template.js
+     resolveSkinRenderMode) — "sandbox" 라고 정확히 적힌 경우만
+     sandbox 이고, 없거나 모르는 값이면 "native" 다. 즉 지금까지의
+     모든 스킨은 이 칸에 "native" 를 싣고 Preview 는 한 줄도
+     달라지지 않는다.
+  ====================================================== */
+
+  const renderModeForFrame =
+    (typeof resolveSkinRenderMode === "function")
+      ? resolveSkinRenderMode(currentWorkingSkin)
+      : "native";
+
   studioPreviewFrame.contentWindow.postMessage(
     {
       type: PREVIEW_MSG_RENDER,
       skin: skinForFrame,
+      renderMode: renderModeForFrame,
       context: payload.context
     },
     window.location.origin

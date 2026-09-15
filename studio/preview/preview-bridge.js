@@ -11,7 +11,7 @@
    함께 고쳐야 한다).
 
    postMessage contract(양쪽 다 origin + shape 검증, 12절):
-     parent -> iframe  "preview:render"          { type, skin, context }
+     parent -> iframe  "preview:render"          { type, skin, renderMode, context }
      parent -> iframe  "preview:render-banner"   { type, categoryName, items }
      parent -> iframe  "preview:ping"            { type }
      parent -> iframe  "preview:inspector-mode"  { type, enabled }
@@ -67,6 +67,22 @@
 
 import { renderSkin } from "../../skin/skin-render.js";
 
+/*
+  SANDBOX-4 — renderMode:"sandbox" 인 스킨은 이 문서가 직접 그리지
+  않고, 공개 화면과 **같은** cross-origin 프레임에 그린다. 분기는
+  아래 handleRenderMessage() 첫 줄 하나뿐이고, 그 조건이 거짓이면
+  (= 지금까지의 모든 스킨) 이 파일의 동작은 한 줄도 달라지지
+  않는다. 자세한 이유는 studio/preview/preview-sandbox.js 상단.
+*/
+
+import {
+  shouldRenderPreviewInSandbox,
+  renderSandboxPreview,
+  sendSandboxPreviewPostBody,
+  teardownSandboxPreview,
+  hasSandboxPreviewFrame
+} from "./preview-sandbox.js";
+
 const PREVIEW_MSG_RENDER = "preview:render";
 const PREVIEW_MSG_RENDER_BANNER = "preview:render-banner";
 const PREVIEW_MSG_READY = "preview:ready";
@@ -117,10 +133,125 @@ function isValidRenderMessage(data) {
     typeof data.skin === "object" &&
     data.skin !== null &&
     typeof data.context === "object" &&
-    data.context !== null
+    data.context !== null &&
+    /* SANDBOX-4 — 선택 필드. 없으면 native(지금까지의 모든 스킨). */
+    (data.renderMode === undefined || typeof data.renderMode === "string")
   );
 
 }
+
+
+/* =========================================================
+   SANDBOX-4 — sandbox 스킨 렌더
+
+   ★ 실패는 언제나 조용한 native 폴백이다(공개 화면과 같은 규칙,
+   skin/skin-home.js tryMountSandboxSkinHome 주석). 프레임이 안
+   뜨면 같은 스킨을 이 문서에서 native 로 그린다 — 백지가 되지
+   않는다. 다시 시도하지 않는다.
+========================================================== */
+
+async function handleSandboxRenderMessage(data) {
+
+  let result;
+
+  try {
+
+    result =
+      await renderSandboxPreview({
+        root: previewRoot,
+        skin: data.skin,
+        context: data.context,
+        onNavigate: function (href) {
+
+          /*
+            프레임 링크 → 기존 "preview:navigate" 그대로. 그 다음은
+            native Preview 에서 링크를 눌렀을 때와 같은 경로다.
+          */
+
+          postToParent({
+            type: PREVIEW_MSG_NAVIGATE,
+            href: href
+          });
+
+        }
+      });
+
+  }
+
+  catch (err) {
+
+    console.error("[preview-bridge] sandbox render threw", err);
+
+    result = { ok: false, reason: "threw" };
+
+  }
+
+
+  if (result && result.ok) {
+
+    /*
+      post-body region 은 프레임 안에 있어 이 문서가 볼 수 없다.
+      템플릿 문자열에 그 자리가 선언되어 있는지로 답한다 —
+      Studio 가 "본문 자리가 없는 POST 템플릿" overlay 를 띄우는
+      판정에 쓰는 값이고, 판정 함수는 Code Editor/Import 와 같은
+      것이다(skin/skin-template.js htmlHasPostBodyRegion).
+    */
+
+    postToParent({
+      type: PREVIEW_MSG_RENDERED,
+      hasPostBodyRegion:
+        typeof window.htmlHasPostBodyRegion === "function"
+          ? window.htmlHasPostBodyRegion(String(data.skin.html || ""))
+          : true
+    });
+
+    return;
+
+  }
+
+
+  if (result && result.reason === "stale") {
+
+    /* 더 새로운 렌더가 이미 진행 중이다 — 아무것도 하지 않는다 */
+
+    return;
+
+  }
+
+
+  console.warn(
+    "[preview-bridge] sandbox preview failed, falling back to native render:",
+    result ? result.reason : "no-result"
+  );
+
+
+  if (!(result && result.keepFrame)) {
+    teardownSandboxPreview();
+  }
+
+
+  /*
+    프레임이 살아 있는데 이번 렌더만 실패했다면(keepFrame) 직전
+    화면을 그대로 두고 오류만 알린다 — 그 위에 native 를 겹쳐
+    그리지 않는다.
+  */
+
+  if (hasSandboxPreviewFrame()) {
+
+    postToParent({
+      type: PREVIEW_MSG_ERROR,
+      message: "sandbox render failed"
+    });
+
+    return;
+
+  }
+
+
+  handleRenderMessage(data);
+
+}
+
 
 function handleRenderMessage(data) {
 
@@ -1521,6 +1652,28 @@ window.addEventListener("message", (event) => {
       return;
     }
 
+    /*
+      SANDBOX-4 — 분기는 여기 한 곳이다. 거짓이면(= renderMode 가
+      없거나 native 인 지금까지의 모든 스킨) 아래 줄로 그대로
+      떨어져 이 파일의 원래 경로를 탄다.
+    */
+
+    if (shouldRenderPreviewInSandbox(data.renderMode, data.context)) {
+
+      handleSandboxRenderMessage(data);
+      return;
+
+    }
+
+
+    /*
+      sandbox → native 로 돌아온 경우(Import/AI/되돌리기로
+      renderMode 가 사라졌다). 프레임을 먼저 치운다 — 안 그러면
+      native 렌더가 그 위에 얹힌다.
+    */
+
+    teardownSandboxPreview();
+
     handleRenderMessage(data);
     return;
 
@@ -1532,6 +1685,18 @@ window.addEventListener("message", (event) => {
       postToParent({ type: PREVIEW_MSG_ERROR, message: "malformed preview:render-banner payload" });
       return;
     }
+
+    /*
+      SANDBOX-4 — 이 경로는 templates.banner 가 **없는** 스킨의
+      배너 카테고리다(Skin template 시스템 밖의 read-only adapter).
+      sandbox 스킨이라도 그 template 이 없으면 여기로 온다.
+
+      handleBannerMessage() 는 previewRoot 를 통째로 비우므로
+      프레임 요소는 어차피 사라지지만, 그것만으로는 부모 쪽
+      message 리스너가 남는다. 먼저 제대로 내린다.
+    */
+
+    teardownSandboxPreview();
 
     handleBannerMessage(data);
     return;
@@ -1605,6 +1770,25 @@ window.addEventListener("message", (event) => {
       postToParent({ type: PREVIEW_MSG_ERROR, message: "malformed preview:post-body payload" });
       return;
     }
+
+    /*
+      SANDBOX-4 — sandbox 로 그리는 중이면 본문도 프레임으로 간다.
+      내용은 native 경로와 **같은 것**이다(parent 가 공개 POST
+      Viewer 와 같은 파이프라인으로 이미 만든 결과물).
+    */
+
+    if (hasSandboxPreviewFrame()) {
+
+      sendSandboxPreviewPostBody({
+        html: data.html,
+        containerStyle: data.containerStyle,
+        isHtmlContent: data.isHtmlContent
+      });
+
+      return;
+
+    }
+
 
     handlePostBodyMessage(data);
     return;

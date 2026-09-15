@@ -1466,11 +1466,17 @@ check("[msg2] ★ 옛 RENDER_HOME 은 여전히 home 만 받는다 (넓히지 �
       frameRules2
     ).reason === "bad-payload-value"));
 
+/*
+  ★ SANDBOX-3.1 — containerStyle 자리가 bodyCss 로 바뀌었다.
+  본문의 inline style 은 프레임 CSP 에 막히므로, 부모가 검증해
+  stylesheet 텍스트로 바꿔 보낸다.
+*/
+
 const goodBody = {
   contract: 1,
   renderSeq: 1,
   html: "<p>본문</p>",
-  containerStyle: "font-size:15px",
+  bodyCss: "#sandboxFrameRoot .imory-pb-root{font-size:15px}",
   isHtmlContent: false
 };
 
@@ -1480,11 +1486,17 @@ check("[msg2] 정상 POST_BODY 는 통과한다",
   ).ok === true);
 
 check("[msg2] ★ POST_BODY 의 타입이 어긋나면 거부",
-  [{ html: 1 }, { containerStyle: null }, { isHtmlContent: "no" },
-   { containerStyle: "a".repeat(5000) }]
+  [{ html: 1 }, { bodyCss: null }, { isHtmlContent: "no" },
+   { bodyCss: "a".repeat(protocol.SANDBOX_MAX_BODY_CSS_CHARS + 1) }]
     .every((patch) => protocol.validateSandboxMessage(
       toFrame2("IMORY_POST_BODY", { ...goodBody, ...patch }), frameRules2
     ).reason === "bad-payload-value"));
+
+check("[msg2] ★ 옛 containerStyle 칸은 더 이상 받지 않는다 (모르는 키)",
+  protocol.validateSandboxMessage(
+    toFrame2("IMORY_POST_BODY", { ...goodBody, containerStyle: "color:red" }),
+    frameRules2
+  ).ok === false);
 
 check("[msg2] ★ 부모는 POST_BODY 를 받지 않는다 (방향)",
   protocol.validateSandboxMessage(

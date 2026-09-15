@@ -379,6 +379,54 @@ function isSandboxSkinEnabled(win) {
 
 
 /* =========================================================
+   isSandboxSkinPreviewEnabled(win, slug) -> boolean
+
+   SANDBOX-4 — Skin Studio Preview 전용 관문.
+
+   ★ 왜 isSandboxSkinEnabled() 를 그대로 쓸 수 없는가
+
+   그 함수는 production 에서 **주소의 첫 칸**을 blog slug 로 읽는다
+   (readSandboxSkinSlug). Studio 의 주소는 /studio 라서 첫 칸이
+   언제나 "studio" 다 — 어떤 블로그를 편집하고 있든 목록에 없으니
+   Preview 는 영원히 native 로 떨어진다.
+
+   그래서 slug 만 밖에서 받는다. 나머지 규칙(호스트 allowlist ·
+   dev opt-in · production slug allowlist)은 **같은 함수들**을
+   그대로 부른다 — 롤아웃 스위치가 여전히 이 파일 한 곳이다.
+
+   slug 는 호출자가 편집 중인 블로그의 것이다(Studio Preview 의
+   context.site.slug). 주소에서 읽은 값이 아니므로 방문자가 쿼리로
+   밀어 넣을 수 있는 값이 아니다.
+========================================================== */
+
+function isSandboxSkinPreviewEnabled(win, slug) {
+
+  const w =
+    win || (typeof window !== "undefined" ? window : null);
+
+  if (!w || !w.location) {
+    return false;
+  }
+
+
+  if (!isSandboxSkinFlagHost(w.location.hostname)) {
+    return false;
+  }
+
+
+  if (isSandboxSkinDevHost(w.location.hostname)) {
+    return readSandboxSkinOptIn(w) === true;
+  }
+
+
+  return isSandboxSkinEnabledSlug(
+    typeof slug === "string" ? slug : ""
+  );
+
+}
+
+
+/* =========================================================
    resolveSandboxSkinFrameOrigin(win) -> "" | "https://..."
 
    빈 문자열이면 "아직 frame origin이 없다" = sandbox 경로를
@@ -657,6 +705,7 @@ if (typeof module !== "undefined" && module.exports) {
     readSandboxSkinSlug,
     isSandboxSkinEnabledSlug,
     isSandboxSkinEnabled,
+    isSandboxSkinPreviewEnabled,
     resolveSandboxSkinFrameOrigin,
     resolveSandboxSkinParentOrigins,
     isAllowedSandboxParentOrigin,

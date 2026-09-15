@@ -471,9 +471,25 @@ export function injectSandboxNonce(html, nonce) {
 
      같은 실측에서 element.style.setProperty() 같은 **CSSOM 쓰기는
      막히지 않는다**는 것도 확인했다 — core/content-width.js의 폭
-     계약이 프레임 안에서도 그대로 동작하므로 style-src-attr를
-     따로 열 필요가 없다. (setAttribute("style", ...)는 막히지만
-     우리 코드 경로에 그런 호출이 없다.)
+     계약이 프레임 안에서도 그대로 동작한다.
+
+     ★ SANDBOX-3.1 (2026-09-15) — 이 자리에 원래 "setAttribute
+     ("style", ...)는 막히지만 우리 코드 경로에 그런 호출이 없다"고
+     적혀 있었다. SANDBOX-2가 POST 본문을 프레임에 넣으면서
+     정확히 그 호출을 더했고(그리고 innerHTML 안의 style= 도),
+     그때부터 본문의 Quote Preset 서식이 통째로 빠지고 있었다.
+
+     **고친 방향은 CSP를 넓히는 것이 아니다.** style-src-attr에
+     'unsafe-inline'을 더하면 두 엔진 모두 살아나지만(실측), 그
+     순간 이 문서에 도달한 **모든** style 속성이 임의 CSS로
+     적용된다 — 이 프레임이 존재하는 이유와 정면으로 어긋난다.
+
+     대신 부모가 그 선언들을 검증해 **stylesheet 텍스트 하나**로
+     바꿔 보내고, 프레임이 자기 nonce를 단 <style>에 넣는다
+     (posts/style/posts-body-style-extract.js — 속성/값 allowlist,
+      url()·image-set()·cross-fade() 계열은 통과하지 못한다).
+     그래서 이 style-src 줄은 한 글자도 바뀌지 않았다.
+     자세한 근거: IMORY_SANDBOX_SKIN_DESIGN.md §M.
 
      'self'가 함께 있는 이유: renderSkin()이
      core/content-width.css를 <link>로 건다.

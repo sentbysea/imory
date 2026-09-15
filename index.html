@@ -4121,6 +4121,18 @@
             "./posts/style/posts-body-decor.js",
             "./posts/style/posts-canvas-background.js",
 
+            /*
+              SANDBOX-3.1 — 본문의 inline style 을 nonce 가 붙은
+              <style> 규칙으로 옮기는 변환기. sandbox 프레임으로
+              본문을 보내는 유일한 출구
+              (skin/sandbox/skin-sandbox-host.js sendSandboxPostBody)
+              가 전역으로 부른다.
+
+              의존이 없는 순수 함수 파일이다 — native 경로는 이
+              파일을 부르지 않으므로 지금까지의 화면은 그대로다.
+            */
+            "./posts/style/posts-body-style-extract.js",
+
             "./posts/style/posts-style-render.js",
             "./posts/editor/format/posts-editor.js",
             "./posts/editor/format/posts-editor-highlight.js",

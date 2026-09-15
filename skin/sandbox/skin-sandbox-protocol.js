@@ -171,7 +171,23 @@ var SANDBOX_HOME_PAGE_TYPE = "home";
 
 var SANDBOX_MAX_POST_BODY_CHARS = 2000000;
 
-var SANDBOX_MAX_CONTAINER_STYLE_CHARS = 4000;
+/*
+  ★ SANDBOX-3.1 — containerStyle 이 bodyCss 로 바뀐 자리.
+
+  프레임 CSP 에는 style-src 'unsafe-inline' 이 없다. 그래서 본문의
+  inline style 은 프레임에서 **적용되지 않는다**(2026-09-15
+  chromium·webkit 실측). 부모가 그 선언들을 검증해서 stylesheet
+  텍스트 하나로 바꿔 보내고, 프레임은 그것을 nonce 가 붙은
+  <style> 에 넣는다(posts/style/posts-body-style-extract.js).
+
+  컨테이너(본문 region) 의 선언도 그 텍스트 안에 들어 있으므로
+  containerStyle 이라는 칸은 더 이상 없다.
+
+  상한이 본문보다 훨씬 작은 이유: 이 텍스트는 요소 하나당 규칙
+  한 줄이고, 값은 전부 allowlist 를 통과한 짧은 선언들이다.
+*/
+
+var SANDBOX_MAX_BODY_CSS_CHARS = 400000;
 
 
 /*
@@ -292,18 +308,24 @@ var SANDBOX_MESSAGE_SPEC = {
     이미 서식·sanitize를 끝낸 결과물이다(posts/view/posts-view-detail.js
     renderPostBodyInto). 프레임은 이것을 post-body region 에 넣기만
     한다 — Studio Preview 의 preview:post-body 와 같은 책임 분리.
+
+    ★ SANDBOX-3.1 — 서식은 html 이 아니라 bodyCss 로 온다.
+    inline style 은 프레임 CSP 에 막히므로, 부모가
+    posts/style/posts-body-style-extract.js 로 검증·변환한
+    stylesheet 텍스트를 따로 싣는다. html 안에는 style 속성이
+    **하나도 없다**.
   */
 
   IMORY_POST_BODY: {
     direction: "to-frame",
-    keys: ["contract", "renderSeq", "html", "containerStyle", "isHtmlContent"],
+    keys: ["contract", "renderSeq", "html", "bodyCss", "isHtmlContent"],
     check: function (payload) {
       return (
         isSandboxRenderSeq(payload.renderSeq) &&
         typeof payload.html === "string" &&
         payload.html.length <= SANDBOX_MAX_POST_BODY_CHARS &&
-        typeof payload.containerStyle === "string" &&
-        payload.containerStyle.length <= SANDBOX_MAX_CONTAINER_STYLE_CHARS &&
+        typeof payload.bodyCss === "string" &&
+        payload.bodyCss.length <= SANDBOX_MAX_BODY_CSS_CHARS &&
         typeof payload.isHtmlContent === "boolean"
       );
     }
@@ -650,7 +672,7 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_PAGE_TYPES,
     SANDBOX_HOME_PAGE_TYPE,
     SANDBOX_MAX_POST_BODY_CHARS,
-    SANDBOX_MAX_CONTAINER_STYLE_CHARS,
+    SANDBOX_MAX_BODY_CSS_CHARS,
     SANDBOX_MAX_NAV_ID,
     SANDBOX_ERROR_CODES,
     isSandboxHeight,

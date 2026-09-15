@@ -145,7 +145,18 @@
       [
         "/skin/skin-render.js",
         "/skin/skin-css-validate.js",
-        "/core/content-width.js"
+        "/core/content-width.js",
+
+        /*
+          SANDBOX-4 — preview-bridge.js 가 정적 import 로 끌어오는
+          두 파일. 상대 지정자라 ?v= 가 붙지 않으므로 여기서
+          같은 배포 버전으로 돌린다(위 skin-render.js 와 같은 이유).
+
+          skin-sandbox-host.js 는 **공개 화면이 쓰는 바로 그 파일**
+          이다 — Preview 전용 복제본을 만들지 않는다.
+        */
+        "/studio/preview/preview-sandbox.js",
+        "/skin/sandbox/skin-sandbox-host.js"
       ]
     );
 
@@ -216,7 +227,39 @@
         "../../posts/view/posts-view-popover.js",
         "../../posts/view/posts-view-highlight-card-tools.js",
         "../../skin/skin-highlight-entry.js",
-        "./preview-highlight-tools.js"
+        "./preview-highlight-tools.js",
+
+        /* =========================================================
+           SANDBOX-4 — renderMode:"sandbox" 인 스킨을 공개 화면과
+           **같은** cross-origin 프레임에 그리기 위한 재료.
+
+           다섯 파일 모두 순수하다(상수와 함수 선언, 그리고 window
+           에 올리는 것뿐 — 최상위 실행문이 없다). 그래서 sandbox
+           스킨이 아닐 때는 이 문서의 동작에 아무 영향이 없다.
+
+           ★ 공개 화면(index.html)이 읽는 것과 **같은 파일**이다.
+           Preview 전용 복제본을 만들면 두 화면이 서서히 달라진다 —
+           위 posts-view-* 를 같은 이유로 공유하는 것과 같다.
+
+           skin-template.js 는 htmlHasPostBodyRegion() 때문에 있다.
+           프레임 안 DOM 은 이 문서가 볼 수 없으므로 "이 POST
+           템플릿에 본문 자리가 있는가"를 마크업 문자열로 답해야
+           하는데, 그 판정은 Code Editor/Import 와 같은 함수를
+           써야 한다.
+        ========================================================== */
+        "../../skin/skin-template.js",
+
+        /*
+          SANDBOX-3.1 — 본문 서식을 프레임으로 옮기는 변환기.
+          sendSandboxPostBody() 가 이 문서의 전역으로 부른다.
+          공개 화면(index.html)이 읽는 것과 **같은 파일**이다.
+        */
+        "../../posts/style/posts-body-style-extract.js",
+
+        "../../skin/sandbox/skin-sandbox-config.js",
+        "../../skin/sandbox/skin-sandbox-protocol.js",
+        "../../skin/sandbox/skin-sandbox-context.js",
+        "../../skin/sandbox/skin-sandbox-nav.js"
       ]
     );
 

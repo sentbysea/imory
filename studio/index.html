@@ -872,6 +872,23 @@
           판정 함수를 쓰므로 함께 로드해야 한다.
         */
         "../posts/style/posts-body-blocks.js",
+
+        /*
+          ★ 형광펜 높이 · 문단 강조선(posts-body-decor.js).
+
+          posts-style-render.js 의 renderStyledPostContentInto() 는
+          이 파일의 flattenNestedPostHighlights() 등을 **guard 없이**
+          부른다. 빠져 있으면 POST Preview 의 본문이 ReferenceError
+          로 통째로 실패한다(본문 자리만 비어 보이고 이유는 콘솔에만
+          남는다). index.html · admin/index.html 은 이미 같은 자리에
+          이 파일을 읽는다 — Studio 만 빠져 있었다.
+
+          posts-body-layout.js 의 정규화를 쓰므로 그 뒤,
+          posts-style-render.js 보다는 앞이어야 한다(index.html 의
+          같은 블록 주석 참고).
+        */
+        "../posts/style/posts-body-decor.js",
+
         "../posts/style/posts-style-render.js",
         "./preview/preview-post-body.js",
         "./preview/preview-navigation.js"

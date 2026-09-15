@@ -1,9 +1,11 @@
 /* =========================================================
    SKIN SANDBOX - HOST (ES 모듈, 부모 쪽)
 
-   기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §B-1 / §D-3 / §D-4
+   기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §B-1 / §D-3 / §D-4 / §L
    단계: SANDBOX-2 — 공개 HOME/CATEGORY/POST 를 별도 origin iframe에서
          그리고, 프레임 안 링크가 기존 SPA 라우터로 이어진다.
+         SANDBOX-4 — Skin Studio Preview 도 **이 파일을 그대로** 쓴다.
+         Preview 전용 복제본은 없다(§L-3).
 
    ---------------------------------------------------------
    ★ 왜 독립 모듈인가
@@ -17,6 +19,16 @@
 
      mountSandboxSkin({ container, pageType, template, context })
        -> { ok:true, handle } | { ok:false, reason }
+
+   그리고 SANDBOX-4 에서 하나 더 — **이미 떠 있는 프레임에 다음 한 장**:
+
+     renderSandboxSkinPage(handle, { pageType, template, context })
+       -> { ok:true } | { ok:false, reason }
+
+   Studio Preview 는 글자 하나 고칠 때마다 다시 그려야 하는데, 그때마다
+   cross-origin iframe 을 새로 만들면 문서 로드와 READY 왕복을 처음부터
+   다시 하게 된다(그 사이 화면이 빈다). 공개 화면은 화면을 옮길 때
+   컨테이너가 통째로 비워지므로 지금까지처럼 mount 를 쓴다.
 
    그 안에서:
      1. projectSkinContextForSandbox()로 **보낼 것만** 고른다
@@ -139,6 +151,12 @@ function readGlobal(name) {
      container   : HTMLElement    // iframe을 넣을 자리
      timeoutMs   : number         // READY를 기다리는 시간
      onError     : (reason) => void   // 선택, 진단용
+
+     frameOrigin : string         // 선택(SANDBOX-4). 주면 플래그/origin
+                                  // 판정을 호출자가 이미 했다는 뜻이다.
+                                  // http(s) 가 아니거나 부모와 같은
+                                  // origin 이면 **여전히 거부**한다.
+                                  // 공개 화면은 주지 않는다.
    }
 
    result = { ok:true,  handle }
@@ -169,34 +187,91 @@ export async function mountSandboxSkinFrame(options) {
     doc.defaultView;
 
 
-  /* --- 기능 플래그 -------------------------------------- */
+  /* =====================================================
+     ★ SANDBOX-4 — opts.frameOrigin (호출자가 이미 판정한 경우)
 
-  const isEnabled =
-    readGlobal("isSandboxSkinEnabled");
+     공개 화면은 이 값을 **주지 않는다**. 그때는 아래 두 관문이
+     지금까지처럼 그대로 돈다 — 공개 경로는 한 줄도 달라지지
+     않는다.
 
-  if (typeof isEnabled !== "function" || isEnabled(win) !== true) {
-    return { ok: false, reason: "disabled" };
-  }
+     Skin Studio Preview 만 준다. Preview 문서의 주소는
+     /studio/preview/preview-frame.html 이라 isSandboxSkinEnabled()
+     의 production 분기(주소 첫 칸 = blog slug)가 성립하지 않는다.
+     그래서 부모가 같은 config 파일의
+     isSandboxSkinPreviewEnabled(win, slug) 로 먼저 판정하고,
+     그 결과로 얻은 frame origin 을 여기에 넘긴다.
 
+     넘겨받아도 **낮출 수 없는 것**이 둘 있다:
+       · http/https 가 아닌 값은 거부한다.
+       · 부모와 같은 origin 이면 거부한다(아래 same-origin 관문).
+     격리가 사라지는 방향으로는 이 문이 열리지 않는다.
+  ====================================================== */
 
-  /* --- frame origin ------------------------------------- */
+  const givenOrigin =
+    typeof opts.frameOrigin === "string" ? opts.frameOrigin.trim() : "";
 
-  const resolveOrigin =
-    readGlobal("resolveSandboxSkinFrameOrigin");
+  let frameOrigin =
+    "";
 
   const buildUrl =
     readGlobal("buildSandboxSkinFrameUrl");
 
-  if (
-    typeof resolveOrigin !== "function" ||
-    typeof buildUrl !== "function"
-  ) {
+  if (typeof buildUrl !== "function") {
     return { ok: false, reason: "no-origin" };
   }
 
 
-  const frameOrigin =
-    resolveOrigin(win);
+  if (givenOrigin) {
+
+    let parsedGiven =
+      null;
+
+    try {
+      parsedGiven = new URL(givenOrigin);
+    }
+    catch (err) {
+      parsedGiven = null;
+    }
+
+    if (
+      !parsedGiven ||
+      (parsedGiven.protocol !== "http:" && parsedGiven.protocol !== "https:") ||
+      parsedGiven.origin !== givenOrigin
+    ) {
+      return { ok: false, reason: "no-origin" };
+    }
+
+    frameOrigin = parsedGiven.origin;
+
+  }
+
+  else {
+
+    /* --- 기능 플래그 ------------------------------------ */
+
+    const isEnabled =
+      readGlobal("isSandboxSkinEnabled");
+
+    if (typeof isEnabled !== "function" || isEnabled(win) !== true) {
+      return { ok: false, reason: "disabled" };
+    }
+
+
+    /* --- frame origin ----------------------------------- */
+
+    const resolveOrigin =
+      readGlobal("resolveSandboxSkinFrameOrigin");
+
+    if (typeof resolveOrigin !== "function") {
+      return { ok: false, reason: "no-origin" };
+    }
+
+
+    frameOrigin =
+      resolveOrigin(win);
+
+  }
+
 
   if (!frameOrigin) {
     return { ok: false, reason: "no-origin" };
@@ -691,10 +766,24 @@ function resolveSandboxParentOrigin(container) {
    유지된다 — 늦게 끝난 prepare 의 mount 는 호출되지 않는다.
 ========================================================== */
 
-export function prepareSandboxSkin(options) {
+/* =========================================================
+   projectSandboxRenderInput(opts)
+     -> { ok:true, pageType, template, data, navRegistry }
+      | { ok:false, reason }
 
-  const opts =
-    options || {};
+   "이번 한 장에 보낼 것"을 만드는 단계 전체. prepareSandboxSkin()
+   이 원래 하던 일을 그대로 꺼낸 것이고, SANDBOX-4 에서
+   renderSandboxSkinPage() 가 같은 경로를 두 번째로 쓴다.
+
+   ★ 여기가 데이터 신뢰 경계다. 원본 context 는 이 함수 안에서
+   끝나고, 아래(=postMessage) 로는 투영 결과만 간다.
+
+   opts.navResolveTarget 은 Studio Preview 만 준다 — 이유는
+   skin/sandbox/skin-sandbox-nav.js 의 createSandboxNavRegistry
+   주석에 있다. 공개 화면은 주지 않으므로 기본 판정자가 쓰인다.
+========================================================== */
+
+function projectSandboxRenderInput(opts) {
 
   const pageType =
     opts.pageType;
@@ -734,26 +823,31 @@ export function prepareSandboxSkin(options) {
 
   /*
     ★ nav 표는 **이번 렌더의 것**이다. 투영이 도는 동안 Context 의
-    href 가 하나씩 등록되고, 그 표는 아래 handle 에만 붙는다 —
+    href 가 하나씩 등록되고, 그 표는 그 렌더의 handle 에만 붙는다 —
     옛 화면의 navId 가 새 화면에서 통하지 않는다.
   */
 
   const createRegistry =
     readGlobal("createSandboxNavRegistry");
 
+  const registryWin =
+    opts.win ||
+    (
+      opts.container && opts.container.ownerDocument
+        ? opts.container.ownerDocument.defaultView
+        : undefined
+    );
+
   const navRegistry =
     typeof createRegistry === "function"
       ? createRegistry(
-        opts.container && opts.container.ownerDocument
-          ? opts.container.ownerDocument.defaultView
+        registryWin,
+        typeof opts.navResolveTarget === "function"
+          ? { resolveTarget: opts.navResolveTarget }
           : undefined
       )
       : null;
 
-
-  /*
-    ★ 원본 context는 여기서 끝난다. 아래로는 투영 결과만 간다.
-  */
 
   const data =
     project(
@@ -771,19 +865,52 @@ export function prepareSandboxSkin(options) {
 
 
   return {
+    ok: true,
+    pageType: pageType,
+    template: template,
+    data: data,
+    navRegistry: navRegistry
+  };
+
+}
+
+
+export function prepareSandboxSkin(options) {
+
+  const opts =
+    options || {};
+
+
+  const prepared =
+    projectSandboxRenderInput({
+      pageType: opts.pageType,
+      template: opts.template,
+      context: opts.context,
+      container: opts.container,
+      navResolveTarget: opts.navResolveTarget
+    });
+
+  if (!prepared.ok) {
+    return prepared;
+  }
+
+
+  return {
 
     ok: true,
 
-    pageType: pageType,
+    pageType: prepared.pageType,
 
     mount: function (container) {
 
       return mountPreparedSandboxSkin({
         container: container || opts.container,
-        pageType: pageType,
-        template: template,
-        data: data,
-        navRegistry: navRegistry,
+        pageType: prepared.pageType,
+        template: prepared.template,
+        data: prepared.data,
+        navRegistry: prepared.navRegistry,
+        frameOrigin: opts.frameOrigin,
+        onNavigate: opts.onNavigate,
         timeoutMs: opts.timeoutMs,
         renderTimeoutMs: opts.renderTimeoutMs,
         onError: opts.onError
@@ -832,7 +959,38 @@ export async function mountSandboxSkin(options) {
 }
 
 
-async function mountPreparedSandboxSkin(opts) {
+/* =========================================================
+   renderSandboxPageIntoHandle(handle, opts) -> Promise<result>
+
+   ★ SANDBOX-4 — "이미 떠 있는 프레임에 한 장 더 그린다".
+
+   mountPreparedSandboxSkin() 이 처음 한 장을 그릴 때 쓰던 블록을
+   그대로 꺼낸 것이다. 새로 생긴 것은 **호출자가 둘**이라는 사실
+   하나뿐이다:
+
+     1. mountPreparedSandboxSkin()  — 프레임을 막 띄운 직후 첫 장
+     2. renderSandboxSkinPage()     — 살아 있는 프레임에 다음 장
+
+   2가 필요한 이유는 Skin Studio Preview 다. 거기서는 HTML/CSS 한
+   글자를 고칠 때마다, 그리고 미리보는 페이지를 바꿀 때마다 다시
+   그려야 한다. 그때마다 cross-origin iframe 을 새로 만들면 문서
+   로드와 READY 왕복을 처음부터 다시 하게 되고(그 사이 화면이
+   비어 보인다), 무엇보다 "iframe 은 정확히 하나"라는 요구가
+   깨진다.
+
+   ★ 늦게 도착한 응답은 여기서도 버려진다
+
+   handle.renderSeq 를 먼저 올리고, 그 값과 다른 renderSeq 를
+   가진 RENDERED/HEIGHT/NAVIGATE 는 무시한다 — 옛 렌더의 답이
+   최신 화면을 덮지 않는다. 프레임 쪽도 같은 규칙으로 옛 렌더
+   메시지를 버린다(skin/sandbox/skin-sandbox-frame.js renderPage).
+
+   opts = {
+     pageType, template, data, navRegistry, renderTimeoutMs
+   }
+========================================================== */
+
+async function renderSandboxPageIntoHandle(handle, opts) {
 
   const pageType =
     opts.pageType;
@@ -842,29 +1000,6 @@ async function mountPreparedSandboxSkin(opts) {
 
   const data =
     opts.data;
-
-
-  /* 옛 handle 정리 — 같은 컨테이너의 것과 이미 떨어져 나간 것 */
-
-  sweepSandboxHandles(opts.container);
-
-
-  /* --- 빈 프레임 --------------------------------------- */
-
-  const mounted =
-    await mountSandboxSkinFrame({
-      container: opts.container,
-      timeoutMs: opts.timeoutMs,
-      onError: opts.onError
-    });
-
-  if (!mounted.ok) {
-    return mounted;
-  }
-
-
-  const handle =
-    mounted.handle;
 
   const TYPES =
     handle.TYPES;
@@ -877,8 +1012,14 @@ async function mountPreparedSandboxSkin(opts) {
     opts.navRegistry || null;
 
 
-  trackSandboxHandle(handle);
+  /*
+    높이 적용 횟수는 렌더 하나당 세는 값이다 — 다시 그릴 때마다
+    0으로 되돌려야 오래 열어 둔 Studio 에서 높이가 굳지 않는다.
+  */
 
+  handle.appliedHeight = 0;
+  handle.heightApplies = 0;
+  handle.rendered = false;
 
   /* --- 렌더 ------------------------------------------- */
 
@@ -1016,6 +1157,28 @@ async function mountPreparedSandboxSkin(opts) {
             }
 
 
+            /*
+              ★ SANDBOX-4 — 나가는 문이 둘이다.
+
+              handle.onNavigate 가 있으면(= Skin Studio Preview)
+              그쪽으로 넘긴다. Preview 는 실제 공개 주소로 나가면
+              안 되고, 보고 있는 미리보기 페이지만 바뀌어야 한다.
+              그 판정과 화면 전환은 이미 있는 Studio 경로
+              (studio/preview/preview-route.js +
+               preview-navigation.js)가 그대로 한다.
+
+              주지 않으면(= 공개 화면) 지금까지와 똑같다.
+            */
+
+            if (typeof handle.onNavigate === "function") {
+
+              handle.onNavigate(target);
+
+              return;
+
+            }
+
+
             const navigate =
               readGlobal("navigateToSkinRoute");
 
@@ -1059,6 +1222,151 @@ async function mountPreparedSandboxSkin(opts) {
     );
 
 
+  /*
+    ★ 이 함수는 실패했다고 프레임을 치우지 않는다.
+
+    첫 장(mount)에서는 호출자가 곧바로 치운다 — 아무것도 그리지
+    못한 프레임을 남길 이유가 없다. 다시 그리기(Studio Preview)
+    에서는 반대다: 방금 편집한 HTML 한 번이 렌더에 실패했다고
+    멀쩡히 떠 있던 프레임을 없애면, 다음 글자를 칠 때 핸드셰이크
+    부터 다시 하게 되고 그 사이 화면이 빈다. 무엇을 할지는
+    호출자가 정한다.
+  */
+
+  return rendered;
+
+}
+
+
+/* =========================================================
+   renderSandboxSkinPage(handle, options) -> Promise<result>
+
+   SANDBOX-4 — 이미 떠 있는 프레임에 **다음 한 장**을 그린다.
+
+   options = {
+     pageType : "home" | "category" | "post" | "banner" | "highlights"
+     template : { html, css }
+     context  : object          // 원본 Context(투영 전)
+     renderTimeoutMs / navResolveTarget : 선택
+   }
+
+   result = { ok:true } | { ok:false, reason }
+
+   ★ prepareSandboxSkin() 과 같은 신뢰 경계를 그대로 지난다 —
+   원본 context 는 투영 함수에서 끝나고, nav 표는 **이번 렌더의
+   것**으로 새로 발급된다(옛 화면의 navId 가 통하지 않는다).
+========================================================== */
+
+export async function renderSandboxSkinPage(handle, options) {
+
+  const opts =
+    options || {};
+
+  if (
+    !handle ||
+    handle.destroyed ||
+    !handle.iframe ||
+    !handle.iframe.isConnected
+  ) {
+    return { ok: false, reason: "no-handle" };
+  }
+
+
+  const prepared =
+    projectSandboxRenderInput({
+      pageType: opts.pageType,
+      template: opts.template,
+      context: opts.context,
+      container: handle.iframe.parentNode,
+      win: handle.win,
+      navResolveTarget: opts.navResolveTarget
+    });
+
+  if (!prepared.ok) {
+    return prepared;
+  }
+
+
+  return renderSandboxPageIntoHandle(
+    handle,
+    {
+      pageType: prepared.pageType,
+      template: prepared.template,
+      data: prepared.data,
+      navRegistry: prepared.navRegistry,
+      renderTimeoutMs: opts.renderTimeoutMs
+    }
+  );
+
+}
+
+
+async function mountPreparedSandboxSkin(opts) {
+
+  const pageType =
+    opts.pageType;
+
+  const template =
+    opts.template;
+
+  const data =
+    opts.data;
+
+
+  /* 옛 handle 정리 — 같은 컨테이너의 것과 이미 떨어져 나간 것 */
+
+  sweepSandboxHandles(opts.container);
+
+
+  /* --- 빈 프레임 --------------------------------------- */
+
+  const mounted =
+    await mountSandboxSkinFrame({
+      container: opts.container,
+      frameOrigin: opts.frameOrigin,
+      timeoutMs: opts.timeoutMs,
+      onError: opts.onError
+    });
+
+  if (!mounted.ok) {
+    return mounted;
+  }
+
+
+  const handle =
+    mounted.handle;
+
+
+  /*
+    ★ SANDBOX-4 — 이동을 누가 처리하는가.
+
+    주지 않으면(=공개 화면) 기존대로 navigateToSkinRoute() 로
+    간다. Studio Preview 만 자기 것을 준다 — 거기서는 실제
+    공개 주소로 나가면 안 되고 Preview 페이지만 바뀌어야 한다.
+  */
+
+  handle.onNavigate =
+    typeof opts.onNavigate === "function" ? opts.onNavigate : null;
+
+
+  trackSandboxHandle(handle);
+
+
+  /* --- 렌더 ------------------------------------------- */
+
+  const rendered =
+    await renderSandboxPageIntoHandle(
+      handle,
+      {
+        pageType: pageType,
+        template: template,
+        data: data,
+        navRegistry: opts.navRegistry,
+        renderTimeoutMs: opts.renderTimeoutMs
+      }
+    );
+
+
   if (!rendered.ok) {
 
     destroySandboxSkinFrame(handle);
@@ -1096,6 +1404,8 @@ async function mountPreparedSandboxSkin(opts) {
    SANDBOX-2 — POST 본문 한 덩어리.
 
    body = { html, containerStyle, isHtmlContent }
+          (호출자는 지금까지와 같은 모양을 준다 — 공개 화면도
+           Studio Preview 도 고치지 않았다)
 
    ★ 부모가 **공개 뷰어와 같은 파이프라인**으로 이미 서식·sanitize를
    끝낸 결과물만 여기로 온다(posts/view/posts-view-detail.js 의
@@ -1103,10 +1413,35 @@ async function mountPreparedSandboxSkin(opts) {
    이 함수는 그것을 옮기기만 한다 — 새 sanitize 로직을 만들지
    않는다(Studio Preview 의 preview:post-body 와 같은 책임 분리).
 
-   ★ 비밀글 본문은 이 경로로 오지 않는다. 비밀글은 sandbox 자체를
-   쓰지 않고 기존 native viewer 로 간다(skin/skin-post.js) — 암호
-   입력 폼이 다른 origin 안으로 들어가는 일이 없게.
+   ---------------------------------------------------------
+   ★ SANDBOX-3.1 — 서식을 stylesheet 로 옮기는 자리
+
+   프레임 CSP 에는 style-src 'unsafe-inline' 이 없다. 그래서 이
+   HTML 을 그대로 보내면 프레임에서 **style 속성이 전부 무시되고**
+   글자만 남는다(Quote Preset 의 글꼴·크기·색·행간·형광펜이
+   통째로 빠진다). 2026-09-15 chromium·webkit 양쪽 실측.
+
+   여기서 고치는 이유 — **공개 화면과 Studio Preview 의 유일한
+   공통 출구**이기 때문이다. 두 호출자는 한 줄도 고치지 않았고,
+   native 경로는 이 함수를 지나지 않으므로 지금까지와 완전히
+   같다(요구사항 7).
+
+   변환 자체는 posts/style/posts-body-style-extract.js 가 한다 —
+   속성/값 allowlist 를 통과한 선언만 규칙으로 옮기고, 통과하지
+   못한 것은 **양쪽 모두에서 사라진다**(프레임에 죽은 속성을
+   실어 보내지 않는다).
+
+   prefix 로 프레임 루트의 id 를 주는 이유는 우선순위다 —
+   그 파일 상단 주석 참고.
+
+   ★ 변환 함수가 없는 문서(전역 미로드)에서는 **보내지 않는다**.
+   그대로 보내면 서식 없는 본문이 나오고, 그것은 조용한 오작동이라
+   원인을 찾기 어렵다. 차라리 본문이 비고 콘솔에 이유가 남는 쪽이
+   낫다.
 ========================================================== */
+
+const SANDBOX_POST_BODY_CSS_PREFIX = "#sandboxFrameRoot";
+
 
 export function sendSandboxPostBody(handle, body) {
 
@@ -1120,15 +1455,38 @@ export function sendSandboxPostBody(handle, body) {
   }
 
 
+  const extract =
+    readGlobal("extractPostBodyStyleSheet");
+
+  if (typeof extract !== "function") {
+
+    console.error(
+      "[skin-sandbox-host] posts-body-style-extract.js 가 로드되지 않아 " +
+      "본문 서식을 프레임으로 보낼 수 없습니다."
+    );
+
+    return false;
+
+  }
+
+
+  const converted =
+    extract({
+      html: typeof body.html === "string" ? body.html : "",
+      containerStyle:
+        typeof body.containerStyle === "string" ? body.containerStyle : "",
+      prefix: SANDBOX_POST_BODY_CSS_PREFIX
+    });
+
+
   return sendToSandboxFrame(
     handle,
     handle.TYPES.POST_BODY,
     {
       contract: 1,
       renderSeq: handle.renderSeq,
-      html: typeof body.html === "string" ? body.html : "",
-      containerStyle:
-        typeof body.containerStyle === "string" ? body.containerStyle : "",
+      html: converted.html,
+      bodyCss: converted.css,
       isHtmlContent: body.isHtmlContent === true
     }
   );
@@ -1197,6 +1555,7 @@ const sandboxHostApi = {
   mountSandboxSkin,
   prepareSandboxSkin,
   mountSandboxSkinFrame,
+  renderSandboxSkinPage,
   sendSandboxPostBody,
   destroySandboxSkin,
   destroySandboxSkinFrame

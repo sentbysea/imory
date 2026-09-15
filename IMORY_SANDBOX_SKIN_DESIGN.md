@@ -1,10 +1,11 @@
 # IMORY SANDBOX SKIN — 0단계 조사 및 구현 설계
 
 **상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기 ·
-§J SANDBOX-2 · §K SANDBOX-3).**
+§J SANDBOX-2 · §K SANDBOX-3 · §L SANDBOX-4 · §M SANDBOX-3.1).**
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
-§G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2) · §K(SANDBOX-3)에만
+§G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2) · §K(SANDBOX-3) ·
+§L(SANDBOX-4) · §M(SANDBOX-3.1)에만
 적혀 있다.** 섞어
 읽지 말 것 (CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 /
 남은 차이"를 구분한다).
@@ -20,6 +21,8 @@
 | `IMORY_NAVIGATE` | §D-2: `{ href }` 를 보내고 부모가 파싱한다 | **href 를 보내지 않는다.** 부모가 발급한 정수 `navId` 하나뿐 (§J-2) |
 | CATEGORY / POST | §E: SANDBOX-3 | **SANDBOX-2 에서 함께 했다** (§J-4) |
 | GALLERY / BANNER / HIGHLIGHTS | §E: 뒤로 미룸 | **SANDBOX-3 에서 했다** (§K). FOLDER 만 남았다 |
+| Studio Preview | §E SANDBOX-4: "중첩하거나 Studio 가 직접 띄운다 — 범위가 크니 재설계" | **중첩을 골랐고, Inspector 는 범위에서 빼서 이번에 했다** (§L) |
+| 본문 inline style | §D-4 · §H-7: "CSSOM 쓰기는 막히지 않으므로 style-src-attr 를 열 필요가 없다" | SANDBOX-2 가 `setAttribute("style", …)` 와 `innerHTML` 의 style 속성을 더하면서 **그 전제가 깨졌다**. CSP 를 넓히는 대신 선언을 검증해 nonce `<style>` 로 옮겼다 (§M) |
 
 목표: 기존 `SkinPackage`·native 렌더링을 **한 byte도 바꾸지 않은 채**,
 `renderMode: "sandbox"`인 스킨만 별도 origin의 iframe에서 그리는 경로를
@@ -702,7 +705,7 @@ frame-ancestors https://imory.me;
   region 좌표를 프레임이 보고하고 부모가 그 위에 자기 버튼을 얹는 방식이
   유력하다(Inspector overlay가 이미 같은 일을 한다).
 
-### SANDBOX-4 — Studio Preview 통합
+### SANDBOX-4 — Studio Preview 통합 — **완료, §L 참고**
 
 - `studio/preview/preview-frame.html`이 sandbox 스킨일 때
   `skin/sandbox/frame.html`을 **중첩해서** 띄우거나, Studio가 처음부터
@@ -1966,6 +1969,416 @@ webkit 실행 · commit/push.
 - 비밀글 gate 를 프레임 안으로 옮기는 것 — POST 는 여전히 native 폴백
 - fixture 디자인 개선 — `templates.banner`/`highlights` 는 진단용이고
   HOME 이 이미 쓰는 `sb-*` 클래스만 재사용한다(새 CSS 없음)
+
+---
+
+## L. SANDBOX-4 구현 기록 (2026-09-15) — Skin Studio Preview 통합
+
+**한 줄**: `renderMode:"sandbox"` 인 스킨은 Skin Studio 의 우측
+미리보기에서도 공개 화면과 **같은 cross-origin 프레임**에 그려진다.
+Save 하지 않은 draft 도 즉시 반영된다.
+
+### L-1. 프레임이 두 겹이다 (그리고 그래야 한다)
+
+```
+studio/index.html                         (imory.me)
+  └ iframe #studioPreviewFrame            (imory.me, preview-frame.html)
+      └ iframe [data-imory-sandbox-frame] (skin-frame.imory.me, frame.html)
+```
+
+§E 의 SANDBOX-4 계획은 "중첩하거나, Studio 가 처음부터 sandbox frame 을
+직접 띄운다" 둘 중 하나였다. **중첩을 골랐다.**
+
+이유:
+
+- Desktop/Mobile 전환·확대/축소·AI 패널 접기·resizer 는 전부 **바깥
+  프레임의 CSS width** 하나만 바꾼다(`studio/studio-preview.js`).
+  안쪽 프레임이 `width:100%` 면 그 전부가 손대지 않아도 그대로 동작한다 —
+  실제로 이 라운드에서 Preview chrome 코드는 한 줄도 고치지 않았다.
+- 스킨의 `@media` 가 안쪽 프레임의 뷰포트 폭에서 평가되므로 공개 화면과
+  같은 값을 본다.
+- Studio 문서가 직접 cross-origin iframe 을 들면 Preview chrome(overlay ·
+  Inspector 좌표 · 배너 adapter)이 두 문서로 흩어진다.
+
+CSP `frame-ancestors` 는 조상 **전부**를 검사하는데, 이 경우 조상 둘이
+같은 메인 origin 이라 기존 목록 그대로 통과한다(§H-7 의 헤더를 바꾸지
+않았다).
+
+### L-2. 분기는 한 곳이다
+
+`studio/preview/preview-bridge.js` 의 `"preview:render"` 처리 첫 줄:
+
+```js
+if (shouldRenderPreviewInSandbox(data.renderMode, data.context)) {
+  handleSandboxRenderMessage(data);
+  return;
+}
+teardownSandboxPreview();
+handleRenderMessage(data);   // 지금까지의 경로 그대로
+```
+
+거짓이면(= `renderMode` 가 없거나 `"native"` 인 **지금까지의 모든 스킨**)
+이 파일의 동작은 한 줄도 달라지지 않는다.
+
+### L-3. 공개 화면과 공유한 코드
+
+Preview 전용 렌더러를 만들지 않았다. 아래는 전부 **공개 화면이 쓰는 그
+파일**이고, Preview 문서가 같은 것을 읽는다:
+
+| 무엇 | 파일 | Preview 가 새로 만든 것 |
+| --- | --- | --- |
+| 프레임 문서 | `skin/sandbox/frame.html` | 없음 |
+| 렌더 프로토콜 | `skin-sandbox-protocol.js` | 없음 |
+| 데이터 투영 | `skin-sandbox-context.js` | 없음 |
+| iframe 생성·핸드셰이크·높이 | `skin-sandbox-host.js` | 없음 |
+| nav 표(navId) | `skin-sandbox-nav.js` | 마지막 한 걸음만(아래 L-5) |
+| 플래그 | `skin-sandbox-config.js` | slug 를 밖에서 받는 관문 하나 |
+
+### L-4. 공용 파일에 더한 것 (전부 additive — 공개 경로는 인자를 주지 않는다)
+
+| 파일 | 더한 것 | 왜 |
+| --- | --- | --- |
+| `skin-sandbox-config.js` | `isSandboxSkinPreviewEnabled(win, slug)` | `isSandboxSkinEnabled()` 는 production 에서 **주소 첫 칸**을 blog slug 로 읽는다. Studio 주소는 `/studio` 라 어떤 블로그를 편집하든 목록에 없다. slug 만 밖에서 받고 나머지 규칙(호스트 allowlist · dev opt-in · slug allowlist)은 같은 함수들을 그대로 부른다 — 롤아웃 스위치는 여전히 이 파일 하나다 |
+| `skin-sandbox-host.js` | `mountSandboxSkinFrame({ frameOrigin })` | 호출자가 이미 판정한 경우. http/https 가 아니거나 부모와 같은 origin 이면 **여전히 거부**한다 — 격리가 사라지는 방향으로는 이 문이 열리지 않는다 |
+| `skin-sandbox-host.js` | `renderSandboxSkinPage(handle, {...})` | 살아 있는 프레임에 다음 한 장. `mountPreparedSandboxSkin()` 이 쓰던 블록을 `renderSandboxPageIntoHandle()` 로 꺼내 둘이 나눠 쓴다 |
+| `skin-sandbox-host.js` | `projectSandboxRenderInput()` | `prepareSandboxSkin()` 이 하던 "보낼 것 만들기"를 꺼낸 것. 데이터 신뢰 경계가 여기 한 곳이다 |
+| `skin-sandbox-host.js` | `handle.onNavigate` | 주지 않으면 기존대로 `navigateToSkinRoute()`. Preview 만 자기 것을 준다 |
+| `skin-sandbox-nav.js` | `createSandboxNavRegistry(win, { resolveTarget })` | 아래 L-5 |
+| `studio/studio-preview.js` | `"preview:render"` 봉투에 `renderMode` 한 칸 | `payload.skin` 은 **이미 고른 template 한 장**이라 SkinPackage 최상위의 `renderMode` 가 들어 있지 않다. 판정은 공개 화면과 같은 `resolveSkinRenderMode()` 다 |
+
+### L-5. 이동 — 표는 같고, 마지막 한 걸음만 다르다
+
+프레임은 주소를 보내지 않는다(§J-2). 부모가 발급한 정수 `navId` 하나만
+온다. 그 구조는 공개 화면과 **완전히 같다**.
+
+다른 것은 그 id 를 무엇으로 바꾸는가 하나다:
+
+| | 공개 화면 | Studio Preview |
+| --- | --- | --- |
+| 주소 모양 검사 | `isSandboxNavPathShape()` | **같은 함수** |
+| 관리 진입 쿼리 거부 | `SANDBOX_NAV_DENIED_QUERY_KEYS` | **같은 상수** |
+| 최종 route 판정 | `resolveInSiteSkinRoute()` | `resolveStudioPreviewTarget()` (`studio/preview/preview-route.js` — 이미 있던 Studio 전용 판정자) |
+| 그 다음 | `navigateToSkinRoute()` — 실제 SPA 이동 | `"preview:navigate"` — **미리보기 페이지만 전환** |
+
+Preview 문서에는 `siteOwnerSlug` 도 SPA 라우터도 없고 **있어서도 안 된다**
+— Preview 는 어디로도 이동하지 않기 때문이다. 그래서 그 둘을 끌어오는
+대신 href 를 부모에 올리고, 부모가 이미 갖고 있는 판정자가 "지금 편집
+중인 블로그의 화면인가"를 최종 판정한다. 다른 slug·모르는 경로는 거기서
+조용히 버려진다(native Preview 의 링크 클릭과 **같은 경로**다).
+
+### L-6. 메시지 흐름
+
+```
+Studio(부모)                preview-frame              sandbox frame
+   │  preview:render {skin, renderMode, context}
+   ├──────────────────────────►│
+   │                           │  (renderMode==="sandbox")
+   │                           │  IMORY_FRAME_READY ◄───┤   첫 렌더만
+   │                           ├──► IMORY_FRAME_ACK     │
+   │                           ├──► IMORY_RENDER_PAGE   │
+   │                           │◄── IMORY_RENDERED      │
+   │◄── preview:rendered {hasPostBodyRegion}            │
+   │                           │◄── IMORY_HEIGHT ───────┤  (계속)
+   │  preview:post-body {html, containerStyle, isHtmlContent}
+   ├──────────────────────────►├──► IMORY_POST_BODY ───►│
+   │                           │                        │
+   │                           │◄── IMORY_NAVIGATE {navId}
+   │◄── preview:navigate {href}│
+   │  (resolveStudioPreviewTarget → 다음 preview:render)
+```
+
+**두 번째 렌더부터는 프레임을 다시 만들지 않는다.** READY/ACK 를 건너뛰고
+같은 handle 에 `IMORY_RENDER_PAGE` 만 다시 보낸다 — 페이지를 바꿔도(HOME →
+CATEGORY → POST → BANNER → HIGHLIGHTS) iframe 은 끝까지 하나다.
+
+### L-7. 늦게 도착한 응답 — 두 겹
+
+- `preview-sandbox.js` 의 `sandboxRenderToken` — 렌더 요청마다 올라간다.
+  `await` 가 끝났을 때 토큰이 다르면 그 결과를 버리고, 그 사이 뜬 프레임은
+  치운다.
+- host 의 `handle.renderSeq` — 프레임이 보낸 `RENDERED`/`HEIGHT`/
+  `NAVIGATE` 중 최신 렌더의 것이 아니면 버린다(공개 화면과 같은 장치).
+  프레임 쪽도 `renderSeq <= 현재` 인 렌더 메시지를 버린다.
+
+### L-8. `hasPostBodyRegion` 은 어떻게 답하는가
+
+프레임 안 DOM 은 Preview 문서가 읽을 수 없다(cross-origin). 그래서
+**template 마크업 문자열**로 답한다 — `htmlHasPostBodyRegion()`
+(`skin/skin-template.js`), Code Editor 와 Import 가 쓰는 그 함수다.
+그래서 `preview-frame.html` 이 `skin-template.js` 를 함께 읽는다.
+
+### L-9. Preview 문서에 새로 로드한 것
+
+전부 **최상위 실행문이 없는 순수 파일**이라 sandbox 스킨이 아닐 때는
+아무 영향이 없다:
+
+`skin-template.js` · `skin-sandbox-config.js` · `skin-sandbox-protocol.js` ·
+`skin-sandbox-context.js` · `skin-sandbox-nav.js` (classic) +
+import map 에 `/studio/preview/preview-sandbox.js` · `/skin/sandbox/skin-sandbox-host.js`
+(상대 지정자라 `?v=` 가 안 붙는다 — CLAUDE.md §4 와 같은 이유).
+
+### L-10. 곁다리로 고친 것 — Studio 의 POST 본문이 원래 깨져 있었다
+
+`posts/style/posts-style-render.js` 의 `renderStyledPostContentInto()` 는
+`flattenNestedPostHighlights()`(`posts/style/posts-body-decor.js`)를
+**guard 없이** 부른다. 그런데 `studio/index.html` 과 lifecycle 하네스의
+스크립트 목록에 그 파일이 빠져 있었다 — `index.html` · `admin/index.html`
+은 이미 같은 자리에서 읽고 있다.
+
+결과: **Studio Preview 의 POST 본문이 native/sandbox 를 가리지 않고
+`ReferenceError` 로 통째로 실패했다.** 본문 자리만 비어 보이고 이유는
+콘솔에만 남는다(`[preview-navigation] buildStudioPostBodyPayload failed`).
+이 라운드 이전부터 있던 문제이고, POST 프레임 렌더를 검증하다가 드러났다.
+두 문서의 스크립트 목록에 한 줄씩 넣어 고쳤다.
+
+### L-11. 알려진 차이
+
+| 차이 | 왜 | 지금 하는 일 |
+| --- | --- | --- |
+| **Element Inspector / Direct Edit / 크롭이 sandbox 스킨에서 안 된다** | 그 기능들은 Preview 문서의 DOM 을 직접 읽어 좌표를 올려보낸다. 프레임 안 DOM 은 다른 origin 이라 읽을 수 없다 | Select 버튼을 **잠근다**(`disabled` + title). 켜지는데 아무것도 안 잡히는 상태를 만들지 않는다. §E 의 "`preview:inspect-*` 같은 메시지를 sandbox 계약에 더한다"는 별도 라운드다 |
+| ~~본문의 inline style 이 프레임 CSP 에 막힌다~~ | — | **해결됐다 → §M (SANDBOX-3.1).** CSP 를 넓히지 않고, 검증한 선언을 nonce 가 붙은 `<style>` 규칙으로 옮겼다. 공개 sandbox POST 와 Studio Preview 모두 native 와 같은 계산값이 나온다 |
+| FOLDER / Series Viewer | 범위 밖 | pageType 표에 없으므로 native Preview 그대로. 폴더 Preview 는 한 줄도 달라지지 않았다 |
+| 사용자 작성 JS | SANDBOX-5 | 프레임에 넘기지 않는다 |
+| 하이라이트 카드 ⋮ | §K-6 과 같은 이유 | Preview 에서도 프레임 안 카드에는 ⋮ 가 없다 |
+
+### L-12. 검증 (mock e2e — 실제 DB·배포 확인 아님)
+
+`node studio/studio-sandbox-preview-e2e-test.mjs` (8959 studio + 8960 frame,
+두 origin 모두 배포되는 그 `functions/_middleware.js` 를 통과한다).
+**81 passed, 0 failed** (chromium — §M 의 `bodystyle`/`bodyparity` 절이
+더해진 뒤. 그 두 절은 webkit 에서도 돌렸다).
+
+| 절 | 무엇 |
+| --- | --- |
+| `frame` | cross-origin iframe 정확히 1개 · 별도 origin · 같은 sandbox 속성 · 실제 데이터/CSS 렌더 · Preview 문서에 중복 렌더 0 · Select 잠김 |
+| `edit` | Save 하지 않은 HTML/CSS 수정이 즉시 반영 · **iframe 재생성 0** |
+| `pages` | HOME/CATEGORY/GALLERY/POST/BANNER/HIGHLIGHTS — 끝까지 iframe 1개 · 본문이 프레임 안 region 에 들어감 |
+| `nav` | 프레임 링크 클릭 → Preview 페이지만 전환 · **Studio 주소 불변** · Preview Back |
+| `native` | renderMode 없는 스킨 iframe 0개 · 이동 회귀 · 플래그 OFF 면 sandbox 스킨도 native |
+| `parity` | 프레임 payload 최상위 키가 공개 계약 그대로 · href 가 공개 주소 그대로 · **비밀글 본문/토큰 미도달** |
+| `mobile` | 390px 부모·프레임 양쪽 넘침 0 · 프레임 높이가 콘텐츠를 따라감 |
+| `reject` | 깨진 `preview:render` 거부 · 알 수 없는 type 을 프레임이 떨어뜨림 · 옛 `renderSeq` 렌더가 화면을 안 덮음 |
+| `bodystyle` | (§M) 본문 서식이 CSP 를 넓히지 않고 살아 있는가 · 주입 CSS 가 전부 떨어지는가 |
+| `bodyparity` | (§M) native 본문과 프레임 본문의 계산값이 같은가 |
+
+회귀(전부 이 라운드 이전과 같음):
+
+| 스위트 | 결과 |
+| --- | --- |
+| `skin/sandbox/skin-sandbox-e2e-test.mjs` (공개 SANDBOX-0~3) | 368 passed, 0 failed (§M 의 본문 서식 판정 11개가 더해진 뒤) |
+| `skin/sandbox/skin-sandbox-unit-test.mjs` | 198 passed, 0 failed |
+| `posts/style/posts-body-style-extract-test.mjs` | 98 passed, 0 failed |
+| `admin/quote/quote-render-parity-e2e-test.mjs --only=parity` | 46/46 |
+| `posts/posts-editor-decor-e2e-test.mjs` | 256/256 |
+| `skin/skin-banner-page-e2e-test.mjs` | 248/248 |
+| `studio/studio-ai-panel-e2e-test.mjs` | 142/142 |
+| `studio/studio-ai-panel-layout-e2e-test.mjs` | 90/90 |
+| `studio/studio-selected-ai-e2e-test.mjs` | 99/99 |
+| `studio/studio-file-ux-e2e-test.mjs` | 42/42 |
+| `studio/studio-direct-edit-e2e-test.mjs` | 37/37 |
+| `studio/studio-crop-e2e-test.mjs` | 104/104 |
+| `studio/studio-highlight-preview-e2e-test.mjs` | 21 passed |
+| `skin/skin-folder-tree-e2e-test.mjs` | 71 passed |
+| `skin/skin-material-parity-e2e-test.mjs` | 58 passed |
+| `studio/studio-inspector-e2e-test.mjs` | `[route]` 절에서 timeout — **이 라운드 이전에도 같은 자리에서 같게 실패한다**(clean tree 에서 확인) |
+
+---
+
+## M. SANDBOX-3.1 구현 기록 (2026-09-15) — 프레임 POST 본문의 inline style CSP
+
+**한 줄**: 프레임 CSP 를 한 칸도 넓히지 않고, 본문의 inline style 을
+**검증해서 nonce 가 붙은 `<style>` 규칙으로 옮겼다**. 공개 sandbox POST 와
+Studio sandbox Preview 가 native 와 같은 Quote Preset 서식을 보여 준다.
+
+### M-1. 증상과 원인
+
+SANDBOX-2 가 POST 본문을 프레임으로 보내면서 두 줄이 들어왔다:
+
+```js
+region.setAttribute("style", body.containerStyle);
+region.innerHTML = body.html;          // 안에 style="..." 이 가득하다
+```
+
+그런데 프레임 CSP 는 `style-src 'self' 'nonce-…'` 뿐이다. **inline style
+속성은 nonce 로 허용할 수 없다** — nonce 는 요소(`<style>`/`<link>`)에만
+붙는다. 그래서 두 줄 모두 거부되고, 글자는 나오는데 글꼴·크기·색·행간·
+정렬·형광펜이 통째로 빠졌다.
+
+`core/lib/skin-sandbox-server.js` 의 CSP 주석은 SANDBOX-1 시점에
+"`setAttribute("style", …)` 는 막히지만 **우리 코드 경로에 그런 호출이
+없다**"고 적고 있었다. SANDBOX-2 가 정확히 그 호출을 더했고, 주석은
+그대로 남아 있었다.
+
+### M-2. 먼저 조사한 것 — 무엇이 실제로 inline 으로 나가는가
+
+저장소의 진짜 파일을 브라우저에 올려 `renderStyledPostContentInto()` 를
+돌리고, 결과 DOM 의 inline 선언을 전수 조사했다. 나오는 속성은
+**스물하나**뿐이다:
+
+```
+background-color · background-image · background-position-x ·
+background-position-y · background-repeat · background-size · color ·
+display · font-family · font-size · font-style · font-weight · height ·
+letter-spacing · line-height · margin-bottom · margin-top ·
+overflow-wrap · text-align · text-indent · word-break
+```
+
+값은 전부 우리 코드가 만든다(`19px`, `rgb(51,34,17)`, `justify`,
+`linear-gradient(...)`, `"Nanum Myeongjo", serif` …). **저장된 글에서
+오는 것은 딱 두 가지**다 — `posts/posts-sanitize.js` 가 형광펜
+(`background-color`)과 포인트 색(`color`)만 남기고, 그 값도
+`getSafeHighlightColor()`/`getSafePointColor()` 를 통과한 색뿐이다.
+`url()` 이 들어올 자리가 애초에 없다.
+
+### M-3. CSP 실측 — 두 엔진이 실제로 무엇을 막는가
+
+`style-src 'self' 'nonce-X'` 아래에서(chromium · webkit 동일):
+
+| 무엇 | 결과 |
+| --- | --- |
+| `el.setAttribute("style", …)` | **차단** |
+| `innerHTML` 로 들어온 `style=` | **차단** |
+| 파서가 읽은 `style=` | **차단** |
+| `el.style.color = …` (CSSOM 쓰기) | 적용됨 |
+| 런타임 `<style nonce>` | 적용됨 |
+| nonce 없는 `<style>` | 차단 |
+| nonce 시트에 `insertRule()` | 적용됨 |
+
+`style-src-attr 'unsafe-inline'` 을 더하면 **두 엔진 모두** 속성이
+되살아난다(WebKit 도 CSP3 `style-src-attr` 를 지킨다 — 이 라운드에서
+실측했다).
+
+### M-4. 두 방안 비교와 선택
+
+| | (A) 검증 후 nonce `<style>` 로 변환 ← **선택** | (B) `style-src-elem` nonce 유지 + `style-src-attr 'unsafe-inline'` |
+| --- | --- | --- |
+| 두 엔진 동작 | 됨 | 됨 |
+| CSP 변경 | **없음** | `style-src-attr` 한 칸을 염 |
+| 통과하는 CSS | 속성 21종 + 값 allowlist 를 지난 선언**만** | 문서에 도달한 **모든** style 속성 |
+| `url()` 로 외부 요청 | 값 allowlist 에서 떨어짐 | 허용됨(`img-src` 가 여는 출처로 나갈 수 있음) |
+| `position:fixed`/`z-index` 로 화면 덮기 | 속성 allowlist 에 없어 떨어짐 | 허용됨 |
+| sanitizer 를 빠져나온 style 이 생기면 | 여전히 막힘 | **그대로 적용됨** |
+| 비용 | 파일 하나(+변환 한 번) | 헤더 한 줄 |
+
+(B) 는 헤더 한 줄로 끝나지만, "nonce 로만 스타일을 허용한다"는 성질을
+**문서 전체에서 영구히** 잃는다. 이 프레임이 존재하는 이유가 "우리가
+민트하지 않은 것은 아무것도 실행/적용되지 않는다"이므로, 요구사항 6
+("임의 CSS 주입이 통과하면 안 됨")은 (B) 로는 구조적으로 만족할 수 없다 —
+style 속성이 곧 임의 CSS 다.
+
+그래서 (A) 를 골랐다. **CSP 는 한 글자도 바뀌지 않았다.**
+
+### M-5. 어떻게 안전한가
+
+변환기는 `posts/style/posts-body-style-extract.js` 하나다.
+
+1. **CSS 파서를 새로 만들지 않는다.** 변환은 **부모 realm**(메인 origin,
+   CSP 없음)에서 돈다. 거기서는 style 속성이 이미 브라우저의 CSS 파서를
+   지나 CSSOM 선언 블록이 되어 있으므로 `el.style.item(i)` /
+   `getPropertyValue()` 로 읽기만 한다. 문법에 어긋난 선언은 그 시점에
+   이미 브라우저가 버렸다.
+
+2. **속성 allowlist** — §M-2 의 스물하나 + 같은 계열 몇 개.
+   `position` · `top` · `left` · `z-index` · `transform` · `filter` ·
+   `clip-path` · `content` · `cursor` · `animation` · `transition` ·
+   `pointer-events` 는 **없다**. 단축 속성(`background` · `border` ·
+   `font`)도 없다 — 값 안에 `url()` 을 숨기기 쉬워서 낱개만 받는다.
+
+3. **값 allowlist** — 함수 표기가 있으면 `rgb rgba hsl hsla calc clamp
+   min max var` 와 그라디언트 6종만 통과한다. `url` · `image-set` ·
+   `-webkit-image-set` · `cross-fade` · `element` · `attr` ·
+   `expression` 은 목록에 없다 → **CSS 로 네트워크 요청을 만들 수 없다**.
+   이름 없는 괄호, `;` `{` `}` `@` `<` `>` 역슬래시, CSS 주석 기호,
+   길이 상한도 함께 막는다.
+
+4. **선택자는 우리가 만든다.** 요소에 붙는 이름은 이 파일이 만든
+   `imory-pb-<번호>` 뿐이고 본문의 글자는 선택자에 절대 들어가지
+   않는다. 본문에 이미 `imory-pb-*` 클래스가 있으면 먼저 떼어 낸다 —
+   남의 규칙을 가로챌 수 없다.
+
+5. **죽은 속성은 보내지 않는다.** 통과하지 못한 선언은 프레임으로
+   가는 HTML 에서도 사라진다(`style` 속성을 통째로 제거). 그래서
+   프레임 DOM 에 `[style]` 요소가 **0개**이고, CSP 위반 경고도 0건이다.
+
+6. **`@import` 와 외부 스타일시트는 여전히 불가능하다.** 우리가 만드는
+   것은 선언 목록뿐이고, `style-src` 는 그대로 nonce 다.
+
+7. `script-src` · `connect-src 'none'` · `frame-ancestors` · iframe
+   `sandbox` 속성은 **한 글자도 건드리지 않았다**.
+
+### M-6. 우선순위 — 왜 `#sandboxFrameRoot` 를 앞에 붙이는가
+
+native 에서 inline style 은 author 규칙 전부를 이긴다(`!important` 제외).
+그냥 `.imory-pb-3 { }` 로 옮기면 특정도가 (0,1,0) 이라 스킨의
+`.sb-body p { color: red }`(0,1,1) 같은 규칙에 **져 버린다** — CSP 는
+통과했는데 서식이 또 달라지는 것이다.
+
+그래서 프레임 루트의 **id** 를 prefix 로 준다:
+
+```css
+#sandboxFrameRoot .imory-pb-root { font-family:"Nanum Myeongjo", serif; … }
+```
+
+(1,1,0) 이 되어 스킨 CSS 를 전부 이긴다. 스킨은 `id` 속성을 쓸 수
+없고(`skin/skin-sanitize.js` 의 `SKIN_SANITIZE_DENY_ATTRS` 에 `id` 가
+있다) 스킨 CSS 는 스코프 클래스로 접두된다 — 즉 스킨이 이 특정도를
+흉내낼 수 없다. `!important` 에는 지는데, 그것도 native inline 과 같은
+관계다.
+
+### M-7. 고친 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `posts/style/posts-body-style-extract.js` (신규) | 변환기. 순수 함수, 의존 없음 |
+| `posts/style/posts-body-style-extract-test.mjs` (신규) | 값·속성 allowlist 단위 테스트(브라우저 없이) |
+| `skin/sandbox/skin-sandbox-host.js` | `sendSandboxPostBody()` 가 보내기 직전에 변환한다 — **공개 화면과 Studio Preview 의 유일한 공통 출구**라 두 호출자는 한 줄도 안 고쳤다 |
+| `skin/sandbox/skin-sandbox-frame.js` | `bodyCss` 를 자기 nonce 를 단 `<style>` 하나(재사용)에 넣는다. region 에 `imory-pb-root` 를 붙인다 |
+| `skin/sandbox/skin-sandbox-protocol.js` | `IMORY_POST_BODY` 의 `containerStyle` → `bodyCss` |
+| `index.html` · `studio/preview/preview-frame.html` | 변환기 로드(공개 화면과 Preview 가 **같은 파일**) |
+
+**native 경로는 이 파일을 부르지 않는다** — 공개 native POST · Quote
+Preset 미리보기 · 에디터 PREVIEW · 발췌 export 는 지금까지처럼 inline
+style 을 그대로 쓴다(요구사항 7).
+
+### M-8. 검증 (mock e2e — 실제 DB·배포 확인 아님)
+
+| 무엇 | 결과 |
+| --- | --- |
+| `node posts/style/posts-body-style-extract-test.mjs` | **98 passed, 0 failed** — `url()`/`image-set()`/`cross-fade()`/`element()`/`expression()`/`attr()`, 선언 탈출(`;` `}`), `@import`, `</style>`, 역슬래시 이스케이프, 주석 닫기, 길이 상한이 전부 거부. `position`/`z-index`/`transform`/단축 속성이 목록에 없음 |
+| `studio/studio-sandbox-preview-e2e-test.mjs --only=bodystyle` | chromium **20/20**, webkit **20/20** — 글꼴·크기·굵기·색·줄간격·자간·정렬·줄바꿈·형광펜·포인트 색의 **계산값**이 프리셋 그대로 · 주입한 `url()`/`position:fixed`/`z-index` 전부 무효 · `evil.example` 요청 0건 · 프레임에 `[style]` 0개 · 서식 `<style>` 이 nonce 를 달고 1개(다시 열어도 1개) · inline style CSP 위반 0건 |
+| `studio/studio-sandbox-preview-e2e-test.mjs --only=bodyparity` | chromium **11/11**, webkit **11/11** — 같은 글·같은 프리셋에서 **native 본문과 프레임 본문의 계산값이 전부 같다** |
+| `skin/sandbox/skin-sandbox-e2e-test.mjs --only=pages` | **33 passed, 0 failed** — 같은 판정을 **공개 sandbox POST**(진짜 `index.html`)에서 한 번 더 |
+| `skin/sandbox/skin-sandbox-e2e-test.mjs` (전체) | **368 passed, 0 failed** (chromium) · `--only=pages` 는 webkit 에서도 **33/33** |
+| `posts/posts-editor-decor-e2e-test.mjs` | **256 PASS / 0 FAIL** — native 본문 렌더가 한 줄도 안 바뀌었다 |
+| `admin/quote/quote-render-parity-e2e-test.mjs --only=parity` | **46 PASS / 0 FAIL** — Quote Preset 미리보기 회귀 |
+| `skin/skin-banner-page-e2e-test.mjs` | **248 passed, 0 failed** — native POST 뷰어 회귀 |
+| `skin/sandbox/skin-sandbox-unit-test.mjs` | **198 passed, 0 failed** — `bodyCss` 계약 + 옛 `containerStyle` 키 거부 |
+
+### M-8-1. 두 엔진 확인
+
+chromium 과 webkit **양쪽에서** 돌린 절:
+
+| 절 | chromium | webkit |
+| --- | --- | --- |
+| `studio … --only=bodystyle` | 20/20 | 20/20 |
+| `studio … --only=bodyparity` | 11/11 | 11/11 |
+| `studio … --only=frame` | 9/9 | 9/9 |
+| `studio … --only=pages` | 9/9 | 9/9 |
+| `skin/sandbox … --only=pages` | 33/33 | 33/33 |
+
+CSP 실측(§M-3)도 두 엔진에서 같은 표가 나왔다 — 이 라운드에는
+"chromium 에서만 되는" 항목이 없다.
+
+### M-9. 남은 차이
+
+- **`style-src` 는 여전히 nonce 전용이다.** 앞으로 본문 파이프라인이
+  새 CSS 속성을 쓰기 시작하면 §M-5 의 allowlist 에 넣어야 한다. 넣지
+  않으면 그 속성만 조용히 빠진다 — 그래서 단위 테스트가 "본문이 실제로
+  쓰는 속성이 목록에 있다"를 속성마다 못 박아 둔다.
+- 저자 CSS(스킨)는 이 경로와 무관하다. 스킨 CSS 는 지금까지처럼
+  `renderSkin({ styleNonce })` 로 들어간다.
+- 발췌 export(html2canvas)는 native DOM 을 캡처하므로 이 변환과
+  관계가 없다.
 
 ---
 

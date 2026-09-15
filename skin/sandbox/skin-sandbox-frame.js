@@ -97,6 +97,9 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
   const FRAME_STATE = {
     parentOrigin: "",
+
+    /* SANDBOX-3.1 — 본문 서식 <style> 하나(재사용) */
+    postBodyStyle: null,
     sentReady: false,
     acked: false,
     seq: 0,
@@ -527,6 +530,52 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
      실행하지 않는 데 더해, 헤더로도 한 번 더 막혀 있다.
   ========================================================== */
 
+  /* =========================================================
+     postBodyStyleElement() — 본문 서식이 들어가는 <style> 하나
+
+     ★ SANDBOX-3.1. 이 문서의 CSP 에는 style-src 'unsafe-inline' 이
+     없다. 그래서 본문의 inline style 은 여기 도착하는 순간 전부
+     무시된다 — 그것이 "글자는 나오는데 Quote Preset 서식이 빠지던"
+     원인이었다.
+
+     부모가 그 선언들을 검증해서 stylesheet 텍스트 하나로 바꿔
+     보내고(posts/style/posts-body-style-extract.js), 이 문서는
+     **자기 nonce 를 단 <style>** 에 그 텍스트를 넣는다. CSP 를
+     넓히지 않고 같은 화면이 나온다.
+
+     요소는 하나만 만들어 재사용한다 — 렌더마다 새로 만들면
+     옛 규칙이 문서에 쌓인다.
+  ========================================================== */
+
+  function postBodyStyleElement() {
+
+    if (FRAME_STATE.postBodyStyle) {
+      return FRAME_STATE.postBodyStyle;
+    }
+
+
+    const el =
+      document.createElement("style");
+
+    el.setAttribute("data-imory-post-body-style", "1");
+
+    const nonce =
+      window.__imorySandboxNonce || "";
+
+    if (nonce) {
+      el.setAttribute("nonce", nonce);
+      el.nonce = nonce;
+    }
+
+    document.head.appendChild(el);
+
+    FRAME_STATE.postBodyStyle = el;
+
+    return el;
+
+  }
+
+
   function applyPostBody(body) {
 
     if (
@@ -550,7 +599,17 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     }
 
 
-    region.setAttribute("style", body.containerStyle);
+    /*
+      컨테이너 선언도 bodyCss 안에 있고, 그 규칙은 이 클래스를
+      가리킨다(posts-body-style-extract.js 의
+      POST_BODY_STYLE_ROOT_CLASS). 문자열 버전 변환이 감싼 요소를
+      다시 벗기므로 이 클래스만은 받는 쪽이 붙인다.
+    */
+
+    region.classList.add("imory-pb-root");
+
+    postBodyStyleElement().textContent =
+      typeof body.bodyCss === "string" ? body.bodyCss : "";
 
     region.innerHTML = body.html;
 

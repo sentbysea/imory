@@ -2076,7 +2076,31 @@ const HOME_DB = {
       sort_order: 1 }
   ],
 
-  quote_presets: []
+  /*
+    ★ SANDBOX-3.1 — 공개 sandbox POST 의 본문 서식이 실제로
+    프레임까지 오는지 보려면 프리셋이 있어야 한다. 기본값과 확실히
+    다른 값으로 채운다(bodyWeight/bodyAlign/lineBreak 은 문자열
+    키다 — posts/style/posts-body-layout.js postStyleText).
+  */
+  quote_presets: [
+    {
+      id: "qp-sandbox",
+      user_id: HOME_OWNER_ID,
+      name: "Vibe",
+      is_active: true,
+      settings: {
+        bodyFont: "nanummyeongjo",
+        bodyColor: "#332211",
+        bodySize: 19,
+        bodyWeight: "500",
+        lineHeight: 1.9,
+        letterSpacing: 0.4,
+        bodyAlign: "justify",
+        lineBreak: "char",
+        highlightHeight: 45
+      }
+    }
+  ]
 };
 
 const HOME_RESERVED_PARAMS =
@@ -2654,6 +2678,73 @@ async function runPages(browser) {
         (await frame.evaluate(() =>
           JSON.stringify(window.__imorySandboxLastReceived || {})))
           .indexOf("본문이다") === -1);
+
+
+      /* =====================================================
+         ★ SANDBOX-3.1 — 본문 서식이 프레임 CSP 를 통과했는가
+
+         프레임 CSP 에는 style-src 'unsafe-inline' 이 없다. 본문의
+         inline style 을 그대로 보내면 글자만 남고 Quote Preset 이
+         통째로 빠진다. 부모가 그 선언을 검증해 stylesheet 로
+         옮기고(posts/style/posts-body-style-extract.js), 프레임이
+         nonce 가 붙은 <style> 에 넣는다.
+
+         여기서는 **계산값**으로 판정한다 — style 속성이 남아 있는지가
+         아니라 화면이 그 값으로 그려졌는지를 본다.
+      ====================================================== */
+
+      const bodyStyle =
+        await frame.locator('[data-imory-region="post-body"]').evaluate((el) => {
+          const s = getComputedStyle(el);
+          return {
+            fontFamily: s.fontFamily,
+            fontSize: s.fontSize,
+            fontWeight: s.fontWeight,
+            color: s.color,
+            lineHeight: s.lineHeight,
+            letterSpacing: s.letterSpacing,
+            textAlign: s.textAlign,
+            wordBreak: s.wordBreak,
+            styleAttrs: document.querySelectorAll("#sandboxFrameRoot [style]").length,
+            sheets: document.querySelectorAll("style[data-imory-post-body-style]").length
+          };
+        });
+
+      check("[pages] ★ 본문 글꼴이 프리셋 그대로 (Nanum Myeongjo)",
+        bodyStyle.fontFamily.includes("Nanum Myeongjo"), bodyStyle.fontFamily);
+
+      check("[pages] ★ 본문 글자 크기가 프리셋 그대로 (19px)",
+        bodyStyle.fontSize === "19px", bodyStyle.fontSize);
+
+      check("[pages] ★ 본문 글자 굵기가 프리셋 그대로 (500)",
+        bodyStyle.fontWeight === "500", bodyStyle.fontWeight);
+
+      check("[pages] ★ 본문 색이 프리셋 그대로 (#332211)",
+        bodyStyle.color === "rgb(51, 34, 17)", bodyStyle.color);
+
+      check("[pages] ★ 줄간격이 프리셋 그대로 (19 × 1.9)",
+        Math.abs(parseFloat(bodyStyle.lineHeight) - 36.1) < 0.6,
+        bodyStyle.lineHeight);
+
+      check("[pages] ★ 자간이 프리셋 그대로 (0.4px)",
+        Math.abs(parseFloat(bodyStyle.letterSpacing) - 0.4) < 0.05,
+        bodyStyle.letterSpacing);
+
+      check("[pages] ★ 정렬이 프리셋 그대로 (justify)",
+        bodyStyle.textAlign === "justify", bodyStyle.textAlign);
+
+      check("[pages] ★ 줄바꿈 모드가 프리셋 그대로 (break-all)",
+        bodyStyle.wordBreak === "break-all", bodyStyle.wordBreak);
+
+      check("[pages] ★ 프레임에 style 속성이 하나도 남지 않았다",
+        bodyStyle.styleAttrs === 0, String(bodyStyle.styleAttrs));
+
+      check("[pages] ★ 본문 서식 <style> 이 nonce 를 달고 정확히 1개",
+        bodyStyle.sheets === 1, String(bodyStyle.sheets));
+
+      check("[pages] ★ inline style CSP 위반이 하나도 나지 않았다",
+        pageErrors.filter(t => /inline style/i.test(t)).length === 0,
+        pageErrors.join(" | ").slice(0, 160));
 
     }
 
