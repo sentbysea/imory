@@ -44,6 +44,98 @@ const SKIN_POST_SUPPORTED_SCHEMA_VERSION = 1;
 const SKIN_POST_BODY_REGION_NAME = "post-body";
 
 /* =========================================================
+   trySandboxSkinPost({ template, context, container })
+     -> Promise<false | { mount }>
+
+   SANDBOX-2. skin/skin-category.js 의 같은 이름 함수와 한 글자도
+   다르지 않은 구조다(page type 만 다르다) — 두 파일이 서로의
+   전역을 공유하지 않는 ES 모듈이라 import 사슬을 새로 만들기보다
+   각자 열 줄을 갖는 쪽을 골랐다. 실제 로직은 전부
+   skin/sandbox/skin-sandbox-host.js 한 곳에 있다.
+
+   이 함수는 절대 throw 하지 않는다(이 파일의 계약).
+========================================================== */
+
+async function trySandboxSkinPost({ template, context, container }) {
+
+  try {
+
+    if (
+      typeof isSandboxSkinEnabled !== "function" ||
+      isSandboxSkinEnabled(window) !== true ||
+      !window.skinSandboxHostReady
+    ) {
+      return false;
+    }
+
+
+    const host =
+      await window.skinSandboxHostReady;
+
+    if (!host || typeof host.prepareSandboxSkin !== "function") {
+      return false;
+    }
+
+
+    const prepared =
+      host.prepareSandboxSkin({
+        container,
+        pageType: "post",
+        template,
+        context
+      });
+
+    if (!prepared || !prepared.ok) {
+
+      console.warn(
+        "[skin-post] sandbox prepare failed, falling back to native skin render:",
+        prepared ? prepared.reason : "no-result"
+      );
+
+      return false;
+
+    }
+
+
+    return {
+
+      mount: prepared.mount,
+
+      /*
+        프레임이 안 뜨면 같은 스킨을 native 로 그린다. 그때는
+        본문 자리(post-body region)도 DOM 으로 돌아오므로, 그
+        region 을 호출자에게 돌려줘야 오늘과 같은 경로가 된다.
+      */
+
+      renderNative: function (target) {
+
+        const instance =
+          renderSkin({
+            container: target,
+            skin: template,
+            context,
+            mode: "view"
+          });
+
+        return instance.getRegion(SKIN_POST_BODY_REGION_NAME) || null;
+
+      }
+
+    };
+
+  }
+
+  catch (err) {
+
+    console.error("[skin-post] sandbox prepare threw", err);
+
+    return false;
+
+  }
+
+}
+
+/* =========================================================
    renderPublishedSkinPost({ ownerId, postId, container })
    -> Promise<false | { rendered: true, bodyRegion: Element }>
 
@@ -56,7 +148,7 @@ const SKIN_POST_BODY_REGION_NAME = "post-body";
    기존 legacy #postDetail 렌더를 그대로 진행해야 한다.
 ========================================================== */
 
-export async function renderPublishedSkinPost({ ownerId, postId, container }) {
+export async function renderPublishedSkinPost({ ownerId, postId, container, isSecret }) {
 
   if (!ownerId || postId === undefined || postId === null || !container) {
     return false;
@@ -136,6 +228,67 @@ export async function renderPublishedSkinPost({ ownerId, postId, container }) {
      담당). */
   if (!context) {
     return false;
+  }
+
+  /* =====================================================
+     SANDBOX-2 — renderMode:"sandbox" 인 스킨의 POST
+
+     ★ 비밀글은 이 경로를 쓰지 않는다 (지시문 5절의 명시적 선택)
+
+     비밀글은 암호 입력 폼(postSecretGate)을 본문 자리로 **옮겨서**
+     보여 주고, 정답을 받은 뒤 같은 자리에 본문을 넣는다
+     (posts/view/posts-view-secret-gate.js). 그 폼을 다른 origin
+     안으로 들여보내는 것은 이 라운드에서 안전하게 설계할 수 없고,
+     "인증 전 비밀글 본문을 프레임에 절대 전달하지 않는다"는 요구를
+     지키려면 프레임 안에 gate 상태 기계를 하나 더 만들어야 한다.
+     그래서 **비밀글 POST 만 기존 native viewer 로 폴백한다.**
+     같은 블로그의 다른 글은 그대로 sandbox 로 그려진다.
+
+     ★ 본문은 Context 가 아니라 별도 메시지로 간다
+
+     buildPostSkinContext()는 본문을 Context 에 넣지 않는다(PHASE1C
+     7-2절). 그 계약을 프레임 경계에서도 같은 모양으로 지키려고,
+     본문은 호출자가 IMORY_POST_BODY 로 따로 보낸다
+     (posts/view/posts-view-detail.js renderPostDetailBody).
+
+     ★ 실제 iframe 생성은 호출자가 한다 — skin-category.js 와 같은
+     이유(스크래치 엘리먼트에서 옮기면 iframe 이 다시 로드된다).
+  ====================================================== */
+
+  const renderMode =
+    typeof resolveSkinRenderMode === "function"
+      ? resolveSkinRenderMode(skinPackage)
+      : "native";
+
+  if (renderMode === "sandbox" && isSecret !== true) {
+
+    const prepared =
+      await trySandboxSkinPost({
+        template: postTemplate,
+        context,
+        container
+      });
+
+    if (prepared) {
+
+      return {
+        rendered: true,
+
+        /*
+          ★ sandbox 에는 넘겨줄 DOM region 이 없다. 본문은 프레임
+          안에 있고, 호출자는 bodyRegion 대신 sandboxMount 를 보고
+          "본문을 메시지로 보내는" 경로를 탄다.
+        */
+        bodyRegion: null,
+
+        sandboxMount: prepared.mount,
+        sandboxRenderNative: prepared.renderNative
+      };
+
+    }
+
+    /* 준비에 실패하면 같은 스킨을 native 로 — 다시 시도하지 않는다 */
+
   }
 
   let skinInstance;

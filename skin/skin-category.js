@@ -43,6 +43,104 @@ import { renderSkin } from "./skin-render.js";
 const SKIN_CATEGORY_SUPPORTED_SCHEMA_VERSION = 1;
 
 /* =========================================================
+   trySandboxSkinCategory({ template, context, container })
+     -> Promise<false | { sandbox: true, mount }>
+
+   SANDBOX-2. renderMode:"sandbox" 인 스킨의 CATEGORY 를 별도
+   origin iframe 에 그릴 준비를 한다.
+
+   ★ 왜 여기서 곧장 그리지 않는가
+
+   호출자(posts/view/posts-view-list.js)는 **떨어진 스크래치
+   엘리먼트**에 먼저 그린 뒤 요청 순번이 아직 최신일 때만 그
+   내용을 화면으로 옮긴다. iframe 은 DOM 에서 옮기는 순간 문서가
+   다시 로드되므로 그 방식을 쓸 수 없다 — 그래서 준비(조회·투영·
+   navId 표 발급)까지만 하고, 실제 iframe 생성은 호출자가
+   **살아 있는 컨테이너**에 대고 한 번 부른다
+   (skin/sandbox/skin-sandbox-host.js prepareSandboxSkin 주석).
+
+   false 를 돌려주면 이 라운드의 sandbox 경로를 쓰지 않는다는 뜻이고,
+   호출자는 오늘과 똑같이 native 로 그린 결과를 옮긴다. 이 함수는
+   절대 throw 하지 않는다(이 파일의 계약).
+========================================================== */
+
+async function trySandboxSkinCategory({ template, context, container }) {
+
+  try {
+
+    if (
+      typeof resolveSkinRenderMode !== "function" ||
+      typeof isSandboxSkinEnabled !== "function" ||
+      isSandboxSkinEnabled(window) !== true ||
+      !window.skinSandboxHostReady
+    ) {
+      return false;
+    }
+
+
+    const host =
+      await window.skinSandboxHostReady;
+
+    if (!host || typeof host.prepareSandboxSkin !== "function") {
+      return false;
+    }
+
+
+    const prepared =
+      host.prepareSandboxSkin({
+        container,
+        pageType: "category",
+        template,
+        context
+      });
+
+    if (!prepared || !prepared.ok) {
+
+      console.warn(
+        "[skin-category] sandbox prepare failed, falling back to native skin render:",
+        prepared ? prepared.reason : "no-result"
+      );
+
+      return false;
+
+    }
+
+
+    return {
+      sandbox: true,
+      mount: prepared.mount,
+
+      /*
+        ★ 프레임이 안 뜨면 **같은 스킨을 native 로** 그린다
+        (skin-home.js 와 같은 규칙 — 백지로 두지 않는다). 조회도
+        Context 조립도 이미 끝났으므로 다시 하지 않는다.
+      */
+
+      renderNative: function (target) {
+
+        renderSkin({
+          container: target,
+          skin: template,
+          context,
+          mode: "view"
+        });
+
+      }
+    };
+
+  }
+
+  catch (err) {
+
+    console.error("[skin-category] sandbox prepare threw", err);
+
+    return false;
+
+  }
+
+}
+
+/* =========================================================
    renderPublishedSkinCategory({ ownerId, categoryId, container })
    -> Promise<boolean>
 
@@ -177,6 +275,64 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
      한다(PHASE1C 5-2/13-1절). */
   if (!["post", "gallery"].includes(context.category.type)) {
     return false;
+  }
+
+  /* =====================================================
+     SANDBOX-2 — renderMode:"sandbox" 인 스킨만 별도 origin의
+     iframe에서 그린다 (IMORY_SANDBOX_SKIN_DESIGN.md).
+
+     ★ 분기가 여기 한 곳뿐인 이유는 skin-home.js와 같다 — 조회·
+     schemaVersion 검사·template 선택·Context 조립은 위에서 이미
+     끝났고, sandbox 는 "그 결과를 어디에 그리는가"만 다르다.
+
+     ★ renderMode가 없는(=대부분의) 스킨은 이 if 가 곧바로 거짓이고
+     그 뒤 코드가 이 라운드 이전과 한 글자도 다르지 않다.
+
+     ★ 실제 iframe 생성은 호출자가 한다(위 trySandboxSkinCategory
+     주석). 여기서는 준비된 mount 함수를 outcome 에 실어 보낸다 —
+     반환 타입(boolean)을 바꾸지 않기 위해서다. 그래서 outcome 을
+     주지 않고 부르는 호출자에게는 sandbox 경로가 아예 열리지
+     않는다(그 호출자는 mount 를 받을 방법이 없으므로 화면이 빈
+     채로 남을 것이다). 공개 경로는 언제나 outcome 을 준다
+     (posts/view/posts-view-list.js).
+  ====================================================== */
+
+  const renderMode =
+    typeof resolveSkinRenderMode === "function"
+      ? resolveSkinRenderMode(skinPackage)
+      : "native";
+
+  if (renderMode === "sandbox" && outcome && typeof outcome === "object") {
+
+    const prepared =
+      await trySandboxSkinCategory({
+        template: categoryTemplate,
+        context,
+        container
+      });
+
+    if (prepared) {
+
+      outcome.sandboxMount =
+        prepared.mount;
+
+      outcome.sandboxRenderNative =
+        prepared.renderNative;
+
+      outcome.isGallery =
+        context.category.isGallery === true;
+
+      outcome.effectivePage =
+        context.category.pagination
+          ? context.category.pagination.currentPage
+          : null;
+
+      return true;
+
+    }
+
+    /* 준비에 실패하면 같은 스킨을 native 로 — 다시 시도하지 않는다 */
+
   }
 
   try {

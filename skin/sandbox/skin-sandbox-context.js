@@ -72,7 +72,30 @@ var SANDBOX_VIEWER_VISITOR_ONLY = true;
 
 /* 이번 라운드가 투영할 수 있는 page type */
 
-var SANDBOX_CONTEXT_PAGE_TYPES = ["home"];
+var SANDBOX_CONTEXT_PAGE_TYPES = ["home", "category", "post"];
+
+
+/*
+  ★ SANDBOX-2 — href 와 이미지 주소를 옮기는 규칙
+
+  href: 값 자체는 **바꾸지 않는다**(native 렌더와 글자 단위로 같은
+  DOM 이 나와야 한다). 대신 부모 쪽에서 옮길 때마다
+  options.nav.mint(href) 를 불러 "이 주소는 눌러도 되는가"를 그
+  자리에서 판정하고 표에 등록한다(skin/sandbox/skin-sandbox-nav.js).
+  프레임 쪽 재투영에는 options 가 없으므로 문자열만 옮긴다.
+
+  이미지 주소: 프레임 문서의 origin 은 부모와 다르다. `/api/post-cover
+  ?image=7` 같은 **상대 주소**를 그대로 보내면 프레임 origin 에서
+  404 가 난다. 그래서 부모가 옮길 때 자기 origin 기준 절대 주소로
+  바꾼다(options.origin). CSP img-src 에 부모 origin 이 들어 있다
+  (core/lib/skin-sandbox-server.js resolveSandboxMediaOrigins).
+
+  ★ 폴더 트리 깊이 상한. 제품 규칙은 3단계지만(IMORY_FOLDER1_DESIGN.md),
+  위조 메시지가 깊은 구조를 보내 재귀를 폭주시키지 못하게 여기서
+  한 번 더 막는다.
+*/
+
+var SANDBOX_MAX_TREE_DEPTH = 8;
 
 
 /*
@@ -148,6 +171,85 @@ function sandboxStrArray(value) {
 }
 
 
+/* =========================================================
+   ★ 투영 중에만 살아 있는 옵션 (부모에서만 채워진다)
+
+   projectSkinContextForSandbox() 가 시작할 때 세우고 끝날 때
+   비운다. 투영은 동기 함수 하나의 호출 트리 안에서만 돌고 재진입이
+   없으므로(비동기 경계가 없다) 이 한 칸으로 충분하다 — 항목
+   투영기 20여 개에 인자를 하나씩 더 달아 다니는 것보다 읽기 쉽다.
+
+   프레임 쪽 재투영에서는 언제나 비어 있다. 그래서 프레임은
+   주소를 등록하지도, 절대 주소로 바꾸지도 않는다 — 부모가 보낸
+   문자열을 그대로 옮기기만 한다.
+========================================================== */
+
+var SANDBOX_PROJECT_OPTS = null;
+
+
+/*
+  href 하나. 값은 바꾸지 않고 **표에만 등록**한다(위 주석).
+*/
+
+function sandboxHref(value) {
+
+  const href =
+    sandboxStr(value);
+
+  if (
+    href &&
+    SANDBOX_PROJECT_OPTS &&
+    SANDBOX_PROJECT_OPTS.nav &&
+    typeof SANDBOX_PROJECT_OPTS.nav.mint === "function"
+  ) {
+
+    SANDBOX_PROJECT_OPTS.nav.mint(href);
+
+  }
+
+
+  return href;
+
+}
+
+
+/*
+  이미지/미디어 주소. 부모가 옮길 때만 자기 origin 기준 절대 주소로
+  바꾼다. 이미 절대 주소(https://…)면 그대로 둔다.
+*/
+
+function sandboxImageUrl(value) {
+
+  const url =
+    sandboxStr(value);
+
+  if (!url) {
+    return url;
+  }
+
+
+  const origin =
+    SANDBOX_PROJECT_OPTS && typeof SANDBOX_PROJECT_OPTS.origin === "string"
+      ? SANDBOX_PROJECT_OPTS.origin
+      : "";
+
+  if (!origin) {
+    return url;
+  }
+
+
+  /* protocol-relative(//host/…) 는 건드리지 않는다 — 그대로 유효하다 */
+
+  if (url.charAt(0) === "/" && url.charAt(1) !== "/") {
+    return origin + url;
+  }
+
+
+  return url;
+
+}
+
+
 function sandboxMap(value, projector) {
 
   if (!Array.isArray(value)) {
@@ -197,7 +299,7 @@ function projectSandboxNavItem(item) {
     id: sandboxStr(item.id),
     name: sandboxStr(item.name),
     type: sandboxStr(item.type),
-    href: sandboxStr(item.href),
+    href: sandboxHref(item.href),
     iconKind: sandboxStr(item.iconKind),
     itemCount: sandboxInt(item.itemCount),
     enabled: item.enabled === undefined ? true : sandboxBool(item.enabled)
@@ -217,7 +319,7 @@ function projectSandboxHighlightsNav(nav) {
 
   return {
     name: sandboxStr(nav.name),
-    href: sandboxStr(nav.href),
+    href: sandboxHref(nav.href),
     type: sandboxStr(nav.type),
     iconKind: sandboxStr(nav.iconKind),
     hasCategory: sandboxBool(nav.hasCategory),
@@ -238,8 +340,8 @@ function projectSandboxBanner(banner) {
 
   return {
     id: sandboxStr(banner.id),
-    imageUrl: sandboxStr(banner.imageUrl),
-    href: sandboxStr(banner.href),
+    imageUrl: sandboxImageUrl(banner.imageUrl),
+    href: sandboxHref(banner.href),
     alt: sandboxStr(banner.alt)
   };
 
@@ -262,7 +364,7 @@ function projectSandboxRecentPost(post) {
   return {
     id: sandboxStr(post.id),
     title: sandboxStr(post.title),
-    href: sandboxStr(post.href),
+    href: sandboxHref(post.href),
     publishedAt: sandboxStr(post.publishedAt),
     publishedAtLabel: sandboxStr(post.publishedAtLabel),
     categoryId: sandboxStr(post.categoryId),
@@ -296,16 +398,16 @@ function projectSandboxHighlightCard(card) {
     dateLabel: sandboxStr(card.dateLabel),
     postId: sandboxStr(card.postId),
     postTitle: sandboxStr(card.postTitle),
-    postHref: sandboxStr(card.postHref),
+    postHref: sandboxHref(card.postHref),
     hasNoPostLink: sandboxBool(card.hasNoPostLink),
     categoryName: sandboxStr(card.categoryName),
     folderName: sandboxStr(card.folderName),
     folderNamePath: sandboxStrArray(card.folderNamePath),
     sourcePathLabel: sandboxStr(card.sourcePathLabel),
     sourcePathSegments: sandboxStrArray(card.sourcePathSegments),
-    categoryHref: sandboxStr(card.categoryHref),
+    categoryHref: sandboxHref(card.categoryHref),
     folderId: sandboxStr(card.folderId),
-    folderHref: sandboxStr(card.folderHref),
+    folderHref: sandboxHref(card.folderHref),
     placement: sandboxStr(card.placement),
     isMissing: sandboxBool(card.isMissing),
     isPlacementUnknown: sandboxBool(card.isPlacementUnknown),
@@ -329,7 +431,7 @@ function projectSandboxSite(site) {
   return {
     title: sandboxStr(value.title),
     slug: sandboxStr(value.slug),
-    faviconUrl: sandboxStr(value.faviconUrl),
+    faviconUrl: sandboxImageUrl(value.faviconUrl),
     description: sandboxStr(value.description),
     language: sandboxStr(value.language)
   };
@@ -346,7 +448,7 @@ function projectSandboxProfile(profile) {
   return {
     nickname: sandboxStr(value.nickname),
     bio: sandboxStr(value.bio),
-    avatarUrl: sandboxStr(value.avatarUrl)
+    avatarUrl: sandboxImageUrl(value.avatarUrl)
   };
 
 }
@@ -469,7 +571,7 @@ function projectSandboxImages(images) {
       continue;
     }
 
-    out[name] = sandboxStr(images[name]);
+    out[name] = sandboxImageUrl(images[name]);
 
   }
 
@@ -489,12 +591,310 @@ function projectSandboxPageMeta(pageType) {
   return {
     type: pageType,
     isHome: pageType === "home",
-    isCategory: false,
-    isPost: false,
+    isCategory: pageType === "category",
+    isPost: pageType === "post",
     isBanner: false,
     isFolder: false,
     isHighlights: false,
     isMemos: false
+  };
+
+}
+
+
+/* =========================================================
+   SANDBOX-2 — CATEGORY
+
+   원본 shape: skin/skin-context.js buildCategorySkinContext()의
+   context.category. 여기 없는 키는 프레임에 가지 않는다.
+
+   ★ 본문은 여기에도 없다. category.posts/gallery.cards 는 제목·
+     날짜·주소·썸네일뿐이고, 비밀글 제목은 이미 마스킹된 값이며
+     비밀글의 대표 이미지 주소는 Context 단계에서 이미 잠금
+     이미지로 바뀌어 있다(IMORY_GALLERY1_DESIGN.md).
+========================================================== */
+
+function projectSandboxCategoryPost(post) {
+
+  if (!sandboxPlainObject(post)) {
+    return null;
+  }
+
+
+  return {
+    id: sandboxStr(post.id),
+    title: sandboxStr(post.title),
+    href: sandboxHref(post.href),
+    publishedAt: sandboxStr(post.publishedAt),
+    publishedAtLabel: sandboxStr(post.publishedAtLabel),
+    isSecret: sandboxBool(post.isSecret)
+  };
+
+}
+
+
+/*
+  폴더 트리 노드. kind 로 갈리는 두 모양이고, 폴더 노드만 children
+  을 갖는다(재귀). depth 는 Context 가 넣어 준 값을 그대로 옮기되,
+  재귀 자체는 SANDBOX_MAX_TREE_DEPTH 에서 끊는다.
+*/
+
+function projectSandboxTreeNode(node, depth) {
+
+  if (!sandboxPlainObject(node)) {
+    return null;
+  }
+
+
+  if (node.kind === "post") {
+
+    return {
+      kind: "post",
+      id: sandboxStr(node.id),
+      title: sandboxStr(node.title),
+      href: sandboxHref(node.href),
+      publishedAt: sandboxStr(node.publishedAt),
+      publishedAtLabel: sandboxStr(node.publishedAtLabel),
+      isSecret: sandboxBool(node.isSecret),
+      depth: sandboxInt(node.depth)
+    };
+
+  }
+
+
+  if (node.kind !== "folder") {
+    return null;
+  }
+
+
+  return {
+    kind: "folder",
+    id: sandboxStr(node.id),
+    name: sandboxStr(node.name),
+    depth: sandboxInt(node.depth),
+    folderHref: sandboxHref(node.folderHref),
+    postCount: sandboxInt(node.postCount),
+
+    children:
+      depth >= SANDBOX_MAX_TREE_DEPTH
+        ? []
+        : projectSandboxTree(node.children, depth + 1)
+  };
+
+}
+
+
+function projectSandboxTree(nodes, depth) {
+
+  if (!Array.isArray(nodes)) {
+    return [];
+  }
+
+
+  const out =
+    [];
+
+  for (let i = 0; i < nodes.length; i += 1) {
+
+    const item =
+      projectSandboxTreeNode(nodes[i], depth);
+
+    if (item) {
+      out.push(item);
+    }
+
+  }
+
+
+  return out;
+
+}
+
+
+/* 갤러리 카드의 사진 한 장 */
+
+function projectSandboxGalleryImage(image) {
+
+  if (!sandboxPlainObject(image)) {
+    return null;
+  }
+
+
+  return {
+    id: sandboxStr(image.id) || sandboxInt(image.id),
+    url: sandboxImageUrl(image.url),
+    alt: sandboxStr(image.alt),
+    isPrimary: sandboxBool(image.isPrimary)
+  };
+
+}
+
+
+function projectSandboxGalleryCard(card) {
+
+  if (!sandboxPlainObject(card)) {
+    return null;
+  }
+
+
+  return {
+    id: sandboxStr(card.id),
+    title: sandboxStr(card.title),
+    href: sandboxHref(card.href),
+    publishedAt: sandboxStr(card.publishedAt),
+    publishedAtLabel: sandboxStr(card.publishedAtLabel),
+    isSecret: sandboxBool(card.isSecret),
+    isPrivate: sandboxBool(card.isPrivate),
+    thumbnailUrl: sandboxImageUrl(card.thumbnailUrl),
+    thumbnailAlt: sandboxStr(card.thumbnailAlt),
+    hasThumbnail: sandboxBool(card.hasThumbnail),
+    isPlaceholder: sandboxBool(card.isPlaceholder),
+    isLocked: sandboxBool(card.isLocked),
+    images: sandboxMap(card.images, projectSandboxGalleryImage),
+    additionalImages: sandboxMap(card.additionalImages, projectSandboxGalleryImage),
+    hasAdditionalImages: sandboxBool(card.hasAdditionalImages),
+    imageCount: sandboxInt(card.imageCount),
+    hasImages: sandboxBool(card.hasImages)
+  };
+
+}
+
+
+function projectSandboxGallery(gallery) {
+
+  if (!sandboxPlainObject(gallery)) {
+    return null;
+  }
+
+
+  const cards =
+    sandboxMap(gallery.cards, projectSandboxGalleryCard);
+
+
+  return {
+    cards: cards,
+    count: cards.length,
+    isEmpty: cards.length === 0,
+    hasCards: cards.length > 0,
+    isEmptyCategory: sandboxBool(gallery.isEmptyCategory)
+  };
+
+}
+
+
+function projectSandboxPageLink(item) {
+
+  if (!sandboxPlainObject(item)) {
+    return null;
+  }
+
+
+  return {
+    number: sandboxInt(item.number),
+    label: sandboxStr(item.label),
+    href: sandboxHref(item.href),
+    isCurrent: sandboxBool(item.isCurrent)
+  };
+
+}
+
+
+function projectSandboxPagination(pagination) {
+
+  if (!sandboxPlainObject(pagination)) {
+    return null;
+  }
+
+
+  return {
+    currentPage: sandboxInt(pagination.currentPage),
+    currentPageLabel: sandboxStr(pagination.currentPageLabel),
+    pageSize: sandboxInt(pagination.pageSize),
+    totalCount: sandboxInt(pagination.totalCount),
+    totalPages: sandboxInt(pagination.totalPages),
+    totalPagesLabel: sandboxStr(pagination.totalPagesLabel),
+    style: sandboxStr(pagination.style),
+    isDecimal: sandboxBool(pagination.isDecimal),
+    isRomanLower: sandboxBool(pagination.isRomanLower),
+    windowSize: sandboxInt(pagination.windowSize),
+    hasLeadingEllipsis: sandboxBool(pagination.hasLeadingEllipsis),
+    hasTrailingEllipsis: sandboxBool(pagination.hasTrailingEllipsis),
+    hasPages: sandboxBool(pagination.hasPages),
+    hasPrev: sandboxBool(pagination.hasPrev),
+    hasNext: sandboxBool(pagination.hasNext),
+    prevHref: sandboxHref(pagination.prevHref),
+    nextHref: sandboxHref(pagination.nextHref),
+    firstHref: sandboxHref(pagination.firstHref),
+    lastHref: sandboxHref(pagination.lastHref),
+    pages: sandboxMap(pagination.pages, projectSandboxPageLink),
+    allPages: sandboxMap(pagination.allPages, projectSandboxPageLink)
+  };
+
+}
+
+
+function projectSandboxCategory(category) {
+
+  const value =
+    sandboxPlainObject(category) ? category : {};
+
+
+  return {
+    id: sandboxStr(value.id),
+    name: sandboxStr(value.name),
+    type: sandboxStr(value.type),
+    href: sandboxHref(value.href),
+
+    posts: sandboxMap(value.posts, projectSandboxCategoryPost),
+
+    hasFolders: sandboxBool(value.hasFolders),
+    tree: projectSandboxTree(value.tree, 1),
+    showPostsList: sandboxBool(value.showPostsList),
+
+    listStyle: sandboxStr(value.listStyle),
+    pageSize: sandboxInt(value.pageSize),
+    paginationStyle: sandboxStr(value.paginationStyle),
+    paginationWindowSize: sandboxInt(value.paginationWindowSize),
+    paginatePosts: sandboxBool(value.paginatePosts),
+    hasPagination: sandboxBool(value.hasPagination),
+
+    isGallery: sandboxBool(value.isGallery),
+    isList: sandboxBool(value.isList),
+
+    gallery: projectSandboxGallery(value.gallery),
+    pagination: projectSandboxPagination(value.pagination)
+  };
+
+}
+
+
+/* =========================================================
+   SANDBOX-2 — POST
+
+   원본 shape: buildPostSkinContext()의 context.post. 그 함수가
+   본문(content/ooc_content)과 secret_password_hash 를 애초에
+   select 하지 않으므로 여기에 들어올 경로 자체가 없다
+   (AI_SKIN_PHASE1C_PAGE_CONTRACT.md 6-1/7-2절).
+
+   본문은 **다른 메시지**로 간다(IMORY_POST_BODY) — 그래야
+   "Context 로는 본문에 닿을 수 없다"는 계약이 프레임 경계에서도
+   같은 모양으로 선다.
+========================================================== */
+
+function projectSandboxPost(post) {
+
+  const value =
+    sandboxPlainObject(post) ? post : {};
+
+
+  return {
+    id: sandboxStr(value.id),
+    title: sandboxStr(value.title),
+    publishedAt: sandboxStr(value.publishedAt),
+    publishedAtLabel: sandboxStr(value.publishedAtLabel),
+    categoryName: sandboxStr(value.categoryName),
+    categoryHref: sandboxHref(value.categoryHref),
+    href: sandboxHref(value.href)
   };
 
 }
@@ -546,7 +946,7 @@ function projectSandboxHome(home) {
    (조용한 native 폴백).
 ========================================================== */
 
-function projectSkinContextForSandbox(context, pageType) {
+function projectSkinContextForSandbox(context, pageType, options) {
 
   if (SANDBOX_CONTEXT_PAGE_TYPES.indexOf(pageType) === -1) {
     return null;
@@ -558,25 +958,126 @@ function projectSkinContextForSandbox(context, pageType) {
   }
 
 
-  return {
+  /*
+    ★ 부모에서만 채워지는 옵션(nav 표 · origin). 프레임 재투영은
+    options 없이 부르므로 이 칸이 비어 있고, 그래서 프레임은 주소를
+    등록하지도 절대 주소로 바꾸지도 않는다.
+  */
 
-    contract: SANDBOX_CONTEXT_CONTRACT,
-    pageType: pageType,
+  SANDBOX_PROJECT_OPTS =
+    sandboxPlainObject(options) ? options : null;
 
-    page: projectSandboxPageMeta(pageType),
 
-    site: projectSandboxSite(context.site),
-    profile: projectSandboxProfile(context.profile),
-    navigation: projectSandboxNavigation(context.navigation),
-    banners: projectSandboxBanners(context.banners),
+  try {
 
-    viewer: projectSandboxViewer(context.viewer),
+    const projected = {
 
-    images: projectSandboxImages(context.images),
+      contract: SANDBOX_CONTEXT_CONTRACT,
+      pageType: pageType,
 
-    home: projectSandboxHome(context.home)
+      page: projectSandboxPageMeta(pageType),
 
-  };
+      site: projectSandboxSite(context.site),
+      profile: projectSandboxProfile(context.profile),
+      navigation: projectSandboxNavigation(context.navigation),
+      banners: projectSandboxBanners(context.banners),
+
+      viewer: projectSandboxViewer(context.viewer),
+
+      images: projectSandboxImages(context.images),
+
+      /*
+        ★ 페이지별 namespace 는 **그 페이지의 것만** 넣는다.
+        CATEGORY 화면에 home.recentPosts 를, POST 화면에
+        category.posts 를 보내지 않는다 — 스킨이 그 자리를
+        그리지도 않을뿐더러, 안 보내도 되는 것을 보내지 않는 것이
+        이 파일의 일이다.
+      */
+
+      home:
+        pageType === "home"
+          ? projectSandboxHome(context.home)
+          : null,
+
+      category:
+        pageType === "category"
+          ? projectSandboxCategory(context.category)
+          : null,
+
+      post:
+        pageType === "post"
+          ? projectSandboxPost(context.post)
+          : null,
+
+      /*
+        nav 표. 위 투영이 도는 동안 mint() 가 채운 것을 마지막에
+        꺼낸다 — 부모에서만 채워지고, 프레임 재투영에서는 도착한
+        표를 **검사해서** 옮긴다(부모를 믿지 않는다).
+      */
+
+      nav:
+        SANDBOX_PROJECT_OPTS &&
+        SANDBOX_PROJECT_OPTS.nav &&
+        typeof SANDBOX_PROJECT_OPTS.nav.entries === "function"
+          ? { entries: SANDBOX_PROJECT_OPTS.nav.entries() }
+          : projectSandboxNavTable(context.nav)
+
+    };
+
+
+    return projected;
+
+  }
+
+  finally {
+
+    SANDBOX_PROJECT_OPTS = null;
+
+  }
+
+}
+
+
+/* =========================================================
+   projectSandboxNavTable(value)
+
+   프레임 쪽. 도착한 nav 표를 알려진 모양으로만 옮긴다. 검사
+   함수 자체는 skin/sandbox/skin-sandbox-nav.js 에 있지만, 그
+   파일은 부모 전용이라 프레임에 로드되지 않을 수도 있다 —
+   없으면 여기서 같은 규칙으로 직접 본다.
+========================================================== */
+
+function projectSandboxNavTable(value) {
+
+  if (!sandboxPlainObject(value) || !Array.isArray(value.entries)) {
+    return { entries: [] };
+  }
+
+
+  const out =
+    [];
+
+  for (let i = 0; i < value.entries.length; i += 1) {
+
+    const entry =
+      value.entries[i];
+
+    if (
+      !sandboxPlainObject(entry) ||
+      !Number.isInteger(entry.id) ||
+      entry.id < 1 ||
+      typeof entry.href !== "string" ||
+      !entry.href
+    ) {
+      continue;
+    }
+
+    out.push({ id: entry.id, href: entry.href });
+
+  }
+
+
+  return { entries: out };
 
 }
 
@@ -599,7 +1100,19 @@ var SANDBOX_CONTEXT_TOP_LEVEL_KEYS = [
   "banners",
   "viewer",
   "images",
-  "home"
+
+  /*
+    ★ 셋 다 **언제나 있다**(그 페이지가 아니면 null). 키의 유무로
+    페이지를 가르지 않는 이유: 렌더러는 없는 값과 null 을 같게
+    다루고, 최상위 키 집합이 고정이어야 아래 검사가 "정확히 이
+    집합인가"를 물을 수 있다.
+  */
+  "home",
+  "category",
+  "post",
+
+  /* SANDBOX-2 — 부모가 발급한 navId 표 */
+  "nav"
 ];
 
 
@@ -616,6 +1129,24 @@ function isSandboxContextShape(data) {
 
 
   if (SANDBOX_CONTEXT_PAGE_TYPES.indexOf(data.pageType) === -1) {
+    return false;
+  }
+
+
+  /*
+    ★ 최상위 pageType 과 page.type 이 같아야 한다.
+
+    page type 이 셋으로 늘어난 SANDBOX-2에서 새로 필요해진 검사다.
+    이것이 없으면 "HOME 으로 만든 payload 의 pageType 만 post 로
+    바꿔치기한" 메시지가 shape 검사를 통과한다 — 그 뒤 재투영이
+    post 로 돌면서 home 데이터가 통째로 사라진 화면이 그려진다.
+    두 값이 어긋난 payload 는 계약 위반이므로 아예 거부한다.
+  */
+
+  if (
+    !sandboxPlainObject(data.page) ||
+    data.page.type !== data.pageType
+  ) {
     return false;
   }
 
@@ -648,7 +1179,9 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_CONTEXT_PAGE_TYPES,
     SANDBOX_CONTEXT_TOP_LEVEL_KEYS,
     SANDBOX_VIEWER_VISITOR_ONLY,
+    SANDBOX_MAX_TREE_DEPTH,
     projectSkinContextForSandbox,
+    projectSandboxNavTable,
     isSandboxContextShape
   };
 

@@ -37,7 +37,8 @@
 
 async function tryRenderPublishedSkinPost(
   postId,
-  container
+  container,
+  isSecret
 ) {
 
   let owner;
@@ -94,7 +95,15 @@ async function tryRenderPublishedSkinPost(
     return await renderPublishedSkinPost({
       ownerId: owner.ownerId,
       postId,
-      container
+      container,
+
+      /*
+        SANDBOX-2: 비밀글은 sandbox 경로를 쓰지 않는다 — 암호 입력
+        폼을 다른 origin 안으로 들여보내지 않기 위해서다
+        (skin/skin-post.js 의 그 분기 주석). 그 밖의 글은 이 값과
+        무관하게 오늘과 같은 경로다.
+      */
+      isSecret
     });
 
   } catch (err) {
@@ -498,6 +507,12 @@ async function openPostPage(
     null;
 
 
+  /* SANDBOX-2 — 이전 글의 프레임 handle을 물고 있지 않는다 */
+
+  currentSandboxPostHandle =
+    null;
+
+
   /*
     PHASE 1C-F: 이전 글이 Skin 경로로 그려졌다면 postSecretGate가
     그 Skin 컨테이너 안에 들어가 있다 — 매 진입마다 legacy
@@ -805,7 +820,8 @@ async function openPostPage(
     maybeSkinCandidate
       ? await tryRenderPublishedSkinPost(
           post.id,
-          skinRenderTarget
+          skinRenderTarget,
+          post.visibility === "secret"
         )
       : false;
 
@@ -873,6 +889,84 @@ async function openPostPage(
 
 
     if (usingSkinPost) {
+
+      /* =====================================================
+         SANDBOX-2 — 별도 origin iframe 으로 그리는 스킨
+
+         skinRenderTarget 은 비어 있다(iframe 은 옮기면 다시
+         로드되므로 skin/skin-post.js 가 생성을 여기로 미뤘다).
+         요청 순번 검사는 이미 끝났으므로 이 프레임은 언제나 최신
+         화면의 것이다.
+
+         프레임이 안 뜨면 같은 스킨을 native 로 그리고, 그때
+         돌려받은 post-body region 으로 오늘과 같은 경로를 탄다.
+      ====================================================== */
+
+      if (typeof skinPostResult.sandboxMount === "function") {
+
+        const mounted =
+          await skinPostResult.sandboxMount(postSkinContainer);
+
+        /*
+          ★ 프레임 핸드셰이크 동안(await) 사용자가 이미 다른 화면으로
+          옮겨 갔을 수 있다 — 뒤로가기/앞으로가기가 특히 그렇다.
+          그러면 이 프레임은 지금 화면의 것이 아니므로 남기지 않는다.
+          (요청 순번은 openPostPage 가 이미 쓰고 있는 그 장치다 —
+           늦게 도착한 응답이 최신 화면을 덮지 않게.)
+        */
+
+        if (mounted && mounted.ok && requestId !== postPageRequestSeq) {
+
+          if (
+            window.skinSandboxHost &&
+            typeof window.skinSandboxHost.destroySandboxSkin === "function"
+          ) {
+
+            window.skinSandboxHost.destroySandboxSkin(mounted.handle);
+
+          }
+
+          return;
+
+        }
+
+
+        if (mounted && mounted.ok) {
+
+          currentSandboxPostHandle =
+            mounted.handle;
+
+        }
+
+        else {
+
+          console.warn(
+            "[posts-view-detail] sandbox post mount failed, falling back to native skin render:",
+            mounted ? mounted.reason : "no-result"
+          );
+
+          postSkinContainer.innerHTML =
+            "";
+
+          try {
+
+            skinPostResult.bodyRegion =
+              skinPostResult.sandboxRenderNative(postSkinContainer);
+
+          }
+
+          catch (err) {
+
+            console.error("[posts-view-detail] native skin fallback failed", err);
+
+            skinPostResult.bodyRegion = null;
+
+          }
+
+        }
+
+      }
+
 
       /*
         PHASE 1H: 스킨 루트에 읽기 모드 상태를 실어 준다 — 최종
@@ -965,8 +1059,17 @@ async function openPostPage(
       #postDetailDate는 지금 hidden이므로 건드리지 않는다.
     */
 
+    /*
+      SANDBOX-2: sandbox 스킨이면 bodyRegion이 없다(본문 자리가 다른
+      origin 안에 있다). 그때는 암호 입력 폼을 옮길 자리도 없고 —
+      애초에 비밀글은 sandbox 경로를 타지 않으므로(skin/skin-post.js)
+      이 폼이 필요한 상황 자체가 오지 않는다. legacy #postDetail
+      소속으로 그대로 둔다.
+    */
+
     if (
       postSecretGate &&
+      skinPostResult.bodyRegion &&
       postSecretGate.parentNode !==
         skinPostResult.bodyRegion
     ) {
@@ -1559,6 +1662,78 @@ async function renderPostDetailBody(
     innerHTML을 그대로 재사용한다).
   */
 
+  /* =========================================================
+     SANDBOX-2 — 본문이 다른 origin 안에 있을 때
+
+     프레임의 post-body region 에는 DOM 노드를 옮길 수 없다.
+     그래서 **화면 밖 엘리먼트**에 오늘과 똑같이 그린 뒤, 그
+     결과(HTML 문자열 + 컨테이너 style)를 IMORY_POST_BODY 로
+     보낸다 — Studio Preview 가 이미 같은 방식을 쓴다
+     (studio/preview/preview-post-body.js).
+
+     ★ 서식 파이프라인을 새로 만들지 않는다. 같은
+       renderPostBodyInto() 한 함수다 — 공개 화면과 프레임이
+       같은 글자를 그린다.
+
+     ★ 상대 주소를 절대 주소로 바꾼다. 본문 사진은
+       `/api/post-cover?image=7` 꼴이라 프레임 origin 에서는
+       404 가 난다. 이미 DOM 으로 그려 둔 상태이므로 img.src
+       프로퍼티(브라우저가 이 문서 기준으로 절대화한 값)를 그대로
+       속성에 다시 적어 주면 된다.
+
+     ★ 글자 크기 조절(도구 메뉴)은 이 경로에서 대상이 없다 —
+       조절할 DOM 이 이 문서에 없다. 프레임 안 본문에 같은 조절을
+       거는 것은 다음 라운드의 일이다(남은 차이).
+  ========================================================== */
+
+  if (currentSandboxPostHandle) {
+
+    const offscreen =
+      document.createElement("div");
+
+    await renderPostBodyInto(
+      offscreen,
+      contentType,
+      contentText,
+      quotePresetId
+    );
+
+
+    const images =
+      offscreen.querySelectorAll("img[src]");
+
+    for (const image of images) {
+
+      image.setAttribute("src", image.src);
+
+    }
+
+
+    const host =
+      window.skinSandboxHost;
+
+    if (host && typeof host.sendSandboxPostBody === "function") {
+
+      host.sendSandboxPostBody(
+        currentSandboxPostHandle,
+        {
+          html: offscreen.innerHTML,
+          containerStyle: offscreen.getAttribute("style") || "",
+          isHtmlContent: contentType === "html"
+        }
+      );
+
+    }
+
+
+    hideReaderFontScaleControl();
+
+
+    return;
+
+  }
+
+
   if (currentPostBodyMountTarget) {
 
     await renderPostBodyInto(
@@ -1730,6 +1905,21 @@ async function renderPostDetailBody(
 function renderOwnerOocNote(
   oocText
 ) {
+
+  /*
+    SANDBOX-2: 본문이 다른 origin 안에 있으면 이 문서에는 넣을
+    자리가 없다. 숨겨진 legacy 그릇에 조용히 써 넣지 않는다 —
+    화면에 안 보이는 곳에 OOC 를 남기는 것보다 아무것도 안 하는
+    편이 낫다. 프레임 안 소유자 자리는 다음 라운드의 일이다
+    (설계 문서 §F#12 — 남은 차이).
+  */
+
+  if (currentSandboxPostHandle) {
+
+    return;
+
+  }
+
 
   const host =
     currentPostBodyMountTarget ||

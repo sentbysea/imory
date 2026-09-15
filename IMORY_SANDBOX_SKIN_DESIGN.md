@@ -1,19 +1,23 @@
 # IMORY SANDBOX SKIN — 0단계 조사 및 구현 설계
 
-**상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기).**
+**상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기 ·
+§J SANDBOX-2).**
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
-§G(SANDBOX-0)와 §H(SANDBOX-1)에만 적혀 있다.** 둘을 섞어 읽지 말 것
-(CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 / 남은 차이"를 구분한다).
+§G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2)에만 적혀 있다.** 섞어
+읽지 말 것 (CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 /
+남은 차이"를 구분한다).
 
-§A~§F 와 §H 가 어긋나는 지점 셋(설계가 나중에 바뀐 곳):
+§A~§F 와 §H·§J 가 어긋나는 지점(설계가 나중에 바뀐 곳):
 
-| 어긋난 곳 | 설계(§A~§F) | 실제(§H) |
+| 어긋난 곳 | 설계(§A~§F) | 실제 |
 | --- | --- | --- |
-| 메시지 이름 | §D-2 `IMORY_READY` / `IMORY_INIT` / `IMORY_ERROR` | `IMORY_FRAME_READY` / `IMORY_RENDER_HOME` / `IMORY_FRAME_ERROR` (§G-7 · §H-6 이 정본) |
+| 메시지 이름 | §D-2 `IMORY_READY` / `IMORY_INIT` / `IMORY_ERROR` | `IMORY_FRAME_READY` / `IMORY_RENDER_PAGE` / `IMORY_FRAME_ERROR` (§G-7 · §H-6 · §J-2 가 정본) |
 | style-src | §D-4 · §G-6 TODO: `'unsafe-inline'` 이 필요해진다 | **nonce 로 해결**했다 — `renderSkin({ styleNonce })` (§H-7) |
 | img/font-src | §F#6: 호스트 allowlist 를 하지 않는다(`https:` 전체) | **지금 쓰는 출처만** 열었다. 외부 자유 이미지·웹폰트는 다음 단계의 명시적 결정 (§H-7) |
-| viewer | §D-1: `isOwner` · `adminHref` · `writeHref` 를 보낸다 | 이 라운드는 **방문자 값으로 고정**(§H-5) |
+| viewer | §D-1: `isOwner` · `adminHref` · `writeHref` 를 보낸다 | **방문자 값으로 고정**(§H-5) — SANDBOX-2 에서도 그대로 |
+| `IMORY_NAVIGATE` | §D-2: `{ href }` 를 보내고 부모가 파싱한다 | **href 를 보내지 않는다.** 부모가 발급한 정수 `navId` 하나뿐 (§J-2) |
+| CATEGORY / POST | §E: SANDBOX-3 | **SANDBOX-2 에서 함께 했다** (§J-4) |
 
 목표: 기존 `SkinPackage`·native 렌더링을 **한 byte도 바꾸지 않은 채**,
 `renderMode: "sandbox"`인 스킨만 별도 origin의 iframe에서 그리는 경로를
@@ -1587,6 +1591,173 @@ Network 탭에서는 `skin-frame.imory.me` 문서 요청 하나가 보이고,
 그 응답에 `Content-Security-Policy: ... frame-ancestors https://imory.me`
 가 붙어 있다. 다른 블로그(`https://imory.me/<다른 slug>`)에서는 같은
 선택자가 0개이고 `.imory-skin-root`가 1개다.
+
+---
+
+
+## J. SANDBOX-2 구현 기록 (2026-09-15) — CATEGORY·POST·안전한 페이지 이동
+
+**상태: 구현 + 로컬 검증 완료. commit/push 하지 않았고 배포 확인도 하지
+않았다.** §A~§F 의 설계는 CATEGORY/POST 를 SANDBOX-3 으로 미루고 있었지만,
+이 라운드의 지시문이 둘을 함께 요구해서 앞당겼다 — 설계 문서를 다시
+쓰지 않고 여기 바뀐 지점을 적는다(CLAUDE.md §5).
+
+### J-1. 라우팅 단일 출처
+
+`skin/skin-link-nav.js` 의 click 위임 본문을
+**`navigateToSkinRoute(route, url)`** 로 그대로 들어냈다(동작 무변경
+리팩터링 — 순서도 분기도 한 줄 바뀌지 않았고 들여쓰기만 두 칸 줄었다).
+
+지금 이 함수를 부르는 곳은 둘뿐이다:
+
+1. 같은 파일의 click 위임 — published Skin 안에서 시작된 클릭 (native)
+2. `skin/sandbox/skin-sandbox-host.js` 의 `IMORY_NAVIGATE` 핸들러 (sandbox)
+
+sandbox 전용 라우팅은 **한 줄도 만들지 않았다.** 주소·history·스크롤
+정책·미저장 입력 보호·요청 순번은 전부 기존 라우터가 오늘처럼 한다.
+
+### J-2. 이동 계약 — 프레임은 **주소를 보내지 않는다**
+
+설계 문서 §D-2 는 `IMORY_NAVIGATE { href }` 로 적혀 있었다. 실제로는
+**정수 하나**만 보낸다:
+
+```
+frame -> parent   IMORY_NAVIGATE { contract, renderSeq, navId }
+```
+
+| 왜 | 어떻게 |
+| --- | --- |
+| 프레임이 지어낸 문자열을 부모가 파싱할 일이 없다 | 표(navId → route)는 부모 realm 에만 있다 |
+| 위조한 정수는 아무 일도 못 한다 | 표에 없으면 조용히 무시 |
+| 표에 있는 정수를 찍어 맞혀도 권한 상승이 없다 | 표에는 **이번 화면의 Context 가 실제로 내려보낸 공개 주소**뿐 |
+| 옛 화면의 클릭이 새 화면을 옮기지 않는다 | `renderSeq` 대조 |
+
+표를 만드는 곳은 `skin/sandbox/skin-sandbox-nav.js` 하나다. 투영 함수가
+Context 의 href 를 옮길 때마다 `mint(href)` 가 불리고, 그 자리에서
+**공개 경로 판정과 같은 함수**(`resolveInSiteSkinRoute()`)로 검사한다.
+
+`mint()` 는 주소를 **바꾸지 않는다.** 화면에 그려지는 `<a href>` 는
+native 렌더와 글자 단위로 같다(SANDBOX-1 의 렌더 일치 검증이 그대로
+서 있어야 한다). 프레임은 도착한 표로 **anchor 요소 → navId** 대응을
+자기 realm 의 `WeakMap` 에 만든다 — DOM 에 속성을 더하지 않는다.
+
+### J-3. 허용/거부 규칙 (`skin-sandbox-nav.js`)
+
+허용(전부 "지금 이 블로그의 공개 화면"):
+`/:slug` · `/:slug/category/:id`(BANNER 카테고리 포함) · `/:slug/post/:id` ·
+`/:slug/category/:cid/folder/:fid` · `/:slug/highlights…`(옛 `/memos` 포함)
+
+거부:
+
+| 거부하는 것 | 어디서 |
+| --- | --- |
+| `javascript:` `data:` `blob:` `vbscript:` `file:` 등 모든 scheme | `isSandboxNavPathShape()` — "`/` 로 시작하고 `//` 가 아니다" 한 줄 |
+| protocol-relative(`//evil.example`) · 외부 origin | 같은 줄 + 파싱 뒤 `url.origin` 재확인 |
+| 다른 사람의 블로그(`/other/...`) | `siteOwnerSlug` 대조 + `resolveInSiteSkinRoute()` |
+| `/admin` `/auth` `/invite` `/studio` `/api` … | `RESERVED_SLUGS` 대조 |
+| `?write=1` `?edit=1` `?manage=1` `?tools=1` `?highlight=1` | 쿼리 키 목록 + route 플래그 재확인(두 겹) |
+| `..` · `%2e%2e` · `%2f` · `%5c` | 모양 검사 |
+| Context 가 내려보내지 않은 임의 주소 | 표에 없다 |
+
+외부 링크(배너의 https 주소 등)는 **그려지되 표에 들어가지 않는다** —
+눌러도 아무 일이 없다. 부모가 새 창을 여는 경로(`window.open`)는 이번
+라운드에 넣지 않았다(남은 차이).
+
+### J-4. 페이지별 전달 schema
+
+`projectSkinContextForSandbox(context, pageType, options)` 의 최상위 키는
+**언제나 같다**(그 페이지가 아니면 `null`):
+
+```
+contract pageType page site profile navigation banners viewer images
+home category post nav
+```
+
+- `category` — id/name/type/href · `posts[]` · `tree`(폴더, 깊이 상한 8) ·
+  `showPostsList` · 표시 설정 · `gallery`(카드·사진) · `pagination`
+- `post` — id/title/publishedAt(+Label)/categoryName/categoryHref/href
+  **본문은 여기 없다.** 별도 메시지(`IMORY_POST_BODY`)로 간다 —
+  "Context 로는 본문에 닿을 수 없다"(PHASE1C 7-2절)를 프레임 경계에서도
+  같은 모양으로 세운 것이다.
+- `nav` — `{ entries: [{ id, href }] }`
+
+새로 넣지 않은 것은 SANDBOX-1 과 같다(토큰·UUID·이메일·DB row 키·
+관리자 링크·비밀글 원문). `viewer` 는 여전히 **방문자 값 고정**이다.
+
+이미지 주소는 부모가 옮길 때 자기 origin 기준 **절대 주소**로 바꾼다 —
+`/api/post-cover?image=7` 같은 상대 주소는 프레임 origin 에서 404 가
+나기 때문이다(CSP `img-src` 에 부모 origin 이 이미 들어 있다).
+
+### J-5. 비밀글
+
+**비밀글 POST 만 기존 native viewer 로 폴백한다**(지시문 5절의 명시적
+선택). 비밀글은 암호 입력 폼(`postSecretGate`)을 본문 자리로 **옮겨서**
+보여 주고 정답 뒤 같은 자리에 본문을 넣는데, 그 폼을 다른 origin 안으로
+들여보내는 것은 이 라운드에서 안전하게 설계할 수 없다. 같은 블로그의
+다른 글은 그대로 sandbox 로 그려진다.
+
+판정은 `posts/view/posts-view-detail.js` 가 `post.visibility === "secret"`
+을 `skin/skin-post.js` 에 넘겨서 한다 — Context 조립 **전에** 갈린다.
+e2e 가 그때 문서 어디에도 비밀 본문이 없음을 함께 잰다.
+
+### J-6. 주인장 기능
+
+- 관리자·편집 URL 은 여전히 프레임에 가지 않는다(`viewer` 고정 + nav
+  표의 쿼리 거부, 두 겹).
+- 소유자 도구(`+`/edit)와 하이라이트 도구는 부모가 오늘처럼 그린다.
+  sandbox 화면에서는 스킨이 그 자리를 그리지 않으므로 플랫폼 기본 도구가
+  남는다.
+- 주인장의 OOC 메모는 sandbox POST 에서 **그리지 않는다** — 숨겨진
+  legacy 그릇에 조용히 써 넣지 않는다(남은 차이).
+
+### J-7. iframe 을 "그려 두고 옮길" 수 없다는 문제
+
+CATEGORY/POST 의 기존 경로는 떨어진 스크래치 엘리먼트에 먼저 그린 뒤
+요청 순번이 최신일 때만 화면으로 **옮긴다**. iframe 은 DOM 에서 옮기는
+순간 문서가 다시 로드된다 — 그 방식을 쓸 수 없다.
+
+그래서 mount 를 둘로 쪼갰다(`prepareSandboxSkin` / `prepared.mount`):
+
+- **prepare** — 조회·template·Context 투영·nav 표 발급 (느린 일, 늦게
+  끝나도 화면을 건드리지 않는다)
+- **mount** — 실제 iframe 생성 (호출자가 요청 순번을 확인한 뒤
+  **살아 있는 컨테이너**에 대고 한 번)
+
+"늦은 응답이 최신 화면을 덮지 않는다"는 성질은 그대로다 — 늦게 끝난
+prepare 의 mount 는 호출되지 않고, 그래도 미끄러진 경우를 위해 mount
+결과에도 요청 순번 검사와 `iframe.isConnected` 검사를 두었다.
+
+### J-8. 검증 결과 (구분해서)
+
+- **mock 자동 검증** — `node skin/sandbox/skin-sandbox-unit-test.mjs`
+  172/172 · `node skin/sandbox/skin-sandbox-e2e-test.mjs` 274/274
+  (chromium) · `--browser=webkit` 274/274.
+  새 절: `--only=pages`(CATEGORY/POST 렌더·비밀글 폴백·native 회귀) ·
+  `--only=nav`(링크·뒤로/앞으로·직접 접속·새로고침·모바일·위조 거부).
+- **기존 회귀** — 8934 64/64 · 8935 248/248 · 8936 155/155 ·
+  8942 71/71 · 8952 122/122 · 8956 58/58.
+  8944 는 70/71, 8948 은 332/333 인데 **두 실패 모두 이 변경 이전부터
+  나던 것**이다(같은 커밋에서 변경분을 stash 하고 돌려 확인).
+- **실제 DB 검증 · 배포 확인 · 실기기 확인 — 하지 않았다.**
+
+### J-9. dev opt-in 이 바뀐 점
+
+SANDBOX-1 까지 로컬 opt-in 은 `?sandboxSkin=1` 쿼리 하나로 충분했다 —
+화면이 HOME 한 장이라 주소가 바뀌지 않았기 때문이다. 이제 프레임 안
+링크가 주소를 바꾸므로(그것이 이 라운드의 목적이다) 쿼리가 사라진다.
+그래서 dev 호스트에서는 frame origin 도 `localStorage["imory.sandboxSkinOrigin"]`
+로 기억한다. **production 은 이 분기를 타지 않는다** — 거기서는 hostname +
+slug allowlist 만 보고 쿼리도 localStorage 도 읽지 않는다.
+
+### J-10. 이 라운드에서 하지 않은 것
+
+- Studio Preview 통합 (SANDBOX-4)
+- 저자 JS (SANDBOX-5)
+- FOLDER / HIGHLIGHTS / BANNER 페이지의 sandbox 렌더 — **이동은 된다**
+  (그 주소들이 nav 표에 들어간다). 도착한 화면은 native 로 그려진다.
+- 외부 링크를 부모가 새 창으로 여는 것 (`IMORY_COPY_LINK` 도 없다)
+- 프레임 안 본문의 글자 크기 조절·하이라이트·소유자 OOC
+- commit / push
 
 ---
 

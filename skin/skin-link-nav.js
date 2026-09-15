@@ -251,6 +251,224 @@ function resolveInSiteSkinRoute(url) {
 
 }
 
+/* =========================================================
+   navigateToSkinRoute(route, url) -> Promise<void>
+
+   ★ 스킨에서 시작된 이동의 **유일한 출구**다.
+
+   SANDBOX-2에서 아래 click 위임 본문을 그대로 들어낸 것이다
+   (동작 무변경 리팩터링 — 순서도 분기도 한 줄 바뀌지 않았고,
+    들여쓰기만 두 칸 줄었다). 지금 이 함수를 부르는 곳은 둘이다:
+
+     1. 아래 click 위임 (published Skin 안에서 시작된 클릭)
+     2. sandbox 프레임의 IMORY_NAVIGATE 핸들러
+        (skin/sandbox/skin-sandbox-host.js)
+
+   sandbox 전용 라우팅을 복제하지 않는다는 것이 이 추출의 목적이다
+   (기준 문서 IMORY_SANDBOX_SKIN_DESIGN.md §E SANDBOX-2).
+
+   route 는 resolveInSiteSkinRoute()가 돌려준 판정이고, url 은 그
+   판정의 근거가 된 **이 문서(부모 origin)의 URL 객체**다. sandbox
+   경로에서도 route/url 을 만드는 것은 언제나 부모다 — 프레임은
+   부모가 발급한 navId 만 돌려보내고, 그 id 를 route 로 바꾸는 표는
+   부모만 갖는다. 즉 이 함수는 프레임이 만든 문자열을 절대 보지
+   않는다.
+
+   실패하면 오늘과 똑같이 문서 이동으로 떨어진다. throw하지 않는다.
+========================================================== */
+
+async function navigateToSkinRoute(route, url) {
+
+  if (!route || !url) {
+    return;
+  }
+
+
+  try {
+
+    if (typeof loadPostsModule === "function") {
+
+      await loadPostsModule();
+
+    }
+
+
+    /*
+      작성/수정 요청(?write=1 / ?edit=1)은 어느 경로에 붙어 있든
+      먼저 처리한다 — 옛 목록/상세 화면을 한 번 그렸다가 그
+      위에서 다시 폼을 여는 중간 단계를 만들지 않기 위해서다.
+      소유자/작성자 검사는 받는 쪽(startPostCompose /
+      openPostEditor)이 한다.
+    */
+
+    if (route.compose === true) {
+
+      if (typeof startPostCompose !== "function") {
+        throw new Error("startPostCompose unavailable");
+      }
+
+      await startPostCompose({
+        categoryId:
+          route.page === "category" ||
+          route.page === "folder"
+            ? route.id
+            : null,
+
+        /*
+          FOLDER-3: 폴더 경로의 WRITE는 그 폴더까지 전달한다 —
+          작성 폼의 FOLDER 드롭다운이 미리 그 폴더로 맞춰진다.
+        */
+
+        folderId:
+          route.page === "folder"
+            ? route.folderId
+            : null
+      });
+
+      return;
+
+    }
+
+
+    if (
+      route.page === "post" &&
+      route.edit === true
+    ) {
+
+      if (typeof openPostEditor !== "function") {
+        throw new Error("openPostEditor unavailable");
+      }
+
+      await openPostEditor(route.id);
+
+      return;
+
+    }
+
+
+    if (route.page === "post") {
+
+      if (typeof openPostPage !== "function") {
+        throw new Error("openPostPage unavailable");
+      }
+
+      await openPostPage(route.id);
+
+      return;
+
+    }
+
+
+    if (route.page === "folder") {
+
+      if (typeof openFolderPage !== "function") {
+        throw new Error("openFolderPage unavailable");
+      }
+
+      await openFolderPage(
+        route.id,
+        route.folderId,
+        {
+          series: route.series
+        }
+      );
+
+      return;
+
+    }
+
+
+    if (route.page === "highlights") {
+
+      if (typeof openHighlightsScreen !== "function") {
+        throw new Error("openHighlightsScreen unavailable");
+      }
+
+      await openHighlightsScreen({
+        view:
+          route.view,
+
+        categoryId:
+          route.categoryId
+      });
+
+      return;
+
+    }
+
+
+    if (route.page === "category") {
+
+      if (typeof openCategoryPage !== "function") {
+        throw new Error("openCategoryPage unavailable");
+      }
+
+      await openCategoryPage(
+        route.id,
+        {
+          manage: route.manage === true,
+          page: route.pageNumber || 1
+        }
+      );
+
+      return;
+
+    }
+
+
+    /*
+      HOME: #themeMount의 HOME Skin은 계속 mount된 채 남아 있으므로
+      #postArea만 애니메이션 없이 닫으면 곧바로 HOME이 보인다.
+      이미 HOME이면 아무것도 하지 않는다(불필요한 history 항목을
+      쌓지 않는다).
+    */
+
+    if (
+      typeof currentPostView === "string" &&
+      currentPostView === "home"
+    ) {
+      return;
+    }
+
+
+    if (typeof closePostArea !== "function") {
+      throw new Error("closePostArea unavailable");
+    }
+
+
+    await closePostArea({
+      animate: false
+    });
+
+  }
+
+  catch (err) {
+
+    console.error(
+      "[skin-link-nav] SPA navigation failed, falling back to document navigation",
+      err
+    );
+
+    window.location.assign(url.href);
+
+  }
+
+}
+
+
+/* sandbox host(ES 모듈)가 이 classic script 전역을 집어 갈 수 있게 */
+
+if (typeof window !== "undefined") {
+
+  window.navigateToSkinRoute =
+    navigateToSkinRoute;
+
+  window.resolveInSiteSkinRoute =
+    resolveInSiteSkinRoute;
+
+}
+
+
 
 /* =========================================================
    클릭 위임
@@ -353,174 +571,8 @@ document.addEventListener(
     event.preventDefault();
 
 
-    try {
+    await navigateToSkinRoute(route, url);
 
-      if (typeof loadPostsModule === "function") {
-
-        await loadPostsModule();
-
-      }
-
-
-      /*
-        작성/수정 요청(?write=1 / ?edit=1)은 어느 경로에 붙어 있든
-        먼저 처리한다 — 옛 목록/상세 화면을 한 번 그렸다가 그
-        위에서 다시 폼을 여는 중간 단계를 만들지 않기 위해서다.
-        소유자/작성자 검사는 받는 쪽(startPostCompose /
-        openPostEditor)이 한다.
-      */
-
-      if (route.compose === true) {
-
-        if (typeof startPostCompose !== "function") {
-          throw new Error("startPostCompose unavailable");
-        }
-
-        await startPostCompose({
-          categoryId:
-            route.page === "category" ||
-            route.page === "folder"
-              ? route.id
-              : null,
-
-          /*
-            FOLDER-3: 폴더 경로의 WRITE는 그 폴더까지 전달한다 —
-            작성 폼의 FOLDER 드롭다운이 미리 그 폴더로 맞춰진다.
-          */
-
-          folderId:
-            route.page === "folder"
-              ? route.folderId
-              : null
-        });
-
-        return;
-
-      }
-
-
-      if (
-        route.page === "post" &&
-        route.edit === true
-      ) {
-
-        if (typeof openPostEditor !== "function") {
-          throw new Error("openPostEditor unavailable");
-        }
-
-        await openPostEditor(route.id);
-
-        return;
-
-      }
-
-
-      if (route.page === "post") {
-
-        if (typeof openPostPage !== "function") {
-          throw new Error("openPostPage unavailable");
-        }
-
-        await openPostPage(route.id);
-
-        return;
-
-      }
-
-
-      if (route.page === "folder") {
-
-        if (typeof openFolderPage !== "function") {
-          throw new Error("openFolderPage unavailable");
-        }
-
-        await openFolderPage(
-          route.id,
-          route.folderId,
-          {
-            series: route.series
-          }
-        );
-
-        return;
-
-      }
-
-
-      if (route.page === "highlights") {
-
-        if (typeof openHighlightsScreen !== "function") {
-          throw new Error("openHighlightsScreen unavailable");
-        }
-
-        await openHighlightsScreen({
-          view:
-            route.view,
-
-          categoryId:
-            route.categoryId
-        });
-
-        return;
-
-      }
-
-
-      if (route.page === "category") {
-
-        if (typeof openCategoryPage !== "function") {
-          throw new Error("openCategoryPage unavailable");
-        }
-
-        await openCategoryPage(
-          route.id,
-          {
-            manage: route.manage === true,
-            page: route.pageNumber || 1
-          }
-        );
-
-        return;
-
-      }
-
-
-      /*
-        HOME: #themeMount의 HOME Skin은 계속 mount된 채 남아 있으므로
-        #postArea만 애니메이션 없이 닫으면 곧바로 HOME이 보인다.
-        이미 HOME이면 아무것도 하지 않는다(불필요한 history 항목을
-        쌓지 않는다).
-      */
-
-      if (
-        typeof currentPostView === "string" &&
-        currentPostView === "home"
-      ) {
-        return;
-      }
-
-
-      if (typeof closePostArea !== "function") {
-        throw new Error("closePostArea unavailable");
-      }
-
-
-      await closePostArea({
-        animate: false
-      });
-
-    }
-
-    catch (err) {
-
-      console.error(
-        "[skin-link-nav] SPA navigation failed, falling back to document navigation",
-        err
-      );
-
-      window.location.assign(url.href);
-
-    }
 
   }
 );

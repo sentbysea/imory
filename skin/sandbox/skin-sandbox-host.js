@@ -2,7 +2,8 @@
    SKIN SANDBOX - HOST (ES 모듈, 부모 쪽)
 
    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §B-1 / §D-3 / §D-4
-   단계: SANDBOX-1 — 공개 HOME 한 장을 별도 origin iframe에서 그린다.
+   단계: SANDBOX-2 — 공개 HOME/CATEGORY/POST 를 별도 origin iframe에서
+         그리고, 프레임 안 링크가 기존 SPA 라우터로 이어진다.
 
    ---------------------------------------------------------
    ★ 왜 독립 모듈인가
@@ -587,24 +588,110 @@ function applySandboxFrameHeight(handle, height) {
 
 
 /* =========================================================
-   mountSandboxSkin(options) -> Promise<result>
+   살아 있는 handle 장부
 
-   options = {
-     container : HTMLElement
-     pageType  : "home"            // 이번 라운드는 HOME 한 장뿐
-     template  : { html, css }     // resolveSkinTemplate()의 결과
-     context   : object            // build*SkinContext()의 결과(원본)
-     timeoutMs / renderTimeoutMs / onError : 선택
-   }
+   컨테이너가 innerHTML="" 로 비워지면 iframe 은 사라지지만 부모
+   window 의 message 리스너는 남는다. 그것이 쌓이면 옛 화면의
+   핸들러가 계속 돌고, 화면마다 리스너가 하나씩 늘어난다.
 
-   result = { ok:true, handle } | { ok:false, reason }
+   그래서 mount 할 때마다
+     ① 같은 컨테이너에 걸려 있던 이전 handle 을 확실히 내리고
+     ② 문서에서 이미 떨어져 나간(iframe.isConnected === false)
+        handle 을 전부 정리한다.
 
-   reason: mountSandboxSkinFrame의 값들 +
-           "bad-page-type" "bad-template" "no-projector"
-           "bad-context" "send-failed" "render-timeout" "frame-error"
+   이 장부가 SANDBOX-2 에서 새로 필요해진 이유: HOME 은 한 번
+   mount 하면 그대로 남지만, CATEGORY/POST 는 화면을 옮길 때마다
+   컨테이너가 통째로 비워진다.
 ========================================================== */
 
-export async function mountSandboxSkin(options) {
+const liveSandboxHandles =
+  [];
+
+
+function trackSandboxHandle(handle) {
+
+  liveSandboxHandles.push(handle);
+
+}
+
+
+function sweepSandboxHandles(container) {
+
+  for (let i = liveSandboxHandles.length - 1; i >= 0; i -= 1) {
+
+    const handle =
+      liveSandboxHandles[i];
+
+    const detached =
+      !handle.iframe ||
+      !handle.iframe.isConnected;
+
+    const sameContainer =
+      container &&
+      handle.iframe &&
+      handle.iframe.parentNode === container;
+
+    if (handle.destroyed || detached || sameContainer) {
+
+      destroySandboxSkinFrame(handle);
+
+      liveSandboxHandles.splice(i, 1);
+
+    }
+
+  }
+
+}
+
+
+/* =========================================================
+   resolveSandboxParentOrigin(container)
+
+   프레임에 보낼 이미지 주소를 절대 주소로 바꿀 때 쓰는 값
+   (skin/sandbox/skin-sandbox-context.js sandboxImageUrl).
+========================================================== */
+
+function resolveSandboxParentOrigin(container) {
+
+  const win =
+    container &&
+    container.ownerDocument
+      ? container.ownerDocument.defaultView
+      : (typeof window !== "undefined" ? window : null);
+
+  return win && win.location ? win.location.origin : "";
+
+}
+
+
+/* =========================================================
+   prepareSandboxSkin(options) -> { ok:true, mount } | { ok:false, reason }
+
+   ★ SANDBOX-2에서 mount 를 둘로 쪼갠 이유
+
+   CATEGORY/POST 의 기존 렌더 경로는 **떨어진(detached) 스크래치
+   엘리먼트**에 먼저 그린 뒤, 요청 순번이 아직 최신일 때만 그
+   내용을 화면 컨테이너로 **옮긴다**(posts/view/posts-view-list.js,
+   posts-view-detail.js). 늦게 도착한 응답이 최신 화면을 덮지 않게
+   하는 기존 장치다.
+
+   그런데 iframe 은 DOM 에서 옮기는 순간 **문서가 다시 로드된다** —
+   핸드셰이크도 렌더도 처음부터 다시 하게 되고, 그 사이 화면이
+   비어 보인다. 그래서 sandbox 경로는 "그려 두고 옮긴다"를 쓸 수
+   없다.
+
+   대신 옮길 수 없는 부분만 미룬다:
+
+     prepare : 조회·template·Context 투영·nav 표 발급 (여기까지가
+               느린 일이고, 늦게 끝나도 화면을 건드리지 않는다)
+     mount   : 실제 iframe 생성 (호출자가 requestId 를 확인한 뒤,
+               **살아 있는 컨테이너**에 대고 한 번만 부른다)
+
+   결과적으로 "늦은 응답이 최신 화면을 덮지 않는다"는 성질은 그대로
+   유지된다 — 늦게 끝난 prepare 의 mount 는 호출되지 않는다.
+========================================================== */
+
+export function prepareSandboxSkin(options) {
 
   const opts =
     options || {};
@@ -612,11 +699,6 @@ export async function mountSandboxSkin(options) {
   const pageType =
     opts.pageType;
 
-
-  /*
-    ★ HOME 한 장이 이번 라운드의 전부다. 다른 page type으로
-    불리면 여기서 끝낸다 — 호출자는 native로 간다.
-  */
 
   const PAGE_TYPES =
     readGlobal("SANDBOX_CONTEXT_PAGE_TYPES");
@@ -651,15 +733,120 @@ export async function mountSandboxSkin(options) {
 
 
   /*
+    ★ nav 표는 **이번 렌더의 것**이다. 투영이 도는 동안 Context 의
+    href 가 하나씩 등록되고, 그 표는 아래 handle 에만 붙는다 —
+    옛 화면의 navId 가 새 화면에서 통하지 않는다.
+  */
+
+  const createRegistry =
+    readGlobal("createSandboxNavRegistry");
+
+  const navRegistry =
+    typeof createRegistry === "function"
+      ? createRegistry(
+        opts.container && opts.container.ownerDocument
+          ? opts.container.ownerDocument.defaultView
+          : undefined
+      )
+      : null;
+
+
+  /*
     ★ 원본 context는 여기서 끝난다. 아래로는 투영 결과만 간다.
   */
 
   const data =
-    project(opts.context, pageType);
+    project(
+      opts.context,
+      pageType,
+      {
+        nav: navRegistry,
+        origin: resolveSandboxParentOrigin(opts.container)
+      }
+    );
 
   if (!data) {
     return { ok: false, reason: "bad-context" };
   }
+
+
+  return {
+
+    ok: true,
+
+    pageType: pageType,
+
+    mount: function (container) {
+
+      return mountPreparedSandboxSkin({
+        container: container || opts.container,
+        pageType: pageType,
+        template: template,
+        data: data,
+        navRegistry: navRegistry,
+        timeoutMs: opts.timeoutMs,
+        renderTimeoutMs: opts.renderTimeoutMs,
+        onError: opts.onError
+      });
+
+    }
+
+  };
+
+}
+
+
+/* =========================================================
+   mountSandboxSkin(options) -> Promise<result>
+
+   options = {
+     container : HTMLElement
+     pageType  : "home" | "category" | "post"
+     template  : { html, css }     // resolveSkinTemplate()의 결과
+     context   : object            // build*SkinContext()의 결과(원본)
+     timeoutMs / renderTimeoutMs / onError : 선택
+   }
+
+   result = { ok:true, handle } | { ok:false, reason }
+
+   reason: mountSandboxSkinFrame의 값들 +
+           "bad-page-type" "bad-template" "no-projector"
+           "bad-context" "send-failed" "render-timeout" "frame-error"
+
+   prepare + mount 를 한 번에 하는 편의 함수다. 컨테이너가 이미
+   화면에 붙어 있고 옮길 일이 없는 HOME 이 이 경로를 쓴다.
+========================================================== */
+
+export async function mountSandboxSkin(options) {
+
+  const prepared =
+    prepareSandboxSkin(options);
+
+  if (!prepared.ok) {
+    return prepared;
+  }
+
+
+  return prepared.mount((options || {}).container);
+
+}
+
+
+async function mountPreparedSandboxSkin(opts) {
+
+  const pageType =
+    opts.pageType;
+
+  const template =
+    opts.template;
+
+  const data =
+    opts.data;
+
+
+  /* 옛 handle 정리 — 같은 컨테이너의 것과 이미 떨어져 나간 것 */
+
+  sweepSandboxHandles(opts.container);
 
 
   /* --- 빈 프레임 --------------------------------------- */
@@ -681,6 +868,16 @@ export async function mountSandboxSkin(options) {
 
   const TYPES =
     handle.TYPES;
+
+
+  handle.pageType =
+    pageType;
+
+  handle.navRegistry =
+    opts.navRegistry || null;
+
+
+  trackSandboxHandle(handle);
 
 
   /* --- 렌더 ------------------------------------------- */
@@ -773,10 +970,75 @@ export async function mountSandboxSkin(options) {
           };
 
 
+        /*
+          ★ SANDBOX-2 — 이동 요청.
+
+          프레임은 주소를 보내지 않는다. 부모가 이번 렌더에 발급한
+          정수 하나만 온다. 그 정수를 route 로 바꾸는 표는 이
+          handle 에만 있고, 그 표에는 이번 화면의 Context 가 실제로
+          내려보낸 공개 주소밖에 없다(skin/sandbox/skin-sandbox-nav.js).
+
+          여기서 하는 일은 표를 한 번 뒤져 보고 기존 라우터에
+          넘기는 것뿐이다 — sandbox 전용 라우팅을 만들지 않는다.
+        */
+
+        handle.handlers[TYPES.NAVIGATE] =
+          (payload) => {
+
+            /*
+              옛 화면에서 늦게 도착한 클릭은 버린다. 그 사이 이미
+              다른 화면으로 옮겨 갔을 수 있다.
+            */
+
+            if (payload.renderSeq !== handle.renderSeq) {
+              return;
+            }
+
+
+            if (
+              !handle.navRegistry ||
+              typeof handle.navRegistry.resolve !== "function"
+            ) {
+              return;
+            }
+
+
+            const target =
+              handle.navRegistry.resolve(payload.navId);
+
+            if (!target) {
+
+              /* 표에 없는 id — 조용히 무시한다(응답하지 않는다) */
+
+              handle.lastReason = "unknown-nav-id";
+              return;
+
+            }
+
+
+            const navigate =
+              readGlobal("navigateToSkinRoute");
+
+            if (typeof navigate !== "function") {
+              return;
+            }
+
+
+            /*
+              기존 SPA 라우터 하나로 들어간다. 주소·history·스크롤
+              정책·미저장 입력 보호는 전부 그쪽이 오늘처럼 한다 —
+              프레임은 history 를 절대 만지지 않는다(설계 문서 §F#4).
+            */
+
+            navigate(target.route, target.url);
+
+          };
+
+
         const sent =
           sendToSandboxFrame(
             handle,
-            TYPES.RENDER_HOME,
+            TYPES.RENDER_PAGE,
             {
               contract: 1,
               pageType: pageType,
@@ -806,7 +1068,70 @@ export async function mountSandboxSkin(options) {
   }
 
 
+  /*
+    ★ 핸드셰이크와 렌더를 기다리는 동안(await 둘) 화면이 바뀌어
+    컨테이너가 통째로 비워졌을 수 있다. 그러면 이 프레임은 이미
+    문서에서 떨어져 나갔고, 살려 둘 이유가 없다 — 리스너만 남는다.
+    호출자에게는 실패로 알려서 "프레임이 안 떴을 때"와 같은 길로
+    가게 한다.
+  */
+
+  if (!handle.iframe || !handle.iframe.isConnected) {
+
+    destroySandboxSkinFrame(handle);
+
+    return { ok: false, reason: "detached" };
+
+  }
+
+
   return { ok: true, handle };
+
+}
+
+
+/* =========================================================
+   sendSandboxPostBody(handle, body) -> boolean
+
+   SANDBOX-2 — POST 본문 한 덩어리.
+
+   body = { html, containerStyle, isHtmlContent }
+
+   ★ 부모가 **공개 뷰어와 같은 파이프라인**으로 이미 서식·sanitize를
+   끝낸 결과물만 여기로 온다(posts/view/posts-view-detail.js 의
+   renderPostBodyInto() 를 화면 밖 엘리먼트에 대고 부른 결과).
+   이 함수는 그것을 옮기기만 한다 — 새 sanitize 로직을 만들지
+   않는다(Studio Preview 의 preview:post-body 와 같은 책임 분리).
+
+   ★ 비밀글 본문은 이 경로로 오지 않는다. 비밀글은 sandbox 자체를
+   쓰지 않고 기존 native viewer 로 간다(skin/skin-post.js) — 암호
+   입력 폼이 다른 origin 안으로 들어가는 일이 없게.
+========================================================== */
+
+export function sendSandboxPostBody(handle, body) {
+
+  if (
+    !handle ||
+    handle.destroyed ||
+    !handle.TYPES ||
+    !body
+  ) {
+    return false;
+  }
+
+
+  return sendToSandboxFrame(
+    handle,
+    handle.TYPES.POST_BODY,
+    {
+      contract: 1,
+      renderSeq: handle.renderSeq,
+      html: typeof body.html === "string" ? body.html : "",
+      containerStyle:
+        typeof body.containerStyle === "string" ? body.containerStyle : "",
+      isHtmlContent: body.isHtmlContent === true
+    }
+  );
 
 }
 
@@ -870,7 +1195,9 @@ export const destroySandboxSkin =
 
 const sandboxHostApi = {
   mountSandboxSkin,
+  prepareSandboxSkin,
   mountSandboxSkinFrame,
+  sendSandboxPostBody,
   destroySandboxSkin,
   destroySandboxSkinFrame
 };

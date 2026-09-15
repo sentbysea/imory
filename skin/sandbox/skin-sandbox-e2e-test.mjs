@@ -1631,10 +1631,17 @@ async function runPayload(browser) {
       () => Object.keys(window.__imorySandboxLastReceived || {}).sort().join(",")
     );
 
+  /*
+    SANDBOX-2 에서 셋이 늘었다: category / post(그 페이지가 아니면
+    null 이지만 키는 언제나 있다 — skin-sandbox-context.js 의
+    최상위 키 집합이 고정이어야 "정확히 이 집합인가"를 물을 수
+    있다)와 nav(부모가 발급한 navId 표).
+  */
+
   check("[payload] ★ 도착한 최상위 키가 계약 그대로다",
     receivedKeys === [
-      "banners", "contract", "home", "images", "navigation",
-      "page", "pageType", "profile", "site", "viewer"
+      "banners", "category", "contract", "home", "images", "nav",
+      "navigation", "page", "pageType", "post", "profile", "site", "viewer"
     ].join(","),
     receivedKeys);
 
@@ -1999,9 +2006,34 @@ const HOME_DB = {
   posts: [
     { id: 101, user_id: HOME_OWNER_ID, category_id: 1, title: "첫 번째 글",
       content_type: "text", visibility: "public",
-      created_at: "2026-09-01T02:00:00Z", quote_preset_id: null }
+      created_at: "2026-09-01T02:00:00Z", quote_preset_id: null },
+
+    /*
+      SANDBOX-2 — 이동 검증용 두 번째 글. 같은 카테고리에 있어서
+      CATEGORY 목록에 둘이 나오고, 그중 하나를 눌러 POST 로
+      들어간 뒤 다시 카테고리로 돌아오는 길을 잰다.
+    */
+    { id: 102, user_id: HOME_OWNER_ID, category_id: 1, title: "두 번째 글",
+      content_type: "text", visibility: "public",
+      created_at: "2026-09-02T02:00:00Z", quote_preset_id: null },
+
+    /*
+      비밀글 — sandbox 경로를 타지 않는다는 것(기존 native viewer 로
+      폴백)을 이 글로 확인한다.
+    */
+    { id: 103, user_id: HOME_OWNER_ID, category_id: 1, title: "잠긴 글",
+      content_type: "text", visibility: "secret",
+      created_at: "2026-09-03T02:00:00Z", quote_preset_id: null }
   ],
-  post_contents: [],
+  post_contents: [
+    { post_id: 101, content: "<p>첫 번째 글의 본문이다.</p>" },
+    { post_id: 102, content: "<p>두 번째 글의 본문이다.</p>" },
+    { post_id: 103, content: "<p>비밀 본문</p>" }
+  ],
+  post_folders: [],
+  post_gallery_images: [],
+  post_covers: [],
+  post_highlights: [],
   banners: [],
   quote_presets: []
 };
@@ -2052,10 +2084,21 @@ async function installHomeSupabaseMock(page, skinPackage) {
     const req = route.request();
     const url = new URL(req.url());
 
+    /*
+      ★ preflight 응답에 허용 메서드를 명시한다.
+
+      WebKit 은 Access-Control-Allow-Methods 가 없는 preflight 를
+      간헐적으로 거절한다("due to access control checks") — chromium
+      은 넘어가므로 두 브라우저에서 결과가 갈렸다. mock 의 문제이지
+      제품 코드의 문제가 아니라, 여기서 헤더를 채워 재현을 없앤다.
+    */
+
     const headers = {
       "access-control-allow-origin": "*",
       "access-control-allow-headers": "*",
-      "access-control-expose-headers": "*"
+      "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS,HEAD",
+      "access-control-expose-headers": "*",
+      "access-control-max-age": "600"
     };
 
     if (req.method() === "OPTIONS") {
@@ -2138,6 +2181,105 @@ async function openPublicHome(browser, skinPackage, query) {
   );
 
   return { ctx, page, pageErrors };
+
+}
+
+
+/* =========================================================
+   openPublicPath(browser, skinPackage, subPath, options)
+
+   SANDBOX-2 — 이동이 생기면서 주소가 바뀐다. 그래서 dev opt-in 을
+   **쿼리가 아니라 localStorage 로** 건다(그러지 않으면 두 번째
+   화면부터 플래그가 꺼져 native 로 떨어진다 —
+   skin/sandbox/skin-sandbox-config.js 의 dev 저장소 키 주석).
+   production 은 이 분기를 타지 않는다(hostname + slug allowlist).
+========================================================== */
+
+async function openPublicPath(browser, skinPackage, subPath, options) {
+
+  const opts = options || {};
+
+  const ctx = await browser.newContext({
+    viewport: opts.viewport || { width: 900, height: 900 }
+  });
+
+  const page = await ctx.newPage();
+
+  const pageErrors = [];
+  page.on("pageerror", err => pageErrors.push(String(err && err.message || err)));
+
+  await page.addInitScript(
+    ([origin, sandboxEnabled]) => {
+      try {
+        if (sandboxEnabled) {
+          localStorage.setItem("imory.sandboxSkin", "1");
+          localStorage.setItem("imory.sandboxSkinOrigin", origin);
+        }
+      } catch (err) { /* 저장소가 막혀 있으면 플래그 없이 돈다 */ }
+    },
+    [SANDBOX_ORIGIN, opts.sandbox !== false]
+  );
+
+  await installHomeSupabaseMock(page, skinPackage);
+
+  await page.goto(
+    PARENT_ORIGIN + "/" + HOME_SLUG + (subPath || "/"),
+    { waitUntil: "load" }
+  );
+
+  return { ctx, page, pageErrors };
+
+}
+
+
+/*
+  "지금 **보이는** 화면을 그리고 있는 sandbox 프레임" 하나를 기다린다.
+
+  ★ 보이는 것만 센다. 화면을 옮겨도 이전 화면의 컨테이너(#postList /
+  #postSkinContainer)는 hidden 으로 남아 있을 뿐 비워지지 않는다 —
+  native 스킨도 똑같이 옛 DOM 을 그 자리에 두고 다음 진입에서
+  덮어쓴다. 그래서 "떠 있는 프레임" 만으로 찾으면 옛 화면의
+  프레임을 집어 와서 테스트가 한 박자 이르게 통과한다.
+*/
+
+async function waitForSandboxPage(page, pageType, timeout) {
+
+  const deadline = Date.now() + (timeout || 20000);
+
+  while (Date.now() < deadline) {
+
+    const elements =
+      await page.$$("iframe.imory-skin-sandbox-frame");
+
+    for (const element of elements) {
+
+      try {
+
+        if (!(await element.isVisible())) continue;
+
+        const frame = await element.contentFrame();
+
+        if (!frame || !frame.url().startsWith(SANDBOX_ORIGIN)) continue;
+
+        const type = await frame.evaluate(() => {
+          const root = document.getElementById("sandboxFrameRoot");
+          return root &&
+            root.getAttribute("data-imory-sandbox-state") === "rendered"
+            ? root.getAttribute("data-imory-sandbox-page")
+            : null;
+        });
+
+        if (type && (!pageType || type === pageType)) return frame;
+
+      } catch (err) { /* 그 사이 프레임이 사라졌다 — 다음 바퀴에 */ }
+
+    }
+
+    await page.waitForTimeout(100);
+
+  }
+
+  return null;
 
 }
 
@@ -2307,6 +2449,554 @@ async function runHome(browser) {
 
 
 /* =========================================================
+   [pages] SANDBOX-2 — CATEGORY / POST 도 프레임에서 그려진다
+
+   HOME 과 같은 문서(진짜 index.html)를 쓰되 주소만 다르게 들어간다.
+   supabase 만 mock 이고 라우팅·Context 조립·본문 서식은 전부
+   저장소의 실제 코드다.
+========================================================== */
+
+function readSandboxPkg() {
+
+  return JSON.parse(
+    fs.readFileSync(
+      path.join(ROOT, "skin", "test-skins", "imory-sandbox-home-v1.json"),
+      "utf8"
+    )
+  );
+
+}
+
+
+async function runPages(browser) {
+
+  console.log("\n[pages] CATEGORY / POST 렌더");
+
+  const sandboxPkg = readSandboxPkg();
+
+
+  /* --- CATEGORY ---------------------------------------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, "/category/1");
+
+    const frame = await waitForSandboxPage(page, "category");
+
+    check("[pages] ★ CATEGORY 가 별도 origin 프레임에서 그려진다",
+      Boolean(frame));
+
+    if (frame) {
+
+      const text = await frame.locator("#sandboxFrameRoot").innerText();
+
+      check("[pages] ★ 카테고리 이름이 프레임에 그려졌다",
+        text.includes("TXT"), text.slice(0, 80));
+
+      check("[pages] ★ 그 카테고리의 글 목록이 그려졌다",
+        text.includes("첫 번째 글") && text.includes("두 번째 글"));
+
+      /*
+        비밀글은 목록에서 제목 앞에 자물쇠가 붙는다(기존 계약 —
+        skin/skin-context.js maskSkinPostTitle). 여기서 보는 것은
+        그 계약이 프레임에서도 같다는 것과, **본문은 어디에도
+        없다**는 것이다.
+      */
+
+      check("[pages] ★ 비밀글은 자물쇠가 붙은 제목으로 온다",
+        text.includes("🔒 잠긴 글"), text.slice(0, 160));
+
+      check("[pages] ★ 비밀 본문은 프레임에 도착하지 않았다",
+        (await frame.evaluate(() =>
+          JSON.stringify(window.__imorySandboxLastReceived || {})))
+          .indexOf("비밀 본문") === -1);
+
+      check("[pages] ★ 프레임에 supabase 전역이 없다",
+        (await frame.evaluate(() => typeof window.supabaseClient)) === "undefined");
+
+      check("[pages] ★ 도착한 data 의 post/home namespace 는 null 이다",
+        (await frame.evaluate(() => {
+          const d = window.__imorySandboxLastReceived || {};
+          return d.pageType === "category" && d.home === null && d.post === null;
+        })) === true);
+
+    }
+
+    check("[pages] ★ 같은 문서에 스킨이 중복으로 그려지지 않는다",
+      (await page.locator("#postList > .imory-skin-root").count()) === 0);
+
+    check("[pages] 부모 문서에 가로 넘침이 없다",
+      (await page.evaluate(() =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth)) <= 0);
+
+    check("[pages] 페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- POST (본문은 별도 메시지로) ---------------------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, "/post/101");
+
+    const frame = await waitForSandboxPage(page, "post");
+
+    check("[pages] ★ POST 가 별도 origin 프레임에서 그려진다",
+      Boolean(frame));
+
+    if (frame) {
+
+      check("[pages] ★ 글 제목이 프레임에 그려졌다",
+        (await frame.locator("#sandboxFrameRoot").innerText()).includes("첫 번째 글"));
+
+      /* 본문은 IMORY_POST_BODY 로 나중에 온다 */
+
+      await frame.waitForFunction(
+        () => (document.querySelector('[data-imory-region="post-body"]')
+          || { textContent: "" }).textContent.trim().length > 0,
+        null,
+        { timeout: 15000 }
+      ).catch(() => {});
+
+      const bodyText =
+        await frame.locator('[data-imory-region="post-body"]').innerText();
+
+      check("[pages] ★ 본문이 post-body region 에 들어왔다",
+        bodyText.includes("첫 번째 글의 본문"), bodyText.slice(0, 80));
+
+      check("[pages] ★ 본문은 Context 가 아니라 별도 메시지로 왔다",
+        (await frame.evaluate(() =>
+          JSON.stringify(window.__imorySandboxLastReceived || {})))
+          .indexOf("본문이다") === -1);
+
+    }
+
+    check("[pages] 페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- 비밀글은 sandbox 를 쓰지 않는다 ------------------ */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, "/post/103");
+
+    await page.waitForTimeout(3000);
+
+    /*
+      ★ #themeMount 의 HOME 프레임은 그대로 있다 — 공개 홈이 먼저
+      그려지고 그 위로 글이 열리는 것은 native 와 같다. 여기서
+      보는 것은 "**글 자리**에 프레임이 생기지 않았는가"다.
+    */
+
+    check("[pages] ★ 비밀글 POST 는 글 자리에 sandbox 프레임을 만들지 않는다 (native 폴백)",
+      (await page.locator("#postSkinContainer iframe.imory-skin-sandbox-frame").count()) === 0 &&
+      (await waitForSandboxPage(page, "post", 3000)) === null);
+
+    check("[pages] ★ 그때 비밀 본문이 문서 어디에도 없다",
+      (await page.content()).indexOf("비밀 본문") === -1);
+
+    check("[pages] 페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- renderMode 없는 스킨의 CATEGORY/POST 회귀 -------- */
+
+  {
+    const nativePkg = readSandboxPkg();
+    delete nativePkg.renderMode;
+
+    for (const [sub, needle] of [["/category/1", "TXT"], ["/post/101", "첫 번째 글"]]) {
+
+      const { ctx, page, pageErrors } =
+        await openPublicPath(browser, nativePkg, sub);
+
+      /*
+        HOME 스킨도 #themeMount 에 함께 떠 있으므로(native 와 같다)
+        이 화면이 그려지는 자리로 좁혀서 본다.
+      */
+
+      const host =
+        sub.startsWith("/post") ? "#postSkinContainer" : "#postList";
+
+      await page.waitForSelector(host + " .imory-skin-root", { timeout: 20000 });
+
+      check(`[pages] ★ native 회귀 — ${sub} 는 같은 문서에 그려진다`,
+        (await page.locator("iframe.imory-skin-sandbox-frame").count()) === 0 &&
+        (await page.locator(host + " .imory-skin-root").first().innerText())
+          .includes(needle));
+
+      check(`[pages] native 회귀 — ${sub} 페이지 오류 없음`,
+        pageErrors.length === 0, pageErrors.join(" | "));
+
+      await ctx.close();
+
+    }
+  }
+
+}
+
+
+/* =========================================================
+   [nav] SANDBOX-2 — 프레임 안 링크가 실제로 눌린다
+
+   여기서 보는 것은 "부모가 화면을 바꿨는가"와 "주소가 따라왔는가"
+   둘이다. 프레임은 주소를 보내지 않고 정수 하나만 올리며, 그
+   정수를 route 로 바꾸는 표는 부모에만 있다.
+========================================================== */
+
+/*
+  ★ mock 의 소음 한 가지를 걸러 낸다.
+
+  화면을 빠르게 옮기면 직전 화면이 띄워 둔 supabase 조회가 이동
+  도중에 끊긴다. WebKit 은 그 중단을 "due to access control checks"
+  라는 CORS 오류로 보고한다(chromium 은 조용히 넘어간다). 실제
+  배포에서는 Playwright route 가 없으므로 이 모양이 나지 않는다 —
+  판정 대상이 아니라 하네스의 소음이다.
+
+  그 밖의 오류는 전부 그대로 실패로 센다.
+*/
+
+function realPageErrors(list) {
+
+  return list.filter(
+    (message) =>
+      !(message.includes(SUPABASE_HOST) &&
+        message.includes("access control checks"))
+  );
+
+}
+
+
+async function runNav(browser) {
+
+  console.log("\n[nav] 프레임 안 링크 · 뒤로가기 · 위조 거부");
+
+  const sandboxPkg = readSandboxPkg();
+
+
+  /* --- HOME -> CATEGORY -> POST -> CATEGORY ------------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, "/");
+
+    let frame = await waitForSandboxPage(page, "home");
+
+    check("[nav] HOME 이 프레임에 떴다", Boolean(frame));
+
+    if (frame) {
+
+      await frame.locator(".sb-nav-link", { hasText: "TXT" }).first().click();
+
+      frame = await waitForSandboxPage(page, "category");
+
+      check("[nav] ★ HOME 의 카테고리 링크로 CATEGORY 가 열린다",
+        Boolean(frame));
+
+      await page.waitForURL(
+        `**/${HOME_SLUG}/category/1`, { timeout: 10000 }
+      ).catch(() => {});
+
+      check("[nav] ★ 주소도 그 카테고리로 바뀌었다",
+        new URL(page.url()).pathname === `/${HOME_SLUG}/category/1`,
+        page.url());
+
+    }
+
+    if (frame) {
+
+      await frame.locator(".sb-recent-link", { hasText: "두 번째 글" })
+        .first().click();
+
+      frame = await waitForSandboxPage(page, "post");
+
+      check("[nav] ★ CATEGORY 의 글 링크로 POST 가 열린다", Boolean(frame));
+
+      await page.waitForURL(
+        `**/${HOME_SLUG}/post/102`, { timeout: 10000 }
+      ).catch(() => {});
+
+      check("[nav] ★ 주소도 그 글로 바뀌었다",
+        new URL(page.url()).pathname === `/${HOME_SLUG}/post/102`,
+        page.url());
+
+    }
+
+    if (frame) {
+
+      await frame.locator(".sb-back").first().click();
+
+      frame = await waitForSandboxPage(page, "category");
+
+      check("[nav] ★ POST 에서 카테고리로 돌아간다", Boolean(frame));
+
+      /*
+        주소는 라우터가 화면을 그린 **뒤**에 정리한다(기존 동작).
+        그래서 프레임 렌더만 보고 바로 주소를 재면 한 박자 이르다.
+      */
+
+      await page.waitForURL(
+        `**/${HOME_SLUG}/category/1`, { timeout: 10000 }
+      ).catch(() => {});
+
+      check("[nav] 그때 주소도 카테고리다",
+        new URL(page.url()).pathname === `/${HOME_SLUG}/category/1`,
+        page.url());
+
+    }
+
+
+    /* --- 뒤로가기 / 앞으로가기 ------------------------- */
+
+    await page.goBack({ waitUntil: "load" }).catch(() => {});
+
+    await page.waitForURL(
+      `**/${HOME_SLUG}/post/102`, { timeout: 10000 }
+    ).catch(() => {});
+
+    check("[nav] ★ 뒤로가기로 글 주소로 돌아온다",
+      new URL(page.url()).pathname === `/${HOME_SLUG}/post/102`,
+      page.url());
+
+    check("[nav] 그 화면이 프레임에 다시 그려진다",
+      Boolean(await waitForSandboxPage(page, "post")));
+
+    await page.goForward({ waitUntil: "load" }).catch(() => {});
+
+    await page.waitForURL(
+      `**/${HOME_SLUG}/category/1`, { timeout: 10000 }
+    ).catch(() => {});
+
+    check("[nav] ★ 앞으로가기로 카테고리 주소로 돌아온다",
+      new URL(page.url()).pathname === `/${HOME_SLUG}/category/1`,
+      page.url());
+
+    check("[nav] 그 화면도 프레임에 다시 그려진다",
+      Boolean(await waitForSandboxPage(page, "category")));
+
+    /*
+      ★ "화면당 하나" — 한 컨테이너에 프레임이 둘 생기지 않는다.
+
+      문서 전체의 개수를 세지 않는 이유: HOME 스킨은 #themeMount 에
+      계속 mount 된 채 남는다(native 와 같다). 그래서 글을 보는 동안
+      살아 있는 프레임은 HOME 것과 지금 화면 것 둘이 정상이다.
+      중복 렌더는 "같은 자리에 둘"로 나타난다.
+    */
+
+    const framePlacement =
+      await page.evaluate(() =>
+        Array.from(document.querySelectorAll("iframe.imory-skin-sandbox-frame"))
+          .map(el => {
+            const parent = el.parentElement;
+            return ((parent && parent.id) || "?") +
+              (parent && parent.offsetParent === null && parent.id !== "themeMount"
+                ? "(hidden)" : "");
+          })
+      );
+
+    const byParent =
+      framePlacement.reduce((acc, id) => {
+        acc[id] = (acc[id] || 0) + 1;
+        return acc;
+      }, {});
+
+    check("[nav] ★ 한 컨테이너에 프레임이 둘 생기지 않는다 (중복 렌더 없음)",
+      Object.values(byParent).every(n => n === 1),
+      JSON.stringify(byParent));
+
+    /*
+      ★ 지금 **보이는** 프레임은 하나뿐이다.
+
+      옛 화면의 컨테이너는 hidden 으로 남는다(native 스킨도 옛 DOM 을
+      그 자리에 두고 다음 진입에서 덮어쓴다 — 같은 동작이다).
+      그러니 "문서에 프레임이 몇 개인가"가 아니라 "보이는 것이
+      하나인가"를 본다.
+    */
+
+    check("[nav] ★ 지금 보이는 sandbox 프레임은 하나뿐이다",
+      (await page.evaluate(() =>
+        Array.from(document.querySelectorAll("iframe.imory-skin-sandbox-frame"))
+          .filter(el => el.offsetParent !== null || el.id === "themeMount")
+          .filter(el => el.closest("#themeMount") === null)
+          .length)) <= 1,
+      JSON.stringify(framePlacement));
+
+    check("[nav] 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- 직접 접속 / 새로고침 ---------------------------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, "/post/101");
+
+    check("[nav] ★ POST 주소로 직접 들어와도 프레임이 뜬다",
+      Boolean(await waitForSandboxPage(page, "post")));
+
+    await page.reload({ waitUntil: "load" });
+
+    check("[nav] ★ 새로고침해도 같은 화면이다",
+      Boolean(await waitForSandboxPage(page, "post")) &&
+      new URL(page.url()).pathname === `/${HOME_SLUG}/post/101`);
+
+    check("[nav] 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- 모바일 터치 ------------------------------------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, "/", {
+        viewport: { width: 390, height: 780 }
+      });
+
+    const frame = await waitForSandboxPage(page, "home");
+
+    check("[nav] 390px 에서도 HOME 이 뜬다", Boolean(frame));
+
+    if (frame) {
+
+      await frame.locator(".sb-nav-link", { hasText: "TXT" }).first()
+        .dispatchEvent("click");
+
+      check("[nav] ★ 모바일에서도 링크가 눌린다",
+        Boolean(await waitForSandboxPage(page, "category")));
+
+    }
+
+    check("[nav] 390px 가로 넘침 없음",
+      (await page.evaluate(() =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth)) <= 0);
+
+    check("[nav] 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- 위조 거부 --------------------------------------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, sandboxPkg, "/");
+
+    const frame = await waitForSandboxPage(page, "home");
+
+    check("[nav] 위조 검증 — HOME 이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      /*
+        ★ 프레임 realm 안에서 직접 쏜다. origin/source 는 진짜지만
+        내용이 계약과 다른 메시지들 — 부모가 화면을 바꾸면 안 된다.
+      */
+
+      const before = page.url();
+
+      await frame.evaluate((parentOrigin) => {
+
+        const send = (payload) =>
+          window.parent.postMessage(
+            { imory: 1, type: "IMORY_NAVIGATE", seq: 9, payload },
+            parentOrigin
+          );
+
+        /* 표에 없는 id */
+        send({ contract: 1, renderSeq: 1, navId: 987654 });
+
+        /* href 를 끼워 보낸다 — 알려지지 않은 키라 봉투에서 거부 */
+        send({ contract: 1, renderSeq: 1, navId: 1, href: "/admin" });
+
+        /* 옛 화면의 renderSeq */
+        send({ contract: 1, renderSeq: 99, navId: 1 });
+
+        /* contract 불일치 */
+        send({ contract: 2, renderSeq: 1, navId: 1 });
+
+        /* 봉투 위조 */
+        window.parent.postMessage(
+          { imory: 2, type: "IMORY_NAVIGATE", seq: 1,
+            payload: { contract: 1, renderSeq: 1, navId: 1 } },
+          parentOrigin
+        );
+
+        /* 모르는 type */
+        window.parent.postMessage(
+          { imory: 1, type: "IMORY_EVAL", seq: 1, payload: { contract: 1 } },
+          parentOrigin
+        );
+
+      }, PARENT_ORIGIN);
+
+      await page.waitForTimeout(1200);
+
+      check("[nav] ★ 위조/불일치 메시지로는 화면이 바뀌지 않는다",
+        page.url() === before, page.url());
+
+      check("[nav] ★ 그때도 HOME 프레임이 그대로 살아 있다",
+        Boolean(await waitForSandboxPage(page, "home", 3000)));
+
+    }
+
+
+    /*
+      ★ 다른 origin 이 부모에게 같은 메시지를 보내도 소용없다.
+      부모는 event.origin 과 event.source 를 둘 다 본다 — 여기서는
+      부모 자신의 window 에서 쏘므로 origin 이 프레임 origin 이
+      아니고, source 도 iframe.contentWindow 가 아니다.
+    */
+
+    {
+      const before = page.url();
+
+      await page.evaluate(() => {
+        for (let id = 1; id <= 20; id += 1) {
+          window.postMessage(
+            { imory: 1, type: "IMORY_NAVIGATE", seq: 1,
+              payload: { contract: 1, renderSeq: 1, navId: id } },
+            window.location.origin
+          );
+        }
+      });
+
+      await page.waitForTimeout(800);
+
+      check("[nav] ★ 부모 자신이 쏜 메시지도 거부된다 (origin/source)",
+        page.url() === before, page.url());
+    }
+
+    check("[nav] 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+}
+
+
+/* =========================================================
    RUN
 ========================================================== */
 
@@ -2352,6 +3042,11 @@ async function runHome(browser) {
     if (shouldRun("fallback")) await runFallback(browser);
     if (shouldRun("package")) await runPackage(browser);
     if (shouldRun("home")) await runHome(browser);
+
+    /* --- SANDBOX-2 --- */
+
+    if (shouldRun("pages")) await runPages(browser);
+    if (shouldRun("nav")) await runNav(browser);
 
     if (shouldRun("regress")) await runRegress();
     if (shouldRun("env")) await runEnv();

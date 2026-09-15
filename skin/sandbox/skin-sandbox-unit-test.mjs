@@ -345,8 +345,16 @@ check("[msg] buildSandboxMessage 는 모르는 키를 싣지 않는다",
 check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
   protocol.buildSandboxMessage("IMORY_EVAL", {}, 1) === null);
 
-check("[msg] 이번 라운드가 아는 type 은 정확히 여섯이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 6,
+/*
+  SANDBOX-1 때 여섯이었고, SANDBOX-2 에서 셋이 늘었다
+  (RENDER_PAGE / POST_BODY / NAVIGATE). 이 수를 못 박아 두는 것은
+  "메시지가 조용히 늘지 않는다"를 지키기 위해서다 — 늘리려면
+  이 줄을 고쳐야 하고, 고치는 사람은 그때 새 메시지의 검증을
+  함께 보게 된다.
+*/
+
+check("[msg] 이번 라운드가 아는 type 은 정확히 아홉이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 9,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -827,9 +835,29 @@ check("[payload] ★ page 는 pageType 하나로 다시 만든다 (정확히 하
 check("[payload] navigation.memos 는 highlights 와 같은 객체다",
   projected.navigation.memos === projected.navigation.highlights);
 
-check("[payload] ★ HOME 이 아닌 page type 은 투영하지 않는다",
-  ["category", "post", "folder", "banner", "highlights", "", null, undefined]
+/*
+  SANDBOX-2 에서 category/post 가 계약에 들어왔다. 나머지는 여전히
+  투영하지 않는다 — 모르는 화면을 sandbox 로 추측하지 않는다.
+*/
+
+check("[payload] ★ 계약에 없는 page type 은 여전히 투영하지 않는다",
+  ["folder", "banner", "highlights", "memos", "HOME", "", null, undefined]
     .every((t) => sandboxContext.projectSkinContextForSandbox(dirtyContext, t) === null));
+
+check("[payload] ★ SANDBOX-2 의 세 page type 은 투영된다",
+  ["home", "category", "post"]
+    .every((t) => {
+      const out = sandboxContext.projectSkinContextForSandbox(dirtyContext, t);
+      return out !== null && out.pageType === t && out.page.type === t;
+    }));
+
+check("[payload] ★ 그 페이지의 namespace 만 채운다 (나머지는 null)",
+  (() => {
+    const cat = sandboxContext.projectSkinContextForSandbox(dirtyContext, "category");
+    const post = sandboxContext.projectSkinContextForSandbox(dirtyContext, "post");
+    return cat.home === null && cat.post === null && cat.category !== null &&
+      post.home === null && post.category === null && post.post !== null;
+  })());
 
 check("[payload] context 가 객체가 아니면 null",
   sandboxContext.projectSkinContextForSandbox(null, "home") === null &&
@@ -1012,6 +1040,277 @@ check("[msg1] buildSandboxMessage 가 RENDER_HOME 의 알려진 키만 담는다
       JSON.stringify(Object.keys(built.payload).sort()) ===
       JSON.stringify(["contract", "data", "pageType", "renderSeq", "template"]);
   })());
+
+/* =========================================================
+   [nav] SANDBOX-2 — "프레임에서 어디로 갈 수 있는가"
+
+   ★ 왜 여기에 있는가
+
+   이 판정은 보안 경계다. 브라우저를 띄우지 않고도 규칙 하나하나를
+   눌러 볼 수 있어야, e2e 를 못 돌리는 상황에서도 "javascript: 가
+   막히는가"를 확인할 수 있다.
+
+   ★ 어떻게 로드하는가
+
+   skin/sandbox/skin-sandbox-nav.js 는 classic script 라 전역
+   함수 두 개(resolveInSiteSkinRoute, siteOwnerSlug)에 기대고,
+   그 함수는 또 core/lib/site-path.js 의 전역에 기댄다. require()
+   로는 그 사슬이 서지 않으므로(각 파일이 자기 모듈 스코프를
+   갖는다) **실제 파일을 그대로 전역 스코프에 평가한다** —
+   production 과 같은 코드가 같은 방식으로 이어진 상태를 본다.
+========================================================== */
+
+console.log("\n[nav] SANDBOX-2 이동 판정");
+
+globalThis.window = {
+  location: {
+    hostname: "localhost",
+    pathname: "/test1/",
+    origin: "http://localhost:8957",
+    search: ""
+  },
+  URL: URL
+};
+
+globalThis.document = {
+  addEventListener() {},
+  referrer: ""
+};
+
+globalThis.siteOwnerSlug = "test1";
+
+const vm = await import("node:vm");
+
+for (const rel of [
+  "core/lib/reserved-slugs.js",
+  "core/lib/site-path.js",
+  "skin/skin-link-nav.js",
+  "skin/sandbox/skin-sandbox-nav.js"
+]) {
+
+  vm.runInThisContext(
+    fs.readFileSync(path.join(ROOT, rel), "utf8"),
+    { filename: rel }
+  );
+
+}
+
+const navWin = globalThis.window;
+
+const allow = (href) => resolveSandboxNavTarget(href, navWin) !== null;
+
+check("[nav] HOME / CATEGORY / POST / FOLDER / HIGHLIGHTS 는 허용",
+  ["/test1/", "/test1", "/test1/category/3", "/test1/post/12",
+   "/test1/category/3/folder/9", "/test1/highlights",
+   "/test1/highlights/category/3", "/test1/memos",
+   "/test1/category/3?page=2"].every(allow));
+
+check("[nav] ★ javascript: / data: / blob: 는 거부",
+  ["javascript:alert(1)", "JavaScript:alert(1)", "data:text/html,<b>",
+   "blob:http://localhost:8957/x", "vbscript:x", "file:///etc/passwd"]
+    .every((h) => !allow(h)));
+
+check("[nav] ★ protocol-relative 와 외부 origin 은 거부",
+  ["//evil.example/test1/", "https://evil.example/test1/",
+   "http://evil.example", "\\\\evil.example"].every((h) => !allow(h)));
+
+check("[nav] ★ 다른 사람의 블로그는 거부",
+  ["/other/", "/other/post/1", "/OTHER/category/2"].every((h) => !allow(h)));
+
+check("[nav] ★ 플랫폼 화면(/admin /auth /invite /studio /api)은 거부",
+  ["/admin", "/admin/", "/auth/index.html", "/invite/abc",
+   "/studio/", "/api/post-cover?image=1"].every((h) => !allow(h)));
+
+check("[nav] ★ 관리/작성 요청 쿼리가 붙은 주소는 거부",
+  ["/test1/?write=1", "/test1/post/12?edit=1", "/test1/category/3?manage=1",
+   "/test1/post/12?tools=1", "/test1/post/12?highlight=1"]
+    .every((h) => !allow(h)));
+
+check("[nav] ★ traversal 은 거부",
+  ["/test1/../admin", "/test1/%2e%2e/admin", "/test1/post/%2f..%2f",
+   "/test1/post/1%5c"].every((h) => !allow(h)));
+
+check("[nav] ★ 길이 상한을 넘는 주소는 거부",
+  !allow("/test1/post/1?x=" + "a".repeat(2100)));
+
+check("[nav] ★ 문자열이 아니거나 빈 값은 거부",
+  [null, undefined, 1, {}, [], ""].every((h) => !allow(h)));
+
+check("[nav] 알 수 없는 내부 경로(계약에 없는 패턴)는 거부",
+  ["/test1/settings", "/test1/post/abc", "/test1/category/3/x"]
+    .every((h) => !allow(h)));
+
+/* --- 표 --------------------------------------------------- */
+
+const registry = createSandboxNavRegistry(navWin);
+
+check("[nav] ★ mint 는 주소를 바꾸지 않는다 (native 와 같은 DOM)",
+  registry.mint("/test1/post/12") === "/test1/post/12");
+
+check("[nav] ★ 허용된 주소만 표에 들어간다",
+  (() => {
+    registry.mint("/test1/category/3");
+    registry.mint("https://evil.example/");
+    registry.mint("javascript:alert(1)");
+    registry.mint("/admin");
+    return registry.size() === 2;
+  })());
+
+check("[nav] ★ 같은 주소를 두 번 등록해도 id 가 하나다",
+  (() => {
+    const before = registry.size();
+    registry.mint("/test1/post/12");
+    return registry.size() === before;
+  })());
+
+check("[nav] ★ resolve 는 표에 있는 id 만 route 를 돌려준다",
+  (() => {
+    const id = registry.idFor("/test1/post/12");
+    const hit = registry.resolve(id);
+    return hit !== null && hit.route.page === "post" && hit.route.id === 12 &&
+      registry.resolve(id + 999) === null &&
+      registry.resolve(0) === null &&
+      registry.resolve(-1) === null &&
+      registry.resolve(1.5) === null &&
+      registry.resolve("1") === null;
+  })());
+
+check("[nav] ★ 표에 없는 주소는 id 가 없다 (눌러도 아무 일 없음)",
+  registry.idFor("https://evil.example/") === 0 &&
+  registry.idFor("/admin") === 0);
+
+check("[nav] entries() 는 {id,href} 쌍만 내보낸다",
+  registry.entries().every((e) =>
+    Object.keys(e).sort().join(",") === "href,id" &&
+    Number.isInteger(e.id) && typeof e.href === "string"));
+
+check("[nav] ★ 프레임이 보낸 nav 표도 모양을 검사한다",
+  isSandboxNavTable({ entries: [{ id: 1, href: "/test1/" }] }) === true &&
+  isSandboxNavTable({ entries: [{ id: 0, href: "/x" }] }) === false &&
+  isSandboxNavTable({ entries: [{ id: 1, href: 1 }] }) === false &&
+  isSandboxNavTable({ entries: [{ id: 1, href: "/x", extra: 1 }] }) === true &&
+  isSandboxNavTable({ entries: "x" }) === false &&
+  isSandboxNavTable(null) === false);
+
+
+/* =========================================================
+   [msg2] SANDBOX-2 메시지
+========================================================== */
+
+console.log("\n[msg2] SANDBOX-2 메시지");
+
+const navRules = {
+  originAllowList: ["https://skin-frame.imory.me"],
+  direction: "to-parent"
+};
+
+const frameRules2 = {
+  originAllowList: ["https://imory.me"],
+  direction: "to-frame"
+};
+
+const toParent2 = (type, payload) => ({
+  origin: "https://skin-frame.imory.me",
+  data: { imory: 1, type, seq: 1, payload }
+});
+
+const toFrame2 = (type, payload) => ({
+  origin: "https://imory.me",
+  data: { imory: 1, type, seq: 1, payload }
+});
+
+check("[msg2] ★ NAVIGATE 에는 href 키가 아예 없다 (주소를 못 보낸다)",
+  JSON.stringify(protocol.SANDBOX_MESSAGE_SPEC.IMORY_NAVIGATE.keys) ===
+  JSON.stringify(["contract", "renderSeq", "navId"]));
+
+check("[msg2] 정상 NAVIGATE 는 통과한다",
+  protocol.validateSandboxMessage(
+    toParent2("IMORY_NAVIGATE", { contract: 1, renderSeq: 1, navId: 3 }),
+    navRules
+  ).ok === true);
+
+check("[msg2] ★ NAVIGATE 에 href 를 끼워 보내면 거부된다",
+  protocol.validateSandboxMessage(
+    toParent2("IMORY_NAVIGATE",
+      { contract: 1, renderSeq: 1, navId: 3, href: "/admin" }),
+    navRules
+  ).reason === "unknown-payload-key");
+
+check("[msg2] ★ navId 가 1 이상 정수가 아니면 거부",
+  [0, -1, 1.5, "3", null, undefined, NaN, 1e9]
+    .every((v) => protocol.validateSandboxMessage(
+      toParent2("IMORY_NAVIGATE", { contract: 1, renderSeq: 1, navId: v }),
+      navRules
+    ).reason === "bad-payload-value"));
+
+check("[msg2] ★ 프레임은 NAVIGATE 를 받지 않는다 (방향)",
+  protocol.validateSandboxMessage(
+    toFrame2("IMORY_NAVIGATE", { contract: 1, renderSeq: 1, navId: 3 }),
+    frameRules2
+  ).reason === "wrong-direction");
+
+const goodPage = {
+  contract: 1,
+  pageType: "category",
+  renderSeq: 1,
+  template: { html: "<div></div>", css: "" },
+  data: {}
+};
+
+check("[msg2] RENDER_PAGE 는 home/category/post 를 받는다",
+  ["home", "category", "post"].every((t) =>
+    protocol.validateSandboxMessage(
+      toFrame2("IMORY_RENDER_PAGE", { ...goodPage, pageType: t }),
+      frameRules2
+    ).ok === true));
+
+check("[msg2] ★ RENDER_PAGE 도 계약에 없는 page type 은 거부",
+  ["folder", "banner", "highlights", "HOME", "", 1, null].every((t) =>
+    protocol.validateSandboxMessage(
+      toFrame2("IMORY_RENDER_PAGE", { ...goodPage, pageType: t }),
+      frameRules2
+    ).reason === "bad-payload-value"));
+
+check("[msg2] ★ 옛 RENDER_HOME 은 여전히 home 만 받는다 (넓히지 않았다)",
+  ["category", "post"].every((t) =>
+    protocol.validateSandboxMessage(
+      toFrame2("IMORY_RENDER_HOME", { ...goodPage, pageType: t }),
+      frameRules2
+    ).reason === "bad-payload-value"));
+
+const goodBody = {
+  contract: 1,
+  renderSeq: 1,
+  html: "<p>본문</p>",
+  containerStyle: "font-size:15px",
+  isHtmlContent: false
+};
+
+check("[msg2] 정상 POST_BODY 는 통과한다",
+  protocol.validateSandboxMessage(
+    toFrame2("IMORY_POST_BODY", goodBody), frameRules2
+  ).ok === true);
+
+check("[msg2] ★ POST_BODY 의 타입이 어긋나면 거부",
+  [{ html: 1 }, { containerStyle: null }, { isHtmlContent: "no" },
+   { containerStyle: "a".repeat(5000) }]
+    .every((patch) => protocol.validateSandboxMessage(
+      toFrame2("IMORY_POST_BODY", { ...goodBody, ...patch }), frameRules2
+    ).reason === "bad-payload-value"));
+
+check("[msg2] ★ 부모는 POST_BODY 를 받지 않는다 (방향)",
+  protocol.validateSandboxMessage(
+    toParent2("IMORY_POST_BODY", goodBody), navRules
+  ).reason === "wrong-direction");
+
+check("[msg2] ★ RENDERED 는 세 page type 을 받는다 (RENDER_PAGE 와 짝)",
+  ["home", "category", "post"].every((t) =>
+    protocol.validateSandboxMessage(
+      toParent2("IMORY_RENDERED",
+        { contract: 1, pageType: t, renderSeq: 1, height: 10 }),
+      navRules
+    ).ok === true));
+
 
 /* =========================================================
    결과

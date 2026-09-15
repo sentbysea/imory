@@ -1690,6 +1690,53 @@ async function openCategoryPage(
       "";
 
 
+    /* =====================================================
+       SANDBOX-2 — 별도 origin iframe 으로 그리는 스킨
+
+       이 경우 skinRenderTarget 은 비어 있다. iframe 은 DOM 에서
+       옮기는 순간 문서가 다시 로드되므로 "스크래치에 그려 두고
+       옮긴다"를 쓸 수 없어서, skin/skin-category.js 가 준비만
+       해 두고 실제 생성을 여기로 미뤘다(그 파일
+       trySandboxSkinCategory 주석). 요청 순번 검사는 이미 위에서
+       끝났으므로, 여기서 만드는 프레임은 언제나 최신 화면의
+       것이다.
+
+       프레임이 안 뜨면 **같은 스킨을 native 로** 그린다 —
+       HOME 과 같은 규칙이고, 화면이 백지로 남지 않는다.
+    ====================================================== */
+
+    if (typeof skinCategoryOutcome.sandboxMount === "function") {
+
+      const mounted =
+        await skinCategoryOutcome.sandboxMount(postList);
+
+      if (!mounted || !mounted.ok) {
+
+        console.warn(
+          "[posts-view-list] sandbox category mount failed, falling back to native skin render:",
+          mounted ? mounted.reason : "no-result"
+        );
+
+        postList.innerHTML =
+          "";
+
+        try {
+
+          skinCategoryOutcome.sandboxRenderNative(postList);
+
+        }
+
+        catch (err) {
+
+          console.error("[posts-view-list] native skin fallback failed", err);
+
+        }
+
+      }
+
+    }
+
+
     while (
       skinRenderTarget.firstChild
     ) {

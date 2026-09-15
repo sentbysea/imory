@@ -2,7 +2,7 @@
    SKIN SANDBOX - PROTOCOL (classic script, 의존 없음)
 
    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §D-2
-   단계: SANDBOX-1 — 허용 메시지는 **여섯 개뿐**이다.
+   단계: SANDBOX-2 — 허용 메시지는 **아홉 개뿐**이다.
 
      frame  -> parent   IMORY_FRAME_READY  { contract }
      parent -> frame    IMORY_FRAME_ACK    { contract }
@@ -12,6 +12,18 @@
                                              renderSeq, height }
      frame  -> parent   IMORY_HEIGHT       { contract, renderSeq, height }
      frame  -> parent   IMORY_FRAME_ERROR  { contract, code }
+
+   SANDBOX-2에서 더해진 셋:
+
+     parent -> frame    IMORY_RENDER_PAGE  { contract, pageType,
+                                             renderSeq, template, data }
+     parent -> frame    IMORY_POST_BODY    { contract, renderSeq, html,
+                                             containerStyle, isHtmlContent }
+     frame  -> parent   IMORY_NAVIGATE     { contract, renderSeq, navId }
+
+   ★ IMORY_NAVIGATE 에 href 가 없다. 프레임은 주소를 보내지 않고
+     부모가 발급한 정수 navId 만 돌려보낸다 — 그 표는 부모 realm의
+     skin/sandbox/skin-sandbox-nav.js 가 갖는다.
 
    (설계 문서 §D-2는 같은 신호들을 IMORY_READY / IMORY_INIT /
     IMORY_ERROR 로 적고 있다. SANDBOX-0 지시문의
@@ -77,7 +89,28 @@ var SANDBOX_MESSAGE_TYPES = {
   RENDER_HOME: "IMORY_RENDER_HOME",
   RENDERED: "IMORY_RENDERED",
   HEIGHT: "IMORY_HEIGHT",
-  FRAME_ERROR: "IMORY_FRAME_ERROR"
+  FRAME_ERROR: "IMORY_FRAME_ERROR",
+
+  /* =======================================================
+     SANDBOX-2 — CATEGORY/POST 와 안전한 페이지 이동
+
+     RENDER_PAGE : RENDER_HOME 과 같은 봉투에 pageType 이 셋으로
+                   늘어난 것. HOME 도 이제 이 메시지로 간다 —
+                   RENDER_HOME 은 SANDBOX-1 하네스와의 호환을 위해
+                   남아 있고, **home 외의 pageType 을 절대 받지
+                   않는다**(아래 spec 참고).
+     POST_BODY   : 글 본문 한 덩어리. Context 로는 본문에 닿을 수
+                   없다는 계약(PHASE1C 7-2절)을 프레임 경계에서도
+                   그대로 지키려고 채널을 나눈 것이다 — Studio
+                   Preview 의 preview:post-body 와 같은 shape.
+     NAVIGATE    : 프레임이 부모에게 "이동해 달라"고 청한다.
+                   ★ 주소가 아니라 **부모가 발급한 정수 navId** 다
+                     (skin/sandbox/skin-sandbox-nav.js 상단 주석).
+  ======================================================= */
+
+  RENDER_PAGE: "IMORY_RENDER_PAGE",
+  POST_BODY: "IMORY_POST_BODY",
+  NAVIGATE: "IMORY_NAVIGATE"
 };
 
 
@@ -103,13 +136,45 @@ var SANDBOX_MAX_FRAME_HEIGHT = 200000;
 
 var SANDBOX_MAX_TEMPLATE_CHARS = 2000000;
 
-var SANDBOX_PAGE_TYPES = ["home"];
+var SANDBOX_PAGE_TYPES = ["home", "category", "post"];
+
+
+/*
+  ★ RENDER_HOME 은 여전히 home 한 값만 받는다.
+
+  SANDBOX-1 의 단위 테스트가 "pageType 이 home 이 아니면 거부"를
+  이 메시지로 확인한다. 페이지가 늘었다고 그 메시지를 넓히면 옛
+  계약이 조용히 느슨해진다 — 넓어진 것은 새 메시지(RENDER_PAGE)
+  쪽이고, 옛 메시지는 옛 약속 그대로 둔다.
+*/
+
+var SANDBOX_HOME_PAGE_TYPE = "home";
+
+
+/*
+  본문 문자열 상한. 글 하나가 이보다 길면 프레임에 보내지 않는다 —
+  화면은 그려지고 본문 자리만 비며, 부모 콘솔에 사유가 남는다.
+*/
+
+var SANDBOX_MAX_POST_BODY_CHARS = 2000000;
+
+var SANDBOX_MAX_CONTAINER_STYLE_CHARS = 4000;
+
+
+/*
+  navId — 부모가 발급한 정수. 프레임은 이 값만 돌려보낸다
+  (skin/sandbox/skin-sandbox-nav.js).
+*/
+
+var SANDBOX_MAX_NAV_ID = 1000000;
+
 
 var SANDBOX_ERROR_CODES = [
   "no-renderer",      /* frame이 renderSkin을 못 받았다 */
   "no-root",          /* 렌더 컨테이너가 없다 */
   "bad-payload",      /* data/template이 계약과 다르다 */
-  "render-failed"     /* renderSkin()이 던졌다 */
+  "render-failed",    /* renderSkin()이 던졌다 */
+  "no-body-region"    /* POST template 에 post-body 자리가 없다 */
 ];
 
 
@@ -179,10 +244,78 @@ var SANDBOX_MESSAGE_SPEC = {
     keys: ["contract", "pageType", "renderSeq", "template", "data"],
     check: function (payload) {
       return (
+        payload.pageType === SANDBOX_HOME_PAGE_TYPE &&
+        isSandboxRenderSeq(payload.renderSeq) &&
+        isSandboxTemplate(payload.template) &&
+        isPlainSandboxObject(payload.data)
+      );
+    }
+  },
+
+
+  /*
+    SANDBOX-2 — 세 페이지 공용 렌더 메시지. RENDER_HOME 과 같은
+    키 집합이고 pageType 만 넓다. data 안쪽(nav 표 포함)은 여기서
+    "plain object"까지만 보고, 알려진 키만 남기는 일은 투영 함수가
+    보내는 쪽과 받는 쪽에서 한 번씩 한다.
+  */
+
+  IMORY_RENDER_PAGE: {
+    direction: "to-frame",
+    keys: ["contract", "pageType", "renderSeq", "template", "data"],
+    check: function (payload) {
+      return (
         SANDBOX_PAGE_TYPES.indexOf(payload.pageType) !== -1 &&
         isSandboxRenderSeq(payload.renderSeq) &&
         isSandboxTemplate(payload.template) &&
         isPlainSandboxObject(payload.data)
+      );
+    }
+  },
+
+
+  /*
+    SANDBOX-2 — 글 본문. 부모가 공개 뷰어와 **같은 파이프라인**으로
+    이미 서식·sanitize를 끝낸 결과물이다(posts/view/posts-view-detail.js
+    renderPostBodyInto). 프레임은 이것을 post-body region 에 넣기만
+    한다 — Studio Preview 의 preview:post-body 와 같은 책임 분리.
+  */
+
+  IMORY_POST_BODY: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq", "html", "containerStyle", "isHtmlContent"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        typeof payload.html === "string" &&
+        payload.html.length <= SANDBOX_MAX_POST_BODY_CHARS &&
+        typeof payload.containerStyle === "string" &&
+        payload.containerStyle.length <= SANDBOX_MAX_CONTAINER_STYLE_CHARS &&
+        typeof payload.isHtmlContent === "boolean"
+      );
+    }
+  },
+
+
+  /*
+    SANDBOX-2 — 이동 요청.
+
+    ★ 여기에 href 가 없다는 것이 이 계약의 핵심이다. 프레임은
+    부모가 발급한 정수 하나만 돌려보내고, 그 정수를 route 로 바꾸는
+    표는 부모 realm 에만 있다(skin/sandbox/skin-sandbox-nav.js).
+    renderSeq 는 "어느 화면에서 누른 것인가"다 — 부모는 최신 렌더의
+    것이 아니면 버린다.
+  */
+
+  IMORY_NAVIGATE: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "navId"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        Number.isInteger(payload.navId) &&
+        payload.navId >= 1 &&
+        payload.navId <= SANDBOX_MAX_NAV_ID
       );
     }
   },
@@ -502,6 +635,10 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_MAX_FRAME_HEIGHT,
     SANDBOX_MAX_TEMPLATE_CHARS,
     SANDBOX_PAGE_TYPES,
+    SANDBOX_HOME_PAGE_TYPE,
+    SANDBOX_MAX_POST_BODY_CHARS,
+    SANDBOX_MAX_CONTAINER_STYLE_CHARS,
+    SANDBOX_MAX_NAV_ID,
     SANDBOX_ERROR_CODES,
     isSandboxHeight,
     isSandboxRenderSeq,

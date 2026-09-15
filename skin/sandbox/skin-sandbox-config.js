@@ -139,6 +139,25 @@ var SANDBOX_SKIN_DEV_ORIGIN_QUERY_KEY =
   "sandboxSkinOrigin";
 
 
+/*
+  ★ SANDBOX-2에서 더해진 dev 전용 저장소 키.
+
+  SANDBOX-1 까지 로컬 opt-in 은 주소의 쿼리 하나로 충분했다 —
+  화면이 HOME 한 장이라 주소가 바뀌지 않았기 때문이다. 이제
+  프레임 안 링크가 SPA 라우터로 이어지면서 주소가 바뀌고(그것이
+  이 라운드의 목적이다), 쿼리는 그 순간 사라진다. 그러면 두 번째
+  화면부터 플래그가 꺼져 native 로 떨어진다.
+
+  그래서 dev 호스트에서는 frame origin 도 localStorage 로 기억한다.
+  ★ production 은 이 분기를 아예 타지 않는다 — 거기서는 hostname +
+  slug allowlist 만 보고, 쿼리도 localStorage 도 읽지 않는다
+  (isSandboxSkinEnabled / resolveSandboxSkinFrameOrigin 의 dev 분기).
+*/
+
+var SANDBOX_SKIN_DEV_ORIGIN_STORAGE_KEY =
+  "imory.sandboxSkinOrigin";
+
+
 /* =========================================================
    isSandboxSkinDevHost(hostname)
 
@@ -401,6 +420,28 @@ function resolveSandboxSkinFrameOrigin(win) {
     }
 
 
+    /*
+      주소에 없으면 저장소를 본다(위 상수 주석 — 프레임 안 링크로
+      이동하면 쿼리가 사라지기 때문이다). dev 호스트 전용이다.
+    */
+
+    if (!given) {
+
+      try {
+
+        given =
+          (w.localStorage &&
+            w.localStorage.getItem(SANDBOX_SKIN_DEV_ORIGIN_STORAGE_KEY)) || "";
+
+      }
+
+      catch (err) {
+        given = "";
+      }
+
+    }
+
+
     if (given) {
 
       let parsed =
@@ -608,6 +649,7 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_SKIN_PRODUCTION_ORIGIN,
     SANDBOX_SKIN_PRODUCTION_PARENT_ORIGINS,
     SANDBOX_SKIN_ENABLED_HOSTS,
+    SANDBOX_SKIN_DEV_ORIGIN_STORAGE_KEY,
     SANDBOX_SKIN_ENABLED_SLUGS,
     isSandboxSkinDevHost,
     isSandboxSkinFlagHost,

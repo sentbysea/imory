@@ -245,6 +245,21 @@ let currentPostBodyMountTarget =
   null;
 
 
+/*
+  SANDBOX-2 — 이 글이 **별도 origin iframe**(sandbox 스킨)으로
+  그려졌다면 그 프레임 handle. 그때는 본문을 넣을 DOM region이
+  이 문서에 없으므로(위 currentPostBodyMountTarget은 null이다)
+  renderPostDetailBody()가 본문을 화면 밖 엘리먼트에 그린 뒤
+  IMORY_POST_BODY 메시지로 프레임에 보낸다.
+
+  두 값 중 하나만 채워진다: native 스킨이면 mount target,
+  sandbox 스킨이면 이 handle, 둘 다 아니면 legacy 경로다.
+*/
+
+let currentSandboxPostHandle =
+  null;
+
+
 let currentEditorMode =
   null;
 

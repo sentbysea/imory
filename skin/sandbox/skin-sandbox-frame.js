@@ -1,14 +1,18 @@
 /* =========================================================
    SKIN SANDBOX - FRAME BRIDGE (ES 모듈, frame 문서 안)
 
-   기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §E SANDBOX-1
-   단계: SANDBOX-1 — HOME 한 장
+   기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §E SANDBOX-1 / SANDBOX-2
+   단계: SANDBOX-2 — HOME / CATEGORY / POST 와 안전한 페이지 이동
 
-   이 파일이 하는 일은 넷뿐이다.
+   이 파일이 하는 일은 여섯뿐이다.
      1. 부모에게 IMORY_FRAME_READY를 한 번 보낸다.
      2. IMORY_FRAME_ACK을 받으면 표시만 남긴다.
-     3. IMORY_RENDER_HOME을 받으면 **기존 renderSkin()**으로 그린다.
+     3. IMORY_RENDER_PAGE(옛 IMORY_RENDER_HOME)를 받으면
+        **기존 renderSkin()**으로 그린다.
      4. 그린 높이를 IMORY_RENDERED / IMORY_HEIGHT로 올린다.
+     5. IMORY_POST_BODY를 받으면 post-body region에 넣는다.
+     6. 프레임 안 링크를 누르면 IMORY_NAVIGATE로 **정수 하나**를
+        올린다 — 주소가 아니다(아래 "링크" 절).
 
    ---------------------------------------------------------
    ★ 이 문서가 로드하지 않는 것 (의도적)
@@ -53,13 +57,18 @@
    더** 돌려서 알려진 키만 남긴다(skin/sandbox/skin-sandbox-context.js
    상단 "양쪽에서 각각 돈다").
 
-   ★ 링크는 이번 라운드에서 비활성이다
+   ★ 링크 (SANDBOX-2)
 
-   네비게이션은 SANDBOX-2다. 지금은 프레임 안의 클릭을
-   preventDefault로 삼킨다 — 눌러도 아무 일도 일어나지 않는다.
-   프레임이 스스로 주소를 바꾸거나 새 탭을 여는 길은 만들지
-   않는다(iframe sandbox 속성에도 allow-top-navigation /
-   allow-popups가 없다).
+   프레임은 **여전히 스스로 어디로도 가지 않는다.** 모든 anchor
+   클릭을 preventDefault로 막고, 그 위에서 부모가 발급한 표에
+   있는 링크면 IMORY_NAVIGATE로 **정수 navId 하나**를 올린다.
+   주소 문자열은 절대 보내지 않고, 이 파일에는 URL 파싱도 경로
+   규칙도 없다 — "어디로 갈 수 있는가"의 판정은 전부 부모가
+   미리 했다(skin/sandbox/skin-sandbox-nav.js).
+
+   프레임이 스스로 주소를 바꾸거나 새 탭을 여는 길은 여전히
+   없다(iframe sandbox 속성에 allow-top-navigation /
+   allow-popups가 없고, CSP form-action 'none' 이다).
 ========================================================== */
 
 import { renderSkin } from "../skin-render.js";
@@ -96,7 +105,35 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     instance: null,
     lastHeight: 0,
     heightReports: 0,
-    resizeObserver: null
+    resizeObserver: null,
+
+    /* =====================================================
+       SANDBOX-2 — 이동
+
+       navByAnchor : anchor 요소 -> 부모가 발급한 navId
+
+       ★ 왜 WeakMap 인가 (DOM 속성이 아니라)
+
+       anchor 에 data-* 를 찍으면 프레임의 outerHTML 이 native
+       렌더와 달라진다 — SANDBOX-1 이 "두 화면이 글자 단위로
+       같다"를 e2e 로 재고 있고, 그 성질은 sandbox 가 native 를
+       조용히 바꾸지 않는다는 증거다. 그래서 대응표는 이 realm
+       안에만 둔다. 화면에 그려진 주소는 native 와 똑같다.
+
+       navHrefToId : 부모가 보낸 표(payload.data.nav)를 옮긴 것
+    ===================================================== */
+
+    navByAnchor: null,
+    navHrefToId: null,
+
+    /*
+       SANDBOX-2 — POST 본문
+
+       렌더보다 먼저 도착할 수 있으므로(메시지는 비동기다) 같은
+       renderSeq 의 것이면 들고 있다가 렌더 직후에 넣는다.
+    */
+
+    pendingBody: null
   };
 
 
@@ -399,7 +436,136 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
      타입별 값). 여기서 하는 것은 **데이터 재투영**과 렌더다.
   ========================================================== */
 
-  function renderHome(payload) {
+  /* =========================================================
+     SANDBOX-2 — nav 표를 anchor 에 대응시킨다
+
+     렌더가 끝난 DOM 을 한 번 훑으면서, 부모가 발급한 표에 있는
+     주소를 가진 anchor 만 WeakMap 에 담는다. 표에 없는 주소
+     (외부 배너 링크 등)는 담기지 않는다 — 눌러도 아무 일이 없다.
+
+     ★ 이 함수는 주소를 **비교만** 한다. 해석하지도, 고치지도
+       않는다. "어디로 갈 수 있는가"의 판정은 전부 부모가 이미
+       했다(skin/sandbox/skin-sandbox-nav.js).
+  ========================================================== */
+
+  function indexNavAnchors(container, nav) {
+
+    FRAME_STATE.navByAnchor =
+      new WeakMap();
+
+    FRAME_STATE.navHrefToId =
+      new Map();
+
+
+    if (!nav || !Array.isArray(nav.entries)) {
+      return;
+    }
+
+
+    for (let i = 0; i < nav.entries.length; i += 1) {
+
+      const entry =
+        nav.entries[i];
+
+      if (
+        entry &&
+        Number.isInteger(entry.id) &&
+        typeof entry.href === "string"
+      ) {
+
+        FRAME_STATE.navHrefToId.set(entry.href, entry.id);
+
+      }
+
+    }
+
+
+    if (!container || !FRAME_STATE.navHrefToId.size) {
+      return;
+    }
+
+
+    const anchors =
+      container.querySelectorAll("a[href]");
+
+    for (let i = 0; i < anchors.length; i += 1) {
+
+      const anchor =
+        anchors[i];
+
+      /*
+        ★ 속성 값 그대로(getAttribute) 비교한다. .href 프로퍼티는
+        브라우저가 **프레임 origin 기준**으로 절대화한 값이라
+        부모가 보낸 문자열과 절대 같을 수 없다.
+      */
+
+      const id =
+        FRAME_STATE.navHrefToId.get(
+          anchor.getAttribute("href")
+        );
+
+      if (id) {
+        FRAME_STATE.navByAnchor.set(anchor, id);
+      }
+
+    }
+
+  }
+
+
+  /* =========================================================
+     SANDBOX-2 — POST 본문 주입
+
+     부모가 공개 뷰어와 같은 파이프라인으로 이미 서식·sanitize를
+     끝낸 결과물이다. 여기서 새 sanitize 를 하지 않는다 —
+     studio/preview/preview-bridge.js 의 handlePostBodyMessage()와
+     같은 책임 분리다.
+
+     이 문서의 CSP 에는 script-src 에 'unsafe-inline' 이 없다.
+     그래서 이 HTML 에 인라인 핸들러(onclick=…)나 <script> 가
+     섞여 있어도 **실행되지 않는다** — innerHTML 자체가 script 를
+     실행하지 않는 데 더해, 헤더로도 한 번 더 막혀 있다.
+  ========================================================== */
+
+  function applyPostBody(body) {
+
+    if (
+      !FRAME_STATE.instance ||
+      typeof FRAME_STATE.instance.getRegion !== "function"
+    ) {
+      return false;
+    }
+
+
+    /*
+      region 은 렌더할 때마다 새로 만들어진다 — 캐싱 금지
+      (skin/skin-post.js 와 같은 원칙).
+    */
+
+    const region =
+      FRAME_STATE.instance.getRegion("post-body");
+
+    if (!region) {
+      return false;
+    }
+
+
+    region.setAttribute("style", body.containerStyle);
+
+    region.innerHTML = body.html;
+
+
+    /* 사진이 들어오면 높이가 달라진다 */
+
+    reportHeight(false);
+
+
+    return true;
+
+  }
+
+
+  function renderPage(payload) {
 
     /* 늦게 도착한 렌더가 최신 화면을 덮지 않는다 */
 
@@ -510,7 +676,36 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     }
 
 
+    /*
+      ★ SANDBOX-2 — 이제 링크가 살아난다.
+
+      방금 그린 DOM 을 훑어 "부모가 발급한 표에 있는 주소"를 가진
+      anchor 만 골라 둔다. 표에 없으면 눌러도 아무 일이 없다.
+    */
+
+    indexNavAnchors(container, context.nav);
+
+
+    /*
+      POST 본문이 렌더보다 먼저 도착했을 수 있다(메시지는
+      비동기다). 같은 렌더의 것이면 지금 넣는다.
+    */
+
+    if (
+      FRAME_STATE.pendingBody &&
+      FRAME_STATE.pendingBody.renderSeq === payload.renderSeq
+    ) {
+
+      applyPostBody(FRAME_STATE.pendingBody);
+
+      FRAME_STATE.pendingBody = null;
+
+    }
+
+
     container.setAttribute("data-imory-sandbox-state", "rendered");
+
+    container.setAttribute("data-imory-sandbox-page", payload.pageType);
 
     const el =
       notice();
@@ -606,9 +801,45 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     }
 
 
-    if (verdict.type === SANDBOX_MESSAGE_TYPES.RENDER_HOME) {
+    if (
+      verdict.type === SANDBOX_MESSAGE_TYPES.RENDER_HOME ||
+      verdict.type === SANDBOX_MESSAGE_TYPES.RENDER_PAGE
+    ) {
 
-      renderHome(verdict.payload);
+      renderPage(verdict.payload);
+
+      return;
+
+    }
+
+
+    if (verdict.type === SANDBOX_MESSAGE_TYPES.POST_BODY) {
+
+      /*
+        늦게 도착한 본문이 최신 화면을 덮지 않는다. 아직 그
+        렌더가 오지 않았으면(메시지 순서가 뒤집힌 경우) 들고
+        있다가 렌더 직후에 넣는다.
+      */
+
+      if (verdict.payload.renderSeq < FRAME_STATE.renderSeq) {
+        return;
+      }
+
+
+      if (verdict.payload.renderSeq > FRAME_STATE.renderSeq) {
+
+        FRAME_STATE.pendingBody = verdict.payload;
+
+        return;
+
+      }
+
+
+      if (!applyPostBody(verdict.payload)) {
+
+        sendError("no-body-region");
+
+      }
 
     }
 
@@ -616,10 +847,24 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
 
   /* =========================================================
-     블록된 네비게이션 (SANDBOX-2까지)
+     SANDBOX-2 — 프레임 안 링크 클릭
+
+     ★ 프레임은 스스로 어디로도 가지 않는다.
+
+     어떤 anchor 든 기본 동작을 막는다(preventDefault). 그 위에서,
+     부모가 발급한 표에 있는 링크면 **정수 하나**를 부모에 올린다.
+     주소는 보내지 않는다 — 부모가 그 정수를 자기 표에서 route 로
+     바꾼다(skin/sandbox/skin-sandbox-nav.js).
+
+     그래서 이 함수에는 URL 파싱도, 경로 규칙도, "외부인가" 판정도
+     없다. 그것은 전부 부모의 일이다.
+
+     수정키/보조버튼 클릭은 그대로 흘려보낸다 — iframe sandbox 에
+     allow-popups 가 없어 어차피 새 탭이 열리지 않고, 프레임이
+     대신 이동해 버리면 사용자가 기대한 동작과 달라진다.
   ========================================================== */
 
-  function swallowClicks(event) {
+  function onFrameClick(event) {
 
     const anchor =
       event.target && event.target.closest
@@ -631,7 +876,46 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     }
 
 
+    /*
+      ★ 먼저 막는다. 표에 없는 링크도, 표가 아직 없을 때도
+      프레임이 자기 주소를 바꾸는 일은 일어나지 않는다.
+    */
+
     event.preventDefault();
+
+
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
+      return;
+    }
+
+
+    if (!FRAME_STATE.navByAnchor) {
+      return;
+    }
+
+
+    const navId =
+      FRAME_STATE.navByAnchor.get(anchor);
+
+    if (!navId) {
+      return;
+    }
+
+
+    send(
+      SANDBOX_MESSAGE_TYPES.NAVIGATE,
+      {
+        contract: 1,
+        renderSeq: FRAME_STATE.renderSeq,
+        navId: navId
+      }
+    );
 
   }
 
@@ -655,7 +939,7 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
     window.addEventListener("message", onMessage);
 
-    document.addEventListener("click", swallowClicks, true);
+    document.addEventListener("click", onFrameClick, true);
 
 
     if (!FRAME_STATE.sentReady) {
