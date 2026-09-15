@@ -10,16 +10,24 @@
     content="width=device-width, initial-scale=1.0"
   >
 
-  <title>SKIN SANDBOX — 부모 쪽 하네스 (SANDBOX-0)</title>
+  <title>SKIN SANDBOX — 부모 쪽 하네스 (SANDBOX-1)</title>
 
   <!--
     =========================================================
-    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §E SANDBOX-0
+    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §E SANDBOX-1
 
-    이 문서는 **부모 쪽**이다. skin/sandbox/skin-sandbox-host.js를
-    실제로 불러 빈 프레임을 띄우고 READY -> ACK 왕복을 눈으로
-    확인한다. index.html도 skin-home.js도 이번 라운드에서는 고치지
-    않으므로(기존 렌더링 경로 무변경), 호출자는 이 하네스와 e2e뿐이다.
+    이 문서는 **부모 쪽**이다. 실제 공개 경로(index.html ->
+    skin/skin-home.js)가 하는 일 중 **조회를 뺀 전부**를 그대로
+    한다:
+
+      resolveSkinRenderMode(pkg)          <- 진짜 함수
+      resolveSkinTemplate(pkg, "home")    <- 진짜 함수
+      projectSkinContextForSandbox(...)   <- 진짜 함수
+      mountSandboxSkin(...)               <- 진짜 함수
+
+    Context만 supabase 없이 손으로 만든 고정값이다(아래
+    buildFixtureHomeContext) — 그래야 native 렌더와 sandbox 렌더가
+    **같은 재료**를 받는지 글자 단위로 비교할 수 있다.
 
     ★ 켜는 법 (로컬 개발에서만)
       1. 저장소 루트에서 정적 서버 둘을 띄운다. 포트가 다르면
@@ -27,14 +35,20 @@
       2. 부모:  http://localhost:8957/skin/skin-sandbox-test.html
                   ?sandboxSkin=1
                   &sandboxSkinOrigin=http://localhost:8958
-      3. frame: http://localhost:8958/skin/sandbox/frame.html
+      3. frame: http://localhost:8958/skin/sandbox/frame
 
       배포된 imory.me에서 같은 주소를 열면 플래그가 **꺼진 채**
       뜬다 — isSandboxSkinEnabled()가 hostname부터 본다
       (skin/sandbox/skin-sandbox-config.js).
 
-      자동화된 왕복 검증은 skin/sandbox/skin-sandbox-e2e-test.mjs
-      (포트 8957/8958)가 한다.
+    ★ 쿼리
+      ?sandboxSkin=1          기능 플래그 opt-in
+      ?sandboxSkinOrigin=...  frame origin (dev 전용)
+      ?native=1               native 렌더도 함께 그린다(비교용)
+      ?renderMode=native      fixture의 renderMode를 바꿔서 본다
+      ?tall=1                 긴 콘텐츠(높이 반영 확인)
+
+      자동 판정은 skin/sandbox/skin-sandbox-e2e-test.mjs가 한다.
     =========================================================
   -->
 
@@ -61,6 +75,13 @@
       margin: 0 0 16px;
     }
 
+    h2 {
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      color: #999;
+      margin: 24px 0 8px;
+    }
+
     dl {
       margin: 0 0 20px;
       display: grid;
@@ -78,7 +99,8 @@
       overflow-wrap: anywhere;
     }
 
-    #sandboxMount {
+    #sandboxMount,
+    #nativeMount {
       border: 1px dashed #bbb;
       min-height: 60px;
       max-width: 100%;
@@ -108,7 +130,7 @@
   <script>
 
     /*
-      index.html이 SANDBOX-1에서 쓸 핸드셰이크와 같은 모양
+      index.html이 쓰는 것과 **같은** 핸드셰이크
       (skin/skin-home.js의 skinHomeReady 패턴).
     */
 
@@ -119,6 +141,17 @@
         }
       );
 
+
+    /* native 비교 렌더용 — 공개 화면과 같은 import map이 필요하다 */
+
+    writeVersionedImportMap(
+      [
+        "/skin/skin-render.js",
+        "/skin/skin-css-validate.js",
+        "/core/content-width.js"
+      ]
+    );
+
   </script>
 
 </head>
@@ -126,7 +159,7 @@
 
 <body>
 
-  <h1>SKIN SANDBOX — 부모 쪽 하네스 (SANDBOX-0)</h1>
+  <h1>SKIN SANDBOX — 부모 쪽 하네스 (SANDBOX-1)</h1>
 
   <dl>
     <dt>기능 플래그</dt>
@@ -138,30 +171,269 @@
     <dt>frame origin</dt>
     <dd id="outFrameOrigin">…</dd>
 
+    <dt>renderMode</dt>
+    <dd id="outRenderMode">…</dd>
+
     <dt>mount 결과</dt>
     <dd id="outMount">…</dd>
 
-    <dt>ACK 왕복</dt>
-    <dd id="outAck">…</dd>
+    <dt>iframe 높이</dt>
+    <dd id="outHeight">…</dd>
   </dl>
 
+  <h2>SANDBOX (cross-origin iframe)</h2>
   <div id="sandboxMount"></div>
+
+  <h2>NATIVE (같은 문서 · 비교용)</h2>
+  <div id="nativeMount"></div>
 
 
   <script>
 
     loadVersionedScripts(
       [
+        "./skin-sanitize.js",
+        "./skin-template.js",
         "./sandbox/skin-sandbox-config.js",
-        "./sandbox/skin-sandbox-protocol.js"
+        "./sandbox/skin-sandbox-protocol.js",
+        "./sandbox/skin-sandbox-context.js"
       ]
     );
 
     loadVersionedModules(
       [
-        "./sandbox/skin-sandbox-host.js"
+        "./sandbox/skin-sandbox-host.js",
+        "./skin-render.js"
       ]
     );
+
+  </script>
+
+
+  <script>
+
+    /* =========================================================
+       fixture Context — supabase 없이 손으로 만든 HOME Context.
+
+       ★ 일부러 **보내면 안 되는 것**을 섞어 둔다. 투영 함수가
+         그것들을 떨어뜨리는지 e2e가 직접 본다.
+    ========================================================== */
+
+    function buildFixtureHomeContext(options) {
+
+      const opts =
+        options || {};
+
+      const recentPosts =
+        [
+          {
+            id: "101",
+            title: "첫 번째 글",
+            href: "/demo/post/101",
+            publishedAt: "2026-09-01T00:00:00Z",
+            publishedAtLabel: "2026.09.01",
+            categoryId: "1",
+            categoryName: "TXT",
+            isSecret: false
+          },
+          {
+            id: "102",
+            title: "비밀글",
+            href: "/demo/post/102",
+            publishedAt: "2026-09-02T00:00:00Z",
+            publishedAtLabel: "2026.09.02",
+            categoryId: "1",
+            categoryName: "TXT",
+            isSecret: true
+          }
+        ];
+
+
+      if (opts.tall) {
+
+        for (let i = 0; i < 60; i += 1) {
+
+          recentPosts.push({
+            id: String(200 + i),
+            title: "긴 목록 채우기 " + i,
+            href: "/demo/post/" + (200 + i),
+            publishedAt: "2026-09-03T00:00:00Z",
+            publishedAtLabel: "2026.09.03",
+            categoryId: "1",
+            categoryName: "TXT",
+            isSecret: false
+          });
+
+        }
+
+      }
+
+
+      const card =
+        {
+          id: "h1",
+          excerpt: "밑줄 그은 문장 하나",
+          note: "여기에 메모",
+          hasNote: true,
+          color: "#f6e0c8",
+          date: "2026-09-04T00:00:00Z",
+          dateLabel: "2026.09.04",
+          postId: "101",
+          postTitle: "첫 번째 글",
+          postHref: "/demo/post/101",
+          hasNoPostLink: false,
+          categoryName: "TXT",
+          folderName: "2002",
+          folderNamePath: ["2002"],
+          sourcePathLabel: "TXT > 2002 > 첫 번째 글",
+          sourcePathSegments: ["TXT", "2002", "첫 번째 글"],
+          categoryHref: "/demo/category/1",
+          folderId: "1",
+          folderHref: "/demo/highlights/1",
+          placement: "found",
+          isMissing: false,
+          isPlacementUnknown: false,
+          isPlaced: true,
+          placementLabel: ""
+        };
+
+
+      const highlightsNav =
+        {
+          name: "HIGHLIGHTS",
+          href: "/demo/highlights",
+          type: "highlight",
+          iconKind: "highlight",
+          hasCategory: true,
+          showStandaloneLink: false,
+          categoryId: "3",
+          enabled: true
+        };
+
+
+      return {
+
+        site: {
+          title: "SANDBOX DEMO",
+          slug: "demo",
+          faviconUrl: null,
+          description: null,
+          language: "ko"
+        },
+
+        profile: {
+          nickname: "주인장",
+          bio: "작은 소개",
+          avatarUrl: null
+        },
+
+        navigation: {
+
+          home: {
+            id: null,
+            name: "SANDBOX DEMO",
+            href: "/demo/",
+            enabled: true,
+            type: "home",
+            iconKind: "home"
+          },
+
+          categories: [
+            { id: "1", name: "TXT", type: "post", iconKind: "post", href: "/demo/category/1", itemCount: null },
+            { id: "2", name: "PIC", type: "gallery", iconKind: "gallery", href: "/demo/category/2", itemCount: null },
+            { id: "3", name: "HIGHLIGHTS", type: "highlight", iconKind: "highlight", href: "/demo/highlights", itemCount: null }
+          ],
+
+          postCategories: [
+            { id: "1", name: "TXT", type: "post", iconKind: "post", href: "/demo/category/1", itemCount: null }
+          ],
+
+          galleryCategories: [
+            { id: "2", name: "PIC", type: "gallery", iconKind: "gallery", href: "/demo/category/2", itemCount: null }
+          ],
+
+          textPostCategories: [
+            { id: "1", name: "TXT", type: "post", iconKind: "post", href: "/demo/category/1", itemCount: null }
+          ],
+
+          bannerCategories: [],
+
+          highlights: highlightsNav,
+          memos: highlightsNav
+
+        },
+
+        banners: {
+          items: []
+        },
+
+        viewer: {
+          isOwner: true,
+          writeHref: "/demo/?write=1",
+          adminHref: "/demo/admin",
+          manageHref: null,
+          toolsHref: null,
+          highlightHref: null,
+          canManageHighlights: true,
+          canManageMemos: true
+        },
+
+        images: {
+          profile: null
+        },
+
+        page: {
+          type: "home",
+          isHome: true,
+          isCategory: false,
+          isPost: false,
+          isBanner: false,
+          isFolder: false,
+          isHighlights: false,
+          isMemos: false
+        },
+
+        home: {
+
+          highlights: {
+            cards: [card],
+            featured: [card],
+            card: card,
+            hasCard: true,
+            count: 1,
+            isEmpty: false,
+            hasError: false
+          },
+
+          recentPosts
+
+        },
+
+
+        /* =====================================================
+           ★ 여기부터는 **절대 프레임에 가면 안 되는 것**이다.
+             투영 함수(skin/sandbox/skin-sandbox-context.js)가
+             알려진 키만 옮기므로 구조적으로 걸러진다. e2e의
+             [payload] 절이 실제 postMessage를 가로채 확인한다.
+        ====================================================== */
+
+        __ownerId: "11111111-2222-3333-4444-555555555555",
+        __accessToken: "eyJhbGciOi.FAKE.TOKEN",
+        __refreshToken: "FAKE-REFRESH",
+        __email: "owner@example.com",
+        __secretBody: "비밀글 본문 원문",
+        __skinId: "skin-row-id",
+        __versionId: "version-row-id",
+        __supabaseClient: { from: function () { return null; } },
+        __node: document.body
+
+      };
+
+    }
+
+
+    window.buildFixtureHomeContext =
+      buildFixtureHomeContext;
 
   </script>
 
@@ -171,6 +443,10 @@
     window.addEventListener(
       "load",
       async function () {
+
+        const params =
+          new URLSearchParams(window.location.search);
+
 
         const flagOn =
           isSandboxSkinEnabled(window);
@@ -195,21 +471,128 @@
           frameOrigin || "(없음 — sandbox 경로를 쓰지 않는다)";
 
 
-        const host =
-          await window.skinSandboxHostReady;
+        /* --- fixture SkinPackage 가져오기 --------------- */
 
-        /*
-          거부된 메시지를 눈으로/테스트로 볼 수 있게 모아 둔다.
-          상대에게 돌려주는 것은 여전히 아무것도 없다 — 이 배열은
-          이 문서 안에만 있다(skin/sandbox/skin-sandbox-protocol.js
-          상단 "실패는 조용하다" 참고).
-        */
+        let skinPackage;
+
+        try {
+
+          const response =
+            await fetch(
+              "/skin/test-skins/imory-sandbox-home-v1.json?v=" +
+              encodeURIComponent(APP_BUILD_VERSION)
+            );
+
+          skinPackage =
+            await response.json();
+
+        }
+
+        catch (err) {
+
+          document.getElementById("outMount").textContent =
+            "fixture 스킨을 못 읽었다";
+
+          window.__sandboxHarnessResult =
+            { ok: false, reason: "no-fixture" };
+
+          return;
+
+        }
+
+
+        if (params.get("renderMode") === "native") {
+          delete skinPackage.renderMode;
+        }
+
+
+        const renderMode =
+          resolveSkinRenderMode(skinPackage);
+
+        document.getElementById("outRenderMode").textContent =
+          renderMode;
+
+
+        const template =
+          resolveSkinTemplate(skinPackage, "home");
+
+
+        const context =
+          buildFixtureHomeContext({
+            tall: params.get("tall") === "1"
+          });
+
+
+        window.__sandboxHarnessContext =
+          context;
+
+        window.__sandboxHarnessTemplate =
+          template;
+
+
+        /* --- native 비교 렌더 ---------------------------- */
+
+        if (params.get("native") === "1") {
+
+          /*
+            ★ native 쪽에도 **투영된 Context**를 준다. 두 화면의
+            차이가 "어디에 그렸는가" 하나로 좁혀져야 innerHTML
+            비교가 의미를 갖는다(viewer 같은 값이 다르면 당연히
+            다르게 그려진다 — 그건 투영 함수의 결정이지 렌더러
+            차이가 아니다).
+          */
+
+          const projected =
+            projectSkinContextForSandbox(context, "home");
+
+          window.renderSkin({
+            container: document.getElementById("nativeMount"),
+            skin: template,
+            context: projected,
+            mode: "view"
+          });
+
+        }
+
+
+        /* --- sandbox 렌더 -------------------------------- */
 
         window.__sandboxHarnessErrors = [];
 
+        /*
+          ★ 실제로 프레임에 건너가는 값. mountSandboxSkin()이 같은
+          입력으로 **같은 함수**를 부르므로, 이것이 곧 wire 위의
+          data다. e2e의 [payload] 절이 여기서 금지 필드가 하나도
+          없다는 것을 확인하고, 프레임 쪽에서 실제로 도착한 값도
+          따로 확인한다(window.__imorySandboxLastReceived).
+        */
+
+        window.__sandboxProjected =
+          projectSkinContextForSandbox(context, "home");
+
+
+        if (renderMode !== "sandbox") {
+
+          document.getElementById("outMount").textContent =
+            "native (sandbox 경로를 타지 않는다)";
+
+          window.__sandboxHarnessResult =
+            { ok: false, reason: "not-sandbox" };
+
+          return;
+
+        }
+
+
+        const host =
+          await window.skinSandboxHostReady;
+
         const result =
-          await host.mountSandboxSkinFrame({
+          await host.mountSandboxSkin({
             container: document.getElementById("sandboxMount"),
+            pageType: "home",
+            template,
+            context,
             onError: (reason) => {
               window.__sandboxHarnessErrors.push(reason);
             }
@@ -219,16 +602,18 @@
           result.ok ? "ok" : ("폴백 — reason: " + result.reason);
 
 
-        /* ACK는 프레임 문서 안의 속성으로 확인한다(같은 origin이
-           아니므로 사람이 눈으로 볼 때는 프레임 화면의 문구로
-           확인한다 — 자동 판정은 e2e가 한다). */
+        const iframe =
+          document.querySelector("iframe.imory-skin-sandbox-frame");
 
-        document.getElementById("outAck").textContent =
-          result.ok
-            ? "프레임에 SANDBOX FRAME READY가 보이면 성립"
-            : "-";
+        document.getElementById("outHeight").textContent =
+          iframe ? iframe.style.height : "-";
 
-        window.__sandboxHarnessResult = result;
+
+        window.__sandboxHarnessHandle =
+          result.ok ? result.handle : null;
+
+        window.__sandboxHarnessResult =
+          result.ok ? { ok: true } : { ok: false, reason: result.reason };
 
       }
     );

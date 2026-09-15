@@ -7,8 +7,9 @@
    `.json` 파일로 내보낸다.
 
    내보내는 필드는 SKIN_DESIGNER_CONTRACT.md의 SkinPackage 계약
-   그대로 — schemaVersion / templates.{home,category,post,banner}
-   .{html[,css]} / css / imageSlots / regions / metadata — 이고,
+   그대로 — schemaVersion / renderMode(선택, SANDBOX-1) /
+   templates.{home,category,post,banner}.{html[,css]} / css /
+   imageSlots / regions / metadata — 이고,
    그 외에는 어떤 키도 내보내지 않는다(allowlist). 그래서 DB 전용
    값(row id · user_id · created_at · version_id 등)이 어떤 경로로
    content 안에 섞여 있더라도 파일에는 절대 실리지 않는다 —
@@ -45,6 +46,16 @@ const SKIN_PACKAGE_EXPORT_PAGE_TYPES =
 */
 const SKIN_PACKAGE_EXPORT_REQUIRED_PAGE_TYPES =
   ["home", "category", "post"];
+
+/*
+  SANDBOX-1 — renderMode(선택). 값의 정의는 skin/skin-template.js의
+  resolveSkinRenderMode/SKIN_RENDER_MODES에 있지만, 이 파일은 "의존
+  없음"을 유지한다(상단 주석) — 목록 하나뿐이라 복사 비용이 낮고,
+  Studio가 아닌 곳에서 이 파일만 읽어도 동작해야 한다. 값이 늘면
+  두 곳을 함께 고친다.
+*/
+const SKIN_PACKAGE_EXPORT_RENDER_MODES =
+  ["native", "sandbox"];
 
 
 function isSkinPackageExportPlainObject(value) {
@@ -139,6 +150,19 @@ function buildSkinPackageExport(skinPackage) {
 
   }
 
+  /*
+    SANDBOX-1 — renderMode(선택, IMORY_SANDBOX_SKIN_DESIGN.md §C).
+    allowlist 원칙 그대로다: 아는 값("native"/"sandbox")일 때만
+    싣는다. 모르는 값이 draft에 어떤 경로로 들어와 있더라도 파일에
+    실리지 않는다 — Import가 거부할 파일을 만들어 내보내지 않는다.
+    없으면 키 자체를 만들지 않는다(Import 결과와 같은 모양).
+  */
+
+  const exportedRenderMode =
+    SKIN_PACKAGE_EXPORT_RENDER_MODES.includes(skinPackage.renderMode)
+      ? skinPackage.renderMode
+      : null;
+
   const exported = {
     schemaVersion: 1,
     templates,
@@ -159,6 +183,10 @@ function buildSkinPackageExport(skinPackage) {
         ? cloneSkinPackageExportValue(skinPackage.metadata)
         : {}
   };
+
+  if (exportedRenderMode) {
+    exported.renderMode = exportedRenderMode;
+  }
 
   return {
     ok: true,

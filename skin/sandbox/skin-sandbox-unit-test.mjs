@@ -1,5 +1,5 @@
 /* =========================================================
-   SKIN SANDBOX — 단위 테스트 (SANDBOX-0)
+   SKIN SANDBOX — 단위 테스트 (SANDBOX-0 + SANDBOX-1)
 
    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §D-2 / §D-4
 
@@ -9,6 +9,8 @@
      - skin/sandbox/skin-sandbox-config.js     기능 플래그 · origin 해석
      - skin/sandbox/skin-sandbox-protocol.js   메시지 검증
      - core/lib/skin-sandbox-server.js         호스트 분기 · CSP · nonce
+     - skin/sandbox/skin-sandbox-context.js    전달 데이터 투영(SANDBOX-1)
+     - skin/skin-template.js                   renderMode 판정(SANDBOX-1)
 
    왜 node인가
    -----------
@@ -22,6 +24,7 @@
      node skin/sandbox/skin-sandbox-unit-test.mjs
 ========================================================== */
 
+import fs from "node:fs";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -33,6 +36,7 @@ const require = createRequire(import.meta.url);
 
 const config = require(path.join(HERE, "skin-sandbox-config.js"));
 const protocol = require(path.join(HERE, "skin-sandbox-protocol.js"));
+const sandboxContext = require(path.join(HERE, "skin-sandbox-context.js"));
 
 const server = await import(
   new URL("../../core/lib/skin-sandbox-server.js", import.meta.url).href
@@ -291,8 +295,8 @@ check("[msg] buildSandboxMessage 는 모르는 키를 싣지 않는다",
 check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
   protocol.buildSandboxMessage("IMORY_EVAL", {}, 1) === null);
 
-check("[msg] 이번 라운드가 아는 type 은 정확히 둘이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 2,
+check("[msg] 이번 라운드가 아는 type 은 정확히 여섯이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 6,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -413,8 +417,24 @@ check("[path] ★ 앱 진입 문서는 sandbox origin 에서 허용되지 않는
 check("[path] ★ supabase client 도 허용되지 않는다",
   server.isSandboxAllowedPath("/core/lib/supabase-client.js") === false);
 
-check("[path] skin-render.js 는 아직 허용되지 않는다 (SANDBOX-1)",
-  server.isSandboxAllowedPath("/skin/skin-render.js") === false);
+/*
+  SANDBOX-1 — 렌더러가 프레임 안으로 들어왔다. SANDBOX-0에서는
+  이 경로가 404였다(그때는 빈 프레임이었다). 지금은 200이어야
+  하고, **그 대신** 앱/인증/supabase/studio가 여전히 404라는
+  것이 allowlist의 의미다(바로 위 절).
+*/
+check("[path] ★ SANDBOX-1: 렌더러 사슬이 허용된다",
+  server.isSandboxAllowedPath("/skin/skin-render.js") === true &&
+  server.isSandboxAllowedPath("/skin/skin-css-validate.js") === true &&
+  server.isSandboxAllowedPath("/skin/skin-sanitize.js") === true &&
+  server.isSandboxAllowedPath("/core/content-width.js") === true &&
+  server.isSandboxAllowedPath("/core/content-width.css") === true);
+
+check("[path] ★ 그래도 다른 skin 파일은 허용되지 않는다",
+  server.isSandboxAllowedPath("/skin/skin-context.js") === false &&
+  server.isSandboxAllowedPath("/skin/skin-home.js") === false &&
+  server.isSandboxAllowedPath("/skin/skin-template.js") === false &&
+  server.isSandboxAllowedPath("/studio/studio-preview.js") === false);
 
 check("[path] ★ isSandboxFramePath 는 두 주소를 모두 frame 으로 본다",
   server.isSandboxFramePath("/skin/sandbox/frame") === true &&
@@ -446,12 +466,51 @@ check("[csp] base-uri 'none'", hasDirective("base-uri 'none'"));
 check("[csp] form-action 'none'", hasDirective("form-action 'none'"));
 check("[csp] frame-ancestors 는 아이모리 부모 origin 만",
   hasDirective("frame-ancestors https://imory.me"));
-check("[csp] script-src 는 'self' + nonce (unsafe-inline 없음)",
-  hasDirective("script-src 'self' 'nonce-N0NCE'") &&
+/*
+  SANDBOX-1 — renderSkin()이 들어오면서 넓어진 세 칸. 어느 것도
+  'unsafe-inline'/'unsafe-eval'이 아니다(core/lib/skin-sandbox-server.js
+  buildSandboxCsp 주석에 근거).
+*/
+check("[csp] ★ unsafe-inline / unsafe-eval 이 어디에도 없다",
   csp.indexOf("unsafe-inline") === -1 &&
-  csp.indexOf("unsafe-eval") === -1);
-check("[csp] style-src 는 nonce 만",
-  hasDirective("style-src 'nonce-N0NCE'"));
+  csp.indexOf("unsafe-eval") === -1,
+  csp);
+
+check("[csp] script-src 는 'self' + nonce + CSS 파서 한 URL",
+  hasDirective(
+    "script-src 'self' 'nonce-N0NCE' " + server.SANDBOX_CSS_PARSER_URL
+  ));
+
+check("[csp] ★ 그 CSS 파서 항목은 호스트가 아니라 파일 하나다",
+  server.SANDBOX_CSS_PARSER_URL.endsWith(".js") &&
+  server.SANDBOX_CSS_PARSER_URL.indexOf("@eslint/css-tree@") !== -1,
+  server.SANDBOX_CSS_PARSER_URL);
+
+check("[csp] style-src 는 'self' + nonce (renderSkin 의 동적 style 용)",
+  hasDirective("style-src 'self' 'nonce-N0NCE'"));
+
+check("[csp] ★ img-src 가 https: 전체가 아니다",
+  csp.indexOf("img-src https:") === -1 &&
+  hasDirective("img-src data: blob: " + server.SANDBOX_SUPABASE_ORIGIN + " https://imory.me"),
+  csp.split("; ").find(d => d.indexOf("img-src") === 0));
+
+check("[csp] ★ font-src 도 https: 전체가 아니다",
+  hasDirective("font-src 'self' data:"));
+
+check("[csp] ★ connect-src 는 계속 'none' 이다 (SANDBOX-1 에서도)",
+  hasDirective("connect-src 'none'"));
+
+/* 배열로 주던 SANDBOX-0 호출자도 계속 받는다 */
+check("[csp] parentOrigins 배열 형태 호출이 그대로 동작한다",
+  server.buildSandboxCsp("X", ["https://imory.me"])
+    .indexOf("frame-ancestors https://imory.me") !== -1);
+
+check("[csp] ★ media 출처는 환경변수로 넓힐 수 있다",
+  server.resolveSandboxMediaOrigins(
+    server.resolveSandboxServerConfig({
+      SANDBOX_SKIN_MEDIA_ORIGINS: "https://cdn.example.com"
+    })
+  ).indexOf("https://cdn.example.com") !== -1);
 check("[csp] sandbox 지시어로 최상위 열람도 같은 제약을 받는다",
   hasDirective("sandbox allow-scripts allow-same-origin"));
 check("[csp] frame-ancestors 목록이 비면 'none' 이 된다",
@@ -526,6 +585,383 @@ check("[frame] ★ nonce 가 실제 인라인 블록 수만큼만 들어간다 (
   (nonced.match(/nonce="TESTNONCE"/g) || []).length === realBlocks,
   `${(nonced.match(/nonce="TESTNONCE"/g) || []).length} vs 실제 블록 ${realBlocks}`);
 
+
+
+
+/* =========================================================
+   [mode] renderMode 판정 (SANDBOX-1)
+
+   skin/skin-template.js 는 classic script(브라우저 전역)라
+   module.exports 가 없다. 함수 선언만 뽑아 쓰기보다, 파일을
+   그대로 읽어 함수 본문을 평가한다 — **배포되는 그 코드**를
+   본다는 뜻이다(문자열 복제가 아니다).
+========================================================== */
+
+console.log("\n[mode] renderMode 판정");
+
+const templateSource =
+  fs.readFileSync(path.join(ROOT, "skin", "skin-template.js"), "utf8");
+
+const modeApi =
+  new Function(
+    templateSource +
+    "\nreturn { resolveSkinRenderMode, isKnownSkinRenderMode, SKIN_RENDER_MODES };"
+  )();
+
+check("[mode] renderMode 가 없으면 native",
+  modeApi.resolveSkinRenderMode({ schemaVersion: 1 }) === "native");
+
+check("[mode] renderMode:'native' 는 native",
+  modeApi.resolveSkinRenderMode({ renderMode: "native" }) === "native");
+
+check("[mode] ★ renderMode:'sandbox' 만 sandbox 다",
+  modeApi.resolveSkinRenderMode({ renderMode: "sandbox" }) === "sandbox");
+
+check("[mode] ★ 모르는 값을 sandbox 로 추측하지 않는다",
+  ["weird", "SANDBOX", "sandbox2", "", " ", "sand box"].every(
+    (value) => modeApi.resolveSkinRenderMode({ renderMode: value }) === "native"
+  ));
+
+check("[mode] ★ 문자열이 아니면 native",
+  [1, true, null, undefined, {}, [], { toString: () => "sandbox" }].every(
+    (value) => modeApi.resolveSkinRenderMode({ renderMode: value }) === "native"
+  ));
+
+check("[mode] skinPackage 자체가 없어도 native (throw 하지 않는다)",
+  modeApi.resolveSkinRenderMode(null) === "native" &&
+  modeApi.resolveSkinRenderMode(undefined) === "native");
+
+check("[mode] Import 가 받아들이는 값은 둘뿐이다",
+  JSON.stringify(modeApi.SKIN_RENDER_MODES) === JSON.stringify(["native", "sandbox"]) &&
+  modeApi.isKnownSkinRenderMode("weird") === false &&
+  modeApi.isKnownSkinRenderMode("sandbox") === true);
+
+
+/* =========================================================
+   [payload] 전달 데이터 투영 (SANDBOX-1)
+
+   ★ 이 절이 "무엇이 다른 origin으로 건너가는가"의 판정이다.
+========================================================== */
+
+console.log("\n[payload] 전달 데이터 투영");
+
+/* 공개 HOME Context 를 흉내내되, **보내면 안 되는 것**을 섞는다 */
+
+const FORBIDDEN = {
+  ownerId: "11111111-2222-3333-4444-555555555555",
+  accessToken: "eyJhbGciOi.FAKE.TOKEN",
+  refreshToken: "FAKE-REFRESH",
+  email: "owner@example.com",
+  secretBody: "비밀글 본문 원문",
+  skinId: "skin-row-id",
+  versionId: "version-row-id"
+};
+
+const dirtyContext = {
+
+  site: { title: "T", slug: "demo", faviconUrl: null, description: null, language: "ko" },
+  profile: { nickname: "주인장", bio: null, avatarUrl: null },
+
+  navigation: {
+    home: { id: null, name: "T", href: "/demo/", type: "home", iconKind: "home" },
+    categories: [{ id: "1", name: "TXT", type: "post", iconKind: "post", href: "/demo/category/1", itemCount: null }],
+    postCategories: [],
+    galleryCategories: [],
+    textPostCategories: [],
+    bannerCategories: [],
+    highlights: { name: "H", href: "/demo/highlights", type: "highlight", iconKind: "highlight", hasCategory: false, showStandaloneLink: true, categoryId: null, enabled: true }
+  },
+
+  banners: { items: [{ id: "b1", imageUrl: "https://x/y.png", href: null, alt: null }] },
+
+  viewer: {
+    isOwner: true,
+    writeHref: "/demo/?write=1",
+    adminHref: "/demo/admin",
+    manageHref: "/demo/category/1?manage=1",
+    toolsHref: null,
+    highlightHref: null,
+    canManageHighlights: true,
+    canManageMemos: true
+  },
+
+  images: { profile: "https://x/avatar.png" },
+
+  page: { type: "home", isHome: true },
+
+  home: {
+    highlights: {
+      cards: [{ id: "h1", excerpt: "E", note: "N", hasNote: true, color: "#fff" }],
+      featured: [],
+      card: null,
+      hasCard: false,
+      count: 99,
+      isEmpty: true,
+      hasError: false
+    },
+    recentPosts: [{ id: "1", title: "글", href: "/demo/post/1", isSecret: false }]
+  },
+
+  /* 넘어가면 안 되는 것 */
+  ownerId: FORBIDDEN.ownerId,
+  accessToken: FORBIDDEN.accessToken,
+  refreshToken: FORBIDDEN.refreshToken,
+  email: FORBIDDEN.email,
+  postBody: FORBIDDEN.secretBody,
+  skinId: FORBIDDEN.skinId,
+  versionId: FORBIDDEN.versionId,
+  supabaseClient: { from() { return null; } },
+  callback() { return 1; }
+
+};
+
+const projected =
+  sandboxContext.projectSkinContextForSandbox(dirtyContext, "home");
+
+const projectedJson =
+  JSON.stringify(projected);
+
+check("[payload] HOME 은 투영된다", Boolean(projected));
+
+check("[payload] ★ 최상위 키가 계약 그대로다",
+  JSON.stringify(Object.keys(projected).sort()) ===
+  JSON.stringify(sandboxContext.SANDBOX_CONTEXT_TOP_LEVEL_KEYS.slice().sort()),
+  Object.keys(projected).join(", "));
+
+for (const [name, value] of Object.entries(FORBIDDEN)) {
+  check(`[payload] ★ ${name} 이(가) 건너가지 않는다`,
+    projectedJson.indexOf(value) === -1);
+}
+
+check("[payload] ★ 함수는 결과에 존재할 수 없다 (구조화 복사 가능)",
+  (() => {
+    try { structuredClone(projected); return true; }
+    catch (err) { return false; }
+  })());
+
+check("[payload] ★ 관리자 여부와 관리자 전용 링크를 보내지 않는다",
+  projected.viewer.isOwner === false &&
+  projected.viewer.adminHref === null &&
+  projected.viewer.writeHref === null &&
+  projected.viewer.manageHref === null &&
+  projectedJson.indexOf("/demo/admin") === -1 &&
+  projectedJson.indexOf("write=1") === -1,
+  JSON.stringify(projected.viewer));
+
+check("[payload] ★ 원본을 스프레드하지 않는다 — 모르는 키가 전혀 없다",
+  Object.keys(projected).every(
+    (key) => sandboxContext.SANDBOX_CONTEXT_TOP_LEVEL_KEYS.indexOf(key) !== -1
+  ));
+
+check("[payload] ★ __proto__ 같은 슬롯 이름은 images 에 실리지 않는다",
+  (() => {
+    const withBadSlot = JSON.parse(JSON.stringify({ site: {}, images: {} }));
+    withBadSlot.images = JSON.parse('{"__proto__":"x","_bad":"y","ok":"https://a/b.png"}');
+    const out = sandboxContext.projectSkinContextForSandbox(withBadSlot, "home");
+    return JSON.stringify(out.images) === '{"ok":"https://a/b.png"}';
+  })());
+
+check("[payload] ★ featured/card 는 cards 에서 다시 만든다 (위조 방지)",
+  projected.home.highlights.featured.length === 1 &&
+  projected.home.highlights.card !== null &&
+  projected.home.highlights.hasCard === true &&
+  projected.home.highlights.count === 1 &&
+  projected.home.highlights.isEmpty === false,
+  "입력은 featured:[] card:null hasCard:false count:99 isEmpty:true 였다");
+
+check("[payload] ★ page 는 pageType 하나로 다시 만든다 (정확히 하나만 true)",
+  Object.entries(projected.page)
+    .filter(([k, v]) => k !== "type" && v === true).length === 1 &&
+  projected.page.isHome === true);
+
+check("[payload] navigation.memos 는 highlights 와 같은 객체다",
+  projected.navigation.memos === projected.navigation.highlights);
+
+check("[payload] ★ HOME 이 아닌 page type 은 투영하지 않는다",
+  ["category", "post", "folder", "banner", "highlights", "", null, undefined]
+    .every((t) => sandboxContext.projectSkinContextForSandbox(dirtyContext, t) === null));
+
+check("[payload] context 가 객체가 아니면 null",
+  sandboxContext.projectSkinContextForSandbox(null, "home") === null &&
+  sandboxContext.projectSkinContextForSandbox([], "home") === null &&
+  sandboxContext.projectSkinContextForSandbox("x", "home") === null);
+
+check("[payload] 받은 쪽 shape 검사가 투영 결과를 통과시킨다",
+  sandboxContext.isSandboxContextShape(projected) === true);
+
+check("[payload] ★ 모르는 최상위 키가 섞이면 받는 쪽이 거부한다",
+  (() => {
+    const tampered = JSON.parse(projectedJson);
+    tampered.accessToken = "FAKE";
+    return sandboxContext.isSandboxContextShape(tampered) === false;
+  })());
+
+check("[payload] ★ contract / pageType 이 어긋나면 거부한다",
+  (() => {
+    const a = JSON.parse(projectedJson); a.contract = 2;
+    const b = JSON.parse(projectedJson); b.pageType = "post";
+    return sandboxContext.isSandboxContextShape(a) === false &&
+      sandboxContext.isSandboxContextShape(b) === false;
+  })());
+
+
+/* =========================================================
+   [msg1] SANDBOX-1 메시지 검증
+========================================================== */
+
+console.log("\n[msg1] SANDBOX-1 메시지");
+
+const FRAME_ORIGIN = "https://skin-frame.imory.me";
+const PARENT_ORIGIN = "https://imory.me";
+
+const frameWin = { name: "frame" };
+const parentWin = { name: "parent" };
+
+function toParent(type, payload, seq) {
+  return {
+    origin: FRAME_ORIGIN,
+    source: frameWin,
+    data: { imory: 1, type, seq: seq === undefined ? 1 : seq, payload }
+  };
+}
+
+function toFrame(type, payload, seq) {
+  return {
+    origin: PARENT_ORIGIN,
+    source: parentWin,
+    data: { imory: 1, type, seq: seq === undefined ? 1 : seq, payload }
+  };
+}
+
+const parentRules = {
+  originAllowList: [FRAME_ORIGIN], source: frameWin, direction: "to-parent"
+};
+
+const frameRules = {
+  originAllowList: [PARENT_ORIGIN], source: parentWin, direction: "to-frame"
+};
+
+const goodRender = {
+  contract: 1,
+  pageType: "home",
+  renderSeq: 1,
+  template: { html: "<div></div>", css: "" },
+  data: projected
+};
+
+check("[msg1] 정상 RENDER_HOME 은 통과한다",
+  protocol.validateSandboxMessage(
+    toFrame("IMORY_RENDER_HOME", goodRender), frameRules
+  ).ok === true);
+
+check("[msg1] ★ 부모는 RENDER_HOME 을 받지 않는다 (방향)",
+  protocol.validateSandboxMessage(
+    toParent("IMORY_RENDER_HOME", goodRender), parentRules
+  ).reason === "wrong-direction");
+
+check("[msg1] ★ 프레임은 RENDERED/HEIGHT 를 받지 않는다 (방향)",
+  protocol.validateSandboxMessage(
+    toFrame("IMORY_RENDERED", { contract: 1, pageType: "home", renderSeq: 1, height: 10 }), frameRules
+  ).reason === "wrong-direction" &&
+  protocol.validateSandboxMessage(
+    toFrame("IMORY_HEIGHT", { contract: 1, renderSeq: 1, height: 10 }), frameRules
+  ).reason === "wrong-direction");
+
+check("[msg1] ★ RENDER_HOME 에 모르는 키가 하나라도 있으면 거부",
+  protocol.validateSandboxMessage(
+    toFrame("IMORY_RENDER_HOME", { ...goodRender, token: "x" }), frameRules
+  ).reason === "unknown-payload-key");
+
+check("[msg1] ★ pageType 이 home 이 아니면 거부 (추측하지 않는다)",
+  ["category", "post", "HOME", "", 1, null].every((t) =>
+    protocol.validateSandboxMessage(
+      toFrame("IMORY_RENDER_HOME", { ...goodRender, pageType: t }), frameRules
+    ).reason === "bad-payload-value"
+  ));
+
+check("[msg1] ★ template 이 {html,css} 문자열 쌍이 아니면 거부",
+  [
+    { html: "<div></div>" },
+    { html: 1, css: "" },
+    { html: "", css: 1 },
+    { html: "", css: "", extra: 1 },
+    "<div></div>",
+    null,
+    []
+  ].every((tpl) =>
+    protocol.validateSandboxMessage(
+      toFrame("IMORY_RENDER_HOME", { ...goodRender, template: tpl }), frameRules
+    ).reason === "bad-payload-value"
+  ));
+
+check("[msg1] ★ data 가 plain object 가 아니면 거부",
+  [null, "x", 1, [], true].every((d) =>
+    protocol.validateSandboxMessage(
+      toFrame("IMORY_RENDER_HOME", { ...goodRender, data: d }), frameRules
+    ).reason === "bad-payload-value"
+  ));
+
+check("[msg1] ★ 높이는 정수여야 한다 (NaN/Infinity/소수/문자 거부)",
+  [NaN, Infinity, -Infinity, 12.5, "120", null, undefined, true].every((h) =>
+    protocol.validateSandboxMessage(
+      toParent("IMORY_HEIGHT", { contract: 1, renderSeq: 1, height: h }), parentRules
+    ).reason === "bad-payload-value"
+  ));
+
+check("[msg1] ★ 높이 범위 밖은 거부한다 (0 · 음수 · 상한 초과)",
+  [0, -1, -9999, protocol.SANDBOX_MAX_FRAME_HEIGHT + 1, 10 ** 9].every((h) =>
+    protocol.validateSandboxMessage(
+      toParent("IMORY_HEIGHT", { contract: 1, renderSeq: 1, height: h }), parentRules
+    ).reason === "bad-payload-value"
+  ));
+
+check("[msg1] 범위 안의 높이는 통과한다",
+  [1, 120, 5000, protocol.SANDBOX_MAX_FRAME_HEIGHT].every((h) =>
+    protocol.validateSandboxMessage(
+      toParent("IMORY_HEIGHT", { contract: 1, renderSeq: 1, height: h }), parentRules
+    ).ok === true
+  ));
+
+check("[msg1] ★ renderSeq 가 1 이상 정수가 아니면 거부",
+  [0, -1, 1.5, "1", null].every((n) =>
+    protocol.validateSandboxMessage(
+      toParent("IMORY_HEIGHT", { contract: 1, renderSeq: n, height: 10 }), parentRules
+    ).reason === "bad-payload-value"
+  ));
+
+check("[msg1] ★ 오류 코드는 정해진 목록뿐이다 (자유 문장 금지)",
+  protocol.validateSandboxMessage(
+    toParent("IMORY_FRAME_ERROR", { contract: 1, code: "render-failed" }), parentRules
+  ).ok === true &&
+  ["boom", "Error: x at line 3", "", 1, null].every((c) =>
+    protocol.validateSandboxMessage(
+      toParent("IMORY_FRAME_ERROR", { contract: 1, code: c }), parentRules
+    ).reason === "bad-payload-value"
+  ));
+
+check("[msg1] ★ 위조 origin 은 타입과 무관하게 거부된다",
+  protocol.validateSandboxMessage(
+    { ...toParent("IMORY_RENDERED", { contract: 1, pageType: "home", renderSeq: 1, height: 10 }),
+      origin: "https://evil.example" },
+    parentRules
+  ).reason === "bad-origin");
+
+check("[msg1] ★ 같은 origin 의 다른 window 도 거부된다",
+  protocol.validateSandboxMessage(
+    { ...toParent("IMORY_RENDERED", { contract: 1, pageType: "home", renderSeq: 1, height: 10 }),
+      source: { name: "other" } },
+    parentRules
+  ).reason === "bad-source");
+
+check("[msg1] buildSandboxMessage 가 RENDER_HOME 의 알려진 키만 담는다",
+  (() => {
+    const built = protocol.buildSandboxMessage(
+      "IMORY_RENDER_HOME", { ...goodRender, token: "LEAK" }, 5
+    );
+    return JSON.stringify(built).indexOf("LEAK") === -1 &&
+      JSON.stringify(Object.keys(built.payload).sort()) ===
+      JSON.stringify(["contract", "data", "pageType", "renderSeq", "template"]);
+  })());
 
 /* =========================================================
    결과

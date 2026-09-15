@@ -598,7 +598,25 @@ function isValidSkinRegionName(name) {
 
 let skinRenderInstanceCounter = 0;
 
-export function renderSkin({ container, skin, context, mode = "view" } = {}) {
+/* =========================================================
+   styleNonce (선택, SANDBOX-1)
+
+   이 렌더러는 스킨 CSS를 doc.createElement("style")로 만들어
+   붙인다. 그 <style>은 **동적으로 만든 요소라도 CSP style-src의
+   적용 대상**이다(2026-09-15 chromium 실측: style-src가
+   nonce만 허용하면 nonce 없는 동적 <style>은 적용되지 않고
+   "Applying inline style violates ..." 위반이 난다. 반면
+   element.style.setProperty() 같은 CSSOM 쓰기는 막히지 않는다 —
+   core/content-width.js는 그래서 영향이 없다).
+
+   sandbox 프레임은 style-src에 'unsafe-inline'을 두지 않는다.
+   그래서 그 문서만 이 옵션으로 자기 nonce를 넘긴다. 넘기지 않는
+   기존 호출자(공개 HOME/CATEGORY/POST, Studio Preview)는 결과가
+   한 byte도 바뀌지 않는다 — 아래에서 값이 문자열일 때만 속성을
+   붙인다.
+========================================================== */
+
+export function renderSkin({ container, skin, context, mode = "view", styleNonce } = {}) {
 
   if (!container) {
     throw new Error("renderSkin: container is required");
@@ -640,6 +658,16 @@ export function renderSkin({ container, skin, context, mode = "view" } = {}) {
     root.setAttribute("data-skin-root", "");
 
     const styleEl = doc.createElement("style");
+
+    /* CSP nonce — 위 styleNonce 주석 참고. 문서에 삽입되기 **전에**
+       달아야 한다(삽입 후에 달면 이미 한 번 거부된 뒤다). 속성과
+       IDL 양쪽에 넣는다 — 브라우저에 따라 nonce 속성을 감추고
+       IDL 값만 유지한다. */
+    if (typeof styleNonce === "string" && styleNonce) {
+      styleEl.setAttribute("nonce", styleNonce);
+      styleEl.nonce = styleNonce;
+    }
+
     styleEl.textContent = safeCss;
     root.appendChild(styleEl);
 

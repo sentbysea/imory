@@ -52,6 +52,77 @@ const SKIN_TEMPLATE_PAGE_TYPES =
 const SKIN_HIGHLIGHTS_TEMPLATE_NAMES =
   ["highlights", "memos"];
 
+
+/* =========================================================
+   SANDBOX-1 — renderMode
+
+   IMORY_SANDBOX_SKIN_DESIGN.md §C. SkinPackage 에 선택 필드
+   `renderMode` 하나가 더해졌다. schemaVersion 은 **1 그대로**다 —
+   2로 올리면 이미 배포된 모든 클라이언트가 그 스킨을 legacy 화면으로
+   폴백시킨다(여섯 진입 모듈이 전부 `schemaVersion !== 1` 이면
+   폴백한다).
+
+   resolveSkinRenderMode(skinPackage) -> "native" | "sandbox"
+
+   ★ "sandbox" 라고 정확히 적힌 경우에만 sandbox 다. 없거나,
+     "native" 거나, 모르는 값이거나, 문자열이 아니면 전부
+     **"native"** 다 — 모르는 값을 sandbox 로 추측하지 않는다.
+     (Import 는 모르는 값을 아예 거부한다. 이 함수는 그 문을
+      통과하지 않은 DB row 도 보므로 한 번 더 좁힌다.)
+
+   ★ 이 함수는 순수 함수다. 기존 함수는 한 줄도 바뀌지 않았고,
+     renderMode 가 없는 SkinPackage 는 이 함수를 불러도 "native"
+     하나를 돌려받는다 — 호출자의 분기는 그때 오늘과 같은 경로다.
+========================================================== */
+
+const SKIN_RENDER_MODE_NATIVE =
+  "native";
+
+const SKIN_RENDER_MODE_SANDBOX =
+  "sandbox";
+
+
+function resolveSkinRenderMode(
+  skinPackage
+) {
+
+  if (
+    !skinPackage ||
+    typeof skinPackage !== "object" ||
+    typeof skinPackage.renderMode !== "string"
+  ) {
+
+    return SKIN_RENDER_MODE_NATIVE;
+
+  }
+
+
+  return skinPackage.renderMode.trim() === SKIN_RENDER_MODE_SANDBOX
+    ? SKIN_RENDER_MODE_SANDBOX
+    : SKIN_RENDER_MODE_NATIVE;
+
+}
+
+
+/*
+  Import 가 받아들이는 값 목록. resolveSkinRenderMode 와 달리 여기서는
+  "native" 를 명시적으로 적은 파일도 그대로 보존한다(왕복에서 필드가
+  사라지지 않아야 한다 — 설계 문서 §C).
+*/
+
+const SKIN_RENDER_MODES =
+  [SKIN_RENDER_MODE_NATIVE, SKIN_RENDER_MODE_SANDBOX];
+
+
+function isKnownSkinRenderMode(value) {
+
+  return (
+    typeof value === "string" &&
+    SKIN_RENDER_MODES.indexOf(value) !== -1
+  );
+
+}
+
 /* Additive gallery fallback. Existing category templates retain full control. */
 function getDefaultGalleryTemplate() {
   const tree = (path, depth) => `<ul><li data-imory-repeat="${path}">

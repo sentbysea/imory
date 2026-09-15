@@ -46,6 +46,89 @@ import { renderSkin } from "./skin-render.js";
 const SKIN_HOME_SUPPORTED_SCHEMA_VERSION = 1;
 
 /* =========================================================
+   tryMountSandboxSkinHome({ container, template, context })
+     -> Promise<boolean>
+
+   SANDBOX-1. true면 별도 origin의 iframe에 HOME이 실제로 그려졌다
+   — 호출자는 native 렌더를 하지 않는다. false면 아무것도 남기지
+   않았다(iframe도 치웠다) — 호출자는 오늘과 같은 native 경로로
+   간다.
+
+   ★ 절대 throw하지 않는다. 이 파일의 계약(상단 "책임 경계")이
+     renderPublishedSkinHome() 전체에 걸리므로, 새로 들어온 이
+     경로도 같은 규칙을 지킨다.
+
+   ★ 기능 플래그가 꺼져 있으면 아무 일도 하지 않는다.
+     판정은 skin/sandbox/skin-sandbox-config.js의
+     isSandboxSkinEnabled() 하나뿐이고, 그 함수는 hostname부터
+     본다 — 공개 방문자가 주소에 쿼리를 붙이는 것만으로는 켜지지
+     않는다. 여기서 먼저 보는 이유는 플래그가 꺼진 배포에서
+     window.skinSandboxHostReady를 기다리지 않게 하기 위해서다
+     (index.html이 그 Promise를 선언만 하고 모듈 로드에 실패하면
+      영원히 pending일 수 있다).
+========================================================== */
+
+async function tryMountSandboxSkinHome({ container, template, context }) {
+
+  try {
+
+    if (
+      typeof isSandboxSkinEnabled !== "function" ||
+      isSandboxSkinEnabled(window) !== true
+    ) {
+      return false;
+    }
+
+
+    if (!window.skinSandboxHostReady) {
+      return false;
+    }
+
+
+    const host =
+      await window.skinSandboxHostReady;
+
+    if (!host || typeof host.mountSandboxSkin !== "function") {
+      return false;
+    }
+
+
+    const result =
+      await host.mountSandboxSkin({
+        container,
+        pageType: "home",
+        template,
+        context
+      });
+
+    if (!result || !result.ok) {
+
+      console.warn(
+        "[skin-home] sandbox mount failed, falling back to native skin render:",
+        result ? result.reason : "no-result"
+      );
+
+      return false;
+
+    }
+
+
+    return true;
+
+  }
+
+  catch (err) {
+
+    /* 어떤 이유로 실패하든 native로 간다. 원인만 남긴다. */
+    console.error("[skin-home] sandbox mount threw", err);
+
+    return false;
+
+  }
+
+}
+
+/* =========================================================
    renderPublishedSkinHome({ ownerId, container }) -> Promise<boolean>
 
    true: published Skin을 실제로 렌더했다 — 호출자는 legacy HOME
@@ -152,6 +235,59 @@ export async function renderPublishedSkinHome({ ownerId, container }) {
 
     console.error("[skin-home] buildSkinContext failed", err);
     return false;
+
+  }
+
+  /* =====================================================
+     SANDBOX-1 — renderMode: "sandbox" 인 스킨만 별도 origin의
+     iframe에서 그린다 (IMORY_SANDBOX_SKIN_DESIGN.md).
+
+     ★ 분기가 여기 한 곳뿐인 이유
+
+     공개 HOME의 조회·schemaVersion 검사·template 선택·Context
+     조립은 **위에서 이미 끝났다**. sandbox는 "그 결과를 어디에
+     그리는가"만 다르다 — 그래서 조건문이 renderSkin() 호출 바로
+     앞 한 줄에 모인다. skin-category.js / skin-post.js 등 다른
+     다섯 진입 모듈은 이 라운드에서 한 줄도 고치지 않았다.
+
+     ★ renderMode가 없는(=대부분의) 스킨은 오늘과 같은 경로다
+
+     resolveSkinRenderMode()가 "native"를 돌려주면 아래 if는
+     곧바로 거짓이고, 그 뒤 코드는 이 라운드 이전과 같다.
+
+     ★ HOME이 아닌 화면에서는 sandbox 스킨도 native로 그린다
+
+     이번 라운드의 범위가 HOME 한 장이다. CATEGORY/POST/FOLDER/
+     HIGHLIGHTS/BANNER는 renderMode를 **보지 않는다** — sandbox
+     패키지도 지금까지의 마크업 계약을 그대로 지키므로 native
+     렌더 결과가 정상 화면이다(설계 문서 §C). "미지원"이라며
+     화면을 비우지 않는다.
+
+     ★ 실패는 한 번만, 그리고 조용히
+
+     플래그가 꺼져 있거나 frame origin이 없거나 READY/RENDERED가
+     오지 않으면 iframe을 치우고 **같은 스킨을 native로** 그린다.
+     다시 시도하지 않는다(무한 재시도 금지). 이 함수의 계약대로
+     여기서도 throw하지 않는다.
+  ====================================================== */
+
+  const renderMode =
+    typeof resolveSkinRenderMode === "function"
+      ? resolveSkinRenderMode(skinPackage)
+      : "native";
+
+  if (renderMode === "sandbox") {
+
+    const mounted =
+      await tryMountSandboxSkinHome({
+        container,
+        template: homeTemplate,
+        context
+      });
+
+    if (mounted) {
+      return true;
+    }
 
   }
 

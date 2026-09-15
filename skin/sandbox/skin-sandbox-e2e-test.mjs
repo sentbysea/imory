@@ -1,5 +1,5 @@
 /* =========================================================
-   SKIN SANDBOX — E2E (SANDBOX-0: 빈 프레임 + origin 격리)
+   SKIN SANDBOX — E2E (SANDBOX-0 격리 + SANDBOX-1 HOME 렌더)
 
    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §E SANDBOX-0 / §D-4
 
@@ -15,9 +15,26 @@
      [flag]      플래그 OFF면 iframe이 아예 생기지 않는가
      [ready]     READY -> ACK 왕복
      [reject]    위조 origin / 다른 source / 알 수 없는 type
-     [isolate]   parent DOM · parent localStorage · fetch
+     [isolate]   parent DOM · parent localStorage · fetch · supabase 전역
      [mobile]    390px 가로 넘침
      [regress]   메인 origin의 기존 응답이 그대로인가
+
+   SANDBOX-1에서 더해진 것
+     [render]    READY -> ACK -> RENDER_HOME -> RENDERED 왕복,
+                 native 렌더와 **같은 innerHTML 구조**,
+                 HOME의 공개 데이터(제목·프로필·카테고리·최근 글·
+                 발췌 카드)가 실제로 프레임에 그려지는가
+     [payload]   wire 위의 data에 금지 필드가 하나도 없는가
+                 (프레임 realm에서 도착한 값을 직접 읽는다)
+     [height]    콘텐츠 길이에 iframe 높이가 따라오는가,
+                 프레임 안에 스크롤 막대가 없는가
+     [fallback]  renderMode 없음 / origin 없음 / READY timeout
+     [home]      **진짜 index.html** 로 공개 HOME 경로를 탄다 —
+                 renderMode 없음/플래그 OFF 는 오늘과 같고,
+                 sandbox 는 #themeMount 안 cross-origin iframe 이며,
+                 프레임이 안 뜨면 같은 스킨을 native 로 그린다
+     [package]   Import -> Export -> Import 왕복에서 renderMode 보존,
+                 모르는 renderMode는 reason:"render-mode"로 거부
 
    ★ 두 origin을 어떻게 만드는가
    포트가 다르면 origin이 다르다(같은 localhost라도). 부모는 8957,
@@ -30,6 +47,7 @@
      node skin/sandbox/skin-sandbox-e2e-test.mjs
      node skin/sandbox/skin-sandbox-e2e-test.mjs --browser=webkit
      node skin/sandbox/skin-sandbox-e2e-test.mjs --only=host
+     node skin/sandbox/skin-sandbox-e2e-test.mjs --only=render
 ========================================================== */
 
 import fs from "node:fs";
@@ -434,12 +452,53 @@ async function runHost() {
     supabaseOnSandbox.status === 404,
     String(supabaseOnSandbox.status));
 
+  /*
+    ★ SANDBOX-1에서 바뀐 곳. SANDBOX-0에서는 이 경로가 404였다
+    (그때는 빈 프레임이라 렌더러가 필요 없었다). 지금은 공개 화면과
+    **같은 렌더러**를 프레임 안에서 쓰므로 200이어야 한다.
+    대신 바로 아래에서 앱/인증/Studio/다른 skin 파일이 여전히
+    404라는 것을 확인한다 — allowlist가 느슨해진 것이 아니라
+    정확히 렌더러 사슬만 늘어난 것이다.
+  */
+
   const renderOnSandbox =
     await rawRequest(SANDBOX_PORT, "/skin/skin-render.js");
 
-  check("[host] sandbox origin 에서 skin-render.js 도 아직 404 (SANDBOX-1 범위)",
-    renderOnSandbox.status === 404,
+  check("[host] ★ SANDBOX-1: sandbox origin 에서 렌더러는 200",
+    renderOnSandbox.status === 200,
     String(renderOnSandbox.status));
+
+  for (const allowed of [
+    "/skin/skin-css-validate.js",
+    "/skin/skin-sanitize.js",
+    "/core/content-width.js",
+    "/core/content-width.css"
+  ]) {
+
+    const res = await rawRequest(SANDBOX_PORT, allowed);
+
+    check(`[host] 렌더러가 끌어오는 ${allowed} 도 200`,
+      res.status === 200, String(res.status));
+
+  }
+
+  for (const denied of [
+    "/skin/skin-home.js",
+    "/skin/skin-context.js",
+    "/skin/skin-template.js",
+    "/skin/skin-link-nav.js",
+    "/studio/studio-preview.js",
+    "/admin/admin.js",
+    "/auth/",
+    "/skin/test-skins/imory-sandbox-home-v1.json"
+  ]) {
+
+    const res = await rawRequestFollow(SANDBOX_PORT, denied);
+
+    check(`[host] ★ sandbox origin 에서 ${denied} 는 여전히 404`,
+      res.status === 404, String(res.status));
+
+  }
 
 
   const configOnSandbox =
@@ -514,8 +573,42 @@ async function runCsp() {
   check("[csp] form-action 'none'", has("form-action 'none'"));
   check("[csp] frame-ancestors 가 부모 origin 하나",
     has(`frame-ancestors ${PARENT_ORIGIN}`), csp);
-  check("[csp] script-src 에 unsafe-inline / unsafe-eval 이 없다",
+  check("[csp] ★ script-src 에 unsafe-inline / unsafe-eval 이 없다",
     csp.indexOf("unsafe-inline") === -1 && csp.indexOf("unsafe-eval") === -1);
+
+
+  /* =====================================================
+     SANDBOX-1에서 넓어진 세 칸. 실제 응답 헤더로 확인한다 —
+     buildSandboxCsp()를 다시 부르는 것이 아니라 **배포되는 그
+     함수가 실제로 내보낸 헤더**를 본다.
+  ====================================================== */
+
+  const scriptSrc =
+    csp.split("; ").find(d => d.indexOf("script-src ") === 0) || "";
+
+  check("[csp] ★ script-src 의 바깥 출처는 CSS 파서 파일 하나뿐이다",
+    (scriptSrc.match(/https?:\/\//g) || []).length === 1 &&
+    scriptSrc.indexOf("@eslint/css-tree@") !== -1 &&
+    scriptSrc.endsWith(".js"),
+    scriptSrc);
+
+  const imgSrc =
+    csp.split("; ").find(d => d.indexOf("img-src ") === 0) || "";
+
+  check("[csp] ★ img-src 가 https: 전체를 열지 않는다",
+    imgSrc.indexOf("https:") !== imgSrc.length - "https:".length &&
+    !/(^|\s)https:(\s|$)/.test(imgSrc) &&
+    imgSrc.indexOf("data:") !== -1,
+    imgSrc);
+
+  const fontSrc =
+    csp.split("; ").find(d => d.indexOf("font-src ") === 0) || "";
+
+  check("[csp] ★ font-src 도 https: 전체를 열지 않는다",
+    !/(^|\s)https:(\s|$)/.test(fontSrc), fontSrc);
+
+  check("[csp] ★ style-src 는 self + nonce (unsafe-inline 아님)",
+    /style-src 'self' 'nonce-[A-Za-z0-9_-]+'/.test(csp), csp);
 
   const nonceMatch =
     csp.match(/'nonce-([A-Za-z0-9_-]+)'/);
@@ -526,6 +619,16 @@ async function runCsp() {
     Boolean(nonceMatch) &&
     first.body.includes(`<script nonce="${nonceMatch[1]}">`) &&
     first.body.includes(`<style nonce="${nonceMatch[1]}">`));
+
+  /*
+    import map은 문서에 글자로 적혀 있지 않다 — document.write로
+    만들어진다. 그 태그가 nonce를 받는지는 런타임에서만 보인다:
+    못 받으면 CSP가 막고, 그러면 정적 import가 ?v= 없이 나가거나
+    아예 실패해서 [render] 절이 통째로 실패한다.
+  */
+
+  check("[csp] 문서에 importmap 이 글자로 적혀 있지 않다 (런타임 생성)",
+    first.body.indexOf("type=\"importmap\"") === -1);
 
   check("[csp] frame 문서는 캐시되지 않는다 (nonce 가 매번 바뀐다)",
     (first.headers["cache-control"] || "").includes("no-store"),
@@ -675,12 +778,34 @@ async function runReady(browser) {
 
   check("[ready] 프레임 문서가 로드됐다", Boolean(frame));
 
-  const rootText =
-    await frame.locator("#sandboxFrameRoot").textContent();
+  /*
+    ★ SANDBOX-1에서 바뀐 곳. SANDBOX-0의 프레임은 진단 문구
+    ("SANDBOX FRAME READY")를 화면에 찍었다. 이제 그 자리는 스킨이
+    그려질 **렌더 컨테이너**라 처음에는 비어 있어야 한다 —
+    렌더 전에 사용자에게 보일 문구가 있으면 그것이 스킨 위에
+    깜빡인다. 준비 상태는 텍스트가 아니라 속성으로 남긴다.
+  */
 
-  check("[ready] ★ 화면에 SANDBOX FRAME READY 만 보인다",
-    rootText.trim() === "SANDBOX FRAME READY",
-    JSON.stringify(rootText));
+  await frame.waitForFunction(
+    () => document.getElementById("sandboxFrameRoot")
+      .getAttribute("data-imory-sandbox-state") !== null,
+    null,
+    { timeout: 5000 }
+  );
+
+  check("[ready] ★ 렌더 컨테이너는 상태 속성으로만 말한다 (문구 없음)",
+    ["ready", "rendered"].indexOf(
+      await frame.evaluate(
+        () => document.getElementById("sandboxFrameRoot")
+          .getAttribute("data-imory-sandbox-state")
+      )
+    ) !== -1);
+
+  check("[ready] 오류 문구는 숨어 있다",
+    (await frame.evaluate(
+      () => document.getElementById("sandboxFrameNotice")
+        .getAttribute("data-visible")
+    )) === null);
 
   await frame.waitForFunction(
     () => document.getElementById("sandboxFrameRoot")
@@ -837,9 +962,15 @@ async function runReject(browser) {
     (await frame.evaluate(() => window.__imorySandboxLastReason)) === "unknown-type",
     String(await frame.evaluate(() => window.__imorySandboxLastReason)));
 
-  check("[reject] 거부해도 화면 문구는 그대로다 (프로빙 신호 없음)",
-    (await frame.locator("#sandboxFrameRoot").textContent()).trim()
-      === "SANDBOX FRAME READY");
+  check("[reject] 거부해도 화면이 그대로다 (프로빙 신호 없음)",
+    (await frame.evaluate(
+      () => document.getElementById("sandboxFrameRoot")
+        .getAttribute("data-imory-sandbox-state")
+    )) === "rendered" &&
+    (await frame.evaluate(
+      () => document.getElementById("sandboxFrameNotice")
+        .getAttribute("data-visible")
+    )) === null);
 
   await ctx.close();
 
@@ -1188,6 +1319,993 @@ async function runEnv() {
 }
 
 
+
+/* =========================================================
+   SANDBOX-1 — HOME 렌더
+
+   [render]   READY -> ACK -> RENDER_HOME -> RENDERED 왕복과
+              그 결과가 native 렌더와 같은 구조인가
+   [payload]  실제로 건너간 data 에 금지 필드가 없는가
+   [height]   콘텐츠 길이에 iframe 높이가 따라오는가
+   [fallback] 폴백 세 경우
+   [package]  renderMode 의 Import/Export 왕복
+========================================================== */
+
+const RENDER_QUERY =
+  ON_QUERY + "&native=1";
+
+
+/* 프레임 안에 스킨이 실제로 그려질 때까지 */
+
+async function waitForSandboxRender(page) {
+
+  const frame =
+    page.frames().find(f => f.url().startsWith(SANDBOX_ORIGIN));
+
+  if (!frame) {
+    return null;
+  }
+
+  await frame.waitForFunction(
+    () => document.getElementById("sandboxFrameRoot")
+      .getAttribute("data-imory-sandbox-state") === "rendered",
+    null,
+    { timeout: 15000 }
+  );
+
+  return frame;
+
+}
+
+
+/*
+  비교용 정규화 — 두 화면이 **설계상** 다르게 찍는 것만 지운다.
+
+    · imory-skin-root-i<N>  인스턴스 scope class
+      renderSkin() 호출마다 올라가는 번호다. 같은 문서에 두 스킨이
+      동시에 떠도 CSS 가 서로 덮지 않게 하는 장치라(skin-render.js),
+      두 화면에서 같을 수가 없다.
+    · keyframes namespace i<N>-  같은 이유.
+    · <style nonce="">  sandbox 프레임의 style 요소만 nonce 를 받는다
+      (CSP style-src 가 nonce 만 허용하므로). 브라우저는 nonce 속성의
+      **값을 감추므로** 직렬화하면 빈 문자열로 남는다 — 그래서 속성
+      자체를 지운다. 실제로 nonce 가 들어갔는지는 아래에서 IDL 값으로
+      따로 확인한다.
+
+  이 셋을 빼면 두 화면의 outerHTML 은 **글자 단위로** 같아야 한다.
+*/
+
+const NORMALIZE_SKIN_HTML =
+  '(html) => html' +
+  '.replace(/imory-skin-root-i\\d+/g, "imory-skin-root-iX")' +
+  '.replace(/\\bi\\d+-/g, "iX-")' +
+  '.replace(/ nonce="[^"]*"/g, "")';
+
+
+function readSkinRootHtml(selector) {
+
+  return '(() => {' +
+    '  const norm = ' + NORMALIZE_SKIN_HTML + ';' +
+    '  const root = document.querySelector("' + selector + '");' +
+    '  return root ? norm(root.outerHTML) : "";' +
+    '})()';
+
+}
+
+
+async function openRenderHarness(browser, query, viewport) {
+
+  const ctx = await browser.newContext({
+    viewport: viewport || { width: 900, height: 900 }
+  });
+
+  const page = await ctx.newPage();
+
+  const consoleErrors = [];
+  page.on("console", msg => {
+    if (msg.type() === "error") consoleErrors.push(msg.text());
+  });
+
+  await page.goto(PARENT_ORIGIN + HARNESS_PATH + query, { waitUntil: "load" });
+
+  await page.waitForFunction(
+    () => window.__sandboxHarnessResult !== undefined,
+    null,
+    { timeout: 20000 }
+  );
+
+  return { ctx, page, consoleErrors };
+
+}
+
+
+async function runRender(browser) {
+
+  console.log("\n[render] HOME 렌더 (READY -> ACK -> RENDER_HOME -> RENDERED)");
+
+  const { ctx, page, consoleErrors } =
+    await openRenderHarness(browser, RENDER_QUERY);
+
+  check("[render] mount 가 성공했다",
+    (await page.evaluate(() => window.__sandboxHarnessResult.ok)) === true,
+    await page.evaluate(() => window.__sandboxHarnessResult.reason || ""));
+
+  const frame = await waitForSandboxRender(page);
+
+  check("[render] ★ 프레임이 렌더를 끝냈다 (RENDERED 왕복 성립)", Boolean(frame));
+
+  if (!frame) {
+    await ctx.close();
+    return null;
+  }
+
+
+  /* --- 공개 데이터가 실제로 그려졌는가 ------------------ */
+
+  const frameText =
+    await frame.locator("#sandboxFrameRoot").innerText();
+
+  const expectations = [
+    ["블로그 제목", "SANDBOX DEMO"],
+    ["프로필 닉네임", "주인장"],
+    ["프로필 소개", "작은 소개"],
+    ["카테고리 이름", "TXT"],
+    ["갤러리 카테고리", "PIC"],
+    ["최근 글 제목", "첫 번째 글"],
+    ["최근 글 날짜", "2026.09.01"],
+    ["발췌 카드", "밑줄 그은 문장 하나"],
+    ["발췌 메모", "여기에 메모"],
+    ["발췌 원문 위치", "TXT > 2002 > 첫 번째 글"]
+  ];
+
+  for (const [label, needle] of expectations) {
+    check("[render] ★ HOME 의 " + label + " 이(가) 프레임에 그려졌다",
+      frameText.includes(needle), needle);
+  }
+
+
+  /* --- CSS 가 실제로 적용됐는가 -------------------------- */
+
+  const titleSize =
+    await frame.evaluate(
+      () => getComputedStyle(document.querySelector(".sb-title")).fontSize
+    );
+
+  check("[render] ★ 스킨 CSS 가 적용됐다 (동적 style 이 CSP 에 막히지 않았다)",
+    titleSize === "22px", titleSize);
+
+  const navBorder =
+    await frame.evaluate(
+      () => getComputedStyle(
+        document.querySelector('.sb-nav-link[data-kind="gallery"]')
+      ).borderTopStyle
+    );
+
+  check("[render] ★ data-imory-kind 가 CSS 로 이어진다 (재료 일치)",
+    navBorder === "dashed", navBorder);
+
+  const cardColor =
+    await frame.evaluate(
+      () => document.querySelector(".sb-hl-card").style.getPropertyValue("--imory-color")
+    );
+
+  check("[render] ★ data-imory-color 가 CSS 변수로 들어갔다 (CSSOM 쓰기는 CSP 대상 아님)",
+    cardColor.trim() === "#f6e0c8", cardColor);
+
+  const widthContract =
+    await frame.evaluate(
+      () => Boolean(document.querySelector('link[href*="content-width.css"]'))
+    );
+
+  check("[render] 폭 계약 stylesheet 가 프레임에도 걸린다", widthContract);
+
+  /*
+    ★ 스킨 CSS 가 적용된 것이 'unsafe-inline' 덕분이 아니라 **nonce**
+    덕분이라는 증거. renderSkin()의 styleNonce 인자가 실제로 그
+    요소에 닿았는지 IDL 값으로 본다(속성 값은 브라우저가 감춘다).
+  */
+
+  const styleNonce =
+    await frame.evaluate(
+      () => document.querySelector("#sandboxFrameRoot .imory-skin-root style").nonce || ""
+    );
+
+  check("[render] ★ 스킨 style 요소가 프레임의 nonce 를 받았다",
+    styleNonce.length > 10, styleNonce ? "(있음)" : "(없음)");
+
+  const nativeStyleNonce =
+    await page.evaluate(
+      () => document.querySelector("#nativeMount .imory-skin-root style").nonce || ""
+    );
+
+  check("[render] ★ native 렌더는 nonce 를 받지 않는다 (기존 호출자 무변경)",
+    nativeStyleNonce === "", nativeStyleNonce);
+
+
+  /* --- native 와 같은 구조인가 --------------------------- */
+
+  const nativeHtml =
+    await page.evaluate(readSkinRootHtml("#nativeMount .imory-skin-root"));
+
+  const sandboxHtml =
+    await frame.evaluate(readSkinRootHtml("#sandboxFrameRoot .imory-skin-root"));
+
+  check("[render] native 쪽도 같은 스킨을 그렸다", nativeHtml.length > 100);
+
+  check("[render] ★ native 와 sandbox 의 innerHTML 구조가 같다",
+    nativeHtml === sandboxHtml,
+    nativeHtml === sandboxHtml
+      ? ""
+      : (() => {
+          let i = 0;
+          while (i < nativeHtml.length && nativeHtml[i] === sandboxHtml[i]) i += 1;
+          return "첫 차이 " + i + "자 부근: native [" +
+            nativeHtml.slice(i - 40, i + 40) + "] / sandbox [" +
+            sandboxHtml.slice(i - 40, i + 40) + "]";
+        })());
+
+
+  const nativeWidth =
+    await page.evaluate(
+      () => Math.round(
+        document.querySelector("#nativeMount .imory-skin-root").getBoundingClientRect().width
+      )
+    );
+
+  const sandboxWidth =
+    await frame.evaluate(
+      () => Math.round(
+        document.querySelector("#sandboxFrameRoot .imory-skin-root").getBoundingClientRect().width
+      )
+    );
+
+  check("[render] ★ 스킨 프레임의 폭이 두 화면에서 같다",
+    Math.abs(nativeWidth - sandboxWidth) <= 1,
+    "native " + nativeWidth + " / sandbox " + sandboxWidth);
+
+
+  /* --- 저자 JS 는 실행되지 않는다 ------------------------ */
+
+  check("[render] ★ 스킨이 그린 DOM 에 script 요소가 없다",
+    (await frame.evaluate(
+      () => document.querySelectorAll("#sandboxFrameRoot script").length
+    )) === 0);
+
+  check("[render] CSP 위반 콘솔 오류가 없다",
+    !consoleErrors.some(t => /Content Security Policy/i.test(t)),
+    consoleErrors.filter(t => /Content Security Policy/i.test(t)).join(" | "));
+
+
+  /* --- 링크는 이번 라운드에서 비활성 ---------------------- */
+
+  const urlBefore = page.url();
+
+  await frame.locator(".sb-recent-link").first().click();
+  await page.waitForTimeout(300);
+
+  check("[render] ★ 프레임 안의 링크는 눌러도 아무 일이 없다 (네비게이션은 SANDBOX-2)",
+    page.url() === urlBefore &&
+    Boolean(page.frames().find(f => f.url().startsWith(SANDBOX_ORIGIN))),
+    page.url());
+
+  return { ctx, page, frame };
+
+}
+
+
+/* =========================================================
+   [payload] 실제로 건너간 data
+========================================================== */
+
+async function runPayload(browser) {
+
+  console.log("\n[payload] wire 위의 data");
+
+  const { ctx, page } =
+    await openRenderHarness(browser, RENDER_QUERY);
+
+  const frame = await waitForSandboxRender(page);
+
+  if (!frame) {
+    check("[payload] 프레임이 렌더를 끝냈다", false);
+    await ctx.close();
+    return;
+  }
+
+
+  /*
+    ★ 프레임 realm 안에서 **실제로 도착한 값**을 읽는다. 부모의
+    투영 결과를 믿는 것이 아니라 wire 를 직접 본다.
+  */
+
+  const received =
+    await frame.evaluate(
+      () => JSON.stringify(window.__imorySandboxLastReceived || null)
+    );
+
+  check("[payload] 프레임이 data 를 받았다",
+    Boolean(received) && received !== "null");
+
+  const receivedKeys =
+    await frame.evaluate(
+      () => Object.keys(window.__imorySandboxLastReceived || {}).sort().join(",")
+    );
+
+  check("[payload] ★ 도착한 최상위 키가 계약 그대로다",
+    receivedKeys === [
+      "banners", "contract", "home", "images", "navigation",
+      "page", "pageType", "profile", "site", "viewer"
+    ].join(","),
+    receivedKeys);
+
+
+  const forbidden = [
+    ["사용자 UUID", "11111111-2222-3333-4444-555555555555"],
+    ["access token", "eyJhbGciOi.FAKE.TOKEN"],
+    ["refresh token", "FAKE-REFRESH"],
+    ["이메일", "owner@example.com"],
+    ["비밀글 본문", "비밀글 본문 원문"],
+    ["skin row id", "skin-row-id"],
+    ["version row id", "version-row-id"],
+    ["관리자 링크", "/demo/admin"],
+    ["작성 링크", "write=1"]
+  ];
+
+  for (const [label, needle] of forbidden) {
+    check("[payload] ★ " + label + " 이(가) 프레임에 도착하지 않았다",
+      received.indexOf(needle) === -1);
+  }
+
+  check("[payload] ★ viewer 는 방문자 값으로 고정돼 있다",
+    (await frame.evaluate(
+      () => JSON.stringify(window.__imorySandboxLastReceived.viewer)
+    )) === JSON.stringify({
+      isOwner: false, writeHref: null, adminHref: null, manageHref: null,
+      toolsHref: null, highlightHref: null,
+      canManageHighlights: false, canManageMemos: false
+    }));
+
+  check("[payload] ★ 함수가 하나도 도착하지 않았다",
+    (await frame.evaluate(() => {
+      const walk = (v, depth) => {
+        if (typeof v === "function") return false;
+        if (depth > 6 || v === null || typeof v !== "object") return true;
+        return Object.values(v).every(x => walk(x, depth + 1));
+      };
+      return walk(window.__imorySandboxLastReceived, 0);
+    })) === true);
+
+  const projectedOnParent =
+    await page.evaluate(() => JSON.stringify(window.__sandboxProjected));
+
+  check("[payload] 부모가 고른 것과 프레임에 도착한 것이 같다",
+    projectedOnParent === received);
+
+  await ctx.close();
+
+}
+
+
+/* =========================================================
+   [height] 높이와 이중 스크롤
+========================================================== */
+
+async function runHeight(browser) {
+
+  console.log("\n[height] 높이 반영 · 이중 스크롤 없음");
+
+  async function measure(query, viewport) {
+
+    const { ctx, page } =
+      await openRenderHarness(browser, query, viewport);
+
+    const frame = await waitForSandboxRender(page);
+
+    /* 높이 메시지가 한 바퀴 더 돌 시간 */
+    await page.waitForTimeout(400);
+
+    const iframeHeight =
+      await page.evaluate(() => {
+        const el = document.querySelector("iframe.imory-skin-sandbox-frame");
+        return el ? Math.round(el.getBoundingClientRect().height) : 0;
+      });
+
+    const contentHeight =
+      frame
+        ? await frame.evaluate(() => Math.round(
+            document.querySelector("#sandboxFrameRoot .imory-skin-root")
+              .getBoundingClientRect().height
+          ))
+        : 0;
+
+    const frameScroll =
+      frame
+        ? await frame.evaluate(() => ({
+            y: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+            x: document.documentElement.scrollWidth - document.documentElement.clientWidth
+          }))
+        : { y: 0, x: 0 };
+
+    return { ctx, page, frame, iframeHeight, contentHeight, frameScroll };
+
+  }
+
+
+  const short =
+    await measure(RENDER_QUERY, { width: 900, height: 900 });
+
+  check("[height] ★ iframe 높이가 콘텐츠 높이를 따라간다 (짧은 글)",
+    Math.abs(short.iframeHeight - short.contentHeight) <= 4,
+    "iframe " + short.iframeHeight + " / content " + short.contentHeight);
+
+  check("[height] iframe 이 초기 고정값(120px)에 머물지 않는다",
+    short.iframeHeight !== 120, String(short.iframeHeight));
+
+  check("[height] ★ 프레임 안에 세로 스크롤이 없다 (이중 스크롤 금지)",
+    short.frameScroll.y <= 1, String(short.frameScroll.y));
+
+  await short.ctx.close();
+
+
+  const tall =
+    await measure(RENDER_QUERY + "&tall=1", { width: 900, height: 900 });
+
+  check("[height] ★ 콘텐츠가 길어지면 iframe 도 함께 길어진다",
+    tall.iframeHeight > 1500 &&
+    Math.abs(tall.iframeHeight - tall.contentHeight) <= 4,
+    "iframe " + tall.iframeHeight + " / content " + tall.contentHeight);
+
+  check("[height] 긴 콘텐츠에서도 프레임 안에 세로 스크롤이 없다",
+    tall.frameScroll.y <= 1, String(tall.frameScroll.y));
+
+  check("[height] 긴 콘텐츠에서도 가로 넘침이 없다",
+    tall.frameScroll.x <= 0, String(tall.frameScroll.x));
+
+
+  /*
+    ★ 무한 높이 루프가 없는가 — 잠깐 기다린 뒤 값이 더 이상
+    움직이지 않아야 한다. 진동하면 여기서 다른 값이 나온다.
+  */
+
+  const settled1 =
+    await tall.page.evaluate(() =>
+      document.querySelector("iframe.imory-skin-sandbox-frame").style.height);
+
+  await tall.page.waitForTimeout(700);
+
+  const settled2 =
+    await tall.page.evaluate(() =>
+      document.querySelector("iframe.imory-skin-sandbox-frame").style.height);
+
+  check("[height] ★ 높이가 진동하지 않고 한 값에 멈춘다",
+    settled1 === settled2, settled1 + " -> " + settled2);
+
+  await tall.ctx.close();
+
+
+  const mobile =
+    await measure(RENDER_QUERY, { width: 390, height: 780 });
+
+  check("[height] 390px 에서도 높이가 맞는다",
+    Math.abs(mobile.iframeHeight - mobile.contentHeight) <= 4,
+    "iframe " + mobile.iframeHeight + " / content " + mobile.contentHeight);
+
+  check("[height] ★ 390px 에서 프레임 가로 넘침 0",
+    mobile.frameScroll.x <= 0, String(mobile.frameScroll.x));
+
+  const parentOverflow =
+    await mobile.page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+  check("[height] ★ 390px 에서 부모 가로 넘침 0",
+    parentOverflow <= 0, String(parentOverflow));
+
+  await mobile.ctx.close();
+
+}
+
+
+/* =========================================================
+   [fallback] 폴백
+========================================================== */
+
+async function runFallback(browser) {
+
+  console.log("\n[fallback] 폴백 경로");
+
+
+  /* --- renderMode 가 없으면 sandbox 경로를 타지 않는다 --- */
+
+  {
+    const { ctx, page } =
+      await openRenderHarness(browser, RENDER_QUERY + "&renderMode=native");
+
+    check("[fallback] ★ renderMode 가 없으면 native 로 판정된다",
+      (await page.evaluate(() => window.__sandboxHarnessResult.reason)) === "not-sandbox");
+
+    check("[fallback] ★ 그때 문서에 iframe 이 하나도 없다",
+      (await page.locator("iframe").count()) === 0);
+
+    check("[fallback] 그래도 native 렌더는 그대로 나온다",
+      (await page.locator("#nativeMount .imory-skin-root").count()) === 1);
+
+    await ctx.close();
+  }
+
+
+  /* --- frame origin 이 없으면 --- */
+
+  {
+    const { ctx, page } =
+      await openRenderHarness(browser, "?sandboxSkin=1&native=1");
+
+    check("[fallback] ★ frame origin 이 없으면 iframe 을 만들지 않는다",
+      (await page.evaluate(() => window.__sandboxHarnessResult.reason)) === "no-origin" &&
+      (await page.locator("iframe").count()) === 0);
+
+    await ctx.close();
+  }
+
+
+  /* --- READY 가 오지 않으면 (프레임 문서를 끊는다) --- */
+
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 900 } });
+    const page = await ctx.newPage();
+
+    /*
+      프레임 문서만 끊는다. origin 은 살아 있고 iframe 도 만들어지지만
+      READY 가 영영 오지 않는다 — 부모가 timeout 으로 폴백해야 한다.
+    */
+
+    await page.route(
+      SANDBOX_ORIGIN + "/skin/sandbox/frame*",
+      route => route.abort()
+    );
+
+    await page.goto(PARENT_ORIGIN + HARNESS_PATH + RENDER_QUERY, { waitUntil: "load" });
+
+    await page.waitForFunction(
+      () => window.__sandboxHarnessResult !== undefined,
+      null,
+      { timeout: 30000 }
+    );
+
+    check("[fallback] ★ READY 가 안 오면 timeout 으로 끝난다",
+      (await page.evaluate(() => window.__sandboxHarnessResult.reason)) === "timeout",
+      await page.evaluate(() => window.__sandboxHarnessResult.reason));
+
+    check("[fallback] ★ 그때 만들었던 iframe 을 치운다 (백지를 남기지 않는다)",
+      (await page.locator("iframe.imory-skin-sandbox-frame").count()) === 0);
+
+    check("[fallback] 다시 시도하지 않는다 (iframe 총 0개)",
+      (await page.locator("iframe").count()) === 0);
+
+    await ctx.close();
+  }
+
+}
+
+
+/* =========================================================
+   [package] renderMode 의 Import / Export 왕복
+
+   실제 skin/skin-package-import.js · skin-package-export.js 를
+   브라우저에서 돌린다(둘 다 classic script + DOM sanitizer 의존).
+========================================================== */
+
+async function runPackage(browser) {
+
+  console.log("\n[package] renderMode Import/Export 왕복");
+
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+
+  await page.goto(
+    PARENT_ORIGIN + "/skin/sandbox/skin-sandbox-package-test.html",
+    { waitUntil: "load" }
+  );
+
+  await page.waitForFunction(
+    () => window.__packageRoundtripResult !== undefined,
+    null,
+    { timeout: 20000 }
+  );
+
+  const r =
+    await page.evaluate(() => window.__packageRoundtripResult);
+
+  check("[package] fixture 스킨이 Import 를 통과한다",
+    Boolean(r.imported) && r.imported.ok === true,
+    r.imported ? (r.imported.message || "") : "(없음)");
+
+  check("[package] ★ Import 결과에 renderMode 가 살아 있다",
+    Boolean(r.imported) && r.imported.renderMode === "sandbox",
+    r.imported ? String(r.imported.renderMode) : "");
+
+  check("[package] ★ Export 가 renderMode 를 파일에 싣는다",
+    Boolean(r.exported) && r.exported.renderMode === "sandbox",
+    r.exported ? String(r.exported.renderMode) : "");
+
+  check("[package] ★ Import -> Export -> Import 왕복에서 값이 그대로다",
+    Boolean(r.reimported) && r.reimported.ok === true &&
+    r.reimported.renderMode === "sandbox",
+    r.reimported ? String(r.reimported.renderMode) : "");
+
+  check("[package] ★ 왕복 뒤에도 templates 와 css 가 같다",
+    r.roundtripSame === true, r.roundtripDiff || "");
+
+  check("[package] renderMode 가 없는 스킨은 결과에도 키가 없다",
+    Boolean(r.nativeImport) && r.nativeImport.ok === true &&
+    r.nativeImport.hasRenderModeKey === false);
+
+  check("[package] renderMode:'native' 를 적은 파일은 그 값이 보존된다",
+    Boolean(r.explicitNative) && r.explicitNative.ok === true &&
+    r.explicitNative.renderMode === "native");
+
+  check('[package] ★ 모르는 renderMode 는 reason:"render-mode" 로 거부된다',
+    Boolean(r.weird) && r.weird.ok === false && r.weird.reason === "render-mode",
+    r.weird ? r.weird.ok + " / " + r.weird.reason : "");
+
+  check("[package] ★ 문자열이 아닌 renderMode 도 거부된다",
+    Array.isArray(r.nonString) &&
+    r.nonString.length > 0 &&
+    r.nonString.every(x => x.ok === false && x.reason === "render-mode"),
+    JSON.stringify(r.nonString));
+
+  check("[package] ★ 모르는 renderMode 는 Export 에도 실리지 않는다",
+    r.weirdExportHasKey === false);
+
+  await ctx.close();
+
+}
+
+
+
+/* =========================================================
+   [home] 공개 HOME 경로 — 하네스가 아니라 **진짜 index.html**
+
+   위 [render] 절은 host 모듈을 직접 불러 확인한다. 이 절은 그
+   위층, 즉 실제 공개 진입점이 sandbox 경로로 이어지는지를 본다:
+
+     index.html initHomeRenderer()
+       -> tryRenderPublishedSkinHome(ownerId)
+       -> skin/skin-home.js renderPublishedSkinHome()
+            get_published_skin RPC -> resolveSkinTemplate
+            -> buildSkinContext -> resolveSkinRenderMode
+            -> mountSandboxSkin()
+
+   Supabase 응답만 mock 하고 HTML/CSS/JS 는 저장소의 실제 파일을
+   그대로 쓴다(다른 skin e2e 와 같은 방식).
+========================================================== */
+
+const HOME_SLUG = "testuser";
+const HOME_OWNER_ID = "11111111-2222-3333-4444-555555555555";
+const SUPABASE_HOST = "vtwcuvouyipohfonfukj.supabase.co";
+
+const HOME_DB = {
+  profiles: [{
+    user_id: HOME_OWNER_ID, slug: HOME_SLUG, home_mode: "customize",
+    nickname: "주인장", bio: "작은 소개"
+  }],
+  site_settings: [
+    { user_id: HOME_OWNER_ID, key: "blog_title", value: "SANDBOX DEMO" },
+    { user_id: HOME_OWNER_ID, key: "favicon_url", value: "" }
+  ],
+  categories: [
+    { id: 1, user_id: HOME_OWNER_ID, name: "TXT", type: "post", sort_order: 1 },
+    { id: 2, user_id: HOME_OWNER_ID, name: "PIC", type: "gallery", sort_order: 2 }
+  ],
+  posts: [
+    { id: 101, user_id: HOME_OWNER_ID, category_id: 1, title: "첫 번째 글",
+      content_type: "text", visibility: "public",
+      created_at: "2026-09-01T02:00:00Z", quote_preset_id: null }
+  ],
+  post_contents: [],
+  banners: [],
+  quote_presets: []
+};
+
+const HOME_RESERVED_PARAMS =
+  new Set(["select", "order", "limit", "offset", "on_conflict", "columns"]);
+
+function homeQueryTable(table, params) {
+
+  let rows = (HOME_DB[table] || []).map(r => ({ ...r }));
+
+  for (const [key, raw] of params.entries()) {
+    if (HOME_RESERVED_PARAMS.has(key)) continue;
+    const m = /^(eq|neq|in|gt|gte|lt|lte)\.(.*)$/s.exec(raw);
+    if (!m) continue;
+    const [, op, val] = m;
+    if (op === "in") {
+      const list = val.replace(/^\(|\)$/g, "").split(",").map(v => v.replace(/^"|"$/g, ""));
+      rows = rows.filter(r => list.includes(String(r[key])));
+      continue;
+    }
+    rows = rows.filter(r => {
+      const cur = r[key];
+      if (op === "eq") return String(cur) === val;
+      if (op === "neq") return String(cur) !== val;
+      return true;
+    });
+  }
+
+  const limit = params.get("limit");
+  if (limit) rows = rows.slice(0, Number(limit));
+
+  const select = params.get("select");
+  if (select && select !== "*") {
+    const cols = select.split(",").map(s => s.trim()).filter(Boolean);
+    rows = rows.map(r => Object.fromEntries(cols.map(c => [c, r[c]])));
+  }
+
+  return rows;
+
+}
+
+
+async function installHomeSupabaseMock(page, skinPackage) {
+
+  await page.route("https://" + SUPABASE_HOST + "/**", async route => {
+
+    const req = route.request();
+    const url = new URL(req.url());
+
+    const headers = {
+      "access-control-allow-origin": "*",
+      "access-control-allow-headers": "*",
+      "access-control-expose-headers": "*"
+    };
+
+    if (req.method() === "OPTIONS") {
+      return route.fulfill({ status: 204, headers });
+    }
+
+    if (url.pathname.startsWith("/auth/v1")) {
+      return route.fulfill({
+        status: 401, headers, contentType: "application/json",
+        body: JSON.stringify({ message: "no session" })
+      });
+    }
+
+    if (url.pathname.startsWith("/rest/v1/rpc/get_published_skin")) {
+      return route.fulfill({
+        status: 200, headers, contentType: "application/json",
+        body: JSON.stringify({
+          skin: skinPackage,
+          schemaVersion: skinPackage.schemaVersion,
+          imageSlotValues: {}
+        })
+      });
+    }
+
+    if (url.pathname.startsWith("/rest/v1/rpc/")) {
+      return route.fulfill({
+        status: 200, headers, contentType: "application/json", body: "null"
+      });
+    }
+
+    if (url.pathname.startsWith("/rest/v1/")) {
+      const rows = homeQueryTable(
+        url.pathname.slice("/rest/v1/".length), url.searchParams
+      );
+      const single = (req.headers()["accept"] || "").includes("vnd.pgrst.object");
+      if (single && rows.length === 0) {
+        return route.fulfill({
+          status: 406, headers, contentType: "application/json",
+          body: JSON.stringify({ code: "PGRST116", message: "0 rows" })
+        });
+      }
+      return route.fulfill({
+        status: 200, headers,
+        contentType: single ? "application/vnd.pgrst.object+json" : "application/json",
+        body: JSON.stringify(single ? rows[0] : rows)
+      });
+    }
+
+    return route.fulfill({ status: 404, headers, body: "{}" });
+
+  });
+
+  /* 외부 잡음 차단 — supabase-js 번들(cdn.jsdelivr.net/npm)은 통과시킨다 */
+
+  for (const pattern of [
+    "https://fonts.googleapis.com/**",
+    "https://fonts.gstatic.com/**",
+    "https://cdn.jsdelivr.net/gh/**",
+    "https://unpkg.com/**"
+  ]) {
+    await page.route(pattern, r => r.abort());
+  }
+
+}
+
+
+async function openPublicHome(browser, skinPackage, query) {
+
+  const ctx = await browser.newContext({ viewport: { width: 900, height: 900 } });
+  const page = await ctx.newPage();
+
+  const pageErrors = [];
+  page.on("pageerror", err => pageErrors.push(String(err && err.message || err)));
+
+  await installHomeSupabaseMock(page, skinPackage);
+
+  await page.goto(
+    PARENT_ORIGIN + "/" + HOME_SLUG + "/" + (query || ""),
+    { waitUntil: "load" }
+  );
+
+  return { ctx, page, pageErrors };
+
+}
+
+
+async function runHome(browser) {
+
+  console.log("\n[home] 공개 HOME 경로 (실제 index.html)");
+
+  const sandboxPkg =
+    JSON.parse(
+      fs.readFileSync(
+        path.join(ROOT, "skin", "test-skins", "imory-sandbox-home-v1.json"),
+        "utf8"
+      )
+    );
+
+  const nativePkg =
+    JSON.parse(JSON.stringify(sandboxPkg));
+
+  delete nativePkg.renderMode;
+
+
+  /* --- 1. renderMode 없는 스킨: 오늘과 같은 경로 ---------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicHome(browser, nativePkg, ON_QUERY);
+
+    await page.waitForSelector("#themeMount .imory-skin-root", { timeout: 20000 });
+
+    check("[home] ★ renderMode 없는 스킨은 같은 문서에 그려진다 (오늘과 동일)",
+      (await page.locator("#themeMount .imory-skin-root").count()) === 1);
+
+    check("[home] ★ 그때 문서에 sandbox iframe 이 하나도 없다",
+      (await page.locator("iframe.imory-skin-sandbox-frame").count()) === 0);
+
+    check("[home] 공개 mount 계약(.theme-mount--skin)이 붙는다",
+      (await page.locator("#themeMount.theme-mount--skin").count()) === 1);
+
+    check("[home] 페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- 2. sandbox 스킨 + 플래그 OFF: native 로 그린다 ----- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicHome(browser, sandboxPkg, "");
+
+    await page.waitForSelector("#themeMount .imory-skin-root", { timeout: 20000 });
+
+    check("[home] ★ 플래그가 꺼져 있으면 sandbox 스킨도 native 로 그린다",
+      (await page.locator("#themeMount .imory-skin-root").count()) === 1 &&
+      (await page.locator("iframe.imory-skin-sandbox-frame").count()) === 0);
+
+    check("[home] ★ 즉 배포에 이 코드가 있어도 공개 화면이 바뀌지 않는다",
+      (await page.locator("#themeMount.theme-mount--skin").count()) === 1);
+
+    check("[home] 페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- 3. sandbox 스킨 + 플래그 ON: 프레임에 그린다 ------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicHome(browser, sandboxPkg, ON_QUERY);
+
+    await page.waitForSelector("iframe.imory-skin-sandbox-frame", { timeout: 20000 });
+
+    check("[home] ★ sandbox 스킨은 #themeMount 안에 cross-origin iframe 으로 뜬다",
+      (await page.locator("#themeMount iframe.imory-skin-sandbox-frame").count()) === 1);
+
+    check("[home] 그 iframe 의 src 가 frame origin 이다",
+      ((await page.locator("iframe.imory-skin-sandbox-frame").getAttribute("src")) || "")
+        .startsWith(SANDBOX_ORIGIN));
+
+    check("[home] ★ 같은 문서에는 스킨이 그려지지 않는다 (중복 렌더 없음)",
+      (await page.locator("#themeMount > .imory-skin-root").count()) === 0);
+
+    const frame = await waitForSandboxRender(page);
+
+    check("[home] ★ 프레임이 렌더를 끝냈다", Boolean(frame));
+
+    if (frame) {
+
+      const text =
+        await frame.locator("#sandboxFrameRoot").innerText();
+
+      check("[home] ★ 실제 DB(mock) 의 블로그 제목이 프레임에 그려졌다",
+        text.includes("SANDBOX DEMO"), text.slice(0, 60));
+
+      check("[home] ★ 실제 카테고리 이름이 프레임에 그려졌다",
+        text.includes("TXT") && text.includes("PIC"));
+
+      check("[home] ★ 실제 글 제목이 프레임에 그려졌다",
+        text.includes("첫 번째 글"));
+
+      check("[home] ★ 프레임에 supabase 전역이 없다",
+        (await frame.evaluate(() => typeof window.supabase)) === "undefined" &&
+        (await frame.evaluate(() => typeof window.supabaseClient)) === "undefined");
+
+      check("[home] ★ 프레임 localStorage 에 Imory 세션 키가 없다",
+        (await frame.evaluate(() => {
+          try { return Object.keys(localStorage).length; }
+          catch (err) { return -1; }
+        })) <= 0);
+
+    }
+
+    check("[home] 공개 mount 계약(.theme-mount--skin)이 그대로 붙는다",
+      (await page.locator("#themeMount.theme-mount--skin").count()) === 1);
+
+    check("[home] 부모 문서에 가로 넘침이 없다",
+      (await page.evaluate(() =>
+        document.documentElement.scrollWidth - document.documentElement.clientWidth)) <= 0);
+
+    check("[home] 페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* --- 4. 프레임이 안 뜨면 같은 스킨을 native 로 --------- */
+
+  {
+    const ctx = await browser.newContext({ viewport: { width: 900, height: 900 } });
+    const page = await ctx.newPage();
+
+    const pageErrors = [];
+    page.on("pageerror", err => pageErrors.push(String(err && err.message || err)));
+
+    await installHomeSupabaseMock(page, sandboxPkg);
+
+    await page.route(
+      SANDBOX_ORIGIN + "/skin/sandbox/frame*",
+      route => route.abort()
+    );
+
+    await page.goto(
+      PARENT_ORIGIN + "/" + HOME_SLUG + "/" + ON_QUERY,
+      { waitUntil: "load" }
+    );
+
+    await page.waitForSelector("#themeMount .imory-skin-root", { timeout: 30000 });
+
+    check("[home] ★ 프레임이 안 뜨면 같은 스킨을 native 로 그린다 (백지 아님)",
+      (await page.locator("#themeMount .imory-skin-root").count()) === 1);
+
+    check("[home] ★ 그때 iframe 을 남기지 않는다",
+      (await page.locator("iframe.imory-skin-sandbox-frame").count()) === 0);
+
+    check("[home] ★ 폴백 화면에도 실제 데이터가 들어 있다",
+      (await page.locator("#themeMount .imory-skin-root").innerText())
+        .includes("SANDBOX DEMO"));
+
+    check("[home] 페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
+
+    await ctx.close();
+  }
+
+}
+
+
 /* =========================================================
    RUN
 ========================================================== */
@@ -1200,7 +2318,7 @@ async function runEnv() {
   const sandboxServer = await startServer(SANDBOX_PORT);
 
   console.log(
-    `SKIN SANDBOX E2E (SANDBOX-0) — ${BROWSER}\n` +
+    `SKIN SANDBOX E2E (SANDBOX-0 + SANDBOX-1) — ${BROWSER}\n` +
     `  parent : ${PARENT_ORIGIN}\n` +
     `  frame  : ${SANDBOX_ORIGIN}`
   );
@@ -1221,6 +2339,20 @@ async function runEnv() {
     if (shouldRun("reject")) await runReject(browser);
     if (shouldRun("isolate")) await runIsolate(browser);
     if (shouldRun("mobile")) await runMobile(browser);
+
+    /* --- SANDBOX-1 --- */
+
+    if (shouldRun("render")) {
+      const r = await runRender(browser);
+      if (r) await r.ctx.close();
+    }
+
+    if (shouldRun("payload")) await runPayload(browser);
+    if (shouldRun("height")) await runHeight(browser);
+    if (shouldRun("fallback")) await runFallback(browser);
+    if (shouldRun("package")) await runPackage(browser);
+    if (shouldRun("home")) await runHome(browser);
+
     if (shouldRun("regress")) await runRegress();
     if (shouldRun("env")) await runEnv();
 

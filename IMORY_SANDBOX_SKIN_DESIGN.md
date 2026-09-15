@@ -1,9 +1,19 @@
 # IMORY SANDBOX SKIN — 0단계 조사 및 구현 설계
 
-**상태: 설계 전용 문서. 이 라운드에서 구현된 코드는 없다.**
-아래 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한 사실이고,
-"설계"는 아직 코드가 존재하지 않는 제안이다. 둘을 섞어 읽지 말 것
+**상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1).**
+§A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
+사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
+§G(SANDBOX-0)와 §H(SANDBOX-1)에만 적혀 있다.** 둘을 섞어 읽지 말 것
 (CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 / 남은 차이"를 구분한다).
+
+§A~§F 와 §H 가 어긋나는 지점 셋(설계가 나중에 바뀐 곳):
+
+| 어긋난 곳 | 설계(§A~§F) | 실제(§H) |
+| --- | --- | --- |
+| 메시지 이름 | §D-2 `IMORY_READY` / `IMORY_INIT` / `IMORY_ERROR` | `IMORY_FRAME_READY` / `IMORY_RENDER_HOME` / `IMORY_FRAME_ERROR` (§G-7 · §H-6 이 정본) |
+| style-src | §D-4 · §G-6 TODO: `'unsafe-inline'` 이 필요해진다 | **nonce 로 해결**했다 — `renderSkin({ styleNonce })` (§H-7) |
+| img/font-src | §F#6: 호스트 allowlist 를 하지 않는다(`https:` 전체) | **지금 쓰는 출처만** 열었다. 외부 자유 이미지·웹폰트는 다음 단계의 명시적 결정 (§H-7) |
+| viewer | §D-1: `isOwner` · `adminHref` · `writeHref` 를 보낸다 | 이 라운드는 **방문자 값으로 고정**(§H-5) |
 
 목표: 기존 `SkinPackage`·native 렌더링을 **한 byte도 바꾸지 않은 채**,
 `renderMode: "sandbox"`인 스킨만 별도 origin의 iframe에서 그리는 경로를
@@ -645,7 +655,7 @@ frame-ancestors https://imory.me;
 
 각 단계는 **혼자서 검증 가능**하고, 실패하면 그 단계만 되돌릴 수 있다.
 
-### SANDBOX-0 — origin과 빈 프레임 (코드 아주 적음)
+### SANDBOX-0 — origin과 빈 프레임 (코드 아주 적음) — **완료, §G 참고**
 
 - `skin/sandbox/frame.html` + `skin-sandbox-frame.js`가 `IMORY_READY`만 보낸다.
 - `_middleware.js` 호스트 분기 + CSP.
@@ -656,7 +666,7 @@ frame-ancestors https://imory.me;
   ⑤ 프레임 안에서 `parent.document` 접근이 SecurityError.
 - **DB도 스킨도 안 건드린다.** 이 단계가 통과하지 않으면 다음이 무의미하다.
 
-### SANDBOX-1 — HOME 한 장 (최소 프로토타입)
+### SANDBOX-1 — HOME 한 장 (최소 프로토타입) — **완료, §H 참고**
 
 - `renderMode` 계약 + `resolveSkinRenderMode()` + Import/Export 왕복.
 - `projectSkinContextForSandbox()` + `IMORY_INIT` + 프레임 안 `renderSkin()`.
@@ -728,8 +738,9 @@ frame-ancestors https://imory.me;
 
 ## G. SANDBOX-0 구현 기록 (2026-09-15)
 
-**상태: 이 절만 "현재 구현"이다.** 위의 A~F는 조사와 설계이고,
-아래 SANDBOX-1 지시문은 아직 코드가 없다(CLAUDE.md §5).
+**상태: 이 절과 §H 가 "현재 구현"이다.** 위의 A~F는 조사와 설계이다
+(CLAUDE.md §5). 문서 맨 끝의 SANDBOX-1 지시문은 **이미 수행된**
+작업 지시서이고, 그 결과는 §H에 있다.
 
 ### G-1. 이 라운드가 만든 것
 
@@ -1001,6 +1012,503 @@ connect-src를 열지 않는다. (`/cdn-cgi/*`는 우리 Function보다 앞단�
 Cloudflare 인프라 경로이고, `/cdn-cgi/rum` 자체는 이 호스트에서 404다.)
 
 
+---
+
+## H. SANDBOX-1 구현 기록 (2026-09-15)
+
+**상태: §G와 함께 "현재 구현"이다.** 위의 A~F는 조사와 설계이고,
+아래 §H는 실제로 저장소에 들어간 코드다(CLAUDE.md §5).
+
+이 라운드의 범위는 **HOME 한 장**이다. CATEGORY/POST/FOLDER/
+HIGHLIGHTS/BANNER, 네비게이션, 저자 JS, Studio Preview 통합은
+들어가지 않았다.
+
+### H-1. 만든 것 / 고친 것
+
+| 새 파일 | 역할 |
+| --- | --- |
+| `skin/sandbox/skin-sandbox-context.js` | classic. `projectSkinContextForSandbox()` / `isSandboxContextShape()`. **데이터 신뢰 경계**. |
+| `skin/test-skins/imory-sandbox-home-v1.json` | `renderMode:"sandbox"` fixture 스킨(저자 JS 없음). |
+| `skin/sandbox/skin-sandbox-package-test.html` | Import/Export 왕복 하네스(부모 origin 전용). |
+
+| 고친 파일 | 내용 |
+| --- | --- |
+| `skin/skin-template.js` | `resolveSkinRenderMode()` / `isKnownSkinRenderMode()` 추가. **기존 함수 무수정**. |
+| `skin/skin-package-import.js` | `renderMode` allowlist. 모르는 값은 `reason:"render-mode"`로 거부. |
+| `skin/skin-package-export.js` | `renderMode`를 export allowlist에 추가(아는 값만). |
+| `skin/skin-render.js` | **선택 인자** `styleNonce`. 넘기지 않는 호출자의 결과는 그대로. |
+| `skin/skin-home.js` | `resolveSkinTemplate()`+Context 조립 뒤, `renderSkin()` 바로 앞에 분기 한 곳. |
+| `index.html` | classic 3 + module 1 + `window.skinSandboxHostReady`. |
+| `core/lib/build-version.js` | `writeVersionedImportMap(paths, nonce)` — **선택** 두 번째 인자. `APP_BUILD_VERSION` 상향. |
+| `skin/sandbox/frame.html` | 렌더러 사슬 + import map + nonce 전달. 진단 문구 제거(렌더 컨테이너가 됐다). |
+| `skin/sandbox/skin-sandbox-frame.js` | classic → **ES 모듈**. `renderSkin()` 호출 + 높이 보고. |
+| `skin/sandbox/skin-sandbox-host.js` | `mountSandboxSkin()` 추가(기존 `mountSandboxSkinFrame()`은 그대로 남아 하위 계층이 됐다). |
+| `skin/sandbox/skin-sandbox-protocol.js` | 메시지 4종 추가 + 타입별 값 검사(`check`). |
+| `core/lib/skin-sandbox-server.js` | 경로 allowlist 5개 추가, CSP 세 칸 확장, media origin 해석. |
+| `functions/_middleware.js` | `sandboxFrameHeaders()`에 config 전체를 넘긴다(한 줄). |
+| `skin/skin-sandbox-test.html` | 부모 하네스가 실제 렌더 경로를 돈다(native 비교 렌더 포함). |
+
+**DB migration 없음.** `renderMode`는 `skin_versions.content jsonb`
+안이라 스키마가 바뀌지 않는다. `schemaVersion`은 **1 그대로**다 —
+2로 올리면 renderMode를 모르는 기존 배포가 그 스킨을 legacy 화면으로
+통째로 폴백시킨다(§C).
+
+### H-2. native / sandbox 분기가 있는 곳 — **한 곳뿐이다**
+
+```
+skin/skin-home.js  renderPublishedSkinHome()
+  ├ get_published_skin RPC          ← 오늘과 동일
+  ├ schemaVersion 검사               ← 오늘과 동일
+  ├ resolveSkinTemplate(pkg,"home")  ← 오늘과 동일
+  ├ buildSkinContext(...)            ← 오늘과 동일
+  │
+  ├ resolveSkinRenderMode(pkg) === "sandbox"  ← ★ 유일한 분기
+  │     └ tryMountSandboxSkinHome() → true 면 여기서 끝
+  │
+  └ renderSkin({container, skin, context})    ← 오늘과 동일
+```
+
+조회·Context 조립이 분기 **위**에 있는 것이 핵심이다. sandbox는
+"그 결과를 어디에 그리는가"만 다르므로 조건문이 한 줄에 모인다.
+
+**다른 다섯 진입 모듈(`skin-category.js` / `skin-post.js` /
+`skin-folder.js` / `skin-highlights.js` / `skin-banner.js`)은 이
+라운드에서 한 줄도 고치지 않았다.**
+
+### H-3. CATEGORY/POST에서 sandbox 스킨은 어떻게 되는가
+
+**native로 그린다.** "미지원"이라며 화면을 비우지 않는다.
+
+근거: SANDBOX-1~2의 sandbox 패키지는 native 마크업 계약을 그대로
+지키므로(§C) native 렌더 결과가 정상 화면이다. 그리고 그 다섯
+모듈이 `renderMode`를 **아예 보지 않으므로**, 코드 경로가 이
+라운드 이전과 byte 단위로 같다 — "기존 native 스킨 렌더링 결과
+변경 금지"가 조건문이 아니라 **파일을 건드리지 않은 것**으로
+성립한다.
+
+> 남은 차이: 한 사이트 안에서 HOME만 cross-origin 프레임이고
+> 나머지는 같은 문서다. 사용자에게는 보이지 않지만(둘 다 같은
+> 스킨·같은 렌더러), HOME↔CATEGORY 이동이 문서 경계를 넘나든다.
+> SANDBOX-3이 나머지 화면을 가져가면 사라진다.
+
+### H-4. HOME payload 전체 schema
+
+`projectSkinContextForSandbox(context, "home")`의 결과가 그대로
+`IMORY_RENDER_HOME`의 `data`다. **원본 Context를 스프레드하지 않고
+알려진 키만 새 리터럴로 옮긴다** — 필드를 늘리려면 그 파일을 고쳐야
+하고, 고치는 사람이 "이것을 다른 origin에 보내도 되는가"를 한 번
+묻게 된다.
+
+```jsonc
+{
+  "contract": 1,
+  "pageType": "home",
+
+  "page": { "type", "isHome", "isCategory", "isPost",
+            "isBanner", "isFolder", "isHighlights", "isMemos" },
+            // ★ pageType 하나로 **다시 만든다**(정확히 하나만 true)
+
+  "site":    { "title", "slug", "faviconUrl", "description", "language" },
+  "profile": { "nickname", "bio", "avatarUrl" },
+
+  "navigation": {
+    "home":               navItem,
+    "categories":        [navItem],
+    "postCategories":    [navItem],
+    "galleryCategories": [navItem],
+    "textPostCategories":[navItem],
+    "bannerCategories":  [navItem],
+    "highlights":         highlightsNav,
+    "memos":              highlightsNav   // ★ 같은 객체(값이 갈라질 수 없다)
+  },
+
+  "banners": { "items": [ { "id", "imageUrl", "href", "alt" } ] },
+
+  "viewer": {                              // ★ 언제나 방문자 값 — H-5
+    "isOwner": false,
+    "writeHref": null, "adminHref": null, "manageHref": null,
+    "toolsHref": null, "highlightHref": null,
+    "canManageHighlights": false, "canManageMemos": false
+  },
+
+  "images": { "<slotName>": "https://… | null" },
+            // 슬롯 이름은 /^[A-Za-z][A-Za-z0-9_-]{0,63}$/ 만
+            // (그대로 옮기면 "__proto__" 같은 키가 섞일 수 있다)
+
+  "home": {
+    "highlights": {
+      "cards":    [highlightCard],
+      "featured": [highlightCard],   // ★ cards 에서 다시 만든다
+      "card":      highlightCard|null,
+      "hasCard", "count", "isEmpty", "hasError"
+    },
+    "recentPosts": [ { "id", "title", "href", "publishedAt",
+                       "publishedAtLabel", "categoryId",
+                       "categoryName", "isSecret" } ]
+  }
+}
+
+navItem        = { id, name, type, href, iconKind, itemCount, enabled }
+highlightsNav  = { name, href, type, iconKind, hasCategory,
+                   showStandaloneLink, categoryId, enabled }
+highlightCard  = { id, excerpt, note, hasNote, color, date, dateLabel,
+                   postId, postTitle, postHref, hasNoPostLink,
+                   categoryName, folderName, folderNamePath,
+                   sourcePathLabel, sourcePathSegments, categoryHref,
+                   folderId, folderHref, placement, isMissing,
+                   isPlacementUnknown, isPlaced, placementLabel }
+```
+
+**투영은 양쪽에서 각각 한 번씩 돈다** — 보내기 전에 부모가, 받은 뒤에
+프레임이. 프레임이 부모를 믿지 않아도 되고, 위조 메시지가 프로토콜
+검사를 통과하더라도 `renderSkin()`에는 알려진 키만 닿는다.
+
+### H-5. 프레임에 **넣지 않는** 것
+
+| 제외 | 어떻게 보장되나 |
+| --- | --- |
+| Supabase client | 투영 함수에 키가 없다. 애초에 구조화 복사도 안 된다. |
+| access / refresh token | 조회 자체를 안 한다. Context에 없다. |
+| 사용자 UUID(`ownerId`) | 오늘 Context에 없다(실측). 투영 함수에도 키가 없다. |
+| 이메일 | 같음. |
+| DOM node · 함수 | 구조화 복사 불가 + 투영 함수가 문자열/불리언/배열만 만든다. |
+| 글 본문 · OOC | 오늘도 Context에 없다(의도적 설계). |
+| 비밀글 원문 / 비밀번호 | RLS가 막고, 제목은 `maskSkinPostTitle()`이 Context 단계에서 이미 마스킹한다. |
+| `skin_id` / `version_id` / DB row 키 | `get_published_skin`이 `content`만 준다. 투영 함수에도 키가 없다. |
+| imageSlot **id** | 부모가 URL로 해석해 넣는다. 프레임은 "슬롯"을 모른다. |
+| **관리자 여부 · 관리자 전용 링크** | ↓ |
+
+**★ `viewer`를 방문자 값으로 고정한 것은 이 라운드의 결정이다.**
+
+§D-1의 계약은 `viewer.isOwner` / `adminHref` / `writeHref` /
+`manageHref`를 포함하고, native HOME은 지금도 그 값들을 받는다.
+그러나 SANDBOX-1 지시문이 "관리자 여부 및 관리자 전용 링크"를
+전달 금지 목록에 **명시**했다. 그 문장을 그대로 지켰다.
+
+결과와 남은 차이:
+
+- sandbox HOME은 **주인장에게도 방문자 화면으로 보인다.** 스킨이
+  그린 WRITE/ADMIN/EDIT 링크가 나오지 않는다.
+- 이 라운드에서는 실질적 손실이 거의 없다 — 프레임 안 링크가
+  전부 비활성이고(네비게이션은 SANDBOX-2), 소유자 도구 자리
+  (`owner-tools`)를 cross-origin에서 채우는 방법도 아직 정해지지
+  않았다(§F#12, SANDBOX-3).
+- 되돌리는 지점은 한 곳이다:
+  `skin/sandbox/skin-sandbox-context.js`의
+  `SANDBOX_VIEWER_VISITOR_ONLY`. false로 바꾸면 그 아래 코드가
+  이미 실제 값을 투영하도록 쓰여 있다.
+- 켤 때 함께 판단할 것: `viewer.*Href`는 "권한"이 아니라 "요청"이다
+  (받는 쪽이 `isSiteOwnerSignedIn()`으로 다시 판정한다 —
+  `core/lib/site-path.js`). 즉 유출이 아니라 **표시 정보**다.
+
+### H-6. 메시지 흐름과 검증
+
+```
+(부모)  mountSandboxSkin({ container, pageType:"home", template, context })
+          │  projectSkinContextForSandbox(context, "home")   ← 원본은 여기서 끝
+          │  <iframe src="https://<frame-origin>/skin/sandbox/frame?v=…"
+          │          sandbox="allow-scripts allow-same-origin"
+          │          referrerpolicy="no-referrer" scrolling="no">
+          │
+(프레임) ─┼─ IMORY_FRAME_READY  { contract }                 ──▶
+(부모)    │◀── IMORY_FRAME_ACK   { contract }
+(부모)    │◀── IMORY_RENDER_HOME { contract, pageType, renderSeq,
+          │                        template:{html,css}, data }
+          │        프레임: isSandboxContextShape(data) → 재투영 →
+          │                renderSkin({ …, styleNonce })
+(프레임) ─┼─ IMORY_RENDERED     { contract, pageType, renderSeq, height } ──▶
+(프레임) ─┼─ IMORY_HEIGHT       { contract, renderSeq, height }           ──▶
+(프레임) ─┴─ IMORY_FRAME_ERROR  { contract, code }                        ──▶
+```
+
+**검증 순서(양쪽 공통, `skin/sandbox/skin-sandbox-protocol.js` 한 곳)**
+
+```
+event.origin (상수와 정확히 일치)
+  → event.source (부모: iframe.contentWindow / 프레임: window.parent)
+  → data.imory === 1
+  → data.type 이 아는 여섯 중 하나
+  → 방향(direction) — 부모는 to-frame 메시지를 받지 않는다
+  → data.seq 가 1 이상 정수
+  → payload 가 plain object 이고 **알려진 키만** (모르는 키 하나면 거부)
+  → payload.contract === 1
+  → 타입별 값 검사(spec.check)
+       pageType 은 "home" 만          (모르면 sandbox로 추측하지 않는다)
+       height   은 1..200000 정수     (NaN·Infinity·소수·문자 거부)
+       renderSeq는 1 이상 정수
+       template 은 {html,css} 문자열 쌍, 각 2,000,000자 이하
+       data     은 plain object
+       code     은 정해진 4개 중 하나 (자유 문장 금지)
+  → 통과하면 **알려진 키만** 새 리터럴로 옮겨 돌려준다
+```
+
+실패는 **조용한 무시**다 — 응답도, 화면 표시도 없다(프로빙 신호 차단).
+
+**`renderSeq` — 늦게 도착한 응답이 최신 화면을 덮지 않게.** 봉투의
+`seq`는 "이 채널에서 몇 번째 메시지인가"이고, payload의 `renderSeq`는
+"어느 렌더에 대한 것인가"다. 부모는 자기가 기다리는 값이 아닌
+RENDERED/HEIGHT를 버리고, 프레임도 자기가 받은 마지막 renderSeq만
+그린다.
+
+**`targetOrigin`에 `"*"`가 없다.** 부모는 자기가 해석한 frame origin
+상수를, 프레임은 자기 상수 목록에서 고른 값을 쓴다. 프레임은 부모가
+메시지로 알려 준 origin을 절대 쓰지 않는다.
+
+**중복 READY**: 두 번째 READY는 `duplicate-ready`로 무시한다 —
+ACK도 렌더도 다시 보내지 않는다.
+
+### H-7. CSP 전문 (SANDBOX-1, 실제 응답 헤더)
+
+```
+default-src 'none';
+script-src 'self' 'nonce-<요청마다 새로>' https://cdn.jsdelivr.net/npm/@eslint/css-tree@4.1.0/dist/csstree.esm.js;
+style-src 'self' 'nonce-<같은 값>';
+img-src data: blob: https://vtwcuvouyipohfonfukj.supabase.co https://imory.me;
+font-src 'self' data:;
+media-src 'none';
+connect-src 'none';
+frame-src 'none';
+child-src 'none';
+object-src 'none';
+worker-src 'none';
+manifest-src 'none';
+form-action 'none';
+base-uri 'none';
+frame-ancestors https://imory.me;
+sandbox allow-scripts allow-same-origin
+```
+
+SANDBOX-0에서 넓어진 것은 **세 칸뿐**이고, 어느 것도
+`'unsafe-inline'`/`'unsafe-eval'`이 아니다.
+
+#### style-src — `'unsafe-inline'` 대신 **nonce**를 골랐다
+
+§G-6의 TODO는 "렌더러는 nonce를 모르므로 `'unsafe-inline'`이
+필요해진다"고 적었다. 실제로 재어 보니 그럴 필요가 없었다.
+
+**2026-09-15 실측(chromium, 독립 probe)** — `style-src 'self' 'nonce-X'`
+아래에서:
+
+| 하는 일 | 결과 |
+| --- | --- |
+| `el.style.setProperty(...)` (CSSOM 쓰기) | **적용된다**(CSP 대상이 아니다) |
+| `el.setAttribute("style", ...)` | 차단 |
+| `createElement("style")` + append | 차단 |
+| 같은 `<style>`에 nonce를 달면 | **적용된다** |
+
+그래서:
+
+- `renderSkin()`에 **선택 인자 `styleNonce` 하나**를 더했다. 문자열일
+  때만 `<style>`에 nonce를 단다 — 넘기지 않는 기존 호출자(공개
+  HOME/CATEGORY/POST, Studio Preview)의 결과는 한 byte도 바뀌지
+  않는다. e2e가 그것을 직접 판정한다(`native 렌더는 nonce 를 받지
+  않는다`).
+- `core/content-width.js`의 폭 계약은 **CSSOM 쓰기**라 아무 영향이
+  없다. `style-src-attr 'unsafe-inline'`을 따로 열 필요가 없었다.
+  (우리 코드 경로에 `setAttribute("style", …)`가 없다 — grep으로
+  확인했다.)
+- `'self'`가 함께 있는 이유: `renderSkin()`이
+  `core/content-width.css`를 `<link>`로 건다.
+- **보안 경계**: 스킨 CSS는 여전히 `validateAndScopeSkinCss()`를
+  거쳐 `.imory-skin-root-i<N>`로 스코프된 뒤에만 그 `<style>`에
+  들어간다. nonce는 "이 요소를 적용해도 된다"만 말하고, 내용의
+  안전성은 렌더러의 검증이 그대로 진다. `'unsafe-inline'`이었다면
+  **프레임 문서 안의 아무 인라인 스타일이나** 허용됐을 것이다 —
+  지금은 우리가 만든 그 요소 하나만 허용된다.
+
+chromium과 webkit 양쪽 e2e에서 같은 결과다(226/226 × 2).
+
+#### script-src — 호스트가 아니라 **파일 하나**
+
+`skin/skin-css-validate.js`가 css-tree를 CDN에서 정적 import한다
+(그 파일 상단에 패키지/버전/URL이 적혀 있다). CSS 검증을 건너뛰거나
+부모가 대신 하는 것은 이번 라운드의 금지 항목이라, **그 URL 하나만**
+허용한다(CSP 경로는 `/`로 끝나지 않으면 정확히 일치해야 한다).
+`https://cdn.jsdelivr.net` 호스트 전체를 연 것이 아니다.
+
+import map은 `document.write`로 만들어지는 **parser-inserted 인라인
+script**라 CSP 검사를 그대로 받는다. frame.html의 인라인 블록이
+자기 nonce(`document.currentScript.nonce`)를 읽어
+`writeVersionedImportMap(paths, nonce)`에 넘긴다 — 해시도
+`'unsafe-inline'`도 쓰지 않았다. 그 두 번째 인자는 **선택**이라
+다른 진입 문서의 호출은 그대로다.
+
+#### img-src / font-src — `https:` 전체를 열지 않았다
+
+지금 HOME이 실제로 부르는 그림만 조사해서 열었다:
+
+| 무엇 | 출처 |
+| --- | --- |
+| `profile.avatarUrl` · `images.<slot>` | Supabase Storage |
+| `banners.items[].imageUrl` | Supabase Storage |
+| `/api/post-cover` (대표 이미지) | 메인 origin(= `parentOrigins`) |
+| 에디터가 만든 인라인 이미지 | `data:` / `blob:` |
+
+목록은 `resolveSandboxMediaOrigins()`가 만든다(Supabase origin 상수 +
+`parentOrigins` + 환경변수 `SANDBOX_SKIN_MEDIA_ORIGINS`).
+
+> ★ **남은 차이 — 알고 남긴다.** 스킨 CSS와 HTML은 임의의 https
+> 이미지·웹폰트를 쓸 수 있다(`skin/skin-sanitize.js`의
+> `isSafeSkinUrl()`은 https면 통과시킨다). 그런 스킨을 sandbox로
+> 그리면 **그 그림/폰트만 빠진 채** 나온다. §F#6은 "호스트
+> allowlist를 하지 않는다(기존 스킨이 깨진다)"고 적었는데, 이
+> 라운드는 지시문의 "근거 없이 `https:` 전체를 열지 않는다"를
+> 우선했다. 외부 자유 이미지·웹폰트 정책은 다음 단계의 **명시적
+> 결정**으로 남긴다 — sandbox는 아직 플래그가 꺼져 있고
+> fixture 스킨 하나만 쓰므로 지금 깨지는 사용자가 없다.
+
+`connect-src`는 이 라운드에서도 **`'none'` 그대로**다.
+
+### H-8. 경로 allowlist (sandbox origin에서 200인 것 **전부**)
+
+```
+/skin/sandbox/frame            (정본)
+/skin/sandbox/frame.html       (308 → 위)
+/core/lib/build-version.js
+/skin/sandbox/skin-sandbox-config.js
+/skin/sandbox/skin-sandbox-protocol.js
+/skin/sandbox/skin-sandbox-context.js     ← SANDBOX-1
+/skin/sandbox/skin-sandbox-frame.js
+/skin/skin-sanitize.js                    ← SANDBOX-1
+/skin/skin-render.js                      ← SANDBOX-1
+/skin/skin-css-validate.js                ← SANDBOX-1
+/core/content-width.js                    ← SANDBOX-1
+/core/content-width.css                   ← SANDBOX-1
+```
+
+그 밖은 전부 404다 — `/`도, `/index.html`도, `supabase-client.js`도,
+`skin-context.js`도, `skin-home.js`도, `admin/`도, `studio/`도,
+그리고 fixture 스킨 JSON도. e2e가 그 목록을 하나씩 재 본다.
+
+### H-9. 높이와 모바일
+
+**프레임 쪽** (`skin-sandbox-frame.js`)
+
+- 재는 대상은 `document.documentElement`가 **아니라 렌더 컨테이너**다.
+  html/body는 뷰포트(= 지금 iframe 높이)만큼을 늘 차지하므로, 그것을
+  재면 "부모가 준 높이"를 되돌려주는 꼴이 되어 **줄어들 수가 없다**.
+- 렌더 직후 1회 + `ResizeObserver` + 프레임 안 `img`의 `load`/`error`
+  (capture 단계 — load는 버블하지 않는다) + `document.fonts.ready`.
+- 직전에 보낸 값과 **1px 이하** 차이면 보내지 않는다(진동 방지).
+- 렌더 하나당 보고 **120회** 상한. 스킨 CSS가 `vh`처럼 뷰포트 높이에
+  반응하면 "적용 → 높이 변화 → 다시 보고"의 고리가 돌 수 있다.
+  상한에 닿으면 조용히 멈춘다.
+
+**부모 쪽** (`skin-sandbox-host.js`)
+
+- 프로토콜이 이미 정수·범위를 봤고, 부모는 **더 좁게** 다시 본다
+  (1..40000). 적용 횟수도 렌더당 200회 상한이다. 어느 한쪽 버그로
+  루프가 생겨도 화면이 멈추지 않는다.
+- `iframe`은 `scrolling="no"`, 프레임 문서는 `overflow:hidden` —
+  **이중 스크롤을 만들지 않는다**(CLAUDE.md §2).
+- 프레임 문서의 html/body가 `background: transparent`라 iframe이
+  투명하다. 부모 페이지 배경이 그대로 비쳐서 native HOME과 같은
+  바탕 위에 놓인다.
+
+실측(chromium, e2e): 짧은 HOME `iframe 538 / content 538`,
+긴 HOME `2746 / 2746`, 390px `516 / 515`. 프레임·부모 모두 가로 넘침
+0, 프레임 안 세로 스크롤 0, 700ms 뒤에도 높이가 같은 값(진동 없음).
+
+### H-10. 실패와 폴백
+
+`renderPublishedSkinHome()`은 **여전히 절대 throw하지 않는다.**
+
+| 상태 | 결과 |
+| --- | --- |
+| 기능 플래그 OFF | sandbox 경로를 **타지 않는다**. iframe 0개. native 렌더. |
+| frame origin 없음/부모와 같음 | iframe을 만들지 않는다. native 렌더. |
+| READY timeout(4s) | iframe을 **치우고** native 렌더. |
+| RENDERED timeout(6s) | 같음. |
+| `IMORY_FRAME_ERROR` | 같음. 코드만 콘솔에 남는다. |
+| 잘못된 HOME payload | 프레임이 `bad-payload` 코드만 보낸다(원문 없음). |
+| `renderSkin` 예외 | 프레임이 `render-failed` 코드만 보낸다. stack도 SkinPackage 원문도 보내지 않고 콘솔에도 찍지 않는다. |
+
+**사용자에게 백지를 보여 주지 않는다** — 어떤 실패든 같은
+SkinPackage를 native로 그린다. **다시 시도하지 않는다**(무한 재시도
+금지). native마저 던지면 그때 오늘의 legacy HOME 폴백이다.
+
+프레임 자신의 오류 화면은 숨어 있는 `#sandboxFrameNotice` 한 줄
+("화면을 불러오지 못했습니다.")뿐이다. 보통은 부모가 그 전에
+폴백하므로 보이지 않는다.
+
+### H-11. 검증 결과 (구분해서)
+
+| 종류 | 결과 |
+| --- | --- |
+| 단위 테스트 (node) | `skin/sandbox/skin-sandbox-unit-test.mjs` **131/131** — renderMode 판정 · payload allowlist · 메시지 값 검사 |
+| E2E (mock, chromium) | `skin/sandbox/skin-sandbox-e2e-test.mjs` **226/226** |
+| E2E (mock, webkit) | 같은 파일 **226/226** |
+| 기존 회귀 (mock) | 8934 **64/64** · 8935 **248/248** · 8942 **71/71** · 8956 **58/58** · 8943 **42/42** · 8954 **175/175** · 8955 **37/37** · 8944 **70/1 실패** |
+| 실제 DB 검증 | **해당 없음** — DB도 스키마도 건드리지 않았다 |
+| 배포 확인 | **미실시** — 이 라운드는 commit/push를 하지 않았다 |
+| 실기기 확인 | **미실시** |
+
+8944의 1건(`Preview FOLDER ?series=1` — Studio Preview의
+`preview:folder-bodies`)은 **이 라운드 이전부터 실패하던 것**이다.
+`git archive HEAD`로 뽑은 깨끗한 트리에서 같은 테스트를 돌려 **같은
+한 건이 같은 값으로 실패**하는 것을 확인했다(§G-9의 기록과 동일).
+
+E2E가 쓰는 origin 두 개는 **포트로 가른 실제 다른 origin**이고, 두
+서버 모두 요청을 배포되는 그 `functions/_middleware.js`에 그대로
+통과시킨다.
+
+`--only=home` 절은 하네스가 아니라 **실제 `index.html`** 을 열고
+Supabase 응답만 mock 한다 — 즉 §H-2의 분기가 진짜 공개 진입점에서
+도는 것을 확인한다. 그 절이 보는 네 가지:
+
+1. renderMode 없는 스킨 -> 같은 문서에 그려지고 iframe 0개
+2. sandbox 스킨 + 플래그 OFF -> **같은 결과**(배포에 이 코드가 있어도
+   공개 화면이 바뀌지 않는다)
+3. sandbox 스킨 + 플래그 ON -> `#themeMount` 안 cross-origin iframe
+   하나, 같은 문서에는 중복 렌더 없음, 프레임에 `supabase` 전역 없음,
+   프레임 localStorage 비어 있음
+4. 프레임 문서를 끊으면 -> **같은 스킨이 native 로** 그려지고 iframe은
+   남지 않는다(백지 아님)
+
+### H-12. 배포 전에 필요한 것
+
+**환경변수: 새로 필요한 것은 없다.** SANDBOX-0에서 설정한
+`SANDBOX_SKIN_HOST` / `SANDBOX_SKIN_PARENT_ORIGINS`가 그대로 쓰인다.
+`SANDBOX_SKIN_MEDIA_ORIGINS`가 새로 생겼지만 **선택**이다 — 비우면
+Supabase origin + 부모 origin이 기본값이다.
+
+`APP_BUILD_VERSION`은 **올렸다**(`2026-09-14-1` → `2026-09-15-1`).
+SANDBOX-0과 달리 이번에는 기존 자산을 고쳤다 — `skin/skin-render.js`,
+`skin/skin-home.js`, `skin/skin-template.js`,
+`skin/skin-package-{import,export}.js`, `index.html`,
+`core/lib/build-version.js`.
+
+**기능 플래그는 계속 꺼져 있다.** `SANDBOX_SKIN_ENABLED_HOSTS`가 빈
+배열이라 `imory.me`에서는 `?sandboxSkin=1`을 붙여도 아무 일도
+일어나지 않는다. production에서 켜려면 그 파일을 고쳐 배포해야 한다.
+
+### H-13. SANDBOX-2 진행 가능 여부
+
+**가능하다.** 이 라운드가 남긴 전제가 다 섰다 — 별도 origin, 메시지
+채널과 검증, 투영 함수, 높이 계약, 폴백.
+
+SANDBOX-2(네비게이션)가 먼저 할 일:
+
+1. `skin/skin-link-nav.js`의 dispatch 부분을
+   `navigateToSkinRoute(route, url)`로 **추출**(동작 무변경 리팩터링).
+   click 리스너와 `IMORY_NAVIGATE` 핸들러가 그 함수 하나를 공유한다.
+2. 프레임의 `swallowClicks()`를 "preventDefault + href를 부모로"로
+   바꾼다. 부모가 `new URL(href, parentOrigin)`로 파싱하고 라우트
+   판정까지 한다 — 프레임은 route 규칙을 모른다.
+3. `IMORY_COPY_LINK`.
+4. 외부 링크는 부모가 `window.open(url, "_blank", "noopener")`.
+
+**blocker는 없다.** 다만 SANDBOX-2에서 함께 결정해야 하는 것:
+
+- **`viewer` 고정을 풀 것인가**(§H-5). 네비게이션이 생기면 스킨이
+  그린 WRITE/ADMIN 링크가 실제로 동작해야 의미가 있다. 풀지 않으면
+  주인장이 sandbox HOME에서 자기 도구를 못 쓴다.
+- **img-src/font-src를 넓힐 것인가**(§H-7). 실제 사용자 스킨을
+  올려 보기 전에 정해야 한다.
+
+---
+
+
 ## 남은 차이 (아직 정하지 않은 것)
 
 - 비밀글 gate를 프레임 안/밖 어디에 둘 것인가 (SANDBOX-3)
@@ -1010,15 +1518,23 @@ Cloudflare 인프라 경로이고, `/cdn-cgi/rum` 자체는 이 호스트에서 
   — **여러 사용자의 임의 JS를 같은 origin에서 실행하지 않는다**가 그 단계의
   전제 조건이다(§G-4). 지금은 단일 frame origin이고 실행되는 저자 JS가 없다.
 - sandbox 전용 태그 allowlist 완화 여부 — **아직 아무것도 정해지지 않았다**
+- **프레임에 `viewer`(주인장 여부·주인장 링크)를 보낼 것인가** — SANDBOX-1은
+  보내지 않기로 했다(§H-5). 네비게이션이 생기는 SANDBOX-2에서 다시 본다.
+- **외부 자유 이미지·웹폰트를 sandbox CSP 가 허용할 것인가** — SANDBOX-1은
+  지금 쓰는 출처만 열었다(§H-7). 실제 사용자 스킨을 올려 보기 전에 정한다.
+- HOME만 프레임이고 나머지 화면은 같은 문서라는 **혼합 상태**(§H-3) —
+  SANDBOX-3이 나머지를 가져가면 사라진다.
 
 ---
 
 ---
 
-# SANDBOX-1 최소 프로토타입 구현 지시문
+# SANDBOX-1 최소 프로토타입 구현 지시문 — **수행 완료 (2026-09-15)**
 
-> 다음 세션에 그대로 넣어 쓸 수 있는 작업 지시문이다.
-> **SANDBOX-0이 먼저 끝나 있어야 한다.**
+> 이 지시문은 **이미 수행됐다.** 결과는 §H다. 아래 본문은 그때
+> 무엇을 요구했는지 남겨 두는 기록이고, 실제로 무엇이 들어갔는지와
+> 요구와 달라진 지점(메시지 이름·style-src·img-src·viewer)은
+> §H에 적혀 있다. 새 작업을 시작할 때는 §H를 먼저 읽는다.
 
 ```
 IMORY SANDBOX-1 — 공개 HOME을 별도 origin iframe에서 그린다

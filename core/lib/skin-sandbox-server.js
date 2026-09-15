@@ -88,8 +88,69 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/core/lib/build-version.js",
   "/skin/sandbox/skin-sandbox-config.js",
   "/skin/sandbox/skin-sandbox-protocol.js",
-  "/skin/sandbox/skin-sandbox-frame.js"
+  "/skin/sandbox/skin-sandbox-context.js",
+  "/skin/sandbox/skin-sandbox-frame.js",
+
+  /* =====================================================
+     SANDBOX-1 — 렌더러. 공개 화면과 **같은 파일**이다.
+
+     frame 문서가 skin/skin-render.js(ES 모듈)를 정적 import하고,
+     그것이 다시 skin-css-validate.js와 core/content-width.js를
+     끌어온다. sanitizeSkinHTML()/isSafeSkinUrl()은 classic
+     script(skin/skin-sanitize.js)가 전역으로 준다.
+
+     ★ 여기 적힌 것이 sandbox origin에서 나갈 수 있는 **전부**다.
+       앱(index.html)·인증·supabase client·관리자·Studio는 여전히
+       404다. 새 파일이 필요하면 이 목록에 적어야 한다 —
+       "그냥 되던데"가 생기지 않게.
+  ====================================================== */
+
+  "/skin/skin-sanitize.js",
+  "/skin/skin-render.js",
+  "/skin/skin-css-validate.js",
+  "/core/content-width.js",
+  "/core/content-width.css"
 ];
+
+
+/* =========================================================
+   SANDBOX-1 — frame 문서가 실제로 필요로 하는 바깥 출처
+
+   ★ script: css-tree 하나뿐이다.
+     skin/skin-css-validate.js가 CSS 파서를 CDN에서 정적 import한다
+     (그 파일 상단에 정확한 패키지/버전/URL이 적혀 있다). CSP 경로는
+     **그 파일 하나**로 못박는다 — 호스트 전체를 여는 것이 아니라
+     정확히 그 URL만 허용한다(CSP 경로는 `/`로 끝나지 않으면 정확히
+     일치해야 한다).
+
+     이것을 피하려면 CSS 검증을 건너뛰거나 부모가 대신 해야 하는데,
+     둘 다 이번 라운드의 금지 항목이다(렌더러 검증 우회 금지).
+
+   ★ img/font: 지금 HOME이 실제로 쓰는 출처만 연다.
+     - 프로필 사진 / 배너 / imageSlot 값 -> Supabase Storage
+     - /api/post-cover -> 메인 origin(= parentOrigins)
+     - data: / blob: -> 에디터가 만든 인라인 이미지
+     https: 전체를 열지 않는다. 지금 스킨 CSS는 임의의 https 이미지와
+     웹폰트를 쓸 수 있으므로(skin/skin-sanitize.js isSafeSkinUrl),
+     그런 스킨을 sandbox로 그리면 **그 이미지/폰트만** 빠진 채
+     나온다 — 알고 남기는 차이다(설계 문서 §F#6 / 남은 차이).
+     넓히려면 SANDBOX_SKIN_MEDIA_ORIGINS 환경변수에 출처를 적는다.
+
+   ★ connect-src는 계속 'none'이다. 이 라운드에서도 열지 않는다.
+========================================================== */
+
+export const SANDBOX_CSS_PARSER_URL =
+  "https://cdn.jsdelivr.net/npm/@eslint/css-tree@4.1.0/dist/csstree.esm.js";
+
+
+/*
+  core/lib/supabase-client.js의 SUPABASE_URL과 같은 값이다. 서버
+  코드는 그 classic script를 import할 수 없어(전역 선언 파일이다)
+  여기 적는다 — 프로젝트 URL이 바뀌면 두 곳을 함께 고친다.
+*/
+
+export const SANDBOX_SUPABASE_ORIGIN =
+  "https://vtwcuvouyipohfonfukj.supabase.co";
 
 
 /*
@@ -168,9 +229,59 @@ export function resolveSandboxServerConfig(env) {
         : ["https://" + IMORY_MAIN_HOST],
 
     extraMainHosts:
-      split(source.IMORY_EXTRA_HOSTS)
+      split(source.IMORY_EXTRA_HOSTS),
+
+    /*
+      SANDBOX-1 — img-src/font-src에 더할 출처(공백 구분). 비워 두면
+      기본값(Supabase Storage + 부모 origin)만 쓴다. 위
+      SANDBOX_SUPABASE_ORIGIN 주석 참고.
+    */
+    mediaOrigins:
+      split(source.SANDBOX_SKIN_MEDIA_ORIGINS)
 
   };
+
+}
+
+
+/* =========================================================
+   resolveSandboxMediaOrigins(config)
+
+   img-src / font-src에 들어갈 출처 목록. 중복을 없애고 순서를
+   고정한다(응답 헤더가 요청마다 달라지지 않게 — nonce만 달라야
+   한다).
+========================================================== */
+
+export function resolveSandboxMediaOrigins(config) {
+
+  const cfg =
+    config || resolveSandboxServerConfig(null);
+
+
+  const list =
+    [SANDBOX_SUPABASE_ORIGIN]
+      .concat(Array.isArray(cfg.parentOrigins) ? cfg.parentOrigins : [])
+      .concat(Array.isArray(cfg.mediaOrigins) ? cfg.mediaOrigins : []);
+
+
+  const seen =
+    [];
+
+  for (let i = 0; i < list.length; i += 1) {
+
+    const value =
+      typeof list[i] === "string" ? list[i].trim() : "";
+
+    if (!value || seen.indexOf(value) !== -1) {
+      continue;
+    }
+
+    seen.push(value);
+
+  }
+
+
+  return seen;
 
 }
 
@@ -341,28 +452,57 @@ export function injectSandboxNonce(html, nonce) {
 
 
 /* =========================================================
-   buildSandboxCsp(nonce, parentOrigins)
+   buildSandboxCsp(nonce, config)
 
-   ★ SANDBOX-0의 초안이다. 빈 프레임을 띄우는 데 필요한 것만 연다.
+   ★ SANDBOX-1. renderSkin()이 프레임 안으로 들어오면서 세 칸이
+     넓어졌다. 어느 칸도 'unsafe-inline'/'unsafe-eval'로 열지 않았다.
 
-   TODO(SANDBOX-1) — renderSkin()이 들어오면 필요해지는 것:
-     - style-src 에 'unsafe-inline'
-       renderSkin()은 스킨 CSS를 document.createElement("style")로
-       만들어 붙인다. 동적으로 만든 <style> 요소도 style-src의
-       적용 대상이라 nonce 없이는 막힌다. 그 요소에 nonce를 달
-       방법이 없으므로(렌더러는 nonce를 모른다) 'unsafe-inline'이
-       필요해진다. **메인 origin에 그런 CSP를 줄 수는 없다 —
-       이것이 별도 sandbox origin이 필요한 이유 그 자체다.**
-     - img-src  에 https: data: blob:      (스킨 이미지 · imageSlot)
-     - font-src 에 https: data:            (스킨 웹폰트)
-       오늘 skin/skin-sanitize.js의 isSafeSkinUrl()이 이미 https만
-       허용하므로 호스트 allowlist는 하지 않는다(하면 기존 스킨이
-       깨진다 — 설계 문서 §F#6).
-     - script-src 에 인라인 허용 하나(import map)
-       ES 모듈(skin-render.js)을 들이면 <script type="importmap">
-       인라인 블록이 생긴다. nonce로 덮을 수 있으면 nonce로 덮고,
-       안 되면 그 블록만 해시로 허용한다. 'unsafe-inline'으로 열지
-       않는다.
+   ① style-src — 'unsafe-inline' 대신 **nonce**로 해결했다.
+
+     renderSkin()은 스킨 CSS를 document.createElement("style")로
+     만들어 붙인다. 동적으로 만든 <style>도 style-src의 적용
+     대상이다(2026-09-15 chromium 실측: nonce 없는 동적 <style>은
+     적용되지 않고 "Applying inline style violates ..." 위반이
+     난다). SANDBOX-0의 이 자리 주석은 "렌더러는 nonce를 모르므로
+     'unsafe-inline'이 필요해진다"고 적었는데, 실제로는
+     renderSkin()에 **선택 인자 styleNonce 하나**를 더하는 것으로
+     끝났다(skin/skin-render.js). 넘기지 않는 기존 호출자의
+     결과는 한 byte도 바뀌지 않는다.
+
+     같은 실측에서 element.style.setProperty() 같은 **CSSOM 쓰기는
+     막히지 않는다**는 것도 확인했다 — core/content-width.js의 폭
+     계약이 프레임 안에서도 그대로 동작하므로 style-src-attr를
+     따로 열 필요가 없다. (setAttribute("style", ...)는 막히지만
+     우리 코드 경로에 그런 호출이 없다.)
+
+     'self'가 함께 있는 이유: renderSkin()이
+     core/content-width.css를 <link>로 건다.
+
+   ② script-src — CSS 파서 하나. 호스트가 아니라 **그 URL**만.
+
+     skin/skin-css-validate.js가 css-tree를 CDN에서 정적
+     import한다(그 파일 상단에 패키지/버전/URL이 적혀 있다).
+     CSS 검증을 건너뛰거나 부모가 대신 하는 것은 이번 라운드의
+     금지 항목이라, 그 한 파일을 정확한 경로로 허용한다
+     (CSP 경로는 슬래시로 끝나지 않으면 정확히 일치해야 한다).
+
+     import map은 document.write로 만들어지는 **parser-inserted
+     인라인 script**라 CSP 검사를 그대로 받는다 — frame.html이
+     자기 nonce를 읽어 그 태그에 달아 준다(해시도 'unsafe-inline'도
+     쓰지 않는다).
+
+   ③ img-src / font-src — https: 전체가 아니라 **지금 쓰는 출처만**.
+
+     HOME이 실제로 부르는 그림은 프로필/배너/imageSlot(Supabase
+     Storage)과 /api/post-cover(메인 origin)뿐이고, 에디터가 만든
+     data:/blob:이 더해진다. 목록은 resolveSandboxMediaOrigins()에
+     있다.
+
+     ★ 남은 차이: 스킨 CSS는 임의의 https 이미지·웹폰트를 쓸 수
+       있다(skin/skin-sanitize.js isSafeSkinUrl은 https면 통과시킨다).
+       그런 스킨을 sandbox로 그리면 그 그림/폰트만 빠진 채 나온다.
+       알고 남기는 차이이고, 외부 자유 이미지·웹폰트 정책은 이후
+       단계에서 명시적으로 정한다(설계 문서 §F#6).
 
    TODO(SANDBOX-5) — 저자 JS / 3D:
      - script-src 에 blob:  (저자 JS를 Blob URL ES 모듈로 주입)
@@ -375,29 +515,51 @@ export function injectSandboxNonce(html, nonce) {
        (설계 문서 §F#7).
 ========================================================== */
 
-export function buildSandboxCsp(nonce, parentOrigins) {
+export function buildSandboxCsp(nonce, config) {
+
+  /*
+    두 번째 인자는 SANDBOX-0에서 parentOrigins 배열이었다. 배열을
+    그대로 주는 호출자도 계속 받는다 — frame-ancestors만 필요한
+    경우가 있고, 그때 media 출처는 기본값을 쓴다.
+  */
+
+  const cfg =
+    Array.isArray(config)
+      ? { parentOrigins: config, mediaOrigins: [] }
+      : (config || {});
+
+
+  const parentOrigins =
+    Array.isArray(cfg.parentOrigins) ? cfg.parentOrigins : [];
+
 
   const ancestors =
-    Array.isArray(parentOrigins) && parentOrigins.length
+    parentOrigins.length
       ? parentOrigins.join(" ")
       : "'none'";
+
+
+  const media =
+    resolveSandboxMediaOrigins(cfg).join(" ");
 
 
   return [
 
     "default-src 'none'",
 
-    /* frame.html의 인라인 부트스트랩 + /skin/sandbox/*.js */
-    "script-src 'self' 'nonce-" + nonce + "'",
+    /* frame.html의 인라인 부트스트랩 + import map + /skin/**의 허용
+       목록 + CSS 파서 하나(위 주석 ②) */
+    "script-src 'self' 'nonce-" + nonce + "' " + SANDBOX_CSS_PARSER_URL,
 
-    /* frame.html의 인라인 <style> 하나. TODO(SANDBOX-1) 위 주석 */
-    "style-src 'nonce-" + nonce + "'",
+    /* frame.html의 인라인 <style> + renderSkin()의 동적 <style>(둘 다
+       nonce) + core/content-width.css(<link>, 그래서 'self') */
+    "style-src 'self' 'nonce-" + nonce + "'",
 
-    /* TODO(SANDBOX-1): 스킨 이미지 -> https: data: blob: */
-    "img-src 'none'",
+    /* 프로필·배너·imageSlot·대표 이미지. https: 전체가 아니다(위 ③) */
+    "img-src data: blob: " + media,
 
-    /* TODO(SANDBOX-1): 스킨 웹폰트 -> https: data: */
-    "font-src 'none'",
+    /* 웹폰트 — 지금은 self/data: 뿐이다(위 ③의 남은 차이) */
+    "font-src 'self' data:",
 
     "media-src 'none'",
 
@@ -460,14 +622,17 @@ export function sandboxNotFoundResponse() {
 }
 
 
-export function sandboxFrameHeaders(baseHeaders, nonce, parentOrigins) {
+export function sandboxFrameHeaders(baseHeaders, nonce, config) {
 
   const headers =
     new Headers(baseHeaders || {});
 
+  /* config는 resolveSandboxServerConfig()의 결과다. SANDBOX-0에서는
+     parentOrigins 배열이었고, buildSandboxCsp()가 둘 다 받는다. */
+
   headers.set(
     "Content-Security-Policy",
-    buildSandboxCsp(nonce, parentOrigins)
+    buildSandboxCsp(nonce, config)
   );
 
   headers.set(

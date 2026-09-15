@@ -2,14 +2,31 @@
    SKIN SANDBOX - PROTOCOL (classic script, 의존 없음)
 
    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §D-2
-   단계: SANDBOX-0 — 허용 메시지는 **두 개뿐**이다.
+   단계: SANDBOX-1 — 허용 메시지는 **여섯 개뿐**이다.
 
-     frame  -> parent   IMORY_FRAME_READY  { contract: 1 }
-     parent -> frame    IMORY_FRAME_ACK    { contract: 1 }
+     frame  -> parent   IMORY_FRAME_READY  { contract }
+     parent -> frame    IMORY_FRAME_ACK    { contract }
+     parent -> frame    IMORY_RENDER_HOME  { contract, pageType,
+                                             renderSeq, template, data }
+     frame  -> parent   IMORY_RENDERED     { contract, pageType,
+                                             renderSeq, height }
+     frame  -> parent   IMORY_HEIGHT       { contract, renderSeq, height }
+     frame  -> parent   IMORY_FRAME_ERROR  { contract, code }
 
-   (설계 문서 §D-2는 SANDBOX-1의 같은 신호를 IMORY_READY로 적고
-    있다. 이 라운드의 지시문이 IMORY_FRAME_READY/ACK를 쓰므로
-    그 이름을 정본으로 삼는다 — SANDBOX-1에서 문서 쪽을 맞춘다.)
+   (설계 문서 §D-2는 같은 신호들을 IMORY_READY / IMORY_INIT /
+    IMORY_ERROR 로 적고 있다. SANDBOX-0 지시문의
+    IMORY_FRAME_READY/ACK 와 SANDBOX-1 지시문의 IMORY_RENDER_HOME /
+    IMORY_RENDERED / IMORY_HEIGHT / IMORY_FRAME_ERROR 가 정본이다 —
+    §D-2 표를 이 이름으로 맞췄다.)
+
+   ★ renderSeq — 늦게 도착한 응답이 최신 화면을 덮지 않게
+
+   봉투의 seq 는 "이 채널에서 몇 번째 메시지인가"이고, payload 의
+   renderSeq 는 "어느 렌더에 대한 것인가"다. 부모는 렌더를 새로
+   보낼 때마다 renderSeq 를 올리고, 자기가 기다리는 값이 아닌
+   RENDERED/HEIGHT 를 **버린다**. 프레임도 자기가 받은 마지막
+   renderSeq 만 그린다(기존 mountToken/postPageRequestSeq 와 같은
+   장치 — 설계 문서 §F#5).
 
    ---------------------------------------------------------
    ★ 왜 한 파일인가
@@ -26,10 +43,11 @@
      1. event.origin 이 기대한 origin과 **정확히** 같은가
      2. event.source 가 기대한 window와 같은가
      3. data.imory === 1  (다른 라이브러리 noise 1차 차단)
-     4. data.type 이 이번 라운드가 아는 두 개 중 하나인가
+     4. data.type 이 이번 라운드가 아는 여섯 개 중 하나인가
      5. 방향이 맞는가 (parent가 IMORY_FRAME_ACK을 받지 않는다)
      6. seq 가 정수인가
      7. payload가 plain object이고 **알려진 키만** 있는가
+     8. 타입별 값 검사(spec.check) — height 범위·pageType·template
 
    ★ 알려진 키만 읽는다 / 알려진 키만 만든다
 
@@ -53,16 +71,89 @@ var SANDBOX_MESSAGE_CONTRACT = 1;
 
 var SANDBOX_MESSAGE_TYPES = {
   FRAME_READY: "IMORY_FRAME_READY",
-  FRAME_ACK: "IMORY_FRAME_ACK"
+  FRAME_ACK: "IMORY_FRAME_ACK",
+
+  /* SANDBOX-1 — HOME 한 장 */
+  RENDER_HOME: "IMORY_RENDER_HOME",
+  RENDERED: "IMORY_RENDERED",
+  HEIGHT: "IMORY_HEIGHT",
+  FRAME_ERROR: "IMORY_FRAME_ERROR"
 };
 
 
+/* =========================================================
+   ★ SANDBOX-1에서 더해진 값 제한
+
+   높이: 부모가 iframe.style.height에 그대로 쓰는 숫자다. 정수가
+   아니거나 범위를 벗어나면 **메시지 자체를 버린다** — 화면이
+   0이 되거나(콘텐츠가 사라진다) 브라우저가 감당 못 할 크기로
+   자라는 것을 프로토콜 층에서 막는다.
+
+   pageType: 이번 라운드는 HOME 한 장뿐이다. 다른 값이 오면
+   거부한다 — "모르는 것을 sandbox로 추측하지 않는다"는 규칙을
+   메시지 층에서도 지킨다.
+
+   오류 코드: 프레임이 부모에게 돌려줄 수 있는 문장은 없다.
+   **정해진 짧은 코드만** 보낸다(민감한 원문·stack 금지).
+========================================================== */
+
+var SANDBOX_MIN_FRAME_HEIGHT = 1;
+
+var SANDBOX_MAX_FRAME_HEIGHT = 200000;
+
+var SANDBOX_MAX_TEMPLATE_CHARS = 2000000;
+
+var SANDBOX_PAGE_TYPES = ["home"];
+
+var SANDBOX_ERROR_CODES = [
+  "no-renderer",      /* frame이 renderSkin을 못 받았다 */
+  "no-root",          /* 렌더 컨테이너가 없다 */
+  "bad-payload",      /* data/template이 계약과 다르다 */
+  "render-failed"     /* renderSkin()이 던졌다 */
+];
+
+
+function isSandboxHeight(value) {
+
+  return (
+    Number.isInteger(value) &&
+    value >= SANDBOX_MIN_FRAME_HEIGHT &&
+    value <= SANDBOX_MAX_FRAME_HEIGHT
+  );
+
+}
+
+
+function isSandboxRenderSeq(value) {
+
+  return Number.isInteger(value) && value >= 1;
+
+}
+
+
+function isSandboxTemplate(value) {
+
+  return (
+    isPlainSandboxObject(value) &&
+    hasOnlyKnownSandboxKeys(value, ["html", "css"]) &&
+    typeof value.html === "string" &&
+    typeof value.css === "string" &&
+    value.html.length <= SANDBOX_MAX_TEMPLATE_CHARS &&
+    value.css.length <= SANDBOX_MAX_TEMPLATE_CHARS
+  );
+
+}
+
+
 /*
-  type -> { direction, keys }
+  type -> { direction, keys, check(payload) }
 
   direction 은 "이 메시지를 받을 자격이 있는 쪽"이다.
     "to-parent" : frame 이 보내고 parent 가 받는다
     "to-frame"  : parent 가 보내고 frame 이 받는다
+
+  check 는 keys 검사(알려진 키만)를 통과한 payload의 **값**을 본다.
+  없으면 contract 검사만 한다.
 */
 
 var SANDBOX_MESSAGE_SPEC = {
@@ -75,6 +166,56 @@ var SANDBOX_MESSAGE_SPEC = {
   IMORY_FRAME_ACK: {
     direction: "to-frame",
     keys: ["contract"]
+  },
+
+  /*
+    부모 -> frame. 이번 라운드가 실제로 데이터를 옮기는 유일한
+    메시지다. data 의 내부 shape은 여기서 "plain object"까지만
+    보고, 알려진 키만 남기는 일은 skin/sandbox/skin-sandbox-context.js
+    의 투영 함수가 **보내는 쪽과 받는 쪽 양쪽에서** 한 번씩 한다.
+  */
+  IMORY_RENDER_HOME: {
+    direction: "to-frame",
+    keys: ["contract", "pageType", "renderSeq", "template", "data"],
+    check: function (payload) {
+      return (
+        SANDBOX_PAGE_TYPES.indexOf(payload.pageType) !== -1 &&
+        isSandboxRenderSeq(payload.renderSeq) &&
+        isSandboxTemplate(payload.template) &&
+        isPlainSandboxObject(payload.data)
+      );
+    }
+  },
+
+  IMORY_RENDERED: {
+    direction: "to-parent",
+    keys: ["contract", "pageType", "renderSeq", "height"],
+    check: function (payload) {
+      return (
+        SANDBOX_PAGE_TYPES.indexOf(payload.pageType) !== -1 &&
+        isSandboxRenderSeq(payload.renderSeq) &&
+        isSandboxHeight(payload.height)
+      );
+    }
+  },
+
+  IMORY_HEIGHT: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "height"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        isSandboxHeight(payload.height)
+      );
+    }
+  },
+
+  IMORY_FRAME_ERROR: {
+    direction: "to-parent",
+    keys: ["contract", "code"],
+    check: function (payload) {
+      return SANDBOX_ERROR_CODES.indexOf(payload.code) !== -1;
+    }
   }
 
 };
@@ -202,6 +343,10 @@ function buildSandboxMessage(type, payload, seq) {
      "no-event" "bad-origin" "bad-source" "bad-envelope"
      "unknown-type" "wrong-direction" "bad-seq"
      "bad-payload" "unknown-payload-key" "bad-contract"
+     "bad-payload-value"   (SANDBOX-1: 타입별 값 검사 실패 —
+       pageType이 home이 아님 / height가 정수가 아니거나 범위 밖 /
+       template이 {html,css} 문자열 쌍이 아님 / data가 plain object가
+       아님 / 모르는 오류 코드)
 ========================================================== */
 
 function validateSandboxMessage(event, expect) {
@@ -305,15 +450,38 @@ function validateSandboxMessage(event, expect) {
   }
 
 
+  /* --- 8. 타입별 값 검사 ------------------------------- */
+
+  if (
+    typeof spec.check === "function" &&
+    spec.check(data.payload) !== true
+  ) {
+    return { ok: false, reason: "bad-payload-value" };
+  }
+
+
   /* 알려진 키만 새 리터럴로 옮겨 돌려준다 */
+
+  const clean =
+    {};
+
+  for (let i = 0; i < spec.keys.length; i += 1) {
+
+    const key =
+      spec.keys[i];
+
+    if (Object.prototype.hasOwnProperty.call(data.payload, key)) {
+      clean[key] = data.payload[key];
+    }
+
+  }
+
 
   return {
     ok: true,
     type: data.type,
     seq: data.seq,
-    payload: {
-      contract: data.payload.contract
-    }
+    payload: clean
   };
 
 }
@@ -330,6 +498,14 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_MESSAGE_CONTRACT,
     SANDBOX_MESSAGE_TYPES,
     SANDBOX_MESSAGE_SPEC,
+    SANDBOX_MIN_FRAME_HEIGHT,
+    SANDBOX_MAX_FRAME_HEIGHT,
+    SANDBOX_MAX_TEMPLATE_CHARS,
+    SANDBOX_PAGE_TYPES,
+    SANDBOX_ERROR_CODES,
+    isSandboxHeight,
+    isSandboxRenderSeq,
+    isSandboxTemplate,
     isPlainSandboxObject,
     hasOnlyKnownSandboxKeys,
     buildSandboxMessage,

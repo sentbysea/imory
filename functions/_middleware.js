@@ -361,7 +361,7 @@ async function handleSandboxHost(
       headers: sandboxFrameHeaders(
         response.headers,
         nonce,
-        config.parentOrigins
+        config
       )
     }
   );

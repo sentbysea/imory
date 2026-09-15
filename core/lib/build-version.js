@@ -58,7 +58,7 @@
    실기기에서 깨져 보이던 원인).
 ========================================================== */
 
-const APP_BUILD_VERSION = "2026-09-14-1";
+const APP_BUILD_VERSION = "2026-09-15-1";
 
 
 /* =========================================================
@@ -161,7 +161,7 @@ function loadVersionedStyles(paths) {
    않는다).
 ========================================================== */
 
-function writeVersionedImportMap(absolutePaths) {
+function writeVersionedImportMap(absolutePaths, nonce) {
 
   const imports = {};
 
@@ -176,8 +176,29 @@ function writeVersionedImportMap(absolutePaths) {
   );
 
 
+  /* =====================================================
+     nonce (선택, SANDBOX-1)
+
+     import map은 **인라인** script다. 진입 문서 대부분은 CSP가
+     없으므로 지금까지 문제가 없었지만, sandbox frame 문서
+     (skin/sandbox/frame.html)는 script-src에 'unsafe-inline'이
+     없고 nonce만 있다. 그 문서는 자기 인라인 블록의 nonce를
+     document.currentScript.nonce로 읽어 여기에 넘긴다.
+
+     document.write로 삽입되는 script는 **parser-inserted**라
+     CSP 인라인 검사를 그대로 받는다(script가 만든 것이 아니다) —
+     그래서 이 한 줄이 필요하다. 넘기지 않는 기존 호출자는
+     지금까지와 완전히 같은 문자열을 쓴다.
+  ====================================================== */
+
+  const nonceAttr =
+    typeof nonce === "string" && nonce
+      ? ` nonce="${nonce}"`
+      : "";
+
+
   document.write(
-    `<script type="importmap">${
+    `<script type="importmap"${nonceAttr}>${
       JSON.stringify({ imports })
     }<\/script>`
   );

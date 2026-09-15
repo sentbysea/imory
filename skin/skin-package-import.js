@@ -90,6 +90,41 @@ async function validateSkinPackageImport(rawJsonText) {
     return { ok: false, reason: "schema-version", message: "schemaVersion은 1이어야 합니다." };
   }
 
+  /*
+    SANDBOX-1 — renderMode(선택). IMORY_SANDBOX_SKIN_DESIGN.md §C.
+
+    없으면 native다(키를 만들지 않는다 — banner template과 같은
+    이유로, 없는 스킨의 저장 JSON에 죽은 키를 남기지 않는다).
+    있으면 **아는 값이어야 한다**: 모르는 값을 조용히 native로
+    접으면 "sandbox라고 적었는데 native로 그려지는" 상태가 파일만
+    보고는 구분되지 않는다. 오탈자를 성공으로 착각하게 두지 않는
+    banner-template/folder-template와 같은 판단이다.
+
+    schemaVersion은 1 그대로다 — 2로 올리면 renderMode를 모르는
+    기존 배포가 그 스킨을 legacy 화면으로 통째로 폴백시킨다.
+  */
+
+  const renderModeInput =
+    parsed.renderMode;
+
+  const hasRenderMode =
+    renderModeInput !== undefined &&
+    renderModeInput !== null;
+
+  if (
+    hasRenderMode &&
+    !(
+      typeof isKnownSkinRenderMode === "function" &&
+      isKnownSkinRenderMode(renderModeInput)
+    )
+  ) {
+    return {
+      ok: false,
+      reason: "render-mode",
+      message: 'renderMode는 "native" 또는 "sandbox"여야 합니다.'
+    };
+  }
+
   const templatesInput =
     parsed.templates;
 
@@ -353,6 +388,10 @@ async function validateSkinPackageImport(rawJsonText) {
       regions,
       metadata
     };
+
+  if (hasRenderMode) {
+    skinPackage.renderMode = renderModeInput;
+  }
 
   /*
     재료 일치 라운드 — "저장은 되지만 화면에서 조용히 잘못 나오는"

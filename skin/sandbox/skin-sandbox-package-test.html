@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>SKIN SANDBOX — renderMode Import/Export 왕복 (SANDBOX-1)</title>
+
+  <!--
+    =========================================================
+    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §C
+
+    renderMode 필드가 **파일 왕복에서 사라지지 않는가**를 본다.
+    실제 검증/내보내기 함수를 그대로 돌린다:
+
+      skin/skin-package-import.js  validateSkinPackageImport()
+      skin/skin-package-export.js  buildSkinPackageExport()
+
+    둘 다 classic script이고 DOM sanitizer와 CSS validator에
+    의존하므로 브라우저가 필요하다 — Studio를 띄우지 않고 그 둘만
+    로드하는 최소 문서다.
+
+    ★ 이 문서는 sandbox origin에서 열리지 않는다(경로 allowlist
+      밖이다). 부모 origin에서만 열리는 개발용 하네스다.
+
+    자동 판정은 skin/sandbox/skin-sandbox-e2e-test.mjs의
+    [package] 절이 한다.
+    =========================================================
+  -->
+
+  <style>
+
+    body {
+      margin: 0;
+      padding: 24px;
+
+      font-family:
+        ui-monospace,
+        SFMono-Regular,
+        Menlo,
+        monospace;
+
+      font-size: 12px;
+      line-height: 1.6;
+      color: #222;
+    }
+
+    pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #f7f7f7;
+      padding: 12px;
+      border-radius: 4px;
+    }
+
+  </style>
+
+  <script>
+
+    document.write(
+      '<script src="../../core/lib/build-version.js?t=' +
+      Date.now() +
+      '"><' + '/script>'
+    );
+
+  </script>
+
+
+  <script>
+
+    /*
+      skin/skin-package-import.js가 기다리는 핸드셰이크.
+      Studio는 skin/skin-initializer.js가 이것을 resolve하지만,
+      여기서는 CSS validator 모듈만 있으면 되므로 직접 만든다.
+    */
+
+    window.skinInitializerReady =
+      new Promise(
+        (resolve) => {
+          window.__resolveSkinInitializerReady = resolve;
+        }
+      );
+
+    writeVersionedImportMap(
+      [
+        "/skin/skin-css-validate.js"
+      ]
+    );
+
+  </script>
+
+</head>
+
+
+<body>
+
+  <h1>renderMode Import/Export 왕복</h1>
+
+  <pre id="out">…</pre>
+
+
+  <script>
+
+    loadVersionedScripts(
+      [
+        "../skin-sanitize.js",
+        "../skin-template.js",
+        "../skin-package-import.js",
+        "../skin-package-export.js"
+      ]
+    );
+
+  </script>
+
+
+  <script type="module">
+
+    /*
+      validateSkinPackageImport()가 window.validateAndScopeSkinCss를
+      쓴다. Studio에서는 skin-initializer.js가 걸어 주지만 여기서는
+      직접 건다 — **같은 모듈**이라 검증 결과는 동일하다.
+    */
+
+    import { validateAndScopeSkinCss } from "/skin/skin-css-validate.js";
+
+    window.validateAndScopeSkinCss = validateAndScopeSkinCss;
+
+    window.__resolveSkinInitializerReady(true);
+
+  </script>
+
+
+  <script type="module">
+
+    await window.skinInitializerReady;
+
+
+    const result = {};
+
+
+    function summarize(imported) {
+
+      if (!imported.ok) {
+
+        return {
+          ok: false,
+          reason: imported.reason,
+          message: imported.message
+        };
+
+      }
+
+      return {
+        ok: true,
+        renderMode: imported.skinPackage.renderMode,
+        hasRenderModeKey:
+          Object.prototype.hasOwnProperty.call(
+            imported.skinPackage, "renderMode"
+          )
+      };
+
+    }
+
+
+    try {
+
+      const fixtureText =
+        await (
+          await fetch(
+            "/skin/test-skins/imory-sandbox-home-v1.json?v=" +
+            encodeURIComponent(APP_BUILD_VERSION)
+          )
+        ).text();
+
+
+      /* --- 1. Import --------------------------------- */
+
+      const imported =
+        await window.validateSkinPackageImport(fixtureText);
+
+      result.imported = summarize(imported);
+
+
+      if (imported.ok) {
+
+        /* --- 2. Export ------------------------------- */
+
+        const exported =
+          window.buildSkinPackageExport(imported.skinPackage);
+
+        result.exported = {
+          ok: exported.ok,
+          renderMode: exported.ok ? exported.skinPackage.renderMode : null
+        };
+
+
+        /* --- 3. 다시 Import -------------------------- */
+
+        const text =
+          window.serializeSkinPackageExport(exported.skinPackage);
+
+        const reimported =
+          await window.validateSkinPackageImport(text);
+
+        result.reimported = summarize(reimported);
+
+
+        /* --- 4. 왕복에서 나머지도 그대로인가 ---------- */
+
+        if (reimported.ok) {
+
+          const a =
+            JSON.stringify({
+              templates: imported.skinPackage.templates,
+              css: imported.skinPackage.css
+            });
+
+          const b =
+            JSON.stringify({
+              templates: reimported.skinPackage.templates,
+              css: reimported.skinPackage.css
+            });
+
+          result.roundtripSame = a === b;
+
+          if (a !== b) {
+            result.roundtripDiff = a.length + "자 vs " + b.length + "자";
+          }
+
+        }
+
+      }
+
+
+      /* --- 5. renderMode 없는 파일 ------------------- */
+
+      const parsed =
+        JSON.parse(fixtureText);
+
+      const withoutMode =
+        JSON.parse(fixtureText);
+
+      delete withoutMode.renderMode;
+
+      result.nativeImport =
+        summarize(
+          await window.validateSkinPackageImport(
+            JSON.stringify(withoutMode)
+          )
+        );
+
+
+      /* --- 6. renderMode: "native" 를 적은 파일 ------ */
+
+      result.explicitNative =
+        summarize(
+          await window.validateSkinPackageImport(
+            JSON.stringify({ ...parsed, renderMode: "native" })
+          )
+        );
+
+
+      /* --- 7. 모르는 값 ------------------------------ */
+
+      result.weird =
+        summarize(
+          await window.validateSkinPackageImport(
+            JSON.stringify({ ...parsed, renderMode: "weird" })
+          )
+        );
+
+
+      result.nonString = [];
+
+      for (const value of [1, true, {}, [], ["sandbox"]]) {
+
+        result.nonString.push(
+          summarize(
+            await window.validateSkinPackageImport(
+              JSON.stringify({ ...parsed, renderMode: value })
+            )
+          )
+        );
+
+      }
+
+
+      /*
+        null 은 이 목록에 없다. undefined 와 같이 "없음"으로 치기
+        때문이다 — banner/folder template 과 같은 규칙이다.
+      */
+
+
+      /* --- 8. 모르는 값이 draft 에 있어도 Export 에 안 실린다 --- */
+
+      const weirdExport =
+        window.buildSkinPackageExport({
+          ...parsed,
+          renderMode: "weird"
+        });
+
+      result.weirdExportHasKey =
+        weirdExport.ok &&
+        Object.prototype.hasOwnProperty.call(
+          weirdExport.skinPackage, "renderMode"
+        );
+
+    }
+
+    catch (err) {
+
+      result.error = String(err && err.message || err);
+
+    }
+
+
+    document.getElementById("out").textContent =
+      JSON.stringify(result, null, 2);
+
+    window.__packageRoundtripResult = result;
+
+  </script>
+
+</body>
+
+</html>
