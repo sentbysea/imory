@@ -88,6 +88,21 @@ const PREVIEW_MSG_RENDER_BANNER = "preview:render-banner";
 const PREVIEW_MSG_READY = "preview:ready";
 const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
+
+/*
+  SANDBOX-5A — 저자 JS 가 오류를 냈다.
+
+  ★ "preview:error" 와 **다른 메시지**여야 한다. 그쪽은 Studio 가
+  미리보기 위에 오류 overlay 를 덮는 신호이고, 저자 JS 오류는 그런
+  종류가 아니다 — HTML/CSS 는 정상으로 그려져 있고 그대로 보여야
+  한다. 이 메시지를 받은 Studio 는 토스트 한 줄만 띄운다.
+
+  ★ 문장이 오지 않는다. 프레임이 올려 준 짧은 코드 하나뿐이고
+  (skin/sandbox/skin-sandbox-protocol.js SCRIPT_ERROR), 사람이 읽을
+  문장은 Studio 가 자기 쪽에서 만든다.
+*/
+
+const PREVIEW_MSG_SCRIPT_ERROR = "preview:script-error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
 const PREVIEW_MSG_FOLDER_BODIES = "preview:folder-bodies";
@@ -171,6 +186,20 @@ async function handleSandboxRenderMessage(data) {
           postToParent({
             type: PREVIEW_MSG_NAVIGATE,
             href: href
+          });
+
+        },
+
+        /*
+          SANDBOX-5A — 저자 JS 오류. 화면은 건드리지 않고 코드만
+          올린다(위 PREVIEW_MSG_SCRIPT_ERROR 주석).
+        */
+
+        onScriptError: function (code) {
+
+          postToParent({
+            type: PREVIEW_MSG_SCRIPT_ERROR,
+            code: typeof code === "string" ? code : ""
           });
 
         }

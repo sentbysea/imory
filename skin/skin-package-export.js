@@ -9,7 +9,7 @@
    내보내는 필드는 SKIN_DESIGNER_CONTRACT.md의 SkinPackage 계약
    그대로 — schemaVersion / renderMode(선택, SANDBOX-1) /
    templates.{home,category,post,banner}.{html[,css]} / css /
-   imageSlots / regions / metadata — 이고,
+   js(선택, SANDBOX-5A) / imageSlots / regions / metadata — 이고,
    그 외에는 어떤 키도 내보내지 않는다(allowlist). 그래서 DB 전용
    값(row id · user_id · created_at · version_id 등)이 어떤 경로로
    content 안에 섞여 있더라도 파일에는 절대 실리지 않는다 —
@@ -56,6 +56,16 @@ const SKIN_PACKAGE_EXPORT_REQUIRED_PAGE_TYPES =
 */
 const SKIN_PACKAGE_EXPORT_RENDER_MODES =
   ["native", "sandbox"];
+
+
+/*
+  SANDBOX-5A — 작성 JS 의 상한. skin/skin-template.js 의
+  SKIN_PACKAGE_MAX_JS_CHARS · skin/sandbox/skin-sandbox-protocol.js 의
+  SANDBOX_MAX_AUTHOR_JS_CHARS 와 **같은 값**이어야 한다. 이 파일이
+  "의존 없음"을 유지하려고 값을 한 번 더 적는다(위 RENDER_MODES 와
+  같은 이유) — 값이 바뀌면 세 곳을 함께 고친다.
+*/
+const SKIN_PACKAGE_EXPORT_MAX_JS_CHARS = 131072;
 
 
 function isSkinPackageExportPlainObject(value) {
@@ -186,6 +196,24 @@ function buildSkinPackageExport(skinPackage) {
 
   if (exportedRenderMode) {
     exported.renderMode = exportedRenderMode;
+  }
+
+  /*
+    SANDBOX-5A — 작성 JS(선택). allowlist 원칙 그대로다: 문자열이고
+    상한 안일 때만 싣는다. 빈 문자열은 **싣는다** — "JS 를 다 지운
+    스킨"이 파일에서 사라지면 다시 가져올 때 예전 JS 가 되살아난
+    것처럼 보이지 않지만, 필드가 있었다는 사실은 남는 편이 왕복에
+    정직하다(Import 도 빈 문자열을 통과시킨다).
+
+    없거나 이상한 값이면 키 자체를 만들지 않는다 — Import 가 거부할
+    파일을 만들어 내보내지 않는다(renderMode 와 같은 규칙).
+  */
+
+  if (
+    typeof skinPackage.js === "string" &&
+    skinPackage.js.length <= SKIN_PACKAGE_EXPORT_MAX_JS_CHARS
+  ) {
+    exported.js = skinPackage.js;
   }
 
   return {

@@ -152,10 +152,31 @@
         2) renderSkin()이 만드는 동적 style 요소
            (skin/sandbox/skin-sandbox-frame.js -> skin/skin-render.js)
 
-      window에 올려 두는 것이 위험하지 않은 이유: 이 문서에서
-      실행되는 스크립트는 CSP script-src('self' + 이 nonce)가
-      허용한 우리 파일뿐이고, 저자 JS는 이 라운드에서 실행되지
-      않는다. 같은 신뢰 영역 안에서 값을 넘기는 것뿐이다.
+      ★ SANDBOX-5A — 이제 저자 JS 가 이 문서에서 실행된다.
+      그래서 bridge 가 시작하자마자 이 값을 자기 안으로 옮겨 담고
+      window 에서 지운다(skin/sandbox/skin-sandbox-frame.js start()).
+
+      ★ 그것은 **정리이지 은닉이 아니다.**
+
+      nonce 는 "이 script 를 실행해도 된다"는 **허가 표식**이지,
+      임의 JS 가 돈 뒤까지 지켜지는 비밀이 아니다. 이미 실행 중인
+      저자 코드는 자기 script 요소의 document.currentScript.nonce 나
+      이 realm 의 다른 요소가 가진 nonce 프로퍼티로 그 값을 **읽을
+      수 있다**(브라우저는 getAttribute("nonce") 만 가리고 IDL
+      프로퍼티는 same-origin 에 그대로 준다).
+
+      그래도 지우는 이유는 노출 면을 줄이는 것 하나다 — 우리가
+      계약으로 약속한 적 없는 전역 이름을 남겨 두지 않는다. 이
+      값을 읽어 저자가 script 를 하나 더 붙여도 얻는 것은 없다:
+      그는 이미 이 realm 에서 임의 코드를 돌리고 있다.
+
+      실제 경계는 nonce 가 아니라 **별도 origin · CSP
+      (connect-src 'none' 등) · iframe sandbox 속성 · 부모가 쥔
+      이동 표**다. 그 넷 중 어느 것도 nonce 가 비밀이라는 가정에
+      기대지 않는다.
+
+      계약으로 지키는 것: nonce 는 SkinPackage 에도 부모 메시지
+      payload 에도 **실리지 않는다**(프레임 밖으로 나가지 않는다).
     */
 
     window.__imorySandboxNonce =
@@ -213,9 +234,14 @@
 
 
     /*
-      순수 classic script 넷. skin-sanitize.js는 skin-render.js가
+      순수 classic script 다섯. skin-sanitize.js는 skin-render.js가
       전역 sanitizeSkinHTML()/isSafeSkinUrl()로 의존한다 —
       classic script는 module보다 먼저 실행되므로 순서가 보장된다.
+
+      ★ SANDBOX-5A — skin-sandbox-author-js.js 가 다섯째다.
+      저자 JS 를 실제로 실행하는 유일한 파일이고, **이 문서에만**
+      로드된다(부모·Studio 문서에는 없다). 실행 판정과 API 계약은
+      그 파일 상단 주석에 있다.
     */
 
     loadVersionedScripts(
@@ -223,7 +249,8 @@
         "/skin/skin-sanitize.js",
         "/skin/sandbox/skin-sandbox-config.js",
         "/skin/sandbox/skin-sandbox-protocol.js",
-        "/skin/sandbox/skin-sandbox-context.js"
+        "/skin/sandbox/skin-sandbox-context.js",
+        "/skin/sandbox/skin-sandbox-author-js.js"
       ]
     );
 

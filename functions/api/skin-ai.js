@@ -360,6 +360,22 @@ const SKIN_AI_SELECTION_PATH_PATTERN = /^[A-Za-z_][A-Za-z0-9_.]{0,79}$/;
 
 const SKIN_AI_SELECTION_SLOT_NAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
+/* =========================================================
+   SANDBOX-5A — 저자 JS 의 상한.
+
+   skin/skin-template.js 의 SKIN_PACKAGE_MAX_JS_CHARS ·
+   skin/sandbox/skin-sandbox-protocol.js 의
+   SANDBOX_MAX_AUTHOR_JS_CHARS 와 **같은 값**이어야 한다.
+   이 파일은 브라우저 모듈을 import 하지 않으므로 값을 한 번 더
+   적는다 — 값이 바뀌면 함께 고친다.
+
+   여기서 쓰는 곳은 한 군데뿐이다: AI 결과에 원본의 js 를 도로
+   싣기 전에 "브라우저 validator 도 통과할 값인가"를 본다.
+========================================================== */
+
+const SKIN_AI_MAX_AUTHOR_JS_CHARS = 131072;
+
+
 /* skin-sanitize.js의 SKIN_SANITIZE_ALLOWED_REGION_NAMES와 같다. */
 const SKIN_AI_SELECTION_REGION_NAMES = ["post-body", "owner-tools"];
 
@@ -1666,7 +1682,27 @@ function extractSkinAiModelOutput(payload) {
    "말없이 사라지는 화면"만 기계적으로 막는 셈이다.
 ========================================================== */
 
-function buildSkinAiResultPackage(currentPackage, edit) {
+/* =========================================================
+   buildSkinAiResultPackage(currentPackage, edit, sourcePackage)
+
+   ★ SANDBOX-5A — sourcePackage 가 세 번째 인자로 늘었다.
+
+   currentPackage 는 **모델에게 보여 준** 모양이다(위
+   normalizeSkinAiInputPackage). 거기에는 renderMode 도 js 도 없다 —
+   모델이 고칠 수 있는 것이 아니고, 저자 JS 를 프롬프트에 실어
+   보낼 이유도 없기 때문이다(토큰도, 남의 코드를 외부 모델에
+   보내는 것도).
+
+   그런데 결과를 그 모양 그대로 돌려주면, AI 를 한 번 쓰는
+   순간 renderMode 와 js 가 **조용히 사라진다** — sandbox 스킨이
+   native 로 바뀌고 저자가 쓴 JS 가 없어진다. 그래서 요청에
+   실려 온 원본에서 그 둘만 따로 옮겨 싣는다.
+
+   "모델이 보지 않는다 / 모델이 바꿀 수 없다 / 그래서 지우지도
+   못한다" 셋이 한 벌이다.
+========================================================== */
+
+function buildSkinAiResultPackage(currentPackage, edit, sourcePackage) {
 
   const templates = {
     home: { html: edit.templates.home.html },
@@ -1739,7 +1775,7 @@ function buildSkinAiResultPackage(currentPackage, edit) {
 
   }
 
-  return {
+  const result = {
     schemaVersion: 1,
     templates,
     css: edit.css,
@@ -1747,6 +1783,33 @@ function buildSkinAiResultPackage(currentPackage, edit) {
     regions: currentPackage.regions,
     metadata: currentPackage.metadata
   };
+
+
+  /*
+    ★ 모델이 만지지 않는 두 필드를 원본에서 그대로 옮긴다.
+
+    값 검사는 좁게 한다 — 여기서 통과시킨 것이 브라우저의
+    validateSkinPackageImport() 도 통과해야 하고, 통과하지 못하면
+    AI 결과 전체가 거부된다(skin/skin-package-import.js 의
+    render-mode / author-js).
+  */
+
+  const source =
+    isSkinAiPlainObject(sourcePackage) ? sourcePackage : {};
+
+  if (source.renderMode === "native" || source.renderMode === "sandbox") {
+    result.renderMode = source.renderMode;
+  }
+
+  if (
+    typeof source.js === "string" &&
+    source.js.length <= SKIN_AI_MAX_AUTHOR_JS_CHARS
+  ) {
+    result.js = source.js;
+  }
+
+
+  return result;
 
 }
 
@@ -2190,7 +2253,11 @@ async function handleSkinAiRequest(context) {
     200,
     {
       ok: true,
-      skinPackage: buildSkinAiResultPackage(currentPackage, result.edit),
+      skinPackage: buildSkinAiResultPackage(
+        currentPackage,
+        result.edit,
+        parsed.skinPackage
+      ),
       summary: clampSkinAiSummary(result.edit.summary)
     }
   );

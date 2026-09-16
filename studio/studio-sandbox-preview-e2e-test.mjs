@@ -281,9 +281,32 @@ async function openStudio(browser, options) {
   });
   page.on("pageerror", (err) => consoleErrors.push(String(err && err.message || err)));
 
+  /*
+    ★ SANDBOX-5A — 시나리오의 SkinPackage 를 통째로 바꿔 끼운다.
+
+    studio/studio-lifecycle-scenario.html 이 window.__scenarioSandboxSkinPackage
+    가 있으면 그것을 draft 로 쓴다. 저자 JS 가 든 스킨을 이 창구로
+    준다 — 시나리오 파일에 테스트용 JS 를 박아 넣지 않기 위해서다.
+  */
+
+  if (opts.skinPackage) {
+    await page.addInitScript(
+      (pkg) => { window.__scenarioSandboxSkinPackage = pkg; },
+      opts.skinPackage
+    );
+  }
+
   const query =
     `?scenario=${opts.scenario || "sb"}` +
-    (opts.sandbox === false ? "" : `&${SANDBOX_FLAGS}`);
+    (opts.sandbox === false ? "" : `&${SANDBOX_FLAGS}`) +
+
+    /*
+      저자 JS 는 sandbox 플래그와 **별개** opt-in 이다
+      (skin/sandbox/skin-sandbox-config.js). 주지 않으면 프레임은
+      뜨지만 JS 는 한 줄도 돌지 않는다 — 기존 절들이 이 라운드
+      뒤에도 그대로 도는 이유다.
+    */
+    (opts.authorJs ? "&sandboxSkinJs=1" : "");
 
   await page.goto(PARENT_ORIGIN + STUDIO_PATH + query, {
     waitUntil: "domcontentloaded"
@@ -507,6 +530,288 @@ async function runEdit(browser) {
 /* =========================================================
    [pages] 페이지를 바꿔도 같은 프레임 하나
 ========================================================== */
+
+
+
+/* =========================================================
+   [authorjs] SANDBOX-5A — Studio Preview 의 저자 JS
+
+   무엇을 보는가
+     · Studio 미리보기의 프레임 안에서 **한 번** 돈다
+     · Code Editor 의 JS 칸을 고치면 **Save 전에** 다시 돈다
+       (그리고 이전 realm 의 타이머가 남지 않는다)
+     · 전용 opt-in 이 없으면 0회다
+     · sandbox 스킨이 아니면 "여기서는 실행되지 않는다"고 알린다
+========================================================== */
+
+/*
+  시나리오에 끼워 넣을 저자 JS. 표식만 남기는 최소 코드다 —
+  공개 fixture(imory-sandbox-authorjs-v1.json)와 달리 여기서는
+  "몇 번 돌았는가"와 "어느 버전이 돌았는가"만 있으면 된다.
+*/
+
+const STUDIO_AUTHOR_JS = (label) => `
+(function () {
+  var api = window.imorySkin;
+  var root = api && api.root;
+  if (!root) { return; }
+
+  root.setAttribute(
+    "data-js-runs",
+    String(Number(root.getAttribute("data-js-runs") || "0") + 1)
+  );
+
+  var mark = document.createElement("p");
+  mark.className = "sb-js-mark";
+  mark.textContent = "${label}";
+  root.appendChild(mark);
+
+  var timer = window.setInterval(function () {
+    window.__studioTicks = (window.__studioTicks || 0) + 1;
+    root.setAttribute("data-js-ticks", String(window.__studioTicks));
+  }, 100);
+
+  if (api.onCleanup) {
+    api.onCleanup(function () { window.clearInterval(timer); });
+  }
+}());
+`;
+
+
+function studioAuthorJsPackage(label) {
+
+  return {
+    schemaVersion: 1,
+    renderMode: "sandbox",
+    templates: {
+      home: {
+        html:
+          '<div class="sb-home">' +
+          '<h1 class="sb-title" data-imory-bind="site.title"></h1>' +
+          '<nav>' +
+          '<a class="sb-nav-link" data-imory-repeat="navigation.categories" ' +
+          'data-imory-href="item.href" data-imory-bind="item.name"></a>' +
+          '</nav>' +
+          '</div>'
+      },
+      category: {
+        html:
+          '<div class="sb-category">' +
+          '<h1 class="sb-category-title" data-imory-bind="category.name"></h1>' +
+          '<a class="sb-post-link" data-imory-repeat="category.posts" ' +
+          'data-imory-href="item.href" data-imory-bind="item.title"></a>' +
+          '</div>'
+      },
+      post: {
+        html:
+          '<div class="sb-post">' +
+          '<h1 class="sb-post-title" data-imory-bind="post.title"></h1>' +
+          '<div class="sb-post-body" data-imory-region="post-body"></div>' +
+          '</div>'
+      }
+    },
+    css: ".sb-home { color: teal; }",
+    js: STUDIO_AUTHOR_JS(label),
+    imageSlots: [],
+    regions: [],
+    metadata: { generatedBy: "sandbox-authorjs-fixture" }
+  };
+
+}
+
+
+async function readStudioJsMarks(page) {
+
+  return sandboxFrame(page).locator("#sandboxFrameRoot").evaluate((root) => ({
+    runs: root.getAttribute("data-js-runs"),
+    ticks: root.getAttribute("data-js-ticks"),
+    marks: Array.from(root.querySelectorAll(".sb-js-mark"))
+      .map((el) => el.textContent),
+    globalTicks: window.__studioTicks || 0,
+    hasApi: typeof window.imorySkin === "object" && window.imorySkin !== null
+  }));
+
+}
+
+
+async function runAuthorJs(browser) {
+
+  console.log("\n[authorjs] Studio Preview 의 저자 JS");
+
+
+  /* ===== 1. 프레임 안에서 한 번 돈다 ===================== */
+
+  {
+    const { ctx, page } =
+      await openStudio(browser, {
+        authorJs: true,
+        skinPackage: studioAuthorJsPackage("JS-V1")
+      });
+
+    await sandboxFrame(page).locator(".sb-js-mark").waitFor({
+      state: "attached", timeout: 15000
+    }).catch(() => {});
+
+    const marks = await readStudioJsMarks(page);
+
+    check("[authorjs] ★ Studio Preview 의 프레임에서 저자 JS 가 한 번 돌았다",
+      marks.runs === "1" &&
+      JSON.stringify(marks.marks) === JSON.stringify(["JS-V1"]),
+      marks.runs + " / " + JSON.stringify(marks.marks));
+
+    check("[authorjs] ★ API 가 프레임 realm 에 올라와 있다",
+      marks.hasApi === true);
+
+    check("[authorjs] 프레임은 여전히 하나다",
+      (await sandboxFrameCount(page)) === 1,
+      String(await sandboxFrameCount(page)));
+
+    check("[authorjs] ★ Studio 문서에서는 저자 JS 가 돌지 않았다",
+      (await page.evaluate(() =>
+        typeof window.imorySkin === "undefined" &&
+        document.querySelectorAll(".sb-js-mark").length === 0)) === true);
+
+
+    /* --- Save 전 JS 수정이 곧바로 다시 돈다 -------------- */
+
+    await page.locator("#studioCodeButton").click();
+
+    await page.waitForSelector(".code-editor-textarea", { timeout: 8000 });
+
+    const fieldCount =
+      await page.locator(".code-editor-textarea").count();
+
+    check("[authorjs] ★ Code Editor 에 칸이 셋이다 (HTML · CSS · JS)",
+      fieldCount === 3, String(fieldCount));
+
+    const jsFieldValue =
+      await page.locator(".code-editor-textarea").nth(2).inputValue();
+
+    check("[authorjs] ★ JS 칸이 지금 스킨의 JS 를 보여 준다",
+      jsFieldValue.indexOf("JS-V1") !== -1);
+
+    check("[authorjs] ★ sandbox 스킨에서는 '실행되지 않는다' 안내가 없다",
+      (await page.locator(".code-editor-field-note").isVisible()) === false);
+
+    /* 2 = JS (studio/editor/code-editor.js 의 필드 순서) */
+
+    await page.evaluate(() => {
+
+      const fields =
+        document.querySelectorAll(".code-editor-textarea");
+
+      fields[2].value = fields[2].value.replace("JS-V1", "JS-V2");
+      fields[2].dispatchEvent(new Event("input", { bubbles: true }));
+
+    });
+
+    await page.locator(".code-editor-button--primary").click();
+
+
+    await sandboxFrame(page).locator(".sb-js-mark").filter({ hasText: "JS-V2" })
+      .waitFor({ state: "attached", timeout: 15000 }).catch(() => {});
+
+    /*
+      ★ 타이머가 실제로 몇 번 돌 때까지 기다린다. 기다리지 않으면
+      아래 "한 벌뿐이다" 비교가 0 == 0 이 되어 아무것도 재지 않는다.
+    */
+
+    await sandboxFrame(page).locator("#sandboxFrameRoot").evaluate(
+      (root) => new Promise((resolve) => {
+        const tick = () => {
+          if (Number(root.getAttribute("data-js-ticks") || "0") >= 2) {
+            resolve(true);
+            return;
+          }
+          setTimeout(tick, 50);
+        };
+        tick();
+      })
+    ).catch(() => {});
+
+    const edited = await readStudioJsMarks(page);
+
+    check("[authorjs] ★ Save 하지 않은 JS 수정이 곧바로 다시 돌았다",
+      JSON.stringify(edited.marks) === JSON.stringify(["JS-V2"]),
+      JSON.stringify(edited.marks));
+
+    check("[authorjs] ★ 새 realm 이라 실행 횟수가 다시 1 이다 (누적 없음)",
+      edited.runs === "1", String(edited.runs));
+
+    check("[authorjs] ★ 타이머도 한 벌뿐이다 (옛 realm 의 것이 안 남았다)",
+      Number(edited.ticks || "0") >= 2 &&
+      Number(edited.ticks) === Number(edited.globalTicks),
+      edited.ticks + " / " + edited.globalTicks);
+
+    check("[authorjs] ★ 프레임은 여전히 정확히 하나다",
+      (await sandboxFrameCount(page)) === 1,
+      String(await sandboxFrameCount(page)));
+
+    check("[authorjs] Save 하지 않은 상태 그대로다",
+      !(await page.locator("#studioSaveButton").isDisabled()));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 2. 전용 opt-in 이 없으면 0회 ==================== */
+
+  {
+    const { ctx, page } =
+      await openStudio(browser, {
+        skinPackage: studioAuthorJsPackage("JS-V1")
+      });
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    await page.waitForTimeout(500);
+
+    const count =
+      await sandboxFrame(page).locator(".sb-js-mark").count();
+
+    check("[authorjs] ★ 저자 JS 전용 opt-in 이 없으면 Studio 에서도 0회다",
+      count === 0, String(count));
+
+    check("[authorjs] ★ 그래도 프레임과 HTML/CSS 는 그대로다",
+      (await sandboxFrame(page).locator(".sb-home").count()) === 1 &&
+      (await sandboxFrameCount(page)) === 1);
+
+    await ctx.close();
+  }
+
+
+  /* ===== 3. sandbox 가 아닌 스킨에서는 안내가 나온다 ====== */
+
+  {
+    const { ctx, page } =
+      await openStudio(browser, { scenario: "x", authorJs: true });
+
+    await page.locator("#studioCodeButton").click();
+
+    await page.waitForSelector(".code-editor-textarea", { timeout: 8000 });
+
+    const note = page.locator(".code-editor-field-note");
+
+    check("[authorjs] ★ sandbox 가 아닌 스킨에서는 JS 칸에 안내가 나온다",
+      (await note.isVisible()) === true);
+
+    const text = await note.textContent();
+
+    check("[authorjs] ★ 안내가 'sandbox 모드에서만 실행된다'고 말한다",
+      String(text).indexOf("sandbox") !== -1, String(text));
+
+    check("[authorjs] ★ 그래도 HTML/CSS 칸은 그대로 편집할 수 있다",
+      (await page.locator(".code-editor-textarea").count()) === 3 &&
+      (await page.locator(".code-editor-textarea").nth(0).isEditable()) === true &&
+      (await page.locator(".code-editor-textarea").nth(1).isEditable()) === true);
+
+    await ctx.close();
+  }
+
+}
+
 
 async function runPages(browser) {
 
@@ -1467,6 +1772,7 @@ try {
 
   if (shouldRun("frame")) await runFrame(browser);
   if (shouldRun("edit")) await runEdit(browser);
+  if (shouldRun("authorjs")) await runAuthorJs(browser);
   if (shouldRun("pages")) await runPages(browser);
   if (shouldRun("nav")) await runNav(browser);
   if (shouldRun("native")) await runNative(browser);

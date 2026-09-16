@@ -60,9 +60,9 @@ const SKIN_PACKAGE_IMPORT_CSS_CHECK_NAMESPACE = "studio-skin-import-check";
   를 남긴다(요구사항 9절).
 
   reason 값: empty-input / json-parse / not-object / schema-version /
-  templates-missing / required-template / banner-template /
-  folder-template / css-type / post-body-region / folder-body-region /
-  css-validator.
+  render-mode / author-js / templates-missing / required-template /
+  banner-template / folder-template / css-type / post-body-region /
+  folder-body-region / css-validator.
 
   sanitizeSkinHTML()은 거부하지 않고 **조용히 지운다** — 그래서
   "sanitizer violation"이라는 reason은 존재할 수 없다. 허용되지 않은
@@ -122,6 +122,53 @@ async function validateSkinPackageImport(rawJsonText) {
       ok: false,
       reason: "render-mode",
       message: 'renderMode는 "native" 또는 "sandbox"여야 합니다.'
+    };
+  }
+
+  /*
+    SANDBOX-5A — js(선택). IMORY_SANDBOX_SKIN_DESIGN.md §O.
+
+    ★ 여기서 sanitize 하지 않는다. HTML 은 태그를 지워서 안전하게
+    만들 수 있지만 JS 는 그런 종류가 아니다 — 이 문자열의 안전은
+    **어디서 실행되는가**가 지킨다(부모와 다른 origin, connect-src
+    'none', 부모 DOM 접근 불가). 그래서 검사는 타입과 길이 둘뿐이다
+    (skin/skin-template.js isValidSkinAuthorJs).
+
+    ★ 빈 문자열은 통과한다. "JS 를 다 지운 스킨"과 "JS 필드가 없는
+    스킨"을 구분해서 보존해야 Import -> Export -> Import 왕복에서
+    값이 사라지지 않는다(renderMode:"native" 를 명시한 파일을
+    보존하는 것과 같은 판단).
+
+    ★ 문자열이 아니거나 너무 길면 **거부**다(조용히 버리지 않는다).
+    "저장은 됐는데 아무 일도 안 일어나는" 상태를 파일만 보고
+    구분할 수 없게 두지 않는다 — renderMode 와 같은 판단이다.
+  */
+
+  const authorJsInput =
+    parsed.js;
+
+  const hasAuthorJs =
+    authorJsInput !== undefined &&
+    authorJsInput !== null;
+
+  if (
+    hasAuthorJs &&
+    !(
+      typeof isValidSkinAuthorJs === "function" &&
+      isValidSkinAuthorJs(authorJsInput)
+    )
+  ) {
+    return {
+      ok: false,
+      reason: "author-js",
+      message:
+        "js는 문자열이어야 하고 " +
+        (
+          typeof SKIN_PACKAGE_MAX_JS_CHARS === "number"
+            ? SKIN_PACKAGE_MAX_JS_CHARS.toLocaleString()
+            : "131,072"
+        ) +
+        "자를 넘을 수 없습니다."
     };
   }
 
@@ -391,6 +438,10 @@ async function validateSkinPackageImport(rawJsonText) {
 
   if (hasRenderMode) {
     skinPackage.renderMode = renderModeInput;
+  }
+
+  if (hasAuthorJs) {
+    skinPackage.js = authorJsInput;
   }
 
   /*

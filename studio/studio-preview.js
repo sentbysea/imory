@@ -74,6 +74,22 @@ const PREVIEW_MSG_PING = "preview:ping";
 const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
+
+/*
+  SANDBOX-5A — sandbox 프레임에서 **저자가 쓴 JS** 가 오류를 냈다.
+
+  ★ "preview:error" 와 다르다. 그쪽은 미리보기를 못 그렸다는 뜻이라
+  오류 overlay 를 덮지만, 저자 JS 오류는 화면이 멀쩡한 상태다 —
+  HTML/CSS 는 이미 그려져 있다. 그래서 여기서는 토스트 한 줄만
+  띄우고 화면은 건드리지 않는다.
+
+  payload 에는 짧은 코드 하나만 온다(문장도 stack 도 오지 않는다 —
+  skin/sandbox/skin-sandbox-protocol.js SCRIPT_ERROR). 사람이 읽을
+  문장은 이 파일이 만든다.
+*/
+
+const PREVIEW_MSG_SCRIPT_ERROR = "preview:script-error";
+
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
 /* FOLDER-2 — 폴더 페이지(Series Viewer)의 글별 본문. post-body와 같은
    1회성 채널이고 payload는 { bodies: [{ key, html, containerStyle,
@@ -909,6 +925,27 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
 
   }
 
+  /* =====================================================
+     SANDBOX-5A — 작성 JS
+
+     meta.js 는 Code Editor 만 준다(문자열일 때만). Inspector 의
+     직접 편집 경로는 이 인자를 주지 않으므로 그쪽 동작은 한 줄도
+     달라지지 않는다.
+
+     ★ css 와 같이 **최상위 한 벌**에 쓴다. 페이지별로 두지 않는다
+     (12-B절의 css 결정과 같은 판단).
+  ====================================================== */
+
+  if (meta && typeof meta.js === "string") {
+
+    currentWorkingSkin =
+      {
+        ...currentWorkingSkin,
+        js: meta.js
+      };
+
+  }
+
   isStudioDirty =
     true;
 
@@ -952,10 +989,38 @@ studioCodeButton.addEventListener(
       return;
     }
 
+    /*
+      SANDBOX-5A — 작성 JS 한 칸.
+
+      ★ 페이지별이 아니라 스킨 한 벌이다(css 와 같은 결). 어느
+      페이지에서 CODE 를 열어도 같은 문자열이 보이고, 고치면 스킨
+      전체에 적용된다 — resolveSkinTemplate 이 그 값을 모든 화면에
+      실어 보낸다(skin/skin-template.js).
+
+      ★ renderMode 가 sandbox 가 아니면 "이 JS 는 실행되지 않는다"를
+      그 자리에서 알린다. 저장은 되고 파일에도 남지만 화면에서는
+      아무 일도 일어나지 않는 상태이므로, 편집기 안에서 말해 주지
+      않으면 알 길이 없다.
+    */
+
+    const renderMode =
+      typeof resolveSkinRenderMode === "function"
+        ? resolveSkinRenderMode(currentWorkingSkin)
+        : "native";
+
     window.openSkinCodeEditor(
       {
         html: source.html,
         css: source.css,
+        js:
+          typeof source.js === "string"
+            ? source.js
+            : (
+              typeof currentWorkingSkin.js === "string"
+                ? currentWorkingSkin.js
+                : ""
+            ),
+        jsEnabled: renderMode === "sandbox",
         onApply: (html, css, meta) =>
           applyWorkingSkinChanges(pageType, html, css, meta)
       }
@@ -2248,6 +2313,32 @@ window.addEventListener(
       setStudioPreviewOverlay(
         "error",
         "미리보기를 표시하지 못했습니다."
+      );
+
+      return;
+
+    }
+
+    /*
+      SANDBOX-5A — 저자 JS 오류. 화면은 그대로 두고 안내만 띄운다.
+
+      ★ overlay 를 덮지 않는다. 덮으면 "JS 하나가 틀렸다"가
+      "미리보기가 안 나온다"처럼 보이고, 실제로는 HTML/CSS 가
+      정상으로 그려져 있다.
+
+      자세한 오류(문구·줄 번호·stack)는 프레임 콘솔에만 있다 —
+      cross-origin 이라 이 문서가 읽을 수 없고, 읽어 오지도
+      않는다(내부 경로가 섞일 수 있다). 그래서 안내가 콘솔을
+      가리킨다.
+    */
+
+    if (data.type === PREVIEW_MSG_SCRIPT_ERROR) {
+
+      showStudioToast(
+        data.code === "script-blocked"
+          ? "이 스킨의 JS는 실행되지 않았습니다."
+          : "스킨 JS에서 오류가 발생했습니다. 자세한 내용은 브라우저 콘솔을 확인하세요.",
+        { isError: true }
       );
 
       return;

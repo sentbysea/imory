@@ -46,6 +46,10 @@
       ?sandboxSkinOrigin=...  frame origin (dev 전용)
       ?native=1               native 렌더도 함께 그린다(비교용)
       ?renderMode=native      fixture의 renderMode를 바꿔서 본다
+      ?authorJs=1             저자 JS 가 든 fixture 를 쓴다(SANDBOX-5A).
+                              실행되려면 ?sandboxSkinJs=1 도 함께 줘야
+                              한다 — 저자 JS 는 sandbox 플래그와 **별도**
+                              opt-in 이다(skin/sandbox/skin-sandbox-config.js)
       ?tall=1                 긴 콘텐츠(높이 반영 확인)
 
       자동 판정은 skin/sandbox/skin-sandbox-e2e-test.mjs가 한다.
@@ -475,11 +479,25 @@
 
         let skinPackage;
 
+        /*
+          ★ SANDBOX-5A — ?authorJs=1 이면 **다른 fixture** 를 읽는다.
+
+          기존 fixture(imory-sandbox-home-v1.json)에 js 를 더하지
+          않은 이유: 그 파일은 "native 렌더와 outerHTML 이 글자
+          단위로 같다"를 재는 데 쓰이는데, 저자 JS 는 바로 그 DOM 을
+          바꾼다. 두 성질을 한 파일에 담으면 둘 다 흐려진다.
+        */
+
+        const fixtureName =
+          params.get("authorJs") === "1"
+            ? "imory-sandbox-authorjs-v1.json"
+            : "imory-sandbox-home-v1.json";
+
         try {
 
           const response =
             await fetch(
-              "/skin/test-skins/imory-sandbox-home-v1.json?v=" +
+              "/skin/test-skins/" + fixtureName + "?v=" +
               encodeURIComponent(APP_BUILD_VERSION)
             );
 
@@ -503,6 +521,29 @@
 
         if (params.get("renderMode") === "native") {
           delete skinPackage.renderMode;
+        }
+
+
+        /* =====================================================
+           ★ SANDBOX-5A — e2e 가 자기 코드를 끼워 넣는 자리
+
+           보안 검증(부모 DOM · 부모 localStorage · top.location ·
+           window.open · form 제출 · fetch/XHR/WebSocket/
+           EventSource/sendBeacon · 외부 script/module · 알 수 없는
+           postMessage · 관리자 URL 이동)은 **탈출을 시도하는 코드**
+           를 실제로 돌려 봐야 판정할 수 있다.
+
+           그 코드를 저장소의 fixture 에 넣지 않는다 — fixture 는
+           "정상적으로 쓰는 JS"의 본보기여야 하고, 공격 코드는
+           그것을 기대하는 테스트 파일 옆에 있는 편이 읽기 쉽다.
+           그래서 하네스는 값이 있으면 그대로 js 로 쓴다.
+
+           이 창구는 **테스트 하네스에만** 있다. 공개 경로(index.html)
+           에도, Studio 에도 없다.
+        ====================================================== */
+
+        if (typeof window.__sandboxHarnessAuthorJsOverride === "string") {
+          skinPackage.js = window.__sandboxHarnessAuthorJsOverride;
         }
 
 

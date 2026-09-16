@@ -35,6 +35,10 @@ const CODE_EDITOR_CSS_CHECK_NAMESPACE = "studio-code-editor-check";
 let codeEditorOverlay = null;
 let codeEditorHtmlTextarea = null;
 let codeEditorCssTextarea = null;
+
+/* SANDBOX-5A — 작성 JS 한 칸(선택) */
+let codeEditorJsTextarea = null;
+let codeEditorJsNote = null;
 let codeEditorMessage = null;
 let codeEditorApplyButton = null;
 let codeEditorCancelButton = null;
@@ -150,6 +154,55 @@ function buildCodeEditorDom() {
   );
 
 
+  /* =====================================================
+     SANDBOX-5A — JS 한 칸
+
+     ★ HTML/CSS 칸은 한 글자도 바뀌지 않았다. 세 번째 칸이 뒤에
+     붙을 뿐이고, 기존 flex 배치가 그대로 셋을 나눠 갖는다.
+
+     ★ 이 칸의 내용은 sanitize 하지 않는다. HTML 은 태그를 지워
+     안전하게 만들 수 있지만 JS 는 그런 종류가 아니다 — 안전은
+     **어디서 실행되는가**가 지킨다(별도 origin 프레임,
+     connect-src 'none', 부모 DOM 접근 불가). 검사는 길이 하나뿐이다.
+
+     ★ sandbox 스킨이 아니면 안내 문구가 나온다. 저장은 되지만
+     화면에서는 아무 일도 일어나지 않기 때문이다(openSkinCodeEditor
+     의 jsEnabled).
+  ====================================================== */
+
+  const jsField =
+    buildCodeEditorField(
+      "JS"
+    );
+
+  /* 아래 줄 가로 전체를 쓴다 (studio/editor/code-editor.css) */
+
+  jsField.field.classList.add("code-editor-field--js");
+
+  const jsNote =
+    document.createElement("p");
+
+  jsNote.className =
+    "code-editor-field-note";
+
+  jsNote.hidden =
+    true;
+
+  /*
+    label 다음, textarea 앞에 끼운다 — 칸을 열었을 때 가장 먼저
+    읽히는 자리다.
+  */
+
+  jsField.field.insertBefore(
+    jsNote,
+    jsField.textarea
+  );
+
+  body.appendChild(
+    jsField.field
+  );
+
+
   const footer =
     document.createElement("div");
 
@@ -230,6 +283,12 @@ function buildCodeEditorDom() {
 
   codeEditorCssTextarea =
     cssField.textarea;
+
+  codeEditorJsTextarea =
+    jsField.textarea;
+
+  codeEditorJsNote =
+    jsNote;
 
   codeEditorMessage =
     message;
@@ -367,7 +426,7 @@ function setCodeEditorMessage(text, isError) {
    띄울지 결정한다(6절, 복잡한 diff UI는 만들지 않음).
 ========================================================== */
 
-function openSkinCodeEditor({ html, css, onApply }) {
+function openSkinCodeEditor({ html, css, js, jsEnabled, onApply }) {
 
   if (!codeEditorOverlay) {
     buildCodeEditorDom();
@@ -381,6 +440,23 @@ function openSkinCodeEditor({ html, css, onApply }) {
 
   codeEditorCssTextarea.value =
     css || "";
+
+  /*
+    SANDBOX-5A — 작성 JS. 호출자가 js 를 아예 주지 않으면 빈 칸이고,
+    Apply 는 그 빈 문자열을 그대로 돌려준다(빈 문자열도 값이다 —
+    "JS 를 다 지웠다"가 저장돼야 한다).
+  */
+
+  codeEditorJsTextarea.value =
+    typeof js === "string" ? js : "";
+
+  codeEditorJsNote.textContent =
+    jsEnabled === false
+      ? "이 JS는 sandbox 모드(renderMode: \"sandbox\")에서만 실행됩니다. 지금 스킨에서는 저장만 되고 화면에는 적용되지 않습니다."
+      : "";
+
+  codeEditorJsNote.hidden =
+    jsEnabled !== false;
 
   setCodeEditorMessage(
     "",
@@ -456,6 +532,40 @@ async function handleCodeEditorApply() {
   const rawCss =
     codeEditorCssTextarea.value;
 
+  const rawJs =
+    codeEditorJsTextarea.value;
+
+
+  /*
+    SANDBOX-5A — JS 는 길이만 본다(위 "sanitize 하지 않는다" 주석).
+    상한은 skin/skin-template.js 의 SKIN_PACKAGE_MAX_JS_CHARS 와
+    같은 값이다 — 여기서 통과시킨 것이 Import/Export/프레임 전송을
+    전부 통과해야 한다.
+  */
+
+  if (
+    typeof isValidSkinAuthorJs === "function" &&
+    !isValidSkinAuthorJs(rawJs)
+  ) {
+
+    setCodeEditorMessage(
+      "JS가 너무 깁니다: " +
+        (
+          typeof SKIN_PACKAGE_MAX_JS_CHARS === "number"
+            ? SKIN_PACKAGE_MAX_JS_CHARS.toLocaleString()
+            : "131,072"
+        ) +
+        "자까지 넣을 수 있습니다.",
+      true
+    );
+
+    codeEditorApplyButton.disabled =
+      false;
+
+    return;
+
+  }
+
   const sanitizedHtml =
     window.sanitizeSkinHTML(
       rawHtml
@@ -490,7 +600,7 @@ async function handleCodeEditorApply() {
     codeEditorCurrentOnApply(
       sanitizedHtml,
       rawCss,
-      { htmlWasModified }
+      { htmlWasModified, js: rawJs }
     );
 
   } catch (err) {

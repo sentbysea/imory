@@ -94,10 +94,23 @@
 }
 
 
+/*
+  SANDBOX-5A — 칸이 셋이 됐다(HTML · CSS · JS).
+
+  ★ 위 두 칸의 자리는 그대로다. JS 는 아래 줄에 **가로 전체**로
+  놓인다 — 코드 한 줄이 길어지기 쉬운 칸이라 반 폭보다 전체 폭이
+  낫고, HTML/CSS 를 나란히 보는 기존 배치도 유지된다.
+
+  행 높이를 명시하는 이유: 암시적 행은 내용에 따라 자라서 두
+  줄의 비율이 열 때마다 달라진다. 위 줄을 조금 더 높게 고정한다.
+*/
+
 .code-editor-body {
   display: grid;
 
   grid-template-columns: 1fr 1fr;
+
+  grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr);
 
   gap: 16px;
 
@@ -106,6 +119,27 @@
   min-height: 0;
 
   padding: 16px 18px;
+}
+
+
+.code-editor-field--js {
+  grid-column: 1 / -1;
+}
+
+
+/*
+  sandbox 스킨이 아닐 때 JS 칸 위에 나오는 한 줄. 거부가 아니라
+  안내다 — 값은 저장되고 파일에도 남는다(studio/editor/code-editor.js
+  openSkinCodeEditor 의 jsEnabled).
+*/
+
+.code-editor-field-note {
+  margin: 0 0 6px;
+
+  font-size: 11px;
+  line-height: 1.5;
+
+  color: var(--system-text-muted);
 }
 
 

@@ -11,6 +11,8 @@
      - core/lib/skin-sandbox-server.js         호스트 분기 · CSP · nonce
      - skin/sandbox/skin-sandbox-context.js    전달 데이터 투영(SANDBOX-1)
      - skin/skin-template.js                   renderMode 판정(SANDBOX-1)
+                                               js 보존(SANDBOX-5A)
+     - skin/sandbox/skin-sandbox-author-js.js  저자 JS API(SANDBOX-5A)
 
    왜 node인가
    -----------
@@ -347,14 +349,16 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
 
 /*
   SANDBOX-1 때 여섯이었고, SANDBOX-2 에서 셋이 늘었다
-  (RENDER_PAGE / POST_BODY / NAVIGATE). 이 수를 못 박아 두는 것은
-  "메시지가 조용히 늘지 않는다"를 지키기 위해서다 — 늘리려면
-  이 줄을 고쳐야 하고, 고치는 사람은 그때 새 메시지의 검증을
-  함께 보게 된다.
+  (RENDER_PAGE / POST_BODY / NAVIGATE). SANDBOX-5A 에서 하나 더
+  늘어 열이다 (SCRIPT_ERROR — 저자 JS 가 오류를 냈다).
+
+  이 수를 못 박아 두는 것은 "메시지가 조용히 늘지 않는다"를
+  지키기 위해서다 — 늘리려면 이 줄을 고쳐야 하고, 고치는 사람은
+  그때 새 메시지의 검증을 함께 보게 된다.
 */
 
-check("[msg] 이번 라운드가 아는 type 은 정확히 아홉이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 9,
+check("[msg] 이번 라운드가 아는 type 은 정확히 열이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 10,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -1546,6 +1550,297 @@ check("[msg2] ★ RENDERED 는 다섯 page type 을 받는다 (RENDER_PAGE 와 �
         { contract: 1, pageType: t, renderSeq: 1, height: 10 }),
       navRules
     ).ok === true));
+
+
+/* =========================================================
+   [authorjs] SANDBOX-5A — 저자 JS
+
+   브라우저 없이 판정할 수 있는 것 넷:
+     1. 언제 실행이 허용되는가 (config 의 두 번째 스위치)
+     2. 메시지가 코드를 어떻게 받아들이는가 (protocol)
+     3. SkinPackage 가 js 를 어떻게 보존하는가 (skin-template)
+     4. 저자에게 주는 API 의 모양 (author-js 런타임)
+
+   실제 실행·격리는 e2e(--only=authorjs)가 본다.
+========================================================== */
+
+console.log("\n[authorjs] 저자 JS — 실행 관문");
+
+/* --- production: imory.me + test1 일 때만 ---------------- */
+
+check("[authorjs] ★ production imory.me/test1 에서 켜진다",
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("https://imory.me/test1/"), "test1") === true);
+
+check("[authorjs] ★ 같은 호스트의 다른 블로그에서는 꺼진다",
+  ["other", "blog2", "admin", ""].every((slug) =>
+    config.isSandboxSkinAuthorJsEnabled(
+      fakeWindow("https://imory.me/" + slug + "/"), slug) === false));
+
+check("[authorjs] ★ 다른 호스트에서는 켜지지 않는다",
+  ["https://example.com/test1/", "https://skin-frame.imory.me/test1/"].every(
+    (href) =>
+      config.isSandboxSkinAuthorJsEnabled(fakeWindow(href), "test1") === false));
+
+check("[authorjs] ★ production 은 쿼리로 켜지지 않는다",
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("https://imory.me/other/?sandboxSkinJs=1"), "other") === false);
+
+check("[authorjs] ★ production 은 localStorage 로도 켜지지 않는다",
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("https://imory.me/other/", { "imory.sandboxSkinJs": "1" }),
+    "other") === false);
+
+check("[authorjs] slug 를 안 주면 주소 첫 칸에서 읽는다",
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("https://imory.me/test1/post/1")) === true &&
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("https://imory.me/other/post/1")) === false);
+
+/* --- dev 호스트: sandbox opt-in 과 **별개** --------------- */
+
+check("[authorjs] ★ dev 호스트에서도 저자 JS 전용 opt-in 이 필요하다",
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("http://localhost:8957/x?sandboxSkin=1")) === false);
+
+check("[authorjs] dev 호스트 + ?sandboxSkinJs=1 이면 켜진다",
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("http://localhost:8957/x?sandboxSkinJs=1")) === true);
+
+check("[authorjs] dev 호스트 + localStorage opt-in 도 받는다",
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("http://localhost:8957/x", { "imory.sandboxSkinJs": "1" })) === true);
+
+check("[authorjs] ★ sandbox 플래그가 켜져도 저자 JS 는 따로다",
+  config.isSandboxSkinEnabled(
+    fakeWindow("http://localhost:8957/x?sandboxSkin=1")) === true &&
+  config.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("http://localhost:8957/x?sandboxSkin=1")) === false);
+
+/* --- 전역 kill switch ------------------------------------ */
+
+/*
+  배포되는 그 파일을 **그대로 읽어** 스위치만 false 로 바꾼 사본을
+  평가한다. 값을 흉내내지 않고 실제 판정 코드를 돌린다.
+*/
+
+const configSource =
+  fs.readFileSync(path.join(HERE, "skin-sandbox-config.js"), "utf8");
+
+const killedConfig =
+  new Function(
+    /*
+      ★ 저장소 파일은 CRLF 다. 줄바꿈을 먼저 고른 뒤 치환한다 —
+      안 그러면 치환이 조용히 빗나가고, 이 테스트가 "끈 적 없는
+      스위치"를 검사하게 된다.
+    */
+    configSource
+      .replace(/\r\n/g, "\n")
+      .replace(
+        "var SANDBOX_SKIN_AUTHOR_JS_ENABLED =\n  true;",
+        "var SANDBOX_SKIN_AUTHOR_JS_ENABLED =\n  false;"
+      ) +
+    "\nreturn { isSandboxSkinAuthorJsEnabled, isSandboxSkinEnabled, SANDBOX_SKIN_AUTHOR_JS_ENABLED };"
+  )();
+
+check("[authorjs] ★ kill switch 를 false 로 두면 어디서도 켜지지 않는다",
+  killedConfig.SANDBOX_SKIN_AUTHOR_JS_ENABLED === false &&
+  killedConfig.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("https://imory.me/test1/"), "test1") === false &&
+  killedConfig.isSandboxSkinAuthorJsEnabled(
+    fakeWindow("http://localhost:8957/x?sandboxSkinJs=1")) === false);
+
+check("[authorjs] ★ kill switch 는 화면 렌더(sandbox 경로)까지 끄지는 않는다",
+  killedConfig.isSandboxSkinEnabled(
+    fakeWindow("https://imory.me/test1/")) === true);
+
+
+/* --- 메시지 계약 ----------------------------------------- */
+
+console.log("\n[authorjs] 저자 JS — 메시지");
+
+const goodTemplate =
+  { html: "<div></div>", css: "" };
+
+check("[authorjs] js 없는 template 은 지금까지와 같다",
+  protocol.isSandboxTemplate(goodTemplate) === true);
+
+check("[authorjs] ★ js 는 선택이고 문자열이어야 한다",
+  protocol.isSandboxTemplate({ ...goodTemplate, js: "var a=1;" }) === true &&
+  protocol.isSandboxTemplate({ ...goodTemplate, js: "" }) === true &&
+  [1, true, null, {}, []].every(
+    (v) => protocol.isSandboxTemplate({ ...goodTemplate, js: v }) === false));
+
+check("[authorjs] ★ 상한을 넘는 js 는 거부된다 (잘린 코드를 실행하지 않는다)",
+  protocol.isSandboxTemplate({
+    ...goodTemplate,
+    js: "x".repeat(protocol.SANDBOX_MAX_AUTHOR_JS_CHARS)
+  }) === true &&
+  protocol.isSandboxTemplate({
+    ...goodTemplate,
+    js: "x".repeat(protocol.SANDBOX_MAX_AUTHOR_JS_CHARS + 1)
+  }) === false);
+
+check("[authorjs] ★ template 에 모르는 키는 여전히 거부된다",
+  protocol.isSandboxTemplate({ ...goodTemplate, evil: "x" }) === false);
+
+check("[authorjs] ★ RENDER_PAGE 가 js 를 실어 나른다",
+  protocol.validateSandboxMessage(
+    toFrame2("IMORY_RENDER_PAGE", {
+      contract: 1,
+      pageType: "home",
+      renderSeq: 1,
+      template: { html: "<div></div>", css: "", js: "var a=1;" },
+      data: {}
+    }),
+    frameRules2
+  ).payload.template.js === "var a=1;");
+
+check("[authorjs] ★ SCRIPT_ERROR 에는 문장도 stack 도 없다 (코드 하나)",
+  JSON.stringify(protocol.SANDBOX_MESSAGE_SPEC.IMORY_SCRIPT_ERROR.keys) ===
+  JSON.stringify(["contract", "renderSeq", "code"]));
+
+check("[authorjs] 정상 SCRIPT_ERROR 는 통과한다",
+  protocol.SANDBOX_SCRIPT_ERROR_CODES.every((code) =>
+    protocol.validateSandboxMessage(
+      toParent2("IMORY_SCRIPT_ERROR", { contract: 1, renderSeq: 1, code }),
+      navRules
+    ).ok === true));
+
+check("[authorjs] ★ 모르는 코드는 거부된다",
+  protocol.validateSandboxMessage(
+    toParent2("IMORY_SCRIPT_ERROR",
+      { contract: 1, renderSeq: 1, code: "Error: /var/www/skin.js:3" }),
+    navRules
+  ).reason === "bad-payload-value");
+
+check("[authorjs] ★ SCRIPT_ERROR 에 문장을 끼워 보내면 거부된다",
+  protocol.validateSandboxMessage(
+    toParent2("IMORY_SCRIPT_ERROR",
+      { contract: 1, renderSeq: 1, code: "script-error", message: "x" }),
+    navRules
+  ).reason === "unknown-payload-key");
+
+check("[authorjs] ★ 프레임은 SCRIPT_ERROR 를 받지 않는다 (방향)",
+  protocol.validateSandboxMessage(
+    toFrame2("IMORY_SCRIPT_ERROR", { contract: 1, renderSeq: 1, code: "script-error" }),
+    frameRules2
+  ).reason === "wrong-direction");
+
+
+/* --- SkinPackage 보존 ------------------------------------ */
+
+console.log("\n[authorjs] 저자 JS — SkinPackage");
+
+const jsApi =
+  new Function(
+    templateSource +
+    "\nreturn { resolveSkinTemplate, resolveSkinAuthorJs, isValidSkinAuthorJs," +
+    " SKIN_PACKAGE_MAX_JS_CHARS };"
+  )();
+
+check("[authorjs] ★ 상한이 프로토콜과 같은 값이다",
+  jsApi.SKIN_PACKAGE_MAX_JS_CHARS === protocol.SANDBOX_MAX_AUTHOR_JS_CHARS);
+
+check("[authorjs] 빈 문자열은 허용이다 (JS 를 다 지운 상태도 값이다)",
+  jsApi.isValidSkinAuthorJs("") === true);
+
+check("[authorjs] 문자열이 아니거나 너무 길면 안 받는다",
+  [1, null, undefined, {}, []].every((v) => jsApi.isValidSkinAuthorJs(v) === false) &&
+  jsApi.isValidSkinAuthorJs("x".repeat(jsApi.SKIN_PACKAGE_MAX_JS_CHARS + 1)) === false);
+
+check("[authorjs] ★ resolveSkinTemplate 이 js 를 모든 화면에 실어 준다",
+  ["home", "category", "post"].every((pageType) =>
+    jsApi.resolveSkinTemplate(
+      {
+        schemaVersion: 1,
+        js: "var a=1;",
+        css: "b{}",
+        templates: {
+          home: { html: "<i></i>" },
+          category: { html: "<i></i>" },
+          post: { html: "<i></i>" }
+        }
+      },
+      pageType
+    ).js === "var a=1;"));
+
+check("[authorjs] ★ js 가 없는 스킨은 빈 문자열을 받는다 (아무 일도 없다)",
+  jsApi.resolveSkinTemplate(
+    { schemaVersion: 1, templates: { home: { html: "<i></i>" } } },
+    "home"
+  ).js === "");
+
+check("[authorjs] ★ 이상한 js 값은 렌더 입력에 닿지 않는다",
+  [1, null, {}, "x".repeat(jsApi.SKIN_PACKAGE_MAX_JS_CHARS + 1)].every((v) =>
+    jsApi.resolveSkinAuthorJs({ js: v }) === ""));
+
+check("[authorjs] legacy HOME-only 스킨도 js 를 받는다",
+  jsApi.resolveSkinTemplate(
+    { schemaVersion: 1, html: "<i></i>", css: "", js: "var a=1;" },
+    "home"
+  ).js === "var a=1;");
+
+
+/* --- 저자에게 주는 API ------------------------------------ */
+
+console.log("\n[authorjs] 저자 JS — API");
+
+const authorRuntime =
+  require(path.join(HERE, "skin-sandbox-author-js.js"));
+
+const cleanups = [];
+
+const api =
+  authorRuntime.buildSandboxAuthorApi({
+    pageType: "home",
+    root: { tag: "root" },
+    context: { site: { slug: "test1" }, nested: { a: [1, 2] } },
+    navigate: (href) => href === "/test1/category/1",
+    cleanups
+  });
+
+check("[authorjs] ★ API 계약 버전은 1 이고 키는 여섯뿐이다",
+  api.version === 1 &&
+  JSON.stringify(Object.keys(api).sort()) ===
+  JSON.stringify(
+    ["context", "navigate", "onCleanup", "pageType", "root", "version"]));
+
+check("[authorjs] ★ API 자체가 동결돼 있다",
+  Object.isFrozen(api) === true);
+
+check("[authorjs] ★ context 는 복사본이고 깊이 동결돼 있다",
+  Object.isFrozen(api.context) === true &&
+  Object.isFrozen(api.context.site) === true &&
+  Object.isFrozen(api.context.nested.a) === true &&
+  api.context.site.slug === "test1");
+
+check("[authorjs] ★ navigate 는 표에 있는 주소만 true 다",
+  api.navigate("/test1/category/1") === true &&
+  api.navigate("https://example.com/evil") === false &&
+  api.navigate("") === false &&
+  api.navigate(null) === false);
+
+check("[authorjs] onCleanup 은 함수만 받고 상한이 있다",
+  api.onCleanup(() => {}) === true &&
+  api.onCleanup("not a function") === false);
+
+check("[authorjs] ★ cleanup 은 한 번만 불리고, 하나가 던져도 나머지가 돈다",
+  (() => {
+    const list = [];
+    const ran = [];
+    list.push(() => { ran.push("a"); });
+    list.push(() => { throw new Error("boom"); });
+    list.push(() => { ran.push("c"); });
+    const first = authorRuntime.runSandboxAuthorCleanups(list);
+    const second = authorRuntime.runSandboxAuthorCleanups(list);
+    return first === 2 && second === 0 &&
+      JSON.stringify(ran) === JSON.stringify(["a", "c"]);
+  })());
+
+check("[authorjs] ★ 빈 코드는 실행 자체를 시도하지 않는다",
+  authorRuntime.runSandboxAuthorScript({ code: "" }).code === "script-blocked" &&
+  authorRuntime.runSandboxAuthorScript({ code: null }).code === "script-blocked");
 
 
 /* =========================================================

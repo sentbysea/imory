@@ -123,6 +123,80 @@ function isKnownSkinRenderMode(value) {
 
 }
 
+
+/* =========================================================
+   SANDBOX-5A — 작성 JS (`js`)
+
+   IMORY_SANDBOX_SKIN_DESIGN.md §C 가 처음부터 자리를 비워 둔 필드다
+   (§O 가 실행을 켠 기록이다). SkinPackage 최상위의 **문자열 하나**이고,
+   `css` 와 같은 결이다: 페이지마다 따로 두지 않고 스킨 전체가 한 벌을
+   공유한다.
+
+   ★ schemaVersion 은 여전히 1 이다.
+
+   이 필드를 모르는 옛 배포는 그냥 무시하고 지금까지처럼 그린다 —
+   즉 JS 가 빠진 화면이 나온다. renderMode 와 같은 판단이다(2로
+   올리면 옛 배포가 스킨을 통째로 legacy 화면으로 폴백시킨다).
+
+   ★ 여기서 sanitize 하지 않는다.
+
+   HTML 은 태그를 지워서 안전하게 만들 수 있지만, JS 는 "일부를
+   지워서 안전해지는" 종류가 아니다. 이 문자열의 안전은 전적으로
+   **어디서 실행되는가**가 지킨다 — 부모와 다른 origin,
+   connect-src 'none', 부모 DOM 접근 불가. 그래서 검사는 타입과
+   길이 둘뿐이다.
+
+   ★ 상한은 프로토콜과 같은 값이어야 한다.
+   (skin/sandbox/skin-sandbox-protocol.js SANDBOX_MAX_AUTHOR_JS_CHARS)
+   어긋나면 "Import 는 통과했는데 프레임에 안 가는" 조용한 오작동이
+   생긴다.
+========================================================== */
+
+const SKIN_PACKAGE_MAX_JS_CHARS = 131072;
+
+
+/*
+  "이 값을 SkinPackage 의 js 로 받아도 되는가".
+
+  빈 문자열은 **허용**이다 — 사용자가 JS 를 다 지운 상태를
+  "필드가 없는 것"과 구분해서 보존해야 왕복에서 값이 사라지지
+  않는다(renderMode:"native" 를 명시한 파일을 보존하는 것과 같은
+  판단).
+*/
+
+function isValidSkinAuthorJs(value) {
+
+  return (
+    typeof value === "string" &&
+    value.length <= SKIN_PACKAGE_MAX_JS_CHARS
+  );
+
+}
+
+
+/*
+  resolveSkinAuthorJs(skinPackage) -> string
+
+  문자열이 아니거나 상한을 넘으면 "" 다 — 어떤 경로로 이상한 값이
+  draft 에 들어와 있더라도 렌더 입력에는 빈 문자열만 닿는다.
+  (renderMode 와 같은 "모르는 값은 안전한 쪽으로" 규칙.)
+*/
+
+function resolveSkinAuthorJs(skinPackage) {
+
+  if (
+    !skinPackage ||
+    typeof skinPackage !== "object" ||
+    !isValidSkinAuthorJs(skinPackage.js)
+  ) {
+    return "";
+  }
+
+
+  return skinPackage.js;
+
+}
+
 /* Additive gallery fallback. Existing category templates retain full control. */
 function getDefaultGalleryTemplate() {
   const tree = (path, depth) => `<ul><li data-imory-repeat="${path}">
@@ -309,6 +383,24 @@ function resolveSkinTemplate(
   }
 
 
+  /*
+    SANDBOX-5A — 작성 JS 는 페이지별이 아니라 스킨 한 벌이다.
+
+    여기에 실어 보내는 이유는 호출자 수다. 이 함수의 결과가 곧
+    "이 화면을 그리는 재료"이고, 공개 다섯 화면과 Studio Preview 가
+    전부 이 객체 하나를 들고 다닌다 — 별도 인자로 만들면 같은 값을
+    여섯 군데에서 따로 꺼내 넘겨야 하고, 한 군데를 빠뜨리면 그
+    화면에서만 JS 가 조용히 빠진다.
+
+    native 렌더러는 이 키를 읽지 않는다(renderSkin 은 html/css 만
+    본다) — renderMode:"native" 에서 무시된다는 계약이 그래서 코드
+    모양으로 성립한다.
+  */
+
+  const authorJs =
+    resolveSkinAuthorJs(skinPackage);
+
+
   const explicitTemplate =
     skinPackage.templates?.[pageType];
 
@@ -319,7 +411,8 @@ function resolveSkinTemplate(
       css:
         typeof explicitTemplate.css === "string"
           ? explicitTemplate.css
-          : (skinPackage.css || "")
+          : (skinPackage.css || ""),
+      js: authorJs
     };
 
   }
@@ -332,7 +425,8 @@ function resolveSkinTemplate(
 
     return {
       html: skinPackage.html,
-      css: skinPackage.css || ""
+      css: skinPackage.css || "",
+      js: authorJs
     };
 
   }

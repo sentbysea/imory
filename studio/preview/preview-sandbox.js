@@ -80,7 +80,11 @@
    ---------------------------------------------------------
    ★ 이번 라운드에서 하지 않는 것
 
-     · 사용자 작성 JS 실행 (프레임에 넘기지 않는다)
+     · (SANDBOX-5A 에서 바뀜) 사용자 작성 JS 는 이제 프레임에서
+       실행된다. 이 파일이 하는 일은 여전히 "연결" 하나다 —
+       판정은 host 가, 실행은 프레임이 한다. 다만 저자 JS 가
+       얽힌 렌더에서는 **프레임을 재사용하지 않는다**(아래
+       needs-new-realm).
      · FOLDER / Series Viewer — pageType 표에 없으므로 native 로
        간다. 폴더 Preview 는 지금까지와 똑같다.
      · Element Inspector / 직접 편집 — 프레임 안 DOM 은 이 문서가
@@ -447,10 +451,23 @@ export async function renderSandboxPreview(options) {
     sandboxRenderToken;
 
 
+  /*
+    ★ SANDBOX-5A — js 한 칸.
+
+    부모(Studio)가 보내는 skin 은 resolveSkinTemplate() 의 결과라
+    js 가 이미 들어 있다(skin/skin-template.js). 여기서 알려진 키만
+    새 리터럴로 옮기므로, 이 줄이 없으면 저자 JS 가 **조용히**
+    빠진다 — Studio Preview 에서만 JS 가 안 도는 상태가 된다.
+
+    실행 여부의 판정은 여전히 host 가 한다(관문 다섯) — 이 파일은
+    값을 흘리지 않고 넘겨줄 뿐이다.
+  */
+
   const template =
     {
       html: typeof opts.skin.html === "string" ? opts.skin.html : "",
-      css: typeof opts.skin.css === "string" ? opts.skin.css : ""
+      css: typeof opts.skin.css === "string" ? opts.skin.css : "",
+      js: typeof opts.skin.js === "string" ? opts.skin.js : ""
     };
 
 
@@ -465,6 +482,7 @@ export async function renderSandboxPreview(options) {
           pageType: pageType,
           template: template,
           context: context,
+          flagWindow: flagWindow(),
           navResolveTarget: resolvePreviewNavTarget
         }
       );
@@ -477,7 +495,33 @@ export async function renderSandboxPreview(options) {
 
     }
 
-    if (!again.ok) {
+    /* =====================================================
+       ★ SANDBOX-5A — 저자 JS 가 얽히면 프레임을 다시 만든다
+
+       host 가 "이 프레임은 재사용할 수 없다"고 알려 준 경우다
+       (이번 렌더가 JS 를 실행하거나, 이 프레임이 **전에** 실행한
+        적이 있다). 임의 JS 가 남긴 타이머·리스너·observer 를 전부
+       되돌릴 방법이 없으므로 청소 대신 realm 을 버린다 —
+       skin/sandbox/skin-sandbox-host.js renderSandboxSkinPage 의
+       needs-new-realm 주석.
+
+       그래서 Studio 에서 JS 를 한 글자 고칠 때마다 프레임이 새로
+       뜬다. 그 대가로 "고치면 그 즉시, 누적 없이 다시 돈다"가
+       성립한다(Save 전에도).
+
+       프레임을 치우고 **아래 첫 렌더 경로로 떨어진다** —
+       return 하지 않는다.
+    ====================================================== */
+
+    if (!again.ok && again.reason === "needs-new-realm") {
+
+      destroySandboxSkinFrame(sandboxHandle);
+
+      sandboxHandle = null;
+
+    }
+
+    else if (!again.ok) {
 
       /*
         ★ 여기서 프레임을 치우지 않는다. 방금 편집한 HTML 한 번이
@@ -490,11 +534,15 @@ export async function renderSandboxPreview(options) {
 
     }
 
-    sandboxPageType = pageType;
+    else {
 
-    flushSandboxPendingPostBody();
+      sandboxPageType = pageType;
 
-    return { ok: true, pageType: pageType };
+      flushSandboxPendingPostBody();
+
+      return { ok: true, pageType: pageType };
+
+    }
 
   }
 
@@ -516,11 +564,26 @@ export async function renderSandboxPreview(options) {
       template: template,
       context: context,
       frameOrigin: frameOrigin,
+      flagWindow: flagWindow(),
       navResolveTarget: resolvePreviewNavTarget,
       onNavigate: function (target) {
 
         if (typeof opts.onNavigate === "function" && target && target.href) {
           opts.onNavigate(target.href);
+        }
+
+      },
+
+      /*
+        SANDBOX-5A — 저자 JS 가 오류를 냈다. 화면은 그대로이고
+        (HTML/CSS 는 이미 그려져 있다) 호출자가 짧은 안내만 띄운다.
+        코드 문자열 하나뿐이다 — 문장도 stack 도 오지 않는다.
+      */
+
+      onScriptError: function (code) {
+
+        if (typeof opts.onScriptError === "function") {
+          opts.onScriptError(code);
         }
 
       }

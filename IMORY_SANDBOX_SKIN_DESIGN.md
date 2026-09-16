@@ -1,14 +1,19 @@
 # IMORY SANDBOX SKIN — 0단계 조사 및 구현 설계
 
 **상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기 ·
-§J SANDBOX-2 · §K SANDBOX-3 · §L SANDBOX-4 · §M SANDBOX-3.1).**
+§J SANDBOX-2 · §K SANDBOX-3 · §L SANDBOX-4 · §M SANDBOX-3.1 ·
+§O SANDBOX-5A 저자 JS).**
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
 §G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2) · §K(SANDBOX-3) ·
-§L(SANDBOX-4) · §M(SANDBOX-3.1)에만
+§L(SANDBOX-4) · §M(SANDBOX-3.1) · §O(SANDBOX-5A)에만
 적혀 있다.** 섞어
 읽지 말 것 (CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 /
 남은 차이"를 구분한다).
+
+★ **여러 블로그에 저자 JS 를 열기 전에 §O-9 를 먼저 읽을 것.**
+지금 모든 프레임이 `skin-frame.imory.me` 하나를 공유하고, 저자 JS 가
+도는 순간 그 origin 의 저장소·채널이 블로그들 사이에서 공유된다.
 
 §A~§F 와 §H·§J 가 어긋나는 지점(설계가 나중에 바뀐 곳):
 
@@ -23,6 +28,8 @@
 | GALLERY / BANNER / HIGHLIGHTS | §E: 뒤로 미룸 | **SANDBOX-3 에서 했다** (§K). FOLDER 만 남았다 |
 | Studio Preview | §E SANDBOX-4: "중첩하거나 Studio 가 직접 띄운다 — 범위가 크니 재설계" | **중첩을 골랐고, Inspector 는 범위에서 빼서 이번에 했다** (§L) |
 | 본문 inline style | §D-4 · §H-7: "CSSOM 쓰기는 막히지 않으므로 style-src-attr 를 열 필요가 없다" | SANDBOX-2 가 `setAttribute("style", …)` 와 `innerHTML` 의 style 속성을 더하면서 **그 전제가 깨졌다**. CSP 를 넓히는 대신 선언을 검증해 nonce `<style>` 로 옮겼다 (§M) |
+| 저자 JS 실행 | §C · §E SANDBOX-5 · §G-6 TODO: `script-src` 에 `blob:` 을 더해 Blob URL ES 모듈로 주입한다 | **CSP 를 한 글자도 넓히지 않았다.** 이미 있던 `'nonce-…'` 가 inline script 에도 적용되므로, nonce 를 단 classic `script` 요소의 `textContent` 로 실행한다 (§O-3) |
+| `js` 필드 | §C: 스키마에만 두고 실행하지 않는다 | **SANDBOX-5A 에서 실행된다.** 단 `test1` + 전용 kill switch 가 켜졌을 때만 (§O-5) |
 
 목표: 기존 `SkinPackage`·native 렌더링을 **한 byte도 바꾸지 않은 채**,
 `renderMode: "sandbox"`인 스킨만 별도 origin의 iframe에서 그리는 경로를
@@ -2510,6 +2517,377 @@ reader-scale 이 지우는 대신 그 값을 읽는다. 누적 방지(원래 지
 
 ---
 
+---
+
+## O. SANDBOX-5A 구현 기록 (2026-09-16) — 저자 JS
+
+**상태: 이 절이 현재 구현이다.** 저자가 쓴 JavaScript 가 **별도
+origin 의 sandbox 프레임 안에서만** 실행되기 시작했다.
+
+### O-1. 한 줄 요약
+
+`SkinPackage.js` (문자열 하나, 선택) 를 프레임이 **nonce 가 붙은
+inline `script` 요소**로 실행한다. CSP 는 **한 글자도 넓히지 않았다** —
+`eval` 도 `new Function` 도 `blob:` 도 `'unsafe-inline'` 도 쓰지
+않는다.
+
+### O-2. SkinPackage 계약
+
+| 항목 | 값 |
+| --- | --- |
+| 필드 이름 | `js` — 최상위, `css` 와 같은 자리 (설계 §C 가 처음부터 비워 둔 칸) |
+| 타입 | 문자열만. 빈 문자열 허용 |
+| 상한 | **131,072자 (128 KiB)** |
+| `schemaVersion` | **1 그대로** — 이 필드를 모르는 옛 배포는 무시하고 그린다 |
+| 페이지별 | 없다. 스킨 한 벌이 한 문자열을 공유한다 |
+| sanitize | **하지 않는다.** JS 는 일부를 지워 안전해지는 종류가 아니다 — 안전은 "어디서 실행되는가"가 지킨다 |
+| native 스킨 | 무시된다. `renderSkin()` 은 `html`/`css` 만 읽는다 |
+
+상한 값은 **세 곳에 같은 숫자**로 적혀 있다(파일이 서로를 import 하지
+않는다 — 값이 바뀌면 함께 고친다):
+
+- `skin/skin-template.js` `SKIN_PACKAGE_MAX_JS_CHARS`
+- `skin/sandbox/skin-sandbox-protocol.js` `SANDBOX_MAX_AUTHOR_JS_CHARS`
+- `skin/skin-package-export.js` `SKIN_PACKAGE_EXPORT_MAX_JS_CHARS`
+- `functions/api/skin-ai.js` `SKIN_AI_MAX_AUTHOR_JS_CHARS`
+
+### O-3. 어디서 실행되는가 — nonce 하나로 끝났다
+
+설계 §G-6 의 TODO 는 "script-src 에 `blob:` 을 더해 Blob URL ES
+모듈로 주입한다"였다. **그럴 필요가 없었다.** frame 문서는 요청마다
+새 nonce 를 받고(`functions/_middleware.js` → `createSandboxNonce`),
+CSP 에 이미 `script-src 'self' 'nonce-…' <css 파서 URL>` 이 있다.
+nonce 는 inline script 에도 적용되므로, 저자 코드를 담은 script 요소에
+그 nonce 를 달아 붙이면 그대로 실행된다.
+
+```
+skin/sandbox/skin-sandbox-author-js.js  runSandboxAuthorScript()
+
+  const el = doc.createElement("script");   // type 없음 = classic
+  el.setAttribute("nonce", nonce);
+  el.textContent = code;                     // HTML 파싱을 거치지 않는다
+  doc.head.appendChild(el);                  // 여기서 **동기적으로** 실행
+```
+
+세 가지가 이 모양에서 나온다:
+
+- **순서 보장** — classic script 는 append 하는 자리에서 동기 실행이라
+  "렌더 → nav 표 → 본문 → 저자 JS → 높이 측정 → RENDERED" 가 코드
+  모양으로 성립한다(`skin-sandbox-frame.js renderPage()`).
+- **오류 포착** — 문법 오류도 최상위 예외도 append 를 감싼 window
+  `error` 리스너가 그 자리에서 잡는다.
+- **코드가 한 글자도 안 바뀐다** — `textContent` 는 HTML 파싱을 거치지
+  않으므로 저자 코드 안의 닫는 script 태그 문자열이나 따옴표를
+  escape 할 필요가 없다.
+
+#### nonce 가 무엇이고 무엇이 아닌가 (오해하기 쉬운 자리)
+
+nonce 는 **"이 script 를 실행해도 된다"는 허가 표식**이다. 임의 JS 가
+실행된 뒤까지 지켜지는 비밀이 아니다.
+
+**계약으로 지키는 것 (실제로 지켜진다)**
+
+- nonce 는 `SkinPackage` 에 실리지 않는다.
+- nonce 는 부모 ↔ 프레임 메시지 payload 에 실리지 않는다
+  (`skin-sandbox-protocol.js` 의 키 목록에 그런 칸이 없다).
+- bridge 가 시작하자마자 `window.__imorySandboxNonce` 를 자기 클로저로
+  옮기고 window 에서 `delete` 한다.
+
+**은닉이 아니다 (2026-09-16 실측)**
+
+마지막 항목은 **노출 면 정리이지 은닉이 아니다.** 이미 실행 중인 저자
+JS 는 자기 script 요소의 `document.currentScript.nonce` 로 그 값을
+**읽을 수 있다.** e2e 로 직접 쟀다:
+
+```
+[authorjs] (기록) 실행 중인 저자 JS 는 자기 script 의 nonce 를 읽는다
+           OK:READABLE/attr:EMPTY
+```
+
+브라우저가 가리는 것은 `getAttribute("nonce")` 뿐이고(그래서 `attr:EMPTY`),
+IDL 프로퍼티는 same-origin 에 그대로 보인다. 이 realm 의 다른 요소가
+가진 nonce 프로퍼티도 마찬가지다.
+
+**그래도 문제가 되지 않는 이유**
+
+이 설계의 경계는 nonce 가 아니다. **별도 origin · CSP
+(`connect-src 'none'` 등) · iframe sandbox 속성 · 부모가 쥔 이동 표** —
+이 넷이고, 그중 어느 것도 "nonce 가 비밀이다"에 기대지 않는다. 저자가
+nonce 를 읽어 script 를 하나 더 붙여도 얻는 것이 없다: 그는 이미 이
+realm 에서 임의 코드를 돌리고 있다.
+
+그러니 문서·주석·테스트 어디에서도 nonce 를 "저자 코드가 볼 수 없다"로
+적지 말 것. 그렇게 적으면 다음 사람이 존재하지 않는 경계를 믿고 설계를
+얹게 된다.
+
+### O-4. CSP — 실제로 바뀐 것: 없음
+
+`core/lib/skin-sandbox-server.js buildSandboxCsp()` 는 **한 줄도
+바뀌지 않았다**(이 라운드의 diff 는 그 파일에서 주석과 경로 allowlist
+한 줄뿐이다). `connect-src 'none'` · `frame-ancestors` ·
+`sandbox allow-scripts allow-same-origin` 전부 SANDBOX-3 그대로다.
+
+e2e `[csp]` 절은 **실제 응답 헤더**를 받아 지시어별로 확인한다
+(전문 문자열 비교가 아니다): `default-src`/`connect-src`/`object-src`/
+`base-uri`/`form-action` 이 `'none'` 인가, `frame-ancestors` 가 부모
+origin 하나인가, `unsafe-inline`·`unsafe-eval` 이 어디에도 없는가,
+`script-src` 의 바깥 출처가 CSS 파서 파일 하나뿐인가, 그리고 이
+라운드에서 더한 한 줄 — **`script-src` 에 `blob:` 이 없는가**(원래
+계획이 그것이었으므로 안 열렸다는 것을 헤더로 못박는다).
+
+그래서 저자 JS 는 CSP 만으로 다음을 할 수 없다:
+fetch / XHR / WebSocket / EventSource / sendBeacon (`connect-src 'none'`),
+외부 script·module import (`script-src`), form 제출
+(`form-action 'none'`), 새 창 (iframe sandbox 에 `allow-popups` 없음),
+top navigation (`allow-top-navigation` 없음).
+
+경로 allowlist 에 파일 **하나**가 늘었다:
+`/skin/sandbox/skin-sandbox-author-js.js` (sandbox origin 에만).
+
+### O-5. 활성화 — 스위치가 둘이다
+
+`skin/sandbox/skin-sandbox-config.js` 의 두 번째 스위치
+`isSandboxSkinAuthorJsEnabled(win, slug)`. 다섯이 **모두** 참일 때만
+코드가 wire 에 오른다:
+
+1. sandbox 기능 ON (`isSandboxSkinEnabled` / `…PreviewEnabled`)
+2. production hostname 이 `imory.me` (`SANDBOX_SKIN_ENABLED_HOSTS`)
+3. blog slug 가 `test1` — **두 목록에 모두** 있어야 한다
+   (`SANDBOX_SKIN_ENABLED_SLUGS` ∩ `SANDBOX_SKIN_AUTHOR_JS_SLUGS`)
+4. `renderMode === "sandbox"` (이 경로에 들어왔다는 것 자체가 그 뜻)
+5. **전역 kill switch** `SANDBOX_SKIN_AUTHOR_JS_ENABLED === true`
+
+**kill switch 하나로 즉시 끈다.** `false` 로 바꿔 배포하면 호스트·
+slug·renderMode 가 무엇이든 저자 JS 는 한 줄도 실행되지 않고, 화면은
+HTML/CSS 로 그대로 나온다(프레임도 그대로다).
+
+- production 은 쿼리도 localStorage 도 **읽지 않는다.**
+- 로컬 개발만 `?sandboxSkinJs=1` / `localStorage["imory.sandboxSkinJs"]`
+  로 켠다. `?sandboxSkin=1` 만으로는 **켜지지 않는다** — 그래서
+  SANDBOX-0~4 의 기존 e2e 는 이 라운드 뒤에도 JS 없이 돈다.
+
+판정 지점은 **두 곳뿐**이다:
+
+- 부모 — `skin/sandbox/skin-sandbox-host.js resolveSandboxAuthorJs()`.
+  거짓이면 `js` 가 payload 에 실리지 않는다(못 받은 코드는 못 돈다).
+- 프레임 — 실행 직전에 전역 kill switch 를 **한 번 더** 본다.
+
+### O-6. 다시 그릴 때 — 청소하지 않고 realm 을 버린다
+
+임의의 JS 가 남기는 것(`setInterval` · rAF 고리 · window/document
+리스너 · MutationObserver · Promise 에 잡힌 참조)을 전부 되돌릴 방법은
+없다. 그래서 이 라운드는 **정리하지 않고 프레임을 새로 만든다.**
+
+- 공개 화면: 화면을 옮길 때 컨테이너가 비워지고 프레임이 새로 뜬다
+  (SANDBOX-2 부터 그랬다 — 이 라운드에서 바뀐 것이 없다).
+- Studio Preview: 지금까지는 프레임을 **재사용**했다. 저자 JS 가
+  얽히면 `renderSandboxSkinPage()` 가 `reason:"needs-new-realm"` 을
+  돌려주고, `preview-sandbox.js` 가 프레임을 치운 뒤 첫 렌더 경로로
+  떨어진다. 거절 조건은 둘이다 —
+  (1) 이번 렌더가 JS 를 실행한다, (2) 이 프레임이 **전에** 실행했다
+  (이번에 JS 가 비어 있어도 옛 타이머가 살아 있다).
+
+  저자 JS 가 없는 스킨은 지금까지와 똑같이 재사용한다 — SANDBOX-4 의
+  `[edit]` 절이 그대로 통과한다.
+
+한 realm 에 **한 번만** 실행한다. 두 번째 요청은 실행하지 않고
+`script-blocked` 를 올린다. 옛 프레임이 늦게 보낸 메시지는 기존
+`renderSeq`/`source` 검증에 걸려 버려진다.
+
+`imorySkin.onCleanup(fn)` 은 그래도 제공한다(프레임이 사라지기 직전
+`pagehide` 에서 불린다) — 격리가 그것에 기대지는 않지만, 저자가
+"언제 멈춰야 하는가"를 표현할 수 있어야 한다.
+
+### O-7. 저자에게 주는 API — `window.imorySkin` 하나
+
+전역을 새로 복제해 주지 않는다. 동결된 객체 하나이고 키는 여섯이다.
+
+| 키 | 값 |
+| --- | --- |
+| `version` | `1` — API 계약 버전. 키가 늘기만 하면 안 올리고, 있던 키의 의미가 바뀌면 올린다 |
+| `pageType` | `"home" | "category" | "post" | "banner" | "highlights"` |
+| `root` | 이번 렌더의 루트 요소 (`#sandboxFrameRoot`) |
+| `context` | 공개용으로 투영된 Context 의 **복사본**, 깊이 동결 |
+| `navigate(href) -> boolean` | 부모가 이번 렌더에 발급한 표에 있는 주소만 true |
+| `onCleanup(fn) -> boolean` | 최대 64개 |
+
+`context` 에는 토큰·이메일·UUID·관리자 URL 이 애초에 없다 — 그
+판정은 `skin/sandbox/skin-sandbox-context.js` 한 곳에서만 하고, 이
+API 는 그 결과를 복사만 한다(§D-1 · §H-5).
+
+`navigate()` 는 **기존 경로를 우회하지 않는다.** href 를 부모에
+보내지 않고, 프레임이 가진 표(href → 정수 navId)를 뒤져 정수 하나를
+올린다 — 링크를 클릭했을 때와 완전히 같은 메시지다(§J-2). 표에 없는
+주소(외부 · 다른 블로그 · `/admin` · 관리 쿼리)는 false 이고 아무 일도
+일어나지 않는다.
+
+`window.defineProperty(writable:false, configurable:false)` 로 올린다.
+realm 이 매번 새것이라 재정의 충돌은 없다.
+
+### O-8. 오류
+
+프레임 → 부모 메시지가 하나 늘었다(총 **열** 개):
+
+```
+frame -> parent   IMORY_SCRIPT_ERROR { contract, renderSeq, code }
+                  code: "script-error" | "script-blocked"
+```
+
+- **`IMORY_FRAME_ERROR` 와 다르다.** 그쪽은 "화면을 못 그렸다"라서
+  부모가 렌더를 실패로 접지만(공개 화면은 native 폴백), 저자 JS 의
+  오류는 HTML/CSS 가 이미 그려진 상태다. 이 메시지는 **렌더 결과를
+  바꾸지 않는다.**
+- **문장도 stack 도 보내지 않는다.** 정해진 짧은 코드 하나뿐이다 —
+  저자 코드의 오류 문구에는 경로와 내부 사정이 섞일 수 있다. 자세한
+  내용은 프레임 콘솔에만 남는다(브라우저가 원래 오류를 그대로 찍는다).
+- 공개 화면: 아무것도 표시하지 않는다(`handle.onScriptError` 를 주지
+  않는다).
+- Studio: `preview:script-error` → 토스트 한 줄. overlay 를 덮지
+  **않는다** — 덮으면 "JS 하나가 틀렸다"가 "미리보기가 안 나온다"처럼
+  보인다.
+
+### O-9. ★ 여러 사용자에게 열기 전에 반드시 해결할 것 — shared origin
+
+**지금 모든 블로그의 프레임이 `skin-frame.imory.me` 하나를
+공유한다.** 화면만 그릴 때는 그래도 됐다(프레임에 쓰기 주체가
+없었다). 저자 JS 가 도는 순간 성질이 달라진다:
+
+| 공유되는 것 | 무엇이 가능해지는가 |
+| --- | --- |
+| `localStorage` · `sessionStorage` · IndexedDB | A 블로그의 JS 가 쓴 값을 B 블로그의 JS 가 읽고 고친다 |
+| `BroadcastChannel` · `SharedWorker` | 두 블로그의 프레임이 서로 대화한다 |
+| `document.cookie` | `.imory.me` 로 설정된 쿠키가 이 서브도메인에도 도달한다(§F#11) |
+| Cache Storage · 권한 프롬프트 | 같은 origin 이므로 함께 쓴다 |
+
+`test1` 하나만 켜져 있는 지금은 위 전부가 "운영자가 자기 것을
+읽는다"라 문제가 되지 않는다. **두 번째 slug 를 켜기 전에** 다음 중
+하나를 반드시 끝내야 한다:
+
+1. **블로그별 origin** — `{slug}--skin.imory.me`. §G-4 가 "지금은
+   아니다"라고 적은 그 항목이고, 이제 그것이 **선행 조건**이 됐다.
+   (와일드카드 DNS + 와일드카드 인증서 + Pages 커스텀 도메인 정책을
+   먼저 확인해야 한다.)
+2. 그것이 안 되면 저자 JS 를 **운영자 계정에만** 묶어 둔다(지금 상태).
+
+이 문서에서 가장 중요한 한 줄이다. 롤아웃 확대는 origin 결정 뒤에만
+한다.
+
+### O-10. 고친 파일
+
+| 파일 | 무엇이 바뀌었나 |
+| --- | --- |
+| `skin/sandbox/skin-sandbox-author-js.js` | **새 파일**. 저자 JS 를 실행하는 유일한 곳 + API 생성 + cleanup |
+| `skin/sandbox/skin-sandbox-config.js` | 두 번째 스위치 — kill switch · slug 목록 · dev opt-in · `isSandboxSkinAuthorJsEnabled()` |
+| `skin/sandbox/skin-sandbox-protocol.js` | `template.js`(선택) · `SANDBOX_MAX_AUTHOR_JS_CHARS` · `IMORY_SCRIPT_ERROR` |
+| `skin/sandbox/skin-sandbox-frame.js` | 렌더 뒤 저자 JS 실행 · nonce 를 window 에서 거둬들임 · `navigateByHref` · `sendScriptError` · pagehide cleanup |
+| `skin/sandbox/skin-sandbox-host.js` | `resolveSandboxAuthorJs()` 관문 · payload 에 `js` · `needs-new-realm` · `SCRIPT_ERROR` 핸들러 |
+| `skin/sandbox/frame.html` | classic script 다섯째 로드 + nonce 주석 갱신 |
+| `core/lib/skin-sandbox-server.js` | 경로 allowlist 한 줄 + CSP TODO 갱신 (**CSP 자체는 불변**) |
+| `skin/skin-template.js` | `SKIN_PACKAGE_MAX_JS_CHARS` · `isValidSkinAuthorJs` · `resolveSkinAuthorJs` · `resolveSkinTemplate` 이 `js` 를 실어 준다 |
+| `skin/skin-package-import.js` | `js` 검증(`reason:"author-js"`)과 보존 |
+| `skin/skin-package-export.js` | `js` 를 파일에 싣는다(빈 문자열 포함) |
+| `studio/preview/preview-sandbox.js` | `js` 를 template 에 실어 넘김 · `needs-new-realm` 처리 · `onScriptError` |
+| `studio/preview/preview-bridge.js` | `preview:script-error` 릴레이 |
+| `studio/studio-preview.js` | Code Editor 에 `js`/`jsEnabled` 전달 · `meta.js` 저장 · 토스트 |
+| `studio/editor/code-editor.js` · `.css` | JS 칸 + "sandbox 모드에서만 실행" 안내 |
+| `functions/api/skin-ai.js` | AI 결과에 원본의 `renderMode`/`js` 를 도로 싣는다(아래) |
+| `skin/skin-sandbox-test.html` | `?authorJs=1` fixture 선택 + e2e 가 코드를 끼우는 창구 |
+| `skin/test-skins/imory-sandbox-authorjs-v1.json` | **새 fixture** |
+| `skin/sandbox/skin-sandbox-nav.js` | (별건) 실제 제어 문자 두 개를 `\x00` · `\x7f` 로 |
+
+### O-11. AI 가 저자 JS 를 지우지 않게
+
+`functions/api/skin-ai.js` 는 모델에게 보여 줄 SkinPackage 를
+allowlist 로 다시 만든다. 그 목록에 `renderMode` 도 `js` 도 없어서,
+**AI 를 한 번 쓰면 둘 다 조용히 사라지고 있었다**(renderMode 쪽은
+SANDBOX-1 부터의 기존 구멍이다 — sandbox 스킨이 native 로 바뀐다).
+
+고친 방향: 모델에게는 여전히 **보여 주지 않고**(토큰도 아깝고, 저자
+코드를 외부 모델에 보낼 이유도 없다), 결과를 만들 때 요청에 실려 온
+원본에서 그 둘만 도로 옮긴다. "모델이 보지 않는다 / 바꿀 수 없다 /
+그래서 지우지도 못한다" 셋이 한 벌이다.
+
+### O-12. 검증 결과 (구분해서)
+
+**브라우저 없이 (node)**
+
+- `node skin/sandbox/skin-sandbox-unit-test.mjs` — **238 passed, 0 failed**
+  (`[authorjs]` 절 33개가 새로 들어갔다: 관문 · 메시지 · SkinPackage
+  보존 · API 모양 · kill switch 를 **실제 파일을 고쳐 평가해서** 확인)
+
+**mock e2e (실제 브라우저 · 실제 두 origin · 배포되는 그 Pages Function)**
+
+| 스위트 | 결과 |
+| --- | --- |
+| `skin/sandbox/skin-sandbox-e2e-test.mjs` 전체 (chromium) | **452 passed, 0 failed** (`[authorjs]` 39 + `[authorjspages]` 23 포함) |
+| `--only=authorjs` (webkit) | 39 passed, 0 failed |
+| `--only=authorjspages` (webkit) | 23 passed, 0 failed |
+| `studio/studio-sandbox-preview-e2e-test.mjs` 전체 | **105 passed, 0 failed** (`[authorjs]` 17 포함) |
+| `--only=authorjs` (webkit) | 17 passed, 0 failed |
+
+회귀(변경 없이 그대로 돌림): 8943 파일 UX 42/42 · 8939 Inspector 34/34 ·
+8945 직접 편집 37/37 · 8956 재료 일치 58/58 · 8942 폴더 트리 71/71 ·
+8937 Studio AI 142/142.
+
+`studio/studio-selected-ai-e2e-test.mjs` 는 99개 중 1개가 **불규칙하게**
+떨어진다(선택 해제/hover 타이밍). HEAD 를 그대로 꺼내 복사한 트리에서
+세 번 돌려 1회 실패(다른 항목)를 확인했다 — 이 라운드와 무관한 기존
+불안정이다.
+
+**하지 않은 것**
+
+- 실제 DB 검증 — 이 라운드에 migration 이 없다(`js` 는 `content` jsonb
+  안이다).
+- 배포 확인 — commit/push 하지 않았다.
+- 실기기 확인 — 없음.
+- **production 의 다른 slug 에서 0회**는 e2e 로 재지 않았다. 로컬
+  호스트에서는 slug 관문이 아니라 dev opt-in 이 쓰이기 때문이다
+  (그 판정 자체는 `[authorjs]` 단위 테스트가 production 호스트를
+  흉내내 직접 잰다).
+
+### O-13. 남은 차이 / 다음 라운드
+
+- **FOLDER** 는 여전히 native 다(프레임에 들어오지 않았다) — 저자 JS 도
+  그 화면에서는 돌지 않는다.
+- Studio 에서 **Select/Inspector 는 계속 잠겨 있다**(cross-origin).
+- 저자 JS 의 CPU/메모리 폭주에 대한 제한이 없다. 높이 진동은 기존
+  상한(`SANDBOX_HEIGHT_REPORT_LIMIT` · `SANDBOX_HOST_MAX_HEIGHT_APPLIES`)
+  이 잡지만, 무한 루프를 멈추는 장치는 없다.
+- 읽는 이의 하이라이트 표시는 여전히 native 에만 덧칠된다(§K-6).
+
+### O-14. SANDBOX-5B (Three.js · GLB) 에 필요한 변경
+
+지금 코드에서 **아직 하지 않은 것**만 적는다.
+
+1. **connect-src** — GLB 는 보통 `fetch()` 로 받는다. 지금 `'none'` 이
+   그 길을 막는다. 이 조항이 "프레임이 데이터를 어디로도 못 보낸다"를
+   지탱하므로 **가장 늦게, 가장 좁게** 연다: 자산 전용 호스트 하나
+   (예: `skin-assets.imory.me`)만, 그리고 `img-src`/`media-src` 와
+   같은 방식으로 `resolveSandboxMediaOrigins()` 옆에 목록을 둔다.
+2. **Three.js 를 누가 주는가** — 저자가 CDN 을 부르게 하면
+   `script-src` 에 남의 호스트를 여는 일이고, 그 순간 "무엇이 실행되는지"
+   를 우리가 모르게 된다. 플랫폼이 `/skin/sandbox/vendor/three.module.js`
+   로 **자기 origin 에서** 제공하고 경로 allowlist 에 한 줄 더하는 쪽이
+   맞다(`'self'` 로 이미 허용된다). 버전 고정과 `?v=` 사슬은 기존
+   방식 그대로.
+3. **자산 URL 검증** — GLB 주소는 SkinPackage 안의 문자열이 될 것이다.
+   `isSafeSkinUrl()` 과 같은 결의 판정자가 필요하고, 프레임이 아니라
+   **부모가** 판정해 절대 주소로 바꿔 보내야 한다(이미지가 그렇게 하고
+   있다 — `sandboxImageUrl`).
+4. **`<canvas>` 태그** — sanitizer 가 스킨 HTML 에서 통째로 제거한다.
+   저자 JS 는 `createElement("canvas")` 로 만들 수 있으므로 5B 가
+   태그 allowlist 를 반드시 건드려야 하는 것은 아니다. 건드린다면
+   CSP 와는 별개의 결정이다(§F#7).
+5. **API 확장 지점** — `imorySkin` 에 `version: 2` 와 자산 해석 함수
+   (예: `imorySkin.assetUrl(name)`) 를 더하는 모양이 자연스럽다. 저자가
+   주소를 직접 적는 대신 이름으로 받게 하면, 어디로 나가는지를 부모가
+   계속 쥐고 있을 수 있다.
+6. **예산** — 3D 는 CPU/GPU/메모리를 실제로 쓴다. 5B 에서는 프레임당
+   상한(픽셀 수 · 텍스처 크기 · 파일 크기)과 "멈추는 방법"을 함께
+   정해야 한다. 5A 에는 없다.
+
+---
+
 ## 남은 차이 (아직 정하지 않은 것)
 
 - 비밀글 gate를 프레임 안/밖 어디에 둘 것인가 (SANDBOX-3)
@@ -2517,10 +2895,17 @@ reader-scale 이 지우는 대신 그 값을 읽는다. 누적 방지(원래 지
   — SANDBOX-3 이후 이것이 **실제로 눈에 보이는 차이**가 됐다: 프레임 안
   하이라이트 화면은 주인장에게도 읽기 전용이다(§K-6)
 - Studio Inspector/Direct Edit/크롭의 sandbox 대응 (SANDBOX-4)
-- 저자 JS를 켤 때의 origin 전략과 리소스 상한 (SANDBOX-5)
-  — **여러 사용자의 임의 JS를 같은 origin에서 실행하지 않는다**가 그 단계의
-  전제 조건이다(§G-4). 지금은 단일 frame origin이고 실행되는 저자 JS가 없다.
-- sandbox 전용 태그 allowlist 완화 여부 — **아직 아무것도 정해지지 않았다**
+- ~~저자 JS를 켤 때의~~ **저자 JS 는 SANDBOX-5A 에서 실행되기 시작했다(§O).**
+  남은 것은 둘이다:
+  - **origin 전략** — 지금도 단일 frame origin 이고, 켜진 slug 는 `test1`
+    하나다. **두 번째 slug 를 켜기 전에** 블로그별 origin
+    (`{slug}--skin.imory.me`, §G-4)을 끝내야 한다. 이유와 무엇이
+    공유되는지는 §O-9.
+  - **리소스 상한** — CPU/메모리 폭주를 멈추는 장치가 아직 없다(§O-13).
+    3D 가 들어오는 5B 에서 예산과 함께 정한다(§O-14).
+- sandbox 전용 태그 allowlist 완화 여부 — **아직 아무것도 정해지지 않았다**.
+  다만 5A 부터 저자 JS 가 `createElement("canvas")` 로 요소를 만들 수는
+  있다 — sanitizer 는 **스킨 HTML 문자열**에만 걸린다(§O-14).
 - **프레임에 `viewer`(주인장 여부·주인장 링크)를 보낼 것인가** — SANDBOX-1은
   보내지 않기로 했다(§H-5). 네비게이션이 생기는 SANDBOX-2에서 다시 본다.
 - **외부 자유 이미지·웹폰트를 sandbox CSP 가 허용할 것인가** — SANDBOX-1은

@@ -98,6 +98,35 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
   const FRAME_STATE = {
     parentOrigin: "",
 
+    /* =====================================================
+       SANDBOX-5A — 이 요청의 CSP nonce
+
+       frame.html 의 인라인 블록이 window.__imorySandboxNonce 에
+       올려 둔 값을 start() 가 여기로 옮겨 담고 **window 에서
+       지운다**. 저자 JS 가 그 이름으로 nonce 를 주워 쓰는 길을
+       남기지 않기 위해서다(frame.html 그 블록의 주석 참고).
+
+       쓰이는 곳은 셋이다: 본문 서식 style · renderSkin 의 동적
+       style · 저자 JS 를 담는 script.
+    ====================================================== */
+
+    nonce: "",
+
+    /* =====================================================
+       SANDBOX-5A — 저자 JS
+
+       authorJsRan   : 이 realm 에서 이미 한 번 실행했는가.
+                       **한 realm 에 한 번**이 이 라운드의 규칙이고,
+                       다시 그릴 때는 부모가 프레임을 새로 만든다
+                       (skin/sandbox/skin-sandbox-author-js.js 상단
+                        "두 번 실행하지 않는 이유").
+       authorCleanups: imorySkin.onCleanup() 으로 등록된 함수들.
+                       pagehide 에서 한 번 불린다.
+    ====================================================== */
+
+    authorJsRan: false,
+    authorCleanups: [],
+
     /* SANDBOX-3.1 — 본문 서식 <style> 하나(재사용) */
     postBodyStyle: null,
     sentReady: false,
@@ -560,7 +589,7 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     el.setAttribute("data-imory-post-body-style", "1");
 
     const nonce =
-      window.__imorySandboxNonce || "";
+      FRAME_STATE.nonce;
 
     if (nonce) {
       el.setAttribute("nonce", nonce);
@@ -620,6 +649,185 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
 
     return true;
+
+  }
+
+
+  /* =========================================================
+     SANDBOX-5A — 저자 JS
+
+     navigateByHref(href)
+
+     imorySkin.navigate() 가 부르는 유일한 출구다. 링크 클릭
+     (onFrameClick)과 **같은 표, 같은 메시지**를 쓴다 — 주소를
+     부모에 보내지 않고, 부모가 이번 렌더에 발급한 정수 하나를
+     돌려보낼 뿐이다. 표에 없는 주소면 false 이고 아무 일도
+     일어나지 않는다.
+  ========================================================== */
+
+  function navigateByHref(href) {
+
+    if (
+      typeof href !== "string" ||
+      !href ||
+      !FRAME_STATE.navHrefToId
+    ) {
+      return false;
+    }
+
+
+    const navId =
+      FRAME_STATE.navHrefToId.get(href);
+
+    if (!navId) {
+      return false;
+    }
+
+
+    return send(
+      SANDBOX_MESSAGE_TYPES.NAVIGATE,
+      {
+        contract: 1,
+        renderSeq: FRAME_STATE.renderSeq,
+        navId: navId
+      }
+    ) === true;
+
+  }
+
+
+  /* =========================================================
+     sendScriptError(code)
+
+     ★ FRAME_ERROR 가 아니다. 저자 JS 의 오류로 화면을 접지
+     않는다 — HTML/CSS 는 이미 그려져 있고 그대로 남는다
+     (skin/sandbox/skin-sandbox-protocol.js SCRIPT_ERROR 주석).
+     오류 문구도 stack 도 보내지 않는다. 부모가 받는 것은 정해진
+     짧은 코드 하나뿐이다.
+  ========================================================== */
+
+  function sendScriptError(code) {
+
+    send(
+      SANDBOX_MESSAGE_TYPES.SCRIPT_ERROR,
+      {
+        contract: 1,
+        renderSeq: FRAME_STATE.renderSeq,
+        code: code
+      }
+    );
+
+  }
+
+
+  /* =========================================================
+     runAuthorJs(code, pageType, context)
+
+     렌더가 끝난 **뒤에** 부른다(renderPage 안에서 마지막 단계).
+     그래서 저자 코드는 자기 DOM 이 이미 선 상태에서 시작한다.
+
+     ★ 한 realm 에 한 번. 두 번째 요청은 실행하지 않고
+       "script-blocked" 를 올린다 — 임의 JS 의 완전한 청소를
+       보장할 수 없으므로 다시 그릴 때는 부모가 프레임 자체를
+       새로 만든다(skin/sandbox/skin-sandbox-host.js
+       renderSandboxSkinPage 의 needs-new-realm).
+
+     ★ 실패해도 화면은 그대로다. 이 함수는 절대 던지지 않는다.
+  ========================================================== */
+
+  function runAuthorJs(code, pageType, context) {
+
+    if (typeof code !== "string" || !code) {
+      return;
+    }
+
+
+    if (
+      typeof runSandboxAuthorScript !== "function" ||
+      typeof buildSandboxAuthorApi !== "function"
+    ) {
+
+      /* 런타임 파일이 로드되지 않은 문서 — 실행하지 않는다 */
+
+      sendScriptError("script-blocked");
+
+      return;
+
+    }
+
+
+    if (FRAME_STATE.authorJsRan) {
+
+      console.warn(
+        "[skin-sandbox-frame] author js already ran in this realm"
+      );
+
+      sendScriptError("script-blocked");
+
+      return;
+
+    }
+
+
+    FRAME_STATE.authorJsRan = true;
+
+
+    let api =
+      null;
+
+    try {
+
+      api =
+        buildSandboxAuthorApi({
+          pageType: pageType,
+          root: root(),
+          context: context,
+          navigate: navigateByHref,
+          cleanups: FRAME_STATE.authorCleanups
+        });
+
+    }
+
+    catch (err) {
+
+      console.error("[skin-sandbox-frame] author api build failed");
+
+      sendScriptError("script-blocked");
+
+      return;
+
+    }
+
+
+    const result =
+      runSandboxAuthorScript({
+        code: code,
+        nonce: FRAME_STATE.nonce,
+        doc: document,
+        api: api,
+        onError: function (errorCode) {
+
+          /*
+            실행 중에도, 그 뒤 타이머/rAF 안에서도 같은 리스너가
+            부른다. 런타임이 첫 번째 한 번만 부르도록 이미
+            눌러 준다.
+          */
+
+          sendScriptError(errorCode);
+
+          /* 높이가 달라졌을 수 있다 */
+
+          reportHeight(false);
+
+        }
+      });
+
+
+    if (!result.ok && result.code === "script-blocked") {
+
+      sendScriptError("script-blocked");
+
+    }
 
   }
 
@@ -711,7 +919,7 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
               동적 <style>에 이 문서의 nonce를 달아 준다
               (skin/skin-render.js의 styleNonce 주석).
             */
-            styleNonce: window.__imorySandboxNonce || ""
+            styleNonce: FRAME_STATE.nonce
           });
 
       }
@@ -765,6 +973,27 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     container.setAttribute("data-imory-sandbox-state", "rendered");
 
     container.setAttribute("data-imory-sandbox-page", payload.pageType);
+
+
+    /*
+      ★ SANDBOX-5A — 저자 JS 는 여기서, **렌더가 끝난 뒤에** 돈다.
+
+      순서가 코드 모양으로 보인다: renderSkin() -> nav 표 ->
+      본문 -> 저자 JS -> 높이 측정 -> RENDERED. 저자 코드가 DOM 을
+      바꿔 높이가 달라져도 아래 measureHeight() 가 그 뒤라서
+      처음부터 맞은 높이가 부모에 간다.
+
+      template.js 가 없으면(= 지금까지의 모든 스킨, 그리고 저자 JS
+      가 꺼진 모든 경우) 이 줄은 아무 일도 하지 않는다 — 부모가
+      아예 보내지 않기 때문이다(skin/sandbox/skin-sandbox-host.js
+      resolveSandboxAuthorJs).
+    */
+
+    runAuthorJs(
+      payload.template.js,
+      payload.pageType,
+      context
+    );
 
     const el =
       notice();
@@ -991,6 +1220,68 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     if (el) {
       el.setAttribute("data-imory-sandbox-state", "ready");
     }
+
+
+    /* =====================================================
+       ★ SANDBOX-5A — nonce 를 이 클로저 안으로 옮기고 window 에서
+       지운다.
+
+       ★ 이것은 **정리이지 은닉이 아니다.** 착각하지 말 것.
+
+       nonce 는 "이 script 를 실행해도 된다"는 허가 표식이다.
+       임의 JS 가 돈 뒤의 비밀 경계가 아니다 — 이미 실행 중인
+       저자 코드는 document.currentScript.nonce 로, 또는 이 realm
+       의 다른 요소가 가진 nonce 프로퍼티로 그 값을 **읽을 수
+       있다**(브라우저가 가리는 것은 getAttribute("nonce") 뿐이고
+       IDL 프로퍼티는 same-origin 에 그대로 보인다).
+
+       그래도 지우는 이유는 노출 면을 줄이는 것 하나다: 우리가
+       계약으로 약속한 적 없는 전역 이름을 남겨 두지 않는다.
+       저자가 그 값으로 script 를 하나 더 붙여도 얻는 것은 없다 —
+       그는 이미 이 realm 에서 임의 코드를 돌리고 있다.
+
+       실제 경계는 별도 origin · CSP · iframe sandbox 속성 ·
+       부모가 쥔 이동 표이고, 그중 무엇도 nonce 가 비밀이라는
+       가정에 기대지 않는다.
+
+       ★ 계약으로 지키는 것은 하나다: nonce 는 SkinPackage 에도
+       부모 메시지 payload 에도 실리지 않는다(프레임 밖으로
+       나가지 않는다).
+
+       delete 가 실패해도(프로퍼티가 없거나 막혀 있어도) 던지지
+       않는다.
+    ====================================================== */
+
+    FRAME_STATE.nonce =
+      typeof window.__imorySandboxNonce === "string"
+        ? window.__imorySandboxNonce
+        : "";
+
+    try {
+      delete window.__imorySandboxNonce;
+    }
+    catch (err) {
+      window.__imorySandboxNonce = "";
+    }
+
+
+    /*
+      SANDBOX-5A — 프레임이 사라지기 직전에 저자가 등록한 정리
+      함수를 부른다. 이 realm 자체가 없어지므로 정리가 없어도
+      격리는 성립하지만, 저자가 "언제 멈춰야 하는가"를 표현할 수
+      있어야 한다.
+    */
+
+    window.addEventListener(
+      "pagehide",
+      function () {
+
+        if (typeof runSandboxAuthorCleanups === "function") {
+          runSandboxAuthorCleanups(FRAME_STATE.authorCleanups);
+        }
+
+      }
+    );
 
 
     FRAME_STATE.parentOrigin =

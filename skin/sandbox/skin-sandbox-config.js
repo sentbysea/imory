@@ -129,6 +129,84 @@ var SANDBOX_SKIN_ENABLED_SLUGS =
   ];
 
 
+/* =========================================================
+   ★ SANDBOX-5A — 작성 JS 전용 스위치 (이 파일의 두 번째 스위치)
+
+   sandbox 경로가 켜졌다고 저자 JS 가 도는 것이 아니다. 저자 JS 는
+   **자기 스위치**를 따로 갖는다 — 아래 세 상수와
+   isSandboxSkinAuthorJsEnabled() 하나다.
+
+   ★ 왜 스위치가 둘인가
+
+   프레임 origin(skin-frame.imory.me)은 **모든 블로그가 공유한다.**
+   저자 JS 가 도는 순간 그 origin 의 localStorage·IndexedDB·
+   BroadcastChannel 은 "그 origin 에서 실행된 모든 스킨"이 함께 쓰는
+   공간이 된다(설계 문서 §O-9). 그래서 화면을 프레임에 그리는 것과
+   그 프레임 안에서 남의 코드를 실행하는 것은 위험의 크기가 다르고,
+   스위치도 따로 있어야 한다.
+
+   ★ 전역 kill switch 하나
+
+   SANDBOX_SKIN_AUTHOR_JS_ENABLED 를 false 로 바꿔 배포하면, 호스트·
+   slug·renderMode 가 무엇이든 저자 JS 는 **한 줄도 실행되지 않는다**.
+   프레임은 계속 화면을 그린다(HTML/CSS 는 그대로다) — 꺼지는 것은
+   JS 하나뿐이다.
+
+   ★ production 에서는 파일을 고쳐야 켜진다
+
+   isSandboxSkinEnabled() 와 같은 규칙이다. 쿼리도 localStorage 도
+   읽지 않는다 — imory.me 방문자가 주소에 무엇을 붙여도 자기 블로그
+   에서 남의 JS 를 켤 수 없다.
+
+   ★ 로컬 개발은 **별도** opt-in 이다
+
+   ?sandboxSkin=1 만으로는 저자 JS 가 돌지 않는다. e2e 와 개발자가
+   ?sandboxSkinJs=1 (또는 localStorage["imory.sandboxSkinJs"]="1")
+   을 명시적으로 더 줘야 한다 — 지금까지의 sandbox 하네스는 이
+   라운드 뒤에도 JS 없이 돈다.
+========================================================== */
+
+
+/*
+  ★ 전역 kill switch. false 로 배포하면 저자 JS 경로가 통째로
+  닫힌다(아래 isSandboxSkinAuthorJsEnabled 의 첫 관문이고, 프레임도
+  실행 직전에 이 값을 한 번 더 본다 —
+  skin/sandbox/skin-sandbox-author-js.js).
+*/
+
+var SANDBOX_SKIN_AUTHOR_JS_ENABLED =
+  true;
+
+
+/*
+  ★ production 에서 저자 JS 를 실행할 블로그 slug.
+
+  SANDBOX_SKIN_ENABLED_SLUGS 와 **별개 목록**이다. 프레임을 쓰는
+  블로그와 그 안에서 JS 를 돌리는 블로그가 같아야 할 이유가 없고,
+  나중에 프레임을 여러 블로그로 넓힐 때 JS 까지 따라 넓어지면
+  안 되기 때문이다.
+
+  2026-09-16 현재 test1 하나. 비어 있으면 production 전체가 꺼진다
+  (넘어지는 방향이 "꺼짐"이다).
+*/
+
+var SANDBOX_SKIN_AUTHOR_JS_SLUGS =
+  [
+    "test1"
+  ];
+
+
+/*
+  로컬 개발 전용 opt-in. production 은 이 두 키를 읽지 않는다.
+*/
+
+var SANDBOX_SKIN_AUTHOR_JS_QUERY_KEY =
+  "sandboxSkinJs";
+
+var SANDBOX_SKIN_AUTHOR_JS_STORAGE_KEY =
+  "imory.sandboxSkinJs";
+
+
 var SANDBOX_SKIN_OPT_IN_QUERY_KEY =
   "sandboxSkin";
 
@@ -427,6 +505,142 @@ function isSandboxSkinPreviewEnabled(win, slug) {
 
 
 /* =========================================================
+   readSandboxSkinAuthorJsOptIn(win) -> boolean
+
+   ★ 로컬 개발 호스트 전용. readSandboxSkinOptIn() 과 **다른 키**를
+   본다 — sandbox 프레임을 켜는 것과 그 안에서 JS 를 돌리는 것은
+   따로 고르게 한다(위 상수 블록 주석).
+========================================================== */
+
+function readSandboxSkinAuthorJsOptIn(win) {
+
+  const w =
+    win || (typeof window !== "undefined" ? window : null);
+
+  if (!w || !w.location) {
+    return false;
+  }
+
+
+  try {
+
+    const params =
+      new URLSearchParams(w.location.search || "");
+
+    if (params.get(SANDBOX_SKIN_AUTHOR_JS_QUERY_KEY) === "1") {
+      return true;
+    }
+
+  }
+
+  catch (err) {
+    /* 주소를 못 읽으면 opt-in 없음 */
+  }
+
+
+  try {
+
+    if (
+      w.localStorage &&
+      w.localStorage.getItem(SANDBOX_SKIN_AUTHOR_JS_STORAGE_KEY) === "1"
+    ) {
+      return true;
+    }
+
+  }
+
+  catch (err) {
+    /* 저장소 접근이 막혀 있으면 opt-in 없음 */
+  }
+
+
+  return false;
+
+}
+
+
+/* =========================================================
+   isSandboxSkinAuthorJsEnabled(win, slug) -> boolean
+
+   ★ 저자 JS 가 실행되려면 이 함수가 true 여야 한다.
+
+   호출자는 두 곳뿐이다:
+     · skin/sandbox/skin-sandbox-host.js — 프레임으로 **보낼지**를
+       정한다(false 면 코드가 wire 에 오르지 않는다)
+     · 프레임 자신 — 전역 kill switch 를 실행 직전에 한 번 더 본다
+       (skin/sandbox/skin-sandbox-author-js.js)
+
+   판정 순서(하나라도 걸리면 false):
+     1. 전역 kill switch
+     2. 호스트 allowlist (또는 dev 호스트)
+     3. dev 호스트면 **저자 JS 전용** opt-in
+        production 이면 slug 가 두 목록에 모두 있는가
+        — sandbox 경로 자체가 열린 블로그여야 하고(ENABLED_SLUGS),
+          그 위에 저자 JS 가 허용된 블로그여야 한다(AUTHOR_JS_SLUGS)
+
+   slug 는 **호출자가 준다**. 공개 화면은 주소가 아니라 지금 그리고
+   있는 블로그의 context.site.slug 를 주고, Studio Preview 는 편집
+   중인 블로그의 slug 를 준다(주소 첫 칸이 "studio" 라서
+   readSandboxSkinSlug 로는 가를 수 없다 — isSandboxSkinPreviewEnabled
+   와 같은 이유). 주지 않으면 주소에서 읽는다.
+========================================================== */
+
+function isSandboxSkinAuthorJsEnabled(win, slug) {
+
+  /* --- 1. 전역 kill switch ----------------------------- */
+
+  if (SANDBOX_SKIN_AUTHOR_JS_ENABLED !== true) {
+    return false;
+  }
+
+
+  const w =
+    win || (typeof window !== "undefined" ? window : null);
+
+  if (!w || !w.location) {
+    return false;
+  }
+
+
+  /* --- 2. 호스트 --------------------------------------- */
+
+  if (!isSandboxSkinFlagHost(w.location.hostname)) {
+    return false;
+  }
+
+
+  /* --- 3. dev 호스트: 저자 JS 전용 opt-in --------------- */
+
+  if (isSandboxSkinDevHost(w.location.hostname)) {
+    return readSandboxSkinAuthorJsOptIn(w) === true;
+  }
+
+
+  /* --- 3'. production: 두 slug 목록에 모두 있어야 한다 --- */
+
+  const resolvedSlug =
+    (
+      typeof slug === "string" && slug
+        ? slug
+        : readSandboxSkinSlug(w)
+    ).toLowerCase();
+
+  if (!resolvedSlug) {
+    return false;
+  }
+
+
+  if (!isSandboxSkinEnabledSlug(resolvedSlug)) {
+    return false;
+  }
+
+
+  return SANDBOX_SKIN_AUTHOR_JS_SLUGS.indexOf(resolvedSlug) !== -1;
+
+}
+
+
+/* =========================================================
    resolveSandboxSkinFrameOrigin(win) -> "" | "https://..."
 
    빈 문자열이면 "아직 frame origin이 없다" = sandbox 경로를
@@ -706,6 +920,12 @@ if (typeof module !== "undefined" && module.exports) {
     isSandboxSkinEnabledSlug,
     isSandboxSkinEnabled,
     isSandboxSkinPreviewEnabled,
+    SANDBOX_SKIN_AUTHOR_JS_ENABLED,
+    SANDBOX_SKIN_AUTHOR_JS_SLUGS,
+    SANDBOX_SKIN_AUTHOR_JS_QUERY_KEY,
+    SANDBOX_SKIN_AUTHOR_JS_STORAGE_KEY,
+    readSandboxSkinAuthorJsOptIn,
+    isSandboxSkinAuthorJsEnabled,
     resolveSandboxSkinFrameOrigin,
     resolveSandboxSkinParentOrigins,
     isAllowedSandboxParentOrigin,

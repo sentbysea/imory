@@ -92,6 +92,19 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/skin/sandbox/skin-sandbox-frame.js",
 
   /* =====================================================
+     SANDBOX-5A — 저자 JS 를 실행하는 런타임.
+
+     ★ 이 파일은 **sandbox origin 에만** 있다. 메인 origin 에서는
+       allowlist 와 무관하게 아무 의미가 없고(부모 문서가 로드하지
+       않는다), 여기 적지 않으면 프레임이 그것을 못 받아 저자 JS 가
+       실행되지 않는다.
+
+     실행 판정과 API 계약은 그 파일 상단 주석에 있다.
+  ====================================================== */
+
+  "/skin/sandbox/skin-sandbox-author-js.js",
+
+  /* =====================================================
      SANDBOX-1 — 렌더러. 공개 화면과 **같은 파일**이다.
 
      frame 문서가 skin/skin-render.js(ES 모듈)를 정적 import하고,
@@ -542,15 +555,31 @@ export function injectSandboxNonce(html, nonce) {
        알고 남기는 차이이고, 외부 자유 이미지·웹폰트 정책은 이후
        단계에서 명시적으로 정한다(설계 문서 §F#6).
 
-   TODO(SANDBOX-5) — 저자 JS / 3D:
-     - script-src 에 blob:  (저자 JS를 Blob URL ES 모듈로 주입)
+   ★ SANDBOX-5A (2026-09-16) — 저자 JS 가 실행되기 시작했는데
+     **이 함수는 한 글자도 바뀌지 않았다.**
+
+     원래 이 자리에는 "script-src 에 blob: 를 더해 저자 JS 를 Blob
+     URL ES 모듈로 주입한다"는 계획이 적혀 있었다. 그럴 필요가
+     없었다 — 이미 여기 있는 'nonce-...' 가 **inline script 에도**
+     적용되기 때문이다. 저자 코드는 그 nonce 가 붙은 script 요소의
+     textContent 로 들어간다(skin/sandbox/skin-sandbox-author-js.js).
+
+     그래서 이 라운드는 blob: 도, 'unsafe-inline' 도, 'unsafe-eval'
+     도 더하지 않았고 connect-src 는 여전히 'none' 이다. 저자 JS 는
+     fetch/XHR/WebSocket/EventSource/sendBeacon 을 쓸 수 없고,
+     외부 script/module 을 가져올 수도 없다 — CSP 가 막는다.
+
+   TODO(SANDBOX-5B) — 3D:
      - GLB(3D 모델)는 보통 fetch()로 받는다 -> connect-src를 열어야
        한다. connect-src 'none'은 "iframe이 데이터를 어디로도 못
        보낸다"를 지탱하는 조항이라 **가장 늦게, 가장 좁게** 연다
        (예: 자산 전용 서브도메인 하나만). 지금 열지 않는다.
+     - Three.js 를 플랫폼이 제공한다면 'self' 로 이미 허용된다 —
+       저자가 CDN 을 부르는 것과는 다른 이야기다.
      - <model>/<canvas>/<video> 태그는 오늘 sanitizer가 통째로
-       제거한다. 태그 allowlist 완화는 CSP와 별개의 결정이다
-       (설계 문서 §F#7).
+       제거한다(저자 JS 는 createElement 로 canvas 를 만들 수
+       있다 — sanitizer 는 **스킨 HTML 문자열**에만 걸린다).
+       태그 allowlist 완화는 CSP와 별개의 결정이다(설계 문서 §F#7).
 ========================================================== */
 
 export function buildSandboxCsp(nonce, config) {

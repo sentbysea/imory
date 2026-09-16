@@ -110,7 +110,28 @@ var SANDBOX_MESSAGE_TYPES = {
 
   RENDER_PAGE: "IMORY_RENDER_PAGE",
   POST_BODY: "IMORY_POST_BODY",
-  NAVIGATE: "IMORY_NAVIGATE"
+  NAVIGATE: "IMORY_NAVIGATE",
+
+  /* =======================================================
+     SANDBOX-5A — 저자 JS 가 오류를 냈다
+
+     ★ FRAME_ERROR 와 **다른 메시지**인 것이 핵심이다.
+
+     FRAME_ERROR 는 "이 화면을 그리지 못했다"는 뜻이고, 부모는
+     그것을 받으면 렌더를 실패로 접는다(공개 화면은 native 로
+     폴백한다). 저자 JS 의 오류는 그것과 다르다 — HTML/CSS 는
+     이미 그려져 있고 그대로 남아야 한다. 그래서 이 메시지는
+     렌더 결과를 바꾸지 않는다.
+
+     ★ 문장이 없다. 정해진 짧은 코드 하나뿐이다.
+
+     저자의 코드에서 나온 오류 문구와 stack 에는 blob/파일 경로와
+     내부 사정이 섞일 수 있다. 그것을 부모 realm 으로 올리지
+     않는다 — 자세한 내용은 프레임 콘솔에만 남는다(공개 화면에는
+     아무것도 표시하지 않고, Studio 는 짧은 안내 한 줄을 띄운다).
+  ======================================================= */
+
+  SCRIPT_ERROR: "IMORY_SCRIPT_ERROR"
 };
 
 
@@ -198,6 +219,41 @@ var SANDBOX_MAX_BODY_CSS_CHARS = 400000;
 var SANDBOX_MAX_NAV_ID = 1000000;
 
 
+/* =========================================================
+   SANDBOX-5A — 저자 JS 문자열의 상한
+
+   프레임에서 실제로 실행되는 코드다. 상한을 두는 이유는 두
+   가지다: (1) postMessage 로 옮기는 값이고, (2) 상한이 없으면
+   "얼마까지 되는가"가 브라우저 사정에 따라 달라진다.
+
+   128 KiB 는 이 라운드가 여는 용도(탭 전환·창 열고 닫기·파티클·
+   드래그)에 넉넉하고, 외부 라이브러리를 통째로 붙여 넣기에는
+   모자란 크기다 — 그 방향은 이 라운드가 열지 않는다(요구사항 7).
+
+   같은 값을 SkinPackage Import 도 쓴다(skin/skin-template.js 의
+   SKIN_PACKAGE_MAX_JS_CHARS) — 두 곳이 어긋나면 "저장은 됐는데
+   프레임에 안 간다"가 조용히 생긴다.
+========================================================== */
+
+var SANDBOX_MAX_AUTHOR_JS_CHARS = 131072;
+
+
+/*
+  프레임이 저자 JS 에 대해 부모에게 돌려줄 수 있는 코드.
+  문장도 stack 도 없다(위 SCRIPT_ERROR 주석).
+
+    "script-error"    실행 중 예외가 났다(문법 오류 포함 —
+                      브라우저가 둘을 같은 error 이벤트로 준다)
+    "script-blocked"  실행 자체가 막혔다(kill switch 가 꺼져 있거나
+                      이 realm 에서 이미 한 번 실행했다)
+*/
+
+var SANDBOX_SCRIPT_ERROR_CODES = [
+  "script-error",
+  "script-blocked"
+];
+
+
 var SANDBOX_ERROR_CODES = [
   "no-renderer",      /* frame이 renderSkin을 못 받았다 */
   "no-root",          /* 렌더 컨테이너가 없다 */
@@ -225,15 +281,44 @@ function isSandboxRenderSeq(value) {
 }
 
 
+/* =========================================================
+   isSandboxTemplate(value)
+
+   ★ SANDBOX-5A 에서 **선택 키 js 하나**가 늘었다.
+
+   html/css 와 같은 봉투에 실어 보내는 이유는 순서다. 저자 JS 는
+   "그 렌더의 DOM 이 선 뒤에" 돌아야 하는데, 별도 메시지로 보내면
+   렌더와 JS 사이에 왕복이 하나 더 생기고 그 사이 상태를 따로
+   관리해야 한다. 같은 메시지에 실으면 프레임이 한 핸들러 안에서
+   **그리고 나서 실행**한다 — 순서가 코드 모양으로 보장된다.
+
+   없으면 지금까지와 완전히 같다. 있으면 문자열이어야 하고
+   상한(SANDBOX_MAX_AUTHOR_JS_CHARS)을 넘지 않아야 한다 — 넘으면
+   메시지 자체가 거부된다(프레임은 잘린 코드를 실행하지 않는다).
+========================================================== */
+
 function isSandboxTemplate(value) {
 
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(value, ["html", "css", "js"]) ||
+    typeof value.html !== "string" ||
+    typeof value.css !== "string" ||
+    value.html.length > SANDBOX_MAX_TEMPLATE_CHARS ||
+    value.css.length > SANDBOX_MAX_TEMPLATE_CHARS
+  ) {
+    return false;
+  }
+
+
+  if (value.js === undefined) {
+    return true;
+  }
+
+
   return (
-    isPlainSandboxObject(value) &&
-    hasOnlyKnownSandboxKeys(value, ["html", "css"]) &&
-    typeof value.html === "string" &&
-    typeof value.css === "string" &&
-    value.html.length <= SANDBOX_MAX_TEMPLATE_CHARS &&
-    value.css.length <= SANDBOX_MAX_TEMPLATE_CHARS
+    typeof value.js === "string" &&
+    value.js.length <= SANDBOX_MAX_AUTHOR_JS_CHARS
   );
 
 }
@@ -383,6 +468,23 @@ var SANDBOX_MESSAGE_SPEC = {
     keys: ["contract", "code"],
     check: function (payload) {
       return SANDBOX_ERROR_CODES.indexOf(payload.code) !== -1;
+    }
+  },
+
+
+  /*
+    SANDBOX-5A — 저자 JS 의 오류. renderSeq 가 붙어 있어서 옛
+    화면에서 늦게 도착한 것을 부모가 버릴 수 있다.
+  */
+
+  IMORY_SCRIPT_ERROR: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "code"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        SANDBOX_SCRIPT_ERROR_CODES.indexOf(payload.code) !== -1
+      );
     }
   }
 
@@ -674,7 +776,9 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_MAX_POST_BODY_CHARS,
     SANDBOX_MAX_BODY_CSS_CHARS,
     SANDBOX_MAX_NAV_ID,
+    SANDBOX_MAX_AUTHOR_JS_CHARS,
     SANDBOX_ERROR_CODES,
+    SANDBOX_SCRIPT_ERROR_CODES,
     isSandboxHeight,
     isSandboxRenderSeq,
     isSandboxTemplate,

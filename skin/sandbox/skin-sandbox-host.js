@@ -412,6 +412,12 @@ export async function mountSandboxSkinFrame(options) {
     appliedHeight: 0,
     heightApplies: 0,
     onError: typeof opts.onError === "function" ? opts.onError : null,
+
+    /* SANDBOX-5A — 저자 JS */
+    authorJsSent: false,
+    lastScriptError: "",
+    onScriptError: null,
+
     handlers: {}
   };
 
@@ -783,6 +789,100 @@ function resolveSandboxParentOrigin(container) {
    주석에 있다. 공개 화면은 주지 않으므로 기본 판정자가 쓰인다.
 ========================================================== */
 
+/* =========================================================
+   SANDBOX-5A — resolveSandboxAuthorJs(opts, template, context)
+     -> "" | string
+
+   ★ 저자 JS 가 wire 에 오를지 말지를 정하는 **유일한 자리**다.
+
+   여기서 "" 를 돌려주면 프레임은 코드를 받지 못하고, 받지 못한
+   코드는 실행될 수 없다. 공개 다섯 화면과 Studio Preview 가 전부
+   이 함수를 지난다 — 화면마다 따로 판정하지 않는다.
+
+   관문(하나라도 걸리면 ""):
+
+     1. template.js 가 비어 있지 않은 문자열인가
+        (없으면 = 지금까지의 모든 스킨. 아무 일도 일어나지 않는다)
+     2. 상한 안인가(프로토콜과 같은 값 —
+        SANDBOX_MAX_AUTHOR_JS_CHARS. 넘으면 메시지 자체가 거부되므로
+        여기서 먼저 떨어뜨리고 이유를 남긴다)
+     3. isSandboxSkinAuthorJsEnabled(win, slug)
+        = 전역 kill switch + 호스트 + (production 이면) slug 두 목록
+        (skin/sandbox/skin-sandbox-config.js)
+
+   ★ renderMode 는 왜 여기서 안 보는가
+
+   이 파일에 들어온다는 것 자체가 renderMode:"sandbox" 라는 뜻이다.
+   native 스킨은 호출자(skin/skin-home.js 등)의 분기에서 이미
+   갈라져 이 함수까지 오지 않는다.
+
+   ★ slug 는 주소가 아니라 **지금 그리는 블로그의 것**을 쓴다.
+
+   context.site.slug 는 DB 에서 온 값이고 방문자가 주소로 바꿀 수
+   없다. Studio Preview 는 주소 첫 칸이 언제나 "studio" 라서 주소로는
+   가를 수 없기도 하다(isSandboxSkinPreviewEnabled 와 같은 이유).
+
+   ★ 플래그를 어느 window 에서 읽는가
+
+   opts.flagWindow 가 있으면 그것(= Studio Preview 가 주는 Studio
+   문서). 없으면 컨테이너의 문서 — 공개 화면이 그 경우다.
+========================================================== */
+
+function resolveSandboxAuthorJs(opts, template, context) {
+
+  const code =
+    template && typeof template.js === "string" ? template.js : "";
+
+  if (!code) {
+    return "";
+  }
+
+
+  const limit =
+    readGlobal("SANDBOX_MAX_AUTHOR_JS_CHARS");
+
+  if (
+    typeof limit === "number" &&
+    code.length > limit
+  ) {
+
+    console.warn(
+      "[skin-sandbox-host] author js too long — not sent to the frame"
+    );
+
+    return "";
+
+  }
+
+
+  const isEnabled =
+    readGlobal("isSandboxSkinAuthorJsEnabled");
+
+  if (typeof isEnabled !== "function") {
+    return "";
+  }
+
+
+  const win =
+    opts.flagWindow ||
+    opts.win ||
+    (
+      opts.container && opts.container.ownerDocument
+        ? opts.container.ownerDocument.defaultView
+        : (typeof window !== "undefined" ? window : null)
+    );
+
+  const slug =
+    context && context.site && typeof context.site.slug === "string"
+      ? context.site.slug
+      : "";
+
+
+  return isEnabled(win, slug) === true ? code : "";
+
+}
+
+
 function projectSandboxRenderInput(opts) {
 
   const pageType =
@@ -869,7 +969,15 @@ function projectSandboxRenderInput(opts) {
     pageType: pageType,
     template: template,
     data: data,
-    navRegistry: navRegistry
+    navRegistry: navRegistry,
+
+    /*
+      SANDBOX-5A — 프레임으로 **실제로 보낼** 저자 코드. 관문을
+      통과하지 못했으면 빈 문자열이고, 빈 문자열은 payload 에
+      실리지 않는다(아래 renderSandboxPageIntoHandle).
+    */
+
+    authorJs: resolveSandboxAuthorJs(opts, template, opts.context)
   };
 
 }
@@ -887,6 +995,7 @@ export function prepareSandboxSkin(options) {
       template: opts.template,
       context: opts.context,
       container: opts.container,
+      flagWindow: opts.flagWindow,
       navResolveTarget: opts.navResolveTarget
     });
 
@@ -901,6 +1010,14 @@ export function prepareSandboxSkin(options) {
 
     pageType: prepared.pageType,
 
+    /*
+      SANDBOX-5A — 호출자가 "이 화면은 저자 JS 를 실행한다"를 미리
+      알 수 있게 한다. Studio Preview 가 프레임 재사용 여부를 정할
+      때 쓴다(needs-new-realm).
+    */
+
+    hasAuthorJs: prepared.authorJs !== "",
+
     mount: function (container) {
 
       return mountPreparedSandboxSkin({
@@ -909,8 +1026,10 @@ export function prepareSandboxSkin(options) {
         template: prepared.template,
         data: prepared.data,
         navRegistry: prepared.navRegistry,
+        authorJs: prepared.authorJs,
         frameOrigin: opts.frameOrigin,
         onNavigate: opts.onNavigate,
+        onScriptError: opts.onScriptError,
         timeoutMs: opts.timeoutMs,
         renderTimeoutMs: opts.renderTimeoutMs,
         onError: opts.onError
@@ -990,6 +1109,31 @@ export async function mountSandboxSkin(options) {
    }
 ========================================================== */
 
+/* =========================================================
+   buildSandboxTemplatePayload(template, authorJs)
+
+   프레임에 보낼 template 봉투. 알려진 키만 새 리터럴에 담는다
+   (프로토콜과 같은 원칙) — 그리고 **저자 코드가 비어 있으면 js
+   키 자체를 만들지 않는다**. 지금까지의 모든 스킨에서 이 메시지는
+   SANDBOX-4 와 byte 단위로 같다.
+========================================================== */
+
+function buildSandboxTemplatePayload(template, authorJs) {
+
+  const payload = {
+    html: template.html,
+    css: typeof template.css === "string" ? template.css : ""
+  };
+
+  if (typeof authorJs === "string" && authorJs) {
+    payload.js = authorJs;
+  }
+
+  return payload;
+
+}
+
+
 async function renderSandboxPageIntoHandle(handle, opts) {
 
   const pageType =
@@ -1010,6 +1154,18 @@ async function renderSandboxPageIntoHandle(handle, opts) {
 
   handle.navRegistry =
     opts.navRegistry || null;
+
+
+  /*
+    SANDBOX-5A — 이 프레임(realm)에 저자 코드를 보낸 적이 있는가.
+    한 번이라도 보냈으면 그 realm 은 재사용하지 않는다 — 임의 JS 가
+    남긴 타이머/리스너/observer 를 전부 되돌릴 방법이 없기 때문이다
+    (renderSandboxSkinPage 의 needs-new-realm).
+  */
+
+  if (opts.authorJs) {
+    handle.authorJsSent = true;
+  }
 
 
   /*
@@ -1112,6 +1268,34 @@ async function renderSandboxPageIntoHandle(handle, opts) {
 
 
         /*
+          ★ SANDBOX-5A — 저자 JS 의 오류.
+
+          FRAME_ERROR 와 달리 **렌더를 접지 않는다**(finish 를
+          부르지 않는다). HTML/CSS 는 이미 그려져 있고 그대로
+          남아야 한다 — 공개 화면은 native 로 폴백하지 않고,
+          Studio 는 프레임을 유지한 채 안내만 띄운다.
+
+          payload 에는 문장도 stack 도 없다. 정해진 짧은 코드
+          하나뿐이다.
+        */
+
+        handle.handlers[TYPES.SCRIPT_ERROR] =
+          (payload) => {
+
+            if (payload.renderSeq !== handle.renderSeq) {
+              return;
+            }
+
+            handle.lastScriptError = payload.code;
+
+            if (typeof handle.onScriptError === "function") {
+              handle.onScriptError(payload.code);
+            }
+
+          };
+
+
+        /*
           ★ SANDBOX-2 — 이동 요청.
 
           프레임은 주소를 보내지 않는다. 부모가 이번 렌더에 발급한
@@ -1206,10 +1390,10 @@ async function renderSandboxPageIntoHandle(handle, opts) {
               contract: 1,
               pageType: pageType,
               renderSeq: renderSeq,
-              template: {
-                html: template.html,
-                css: typeof template.css === "string" ? template.css : ""
-              },
+              template: buildSandboxTemplatePayload(
+                template,
+                opts.authorJs
+              ),
               data: data
             }
           );
@@ -1279,11 +1463,39 @@ export async function renderSandboxSkinPage(handle, options) {
       context: opts.context,
       container: handle.iframe.parentNode,
       win: handle.win,
+      flagWindow: opts.flagWindow,
       navResolveTarget: opts.navResolveTarget
     });
 
   if (!prepared.ok) {
     return prepared;
+  }
+
+
+  /* =====================================================
+     ★ SANDBOX-5A — 저자 JS 가 얽히면 이 프레임을 재사용하지 않는다
+
+     임의의 JS 가 남기는 것(setInterval · requestAnimationFrame
+     고리 · window/document 리스너 · MutationObserver · Promise 에
+     잡힌 참조)을 전부 되돌릴 방법은 없다. 하나만 놓쳐도 다시
+     그릴 때마다 조금씩 쌓인다.
+
+     그래서 청소하지 않고 **realm 을 버린다.** 여기서 거절하면
+     호출자가 프레임을 없애고 새로 띄우며, 그때 READY/ACK ->
+     RENDER -> JS 순서를 처음부터 다시 밟는다. 옛 프레임이 늦게
+     보낸 메시지는 renderSeq 와 source 검증에 걸려 버려진다.
+
+     두 경우에 거절한다:
+       · 이번 렌더가 저자 JS 를 실행한다
+       · 이 프레임이 **전에** 저자 JS 를 실행했다
+         (이번에 JS 가 비어 있어도 옛 타이머가 살아 있다)
+
+     둘 다 아니면 지금까지와 똑같이 재사용한다 — SANDBOX-4 의
+     Studio Preview 는 한 줄도 달라지지 않는다.
+  ====================================================== */
+
+  if (prepared.authorJs || handle.authorJsSent) {
+    return { ok: false, reason: "needs-new-realm" };
   }
 
 
@@ -1294,6 +1506,7 @@ export async function renderSandboxSkinPage(handle, options) {
       template: prepared.template,
       data: prepared.data,
       navRegistry: prepared.navRegistry,
+      authorJs: prepared.authorJs,
       renderTimeoutMs: opts.renderTimeoutMs
     }
   );
@@ -1349,6 +1562,18 @@ async function mountPreparedSandboxSkin(opts) {
     typeof opts.onNavigate === "function" ? opts.onNavigate : null;
 
 
+  /*
+    SANDBOX-5A — 저자 JS 오류를 누가 보여 주는가.
+
+    주지 않으면(= 공개 화면) 아무것도 표시하지 않는다. 방문자에게
+    스킨 저자의 코드 사정을 알릴 이유가 없고, 화면은 HTML/CSS 로
+    이미 정상이다. Studio 만 자기 것을 주고 짧은 안내를 띄운다.
+  */
+
+  handle.onScriptError =
+    typeof opts.onScriptError === "function" ? opts.onScriptError : null;
+
+
   trackSandboxHandle(handle);
 
 
@@ -1362,6 +1587,7 @@ async function mountPreparedSandboxSkin(opts) {
         template: template,
         data: data,
         navRegistry: opts.navRegistry,
+        authorJs: opts.authorJs,
         renderTimeoutMs: opts.renderTimeoutMs
       }
     );
