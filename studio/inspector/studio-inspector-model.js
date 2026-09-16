@@ -96,6 +96,19 @@ function stampInspectorEditIds(html) {
 
   const used = new Set();
 
+  /* =====================================================
+     같은 id 가 HTML 안에 두 번 이상 있었는가 (2026-09-17)
+
+     아래에서 두 번째 것은 속성을 잃고 임시 id 를 받으므로, 이
+     함수가 끝나면 doc 만 봐서는 "중복이 있었다"를 알 수 없다.
+     선택 복원은 그 사실을 알아야 한다 — 승격된 id 가 복제되면
+     (Code Editor 복붙 · AI 가 노드를 통째로 베낌) querySelector 가
+     돌려주는 **첫 번째**가 사용자가 고른 그 요소라는 보장이 없다.
+     그때는 되살리지 않고 푼다(resolveInspectorSelectionTarget 의
+     "ambiguous").
+  ====================================================== */
+  const duplicateIds = new Set();
+
   Array.from(doc.body.querySelectorAll(`[${INSPECTOR_EDIT_ID_ATTR}]`)).forEach(
     (el) => {
 
@@ -105,6 +118,11 @@ function stampInspectorEditIds(html) {
       if (!isValidInspectorEditId(value) || used.has(value)) {
         /* 형태가 깨졌거나 중복된 id는 식별자로 쓸 수 없다 — 저장
            시점 sanitize도 어차피 형태가 깨진 값은 버린다. */
+
+        if (isValidInspectorEditId(value)) {
+          duplicateIds.add(value);
+        }
+
         el.removeAttribute(INSPECTOR_EDIT_ID_ATTR);
         return;
       }
@@ -169,7 +187,8 @@ function stampInspectorEditIds(html) {
   return {
     doc,
     html: doc.body.innerHTML,
-    autoIds
+    autoIds,
+    duplicateIds
   };
 
 }
@@ -208,58 +227,366 @@ function commitInspectorEditId(stamped, keepEditId) {
 
 
 /* =========================================================
+   선택 복원의 근거 (SANDBOX-6A 후속, 2026-09-17)
+
+   ★ 무엇이 문제였나
+
+   임시 식별자는 **구조 경로**다("e0-2-1" = body 첫 자식의 셋째
+   자식의 둘째 자식, 위 stampInspectorEditIds). 그래서 고른 요소가
+   사라지면 **뒤 형제가 그 자리로 밀려와 같은 id 를 물려받는다.**
+   id 로만 되살리면 "복원은 성공했는데 엉뚱한 요소가 선택된" 상태가
+   된다 — 그 상태에서 AI 수정을 보내면 사용자가 보지도 않은 요소가
+   바뀐다. 앞 형제를 넣거나 지우거나 순서를 바꿔도 같다.
+
+   ★ 어떻게 가르나 — 두 종류의 id 를 구분한다
+
+   승격된 id (promoted) : 사용자가 실제로 한 번 편집해서 SkinPackage
+     HTML 에 **글자로 남은** id. 요소를 따라 움직이므로 위치가
+     바뀌어도, 내용이 바뀌어도 같은 요소를 가리킨다. 그 id 가
+     **하나뿐이면** 그 존재 자체가 근거다(복제되었다면 아니다 —
+     아래 "ambiguous").
+   임시 id (auto)       : 이번 stamp 가 구조 경로로 만들어 낸 id.
+     위치 말고는 아무 것도 보장하지 않는다. 그래서 고를 때 남긴
+     **근거(signature)** 를 함께 대조한다.
+
+   stampInspectorEditIds() 가 돌려주는 autoIds 가 그 둘을 정확히
+   가른다 — 이번 pass 에서 새로 만든 id 만 담기기 때문이다.
+
+   ★ 지문은 "그 요소가 어떤 요소였는가"의 값싼 요약이다
+
+   태그 · 클래스 · data-imory-* 바인딩 · 정적 href/src · 자식 수 ·
+   제 텍스트 앞부분. 뒤 형제가 자리를 물려받으면 이 중 하나는 대개
+   달라진다 — 그러나 **완전히 같은 형제**는 이것만으로 갈리지
+   않는다. 그래서 실제 대조에 쓰는 값은 이 지문에 자리(형제 차례와
+   형제 수 · 조상)와 subtree 를 더한 세 겹이다
+   (inspectorSelectionSignature — 그 머리말에 근거와 남은 한계).
+
+   ★ 근거가 없으면 **해제**다
+
+   임시 id 인데 근거가 없거나(옛 선택), 근거가 다르면 되살리지
+   않는다. "아마 같은 요소일 것"으로 넘기지 않는다 — 틀렸을 때
+   치르는 값이 크다.
+========================================================== */
+
+const INSPECTOR_FINGERPRINT_ATTRS = [
+  "data-imory-bind",
+  "data-imory-src",
+  "data-imory-href",
+  "data-imory-repeat",
+  "data-imory-if",
+  "data-imory-region",
+  "data-imory-kind",
+  "data-imory-color",
+  "data-imory-slot",
+  "href",
+  "src"
+];
+
+const INSPECTOR_FINGERPRINT_TEXT_MAX = 40;
+
+
+function inspectorElementFingerprint(el) {
+
+  if (!el || el.nodeType !== 1) {
+    return "";
+  }
+
+  const parts = [
+    el.tagName.toLowerCase(),
+
+    /* class 는 적힌 순서 그대로다 — 순서가 바뀌면 그것도 "달라졌다"로
+       본다. 지문은 같음을 증명하는 값이지 비슷함을 재는 값이 아니다. */
+    (el.getAttribute("class") || "").trim().replace(/\s+/g, " "),
+
+    String(el.children.length)
+  ];
+
+  INSPECTOR_FINGERPRINT_ATTRS.forEach((name) => {
+    parts.push(el.getAttribute(name) || "");
+  });
+
+  /* 자식 요소의 글자는 빼고 **제 텍스트**만 — 자식이 바뀌어도
+     이 요소가 그 요소인 것은 변하지 않는다. */
+  const ownText =
+    Array.from(el.childNodes)
+      .filter((node) => node.nodeType === 3)
+      .map((node) => node.textContent)
+      .join("")
+      .trim()
+      .replace(/\s+/g, " ")
+      .slice(0, INSPECTOR_FINGERPRINT_TEXT_MAX);
+
+  parts.push(ownText);
+
+  return parts.join("");
+
+}
+
+
+/* =========================================================
+   선택 복원의 근거 — 지문 하나로는 모자란 경우 (2026-09-17 보완)
+
+   ★ 남아 있던 구멍: **완전히 같은 형제**
+
+     <li class="card">글</li>
+     <li class="card">글</li>   <- 사용자가 고른 것
+     <li class="card">글</li>
+
+   위 지문(태그·클래스·속성·자식 수·제 텍스트)은 셋이 똑같다.
+   가운데를 고른 뒤 **첫째를 지우면** 셋째가 그 구조 경로 id 를
+   물려받고 지문까지 같아서 "ok" 가 나온다 — 선택이 조용히 다른
+   형제로 넘어간다. 그 상태로 AI 수정을 보내면 사용자가 보지도 않은
+   요소가 바뀐다.
+
+   ★ 그래서 근거를 세 겹으로 만든다 (inspectorSelectionSignature)
+
+     1. own    그 요소 자체의 지문 (inspectorElementFingerprint)
+     2. trail  body 까지 올라가며 **형제 중 몇 번째인가 · 형제가
+               몇인가 · 그 부모는 어떤 요소인가**
+     3. sub    제 아래 subtree 의 구조와 글자
+
+   (1) 은 자리를 물려받은 **다른 종류**의 형제를 걸러내고,
+   (2) 는 **형제 수·차례가 달라진 것**(= 누가 지워지거나 끼어들었다)
+   을 걸러내며, (3) 은 겉만 같고 속이 다른 형제를 걸러낸다. 형제를
+   하나 지우면 부모의 자식 수가 반드시 1 줄므로, 완전히 같은 형제
+   사이에서도 (2) 에서 걸린다.
+
+   ★ 여전히 가를 수 없는 경우는 그대로 적는다
+
+   subtree 까지 글자 단위로 똑같은 형제 **둘의 자리를 맞바꾸면**
+   결과 HTML 이 바꾸기 전과 한 글자도 다르지 않다. 그 둘을 가르는
+   근거는 HTML 어디에도 없고 — 지금 우리가 들고 있는 것은 그
+   HTML 문자열 하나다 — 어느 쪽에 규칙을 붙여도 화면도 저장 결과도
+   같다. 그래서 그 경우만 "유지"로 남는다. 넘어갈 **다른** 형제가
+   결과적으로 존재하지 않기 때문이다. 지우기·끼워넣기·(속이 다른)
+   순서 바꾸기는 전부 (2)나 (3)에서 걸려 해제된다.
+
+   ★ 값은 해시로 줄인다
+
+   trail 과 subtree 를 원문으로 들면 큰 템플릿에서 수 KB 가 된다.
+   비교는 "같은가/다른가" 하나뿐이므로 32bit 두 벌(FNV-1a, 시드가
+   다르다)로 줄인다. own 지문은 사람이 읽을 수 있게 그대로 둔다 —
+   로그에서 "무엇이 달라졌나"를 보는 데 쓴다. 이 값은 프레임으로도
+   서버로도 나가지 않는다(이 문서 메모리에만 있다).
+========================================================== */
+
+const INSPECTOR_SIGNATURE_VERSION = "v2";
+
+/* 아주 깊거나 큰 subtree 에서 비용이 폭발하지 않게 한다. 상한에
+   걸리면 그 사실 자체를 값에 적는다 — 상한 아래가 같아도 "잘렸다"
+   가 같아야 같은 값이다. */
+const INSPECTOR_SIGNATURE_MAX_NODES = 400;
+const INSPECTOR_SIGNATURE_MAX_DEPTH = 8;
+const INSPECTOR_SIGNATURE_MAX_ANCESTORS = 20;
+
+
+function inspectorSignatureHash(text) {
+
+  /* FNV-1a 계열 32bit 두 벌. 암호 해시가 아니다 — 여기서 막는 것은
+     "우연히 같아 보이는 두 요소"이지 공격자가 아니다. */
+
+  let a = 0x811c9dc5;
+  let b = 0x9e3779b1;
+
+  for (let i = 0; i < text.length; i += 1) {
+
+    const code = text.charCodeAt(i);
+
+    a ^= code;
+    a = Math.imul(a, 0x01000193) >>> 0;
+
+    b ^= code + i;
+    b = Math.imul(b, 0x85ebca6b) >>> 0;
+
+  }
+
+  return (
+    a.toString(16).padStart(8, "0") +
+    b.toString(16).padStart(8, "0")
+  );
+
+}
+
+
+/* body 까지 올라가는 자리 기록 — "몇 번째 · 몇 중에 · 누구 밑에" */
+function inspectorAncestorTrail(el) {
+
+  const parts = [];
+
+  let node = el;
+  let parent = node.parentElement;
+
+  while (parent && parts.length < INSPECTOR_SIGNATURE_MAX_ANCESTORS) {
+
+    const index =
+      Array.prototype.indexOf.call(parent.children, node);
+
+    parts.push(
+      index + "/" + parent.children.length + ":" +
+      inspectorElementFingerprint(parent)
+    );
+
+    node = parent;
+    parent = node.parentElement;
+
+  }
+
+  /* 문서 끝까지 올라갔는가 — 상한에 걸려 멈춘 것과 구분한다 */
+  parts.push(parent ? "cut" : "root");
+
+  return parts.join("|");
+
+}
+
+
+/* 제 아래 subtree 의 구조와 글자 */
+function inspectorSubtreeDetail(el) {
+
+  const parts = [];
+
+  let budget = INSPECTOR_SIGNATURE_MAX_NODES;
+
+  (function walk(node, depth) {
+
+    if (depth > INSPECTOR_SIGNATURE_MAX_DEPTH) {
+      parts.push("deep");
+      return;
+    }
+
+    Array.from(node.children).forEach((child, index) => {
+
+      if (budget <= 0) {
+        return;
+      }
+
+      budget -= 1;
+
+      parts.push(
+        depth + ":" + index + ":" + inspectorElementFingerprint(child)
+      );
+
+      walk(child, depth + 1);
+
+    });
+
+  }(el, 0));
+
+  if (budget <= 0) {
+    parts.push("cut");
+  }
+
+  return parts.join("|");
+
+}
+
+
+function inspectorSelectionSignature(el) {
+
+  if (!el || el.nodeType !== 1) {
+    return "";
+  }
+
+  return [
+    INSPECTOR_SIGNATURE_VERSION,
+    inspectorElementFingerprint(el),
+    inspectorSignatureHash(inspectorAncestorTrail(el)),
+    inspectorSignatureHash(inspectorSubtreeDetail(el))
+  ].join("~");
+
+}
+
+
+/* =========================================================
+   resolveInspectorSelectionTarget(stamped, editId, signature)
+     -> { element, reason } | { element: null, reason }
+
+   reason 값(호출자의 로그/테스트용):
+     "ok"            그 요소가 맞다
+     "gone"          그 id 를 가진 요소가 없다
+     "ambiguous"     승격된 id 인데 HTML 안에 여러 번 있다
+     "no-evidence"   임시 id 인데 대조할 근거가 없다
+     "mismatch"      임시 id 인데 근거가 다르다(자리를 물려받았다)
+
+   세 번째 인자는 고를 때 남긴 inspectorSelectionSignature() 값이다
+   (예전 이름은 fingerprint 였다 — 값이 세 겹으로 넓어졌을 뿐,
+   호출 규약과 흐르는 자리는 그대로다).
+========================================================== */
+
+function resolveInspectorSelectionTarget(stamped, editId, signature) {
+
+  if (!stamped || !isValidInspectorEditId(editId)) {
+    return { element: null, reason: "gone" };
+  }
+
+  const element =
+    stamped.doc.body.querySelector(
+      `[${INSPECTOR_EDIT_ID_ATTR}="${editId}"]`
+    );
+
+  if (!element) {
+    return { element: null, reason: "gone" };
+  }
+
+  /* 승격된 id — **유일할 때만** 그 자체가 근거다.
+
+     stamp 가 두 번째 사본의 속성을 이미 떼어 냈으므로 doc 만 봐서는
+     알 수 없다. 그래서 stamp 가 적어 둔 기록을 본다
+     (stampInspectorEditIds duplicateIds). 여럿이었다면 위
+     querySelector 가 돌려준 **첫 번째**가 사용자가 고른 그 요소라는
+     보장이 없다 — 되살리지 않는다. */
+  if (!stamped.autoIds.has(editId)) {
+
+    const duplicated =
+      !!(stamped.duplicateIds && stamped.duplicateIds.has(editId));
+
+    return duplicated
+      ? { element: null, reason: "ambiguous" }
+      : { element, reason: "ok" };
+
+  }
+
+  if (typeof signature !== "string" || !signature) {
+    return { element: null, reason: "no-evidence" };
+  }
+
+  if (inspectorSelectionSignature(element) !== signature) {
+    return { element: null, reason: "mismatch" };
+  }
+
+  return { element, reason: "ok" };
+
+}
+
+
+/* =========================================================
    요소 분류
 
    "너무 작은 span 하나하나를 잡지 않는다"(요구사항 4절)는 여기서
    결정된다 — 장식용 빈 요소는 선택 대상에서 빼고, 클릭이 그런
    요소에 떨어지면 호출자가 부모로 한 칸 올라간다
    (preview-bridge.js의 resolveInspectableTarget).
+
+   ★ 판정 규칙 자체는 이 파일에 없다 — skin/skin-inspect-target.js
+
+   SANDBOX-6A 에서 옮겼다. 같은 규칙이 이제 **세 realm** 에서
+   필요하기 때문이다: Studio 문서 · native Preview 문서 ·
+   sandbox 프레임 문서. 프레임은 studio/* 를 로드할 수 없으므로
+   (sandbox origin allowlist — core/lib/skin-sandbox-server.js),
+   의존이 하나도 없는 그 파일을 셋이 각각 로드한다. 규칙을 복붙하면
+   세 쪽이 서서히 달라지고, 달라지는 쪽은 늘 느슨한 쪽이다.
+
+   그 파일이 주는 전역(classic script 최상위 선언이라 이 파일에서
+   그대로 읽힌다 — 로드 순서만 지키면 된다):
+
+     INSPECTOR_NEVER_SELECTABLE_TAGS
+     INSPECTOR_TEXTUAL_TAGS          (아래 kind 판정이 쓴다)
+     isInspectableElement(el)
+     resolveInspectableAncestor(node, root, editIdOf)
+
+   로드 순서: skin/skin-inspect-target.js -> 이 파일
+   (studio/index.html · studio/studio-lifecycle-scenario.html ·
+    studio/preview/preview-frame.html · skin/sandbox/frame.html)
 ========================================================== */
-
-const INSPECTOR_NEVER_SELECTABLE_TAGS =
-  new Set(["br", "hr"]);
-
-const INSPECTOR_TEXTUAL_TAGS =
-  new Set([
-    "h1", "h2", "h3", "h4", "h5", "h6",
-    "p", "span", "small", "strong", "b", "em", "i", "u", "mark",
-    "blockquote", "cite", "dt", "dd", "figcaption", "summary", "li"
-  ]);
-
-
-function isInspectableElement(el) {
-
-  if (!el || el.nodeType !== 1) {
-    return false;
-  }
-
-  const tag =
-    el.tagName.toLowerCase();
-
-  if (INSPECTOR_NEVER_SELECTABLE_TAGS.has(tag)) {
-    return false;
-  }
-
-  if (tag === "img" || tag === "a") {
-    return true;
-  }
-
-  /* data-imory-* 가 붙은 요소는 언제나 "의미 있는 단위"다. */
-  if (
-    Array.from(el.attributes).some(
-      (attr) => attr.name.toLowerCase().startsWith("data-imory-")
-    )
-  ) {
-    return true;
-  }
-
-  if (el.children.length > 0) {
-    return true;
-  }
-
-  return !!(el.textContent || "").trim();
-
-}
 
 
 function inspectorOwnText(el) {
@@ -929,6 +1256,11 @@ if (typeof window !== "undefined") {
   window.commitInspectorEditId = commitInspectorEditId;
   window.isInspectableElement = isInspectableElement;
   window.describeInspectorElement = describeInspectorElement;
+
+  /* 선택 복원의 근거 (SANDBOX-6A 후속) */
+  window.inspectorElementFingerprint = inspectorElementFingerprint;
+  window.inspectorSelectionSignature = inspectorSelectionSignature;
+  window.resolveInspectorSelectionTarget = resolveInspectorSelectionTarget;
   window.resolveInspectorImageSlot = resolveInspectorImageSlot;
   window.buildInspectorEditSelector = buildInspectorEditSelector;
   window.readInspectorEditDeclarations = readInspectorEditDeclarations;

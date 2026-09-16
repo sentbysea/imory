@@ -350,15 +350,19 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
 /*
   SANDBOX-1 때 여섯이었고, SANDBOX-2 에서 셋이 늘었다
   (RENDER_PAGE / POST_BODY / NAVIGATE). SANDBOX-5A 에서 하나 더
-  늘어 열이다 (SCRIPT_ERROR — 저자 JS 가 오류를 냈다).
+  늘어 열이었다 (SCRIPT_ERROR — 저자 JS 가 오류를 냈다).
+  SANDBOX-6A 에서 Element Inspector 의 다섯이 늘어 열다섯이다
+  (INSPECT_MODE / INSPECT_PICK / INSPECT_HOVER / INSPECT_SELECT /
+   INSPECT_RECTS / INSPECT_ERROR — 여섯 같지만 MODE 가 지시문의
+   START·STOP 둘을 겸한다).
 
   이 수를 못 박아 두는 것은 "메시지가 조용히 늘지 않는다"를
   지키기 위해서다 — 늘리려면 이 줄을 고쳐야 하고, 고치는 사람은
   그때 새 메시지의 검증을 함께 보게 된다.
 */
 
-check("[msg] 이번 라운드가 아는 type 은 정확히 열이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 10,
+check("[msg] 이번 라운드가 아는 type 은 정확히 열여섯이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 16,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -1841,6 +1845,223 @@ check("[authorjs] ★ cleanup 은 한 번만 불리고, 하나가 던져도 나�
 check("[authorjs] ★ 빈 코드는 실행 자체를 시도하지 않는다",
   authorRuntime.runSandboxAuthorScript({ code: "" }).code === "script-blocked" &&
   authorRuntime.runSandboxAuthorScript({ code: null }).code === "script-blocked");
+
+
+/* =========================================================
+   [inspect] SANDBOX-6A — Element Inspector 메시지
+
+   무엇을 보는가: **프레임이 부모에게 무엇을 보낼 수 있는가**의
+   상한. 이 절이 통과한다는 것은 "프레임이 아무 말이나 지어내도
+   봉투 단계에서 걸린다"는 뜻이다. 그 다음 관문(그 식별자가 지금
+   draft template 에 실제로 있는가)은 Studio 가 하고, e2e 가 본다.
+========================================================== */
+
+console.log("\n[inspect] Element Inspector 메시지 (SANDBOX-6A)");
+
+
+function inspectEvent(type, payload, overrides = {}) {
+  return {
+    origin: "https://skin-frame.imory.me",
+    source: FRAME_WIN,
+    data: protocol.buildSandboxMessage(type, payload, 7),
+    ...overrides
+  };
+}
+
+const okRect = { left: 10, top: 20, width: 100, height: 40 };
+
+const inspectOk = (type, payload) =>
+  protocol.validateSandboxMessage(
+    inspectEvent(type, payload), parentExpect
+  ).ok === true;
+
+const inspectReason = (type, payload) =>
+  protocol.validateSandboxMessage(
+    inspectEvent(type, payload), parentExpect
+  ).reason;
+
+
+check("[inspect] 정상 HOVER 를 통과시킨다",
+  inspectOk("IMORY_INSPECT_HOVER",
+    { contract: 1, renderSeq: 3, editId: "e0-1", rect: okRect }));
+
+check("[inspect] ★ 빈 HOVER 는 '없어졌다'는 뜻이라 통과한다",
+  inspectOk("IMORY_INSPECT_HOVER", { contract: 1, renderSeq: 3 }));
+
+check("[inspect] 정상 SELECT 를 통과시킨다",
+  inspectOk("IMORY_INSPECT_SELECT",
+    { contract: 1, renderSeq: 3, editId: "e0-1", tagName: "h1", rect: okRect }));
+
+check("[inspect] ★ 빈 SELECT 는 '아무것도 안 골랐다'라 통과한다",
+  inspectOk("IMORY_INSPECT_SELECT", { contract: 1, renderSeq: 3 }));
+
+check("[inspect] ★ 식별자 모양이 깨지면 거부된다",
+  inspectReason("IMORY_INSPECT_SELECT",
+    { contract: 1, renderSeq: 3, editId: "e0 1\"]", tagName: "h1", rect: okRect })
+    === "bad-payload-value",
+  "선택자 탈출을 노린 값");
+
+check("[inspect] ★ 식별자만 있고 좌표가 없으면 거부된다",
+  inspectReason("IMORY_INSPECT_SELECT",
+    { contract: 1, renderSeq: 3, editId: "e0-1" }) === "bad-payload-value");
+
+check("[inspect] ★ 태그 이름이 태그 모양이 아니면 거부된다",
+  inspectReason("IMORY_INSPECT_SELECT",
+    { contract: 1, renderSeq: 3, editId: "e0-1", tagName: "H1 onload=x", rect: okRect })
+    === "bad-payload-value");
+
+check("[inspect] ★ 좌표가 NaN/Infinity 면 거부된다",
+  inspectReason("IMORY_INSPECT_HOVER",
+    { contract: 1, renderSeq: 3, editId: "e0-1",
+      rect: { left: NaN, top: 0, width: 1, height: 1 } }) === "bad-payload-value" &&
+  inspectReason("IMORY_INSPECT_HOVER",
+    { contract: 1, renderSeq: 3, editId: "e0-1",
+      rect: { left: 0, top: 0, width: Infinity, height: 1 } }) === "bad-payload-value");
+
+check("[inspect] ★ 좌표가 범위를 벗어나면 거부된다",
+  inspectReason("IMORY_INSPECT_HOVER",
+    { contract: 1, renderSeq: 3, editId: "e0-1",
+      rect: { left: 0, top: 0, width: 999999, height: 1 } }) === "bad-payload-value");
+
+check("[inspect] ★ 음수 크기는 거부된다",
+  inspectReason("IMORY_INSPECT_HOVER",
+    { contract: 1, renderSeq: 3, editId: "e0-1",
+      rect: { left: 0, top: 0, width: -5, height: 1 } }) === "bad-payload-value");
+
+check("[inspect] ★ rect 에 모르는 키가 섞이면 거부된다",
+  inspectReason("IMORY_INSPECT_HOVER",
+    { contract: 1, renderSeq: 3, editId: "e0-1",
+      rect: { left: 0, top: 0, width: 1, height: 1, html: "<b>" } })
+    === "bad-payload-value",
+  "사각형 봉투로 다른 값을 실어 나를 수 없다");
+
+check("[inspect] ★ payload 에 모르는 키가 있으면 거부된다",
+  (() => {
+    const event = inspectEvent("IMORY_INSPECT_SELECT",
+      { contract: 1, renderSeq: 3, editId: "e0-1", tagName: "h1", rect: okRect });
+    event.data.payload.innerHTML = "<script>";
+    return protocol.validateSandboxMessage(event, parentExpect).reason
+      === "unknown-payload-key";
+  })(),
+  "innerHTML 을 끼워 보낼 수 없다");
+
+check("[inspect] 정상 RECTS 를 통과시킨다",
+  inspectOk("IMORY_INSPECT_RECTS", {
+    contract: 1,
+    renderSeq: 3,
+    hover: { editId: "e0-1", rect: okRect },
+    selected: { editId: "e0-2", tagName: "img", rect: okRect }
+  }));
+
+check("[inspect] ★ RECTS 의 hover 칸에는 tagName 이 들어갈 수 없다",
+  inspectReason("IMORY_INSPECT_RECTS", {
+    contract: 1,
+    renderSeq: 3,
+    hover: { editId: "e0-1", tagName: "h1", rect: okRect }
+  }) === "bad-payload-value");
+
+check("[inspect] ★ 빈 RECTS 도 통과한다 (둘 다 없어진 상태)",
+  inspectOk("IMORY_INSPECT_RECTS", { contract: 1, renderSeq: 3 }));
+
+check("[inspect] 정상 INSPECT_ERROR 를 통과시킨다",
+  inspectOk("IMORY_INSPECT_ERROR",
+    { contract: 1, renderSeq: 3, code: "not-inspectable" }));
+
+check("[inspect] ★ 모르는 오류 코드는 거부된다",
+  inspectReason("IMORY_INSPECT_ERROR",
+    { contract: 1, renderSeq: 3, code: "stack: at foo (/skin/...)" })
+    === "bad-payload-value",
+  "문장도 경로도 올라갈 수 없다");
+
+check("[inspect] ★ renderSeq 가 없으면 거부된다",
+  inspectReason("IMORY_INSPECT_SELECT",
+    { contract: 1, editId: "e0-1", tagName: "h1", rect: okRect })
+    === "bad-payload-value",
+  "어느 화면의 선택인지 말하지 않는 메시지는 받지 않는다");
+
+
+/*
+  방향 — 프레임은 부모용 메시지를 받지 않고, 부모는 프레임용
+  메시지를 받지 않는다. 위조 경로 하나를 이 한 칸이 닫는다.
+*/
+
+const frameExpect = {
+  originAllowList: ["https://imory.me"],
+  source: PARENT_WIN,
+  direction: "to-frame"
+};
+
+check("[inspect] ★ 부모는 INSPECT_MODE 를 받지 않는다 (방향)",
+  inspectReason("IMORY_INSPECT_MODE",
+    { contract: 1, renderSeq: 3, enabled: true }) === "wrong-direction");
+
+check("[inspect] ★ 프레임은 INSPECT_SELECT 를 받지 않는다 (방향)",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: PARENT_WIN,
+      data: protocol.buildSandboxMessage("IMORY_INSPECT_SELECT",
+        { contract: 1, renderSeq: 3, editId: "e0-1", tagName: "h1", rect: okRect }, 2)
+    },
+    frameExpect
+  ).reason === "wrong-direction",
+  "저자 JS 가 자기 프레임에 선택을 심을 수 없다");
+
+check("[inspect] 정상 MODE / PICK 를 프레임이 받는다",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: PARENT_WIN,
+      data: protocol.buildSandboxMessage("IMORY_INSPECT_MODE",
+        { contract: 1, renderSeq: 3, enabled: true }, 2)
+    },
+    frameExpect
+  ).ok === true &&
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: PARENT_WIN,
+      data: protocol.buildSandboxMessage("IMORY_INSPECT_PICK",
+        { contract: 1, renderSeq: 3, editId: "e0-1" }, 3)
+    },
+    frameExpect
+  ).ok === true);
+
+check("[inspect] ★ editId 없는 PICK 은 '해제'라 통과한다",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: PARENT_WIN,
+      data: protocol.buildSandboxMessage("IMORY_INSPECT_PICK",
+        { contract: 1, renderSeq: 3 }, 4)
+    },
+    frameExpect
+  ).ok === true);
+
+check("[inspect] ★ enabled 가 boolean 이 아니면 거부된다",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: PARENT_WIN,
+      data: protocol.buildSandboxMessage("IMORY_INSPECT_MODE",
+        { contract: 1, renderSeq: 3, enabled: "1" }, 5)
+    },
+    frameExpect
+  ).reason === "bad-payload-value");
+
+
+/*
+  ★ 식별자 형태가 세 파일에서 같은가. 하나라도 느슨해지면 그 틈으로만
+  값이 흐른다(skin-sanitize.js ↔ studio-inspector-model.js ↔ 이 프로토콜).
+*/
+
+check("[inspect] ★ 식별자 형태가 sanitizer 와 같다",
+  (() => {
+    const good = ["e0", "e0-1-2", "a".repeat(64)];
+    const bad = ["0e", "", "a".repeat(65), "e0 1", 'e"]', "e0/1"];
+    return good.every(protocol.isSandboxInspectEditId) &&
+      bad.every(v => !protocol.isSandboxInspectEditId(v));
+  })());
 
 
 /* =========================================================

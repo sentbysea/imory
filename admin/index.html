@@ -2182,11 +2182,12 @@
            구성된다(admin-shell.css의 .skin-studio-mode, 미디어쿼리
            없이 적용) — AI_SKIN_PHASE1B_DESIGN.md 2-2/9절.
 
-           Skin Studio 제작 자체는 데스크탑 전용이라, 좁은
-           화면(admin-shell.css 기준 900px 이하)에서는 iframe 대신
-           #skinStudioMobileNotice 안내만 보여준다 — admin 자체는
-           모바일에서도 깨지지 않아야 하므로 iframe 로드는 그대로
-           두고 CSS로만 전환한다.
+           (2026-09-17에 바뀜) 예전에는 좁은 화면(900px 이하)에서
+           iframe 대신 #skinStudioMobileNotice 안내만 보여줬다.
+           지금은 어느 폭에서든 Studio를 그대로 연다 — Top Dock이
+           여러 줄로 접히고 Select도 터치로 동작한다
+           (admin-shell.css "좁은 화면 안내" 절). 그 안내 요소는
+           마크업에 남아 있지만 표시되지 않는다.
       ==================================================== -->
 
       <section

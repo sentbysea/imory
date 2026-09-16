@@ -278,6 +278,27 @@ function bumpStudioWorkingRevision() {
 
   studioWorkingRevision += 1;
 
+  /* =====================================================
+     working draft 가 바뀌었다 — 고른 요소가 **여전히 그 요소인가**
+     를 여기서 한 번 확인한다(2026-09-17).
+
+     임시 식별자는 구조 경로라, 고른 요소가 지워지면 뒤 형제가 그
+     자리로 밀려와 같은 id 를 물려받는다. id 만 보고 되살리면
+     엉뚱한 요소가 선택된 채로 남고, 그 상태에서 AI 수정을 보내면
+     사용자가 보지도 않은 요소가 바뀐다
+     (studio/inspector/studio-inspector-model.js
+      resolveInspectorSelectionTarget 머리말).
+
+     이 함수가 그 공통 관문이다 — Direct Edit · Code Apply ·
+     Import · AI 적용 · 되돌리기 · 이미지 슬롯 · remount 가 전부
+     여기를 지난다. Inspector 파일은 이 파일보다 나중에 로드되므로
+     typeof 로 확인한다(다른 지점들과 같은 패턴).
+  ====================================================== */
+
+  if (typeof window.reconcileStudioInspectorSelection === "function") {
+    window.reconcileStudioInspectorSelection();
+  }
+
 }
 
 
@@ -580,29 +601,34 @@ function updateStudioInspectorButtonState() {
   }
 
   /* =====================================================
-     SANDBOX-4 — sandbox 스킨에서는 Select 를 잠근다.
+     SANDBOX-4 에서 잠갔던 것을 SANDBOX-6A 에서 다시 열었다.
 
+     ★ 왜 잠가 뒀었나
      Inspector 는 Preview 문서의 DOM 을 직접 읽어 hover/선택
-     좌표를 올려보낸다(studio/preview/preview-bridge.js). sandbox
+     좌표를 올려보냈다(studio/preview/preview-bridge.js). sandbox
      스킨의 DOM 은 **다른 origin 의 프레임 안**에 있어 그 문서가
-     읽을 수 없다 — 켜면 크로스헤어 커서만 생기고 아무것도 잡히지
-     않는다. 그래서 "되는 척"하지 않고 잠근다.
+     읽을 수 없다 — 켜 봐야 크로스헤어 커서만 생기고 아무것도
+     잡히지 않았다.
 
-     남은 차이로 문서에 적었다(IMORY_SANDBOX_SKIN_DESIGN.md).
+     ★ 왜 이제 열리나
+     hit-test 를 프레임 안에서 한다(skin/sandbox/skin-sandbox-inspect.js).
+     프레임이 올려보내는 것은 native 와 같은 최소값(식별자 · 태그
+     이름 · 사각형)이고, 좌표를 이 문서의 것으로 옮기는 일은
+     preview-sandbox.js 가 한다. 그래서 이 파일부터 Inspector
+     패널·AI 선택까지는 native 와 같은 경로를 그대로 탄다.
+
+     ★ 아직 안 되는 것 — 직접 편집(텍스트 내용 · 이미지 크기 ·
+     자르기)은 sandbox 에서 열리지 않는다. 그 컨트롤들은 프레임 안
+     DOM 의 실측값(자연 크기 · 부모 안쪽 폭)과 임시 미리보기를
+     필요로 한다. 팝오버가 그 이유를 적어 준다
+     (studio/inspector/studio-inspector-controls.js).
   ====================================================== */
 
-  const isSandboxSkin =
-    !!currentWorkingSkin &&
-    typeof resolveSkinRenderMode === "function" &&
-    resolveSkinRenderMode(currentWorkingSkin) === "sandbox";
-
   studioInspectorButton.disabled =
-    !currentWorkingSkin || isSandboxSkin;
+    !currentWorkingSkin;
 
   studioInspectorButton.title =
-    isSandboxSkin
-      ? "sandbox 스킨은 직접 편집을 지원하지 않습니다"
-      : "";
+    "";
 
   if (
     studioInspectorButton.disabled &&

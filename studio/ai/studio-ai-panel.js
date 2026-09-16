@@ -1340,6 +1340,19 @@ async function handleStudioAiSend() {
       ? window.getStudioAiSelectionContext()
       : null;
 
+  /*
+    ★ 지문도 전송 시점 snapshot 이다 (2026-09-17).
+
+    응답이 도착했을 때 "그 사이 그 요소가 사라지고 뒤 형제가 같은
+    구조 경로 id 를 물려받지 않았는가"를 이 값으로 확인한다
+    (studio/ai/studio-ai-selection.js studioAiSelectionTargetIsIntact).
+    selectionContext 에 넣지 않는다 — 서버가 알 필요가 없는 값이다.
+  */
+  const selectionFingerprint =
+    (selectionContext && typeof window.getStudioInspectorSelection === "function")
+      ? ((window.getStudioInspectorSelection() || {}).fingerprint || "")
+      : "";
+
   const selectionPackage =
     selectionContext
       ? window.buildStudioAiSelectionPackage(working.skinPackage, selectionContext)
@@ -1569,6 +1582,50 @@ async function handleStudioAiSend() {
       STUDIO_AI_ERROR_CODES.SKIN_VALIDATION_FAILED,
       { hasSelection: !!selectionContext }
     );
+
+    return;
+
+  }
+
+  /* =========================================================
+     ★ 적용 직전 — 고른 요소가 지금도 그 요소인가 (2026-09-17)
+
+     아래 applyAiSkinPackage() 의 expectedRevision/expectedMountToken
+     이 "그 사이 draft 가 바뀌었는가"를 본다. 그것이 1차 방어선이고
+     대개 충분하다. 하지만 그 검사는 **무엇이** 바뀌었는지는 모른다.
+
+     우리가 실제로 두려운 경우는 하나다: 기다리는 사이 고른 요소가
+     사라져서 뒤 형제가 **같은 구조 경로 id 를 물려받은** 경우
+     (studio/inspector/studio-inspector-model.js
+      resolveInspectorSelectionTarget). 그때 응답을 그대로 적용하면
+     사용자가 보지도 않은 요소가 바뀐다.
+
+     그래서 두 검사를 **함께** 한다 — 순서는 이쪽이 먼저다. 이유가
+     더 정확한 안내를 낼 수 있기 때문이다("다시 선택해 주세요").
+     여기서 막히면 draft 는 한 글자도 바뀌지 않는다.
+  ========================================================== */
+
+  if (
+    selectionContext &&
+    typeof window.studioAiSelectionTargetIsIntact === "function" &&
+    !window.studioAiSelectionTargetIsIntact(selectionContext, selectionFingerprint)
+  ) {
+
+    console.warn(
+      "[studio-ai] 응답이 오는 사이 선택 요소가 바뀌었습니다 — 적용하지 않습니다",
+      { stage: "S10", editId: selectionContext.editId }
+    );
+
+    failStudioAiRequest(
+      "S10",
+      STUDIO_AI_ERROR_CODES.SELECTION_TARGET_NOT_FOUND,
+      { statusText: "", hasSelection: true }
+    );
+
+    /* 그 선택은 이미 믿을 수 없다 — 조용히 푼다. */
+    if (typeof window.clearStudioInspectorSelection === "function") {
+      window.clearStudioInspectorSelection();
+    }
 
     return;
 

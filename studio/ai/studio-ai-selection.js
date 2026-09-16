@@ -298,6 +298,14 @@ function buildStudioAiSelectionPackage(skinPackage, selectionContext) {
    같은 id를 물려받는다** — 되살리기는 성공하지만 엉뚱한 요소가
    선택된 채로 남는다.
 
+   ★ (2026-09-17) 이제 그 판정은 Inspector 쪽에도 있다 —
+   reconcileStudioInspectorSelection() 이 working draft 가 바뀔
+   때마다 지문으로 대조한다(studio/inspector/studio-inspector.js ·
+   studio-inspector-model.js resolveInspectorSelectionTarget). 이
+   함수는 여전히 남는다: 판정 근거가 다르고(응답 HTML 에 그 id 가
+   **글자로** 남았는가), AI 경로에서 가장 이른 시점에 돈다. 두
+   장치가 같은 결론을 내는 것이 정상이다.
+
    선택 요소 AI 요청은 그 요소에 id를 심어서 보냈고(위
    buildStudioAiSelectionPackage), 모델에게 그 id를 유지하라고
    계약으로 요구했다. 그러니 응답 SkinPackage의 html에 그 id가
@@ -321,6 +329,77 @@ function skinPackageHasEditId(skinPackage, template, editId) {
     (entry && typeof entry.html === "string") ? entry.html : "";
 
   return html.indexOf(`data-imory-edit-id="${editId}"`) !== -1;
+
+}
+
+
+/* =========================================================
+   studioAiSelectionTargetIsIntact(selectionContext, fingerprint)
+     -> boolean
+
+   AI 응답을 **적용하기 직전에** 부른다: "보낼 때 고른 그 요소가
+   지금 draft 에도 그대로 있는가".
+
+   ★ 왜 revision 검사만으로 부족한가
+
+   applyAiSkinPackage() 의 expectedRevision/expectedMountToken 은
+   "그 사이 draft 가 바뀌었는가"를 본다. 그것이 1차 방어선이고 대개
+   충분하다. 하지만 그 검사는 **무엇이** 바뀌었는지는 모른다 —
+   그리고 우리가 실제로 두려운 것은 하나다: 그 사이 고른 요소가
+   사라져서 **뒤 형제가 같은 구조 경로 id 를 물려받은** 경우
+   (studio/inspector/studio-inspector-model.js
+    resolveInspectorSelectionTarget 머리말). 그때 응답을 그대로
+   적용하면 사용자가 보지도 않은 요소가 바뀐다.
+
+   그래서 두 검사를 **함께** 한다. 이 함수는 지금 draft 를 다시
+   stamp 해서, 그 id 가 아직 있고 **같은 요소라고 말할 근거가
+   있는지**까지 본다.
+
+   ★ 살아 있는 선택 상태와는 무관하다. 요청의 타깃은 전송 시점
+   snapshot 이고(studio/ai/studio-ai-panel.js), 기다리는 동안
+   사용자가 다른 요소를 골랐다고 해서 이 요청이 틀려지지는 않는다.
+========================================================== */
+
+function studioAiSelectionTargetIsIntact(selectionContext, fingerprint) {
+
+  if (!selectionContext) {
+    return false;
+  }
+
+  if (
+    typeof window.getStudioAiWorkingState !== "function" ||
+    typeof window.stampInspectorEditIds !== "function" ||
+    typeof window.resolveInspectorSelectionTarget !== "function"
+  ) {
+    return false;
+  }
+
+  const state =
+    window.getStudioAiWorkingState({ includePackage: true });
+
+  const template =
+    (state.skinPackage && state.skinPackage.templates)
+      ? state.skinPackage.templates[selectionContext.template]
+      : null;
+
+  if (!template || typeof template.html !== "string") {
+    return false;
+  }
+
+  let stamped;
+
+  try {
+    stamped = window.stampInspectorEditIds(template.html);
+  }
+  catch (err) {
+    return false;
+  }
+
+  return !!window.resolveInspectorSelectionTarget(
+    stamped,
+    selectionContext.editId,
+    fingerprint
+  ).element;
 
 }
 
@@ -504,6 +583,10 @@ if (typeof window !== "undefined") {
 
   window.reconcileStudioAiSelection =
     reconcileStudioAiSelection;
+
+  /* 응답 적용 직전의 "그 요소가 지금도 그 요소인가" (2026-09-17) */
+  window.studioAiSelectionTargetIsIntact =
+    studioAiSelectionTargetIsIntact;
 
   /* =========================================================
      S1/S2 진단 (PHASE AI-6B.1)

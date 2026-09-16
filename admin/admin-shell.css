@@ -434,9 +434,9 @@ a.logout-button[hidden] {
    아래 @media(모바일) 섹션 안에서만 position:fixed가 걸리므로
    재사용하지 않고 별도 클래스를 둔다.
 
-   Skin Studio 제작 자체는 데스크탑 전용이라(스튜디오 안 편집
-   기능), 좁은 화면에서는 iframe 대신 #skinStudioMobileNotice
-   안내만 보인다 — 아래 @media 섹션.
+   (2026-09-17에 바뀜) 예전에는 좁은 화면에서 iframe 대신
+   #skinStudioMobileNotice 안내만 보여줬다. 지금은 어느 폭에서든
+   Studio 를 그대로 연다 — 아래 "좁은 화면 안내" 절 참고.
 ========================================================== */
 
 body.skin-studio-body-mode {
@@ -525,35 +525,27 @@ body.skin-studio-body-mode {
 }
 
 
+/* =========================================================
+   좁은 화면 안내 — 2026-09-17부터 **띄우지 않는다**
+
+   예전에는 900px 이하에서 iframe 대신 이 안내만 보여줬다
+   ("Skin Studio는 데스크탑에서 이용할 수 있습니다"). 스튜디오 안
+   편집 기능이 hover/정밀 클릭 전제라는 이유였다.
+
+   그 전제가 더 이상 맞지 않는다. Top Dock 은 좁은 폭에서 여러
+   줄로 접히고(studio.css @media (max-width:720px)), Select 는
+   터치로도 고를 수 있으며(pointerdown 으로 잡는다 —
+   studio/inspector/studio-inspector.css 의 같은 media query 주석),
+   AI 패널은 그 폭에서 overlay 로 뜬다. 즉 모바일에서 못 하는
+   일은 직접 편집·자르기 정도이고, 그것은 화면 안에서 안내된다.
+
+   마크업(#skinStudioMobileNotice)은 그대로 둔다 — 되돌리기 쉽고,
+   admin navigation 계약(버튼 id)을 건드리지 않기 위해서다. 다만
+   어떤 폭에서도 보이지 않는다.
+========================================================== */
+
 .admin-page.skin-studio-mode .skin-studio-mobile-notice {
   display: none;
-}
-
-
-@media (max-width: 900px) {
-
-  .admin-page.skin-studio-mode .skin-studio-embed {
-    display: none;
-  }
-
-
-  .admin-page.skin-studio-mode .skin-studio-mobile-notice {
-    display: flex;
-
-    flex-direction: column;
-
-    align-items: center;
-    justify-content: center;
-
-    gap: 16px;
-
-    flex: 1;
-
-    padding: 24px;
-
-    text-align: center;
-  }
-
 }
 
 

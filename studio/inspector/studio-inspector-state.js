@@ -63,6 +63,21 @@ const studioInspectorFrame =
 const studioInspectorStage =
   document.getElementById("studioPreviewStage");
 
+/* =========================================================
+   Top Dock — 팝오버가 그 밑에 깔리지 않게 하려고 읽는다
+
+   바는 stage 위에 absolute 로 얹히고(z-index 8), 좁은 폭에서는
+   여러 줄로 접혀 144px 까지 자란다(390px 실측). stage 경계만 보고
+   팝오버를 앉히면 그 밴드 아래에 깔려 **버튼을 누를 수 없다** —
+   2026-09-17, 390px 에서 "✦ AI 수정"이 실제로 그랬다.
+
+   바가 접혀 올라가 있으면(translateY(-100%)) 사각형이 뷰포트 위로
+   나가므로 아래 계산이 저절로 아무 일도 하지 않는다.
+========================================================== */
+
+const studioInspectorTopDock =
+  document.getElementById("studioTopDock");
+
 
 /* =========================================================
    상태
@@ -87,6 +102,42 @@ let studioInspectorEditingOpen = false;
    정한다 — 자르기 중에도 좌표는 계속 갱신되므로 metrics와 달리
    한 박자 늦지 않는다(studio-inspector.js rects 처리 주석 참고). */
 let studioInspectorClipped = false;
+
+
+/* =========================================================
+   SANDBOX-6A — 테두리를 누가 그리는가
+
+   sandbox 스킨에서는 hover/선택 테두리를 **프레임 안에서** 그린다
+   (skin/sandbox/skin-sandbox-inspect.js). 저자 JS 의 애니메이션이나
+   늦게 오는 이미지로 사각형이 움직일 때 같은 realm 의 같은 rAF 로
+   따라가야 하기 때문이다.
+
+   그래서 그 경우 이 문서의 hover/선택 상자는 그리지 않는다 — 둘 다
+   그리면 겹쳐 보인다. **팝오버는 계속 이쪽 몫이다**(프레임 안에
+   그리면 스킨 CSS 가 영향을 주고, Mobile 축소에 같이 작아진다 —
+   studio-inspector.js 머리말의 "왜 Preview 안이 아니라 Studio
+   overlay 인가").
+
+   값은 프레임에서 온 메시지의 remote 표식 하나로 정한다. native
+   Preview 의 메시지에는 그 칸이 없으므로 언제나 false 다 — 지금까지의
+   동작은 한 줄도 달라지지 않는다.
+========================================================== */
+
+let studioInspectorRemoteOverlay = false;
+
+
+/* =========================================================
+   마지막으로 선택을 되살리지 못한 이유 (진단·테스트용)
+
+   "gone" / "ambiguous" / "no-evidence" / "mismatch"
+   (studio-inspector-model.js resolveInspectorSelectionTarget)
+
+   선택이 풀린 **뒤에도** 남는다 — studioInspectorSelection 은
+   그때 null 이 되므로, 이유를 거기 담아 두면 읽을 수가 없다.
+   새로 고르면 빈 문자열로 되돌아간다.
+========================================================== */
+
+let studioInspectorLastLostReason = "";
 
 
 /* Direct Edit 1-step undo (요구사항 13절) — 바꾸기 **직전**의
@@ -320,14 +371,43 @@ function describeStudioInspectorSelection() {
   const stamped =
     window.stampInspectorEditIds(source.html);
 
-  const element =
-    stamped.doc.body.querySelector(
-      `[data-imory-edit-id="${studioInspectorSelection.editId}"]`
+  /* =====================================================
+     ★ id 가 같다는 것만으로 되살리지 않는다 (2026-09-17)
+
+     임시 id 는 구조 경로라, 고른 요소를 지우면 뒤 형제가 그 자리로
+     밀려와 같은 id 를 물려받는다. 그래서 "유일한 승격된 id 인가 /
+     아니면 고를 때의 근거(자리·속까지)가 그대로인가"를 함께 본다 —
+     완전히 같은 형제 사이에서도 갈려야 하기 때문이다. 판정은
+     studio/inspector/studio-inspector-model.js
+     resolveInspectorSelectionTarget() 한 곳이고, native 와 sandbox
+     가 같은 함수를 지난다(선택의 주인이 언제나 이 문서이기 때문).
+
+     근거가 모자라면 여기서 null 이고, 그러면 팝오버도 AI chip 도
+     selectionContext 도 생기지 않는다. 실제로 선택을 걷어내는 것은
+     reconcileStudioInspectorSelection()(studio-inspector.js)이다.
+  ====================================================== */
+
+  const resolvedTarget =
+    window.resolveInspectorSelectionTarget(
+      stamped,
+      studioInspectorSelection.editId,
+      studioInspectorSelection.fingerprint
     );
 
+  const element =
+    resolvedTarget.element;
+
   if (!element) {
+
+    studioInspectorSelection.lostReason =
+      resolvedTarget.reason;
+
     return null;
+
   }
+
+  studioInspectorSelection.lostReason =
+    "";
 
   return {
     stamped,

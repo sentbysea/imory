@@ -87,15 +87,37 @@
        needs-new-realm).
      · FOLDER / Series Viewer — pageType 표에 없으므로 native 로
        간다. 폴더 Preview 는 지금까지와 똑같다.
-     · Element Inspector / 직접 편집 — 프레임 안 DOM 은 이 문서가
-       읽을 수 없다(cross-origin). sandbox 스킨에서는 Select 가
-       고를 것이 없다. 남은 차이로 문서에 적었다.
+     · (SANDBOX-6A 에서 바뀜) Element Inspector — 이제 Select 가
+       sandbox 스킨에서도 된다. 아래 "Inspector" 절 참고.
+       **직접 편집(텍스트/크기/자르기)은 아직 아니다** — 그것들은
+       프레임 안 DOM 의 실측값과 임시 미리보기를 필요로 한다.
+       Studio 가 그 이유를 팝오버에 적어 준다.
+
+   ---------------------------------------------------------
+   ★ Inspector (SANDBOX-6A)
+
+   프레임이 올려보내는 것은 식별자 문자열 · 태그 이름 · 사각형
+   넷뿐이다. 이 파일이 하는 일은 그 사각형을 **이 문서의 좌표로
+   옮기는 것** 하나다:
+
+     프레임 뷰포트 좌표  +  iframe 이 이 문서에서 차지한 자리
+     = Preview 문서 좌표
+
+   그러면 그 다음은 native Inspector 와 글자 하나 다르지 않다 —
+   같은 "preview:inspect-*" 메시지로 Studio 에 올라가고, Studio 의
+   overlay/팝오버/AI 선택 chip 이 지금까지 쓰던 경로를 그대로 탄다.
+
+   ★ 안쪽 iframe 에는 배율이 없다(width:100%, transform 없음).
+     Desktop/Mobile 축소는 **바깥** 프레임의 CSS width 로만 하고,
+     그 배율은 Studio 의 studioInspectorMapRect() 가 이미 반영한다.
 ========================================================== */
 
 import {
   prepareSandboxSkin,
   renderSandboxSkinPage,
   sendSandboxPostBody,
+  sendSandboxInspectMode,
+  sendSandboxInspectPick,
   destroySandboxSkinFrame
 } from "../../skin/sandbox/skin-sandbox-host.js";
 
@@ -121,6 +143,28 @@ let sandboxPageType =
 */
 
 let sandboxPendingPostBody =
+  null;
+
+
+/* =========================================================
+   SANDBOX-6A — Inspector
+
+   sandboxInspectEnabled  Studio 의 Select 토글 상태. 프레임이
+                          새로 만들어져도(저자 JS 가 얽힌 렌더)
+                          렌더 직후에 이 값으로 다시 켜 준다.
+   sandboxInspectEditId   Studio 가 정한 선택. 같은 이유로 렌더
+                          직후에 다시 내려보낸다.
+   sandboxInspectRelay    프레임의 inspect 메시지를 Studio 로
+                          올리는 함수(부모 문서가 꽂아 준다).
+========================================================== */
+
+let sandboxInspectEnabled =
+  false;
+
+let sandboxInspectEditId =
+  null;
+
+let sandboxInspectRelay =
   null;
 
 
@@ -383,6 +427,14 @@ export function teardownSandboxPreview() {
 
   sandboxPageType = "";
 
+  /*
+    SANDBOX-6A — 프레임이 사라지면 그 안의 선택도 사라진다.
+    모드(Select 토글)는 Studio 의 것이므로 여기서 끄지 않는다 —
+    native 로 돌아가면 native Inspector 가 그대로 이어받는다.
+  */
+
+  sandboxInspectEditId = null;
+
   if (sandboxHandle) {
 
     destroySandboxSkinFrame(sandboxHandle);
@@ -540,6 +592,10 @@ export async function renderSandboxPreview(options) {
 
       flushSandboxPendingPostBody();
 
+      /* SANDBOX-6A — 같은 프레임에 다시 그렸다. Select 상태를
+         다시 내려보낸다(flushSandboxInspectState 머리말). */
+      flushSandboxInspectState();
+
       return { ok: true, pageType: pageType };
 
     }
@@ -586,7 +642,15 @@ export async function renderSandboxPreview(options) {
           opts.onScriptError(code);
         }
 
-      }
+      },
+
+      /*
+        SANDBOX-6A — 프레임의 Element Inspector 가 올려보내는
+        hover/선택/좌표. 여기서 좌표만 이 문서의 것으로 옮겨
+        native 와 **같은 메시지 이름**으로 Studio 에 올린다.
+      */
+
+      onInspect: handleSandboxInspect
     });
 
   if (!prepared.ok) {
@@ -630,6 +694,10 @@ export async function renderSandboxPreview(options) {
 
   flushSandboxPendingPostBody();
 
+  /* SANDBOX-6A — 새 프레임(realm)이다. 그 안의 Inspector 는 꺼진
+     채로 시작하므로 여기서 Studio 의 Select 상태를 다시 세운다. */
+  flushSandboxInspectState();
+
 
   return { ok: true, pageType: pageType };
 
@@ -665,6 +733,267 @@ export function sendSandboxPreviewPostBody(body) {
 
 
   return sendSandboxPostBody(sandboxHandle, body);
+
+}
+
+
+/* =========================================================
+   SANDBOX-6A — 프레임 좌표를 이 문서의 좌표로
+
+   안쪽 iframe 이 이 문서에서 차지한 자리를 더한다. 그것이 전부다 —
+   배율도 스크롤 보정도 없다(안쪽 프레임은 width:100% 이고 자기
+   안에 스크롤이 없다. 높이는 IMORY_HEIGHT 가 맞춘다).
+
+   프레임이 없으면 null — 좌표 없는 사각형을 만들지 않는다.
+========================================================== */
+
+function sandboxInspectRectToPreview(rect) {
+
+  if (!rect || !hasSandboxPreviewFrame()) {
+    return null;
+  }
+
+
+  const box =
+    sandboxHandle.iframe.getBoundingClientRect();
+
+
+  return {
+    left: box.left + rect.left,
+    top: box.top + rect.top,
+    width: rect.width,
+    height: rect.height
+  };
+
+}
+
+
+/* hover/selected 한 칸 — 좌표만 옮기고 나머지는 그대로 옮겨 적는다 */
+
+function sandboxInspectTarget(value) {
+
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+
+  const rect =
+    sandboxInspectRectToPreview(value.rect);
+
+  if (!rect) {
+    return null;
+  }
+
+
+  const mapped = {
+    editId: typeof value.editId === "string" ? value.editId : null,
+    rect: rect,
+
+    /*
+      ★ visibleRect 를 따로 만들지 않는다. native 에서 그 값은
+      "조상 overflow 가 잘라낸 뒤 실제로 보이는 자리"이고, 자르기
+      프레임 때문에 필요했다. 이번 라운드의 sandbox 는 자르기를
+      켜지 않으므로 둘이 언제나 같다 — 없는 구분을 있는 척하지
+      않는다(Studio 는 visibleRect 가 없으면 rect 를 쓴다).
+    */
+    visibleRect: rect
+  };
+
+  if (typeof value.tagName === "string") {
+    mapped.tagName = value.tagName;
+  }
+
+  return mapped;
+
+}
+
+
+/* =========================================================
+   handleSandboxInspect(kind, payload)
+
+   host 가 renderSeq 를 이미 확인했다. 여기서 하는 일은 좌표
+   변환과, native 와 **같은 메시지 이름**으로 부모에 올리는 것이다.
+
+   ★ remote:true 한 칸을 더한다. Studio 는 그 표식을 보고 자기
+     hover/선택 테두리를 그리지 않는다 — 테두리는 프레임 안에서
+     이미 그려져 있고, 둘 다 그리면 겹쳐 보인다. 팝오버 자리는
+     여전히 이 좌표로 잡는다.
+========================================================== */
+
+function handleSandboxInspect(kind, payload) {
+
+  if (typeof sandboxInspectRelay !== "function") {
+    return;
+  }
+
+
+  if (kind === "error") {
+
+    /*
+      진단용이다. 화면을 바꾸지 않는다 — "고를 수 없는 자리를
+      눌렀다"가 오류 화면이 되어서는 안 된다(지시문 4절).
+    */
+
+    return;
+
+  }
+
+
+  if (kind === "hover") {
+
+    const hover =
+      sandboxInspectTarget(payload);
+
+    sandboxInspectRelay({
+      type: "preview:inspect-hover",
+      remote: true,
+      editId: hover ? hover.editId : null,
+      tagName: hover ? (hover.tagName || null) : null,
+      rect: hover ? hover.rect : null,
+      visibleRect: hover ? hover.visibleRect : null
+    });
+
+    return;
+
+  }
+
+
+  if (kind === "select") {
+
+    const selected =
+      sandboxInspectTarget(payload);
+
+    /* 프레임이 정한 선택을 이쪽 기억에도 남긴다 — 프레임이 새로
+       만들어졌을 때 되살리려면 필요하다. */
+
+    sandboxInspectEditId =
+      selected ? selected.editId : null;
+
+    sandboxInspectRelay({
+      type: "preview:inspect-select",
+      remote: true,
+      editId: selected ? selected.editId : null,
+      tagName: selected ? (selected.tagName || null) : null,
+      rect: selected ? selected.rect : null,
+      visibleRect: selected ? selected.visibleRect : null,
+
+      /*
+        ★ metrics 는 없다. 그것은 이미지 크기·자르기 컨트롤이 쓰는
+        실측값인데(자연 크기·부모 안쪽 폭), 이번 라운드의 sandbox 는
+        그 컨트롤을 열지 않는다. 없는 값을 0 으로 지어내지 않는다 —
+        Studio 는 metrics 가 없으면 크기 컨트롤을 그리지 않는다.
+      */
+      metrics: null
+    });
+
+    return;
+
+  }
+
+
+  if (kind === "rects") {
+
+    sandboxInspectRelay({
+      type: "preview:inspect-rects",
+      remote: true,
+      hover: sandboxInspectTarget(payload.hover),
+      selected: sandboxInspectTarget(payload.selected)
+    });
+
+  }
+
+}
+
+
+/* =========================================================
+   setSandboxPreviewInspectRelay(fn)
+
+   부모 문서(preview-bridge.js)가 "프레임의 inspect 결과를 여기로
+   올려 달라"고 꽂아 주는 창구. 이 파일은 Studio 와 직접 말하지
+   않는다 — postMessage 경로는 bridge 한 곳이다.
+========================================================== */
+
+export function setSandboxPreviewInspectRelay(fn) {
+
+  sandboxInspectRelay =
+    typeof fn === "function" ? fn : null;
+
+}
+
+
+/* =========================================================
+   setSandboxPreviewInspectMode(enabled)
+   setSandboxPreviewInspectSelection(editId|null)
+
+   Studio 의 Select 토글과 선택이 여기로 내려온다. 프레임이 아직
+   없으면 값만 기억해 두고, 렌더가 끝나면 그때 보낸다
+   (flushSandboxInspectState).
+========================================================== */
+
+export function setSandboxPreviewInspectMode(enabled) {
+
+  sandboxInspectEnabled =
+    !!enabled;
+
+  if (!sandboxInspectEnabled) {
+    sandboxInspectEditId = null;
+  }
+
+  if (!hasSandboxPreviewFrame()) {
+    return false;
+  }
+
+  return sendSandboxInspectMode(sandboxHandle, sandboxInspectEnabled);
+
+}
+
+
+export function setSandboxPreviewInspectSelection(editId) {
+
+  sandboxInspectEditId =
+    (typeof editId === "string" && editId) ? editId : null;
+
+  if (!hasSandboxPreviewFrame()) {
+    return false;
+  }
+
+  return sendSandboxInspectPick(sandboxHandle, sandboxInspectEditId);
+
+}
+
+
+/* =========================================================
+   flushSandboxInspectState()
+
+   렌더가 끝난 **직후**에 부른다.
+
+   ★ 왜 매 렌더마다 다시 보내는가
+
+   저자 JS 가 얽힌 렌더에서는 프레임(realm)이 통째로 새로 만들어
+   진다(needs-new-realm). 그 realm 의 Inspector 는 꺼진 채로
+   시작하므로, 여기서 다시 켜 주지 않으면 "Select 를 켜 뒀는데
+   JS 를 한 글자 고치니 아무것도 안 잡힌다"가 된다.
+
+   같은 realm 을 재사용하는 보통의 렌더에서는 이 두 메시지가
+   이미 맞는 값을 한 번 더 보내는 것뿐이라 아무 일도 하지 않는다
+   (프레임 쪽 setEnabled 는 값이 같으면 첫 줄에서 빠져나간다).
+========================================================== */
+
+function flushSandboxInspectState() {
+
+  if (!hasSandboxPreviewFrame()) {
+    return;
+  }
+
+
+  sendSandboxInspectMode(sandboxHandle, sandboxInspectEnabled);
+
+
+  if (sandboxInspectEnabled && sandboxInspectEditId) {
+
+    sendSandboxInspectPick(sandboxHandle, sandboxInspectEditId);
+
+  }
 
 }
 

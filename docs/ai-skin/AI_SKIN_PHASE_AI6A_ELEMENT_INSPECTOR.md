@@ -11,6 +11,45 @@ OpenAI를 전혀 부르지 않고 Studio 자체 기능으로 끝내는 단계.
 > [PHASE AI-6B](./AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md)에서 했다.
 > 아래 10절 1번이 그 라운드에서 해소됐다.
 
+> **변경됨 (SANDBOX-6A, 2026-09-16)** — 이 문서는 hit-test 와 hover/선택이
+> **Preview 문서(iframe) 안에서** 일어난다고 적고 있다. `renderMode:"sandbox"`
+> 스킨에서는 그 자리가 **다른 origin 의 프레임 안**으로 한 겹 더 들어간다:
+>
+> - "이 요소를 고를 수 있는가" 규칙은 `studio/inspector/studio-inspector-model.js`
+>   에서 **`skin/skin-inspect-target.js`** 로 옮겼다(세 realm 이 같은 파일을
+>   읽는다). 이 문서가 `isInspectableElement` 를 model 의 것으로 가리키는
+>   곳은 그 파일로 읽는다.
+> - `preview:inspect-*` 네 메시지는 그대로이고, 프레임에서 온 것에는
+>   `remote:true` 한 칸이 붙는다 — 그때 테두리는 **프레임 안에서** 그려지고
+>   Studio overlay 는 팝오버만 맡는다.
+> - sandbox 에서는 **직접 편집(텍스트/이미지 크기/자르기)이 잠긴다.**
+>   실측값과 임시 미리보기 채널이 프레임 계약에 아직 없다.
+>
+> 기준 문서: [IMORY_SANDBOX_SKIN_DESIGN.md](../../IMORY_SANDBOX_SKIN_DESIGN.md) §Q.
+
+> **변경됨 (2026-09-17)** — 이 문서는 선택을 `data-imory-edit-id` **하나로**
+> 되살린다고 적고 있다. 그것만으로는 부족하다: 임시 id 는 구조 경로라,
+> 고른 요소가 사라지면 뒤 형제가 같은 id 를 물려받아 **엉뚱한 요소가
+> 선택된 채로 남는다.**
+>
+> - 이제 **승격된 id**(편집으로 HTML 에 남은 것)는 HTML 안에 **하나뿐일
+>   때** 그 자체가 근거이고(복제되었으면 `ambiguous` 로 해제),
+>   **임시 id** 는 선택 시점 **근거 세 겹**과 대조한다 — 그 요소의
+>   지문(태그·클래스·바인딩·자식 수·제 텍스트) + 자리(형제 차례·형제
+>   수·조상) + subtree. 세 겹인 이유는 **완전히 같은 형제**가 여럿일 때
+>   지문만으로는 "하나가 지워져 뒤가 자리를 물려받은" 경우를 가릴 수
+>   없기 때문이다 — `inspectorSelectionSignature()` /
+>   `resolveInspectorSelectionTarget()`.
+> - 근거가 모자라면 조용히 해제한다. 판정을 부르는 자리는
+>   `bumpStudioWorkingRevision()` 한 곳이다(Direct Edit · Code Apply ·
+>   Import · AI · 되돌리기 · 이미지 슬롯 · remount 공통).
+> - 선택 요소 AI 는 응답 적용 **직전에** 같은 판정을 한 번 더 한다.
+>
+> 그리고 720px 이하에서 Select 버튼을 감추던 규칙을 걷었다 — 모바일
+> 에서도 Select 와 선택 요소 AI 를 쓸 수 있다.
+>
+> 기준 문서: [IMORY_SANDBOX_SKIN_DESIGN.md](../../IMORY_SANDBOX_SKIN_DESIGN.md) §R.
+
 ---
 
 ## 1. 이번 라운드의 경계

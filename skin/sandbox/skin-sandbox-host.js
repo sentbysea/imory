@@ -418,6 +418,10 @@ export async function mountSandboxSkinFrame(options) {
     lastScriptError: "",
     onScriptError: null,
 
+    /* SANDBOX-6A — Element Inspector(Select) */
+    onInspect: null,
+    inspectEnabled: false,
+
     handlers: {}
   };
 
@@ -1389,6 +1393,10 @@ export function prepareSandboxSkin(options) {
 
         onNavigate: opts.onNavigate,
         onScriptError: opts.onScriptError,
+
+        /* SANDBOX-6A — 프레임의 Select 결과를 받을 곳 */
+        onInspect: opts.onInspect,
+
         timeoutMs: opts.timeoutMs,
         renderTimeoutMs: opts.renderTimeoutMs,
         onError: opts.onError
@@ -1652,6 +1660,40 @@ async function renderSandboxPageIntoHandle(handle, opts) {
             }
 
           };
+
+
+        /*
+          ★ SANDBOX-6A — Element Inspector 가 올려보내는 넷.
+
+          여기서는 **해석하지 않는다.** 프로토콜이 이미 모양을
+          확인했고(식별자 형태·태그 형태·사각형 범위), 이 층이
+          더하는 것은 "지금 화면의 것인가" 하나다 — 옛 렌더에서
+          늦게 도착한 선택은 버린다.
+
+          그 다음 판정(그 식별자가 지금 draft template 에 실제로
+          있는가)은 부모 realm 의 Studio 가 한다. 프레임이 보낸
+          descriptor 를 신뢰 입력으로 쓰는 코드는 이 파일에 없다.
+        */
+
+        const inspectRelay =
+          (kind) => (payload) => {
+
+            if (payload.renderSeq !== handle.renderSeq) {
+              return;
+            }
+
+            if (typeof handle.onInspect !== "function") {
+              return;
+            }
+
+            handle.onInspect(kind, payload);
+
+          };
+
+        handle.handlers[TYPES.INSPECT_HOVER] = inspectRelay("hover");
+        handle.handlers[TYPES.INSPECT_SELECT] = inspectRelay("select");
+        handle.handlers[TYPES.INSPECT_RECTS] = inspectRelay("rects");
+        handle.handlers[TYPES.INSPECT_ERROR] = inspectRelay("error");
 
 
         /*
@@ -2005,6 +2047,19 @@ async function mountPreparedSandboxSkin(opts) {
 
 
   /*
+    SANDBOX-6A — Element Inspector 의 결과를 누가 받는가.
+
+    주지 않으면(= 공개 화면) 아무도 받지 않는다. 공개 화면에는
+    Select 라는 것 자체가 없고, 그래서 부모가 INSPECT_MODE 를
+    보내는 일도 없다 — 프레임의 Inspector 는 영영 꺼진 채다.
+    Skin Studio Preview 만 자기 것을 준다.
+  */
+
+  handle.onInspect =
+    typeof opts.onInspect === "function" ? opts.onInspect : null;
+
+
+  /*
     SANDBOX-5B — 이 handle 이 어느 자리의 것인가, 그리고 다시
     띄우려면 무엇이 필요한가. 복귀(resume)는 이 옵션 하나로 끝난다 —
     조회도 Context 조립도 다시 하지 않는다.
@@ -2203,6 +2258,87 @@ export function sendSandboxPostBody(handle, body) {
       bodyCss: converted.css,
       isHtmlContent: body.isHtmlContent === true
     }
+  );
+
+}
+
+
+/* =========================================================
+   SANDBOX-6A — Element Inspector 를 켜고, 선택을 정한다
+
+   sendSandboxInspectMode(handle, enabled) -> boolean
+   sendSandboxInspectPick(handle, editId|null) -> boolean
+
+   ★ 두 함수 모두 renderSeq 를 지금 값으로 단다. 프레임은 자기
+     renderSeq 와 다른 INSPECT_* 를 버린다 — 페이지를 옮긴 뒤
+     늦게 도착한 지시가 새 화면의 선택을 건드리지 않는다.
+
+   ★ 아직 한 장도 그리지 않은 프레임(renderSeq 0)에는 보내지
+     않는다. 그때 보내 봐야 프레임이 버린다 — 부모는 렌더가 끝난
+     직후에 다시 보낸다(studio/preview/preview-sandbox.js).
+
+   ★ handle.inspectEnabled 를 여기서 기억한다. 저자 JS 가 얽힌
+     렌더에서는 프레임(realm)이 새로 만들어지고 그 안의 Inspector
+     는 꺼진 채로 시작하므로, 호출자가 렌더 뒤에 이 값을 보고
+     다시 켜 준다.
+========================================================== */
+
+export function sendSandboxInspectMode(handle, enabled) {
+
+  if (!handle || handle.destroyed || !handle.TYPES) {
+    return false;
+  }
+
+
+  handle.inspectEnabled = !!enabled;
+
+
+  if (!handle.renderSeq) {
+    return false;
+  }
+
+
+  return sendToSandboxFrame(
+    handle,
+    handle.TYPES.INSPECT_MODE,
+    {
+      contract: 1,
+      renderSeq: handle.renderSeq,
+      enabled: !!enabled
+    }
+  );
+
+}
+
+
+export function sendSandboxInspectPick(handle, editId) {
+
+  if (!handle || handle.destroyed || !handle.TYPES || !handle.renderSeq) {
+    return false;
+  }
+
+
+  const payload = {
+    contract: 1,
+    renderSeq: handle.renderSeq
+  };
+
+  /*
+    ★ 값이 없으면 키 자체를 만들지 않는다 — 그것이 "해제"다
+    (skin/sandbox/skin-sandbox-protocol.js INSPECT_PICK).
+    프로토콜이 알려진 키만 옮기므로 undefined 를 실어도 같은
+    결과지만, 뜻을 코드 모양으로 남긴다.
+  */
+
+  if (typeof editId === "string" && editId) {
+    payload.editId = editId;
+  }
+
+
+  return sendToSandboxFrame(
+    handle,
+    handle.TYPES.INSPECT_PICK,
+    payload
   );
 
 }

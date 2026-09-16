@@ -1499,6 +1499,708 @@ async function runMobile(context) {
 
 
 /* =========================================================
+   V. 선택 복원의 근거 — 구조 경로 id 만으로는 되살리지 않는다
+      (SANDBOX-6A 후속, 2026-09-17)
+
+   임시 식별자는 구조 경로다("e0-0" = body 첫 자식의 첫 자식).
+   그래서 고른 요소가 사라지거나 앞쪽이 바뀌면 **뒤 형제가 그
+   자리로 밀려와 같은 id 를 물려받는다.** id 만 보고 되살리면
+   엉뚱한 요소가 선택된 채로 남고, 그 상태에서 AI 수정을 보내면
+   사용자가 보지도 않은 요소가 바뀐다.
+
+   ★ draft 를 바꾸는 방법으로 applyAiSkinPackage() 를 쓴다 —
+     Import/AI 가 실제로 지나는 그 경로다(전용 우회가 아니다).
+     그 안에서 bumpStudioWorkingRevision() 이 돌고, 거기서
+     reconcileStudioInspectorSelection() 이 불린다.
+========================================================== */
+
+/* 지금 draft 의 HOME html 을 바꾼 새 SkinPackage 를 적용한다 */
+async function applyHomeHtml(page, transform) {
+
+  return page.evaluate((fnSource) => {
+
+    const state =
+      window.getStudioAiWorkingState({ includePackage: true });
+
+    const html =
+      state.skinPackage.templates.home.html;
+
+    /* eslint-disable no-new-func */
+    const next =
+      new Function("html", `return (${fnSource})(html);`)(html);
+
+    const applied =
+      window.applyAiSkinPackage(
+        {
+          ...state.skinPackage,
+          templates: {
+            ...state.skinPackage.templates,
+            home: { ...state.skinPackage.templates.home, html: next }
+          }
+        },
+        { source: "e2e-identity" }
+      );
+
+    return { ok: applied.ok, reason: applied.reason || "" };
+
+  }, transform.toString());
+
+}
+
+
+/* =========================================================
+   완전히 같은 형제를 고른다 (V7~V8)
+
+   selectInPreview() 는 ".클래스" 하나만 받고 "그 클래스가 선택됐다"
+   로 기다린다 — 형제가 똑같으면 그 조건으로는 **몇 번째를 골랐는지**
+   를 확인할 수 없다. 그래서 여기서는 구조 선택자로 누르고, 고른 뒤
+   draft 에서 그 id 가 정말 그 자리인지 editId 로 되짚는다.
+========================================================== */
+async function selectNthTwin(page, nth, expectedCount) {
+
+  /* 방금 적용한 HTML 이 Preview 에 실제로 그려질 때까지 기다린다 —
+     WebKit 은 여기서 한 박자 늦고, 그 사이에 누르면 아무 것도
+     고르지 못한다. */
+  await page.waitForFunction(
+    (count) => {
+      const doc =
+        document.getElementById("studioPreviewFrame").contentDocument;
+      return (
+        !!doc &&
+        doc.querySelectorAll(".y-twins .y-twin").length === count
+      );
+    },
+    expectedCount,
+    { timeout: 8000 }
+  );
+
+  await previewClick(page, `.y-twins .y-twin:nth-child(${nth})`);
+
+  await page.waitForFunction(
+    () => {
+      const selection = window.getStudioInspectorSelection();
+      return !!selection && selection.classNames.indexOf("y-twin") !== -1;
+    },
+    null,
+    { timeout: 6000 }
+  );
+
+  /* 지금 고른 것이 정말 nth 번째인가 — preview DOM 에서 확인한다 */
+  return page.evaluate((index) => {
+
+    const doc =
+      document.getElementById("studioPreviewFrame").contentDocument;
+
+    const twins =
+      Array.from(doc.querySelectorAll(".y-twins .y-twin"));
+
+    const selection =
+      window.getStudioInspectorSelection();
+
+    return {
+      editId: selection && selection.editId,
+      isNth:
+        !!twins[index - 1] &&
+        twins[index - 1].getAttribute("data-imory-edit-id") ===
+          (selection && selection.editId)
+    };
+
+  }, nth);
+
+}
+
+
+async function selectionAfter(page) {
+
+  await sleep(500);
+
+  return page.evaluate(() => {
+
+    const state =
+      window.getStudioInspectorState();
+
+    return {
+      selection: window.getStudioInspectorSelection(),
+      raw: state.selection,
+      lostReason: state.lostReason
+    };
+
+  });
+
+}
+
+
+async function runIdentity(context) {
+
+  /* --- V1. 고른 요소를 지우면 해제된다 ----------------- */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+    await selectInPreview(page, ".y-heading");
+
+    const picked = await page.evaluate(() => window.getStudioInspectorSelection());
+
+    /* h1 을 통째로 지운다 — 뒤 <img class="y-avatar"> 가 그 자리로
+       밀려와 같은 구조 경로 id 를 물려받는다. */
+    await applyHomeHtml(page, (html) =>
+      html.replace('<h1 class="y-heading">Recent Notes</h1>', "")
+    );
+
+    const after = await selectionAfter(page);
+
+    record(
+      "V1. 고른 요소를 지우면 — 뒤 형제가 같은 id 를 물려받아도 선택이 해제된다",
+      after.selection === null && after.raw === null &&
+        after.lostReason === "mismatch",
+      `editId=${picked && picked.editId} lost=${after.lostReason}`
+    );
+
+    record(
+      "V1b. 그때 Inspector 팝오버도 닫힌다",
+      (await page.evaluate(
+        () => document.getElementById("studioInspectorPopover").hidden
+      )) === true
+    );
+
+    await page.close();
+  }
+
+
+  /* --- V2. 앞 형제를 새로 넣으면 해제된다 -------------- */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+    await selectInPreview(page, ".y-box");
+
+    await applyHomeHtml(page, (html) =>
+      html.replace('<div class="y-home">', '<div class="y-home"><p class="y-inserted">새 줄</p>')
+    );
+
+    const after = await selectionAfter(page);
+
+    record(
+      "V2. 앞에 형제를 끼워 넣어 경로가 한 칸씩 밀리면 선택이 해제된다",
+      after.selection === null && after.lostReason === "mismatch",
+      `lost=${after.lostReason}`
+    );
+
+    await page.close();
+  }
+
+
+  /* --- V3. 앞 형제를 지우면 해제된다 ------------------- */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+    await selectInPreview(page, ".y-box");
+
+    await applyHomeHtml(page, (html) =>
+      html.replace('<a class="y-link" href="/scenario-y/category/301">카테고리 보기</a>', "")
+    );
+
+    const after = await selectionAfter(page);
+
+    record(
+      "V3. 앞 형제를 지워 경로가 당겨져도 선택이 해제된다",
+      after.selection === null && after.lostReason === "mismatch",
+      `lost=${after.lostReason}`
+    );
+
+    await page.close();
+  }
+
+
+  /* --- V4. 순서를 바꾸면 해제된다 ---------------------- */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+    await selectInPreview(page, ".y-heading");
+
+    /* h1 과 그 뒤 두 <img> 의 순서를 뒤집는다 */
+    await applyHomeHtml(page, (html) =>
+      html.replace(
+        '<h1 class="y-heading">Recent Notes</h1>' +
+        '<img class="y-avatar" data-imory-src="profile.avatarUrl" alt="프로필">',
+        '<img class="y-avatar" data-imory-src="profile.avatarUrl" alt="프로필">' +
+        '<h1 class="y-heading">Recent Notes</h1>'
+      )
+    );
+
+    const after = await selectionAfter(page);
+
+    record(
+      "V4. 순서가 바뀌어 다른 요소가 그 자리에 오면 선택이 해제된다",
+      after.selection === null && after.lostReason === "mismatch",
+      `lost=${after.lostReason}`
+    );
+
+    await page.close();
+  }
+
+
+  /* --- V5. 과잉 해제 방지 — 그 요소가 그대로면 유지된다 - */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+    await selectInPreview(page, ".y-heading");
+
+    const picked = await page.evaluate(() => window.getStudioInspectorSelection());
+
+    /* HTML 은 한 글자도 건드리지 않고 CSS 만 바꾼다 */
+    await page.evaluate(() => {
+
+      const state =
+        window.getStudioAiWorkingState({ includePackage: true });
+
+      window.applyAiSkinPackage(
+        { ...state.skinPackage, css: state.skinPackage.css + "\n.y-home { opacity: 0.99; }\n" },
+        { source: "e2e-identity-css" }
+      );
+
+    });
+
+    const after = await selectionAfter(page);
+
+    record(
+      "V5. 그 요소가 그대로면 재렌더 뒤에도 선택이 유지된다 (과잉 해제 없음)",
+      !!after.selection && after.selection.editId === picked.editId,
+      `${picked.editId} -> ${after.selection && after.selection.editId}`
+    );
+
+    await page.close();
+  }
+
+
+  /* --- V6. 승격된 id 는 자리가 바뀌어도 그 요소를 따라간다 - */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+    await selectInPreview(page, ".y-heading");
+    await openDirectEdit(page);
+
+    /* 한 번 직접 수정하면 그 id 가 SkinPackage HTML 에 글자로
+       남는다(승격) — 그 뒤로는 구조 경로가 아니라 그 id 자체가
+       근거다. */
+    await applyInspectorText(page, "승격된 제목");
+
+    const picked = await page.evaluate(() => window.getStudioInspectorSelection());
+
+    const promoted = await page.evaluate(() =>
+      window.getStudioAiWorkingState({ includePackage: true })
+        .skinPackage.templates.home.html.includes("data-imory-edit-id")
+    );
+
+    /* 이제 앞에 형제를 끼워 넣어 구조 경로를 통째로 밀어 버린다 */
+    await applyHomeHtml(page, (html) =>
+      html.replace('<div class="y-home">', '<div class="y-home"><p class="y-inserted">새 줄</p>')
+    );
+
+    const after = await selectionAfter(page);
+
+    record(
+      "V6. 승격된 id 는 앞에 형제가 끼어들어도 그 요소를 그대로 가리킨다",
+      promoted === true &&
+        !!after.selection &&
+        after.selection.editId === picked.editId &&
+        after.selection.text === "승격된 제목",
+      `promoted=${promoted} text=${after.selection && after.selection.text}`
+    );
+
+    await page.close();
+  }
+
+
+  /* =======================================================
+     V7~V10. 완전히 같은 형제 (2026-09-17 보완)
+
+     V1~V6 은 "자리를 물려받은 요소가 **다르게 생겼다**"에 기대고
+     있었다. 목록 카드처럼 형제가 서로 똑같으면 그 기대가 무너진다 —
+     지문(태그·클래스·속성·자식 수·제 텍스트)이 셋 다 같으므로
+     하나를 지워도 "그 요소 맞다"가 나온다.
+
+     여기서는 일부러 똑같은 형제 셋을 만들어 두고, 그중 하나를
+     지우거나 순서를 바꾼다. 기대는 "다른 형제로 넘어가지 않는다"
+     이고, 확정할 수 없으면 해제다
+     (studio-inspector-model.js inspectorSelectionSignature).
+  ======================================================== */
+
+  /* --- V7. 완전히 같은 형제 중 앞의 것을 지우면 해제된다 --- */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+
+    /* 셋은 글자 단위로 똑같다 */
+    await applyHomeHtml(page, (html) =>
+      html.replace(
+        '<p class="y-below">아래 문단</p>',
+        '<ul class="y-twins">' +
+        '<li class="y-twin"><span class="y-twin-in">쌍둥이</span></li>' +
+        '<li class="y-twin"><span class="y-twin-in">쌍둥이</span></li>' +
+        '<li class="y-twin"><span class="y-twin-in">쌍둥이</span></li>' +
+        '</ul><p class="y-below">아래 문단</p>'
+      )
+    );
+
+    const picked = await selectNthTwin(page, 2, 3);
+
+    /* 첫째만 지운다 — 셋째가 가운데의 구조 경로 id 를 물려받고,
+       지문까지 똑같다. */
+    await applyHomeHtml(page, (html) =>
+      html.replace(
+        '<li class="y-twin"><span class="y-twin-in">쌍둥이</span></li>',
+        ""
+      )
+    );
+
+    const after = await selectionAfter(page);
+
+    const twinsLeft = await page.evaluate(() => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      return doc.querySelectorAll(".y-twins .y-twin").length;
+    });
+
+    record(
+      "V7. ★ 똑같은 형제 중 하나를 지우면 — 지문이 같아도 선택이 다른 형제로 넘어가지 않고 해제된다",
+      picked.isNth === true &&
+        twinsLeft === 2 &&
+        after.selection === null &&
+        after.raw === null &&
+        after.lostReason === "mismatch",
+      `editId=${picked && picked.editId} nth=${picked.isNth} twins=${twinsLeft} lost=${after.lostReason}`
+    );
+
+    await page.close();
+  }
+
+
+  /* --- V8. 겉이 같고 속이 다른 형제의 순서를 바꾸면 해제된다 --- */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+
+    /* 두 형제의 지문(태그·클래스·자식 수·제 텍스트)은 같고
+       **안쪽 글자만** 다르다 — 순서를 바꾸면 자리는 그대로이므로
+       subtree 를 보지 않으면 갈리지 않는다. */
+    await applyHomeHtml(page, (html) =>
+      html.replace(
+        '<p class="y-below">아래 문단</p>',
+        '<ul class="y-twins">' +
+        '<li class="y-twin"><span class="y-twin-in">A</span></li>' +
+        '<li class="y-twin"><span class="y-twin-in">B</span></li>' +
+        '</ul><p class="y-below">아래 문단</p>'
+      )
+    );
+
+    const picked = await selectNthTwin(page, 1, 2);
+
+    await applyHomeHtml(page, (html) =>
+      html.replace(
+        '<li class="y-twin"><span class="y-twin-in">A</span></li>' +
+        '<li class="y-twin"><span class="y-twin-in">B</span></li>',
+        '<li class="y-twin"><span class="y-twin-in">B</span></li>' +
+        '<li class="y-twin"><span class="y-twin-in">A</span></li>'
+      )
+    );
+
+    const after = await selectionAfter(page);
+
+    const order = await page.evaluate(() => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      return Array.from(doc.querySelectorAll(".y-twins .y-twin-in"))
+        .map((el) => el.textContent.trim())
+        .join("");
+    });
+
+    record(
+      "V8. ★ 겉만 같은 형제의 순서가 바뀌면(속이 다르다) 선택이 해제된다",
+      picked.isNth === true &&
+        order === "BA" &&
+        after.selection === null &&
+        after.lostReason === "mismatch",
+      `editId=${picked && picked.editId} nth=${picked.isNth} order=${order} lost=${after.lostReason}`
+    );
+
+    await page.close();
+  }
+
+
+  /* --- V9. 승격된 id 가 복제되면 되살리지 않는다 ------------ */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+    await selectInPreview(page, ".y-heading");
+    await openDirectEdit(page);
+
+    await applyInspectorText(page, "승격된 제목");
+
+    const picked = await page.evaluate(() => window.getStudioInspectorSelection());
+
+    /* Code Editor 복붙 · AI 가 노드를 통째로 베낀 경우와 같은 결과 —
+       같은 id 를 단 요소가 둘이 된다. 그때 querySelector 가 돌려주는
+       첫 번째가 사용자가 고른 그 요소라는 보장이 없다. */
+    const duplicated = await applyHomeHtml(page, (html) => {
+
+      const found =
+        html.match(/<h1[^>]*data-imory-edit-id="[^"]*"[^>]*>[^<]*<\/h1>/);
+
+      return found ? html.replace(found[0], found[0] + found[0]) : html;
+
+    });
+
+    const after = await selectionAfter(page);
+
+    const copies = await page.evaluate((editId) => {
+      const html =
+        window.getStudioAiWorkingState({ includePackage: true })
+          .skinPackage.templates.home.html;
+      return html.split(`data-imory-edit-id="${editId}"`).length - 1;
+    }, picked.editId);
+
+    record(
+      "V9. ★ 승격된 id 라도 HTML 안에 둘이면 되살리지 않는다 (ambiguous)",
+      duplicated.ok === true &&
+        copies === 2 &&
+        after.selection === null &&
+        after.lostReason === "ambiguous",
+      `copies=${copies} lost=${after.lostReason}`
+    );
+
+    await page.close();
+  }
+
+
+  /* --- V10. 과잉 해제 방지 — 남의 글자만 바뀌면 유지된다 ---- */
+
+  {
+    const page = await openStudio(context);
+    await enableInspector(page);
+    await selectInPreview(page, ".y-heading");
+
+    const picked = await page.evaluate(() => window.getStudioInspectorSelection());
+
+    /* 고른 요소도, 그 자리도, 그 속도 그대로다 — 형제의 글자만
+       바뀌었다. 이런 변경까지 해제하면 쓸 수 없는 도구가 된다. */
+    await applyHomeHtml(page, (html) =>
+      html.replace("아래 문단", "아래 문단 (고침)")
+    );
+
+    const after = await selectionAfter(page);
+
+    record(
+      "V10. 관계없는 형제의 글자만 바뀌면 선택이 유지된다 (과잉 해제 없음)",
+      !!after.selection && after.selection.editId === picked.editId,
+      `${picked.editId} -> ${after.selection && after.selection.editId}`
+    );
+
+    await page.close();
+  }
+
+}
+
+
+/* =========================================================
+   W. 좁은 Studio 창(390px)에서의 Select 진입 (2026-09-17)
+
+   예전에는 720px 이하에서 Select 버튼을 감췄다. 그래서 모바일
+   에서는 Select 도, 그 뒤의 선택 요소 AI 도 길이 없었다. 지금은
+   Top Dock 이 여러 줄로 접히므로 감추지 않는다
+   (studio/inspector/studio-inspector.css 의 같은 media query 주석).
+
+   여기서 보는 것: 버튼이 실제로 눌리는 자리에 있고, **터치**로
+   고를 수 있고, 선택을 풀 수 있고, AI 패널로 이어지는가. 그리고
+   그 폭에서 가로 넘침이 생기지 않는가.
+========================================================== */
+
+async function runNarrow(context) {
+
+  const page = await openStudio(context, { viewport: { width: 390, height: 780 } });
+
+  const dock = await page.evaluate(() => {
+
+    const button =
+      document.getElementById("studioInspectorButton");
+
+    const rect =
+      button.getBoundingClientRect();
+
+    return {
+      display: getComputedStyle(button).display,
+      inViewport:
+        rect.left >= 0 && rect.right <= window.innerWidth + 1 &&
+        rect.top >= 0 && rect.bottom <= window.innerHeight + 1,
+      height: Math.round(rect.height),
+      overflow: document.documentElement.scrollWidth <= window.innerWidth + 1
+    };
+
+  });
+
+  record(
+    "W1. 390px 에서도 Select 버튼이 화면 안에 있다",
+    dock.display !== "none" && dock.inViewport === true && dock.overflow === true,
+    JSON.stringify(dock)
+  );
+
+  await enableInspector(page);
+
+  /* --- 터치로 고른다 --------------------------------- */
+
+  const tapped = await page.evaluate(() => {
+
+    const doc =
+      document.getElementById("studioPreviewFrame").contentDocument;
+
+    const el =
+      doc.querySelector(".y-heading");
+
+    if (!el) {
+      return false;
+    }
+
+    /*
+      손가락과 같은 순서로 보낸다 — pointerdown(touch) 뒤에 click.
+      Inspector 는 pointerdown 에서 고르고 click 은 삼킨다.
+    */
+    el.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true, cancelable: true, pointerType: "touch", isPrimary: true, button: 0
+    }));
+
+    el.dispatchEvent(new PointerEvent("pointerup", {
+      bubbles: true, cancelable: true, pointerType: "touch", isPrimary: true, button: 0
+    }));
+
+    el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+
+    return true;
+
+  });
+
+  await page.waitForFunction(
+    () => {
+      const s = window.getStudioInspectorSelection();
+      return !!s && s.classNames.indexOf("y-heading") !== -1;
+    },
+    null,
+    { timeout: 6000 }
+  ).then(() => true, () => false);
+
+  const touchSelection = await page.evaluate(() => window.getStudioInspectorSelection());
+
+  record(
+    "W2. 390px 에서 터치(pointerdown)로 요소를 고를 수 있다",
+    tapped === true &&
+      !!touchSelection &&
+      touchSelection.classNames.indexOf("y-heading") !== -1,
+    JSON.stringify(touchSelection && { tag: touchSelection.tagName })
+  );
+
+  const panelFits = await page.evaluate(() => {
+
+    const popover =
+      document.getElementById("studioInspectorPopover");
+
+    const rect =
+      popover.getBoundingClientRect();
+
+    return {
+      hidden: popover.hidden,
+      inViewport: rect.left >= -1 && rect.right <= window.innerWidth + 1,
+      overflow: document.documentElement.scrollWidth <= window.innerWidth + 1
+    };
+
+  });
+
+  record(
+    "W3. 선택 패널이 390px 안에 들어오고 가로 넘침이 없다",
+    panelFits.hidden === false &&
+      panelFits.inViewport === true &&
+      panelFits.overflow === true,
+    JSON.stringify(panelFits)
+  );
+
+  /* --- AI 패널로 이어진다 ----------------------------- */
+
+  await page.click("#studioInspectorAiButton");
+
+  await sleep(400);
+
+  const aiLinked = await page.evaluate(() => {
+
+    const chip =
+      document.getElementById("studioAiSelectionChip");
+
+    return {
+      panelOpen: window.getStudioAiPanelDebugState
+        ? window.getStudioAiPanelDebugState().open
+        : null,
+      chipHidden: chip ? chip.hidden : null,
+      hasContext: !!(window.getStudioAiSelectionContext &&
+        window.getStudioAiSelectionContext()),
+      overflow: document.documentElement.scrollWidth <= window.innerWidth + 1
+    };
+
+  });
+
+  record(
+    "W4. 390px 에서도 고른 요소가 AI 패널로 이어진다 (chip + selectionContext)",
+    aiLinked.chipHidden === false &&
+      aiLinked.hasContext === true &&
+      aiLinked.overflow === true,
+    JSON.stringify(aiLinked)
+  );
+
+  /* --- 직접 편집은 여전히 열린다(native 이므로) -------- */
+
+  record(
+    "W5. native Preview 이므로 직접 수정은 그대로 열려 있다",
+    (await page.evaluate(
+      () => document.getElementById("studioInspectorDirectButton").disabled
+    )) === false
+  );
+
+  /* --- 선택 종료 -------------------------------------- */
+
+  await page.keyboard.press("Escape");
+
+  await sleep(300);
+
+  record(
+    "W6. 390px 에서 선택을 풀 수 있다 (Escape)",
+    (await page.evaluate(() => window.getStudioInspectorSelection())) === null &&
+      (await page.evaluate(
+        () => document.getElementById("studioInspectorPopover").hidden
+      )) === true
+  );
+
+  /* --- Select 모드 종료 ------------------------------- */
+
+  await page.click("#studioInspectorButton");
+
+  await page.waitForFunction(
+    () => window.getStudioInspectorState().enabled === false,
+    null,
+    { timeout: 6000 }
+  );
+
+  record(
+    "W7. 390px 에서 Select 모드를 끌 수 있다",
+    (await page.evaluate(() => window.getStudioInspectorState().enabled)) === false
+  );
+
+  await page.close();
+
+}
+
+
+/* =========================================================
    실행
 ========================================================== */
 
@@ -1520,6 +2222,8 @@ async function main() {
     if (shouldRun("ai")) await runAi(context);
     if (shouldRun("route")) await runRoute(context);
     if (shouldRun("mobile")) await runMobile(context);
+    if (shouldRun("identity")) await runIdentity(context);
+    if (shouldRun("narrow")) await runNarrow(context);
 
     record(
       "Z. 콘솔 에러 없음",

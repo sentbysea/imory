@@ -269,9 +269,12 @@ async function openStudio(browser, options) {
 
   const opts = options || {};
 
-  const ctx = await browser.newContext(
-    opts.viewport ? { viewport: opts.viewport } : {}
-  );
+  const ctx = await browser.newContext({
+    ...(opts.viewport ? { viewport: opts.viewport } : {}),
+
+    /* SANDBOX-6A — 터치 선택 절이 쓴다. 주지 않으면 지금까지와 같다. */
+    ...(opts.contextOptions || {})
+  });
 
   const page = await ctx.newPage();
 
@@ -436,10 +439,17 @@ async function runFrame(browser) {
     nativeInPreview === 0, String(nativeInPreview));
 
 
-  /* --- Select 는 잠긴다 ---------------------------------- */
+  /* --- Select 는 이제 열려 있다 (SANDBOX-6A) -------------- */
 
-  check("[frame] ★ sandbox 스킨에서 Select 버튼이 잠긴다",
-    await page.locator("#studioInspectorButton").isDisabled());
+  /*
+    SANDBOX-4 에서는 여기가 "잠긴다"였다. 프레임 안 DOM 을 Studio 가
+    읽을 수 없어 켜 봐야 아무것도 잡히지 않았기 때문이다. SANDBOX-6A
+    는 hit-test 를 프레임 안으로 옮겨(skin/sandbox/skin-sandbox-inspect.js)
+    그 자리를 열었다 — 실제로 고를 수 있는지는 아래 [inspect] 절이 본다.
+  */
+
+  check("[frame] ★ sandbox 스킨에서도 Select 버튼이 열려 있다",
+    !(await page.locator("#studioInspectorButton").isDisabled()));
 
 
   check("[frame] 콘솔 오류 없음",
@@ -1750,6 +1760,1141 @@ async function runBodyParity(browser) {
 
 
 /* =========================================================
+   [inspect] SANDBOX-6A — 프레임 안에서 요소를 고른다
+
+   무엇을 보는가
+     · Select 를 켜면 프레임 안에서 hover/선택이 된다
+     · 고른 것이 Studio 의 선택 상태(패널·AI chip)가 된다
+     · **반복 항목은 반복 template 자체**로 매핑된다
+     · Inspect 중에는 링크도 저자 JS 도 실행되지 않고, 끄면 돌아온다
+     · post-body 안쪽은 고를 수 없다
+     · 위조 선택(지금 template 에 없는 식별자 · 옛 renderSeq)은 거부
+     · 선택 요소 AI 가 **그 요소 범위만** 고치고 Save 전에 반영된다
+     · 재렌더 뒤 복원 또는 조용한 해제
+     · overlay 가 높이도 가로 폭도 바꾸지 않는다
+     · iframe 은 계속 하나
+========================================================== */
+
+/* =========================================================
+   이 절 전용 fixture
+
+   ★ 왜 따로 만드는가 — 두 가지 때문이다.
+
+   1. Top Dock 이 Preview 의 맨 윗줄을 실제로 덮는다. 스킨 맨 위
+      요소는 사람도 그 자리에서는 누를 수 없다. 그래서 .sb-home 에
+      넉넉한 위 여백을 준다(테스트용 우회가 아니라, 누를 수 있는
+      자리를 만드는 것이다).
+   2. 고를 대상이 종류별로 있어야 한다 — 텍스트(바인딩 있는 것과
+      정적인 것) · 이미지 · 카드(컨테이너) · 반복 항목 · 링크.
+========================================================== */
+
+function inspectSkinPackage(options) {
+
+  const opts = options || {};
+
+  const pkg = {
+    schemaVersion: 1,
+    renderMode: "sandbox",
+    templates: {
+      home: {
+        html:
+          '<div class="sb-home">' +
+          '<h1 class="sb-title" data-imory-bind="site.title"></h1>' +
+          '<p class="sb-static">고정 문구</p>' +
+          /* data: URI 다 — 프레임 CSP 의 img-src 가 허용하는 출처이고,
+             바깥 네트워크를 타지 않아 테스트가 흔들리지 않는다. */
+          '<img class="sb-pic" alt="" src="data:image/gif;base64,' +
+          'R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==">' +
+          '<div class="sb-card"><span class="sb-card-text">카드 안 글자</span></div>' +
+          '<nav class="sb-nav">' +
+          '<a class="sb-nav-link" data-imory-repeat="navigation.categories" ' +
+          'data-imory-href="item.href" data-imory-bind="item.name"></a>' +
+          '</nav>' +
+          '</div>'
+      },
+      category: {
+        html:
+          '<div class="sb-category">' +
+          '<h1 class="sb-category-title" data-imory-bind="category.name"></h1>' +
+          '<a class="sb-post-link" data-imory-repeat="category.posts" ' +
+          'data-imory-href="item.href" data-imory-bind="item.title"></a>' +
+          '</div>'
+      },
+      post: {
+        html:
+          '<div class="sb-post">' +
+          '<h1 class="sb-post-title" data-imory-bind="post.title"></h1>' +
+          '<div class="sb-post-body" data-imory-region="post-body"></div>' +
+          '</div>'
+      },
+      banner: {
+        html:
+          '<div class="sb-banner">' +
+          '<h1 class="sb-banner-title" data-imory-bind="bannerCategory.name"></h1>' +
+          '<span class="sb-banner-name" data-imory-repeat="bannerCategory.items" ' +
+          'data-imory-bind="item.name"></span>' +
+          '</div>'
+      },
+      highlights: {
+        html:
+          '<div class="sb-highlights">' +
+          '<h1 class="sb-highlights-title" data-imory-bind="navigation.highlights.name"></h1>' +
+          '<blockquote class="sb-hl-card" data-imory-repeat="highlights.cards" ' +
+          'data-imory-bind="item.excerpt"></blockquote>' +
+          '</div>'
+      }
+    },
+    css:
+      ".sb-home, .sb-category, .sb-post," +
+      " .sb-banner, .sb-highlights { padding-top: 260px; }" +
+      " .sb-title { font-size: 33px; }" +
+      " .sb-static { font-size: 15px; }" +
+      " .sb-pic { display: block; width: 80px; height: 80px; background: #eee; }" +
+      " .sb-card { padding: 18px; border: 1px solid #ccc; }" +
+      " .sb-nav-link { display: inline-block; margin-right: 10px; }" +
+      " .sb-post-body { min-height: 120px; }",
+    imageSlots: [],
+    regions: [],
+    metadata: { generatedBy: "sandbox-inspect-fixture" }
+  };
+
+  if (opts.js) {
+    pkg.js = opts.js;
+  }
+
+  return pkg;
+
+}
+
+
+function openInspectStudio(browser, extra) {
+
+  return openStudio(browser, {
+    skinPackage: inspectSkinPackage(),
+    ...(extra || {})
+  });
+
+}
+
+
+/*
+  좁은 창에서는 Top Dock 이 접혀 있고 Select 버튼이 화면에 없다.
+  사람도 손잡이를 먼저 누르므로, 테스트도 같은 문을 쓴다.
+*/
+
+async function ensureTopDockOpen(page) {
+
+  const open =
+    await page.evaluate(() => {
+      const zone = document.getElementById("studioTopDockZone");
+      return !!zone && zone.classList.contains("is-open");
+    });
+
+  if (open) {
+    return;
+  }
+
+  await page.locator("#studioTopDockHandle").click();
+
+  await page.waitForTimeout(400);
+
+}
+
+
+async function enableSelect(page) {
+
+  await ensureTopDockOpen(page);
+
+  await page.locator("#studioInspectorButton").click();
+
+  /* 켜면 다시 그린다(편집 식별자를 찍은 사본으로) — 그 렌더가
+     끝나야 프레임 안에서 고를 것이 생긴다. */
+
+  await sandboxFrame(page)
+    .locator("#sandboxFrameRoot[data-imory-sandbox-state='rendered']")
+    .waitFor({ state: "attached", timeout: 12000 });
+
+  await page.waitForFunction(
+    () => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      const inner = doc && doc.querySelector("iframe[data-imory-sandbox-frame]");
+      return !!inner;
+    },
+    null,
+    { timeout: 12000 }
+  );
+
+  /* 프레임 쪽 Inspect 가 실제로 켜졌는가 */
+
+  await sandboxFrame(page).locator("body.imory-sandbox-inspect-on")
+    .waitFor({ state: "attached", timeout: 8000 });
+
+}
+
+
+async function studioSelection(page) {
+
+  return page.evaluate(
+    () => (typeof window.getStudioInspectorSelection === "function")
+      ? window.getStudioInspectorSelection()
+      : null
+  );
+
+}
+
+
+async function frameInspectState(page) {
+
+  return sandboxFrame(page).locator("#sandboxFrameRoot").evaluate(
+    () => (typeof window.__imorySandboxInspectState === "function")
+      ? window.__imorySandboxInspectState()
+      : null
+  );
+
+}
+
+
+/* 프레임 realm 이 부모에게 직접 쏘는 위조 메시지 */
+
+async function forgeFrameMessage(page, payload, type) {
+
+  return sandboxFrame(page).locator("#sandboxFrameRoot").evaluate(
+    (el, args) => {
+
+      window.parent.postMessage(
+        {
+          imory: 1,
+          type: args.type,
+          seq: 9999,
+          payload: args.payload
+        },
+        "*"
+      );
+
+      return true;
+
+    },
+    { payload, type: type || "IMORY_INSPECT_SELECT" }
+  );
+
+}
+
+
+async function runInspect(browser) {
+
+  console.log("\n[inspect] sandbox 프레임 안에서 요소 고르기");
+
+
+  /* ===== 1. HOME — 켜기 · hover · 선택 ==================== */
+
+  {
+    const { ctx, page, consoleErrors } = await openInspectStudio(browser);
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    const heightBefore = await page.evaluate(() => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      const inner = doc.querySelector("iframe[data-imory-sandbox-frame]");
+      return inner ? Math.round(inner.getBoundingClientRect().height) : -1;
+    });
+
+    await enableSelect(page);
+
+    check("[inspect] ★ Select 를 켜면 프레임 안 Inspect 가 켜진다",
+      (await frameInspectState(page)).enabled === true);
+
+    check("[inspect] 프레임은 여전히 하나다",
+      (await sandboxFrameCount(page)) === 1,
+      String(await sandboxFrameCount(page)));
+
+
+    /* --- hover --- */
+
+    await sandboxFrame(page).locator(".sb-title").hover();
+
+    await page.waitForTimeout(250);
+
+    const hovered = await frameInspectState(page);
+
+    check("[inspect] ★ hover 한 요소가 프레임에서 잡힌다",
+      typeof hovered.hoverEditId === "string" && hovered.hoverEditId.length > 0,
+      String(hovered.hoverEditId));
+
+    check("[inspect] ★ 테두리는 프레임 안에 있다 (상자 2개)",
+      hovered.boxes === 2, String(hovered.boxes));
+
+    check("[inspect] ★ Studio 는 자기 hover 테두리를 그리지 않는다 (중복 없음)",
+      (await page.evaluate(() => {
+        const box = document.getElementById("studioInspectorHoverBox");
+        return !box || box.hidden === true;
+      })) === true);
+
+
+    /* --- 선택 --- */
+
+    await sandboxFrame(page).locator(".sb-title").click();
+
+    await page.waitForTimeout(300);
+
+    const selection = await studioSelection(page);
+
+    check("[inspect] ★ 고른 요소가 Studio 의 선택 상태가 된다",
+      !!selection && selection.pageType === "home" &&
+      selection.tagName === "h1" && selection.kind === "text",
+      JSON.stringify(selection && {
+        pageType: selection.pageType,
+        tagName: selection.tagName,
+        kind: selection.kind
+      }));
+
+    check("[inspect] ★ 부모가 template 에서 다시 판단한다 (bindPath)",
+      !!selection && selection.bindPath === "site.title",
+      String(selection && selection.bindPath));
+
+    check("[inspect] ★ Inspector 패널이 떴다",
+      (await page.locator("#studioInspectorPopover").isVisible()) === true);
+
+    check("[inspect] ★ sandbox 에서는 직접 수정이 잠기고 이유가 나온다",
+      (await page.locator("#studioInspectorDirectButton").isDisabled()) === true &&
+      (await page.locator("#studioInspectorNote").innerText()).includes("sandbox"),
+      (await page.locator("#studioInspectorNote").innerText()).slice(0, 60));
+
+
+    /* --- overlay 가 높이·가로 폭을 바꾸지 않는다 --------- */
+
+    const heightAfter = await page.evaluate(() => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      const inner = doc.querySelector("iframe[data-imory-sandbox-frame]");
+      return inner ? Math.round(inner.getBoundingClientRect().height) : -1;
+    });
+
+    check("[inspect] ★ overlay 가 iframe 높이를 바꾸지 않는다",
+      Math.abs(heightAfter - heightBefore) <= 2,
+      `${heightBefore} -> ${heightAfter}`);
+
+    const frameOverflow = await sandboxFrame(page).locator("body").evaluate(
+      (body) => ({
+        scrollWidth: body.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        rootScrollHeight: document.getElementById("sandboxFrameRoot").scrollHeight
+      })
+    );
+
+    check("[inspect] ★ overlay 로 프레임이 가로로 넘치지 않는다",
+      frameOverflow.scrollWidth <= frameOverflow.clientWidth + 1,
+      JSON.stringify(frameOverflow));
+
+
+    /* --- Escape 로 해제 --------------------------------- */
+
+    await sandboxFrame(page).locator(".sb-title").click();
+    await page.keyboard.press("Escape");
+
+    await page.waitForTimeout(250);
+
+    check("[inspect] ★ 프레임 안 Escape 로 선택이 풀린다",
+      (await studioSelection(page)) === null);
+
+    check("[inspect] 콘솔 오류 없음",
+      consoleErrors.filter(e => !/cdn-cgi|favicon/i.test(e)).length === 0,
+      consoleErrors.join(" | ").slice(0, 200));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 1-B. 종류별로 고를 수 있는가 ==================== */
+
+  {
+    const { ctx, page } = await openInspectStudio(browser);
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    await enableSelect(page);
+
+    const cases = [
+      [".sb-static", "text", "정적 텍스트"],
+      [".sb-pic", "image", "이미지"],
+      [".sb-card", "container", "카드(컨테이너)"],
+      [".sb-nav-link", "link", "링크"]
+    ];
+
+    for (const [selector, kind, label] of cases) {
+
+      /*
+        선택 패널은 고른 요소 옆에 앉는다 — 그대로 두면 다음 대상을
+        덮는다(사람도 같은 상황에서는 Escape 로 닫는다). 한 번에
+        하나씩 고르는 절이므로 매번 먼저 푼다.
+      */
+
+      await page.keyboard.press("Escape");
+
+      await page.waitForTimeout(200);
+
+      await sandboxFrame(page).locator(selector).first().click();
+
+      await page.waitForTimeout(250);
+
+      const sel = await studioSelection(page);
+
+      check(`[inspect] ★ ${label} 를 고르면 부모가 ${kind} 로 판단한다`,
+        !!sel && sel.kind === kind,
+        JSON.stringify(sel && { kind: sel.kind, tag: sel.tagName }));
+
+    }
+
+    /* 카드 안 글자를 누르면 그 글자가 잡힌다(부모로 튀지 않는다) */
+
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(200);
+
+    await sandboxFrame(page).locator(".sb-card-text").click();
+    await page.waitForTimeout(250);
+
+    const inner = await studioSelection(page);
+
+    check("[inspect] ★ 카드 안 글자를 누르면 그 글자가 잡힌다",
+      !!inner && inner.tagName === "span",
+      JSON.stringify(inner && { tag: inner.tagName }));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 1-C. 다른 화면들 (BANNER / HIGHLIGHTS) =========== */
+
+  /*
+    CATEGORY / POST 는 아래 4절이 본다. 여기서는 templates.banner /
+    templates.highlights 가 있는 스킨으로 그 두 화면을 열어, 화면이
+    바뀌어도 같은 프레임 하나에서 같은 방식으로 고를 수 있는지 본다.
+  */
+
+  {
+    const { ctx, page } = await openInspectStudio(browser);
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    /* FRIENDS(배너) 로 간다 — Inspect 는 아직 꺼진 상태 */
+
+    await sandboxFrame(page).locator(".sb-nav-link", { hasText: "FRIENDS" })
+      .first().click();
+
+    await sandboxFrame(page).locator(".sb-banner-title")
+      .waitFor({ state: "attached", timeout: 12000 });
+
+    await enableSelect(page);
+
+    await sandboxFrame(page).locator(".sb-banner-title").click();
+    await page.waitForTimeout(300);
+
+    const bannerSel = await studioSelection(page);
+
+    check("[inspect] ★ BANNER 화면에서도 고를 수 있다",
+      !!bannerSel && bannerSel.pageType === "banner" &&
+      bannerSel.bindPath === "bannerCategory.name",
+      JSON.stringify(bannerSel && { p: bannerSel.pageType, b: bannerSel.bindPath }));
+
+    check("[inspect] 프레임은 여전히 하나다",
+      (await sandboxFrameCount(page)) === 1);
+
+    /* NOTES(하이라이트) 로 — Inspect 를 끄고, HOME 으로 돌아가 이동한다
+       (배너 화면에는 메뉴가 없다) */
+
+    await page.locator("#studioInspectorButton").click();
+    await page.waitForTimeout(300);
+
+    await page.locator("#studioPreviewBackButton").click();
+
+    await sandboxFrame(page).locator(".sb-home")
+      .waitFor({ state: "attached", timeout: 12000 });
+
+    await sandboxFrame(page).locator(".sb-nav-link", { hasText: "NOTES" })
+      .first().click();
+
+    await sandboxFrame(page).locator(".sb-highlights-title")
+      .waitFor({ state: "attached", timeout: 12000 });
+
+    await enableSelect(page);
+
+    await sandboxFrame(page).locator(".sb-highlights-title").click();
+    await page.waitForTimeout(300);
+
+    const hlSel = await studioSelection(page);
+
+    check("[inspect] ★ HIGHLIGHTS 화면에서도 고를 수 있다",
+      !!hlSel && hlSel.pageType === "highlights",
+      JSON.stringify(hlSel && { p: hlSel.pageType, b: hlSel.bindPath }));
+
+    check("[inspect] ★ 화면을 옮겨도 프레임은 하나다",
+      (await sandboxFrameCount(page)) === 1,
+      String(await sandboxFrameCount(page)));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 2. 반복 항목 -> 반복 template ==================== */
+
+  {
+    const { ctx, page } = await openInspectStudio(browser);
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    await enableSelect(page);
+
+    const links = sandboxFrame(page).locator(".sb-nav-link");
+
+    check("[inspect] 반복으로 여러 항목이 그려져 있다",
+      (await links.count()) >= 3, String(await links.count()));
+
+    await links.nth(0).click();
+    await page.waitForTimeout(250);
+
+    const first = await studioSelection(page);
+
+    await links.nth(2).click();
+    await page.waitForTimeout(250);
+
+    const third = await studioSelection(page);
+
+    check("[inspect] ★ 반복 항목은 '데이터 한 건'이 아니라 반복 template 이다",
+      !!first && !!third && first.editId === third.editId,
+      `${first && first.editId} / ${third && third.editId}`);
+
+    check("[inspect] ★ 부모가 그 요소를 반복으로 안다",
+      !!third && third.repeatPath === "navigation.categories",
+      String(third && third.repeatPath));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 3. Inspect 중 링크·저자 JS 가 실행되지 않는다 ==== */
+
+  {
+    const { ctx, page } = await openStudio(browser, {
+      authorJs: true,
+      skinPackage: inspectSkinPackage({ js: STUDIO_AUTHOR_JS("JS-INSPECT") })
+    });
+
+    await sandboxFrame(page).locator(".sb-js-mark").waitFor({
+      state: "attached", timeout: 15000
+    }).catch(() => {});
+
+    const beforeRuns = await readStudioJsMarks(page);
+
+    await enableSelect(page);
+
+    /* 저자 JS 는 다시 돌지 않는다 — Inspect 는 재렌더를 만들지만
+       같은 realm 을 재사용하지 못하면 부모가 프레임을 새로 만든다.
+       어느 쪽이든 "이 realm 에서 한 번"은 지켜져야 한다. */
+
+    const afterRuns = await readStudioJsMarks(page);
+
+    check("[inspect] ★ Select 를 켜도 저자 JS 가 이 realm 에서 한 번만 돈다",
+      afterRuns.runs === "1" && beforeRuns.runs === "1",
+      `${beforeRuns.runs} -> ${afterRuns.runs}`);
+
+    /* 링크를 눌러도 미리보기 페이지가 바뀌지 않는다 */
+
+    const routeBefore = await page.evaluate(
+      () => window.__imoryPreviewSandboxPageType
+        ? window.__imoryPreviewSandboxPageType()
+        : ""
+    );
+
+    await sandboxFrame(page).locator(".sb-nav-link").first().click();
+    await page.waitForTimeout(400);
+
+    check("[inspect] ★ Inspect 중 링크를 눌러도 이동하지 않는다",
+      (await sandboxFrame(page).locator(".sb-home").count()) === 1,
+      `route=${routeBefore}`);
+
+    check("[inspect] ★ 그 클릭은 '선택'이 됐다",
+      !!(await studioSelection(page)));
+
+
+    /* --- 끄면 원래 동작이 돌아온다 ---------------------- */
+
+    await page.locator("#studioInspectorButton").click();
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 12000
+    });
+
+    await page.waitForTimeout(300);
+
+    check("[inspect] ★ Select 를 끄면 프레임 Inspect 도 꺼진다",
+      (await frameInspectState(page)).enabled === false);
+
+    await sandboxFrame(page).locator(".sb-nav-link").first().click();
+
+    await sandboxFrame(page).locator(".sb-category").waitFor({
+      state: "attached", timeout: 12000
+    });
+
+    check("[inspect] ★ Select 를 끄면 링크가 다시 눌린다 (CATEGORY 로 이동)",
+      (await sandboxFrame(page).locator(".sb-category-title").innerText())
+        .includes("LOG"));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 4. post-body 안쪽은 고를 수 없다 ================= */
+
+  {
+    const { ctx, page } = await openInspectStudio(browser);
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    await enableSelect(page);
+
+    /* HOME -> CATEGORY -> POST 로 간다. Inspect 중에는 링크가
+       안 눌리므로, 끄고 옮긴 뒤 다시 켠다. */
+
+    await page.locator("#studioInspectorButton").click();
+    await page.waitForTimeout(200);
+
+    await sandboxFrame(page).locator(".sb-nav-link").first().click();
+    await sandboxFrame(page).locator(".sb-post-link").first()
+      .waitFor({ state: "attached", timeout: 12000 });
+
+    await sandboxFrame(page).locator(".sb-post-link").first().click();
+    await sandboxFrame(page).locator(".sb-post-body")
+      .waitFor({ state: "attached", timeout: 12000 });
+
+    await enableSelect(page);
+
+    const bodyHasText = await sandboxFrame(page).locator(".sb-post-body")
+      .evaluate((el) => el.innerText.trim().length > 0);
+
+    await sandboxFrame(page).locator(".sb-post-body").click({ position: { x: 5, y: 5 } });
+    await page.waitForTimeout(250);
+
+    check("[inspect] ★ post-body(사용자 글) 안쪽은 고를 수 없다",
+      (await studioSelection(page)) === null,
+      `본문 있음=${bodyHasText}`);
+
+    /* 같은 화면에서 스킨 요소는 고를 수 있다 */
+
+    await sandboxFrame(page).locator(".sb-post-title").click();
+    await page.waitForTimeout(250);
+
+    const postSel = await studioSelection(page);
+
+    check("[inspect] ★ 같은 화면의 스킨 요소는 고를 수 있다 (POST 제목)",
+      !!postSel && postSel.pageType === "post" && postSel.bindPath === "post.title",
+      JSON.stringify(postSel && { p: postSel.pageType, b: postSel.bindPath }));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 5. 위조 거부 ==================================== */
+
+  {
+    const { ctx, page } = await openInspectStudio(browser);
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    await enableSelect(page);
+
+    await sandboxFrame(page).locator(".sb-title").click();
+    await page.waitForTimeout(250);
+
+    const real = await studioSelection(page);
+
+    check("[inspect] 먼저 정상 선택이 있다", !!real);
+
+    const rect = { left: 1, top: 1, width: 10, height: 10 };
+
+    /*
+      ★ 지금 template 에 없는 식별자. 봉투·origin·source·방향은
+      전부 진짜다(프레임 realm 이 직접 쏜다) — 그래도 Studio 가
+      자기 draft 와 대조해서 떨어뜨려야 한다.
+    */
+
+    await forgeFrameMessage(page, {
+      contract: 1,
+      renderSeq: 9,
+      editId: "zzzforged",
+      tagName: "h1",
+      rect
+    });
+
+    await page.waitForTimeout(300);
+
+    const afterForged = await studioSelection(page);
+
+    check("[inspect] ★ template 에 없는 식별자는 선택이 되지 않는다",
+      !!afterForged && afterForged.editId === real.editId,
+      `${real && real.editId} -> ${afterForged && afterForged.editId}`);
+
+
+    /* 옛 renderSeq — host 가 떨어뜨린다 */
+
+    await forgeFrameMessage(page, {
+      contract: 1,
+      renderSeq: 1,
+      editId: "e0-0-0",
+      tagName: "p",
+      rect
+    });
+
+    await page.waitForTimeout(300);
+
+    check("[inspect] ★ 옛 renderSeq 의 선택은 버려진다",
+      (await studioSelection(page)).editId === real.editId);
+
+
+    /* 모르는 type / 모르는 payload 키 */
+
+    const rejectedBefore = await page.evaluate(() => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      return doc.defaultView.__imoryPreviewSandboxRejected || 0;
+    });
+
+    await forgeFrameMessage(page, {
+      contract: 1,
+      renderSeq: 9,
+      editId: "e0-0",
+      tagName: "h1",
+      rect,
+      innerHTML: "<script>alert(1)</script>"
+    });
+
+    await forgeFrameMessage(page, { contract: 1, renderSeq: 9 }, "IMORY_EVAL");
+
+    await page.waitForTimeout(300);
+
+    check("[inspect] ★ 모르는 payload 키 / 모르는 type 도 선택을 바꾸지 못한다",
+      (await studioSelection(page)).editId === real.editId,
+      `rejectedBefore=${rejectedBefore}`);
+
+    check("[inspect] 프레임은 여전히 하나다",
+      (await sandboxFrameCount(page)) === 1);
+
+    await ctx.close();
+  }
+
+
+  /* ===== 6. 선택 요소 AI · Save 전 반영 · Undo · 복원 ===== */
+
+  {
+    const { ctx, page } = await openInspectStudio(browser);
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    await enableSelect(page);
+
+    await sandboxFrame(page).locator(".sb-title").click();
+    await page.waitForTimeout(300);
+
+    const selection = await studioSelection(page);
+
+    check("[inspect] AI 로 넘길 선택이 있다", !!selection);
+
+
+    /* --- selectionContext + 요청용 SkinPackage ----------- */
+
+    const aiRequest = await page.evaluate(() => {
+
+      const context = window.getStudioAiSelectionContext();
+
+      const working = window.getStudioAiWorkingState
+        ? window.getStudioAiWorkingState({ includePackage: true })
+        : null;
+
+      const pkg = (context && working)
+        ? window.buildStudioAiSelectionPackage(working.skinPackage, context)
+        : null;
+
+      return {
+        context,
+        stampedHtml: pkg && pkg.templates && pkg.templates.home
+          ? pkg.templates.home.html
+          : ""
+      };
+
+    });
+
+    check("[inspect] ★ selectionContext 가 만들어진다 (AI 가 범위를 안다)",
+      !!aiRequest.context &&
+      aiRequest.context.template === "home" &&
+      aiRequest.context.editId === selection.editId,
+      JSON.stringify(aiRequest.context && {
+        t: aiRequest.context.template,
+        e: aiRequest.context.editId
+      }));
+
+    check("[inspect] ★ 요청 SkinPackage 에 그 요소 식별자 하나만 심긴다",
+      (aiRequest.stampedHtml.match(/data-imory-edit-id/g) || []).length === 1 &&
+      aiRequest.stampedHtml.includes(selection.editId),
+      String((aiRequest.stampedHtml.match(/data-imory-edit-id/g) || []).length));
+
+
+    /* --- AI 결과 적용 (모델 호출 없이 같은 경로로) -------- */
+
+    const applied = await page.evaluate((editId) => {
+
+      const working = window.getStudioAiWorkingState({ includePackage: true });
+
+      const pkg = window.buildStudioAiSelectionPackage(
+        working.skinPackage,
+        window.getStudioAiSelectionContext()
+      );
+
+      /* 모델이 그 요소 하나만 고쳤다고 치고 — 식별자는 유지한다
+         (계약). 다른 template 은 손대지 않는다. */
+      const next = {
+        ...pkg,
+        css: (pkg.css || "") +
+          `\n[data-imory-edit-id="${editId}"][data-imory-edit-id="${editId}"] { color: rgb(0, 128, 0); }\n`
+      };
+
+      window.applyAiSkinPackage(next, { source: "e2e-selected-ai" });
+
+      return true;
+
+    }, selection.editId);
+
+    check("[inspect] AI 결과를 적용했다", applied === true);
+
+    await sandboxFrame(page).locator(".sb-title").waitFor({
+      state: "attached", timeout: 12000
+    });
+
+    await page.waitForTimeout(500);
+
+    const titleColor = await sandboxFrame(page).locator(".sb-title").first()
+      .evaluate(el => getComputedStyle(el).color);
+
+    check("[inspect] ★ Save 전인데도 프레임에 즉시 반영된다",
+      titleColor === "rgb(0, 128, 0)", titleColor);
+
+    const navColor = await sandboxFrame(page).locator(".sb-nav-link").first()
+      .evaluate(el => getComputedStyle(el).color);
+
+    check("[inspect] ★ 선택하지 않은 요소는 그대로다 (범위가 지켜졌다)",
+      navColor !== "rgb(0, 128, 0)", navColor);
+
+    check("[inspect] ★ 재렌더 뒤에도 같은 요소가 선택돼 있다",
+      (await studioSelection(page) || {}).editId === selection.editId,
+      String((await studioSelection(page) || {}).editId));
+
+    check("[inspect] ★ Save 는 아직 눌리지 않았다 (dirty 상태 유지)",
+      !(await page.locator("#studioSaveButton").isDisabled()));
+
+    check("[inspect] 프레임은 여전히 하나다",
+      (await sandboxFrameCount(page)) === 1);
+
+
+    /* --- 선택 요소가 사라지면 조용히 해제된다 ------------ */
+
+    await page.evaluate(() => {
+
+      const working = window.getStudioAiWorkingState({ includePackage: true });
+
+      window.applyAiSkinPackage(
+        {
+          ...working.skinPackage,
+          templates: {
+            ...working.skinPackage.templates,
+            home: {
+              ...working.skinPackage.templates.home,
+              /*
+                ★ 구조를 통째로 바꾼다 — 고른 요소의 자리 자체가
+                없어져야 한다.
+
+                편집 식별자는 **구조 경로**로 만들어진다("e0-0" =
+                body 첫 자식의 첫 자식, studio-inspector-model.js
+                stampInspectorEditIds). 그래서 h1 하나만 지우면 뒤
+                요소가 그 자리로 밀려와 같은 id 를 물려받고, 선택은
+                **엉뚱한 요소에 붙은 채로 살아남는다**. 그 경우를
+                다루는 것은 AI 패널의 reconcileStudioAiSelection()
+                이고(studio/ai/studio-ai-selection.js), 이 절이 보는
+                것은 "자리가 정말 없어졌을 때 조용히 풀리는가"다.
+              */
+              html: '<p class="sb-gone">GONE</p>'
+            }
+          }
+        },
+        { source: "e2e-selected-ai-remove" }
+      );
+
+    });
+
+    await sandboxFrame(page).locator(".sb-gone").waitFor({
+      state: "attached", timeout: 12000
+    });
+
+    await page.waitForTimeout(500);
+
+    check("[inspect] ★ 고른 요소가 사라지면 선택이 조용히 풀린다 (오류 없음)",
+      (await studioSelection(page)) === null);
+
+    check("[inspect] ★ 그때 Inspector 패널도 닫힌다",
+      (await page.locator("#studioInspectorPopover").isVisible()) === false);
+
+    await ctx.close();
+  }
+
+
+  /* ===== 6-B. 뒤 형제가 같은 구조 경로 id 를 물려받아도 해제 === */
+
+  /*
+    sandbox 도 native 와 **같은 판정**을 지난다 — 선택의 주인은
+    언제나 Studio 문서이고, 되살리기는 draft template 에서 한다
+    (studio/inspector/studio-inspector-model.js
+     resolveInspectorSelectionTarget). 그 사실을 프레임 쪽에서도
+     한 번 못 박아 둔다.
+  */
+
+  {
+    const { ctx, page } = await openInspectStudio(browser);
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    await enableSelect(page);
+
+    await sandboxFrame(page).locator(".sb-title").click();
+    await page.waitForTimeout(300);
+
+    const picked = await studioSelection(page);
+
+    check("[inspect] 먼저 정상 선택이 있다 (구조 경로 id)",
+      !!picked && picked.editId === "e0-0",
+      String(picked && picked.editId));
+
+    /* h1 만 지운다 — 뒤 <p class="sb-static"> 가 e0-0 을 물려받는다 */
+
+    await page.evaluate(() => {
+
+      const state =
+        window.getStudioAiWorkingState({ includePackage: true });
+
+      window.applyAiSkinPackage(
+        {
+          ...state.skinPackage,
+          templates: {
+            ...state.skinPackage.templates,
+            home: {
+              ...state.skinPackage.templates.home,
+              html: state.skinPackage.templates.home.html.replace(
+                '<h1 class="sb-title" data-imory-bind="site.title"></h1>',
+                ""
+              )
+            }
+          }
+        },
+        { source: "e2e-inherit-path" }
+      );
+
+    });
+
+    await sandboxFrame(page).locator(".sb-static").waitFor({
+      state: "attached", timeout: 12000
+    });
+
+    await page.waitForTimeout(600);
+
+    const afterInherit = await studioSelection(page);
+
+    const lostReason = await page.evaluate(
+      () => window.getStudioInspectorState().lostReason
+    );
+
+    check("[inspect] ★ 뒤 형제가 같은 id 를 물려받아도 선택이 해제된다",
+      afterInherit === null && lostReason === "mismatch",
+      `lost=${lostReason}`);
+
+    const frameState = await frameInspectState(page);
+
+    check("[inspect] ★ 프레임의 선택 테두리도 함께 걷힌다",
+      frameState.selectedEditId === null,
+      String(frameState.selectedEditId));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 7. Mobile 미리보기 + 터치 선택 ================== */
+
+  /*
+    ★ "모바일"을 Studio 창 폭 390px 로 재지 않는다.
+
+    Select 버튼은 창이 좁으면(720px 이하) 아예 감춰진다 —
+    studio/inspector/studio-inspector.css 의 media query 가 그렇게
+    정해 뒀고, 그것이 이 제품의 설계다. 실제로 모바일 폭 스킨을
+    고르는 길은 **Preview 를 Mobile 모드로 두는 것**이다(iframe 만
+    390px 로 줄고 Studio 창은 넓다). native Inspector 도 같은
+    방식으로 검사한다(studio/studio-inspector-e2e-test.mjs 검사 U).
+
+    그래서 여기서 보는 것은 셋이다:
+      · 터치(tap)로도 고를 수 있는가
+      · 축소 배율이 걸린 프레임에서도 좌표가 맞는가
+      · 390px 프레임 안에서 overlay 가 가로로 넘치지 않는가
+  */
+
+  {
+    const { ctx, page } = await openInspectStudio(browser, {
+      contextOptions: {
+        hasTouch: true
+      }
+    });
+
+    await sandboxFrame(page).locator(".sb-home").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    await page.locator('[data-viewport-mode="mobile"]').click();
+
+    await page.waitForTimeout(600);
+
+    const frameWidth = await page.evaluate(() => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      const inner = doc.querySelector("iframe[data-imory-sandbox-frame]");
+      return inner ? Math.round(inner.getBoundingClientRect().width) : -1;
+    });
+
+    check("[inspect] Mobile 모드에서 프레임이 좁아졌다",
+      frameWidth > 0 && frameWidth <= 400, String(frameWidth));
+
+    await enableSelect(page);
+
+    await sandboxFrame(page).locator(".sb-title").tap();
+
+    await page.waitForTimeout(400);
+
+    const touchSelection = await studioSelection(page);
+
+    check("[inspect] ★ 터치(tap)로도 고를 수 있다",
+      !!touchSelection && touchSelection.tagName === "h1",
+      JSON.stringify(touchSelection && { t: touchSelection.tagName }));
+
+    /*
+      ★ 축소 배율이 걸린 화면에서 좌표가 맞는가 — Studio 가 앉힌
+      팝오버가 그 요소 근처에 있고, Preview 영역 안에 있는가.
+    */
+
+    const placement = await page.evaluate(() => {
+
+      const pop = document.getElementById("studioInspectorPopover");
+      const stage = document.getElementById("studioPreviewStage");
+
+      if (!pop || pop.hidden || !stage) {
+        return null;
+      }
+
+      const p = pop.getBoundingClientRect();
+      const s = stage.getBoundingClientRect();
+
+      return {
+        inside:
+          p.left >= s.left - 1 && p.right <= s.right + 1 &&
+          p.top >= s.top - 1 && p.bottom <= s.bottom + 1,
+        width: Math.round(p.width)
+      };
+
+    });
+
+    check("[inspect] ★ 축소된 화면에서도 팝오버가 Preview 안에 앉는다",
+      !!placement && placement.inside === true,
+      JSON.stringify(placement));
+
+    const frameOverflow = await sandboxFrame(page).locator("body").evaluate(
+      () => ({
+        doc: document.documentElement.scrollWidth,
+        win: document.documentElement.clientWidth
+      })
+    );
+
+    check("[inspect] ★ 390px 프레임 안에서 overlay 가 가로로 넘치지 않는다",
+      frameOverflow.doc <= frameOverflow.win + 1, JSON.stringify(frameOverflow));
+
+    const parentOverflow = await page.evaluate(() => ({
+      doc: document.documentElement.scrollWidth,
+      win: window.innerWidth
+    }));
+
+    check("[inspect] ★ 부모 문서도 가로로 넘치지 않는다",
+      parentOverflow.doc <= parentOverflow.win + 1,
+      JSON.stringify(parentOverflow));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 8. native 회귀 — renderMode 없는 스킨 =========== */
+
+  {
+    const { ctx, page } = await openStudio(browser, { scenario: "x" });
+
+    await previewFrame(page).locator("[data-skin-root]").waitFor({
+      state: "attached", timeout: 15000
+    });
+
+    check("[inspect] ★ native 스킨에는 프레임이 없다",
+      (await sandboxFrameCount(page)) === 0,
+      String(await sandboxFrameCount(page)));
+
+    await page.locator("#studioInspectorButton").click();
+
+    await page.waitForTimeout(600);
+
+    /*
+      ★ 스킨 바깥 상자(.scenario-x-home)가 아니라 **안쪽 링크**를
+      누른다. 바깥 상자는 Preview 를 통째로 덮어 그 가운데가 Top Dock
+      밑에 들어가고(WebKit 실측), 사람도 그 자리는 누를 수 없다.
+    */
+
+    await previewFrame(page).locator(".scenario-x-nav-link").first()
+      .waitFor({ state: "attached", timeout: 12000 });
+
+    await previewFrame(page).locator(".scenario-x-nav-link").first().click();
+
+    await page.waitForTimeout(400);
+
+    const nativeSelection = await studioSelection(page);
+
+    check("[inspect] ★ native Inspector 는 지금까지와 같다 (선택된다)",
+      !!nativeSelection, JSON.stringify(nativeSelection && {
+        t: nativeSelection.tagName
+      }));
+
+    check("[inspect] ★ native 에서는 Studio 가 자기 테두리를 그린다",
+      (await page.evaluate(() => {
+        const box = document.getElementById("studioInspectorSelectBox");
+        return !!box && box.hidden === false;
+      })) === true);
+
+    check("[inspect] ★ native 에서는 직접 수정이 잠기지 않는다",
+      (await page.locator("#studioInspectorDirectButton").isDisabled()) === false);
+
+    await ctx.close();
+  }
+
+}
+
+
+/* =========================================================
    실행
 ========================================================== */
 
@@ -1781,6 +2926,7 @@ try {
   if (shouldRun("reject")) await runReject(browser);
   if (shouldRun("bodystyle")) await runBodyStyle(browser);
   if (shouldRun("bodyparity")) await runBodyParity(browser);
+  if (shouldRun("inspect")) await runInspect(browser);
 
 } finally {
 

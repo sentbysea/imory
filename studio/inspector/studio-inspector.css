@@ -776,18 +776,30 @@
 
 
 /* =========================================================
-   좁은 화면에서는 Select 진입점을 내린다
+   좁은 화면의 Select 진입점 (2026-09-17에 다시 열었다)
 
-   Top Dock은 원래도 좁은 화면에서 오른쪽 actions 그룹이 뷰포트를
-   넘친다(Studio는 데스크톱 전용 도구다 — studio.css의
-   .studio-top-dock-groups 주석 참고). Select 버튼을 왼쪽에
-   더하면 그만큼 더 밀려서, 이미 아슬아슬하던 "AI Assistant"가
-   아예 화면 밖으로 나가 누를 수 없게 된다.
+   ★ 예전에는 여기서 이 버튼을 감췄다. 그 이유와, 왜 더 이상
+     맞지 않는지를 함께 남긴다.
 
-   그래서 AI 패널이 overlay로 바뀌는 것과 **같은 breakpoint**에서
-   이 버튼만 감춘다. Inspector는 hover/정밀 클릭이 전제인 도구라
-   이 폭에서 잃는 것이 크지 않고, 모드는 항상 꺼진 상태로
-   시작하므로 감춰도 어중간한 상태에 갇히지 않는다.
+   감춘 이유는 자리였다. "좁은 화면에서는 오른쪽 actions 그룹이
+   뷰포트를 넘치고, Select 를 왼쪽에 더하면 이미 아슬아슬하던
+   AI Assistant 가 화면 밖으로 나간다." 그때는 dock 의 세 그룹이
+   한 줄에서 서로를 밀어냈다.
+
+   지금은 그렇지 않다. 반응형 라운드가 actions 그룹의 min-width
+   바닥을 풀어(fit-content → 0) 버튼이 많으면 **그 안에서 여러
+   줄로 접히게** 해 두었다(studio.css @media (max-width:720px)).
+   390px 실측: dock 이 세 줄(141px)로 자라고 AI Assistant 를
+   포함해 아홉 버튼이 전부 뷰포트 안에 있으며 가로 넘침은 0이다.
+
+   그래서 자리 때문에 감출 이유가 없어졌고, 감춰 두면 모바일에서
+   Select 와 그 뒤의 선택 요소 AI 로 가는 길이 아예 없다. 다시
+   연다 — 터치 선택은 프레임/Preview 양쪽에서 pointerdown 으로
+   잡는다(skin/sandbox/skin-sandbox-inspect.js · preview-bridge.js).
+
+   남는 것은 **폭에 따른 크기 조정** 하나다: 좁은 화면에서는 이
+   버튼도 다른 dock 버튼처럼 한 칸 작아진다(studio.css 의 같은
+   media query 가 .studio-corner-button 에 하는 것과 같은 결).
 
    (Preview 자체를 Mobile 폭으로 보는 것과는 무관하다 — 그건
    Studio 창은 넓은 채로 iframe만 390px가 되는 것이라 이 규칙에
@@ -797,8 +809,12 @@
 
 @media (max-width: 720px) {
 
+  /*
+    손가락으로 누르는 자리다 — 44px 권장선까지는 못 가더라도
+    (dock 한 줄이 그만큼 두꺼워진다) 세로를 한 칸 키워 둔다.
+  */
   #studioInspectorButton {
-    display: none;
+    min-height: 30px;
   }
 
 }

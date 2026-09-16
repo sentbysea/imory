@@ -105,6 +105,23 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/skin/sandbox/skin-sandbox-author-js.js",
 
   /* =====================================================
+     SANDBOX-6A — Element Inspector(Select).
+
+     skin-inspect-target.js 는 "이 요소를 고를 수 있는가"의 규칙
+     하나뿐인 순수 함수 파일이다. Studio 와 native Preview 도 같은
+     파일을 읽는다 — studio/inspector/studio-inspector-model.js 를
+     여기 올리는 대신 그 규칙만 skin/ 으로 옮겼다. 이 origin 에서
+     studio/* 는 여전히 404 다.
+
+     skin-sandbox-inspect.js 는 프레임 안 선택 UI 다. 올려보내는
+     것은 식별자·태그 이름·사각형뿐이고, 고른 요소가 무엇인지는
+     부모가 자기 SkinPackage 에서 다시 판단한다.
+  ====================================================== */
+
+  "/skin/skin-inspect-target.js",
+  "/skin/sandbox/skin-sandbox-inspect.js",
+
+  /* =====================================================
      SANDBOX-1 — 렌더러. 공개 화면과 **같은 파일**이다.
 
      frame 문서가 skin/skin-render.js(ES 모듈)를 정적 import하고,

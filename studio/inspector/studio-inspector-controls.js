@@ -708,7 +708,12 @@ function renderStudioInspectorPopover() {
 
   studioInspectorResizable =
     resolved.info.kind === "image" &&
-    resolved.info.capabilities.size === true;
+    resolved.info.capabilities.size === true &&
+
+    /* SANDBOX-6A — 프레임 안 이미지는 크기 핸들을 달지 않는다.
+       실측값(자연 크기·부모 안쪽 폭)이 오지 않으므로 슬라이더도
+       모서리 드래그도 기준을 세울 수 없다(아래 directEditBlocked). */
+    !studioInspectorRemoteOverlay;
 
   studioInspectorPopover.hidden =
     false;
@@ -716,8 +721,27 @@ function renderStudioInspectorPopover() {
   studioInspectorPopoverTitle.textContent =
     studioInspectorLabelFor(resolved.info);
 
+  /* =====================================================
+     SANDBOX-6A — sandbox 스킨에서는 직접 편집을 열지 않는다
+
+     "✦ AI 수정"은 그대로 된다(선택 하나만 있으면 되므로). 직접
+     편집은 다르다 — 텍스트 임시 미리보기 · 이미지 너비 · 자르기는
+     전부 **프레임 안 DOM 의 실측값**(자연 크기 · 부모 안쪽 폭 ·
+     자르기 래퍼)과, 확정 전에 그 DOM 을 임시로 바꾸는 채널을
+     필요로 한다. 그것들은 아직 프레임 계약에 없다.
+
+     그래서 "되는 척"하지 않고 버튼을 잠그고 이유를 적는다 —
+     고쳤는데 저장되지 않는 상태를 만들지 않는다.
+     (IMORY_SANDBOX_SKIN_DESIGN.md 남은 차이)
+  ====================================================== */
+
+  const directEditBlocked =
+    studioInspectorRemoteOverlay;
+
   const note =
-    studioInspectorNoteFor(resolved.info);
+    directEditBlocked
+      ? "sandbox 스킨은 여기서 직접 수정할 수 없어요. 고른 요소는 ✦ AI 수정이나 CODE 로 고칠 수 있어요."
+      : studioInspectorNoteFor(resolved.info);
 
   studioInspectorNote.textContent =
     note;
@@ -725,18 +749,21 @@ function renderStudioInspectorPopover() {
   studioInspectorNote.hidden =
     !note;
 
+  studioInspectorDirectButton.disabled =
+    directEditBlocked;
+
   studioInspectorDirectButton.setAttribute(
     "aria-expanded",
-    String(studioInspectorEditingOpen)
+    String(studioInspectorEditingOpen && !directEditBlocked)
   );
 
   studioInspectorFields.innerHTML =
     "";
 
   studioInspectorFields.hidden =
-    !studioInspectorEditingOpen;
+    !studioInspectorEditingOpen || directEditBlocked;
 
-  if (studioInspectorEditingOpen) {
+  if (studioInspectorEditingOpen && !directEditBlocked) {
 
     const controls =
       buildStudioInspectorControls(resolved.info);

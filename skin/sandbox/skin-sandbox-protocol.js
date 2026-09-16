@@ -131,7 +131,56 @@ var SANDBOX_MESSAGE_TYPES = {
      아무것도 표시하지 않고, Studio 는 짧은 안내 한 줄을 띄운다).
   ======================================================= */
 
-  SCRIPT_ERROR: "IMORY_SCRIPT_ERROR"
+  SCRIPT_ERROR: "IMORY_SCRIPT_ERROR",
+
+
+  /* =======================================================
+     SANDBOX-6A — Element Inspector (Select)
+
+     Studio 의 Select 는 지금까지 native Preview 에서만 됐다.
+     프레임 안 DOM 은 cross-origin 이라 Studio 가 읽을 수 없어
+     버튼을 잠가 뒀다. 그 다섯 줄이 이 다섯 메시지다.
+
+       INSPECT_MODE   parent -> frame  { renderSeq, enabled }
+                      지시문의 INSPECT_START / INSPECT_STOP 이
+                      **한 메시지**다(enabled 로 가른다) —
+                      기존 native 계약(preview:inspector-mode)과
+                      같은 모양을 유지하려고 이렇게 뒀다.
+
+       INSPECT_PICK   parent -> frame  { renderSeq, editId? }
+                      부모가 선택을 정한다. editId 가 **없으면**
+                      해제다 — 지시문의 INSPECT_CLEAR 가 이것이다.
+
+       INSPECT_HOVER  frame -> parent  { renderSeq, editId?, rect? }
+       INSPECT_SELECT frame -> parent  { renderSeq, editId?, tagName?, rect? }
+                      editId 가 없으면 "아무것도 고르지 않았다"
+                      (프레임 안 Escape · 빈 자리 클릭).
+       INSPECT_RECTS  frame -> parent  { renderSeq, hover?, selected? }
+                      좌표만 다시 보낸다. 저자 JS 의 애니메이션·
+                      이미지 로드·높이 변화로 사각형이 움직이면
+                      부모의 팝오버가 따라가야 한다. native 의
+                      preview:inspect-rects 와 같은 성격이다.
+
+       INSPECT_ERROR  frame -> parent  { renderSeq, code }
+                      진단용 코드 하나. 화면에 오류를 띄우는
+                      신호가 아니다(SCRIPT_ERROR 와 같은 결).
+
+     ★ 올라가는 것은 **식별자 문자열 · 태그 이름 · 사각형 네 개**
+       뿐이다. DOM 노드도, innerHTML 도, 사용자 글 본문도, computed
+       style 덤프도 없다 — native Inspector 가 올려보내는 것과
+       정확히 같은 최소값이다(studio/preview/preview-bridge.js
+       PHASE AI-6A 주석). 고른 요소가 **무엇인지**(바인딩·보호
+       영역·가능한 수정)는 부모가 자기 SkinPackage 에서 그 id 로
+       다시 찾아 판단한다. 그래서 프레임이 descriptor 를 위조해도
+       얻는 것이 없다: 존재하지 않는 id 는 부모의 대조에서 떨어진다.
+  ======================================================= */
+
+  INSPECT_MODE: "IMORY_INSPECT_MODE",
+  INSPECT_PICK: "IMORY_INSPECT_PICK",
+  INSPECT_HOVER: "IMORY_INSPECT_HOVER",
+  INSPECT_SELECT: "IMORY_INSPECT_SELECT",
+  INSPECT_RECTS: "IMORY_INSPECT_RECTS",
+  INSPECT_ERROR: "IMORY_INSPECT_ERROR"
 };
 
 
@@ -252,6 +301,127 @@ var SANDBOX_SCRIPT_ERROR_CODES = [
   "script-error",
   "script-blocked"
 ];
+
+
+/* =========================================================
+   SANDBOX-6A — Inspector 값 제한
+
+   ★ editId — skin/skin-sanitize.js 의 SKIN_SANITIZE_EDIT_ID_PATTERN,
+   studio/inspector/studio-inspector-model.js 의
+   INSPECTOR_EDIT_ID_PATTERN 과 **같은 형태**여야 한다. 셋 중 하나가
+   느슨해지면 그 틈으로만 값이 흐른다. 값을 바꿀 땐 세 파일을 함께
+   고친다.
+
+   ★ tagName — 소문자 알파벳/숫자만. 부모는 이 값을 화면 라벨에만
+   쓰고 selector 로 쓰지 않지만, 그래도 여기서 모양을 못박는다.
+
+   ★ rect — 부모가 overlay 좌표로 그대로 쓰는 숫자 넷이다. 유한하지
+   않거나 범위를 벗어나면 **메시지 자체를 버린다**(NaN/Infinity 가
+   style 에 들어가 팝오버가 화면 밖으로 날아가는 것을 프로토콜
+   층에서 막는다).
+========================================================== */
+
+var SANDBOX_INSPECT_EDIT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+var SANDBOX_INSPECT_TAG_PATTERN = /^[a-z][a-z0-9]{0,19}$/;
+
+var SANDBOX_INSPECT_MAX_COORD = 100000;
+
+
+/*
+  프레임이 Inspector 에 대해 부모에게 돌려줄 수 있는 코드.
+  문장도 stack 도 없다.
+
+    "no-root"        렌더 컨테이너가 없다(아직 안 그렸다)
+    "stale-render"   지금 화면의 렌더가 아니다
+    "not-inspectable" 고를 수 있는 요소가 없는 자리를 눌렀다
+                      (부모는 이것으로 화면을 바꾸지 않는다 —
+                       "빈 선택을 만들지 않는다"의 진단 신호다)
+*/
+
+var SANDBOX_INSPECT_ERROR_CODES = [
+  "no-root",
+  "stale-render",
+  "not-inspectable"
+];
+
+
+function isSandboxInspectEditId(value) {
+
+  return (
+    typeof value === "string" &&
+    SANDBOX_INSPECT_EDIT_ID_PATTERN.test(value)
+  );
+
+}
+
+
+function isSandboxInspectCoord(value) {
+
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= -SANDBOX_INSPECT_MAX_COORD &&
+    value <= SANDBOX_INSPECT_MAX_COORD
+  );
+
+}
+
+
+/* rect = { left, top, width, height } — 알려진 네 키만, 전부 숫자.
+   width/height 는 음수일 수 없다. */
+
+function isSandboxInspectRect(value) {
+
+  return (
+    isPlainSandboxObject(value) &&
+    hasOnlyKnownSandboxKeys(value, ["left", "top", "width", "height"]) &&
+    isSandboxInspectCoord(value.left) &&
+    isSandboxInspectCoord(value.top) &&
+    isSandboxInspectCoord(value.width) &&
+    isSandboxInspectCoord(value.height) &&
+    value.width >= 0 &&
+    value.height >= 0
+  );
+
+}
+
+
+/* hover/selected 한 칸 — { editId, rect } 또는 { editId, rect, tagName } */
+
+function isSandboxInspectTarget(value, allowTagName) {
+
+  if (!isPlainSandboxObject(value)) {
+    return false;
+  }
+
+  const keys =
+    allowTagName
+      ? ["editId", "tagName", "rect"]
+      : ["editId", "rect"];
+
+  if (!hasOnlyKnownSandboxKeys(value, keys)) {
+    return false;
+  }
+
+  if (!isSandboxInspectEditId(value.editId)) {
+    return false;
+  }
+
+  if (!isSandboxInspectRect(value.rect)) {
+    return false;
+  }
+
+  if (value.tagName === undefined) {
+    return true;
+  }
+
+  return (
+    typeof value.tagName === "string" &&
+    SANDBOX_INSPECT_TAG_PATTERN.test(value.tagName)
+  );
+
+}
 
 
 var SANDBOX_ERROR_CODES = [
@@ -484,6 +654,145 @@ var SANDBOX_MESSAGE_SPEC = {
       return (
         isSandboxRenderSeq(payload.renderSeq) &&
         SANDBOX_SCRIPT_ERROR_CODES.indexOf(payload.code) !== -1
+      );
+    }
+  },
+
+
+  /* =======================================================
+     SANDBOX-6A — Element Inspector
+
+     다섯 메시지 전부 renderSeq 를 갖는다. "어느 화면에서 고른
+     것인가"를 양쪽이 대조할 수 있어야 하기 때문이다 — 페이지를
+     옮긴 뒤 늦게 도착한 선택은 버려진다.
+  ======================================================= */
+
+  IMORY_INSPECT_MODE: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq", "enabled"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        typeof payload.enabled === "boolean"
+      );
+    }
+  },
+
+
+  /* editId 가 없으면 "해제하라"는 뜻이다(지시문의 INSPECT_CLEAR). */
+
+  IMORY_INSPECT_PICK: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq", "editId"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        (
+          payload.editId === undefined ||
+          isSandboxInspectEditId(payload.editId)
+        )
+      );
+    }
+  },
+
+
+  /* editId/rect 가 함께 없으면 "hover 가 없어졌다"는 뜻이다. */
+
+  IMORY_INSPECT_HOVER: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "editId", "rect"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (payload.editId === undefined && payload.rect === undefined) {
+        return true;
+      }
+
+      return (
+        isSandboxInspectEditId(payload.editId) &&
+        isSandboxInspectRect(payload.rect)
+      );
+
+    }
+  },
+
+
+  /* editId 가 없으면 "아무것도 고르지 않았다"(Escape · 빈 자리). */
+
+  IMORY_INSPECT_SELECT: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "editId", "tagName", "rect"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (
+        payload.editId === undefined &&
+        payload.tagName === undefined &&
+        payload.rect === undefined
+      ) {
+        return true;
+      }
+
+      return isSandboxInspectTarget(
+        {
+          editId: payload.editId,
+          tagName: payload.tagName,
+          rect: payload.rect
+        },
+        true
+      );
+
+    }
+  },
+
+
+  /*
+    좌표만 다시 보낸다. 둘 다 없을 수 있다(hover 도 선택도 없는
+    상태에서 화면이 움직인 경우) — 그때는 부모가 테두리를 지운다.
+  */
+
+  IMORY_INSPECT_RECTS: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "hover", "selected"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (
+        payload.hover !== undefined &&
+        !isSandboxInspectTarget(payload.hover, false)
+      ) {
+        return false;
+      }
+
+      if (
+        payload.selected !== undefined &&
+        !isSandboxInspectTarget(payload.selected, true)
+      ) {
+        return false;
+      }
+
+      return true;
+
+    }
+  },
+
+
+  IMORY_INSPECT_ERROR: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "code"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        SANDBOX_INSPECT_ERROR_CODES.indexOf(payload.code) !== -1
       );
     }
   }
@@ -779,6 +1088,11 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_MAX_AUTHOR_JS_CHARS,
     SANDBOX_ERROR_CODES,
     SANDBOX_SCRIPT_ERROR_CODES,
+    SANDBOX_INSPECT_ERROR_CODES,
+    SANDBOX_INSPECT_MAX_COORD,
+    isSandboxInspectEditId,
+    isSandboxInspectRect,
+    isSandboxInspectTarget,
     isSandboxHeight,
     isSandboxRenderSeq,
     isSandboxTemplate,

@@ -181,12 +181,143 @@ function studioInspectorRectIsClipped(selection) {
 }
 
 
+/* =========================================================
+   studioInspectorEditIdExistsInDraft(editId) -> boolean
+
+   SANDBOX-6A. "그 식별자를 가진 요소가 **지금 draft 의 이 페이지
+   template 에** 실제로 있는가."
+
+   describeStudioInspectorSelection() 과 같은 방식으로 본다 —
+   지금 SkinPackage 를 파싱해서 그 id 를 찾는다. 스냅샷을 믿지
+   않으므로 Code Apply / Import / AI 적용 뒤에도 옛 판단이 남지
+   않는다.
+
+   ★ 여기서 stamp 를 한 번 더 하는 것이 핵심이다. Inspector 의
+     임시 id 는 SkinPackage 에 남지 않으므로(studio-inspector-model.js
+     commitInspectorEditId), 원본 html 을 그냥 뒤지면 아직 한 번도
+     편집하지 않은 요소의 id 는 하나도 찾을 수 없다.
+========================================================== */
+
+function studioInspectorDraftElement(editId) {
+
+  if (!window.isValidInspectorEditId(editId)) {
+    return null;
+  }
+
+  const source =
+    studioInspectorTemplateSource();
+
+  if (!source || typeof source.html !== "string") {
+    return null;
+  }
+
+  let stamped;
+
+  try {
+    stamped = window.stampInspectorEditIds(source.html);
+  }
+  catch (err) {
+    return null;
+  }
+
+  return stamped.doc.body.querySelector(
+    `[data-imory-edit-id="${editId}"]`
+  );
+
+}
+
+
+function studioInspectorEditIdExistsInDraft(editId) {
+
+  return !!studioInspectorDraftElement(editId);
+
+}
+
+
+/* =========================================================
+   studioInspectorSelectionFingerprint(editId)
+
+   고르는 **그 순간** 그 요소가 어떤 요소였는지의 요약을 남긴다.
+   나중에 되살릴 때 이 값과 대조한다
+   (studio-inspector-model.js resolveInspectorSelectionTarget).
+
+   ★ 지금 draft 에서 계산한다 — 프레임이 보낸 값이 아니다. 그래서
+     native 든 sandbox 든 같은 값이 나오고, 프레임이 지문을 위조할
+     길도 없다.
+
+   ★ (2026-09-17 보완) 값은 그 요소 하나의 지문이 아니라 **자리와
+     속까지 담은 세 겹**이다(inspectorSelectionSignature). 완전히
+     같은 형제가 여럿일 때 지문만으로는 "형제 하나가 지워져 뒤가
+     자리를 물려받은" 경우를 가릴 수 없기 때문이다.
+========================================================== */
+
+function studioInspectorSelectionFingerprint(editId) {
+
+  const element =
+    studioInspectorDraftElement(editId);
+
+  return element
+    ? window.inspectorSelectionSignature(element)
+    : "";
+
+}
+
+
+/* =========================================================
+   reconcileStudioInspectorSelection()
+
+   working draft 가 바뀔 때마다 한 번 부른다(studio-preview.js
+   bumpStudioWorkingRevision — Direct Edit · Code Apply · Import ·
+   AI 적용 · 되돌리기 · 이미지 슬롯 · remount 가 전부 그 한 곳을
+   지난다).
+
+   고른 요소를 **같은 요소라고 말할 근거가 남아 있으면** 아무 일도
+   하지 않고, 없으면 조용히 푼다. 오류가 아니라 정상 fallback이다 —
+   토스트도 띄우지 않는다(사용자가 방금 한 일은 성공했고, 선택이
+   풀린 것은 그 결과일 뿐이다).
+
+   ★ 왜 여기서 한 번 더 푸는가
+   describeStudioInspectorSelection() 이 null 을 주면 팝오버는
+   이미 숨고 getStudioInspectorSelection() 도 null 이다. 하지만
+   studioInspectorSelection 자체는 남아 있어서, sandbox 프레임에는
+   테두리가 그대로 떠 있고 rects 메시지도 계속 오간다. 상태를 실제로
+   걷어내야 프레임까지 정리된다(clearStudioInspectorSelection 이
+   프레임에 해제를 내려보낸다).
+========================================================== */
+
+function reconcileStudioInspectorSelection() {
+
+  if (!studioInspectorEnabled || !studioInspectorSelection) {
+    return;
+  }
+
+  if (describeStudioInspectorSelection()) {
+    return;
+  }
+
+  studioInspectorLastLostReason =
+    studioInspectorSelection.lostReason || "gone";
+
+  console.info(
+    "[studio-inspector] 선택을 유지할 근거가 없어 해제합니다",
+    { reason: studioInspectorLastLostReason }
+  );
+
+  clearStudioInspectorSelection();
+
+}
+
+
 function setStudioInspectorSelection(editId, tagName, rect, metrics, visibleRect) {
 
   if (!editId || !window.isValidInspectorEditId(editId)) {
     clearStudioInspectorSelection();
     return;
   }
+
+  /* 새로 고르면 "왜 못 되살렸는가"의 기록은 지운다 */
+  studioInspectorLastLostReason =
+    "";
 
   const isSameElement =
     !!studioInspectorSelection && studioInspectorSelection.editId === editId;
@@ -201,6 +332,17 @@ function setStudioInspectorSelection(editId, tagName, rect, metrics, visibleRect
     editId,
     tagName: tagName || null,
     rect: rect || null,
+
+    /* =====================================================
+       고르는 순간의 지문. 나중에 "이 id 가 여전히 그 요소인가"를
+       이 값 하나로 판정한다(studio-inspector-model.js
+       resolveInspectorSelectionTarget). 지금 draft 에서 계산하므로
+       native 와 sandbox 가 같은 값을 갖는다.
+    ====================================================== */
+    fingerprint: studioInspectorSelectionFingerprint(editId),
+
+    /* 되살리지 못한 이유(진단·테스트용) */
+    lostReason: "",
 
     /* 조상 overflow까지 반영한 "실제로 보이는" 사각형.
        테두리·핸들·자르기 드래그 판은 이 값을 쓴다 — rect는
@@ -223,7 +365,24 @@ function setStudioInspectorSelection(editId, tagName, rect, metrics, visibleRect
     studioInspectorEditingOpen = false;
   }
 
-  paintStudioInspectorBox(studioInspectorSelectBox, studioInspectorSelection.visibleRect);
+  /* SANDBOX-6A — 프레임이 테두리를 그린 경우에는 여기서 또 그리지
+     않는다(studio-inspector-state.js studioInspectorRemoteOverlay). */
+  if (studioInspectorRemoteOverlay) {
+
+    if (studioInspectorSelectBox) {
+      studioInspectorSelectBox.hidden = true;
+    }
+
+  }
+
+  else {
+
+    paintStudioInspectorBox(
+      studioInspectorSelectBox,
+      studioInspectorSelection.visibleRect
+    );
+
+  }
 
   renderStudioInspectorPopover();
 
@@ -242,6 +401,33 @@ function handleStudioInspectorMessage(data) {
     return;
   }
 
+  /* =====================================================
+     SANDBOX-6A — 이 메시지가 프레임에서 왔는가
+
+     왔다면 hover/선택 테두리는 프레임 안에 이미 그려져 있다.
+     이 문서는 팝오버만 맡는다(studio-inspector-state.js
+     studioInspectorRemoteOverlay 주석).
+
+     native 메시지에는 이 칸이 없으므로 false 로 돌아간다 —
+     같은 세션에서 sandbox 스킨을 native 스킨으로 바꿔도
+     테두리가 사라진 채 남지 않는다.
+  ====================================================== */
+
+  studioInspectorRemoteOverlay =
+    data.remote === true;
+
+  if (studioInspectorRemoteOverlay) {
+
+    if (studioInspectorHoverBox) {
+      studioInspectorHoverBox.hidden = true;
+    }
+
+    if (studioInspectorSelectBox) {
+      studioInspectorSelectBox.hidden = true;
+    }
+
+  }
+
   if (data.type === "preview:inspect-escape") {
     clearStudioInspectorSelection();
     return;
@@ -252,13 +438,45 @@ function handleStudioInspectorMessage(data) {
     studioInspectorHover =
       data.visibleRect || data.rect || null;
 
-    paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+    if (!studioInspectorRemoteOverlay) {
+      paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+    }
 
     return;
 
   }
 
   if (data.type === "preview:inspect-select") {
+
+    /* =====================================================
+       ★ 위조 선택 거부 (SANDBOX-6A 요구사항 9절)
+
+       프레임 안에서는 스킨 저자의 JS 가 돈다. 그 코드가 부모에
+       메시지를 쏠 수는 없지만(봉투·origin·source 검사), "프레임이
+       무엇이든 보낼 수 있다"고 **가정하고** 한 겹 더 둔다:
+
+       지금 draft 의 이 페이지 template 에 그 식별자를 가진 요소가
+       **실제로 있는가**. 없으면 선택 자체를 만들지 않는다 —
+       팝오버도, AI 선택 chip 도, selectionContext 도 생기지 않는다.
+
+       native 경로는 지금까지처럼 그대로 둔다(remote 가 아닐 때는
+       이 관문을 지나지 않는다) — 그 메시지는 같은 origin 의 같은
+       스킨 DOM 에서 온 것이고, 이 라운드가 바꾸지 않기로 한 흐름이다.
+    ====================================================== */
+
+    if (
+      studioInspectorRemoteOverlay &&
+      data.editId &&
+      !studioInspectorEditIdExistsInDraft(data.editId)
+    ) {
+
+      console.warn(
+        "[studio-inspector] 프레임이 보낸 선택이 지금 template 에 없습니다 — 무시합니다."
+      );
+
+      return;
+
+    }
 
     setStudioInspectorSelection(
       data.editId,
@@ -277,7 +495,9 @@ function handleStudioInspectorMessage(data) {
     studioInspectorHover =
       (data.hover && (data.hover.visibleRect || data.hover.rect)) || null;
 
-    paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+    if (!studioInspectorRemoteOverlay) {
+      paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+    }
 
     if (!studioInspectorSelection) {
       return;
@@ -326,15 +546,19 @@ function handleStudioInspectorMessage(data) {
       studioInspectorMetrics = data.selected.metrics || studioInspectorMetrics;
     }
 
-    paintStudioInspectorBox(
-      studioInspectorSelectBox,
-      studioInspectorSelection.visibleRect
-    );
+    if (!studioInspectorRemoteOverlay) {
 
-    paintStudioInspectorHandles(
-      data.selected.rect,
-      studioInspectorSelection.visibleRect
-    );
+      paintStudioInspectorBox(
+        studioInspectorSelectBox,
+        studioInspectorSelection.visibleRect
+      );
+
+      paintStudioInspectorHandles(
+        data.selected.rect,
+        studioInspectorSelection.visibleRect
+      );
+
+    }
 
     /* 사용자가 크기를 만지는 동안에는 팝오버를 옮기지
        않는다 — 이 경로는 "이미지가 커졌다/작아졌다"로 오는
@@ -558,6 +782,21 @@ if (typeof window !== "undefined") {
     clearStudioInspectorSelection;
 
   /* =========================================================
+     working draft 가 바뀔 때마다 studio-preview.js 의
+     bumpStudioWorkingRevision() 이 부른다 — 그 한 곳이 Direct Edit ·
+     Code Apply · Import · AI 적용 · 되돌리기 · 이미지 슬롯 ·
+     remount 의 공통 관문이다.
+  ========================================================== */
+  window.reconcileStudioInspectorSelection =
+    reconcileStudioInspectorSelection;
+
+  /* 선택 요소 AI 가 응답 적용 직전에 하는 "그 요소가 지금도 그
+     요소인가"는 **살아 있는 선택**이 아니라 지금 draft 를 본다 —
+     studio/ai/studio-ai-selection.js studioAiSelectionTargetIsIntact.
+     요청의 타깃은 전송 시점 snapshot 이므로, 기다리는 사이 사용자가
+     다른 요소를 골랐다고 그 요청이 틀려지지는 않는다. */
+
+  /* =========================================================
      선택 요소의 지금 상태. studio/ai/studio-ai-selection.js가
      이 값 하나로 chip 문구와 서버로 보낼 selectionContext를
      만든다(PHASE AI-6B) — 선택 상태의 복사본을 그쪽에 두지
@@ -580,6 +819,20 @@ if (typeof window !== "undefined") {
       return {
         pageType: currentPreviewPageType,
         editId: studioInspectorSelection.editId,
+
+        /* =====================================================
+           고른 순간의 지문. 선택 요소 AI 가 **전송 시점 snapshot**
+           으로 들고 있다가, 응답을 적용하기 직전에 "그 요소가 지금도
+           그 요소인가"를 확인하는 데 쓴다
+           (studio/ai/studio-ai-selection.js
+            studioAiSelectionTargetIsIntact).
+
+           ★ 서버로는 가지 않는다 — selectionContext 는
+           buildStudioAiSelectionContext() 가 필드를 하나씩 적어
+           만들고, 그 목록에 이 값은 없다.
+        ====================================================== */
+        fingerprint: studioInspectorSelection.fingerprint || "",
+
         tagName: resolved.info.tagName,
         kind: resolved.info.kind,
         label: studioInspectorLabelFor(resolved.info),
@@ -614,6 +867,11 @@ if (typeof window !== "undefined") {
             ? { ...studioInspectorSelection }
             : null,
         hover: studioInspectorHover ? { ...studioInspectorHover } : null,
+
+        /* 마지막으로 선택을 되살리지 못한 이유 — "gone" /
+           "no-evidence" / "mismatch". 선택이 풀린 뒤에도 남는다
+           (그때 selection 은 null 이라 거기 담아 두면 읽을 수 없다). */
+        lostReason: studioInspectorLastLostReason,
 
         /* Select mode 직접 편집 라운드 — 확정되지 않은 상태.
            "취소/선택 해제 뒤에 임시 변경이 남지 않는다"를 테스트가

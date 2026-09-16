@@ -80,7 +80,26 @@ import {
   renderSandboxPreview,
   sendSandboxPreviewPostBody,
   teardownSandboxPreview,
-  hasSandboxPreviewFrame
+  hasSandboxPreviewFrame,
+
+  /*
+    SANDBOX-6A — Element Inspector(Select)가 sandbox 스킨에서도
+    된다. 이 문서가 하는 일은 여전히 "연결" 하나다:
+
+      Studio -> 이 문서 : preview:inspector-mode / -select
+                          (native 와 **같은 메시지**)
+      이 문서 -> 프레임 : IMORY_INSPECT_MODE / IMORY_INSPECT_PICK
+      프레임 -> 이 문서 : IMORY_INSPECT_* (좌표는 프레임 뷰포트)
+      이 문서 -> Studio : preview:inspect-*  (좌표를 이 문서의
+                          것으로 옮긴 뒤, native 와 같은 이름)
+
+    그래서 Studio 쪽(studio/inspector/*)은 sandbox 를 거의 알지
+    못한다 — 알아야 하는 것은 remote:true 한 칸뿐이다(테두리를
+    프레임이 이미 그렸다는 표식).
+  */
+  setSandboxPreviewInspectRelay,
+  setSandboxPreviewInspectMode,
+  setSandboxPreviewInspectSelection
 } from "./preview-sandbox.js";
 
 const PREVIEW_MSG_RENDER = "preview:render";
@@ -695,6 +714,34 @@ function inspectorSkinRoot() {
 }
 
 
+/* =========================================================
+   inspectorNativeActive() — 이 문서가 hit-test 를 해야 하는가
+
+   SANDBOX-6A. sandbox 스킨을 그리고 있는 동안 이 문서 안에는 스킨
+   DOM 이 없다 — previewRoot 안에는 cross-origin iframe 하나뿐이다.
+   그런데도 아래 리스너들이 계속 돌면 두 가지 일이 생긴다:
+
+     1. hover/선택이 언제나 null 이라 "고를 것이 없다"를 계속 올린다.
+     2. postInspectorRects() 가 selected:null 을 올리고, Studio 는
+        그것을 "그 요소가 사라졌다"로 읽어 **방금 프레임에서 고른
+        선택을 지운다**(studio-inspector.js rects 처리).
+
+     2번은 실제로 그랬다 — 프레임에서 고른 직후 120ms 안에 선택이
+     풀렸다. 그래서 프레임이 화면을 맡고 있는 동안 이 문서의
+     Inspector 는 **아무 말도 하지 않는다**.
+
+   ★ inspectorEnabled 자체는 그대로 둔다. 프레임이 실패해 native 로
+     폴백하면 그 순간부터 이 함수가 참이 되어 지금까지의 동작이
+     그대로 살아난다 — 모드 메시지를 다시 받을 필요가 없다.
+========================================================== */
+
+function inspectorNativeActive() {
+
+  return inspectorEnabled && !hasSandboxPreviewFrame();
+
+}
+
+
 function inspectorEditIdOf(el) {
 
   return el && el.getAttribute
@@ -980,7 +1027,7 @@ function inspectorReviveSelection() {
 
 function postInspectorRects() {
 
-  if (!inspectorEnabled) {
+  if (!inspectorNativeActive()) {
     return;
   }
 
@@ -1013,7 +1060,7 @@ function postInspectorRects() {
 
 function scheduleInspectorRects() {
 
-  if (!inspectorEnabled || inspectorRectFrame) {
+  if (!inspectorNativeActive() || inspectorRectFrame) {
     return;
   }
 
@@ -1451,7 +1498,7 @@ document.addEventListener(
   "click",
   (event) => {
 
-    if (!inspectorEnabled) {
+    if (!inspectorNativeActive()) {
       return;
     }
 
@@ -1477,7 +1524,7 @@ document.addEventListener(
   "dragstart",
   (event) => {
 
-    if (!inspectorEnabled) {
+    if (!inspectorNativeActive()) {
       return;
     }
 
@@ -1493,7 +1540,7 @@ document.addEventListener(
   "auxclick",
   (event) => {
 
-    if (!inspectorEnabled) {
+    if (!inspectorNativeActive()) {
       return;
     }
 
@@ -1509,7 +1556,7 @@ document.addEventListener(
   "pointerover",
   (event) => {
 
-    if (!inspectorEnabled) {
+    if (!inspectorNativeActive()) {
       return;
     }
 
@@ -1526,7 +1573,7 @@ document.addEventListener(
   "pointerout",
   (event) => {
 
-    if (!inspectorEnabled || event.relatedTarget) {
+    if (!inspectorNativeActive() || event.relatedTarget) {
       return;
     }
 
@@ -1546,7 +1593,7 @@ document.addEventListener(
   "keydown",
   (event) => {
 
-    if (!inspectorEnabled || event.key !== "Escape") {
+    if (!inspectorNativeActive() || event.key !== "Escape") {
       return;
     }
 
@@ -1560,6 +1607,29 @@ document.addEventListener(
 window.addEventListener("scroll", scheduleInspectorRects, true);
 
 window.addEventListener("resize", scheduleInspectorRects);
+
+
+/* =========================================================
+   SANDBOX-6A — 프레임이 올려보낸 inspect 결과를 Studio 로
+
+   preview-sandbox.js 가 좌표를 **이 문서의 것으로** 이미 옮겨
+   놓았다. 여기서 하는 일은 그것을 지금까지 쓰던 통로로 흘려
+   보내는 것 하나다 — 메시지 이름도, 키도 native 와 같다.
+
+   ★ 여기서 값을 다시 만들지 않는다. postToParent 는 봉투를
+     그대로 보내고, 최종 판정(그 식별자가 지금 draft template 에
+     실제로 있는가)은 Studio 가 한다.
+========================================================== */
+
+setSandboxPreviewInspectRelay(function (message) {
+
+  if (!message || typeof message.type !== "string") {
+    return;
+  }
+
+  postToParent(message);
+
+});
 
 
 /* =========================================================
@@ -1735,13 +1805,44 @@ window.addEventListener("message", (event) => {
   if (data.type === PREVIEW_MSG_INSPECTOR_MODE) {
 
     setInspectorEnabled(data.enabled === true);
+
+    /*
+      SANDBOX-6A — sandbox 스킨이면 프레임에도 알린다.
+
+      ★ 위 setInspectorEnabled() 를 건너뛰지 않는다. 그 함수가
+      켜는 것은 **이 문서의** hit-test 인데, sandbox 렌더에서는
+      이 문서에 스킨 DOM 이 없어(previewRoot 안은 iframe 하나다)
+      그 리스너들이 고를 것을 찾지 못한다 — 켜 두어도 아무 일이
+      없고, 프레임이 native 로 폴백했을 때 그대로 동작한다.
+    */
+
+    setSandboxPreviewInspectMode(data.enabled === true);
+
     return;
 
   }
 
   if (data.type === PREVIEW_MSG_INSPECTOR_SELECT) {
 
-    if (!inspectorEnabled) {
+    /*
+      SANDBOX-6A — sandbox 스킨이면 프레임이 선택의 주인이다.
+      (아래 native 경로는 inspectorEnabled 가 꺼져 있으면 어차피
+       빠져나간다.)
+    */
+
+    if (hasSandboxPreviewFrame()) {
+
+      setSandboxPreviewInspectSelection(
+        (typeof data.editId === "string" && window.isValidInspectorEditId(data.editId))
+          ? data.editId
+          : null
+      );
+
+      return;
+
+    }
+
+    if (!inspectorNativeActive()) {
       return;
     }
 
@@ -1761,7 +1862,7 @@ window.addEventListener("message", (event) => {
 
   if (data.type === PREVIEW_MSG_INSPECT_PREVIEW) {
 
-    if (!inspectorEnabled) {
+    if (!inspectorNativeActive()) {
       return;
     }
 

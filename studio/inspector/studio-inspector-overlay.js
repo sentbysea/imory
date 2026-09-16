@@ -695,9 +695,51 @@ function studioInspectorPopoverCovers(anchor, size, placement) {
 
 function studioInspectorStageBounds() {
 
-  return studioInspectorStage
-    ? studioInspectorStage.getBoundingClientRect()
-    : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+  const stage =
+    studioInspectorStage
+      ? studioInspectorStage.getBoundingClientRect()
+      : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+
+  /* =====================================================
+     Top Dock 이 덮는 만큼은 앉을 수 있는 자리가 아니다.
+
+     바는 stage 위에 얹히고(z-index 8) 좁은 폭에서는 여러 줄로
+     접혀 세 배까지 자란다. 그 밑에 팝오버를 앉히면 "✦ AI 수정"
+     같은 버튼을 아예 누를 수 없다(390px 실측, 2026-09-17).
+
+     바가 접혀 있으면 rect 가 뷰포트 위로 나가므로 이 계산은
+     아무 일도 하지 않는다 — 데스크톱의 평소 동작(48px 바)도
+     지금까지와 같다.
+  ====================================================== */
+
+  if (!studioInspectorTopDock) {
+    return stage;
+  }
+
+  const dock =
+    studioInspectorTopDock.getBoundingClientRect();
+
+  const overlaps =
+    dock.bottom > stage.top &&
+    dock.top < stage.bottom &&
+    dock.right > stage.left &&
+    dock.left < stage.right;
+
+  if (!overlaps) {
+    return stage;
+  }
+
+  const top =
+    Math.min(Math.max(stage.top, dock.bottom), stage.bottom);
+
+  return {
+    left: stage.left,
+    top,
+    right: stage.right,
+    bottom: stage.bottom,
+    width: stage.right - stage.left,
+    height: stage.bottom - top
+  };
 
 }
 
@@ -766,7 +808,12 @@ function studioInspectorPopoverSpot(anchor, size, bounds) {
 
   return {
     left: Math.min(Math.max(anchor.left, minLeft), maxLeft),
-    top
+
+    /* ★ 위쪽도 반드시 물린다. 예전에는 아래로 넘칠 때만 되밀었는데,
+       고른 요소가 화면 맨 위에 있으면 팝오버가 minTop 위에 앉아
+       **Top Dock 밑에 깔렸다** — 390px 에서 바가 세 줄(144px)이 되면
+       "✦ AI 수정"을 아예 누를 수 없었다(2026-09-17 실측). */
+    top: Math.min(Math.max(top, minTop), maxTop)
   };
 
 }

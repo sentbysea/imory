@@ -129,6 +129,20 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
     /* SANDBOX-3.1 — 본문 서식 <style> 하나(재사용) */
     postBodyStyle: null,
+
+    /* =====================================================
+       SANDBOX-6A — Element Inspector (Select)
+
+       controller 는 **한 번만** 만든다(start 에서). Inspect 를
+       켜고 끄는 것으로 realm 을 다시 만들지 않으므로 저자 JS 도
+       다시 돌지 않고 타이머도 한 벌 그대로다.
+
+       null 이면 이 문서에 skin-sandbox-inspect.js 가 로드되지
+       않은 것이다 — 그때는 INSPECT_* 메시지가 와도 아무 일도
+       일어나지 않는다(화면은 지금까지와 같다).
+    ====================================================== */
+
+    inspector: null,
     sentReady: false,
     acked: false,
     seq: 0,
@@ -995,6 +1009,20 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
       context
     );
 
+
+    /*
+      ★ SANDBOX-6A — 다시 그렸으니 Inspector 가 선택을 되살린다.
+
+      저자 JS **뒤에** 부르는 이유: 저자 코드가 DOM 을 바꿀 수
+      있으므로, 그 뒤의 좌표라야 테두리가 맞는 자리에 선다.
+      Inspect 가 꺼져 있으면 이 줄은 아무 일도 하지 않는다.
+    */
+
+    if (FRAME_STATE.inspector) {
+      FRAME_STATE.inspector.onRender();
+    }
+
+
     const el =
       notice();
 
@@ -1129,6 +1157,49 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
       }
 
+      return;
+
+    }
+
+
+    /* =====================================================
+       SANDBOX-6A — Element Inspector
+
+       ★ 늦게 도착한 지시는 버린다. 부모가 옛 화면에서 보낸
+         INSPECT_* 가 새 화면의 선택을 건드리지 않게 한다.
+         (프레임이 올려보내는 쪽도 언제나 지금 renderSeq 를
+          달고 나간다 — skin-sandbox-inspect.js send())
+    ====================================================== */
+
+    if (
+      verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_MODE ||
+      verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_PICK
+    ) {
+
+      if (!FRAME_STATE.inspector) {
+        return;
+      }
+
+      if (verdict.payload.renderSeq !== FRAME_STATE.renderSeq) {
+        return;
+      }
+
+      if (verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_MODE) {
+
+        FRAME_STATE.inspector.setEnabled(verdict.payload.enabled === true);
+
+        return;
+
+      }
+
+      FRAME_STATE.inspector.pick(
+        typeof verdict.payload.editId === "string"
+          ? verdict.payload.editId
+          : null
+      );
+
+      return;
+
     }
 
   }
@@ -1153,6 +1224,19 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
   ========================================================== */
 
   function onFrameClick(event) {
+
+    /*
+      ★ SANDBOX-6A — Inspect 중에는 링크가 "선택 대상"일 뿐이다.
+
+      skin-sandbox-inspect.js 의 capture 리스너가 먼저 등록되어
+      이미 전파를 끊었지만, 그 한 가지에만 기대지 않는다
+      (native 쪽 preview-bridge.js 도 같은 이유로 두 겹이다).
+    */
+
+    if (FRAME_STATE.inspector && FRAME_STATE.inspector.isEnabled()) {
+      return;
+    }
+
 
     const anchor =
       event.target && event.target.closest
@@ -1287,9 +1371,55 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     FRAME_STATE.parentOrigin =
       resolveParentOrigin();
 
+
+    /* =====================================================
+       ★ SANDBOX-6A — Inspector controller 를 **먼저** 만든다.
+
+       그 안의 capture 리스너가 아래 onFrameClick 보다 먼저
+       등록되어야, Inspect 중 링크 클릭이 그 함수에 닿기 전에
+       끊긴다(등록 순서가 곧 capture 순서다).
+
+       파일이 로드되지 않은 문서에서는 null 로 남고, INSPECT_*
+       메시지가 와도 아무 일이 일어나지 않는다.
+    ====================================================== */
+
+    if (typeof createSandboxInspector === "function") {
+
+      FRAME_STATE.inspector =
+        createSandboxInspector({
+          doc: document,
+          getRoot: root,
+          getRenderSeq: function () {
+            return FRAME_STATE.renderSeq;
+          },
+          getNonce: function () {
+            return FRAME_STATE.nonce;
+          },
+          send: send,
+          TYPES: SANDBOX_MESSAGE_TYPES
+        });
+
+    }
+
+
     window.addEventListener("message", onMessage);
 
     document.addEventListener("click", onFrameClick, true);
+
+
+    /*
+      진단용 — e2e 가 프레임 realm 안에서 Inspector 상태를 읽는다.
+      이 창구로 선택을 바꿀 수는 없다(읽기 전용).
+    */
+
+    window.__imorySandboxInspectState =
+      function () {
+
+        return FRAME_STATE.inspector
+          ? FRAME_STATE.inspector.debugState()
+          : null;
+
+      };
 
 
     if (!FRAME_STATE.sentReady) {

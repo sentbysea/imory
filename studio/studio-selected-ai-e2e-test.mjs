@@ -150,10 +150,18 @@ let openAiMode = "selected-style";
 let openAiCallCount = 0;
 let openAiLastRequest = null;
 
-function resetOpenAiMock(mode) {
+/*
+  응답을 일부러 늦춘다 — "응답이 오는 사이에 draft 가 바뀌면"을
+  재현하려면 그 틈이 있어야 한다(2026-09-17). 0 이면 지금까지와
+  똑같이 곧바로 답한다.
+*/
+let openAiDelayMs = 0;
+
+function resetOpenAiMock(mode, delayMs) {
   openAiMode = mode || "selected-style";
   openAiCallCount = 0;
   openAiLastRequest = null;
+  openAiDelayMs = Number.isFinite(delayMs) ? delayMs : 0;
 }
 
 function jsonResponse(status, body) {
@@ -295,6 +303,10 @@ function buildMockCompletedResponse(structured, model) {
 async function handleOpenAiMock(init) {
 
   openAiCallCount += 1;
+
+  if (openAiDelayMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, openAiDelayMs));
+  }
 
   let body = null;
   try { body = JSON.parse((init && init.body) || "{}"); } catch { body = null; }
@@ -1686,6 +1698,376 @@ async function runApply(context) {
 
 
 /* =========================================================
+   ST. 응답이 오는 사이 draft 가 바뀌면 적용하지 않는다
+       (SANDBOX-6A 후속, 2026-09-17)
+
+   보낼 때 고른 요소가, 응답이 도착했을 때도 **그 요소인가**.
+
+   ★ 왜 revision 검사만으로 부족한가
+   applyAiSkinPackage() 의 expectedRevision 은 "그 사이 draft 가
+   바뀌었는가"를 본다. 그것이 1차 방어선이다. 하지만 우리가 실제로
+   두려운 경우는 하나다 — 그 사이 고른 요소가 사라져서 **뒤 형제가
+   같은 구조 경로 id 를 물려받은** 경우. 그때 응답을 그대로 적용하면
+   사용자가 보지도 않은 요소가 바뀐다.
+
+   그래서 응답을 일부러 늦추고(mock delay), 그 틈에 draft 를 바꾼
+   뒤 무슨 일이 일어나는지 본다.
+========================================================== */
+
+async function runStaleTarget(context) {
+
+  const page = await openStudio(context);
+  await enableInspector(page);
+
+  await selectInPreview(page, ".y-heading");
+  await page.click("#studioInspectorAiButton");
+
+  const picked = await page.evaluate(() => window.getStudioInspectorSelection());
+
+  const before = await workingPackage(page);
+
+  /* 응답을 1.2초 뒤에 준다 */
+  resetOpenAiMock("selected-style", 1200);
+
+  await page.fill("#studioAiDrawerInput", "이 제목만 조금 크게");
+  await page.click("#studioAiDrawerSend");
+
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().pending === true,
+    null,
+    { timeout: 6000 }
+  );
+
+  /* --- 기다리는 사이에 그 요소를 지운다 ----------------
+     뒤 <img class="y-avatar"> 가 같은 구조 경로 id 를 물려받는다. */
+
+  await page.evaluate(() => {
+
+    const state =
+      window.getStudioAiWorkingState({ includePackage: true });
+
+    window.applyAiSkinPackage(
+      {
+        ...state.skinPackage,
+        templates: {
+          ...state.skinPackage.templates,
+          home: {
+            ...state.skinPackage.templates.home,
+            html: state.skinPackage.templates.home.html
+              .replace('<h1 class="y-heading">Recent Notes</h1>', "")
+          }
+        }
+      },
+      { source: "e2e-stale-target" }
+    );
+
+  });
+
+  const mid = await workingPackage(page);
+
+  record(
+    "ST1. 기다리는 사이 그 요소가 실제로 사라졌다 (전제)",
+    !mid.templates.home.html.includes('class="y-heading"'),
+    `heading=${mid.templates.home.html.includes('class="y-heading"')}`
+  );
+
+  await page.waitForFunction(
+    () => window.getStudioAiPanelDebugState().pending === false,
+    null,
+    { timeout: 15000 }
+  );
+
+  await sleep(400);
+
+  const after = await workingPackage(page);
+
+  record(
+    "ST2. ★ 응답을 적용하지 않는다 — 엉뚱한 요소에 규칙이 붙지 않는다",
+    !after.css.includes(
+      `[data-imory-edit-id="${picked.editId}"][data-imory-edit-id="${picked.editId}"]`
+    ),
+    `cssDelta=${after.css.length - mid.css.length}`
+  );
+
+  record(
+    "ST3. draft 는 그 사이 내가 한 변경 그대로다 (AI 결과가 섞이지 않는다)",
+    after.templates.home.html === mid.templates.home.html &&
+      after.css === mid.css,
+    JSON.stringify({
+      html: after.templates.home.html === mid.templates.home.html,
+      css: after.css === mid.css
+    })
+  );
+
+  const panel = await panelState(page);
+
+  record(
+    "ST4. 사용자에게 이유가 보인다 (다시 선택해 달라는 안내)",
+    panel.pending === false &&
+      !!panel.lastFailure &&
+      panel.lastFailure.code === "SELECTION_TARGET_NOT_FOUND",
+    JSON.stringify(panel.lastFailure && {
+      stage: panel.lastFailure.stage,
+      code: panel.lastFailure.code
+    })
+  );
+
+  record(
+    "ST5. 믿을 수 없는 선택은 풀린다",
+    (await page.evaluate(() => window.getStudioInspectorSelection())) === null &&
+      (await chipState(page)).hidden === true
+  );
+
+  /* --- 대조군: draft 가 그대로면 늦은 응답도 정상 적용된다 --- */
+
+  await selectInPreview(page, ".y-box");
+  await page.click("#studioInspectorAiButton");
+
+  const picked2 = await page.evaluate(() => window.getStudioInspectorSelection());
+
+  resetOpenAiMock("selected-style", 800);
+
+  await sendAi(page, "이 영역만 조금 납작하게");
+
+  const after2 = await workingPackage(page);
+
+  record(
+    "ST6. 대조군 — draft 가 그대로면 늦게 온 응답도 정상 적용된다",
+    after2.css.includes(
+      `[data-imory-edit-id="${picked2.editId}"][data-imory-edit-id="${picked2.editId}"]`
+    ),
+    `editId=${picked2.editId}`
+  );
+
+  resetOpenAiMock("selected-style");
+
+  await page.close();
+
+
+  /* =======================================================
+     ST7~ST10. 기다리는 사이 **똑같은 형제** 하나가 지워진다
+                (2026-09-17 보완)
+
+     ST1~ST5 는 "자리를 물려받은 요소가 다르게 생겼다"에 기대고
+     있었다. 목록 카드처럼 형제가 서로 똑같으면 그 기대가 무너진다 —
+     지문만 보면 "그 요소 맞다"가 나오고, 응답이 **사용자가 보지도
+     않은 형제**에 붙는다. 선택 요소 AI 에서 가장 위험한 경우라
+     따로 못 박는다(studio/inspector/studio-inspector-model.js
+     inspectorSelectionSignature).
+  ======================================================== */
+
+  const twinPage = await openStudio(context);
+  await enableInspector(twinPage);
+
+  /* 글자 단위로 똑같은 형제 셋을 만든다 */
+  await twinPage.evaluate(() => {
+
+    const state =
+      window.getStudioAiWorkingState({ includePackage: true });
+
+    window.applyAiSkinPackage(
+      {
+        ...state.skinPackage,
+        templates: {
+          ...state.skinPackage.templates,
+          home: {
+            ...state.skinPackage.templates.home,
+            html: state.skinPackage.templates.home.html.replace(
+              '<p class="y-below">아래 문단</p>',
+              '<ul class="y-twins">' +
+              '<li class="y-twin"><span class="y-twin-in">쌍둥이</span></li>' +
+              '<li class="y-twin"><span class="y-twin-in">쌍둥이</span></li>' +
+              '<li class="y-twin"><span class="y-twin-in">쌍둥이</span></li>' +
+              '</ul><p class="y-below">아래 문단</p>'
+            )
+          }
+        }
+      },
+      { source: "e2e-stale-twin" }
+    );
+
+  });
+
+  /* 방금 적용한 HTML 이 Preview 에 실제로 그려질 때까지 기다린다 —
+     WebKit 은 여기서 한 박자 늦다. */
+  await twinPage.waitForFunction(
+    () => {
+      const doc =
+        document.getElementById("studioPreviewFrame").contentDocument;
+      return !!doc && doc.querySelectorAll(".y-twins .y-twin").length === 3;
+    },
+    null,
+    { timeout: 8000 }
+  );
+
+  /* 가운데를 고른다 */
+  await previewClick(twinPage, ".y-twins .y-twin:nth-child(2)");
+
+  await twinPage.waitForFunction(
+    () => {
+      const selection = window.getStudioInspectorSelection();
+      return !!selection && selection.classNames.indexOf("y-twin") !== -1;
+    },
+    null,
+    { timeout: 6000 }
+  );
+
+  const twinPicked = await twinPage.evaluate(() => {
+
+    const doc =
+      document.getElementById("studioPreviewFrame").contentDocument;
+
+    const twins =
+      Array.from(doc.querySelectorAll(".y-twins .y-twin"));
+
+    const selection =
+      window.getStudioInspectorSelection();
+
+    return {
+      editId: selection.editId,
+      isSecond:
+        twins[1].getAttribute("data-imory-edit-id") === selection.editId
+    };
+
+  });
+
+  await twinPage.click("#studioInspectorAiButton");
+
+  const twinBefore = await workingPackage(twinPage);
+
+  resetOpenAiMock("selected-style", 1200);
+
+  await twinPage.fill("#studioAiDrawerInput", "이 카드만 조금 크게");
+  await twinPage.click("#studioAiDrawerSend");
+
+  await twinPage.waitForFunction(
+    () => window.getStudioAiPanelDebugState().pending === true,
+    null,
+    { timeout: 6000 }
+  );
+
+  /* 기다리는 사이 **첫째**를 지운다 — 셋째가 가운데의 구조 경로
+     id 를 물려받고, 지문까지 똑같다. */
+  await twinPage.evaluate(() => {
+
+    const state =
+      window.getStudioAiWorkingState({ includePackage: true });
+
+    window.applyAiSkinPackage(
+      {
+        ...state.skinPackage,
+        templates: {
+          ...state.skinPackage.templates,
+          home: {
+            ...state.skinPackage.templates.home,
+            html: state.skinPackage.templates.home.html.replace(
+              '<li class="y-twin"><span class="y-twin-in">쌍둥이</span></li>',
+              ""
+            )
+          }
+        }
+      },
+      { source: "e2e-stale-twin-delete" }
+    );
+
+  });
+
+  const twinMid = await workingPackage(twinPage);
+
+  record(
+    "ST7. 기다리는 사이 똑같은 형제 셋 중 하나가 실제로 사라졌다 (전제)",
+    twinPicked.isSecond === true &&
+      (twinBefore.templates.home.html.split('class="y-twin"').length - 1) === 3 &&
+      (twinMid.templates.home.html.split('class="y-twin"').length - 1) === 2,
+    `editId=${twinPicked.editId} second=${twinPicked.isSecond}`
+  );
+
+  await twinPage.waitForFunction(
+    () => window.getStudioAiPanelDebugState().pending === false,
+    null,
+    { timeout: 15000 }
+  );
+
+  await sleep(400);
+
+  const twinAfter = await workingPackage(twinPage);
+
+  record(
+    "ST8. ★ 응답을 적용하지 않는다 — 규칙이 살아남은 형제에 붙지 않는다",
+    !twinAfter.css.includes(
+      `[data-imory-edit-id="${twinPicked.editId}"][data-imory-edit-id="${twinPicked.editId}"]`
+    ) &&
+      twinAfter.css === twinMid.css &&
+      twinAfter.templates.home.html === twinMid.templates.home.html,
+    `cssDelta=${twinAfter.css.length - twinMid.css.length}`
+  );
+
+  const twinPanel = await panelState(twinPage);
+
+  record(
+    "ST9. 그때도 이유가 보이고(SELECTION_TARGET_NOT_FOUND) 선택이 풀린다",
+    twinPanel.pending === false &&
+      !!twinPanel.lastFailure &&
+      twinPanel.lastFailure.code === "SELECTION_TARGET_NOT_FOUND" &&
+      (await twinPage.evaluate(() => window.getStudioInspectorSelection())) === null &&
+      (await chipState(twinPage)).hidden === true,
+    JSON.stringify(twinPanel.lastFailure && {
+      stage: twinPanel.lastFailure.stage,
+      code: twinPanel.lastFailure.code
+    })
+  );
+
+  /* --- 대조군: 형제를 건드리지 않으면 정상 적용된다 ------- */
+
+  await twinPage.waitForFunction(
+    () => {
+      const doc =
+        document.getElementById("studioPreviewFrame").contentDocument;
+      return !!doc && doc.querySelectorAll(".y-twins .y-twin").length === 2;
+    },
+    null,
+    { timeout: 8000 }
+  );
+
+  await previewClick(twinPage, ".y-twins .y-twin:nth-child(1)");
+
+  await twinPage.waitForFunction(
+    () => {
+      const selection = window.getStudioInspectorSelection();
+      return !!selection && selection.classNames.indexOf("y-twin") !== -1;
+    },
+    null,
+    { timeout: 6000 }
+  );
+
+  const twinPicked2 = await twinPage.evaluate(
+    () => window.getStudioInspectorSelection()
+  );
+
+  await twinPage.click("#studioInspectorAiButton");
+
+  resetOpenAiMock("selected-style", 800);
+
+  await sendAi(twinPage, "이 카드만 조금 납작하게");
+
+  const twinAfter2 = await workingPackage(twinPage);
+
+  record(
+    "ST10. 대조군 — 똑같은 형제라도 그대로면 늦게 온 응답이 그 형제에 정상 적용된다",
+    twinAfter2.css.includes(
+      `[data-imory-edit-id="${twinPicked2.editId}"][data-imory-edit-id="${twinPicked2.editId}"]`
+    ),
+    `editId=${twinPicked2.editId}`
+  );
+
+  resetOpenAiMock("selected-style");
+
+  await twinPage.close();
+
+}
+
+
+/* =========================================================
    V, W. route 유지
 ========================================================== */
 
@@ -2371,7 +2753,7 @@ try {
     runBackCapabilityAudit();
   }
 
-  const browserSections = ["chip", "send", "apply", "route", "undo", "images", "repeat", "codes"];
+  const browserSections = ["chip", "send", "apply", "stale", "route", "undo", "images", "repeat", "codes"];
 
   if (browserSections.some(shouldRun)) {
 
@@ -2388,6 +2770,7 @@ try {
     if (shouldRun("chip")) await runChip(context);
     if (shouldRun("send")) await runSend(context);
     if (shouldRun("apply")) await runApply(context);
+    if (shouldRun("stale")) await runStaleTarget(context);
     if (shouldRun("route")) await runRoute(context);
     if (shouldRun("undo")) await runUndo(context);
     if (shouldRun("images")) await runImages(context);

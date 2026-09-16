@@ -2355,6 +2355,8 @@
        Inspector 파일 분리 라운드 이후로는 일곱 파일이고, state가 맨
        앞·main(studio-inspector.js)이 맨 뒤인 순서를 지켜야 한다 —
        이유는 studio/index.html의 같은 블록 주석에 있다. -->
+  <!-- SANDBOX-6A — hit-test 규칙(세 realm 공용). model 보다 먼저. -->
+  <script src="../skin/skin-inspect-target.js"></script>
   <script src="./inspector/studio-inspector-model.js"></script>
   <script src="./inspector/studio-inspector-crop-model.js"></script>
   <script src="./inspector/studio-inspector-state.js"></script>

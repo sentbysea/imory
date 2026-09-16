@@ -2,11 +2,13 @@
 
 **상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기 ·
 §J SANDBOX-2 · §K SANDBOX-3 · §L SANDBOX-4 · §M SANDBOX-3.1 ·
-§O SANDBOX-5A 저자 JS · §P SANDBOX-5B 화면 전환 수명).**
+§O SANDBOX-5A 저자 JS · §P SANDBOX-5B 화면 전환 수명 ·
+§Q SANDBOX-6A Studio Select · §R SANDBOX-6A 마무리).**
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
 §G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2) · §K(SANDBOX-3) ·
-§L(SANDBOX-4) · §M(SANDBOX-3.1) · §O(SANDBOX-5A) · §P(SANDBOX-5B)에만
+§L(SANDBOX-4) · §M(SANDBOX-3.1) · §O(SANDBOX-5A) · §P(SANDBOX-5B) ·
+§Q·§R(SANDBOX-6A)에만
 적혀 있다.** 섞어
 읽지 말 것 (CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 /
 남은 차이"를 구분한다).
@@ -26,7 +28,7 @@
 | `IMORY_NAVIGATE` | §D-2: `{ href }` 를 보내고 부모가 파싱한다 | **href 를 보내지 않는다.** 부모가 발급한 정수 `navId` 하나뿐 (§J-2) |
 | CATEGORY / POST | §E: SANDBOX-3 | **SANDBOX-2 에서 함께 했다** (§J-4) |
 | GALLERY / BANNER / HIGHLIGHTS | §E: 뒤로 미룸 | **SANDBOX-3 에서 했다** (§K). FOLDER 만 남았다 |
-| Studio Preview | §E SANDBOX-4: "중첩하거나 Studio 가 직접 띄운다 — 범위가 크니 재설계" | **중첩을 골랐고, Inspector 는 범위에서 빼서 이번에 했다** (§L) |
+| Studio Preview | §E SANDBOX-4: "중첩하거나 Studio 가 직접 띄운다 — 범위가 크니 재설계" | **중첩을 골랐다** (§L). Inspector 는 그때 범위에서 뺐다가 **§Q(SANDBOX-6A)에서 되살렸다** — 직접 편집만 아직 잠겨 있다 |
 | 본문 inline style | §D-4 · §H-7: "CSSOM 쓰기는 막히지 않으므로 style-src-attr 를 열 필요가 없다" | SANDBOX-2 가 `setAttribute("style", …)` 와 `innerHTML` 의 style 속성을 더하면서 **그 전제가 깨졌다**. CSP 를 넓히는 대신 선언을 검증해 nonce `<style>` 로 옮겼다 (§M) |
 | 저자 JS 실행 | §C · §E SANDBOX-5 · §G-6 TODO: `script-src` 에 `blob:` 을 더해 Blob URL ES 모듈로 주입한다 | **CSP 를 한 글자도 넓히지 않았다.** 이미 있던 `'nonce-…'` 가 inline script 에도 적용되므로, nonce 를 단 classic `script` 요소의 `textContent` 로 실행한다 (§O-3) |
 | `js` 필드 | §C: 스키마에만 두고 실행하지 않는다 | **SANDBOX-5A 에서 실행된다.** 단 `test1` + 전용 kill switch 가 켜졌을 때만 (§O-5) |
@@ -2143,7 +2145,7 @@ import map 에 `/studio/preview/preview-sandbox.js` · `/skin/sandbox/skin-sandb
 
 | 차이 | 왜 | 지금 하는 일 |
 | --- | --- | --- |
-| **Element Inspector / Direct Edit / 크롭이 sandbox 스킨에서 안 된다** | 그 기능들은 Preview 문서의 DOM 을 직접 읽어 좌표를 올려보낸다. 프레임 안 DOM 은 다른 origin 이라 읽을 수 없다 | Select 버튼을 **잠근다**(`disabled` + title). 켜지는데 아무것도 안 잡히는 상태를 만들지 않는다. §E 의 "`preview:inspect-*` 같은 메시지를 sandbox 계약에 더한다"는 별도 라운드다 |
+| ~~**Element Inspector 가 sandbox 스킨에서 안 된다**~~ | 그 기능은 Preview 문서의 DOM 을 직접 읽어 좌표를 올려보냈다. 프레임 안 DOM 은 다른 origin 이라 읽을 수 없다 | **해결됐다 → §Q (SANDBOX-6A).** hit-test 를 프레임 안으로 옮겨 Select 를 다시 열었다. **직접 편집(텍스트/크기/자르기)은 여전히 잠겨 있다** — 팝오버가 이유를 적어 준다 |
 | ~~본문의 inline style 이 프레임 CSP 에 막힌다~~ | — | **해결됐다 → §M (SANDBOX-3.1).** CSP 를 넓히지 않고, 검증한 선언을 nonce 가 붙은 `<style>` 규칙으로 옮겼다. 공개 sandbox POST 와 Studio Preview 모두 native 와 같은 계산값이 나온다 |
 | FOLDER / Series Viewer | 범위 밖 | pageType 표에 없으므로 native Preview 그대로. 폴더 Preview 는 한 줄도 달라지지 않았다 |
 | 사용자 작성 JS | SANDBOX-5 | 프레임에 넘기지 않는다 |
@@ -3111,13 +3113,443 @@ POST→HOME(클릭) · BANNER/HIGHLIGHTS/GALLERY 왕복 · 뒤로/앞으로 20�
 
 ---
 
+## Q. SANDBOX-6A 구현 기록 (2026-09-16) — Studio Preview 의 Select 를 되살린다
+
+### Q-1. 무엇이 문제였나
+
+SANDBOX-4 는 `renderMode:"sandbox"` 스킨의 Studio Preview 에서 Select
+버튼을 **잠가** 두었다(§L-11). Element Inspector 가 Preview 문서의 DOM 을
+직접 읽어 hover/선택 좌표를 올려보내는 구조인데, sandbox 스킨의 DOM 은
+다른 origin 의 프레임 안에 있어 그 문서가 읽을 수 없기 때문이다. 켜면
+크로스헤어만 생기고 아무것도 잡히지 않았다.
+
+그래서 sandbox 스킨은 **선택 요소 AI 수정**도 쓸 수 없었다 — 그 기능의
+입구가 Inspector 의 선택 하나이기 때문이다.
+
+### Q-2. 고친 방향 — 판정은 프레임이, **해석은 부모가**
+
+native Inspector 의 계약이 이미 이 문제에 맞게 생겨 있었다. 프레임이
+올려보내는 것은 처음부터
+
+> **식별자 문자열 하나(`data-imory-edit-id`) · 태그 이름 · 사각형 넷**
+
+뿐이고, "그 요소가 무엇인가"(바인딩 / 보호 영역 / 가능한 수정 / 반복
+template)는 **부모가 자기 SkinPackage 에서 그 id 로 다시 찾아** 판단한다
+(studio/preview/preview-bridge.js PHASE AI-6A 주석). DOM 노드도, HTML 도,
+computed style 도 원래부터 오가지 않았다.
+
+그래서 이번 라운드가 한 일은 **그 최소 계약을 sandbox 프로토콜로 한 번 더
+옮긴 것**이고, 새 편집 엔진은 하나도 만들지 않았다.
+
+```
+Studio            preview-frame(같은 origin)        frame(다른 origin)
+studio-inspector  preview-bridge · preview-sandbox   skin-sandbox-inspect
+   ─ Select 켬 ──▶ preview:inspector-mode ──▶ IMORY_INSPECT_MODE ──▶ 켬
+                                                        │ hover/클릭
+   ◀── preview:inspect-hover/select ◀── 좌표 변환 ◀── IMORY_INSPECT_*
+   (native 와 **같은 메시지 이름**이라 Studio 쪽은 거의 그대로)
+```
+
+좌표 변환은 한 줄이다 — 프레임 뷰포트 좌표 + 안쪽 iframe 이 Preview 문서
+에서 차지한 자리. 안쪽 프레임에는 배율이 없고(width:100%), Desktop/Mobile
+축소는 **바깥** 프레임의 CSS width 로만 하므로 그 배율은 Studio 의
+`studioInspectorMapRect()` 가 지금까지처럼 반영한다.
+
+### Q-3. source 매핑 — 왜 새 식별자를 만들지 않았나
+
+Inspector 의 편집 식별자는 Select 가 켜져 있는 동안 **Preview 로 보내는
+사본**에만 찍힌다(`stampInspectorEditIds`, 구조 경로 `e0-2-1`). 그 사본은
+`postRenderToFrame()` → `preview:render` → `preview-sandbox` → host →
+프레임 → `renderSkin()` 으로 **그대로 흘러간다**. 그리고
+`skin/skin-sanitize.js` 는 `data-imory-edit-id` 를 허용 목록에 갖고
+있으므로(형태 검사 포함) 프레임 DOM 에도 그 속성이 그대로 남는다.
+
+즉 **프레임에 있는 id 는 부모가 방금 찍어 보낸 그 id 다.** 따로 표식을
+발명할 필요가 없었고, export 되는 사용자 HTML 도 오염되지 않는다 —
+`commitInspectorEditId()` 가 저장 시점에 실제로 편집한 요소 하나만 남기고
+나머지 임시 id 를 걷어낸다(지금까지와 같다).
+
+**반복 항목**도 그래서 저절로 계약대로 동작한다. 반복으로 복제된 항목들은
+같은 template 요소에서 나왔으므로 **id 가 서로 같다** — 세 번째 글을
+눌러도 첫 번째를 눌러도 같은 `editId` 가 올라가고, 부모는 그것을 반복
+template 으로 해석한다(`repeatPath`).
+
+### Q-4. 부모가 위조를 어떻게 거른다
+
+프레임 안에서는 스킨 저자의 JS 가 돈다(§O). 그 코드가 부모에 메시지를 쏠
+수는 없지만(봉투·origin·source·방향 검사), **쏠 수 있다고 가정하고** 세
+겹을 둔다.
+
+1. **프로토콜** (`skin/sandbox/skin-sandbox-protocol.js`) — 봉투 ·
+   origin · source · 방향 · seq · **알려진 payload 키만** · 타입별 값
+   검사. 값 검사에는 식별자 형태(sanitizer 와 같은 정규식) · 태그 형태 ·
+   사각형 네 숫자의 유한성과 범위가 들어 있다. `innerHTML` 을 끼워 보내면
+   `unknown-payload-key` 로 떨어진다.
+2. **host** (`skin-sandbox-host.js`) — `renderSeq` 가 지금 렌더의 것이
+   아니면 버린다. 페이지를 옮긴 뒤 늦게 도착한 선택이 새 화면을 건드리지
+   못한다.
+3. **Studio** (`studio-inspector.js` `studioInspectorEditIdExistsInDraft`)
+   — **지금 draft 의 이 페이지 template 에 그 식별자를 가진 요소가 실제로
+   있는가**. 없으면 선택 자체를 만들지 않는다: 팝오버도, AI chip 도,
+   selectionContext 도 생기지 않는다. 이 관문은 프레임에서 온 메시지
+   (`remote:true`)에만 적용한다 — native 흐름은 한 줄도 바꾸지 않는다.
+
+그리고 메시지만으로는 아무것도 저장되지 않는다. 저장되는 것은 언제나
+Studio 가 들고 있는 SkinPackage 이고, 그것을 바꾸는 입구는 지금까지와
+같이 Direct Edit 확정 / AI 적용 / Code Apply / Import 넷뿐이다.
+
+### Q-5. 프레임 안 선택 UI
+
+테두리는 **프레임 안에서** 그린다. 저자 JS 의 rAF 애니메이션이나 늦게
+오는 이미지로 사각형이 움직일 때 같은 realm 의 같은 rAF 로 따라가야 하기
+때문이다(부모로 왕복하면 한 프레임씩 늦는다).
+
+- 테두리 요소는 렌더 루트가 **아니라** `document.body` 에 붙고
+  `position:fixed` 다 → 프레임 높이(`measureHeight()` 는 루트만 잰다)에
+  한 픽셀도 더하지 않는다. `pointer-events:none` 이라 hit-test 대상도
+  아니고, hit-test 자체가 루트 안쪽만 훑으므로 두 겹으로 제외된다.
+- 스타일은 **nonce 를 단 `<style>` 하나**다. CSP 를 한 글자도 넓히지
+  않았다(본문 서식이 이미 쓰는 방식 — §M).
+- 그래서 Studio 는 자기 hover/선택 테두리를 그리지 않는다(`remote:true`
+  표식). Studio overlay 가 계속 맡는 것은 **팝오버** 하나다 — 프레임 안에
+  그리면 스킨 CSS 가 영향을 주고 Mobile 축소에 같이 작아진다.
+
+**고르는 순간은 `click` 이 아니라 `pointerdown` 이다.** Inspect 중에는
+저자 JS 의 드래그가 시작되지 않도록 pointerdown 의 전파를 capture 에서
+끊는데, WebKit 은 터치 제스처에서 그 뒤의 `click` 을 만들어 주지 않는
+경우가 있어 손가락으로는 아무것도 고를 수 없었다(2026-09-16 실측).
+`click` 은 여전히 받아서 **삼키기만** 한다 — 링크 이동과 저자 JS 의
+click 핸들러를 막는 일은 그대로다.
+
+### Q-6. 저자 JS 와의 관계
+
+- Inspect 를 켜고 끄는 것으로 프레임을 다시 만들지 않는다 → **realm 이
+  새로 생기지 않고 저자 JS 도 다시 돌지 않는다**(타이머 한 벌 그대로).
+- Inspect 중에는 capture 단계에서 click / auxclick / dragstart /
+  pointerdown / submit 을 끊는다. 저자 코드는 렌더 루트 **안쪽**에
+  리스너를 달므로 document capture 가 먼저 돈다.
+- 끄면 리스너의 첫 줄 판정만 false 로 돌아가므로 원래 상호작용이 그대로
+  살아난다. e2e 가 "끄면 링크가 다시 눌린다"로 못 박는다.
+- 저자 JS 가 얽힌 렌더는 프레임을 새로 만든다(needs-new-realm, §O). 그
+  경우 새 realm 의 Inspector 는 꺼진 채로 시작하므로, 렌더 직후
+  `flushSandboxInspectState()` 가 Select 상태와 선택을 다시 세운다.
+
+### Q-7. 한 가지 실제 버그 — 이 문서의 native 루프가 선택을 지우고 있었다
+
+프레임에서 고른 직후 120ms 안에 선택이 풀렸다. 원인은 **Preview 문서의
+native Inspector 루프**였다: sandbox 렌더 중에도 `postInspectorRects()` 가
+계속 돌면서 `selected: null` 을 올렸고, Studio 는 그것을 "그 요소가
+사라졌다"로 읽어 방금 잡은 선택을 지웠다.
+
+그래서 `inspectorNativeActive()` = `inspectorEnabled && !hasSandboxPreviewFrame()`
+하나를 만들고 이 문서의 Inspector 리스너·좌표 루프 전부를 그 판정으로
+바꿨다. `inspectorEnabled` 자체는 그대로 둔다 — 프레임이 실패해 native 로
+폴백하면 그 순간부터 판정이 참이 되어 지금까지의 동작이 그대로 살아난다
+(모드 메시지를 다시 받을 필요가 없다).
+
+### Q-8. hit-test 규칙을 한 파일로 — `skin/skin-inspect-target.js`
+
+"이 요소를 고를 수 있는가"의 규칙이 이제 **세 realm** 에서 필요하다:
+Studio 문서 · native Preview 문서 · sandbox 프레임 문서. 앞의 둘은
+`studio/inspector/studio-inspector-model.js` 를 각각 로드해 같은 규칙을
+썼지만, 프레임은 그럴 수 없다 — sandbox origin 에서 나갈 수 있는 파일은
+allowlist 에 적힌 것뿐이고(`core/lib/skin-sandbox-server.js`), 그 목록에
+`studio/*` 를 올리는 것은 "프레임은 렌더러이지 관리 코드가 아니다"라는
+계약을 깬다.
+
+규칙을 복붙하면 세 쪽이 서서히 달라지고 달라지는 쪽은 늘 느슨한 쪽이다.
+그래서 의존이 하나도 없는 파일 하나로 뽑아 셋이 각각 로드한다
+(`skin-sanitize.js` · `skin-sandbox-protocol.js` 가 이미 쓰는 방식).
+`studio-inspector-model.js` 는 그 전역을 그대로 읽는다(classic script 의
+최상위 선언은 하나의 전역 lexical 환경을 공유한다).
+
+### Q-9. 선택 가능 범위
+
+공용 규칙(`resolveInspectableAncestor`)이 렌더 루트 자신과 편집 식별자가
+없는 요소를 제외하고, 프레임 쪽이 `data-imory-region` **안쪽**을 한 겹 더
+막는다 — post-body(사용자가 쓴 글) · `owner-tools` · `highlight-tools`.
+저자 JS 가 만들어 붙인 요소는 template 에서 나온 것이 아니라 식별자가
+없으므로 공용 규칙에서 이미 걸린다. 고를 것이 없는 자리를 눌러도
+**아무 일도 하지 않는다** — 빈 선택을 만들지도, 지금 선택을 풀지도
+않고 진단용 코드(`IMORY_INSPECT_ERROR`) 하나만 올린다.
+
+### Q-10. 메시지 (다섯 · 여섯 번째는 방향이 다른 짝)
+
+| type | 방향 | payload |
+| --- | --- | --- |
+| `IMORY_INSPECT_MODE` | parent → frame | `{ contract, renderSeq, enabled }` — 지시문의 START/STOP 이 한 메시지다 |
+| `IMORY_INSPECT_PICK` | parent → frame | `{ contract, renderSeq, editId? }` — **editId 가 없으면 해제**(지시문의 CLEAR) |
+| `IMORY_INSPECT_HOVER` | frame → parent | `{ contract, renderSeq, editId?, rect? }` — 둘 다 없으면 "hover 없음" |
+| `IMORY_INSPECT_SELECT` | frame → parent | `{ contract, renderSeq, editId?, tagName?, rect? }` — 셋 다 없으면 "아무것도 안 골랐다"(프레임 안 Escape) |
+| `IMORY_INSPECT_RECTS` | frame → parent | `{ contract, renderSeq, hover?, selected? }` — 좌표만 다시(≥120ms 간격, 값이 달라졌을 때만) |
+| `IMORY_INSPECT_ERROR` | frame → parent | `{ contract, renderSeq, code }` — `no-root` / `stale-render` / `not-inspectable`. 화면을 바꾸지 않는 진단 신호다 |
+
+프로토콜이 아는 type 은 열 → **열여섯**이 됐다(단위 테스트가 그 수를
+못 박는다).
+
+### Q-11. 아직 안 되는 것 — 직접 편집 / 자르기
+
+sandbox 에서 Select 는 되지만 **직접 편집(텍스트 내용 · 이미지 크기 ·
+자르기)은 열지 않았다.** 그 컨트롤들은 둘을 필요로 한다:
+
+- 프레임 안 DOM 의 **실측값** — 이미지 자연 크기, 부모 안쪽 폭,
+  자르기 래퍼의 프레임 크기(`inspectorMetricsOf`)
+- **확정 전에 그 DOM 을 임시로 바꾸는 채널** — `preview:inspect-preview`
+  에 해당하는 것이 프레임 계약에 없다(입력 중 미리보기 · 드래그 중 크기 ·
+  구도 이동)
+
+억지로 우회하지 않았다. 팝오버의 "직접 수정" 버튼을 잠그고 이유를 한 줄로
+적는다 — *"sandbox 스킨은 여기서 직접 수정할 수 없어요. 고른 요소는
+✦ AI 수정이나 CODE 로 고칠 수 있어요."* 크기 핸들도 그려지지 않는다
+(`studioInspectorResizable` 이 false).
+
+### Q-12. 검증 (mock e2e — 실제 DB·배포 확인 아님)
+
+- `node skin/sandbox/skin-sandbox-unit-test.mjs` — **262 passed, 0 failed**
+  (새 `[inspect]` 절 24개: 식별자/태그/사각형 형태 · 모르는 키 ·
+  방향 · 오류 코드 · 세 파일의 식별자 정규식 일치)
+- `node studio/studio-sandbox-preview-e2e-test.mjs` — **162 passed, 0 failed**
+  (chromium · webkit 둘 다). 새 `--only=inspect` 절 57개.
+- `node skin/sandbox/skin-sandbox-e2e-test.mjs` — **559 passed, 0 failed**
+  (공개 화면 회귀)
+- `node studio/studio-inspector-e2e-test.mjs` — native Inspector 회귀.
+  `route` 절 하나가 실패하는데 **HEAD 에서도 같은 자리에서 같게 실패한다**
+  (worktree 로 대조 확인). 나머지 여덟 절은 전부 PASS.
+
+### Q-13. 남은 차이
+
+- **직접 편집 / 자르기** — Q-11.
+- **프레임 안 `data-imory-region`** (owner-tools · highlight-tools)은
+  여전히 채워지지 않는다(§K-6). Inspector 도 그 안쪽을 고르지 않는다.
+- **FOLDER** 화면은 native 다 — 거기서는 지금까지의 native Inspector 가
+  그대로 돈다.
+- **선택 복원의 한계는 native 와 같다.** 임시 식별자는 구조 경로라,
+  고른 요소를 지우면 뒤 요소가 그 자리로 밀려와 같은 id 를 물려받고
+  선택이 **엉뚱한 요소에 붙은 채로 살아남는다**. 그 경우를 다루는 것은
+  AI 패널의 `reconcileStudioAiSelection()` 이고(studio/ai/studio-ai-selection.js),
+  이번 라운드가 새로 만든 문제도 고친 문제도 아니다.
+- ~~**Studio 창이 좁으면(720px 이하) Select 버튼 자체가 없다**~~ →
+  §R 에서 열었다.
+- ~~**선택 복원의 한계는 native 와 같다**~~ → §R 에서 고쳤다.
+
+---
+
+## R. SANDBOX-6A 마무리 (2026-09-17) — 잘못된 복원 방지 · 모바일 진입
+
+### R-1. 구조 경로 id 만으로는 되살리지 않는다
+
+§Q-13 에 "남은 차이"로 적어 둔 것이다. 임시 식별자는 **구조 경로**라
+(`e0-2-1` = body 첫 자식의 셋째 자식의 둘째 자식), 고른 요소가 사라지면
+**뒤 형제가 그 자리로 밀려와 같은 id 를 물려받는다.** id 로만 되살리면
+"복원은 성공했는데 엉뚱한 요소가 선택된" 상태가 되고, 그 상태에서 AI
+수정을 보내면 사용자가 보지도 않은 요소가 바뀐다. 앞 형제를 넣거나
+지우거나 순서를 바꿔도 같다.
+
+**두 종류의 id 를 가른다.**
+
+| | 무엇 | 근거 |
+| --- | --- | --- |
+| **승격된 id** | 사용자가 한 번 실제로 편집해서 SkinPackage HTML 에 **글자로 남은** id | id 의 존재 자체 — 단, **HTML 안에 하나뿐일 때만**. 위치가 바뀌어도, 내용이 바뀌어도 그 요소를 따라간다 |
+| **임시 id** | 이번 stamp 가 구조 경로로 만들어 낸 id | 위치 말고는 아무 것도 보장하지 않는다 → 고를 때 남긴 **근거(signature)** 를 함께 대조한다 |
+
+`stampInspectorEditIds()` 가 돌려주는 `autoIds` 가 그 둘을 정확히 가른다
+(이번 pass 에서 새로 만든 id 만 담기기 때문).
+
+판정은 한 곳이다: `resolveInspectorSelectionTarget(stamped, editId,
+signature)` → `{ element, reason }`, reason 은 `ok` / `gone` /
+`ambiguous` / `no-evidence` / `mismatch`.
+
+### R-1-1. 근거는 세 겹이다 (2026-09-17 보완 — 완전히 같은 형제)
+
+처음 구현은 **그 요소 하나의 지문**만 봤다(태그 · 클래스 ·
+`data-imory-*` 바인딩 · 정적 `href`/`src` · 자식 수 · 제 텍스트 앞 40자
+— `inspectorElementFingerprint`). 형제가 서로 다르게 생겼을 때는 그것으로
+충분하지만, **목록 카드처럼 형제가 똑같으면** 무너진다:
+
+```html
+<li class="card">글</li>
+<li class="card">글</li>   <- 고른 것
+<li class="card">글</li>
+```
+
+가운데를 고른 뒤 첫째를 지우면 셋째가 그 구조 경로 id 를 물려받고
+지문까지 같아서 `ok` 가 나온다 — 선택이 조용히 **다른 형제로** 넘어간다.
+그 상태에서 AI 수정을 보내면 사용자가 보지도 않은 형제가 바뀐다.
+
+그래서 임시 id 의 근거를 세 겹으로 만들었다
+(`inspectorSelectionSignature`, studio-inspector-model.js):
+
+| 겹 | 무엇 | 무엇을 걸러내나 |
+| --- | --- | --- |
+| `own` | 그 요소의 지문 (위 값 그대로) | 자리를 물려받은 **다른 종류**의 형제 |
+| `trail` | body 까지 올라가며 형제 중 **몇 번째 · 형제가 몇 · 그 부모는 무엇** | 누가 지워지거나 끼어들었다 (형제 하나를 지우면 부모의 자식 수가 반드시 1 준다) |
+| `sub` | 제 아래 subtree 의 구조와 글자 | 겉만 같고 **속이 다른** 형제 (순서 바꾸기) |
+
+`trail`·`sub` 는 큰 템플릿에서 수 KB 가 되므로 32bit 두 벌(FNV-1a
+계열, 시드가 다르다)로 줄여 담는다. 비교는 "같은가/다른가" 하나뿐이고
+이 값은 프레임으로도 서버로도 나가지 않는다. `own` 은 로그에서 "무엇이
+달라졌나"를 읽을 수 있게 원문 그대로 둔다.
+
+**승격된 id 의 유일성.** `stampInspectorEditIds()` 는 같은 id 가 둘이면
+두 번째 것의 속성을 떼어 낸다(그래야 두 요소가 같은 CSS 규칙을 받지
+않는다). 그러면 stamp 가 끝난 doc 만 봐서는 "중복이 있었다"를 알 수 없어
+`querySelector` 가 돌려준 **첫 번째**를 그 요소로 믿게 된다. 그래서
+stamp 가 `duplicateIds` 에 그 사실을 적어 두고, 복원은 그때
+`ambiguous` 로 **해제**한다(Code Editor 복붙 · AI 가 노드를 통째로 베낀
+경우).
+
+**근거가 모자라면 되살리지 않는다** — 임시 id 인데 근거가 없거나(옛
+선택) 다르면 조용히 해제한다.
+
+### R-2. 어디서 부르는가 — native·sandbox 공통 관문 하나
+
+지문은 **고르는 순간 지금 draft 에서** 계산해 선택 상태에 담는다
+(`studioInspectorSelectionFingerprint`). 프레임이 보낸 값이 아니므로
+native 든 sandbox 든 같은 값이 나오고, 프레임이 지문을 위조할 길도 없다.
+
+되살리기 판정은 `describeStudioInspectorSelection()` 안에 있고, 실제로
+선택을 걷어내는 것은 `reconcileStudioInspectorSelection()` 이다. 그것을
+부르는 자리는 **`bumpStudioWorkingRevision()` 한 곳**이다 — Direct Edit ·
+Code Apply · Import · AI 적용 · 되돌리기 · 이미지 슬롯 · remount 가 전부
+그 관문을 지난다. 그래서 "양쪽에 공통 적용 가능한 최소 수정"이 성립한다:
+선택의 주인이 언제나 Studio 문서이기 때문에 프레임 쪽에는 한 줄도
+더하지 않았다(해제는 기존 `preview:inspector-select` null 로 내려간다).
+
+### R-3. AI 응답 대기 중 draft 가 바뀐 경우
+
+`applyAiSkinPackage()` 의 `expectedRevision`/`expectedMountToken` 이
+1차 방어선이고 대개 충분하다. 하지만 그 검사는 **무엇이** 바뀌었는지는
+모른다. 그래서 적용 직전에 하나를 더 본다 —
+`studioAiSelectionTargetIsIntact(selectionContext, fingerprint)`:
+지금 draft 를 다시 stamp 해서 그 id 가 아직 있고 **같은 요소라고 말할
+근거가 있는가**. 없으면 적용하지 않고(`S10` /
+`SELECTION_TARGET_NOT_FOUND`) 그 선택을 푼다.
+
+지문은 selectionContext 에 **넣지 않는다** — 서버가 알 필요가 없는
+값이라 전송 시점 지역 변수로만 들고 있는다.
+
+요청 타깃은 여전히 전송 시점 snapshot 이다: 기다리는 사이 사용자가
+다른 요소를 골랐다고 그 요청이 틀려지지는 않는다(그래서 살아 있는
+선택이 아니라 **draft** 를 본다).
+
+### R-4. 모바일 Select 진입
+
+`studio/inspector/studio-inspector.css` 가 720px 이하에서
+`#studioInspectorButton { display: none }` 을 걸고 있었다. 그때의 이유는
+자리였다("좁은 화면에서는 actions 그룹이 뷰포트를 넘치고, Select 를
+더하면 AI Assistant 가 화면 밖으로 나간다").
+
+그 전제가 더 이상 맞지 않는다. 반응형 라운드가 actions 그룹의 min-width
+바닥을 풀어 버튼이 **그 안에서 여러 줄로 접히게** 해 두었다. 390px
+실측(2026-09-17): dock 이 세 줄(144px)로 자라고 AI Assistant 를 포함해
+아홉 버튼이 전부 뷰포트 안에 있으며 가로 넘침은 0이다. 그래서 감출
+이유가 없어졌고, 감춰 두면 모바일에서 Select 와 선택 요소 AI 로 가는
+길이 아예 없다.
+
+**함께 고친 것 — 팝오버가 Top Dock 밑에 깔렸다.** 바는 stage 위에
+얹히는데(z-index 8) 좁은 폭에서 세 줄까지 자란다. 그런데 팝오버 배치가
+`top` 을 **아래로 넘칠 때만** 되밀고 위쪽은 물리지 않아서, 화면 맨 위
+요소를 고르면 팝오버가 그 밴드 아래에 깔려 "✦ AI 수정"을 아예 누를 수
+없었다(390px 실측). 둘을 고쳤다:
+
+- `studioInspectorStageBounds()` 가 바가 덮는 만큼을 **앉을 수 있는
+  자리에서 뺀다**(바가 접혀 있으면 아무 일도 하지 않는다 — 데스크톱의
+  48px 바에서는 지금까지와 같다).
+- `studioInspectorPopoverSpot()` 이 `top` 을 `minTop`/`maxTop` **양쪽**
+  으로 물린다.
+
+직접 편집·자르기의 sandbox 비활성(§Q-11)은 그대로다 — 좁은 화면에서도
+native Preview 에서는 열리고 sandbox 프레임에서는 이유와 함께 잠긴다.
+
+### R-5. admin 의 "데스크탑 전용" 안내를 걷었다
+
+`admin/admin-shell.css` 가 900px 이하에서 Studio iframe 대신
+`#skinStudioMobileNotice`("Skin Studio는 데스크탑에서 이용할 수
+있습니다")만 보여주고 있었다. 그 media query 를 걷어 어느 폭에서든
+Studio 를 그대로 연다. 안내 요소의 마크업은 남겨 두되 어떤 폭에서도
+보이지 않는다(되돌리기 쉽고 admin navigation 계약의 버튼 id 를 건드리지
+않는다).
+
+### R-6. 검증 (mock e2e — 실제 DB·배포 확인 아님)
+
+- `studio/studio-inspector-e2e-test.mjs --only=identity` — **12/12**.
+  고른 요소 삭제(뒤 형제가 같은 id 를 물려받음) · 앞 형제 삽입 ·
+  앞 형제 삭제 · 순서 변경에서 전부 `mismatch` 로 해제. CSS 만 바뀌면
+  유지(과잉 해제 없음). 승격된 id 는 앞에 형제가 끼어들어도 그 요소를
+  따라간다.
+  R-1-1 보완분 넷: 글자 단위로 **똑같은 형제** 셋 중 하나를 지우면
+  해제(`mismatch`) · 겉만 같고 속이 다른 형제의 순서를 바꾸면 해제 ·
+  승격된 id 가 복제되면 해제(`ambiguous`) · 관계없는 형제의 글자만
+  바뀌면 유지. 네 검사는 보완 **전** 코드에서 각각 실패함을 확인했다
+  (지문만 보던 판정으로 되돌려 돌린 대조 실행: 9/12).
+- `studio/studio-inspector-e2e-test.mjs --only=narrow` — **8/8**.
+  390px Studio 창에서 Select 가 보이고, 터치(pointerdown)로 고르고,
+  패널이 화면 안에 들어오고, AI chip 으로 이어지고, Escape 로 풀리고,
+  모드를 끌 수 있다. 가로 넘침 0.
+- `studio/studio-selected-ai-e2e-test.mjs --only=stale` — **12/12**.
+  응답을 1.2초 늦춘 뒤 그 틈에 고른 요소를 지운다 → 적용되지 않고,
+  draft 는 내가 한 변경 그대로이며, `SELECTION_TARGET_NOT_FOUND` 가
+  뜨고 선택이 풀린다. 대조군(draft 그대로)에서는 늦은 응답도 정상 적용.
+  R-1-1 보완분 넷: 글자 단위로 **똑같은 형제** 셋 중 가운데를 고르고
+  기다리는 사이 첫째가 지워지는 경우 — 규칙이 살아남은 형제에 붙지
+  않고 CSS/HTML 이 한 글자도 바뀌지 않으며, 이유가 뜨고 선택이 풀린다.
+  대조군(형제를 건드리지 않음)에서는 늦은 응답이 그 형제에 정상 적용.
+- `studio/studio-selected-ai-e2e-test.mjs` 전체 — **109/109**.
+- `studio/studio-sandbox-preview-e2e-test.mjs` — **165 passed, 0 failed**
+  (`--only=inspect` 60/60 포함). `--only=inspect` 에 "뒤 형제가 같은 id 를
+  물려받아도 해제되고 프레임 테두리도 걷힌다"를 더했다.
+- native Inspector 회귀: `mode/text/image/link/container/state/ai/mobile/
+  narrow` 전부 PASS. 직접 편집 `studio-direct-edit` **37/37**,
+  자르기 `studio-crop` **104/104**, sandbox 단위 테스트 **262/262**,
+  공개 sandbox `skin/sandbox/skin-sandbox-e2e-test.mjs` **559 passed,
+  0 failed**.
+- WebKit: `studio-inspector --only=identity` **12/12**,
+  `studio-selected-ai --only=stale` 열 검사 전부 PASS. (그 실행의
+  `Z. 콘솔 에러 없음` 은 scenario mock 이미지의 404 때문에 HEAD
+  에서도 똑같이 실패한다 — 이 라운드와 무관.) WebKit 은 적용 직후
+  Preview 가 한 박자 늦으므로, 형제를 세는 검사들은 클릭 전에
+  Preview DOM 을 기다린다.
+- 기존 실패와 구분: `studio-inspector --only=route`,
+  `studio-selected-ai --only=repeat`,
+  `studio-direct-edit`/`studio-crop --only=persist` 는 HEAD worktree 와
+  나란히 돌려 **같은 자리에서 같은 비율로 실패**함을 확인했다
+  (persist 는 6회 중 2회씩 양쪽 동일한 flake).
+  R-1-1 보완 뒤에도 `--only=route` 는 같은 자리에서 실패한다 — HEAD
+  worktree(`git worktree add … HEAD`)에서 그대로 재현했다. 그 절의
+  실패는 이 라운드와 무관하다.
+
+### R-7. 남은 차이
+
+- ~~**지문은 같음의 증거이지 유일성의 증거가 아니다.**~~ → R-1-1 에서
+  고쳤다. 완전히 똑같은 형제 중 하나를 지우거나 순서를 바꾸면 이제
+  `mismatch` 로 해제된다.
+- **끝까지 가를 수 없는 경우 하나는 남는다.** subtree 까지 글자 단위로
+  똑같은 형제 **둘의 자리를 맞바꾸면** 결과 HTML 이 바꾸기 전과 한 글자도
+  다르지 않다. 우리가 들고 있는 것은 그 HTML 문자열 하나뿐이므로 둘을
+  가를 근거가 어디에도 없고, 어느 쪽에 규칙을 붙여도 화면도 저장 결과도
+  같다. 그래서 그 경우만 선택이 유지된다 — 넘어갈 **다른** 형제가
+  결과적으로 존재하지 않는다.
+- **정확히 같은 수를 지우고 더하면** (예: 첫 형제를 지우면서 같은 자리에
+  다른 형제를 끼워 넣는 한 번의 변경) 형제 수와 차례가 그대로라
+  `trail` 로 잡히지 않는다. 그런 변경은 AI 응답이나 Code Apply 한 번에
+  일어날 수 있고, 그때는 subtree·지문이 같아야만 유지된다 — 즉 유지되는
+  경우는 위 항목과 같은 "글자 단위로 같은 형제"뿐이다.
+- **지문은 선택 시점 값이고 갱신하지 않는다.** 승격된 id 는 지문을
+  보지 않으므로 편집으로 내용이 바뀌어도 상관없고, Undo 로 id 가 다시
+  임시가 되면 선택 시점 지문과 대조된다(그 시점 구조로 되돌아가므로
+  맞는다). 갱신하면 오히려 그 Undo 경로가 틀린다.
+- **직접 편집 · 자르기**의 sandbox 대응은 그대로 남는다(§Q-11).
+
+---
+
 ## 남은 차이 (아직 정하지 않은 것)
 
 - 비밀글 gate를 프레임 안/밖 어디에 둘 것인가 (SANDBOX-3)
 - `owner-tools` / `highlight-tools` region을 cross-origin에서 어떻게 채울 것인가
   — SANDBOX-3 이후 이것이 **실제로 눈에 보이는 차이**가 됐다: 프레임 안
   하이라이트 화면은 주인장에게도 읽기 전용이다(§K-6)
-- Studio Inspector/Direct Edit/크롭의 sandbox 대응 (SANDBOX-4)
+- Studio 의 **직접 편집 / 자르기**의 sandbox 대응 (Select 자체는 §Q 에서
+  됐다) — 실측값 채널과 임시 미리보기 채널이 프레임 계약에 없다
 - ~~저자 JS를 켤 때의~~ **저자 JS 는 SANDBOX-5A 에서 실행되기 시작했다(§O).**
   남은 것은 둘이다:
   - **origin 전략** — 지금도 단일 frame origin 이고, 켜진 slug 는 `test1`
