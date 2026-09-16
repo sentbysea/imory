@@ -36,6 +36,13 @@
      [package]   Import -> Export -> Import 왕복에서 renderMode 보존,
                  모르는 renderMode는 reason:"render-mode"로 거부
 
+   SANDBOX-5B에서 더해진 것
+     [screens]   **문서 전체**에 지금 화면의 sandbox 프레임 하나뿐인가.
+                 HOME ↔ CATEGORY/GALLERY/BANNER/HIGHLIGHTS/POST 를
+                 오갈 때 옛 자리의 프레임이 가려지는 것이 아니라
+                 **없어지는가**(타이머·rAF·저자 JS 가 끝나는가),
+                 그리고 돌아왔을 때 다시 뜨는가
+
    SANDBOX-5A에서 더해진 것
      [authorjs]      저자 JS 가 프레임 안에서 **정확히 한 번** 돌고
                      클릭/파티클/드래그가 실제로 동작하는가,
@@ -2861,14 +2868,19 @@ async function runPages(browser) {
     await page.waitForTimeout(3000);
 
     /*
-      ★ #themeMount 의 HOME 프레임은 그대로 있다 — 공개 홈이 먼저
-      그려지고 그 위로 글이 열리는 것은 native 와 같다. 여기서
-      보는 것은 "**글 자리**에 프레임이 생기지 않았는가"다.
+      여기서 보는 것은 "**글 자리**에 프레임이 생기지 않았는가"다.
+
+      ★ SANDBOX-5B — 이제 HOME 자리에도 프레임이 없다. 글 화면이
+      현재 화면이 되는 순간 HOME 프레임은 내려가기 때문이다. 즉
+      비밀글 화면에서는 문서 전체에 sandbox 프레임이 0개다.
     */
 
     check("[pages] ★ 비밀글 POST 는 글 자리에 sandbox 프레임을 만들지 않는다 (native 폴백)",
       (await page.locator("#postSkinContainer iframe.imory-skin-sandbox-frame").count()) === 0 &&
       (await waitForSandboxPage(page, "post", 3000)) === null);
+
+    check("[pages] ★ 비밀글 화면에서는 문서 전체에 sandbox 프레임이 0개다",
+      (await countVisibleSandboxFrames(page)) === 0);
 
     check("[pages] ★ 그때 비밀 본문이 문서 어디에도 없다",
       (await page.content()).indexOf("비밀 본문") === -1);
@@ -2935,17 +2947,20 @@ async function runPages(browser) {
 ========================================================== */
 
 /*
-  한 컨테이너 안의 **보이는** sandbox 프레임 개수 — "1개" 를 판정하는
-  자리. waitForSandboxPage 와 같은 이유로 보이는 것만 센다(옛 화면의
-  컨테이너는 hidden 으로 남을 뿐 비워지지 않는다).
+  **보이는** sandbox 프레임 개수. selector 를 주면 그 안에서만,
+  주지 않으면 문서 전체에서 센다.
 
-  ★ 왜 문서 전체가 아니라 컨테이너인가
+  ★ 2026-09-16 (SANDBOX-5B) 이전에는 컨테이너 안에서만 셌다
 
-  공개 HOME 은 #themeMount 에 먼저 그려지고 그 위로 글/카테고리
-  화면이 열린다 — sandbox 스킨이면 HOME 프레임이 그 자리에 계속
-  떠 있다(native 에서 HOME 스킨 DOM 이 남아 있는 것과 같다,
-  SANDBOX-2 의 [pages] 절 주석). 그래서 "이 화면이 프레임 하나로
-  그려졌는가"는 그 화면이 그려지는 컨테이너 안에서 세야 한다.
+  그때는 HOME 프레임이 #themeMount 에 그대로 남는 것이 정상이라고
+  보았기 때문이다(native 에서 HOME 스킨 DOM 이 남아 있는 것과
+  같다고). 그것이 production 에서 "HOME → CATEGORY 뒤 프레임 둘"
+  을 놓친 자리다 — 남은 프레임은 죽은 DOM 이 아니라 타이머와
+  저자 JS 가 도는 살아 있는 문서다.
+
+  지금 기준: **어느 공개 route 에서도 문서 전체에 보이는 sandbox
+  프레임은 1개뿐이다**(sandbox 로 그리지 않는 화면이면 0개).
+  그래서 이 헬퍼는 selector 없이 부르는 쪽이 기본이 됐다.
 */
 
 async function countVisibleSandboxFrames(page, selector) {
@@ -2965,6 +2980,79 @@ async function countVisibleSandboxFrames(page, selector) {
   }
 
   return n;
+
+}
+
+
+/*
+  문서에 붙어 있는 sandbox iframe **요소**의 개수. 보이든 가려졌든
+  센다 — 가려 두기만 한 프레임도 살아 있는 문서이고, 이 라운드가
+  잡으려는 것이 정확히 그것이다.
+*/
+
+async function countSandboxFrameElements(page, selector) {
+
+  return page.evaluate(
+    (sel) =>
+      document.querySelectorAll(
+        (sel ? sel + " " : "") + "iframe.imory-skin-sandbox-frame"
+      ).length,
+    selector || null
+  );
+
+}
+
+
+/*
+  화면 전환은 한순간에 끝나지 않는다 — HOME 으로 돌아올 때는
+  커튼(380ms)이 걷히는 동안 새 HOME 프레임과 내려갈 예정인 옛
+  프레임이 잠깐 함께 있을 수 있다(그래야 옛 화면이 비어 보이지
+  않는다). 판정은 그 전환이 끝난 뒤에 해야 하므로 여기서 기다린다.
+
+  끝내 하나가 되지 않으면 그대로 두고 돌아온다 — 판정은 호출한
+  check() 가 한다(이 함수가 테스트를 통과시키지 않는다).
+*/
+
+async function settleSingleSandboxFrame(page, timeout) {
+
+  const deadline =
+    Date.now() + (timeout || 6000);
+
+  while (Date.now() < deadline) {
+
+    const total =
+      await countSandboxFrameElements(page);
+
+    if (total <= 1) return total;
+
+    await page.waitForTimeout(100);
+
+  }
+
+  return countSandboxFrameElements(page);
+
+}
+
+
+/*
+  지금 문서가 어떤 상태인가를 한 줄로 — 실패했을 때 읽을 수 있게.
+*/
+
+async function describeSandboxFrames(page) {
+
+  return page.evaluate(() =>
+    Array.from(document.querySelectorAll("iframe.imory-skin-sandbox-frame"))
+      .map((el) => {
+
+        const parent = el.parentElement;
+
+        const rects = el.getClientRects().length;
+
+        return ((parent && parent.id) || "?") +
+          (rects > 0 ? "" : "(안 보임)");
+
+      })
+      .join(" + ") || "(없음)");
 
 }
 
@@ -3048,16 +3136,19 @@ async function runSurfaces(browser) {
         visible === 1, String(visible));
 
       /*
-        HOME 프레임은 #themeMount 에 그대로 남는다(위 함수 주석) —
-        그러나 화면당 프레임은 하나여야 하므로 문서 전체도 둘을
-        넘지 않는다.
+        ★ SANDBOX-5B — 문서 **전체**로도 하나다. 이 화면이 열리는
+        순간 HOME 자리의 프레임은 내려간다(#themeMount 가 비고,
+        그 realm 의 타이머·저자 JS 가 함께 끝난다).
       */
 
       const visibleAll =
         await countVisibleSandboxFrames(page);
 
-      check(`[surfaces] ${surface.label} — 문서 전체로도 HOME + 이 화면 둘뿐이다`,
-        visibleAll === 2, String(visibleAll));
+      check(`[surfaces] ★ ${surface.label} — 문서 전체로도 sandbox 프레임이 1개다`,
+        visibleAll === 1, String(visibleAll));
+
+      check(`[surfaces] ★ ${surface.label} — HOME 자리(#themeMount)에는 프레임이 없다`,
+        (await page.locator("#themeMount iframe.imory-skin-sandbox-frame").count()) === 0);
 
       /*
         HOME 과 같은 SkinPackage 의 디자인 체계인가 — 스킨이 선언한
@@ -4093,16 +4184,16 @@ async function runAuthorJsPages(browser) {
         Number(marks.ticks) === Number(marks.globalTicks),
         marks.ticks + " / " + marks.globalTicks);
 
-      const frameCount =
-        await page.locator("iframe.imory-skin-sandbox-frame").count();
+      await settleSingleSandboxFrame(page);
 
-      check("[authorjspages] ★ 프레임이 쌓이지 않았다",
-        frameCount <= 2, String(frameCount));
+      const frameCount =
+        await countSandboxFrameElements(page);
+
+      check("[authorjspages] ★ 프레임이 쌓이지 않았다 (문서 전체에 하나)",
+        frameCount === 1, String(frameCount));
 
       const visibleFrames =
-        await page.evaluate(() =>
-          Array.from(document.querySelectorAll("iframe.imory-skin-sandbox-frame"))
-            .filter((el) => el.offsetParent !== null).length);
+        await countVisibleSandboxFrames(page);
 
       check("[authorjspages] ★ 보이는 프레임은 하나다",
         visibleFrames === 1, String(visibleFrames));
@@ -4150,6 +4241,644 @@ async function runAuthorJsPages(browser) {
 
 }
 
+
+/* =========================================================
+   [screens] SANDBOX-5B — 문서 전체에 지금 화면의 프레임 하나
+
+   ★ 무엇을 놓쳤었나
+
+   지금까지 이 파일의 프레임 개수 판정은 전부 **컨테이너 안에서**
+   셌다(#postList / #postSkinContainer). HOME 스킨은 #themeMount 에
+   계속 mount 된 채 남는 것이 정상이라고 보았기 때문이다 — native
+   스킨에서 HOME DOM 이 그 자리에 남아 있는 것과 같다고.
+
+   native 에서는 맞는 말이다. 덮인 DOM 은 아무 일도 하지 않는다.
+   sandbox 에서는 틀린 말이다. 덮인 자리의 iframe 은 **살아 있는
+   문서**이고 그 안의 타이머 · rAF · 리스너 · 저자 JS 가 계속
+   돈다. production(test1)에서 HOME → CATEGORY 뒤에 프레임이 둘
+   떠 있었던 것이 그 결과다:
+
+     #viewerArea > #themeMount            > iframe   (옛 HOME)
+     #postArea > #postContainer > #postList > iframe (지금 CATEGORY)
+
+   ★ 어떻게 재는가
+
+   ① 문서 전체의 iframe 요소 수 — 가려진 것까지 센다.
+   ② playwright 의 frame tree — 브라우저가 아는 **살아 있는 realm**.
+   ③ 프레임 origin 의 localStorage 공용 심장박동
+      (skin/test-skins/imory-sandbox-screens-v1.json). 지금 화면의
+      프레임에서 계수기를 0 으로 되돌리고 잠시 기다린 뒤, 공용
+      값과 이 realm 의 값을 견준다. 두 값이 같으면 돌고 있는
+      realm 은 하나뿐이다 — 옛 프레임이 남아 있으면 공용 쪽만
+      두 배로 늘어난다.
+   ④ 같은 저장소의 cleanup 기록 — 없어진 프레임에서 pagehide →
+      onCleanup 이 실제로 돌았는가(타이머·rAF·리스너를 저자가
+      직접 끊는 지점).
+========================================================== */
+
+function readScreensPkg() {
+
+  return JSON.parse(
+    fs.readFileSync(
+      path.join(ROOT, "skin", "test-skins", "imory-sandbox-screens-v1.json"),
+      "utf8"
+    )
+  );
+
+}
+
+
+/* 브라우저가 아는 "살아 있는 realm" — 없어진 iframe 은 여기서 빠진다 */
+
+function countSandboxRealms(page) {
+
+  return page.frames().filter(
+    (f) => {
+
+      try {
+        return f.url().startsWith(SANDBOX_ORIGIN);
+      }
+
+      catch (err) {
+        return false;
+      }
+
+    }
+  ).length;
+
+}
+
+
+const SCREENS_LOG_KEY = "imory.screens.log";
+
+
+async function resetScreensBeats(frame) {
+
+  return frame.evaluate((key) => {
+
+    try {
+
+      const log =
+        JSON.parse(window.localStorage.getItem(key) || "{}") || {};
+
+      /* 누가 뛰는지를 처음부터 다시 본다 */
+      log.ticks = {};
+
+      window.localStorage.setItem(key, JSON.stringify(log));
+
+      return true;
+
+    }
+
+    catch (err) {
+      return false;
+    }
+
+  }, SCREENS_LOG_KEY);
+
+}
+
+
+async function readScreensLog(frame) {
+
+  return frame.evaluate((key) => {
+
+    let log = {};
+
+    try {
+      log = JSON.parse(window.localStorage.getItem(key) || "{}") || {};
+    }
+    catch (err) { /* 저장소가 막혀 있다 */ }
+
+    const root =
+      document.getElementById("sandboxFrameRoot");
+
+    const ticks =
+      (log.ticks && typeof log.ticks === "object") ? log.ticks : {};
+
+    const own =
+      root ? root.getAttribute("data-imory-screens-realm") : null;
+
+    return {
+      /* 측정 창 동안 실제로 박동한 realm 의 수 */
+      runningRealms: Object.keys(ticks).length,
+
+      /* 그중 지금 화면의 realm 이 뛰었는가(살아 있는가) */
+      ownTicks: Number((own && ticks[own]) || 0),
+
+      ticks: ticks,
+      lastTickPage: String(log.lastTickPage || ""),
+      starts: Number(log.starts || 0),
+      cleanups: Number(log.cleanups || 0),
+      cleaned: String(log.cleaned || ""),
+      stored: root ? root.getAttribute("data-imory-screens-store") : null,
+      page: root ? root.getAttribute("data-imory-screens-page") : null
+    };
+
+  }, SCREENS_LOG_KEY);
+
+}
+
+
+const SCREENS_EMPTY_LOG = {
+  reset: false,
+  runningRealms: -1,
+  ownTicks: 0,
+  ticks: {},
+  lastTickPage: "",
+  starts: 0,
+  cleanups: 0,
+  cleaned: "",
+  stored: null,
+  page: null
+};
+
+
+/*
+  "지금 돌고 있는 realm 은 하나뿐인가" — 위 ③.
+
+  beats 를 0 으로 되돌리고 windowMs 만큼 기다린 뒤 공용/자기 값을
+  견준다. 저장소가 막힌 브라우저에서는 stored 가 "0" 이므로
+  호출자가 그 사실을 그대로 보고한다(조용히 통과시키지 않는다).
+
+  ★ 재는 도중에 그 프레임이 사라질 수 있다 — 화면 전환 직후에는
+  아직 한 박자가 남아 있고, WebKit 은 그 틈이 더 크다(2026-09-16
+  실측). 그때는 지금 화면의 프레임을 다시 잡아 한 번 더 잰다.
+*/
+
+async function measureRunningRealms(page, frame, windowMs) {
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+
+    const target =
+      attempt === 0
+        ? frame
+        : await waitForSandboxPage(page, null, 8000);
+
+    if (!target) continue;
+
+    try {
+
+      const reset =
+        await resetScreensBeats(target);
+
+      await page.waitForTimeout(windowMs || 700);
+
+      const log =
+        await readScreensLog(target);
+
+      return { reset, ...log };
+
+    }
+
+    catch (err) {
+      /* Frame was detached — 다음 바퀴에 지금 화면의 프레임으로 */
+    }
+
+  }
+
+  return { ...SCREENS_EMPTY_LOG };
+
+}
+
+
+async function runScreens(browser) {
+
+  console.log("\n[screens] 문서 전체에 지금 화면의 sandbox 프레임 하나");
+
+  const pkg = readScreensPkg();
+
+
+  /*
+    화면을 한 바퀴 돌린다. 각 칸:
+      label / 어떻게 가는가 / 도착한 화면의 pageType
+  */
+
+  async function expectOne(page, label) {
+
+    const total =
+      await settleSingleSandboxFrame(page);
+
+    const placement =
+      await describeSandboxFrames(page);
+
+    check(`[screens] ★ ${label} — 문서 전체의 sandbox iframe 이 1개다`,
+      total === 1, placement);
+
+    check(`[screens] ★ ${label} — 살아 있는 프레임 realm 도 1개다`,
+      countSandboxRealms(page) === 1,
+      String(countSandboxRealms(page)));
+
+    check(`[screens] ${label} — 그 하나가 보인다`,
+      (await countVisibleSandboxFrames(page)) === 1);
+
+    return total;
+
+  }
+
+
+  /* ===== 1. HOME 최초 진입 ============================= */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, pkg, "/", { authorJs: true });
+
+    let frame = await waitForSandboxPage(page, "home");
+
+    check("[screens] HOME 이 프레임에 떴다", Boolean(frame));
+
+    await expectOne(page, "HOME 최초 진입");
+
+    if (frame) {
+
+      const log = await measureRunningRealms(page, frame);
+
+      check("[screens] fixture 가 프레임 origin 의 저장소를 쓴다",
+        log.stored === "1", String(log.stored));
+
+      check("[screens] ★ HOME 에서 돌고 있는 realm 은 하나뿐이다",
+        log.stored === "1" && log.ownTicks > 0 && log.runningRealms === 1,
+        `realms=${log.runningRealms} own=${log.ownTicks}`);
+
+      check("[screens] 이 realm 의 저자 JS 는 한 번 돌았다",
+        (await readAuthorJsMarks(frame)).runs === "1");
+
+    }
+
+
+    /* ===== 2. HOME -> CATEGORY ========================= */
+
+    if (frame) {
+
+      await frame.locator(".sb-nav-link", { hasText: "TXT" }).first().click();
+
+      frame = await waitForSandboxPage(page, "category");
+
+      check("[screens] CATEGORY 로 갔다", Boolean(frame));
+
+    }
+
+    if (frame) {
+
+      await expectOne(page, "HOME → CATEGORY");
+
+      check("[screens] ★ HOME 자리(#themeMount)에 iframe 이 남아 있지 않다",
+        (await countSandboxFrameElements(page, "#themeMount")) === 0);
+
+      const log = await measureRunningRealms(page, frame);
+
+      check("[screens] ★ 옛 HOME realm 이 함께 돌고 있지 않다",
+        log.runningRealms === 1 && log.ownTicks > 0,
+        `realms=${log.runningRealms} own=${log.ownTicks} last=${log.lastTickPage}`);
+
+      check("[screens] ★ 없어진 HOME 프레임에서 cleanup 이 돌았다 (pagehide)",
+        log.cleanups >= 1 && log.cleaned.indexOf("home") !== -1,
+        `cleanups=${log.cleanups} cleaned=${log.cleaned}`);
+
+    }
+
+
+    /* ===== 3. CATEGORY -> POST ======================== */
+
+    if (frame) {
+
+      await frame.locator(".sb-recent-link").first().click();
+
+      frame = await waitForSandboxPage(page, "post");
+
+      check("[screens] POST 로 갔다", Boolean(frame));
+
+    }
+
+    if (frame) {
+
+      await expectOne(page, "CATEGORY → POST");
+
+      /*
+        CATEGORY 와 POST 는 컨테이너가 서로 다르다(#postList /
+        #postSkinContainer). 예전 판정(컨테이너별)은 바로 이
+        조합을 놓쳤다 — 옛 목록 컨테이너는 hidden 이 될 뿐
+        비워지지 않기 때문이다.
+      */
+
+      check("[screens] ★ 옛 목록 자리(#postList)에 iframe 이 남아 있지 않다",
+        (await countSandboxFrameElements(page, "#postList")) === 0);
+
+      const log = await measureRunningRealms(page, frame);
+
+      check("[screens] ★ 옛 CATEGORY realm 이 함께 돌고 있지 않다",
+        log.runningRealms === 1 && log.ownTicks > 0,
+        `realms=${log.runningRealms} own=${log.ownTicks}`);
+
+    }
+
+
+    /* ===== 4. POST -> HOME ============================ */
+
+    if (frame) {
+
+      await frame.locator(".sb-nav-home").first().click();
+
+      frame = await waitForSandboxPage(page, "home");
+
+      check("[screens] ★ POST 에서 HOME 으로 돌아왔다 (프레임이 다시 뜬다)",
+        Boolean(frame));
+
+    }
+
+    if (frame) {
+
+      await page.waitForURL(`**/${HOME_SLUG}`, { timeout: 10000 }).catch(() => {});
+
+      await expectOne(page, "POST → HOME");
+
+      check("[screens] ★ 돌아온 HOME 프레임은 #themeMount 안에 있다",
+        (await countSandboxFrameElements(page, "#themeMount")) === 1);
+
+      check("[screens] ★ 글 자리에는 iframe 이 남아 있지 않다",
+        (await countSandboxFrameElements(page, "#postSkinContainer")) === 0 &&
+        (await countSandboxFrameElements(page, "#postList")) === 0);
+
+      const marks = await readAuthorJsMarks(frame);
+
+      check("[screens] ★ 돌아온 HOME 에서 저자 JS 는 이 realm 에서 한 번만 돈다",
+        marks.runs === "1" && marks.page === "home",
+        `${marks.runs} / ${marks.page}`);
+
+      check("[screens] ★ 타이머도 이 realm 것 한 벌뿐이다",
+        Number(marks.ticks) === Number(marks.globalTicks),
+        `${marks.ticks} / ${marks.globalTicks}`);
+
+      const log = await measureRunningRealms(page, frame);
+
+      check("[screens] ★ 돌아온 HOME 에서도 돌고 있는 realm 은 하나다",
+        log.runningRealms === 1 && log.ownTicks > 0,
+        `realms=${log.runningRealms} own=${log.ownTicks}`);
+
+      check("[screens] ★ 지나온 화면마다 cleanup 이 돌았다",
+        log.cleanups >= 3,
+        `cleanups=${log.cleanups} cleaned=${log.cleaned}`);
+
+    }
+
+    check("[screens] 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 5. BANNER / HIGHLIGHTS / GALLERY 왕복 ======== */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, pkg, "/", { authorJs: true });
+
+    check("[screens] (왕복) HOME 이 떴다",
+      Boolean(await waitForSandboxPage(page, "home")));
+
+    const ROUND = [
+      ["/category/3", "banner", "BANNER"],
+      ["/", "home", "HOME 복귀"],
+      ["/highlights", "highlights", "HIGHLIGHTS"],
+      ["/", "home", "HOME 복귀"],
+      ["/category/2", "category", "GALLERY(Pic)"],
+      ["/", "home", "HOME 복귀"]
+    ];
+
+    for (const [sub, pageType, label] of ROUND) {
+
+      await page.goto(
+        PARENT_ORIGIN + "/" + HOME_SLUG + sub,
+        { waitUntil: "load" }
+      );
+
+      const frame =
+        await waitForSandboxPage(page, pageType);
+
+      check(`[screens] ${label} 이(가) 프레임에 떴다`, Boolean(frame));
+
+      if (frame) {
+        await expectOne(page, label);
+      }
+
+    }
+
+    check("[screens] 왕복 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 6. 뒤로/앞으로 10회 ========================== */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, pkg, "/", { authorJs: true });
+
+    let frame = await waitForSandboxPage(page, "home");
+
+    check("[screens] (히스토리) HOME 이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      await frame.locator(".sb-nav-link", { hasText: "TXT" }).first().click();
+
+      frame = await waitForSandboxPage(page, "category");
+
+      check("[screens] (히스토리) CATEGORY 로 갔다", Boolean(frame));
+
+    }
+
+    if (frame) {
+
+      await frame.locator(".sb-recent-link").first().click();
+
+      check("[screens] (히스토리) POST 로 갔다",
+        Boolean(await waitForSandboxPage(page, "post")));
+
+    }
+
+    let worst = 0;
+    let worstWhere = "";
+
+    const step = async (go, label) => {
+
+      await page[go]({ waitUntil: "load" });
+
+      await waitForSandboxPage(page, null, 8000);
+
+      const total =
+        await settleSingleSandboxFrame(page);
+
+      if (total > worst) {
+        worst = total;
+        worstWhere = label + " → " + new URL(page.url()).pathname +
+          " · " + (await describeSandboxFrames(page));
+      }
+
+    };
+
+    for (let i = 0; i < 5; i += 1) {
+
+      await step("goBack", `${i}:back1`);
+      await step("goBack", `${i}:back2`);
+      await step("goForward", `${i}:fwd1`);
+      await step("goForward", `${i}:fwd2`);
+
+    }
+
+    check("[screens] ★ 뒤로/앞으로 20번을 오가도 프레임은 늘 1개다",
+      worst === 1,
+      `최대 ${worst}개 · ${worstWhere}`);
+
+    const last =
+      await waitForSandboxPage(page, null, 8000);
+
+    if (last) {
+
+      const log = await measureRunningRealms(page, last);
+
+      check("[screens] ★ 그동안 쌓인 realm 도 없다 (돌고 있는 것은 하나)",
+        log.runningRealms === 1 && log.ownTicks > 0,
+        `realms=${log.runningRealms} own=${log.ownTicks} starts=${log.starts}`);
+
+    }
+
+    check("[screens] 히스토리 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 7. 직접 접속 / 새로고침 ====================== */
+
+  for (const [sub, pageType] of [["/category/1", "category"], ["/post/101", "post"]]) {
+
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, pkg, sub, { authorJs: true });
+
+    check(`[screens] ${sub} 직접 접속 — 프레임이 떴다`,
+      Boolean(await waitForSandboxPage(page, pageType)));
+
+    /*
+      ★ 여기가 직접 접속의 함정이다. index.html 의
+      initHomeRenderer() 는 경로와 무관하게 HOME 도 그린다 —
+      그 렌더가 한 박자 늦게 도착해도 HOME 자리에 프레임이
+      생겨서는 안 된다(생기면 문서에 둘이 된다).
+    */
+
+    await page.waitForTimeout(1500);
+
+    await expectOne(page, `${sub} 직접 접속`);
+
+    check(`[screens] ★ ${sub} 직접 접속 — 늦게 도착한 HOME 렌더가 프레임을 만들지 않았다`,
+      (await countSandboxFrameElements(page, "#themeMount")) === 0);
+
+    await page.reload({ waitUntil: "load" });
+
+    check(`[screens] ${sub} 새로고침 — 프레임이 다시 떴다`,
+      Boolean(await waitForSandboxPage(page, pageType)));
+
+    await page.waitForTimeout(1500);
+
+    await expectOne(page, `${sub} 새로고침`);
+
+    check(`[screens] ${sub} 페이지 오류 없음`,
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+
+  }
+
+
+  /* ===== 8. 모바일 390px ============================== */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, pkg, "/", {
+        authorJs: true,
+        viewport: { width: 390, height: 780 }
+      });
+
+    let frame = await waitForSandboxPage(page, "home");
+
+    check("[screens] 390px HOME 이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      await frame.locator(".sb-nav-link", { hasText: "TXT" }).first()
+        .dispatchEvent("click");
+
+      frame = await waitForSandboxPage(page, "category");
+
+      check("[screens] 390px CATEGORY 로 갔다", Boolean(frame));
+
+    }
+
+    if (frame) {
+
+      await expectOne(page, "390px HOME → CATEGORY");
+
+      check("[screens] 390px 가로 넘침 없음",
+        (await page.evaluate(() =>
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth)) <= 0);
+
+    }
+
+    check("[screens] 390px 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+
+  /* ===== 9. native 스킨 회귀 ========================== */
+
+  {
+    const nativePkg = readScreensPkg();
+    delete nativePkg.renderMode;
+
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, nativePkg, "/", { authorJs: true });
+
+    await page.waitForSelector("#themeMount .imory-skin-root", { timeout: 20000 });
+
+    check("[screens] ★ native 회귀 — HOME 은 같은 문서에 그려진다 (iframe 0)",
+      (await countSandboxFrameElements(page)) === 0);
+
+    await page.locator("#themeMount .sb-nav-link").first().click();
+
+    await page.waitForSelector("#postList .imory-skin-root", { timeout: 20000 });
+
+    check("[screens] ★ native 회귀 — CATEGORY 도 같은 문서에 그려진다 (iframe 0)",
+      (await countSandboxFrameElements(page)) === 0);
+
+    /*
+      ★ native 에서는 HOME DOM 이 #themeMount 에 그대로 남는 것이
+      지금까지의 동작이고, 이 라운드는 그것을 바꾸지 않았다.
+      (덮인 DOM 은 아무 일도 하지 않으므로 바꿀 이유가 없다.)
+    */
+
+    check("[screens] ★ native 회귀 — HOME DOM 은 예전처럼 #themeMount 에 남는다",
+      (await page.locator("#themeMount .imory-skin-root").count()) === 1);
+
+    check("[screens] native 회귀 페이지 오류 없음",
+      realPageErrors(pageErrors).length === 0,
+      realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+}
 
 async function runNav(browser) {
 
@@ -4259,12 +4988,12 @@ async function runNav(browser) {
       Boolean(await waitForSandboxPage(page, "category")));
 
     /*
-      ★ "화면당 하나" — 한 컨테이너에 프레임이 둘 생기지 않는다.
+      ★ "문서 전체에 하나" — SANDBOX-5B.
 
-      문서 전체의 개수를 세지 않는 이유: HOME 스킨은 #themeMount 에
-      계속 mount 된 채 남는다(native 와 같다). 그래서 글을 보는 동안
-      살아 있는 프레임은 HOME 것과 지금 화면 것 둘이 정상이다.
-      중복 렌더는 "같은 자리에 둘"로 나타난다.
+      예전에는 여기서 컨테이너별로만 셌다. HOME 스킨이 #themeMount
+      에 계속 mount 된 채 남는 것을 정상으로 보았기 때문이다.
+      그것이 production 에서 "HOME → CATEGORY 뒤 프레임 둘"을
+      놓친 자리다. 지금은 문서 전체로 센다.
     */
 
     const framePlacement =
@@ -4289,21 +5018,18 @@ async function runNav(browser) {
       JSON.stringify(byParent));
 
     /*
-      ★ 지금 **보이는** 프레임은 하나뿐이다.
-
-      옛 화면의 컨테이너는 hidden 으로 남는다(native 스킨도 옛 DOM 을
-      그 자리에 두고 다음 진입에서 덮어쓴다 — 같은 동작이다).
-      그러니 "문서에 프레임이 몇 개인가"가 아니라 "보이는 것이
-      하나인가"를 본다.
+      ★ 문서 전체에 sandbox 프레임이 정확히 하나다 — 옛 화면의
+      것은 가려진 것이 아니라 **없다**.
     */
 
-    check("[nav] ★ 지금 보이는 sandbox 프레임은 하나뿐이다",
-      (await page.evaluate(() =>
-        Array.from(document.querySelectorAll("iframe.imory-skin-sandbox-frame"))
-          .filter(el => el.offsetParent !== null || el.id === "themeMount")
-          .filter(el => el.closest("#themeMount") === null)
-          .length)) <= 1,
+    await settleSingleSandboxFrame(page);
+
+    check("[nav] ★ 문서 전체의 sandbox 프레임이 정확히 하나다",
+      (await countSandboxFrameElements(page)) === 1,
       JSON.stringify(framePlacement));
+
+    check("[nav] ★ 그 하나가 지금 보이는 화면의 것이다",
+      (await countVisibleSandboxFrames(page)) === 1);
 
     check("[nav] 페이지 오류 없음",
       realPageErrors(pageErrors).length === 0,
@@ -4892,6 +5618,8 @@ async function runBodyParity(browser) {
     if (shouldRun("bodyparity")) await runBodyParity(browser);
     if (shouldRun("surfaces")) await runSurfaces(browser);
     if (shouldRun("nav")) await runNav(browser);
+
+    if (shouldRun("screens")) await runScreens(browser);
 
     if (shouldRun("authorjs")) await runAuthorJs(browser);
     if (shouldRun("authorjspages")) await runAuthorJsPages(browser);

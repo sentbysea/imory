@@ -669,24 +669,120 @@ function applySandboxFrameHeight(handle, height) {
 
 
 /* =========================================================
-   살아 있는 handle 장부
+   살아 있는 handle 장부 · 지금 화면(screen)
 
-   컨테이너가 innerHTML="" 로 비워지면 iframe 은 사라지지만 부모
-   window 의 message 리스너는 남는다. 그것이 쌓이면 옛 화면의
-   핸들러가 계속 돌고, 화면마다 리스너가 하나씩 늘어난다.
+   ---------------------------------------------------------
+   ★ 왜 "지금 화면" 이라는 축이 필요한가 (SANDBOX-5B)
 
-   그래서 mount 할 때마다
-     ① 같은 컨테이너에 걸려 있던 이전 handle 을 확실히 내리고
-     ② 문서에서 이미 떨어져 나간(iframe.isConnected === false)
-        handle 을 전부 정리한다.
+   이 앱의 공개 화면은 **두 자리**에 그려진다.
 
-   이 장부가 SANDBOX-2 에서 새로 필요해진 이유: HOME 은 한 번
-   mount 하면 그대로 남지만, CATEGORY/POST 는 화면을 옮길 때마다
-   컨테이너가 통째로 비워진다.
+     HOME                      #themeMount   (#viewerArea 안)
+     CATEGORY/GALLERY/BANNER/  #postList /
+     HIGHLIGHTS/POST           #postSkinContainer  (#postArea 안)
+
+   그리고 HOME 으로 옮겨 갈 때 #postArea 를 접기만 하듯,
+   HOME 에서 다른 화면으로 갈 때도 #themeMount 를 비우지 않는다 —
+   #postArea 가 그 위를 덮을 뿐이다. native 스킨에서는 그것이 맞는
+   동작이다(덮인 DOM 은 아무 일도 하지 않는다).
+
+   sandbox 스킨에서는 맞지 않는다. 덮인 자리에 남은 iframe 은
+   살아 있는 문서이고, 그 안의 타이머 · rAF · 리스너 ·
+   **저자 JS** 가 계속 돈다. 그래서 production 에서 HOME →
+   CATEGORY 뒤에 프레임이 둘 떠 있었다(둘 다 실행 중).
+
+   고치는 자리는 "iframe 을 지우는 코드"를 진입 모듈마다 뿌리는
+   것이 아니라, **지금 어느 자리가 현재 화면인가**를 한 곳에서
+   아는 것이다. 그 한 곳이 이 장부이고, 그것을 알려 주는 쪽은
+   기존 화면 전환의 주인인 posts/view/posts-view-transition.js
+   (body.post-mode 를 켜고 끄는 그 지점) 하나다.
+
+   ---------------------------------------------------------
+   ★ 규칙 넷
+
+     1. 지금 화면이 아닌 자리의 handle 은 **제거**한다(가리지
+        않는다). iframe 을 DOM 에서 떼면 그 realm 이 통째로
+        사라지므로 타이머 · rAF · 리스너 · observer · 저자 JS 가
+        함께 끝난다(프레임의 pagehide 에서 onCleanup 도 돈다).
+     2. HOME 자리의 handle 은 버리기 전에 **다시 띄울 재료**를
+        적어 둔다(suspendedHomeSandbox). 조회도 Context 조립도
+        다시 하지 않는다 — 같은 payload 로 프레임만 새로 띄운다.
+     3. 지금 화면이 post 인 동안 도착한 HOME mount 요청은 프레임을
+        만들지 않고 그 재료만 적어 둔다(deferred). 주소로 곧장
+        /category/1 에 들어온 경우 index.html 의 initHomeRenderer()
+        가 뒤늦게 HOME 을 그리는데, 그때 프레임이 하나 더 생기는
+        것을 여기서 막는다.
+     4. 같은 자리(screen)에 새로 mount 하면 그 자리의 옛 handle 은
+        전부 내린다. CATEGORY → POST 는 컨테이너가 서로 다르지만
+        (#postList / #postSkinContainer) 같은 자리다.
+
+   destroy 된 handle 의 늦은 postMessage 는 이미 무시된다 —
+   destroySandboxSkinFrame() 이 리스너를 떼고, 남은 호출에서도
+   handle.destroyed 가 먼저 걸린다.
 ========================================================== */
 
 const liveSandboxHandles =
   [];
+
+
+/*
+  "" 이면 아직 아무도 알려 주지 않았다 = 모든 mount 를 그대로
+  받는다. Skin Studio Preview 문서(preview-frame.html)는 이 모듈을
+  자기 문서에서 따로 로드하고 post-mode 라는 것이 없으므로 끝까지
+  "" 이다 — 이 라운드의 판정이 Preview 를 건드리지 않는다.
+*/
+
+let activeSandboxScreen =
+  "";
+
+
+/*
+  HOME 자리를 비우면서 적어 둔 재료. { options, scrollTop }.
+  하나뿐이다 — HOME 은 한 자리이고, 늦게 온 것이 이긴다.
+*/
+
+let suspendedHomeSandbox =
+  null;
+
+
+/*
+  자리(screen)마다의 mount 순번.
+
+  ★ 왜 장부만으로는 모자라는가
+
+  mount 는 두 번 기다린다(READY 왕복 · RENDERED). 장부에 오르는
+  것은 첫 기다림이 끝난 뒤다. 그래서 CATEGORY 프레임이 아직
+  READY 를 기다리는 동안 POST 로 옮겨 가면, POST 의 mount 가
+  하는 정리(sweepSandboxHandles)는 아직 장부에 없는 그 CATEGORY
+  프레임을 보지 못한다. 잠시 뒤 그것이 장부에 올라 **가려진 채
+  남는다** — 2026-09-16 뒤로/앞으로 반복에서 실제로 재현됐다
+  (#postList(안 보임) + #postSkinContainer).
+
+  그래서 mount 를 시작할 때 그 자리의 번호를 하나 올리고, 기다림이
+  끝날 때마다 자기 번호가 아직 최신인지 본다. 이 파일의 renderSeq
+  와 같은 장치이고, posts/view/* 의 요청 순번과도 같은 생각이다.
+*/
+
+const sandboxScreenMountSeq = {
+  home: 0,
+  post: 0
+};
+
+
+/*
+  복귀(resume)가 진행 중인가. 한 번에 하나만 돈다 —
+  suspendedHomeSandbox 를 기다리기 **전에** 비우므로, 그 사이
+  들어온 다른 sync 호출은 다시 띄우지 않는다.
+*/
+
+let homeSandboxResuming =
+  false;
+
+
+function sandboxScreenOf(pageType) {
+
+  return pageType === "home" ? "home" : "post";
+
+}
 
 
 function trackSandboxHandle(handle) {
@@ -696,27 +792,281 @@ function trackSandboxHandle(handle) {
 }
 
 
-function sweepSandboxHandles(container) {
+function forgetSandboxHandle(handle) {
+
+  const at =
+    liveSandboxHandles.indexOf(handle);
+
+  if (at !== -1) {
+    liveSandboxHandles.splice(at, 1);
+  }
+
+}
+
+
+/*
+  HOME 자리의 handle 을 내리기 전에 재료를 적어 둔다. 컨테이너가
+  이미 문서에서 떨어져 나갔으면 적지 않는다 — 그 자리로는 돌아갈
+  수 없다.
+*/
+
+function rememberSuspendedHomeSandbox(handle) {
+
+  const options =
+    handle && handle.mountOptions;
+
+  const container =
+    options && options.container;
+
+  if (!container || !container.isConnected) {
+    return;
+  }
+
+  suspendedHomeSandbox = {
+    options: options,
+
+    /* 돌아왔을 때 보던 자리를 그대로 — 스킨 HOME 은 #themeMount 가 스크롤한다 */
+    scrollTop:
+      typeof container.scrollTop === "number" ? container.scrollTop : 0
+  };
+
+}
+
+
+function retireSandboxHandle(handle) {
+
+  if (
+    handle &&
+    handle.screen === "home" &&
+    !handle.destroyed
+  ) {
+    rememberSuspendedHomeSandbox(handle);
+  }
+
+  /* 장부에서 빼는 것은 destroySandboxSkinFrame() 이 한다 */
+
+  destroySandboxSkinFrame(handle);
+
+}
+
+
+/*
+  mount 직전 정리. 같은 자리(screen)의 것과, 같은 컨테이너의 것과,
+  이미 떨어져 나간 것을 내린다.
+
+  ★ **다른 자리**의 handle 은 여기서 건드리지 않는다. 그것은
+  syncSandboxSkinScreen() 의 몫이다 — 새 화면이 다 그려진 뒤에
+  옛 자리를 내려야 화면이 비는 순간이 생기지 않는다(기존 SPA 의
+  "이전 화면을 유지한다" 원칙 그대로).
+*/
+
+function sweepSandboxHandles(container, screen) {
+
+  const doomed =
+    liveSandboxHandles.filter(
+      (handle) => {
+
+        const detached =
+          !handle.iframe ||
+          !handle.iframe.isConnected;
+
+        const sameContainer =
+          container &&
+          handle.iframe &&
+          handle.iframe.parentNode === container;
+
+        const sameScreen =
+          screen &&
+          handle.screen === screen;
+
+        return (
+          handle.destroyed || detached || sameContainer || sameScreen
+        );
+
+      }
+    );
+
+
+  /*
+    같은 자리를 다시 그리는 중이다 — 재료를 적어 둘 이유가
+    없다(방금 새것이 들어온다). 떨어져 나간 것도 마찬가지다.
+  */
+
+  for (const handle of doomed) {
+    destroySandboxSkinFrame(handle);
+  }
+
+}
+
+
+/* =========================================================
+   syncSandboxSkinScreen(screen, options) -> Promise<void>
+
+   "지금 현재 화면은 여기다" 하나만 알려 주는 창구.
+
+     screen : "home" | "post"
+     options.retirePrevious : false 면 옛 자리를 아직 내리지 않는다
+                              (닫히는 애니메이션이 도는 동안 옛
+                               화면이 비어 보이지 않게)
+
+   ★ 부르는 곳은 posts/view/posts-view-transition.js 한 곳이다.
+     (body.post-mode 를 켜고 끄는 자리 + closePostArea 의 첫 줄)
+
+   ★ sandbox 프레임이 하나도 없는 배포/스킨에서는 전부 no-op 다 —
+     장부가 비어 있고 적어 둔 재료도 없으므로 native 스킨의 화면
+     전환은 한 줄도 달라지지 않는다.
+========================================================== */
+
+export async function syncSandboxSkinScreen(screen, options) {
+
+  const opts =
+    options || {};
+
+  const next =
+    screen === "home" ? "home" : "post";
+
+  activeSandboxScreen =
+    next;
+
+
+  /* --- ① 이 자리가 다시 현재 화면이 됐다 --------------- */
+
+  if (
+    next === "home" &&
+    suspendedHomeSandbox &&
+    !homeSandboxResuming
+  ) {
+
+    const record =
+      suspendedHomeSandbox;
+
+    suspendedHomeSandbox =
+      null;
+
+    homeSandboxResuming =
+      true;
+
+    try {
+      await resumeHomeSandbox(record);
+    }
+
+    finally {
+      homeSandboxResuming = false;
+    }
+
+  }
+
+
+  /* --- ② 지금 화면이 아닌 자리는 내린다 ---------------- */
+
+  if (opts.retirePrevious === false) {
+    return;
+  }
 
   for (let i = liveSandboxHandles.length - 1; i >= 0; i -= 1) {
 
     const handle =
       liveSandboxHandles[i];
 
-    const detached =
-      !handle.iframe ||
-      !handle.iframe.isConnected;
+    if (handle.screen !== activeSandboxScreen) {
+      retireSandboxHandle(handle);
+    }
 
-    const sameContainer =
-      container &&
-      handle.iframe &&
-      handle.iframe.parentNode === container;
+  }
 
-    if (handle.destroyed || detached || sameContainer) {
+}
 
-      destroySandboxSkinFrame(handle);
 
-      liveSandboxHandles.splice(i, 1);
+async function resumeHomeSandbox(record) {
+
+  const container =
+    record.options && record.options.container;
+
+  if (!container || !container.isConnected) {
+    return;
+  }
+
+
+  const mounted =
+    await mountPreparedSandboxSkin(record.options);
+
+
+  /*
+    ★ 기다리는 사이에 **다른 화면**이 현재 화면이 됐으면 이 프레임은
+    이미 옛것이다. 재료는 다시 적어 두고(다음 복귀에서 쓴다) 프레임만
+    내린다.
+
+    판정을 순번이 아니라 activeSandboxScreen 으로 하는 이유:
+    HOME 으로 돌아오는 길에는 sync("home") 이 **두 번** 불린다
+    (closePostArea 첫 줄에서 한 번, 커튼이 걷힌 뒤 한 번 — 앞의
+    것이 복귀를 시작하고 뒤의 것이 옛 화면을 내린다). 순번으로
+    재면 두 번째 호출 때문에 방금 띄운 HOME 프레임을 스스로
+    내려 버린다(2026-09-16 실측).
+  */
+
+  if (activeSandboxScreen !== "home") {
+
+    if (mounted && mounted.ok && mounted.handle) {
+      retireSandboxHandle(mounted.handle);
+    }
+
+    else if (mounted && mounted.deferred) {
+      /* mount 가 스스로 적어 뒀다 */
+    }
+
+    else {
+      suspendedHomeSandbox = record;
+    }
+
+    return;
+
+  }
+
+
+  if (mounted && (mounted.ok || mounted.deferred)) {
+
+    if (mounted.ok) {
+
+      try {
+        container.scrollTop = record.scrollTop || 0;
+      }
+      catch (err) { /* 스크롤 복원 실패는 화면을 막지 않는다 */ }
+
+    }
+
+    return;
+
+  }
+
+
+  /*
+    ★ 프레임이 다시 뜨지 못했다 — 백지로 두지 않는다.
+
+    같은 스킨을 native 로 그린다(skin-home.js 가 처음 mount 실패
+    때 하는 것과 같은 규칙). 조회도 Context 조립도 다시 하지
+    않는다 — 그 재료는 호출자가 이 thunk 안에 이미 담아 줬다.
+    다시 시도하지는 않는다(무한 재시도 금지).
+  */
+
+  const renderNative =
+    record.options && record.options.renderNative;
+
+  if (typeof renderNative === "function") {
+
+    try {
+
+      container.innerHTML = "";
+
+      renderNative(container);
+
+    }
+
+    catch (err) {
+
+      console.error(
+        "[skin-sandbox-host] HOME native fallback failed",
+        err
+      );
 
     }
 
@@ -1028,6 +1378,15 @@ export function prepareSandboxSkin(options) {
         navRegistry: prepared.navRegistry,
         authorJs: prepared.authorJs,
         frameOrigin: opts.frameOrigin,
+
+        /*
+          SANDBOX-5B — 복귀(resume)가 실패했을 때 같은 스킨을
+          native 로 그릴 thunk. 주지 않으면 그 경우 그 자리는
+          비어 있게 된다(지금까지의 호출자는 주지 않았다).
+        */
+
+        renderNative: opts.renderNative,
+
         onNavigate: opts.onNavigate,
         onScriptError: opts.onScriptError,
         timeoutMs: opts.timeoutMs,
@@ -1526,9 +1885,66 @@ async function mountPreparedSandboxSkin(opts) {
     opts.data;
 
 
-  /* 옛 handle 정리 — 같은 컨테이너의 것과 이미 떨어져 나간 것 */
+  const screen =
+    sandboxScreenOf(pageType);
 
-  sweepSandboxHandles(opts.container);
+
+  /* =====================================================
+     ★ SANDBOX-5B — 지금 현재 화면이 아닌 자리면 띄우지 않는다
+
+     주소로 곧장 /category/1 에 들어오면 index.html 의
+     initHomeRenderer() 가 경로와 무관하게 HOME 도 그린다. 그때
+     프레임을 만들면 문서에 프레임이 둘이 된다(하나는 덮여 있지만
+     둘 다 실행 중). 그래서 만들지 않고 **재료만 적어 둔다** —
+     HOME 으로 돌아오는 순간 syncSandboxSkinScreen("home") 이
+     그대로 띄운다.
+
+     호출자에게는 성공으로 알린다. 실패로 알리면 같은 스킨을
+     native 로 #themeMount 에 그려 두게 되고, 나중에 복귀한
+     프레임과 그 DOM 이 한 자리에 겹친다.
+
+     activeSandboxScreen 이 "" 인 문서(Skin Studio Preview)는 이
+     분기를 타지 않는다.
+
+     ★ 이 관문은 **HOME 쪽으로만** 닫힌다 (한쪽으로만 비대칭이다)
+
+     반대쪽(지금 HOME 인데 post 화면 프레임이 온다)은 정상 경로다.
+     기존 SPA 는 새 화면을 **다 그린 뒤에** 표시 공간을 드러낸다
+     (posts-view-list.js 의 "Skin 후보면 이전 화면을 그대로 둔다").
+     그래서 CATEGORY 프레임은 body.post-mode 가 켜지기 **전에**
+     mount 된다 — 그때 막으면 카테고리가 통째로 비어 버린다.
+  ====================================================== */
+
+  if (
+    screen === "home" &&
+    activeSandboxScreen === "post"
+  ) {
+
+    suspendedHomeSandbox = {
+      options: opts,
+      scrollTop: 0
+    };
+
+    return { ok: true, deferred: true, reason: "inactive-screen" };
+
+  }
+
+
+  /*
+    옛 handle 정리 — 같은 자리(screen)의 것 · 같은 컨테이너의 것 ·
+    이미 떨어져 나간 것. 다른 자리의 것은 건드리지 않는다
+    (syncSandboxSkinScreen 의 몫 — 위 장부 주석 참고).
+  */
+
+  sweepSandboxHandles(opts.container, screen);
+
+
+  /* 이 자리의 최신 mount 는 이제 나다 (위 상수 주석) */
+
+  sandboxScreenMountSeq[screen] += 1;
+
+  const mountToken =
+    sandboxScreenMountSeq[screen];
 
 
   /* --- 빈 프레임 --------------------------------------- */
@@ -1548,6 +1964,20 @@ async function mountPreparedSandboxSkin(opts) {
 
   const handle =
     mounted.handle;
+
+
+  /*
+    기다리는 사이에 같은 자리에서 다음 화면이 시작됐다 — 이 프레임은
+    그리기도 전에 옛것이 됐다. 그리지 않고 치운다.
+  */
+
+  if (sandboxScreenMountSeq[screen] !== mountToken) {
+
+    destroySandboxSkinFrame(handle);
+
+    return { ok: true, deferred: true, reason: "superseded" };
+
+  }
 
 
   /*
@@ -1572,6 +2002,22 @@ async function mountPreparedSandboxSkin(opts) {
 
   handle.onScriptError =
     typeof opts.onScriptError === "function" ? opts.onScriptError : null;
+
+
+  /*
+    SANDBOX-5B — 이 handle 이 어느 자리의 것인가, 그리고 다시
+    띄우려면 무엇이 필요한가. 복귀(resume)는 이 옵션 하나로 끝난다 —
+    조회도 Context 조립도 다시 하지 않는다.
+  */
+
+  handle.pageType =
+    pageType;
+
+  handle.screen =
+    screen;
+
+  handle.mountOptions =
+    opts;
 
 
   trackSandboxHandle(handle);
@@ -1615,6 +2061,48 @@ async function mountPreparedSandboxSkin(opts) {
     destroySandboxSkinFrame(handle);
 
     return { ok: false, reason: "detached" };
+
+  }
+
+
+  /*
+    렌더를 기다리는 사이에 같은 자리에서 다음 화면이 시작됐다.
+    (CATEGORY → POST 처럼 컨테이너가 서로 달라도 같은 자리다 —
+    그래서 컨테이너 기준 정리만으로는 잡히지 않는다.)
+  */
+
+  if (sandboxScreenMountSeq[screen] !== mountToken) {
+
+    retireSandboxHandle(handle);
+
+    return { ok: true, deferred: true, reason: "superseded" };
+
+  }
+
+
+  /*
+    ★ SANDBOX-5B — 기다리는 동안 다른 화면이 현재 화면이 됐을 수도
+    있다. 주소로 곧장 /category/1 에 들어오면 index.html 의
+    initHomeRenderer() 가 HOME 도 그리는데, 그 렌더가 카테고리보다
+    늦게 끝나면 위의 "띄우지 않는다" 관문(mount 를 시작할 때 한 번
+    본다)을 지나온 뒤가 된다. 그래서 끝날 때 한 번 더 본다.
+
+    위 관문과 같은 이유로 여기서도 **HOME 쪽으로만** 닫는다 —
+    post 화면 프레임은 표시 공간이 드러나기 전에 완성되는 것이
+    정상이다.
+
+    재료를 적어 두고 내린다(retireSandboxHandle) — HOME 으로
+    돌아오는 순간 다시 뜬다.
+  */
+
+  if (
+    handle.screen === "home" &&
+    activeSandboxScreen === "post"
+  ) {
+
+    retireSandboxHandle(handle);
+
+    return { ok: true, deferred: true, reason: "screen-changed" };
 
   }
 
@@ -1738,6 +2226,14 @@ export function destroySandboxSkinFrame(handle) {
   handle.handlers = {};
 
 
+  /*
+    SANDBOX-5B — 장부에서도 뺀다. 한 곳에서만 빼야 "내렸는데
+    장부에는 남아 있는" 상태가 생기지 않는다.
+  */
+
+  forgetSandboxHandle(handle);
+
+
   if (handle.win && handle.onMessage) {
 
     handle.win.removeEventListener(
@@ -1783,6 +2279,7 @@ const sandboxHostApi = {
   mountSandboxSkinFrame,
   renderSandboxSkinPage,
   sendSandboxPostBody,
+  syncSandboxSkinScreen,
   destroySandboxSkin,
   destroySandboxSkinFrame
 };
@@ -1792,6 +2289,18 @@ if (typeof window !== "undefined") {
 
   window.skinSandboxHost =
     sandboxHostApi;
+
+
+  /*
+    SANDBOX-5B — 화면 전환의 주인(posts/view/posts-view-transition.js)
+    은 classic script 라 이 모듈을 import 할 수 없고, 전환 도중에
+    Promise 를 기다릴 수도 없다(기다리는 사이 화면이 또 바뀐다).
+    그래서 전역 함수 하나로 준다 — 이 모듈이 아직 로드되지 않은
+    문서에서는 undefined 이고, 호출자는 그때 아무것도 하지 않는다.
+  */
+
+  window.syncSandboxSkinScreen =
+    syncSandboxSkinScreen;
 
   if (typeof window.__resolveSkinSandboxHostReady === "function") {
     window.__resolveSkinSandboxHostReady(sandboxHostApi);

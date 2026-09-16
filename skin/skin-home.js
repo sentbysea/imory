@@ -99,7 +99,27 @@ async function tryMountSandboxSkinHome({ container, template, context }) {
         container,
         pageType: "home",
         template,
-        context
+        context,
+
+        /*
+          SANDBOX-5B — HOME 프레임은 다른 화면으로 옮겨 갈 때
+          **내려간다**(그 자리에 남아 타이머·저자 JS 가 계속 도는
+          것을 막는다). HOME 으로 돌아오면 host 가 같은 재료로
+          다시 띄우는데, 그 복귀가 실패하면 백지가 된다. 그때
+          쓰라고 같은 스킨의 native 렌더를 함께 넘긴다 — 조회도
+          Context 조립도 다시 하지 않는다.
+        */
+
+        renderNative: function (target) {
+
+          renderSkin({
+            container: target,
+            skin: template,
+            context,
+            mode: "view"
+          });
+
+        }
       });
 
     if (!result || !result.ok) {

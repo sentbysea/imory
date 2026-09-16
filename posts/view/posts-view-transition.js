@@ -17,6 +17,125 @@
    POST TRANSITION
 ========================================================== */
 
+/* =========================================================
+   setPostSurfaceActive(active)
+
+   "지금 현재 화면이 어느 자리인가"를 정하는 단 하나의 지점.
+
+   이 앱의 공개 화면은 두 자리에 그려진다 — HOME 은 #themeMount
+   (#viewerArea 안), 나머지(CATEGORY/GALLERY/BANNER/HIGHLIGHTS/
+   POST/에디터/관리)는 #postArea 안. body.post-mode 가 그 둘 중
+   어느 쪽이 지금 화면인가를 이미 말하고 있었으므로, 그 토글을
+   함수 하나로 모으고 여기서 한 번 더 알린다.
+
+   ★ 왜 알려야 하는가 (SANDBOX-5B)
+
+   지금까지 HOME 은 다른 화면으로 옮겨 가도 #themeMount 에 그대로
+   남았다 — #postArea 가 그 위를 덮을 뿐이다. native 스킨에서는
+   덮인 DOM 이 아무 일도 하지 않으므로 그것이 맞는 동작이다.
+
+   sandbox 스킨(별도 origin iframe)에서는 다르다. 덮인 자리에 남은
+   iframe 은 살아 있는 문서이고, 그 안의 타이머 · rAF · 리스너 ·
+   **저자 JS** 가 계속 돈다. production 에서 HOME → CATEGORY 뒤에
+   프레임이 둘 떠 있었던 것이 그 결과다(둘 다 실행 중).
+
+   그래서 화면 전환의 주인인 이 파일이 자리를 알리고, 프레임을
+   실제로 내리고 다시 띄우는 일은 전부
+   skin/sandbox/skin-sandbox-host.js 안에서 한다 — 이 파일에는
+   iframe 을 지우는 코드가 한 줄도 없다.
+
+   ★ sandbox 프레임이 없는 배포/스킨에서는 전부 no-op 다.
+     전역이 없으면(모듈 미로드) 아무것도 하지 않고, 있어도
+     장부가 비어 있으면 곧바로 돌아온다. native 화면 전환은
+     한 줄도 달라지지 않는다.
+========================================================== */
+
+function setPostSurfaceActive(
+  active
+) {
+
+  if (active) {
+
+    document.body.classList.add(
+      "post-mode"
+    );
+
+  }
+
+  else {
+
+    document.body.classList.remove(
+      "post-mode"
+    );
+
+  }
+
+
+  syncSandboxSkinSurface(
+    active
+      ? "post"
+      : "home"
+  );
+
+}
+
+
+/*
+  위 함수와 closePostArea()가 쓰는 창구 하나. 비동기지만 기다리지
+  않는다 — 화면 전환이 프레임 핸드셰이크를 기다려서는 안 된다
+  (느리면 그 사이 이전 화면이 그대로 보이고, 프레임은 준비되는
+  대로 들어온다).
+*/
+
+function syncSandboxSkinSurface(
+  screen,
+  options
+) {
+
+  if (
+    typeof window === "undefined" ||
+    typeof window.syncSandboxSkinScreen !== "function"
+  ) {
+    return;
+  }
+
+
+  try {
+
+    const result =
+      window.syncSandboxSkinScreen(
+        screen,
+        options
+      );
+
+    if (result && typeof result.catch === "function") {
+
+      result.catch(
+        (err) => {
+
+          console.error(
+            "[posts-view-transition] sandbox screen sync failed",
+            err
+          );
+
+        }
+      );
+
+    }
+
+  }
+
+  catch (err) {
+
+    console.error(
+      "[posts-view-transition] sandbox screen sync threw",
+      err
+    );
+
+  }
+
+}
+
 async function showPostArea() {
 
   if (!postArea) {
@@ -29,8 +148,8 @@ async function showPostArea() {
     currentPostView !== "home"
   ) {
 
-    document.body.classList.add(
-      "post-mode"
+    setPostSurfaceActive(
+      true
     );
 
     return;
@@ -78,8 +197,8 @@ async function showPostArea() {
     false;
 
 
-  document.body.classList.add(
-    "post-mode"
+  setPostSurfaceActive(
+    true
   );
 
 
@@ -251,8 +370,8 @@ function showPostAreaInstant() {
     false;
 
 
-  document.body.classList.add(
-    "post-mode"
+  setPostSurfaceActive(
+    true
   );
 
 }
@@ -298,8 +417,8 @@ function hidePostAreaInstant() {
     "";
 
 
-  document.body.classList.remove(
-    "post-mode"
+  setPostSurfaceActive(
+    false
   );
 
 }
@@ -468,8 +587,8 @@ async function hidePostAreaCurtain() {
     "";
 
 
-  document.body.classList.remove(
-    "post-mode"
+  setPostSurfaceActive(
+    false
   );
 
 }
@@ -1508,6 +1627,27 @@ async function closePostArea(
     updateUrl = true,
     animate = true
   } = options;
+
+
+  /*
+    SANDBOX-5B — HOME 이 다시 현재 화면이 된다.
+
+    커튼(380ms)이 걷히기 **전에** 알린다. 내려가 있던 HOME 스킨
+    프레임이 그 시간 동안 조용히 다시 떠서, 커튼이 걷혔을 때
+    빈 자리가 보이지 않는다.
+
+    retirePrevious: false — 지금 화면(카테고리/글)의 프레임은
+    아직 내리지 않는다. 지금 내리면 페이드아웃하는 동안 그 화면이
+    비어 보인다. 실제로 내리는 것은 아래 hidePostAreaCurtain() /
+    hidePostAreaInstant() 안의 setPostSurfaceActive(false) 다.
+  */
+
+  syncSandboxSkinSurface(
+    "home",
+    {
+      retirePrevious: false
+    }
+  );
 
 
   if (updateUrl) {

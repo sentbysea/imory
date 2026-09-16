@@ -2,11 +2,11 @@
 
 **상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기 ·
 §J SANDBOX-2 · §K SANDBOX-3 · §L SANDBOX-4 · §M SANDBOX-3.1 ·
-§O SANDBOX-5A 저자 JS).**
+§O SANDBOX-5A 저자 JS · §P SANDBOX-5B 화면 전환 수명).**
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
 §G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2) · §K(SANDBOX-3) ·
-§L(SANDBOX-4) · §M(SANDBOX-3.1) · §O(SANDBOX-5A)에만
+§L(SANDBOX-4) · §M(SANDBOX-3.1) · §O(SANDBOX-5A) · §P(SANDBOX-5B)에만
 적혀 있다.** 섞어
 읽지 말 것 (CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 /
 남은 차이"를 구분한다).
@@ -30,6 +30,7 @@
 | 본문 inline style | §D-4 · §H-7: "CSSOM 쓰기는 막히지 않으므로 style-src-attr 를 열 필요가 없다" | SANDBOX-2 가 `setAttribute("style", …)` 와 `innerHTML` 의 style 속성을 더하면서 **그 전제가 깨졌다**. CSP 를 넓히는 대신 선언을 검증해 nonce `<style>` 로 옮겼다 (§M) |
 | 저자 JS 실행 | §C · §E SANDBOX-5 · §G-6 TODO: `script-src` 에 `blob:` 을 더해 Blob URL ES 모듈로 주입한다 | **CSP 를 한 글자도 넓히지 않았다.** 이미 있던 `'nonce-…'` 가 inline script 에도 적용되므로, nonce 를 단 classic `script` 요소의 `textContent` 로 실행한다 (§O-3) |
 | `js` 필드 | §C: 스키마에만 두고 실행하지 않는다 | **SANDBOX-5A 에서 실행된다.** 단 `test1` + 전용 kill switch 가 켜졌을 때만 (§O-5) |
+| 프레임의 수명 | §A~§F 에 없다("화면을 옮기면 컨테이너가 비워진다"고 전제했다) | **HOME 자리는 비워지지 않았다.** 화면을 옮겨도 옛 프레임이 살아 남아 둘이 동시에 돌았다 — 화면 전환이 자리를 알리고 host 가 내린다 (§P) |
 
 목표: 기존 `SkinPackage`·native 렌더링을 **한 byte도 바꾸지 않은 채**,
 `renderMode: "sandbox"`인 스킨만 별도 origin의 iframe에서 그리는 경로를
@@ -2885,6 +2886,228 @@ SANDBOX-1 부터의 기존 구멍이다 — sandbox 스킨이 native 로 바뀐�
 6. **예산** — 3D 는 CPU/GPU/메모리를 실제로 쓴다. 5B 에서는 프레임당
    상한(픽셀 수 · 텍스처 크기 · 파일 크기)과 "멈추는 방법"을 함께
    정해야 한다. 5A 에는 없다.
+
+---
+
+## P. SANDBOX-5B 구현 기록 (2026-09-16) — 화면을 옮기면 옛 프레임이 끝난다
+
+### P-1. 관측한 것
+
+production(`imory.me/test1`)에서 HOME → CATEGORY 로 옮긴 뒤, 문서에
+sandbox iframe 이 **둘** 있었다.
+
+```
+#viewerArea > #themeMount              > iframe   ← 옛 HOME
+#postArea > #postContainer > #postList > iframe   ← 지금 CATEGORY
+```
+
+둘 다 살아 있는 문서다. 타이머 · `requestAnimationFrame` 고리 ·
+window 리스너 · MutationObserver — 그리고 **저자 JS** 가 양쪽에서
+동시에 돈다. 저자 JS 를 Publish 하기 전에 반드시 끝내야 하는 이유가
+그것이다.
+
+기존 e2e 는 이것을 놓쳤다. 프레임 개수를 언제나 **컨테이너 안에서**
+셌기 때문이다(`countVisibleSandboxFrames(page, "#postList")`). 그
+판정의 근거였던 주석이 [nav] 절에 그대로 남아 있었다 — "HOME 스킨은
+`#themeMount` 에 계속 mount 된 채 남는다(native 와 같다). 그래서 글을
+보는 동안 살아 있는 프레임은 HOME 것과 지금 화면 것 둘이 정상이다."
+
+native 에서는 맞는 말이었다. 덮인 DOM 은 아무 일도 하지 않는다.
+sandbox 에서는 틀린 말이다.
+
+### P-2. 원인 — 화면 전환에 "옛 자리를 끈다"가 없다
+
+이 앱의 공개 화면은 두 자리에 그려진다.
+
+| 자리 | 컨테이너 | 화면 |
+| --- | --- | --- |
+| HOME | `#themeMount` (`#viewerArea` 안) | HOME |
+| POST 자리 | `#postList` | CATEGORY · GALLERY · BANNER · HIGHLIGHTS |
+| POST 자리 | `#postSkinContainer` | POST |
+
+전환은 **덮기**로 되어 있다. `#postArea` 는 `position: fixed; inset: 0`
+에 `rgba(255,255,255,.98)` 이라 HOME 을 완전히 가린다. HOME 으로
+돌아올 때도 `#postArea` 를 접기만 하면 HOME 이 그대로 다시 보인다
+(`skin/skin-link-nav.js` 의 HOME 분기 주석). `body.post-mode` 가
+`#viewerArea` 에 주는 것은 `pointer-events: none` 하나뿐이다.
+
+그래서 세 가지가 동시에 있었다.
+
+1. **HOME 프레임이 안 내려간다** — 다른 화면으로 가도 `#themeMount`
+   는 비워지지 않는다.
+2. **CATEGORY → POST 에서 목록 프레임이 안 내려간다** — `#postList`
+   는 `hidden` 이 될 뿐 비워지지 않는다
+   (`posts/view/posts-view-detail.js`). 컨테이너가 서로 달라서
+   기존 `sweepSandboxHandles(container)` 의 "같은 컨테이너" 규칙에
+   걸리지 않았다.
+3. **주소로 곧장 들어와도 HOME 이 그려진다** — `index.html` 의
+   `initHomeRenderer()` 는 경로와 무관하게 돈다. `/category/1` 로
+   직접 들어오면 카테고리 프레임 옆에 HOME 프레임이 하나 더 생긴다.
+
+`destroySandboxSkinFrame()` 은 처음부터 있었고 제 일을 했다 — 부르는
+사람이 없었을 뿐이다.
+
+### P-3. 고친 자리 — "지금 어느 자리가 현재 화면인가" 하나
+
+iframe 을 지우는 코드를 진입 모듈(skin-home / skin-category /
+skin-post / skin-banner / skin-highlights / posts-view-*)마다 뿌리지
+않았다. 그 대신 **화면 전환의 주인**이 자리 하나를 알린다.
+
+```
+posts/view/posts-view-transition.js
+    setPostSurfaceActive(active)        ← body.post-mode 토글을 모은 함수
+        -> window.syncSandboxSkinScreen("post" | "home")
+
+skin/sandbox/skin-sandbox-host.js
+    syncSandboxSkinScreen(screen, { retirePrevious })
+        ① screen === "home" 이면 내려가 있던 HOME 프레임을 다시 띄운다
+        ② 지금 화면이 아닌 자리의 handle 을 전부 retire 한다
+```
+
+`body.post-mode` 는 원래부터 "지금 화면이 HOME 인가 아닌가"를 말하고
+있었다. 새 상태를 만들지 않고 그 토글에 얹었다.
+
+**부르는 곳은 다섯 줄뿐이고 전부 같은 파일이다.**
+
+| 자리 | 무엇을 알리는가 |
+| --- | --- |
+| `showPostArea()` (이미 열려 있는 분기) | `"post"` |
+| `showPostArea()` (커튼을 치며 연다) | `"post"` |
+| `showPostAreaInstant()` | `"post"` |
+| `hidePostAreaInstant()` / `hidePostAreaCurtain()` | `"home"` |
+| `closePostArea()` 첫 줄 | `"home"`, `retirePrevious: false` |
+
+마지막 줄이 따로 있는 이유는 **빈 화면을 만들지 않기 위해서**다.
+HOME 으로 돌아가는 길은 380ms 커튼이 걷히는 애니메이션인데, 그 시작
+시점에 HOME 프레임을 다시 띄워 두면 커튼이 걷혔을 때 이미 그려져
+있다. 그리고 그때 옛 화면(카테고리/글)의 프레임은 **아직 내리지
+않는다** — 내리면 페이드아웃하는 동안 그 화면이 비어 보인다. 실제로
+내리는 것은 커튼이 끝난 뒤의 `setPostSurfaceActive(false)` 다.
+
+### P-4. 내리는 것과 다시 띄우는 것
+
+- **내린다** = `destroySandboxSkinFrame()`. 리스너를 떼고 iframe 을
+  DOM 에서 제거한다. 그 순간 realm 이 통째로 사라지므로 타이머 ·
+  rAF · 리스너 · observer · 저자 JS 가 함께 끝나고, 프레임 문서의
+  `pagehide` 에서 `imorySkin.onCleanup()` 이 돈다
+  (`skin/sandbox/skin-sandbox-frame.js`). 가리는 것이 아니다.
+- **늦게 온 메시지**는 이미 버려진다 — `destroySandboxSkinFrame()` 이
+  `handle.destroyed = true` 로 두고 `message` 리스너를 떼며,
+  `state.onMessage` 의 첫 줄도 `destroyed` 를 본다.
+- **다시 띄운다** = HOME 만. 내리기 전에 `mountPreparedSandboxSkin()`
+  에 줬던 옵션 전체(컨테이너 · template · 투영된 data · navRegistry ·
+  저자 JS)와 `#themeMount.scrollTop` 을 적어 두고(`suspendedHomeSandbox`),
+  돌아올 때 그대로 다시 mount 한다. **조회도 Context 조립도 다시
+  하지 않는다** — `get_published_skin` RPC 도 `buildSkinContext()` 도
+  부르지 않는다.
+- **복귀가 실패하면 백지로 두지 않는다.** `skin/skin-home.js` 가
+  `mountSandboxSkin()` 에 `renderNative` thunk 를 함께 넘기고, host 는
+  복귀 실패 시 그것으로 같은 스킨을 native 로 그린다. 다시 시도하지
+  않는다(무한 재시도 금지 — §H 와 같은 규칙).
+
+### P-5. 관문 둘 — 한쪽으로만 닫힌다
+
+`mountPreparedSandboxSkin()` 이 지금 화면을 두 번 본다(시작할 때 ·
+끝날 때). 두 번 다 **HOME 쪽으로만** 닫는다.
+
+- `screen === "home" && activeSandboxScreen === "post"` 이면 프레임을
+  만들지 않고 재료만 적어 둔 뒤 `{ ok: true, deferred: true }` 로
+  돌려준다. `/category/1` 직접 접속에서 늦게 도착하는
+  `initHomeRenderer()` 의 HOME 렌더가 여기 걸린다. 실패로 돌려주면
+  `skin-home.js` 가 같은 스킨을 native 로 `#themeMount` 에 그려 두고,
+  나중에 복귀한 프레임과 그 DOM 이 한 자리에 겹친다 — 그래서
+  성공으로 돌려준다.
+- 반대쪽은 닫지 않는다. 기존 SPA 는 새 화면을 **다 그린 뒤에** 표시
+  공간을 드러낸다(`posts-view-list.js` 의 "Skin 후보면 이전 화면을
+  그대로 둔다"). 그래서 CATEGORY 프레임은 `body.post-mode` 가 켜지기
+  **전에** mount 된다 — 그때 막으면 카테고리가 통째로 빈다. 실제로
+  한 번 그렇게 막았다가 [authorjspages] 의 클릭 이동이 전부
+  깨졌다(2026-09-16).
+
+### P-6. 자리마다의 mount 순번
+
+장부(`liveSandboxHandles`)만으로는 모자랐다. mount 는 두 번
+기다리는데(READY 왕복 · RENDERED), 장부에 오르는 것은 첫 기다림이
+끝난 뒤다. CATEGORY 프레임이 아직 READY 를 기다리는 동안 POST 로
+옮겨 가면 POST 의 정리(`sweepSandboxHandles`)가 그것을 보지 못하고,
+잠시 뒤 그것이 장부에 올라 `#postList` 안에 **가려진 채** 남는다.
+뒤로/앞으로를 20번 오가는 절에서 간헐적으로 재현됐다.
+
+그래서 자리마다 `sandboxScreenMountSeq` 를 하나 두고, mount 를 시작할
+때 번호를 올린 뒤 기다림이 끝날 때마다 자기 번호가 최신인지 본다.
+아니면 그리지 않고 치운다(`reason: "superseded"`). 이 파일의
+`renderSeq` 와 같은 장치이고, `posts/view/*` 의 요청 순번과도 같은
+생각이다.
+
+### P-7. 바꾸지 않은 것
+
+- **native 스킨** — `syncSandboxSkinScreen()` 은 장부가 비어 있으면
+  곧바로 돌아온다. HOME DOM 은 예전처럼 `#themeMount` 에 남는다
+  (덮인 DOM 은 아무 일도 하지 않으므로 바꿀 이유가 없다). e2e 가
+  그것을 그대로 못박는다.
+- **비밀글 native 폴백**(§J-5) — 글 자리에 프레임을 만들지 않는다.
+  이제 HOME 자리에도 없으므로 그 화면에서는 문서 전체에 sandbox
+  프레임이 **0개**다.
+- **Skin Studio Preview**(§L) — `preview-frame.html` 은 이 모듈을
+  자기 문서에서 따로 로드하고 `body.post-mode` 라는 것이 없다.
+  `activeSandboxScreen` 이 끝까지 `""` 라 위 관문을 아예 타지 않는다.
+- **CSP · 저자 JS 관문 · kill switch**(§O) — 한 글자도 바꾸지 않았다.
+- `renderMode` 가 없는 스킨의 경로 — 한 줄도 지나가지 않는다.
+
+### P-8. 고친 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/sandbox/skin-sandbox-host.js` | 장부에 `screen` 축 · `syncSandboxSkinScreen()` · HOME suspend/resume · 자리별 mount 순번 · `window.syncSandboxSkinScreen` 전역 |
+| `posts/view/posts-view-transition.js` | `setPostSurfaceActive()` 로 `body.post-mode` 토글을 모으고 host 에 알린다 (iframe 을 지우는 코드는 없다) |
+| `skin/skin-home.js` | `mountSandboxSkin()` 에 `renderNative` thunk 를 함께 넘긴다(복귀 실패 시 백지 금지) |
+| `skin/test-skins/imory-sandbox-screens-v1.json` (+ `build-sandbox-screens-v1.mjs`) | regression fixture — realm 마다 프레임 origin 의 저장소에 박동과 cleanup 을 적는다 |
+| `skin/sandbox/skin-sandbox-e2e-test.mjs` | `--only=screens` 신설 · 기존 컨테이너별 판정을 **문서 전체** 판정으로 |
+
+### P-9. 검증 (2026-09-16, mock 기반 e2e)
+
+`node skin/sandbox/skin-sandbox-e2e-test.mjs --only=screens`
+(chromium · webkit 양쪽, 94 PASS)
+
+세 가지로 잰다.
+
+1. 문서 전체의 iframe **요소** 수 — 가려진 것까지 센다.
+2. playwright 의 frame tree — 브라우저가 아는 **살아 있는 realm** 수.
+3. fixture 가 프레임 origin 의 `localStorage` 에 적는
+   `{ realm id -> 박동 수 }` — 지금 화면의 프레임에서 그 표를 비우고
+   잠시 기다린 뒤 **키 개수**를 센다. 1 이면 돌고 있는 realm 은
+   하나뿐이다. 누적 계수기가 아니라 "누가 뛰었는가"를 세므로 측정
+   창의 길이에도, 프레임이 언제 만들어졌는지에도 좌우되지 않는다.
+4. 같은 표의 `cleanups` / `cleaned` — 없어진 프레임에서 `pagehide` →
+   `onCleanup` 이 실제로 돌았는가.
+
+확인한 것: HOME 최초 진입 · HOME→CATEGORY · CATEGORY→POST ·
+POST→HOME(클릭) · BANNER/HIGHLIGHTS/GALLERY 왕복 · 뒤로/앞으로 20회 ·
+`/category/1`·`/post/101` 직접 접속과 새로고침(늦게 오는 HOME 렌더
+포함) · 390px · native 회귀. 전부 문서 전체 1개(비밀글은 0개).
+
+함께 돌린 것: 전체 sandbox e2e 559 PASS · Studio Preview sandbox
+105 PASS · sandbox 단위 238 PASS · `skin-write-manage` 155 PASS ·
+`skin-banner-page` 248 PASS · `skin-published-frame` 64 PASS ·
+`skin-public-number` 26 PASS · `posts-highlight --only=entry` 14 PASS.
+
+**아직 안 한 것: 배포 확인과 실기기 확인.** production 에서 관측된
+현상이므로, 배포 뒤 `imory.me/test1` 에서 같은 전환을 직접 밟아
+문서의 iframe 수를 다시 재야 한다.
+
+### P-10. 남은 차이
+
+- **HOME 복귀는 프레임을 새로 만든다.** 저자 JS 의 realm 이 새것이
+  되므로 저자가 화면 안에 만들어 둔 상태(열어 둔 패널, 옮겨 둔 카드)는
+  HOME 을 떠났다가 돌아오면 초기값이다. `#themeMount.scrollTop` 만
+  복원한다. 상태를 이어 주려면 저자에게 저장 지점을 주는 설계가
+  따로 필요하다(§O-9 의 공유 origin 문제와 함께 봐야 한다).
+- **POST 자리 프레임이 화면이 닫힌 뒤에 도착하는 경우**는 여전히
+  기존 장치에 기댄다 — `closePostArea()` 가 두 컨테이너를 비우므로
+  그 iframe 은 문서에서 떨어지고, mount 끝의 `detached` 검사에
+  걸려 치워진다. 자리별 순번은 "같은 자리의 다음 화면"까지만 본다.
+- FOLDER 화면은 여전히 native 다(§K). 그 화면에서는 HOME 프레임이
+  내려가고 새 프레임은 뜨지 않는다 — 문서 전체 0개가 정상이다.
 
 ---
 
