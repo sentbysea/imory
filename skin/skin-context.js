@@ -3825,6 +3825,44 @@ async function buildFolderSkinContext(
    최종 텍스트만 돌려준다(5-3절과 동일 원칙).
 ========================================================== */
 
+/* Sage Letter: read-only, public metadata for the footer of a post.
+   Existing RLS still applies. Never select contents, passwords or owner tools.
+   Additive native context field; sandbox projection is intentionally unchanged. */
+async function fetchSkinRelatedPosts(ownerId, post) {
+  try {
+    let query = supabaseClient
+      .from("posts")
+      .select("id, public_no, title, created_at, visibility, category_id")
+      .eq("user_id", ownerId)
+      .eq("visibility", "public")
+      .neq("id", post.id);
+
+    if (post.category_id != null) {
+      query = query.eq("category_id", post.category_id);
+    }
+
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
+      .limit(5);
+
+    if (error) {
+      console.warn("[skin-context] related posts unavailable", error.code || "query-failed");
+      return [];
+    }
+
+    const rows = (data || []).filter((row) =>
+      row.visibility === "public" &&
+      String(row.id) !== String(post.id) &&
+      Number.isSafeInteger(Number(row.public_no)) && Number(row.public_no) > 0
+    );
+    return rememberPublicNoRows(PUBLIC_NO_POST, ownerId, rows);
+  } catch (error) {
+    console.warn("[skin-context] related posts unavailable");
+    return [];
+  }
+}
+
 async function buildPostSkinContext(
   ownerId,
   postId,
@@ -3890,6 +3928,13 @@ async function buildPostSkinContext(
   const postPath =
     skinPostHref(commonData.slug, post);
 
+  const relatedPostsRaw = await fetchSkinRelatedPosts(ownerId, post);
+  const relatedPosts = relatedPostsRaw.map((row) => ({
+    title: maskSkinPostTitle(row.visibility, row.title),
+    href: skinPostHref(commonData.slug, row),
+    publishedAtLabel: formatSkinPublishedAtLabel(row.created_at)
+  }));
+
 
   return {
 
@@ -3923,6 +3968,7 @@ async function buildPostSkinContext(
       publishedAtLabel: formatSkinPublishedAtLabel(post.created_at),
       categoryName,
       categoryHref,
+      relatedPosts,
 
       /* 정식 공개 주소 — 스킨이 "이 글 링크" 같은 것을 그릴 때 쓴다 */
       href:
@@ -4767,3 +4813,4 @@ async function buildSkinContext(
   );
 
 }
+
