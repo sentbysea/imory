@@ -1,0 +1,362 @@
+/* =========================================================
+   SKIN LAYOUT PRIMITIVES — 배치 규칙
+
+   기준 문서: IMORY_LAYOUT_PRIMITIVE_DESIGN.md
+   값을 채우는 쪽: skin/skin-layout.js (compileSkinLayoutTree)
+
+   이 파일은 **배치만** 한다. 색·테두리·그림자·글꼴은 한 줄도
+   없다 — primitive 가 디자인을 강제하지 않는다는 원칙(요구사항
+   1절)이 파일 모양으로 성립한다.
+
+   ── 왜 custom property 인가 ────────────────────────────
+   @media 는 요소마다 다른 값을 가질 수 없고, 스킨 HTML 의 속성
+   값은 CSS 가 숫자로 읽을 수 없다(attr() 은 content 밖에서 못 쓴다).
+   그래서 JS 컴파일러가 검증된 값을 custom property 로 써 넣고
+   (CSSOM 쓰기라 CSP style-src 에 걸리지 않는다) 여기서는 그
+   property 만 읽는다. 여기 적힌 var() 폴백은 "컴파일러가 아직 돌지
+   않은 찰나"용 최소값일 뿐이고, 진짜 기본값은 skin-layout.js 의
+   normalizeSkinLayout() 한 곳에 있다.
+
+   ── 우선순위 ───────────────────────────────────────────
+   선택자는 전부 속성 하나(0,1,0)다. 스킨 CSS 는 인스턴스 스코프
+   클래스가 앞에 붙어(.imory-skin-root-iN .foo = 0,2,0) 언제나 더
+   강하고, 같은 특정도라도 스킨의 <style> 이 문서상 뒤에 온다 —
+   즉 스킨 저자가 원하면 언제든 덮어쓸 수 있다.
+
+   ── breakpoint ─────────────────────────────────────────
+   grid  : 900px(tablet) / 600px(mobile)
+   sidebar: 요소마다 다르다. @media 가 custom property 를 못 읽어서
+            허용된 계단(480/600/720/900)마다 블록을 하나씩 둔다.
+   이 숫자들은 skin-layout.js 의 SKIN_LAYOUT_TABLET_MAX /
+   SKIN_LAYOUT_MOBILE_MAX / SKIN_LAYOUT_COLLAPSE_STEPS 와 같아야
+   한다 — 단위 테스트가 두 파일을 실제로 읽어 대조한다.
+========================================================== */
+
+
+/* =========================================================
+   공통 — 모든 primitive 의 구조 속성(요구사항 2절)
+
+   layout 을 선언하지 않은 요소에는 이 규칙이 닿지 않는다.
+========================================================== */
+
+[data-imory-layout] {
+  box-sizing: border-box;
+  min-height: var(--imory-lay-min-height, 0px);
+  overflow: var(--imory-lay-overflow, visible);
+
+  /* 가로 넘침 안전판(요구사항 13절) */
+  min-width: 0;
+}
+
+/* max-width 를 준 컨테이너는 가운데로 모은다 — "폭을 제한했는데
+   왼쪽에 붙는다"가 거의 항상 실수이기 때문이다. 왼쪽/오른쪽에
+   두고 싶으면 align 으로 고른다.
+
+   판정을 custom property 가 아니라 **저자가 실제로 쓴 속성**으로
+   한다: 컴파일러는 --imory-lay-max-width 를 언제나 써 넣으므로
+   (없으면 "none") 그 값으로는 "저자가 폭을 정했는가"를 구분할 수
+   없다.
+
+   ★ 선택자가 속성 **둘**인 것(0,2,0)에는 이유가 있다. 플랫폼 폭
+     계약(core/content-width.css)의
+       `.imory-skin-root :where(*):not(table)…{ max-width:100% }`
+     은 :not() 안의 타입 선택자 때문에 (0,1,1) 이라, 속성 하나짜리
+     (0,1,0) 규칙으로는 이길 수 없다 — 2026-09-18 실측: panel 에
+     max-width:720px 을 줘도 부모 폭 그대로 그려졌다.
+
+   ★ min(…, 100%) 으로 감싸는 것도 그 계약을 **되살리기** 위해서다.
+     이 규칙이 이기는 순간 "부모보다 넓어질 수 없다"는 보장이 사라
+     지므로(390px 화면에서 720px 상자), 여기서 다시 건다. */
+[data-imory-layout][data-imory-layout-max-width] {
+  max-width: min(var(--imory-lay-max-width, 100%), 100%);
+  margin-inline: auto;
+}
+
+[data-imory-layout][data-imory-layout-max-width][data-imory-layout-align="start"] {
+  margin-inline: 0 auto;
+}
+
+[data-imory-layout][data-imory-layout-max-width][data-imory-layout-align="end"] {
+  margin-inline: auto 0;
+}
+
+
+/* =========================================================
+   PANEL — 담기만 한다(요구사항 2절)
+
+   자체로는 어떤 배치도 의미하지 않는다. 그래서 display 를 바꾸지
+   않는다 — 블록 흐름 그대로다. 안에 다시 stack/grid/free/sidebar
+   를 둘 수 있다.
+========================================================== */
+
+[data-imory-layout="panel"] {
+  display: block;
+}
+
+
+/* =========================================================
+   STACK — 한 방향으로 순서대로(요구사항 3절)
+========================================================== */
+
+[data-imory-layout="stack"] {
+  display: flex;
+  flex-direction: var(--imory-lay-direction, column);
+  flex-wrap: var(--imory-lay-wrap, wrap);
+  gap: var(--imory-lay-row-gap, 16px) var(--imory-lay-gap, 16px);
+  align-items: var(--imory-lay-align, stretch);
+  justify-content: var(--imory-lay-justify, start);
+}
+
+/* 가로 stack 의 항목이 자기 콘텐츠 때문에 줄을 밀어내지 못하게
+   한다 — 긴 제목 하나가 모바일 가로 스크롤을 만드는 가장 흔한
+   경로다(요구사항 13절). */
+[data-imory-layout="stack"] > * {
+  min-width: 0;
+}
+
+
+/* =========================================================
+   GRID — 정해진 칸에(요구사항 4절)
+
+   트랙이 항상 minmax(0, 1fr) 이라 항목이 트랙 폭을 넘길 수 없다.
+   열 수는 breakpoint 마다 JS 가 확정해서 넘긴다.
+========================================================== */
+
+[data-imory-layout="grid"] {
+  display: grid;
+  grid-template-columns: var(--imory-lay-tracks, repeat(2, minmax(0, 1fr)));
+  gap: var(--imory-lay-row-gap, 16px) var(--imory-lay-gap, 16px);
+  align-items: var(--imory-lay-align, stretch);
+}
+
+[data-imory-layout="grid"] > * {
+  min-width: 0;
+  grid-column: var(--imory-it-column, auto);
+  grid-row: var(--imory-it-row, auto);
+}
+
+@media (max-width: 900px) {
+
+  [data-imory-layout="grid"] {
+    grid-template-columns: var(--imory-lay-tracks-tablet, repeat(2, minmax(0, 1fr)));
+  }
+
+}
+
+@media (max-width: 600px) {
+
+  [data-imory-layout="grid"] {
+    grid-template-columns: var(--imory-lay-tracks-mobile, repeat(1, minmax(0, 1fr)));
+  }
+
+  /* 열이 줄어든 뒤 span 이 남은 열 수보다 크면 **암시적 열이
+     생겨** 그리드가 화면 밖으로 넘친다(`grid-column: span 3` 을
+     2열 그리드에 주면 3열이 된다). 그래서 좁은 화면에서는 span 을
+     가진 항목이 그냥 그 줄 전체를 쓴다 — 넓게 두려던 의도는
+     지키면서 가로 스크롤은 구조적으로 못 만든다(요구사항 13절). */
+  [data-imory-layout="grid"] > [data-imory-item-span] {
+    grid-column: 1 / -1;
+  }
+
+}
+
+
+/* =========================================================
+   FREE — 자유 좌표(요구사항 5·6절)
+
+   좌표는 px 가 아니라 0~1 비율이다.
+
+     left      : x * 컨테이너 폭
+     translateX: x * -(자기 폭)
+     합         = x * (컨테이너 폭 - 자기 폭)
+
+   x=0 이면 왼쪽 끝, x=1 이면 오른쪽 끝에 딱 붙는다. 화면이 어떻게
+   바뀌어도 요소가 컨테이너 밖으로 나갈 수 없으므로 clamp 를 도는
+   런타임 코드가 필요 없다(요구사항 6·13절).
+========================================================== */
+
+[data-imory-layout="free"] {
+  display: block;
+  position: relative;
+  min-height: var(--imory-lay-height, 320px);
+}
+
+[data-imory-layout="free"] > * {
+  position: absolute;
+  left: calc(var(--imory-it-x, 0) * 100%);
+  top: calc(var(--imory-it-y, 0) * 100%);
+  transform:
+    translate(
+      calc(var(--imory-it-x, 0) * -100%),
+      calc(var(--imory-it-y, 0) * -100%)
+    );
+  width: var(--imory-it-width, 40%);
+  height: var(--imory-it-height, auto);
+  max-width: 100%;
+  z-index: var(--imory-it-z, 0);
+}
+
+
+/* =========================================================
+   SIDEBAR — 보조 영역 + 주요 콘텐츠(요구사항 7절)
+
+   본문 트랙이 minmax(0, 1fr) 이라 본문이 사이드바를 밀어내지
+   못한다.
+
+   ★ 자리 배정은 **자동 배치에 맡긴다**. 두 슬롯에 열 번호만 주면
+     브라우저가 순서대로 "그 열이 비어 있는 첫 줄"에 넣는다 —
+     사이드바는 1행, 본문 자식이 여럿이면 2행·3행으로 이어 쌓인다.
+
+   ★ 사이드바에 `grid-row: 1 / -1` 을 쓰지 않는다. `-1` 은 **명시
+     그리드**의 마지막 선을 가리키는데 여기에는 명시 행이 없어서
+     실제로는 1행 하나만 잡는다(2026-09-18 실측: 본문이 2행일 때
+     사이드바가 늘어나지 않았고, 선언만 "늘어난다"고 말하고 있었다).
+     그래서 거짓말하는 선언을 지우고, 계약을 그대로 적는다 —
+     사이드바는 첫 줄에 놓인다. 본문이 여러 덩어리라면 그것들을
+     본문 슬롯 **하나** 안에 stack 으로 묶는 것이 이 primitive 의
+     쓰임이다(감사가 그때 한 줄로 알려 준다).
+========================================================== */
+
+[data-imory-layout="sidebar"] {
+  display: grid;
+
+  /* ★ dense 인 이유(2026-09-18 실측).
+
+     기본(sparse) 자동 배치는 커서가 앞으로만 간다: 열이 지정된
+     항목이 앞 항목보다 **왼쪽** 열이면 줄을 하나 내린다. 그래서
+     side="right" 처럼 사이드바가 2열이고 DOM 에서 먼저 오면, 그
+     다음 본문(1열)이 2행으로 밀려 사이드바 옆이 텅 비고 전체가
+     계단처럼 내려갔다.
+
+     dense 는 항목마다 처음부터 빈 칸을 찾는다 — 두 슬롯을 DOM 에
+     어느 순서로 적든 같은 그림이 된다. 순서가 뜻을 갖는 것은
+     stack/grid 이고, 사이드바의 자리는 side 가 정한다. */
+  grid-auto-flow: row dense;
+
+  grid-template-columns: var(--imory-lay-tracks, 220px minmax(0, 1fr));
+  gap: var(--imory-lay-row-gap, 24px) var(--imory-lay-gap, 24px);
+  align-items: var(--imory-lay-align, stretch);
+}
+
+[data-imory-layout="sidebar"] > * {
+  min-width: 0;
+  grid-column: var(--imory-lay-main-column, 2);
+}
+
+[data-imory-layout="sidebar"] > [data-imory-slot="sidebar"] {
+  grid-column: var(--imory-lay-side-column, 1);
+}
+
+
+/* =========================================================
+   SIDEBAR 접힘 — desktop 나란히 / mobile 세로
+
+   접히면 **CONTENT 가 위**다(요구사항 7절 그림). DOM 순서가
+   어떻든 order 로 정한다.
+
+   같은 규칙을 계단마다 반복한다 — @media 가 custom property 를
+   읽지 못하기 때문이다. 계단을 늘리려면 skin-layout.js 의
+   SKIN_LAYOUT_COLLAPSE_STEPS 와 함께 고친다.
+========================================================== */
+
+@media (max-width: 720px) {
+
+  [data-imory-layout="sidebar"]:not([data-imory-layout-collapse]),
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="720"] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  [data-imory-layout="sidebar"]:not([data-imory-layout-collapse]) > *,
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="720"] > * {
+    order: 1;
+  }
+
+  [data-imory-layout="sidebar"]:not([data-imory-layout-collapse]) > [data-imory-slot="sidebar"],
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="720"] > [data-imory-slot="sidebar"] {
+    order: 2;
+  }
+
+  [data-imory-layout="sidebar"]:not([data-imory-layout-collapse])[data-imory-layout-mobile="hide"] > [data-imory-slot="sidebar"],
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="720"][data-imory-layout-mobile="hide"] > [data-imory-slot="sidebar"] {
+    display: none;
+  }
+
+}
+
+@media (max-width: 480px) {
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="480"] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="480"] > * {
+    order: 1;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="480"] > [data-imory-slot="sidebar"] {
+    order: 2;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="480"][data-imory-layout-mobile="hide"] > [data-imory-slot="sidebar"] {
+    display: none;
+  }
+
+}
+
+@media (max-width: 600px) {
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="600"] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="600"] > * {
+    order: 1;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="600"] > [data-imory-slot="sidebar"] {
+    order: 2;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="600"][data-imory-layout-mobile="hide"] > [data-imory-slot="sidebar"] {
+    display: none;
+  }
+
+}
+
+@media (max-width: 900px) {
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="900"] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="900"] > * {
+    order: 1;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="900"] > [data-imory-slot="sidebar"] {
+    order: 2;
+  }
+
+  [data-imory-layout="sidebar"][data-imory-layout-collapse="900"][data-imory-layout-mobile="hide"] > [data-imory-slot="sidebar"] {
+    display: none;
+  }
+
+}
+
+
+/* =========================================================
+   Studio 전용 표식
+
+   Direct Edit 이 "지금 이 요소의 부모가 배치다"를 화면에서
+   보여줄 때만 쓴다. 공개 화면에는 이 속성이 절대 생기지 않는다
+   (플랫폼이 Studio 안에서만 찍는다).
+========================================================== */
+
+[data-imory-layout-hint="drop"] {
+  outline: 2px dashed currentColor;
+  outline-offset: 2px;
+}

@@ -746,7 +746,45 @@ function describeInspectorElement(el, options) {
   const canStyle =
     !isProtectedRegion;
 
+  /* =====================================================
+     LAYOUT-1 — 배치 primitive (IMORY_LAYOUT_PRIMITIVE_DESIGN.md)
+
+     "이 요소가 어떤 배치를 선언했는가 / 부모가 어떤 배치인가"는
+     skin/skin-layout.js 의 순수 함수 하나가 답한다 — Studio 와
+     공개 렌더러가 같은 판정을 쓰는 이유다.
+
+     열어 주는 조건:
+       layout     자식이 있는 컨테이너여야 한다. 배치는 "무엇을
+                  어떻게 담는가"라서 담을 것이 없으면 뜻이 없다.
+       layoutItem 부모가 실제로 배치를 선언했고, 그 배치에 자식별
+                  파라미터가 있을 때만(격자의 칸, 자유 배치의
+                  좌표, 사이드바의 영역).
+       reorder    형제가 둘 이상이고 부모가 순서를 읽는 배치일 때.
+
+     보호 구역(post-body) 안에서는 전부 닫힌다 — canStyle 과 같다.
+  ====================================================== */
+
+  const layout =
+    typeof describeSkinLayoutTarget === "function"
+      ? describeSkinLayoutTarget(el)
+      : null;
+
+  const canLayout =
+    canStyle &&
+    !!layout &&
+    hasElementChildren &&
+    kind !== "image";
+
+  const canLayoutItem =
+    canStyle &&
+    !!layout &&
+    layout.parentIsLayout &&
+    (layout.itemParams.length > 0 || layout.parentType === "sidebar");
+
   const capabilities = {
+    layout: canLayout,
+    layoutItem: canLayoutItem,
+    reorder: canStyle && !!layout && layout.canReorder,
     text: canEditText,
     href: canEditHref,
     typography: canStyle && (kind === "text" || kind === "link"),
@@ -789,6 +827,7 @@ function describeInspectorElement(el, options) {
     isRepeatTemplate: !!repeatPath,
     isInsideRepeat: !!repeatAncestor,
     imageSlot,
+    layout,
     staticHref: el.getAttribute("href") || null,
     staticSrc: el.getAttribute("src") || null,
     text: ownText,

@@ -2459,13 +2459,38 @@ async function runRepeat(context) {
     el.dispatchEvent(new PointerEvent("pointerover", { bubbles: true, cancelable: true }));
     el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
   });
-  await page.waitForFunction(
-    () => window.getStudioInspectorState().selection !== null,
-    null,
-    { timeout: 5000 }
-  );
+  /*
+    ★ "raw selection 이 null 이 아니다"로 기다리면 안 된다 (2026-09-18).
 
-  const homeSelection = await page.evaluate(() => window.getStudioAiSelectionContext());
+    그 값은 프레임의 select 메시지가 도착하는 순간 바로 채워지지만,
+    아래에서 읽는 selectionContext 는 그 id 를 **지금 SkinPackage 에서
+    다시 찾아낼 수 있을 때**만 만들어진다
+    (describeStudioInspectorSelection -> resolveInspectorSelectionTarget).
+    그 사이가 한 틱이라도 벌어지면 raw 는 있는데 context 는 null 이라,
+    이 검사가 간헐적으로 "elementType: null" 로 깨졌다.
+
+    그래서 **이 검사가 실제로 보는 값**이 준비될 때까지 기다린다.
+
+    ★ 그리고 **기다린 그 값을 그대로 읽는다**. 조건이 참이 된 뒤에
+    다시 page.evaluate 로 물으면 그것은 또 한 번의 왕복이라, 그
+    사이에 늦게 도착한 rects/select 메시지가 선택을 다시 계산해
+    잠깐 null 이 되는 순간을 밟을 수 있다(실제로 밟았다).
+    waitForFunction 은 조건이 참이던 그 시점의 값을 handle 로
+    돌려주므로 그 값에는 틈이 없다.
+  */
+  const homeSelection =
+    await page
+      .waitForFunction(
+        () => {
+          const context = window.getStudioAiSelectionContext();
+          return (context && context.hrefBinding === "navigation.home.href")
+            ? context
+            : null;
+        },
+        null,
+        { timeout: 5000 }
+      )
+      .then((handle) => handle.jsonValue());
 
   record(
     "H1(6B.1). HOME 링크 선택은 hrefBinding=navigation.home.href로 정확히 보고된다",

@@ -1152,6 +1152,116 @@
         },
 
         /*
+          Scenario LAY (LAYOUT-1) — 배치 primitive 직접 편집 fixture.
+          기준 문서: IMORY_LAYOUT_PRIMITIVE_DESIGN.md
+
+          HOME template 하나에 이번 라운드가 고칠 수 있는 자리를 전부
+          둔다.
+
+            .lay-plain    배치가 아직 없는 컨테이너
+                          -> "배치 방식"으로 격자/세로/사이드바를 고른다
+            .lay-grid     이미 격자인 컨테이너 (열 수를 바꾼다)
+            .lay-g1..g3   그 자식 (가로 칸 · 순서)
+            .lay-free     자유 배치 컨테이너
+            .lay-f1       그 자식 (좌표 · 이동 손잡이)
+            .lay-side     사이드바 (영역 슬롯)
+            .lay-text     배치와 무관한 텍스트 (회귀 대조군)
+
+          scenario y 와 따로 두는 이유: y 는 "구조 경로 id"를 기대하는
+          검사들이 붙어 있어서 요소를 더하거나 순서를 건드리면 그쪽이
+          함께 흔들린다. 배치는 형제 순서를 실제로 바꾸는 라운드라
+          같은 fixture 를 쓸 수 없다.
+        */
+        lay: {
+          userId: "user-lay",
+          tables: {
+            skins: [
+              { id: "skin-lay1", user_id: "user-lay", is_active: true, current_draft_version_id: "draft-lay1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-lay1",
+                content: window.__scenarioLaySkinPackage || {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html:
+                        '<div class="lay-home">' +
+                        '<h1 class="lay-text" data-imory-bind="site.title"></h1>' +
+                        '<div class="lay-plain"><p class="lay-p1">하나</p><p class="lay-p2">둘</p></div>' +
+                        '<div class="lay-grid" data-imory-layout="grid" data-imory-layout-columns="2" data-imory-layout-gap="10">' +
+                        '<div class="lay-g1">G1</div><div class="lay-g2">G2</div><div class="lay-g3">G3</div>' +
+                        '</div>' +
+                        '<div class="lay-free" data-imory-layout="free" data-imory-layout-height="200">' +
+                        '<div class="lay-f1" data-imory-item-x="0" data-imory-item-y="0" data-imory-item-width="30">F1</div>' +
+                        '</div>' +
+                        '<div class="lay-side" data-imory-layout="sidebar" data-imory-layout-side="left" data-imory-layout-sidebar-width="150">' +
+                        '<nav class="lay-side-menu" data-imory-slot="sidebar">MENU</nav>' +
+                        '<div class="lay-side-main" data-imory-slot="main">CONTENT</div>' +
+                        '</div>' +
+                        '</div>'
+                    },
+                    category: {
+                      html: '<div class="lay-category"><h1 data-imory-bind="category.name"></h1></div>'
+                    },
+                    post: {
+                      html: '<div class="lay-post"><h1 data-imory-bind="post.title"></h1><div data-imory-region="post-body"></div></div>'
+                    }
+                  },
+                  css:
+                    '.lay-home { padding: 8px; } ' +
+                    '.lay-grid > div, .lay-plain > p { height: 30px; background: #ddd; } ' +
+                    '.lay-free > div { height: 40px; background: #cce; } ' +
+                    '.lay-side > * { height: 50px; background: #efe; }',
+                  imageSlots: [],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-lay", nickname: "Scenario LAY", bio: null, slug: "scenario-lay" }],
+            site_settings: [{ user_id: "user-lay", key: "blog_title", value: "SCENARIO LAY BLOG" }],
+            categories: [
+              { id: "301", user_id: "user-lay", name: "LOG", type: "post", sort_order: 1 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-lay", title: "Hello", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301", content: "본문" }
+            ],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version: function (params) {
+
+              window.top.__savedDraftCallsLay =
+                window.top.__savedDraftCallsLay || [];
+
+              window.top.__savedDraftCallsLay.push(params);
+
+              const newVersionId =
+                "draft-lay" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            }
+          }
+        },
+
+        /*
           Scenario T — folder-aware Skin Preview fixture (FOLDER-1
           후속: Folder-aware Skin Rendering).
 
@@ -2294,6 +2404,7 @@
     })();
   </script>
 
+  <script src="../skin/skin-layout.js"></script>
   <script src="../skin/skin-sanitize.js"></script>
   <script src="../skin/skin-package-normalize.js"></script>
   <!-- skin-generator.js는 위(mock 정의보다 먼저)에서 이미 로드했다 -->
@@ -2365,6 +2476,7 @@
   <script src="./inspector/studio-inspector-text.js"></script>
   <script src="./inspector/studio-inspector-image-size.js"></script>
   <script src="./inspector/studio-inspector-crop.js"></script>
+  <script src="./inspector/studio-inspector-layout.js"></script>
   <script src="./inspector/studio-inspector-controls.js"></script>
   <script src="./inspector/studio-inspector.js"></script>
   <script src="./studio-state.js"></script>

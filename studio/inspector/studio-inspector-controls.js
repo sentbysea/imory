@@ -143,6 +143,17 @@ function buildStudioInspectorControls(info) {
     controls.push({ control: "href", type: "text", label: "링크 주소" });
   }
 
+  /* 배치(LAYOUT-1) — 텍스트/링크 바로 다음이다.
+
+     이 자리인 이유: 색·테두리·여백보다 **먼저** 정해지는 것이
+     배치다("이 카드들을 2열로"가 "이 카드를 분홍으로"보다 앞선
+     결정이다). 한 덩어리로 묶어 그리는 이유는 행 수가 고른 배치에
+     따라 달라지기 때문이다 — 격자와 사이드바가 요구하는 칸이 다르다
+     (studio/inspector/studio-inspector-layout.js). */
+  if (can.layout || can.layoutItem || can.reorder) {
+    controls.push({ control: "layout", type: "layoutBlock", label: "배치 방식" });
+  }
+
   if (can.imageSource || can.imageClear) {
     controls.push({ control: "imageSource", type: "image", label: "이미지" });
   }
@@ -394,6 +405,16 @@ function renderStudioInspectorControl(spec, info, declarations) {
   if (spec.type === "bindNote") {
 
     renderStudioInspectorBindNote(spec, info);
+
+    return;
+
+  }
+
+  if (spec.type === "layoutBlock") {
+
+    if (typeof renderStudioInspectorLayoutBlock === "function") {
+      renderStudioInspectorLayoutBlock(spec, info);
+    }
 
     return;
 
@@ -694,6 +715,12 @@ function renderStudioInspectorPopover() {
 
     studioInspectorResizable = false;
 
+    /* LAYOUT-1 — 이동 손잡이 자격도 여기서 한 번만 정한다
+       (좌표 칠하기가 매번 다시 판단하지 않는 이유는
+       studio/inspector/studio-inspector-layout.js
+       resolveStudioInspectorMovable 머리말). */
+    studioInspectorMovable = false;
+
     studioInspectorPopoverShape = "";
 
     resetStudioInspectorPopoverPlacement();
@@ -714,6 +741,10 @@ function renderStudioInspectorPopover() {
        실측값(자연 크기·부모 안쪽 폭)이 오지 않으므로 슬라이더도
        모서리 드래그도 기준을 세울 수 없다(아래 directEditBlocked). */
     !studioInspectorRemoteOverlay;
+
+  studioInspectorMovable =
+    typeof resolveStudioInspectorMovable === "function" &&
+    resolveStudioInspectorMovable(resolved);
 
   studioInspectorPopover.hidden =
     false;

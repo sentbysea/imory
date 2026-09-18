@@ -636,6 +636,74 @@ article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 
 즉 `home.recentPosts`, `item.href`, `post.categoryName`처럼 영문자/숫자/언더스코어와 마침표만 가능합니다. 대괄호 인덱싱(`home.recentPosts[0]`), 함수 호출, 공백, 따옴표는 전부 불가 — 이 패턴에 안 맞으면 저장 시점에 속성이 통째로 제거됩니다.
 
+### 3-3. 배치 primitive (`data-imory-layout` · `data-imory-item` · `data-imory-slot`)
+
+근거: [skin/skin-layout.js](skin/skin-layout.js) · [skin/skin-layout.css](skin/skin-layout.css) · 기준 문서 [IMORY_LAYOUT_PRIMITIVE_DESIGN.md](./IMORY_LAYOUT_PRIMITIVE_DESIGN.md)
+
+위 9개와 **별개의 계층**입니다. 바인딩이 "무엇을 보여주는가"라면 이쪽은 **"어떻게 배치되는가"** 하나만 정합니다 — 색·테두리·둥글기·글꼴은 여전히 전부 CSS의 몫이라, 배치 속성을 붙였다고 디자인이 강제되지 않습니다.
+
+쓰지 않아도 됩니다. 이 속성이 하나도 없는 스킨은 지금까지와 **한 글자도 다르지 않게** 그려집니다(강제 마이그레이션 없음).
+
+`data-imory-layout` 에 올 수 있는 값은 다섯 개입니다.
+
+| 값 | 무엇 | 자식에게 |
+|---|---|---|
+| `panel` | 담기만 하는 그룹. 스스로 배치하지 않습니다(블록 흐름 그대로). | — |
+| `stack` | 한 방향으로 순서대로. | — |
+| `grid` | 정해진 칸에. | `data-imory-item-span`(1–12), `data-imory-item-row-span`(1–6) |
+| `free` | 자유 좌표. | `data-imory-item-x`/`-y`(0–1 **비율**), `-width`/`-height`(%), `-z`(0–99) |
+| `sidebar` | 보조 영역 + 주요 콘텐츠. | `data-imory-slot="sidebar"` / `"main"` |
+
+컨테이너 파라미터는 전부 `data-imory-layout-` 으로 시작합니다.
+
+| 파라미터 | 쓰이는 곳 | 값 |
+|---|---|---|
+| `direction` | stack | `column`(기본) `row` |
+| `gap` / `row-gap` | stack grid sidebar | 0–160 |
+| `align` | 전부 | `start` `center` `end` `stretch`(기본) `baseline` |
+| `justify` | stack | `start`(기본) `center` `end` `between` `around` |
+| `wrap` | stack | `wrap`(기본) `nowrap` |
+| `columns` / `columns-tablet` / `columns-mobile` | grid | 1–12 (태블릿/모바일을 비우면 각각 `min(열 수,3)`, `min(열 수,2)`) |
+| `min` | grid | 40–800. 주면 **열 수를 폭이 정합니다**(그때 `columns*`는 무시됩니다) |
+| `height` | free | 0–2000 (컨테이너 높이) |
+| `side` / `sidebar-width` / `collapse` / `mobile` | sidebar | `left`(기본) `right` / 60–600 / `480` `600` `720`(기본) `900` / `stack`(기본) `hide` |
+| `max-width` / `min-height` / `overflow` | 전부 | 0–2000 / 0–2000 / `visible`(기본) `hidden` `auto` |
+
+**범위를 벗어나거나 이름이 틀린 값은 저장 시점에 그 속성만 조용히 사라집니다.** 요소와 내용은 그대로 남으므로 배치 하나가 빠질 뿐 화면이 깨지지는 않습니다(다른 `data-imory-*`와 같은 규칙).
+
+```html
+<section data-imory-layout="sidebar"
+         data-imory-layout-side="left"
+         data-imory-layout-sidebar-width="220"
+         data-imory-layout-collapse="720">
+
+  <nav data-imory-slot="sidebar"
+       data-imory-layout="stack"
+       data-imory-layout-direction="column"
+       data-imory-layout-gap="8">
+    <a data-imory-repeat="navigation.categories"
+       data-imory-href="item.href"
+       data-imory-bind="item.name"></a>
+  </nav>
+
+  <div data-imory-slot="main"
+       data-imory-layout="grid"
+       data-imory-layout-columns="3"
+       data-imory-layout-gap="16">
+    <article data-imory-repeat="category.posts">
+      <a data-imory-href="item.href" data-imory-bind="item.title"></a>
+    </article>
+  </div>
+
+</section>
+```
+
+세 가지만 기억하면 됩니다.
+
+1. **자유 배치의 좌표는 px이 아니라 0~1 비율입니다.** `x="1"`은 "오른쪽 끝에 **안쪽으로** 딱 붙음"이라, 화면 폭이 어떻게 바뀌어도 요소가 상자를 벗어나지 않습니다.
+2. **반응형을 직접 쓰지 마세요.** 격자는 900px/600px에서 열이 줄고, 사이드바는 `collapse` 아래에서 본문이 위로 오게 접힙니다. 같은 것을 재현하려고 미디어 쿼리나 `position: absolute`를 쓰면 두 벌이 싸웁니다.
+3. **순서는 HTML 순서입니다.** `order` 같은 CSS로 바꾸지 마세요 — Skin Studio의 순서 ↑↓와 AI가 고치는 것은 HTML의 형제 순서입니다.
+
 ### 3-2. `id` 속성은 전면 금지
 
 표준 HTML `id` 속성은 v0.1 정책상 **완전히 제거**됩니다(`SKIN_SANITIZE_DENY_ATTRS`). region/앵커 식별에도 표준 `id`를 쓸 수 없고, 오직 `data-imory-region`만 그 역할을 합니다.

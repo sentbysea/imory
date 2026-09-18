@@ -505,6 +505,10 @@
 
     loadVersionedScripts(
       [
+        /* 배치 primitive(IMORY_LAYOUT_PRIMITIVE_DESIGN.md) —
+           sanitize 가 layout 속성을 검사할 때 이 파일의 판정
+           함수를 부르므로 **먼저** 온다. */
+        "./skin/skin-layout.js",
         "./skin/skin-sanitize.js",
         "./skin/skin-image-slots.js",
         "./skin/skin-context.js",
@@ -672,6 +676,12 @@
         "./themes/sua/heart-interaction.css",
         "./themes/sua/cover-profile.css",
         "./posts/posts-base.css",
+
+        /* 스킨 배치 primitive — stack/grid/free/sidebar/panel.
+           renderSkin() 도 없으면 스스로 걸지만, 미리 걸어야
+           첫 페인트부터 배치가 맞는다
+           (IMORY_LAYOUT_PRIMITIVE_DESIGN.md). */
+        "./skin/skin-layout.css",
 
         /*
           본문이 그려지는 모든 화면의 공용 CSS — 형광펜 여백 ·

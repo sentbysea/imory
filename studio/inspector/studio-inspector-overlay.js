@@ -340,6 +340,71 @@ function buildStudioInspectorLayer() {
 
     });
 
+  /* =====================================================
+     LAYOUT-1 — 자유 배치의 이동 손잡이
+
+     자유 배치(free) 안에 있는 요소만 가진다. 선택 테두리 왼쪽 위
+     바깥에 앉는다 — 모서리 크기 핸들 네 개와 자리가 겹치지 않는
+     유일한 자리이고, 자유 배치 요소는 크기 핸들을 갖지 않으므로
+     (이미지가 아닌 컨테이너가 대부분) 실제로는 거의 단독이다.
+
+     "요소 자체를 끄는" 방식을 쓰지 않는 이유: 프레임 안 요소를
+     직접 끌면 그 안의 링크·텍스트 선택·저자 JS 와 뒤엉킨다.
+     Inspector 의 다른 드래그(크기·자르기)가 전부 overlay 손잡이인
+     것과 같은 판단이다.
+  ====================================================== */
+
+  studioInspectorMoveHandle =
+    document.createElement("div");
+
+  studioInspectorMoveHandle.className =
+    "studio-inspector-move-handle";
+
+  studioInspectorMoveHandle.id =
+    "studioInspectorMoveHandle";
+
+  studioInspectorMoveHandle.dataset.inspectorMoveHandle =
+    "free";
+
+  studioInspectorMoveHandle.setAttribute("role", "button");
+
+  studioInspectorMoveHandle.setAttribute("aria-label", "자유 배치 위치 옮기기");
+
+  studioInspectorMoveHandle.textContent =
+    "✥";
+
+  studioInspectorMoveHandle.hidden =
+    true;
+
+  studioInspectorMoveHandle.addEventListener(
+    "pointerdown",
+    (event) => {
+
+      if (typeof beginStudioInspectorLayoutDrag === "function") {
+        beginStudioInspectorLayoutDrag(event, studioInspectorMoveHandle);
+      }
+
+    }
+  );
+
+  studioInspectorMoveHandle.addEventListener(
+    "lostpointercapture",
+    () => {
+
+      if (typeof cancelStudioInspectorLayoutDrag === "function") {
+        cancelStudioInspectorLayoutDrag();
+      }
+
+    }
+  );
+
+  studioInspectorMoveHandle.addEventListener(
+    "dragstart",
+    (event) => event.preventDefault()
+  );
+
+  studioInspectorLayer.appendChild(studioInspectorMoveHandle);
+
   studioInspectorLayer.appendChild(studioInspectorPopover);
 
   studioInspectorShell.appendChild(studioInspectorLayer);
@@ -542,6 +607,13 @@ function paintStudioInspectorHandles(rect, visibleRect) {
   paintStudioInspectorCropSurface(visible);
 
   paintStudioInspectorCropHandles(visible);
+
+  /* 배치 모듈(studio-inspector-layout.js)이 로드되지 않은 문서에서도
+     overlay 자체는 살아 있어야 한다 — 좌표 칠하기가 여기서 예외를
+     내면 테두리도 핸들도 팝오버도 전부 멈춘다. */
+  if (typeof paintStudioInspectorMoveHandle === "function") {
+    paintStudioInspectorMoveHandle(visible);
+  }
 
   if (!studioInspectorHandles.length) {
     return;

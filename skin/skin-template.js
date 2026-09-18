@@ -1052,6 +1052,56 @@ function auditSkinPackageMaterials(skinPackage) {
   }
 
 
+  /* 5) 배치 primitive 가 조용히 무시되는 조합
+
+     IMORY_LAYOUT_PRIMITIVE_DESIGN.md. 판정은 skin/skin-layout.js
+     한 곳에만 있고 여기서는 페이지마다 불러 모으기만 한다 —
+     "저장은 되는데 화면에서 아무 일도 안 일어나는" 배치 선언
+     (격자에 direction 을 준다든가, 사이드바에 slot 자식이 없다든가)
+     을 사람이 읽을 문장으로 돌려준다. 거부가 아니라 경고다.
+
+     DOMParser 가 없는 환경(node 단위 테스트에서 이 함수를 직접
+     부르는 경우)에서는 조용히 건너뛴다 — 배치 감사는 그쪽에서
+     skin-layout.js 를 직접 본다. */
+
+  if (
+    typeof auditSkinLayoutDocument === "function" &&
+    typeof DOMParser !== "undefined"
+  ) {
+
+    const parser = new DOMParser();
+
+    const layoutPages =
+      [["HOME", typeof skinPackage.html === "string" ? skinPackage.html : ""]]
+        .concat(
+          Object.keys(templates).map(
+            (pageType) => [
+              pageType.toUpperCase(),
+              (templates[pageType] && typeof templates[pageType].html === "string")
+                ? templates[pageType].html
+                : ""
+            ]
+          )
+        );
+
+    layoutPages.forEach(([label, html]) => {
+
+      if (!html || html.indexOf("data-imory-layout") === -1) {
+        return;
+      }
+
+      const doc =
+        parser.parseFromString(html, "text/html");
+
+      auditSkinLayoutDocument(doc.body, label).forEach(
+        (warning) => warnings.push(warning)
+      );
+
+    });
+
+  }
+
+
   return warnings;
 
 }

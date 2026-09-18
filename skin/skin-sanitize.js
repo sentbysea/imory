@@ -237,6 +237,40 @@ function copySkinSanitizedAttributes(sourceEl, destEl, tag) {
       return;
     }
 
+    /* =====================================================
+       LAYOUT PRIMITIVE (data-imory-layout* / data-imory-item* /
+       data-imory-slot) — IMORY_LAYOUT_PRIMITIVE_DESIGN.md
+
+       값 판정은 여기에 복사하지 않는다. 허용되는 type/파라미터와
+       각 값의 범위는 skin/skin-layout.js 한 곳에만 있고(저장 ·
+       렌더 · Studio 폼 · AI 응답 검사가 전부 그 표를 본다) 여기서는
+       그 함수에 묻기만 한다 — 표가 두 벌이 되면 "저장은 되는데
+       렌더는 안 되는" 값이 생긴다.
+
+       모양이 틀린 값은 region/edit-id 와 같은 규칙으로 **조용히
+       버린다**(속성만 사라지고 요소와 내용은 그대로 남는다). 그
+       요소는 배치 선언이 없는 평범한 요소가 되므로 legacy 스킨과
+       똑같이 그려진다 — 배치가 하나 빠질 뿐 화면이 깨지지 않는다.
+
+       skin-layout.js 가 아직 로드되지 않은 문서라면 layout 속성을
+       아는 코드가 그 문서에 없다는 뜻이므로 전부 버린다(진입
+       문서들은 이 파일보다 먼저 로드한다 — index.html 등의 로드
+       목록 참고). */
+    if (
+      typeof isSkinLayoutAttributeName === "function" &&
+      isSkinLayoutAttributeName(name)
+    ) {
+
+      if (isValidSkinLayoutAttributeValue(name, value)) {
+        destEl.setAttribute(name, value);
+      } else {
+        console.warn(`[skin-sanitize] dropped unsupported ${name}="${value}"`);
+      }
+
+      return;
+
+    }
+
     if (name === SKIN_SANITIZE_REGION_ATTR) {
       if (SKIN_SANITIZE_ALLOWED_REGION_NAMES.has(value)) {
         destEl.setAttribute(name, value);

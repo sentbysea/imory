@@ -112,6 +112,90 @@
 }
 
 
+/* =========================================================
+   LAYOUT-1 — 자유 배치의 이동 손잡이
+
+   크기 핸들(동그라미)과 **모양이 달라야** 한다. 둘은 하는 일이
+   전혀 다른데(하나는 크기, 하나는 자리) 같은 점으로 그리면 어느
+   것을 잡았는지 손이 먼저 알지 못한다. 그래서 네모 + 십자 기호에
+   move 커서다.
+========================================================== */
+
+/* ★ [hidden] 을 **명시로** 되살린다.
+
+   브라우저 기본 스타일시트의 `[hidden] { display: none }` 은 저자
+   스타일보다 약하다. 그래서 아래에서 display 를 지정하는 순간 이
+   손잡이는 hidden 이어도 계속 그려진다 — 그리고 좌표를 아직 한 번도
+   칠하지 않은 상태라 화면 왼쪽 위(0,0)에 얹혀 Preview 의 클릭을
+   가로챈다(2026-09-18: 이것 때문에 선택 관련 e2e 가 시간 초과로
+   깨졌다 — 눈에는 아무 것도 안 보이는데 클릭만 사라졌다).
+
+   크기·자르기 핸들은 display 를 건드리지 않아서 이 문제가 없다. */
+.studio-inspector-move-handle[hidden] {
+  display: none;
+}
+
+.studio-inspector-move-handle {
+  position: absolute;
+
+  width: 20px;
+  height: 20px;
+
+  margin: -24px 0 0 -2px;
+
+  box-sizing: border-box;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 1px solid var(--system-accent-hover);
+  border-radius: var(--imory-radius-100, 4px);
+
+  background: var(--system-bg);
+
+  color: var(--system-accent-hover);
+
+  font-size: var(--imory-font-size-200);
+  line-height: 1;
+
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+
+  cursor: move;
+
+  pointer-events: auto;
+
+  touch-action: none;
+
+  user-select: none;
+}
+
+
+/* 순서 ↑↓ — 한 행 안에 나란히 */
+
+.studio-inspector-layout-order {
+  display: flex;
+  gap: 4px;
+
+  flex: 1;
+}
+
+
+.studio-inspector-layout-order-button {
+  min-width: 28px;
+
+  border: 1px solid var(--system-border, rgba(0, 0, 0, 0.12));
+  border-radius: var(--imory-radius-100, 4px);
+}
+
+
+.studio-inspector-layout-order-button:disabled {
+  opacity: 0.4;
+
+  cursor: default;
+}
+
+
 .studio-inspector-layer.is-dragging {
   pointer-events: auto;
 

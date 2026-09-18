@@ -966,6 +966,13 @@ function inspectorMetricsOf(el) {
 
   let parentWidth = 0;
 
+  /* LAYOUT-1 — 자유 배치(free)의 좌표는 "부모 안쪽 상자의 비율"이다.
+     그래서 폭만으로는 부족하다: 세로 좌표를 포인터 이동량에서
+     되돌리려면 부모의 안쪽 **높이**도 필요하다
+     (IMORY_LAYOUT_PRIMITIVE_DESIGN.md §직접 편집). 폭과 똑같이
+     padding 을 뺀 값이다. */
+  let parentHeight = 0;
+
   if (parent) {
 
     const parentStyle =
@@ -976,6 +983,11 @@ function inspectorMetricsOf(el) {
       (parseFloat(parentStyle.paddingLeft) || 0) -
       (parseFloat(parentStyle.paddingRight) || 0);
 
+    parentHeight =
+      parent.clientHeight -
+      (parseFloat(parentStyle.paddingTop) || 0) -
+      (parseFloat(parentStyle.paddingBottom) || 0);
+
   }
 
   return {
@@ -984,6 +996,7 @@ function inspectorMetricsOf(el) {
     naturalWidth: Number(el.naturalWidth) || 0,
     naturalHeight: Number(el.naturalHeight) || 0,
     parentWidth: Math.max(0, Math.round(parentWidth)),
+    parentHeight: Math.max(0, Math.round(parentHeight)),
     viewportWidth: document.documentElement.clientWidth || 0,
 
     /* 자르기 UI가 "이미지가 없거나 로드에 실패했다"를 말해 줄 수
@@ -1434,6 +1447,43 @@ function applyInspectorPreview(data) {
           ? String(data.ratio)
           : "";
 
+    }
+
+  }
+
+  /* =====================================================
+     LAYOUT-1 — 자유 배치의 좌표 임시 미리보기
+
+     Studio 가 보내는 것은 확정될 값 그대로(0~1 비율)이고, 여기서는
+     그것을 skin/skin-layout.css 가 읽는 **바로 그 custom property**
+     에 써 넣는다. 그래서 끄는 동안 보이는 자리와 손을 뗀 뒤
+     확정되어 다시 그려진 자리가 같은 계산에서 나온다.
+
+     되돌리기는 따로 없다 — 위에서 이 요소의 style 속성 원본을 이미
+     기억해 뒀고(inspectorPreviewRestore.style), clearInspectorPreview()
+     가 그것을 되돌린다.
+  ====================================================== */
+  if (data.layoutPosition && typeof data.layoutPosition === "object") {
+
+    const ratio = (value) => {
+
+      const parsed = Number(value);
+
+      return Number.isFinite(parsed)
+        ? String(Math.min(1, Math.max(0, parsed)))
+        : null;
+
+    };
+
+    const x = ratio(data.layoutPosition.x);
+    const y = ratio(data.layoutPosition.y);
+
+    if (x !== null) {
+      selected.style.setProperty("--imory-it-x", x);
+    }
+
+    if (y !== null) {
+      selected.style.setProperty("--imory-it-y", y);
     }
 
   }

@@ -385,7 +385,12 @@ const SKIN_AI_SELECTION_REGION_NAMES = ["post-body", "owner-tools"];
 const SKIN_AI_SELECTION_CAPABILITY_NAMES = [
   "text", "href", "typography", "color", "background", "align",
   "imageSource", "imageClear", "size", "shape", "border", "padding",
-  "imageAlign", "crop"
+  "imageAlign", "crop",
+
+  /* LAYOUT-1 — 배치 primitive(IMORY_LAYOUT_PRIMITIVE_DESIGN.md).
+     이 셋이 목록에 없으면 배치를 고칠 수 있는 요소를 고른 채 보낸
+     요청이 selectionContext 검증에서 통째로 거부된다. */
+  "layout", "layoutItem", "reorder"
 ];
 
 /* 사람이 읽는 한 줄 라벨("HOME · 제목 · Recent Notes"). 프롬프트에
@@ -1085,6 +1090,20 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `data-imory-region=\"post-body\"` marks the protected post body. It appears once in `templates.post`, and once per repeated post inside `templates.folder` (see FOLDER).",
     "- `data-imory-region=\"owner-tools\"` marks where the platform's own owner buttons (＋ new post, edit) are placed. Leave the element empty. Only these two region names exist; any other value is stripped.",
     "Keep every binding that already exists unless the user explicitly asks to remove that piece of content.",
+    "",
+    "## Layout primitives (data-imory-layout / data-imory-item / data-imory-slot)",
+    "The platform has five built-in layout primitives. When a request is about WHERE things sit — order, columns, side by side, free placement, grouping — express it with these attributes instead of inventing new CSS. The owner's own no-AI edit form writes exactly the same attributes, so a layout you build this way stays editable by hand, and vice versa. The attributes carry NO visual design: colour, borders, radius, shadows and typography stay in the CSS, untouched.",
+    "- `data-imory-layout=\"panel\"`   a plain group. It does not arrange anything itself; put another primitive inside it.",
+    "- `data-imory-layout=\"stack\"`   children in one direction, in order. `data-imory-layout-direction=\"column|row\"` (default column), `-gap` (px 0-160), `-align` (start|center|end|stretch|baseline), `-justify` (start|center|end|between|around), `-wrap` (wrap|nowrap).",
+    "- `data-imory-layout=\"grid\"`    children in cells. `data-imory-layout-columns` (1-12), `-columns-tablet`, `-columns-mobile`, `-gap`, `-row-gap`, `-min` (px; when set, the column count follows the available width and the columns numbers are ignored). On a child: `data-imory-item-span` (1-12) and `data-imory-item-row-span` (1-6).",
+    "- `data-imory-layout=\"free\"`    children at free coordinates. `data-imory-layout-height` (px, the container's height). On a child: `data-imory-item-x` and `data-imory-item-y` are RATIOS from 0 to 1 (0 = flush left/top, 0.5 = centred, 1 = flush right/bottom), plus `data-imory-item-width` / `-height` in percent and `data-imory-item-z`. Never write pixel coordinates — ratios are what keeps the element inside the box at every screen width.",
+    "- `data-imory-layout=\"sidebar\"` a secondary column beside the main content. `data-imory-layout-side=\"left|right\"`, `-sidebar-width` (px 60-600), `-gap`, `-collapse` (480|600|720|900 — the width below which it stacks), `-mobile` (stack|hide). Mark the two children with `data-imory-slot=\"sidebar\"` and `data-imory-slot=\"main\"`; a sidebar without a `sidebar` slot child renders as one block.",
+    "Primitives nest: a panel can hold a sidebar whose main slot holds a grid. Build complex arrangements by nesting, not by writing new positioning CSS.",
+    "- The platform stylesheet already handles responsiveness: grid drops columns at 900px and 600px, sidebar stacks (content first) below its collapse width, and free coordinates are ratios. So do NOT add your own media queries, `position: absolute`, `float`, or negative margins to reproduce these five arrangements.",
+    "- Values outside the ranges above are dropped when the skin is saved, and the element then renders with no layout at all. Stay inside them.",
+    "- Interpret layout requests as primitive changes: \"swap these two\" = move the elements in the HTML; \"put these four in two columns\" = `grid` with `columns=\"2\"`; \"menu on the left, posts on the right\" = `sidebar` with `side=\"left\"`; \"move the profile photo freely to the top right\" = make the parent `free` and give that child `x=\"1\" y=\"0\"`; \"group these three\" = wrap them in one element with a layout.",
+    "- Scope: when the user selected one container and asked to change its layout, change THAT element's layout attributes and nothing else. Do not restyle the rest of the page and do not convert unrelated containers to primitives.",
+    "- Existing skins have no layout attributes and must keep working exactly as they are. Only add them where the request is actually about arrangement.",
     "",
     "### Context paths available on every page",
     "site.title, site.language",

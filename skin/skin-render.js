@@ -53,6 +53,57 @@ import { installContentWidthContract } from "../core/content-width.js";
 const CONTENT_WIDTH_STYLESHEET_URL =
   new URL("../core/content-width.css", import.meta.url);
 
+/* 배치 primitive stylesheet(IMORY_LAYOUT_PRIMITIVE_DESIGN.md).
+
+   content-width.css 와 완전히 같은 방식으로 건다 — 진입 문서가
+   loadVersionedStyles()로 미리 걸어 뒀으면 그대로 두고, 걸어 두지
+   않은 document(테스트 하네스 등)에서만 여기서 넣는다.
+
+   layout 속성이 하나도 없는 스킨에서는 이 파일의 어느 선택자도
+   매치되지 않는다 — 그래서 기존 스킨의 렌더 결과는 바뀌지 않는다. */
+const SKIN_LAYOUT_STYLESHEET_URL =
+  new URL("./skin-layout.css", import.meta.url);
+
+function ensureSkinStylesheet(doc, stylesheetUrl, marker) {
+
+  const alreadyLinked =
+    Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).some(
+      (link) => {
+
+        try {
+          return new URL(link.getAttribute("href") || "", doc.baseURI).pathname ===
+            stylesheetUrl.pathname;
+        } catch (error) {
+          return false;
+        }
+
+      }
+    );
+
+  if (alreadyLinked) {
+    return;
+  }
+
+  const version =
+    typeof APP_BUILD_VERSION === "string"
+      ? APP_BUILD_VERSION
+      : null;
+
+  const link = doc.createElement("link");
+  link.rel = "stylesheet";
+  link.href = version
+    ? `${stylesheetUrl.pathname}?v=${version}`
+    : stylesheetUrl.href;
+  link.setAttribute(marker, "");
+
+  doc.head.appendChild(link);
+
+}
+
+function ensureSkinLayoutStylesheet(doc) {
+  ensureSkinStylesheet(doc, SKIN_LAYOUT_STYLESHEET_URL, "data-imory-skin-layout");
+}
+
 function ensureContentWidthStylesheet(doc) {
 
   const alreadyLinked =
@@ -634,6 +685,7 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
     const doc = container.ownerDocument;
     installContentWidthContract(doc);
     ensureContentWidthStylesheet(doc);
+    ensureSkinLayoutStylesheet(doc);
 
     const safeHtml = sanitizeSkinHTML(String(currentSkin?.html || ""), doc);
 
@@ -683,6 +735,24 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
     Array.from(root.children)
       .filter((child) => child !== styleEl)
       .forEach((child) => walkSkinTree(child, resolveTopLevel, 0));
+
+    /* =====================================================
+       배치 primitive 컴파일 — 반드시 walk **뒤**다.
+
+       data-imory-repeat 은 clone 을 만들어 넣으므로, walk 전에
+       컴파일하면 반복으로 생긴 항목들이 자기 custom property 를
+       못 받는다(격자 안에서 반복되는 카드가 전부 span 없이
+       그려지는 식). 여기서 한 번 돌면 template 도 clone 도 전부
+       같은 값을 받는다.
+
+       layout 속성이 하나도 없는 스킨에서는 이 호출이 어떤 요소도
+       건드리지 않는다 — style 속성조차 생기지 않으므로 기존
+       스킨의 outerHTML 이 글자 단위로 그대로다
+       (skin/skin-layout.js 7절).
+    ====================================================== */
+    if (typeof compileSkinLayoutTree === "function") {
+      compileSkinLayoutTree(root);
+    }
 
   }
 

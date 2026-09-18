@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SKIN LAYOUT — 렌더 하네스</title>
+
+  <!--
+    =========================================================
+    LAYOUT-1 렌더 하네스
+
+    기준 문서: IMORY_LAYOUT_PRIMITIVE_DESIGN.md
+
+    다섯 primitive 를 **실제 renderSkin() 으로** 그린다. 화면에
+    "PASS/FAIL"을 찍지 않는다 — 이 문서가 하는 일은 재어 볼 수 있는
+    화면을 만드는 것이고, 판정은 좌표를 재는 쪽이 한다
+    (skin/skin-layout-e2e-test.mjs).
+
+    왜 renderSkin 인가: 공개 HOME/CATEGORY/POST · sandbox 프레임 ·
+    Studio Preview 가 전부 이 함수 하나를 지난다. 여기서 맞으면 그
+    네 화면에서 같은 계산이 돈다.
+
+    로컬 정적 서버가 필요하다(ES 모듈 import + CDN css-tree) —
+    관례상 포트 8934. e2e 는 자기 서버를 띄운다.
+    =========================================================
+  -->
+
+  <style>
+    body {
+      margin: 0;
+      padding: 16px;
+      font: 13px system-ui, sans-serif;
+      background: #fafafa;
+    }
+
+    h2 {
+      margin: 24px 0 8px;
+      font-size: 12px;
+      letter-spacing: 0.1em;
+      color: #999;
+    }
+
+    .harness-mount {
+      background: #fff;
+      border: 1px solid #e3e3e3;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>LAYOUT</h2>
+  <div class="harness-mount" id="layoutMount"></div>
+
+  <h2>LEGACY (배치 속성 없음 — 회귀 대조군)</h2>
+  <div class="harness-mount" id="legacyMount"></div>
+
+  <script src="../core/lib/build-version.js"></script>
+  <script src="./skin-layout.js"></script>
+  <script src="./skin-sanitize.js"></script>
+
+  <script type="module">
+
+    import { renderSkin } from "./skin-render.js";
+
+    /* =====================================================
+       fixture
+
+       한 HOME template 안에 다섯 primitive 를 전부 둔다. 클래스
+       이름은 재는 쪽이 붙잡는 손잡이라 짧고 고정이다.
+
+       ★ 스킨 CSS 에는 **배치 선언이 한 줄도 없다**. 크기와 색만
+         준다 — 배치가 정말로 플랫폼 스타일시트에서 오는지가 이
+         하네스의 요점이기 때문이다. 스킨 CSS 가 display:grid 를
+         쓰면 무엇이 그렸는지 구분할 수 없다.
+    ====================================================== */
+
+    const LAYOUT_HTML =
+      '<div class="lay-page" data-imory-layout="panel" data-imory-layout-max-width="720">' +
+
+      '<div class="lay-stack-col" data-imory-layout="stack" data-imory-layout-direction="column" data-imory-layout-gap="12">' +
+      '<p class="lay-a">A</p><p class="lay-b">B</p><p class="lay-c">C</p>' +
+      '</div>' +
+
+      '<div class="lay-stack-row" data-imory-layout="stack" data-imory-layout-direction="row" data-imory-layout-gap="8">' +
+      '<span class="lay-r1">1</span><span class="lay-r2">2</span><span class="lay-r3">3</span>' +
+      '</div>' +
+
+      '<div class="lay-grid" data-imory-layout="grid" data-imory-layout-columns="4" data-imory-layout-gap="10">' +
+      '<div class="lay-g1" data-imory-item-span="2">G1</div>' +
+      '<div class="lay-g2">G2</div>' +
+      '<div class="lay-g3">G3</div>' +
+      '<div class="lay-g4">G4</div>' +
+      '</div>' +
+
+      '<div class="lay-grid-min" data-imory-layout="grid" data-imory-layout-columns="6" data-imory-layout-min="200" data-imory-layout-gap="10">' +
+      '<div class="lay-m1">M1</div><div class="lay-m2">M2</div><div class="lay-m3">M3</div>' +
+      '</div>' +
+
+      '<div class="lay-free" data-imory-layout="free" data-imory-layout-height="300">' +
+      '<div class="lay-f-tl" data-imory-item-x="0" data-imory-item-y="0" data-imory-item-width="30">TL</div>' +
+      '<div class="lay-f-br" data-imory-item-x="1" data-imory-item-y="1" data-imory-item-width="30">BR</div>' +
+      '<div class="lay-f-mid" data-imory-item-x="0.5" data-imory-item-y="0.5" data-imory-item-width="20">MID</div>' +
+      '<div class="lay-f-top" data-imory-item-x="1" data-imory-item-y="0" data-imory-item-width="25" data-imory-item-z="5">TOP</div>' +
+      '</div>' +
+
+      '<div class="lay-side-left" data-imory-layout="sidebar" data-imory-layout-side="left" data-imory-layout-sidebar-width="180" data-imory-layout-gap="20" data-imory-layout-collapse="600">' +
+      '<nav class="lay-sl-menu" data-imory-slot="sidebar">MENU</nav>' +
+      '<div class="lay-sl-main" data-imory-slot="main">CONTENT</div>' +
+      '</div>' +
+
+      '<div class="lay-side-right" data-imory-layout="sidebar" data-imory-layout-side="right" data-imory-layout-sidebar-width="160" data-imory-layout-collapse="600">' +
+      '<nav class="lay-sr-menu" data-imory-slot="sidebar">MENU</nav>' +
+      '<div class="lay-sr-main" data-imory-slot="main">CONTENT</div>' +
+      '<div class="lay-sr-main2" data-imory-slot="main">MORE</div>' +
+      '</div>' +
+
+      '<div class="lay-side-hide" data-imory-layout="sidebar" data-imory-layout-collapse="600" data-imory-layout-mobile="hide">' +
+      '<nav class="lay-sh-menu" data-imory-slot="sidebar">MENU</nav>' +
+      '<div class="lay-sh-main" data-imory-slot="main">CONTENT</div>' +
+      '</div>' +
+
+      /* 중첩: panel > sidebar > (stack | grid) */
+      '<div class="lay-nest" data-imory-layout="panel">' +
+      '<div class="lay-nest-side-wrap" data-imory-layout="sidebar" data-imory-layout-side="left" data-imory-layout-sidebar-width="120" data-imory-layout-collapse="480">' +
+      '<div class="lay-nest-side" data-imory-slot="sidebar" data-imory-layout="stack" data-imory-layout-direction="column" data-imory-layout-gap="6">' +
+      '<p class="lay-ns1">ns1</p><p class="lay-ns2">ns2</p>' +
+      '</div>' +
+      '<div class="lay-nest-main" data-imory-slot="main" data-imory-layout="grid" data-imory-layout-columns="3" data-imory-layout-gap="6">' +
+      '<div class="lay-nm1">1</div><div class="lay-nm2">2</div><div class="lay-nm3">3</div>' +
+      '</div>' +
+      '</div></div>' +
+
+      /* 중첩: panel > free > stack */
+      '<div class="lay-nest2" data-imory-layout="panel">' +
+      '<div class="lay-nest2-free" data-imory-layout="free" data-imory-layout-height="200">' +
+      '<div class="lay-nest2-stack" data-imory-item-x="1" data-imory-item-y="0" data-imory-item-width="50" data-imory-layout="stack" data-imory-layout-direction="row" data-imory-layout-gap="4">' +
+      '<span class="lay-n2a">a</span><span class="lay-n2b">b</span>' +
+      '</div></div></div>' +
+
+      /* 반복이 격자 안에 있을 때 — clone 도 자기 자리 값을 받는가 */
+      '<ul class="lay-repeat-grid" data-imory-layout="grid" data-imory-layout-columns="2" data-imory-layout-gap="8">' +
+      '<li class="lay-rep" data-imory-repeat="home.recentPosts" data-imory-item-span="2">' +
+      '<span class="lay-rep-title" data-imory-bind="item.title"></span>' +
+      '</li></ul>' +
+
+      '</div>';
+
+    /* 배치를 한 줄도 쓰지 않는 CSS — 크기/여백/색만 */
+    const LAYOUT_CSS =
+      ".lay-page { padding: 0; }" +
+      ".lay-page div, .lay-page p, .lay-page span, .lay-page nav, .lay-page li { margin: 0; box-sizing: border-box; }" +
+      ".lay-stack-col p, .lay-stack-row span { height: 20px; background: #eee; }" +
+      ".lay-grid > div, .lay-grid-min > div, .lay-nest-main > div { height: 30px; background: #ddd; }" +
+      ".lay-free > div, .lay-nest2-free > div { height: 40px; background: #cce; }" +
+      ".lay-side-left > *, .lay-side-right > *, .lay-side-hide > * { height: 50px; background: #efe; }" +
+      ".lay-rep { height: 24px; background: #fee; list-style: none; }" +
+      ".lay-repeat-grid { padding: 0; }";
+
+    /* 대조군 — 같은 내용, 배치 속성만 없다 */
+    const LEGACY_HTML =
+      '<div class="leg-page">' +
+      '<div class="leg-list"><p class="leg-a">A</p><p class="leg-b">B</p></div>' +
+      '<ul class="leg-repeat"><li class="leg-rep" data-imory-repeat="home.recentPosts">' +
+      '<span data-imory-bind="item.title"></span></li></ul>' +
+      '</div>';
+
+    const CONTEXT = {
+      site: { title: "LAYOUT HARNESS", slug: "layout" },
+      profile: { nickname: "harness", bio: "" },
+      navigation: { categories: [] },
+      home: {
+        recentPosts: [
+          { id: 1, title: "첫 글", href: "/layout/post/1" },
+          { id: 2, title: "둘째 글", href: "/layout/post/2" },
+          { id: 3, title: "셋째 글", href: "/layout/post/3" }
+        ]
+      }
+    };
+
+    const layoutInstance =
+      renderSkin({
+        container: document.getElementById("layoutMount"),
+        skin: { html: LAYOUT_HTML, css: LAYOUT_CSS },
+        context: CONTEXT
+      });
+
+    const legacyInstance =
+      renderSkin({
+        container: document.getElementById("legacyMount"),
+        skin: { html: LEGACY_HTML, css: ".leg-page { color: #333; }" },
+        context: CONTEXT
+      });
+
+    /* =====================================================
+       재는 쪽이 쓰는 창구
+
+       - 저장 경계(sanitizeSkinHTML)를 한 번 더 지난 HTML 을 그대로
+         돌려준다 — "배치 속성이 저장을 살아서 지나가는가"를 같은
+         문서에서 확인할 수 있다.
+       - 다시 그리기(update)도 열어 둔다 — 값을 바꿔 가며 재려면
+         필요하다.
+    ====================================================== */
+
+    window.__layoutHarness = {
+
+      layoutHtml: LAYOUT_HTML,
+
+      sanitized: sanitizeSkinHTML(LAYOUT_HTML),
+
+      render(html, css) {
+        layoutInstance.update({ html, css: css === undefined ? LAYOUT_CSS : css }, CONTEXT);
+      },
+
+      reset() {
+        layoutInstance.update({ html: LAYOUT_HTML, css: LAYOUT_CSS }, CONTEXT);
+      },
+
+      legacyHtml: document.getElementById("legacyMount").innerHTML
+
+    };
+
+    window.__layoutHarnessReady = true;
+
+  </script>
+
+</body>
+</html>

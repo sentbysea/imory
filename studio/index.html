@@ -654,6 +654,9 @@
 
     loadVersionedScripts(
       [
+        /* 배치 primitive — sanitize 보다 먼저
+           (IMORY_LAYOUT_PRIMITIVE_DESIGN.md) */
+        "../skin/skin-layout.js",
         "../skin/skin-sanitize.js",
         "../skin/skin-package-normalize.js",
         "../skin/skin-generator.js"
@@ -1009,6 +1012,12 @@
         "./inspector/studio-inspector-text.js",
         "./inspector/studio-inspector-image-size.js",
         "./inspector/studio-inspector-crop.js",
+
+        /* 배치 primitive 직접 편집(LAYOUT-1). edit.js 의
+           applyStudioInspectorPatch 와 overlay 의 좌표 변환을
+           호출 시점에 쓰므로 그 뒤이고, controls.js 가 이 파일의
+           renderStudioInspectorLayoutBlock 을 부르므로 그 앞이다. */
+        "./inspector/studio-inspector-layout.js",
         "./inspector/studio-inspector-controls.js",
         "./inspector/studio-inspector.js",
         "./studio-state.js"

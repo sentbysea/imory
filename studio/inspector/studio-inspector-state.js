@@ -205,6 +205,21 @@ let studioInspectorSizeNumber = null;
 
 let studioInspectorHandles = [];
 
+/* LAYOUT-1 — 자유 배치 요소의 이동 손잡이(DOM 은 overlay 가 만들고,
+   끄는 계산은 studio-inspector-layout.js 가 한다). 크기 핸들과 달리
+   하나뿐이다 — 옮기는 것은 한 가지 동작이고 방향이 따로 없다. */
+let studioInspectorMoveHandle = null;
+
+/* "지금 선택이 자유 배치 안에 있는가" — studioInspectorResizable 과
+   **같은 이유로** 미리 계산해 둔 값이다.
+
+   좌표 칠하기(paintStudioInspectorHandles)는 스크롤·리사이즈·프레임
+   메시지마다 돈다. 그 자리에서 매번 다시 판단하면 template 을 통째로
+   파싱하게 되고(describeStudioInspectorSelection), 실제로 Studio 가
+   눈에 띄게 느려져 다른 e2e 가 선택을 기다리다 시간 초과로 깨졌다
+   (2026-09-18). 판단은 폼을 다시 그릴 때 한 번만 한다. */
+let studioInspectorMovable = false;
+
 
 /* 이미지 자르기 라운드 — 여기도 전부 "아직 확정되지 않은 것"이다.
    studio/inspector/studio-inspector-crop.js가 읽고 쓴다.

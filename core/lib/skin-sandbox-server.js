@@ -142,6 +142,22 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/core/content-width.css",
 
   /* =====================================================
+     LAYOUT-1 — 배치 primitive. 공개 화면과 **같은 두 파일**이다
+     (IMORY_LAYOUT_PRIMITIVE_DESIGN.md).
+
+     skin-layout.js 는 sanitize 가 layout 속성을 검사할 때 부르는
+     판정 함수와, 렌더 뒤 custom property 를 써 넣는 컴파일러다.
+     skin-layout.css 는 그 값을 읽어 실제로 배치하는 규칙이고,
+     renderSkin() 이 link 로 건다.
+
+     둘 중 하나라도 없으면 같은 스킨이 프레임에서만 배치 없이
+     그려진다 — posts-body-shared.css 와 정확히 같은 사정이다.
+  ====================================================== */
+
+  "/skin/skin-layout.js",
+  "/skin/skin-layout.css",
+
+  /* =====================================================
      SANDBOX-3.2 — POST 본문의 class 규칙. 공개 화면과 **같은
      파일**이다.
 
