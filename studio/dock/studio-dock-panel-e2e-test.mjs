@@ -10,13 +10,16 @@
 
    검사 범위
      open      dock 이 없는 스킨에서 버튼 → 기본 구성이 채워진다
-     apply     적용 → working draft 에 들어가고 Preview 에 나타난다
-     settings  자리/접기/전환을 바꾸면 Preview 의 상태 속성이 바뀐다
+     apply     적용 → fixed · collapsed 로 working draft 에 · Preview 는 열기 버튼만,
+               누르면 펼쳐지고 아이콘이 실제 그림으로 보인다
+     visual    표시 방식 넷 · 아이콘 고르기(토큰 안 보임) · placeholder 는 값이 아니다 ·
+               방식별 안내 문구 · 입력한 값만 저장된다
+     validate  빈 항목 추가 → 적용 전에 그 항목 아래 안내(내부 경로 없음) · blur 안내
      items     추가 · 삭제 · 순서(↑↓) · 동작 종류에 따라 칸이 바뀐다
-     reject    모양이 틀리면 적용되지 않고 이유가 나온다
+     legacy    옛 asset/svg/스킨 고유 아이콘/패널/전환이 보존된다
      cancel    ★ 취소는 정말로 아무 일도 없다(draft 불변)
-     remove    dock 없애기 → 설정 키가 사라진다
-     click     ★ Preview 의 dock 을 누르면 설정 패널이 열린다
+     remove    Dock 사용 안 함(설정 유지) · Dock 지우기(설정 키가 사라진다)
+     click     ★ 펼친 Preview dock 의 항목을 누르면 설정 패널이 열린다
      export    Export → Import 왕복에 bottomDock 이 그대로 산다
      mobile    390px 에서 가로 넘침 0
 
@@ -161,6 +164,9 @@ const consoleErrors = [];
 /* 이미지 라이브러리 mock 이 원래 남기는 오류(다른 Studio e2e 와 동일) */
 const PRE_EXISTING_CONSOLE_ERROR = /image library probe failed/;
 
+/* scenario y fixture 의 가짜 이미지 주소(example.com) — WebKit 만 콘솔에 404 를 찍는다 */
+const FIXTURE_IMAGE_404 = /@ https:\/\/example\.com\//;
+
 async function openStudio(context) {
 
   const page = await context.newPage();
@@ -168,7 +174,10 @@ async function openStudio(context) {
   page.on("console", msg => {
     if (msg.type() !== "error") return;
     if (PRE_EXISTING_CONSOLE_ERROR.test(msg.text())) return;
-    consoleErrors.push(msg.text());
+    const where = msg.location && msg.location() && msg.location().url;
+    const line = where ? `${msg.text()} @ ${where}` : msg.text();
+    if (FIXTURE_IMAGE_404.test(line)) return;
+    consoleErrors.push(line);
   });
 
   page.on("pageerror", err => consoleErrors.push(err.message));
@@ -214,17 +223,99 @@ async function panelMessage(page) {
 const panelIsOpen = (page) =>
   page.evaluate(() => !!document.querySelector(".dock-panel-overlay--open"));
 
-/* 설정 줄 하나의 select 를 라벨로 찾아 값을 바꾼다 */
-async function setSettingByLabel(page, labelText, value) {
-  await page.evaluate(({ labelText, value }) => {
-    const rows = Array.from(document.querySelectorAll(".dock-panel-settings .dock-panel-row"));
-    const row = rows.find(r => r.querySelector(".dock-panel-label")?.textContent === labelText);
+/*
+  scope — "trigger" 이면 열기 버튼 구역, 숫자면 그 번째 항목 카드.
+  그 안에서 라벨이 labelText 인 줄의 컨트롤을 다룬다.
+*/
+const SCOPE_JS = `
+  window.__dockScope = (scope) => scope === "trigger"
+    ? document.querySelector(".dock-panel-trigger")
+    : document.querySelectorAll(".dock-panel-item")[scope];
+  window.__dockRow = (scope, label) => {
+    const host = window.__dockScope(scope);
+    if (!host) return null;
+    return Array.from(host.querySelectorAll(".dock-panel-row"))
+      .find(r => r.querySelector(".dock-panel-label")?.textContent === label) || null;
+  };
+`;
+
+async function installScopeHelpers(page) {
+  await page.evaluate(SCOPE_JS);
+}
+
+async function setSelect(page, scope, label, value) {
+  await installScopeHelpers(page);
+  await page.evaluate(({ scope, label, value }) => {
+    const row = window.__dockRow(scope, label);
     const select = row && row.querySelector("select");
-    if (!select) throw new Error(`설정 줄 "${labelText}" 을 찾지 못했다`);
+    if (!select) throw new Error(`"${label}" select 를 찾지 못했다(${scope})`);
     select.value = value;
     select.dispatchEvent(new Event("change", { bubbles: true }));
-  }, { labelText, value });
+  }, { scope, label, value });
   await sleep(120);
+}
+
+/* 사람이 치듯 — 칸을 눌러 글자를 친다 */
+async function typeInto(page, scope, label, text) {
+  await installScopeHelpers(page);
+  const handle = await page.evaluateHandle(({ scope, label }) => {
+    const row = window.__dockRow(scope, label);
+    return row && row.querySelector("input");
+  }, { scope, label });
+  const input = handle.asElement();
+  if (!input) throw new Error(`"${label}" 입력 칸을 찾지 못했다(${scope})`);
+  await input.click();
+  await input.fill("");
+  await input.type(text);
+  await sleep(80);
+}
+
+async function blurActive(page) {
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await sleep(80);
+}
+
+async function pickIcon(page, scope, name) {
+  await installScopeHelpers(page);
+  await page.evaluate(({ scope, name }) => {
+    const host = window.__dockScope(scope);
+    const button = Array.from(host.querySelectorAll(".dock-panel-icon"))
+      .find(b => b.getAttribute("aria-label") === name);
+    if (!button) throw new Error(`아이콘 "${name}" 을 찾지 못했다`);
+    button.click();
+  }, { scope, name });
+  await sleep(120);
+}
+
+async function readScope(page, scope) {
+  await installScopeHelpers(page);
+  return page.evaluate((scope) => {
+    const host = window.__dockScope(scope);
+    if (!host) return null;
+    const labels = Array.from(host.querySelectorAll(".dock-panel-label")).map(el => el.textContent);
+    const valueRow = window.__dockRow(scope, "표시");
+    const input = valueRow ? valueRow.querySelector("input") : null;
+    const error = host.querySelector(".dock-panel-error");
+    const typeRow = window.__dockRow(scope, "표시 방식");
+    return {
+      labels,
+      typeOptions: typeRow ? Array.from(typeRow.querySelectorAll("option")).map(o => o.textContent) : [],
+      typeValue: typeRow ? typeRow.querySelector("select").value : null,
+      hasInput: !!input,
+      inputValue: input ? input.value : null,
+      placeholder: input ? input.placeholder : null,
+      hasPicker: !!(valueRow && valueRow.querySelector(".dock-panel-icons")),
+      pickerText: valueRow && valueRow.querySelector(".dock-panel-icons")
+        ? valueRow.querySelector(".dock-panel-icons").textContent.trim()
+        : null,
+      selectedIcon: (() => {
+        const b = valueRow && valueRow.querySelector('.dock-panel-icon[aria-checked="true"]');
+        return b ? b.getAttribute("aria-label") : null;
+      })(),
+      error: error && !error.hidden ? error.textContent.trim() : "",
+      text: host.textContent
+    };
+  }, scope);
 }
 
 /* Preview iframe 안의 dock 상태 */
@@ -235,19 +326,43 @@ async function readPreviewDock(page) {
     const roots = Array.from(document.querySelectorAll("[data-imory-dock-position]"));
     if (roots.length !== 1) return { count: roots.length };
     const root = roots[0];
+    const itemsBox = root.querySelector('[data-imory-dock="items"]');
+    const trigger = root.querySelector('[data-imory-dock="trigger"]');
+    const icons = Array.from(root.querySelectorAll("[data-imory-dock-icon]"));
     return {
       count: 1,
       position: root.getAttribute("data-imory-dock-position"),
       state: root.getAttribute("data-imory-dock-state"),
       transition: root.getAttribute("data-imory-dock-transition"),
       ids: Array.from(root.querySelectorAll("[data-imory-dock-item]"))
-        .map(el => el.getAttribute("data-imory-dock-item"))
+        .map(el => el.getAttribute("data-imory-dock-item")),
+      itemsHidden: itemsBox ? itemsBox.hidden : null,
+      triggerVisible: !!(trigger && trigger.getBoundingClientRect().width > 0),
+      triggerIcon: trigger && trigger.querySelector("[data-imory-dock-icon]")
+        ? trigger.querySelector("[data-imory-dock-icon]").getAttribute("data-imory-dock-icon")
+        : null,
+      drawnIcons: icons.filter(el => {
+        const cs = getComputedStyle(el);
+        const mask = cs.maskImage || cs.webkitMaskImage || "";
+        return mask.startsWith("url(") && el.getBoundingClientRect().width > 0;
+      }).map(el => el.getAttribute("data-imory-dock-icon"))
     };
   });
 }
 
+async function clickPreviewTrigger(page) {
+  const frame = page.frames().find(f => f.url().includes("preview-frame.html"));
+  await frame.evaluate(() => document.querySelector('[data-imory-dock="trigger"]').click());
+  await sleep(450);
+}
+
 const itemCount = (page) =>
   page.evaluate(() => document.querySelectorAll(".dock-panel-item").length);
+
+/* 사용자에게 보이면 안 되는 개발자용 낱말. "전환"은 기능 이름(라이트/다크 전환)에
+   쓰이므로 여기 두지 않는다 — 칸 이름은 open 절이 따로 본다. */
+const DEVELOPER_WORDS =
+  /position|defaultState|transition|easing|direction|token|토큰|SVG|이미지 슬롯|스킨 CSS|templates\.dock|data-kind|표식|처음 상태|효과|속도|움직임|bottomDock|\bitems\[|visual\.value/;
 
 
 /* =========================================================
@@ -295,12 +410,60 @@ async function run() {
         (await workingPackage(page)).bottomDock === undefined
       );
 
+      const allLabels = await page.evaluate(() =>
+        Array.from(document.querySelectorAll(".dock-panel-label")).map(el => el.textContent)
+      );
+
       check(
         "생김새를 고치는 칸은 없다(색/크기/글꼴)",
+        !allLabels.some(t => /색|크기|글꼴|폰트/.test(t))
+      );
+
+      check(
+        "★ 자리 · 처음 상태 · 전환 · 속도 · 움직임 · 방향 칸이 없다",
+        !allLabels.some(t => /자리|처음 상태|접기|전환|속도|움직임|방향/.test(t)),
+        allLabels.join(",")
+      );
+
+      const panelText = await page.evaluate(() => document.querySelector(".dock-panel-modal").textContent);
+
+      check(
+        "★ 패널 어디에도 개발자용 낱말이 없다(position·token·SVG·transition·표식 …)",
+        !DEVELOPER_WORDS.test(panelText),
+        (panelText.match(DEVELOPER_WORDS) || [""])[0]
+      );
+
+      check(
+        "★ '독 열기 버튼' 구역이 있고 표시 방식 · 표시 두 칸이다",
+        await page.evaluate(() =>
+          Array.from(document.querySelectorAll(".dock-panel-section")).some(el => el.textContent === "독 열기 버튼")
+        ) &&
+        JSON.stringify((await readScope(page, "trigger")).labels) === JSON.stringify(["표시 방식", "표시"]),
+        JSON.stringify((await readScope(page, "trigger")).labels)
+      );
+
+      const item = await readScope(page, 0);
+
+      check(
+        "★ 항목 카드는 라벨 · 표시 방식 · 표시 · 동작 · 이동할 곳 · 보이는 사람",
+        JSON.stringify(item.labels) ===
+          JSON.stringify(["라벨", "표시 방식", "표시", "동작", "이동할 곳", "보이는 사람"]),
+        JSON.stringify(item.labels)
+      );
+
+      check(
+        "★ 표시 방식은 아이콘 · 이모지 · 글자 · 이미지 주소 넷뿐",
+        JSON.stringify(item.typeOptions) === JSON.stringify(["아이콘", "이모지", "글자", "이미지 주소"]),
+        JSON.stringify(item.typeOptions)
+      );
+
+      check(
+        "순서 변경(↑↓)과 삭제가 카드마다 있다",
         await page.evaluate(() => {
-          const labels = Array.from(document.querySelectorAll(".dock-panel-label"))
-            .map(el => el.textContent);
-          return !labels.some(t => /색|크기|글꼴|폰트/.test(t));
+          const card = document.querySelectorAll(".dock-panel-item")[0];
+          return !!card.querySelector('[aria-label="위로"]') &&
+            !!card.querySelector('[aria-label="아래로"]') &&
+            !!card.querySelector(".dock-panel-remove");
         })
       );
 
@@ -323,11 +486,23 @@ async function run() {
       const pkg = await workingPackage(page);
 
       check(
-        "★ working draft 에 정규화된 설정이 들어간다",
+        "★ 자리는 언제나 화면 아래 고정 · 접힌 채로 시작 · 접기 켜짐",
         !!pkg.bottomDock &&
         pkg.bottomDock.items.length === 3 &&
-        pkg.bottomDock.position === "auto",
-        JSON.stringify(pkg.bottomDock && pkg.bottomDock.position)
+        pkg.bottomDock.position === "fixed" &&
+        pkg.bottomDock.defaultState === "collapsed" &&
+        pkg.bottomDock.collapsible === true,
+        JSON.stringify(pkg.bottomDock && {
+          position: pkg.bottomDock.position,
+          defaultState: pkg.bottomDock.defaultState,
+          collapsible: pkg.bottomDock.collapsible
+        })
+      );
+
+      check(
+        "펼치고 접는 움직임은 공용 전환 primitive 의 값이다(사용자에게는 안 보인다)",
+        pkg.bottomDock.transition && pkg.bottomDock.transition.type === "fade-slide",
+        JSON.stringify(pkg.bottomDock.transition)
       );
 
       check(
@@ -335,19 +510,51 @@ async function run() {
         await page.evaluate(() => !document.getElementById("studioSaveButton").disabled)
       );
 
-      check(
-        "DB 에는 쓰지 않는다(Save 를 누르기 전까지)",
-        await page.evaluate(() => (window.__scenarioSavedDraftCalls || 0) === 0) !== false
-      );
-
       const dock = await readPreviewDock(page);
 
       check("★ Preview 에 dock 이 하나 그려진다", dock.count === 1, JSON.stringify(dock));
 
       check(
+        "★ Preview 에서도 화면 아래 고정 · 접힌 채 · 열기 버튼만 보인다",
+        dock.position === "fixed" && dock.state === "collapsed" &&
+        dock.itemsHidden === true && dock.triggerVisible,
+        JSON.stringify({ position: dock.position, state: dock.state, hidden: dock.itemsHidden })
+      );
+
+      check(
+        "★ 열기 버튼의 아이콘을 아이모리가 그린다(기본 template)",
+        dock.triggerIcon === "menu" && dock.drawnIcons.includes("menu"),
+        JSON.stringify(dock.drawnIcons)
+      );
+
+      /* 열기 버튼은 Preview 에서도 실제로 펼친다 */
+      await clickPreviewTrigger(page);
+
+      const opened = await readPreviewDock(page);
+
+      check(
+        "★ Preview 의 열기 버튼을 누르면 펼쳐진다(설정 패널이 아니라)",
+        opened.state === "expanded" && opened.itemsHidden === false && !(await panelIsOpen(page)),
+        JSON.stringify({ state: opened.state, panel: await panelIsOpen(page) })
+      );
+
+      check(
         "항목이 설정 그대로다",
-        (dock.ids || []).join(",") === "home,highlights,top",
-        (dock.ids || []).join(",")
+        (opened.ids || []).join(",") === "home,highlights,top",
+        (opened.ids || []).join(",")
+      );
+
+      check(
+        "★ 항목 아이콘(홈 · 인용 · 맨 위로)이 실제 그림으로 보인다",
+        ["home", "quote", "top"].every(t => opened.drawnIcons.includes(t)),
+        JSON.stringify(opened.drawnIcons)
+      );
+
+      await clickPreviewTrigger(page);
+
+      check(
+        "다시 누르면 접힌다",
+        (await readPreviewDock(page)).state === "collapsed"
       );
 
       await ctx.close();
@@ -356,48 +563,230 @@ async function run() {
 
     /* --------------------------------------------------- */
 
-    if (section("settings")) {
+    if (section("visual")) {
 
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
       const page = await openStudio(ctx);
 
       await openDockPanel(page);
-      await setSettingByLabel(page, "자리", "static");
-      await setSettingByLabel(page, "접기", "on");
-      await setSettingByLabel(page, "전환", "slide");
-      await applyDockPanel(page);
 
-      const dock = await readPreviewDock(page);
+      /* 아이콘 — 입력 칸이 아니라 그림 고르기 */
+      const iconScope = await readScope(page, 0);
 
-      check("자리가 Preview 에 반영된다", dock.position === "static", dock.position);
-      check("전환 종류가 반영된다", dock.transition === "slide", dock.transition);
-      check("접기를 켜면 상태 속성이 붙는다", dock.state === "expanded", dock.state);
-
-      /* 다시 열면 저장된 값이 그대로 보인다 */
-      await openDockPanel(page);
-
-      const shown = await page.evaluate(() => {
-        const rows = Array.from(document.querySelectorAll(".dock-panel-settings .dock-panel-row"));
-        const get = (label) => {
-          const row = rows.find(r => r.querySelector(".dock-panel-label")?.textContent === label);
-          return row ? row.querySelector("select").value : null;
-        };
-        return { position: get("자리"), collapse: get("접기"), transition: get("전환") };
-      });
+      check("★ 아이콘 방식은 텍스트 칸이 아니라 고르기다", iconScope.hasPicker && !iconScope.hasInput);
 
       check(
-        "다시 열면 저장된 설정이 그대로 보인다",
-        shown.position === "static" && shown.collapse === "on" && shown.transition === "slide",
-        JSON.stringify(shown)
+        "★ 고르기에 내부 이름(home/quote …)이 글자로 보이지 않는다",
+        iconScope.pickerText === "",
+        JSON.stringify(iconScope.pickerText)
+      );
+
+      check("지금 값이 선택된 채로 보인다(홈)", iconScope.selectedIcon === "홈", iconScope.selectedIcon);
+
+      check(
+        "요청된 아이콘이 전부 고를 수 있다",
+        await page.evaluate(() => {
+          const names = Array.from(document.querySelectorAll(".dock-panel-item")[0]
+            .querySelectorAll(".dock-panel-icon")).map(b => b.getAttribute("aria-label"));
+          return ["홈", "폴더", "하트", "별", "사진", "책", "연필", "프로필", "메뉴"].every(n => names.includes(n));
+        })
       );
 
       check(
-        "접기를 켜야 '처음 상태'와 '접는 표식' 줄이 나온다",
+        "고르기의 그림이 실제로 그려진다(마스크 그림 · 크기 있음)",
         await page.evaluate(() => {
-          const labels = Array.from(document.querySelectorAll(".dock-panel-settings .dock-panel-label"))
-            .map(el => el.textContent);
-          return labels.includes("처음 상태") && labels.includes("접는 표식");
+          const glyphs = Array.from(document.querySelectorAll(".dock-panel-item")[0]
+            .querySelectorAll(".dock-panel-icon-glyph"));
+          return glyphs.length >= 9 && glyphs.every(g => {
+            const cs = getComputedStyle(g);
+            return (cs.maskImage || cs.webkitMaskImage || "").startsWith("url(") &&
+              g.getBoundingClientRect().width > 8;
+          });
         })
+      );
+
+      await pickIcon(page, 0, "하트");
+
+      check("하트를 고르면 하트가 선택된다", (await readScope(page, 0)).selectedIcon === "하트");
+
+      /* 이모지 — placeholder 는 값이 아니다 */
+      await setSelect(page, 0, "표시 방식", "emoji");
+
+      const emoji = await readScope(page, 0);
+
+      check("★ 방식을 바꾸면 입력 칸의 **실제 값**은 비어 있다", emoji.hasInput && emoji.inputValue === "", JSON.stringify(emoji.inputValue));
+      check("★ 예시는 placeholder 로만 보인다(예: ♡)", emoji.placeholder === "예: ♡", emoji.placeholder);
+
+      const colors = await page.evaluate(() => {
+        const card = document.querySelectorAll(".dock-panel-item")[0];
+        const input = card.querySelector(".dock-panel-row input.dock-panel-input:not([placeholder^='예: 홈'])")
+          || card.querySelectorAll("input.dock-panel-input")[1];
+        const parse = (c) => (c.match(/[\d.]+/g) || []).map(Number);
+        const ph = getComputedStyle(input, "::placeholder");
+        const [pr, pg, pb, pa = 1] = parse(ph.color);
+        const [ir, ig, ib] = parse(getComputedStyle(input).color);
+        const lum = (r, g, b) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        return {
+          placeholderLum: lum(pr, pg, pb) * (Number(ph.opacity) || 1) + 255 * (1 - (Number(ph.opacity) || 1) * pa),
+          inputLum: lum(ir, ig, ib),
+          italic: ph.fontStyle
+        };
+      });
+
+      check(
+        "★ placeholder 는 실제 입력값보다 옅다",
+        colors.placeholderLum > colors.inputLum + 40,
+        JSON.stringify(colors)
+      );
+
+      check(
+        "★ 방식을 바꾸면 그 방식에 맞는 짧은 안내가 바로 보인다",
+        emoji.error === "표시할 이모지를 입력해 주세요.",
+        emoji.error
+      );
+
+      /* 아무것도 치지 않은 채 적용 → 예시 문자가 저장되지 않는다 */
+      await page.click(".dock-panel-button--primary");
+      await sleep(300);
+
+      check("비어 있으면 적용되지 않는다", await panelIsOpen(page));
+      check(
+        "★ 그때 draft 에 예시(♡)도 빈 값도 들어가지 않는다",
+        (await workingPackage(page)).bottomDock === undefined
+      );
+
+      await typeInto(page, 0, "표시", "🌙");
+
+      check("값을 치면 안내가 사라진다", (await readScope(page, 0)).error === "");
+
+      /* 글자 · 이미지 주소 */
+      await setSelect(page, 1, "표시 방식", "text");
+      const text = await readScope(page, 1);
+      check("글자 — 빈 값 · placeholder 예: HOME", text.inputValue === "" && text.placeholder === "예: HOME", JSON.stringify(text));
+      check("글자 — 안내 문구", text.error === "표시할 글자를 입력해 주세요.", text.error);
+      await typeInto(page, 1, "표시", "QUOTES");
+
+      await setSelect(page, 2, "표시 방식", "image");
+      const image = await readScope(page, 2);
+      check("이미지 주소 — 빈 값 · placeholder https://...", image.inputValue === "" && image.placeholder === "https://...", JSON.stringify(image));
+      check("이미지 주소 — 안내 문구", image.error === "이미지 주소를 입력해 주세요.", image.error);
+
+      await typeInto(page, 2, "표시", "http://example.com/a.png");
+      check(
+        "https 가 아니면 그 이유를 짧게 말한다",
+        (await readScope(page, 2)).error === "https:// 로 시작하는 이미지 주소를 입력해 주세요.",
+        (await readScope(page, 2)).error
+      );
+      await typeInto(page, 2, "표시", "https://example.com/a.png");
+
+      /* 열기 버튼 — 글자로 */
+      await setSelect(page, "trigger", "표시 방식", "text");
+      const trig = await readScope(page, "trigger");
+      check("열기 버튼도 같은 규칙(빈 값 · placeholder · 안내)", trig.inputValue === "" && trig.placeholder === "예: HOME" && trig.error === "표시할 글자를 입력해 주세요.", JSON.stringify(trig));
+      await typeInto(page, "trigger", "표시", "MENU");
+
+      await applyDockPanel(page);
+
+      check("다 채우면 적용된다", !(await panelIsOpen(page)));
+
+      const pkg = await workingPackage(page);
+      const visuals = pkg.bottomDock.items.map(i => i.visual);
+
+      check(
+        "★ 입력한 값만 그대로 저장된다",
+        JSON.stringify(visuals) === JSON.stringify([
+          { type: "emoji", value: "🌙" },
+          { type: "text", value: "QUOTES" },
+          { type: "image", value: "https://example.com/a.png" }
+        ]) &&
+        pkg.bottomDock.trigger.type === "text" && pkg.bottomDock.trigger.value === "MENU",
+        JSON.stringify({ visuals, trigger: pkg.bottomDock.trigger })
+      );
+
+      check(
+        "★ placeholder 문자열이 어디에도 저장되지 않는다",
+        !/예: |https:\/\/\.\.\./.test(JSON.stringify(pkg.bottomDock)),
+        JSON.stringify(pkg.bottomDock).slice(0, 200)
+      );
+
+      await ctx.close();
+    }
+
+
+    /* --------------------------------------------------- */
+
+    if (section("validate")) {
+
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      const page = await openStudio(ctx);
+
+      await openDockPanel(page);
+
+      /* 빈 항목 추가 — 표시가 미리 채워져 있지 않다 */
+      await page.click(".dock-panel-button--add");
+      await sleep(150);
+
+      const added = await readScope(page, 3);
+
+      check("★ 빈 항목은 아이콘이 골라져 있지 않다(예시 값 없음)", added.selectedIcon === null, added.selectedIcon);
+      check("추가하자마자 빨간 글자를 띄우지는 않는다", added.error === "");
+
+      await page.click(".dock-panel-button--primary");
+      await sleep(300);
+
+      const after = await readScope(page, 3);
+
+      check("★ 적용을 누르면 그 항목 바로 아래에 안내가 나온다", after.error === "아이콘을 골라 주세요.", after.error);
+      check("적용되지 않는다", await panelIsOpen(page));
+
+      const msg = await panelMessage(page);
+
+      check(
+        "★ 내부 경로(bottomDock.items[0]…) 같은 개발자식 문장이 없다",
+        !/bottomDock|items\[|visual|value/.test(msg.text + after.text),
+        msg.text
+      );
+
+      check("다른 항목에는 안내가 붙지 않는다", (await readScope(page, 0)).error === "");
+
+      /* 칸을 비운 채 나가면(blur) 바로 알려 준다 */
+      await setSelect(page, 0, "표시 방식", "text");
+      await typeInto(page, 0, "표시", "HOME");
+      await typeInto(page, 0, "표시", "");
+      await blurActive(page);
+
+      check("칸을 비운 채 나가면 곧바로 안내한다", (await readScope(page, 0)).error === "표시할 글자를 입력해 주세요.");
+
+      await typeInto(page, 0, "표시", "HOME");
+      await pickIcon(page, 3, "별");
+
+      check("채우면 안내가 사라진다", (await readScope(page, 0)).error === "" && (await readScope(page, 3)).error === "");
+
+      /* 직접 입력 주소 */
+      await setSelect(page, 3, "이동할 곳", "path:");
+      await typeInto(page, 3, "이동할 곳", "about me");
+      await blurActive(page);
+
+      check(
+        "블로그 안 주소가 형태에 맞지 않으면 짧게 안내한다",
+        /주소/.test((await readScope(page, 3)).error) && !/path:/.test((await readScope(page, 3)).error),
+        (await readScope(page, 3)).error
+      );
+
+      await typeInto(page, 3, "이동할 곳", "/about");
+
+      await applyDockPanel(page);
+
+      check("모두 채우면 적용된다", !(await panelIsOpen(page)));
+
+      const pkg = await workingPackage(page);
+      const last = pkg.bottomDock.items[3];
+
+      check(
+        "추가한 항목이 고른 그대로 저장된다",
+        last.visual.type === "icon" && last.visual.value === "star" &&
+        last.action.type === "navigate" && last.action.target === "path:/about",
+        JSON.stringify(last)
       );
 
       await ctx.close();
@@ -446,6 +835,8 @@ async function run() {
         pkg.bottomDock.items.map(i => i.id).join(",")
       );
 
+      await clickPreviewTrigger(page);
+
       const dock = await readPreviewDock(page);
 
       check(
@@ -454,35 +845,28 @@ async function run() {
         (dock.ids || []).join(",")
       );
 
-      /* 동작 종류를 바꾸면 그에 맞는 칸이 나온다 */
       await openDockPanel(page);
 
-      await page.evaluate(() => {
-        const card = document.querySelectorAll(".dock-panel-item")[0];
-        const rows = Array.from(card.querySelectorAll(".dock-panel-row"));
-        const row = rows.find(r => r.querySelector(".dock-panel-label")?.textContent === "동작");
-        const select = row.querySelector("select");
-        select.value = "open";
-        select.dispatchEvent(new Event("change", { bubbles: true }));
+      const actionOptions = await page.evaluate(() => {
+        window.__r = Array.from(document.querySelectorAll(".dock-panel-item")[0].querySelectorAll(".dock-panel-row"))
+          .find(r => r.querySelector(".dock-panel-label")?.textContent === "동작");
+        return Array.from(window.__r.querySelectorAll("option")).map(o => o.textContent);
       });
-      await sleep(150);
 
       check(
-        "★ '패널 열기'를 고르면 패널 이름 칸이 나온다",
-        await page.evaluate(() => {
-          const card = document.querySelectorAll(".dock-panel-item")[0];
-          return Array.from(card.querySelectorAll(".dock-panel-label"))
-            .some(el => el.textContent === "패널 이름");
-        })
+        "★ 동작은 화면 이동 · 기능 실행(스킨 마크업이 필요한 '패널 열기'는 없다)",
+        JSON.stringify(actionOptions) === JSON.stringify(["화면 이동", "기능 실행"]),
+        JSON.stringify(actionOptions)
       );
 
+      await setSelect(page, 0, "동작", "action");
+
       check(
-        "'어디로' 칸은 사라진다",
-        await page.evaluate(() => {
-          const card = document.querySelectorAll(".dock-panel-item")[0];
-          return !Array.from(card.querySelectorAll(".dock-panel-label"))
-            .some(el => el.textContent === "어디로");
-        })
+        "★ '기능 실행'을 고르면 '실행할 기능' 칸이 나오고 '이동할 곳'은 사라진다",
+        await (async () => {
+          const s = await readScope(page, 0);
+          return s.labels.includes("실행할 기능") && !s.labels.includes("이동할 곳");
+        })()
       );
 
       check(
@@ -490,7 +874,7 @@ async function run() {
         await page.evaluate(() => {
           const card = document.querySelectorAll(".dock-panel-item")[1];
           const rows = Array.from(card.querySelectorAll(".dock-panel-row"));
-          const row = rows.find(r => r.querySelector(".dock-panel-label")?.textContent === "어디로");
+          const row = rows.find(r => r.querySelector(".dock-panel-label")?.textContent === "이동할 곳");
           if (!row) return false;
           return Array.from(row.querySelectorAll("option"))
             .some(o => o.value.startsWith("category:"));
@@ -503,33 +887,77 @@ async function run() {
 
     /* --------------------------------------------------- */
 
-    if (section("reject")) {
+    if (section("legacy")) {
 
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
       const page = await openStudio(ctx);
 
+      /* Code · AI · 옛 패널이 만든 dock — 이 패널에 없는 값들 */
+      const legacy = {
+        visible: true,
+        position: "static",
+        collapsible: true,
+        defaultState: "expanded",
+        transition: { type: "scale", duration: 600, easing: "ease-in", direction: "down" },
+        trigger: { type: "svg", value: "https://example.com/t.svg", label: "열기" },
+        items: [
+          { id: "slot", label: "logo", audience: "all", visual: { type: "asset", value: "profile" }, action: { type: "navigate", target: "home" } },
+          { id: "tape", label: "tape", audience: "all", visual: { type: "icon", value: "cassette" }, action: { type: "open", target: "panel:pair" } }
+        ]
+      };
+
+      const set = await page.evaluate((dock) => window.setStudioBottomDock(dock), legacy);
+
+      check("옛 모양의 dock 이 draft 에 있다(전제)", set.ok === true, JSON.stringify(set));
+
       await openDockPanel(page);
 
-      /* 아이콘 값을 비운다 — 정규화가 거부한다 */
-      await page.evaluate(() => {
-        const card = document.querySelectorAll(".dock-panel-item")[0];
-        const rows = Array.from(card.querySelectorAll(".dock-panel-row"));
-        const row = rows.find(r => r.querySelector(".dock-panel-label")?.textContent === "그림 값");
-        const input = row.querySelector("input");
-        input.value = "";
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-      });
+      const slot = await readScope(page, 0);
+      const tape = await readScope(page, 1);
+      const trig = await readScope(page, "trigger");
 
-      await page.click(".dock-panel-button--primary");
-      await sleep(300);
-
-      const message = await panelMessage(page);
-
-      check("★ 모양이 틀리면 적용되지 않는다", await panelIsOpen(page));
-      check("무엇이 문제인지 알려 준다", message.isError && message.text.includes("items[0]"), message.text);
       check(
-        "그때 draft 는 그대로다",
-        (await workingPackage(page)).bottomDock === undefined
+        "★ 옛 asset/svg 표시는 '이전 설정 그대로'로 보인다(이미지 슬롯 · SVG 낱말 없음)",
+        slot.typeOptions.includes("이전 설정 그대로") && slot.typeValue === "asset" &&
+        trig.typeValue === "svg" && !/슬롯|SVG/.test(slot.text + trig.text),
+        JSON.stringify(slot.typeOptions)
+      );
+
+      check(
+        "★ 스킨 고유 아이콘(cassette)은 이름 대신 '이 스킨의 아이콘'으로 선택되어 있다",
+        tape.selectedIcon === "이 스킨의 아이콘" && !/cassette/.test(tape.text),
+        tape.selectedIcon
+      );
+
+      check(
+        "옛 '패널 열기' 항목에서는 그 동작이 계속 보인다",
+        tape.labels.includes("패널 이름")
+      );
+
+      await applyDockPanel(page);
+
+      const pkg = await workingPackage(page);
+
+      check(
+        "★ 손대지 않은 옛 표시 값이 그대로 저장된다(asset · svg · cassette · panel)",
+        pkg.bottomDock.items[0].visual.type === "asset" &&
+        pkg.bottomDock.items[0].visual.value === "profile" &&
+        pkg.bottomDock.items[1].visual.value === "cassette" &&
+        pkg.bottomDock.items[1].action.target === "panel:pair" &&
+        pkg.bottomDock.trigger.type === "svg",
+        JSON.stringify(pkg.bottomDock.items)
+      );
+
+      check(
+        "★ 적용하면 화면 아래 고정 · 접힌 채 시작으로 맞춰진다",
+        pkg.bottomDock.position === "fixed" && pkg.bottomDock.defaultState === "collapsed",
+        JSON.stringify([pkg.bottomDock.position, pkg.bottomDock.defaultState])
+      );
+
+      check(
+        "Code/AI 가 정한 움직임(전환)은 지우지 않는다",
+        JSON.stringify(pkg.bottomDock.transition) === JSON.stringify(legacy.transition),
+        JSON.stringify(pkg.bottomDock.transition)
       );
 
       await ctx.close();
@@ -570,7 +998,6 @@ async function run() {
           JSON.stringify(applied.bottomDock)
       );
 
-      /* 다시 열면 취소한 편집이 남아 있지 않다 */
       await openDockPanel(page);
 
       check(
@@ -595,6 +1022,27 @@ async function run() {
 
       check("먼저 dock 이 생겼다(전제)", !!(await workingPackage(page)).bottomDock);
 
+      /* 끄기 — 설정은 남고 공개 화면에만 안 나온다 */
+      await openDockPanel(page);
+      await page.evaluate(() => {
+        const row = Array.from(document.querySelectorAll(".dock-panel-settings .dock-panel-row"))
+          .find(r => r.querySelector(".dock-panel-label")?.textContent === "Dock");
+        const select = row.querySelector("select");
+        select.value = "hide";
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      await sleep(120);
+      await applyDockPanel(page);
+
+      const off = await workingPackage(page);
+
+      check(
+        "★ Dock 사용 안 함 → 설정은 남고 visible 만 꺼진다",
+        !!off.bottomDock && off.bottomDock.visible === false && off.bottomDock.items.length === 3
+      );
+
+      check("Preview 에서 사라진다", (await readPreviewDock(page)).count === 0);
+
       await openDockPanel(page);
 
       await page.click(".dock-panel-button--quiet");
@@ -603,12 +1051,10 @@ async function run() {
       const pkg = await workingPackage(page);
 
       check(
-        "★ dock 없애기 → 설정 키 자체가 사라진다",
+        "★ Dock 지우기 → 설정 키 자체가 사라진다",
         pkg.bottomDock === undefined,
         JSON.stringify(pkg.bottomDock)
       );
-
-      check("Preview 에서도 사라진다", (await readPreviewDock(page)).count === 0);
 
       await ctx.close();
     }
@@ -626,6 +1072,8 @@ async function run() {
 
       check("패널이 닫혀 있다(전제)", !(await panelIsOpen(page)));
 
+      await clickPreviewTrigger(page);
+
       const frame = page.frames().find(f => f.url().includes("preview-frame.html"));
 
       await frame.evaluate(() => {
@@ -635,7 +1083,7 @@ async function run() {
       await sleep(400);
 
       check(
-        "★ Preview 의 dock 을 누르면 설정 패널이 열린다",
+        "★ 펼친 뒤 Preview 의 항목을 누르면 설정 패널이 열린다",
         await panelIsOpen(page)
       );
 
@@ -659,7 +1107,8 @@ async function run() {
       const page = await openStudio(ctx);
 
       await openDockPanel(page);
-      await setSettingByLabel(page, "접기", "on");
+      await setSelect(page, 0, "표시 방식", "emoji");
+      await typeInto(page, 0, "표시", "♡");
       await applyDockPanel(page);
 
       const applied = (await workingPackage(page)).bottomDock;
@@ -673,7 +1122,7 @@ async function run() {
       check(
         "★ Export 파일에 bottomDock 이 그대로 실린다",
         JSON.stringify(exported.bottomDock) === JSON.stringify(applied),
-        JSON.stringify(exported.bottomDock && exported.bottomDock.collapsible)
+        JSON.stringify(exported.bottomDock && exported.bottomDock.position)
       );
 
       /* 같은 파일을 붙여넣기로 다시 Import */
@@ -731,6 +1180,16 @@ async function run() {
           const modal = document.querySelector(".dock-panel-modal");
           const r = modal.getBoundingClientRect();
           return r.left >= -1 && r.right <= window.innerWidth + 1;
+        })
+      );
+
+      check(
+        "아이콘 고르기가 줄바꿈되어 카드 안에 들어온다",
+        await page.evaluate(() => {
+          const card = document.querySelector(".dock-panel-item");
+          const c = card.getBoundingClientRect();
+          return Array.from(card.querySelectorAll(".dock-panel-icon"))
+            .every(b => { const r = b.getBoundingClientRect(); return r.left >= c.left - 1 && r.right <= c.right + 1; });
         })
       );
 

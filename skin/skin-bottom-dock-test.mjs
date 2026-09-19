@@ -469,6 +469,95 @@ section("template");
 
 
 /* =========================================================
+   아이모리 아이콘 — Studio 가 고르는 목록과 공개 화면이 그리는 그림
+
+   목록(SKIN_DOCK_IMORY_ICONS)은 skin-bottom-dock.js, 그림은
+   skin-dock-icons.css 에 있다. 두 파일을 **실제로 읽어** 양방향으로
+   대조한다 — 하나만 고치면 "고를 수는 있는데 안 보이는" 아이콘이나
+   "그려 두고 못 고르는" 아이콘이 생긴다.
+========================================================== */
+
+section("icons");
+
+{
+  const fs = await import("node:fs");
+
+  const here =
+    path.dirname(fileURLToPath(import.meta.url));
+
+  const css =
+    fs.readFileSync(path.join(here, "skin-dock-icons.css"), "utf8");
+
+  const drawn =
+    new Set(
+      Array.from(css.matchAll(/\[data-imory-dock-icon="([a-z0-9-]+)"\]/g))
+        .map((m) => m[1])
+    );
+
+  const listed =
+    dock.SKIN_DOCK_IMORY_ICONS.map((icon) => icon.token);
+
+  const missingDrawing =
+    listed.filter((token) => !drawn.has(token));
+
+  const missingChoice =
+    Array.from(drawn).filter((token) => listed.indexOf(token) === -1);
+
+  check("목록의 아이콘마다 그림이 있다", missingDrawing.length === 0, missingDrawing.join(","));
+  check("그림마다 목록에 이름이 있다", missingChoice.length === 0, missingChoice.join(","));
+
+  check(
+    "요청된 기본 아이콘이 전부 있다(home·folder·heart·star·image·book·edit·profile·menu)",
+    ["home", "folder", "heart", "star", "image", "book", "edit", "profile", "menu"]
+      .every((token) => listed.indexOf(token) !== -1)
+  );
+
+  check(
+    "Studio 가 처음 채우는 dock 의 아이콘(home·quote·top)도 그려진다",
+    ["home", "quote", "top"].every((token) => drawn.has(token))
+  );
+
+  check(
+    "목록의 토큰은 data-kind 로 나갈 수 있는 형태다",
+    listed.every((token) => /^[a-z][a-z0-9-]{0,31}$/.test(token))
+  );
+
+  check(
+    "목록의 이름은 사용자에게 보일 한국어 라벨을 갖는다(토큰을 보여 주지 않는다)",
+    dock.SKIN_DOCK_IMORY_ICONS.every((icon) => icon.label && icon.label !== icon.token)
+  );
+
+  check(
+    "그림은 외부 요청이 아니라 data: 주소다",
+    !/url\(\s*["']?https?:/i.test(css)
+  );
+
+  check(
+    "사용자에게 보이는 표시 방식은 넷이다(asset/svg 는 저장값으로만)",
+    JSON.stringify(dock.SKIN_DOCK_USER_VISUAL_TYPES) ===
+      JSON.stringify(["icon", "emoji", "text", "image"]) &&
+    dock.SKIN_DOCK_VISUAL_TYPES.indexOf("asset") !== -1 &&
+    dock.SKIN_DOCK_VISUAL_TYPES.indexOf("svg") !== -1
+  );
+
+  check(
+    "옛 asset/svg 표시도 여전히 정규화를 통과한다(저장 데이터 호환)",
+    normalizeSkinBottomDock({
+      items: [
+        { id: "a", visual: { type: "asset", value: "logo" }, action: { type: "navigate", target: "home" } },
+        { id: "b", visual: { type: "svg", value: "https://example.com/a.svg" }, action: { type: "navigate", target: "home" } }
+      ]
+    }).ok
+  );
+
+  check(
+    "기본 template 의 열기 버튼은 이미지 주소도 그릴 자리를 갖는다",
+    getDefaultSkinDockTemplate().html.includes('data-imory-src="dock.trigger.imageUrl"')
+  );
+}
+
+
+/* =========================================================
 ========================================================== */
 
 console.log(`\n${failed === 0 ? "PASS" : "FAIL"} — ${passed} passed, ${failed} failed\n`);

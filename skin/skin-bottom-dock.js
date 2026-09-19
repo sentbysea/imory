@@ -141,6 +141,53 @@ const SKIN_DOCK_VISUAL_TYPES =
   ["icon", "emoji", "text", "image", "asset", "svg"];
 
 
+/*
+  사용자에게 보이는 표시 방식은 이 넷뿐이다(Studio Dock 패널).
+  asset · svg 는 저장값과 렌더러가 그대로 받지만(옛 데이터 · Code ·
+  AI) 패널의 선택지에는 없다 — IMORY_BOTTOM_DOCK_DESIGN.md §9.
+*/
+const SKIN_DOCK_USER_VISUAL_TYPES =
+  ["icon", "emoji", "text", "image"];
+
+
+/*
+  아이모리가 **직접 그리는** 아이콘 — Studio 의 아이콘 고르기와 공개
+  화면의 그림이 같은 목록을 본다.
+
+  토큰 목록 자체는 여전히 열려 있다(위 visual.type 주석 — 스킨이
+  자기 낱말을 쓸 수 있어야 한다). 여기 있는 것은 "스킨이 그 종류를
+  따로 그리지 않았을 때 플랫폼이 대신 그려 주는" 이름들이다. 그림은
+  skin/skin-dock-icons.css 한 곳에 있고, 그 파일이 이 목록의 토큰마다
+  규칙을 갖는지는 skin/skin-bottom-dock-test.mjs 가 두 파일을 실제로
+  읽어 대조한다.
+
+  label 은 Studio 가 보여 주는 이름이다. **토큰은 사용자에게 보이지
+  않는다.**
+*/
+const SKIN_DOCK_IMORY_ICONS = [
+  { token: "home", label: "홈" },
+  { token: "folder", label: "폴더" },
+  { token: "heart", label: "하트" },
+  { token: "star", label: "별" },
+  { token: "image", label: "사진" },
+  { token: "camera", label: "카메라" },
+  { token: "book", label: "책" },
+  { token: "quote", label: "인용" },
+  { token: "edit", label: "연필" },
+  { token: "profile", label: "프로필" },
+  { token: "menu", label: "메뉴" },
+  { token: "share", label: "공유" },
+  { token: "top", label: "맨 위로" }
+];
+
+
+function isSkinDockImoryIcon(token) {
+
+  return SKIN_DOCK_IMORY_ICONS.some((icon) => icon.token === token);
+
+}
+
+
 const SKIN_DOCK_ACTION_TYPES =
   ["navigate", "open", "action"];
 
@@ -1030,8 +1077,11 @@ function getDefaultSkinDockTemplate() {
 
       <span class="imory-dock-trigger" data-imory-dock="trigger"
         data-imory-if="dock.collapsible"
-        data-imory-kind="dock.trigger.iconKind"
-        data-imory-bind="dock.trigger.text"></span>
+        data-imory-kind="dock.trigger.iconKind"><span class="imory-dock-trigger-text"
+          data-imory-if="dock.trigger.hasText"
+          data-imory-bind="dock.trigger.text"></span><img class="imory-dock-image"
+          data-imory-if="dock.trigger.isImage"
+          data-imory-src="dock.trigger.imageUrl" alt=""></span>
 
       <div class="imory-dock-items" data-imory-dock="items">
 
@@ -1150,6 +1200,11 @@ if (typeof window !== "undefined") {
   window.SKIN_DOCK_NAVIGATE_TARGETS = SKIN_DOCK_NAVIGATE_TARGETS;
   window.SKIN_DOCK_AUDIENCES = SKIN_DOCK_AUDIENCES;
   window.SKIN_DOCK_MAX_ITEMS = SKIN_DOCK_MAX_ITEMS;
+  window.SKIN_DOCK_MAX_TEXT_CHARS = SKIN_DOCK_MAX_TEXT_CHARS;
+  window.SKIN_DOCK_MAX_EMOJI_CHARS = SKIN_DOCK_MAX_EMOJI_CHARS;
+  window.SKIN_DOCK_USER_VISUAL_TYPES = SKIN_DOCK_USER_VISUAL_TYPES;
+  window.SKIN_DOCK_IMORY_ICONS = SKIN_DOCK_IMORY_ICONS;
+  window.isSkinDockImoryIcon = isSkinDockImoryIcon;
 
   window.normalizeSkinBottomDock = normalizeSkinBottomDock;
   window.resolveSkinBottomDock = resolveSkinBottomDock;
@@ -1176,6 +1231,11 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_DOCK_NAVIGATE_TARGETS,
     SKIN_DOCK_AUDIENCES,
     SKIN_DOCK_MAX_ITEMS,
+    SKIN_DOCK_MAX_TEXT_CHARS,
+    SKIN_DOCK_MAX_EMOJI_CHARS,
+    SKIN_DOCK_USER_VISUAL_TYPES,
+    SKIN_DOCK_IMORY_ICONS,
+    isSkinDockImoryIcon,
     normalizeSkinBottomDock,
     resolveSkinBottomDock,
     buildSkinDockContext,

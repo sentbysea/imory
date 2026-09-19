@@ -496,9 +496,26 @@ function handleRenderMessage(data) {
 
       if (dockMount && dockMount.dockRoot) {
 
+        /*
+          ★ 열기 버튼만은 예외다 — 공개 화면처럼 실제로 펼치고 접는다.
+          Dock 패널이 만드는 dock 은 언제나 접힌 채로 시작하므로
+          (IMORY_BOTTOM_DOCK_DESIGN.md §6), 이 버튼이 막혀 있으면
+          Preview 에서는 항목을 한 번도 볼 수 없다. 펼친 뒤 항목을
+          누르면 아래처럼 설정 패널이 열린다.
+        */
+
         dockMount.dockRoot.addEventListener(
           "click",
           (event) => {
+
+            if (
+              event.target &&
+              typeof event.target.closest === "function" &&
+              event.target.closest('[data-imory-dock="trigger"]') &&
+              dockMount.triggerEl
+            ) {
+              return;
+            }
 
             event.preventDefault();
             event.stopPropagation();

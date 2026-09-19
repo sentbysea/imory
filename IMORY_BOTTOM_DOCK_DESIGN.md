@@ -125,6 +125,43 @@ skin-specific custom design.
 `ribbon`, `flower`)을 쓸 수 있어야 한다. 형태(소문자로 시작, 32자)만
 강제한다.
 
+**변경됨(Dock 패널 단순화 라운드, 2026-09-19).** 여섯 종류는 저장값과
+렌더러가 그대로 받지만, Studio Dock 패널이 **사용자에게 보이는 것은
+넷**이다 — 아이콘 · 이모지 · 글자 · 이미지 주소
+(`SKIN_DOCK_USER_VISUAL_TYPES`). `asset` · `svg` 로 저장된 옛 항목은
+패널에서 "이전 설정 그대로"로 보이고 값이 보존된다.
+
+#### 아이모리 아이콘 (현재 구현)
+
+`icon` 의 값을 사용자가 적지 않는다. 패널은 **아이모리가 그리는 그림
+목록**에서 고르게 한다(`SKIN_DOCK_IMORY_ICONS` — home · folder · heart ·
+star · image · camera · book · quote · edit · profile · menu · share ·
+top). 토큰 이름은 화면에 나오지 않고 그림과 한국어 이름만 보인다.
+
+그림은 [skin/skin-dock-icons.css](./skin/skin-dock-icons.css) 한 곳에
+있다(mask + `currentColor` 라 스킨 글자색을 따르고, 크기는 `1.25em`).
+공개 화면 · Studio Preview · 패널의 고르기가 같은 파일을 읽는다. 목록과
+그림이 짝인지는 `skin/skin-bottom-dock-test.mjs` 가 두 파일을 실제로
+읽어 양방향으로 대조한다.
+
+#### 표시 채우기 — 스킨이 그리지 않은 자리만
+
+[skin/skin-bottom-dock-visual.js](./skin/skin-bottom-dock-visual.js)
+`applySkinDockVisuals()` — 렌더 직후, 접힘을 얹기 **전**에 돈다.
+
+| 고른 표시 | 스킨이 이미 보여 주면 | 아니면 |
+| --- | --- | --- |
+| 아이콘(아이모리 목록) | 그 `[data-kind]` 요소에 `::before`/`::after` content · 배경 · 마스크 그림이 있으면 손대지 않는다 | 그 요소(없으면 항목/트리거) 안에 `<span data-imory-dock-icon="…">` |
+| 아이콘(스킨 고유 낱말) | — | 넣지 않는다(스킨 CSS 의 몫) |
+| 이모지 · 글자 | 그 자리에 보이는 글자/이미지가 있으면 손대지 않는다 | `<span data-imory-dock-text>` 에 textContent |
+| 이미지 주소 | 〃 | `<img src alt="">` |
+
+"스킨이 무엇을 그렸든 스킨이 이긴다"가 원칙이다. 채우는 이유는 둘이다 —
+기본 template 은 아이콘 자리가 비어 있었고(`data-kind` 만 나갔다),
+트리거에 `dock.trigger.text` 만 받는 스킨에서 아이콘/이미지를 고르면
+**빈 버튼**이 됐다. 이 파일은 그 틈만 메운다. 기본 template 의 트리거에는
+이미지 자리(`dock.trigger.imageUrl`)도 더했다.
+
 ### action.type / target
 
 | type | target | 결과 |
@@ -317,6 +354,22 @@ fixed 일 때만 플랫폼이 dock 높이를 실측해
 방문자의 선택이 유지된다. 저장소 권한(사생활 보호 창 · 차단 설정)에
 기대지 않으면서 "눌렀는데 다음 화면에서 도로 펴지는" 불편은 없앤다.
 
+**변경됨(Dock 패널 단순화 라운드).** `defaultState: "collapsed"` 인
+dock 은 **화면에 들어올 때마다 접혀 있다** — 펼친 채로 항목을 눌러 다른
+화면으로 가면 새 화면의 dock 은 다시 작은 열기 버튼 하나다(메뉴를 누르면
+메뉴가 닫히는 것과 같은 결). 세션 기억은 `defaultState: "expanded"` 인
+옛 dock 에서 "방문자가 접었다"만 다음 화면으로 넘긴다
+(`skin-bottom-dock-mount.js` `collapsedStart`).
+
+### 높이 변수는 접고 펼 때 다시 잰다
+
+`--imory-bottom-dock-height` 는 dock 루트의 `ResizeObserver` 로 다시
+잰다. 이 값을 보는 것이 둘이다 — 본문 아래 여백과, 같은 오른쪽 아래
+모서리를 쓰는 **하이라이트 진입점 칩**(`posts/posts-highlight.css`,
+`html.imory-has-bottom-dock` 이면 dock 위로 올라간다). 접힌 높이로만 재
+두면 390px 에서 펼친 항목이 그 칩 밑에 깔려 눌리지 않았다(Studio →
+공개 흐름 E2E 가 `elementFromPoint` 로 잡았다).
+
 ### collapsed dock ≠ hamburger menu
 
 trigger 의 외형은 고정하지 않는다. 작은 점 · 화살표 · 하트 · 별 ·
@@ -371,7 +424,61 @@ HIGHLIGHTS)이 렌더 직후 `syncSkinBottomDockForScreen()` 을 부른다. 그
 Top Dock 의 **Dock** 버튼, 또는 **Preview 안의 dock 을 클릭**하면
 설정 패널이 열린다(`preview:dock-select`).
 
-패널에서 고치는 것:
+**변경됨(Dock 패널 단순화 라운드, 2026-09-19).** 사용자가 이해해야 하는
+것은 넷뿐이다 — ① Dock 켜기/끄기 ② 작은 열기 버튼의 모양 ③ 어떤 항목을
+넣을지 ④ 각 항목을 누르면 어디로 갈지.
+
+패널에서 고치는 것(현재 구현, [studio/dock/dock-panel.js](./studio/dock/dock-panel.js)):
+
+- **Dock** — 사용 / 사용 안 함(`visible`, 설정은 남는다)
+- **독 열기 버튼** — 표시 방식 · 표시
+- **항목** — 라벨 · 표시 방식 · 표시 · 동작(화면 이동 / 기능 실행) ·
+  이동할 곳(또는 실행할 기능) · 보이는 사람 · 순서 변경(손잡이 끌기 ·
+  ↑↓) · 삭제 · 추가
+
+**패널에 없는 것**: 자리 · 처음 상태 · 접기 · 전환(종류 · 속도 · 움직임 ·
+방향). 이 패널이 적용하는 dock 은 언제나
+
+```
+position: "fixed" · collapsible: true · defaultState: "collapsed"
+```
+
+이다 — 평소에는 화면 아래에 작은 열기 버튼 하나, 누르면 펼쳐지고 다시
+누르면 접힌다. 움직임은 공용 전환 primitive 그대로이고, 저장된
+`transition` 이 있으면 **지우지 않는다**(Code · AI 가 정한 값), 없으면
+`{ type: "fade-slide", duration: 200, easing: "smooth", direction: "up" }`.
+저장 모양과 렌더러는 바뀌지 않았다 — 네 칸은 여전히 `bottomDock` 의
+칸이고 Code · AI · 옛 데이터가 쓸 수 있다. 사용자에게 보이지 않을 뿐이다.
+
+`패널 열기`(open) 동작은 스킨 마크업이 있어야 동작하는 개발자용 동작이라
+선택지에 없다 — 이미 그렇게 저장된 항목에서만 보이고 보존된다.
+
+#### 표시 입력
+
+| 표시 방식 | 입력 | placeholder | 비었을 때 안내 |
+| --- | --- | --- | --- |
+| 아이콘 | 그림 고르기(§3 아이모리 아이콘) | — | 아이콘을 골라 주세요. |
+| 이모지 | 짧은 입력(8자) | `예: ♡` | 표시할 이모지를 입력해 주세요. |
+| 글자 | 짧은 입력(24자) | `예: HOME` | 표시할 글자를 입력해 주세요. |
+| 이미지 주소 | URL 입력 | `https://...` | 이미지 주소를 입력해 주세요. (https 가 아니면 "https:// 로 시작하는 …") |
+
+- 예시는 **placeholder 로만** 보인다. `input.value` 는 언제나 실제로
+  저장될 값이고, 방식을 바꾸면 빈 값이 된다. placeholder 는 옅게(기울임)
+  그려 "이미 들어 있는 값"처럼 보이지 않게 한다.
+- 빈 항목 추가는 아이콘이 **골라져 있지 않은** 채로 생긴다.
+- 안내는 문제가 있는 **항목/열기 버튼 바로 아래**에 한 줄. 손을 댄 뒤
+  (방식을 바꿨을 때 · 칸을 비운 채 나갔을 때 · 적용을 눌렀을 때)부터
+  보이고, 채우는 즉시 사라진다. 적용은 이 검사를 먼저 통과해야 하고,
+  내부 경로(`bottomDock.items[0].visual.value`)는 어디에도 나오지
+  않는다. 정규화가 그래도 거부하면 "N번째 항목의 설정을 확인해 주세요."
+
+#### Preview 안의 dock
+
+열기 버튼은 공개 화면처럼 **실제로 펼치고 접는다**(접힌 채로 시작하므로
+그렇지 않으면 Preview 에서 항목을 볼 수 없다). 펼친 뒤 항목을 누르면
+설정 패널이 열린다([studio/preview/preview-bridge.js](./studio/preview/preview-bridge.js)).
+
+아래는 이 라운드 **이전**의 패널 목록이다(기록):
 
 - 표시 — 보이기 / 숨기기
 - 자리 — 자동 / 화면에 고정 / 따라오다 멈춤 / 콘텐츠 흐름 안
@@ -465,8 +572,20 @@ AI 는 dock 관련 자연어 요청을 **기존 primitive 의 property 변경**�
   자신이라 항목의 주소와 맞지 않는다. "지금 보고 있는 항목"을 강조하는
   스킨은 공개 화면에서만 그 표시가 보인다.
 - **Preview 안에서 dock 을 실제로 조작해 보기** — Studio Preview 의
-  dock 은 누르면 설정 패널이 열린다(편집 대상이지 조작 대상이 아니다).
-  접힘/패널 동작을 실제로 확인하려면 공개 화면에서 본다.
+  dock 항목은 누르면 설정 패널이 열린다(편집 대상이지 조작 대상이 아니다).
+  **열기 버튼만은 예외로 실제로 펼치고 접는다**(Dock 패널 단순화 라운드).
+  패널 열기 · 공유 · 맨 위로 같은 항목 동작은 공개 화면에서 본다.
+- **Dock 패널에서 자리 · 처음 상태 · 전환을 고르기** — 일부러 없다(§9).
+  "흐름 안에 둔 dock"이나 "펼친 채 시작하는 dock"은 Code · AI 로만 만들
+  수 있고, 그 dock 을 패널에서 적용하면 화면 아래 고정 · 접힌 채 시작으로
+  맞춰진다(전환은 보존).
+- **스킨이 [data-kind] 를 한 가지 모양으로 뭉뚱그려 그린 dock** —
+  예: `.link::before { content:"" }` 로 모든 종류에 같은 점을 그린 스킨.
+  그 스킨에서는 패널에서 하트를 골라도 스킨의 점이 보인다(스킨이 이긴다,
+  §3). 아이모리 그림을 쓰려면 스킨 CSS 에서 그 규칙을 지우면 된다.
+- **아이모리 아이콘 추가** — 목록(`SKIN_DOCK_IMORY_ICONS`)과 그림
+  (`skin/skin-dock-icons.css`)을 **함께** 고친다. 단위 테스트가 둘의
+  짝을 대조한다.
 
 ---
 
@@ -491,3 +610,24 @@ AI 는 dock 관련 자연어 요청을 **기존 primitive 의 property 변경**�
 - **실제 DB 검증 / 배포 확인 / 실기기 확인은 하지 않았다.**
   migration 이 필요 없는 변경이다(`bottomDock` 은 기존
   `skin_versions.content` JSON 안의 새 키다).
+
+### Dock 패널 단순화 라운드 (2026-09-19)
+
+- 단위 76건(+10: 아이콘 목록 ↔ 그림 CSS 양방향 · 옛 asset/svg 정규화
+  통과 · 기본 template 트리거의 이미지 자리).
+- Studio E2E 88건(chromium · webkit) — 개발자용 칸/낱말이 없다 · 표시
+  방식 넷 · 아이콘 고르기에 토큰 글자 없음 · placeholder 는 값이 아니고
+  더 옅다 · 방식별 안내 문구 · 빈 항목 추가 → 적용 전에 그 항목 아래 안내 ·
+  옛 asset/svg/스킨 고유 아이콘/패널 열기/전환 보존 · 적용하면 fixed +
+  collapsed · Preview 열기 버튼이 실제로 펼치고 접는다.
+- 공개 E2E 114건(chromium · webkit) — `[visual]` 스킨이 그리지 않은
+  자리만 채운다 · `[studioflow]` **실제 Studio 에서 빈 항목 추가 → 표시
+  방식 변경 → 값 입력 → 적용 → Save 한 content 그대로** 진짜
+  `index.html` 을 데스크톱/390px 로 연다: 접힌 채 열기 버튼 하나 →
+  누르면 펼침 → 다시 누르면 접힘 → 항목을 누르면 지정한 카테고리 → 새
+  화면·직접 접속도 다시 접힘 · 펼친 항목 위에 겹치는 것 없음.
+  `IMORY_DOCK_SHOT=<디렉터리>` 를 주면 Studio 패널과 공개 화면(접힘/펼침)
+  스크린샷을 남긴다.
+- 회귀: 8966 전환(134) · 8967 Studio 전환(32 — Dock 절은 "전환 칸 없음 ·
+  객체 보존"으로 바뀌었다) · 8952 하이라이트 진입점(14) · 8937 AI 서버(72).
+- mock 테스트만이다. 실제 DB · 배포 · 실기기는 확인하지 않았다.

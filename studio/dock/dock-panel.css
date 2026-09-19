@@ -143,6 +143,127 @@
   border-radius: 8px;
 }
 
+/*
+  예시는 placeholder 로만 보인다(dock-panel.js dockTextInput). 실제
+  입력값과 헷갈리지 않게 **옅게**, 그리고 기울여서 "아직 비어 있다"를
+  한눈에 알 수 있게 한다.
+*/
+.dock-panel-input::placeholder {
+  color: var(--system-text-weak, #b4b4b4);
+
+  opacity: 0.7;
+
+  font-style: italic;
+}
+
+.dock-panel-input:focus,
+.dock-panel-select:focus {
+  outline: 2px solid var(--system-accent, #d76a8a);
+  outline-offset: -1px;
+}
+
+.dock-panel-hint--lead {
+  margin: 0 0 10px;
+}
+
+.dock-panel-note {
+  margin: 0;
+
+  font-size: 12px;
+  line-height: 1.6;
+
+  color: var(--system-text-weak, #8b8b8b);
+}
+
+
+/* =========================================================
+   아이콘 고르기 — 그림만 보인다(토큰 이름은 보이지 않는다).
+   그림 자체는 skin/skin-dock-icons.css 가 그린다.
+========================================================== */
+
+.dock-panel-icons {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 6px;
+
+  min-width: 0;
+}
+
+.dock-panel-icon {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  width: 40px;
+  height: 40px;
+
+  padding: 0;
+
+  color: var(--system-text, #333333);
+
+  background: var(--system-bg, #ffffff);
+
+  border: 1px solid var(--system-line, #dcdcdc);
+  border-radius: 9px;
+
+  cursor: pointer;
+}
+
+.dock-panel-icon:hover {
+  border-color: var(--system-text-weak, #b4b4b4);
+}
+
+.dock-panel-icon--selected {
+  color: var(--system-accent, #d76a8a);
+
+  border-color: var(--system-accent, #d76a8a);
+
+  box-shadow: 0 0 0 1px var(--system-accent, #d76a8a) inset;
+}
+
+.dock-panel-icon-glyph {
+  font-size: 18px;
+}
+
+.dock-panel-icon-skin {
+  font-size: 10px;
+  letter-spacing: 0.02em;
+}
+
+
+/* =========================================================
+   안내 문구 — 문제가 있는 자리 바로 아래
+========================================================== */
+
+.dock-panel-error {
+  margin: 4px 0 0;
+
+  font-size: 12px;
+  line-height: 1.5;
+
+  color: #c2453f;
+}
+
+.dock-panel-error[hidden] {
+  display: none;
+}
+
+.dock-panel-item--invalid {
+  border-color: #e6b7b4;
+}
+
+.dock-panel-trigger {
+  padding: 12px 14px;
+
+  border: 1px solid var(--system-line, #e6e6e6);
+  border-radius: 10px;
+
+  background: var(--system-bg-soft, #fbfbfb);
+}
+
 .dock-panel-target {
   display: flex;
 

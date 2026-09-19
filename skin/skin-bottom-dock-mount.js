@@ -90,7 +90,9 @@ let currentSkinDock =
 
 /*
   방문자가 직접 접었는가 / 폈는가. null 이면 아직 손대지 않았다는
-  뜻이고 그때는 설정의 defaultState 를 따른다.
+  뜻이고 그때는 설정의 defaultState 를 따른다. "접은 채로 시작"하는
+  dock 은 이 값과 무관하게 화면마다 접혀서 시작한다 — 아래
+  mountSkinBottomDock 의 collapsedStart.
 
   ★ localStorage 에 쓰지 않는다. 새로고침하면 스킨이 정한 기본
     상태로 돌아가고, 한 세션 안에서 화면을 옮기는 동안에만 방문자의
@@ -604,6 +606,20 @@ function mountSkinBottomDock({
   }
 
 
+  /* 사용자가 고른 표시(아이콘 · 이모지 · 글자 · 이미지)를 스킨이
+     그리지 않은 자리만 채운다 — skin-bottom-dock-visual.js. 접힘을
+     얹기 **전**이어야 한다(접힌 항목은 보이는지 잴 수 없다). */
+  if (typeof applySkinDockVisuals === "function") {
+
+    try {
+      applySkinDockVisuals({ dockRoot, dockContext, triggerEl });
+    } catch (err) {
+      console.warn("[skin-bottom-dock] visual fallback failed", err);
+    }
+
+  }
+
+
   const mount = {
 
     doc,
@@ -635,16 +651,23 @@ function mountSkinBottomDock({
   };
 
 
-  /* 초기 접힘 상태 — 방문자가 이 세션에서 고른 것이 있으면 그것,
-     없으면 스킨이 정한 defaultState. trigger 가 없으면 접을 수단이
-     없으므로 언제나 펼친 상태다(요구사항 8/10절). */
+  /* 초기 접힘 상태.
+
+     · trigger 가 없으면 접을 수단이 없으므로 언제나 펼친 상태다
+       (요구사항 8/10절).
+     · "접은 채로 시작"하는 dock 은 **화면에 들어올 때마다** 접혀
+       있다. 항목을 눌러 다른 화면으로 가면 dock 은 다시 작은 열기
+       버튼 하나로 돌아간다 — 메뉴를 누른 뒤 메뉴가 닫히는 것과 같은
+       결이다. Studio Dock 패널이 만드는 dock 은 전부 이 모양이다
+       (IMORY_BOTTOM_DOCK_DESIGN.md §6).
+     · "펼친 채로 시작"하는 옛 dock 은 방문자가 이 세션에서 접었으면
+       다음 화면에서도 접힌 채로 둔다(원래 규칙 그대로). */
 
   const collapsedStart =
     !!triggerEl &&
     (
-      skinDockCollapsedOverride === null
-        ? dockContext.isCollapsedByDefault
-        : skinDockCollapsedOverride
+      dockContext.isCollapsedByDefault ||
+      skinDockCollapsedOverride === true
     );
 
   setSkinDockCollapsed(mount, collapsedStart, false);
@@ -979,6 +1002,40 @@ function syncSkinBottomDockForScreen(options = {}) {
 
 
     applySkinDockContentPadding(doc, mount.dockRoot, position);
+
+
+    /*
+      dock 자신의 높이가 바뀔 때(접힌 열기 버튼 하나 ↔ 펼친 항목들)
+      높이 변수를 다시 잰다. 이 값을 보는 것이 둘이다 — 본문 아래
+      여백과, 같은 오른쪽 아래 모서리를 쓰는 플랫폼 칩(하이라이트
+      진입점, posts/posts-highlight.css). 접힌 높이로만 재 두면 390px
+      에서 펼친 항목이 칩 밑에 깔려 눌리지 않는다.
+
+      값이 같으면 아무것도 바꾸지 않으므로(같은 문자열을 다시 쓸 뿐)
+      auto 판정과 고리를 만들지 않는다.
+    */
+
+    const heightView =
+      doc.defaultView;
+
+    if (heightView && typeof heightView.ResizeObserver === "function") {
+
+      const heightObserver =
+        new heightView.ResizeObserver(() => {
+
+          if (currentSkinDock !== mount) {
+            return;
+          }
+
+          applySkinDockContentPadding(doc, mount.dockRoot, mount.position);
+
+        });
+
+      heightObserver.observe(mount.dockRoot);
+
+      mount.listeners.push(() => heightObserver.disconnect());
+
+    }
 
 
     /* auto 는 화면이 실제로 드러난 뒤에 한 번 더 판정한다 */

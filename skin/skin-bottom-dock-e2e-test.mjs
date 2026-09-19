@@ -20,6 +20,12 @@
    [skin]     스킨이 그린 templates.dock 과 bottom-dock region
    [mobile]   390px 가로 넘침 0 · 터치 영역
    [none]     dock 이 없는 스킨은 한 줄도 달라지지 않는다(회귀)
+   [visual]   고른 표시(아이콘·이모지·글자·이미지)를 스킨이 그리지 않은
+              자리만 플랫폼이 채운다 — 스킨이 그렸으면 손대지 않는다
+   [studioflow] ★ 실제 Studio 에서 빈 항목 추가 → 표시 방식 변경 → 값 입력 →
+              적용 → Save 한 content 그대로 공개 화면을 연다(데스크톱·390px):
+              접힌 채 열기 버튼 하나 → 누르면 펼침 → 다시 누르면 접힘 →
+              항목을 누르면 지정한 곳 → 새 화면은 다시 접힘
 
    실행:
      node skin/skin-bottom-dock-e2e-test.mjs
@@ -50,6 +56,15 @@ const argOf = (name, fallback) => {
 };
 const BROWSER = argOf("browser", "chromium");
 const ONLY = argOf("only", "");
+
+/* [studioflow] 가 눈으로 볼 스크린샷을 남길 디렉터리(선택) */
+const SHOT_DIR = process.env.IMORY_DOCK_SHOT || "";
+
+async function shot(page, name) {
+  if (!SHOT_DIR) return;
+  fs.mkdirSync(SHOT_DIR, { recursive: true });
+  await page.screenshot({ path: path.join(SHOT_DIR, `${name}.png`) });
+}
 
 
 /* =========================================================
@@ -608,6 +623,23 @@ async function clickDockItem(page, id) {
     if (el) el.click();
   }, id);
   await page.waitForTimeout(350);
+}
+
+
+/* 이미지 주소 표시용 그림 — example.com 의 그 주소만 1×1 PNG 로 답한다 */
+
+const DOCK_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+  "base64"
+);
+
+async function routeDockPng(page) {
+  await page.route("https://example.com/**", route => {
+    if (route.request().url().endsWith("/dock-pic.png")) {
+      return route.fulfill({ status: 200, contentType: "image/png", body: DOCK_PNG });
+    }
+    return route.abort();
+  });
 }
 
 
@@ -1254,6 +1286,421 @@ async function run() {
       );
 
       await ctx.close();
+    }
+
+
+    /* ------------------------------------------------- */
+
+    /*
+      [visual] Studio 가 고르는 표시(아이콘 · 이모지 · 글자 · 이미지)는
+      **스킨이 그리지 않은 자리만** 플랫폼이 채운다
+      (skin/skin-bottom-dock-visual.js).
+    */
+
+    if (section("visual")) {
+
+      const readVisual = (page) => page.evaluate(() => {
+        const root = document.querySelector("[data-imory-dock-position]");
+        const drawn = (el) => {
+          if (!el) return false;
+          const cs = getComputedStyle(el);
+          return (cs.maskImage || cs.webkitMaskImage || "").startsWith("url(") &&
+            el.getBoundingClientRect().width > 4;
+        };
+        const trigger = root.querySelector('[data-imory-dock="trigger"]');
+        const items = {};
+        root.querySelectorAll("[data-imory-dock-item]").forEach(el => {
+          const icon = el.querySelector("[data-imory-dock-icon]");
+          items[el.getAttribute("data-imory-dock-item")] = {
+            icon: icon ? icon.getAttribute("data-imory-dock-icon") : null,
+            iconDrawn: drawn(icon),
+            iconCount: el.querySelectorAll("[data-imory-dock-icon]").length,
+            text: el.textContent.replace(/\s+/g, " ").trim(),
+            img: (() => {
+              const img = Array.from(el.querySelectorAll("img")).find(i => !i.hidden);
+              return img ? img.getAttribute("src") : null;
+            })()
+          };
+        });
+        const tIcon = trigger && trigger.querySelector("[data-imory-dock-icon]");
+        return {
+          trigger: {
+            icon: tIcon ? tIcon.getAttribute("data-imory-dock-icon") : null,
+            iconDrawn: drawn(tIcon),
+            width: trigger ? Math.round(trigger.getBoundingClientRect().width) : 0,
+            text: trigger ? trigger.textContent.trim() : ""
+          },
+          items
+        };
+      });
+
+      /* ① 플랫폼 기본 template — 아이콘 자리가 비어 있던 곳 */
+      {
+        const { ctx, page } = await newPage(desktop, {
+          skin: skinWith({
+            bottomDock: {
+              position: "fixed",
+              trigger: { type: "icon", value: "heart", label: "열기" },
+              items: [
+                { id: "home", label: "home", visual: { type: "icon", value: "home" }, action: { type: "navigate", target: "home" } },
+                { id: "star", label: "", visual: { type: "icon", value: "star" }, action: { type: "action", target: "top" } },
+                { id: "own", label: "own", visual: { type: "icon", value: "cassette" }, action: { type: "action", target: "top" } }
+              ]
+            }
+          })
+        });
+        await gotoAndSettle(page, `${base}/${SLUG}`);
+
+        const v = await readVisual(page);
+
+        check("★ 기본 template 의 열기 버튼에 고른 아이콘(하트)이 그려진다",
+          v.trigger.icon === "heart" && v.trigger.iconDrawn, JSON.stringify(v.trigger));
+        check("★ 항목 아이콘(홈)이 실제 그림으로 보인다",
+          v.items.home.icon === "home" && v.items.home.iconDrawn, JSON.stringify(v.items.home));
+        check("라벨이 없는 아이콘 항목도 그림이 보인다(빈 자리가 아니다)",
+          v.items.star.icon === "star" && v.items.star.iconDrawn, JSON.stringify(v.items.star));
+        check("아이모리 목록에 없는 스킨 고유 낱말은 플랫폼이 그리지 않는다(스킨 CSS 의 몫)",
+          v.items.own.icon === null, JSON.stringify(v.items.own));
+        check("아이콘은 한 항목에 한 번만 들어간다",
+          Object.values(v.items).every(i => i.iconCount <= 1));
+
+        await ctx.close();
+      }
+
+      /* ② 스킨이 [data-kind] 로 자기 그림을 그린 dock — 덮어쓰지 않는다 */
+      {
+        const { ctx, page } = await newPage(desktop, {
+          skin: skinWith({
+            bottomDock: {
+              position: "fixed",
+              trigger: { type: "icon", value: "heart", label: "열기" },
+              items: [
+                { id: "home", label: "home", visual: { type: "icon", value: "home" }, action: { type: "navigate", target: "home" } }
+              ]
+            },
+            templates: {
+              dock: {
+                html:
+                  '<nav class="pd">' +
+                  '<span class="pd-trigger" data-imory-dock="trigger" data-imory-kind="dock.trigger.iconKind"></span>' +
+                  '<ul class="pd-items" data-imory-dock="items"><li data-imory-repeat="dock.items">' +
+                  '<a class="pd-link" data-imory-href="item.href" data-imory-kind="item.visual.iconKind" data-imory-bind="item.label"></a>' +
+                  '</li></ul></nav>'
+              }
+            },
+            css: BASE_CSS +
+              ".pd-link::before{content:'';display:inline-block;width:8px;height:8px;background:#c9bfc3;}" +
+              ".pd-trigger::before{content:'♥';}"
+          })
+        });
+        await gotoAndSettle(page, `${base}/${SLUG}`);
+
+        const v = await readVisual(page);
+
+        check("★ 스킨이 그 종류를 ::before 로 그렸으면 플랫폼 아이콘을 넣지 않는다(항목)",
+          v.items.home.icon === null, JSON.stringify(v.items.home));
+        check("★ 트리거도 마찬가지다(스킨의 하트가 이긴다)",
+          v.trigger.icon === null, JSON.stringify(v.trigger));
+
+        await ctx.close();
+      }
+
+      /* ③ 트리거에 글자만 받는 스킨 — 아이콘/이미지를 고르면 빈 버튼이 되던 자리 */
+      {
+        const { ctx, page } = await newPage(desktop, {
+          skin: skinWith({
+            bottomDock: {
+              position: "fixed",
+              trigger: { type: "icon", value: "star", label: "열기" },
+              items: [
+                { id: "moon", label: "", visual: { type: "emoji", value: "🌙" }, action: { type: "navigate", target: "home" } },
+                { id: "pic", label: "", visual: { type: "image", value: "https://example.com/dock-pic.png" }, action: { type: "action", target: "top" } },
+                { id: "named", label: "diary", visual: { type: "emoji", value: "📓" }, action: { type: "action", target: "top" } }
+              ]
+            },
+            templates: {
+              dock: {
+                html:
+                  '<nav class="td">' +
+                  '<span class="td-trigger" data-imory-dock="trigger" data-imory-bind="dock.trigger.text"></span>' +
+                  '<ul class="td-items" data-imory-dock="items"><li data-imory-repeat="dock.items">' +
+                  '<a class="td-link" data-imory-href="item.href" data-imory-bind="item.label"></a>' +
+                  '</li></ul></nav>'
+              }
+            }
+          })
+        });
+        await routeDockPng(page);
+        await gotoAndSettle(page, `${base}/${SLUG}`);
+
+        const v = await readVisual(page);
+
+        check("★ 글자만 받는 트리거에도 고른 아이콘이 보인다(빈 버튼이 아니다)",
+          v.trigger.icon === "star" && v.trigger.iconDrawn && v.trigger.width >= 44, JSON.stringify(v.trigger));
+        check("★ 아무것도 안 보이던 이모지 항목에 이모지가 채워진다",
+          v.items.moon.text === "🌙", JSON.stringify(v.items.moon));
+        check("★ 아무것도 안 보이던 이미지 항목에 이미지가 채워진다",
+          v.items.pic.img === "https://example.com/dock-pic.png", JSON.stringify(v.items.pic));
+        check("스킨이 라벨을 보여 주는 항목에는 덧붙이지 않는다(스킨 디자인 존중)",
+          v.items.named.text === "diary", JSON.stringify(v.items.named));
+
+        await ctx.close();
+      }
+    }
+
+
+    /* ------------------------------------------------- */
+
+    /*
+      [studioflow] 처음 보는 사용자의 흐름 그대로 —
+
+        실제 Studio(시나리오 하네스, production 과 같은 스크립트 구성)
+        에서 Dock 을 열고 → 빈 항목을 추가하고 → 표시 방식을 바꾸고 →
+        값을 입력하고 → 적용 → Save 를 누른다. 그때 **Save 가 DB 로
+        보낸 content 그대로**를 공개 화면(진짜 index.html)의
+        get_published_skin 응답으로 준다.
+    */
+
+    if (section("studioflow")) {
+
+      const studioCtx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      const studio = await studioCtx.newPage();
+
+      await studio.goto(`${base}/studio/studio-lifecycle-scenario.html?scenario=y`, { waitUntil: "load" });
+      await studio.waitForFunction(
+        () => window.getStudioAiWorkingState && window.getStudioAiWorkingState().hasWorkingSkin === true,
+        null,
+        { timeout: 15000 }
+      );
+      await studio.waitForTimeout(700);
+
+      await studio.click("#studioDockButton");
+      await studio.waitForSelector(".dock-panel-overlay--open");
+
+      const cardRow = (index, label) =>
+        studio.evaluateHandle(({ index, label }) => {
+          const card = document.querySelectorAll(".dock-panel-item")[index];
+          return Array.from(card.querySelectorAll(".dock-panel-row"))
+            .find(r => r.querySelector(".dock-panel-label")?.textContent === label);
+        }, { index, label });
+
+      /* 빈 항목 추가 */
+      await studio.click(".dock-panel-button--add");
+      await studio.waitForTimeout(150);
+
+      const newIndex = await studio.evaluate(() => document.querySelectorAll(".dock-panel-item").length - 1);
+
+      /* 표시 방식 → 이모지 (사람이 select 를 고르듯) */
+      await (await cardRow(newIndex, "표시 방식")).asElement().$("select").then(s => s.selectOption("emoji"));
+      await studio.waitForTimeout(150);
+
+      const blank = await studio.evaluate((i) => {
+        const card = document.querySelectorAll(".dock-panel-item")[i];
+        const row = Array.from(card.querySelectorAll(".dock-panel-row"))
+          .find(r => r.querySelector(".dock-panel-label")?.textContent === "표시");
+        const input = row.querySelector("input");
+        return { value: input.value, placeholder: input.placeholder, error: card.querySelector(".dock-panel-error").textContent };
+      }, newIndex);
+
+      check("[Studio] 방식을 바꾼 칸은 비어 있고 예시는 placeholder 다",
+        blank.value === "" && blank.placeholder === "예: ♡", JSON.stringify(blank));
+      check("[Studio] 무엇을 넣으면 되는지 그 자리에서 안내한다",
+        blank.error === "표시할 이모지를 입력해 주세요.", blank.error);
+
+      await studio.evaluate((i) => document.querySelectorAll(".dock-panel-item")[i].scrollIntoView({ block: "center" }), newIndex);
+      await shot(studio, "studio-1-empty-emoji");
+
+      /* 값 입력 */
+      const valueInput = await (await cardRow(newIndex, "표시")).asElement().$("input");
+      await valueInput.click();
+      await studio.keyboard.insertText("🌙");
+
+      const labelInput = await (await cardRow(newIndex, "라벨")).asElement().$("input");
+      await labelInput.click();
+      await studio.keyboard.type("night");
+
+      /* 이동할 곳 → 카테고리 LOG */
+      await (await cardRow(newIndex, "이동할 곳")).asElement().$("select").then(s => s.selectOption("category:301"));
+      await studio.waitForTimeout(120);
+
+      /* 세 번째 기본 항목(맨 위로)의 표시를 이미지 주소로 */
+      await (await cardRow(2, "표시 방식")).asElement().$("select").then(s => s.selectOption("image"));
+      await studio.waitForTimeout(120);
+      const imgInput = await (await cardRow(2, "표시")).asElement().$("input");
+      await imgInput.click();
+      await studio.keyboard.type("https://example.com/dock-pic.png");
+
+      await studio.evaluate((i) => document.querySelectorAll(".dock-panel-item")[i].scrollIntoView({ block: "center" }), newIndex);
+      await shot(studio, "studio-2-filled");
+      await studio.evaluate(() => document.querySelector(".dock-panel-body").scrollTo(0, 0));
+      await shot(studio, "studio-0-top");
+
+      await studio.click(".dock-panel-button--primary");
+      await studio.waitForTimeout(600);
+
+      check("[Studio] 적용하면 패널이 닫힌다",
+        await studio.evaluate(() => !document.querySelector(".dock-panel-overlay--open")));
+
+      /* Save */
+      await studio.click("#studioSaveButton");
+      await studio.waitForFunction(() => (window.__savedDraftCallsY || []).length > 0, null, { timeout: 8000 });
+
+      const saved = await studio.evaluate(() => {
+        const calls = window.__savedDraftCallsY;
+        return calls[calls.length - 1].p_content;
+      });
+
+      await studioCtx.close();
+
+      const savedDock = saved && saved.bottomDock;
+
+      check("[Save] 저장된 content 에 bottomDock 이 있다", !!savedDock);
+      check("[Save] 화면 아래 고정 · 접힌 채 시작 · 접기 켜짐",
+        savedDock.position === "fixed" && savedDock.defaultState === "collapsed" && savedDock.collapsible === true,
+        JSON.stringify([savedDock.position, savedDock.defaultState, savedDock.collapsible]));
+      check("[Save] 추가한 항목이 입력한 그대로다",
+        JSON.stringify(savedDock.items[3]) === JSON.stringify({
+          id: savedDock.items[3].id, label: "night", audience: "all",
+          visual: { type: "emoji", value: "🌙" },
+          action: { type: "navigate", target: "category:301" }
+        }),
+        JSON.stringify(savedDock.items[3]));
+      check("[Save] placeholder 문자열이 저장되지 않았다",
+        !/예: |https:\/\/\.\.\./.test(JSON.stringify(savedDock)));
+
+
+      /* 공개 화면 — Save 한 content 그대로 */
+      DB.categories.push({ id: 301, public_no: 2, user_id: OWNER_ID, name: "LOG", type: "post", sort_order: 2 });
+
+      for (const viewport of [desktop, mobile]) {
+
+        const tag = viewport.viewport.width < 500 ? "390px" : "desktop";
+
+        const { ctx, page } = await newPage(viewport, { skin: saved });
+        await routeDockPng(page);
+        await gotoAndSettle(page, `${base}/${SLUG}`);
+
+        let dock = await readDock(page);
+
+        check(`[공개 ${tag}] dock 이 하나 · 화면 아래 고정`,
+          dock.count === 1 && dock.position === "fixed" && dock.cssPosition === "fixed",
+          JSON.stringify([dock.count, dock.position, dock.cssPosition]));
+        check(`[공개 ${tag}] ★ 들어오면 접혀 있고 열기 버튼 하나만 보인다`,
+          dock.state === "collapsed" && dock.itemsHidden === true && dock.triggerVisible,
+          JSON.stringify([dock.state, dock.itemsHidden, dock.triggerVisible]));
+
+        const trig = await page.evaluate(() => {
+          const t = document.querySelector('[data-imory-dock="trigger"]');
+          const icon = t.querySelector("[data-imory-dock-icon]");
+          const r = t.getBoundingClientRect();
+          const cs = icon ? getComputedStyle(icon) : null;
+          return {
+            icon: icon ? icon.getAttribute("data-imory-dock-icon") : null,
+            drawn: !!(cs && (cs.maskImage || cs.webkitMaskImage || "").startsWith("url(") && icon.getBoundingClientRect().width > 4),
+            w: Math.round(r.width), h: Math.round(r.height),
+            inView: r.bottom <= window.innerHeight + 1 && r.top >= 0
+          };
+        });
+
+        await shot(page, `public-${tag}-1-collapsed`);
+
+        check(`[공개 ${tag}] 열기 버튼은 아이콘이 실제로 그려진 44px 이상 버튼이다`,
+          trig.icon === "menu" && trig.drawn && trig.w >= 44 && trig.h >= 44 && trig.inView,
+          JSON.stringify(trig));
+
+        /* 누르면 펼쳐진다 */
+        await page.click('[data-imory-dock="trigger"]');
+        await page.waitForTimeout(450);
+
+        dock = await readDock(page);
+
+        check(`[공개 ${tag}] ★ 열기 버튼을 누르면 펼쳐진다`,
+          dock.state === "expanded" && dock.itemsHidden === false, JSON.stringify([dock.state, dock.itemsHidden]));
+
+        const shown = await page.evaluate((id) => {
+          const el = document.querySelector(`[data-imory-dock-item="${id}"]`);
+          const pic = document.querySelector('[data-imory-dock-item="top"] img:not([hidden])');
+          const drawn = Array.from(document.querySelectorAll("[data-imory-dock-item] [data-imory-dock-icon]"))
+            .filter(i => (getComputedStyle(i).maskImage || getComputedStyle(i).webkitMaskImage || "").startsWith("url("))
+            .map(i => i.getAttribute("data-imory-dock-icon"));
+          return {
+            text: el ? el.textContent.replace(/\s+/g, " ").trim() : null,
+            visible: el ? el.getBoundingClientRect().height > 0 : false,
+            pic: pic ? { src: pic.getAttribute("src"), loaded: pic.complete && pic.naturalWidth > 0 } : null,
+            drawn
+          };
+        }, savedDock.items[3].id);
+
+        check(`[공개 ${tag}] ★ 추가한 항목이 입력한 이모지와 라벨로 보인다`,
+          shown.visible && shown.text.includes("🌙") && shown.text.includes("night"), JSON.stringify(shown.text));
+        check(`[공개 ${tag}] 이미지 주소로 바꾼 항목은 그 이미지가 보인다`,
+          !!shown.pic && shown.pic.src === "https://example.com/dock-pic.png" && shown.pic.loaded, JSON.stringify(shown.pic));
+        check(`[공개 ${tag}] 아이콘 항목(홈 · 인용)은 아이모리 그림으로 보인다`,
+          shown.drawn.includes("home") && shown.drawn.includes("quote"), JSON.stringify(shown.drawn));
+
+        await shot(page, `public-${tag}-2-expanded`);
+
+        const covered = await page.evaluate(() =>
+          Array.from(document.querySelectorAll("[data-imory-dock-item]")).map(el => {
+            const r = el.getBoundingClientRect();
+            const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            return hit && el.contains(hit) ? null : `${el.getAttribute("data-imory-dock-item")}←${hit ? (hit.id || hit.className) : "none"}`;
+          }).filter(Boolean)
+        );
+
+        check(`[공개 ${tag}] ★ 펼친 항목 위에 다른 플랫폼 UI(하이라이트 칩 등)가 겹치지 않는다`,
+          covered.length === 0, covered.join(" "));
+
+        const chipGap = await page.evaluate(() => {
+          const chip = document.getElementById("imoryPlatformHighlightEntry");
+          const root = document.querySelector("[data-imory-dock-position]");
+          if (!chip || chip.hidden || !chip.getBoundingClientRect().height) return "no-chip";
+          return Math.round(root.getBoundingClientRect().top - chip.getBoundingClientRect().bottom);
+        });
+
+        check(`[공개 ${tag}] 하이라이트 칩은 펼친 dock 위에 선다`,
+          chipGap === "no-chip" || chipGap >= 0, String(chipGap));
+
+        if (tag === "390px") {
+          const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+          check("[공개 390px] 펼쳐도 가로 넘침 0", overflow <= 0, String(overflow));
+        }
+
+        /* 다시 누르면 접힌다 */
+        await page.click('[data-imory-dock="trigger"]');
+        await page.waitForTimeout(450);
+
+        dock = await readDock(page);
+
+        check(`[공개 ${tag}] 다시 누르면 접힌다`,
+          dock.state === "collapsed" && dock.itemsHidden === true, JSON.stringify([dock.state, dock.itemsHidden]));
+
+        /* 펼쳐서 새 항목을 누르면 지정한 곳으로 */
+        await page.click('[data-imory-dock="trigger"]');
+        await page.waitForTimeout(450);
+        await page.click(`[data-imory-dock-item="${savedDock.items[3].id}"]`);
+        await page.waitForTimeout(1000);
+
+        check(`[공개 ${tag}] ★ 항목을 누르면 지정한 카테고리로 간다(SPA)`,
+          new URL(page.url()).pathname === `/${SLUG}/category/2`, page.url());
+
+        dock = await readDock(page);
+
+        check(`[공개 ${tag}] ★ 새 화면에 들어오면 dock 은 다시 접혀 있다`,
+          dock.count === 1 && dock.state === "collapsed" && dock.itemsHidden === true,
+          JSON.stringify([dock.count, dock.state]));
+
+        /* 직접 접속/새로고침도 접힌 채 */
+        await gotoAndSettle(page, `${base}/${SLUG}/category/2`);
+        dock = await readDock(page);
+
+        check(`[공개 ${tag}] 직접 접속(새로고침)도 접힌 채로 시작`,
+          dock.count === 1 && dock.state === "collapsed", JSON.stringify([dock.count, dock.state]));
+
+        await ctx.close();
+      }
+
+      DB.categories.pop();
     }
 
   } finally {

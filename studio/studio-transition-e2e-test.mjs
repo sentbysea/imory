@@ -21,8 +21,8 @@
    [none]   "없음"은 속성 넷을 전부 걷는다
    [undo]   되돌리기 한 칸
    [save]   저장 payload 에 속성만 실린다(상태/style/inert 없음)
-   [dock]   Dock 패널의 전환이 같은 네 칸이다 → working draft 의
-            bottomDock.transition 객체
+   [dock]   Dock 패널에는 전환 칸이 없고(사용자 UI 단순화), working draft 의
+            bottomDock.transition 은 여전히 네 칸짜리 객체 · Code/AI 값 보존
    [mobile] 390px Studio 창
 
    실행:
@@ -481,38 +481,32 @@ async function run() {
       await page.click("#studioDockButton");
       await page.waitForSelector(".dock-panel-overlay--open", { timeout: 5000 });
 
-      const setByLabel = (label, value) => page.evaluate(({ label, value }) => {
-        const rows = Array.from(document.querySelectorAll(".dock-panel-settings .dock-panel-row"));
-        const row = rows.find((r) => r.querySelector(".dock-panel-label")?.textContent === label);
-        const select = row && row.querySelector("select");
-        if (!select) return false;
-        select.value = value;
-        select.dispatchEvent(new Event("change", { bubbles: true }));
-        return true;
-      }, { label, value });
+      /*
+        Dock 패널 단순화 라운드 — 전환 칸(종류 · 속도 · 움직임 · 방향)은
+        사용자 UI 에서 걷어냈다(IMORY_BOTTOM_DOCK_DESIGN.md §9). 움직임은
+        그대로 **같은 공용 primitive 의 네 칸짜리 객체**로 저장된다 —
+        이 패널이 조용한 기본값을 쓰고, Code · AI 가 정한 값은 지우지
+        않는다.
+      */
 
       const labels = () => page.evaluate(() =>
-        Array.from(document.querySelectorAll(".dock-panel-settings .dock-panel-label")).map((l) => l.textContent)
+        Array.from(document.querySelectorAll(".dock-panel-modal .dock-panel-label")).map((l) => l.textContent)
       );
 
-      check("Dock 패널 — 기본 전환(fade)에서 속도 · 움직임 칸이 나온다", (await labels()).includes("속도") && (await labels()).includes("움직임"), JSON.stringify(await labels()));
-      check("Dock 패널 — fade 에는 방향 칸이 없다", !(await labels()).includes("방향"));
-
-      check("전환 → slide", await setByLabel("전환", "slide"));
-      await sleep(150);
-      check("slide 에는 방향 칸이 나온다", (await labels()).includes("방향"));
-      await setByLabel("속도", "360");
-      await setByLabel("움직임", "smooth");
-      await setByLabel("방향", "right");
+      check(
+        "Dock 패널 — 전환 · 속도 · 움직임 · 방향 칸이 사용자에게 보이지 않는다",
+        !(await labels()).some((t) => /전환|속도|움직임|방향/.test(t)),
+        JSON.stringify(await labels())
+      );
 
       await page.click(".dock-panel-button--primary");
       await sleep(700);
 
       const pkg = await workingPackage(page);
       check(
-        "★ working draft 의 bottomDock.transition 이 네 칸짜리 객체다",
+        "★ working draft 의 bottomDock.transition 은 여전히 네 칸짜리 객체다(기본 fade-slide)",
         JSON.stringify(pkg.bottomDock && pkg.bottomDock.transition) ===
-          JSON.stringify({ type: "slide", duration: 360, easing: "smooth", direction: "right" }),
+          JSON.stringify({ type: "fade-slide", duration: 200, easing: "smooth", direction: "up" }),
         JSON.stringify(pkg.bottomDock && pkg.bottomDock.transition)
       );
 
@@ -521,20 +515,31 @@ async function run() {
         const root = doc.querySelector("[data-imory-dock-position]");
         return root ? { transition: root.getAttribute("data-imory-dock-transition"), clip: root.hasAttribute("data-imory-transition-clip") } : null;
       });
-      check("Preview dock 에 종류 이름이 나가고, 옆으로 접히므로 가로 자르기", pvDock && pvDock.transition === "slide" && pvDock.clip, JSON.stringify(pvDock));
+      check("Preview dock 에 종류 이름이 나가고, 위아래로 접히므로 가로 자르기는 없다", pvDock && pvDock.transition === "fade-slide" && !pvDock.clip, JSON.stringify(pvDock));
 
-      /* 다시 열면 같은 값이 폼에 그대로 */
+      /* Code · AI 가 정한 움직임 — 패널을 열고 적용해도 그대로 */
+      const custom = { type: "slide", duration: 360, easing: "smooth", direction: "right" };
+      await page.evaluate((transition) => {
+        const dock = window.getStudioBottomDock();
+        window.setStudioBottomDock({ ...dock, transition });
+      }, custom);
+      await sleep(400);
+
       await page.click("#studioDockButton");
       await page.waitForSelector(".dock-panel-overlay--open", { timeout: 5000 });
-      const shown = await page.evaluate(() => {
-        const get = (label) => {
-          const row = Array.from(document.querySelectorAll(".dock-panel-settings .dock-panel-row"))
-            .find((r) => r.querySelector(".dock-panel-label")?.textContent === label);
-          return row ? row.querySelector("select").value : null;
-        };
-        return { type: get("전환"), speed: get("속도"), easing: get("움직임"), direction: get("방향") };
+      await page.click(".dock-panel-button--primary");
+      await sleep(700);
+
+      const kept = (await workingPackage(page)).bottomDock.transition;
+      check("Code · AI 가 정한 전환은 패널을 적용해도 지워지지 않는다", JSON.stringify(kept) === JSON.stringify(custom), JSON.stringify(kept));
+
+      const pvDock2 = await page.evaluate(() => {
+        const doc = document.getElementById("studioPreviewFrame").contentDocument;
+        const root = doc.querySelector("[data-imory-dock-position]");
+        return root ? { transition: root.getAttribute("data-imory-dock-transition"), clip: root.hasAttribute("data-imory-transition-clip") } : null;
       });
-      check("다시 열면 네 칸이 그대로 보인다", JSON.stringify(shown) === JSON.stringify({ type: "slide", speed: "360", easing: "smooth", direction: "right" }), JSON.stringify(shown));
+      check("그때 Preview dock 은 옆으로 접히므로 가로 자르기", pvDock2 && pvDock2.transition === "slide" && pvDock2.clip, JSON.stringify(pvDock2));
+
       await page.keyboard.press("Escape");
       await page.evaluate(() => window.closeSkinDockPanel && window.closeSkinDockPanel());
     }

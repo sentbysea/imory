@@ -1,28 +1,44 @@
 /* =========================================================
    SKIN STUDIO — BOTTOM DOCK 설정 패널 (BOTTOM-DOCK-1)
 
-   기준 문서: IMORY_BOTTOM_DOCK_DESIGN.md §12
+   기준 문서: IMORY_BOTTOM_DOCK_DESIGN.md §9
 
    studio/images/images-panel.js 와 같은 형태의 modal 이다 — DOM 은
    처음 열 때 한 번 만들고 이후 재사용한다.
 
-   ── 무엇을 고치는가 ─────────────────────────────────────
-   dock 의 **설정**이다(bottomDock). 표시/숨김 · 자리 · 접기 ·
-   기본 상태 · 전환 · 트리거, 그리고 항목의 순서/추가/삭제/라벨/
-   그림/동작.
+   ── 사용자가 이해해야 하는 것은 넷뿐이다 ────────────────
+     1) Dock 켜기/끄기
+     2) 작은 열기 버튼의 모양
+     3) Dock 안에 어떤 항목을 넣을지
+     4) 각 항목을 누르면 어디로 갈지
+
+   자리(position) · 처음 상태(defaultState) · 전환(종류/속도/움직임/
+   방향) 칸은 **없다**. 이 패널이 만드는 dock 은 언제나 화면 아래에
+   고정되고(fixed) 접힌 채로 시작한다(collapsed) — 평소에는 작은 열기
+   버튼 하나만 보이고, 누르면 펼쳐지고, 다시 누르면 접힌다. 펼치고
+   접는 움직임은 공용 전환 primitive 가 한다(저장된 transition 이
+   있으면 그대로 두고, 없으면 조용한 기본값 하나).
+
+   저장 모양과 렌더러는 그대로다 — position/defaultState/transition 은
+   여전히 bottomDock 의 칸이고 Code · AI · 옛 데이터가 쓸 수 있다.
+   이 패널이 그 칸을 **사용자에게 보이지 않을** 뿐이다.
+
+   표시 방식도 넷만 보인다 — 아이콘 · 이모지 · 글자 · 이미지 주소.
+   아이콘은 토큰을 적는 칸이 아니라 아이모리가 그리는 그림에서
+   고른다(SKIN_DOCK_IMORY_ICONS · skin/skin-dock-icons.css). 옛
+   데이터의 asset/svg 는 "이전 설정 그대로"로 보존된다.
 
    ── 무엇을 고치지 않는가 ───────────────────────────────
-   dock 의 **생김새**는 여기서 손대지 않는다. 그건 templates.dock
-   과 스킨 CSS 의 몫이고, Code Editor 와 AI 가 그 길이다. 이 패널에
-   색·크기·글꼴 칸을 만들면 "스킨마다 자유롭게"가 무너진다
-   (요구사항 1절 금지 목록).
+   dock 의 **생김새**(색·크기·글꼴)는 여기서 손대지 않는다. 그건
+   templates.dock 과 스킨 CSS 의 몫이고, Code Editor 와 AI 가 그
+   길이다.
 
    ── DB 를 건드리지 않는다 ──────────────────────────────
    setStudioBottomDock(studio/studio-preview.js) 하나만 부른다 —
    그쪽이 working draft · dirty · Preview 재렌더의 주인이다. 실제
-   기록은 Save 가 새 버전 row 에 할 때뿐이다. Cancel 은 정말로
+   기록은 Save 가 새 버전 row 에 할 때뿐이다. 취소는 정말로
    아무 일도 일어나지 않은 것과 같다(패널이 자기 사본에서만
-   작업하고, 확인을 눌러야 draft 에 넘긴다).
+   작업하고, 적용을 눌러야 draft 에 넘긴다).
 
    classic script — window.openSkinDockPanel 로 노출된다.
    의존(먼저 로드되어야 함): skin/skin-bottom-dock.js(값 목록과
@@ -35,10 +51,11 @@ let dockPanelOverlay = null;
 let dockPanelBody = null;
 let dockPanelMessage = null;
 let dockPanelItemList = null;
+let dockPanelTriggerHost = null;
 let dockPanelIsOpen = false;
 
 /*
-  패널이 작업하는 **사본**. 확인을 누르기 전까지 working draft 는
+  패널이 작업하는 **사본**. 적용을 누르기 전까지 working draft 는
   한 글자도 바뀌지 않는다.
 */
 let dockPanelDraft = null;
@@ -48,78 +65,57 @@ let dockPanelTargets = { categories: [], imageSlots: [] };
 /* 항목 끌어 옮기기 — 지금 잡고 있는 항목의 index */
 let dockPanelDragFrom = -1;
 
+/*
+  안내 문구를 보여 줄 대상(항목 객체 / 트리거 객체). 처음 추가한
+  빈 항목에 곧바로 빨간 글자를 띄우지 않고, 손을 댄 뒤(표시 방식을
+  바꿨거나 칸을 비운 채 나갔거나 적용을 눌렀을 때)부터 보인다.
+*/
+let dockPanelTouched = new WeakSet();
+
+
+/* =========================================================
+   이 패널이 만드는 dock 의 고정값
+========================================================== */
+
+const DOCK_PANEL_FIXED_POSITION = "fixed";
+const DOCK_PANEL_FIXED_STATE = "collapsed";
+
+/* 저장된 전환이 없을 때만 쓰는 기본 움직임 — 아래에서 살짝 올라오며
+   나타난다. 사용자에게는 보이지 않는다. */
+const DOCK_PANEL_DEFAULT_TRANSITION = {
+  type: "fade-slide",
+  duration: 200,
+  easing: "smooth",
+  direction: "up"
+};
+
+const DOCK_PANEL_DEFAULT_TRIGGER_LABEL = "메뉴 열기";
+
 
 /* =========================================================
    라벨 — 저장값(enum)은 영어, 화면 글자는 한국어다.
-   (Quote Preset 라벨 규칙과 같은 결)
 ========================================================== */
 
-const DOCK_PANEL_POSITION_LABELS = {
-  auto: "자동",
-  fixed: "화면에 고정",
-  sticky: "따라오다 멈춤",
-  static: "콘텐츠 흐름 안"
-};
-
-const DOCK_PANEL_POSITION_HINTS = {
-  auto: "한 화면에 다 들어오면 고정, 스크롤이 있으면 따라오다 멈춤으로 정해집니다.",
-  fixed: "언제나 화면 아래에 떠 있습니다.",
-  sticky: "스크롤과 함께 움직이다가 화면 아래에 붙습니다.",
-  static: "글 목록·프로필 다음에 오는 평범한 콘텐츠처럼 놓입니다."
-};
-
-const DOCK_PANEL_STATE_LABELS = {
-  expanded: "펼친 채로",
-  collapsed: "접은 채로"
-};
-
-const DOCK_PANEL_TRANSITION_LABELS = {
-  "none": "없음",
-  "fade": "서서히",
-  "slide": "밀기",
-  "scale": "확대·축소",
-  "fade-slide": "서서히 + 밀기",
-  "fade-scale": "서서히 + 확대·축소"
-};
-
-/* 속도·움직임·방향 — 스킨 요소의 전환 폼
-   (studio/inspector/studio-inspector-transition.js)과 같은 이름을 쓴다 */
-const DOCK_PANEL_SPEED_CHOICES = [
-  ["140", "빠르게"],
-  ["200", "보통"],
-  ["360", "느리게"],
-  ["600", "아주 느리게"]
-];
-
-const DOCK_PANEL_EASING_CHOICES = [
-  ["ease", "기본"],
-  ["smooth", "부드럽게"],
-  ["ease-out", "끝을 천천히"],
-  ["ease-in", "시작을 천천히"],
-  ["ease-in-out", "양끝을 천천히"],
-  ["linear", "일정하게"]
-];
-
-const DOCK_PANEL_DIRECTION_CHOICES = [
-  ["up", "아래에서 위로"],
-  ["down", "위에서 아래로"],
-  ["left", "오른쪽에서 왼쪽으로"],
-  ["right", "왼쪽에서 오른쪽으로"]
-];
-
 const DOCK_PANEL_VISUAL_LABELS = {
-  icon: "아이콘(스킨 CSS가 그림)",
+  icon: "아이콘",
   emoji: "이모지",
   text: "글자",
-  image: "이미지 주소",
-  asset: "이미지 슬롯",
-  svg: "SVG 주소"
+  image: "이미지 주소"
+};
+
+/* 옛 데이터(asset/svg)를 열었을 때만 보이는 선택지 */
+const DOCK_PANEL_LEGACY_VISUAL_LABEL = "이전 설정 그대로";
+
+const DOCK_PANEL_VISUAL_PLACEHOLDERS = {
+  emoji: "예: ♡",
+  text: "예: HOME",
+  image: "https://..."
 };
 
 const DOCK_PANEL_ACTION_LABELS = {
   navigate: "화면 이동",
-  open: "패널 열기",
-  action: "동작 실행"
+  action: "기능 실행",
+  open: "패널 열기"
 };
 
 const DOCK_PANEL_NAVIGATE_LABELS = {
@@ -138,24 +134,28 @@ const DOCK_PANEL_ACTION_TARGET_LABELS = {
   top: "맨 위로"
 };
 
+/* 정규화(skin/skin-bottom-dock.js normalizeSkinDockAction)와 같은 규칙 */
+const DOCK_PANEL_PATH_PATTERN = /^\/[A-Za-z0-9/_\-.?=&%]{0,255}$/;
+const DOCK_PANEL_PANEL_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
+
 
 /* =========================================================
    기본값 — "처음 만들 때" 어떤 dock 이 생기는가
 
    3~5개를 권한다(요구사항 14절). 홈 하나만 두면 쓸모를 상상하기
    어렵고, 처음부터 많으면 지우는 일이 먼저가 된다. 그림은 전부
-   아이콘 토큰이라 스킨 CSS 가 자기 방식대로 그린다.
+   아이모리 아이콘이라 어느 스킨에서도 보인다.
 ========================================================== */
 
 function buildDefaultDockDraft() {
 
   return {
     visible: true,
-    position: "auto",
-    collapsible: false,
-    defaultState: "expanded",
-    transition: "fade",
-    trigger: { type: "text", value: "⌄", label: "메뉴 열기" },
+    position: DOCK_PANEL_FIXED_POSITION,
+    collapsible: true,
+    defaultState: DOCK_PANEL_FIXED_STATE,
+    transition: { ...DOCK_PANEL_DEFAULT_TRANSITION },
+    trigger: { type: "icon", value: "menu", label: DOCK_PANEL_DEFAULT_TRIGGER_LABEL },
     items: [
       { id: "home", label: "home", audience: "all", visual: { type: "icon", value: "home" }, action: { type: "navigate", target: "home" } },
       { id: "highlights", label: "quotes", audience: "all", visual: { type: "icon", value: "quote" }, action: { type: "navigate", target: "highlights" } },
@@ -237,13 +237,21 @@ function dockSelect(options, value, onChange) {
 }
 
 
-function dockTextInput(value, placeholder, onChange, maxLength) {
+/*
+  ★ 예시는 placeholder 로만 보인다. input.value 는 언제나 **실제로
+    저장될 값**이다 — 비어 있으면 빈 값이다. 예시 글자가 값처럼
+    보여서 "이미 ♡ 가 들어 있다"고 오해하지 않게 placeholder 는
+    옅게 그린다(dock-panel.css).
+*/
+function dockTextInput(value, placeholder, onChange, maxLength, onBlur) {
 
   const input =
     dockEl("input", "dock-panel-input");
 
   input.type = "text";
   input.value = value || "";
+  input.autocomplete = "off";
+  input.spellcheck = false;
 
   if (placeholder) {
     input.placeholder = placeholder;
@@ -254,6 +262,10 @@ function dockTextInput(value, placeholder, onChange, maxLength) {
   }
 
   input.addEventListener("input", () => onChange(input.value));
+
+  if (onBlur) {
+    input.addEventListener("blur", () => onBlur(input.value));
+  }
 
   return input;
 
@@ -286,6 +298,346 @@ function dockRow(labelText, control, hintText) {
 
 
 /* =========================================================
+   표시(visual) — 방식 고르기 · 값 입력 · 안내 문구
+========================================================== */
+
+function isDockPanelLegacyVisualType(type) {
+
+  return (window.SKIN_DOCK_USER_VISUAL_TYPES || ["icon", "emoji", "text", "image"])
+    .indexOf(type) === -1;
+
+}
+
+
+/*
+  지금 고른 방식에 맞는 짧은 안내 문구 — 없으면 null.
+
+  ★ 내부 경로("bottomDock.items[0].visual.value")를 보여 주지 않는다.
+    사용자에게는 "무엇을 하면 되는지"만 말한다.
+*/
+function dockPanelVisualProblem(visual) {
+
+  const type =
+    visual ? visual.type : "";
+
+  const value =
+    visual && typeof visual.value === "string"
+      ? visual.value.trim()
+      : "";
+
+  if (type === "icon") {
+    return value ? null : "아이콘을 골라 주세요.";
+  }
+
+  if (type === "emoji") {
+    return value ? null : "표시할 이모지를 입력해 주세요.";
+  }
+
+  if (type === "text") {
+    return value ? null : "표시할 글자를 입력해 주세요.";
+  }
+
+  if (type === "image") {
+
+    if (!value) {
+      return "이미지 주소를 입력해 주세요.";
+    }
+
+    return /^https:\/\/[^\s"'<>]+$/i.test(value)
+      ? null
+      : "https:// 로 시작하는 이미지 주소를 입력해 주세요.";
+
+  }
+
+  /* 옛 asset/svg — 이 패널에서 고친 값이 아니므로 판단하지 않는다 */
+  return null;
+
+}
+
+
+function dockPanelActionProblem(action) {
+
+  if (!action) {
+    return null;
+  }
+
+  const target =
+    typeof action.target === "string" ? action.target : "";
+
+  if (action.type === "navigate" && target.startsWith("path:")) {
+
+    const path =
+      target.slice("path:".length);
+
+    return (
+      DOCK_PANEL_PATH_PATTERN.test(path) &&
+      path.indexOf("//") === -1 &&
+      path.indexOf("..") === -1
+    )
+      ? null
+      : "이동할 주소는 / 로 시작하는 이 블로그 안의 주소로 입력해 주세요. 예: /about";
+
+  }
+
+  if (action.type === "open") {
+
+    return DOCK_PANEL_PANEL_PATTERN.test(target.replace(/^panel:/, ""))
+      ? null
+      : "패널 이름은 영문 소문자로 입력해 주세요.";
+
+  }
+
+  return null;
+
+}
+
+
+function dockPanelItemProblem(item) {
+
+  return dockPanelVisualProblem(item.visual) || dockPanelActionProblem(item.action);
+
+}
+
+
+/*
+  안내 문구 한 줄 — 카드(또는 열기 버튼 구역) 맨 아래에 붙는다.
+  owner 는 항목 객체 / 트리거 객체, compute 는 지금 문제를 돌려준다.
+*/
+function syncDockPanelError(errorEl, owner, compute) {
+
+  const problem =
+    dockPanelTouched.has(owner) ? compute() : null;
+
+  errorEl.textContent =
+    problem || "";
+
+  errorEl.hidden =
+    !problem;
+
+  return problem;
+
+}
+
+
+/*
+  아이콘 고르기 — 아이모리가 그리는 그림 목록.
+
+  ★ 토큰 이름("home")은 화면 어디에도 나오지 않는다. 그림과 한국어
+    이름(title/aria-label)만 보인다.
+*/
+function buildDockIconPicker(visual, onPick) {
+
+  const picker =
+    dockEl("div", "dock-panel-icons");
+
+  picker.setAttribute("role", "radiogroup");
+  picker.setAttribute("aria-label", "아이콘");
+
+  const icons =
+    window.SKIN_DOCK_IMORY_ICONS || [];
+
+  const known =
+    icons.some((icon) => icon.token === visual.value);
+
+  const choices =
+    icons.map((icon) => ({ token: icon.token, label: icon.label, draw: true }));
+
+  /*
+    스킨 고유의 낱말(Code · AI 가 적은 "cassette" 같은 값)은 목록에
+    없다. 그 값을 지우지 않고 "이 스킨의 아이콘"으로 보여 준다 —
+    다른 그림을 고르기 전까지 그대로 저장된다.
+  */
+  if (visual.value && !known) {
+    choices.unshift({ token: visual.value, label: "이 스킨의 아이콘", draw: false });
+  }
+
+  choices.forEach((choice) => {
+
+    const button =
+      dockEl("button", "dock-panel-icon");
+
+    button.type = "button";
+    button.title = choice.label;
+    button.setAttribute("role", "radio");
+    button.setAttribute("aria-label", choice.label);
+    button.setAttribute("data-dock-icon-choice", choice.draw ? "imory" : "skin");
+
+    const selected =
+      choice.token === visual.value;
+
+    button.setAttribute("aria-checked", selected ? "true" : "false");
+
+    if (selected) {
+      button.classList.add("dock-panel-icon--selected");
+    }
+
+    if (choice.draw) {
+
+      const glyph =
+        dockEl("span", "dock-panel-icon-glyph");
+
+      glyph.setAttribute("data-imory-dock-icon", choice.token);
+      glyph.setAttribute("aria-hidden", "true");
+
+      button.appendChild(glyph);
+
+    } else {
+
+      button.appendChild(dockEl("span", "dock-panel-icon-skin", "스킨"));
+
+    }
+
+    button.addEventListener("click", () => onPick(choice.token));
+
+    picker.appendChild(button);
+
+  });
+
+  return picker;
+
+}
+
+
+/*
+  표시 방식 + 표시 두 줄을 host 에 그린다. 항목과 열기 버튼이 같은
+  함수를 쓴다.
+
+  owner    안내 문구를 붙일 대상(항목/트리거 객체)
+  refresh  방식이 바뀌어 칸 모양이 달라질 때 다시 그리는 함수
+  onValue  값이 바뀔 때마다(안내 문구 갱신)
+*/
+function appendDockVisualRows(host, owner, visual, refresh, onValue) {
+
+  const types =
+    (window.SKIN_DOCK_USER_VISUAL_TYPES || ["icon", "emoji", "text", "image"]).slice();
+
+  const options =
+    types.map((type) => [type, DOCK_PANEL_VISUAL_LABELS[type] || type]);
+
+  if (isDockPanelLegacyVisualType(visual.type)) {
+    options.push([visual.type, DOCK_PANEL_LEGACY_VISUAL_LABEL]);
+  }
+
+  host.appendChild(
+    dockRow(
+      "표시 방식",
+      dockSelect(
+        options,
+        visual.type,
+        (value) => {
+          visual.type = value;
+          /* 이전 방식의 값을 새 방식에 끌고 가지 않는다 — 아이콘
+             이름이 글자로, 이모지가 주소로 저장되는 일이 없게 */
+          visual.value = "";
+          dockPanelTouched.add(owner);
+          refresh();
+        }
+      )
+    )
+  );
+
+
+  let control;
+
+  if (visual.type === "icon") {
+
+    control =
+      buildDockIconPicker(visual, (token) => {
+        visual.value = token;
+        dockPanelTouched.add(owner);
+        refresh();
+      });
+
+  } else if (isDockPanelLegacyVisualType(visual.type)) {
+
+    control =
+      dockEl(
+        "p",
+        "dock-panel-note",
+        "이전에 저장된 표시를 그대로 씁니다. 바꾸려면 위에서 다른 방식을 고르세요."
+      );
+
+  } else {
+
+    const maxLength =
+      visual.type === "emoji"
+        ? (window.SKIN_DOCK_MAX_EMOJI_CHARS || 8)
+        : visual.type === "text"
+          ? (window.SKIN_DOCK_MAX_TEXT_CHARS || 24)
+          : 2048;
+
+    control =
+      dockTextInput(
+        visual.value,
+        DOCK_PANEL_VISUAL_PLACEHOLDERS[visual.type] || "",
+        (value) => {
+          visual.value = value;
+          onValue();
+        },
+        maxLength,
+        (value) => {
+          if (!value.trim()) {
+            dockPanelTouched.add(owner);
+          }
+          onValue();
+        }
+      );
+
+    if (visual.type === "image") {
+      control.inputMode = "url";
+    }
+
+  }
+
+  host.appendChild(dockRow("표시", control));
+
+}
+
+
+/* =========================================================
+   독 열기 버튼(trigger)
+========================================================== */
+
+function renderDockTriggerSection() {
+
+  const host =
+    dockPanelTriggerHost;
+
+  if (!host) {
+    return;
+  }
+
+  host.innerHTML = "";
+
+  const trigger =
+    dockPanelDraft.trigger;
+
+  host.appendChild(
+    dockEl(
+      "p",
+      "dock-panel-hint dock-panel-hint--lead",
+      "평소에는 이 버튼 하나만 화면 아래에 보입니다. 누르면 항목이 펼쳐지고, 다시 누르면 접힙니다."
+    )
+  );
+
+  const error =
+    dockEl("p", "dock-panel-error");
+
+  error.setAttribute("role", "alert");
+
+  const update =
+    () => syncDockPanelError(error, trigger, () => dockPanelVisualProblem(trigger));
+
+  appendDockVisualRows(host, trigger, trigger, renderDockTriggerSection, update);
+
+  host.appendChild(error);
+
+  update();
+
+}
+
+
+/* =========================================================
    항목 편집 카드 하나
 ========================================================== */
 
@@ -294,11 +646,10 @@ function buildDockItemCard(item, index) {
   const card =
     dockEl("div", "dock-panel-item");
 
-  card.setAttribute("draggable", "true");
   card.setAttribute("data-dock-item-index", String(index));
 
 
-  /* ── 머리 줄: 끌기 손잡이 · ↑↓ · 삭제 ─────────────── */
+  /* ── 머리 줄: 끌기 손잡이 · 이름 · ↑↓ · 삭제 ──────── */
 
   const head =
     dockEl("div", "dock-panel-item-head");
@@ -308,11 +659,25 @@ function buildDockItemCard(item, index) {
 
   grip.setAttribute("aria-hidden", "true");
 
+  /*
+    카드 전체가 아니라 **손잡이를 잡았을 때만** 끌 수 있다. 카드 전체가
+    draggable 이면 안쪽 입력 칸에서 글자를 고르거나 커서를 옮기는
+    동작이 끌기로 바뀌는 브라우저가 있다.
+  */
+  grip.addEventListener("pointerdown", () => {
+    card.setAttribute("draggable", "true");
+  });
+
+  grip.addEventListener("pointerup", () => {
+    card.removeAttribute("draggable");
+  });
+
   head.appendChild(grip);
 
-  head.appendChild(
-    dockEl("span", "dock-panel-item-name", item.label || item.id)
-  );
+  const nameEl =
+    dockEl("span", "dock-panel-item-name", item.label || `${index + 1}번째 항목`);
+
+  head.appendChild(nameEl);
 
 
   const moves =
@@ -361,6 +726,22 @@ function buildDockItemCard(item, index) {
   card.appendChild(head);
 
 
+  const error =
+    dockEl("p", "dock-panel-error");
+
+  error.setAttribute("role", "alert");
+
+  const update =
+    () => {
+      const problem =
+        syncDockPanelError(error, item, () => dockPanelItemProblem(item));
+      card.classList.toggle("dock-panel-item--invalid", !!problem);
+    };
+
+  const rerender =
+    () => replaceDockItemCard(card, item, index);
+
+
   /* ── 라벨 ─────────────────────────────────────────── */
 
   card.appendChild(
@@ -368,11 +749,10 @@ function buildDockItemCard(item, index) {
       "라벨",
       dockTextInput(
         item.label,
-        "비워 두면 아이콘만",
+        "예: 홈 (비워 두면 표시만 보입니다)",
         (value) => {
           item.label = value;
-          const nameEl = card.querySelector(".dock-panel-item-name");
-          if (nameEl) nameEl.textContent = value || item.id;
+          nameEl.textContent = value || `${index + 1}번째 항목`;
         },
         24
       )
@@ -380,65 +760,41 @@ function buildDockItemCard(item, index) {
   );
 
 
-  /* ── 그림 ─────────────────────────────────────────── */
+  /* ── 표시 방식 · 표시 ─────────────────────────────── */
 
-  const visualTypeSelect =
-    dockSelect(
-      SKIN_DOCK_VISUAL_TYPES.map((type) => [type, DOCK_PANEL_VISUAL_LABELS[type] || type]),
-      item.visual.type,
-      (value) => {
-        item.visual.type = value;
-        item.visual.value = "";
-        renderDockItemList();
-      }
-    );
+  appendDockVisualRows(card, item, item.visual, rerender, update);
 
-  card.appendChild(dockRow("그림", visualTypeSelect));
+
+  /* ── 동작 · 이동할 곳 ─────────────────────────────── */
+
+  const actionOptions =
+    ["navigate", "action"].map((type) => [type, DOCK_PANEL_ACTION_LABELS[type]]);
+
+  /* 패널 열기는 스킨 마크업이 있어야 동작하는 개발자용 동작이다 —
+     이미 그렇게 저장된 항목에서만 보인다 */
+  if (item.action.type === "open") {
+    actionOptions.push(["open", DOCK_PANEL_ACTION_LABELS.open]);
+  }
 
   card.appendChild(
     dockRow(
-      "그림 값",
-      item.visual.type === "asset"
-        ? dockSelect(
-            (dockPanelTargets.imageSlots.length
-              ? dockPanelTargets.imageSlots
-              : [""]
-            ).map((slot) => [slot, slot || "(선언된 이미지 슬롯 없음)"]),
-            item.visual.value,
-            (value) => { item.visual.value = value; }
-          )
-        : dockTextInput(
-            item.visual.value,
-            dockVisualPlaceholder(item.visual.type),
-            (value) => { item.visual.value = value; },
-            2048
-          ),
-      item.visual.type === "icon"
-        ? "영문 소문자 토큰 하나입니다. 모양은 스킨 CSS가 [data-kind=\"…\"]로 그립니다."
-        : null
+      "동작",
+      dockSelect(
+        actionOptions,
+        item.action.type,
+        (value) => {
+          item.action.type = value;
+          item.action.target =
+            value === "navigate" ? "home"
+              : value === "open" ? "panel:panel"
+                : "top";
+          rerender();
+        }
+      )
     )
   );
 
-
-  /* ── 동작 ─────────────────────────────────────────── */
-
-  const actionTypeSelect =
-    dockSelect(
-      SKIN_DOCK_ACTION_TYPES.map((type) => [type, DOCK_PANEL_ACTION_LABELS[type] || type]),
-      item.action.type,
-      (value) => {
-        item.action.type = value;
-        item.action.target =
-          value === "navigate" ? "home"
-            : value === "open" ? "panel:panel"
-              : "top";
-        renderDockItemList();
-      }
-    );
-
-  card.appendChild(dockRow("동작", actionTypeSelect));
-
-  card.appendChild(buildDockActionTargetRow(item));
+  card.appendChild(buildDockActionTargetRow(item, update, rerender));
 
 
   /* ── 누가 보는가 ─────────────────────────────────── */
@@ -453,31 +809,40 @@ function buildDockItemCard(item, index) {
           ["visitor", "방문자만"]
         ],
         item.audience || "all",
-        (value) => { item.audience = value; }
+        (value) => {
+          item.audience = value;
+          rerender();
+        }
       ),
       item.audience === "owner"
-        ? "방문자에게는 이 항목의 데이터 자체가 가지 않습니다."
+        ? "방문자에게는 이 항목이 보이지 않습니다."
         : null
     )
   );
 
+
+  card.appendChild(error);
+
+  update();
 
   return card;
 
 }
 
 
-function dockVisualPlaceholder(type) {
+/* 카드 하나만 다시 그린다 — 다른 카드의 입력 중인 칸을 흔들지 않게 */
+function replaceDockItemCard(card, item, index) {
 
-  if (type === "icon") return "home / camera / heart …";
-  if (type === "emoji") return "♡";
-  if (type === "text") return "HOME";
-  return "https://…";
+  if (!card.parentNode) {
+    return;
+  }
+
+  card.parentNode.replaceChild(buildDockItemCard(item, index), card);
 
 }
 
 
-function buildDockActionTargetRow(item) {
+function buildDockActionTargetRow(item, update, rerender) {
 
   if (item.action.type === "navigate") {
 
@@ -501,7 +866,7 @@ function buildDockActionTargetRow(item) {
         isKnown ? item.action.target : "path:",
         (value) => {
           item.action.target = value === "path:" ? "path:/" : value;
-          renderDockItemList();
+          rerender();
         }
       );
 
@@ -516,18 +881,25 @@ function buildDockActionTargetRow(item) {
         dockTextInput(
           item.action.target.startsWith("path:")
             ? item.action.target.slice("path:".length)
-            : "/",
+            : "",
           "/about",
           (value) => {
-            item.action.target = "path:" + (value.startsWith("/") ? value : "/" + value);
+            const trimmed = value.trim();
+            item.action.target =
+              "path:" + (trimmed.startsWith("/") ? trimmed : "/" + trimmed);
+            update();
           },
-          255
+          255,
+          () => {
+            dockPanelTouched.add(item);
+            update();
+          }
         )
       );
 
     }
 
-    return dockRow("어디로", wrap);
+    return dockRow("이동할 곳", wrap);
 
   }
 
@@ -541,17 +913,22 @@ function buildDockActionTargetRow(item) {
         "pair",
         (value) => {
           item.action.target = "panel:" + value.trim().toLowerCase();
+          update();
         },
-        32
+        32,
+        () => {
+          dockPanelTouched.add(item);
+          update();
+        }
       ),
-      "스킨 CSS가 [data-imory-dock-open=\"이 이름\"]으로 무엇을 보일지 정합니다."
+      "스킨에 그 이름의 패널이 있어야 열립니다."
     );
 
   }
 
 
   return dockRow(
-    "무엇을",
+    "실행할 기능",
     dockSelect(
       SKIN_DOCK_ACTION_TARGETS.map(
         (target) => [target, DOCK_PANEL_ACTION_TARGET_LABELS[target] || target]
@@ -559,11 +936,11 @@ function buildDockActionTargetRow(item) {
       item.action.target,
       (value) => {
         item.action.target = value;
-        renderDockItemList();
+        rerender();
       }
     ),
     ["write", "admin", "manage"].indexOf(item.action.target) !== -1
-      ? "주인장에게만 주소가 생깁니다 — 방문자에게는 이 항목이 나오지 않습니다."
+      ? "주인장에게만 보입니다."
       : null
   );
 
@@ -635,7 +1012,7 @@ function renderDockItemList() {
 
 
 /* =========================================================
-   설정 줄들(항목 위)
+   Dock 켜기/끄기
 ========================================================== */
 
 function renderDockSettings(host) {
@@ -644,9 +1021,9 @@ function renderDockSettings(host) {
 
   host.appendChild(
     dockRow(
-      "표시",
+      "Dock",
       dockSelect(
-        [["show", "보이기"], ["hide", "숨기기"]],
+        [["show", "사용"], ["hide", "사용 안 함"]],
         dockPanelDraft.visible ? "show" : "hide",
         (value) => {
           dockPanelDraft.visible = value === "show";
@@ -655,205 +1032,9 @@ function renderDockSettings(host) {
       ),
       dockPanelDraft.visible
         ? null
-        : "숨기면 공개 화면에 dock 자체가 그려지지 않습니다(설정은 남습니다)."
+        : "공개 화면에 Dock이 나오지 않습니다. 아래 설정은 그대로 남습니다."
     )
   );
-
-  host.appendChild(
-    dockRow(
-      "자리",
-      dockSelect(
-        SKIN_DOCK_POSITIONS.map((p) => [p, DOCK_PANEL_POSITION_LABELS[p] || p]),
-        dockPanelDraft.position,
-        (value) => {
-          dockPanelDraft.position = value;
-          renderDockSettings(host);
-        }
-      ),
-      DOCK_PANEL_POSITION_HINTS[dockPanelDraft.position]
-    )
-  );
-
-  host.appendChild(
-    dockRow(
-      "접기",
-      dockSelect(
-        [["off", "사용 안 함"], ["on", "사용"]],
-        dockPanelDraft.collapsible ? "on" : "off",
-        (value) => {
-          dockPanelDraft.collapsible = value === "on";
-          renderDockSettings(host);
-        }
-      )
-    )
-  );
-
-  if (dockPanelDraft.collapsible) {
-
-    host.appendChild(
-      dockRow(
-        "처음 상태",
-        dockSelect(
-          SKIN_DOCK_STATES.map((s) => [s, DOCK_PANEL_STATE_LABELS[s] || s]),
-          dockPanelDraft.defaultState,
-          (value) => { dockPanelDraft.defaultState = value; }
-        )
-      )
-    );
-
-    host.appendChild(
-      dockRow(
-        "접는 표식",
-        dockSelect(
-          SKIN_DOCK_VISUAL_TYPES.map((t) => [t, DOCK_PANEL_VISUAL_LABELS[t] || t]),
-          dockPanelDraft.trigger.type,
-          (value) => {
-            dockPanelDraft.trigger.type = value;
-            dockPanelDraft.trigger.value = "";
-            renderDockSettings(host);
-          }
-        ),
-        "하트 · 리본 · 작은 사진 — 무엇이든 됩니다. 접힌 dock은 햄버거 메뉴가 아닙니다."
-      )
-    );
-
-    host.appendChild(
-      dockRow(
-        "표식 값",
-        dockTextInput(
-          dockPanelDraft.trigger.value,
-          dockVisualPlaceholder(dockPanelDraft.trigger.type),
-          (value) => { dockPanelDraft.trigger.value = value; },
-          2048
-        )
-      )
-    );
-
-    host.appendChild(
-      dockRow(
-        "표식 이름",
-        dockTextInput(
-          dockPanelDraft.trigger.label,
-          "메뉴 열기",
-          (value) => { dockPanelDraft.trigger.label = value; },
-          24
-        ),
-        "화면에 보이지 않아도 스크린 리더가 읽는 이름입니다."
-      )
-    );
-
-  }
-
-  /*
-    TRANSITION-1 — 전환은 공용 전환 primitive 한 벌이다
-    ({ type, duration, easing, direction }). 스킨 요소의 Direct Edit
-    전환 폼과 **같은 네 칸**이고 값 목록도 같은 파일
-    (skin/skin-transition.js)에서 온다.
-  */
-
-  const transition =
-    dockPanelTransitionDraft();
-
-  host.appendChild(
-    dockRow(
-      "전환",
-      dockSelect(
-        SKIN_DOCK_TRANSITIONS.map((t) => [t, DOCK_PANEL_TRANSITION_LABELS[t] || t]),
-        transition.type,
-        (value) => {
-          transition.type = value;
-          renderDockSettings(host);
-        }
-      ),
-      "움직임을 줄이도록 설정한 방문자에게는 전환이 자동으로 꺼집니다."
-    )
-  );
-
-  if (transition.type === "none") {
-    return;
-  }
-
-  const speedChoices =
-    DOCK_PANEL_SPEED_CHOICES.slice();
-
-  if (!speedChoices.some(([value]) => value === String(transition.duration))) {
-    speedChoices.push([String(transition.duration), `${transition.duration}ms`]);
-  }
-
-  host.appendChild(
-    dockRow(
-      "속도",
-      dockSelect(
-        speedChoices,
-        String(transition.duration),
-        (value) => { transition.duration = Number(value); }
-      )
-    )
-  );
-
-  host.appendChild(
-    dockRow(
-      "움직임",
-      dockSelect(
-        DOCK_PANEL_EASING_CHOICES,
-        transition.easing,
-        (value) => { transition.easing = value; }
-      ),
-      "\"부드럽게\"는 끝이 길게 풀리는 움직임입니다."
-    )
-  );
-
-  if (
-    transition.type === "slide" ||
-    transition.type === "scale" ||
-    transition.type === "fade-slide" ||
-    transition.type === "fade-scale"
-  ) {
-
-    host.appendChild(
-      dockRow(
-        "방향",
-        dockSelect(
-          DOCK_PANEL_DIRECTION_CHOICES,
-          transition.direction,
-          (value) => { transition.direction = value; }
-        ),
-        "펼쳐질 때 움직이는 쪽입니다."
-      )
-    );
-
-  }
-
-}
-
-
-/* draft 의 transition 을 언제나 네 칸짜리 객체로 둔다 — 옛 문자열
-   ("fade")로 저장된 dock 을 열어도 같은 폼이 나온다. */
-function dockPanelTransitionDraft() {
-
-  const current =
-    dockPanelDraft.transition;
-
-  if (
-    current &&
-    typeof current === "object" &&
-    typeof current.type === "string" &&
-    typeof current.duration === "number"
-  ) {
-    return current;
-  }
-
-  dockPanelDraft.transition =
-    typeof normalizeSkinTransition === "function"
-      ? normalizeSkinTransition(current)
-      : {
-          type: typeof current === "string" ? current : "fade",
-          duration: 200,
-          easing: "ease",
-          direction: "up"
-        };
-
-  return dockPanelDraft.transition;
 
 }
 
@@ -895,7 +1076,7 @@ function ensureDockPanelDom() {
     dockEl(
       "p",
       "dock-panel-subtitle",
-      "무엇이 들어가고 어떻게 동작하는지를 정합니다. 생김새는 스킨의 CSS와 templates.dock이 정합니다."
+      "화면 아래에 작은 열기 버튼이 떠 있고, 누르면 항목들이 펼쳐집니다. 색과 크기는 스킨이 정합니다."
     )
   );
 
@@ -911,6 +1092,8 @@ function ensureDockPanelDom() {
   dockPanelMessage =
     dockEl("p", "dock-panel-message");
 
+  dockPanelMessage.setAttribute("aria-live", "polite");
+
   modal.appendChild(dockPanelMessage);
 
 
@@ -918,7 +1101,7 @@ function ensureDockPanelDom() {
     dockEl("div", "dock-panel-footer");
 
   const removeAll =
-    dockEl("button", "dock-panel-button dock-panel-button--quiet", "dock 없애기");
+    dockEl("button", "dock-panel-button dock-panel-button--quiet", "Dock 지우기");
 
   removeAll.type = "button";
   removeAll.addEventListener("click", () => {
@@ -971,19 +1154,101 @@ function ensureDockPanelDom() {
 }
 
 
+/*
+  적용할 모양 — 사용자가 고른 것 + 이 패널이 늘 정하는 것.
+
+  ★ 자리는 화면 아래 고정, 처음 상태는 접힘, 접기는 켜짐 — 사용자가
+    고르지 않는다. 전환은 저장된 것이 있으면 그대로(Code · AI 가 정한
+    움직임을 지우지 않는다), 없으면 기본값.
+*/
+function buildDockPanelResult() {
+
+  const draft =
+    dockPanelCloneDraft(dockPanelDraft);
+
+  draft.position = DOCK_PANEL_FIXED_POSITION;
+  draft.collapsible = true;
+  draft.defaultState = DOCK_PANEL_FIXED_STATE;
+
+  if (draft.transition === undefined || draft.transition === null) {
+    draft.transition = { ...DOCK_PANEL_DEFAULT_TRANSITION };
+  }
+
+  if (!draft.trigger.label) {
+    draft.trigger.label = DOCK_PANEL_DEFAULT_TRIGGER_LABEL;
+  }
+
+  draft.trigger.value =
+    typeof draft.trigger.value === "string" ? draft.trigger.value.trim() : "";
+
+  draft.items.forEach((item) => {
+    item.visual.value =
+      typeof item.visual.value === "string" ? item.visual.value.trim() : "";
+  });
+
+  return draft;
+
+}
+
+
+/*
+  정규화가 그래도 거부했을 때 — 내부 경로 대신 "몇 번째 항목"만
+  말한다. 패널이 먼저 걸러 내므로 여기까지 오는 일은 드물다(옛
+  데이터의 모양이 이미 틀린 경우 정도).
+*/
+function describeDockPanelFailure(message) {
+
+  const match =
+    /bottomDock\.items\[(\d+)\]/.exec(message || "");
+
+  if (match) {
+    return `${Number(match[1]) + 1}번째 항목의 설정을 확인해 주세요.`;
+  }
+
+  if (/bottomDock\.trigger/.test(message || "")) {
+    return "열기 버튼의 설정을 확인해 주세요.";
+  }
+
+  return "입력한 설정을 확인해 주세요.";
+
+}
+
+
 function handleDockPanelApply() {
 
   /*
-    빈 라벨/빈 값처럼 "아직 덜 채운" 상태는 정규화가 거부한다 —
-    그 문장을 그대로 보여 준다. 어느 항목의 무엇이 문제인지가
-    그 안에 들어 있다(skin/skin-bottom-dock.js).
+    빈 칸은 적용 **전에** 여기서 잡는다. 문제가 있는 자리마다 그
+    아래에 짧은 안내를 띄우고, 첫 자리로 스크롤한다.
   */
 
+  dockPanelTouched.add(dockPanelDraft.trigger);
+
+  dockPanelDraft.items.forEach((item) => dockPanelTouched.add(item));
+
+  renderDockTriggerSection();
+  renderDockItemList();
+
+  const firstError =
+    dockPanelBody.querySelector(".dock-panel-error:not([hidden])");
+
+  if (firstError) {
+
+    setDockPanelMessage("비어 있는 칸을 채워 주세요.", true);
+
+    if (typeof firstError.scrollIntoView === "function") {
+      firstError.scrollIntoView({ block: "center" });
+    }
+
+    return;
+
+  }
+
+
   const result =
-    window.setStudioBottomDock(dockPanelDraft);
+    window.setStudioBottomDock(buildDockPanelResult());
 
   if (!result.ok) {
-    setDockPanelMessage(result.message, true);
+    setDockPanelMessage(describeDockPanelFailure(result.message), true);
     return;
   }
 
@@ -1005,6 +1270,18 @@ function buildDockPanelContent() {
 
 
   dockPanelBody.appendChild(
+    dockEl("h3", "dock-panel-section", "독 열기 버튼")
+  );
+
+  dockPanelTriggerHost =
+    dockEl("div", "dock-panel-trigger");
+
+  dockPanelBody.appendChild(dockPanelTriggerHost);
+
+  renderDockTriggerSection();
+
+
+  dockPanelBody.appendChild(
     dockEl("h3", "dock-panel-section", "항목")
   );
 
@@ -1012,7 +1289,7 @@ function buildDockPanelContent() {
     dockEl(
       "p",
       "dock-panel-hint",
-      "끌어서 순서를 바꾸거나 ↑↓를 쓰세요. 모바일에서는 3~5개가 편합니다."
+      "펼쳤을 때 보이는 항목입니다. 끌거나 ↑↓로 순서를 바꿉니다. 모바일에서는 3~5개가 편합니다."
     )
   );
 
@@ -1077,8 +1354,11 @@ function buildDockPanelContent() {
     dockPanelDragFrom = -1;
 
     dockPanelItemList
-      .querySelectorAll(".dock-panel-item--dragging")
-      .forEach((el) => el.classList.remove("dock-panel-item--dragging"));
+      .querySelectorAll(".dock-panel-item--dragging, .dock-panel-item[draggable]")
+      .forEach((el) => {
+        el.classList.remove("dock-panel-item--dragging");
+        el.removeAttribute("draggable");
+      });
 
   });
 
@@ -1100,19 +1380,58 @@ function buildDockPanelContent() {
 
     setDockPanelMessage("");
 
+    /* 빈 항목 — 표시는 사용자가 고른다(예시 값을 미리 넣지 않는다) */
     dockPanelDraft.items.push({
       id: nextDockItemId(),
       label: "",
       audience: "all",
-      visual: { type: "icon", value: "home" },
+      visual: { type: "icon", value: "" },
       action: { type: "navigate", target: "home" }
     });
 
     renderDockItemList();
 
+    const cards =
+      dockPanelItemList.querySelectorAll(".dock-panel-item");
+
+    const last =
+      cards[cards.length - 1];
+
+    if (last && typeof last.scrollIntoView === "function") {
+      last.scrollIntoView({ block: "nearest" });
+    }
+
   });
 
   dockPanelBody.appendChild(add);
+
+}
+
+
+/*
+  옛 설정(자리/처음 상태/접기를 따로 골랐던 dock)을 열었을 때
+  사본의 모양을 맞춘다. trigger 가 없던 dock 에는 기본 열기 버튼을
+  준다 — 이 패널이 만드는 dock 은 언제나 접혀서 시작하므로 열기
+  버튼이 반드시 있어야 한다.
+*/
+function prepareDockPanelDraft(existing) {
+
+  const draft =
+    dockPanelCloneDraft(existing);
+
+  if (!draft.trigger || typeof draft.trigger !== "object") {
+    draft.trigger = { type: "icon", value: "menu", label: DOCK_PANEL_DEFAULT_TRIGGER_LABEL };
+  }
+
+  if (typeof draft.trigger.value !== "string") {
+    draft.trigger.value = "";
+  }
+
+  if (!Array.isArray(draft.items)) {
+    draft.items = [];
+  }
+
+  return draft;
 
 }
 
@@ -1137,9 +1456,12 @@ function openSkinDockPanel() {
   const existing =
     window.getStudioBottomDock();
 
+  dockPanelTouched =
+    new WeakSet();
+
   dockPanelDraft =
     existing
-      ? dockPanelCloneDraft(existing)
+      ? prepareDockPanelDraft(existing)
       : buildDefaultDockDraft();
 
   setDockPanelMessage(
