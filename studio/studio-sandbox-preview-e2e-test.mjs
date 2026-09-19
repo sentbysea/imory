@@ -2056,14 +2056,17 @@ async function runInspect(browser) {
     check("[inspect] ★ Inspector 패널이 떴다",
       (await page.locator("#studioInspectorPopover").isVisible()) === true);
 
-    /* DIRECT-UX-1 — "직접 수정" 탭 버튼은 없어졌다. 잠김은 항목이 그려지지
-       않는 것으로 본다(IMORY_DIRECT_UX_DESIGN.md §9). */
-    check("[inspect] ★ sandbox 에서는 직접 수정이 잠기고 이유가 나온다",
+    /* SANDBOX-SELECT-PARITY-1 — 6A 에서는 잠갔던 직접 수정 항목이 이제
+       native 와 같이 열린다(이미지 크기 · 자르기만 빼고 —
+       IMORY_SANDBOX_SKIN_DESIGN.md §S). */
+    check("[inspect] ★ sandbox 에서도 직접 수정 항목이 열린다 (6A 잠금 해제)",
       (await page.evaluate(() => {
         const fields = document.getElementById("studioInspectorFields");
-        return !!fields && fields.hidden === true && window.getStudioInspectorState().editingOpen === false;
+        return !!fields && fields.hidden === false &&
+          fields.querySelectorAll("input, select, textarea, button").length > 0 &&
+          window.getStudioInspectorState().editingOpen === true;
       })) === true &&
-      (await page.locator("#studioInspectorNote").innerText()).includes("sandbox"),
+      !(await page.locator("#studioInspectorNote").innerText()).includes("직접 수정할 수 없어요"),
       (await page.locator("#studioInspectorNote").innerText()).slice(0, 60));
 
 

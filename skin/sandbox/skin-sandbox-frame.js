@@ -1173,7 +1173,11 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
     if (
       verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_MODE ||
-      verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_PICK
+      verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_PICK ||
+      verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_CHOOSE ||
+      verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_PARENT ||
+      verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_CAPS ||
+      verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_PREVIEW
     ) {
 
       if (!FRAME_STATE.inspector) {
@@ -1190,6 +1194,30 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
         return;
 
+      }
+
+      /* SANDBOX-SELECT-PARITY-1 — 겹친 요소 메뉴의 칸 · 바깥 영역 ·
+         Studio 가 정한 가능 여부 · 임시 미리보기
+         (skin/sandbox/skin-sandbox-inspect.js) */
+
+      if (verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_CHOOSE) {
+        FRAME_STATE.inspector.choose(verdict.payload.index);
+        return;
+      }
+
+      if (verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_PARENT) {
+        FRAME_STATE.inspector.selectParent();
+        return;
+      }
+
+      if (verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_CAPS) {
+        FRAME_STATE.inspector.setCaps(verdict.payload);
+        return;
+      }
+
+      if (verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_PREVIEW) {
+        FRAME_STATE.inspector.preview(verdict.payload);
+        return;
       }
 
       FRAME_STATE.inspector.pick(
@@ -1415,8 +1443,14 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     window.__imorySandboxInspectState =
       function () {
 
+        /* renderSeq 는 비밀이 아니다(작은 정수이고 모든 메시지에
+           실려 다닌다) — 위조 검사가 "지금 화면의 번호를 단 위조"를
+           만들 수 있게 함께 읽힌다(SANDBOX-SELECT-PARITY-1 e2e). */
         return FRAME_STATE.inspector
-          ? FRAME_STATE.inspector.debugState()
+          ? Object.assign(
+              { renderSeq: FRAME_STATE.renderSeq },
+              FRAME_STATE.inspector.debugState()
+            )
           : null;
 
       };

@@ -89,14 +89,25 @@
    controller = {
      setEnabled(enabled)      부모의 INSPECT_MODE
      pick(editId|null)        부모의 INSPECT_PICK
+     choose(index)            부모의 INSPECT_CHOOSE  (SANDBOX-SELECT-PARITY-1)
+     selectParent()           부모의 INSPECT_PARENT
+     setCaps(payload)         부모의 INSPECT_CAPS
+     preview(payload)         부모의 INSPECT_PREVIEW
      onRender()               렌더가 끝났을 때(선택 되살리기)
      dispose()
      isEnabled()
    }
 
+   ★ SANDBOX-SELECT-PARITY-1 — 실제 포인터의 hit-test 는 이제 native
+     Preview 와 같은 선택 우선순위다(자리의 요소 전부 → 순위). 그
+     부분과 더블클릭 편집 · 본체 끌기 · 겹친 후보 · 바깥 영역은
+     skin/sandbox/skin-sandbox-inspect-direct.js 에 있다. 이 파일은
+     테두리 · 좌표 보고 · 모드/선택의 주인으로 남는다.
+
    의존: skin/skin-inspect-target.js (isInspectableElement /
-   resolveInspectableAncestor) — frame.html 이 이 파일보다 먼저
-   로드한다.
+   resolveInspectableAncestor / pickInspectableAtPoint) ·
+   skin/sandbox/skin-sandbox-inspect-direct.js — frame.html 이 이
+   파일보다 먼저 로드한다.
 ========================================================== */
 
 
@@ -140,13 +151,37 @@ var SANDBOX_INSPECT_CSS = [
   "  outline: 2px solid rgba(255, 51, 170, 0.95);",
   "  outline-offset: 0;",
   "}",
+  /* SANDBOX-SELECT-PARITY-1 — 커서는 native Preview 와 같은 규칙
+     (studio/preview/preview-frame.html): 고를 수 있는 자리 위에서만
+     손가락, 끌 수 있는 요소 위에서는 이동, 글자를 고치는 중에는 글자.
+     표식은 skin-sandbox-inspect-direct.js 가 단다. */
+  "body.imory-sandbox-inspect-on,",
   "body.imory-sandbox-inspect-on * {",
-  "  cursor: crosshair !important;",
+  "  cursor: default !important;",
   "}",
   "body.imory-sandbox-inspect-on {",
-  "  cursor: crosshair;",
   "  -webkit-user-select: none;",
   "  user-select: none;",
+  "}",
+  "body.imory-sandbox-inspect-on [data-imory-inspector-hover],",
+  "body.imory-sandbox-inspect-on [data-imory-inspector-hover] * {",
+  "  cursor: pointer !important;",
+  "}",
+  "body.imory-sandbox-inspect-on [data-imory-inspector-movable],",
+  "body.imory-sandbox-inspect-on [data-imory-inspector-movable] * {",
+  "  cursor: move !important;",
+  "}",
+  "body.imory-sandbox-inspect-on [data-imory-inspector-editing],",
+  "body.imory-sandbox-inspect-on [data-imory-inspector-editing] * {",
+  "  cursor: text !important;",
+  "  -webkit-user-select: text;",
+  "  user-select: text;",
+  "}",
+  "body.imory-sandbox-inspect-on [data-imory-inspector-editing] {",
+  "  outline: none;",
+  "}",
+  "body.imory-sandbox-inspect-on img {",
+  "  -webkit-user-drag: none;",
   "}"
 ].join("\n");
 
@@ -180,6 +215,9 @@ function createSandboxInspector(options) {
     listeners: [],
     disposed: false
   };
+
+  /* SANDBOX-SELECT-PARITY-1 — 직접 조작(아래 install 에서 만든다) */
+  var direct = null;
 
 
   /* =========================================================
@@ -327,6 +365,57 @@ function createSandboxInspector(options) {
 
 
   /* =========================================================
+     metricsOf(el) — 자유 배치 끌기가 비율을 세우는 기준
+
+     SANDBOX-SELECT-PARITY-1. native 의 inspectorMetricsOf() 중
+     **끌기에 필요한 넷**만이다(요소 크기 · 부모 안쪽 폭/높이).
+     이미지 자연 크기는 보내지 않는다 — 크기 조절 · 자르기는 이
+     프레임에서 열지 않는다(IMORY_SANDBOX_SKIN_DESIGN.md §S).
+  ========================================================== */
+
+  function metricsOf(el) {
+
+    if (!el || !el.isConnected) {
+      return null;
+    }
+
+    var box =
+      el.getBoundingClientRect();
+
+    var parent =
+      el.parentElement;
+
+    var parentWidth = 0;
+    var parentHeight = 0;
+
+    if (parent) {
+
+      var style =
+        win.getComputedStyle(parent);
+
+      parentWidth =
+        parent.clientWidth -
+        (parseFloat(style.paddingLeft) || 0) -
+        (parseFloat(style.paddingRight) || 0);
+
+      parentHeight =
+        parent.clientHeight -
+        (parseFloat(style.paddingTop) || 0) -
+        (parseFloat(style.paddingBottom) || 0);
+
+    }
+
+    return {
+      width: Math.round(box.width * 100) / 100,
+      height: Math.round(box.height * 100) / 100,
+      parentWidth: Math.max(0, Math.round(parentWidth)),
+      parentHeight: Math.max(0, Math.round(parentHeight))
+    };
+
+  }
+
+
+  /* =========================================================
      테두리
   ========================================================== */
 
@@ -430,7 +519,15 @@ function createSandboxInspector(options) {
     };
 
     if (withTag) {
+
       value.tagName = el.tagName.toLowerCase();
+
+      var metrics = metricsOf(el);
+
+      if (metrics) {
+        value.metrics = metrics;
+      }
+
     }
 
     return value;
@@ -569,14 +666,18 @@ function createSandboxInspector(options) {
 
     repaint();
 
+    if (direct) {
+      direct.syncMovableMark();
+    }
+
     if (options && options.silent) {
       return;
     }
 
-    var rect =
-      rectOf(state.selectedEl);
+    var selected =
+      targetPayload(state.selectedEl, state.selectedEditId, true);
 
-    if (!state.selectedEl || !state.selectedEditId || !rect) {
+    if (!selected) {
 
       send(opts.TYPES.INSPECT_SELECT, {});
 
@@ -584,11 +685,7 @@ function createSandboxInspector(options) {
 
     }
 
-    send(opts.TYPES.INSPECT_SELECT, {
-      editId: state.selectedEditId,
-      tagName: state.selectedEl.tagName.toLowerCase(),
-      rect: rect
-    });
+    send(opts.TYPES.INSPECT_SELECT, selected);
 
   }
 
@@ -702,6 +799,13 @@ function createSandboxInspector(options) {
       return;
     }
 
+    /* SANDBOX-SELECT-PARITY-1 — 실제 포인터는 **자리**로 고른다
+       (선택 우선순위 · 겹친 요소 · 끌기 준비). 좌표 없는 합성
+       이벤트만 아래 예전 규칙으로 간다(native 와 같다). */
+    if (direct && direct.pointerDown(event)) {
+      return;
+    }
+
     pickAt(event.target);
 
   }
@@ -713,7 +817,51 @@ function createSandboxInspector(options) {
       return;
     }
 
+    if (direct && direct.pointerMove(event)) {
+      return;
+    }
+
     setHover(resolveTarget(event.target));
+
+  }
+
+
+  function onPointerUp(event) {
+
+    if (!state.enabled || !direct) {
+      return;
+    }
+
+    if (direct.pointerUp(event)) {
+      event.stopPropagation();
+    }
+
+  }
+
+
+  function onPointerCancel(event) {
+
+    if (!state.enabled || !direct) {
+      return;
+    }
+
+    direct.pointerCancel(event);
+
+  }
+
+
+  /* 더블클릭 = 고른 글자를 그 자리에서 고치기(Studio 가 허락한 것만) */
+  function onDblClick(event) {
+
+    if (!state.enabled) {
+      return;
+    }
+
+    swallow(event);
+
+    if (direct) {
+      direct.dblClick(event);
+    }
 
   }
 
@@ -732,6 +880,12 @@ function createSandboxInspector(options) {
   function onKeyDown(event) {
 
     if (!state.enabled || event.key !== "Escape") {
+      return;
+    }
+
+    /* 글자를 고치는 중의 Escape 는 "그 입력만 취소"다 — 편집 요소의
+       리스너가 받는다. 여기서 선택까지 풀지 않는다. */
+    if (direct && direct.keyDown(event)) {
       return;
     }
 
@@ -776,12 +930,20 @@ function createSandboxInspector(options) {
 
     stopPump();
 
+    if (direct) {
+      direct.reset({ disabled: true });
+    }
+
     state.hoverEl = null;
     state.selectedEl = null;
     state.selectedEditId = null;
     state.lastSentKey = "";
 
     repaint();
+
+    if (direct) {
+      direct.syncMovableMark();
+    }
 
     doc.body.classList.remove("imory-sandbox-inspect-on");
 
@@ -860,6 +1022,12 @@ function createSandboxInspector(options) {
 
     ensureLayer();
 
+    /* 고치던 글자 · 끌기 · 겹친 후보 · 임시 미리보기는 옛 DOM 의
+       것이다 — 버린다(Studio 가 확정했으면 새 DOM 에 이미 있다). */
+    if (direct) {
+      direct.reset();
+    }
+
     state.hoverEl = null;
 
     var wanted =
@@ -921,6 +1089,9 @@ function createSandboxInspector(options) {
   on(doc, "pointerover", onPointerMove);
   on(doc, "pointermove", onPointerMove);
   on(doc, "pointerout", onPointerLeave);
+  on(doc, "pointerup", onPointerUp);
+  on(doc, "pointercancel", onPointerCancel);
+  on(doc, "dblclick", onDblClick);
   on(doc, "keydown", onKeyDown);
 
   on(doc, "dragstart", function (event) {
@@ -954,12 +1125,67 @@ function createSandboxInspector(options) {
   });
 
 
+  /* =========================================================
+     SANDBOX-SELECT-PARITY-1 — 직접 조작
+     (skin/sandbox/skin-sandbox-inspect-direct.js)
+
+     그 파일은 이 controller 의 상태를 아래 함수로만 읽고 쓴다.
+     파일이 로드되지 않은 문서에서는 direct 가 null 이고, 모든
+     입력이 예전 규칙으로 간다.
+  ========================================================== */
+
+  if (typeof createSandboxInspectDirect === "function") {
+
+    direct = createSandboxInspectDirect({
+      doc: doc,
+      win: win,
+      root: root,
+      editIdOf: editIdOf,
+      isProtected: isInsideProtectedRegion,
+      resolveTarget: resolveTarget,
+      rectOf: rectOf,
+      selected: function () {
+        return (state.selectedEl && state.selectedEl.isConnected) ? state.selectedEl : null;
+      },
+      select: function (el) {
+        setSelection(el || null);
+      },
+      hover: setHover,
+      send: send,
+      error: sendInspectError,
+      TYPES: opts.TYPES
+    });
+
+  }
+
+
+  function whenEnabled(fn) {
+
+    return function (value) {
+
+      if (!state.enabled || !direct) {
+        return;
+      }
+
+      fn(value);
+
+    };
+
+  }
+
+
   return {
 
     setEnabled: setEnabled,
     pick: pick,
     onRender: onRender,
     dispose: dispose,
+
+    /* 부모의 INSPECT_CHOOSE / _PARENT / _CAPS / _PREVIEW */
+    choose: whenEnabled(function (index) { direct.choose(index); }),
+    selectParent: whenEnabled(function () { direct.selectParent(); }),
+    setCaps: whenEnabled(function (payload) { direct.setCaps(payload); }),
+    preview: whenEnabled(function (payload) { direct.preview(payload); }),
 
     isEnabled: function () {
       return state.enabled;
@@ -971,7 +1197,8 @@ function createSandboxInspector(options) {
         enabled: state.enabled,
         selectedEditId: state.selectedEditId,
         hoverEditId: editIdOf(state.hoverEl),
-        boxes: doc.querySelectorAll(".imory-sandbox-inspect-box").length
+        boxes: doc.querySelectorAll(".imory-sandbox-inspect-box").length,
+        direct: direct ? direct.debugState() : null
       };
     }
 

@@ -166,8 +166,9 @@ function resolveInspectableAncestor(node, root, editIdOf) {
    "바깥 영역 선택"과 겹친 요소 메뉴의 맨 아래 칸으로만 고른다.
 
    ★ 판단은 이 파일 한 곳이다. native Preview 문서
-     (studio/preview/preview-inspect-direct.js)가 읽는다. sandbox
-     프레임은 아직 예전 규칙이다(IMORY_DIRECT_UX_DESIGN.md §남은 차이).
+     (studio/preview/preview-inspect-direct.js)와 sandbox 프레임 문서
+     (skin/sandbox/skin-sandbox-inspect-direct.js — SANDBOX-SELECT-PARITY-1)
+     가 같은 함수를 읽는다.
    ★ 계산 스타일(배경·테두리)을 읽으므로 **그려진 문서**에서만 뜻이
      있다. Studio 가 들고 있는 DOMParser 사본에서 부르지 않는다.
 ========================================================== */

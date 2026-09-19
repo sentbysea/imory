@@ -569,9 +569,9 @@ function cancelStudioInspectorLayoutDrag() {
      (2026-09-18). studioInspectorResizable 이 같은 이유로 같은
      모양인 값이다.
 
-   sandbox 프레임 안 선택에는 달지 않는다 — 실측값(부모 안쪽
-   상자)이 오지 않아 비율을 세울 기준이 없다(이미지 크기 핸들과
-   같은 사정).
+   sandbox 프레임 안 선택은 프레임이 부모 안쪽 폭/높이(metrics)를
+   보내 왔을 때만 단다(SANDBOX-SELECT-PARITY-1) — 그 값이 비율을
+   세우는 기준이다. 없으면 끌 수 없다(지어내지 않는다).
 ========================================================== */
 
 function resolveStudioInspectorMovable(resolved) {
@@ -579,10 +579,16 @@ function resolveStudioInspectorMovable(resolved) {
   if (
     !studioInspectorEnabled ||
     !studioInspectorSelection ||
-    studioInspectorRemoteOverlay ||
     !resolved ||
     !resolved.info ||
     !resolved.info.layout
+  ) {
+    return false;
+  }
+
+  if (
+    studioInspectorRemoteOverlay &&
+    !(studioInspectorMetrics && studioInspectorMetrics.parentWidth > 0 && studioInspectorMetrics.parentHeight > 0)
   ) {
     return false;
   }

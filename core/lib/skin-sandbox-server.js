@@ -119,6 +119,11 @@ export const SANDBOX_ALLOWED_PATHS = [
   ====================================================== */
 
   "/skin/skin-inspect-target.js",
+
+  /* SANDBOX-SELECT-PARITY-1 — 프레임 안 직접 조작(선택 우선순위 ·
+     겹친 후보 · 더블클릭 편집 · 본체 끌기). 올려보내는 것은 식별자 ·
+     태그 · 사각형 · 문구 · 좌표뿐이다. */
+  "/skin/sandbox/skin-sandbox-inspect-direct.js",
   "/skin/sandbox/skin-sandbox-inspect.js",
 
   /* =====================================================

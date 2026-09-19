@@ -297,11 +297,11 @@ Select 패널은 기존 아래 시트. Quick Bar 는 시트 맨 위. 겹친 요�
 
 ## 남은 차이
 
-- **sandbox 스킨**(renderMode sandbox)의 프레임 안 Select 는 예전 hit-test 규칙이다
-  (`skin/sandbox/skin-sandbox-inspect.js` 는 이 라운드의 우선순위 · 겹친 요소 ·
-  더블클릭 · 본체 끌기를 쓰지 않는다). 그 프레임의 INSPECT 메시지 계약
-  (IMORY_SANDBOX_SKIN_DESIGN.md §Q)에 후보 목록 · 편집 문구 메시지를 더해야 한다.
-  직접 편집은 원래 잠겨 있다.
+- ~~**sandbox 스킨**의 프레임 안 Select 는 예전 hit-test 규칙이다~~ →
+  **SANDBOX-SELECT-PARITY-1 에서 닫았다**(IMORY_SANDBOX_SKIN_DESIGN.md §S). 프레임도
+  같은 우선순위 · 겹친 요소 메뉴 · 바깥 영역 · 더블클릭 · 본체 끌기 · 패널 항목 ·
+  Quick Bar 를 쓴다(`skin/sandbox/skin-sandbox-inspect-direct.js`). sandbox 에서만
+  남은 차이는 **이미지 크기 조절 · 자르기**다(§S-7).
 - **390px 에서 아래 시트가 Preview 아래쪽 절반을 덮는다**(STUDIO-SHELL-1 의 셸
   설계). 짧은 페이지는 스크롤로 끌어올릴 수 없어, 아래쪽 요소는 시트를 접고
   눌러야 한다.

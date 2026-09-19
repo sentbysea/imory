@@ -89,9 +89,12 @@
        간다. 폴더 Preview 는 지금까지와 똑같다.
      · (SANDBOX-6A 에서 바뀜) Element Inspector — 이제 Select 가
        sandbox 스킨에서도 된다. 아래 "Inspector" 절 참고.
-       **직접 편집(텍스트/크기/자르기)은 아직 아니다** — 그것들은
-       프레임 안 DOM 의 실측값과 임시 미리보기를 필요로 한다.
-       Studio 가 그 이유를 팝오버에 적어 준다.
+     · (SANDBOX-SELECT-PARITY-1 에서 바뀜) 직접 편집 — 선택 우선순위 ·
+       겹친 요소 메뉴 · 바깥 영역 · 더블클릭 글자 · 본체 끌기 · 패널
+       항목이 native 와 같다(forwardSandboxPreviewInspectDirective).
+       **이미지 크기 · 자르기만 아직 아니다** — 이미지 자연 크기와
+       너비/구도 임시 미리보기가 프레임 계약에 없다. Studio 가 그
+       이유를 패널에 적어 준다.
 
    ---------------------------------------------------------
    ★ Inspector (SANDBOX-6A)
@@ -118,6 +121,10 @@ import {
   sendSandboxPostBody,
   sendSandboxInspectMode,
   sendSandboxInspectPick,
+  sendSandboxInspectChoose,
+  sendSandboxInspectParent,
+  sendSandboxInspectCaps,
+  sendSandboxInspectPreview,
   destroySandboxSkinFrame
 } from "../../skin/sandbox/skin-sandbox-host.js";
 
@@ -162,6 +169,12 @@ let sandboxInspectEnabled =
   false;
 
 let sandboxInspectEditId =
+  null;
+
+/* SANDBOX-SELECT-PARITY-1 — Studio 가 정한 가능 여부(끌기 · 글자). 프레임이
+   새로 만들어져도 렌더 직후 다시 내려보낸다. */
+
+let sandboxInspectCaps =
   null;
 
 let sandboxInspectRelay =
@@ -434,6 +447,11 @@ export function teardownSandboxPreview() {
   */
 
   sandboxInspectEditId = null;
+
+  sandboxInspectCaps = null;
+
+  sandboxInspectLastHover = null;
+  sandboxInspectLastSelected = null;
 
   if (sandboxHandle) {
 
@@ -803,7 +821,54 @@ function sandboxInspectTarget(value) {
     mapped.tagName = value.tagName;
   }
 
+  /* SANDBOX-SELECT-PARITY-1 — 자유 배치 끌기의 기준(부모 안쪽 폭/높이).
+     프로토콜이 숫자 넷만 통과시켰다. 좌표계와 무관한 크기라 옮기지
+     않고 새 리터럴로만 적는다. */
+  if (value.metrics && typeof value.metrics === "object") {
+    mapped.metrics = {
+      width: value.metrics.width,
+      height: value.metrics.height,
+      parentWidth: value.metrics.parentWidth,
+      parentHeight: value.metrics.parentHeight
+    };
+  }
+
   return mapped;
+
+}
+
+
+/* 겹친 후보 한 칸 — 좌표만 옮긴다 */
+
+function sandboxInspectCandidate(value) {
+
+  const target =
+    sandboxInspectTarget(value);
+
+  if (!target || !target.editId) {
+    return null;
+  }
+
+  return {
+    editId: target.editId,
+    tagName: target.tagName || null,
+    rect: target.rect,
+    visibleRect: target.visibleRect,
+    outer: value.outer === true,
+    current: value.current === true
+  };
+
+}
+
+
+/* 프레임 뷰포트의 한 점 → 이 문서의 점 */
+
+function sandboxInspectPointToPreview(x, y) {
+
+  const rect =
+    sandboxInspectRectToPreview({ left: x, top: y, width: 0, height: 0 });
+
+  return rect ? { x: rect.left, y: rect.top } : null;
 
 }
 
@@ -820,11 +885,85 @@ function sandboxInspectTarget(value) {
      여전히 이 좌표로 잡는다.
 ========================================================== */
 
+/* =========================================================
+   SANDBOX-SELECT-PARITY-1 — 이 문서가 스크롤돼도 좌표를 다시 올린다
+
+   프레임이 보내는 사각형은 **프레임 뷰포트** 기준이다. 이 문서
+   (Preview)가 스크롤되면 프레임 안 좌표는 그대로이므로 프레임은
+   아무것도 다시 보내지 않는다 — 그런데 Studio 의 이름표 · Quick Bar
+   · 팝오버 자리는 이 문서 좌표가 필요하다. native 는 스크롤마다
+   rects 를 다시 보낸다(preview-bridge.js scheduleInspectorRects).
+
+   그래서 마지막으로 받은 hover/선택 사각형(프레임 좌표 그대로)을
+   들고 있다가, 스크롤 · 리사이즈 때 **지금 iframe 자리로** 다시
+   옮겨 올린다. 선택이 없으면 보내지 않는다 — selected:null 은
+   Studio 에게 "그 요소가 사라졌다"로 읽힌다(§Q-7 의 함정).
+========================================================== */
+
+let sandboxInspectLastHover =
+  null;
+
+let sandboxInspectLastSelected =
+  null;
+
+
+export function refreshSandboxPreviewInspectRects() {
+
+  if (
+    typeof sandboxInspectRelay !== "function" ||
+    !sandboxInspectEnabled ||
+    !sandboxInspectLastSelected ||
+    !hasSandboxPreviewFrame()
+  ) {
+    return false;
+  }
+
+  const selected =
+    sandboxInspectTarget(sandboxInspectLastSelected);
+
+  if (!selected) {
+    return false;
+  }
+
+  sandboxInspectRelay({
+    type: "preview:inspect-rects",
+    remote: true,
+    hover: sandboxInspectTarget(sandboxInspectLastHover),
+    selected
+  });
+
+  return true;
+
+}
+
+
+function rememberSandboxInspectRects(kind, payload) {
+
+  if (kind === "hover") {
+    sandboxInspectLastHover = payload && payload.editId ? payload : null;
+    return;
+  }
+
+  if (kind === "select") {
+    sandboxInspectLastSelected = payload && payload.editId ? payload : null;
+    return;
+  }
+
+  if (kind === "rects") {
+    sandboxInspectLastHover = payload.hover || null;
+    sandboxInspectLastSelected = payload.selected || null;
+  }
+
+}
+
+
 function handleSandboxInspect(kind, payload) {
 
   if (typeof sandboxInspectRelay !== "function") {
     return;
   }
+
+  rememberSandboxInspectRects(kind, payload);
 
 
   if (kind === "error") {
@@ -878,12 +1017,85 @@ function handleSandboxInspect(kind, payload) {
       visibleRect: selected ? selected.visibleRect : null,
 
       /*
-        ★ metrics 는 없다. 그것은 이미지 크기·자르기 컨트롤이 쓰는
-        실측값인데(자연 크기·부모 안쪽 폭), 이번 라운드의 sandbox 는
-        그 컨트롤을 열지 않는다. 없는 값을 0 으로 지어내지 않는다 —
-        Studio 는 metrics 가 없으면 크기 컨트롤을 그리지 않는다.
+        ★ metrics 는 **끌기에 필요한 넷**뿐이다(요소 크기 · 부모 안쪽
+        폭/높이 — SANDBOX-SELECT-PARITY-1). 이미지 자연 크기는 없다 —
+        크기 조절 · 자르기는 sandbox 에서 열지 않으므로 없는 값을 0 으로
+        지어내지 않는다.
       */
-      metrics: null
+      metrics: selected && selected.metrics ? selected.metrics : null
+    });
+
+    return;
+
+  }
+
+
+  /* =====================================================
+     SANDBOX-SELECT-PARITY-1 — 겹친 후보 · 더블클릭 글자 · 본체 끌기
+
+     native 와 **같은 메시지 이름**으로 올린다(preview:inspect-pick /
+     -text / -drag). 좌표만 이 문서의 것으로 옮기고, 나머지는 새
+     리터럴로 옮겨 적는다. remote:true 는 Studio 가 "프레임에서 온
+     것"으로 알아 한 겹 더 거르게 하는 표식이다.
+  ====================================================== */
+
+  if (kind === "candidates") {
+
+    const point =
+      payload.point ? sandboxInspectPointToPreview(payload.point.x, payload.point.y) : null;
+
+    const candidates =
+      Array.isArray(payload.candidates)
+        ? payload.candidates.map(sandboxInspectCandidate)
+        : [];
+
+    if (!point || !candidates.length || candidates.some((entry) => !entry)) {
+      return;
+    }
+
+    sandboxInspectRelay({
+      type: "preview:inspect-pick",
+      remote: true,
+      point,
+      candidates
+    });
+
+    return;
+
+  }
+
+
+  if (kind === "text") {
+
+    sandboxInspectRelay({
+      type: "preview:inspect-text",
+      remote: true,
+      phase: payload.phase,
+      editId: payload.editId,
+      text: payload.text
+    });
+
+    return;
+
+  }
+
+
+  if (kind === "drag") {
+
+    /* native 의 x/y 는 Preview 문서 좌표다 — 같은 좌표계로 옮긴다 */
+    const point =
+      sandboxInspectPointToPreview(payload.x, payload.y);
+
+    if (!point) {
+      return;
+    }
+
+    sandboxInspectRelay({
+      type: "preview:inspect-drag",
+      remote: true,
+      phase: payload.phase,
+      x: point.x,
+      y: point.y
     });
 
     return;
@@ -937,6 +1149,9 @@ export function setSandboxPreviewInspectMode(enabled) {
 
   if (!sandboxInspectEnabled) {
     sandboxInspectEditId = null;
+    sandboxInspectCaps = null;
+    sandboxInspectLastHover = null;
+    sandboxInspectLastSelected = null;
   }
 
   if (!hasSandboxPreviewFrame()) {
@@ -953,11 +1168,102 @@ export function setSandboxPreviewInspectSelection(editId) {
   sandboxInspectEditId =
     (typeof editId === "string" && editId) ? editId : null;
 
+  /* 다른 요소(또는 해제)로 바뀌었으면 기억한 사각형은 옛 요소의 것이다 —
+     스크롤 보정이 그 자리를 새 선택에 붙이지 않게 버린다 */
+  if (!sandboxInspectLastSelected || sandboxInspectLastSelected.editId !== sandboxInspectEditId) {
+    sandboxInspectLastSelected = null;
+  }
+
   if (!hasSandboxPreviewFrame()) {
     return false;
   }
 
   return sendSandboxInspectPick(sandboxHandle, sandboxInspectEditId);
+
+}
+
+
+/* =========================================================
+   SANDBOX-SELECT-PARITY-1 — Studio 의 직접 조작 지시를 프레임으로
+
+   forwardSandboxPreviewInspectDirective(data) -> boolean
+
+   preview-bridge.js 가 native 문서에서 처리하던 넷을, sandbox 가
+   화면을 맡고 있을 때 여기로 넘긴다:
+
+     preview:inspector-caps     → INSPECT_CAPS
+     preview:inspector-choose   → INSPECT_CHOOSE
+     preview:inspector-parent   → INSPECT_PARENT
+     preview:inspect-preview    → INSPECT_PREVIEW (글자 · 자유 배치 좌표만)
+
+   ★ 임시 미리보기 중 **이미지 너비 · 자르기**는 옮기지 않는다 — 그
+     컨트롤은 sandbox 에서 열리지 않는다. 옮길 칸이 하나도 없으면
+     보내지 않는다(host 가 거절한다).
+
+   처리했으면(= 이 메시지가 넷 중 하나였으면) true.
+========================================================== */
+
+export function forwardSandboxPreviewInspectDirective(data) {
+
+  if (!data || typeof data.type !== "string") {
+    return false;
+  }
+
+  const handled =
+    data.type === "preview:inspector-caps" ||
+    data.type === "preview:inspector-choose" ||
+    data.type === "preview:inspector-parent" ||
+    data.type === "preview:inspect-preview";
+
+  if (!handled) {
+    return false;
+  }
+
+  if (!hasSandboxPreviewFrame() || !sandboxInspectEnabled) {
+    return true;
+  }
+
+  if (data.type === "preview:inspector-caps") {
+    sandboxInspectCaps = {
+      editId: typeof data.editId === "string" ? data.editId : null,
+      movable: data.movable === true,
+      textEditable: data.textEditable === true
+    };
+    sendSandboxInspectCaps(sandboxHandle, sandboxInspectCaps);
+    return true;
+  }
+
+  if (data.type === "preview:inspector-choose") {
+    sendSandboxInspectChoose(sandboxHandle, Number(data.index));
+    return true;
+  }
+
+  if (data.type === "preview:inspector-parent") {
+    sendSandboxInspectParent(sandboxHandle);
+    return true;
+  }
+
+  if (data.clear === true) {
+    sendSandboxInspectPreview(sandboxHandle, { clear: true });
+    return true;
+  }
+
+  const position =
+    (data.layoutPosition && typeof data.layoutPosition === "object") ? data.layoutPosition : null;
+
+  const ratio = (value) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.min(1, Math.max(0, parsed)) : undefined;
+  };
+
+  sendSandboxInspectPreview(sandboxHandle, {
+    editId: data.editId,
+    text: typeof data.text === "string" ? data.text : undefined,
+    layoutX: position ? ratio(position.x) : undefined,
+    layoutY: position ? ratio(position.y) : undefined
+  });
+
+  return true;
 
 }
 
@@ -992,6 +1298,11 @@ function flushSandboxInspectState() {
   if (sandboxInspectEnabled && sandboxInspectEditId) {
 
     sendSandboxInspectPick(sandboxHandle, sandboxInspectEditId);
+
+    /* 새 realm 이면 caps 도 잃었다 — 같은 선택의 것만 다시 */
+    if (sandboxInspectCaps && sandboxInspectCaps.editId === sandboxInspectEditId) {
+      sendSandboxInspectCaps(sandboxHandle, sandboxInspectCaps);
+    }
 
   }
 

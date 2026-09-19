@@ -180,7 +180,52 @@ var SANDBOX_MESSAGE_TYPES = {
   INSPECT_HOVER: "IMORY_INSPECT_HOVER",
   INSPECT_SELECT: "IMORY_INSPECT_SELECT",
   INSPECT_RECTS: "IMORY_INSPECT_RECTS",
-  INSPECT_ERROR: "IMORY_INSPECT_ERROR"
+  INSPECT_ERROR: "IMORY_INSPECT_ERROR",
+
+
+  /* =======================================================
+     SANDBOX-SELECT-PARITY-1 — 일반 Preview 의 "클릭하고 바로
+     고치는 Select"(DIRECT-UX-1)를 프레임에서도
+
+     native Preview 문서가 Studio 와 주고받는 preview:inspect-pick /
+     -text / -drag / inspector-caps / -choose / -parent /
+     inspect-preview 를 **같은 뜻 그대로** 한 번 더 옮긴 것이다.
+     새 판단은 없다 — 무엇을 고칠 수 있는가는 여전히 Studio 가
+     자기 draft 에서 정한다(INSPECT_CAPS 로 내려보낸다).
+
+       INSPECT_CANDIDATES frame -> parent { point, candidates[] }
+                      한 자리에 **서로를 담지 않는** 후보가 둘
+                      이상일 때만. 칸 하나 = { editId, tagName,
+                      rect, outer?, current? }. Studio 가 "무엇을
+                      선택할까요?" 메뉴를 띄우고 고른 칸의 **순번**
+                      만 돌려준다(INSPECT_CHOOSE) — 반복 항목은
+                      식별자가 같아서 식별자로는 칸을 가를 수 없다.
+       INSPECT_CHOOSE parent -> frame  { index }
+       INSPECT_PARENT parent -> frame  {}  바깥 영역 선택
+       INSPECT_CAPS   parent -> frame  { editId?, movable, textEditable }
+       INSPECT_TEXT   frame -> parent  { phase, editId, text }
+                      더블클릭 글자 편집. 올라가는 것은 **문구**
+                      하나다 — 확정은 Studio 가 기존 patch 경로로
+                      한다(그 DOM 을 저장하지 않는다).
+       INSPECT_DRAG   frame -> parent  { phase, x, y }  자유 배치 본체 끌기
+       INSPECT_PREVIEW parent -> frame { editId?, text?, layoutX?, layoutY?, clear? }
+                      확정 전 임시 미리보기. 글자(textContent) 와
+                      자유 배치 좌표(0~1 비율 두 개) **뿐**이다 —
+                      CSS 문자열도 선언 목록도 받지 않는다.
+
+     ★ 이 채널로 selector 도, HTML 도, 스크립트도 오가지 않는다.
+       프레임은 여전히 "식별자 · 태그 · 사각형 · 문구 · 좌표"만
+       올리고, 부모는 "식별자 · 순번 · 참/거짓 · 문구 · 비율"만
+       내린다.
+  ======================================================= */
+
+  INSPECT_CANDIDATES: "IMORY_INSPECT_CANDIDATES",
+  INSPECT_CHOOSE: "IMORY_INSPECT_CHOOSE",
+  INSPECT_PARENT: "IMORY_INSPECT_PARENT",
+  INSPECT_CAPS: "IMORY_INSPECT_CAPS",
+  INSPECT_TEXT: "IMORY_INSPECT_TEXT",
+  INSPECT_DRAG: "IMORY_INSPECT_DRAG",
+  INSPECT_PREVIEW: "IMORY_INSPECT_PREVIEW"
 };
 
 
@@ -387,7 +432,79 @@ function isSandboxInspectRect(value) {
 }
 
 
-/* hover/selected 한 칸 — { editId, rect } 또는 { editId, rect, tagName } */
+/* =========================================================
+   SANDBOX-SELECT-PARITY-1 — 값 제한
+
+   metrics  자유 배치 끌기가 비율을 세우는 기준(부모 안쪽 폭·높이)
+            과 그 요소의 크기. 숫자 넷뿐이다. 이미지 자연 크기는
+            없다 — 크기 조절 · 자르기는 프레임에서 열지 않는다.
+   text     더블클릭 편집의 문구. Studio 의 textarea 와 같은 성격
+            이라 넉넉히 두되 상한은 못 박는다.
+   candidates  한 자리의 후보는 native 와 같이 최대 여섯 + 바깥 한 칸.
+========================================================== */
+
+var SANDBOX_INSPECT_METRIC_KEYS = ["width", "height", "parentWidth", "parentHeight"];
+
+var SANDBOX_INSPECT_MAX_TEXT_CHARS = 20000;
+
+var SANDBOX_INSPECT_MAX_CANDIDATES = 7;
+
+var SANDBOX_INSPECT_TEXT_PHASES = ["begin", "input", "commit", "cancel"];
+
+var SANDBOX_INSPECT_DRAG_PHASES = ["start", "move", "end", "cancel"];
+
+
+function isSandboxInspectMetrics(value) {
+
+  if (!isPlainSandboxObject(value)) {
+    return false;
+  }
+
+  if (!hasOnlyKnownSandboxKeys(value, SANDBOX_INSPECT_METRIC_KEYS)) {
+    return false;
+  }
+
+  for (let i = 0; i < SANDBOX_INSPECT_METRIC_KEYS.length; i += 1) {
+
+    const metric =
+      value[SANDBOX_INSPECT_METRIC_KEYS[i]];
+
+    if (!isSandboxInspectCoord(metric) || metric < 0) {
+      return false;
+    }
+
+  }
+
+  return true;
+
+}
+
+
+function isSandboxInspectText(value) {
+
+  return (
+    typeof value === "string" &&
+    value.length <= SANDBOX_INSPECT_MAX_TEXT_CHARS
+  );
+
+}
+
+
+/* 자유 배치 좌표 — 0~1 비율 */
+
+function isSandboxInspectRatio(value) {
+
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+  );
+
+}
+
+
+/* hover/selected 한 칸 — { editId, rect } 또는 { editId, rect, tagName[, metrics] } */
 
 function isSandboxInspectTarget(value, allowTagName) {
 
@@ -397,7 +514,7 @@ function isSandboxInspectTarget(value, allowTagName) {
 
   const keys =
     allowTagName
-      ? ["editId", "tagName", "rect"]
+      ? ["editId", "tagName", "rect", "metrics"]
       : ["editId", "rect"];
 
   if (!hasOnlyKnownSandboxKeys(value, keys)) {
@@ -412,6 +529,10 @@ function isSandboxInspectTarget(value, allowTagName) {
     return false;
   }
 
+  if (value.metrics !== undefined && !isSandboxInspectMetrics(value.metrics)) {
+    return false;
+  }
+
   if (value.tagName === undefined) {
     return true;
   }
@@ -419,6 +540,42 @@ function isSandboxInspectTarget(value, allowTagName) {
   return (
     typeof value.tagName === "string" &&
     SANDBOX_INSPECT_TAG_PATTERN.test(value.tagName)
+  );
+
+}
+
+
+/* 겹친 후보 한 칸 — { editId, tagName, rect, outer?, current? } */
+
+function isSandboxInspectCandidate(value) {
+
+  if (!isPlainSandboxObject(value)) {
+    return false;
+  }
+
+  if (!hasOnlyKnownSandboxKeys(value, ["editId", "tagName", "rect", "outer", "current"])) {
+    return false;
+  }
+
+  return (
+    isSandboxInspectEditId(value.editId) &&
+    typeof value.tagName === "string" &&
+    SANDBOX_INSPECT_TAG_PATTERN.test(value.tagName) &&
+    isSandboxInspectRect(value.rect) &&
+    (value.outer === undefined || typeof value.outer === "boolean") &&
+    (value.current === undefined || typeof value.current === "boolean")
+  );
+
+}
+
+
+function isSandboxInspectPoint(value) {
+
+  return (
+    isPlainSandboxObject(value) &&
+    hasOnlyKnownSandboxKeys(value, ["x", "y"]) &&
+    isSandboxInspectCoord(value.x) &&
+    isSandboxInspectCoord(value.y)
   );
 
 }
@@ -724,7 +881,7 @@ var SANDBOX_MESSAGE_SPEC = {
 
   IMORY_INSPECT_SELECT: {
     direction: "to-parent",
-    keys: ["contract", "renderSeq", "editId", "tagName", "rect"],
+    keys: ["contract", "renderSeq", "editId", "tagName", "rect", "metrics"],
     check: function (payload) {
 
       if (!isSandboxRenderSeq(payload.renderSeq)) {
@@ -734,19 +891,23 @@ var SANDBOX_MESSAGE_SPEC = {
       if (
         payload.editId === undefined &&
         payload.tagName === undefined &&
-        payload.rect === undefined
+        payload.rect === undefined &&
+        payload.metrics === undefined
       ) {
         return true;
       }
 
-      return isSandboxInspectTarget(
-        {
-          editId: payload.editId,
-          tagName: payload.tagName,
-          rect: payload.rect
-        },
-        true
-      );
+      const target = {
+        editId: payload.editId,
+        tagName: payload.tagName,
+        rect: payload.rect
+      };
+
+      if (payload.metrics !== undefined) {
+        target.metrics = payload.metrics;
+      }
+
+      return isSandboxInspectTarget(target, true);
 
     }
   },
@@ -794,6 +955,155 @@ var SANDBOX_MESSAGE_SPEC = {
         isSandboxRenderSeq(payload.renderSeq) &&
         SANDBOX_INSPECT_ERROR_CODES.indexOf(payload.code) !== -1
       );
+    }
+  },
+
+
+  /* =======================================================
+     SANDBOX-SELECT-PARITY-1 — 직접 조작 (위 INSPECT_* 와 같은 봉투)
+  ======================================================= */
+
+  IMORY_INSPECT_CANDIDATES: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "point", "candidates"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq) || !isSandboxInspectPoint(payload.point)) {
+        return false;
+      }
+
+      const list =
+        payload.candidates;
+
+      if (
+        !Array.isArray(list) ||
+        list.length < 1 ||
+        list.length > SANDBOX_INSPECT_MAX_CANDIDATES
+      ) {
+        return false;
+      }
+
+      for (let i = 0; i < list.length; i += 1) {
+        if (!isSandboxInspectCandidate(list[i])) {
+          return false;
+        }
+      }
+
+      return true;
+
+    }
+  },
+
+
+  IMORY_INSPECT_CHOOSE: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq", "index"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        Number.isInteger(payload.index) &&
+        payload.index >= 0 &&
+        payload.index < SANDBOX_INSPECT_MAX_CANDIDATES
+      );
+    }
+  },
+
+
+  IMORY_INSPECT_PARENT: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq"],
+    check: function (payload) {
+      return isSandboxRenderSeq(payload.renderSeq);
+    }
+  },
+
+
+  /* editId 가 없으면 "고른 요소가 없다" — 둘 다 false 로 본다 */
+
+  IMORY_INSPECT_CAPS: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq", "editId", "movable", "textEditable"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        (payload.editId === undefined || isSandboxInspectEditId(payload.editId)) &&
+        typeof payload.movable === "boolean" &&
+        typeof payload.textEditable === "boolean"
+      );
+    }
+  },
+
+
+  IMORY_INSPECT_TEXT: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "phase", "editId", "text"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        SANDBOX_INSPECT_TEXT_PHASES.indexOf(payload.phase) !== -1 &&
+        isSandboxInspectEditId(payload.editId) &&
+        isSandboxInspectText(payload.text)
+      );
+    }
+  },
+
+
+  IMORY_INSPECT_DRAG: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "phase", "x", "y"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        SANDBOX_INSPECT_DRAG_PHASES.indexOf(payload.phase) !== -1 &&
+        isSandboxInspectCoord(payload.x) &&
+        isSandboxInspectCoord(payload.y)
+      );
+    }
+  },
+
+
+  /*
+    clear:true 면 그것 하나만(다른 칸이 같이 오면 거부). 아니면
+    editId 가 반드시 있고, text / layoutX / layoutY 중 하나 이상.
+  */
+
+  IMORY_INSPECT_PREVIEW: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq", "editId", "text", "layoutX", "layoutY", "clear"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (payload.clear !== undefined) {
+        return (
+          payload.clear === true &&
+          payload.editId === undefined &&
+          payload.text === undefined &&
+          payload.layoutX === undefined &&
+          payload.layoutY === undefined
+        );
+      }
+
+      if (!isSandboxInspectEditId(payload.editId)) {
+        return false;
+      }
+
+      if (
+        payload.text === undefined &&
+        payload.layoutX === undefined &&
+        payload.layoutY === undefined
+      ) {
+        return false;
+      }
+
+      return (
+        (payload.text === undefined || isSandboxInspectText(payload.text)) &&
+        (payload.layoutX === undefined || isSandboxInspectRatio(payload.layoutX)) &&
+        (payload.layoutY === undefined || isSandboxInspectRatio(payload.layoutY))
+      );
+
     }
   }
 
@@ -1090,9 +1400,13 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_SCRIPT_ERROR_CODES,
     SANDBOX_INSPECT_ERROR_CODES,
     SANDBOX_INSPECT_MAX_COORD,
+    SANDBOX_INSPECT_MAX_TEXT_CHARS,
+    SANDBOX_INSPECT_MAX_CANDIDATES,
     isSandboxInspectEditId,
     isSandboxInspectRect,
     isSandboxInspectTarget,
+    isSandboxInspectMetrics,
+    isSandboxInspectCandidate,
     isSandboxHeight,
     isSandboxRenderSeq,
     isSandboxTemplate,

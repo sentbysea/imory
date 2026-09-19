@@ -355,14 +355,18 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
   (INSPECT_MODE / INSPECT_PICK / INSPECT_HOVER / INSPECT_SELECT /
    INSPECT_RECTS / INSPECT_ERROR — 여섯 같지만 MODE 가 지시문의
    START·STOP 둘을 겸한다).
+  SANDBOX-SELECT-PARITY-1 에서 직접 조작의 일곱이 늘어 스물셋이다
+  (INSPECT_CANDIDATES / _CHOOSE / _PARENT / _CAPS / _TEXT / _DRAG /
+   _PREVIEW — native Preview 의 preview:inspect-pick / -text / -drag /
+   inspector-caps / -choose / -parent / inspect-preview 와 한 짝씩).
 
   이 수를 못 박아 두는 것은 "메시지가 조용히 늘지 않는다"를
   지키기 위해서다 — 늘리려면 이 줄을 고쳐야 하고, 고치는 사람은
   그때 새 메시지의 검증을 함께 보게 된다.
 */
 
-check("[msg] 이번 라운드가 아는 type 은 정확히 열여섯이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 16,
+check("[msg] 이번 라운드가 아는 type 은 정확히 스물셋이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 23,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -2061,6 +2065,146 @@ check("[inspect] ★ 식별자 형태가 sanitizer 와 같다",
     const bad = ["0e", "", "a".repeat(65), "e0 1", 'e"]', "e0/1"];
     return good.every(protocol.isSandboxInspectEditId) &&
       bad.every(v => !protocol.isSandboxInspectEditId(v));
+  })());
+
+
+/* =========================================================
+   [parity] SANDBOX-SELECT-PARITY-1 — 직접 조작 메시지
+
+   무엇을 보는가: 새 일곱 메시지가 **어디까지만** 실을 수 있는가.
+   프레임 → 부모는 식별자 · 태그 · 사각형 · 문구 · 좌표뿐이고,
+   부모 → 프레임은 식별자 · 순번 · 참/거짓 · 문구 · 비율뿐이다.
+   selector · HTML · CSS 문자열을 끼우면 봉투 단계에서 떨어진다.
+========================================================== */
+
+console.log("\n[parity] 직접 조작 메시지 (SANDBOX-SELECT-PARITY-1)");
+
+const parityToFrame = (type, payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: PARENT_WIN,
+      data: protocol.buildSandboxMessage(type, payload, 11)
+    },
+    frameExpect
+  );
+
+const okCandidate = { editId: "e0-1", tagName: "h1", rect: okRect };
+
+check("[parity] 정상 CANDIDATES 를 부모가 받는다",
+  inspectOk("IMORY_INSPECT_CANDIDATES", {
+    contract: 1, renderSeq: 3, point: { x: 10, y: 20 },
+    candidates: [okCandidate, { ...okCandidate, editId: "e0-2", current: true }, { ...okCandidate, editId: "e0", outer: true }]
+  }));
+
+check("[parity] ★ 후보에 class/selector/html 을 끼우면 거부된다",
+  ["className", "selector", "html", "path"].every((key) =>
+    inspectReason("IMORY_INSPECT_CANDIDATES", {
+      contract: 1, renderSeq: 3, point: { x: 1, y: 1 },
+      candidates: [{ ...okCandidate, [key]: "x" }]
+    }) === "bad-payload-value"),
+  "후보 한 칸은 식별자 · 태그 · 사각형 · outer · current 뿐이다");
+
+check("[parity] ★ 후보가 없거나 일곱을 넘으면 거부된다",
+  inspectReason("IMORY_INSPECT_CANDIDATES",
+    { contract: 1, renderSeq: 3, point: { x: 1, y: 1 }, candidates: [] }) === "bad-payload-value" &&
+  inspectReason("IMORY_INSPECT_CANDIDATES", {
+    contract: 1, renderSeq: 3, point: { x: 1, y: 1 },
+    candidates: Array.from({ length: 8 }, (_, i) => ({ ...okCandidate, editId: "e" + i }))
+  }) === "bad-payload-value");
+
+check("[parity] ★ SELECT 의 metrics 는 숫자 넷뿐이다",
+  inspectOk("IMORY_INSPECT_SELECT", {
+    contract: 1, renderSeq: 3, editId: "e0-1", tagName: "div", rect: okRect,
+    metrics: { width: 100, height: 40, parentWidth: 600, parentHeight: 300 }
+  }) &&
+  inspectReason("IMORY_INSPECT_SELECT", {
+    contract: 1, renderSeq: 3, editId: "e0-1", tagName: "img", rect: okRect,
+    metrics: { width: 100, height: 40, parentWidth: 600, parentHeight: 300, naturalWidth: 9 }
+  }) === "bad-payload-value" &&
+  inspectReason("IMORY_INSPECT_SELECT", {
+    contract: 1, renderSeq: 3, editId: "e0-1", tagName: "div", rect: okRect,
+    metrics: { width: 100, height: 40, parentWidth: -1, parentHeight: 300 }
+  }) === "bad-payload-value");
+
+check("[parity] 정상 TEXT 를 부모가 받는다 (네 단계)",
+  ["begin", "input", "commit", "cancel"].every((phase) =>
+    inspectOk("IMORY_INSPECT_TEXT", { contract: 1, renderSeq: 3, phase, editId: "e0-1", text: "새 문구\n둘째 줄" })));
+
+check("[parity] ★ TEXT 는 모르는 단계 · 상한 넘는 문구 · 식별자 없음을 거부한다",
+  inspectReason("IMORY_INSPECT_TEXT", { contract: 1, renderSeq: 3, phase: "html", editId: "e0-1", text: "x" }) === "bad-payload-value" &&
+  inspectReason("IMORY_INSPECT_TEXT", {
+    contract: 1, renderSeq: 3, phase: "commit", editId: "e0-1",
+    text: "x".repeat(protocol.SANDBOX_INSPECT_MAX_TEXT_CHARS + 1)
+  }) === "bad-payload-value" &&
+  inspectReason("IMORY_INSPECT_TEXT", { contract: 1, renderSeq: 3, phase: "commit", text: "x" }) === "bad-payload-value");
+
+check("[parity] 정상 DRAG 를 부모가 받고, NaN 좌표는 거부한다",
+  inspectOk("IMORY_INSPECT_DRAG", { contract: 1, renderSeq: 3, phase: "move", x: 12.5, y: 40 }) &&
+  inspectReason("IMORY_INSPECT_DRAG", { contract: 1, renderSeq: 3, phase: "move", x: NaN, y: 40 }) === "bad-payload-value");
+
+check("[parity] ★ 부모는 CHOOSE/PARENT/CAPS/PREVIEW 를 받지 않는다 (방향)",
+  ["IMORY_INSPECT_CHOOSE", "IMORY_INSPECT_PARENT", "IMORY_INSPECT_CAPS", "IMORY_INSPECT_PREVIEW"].every((type) =>
+    inspectReason(type, { contract: 1, renderSeq: 3 }) === "wrong-direction"),
+  "저자 JS 가 부모에게 지시를 보낼 수 없다");
+
+check("[parity] ★ 프레임은 CANDIDATES/TEXT/DRAG 를 받지 않는다 (방향)",
+  ["IMORY_INSPECT_CANDIDATES", "IMORY_INSPECT_TEXT", "IMORY_INSPECT_DRAG"].every((type) =>
+    parityToFrame(type, { contract: 1, renderSeq: 3 }).reason === "wrong-direction"));
+
+check("[parity] 정상 CHOOSE / PARENT / CAPS 를 프레임이 받는다",
+  parityToFrame("IMORY_INSPECT_CHOOSE", { contract: 1, renderSeq: 3, index: 2 }).ok === true &&
+  parityToFrame("IMORY_INSPECT_PARENT", { contract: 1, renderSeq: 3 }).ok === true &&
+  parityToFrame("IMORY_INSPECT_CAPS", { contract: 1, renderSeq: 3, editId: "e0-1", movable: true, textEditable: false }).ok === true &&
+  parityToFrame("IMORY_INSPECT_CAPS", { contract: 1, renderSeq: 3, movable: false, textEditable: false }).ok === true);
+
+check("[parity] ★ CHOOSE 순번이 정수 범위가 아니면 거부된다",
+  [-1, 7, 1.5, "0"].every((index) =>
+    parityToFrame("IMORY_INSPECT_CHOOSE", { contract: 1, renderSeq: 3, index }).reason === "bad-payload-value"));
+
+check("[parity] ★ CAPS 에 selector 를 끼울 수 없다",
+  parityToFrame("IMORY_INSPECT_CAPS", { contract: 1, renderSeq: 3, editId: '[x]"', movable: true, textEditable: true }).reason === "bad-payload-value" &&
+  parityToFrame("IMORY_INSPECT_CAPS", { contract: 1, renderSeq: 3, movable: "yes", textEditable: true }).reason === "bad-payload-value");
+
+check("[parity] 정상 PREVIEW (글자 / 좌표 / 해제) 를 프레임이 받는다",
+  parityToFrame("IMORY_INSPECT_PREVIEW", { contract: 1, renderSeq: 3, editId: "e0-1", text: "임시" }).ok === true &&
+  parityToFrame("IMORY_INSPECT_PREVIEW", { contract: 1, renderSeq: 3, editId: "e0-1", layoutX: 0.25, layoutY: 1 }).ok === true &&
+  parityToFrame("IMORY_INSPECT_PREVIEW", { contract: 1, renderSeq: 3, clear: true }).ok === true);
+
+check("[parity] ★ PREVIEW 는 CSS 를 받지 않는다 (모르는 키 · 범위 밖 비율 · 빈 지시)",
+  /* buildSandboxMessage 는 모르는 키를 싣지도 않는다 — 봉투를 직접 만든다 */
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: PARENT_WIN,
+      data: {
+        imory: 1, type: "IMORY_INSPECT_PREVIEW", seq: 12,
+        payload: { contract: 1, renderSeq: 3, editId: "e0-1", css: "position:fixed" }
+      }
+    },
+    frameExpect
+  ).reason === "unknown-payload-key" &&
+  parityToFrame("IMORY_INSPECT_PREVIEW", { contract: 1, renderSeq: 3, editId: "e0-1", layoutX: 1.5 }).reason === "bad-payload-value" &&
+  parityToFrame("IMORY_INSPECT_PREVIEW", { contract: 1, renderSeq: 3, editId: "e0-1", layoutX: "0.5" }).reason === "bad-payload-value" &&
+  parityToFrame("IMORY_INSPECT_PREVIEW", { contract: 1, renderSeq: 3, editId: "e0-1" }).reason === "bad-payload-value" &&
+  parityToFrame("IMORY_INSPECT_PREVIEW", { contract: 1, renderSeq: 3, clear: true, text: "x" }).reason === "bad-payload-value");
+
+check("[parity] ★ 프레임의 직접 조작 파일은 studio/* 를 로드하지 않고 순위 규칙을 복제하지 않는다",
+  (() => {
+    const src = fs.readFileSync(path.join(ROOT, "skin", "sandbox", "skin-sandbox-inspect-direct.js"), "utf8");
+    return !/import\s|importScripts|\/studio\//.test(src) &&
+      /pickInspectableAtPoint\(/.test(src) &&
+      !/function\s+inspectorSelectionRank/.test(src) &&
+      !/innerHTML|outerHTML|insertAdjacentHTML/.test(src);
+  })(),
+  "순위는 skin/skin-inspect-target.js 하나 · HTML 을 쓰지 않는다");
+
+check("[parity] ★ frame.html · allowlist 가 새 파일을 inspector 보다 먼저 싣는다",
+  (() => {
+    const html = fs.readFileSync(path.join(ROOT, "skin", "sandbox", "frame.html"), "utf8");
+    const a = html.indexOf("/skin/sandbox/skin-sandbox-inspect-direct.js");
+    const b = html.indexOf("/skin/sandbox/skin-sandbox-inspect.js");
+    return a > 0 && b > a;
   })());
 
 

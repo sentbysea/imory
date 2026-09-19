@@ -99,7 +99,9 @@ import {
   */
   setSandboxPreviewInspectRelay,
   setSandboxPreviewInspectMode,
-  setSandboxPreviewInspectSelection
+  setSandboxPreviewInspectSelection,
+  forwardSandboxPreviewInspectDirective,
+  refreshSandboxPreviewInspectRects
 } from "./preview-sandbox.js";
 
 const PREVIEW_MSG_RENDER = "preview:render";
@@ -1876,6 +1878,31 @@ window.addEventListener("scroll", scheduleInspectorRects, true);
 window.addEventListener("resize", scheduleInspectorRects);
 
 
+/* SANDBOX-SELECT-PARITY-1 — sandbox 프레임이 화면을 맡고 있으면 이
+   문서가 스크롤돼도 프레임 안 좌표는 그대로다. 마지막 사각형을 지금
+   iframe 자리로 다시 옮겨 올린다(studio/preview/preview-sandbox.js
+   refreshSandboxPreviewInspectRects). 한 프레임에 한 번. */
+let sandboxInspectScrollFrame = 0;
+
+function scheduleSandboxInspectRects() {
+
+  if (!inspectorEnabled || !hasSandboxPreviewFrame() || sandboxInspectScrollFrame) {
+    return;
+  }
+
+  sandboxInspectScrollFrame =
+    window.requestAnimationFrame(() => {
+      sandboxInspectScrollFrame = 0;
+      refreshSandboxPreviewInspectRects();
+    });
+
+}
+
+window.addEventListener("scroll", scheduleSandboxInspectRects, true);
+
+window.addEventListener("resize", scheduleSandboxInspectRects);
+
+
 /* =========================================================
    SANDBOX-6A — 프레임이 올려보낸 inspect 결과를 Studio 로
 
@@ -2141,6 +2168,14 @@ window.addEventListener("message", (event) => {
 
     return;
 
+  }
+
+  /* SANDBOX-SELECT-PARITY-1 — sandbox 프레임이 화면을 맡고 있으면
+     직접 조작 지시(caps · choose · parent · 임시 미리보기)는 그
+     프레임으로 간다(studio/preview/preview-sandbox.js). 이 문서에는
+     고를 요소가 없다. */
+  if (hasSandboxPreviewFrame() && forwardSandboxPreviewInspectDirective(data)) {
+    return;
   }
 
   /* DIRECT-UX-1 — preview:inspector-caps / -choose / -parent

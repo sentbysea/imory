@@ -208,8 +208,16 @@ function hideStudioInspectorPickMenu() {
     studioInspectorPickMenu.hidden = true;
   }
 
-  if (studioInspectorHoverBox && !studioInspectorRemoteOverlay) {
-    paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+  if (studioInspectorHoverBox) {
+
+    /* sandbox 프레임은 hover 테두리를 프레임 안에서 그린다 — 메뉴가
+       잠깐 비춘 자리만 걷는다 */
+    if (studioInspectorRemoteOverlay) {
+      studioInspectorHoverBox.hidden = true;
+    } else {
+      paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+    }
+
   }
 
 }
@@ -312,14 +320,14 @@ function showStudioInspectorPickMenu(data) {
 
     }
 
-    /* 칸 위에 올리면 그 후보의 자리를 Preview 에 비춘다 */
+    /* 칸 위에 올리면 그 후보의 자리를 Preview 에 비춘다. sandbox 에서도
+       같다 — 메뉴는 이 문서의 것이고 후보 좌표는 이미 이 문서의 것으로
+       옮겨져 왔다(메뉴가 닫히면 걷는다). */
     const preview = () => {
-      if (!studioInspectorRemoteOverlay) {
-        paintStudioInspectorBox(
-          studioInspectorHoverBox,
-          entry.candidate.visibleRect || entry.candidate.rect
-        );
-      }
+      paintStudioInspectorBox(
+        studioInspectorHoverBox,
+        entry.candidate.visibleRect || entry.candidate.rect
+      );
     };
 
     item.addEventListener("pointerenter", preview);
@@ -793,7 +801,7 @@ function commitStudioInspectorHidden(hide) {
   const resolved =
     describeStudioInspectorSelection();
 
-  if (!resolved || resolved.info.isProtectedRegion || studioInspectorRemoteOverlay) {
+  if (!resolved || resolved.info.isProtectedRegion) {
     return false;
   }
 
@@ -904,7 +912,7 @@ function commitStudioInspectorOrder(direction) {
   const order =
     studioInspectorOrderInfo(resolved);
 
-  if (!order.mode || studioInspectorRemoteOverlay) {
+  if (!order.mode) {
     return false;
   }
 

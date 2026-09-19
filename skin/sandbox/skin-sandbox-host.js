@@ -1695,6 +1695,12 @@ async function renderSandboxPageIntoHandle(handle, opts) {
         handle.handlers[TYPES.INSPECT_RECTS] = inspectRelay("rects");
         handle.handlers[TYPES.INSPECT_ERROR] = inspectRelay("error");
 
+        /* SANDBOX-SELECT-PARITY-1 — 겹친 후보 · 더블클릭 글자 · 본체
+           끌기. 같은 관문(지금 화면의 것인가)만 지나고 해석하지 않는다. */
+        handle.handlers[TYPES.INSPECT_CANDIDATES] = inspectRelay("candidates");
+        handle.handlers[TYPES.INSPECT_TEXT] = inspectRelay("text");
+        handle.handlers[TYPES.INSPECT_DRAG] = inspectRelay("drag");
+
 
         /*
           ★ SANDBOX-2 — 이동 요청.
@@ -2340,6 +2346,99 @@ export function sendSandboxInspectPick(handle, editId) {
     handle.TYPES.INSPECT_PICK,
     payload
   );
+
+}
+
+
+/* =========================================================
+   SANDBOX-SELECT-PARITY-1 — 직접 조작 지시
+
+   sendSandboxInspectChoose(handle, index)   겹친 요소 메뉴의 칸
+   sendSandboxInspectParent(handle)          바깥 영역 선택
+   sendSandboxInspectCaps(handle, caps)      끌 수 있나 · 글자를 고칠 수 있나
+   sendSandboxInspectPreview(handle, value)  임시 미리보기(글자 · 자유 배치 좌표)
+
+   ★ 넷 다 **값을 새 리터럴로 옮겨** 보낸다 — 호출자의 객체를 그대로
+     넘기지 않는다(모르는 키가 섞여 프레임에 가지 않게). 프로토콜이
+     한 번 더 거른다.
+========================================================== */
+
+function sendInspectDirective(handle, type, payload) {
+
+  if (!handle || handle.destroyed || !handle.TYPES || !handle.renderSeq) {
+    return false;
+  }
+
+  return sendToSandboxFrame(
+    handle,
+    handle.TYPES[type],
+    Object.assign({ contract: 1, renderSeq: handle.renderSeq }, payload)
+  );
+
+}
+
+
+export function sendSandboxInspectChoose(handle, index) {
+
+  if (!Number.isInteger(index) || index < 0) {
+    return false;
+  }
+
+  return sendInspectDirective(handle, "INSPECT_CHOOSE", { index: index });
+
+}
+
+
+export function sendSandboxInspectParent(handle) {
+
+  return sendInspectDirective(handle, "INSPECT_PARENT", {});
+
+}
+
+
+export function sendSandboxInspectCaps(handle, caps) {
+
+  const payload = {
+    movable: !!(caps && caps.movable === true),
+    textEditable: !!(caps && caps.textEditable === true)
+  };
+
+  if (caps && typeof caps.editId === "string" && caps.editId) {
+    payload.editId = caps.editId;
+  }
+
+  return sendInspectDirective(handle, "INSPECT_CAPS", payload);
+
+}
+
+
+export function sendSandboxInspectPreview(handle, value) {
+
+  if (!value || value.clear === true) {
+    return sendInspectDirective(handle, "INSPECT_PREVIEW", { clear: true });
+  }
+
+  if (typeof value.editId !== "string" || !value.editId) {
+    return false;
+  }
+
+  const payload = { editId: value.editId };
+
+  if (typeof value.text === "string") {
+    payload.text = value.text;
+  }
+
+  ["layoutX", "layoutY"].forEach((key) => {
+    if (typeof value[key] === "number" && Number.isFinite(value[key])) {
+      payload[key] = Math.min(1, Math.max(0, value[key]));
+    }
+  });
+
+  if (payload.text === undefined && payload.layoutX === undefined && payload.layoutY === undefined) {
+    return false;
+  }
+
+  return sendInspectDirective(handle, "INSPECT_PREVIEW", payload);
 
 }
 

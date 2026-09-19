@@ -811,8 +811,8 @@ function renderStudioInspectorPopover() {
     resolved.info.capabilities.size === true &&
 
     /* SANDBOX-6A — 프레임 안 이미지는 크기 핸들을 달지 않는다.
-       실측값(자연 크기·부모 안쪽 폭)이 오지 않으므로 슬라이더도
-       모서리 드래그도 기준을 세울 수 없다(아래 directEditBlocked). */
+       실측값(자연 크기)이 오지 않으므로 슬라이더도 모서리 드래그도
+       기준을 세울 수 없다(아래 sandboxImageNote). */
     !studioInspectorRemoteOverlay;
 
   studioInspectorMovable =
@@ -843,26 +843,33 @@ function renderStudioInspectorPopover() {
   }
 
   /* =====================================================
-     SANDBOX-6A — sandbox 스킨에서는 직접 편집을 열지 않는다
+     SANDBOX-6A → SANDBOX-SELECT-PARITY-1 — sandbox 스킨의 직접 편집
 
-     "✦ AI 수정"은 그대로 된다(선택 하나만 있으면 되므로). 직접
-     편집은 다르다 — 텍스트 임시 미리보기 · 이미지 너비 · 자르기는
-     전부 **프레임 안 DOM 의 실측값**(자연 크기 · 부모 안쪽 폭 ·
-     자르기 래퍼)과, 확정 전에 그 DOM 을 임시로 바꾸는 채널을
-     필요로 한다. 그것들은 아직 프레임 계약에 없다.
+     처음(6A)에는 전부 잠갔다. 이제 프레임 계약에 임시 미리보기
+     (글자 · 자유 배치 좌표)와 끌기 기준(부모 안쪽 폭/높이)이 있어
+     native 와 **같은 항목**이 열린다 — 확정은 언제나 이 문서의
+     draft 에 대한 patch 이므로 프레임이 무엇을 보내든 저장 경로는
+     같다.
 
-     그래서 "되는 척"하지 않고 버튼을 잠그고 이유를 적는다 —
-     고쳤는데 저장되지 않는 상태를 만들지 않는다.
-     (IMORY_SANDBOX_SKIN_DESIGN.md 남은 차이)
+     여전히 열지 않는 것은 **이미지 크기 조절과 자르기** 둘이다.
+     이미지 자연 크기 · 자르기 래퍼 실측과, 드래그 중 너비/구도를
+     바꾸는 임시 채널이 프레임 계약에 없다(buildStudioInspectorControls
+     가 그 두 칸을 빼고, 크기 핸들도 그리지 않는다). 이미지일 때만
+     그 이유를 한 줄 적는다.
+     (IMORY_SANDBOX_SKIN_DESIGN.md §S)
   ====================================================== */
 
   const directEditBlocked =
-    studioInspectorRemoteOverlay;
+    false;
+
+  const sandboxImageNote =
+    studioInspectorRemoteOverlay && resolved.info.kind === "image" &&
+    (resolved.info.capabilities.size === true || resolved.info.capabilities.crop === true)
+      ? "sandbox 스킨에서는 이미지 크기와 자르기를 여기서 바꿀 수 없어요. AI로 수정이나 CODE 로 고칠 수 있어요."
+      : "";
 
   const note =
-    directEditBlocked
-      ? "sandbox 스킨은 여기서 직접 수정할 수 없어요. 고른 요소는 AI로 수정이나 CODE 로 고칠 수 있어요."
-      : studioInspectorNoteFor(resolved.info);
+    [studioInspectorNoteFor(resolved.info), sandboxImageNote].filter(Boolean).join(" ");
 
   studioInspectorNote.textContent =
     note;
@@ -901,8 +908,11 @@ function renderStudioInspectorPopover() {
 
   if (studioInspectorEditingOpen && !directEditBlocked) {
 
+    /* sandbox 프레임 안 이미지는 크기 · 자르기 칸을 그리지 않는다
+       (위 sandboxImageNote 주석) */
     const controls =
-      buildStudioInspectorControls(resolved.info, resolved);
+      buildStudioInspectorControls(resolved.info, resolved)
+        .filter((spec) => !(studioInspectorRemoteOverlay && (spec.control === "size" || spec.control === "crop")));
 
     if (!controls.length) {
 

@@ -420,6 +420,56 @@ function setStudioInspectorSelection(editId, tagName, rect, metrics, visibleRect
 
 
 /* =========================================================
+   studioInspectorAcceptRemoteText(data) -> boolean
+
+   SANDBOX-SELECT-PARITY-1. sandbox 프레임 realm 에서는 저자 JS 가
+   돈다 — 그 코드가 글자 편집 메시지를 **쏠 수 있다고 가정한다**.
+   그래서 프레임의 글자 확정은 다음을 모두 만족할 때만 받는다:
+
+     1. "begin" 이 먼저 왔다 — 지금 고른 요소이고, draft 에서 그
+        요소의 글자를 고칠 수 있다(capabilities.text).
+     2. input / commit / cancel 은 그 begin 과 같은 식별자다.
+
+   그래도 확정되는 것은 "고른 정적 글자 하나의 textContent"뿐이고
+   (commitStudioInspectorText), ↶ 한 칸으로 되돌릴 수 있다. HTML ·
+   속성 · 다른 요소에는 닿지 않는다.
+========================================================== */
+
+let studioInspectorRemoteTextEditId = null;
+
+
+function studioInspectorAcceptRemoteText(data) {
+
+  if (!studioInspectorSelection || data.editId !== studioInspectorSelection.editId) {
+    return false;
+  }
+
+  if (data.phase === "begin") {
+
+    const resolved =
+      describeStudioInspectorSelection();
+
+    studioInspectorRemoteTextEditId =
+      (resolved && resolved.info.capabilities.text === true) ? data.editId : null;
+
+    return !!studioInspectorRemoteTextEditId;
+
+  }
+
+  if (studioInspectorRemoteTextEditId !== data.editId) {
+    return false;
+  }
+
+  if (data.phase === "commit" || data.phase === "cancel") {
+    studioInspectorRemoteTextEditId = null;
+  }
+
+  return true;
+
+}
+
+
+/* =========================================================
    iframe -> Studio 메시지 (studio-preview.js가 그대로 넘겨준다)
 
    origin/source는 그쪽에서 이미 확인했다 — 여기서는 shape만 본다.
@@ -491,9 +541,18 @@ function handleStudioInspectorMessage(data) {
      (studio/preview/preview-inspect-direct.js)
   ====================================================== */
 
+  /* SANDBOX-SELECT-PARITY-1 — sandbox 프레임(remote)에서 온 것도 같은
+     함수를 탄다. 한 겹씩 더 거르는 자리:
+       pick  메뉴는 draft 에 실제로 있는 식별자로만 칸을 만든다
+             (showStudioInspectorPickMenu).
+       text  이 문서가 "그 요소를 고치기 시작했다"를 받아 둔 경우에만
+             입력 · 확정을 받는다(아래 studioInspectorRemoteTextEditId).
+             확정은 draft 에서 capabilities.text 를 한 번 더 본다.
+       drag  draft 에서 정한 studioInspectorMovable 이 참일 때만. */
+
   if (data.type === "preview:inspect-pick") {
 
-    if (!studioInspectorRemoteOverlay && typeof showStudioInspectorPickMenu === "function") {
+    if (typeof showStudioInspectorPickMenu === "function") {
       showStudioInspectorPickMenu(data);
     }
 
@@ -503,7 +562,11 @@ function handleStudioInspectorMessage(data) {
 
   if (data.type === "preview:inspect-text") {
 
-    if (!studioInspectorRemoteOverlay && typeof handleStudioInspectorInlineText === "function") {
+    if (studioInspectorRemoteOverlay && !studioInspectorAcceptRemoteText(data)) {
+      return;
+    }
+
+    if (typeof handleStudioInspectorInlineText === "function") {
       handleStudioInspectorInlineText(data);
     }
 
@@ -513,7 +576,7 @@ function handleStudioInspectorMessage(data) {
 
   if (data.type === "preview:inspect-drag") {
 
-    if (!studioInspectorRemoteOverlay && typeof handleStudioInspectorFrameDrag === "function") {
+    if (typeof handleStudioInspectorFrameDrag === "function") {
       handleStudioInspectorFrameDrag(data);
     }
 

@@ -3,14 +3,15 @@
 **상태: 설계(§A~§F) + 구현 기록(§G SANDBOX-0 · §H SANDBOX-1 · §I 켜기 ·
 §J SANDBOX-2 · §K SANDBOX-3 · §L SANDBOX-4 · §M SANDBOX-3.1 ·
 §O SANDBOX-5A 저자 JS · §P SANDBOX-5B 화면 전환 수명 ·
-§Q SANDBOX-6A Studio Select · §R SANDBOX-6A 마무리).**
+§Q SANDBOX-6A Studio Select · §R SANDBOX-6A 마무리 ·
+§S SANDBOX-SELECT-PARITY-1 Select 규칙 통일).**
 
-> **DIRECT-UX-1 과의 차이 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md) §남은 차이.** native Preview 의 Select 는 선택 우선순위(자리로 고르기) · 겹친 요소 메뉴 · 바깥 영역 · 더블클릭 글자 편집 · 본체 끌기를 쓴다. sandbox 프레임 안 Select(§Q)는 아직 예전 hit-test 규칙이고, 직접 편집은 원래대로 잠겨 있다("직접 수정" 탭 버튼이 없어져 잠김은 항목이 그려지지 않는 것 + 안내 문구로 보인다).
+> **DIRECT-UX-1 과의 차이 → §S 에서 닫았다.** sandbox 프레임 안 Select 도 native Preview 와 같은 선택 우선순위(자리로 고르기) · 겹친 요소 메뉴 · 바깥 영역 · 더블클릭 글자 편집 · 본체 끌기 · 패널 항목 · Quick Bar 를 쓴다. **남은 차이는 이미지 크기 조절과 자르기 둘뿐**이다(§S-7).
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
 §G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2) · §K(SANDBOX-3) ·
 §L(SANDBOX-4) · §M(SANDBOX-3.1) · §O(SANDBOX-5A) · §P(SANDBOX-5B) ·
-§Q·§R(SANDBOX-6A)에만
+§Q·§R(SANDBOX-6A) · §S(SANDBOX-SELECT-PARITY-1)에만
 적혀 있다.** 섞어
 읽지 말 것 (CLAUDE.md §5 — "현재 구현 / 앞으로 지켜야 할 원칙 /
 남은 차이"를 구분한다).
@@ -30,7 +31,7 @@
 | `IMORY_NAVIGATE` | §D-2: `{ href }` 를 보내고 부모가 파싱한다 | **href 를 보내지 않는다.** 부모가 발급한 정수 `navId` 하나뿐 (§J-2) |
 | CATEGORY / POST | §E: SANDBOX-3 | **SANDBOX-2 에서 함께 했다** (§J-4) |
 | GALLERY / BANNER / HIGHLIGHTS | §E: 뒤로 미룸 | **SANDBOX-3 에서 했다** (§K). FOLDER 만 남았다 |
-| Studio Preview | §E SANDBOX-4: "중첩하거나 Studio 가 직접 띄운다 — 범위가 크니 재설계" | **중첩을 골랐다** (§L). Inspector 는 그때 범위에서 뺐다가 **§Q(SANDBOX-6A)에서 되살렸다** — 직접 편집만 아직 잠겨 있다 |
+| Studio Preview | §E SANDBOX-4: "중첩하거나 Studio 가 직접 띄운다 — 범위가 크니 재설계" | **중첩을 골랐다** (§L). Inspector 는 그때 범위에서 뺐다가 **§Q(SANDBOX-6A)에서 되살렸고**, 직접 편집은 **§S 에서 열었다**(이미지 크기 · 자르기만 잠김) |
 | 본문 inline style | §D-4 · §H-7: "CSSOM 쓰기는 막히지 않으므로 style-src-attr 를 열 필요가 없다" | SANDBOX-2 가 `setAttribute("style", …)` 와 `innerHTML` 의 style 속성을 더하면서 **그 전제가 깨졌다**. CSP 를 넓히는 대신 선언을 검증해 nonce `<style>` 로 옮겼다 (§M) |
 | 저자 JS 실행 | §C · §E SANDBOX-5 · §G-6 TODO: `script-src` 에 `blob:` 을 더해 Blob URL ES 모듈로 주입한다 | **CSP 를 한 글자도 넓히지 않았다.** 이미 있던 `'nonce-…'` 가 inline script 에도 적용되므로, nonce 를 단 classic `script` 요소의 `textContent` 로 실행한다 (§O-3) |
 | `js` 필드 | §C: 스키마에만 두고 실행하지 않는다 | **SANDBOX-5A 에서 실행된다.** 단 `test1` + 전용 kill switch 가 켜졌을 때만 (§O-5) |
@@ -3291,6 +3292,10 @@ allowlist 에 적힌 것뿐이고(`core/lib/skin-sandbox-server.js`), 그 목록
 
 ### Q-11. 아직 안 되는 것 — 직접 편집 / 자르기
 
+> **변경됨 → §S.** 임시 미리보기 채널(글자 · 자유 배치 좌표)과 끌기 기준
+> (부모 안쪽 폭/높이)을 계약에 더해 직접 편집을 열었다. 잠긴 채 남은 것은
+> **이미지 크기 조절과 자르기**뿐이다(§S-7). 아래는 6A 당시의 기록이다.
+
 sandbox 에서 Select 는 되지만 **직접 편집(텍스트 내용 · 이미지 크기 ·
 자르기)은 열지 않았다.** 그 컨트롤들은 둘을 필요로 한다:
 
@@ -3540,7 +3545,164 @@ Studio 를 그대로 연다. 안내 요소의 마크업은 남겨 두되 어떤 
   보지 않으므로 편집으로 내용이 바뀌어도 상관없고, Undo 로 id 가 다시
   임시가 되면 선택 시점 지문과 대조된다(그 시점 구조로 되돌아가므로
   맞는다). 갱신하면 오히려 그 Undo 경로가 틀린다.
-- **직접 편집 · 자르기**의 sandbox 대응은 그대로 남는다(§Q-11).
+- ~~**직접 편집 · 자르기**의 sandbox 대응은 그대로 남는다(§Q-11).~~ →
+  §S 에서 직접 편집을 열었다. 이미지 크기 · 자르기만 남았다(§S-7).
+
+---
+
+## S. SANDBOX-SELECT-PARITY-1 (2026-09-19) — sandbox 스킨의 Select 를 일반 Preview 와 같게
+
+### S-1. 조사 — 두 경로가 어디서 갈라졌나
+
+| | native Preview (DIRECT-UX-1) | sandbox 프레임 (6A 까지) |
+| --- | --- | --- |
+| hit-test | `preview-inspect-direct.js` → `pickInspectableAtPoint()`(자리의 요소 전부 → 순위) | `skin-sandbox-inspect.js` → `resolveInspectableAncestor()`(눌린 노드의 가장 가까운 요소) — **예전 규칙** |
+| 빈 곳(래퍼만) | 선택 해제 | 아무 일도 안 함(`not-inspectable`) |
+| 겹친 후보 | `preview:inspect-pick` → Studio 메뉴 → `preview:inspector-choose` | 없음(Studio 가 `remote` 면 메뉴를 막음) |
+| 바깥 영역 | `preview:inspector-parent` | Studio 버튼은 보이지만 메시지가 프레임에 닿지 않음(native 문서만 받음) |
+| 더블클릭 편집 | `preview:inspect-text` + `inspector-caps` | 없음 |
+| 본체 끌기 | `preview:inspect-drag` + `metrics` | 없음 · `metrics:null` |
+| 임시 미리보기 | `preview:inspect-preview`(글자 · 너비 · 자르기 · 자유 배치 좌표) | 없음 |
+| 패널 항목 · Quick Bar | 종류별 항목 · 숨기기 · 앞으로/뒤로 · 이미지 변경 | 항목 전부 숨김 · 숨기기/순서/이미지 버튼 숨김(`studioInspectorRemoteOverlay` 가 다 막음) |
+| 이름 | `studio-inspector-names.js`(Studio 가 draft 에서) | **같다** — 이름은 원래부터 Studio 가 식별자로 draft 에서 만든다 |
+| 선택 복원 | `reconcileStudioInspectorSelection()`(§R) | **같다** — 관문이 Studio 문서에 하나다 |
+
+중복된 판정 코드는 없었다 — 순위 규칙은 이미 `skin/skin-inspect-target.js`
+한 파일이었고 프레임도 그 파일을 로드하고 있었다(§Q-8). 프레임이 그 함수를
+**부르지 않았을 뿐**이다. cross-origin 에서 Studio 가 직접 못 읽는 것은
+프레임 DOM 의 겹침(elementsFromPoint) · 사각형 · 부모 안쪽 크기 · 편집 중
+글자 · 포인터 좌표다 — 그래서 그 다섯만 메시지로 옮긴다.
+
+### S-2. 공용화한 것 — 새 엔진은 없다
+
+- **순위 규칙**: 프레임도 `pickInspectableAtPoint()` 를 부른다. 프레임 쪽에만
+  있는 규칙은 하나 — 그 자리의 맨 위 스킨 요소가 `data-imory-region` 안쪽이면
+  예전처럼 아무 일도 하지 않고(§Q-9), 영역 안쪽 요소는 후보에서 뺀다.
+- **이름**: 새 코드 없음. 패널 · 선택 이름표 · hover 이름표 · 겹친 메뉴 ·
+  Quick Bar · AI chip · `selectionContext.label` 이 전부 Studio 의
+  `studio-inspector-names.js` 한 함수다(e2e N1 이 native 와 글자 단위로 대조).
+- **직접 조작**: 프레임 realm 의 손은 `skin/sandbox/skin-sandbox-inspect-direct.js`
+  하나다(native 의 `preview-inspect-direct.js` 와 같은 구조 · 같은 규칙 —
+  4px 끌기 문턱 · 합성 입력은 예전 규칙 · `plaintext-only` · 노드에서 직접 읽는
+  문구 · 크기가 같은 래퍼는 건너뛰는 바깥 영역). sandbox origin 은 `studio/*`
+  를 로드할 수 없어(§Q-8) 파일을 옮겨 쓰지 못했다.
+- **Studio 쪽**: `studioInspectorRemoteOverlay` 로 막던 자리를 걷었다 —
+  겹친 메뉴 · 글자 편집 · 끌기 · 패널 항목 · 숨기기 · 앞으로/뒤로 · 이미지 변경.
+  남은 뜻은 둘이다: "테두리는 프레임이 그린다", "이미지 크기 · 자르기는 없다".
+
+### S-3. 메시지 — 일곱이 늘었다(열여섯 → 스물셋)
+
+native 의 `preview:*` 메시지와 한 짝씩이다. 봉투 · origin · source · 방향 ·
+seq · 알려진 키 · 값 검사는 지금까지와 같은 `validateSandboxMessage()` 이고,
+host 는 `renderSeq` 가 지금 렌더의 것이 아니면 버린다.
+
+| type | 방향 | payload | native 짝 |
+| --- | --- | --- | --- |
+| `IMORY_INSPECT_CANDIDATES` | frame → parent | `{ point:{x,y}, candidates:[{ editId, tagName, rect, outer?, current? }] }` 1~7칸 | `preview:inspect-pick` |
+| `IMORY_INSPECT_CHOOSE` | parent → frame | `{ index }` 0~6 정수 | `preview:inspector-choose` |
+| `IMORY_INSPECT_PARENT` | parent → frame | `{}` | `preview:inspector-parent` |
+| `IMORY_INSPECT_CAPS` | parent → frame | `{ editId?, movable, textEditable }` | `preview:inspector-caps` |
+| `IMORY_INSPECT_TEXT` | frame → parent | `{ phase: begin/input/commit/cancel, editId, text ≤20000자 }` | `preview:inspect-text` |
+| `IMORY_INSPECT_DRAG` | frame → parent | `{ phase: start/move/end/cancel, x, y }` 프레임 좌표 | `preview:inspect-drag` |
+| `IMORY_INSPECT_PREVIEW` | parent → frame | `{ editId, text?, layoutX?, layoutY? }` 또는 `{ clear:true }` | `preview:inspect-preview` 의 글자 · 자유 배치 좌표만 |
+
+그리고 `IMORY_INSPECT_SELECT` · `IMORY_INSPECT_RECTS.selected` 에 `metrics`
+(`width · height · parentWidth · parentHeight` 숫자 넷)가 붙을 수 있다.
+
+**올라가지 않는 것**: HTML · class · selector · computed style · 이미지 자연
+크기 · 사용자/DB 값. **내려가지 않는 것**: CSS 문자열 · 선언 목록 · selector ·
+HTML. 임시 미리보기는 `textContent` 와 `--imory-it-x/y` custom property 를
+CSSOM 으로 쓰는 것뿐이다(§M-3 — CSSOM 쓰기는 CSP 가 막지 않고 style 속성은
+막는다). 가능 여부(끌기 · 글자)는 Studio 가 draft 에서 정해 CAPS 로 내린다 —
+프레임은 판단하지 않는다.
+
+좌표는 preview-sandbox 가 "프레임 뷰포트 + 안쪽 iframe 자리"로 옮기고, 그
+다음은 native 와 같은 `studioInspectorFrameGeometry()`(Mobile 축소 배율 ·
+테두리)다.
+
+### S-4. 위조를 어떻게 거르나(§Q-4 에 더한 것)
+
+프레임 realm 에서는 저자 JS 가 돈다 — 새 메시지도 **쏠 수 있다고 가정한다**.
+
+- 후보(CANDIDATES): Studio 메뉴는 draft 에 실제로 있는 식별자로만 칸을 만든다.
+  칸을 고르면 프레임이 SELECT 를 올리고, 그것은 §Q-4 의 관문을 다시 지난다.
+- 글자(TEXT): Studio 가 **"begin" 을 받아 둔 경우에만** input/commit/cancel 을
+  받는다(`studioInspectorAcceptRemoteText`). begin 은 지금 고른 요소이고 draft
+  에서 `capabilities.text` 일 때만 받는다. 확정은 그래도 기존
+  `commitStudioInspectorText()` 가 한 번 더 거른다. 결과는 "고른 정적 글자
+  하나의 textContent"뿐이고 ↶ 한 칸이다.
+- 끌기(DRAG): draft 에서 정한 `studioInspectorMovable` 이 참일 때만.
+- 부모용 지시(CHOOSE/PARENT/CAPS/PREVIEW)는 방향 검사로 프레임이 부모에게 보낼
+  수 없고, 프레임 realm 이 자기 자신에게 보내도 origin 이 부모가 아니라 버려진다
+  (e2e F6).
+
+### S-5. 선택 복원
+
+새 장치는 없다. 복원의 근거는 §R 의 승격된 id / 지문 세 겹이고 관문은
+`bumpStudioWorkingRevision()` 하나다. 프레임은 렌더 뒤 같은 식별자를 다시 잡고
+(`onRender`), Studio 가 근거를 잃으면 해제를 내려보낸다. 패널 수정 · Undo ·
+Redo · Save · AI · Code · 이미지 변경 뒤 같은 요소가, 지운 요소는 해제가 되는
+것을 e2e `restore` 가 본다. 프레임이 새 realm 으로 바뀌어도(저자 JS) caps 는
+`flushSandboxInspectState()` 가 선택과 함께 다시 내린다.
+
+**함께 고친 버그 — 스크롤하면 이름표가 제자리에 남았다.** 프레임이 보내는
+사각형은 프레임 뷰포트 기준이라 **Preview 문서**가 스크롤돼도 값이 그대로다.
+프레임은 아무것도 다시 보내지 않고, Studio 의 이름표 · Quick Bar 는 옛 자리에
+남았다(native 는 스크롤마다 rects 를 다시 보낸다). preview-sandbox 가 마지막
+사각형을 기억했다가 스크롤 · 리사이즈 때 지금 iframe 자리로 다시 옮겨 올린다
+(`refreshSandboxPreviewInspectRects`). 선택이 없으면 보내지 않는다 — §Q-7 의
+`selected:null` 함정. e2e Z3 는 이 보정을 빼면 실패한다(대조 확인).
+
+### S-6. 지원하는 직접 편집
+
+| 기능 | sandbox |
+| --- | --- |
+| 선택 우선순위 · 빈 곳 해제 · 겹친 요소 메뉴 · 바깥 영역 | 됨 |
+| hover 테두리(프레임 안) · 이름표(Studio) · 손가락/이동/글자 커서 | 됨 |
+| 더블클릭 글자 편집(정적 글자 · 링크 문구) · Esc · Ctrl/⌘+Enter · blur · ↶ 한 칸 | 됨. 바인딩 글자 · 글 본문은 안 열림. 링크는 이동 0 |
+| 패널 항목(글꼴 · 크기 · 굵기 · 색 · 정렬 · 배경 · 여백 · 테두리 · 모서리 · 맞춤 · 정렬 · 표시 · 투명도) · 내용 칸의 임시 미리보기 | 됨 |
+| Quick Bar — 앞으로/뒤로(겹침 · 형제 순서) · 숨기기/보이기 · AI로 수정 · 이미지 변경 | 됨 |
+| 자유 배치 본체 끌기 · ✥ 손잡이 끌기(임시 미리보기 → 놓으면 한 칸) | 됨 |
+| **이미지 너비(슬라이더 · 모서리 핸들) · 자르기** | **안 됨**(§S-7) — 패널이 이유를 한 줄 적는다 |
+
+### S-7. 안전상 · 계약상 지원하지 않은 것
+
+- **이미지 크기 조절 · 자르기.** 이미지 자연 크기 · 자르기 래퍼 실측과, 드래그
+  중 너비 · 구도를 바꾸는 임시 채널(자르기 래퍼를 프레임 DOM 에 만들었다
+  걷는 일)이 필요하다. 래퍼를 프레임 DOM 에 끼우는 것은 "프레임에는 글자와
+  좌표만 내려간다"는 이번 계약 밖이라 열지 않았다. 필요한 계약: `metrics` 에
+  `naturalWidth/Height · loaded · cropped`, PREVIEW 에 `width · ratio · target` 과
+  자르기 선언(`buildInspectorCropDeclarations` 의 결과를 CSSOM 으로만 쓰는 형태).
+- **390px 에서 아래 시트가 Preview 아래쪽을 덮는 문제**는 셸 구조라 이번에
+  바꾸지 않았다(DIRECT-UX-1 §남은 차이 그대로 — 별도 후속).
+
+### S-8. 바꾼 파일
+
+`skin/sandbox/skin-sandbox-inspect-direct.js`(새) · `skin-sandbox-inspect.js` ·
+`skin-sandbox-protocol.js` · `skin-sandbox-frame.js` · `skin-sandbox-host.js` ·
+`frame.html` · `core/lib/skin-sandbox-server.js`(allowlist) ·
+`studio/preview/preview-sandbox.js` · `preview-bridge.js` ·
+`studio/inspector/studio-inspector.js` · `-controls.js` · `-quickbar.js` ·
+`-layout.js`.
+
+### S-9. 검증 (mock e2e — 실제 DB · 배포 확인 아님)
+
+- `node studio/studio-sandbox-select-parity-e2e-test.mjs` — **66/66**
+  (chromium · webkit 둘 다). DIRECT-UX-1 의 `dux` fixture 에 `renderMode:"sandbox"`
+  만 더해 연다. priority · names(native 와 대조) · overlap · text · image ·
+  quickbar · move · restore · preserve(Select 를 끈 공개와 같은 렌더까지) ·
+  zoom(Mobile 축소 · 스크롤) · narrow(390px) · forge.
+- `node skin/sandbox/skin-sandbox-unit-test.mjs` — **278/278**(새 `[parity]` 절).
+- `node studio/studio-sandbox-preview-e2e-test.mjs` — **165/165**. 6A 의 "직접
+  수정이 잠기고 이유가 나온다"를 "항목이 열린다"로 바꿨다(계약 변경).
+  `--only=inspect --browser=webkit` 60/60.
+- `node skin/sandbox/skin-sandbox-e2e-test.mjs` — **568/568**(공개 · CSP ·
+  origin · READY/ACK · nav · 저자 JS 회귀).
+- native 회귀: `studio-direct-ux` 58/58 · `studio-direct-edit` 37/37 ·
+  `studio-selected-ai` 109/109 · `studio-layout` 50/50 · `studio-shell` 61/61 ·
+  `studio-inspector` 의 route 를 뺀 열 절 전부 PASS. route 는 HEAD worktree 에서도
+  같은 자리에서 멈춘다(기존 실패). 전체 실행에서 `B`(hover 상자) 한 번이
+  타이밍으로 떨어졌고 `--only=mode` 단독 두 번 · HEAD 대조에서는 통과했다.
 
 ---
 
@@ -3550,8 +3712,9 @@ Studio 를 그대로 연다. 안내 요소의 마크업은 남겨 두되 어떤 
 - `owner-tools` / `highlight-tools` region을 cross-origin에서 어떻게 채울 것인가
   — SANDBOX-3 이후 이것이 **실제로 눈에 보이는 차이**가 됐다: 프레임 안
   하이라이트 화면은 주인장에게도 읽기 전용이다(§K-6)
-- Studio 의 **직접 편집 / 자르기**의 sandbox 대응 (Select 자체는 §Q 에서
-  됐다) — 실측값 채널과 임시 미리보기 채널이 프레임 계약에 없다
+- Studio 의 **이미지 크기 조절 / 자르기**의 sandbox 대응 (Select 는 §Q,
+  나머지 직접 편집은 §S 에서 됐다) — 이미지 자연 크기와 너비 · 구도 임시
+  미리보기 채널이 프레임 계약에 없다(§S-7)
 - ~~저자 JS를 켤 때의~~ **저자 JS 는 SANDBOX-5A 에서 실행되기 시작했다(§O).**
   남은 것은 둘이다:
   - **origin 전략** — 지금도 단일 frame origin 이고, 켜진 slug 는 `test1`
