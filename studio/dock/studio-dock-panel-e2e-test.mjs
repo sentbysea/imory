@@ -220,8 +220,16 @@ async function panelMessage(page) {
   });
 }
 
+/* STUDIO-SHELL-1 — 설정 패널은 Studio 왼쪽 패널 안에 있다. 여닫기
+   표식(--open)만 보면 패널이 다른 내용을 보여 주는 동안 숨은 채로
+   "열렸다"가 된다 — 실제로 화면에 보이는지까지 본다. */
 const panelIsOpen = (page) =>
-  page.evaluate(() => !!document.querySelector(".dock-panel-overlay--open"));
+  page.evaluate(() => {
+    const el = document.querySelector(".dock-panel-overlay--open");
+    if (!el || el.getClientRects().length === 0) return false;
+    const panel = el.closest("#studioLeftPanel");
+    return !panel || window.getComputedStyle(panel).visibility !== "hidden";
+  });
 
 /*
   scope — "trigger" 이면 열기 버튼 구역, 숫자면 그 번째 항목 카드.

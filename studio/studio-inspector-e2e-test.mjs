@@ -1458,7 +1458,8 @@ async function runMobile(context) {
     const frame = document.getElementById("studioPreviewFrame").getBoundingClientRect();
     const stage = document.getElementById("studioPreviewStage").getBoundingClientRect();
     const box = document.getElementById("studioInspectorSelectBox").getBoundingClientRect();
-    const popover = document.getElementById("studioInspectorPopover").getBoundingClientRect();
+    const popoverEl = document.getElementById("studioInspectorPopover");
+    const popover = popoverEl.getBoundingClientRect();
 
     const doc = document.getElementById("studioPreviewFrame").contentDocument;
     const inner = doc.querySelector(".y-heading").getBoundingClientRect();
@@ -1473,18 +1474,22 @@ async function runMobile(context) {
         box.right <= frame.right + 1 &&
         box.bottom <= frame.bottom + 1,
       widthMatchesScaled: Math.abs(box.width - inner.width * scale) <= 2,
+      /* STUDIO-SHELL-1 — 팝오버는 Preview 위에 뜨지 않고 왼쪽 패널
+         안에 있다(IMORY_STUDIO_SHELL_DESIGN.md §2-3). 그래서 "stage 안에
+         머문다"가 아니라 "패널 안에 있고 축소된 프레임을 가리지 않는다"
+         를 본다. */
       popoverInsideStage:
-        popover.left >= stage.left - 1 &&
-        popover.right <= stage.right + 1 &&
-        popover.top >= stage.top - 1 &&
-        popover.bottom <= stage.bottom + 1,
+        !!popoverEl.closest("#studioLeftPanel") &&
+        !popoverEl.hidden &&
+        popover.right <= frame.left + 1 &&
+        popover.right <= stage.left + 1,
       documentOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1
     };
 
   });
 
   record(
-    "U. Mobile Preview — 축소 배율까지 반영해 테두리가 그려지고 팝오버가 stage 안에 머문다",
+    "U. Mobile Preview — 축소 배율까지 반영해 테두리가 그려지고 팝오버는 왼쪽 패널 안에서 프레임을 가리지 않는다",
     geometry.scale > 0 &&
       geometry.boxInsideFrame &&
       geometry.widthMatchesScaled &&

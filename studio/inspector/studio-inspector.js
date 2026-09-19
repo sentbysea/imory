@@ -5,7 +5,8 @@
    OpenAI를 전혀 부르지 않고 여기서 끝낸다.
 
    ★ 이 파일이 하는 일 — Inspector의 진입점과 lifecycle
-     - Top Dock의 "Select" 토글(#studioInspectorButton)
+     - Select 모드 켜고 끄기(버튼 클릭은 studio/studio-shell.js 가
+       받아 이 파일의 setStudioInspectorEnabled 를 부른다)
      - 선택 상태의 **전이**: 고르기 / 해제하기 / 임시 상태 걷어내기
        (setStudioInspectorSelection / clearStudioInspectorSelection /
        clearStudioInspectorTransient)
@@ -70,7 +71,7 @@
      되므로 순서에 걸리지 않는다.
 
    ★ 리스너는 파일마다 **한 번씩만** 등록된다(전부 top-level).
-     이 파일: 토글 버튼 click, document keydown.
+     이 파일: document keydown.
      overlay: window resize, stage ResizeObserver.
      image-size: document pointermove/up/cancel.
      overlay DOM 안쪽 리스너는 buildStudioInspectorLayer()가 달고,
@@ -154,6 +155,10 @@ function clearStudioInspectorSelection() {
 
   if (studioInspectorPopover) {
     studioInspectorPopover.hidden = true;
+  }
+
+  if (studioInspectorSelectLabel) {
+    studioInspectorSelectLabel.hidden = true;
   }
 
   notifyStudioInspectorSelectionChanged();
@@ -365,6 +370,16 @@ function setStudioInspectorSelection(editId, tagName, rect, metrics, visibleRect
     studioInspectorEditingOpen = false;
   }
 
+  /* STUDIO-SHELL-1 — 고른 요소의 내용은 왼쪽 패널에 있다. 패널이
+     접혀 있거나 Images/Dock 을 보여 주고 있으면 Select 로 돌린다
+     (studio/studio-shell.js). 이 함수는 사용자의 클릭/탭에서 온
+     select 메시지로만 불린다 — 좌표 갱신(rects)은 이 길을 지나지
+     않으므로 사용자가 접어 둔 패널이 저절로 열리지 않는다. 같은
+     요소를 다시 누른 것도 "그 내용을 보여 달라"로 본다. */
+  if (typeof window.revealStudioLeftPanelForSelection === "function") {
+    window.revealStudioLeftPanelForSelection();
+  }
+
   /* SANDBOX-6A — 프레임이 테두리를 그린 경우에는 여기서 또 그리지
      않는다(studio-inspector-state.js studioInspectorRemoteOverlay). */
   if (studioInspectorRemoteOverlay) {
@@ -560,12 +575,10 @@ function handleStudioInspectorMessage(data) {
 
     }
 
-    /* 사용자가 크기를 만지는 동안에는 팝오버를 옮기지
-       않는다 — 이 경로는 "이미지가 커졌다/작아졌다"로 오는
-       좌표 갱신이라, 여기서 다시 앉히면 손이 잡고 있는
-       슬라이더가 밑으로 도망간다(placeStudioInspectorPopover
-       머리말). 화면 밖으로 나가면 그때만 되돌린다. */
-    placeStudioInspectorPopover(studioInspectorSelection.visibleRect);
+    /* 이름표는 테두리를 따라간다(STUDIO-SHELL-1). 팝오버는 왼쪽
+       패널 안에 있으므로 좌표 갱신으로 움직이지 않는다 — 손이
+       잡고 있는 슬라이더가 도망가는 일이 원천적으로 없다. */
+    paintStudioInspectorSelectLabel(studioInspectorSelection.visibleRect);
 
     return;
 
@@ -670,14 +683,13 @@ function stampSkinForInspector(skin) {
 }
 
 
-if (studioInspectorToggleButton) {
-
-  studioInspectorToggleButton.addEventListener(
-    "click",
-    () => setStudioInspectorEnabled(!studioInspectorEnabled)
-  );
-
-}
+/*
+  STUDIO-SHELL-1 — Top Dock 의 Select 클릭은 studio/studio-shell.js 가
+  받는다. Select 는 이제 "모드 켜고 끄기"이면서 동시에 왼쪽 패널의
+  한 내용이라, Images/Dock 을 보다가 누르면 모드를 끄지 않고 패널만
+  Select 로 돌린다(그래야 고른 요소가 남는다). 켜고 끄는 일 자체는
+  여전히 이 파일의 setStudioInspectorEnabled() 하나다.
+*/
 
 
 /*

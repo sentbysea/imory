@@ -15,6 +15,8 @@
 <link rel="stylesheet" href="./dock/dock-panel.css">
 <link rel="stylesheet" href="../skin/skin-dock-icons.css">
 <link rel="stylesheet" href="./inspector/studio-inspector.css">
+<!-- STUDIO-SHELL-1 — studio/index.html 과 같은 자리(맨 뒤) -->
+<link rel="stylesheet" href="./studio-shell.css">
 </head>
 <body>
 
@@ -54,41 +56,61 @@
 
     <button type="button" class="studio-preview-back-floating" id="studioPreviewBackButton" hidden aria-label="이전 화면" title="이전 화면">←</button>
 
-    <!-- PHASE AI-5A.1 — 기본 상태 = 펼침(studio/index.html과 동일) -->
+    <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 왼쪽 패널(Select · Images · Dock 이 함께 쓴다) -->
+    <aside class="studio-left-panel" id="studioLeftPanel" data-mode="select" aria-labelledby="studioLeftPanelTitle">
+      <div class="studio-left-panel-header">
+        <h2 class="studio-left-panel-title" id="studioLeftPanelTitle">SELECT</h2>
+        <button type="button" class="studio-left-panel-collapse" id="studioLeftPanelCollapse" aria-expanded="false" aria-controls="studioLeftPanel" aria-label="편집 패널 접기">‹</button>
+      </div>
+      <div class="studio-left-panel-body">
+        <section class="studio-left-panel-section" id="studioLeftPanelSelect" data-left-panel-mode="select">
+          <p class="studio-left-panel-empty" id="studioLeftPanelSelectEmpty">Preview에서 고칠 요소를 누르세요.</p>
+        </section>
+        <section class="studio-left-panel-section" id="studioLeftPanelImages" data-left-panel-mode="images" hidden></section>
+        <section class="studio-left-panel-section" id="studioLeftPanelDock" data-left-panel-mode="dock" hidden></section>
+      </div>
+    </aside>
+
+    <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 세 그룹(기본 상태 = 펼침).
+         왼쪽: back · Select · Images · Dock / 가운데: 현재 페이지 · Desktop|Mobile · Undo/Redo /
+         오른쪽: Code · Import|Export · (···) · Save · Publish · AI Assistant.
+         Inspector·AI·Images 가 재는 화면이 실제 Studio 와 같은 폭이어야 한다. -->
     <div class="studio-top-dock-zone is-open" id="studioTopDockZone">
       <div class="studio-top-dock" id="studioTopDock">
         <div class="studio-top-dock-lead">
-          <button type="button" class="studio-top-dock-back" id="studioBackButton">← back</button>
-          <button type="button" class="studio-corner-button" id="studioInspectorButton" aria-pressed="false" disabled>Select</button>
+          <button type="button" class="studio-top-dock-back" id="studioBackButton" aria-label="Studio 나가기">←<span class="studio-label-wide"> back</span></button>
+          <div class="studio-top-dock-modes" role="group" aria-label="편집 패널">
+            <button type="button" class="studio-corner-button studio-mode-button" id="studioInspectorButton" aria-pressed="false" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Select</button>
+            <button type="button" class="studio-corner-button studio-mode-button" id="studioImagesButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Images</button>
+            <button type="button" class="studio-corner-button studio-mode-button" id="studioDockButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Dock</button>
+          </div>
         </div>
         <div class="studio-top-dock-groups">
+          <span class="studio-page-indicator" id="studioPageIndicator" title="지금 Preview가 보여 주는 페이지">HOME</span>
           <div class="studio-viewport-toggle" id="studioViewportToggle" role="group" aria-label="Preview 화면 크기">
             <button type="button" class="studio-viewport-toggle-option studio-viewport-toggle-option--active" data-viewport-mode="desktop">Desktop</button>
             <span class="studio-viewport-toggle-divider" aria-hidden="true"></span>
             <button type="button" class="studio-viewport-toggle-option" data-viewport-mode="mobile">Mobile</button>
           </div>
+          <div class="studio-history-buttons" role="group" aria-label="변경 기록">
+            <button type="button" class="studio-icon-button" id="studioUndoButton" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>↶</button>
+            <button type="button" class="studio-icon-button" id="studioRedoButton" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>↷</button>
+          </div>
         </div>
-        <!-- PHASE AI-2.1 — studio/index.html과 같은 순서/구성을 그대로 비춘다
-             (Code / Import / Export / Images / Save / Publish, Settings 없음).
-
-             Select mode 직접 편집 라운드 — Images 버튼과 그 모듈을 이
-             하네스에도 넣었다. 예전에는 "images 모듈을 로드하지 않으므로"
-             라며 이 버튼 하나만 빼 두었는데, 그러면 Inspector가 검사하는
-             화면이 실제 Studio보다 버튼 하나 좁은 Top Dock이 된다 —
-             팝오버/overlay 좌표를 재는 테스트가 진짜 화면과 다른 폭에서
-             돌아간다. -->
         <div class="studio-top-dock-actions">
-          <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
-          <button type="button" class="studio-corner-button" id="studioImportButton" disabled>Import</button>
-          <button type="button" class="studio-corner-button" id="studioExportButton" disabled>Export</button>
-          <button type="button" class="studio-corner-button" id="studioImagesButton" disabled>Images</button>
-          <!-- BOTTOM-DOCK-1 — studio/index.html 과 같은 자리 -->
-          <button type="button" class="studio-corner-button" id="studioDockButton" disabled>Dock</button>
+          <div class="studio-top-dock-files" id="studioTopDockFiles">
+            <button type="button" class="studio-corner-button" id="studioCodeButton" disabled>Code</button>
+            <div class="studio-button-pair" role="group" aria-label="SkinPackage 파일">
+              <button type="button" class="studio-corner-button" id="studioImportButton" disabled>Import</button>
+              <button type="button" class="studio-corner-button" id="studioExportButton" disabled>Export</button>
+            </div>
+          </div>
+          <button type="button" class="studio-corner-button studio-top-dock-more" id="studioMoreButton" aria-expanded="false" aria-controls="studioTopDockFiles" aria-haspopup="true" aria-label="더 보기 (Code · Import · Export)">···</button>
           <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
-          <button type="button" class="studio-corner-button" id="studioPublishButton" disabled>Publish</button>
+          <button type="button" class="studio-corner-button studio-corner-button--primary" id="studioPublishButton" disabled>Publish</button>
           <!-- PHASE AI-5A.1 — studio/index.html과 동일한 AI 진입점 -->
           <span class="studio-top-dock-divider" aria-hidden="true"></span>
-          <button type="button" class="studio-corner-button studio-ai-toggle-button" id="studioAiToggleButton" aria-expanded="false" aria-controls="studioAiDrawer">AI Assistant</button>
+          <button type="button" class="studio-corner-button studio-ai-toggle-button" id="studioAiToggleButton" aria-expanded="false" aria-controls="studioAiDrawer" aria-label="AI Assistant">AI<span class="studio-label-wide"> Assistant</span></button>
         </div>
         <!-- 반응형 라운드 — handle은 zone이 아니라 바의 자식이다(studio/index.html과 동일) -->
         <button type="button" class="studio-top-dock-handle" id="studioTopDockHandle" aria-expanded="true" aria-controls="studioTopDock" aria-label="Studio 상단 컨트롤"><span id="studioTopDockHandleIcon" aria-hidden="true">▴</span></button>
@@ -2489,6 +2511,9 @@
   <script src="./inspector/studio-inspector-transition.js"></script>
   <script src="./inspector/studio-inspector-controls.js"></script>
   <script src="./inspector/studio-inspector.js"></script>
+  <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 순서 -->
+  <script src="./studio-history.js"></script>
+  <script src="./studio-shell.js"></script>
   <script src="./studio-state.js"></script>
 
   <script>

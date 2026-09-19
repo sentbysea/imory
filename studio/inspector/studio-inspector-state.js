@@ -64,12 +64,16 @@ const studioInspectorStage =
   document.getElementById("studioPreviewStage");
 
 /* =========================================================
-   Top Dock — 팝오버가 그 밑에 깔리지 않게 하려고 읽는다
+   Top Dock — 선택 요소 이름표가 그 밑에 깔리지 않게 하려고 읽는다
 
    바는 stage 위에 absolute 로 얹히고(z-index 8), 좁은 폭에서는
-   여러 줄로 접혀 144px 까지 자란다(390px 실측). stage 경계만 보고
-   팝오버를 앉히면 그 밴드 아래에 깔려 **버튼을 누를 수 없다** —
-   2026-09-17, 390px 에서 "✦ AI 수정"이 실제로 그랬다.
+   두 줄 이상으로 자란다. 이름표를 테두리 바깥 위에 붙이려다 그
+   밴드 아래로 들어가면 보이지 않으므로 그때는 테두리 안쪽에 붙인다
+   (studio-inspector-overlay.js paintStudioInspectorSelectLabel).
+
+   (STUDIO-SHELL-1 이전에는 떠 있는 팝오버의 자리를 이 값으로 잡았다
+   — 390px 에서 "✦ AI 수정"이 바 밑에 깔렸던 2026-09-17 의 이유.
+   팝오버는 이제 왼쪽 패널 안에 있다.)
 
    바가 접혀 올라가 있으면(translateY(-100%)) 사각형이 뷰포트 위로
    나가므로 아래 계산이 저절로 아무 일도 하지 않는다.
@@ -154,6 +158,9 @@ let studioInspectorHoverBox = null;
 let studioInspectorSelectBox = null;
 
 let studioInspectorPopover = null;
+
+/* STUDIO-SHELL-1 — Preview 위 선택 테두리에 붙는 요소 이름표 */
+let studioInspectorSelectLabel = null;
 
 let studioInspectorPopoverTitle = null;
 

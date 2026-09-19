@@ -2790,33 +2790,39 @@ async function runInspect(browser) {
       JSON.stringify(touchSelection && { t: touchSelection.tagName }));
 
     /*
-      ★ 축소 배율이 걸린 화면에서 좌표가 맞는가 — Studio 가 앉힌
-      팝오버가 그 요소 근처에 있고, Preview 영역 안에 있는가.
+      ★ 축소 배율이 걸린 화면에서도 고른 요소의 수정 내용이 보이는가.
+
+      STUDIO-SHELL-1 — 팝오버는 더 이상 Preview 위에 떠서 자리를
+      고르지 않는다. Studio 왼쪽 패널(좁은 화면에서는 아래 시트) 안에
+      있다(IMORY_STUDIO_SHELL_DESIGN.md §2-3). 그래서 "Preview 안에
+      앉는가" 대신 "패널 안에 보이고 화면 밖으로 나가지 않는가"를 본다.
     */
 
     const placement = await page.evaluate(() => {
 
       const pop = document.getElementById("studioInspectorPopover");
-      const stage = document.getElementById("studioPreviewStage");
+      const panel = document.getElementById("studioLeftPanel");
 
-      if (!pop || pop.hidden || !stage) {
+      if (!pop || pop.hidden || !panel) {
         return null;
       }
 
       const p = pop.getBoundingClientRect();
-      const s = stage.getBoundingClientRect();
+      const s = panel.getBoundingClientRect();
 
       return {
+        inPanel: !!pop.closest("#studioLeftPanel"),
         inside:
           p.left >= s.left - 1 && p.right <= s.right + 1 &&
-          p.top >= s.top - 1 && p.bottom <= s.bottom + 1,
+          p.top >= s.top - 1 &&
+          p.right <= window.innerWidth + 1,
         width: Math.round(p.width)
       };
 
     });
 
-    check("[inspect] ★ 축소된 화면에서도 팝오버가 Preview 안에 앉는다",
-      !!placement && placement.inside === true,
+    check("[inspect] ★ 축소된 화면에서도 고른 요소의 수정 내용이 왼쪽 패널 안에 보인다",
+      !!placement && placement.inPanel === true && placement.inside === true,
       JSON.stringify(placement));
 
     const frameOverflow = await sandboxFrame(page).locator("body").evaluate(

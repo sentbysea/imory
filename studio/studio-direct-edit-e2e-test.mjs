@@ -241,6 +241,22 @@ async function enableInspector(page) {
 
   await previewHas(page, "[data-imory-edit-id]");
 
+  /*
+    프레임이 모드 전환을 **실제로 받았는가**까지 기다린다(2026-09-19).
+
+    직접 편집을 한 번이라도 저장한 draft 는 편집한 요소의 식별자를
+    HTML 에 그대로 들고 있다(승격된 id). 그래서 그 draft 로 다시 연
+    Studio 에서는 위 previewHas 가 Inspector 를 켜기 **전부터** 참이다
+    — 곧바로 누르면 프레임이 아직 "inspector-mode" 메시지를 처리하지
+    않아 클릭이 선택이 되지 않는다. Select 가 왼쪽 패널을 함께 열면서
+    (STUDIO-SHELL-1) Preview 가 한 번 다시 배치되므로 그 틈이 조금
+    길어졌다. 사람 손으로는 닿을 수 없는 틈이지만 스크립트는 닿는다.
+  */
+  await page.waitForFunction(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    return !!(doc && doc.body && doc.body.classList.contains("imory-inspector-on"));
+  });
+
 }
 
 

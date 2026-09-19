@@ -1477,7 +1477,10 @@ async function runViewport(context) {
     const toolbarFit = await page.evaluate(() => {
       const actions = document.querySelector(".studio-top-dock-actions");
       const dock = document.getElementById("studioTopDock");
+      /* STUDIO-SHELL-1 — 좁은 화면 전용 ··· 버튼은 넓은 화면에서
+         display:none 이라 사각형이 (0,0)이다. 보이는 버튼만 잰다. */
       const buttons = Array.from(actions.querySelectorAll("button"))
+        .filter(el => el.getClientRects().length > 0)
         .map(el => el.getBoundingClientRect());
       const divider = actions
         .querySelector(".studio-top-dock-divider")
@@ -1644,11 +1647,16 @@ async function runMotion(context) {
     };
   });
 
+  /* STUDIO-SHELL-1 — stage 는 이제 왼쪽 패널 때문에 left 도 전환한다
+     ("0.15s, 0.15s"). 값 하나하나가 같은 타이밍인지를 본다. */
+  const allSame = (value) =>
+    String(value).split(",").every(part => part.trim() === "0.15s");
+
   record(
     "U1. 패널 모션이 Top Dock과 같은 타이밍(0.15s)을 쓴다",
     motion.token === "0.15s ease" &&
       motion.topDockBar === "0.15s" &&
-      motion.stage === "0.15s" &&
+      allSame(motion.stage) &&
       motion.zone === "0.15s" &&
       motion.panel.startsWith("0.15s"),
     JSON.stringify(motion)
@@ -2079,7 +2087,12 @@ async function runDockFit(context) {
 
   const page = await openStudio(context, { viewport: { width: 1600, height: 900 } });
 
-  /* --- W1. 넓은 화면에서는 토글이 정확히 가운데 --- */
+  /* --- W1. 넓은 화면에서는 가운데 그룹이 정확히 가운데 ---
+
+     STUDIO-SHELL-1 — 가운데 그룹은 이제 셋이다(현재 페이지 ·
+     Desktop/Mobile · Undo/Redo). 좌우 그룹이 같은 몫을 나눠 가져
+     **그룹**이 바의 정중앙에 온다는 규칙은 그대로이고, 토글은 그
+     그룹 안의 한 칸이다. 그래서 가운데 그룹의 중심을 잰다. */
 
   const wide = [];
 
@@ -2089,7 +2102,7 @@ async function runDockFit(context) {
     const m = await dockProbe(page);
     wide.push({
       width,
-      center: (m.toggle.left + m.toggle.right) / 2,
+      center: (m.groups.left + m.groups.right) / 2,
       expected: m.innerWidth / 2,
       handleCenter: (m.handle.left + m.handle.right) / 2,
       rows: Math.round(m.bar.height)
@@ -2097,13 +2110,13 @@ async function runDockFit(context) {
   }
 
   record(
-    "W1. 넓은 화면(1600/1440/1280)에서는 Desktop/Mobile 토글이 화면 정중앙이다",
+    "W1. 넓은 화면(1600/1440/1280)에서는 가운데 그룹(현재 페이지 · Desktop/Mobile · Undo/Redo)이 화면 정중앙이다",
     wide.every(w => Math.abs(w.center - w.expected) <= 2 && w.rows <= 50),
     JSON.stringify(wide)
   );
 
   record(
-    "W1-b. handle도 같은 중심을 쓴다(토글 divider 바로 위/아래)",
+    "W1-b. handle도 같은 중심을 쓴다(가운데 그룹 바로 아래)",
     wide.every(w => Math.abs(w.handleCenter - w.expected) <= 2),
     JSON.stringify(wide)
   );
@@ -2148,7 +2161,7 @@ async function runDockFit(context) {
       /* 문서 자체가 가로로 스크롤되면 안 된다 */
       if (m.scrollWidth > m.innerWidth + 0.5) problems.push("h-scroll");
 
-      shifts.push({ width, toggleCenter: Math.round((m.toggle.left + m.toggle.right) / 2), barH: Math.round(m.bar.height) });
+      shifts.push({ width, toggleCenter: Math.round((m.groups.left + m.groups.right) / 2), barH: Math.round(m.bar.height) });
 
       if (problems.length) bad.push({ width, problems });
     }

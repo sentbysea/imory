@@ -46,7 +46,7 @@
    의존(이 파일보다 먼저 로드되어야 함):
    studio/inspector/studio-inspector-state.js,
    studio/inspector/studio-inspector-overlay.js
-   (paintStudioInspectorHandles / placeStudioInspectorPopover).
+   (paintStudioInspectorHandles / paintStudioInspectorSelectLabel).
    호출 시점 의존: studio-inspector-text.js,
    studio-inspector-image-size.js, studio-inspector-edit.js,
    studio/images/images-panel.js(openSkinImagesPanel),
@@ -626,7 +626,13 @@ function renderStudioInspectorControl(spec, info, declarations) {
 
     change.addEventListener("click", () => {
 
-      if (typeof window.openSkinImagesPanel === "function") {
+      /* STUDIO-SHELL-1 — Images 는 왼쪽 패널의 한 내용이다. 셸을 거쳐야
+         패널이 Images 로 바뀐다(직접 열면 숨은 자리에 그려진다).
+         Select 모드와 고른 요소는 그대로 남고, Images 를 닫으면 Select
+         로 돌아온다. */
+      if (typeof window.showStudioLeftPanelMode === "function") {
+        window.showStudioLeftPanelMode("images");
+      } else if (typeof window.openSkinImagesPanel === "function") {
         window.openSkinImagesPanel();
       } else {
         showStudioToast("이미지 라이브러리를 열 수 없어요.", { isError: true });
@@ -670,31 +676,15 @@ function renderStudioInspectorControl(spec, info, declarations) {
 }
 
 
-/* 팝오버가 "다른 모양"으로 바뀜는가. 이것이 바뀌었을 때만
-   자리를 다시 고른다 — 같은 모양으로 내용만 다시 그리는
-   경우(자르기 확대·구도 갱신, 크기 확정)는 손이 올라가 있는
-   판이므로 그 자리 그대로 둔다(요구사항 C,
-   studio-inspector-overlay.js placeStudioInspectorPopover 머리말). */
-let studioInspectorPopoverShape = "";
+/* =========================================================
+   팝오버 = 왼쪽 패널의 Select 내용 (STUDIO-SHELL-1)
 
-function studioInspectorPopoverShapeOf(resolved) {
-
-  return [
-    studioInspectorSelection ? studioInspectorSelection.editId : "",
-    resolved ? resolved.info.kind : "",
-    studioInspectorEditingOpen ? "open" : "shut",
-
-    /* 자유 비율은 팝오버가 **앉을 자리**를 바꾼다 — 프레임 밖으로
-       나온 핸들만큼 더 비켜 앉아야 모서리 핸들이 팝오버 밑에 깔리지
-       않는다(studio-inspector-overlay.js 팝오버 자리 절). 그래서
-       자르기 여부와 따로 적는다. */
-    studioInspectorCropDraft
-      ? (studioInspectorCropDraft.free ? "crop-free" : "crop")
-      : "-"
-  ].join("|");
-
-}
-
+   이 함수가 채우는 DOM 은 이제 Preview 위에 뜨지 않고 왼쪽 패널
+   안에 산다(studio-inspector-overlay.js buildStudioInspectorLayer).
+   그래서 예전의 "모양이 바뀌었을 때만 자리를 다시 고른다"는 계산이
+   없다 — 고를 자리가 없다. Preview 위에는 테두리 · 이름표 · 핸들만
+   남고, 이름표의 글자는 여기서 팝오버 제목과 같은 문구로 적는다.
+========================================================== */
 
 function renderStudioInspectorPopover() {
 
@@ -738,9 +728,11 @@ function renderStudioInspectorPopover() {
        resolveStudioInspectorMovable 머리말). */
     studioInspectorMovable = false;
 
-    studioInspectorPopoverShape = "";
+    if (studioInspectorSelectLabel) {
+      studioInspectorSelectLabel.textContent = "";
+    }
 
-    resetStudioInspectorPopoverPlacement();
+    paintStudioInspectorSelectLabel(null);
 
     paintStudioInspectorHandles(null, null);
 
@@ -768,6 +760,11 @@ function renderStudioInspectorPopover() {
 
   studioInspectorPopoverTitle.textContent =
     studioInspectorLabelFor(resolved.info);
+
+  if (studioInspectorSelectLabel) {
+    studioInspectorSelectLabel.textContent =
+      studioInspectorPopoverTitle.textContent;
+  }
 
   /* =====================================================
      SANDBOX-6A — sandbox 스킨에서는 직접 편집을 열지 않는다
@@ -856,20 +853,10 @@ function renderStudioInspectorPopover() {
       : null
   );
 
-  const shape =
-    studioInspectorPopoverShapeOf(resolved);
-
-  const shapeChanged =
-    shape !== studioInspectorPopoverShape;
-
-  studioInspectorPopoverShape =
-    shape;
-
-  placeStudioInspectorPopover(
+  paintStudioInspectorSelectLabel(
     studioInspectorSelection
       ? (studioInspectorSelection.visibleRect || studioInspectorSelection.rect)
-      : null,
-    { force: shapeChanged }
+      : null
   );
 
   /* 같은 id의 컨트롤이 다시 만들어졌으면 포커스를 돌려준다 —

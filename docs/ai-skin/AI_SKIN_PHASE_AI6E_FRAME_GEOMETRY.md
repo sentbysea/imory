@@ -158,6 +158,12 @@ inspectorCropTravelPx(crop, { width, height, naturalWidth, naturalHeight })
 
 ## 4. 팝오버 자리 — 손이 잡고 있는 동안에는 움직이지 않는다
 
+> **철회됨 → [IMORY_STUDIO_SHELL_DESIGN.md](../../IMORY_STUDIO_SHELL_DESIGN.md) §2-3 (STUDIO-SHELL-1).**
+> 팝오버는 더 이상 Preview 위에 뜨지 않고 Studio 왼쪽 패널 안에 있다.
+> 그래서 이 절의 자리 계산(`placeStudioInspectorPopover` 와 보조 함수)은
+> 지워졌다 — 좌표 갱신으로 팝오버가 움직일 일 자체가 없다. 아래는 그
+> 전의 기록이다. 1~3절(프레임 좌표 · 드래그 판 · 구도 기어비)은 그대로다.
+
 ### 무엇이 문제였나
 
 팝오버는 선택 사각형 **아래**에 붙어 있었고, 좌표가 갱신될 때마다

@@ -311,6 +311,35 @@ function bumpStudioWorkingRevision() {
 
 
 /* =========================================================
+   STUDIO-SHELL-1 — Undo/Redo 기록의 두 손잡이
+
+   working draft 를 바꾸는 입구(applyWorkingSkinChanges ·
+   applyImportedSkinPackage · setStudioBottomDock ·
+   setStudioImageSlot)가 바꾸기 **직전**에 capture 하고, 바꾼
+   **뒤에** record 한다. 기록 자체는 studio/studio-history.js 가
+   갖는다(이 파일보다 나중에 로드되므로 typeof 로 확인한다 —
+   Inspector 창구와 같은 패턴).
+========================================================== */
+
+function captureStudioWorkingChange() {
+
+  return typeof window.captureStudioHistoryState === "function"
+    ? window.captureStudioHistoryState()
+    : null;
+
+}
+
+
+function recordStudioWorkingChange(before) {
+
+  if (before && typeof window.recordStudioHistory === "function") {
+    window.recordStudioHistory(before);
+  }
+
+}
+
+
+/* =========================================================
    PAGE PREVIEW 상태
 
    viewport state(studioViewportMode, 이 파일 하단)와 완전히
@@ -472,6 +501,12 @@ function updateStudioSaveButtonState() {
     isStudioPublishPending ||
     !currentWorkingSkin;
 
+  /* Undo/Redo 도 같은 조건(working draft 유무 · Save/Publish 진행
+     중)에 걸린다 — 이 함수가 그 상태가 바뀌는 모든 자리에서 불린다. */
+  if (typeof window.updateStudioHistoryButtons === "function") {
+    window.updateStudioHistoryButtons();
+  }
+
 }
 
 
@@ -548,6 +583,13 @@ function updateStudioCodeButtonState() {
     (currentWorkingSkin && !codeEditorSource)
       ? "이 페이지에는 아직 편집할 template이 없습니다"
       : "";
+
+  /* STUDIO-SHELL-1 — 상단 바의 "현재 페이지" 표시. 이 함수는
+     preview-navigation.js 가 currentPreviewPageType 을 바꿀 때마다
+     빠짐없이 부르므로 여기 한 곳에 걸어 둔다. */
+  if (typeof window.updateStudioPageIndicator === "function") {
+    window.updateStudioPageIndicator(currentPreviewPageType);
+  }
 
 }
 
@@ -687,6 +729,11 @@ function resetStudioWorkingState() {
 
   currentWorkingImageSlots =
     {};
+
+  /* 다른 스킨의 기록을 이어 쓰지 않는다 */
+  if (typeof window.resetStudioHistory === "function") {
+    window.resetStudioHistory();
+  }
 
   bumpStudioWorkingRevision();
 
@@ -885,6 +932,9 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
     return;
   }
 
+  const historyBefore =
+    captureStudioWorkingChange();
+
   if (
     pageType === "post" &&
     !htmlHasPostBodyRegion(html)
@@ -981,6 +1031,8 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
       };
 
   }
+
+  recordStudioWorkingChange(historyBefore);
 
   isStudioDirty =
     true;
@@ -1120,6 +1172,9 @@ function applyImportedSkinPackage(skinPackage, options) {
     return;
   }
 
+  const historyBefore =
+    captureStudioWorkingChange();
+
   currentWorkingSkin =
     skinPackage;
 
@@ -1147,6 +1202,8 @@ function applyImportedSkinPackage(skinPackage, options) {
   */
 
   pruneWorkingImageSlotsToDeclared();
+
+  recordStudioWorkingChange(historyBefore);
 
   isStudioDirty =
     (options && options.dirty === false)
@@ -1286,8 +1343,13 @@ function setStudioBottomDock(dock) {
 
   }
 
+  const historyBefore =
+    captureStudioWorkingChange();
+
   currentWorkingSkin =
     nextSkin;
+
+  recordStudioWorkingChange(historyBefore);
 
   isStudioDirty =
     true;
@@ -1361,8 +1423,13 @@ function setStudioImageSlot(slotName, image) {
 
   }
 
+  const historyBefore =
+    captureStudioWorkingChange();
+
   currentWorkingImageSlots =
     next;
+
+  recordStudioWorkingChange(historyBefore);
 
   currentImageSlotValues =
     deriveImageSlotValues(next);
@@ -1707,34 +1774,13 @@ studioExportButton?.addEventListener(
 );
 
 
-studioImagesButton?.addEventListener(
-  "click",
-  () => {
-
-    if (!currentWorkingSkin) {
-      return;
-    }
-
-    window.openSkinImagesPanel();
-
-  }
-);
-
-
-/* BOTTOM-DOCK-1 — Bottom Dock 설정 패널 */
-
-studioDockButton?.addEventListener(
-  "click",
-  () => {
-
-    if (!currentWorkingSkin) {
-      return;
-    }
-
-    window.openSkinDockPanel?.();
-
-  }
-);
+/* =========================================================
+   Images · Dock (· Select) 버튼의 클릭은 studio/studio-shell.js 가
+   받는다(STUDIO-SHELL-1). 셋이 같은 왼쪽 패널을 나눠 쓰므로 "어느
+   내용을 보여 줄까"를 한 곳에서 정해야 한다. 이 파일은 여전히
+   활성화 조건(working draft 유무)만 갖는다 —
+   updateStudioImagesButtonState / updateStudioDockButtonState.
+========================================================== */
 
 
 /* =========================================================
@@ -2604,8 +2650,14 @@ window.addEventListener(
 
     if (data.type === PREVIEW_MSG_DOCK_SELECT) {
 
+      /* STUDIO-SHELL-1 — Dock 설정은 왼쪽 패널의 한 내용이라 셸을
+         거쳐 연다(studio/studio-shell.js). */
       if (currentWorkingSkin) {
-        window.openSkinDockPanel?.();
+        if (typeof window.showStudioLeftPanelMode === "function") {
+          window.showStudioLeftPanelMode("dock");
+        } else {
+          window.openSkinDockPanel?.();
+        }
       }
 
       return;
@@ -3117,6 +3169,11 @@ async function mountStudioPreview(
 
   currentWorkingSkin =
     draftContent;
+
+  /* 새로 불러온 draft 가 기록의 첫 칸이다 */
+  if (typeof window.resetStudioHistory === "function") {
+    window.resetStudioHistory();
+  }
 
   currentSkinContext =
     context;

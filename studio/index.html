@@ -73,7 +73,12 @@
 
         /* Dock 패널의 아이콘 고르기 — 공개 화면이 그리는 것과 같은 그림 */
         "../skin/skin-dock-icons.css",
-        "./inspector/studio-inspector.css"
+        "./inspector/studio-inspector.css",
+
+        /* STUDIO-SHELL-1 — 상단 세 그룹 · 왼쪽 패널. Images/Dock/
+           Inspector 의 내용을 패널 안에 앉히는 규칙이 있어서 그
+           셋보다 뒤다(IMORY_STUDIO_SHELL_DESIGN.md). */
+        "./studio-shell.css"
       ]
     );
 
@@ -206,32 +211,108 @@
 
 
     <!-- =====================================================
-         TOP DOCK — Back / DESKTOP|MOBILE / Save / Code / Settings
-         한 줄 통합 (Studio chrome 재정리 라운드, PHASE 1C-H에서
-         Preview Back을 위 floating 컨트롤로 옮기며 이 dock에서는
-         제거됨).
+         LEFT PANEL — Select · Images · Dock 이 함께 쓰는 자리
+         (STUDIO-SHELL-1, IMORY_STUDIO_SHELL_DESIGN.md)
+
+         예전에는 셋이 서로 다른 모양이었다 — Select 는 Preview 위에
+         떠서 요소를 가리는 팝오버, Images 와 Dock 은 화면 전체를
+         덮는 modal. 이제 셋 다 이 패널 하나의 **내용**이다. 패널이
+         열려 있는 동안 #studioPreviewStage 의 left 가 패널 폭만큼
+         밀리므로 Preview 는 가려지지 않고 폭이 다시 계산된다
+         (오른쪽 AI 패널과 같은 방식, studio-shell.css).
+
+         여닫기와 어느 내용을 보여 줄지는 studio/studio-shell.js 가
+         정한다. 각 section 안의 실제 DOM 은 그 기능의 파일이 처음
+         열 때 만들어 넣는다(Inspector 팝오버 · images-panel.js ·
+         dock-panel.js) — 이 문서와 studio-lifecycle-scenario.html
+         두 곳에 같은 마크업을 두지 않기 위해서다.
+
+         좁은 화면(720px 이하)에서는 화면 아래에서 올라오는 시트가
+         된다 — 위쪽 Preview 는 그대로 보여서 Select 로 요소를 계속
+         고를 수 있다.
+    ====================================================== -->
+
+    <aside
+      class="studio-left-panel"
+      id="studioLeftPanel"
+      data-mode="select"
+      aria-labelledby="studioLeftPanelTitle"
+    >
+
+      <div class="studio-left-panel-header">
+
+        <h2
+          class="studio-left-panel-title"
+          id="studioLeftPanelTitle"
+        >
+          SELECT
+        </h2>
+
+        <button
+          type="button"
+          class="studio-left-panel-collapse"
+          id="studioLeftPanelCollapse"
+          aria-expanded="false"
+          aria-controls="studioLeftPanel"
+          aria-label="편집 패널 접기"
+        >‹</button>
+
+      </div>
+
+      <div class="studio-left-panel-body">
+
+        <section
+          class="studio-left-panel-section"
+          id="studioLeftPanelSelect"
+          data-left-panel-mode="select"
+        >
+
+          <p
+            class="studio-left-panel-empty"
+            id="studioLeftPanelSelectEmpty"
+          >
+            Preview에서 고칠 요소를 누르세요.
+          </p>
+
+        </section>
+
+        <section
+          class="studio-left-panel-section"
+          id="studioLeftPanelImages"
+          data-left-panel-mode="images"
+          hidden
+        ></section>
+
+        <section
+          class="studio-left-panel-section"
+          id="studioLeftPanelDock"
+          data-left-panel-mode="dock"
+          hidden
+        ></section>
+
+      </div>
+
+    </aside>
+
+
+    <!-- =====================================================
+         TOP DOCK — 세 그룹 (STUDIO-SHELL-1)
+
+           왼쪽   ← back · Select · Images · Dock   (왼쪽 패널을 여는 셋)
+           가운데 현재 페이지 · Desktop|Mobile · Undo/Redo
+           오른쪽 Code · Import|Export · Save · Publish · AI Assistant
+
+         Publish 만 primary 다. Import 와 Export 는 한 덩어리로 붙인다.
+         좁은 화면에서는 Code · Import · Export 가 ··· 메뉴로 들어간다
+         — 메뉴는 **같은 버튼**을 드롭다운으로 보여 줄 뿐이라 id 와
+         클릭 핸들러가 두 벌이 되지 않는다(studio-shell.css ·
+         studio/studio-shell.js).
 
          hover/focus로는 절대 열리거나 닫히지 않는다 —
          #studioTopDockHandle을 클릭할 때만 studio-preview.js가
          #studioTopDockZone에 is-open 클래스를 토글한다(닫힘 ↔
-         펼침). handle은 dock이 열려 있든 닫혀 있든 항상 같은
-         자리(zone 최상단)에 남아 있어 클릭 가능해야 한다 — dock이
-         열렸을 때도 handle이 dock 바로 위(z-index 상 dock보다
-         위)에 그려지므로 다시 눌러 접을 수 있다.
-
-         ★ 기본 상태 = 펼침 (PHASE AI-5A.1 마지막 조정)
-         예전에는 접힌 채로 시작했다. AI 진입점이 오른쪽 세로 탭에서
-         이 dock 안의 "AI Assistant"로 옮겨 오면서, 접힌 채로
-         시작하면 Studio에 들어와 AI를 쓰기까지 handle을 먼저
-         찾아 눌러야 했다 — 그래서 초기값만 펼침으로 바꾼다.
-         "접으면 Preview가 실제 사이트와 같아진다"는 이 dock의
-         존재 이유는 그대로다(사용자가 handle로 접으면 된다).
-
-         상태는 **여기 마크업의 초기값**일 뿐이고 어디에도 저장하지
-         않는다 — 사용자가 세션 중 접고 편 결과는 그 문서가 살아
-         있는 동안만 유지되며(Studio는 admin iframe 안에서 계속
-         살아 있다), 새로 로드하면 다시 이 초기값에서 시작한다.
-         AI 패널의 열림 상태와도 무관하다(서로 다른 토글).
+         펼침). 기본 상태는 펼침이고, 어디에도 저장하지 않는다
+         (PHASE AI-5A.1). AI 패널의 열림 상태와는 무관하다.
     ====================================================== -->
 
     <div
@@ -245,21 +326,14 @@
       >
 
         <!-- =================================================
-             DOCK LEAD — Back + Select (PHASE AI-6A)
+             LEAD — 나가기 + 왼쪽 패널을 여는 셋
 
-             Select는 "무엇을 만든다"가 아니라 **모드**라, Code/
-             Import/Images/Save/Publish가 있는 오른쪽 actions 그룹이
-             아니라 dock 왼쪽에 둔다 — 왼쪽은 back 뒤로 300px 넘게
-             비어 있다.
-
-             back과 Select를 한 wrapper로 묶어 dock의 자식 그룹을
-             셋(lead / groups / actions)으로 유지한다 — 이 셋이
-             같은 flex 줄에서 서로를 밀어내는 것이 지금의 반응형
-             배치 규칙이다(studio.css "세 그룹의 배치 규칙").
-
-             aria-pressed로 "지금 켜져 있는가"를 나타낸다(여닫는
-             패널이 아니라 모드라 aria-expanded가 아니다) —
-             studio/inspector/studio-inspector.js가 갱신한다.
+             Select 의 aria-pressed 는 "Inspector 모드가 켜져 있는가"
+             다(studio/inspector/studio-inspector.js). 세 버튼의
+             aria-expanded 는 "왼쪽 패널이 지금 그 내용을 보여 주는가"
+             다(studio/studio-shell.js). Images/Dock 으로 옮겨 가도
+             Select 모드는 꺼지지 않는다 — 그래야 돌아왔을 때 고른
+             요소가 그대로 남는다.
         ================================================== -->
 
         <div class="studio-top-dock-lead">
@@ -268,25 +342,81 @@
             type="button"
             class="studio-top-dock-back"
             id="studioBackButton"
-          >
-            ← back
-          </button>
+            aria-label="Studio 나가기"
+          >←<span class="studio-label-wide"> back</span></button>
 
-          <button
-            type="button"
-            class="studio-corner-button"
-            id="studioInspectorButton"
-            aria-pressed="false"
-            title="Preview에서 요소를 직접 고릅니다"
-            disabled
+          <div
+            class="studio-top-dock-modes"
+            role="group"
+            aria-label="편집 패널"
           >
-            Select
-          </button>
+
+            <button
+              type="button"
+              class="studio-corner-button studio-mode-button"
+              id="studioInspectorButton"
+              aria-pressed="false"
+              aria-expanded="false"
+              aria-controls="studioLeftPanel"
+              title="Preview에서 요소를 직접 고릅니다"
+              disabled
+            >
+              Select
+            </button>
+
+            <!--
+                 Skin Image Library — 지금 Skin이 선언한 imageSlots에
+                 내 이미지를 연결/교체/비운다. working draft가 있을 때만
+                 활성화된다(studio-preview.js updateStudioImagesButtonState).
+            -->
+            <button
+              type="button"
+              class="studio-corner-button studio-mode-button"
+              id="studioImagesButton"
+              aria-expanded="false"
+              aria-controls="studioLeftPanel"
+              disabled
+            >
+              Images
+            </button>
+
+            <!--
+                 BOTTOM-DOCK-1 — 화면 아래 dock의 설정(IMORY_BOTTOM_DOCK_DESIGN.md
+                 §9). 생김새는 templates.dock과 스킨 CSS의 몫이다.
+            -->
+            <button
+              type="button"
+              class="studio-corner-button studio-mode-button"
+              id="studioDockButton"
+              aria-expanded="false"
+              aria-controls="studioLeftPanel"
+              title="화면 아래 dock의 항목과 동작을 고칩니다"
+              disabled
+            >
+              Dock
+            </button>
+
+          </div>
 
         </div>
 
 
+        <!-- =================================================
+             GROUPS — 지금 보고 있는 것 + 되돌리기
+
+             현재 페이지는 **표시**다. 페이지는 Preview 안의 링크를
+             눌러 옮긴다(preview-bridge.js) — 여기서 고르지 않는다.
+             값은 preview-navigation.js 가 currentPreviewPageType 을
+             바꿀 때마다 studio-shell.js 가 다시 적는다.
+        ================================================== -->
+
         <div class="studio-top-dock-groups">
+
+          <span
+            class="studio-page-indicator"
+            id="studioPageIndicator"
+            title="지금 Preview가 보여 주는 페이지"
+          >HOME</span>
 
           <div
             class="studio-viewport-toggle"
@@ -318,85 +448,107 @@
 
           </div>
 
+          <!--
+               working draft 변경 기록(studio/studio-history.js).
+               Direct Edit · Code · Import · AI · Images · Dock 이 바꾼
+               것을 한 칸씩 되돌리고 다시 적용한다.
+          -->
+          <div
+            class="studio-history-buttons"
+            role="group"
+            aria-label="변경 기록"
+          >
+
+            <button
+              type="button"
+              class="studio-icon-button"
+              id="studioUndoButton"
+              aria-label="Undo"
+              title="Undo (Ctrl+Z)"
+              disabled
+            >↶</button>
+
+            <button
+              type="button"
+              class="studio-icon-button"
+              id="studioRedoButton"
+              aria-label="Redo"
+              title="Redo (Ctrl+Shift+Z)"
+              disabled
+            >↷</button>
+
+          </div>
+
         </div>
 
 
-        <!--
-             PHASE AI-2.1 — 버튼 순서는 "만들기(Code/Import/Images)"
-             다음에 "내보내기(Save/Publish)"다. Settings는 이 toolbar
-             에서 뺐다(진입점만 제거, 기능 코드는 건드리지 않는다 —
-             이 id를 참조하는 JS는 원래 없다).
-        -->
+        <!-- =================================================
+             ACTIONS — 파일 · 저장 · 발행 · AI
+
+             #studioTopDockFiles 는 데스크톱에서는 줄 안의 버튼
+             묶음이고, 좁은 화면에서는 ··· 버튼이 여는 드롭다운이다.
+        ================================================== -->
 
         <div class="studio-top-dock-actions">
 
-          <button
-            type="button"
-            class="studio-corner-button"
-            id="studioCodeButton"
-            disabled
+          <div
+            class="studio-top-dock-files"
+            id="studioTopDockFiles"
           >
-            Code
-          </button>
+
+            <button
+              type="button"
+              class="studio-corner-button"
+              id="studioCodeButton"
+              disabled
+            >
+              Code
+            </button>
+
+            <!--
+                 Import 와 Export 는 한 쌍이다 — 같은 SkinPackage .json
+                 파일을 들이고 내보낸다(Skin Studio 파일 UX). 둘 다
+                 working draft 유무로 활성화된다
+                 (studio-preview.js updateStudioImportButtonState).
+            -->
+            <div
+              class="studio-button-pair"
+              role="group"
+              aria-label="SkinPackage 파일"
+            >
+
+              <button
+                type="button"
+                class="studio-corner-button"
+                id="studioImportButton"
+                disabled
+              >
+                Import
+              </button>
+
+              <button
+                type="button"
+                class="studio-corner-button"
+                id="studioExportButton"
+                title="현재 SkinPackage를 .json 파일로 내려받습니다"
+                disabled
+              >
+                Export
+              </button>
+
+            </div>
+
+          </div>
 
           <button
             type="button"
-            class="studio-corner-button"
-            id="studioImportButton"
-            disabled
-          >
-            Import
-          </button>
-
-          <!--
-               Skin Studio 파일 UX — 지금 working draft(SkinPackage)를
-               다시 Import 가능한 .json 파일로 내려받는다. Import와
-               같은 기준(working draft 유무)으로 활성화된다
-               (studio-preview.js updateStudioImportButtonState).
-          -->
-          <button
-            type="button"
-            class="studio-corner-button"
-            id="studioExportButton"
-            title="현재 SkinPackage를 .json 파일로 내려받습니다"
-            disabled
-          >
-            Export
-          </button>
-
-          <!--
-               Skin Image Library v0.1 — 지금 Skin이 선언한
-               imageSlots에 내 이미지를 연결/교체/비운다.
-               Import 버튼과 같은 기준으로 "working draft가 있는가"
-               만 보고 활성화된다(studio-preview.js
-               updateStudioImagesButtonState).
-          -->
-          <button
-            type="button"
-            class="studio-corner-button"
-            id="studioImagesButton"
-            disabled
-          >
-            Images
-          </button>
-
-          <!--
-               BOTTOM-DOCK-1 — 화면 아래 dock의 **설정**을 고친다
-               (IMORY_BOTTOM_DOCK_DESIGN.md §12): 표시/자리/접기/
-               전환/항목. 생김새는 여기서 손대지 않는다 — 그건
-               templates.dock과 스킨 CSS이고, Code와 AI가 그 길이다.
-               Import/Images와 같은 기준으로 활성화된다
-               (studio-preview.js updateStudioDockButtonState).
-          -->
-          <button
-            type="button"
-            class="studio-corner-button"
-            id="studioDockButton"
-            title="화면 아래 dock의 항목과 동작을 고칩니다"
-            disabled
-          >
-            Dock
-          </button>
+            class="studio-corner-button studio-top-dock-more"
+            id="studioMoreButton"
+            aria-expanded="false"
+            aria-controls="studioTopDockFiles"
+            aria-haspopup="true"
+            aria-label="더 보기 (Code · Import · Export)"
+          >···</button>
 
           <button
             type="button"
@@ -409,7 +561,7 @@
 
           <button
             type="button"
-            class="studio-corner-button"
+            class="studio-corner-button studio-corner-button--primary"
             id="studioPublishButton"
             disabled
           >
@@ -417,15 +569,9 @@
           </button>
 
           <!--
-               PHASE AI-5A.1 — AI 패널의 유일한 여는 곳.
-               예전에는 화면 오른쪽 가장자리의 세로 탭이었는데,
-               "Preview 위에 떠 있는 또 하나의 진입점"이 되어
-               제거하고 여기로 합쳤다. 스킨을 직접 만드는 버튼들과는
-               1px divider로 한 칸 떼어 둔다.
-
-               aria-expanded는 studio/ai/studio-ai-panel-layout.js가
-               패널 헤더의 접기 버튼과 **같은 state 하나**로 동기화한다
-               — 어느 쪽으로 닫든 이 값이 즉시 false가 된다.
+               PHASE AI-5A.1 — AI 패널의 여는 곳. aria-expanded는
+               studio/ai/studio-ai-panel-layout.js가 패널 헤더의 접기
+               버튼과 같은 state 하나로 동기화한다.
           -->
           <span
             class="studio-top-dock-divider"
@@ -438,21 +584,16 @@
             id="studioAiToggleButton"
             aria-expanded="false"
             aria-controls="studioAiDrawer"
-          >
-            AI Assistant
-          </button>
+            aria-label="AI Assistant"
+          >AI<span class="studio-label-wide"> Assistant</span></button>
 
         </div>
 
 
         <!--
-             DOCK HANDLE — 바에 매달린 탭 (반응형 라운드에서
-             zone의 자식 → 바의 자식으로 옮김)
-
-             top:100%(studio.css)로 바 **아래**에 붙는다. 열려
-             있을 때 가운데 Desktop/Mobile 토글 위를 덮지 않고,
-             닫히면 바가 자기 높이만큼 올라가면서 이 탭이 정확히
-             화면 맨 위(y=0)에 남는다 — 예전과 같은 자리다.
+             DOCK HANDLE — 바에 매달린 탭. top:100%(studio.css)로 바
+             **아래**에 붙고, 닫히면 바가 자기 높이만큼 올라가면서
+             이 탭이 화면 맨 위(y=0)에 남는다.
         -->
 
         <button
@@ -1077,6 +1218,14 @@
         "./inspector/studio-inspector-transition.js",
         "./inspector/studio-inspector-controls.js",
         "./inspector/studio-inspector.js",
+
+        /* STUDIO-SHELL-1 — Undo/Redo 기록과 셸(왼쪽 패널 · ··· 메뉴 ·
+           현재 페이지 표시). 둘 다 studio-preview.js 의 상태와
+           Inspector/Images/Dock 의 창구를 **호출 시점에** 쓰므로 그
+           뒤이고, mount 를 시작하는 studio-state.js 보다는 앞이다 —
+           첫 화면이 그려질 때 이미 버튼이 연결돼 있어야 한다. */
+        "./studio-history.js",
+        "./studio-shell.js",
         "./studio-state.js"
       ]
     );

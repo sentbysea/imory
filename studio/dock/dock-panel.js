@@ -3,8 +3,18 @@
 
    기준 문서: IMORY_BOTTOM_DOCK_DESIGN.md §9
 
-   studio/images/images-panel.js 와 같은 형태의 modal 이다 — DOM 은
-   처음 열 때 한 번 만들고 이후 재사용한다.
+   studio/images/images-panel.js 와 같은 형태다 — DOM 은 처음 열 때
+   한 번 만들고 이후 재사용한다.
+
+   STUDIO-SHELL-1 — 예전에는 화면 전체를 덮는 modal 이었다. 이제
+   Studio 왼쪽 패널의 Dock 자리(#studioLeftPanelDock)에 들어가는
+   **패널 내용**이다. 여닫기는 studio/studio-shell.js 가 정한다.
+   셸이 다른 내용(Select/Images)으로 옮겨 가도 적용하지 않은 사본은
+   버리지 않는다 — 다시 Dock 을 누르면 그 사본 그대로 보인다. 다만
+   그 사이 working draft 가 바뀌었으면(Undo · AI · Import …) 옛
+   사본으로 새 draft 를 덮지 않도록 새로 만든다(openSkinDockPanel).
+   적용 · 취소 · 지우기 · Escape 는 예전처럼 사본을 끝내고, 셸에게
+   알려 패널을 접게 한다.
 
    ── 사용자가 이해해야 하는 것은 넷뿐이다 ────────────────
      1) Dock 켜기/끄기
@@ -59,6 +69,11 @@ let dockPanelIsOpen = false;
   한 글자도 바뀌지 않는다.
 */
 let dockPanelDraft = null;
+
+/* 사본을 만든 순간의 working draft revision(studio-preview.js
+   studioWorkingRevision). 다시 열 때 이 값이 그대로면 사본을 이어서
+   보여 준다. */
+let dockPanelDraftRevision = -1;
 
 let dockPanelTargets = { categories: [], imageSlots: [] };
 
@@ -1052,18 +1067,29 @@ function ensureDockPanelDom() {
   const overlay =
     dockEl("div", "dock-panel-overlay");
 
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) {
-      closeSkinDockPanel();
-    }
-  });
+  const host =
+    document.getElementById("studioLeftPanelDock");
+
+  /* 바깥(어두운 배경)을 눌러 닫기 — modal 로 뜰 때만 */
+  if (!host) {
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        closeSkinDockPanel();
+      }
+    });
+  }
 
 
   const modal =
     dockEl("div", "dock-panel-modal");
 
-  modal.setAttribute("role", "dialog");
-  modal.setAttribute("aria-modal", "true");
+  if (host) {
+    modal.setAttribute("role", "region");
+  } else {
+    modal.setAttribute("role", "dialog");
+    modal.setAttribute("aria-modal", "true");
+  }
+
   modal.setAttribute("aria-label", "Bottom Dock");
 
 
@@ -1138,16 +1164,28 @@ function ensureDockPanelDom() {
 
   overlay.appendChild(modal);
 
-  document.body.appendChild(overlay);
+  (host || document.body).appendChild(overlay);
 
   dockPanelOverlay = overlay;
 
 
+  /* Escape — 패널이 지금 Dock 을 **보여 주고 있을 때만**. 다른 내용을
+     보는 동안 숨겨진 사본을 Escape 가 버리면 안 된다. */
   document.addEventListener("keydown", (event) => {
 
-    if (dockPanelIsOpen && event.key === "Escape") {
-      closeSkinDockPanel();
+    if (!dockPanelIsOpen || event.key !== "Escape") {
+      return;
     }
+
+    if (
+      host &&
+      typeof window.isStudioLeftPanelShowing === "function" &&
+      !window.isStudioLeftPanelShowing("dock")
+    ) {
+      return;
+    }
+
+    closeSkinDockPanel();
 
   });
 
@@ -1448,6 +1486,20 @@ function openSkinDockPanel() {
 
   ensureDockPanelDom();
 
+  /* 셸이 다른 내용을 보다가 돌아왔다 — 그 사이 working draft 가 그대로면
+     적용하지 않은 사본을 이어서 보여 준다. */
+  if (
+    dockPanelIsOpen &&
+    dockPanelDraft &&
+    dockPanelDraftRevision === dockPanelWorkingRevision()
+  ) {
+
+    dockPanelOverlay.classList.add("dock-panel-overlay--open");
+
+    return;
+
+  }
+
   dockPanelTargets =
     (typeof window.getStudioBottomDockTargets === "function")
       ? window.getStudioBottomDockTargets()
@@ -1476,6 +1528,21 @@ function openSkinDockPanel() {
 
   dockPanelIsOpen = true;
 
+  dockPanelDraftRevision =
+    dockPanelWorkingRevision();
+
+}
+
+
+/* studio-preview.js 의 studioWorkingRevision(나중에 로드되는 classic
+   script 의 top-level let — 호출 시점에는 이미 있다). 없는 문서에서는
+   매번 다른 값이라 사본을 이어 쓰지 않는다. */
+function dockPanelWorkingRevision() {
+
+  return typeof studioWorkingRevision === "number"
+    ? studioWorkingRevision
+    : Number.NaN;
+
 }
 
 
@@ -1490,6 +1557,13 @@ function closeSkinDockPanel() {
   dockPanelIsOpen = false;
 
   dockPanelDraft = null;
+
+  dockPanelDraftRevision = -1;
+
+  /* STUDIO-SHELL-1 — 왼쪽 패널이 Dock 을 보여 주고 있었다면 접는다 */
+  if (typeof window.handleStudioLeftPanelContentClosed === "function") {
+    window.handleStudioLeftPanelContentClosed("dock");
+  }
 
 }
 

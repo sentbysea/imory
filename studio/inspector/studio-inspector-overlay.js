@@ -9,7 +9,8 @@
      - iframe 안 좌표를 Studio(뷰포트) 좌표로 옮긴다
        (studioInspectorFrameGeometry / studioInspectorMapRect /
        studioInspectorMapRectRaw)
-     - 그 좌표로 테두리·핸들을 칠하고 팝오버를 앉힌다
+     - 그 좌표로 테두리·이름표·핸들을 칠한다(팝오버는 왼쪽 패널에
+       산다 — STUDIO-SHELL-1)
      - Studio 레이아웃이 바뀌면 다시 칠한다
        (repaintStudioInspectorOverlay + resize/ResizeObserver)
 
@@ -30,7 +31,7 @@
      노출하지 않는다.
 
        studio-inspector-state.js       공유 상태 · 선택 해석 · 임시 채널
-       studio-inspector-overlay.js     overlay DOM · 좌표 변환 · 테두리/핸들/팝오버 위치
+       studio-inspector-overlay.js     overlay DOM · 좌표 변환 · 테두리/이름표/핸들
        studio-inspector-edit.js        확정 경로(patch/스타일/링크/Undo)
        studio-inspector-text.js        텍스트 임시 편집 · 적용 · 취소
        studio-inspector-image-size.js  이미지 너비 컨트롤 · 모서리 드래그
@@ -255,8 +256,27 @@ function buildStudioInspectorLayer() {
 
   studioInspectorCropSurface.appendChild(cropGuide);
 
+  /* STUDIO-SHELL-1 — 선택 요소 이름표. 테두리와 같은 층에 두되
+     핸들보다 **먼저** 붙인다 — 둘이 겹치면 핸들이 위에서 잡힌다.
+     내용은 renderStudioInspectorPopover()가 팝오버 제목과 같은
+     문구로 채운다. */
+  studioInspectorSelectLabel =
+    document.createElement("div");
+
+  studioInspectorSelectLabel.className =
+    "studio-inspector-select-label";
+
+  studioInspectorSelectLabel.id =
+    "studioInspectorSelectLabel";
+
+  studioInspectorSelectLabel.setAttribute("aria-hidden", "true");
+
+  studioInspectorSelectLabel.hidden =
+    true;
+
   studioInspectorLayer.appendChild(studioInspectorHoverBox);
   studioInspectorLayer.appendChild(studioInspectorSelectBox);
+  studioInspectorLayer.appendChild(studioInspectorSelectLabel);
   studioInspectorLayer.appendChild(studioInspectorCropSurface);
 
   /* 자유 비율 핸들 — 자르기 판과 같은 사각형 위에 앉지만 판보다
@@ -405,7 +425,24 @@ function buildStudioInspectorLayer() {
 
   studioInspectorLayer.appendChild(studioInspectorMoveHandle);
 
-  studioInspectorLayer.appendChild(studioInspectorPopover);
+  /* =====================================================
+     STUDIO-SHELL-1 — 팝오버는 Preview 위에 뜨지 않는다
+
+     왼쪽 패널의 Select 자리(#studioLeftPanelSelect)에 들어가
+     패널 내용이 된다. 안내 문구(#studioLeftPanelSelectEmpty) **앞**
+     에 넣는다 — 선택이 생기면 CSS 가 그 문구를 물린다
+     (studio-shell.css). 자리가 없는 문서(셸이 없는 하네스)에서만
+     예전처럼 레이어에 붙는다.
+  ====================================================== */
+
+  const popoverHost =
+    document.getElementById("studioLeftPanelSelect");
+
+  if (popoverHost) {
+    popoverHost.insertBefore(studioInspectorPopover, popoverHost.firstChild);
+  } else {
+    studioInspectorLayer.appendChild(studioInspectorPopover);
+  }
 
   studioInspectorShell.appendChild(studioInspectorLayer);
 
@@ -675,304 +712,95 @@ function paintStudioInspectorHandles(rect, visibleRect) {
 
 
 /* =========================================================
-   팝오버 위치 — 선택 요소 rect 기준, 화면 밖으로 나가면 위/아래·
-   좌/우 자동 보정(요구사항 6절). 기준 영역은 뷰포트가 아니라
-   Preview stage다 — AI 패널이 열려 있을 때 팝오버가 그 아래로
-   숨지 않게 하기 위해서다.
+   선택 요소 이름표 (STUDIO-SHELL-1)
+
+   예전에는 여기가 "팝오버 위치"였다 — 긴 직접 수정 카드가 선택
+   요소 옆에 떠서 자리를 고르고(위/아래·좌/우 보정, 손이 슬라이더를
+   잡고 있는 동안 고정, 편집 중인 요소를 덮으면 다시 고르기),
+   그래도 Preview 의 일부를 가렸다. 이제 그 카드는 왼쪽 패널의
+   Select 자리에 산다(buildStudioInspectorLayer) — 떠 있지 않으므로
+   고를 자리도 없다.
+
+   Preview 위에 남는 것은 셋이다: 선택 테두리 · 이 이름표 · 이동/
+   크기 핸들. 이름표는 테두리 왼쪽 위 **바깥**에 붙고, 그 자리가
+   Preview 위쪽 경계(또는 그 위를 덮은 Top Dock) 밖이면 테두리
+   **안쪽** 위에 붙는다. 자유 배치 이동 손잡이(✥)가 같은 모서리
+   바깥에 있으면 그 옆으로 비킨다.
+
+   sandbox 스킨에서는 테두리를 프레임이 그리지만(studio-inspector-
+   state.js studioInspectorRemoteOverlay) 이름표는 이쪽이 그린다 —
+   좌표는 같은 rects 메시지로 온다.
 ========================================================== */
 
-const STUDIO_INSPECTOR_POPOVER_GAP = 8;
+const STUDIO_INSPECTOR_LABEL_GAP = 3;
 
-/* 자유 비율 핸들은 프레임 **밖으로** 나온다 — 변 막대는 10px,
-   모서리는 12px. 팝오버가 평소의 8px 간격만 두면 그 자리를 덮어
-   모서리 핸들이 팝오버 밑에 깔린다(눌러도 팝오버가 먼저 받는다).
-   자유 비율이 켜져 있는 동안에만 그만큼 더 비켜 앉는다. */
-const STUDIO_INSPECTOR_CROP_HANDLE_REACH = 16;
+/* 이동 손잡이(20px + 여백)만큼 */
+const STUDIO_INSPECTOR_LABEL_MOVE_SHIFT = 24;
 
 
-function studioInspectorPopoverClearance() {
-
-  return STUDIO_INSPECTOR_POPOVER_GAP +
-    ((studioInspectorCropDraft && studioInspectorCropDraft.free)
-      ? STUDIO_INSPECTOR_CROP_HANDLE_REACH
-      : 0);
-
-}
-
-/* 지금 앉아 있는 자리.
-
-   ★ 규칙 (요구사항 C)
-     - 손이 무언가를 만지고 있는 동안(슬라이더 · 숫자 입력 ·
-       모서리 드래그 · 자르기 드래그 = 임시 미리보기가 떠 있는
-       동안)에는 **절대 움직이지 않는다.** 이미지가 커지면 팝오버가
-       따라 내려가고, 그러면 손이 잡고 있는 슬라이더가 밑으로
-       도망간다. 그게 원래 불편의 정체다.
-     - 손을 뗀 뒤에는 자리를 그대로 두되, 두 경우에만 다시 고른다:
-       stage 밖으로 밀려났을 때, 그리고 **지금 편집 중인 요소를
-       덮고 있을 때**. 덮은 채로 두면 모서리 핸들이 팝오버 밑으로
-       들어가 잡히지 않는다.
-     - 선택이 바뀌거나 폼 모양이 바뀌면 새로 고른다(force).
-
-   ★ 선택 테두리와 모서리 핸들은 이 고정과 무관하게 늘 실제
-     프레임을 따라간다 — 그쪽은 "무엇이 선택돼 있는가"를 보여주는
-     선이고, 팝오버는 손이 올라가 있는 판이라서 요구가 반대다. */
-let studioInspectorPopoverPlacement = null;
-
-
-/* 지금 손이 무언가를 만지고 있는가 — 임시 미리보기가 떠 있으면
-   그렇다(크기 슬라이더/숫자칸/모서리 드래그/자르기 전 과정). */
-function studioInspectorPopoverIsBusy() {
-
-  return !!(
-    studioInspectorPreviewActive ||
-    studioInspectorDrag ||
-    studioInspectorCropDrag ||
-    studioInspectorCropSideDrag
-  );
-
-}
-
-
-/* 모서리 핸들은 사각형 모서리에 걸쳐 그려진다 — 팝오버가 그 바로
-   위까지 올라오면 핸들 절반이 덮인다. 그만큼 여유를 둔다. */
-const STUDIO_INSPECTOR_HANDLE_HIT_PAD = 10;
-
-
-/* 팝오버가 지금 편집 중인 사각형을 덮고 있는가(모서리 핸들이
-   잡히는 자리까지 조금 넉넉하게 본다). */
-function studioInspectorPopoverCovers(anchor, size, placement) {
-
-  if (!anchor || !anchor.width || !anchor.height) {
-    return false;
-  }
-
-  /* 자유 비율에서는 잡을 것이 프레임 밖으로 더 나와 있다 */
-  const pad =
-    Math.max(
-      STUDIO_INSPECTOR_HANDLE_HIT_PAD,
-      studioInspectorPopoverClearance() - STUDIO_INSPECTOR_POPOVER_GAP
-    );
-
-  return !(
-    placement.left > anchor.left + anchor.width + pad ||
-    placement.left + size.width < anchor.left - pad ||
-    placement.top > anchor.top + anchor.height + pad ||
-    placement.top + size.height < anchor.top - pad
-  );
-
-}
-
-
-
-
-function studioInspectorStageBounds() {
-
-  const stage =
-    studioInspectorStage
-      ? studioInspectorStage.getBoundingClientRect()
-      : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
-
-  /* =====================================================
-     Top Dock 이 덮는 만큼은 앉을 수 있는 자리가 아니다.
-
-     바는 stage 위에 얹히고(z-index 8) 좁은 폭에서는 여러 줄로
-     접혀 세 배까지 자란다. 그 밑에 팝오버를 앉히면 "✦ AI 수정"
-     같은 버튼을 아예 누를 수 없다(390px 실측, 2026-09-17).
-
-     바가 접혀 있으면 rect 가 뷰포트 위로 나가므로 이 계산은
-     아무 일도 하지 않는다 — 데스크톱의 평소 동작(48px 바)도
-     지금까지와 같다.
-  ====================================================== */
+function studioInspectorLabelTopBound(frameBox) {
 
   if (!studioInspectorTopDock) {
-    return stage;
+    return frameBox.top;
   }
 
   const dock =
     studioInspectorTopDock.getBoundingClientRect();
 
-  const overlaps =
-    dock.bottom > stage.top &&
-    dock.top < stage.bottom &&
-    dock.right > stage.left &&
-    dock.left < stage.right;
+  /* 바가 접혀 올라가 있으면 사각형이 뷰포트 위로 나가 있다 */
+  return dock.bottom > frameBox.top && dock.left < frameBox.right
+    ? Math.max(frameBox.top, dock.bottom)
+    : frameBox.top;
 
-  if (!overlaps) {
-    return stage;
+}
+
+
+function paintStudioInspectorSelectLabel(rect) {
+
+  const label =
+    studioInspectorSelectLabel;
+
+  if (!label) {
+    return;
   }
+
+  const mapped =
+    (studioInspectorSelection && label.textContent)
+      ? studioInspectorMapRect(rect)
+      : null;
+
+  if (!mapped) {
+    label.hidden = true;
+    return;
+  }
+
+  label.hidden = false;
+
+  const frame =
+    studioInspectorFrameGeometry().box;
+
+  const shift =
+    (studioInspectorMoveHandle && !studioInspectorMoveHandle.hidden)
+      ? STUDIO_INSPECTOR_LABEL_MOVE_SHIFT
+      : 0;
+
+  const left =
+    mapped.left + shift;
+
+  const height =
+    label.offsetHeight || 20;
+
+  const outside =
+    mapped.top - height - STUDIO_INSPECTOR_LABEL_GAP;
 
   const top =
-    Math.min(Math.max(stage.top, dock.bottom), stage.bottom);
+    outside >= studioInspectorLabelTopBound(frame)
+      ? outside
+      : mapped.top + STUDIO_INSPECTOR_LABEL_GAP;
 
-  return {
-    left: stage.left,
-    top,
-    right: stage.right,
-    bottom: stage.bottom,
-    width: stage.right - stage.left,
-    height: stage.bottom - top
-  };
-
-}
-
-
-/* 앵커(선택 사각형) 기준으로 앉을 자리를 새로 고른다.
-
-   자르는 동안에는 **옆으로** 비켜 앉는다 — 자르기는 프레임 위를
-   직접 끄는 조작이라, 아래에 붙으면 큰 프레임에서 드래그 영역을
-   덮는다. 옆에 자리가 없을 때만 위/아래로 돌아간다. */
-function studioInspectorPopoverSpot(anchor, size, bounds) {
-
-  const minLeft =
-    bounds.left + STUDIO_INSPECTOR_POPOVER_GAP;
-
-  const maxLeft =
-    Math.max(minLeft, bounds.right - size.width - STUDIO_INSPECTOR_POPOVER_GAP);
-
-  const minTop =
-    bounds.top + STUDIO_INSPECTOR_POPOVER_GAP;
-
-  const maxTop =
-    Math.max(minTop, bounds.bottom - size.height - STUDIO_INSPECTOR_POPOVER_GAP);
-
-  /* 앵커에서 떨어질 거리 — 자유 비율에서는 핸들이 나온 만큼 더
-     비켜 앉는다(studioInspectorPopoverClearance). stage 경계까지의
-     여백은 지금까지와 같은 8px 그대로다. */
-  const clearance =
-    studioInspectorPopoverClearance();
-
-  if (studioInspectorCropDraft) {
-
-    const right =
-      anchor.left + anchor.width + clearance;
-
-    const left =
-      anchor.left - size.width - clearance;
-
-    const beside =
-      (right + size.width <= bounds.right - STUDIO_INSPECTOR_POPOVER_GAP)
-        ? right
-        : (left >= minLeft ? left : null);
-
-    if (beside !== null) {
-
-      return {
-        left: beside,
-        top: Math.min(Math.max(anchor.top, minTop), maxTop)
-      };
-
-    }
-
-  }
-
-  let top =
-    anchor.top + anchor.height + clearance;
-
-  if (top + size.height > bounds.bottom - STUDIO_INSPECTOR_POPOVER_GAP) {
-
-    const above =
-      anchor.top - size.height - clearance;
-
-    top =
-      above >= minTop ? above : maxTop;
-
-  }
-
-  return {
-    left: Math.min(Math.max(anchor.left, minLeft), maxLeft),
-
-    /* ★ 위쪽도 반드시 물린다. 예전에는 아래로 넘칠 때만 되밀었는데,
-       고른 요소가 화면 맨 위에 있으면 팝오버가 minTop 위에 앉아
-       **Top Dock 밑에 깔렸다** — 390px 에서 바가 세 줄(144px)이 되면
-       "✦ AI 수정"을 아예 누를 수 없었다(2026-09-17 실측). */
-    top: Math.min(Math.max(top, minTop), maxTop)
-  };
-
-}
-
-
-function placeStudioInspectorPopover(rect, options) {
-
-  if (!studioInspectorPopover || studioInspectorPopover.hidden) {
-    studioInspectorPopoverPlacement = null;
-    return;
-  }
-
-  const bounds =
-    studioInspectorStageBounds();
-
-  const size =
-    studioInspectorPopover.getBoundingClientRect();
-
-  const mappedAnchor =
-    studioInspectorMapRect(rect);
-
-  /* 손을 떼고 난 뒤, 지금 자리가 편집 중인 요소를 덮고 있으면
-     다시 고른다 — 안 그러면 모서리 핸들이 팝오버 밑에 깔린다. */
-  const covering =
-    !studioInspectorPopoverIsBusy() &&
-    !!studioInspectorPopoverPlacement &&
-    studioInspectorPopoverCovers(mappedAnchor, size, studioInspectorPopoverPlacement);
-
-  const force =
-    !!(options && options.force) ||
-    !studioInspectorPopoverPlacement ||
-    covering;
-
-  if (!force) {
-
-    /* 자리는 그대로 두되, stage 밖으로 밀려났으면 그만큼만 되민다.
-       (AI 패널을 열어 stage가 좁아졌거나 창이 작아진 경우) */
-    const minLeft =
-      bounds.left + STUDIO_INSPECTOR_POPOVER_GAP;
-
-    const maxLeft =
-      Math.max(minLeft, bounds.right - size.width - STUDIO_INSPECTOR_POPOVER_GAP);
-
-    const minTop =
-      bounds.top + STUDIO_INSPECTOR_POPOVER_GAP;
-
-    const maxTop =
-      Math.max(minTop, bounds.bottom - size.height - STUDIO_INSPECTOR_POPOVER_GAP);
-
-    const left =
-      Math.min(Math.max(studioInspectorPopoverPlacement.left, minLeft), maxLeft);
-
-    const top =
-      Math.min(Math.max(studioInspectorPopoverPlacement.top, minTop), maxTop);
-
-    studioInspectorPopoverPlacement = { left, top };
-
-    studioInspectorPopover.style.left = `${left}px`;
-    studioInspectorPopover.style.top = `${top}px`;
-
-    return;
-
-  }
-
-  const anchor =
-    mappedAnchor || {
-      left: bounds.left + 16,
-      top: bounds.top + 16,
-      width: 0,
-      height: 0
-    };
-
-  studioInspectorPopoverPlacement =
-    studioInspectorPopoverSpot(anchor, size, bounds);
-
-  studioInspectorPopover.style.left = `${studioInspectorPopoverPlacement.left}px`;
-  studioInspectorPopover.style.top = `${studioInspectorPopoverPlacement.top}px`;
-
-}
-
-
-/* 팝오버 내용이 바뀌어 크기가 달라졌을 때(직접 수정 폼 여닫기,
-   자르기 열기) 자리를 새로 고른다 — 내용이 그대로면 부르지
-   않는다. renderStudioInspectorPopover()가 마지막에 부른다. */
-function resetStudioInspectorPopoverPlacement() {
-
-  studioInspectorPopoverPlacement = null;
+  label.style.left = `${left}px`;
+  label.style.top = `${top}px`;
+  label.style.maxWidth = `${Math.max(60, Math.round(frame.right - left - 4))}px`;
 
 }
 
@@ -1000,10 +828,9 @@ function repaintStudioInspectorOverlay() {
 
     paintStudioInspectorHandles(studioInspectorSelection.rect, visible);
 
-    /* stage가 움직인 경우다(창 크기 · AI 패널 · Desktop/Mobile) —
-       그때는 팝오버도 새 자리를 골라야 한다. 다만 손이 무언가를
-       잡고 있는 중이면 그대로 둔다(자리 보정만 한다). */
-    placeStudioInspectorPopover(visible, { force: !studioInspectorPopoverIsBusy() });
+    /* stage가 움직인 경우다(창 크기 · 왼쪽/AI 패널 · Desktop/Mobile) —
+       이름표도 테두리를 따라간다. */
+    paintStudioInspectorSelectLabel(visible);
 
   }
 

@@ -1,0 +1,940 @@
+/* =========================================================
+   SKIN STUDIO — SHELL (STUDIO-SHELL-1)
+
+   기준 문서: IMORY_STUDIO_SHELL_DESIGN.md
+
+   화면 정보 구조만 담는다 — 기능 파일의 규칙은 건드리지 않는다.
+
+     [ 상단 바: 왼쪽 · 가운데 · 오른쪽 세 그룹                   ]
+     [ 왼쪽 패널 ][        Preview stage        ][ AI 패널 ]
+
+   ★ 폭의 원천
+     왼쪽: --studio-left-panel-width (이 파일)
+     오른쪽: --studio-ai-panel-width (studio.css · studio-ai-panel-layout.js)
+     #studioPreviewStage 의 left/right 가 두 값을 읽는다. 그래서
+     iframe 의 레이아웃 뷰포트가 실제로 좁아지고(스킨 @media 가 그
+     폭으로 다시 평가된다) Mobile 축소 배율은 stage 의 ResizeObserver
+     (studio-preview.js)가, Inspector 테두리는 같은 stage 의
+     ResizeObserver(studio-inspector-overlay.js)가 다시 계산한다.
+
+   ★ 이 파일이 맨 뒤에 로드되는 이유
+     Images(images-panel.css) · Dock(dock-panel.css) · Inspector
+     (studio-inspector.css)는 원래 modal/팝오버 모양을 갖고 있다.
+     여기서 `.studio-left-panel` 안에 있을 때만 패널 모양으로 바꾼다
+     — 조상 선택자가 붙어 특정도가 높지만, 같은 특정도의 규칙
+     (stage 의 transition)도 있어 순서까지 맞춰 둔다.
+========================================================== */
+
+.studio-preview-shell {
+  --studio-left-panel-width: 320px;
+}
+
+
+/* 좁은 데스크톱(721~1100px)에서는 한 칸 좁힌다 — AI 패널까지 열면
+   Preview 가 너무 작아진다. */
+@media (max-width: 1100px) {
+
+  .studio-preview-shell {
+    --studio-left-panel-width: 280px;
+  }
+
+}
+
+
+/* =========================================================
+   Preview stage — 왼쪽 패널만큼 비킨다
+
+   transition 은 studio.css 가 right 에만 걸어 둔 것을 left 까지
+   넓힌다(같은 선택자, 이 파일이 뒤라 이긴다). AI 폭 드래그 중에
+   전환을 끄는 규칙(body.studio-ai-resizing …)은 특정도가 더 높아
+   그대로 이긴다.
+========================================================== */
+
+.studio-preview-stage {
+  transition:
+    left var(--studio-ai-panel-motion),
+    right var(--studio-ai-panel-motion);
+}
+
+
+.studio-preview-shell.has-left-panel .studio-preview-stage {
+  left: var(--studio-left-panel-width);
+}
+
+
+/* Preview Back 은 stage 왼쪽 위에 붙어 있어야 한다 — 패널 밑에
+   깔리지 않고, 바가 두 줄이 되어도 그 아래에 앉는다. */
+.studio-preview-back-floating {
+  top: calc(var(--studio-top-dock-height, 48px) + 8px);
+
+  transition: left var(--studio-ai-panel-motion);
+}
+
+
+.studio-preview-shell.has-left-panel .studio-preview-back-floating {
+  left: calc(var(--studio-left-panel-width) + 12px);
+}
+
+
+
+/* =========================================================
+   LEFT PANEL
+
+   바 **아래**에서 시작한다(바는 z-index 8 로 위에 있다). 바를
+   handle 로 접으면 맨 위까지 올라온다 — 바의 높이는
+   studio-preview.js 가 --studio-top-dock-height 로 알려 준다.
+
+   접힘은 AI 패널과 같은 방식이다: display:none 이 아니라 왼쪽 밖으로
+   밀어낸 뒤 visibility 를 늦게 건다(닫히는 동안 보이다가 다 나간 뒤
+   사라지고, Tab 순서와 hit-test 에서도 빠진다).
+========================================================== */
+
+.studio-left-panel {
+  position: absolute;
+  top: var(--studio-top-dock-height, 48px);
+  left: 0;
+  bottom: 0;
+
+  z-index: 6;
+
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+
+  width: var(--studio-left-panel-width);
+
+  border-right: 1px solid var(--system-border-strong);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  pointer-events: none;
+
+  transform: translateX(-100%);
+
+  visibility: hidden;
+
+  transition:
+    transform var(--studio-ai-panel-motion),
+    top var(--studio-ai-panel-motion),
+    visibility 0s linear 0.15s;
+}
+
+
+.studio-left-panel.is-open {
+  pointer-events: auto;
+
+  transform: translateX(0);
+
+  visibility: visible;
+
+  transition:
+    transform var(--studio-ai-panel-motion),
+    top var(--studio-ai-panel-motion),
+    visibility 0s;
+}
+
+
+.studio-preview-shell:has(.studio-top-dock-zone:not(.is-open)) .studio-left-panel {
+  top: 0;
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+
+  .studio-left-panel,
+  .studio-left-panel.is-open,
+  .studio-preview-stage,
+  .studio-preview-back-floating {
+    transition: none;
+  }
+
+}
+
+
+.studio-left-panel-header {
+  flex: 0 0 auto;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  min-height: 44px;
+
+  padding: 0 8px 0 14px;
+
+  border-bottom: 1px solid var(--system-border);
+}
+
+
+.studio-left-panel-title {
+  flex: 1;
+
+  margin: 0;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  font-weight: 600;
+
+  letter-spacing: 0.14em;
+}
+
+
+.studio-left-panel-collapse {
+  flex: 0 0 auto;
+
+  width: 28px;
+  height: 28px;
+
+  padding: 0;
+
+  border: 1px solid transparent;
+  border-radius: var(--imory-radius-200);
+
+  background: transparent;
+
+  color: var(--system-text-faint);
+
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+
+.studio-left-panel-collapse:hover,
+.studio-left-panel-collapse:focus-visible {
+  color: var(--system-accent-hover);
+}
+
+
+/* 본문은 section 하나만 보인다. section 이 자기 스크롤을 갖는다 —
+   Images/Dock 은 머리·꼬리를 고정하고 가운데만 스크롤하기 때문이다. */
+.studio-left-panel-body {
+  flex: 1 1 auto;
+
+  display: flex;
+  flex-direction: column;
+
+  min-height: 0;
+
+  overflow: hidden;
+}
+
+
+.studio-left-panel-section {
+  flex: 1 1 auto;
+
+  display: flex;
+  flex-direction: column;
+
+  min-height: 0;
+}
+
+
+.studio-left-panel-section[hidden] {
+  display: none;
+}
+
+
+.studio-left-panel-section[data-left-panel-mode="select"] {
+  overflow-y: auto;
+
+  padding: 12px 14px 16px;
+}
+
+
+.studio-left-panel-empty {
+  margin: 4px 0 0;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-300);
+  line-height: var(--imory-line-height-relaxed);
+
+  word-break: keep-all;
+}
+
+
+/* 선택이 있으면 안내 문구는 물러난다(팝오버가 이 문구 **앞**에 들어온다) */
+.studio-inspector-popover:not([hidden]) ~ .studio-left-panel-empty {
+  display: none;
+}
+
+
+
+/* =========================================================
+   Select — Inspector 팝오버를 패널 내용으로
+
+   팝오버 DOM 과 그 안의 폼은 그대로다(studio-inspector-overlay.js
+   가 만들고 studio-inspector-controls.js 가 채운다). 떠 있던 카드의
+   모양(절대 위치 · 폭 268px · 60vh 스크롤 · 그림자)만 걷는다.
+========================================================== */
+
+.studio-left-panel .studio-inspector-popover {
+  position: static;
+
+  width: auto;
+  max-height: none;
+
+  overflow: visible;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 0;
+
+  background: transparent;
+
+  box-shadow: none;
+}
+
+
+.studio-left-panel .studio-inspector-popover-title {
+  margin-bottom: 10px;
+
+  color: var(--system-text);
+
+  font-size: var(--imory-font-size-300);
+  font-weight: var(--imory-font-weight-medium);
+}
+
+
+
+/* =========================================================
+   Preview 위에 남는 것 — 선택 테두리 · 요소 이름 · 핸들
+
+   요소 이름표는 테두리 왼쪽 위 바깥에 붙는다(자리가 없으면 안쪽).
+   포인터를 받지 않는다 — Preview 클릭과 핸들을 가로채지 않는다.
+========================================================== */
+
+.studio-inspector-select-label {
+  position: absolute;
+
+  box-sizing: border-box;
+
+  max-width: 240px;
+
+  padding: 2px 6px;
+
+  border-radius: var(--imory-radius-100);
+
+  background: var(--system-accent-hover);
+
+  color: var(--imory-white);
+
+  font-size: 11px;
+  line-height: 16px;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  pointer-events: none;
+}
+
+
+.studio-inspector-select-label[hidden] {
+  display: none;
+}
+
+
+
+/* =========================================================
+   Images — modal 을 패널 내용으로
+
+   .images-panel-overlay 라는 이름은 그대로 둔다 — 여닫기 표식이
+   hidden 속성 하나이고, 이미지 라이브러리 테스트가 그 이름으로
+   "열렸다/닫혔다"를 본다. 모양만 바꾼다: 두 열 → 한 열, 헤더의
+   제목·✕ 는 패널 머리가 대신한다.
+========================================================== */
+
+/* modal 일 때의 가운데 정렬(align-items: center)을 걷어야 내용이
+   패널 높이에 묶이고 가운데만 스크롤한다 — 그대로 두면 내용 높이만큼
+   자라 패널 밖으로 넘친다. Dock 도 같다. */
+.studio-left-panel .images-panel-overlay {
+  position: static;
+  inset: auto;
+
+  z-index: auto;
+
+  flex: 1 1 auto;
+
+  display: flex;
+  align-items: stretch;
+  justify-content: stretch;
+
+  min-height: 0;
+
+  padding: 0;
+
+  background: transparent;
+}
+
+
+.studio-left-panel .images-panel-overlay[hidden] {
+  display: none;
+}
+
+
+.studio-left-panel .images-panel-modal {
+  flex: 1 1 auto;
+
+  width: 100%;
+  height: auto;
+
+  min-height: 0;
+
+  border: 0;
+  border-radius: 0;
+}
+
+
+.studio-left-panel .images-panel-header {
+  display: none;
+}
+
+
+/* 한 열이 되면 두 구역(SLOTS · MY IMAGES)이 grid 의 두 줄이다 —
+   줄 높이를 내용에 맞추지 않으면 남는 높이를 반씩 나눠 가져 슬롯
+   목록 밑에 큰 빈칸이 생긴다. */
+.studio-left-panel .images-panel-body {
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: max-content;
+  align-content: start;
+
+  overflow-y: auto;
+}
+
+
+/* 가운데(본문)만 스크롤하고 머리·안내·꼬리는 줄어들지 않는다 —
+   줄어들면 두 줄짜리 안내 문구가 꼬리 버튼 위로 겹친다. */
+.studio-left-panel .images-panel-message,
+.studio-left-panel .images-panel-footer,
+.studio-left-panel .dock-panel-header,
+.studio-left-panel .dock-panel-message,
+.studio-left-panel .dock-panel-footer {
+  flex-shrink: 0;
+}
+
+
+.studio-left-panel .images-panel-column {
+  padding: 12px 14px;
+}
+
+
+.studio-left-panel .images-panel-column + .images-panel-column {
+  border-left: 0;
+  border-top: 1px solid var(--system-border);
+}
+
+
+.studio-left-panel .images-panel-slot-list,
+.studio-left-panel .images-panel-grid {
+  overflow: visible;
+}
+
+
+.studio-left-panel .images-panel-grid {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+}
+
+
+.studio-left-panel .images-panel-footer {
+  flex-wrap: wrap;
+
+  padding: 10px 14px;
+}
+
+
+
+/* =========================================================
+   Dock — modal 을 패널 내용으로
+
+   .dock-panel-overlay--open 이 여닫기 표식이다(dock-panel.js ·
+   Dock 패널 테스트). 모양만 바꾼다. 부제는 남기고 제목은 패널
+   머리가 대신한다.
+========================================================== */
+
+.studio-left-panel .dock-panel-overlay {
+  position: static;
+
+  z-index: auto;
+
+  align-items: stretch;
+  justify-content: stretch;
+
+  flex: 1 1 auto;
+
+  min-height: 0;
+
+  padding: 0;
+
+  background: transparent;
+}
+
+
+.studio-left-panel .dock-panel-overlay--open {
+  display: flex;
+}
+
+
+.studio-left-panel .dock-panel-modal {
+  flex: 1 1 auto;
+
+  width: 100%;
+  max-height: none;
+
+  min-height: 0;
+
+  border-radius: 0;
+
+  box-shadow: none;
+}
+
+
+.studio-left-panel .dock-panel-header {
+  padding: 12px 14px 10px;
+}
+
+
+.studio-left-panel .dock-panel-title {
+  display: none;
+}
+
+
+.studio-left-panel .dock-panel-body {
+  padding: 8px 14px 14px;
+}
+
+
+.studio-left-panel .dock-panel-message {
+  padding: 6px 14px 0;
+}
+
+
+.studio-left-panel .dock-panel-row {
+  grid-template-columns: minmax(0, 1fr);
+
+  gap: 4px;
+}
+
+
+.studio-left-panel .dock-panel-footer {
+  flex-wrap: wrap;
+
+  padding: 10px 14px;
+}
+
+
+
+/* =========================================================
+   TOP DOCK — 세 그룹 (데스크톱)
+
+   세 그룹의 flex 규칙(lead · groups · actions)은 studio.css 의
+   "세 그룹의 배치 규칙" 그대로다 — 좌우가 같은 몫을 나눠 가져서
+   가운데 그룹이 바의 정중앙에 온다. 여기서는 각 그룹 안쪽만 짠다.
+========================================================== */
+
+.studio-top-dock-modes {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+}
+
+
+/* 가운데 그룹은 셋이라 studio.css 의 16px 간격을 조금 좁힌다 */
+.studio-top-dock-groups {
+  gap: 12px;
+}
+
+
+/* 왼쪽 패널이 지금 이 내용을 보여 준다 — 채운 톤.
+   (Select 의 aria-pressed=true 는 "모드가 켜져 있다"이고 그 모양은
+   studio-inspector.css 의 --active 다. Images 로 옮겨 가도 Select
+   모드는 켜져 있으므로 둘은 따로 보인다.) */
+.studio-mode-button[aria-expanded="true"]:not(:disabled) {
+  border-color: var(--system-accent);
+
+  background: var(--system-accent-soft);
+
+  color: var(--system-accent-hover);
+
+  font-weight: var(--imory-font-weight-medium);
+}
+
+
+.studio-page-indicator {
+  flex: none;
+
+  min-width: 44px;
+
+  padding: 3px 7px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-100);
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  letter-spacing: 0.08em;
+  text-align: center;
+
+  white-space: nowrap;
+}
+
+
+.studio-history-buttons {
+  display: flex;
+  align-items: center;
+
+  gap: 2px;
+}
+
+
+.studio-icon-button {
+  width: 28px;
+  height: 28px;
+
+  padding: 0;
+
+  border: 1px solid transparent;
+  border-radius: var(--imory-radius-200);
+
+  background: transparent;
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+
+  cursor: pointer;
+}
+
+
+.studio-icon-button:hover:not(:disabled),
+.studio-icon-button:focus-visible {
+  border-color: var(--system-border-strong);
+
+  color: var(--system-accent-hover);
+}
+
+
+.studio-icon-button:disabled {
+  color: var(--system-text-disabled);
+
+  cursor: not-allowed;
+}
+
+
+.studio-top-dock-files {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+}
+
+
+/* Import | Export — 한 덩어리. 가운데 테두리를 한 줄로 겹친다. */
+.studio-button-pair {
+  display: flex;
+}
+
+
+.studio-button-pair > .studio-corner-button:first-child {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+
+.studio-button-pair > .studio-corner-button + .studio-corner-button {
+  margin-left: -1px;
+
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+
+/* Publish — 이 바에서 유일한 primary. 비활성(저장 안 한 변경이
+   있거나 이미 발행됨)일 때는 다른 버튼과 같은 조용한 모양이다. */
+.studio-corner-button--primary:not(:disabled) {
+  border-color: var(--system-accent-hover);
+
+  background: var(--system-accent-hover);
+
+  color: var(--imory-white);
+
+  font-weight: var(--imory-font-weight-medium);
+}
+
+
+.studio-corner-button--primary:not(:disabled):hover,
+.studio-corner-button--primary:not(:disabled):focus-visible {
+  border-color: var(--system-accent);
+
+  background: var(--system-accent);
+}
+
+
+/* ··· 는 좁은 화면에서만 */
+.studio-top-dock-more {
+  display: none;
+}
+
+
+/* =========================================================
+   바가 좁아지면 먼저 글자를 줄인다
+
+   "← back" 의 back, "AI Assistant" 의 Assistant 는 바의 폭이
+   1000px 아래로 내려가면 숨는다(1280px 창에 AI 패널을 연 900px 바가
+   대표적이다). 그래야 세 그룹이 한 줄에 남는다 — 줄이 바뀌면 바
+   아래의 패널과 Preview 가 함께 내려앉는다. 창 폭이 아니라 **바의 폭**
+   으로 재므로(container query) AI 패널을 여닫을 때도 맞는다.
+
+   버튼의 textContent 는 그대로다. 숨긴 글자가 클릭 hit-test 의 대상이
+   되지 않게 포인터는 버튼이 받는다.
+========================================================== */
+
+.studio-top-dock {
+  container: studio-top-dock / inline-size;
+}
+
+
+.studio-label-wide {
+  pointer-events: none;
+}
+
+
+@container studio-top-dock (max-width: 1000px) {
+
+  .studio-label-wide {
+    display: none;
+  }
+
+}
+
+
+
+/* =========================================================
+   좁은 화면 (720px 이하)
+
+   ★ 상단 — 두 줄로 명시한다
+
+     1줄: Select · Images · Dock ………… Save · Publish · ···
+     2줄: ← · 현재 페이지 · Desktop|Mobile · ↶ ↷ ……… AI
+
+   그룹 wrapper 셋은 display:contents 로 풀고 버튼마다 order 를 준다
+   — 같은 버튼이 두 자리에 복제되지 않는다. 줄바꿈은 바의 ::after
+   (폭 100%) 하나가 만든다. 가로 스크롤은 없다: 버튼이 한 줄에 못
+   들어가면(320px 등) 그 줄 안에서 다시 접힌다.
+
+   Code · Import · Export 는 ··· 가 여는 드롭다운이다. 드롭다운의
+   자리는 studio-shell.js 가 ··· 버튼 바로 아래로 잡는다.
+
+   ★ 패널 — 왼쪽 패널은 화면 아래에서 올라오는 시트, AI 패널은
+   studio.css 의 기존 overlay 그대로다. 둘 다 Preview 를 좁히지
+   않는다. 둘을 동시에 열면 하나가 다른 하나를 가리므로 이 폭에서는
+   하나를 열면 다른 하나가 접힌다(studio-shell.js).
+========================================================== */
+
+@media (max-width: 720px) {
+
+  .studio-top-dock {
+    column-gap: 6px;
+    row-gap: 0;
+
+    padding: 6px 10px;
+  }
+
+  .studio-top-dock-lead,
+  .studio-top-dock-modes,
+  .studio-top-dock-groups,
+  .studio-top-dock-actions {
+    display: contents;
+  }
+
+  .studio-top-dock::after {
+    content: "";
+
+    order: 8;
+
+    flex: 0 0 100%;
+
+    height: 6px;
+  }
+
+  #studioInspectorButton { order: 1; }
+  #studioImagesButton { order: 2; }
+  #studioDockButton { order: 3; }
+
+  #studioSaveButton {
+    order: 5;
+
+    margin-left: auto;
+  }
+
+  #studioPublishButton { order: 6; }
+
+  .studio-top-dock-more {
+    order: 7;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 34px;
+
+    letter-spacing: 0.08em;
+  }
+
+  .studio-top-dock-back {
+    order: 9;
+
+    padding: 6px 2px;
+  }
+
+  .studio-page-indicator {
+    order: 10;
+
+    min-width: 0;
+  }
+
+  .studio-viewport-toggle {
+    order: 11;
+
+    gap: 6px;
+  }
+
+  .studio-history-buttons {
+    order: 12;
+  }
+
+  .studio-top-dock-divider {
+    display: none;
+  }
+
+  .studio-ai-toggle-button {
+    order: 14;
+
+    margin-left: auto;
+  }
+
+  .studio-label-wide {
+    display: none;
+  }
+
+  /* 버튼 줄의 세로 여유 — 줄이 셋이 되어도 붙지 않는다 */
+  .studio-top-dock .studio-corner-button,
+  .studio-top-dock .studio-icon-button,
+  .studio-page-indicator,
+  .studio-viewport-toggle,
+  .studio-top-dock-back {
+    margin-block: 2px;
+  }
+
+
+  /* ··· 드롭다운 */
+
+  .studio-top-dock-files {
+    position: absolute;
+    top: 44px;
+    right: 10px;
+
+    z-index: 2;
+
+    display: none;
+    flex-direction: column;
+    align-items: stretch;
+
+    gap: 4px;
+
+    min-width: 168px;
+
+    padding: 6px;
+
+    border: 1px solid var(--system-border-strong);
+    border-radius: var(--imory-radius-300);
+
+    background: var(--system-bg);
+
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  }
+
+  .studio-top-dock.is-more-open .studio-top-dock-files {
+    display: flex;
+  }
+
+  .studio-top-dock-files .studio-corner-button {
+    min-height: 36px;
+
+    text-align: left;
+  }
+
+  .studio-button-pair {
+    flex-direction: column;
+
+    gap: 4px;
+  }
+
+  .studio-button-pair > .studio-corner-button:first-child,
+  .studio-button-pair > .studio-corner-button + .studio-corner-button {
+    margin-left: 0;
+
+    border-radius: var(--imory-radius-200);
+  }
+
+
+  /* 왼쪽 패널 = 아래에서 올라오는 시트 */
+
+  .studio-preview-shell.has-left-panel .studio-preview-stage {
+    left: 0;
+  }
+
+  .studio-preview-shell.has-left-panel .studio-preview-back-floating {
+    left: 12px;
+  }
+
+  .studio-left-panel,
+  .studio-preview-shell:has(.studio-top-dock-zone:not(.is-open)) .studio-left-panel {
+    top: auto;
+    right: 0;
+
+    /* Top Dock(8)과 같은 층 — 바와는 겹치지 않고, 선택 테두리·핸들
+       (Inspector 레이어 7)이 시트 위로 비쳐 올라오지 않는다. */
+    z-index: 8;
+
+    width: auto;
+    height: min(55%, calc(100% - var(--studio-top-dock-height, 48px) - 96px));
+    min-height: 220px;
+
+    border-right: 0;
+    border-top: 1px solid var(--system-border-strong);
+    border-radius: var(--imory-radius-300) var(--imory-radius-300) 0 0;
+
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.12);
+
+    transform: translateY(100%);
+  }
+
+  .studio-left-panel.is-open {
+    transform: translateY(0);
+  }
+
+  .studio-left-panel-collapse {
+    width: 36px;
+    height: 36px;
+
+    transform: rotate(-90deg);
+  }
+
+  .studio-left-panel .images-panel-footer .images-panel-hint {
+    flex-basis: 100%;
+  }
+
+}

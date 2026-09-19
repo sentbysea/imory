@@ -1,9 +1,17 @@
 /* =========================================================
    SKIN STUDIO - IMAGES PANEL (Skin Image Library v0.1)
 
-   SKIN_IMAGE_LIBRARY_PLAN.md 5절. studio/editor/import-editor.js와
-   같은 형태의 별도 modal이다 — DOM은 처음 열 때 한 번만 만들고
+   SKIN_IMAGE_LIBRARY_PLAN.md 5절. DOM은 처음 열 때 한 번만 만들고
    이후 재사용한다.
+
+   STUDIO-SHELL-1 — 예전에는 화면 전체를 덮는 modal 이었다. 이제
+   Studio 왼쪽 패널의 Images 자리(#studioLeftPanelImages)에 들어가는
+   **패널 내용**이다 — Preview 를 가리지 않는다. 여닫기는
+   studio/studio-shell.js 가 정하고, 이 파일의 "닫기"·Escape 는
+   셸에게 알려 패널을 접게 한다(handleStudioLeftPanelContentClosed).
+   자리가 없는 문서에서만 예전처럼 body 의 modal 로 뜬다.
+   바깥 루트의 클래스 이름(.images-panel-overlay)과 hidden 여닫기
+   표식은 그대로 두었다 — 모양은 studio-shell.css 가 바꾼다.
 
    화면 구성(왼쪽/오른쪽 2열):
      - 왼쪽 SLOTS: 지금 Skin이 선언한 imageSlots 목록. 각 슬롯의
@@ -302,7 +310,10 @@ function buildImagesPanelDom() {
 
   modal.appendChild(footer);
 
-  document.body.appendChild(overlay);
+  const host =
+    document.getElementById("studioLeftPanelImages");
+
+  (host || document.body).appendChild(overlay);
 
   imagesPanelOverlay = overlay;
   imagesPanelSlotList = slotList;
@@ -318,11 +329,16 @@ function buildImagesPanelDom() {
   closeButton.addEventListener("click", closeSkinImagesPanel);
   doneButton.addEventListener("click", closeSkinImagesPanel);
 
-  overlay.addEventListener("click", (event) => {
-    if (event.target === overlay) {
-      closeSkinImagesPanel();
-    }
-  });
+  /* 바깥(어두운 배경)을 눌러 닫기 — modal 로 뜰 때만 의미가 있다.
+     왼쪽 패널 안에서는 바깥이 Preview 이고, 거기를 누르는 것은
+     닫으라는 뜻이 아니다. */
+  if (!host) {
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) {
+        closeSkinImagesPanel();
+      }
+    });
+  }
 
   uploadButton.addEventListener("click", () => {
     if (!imagesPanelIsBusy) {
@@ -430,10 +446,24 @@ function buildImagesPanelDom() {
 
   pasteZone.addEventListener("drop", handleImagesPanelDrop);
 
+  /* Escape — 패널이 지금 이 내용을 **보여 주고 있을 때만**. Select
+     나 Dock 을 보고 있을 때의 Escape 는 그쪽 몫이다(고른 요소 해제 등). */
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && imagesPanelIsOpen) {
-      closeSkinImagesPanel();
+
+    if (event.key !== "Escape" || !imagesPanelIsOpen) {
+      return;
     }
+
+    if (
+      typeof window.isStudioLeftPanelShowing === "function" &&
+      host &&
+      !window.isStudioLeftPanelShowing("images")
+    ) {
+      return;
+    }
+
+    closeSkinImagesPanel();
+
   });
 
 }
@@ -1100,6 +1130,11 @@ function closeSkinImagesPanel() {
 
   if (imagesPanelOverlay) {
     imagesPanelOverlay.hidden = true;
+  }
+
+  /* STUDIO-SHELL-1 — 왼쪽 패널이 이 내용을 보여 주고 있었다면 접는다 */
+  if (typeof window.handleStudioLeftPanelContentClosed === "function") {
+    window.handleStudioLeftPanelContentClosed("images");
   }
 
 }
