@@ -981,6 +981,18 @@ const INSPECTOR_SHAPE_VALUES = {
   circle: "50%"
 };
 
+/* DIRECT-UX-1 — 사용자에게는 "고딕 · 명조 · 고정폭"이다. 글꼴 이름을
+   받지 않는다(자유 문자열 CSS 입구를 만들지 않는다) — 생성 글꼴
+   가족만 쓴다. */
+const INSPECTOR_FONT_FAMILY_VALUES = {
+  sans: "sans-serif",
+  serif: "serif",
+  mono: "monospace"
+};
+
+/* 공간 채우기 / 이미지 전체 보기 */
+const INSPECTOR_OBJECT_FIT_VALUES = ["cover", "contain"];
+
 
 /* =========================================================
    이미지 가로 크기와 비율 (Select mode 직접 편집 라운드)
@@ -1177,6 +1189,35 @@ function buildInspectorStylePatch(control, value) {
         ? { "white-space": "pre-wrap" }
         : clear(["white-space"]);
 
+    /* DIRECT-UX-1 — 투명도. 화면에서는 0~100(%)이고 저장은 0~1 이다. */
+    case "opacity": {
+
+      if (value === null || value === undefined || String(value).trim() === "") {
+        return clear(["opacity"]);
+      }
+
+      const percent = Number(value);
+
+      if (!Number.isFinite(percent)) {
+        return clear(["opacity"]);
+      }
+
+      const clamped = Math.min(Math.max(Math.round(percent), 0), 100);
+
+      return { opacity: String(clamped / 100) };
+
+    }
+
+    case "fontFamily":
+      return Object.prototype.hasOwnProperty.call(INSPECTOR_FONT_FAMILY_VALUES, String(value))
+        ? { "font-family": INSPECTOR_FONT_FAMILY_VALUES[String(value)] }
+        : clear(["font-family"]);
+
+    case "objectFit":
+      return INSPECTOR_OBJECT_FIT_VALUES.includes(String(value))
+        ? { "object-fit": String(value) }
+        : clear(["object-fit"]);
+
     case "imageAlign": {
 
       const alignment =
@@ -1266,6 +1307,34 @@ function readInspectorControlValue(control, declarations) {
     case "whiteSpace":
       return decl["white-space"] === "pre-wrap" ? "pre-wrap" : "";
 
+    case "opacity": {
+
+      const number = Number(decl.opacity);
+
+      return (typeof decl.opacity === "string" && Number.isFinite(number))
+        ? String(Math.round(Math.min(Math.max(number, 0), 1) * 100))
+        : "";
+
+    }
+
+    case "fontFamily": {
+
+      const found =
+        Object.keys(INSPECTOR_FONT_FAMILY_VALUES).find(
+          (name) => INSPECTOR_FONT_FAMILY_VALUES[name] === decl["font-family"]
+        );
+
+      return found || "";
+
+    }
+
+    case "objectFit":
+      return INSPECTOR_OBJECT_FIT_VALUES.includes(decl["object-fit"]) ? decl["object-fit"] : "";
+
+    /* 직접 편집으로 숨겼는가 — 이 요소 규칙의 display:none 하나로 정한다 */
+    case "hidden":
+      return decl.display === "none" ? "hidden" : "";
+
     case "border": {
 
       const parsed =
@@ -1279,7 +1348,10 @@ function readInspectorControlValue(control, declarations) {
 
     case "imageAlign": {
 
-      if (decl.display !== "block") {
+      /* 숨긴 동안에도 정렬 값은 남아 있다(margin 두 줄). 보이기로
+         돌리면 display:block 이 함께 돌아온다
+         (studio-inspector-quickbar.js commitStudioInspectorHidden). */
+      if (decl.display !== "block" && decl.display !== "none") {
         return "";
       }
 

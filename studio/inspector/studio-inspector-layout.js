@@ -472,7 +472,12 @@ function moveStudioInspectorLayoutDrag(event) {
         /* 프레임은 이 두 값을 그대로 custom property 로 써 넣는다
            (skin/skin-layout.css 가 읽는 바로 그 이름). 즉 임시
            미리보기와 확정 결과가 **같은 계산**을 지난다. */
+        /* DIRECT-UX-1 — editId 를 함께 싣는다. 예전에는 빠져 있어서
+           프레임(applyInspectorPreview)이 "고른 요소와 다르다"로 읽고
+           미리보기를 버렸다 — 끄는 동안 요소가 제자리에 있다가 손을
+           뗄 때 한 번에 뛰었다. */
         sendStudioInspectorPreview({
+          editId: studioInspectorSelection ? studioInspectorSelection.editId : null,
           layoutPosition: { x: drag.x, y: drag.y }
         });
 
@@ -499,6 +504,20 @@ function endStudioInspectorLayoutDrag(event) {
 
   if (studioInspectorLayer) {
     studioInspectorLayer.classList.remove("is-dragging");
+  }
+
+  /* DIRECT-UX-1 — 제자리로 돌아왔으면(또는 한 칸도 못 움직였으면)
+     확정하지 않는다. 바뀐 것이 없는 편집이 ↶ 한 칸을 차지하면
+     "되돌렸는데 아무 일도 없다"가 된다. */
+  if (
+    drag.x === studioInspectorLayoutRatio(drag.originX) &&
+    drag.y === studioInspectorLayoutRatio(drag.originY)
+  ) {
+
+    clearStudioInspectorPreview();
+
+    return;
+
   }
 
   /* 한 번의 편집으로 두 축을 함께 확정한다 — 따로 확정하면 Undo 가
@@ -883,6 +902,97 @@ function paintStudioInspectorMoveHandle(rect) {
   studioInspectorMoveHandle.style.top = `${mapped.top}px`;
 
   studioInspectorMoveHandle.hidden = false;
+
+}
+
+
+/* =========================================================
+   본체 끌기 (DIRECT-UX-1 §7)
+
+   자유 배치 안의 요소는 손잡이(✥)뿐 아니라 **본체**를 끌어도
+   움직인다. 포인터는 Preview 프레임 안에 있으므로 이 문서에는
+   pointer 이벤트가 오지 않는다 — 프레임이 좌표만 올려보내고
+   (preview:inspect-drag, studio/preview/preview-inspect-direct.js),
+   여기서 그 좌표를 이 문서 좌표로 옮겨 **위 손잡이 드래그와 같은
+   함수**에 넣는다. 계산 · 임시 미리보기 · 손을 뗄 때 한 번 확정이
+   전부 같다(↶ 한 칸).
+
+   좌표 변환은 overlay 의 테두리와 같은 식이다(Mobile 축소 배율 ·
+   프레임 테두리 포함, studioInspectorFrameGeometry).
+========================================================== */
+
+const STUDIO_INSPECTOR_FRAME_POINTER = "preview-frame";
+
+
+function handleStudioInspectorFrameDrag(data) {
+
+  if (!data || typeof data.phase !== "string") {
+    return;
+  }
+
+  if (data.phase === "cancel") {
+
+    if (studioInspectorLayoutDrag && studioInspectorLayoutDrag.pointerId === STUDIO_INSPECTOR_FRAME_POINTER) {
+      cancelStudioInspectorLayoutDrag();
+    }
+
+    return;
+
+  }
+
+  const x = Number(data.x);
+  const y = Number(data.y);
+
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !studioInspectorFrame) {
+    return;
+  }
+
+  const geometry =
+    studioInspectorFrameGeometry();
+
+  const pointer = {
+    pointerId: STUDIO_INSPECTOR_FRAME_POINTER,
+    clientX: geometry.box.left + (geometry.borderLeft + x) * geometry.scale,
+    clientY: geometry.box.top + (geometry.borderTop + y) * geometry.scale,
+    preventDefault() {},
+    stopPropagation() {}
+  };
+
+  if (data.phase === "start") {
+
+    if (!studioInspectorMovable || !studioInspectorMoveHandle) {
+      return;
+    }
+
+    beginStudioInspectorLayoutDrag(pointer, studioInspectorMoveHandle);
+
+    /* 포인터는 프레임이 잡고 있다 — 레이어가 포인터를 가로채면
+       안 된다(손잡이 드래그와 다른 점은 이것 하나다). */
+    if (studioInspectorLayer) {
+      studioInspectorLayer.classList.remove("is-dragging");
+    }
+
+    return;
+
+  }
+
+  if (!studioInspectorLayoutDrag || studioInspectorLayoutDrag.pointerId !== STUDIO_INSPECTOR_FRAME_POINTER) {
+    return;
+  }
+
+  if (data.phase === "move") {
+    moveStudioInspectorLayoutDrag(pointer);
+    return;
+  }
+
+  if (data.phase === "end") {
+
+    /* 마지막 좌표를 한 번 반영하고 확정한다 */
+    moveStudioInspectorLayoutDrag(pointer);
+
+    endStudioInspectorLayoutDrag(pointer);
+
+  }
 
 }
 

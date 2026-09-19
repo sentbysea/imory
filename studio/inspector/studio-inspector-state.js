@@ -170,7 +170,20 @@ let studioInspectorNote = null;
 
 let studioInspectorUndoButton = null;
 
+/* DIRECT-UX-1 — "직접 수정" 탭 버튼은 없어졌다. 참조는 null 로 남아
+   예전 자리(있으면 만지는 코드)가 전부 건너뛴다. */
 let studioInspectorDirectButton = null;
+
+/* DIRECT-UX-1 — 패널 머리의 "종류 · 페이지" 줄 · 바깥 영역 버튼 ·
+   움직임 효과 상태 줄(studio-inspector-overlay.js 가 만든다) */
+let studioInspectorPopoverMeta = null;
+
+let studioInspectorOuterButton = null;
+
+let studioInspectorMotion = null;
+
+/* hover 중인 요소의 식별자 — hover 이름표가 이름을 찾는 데 쓴다 */
+let studioInspectorHoverEditId = null;
 
 
 /* =========================================================
@@ -443,26 +456,23 @@ function describeStudioInspectorSelection() {
 }
 
 
-function studioInspectorLabelFor(info) {
+/* =========================================================
+   고른 요소의 이름 (DIRECT-UX-1)
 
-  const parts = [
-    STUDIO_INSPECTOR_PAGE_LABELS[currentPreviewPageType] || "PAGE",
-    `${STUDIO_INSPECTOR_KIND_LABELS[info.kind] || "요소"} <${info.tagName}>`
-  ];
+   패널 머리 · Preview 이름표 · AI chip 이 같은 문자열을 쓴다.
+   예전에는 "HOME · 텍스트 <h1> · profile.bio" 처럼 태그와 바인딩
+   경로가 보였다 — 이름은 이제 studio-inspector-names.js 가 스킨
+   계약(바인딩 · 반복 · region)에서 만든다. 태그 · 클래스 · 경로는
+   근거로만 쓰고 화면에 내지 않는다.
+========================================================== */
 
-  const hint =
-    (info.text || "").trim() ||
-    info.bindPath ||
-    info.srcPath ||
-    info.hrefPath ||
-    info.classNames[0] ||
-    "";
+function studioInspectorLabelFor(info, element) {
 
-  if (hint) {
-    parts.push(hint.length > 20 ? `${hint.slice(0, 20)}…` : hint);
+  if (typeof studioInspectorElementName === "function" && element) {
+    return studioInspectorElementName(element, info);
   }
 
-  return parts.join(" · ");
+  return STUDIO_INSPECTOR_KIND_LABELS[info.kind] || "영역";
 
 }
 

@@ -108,6 +108,8 @@ Images · Dock 을 여는 입구는 전부 셸을 거친다(`showStudioLeftPanel
 
 ### 2-3. Preview 위에 남는 것
 
+> **DIRECT-UX-1 에서 더해진 것 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md).** 테두리 · 이름표 · 핸들에 더해 hover 이름표와 작은 Quick Bar(데스크톱은 선택 테두리 옆, 720px 이하는 Select 시트 맨 위)가 있다. 긴 폼은 여전히 Preview 위에 뜨지 않는다. 이름표의 문구는 사람이 읽는 이름(§2)이고, 이름표 · Quick Bar 는 Preview 프레임 밖으로 나가지 않는다.
+
 떠 있던 긴 Inspector 카드는 없어졌다. Preview 위에는 셋만 남는다.
 
 - 선택 테두리(`#studioInspectorSelectBox`, sandbox 스킨은 프레임 안에서)

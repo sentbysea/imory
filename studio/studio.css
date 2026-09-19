@@ -1527,3 +1527,49 @@ body.studio-ai-resizing {
 
   color: var(--system-accent-hover);
 }
+
+
+/* =========================================================
+   DIRECT-UX-1 — AI 빠른 제안 (studio/ai/studio-ai-suggestions.js)
+
+   선택 chip 바로 밑. 누르면 입력칸에 넣기만 한다(보내지 않는다).
+========================================================== */
+
+.studio-ai-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 6px;
+
+  margin: 0 14px 10px;
+}
+
+
+.studio-ai-suggestions[hidden] {
+  display: none;
+}
+
+
+.studio-ai-suggestion {
+  padding: 4px 10px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-ai-suggestion:hover,
+.studio-ai-suggestion:focus-visible {
+  border-color: var(--system-accent-border);
+
+  color: var(--system-accent-hover);
+}

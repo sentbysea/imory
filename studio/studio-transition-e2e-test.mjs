@@ -267,6 +267,12 @@ async function openStudio(browser, viewport) {
   const page = await context.newPage();
   page.on("pageerror", (err) => failures.push(`pageerror: ${err.message}`));
   await context.addInitScript(animationRecorder);
+
+  /* DIRECT-UX-1 — 전환 폼은 일반 Select 패널에서 걷었다(값은 그대로
+     보존되고 효과가 있으면 상태 한 줄만 보인다, IMORY_DIRECT_UX_DESIGN.md
+     §11). 이 파일은 그 폼으로 전환 엔진을 두드리므로 개발/테스트
+     스위치로 예전 목록을 켠다. */
+  await context.addInitScript(() => { window.IMORY_STUDIO_ADVANCED_INSPECTOR = true; });
   await page.route("**/api/skin-ai", (route) => route.fulfill({ status: 500, body: "must not be called" }));
   await page.goto(SCENARIO_URL, { waitUntil: "load" });
   await page.waitForFunction(

@@ -1139,6 +1139,9 @@
       [
         "./ai/studio-ai-panel-layout.js",
         "./ai/studio-ai-selection.js",
+
+        /* DIRECT-UX-1 — 고른 요소에 맞는 AI 빠른 제안(입력칸에 넣기만) */
+        "./ai/studio-ai-suggestions.js",
         "./ai/studio-ai-panel.js"
       ]
     );
@@ -1215,6 +1218,16 @@
            같은 이유다 — controls.js 가 이 파일의
            renderStudioInspectorTransitionBlock 을 부른다. */
         "./inspector/studio-inspector-transition.js",
+
+        /* DIRECT-UX-1 — 사람이 읽는 요소 이름(names)과 Quick Bar ·
+           겹친 요소 메뉴 · 숨기기 · 앞으로/뒤로(quickbar), 일반 UI 의
+           항목 목록과 새 행들(fields). controls.js
+           와 overlay 가 **호출 시점에** 두 파일의 함수를 쓴다.
+           quickbar 는 로드 시점에 state 의 studioInspectorShell 과
+           matchMedia 를 읽으므로 state 뒤다. */
+        "./inspector/studio-inspector-names.js",
+        "./inspector/studio-inspector-quickbar.js",
+        "./inspector/studio-inspector-fields.js",
         "./inspector/studio-inspector-controls.js",
         "./inspector/studio-inspector.js",
 
@@ -1225,6 +1238,12 @@
            첫 화면이 그려질 때 이미 버튼이 연결돼 있어야 한다. */
         "./studio-history.js",
         "./studio-shell.js",
+
+        /* DIRECT-UX-1 — Save 옆 상태 한 줄 · 처음 쓰는 사람 안내.
+           둘 다 studio-preview.js 의 상태와 Top Dock 버튼을 읽으므로
+           그 뒤, mount(studio-state.js) 앞이다. */
+        "./studio-save-status.js",
+        "./studio-coach.js",
         "./studio-state.js"
       ]
     );

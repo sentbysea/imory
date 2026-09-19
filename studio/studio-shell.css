@@ -938,3 +938,296 @@
   }
 
 }
+
+
+
+/* =========================================================
+   DIRECT-UX-1 — 저장 · 공개 상태 한 줄 (studio/studio-save-status.js)
+
+   점의 모양과 **문구**가 함께 상태를 말한다(색만으로 가르지 않는다).
+   바가 좁으면 짧은 문구 — 긴 문구는 title / aria-label 에 남는다.
+========================================================== */
+
+.studio-save-status {
+  display: inline-flex;
+  align-items: center;
+
+  gap: 5px;
+
+  flex: none;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+
+  white-space: nowrap;
+}
+
+
+.studio-save-status[hidden] {
+  display: none;
+}
+
+
+.studio-save-status-dot {
+  width: 7px;
+  height: 7px;
+
+  border-radius: 50%;
+
+  background: var(--imory-gray-400, #9aa4b2);
+}
+
+
+/* 기본은 짧은 문구 — 1280px 에서 오른쪽 그룹은 이미 폭이 거의 꽉 차
+   있다(가운데 그룹이 바 정중앙에 남으려면 좌우 그룹이 절반을 넘으면
+   안 된다, studio.css 세 그룹 배치 규칙). 바가 충분히 넓을 때만 긴 문구. */
+.studio-save-status-long {
+  display: none;
+}
+
+
+/* 저장 안 됨 — 속이 빈 점 */
+.studio-save-status[data-state="dirty"] .studio-save-status-dot,
+.studio-save-status[data-state="unpublished"] .studio-save-status-dot {
+  background: transparent;
+
+  box-shadow: inset 0 0 0 1.5px var(--system-accent);
+}
+
+
+.studio-save-status[data-state="dirty"] {
+  color: var(--system-accent-hover);
+}
+
+
+/* 진행 중 — 점이 깜빡인다(움직임을 줄인 환경에서는 가만히) */
+.studio-save-status[data-state="saving"] .studio-save-status-dot,
+.studio-save-status[data-state="publishing"] .studio-save-status-dot {
+  background: var(--system-accent);
+
+  animation: studio-save-status-pulse 1s ease-in-out infinite alternate;
+}
+
+
+@keyframes studio-save-status-pulse {
+  from { opacity: 0.3; }
+  to { opacity: 1; }
+}
+
+
+@media (prefers-reduced-motion: reduce) {
+
+  .studio-save-status[data-state="saving"] .studio-save-status-dot,
+  .studio-save-status[data-state="publishing"] .studio-save-status-dot {
+    animation: none;
+  }
+
+}
+
+
+/* 실패 — 느낌표 모양의 네모 점 + 강조색 문구 */
+.studio-save-status[data-state="saveFailed"],
+.studio-save-status[data-state="publishFailed"] {
+  color: #b42318;
+
+  font-weight: var(--imory-font-weight-medium);
+}
+
+
+.studio-save-status[data-state="saveFailed"] .studio-save-status-dot,
+.studio-save-status[data-state="publishFailed"] .studio-save-status-dot {
+  border-radius: 1px;
+
+  background: #b42318;
+}
+
+
+@container studio-top-dock (min-width: 1440px) {
+
+  .studio-save-status-long {
+    display: inline;
+  }
+
+  .studio-save-status-short {
+    display: none;
+  }
+
+}
+
+
+/* 사용법 다시 보기 — 넓은 화면에서는 왼쪽 그룹의 ? 한 글자(오른쪽 그룹은
+   자리가 없다), 좁은 화면에서는 ··· 메뉴 안의 한 줄. 두 버튼은 같은 일을
+   한다(studio/studio-coach.js). */
+.studio-help-button--menu {
+  display: none;
+}
+
+
+.studio-help-button--wide {
+  min-width: 30px;
+
+  padding-inline: 8px;
+}
+
+
+/* 바가 좁아지면(AI 패널을 연 1280px 창이 대표적) ? 는 물러난다 — 그 폭에서는
+   세 그룹이 한 줄에 남을 자리가 40px 남짓뿐이다. 패널을 닫으면 돌아온다. */
+@container studio-top-dock (max-width: 1000px) {
+
+  .studio-help-button--wide {
+    display: none;
+  }
+
+  /* 저장 상태 한 줄(짧은 문구 ~50px)이 들어갈 자리 — 버튼 좌우 여백을
+     조금씩 줄인다. 글자 줄이기(studio-label-wide)와 같은 결의 양보다. */
+  .studio-top-dock .studio-corner-button {
+    padding-inline: 9px;
+  }
+
+}
+
+
+/* =========================================================
+   DIRECT-UX-1 — 처음 쓰는 사람 안내 말풍선 (studio/studio-coach.js)
+
+   화면을 덮지 않는다 — 말풍선 자신만 포인터를 받는다.
+========================================================== */
+
+.studio-coach {
+  position: fixed;
+
+  z-index: 9;
+
+  box-sizing: border-box;
+
+  width: 280px;
+  max-width: calc(100vw - 16px);
+
+  padding: 12px 14px 10px;
+
+  border: 1px solid var(--system-accent-border);
+  border-radius: var(--imory-radius-300);
+
+  background: var(--system-bg);
+
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+
+  color: var(--system-text);
+}
+
+
+.studio-coach[hidden] {
+  display: none;
+}
+
+
+/* 아래로 붙은 말풍선의 꼬리 — 가리키는 버튼 쪽 */
+.studio-coach[data-placement="below"]::before {
+  position: absolute;
+  top: -6px;
+  left: var(--studio-coach-arrow-x, 50%);
+
+  width: 10px;
+  height: 10px;
+
+  margin-left: -5px;
+
+  border-top: 1px solid var(--system-accent-border);
+  border-left: 1px solid var(--system-accent-border);
+
+  background: var(--system-bg);
+
+  transform: rotate(45deg);
+
+  content: "";
+}
+
+
+.studio-coach-step {
+  margin: 0 0 4px;
+
+  color: var(--system-accent-hover);
+
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+
+.studio-coach-text {
+  margin: 0 0 10px;
+
+  font-size: var(--imory-font-size-300);
+  line-height: var(--imory-line-height-relaxed);
+
+  word-break: keep-all;
+}
+
+
+.studio-coach-actions {
+  display: flex;
+  justify-content: flex-end;
+
+  gap: 6px;
+}
+
+
+.studio-coach-skip,
+.studio-coach-next {
+  min-height: 30px;
+
+  padding: 4px 12px;
+
+  border: 1px solid var(--system-border-strong);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-bg);
+
+  color: var(--system-text-muted);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-coach-next {
+  border-color: var(--system-accent-hover);
+
+  background: var(--system-accent-hover);
+
+  color: var(--imory-white);
+}
+
+
+/* =========================================================
+   DIRECT-UX-1 — 좁은 화면
+
+   상태 한 줄은 둘째 줄(← · 페이지 · Desktop|Mobile · ↶↷) 뒤, AI 앞에
+   짧은 문구로. 사용법 버튼은 ··· 메뉴 안의 한 줄.
+========================================================== */
+
+@media (max-width: 720px) {
+
+  .studio-save-status {
+    order: 13;
+  }
+
+  .studio-save-status-long {
+    display: none;
+  }
+
+  .studio-save-status-short {
+    display: inline;
+  }
+
+  .studio-help-button--wide {
+    display: none;
+  }
+
+  .studio-top-dock-files .studio-help-button--menu {
+    display: block;
+  }
+
+}

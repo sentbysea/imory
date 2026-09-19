@@ -51,7 +51,8 @@ const STUDIO_AI_SELECTION_PAGE_LABELS = {
   category: "CATEGORY",
   post: "POST",
   banner: "BANNER",
-  folder: "FOLDER"
+  folder: "FOLDER",
+  highlights: "HIGHLIGHTS"
 };
 
 
@@ -141,13 +142,27 @@ function buildStudioAiSelectionLabel(selection) {
     return "";
   }
 
+  /* DIRECT-UX-1 — Inspector 패널 머리 · Preview 이름표와 **같은 이름**
+     (studio/inspector/studio-inspector-names.js). 이름이 근거 없이
+     붙인 일반 이름(텍스트 · 제목 …)일 때만 글자 힌트를 덧붙인다 —
+     "HOME · 소개 문구"에는 덧붙일 것이 없다. */
+  const name =
+    typeof selection.name === "string" && selection.name
+      ? selection.name
+      : studioAiSelectionRoleLabel(selection);
+
   const parts = [
     STUDIO_AI_SELECTION_PAGE_LABELS[selection.pageType] || "PAGE",
-    studioAiSelectionRoleLabel(selection)
+    name
   ];
 
+  const generic =
+    typeof window.studioInspectorNameIsGeneric === "function"
+      ? window.studioInspectorNameIsGeneric(name)
+      : true;
+
   const hint =
-    studioAiSelectionHint(selection);
+    generic ? studioAiSelectionHint(selection) : "";
 
   if (hint) {
     parts.push(hint);

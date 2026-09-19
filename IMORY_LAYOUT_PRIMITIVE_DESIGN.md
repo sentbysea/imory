@@ -278,6 +278,8 @@ grid  > repeat(글 목록)
 
 ## 6. 직접 편집 (Direct Edit)
 
+> **변경됨 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md) §7 · §10 (DIRECT-UX-1).** 아래 배치 폼(배치 방식 · 열 수 · 간격 · 좌표 숫자 …)은 **일반 Select 패널에서 걷었다** — 값은 지우지 않고(모든 확정이 속성 하나만 바꾼다) 배치는 AI · Code 로 고친다. 폼과 확정 함수는 그대로 있고 개발/테스트 스위치 `window.IMORY_STUDIO_ADVANCED_INSPECTOR = true` 에서만 그려진다(`studio-layout-e2e-test.mjs` 가 켠다). 자유 배치 요소는 이제 ✥ 손잡이뿐 아니라 **본체를 끌어도** 같은 엔진으로 움직이고, 형제 순서 · 겹침 순서는 Quick Bar 의 앞으로/뒤로다. 끄는 동안의 임시 미리보기가 프레임에 닿지 않던 버그(editId · layoutPosition 누락)도 그 라운드에서 고쳤다.
+
 [studio/inspector/studio-inspector-layout.js](./studio/inspector/studio-inspector-layout.js)
 
 사용자 UI 에는 primitive 이름을 그대로 노출하지 않는다.

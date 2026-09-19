@@ -507,6 +507,10 @@ function updateStudioSaveButtonState() {
     window.updateStudioHistoryButtons();
   }
 
+  if (typeof window.updateStudioSaveStatus === "function") {
+    window.updateStudioSaveStatus();
+  }
+
 }
 
 
@@ -545,6 +549,12 @@ function updateStudioPublishButtonState() {
     (isStudioDirty && !!currentWorkingSkin)
       ? "저장하지 않은 변경사항이 있습니다. 먼저 Save 해주세요."
       : "";
+
+  /* DIRECT-UX-1 — Save 옆 상태 한 줄도 같은 값으로 다시 적는다
+     (studio/studio-save-status.js) */
+  if (typeof window.updateStudioSaveStatus === "function") {
+    window.updateStudioSaveStatus();
+  }
 
 }
 
@@ -1696,6 +1706,15 @@ if (typeof window !== "undefined") {
   window.postInspectorSelectionToFrame =
     postInspectorSelectionToFrame;
 
+  window.postInspectorCapsToFrame =
+    postInspectorCapsToFrame;
+
+  window.postInspectorChooseToFrame =
+    postInspectorChooseToFrame;
+
+  window.postInspectorParentToFrame =
+    postInspectorParentToFrame;
+
   window.postInspectorPreviewToFrame =
     postInspectorPreviewToFrame;
 
@@ -1850,6 +1869,10 @@ async function handleStudioSaveClick() {
   isStudioSavePending =
     true;
 
+  if (typeof window.noteStudioSaveStatusFailure === "function") {
+    window.noteStudioSaveStatusFailure("");
+  }
+
   updateStudioSaveButtonState();
 
   updateStudioPublishButtonState();
@@ -1874,6 +1897,10 @@ async function handleStudioSaveClick() {
       "저장하지 못했습니다. 스킨 내용을 확인해주세요.",
       { isError: true }
     );
+
+    if (typeof window.noteStudioSaveStatusFailure === "function") {
+      window.noteStudioSaveStatusFailure("save");
+    }
 
     isStudioSavePending =
       false;
@@ -1979,6 +2006,10 @@ async function handleStudioSaveClick() {
       { isError: true }
     );
 
+    if (typeof window.noteStudioSaveStatusFailure === "function") {
+      window.noteStudioSaveStatusFailure("save");
+    }
+
   } finally {
 
     isStudioSavePending =
@@ -2067,6 +2098,10 @@ async function handleStudioPublishConfirmed() {
   isStudioPublishPending =
     true;
 
+  if (typeof window.noteStudioSaveStatusFailure === "function") {
+    window.noteStudioSaveStatusFailure("");
+  }
+
   updateStudioPublishButtonState();
 
   updateStudioSaveButtonState();
@@ -2095,6 +2130,10 @@ async function handleStudioPublishConfirmed() {
       "적용하지 못했습니다. 다시 시도해주세요.",
       { isError: true }
     );
+
+    if (typeof window.noteStudioSaveStatusFailure === "function") {
+      window.noteStudioSaveStatusFailure("publish");
+    }
 
   } finally {
 
@@ -2258,6 +2297,65 @@ function postInspectorSelectionToFrame(editId) {
 
 
 /* =========================================================
+   DIRECT-UX-1 — Preview 안 직접 조작(studio/preview/preview-inspect-direct.js)
+
+     preview:inspector-caps    고른 요소를 끌 수 있는가 · 더블클릭으로
+                               글자를 고칠 수 있는가(Studio 가 draft 에서
+                               정한다 — 프레임은 판단하지 않는다)
+     preview:inspector-choose  겹친 요소 메뉴에서 고른 칸의 순번
+     preview:inspector-parent  바깥 영역 선택
+========================================================== */
+
+function postToPreviewFrameIfReady(message) {
+
+  if (!previewFrameReady) {
+    return;
+  }
+
+  studioPreviewFrame.contentWindow.postMessage(
+    message,
+    window.location.origin
+  );
+
+}
+
+
+function postInspectorCapsToFrame(caps) {
+
+  postToPreviewFrameIfReady({
+    type: "preview:inspector-caps",
+    editId: caps && typeof caps.editId === "string" ? caps.editId : null,
+    movable: !!(caps && caps.movable),
+    textEditable: !!(caps && caps.textEditable)
+  });
+
+}
+
+
+function postInspectorChooseToFrame(index) {
+
+  if (!Number.isInteger(index) || index < 0) {
+    return;
+  }
+
+  postToPreviewFrameIfReady({
+    type: "preview:inspector-choose",
+    index
+  });
+
+}
+
+
+function postInspectorParentToFrame() {
+
+  postToPreviewFrameIfReady({
+    type: "preview:inspector-parent"
+  });
+
+}
+
+
+/* =========================================================
    postInspectorPreviewToFrame(payload) (Select mode 직접 편집)
 
    입력 중인 텍스트/드래그 중인 크기/자르기를 **저장하지 않고**
@@ -2381,7 +2479,18 @@ function postInspectorPreviewToFrame(payload) {
              적용할지를 이 한 글자가 정한다. */
           target: payload.target === "frame" ? "frame" : undefined,
 
-          crop: inspectorPreviewCropPayload(payload.crop)
+          crop: inspectorPreviewCropPayload(payload.crop),
+
+          /* LAYOUT-1 자유 배치 좌표(0~1). DIRECT-UX-1 에서 이 목록에
+             빠져 있던 것을 채웠다 — 빠지면 끄는 동안 요소가 움직이지
+             않는다(위 머리말). */
+          layoutPosition:
+            (payload.layoutPosition && typeof payload.layoutPosition === "object")
+              ? {
+                  x: String(payload.layoutPosition.x),
+                  y: String(payload.layoutPosition.y)
+                }
+              : undefined
         }
       : {
           type: "preview:inspect-preview",

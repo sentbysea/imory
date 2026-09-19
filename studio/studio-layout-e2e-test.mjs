@@ -430,6 +430,11 @@ async function run() {
   try {
 
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+
+    /* DIRECT-UX-1 — 배치 폼은 일반 Select 패널에서 걷었다(값은 그대로
+       보존된다, IMORY_DIRECT_UX_DESIGN.md §10). 이 파일은 그 폼으로
+       배치 엔진을 두드리므로 개발/테스트 스위치로 예전 목록을 켠다. */
+    await context.addInitScript(() => { window.IMORY_STUDIO_ADVANCED_INSPECTOR = true; });
     const page = await context.newPage();
 
     page.on("console", (msg) => {

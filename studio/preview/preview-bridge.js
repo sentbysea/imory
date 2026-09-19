@@ -577,6 +577,11 @@ function handleRenderMessage(data) {
          그려진 스킨 안에 들어 있다). */
       clearInspectorPreview({ discard: true });
 
+      /* DIRECT-UX-1 — 고치던 글자·끌던 요소도 사라진 DOM 위에 있었다 */
+      if (window.previewInspectDirect) {
+        window.previewInspectDirect.reset();
+      }
+
       postInspectorRects();
 
     }
@@ -1698,6 +1703,36 @@ function setInspectorEnabled(enabled) {
     inspectorEnabled
   );
 
+  if (window.previewInspectDirect) {
+    window.previewInspectDirect.reset();
+  }
+
+}
+
+
+/* DIRECT-UX-1 — 직접 조작 모듈에 이 문서의 Inspector 상태를 빌려준다
+   (studio/preview/preview-inspect-direct.js). 그 파일은 이 함수들로만
+   읽고 쓴다. */
+if (window.previewInspectDirect) {
+
+  window.previewInspectDirect.install({
+    isActive: inspectorNativeActive,
+    root: inspectorSkinRoot,
+    selected: inspectorReviveSelection,
+    editIdOf: inspectorEditIdOf,
+    resolveTarget: resolveInspectableTarget,
+    rectOf: inspectorRectOf,
+    visibleRectOf: inspectorVisibleRectOf,
+    post: postToParent,
+    hover(el) {
+      setInspectorHover(el);
+    },
+    select(el) {
+      setInspectorSelection(el);
+      window.previewInspectDirect.syncMovableMark();
+    }
+  });
+
 }
 
 
@@ -1718,6 +1753,14 @@ document.addEventListener(
 
     event.preventDefault();
     event.stopPropagation();
+
+    /* DIRECT-UX-1 — 실제 포인터 클릭은 "그 자리에 겹친 것" 중에서
+       우선순위로 고른다(겹쳤으면 Studio 가 메뉴로 묻는다). 좌표가 없는
+       합성 이벤트만 아래 예전 규칙으로 간다
+       (studio/preview/preview-inspect-direct.js). */
+    if (window.previewInspectDirect && window.previewInspectDirect.handleClick(event)) {
+      return;
+    }
 
     setInspectorSelection(
       resolveInspectableTarget(event.target)
@@ -1774,6 +1817,10 @@ document.addEventListener(
       return;
     }
 
+    if (window.previewInspectDirect && window.previewInspectDirect.pointerOver(event)) {
+      return;
+    }
+
     setInspectorHover(
       resolveInspectableTarget(event.target)
     );
@@ -1808,6 +1855,12 @@ document.addEventListener(
   (event) => {
 
     if (!inspectorNativeActive() || event.key !== "Escape") {
+      return;
+    }
+
+    /* 글자를 고치는 중의 Escape 는 "그 입력만 취소"다 — 편집 요소의
+       리스너가 받는다. 여기서 올리면 Studio 가 선택까지 풀어 버린다. */
+    if (window.previewInspectDirect && window.previewInspectDirect.isEditing()) {
       return;
     }
 
@@ -2088,6 +2141,14 @@ window.addEventListener("message", (event) => {
 
     return;
 
+  }
+
+  /* DIRECT-UX-1 — preview:inspector-caps / -choose / -parent
+     (studio/preview/preview-inspect-direct.js). sandbox 프레임이 화면을
+     맡고 있으면 이 문서에 고를 요소가 없으므로 그 파일이 아무 일도
+     하지 않는다(isActive = inspectorNativeActive). */
+  if (window.previewInspectDirect && window.previewInspectDirect.handleMessage(data)) {
+    return;
   }
 
   if (data.type === PREVIEW_MSG_INSPECT_PREVIEW) {

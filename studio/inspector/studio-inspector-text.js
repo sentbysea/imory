@@ -271,3 +271,93 @@ function cancelStudioInspectorTextDraft() {
   renderStudioInspectorPopover();
 
 }
+
+
+/* =========================================================
+   더블클릭 글자 편집 (DIRECT-UX-1 §5)
+
+   Preview 안에서 글자를 두 번 누르면 프레임이 그 자리를 잠깐
+   contenteditable 로 연다(studio/preview/preview-inspect-direct.js).
+   **저장되는 것은 그 DOM 이 아니다** — 프레임은 문구만 올려보내고,
+   확정은 위 textarea 와 같은 길(commitStudioInspectorTextDraft →
+   commitStudioInspectorText → applyStudioInspectorPatch)을 지난다.
+   그래서:
+
+     - 입력 중에는 아무 것도 확정하지 않는다(글자마다 기록이 쌓이지
+       않는다). 패널의 textarea 만 같은 문구로 따라간다.
+     - Ctrl/⌘+Enter 나 포커스를 잃으면 적용 = 상단 ↶ 한 칸.
+     - Escape 는 취소 — 프레임이 원래 문구로 되돌리고 draft 는 그대로.
+     - 고칠 수 없는 요소(바인딩 · 보호 영역 · 자식이 있는 요소)는
+       Studio 가 textEditable 을 내려보내지 않으므로 애초에 열리지
+       않고, 그래도 commit 이 오면 여기서 한 번 더 거른다.
+========================================================== */
+
+function syncStudioInspectorTextInput(value) {
+
+  const input =
+    document.getElementById("studioInspectorTextInput");
+
+  if (input && document.activeElement !== input && typeof value === "string") {
+    input.value = value;
+  }
+
+}
+
+
+function handleStudioInspectorInlineText(data) {
+
+  if (
+    !studioInspectorSelection ||
+    typeof data.editId !== "string" ||
+    data.editId !== studioInspectorSelection.editId
+  ) {
+    return;
+  }
+
+  const text =
+    typeof data.text === "string" ? data.text : null;
+
+  if (data.phase === "begin" || data.phase === "input") {
+
+    if (text === null) {
+      return;
+    }
+
+    studioInspectorTextDraft =
+      text;
+
+    syncStudioInspectorTextInput(text);
+
+    return;
+
+  }
+
+  if (data.phase === "cancel") {
+
+    cancelStudioInspectorTextDraft();
+
+    return;
+
+  }
+
+  if (data.phase === "commit") {
+
+    const resolved =
+      describeStudioInspectorSelection();
+
+    if (!resolved || resolved.info.capabilities.text !== true || text === null) {
+
+      cancelStudioInspectorTextDraft();
+
+      return;
+
+    }
+
+    studioInspectorTextDraft =
+      text;
+
+    commitStudioInspectorTextDraft();
+
+  }
+
+}

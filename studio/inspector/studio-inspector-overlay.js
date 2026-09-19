@@ -17,8 +17,9 @@
    ★ 스킨 DOM에는 아무 것도 붙이지 않는다. 왜 iframe 안이 아니라
      Studio overlay인지는 studio-inspector.js 머리말 참고.
 
-   ★ 팝오버 **안의 내용**은 여기서 그리지 않는다 — 껍데기와 버튼
-     두 개(직접 수정 / ✦ AI 수정)까지만 만들고, 폼은
+   ★ 팝오버 **안의 내용**은 여기서 그리지 않는다 — 껍데기와 머리
+     (이름 · 종류 · 바깥 영역 선택 · 선택 해제, DIRECT-UX-1)까지만
+     만들고, 폼은
      studio-inspector-controls.js의 renderStudioInspectorPopover()가
      채운다. 그래야 "위치 계산"과 "무엇을 보여줄까"가 섞이지 않는다.
 
@@ -113,6 +114,24 @@ function buildStudioInspectorLayer() {
   studioInspectorPopover.hidden =
     true;
 
+  /* =====================================================
+     DIRECT-UX-1 — 패널 머리
+
+     예전의 "직접 수정 | ✦ AI 수정" 두 탭은 없다. 이 패널 자체가
+     직접 수정 화면이고(항목이 늘 펼쳐져 있다), AI 는 오른쪽 AI
+     Assistant 에서만 한다 — 여는 곳은 Quick Bar 의 "AI로 수정"이다.
+
+       이름            프로필 이미지
+       종류 · 페이지   이미지 · HOME
+       [바깥 영역 선택] [선택 해제]
+  ====================================================== */
+
+  const head =
+    document.createElement("div");
+
+  head.className =
+    "studio-inspector-head";
+
   studioInspectorPopoverTitle =
     document.createElement("p");
 
@@ -122,44 +141,68 @@ function buildStudioInspectorLayer() {
   studioInspectorPopoverTitle.id =
     "studioInspectorPopoverTitle";
 
+  studioInspectorPopoverMeta =
+    document.createElement("p");
+
+  studioInspectorPopoverMeta.className =
+    "studio-inspector-popover-meta";
+
+  studioInspectorPopoverMeta.id =
+    "studioInspectorPopoverMeta";
+
   const actions =
     document.createElement("div");
 
   actions.className =
     "studio-inspector-popover-actions";
 
-  studioInspectorDirectButton =
+  studioInspectorOuterButton =
     document.createElement("button");
 
-  studioInspectorDirectButton.type =
-    "button";
+  studioInspectorOuterButton.type = "button";
+  studioInspectorOuterButton.className = "studio-inspector-action";
+  studioInspectorOuterButton.id = "studioInspectorOuterButton";
+  studioInspectorOuterButton.textContent = "바깥 영역 선택";
+  studioInspectorOuterButton.title = "지금 고른 요소를 감싸는 영역을 고릅니다";
 
-  studioInspectorDirectButton.className =
-    "studio-inspector-action";
-
-  studioInspectorDirectButton.id =
-    "studioInspectorDirectButton";
-
-  studioInspectorDirectButton.textContent =
-    "직접 수정";
-
-  const aiButton =
+  const deselectButton =
     document.createElement("button");
 
-  aiButton.type =
-    "button";
+  deselectButton.type = "button";
+  deselectButton.className = "studio-inspector-action";
+  deselectButton.id = "studioInspectorDeselectButton";
+  deselectButton.textContent = "선택 해제";
+  deselectButton.title = "선택 해제 · Esc";
 
-  aiButton.className =
-    "studio-inspector-action studio-inspector-action--ai";
+  actions.appendChild(studioInspectorOuterButton);
+  actions.appendChild(deselectButton);
 
-  aiButton.id =
-    "studioInspectorAiButton";
+  head.appendChild(studioInspectorPopoverTitle);
+  head.appendChild(studioInspectorPopoverMeta);
+  head.appendChild(actions);
 
-  aiButton.textContent =
-    "✦ AI 수정";
+  /* 좁은 화면에서 Quick Bar 가 들어오는 자리(studio-inspector-quickbar.js) */
+  const quickBarSlot =
+    document.createElement("div");
 
-  actions.appendChild(studioInspectorDirectButton);
-  actions.appendChild(aiButton);
+  quickBarSlot.className =
+    "studio-inspector-quickbar-slot";
+
+  quickBarSlot.id =
+    "studioInspectorQuickBarSlot";
+
+  /* 움직임 효과 상태 한 줄 — 효과가 있을 때만 보인다(§11) */
+  studioInspectorMotion =
+    document.createElement("div");
+
+  studioInspectorMotion.className =
+    "studio-inspector-motion";
+
+  studioInspectorMotion.id =
+    "studioInspectorMotion";
+
+  studioInspectorMotion.hidden =
+    true;
 
   studioInspectorNote =
     document.createElement("p");
@@ -192,9 +235,10 @@ function buildStudioInspectorLayer() {
      기록은 호환 경로로 남는다 — studioInspectorUndoButton 은 null
      그대로이고, 그것을 만지는 자리는 전부 건너뛴다. */
 
-  studioInspectorPopover.appendChild(studioInspectorPopoverTitle);
-  studioInspectorPopover.appendChild(actions);
+  studioInspectorPopover.appendChild(head);
+  studioInspectorPopover.appendChild(quickBarSlot);
   studioInspectorPopover.appendChild(studioInspectorNote);
+  studioInspectorPopover.appendChild(studioInspectorMotion);
   studioInspectorPopover.appendChild(studioInspectorFields);
 
   /* 자르기 중에 사진을 끌어 옮기는 투명한 판. 평소에는 hidden이라
@@ -434,21 +478,23 @@ function buildStudioInspectorLayer() {
 
   studioInspectorShell.appendChild(studioInspectorLayer);
 
-  studioInspectorDirectButton.addEventListener(
+  /* Quick Bar · hover 이름표 · 겹친 요소 메뉴(studio-inspector-quickbar.js) */
+  if (typeof buildStudioInspectorQuickBar === "function") {
+    buildStudioInspectorQuickBar(studioInspectorLayer);
+  }
+
+  studioInspectorOuterButton.addEventListener(
     "click",
     () => {
-
-      studioInspectorEditingOpen =
-        !studioInspectorEditingOpen;
-
-      renderStudioInspectorPopover();
-
+      if (typeof selectStudioInspectorOuter === "function") {
+        selectStudioInspectorOuter();
+      }
     }
   );
 
-  aiButton.addEventListener(
+  deselectButton.addEventListener(
     "click",
-    handleStudioInspectorAiRequest
+    () => clearStudioInspectorSelection()
   );
 
   if (studioInspectorUndoButton) {
@@ -760,8 +806,15 @@ function paintStudioInspectorSelectLabel(rect) {
       : null;
 
   if (!mapped) {
+
     label.hidden = true;
+
+    if (typeof paintStudioInspectorQuickBar === "function") {
+      paintStudioInspectorQuickBar(null);
+    }
+
     return;
+
   }
 
   label.hidden = false;
@@ -774,9 +827,6 @@ function paintStudioInspectorSelectLabel(rect) {
       ? STUDIO_INSPECTOR_LABEL_MOVE_SHIFT
       : 0;
 
-  const left =
-    mapped.left + shift;
-
   const height =
     label.offsetHeight || 20;
 
@@ -788,9 +838,26 @@ function paintStudioInspectorSelectLabel(rect) {
       ? outside
       : mapped.top + STUDIO_INSPECTOR_LABEL_GAP;
 
-  label.style.left = `${left}px`;
-  label.style.top = `${top}px`;
-  label.style.maxWidth = `${Math.max(60, Math.round(frame.right - left - 4))}px`;
+  /* DIRECT-UX-1 — 이름표는 Preview 프레임 밖으로 나가지 않는다
+     (390px 에서 오른쪽 끝 요소를 고르면 예전에는 60px 이 삐져나가
+     Studio 에 가로 스크롤이 생길 수 있었다). */
+  const maxWidth =
+    Math.max(40, Math.min(240, Math.round(frame.width - 8)));
+
+  label.style.maxWidth = `${maxWidth}px`;
+
+  const width =
+    Math.min(label.offsetWidth || maxWidth, maxWidth);
+
+  const left =
+    Math.max(frame.left + 2, Math.min(mapped.left + shift, frame.right - width - 2));
+
+  label.style.left = `${Math.round(left)}px`;
+  label.style.top = `${Math.round(top)}px`;
+
+  if (typeof paintStudioInspectorQuickBar === "function") {
+    paintStudioInspectorQuickBar(rect);
+  }
 
 }
 
@@ -808,6 +875,10 @@ function repaintStudioInspectorOverlay() {
   }
 
   paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+
+  if (typeof paintStudioInspectorHoverLabel === "function") {
+    paintStudioInspectorHoverLabel(studioInspectorHover, studioInspectorHoverEditId);
+  }
 
   if (studioInspectorSelection) {
 

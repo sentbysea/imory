@@ -52,7 +52,34 @@
     */
     body.imory-inspector-on,
     body.imory-inspector-on * {
-      cursor: crosshair !important;
+      cursor: default !important;
+    }
+
+    /*
+      DIRECT-UX-1 — 고를 수 있는 자리 위에서만 손가락 커서, 끌 수 있는
+      요소 위에서는 이동 커서, 글자를 고치는 중에는 글자 커서
+      (studio/preview/preview-inspect-direct.js 가 표식을 단다 —
+      Preview 사본에만 붙고 저장되지 않는다).
+    */
+    body.imory-inspector-on [data-imory-inspector-hover],
+    body.imory-inspector-on [data-imory-inspector-hover] * {
+      cursor: pointer !important;
+    }
+
+    body.imory-inspector-on [data-imory-inspector-movable],
+    body.imory-inspector-on [data-imory-inspector-movable] * {
+      cursor: move !important;
+      user-select: none;
+    }
+
+    body.imory-inspector-on [data-imory-inspector-editing],
+    body.imory-inspector-on [data-imory-inspector-editing] * {
+      cursor: text !important;
+      user-select: text;
+    }
+
+    body.imory-inspector-on [data-imory-inspector-editing] {
+      outline: none;
     }
 
     /*
@@ -236,6 +263,14 @@
         */
         "../../skin/skin-inspect-target.js",
         "../../studio/inspector/studio-inspector-model.js",
+
+        /*
+          DIRECT-UX-1 — Preview 안에서 손이 하는 일(선택 우선순위 ·
+          겹친 요소 · 바깥 영역 · 더블클릭 글자 편집 · 본체 끌기).
+          preview-bridge.js(모듈)가 install() 로 자기 상태를 빌려준다
+          — 모듈은 이 classic script 뒤에 실행된다(defer).
+        */
+        "./preview-inspect-direct.js",
 
         /*
           이미지 자르기 라운드 — 자르기 값(비율/확대/구도)을 CSS

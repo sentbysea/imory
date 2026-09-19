@@ -734,9 +734,14 @@ async function runText(context) {
 
   const boundControls = await listControls(page);
 
+  /* DIRECT-UX-1 — 글자 요소의 "왜 못 고치나"는 내용 자리의 안내 블록
+     (#studioInspectorBindNote)에 한 번만 나온다(아래 안내 줄과 겹치지
+     않게). 문장은 바인딩 경로를 말하지 않는다. */
   const boundInfo = await page.evaluate(() => ({
     selection: window.getStudioInspectorSelection(),
-    note: document.getElementById("studioInspectorNote").textContent
+    note:
+      (document.getElementById("studioInspectorBindNote")?.textContent || "") +
+      " " + document.getElementById("studioInspectorNote").textContent
   }));
 
   /* 스타일은 바꿀 수 있어야 한다(내용만 잠긴다) */
@@ -765,7 +770,7 @@ async function runText(context) {
     "F. runtime-bound text — 내용 수정 옵션이 아예 없고 data-imory-bind가 그대로 보존된다",
     !boundControls.includes("text") &&
       boundInfo.selection.bindPath === "item.title" &&
-      /item\.title/.test(boundInfo.note) &&
+      !/item\.title/.test(boundInfo.note) && /글에서 옵니다/.test(boundInfo.note) &&
       boundAfter.bind === "item.title" &&
       boundAfter.templateText === "" &&
       boundAfter.renderedText === "Hello World" &&
@@ -2165,11 +2170,14 @@ async function runNarrow(context) {
 
   /* --- 직접 편집은 여전히 열린다(native 이므로) -------- */
 
+  /* DIRECT-UX-1 — "직접 수정" 탭 버튼은 없다. 항목이 늘 펼쳐져 있다 */
   record(
-    "W5. native Preview 이므로 직접 수정은 그대로 열려 있다",
-    (await page.evaluate(
-      () => document.getElementById("studioInspectorDirectButton").disabled
-    )) === false
+    "W5. native Preview 이므로 직접 수정은 그대로 열려 있다(항목이 보인다)",
+    (await page.evaluate(() => {
+      const fields = document.getElementById("studioInspectorFields");
+      return !!fields && fields.hidden === false && fields.children.length > 0 &&
+        window.getStudioInspectorState().editingOpen === true;
+    })) === true
   );
 
   /* --- 선택 종료 -------------------------------------- */

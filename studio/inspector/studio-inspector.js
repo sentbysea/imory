@@ -22,7 +22,8 @@
      (PHASE AI-6B, 요구사항 10절)
 
    ★ 이 파일이 하지 않는 일
-     - OpenAI 호출 — "✦ AI 수정" 버튼도 패널을 열 뿐이다.
+     - OpenAI 호출 — Quick Bar 의 "AI로 수정"(예전 "✦ AI 수정")도
+       패널을 열 뿐이다.
        실제 호출은 사용자가 문장을 쓰고 Send를 눌렀을 때
        studio/ai/studio-ai-panel.js가 한다(PHASE AI-6B)
      - AI 패널의 선택 chip — studio/ai/studio-ai-selection.js
@@ -161,10 +162,24 @@ function clearStudioInspectorSelection() {
     studioInspectorSelectLabel.hidden = true;
   }
 
+  /* DIRECT-UX-1 — Quick Bar · 겹친 요소 메뉴 · 프레임에 알려 둔
+     "끌 수 있다/글자를 고칠 수 있다"도 함께 걷는다 */
+  if (typeof renderStudioInspectorQuickBar === "function") {
+    renderStudioInspectorQuickBar(null, true);
+  }
+
+  if (typeof hideStudioInspectorPickMenu === "function") {
+    hideStudioInspectorPickMenu();
+  }
+
   notifyStudioInspectorSelectionChanged();
 
   if (typeof window.postInspectorSelectionToFrame === "function") {
     window.postInspectorSelectionToFrame(null);
+  }
+
+  if (typeof window.postInspectorCapsToFrame === "function") {
+    window.postInspectorCapsToFrame(null);
   }
 
 }
@@ -453,8 +468,53 @@ function handleStudioInspectorMessage(data) {
     studioInspectorHover =
       data.visibleRect || data.rect || null;
 
+    studioInspectorHoverEditId =
+      (studioInspectorHover && window.isValidInspectorEditId(data.editId)) ? data.editId : null;
+
     if (!studioInspectorRemoteOverlay) {
       paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+    }
+
+    if (typeof paintStudioInspectorHoverLabel === "function") {
+      paintStudioInspectorHoverLabel(studioInspectorHover, studioInspectorHoverEditId);
+    }
+
+    return;
+
+  }
+
+  /* =====================================================
+     DIRECT-UX-1 — 프레임이 올린 직접 조작
+       inspect-pick  한 자리에 겹친 후보들 → "무엇을 선택할까요?"
+       inspect-text  더블클릭 글자 편집의 시작/입력/적용/취소
+       inspect-drag  자유 배치 요소의 본체 끌기
+     (studio/preview/preview-inspect-direct.js)
+  ====================================================== */
+
+  if (data.type === "preview:inspect-pick") {
+
+    if (!studioInspectorRemoteOverlay && typeof showStudioInspectorPickMenu === "function") {
+      showStudioInspectorPickMenu(data);
+    }
+
+    return;
+
+  }
+
+  if (data.type === "preview:inspect-text") {
+
+    if (!studioInspectorRemoteOverlay && typeof handleStudioInspectorInlineText === "function") {
+      handleStudioInspectorInlineText(data);
+    }
+
+    return;
+
+  }
+
+  if (data.type === "preview:inspect-drag") {
+
+    if (!studioInspectorRemoteOverlay && typeof handleStudioInspectorFrameDrag === "function") {
+      handleStudioInspectorFrameDrag(data);
     }
 
     return;
@@ -510,8 +570,17 @@ function handleStudioInspectorMessage(data) {
     studioInspectorHover =
       (data.hover && (data.hover.visibleRect || data.hover.rect)) || null;
 
+    studioInspectorHoverEditId =
+      (studioInspectorHover && data.hover && window.isValidInspectorEditId(data.hover.editId))
+        ? data.hover.editId
+        : null;
+
     if (!studioInspectorRemoteOverlay) {
       paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
+    }
+
+    if (typeof paintStudioInspectorHoverLabel === "function") {
+      paintStudioInspectorHoverLabel(studioInspectorHover, studioInspectorHoverEditId);
     }
 
     if (!studioInspectorSelection) {
@@ -622,10 +691,15 @@ function setStudioInspectorEnabled(enabled) {
     clearStudioInspectorSelection();
 
     studioInspectorHover = null;
+    studioInspectorHoverEditId = null;
     studioInspectorUndo = null;
 
     if (studioInspectorHoverBox) {
       studioInspectorHoverBox.hidden = true;
+    }
+
+    if (typeof paintStudioInspectorHoverLabel === "function") {
+      paintStudioInspectorHoverLabel(null, null);
     }
 
     studioInspectorHandles.forEach((handle) => {
@@ -667,9 +741,16 @@ function stampSkinForInspector(skin) {
 
   try {
 
+    /* DIRECT-UX-1 — 숨긴 요소는 Select 모드 Preview 에서만 흐리게
+       보인다(다시 골라 "보이기"로 돌릴 수 있어야 한다). working
+       draft 는 그대로다 — 이 사본은 Preview 로만 나간다. */
     return {
       ...skin,
-      html: window.stampInspectorEditIds(skin.html).html
+      html: window.stampInspectorEditIds(skin.html).html,
+      css:
+        typeof studioInspectorGhostHiddenCss === "function"
+          ? studioInspectorGhostHiddenCss(skin.css)
+          : skin.css
     };
 
   } catch (err) {
@@ -704,6 +785,17 @@ document.addEventListener(
 
     if (!studioInspectorEnabled || event.key !== "Escape") {
       return;
+    }
+
+    /* DIRECT-UX-1 — "무엇을 선택할까요?" 메뉴가 떠 있으면 메뉴만 닫는다 */
+    if (typeof isStudioInspectorPickMenuOpen === "function" && isStudioInspectorPickMenuOpen()) {
+
+      event.preventDefault();
+
+      hideStudioInspectorPickMenu();
+
+      return;
+
     }
 
     /* 드래그 중 Escape는 "시작 전 크기로 되돌리기"다 —
@@ -847,7 +939,12 @@ if (typeof window !== "undefined") {
 
         tagName: resolved.info.tagName,
         kind: resolved.info.kind,
-        label: studioInspectorLabelFor(resolved.info),
+        label: studioInspectorLabelFor(resolved.info, resolved.element),
+
+        /* DIRECT-UX-1 — 사람이 읽는 이름과 종류(studio-inspector-names.js).
+           AI chip · selectionContext.label 이 이 값을 쓴다. */
+        name: studioInspectorLabelFor(resolved.info, resolved.element),
+        kindName: studioInspectorKindName(resolved.element, resolved.info),
         classNames: resolved.info.classNames,
         bindPath: resolved.info.bindPath,
         srcPath: resolved.info.srcPath,

@@ -233,6 +233,8 @@ left/right 로 미끄러지는 요소는 전환 동안 12px 옆에 있다. 폭�
 
 ## 8. 직접 편집 (Direct Edit)
 
+> **변경됨 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md) §11 (DIRECT-UX-1).** 아래 전환 폼(효과 · 속도 · 방향 · 움직임)은 **일반 Select 패널에서 걷었다.** 효과가 있는 요소에는 "움직임 효과 적용됨 [미리보기]" 한 줄만 보이고, 값은 그대로 보존된다. 효과를 더하거나 바꾸는 것은 AI · Code 다. 폼은 개발/테스트 스위치 `window.IMORY_STUDIO_ADVANCED_INSPECTOR = true` 에서만 그려진다(`studio-transition-e2e-test.mjs` 가 켠다).
+
 [studio/inspector/studio-inspector-transition.js](./studio/inspector/studio-inspector-transition.js)
 
 capability `transition` — 보호 구역(post-body) 밖이면 어떤 요소든.

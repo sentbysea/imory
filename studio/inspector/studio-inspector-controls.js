@@ -3,21 +3,22 @@
 
    고른 요소에 **무엇을 보여줄까**를 정하고 그린다.
 
-     buildStudioInspectorControls()   capabilities -> 컨트롤 목록
+     buildStudioInspectorAdvancedControls()  예전 목록(개발/테스트 스위치)
      studioInspectorNoteFor()         "왜 이건 못 고치나" 한 줄
      renderStudioInspectorControl()   컨트롤 한 개 그리기
      renderStudioInspectorPopover()   팝오버 전체 다시 그리기
-     handleStudioInspectorAiRequest() "✦ AI 수정" 버튼
+     handleStudioInspectorAiRequest() Quick Bar 의 "AI로 수정"
 
    ★ "모든 요소에 같은 설정 목록을 보여주지 않는다"(요구사항 7절)는
-     buildStudioInspectorControls() 한 곳에서만 결정된다.
+     buildStudioInspectorControls() 한 곳에서만 결정된다 — DIRECT-UX-1
+     에서 studio-inspector-fields.js 로 옮겼다(일반 UI 의 목록과 새 행들).
 
    ★ 텍스트 블록과 이미지 너비 블록은 여기서 그리지 않는다 —
      renderStudioInspectorControl()이 studio-inspector-text.js /
      studio-inspector-image-size.js로 넘긴다. 그 둘만 "임시 상태"를
      갖기 때문이다(나머지 컨트롤은 change 한 번 = 확정 한 번).
 
-   ★ "✦ AI 수정"은 OpenAI를 부르지 않는다 — 선택을 유지한 채 AI
+   ★ "AI로 수정"(예전 "✦ AI 수정")은 OpenAI를 부르지 않는다 — 선택을 유지한 채 AI
      Assistant를 열 뿐이다(아래 머리말).
 
    ★ 파일 나누기 (Inspector 파일 분리 라운드)
@@ -35,6 +36,11 @@
        studio-inspector-image-size.js  이미지 너비 컨트롤 · 모서리 드래그
        studio-inspector-controls.js    직접 수정 폼 UI · 팝오버 그리기
        studio-inspector.js             진입 · lifecycle · 선택 상태 전이 · 전역 창구
+
+     DIRECT-UX-1 이 더한 셋(controls 앞에 로드):
+       studio-inspector-names.js       사람이 읽는 요소 이름
+       studio-inspector-quickbar.js    Quick Bar · 겹친 요소 메뉴 · 숨기기 · 앞뒤
+       studio-inspector-fields.js      일반 UI 의 항목 목록과 새 행들
 
      로드 순서는 위 순서 그대로다(studio/index.html ·
      studio/studio-lifecycle-scenario.html). state가 맨 앞인 이유는
@@ -118,7 +124,10 @@ function bindStudioInspectorRange(range) {
    그리지 않고 이유만 보여준다.
 ========================================================== */
 
-function buildStudioInspectorControls(info) {
+/* 예전 목록 — 개발/테스트 스위치에서만.
+   일반 UI 의 목록(buildStudioInspectorControls)과 그 스위치의 설명은
+   studio-inspector-fields.js 에 있다(DIRECT-UX-1). */
+function buildStudioInspectorAdvancedControls(info) {
 
   const can =
     info.capabilities;
@@ -266,12 +275,19 @@ const STUDIO_INSPECTOR_BIND_NOTES = {
 };
 
 
+/* DIRECT-UX-1 — 바인딩 경로(profile.bio 같은 코드 이름)를 문장에 넣지
+   않는다. 표에 없는 경로는 "데이터에서 온다"까지만 말한다. */
 function studioInspectorBindNote(bindPath) {
 
-  return (
-    STUDIO_INSPECTOR_BIND_NOTES[bindPath] ||
-    `${bindPath} 값으로 자동으로 채워지는 자리입니다.`
-  );
+  if (STUDIO_INSPECTOR_BIND_NOTES[bindPath]) {
+    return STUDIO_INSPECTOR_BIND_NOTES[bindPath];
+  }
+
+  if (typeof bindPath === "string" && bindPath.indexOf("item.") === 0) {
+    return "목록에 들어오는 데이터에서 자동으로 채워지는 자리예요.";
+  }
+
+  return "블로그 데이터에서 자동으로 채워지는 자리예요.";
 
 }
 
@@ -284,14 +300,16 @@ function studioInspectorNoteFor(info) {
 
   const notes = [];
 
-  if (info.bindPath) {
-    notes.push(`내용은 ${info.bindPath} 값으로 자동으로 채워져요.`);
+  /* 글자 요소는 "내용" 자리에 이유가 따로 적힌다(bindNote) — 두 번
+     말하지 않는다. */
+  if (info.bindPath && info.kind !== "text" && info.kind !== "link") {
+    notes.push("내용은 데이터에서 자동으로 채워져요.");
   }
 
   if (info.isViewerBinding) {
     notes.push("관리자용 링크라 주소는 바꿀 수 없어요.");
   } else if (info.hrefPath) {
-    notes.push(`주소는 ${info.hrefPath} 값으로 자동으로 채워져요.`);
+    notes.push("주소가 자동으로 정해지는 링크예요.");
   }
 
   if (info.srcPath && info.kind === "image" && !info.imageSlot) {
@@ -311,6 +329,9 @@ function studioInspectorNoteFor(info) {
    폼 그리기
 ========================================================== */
 
+/* clearHandler 는 **지금 값이 있을 때만** 넘긴다(DIRECT-UX-1) — 값이
+   없는 칸마다 "기본" 버튼이 줄지어 서 있으면 무엇이 설정된 칸인지
+   읽히지 않는다. */
 function appendStudioInspectorRow(label, controlNode, clearHandler) {
 
   const row =
@@ -396,10 +417,48 @@ function renderStudioInspectorBindNote(spec, info) {
 }
 
 
-function renderStudioInspectorControl(spec, info, declarations) {
+/* 값이 있을 때만 "기본" 버튼 — 고급 스위치에서는 예전처럼 늘 */
+function studioInspectorClearIf(hasValue, handler) {
+  return (hasValue || studioInspectorAdvancedFields()) ? handler : null;
+}
+
+
+function renderStudioInspectorControl(spec, info, declarations, resolved) {
+
+  if (spec.type === "section") {
+
+    renderStudioInspectorSection(spec);
+
+    return;
+
+  }
+
+  if (spec.type === "visibility") {
+
+    renderStudioInspectorVisibility(spec, resolved);
+
+    return;
+
+  }
+
+  if (spec.type === "order") {
+
+    renderStudioInspectorOrder(spec, resolved);
+
+    return;
+
+  }
 
   const current =
     window.readInspectorControlValue(spec.control, declarations);
+
+  if (spec.type === "range") {
+
+    renderStudioInspectorOpacity(spec, current);
+
+    return;
+
+  }
 
   if (spec.type === "textBlock") {
 
@@ -494,7 +553,7 @@ function renderStudioInspectorControl(spec, info, declarations) {
     appendStudioInspectorRow(
       `${spec.label}${spec.unit ? ` (${spec.unit})` : ""}`,
       input,
-      () => commitStudioInspectorStyle(spec.control, "")
+      studioInspectorClearIf(current !== "", () => commitStudioInspectorStyle(spec.control, ""))
     );
 
     return;
@@ -515,10 +574,15 @@ function renderStudioInspectorControl(spec, info, declarations) {
       commitStudioInspectorStyle(spec.control, input.value);
     });
 
+    if (!current) {
+      input.classList.add("is-unset");
+      input.title = "스킨 기본값";
+    }
+
     appendStudioInspectorRow(
       spec.label,
       input,
-      () => commitStudioInspectorStyle(spec.control, "")
+      studioInspectorClearIf(!!current, () => commitStudioInspectorStyle(spec.control, ""))
     );
 
     return;
@@ -600,7 +664,10 @@ function renderStudioInspectorControl(spec, info, declarations) {
     appendStudioInspectorRow(
       spec.label,
       group,
-      () => commitStudioInspectorStyle("border", { width: "", color: "" })
+      studioInspectorClearIf(
+        !!current.width,
+        () => commitStudioInspectorStyle("border", { width: "", color: "" })
+      )
     );
 
     return;
@@ -624,21 +691,12 @@ function renderStudioInspectorControl(spec, info, declarations) {
     change.textContent = "이미지 변경";
     change.disabled = !info.capabilities.imageSource;
 
-    change.addEventListener("click", () => {
-
-      /* STUDIO-SHELL-1 — Images 는 왼쪽 패널의 한 내용이다. 셸을 거쳐야
-         패널이 Images 로 바뀐다(직접 열면 숨은 자리에 그려진다).
-         Select 모드와 고른 요소는 그대로 남고, Images 를 닫으면 Select
-         로 돌아온다. */
-      if (typeof window.showStudioLeftPanelMode === "function") {
-        window.showStudioLeftPanelMode("images");
-      } else if (typeof window.openSkinImagesPanel === "function") {
-        window.openSkinImagesPanel();
-      } else {
-        showStudioToast("이미지 라이브러리를 열 수 없어요.", { isError: true });
-      }
-
-    });
+    /* STUDIO-SHELL-1 — Images 는 왼쪽 패널의 한 내용이다. 셸을 거쳐야
+       패널이 Images 로 바뀐다(직접 열면 숨은 자리에 그려진다).
+       Select 모드와 고른 요소는 그대로 남고, Images 를 닫으면 Select
+       로 돌아온다. DIRECT-UX-1 — 이 요소의 슬롯을 고른 채로 연다
+       (Quick Bar 의 "이미지 변경"과 같은 함수). */
+    change.addEventListener("click", openStudioInspectorImageChange);
 
     const clear =
       document.createElement("button");
@@ -664,10 +722,8 @@ function renderStudioInspectorControl(spec, info, declarations) {
     group.appendChild(change);
     group.appendChild(clear);
 
-    appendStudioInspectorRow(
-      `${spec.label} (${info.imageSlot || "슬롯 없음"})`,
-      group
-    );
+    /* 슬롯 식별자(profile · cover)는 코드 이름이라 보여 주지 않는다 */
+    appendStudioInspectorRow(spec.label, group);
 
     return;
 
@@ -736,6 +792,14 @@ function renderStudioInspectorPopover() {
 
     paintStudioInspectorHandles(null, null);
 
+    if (typeof renderStudioInspectorQuickBar === "function") {
+      renderStudioInspectorQuickBar(null, true);
+    }
+
+    if (typeof window.postInspectorCapsToFrame === "function") {
+      window.postInspectorCapsToFrame(null);
+    }
+
     notifyStudioInspectorSelectionChanged();
 
     return;
@@ -758,8 +822,20 @@ function renderStudioInspectorPopover() {
   studioInspectorPopover.hidden =
     false;
 
+  /* DIRECT-UX-1 — 이름 · 종류 · 페이지. 셋 다 사람 말이다
+     (studio-inspector-names.js). */
   studioInspectorPopoverTitle.textContent =
-    studioInspectorLabelFor(resolved.info);
+    studioInspectorLabelFor(resolved.info, resolved.element);
+
+  if (studioInspectorPopoverMeta) {
+    studioInspectorPopoverMeta.textContent =
+      `${studioInspectorKindName(resolved.element, resolved.info)} · ${studioInspectorPageName(currentPreviewPageType)}`;
+  }
+
+  if (studioInspectorOuterButton) {
+    studioInspectorOuterButton.hidden =
+      !studioInspectorHasOuter(resolved);
+  }
 
   if (studioInspectorSelectLabel) {
     studioInspectorSelectLabel.textContent =
@@ -785,7 +861,7 @@ function renderStudioInspectorPopover() {
 
   const note =
     directEditBlocked
-      ? "sandbox 스킨은 여기서 직접 수정할 수 없어요. 고른 요소는 ✦ AI 수정이나 CODE 로 고칠 수 있어요."
+      ? "sandbox 스킨은 여기서 직접 수정할 수 없어요. 고른 요소는 AI로 수정이나 CODE 로 고칠 수 있어요."
       : studioInspectorNoteFor(resolved.info);
 
   studioInspectorNote.textContent =
@@ -794,13 +870,14 @@ function renderStudioInspectorPopover() {
   studioInspectorNote.hidden =
     !note;
 
-  studioInspectorDirectButton.disabled =
-    directEditBlocked;
+  /* DIRECT-UX-1 — 여닫는 탭이 없다. 고칠 수 있으면 항목은 늘 펼쳐져
+     있다(editingOpen 은 "항목이 보이는가"의 뜻으로 남는다). */
+  studioInspectorEditingOpen =
+    !directEditBlocked;
 
-  studioInspectorDirectButton.setAttribute(
-    "aria-expanded",
-    String(studioInspectorEditingOpen && !directEditBlocked)
-  );
+  if (studioInspectorDirectButton) {
+    studioInspectorDirectButton.disabled = directEditBlocked;
+  }
 
   studioInspectorFields.innerHTML =
     "";
@@ -808,10 +885,24 @@ function renderStudioInspectorPopover() {
   studioInspectorFields.hidden =
     !studioInspectorEditingOpen || directEditBlocked;
 
+  renderStudioInspectorMotion(resolved.info, directEditBlocked);
+
+  if (typeof renderStudioInspectorQuickBar === "function") {
+    renderStudioInspectorQuickBar(resolved, directEditBlocked);
+  }
+
+  if (typeof window.postInspectorCapsToFrame === "function") {
+    window.postInspectorCapsToFrame({
+      editId: studioInspectorSelection.editId,
+      movable: studioInspectorMovable && !directEditBlocked,
+      textEditable: resolved.info.capabilities.text === true && !directEditBlocked
+    });
+  }
+
   if (studioInspectorEditingOpen && !directEditBlocked) {
 
     const controls =
-      buildStudioInspectorControls(resolved.info);
+      buildStudioInspectorControls(resolved.info, resolved);
 
     if (!controls.length) {
 
@@ -835,7 +926,8 @@ function renderStudioInspectorPopover() {
         renderStudioInspectorControl(
           spec,
           resolved.info,
-          studioInspectorCropDeclarationsFor(spec.control, resolved)
+          studioInspectorCropDeclarationsFor(spec.control, resolved),
+          resolved
         );
       });
 
@@ -880,7 +972,7 @@ function renderStudioInspectorPopover() {
 
 
 /* =========================================================
-   "✦ AI 수정" (PHASE AI-6B)
+   "AI로 수정" — Quick Bar (PHASE AI-6B, DIRECT-UX-1 에서 자리만 옮김)
 
    ★ 이 버튼은 OpenAI를 부르지 않는다.
    하는 일은 "선택을 유지한 채 AI Assistant를 열고 입력칸에 커서를
@@ -904,6 +996,11 @@ function handleStudioInspectorAiRequest() {
 
   if (typeof window.renderStudioAiSelectionChip === "function") {
     window.renderStudioAiSelectionChip();
+  }
+
+  /* DIRECT-UX-1 — 고른 요소에 맞는 빠른 제안(입력칸에 넣기만 한다) */
+  if (typeof window.renderStudioAiSuggestions === "function") {
+    window.renderStudioAiSuggestions();
   }
 
   const input =

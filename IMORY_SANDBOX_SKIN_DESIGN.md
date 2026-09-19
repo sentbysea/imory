@@ -4,6 +4,8 @@
 §J SANDBOX-2 · §K SANDBOX-3 · §L SANDBOX-4 · §M SANDBOX-3.1 ·
 §O SANDBOX-5A 저자 JS · §P SANDBOX-5B 화면 전환 수명 ·
 §Q SANDBOX-6A Studio Select · §R SANDBOX-6A 마무리).**
+
+> **DIRECT-UX-1 과의 차이 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md) §남은 차이.** native Preview 의 Select 는 선택 우선순위(자리로 고르기) · 겹친 요소 메뉴 · 바깥 영역 · 더블클릭 글자 편집 · 본체 끌기를 쓴다. sandbox 프레임 안 Select(§Q)는 아직 예전 hit-test 규칙이고, 직접 편집은 원래대로 잠겨 있다("직접 수정" 탭 버튼이 없어져 잠김은 항목이 그려지지 않는 것 + 안내 문구로 보인다).
 §A~§F 의 "현재 구조"는 2026-09-15 기준 저장소를 직접 읽고 확인한
 사실이고, 그 안의 "설계"는 제안이다. **실제로 저장소에 들어간 코드는
 §G(SANDBOX-0) · §H(SANDBOX-1) · §J(SANDBOX-2) · §K(SANDBOX-3) ·

@@ -1140,9 +1140,35 @@ function closeSkinImagesPanel() {
 }
 
 
+/* =========================================================
+   DIRECT-UX-1 — Select 에서 이미지를 고르고 "이미지 변경"을 누르면
+   그 이미지의 슬롯을 고른 채로 패널이 열린다. 여기서는 어느 슬롯을
+   고를지만 적어 두고, 실제로 여는 것은 셸이다(showStudioLeftPanelMode).
+   이미 열려 있으면 목록을 다시 그린다. 연결은 지금처럼 사용자가
+   "이 슬롯에 연결"을 눌러야 일어난다(setStudioImageSlot = ↶ 한 칸).
+========================================================== */
+
+function setSkinImagesPanelSlot(slotName) {
+
+  if (typeof slotName !== "string" || !slotName) {
+    return;
+  }
+
+  imagesPanelSelectedSlot =
+    slotName;
+
+  if (imagesPanelIsOpen && imagesPanelSlotList && imagesPanelGrid) {
+    renderImagesPanelSlots();
+    renderImagesPanelGrid();
+  }
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.openSkinImagesPanel = openSkinImagesPanel;
   window.closeSkinImagesPanel = closeSkinImagesPanel;
+  window.setSkinImagesPanelSlot = setSkinImagesPanelSlot;
 
 }

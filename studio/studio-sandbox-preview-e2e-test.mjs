@@ -2056,8 +2056,13 @@ async function runInspect(browser) {
     check("[inspect] ★ Inspector 패널이 떴다",
       (await page.locator("#studioInspectorPopover").isVisible()) === true);
 
+    /* DIRECT-UX-1 — "직접 수정" 탭 버튼은 없어졌다. 잠김은 항목이 그려지지
+       않는 것으로 본다(IMORY_DIRECT_UX_DESIGN.md §9). */
     check("[inspect] ★ sandbox 에서는 직접 수정이 잠기고 이유가 나온다",
-      (await page.locator("#studioInspectorDirectButton").isDisabled()) === true &&
+      (await page.evaluate(() => {
+        const fields = document.getElementById("studioInspectorFields");
+        return !!fields && fields.hidden === true && window.getStudioInspectorState().editingOpen === false;
+      })) === true &&
       (await page.locator("#studioInspectorNote").innerText()).includes("sandbox"),
       (await page.locator("#studioInspectorNote").innerText()).slice(0, 60));
 
@@ -2892,7 +2897,10 @@ async function runInspect(browser) {
       })) === true);
 
     check("[inspect] ★ native 에서는 직접 수정이 잠기지 않는다",
-      (await page.locator("#studioInspectorDirectButton").isDisabled()) === false);
+      (await page.evaluate(() => {
+        const fields = document.getElementById("studioInspectorFields");
+        return !!fields && fields.hidden === false && window.getStudioInspectorState().editingOpen === true;
+      })) === true);
 
     await ctx.close();
   }

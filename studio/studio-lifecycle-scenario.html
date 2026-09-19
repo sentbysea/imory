@@ -1287,6 +1287,179 @@
         },
 
         /*
+          Scenario DUX (DIRECT-UX-1) — 클릭하고 바로 고치는 Select 의
+          fixture. 기준 문서: IMORY_DIRECT_UX_DESIGN.md
+          e2e: studio/studio-direct-ux-e2e-test.mjs
+
+            .dx-page     템플릿 맨 바깥(= 배경, 페이지 전체 래퍼)
+            .dx-head     단순 래퍼 — 그 위를 .dx-veil 이 투명하게 덮는다
+                         (예전 규칙에서는 제목 대신 래퍼가 잡혔다)
+            .dx-avatar   프로필 이미지(profile 슬롯)
+            .dx-title    홈 이름(site.title)
+            .dx-bio      정적 텍스트(더블클릭 편집)
+            .dx-link     정적 링크(더블클릭 편집 · 이동하지 않는다)
+            .dx-menu     카테고리 메뉴(반복)
+            .dx-recent   최근 글 목록(반복)
+            .dx-wrap     여백만 있는 래퍼(빈 곳)
+            .dx-grid     격자 + 움직임 효과(숨긴 배치·전환 값 보존)
+            .dx-stage    자유 배치 — 겹친 세 요소와 끌어 옮길 메모
+
+          레이어 fixture(lay)와 따로 두는 이유: 저장 · 공개 상태 문구를
+          보려면 publish_skin 과 저장 실패 스위치(window.top.
+          __duxSaveFail / __duxPublishFail)가 필요하고, 이미지 변경을
+          보려면 imageLibrary 가 필요하다.
+        */
+        dux: {
+          userId: "user-dux",
+          imageLibrary: {
+            versionSlots: {
+              "draft-dux1": {
+                profile: { imageId: "img-dux-a", imageUrl: "https://example.com/dux-a.png" }
+              }
+            },
+            images: [
+              { id: "img-dux-a", public_url: "https://example.com/dux-a.png", file_name: "dux-a.png", byte_size: 100 },
+              { id: "img-dux-b", public_url: "https://example.com/dux-b.png", file_name: "dux-b.png", byte_size: 100 }
+            ]
+          },
+          tables: {
+            skins: [
+              { id: "skin-dux1", user_id: "user-dux", is_active: true, current_draft_version_id: "draft-dux1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-dux1",
+                content: window.__scenarioDuxSkinPackage || {
+                  schemaVersion: 1,
+                  templates: {
+                    home: {
+                      html:
+                        '<div class="dx-page">' +
+                        '<header class="dx-head">' +
+                        '<img class="dx-avatar" data-imory-src="profile.avatarUrl" alt="">' +
+                        '<h1 class="dx-title" data-imory-bind="site.title"></h1>' +
+                        '<p class="dx-bio">안녕하세요 소개 문구입니다</p>' +
+                        '<a class="dx-link" href="/scenario-dux/category/301">카테고리 보기</a>' +
+                        '<div class="dx-veil"></div>' +
+                        '</header>' +
+                        '<nav class="dx-menu">' +
+                        '<a class="dx-menu-item" data-imory-repeat="navigation.postCategories" data-imory-href="item.href"><span class="dx-menu-name" data-imory-bind="item.name"></span></a>' +
+                        '</nav>' +
+                        '<ul class="dx-recent">' +
+                        '<li class="dx-recent-item" data-imory-repeat="home.recentPosts"><a class="dx-recent-link" data-imory-href="item.href" data-imory-bind="item.title"></a></li>' +
+                        '</ul>' +
+                        '<div class="dx-wrap">' +
+                        '<section class="dx-grid" data-imory-layout="grid" data-imory-layout-columns="2" data-imory-layout-gap="12" data-imory-transition="fade-slide" data-imory-transition-duration="400">' +
+                        '<div class="dx-card"><p class="dx-card-text">카드 하나</p></div>' +
+                        '<div class="dx-card"><p class="dx-card-text" data-imory-transition="fade">카드 둘</p></div>' +
+                        '</section>' +
+                        '</div>' +
+                        '<div class="dx-stage" data-imory-layout="free" data-imory-layout-height="220">' +
+                        '<div class="dx-back" data-imory-item-x="0" data-imory-item-y="0" data-imory-item-width="70" data-imory-item-height="90"></div>' +
+                        '<img class="dx-photo" src="https://example.com/dux-photo.png" alt="" data-imory-item-x="0.05" data-imory-item-y="0.1" data-imory-item-width="40" data-imory-item-z="1">' +
+                        '<p class="dx-caption" data-imory-item-x="0.08" data-imory-item-y="0.2" data-imory-item-width="35" data-imory-item-z="2">겹친 제목</p>' +
+                        '<div class="dx-note" data-imory-item-x="1" data-imory-item-y="1" data-imory-item-width="25">메모</div>' +
+                        '</div>' +
+                        '</div>'
+                    },
+                    category: {
+                      html: '<div class="dx-category"><h1 data-imory-bind="category.name"></h1></div>'
+                    },
+                    post: {
+                      html: '<div class="dx-post"><h1 data-imory-bind="post.title"></h1><div data-imory-region="post-body"></div></div>'
+                    }
+                  },
+                  css:
+                    '.dx-page { padding: 12px; } ' +
+                    '.dx-head { position: relative; padding: 16px; } ' +
+                    '.dx-veil { position: absolute; inset: 0; } ' +
+                    '.dx-avatar { width: 64px; height: 64px; object-fit: cover; display: block; } ' +
+                    '.dx-title { font-size: 22px; margin: 8px 0; } ' +
+                    '.dx-bio { margin: 0 0 8px; } ' +
+                    '.dx-menu { display: flex; gap: 8px; padding: 8px 0; } ' +
+                    '.dx-wrap { padding: 24px; } ' +
+                    '.dx-card { height: 60px; background: #eef; } ' +
+                    '.dx-stage { margin-top: 16px; } ' +
+                    '.dx-back { background: #fde; } ' +
+                    '.dx-photo { height: 120px; object-fit: cover; } ' +
+                    '.dx-caption { margin: 0; font-size: 18px; } ' +
+                    '.dx-note { background: #dfd; height: 30px; }',
+                  imageSlots: [
+                    { name: "profile", label: "프로필 사진", required: false, aspectRatioHint: "1:1" }
+                  ],
+                  regions: [],
+                  metadata: { generatedBy: "deterministic-v1" }
+                }
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-dux", nickname: "Scenario DUX", bio: null, slug: "scenario-dux" }],
+            site_settings: [{ user_id: "user-dux", key: "blog_title", value: "DUX BLOG" }],
+            categories: [
+              { id: "301", user_id: "user-dux", name: "LOG", type: "post", sort_order: 1 }
+            ],
+            posts: [
+              { id: "401", user_id: "user-dux", title: "Hello", created_at: "2026-01-01T00:00:00Z", visibility: "public", category_id: "301", content: "본문" }
+            ],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version_with_image_slots: function (params) {
+              return state.rpcHandlers.save_skin_draft_version(params);
+            },
+            save_skin_draft_version: function (params) {
+
+              if (window.top.__duxSaveFail) {
+                return { data: null, error: { message: "save failed (scenario)" } };
+              }
+
+              window.top.__savedDraftCallsDux =
+                window.top.__savedDraftCallsDux || [];
+
+              window.top.__savedDraftCallsDux.push(params);
+
+              const newVersionId =
+                "draft-dux" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            },
+            publish_skin: function (params) {
+
+              if (window.top.__duxPublishFail) {
+                return { data: null, error: { message: "publish failed (scenario)" } };
+              }
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_published_version_id = skinRow.current_draft_version_id;
+              }
+
+              return { data: skinRow ? skinRow.current_published_version_id : null, error: null };
+
+            }
+          }
+        },
+
+        /*
           Scenario T — folder-aware Skin Preview fixture (FOLDER-1
           후속: Folder-aware Skin Rendering).
 
@@ -2491,6 +2664,7 @@
   <!-- PHASE AI-1 / AI-5A — production과 동일한 순서(studio/index.html 참고) -->
   <script src="./ai/studio-ai-panel-layout.js"></script>
   <script src="./ai/studio-ai-selection.js"></script>
+  <script src="./ai/studio-ai-suggestions.js"></script>
   <script src="./ai/studio-ai-panel.js"></script>
   <!-- PHASE AI-6A — production과 동일한 순서(studio/index.html 참고).
        Inspector 파일 분리 라운드 이후로는 일곱 파일이고, state가 맨
@@ -2508,11 +2682,25 @@
   <script src="./inspector/studio-inspector-crop.js"></script>
   <script src="./inspector/studio-inspector-layout.js"></script>
   <script src="./inspector/studio-inspector-transition.js"></script>
+  <!-- DIRECT-UX-1 — studio/index.html 과 같은 자리 -->
+  <script src="./inspector/studio-inspector-names.js"></script>
+  <script src="./inspector/studio-inspector-quickbar.js"></script>
+  <script src="./inspector/studio-inspector-fields.js"></script>
   <script src="./inspector/studio-inspector-controls.js"></script>
   <script src="./inspector/studio-inspector.js"></script>
   <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 순서 -->
   <script src="./studio-history.js"></script>
   <script src="./studio-shell.js"></script>
+  <!-- DIRECT-UX-1 — studio/index.html 과 같은 자리. 처음 쓰는 사람
+       안내는 이 시험 문서에서 **저절로 뜨지 않는다** — 수십 개의 e2e 가
+       말풍선을 피해 다니지 않게 한다. 주소에 coach=1 을 붙이면 production
+       처럼 뜬다(studio/studio-direct-ux-e2e-test.mjs). -->
+  <script>
+    window.IMORY_STUDIO_COACH_AUTOSTART =
+      new URLSearchParams(window.location.search).get("coach") === "1";
+  </script>
+  <script src="./studio-save-status.js"></script>
+  <script src="./studio-coach.js"></script>
   <script src="./studio-state.js"></script>
 
   <script>

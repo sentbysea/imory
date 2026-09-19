@@ -1302,6 +1302,16 @@ async function runUnits(context) {
     const el = document.getElementById("studioInspectorMoveHandle");
     return !!el && !el.hidden && el.getBoundingClientRect().width > 0;
   }, null, { timeout: 6000 });
+  /* DIRECT-UX-1 — 예전에는 "직접 수정" 버튼을 누르는 동안 왼쪽 패널이
+     다 열렸다. 그 버튼이 없어진 뒤로는 패널이 미끄러져 들어오는 도중에
+     손잡이 자리를 읽을 수 있다 — 자리가 멈출 때까지 기다린다. */
+  await lay.waitForFunction(() => {
+    const r = document.getElementById("studioInspectorMoveHandle").getBoundingClientRect();
+    const key = Math.round(r.left) + "," + Math.round(r.top);
+    const same = window.__u12LastHandle === key;
+    window.__u12LastHandle = key;
+    return same;
+  }, null, { timeout: 6000, polling: 150 });
   const handle = await lay.evaluate(() => {
     const r = document.getElementById("studioInspectorMoveHandle").getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 };

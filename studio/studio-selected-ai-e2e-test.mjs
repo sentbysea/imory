@@ -1140,9 +1140,22 @@ async function previewClick(page, selector) {
 
 async function selectInPreview(page, selector) {
   await previewClick(page, selector);
+  /* DIRECT-UX-1 — "무언가 골라져 있다"가 아니라 **누른 그 요소**가
+     골라질 때까지 기다린다. 이미 다른 요소가 골라져 있으면 앞의 조건은
+     클릭이 도착하기도 전에 참이 되어, 검사 T 가 간헐적으로 옛 선택을
+     읽었다. */
+  const startedAt = Date.now();
   await page.waitForFunction(
-    () => window.getStudioInspectorState().selection !== null,
-    null,
+    ([sel, startedAt]) => {
+      const state = window.getStudioInspectorState().selection;
+      if (!state) return false;
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      const el = doc && doc.querySelector(sel);
+      /* 눌린 요소가 고를 수 없어 조상으로 올라가는 경우를 위해 1.5초 뒤에는
+         예전 조건(무언가 골라져 있다)으로 물러난다 */
+      return !el || el.getAttribute("data-imory-edit-id") === state.editId || Date.now() - startedAt > 1500;
+    },
+    [selector, startedAt],
     { timeout: 4000 }
   );
 }
@@ -1460,8 +1473,8 @@ async function runSend(context) {
     { timeout: 5000 }
   );
 
-  /* 응답을 기다리는 동안 Direct Edit로 working draft를 바꾼다 */
-  await page4.click("#studioInspectorDirectButton");
+  /* 응답을 기다리는 동안 Direct Edit로 working draft를 바꾼다
+     (DIRECT-UX-1 — 항목은 늘 펼쳐져 있다. "직접 수정" 버튼이 없다) */
   await page4.waitForFunction(() => window.getStudioInspectorState().editingOpen === true);
   await page4.fill('#studioInspectorFields [data-inspector-control="padding"]', "12");
   await page4.evaluate(() => {
