@@ -18,6 +18,20 @@ import path from "node:path";
 const require =
   createRequire(import.meta.url);
 
+/* TRANSITION-1 — 브라우저에서는 skin-transition.js 가 같은 realm 에
+   먼저 실려 dock 의 transition 을 정규화한다. node 에서도 같은
+   조건을 만든다(전역 함수로 노출). */
+const transitionModule =
+  require(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "skin-transition.js"
+    )
+  );
+
+globalThis.validateSkinTransitionInput =
+  transitionModule.validateSkinTransitionInput;
+
 const dock =
   require(
     path.join(
@@ -127,7 +141,7 @@ section("normalize — 받아들이는 것");
   const r = normalizeSkinBottomDock({ items: [item()] });
 
   check("기본값 — position auto", r.ok && r.dock.position === "auto");
-  check("기본값 — transition fade", r.ok && r.dock.transition === "fade");
+  check("기본값 — transition fade(공용 전환 primitive 한 벌)", r.ok && r.dock.transition.type === "fade" && r.dock.transition.duration === 200);
   check("기본값 — defaultState expanded", r.ok && r.dock.defaultState === "expanded");
   check("기본값 — visible true", r.ok && r.dock.visible === true);
   check("기본값 — collapsible false(명시해야 켜진다)", r.ok && r.dock.collapsible === false);
@@ -154,7 +168,7 @@ section("normalize — 받아들이는 것");
     r.dock.position === "sticky" &&
     r.dock.collapsible === true &&
     r.dock.defaultState === "collapsed" &&
-    r.dock.transition === "fade-slide", JSON.stringify(r));
+    r.dock.transition.type === "fade-slide", JSON.stringify(r));
 
   check("네 종류의 visual/action 이 통과한다", r.ok && r.dock.items.length === 4);
 

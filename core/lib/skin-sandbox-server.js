@@ -157,6 +157,12 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/skin/skin-layout.js",
   "/skin/skin-layout.css",
 
+  /* TRANSITION-1 — 전환 primitive. 배치와 같은 사정이다: 없으면
+     같은 스킨이 프레임에서만 움직임 없이(그리고 닫혀 있어야 할
+     패널이 열린 채로) 그려진다(IMORY_TRANSITION_PRIMITIVE_DESIGN.md). */
+  "/skin/skin-transition.js",
+  "/skin/skin-transition.css",
+
   /* =====================================================
      SANDBOX-3.2 — POST 본문의 class 규칙. 공개 화면과 **같은
      파일**이다.

@@ -481,7 +481,8 @@ function mountSkinBottomDock({
   template,
   context,
   skinRoot,
-  position
+  position,
+  transitionSpec
 }) {
 
   const host =
@@ -576,6 +577,16 @@ function mountSkinBottomDock({
   dockRoot.setAttribute("data-imory-dock-position", position);
   dockRoot.setAttribute("data-imory-dock-transition", dockContext.transition);
 
+  /* 옆으로 접히는 dock 은 전환 동안 화면을 옆으로 밀지 않게 가로를
+     자른다 — 스킨 안의 전환과 같은 장치(skin/skin-transition.css). */
+  if (
+    typeof isSkinTransitionHorizontal === "function" &&
+    transitionSpec &&
+    isSkinTransitionHorizontal(transitionSpec)
+  ) {
+    dockRoot.setAttribute("data-imory-transition-clip", "");
+  }
+
 
   const triggerEl =
     dockContext.collapsible
@@ -610,9 +621,15 @@ function mountSkinBottomDock({
     /* 사용자가 적은 값 — "auto 인가"를 나중에도 알아야 한다 */
     authoredPosition: dockContext.position,
 
-    transition: dockContext.transition,
+    /* TRANSITION-1 — 접기/펴기의 움직임 전체(종류·속도·곡선·방향).
+       dock 루트의 data-imory-dock-transition 에는 종류 이름만 나간다
+       (스킨 CSS 가 읽는 옛 계약). */
+    transition:
+      transitionSpec && typeof transitionSpec === "object"
+        ? transitionSpec
+        : { type: dockContext.transition },
+
     collapsed: false,
-    collapseTimer: 0,
     listeners: []
 
   };
@@ -754,11 +771,9 @@ function unmountSkinBottomDock() {
   });
 
 
-  if (mount.collapseTimer && mount.doc.defaultView) {
-
-    mount.doc.defaultView.clearTimeout(mount.collapseTimer);
-
-  }
+  /* 접기 전환의 타이머는 전환 primitive 가 요소별로 갖고 있다
+     (skin/skin-transition.js). 요소가 떨어지면 그 타이머는 떨어진
+     요소의 상태만 맞추고 끝난다 — 새 dock 에 닿지 않는다. */
 
 
   /*
@@ -952,7 +967,8 @@ function syncSkinBottomDockForScreen(options = {}) {
         template,
         context: options.context || {},
         skinRoot,
-        position
+        position,
+        transitionSpec: dock.transition
       });
 
     if (!mount) {

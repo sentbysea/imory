@@ -82,6 +82,31 @@ const DOCK_PANEL_TRANSITION_LABELS = {
   "fade-scale": "서서히 + 확대·축소"
 };
 
+/* 속도·움직임·방향 — 스킨 요소의 전환 폼
+   (studio/inspector/studio-inspector-transition.js)과 같은 이름을 쓴다 */
+const DOCK_PANEL_SPEED_CHOICES = [
+  ["140", "빠르게"],
+  ["200", "보통"],
+  ["360", "느리게"],
+  ["600", "아주 느리게"]
+];
+
+const DOCK_PANEL_EASING_CHOICES = [
+  ["ease", "기본"],
+  ["smooth", "부드럽게"],
+  ["ease-out", "끝을 천천히"],
+  ["ease-in", "시작을 천천히"],
+  ["ease-in-out", "양끝을 천천히"],
+  ["linear", "일정하게"]
+];
+
+const DOCK_PANEL_DIRECTION_CHOICES = [
+  ["up", "아래에서 위로"],
+  ["down", "위에서 아래로"],
+  ["left", "오른쪽에서 왼쪽으로"],
+  ["right", "왼쪽에서 오른쪽으로"]
+];
+
 const DOCK_PANEL_VISUAL_LABELS = {
   icon: "아이콘(스킨 CSS가 그림)",
   emoji: "이모지",
@@ -719,17 +744,116 @@ function renderDockSettings(host) {
 
   }
 
+  /*
+    TRANSITION-1 — 전환은 공용 전환 primitive 한 벌이다
+    ({ type, duration, easing, direction }). 스킨 요소의 Direct Edit
+    전환 폼과 **같은 네 칸**이고 값 목록도 같은 파일
+    (skin/skin-transition.js)에서 온다.
+  */
+
+  const transition =
+    dockPanelTransitionDraft();
+
   host.appendChild(
     dockRow(
       "전환",
       dockSelect(
         SKIN_DOCK_TRANSITIONS.map((t) => [t, DOCK_PANEL_TRANSITION_LABELS[t] || t]),
-        dockPanelDraft.transition,
-        (value) => { dockPanelDraft.transition = value; }
+        transition.type,
+        (value) => {
+          transition.type = value;
+          renderDockSettings(host);
+        }
       ),
       "움직임을 줄이도록 설정한 방문자에게는 전환이 자동으로 꺼집니다."
     )
   );
+
+  if (transition.type === "none") {
+    return;
+  }
+
+  const speedChoices =
+    DOCK_PANEL_SPEED_CHOICES.slice();
+
+  if (!speedChoices.some(([value]) => value === String(transition.duration))) {
+    speedChoices.push([String(transition.duration), `${transition.duration}ms`]);
+  }
+
+  host.appendChild(
+    dockRow(
+      "속도",
+      dockSelect(
+        speedChoices,
+        String(transition.duration),
+        (value) => { transition.duration = Number(value); }
+      )
+    )
+  );
+
+  host.appendChild(
+    dockRow(
+      "움직임",
+      dockSelect(
+        DOCK_PANEL_EASING_CHOICES,
+        transition.easing,
+        (value) => { transition.easing = value; }
+      ),
+      "\"부드럽게\"는 끝이 길게 풀리는 움직임입니다."
+    )
+  );
+
+  if (
+    transition.type === "slide" ||
+    transition.type === "scale" ||
+    transition.type === "fade-slide" ||
+    transition.type === "fade-scale"
+  ) {
+
+    host.appendChild(
+      dockRow(
+        "방향",
+        dockSelect(
+          DOCK_PANEL_DIRECTION_CHOICES,
+          transition.direction,
+          (value) => { transition.direction = value; }
+        ),
+        "펼쳐질 때 움직이는 쪽입니다."
+      )
+    );
+
+  }
+
+}
+
+
+/* draft 의 transition 을 언제나 네 칸짜리 객체로 둔다 — 옛 문자열
+   ("fade")로 저장된 dock 을 열어도 같은 폼이 나온다. */
+function dockPanelTransitionDraft() {
+
+  const current =
+    dockPanelDraft.transition;
+
+  if (
+    current &&
+    typeof current === "object" &&
+    typeof current.type === "string" &&
+    typeof current.duration === "number"
+  ) {
+    return current;
+  }
+
+  dockPanelDraft.transition =
+    typeof normalizeSkinTransition === "function"
+      ? normalizeSkinTransition(current)
+      : {
+          type: typeof current === "string" ? current : "fade",
+          duration: 200,
+          easing: "ease",
+          direction: "up"
+        };
+
+  return dockPanelDraft.transition;
 
 }
 

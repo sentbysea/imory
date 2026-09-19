@@ -1,0 +1,116 @@
+/* =========================================================
+   SKIN TRANSITION PRIMITIVE — 움직임 규칙 (플랫폼 몫)
+
+   기준 문서: IMORY_TRANSITION_PRIMITIVE_DESIGN.md
+   계약/값: skin/skin-transition.js
+
+   여기 있는 것은 네 가지뿐이다.
+
+     1) appear   전환을 선언한 요소가 화면에 들어올 때 한 번
+     2) hiding   감추는 동안 클릭을 가로채지 않는다
+     3) hidden   다 감춰졌으면 레이아웃에서 빠진다
+     4) 가로 넘침 가로로 미끄러지는 동안 화면이 옆으로 밀리지 않는다
+
+   show/hide 의 움직임 자체는 Web Animations 가 한다
+   (skin-transition.js setSkinTransitionVisible) — 중간에 방향을
+   바꿔도 지금 자리에서 되돌아가야 해서다.
+
+   ★ 색·크기·모양은 한 줄도 없다. 모든 값은 컴파일러가 쓴 custom
+     property 에서 온다 — 단위 테스트가 두 파일의 이름을 대조한다.
+
+   ★ 전환 속성이 없는 요소에는 이 파일의 어느 선택자도 닿지 않는다
+     (상태 속성은 플랫폼이 전환/패널 요소에만 찍는다).
+========================================================== */
+
+
+/* =========================================================
+   1. appear — "나타날 때의 자세"에서 원래 모습으로
+
+   끝 키프레임에 opacity/translate/scale 을 적지 않는다 — 원래
+   모습은 스킨 CSS 가 정한 값이다(0.8 로 그린 카드는 0.8 로 돌아온다).
+   transform-origin 은 양 끝에 같은 값을 적어 전환 동안만 쓴다.
+
+   CSS 애니메이션은 요소가 **박스를 얻는 순간** 시작된다. 그래서
+   떨어진 스크래치에 먼저 그리고 나중에 붙이는 공개 화면에서도,
+   숨겨졌던 자리가 드러나는 순간에도 맞게 재생된다.
+========================================================== */
+
+@keyframes imory-transition-in {
+
+  from {
+    opacity: var(--imory-tr-opacity, 1);
+    translate: var(--imory-tr-translate, 0px 0px);
+    scale: var(--imory-tr-scale, 1);
+    transform-origin: var(--imory-tr-origin, 50% 50%);
+  }
+
+  to {
+    transform-origin: var(--imory-tr-origin, 50% 50%);
+  }
+
+}
+
+[data-imory-transition][data-imory-transition-state="appear"] {
+  animation-name: imory-transition-in;
+  animation-duration: var(--imory-tr-duration, 200ms);
+  animation-timing-function: var(--imory-tr-easing, ease);
+  animation-fill-mode: backwards;
+}
+
+
+/* =========================================================
+   2. 감추는 동안 — 클릭을 가로채지 않는다
+
+   inert 도 함께 얹지만(키보드·보조기기), 오래된 엔진에서 inert 가
+   없을 때도 손가락은 통과하도록 여기서 한 번 더 막는다.
+========================================================== */
+
+[data-imory-transition-state="hiding"] {
+  pointer-events: none !important;
+}
+
+
+/* =========================================================
+   3. 다 감춰짐 — 레이아웃에서 빠진다
+
+   !important 인 이유: 스킨 CSS 가 같은 요소에 display:flex 를
+   주면(스코프 클래스 때문에 명시도가 높다) 브라우저 기본 [hidden]
+   규칙이 진다 — 닫힌 패널이 보이는 채로 남고 클릭을 먹는다. 이
+   상태 속성은 런타임에만 찍히고 저장되는 HTML 에는 들어갈 수 없다.
+========================================================== */
+
+[data-imory-transition-state="hidden"] {
+  display: none !important;
+}
+
+
+/* =========================================================
+   4. 가로 넘침 0
+
+   left/right 로 미끄러지는 요소는 전환 동안 12px 옆에 있다 — 폭이
+   꽉 찬 요소라면 그만큼 스크롤 영역이 생겨 좁은 화면이 옆으로
+   흔들린다. 그런 전환이 있는 스킨 루트만 가로로 자른다.
+
+   clip 은 스크롤 컨테이너를 만들지 않는다(hidden 과 다르다) —
+   sticky 가 그대로 동작하고 세로 방향은 건드리지 않는다.
+========================================================== */
+
+[data-skin-root][data-imory-transition-clip] {
+  overflow-x: clip;
+}
+
+
+/* =========================================================
+   과한 움직임은 기본값이 아니다
+
+   prefers-reduced-motion 이면 appear 를 재생하지 않는다. show/hide
+   는 JS 가 같은 조건을 보고 기다리지 않는다.
+========================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+
+  [data-imory-transition][data-imory-transition-state="appear"] {
+    animation: none;
+  }
+
+}

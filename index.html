@@ -509,6 +509,11 @@
            sanitize 가 layout 속성을 검사할 때 이 파일의 판정
            함수를 부르므로 **먼저** 온다. */
         "./skin/skin-layout.js",
+
+        /* 전환 primitive(IMORY_TRANSITION_PRIMITIVE_DESIGN.md) —
+           배치와 같은 이유로 sanitize 보다 먼저다. dock 의 접기와
+           페이지 전환도 이 파일의 움직임을 쓴다. */
+        "./skin/skin-transition.js",
         "./skin/skin-sanitize.js",
         "./skin/skin-image-slots.js",
         "./skin/skin-context.js",
@@ -702,6 +707,11 @@
            첫 페인트부터 배치가 맞는다
            (IMORY_LAYOUT_PRIMITIVE_DESIGN.md). */
         "./skin/skin-layout.css",
+
+        /* 스킨 전환 primitive — appear · 감추는 동안의 클릭 차단 ·
+           가로 넘침 방지(IMORY_TRANSITION_PRIMITIVE_DESIGN.md).
+           renderSkin() 도 없으면 스스로 건다. */
+        "./skin/skin-transition.css",
 
         /*
           본문이 그려지는 모든 화면의 공용 CSS — 형광펜 여백 ·

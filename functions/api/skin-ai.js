@@ -331,8 +331,21 @@ const SKIN_AI_TEMPLATE_PAGE_TYPES =
 const SKIN_AI_DOCK_POSITIONS =
   ["auto", "fixed", "sticky", "static"];
 
+/* TRANSITION-1 — 공용 전환 primitive 의 값 목록. 원본은
+   skin/skin-transition.js 이고, 여기 적힌 값이 그쪽과 같은지는 단위
+   테스트가 두 파일을 실제로 읽어 대조한다(skin/skin-transition-test.mjs). */
 const SKIN_AI_DOCK_TRANSITIONS =
   ["none", "fade", "slide", "scale", "fade-slide", "fade-scale"];
+
+const SKIN_AI_TRANSITION_DIRECTIONS =
+  ["up", "down", "left", "right"];
+
+const SKIN_AI_TRANSITION_EASINGS =
+  ["ease", "ease-in", "ease-out", "ease-in-out", "linear", "smooth"];
+
+const SKIN_AI_TRANSITION_DURATION_MIN = 80;
+const SKIN_AI_TRANSITION_DURATION_MAX = 1000;
+const SKIN_AI_TRANSITION_DURATION_DEFAULT = 200;
 
 const SKIN_AI_DOCK_STATES =
   ["expanded", "collapsed"];
@@ -434,7 +447,12 @@ const SKIN_AI_SELECTION_CAPABILITY_NAMES = [
   /* LAYOUT-1 — 배치 primitive(IMORY_LAYOUT_PRIMITIVE_DESIGN.md).
      이 셋이 목록에 없으면 배치를 고칠 수 있는 요소를 고른 채 보낸
      요청이 selectionContext 검증에서 통째로 거부된다. */
-  "layout", "layoutItem", "reorder"
+  "layout", "layoutItem", "reorder",
+
+  /* TRANSITION-1 — 전환 primitive(IMORY_TRANSITION_PRIMITIVE_DESIGN.md).
+     Inspector 가 보호 구역 밖의 모든 요소에 이 capability 를 준다 —
+     목록에 없으면 거의 모든 선택 요청이 통째로 거부된다. */
+  "transition"
 ];
 
 /* 사람이 읽는 한 줄 라벨("HOME · 제목 · Recent Notes"). 프롬프트에
@@ -1103,6 +1121,48 @@ function pickSkinAiDockEnum(value, allowed, fallback) {
 }
 
 
+/* TRANSITION-1 — bottomDock.transition 은 { type, duration, easing,
+   direction } 이다. 옛 모양(문자열)도 받는다. 칸 단위로 걸러 받는
+   규칙 그대로 — 모르는 칸은 현재 값(없으면 기본값)으로 되돌리고,
+   duration 은 안전한 범위로 **자른다**. */
+function sanitizeSkinAiTransition(fromModel, current) {
+
+  const base =
+    isSkinAiPlainObject(current)
+      ? current
+      : { type: typeof current === "string" ? current : "fade" };
+
+  const source =
+    isSkinAiPlainObject(fromModel)
+      ? fromModel
+      : (typeof fromModel === "string" ? { type: fromModel } : {});
+
+  const pick = (key, allowed, fallback) =>
+    pickSkinAiDockEnum(
+      source[key],
+      allowed,
+      pickSkinAiDockEnum(base[key], allowed, fallback)
+    );
+
+  const rawDuration =
+    typeof source.duration === "number" && Number.isFinite(source.duration)
+      ? source.duration
+      : (typeof base.duration === "number" && Number.isFinite(base.duration)
+          ? base.duration
+          : SKIN_AI_TRANSITION_DURATION_DEFAULT);
+
+  return {
+    type: pick("type", SKIN_AI_DOCK_TRANSITIONS, "fade"),
+    duration: Math.round(
+      Math.min(SKIN_AI_TRANSITION_DURATION_MAX, Math.max(SKIN_AI_TRANSITION_DURATION_MIN, rawDuration))
+    ),
+    easing: pick("easing", SKIN_AI_TRANSITION_EASINGS, "ease"),
+    direction: pick("direction", SKIN_AI_TRANSITION_DIRECTIONS, "up")
+  };
+
+}
+
+
 function sanitizeSkinAiDockVisual(value) {
 
   if (!isSkinAiPlainObject(value)) {
@@ -1290,7 +1350,7 @@ function sanitizeSkinAiBottomDock(fromModel, current) {
     position: pickSkinAiDockEnum(source.position, SKIN_AI_DOCK_POSITIONS, "auto"),
     collapsible: source.collapsible === true,
     defaultState: pickSkinAiDockEnum(source.defaultState, SKIN_AI_DOCK_STATES, "expanded"),
-    transition: pickSkinAiDockEnum(source.transition, SKIN_AI_DOCK_TRANSITIONS, "fade"),
+    transition: sanitizeSkinAiTransition(source.transition, fallback.transition),
     trigger: {
       type: trigger.type,
       value: trigger.value,
@@ -1395,6 +1455,16 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- Interpret layout requests as primitive changes: \"swap these two\" = move the elements in the HTML; \"put these four in two columns\" = `grid` with `columns=\"2\"`; \"menu on the left, posts on the right\" = `sidebar` with `side=\"left\"`; \"move the profile photo freely to the top right\" = make the parent `free` and give that child `x=\"1\" y=\"0\"`; \"group these three\" = wrap them in one element with a layout.",
     "- Scope: when the user selected one container and asked to change its layout, change THAT element's layout attributes and nothing else. Do not restyle the rest of the page and do not convert unrelated containers to primitives.",
     "- Existing skins have no layout attributes and must keep working exactly as they are. Only add them where the request is actually about arrangement.",
+    "",
+    "## Transition primitives (data-imory-transition / data-imory-panel / data-imory-toggle)",
+    "The platform has ONE shared transition primitive for anything that appears or disappears: an element entering the screen, a page change, a panel opening/closing, the bottom dock folding. When a request is about how something APPEARS, DISAPPEARS or MOVES IN, express it with these attributes. Do NOT write `@keyframes`, `animation:` or `transition: opacity/transform` CSS for it, and never JavaScript — the owner's no-AI edit form writes exactly these attributes, so a transition built this way stays editable by hand.",
+    "- `data-imory-transition=\"none|fade|slide|scale|fade-slide|fade-scale\"` on the element. It plays when that element enters the screen. Put it on a template's OUTERMOST element to make that PAGE fade/slide in on every navigation (HOME/CATEGORY/POST ...).",
+    "- `data-imory-transition-duration` = milliseconds " + SKIN_AI_TRANSITION_DURATION_MIN + "-" + SKIN_AI_TRANSITION_DURATION_MAX + " (default 200). `data-imory-transition-easing` = ease|ease-in|ease-out|ease-in-out|linear|smooth. `data-imory-transition-direction` = up|down|left|right — the way it moves while appearing (up = rises from slightly below); only slide/scale/fade-slide/fade-scale use it. The distance is always small (12px) — there is no fly-in-from-offscreen.",
+    "- Panels: mark the block with `data-imory-panel=\"<name>\"` (lowercase, a-z0-9-) and the thing that opens it with `data-imory-toggle=\"<name>\"`. The platform starts the panel CLOSED, toggles it on click, handles the keyboard, and animates it with the panel's own data-imory-transition-* attributes. A dock item with action {type:\"open\", target:\"panel:<name>\"} opens the same panel inside templates.dock. Never show/hide a panel with your own CSS or JS.",
+    "- The platform stamps `data-imory-transition-state` and `inert`/`hidden` at runtime. Never write them into your HTML — they are stripped.",
+    "- Map requests: \"페이드되게\" -> data-imory-transition=\"fade\". \"아래에서 살짝 올라오게\" -> \"fade-slide\" with direction \"up\". \"옆에서 들어오게\" -> \"fade-slide\" with \"left\" or \"right\". \"톡 튀어나오게/커지면서\" -> \"fade-scale\". \"더 부드럽게\" -> longer duration (300-400) and easing \"smooth\". \"빠르게\" -> 120-160. \"애니메이션 없애줘\" -> remove the data-imory-transition* attributes (or bottomDock.transition.type \"none\" for the dock) AND remove any old @keyframes/animation CSS that did the same job.",
+    "- Scope: if one element is selected, put the attributes on THAT element only. For \"페이지 전환\" requests put them on each requested template's outermost element.",
+    "- Hover/focus effects (colour changes, underline, lift on hover) are NOT transitions of appearing; those remain ordinary CSS.",
     "",
     "### Context paths available on every page",
     "site.title, site.language",
@@ -1512,7 +1582,9 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- READ THOSE ATTRIBUTES WITH `:root[...]`, for example `:root[data-imory-dock-open=\"pair\"] .my-panel { display: block; }`. Skin CSS selectors are automatically prefixed with the skin root class, so a bare `[data-imory-dock-open=…] .my-panel` asks for a DESCENDANT carrying the attribute and silently never matches the root itself. This is the same form the platform already uses for `:root[data-imory-post-focus=\"on\"]`.",
     "bottomDock fields and what a request maps to:",
     "- position: \"auto\" | \"fixed\" | \"sticky\" | \"static\". \"이 스킨은 한 화면에 다 들어오니까 아래 메뉴는 계속 떠 있게\" -> \"fixed\". \"글이 길어서 아래 메뉴가 따라다니는 게 거슬려\" -> \"static\". auto lets the platform measure the page.",
-    "- collapsible / defaultState / trigger / transition. \"독이 너무 커. 평소에는 작은 하트만 보이고 누르면 펼쳐지게\" -> collapsible:true, defaultState:\"collapsed\", trigger:{type:\"emoji\",value:\"♡\"}, transition:\"fade\" (or \"fade-slide\").",
+    "- collapsible / defaultState / trigger / transition. \"독이 너무 커. 평소에는 작은 하트만 보이고 누르면 펼쳐지게\" -> collapsible:true, defaultState:\"collapsed\", trigger:{type:\"emoji\",value:\"♡\"}, transition:{type:\"fade\",...} (or \"fade-slide\").",
+    "- transition is the shared transition primitive: {type, duration, easing, direction}. \"독 펼칠 때 더 부드럽게\" -> keep the type, duration ~320-400, easing \"smooth\". \"독 애니메이션 없애줘\" -> type \"none\". Return all four fields, unchanged ones as they are.",
+    "- A panel opened by a dock item: mark it `data-imory-panel=\"<name>\"` inside templates.dock and give it its own data-imory-transition-* for the motion. The old CSS-only form `:root[data-imory-dock-open=\"<name>\"] .your-panel { display:block }` still works, but it cannot animate the closing.",
     "- items[].action: {type:\"navigate\", target:\"home\" | \"highlights\" | \"gallery\" | \"banner\" | \"category:<id>\" | \"path:/<in-blog path>\"}, {type:\"open\", target:\"panel:<name>\"}, {type:\"action\", target:\"write\" | \"admin\" | \"manage\" | \"share\" | \"theme\" | \"top\"}. \"독에서 하트를 누르면 페어 화면이 열렸으면\" -> an item whose action is {type:\"open\", target:\"panel:pair\"}, plus markup for that panel inside templates.dock shown by `:root[data-imory-dock-open=\"pair\"] .your-panel { display: block; }`.",
     "- items[].audience: \"owner\" for owner-only actions (write/admin). Visitors never receive those items at all.",
     "- NEVER compute a URL for a dock item and never invent a target that is not in the lists above. The platform resolves every address; an item pointing at something that does not exist is dropped.",
@@ -1668,7 +1740,8 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- Deleting the selected element itself is allowed only if the user asked for it AND it is not a protected region, not an owner/admin link, and not the post-body region.",
     "",
     "### Effects",
-    "- Hover effects, transitions, shadows, borders, opacity changes and small animations on the selected element are exactly what this mode is for. Use them when asked.",
+    "- Hover effects, transitions on hover/focus, shadows, borders and opacity changes on the selected element are exactly what this mode is for. Use them when asked.",
+    "- How the selected element APPEARS (\"페이드되게\", \"아래에서 살짝 올라오게\", \"애니메이션 없애줘\") is the transition primitive: set or remove `data-imory-transition*` attributes on the selected element (see Transition primitives). Do not write @keyframes or an entrance animation in CSS for it.",
     "- CSS only. Never add JavaScript or event handler attributes — they are stripped and the effect would silently disappear.",
     "",
     "### If you cannot do it",
@@ -1759,6 +1832,44 @@ function buildSkinAiDockVisualSchema(what) {
 }
 
 
+/* TRANSITION-1 — 공용 전환 primitive 한 벌의 스키마. 네 칸 모두
+   required(structured outputs 제약) — 모델은 바꾸지 않는 칸도 현재
+   값 그대로 돌려준다. */
+function buildSkinAiTransitionSchema(description) {
+
+  return {
+    type: "object",
+    description,
+    properties: {
+      type: {
+        type: "string",
+        enum: SKIN_AI_DOCK_TRANSITIONS,
+        description: "none = no motion at all."
+      },
+      duration: {
+        type: "number",
+        description:
+          `Milliseconds, ${SKIN_AI_TRANSITION_DURATION_MIN}-${SKIN_AI_TRANSITION_DURATION_MAX}. ` +
+          "Default 200. \"더 부드럽게/천천히\" = longer (300-400) with easing \"smooth\"."
+      },
+      easing: {
+        type: "string",
+        enum: SKIN_AI_TRANSITION_EASINGS
+      },
+      direction: {
+        type: "string",
+        enum: SKIN_AI_TRANSITION_DIRECTIONS,
+        description:
+          "The way it moves while APPEARING: up = rises from slightly below. Only slide/scale types use it."
+      }
+    },
+    required: ["type", "duration", "easing", "direction"],
+    additionalProperties: false
+  };
+
+}
+
+
 function buildSkinAiBottomDockSchema() {
 
   return {
@@ -1791,12 +1902,10 @@ function buildSkinAiBottomDockSchema() {
         enum: SKIN_AI_DOCK_STATES
       },
 
-      transition: {
-        type: "string",
-        enum: SKIN_AI_DOCK_TRANSITIONS,
-        description:
-          "The platform's shared interaction primitives. Never write your own animation for this."
-      },
+      transition: buildSkinAiTransitionSchema(
+        "How the dock's items move when it folds and unfolds — the platform's shared transition primitive. " +
+        "Never write your own animation for this."
+      ),
 
       trigger: {
         type: "object",

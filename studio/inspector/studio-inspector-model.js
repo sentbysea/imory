@@ -781,10 +781,25 @@ function describeInspectorElement(el, options) {
     layout.parentIsLayout &&
     (layout.itemParams.length > 0 || layout.parentType === "sidebar");
 
+  /* =====================================================
+     TRANSITION-1 — 전환 primitive (IMORY_TRANSITION_PRIMITIVE_DESIGN.md)
+
+     "이 요소가 어떤 전환을 선언했는가"는 skin/skin-transition.js 의
+     순수 함수 하나가 답한다. 열어 주는 조건은 스타일과 같다 —
+     보호 구역(post-body) 안이 아니면 어떤 요소든 나타날 때의
+     움직임을 가질 수 있다.
+  ====================================================== */
+
+  const transition =
+    typeof describeSkinTransitionTarget === "function"
+      ? describeSkinTransitionTarget(el)
+      : null;
+
   const capabilities = {
     layout: canLayout,
     layoutItem: canLayoutItem,
     reorder: canStyle && !!layout && layout.canReorder,
+    transition: canStyle && !!transition,
     text: canEditText,
     href: canEditHref,
     typography: canStyle && (kind === "text" || kind === "link"),
@@ -828,6 +843,7 @@ function describeInspectorElement(el, options) {
     isInsideRepeat: !!repeatAncestor,
     imageSlot,
     layout,
+    transition,
     staticHref: el.getAttribute("href") || null,
     staticSrc: el.getAttribute("src") || null,
     text: ownText,

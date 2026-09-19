@@ -2295,6 +2295,27 @@ function inspectorPreviewCropPayload(crop) {
 }
 
 
+/* TRANSITION-1 — 고른 요소의 "들어오기"를 Preview 에서 한 번 재생한다
+   (studio/inspector/studio-inspector-transition.js). Preview 는 편집마다
+   다시 그리므로 전환을 저절로 재생하지 않는다 — 이 메시지가 유일한
+   재생 버튼이다(studio/preview/preview-bridge.js playPreviewTransition). */
+function postTransitionPlayToFrame(editId) {
+
+  if (!previewFrameReady || typeof editId !== "string") {
+    return;
+  }
+
+  studioPreviewFrame.contentWindow.postMessage(
+    {
+      type: "preview:transition-play",
+      editId
+    },
+    window.location.origin
+  );
+
+}
+
+
 function postInspectorPreviewToFrame(payload) {
 
   if (!previewFrameReady) {

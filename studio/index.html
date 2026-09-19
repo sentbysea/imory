@@ -678,6 +678,11 @@
         /* 배치 primitive — sanitize 보다 먼저
            (IMORY_LAYOUT_PRIMITIVE_DESIGN.md) */
         "../skin/skin-layout.js",
+
+        /* 전환 primitive — sanitize 보다 먼저. Inspector 의 전환 폼과
+           dock 패널이 같은 값 목록을 읽는다
+           (IMORY_TRANSITION_PRIMITIVE_DESIGN.md) */
+        "../skin/skin-transition.js",
         "../skin/skin-sanitize.js",
         "../skin/skin-package-normalize.js",
         "../skin/skin-generator.js"
@@ -1062,6 +1067,11 @@
            호출 시점에 쓰므로 그 뒤이고, controls.js 가 이 파일의
            renderStudioInspectorLayoutBlock 을 부르므로 그 앞이다. */
         "./inspector/studio-inspector-layout.js",
+
+        /* 전환 primitive 직접 편집(TRANSITION-1). 배치와 같은 자리,
+           같은 이유다 — controls.js 가 이 파일의
+           renderStudioInspectorTransitionBlock 을 부른다. */
+        "./inspector/studio-inspector-transition.js",
         "./inspector/studio-inspector-controls.js",
         "./inspector/studio-inspector.js",
         "./studio-state.js"

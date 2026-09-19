@@ -138,6 +138,9 @@ const PREVIEW_MSG_INSPECT_RECTS = "preview:inspect-rects";
 const PREVIEW_MSG_INSPECT_ESCAPE = "preview:inspect-escape";
 const PREVIEW_MSG_INSPECT_PREVIEW = "preview:inspect-preview";
 
+/* TRANSITION-1 — Direct Edit 의 전환 "미리 보기" (editId 하나만 받는다) */
+const PREVIEW_MSG_TRANSITION_PLAY = "preview:transition-play";
+
 const POST_BODY_REGION_NAME = "post-body";
 
 const previewRoot = document.getElementById("previewRoot");
@@ -308,6 +311,80 @@ async function handleSandboxRenderMessage(data) {
 }
 
 
+/* =========================================================
+   TRANSITION-1 — Preview 의 페이지 전환
+
+   공개 화면에서 페이지 전환은 "새 화면이 그려질 때 appear 가
+   재생되는 것"이다. Preview 는 편집마다 다시 그리므로 appear 를 끄고
+   (renderSkin transitionAppear:false), **보고 있는 화면이 바뀐
+   경우에만** 같은 움직임을 재생한다 — 같은 화면에서 글자를 고칠
+   때는 조용하다.
+========================================================== */
+
+let previewTransitionPageKey = null;
+
+function previewTransitionPageKeyOf(context) {
+
+  const page = (context && context.page) || {};
+
+  const id =
+    (context && context.post && context.post.id) ||
+    (context && context.category && context.category.id) ||
+    "";
+
+  return String(page.type || "") + ":" + String(id);
+
+}
+
+function replayPreviewPageTransition(context) {
+
+  const key = previewTransitionPageKeyOf(context);
+
+  const changed =
+    previewTransitionPageKey !== null && key !== previewTransitionPageKey;
+
+  previewTransitionPageKey = key;
+
+  if (!changed || typeof window.replaySkinTransitionAppear !== "function") {
+    return;
+  }
+
+  const root = previewRoot.querySelector("[data-skin-root]");
+
+  if (root) {
+    window.replaySkinTransitionAppear(root);
+  }
+
+}
+
+/* Direct Edit 의 "미리 보기" — 고른 요소(반복 clone 포함) 의 들어오기를
+   한 번 재생한다. editId 형태는 Inspector 와 같은 검사를 지난다. */
+function playPreviewTransition(editId) {
+
+  if (
+    typeof editId !== "string" ||
+    typeof window.isValidInspectorEditId !== "function" ||
+    !window.isValidInspectorEditId(editId) ||
+    typeof window.playSkinTransitionEnter !== "function"
+  ) {
+    return 0;
+  }
+
+  let played = 0;
+
+  previewRoot
+    .querySelectorAll(`[data-imory-edit-id="${editId}"]`)
+    .forEach((el) => {
+      if (window.playSkinTransitionEnter(el)) {
+        played += 1;
+      }
+    });
+
+  return played;
+
+}
+
+
 function handleRenderMessage(data) {
 
   try {
@@ -319,9 +396,18 @@ function handleRenderMessage(data) {
         container: previewRoot,
         skin: data.skin,
         context: data.context,
-        mode: "preview"
+        mode: "preview",
+
+        /* TRANSITION-1 — 편집할 때마다(글자 하나에도) 다시 그리므로
+           그때마다 화면 전체가 "들어오면" 편집을 할 수 없다. 대신
+           **미리보기 화면이 바뀔 때만** 한 번 재생하고(아래
+           replayPreviewPageTransition), Direct Edit 의 "미리 보기"
+           버튼이 고른 요소만 재생한다(preview:transition-play). */
+        transitionAppear: false
       });
     }
+
+    replayPreviewPageTransition(data.context);
 
     /*
       PHASE 1H: 공개 POST 화면은 스킨 루트에 읽기 모드 상태를 싣는다
@@ -1782,6 +1868,14 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  /* TRANSITION-1 — 패널을 여닫는 링크(data-imory-toggle)는 스킨 루트가
+     이미 처리했다(skin/skin-transition.js). 미리보기 페이지를 옮기지
+     않는다 — 공개 화면의 skin-link-nav 가 defaultPrevented 를 존중하는
+     것과 같은 결이다. */
+  if (event.defaultPrevented && anchor.hasAttribute("data-imory-toggle")) {
+    return;
+  }
+
   const rawHref = anchor.getAttribute("href");
 
   if (!rawHref) {
@@ -1966,6 +2060,14 @@ window.addEventListener("message", (event) => {
         : null,
       { silent: true }
     );
+
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_TRANSITION_PLAY) {
+
+    playPreviewTransition(data.editId);
 
     return;
 

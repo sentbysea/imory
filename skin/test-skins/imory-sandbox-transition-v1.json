@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "renderMode": "sandbox",
+  "templates": {
+    "home": {
+      "html": "<div class=\"sbt-page\" data-imory-transition=\"fade-slide\" data-imory-transition-direction=\"left\" data-imory-transition-duration=\"400\"><h1 class=\"sbt-title\" data-imory-bind=\"site.title\"></h1><span class=\"sbt-toggle\" data-imory-toggle=\"menu\">MENU</span><div class=\"sbt-panel\" data-imory-panel=\"menu\" data-imory-transition=\"fade-scale\" data-imory-transition-duration=\"200\"><p>PANEL</p></div><p class=\"sbt-foot\">FOOT</p></div>"
+    },
+    "category": {
+      "html": "<div class=\"sbt-page sbt-category\"><h1 data-imory-bind=\"category.name\"></h1></div>"
+    },
+    "post": {
+      "html": "<div class=\"sbt-page sbt-post\"><h1 data-imory-bind=\"post.title\"></h1><div data-imory-region=\"post-body\"></div></div>"
+    }
+  },
+  "css": ".sbt-page{padding:16px;font-family:system-ui,sans-serif;}.sbt-toggle{display:inline-block;padding:8px;cursor:pointer;}.sbt-panel{display:flex;padding:12px;background:#f3eeee;}.sbt-foot{margin:12px 0 0;}",
+  "imageSlots": [],
+  "regions": [],
+  "metadata": { "title": "Sandbox Transition Probe" }
+}

@@ -1649,6 +1649,13 @@ async function closePostArea(
   } = options;
 
 
+  /* TRANSITION-1 — 다른 화면에서 **돌아오는** 것인가. 첫 로드처럼
+     표시 공간이 이미 닫혀 있으면 HOME 은 방금 그려져 자기 appear 를
+     재생하는 중이다 — 그때 다시 재생하면 그 애니메이션을 끊는다. */
+  const returningToHome =
+    !!postArea && !postArea.hidden;
+
+
   /*
     SANDBOX-5B — HOME 이 다시 현재 화면이 된다.
 
@@ -1748,6 +1755,36 @@ async function closePostArea(
   if (typeof restoreSkinBottomDockForHome === "function") {
 
     restoreSkinBottomDockForHome();
+
+  }
+
+
+  /*
+    TRANSITION-1 — 페이지 전환도 같은 사정이다. 다른 화면은 새로
+    그려질 때 전환 primitive 의 appear(CSS 애니메이션)가 저절로
+    재생되지만, HOME 은 다시 그려지지 않는다. 그래서 HOME 의 스킨
+    루트에서 "들어오기"를 한 번 더 재생한다 — 같은 값, 같은 함수
+    (skin/skin-transition.js replaySkinTransitionAppear).
+
+    전환 속성이 없는 스킨에서는 아무 요소도 건드리지 않는다.
+    sandbox HOME 은 프레임이 새로 떠서 프레임 안에서 저절로 재생된다
+    (부모는 프레임 안에 닿지 않는다).
+  */
+
+  if (returningToHome && typeof replaySkinTransitionAppear === "function") {
+
+    const homeSkinRoot =
+      document.querySelector(
+        "#themeMount [data-skin-root]"
+      );
+
+    if (homeSkinRoot) {
+
+      replaySkinTransitionAppear(
+        homeSkinRoot
+      );
+
+    }
 
   }
 

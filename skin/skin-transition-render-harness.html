@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SKIN TRANSITION — 렌더 하네스</title>
+
+  <!--
+    =========================================================
+    TRANSITION-1 렌더 하네스
+
+    기준 문서: IMORY_TRANSITION_PRIMITIVE_DESIGN.md
+
+    전환 primitive 를 **실제 renderSkin() 으로** 그린다. 화면에
+    PASS/FAIL 을 찍지 않는다 — 판정은 재는 쪽이 한다
+    (skin/skin-transition-e2e-test.mjs). 손으로 볼 때는
+    window.__tr.render(html, css) 로 아무 조각이나 그려 본다.
+
+    로컬 정적 서버가 필요하다(ES 모듈 import + CDN css-tree).
+    =========================================================
+  -->
+
+  <!-- 진입 문서들처럼 미리 건다 — renderSkin() 도 없으면 스스로 걸지만
+       그때는 첫 마운트가 스타일시트보다 먼저라 appear 가 재생되지 않는다. -->
+  <link rel="stylesheet" href="./skin-layout.css">
+  <link rel="stylesheet" href="./skin-transition.css">
+
+  <style>
+    body {
+      margin: 0;
+      font: 13px system-ui, sans-serif;
+      background: #fafafa;
+    }
+
+    #mount {
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="mount"></div>
+
+  <script src="../core/lib/build-version.js"></script>
+  <script src="./skin-layout.js"></script>
+  <script src="./skin-transition.js"></script>
+  <script src="./skin-sanitize.js"></script>
+
+  <script type="module">
+
+    import { renderSkin } from "./skin-render.js";
+
+    const CONTEXT = {
+      site: { title: "TRANSITION HARNESS", slug: "transition" },
+      profile: { nickname: "harness", bio: "" },
+      navigation: { categories: [] },
+      home: {
+        recentPosts: [
+          { id: 1, title: "첫 글", href: "/transition/post/1" },
+          { id: 2, title: "둘째 글", href: "/transition/post/2" }
+        ]
+      }
+    };
+
+    let instance = null;
+
+    window.__tr = {
+
+      /* 매번 새 인스턴스로 그린다 — appear 는 "마운트될 때"의 일이라
+         update() 로 같은 컨테이너를 다시 그리는 것과 같다. */
+      render(html, css, options) {
+
+        const mount = document.getElementById("mount");
+
+        if (instance) {
+          instance.destroy();
+        }
+
+        instance =
+          renderSkin({
+            container: mount,
+            skin: { html, css: css || "" },
+            context: CONTEXT,
+            transitionAppear: !(options && options.appear === false)
+          });
+
+        return mount.querySelector("[data-skin-root]");
+
+      },
+
+      sanitize(html) {
+        return sanitizeSkinHTML(html);
+      },
+
+      ready: true
+
+    };
+
+  </script>
+
+</body>
+</html>

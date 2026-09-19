@@ -65,6 +65,56 @@ const SKIN_DOCK_DEFAULT_TRANSITION =
   "fade";
 
 
+/*
+  TRANSITION-1 — transition 은 이제 공용 전환 primitive 의 설정
+  객체다(IMORY_TRANSITION_PRIMITIVE_DESIGN.md):
+
+    { type, duration, easing, direction }
+
+  옛 모양(문자열 "fade")도 그대로 받는다 — 그 type 에 나머지 칸을
+  기본값으로 채운 객체가 된다. 정규화 결과는 **언제나 객체**다.
+
+  값 판정은 skin/skin-transition.js 한 곳에만 있다. 그 파일이 없는
+  문서(축소 구성)에서는 옛 규칙 — type 문자열만 — 으로 받는다.
+*/
+function normalizeSkinDockTransition(value) {
+
+  const input =
+    value === undefined || value === null
+      ? SKIN_DOCK_DEFAULT_TRANSITION
+      : value;
+
+  if (typeof validateSkinTransitionInput === "function") {
+
+    const result =
+      validateSkinTransitionInput(input, "bottomDock.transition");
+
+    return result.ok
+      ? { ok: true, transition: result.transition }
+      : result;
+
+  }
+
+  const type =
+    typeof input === "string"
+      ? input.trim()
+      : (isSkinDockPlainObject(input) ? skinDockTrimmedString(input.type) : "");
+
+  if (SKIN_DOCK_TRANSITIONS.indexOf(type) === -1) {
+    return {
+      ok: false,
+      message: `bottomDock.transition은 ${SKIN_DOCK_TRANSITIONS.join(" / ")} 중 하나여야 합니다.`
+    };
+  }
+
+  return {
+    ok: true,
+    transition: { type, duration: 200, easing: "ease", direction: "up" }
+  };
+
+}
+
+
 const SKIN_DOCK_STATES =
   ["expanded", "collapsed"];
 
@@ -446,17 +496,15 @@ function normalizeSkinBottomDock(value) {
   }
 
 
-  const transition =
-    value.transition === undefined || value.transition === null
-      ? SKIN_DOCK_DEFAULT_TRANSITION
-      : skinDockTrimmedString(value.transition);
+  const transitionResult =
+    normalizeSkinDockTransition(value.transition);
 
-  if (SKIN_DOCK_TRANSITIONS.indexOf(transition) === -1) {
-    return {
-      ok: false,
-      message: `bottomDock.transition은 ${SKIN_DOCK_TRANSITIONS.join(" / ")} 중 하나여야 합니다.`
-    };
+  if (!transitionResult.ok) {
+    return transitionResult;
   }
+
+  const transition =
+    transitionResult.transition;
 
 
   const defaultState =
@@ -929,8 +977,13 @@ function buildSkinDockContext(dock, context, options = {}) {
     isCollapsedByDefault:
       dock.collapsible && dock.defaultState === "collapsed",
 
+    /* 스킨이 [data-imory-if] 나 바인딩으로 읽는 것은 **종류 이름**
+       이다(옛 계약 그대로). 속도·곡선·방향은 움직임의 몫이라
+       플랫폼만 본다(skin-bottom-dock-mount.js). */
     transition:
-      dock.transition,
+      dock.transition && typeof dock.transition === "object"
+        ? dock.transition.type
+        : dock.transition,
 
     trigger: {
       ...buildSkinDockVisualContext(dock.trigger, context),

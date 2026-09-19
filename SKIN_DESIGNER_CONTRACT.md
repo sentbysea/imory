@@ -718,6 +718,39 @@ article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 2. **반응형을 직접 쓰지 마세요.** 격자는 900px/600px에서 열이 줄고, 사이드바는 `collapse` 아래에서 본문이 위로 오게 접힙니다. 같은 것을 재현하려고 미디어 쿼리나 `position: absolute`를 쓰면 두 벌이 싸웁니다.
 3. **순서는 HTML 순서입니다.** `order` 같은 CSS로 바꾸지 마세요 — Skin Studio의 순서 ↑↓와 AI가 고치는 것은 HTML의 형제 순서입니다.
 
+### 3-4. 전환 primitive (`data-imory-transition` · `data-imory-panel` · `data-imory-toggle`)
+
+근거: [skin/skin-transition.js](skin/skin-transition.js) · [skin/skin-transition.css](skin/skin-transition.css) · 기준 문서 [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](./IMORY_TRANSITION_PRIMITIVE_DESIGN.md)
+
+배치와 같은 **별개의 계층**입니다. 이쪽은 **"나타나고 사라질 때 어떻게 움직이는가"** 하나만 정합니다. 요소가 화면에 들어올 때(페이지 전환 포함) · 패널이 열리고 닫힐 때 · Bottom Dock이 접히고 펴질 때가 전부 같은 계약을 씁니다. 쓰지 않으면 지금까지와 한 글자도 다르지 않습니다.
+
+| 속성 | 값 | 기본 |
+|---|---|---|
+| `data-imory-transition` | `none` `fade` `slide` `scale` `fade-slide` `fade-scale` | — (없으면 움직임 없음) |
+| `data-imory-transition-duration` | 밀리초 정수. **80–1000 으로 잘립니다**(5000 → 1000) | 200 |
+| `data-imory-transition-easing` | `ease` `ease-in` `ease-out` `ease-in-out` `linear` `smooth` | `ease` |
+| `data-imory-transition-direction` | `up` `down` `left` `right` — **나타날 때 움직이는 쪽**(up = 아래에서 살짝 올라옴). slide/scale 계열에만 쓰입니다 | `up` |
+| `data-imory-panel` | 이름(소문자로 시작, `a-z0-9-`, 32자) — 열고 닫히는 덩어리. **닫힌 채로 시작**합니다 | — |
+| `data-imory-toggle` | 같은 이름 — 누르면 그 패널을 열고 닫는 자리 | — |
+
+```html
+<!-- 페이지 전환: 템플릿 맨 바깥 요소에 달면 이 화면으로 올 때마다 들어온다 -->
+<main data-imory-transition="fade-slide" data-imory-transition-direction="up">
+  <span data-imory-toggle="menu">MENU</span>
+  <nav data-imory-panel="menu"
+       data-imory-transition="fade-slide"
+       data-imory-transition-direction="down"
+       data-imory-transition-duration="200">…</nav>
+</main>
+```
+
+- **@keyframes / `animation` / `transition: opacity/transform` 으로 같은 것을 다시 만들지 마세요.** Skin Studio의 전환 폼과 AI가 고치는 것은 이 속성입니다. hover 색 변화처럼 "나타나기"가 아닌 효과는 여전히 CSS입니다.
+- 움직이는 거리는 언제나 작습니다(12px, 확대는 92%에서). 화면 밖에서 날아 들어오는 전환은 없습니다.
+- 움직임은 `transform` 을 덮어쓰지 않습니다(개별 `translate`/`scale` 속성). 자유 배치(`free`)나 스킨 CSS 의 transform 과 함께 쓸 수 있습니다.
+- 방문자가 "동작 줄이기"를 켰으면 재생하지 않고 즉시 나타나고 사라집니다.
+- 플랫폼이 렌더 뒤에 `data-imory-transition-state` · `inert` · `hidden` 을 얹습니다. 저장되는 HTML 에는 들어갈 수 없습니다.
+- `bottomDock.transition` 은 같은 네 칸의 객체입니다 — `{ "type": "fade-slide", "duration": 240, "easing": "smooth", "direction": "up" }`. 옛 모양(`"fade"`)도 그대로 받습니다.
+
 ### 3-2. `id` 속성은 전면 금지
 
 표준 HTML `id` 속성은 v0.1 정책상 **완전히 제거**됩니다(`SKIN_SANITIZE_DENY_ATTRS`). region/앵커 식별에도 표준 `id`를 쓸 수 없고, 오직 `data-imory-region`만 그 역할을 합니다.

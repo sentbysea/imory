@@ -78,7 +78,12 @@ skin-specific custom design.
   "position": "auto",          // auto | fixed | sticky | static
   "collapsible": true,
   "defaultState": "expanded",  // expanded | collapsed
-  "transition": "fade",        // none | fade | slide | scale | fade-slide | fade-scale
+  "transition": {              // 공용 전환 primitive 한 벌 (TRANSITION-1)
+    "type": "fade",            // none | fade | slide | scale | fade-slide | fade-scale
+    "duration": 200,           // ms, 80–1000 으로 잘린다
+    "easing": "ease",          // ease | ease-in | ease-out | ease-in-out | linear | smooth
+    "direction": "up"          // up | down | left | right (펼쳐질 때 움직이는 쪽)
+  },
   "trigger": { "type": "emoji", "value": "♡", "label": "메뉴 열기" },
   "items": [
     {
@@ -92,6 +97,12 @@ skin-specific custom design.
 }
 ```
 
+- **변경됨(TRANSITION-1) → [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](./IMORY_TRANSITION_PRIMITIVE_DESIGN.md) §6.**
+  `transition` 은 처음에 종류 문자열 하나(`"fade"`)였다. 지금은 위의
+  네 칸짜리 객체이고, 정규화 결과는 언제나 객체다. 옛 문자열도 그대로
+  받는다(그 종류 + 나머지 기본값). Context 의 `dock.transition` 과
+  dock 루트의 `data-imory-dock-transition` 에는 여전히 **종류 이름만**
+  나간다 — 스킨 CSS 가 읽는 옛 계약이 그대로다.
 - `schemaVersion` 은 **1 그대로**다. 2로 올리면 이 필드를 모르는 기존
   배포가 그 스킨을 통째로 legacy 화면으로 폴백시킨다(renderMode · js 와
   같은 판단).
@@ -288,6 +299,16 @@ fixed 일 때만 플랫폼이 dock 높이를 실측해
   애니메이션이 보이지 않는다).
 - `prefers-reduced-motion` 이거나 `transition: "none"` 이면 기다리지
   않는다.
+- **변경됨(TRANSITION-1) → [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](./IMORY_TRANSITION_PRIMITIVE_DESIGN.md) §6.**
+  움직임은 더 이상 dock CSS 의 transition 규칙과 220ms 타이머가 아니다.
+  접힘 **상태**(`data-imory-dock-state` · trigger 의 `aria-expanded` ·
+  세션 기억)는 여전히 여기 것이고, **움직임**만 공용 전환 primitive
+  (`setSkinTransitionVisible`)가 한다 — 빠르게 여러 번 눌러도 지금
+  자리에서 방향만 바뀌고, 사라지기 시작하는 순간부터 항목이 클릭을
+  받지 않는다(`inert` + `pointer-events`).
+- dock template 안의 패널은 `data-imory-panel="<이름>"` 으로 표시하면
+  `open` 항목이 그 패널을 전환과 함께 열고 닫는다. `data-imory-dock-open`
+  속성도 그대로 찍히므로 CSS 로 여는 옛 방식도 동작한다.
 
 ### 방문자의 선택은 어디 저장되나
 
@@ -397,7 +418,9 @@ AI 는 dock 관련 자연어 요청을 **기존 primitive 의 property 변경**�
 
 | 요청 | 처리 |
 | --- | --- |
-| "독이 너무 커. 평소에는 작은 하트만 보이고 누르면 펼쳐지게 해줘" | `collapsible: true` · `defaultState: "collapsed"` · `trigger: {type:"emoji", value:"♡"}` · `transition: "fade"` |
+| "독이 너무 커. 평소에는 작은 하트만 보이고 누르면 펼쳐지게 해줘" | `collapsible: true` · `defaultState: "collapsed"` · `trigger: {type:"emoji", value:"♡"}` · `transition: {type:"fade", …}` |
+| "독 펼칠 때 더 부드럽게" (TRANSITION-1) | `transition` 의 type 은 그대로 · `duration` 320~400 · `easing: "smooth"` |
+| "독 애니메이션 없애줘" (TRANSITION-1) | `transition.type: "none"` |
 | "이 스킨은 한 화면에 다 들어오니까 아래 메뉴는 계속 떠 있게 해줘" | `position: "fixed"` |
 | "글이 길어서 아래 메뉴가 따라다니는 게 거슬려" | `position: "static"` |
 | "독에서 하트를 누르면 페어 화면이 열렸으면 좋겠어" | 항목의 `action: {type:"open", target:"panel:pair"}` + `templates.dock` 안의 패널 마크업 + `:root[data-imory-dock-open="pair"] .panel { display:block }` |

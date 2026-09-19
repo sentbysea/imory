@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "templates": {
+    "home": {
+      "html": "<div class=\"tr-page tr-home\" data-imory-transition=\"fade\" data-imory-transition-duration=\"240\"><header class=\"tr-head\"><h1 class=\"tr-title\" data-imory-bind=\"site.title\"></h1><span class=\"tr-menu-button\" data-imory-toggle=\"menu\">MENU</span></header><nav class=\"tr-menu\" data-imory-panel=\"menu\" data-imory-transition=\"fade-slide\" data-imory-transition-direction=\"down\" data-imory-transition-duration=\"200\"><a class=\"tr-menu-link\" data-imory-repeat=\"navigation.categories\" data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></nav><ul class=\"tr-cards\"><li class=\"tr-card\" data-imory-repeat=\"navigation.categories\" data-imory-transition=\"fade-slide\" data-imory-transition-direction=\"up\" data-imory-transition-easing=\"smooth\" data-imory-transition-duration=\"360\"><a class=\"tr-cat\" data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a></li></ul></div>"
+    },
+    "category": {
+      "html": "<div class=\"tr-page tr-category\" data-imory-transition=\"fade-slide\" data-imory-transition-direction=\"left\" data-imory-transition-easing=\"smooth\" data-imory-transition-duration=\"260\"><a class=\"tr-home-link\" data-imory-href=\"navigation.home.href\">HOME</a><h1 class=\"tr-title\" data-imory-bind=\"category.name\"></h1><ol class=\"tr-list\"><li class=\"tr-row\" data-imory-repeat=\"category.posts\"><a class=\"tr-post\" data-imory-href=\"item.href\" data-imory-bind=\"item.title\"></a></li></ol></div>"
+    },
+    "post": {
+      "html": "<div class=\"tr-page tr-post\" data-imory-transition=\"fade-scale\" data-imory-transition-direction=\"up\" data-imory-transition-duration=\"220\"><a class=\"tr-back\" data-imory-href=\"post.categoryHref\">BACK</a><h1 class=\"tr-title\" data-imory-bind=\"post.title\"></h1><div class=\"tr-body\" data-imory-region=\"post-body\"></div></div>"
+    },
+    "dock": {
+      "html": "<nav class=\"tr-dock\"><span class=\"tr-trigger\" data-imory-dock=\"trigger\" data-imory-bind=\"dock.trigger.text\"></span><ul class=\"tr-dock-items\" data-imory-dock=\"items\"><li class=\"tr-dock-item\" data-imory-repeat=\"dock.items\"><a class=\"tr-dock-link\" data-imory-href=\"item.href\" data-imory-bind=\"item.label\"></a></li></ul><div class=\"tr-pair\" data-imory-panel=\"pair\" data-imory-transition=\"fade-scale\" data-imory-transition-direction=\"up\" data-imory-transition-duration=\"220\"><p>PAIR PANEL</p></div></nav>"
+    }
+  },
+  "css": ".tr-page{max-width:640px;margin:0 auto;padding:24px;font-family:system-ui,sans-serif;color:#2b2b2b;}.tr-head{display:flex;justify-content:space-between;align-items:center;}.tr-title{font-size:20px;margin:0 0 12px;}.tr-menu-button{cursor:pointer;padding:8px 12px;border:1px solid #d8cfcf;border-radius:6px;}.tr-menu{display:flex;flex-direction:column;gap:6px;padding:12px;margin:8px 0;background:#fbf7f5;border:1px solid #eee3df;}.tr-cards,.tr-list{list-style:none;margin:0;padding:0;display:grid;gap:10px;}.tr-card{padding:16px;background:#f6f1ef;border-radius:8px;}.tr-cat,.tr-post,.tr-home-link,.tr-back,.tr-menu-link{color:#2b2b2b;}.tr-row{min-height:90px;}.tr-dock{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:center;padding:8px 12px;background:#fdfbfb;}.tr-dock-items{display:flex;gap:10px;list-style:none;margin:0;padding:0;}.tr-pair{flex-basis:100%;padding:12px;background:#fff;border:1px solid #eee3df;text-align:center;}[hidden]{display:none;}",
+  "bottomDock": {
+    "visible": true,
+    "position": "fixed",
+    "collapsible": true,
+    "defaultState": "expanded",
+    "transition": {
+      "type": "fade-slide",
+      "duration": 240,
+      "easing": "smooth",
+      "direction": "up"
+    },
+    "trigger": {
+      "type": "emoji",
+      "value": "♡",
+      "label": "메뉴 열기"
+    },
+    "items": [
+      {
+        "id": "home",
+        "label": "home",
+        "audience": "all",
+        "visual": {
+          "type": "icon",
+          "value": "home"
+        },
+        "action": {
+          "type": "navigate",
+          "target": "home"
+        }
+      },
+      {
+        "id": "pair",
+        "label": "pair",
+        "audience": "all",
+        "visual": {
+          "type": "emoji",
+          "value": "♡"
+        },
+        "action": {
+          "type": "open",
+          "target": "panel:pair"
+        }
+      },
+      {
+        "id": "top",
+        "label": "top",
+        "audience": "all",
+        "visual": {
+          "type": "text",
+          "value": "↑"
+        },
+        "action": {
+          "type": "action",
+          "target": "top"
+        }
+      }
+    ]
+  },
+  "imageSlots": [],
+  "regions": [],
+  "metadata": {
+    "title": "Imory Transitions v1"
+  }
+}

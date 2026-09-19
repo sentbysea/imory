@@ -301,6 +301,37 @@ function copySkinSanitizedAttributes(sourceEl, destEl, tag) {
 
     }
 
+    /* =====================================================
+       TRANSITION PRIMITIVE (data-imory-transition* /
+       data-imory-panel / data-imory-toggle) —
+       IMORY_TRANSITION_PRIMITIVE_DESIGN.md
+
+       배치와 같은 규칙이다 — 판정은 skin/skin-transition.js 한
+       곳에만 있고 여기서는 묻기만 한다. 한 곳만 다르다:
+       duration 은 범위 밖이어도 버리지 않고 **잘라서** 저장한다
+       (요구사항 "안전한 범위로 normalize/clamp"). 그래서 검사
+       함수가 true/false 가 아니라 "저장할 값"을 돌려준다.
+
+       런타임 상태(data-imory-transition-state · -clip)는 규칙표에
+       없으므로 여기서 조용히 사라진다 — 저장되는 HTML 에 들어갈 수
+       없다. */
+    if (
+      typeof isSkinTransitionAttributeName === "function" &&
+      isSkinTransitionAttributeName(name)
+    ) {
+
+      const stored = sanitizeSkinTransitionAttributeValue(name, value);
+
+      if (stored !== null) {
+        destEl.setAttribute(name, stored);
+      } else {
+        console.warn(`[skin-sanitize] dropped unsupported ${name}="${value}"`);
+      }
+
+      return;
+
+    }
+
     if (name === SKIN_SANITIZE_DOCK_ATTR) {
       if (SKIN_SANITIZE_ALLOWED_DOCK_SLOTS.has(value)) {
         destEl.setAttribute(name, value);

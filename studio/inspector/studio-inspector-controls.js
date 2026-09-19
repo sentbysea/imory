@@ -154,6 +154,13 @@ function buildStudioInspectorControls(info) {
     controls.push({ control: "layout", type: "layoutBlock", label: "배치 방식" });
   }
 
+  /* 전환(TRANSITION-1) — 배치 바로 다음. 생김새(색·테두리)보다
+     먼저 오는 "구조"의 한 갈래다: 무엇이 어떻게 나타나는가
+     (studio/inspector/studio-inspector-transition.js). */
+  if (can.transition) {
+    controls.push({ control: "transition", type: "transitionBlock", label: "전환 효과" });
+  }
+
   if (can.imageSource || can.imageClear) {
     controls.push({ control: "imageSource", type: "image", label: "이미지" });
   }
@@ -414,6 +421,16 @@ function renderStudioInspectorControl(spec, info, declarations) {
 
     if (typeof renderStudioInspectorLayoutBlock === "function") {
       renderStudioInspectorLayoutBlock(spec, info);
+    }
+
+    return;
+
+  }
+
+  if (spec.type === "transitionBlock") {
+
+    if (typeof renderStudioInspectorTransitionBlock === "function") {
+      renderStudioInspectorTransitionBlock(spec, info);
     }
 
     return;

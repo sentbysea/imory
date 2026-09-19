@@ -64,6 +64,12 @@ const CONTENT_WIDTH_STYLESHEET_URL =
 const SKIN_LAYOUT_STYLESHEET_URL =
   new URL("./skin-layout.css", import.meta.url);
 
+/* 전환 primitive stylesheet(IMORY_TRANSITION_PRIMITIVE_DESIGN.md).
+   배치와 완전히 같은 방식으로 건다. 전환 속성이 하나도 없는
+   스킨에서는 이 파일의 어느 선택자도 매치되지 않는다. */
+const SKIN_TRANSITION_STYLESHEET_URL =
+  new URL("./skin-transition.css", import.meta.url);
+
 function ensureSkinStylesheet(doc, stylesheetUrl, marker) {
 
   const alreadyLinked =
@@ -102,6 +108,10 @@ function ensureSkinStylesheet(doc, stylesheetUrl, marker) {
 
 function ensureSkinLayoutStylesheet(doc) {
   ensureSkinStylesheet(doc, SKIN_LAYOUT_STYLESHEET_URL, "data-imory-skin-layout");
+}
+
+function ensureSkinTransitionStylesheet(doc) {
+  ensureSkinStylesheet(doc, SKIN_TRANSITION_STYLESHEET_URL, "data-imory-skin-transition");
 }
 
 function ensureContentWidthStylesheet(doc) {
@@ -694,7 +704,18 @@ let skinRenderInstanceCounter = 0;
    붙인다.
 ========================================================== */
 
-export function renderSkin({ container, skin, context, mode = "view", styleNonce, onRepeatItem } = {}) {
+/* =========================================================
+   transitionAppear (선택, TRANSITION-1)
+
+   전환을 선언한 요소가 마운트될 때 "들어오기"를 재생할지.
+   기본은 재생이다(공개 화면 · sandbox 프레임 — 페이지 전환이
+   이것이다). Studio Preview 만 false 를 넘긴다: 글자 하나 고칠
+   때마다 화면 전체가 다시 들어오면 편집을 할 수 없다. 그때도
+   값은 똑같이 컴파일되고, "미리 보기"가 같은 값으로 재생한다
+   (skin/skin-transition.js compileSkinTransitionTree).
+========================================================== */
+
+export function renderSkin({ container, skin, context, mode = "view", styleNonce, onRepeatItem, transitionAppear = true } = {}) {
 
   if (!container) {
     throw new Error("renderSkin: container is required");
@@ -713,6 +734,7 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
     installContentWidthContract(doc);
     ensureContentWidthStylesheet(doc);
     ensureSkinLayoutStylesheet(doc);
+    ensureSkinTransitionStylesheet(doc);
 
     const safeHtml = sanitizeSkinHTML(String(currentSkin?.html || ""), doc);
 
@@ -779,6 +801,13 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
     ====================================================== */
     if (typeof compileSkinLayoutTree === "function") {
       compileSkinLayoutTree(root);
+    }
+
+    /* 전환 primitive — 배치와 같은 자리, 같은 이유로 walk **뒤**다
+       (반복 clone 도 자기 값을 받는다). 전환 속성이 없는 스킨에서는
+       어떤 요소도 건드리지 않는다(skin/skin-transition.js 9절). */
+    if (typeof compileSkinTransitionTree === "function") {
+      compileSkinTransitionTree(root, { appear: transitionAppear !== false });
     }
 
   }

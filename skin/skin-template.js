@@ -1108,6 +1108,49 @@ function auditSkinPackageMaterials(skinPackage) {
   }
 
 
+  /* 6) 전환 primitive 가 조용히 무시되는 조합(TRANSITION-1)
+
+     효과 없이 속도만 적힌 요소, 방향이 뜻이 없는 효과에 적힌 방향,
+     여는 패널이 같은 템플릿에 없는 토글. 판정은
+     skin/skin-transition.js 한 곳에만 있다 — 배치 감사와 같은 방식. */
+
+  if (
+    typeof auditSkinTransitionDocument === "function" &&
+    typeof DOMParser !== "undefined"
+  ) {
+
+    const parser = new DOMParser();
+
+    [["HOME", typeof skinPackage.html === "string" ? skinPackage.html : ""]]
+      .concat(
+        Object.keys(templates).map(
+          (pageType) => [
+            pageType.toUpperCase(),
+            (templates[pageType] && typeof templates[pageType].html === "string")
+              ? templates[pageType].html
+              : ""
+          ]
+        )
+      )
+      .forEach(([label, html]) => {
+
+        if (
+          !html ||
+          (html.indexOf("data-imory-transition") === -1 && html.indexOf("data-imory-toggle") === -1)
+        ) {
+          return;
+        }
+
+        auditSkinTransitionDocument(
+          parser.parseFromString(html, "text/html").body,
+          label
+        ).forEach((warning) => warnings.push(warning));
+
+      });
+
+  }
+
+
   return warnings;
 
 }

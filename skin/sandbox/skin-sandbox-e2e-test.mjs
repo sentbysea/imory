@@ -3649,6 +3649,92 @@ async function readAuthorJsMarks(frame) {
 }
 
 
+/* =========================================================
+   [transition] TRANSITION-1 — 전환 primitive 가 프레임 안에서도 돈다
+
+   공개 화면과 **같은 두 파일**(skin-transition.js/.css)이 sandbox
+   origin 에서 나가고 프레임 문서가 그것을 싣는가를, 실제로 그려진
+   프레임에서 잰다. 둘 중 하나라도 빠지면 같은 스킨이 프레임에서만
+   움직임 없이 — 그리고 닫혀 있어야 할 패널이 열린 채로 — 그려진다.
+
+   ★ 스킨 JS 없이 된다: 패널 토글은 플랫폼 스크립트(프레임의
+     skin-transition.js)가 처리한다. 저자 JS opt-in 이 필요 없다.
+========================================================== */
+
+async function runTransition(browser) {
+
+  console.log("\n[transition] 전환 primitive — 프레임 안");
+
+  const { ctx, page } =
+    await openAuthorJsHarness(browser, ON_QUERY + "&transition=1", undefined, { width: 390, height: 800 });
+
+  const frame = await waitForSandboxRender(page);
+
+  check("[transition] 프레임이 떴다", Boolean(frame));
+
+  if (frame) {
+
+    const first = await frame.evaluate(() => {
+      const pageEl = document.querySelector(".sbt-page");
+      const panel = document.querySelector(".sbt-panel");
+      const root = pageEl.closest("[data-skin-root]");
+      return {
+        state: pageEl.getAttribute("data-imory-transition-state"),
+        animationName: getComputedStyle(pageEl).animationName,
+        duration: pageEl.style.getPropertyValue("--imory-tr-duration"),
+        clip: root.hasAttribute("data-imory-transition-clip"),
+        overflowX: getComputedStyle(root).overflowX,
+        panelHidden: panel.hidden,
+        panelDisplay: getComputedStyle(panel).display,
+        toggleRole: document.querySelector(".sbt-toggle").getAttribute("role")
+      };
+    });
+
+    check("[transition] ★ 화면이 appear 로 들어온다(스타일시트가 프레임에 도착했다)",
+      first.state === "appear" && first.animationName === "imory-transition-in", JSON.stringify(first));
+
+    check("[transition] 컴파일된 값이 CSSOM 으로 들어갔다(CSP 가 막지 않는다)",
+      first.duration === "400ms", first.duration);
+
+    check("[transition] 왼쪽으로 들어오는 루트에 가로 자르기",
+      first.clip && first.overflowX === "clip", JSON.stringify(first));
+
+    check("[transition] ★ 패널은 닫힌 채로 시작한다", first.panelHidden && first.panelDisplay === "none", JSON.stringify(first));
+
+    check("[transition] 토글이 버튼으로 읽힌다", first.toggleRole === "button");
+
+    await frame.locator(".sbt-toggle").click();
+    await page.waitForTimeout(450);
+
+    const opened = await frame.evaluate(() => {
+      const panel = document.querySelector(".sbt-panel");
+      return { state: panel.getAttribute("data-imory-transition-state"), visible: panel.getBoundingClientRect().height > 0 };
+    });
+
+    check("[transition] ★ 저자 JS 없이도 토글이 패널을 연다(플랫폼 스크립트)", opened.state === "shown" && opened.visible, JSON.stringify(opened));
+
+    await frame.locator(".sbt-toggle").click();
+    await page.waitForTimeout(450);
+
+    const closed = await frame.evaluate(() => {
+      const panel = document.querySelector(".sbt-panel");
+      return {
+        state: panel.getAttribute("data-imory-transition-state"),
+        hidden: panel.hidden,
+        overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth
+      };
+    });
+
+    check("[transition] 다시 누르면 닫힌다", closed.state === "hidden" && closed.hidden, JSON.stringify(closed));
+    check("[transition] 390px 프레임 가로 넘침 0", closed.overflow <= 0, String(closed.overflow));
+
+  }
+
+  await ctx.close();
+
+}
+
+
 async function runAuthorJs(browser) {
 
   console.log("\n[authorjs] 저자 JS — 실행 · 수명 · 관문 · 보안");
@@ -5622,6 +5708,9 @@ async function runBodyParity(browser) {
     if (shouldRun("screens")) await runScreens(browser);
 
     if (shouldRun("authorjs")) await runAuthorJs(browser);
+
+    /* --- TRANSITION-1 --- */
+    if (shouldRun("transition")) await runTransition(browser);
     if (shouldRun("authorjspages")) await runAuthorJsPages(browser);
 
     if (shouldRun("regress")) await runRegress();

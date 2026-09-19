@@ -94,15 +94,25 @@ function findSkinDockScrollContainer(el) {
 /* =========================================================
    접기 / 펼치기
 
-   전환은 CSS 가 한다(skin/skin-bottom-dock.css). 여기서는 상태
-   속성을 바꾸고, 닫힐 때만 전환이 끝난 뒤 hidden 을 얹는다 —
-   전환 중에 요소가 레이아웃에서 사라지면 애니메이션이 보이지
-   않기 때문이다.
+   **상태**는 여기가 갖는다 — 접혔는가, 트리거가 무엇을 알리는가,
+   dock 루트에 무슨 상태 속성이 찍히는가. **움직임**은 공용 전환
+   primitive 에 맡긴다(skin/skin-transition.js setSkinTransitionVisible,
+   TRANSITION-1). 둘을 하나로 합치지 않은 이유: dock 의 수명(화면마다
+   새로 그리고, 세션 동안 접힘을 기억한다)은 dock 만의 것이고,
+   "사라질 때 어떻게 움직이는가"는 패널·페이지와 같은 계약이어야
+   한다.
 
-   prefers-reduced-motion 이거나 transition 이 "none" 이면 기다리지
-   않는다(요구사항 11절).
+   primitive 가 보장하는 것:
+     - 닫힐 때는 전환이 끝난 뒤 hidden 이 얹힌다(전환 중에
+       레이아웃에서 빠지면 움직임이 안 보인다).
+     - 감추기 시작하는 순간부터 클릭을 가로채지 않는다.
+     - 빠르게 여러 번 눌러도 지금 자리에서 방향만 바뀌고, 마지막
+       요청이 최종 상태다.
+     - prefers-reduced-motion 이거나 type 이 "none" 이면 기다리지
+       않는다(요구사항 11절).
 ========================================================== */
 
+/* primitive 가 없는 축소 구성에서 쓰는 옛 대기 시간 */
 const SKIN_DOCK_TRANSITION_MS = 220;
 
 function setSkinDockCollapsed(mount, collapsed, animate) {
@@ -141,9 +151,32 @@ function setSkinDockCollapsed(mount, collapsed, animate) {
   }
 
 
+  if (typeof setSkinTransitionVisible === "function") {
+
+    setSkinTransitionVisible(
+      itemsEl,
+      !collapsed,
+      {
+        spec: mount.transition,
+        animate: animate !== false
+      }
+    );
+
+    return;
+
+  }
+
+
+  /* ── primitive 가 없는 문서: 옛 방식(CSS 전환 + 타이머) ── */
+
+  const transitionType =
+    mount.transition && typeof mount.transition === "object"
+      ? mount.transition.type
+      : mount.transition;
+
   const instant =
     animate === false ||
-    mount.transition === "none" ||
+    transitionType === "none" ||
     skinDockPrefersReducedMotion(doc);
 
 
@@ -323,15 +356,39 @@ function runSkinDockOpenPanel(mount, panelId) {
   const current =
     mount.dockRoot.getAttribute("data-imory-dock-open");
 
-  if (current === panelId) {
+  const next =
+    current === panelId ? null : panelId;
 
+  if (next === null) {
     mount.dockRoot.removeAttribute("data-imory-dock-open");
-
-    return;
-
+  } else {
+    mount.dockRoot.setAttribute("data-imory-dock-open", next);
   }
 
-  mount.dockRoot.setAttribute("data-imory-dock-open", panelId);
+
+  /*
+    TRANSITION-1 — dock template 안에 data-imory-panel="<이름>" 으로
+    표시한 패널이 있으면 플랫폼이 직접 열고 닫는다. 움직임은 그
+    패널의 data-imory-transition-* 이다(없으면 즉시). 스킨 안의
+    data-imory-toggle 버튼과 **같은 함수**를 지난다
+    (skin/skin-transition.js setSkinPanelOpen).
+
+    위의 data-imory-dock-open 속성은 그대로 찍는다 — CSS 로 패널을
+    보이는 옛 방식(:root[data-imory-dock-open="pair"] .panel)의
+    스킨이 그대로 동작한다.
+  */
+
+  if (typeof setSkinPanelOpen !== "function") {
+    return;
+  }
+
+  if (current && current !== next) {
+    setSkinPanelOpen(mount.dockRoot, current, false);
+  }
+
+  if (next) {
+    setSkinPanelOpen(mount.dockRoot, next, true);
+  }
 
 }
 

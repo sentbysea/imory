@@ -216,7 +216,11 @@
         /* 배치 primitive(IMORY_LAYOUT_PRIMITIVE_DESIGN.md).
            renderSkin() 도 없으면 스스로 걸지만, 여기서 미리
            걸어야 첫 페인트부터 배치가 맞는다. */
-        "/skin/skin-layout.css"
+        "/skin/skin-layout.css",
+
+        /* 전환 primitive — 공개 화면과 같은 파일
+           (IMORY_TRANSITION_PRIMITIVE_DESIGN.md) */
+        "/skin/skin-transition.css"
       ]
     );
 
@@ -254,6 +258,7 @@
         /* 배치 primitive — sanitize 보다 먼저
            (IMORY_LAYOUT_PRIMITIVE_DESIGN.md) */
         "/skin/skin-layout.js",
+        "/skin/skin-transition.js",
         "/skin/skin-sanitize.js",
         "/skin/sandbox/skin-sandbox-config.js",
         "/skin/sandbox/skin-sandbox-protocol.js",
