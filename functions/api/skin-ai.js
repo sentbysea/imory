@@ -44,11 +44,14 @@
    AI로 할 수 없다(기존 Import/Code 경로로는 가능하다). 남은 차이로
    남겨둔다.
 
-   ★ 참고 이미지 (PHASE AI-4)
-   images는 **디자인 참고 자료**다. 스킨에 삽입될 이미지가 아니다 —
-   이 파일은 imageSlots도 Supabase Storage도 DB도 건드리지 않는다.
-   검증을 통과한 data URL을 OpenAI vision input(input_image)으로
-   한 번 넘기고 그대로 버린다. 저장하는 곳은 어디에도 없다.
+   ★ 참고 이미지 (PHASE AI-4 / IMPORT-CSS-IMAGE-1)
+   images는 기본적으로 **디자인 참고 자료**다. 사용자가 스킨 안에
+   넣어 달라고 한 경우에만 모델이 `<img src="imory-attachment:N">`
+   자리표시자를 쓴다 — 그것을 슬롯으로 바꾸고 이미지를 올리는 일은
+   브라우저가 한다(skin/skin-package-images.js · studio/ai/studio-ai-panel.js).
+   이 파일은 여전히 imageSlots도 Supabase Storage도 DB도 건드리지
+   않는다. 검증을 통과한 data URL을 OpenAI vision input(input_image)으로
+   한 번 넘기고 그대로 버린다.
    images가 없으면 요청 body도 시스템 프롬프트도 PHASE AI-2와
    완전히 같다(아래 buildSkinAiSystemPrompt / buildSkinAiModelRequestBody).
 
@@ -1656,12 +1659,21 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
   ];
 
   /*
-    ★ 첨부 이미지 규칙 — 여기서 가장 중요한 문장은 "첨부 이미지를
-    스킨에 넣지 말라"이다. 사용자가 붙인 이미지는 Storage에 올라가
-    있지도 않고 imageSlots에도 없으므로, 모델이 그것을 넣으려
-    해봤자 만들 수 있는 것은 깨진 <img>나 data: URL뿐이다(둘 다
-    sanitizer/validator가 지운다). 그래서 "참고만 한다"를 계약으로
-    못박는다.
+    ★ 첨부 이미지 규칙 (PHASE AI-4 → IMPORT-CSS-IMAGE-1)
+
+    기본은 여전히 "참고만 한다"다. 바뀐 것은 하나 — 사용자가 그
+    이미지를 **스킨 안에 넣어 달라고** 한 경우에만, 모델은 정해진
+    자리표시자 `<img src="imory-attachment:N">` 을 쓴다. 모델은 그
+    이미지의 주소를 모른다(Storage 에 없다). 자리표시자는 브라우저의
+    공용 파이프라인(skin/skin-package-images.js)이 `images.<슬롯>` 과
+    imageSlots 선언으로 바꾸고, Studio 가 그 첨부만 내 이미지에 올려
+    슬롯에 연결한다. 그래서 이 파일은 여전히 Storage 도 DB 도 imageSlots
+    도 건드리지 않는다(모델이 만든 imageSlots 는 받지도 않는다).
+
+    배경 이미지(CSS url())로 넣지 말라는 규칙이 함께 간다 — 엔진에는
+    "배경 슬롯"이 없고, url() 의 자리표시자는 CSS 검사가 지운다.
+    그래서 사진을 배경처럼 깔고 싶으면 <img> 한 층을 absolute +
+    object-fit: cover 로 두라고 시킨다.
   */
   const sections =
     hasReferenceImages
@@ -1669,8 +1681,12 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
 
           "",
           "## Reference images (attached by the user)",
-          "- The user attached one or two images. They are DESIGN REFERENCES ONLY.",
-          "- NEVER put an attached image into the skin. Do not add an <img> for it, do not reference it from url(), do not invent an imageSlot for it. You cannot: those images are not hosted anywhere your templates could reach.",
+          "- The user attached one or two images. By default they are DESIGN REFERENCES ONLY.",
+          "- Put an attached image INTO the skin only when the instruction explicitly asks for it (for example \"이 사진을 메인 이미지로 넣어줘\", \"첨부한 사진으로 헤더를 만들어줘\", \"이 그림을 배경으로 깔아줘\"). Otherwise NEVER add an <img> for it and never try to reproduce it.",
+          "- When you do place one, write exactly `<img src=\"imory-attachment:1\" alt=\"<short Korean description>\" class=\"<a class that says what it is, e.g. hero-photo>\">` — the number is the attachment's order (1 = first attached image, 2 = second). The platform turns that placeholder into an editable image slot and fills it with the user's picture. Never write a data: URL, a made-up https URL or `images.*` for an attached image, and do not add imageSlots yourself.",
+          "- An attached image must be a real <img> element, NEVER a CSS background-image or url(): the platform has no editable background slot and removes such url()s. If it should look like a background, put the <img> in its own layer (for example `position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;` on the <img>, inside a `position: relative` wrapper) and keep text above it with z-index.",
+          "- Do not use the placeholder for icons, logos you invent, or decoration. Only for the attached images, and each attached image at most where the user asked.",
+          "- NEVER put an attached image into the skin unless asked — the rest of this section is about reading them as references.",
           "- The user's written instruction always wins. The images only fill in what the words leave open.",
           "- What you MAY take from a reference image: overall layout mood, spacing and density, typography hierarchy and relative sizes, border weight and corner radius, color palette, visual balance.",
           "- What you must NOT copy: any logo, brand mark, product name, photograph, or literal text visible in the image. Never transcribe text out of an image into the templates.",
@@ -2119,7 +2135,8 @@ function buildSkinAiModelRequestBody(model, instruction, skinPackage, images, se
               (
                 referenceImages.length
                   ? "\n\n첨부된 " + referenceImages.length +
-                    "장은 디자인 참고 이미지다. 스킨에 넣을 이미지가 아니다."
+                    "장은 기본적으로 디자인 참고 이미지다. 사용자가 이 이미지를 스킨 안에 넣어 달라고 했을 때만 " +
+                    "<img src=\"imory-attachment:번호\"> 로 넣는다(번호는 첨부 순서, 1부터)."
                   : ""
               ) +
               selectionText

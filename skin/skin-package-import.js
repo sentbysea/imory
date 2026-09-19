@@ -44,13 +44,177 @@
    않으므로, 실패는 항상 "아무 일도 없었던 것"과 동일하다(요구사항
    7절 "전체 성공 또는 전체 실패의 atomic 동작").
 
-   classic script — window.validateSkinPackageImport로 노출된다.
+   IMPORT-CSS-IMAGE-1: sanitize 와 CSS 판정은 아래
+   runSkinPackageContentPipeline 이 한다 — Code 적용도 같은 함수를
+   부른다. 실패의 모양은 그대로이고(message/reason), CSS 실패에는
+   cssReport(줄·열·분류가 담긴 목록)가 더 붙는다.
+
+   classic script — window.validateSkinPackageImport /
+   window.runSkinPackageContentPipeline 로 노출된다.
    의존(먼저 로드되어야 함): sanitizeSkinHTML(skin/skin-sanitize.js),
-   htmlHasPostBodyRegion(skin/skin-template.js), window.skinInitializerReady
-   핸드셰이크(skin/skin-initializer.js).
+   htmlHasPostBodyRegion(skin/skin-template.js),
+   normalizeSkinPackageImageSlots(skin/skin-package-images.js),
+   window.skinInitializerReady 핸드셰이크(skin/skin-initializer.js —
+   그 뒤에 window.analyzeSkinCss 가 있다).
 ========================================================== */
 
-const SKIN_PACKAGE_IMPORT_CSS_CHECK_NAMESPACE = "studio-skin-import-check";
+const SKIN_PACKAGE_CONTENT_PAGE_TYPES =
+  ["home", "category", "post", "banner", "folder", "highlights", "memos", "dock"];
+
+
+/* =========================================================
+   runSkinPackageContentPipeline(candidate, options) -> result
+   (IMPORT-CSS-IMAGE-1)
+
+   SkinPackage 가 Studio working draft 로 들어오는 **모든 입구**가
+   이 함수 하나를 지난다 — 입구마다 검사기를 따로 두면 "Import 는
+   통과했는데 Code 적용은 거부"하는 식으로 규칙이 갈라진다.
+
+     Import 창의 Validate / Apply to Draft   validateSkinPackageImport
+     AI 전체 · AI 선택 요소                  validateSkinPackageImport
+     Code 적용                                studio-preview.js
+                                              applyCodeEditorChanges
+     Export → 다시 Import                     validateSkinPackageImport
+
+   순서는 고정이다:
+     1) 이미지 슬롯 정규화 (skin/skin-package-images.js) — sanitize
+        **전에** 해야 한다. AI 의 `src="imory-attachment:1"` 은
+        https 가 아니라 sanitizer 가 src 를 지워 버린다.
+     2) HTML sanitize (skin/skin-sanitize.js)
+     3) CSS 판정 (skin/skin-css-validate.js analyzeSkinCss, strict) —
+        문제된 선언만 잘라낸 CSS 가 저장·Export 에 들어간다.
+
+   candidate 는 이미 "알려진 필드만 담은" 객체여야 한다(Import 는
+   아래에서 새 리터럴을 만들고, Code 적용은 working draft 에서 만든다).
+   이 함수는 templates/html/css/imageSlots 만 바꾸고 나머지 필드는
+   그대로 옮긴다.
+
+   options.attachments: AI 요청에 붙인 첨부([{ aspectRatioHint }]).
+
+   result = { ok, reason?, message?, skinPackage?, cssReport,
+              slotReport, notices: string[], htmlWasModified }
+========================================================== */
+
+async function runSkinPackageContentPipeline(candidate, options) {
+
+  await window.skinInitializerReady;
+
+  const attachments =
+    (options && Array.isArray(options.attachments)) ? options.attachments : [];
+
+  const templatesIn =
+    (candidate.templates && typeof candidate.templates === "object") ? candidate.templates : null;
+
+  const rawHtmlByPage = {};
+
+  if (templatesIn) {
+    SKIN_PACKAGE_CONTENT_PAGE_TYPES.forEach((pageType) => {
+      const template = templatesIn[pageType];
+      if (template && typeof template.html === "string") {
+        rawHtmlByPage[pageType] = template.html;
+      }
+    });
+  }
+
+  /* 1) 이미지 슬롯 */
+  const slots =
+    typeof normalizeSkinPackageImageSlots === "function"
+      ? normalizeSkinPackageImageSlots(
+          {
+            templates: rawHtmlByPage,
+            legacyHtml: typeof candidate.html === "string" ? candidate.html : undefined,
+            imageSlots: candidate.imageSlots
+          },
+          { attachments }
+        )
+      : {
+          templates: rawHtmlByPage,
+          legacyHtml: candidate.html,
+          imageSlots: Array.isArray(candidate.imageSlots) ? candidate.imageSlots : [],
+          report: null
+        };
+
+  /* 2) sanitize */
+  let htmlWasModified = false;
+
+  const sanitize = (html) => {
+    const clean = sanitizeSkinHTML(html);
+    if (clean !== html) {
+      htmlWasModified = true;
+    }
+    return clean;
+  };
+
+  const output = {};
+
+  Object.keys(candidate).forEach((key) => {
+    if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
+      output[key] = candidate[key];
+    }
+  });
+
+  if (templatesIn) {
+
+    const templatesOut = {};
+
+    Object.keys(templatesIn).forEach((pageType) => {
+
+      const template = templatesIn[pageType];
+
+      if (typeof slots.templates[pageType] === "string") {
+        templatesOut[pageType] = { ...template, html: sanitize(slots.templates[pageType]) };
+      } else {
+        templatesOut[pageType] = template;
+      }
+
+    });
+
+    output.templates = templatesOut;
+
+  }
+
+  if (typeof candidate.html === "string") {
+    output.html = sanitize(slots.legacyHtml);
+  }
+
+  output.imageSlots = slots.imageSlots;
+
+  /* 3) CSS */
+  const cssReport =
+    window.analyzeSkinCss(
+      typeof candidate.css === "string" ? candidate.css : "",
+      { mode: "strict" }
+    );
+
+  const notices =
+    (typeof describeSkinImageSlotReport === "function" && slots.report)
+      ? describeSkinImageSlotReport(slots.report)
+      : [];
+
+  if (!cssReport.ok) {
+    return {
+      ok: false,
+      reason: "css-validator",
+      message: "CSS에 문제가 있어 가져올 수 없습니다 — " + cssReport.summary,
+      cssReport,
+      slotReport: slots.report,
+      notices,
+      htmlWasModified
+    };
+  }
+
+  output.css = cssReport.css;
+
+  return {
+    ok: true,
+    skinPackage: output,
+    cssReport,
+    slotReport: slots.report,
+    notices,
+    htmlWasModified
+  };
+
+}
 
 /*
   실패 반환에는 message(사용자용 문장)와 함께 reason(짧은 내부
@@ -69,7 +233,7 @@ const SKIN_PACKAGE_IMPORT_CSS_CHECK_NAMESPACE = "studio-skin-import-check";
   "sanitizer violation"이라는 reason은 존재할 수 없다. 허용되지 않은
   태그/속성이 들어오면 검증은 통과하고 그 부분만 사라진다.
 */
-async function validateSkinPackageImport(rawJsonText) {
+async function validateSkinPackageImport(rawJsonText, options) {
 
   if (typeof rawJsonText !== "string" || !rawJsonText.trim()) {
     return { ok: false, reason: "empty-input", message: "가져올 SkinPackage JSON을 입력해주세요." };
@@ -390,90 +554,14 @@ async function validateSkinPackageImport(rawJsonText) {
   }
 
   /*
-    sanitizeSkinHTML/window.validateAndScopeSkinCss는 이미 다른
-    classic script(skin-sanitize.js)/ES 모듈(skin-css-validate.js)이
-    로드를 마쳐야 쓸 수 있다 — code-editor.js와 동일하게 이
-    Promise로 안전하게 대기한다.
-  */
-  await window.skinInitializerReady;
-
-  const sanitizedHomeHtml =
-    sanitizeSkinHTML(templatesInput.home.html);
-
-  const sanitizedCategoryHtml =
-    sanitizeSkinHTML(templatesInput.category.html);
-
-  const sanitizedPostHtml =
-    sanitizeSkinHTML(templatesInput.post.html);
-
-  const sanitizedBannerHtml =
-    hasBannerTemplate
-      ? sanitizeSkinHTML(bannerTemplateInput.html)
-      : null;
-
-  const sanitizedFolderHtml =
-    hasFolderTemplate
-      ? sanitizeSkinHTML(folderTemplateInput.html)
-      : null;
-
-  const sanitizedHighlightsHtml =
-    hasHighlightsTemplate
-      ? sanitizeSkinHTML(highlightsTemplateInput.html)
-      : null;
-
-  const sanitizedDockHtml =
-    hasDockTemplate
-      ? sanitizeSkinHTML(dockTemplateInput.html)
-      : null;
-
-  if (!htmlHasPostBodyRegion(sanitizedPostHtml)) {
-    return {
-      ok: false,
-      reason: "post-body-region",
-      message: "POST 템플릿에는 글 본문이 표시되는 자리(post-body region)가 반드시 있어야 합니다."
-    };
-  }
-
-  if (
-    hasFolderTemplate &&
-    !htmlHasPostBodyRegion(sanitizedFolderHtml)
-  ) {
-    return {
-      ok: false,
-      reason: "folder-body-region",
-      message: "FOLDER 템플릿에는 글 본문이 표시되는 자리(folder.posts 반복 안의 post-body region)가 반드시 있어야 합니다."
-    };
-  }
-
-  const cssResult =
-    window.validateAndScopeSkinCss(
-      cssRaw,
-      { namespace: SKIN_PACKAGE_IMPORT_CSS_CHECK_NAMESPACE }
-    );
-
-  if (!cssResult.ok) {
-    return {
-      ok: false,
-      reason: "css-validator",
-      message: "CSS에 문제가 있어 가져올 수 없습니다: " + cssResult.warnings.join(", ")
-    };
-  }
-
-  /*
     imageSlots/regions/metadata는 이미 JSON.parse()를 거친 순수
     데이터(함수/Date 등 위험한 타입이 존재할 수 없음)라 별도
     sanitizer가 필요 없다 — 다만 shape이 기대와 다르면(배열이어야
     할 자리에 객체가 오는 등) 조용히 안전한 기본값으로 대체한다
     (요구사항 9절 "허용되지 않은 SkinPackage shape 안전 처리").
-    이 값들도 원본을 스프레드하지 않고 그대로 참조만 옮긴다 —
-    아래에서 만드는 새 SkinPackage 리터럴 자체는 여전히 알려진
-    필드만 갖는 새 객체다.
+    IMPORT-CSS-IMAGE-1: imageSlots 는 아래 파이프라인이 한 번 더
+    정리한다(이름 규칙 · 중복 병합 · HTML 이 쓰는데 선언이 빠진 슬롯).
   */
-
-  const imageSlots =
-    Array.isArray(parsed.imageSlots)
-      ? parsed.imageSlots
-      : [];
 
   const regions =
     Array.isArray(parsed.regions)
@@ -492,51 +580,83 @@ async function validateSkinPackageImport(rawJsonText) {
     남지 않게 한다(resolveSkinTemplate이 undefined를 그대로
     "미지원"으로 읽으므로 동작상 차이는 없지만, 저장되는 JSON이
     깨끗한 편이 낫다).
+
+    여기 담기는 html 은 아직 **원문**이다 — sanitize 는 아래
+    runSkinPackageContentPipeline 이 이미지 슬롯 정규화 뒤에 한다.
   */
 
   const templates =
     {
-      home: { html: sanitizedHomeHtml },
-      category: { html: sanitizedCategoryHtml },
-      post: { html: sanitizedPostHtml }
+      home: { html: templatesInput.home.html },
+      category: { html: templatesInput.category.html },
+      post: { html: templatesInput.post.html }
     };
 
   if (hasBannerTemplate) {
-    templates.banner = { html: sanitizedBannerHtml };
+    templates.banner = { html: bannerTemplateInput.html };
   }
 
   if (hasFolderTemplate) {
-    templates.folder = { html: sanitizedFolderHtml };
+    templates.folder = { html: folderTemplateInput.html };
   }
 
   if (hasHighlightsTemplate) {
-    templates[highlightsTemplateKey] = { html: sanitizedHighlightsHtml };
+    templates[highlightsTemplateKey] = { html: highlightsTemplateInput.html };
   }
 
   if (hasDockTemplate) {
-    templates.dock = { html: sanitizedDockHtml };
+    templates.dock = { html: dockTemplateInput.html };
   }
 
-  const skinPackage =
+  const candidate =
     {
       schemaVersion: 1,
       templates,
       css: cssRaw,
-      imageSlots,
+      imageSlots: Array.isArray(parsed.imageSlots) ? parsed.imageSlots : [],
       regions,
       metadata
     };
 
   if (hasRenderMode) {
-    skinPackage.renderMode = renderModeInput;
+    candidate.renderMode = renderModeInput;
   }
 
   if (hasAuthorJs) {
-    skinPackage.js = authorJsInput;
+    candidate.js = authorJsInput;
   }
 
   if (normalizedBottomDock) {
-    skinPackage.bottomDock = normalizedBottomDock;
+    candidate.bottomDock = normalizedBottomDock;
+  }
+
+  const pipeline =
+    await runSkinPackageContentPipeline(candidate, options);
+
+  if (!pipeline.ok) {
+    return pipeline;
+  }
+
+  const skinPackage =
+    pipeline.skinPackage;
+
+  if (!htmlHasPostBodyRegion(skinPackage.templates.post.html)) {
+    return {
+      ok: false,
+      reason: "post-body-region",
+      message: "POST 템플릿에는 글 본문이 표시되는 자리(post-body region)가 반드시 있어야 합니다."
+    };
+  }
+
+  if (
+    hasFolderTemplate &&
+    !htmlHasPostBodyRegion(skinPackage.templates.folder.html)
+  ) {
+    return {
+      ok: false,
+      reason: "folder-body-region",
+      message: "FOLDER 템플릿에는 글 본문이 표시되는 자리(folder.posts 반복 안의 post-body region)가 반드시 있어야 합니다."
+    };
   }
 
   /*
@@ -546,6 +666,10 @@ async function validateSkinPackageImport(rawJsonText) {
     경고 중 일부는 의도한 선택일 수도 있다. 판정은
     auditSkinPackageMaterials 한 곳에만 있다(skin/skin-template.js) —
     Save 경로도 같은 함수를 쓴다.
+
+    IMPORT-CSS-IMAGE-1 — warnings 옆에 두 가지가 더 온다:
+      cssReport  잘라낸 CSS 선언 목록(Import 창이 목록으로 보여 준다)
+      notices    이미지 슬롯 정리 안내(빈 슬롯 포함)
   */
 
   const warnings =
@@ -556,6 +680,9 @@ async function validateSkinPackageImport(rawJsonText) {
   return {
     ok: true,
     warnings,
+    notices: pipeline.notices,
+    cssReport: pipeline.cssReport,
+    slotReport: pipeline.slotReport,
     skinPackage
   };
 
@@ -563,4 +690,5 @@ async function validateSkinPackageImport(rawJsonText) {
 
 if (typeof window !== "undefined") {
   window.validateSkinPackageImport = validateSkinPackageImport;
+  window.runSkinPackageContentPipeline = runSkinPackageContentPipeline;
 }

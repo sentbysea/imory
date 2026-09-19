@@ -56,6 +56,9 @@ const IMPORT_EDITOR_FILE_MAX_BYTES = 5 * 1024 * 1024;
 let importEditorOverlay = null;
 let importEditorTextarea = null;
 let importEditorMessage = null;
+
+/* IMPORT-CSS-IMAGE-1 — 검사 결과 목록(메시지 아래) */
+let importEditorReport = null;
 let importEditorValidateButton = null;
 let importEditorApplyButton = null;
 let importEditorCancelButton = null;
@@ -249,6 +252,18 @@ function buildImportEditorDom() {
   footer.appendChild(message);
 
 
+  const report =
+    document.createElement("div");
+
+  report.className =
+    "import-editor-report";
+
+  report.hidden =
+    true;
+
+  footer.appendChild(report);
+
+
   const actions =
     document.createElement("div");
 
@@ -312,6 +327,7 @@ function buildImportEditorDom() {
   importEditorOverlay = overlay;
   importEditorTextarea = textarea;
   importEditorMessage = message;
+  importEditorReport = report;
   importEditorValidateButton = validateButton;
   importEditorApplyButton = applyButton;
   importEditorCancelButton = cancelButton;
@@ -624,6 +640,10 @@ document.addEventListener("keydown", (event) => {
 
 function setImportEditorMessage(text, isError) {
 
+  if (!text) {
+    renderImportEditorReport(null);
+  }
+
   importEditorMessage.textContent =
     text || "";
 
@@ -710,6 +730,8 @@ async function handleImportEditorValidate() {
 
   setImportEditorMessage("확인하는 중...", false);
 
+  renderImportEditorReport(null);
+
   const result =
     await window.validateSkinPackageImport(
       importEditorTextarea.value
@@ -721,6 +743,8 @@ async function handleImportEditorValidate() {
   if (!result.ok) {
 
     setImportEditorMessage(result.message, true);
+
+    renderImportEditorReport(result);
 
     return;
 
@@ -743,12 +767,165 @@ async function handleImportEditorValidate() {
       ? result.warnings
       : [];
 
+  const removedCount =
+    result.cssReport && Array.isArray(result.cssReport.removed)
+      ? result.cssReport.removed.length
+      : 0;
+
   setImportEditorMessage(
     warnings.length
       ? "검증 성공 — 다만 확인할 점이 있습니다: " + warnings.join(" / ")
-      : "검증 성공 — HOME/CATEGORY/POST 템플릿과 CSS를 확인했습니다. Apply to Draft를 누르면 현재 draft에 반영됩니다.",
+      : (
+        removedCount
+          ? "검증 성공 — CSS에서 " + removedCount + "곳을 빼고 가져옵니다(아래 목록). Apply to Draft를 누르면 현재 draft에 반영됩니다."
+          : "검증 성공 — HOME/CATEGORY/POST 템플릿과 CSS를 확인했습니다. Apply to Draft를 누르면 현재 draft에 반영됩니다."
+      ),
     false
   );
+
+  renderImportEditorReport(result);
+
+}
+
+
+/* =========================================================
+   검사 결과 목록 (IMPORT-CSS-IMAGE-1)
+
+   Validate 가 돌려준 **그 결과**를 그린다 — Apply 는 이 결과의
+   skinPackage 를 그대로 적용하므로, 목록에 "제외"로 적힌 선언은
+   적용되는 CSS 에도 없다(검사 두 번 돌리지 않는다).
+
+     오류(가져오지 않음)   cssReport.errors — 줄·열 · 분류 · 수정 방법
+     제외하고 가져옴       cssReport.removed
+     이미지 슬롯 안내       notices(빈 슬롯 · 만든 슬롯 · 이름 바꿈)
+========================================================== */
+
+function renderImportEditorReport(result) {
+
+  if (!importEditorReport) {
+    return;
+  }
+
+  importEditorReport.textContent =
+    "";
+
+  const report =
+    result && result.cssReport;
+
+  const groups = [];
+
+  if (report && report.errors && report.errors.length) {
+    groups.push({
+      kind: "error",
+      title:
+        "가져올 수 없는 이유 — CSS 오류 " + report.errors.length + "개" +
+        (report.errors.length > 1 ? " (첫 번째부터)" : ""),
+      items: report.errors
+    });
+  }
+
+  if (report && report.removed && report.removed.length) {
+    groups.push({
+      kind: "removed",
+      title:
+        (result && result.ok ? "빼고 가져오는 CSS " : "통과하면 빼고 가져올 CSS ") +
+        report.removed.length + "곳",
+      items: report.removed
+    });
+  }
+
+  const notices =
+    result && Array.isArray(result.notices) ? result.notices : [];
+
+  if (notices.length) {
+    groups.push({ kind: "notice", title: "이미지 슬롯", texts: notices });
+  }
+
+  if (!groups.length) {
+    importEditorReport.hidden = true;
+    return;
+  }
+
+  groups.forEach((group) => {
+
+    const section =
+      document.createElement("section");
+
+    section.className =
+      "import-editor-report-group import-editor-report-group--" + group.kind;
+
+    const title =
+      document.createElement("p");
+
+    title.className =
+      "import-editor-report-group-title";
+
+    title.textContent =
+      group.title;
+
+    section.appendChild(title);
+
+    const list =
+      document.createElement("ul");
+
+    list.className =
+      "import-editor-report-list";
+
+    (group.items || []).forEach((issue) => {
+
+      const item =
+        document.createElement("li");
+
+      item.className =
+        "import-editor-report-item";
+
+      item.textContent =
+        typeof window.formatSkinCssIssue === "function"
+          ? window.formatSkinCssIssue(issue)
+          : String(issue.message || "");
+
+      if (issue.hint) {
+
+        const hint =
+          document.createElement("span");
+
+        hint.className =
+          "import-editor-report-hint";
+
+        hint.textContent =
+          "수정 방법: " + issue.hint;
+
+        item.appendChild(hint);
+
+      }
+
+      list.appendChild(item);
+
+    });
+
+    (group.texts || []).forEach((text) => {
+
+      const item =
+        document.createElement("li");
+
+      item.className =
+        "import-editor-report-item";
+
+      item.textContent =
+        text;
+
+      list.appendChild(item);
+
+    });
+
+    section.appendChild(list);
+
+    importEditorReport.appendChild(section);
+
+  });
+
+  importEditorReport.hidden =
+    false;
 
 }
 

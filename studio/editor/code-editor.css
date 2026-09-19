@@ -214,6 +214,9 @@
 
   margin: 0;
 
+  /* IMPORT-CSS-IMAGE-1: CSS 실패는 오류 · 수정 방법 · 남은 개수 세 줄이다 */
+  white-space: pre-line;
+
   font-size: 12px;
 
   line-height: 1.5;

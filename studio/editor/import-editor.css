@@ -319,3 +319,69 @@
 
   border-color: var(--system-accent);
 }
+
+/* =========================================================
+   IMPORT-CSS-IMAGE-1 — 검사 결과 목록
+
+   메시지 한 줄 아래에 붙는다. 오류(가져오지 않음)와 제외한 부분
+   (그 부분만 빼고 가져옴), 이미지 슬롯 안내를 묶음별로 보인다.
+   항목마다 "CSS 129행 11열 · 문법 오류: …"와 수정 방법 한 줄.
+   길어지면 이 목록 안에서만 스크롤한다(버튼이 밀려나지 않게).
+========================================================== */
+
+.import-editor-report {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  max-height: 200px;
+
+  overflow-y: auto;
+
+  font-size: 12px;
+
+  line-height: 1.5;
+
+  color: var(--system-text-muted);
+}
+
+
+.import-editor-report[hidden] {
+  display: none;
+}
+
+
+.import-editor-report-group-title {
+  margin: 0 0 2px;
+
+  font-size: 11px;
+
+  letter-spacing: 0.04em;
+
+  color: var(--system-text);
+}
+
+
+.import-editor-report-group--error .import-editor-report-group-title {
+  color: var(--system-accent-hover);
+}
+
+
+.import-editor-report-list {
+  margin: 0;
+
+  padding-left: 16px;
+}
+
+
+.import-editor-report-item {
+  overflow-wrap: anywhere;
+}
+
+
+.import-editor-report-hint {
+  display: block;
+
+  color: var(--system-text-faint);
+}

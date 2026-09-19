@@ -970,9 +970,23 @@ async function testImportPrunesSlots(playwright) {
     await page.waitForTimeout(200);
     await page.click(".images-panel-done-button");
 
-    /* cover 선언이 사라진 SkinPackage를 Import */
+    /*
+      cover 가 정말로 사라진 SkinPackage를 Import — 선언도, HTML 의
+      images.cover 바인딩도 없다.
+
+      IMPORT-CSS-IMAGE-1 부터 "HTML 이 images.cover 를 쓰는데 선언만
+      빠진" 패키지는 Import 가 선언을 **복구**한다(skin/skin-package-images.js).
+      그래서 "사라진 슬롯"을 만들려면 바인딩도 함께 없어야 한다 — 이 절의
+      뜻(선언에서 사라진 슬롯의 연결은 저장되지 않는다)은 그대로다.
+    */
     const reduced = {
       ...SKIN_CONTENT,
+      templates: {
+        ...SKIN_CONTENT.templates,
+        home: {
+          html: SKIN_CONTENT.templates.home.html.replace('<img class="t-cover" data-imory-src="images.cover" alt="">', "")
+        }
+      },
       imageSlots: [{ name: "profile", label: "프로필 사진", required: false }]
     };
 

@@ -177,13 +177,32 @@ function buildSkinPackageExport(skinPackage) {
       ? skinPackage.renderMode
       : null;
 
+  /*
+    IMPORT-CSS-IMAGE-1 — CSS 는 Save 와 같은 규칙(analyzeSkinCss
+    repair)으로 한 번 더 걸러 싣는다. Import/Code/AI 를 지난 draft 는
+    이미 깨끗하지만, 이 규칙 이전에 저장된 draft 는 @import 같은 것을
+    담고 있을 수 있다 — 렌더와 Save 가 이미 빼는 것을 파일에만 되살리지
+    않는다. 판정 함수가 없는 문서(모듈 로드 전)나 구조가 깨진 CSS 는
+    원문 그대로 싣는다 — 다시 Import 할 때 그 창이 위치와 이유를 말한다.
+  */
+
+  const rawCss =
+    typeof skinPackage.css === "string"
+      ? skinPackage.css
+      : "";
+
+  const cssReport =
+    (typeof window !== "undefined" && typeof window.analyzeSkinCss === "function")
+      ? window.analyzeSkinCss(rawCss, { mode: "repair" })
+      : null;
+
   const exported = {
     schemaVersion: 1,
     templates,
     css:
-      typeof skinPackage.css === "string"
-        ? skinPackage.css
-        : "",
+      cssReport && cssReport.ok
+        ? cssReport.css
+        : rawCss,
     imageSlots:
       Array.isArray(skinPackage.imageSlots)
         ? cloneSkinPackageExportValue(skinPackage.imageSlots)

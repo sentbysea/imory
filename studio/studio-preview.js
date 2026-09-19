@@ -945,6 +945,48 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
   const historyBefore =
     captureStudioWorkingChange();
 
+  assertStudioPageEditRegions(pageType, html);
+
+  currentWorkingSkin =
+    buildWorkingSkinWithPageEdit(
+      currentWorkingSkin,
+      pageType,
+      html,
+      css,
+      meta && typeof meta.js === "string" ? meta.js : undefined
+    );
+
+  recordStudioWorkingChange(historyBefore);
+
+  isStudioDirty =
+    true;
+
+  bumpStudioWorkingRevision();
+
+  updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
+
+  renderCurrentPreviewEntry();
+
+  if (meta && meta.htmlWasModified) {
+
+    showStudioToast(
+      "일부 허용되지 않는 HTML이 제거되었습니다."
+    );
+
+  }
+
+}
+
+
+/*
+  POST/FOLDER 는 글 본문 자리(post-body region)가 남아 있어야만 통과
+  (PHASE1C-I / FOLDER-2). 없으면 throw — 호출자가 message 를 그대로
+  사용자에게 보인다.
+*/
+function assertStudioPageEditRegions(pageType, html) {
+
   if (
     pageType === "post" &&
     !htmlHasPostBodyRegion(html)
@@ -969,26 +1011,40 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
 
   }
 
+}
+
+
+/*
+  IMPORT-CSS-IMAGE-1 — "이 페이지의 html/css(/js)만 바꾼 working
+  draft"를 만드는 순수 함수. applyWorkingSkinChanges(Direct Edit ·
+  예전 경로)와 applyCodeEditorChanges(Code 적용 — 공용 파이프라인을
+  먼저 돌린다)가 같은 규칙으로 자리를 고르게 한다. base 는 건드리지
+  않는다.
+*/
+function buildWorkingSkinWithPageEdit(base, pageType, html, css, js) {
+
+  let next;
+
   if (pageType === "home") {
 
     const hasHomeTemplate =
-      !!(currentWorkingSkin.templates && currentWorkingSkin.templates.home);
+      !!(base.templates && base.templates.home);
 
-    currentWorkingSkin =
+    next =
       hasHomeTemplate
         ? {
-            ...currentWorkingSkin,
+            ...base,
             css,
             templates: {
-              ...currentWorkingSkin.templates,
+              ...base.templates,
               home: {
-                ...currentWorkingSkin.templates.home,
+                ...base.templates.home,
                 html
               }
             }
           }
         : {
-            ...currentWorkingSkin,
+            ...base,
             html,
             css
           };
@@ -996,8 +1052,8 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
   } else {
 
     if (
-      !currentWorkingSkin.templates ||
-      !currentWorkingSkin.templates[pageType]
+      !base.templates ||
+      !base.templates[pageType]
     ) {
 
       throw new Error(
@@ -1006,14 +1062,14 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
 
     }
 
-    currentWorkingSkin =
+    next =
       {
-        ...currentWorkingSkin,
+        ...base,
         css,
         templates: {
-          ...currentWorkingSkin.templates,
+          ...base.templates,
           [pageType]: {
-            ...currentWorkingSkin.templates[pageType],
+            ...base.templates[pageType],
             html
           }
         }
@@ -1032,15 +1088,82 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
      (12-B절의 css 결정과 같은 판단).
   ====================================================== */
 
-  if (meta && typeof meta.js === "string") {
+  if (typeof js === "string") {
 
-    currentWorkingSkin =
+    next =
       {
-        ...currentWorkingSkin,
-        js: meta.js
+        ...next,
+        js
       };
 
   }
+
+  return next;
+
+}
+
+
+/* =========================================================
+   applyCodeEditorChanges(pageType, rawHtml, rawCss, meta)
+     -> Promise<{ ok, message?, cssReport?, notices? }>
+   (IMPORT-CSS-IMAGE-1)
+
+   Code 편집기의 Apply 가 부른다. 예전에는 편집기가 sanitize 와 CSS
+   검사를 직접 하고 결과만 applyWorkingSkinChanges 로 넘겼다 — 그래서
+   Import · AI 와 규칙이 갈라질 수 있었다. 지금은 **원문**으로 이
+   페이지만 바꾼 후보 draft 를 만들고, Import · AI 와 같은
+   runSkinPackageContentPipeline(skin/skin-package-import.js)을 돌린다:
+
+     - HTML sanitize(모든 template — 이미 깨끗한 것은 그대로다)
+     - 이미지 슬롯 정리: HTML 에 새로 쓴 images.xxx 의 선언을 만든다
+     - CSS strict 판정: 구조 오류·보안 차단이면 적용하지 않고 이유를
+       돌려준다(편집기가 모달을 열어 둔 채 보인다). 선언 하나의 문법
+       오류는 그 선언만 빼고 적용하고 toast 로 알린다.
+
+   적용 자체는 applyWorkingSkinChanges 와 같다(한 번의 확정 = Undo
+   한 칸, dirty, revision, 지금 화면 다시 그리기). imageSlots 선언이
+   바뀌었으면 슬롯 연결도 새 선언에 맞춰 정리한다.
+========================================================== */
+
+async function applyCodeEditorChanges(pageType, rawHtml, rawCss, meta) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, message: "편집 중인 스킨이 없습니다." };
+  }
+
+  const candidate =
+    buildWorkingSkinWithPageEdit(
+      currentWorkingSkin,
+      pageType,
+      rawHtml,
+      rawCss,
+      meta && typeof meta.js === "string" ? meta.js : undefined
+    );
+
+  const result =
+    await window.runSkinPackageContentPipeline(candidate, {});
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const next =
+    result.skinPackage;
+
+  const editedHtml =
+    (pageType === "home" && !(next.templates && next.templates.home))
+      ? next.html
+      : next.templates[pageType].html;
+
+  assertStudioPageEditRegions(pageType, editedHtml);
+
+  const historyBefore =
+    captureStudioWorkingChange();
+
+  currentWorkingSkin =
+    next;
+
+  pruneWorkingImageSlotsToDeclared();
 
   recordStudioWorkingChange(historyBefore);
 
@@ -1055,13 +1178,35 @@ function applyWorkingSkinChanges(pageType, html, css, meta) {
 
   renderCurrentPreviewEntry();
 
-  if (meta && meta.htmlWasModified) {
+  const messages = [];
 
-    showStudioToast(
-      "일부 허용되지 않는 HTML이 제거되었습니다."
-    );
-
+  if (result.htmlWasModified) {
+    messages.push("일부 허용되지 않는 HTML이 제거되었습니다.");
   }
+
+  const removed =
+    result.cssReport && Array.isArray(result.cssReport.removed)
+      ? result.cssReport.removed
+      : [];
+
+  if (removed.length) {
+    messages.push(
+      "CSS에서 " + removed.length + "곳을 빼고 적용했습니다: " +
+      removed
+        .slice(0, 3)
+        .map((issue) => (typeof window.formatSkinCssIssue === "function" ? window.formatSkinCssIssue(issue) : issue.message))
+        .join(" / ") +
+      (removed.length > 3 ? " 외 " + (removed.length - 3) + "곳" : "")
+    );
+  }
+
+  (result.notices || []).forEach((notice) => messages.push(notice));
+
+  if (messages.length) {
+    showStudioToast(messages.join(" "));
+  }
+
+  return result;
 
 }
 
@@ -1120,7 +1265,7 @@ studioCodeButton.addEventListener(
             ),
         jsEnabled: renderMode === "sandbox",
         onApply: (html, css, meta) =>
-          applyWorkingSkinChanges(pageType, html, css, meta)
+          applyCodeEditorChanges(pageType, html, css, meta)
       }
     );
 

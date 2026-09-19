@@ -68,7 +68,7 @@
 
   <script type="module">
 
-    import { validateAndScopeSkinCss } from "./skin-css-validate.js";
+    import { validateAndScopeSkinCss, analyzeSkinCss } from "./skin-css-validate.js";
 
     const reportList = document.getElementById("reportList");
     const casePanel = document.getElementById("casePanel");
@@ -160,11 +160,26 @@
           /\.imory-skin-root \*\{box-sizing:border-box\}/.test(r.css)
       );
 
+      /* IMPORT-CSS-IMAGE-1 — 렌더 경로(이 함수)는 repair 다: 그 선언만
+         빠지고 나머지 CSS 는 산다. 들여올 때(Import/Code/AI)는 같은 입력이
+         strict 로 **차단**된다 — 아래 analyzeSkinCss 검사. 예전에는
+         CSS 전체가 빈 문자열이 되어 스킨이 CSS 없이 그려졌다. */
       run(
-        "따옴표 없는 javascript: url() — 문법이 깨진 url-token이라 csstree 자체가 parse error를 내고, 전체가 안전하게 실패 처리됨",
-        'div{background:url(javascript:alert(1))}',
-        (r) => r.ok === false && r.css === "" && r.warnings.length > 0
+        "따옴표 없는 javascript: url() — 렌더에서는 그 선언만 빠지고(나머지 유지), 경고가 남는다",
+        'div{background:url(javascript:alert(1))} p{color:red}',
+        (r) => r.ok === true && !/javascript/.test(r.css) && !/background/.test(r.css) &&
+          /\.imory-skin-root p\{color:red\}/.test(r.css) && r.warnings.length === 1
       );
+
+      {
+        const strict = analyzeSkinCss('div{background:url(javascript:alert(1))} p{color:red}', { mode: "strict" });
+        assert(
+          "같은 입력을 들여올 때(strict)는 보안 정책 차단 — 줄·열과 함께",
+          strict.ok === false && strict.css === "" && strict.errors.length === 1 &&
+            strict.errors[0].category === "security" && strict.errors[0].line === 1,
+          JSON.stringify(strict.errors)
+        );
+      }
 
       run(
         "따옴표 있는 javascript: url() — Url 노드 스킴 검증으로 제거됨",

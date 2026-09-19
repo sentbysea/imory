@@ -980,12 +980,17 @@
        htmlHasPostBodyRegion(바로 위 skin-template.js)에 의존한다 —
        그래서 그 둘 다음, studio-preview.js/import-editor.js보다는
        먼저 로드한다.
+
+       IMPORT-CSS-IMAGE-1 — skin-package-images.js(이미지 슬롯 정규화)는
+       skin-package-import.js 의 공용 파이프라인이 sanitize 전에 부른다.
+       의존이 없으므로 바로 앞에 둔다.
   ========================================================== -->
 
   <script>
 
     loadVersionedScripts(
       [
+        "../skin/skin-package-images.js",
         "../skin/skin-package-import.js",
         "../skin/skin-package-export.js"
       ]

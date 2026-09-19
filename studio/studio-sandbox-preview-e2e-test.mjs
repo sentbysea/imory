@@ -2912,6 +2912,125 @@ async function runInspect(browser) {
 
 
 /* =========================================================
+   [slots] IMPORT-CSS-IMAGE-1 — 자동 슬롯이 native 와 프레임에서
+   같게 그려지는가
+
+   Code 적용으로 `images.heroPhoto`(선언 없음 · 저장할 수 없는 이름)를
+   쓰면 공용 파이프라인이 hero_photo 로 이름을 고치고 슬롯을 선언한다.
+   그 슬롯에 이미지를 연결한 뒤 **같은 draft** 를 sandbox 프레임과
+   native Preview 에서 각각 재서 같은가를 본다(주소 · 실제 디코드 ·
+   크기 · object-position).
+========================================================== */
+
+const SLOT_IMAGE_URL =
+  "https://vtwcuvouyipohfonfukj.supabase.co/storage/v1/object/public/skin-images/u/slot-hero.png";
+
+/* 2×3 픽셀 PNG(청록) — 크기와 디코드 여부만 본다 */
+const SLOT_IMAGE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAEklEQVR4nGPQ8JqBBTGMSmMCAKLuFNHBC/NLAAAAAElFTkSuQmCC",
+  "base64"
+);
+
+async function measureSlotImage(locatorRoot) {
+  return locatorRoot.locator(".sb-hero").first().evaluate((img) => {
+    const style = getComputedStyle(img);
+    const rect = img.getBoundingClientRect();
+    return {
+      src: img.getAttribute("src"),
+      decoded: img.complete && img.naturalWidth > 0,
+      natural: [img.naturalWidth, img.naturalHeight],
+      size: [Math.round(rect.width), Math.round(rect.height)],
+      position: style.objectPosition,
+      fit: style.objectFit
+    };
+  });
+}
+
+async function runSlots(browser) {
+
+  console.log("\n[slots] 자동 이미지 슬롯 — native 와 sandbox 프레임이 같다");
+
+  const results = {};
+
+  for (const mode of ["sandbox", "native"]) {
+
+    const { ctx, page } = await openStudio(browser, { sandbox: mode === "sandbox" });
+
+    await ctx.route(SLOT_IMAGE_URL, (route) =>
+      route.fulfill({ status: 200, contentType: "image/png", body: SLOT_IMAGE_PNG })
+    );
+
+    const root = mode === "sandbox" ? sandboxFrame(page) : previewFrame(page);
+
+    await root.locator(".sb-home").first().waitFor({ state: "attached", timeout: 15000 });
+
+    await page.locator("#studioCodeButton").click();
+    await page.waitForSelector(".code-editor-textarea", { timeout: 8000 });
+
+    await page.evaluate(() => {
+      const fields = document.querySelectorAll(".code-editor-textarea");
+      fields[0].value = fields[0].value.replace(
+        "</nav>",
+        '</nav><img class="sb-hero" data-imory-if="images.heroPhoto" data-imory-src="images.heroPhoto" alt="메인 사진">'
+      );
+      fields[1].value = fields[1].value + " .sb-hero { display:block; width:120px; height:160px; object-fit:cover; object-position:40% 20%; }";
+      fields.forEach((f) => f.dispatchEvent(new Event("input", { bubbles: true })));
+    });
+
+    await page.locator(".code-editor-button--primary").click();
+
+    await page.waitForFunction(() => document.querySelector(".code-editor-overlay").hidden === true, null, { timeout: 12000 });
+
+    const draft = await page.evaluate(() => {
+      const state = window.getStudioAiWorkingState({ includePackage: true });
+      return {
+        slots: state.skinPackage.imageSlots,
+        home: state.skinPackage.templates.home.html
+      };
+    });
+
+    const bound = await page.evaluate((url) =>
+      window.setStudioImageSlot("hero_photo", { id: "img-slot-hero", public_url: url }),
+    SLOT_IMAGE_URL);
+
+    await root.locator(".sb-hero[src]").first().waitFor({ state: "attached", timeout: 12000 });
+
+    await page.waitForTimeout(300);
+
+    results[mode] = {
+      declared: draft.slots.some((slot) => slot.name === "hero_photo" && slot.label === "메인 사진"),
+      renamed: draft.home.indexOf('data-imory-src="images.hero_photo"') !== -1 && draft.home.indexOf("heroPhoto") === -1,
+      bound,
+      measure: await measureSlotImage(root)
+    };
+
+    if (mode === "sandbox") {
+      check("[slots] sandbox 프레임은 여전히 하나", (await sandboxFrameCount(page)) === 1);
+    }
+
+    await ctx.close();
+
+  }
+
+  check("[slots] ★ Code 적용이 공용 파이프라인을 탔다 — heroPhoto → hero_photo 로 고치고 슬롯을 선언(두 모드 모두)",
+    results.sandbox.declared && results.sandbox.renamed && results.native.declared && results.native.renamed,
+    JSON.stringify({ sandbox: [results.sandbox.declared, results.sandbox.renamed], native: [results.native.declared, results.native.renamed] }));
+
+  check("[slots] 새 슬롯에 이미지를 연결할 수 있다", results.sandbox.bound === true && results.native.bound === true);
+
+  check("[slots] ★ 프레임 안에서 슬롯 이미지가 실제로 디코드되어 보인다",
+    results.sandbox.measure.src === SLOT_IMAGE_URL && results.sandbox.measure.decoded,
+    JSON.stringify(results.sandbox.measure));
+
+  check("[slots] ★ native 와 sandbox 가 같은 주소 · 크기 · object-fit/position",
+    JSON.stringify(results.sandbox.measure) === JSON.stringify(results.native.measure) &&
+      results.native.measure.position === "40% 20%" && results.native.measure.size.join("x") === "120x160",
+    JSON.stringify(results));
+
+}
+
+
+/* =========================================================
    실행
 ========================================================== */
 
@@ -2944,6 +3063,7 @@ try {
   if (shouldRun("bodystyle")) await runBodyStyle(browser);
   if (shouldRun("bodyparity")) await runBodyParity(browser);
   if (shouldRun("inspect")) await runInspect(browser);
+  if (shouldRun("slots")) await runSlots(browser);
 
 } finally {
 

@@ -23,9 +23,9 @@
    때마다 다시 검증하므로(skin-render.js 파일 상단 참고), 여기서
    놓친 것이 있어도 2차 방어선이 남아 있다.
 
-   저장할 css 자체는 항상 raw(미scope) 값을 그대로 유지한다 —
-   검증에만 쓰고 scoped 결과(cssResult.css)는 버린다
-   (skin-initializer.js/code-editor.js와 동일 원칙).
+   저장할 css 는 미scope 원문이다 — scope 는 렌더 시점의 몫이다.
+   IMPORT-CSS-IMAGE-1 부터는 "원문 그대로"가 아니라 "문제된 선언만
+   잘라낸 원문"이다(skin/skin-css-validate.js analyzeSkinCss repair).
 
    ok=false(구조적으로 신뢰할 수 없는 CSS)면 이 함수는 throw한다
    — 호출자는 그 실패를 "이번 Apply/Save 후보 자체를 반영하지
@@ -44,7 +44,6 @@
    시점에만 준비되어 있으면 된다(studio/index.html 로드 순서 참고).
 ========================================================== */
 
-const SKIN_PACKAGE_NORMALIZE_CSS_CHECK_NAMESPACE = "package-normalize-check";
 /* FOLDER-2: templates.folder(선택)도 같은 sanitize를 거친다.
    HIGHLIGHT-1/2: 하이라이트 화면 template(templates.highlights, 그리고
    레거시 이름 templates.memos)도 마찬가지다. */
@@ -88,12 +87,23 @@ async function normalizeSkinPackageForDraft(skinPackage) {
 
   }
 
-  const cssResult = window.validateAndScopeSkinCss(String(normalized.css || ""), {
-    namespace: SKIN_PACKAGE_NORMALIZE_CSS_CHECK_NAMESPACE
-  });
+  /*
+    IMPORT-CSS-IMAGE-1 — repair 로 판정하고 **잘라낸 CSS 를 저장한다**.
 
-  if (!cssResult.ok) {
-    throw new Error("skin css failed validation: " + cssResult.warnings.join(", "));
+    Import · Code 적용 · AI 는 이미 strict 로 막았으므로 여기까지 오는
+    CSS 는 대개 깨끗하다. 남는 것은 이 규칙 이전에 저장된 draft 다 —
+    @import 가 들어 있던 옛 draft 도 Save 는 되어야 하고(렌더 시점에는
+    원래도 지워졌다), 저장되는 글자에서 그것이 빠진다. 구조가 깨진
+    CSS 만 예전처럼 throw 한다.
+  */
+  const cssReport = window.analyzeSkinCss(String(normalized.css || ""), { mode: "repair" });
+
+  if (!cssReport.ok) {
+    throw new Error("skin css failed validation: " + cssReport.summary);
+  }
+
+  if (typeof normalized.css === "string" || cssReport.changed) {
+    normalized.css = cssReport.css;
   }
 
   return normalized;

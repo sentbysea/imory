@@ -8,29 +8,22 @@
    studio/studio-preview.js 몫, 22절 파일 책임 분리) — 대신 열 때마다
    호출자가 넘겨준 { html, css, onApply }를 그대로 쓴다.
 
-   sanitize/validate는 기존 skin/skin-sanitize.js의
-   sanitizeSkinHTML(), skin/skin-css-validate.js의
-   validateAndScopeSkinCss()를 그대로 재사용한다 — 새 sanitizer/
-   CSS parser는 만들지 않는다(6/7절). CSS validate에 넘기는
-   namespace("studio-code-editor-check")는 이 검증 호출 전용
-   scope 계산에만 쓰이고, 실제 저장/Preview에 쓰는 CSS는 항상
-   원본 raw 문자열이다(namespace가 있는 scoped 결과는 버림 —
-   skin/skin-initializer.js와 동일한 패턴).
+   IMPORT-CSS-IMAGE-1 — sanitize/validate 를 이 파일이 하지 않는다.
+   예전에는 여기서 sanitizeSkinHTML()과 validateAndScopeSkinCss()를
+   직접 불렀는데, 그래서 Code 적용과 Import 의 규칙이 따로 놀 수
+   있었다. 지금은 원문 그대로 onApply(rawHtml, rawCss, meta)에 넘기고,
+   호출자(studio/studio-preview.js applyCodeEditorChanges)가 Import ·
+   AI 와 같은 파이프라인(skin/skin-package-import.js
+   runSkinPackageContentPipeline)을 돌린 결과를 돌려준다. 이 파일은
+   그 결과로 모달을 닫거나, 실패 이유(줄·열·수정 방법)를 보인다.
 
-   Apply 성공 판정 후에만 호출자의 onApply(sanitizedHtml, rawCss,
-   meta)를 호출한다 — DB RPC 호출은 이 파일 어디에도 없다(5절
-   "Apply에서는 DB RPC 호출 금지").
+   DB RPC 호출은 이 파일 어디에도 없다(5절 "Apply에서는 DB RPC
+   호출 금지").
 
    classic script — window.openSkinCodeEditor로 노출된다. 의존
-   (classic script, 이 파일보다 먼저 로드되어야 함):
-   sanitizeSkinHTML(skin/skin-sanitize.js), window.skinInitializerReady
-   핸드셰이크(skin/skin-initializer.js — 그 모듈이 정적 import하는
-   skin/skin-css-validate.js가 window.validateAndScopeSkinCss를
-   노출하므로, 이 Promise가 풀렸다는 것은 곧 그 함수도 준비됐다는
-   뜻이다. studio/index.html 로드 순서 참고).
+   없음(window.formatSkinCssIssue 는 있으면 쓴다 —
+   skin/skin-css-validate.js).
 ========================================================== */
-
-const CODE_EDITOR_CSS_CHECK_NAMESPACE = "studio-code-editor-check";
 
 let codeEditorOverlay = null;
 let codeEditorHtmlTextarea = null;
@@ -517,15 +510,6 @@ async function handleCodeEditorApply() {
     false
   );
 
-  /*
-    validateAndScopeSkinCss는 skin/skin-css-validate.js(ES 모듈)가
-    노출하는 window 전역이다 — skinInitializerReady가 풀렸다는 건
-    그 모듈이 이미 로드를 끝냈다는 뜻이므로(파일 상단 주석 참고)
-    이 await로 안전하게 대기한다.
-  */
-
-  await window.skinInitializerReady;
-
   const rawHtml =
     codeEditorHtmlTextarea.value;
 
@@ -566,42 +550,30 @@ async function handleCodeEditorApply() {
 
   }
 
-  const sanitizedHtml =
-    window.sanitizeSkinHTML(
-      rawHtml
-    );
+  /*
+    IMPORT-CSS-IMAGE-1 — HTML sanitize · 이미지 슬롯 정리 · CSS 판정은
+    이 파일이 하지 않는다. 호출자(studio-preview.js
+    applyCodeEditorChanges)가 Import · AI 와 **같은** 파이프라인
+    (skin/skin-package-import.js runSkinPackageContentPipeline)에
+    원문을 넣고, 그 결과를 돌려준다:
 
-  const cssResult =
-    window.validateAndScopeSkinCss(
-      rawCss,
-      { namespace: CODE_EDITOR_CSS_CHECK_NAMESPACE }
-    );
+      { ok:false, message, cssReport? }  -> 모달을 열어 둔 채 이유를 보인다
+      { ok:true, cssReport?, notices? }  -> 닫는다(제외한 선언은 호출자가
+                                            toast 로 알린다)
 
-  if (!cssResult.ok) {
+    예외(POST region 누락 등)는 예전처럼 message 를 그대로 보인다.
+  */
 
-    setCodeEditorMessage(
-      "CSS에 문제가 있어 적용할 수 없습니다: " +
-        cssResult.warnings.join(", "),
-      true
-    );
-
-    codeEditorApplyButton.disabled =
-      false;
-
-    return;
-
-  }
-
-  const htmlWasModified =
-    sanitizedHtml !== rawHtml;
+  let outcome;
 
   try {
 
-    codeEditorCurrentOnApply(
-      sanitizedHtml,
-      rawCss,
-      { htmlWasModified, js: rawJs }
-    );
+    outcome =
+      await codeEditorCurrentOnApply(
+        rawHtml,
+        rawCss,
+        { js: rawJs }
+      );
 
   } catch (err) {
 
@@ -611,12 +583,10 @@ async function handleCodeEditorApply() {
     );
 
     /*
-      PHASE 1C-J: onApply(studio-preview.js의 applyWorkingSkinChanges)
-      가 POST post-body region 누락처럼 구체적인 validation 실패를
-      던지면 err.message를 그대로 보여준다 — 이 파일은 여전히 그
-      메시지의 "의미"(무엇이 왜 틀렸는지)는 모르고 문자열만 relay
-      한다(파일 상단 주석의 책임 분리 유지). message가 없는 예외만
-      기존 범용 문구로 대체한다.
+      PHASE 1C-J: onApply(studio-preview.js)가 POST post-body region
+      누락처럼 구체적인 validation 실패를 던지면 err.message를 그대로
+      보여준다 — 이 파일은 그 메시지의 "의미"는 모르고 문자열만 relay
+      한다. message가 없는 예외만 기존 범용 문구로 대체한다.
     */
     setCodeEditorMessage(
       (err && err.message) ||
@@ -631,7 +601,54 @@ async function handleCodeEditorApply() {
 
   }
 
+  if (outcome && outcome.ok === false) {
+
+    setCodeEditorMessage(
+      buildCodeEditorFailureText(outcome),
+      true
+    );
+
+    codeEditorApplyButton.disabled =
+      false;
+
+    return;
+
+  }
+
   closeCodeEditor();
+
+}
+
+
+/*
+  CSS 실패는 첫 오류 한 줄 + 수정 예 + 나머지 개수. 모달의 메시지
+  줄은 한 칸이라 줄바꿈으로 나눈다(white-space: pre-line).
+*/
+function buildCodeEditorFailureText(outcome) {
+
+  const report =
+    outcome && outcome.cssReport;
+
+  if (!report || !report.errors || !report.errors.length) {
+    return (outcome && outcome.message) || "적용하지 못했습니다.";
+  }
+
+  const lines = [
+    "CSS에 문제가 있어 적용할 수 없습니다.",
+    typeof window.formatSkinCssIssue === "function"
+      ? window.formatSkinCssIssue(report.errors[0])
+      : report.summary
+  ];
+
+  if (report.errors[0].hint) {
+    lines.push("수정 방법: " + report.errors[0].hint);
+  }
+
+  if (report.errors.length > 1) {
+    lines.push(`그 밖에 오류 ${report.errors.length - 1}개가 더 있습니다.`);
+  }
+
+  return lines.join("\n");
 
 }
 

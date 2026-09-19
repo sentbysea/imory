@@ -861,10 +861,12 @@ async function runServerChecks() {
     );
 
     record(
-      "J2. 이미지가 있을 때만 시스템 프롬프트에 참고 이미지 규칙이 붙는다",
+      "J2. 이미지가 있을 때만 시스템 프롬프트에 참고 이미지 규칙이 붙는다(기본은 참고만, 넣으라고 할 때만 imory-attachment 자리표시자 · 배경 url() 금지)",
       openAiLastRequest.body.instructions.includes("Reference images") &&
         openAiLastRequest.body.instructions.includes("DESIGN REFERENCES ONLY") &&
-        openAiLastRequest.body.instructions.includes("NEVER put an attached image into the skin"),
+        openAiLastRequest.body.instructions.includes("NEVER put an attached image into the skin unless asked") &&
+        openAiLastRequest.body.instructions.includes("imory-attachment:1") &&
+        openAiLastRequest.body.instructions.includes("NEVER a CSS background-image"),
       "instructions.length=" + openAiLastRequest.body.instructions.length
     );
 
@@ -2468,9 +2470,9 @@ async function runImages(browser) {
   );
 
   record(
-    "J3. 첨부가 생기면 '저장되지 않는다' 안내가 보인다(Imory 범위로만 한정된 문구)",
+    "J3. 첨부가 생기면 저장 범위 안내가 보인다(IMPORT-CSS-IMAGE-1: AI가 스킨에 넣은 이미지만 내 이미지에 저장)",
     one.noteHidden === false &&
-      one.noteText === "참고 이미지는 AI 요청에만 사용되며 Imory에 저장되지 않습니다.",
+      one.noteText === "참고 이미지는 AI 요청에 쓰입니다. AI가 스킨 안에 넣은 이미지만 내 이미지에 저장되어 이미지 슬롯에 연결됩니다.",
     JSON.stringify(one.noteText)
   );
 

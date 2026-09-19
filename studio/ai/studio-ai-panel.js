@@ -312,18 +312,24 @@ function stopStudioAiLoading() {
 /* =========================================================
    참고 이미지 첨부 (PHASE AI-4)
 
-   ★ 이것은 "스킨에 넣을 이미지"가 아니다.
-   Images panel(studio/images/*)이 다루는 imageSlots 이미지는
-   Supabase Storage에 올라가 published 스킨에 실제로 박히는
-   자산이다. 여기 첨부되는 것은 **모델에게 한 번 보여주는 디자인
-   참고 자료**일 뿐이라, 두 경로는 코드도 상태도 공유하지 않는다
-   (skinImageLibrary / getStudioImageSlotState를 부르지 않는다).
+   ★ 기본은 "디자인 참고 자료"다.
+   모델에게 한 번 보여주고 끝난다 — 사용자가 "이 사진을 메인에
+   넣어줘"처럼 **스킨 안에 넣으라고** 했을 때만 모델이 그 자리에
+   `<img src="imory-attachment:N">` 을 쓴다(functions/api/skin-ai.js
+   참고 이미지 규칙).
 
-   ★ 저장하지 않는다
-   attachment는 아래 studioAiAttachments 배열(브라우저 메모리)과
+   ★ IMPORT-CSS-IMAGE-1 — 모델이 넣은 첨부만 슬롯이 된다
+   그 자리표시자는 공용 파이프라인(skin/skin-package-images.js)이
+   `data-imory-src="images.<슬롯>"` + imageSlots 선언으로 바꾸고,
+   이 파일이 **그 첨부만** 내 이미지(skinImageLibrary.upload — Images
+   패널과 같은 업로드 경로)에 올려 그 슬롯에 연결한다
+   (uploadStudioAiAttachmentsToSlots). 그래서 생성 직후 Preview 에
+   사진이 보이고, Images 패널에서 바꾸기·자르기를 그대로 쓸 수 있다.
+   모델이 쓰지 않은 첨부는 지금처럼 어디에도 저장되지 않는다.
+
+   attachment 자체는 아래 studioAiAttachments 배열(브라우저 메모리)과
    전송 시 만들어지는 요청 body에만 존재한다. localStorage /
-   sessionStorage / IndexedDB / Supabase / SkinPackage 어디에도
-   쓰지 않는다 — 탭을 닫거나 새로고침하면 사라지는 것이 의도다.
+   sessionStorage / IndexedDB / SkinPackage 어디에도 쓰지 않는다.
 
    ★ working skin과 섞지 않는다
    applyAiSkinPackage()로 들어가는 SkinPackage에는 attachment가
@@ -370,10 +376,10 @@ const STUDIO_AI_ATTACHMENT_SIZE_MESSAGE =
   대신 보장하는 문장("어디에도 저장되지 않습니다")은 쓰지 않는다.
 */
 const STUDIO_AI_ATTACHMENT_PRIVACY_NOTE =
-  "참고 이미지는 AI 요청에만 사용되며 Imory에 저장되지 않습니다.";
+  "참고 이미지는 AI 요청에 쓰입니다. AI가 스킨 안에 넣은 이미지만 내 이미지에 저장되어 이미지 슬롯에 연결됩니다.";
 
 
-/* { id, mimeType, dataUrl, size, name } */
+/* { id, mimeType, dataUrl, size, name, width, height } */
 let studioAiAttachments = [];
 
 let studioAiAttachmentSeq = 0;
@@ -622,6 +628,130 @@ function readStudioAiAttachmentDataUrl(file) {
 }
 
 
+function readStudioAiAttachmentSize(dataUrl) {
+
+  return new Promise((resolve) => {
+
+    const image =
+      new Image();
+
+    image.onload =
+      () => resolve({ width: image.naturalWidth || 0, height: image.naturalHeight || 0 });
+
+    image.onerror =
+      () => resolve({ width: 0, height: 0 });
+
+    image.src =
+      dataUrl;
+
+  });
+
+}
+
+
+/* =========================================================
+   첨부 -> 이미지 슬롯 (IMPORT-CSS-IMAGE-1)
+
+   공용 파이프라인이 돌려준 attachmentSlots([{ slot, attachmentIndex }])
+   대로, 그 첨부를 **내 이미지**에 올리고 슬롯 연결 값
+   ({ imageId, imageUrl })을 만든다. Images 패널의 업로드와 같은
+   window.skinImageLibrary.upload 를 쓴다(메타데이터 제거·압축·새 경로).
+
+   돌려주는 것: { bindings: { slot: {imageId,imageUrl} }, failedSlots: [slot] }
+   - 저장소가 준비되지 않은 배포(migration 전)이거나 업로드가 실패하면
+     그 슬롯은 비운 채 둔다 — 스킨 적용 자체는 막지 않는다(사진 한 장
+     때문에 사용자가 요청한 디자인 전체를 버리지 않는다).
+   - 같은 첨부가 두 슬롯에 쓰이는 일은 없다(파이프라인이 첨부 하나당
+     슬롯 하나로 묶는다).
+========================================================== */
+
+function studioAiAttachmentToFile(attachment) {
+
+  const comma =
+    attachment.dataUrl.indexOf(",");
+
+  const binary =
+    atob(attachment.dataUrl.slice(comma + 1));
+
+  const bytes =
+    new Uint8Array(binary.length);
+
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+
+  const extension =
+    attachment.mimeType === "image/png" ? "png" : attachment.mimeType === "image/webp" ? "webp" : "jpg";
+
+  return new File(
+    [bytes],
+    attachment.name || ("ai-attachment." + extension),
+    { type: attachment.mimeType }
+  );
+
+}
+
+
+async function uploadStudioAiAttachmentsToSlots(attachmentSlots, attachments) {
+
+  const bindings = {};
+  const failedSlots = [];
+
+  if (!attachmentSlots || !attachmentSlots.length) {
+    return { bindings, failedSlots };
+  }
+
+  const library =
+    window.skinImageLibrary;
+
+  let ready = false;
+
+  try {
+    ready = !!(library && typeof library.isReady === "function" && await library.isReady());
+  } catch (err) {
+    ready = false;
+  }
+
+  for (const entry of attachmentSlots) {
+
+    const attachment =
+      attachments[entry.attachmentIndex];
+
+    if (!ready || !attachment) {
+      failedSlots.push(entry.slot);
+      continue;
+    }
+
+    try {
+
+      const row =
+        await library.upload(studioAiAttachmentToFile(attachment));
+
+      if (!row || !row.id || !row.public_url) {
+        failedSlots.push(entry.slot);
+        continue;
+      }
+
+      bindings[entry.slot] = {
+        imageId: row.id,
+        imageUrl: row.public_url
+      };
+
+    } catch (err) {
+
+      console.warn("[studio-ai] attachment upload failed", { slot: entry.slot, message: err && err.message });
+
+      failedSlots.push(entry.slot);
+
+    }
+
+  }
+
+  return { bindings, failedSlots };
+
+}
+
+
 /* =========================================================
    파일 -> attachment
 
@@ -689,6 +819,15 @@ async function addStudioAiAttachmentFiles(files) {
       continue;
     }
 
+    /* 슬롯이 될 때 aspectRatioHint 를 적으려고 크기를 재 둔다 */
+    const dimensions =
+      await readStudioAiAttachmentSize(dataUrl);
+
+    if (studioAiAttachments.length >= STUDIO_AI_MAX_ATTACHMENTS) {
+      rejected.count = true;
+      continue;
+    }
+
     studioAiAttachmentSeq += 1;
 
     studioAiAttachments = studioAiAttachments.concat([{
@@ -696,7 +835,9 @@ async function addStudioAiAttachmentFiles(files) {
       mimeType: file.type,
       dataUrl,
       size: file.size,
-      name: file.name || ""
+      name: file.name || "",
+      width: dimensions.width,
+      height: dimensions.height
     }]);
 
     renderStudioAiAttachments();
@@ -1337,6 +1478,13 @@ async function handleStudioAiSend() {
     snapshotStudioAiAttachments();
 
   /*
+    IMPORT-CSS-IMAGE-1 — 응답이 첨부를 스킨 안에 넣었으면 **보낸 그
+    첨부**를 올려야 한다(그 사이 × 로 지웠거나 새로 붙였어도).
+  */
+  const attachmentSources =
+    studioAiAttachments.slice();
+
+  /*
     ★ 선택 요소도 **전송 시점 snapshot**이다 (PHASE AI-6B, 10절).
     보낸 뒤 사용자가 다른 요소를 고르거나 선택을 풀어도 진행 중인
     요청의 타깃은 바뀌지 않는다 — 아래 selectionContext 지역 변수
@@ -1568,11 +1716,52 @@ async function handleStudioAiSend() {
   */
   const validated =
     await window.validateSkinPackageImport(
-      JSON.stringify(payload.skinPackage)
+      JSON.stringify(payload.skinPackage),
+      {
+        attachments:
+          attachmentSources.map((attachment) => ({
+            aspectRatioHint:
+              typeof window.describeSkinImageAspectRatio === "function"
+                ? window.describeSkinImageAspectRatio(attachment.width, attachment.height)
+                : ""
+          }))
+      }
     );
 
   if (!isStudioAiRequestCurrent(seq)) {
     return;
+  }
+
+  /*
+    IMPORT-CSS-IMAGE-1 — 모델이 첨부를 스킨에 넣었으면 적용 **전에**
+    올린다. 요청은 아직 진행 중으로 둔다(버튼이 "중단"인 채) — 그
+    사이 사용자가 중단을 누르면 적용하지 않는다.
+  */
+  let attachmentUpload =
+    { bindings: {}, failedSlots: [] };
+
+  const attachmentSlots =
+    validated.ok && validated.slotReport
+      ? validated.slotReport.attachmentSlots
+      : [];
+
+  if (attachmentSlots.length) {
+
+    setStudioAiStatus("첨부 이미지를 이미지 슬롯에 넣는 중...", { loading: true });
+
+    attachmentUpload =
+      await uploadStudioAiAttachmentsToSlots(attachmentSlots, attachmentSources);
+
+    if (!isStudioAiRequestCurrent(seq)) {
+      return;
+    }
+
+    if (controller.signal.aborted) {
+      clearStudioAiPendingRequest();
+      setStudioAiStatus("");
+      return;
+    }
+
   }
 
   clearStudioAiPendingRequest();
@@ -1589,10 +1778,20 @@ async function handleStudioAiSend() {
       { stage: "S9", reason: validated.reason || "unknown" }
     );
 
+    /*
+      IMPORT-CSS-IMAGE-1 — CSS 때문이면 어디의 무엇인지까지 말한다
+      (Import 창과 같은 문장). 다른 이유는 예전 문장 그대로다.
+    */
     failStudioAiRequest(
       "S9",
       STUDIO_AI_ERROR_CODES.SKIN_VALIDATION_FAILED,
-      { hasSelection: !!selectionContext }
+      {
+        hasSelection: !!selectionContext,
+        serverMessage:
+          validated.reason === "css-validator" && validated.cssReport && validated.cssReport.summary
+            ? STUDIO_AI_ERROR_MESSAGES.SKIN_VALIDATION_FAILED + " " + validated.cssReport.summary
+            : ""
+      }
     );
 
     return;
@@ -1643,14 +1842,32 @@ async function handleStudioAiSend() {
 
   }
 
+  /*
+    첨부를 올린 슬롯은 연결까지 한 번에 적용한다 — 스킨 교체와 슬롯
+    연결이 Undo 한 칸이다(applyImportedSkinPackage 가 둘을 같은 기록에
+    담는다). 연결이 없으면 옵션을 넘기지 않는다(예전과 같은 호출).
+  */
+  const hasNewBindings =
+    Object.keys(attachmentUpload.bindings).length > 0;
+
   const applied =
     window.applyAiSkinPackage(
       validated.skinPackage,
-      {
-        expectedRevision: snapshot.revision,
-        expectedMountToken: snapshot.mountToken,
-        dirty: true
-      }
+      hasNewBindings
+        ? {
+            expectedRevision: snapshot.revision,
+            expectedMountToken: snapshot.mountToken,
+            dirty: true,
+            imageSlotBindings: {
+              ...(snapshot.imageSlotBindings || {}),
+              ...attachmentUpload.bindings
+            }
+          }
+        : {
+            expectedRevision: snapshot.revision,
+            expectedMountToken: snapshot.mountToken,
+            dirty: true
+          }
     );
 
   if (!applied.ok) {
@@ -1701,11 +1918,60 @@ async function handleStudioAiSend() {
     null;
 
   setStudioAiStatus(
-    payload.summary || "적용했습니다.",
+    [payload.summary || "적용했습니다."]
+      .concat(describeStudioAiImportExtras(validated, attachmentUpload))
+      .join(" "),
     { showUndo: true }
   );
 
   updateStudioAiSendButtonState();
+
+}
+
+
+/*
+  적용 뒤 상태 줄에 덧붙이는 짧은 안내(IMPORT-CSS-IMAGE-1) — 첨부가
+  슬롯이 되었는지, 비어 있는 슬롯이 있는지, CSS 에서 뺀 곳이 있는지.
+*/
+function describeStudioAiImportExtras(validated, attachmentUpload) {
+
+  const lines = [];
+
+  const created =
+    (validated.slotReport && validated.slotReport.createdSlots) || [];
+
+  const labelOf = (slot) => {
+    const found = created.find((entry) => entry.name === slot);
+    return "\u201C" + (found ? found.label : slot) + "\u201D";
+  };
+
+  const linked =
+    Object.keys(attachmentUpload.bindings);
+
+  if (linked.length) {
+    lines.push(
+      "첨부 이미지를 " + linked.map(labelOf).join(", ") +
+      " 슬롯에 넣었습니다 — Images 패널에서 바꾸거나 자를 수 있습니다."
+    );
+  }
+
+  if (attachmentUpload.failedSlots.length) {
+    lines.push(
+      "첨부 이미지를 저장하지 못해 " + attachmentUpload.failedSlots.map(labelOf).join(", ") +
+      " 슬롯이 비어 있습니다 — Images 패널에서 넣어 주세요."
+    );
+  }
+
+  const removed =
+    validated.cssReport && Array.isArray(validated.cssReport.removed)
+      ? validated.cssReport.removed.length
+      : 0;
+
+  if (removed) {
+    lines.push("CSS에서 " + removed + "곳을 빼고 적용했습니다.");
+  }
+
+  return lines;
 
 }
 
