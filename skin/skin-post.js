@@ -271,7 +271,7 @@ export async function renderPublishedSkinPost({ ownerId, postId, container, isSe
 
     if (prepared) {
 
-      return {
+      const sandboxResult = {
         rendered: true,
 
         /*
@@ -284,6 +284,14 @@ export async function renderPublishedSkinPost({ ownerId, postId, container, isSe
         sandboxMount: prepared.mount,
         sandboxRenderNative: prepared.renderNative
       };
+
+      window.syncSkinBottomDockForScreen?.({
+        skinPackage,
+        context,
+        container
+      });
+
+      return sandboxResult;
 
     }
 
@@ -322,6 +330,14 @@ export async function renderPublishedSkinPost({ ownerId, postId, container, isSe
     container.innerHTML = "";
     return false;
   }
+
+  /* BOTTOM-DOCK-1 — 이 화면의 dock 하나 */
+
+  window.syncSkinBottomDockForScreen?.({
+    skinPackage,
+    context,
+    container
+  });
 
   return {
     rendered: true,

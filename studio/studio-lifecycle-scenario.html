@@ -12,6 +12,7 @@
 <link rel="stylesheet" href="./editor/confirm-dialog.css">
 <!-- studio/index.html과 같은 순서(images-panel 다음 inspector) -->
 <link rel="stylesheet" href="./images/images-panel.css">
+<link rel="stylesheet" href="./dock/dock-panel.css">
 <link rel="stylesheet" href="./inspector/studio-inspector.css">
 </head>
 <body>
@@ -80,6 +81,8 @@
           <button type="button" class="studio-corner-button" id="studioImportButton" disabled>Import</button>
           <button type="button" class="studio-corner-button" id="studioExportButton" disabled>Export</button>
           <button type="button" class="studio-corner-button" id="studioImagesButton" disabled>Images</button>
+          <!-- BOTTOM-DOCK-1 — studio/index.html 과 같은 자리 -->
+          <button type="button" class="studio-corner-button" id="studioDockButton" disabled>Dock</button>
           <button type="button" class="studio-corner-button" id="studioSaveButton" disabled>Save</button>
           <button type="button" class="studio-corner-button" id="studioPublishButton" disabled>Publish</button>
           <!-- PHASE AI-5A.1 — studio/index.html과 동일한 AI 진입점 -->
@@ -2429,6 +2432,8 @@
   <script src="../skin/skin-image-slots.js"></script>
   <script src="../skin/skin-context.js"></script>
   <script src="../skin/skin-template.js"></script>
+  <!-- BOTTOM-DOCK-1 — dock 설정의 값 목록/정규화. import/export/패널이 쓴다 -->
+  <script src="../skin/skin-bottom-dock.js"></script>
   <script src="../skin/skin-package-import.js"></script>
   <script src="../skin/skin-package-export.js"></script>
   <script src="./studio-write.js"></script>
@@ -2443,6 +2448,8 @@
        skin-image-library-e2e-test.mjs(8935)가 진짜 studio/index.html
        위에서 검증한다. -->
   <script src="./images/images-panel.js"></script>
+  <!-- BOTTOM-DOCK-1 — dock 설정 패널(실제 파일). studio/index.html 과 같은 자리 -->
+  <script src="./dock/dock-panel.js"></script>
   <script src="./studio-preview.js"></script>
   <script src="./preview/preview-route.js"></script>
   <!-- PHASE 1C-I — production과 동일한 순서(studio/index.html 참고) -->

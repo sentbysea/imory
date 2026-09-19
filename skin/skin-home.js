@@ -307,7 +307,16 @@ export async function renderPublishedSkinHome({ ownerId, container }) {
       });
 
     if (mounted) {
+
+      window.syncSkinBottomDockForScreen?.({
+        skinPackage,
+        context,
+        container,
+        pageType: "home"
+      });
+
       return true;
+
     }
 
   }
@@ -332,6 +341,13 @@ export async function renderPublishedSkinHome({ ownerId, container }) {
     return false;
 
   }
+
+  window.syncSkinBottomDockForScreen?.({
+    skinPackage,
+    context,
+    container,
+    pageType: "home"
+  });
 
   return true;
 

@@ -123,6 +123,9 @@ const PREVIEW_MSG_ERROR = "preview:error";
 
 const PREVIEW_MSG_SCRIPT_ERROR = "preview:script-error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
+
+/* BOTTOM-DOCK-1 — 프레임 안에서 dock 을 눌렀다(설정 패널을 연다) */
+const PREVIEW_MSG_DOCK_SELECT = "preview:dock-select";
 const PREVIEW_MSG_POST_BODY = "preview:post-body";
 const PREVIEW_MSG_FOLDER_BODIES = "preview:folder-bodies";
 const PREVIEW_MSG_PING = "preview:ping";
@@ -169,7 +172,11 @@ function isValidRenderMessage(data) {
     typeof data.context === "object" &&
     data.context !== null &&
     /* SANDBOX-4 — 선택 필드. 없으면 native(지금까지의 모든 스킨). */
-    (data.renderMode === undefined || typeof data.renderMode === "string")
+    (data.renderMode === undefined || typeof data.renderMode === "string") &&
+    /* BOTTOM-DOCK-1 — 선택 필드 둘. null 이면 dock 없는 스킨이다.
+       실제 모양 검사는 skin/skin-bottom-dock.js 의 정규화가 한다. */
+    (data.dock === undefined || data.dock === null || typeof data.dock === "object") &&
+    (data.dockTemplate === undefined || data.dockTemplate === null || typeof data.dockTemplate === "object")
   );
 
 }
@@ -363,6 +370,60 @@ function handleRenderMessage(data) {
         context:
           data.context
       });
+
+    }
+
+    /*
+      BOTTOM-DOCK-1 — Preview 에도 같은 dock 을 그린다.
+
+      공개 화면과 같은 파일이 그린다(skin/skin-bottom-dock-mount.js,
+      이 문서도 같은 두 파일을 읽는다). 설정과 template 은 봉투로
+      온다 — Preview 문서는 SkinPackage 전체를 갖고 있지 않기
+      때문이다(studio/studio-preview.js postRenderToFrame).
+
+      dock 이 없는 스킨에서는 config 가 null 이라 아무 일도 하지
+      않는다. 화면이 바뀔 때마다 옛 dock 을 내리고 새로 그리므로
+      Preview 안에 dock 이 쌓이지 않는다.
+    */
+
+    if (typeof window.syncSkinBottomDockForScreen === "function") {
+
+      const dockMount =
+        window.syncSkinBottomDockForScreen({
+          dock: data.dock || null,
+          dockTemplate: data.dockTemplate || null,
+          context: data.context,
+          container: previewRoot,
+          skinRoot: previewSkinRoot
+        });
+
+      /*
+        Preview 에서 dock 을 누르면 **설정 패널**이 열린다
+        (요구사항 12절). 공개 화면과 달리 여기서 dock 을 눌러
+        화면을 옮길 이유가 없고, 편집 중에 "이걸 어디서 고치지"를
+        찾아 헤매지 않게 하는 것이 낫다.
+
+        capture 단계에서 먼저 잡아 dock 자신의 동작(패널 토글 ·
+        맨 위로 · 링크)까지 막는다 — Preview 안의 dock 은 조작
+        대상이 아니라 편집 대상이다.
+      */
+
+      if (dockMount && dockMount.dockRoot) {
+
+        dockMount.dockRoot.addEventListener(
+          "click",
+          (event) => {
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            postToParent({ type: PREVIEW_MSG_DOCK_SELECT });
+
+          },
+          true
+        );
+
+      }
 
     }
 

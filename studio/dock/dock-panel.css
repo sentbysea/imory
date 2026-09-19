@@ -1,0 +1,372 @@
+/* =========================================================
+   SKIN STUDIO — BOTTOM DOCK 설정 패널
+
+   studio/images/images-panel.css 와 같은 결의 modal 하나.
+   Studio 자신의 UI 라 --system-* 토큰을 쓴다(사용자 홈페이지의
+   --theme-* 와 무관).
+========================================================== */
+
+.dock-panel-overlay {
+  position: fixed;
+  inset: 0;
+
+  display: none;
+
+  align-items: center;
+  justify-content: center;
+
+  padding: 20px;
+
+  background: rgba(20, 20, 20, 0.45);
+
+  z-index: 1200;
+}
+
+.dock-panel-overlay--open {
+  display: flex;
+}
+
+
+.dock-panel-modal {
+  display: flex;
+  flex-direction: column;
+
+  width: min(560px, 100%);
+  max-height: min(760px, 90vh);
+
+  background: var(--system-bg, #ffffff);
+  color: var(--system-text, #222222);
+
+  border-radius: 14px;
+
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+
+  overflow: hidden;
+}
+
+
+.dock-panel-header {
+  padding: 20px 22px 12px;
+
+  border-bottom: 1px solid var(--system-line, #ececec);
+}
+
+.dock-panel-title {
+  margin: 0 0 6px;
+
+  font-size: 13px;
+  letter-spacing: 0.16em;
+}
+
+.dock-panel-subtitle {
+  margin: 0;
+
+  font-size: 12px;
+  line-height: 1.6;
+
+  color: var(--system-text-weak, #8b8b8b);
+}
+
+
+.dock-panel-body {
+  flex: 1 1 auto;
+
+  min-height: 0;
+
+  overflow-y: auto;
+
+  padding: 16px 22px;
+}
+
+
+.dock-panel-section {
+  margin: 22px 0 4px;
+
+  font-size: 12px;
+  letter-spacing: 0.14em;
+
+  color: var(--system-text-weak, #8b8b8b);
+}
+
+
+/* =========================================================
+   한 줄 = 라벨 + 컨트롤 (+ 설명)
+========================================================== */
+
+.dock-panel-row {
+  display: grid;
+
+  grid-template-columns: 96px minmax(0, 1fr);
+
+  align-items: center;
+
+  gap: 8px 12px;
+
+  margin-bottom: 10px;
+}
+
+.dock-panel-label {
+  font-size: 12px;
+
+  color: var(--system-text-weak, #8b8b8b);
+}
+
+.dock-panel-hint {
+  grid-column: 1 / -1;
+
+  margin: 0;
+
+  font-size: 11px;
+  line-height: 1.6;
+
+  color: var(--system-text-weak, #a5a5a5);
+}
+
+.dock-panel-select,
+.dock-panel-input {
+  width: 100%;
+
+  min-width: 0;
+
+  box-sizing: border-box;
+
+  padding: 7px 9px;
+
+  font: inherit;
+  font-size: 13px;
+
+  color: inherit;
+
+  background: var(--system-bg, #ffffff);
+
+  border: 1px solid var(--system-line, #dcdcdc);
+  border-radius: 8px;
+}
+
+.dock-panel-target {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 6px;
+
+  min-width: 0;
+}
+
+.dock-panel-target > * {
+  flex: 1 1 140px;
+
+  min-width: 0;
+}
+
+
+/* =========================================================
+   항목 카드
+========================================================== */
+
+.dock-panel-items {
+  display: flex;
+  flex-direction: column;
+
+  gap: 10px;
+
+  margin-bottom: 12px;
+}
+
+.dock-panel-item {
+  padding: 12px 14px;
+
+  border: 1px solid var(--system-line, #e6e6e6);
+  border-radius: 10px;
+
+  background: var(--system-bg-soft, #fbfbfb);
+}
+
+.dock-panel-item--dragging {
+  opacity: 0.5;
+}
+
+.dock-panel-item-head {
+  display: flex;
+
+  align-items: center;
+
+  gap: 8px;
+
+  margin-bottom: 10px;
+}
+
+.dock-panel-grip {
+  cursor: grab;
+
+  color: var(--system-text-weak, #b9b9b9);
+
+  font-size: 14px;
+
+  line-height: 1;
+}
+
+.dock-panel-item-name {
+  flex: 1 1 auto;
+
+  min-width: 0;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  font-size: 13px;
+}
+
+.dock-panel-item-moves {
+  display: flex;
+
+  gap: 4px;
+}
+
+.dock-panel-move,
+.dock-panel-remove {
+  min-width: 30px;
+  min-height: 30px;
+
+  padding: 0 8px;
+
+  font: inherit;
+  font-size: 12px;
+
+  color: inherit;
+
+  background: transparent;
+
+  border: 1px solid var(--system-line, #dcdcdc);
+  border-radius: 7px;
+
+  cursor: pointer;
+}
+
+.dock-panel-move[disabled] {
+  opacity: 0.35;
+
+  cursor: default;
+}
+
+.dock-panel-empty {
+  margin: 0;
+
+  padding: 18px 0;
+
+  text-align: center;
+
+  font-size: 12px;
+
+  color: var(--system-text-weak, #a5a5a5);
+}
+
+
+/* =========================================================
+   바닥
+========================================================== */
+
+.dock-panel-message {
+  margin: 0;
+
+  padding: 0 22px;
+
+  min-height: 18px;
+
+  font-size: 12px;
+  line-height: 1.5;
+
+  color: var(--system-text-weak, #8b8b8b);
+}
+
+.dock-panel-message--error {
+  color: #c2453f;
+}
+
+.dock-panel-footer {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  align-items: center;
+
+  gap: 8px;
+
+  padding: 14px 22px 18px;
+
+  border-top: 1px solid var(--system-line, #ececec);
+}
+
+.dock-panel-button {
+  min-height: 36px;
+
+  padding: 0 14px;
+
+  font: inherit;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+
+  color: inherit;
+
+  background: transparent;
+
+  border: 1px solid var(--system-line, #dcdcdc);
+  border-radius: 9px;
+
+  cursor: pointer;
+}
+
+.dock-panel-button--primary {
+  margin-left: auto;
+
+  color: #ffffff;
+
+  background: var(--system-accent, #d76a8a);
+
+  border-color: transparent;
+}
+
+.dock-panel-button--quiet {
+  color: var(--system-text-weak, #9a9a9a);
+
+  border-color: transparent;
+}
+
+.dock-panel-button--add {
+  width: 100%;
+}
+
+
+/* =========================================================
+   좁은 화면
+========================================================== */
+
+@media (max-width: 480px) {
+
+  .dock-panel-overlay {
+    padding: 0;
+
+    align-items: stretch;
+  }
+
+  .dock-panel-modal {
+    width: 100%;
+    max-height: 100%;
+
+    border-radius: 0;
+  }
+
+  .dock-panel-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dock-panel-button--primary {
+    margin-left: 0;
+  }
+
+  .dock-panel-footer > .dock-panel-button {
+    flex: 1 1 auto;
+  }
+
+}

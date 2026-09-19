@@ -304,7 +304,7 @@ function stampSkinRepeatRegionKeys(clone, item) {
    상한을 넘으면 지금까지와 같이 경고 후 그 요소를 제거한다.
 ========================================================== */
 
-function applySkinRepeat(templateEl, resolvePath, repeatDepth) {
+function applySkinRepeat(templateEl, resolvePath, repeatDepth, onRepeatItem) {
 
   const path = templateEl.getAttribute("data-imory-repeat");
 
@@ -353,9 +353,36 @@ function applySkinRepeat(templateEl, resolvePath, repeatDepth) {
 
     parent.insertBefore(clone, anchor);
 
-    walkSkinTree(clone, itemResolve, repeatDepth + 1);
+    walkSkinTree(clone, itemResolve, repeatDepth + 1, onRepeatItem);
 
     stampSkinRepeatRegionKeys(clone, item);
+
+    /* =====================================================
+       onRepeatItem(clone, item, path) — caller 가 자기 표식을
+       찍는 자리 (BOTTOM-DOCK-1).
+
+       왜 필요한가 — Bottom Dock 의 항목 중 일부는 주소가 없는
+       동작이다(패널 열기 · 공유 · 맨 위로). 그런 항목을 눌렀을 때
+       플랫폼이 "어느 항목인가"를 알아야 하는데, 스킨 HTML 에는
+       그 표식을 적을 수 없다(skin/skin-sanitize.js 의 속성
+       화이트리스트에 없어 저장/렌더 전에 늘 제거된다 —
+       data-imory-region-key 와 정확히 같은 사정이다).
+
+       그래서 **렌더러가 clone 을 만드는 그 자리**에서 caller 가
+       한 번 손댈 수 있게 한다. 넘기지 않는 기존 호출자(공개
+       HOME/CATEGORY/POST, Studio Preview, sandbox)는 결과가 한
+       byte 도 바뀌지 않는다.
+    ====================================================== */
+
+    if (typeof onRepeatItem === "function") {
+
+      try {
+        onRepeatItem(clone, item, path);
+      } catch (err) {
+        console.warn("[skin-render] onRepeatItem threw", err);
+      }
+
+    }
 
   });
 
@@ -574,14 +601,14 @@ function applySkinRegion(el) {
    if/bind/자식 순회는 하지 않는다.
 ========================================================== */
 
-function walkSkinTree(el, resolvePath, repeatDepth) {
+function walkSkinTree(el, resolvePath, repeatDepth, onRepeatItem) {
 
   if (!el || el.nodeType !== 1) {
     return;
   }
 
   if (el.hasAttribute("data-imory-repeat")) {
-    applySkinRepeat(el, resolvePath, repeatDepth);
+    applySkinRepeat(el, resolvePath, repeatDepth, onRepeatItem);
     return;
   }
 
@@ -614,7 +641,7 @@ function walkSkinTree(el, resolvePath, repeatDepth) {
     applySkinColor(el, resolvePath);
   }
 
-  Array.from(el.children).forEach((child) => walkSkinTree(child, resolvePath, repeatDepth));
+  Array.from(el.children).forEach((child) => walkSkinTree(child, resolvePath, repeatDepth, onRepeatItem));
 
 }
 
@@ -667,7 +694,7 @@ let skinRenderInstanceCounter = 0;
    붙인다.
 ========================================================== */
 
-export function renderSkin({ container, skin, context, mode = "view", styleNonce } = {}) {
+export function renderSkin({ container, skin, context, mode = "view", styleNonce, onRepeatItem } = {}) {
 
   if (!container) {
     throw new Error("renderSkin: container is required");
@@ -734,7 +761,7 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
 
     Array.from(root.children)
       .filter((child) => child !== styleEl)
-      .forEach((child) => walkSkinTree(child, resolveTopLevel, 0));
+      .forEach((child) => walkSkinTree(child, resolveTopLevel, 0, onRepeatItem));
 
     /* =====================================================
        배치 primitive 컴파일 — 반드시 walk **뒤**다.

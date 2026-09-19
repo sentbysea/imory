@@ -567,7 +567,8 @@ async function runServerChecks() {
         body.max_output_tokens === 24000 &&
         body.text.format.type === "json_schema" &&
         body.text.format.strict === true &&
-        body.text.format.schema.required.join(",") === "summary,templates,css" &&
+        /* BOTTOM-DOCK-1: bottomDock(설정)이 네 번째 최상위 칸이다 */
+        body.text.format.schema.required.join(",") === "summary,templates,css,bottomDock" &&
         body.store === false &&
         !("messages" in body),
       JSON.stringify({
@@ -594,11 +595,11 @@ async function runServerChecks() {
     record(
       /* HIGHLIGHT-1: memos(하이라이트 화면)가 여섯 번째 선택 템플릿으로
          더해졌다 — banner/folder와 같이 null 허용이다. */
-      "A6. Structured Output schema가 templates.{home,category,post,banner,folder,highlights}.html과 css를 강제한다(banner/folder/highlights는 null 허용)",
+      "A6. Structured Output schema가 templates.{home,category,post,banner,folder,highlights,dock}.html과 css를 강제한다(banner/folder/highlights/dock은 null 허용)",
       (() => {
         const schema = body.text.format.schema;
         const t = schema.properties.templates;
-        return t.required.join(",") === "home,category,post,banner,folder,highlights" &&
+        return t.required.join(",") === "home,category,post,banner,folder,highlights,dock" &&
           t.additionalProperties === false &&
           t.properties.home.required[0] === "html" &&
           t.properties.home.additionalProperties === false &&
@@ -609,6 +610,9 @@ async function runServerChecks() {
           t.properties.folder.type.includes("null") &&
           Array.isArray(t.properties.highlights.type) &&
           t.properties.highlights.type.includes("null") &&
+          /* BOTTOM-DOCK-1: dock template 도 같은 null 허용 */
+          Array.isArray(t.properties.dock.type) &&
+          t.properties.dock.type.includes("null") &&
           /* HIGHLIGHT-2: 모델에게 보여 주는 이름은 highlights 하나다 */
           t.properties.memos === undefined &&
           schema.properties.css.type === "string" &&

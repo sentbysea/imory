@@ -75,6 +75,9 @@ const PREVIEW_MSG_RENDERED = "preview:rendered";
 const PREVIEW_MSG_ERROR = "preview:error";
 const PREVIEW_MSG_NAVIGATE = "preview:navigate";
 
+/* BOTTOM-DOCK-1 — 프레임 안에서 dock 을 눌렀다(설정 패널을 연다) */
+const PREVIEW_MSG_DOCK_SELECT = "preview:dock-select";
+
 /*
   SANDBOX-5A — sandbox 프레임에서 **저자가 쓴 JS** 가 오류를 냈다.
 
@@ -165,6 +168,11 @@ const studioExportButton =
 
 const studioImagesButton =
   document.getElementById("studioImagesButton");
+
+/* BOTTOM-DOCK-1 — Bottom Dock 설정 패널 진입점. IMPORT/IMAGES 와
+   같은 기준("working draft 가 있는가")으로만 활성화된다. */
+const studioDockButton =
+  document.getElementById("studioDockButton");
 
 /* PHASE AI-6A — Element Inspector(Select) 진입점. 여닫기 리스너는
    studio/inspector/studio-inspector.js가 달고, 이 파일은 활성화
@@ -698,6 +706,8 @@ function resetStudioWorkingState() {
 
   updateStudioImagesButtonState();
 
+  updateStudioDockButtonState();
+
   updateStudioInspectorButtonState();
 
 }
@@ -1173,6 +1183,146 @@ function applyImportedSkinPackage(skinPackage, options) {
 
 
 /* =========================================================
+   BOTTOM DOCK — 설정 읽기/쓰기 (BOTTOM-DOCK-1)
+
+   studio/dock/dock-panel.js 가 쓰는 유일한 진입점이다. 이미지
+   슬롯(setStudioImageSlot)과 같은 분리 원칙을 지킨다 — DB 에는
+   전혀 손대지 않고, working draft 와 dirty 만 바꾸고 Preview 를
+   다시 그린다. 실제 기록은 Save 가 새 버전 row 에 할 때뿐이다.
+
+   ★ 받은 값을 그대로 넣지 않는다.
+
+   normalizeSkinBottomDock(skin/skin-bottom-dock.js)을 한 번
+   통과시킨 결과만 draft 에 들어간다 — 그래야 Save 와 Export 와
+   공개 렌더가 전부 같은 모양을 본다. 패널 쪽의 실수 하나가
+   "저장은 되는데 공개 화면에서 조용히 사라지는 dock"이 되지
+   않게 하는 자리다.
+========================================================== */
+
+function getStudioBottomDock() {
+
+  if (!currentWorkingSkin) {
+    return null;
+  }
+
+  if (typeof normalizeSkinBottomDock !== "function") {
+    return null;
+  }
+
+  const result =
+    normalizeSkinBottomDock(currentWorkingSkin.bottomDock);
+
+  return result.ok ? result.dock : null;
+
+}
+
+
+/*
+  지금 Preview 가 아는 이동 대상들 — 패널의 "무엇으로 가는가"
+  드롭다운을 채운다. 스킨이 카테고리 id 를 모르는 것과 달리
+  **블로그 주인은** 자기 카테고리를 고를 수 있어야 한다.
+*/
+
+function getStudioBottomDockTargets() {
+
+  const navigation =
+    (currentSkinContext && currentSkinContext.navigation) || {};
+
+  return {
+    categories:
+      (navigation.categories || []).map((category) => ({
+        id: String(category.id),
+        name: category.name,
+        type: category.type
+      })),
+
+    hasGallery:
+      (navigation.galleryCategories || []).length > 0,
+
+    hasBanner:
+      (navigation.bannerCategories || []).length > 0,
+
+    imageSlots:
+      currentImageSlotNames.slice()
+  };
+
+}
+
+
+/*
+  setStudioBottomDock(dock) -> { ok, message }
+
+  dock 이 null 이면 설정을 **지운다**(= dock 없는 스킨으로 되돌린다).
+*/
+
+function setStudioBottomDock(dock) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, message: "편집 중인 스킨이 없습니다." };
+  }
+
+  if (typeof normalizeSkinBottomDock !== "function") {
+    return { ok: false, message: "이 배포는 아직 Bottom Dock을 지원하지 않습니다." };
+  }
+
+  let nextSkin;
+
+  if (dock === null || dock === undefined) {
+
+    nextSkin = { ...currentWorkingSkin };
+
+    delete nextSkin.bottomDock;
+
+  } else {
+
+    const result =
+      normalizeSkinBottomDock(dock);
+
+    if (!result.ok) {
+      return { ok: false, message: result.message };
+    }
+
+    nextSkin = { ...currentWorkingSkin, bottomDock: result.dock };
+
+  }
+
+  currentWorkingSkin =
+    nextSkin;
+
+  isStudioDirty =
+    true;
+
+  bumpStudioWorkingRevision();
+
+  updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
+
+  /*
+    보고 있던 페이지를 그대로 다시 그린다 — dock 은 모든 화면에
+    함께 얹히므로, 화면을 HOME 으로 되돌릴 이유가 없다.
+  */
+
+  renderPreviewAfterSkinPackageChange();
+
+  return { ok: true };
+
+}
+
+
+function updateStudioDockButtonState() {
+
+  if (!studioDockButton) {
+    return;
+  }
+
+  studioDockButton.disabled =
+    !currentWorkingSkin;
+
+}
+
+
+/* =========================================================
    SKIN IMAGE LIBRARY — 슬롯 연결 변경 (v0.1)
 
    studio/images/images-panel.js가 쓰는 유일한 진입점. 연결/교체/
@@ -1571,6 +1721,22 @@ studioImagesButton?.addEventListener(
 );
 
 
+/* BOTTOM-DOCK-1 — Bottom Dock 설정 패널 */
+
+studioDockButton?.addEventListener(
+  "click",
+  () => {
+
+    if (!currentWorkingSkin) {
+      return;
+    }
+
+    window.openSkinDockPanel?.();
+
+  }
+);
+
+
 /* =========================================================
    Save — save_skin_draft_version() RPC(studio/studio-write.js
    wrapper) 1회 호출. 저장 대상은 항상 currentWorkingSkin 전체
@@ -1963,11 +2129,37 @@ function postRenderToFrame(payload) {
       ? resolveSkinRenderMode(currentWorkingSkin)
       : "native";
 
+  /* =====================================================
+     BOTTOM-DOCK-1 — dock 두 칸
+
+     renderMode 와 같은 사정이다. payload.skin 은 template 한 장이라
+     SkinPackage 최상위의 bottomDock 설정도, templates.dock 도 들어
+     있지 않다. Preview 가 공개 화면과 **같은 dock** 을 보여주려면
+     둘 다 필요하므로 봉투에 같이 싣는다.
+
+     ★ 공개 화면과 같은 함수로 고른다(skin/skin-bottom-dock.js) —
+       Preview 전용 판정을 따로 만들지 않는다.
+     ★ dock 이 없는 스킨(= 지금까지의 모든 스킨)에서는 config 가
+       null 이라 Preview 는 한 줄도 달라지지 않는다.
+  ====================================================== */
+
+  const dockConfigForFrame =
+    (typeof resolveSkinBottomDock === "function")
+      ? resolveSkinBottomDock(currentWorkingSkin)
+      : null;
+
+  const dockTemplateForFrame =
+    dockConfigForFrame && typeof resolveSkinDockTemplate === "function"
+      ? resolveSkinDockTemplate(currentWorkingSkin)
+      : null;
+
   studioPreviewFrame.contentWindow.postMessage(
     {
       type: PREVIEW_MSG_RENDER,
       skin: skinForFrame,
       renderMode: renderModeForFrame,
+      dock: dockConfigForFrame,
+      dockTemplate: dockTemplateForFrame,
       context: payload.context
     },
     window.location.origin
@@ -2375,6 +2567,24 @@ window.addEventListener(
 
       if (typeof data.href === "string") {
         handlePreviewNavigateMessage(data.href);
+      }
+
+      return;
+
+    }
+
+    /*
+      BOTTOM-DOCK-1 — Preview 안에서 dock 을 누르면 설정 패널이 열린다
+      (요구사항 12절 "사용자가 Bottom Dock을 클릭하면").
+
+      프레임은 "눌렸다"만 알린다 — 무엇을 열지는 부모가 정한다.
+      payload 가 없는 신호 하나라 검증할 것도 없다.
+    */
+
+    if (data.type === PREVIEW_MSG_DOCK_SELECT) {
+
+      if (currentWorkingSkin) {
+        window.openSkinDockPanel?.();
       }
 
       return;
@@ -2943,6 +3153,8 @@ async function mountStudioPreview(
   updateStudioImportButtonState();
 
   updateStudioImagesButtonState();
+
+  updateStudioDockButtonState();
 
   updateStudioInspectorButtonState();
 

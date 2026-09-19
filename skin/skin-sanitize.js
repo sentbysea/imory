@@ -112,8 +112,38 @@ const SKIN_SANITIZE_REGION_ATTR = "data-imory-region";
    그 자리를 없애 버려 주인장이 자기 카드를 고칠 수 없게 된다. 새로
    만드는 스킨과 AI 가 쓰는 이름은 highlight-tools 하나다
    (제거 가능 시점: IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md §12). */
+/* BOTTOM-DOCK-1: "bottom-dock" — 스킨이 "내 레이아웃의 여기에 dock 을
+   두겠다"고 말하는 자리다. 다른 region 과 달리 **선택**이고, 없으면
+   플랫폼이 스킨 루트 바로 뒤에 자기 자리를 만든다
+   (skin/skin-bottom-dock-mount.js ensureSkinDockFlowHost). 자리를
+   그려 두면 흐름(sticky/static) dock 이 스킨이 정한 그 지점에
+   들어간다. post-body 와 마찬가지로 안쪽은 렌더러가 비운다 —
+   내용은 플랫폼이 채운다. */
 const SKIN_SANITIZE_ALLOWED_REGION_NAMES =
-  new Set(["post-body", "owner-tools", "highlight-tools", "memo-tools"]);
+  new Set(["post-body", "owner-tools", "highlight-tools", "memo-tools", "bottom-dock"]);
+
+
+/* =========================================================
+   data-imory-dock (BOTTOM-DOCK-1)
+
+   Bottom Dock template 안에서 **플랫폼이 찾아야 하는 두 자리**를
+   가리킨다. region 과 달리 안쪽을 비우지 않는다 — 여기 적힌 것은
+   전부 스킨이 그린 그림이고, 플랫폼은 그 요소를 붙잡아 상태만
+   바꾼다(접기 트리거로 쓰거나, 접힐 때 감추거나).
+
+     "trigger" 눌러서 접고 펴는 자리. 모양은 스킨이 정한다 —
+               하트든 리본든 작은 사진이든 상관없다(요구사항 9절).
+     "items"   접힐 때 사라지는 덩어리. 없으면 trigger 를 뺀
+               나머지 전부가 접힌다.
+
+   값이 이 둘이 아니면 조용히 제거한다(region 과 같은 규칙).
+   플랫폼이 렌더 뒤에 얹는 상태 속성(data-imory-dock-position /
+   -state / -transition / -open)은 이 목록에 없다 — 저장되는 HTML
+   에는 들어갈 수 없고, 오직 런타임에만 찍힌다.
+========================================================== */
+const SKIN_SANITIZE_DOCK_ATTR = "data-imory-dock";
+const SKIN_SANITIZE_ALLOWED_DOCK_SLOTS =
+  new Set(["trigger", "items"]);
 
 /* =========================================================
    data-imory-edit-id (PHASE AI-6A, Element Inspector + Direct Edit)
@@ -269,6 +299,15 @@ function copySkinSanitizedAttributes(sourceEl, destEl, tag) {
 
       return;
 
+    }
+
+    if (name === SKIN_SANITIZE_DOCK_ATTR) {
+      if (SKIN_SANITIZE_ALLOWED_DOCK_SLOTS.has(value)) {
+        destEl.setAttribute(name, value);
+      } else {
+        console.warn(`[skin-sanitize] dropped unsupported ${name}="${value}"`);
+      }
+      return;
     }
 
     if (name === SKIN_SANITIZE_REGION_ATTR) {

@@ -48,7 +48,13 @@ const SKIN_PACKAGE_NORMALIZE_CSS_CHECK_NAMESPACE = "package-normalize-check";
 /* FOLDER-2: templates.folder(선택)도 같은 sanitize를 거친다.
    HIGHLIGHT-1/2: 하이라이트 화면 template(templates.highlights, 그리고
    레거시 이름 templates.memos)도 마찬가지다. */
-const SKIN_PACKAGE_NORMALIZE_PAGE_TYPES = ["home", "category", "post", "banner", "folder", "highlights", "memos"];
+/* BOTTOM-DOCK-1: templates.dock(선택)도 같은 sanitize 를 거친다 —
+   dock 도 다른 화면과 똑같이 저장 전에 화이트리스트를 통과한
+   마크업만 남는다(IMORY_BOTTOM_DOCK_DESIGN.md). bottomDock **설정**은
+   HTML 이 아니라 데이터라 이 함수가 건드리지 않는다: 그 검증은
+   Import(skin/skin-package-import.js)와 렌더 시점
+   (skin/skin-bottom-dock.js resolveSkinBottomDock) 두 곳이 한다. */
+const SKIN_PACKAGE_NORMALIZE_PAGE_TYPES = ["home", "category", "post", "banner", "folder", "highlights", "memos", "dock"];
 
 async function normalizeSkinPackageForDraft(skinPackage) {
 

@@ -30,6 +30,10 @@
    내보내는 downloadSkinPackageExport 하나만 노출한다. DB RPC 호출은
    없다.
 
+   예외 하나: bottomDock(BOTTOM-DOCK-1)만 skin/skin-bottom-dock.js의
+   normalizeSkinBottomDock()을 **있으면** 쓴다 — 아래 해당 블록의
+   주석 참고(검증 로직을 복사하면 Import와 갈라지기 때문).
+
    classic script — window.buildSkinPackageExport /
    window.serializeSkinPackageExport /
    window.buildSkinPackageExportFilename /
@@ -37,7 +41,7 @@
 ========================================================== */
 
 const SKIN_PACKAGE_EXPORT_PAGE_TYPES =
-  ["home", "category", "post", "banner", "folder", "highlights", "memos"];
+  ["home", "category", "post", "banner", "folder", "highlights", "memos", "dock"];
 
 /*
   Import 쪽(skin/skin-package-import.js requiredPageTypes)과 같은
@@ -196,6 +200,37 @@ function buildSkinPackageExport(skinPackage) {
 
   if (exportedRenderMode) {
     exported.renderMode = exportedRenderMode;
+  }
+
+  /*
+    BOTTOM-DOCK-1 — bottomDock(선택, IMORY_BOTTOM_DOCK_DESIGN.md).
+
+    allowlist 원칙 그대로다: **Import 가 받아들일 모양일 때만** 싣고,
+    그때도 원본이 아니라 정규화된 결과를 싣는다(알 수 없는 추가 키가
+    파일에 섞이지 않는다). 모양이 틀린 값이 어떤 경로로 draft 에
+    들어와 있더라도 "가져올 수 없는 파일"을 만들어 내보내지 않는다.
+
+    ★ 이 파일의 "의존 없음"에 대한 유일한 예외다.
+      normalizeSkinBottomDock(skin/skin-bottom-dock.js)이 없는
+      환경에서는 키를 만들지 않는다 — 판정 규칙을 여기 복사하면
+      두 곳이 갈라져 "Export 는 통과하는데 Import 가 거부하는"
+      파일이 생긴다. 값 목록 하나가 아니라 검증 로직 전체라서
+      renderMode/js 처럼 베껴 적을 수 없다.
+  */
+
+  if (
+    skinPackage.bottomDock !== undefined &&
+    skinPackage.bottomDock !== null &&
+    typeof normalizeSkinBottomDock === "function"
+  ) {
+
+    const dockResult =
+      normalizeSkinBottomDock(skinPackage.bottomDock);
+
+    if (dockResult.ok && dockResult.dock) {
+      exported.bottomDock = dockResult.dock;
+    }
+
   }
 
   /*

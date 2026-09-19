@@ -163,6 +163,14 @@ export async function renderPublishedSkinFolder({ ownerId, categoryId, folderId,
     return false;
   }
 
+  /* BOTTOM-DOCK-1 — 이 화면의 dock 하나 */
+
+  window.syncSkinBottomDockForScreen?.({
+    skinPackage,
+    context,
+    container
+  });
+
   return {
     rendered: true,
     instance: skinInstance,

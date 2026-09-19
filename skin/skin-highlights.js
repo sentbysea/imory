@@ -263,6 +263,12 @@ export async function renderPublishedSkinHighlights({ ownerId, container, view, 
       outcome.sandboxRenderNative =
         prepared.renderNative;
 
+      window.syncSkinBottomDockForScreen?.({
+        skinPackage,
+        context,
+        container
+      });
+
       return true;
 
     }
@@ -292,6 +298,14 @@ export async function renderPublishedSkinHighlights({ ownerId, container, view, 
     return false;
 
   }
+
+  /* BOTTOM-DOCK-1 — 이 화면의 dock 하나 */
+
+  window.syncSkinBottomDockForScreen?.({
+    skinPackage,
+    context,
+    container
+  });
 
   return true;
 

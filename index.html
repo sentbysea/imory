@@ -553,6 +553,26 @@
         "./skin/skin-post-focus.js",
 
         /*
+          BOTTOM-DOCK-1 — 화면 아래 dock(IMORY_BOTTOM_DOCK_DESIGN.md).
+          세 파일이다: 설정/Context 를 만드는 순수 함수
+          (skin-bottom-dock.js) · 접기와 동작(skin-bottom-dock-actions.js) ·
+          실제 화면에 얹는 쪽(skin-bottom-dock-mount.js).
+          ★ 읽는 순서대로 적어 둔다 — 셋 다 최상위 함수 선언뿐이라
+          실행 시점에는 서로를 볼 수 있다.
+
+          mount 는 window.renderSkin(skin/skin-render.js — module 이지만
+          window 에도 노출된다)을 **호출 시점에** 읽으므로 아래 module
+          블록보다 앞이어도 된다. 스킨 화면을 그리는 여섯 진입 모듈이
+          이 전역을 optional chaining 으로 부르므로(window.
+          syncSkinBottomDockForScreen?.(…)), 이 두 파일이 빠진 축소
+          구성에서도 화면은 그대로 그려진다.
+        */
+
+        "./skin/skin-bottom-dock.js",
+        "./skin/skin-bottom-dock-actions.js",
+        "./skin/skin-bottom-dock-mount.js",
+
+        /*
           SANDBOX-1 — sandbox 스킨 경로의 classic script 셋.
           config(기능 플래그·origin 상수) -> protocol(메시지 검증) ->
           context(전달 데이터 투영) 순서로 적었지만 셋 다 서로
@@ -720,6 +740,16 @@
         */
 
         "./posts/posts-highlight.css",
+
+        /*
+          BOTTOM-DOCK-1 — dock 의 **자리 계약**만 담은 파일이다
+          (생김새는 한 줄도 없다, skin/skin-bottom-dock.css 상단 주석).
+          스킨 CSS 는 자기 스코프 클래스 아래에 있어 여기 규칙보다
+          명시도가 높으므로 순서에 민감하지 않지만, 모바일 보정이
+          뒤에서 덮을 수 있게 posts-mobile.css 앞에 둔다.
+        */
+
+        "./skin/skin-bottom-dock.css",
 
         "./posts/posts-mobile.css"
       ]

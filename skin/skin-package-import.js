@@ -61,7 +61,8 @@ const SKIN_PACKAGE_IMPORT_CSS_CHECK_NAMESPACE = "studio-skin-import-check";
 
   reason 값: empty-input / json-parse / not-object / schema-version /
   render-mode / author-js / templates-missing / required-template /
-  banner-template / folder-template / css-type / post-body-region /
+  banner-template / folder-template / highlights-template /
+  dock-template / bottom-dock / css-type / post-body-region /
   folder-body-region / css-validator.
 
   sanitizeSkinHTML()은 거부하지 않고 **조용히 지운다** — 그래서
@@ -297,6 +298,87 @@ async function validateSkinPackageImport(rawJsonText) {
     };
   }
 
+  /*
+    BOTTOM-DOCK-1 — templates.dock(선택). IMORY_BOTTOM_DOCK_DESIGN.md.
+
+    banner/folder 와 같은 **선택** template 이지만 폴백은 하이라이트
+    화면 쪽에 가깝다: 없으면 dock 이 사라지는 게 아니라 플랫폼 기본
+    template 으로 그려진다(skin/skin-bottom-dock.js
+    getDefaultSkinDockTemplate). 그래서 강제하는 것은 "넣었으면 모양이
+    맞아야 한다" 하나뿐이고, 필수 region 검사는 없다.
+  */
+
+  const dockTemplateInput =
+    templatesInput.dock;
+
+  const hasDockTemplate =
+    dockTemplateInput !== undefined &&
+    dockTemplateInput !== null;
+
+  if (
+    hasDockTemplate &&
+    (
+      typeof dockTemplateInput !== "object" ||
+      Array.isArray(dockTemplateInput) ||
+      typeof dockTemplateInput.html !== "string"
+    )
+  ) {
+    return {
+      ok: false,
+      reason: "dock-template",
+      message: "templates.dock을 포함하려면 templates.dock.html이 문자열이어야 합니다."
+    };
+  }
+
+  /*
+    BOTTOM-DOCK-1 — bottomDock(선택). **설정**이지 마크업이 아니다.
+
+    검증은 skin/skin-bottom-dock.js 의 normalizeSkinBottomDock 한
+    곳에만 있다(Studio 폼 · Export · AI 응답 검사가 같은 함수를
+    본다). 여기서는 그 결과를 그대로 쓰고, 실패 사유 문장도 그대로
+    내보낸다 — 어느 항목의 무엇이 틀렸는지가 그 문장에 들어 있다.
+
+    ★ 모양이 틀리면 거부한다(조용히 버리지 않는다). renderMode/js 와
+      같은 판단이다: "저장은 됐는데 dock 이 안 나오는" 상태를 파일만
+      보고 구분할 수 없게 두지 않는다.
+  */
+
+  let normalizedBottomDock =
+    null;
+
+  if (
+    parsed.bottomDock !== undefined &&
+    parsed.bottomDock !== null
+  ) {
+
+    if (typeof normalizeSkinBottomDock !== "function") {
+
+      return {
+        ok: false,
+        reason: "bottom-dock",
+        message: "이 배포는 아직 bottomDock을 지원하지 않습니다."
+      };
+
+    }
+
+    const dockResult =
+      normalizeSkinBottomDock(parsed.bottomDock);
+
+    if (!dockResult.ok) {
+
+      return {
+        ok: false,
+        reason: "bottom-dock",
+        message: dockResult.message
+      };
+
+    }
+
+    normalizedBottomDock =
+      dockResult.dock;
+
+  }
+
   let cssRaw;
 
   if (typeof parsed.css === "string") {
@@ -337,6 +419,11 @@ async function validateSkinPackageImport(rawJsonText) {
   const sanitizedHighlightsHtml =
     hasHighlightsTemplate
       ? sanitizeSkinHTML(highlightsTemplateInput.html)
+      : null;
+
+  const sanitizedDockHtml =
+    hasDockTemplate
+      ? sanitizeSkinHTML(dockTemplateInput.html)
       : null;
 
   if (!htmlHasPostBodyRegion(sanitizedPostHtml)) {
@@ -426,6 +513,10 @@ async function validateSkinPackageImport(rawJsonText) {
     templates[highlightsTemplateKey] = { html: sanitizedHighlightsHtml };
   }
 
+  if (hasDockTemplate) {
+    templates.dock = { html: sanitizedDockHtml };
+  }
+
   const skinPackage =
     {
       schemaVersion: 1,
@@ -442,6 +533,10 @@ async function validateSkinPackageImport(rawJsonText) {
 
   if (hasAuthorJs) {
     skinPackage.js = authorJsInput;
+  }
+
+  if (normalizedBottomDock) {
+    skinPackage.bottomDock = normalizedBottomDock;
   }
 
   /*

@@ -295,6 +295,12 @@ export async function renderPublishedSkinBanner({ ownerId, categoryId, container
       outcome.sandboxRenderNative =
         prepared.renderNative;
 
+      window.syncSkinBottomDockForScreen?.({
+        skinPackage,
+        context,
+        container
+      });
+
       return true;
 
     }
@@ -318,6 +324,14 @@ export async function renderPublishedSkinBanner({ ownerId, categoryId, container
     return false;
 
   }
+
+  /* BOTTOM-DOCK-1 — 이 화면의 dock 하나 */
+
+  window.syncSkinBottomDockForScreen?.({
+    skinPackage,
+    context,
+    container
+  });
 
   return true;
 

@@ -308,7 +308,51 @@ const SKIN_AI_MAX_INSTRUCTION_LENGTH = 2000;
    않기 위해서다. 그래서 이 목록에 "memos" 는 없다. 병합하는 쪽
    (studio/studio-ai-apply.js)이 옛 키를 지우고 새 키로 바꾼다. */
 const SKIN_AI_TEMPLATE_PAGE_TYPES =
-  ["home", "category", "post", "banner", "folder", "highlights"];
+  ["home", "category", "post", "banner", "folder", "highlights", "dock"];
+
+
+/* =========================================================
+   BOTTOM-DOCK-1 — bottomDock 설정의 값 목록
+
+   원본은 skin/skin-bottom-dock.js 다. 이 파일은 Cloudflare Pages
+   Function 이라 브라우저 전역을 쓸 수 없어서(같은 realm 이 아니다)
+   **값 목록만** 옮겨 적는다 — SKIN_AI_MAX_AUTHOR_JS_CHARS 를 세 곳에
+   적어 두는 것과 같은 사정이다. 목록이 바뀌면 두 곳을 함께 고친다.
+
+   ★ 여기서 하는 일은 "거부"가 아니라 **칸 단위로 걸러 받기**다.
+
+   모델이 position 에 오탈자를 내면 그 칸만 현재 값으로 되돌리고,
+   항목 하나의 모양이 틀리면 그 항목만 버린다. 설정 하나 때문에
+   AI 수정 전체가 거부되면(브라우저의 validateSkinPackageImport 가
+   bottomDock 을 거부한다) 사용자는 "색을 바꿔 달라"는 요청이
+   통째로 실패하는 것을 보게 된다.
+========================================================== */
+
+const SKIN_AI_DOCK_POSITIONS =
+  ["auto", "fixed", "sticky", "static"];
+
+const SKIN_AI_DOCK_TRANSITIONS =
+  ["none", "fade", "slide", "scale", "fade-slide", "fade-scale"];
+
+const SKIN_AI_DOCK_STATES =
+  ["expanded", "collapsed"];
+
+const SKIN_AI_DOCK_VISUAL_TYPES =
+  ["icon", "emoji", "text", "image", "asset", "svg"];
+
+const SKIN_AI_DOCK_AUDIENCES =
+  ["all", "owner", "visitor"];
+
+const SKIN_AI_DOCK_NAVIGATE_TARGETS =
+  ["home", "highlights", "gallery", "banner"];
+
+const SKIN_AI_DOCK_ACTION_TARGETS =
+  ["write", "admin", "manage", "share", "theme", "top"];
+
+const SKIN_AI_DOCK_ACTION_TYPES_FOR_SCHEMA =
+  ["navigate", "open", "action"];
+
+const SKIN_AI_DOCK_MAX_ITEMS = 12;
 
 
 /* =========================================================
@@ -1004,13 +1048,258 @@ function normalizeSkinAiInputPackage(input) {
 
   }
 
-  return {
+  const normalized = {
     schemaVersion: input.schemaVersion,
     templates,
     css: typeof input.css === "string" ? input.css : "",
     imageSlots: Array.isArray(input.imageSlots) ? input.imageSlots : [],
     regions: Array.isArray(input.regions) ? input.regions : [],
     metadata: isSkinAiPlainObject(input.metadata) ? input.metadata : {}
+  };
+
+  /*
+    BOTTOM-DOCK-1 — 모델은 dock **설정도** 본다.
+
+    "독이 너무 커. 평소에는 작은 하트만 보이고 누르면 펼쳐지게
+    해줘" 같은 요청은 HTML/CSS 가 아니라 이 설정의 칸 몇 개를
+    바꾸는 일이다(collapsible / defaultState / trigger / transition).
+    현재 값을 보여 주지 않으면 모델은 그 대신 새 마크업과 JS 를
+    지어내려 한다 — 그것이 정확히 요구사항 13절이 막으려는 것이다.
+
+    설정이 없는 스킨에서는 키 자체를 만들지 않는다(지금까지의
+    모든 스킨에서 프롬프트가 한 글자도 달라지지 않는다).
+  */
+
+  if (isSkinAiPlainObject(input.bottomDock)) {
+    normalized.bottomDock = input.bottomDock;
+  }
+
+  return normalized;
+
+}
+
+
+/* =========================================================
+   BOTTOM-DOCK-1 — 모델이 돌려준 bottomDock 을 칸 단위로 걸러 받기
+
+   sanitizeSkinAiBottomDock(fromModel, current) -> object | undefined
+
+   규칙 하나로 요약된다: **모르는 값이면 현재 값을 쓴다.**
+   항목은 하나씩 본다 — 모양이 틀린 항목만 버리고 나머지는 받는다.
+   결과는 언제나 skin/skin-package-import.js 의 bottom-dock 검사를
+   통과하는 모양이다(그래야 AI 수정 전체가 거부되지 않는다).
+
+   ★ 현재 dock 이 없고 모델도 만들지 않았으면 undefined 다 —
+     "없던 dock 이 AI 를 한 번 썼다고 생기는" 일은 없다. 사용자가
+     실제로 요청하면 모델이 만들어 보내고, 그때는 받는다.
+========================================================== */
+
+function pickSkinAiDockEnum(value, allowed, fallback) {
+
+  return (typeof value === "string" && allowed.indexOf(value) !== -1)
+    ? value
+    : fallback;
+
+}
+
+
+function sanitizeSkinAiDockVisual(value) {
+
+  if (!isSkinAiPlainObject(value)) {
+    return null;
+  }
+
+  const type =
+    typeof value.type === "string" ? value.type.trim() : "";
+
+  if (SKIN_AI_DOCK_VISUAL_TYPES.indexOf(type) === -1) {
+    return null;
+  }
+
+  const raw =
+    typeof value.value === "string" ? value.value.trim() : "";
+
+  if (!raw) {
+    return null;
+  }
+
+  if (type === "icon") {
+    return /^[a-z][a-z0-9-]{0,31}$/.test(raw.toLowerCase())
+      ? { type, value: raw.toLowerCase() }
+      : null;
+  }
+
+  if (type === "emoji") {
+    return { type, value: raw.slice(0, 8) };
+  }
+
+  if (type === "text") {
+    return { type, value: raw.slice(0, 24) };
+  }
+
+  if (type === "asset") {
+    return { type, value: raw.slice(0, 64) };
+  }
+
+  /* image / svg — https 주소만 */
+  return /^https:\/\/[^\s"'<>]+$/i.test(raw)
+    ? { type, value: raw.slice(0, 2048) }
+    : null;
+
+}
+
+
+function sanitizeSkinAiDockAction(value) {
+
+  if (!isSkinAiPlainObject(value)) {
+    return null;
+  }
+
+  const type =
+    typeof value.type === "string" ? value.type.trim() : "";
+
+  const target =
+    typeof value.target === "string" ? value.target.trim() : "";
+
+  if (!target) {
+    return null;
+  }
+
+  if (type === "navigate") {
+
+    if (SKIN_AI_DOCK_NAVIGATE_TARGETS.indexOf(target) !== -1) {
+      return { type, target };
+    }
+
+    if (target.startsWith("category:")) {
+      return /^[A-Za-z0-9_-]{1,64}$/.test(target.slice("category:".length))
+        ? { type, target }
+        : null;
+    }
+
+    if (target.startsWith("path:")) {
+      const p = target.slice("path:".length);
+      return (
+        /^\/[A-Za-z0-9/_\-.?=&%]{0,255}$/.test(p) &&
+        p.indexOf("//") === -1 &&
+        p.indexOf("..") === -1
+      )
+        ? { type, target }
+        : null;
+    }
+
+    return null;
+
+  }
+
+  if (type === "open") {
+
+    const panel =
+      (target.startsWith("panel:") ? target.slice("panel:".length) : target).toLowerCase();
+
+    return /^[a-z][a-z0-9-]{0,31}$/.test(panel)
+      ? { type, target: `panel:${panel}` }
+      : null;
+
+  }
+
+  if (type === "action") {
+    return SKIN_AI_DOCK_ACTION_TARGETS.indexOf(target) !== -1
+      ? { type, target }
+      : null;
+  }
+
+  return null;
+
+}
+
+
+function sanitizeSkinAiBottomDock(fromModel, current) {
+
+  const base =
+    isSkinAiPlainObject(current) ? current : null;
+
+  const model =
+    isSkinAiPlainObject(fromModel) ? fromModel : null;
+
+  if (!base && !model) {
+    return undefined;
+  }
+
+  const source =
+    model || base;
+
+  const fallback =
+    base || {};
+
+
+  /* 항목 — 모델이 배열을 줬으면 그것을, 아니면 현재 것을 */
+
+  const rawItems =
+    Array.isArray(source.items)
+      ? source.items
+      : (Array.isArray(fallback.items) ? fallback.items : []);
+
+  const items = [];
+  const seen = new Set();
+
+  for (const raw of rawItems) {
+
+    if (items.length >= SKIN_AI_DOCK_MAX_ITEMS) {
+      break;
+    }
+
+    if (!isSkinAiPlainObject(raw)) {
+      continue;
+    }
+
+    const id =
+      typeof raw.id === "string" ? raw.id.trim().slice(0, 32) : "";
+
+    if (!/^[A-Za-z][A-Za-z0-9_-]{0,31}$/.test(id) || seen.has(id)) {
+      continue;
+    }
+
+    const visual = sanitizeSkinAiDockVisual(raw.visual);
+    const action = sanitizeSkinAiDockAction(raw.action);
+
+    if (!visual || !action) {
+      continue;
+    }
+
+    seen.add(id);
+
+    items.push({
+      id,
+      label: typeof raw.label === "string" ? raw.label.trim().slice(0, 24) : "",
+      audience: pickSkinAiDockEnum(raw.audience, SKIN_AI_DOCK_AUDIENCES, "all"),
+      visual,
+      action
+    });
+
+  }
+
+
+  const trigger =
+    sanitizeSkinAiDockVisual(source.trigger) ||
+    sanitizeSkinAiDockVisual(fallback.trigger) ||
+    { type: "text", value: "⌄" };
+
+  return {
+    visible: source.visible !== false,
+    position: pickSkinAiDockEnum(source.position, SKIN_AI_DOCK_POSITIONS, "auto"),
+    collapsible: source.collapsible === true,
+    defaultState: pickSkinAiDockEnum(source.defaultState, SKIN_AI_DOCK_STATES, "expanded"),
+    transition: pickSkinAiDockEnum(source.transition, SKIN_AI_DOCK_TRANSITIONS, "fade"),
+    trigger: {
+      type: trigger.type,
+      value: trigger.value,
+      label:
+        isSkinAiPlainObject(source.trigger) && typeof source.trigger.label === "string"
+          ? source.trigger.label.trim().slice(0, 24)
+          : ""
+    },
+    items
   };
 
 }
@@ -1070,6 +1359,7 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `templates.banner` is optional. If the current package has a banner template, return it (edited or unchanged). Return null ONLY if the current package has no banner template.",
     "- `templates.folder` is optional (same rule as banner): return the current folder template edited or unchanged; return null ONLY if the current package has no folder template and the user did not ask for a folder page.",
     "- `templates.highlights` is optional (same rule): return the current highlights template edited or unchanged; return null ONLY if the current package has no highlights template and the user did not ask for the highlights page. Returning null does NOT hide the highlights page — the platform draws it with a built-in default template instead.",
+    "- `templates.dock` is optional (same rule): the bottom dock's markup. Returning null does NOT remove the dock — the platform draws a plain default instead. See BOTTOM DOCK below.",
     "- Never declare support for a page you did not actually write. If the package's `metadata.supports` claims a page (for example `supports.highlights: true`), that page MUST have a real template with real bindings; a stub of links or buttons is not one. The mismatch is reported to the owner when they save.",
     "- home  : the blog front page (profile, navigation, recent post list).",
     "- category: one category's post list.",
@@ -1088,7 +1378,8 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "- `data-imory-kind=\"path\"`   writes the resolved kind token into a `data-kind` attribute on the same element, so CSS can style by KIND: `[data-kind=\"image\"]::before { ... }`. Use it for category icons and any other per-kind decoration.",
     "- `data-imory-color=\"path\"`  writes the resolved `#rgb`/`#rrggbb` value into the CSS custom property `--imory-color` on that element. Read it back with `var(--imory-color, <your fallback>)`. This is the ONLY way to use a per-item colour, because the `style` attribute is forbidden.",
     "- `data-imory-region=\"post-body\"` marks the protected post body. It appears once in `templates.post`, and once per repeated post inside `templates.folder` (see FOLDER).",
-    "- `data-imory-region=\"owner-tools\"` marks where the platform's own owner buttons (＋ new post, edit) are placed. Leave the element empty. Only these two region names exist; any other value is stripped.",
+    "- `data-imory-region=\"owner-tools\"` marks where the platform's own owner buttons (＋ new post, edit) are placed. Leave the element empty.",
+    "- `data-imory-region=\"bottom-dock\"` (optional) marks where the bottom dock sits inside your layout when it is in the content flow. Leave the element empty. See BOTTOM DOCK below.",
     "Keep every binding that already exists unless the user explicitly asks to remove that piece of content.",
     "",
     "## Layout primitives (data-imory-layout / data-imory-item / data-imory-slot)",
@@ -1205,6 +1496,28 @@ function buildSkinAiSystemPrompt(hasReferenceImages, hasSelection) {
     "Guard the two lists with `data-imory-if=\"highlights.showCards\"` (cards) and `data-imory-if=\"highlights.view.isFolders\"` (folder grid). `data-imory-if` cannot compare values, so use these precomputed booleans and never test `highlights.view` itself.",
     "item.excerpt is the quoted sentence and item.note is the owner's short note: give the excerpt the visual weight and put the note in a quieter secondary block guarded by `data-imory-if=\"item.hasNote\"`. item.color is the highlight colour — a left border or a small dot reads better than painting the whole card.",
     "Folder covers: use `item.coverUrl` only when `item.hasCover`. `item.coverRatio` is one of \"1:1\", \"3:4\", \"4:3\", \"original\"; the platform stylesheet is not loaded for your template, so express the ratio yourself with aspect-ratio rules if you want it.",
+    "",
+    "### BOTTOM DOCK (bottomDock + templates.dock — the bar of small objects at the bottom of every page)",
+    "The dock is one of Imory's navigation primitives, but its LOOK is never standardised. Do not default to an iOS-style pill, a blurred bar, uniform rounded-square icons or one fixed icon size. A dock may be icon-only, text-only, image-based, transparent, full width, floating, taskbar-like or a few small objects sitting together — whatever suits this skin. Pure black (#000000) is not a default; use it only if the user asks.",
+    "Two separate things:",
+    "- `bottomDock` is DATA the blog owner owns: which items exist, what they do, whether the dock folds, where it sits. Edit its fields; do not express these as new markup.",
+    "- `templates.dock` is the DESIGN: your markup for the dock, bound to `dock.*` exactly like any other template. It is optional — without it the platform draws a plain default. Write one whenever the user wants the dock to look like anything in particular.",
+    "Context paths inside templates.dock:",
+    "dock.items[] (item.id, item.label, item.hasLabel, item.href, item.hasHref, item.isActive, item.visual.isIcon / .isEmoji / .isText / .isImage, item.visual.iconKind, item.visual.text, item.visual.imageUrl)",
+    "dock.collapsible, dock.isCollapsedByDefault, dock.itemCount, dock.hasItems, dock.trigger.text / .iconKind / .imageUrl / .isIcon / .isEmoji / .isText / .isImage",
+    "- Draw each item with one repeated element: `<a data-imory-repeat=\"dock.items\" data-imory-href=\"item.href\">`. Bind the icon with `data-imory-kind=\"item.visual.iconKind\"` and draw the shape in CSS ([data-kind=\"camera\"]), the same rule as category icons — never bake a glyph into the HTML and never pick an icon by position.",
+    "- Items with no address (a panel, share, scroll-to-top) still appear in the list; their `item.href` is null, so guard nothing and let the platform handle the click.",
+    "- Mark two elements so the platform can drive the fold: `data-imory-dock=\"trigger\"` on the small object that folds/unfolds, and `data-imory-dock=\"items\"` on the group that disappears when folded. Those are the ONLY two values. The trigger must stay reachable when folded — never hide it.",
+    "- The platform stamps state on the dock root at render time: `data-imory-dock-position` (fixed/sticky/static), `-state` (expanded/collapsed), `-transition`, and `-open` (the open panel's name). Never write them into your HTML — they are stripped.",
+    "- READ THOSE ATTRIBUTES WITH `:root[...]`, for example `:root[data-imory-dock-open=\"pair\"] .my-panel { display: block; }`. Skin CSS selectors are automatically prefixed with the skin root class, so a bare `[data-imory-dock-open=…] .my-panel` asks for a DESCENDANT carrying the attribute and silently never matches the root itself. This is the same form the platform already uses for `:root[data-imory-post-focus=\"on\"]`.",
+    "bottomDock fields and what a request maps to:",
+    "- position: \"auto\" | \"fixed\" | \"sticky\" | \"static\". \"이 스킨은 한 화면에 다 들어오니까 아래 메뉴는 계속 떠 있게\" -> \"fixed\". \"글이 길어서 아래 메뉴가 따라다니는 게 거슬려\" -> \"static\". auto lets the platform measure the page.",
+    "- collapsible / defaultState / trigger / transition. \"독이 너무 커. 평소에는 작은 하트만 보이고 누르면 펼쳐지게\" -> collapsible:true, defaultState:\"collapsed\", trigger:{type:\"emoji\",value:\"♡\"}, transition:\"fade\" (or \"fade-slide\").",
+    "- items[].action: {type:\"navigate\", target:\"home\" | \"highlights\" | \"gallery\" | \"banner\" | \"category:<id>\" | \"path:/<in-blog path>\"}, {type:\"open\", target:\"panel:<name>\"}, {type:\"action\", target:\"write\" | \"admin\" | \"manage\" | \"share\" | \"theme\" | \"top\"}. \"독에서 하트를 누르면 페어 화면이 열렸으면\" -> an item whose action is {type:\"open\", target:\"panel:pair\"}, plus markup for that panel inside templates.dock shown by `:root[data-imory-dock-open=\"pair\"] .your-panel { display: block; }`.",
+    "- items[].audience: \"owner\" for owner-only actions (write/admin). Visitors never receive those items at all.",
+    "- NEVER compute a URL for a dock item and never invent a target that is not in the lists above. The platform resolves every address; an item pointing at something that does not exist is dropped.",
+    "- There is no search feature in Imory, so there is no search action.",
+    "- Everything the dock needs already exists as a property or a CSS hook. Do not write JavaScript for folding, panels, transitions or navigation.",
     "",
     "### POST",
     "post.id, post.title, post.publishedAtLabel, post.categoryName, post.categoryHref, post.href",
@@ -1406,6 +1719,164 @@ function buildSkinAiTemplateSchema(pageType, nullable) {
 }
 
 
+/* =========================================================
+   BOTTOM-DOCK-1 — bottomDock 의 응답 스키마
+
+   nullable 이다: dock 이 없는 스킨에서 모델이 null 을 주면
+   "dock 없음"이 유지된다(서버가 현재 값으로 되돌린다).
+
+   OpenAI structured outputs 는 required 에 모든 키가 있어야
+   하므로(위 templates 와 같은 제약) 선택 필드도 전부 적고,
+   비워 둘 수 있는 것은 type union 으로 표현한다.
+========================================================== */
+
+function buildSkinAiDockVisualSchema(what) {
+
+  return {
+    type: "object",
+    description:
+      `How the ${what} is drawn. Only these six kinds exist.`,
+    properties: {
+      type: {
+        type: "string",
+        enum: SKIN_AI_DOCK_VISUAL_TYPES,
+        description:
+          "icon = a kind token drawn by your CSS ([data-kind=\"...\"]). " +
+          "emoji / text = literal characters. " +
+          "image / svg = an https:// URL. asset = the name of an existing imageSlot."
+      },
+      value: {
+        type: "string",
+        description:
+          "For icon: a lowercase token (a-z0-9-). For emoji/text: the characters. " +
+          "For image/svg: an https:// URL. For asset: the slot name."
+      }
+    },
+    required: ["type", "value"],
+    additionalProperties: false
+  };
+
+}
+
+
+function buildSkinAiBottomDockSchema() {
+
+  return {
+    type: ["object", "null"],
+    description:
+      "The bottom dock configuration. Return the current one edited or unchanged. " +
+      "Return null ONLY if the skin has no dock and the user did not ask for one.",
+    properties: {
+
+      visible: {
+        type: "boolean",
+        description: "false hides the dock entirely (nothing is rendered)."
+      },
+
+      position: {
+        type: "string",
+        enum: SKIN_AI_DOCK_POSITIONS,
+        description:
+          "auto = the platform measures the page (fixed when it fits one screen, sticky when it scrolls). " +
+          "static = the dock is part of the content flow."
+      },
+
+      collapsible: {
+        type: "boolean",
+        description: "true lets the reader fold the dock down to its trigger."
+      },
+
+      defaultState: {
+        type: "string",
+        enum: SKIN_AI_DOCK_STATES
+      },
+
+      transition: {
+        type: "string",
+        enum: SKIN_AI_DOCK_TRANSITIONS,
+        description:
+          "The platform's shared interaction primitives. Never write your own animation for this."
+      },
+
+      trigger: {
+        type: "object",
+        description:
+          "The small object that folds and unfolds the dock. Its look is yours — a heart, a ribbon, a dot, a tiny image.",
+        properties: {
+          type: {
+            type: "string",
+            enum: SKIN_AI_DOCK_VISUAL_TYPES
+          },
+          value: { type: "string" },
+          label: {
+            type: "string",
+            description: "Short Korean accessible name, e.g. \"메뉴 열기\". May be empty."
+          }
+        },
+        required: ["type", "value", "label"],
+        additionalProperties: false
+      },
+
+      items: {
+        type: "array",
+        maxItems: SKIN_AI_DOCK_MAX_ITEMS,
+        items: {
+          type: "object",
+          properties: {
+
+            id: {
+              type: "string",
+              description: "Stable identifier, letters/digits/_/- starting with a letter."
+            },
+
+            label: {
+              type: "string",
+              description: "Optional visible caption. May be empty for an icon-only dock."
+            },
+
+            audience: {
+              type: "string",
+              enum: SKIN_AI_DOCK_AUDIENCES,
+              description:
+                "owner = only the blog owner gets this item (the data never reaches visitors)."
+            },
+
+            visual: buildSkinAiDockVisualSchema("item"),
+
+            action: {
+              type: "object",
+              properties: {
+                type: {
+                  type: "string",
+                  enum: SKIN_AI_DOCK_ACTION_TYPES_FOR_SCHEMA
+                },
+                target: {
+                  type: "string",
+                  description:
+                    "navigate: " + SKIN_AI_DOCK_NAVIGATE_TARGETS.join(" / ") +
+                    " or category:<id> or path:/<in-blog path>. " +
+                    "open: panel:<lowercase name>. " +
+                    "action: " + SKIN_AI_DOCK_ACTION_TARGETS.join(" / ") + "."
+                }
+              },
+              required: ["type", "target"],
+              additionalProperties: false
+            }
+
+          },
+          required: ["id", "label", "audience", "visual", "action"],
+          additionalProperties: false
+        }
+      }
+
+    },
+    required: ["visible", "position", "collapsible", "defaultState", "transition", "trigger", "items"],
+    additionalProperties: false
+  };
+
+}
+
+
 function buildSkinAiResponseSchema() {
 
   return {
@@ -1426,9 +1897,10 @@ function buildSkinAiResponseSchema() {
           post: buildSkinAiTemplateSchema("post", false),
           banner: buildSkinAiTemplateSchema("banner", true),
           folder: buildSkinAiTemplateSchema("folder", true),
-          highlights: buildSkinAiTemplateSchema("highlights", true)
+          highlights: buildSkinAiTemplateSchema("highlights", true),
+          dock: buildSkinAiTemplateSchema("dock", true)
         },
-        required: ["home", "category", "post", "banner", "folder", "highlights"],
+        required: ["home", "category", "post", "banner", "folder", "highlights", "dock"],
         additionalProperties: false
       },
 
@@ -1436,10 +1908,21 @@ function buildSkinAiResponseSchema() {
         type: "string",
         description:
           "The complete stylesheet for the whole skin. Not a patch."
-      }
+      },
+
+      /*
+        BOTTOM-DOCK-1 — dock **설정**.
+
+        enum 으로 좁혀 두면 모델이 오탈자를 낼 자리가 거의 없어진다.
+        그래도 서버는 받은 값을 칸 단위로 한 번 더 거른다
+        (sanitizeSkinAiBottomDock) — 스키마를 지키지 않는 응답이
+        올 수 있고, 그때 AI 수정 전체가 거부되면 안 된다.
+      */
+
+      bottomDock: buildSkinAiBottomDockSchema()
 
     },
-    required: ["summary", "templates", "css"],
+    required: ["summary", "templates", "css", "bottomDock"],
     additionalProperties: false
   };
 
@@ -1681,7 +2164,17 @@ function extractSkinAiModelOutput(payload) {
         typeof parsed.summary === "string" ? parsed.summary : "",
       css:
         parsed.css,
-      templates
+      templates,
+
+      /*
+        BOTTOM-DOCK-1 — 모양 검사는 여기서 하지 않는다.
+        buildSkinAiResultPackage 가 칸 단위로 걸러 받으므로
+        (sanitizeSkinAiBottomDock) 이상한 값이 와도 결과가 깨지지
+        않는다. 여기서 거부하면 dock 설정 하나 때문에 "색을 바꿔
+        달라"는 수정이 통째로 실패한다.
+      */
+      bottomDock:
+        parsed.bottomDock
     }
   };
 
@@ -1794,6 +2287,28 @@ function buildSkinAiResultPackage(currentPackage, edit, sourcePackage) {
 
   }
 
+  /*
+    BOTTOM-DOCK-1 — dock template 도 banner/folder/highlights 와 같은
+    한 방향 관대함이다. 모델이 null 을 줬는데 현재 패키지에 있으면
+    현재 것을 유지하고, 새로 그렸다면 받는다.
+  */
+
+  const dockFromModel =
+    edit.templates.dock;
+
+  if (isSkinAiPlainObject(dockFromModel) && typeof dockFromModel.html === "string") {
+
+    templates.dock = { html: dockFromModel.html };
+
+  } else if (
+    isSkinAiPlainObject(currentPackage.templates.dock) &&
+    typeof currentPackage.templates.dock.html === "string"
+  ) {
+
+    templates.dock = { html: currentPackage.templates.dock.html };
+
+  }
+
   const result = {
     schemaVersion: 1,
     templates,
@@ -1802,6 +2317,22 @@ function buildSkinAiResultPackage(currentPackage, edit, sourcePackage) {
     regions: currentPackage.regions,
     metadata: currentPackage.metadata
   };
+
+  /*
+    BOTTOM-DOCK-1 — dock **설정**. 모델이 준 값을 칸 단위로 걸러
+    받고, 모르는 값은 현재 값으로 되돌린다(위 sanitizeSkinAiBottomDock).
+    현재도 없고 모델도 만들지 않았으면 키 자체를 만들지 않는다.
+  */
+
+  const bottomDock =
+    sanitizeSkinAiBottomDock(
+      edit.bottomDock,
+      currentPackage.bottomDock
+    );
+
+  if (bottomDock) {
+    result.bottomDock = bottomDock;
+  }
 
 
   /*

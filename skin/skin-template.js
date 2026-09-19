@@ -43,8 +43,14 @@
    저장·export 한 스킨이 있고, 그 파일을 다시 저장하지 않아도 계속 그려져야
    한다. 새로 만드는 스킨과 AI 가 쓰는 이름은 templates.highlights 하나다.
    alias 제거 가능 시점: IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md §12. */
+/* BOTTOM-DOCK-1: "dock" 은 화면이 아니라 **모든 화면에 함께 얹히는
+   조각**이다(IMORY_BOTTOM_DOCK_DESIGN.md). 선택 template 이고, 없으면
+   플랫폼 기본 template 을 쓴다(하이라이트 화면과 같은 폴백). 실제
+   선택은 skin/skin-bottom-dock.js 의 resolveSkinDockTemplate 이
+   하지만, Export/Save/감사가 이 목록을 "아는 template 이름"으로
+   쓰므로 여기에도 있어야 한다. */
 const SKIN_TEMPLATE_PAGE_TYPES =
-  ["home", "category", "post", "banner", "folder", "highlights", "memos"];
+  ["home", "category", "post", "banner", "folder", "highlights", "memos", "dock"];
 
 
 /* 하이라이트 화면 template 의 공식 이름과 레거시 alias (우선순위 순) */

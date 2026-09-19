@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "templates": {
+    "home": {
+      "html": "<div class=\"bd-page\">\n  <header class=\"bd-head\">\n    <h1 class=\"bd-title\" data-imory-bind=\"site.title\"></h1>\n    <p class=\"bd-nick\" data-imory-bind=\"profile.nickname\"></p>\n    <span data-imory-region=\"owner-tools\"></span>\n  </header>\n\n  <nav class=\"bd-nav\">\n    <a class=\"bd-nav-link\" data-imory-repeat=\"navigation.categories\"\n       data-imory-kind=\"item.iconKind\"\n       data-imory-href=\"item.href\" data-imory-bind=\"item.name\"></a>\n  </nav>\n\n  <ol class=\"bd-list\">\n    <li class=\"bd-list-item\" data-imory-repeat=\"home.recentPosts\">\n      <a class=\"bd-list-link\" data-imory-href=\"item.href\" data-imory-bind=\"item.title\"></a>\n      <span class=\"bd-date\" data-imory-bind=\"item.publishedAtLabel\"></span>\n    </li>\n  </ol>\n</div>"
+    },
+    "category": {
+      "html": "<div class=\"bd-page\">\n  <header class=\"bd-head\">\n    <h1 class=\"bd-title\" data-imory-bind=\"category.name\"></h1>\n    <span data-imory-region=\"owner-tools\"></span>\n  </header>\n\n  <ol class=\"bd-list\" data-imory-if=\"category.showPostsList\">\n    <li class=\"bd-list-item\" data-imory-repeat=\"category.posts\">\n      <a class=\"bd-list-link\" data-imory-href=\"item.href\" data-imory-bind=\"item.title\"></a>\n      <span class=\"bd-date\" data-imory-bind=\"item.publishedAtLabel\"></span>\n    </li>\n  </ol>\n\n  <ul class=\"bd-tree\" data-imory-if=\"category.hasFolders\">\n    <li class=\"bd-tree-node\" data-imory-repeat=\"category.tree\">\n      <a class=\"bd-tree-folder\" data-imory-if=\"item.folderHref\"\n         data-imory-href=\"item.folderHref\" data-imory-bind=\"item.name\"></a>\n      <a class=\"bd-list-link\" data-imory-if=\"item.href\"\n         data-imory-href=\"item.href\" data-imory-bind=\"item.title\"></a>\n    </li>\n  </ul>\n\n  <nav class=\"bd-pages\" data-imory-if=\"category.pagination.hasPages\">\n    <a class=\"bd-page-link\" data-imory-repeat=\"category.pagination.pages\"\n       data-imory-href=\"item.href\" data-imory-bind=\"item.label\"></a>\n  </nav>\n\n  <!--\n    ★ 흐름 dock 을 여기 두겠다는 표시. 스킨이 이 자리를 그려 두면\n    플랫폼이 자기 자리를 만들지 않고 여기에 넣는다(fixed 일 때는\n    무시된다 — 그때는 뷰포트에 고정되는 자리가 따로 있다).\n  -->\n  <div class=\"bd-dock-slot\" data-imory-region=\"bottom-dock\"></div>\n</div>"
+    },
+    "post": {
+      "html": "<div class=\"bd-page\">\n  <header class=\"bd-head\">\n    <a class=\"bd-back\" data-imory-if=\"post.categoryHref\"\n       data-imory-href=\"post.categoryHref\" data-imory-bind=\"post.categoryName\"></a>\n    <span data-imory-region=\"owner-tools\"></span>\n  </header>\n\n  <h1 class=\"bd-title\" data-imory-bind=\"post.title\"></h1>\n  <p class=\"bd-date\" data-imory-bind=\"post.publishedAtLabel\"></p>\n\n  <div class=\"bd-body\" data-imory-region=\"post-body\"></div>\n</div>"
+    },
+    "dock": {
+      "html": "<nav class=\"bd-dock\" aria-label=\"바로가기\">\n\n  <span class=\"bd-dock-trigger\" data-imory-dock=\"trigger\"\n        data-imory-if=\"dock.collapsible\"\n        data-imory-bind=\"dock.trigger.text\"></span>\n\n  <ul class=\"bd-dock-items\" data-imory-dock=\"items\">\n\n    <li class=\"bd-dock-item\" data-imory-repeat=\"dock.items\">\n\n      <a class=\"bd-dock-link\"\n         data-imory-href=\"item.href\"\n         data-imory-kind=\"item.visual.iconKind\">\n\n        <span class=\"bd-dock-mark\"\n              data-imory-if=\"item.visual.hasText\"\n              data-imory-bind=\"item.visual.text\"></span>\n\n        <img class=\"bd-dock-photo\"\n             data-imory-if=\"item.visual.isImage\"\n             data-imory-src=\"item.visual.imageUrl\" alt=\"\">\n\n        <span class=\"bd-dock-label\"\n              data-imory-if=\"item.hasLabel\"\n              data-imory-bind=\"item.label\"></span>\n\n      </a>\n\n    </li>\n\n  </ul>\n\n  <!--\n    open 항목(action: panel:about)이 여는 자리.\n    플랫폼은 dock 루트의 data-imory-dock-open 만 바꾸고,\n    무엇이 어떻게 보이는지는 아래 CSS 가 정한다.\n  -->\n  <div class=\"bd-dock-panel\">\n    <p class=\"bd-dock-panel-line\" data-imory-bind=\"profile.nickname\"></p>\n    <p class=\"bd-dock-panel-bio\" data-imory-if=\"profile.bio\" data-imory-bind=\"profile.bio\"></p>\n  </div>\n\n</nav>"
+    }
+  },
+  "css": "/* ── 페이지 ─────────────────────────────────────────── */\n\n.bd-page {\n  --bd-ink: #3a3538;\n  --bd-quiet: #9b9296;\n  --bd-line: #ece7e8;\n  --bd-accent: #d9a7b4;\n\n  max-width: 640px;\n  margin: 0 auto;\n  padding: 28px 20px;\n\n  color: var(--bd-ink);\n  font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif;\n  line-height: 1.75;\n}\n\n.bd-head {\n  display: flex;\n  align-items: center;\n  gap: 10px;\n\n  padding-bottom: 14px;\n  margin-bottom: 18px;\n\n  border-bottom: 1px solid var(--bd-line);\n}\n\n.bd-title { flex: 1 1 auto; margin: 0; font-size: 19px; letter-spacing: 0.06em; }\n.bd-nick  { margin: 0; font-size: 12px; color: var(--bd-quiet); }\n.bd-date  { font-size: 11px; color: var(--bd-quiet); }\n.bd-back  { font-size: 12px; color: var(--bd-quiet); text-decoration: none; }\n\n.bd-nav { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 22px; }\n\n.bd-nav-link {\n  font-size: 12px;\n  color: var(--bd-ink);\n  text-decoration: none;\n  padding-left: 16px;\n  position: relative;\n}\n\n/* 종류마다 다른 표식 — 순서가 아니라 data-kind 로 (재료 일치 계약) */\n.bd-nav-link::before {\n  content: \"\";\n  position: absolute;\n  left: 0;\n  top: 0.55em;\n  width: 7px;\n  height: 7px;\n  background: var(--bd-accent);\n}\n.bd-nav-link[data-kind=\"document\"]::before { border-radius: 1px; }\n.bd-nav-link[data-kind=\"image\"]::before    { border-radius: 50%; }\n.bd-nav-link[data-kind=\"quote\"]::before    { width: 2px; height: 11px; top: 0.4em; }\n.bd-nav-link[data-kind=\"link\"]::before     { height: 2px; width: 11px; top: 0.85em; }\n\n.bd-list, .bd-tree { list-style: none; margin: 0 0 24px; padding: 0; }\n\n.bd-list-item {\n  display: flex;\n  flex-wrap: wrap;\n  align-items: baseline;\n  gap: 10px;\n  padding: 7px 0;\n  border-bottom: 1px dotted var(--bd-line);\n}\n\n.bd-list-link, .bd-tree-folder {\n  color: var(--bd-ink);\n  text-decoration: none;\n  font-size: 14px;\n}\n\n.bd-pages { display: flex; gap: 10px; }\n.bd-page-link { font-size: 12px; color: var(--bd-quiet); text-decoration: none; }\n\n.bd-body { margin-top: 18px; }\n\n[hidden] { display: none !important; }\n\n\n/* ── dock ───────────────────────────────────────────────\n\n   작은 오브젝트들이 모여 있는 느낌. 같은 크기의 네모를 줄세우지\n   않는다 — 종류마다 표식의 모양이 다르고, 아래로 갈수록 여백이\n   넉넉하다. 순검정은 쓰지 않는다.\n──────────────────────────────────────────────────────── */\n\n.bd-dock {\n  display: flex;\n  align-items: flex-end;\n  justify-content: center;\n  gap: 14px;\n\n  padding: 10px 16px 14px;\n\n  font-family: system-ui, -apple-system, \"Segoe UI\", sans-serif;\n}\n\n.bd-dock-items {\n  display: flex;\n  align-items: flex-end;\n  justify-content: center;\n  gap: 20px;\n\n  list-style: none;\n  margin: 0;\n  padding: 0;\n}\n\n.bd-dock-link {\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  gap: 5px;\n\n  text-decoration: none;\n  color: #7e7579;\n\n  font-size: 10px;\n  letter-spacing: 0.1em;\n}\n\n.bd-dock-mark { font-size: 15px; line-height: 1; }\n.bd-dock-mark:empty { display: none; }\n\n.bd-dock-photo { width: 20px; height: 20px; object-fit: contain; }\n\n/* 종류마다 다른 오브젝트 — 하나도 같은 모양이 아니다 */\n.bd-dock-link::before {\n  content: \"\";\n  width: 16px;\n  height: 16px;\n  border: 1px solid #c9bfc3;\n}\n.bd-dock-link[data-kind=\"home\"]::before   { border-radius: 0; transform: rotate(45deg); width: 12px; height: 12px; }\n.bd-dock-link[data-kind=\"camera\"]::before { border-radius: 4px; }\n.bd-dock-link[data-kind=\"quote\"]::before  { border: none; border-left: 2px solid #c9bfc3; height: 15px; width: 6px; }\n.bd-dock-link[data-kind=\"note\"]::before   { border-radius: 2px 8px 2px 2px; }\n.bd-dock-link[data-kind=\"heart\"]::before  { border: none; }\n\n/* 그림이 글자/사진으로 오는 항목에는 표식을 그리지 않는다 */\n.bd-dock-link:not([data-kind])::before { display: none; }\n\n.bd-dock-trigger {\n  font-size: 15px;\n  line-height: 1;\n  color: var(--bd-accent, #d9a7b4);\n}\n\n\n/* 접힘 — 전환은 플랫폼의 공용 primitive 를 쓴다(transition: fade) */\n\n:root[data-imory-dock-state=\"collapsed\"] .bd-dock-items {\n  /* 플랫폼 CSS 가 opacity 를 다루므로 여기서는 자리만 줄인다 */\n  gap: 0;\n}\n\n\n/* 패널 — open 항목이 여는 자리 */\n\n.bd-dock-panel {\n  display: none;\n\n  max-width: 240px;\n  padding: 10px 12px;\n\n  font-size: 12px;\n  line-height: 1.7;\n  color: #6f676a;\n\n  background: #fdfbfb;\n  border: 1px solid #ece7e8;\n  border-radius: 10px;\n}\n\n:root[data-imory-dock-open=\"about\"] .bd-dock-panel { display: block; }\n\n.bd-dock-panel-line { margin: 0; }\n.bd-dock-panel-bio  { margin: 4px 0 0; color: #a49a9e; }\n\n\n/* fixed 로 놓였을 때만 바닥에서 살짝 띄운다 */\n\n:root[data-imory-dock-position=\"fixed\"] .bd-dock {\n  background: rgba(253, 251, 251, 0.92);\n  border-top: 1px solid #f0ebec;\n}\n\n/* 흐름 안에 놓였을 때는 배경도 선도 없다 */\n\n:root[data-imory-dock-position=\"static\"] .bd-dock,\n:root[data-imory-dock-position=\"sticky\"] .bd-dock {\n  background: transparent;\n  border-top: 1px dotted #ece7e8;\n}\n\n\n@media (max-width: 480px) {\n  .bd-page { padding: 20px 16px; }\n  .bd-title { font-size: 17px; }\n  .bd-dock-items { gap: 14px; }\n}",
+  "bottomDock": {
+    "visible": true,
+    "position": "auto",
+    "collapsible": true,
+    "defaultState": "expanded",
+    "transition": "fade",
+    "trigger": {
+      "type": "emoji",
+      "value": "♡",
+      "label": "메뉴 열기"
+    },
+    "items": [
+      {
+        "id": "home",
+        "label": "home",
+        "audience": "all",
+        "visual": {
+          "type": "icon",
+          "value": "home"
+        },
+        "action": {
+          "type": "navigate",
+          "target": "home"
+        }
+      },
+      {
+        "id": "gallery",
+        "label": "photo",
+        "audience": "all",
+        "visual": {
+          "type": "icon",
+          "value": "camera"
+        },
+        "action": {
+          "type": "navigate",
+          "target": "gallery"
+        }
+      },
+      {
+        "id": "quotes",
+        "label": "quotes",
+        "audience": "all",
+        "visual": {
+          "type": "icon",
+          "value": "quote"
+        },
+        "action": {
+          "type": "navigate",
+          "target": "highlights"
+        }
+      },
+      {
+        "id": "about",
+        "label": "about",
+        "audience": "all",
+        "visual": {
+          "type": "icon",
+          "value": "note"
+        },
+        "action": {
+          "type": "open",
+          "target": "panel:about"
+        }
+      },
+      {
+        "id": "write",
+        "label": "write",
+        "audience": "owner",
+        "visual": {
+          "type": "text",
+          "value": "＋"
+        },
+        "action": {
+          "type": "action",
+          "target": "write"
+        }
+      }
+    ]
+  },
+  "imageSlots": [],
+  "regions": [],
+  "metadata": {
+    "title": "Imory Bottom Dock v1",
+    "description": "BOTTOM-DOCK-1 예시 스킨. dock 이 어떻게 '작은 오브젝트들이 모여 있는' 모습이 될 수 있는지 보여 준다 — 종류마다 표식의 모양이 다르고(data-imory-kind → [data-kind]), 접으면 하트 하나만 남고, about 항목은 dock 안의 패널을 연다([data-imory-dock-open]). CATEGORY 에는 흐름 dock 자리를 직접 그려 두었다(data-imory-region=\"bottom-dock\")."
+  }
+}

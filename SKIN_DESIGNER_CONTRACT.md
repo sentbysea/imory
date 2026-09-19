@@ -61,6 +61,19 @@
 
   > **옛 이름 `templates.memos`** — HIGHLIGHT-1 때 저장·export 된 스킨은 같은 화면의 template을 `templates.memos` 라는 이름으로 갖고 있습니다. 그 파일도 **그대로 동작합니다**(우선순위: `highlights` → `memos` → 플랫폼 기본). 새로 만드는 스킨은 `templates.highlights` 하나만 쓰세요. 자세한 내용과 제거 시점: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) §2.
 
+- **`templates.dock`(선택) + `bottomDock`(선택)** — 화면 아래 dock입니다(BOTTOM-DOCK-1). 다른 template과 달리 **화면 하나가 아니라 모든 화면에 함께 얹히는 조각**이고, 짝이 되는 `bottomDock` 설정과 역할이 갈라져 있습니다.
+
+  | | 무엇 | 누가 고치나 |
+  |---|---|---|
+  | `bottomDock` | 어떤 항목이 있고 무엇을 하는가 · 접히는가 · 어디 놓이는가 | 블로그 주인(Studio의 **Dock** 패널)·AI |
+  | `templates.dock` | 그것을 어떻게 그리는가 | 스킨 제작자(Code Editor)·AI |
+
+  `templates.dock`이 없으면 플랫폼 기본 template으로 그려집니다(`getDefaultSkinDockTemplate()`, [skin/skin-bottom-dock.js](skin/skin-bottom-dock.js)) — `templates.highlights`와 같은 폴백입니다. `bottomDock`이 없으면 그 스킨에는 dock이 아예 없습니다.
+
+  dock 템플릿 안에서는 `dock.*` 경로를 쓰고, 플랫폼이 붙잡아야 하는 자리 둘을 `data-imory-dock="trigger"` / `data-imory-dock="items"`로 표시합니다. 자리(fixed/sticky/static)·접기 전환·safe area·클릭 동작은 전부 플랫폼이 담당하며, **생김새는 한 줄도 강제하지 않습니다**. 전체 계약: [IMORY_BOTTOM_DOCK_DESIGN.md](./IMORY_BOTTOM_DOCK_DESIGN.md).
+
+  > `bottomDock`의 모양이 틀리면 Import가 **거부**됩니다(`reason: "bottom-dock"`) — 저장은 됐는데 화면에 아무 일도 일어나지 않는 상태를 파일만 보고 구분할 수 없게 두지 않기 위해서입니다(`renderMode`/`js`와 같은 판단).
+
 ### 1-2. 레거시 단일 페이지 shape (HOME 전용, 여전히 지원됨)
 
 ```jsonc
@@ -86,6 +99,7 @@
 | `css` | string | 공유 CSS. **강제 검증**(CSS validator, 8절). 검증 실패 시 저장 자체가 거부됨(`normalizeSkinPackageForDraft`가 throw). |
 | `imageSlots` | `{name,label,required,aspectRatioHint}[]` | `name`만 실제로 쓰입니다(`images.<name>` context 키가 됨, 10절). `label`/`required`/`aspectRatioHint`는 **코드 어디에서도 읽지 않는 순수 정보성 필드**입니다(Studio UI에서도 참조하는 곳이 없음). |
 | `regions` | array | **완전 미사용**. 항상 빈 배열(`[]`)로만 존재하고 렌더러/새니타이저 어디도 이 필드를 읽지 않습니다. `data-imory-region`(HTML 속성)과 이름이 비슷하지만 이 최상위 `regions` 필드와는 무관합니다. |
+| `bottomDock` | object (선택) | **강제 검증**(`normalizeSkinBottomDock`, [skin/skin-bottom-dock.js](skin/skin-bottom-dock.js)). 모르는 값·모양이 틀린 항목이 있으면 Import 거부. 렌더 시점에는 같은 함수로 한 번 더 좁히되 거부가 아니라 "dock 없음"으로 폴백합니다(공개 화면이 설정 하나 때문에 깨지지 않게). |
 | `metadata.supports` / `metadata.requiredContext` | object / string[] | **순수 정보성**. 렌더러/저장 RPC/Studio 어디도 이 값을 읽어서 분기하지 않습니다. 실제 지원 여부는 오직 `templates.<page>`가 존재하는지로만 판정됩니다. |
 
 ### 1-4. DB 저장 경로 (참고용)

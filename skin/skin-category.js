@@ -327,6 +327,12 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
           ? context.category.pagination.currentPage
           : null;
 
+      window.syncSkinBottomDockForScreen?.({
+        skinPackage,
+        context,
+        container
+      });
+
       return true;
 
     }
@@ -368,6 +374,15 @@ export async function renderPublishedSkinCategory({ ownerId, categoryId, contain
         : null;
 
   }
+
+  /* BOTTOM-DOCK-1 — 이 화면의 dock 하나. 언제나 "지금 화면의 것"만
+     남는다(skin/skin-bottom-dock-mount.js). */
+
+  window.syncSkinBottomDockForScreen?.({
+    skinPackage,
+    context,
+    container
+  });
 
   return true;
 

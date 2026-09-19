@@ -722,6 +722,26 @@ function enterPlatformScreen() {
 
 
   /*
+    BOTTOM-DOCK-1 — 스킨이 아닌 화면에는 dock 이 없다.
+
+    fixed dock 은 document.body 에 떠 있는 플랫폼 chrome 이라
+    #postArea 를 치워도 저절로 사라지지 않는다. 에디터·관리 패널
+    위에 남아 있으면 저장 버튼을 가리고, 그 화면에는 dock 이
+    가리키는 "지금 화면"이라는 것 자체가 없다. 그래서 여기서
+    명시적으로 내린다(hidePlatformMemoEntry 와 같은 자리).
+
+    되돌리는 코드는 두지 않는다 — 스킨 화면으로 돌아가면 각 화면의
+    렌더가 syncSkinBottomDockForScreen 을 다시 부른다.
+  */
+
+  if (typeof hideSkinBottomDock === "function") {
+
+    hideSkinBottomDock();
+
+  }
+
+
+  /*
     소유자 도구(.post-header)가 스킨의 줄에 맞춰 잰 자리에 앉아
     있을 수 있다 — 플랫폼 자기 화면에는 그 좌표가 의미가 없으므로
     기본 자리로 되돌린다(posts/view/posts-view-owner-tools.js).
@@ -1714,6 +1734,20 @@ async function closePostArea(
           "themeMount"
         )
     });
+
+  }
+
+
+  /*
+    BOTTOM-DOCK-1 — 같은 사정이다. HOME 은 다시 그려지지 않으므로
+    직전 화면(CATEGORY/POST/…)의 dock 이 그대로 남는다. HOME 을
+    그릴 때 기억해 둔 재료로 다시 그린다
+    (skin/skin-bottom-dock-mount.js restoreSkinBottomDockForHome).
+  */
+
+  if (typeof restoreSkinBottomDockForHome === "function") {
+
+    restoreSkinBottomDockForHome();
 
   }
 

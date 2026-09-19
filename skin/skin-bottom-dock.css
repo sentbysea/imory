@@ -1,0 +1,284 @@
+/* =========================================================
+   SKIN BOTTOM DOCK — 자리 계약 (플랫폼 몫)
+
+   기준 문서: IMORY_BOTTOM_DOCK_DESIGN.md
+
+   ★ 이 파일은 dock 의 **생김새를 정하지 않는다**.
+
+   배경·테두리·반지름·그림자·blur·아이콘 크기·색은 한 줄도 없다.
+   요구사항 1절의 금지 목록(항상 같은 pill, iOS Dock, 고정 아이콘
+   크기, 같은 배경/blur)이 플랫폼 CSS 에서 새어 나오지 않게 하려는
+   것이다. 여기 있는 것은 스킨이 스스로 할 수 없거나 해서는 안 되는
+   네 가지뿐이다:
+
+     1) 자리   fixed / sticky / static
+     2) 공간   모바일 safe area · 콘텐츠 아래 여백 · 가로 넘침 0
+     3) 상태   접힘/펼침 전환(공용 primitive 여섯)
+     4) 손가락 시각적으로 작은 아이콘이어도 실제 hit area 는 넓게
+
+   스킨 CSS 는 자기 스코프 클래스(.imory-skin-root-iN) 아래에 있어
+   여기 규칙보다 명시도가 높다 — 여백 하나, 정렬 하나까지 스킨이
+   덮어쓸 수 있다.
+========================================================== */
+
+
+/* =========================================================
+   1. 자리
+========================================================== */
+
+/*
+  fixed — 뷰포트 아래. 플랫폼이 document.body 에 만드는 자리다.
+
+  z-index 는 .post-area(50) 보다 위여야 한다 — 글 화면이 뷰포트를
+  덮는 고정 레이어라(posts/posts-base.css) 그보다 아래면 dock 이
+  HOME 에서만 보인다.
+
+  pointer-events: dock 이 없는 좌우 여백까지 클릭을 먹지 않게
+  자리 자체는 통과시키고, 스킨이 그린 dock 덩어리만 받는다.
+*/
+
+.imory-dock-fixed {
+  position: fixed;
+
+  left: 0;
+  right: 0;
+  bottom: 0;
+
+  z-index: 60;
+
+  pointer-events: none;
+
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.imory-dock-fixed > [data-skin-root] {
+  pointer-events: none;
+}
+
+.imory-dock-fixed > [data-skin-root] > * {
+  pointer-events: auto;
+}
+
+
+/*
+  sticky — 스크롤 흐름과 함께 움직이되 바닥에 붙는다. 흐름 자리에
+  들어가 있어야 성립하므로(스크롤 담당 요소 안) 플랫폼은 이때
+  스킨 루트 바로 뒤나 스킨이 그린 bottom-dock region 에 둔다.
+*/
+
+[data-imory-dock-position="sticky"] {
+  position: sticky;
+
+  bottom: 0;
+
+  z-index: 3;
+}
+
+
+/* static — 평범한 콘텐츠의 일부. 아무 것도 하지 않는 것이 계약이다. */
+
+[data-imory-dock-position="static"] {
+  position: static;
+}
+
+
+/*
+  흐름 자리(sticky/static)의 아래 여백도 safe area 를 존중한다 —
+  홈 인디케이터에 dock 이 겹치지 않게.
+*/
+
+.imory-dock-flow,
+[data-imory-dock-position="sticky"],
+[data-imory-dock-position="static"] {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+
+/* =========================================================
+   2. 공간
+========================================================== */
+
+/*
+  가로 넘침 0(요구사항 14절).
+
+  자리 자체는 절대 뷰포트보다 넓어지지 않는다. 안쪽 내용이 넘치면
+  숨기지 않고 **줄바꿈**으로 흘린다 — overflow:hidden 으로 잘린
+  내용을 감추지 않는다는 플랫폼 원칙 그대로다.
+*/
+
+.imory-dock-fixed,
+.imory-dock-flow {
+  max-width: 100%;
+
+  box-sizing: border-box;
+}
+
+[data-imory-dock-position] {
+  max-width: 100%;
+
+  box-sizing: border-box;
+}
+
+[data-imory-dock="items"] {
+  flex-wrap: wrap;
+
+  max-width: 100%;
+}
+
+
+/*
+  fixed dock 이 본문의 마지막 줄을 가리지 않게, 스크롤 담당 요소의
+  아래에 dock 높이만큼 여백을 준다. 높이는 플랫폼이 실측해
+  --imory-bottom-dock-height 로 넘긴다
+  (skin/skin-bottom-dock-mount.js applySkinDockContentPadding).
+
+  ★ 스킨 CSS 에는 손대지 않는다 — 여백은 스킨 루트가 아니라
+    플랫폼이 소유한 스크롤 컨테이너에 준다.
+*/
+
+html.imory-has-bottom-dock #themeMount.theme-mount--skin,
+html.imory-has-bottom-dock .post-area {
+  padding-bottom:
+    calc(
+      var(--imory-bottom-dock-height, 0px) +
+      env(safe-area-inset-bottom, 0px) +
+      12px
+    );
+}
+
+
+/* =========================================================
+   3. 상태 — 접기 / 펼치기
+
+   전환은 여섯 가지 공용 primitive 뿐이다(요구사항 11절). 스킨마다
+   새 JS 애니메이션을 만들지 않게 목록을 여기서 닫는다.
+
+   접힌 상태에서 사라지는 것은 [data-imory-dock="items"] 하나이고,
+   트리거는 **항상 남는다** — 다시 펼 수단이 없는 상태를 만들지
+   않는다(요구사항 10절).
+========================================================== */
+
+[data-imory-dock="items"] {
+  transition:
+    opacity 200ms ease,
+    transform 200ms ease;
+}
+
+/* none — 전환 없이 즉시 */
+
+[data-imory-dock-transition="none"] [data-imory-dock="items"] {
+  transition: none;
+}
+
+/* 접힘 — 공통(무엇이 바뀌는지는 아래 transition 별 규칙) */
+
+[data-imory-dock-state="collapsed"] [data-imory-dock="items"] {
+  opacity: 0;
+
+  pointer-events: none;
+}
+
+[data-imory-dock-transition="none"][data-imory-dock-state="collapsed"] [data-imory-dock="items"] {
+  opacity: 0;
+}
+
+[data-imory-dock-transition="slide"][data-imory-dock-state="collapsed"] [data-imory-dock="items"],
+[data-imory-dock-transition="fade-slide"][data-imory-dock-state="collapsed"] [data-imory-dock="items"] {
+  transform: translateY(12px);
+}
+
+[data-imory-dock-transition="scale"][data-imory-dock-state="collapsed"] [data-imory-dock="items"],
+[data-imory-dock-transition="fade-scale"][data-imory-dock-state="collapsed"] [data-imory-dock="items"] {
+  transform: scale(0.92);
+
+  transform-origin: bottom center;
+}
+
+/* slide/scale 은 "움직임"이 본체다 — 사라지지는 않는다 */
+
+[data-imory-dock-transition="slide"][data-imory-dock-state="collapsed"] [data-imory-dock="items"],
+[data-imory-dock-transition="scale"][data-imory-dock-state="collapsed"] [data-imory-dock="items"] {
+  opacity: 1;
+}
+
+
+/*
+  전환이 끝나면 플랫폼이 hidden 을 얹는다 — 접힌 dock 이 탭 순서와
+  스크린 리더에 남지 않게. 스킨 CSS 에 [hidden] 규칙이 없을 수도
+  있으므로 여기서 한 번 보장한다.
+*/
+
+[data-imory-dock="items"][hidden] {
+  display: none;
+}
+
+
+/* 과도한 애니메이션은 기본값이 아니다(요구사항 11절 마지막 줄) */
+
+@media (prefers-reduced-motion: reduce) {
+
+  [data-imory-dock="items"] {
+    transition: none;
+  }
+
+  [data-imory-dock-state="collapsed"] [data-imory-dock="items"] {
+    transform: none;
+  }
+
+}
+
+
+/* =========================================================
+   4. 손가락
+
+   시각적으로 작은 아이콘이어도 실제 hit area 는 넓게(요구사항
+   10/14절). **크기를 정하는 게 아니라 최소값만 보장한다** — 스킨이
+   더 크게 그리는 것은 자유고, 더 작게 그려도 누를 수 있는 범위는
+   44px 아래로 내려가지 않는다.
+========================================================== */
+
+/*
+  ★ display 한 줄은 예외적으로 플랫폼이 준다.
+
+  min-width/min-height 는 인라인 박스에서 무시된다 — 항목을 그냥
+  <a> 나 <span> 으로 그린 스킨에서는 44px 보장이 글자로만 남고
+  실제 손가락 영역은 글자 크기 그대로가 된다. 그래서 "누를 수 있는
+  넓이"가 성립하도록 최소한의 display 만 준다. 생김새를 정하는
+  선언이 아니고, 스킨 CSS 는 자기 스코프 클래스 아래에 있어
+  명시도가 높으므로 block 이든 grid 든 원하는 대로 덮어쓴다.
+*/
+
+[data-imory-dock-item],
+[data-imory-dock="trigger"] {
+  display: inline-flex;
+
+  align-items: center;
+  justify-content: center;
+
+  min-width: 44px;
+  min-height: 44px;
+
+  touch-action: manipulation;
+}
+
+/*
+  위 display 한 줄이 브라우저 기본 [hidden] 규칙을 이겨 버리므로
+  (작성자 스타일이 UA 스타일보다 세다) 곧바로 되돌려 둔다 —
+  data-imory-if 로 숨긴 트리거가 계속 보이던 문제.
+*/
+
+[data-imory-dock-item][hidden],
+[data-imory-dock="trigger"][hidden] {
+  display: none;
+}
+
+[data-imory-dock-item]:focus-visible,
+[data-imory-dock="trigger"]:focus-visible {
+  outline: 2px solid currentColor;
+
+  outline-offset: 2px;
+}
+
+[data-imory-dock="trigger"] {
+  cursor: pointer;
+}
