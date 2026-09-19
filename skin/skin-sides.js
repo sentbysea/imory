@@ -255,12 +255,100 @@ function writeSkinSidesSetting(regions, setting) {
 }
 
 
-/* 렌더 재료에 싣는 모양 — 영역 설정이 없으면 undefined(키를 만들지 않는다) */
+/*
+  EDITORIAL-DEFAULT-SKIN-2 — 모바일에서 좌우 영역을 패널로 열 수 있는가.
+
+  같은 영역 항목의 `mobile` 칸이다. 정확히 false 일 때만 "모바일에서는
+  이 영역을 두지 않는다"이고, 없으면 지금까지처럼 패널로 연다. 칼럼
+  (넓은 화면)에는 영향이 없다.
+
+    { "name": "right_sidebar", "enabled": true, "mobile": false }
+
+  readSkinSidesMobileSetting(regions) -> { left, right }  (true = 패널로 연다)
+*/
+function readSkinSidesMobileSetting(regions) {
+
+  const allowed = { left: true, right: true };
+
+  const seen = {};
+
+  (Array.isArray(regions) ? regions : []).forEach((entry) => {
+
+    if (!isSkinSidesRegionEntry(entry)) {
+      return;
+    }
+
+    const side =
+      entry.name === SKIN_SIDES_REGION_NAMES.left ? "left" : "right";
+
+    if (seen[side]) {
+      return;
+    }
+
+    seen[side] = true;
+
+    allowed[side] = entry.mobile !== false;
+
+  });
+
+  return allowed;
+
+}
+
+
+/*
+  writeSkinSidesMobileSetting(regions, allow) -> 새 regions 배열
+
+  두 영역에 같은 값을 쓴다(Studio 에는 "모바일에서 좌우 영역" 하나다).
+  허용이면 `mobile` 칸을 지운다 — 기본값을 적어 두지 않는다. 영역 항목이
+  없으면 꺼진 채로 만든다(단 구성은 바꾸지 않는다).
+*/
+function writeSkinSidesMobileSetting(regions, allow) {
+
+  const current = readSkinSidesSetting(regions) || { left: false, right: false };
+
+  const withEntries = writeSkinSidesSetting(regions, current);
+
+  return withEntries.map((entry) => {
+
+    if (!isSkinSidesRegionEntry(entry)) {
+      return entry;
+    }
+
+    const copy = { ...entry };
+
+    if (allow) {
+      delete copy.mobile;
+    } else {
+      copy.mobile = false;
+    }
+
+    return copy;
+
+  });
+
+}
+
+
+/* 렌더 재료에 싣는 모양 — 영역 설정이 없으면 undefined(키를 만들지 않는다).
+   모바일에서 끈 쪽이 있을 때만 `mobile` 을 싣는다(지금까지의 봉투 그대로). */
 function buildSkinSidesRenderSetting(skinPackage) {
 
   const setting = resolveSkinSidesSetting(skinPackage);
 
-  return setting ? { left: setting.left, right: setting.right } : undefined;
+  if (!setting) {
+    return undefined;
+  }
+
+  const result = { left: setting.left, right: setting.right };
+
+  const mobile = readSkinSidesMobileSetting(skinPackage && skinPackage.regions);
+
+  if (!mobile.left || !mobile.right) {
+    result.mobile = { left: mobile.left, right: mobile.right };
+  }
+
+  return result;
 
 }
 
@@ -272,7 +360,18 @@ function coerceSkinSidesRenderSetting(value) {
     return { left: false, right: false };
   }
 
-  return { left: value.left === true, right: value.right === true };
+  const result = { left: value.left === true, right: value.right === true };
+
+  const mobile = value.mobile;
+
+  if (
+    mobile && typeof mobile === "object" && !Array.isArray(mobile) &&
+    (mobile.left === false || mobile.right === false)
+  ) {
+    result.mobile = { left: mobile.left !== false, right: mobile.right !== false };
+  }
+
+  return result;
 
 }
 
@@ -558,9 +657,20 @@ function createSkinSidesController(frame, setting, options) {
 
   const count = 1 + (enabled.left ? 1 : 0) + (enabled.right ? 1 : 0);
 
-  const onList = SKIN_SIDES.filter((side) => enabled[side]).join(" ");
+  /* EDITORIAL-DEFAULT-SKIN-2 — 모바일(패널)에서는 두지 않는 쪽. 칼럼일
+     때는 켜진 그대로이고, 패널일 때만 꺼진 쪽처럼 보인다(여는 버튼도
+     없다). 칼럼/패널 판정의 폭 계산은 바꾸지 않는다. */
+  const noDrawer = {
+    left: !!(setting.mobile && setting.mobile.left === false),
+    right: !!(setting.mobile && setting.mobile.right === false)
+  };
 
-  frame.setAttribute(SKIN_SIDES_RUNTIME_ON, onList);
+  const usable = (side) =>
+    enabled[side] && !(state.layout === "drawer" && noDrawer[side]);
+
+  const onListNow = () => SKIN_SIDES.filter(usable).join(" ");
+
+  frame.setAttribute(SKIN_SIDES_RUNTIME_ON, SKIN_SIDES.filter((side) => enabled[side]).join(" "));
   frame.setAttribute(SKIN_SIDES_RUNTIME_COUNT, String(count));
 
 
@@ -761,6 +871,17 @@ function createSkinSidesController(frame, setting, options) {
       return;
     }
 
+    /* 모바일에서 두지 않는 쪽 — 패널일 때는 꺼진 영역과 같다 */
+    if (!usable(side)) {
+      area.setAttribute(SKIN_SIDES_RUNTIME_STATE, "off");
+      area.setAttribute("inert", "");
+      if (area.getAttribute("aria-modal") === "true") {
+        area.removeAttribute("role");
+        area.removeAttribute("aria-modal");
+      }
+      return;
+    }
+
     let next;
 
     if (state.layout !== "drawer") {
@@ -797,6 +918,11 @@ function createSkinSidesController(frame, setting, options) {
     if (state.layout) {
       frame.setAttribute(SKIN_SIDES_RUNTIME_LAYOUT, state.layout);
     }
+
+    /* 보이는 쪽 목록 — 모바일에서 두지 않는 쪽은 패널일 때 빠진다
+       (스킨 CSS 가 "오른쪽이 없으면 본문에 최근 글" 같은 규칙을 이
+       값으로 쓴다) */
+    frame.setAttribute(SKIN_SIDES_RUNTIME_ON, onListNow());
 
     if (state.active) {
       frame.setAttribute(SKIN_SIDES_RUNTIME_ACTIVE, state.active);
@@ -1020,7 +1146,7 @@ function createSkinSidesController(frame, setting, options) {
 
     const o = openOptions || {};
 
-    if (state.destroyed || state.layout !== "drawer" || !enabled[side]) {
+    if (state.destroyed || state.layout !== "drawer" || !usable(side)) {
       return false;
     }
 
@@ -1497,6 +1623,8 @@ if (typeof window !== "undefined") {
   window.readSkinSidesSetting = readSkinSidesSetting;
   window.resolveSkinSidesSetting = resolveSkinSidesSetting;
   window.writeSkinSidesSetting = writeSkinSidesSetting;
+  window.readSkinSidesMobileSetting = readSkinSidesMobileSetting;
+  window.writeSkinSidesMobileSetting = writeSkinSidesMobileSetting;
   window.skinSidesCount = skinSidesCount;
   window.skinSidesSettingForCount = skinSidesSettingForCount;
   window.buildSkinSidesRenderSetting = buildSkinSidesRenderSetting;
@@ -1534,6 +1662,8 @@ if (typeof module !== "undefined" && module.exports) {
     readSkinSidesSetting,
     resolveSkinSidesSetting,
     writeSkinSidesSetting,
+    readSkinSidesMobileSetting,
+    writeSkinSidesMobileSetting,
     skinSidesCount,
     skinSidesSettingForCount,
     buildSkinSidesRenderSetting,

@@ -1652,6 +1652,42 @@ export async function mountSandboxSkin(options) {
    SANDBOX-4 와 byte 단위로 같다.
 ========================================================== */
 
+/* 좌우 영역 설정 봉투 — { left, right } (+ 모바일에서 끈 쪽이 있으면 mobile) */
+export function copySandboxSidesSetting(sides) {
+
+  const copy = {
+    left: sides.left === true,
+    right: sides.right === true
+  };
+
+  const mobile = sides.mobile;
+
+  if (
+    mobile && typeof mobile === "object" &&
+    (mobile.left === false || mobile.right === false)
+  ) {
+    copy.mobile = { left: mobile.left !== false, right: mobile.right !== false };
+  }
+
+  return copy;
+
+}
+
+
+/* 스킨 설정 봉투 — 모양이 틀리거나 비었으면 undefined(키를 만들지 않는다) */
+export function copySandboxSkinSettings(settings) {
+
+  if (!settings || typeof settings !== "object") {
+    return undefined;
+  }
+
+  return typeof coerceSkinSettingsRenderSetting === "function"
+    ? coerceSkinSettingsRenderSetting(settings)
+    : undefined;
+
+}
+
+
 function buildSandboxTemplatePayload(template, authorJs) {
 
   const payload = {
@@ -1662,10 +1698,15 @@ function buildSandboxTemplatePayload(template, authorJs) {
   /* 좌우 영역 설정 — resolveSkinTemplate 이 regions 에서 만든다. 영역
      설정이 없는 스킨은 키 자체가 없다(봉투가 지금까지와 같다). */
   if (template.sides && typeof template.sides === "object") {
-    payload.sides = {
-      left: template.sides.left === true,
-      right: template.sides.right === true
-    };
+    payload.sides = copySandboxSidesSetting(template.sides);
+  }
+
+  /* 주인의 스킨 설정(색 · 사진 구성 · D-day) — 설정이 없는 스킨은 키가
+     없다. 알려진 칸만 새 리터럴로 옮긴다(skin/skin-settings.js). */
+  const settings = copySandboxSkinSettings(template.settings);
+
+  if (settings) {
+    payload.settings = settings;
   }
 
   if (typeof authorJs === "string" && authorJs) {

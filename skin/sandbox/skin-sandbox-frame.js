@@ -917,6 +917,22 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         left: payload.template.sides.left === true,
         right: payload.template.sides.right === true
       };
+      /* 모바일에서 끈 쪽(EDITORIAL-DEFAULT-SKIN-2) — 프로토콜이 모양을 확인했다 */
+      if (payload.template.sides.mobile) {
+        skin.sides.mobile = {
+          left: payload.template.sides.mobile.left === true,
+          right: payload.template.sides.mobile.right === true
+        };
+      }
+    }
+
+    /* 주인의 스킨 설정(색 · 사진 구성 · D-day, skin/skin-settings.js) —
+       프로토콜이 모양을 확인했고, 한 번 더 알려진 칸만 옮긴다. */
+    if (payload.template.settings && typeof coerceSkinSettingsRenderSetting === "function") {
+      const settings = coerceSkinSettingsRenderSetting(payload.template.settings);
+      if (settings) {
+        skin.settings = settings;
+      }
     }
 
 

@@ -33,7 +33,16 @@ import "./skin-css-validate.js";
 
 async function createInitialSkinFromAnswers(answers) {
 
-  const skinPackage = generateInitialSkin(answers);
+  /* EDITORIAL-DEFAULT-SKIN-2 — 새 사용자의 첫 스킨은 아이모리 기본
+     스킨(skin/skin-default-editorial.js)이다. 문답의 단 구성 · 분위기가
+     그 스킨의 설정(regions)이 된다. 이 경로는 스킨이 하나도 없는
+     사람에게만 열린다(studio-state.js "first-time") — 이미 스킨이 있는
+     사람의 스킨은 바뀌지 않는다. 기본 스킨 파일이 없는 문서면 예전
+     생성기로 간다. */
+  const skinPackage =
+    typeof createImoryEditorialDefaultSkin === "function"
+      ? createImoryEditorialDefaultSkin(imoryEditorialOptionsFromAnswers(answers))
+      : generateInitialSkin(answers);
 
   const finalPackage = await normalizeSkinPackageForDraft(skinPackage);
 

@@ -173,6 +173,11 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/skin/skin-sides.js",
   "/skin/skin-sides.css",
 
+  /* 주인의 스킨 설정 — 색 네 역할 · HOME 사진 구성 · D-day
+     (IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md). 없으면 같은 스킨이 프레임에서만
+     기본색 · 사진 전부 · D-day 없음으로 그려진다. */
+  "/skin/skin-settings.js",
+
   /* =====================================================
      SANDBOX-3.2 — POST 본문의 class 규칙. 공개 화면과 **같은
      파일**이다.

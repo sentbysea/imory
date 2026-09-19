@@ -328,9 +328,9 @@
         window.__capturedMetadataB ? Object.keys(window.__capturedMetadataB) : [];
 
       record(
-        "B4. 생성된 Skin의 metadata에는 generatedBy/supports만 남고 Questionnaire 답변(layoutPreference/baseAppearance/homeStyle)은 저장되지 않는다",
+        "B4. 생성된 Skin의 metadata에는 generatedBy/supports만 남고 Questionnaire 답변(layoutPreference/baseAppearance/homeStyle)은 저장되지 않는다(EDITORIAL-DEFAULT-SKIN-2부터 첫 스킨은 아이모리 기본 스킨)",
         !!window.__capturedMetadataB &&
-          window.__capturedMetadataB.generatedBy === "deterministic-v1" &&
+          window.__capturedMetadataB.generatedBy === "imory-editorial-default-v2" &&
           capturedMetadataBKeys.every((key) => key === "generatedBy" || key === "supports") &&
           !("layoutPreference" in window.__capturedMetadataB) &&
           !("baseAppearance" in window.__capturedMetadataB) &&

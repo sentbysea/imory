@@ -176,6 +176,9 @@
     시점을 앞당겨도 다른 프로덕션 스크립트 동작에는 영향이 없다.
   -->
   <script src="../skin/skin-generator.js"></script>
+  <!-- 아이모리 기본 스킨(EDITORIAL-DEFAULT-SKIN-2) — production studio/index.html 처럼
+       skin-initializer.js 보다 먼저. 첫 스킨(scenario b)이 이 스킨이다. -->
+  <script src="../skin/skin-default-editorial.js"></script>
 
   <!-- =========================================================
        MOCK SUPABASE CLIENT (test only) — 실제 supabase-js/
@@ -1324,6 +1327,118 @@
 
               window.top.__publishedLay =
                 version ? version.content : null;
+
+              return { data: skinRow ? skinRow.current_published_version_id : null, error: null };
+
+            }
+          }
+        },
+
+        /*
+          Scenario EDS (EDITORIAL-DEFAULT-SKIN-2) — 아이모리 기본 스킨.
+          기준 문서: IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md
+          e2e: studio/studio-editorial-default-e2e-test.mjs
+
+          기본 content 는 실제 createImoryEditorialDefaultSkin()(3단)이다.
+          addInitScript 가 바꿔 끼울 수 있는 것:
+            window.__scenarioEdsSkinPackage  저장한 content 로 다시 열기
+            window.__scenarioEdsSlots        그 draft 의 슬롯 연결
+            window.__scenarioEdsEmpty        글 · 카테고리 · 소개가 없는 새 계정
+          사진 주소는 https://imory-test.invalid/photo-N.svg — 테스트가
+          page.route 로 그 자리에서 만든 색 SVG 를 돌려준다(사용자 원화 없음).
+        */
+        eds: {
+          userId: "user-eds",
+          imageLibrary: {
+            versionSlots: {
+              "draft-eds1": window.__scenarioEdsSlots || {
+                photo_1: { imageId: "img-eds-1", imageUrl: "https://imory-test.invalid/photo-1.svg" }
+              }
+            },
+            images: [
+              { id: "img-eds-1", public_url: "https://imory-test.invalid/photo-1.svg", file_name: "photo-1.svg", byte_size: 100 },
+              { id: "img-eds-2", public_url: "https://imory-test.invalid/photo-2.svg", file_name: "photo-2.svg", byte_size: 100 },
+              { id: "img-eds-3", public_url: "https://imory-test.invalid/photo-3.svg", file_name: "photo-3.svg", byte_size: 100 },
+              { id: "img-eds-4", public_url: "https://imory-test.invalid/photo-4.svg", file_name: "photo-4.svg", byte_size: 100 }
+            ]
+          },
+          tables: {
+            skins: [
+              { id: "skin-eds1", user_id: "user-eds", is_active: true, current_draft_version_id: "draft-eds1", current_published_version_id: null }
+            ],
+            skin_versions: [
+              {
+                id: "draft-eds1",
+                content:
+                  window.__scenarioEdsSkinPackage ||
+                  (typeof window.createImoryEditorialDefaultSkin === "function"
+                    ? window.createImoryEditorialDefaultSkin({ columns: 3 })
+                    : { schemaVersion: 1, templates: { home: { html: "<p>no default skin</p>" } }, css: "", imageSlots: [], regions: [], metadata: {} })
+              }
+            ],
+            skin_image_slot_values: [],
+            profiles: [{ user_id: "user-eds", nickname: "Scenario EDS", bio: window.__scenarioEdsEmpty ? null : "Hong Jiwon × Moon Suyoung", slug: "scenario-eds" }],
+            site_settings: [{ user_id: "user-eds", key: "blog_title", value: "Forever, My Foe" }],
+            categories: window.__scenarioEdsEmpty ? [] : [
+              { id: "501", user_id: "user-eds", name: "TXT", type: "post", sort_order: 1 },
+              { id: "502", user_id: "user-eds", name: "IMG", type: "gallery", sort_order: 2 }
+            ],
+            posts: window.__scenarioEdsEmpty ? [] : [
+              { id: "601", user_id: "user-eds", title: "첫 장면", created_at: "2026-09-01T00:00:00Z", visibility: "public", category_id: "501", content: "본문" },
+              { id: "602", user_id: "user-eds", title: "창가에서 읽은 것", created_at: "2026-09-02T00:00:00Z", visibility: "public", category_id: "501", content: "본문" }
+            ],
+            banners: []
+          },
+          rpcHandlers: {
+            save_skin_draft_version_with_image_slots: function (params) {
+              return state.rpcHandlers.save_skin_draft_version(params);
+            },
+            save_skin_draft_version: function (params) {
+
+              window.top.__savedDraftCallsEds =
+                window.top.__savedDraftCallsEds || [];
+
+              window.top.__savedDraftCallsEds.push(JSON.parse(JSON.stringify(params)));
+
+              const newVersionId =
+                "draft-eds" + (state.tables.skin_versions.length + 1);
+
+              state.tables.skin_versions.push({
+                id: newVersionId,
+                content: params.p_content
+              });
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_draft_version_id = newVersionId;
+              }
+
+              return { data: newVersionId, error: null };
+
+            },
+            publish_skin: function (params) {
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_published_version_id = skinRow.current_draft_version_id;
+              }
+
+              const version =
+                skinRow &&
+                state.tables.skin_versions.find(function (row) {
+                  return row.id === skinRow.current_published_version_id;
+                });
+
+              window.top.__publishedEds =
+                version ? JSON.parse(JSON.stringify(version.content)) : null;
 
               return { data: skinRow ? skinRow.current_published_version_id : null, error: null };
 
@@ -2650,6 +2765,7 @@
   <script src="../skin/skin-layout.js"></script>
   <script src="../skin/skin-transition.js"></script>
   <script src="../skin/skin-sides.js"></script>
+  <script src="../skin/skin-settings.js"></script>
   <script src="../skin/skin-sanitize.js"></script>
   <script src="../skin/skin-package-normalize.js"></script>
   <!-- skin-generator.js는 위(mock 정의보다 먼저)에서 이미 로드했다 -->
@@ -2696,6 +2812,7 @@
   <script src="./dock/dock-panel.js"></script>
   <!-- HOME 단 구성 패널 — studio/index.html 과 같은 자리 -->
   <script src="./sides/sides-panel.js"></script>
+  <script src="./sides/home-settings-panel.js"></script>
   <script src="./studio-preview.js"></script>
   <script src="./preview/preview-route.js"></script>
   <!-- PHASE 1C-I — production과 동일한 순서(studio/index.html 참고) -->

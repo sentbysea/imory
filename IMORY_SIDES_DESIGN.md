@@ -86,6 +86,7 @@
 | 영역 항목이 하나도 없음(`[]`) | 설정 없음 = 둘 다 꺼짐. 틀이 없는 기존 스킨은 어차피 아무것도 바뀌지 않는다 |
 | 쓰기(`writeSkinSidesSetting`) | 항목을 **지우지 않고** `enabled` 만 바꾼다(항목의 다른 칸도 보존) — 숨겼다 다시 켜도 같은 자리 |
 | 1 · 2 · 3단 | `{}` · `{right}` · `{left,right}`. 2단은 오른쪽(요구사항 2절). 왼쪽만 켠 설정은 데이터로는 허용되고 렌더도 되지만 Studio 의 세 선택지에는 없다 |
+| `mobile: false` (EDITORIAL-DEFAULT-SKIN-2) | 그 쪽은 **패널(좁은 화면)일 때만** 꺼진 영역과 같다 — `off` · 여는 버튼 없음 · `-on` 에서 빠짐. 칼럼과 폭 판정은 그대로. 봉투에는 끈 쪽이 있을 때만 `sides.mobile = { left, right }`. 쓰기는 `writeSkinSidesMobileSetting`(두 영역에 같은 값 · 켜면 칸을 지운다). [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](./IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) §4-5 |
 
 렌더 재료: `resolveSkinTemplate()` 이 `sides: { left, right }` 를 싣는다 —
 **영역 항목이 없는 스킨이면 키 자체를 만들지 않는다**(sandbox 봉투 ·

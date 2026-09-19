@@ -1031,10 +1031,24 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
         ? buildSkinCropGuardCss(template.content, cssResult.editRules, cssResult.scopeClass)
         : "";
 
+    /* EDITORIAL-DEFAULT-SKIN-2 — 주인이 고른 색 네 역할을 스킨 루트의
+       custom property 로(skin/skin-settings.js). 스킨은
+       var(--imory-color-*, 기본값) 로 읽는다. 값은 검증된 #rrggbb 뿐이고,
+       설정이 없으면 한 글자도 붙지 않는다. */
+    const themeCss =
+      cssResult.ok && typeof buildSkinThemeColorsCss === "function"
+        ? buildSkinThemeColorsCss(currentSkin?.settings?.colors, cssResult.scopeClass)
+        : "";
+
+    const cssWithTheme =
+      themeCss
+        ? `${themeCss}\n${safeCss}`
+        : safeCss;
+
     styleEl.textContent =
       cropGuardCss
-        ? `@layer ${SKIN_CROP_GUARD_LAYER};\n${safeCss}\n${cropGuardCss}`
-        : safeCss;
+        ? `@layer ${SKIN_CROP_GUARD_LAYER};\n${cssWithTheme}\n${cropGuardCss}`
+        : cssWithTheme;
 
     root.appendChild(styleEl);
 
@@ -1043,7 +1057,19 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
     container.appendChild(root);
     currentRoot = root;
 
-    const resolveTopLevel = (path) => resolveSkinPath(currentContext, path);
+    /* EDITORIAL-DEFAULT-SKIN-2 — `settings.*` 는 Context 가 아니라 스킨
+       설정(skin.settings, resolveSkinTemplate 이 regions 에서 만든다)에서
+       온다. D-day 처럼 오늘 날짜로 계산되는 값이라 그릴 때 만든다.
+       설정 파일이 없는 문서면 이 이름은 아무것도 가리키지 않는다. */
+    const settingsScope =
+      typeof buildSkinSettingsContext === "function"
+        ? { settings: buildSkinSettingsContext(currentSkin?.settings) }
+        : null;
+
+    const resolveTopLevel = (path) =>
+      settingsScope && typeof path === "string" && (path === "settings" || path.startsWith("settings."))
+        ? resolveSkinPath(settingsScope, path)
+        : resolveSkinPath(currentContext, path);
 
     Array.from(root.children)
       .filter((child) => child !== styleEl)
@@ -1063,6 +1089,14 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
        스킨의 outerHTML 이 글자 단위로 그대로다
        (skin/skin-layout.js 7절).
     ====================================================== */
+    /* HOME 사진 구성(skin/skin-settings.js) — walk **뒤**다: 어느 사진이
+       채워졌는지는 data-imory-if 가 슬롯 값을 보고 정한 hidden 으로 안다.
+       배치보다 먼저 — 접힌 사진이 격자의 칸을 차지하지 않게.
+       사진 묶음이 없는 스킨에서는 어떤 요소도 건드리지 않는다. */
+    if (typeof compileSkinPhotos === "function") {
+      compileSkinPhotos(root, currentSkin?.settings?.photos);
+    }
+
     if (typeof compileSkinLayoutTree === "function") {
       compileSkinLayoutTree(root);
     }

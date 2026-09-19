@@ -125,7 +125,9 @@ import {
   sendSandboxInspectParent,
   sendSandboxInspectCaps,
   sendSandboxInspectPreview,
-  destroySandboxSkinFrame
+  destroySandboxSkinFrame,
+  copySandboxSidesSetting,
+  copySandboxSkinSettings
 } from "../../skin/sandbox/skin-sandbox-host.js";
 
 
@@ -543,10 +545,15 @@ export async function renderSandboxPreview(options) {
   /* 좌우 영역 설정 — js 와 같은 사정이다(여기서 옮기지 않으면 sandbox
      Preview 에서만 영역이 조용히 꺼진다). IMORY_SIDES_DESIGN.md */
   if (opts.skin.sides && typeof opts.skin.sides === "object") {
-    template.sides = {
-      left: opts.skin.sides.left === true,
-      right: opts.skin.sides.right === true
-    };
+    template.sides = copySandboxSidesSetting(opts.skin.sides);
+  }
+
+  /* 주인의 스킨 설정(색 · 사진 구성 · D-day) — sides 와 같은 사정이다
+     (IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) */
+  const settings = copySandboxSkinSettings(opts.skin.settings);
+
+  if (settings) {
+    template.settings = settings;
   }
 
 

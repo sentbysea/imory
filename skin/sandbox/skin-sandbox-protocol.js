@@ -650,11 +650,82 @@ function isSandboxRenderSeq(value) {
    메시지 자체가 거부된다(프레임은 잘린 코드를 실행하지 않는다).
 ========================================================== */
 
+/* =========================================================
+   EDITORIAL-DEFAULT-SKIN-2 — template.settings
+
+   주인의 스킨 설정(skin/skin-settings.js buildSkinSettingsRenderSetting).
+   설정이 없는 스킨은 키가 없다(봉투가 지금까지와 같다). 있으면 정확히
+   이 모양만 통과한다 — 프레임이 받는 값은 색 · 낱말 · 날짜 · 짧은 글자
+   뿐이고, 색은 #rrggbb 라 CSS 선언을 벗어날 글자가 없다.
+
+     { colors?: { background?, text?, accent?, accent2? },
+       photos?: "auto" | "empty" | "hero" | "pair" | "triptych",
+       dday?:   { date: "YYYY-MM-DD", label?: string(≤40) } }
+========================================================== */
+
+const SANDBOX_SETTINGS_COLOR_ROLES = ["background", "text", "accent", "accent2"];
+
+const SANDBOX_SETTINGS_PHOTO_LAYOUTS = ["auto", "empty", "hero", "pair", "triptych"];
+
+function isSandboxSkinSettings(value) {
+
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(value, ["colors", "photos", "dday"]) ||
+    Object.keys(value).length === 0
+  ) {
+    return false;
+  }
+
+  if (value.colors !== undefined) {
+
+    if (
+      !isPlainSandboxObject(value.colors) ||
+      !hasOnlyKnownSandboxKeys(value.colors, SANDBOX_SETTINGS_COLOR_ROLES) ||
+      Object.keys(value.colors).length === 0 ||
+      !Object.keys(value.colors).every((role) =>
+        typeof value.colors[role] === "string" && /^#[0-9a-f]{6}$/.test(value.colors[role])
+      )
+    ) {
+      return false;
+    }
+
+  }
+
+  if (
+    value.photos !== undefined &&
+    SANDBOX_SETTINGS_PHOTO_LAYOUTS.indexOf(value.photos) === -1
+  ) {
+    return false;
+  }
+
+  if (value.dday !== undefined) {
+
+    if (
+      !isPlainSandboxObject(value.dday) ||
+      !hasOnlyKnownSandboxKeys(value.dday, ["date", "label"]) ||
+      typeof value.dday.date !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(value.dday.date) ||
+      (
+        value.dday.label !== undefined &&
+        !(typeof value.dday.label === "string" && value.dday.label.length <= 40)
+      )
+    ) {
+      return false;
+    }
+
+  }
+
+  return true;
+
+}
+
+
 function isSandboxTemplate(value) {
 
   if (
     !isPlainSandboxObject(value) ||
-    !hasOnlyKnownSandboxKeys(value, ["html", "css", "js", "sides"]) ||
+    !hasOnlyKnownSandboxKeys(value, ["html", "css", "js", "sides", "settings"]) ||
     typeof value.html !== "string" ||
     typeof value.css !== "string" ||
     value.html.length > SANDBOX_MAX_TEMPLATE_CHARS ||
@@ -664,16 +735,32 @@ function isSandboxTemplate(value) {
   }
 
 
-  /* 좌우 영역 설정 — { left: boolean, right: boolean } 정확히 그 모양만 */
+  /* 좌우 영역 설정 — { left: boolean, right: boolean } 정확히 그 모양만.
+     EDITORIAL-DEFAULT-SKIN-2: 모바일에서 끈 쪽이 있으면 mobile 도
+     { left: boolean, right: boolean } 로 온다. */
   if (
     value.sides !== undefined &&
     !(
       isPlainSandboxObject(value.sides) &&
-      hasOnlyKnownSandboxKeys(value.sides, ["left", "right"]) &&
+      hasOnlyKnownSandboxKeys(value.sides, ["left", "right", "mobile"]) &&
       typeof value.sides.left === "boolean" &&
-      typeof value.sides.right === "boolean"
+      typeof value.sides.right === "boolean" &&
+      (
+        value.sides.mobile === undefined ||
+        (
+          isPlainSandboxObject(value.sides.mobile) &&
+          hasOnlyKnownSandboxKeys(value.sides.mobile, ["left", "right"]) &&
+          typeof value.sides.mobile.left === "boolean" &&
+          typeof value.sides.mobile.right === "boolean"
+        )
+      )
     )
   ) {
+    return false;
+  }
+
+
+  if (value.settings !== undefined && !isSandboxSkinSettings(value.settings)) {
     return false;
   }
 
@@ -1488,6 +1575,7 @@ if (typeof module !== "undefined" && module.exports) {
     isSandboxHeight,
     isSandboxRenderSeq,
     isSandboxTemplate,
+    isSandboxSkinSettings,
     isPlainSandboxObject,
     hasOnlyKnownSandboxKeys,
     buildSandboxMessage,

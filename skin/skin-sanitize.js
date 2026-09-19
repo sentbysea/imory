@@ -358,6 +358,31 @@ function copySkinSanitizedAttributes(sourceEl, destEl, tag) {
 
     }
 
+    /* =====================================================
+       HOME 사진 구성(data-imory-photos / -item) —
+       IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md
+
+       판정은 skin/skin-settings.js 의 표 한 곳이다. 런타임 상태
+       (-layout · -count · -filled · -state · -position)는 표에 없어
+       저장되는 HTML 에 들어갈 수 없다. 그 파일이 없는 문서면 전부
+       버린다(진입 문서들은 이 파일보다 먼저 로드한다). */
+    if (
+      typeof isSkinPhotosAttributeName === "function" &&
+      isSkinPhotosAttributeName(name)
+    ) {
+
+      const stored = sanitizeSkinPhotosAttributeValue(name, value);
+
+      if (stored !== null) {
+        destEl.setAttribute(name, stored);
+      } else {
+        console.warn(`[skin-sanitize] dropped unsupported ${name}="${value}"`);
+      }
+
+      return;
+
+    }
+
     if (name === SKIN_SANITIZE_DOCK_ATTR) {
       if (SKIN_SANITIZE_ALLOWED_DOCK_SLOTS.has(value)) {
         destEl.setAttribute(name, value);

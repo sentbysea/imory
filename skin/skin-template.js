@@ -422,11 +422,28 @@ function resolveSkinTemplate(
       ? buildSkinSidesRenderSetting(skinPackage)
       : undefined;
 
+  /*
+    EDITORIAL-DEFAULT-SKIN-2 — 주인의 스킨 설정(색 네 역할 · HOME 사진
+    구성 · D-day, skin/skin-settings.js). sides 와 같은 이유로 여기서
+    싣고, 설정 항목이 없는 스킨이면 키 자체를 만들지 않는다.
+  */
+
+  const settings =
+    typeof buildSkinSettingsRenderSetting === "function"
+      ? buildSkinSettingsRenderSetting(skinPackage)
+      : undefined;
+
   const withSides =
-    (template) =>
-      sides
-        ? { ...template, sides }
-        : template;
+    (template) => {
+      let next = template;
+      if (sides) {
+        next = { ...next, sides };
+      }
+      if (settings) {
+        next = { ...next, settings };
+      }
+      return next;
+    };
 
 
   const explicitTemplate =

@@ -49,6 +49,9 @@ const STUDIO_NAME_BY_BIND = {
   "category.name": "카테고리 이름",
   "folder.name": "폴더 이름",
   "bannerCategory.name": "Banner 이름",
+  /* 주인의 스킨 설정(IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) — Layout 패널에서 바꾼다 */
+  "settings.dday.display": "D-day 날 수",
+  "settings.dday.label": "D-day 이름",
   "navigation.home.name": "홈 메뉴",
   "navigation.highlights.name": "Highlight 메뉴",
   "navigation.memos.name": "Highlight 메뉴",
@@ -347,6 +350,12 @@ function studioInspectorElementName(el, info) {
 
   if (el.hasAttribute("data-imory-sides-close")) {
     return "영역 닫기 버튼";
+  }
+
+  /* HOME 사진 구성(IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) — 몇 장을
+     어떻게 놓을지는 Layout 패널에서 고른다 */
+  if (el.getAttribute("data-imory-photos") === "set") {
+    return "HOME 사진 구성";
   }
 
   const family =

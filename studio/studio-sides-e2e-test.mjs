@@ -182,7 +182,7 @@ function readPreviewSides(page) {
 
 function readStudio(page) {
   return page.evaluate(() => {
-    const radios = Array.from(document.querySelectorAll("#studioLeftPanelLayout [role=radio]"));
+    const radios = Array.from(document.querySelectorAll("#studioLeftPanelLayout .studio-sides-options [role=radio]"));
     const status = document.querySelector("#studioLeftPanelLayout .studio-sides-status");
     return {
       regions: JSON.parse(JSON.stringify(currentWorkingSkin.regions || [])),
@@ -473,7 +473,7 @@ async function run() {
         s.shell.leftPanelOpen && s.shell.leftPanelMode === "layout" && s.shell.sheetState, JSON.stringify(s.shell));
 
       const fits = await page.evaluate(() => {
-        const radios = Array.from(document.querySelectorAll("#studioLeftPanelLayout [role=radio]"));
+        const radios = Array.from(document.querySelectorAll("#studioLeftPanelLayout .studio-sides-options [role=radio]"));
         return {
           overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
           inside: radios.every((r) => { const b = r.getBoundingClientRect(); return b.left >= 0 && b.right <= innerWidth && b.height >= 44; })

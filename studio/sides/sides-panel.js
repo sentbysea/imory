@@ -233,6 +233,12 @@
 
     sync();
 
+    /* 같은 패널 아래쪽 — 모바일 · HOME 사진 · 색 · D-day
+       (studio/sides/home-settings-panel.js, 이 파일 뒤에 로드) */
+    if (typeof window.openSkinHomeSettingsPanel === "function") {
+      window.openSkinHomeSettingsPanel();
+    }
+
   }
 
 

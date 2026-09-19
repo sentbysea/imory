@@ -313,6 +313,12 @@ function bumpStudioWorkingRevision() {
     window.syncSkinSidesPanel();
   }
 
+  /* 같은 패널 아래쪽의 스킨 설정(색 · 사진 구성 · D-day · 모바일) —
+     studio/sides/home-settings-panel.js */
+  if (typeof window.syncSkinHomeSettingsPanel === "function") {
+    window.syncSkinHomeSettingsPanel();
+  }
+
 }
 
 
@@ -1625,6 +1631,135 @@ function setStudioHomeSides(setting) {
   currentWorkingSkin = {
     ...currentWorkingSkin,
     regions: writeSkinSidesSetting(currentWorkingSkin.regions, next)
+  };
+
+  recordStudioWorkingChange(historyBefore);
+
+  isStudioDirty =
+    true;
+
+  bumpStudioWorkingRevision();
+
+  updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
+
+  renderPreviewAfterSkinPackageChange();
+
+  return { ok: true };
+
+}
+
+
+/* =========================================================
+   스킨 설정 — 색 네 역할 · HOME 사진 구성 · D-day · 모바일 패널
+   (EDITORIAL-DEFAULT-SKIN-2, IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md)
+
+   좌우 영역과 같은 자리(SkinPackage.regions)의 이름 붙은 항목이다
+   (skin/skin-settings.js · skin/skin-sides.js). 이 두 함수가
+   studio/sides/home-settings-panel.js 의 유일한 진입점이다.
+
+   ★ 값 하나를 확정할 때마다 Undo 한 칸 · dirty · Preview 다시 그리기.
+     같은 값이면 아무 일도 없다(기록 0).
+========================================================== */
+
+function getStudioHomeSettings() {
+
+  if (!currentWorkingSkin || typeof readSkinThemeColors !== "function") {
+    return null;
+  }
+
+  const regions = currentWorkingSkin.regions;
+
+  const home =
+    typeof resolveSkinTemplate === "function"
+      ? resolveSkinTemplate(currentWorkingSkin, "home")
+      : null;
+
+  const html = home ? home.html : "";
+
+  const css = home ? home.css : String(currentWorkingSkin.css || "");
+
+  const photoSlots = skinHtmlPhotoSlotNames(html);
+
+  const sides =
+    typeof resolveSkinSidesSetting === "function"
+      ? (resolveSkinSidesSetting(currentWorkingSkin) || { left: false, right: false })
+      : { left: false, right: false };
+
+  const mobile =
+    typeof readSkinSidesMobileSetting === "function"
+      ? readSkinSidesMobileSetting(regions)
+      : { left: true, right: true };
+
+  return {
+    colors: readSkinThemeColors(regions),
+    colorDefaults: readSkinThemeColorDefaults(css),
+    usesColors: skinCssUsesThemeColors(css),
+    photos: readSkinHomePhotosLayout(regions) || "auto",
+    hasPhotoSet: skinHtmlHasPhotoSet(html),
+    photoSlots,
+    filledPhotos: photoSlots.filter((name) => !!currentImageSlotValues[name]).length,
+    dday: readSkinDdayDraft(regions),
+    usesDday: skinHtmlUsesDday(html),
+    sidesOn: !!(sides.left || sides.right),
+    mobilePanels: mobile.left && mobile.right,
+    hasSidesFrame:
+      typeof skinHtmlHasSidesFrame === "function"
+        ? skinHtmlHasSidesFrame(html).frame
+        : false
+  };
+
+}
+
+
+/*
+  setStudioHomeSetting(kind, value)
+
+    "colors"  { background, text, accent, accent2 } | null(스킨 기본색으로)
+    "photos"  "auto" | "empty" | "hero" | "pair" | "triptych"
+    "dday"    { enabled, date, label }
+    "mobile"  true | false (모바일에서 좌우 영역을 패널로 연다)
+*/
+function setStudioHomeSetting(kind, value) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, message: "편집 중인 스킨이 없습니다." };
+  }
+
+  if (typeof writeSkinThemeColors !== "function") {
+    return { ok: false, message: "이 배포는 아직 스킨 설정을 지원하지 않습니다." };
+  }
+
+  const regions = currentWorkingSkin.regions;
+
+  let next;
+
+  if (kind === "colors") {
+    next = writeSkinThemeColors(regions, value);
+  } else if (kind === "photos") {
+    next = writeSkinHomePhotosLayout(regions, value);
+  } else if (kind === "dday") {
+    if (value && value.enabled !== false && !normalizeSkinDdayDate(value.date)) {
+      return { ok: false, message: "날짜를 YYYY-MM-DD 로 적어 주세요." };
+    }
+    next = writeSkinDday(regions, value);
+  } else if (kind === "mobile" && typeof writeSkinSidesMobileSetting === "function") {
+    next = writeSkinSidesMobileSetting(regions, value !== false);
+  } else {
+    return { ok: false, message: "알 수 없는 설정입니다." };
+  }
+
+  if (JSON.stringify(next) === JSON.stringify(Array.isArray(regions) ? regions : [])) {
+    return { ok: true, unchanged: true };
+  }
+
+  const historyBefore =
+    captureStudioWorkingChange();
+
+  currentWorkingSkin = {
+    ...currentWorkingSkin,
+    regions: next
   };
 
   recordStudioWorkingChange(historyBefore);

@@ -44,6 +44,10 @@
                Export/Import · Publish · 네 화면(15)
      keep      자르지 않은 이미지는 스킨의 object-fit/position 그대로 ·
                자르기가 없으면 보호 규칙도 없다
+     editorial 아이모리 기본 스킨(EDITORIAL-DEFAULT-SKIN-2) — 사진 슬롯
+               photo_2 자르기 + 주인 설정(색 · D-day · 모바일) · Save/새로
+               열기 · Export/Import · Publish · 네 화면이 같은 구성 · 색 ·
+               D-day · 좌우 영역 · 자르기(E1~E10)
 
    실행
      node studio/studio-crop-priority-e2e-test.mjs
@@ -1259,7 +1263,21 @@ async function runCancel(browser) {
    [persist] Save · 새로고침 · Export/Import · 네 화면
 ========================================================== */
 
-async function fourScreens(browser, pkg, slotValues, slots, selectors, viewport, labelPrefix) {
+/* 가라앉은 값 — 연달아 두 번 같은 값이 나올 때까지(칼럼/패널 판정은 프레임
+   폭이 자리 잡은 뒤에 끝난다 — sandbox 프레임은 뜬 직후 폭이 한 번 바뀐다) */
+async function settledIn(frame, fn) {
+  let previous = null;
+  for (let i = 0; i < 12; i++) {
+    const current = JSON.stringify(await frame.evaluate(fn));
+    if (current === previous) return JSON.parse(current);
+    previous = current;
+    await sleep(150);
+  }
+  return JSON.parse(previous);
+}
+
+/* extraFn(선택) — 네 문서에서 똑같이 돌려 screens[kind].extra 에 담는다 */
+async function fourScreens(browser, pkg, slotValues, slots, selectors, viewport, labelPrefix, extraFn) {
 
   const screens = {};
 
@@ -1269,6 +1287,7 @@ async function fourScreens(browser, pkg, slotValues, slots, selectors, viewport,
     try {
       const frame = await waitIn(page, previewFrameOf, selectors[0]);
       screens.studioNative = {};
+      if (extraFn) screens.studioNative.extra = await settledIn(frame, extraFn);
       for (const sel of selectors) {
         const geo = await measure(frame, sel);
         screens.studioNative[sel] = { geo, px: await framePixels(frame, geo, `${labelPrefix}-studio-native-${sel.replace(/\W/g, "")}`) };
@@ -1282,6 +1301,7 @@ async function fourScreens(browser, pkg, slotValues, slots, selectors, viewport,
     try {
       const frame = await waitIn(page, sandboxFrameOf, selectors[0], 20000);
       screens.studioSandbox = {};
+      if (extraFn) screens.studioSandbox.extra = await settledIn(frame, extraFn);
       for (const sel of selectors) {
         const geo = await measure(frame, sel);
         screens.studioSandbox[sel] = { geo, px: await framePixels(frame, geo, `${labelPrefix}-studio-sandbox-${sel.replace(/\W/g, "")}`) };
@@ -1298,6 +1318,7 @@ async function fourScreens(browser, pkg, slotValues, slots, selectors, viewport,
         : await waitIn(page, (p) => p.mainFrame(), `#themeMount ${selectors[0]}`, 20000);
       const key = sandbox ? "publicSandbox" : "publicNative";
       screens[key] = { sandboxFrames: await page.locator("iframe[data-imory-sandbox-frame]").count() };
+      if (extraFn) screens[key].extra = await settledIn(frame, extraFn);
       for (const sel of selectors) {
         const geo = await measure(frame, sandbox ? sel : `#themeMount ${sel}`);
         screens[key][sel] = { geo, px: await framePixels(frame, geo, `${labelPrefix}-${key}-${sel.replace(/\W/g, "")}`) };
@@ -1721,6 +1742,202 @@ async function runFoe(browser) {
 
 
 /* =========================================================
+   [editorial] 아이모리 기본 스킨 — 사진 슬롯 자르기 · 스킨 설정 ·
+   저장 · 공개 · 네 화면 (EDITORIAL-DEFAULT-SKIN-2)
+
+   기준 문서: IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md
+
+   기본 스킨(3단)에 세로 사진 셋 → 세 장 구성. 주인 설정(색 네 역할 ·
+   D-day · 모바일에서 좌우 영역 끔)을 Studio 진입점으로 고르고, 가운데
+   사진(photo_2)을 자른다. 그 저장물이 Save → 새로 열기 · Export →
+   Import · Publish 를 지나 Studio native/sandbox · 공개 native/sandbox
+   네 화면에서 같은 구성 · 같은 색 · 같은 D-day · 같은 자르기인가.
+========================================================== */
+
+const EDITORIAL_IMG = ".ied-photo--2 .ied-photo-img";
+const EDITORIAL_CROP = { zoom: 170, x: 30, y: 40 };
+const EDITORIAL_SLOTS = {
+  photo_1: { imageId: "img-p1", imageUrl: PORTRAIT_URL },
+  photo_2: { imageId: "img-p2", imageUrl: PORTRAIT_URL },
+  photo_3: { imageId: "img-p3", imageUrl: PORTRAIT_URL }
+};
+const EDITORIAL_SLOT_VALUES = { photo_1: PORTRAIT_URL, photo_2: PORTRAIT_URL, photo_3: PORTRAIT_URL };
+const EDITORIAL_COLORS = { background: "#fbf7f1", text: "#2a1d14", accent: "#7a2e2e", accent2: "#b89a86" };
+
+const editorialLib = (() => {
+  const req = createRequire(import.meta.url);
+  return req(path.join(ROOT, "skin", "skin-default-editorial.js"));
+})();
+
+/* 문서 안에서 도는 함수 — 기본 스킨의 설정이 그려진 모양 */
+function readEditorialInDocument() {
+  const set = document.querySelector('[data-imory-photos="set"]');
+  const sheet = document.querySelector(".ied-sheet");
+  const dday = document.querySelector(".ied-dday");
+  return {
+    layout: set && set.getAttribute("data-imory-photos-layout"),
+    count: set && set.getAttribute("data-imory-photos-count"),
+    bg: sheet && getComputedStyle(sheet).backgroundColor,
+    title: document.querySelector(".ied-title") && getComputedStyle(document.querySelector(".ied-title")).color,
+    dday: dday && !dday.hidden ? document.querySelector(".ied-dday-num").textContent : null,
+    ddayLabel: dday && !dday.hidden ? document.querySelector(".ied-dday-label").textContent : null,
+    sides: sheet && sheet.getAttribute("data-imory-sides-layout"),
+    on: sheet && sheet.getAttribute("data-imory-sides-on"),
+    openers: Array.from(document.querySelectorAll(".ied-main [data-imory-sides-open]"))
+      .filter((el) => getComputedStyle(el).display !== "none").length
+  };
+}
+
+async function runEditorial(browser) {
+
+  console.log("\n[editorial] 아이모리 기본 스킨 — 사진 슬롯 자르기 · 설정 · 저장 · 공개 · 네 화면");
+
+  const base = editorialLib.createImoryEditorialDefaultSkin({ columns: 3 });
+
+  const { ctx, page } = await openStudio(browser, { pkg: base, slots: EDITORIAL_SLOTS, label: "editorial" });
+
+  let saved;
+  let exportedText;
+  let studioGeo;
+  let publishedStatus = "";
+
+  const ddayDate = "2024-09-21";
+
+  try {
+
+    const preview = await waitIn(page, previewFrameOf, EDITORIAL_IMG);
+    await sleep(400);
+
+    const first = await preview.evaluate(readEditorialInDocument);
+    record("E1. 기본 스킨 · 사진 셋 → 세 장(triptych) · 3단 칼럼", first.layout === "triptych" && first.count === "3" && first.sides === "columns", JSON.stringify(first));
+
+    const results = await page.evaluate(([colors, date]) => [
+      window.setStudioHomeSetting("colors", colors),
+      window.setStudioHomeSetting("dday", { enabled: true, date, label: "since we met" }),
+      window.setStudioHomeSetting("mobile", false)
+    ], [EDITORIAL_COLORS, ddayDate]);
+    await sleep(600);
+    const set = await (await waitIn(page, previewFrameOf, EDITORIAL_IMG)).evaluate(readEditorialInDocument);
+    record("E2. Studio 설정(색 · D-day · 모바일) → Preview 에 곧바로",
+      results.every((r) => r && r.ok) && set.bg === "rgb(251, 247, 241)" && set.title === "rgb(122, 46, 46)" && /^\d[\d,]*$/.test(set.dday || "") && set.ddayLabel === "since we met",
+      JSON.stringify({ results, set }));
+
+    await enableSelect(page, EDITORIAL_IMG);
+    const h0 = await history(page);
+    await cropWith(page, EDITORIAL_IMG, EDITORIAL_CROP);
+    const h1 = await history(page);
+    studioGeo = await measure(await waitIn(page, previewFrameOf, EDITORIAL_IMG), EDITORIAL_IMG);
+    record("E3. 가운데 사진(photo_2 슬롯)을 자른다 — 기록 한 칸 · 같은 자르기 · 사진 칸을 채운다",
+      h1.undo === h0.undo + 1 && relMatches(studioGeo, EDITORIAL_CROP) && studioGeo.guards === 1 && studioGeo.cropped,
+      JSON.stringify({ h0, h1, geo: brief(studioGeo) }));
+
+    /* 자른 뒤에도 구성은 그대로 · 설정도 그대로 */
+    const afterCrop = await (await waitIn(page, previewFrameOf, EDITORIAL_IMG)).evaluate(readEditorialInDocument);
+    record("E4. 자른 뒤에도 세 장 구성 · 색 · D-day 그대로", afterCrop.layout === "triptych" && afterCrop.bg === set.bg && afterCrop.dday === set.dday, JSON.stringify(afterCrop));
+
+    await disableSelect(page);
+
+    saved = await saveDraft(page);
+    const names = (saved.regions || []).map((e) => e && e.name);
+    record("E5. Save — regions 에 설정 넷(단 구성 · 모바일 · 색 · D-day) · 자르기 규칙은 CSS 에",
+      names.includes("theme_colors") && names.includes("dday") &&
+        saved.regions.find((e) => e.name === "right_sidebar").mobile === false &&
+        JSON.stringify(saved.regions.find((e) => e.name === "theme_colors").colors) === JSON.stringify(EDITORIAL_COLORS) &&
+        /--imory-crop|imory-crop/.test(saved.css) && !/data-imory-photos-(layout|state|position)/.test(JSON.stringify(saved.templates)),
+      JSON.stringify(saved.regions));
+
+    exportedText = await exportPackage(page);
+    const exported = JSON.parse(exportedText);
+    record("E6. Export — 같은 regions · 슬롯 선언",
+      JSON.stringify(exported.regions) === JSON.stringify(saved.regions) &&
+        JSON.stringify(exported.imageSlots.map((s) => s.name)) === JSON.stringify(["photo_1", "photo_2", "photo_3", "photo_4", "pair_photo"]),
+      JSON.stringify(exported.regions));
+
+    await page.click("#studioPublishButton");
+    await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 8000 }).catch(() => {});
+    const confirmButton = await page.$(".studio-confirm-button--primary");
+    if (confirmButton) await confirmButton.click();
+    await sleep(1500);
+    publishedStatus = await page.evaluate(() => {
+      const s = document.getElementById("studioSaveStatus") || document.querySelector("[data-studio-save-status]");
+      return s ? s.textContent : "";
+    });
+
+  } finally {
+    await ctx.close();
+  }
+
+  /* 저장 → 새로 열기 */
+  {
+    const { ctx: c2, page: p2 } = await openStudio(browser, { pkg: saved, slots: EDITORIAL_SLOTS, label: "editorial-reload" });
+    try {
+      const preview = await waitIn(p2, previewFrameOf, EDITORIAL_IMG);
+      await sleep(400);
+      const geo = await measure(preview, EDITORIAL_IMG);
+      const state = await preview.evaluate(readEditorialInDocument);
+      const panel = await p2.evaluate(() => window.getStudioHomeSettings());
+      record("E7. Save → 새로 열기 — 같은 자르기 · 같은 설정(Preview 와 Layout 패널 값)",
+        relSame(geo, studioGeo) && state.layout === "triptych" && state.bg === "rgb(251, 247, 241)" && state.dday !== null &&
+          JSON.stringify(panel.colors) === JSON.stringify(EDITORIAL_COLORS) && panel.dday.date === ddayDate && panel.mobilePanels === false,
+        JSON.stringify({ geo: brief(geo), state, panel: { colors: panel.colors, dday: panel.dday, mobile: panel.mobilePanels } }));
+    } finally { await c2.close(); }
+  }
+
+  /* Export → Import */
+  {
+    const { ctx: c3, page: p3 } = await openStudio(browser, { label: "editorial-import", slots: EDITORIAL_SLOTS });
+    try {
+      await importText(p3, exportedText);
+      for (const [slot, binding] of Object.entries(EDITORIAL_SLOTS)) {
+        await p3.evaluate(([name, url, id]) => window.setStudioImageSlot(name, { id, public_url: url }), [slot, binding.imageUrl, binding.imageId]);
+      }
+      const preview = await waitIn(p3, previewFrameOf, EDITORIAL_IMG);
+      await sleep(500);
+      const geo = await measure(preview, EDITORIAL_IMG);
+      const state = await preview.evaluate(readEditorialInDocument);
+      const regions = await p3.evaluate(() => window.getStudioAiWorkingState({ includePackage: true }).skinPackage.regions);
+      record("E8. Export → 다시 Import — 같은 자르기 · 같은 설정",
+        relSame(geo, studioGeo) && state.layout === "triptych" && state.bg === "rgb(251, 247, 241)" &&
+          JSON.stringify(regions) === JSON.stringify(saved.regions),
+        JSON.stringify({ geo: brief(geo), state }));
+    } finally { await c3.close(); }
+  }
+
+  /* 네 화면 — 390 과 1280 */
+  const pkg = JSON.parse(JSON.stringify(saved));
+  pkg.renderMode = "sandbox";
+
+  for (const viewport of [{ width: 390, height: 844 }, { width: 1280, height: 900 }]) {
+
+    const screens = await fourScreens(browser, pkg, EDITORIAL_SLOT_VALUES, EDITORIAL_SLOTS, [EDITORIAL_IMG], viewport, `editorial-${viewport.width}`, readEditorialInDocument);
+
+    const kinds = ["studioNative", "studioSandbox", "publicNative", "publicSandbox"];
+    const states = kinds.map((k) => screens[k].extra);
+    const reference = JSON.stringify(states[0]);
+    const cropOk = kinds.every((k) => relMatches(screens[k][EDITORIAL_IMG].geo, EDITORIAL_CROP) && screens[k][EDITORIAL_IMG].geo.guards === 1);
+    const wide = viewport.width >= 1024;
+
+    record(
+      `E9. ${viewport.width}px — 네 화면이 같은 구성 · 색 · D-day · 좌우 영역(${wide ? "칼럼" : "모바일에서 끔 → 여는 버튼 0"}) · 같은 자르기`,
+      states.every((s) => JSON.stringify(s) === reference) && cropOk &&
+        states[0].layout === "triptych" && states[0].bg === "rgb(251, 247, 241)" && states[0].dday !== null &&
+        (wide ? states[0].sides === "columns" && states[0].on === "left right" : states[0].sides === "drawer" && states[0].on === "" && states[0].openers === 0) &&
+        screens.publicSandbox.sandboxFrames === 1,
+      JSON.stringify({ states, crop: kinds.map((k) => brief(screens[k][EDITORIAL_IMG].geo)) })
+    );
+
+  }
+
+  record(
+    "E10. Publish — 상태가 '저장됨'(저장한 draft = 공개본). 공개 화면은 그 draft 로 위 E9 에서 열었다",
+    typeof publishedStatus === "string" && publishedStatus.indexOf("저장됨") === 0,
+    publishedStatus
+  );
+
+}
+
+
+/* =========================================================
    [keep] 자르지 않은 이미지는 스킨 디자인 그대로
 ========================================================== */
 
@@ -1772,6 +1989,7 @@ const sections = [
   ["persist", runPersist],
   ["mobile", runMobile],
   ["foe", runFoe],
+  ["editorial", runEditorial],
   ["keep", runKeep]
 ];
 
