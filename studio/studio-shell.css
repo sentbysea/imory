@@ -816,6 +816,9 @@
   #studioImagesButton { order: 2; }
   #studioDockButton { order: 3; }
 
+  /* HOME 단 구성 — 첫 줄은 이미 꽉 찼다. 둘째 줄 ↶ ↷ 다음, AI 앞 */
+  #studioLayoutButton { order: 13; }
+
   #studioSaveButton {
     order: 5;
 

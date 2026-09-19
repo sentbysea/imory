@@ -1263,6 +1263,129 @@ async function runMobile(browser) {
 
 
 /* =========================================================
+   [sides] EDITORIAL-RESPONSIVE-HOME-1 — 좌우 영역(IMORY_SIDES_DESIGN.md)
+
+   Studio Preview 의 sandbox 프레임은 **Preview 문서 안**에 있다.
+   그래서 패널이 열리면 잠기는 것은 Preview 문서(바깥 프레임)의
+   스크롤이고, 프레임 안 패널은 그 문서에서 보이는 부분에 선다.
+   Layout 패널로 단을 바꾸면 봉투(template.sides)로 프레임에 간다.
+========================================================== */
+
+async function runSides(browser) {
+
+  console.log("\n[sides] 좌우 영역 — Studio sandbox Preview");
+
+  const pkg =
+    JSON.parse(fs.readFileSync(path.join(ROOT, "skin", "test-skins", "imory-editorial-home-v1.json"), "utf8"));
+
+  pkg.renderMode = "sandbox";
+
+  const { ctx, page, consoleErrors } =
+    await openStudio(browser, { skinPackage: pkg, viewport: { width: 1280, height: 900 } });
+
+  const inner = sandboxFrame(page);
+
+  await inner.locator("[data-imory-sides-layout]").first().waitFor({ state: "attached", timeout: 15000 });
+
+  const readInner = () => inner.locator("body").evaluate(() => {
+    const frame = document.querySelector('[data-imory-sides="frame"]');
+    const right = frame.querySelector('[data-imory-sides-area="right"]');
+    const r = right.getBoundingClientRect();
+    return {
+      layout: frame.getAttribute("data-imory-sides-layout"),
+      on: frame.getAttribute("data-imory-sides-on"),
+      active: frame.getAttribute("data-imory-sides-active"),
+      rightTop: Math.round(r.top),
+      viewportTop: document.documentElement.style.getPropertyValue("--imory-sides-viewport-top")
+    };
+  });
+
+  const readOuter = () => page.evaluate(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    const scroller = doc.scrollingElement || doc.documentElement;
+    return {
+      overflow: doc.defaultView.getComputedStyle(doc.documentElement).overflow,
+      scrollTop: Math.round(scroller.scrollTop),
+      frames: doc.querySelectorAll("iframe[data-imory-sandbox-frame]").length
+    };
+  });
+
+  let s = await readInner();
+  check("[sides] 데스크톱 Preview: 프레임 안에서 3단 칼럼", s.layout === "columns" && s.on === "left right", JSON.stringify(s));
+
+  /* Layout 패널로 2단 → 프레임이 다시 그린다(iframe 은 그대로 하나) */
+  await page.click("#studioLayoutButton");
+  await page.waitForTimeout(250);
+  await page.click('#studioLeftPanelLayout [role=radio][data-count="2"]');
+  await page.waitForTimeout(900);
+
+  s = await readInner();
+  check("[sides] ★ 2단을 고르면 sandbox 프레임에도 2단(봉투로 설정이 간다)", s.on === "right", JSON.stringify(s));
+  check("[sides] 프레임은 여전히 하나", (await readOuter()).frames === 1);
+
+  /* Mobile Preview → 패널, 스크롤한 뒤 연다 */
+  await page.locator('[data-viewport-mode="mobile"]').click();
+  await page.waitForTimeout(700);
+
+  await inner.locator("body").evaluate(() => {
+    const main = document.querySelector('[data-imory-sides-area="main"]');
+    const pad = document.createElement("div");
+    pad.style.height = "900px";
+    main.appendChild(pad);
+  });
+  await page.waitForTimeout(500);
+
+  await page.evaluate(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    (doc.scrollingElement || doc.documentElement).scrollTop = 250;
+  });
+  await page.waitForTimeout(150);
+
+  s = await readInner();
+  check("[sides] Mobile Preview: 패널로 바뀐다", s.layout === "drawer", JSON.stringify(s));
+
+  const iframeHeight = () => page.evaluate(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    return Math.round(doc.querySelector("iframe[data-imory-sandbox-frame]").getBoundingClientRect().height);
+  });
+
+  const heightBefore = await iframeHeight();
+
+  await inner.locator('[data-imory-sides-open="right"]').evaluate((el) => el.click());
+  await page.waitForTimeout(700);
+
+  s = await readInner();
+  let o = await readOuter();
+
+  check("[sides] Mobile Preview: 오른쪽 패널이 열린다", s.active === "right", JSON.stringify(s));
+  check("[sides] 패널이 열려도 프레임 높이는 그대로(fixed 는 높이에 들지 않는다)",
+    Math.abs((await iframeHeight()) - heightBefore) <= 1, `${heightBefore}`);
+  check("[sides] ★ Preview 문서(부모)의 스크롤이 잠기고 위치 그대로", o.overflow === "hidden" && o.scrollTop === 250, JSON.stringify(o));
+  check("[sides] ★ 패널이 Preview 에서 보이는 부분에 선다", s.viewportTop === "250px" && s.rightTop === 250, JSON.stringify(s));
+
+  await inner.locator('[data-imory-sides-area="right"]').evaluate(() =>
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+  await page.waitForTimeout(700);
+
+  s = await readInner();
+  o = await readOuter();
+
+  check("[sides] Escape → 닫힘 · Preview 잠금 풀림 · 위치 그대로", !s.active && o.overflow !== "hidden" && o.scrollTop === 250,
+    JSON.stringify({ s, o }));
+
+  check("[sides] 여닫기는 dirty/기록을 늘리지 않는다(단 고르기 한 칸뿐)",
+    (await page.evaluate(() => window.getStudioHistoryState().undo)) === 1);
+
+  check("[sides] 콘솔 오류 없음",
+    consoleErrors.filter((t) => !/favicon|Failed to load resource/.test(t)).length === 0,
+    consoleErrors.join(" | ").slice(0, 300));
+
+  await ctx.close();
+
+}
+
+
+/* =========================================================
    [reject] 위조 메시지 · 늦게 온 응답
 ========================================================== */
 
@@ -3064,6 +3187,7 @@ try {
   if (shouldRun("bodyparity")) await runBodyParity(browser);
   if (shouldRun("inspect")) await runInspect(browser);
   if (shouldRun("slots")) await runSlots(browser);
+  if (shouldRun("sides")) await runSides(browser);
 
 } finally {
 

@@ -629,6 +629,173 @@ function sendToSandboxFrame(handle, type, payload) {
 
 
 /* =========================================================
+   좌우 영역의 모바일 패널 (IMORY_SIDES_DESIGN.md §7)
+
+   프레임은 콘텐츠 높이만큼 늘어나 있어서 프레임 안의 fixed 패널은
+   "화면"이 아니라 프레임 전체에 붙는다. 스크롤은 부모가 하므로
+   부모가 두 가지를 한다.
+
+     1) 패널이 열린 동안 **부모의** 스크롤을 잠근다 — native 와
+        같은 함수(skin/skin-sides.js lockSkinSidesScroll)다.
+     2) 프레임 좌표로 "지금 보이는 부분"을 내려보낸다. 창 크기가
+        바뀌면 다시.
+
+   프레임 바깥(부모)을 누르면 닫으라고 알린다. 프레임이 내려가면
+   (화면 전환 · 다시 그리기 실패) 잠금은 여기서 반드시 풀린다.
+========================================================== */
+
+function readSandboxSidesViewport(handle) {
+
+  const iframe = handle.iframe;
+
+  const doc = iframe.ownerDocument;
+
+  const win = doc.defaultView;
+
+  const rect = iframe.getBoundingClientRect();
+
+  let clipTop = 0;
+
+  let clipBottom =
+    win.visualViewport && win.visualViewport.height
+      ? Math.min(win.innerHeight, win.visualViewport.height + win.visualViewport.offsetTop)
+      : win.innerHeight;
+
+  let el = iframe.parentElement;
+
+  while (el && el !== doc.body && el !== doc.documentElement) {
+
+    const overflowY = win.getComputedStyle(el).overflowY;
+
+    if (/(auto|scroll|hidden|clip)/.test(overflowY)) {
+
+      const box = el.getBoundingClientRect();
+
+      clipTop = Math.max(clipTop, box.top + el.clientTop);
+
+      clipBottom = Math.min(clipBottom, box.top + el.clientTop + el.clientHeight);
+
+    }
+
+    el = el.parentElement;
+
+  }
+
+  const top = Math.max(0, clipTop - rect.top);
+
+  const bottom = Math.min(rect.height, clipBottom - rect.top);
+
+  return {
+    top: Math.round(top),
+    height: Math.max(0, Math.round(bottom - top))
+  };
+
+}
+
+
+function sendSandboxSidesViewport(handle) {
+
+  if (!handle || handle.destroyed || !handle.iframe) {
+    return;
+  }
+
+  const viewport = readSandboxSidesViewport(handle);
+
+  sendToSandboxFrame(
+    handle,
+    handle.TYPES.SIDES_VIEWPORT,
+    {
+      contract: 1,
+      renderSeq: handle.renderSeq,
+      top: viewport.top,
+      height: viewport.height
+    }
+  );
+
+}
+
+
+function openSandboxSides(handle) {
+
+  if (!handle || handle.destroyed || !handle.iframe) {
+    return;
+  }
+
+  const lock = readGlobal("lockSkinSidesScroll");
+
+  if (!handle.sidesRelease && typeof lock === "function") {
+    handle.sidesRelease = lock(handle.iframe);
+  }
+
+  sendSandboxSidesViewport(handle);
+
+  if (handle.sidesCleanup) {
+    return;
+  }
+
+  const doc = handle.iframe.ownerDocument;
+
+  const win = doc.defaultView;
+
+  const onResize = () => sendSandboxSidesViewport(handle);
+
+  const onPointerDown = (event) => {
+
+    if (event.target === handle.iframe) {
+      return;
+    }
+
+    sendToSandboxFrame(
+      handle,
+      handle.TYPES.SIDES_CLOSE,
+      { contract: 1, renderSeq: handle.renderSeq }
+    );
+
+  };
+
+  win.addEventListener("resize", onResize);
+
+  if (win.visualViewport) {
+    win.visualViewport.addEventListener("resize", onResize);
+  }
+
+  doc.addEventListener("pointerdown", onPointerDown, true);
+
+  handle.sidesCleanup = () => {
+
+    win.removeEventListener("resize", onResize);
+
+    if (win.visualViewport) {
+      win.visualViewport.removeEventListener("resize", onResize);
+    }
+
+    doc.removeEventListener("pointerdown", onPointerDown, true);
+
+  };
+
+}
+
+
+function releaseSandboxSides(handle) {
+
+  if (!handle) {
+    return;
+  }
+
+  if (handle.sidesCleanup) {
+    handle.sidesCleanup();
+    handle.sidesCleanup = null;
+  }
+
+  if (handle.sidesRelease) {
+    handle.sidesRelease();
+    handle.sidesRelease = null;
+  }
+
+}
+
+
+/* =========================================================
    applySandboxFrameHeight(handle, height)
 
    프로토콜이 이미 정수·범위를 봤다. 여기서는 **부모 쪽 상한**과
@@ -1492,6 +1659,15 @@ function buildSandboxTemplatePayload(template, authorJs) {
     css: typeof template.css === "string" ? template.css : ""
   };
 
+  /* 좌우 영역 설정 — resolveSkinTemplate 이 regions 에서 만든다. 영역
+     설정이 없는 스킨은 키 자체가 없다(봉투가 지금까지와 같다). */
+  if (template.sides && typeof template.sides === "object") {
+    payload.sides = {
+      left: template.sides.left === true,
+      right: template.sides.right === true
+    };
+  }
+
   if (typeof authorJs === "string" && authorJs) {
     payload.js = authorJs;
   }
@@ -1616,6 +1792,23 @@ async function renderSandboxPageIntoHandle(handle, opts) {
             }
 
             applySandboxFrameHeight(handle, payload.height);
+
+          };
+
+
+        /* 좌우 영역 — 위 openSandboxSides 주석. 옛 화면의 알림은 버린다. */
+        handle.handlers[TYPES.SIDES_STATE] =
+          (payload) => {
+
+            if (payload.renderSeq !== handle.renderSeq) {
+              return;
+            }
+
+            if (payload.open) {
+              openSandboxSides(handle);
+            } else {
+              releaseSandboxSides(handle);
+            }
 
           };
 
@@ -2455,6 +2648,9 @@ export function destroySandboxSkinFrame(handle) {
     return;
   }
 
+
+  /* 열린 패널이 부모 스크롤을 잠가 둔 채 프레임이 내려가면 안 된다 */
+  releaseSandboxSides(handle);
 
   handle.destroyed = true;
 

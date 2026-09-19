@@ -1,0 +1,293 @@
+/* =========================================================
+   SKIN SIDES — 좌우 영역의 자리 (EDITORIAL-RESPONSIVE-HOME-1)
+
+   기준 문서: IMORY_SIDES_DESIGN.md · 런타임: skin/skin-sides.js
+
+   이 파일에는 두 종류의 규칙만 있다.
+
+   1) 구조 — !important
+      칼럼의 칸 · 패널의 자리(fixed · 좌/우 · 보이는 높이) · 닫힌
+      패널이 보이지도 눌리지도 않게 · 꺼진 영역 · 칼럼일 때 여는
+      버튼 숨기기. 시스템이 책임지는 부분이라 스킨의 선언(스코프
+      클래스 때문에 명시도가 높다)이 실수로 이기면 안 된다 —
+      데스크톱용 `position: sticky` 하나가 모바일 패널을 문서 흐름에
+      주저앉히는 식.
+
+   2) 보기 — :where() 로 명시도 0
+      칸 폭 · 본문 최대 폭 · 패널 폭 · 등장 거리 · 속도 · easing ·
+      덮개 색. 전부 custom property 기본값이고, 스킨은 변수를 바꾸거나
+      자기 선언을 쓰면 그대로 이긴다.
+
+   색·테두리·그림자·글꼴 선언이 없다. 덮개의 기본 색 하나만 있다
+   (반투명 회색 — 스킨이 --imory-sides-backdrop 으로 바꾼다).
+
+   틀(data-imory-sides="frame")이 없는 스킨에서는 이 파일의 어느
+   선택자도 매치되지 않는다.
+========================================================== */
+
+
+/* ---------------------------------------------------------
+   기본값 — 스킨이 바꾸는 변수들
+--------------------------------------------------------- */
+
+:where([data-imory-sides="frame"]) {
+
+  /* 칼럼 폭(좌우 각각 바꿀 수 있다) */
+  --imory-sides-width: 264px;
+  --imory-sides-left-width: var(--imory-sides-width);
+  --imory-sides-right-width: var(--imory-sides-width);
+
+  /* 본문 — 최소 가독 폭이 칼럼/패널 판정의 기준이다 */
+  --imory-sides-main-min: 560px;
+  --imory-sides-main-max: 760px;
+
+  /* 모바일 패널 */
+  --imory-sides-drawer-width: min(86vw, 340px);
+  --imory-sides-distance: 100%;
+  --imory-sides-duration: 280ms;
+  --imory-sides-easing: cubic-bezier(0.22, 1, 0.36, 1);
+  --imory-sides-backdrop: rgba(24, 24, 27, 0.32);
+  --imory-sides-z: 1000;
+}
+
+
+/* ---------------------------------------------------------
+   구조 — 공통
+--------------------------------------------------------- */
+
+[data-imory-sides="frame"] {
+  position: relative !important;
+}
+
+/* 판정 전(렌더 직후 한 순간) · 꺼진 영역 */
+[data-imory-sides="frame"]:not([data-imory-sides-layout]) > [data-imory-sides-area="left"],
+[data-imory-sides="frame"]:not([data-imory-sides-layout]) > [data-imory-sides-area="right"],
+[data-imory-sides-area][data-imory-sides-state="off"] {
+  display: none !important;
+}
+
+/* 여는 버튼 · 닫기는 패널일 때만 */
+[data-imory-sides="frame"]:not([data-imory-sides-layout="drawer"]) [data-imory-sides-open],
+[data-imory-sides="frame"]:not([data-imory-sides-layout="drawer"]) [data-imory-sides-close],
+[data-imory-sides="frame"]:not([data-imory-sides-on~="left"]) [data-imory-sides-open="left"],
+[data-imory-sides="frame"]:not([data-imory-sides-on~="right"]) [data-imory-sides-open="right"] {
+  display: none !important;
+}
+
+/* 폭 재기 — 스킨이 적은 길이를 실제로 그려서 잰다 */
+[data-imory-sides-probe] {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+
+  /* 격자(칼럼)일 때도 자리는 틀의 padding box — 칸에 들어가면 폭이
+     칼럼 합으로 바뀌어 감지 요소가 판정 결과를 따라 흔들린다 */
+  grid-column: auto !important;
+  grid-row: auto !important;
+}
+
+[data-imory-sides-probe="left"] { width: var(--imory-sides-left-width) !important; }
+[data-imory-sides-probe="right"] { width: var(--imory-sides-right-width) !important; }
+[data-imory-sides-probe="main"] { width: var(--imory-sides-main-min) !important; }
+
+/* 폭 감지 — 틀의 폭만 따라가고 높이는 언제나 0 */
+[data-imory-sides-probe="width"] { right: 0 !important; width: auto !important; }
+
+
+/* ---------------------------------------------------------
+   구조 — 칼럼 (데스크톱)
+--------------------------------------------------------- */
+
+[data-imory-sides="frame"][data-imory-sides-on~="left"] {
+  --_imory-sides-l: var(--imory-sides-left-width);
+}
+
+[data-imory-sides="frame"][data-imory-sides-on~="right"] {
+  --_imory-sides-r: var(--imory-sides-right-width);
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="columns"] {
+  display: grid !important;
+  grid-template-columns:
+    var(--_imory-sides-l, 0px)
+    minmax(0, var(--imory-sides-main-max))
+    var(--_imory-sides-r, 0px) !important;
+  justify-content: center !important;
+  align-items: stretch;
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="columns"] > [data-imory-sides-area] {
+  grid-row: 1 !important;
+  min-width: 0 !important;
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="columns"] > [data-imory-sides-area="left"] { grid-column: 1 !important; }
+[data-imory-sides="frame"][data-imory-sides-layout="columns"] > [data-imory-sides-area="main"] { grid-column: 2 !important; }
+[data-imory-sides="frame"][data-imory-sides-layout="columns"] > [data-imory-sides-area="right"] { grid-column: 3 !important; }
+
+/* 세 칸이 아닌 것(스킨이 틀 바로 안에 둔 다른 덩어리)은 아래 줄 전체 */
+[data-imory-sides="frame"][data-imory-sides-layout="columns"] > :not([data-imory-sides-area]):not([data-imory-sides-probe]):not([data-imory-sides-backdrop]) {
+  grid-column: 1 / -1;
+}
+
+
+/* ---------------------------------------------------------
+   구조 — 패널 (모바일)
+--------------------------------------------------------- */
+
+[data-imory-sides="frame"][data-imory-sides-layout="drawer"] {
+  display: block !important;
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area="left"],
+[data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area="right"] {
+  position: fixed !important;
+  top: var(--imory-sides-viewport-top, 0px) !important;
+  bottom: auto !important;
+  height: var(--imory-sides-viewport-height, 100%) !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  max-width: 100% !important;
+  margin: 0 !important;
+  float: none !important;
+  box-sizing: border-box !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain !important;
+  -webkit-overflow-scrolling: touch;
+  z-index: calc(var(--imory-sides-z, 1000) + 1) !important;
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area="left"] {
+  left: 0 !important;
+  right: auto !important;
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area="right"] {
+  right: 0 !important;
+  left: auto !important;
+}
+
+/* 닫힘 — 보이지도, 눌리지도, 탭으로 닿지도 않는다(inert 도 JS 가 단다).
+   닫히는 중(closing)은 보이되 누를 수 없다. */
+[data-imory-sides-area][data-imory-sides-state="closed"] {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+[data-imory-sides-area][data-imory-sides-state="closing"] {
+  pointer-events: none !important;
+}
+
+/* 덮개 — 바깥을 누르면 닫힌다 */
+[data-imory-sides-backdrop] {
+  display: none !important;
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-backdrop] {
+  display: block !important;
+  position: fixed !important;
+  left: 0 !important;
+  right: 0 !important;
+  top: var(--imory-sides-viewport-top, 0px) !important;
+  height: var(--imory-sides-viewport-height, 100%) !important;
+  margin: 0 !important;
+  max-width: none !important;
+  z-index: var(--imory-sides-z, 1000) !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+  touch-action: none;
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="drawer"][data-imory-sides-phase="open"] > [data-imory-sides-backdrop] {
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+[data-imory-sides="frame"][data-imory-sides-layout="drawer"][data-imory-sides-phase="closing"] > [data-imory-sides-backdrop] {
+  visibility: visible !important;
+}
+
+/* 움직임 없이 한 번(Studio 에서 다시 그린 뒤 열린 채로 되살릴 때) */
+[data-imory-sides-instant] > [data-imory-sides-area],
+[data-imory-sides-instant] > [data-imory-sides-backdrop] {
+  transition: none !important;
+  animation: none !important;
+}
+
+
+/* ---------------------------------------------------------
+   보기 — 명시도 0. 스킨이 무엇이든 쓰면 이긴다.
+--------------------------------------------------------- */
+
+:where([data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area="left"],
+       [data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area="right"]) {
+  width: var(--imory-sides-drawer-width);
+  transition: transform var(--imory-sides-duration) var(--imory-sides-easing);
+}
+
+:where([data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area="left"]) {
+  transform: translateX(calc(-1 * var(--imory-sides-distance)));
+}
+
+:where([data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area="right"]) {
+  transform: translateX(var(--imory-sides-distance));
+}
+
+:where([data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-area][data-imory-sides-state="open"]) {
+  transform: none;
+}
+
+:where([data-imory-sides="frame"][data-imory-sides-layout="drawer"] > [data-imory-sides-backdrop]) {
+  background: var(--imory-sides-backdrop);
+  opacity: 0;
+  transition: opacity var(--imory-sides-duration) var(--imory-sides-easing);
+}
+
+:where([data-imory-sides="frame"][data-imory-sides-phase="open"] > [data-imory-sides-backdrop]) {
+  opacity: 1;
+}
+
+/* 플랫폼이 채운 버튼(스킨이 여는 버튼·닫기를 그리지 않았을 때만) */
+:where([data-imory-sides-fallback]) {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+:where([data-imory-sides-fallback][data-imory-sides-open]) {
+  position: absolute;
+  top: 8px;
+  z-index: 2;
+}
+
+:where([data-imory-sides-fallback][data-imory-sides-open="left"]) { left: 8px; }
+:where([data-imory-sides-fallback][data-imory-sides-open="right"]) { right: 8px; }
+
+:where([data-imory-sides-fallback][data-imory-sides-close]) {
+  display: block;
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where([data-imory-sides="frame"] > [data-imory-sides-area],
+         [data-imory-sides="frame"] > [data-imory-sides-backdrop]) {
+    transition: none;
+  }
+}

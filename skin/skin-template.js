@@ -407,19 +407,41 @@ function resolveSkinTemplate(
     resolveSkinAuthorJs(skinPackage);
 
 
+  /*
+    EDITORIAL-RESPONSIVE-HOME-1 — 좌우 영역 설정(IMORY_SIDES_DESIGN.md).
+
+    js 와 같은 이유로 여기서 싣는다. 설정은 SkinPackage.regions 에
+    있고(스킨 한 벌에 하나), 렌더러(skin-render.js)는 template 한 장만
+    받는다. 영역 항목이 없는 스킨(= 지금까지의 모든 스킨)에서는 키
+    자체를 만들지 않는다 — sandbox 봉투와 Preview 메시지가 byte 단위로
+    그대로다.
+  */
+
+  const sides =
+    typeof buildSkinSidesRenderSetting === "function"
+      ? buildSkinSidesRenderSetting(skinPackage)
+      : undefined;
+
+  const withSides =
+    (template) =>
+      sides
+        ? { ...template, sides }
+        : template;
+
+
   const explicitTemplate =
     skinPackage.templates?.[pageType];
 
   if (explicitTemplate && typeof explicitTemplate.html === "string") {
 
-    return {
+    return withSides({
       html: explicitTemplate.html,
       css:
         typeof explicitTemplate.css === "string"
           ? explicitTemplate.css
           : (skinPackage.css || ""),
       js: authorJs
-    };
+    });
 
   }
 
@@ -429,11 +451,11 @@ function resolveSkinTemplate(
     typeof skinPackage.html === "string"
   ) {
 
-    return {
+    return withSides({
       html: skinPackage.html,
       css: skinPackage.css || "",
       js: authorJs
-    };
+    });
 
   }
 

@@ -71,6 +71,9 @@
         /* BOTTOM-DOCK-1 — dock 설정 패널(Studio 자신의 UI) */
         "./dock/dock-panel.css",
 
+        /* HOME 단 구성 패널(IMORY_SIDES_DESIGN.md §6) */
+        "./sides/sides-panel.css",
+
         /* Dock 패널의 아이콘 고르기 — 공개 화면이 그리는 것과 같은 그림 */
         "../skin/skin-dock-icons.css",
         "./inspector/studio-inspector.css",
@@ -342,6 +345,14 @@
           hidden
         ></section>
 
+        <!-- HOME 단 구성(1단 · 2단 · 3단) — IMORY_SIDES_DESIGN.md §6 -->
+        <section
+          class="studio-left-panel-section"
+          id="studioLeftPanelLayout"
+          data-left-panel-mode="layout"
+          hidden
+        ></section>
+
       </div>
 
     </aside>
@@ -378,7 +389,7 @@
       >
 
         <!-- =================================================
-             LEAD — 나가기 + 왼쪽 패널을 여는 셋
+             LEAD — 나가기 + 왼쪽 패널을 여는 넷(Select · Images · Dock · Layout)
 
              Select 의 aria-pressed 는 "Inspector 모드가 켜져 있는가"
              다(studio/inspector/studio-inspector.js). 세 버튼의
@@ -446,6 +457,23 @@
               disabled
             >
               Dock
+            </button>
+
+            <!--
+                 HOME 단 구성(IMORY_SIDES_DESIGN.md §6) — 왼쪽 패널에
+                 1단 · 2단 · 3단을 연다. 좁은 화면에서는 첫 줄에 자리가
+                 없어 둘째 줄(↶ ↷ 다음)로 간다(studio-shell.css).
+            -->
+            <button
+              type="button"
+              class="studio-corner-button studio-mode-button"
+              id="studioLayoutButton"
+              aria-expanded="false"
+              aria-controls="studioLeftPanel"
+              title="HOME 을 1단 · 2단 · 3단 중 무엇으로 보여 줄지 고릅니다"
+              disabled
+            >
+              Layout
             </button>
 
           </div>
@@ -878,6 +906,9 @@
            dock 패널이 같은 값 목록을 읽는다
            (IMORY_TRANSITION_PRIMITIVE_DESIGN.md) */
         "../skin/skin-transition.js",
+        /* 좌우 영역(IMORY_SIDES_DESIGN.md) — sanitize 가 data-imory-sides*
+           를 이 파일의 표로 판정하므로 먼저 온다. */
+        "../skin/skin-sides.js",
         "../skin/skin-sanitize.js",
         "../skin/skin-package-normalize.js",
         "../skin/skin-generator.js"
@@ -1075,6 +1106,11 @@
           (images-panel.js와 완전히 같은 관계).
         */
         "./dock/dock-panel.js",
+
+        /* HOME 단 구성 패널 — getStudioHomeSides/setStudioHomeSides
+           (studio-preview.js)는 버튼을 누르는 시점에만 있으면 된다
+           (dock-panel.js 와 같은 관계). */
+        "./sides/sides-panel.js",
 
         "./studio-preview.js"
       ]

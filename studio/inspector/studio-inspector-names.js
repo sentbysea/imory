@@ -298,6 +298,13 @@ function studioInspectorKindName(el, info) {
    studioInspectorElementName(el, info) -> 사람이 읽는 이름
 ========================================================== */
 
+const STUDIO_NAME_BY_SIDES_AREA = {
+  left: "왼쪽 영역",
+  main: "가운데 HOME",
+  right: "오른쪽 영역"
+};
+
+
 function studioInspectorElementName(el, info) {
 
   if (!el || !info) {
@@ -320,6 +327,26 @@ function studioInspectorElementName(el, info) {
 
   if (dockPart === "items") {
     return "Bottom Dock 항목";
+  }
+
+  /* HOME 좌우 영역(IMORY_SIDES_DESIGN.md) — dock 자리와 같은 급의
+     스킨 계약이다 */
+  const sidesArea =
+    el.getAttribute("data-imory-sides-area");
+
+  if (sidesArea && STUDIO_NAME_BY_SIDES_AREA[sidesArea]) {
+    return STUDIO_NAME_BY_SIDES_AREA[sidesArea];
+  }
+
+  const sidesOpen =
+    el.getAttribute("data-imory-sides-open");
+
+  if (sidesOpen === "left" || sidesOpen === "right") {
+    return sidesOpen === "left" ? "왼쪽 영역 여는 버튼" : "오른쪽 영역 여는 버튼";
+  }
+
+  if (el.hasAttribute("data-imory-sides-close")) {
+    return "영역 닫기 버튼";
   }
 
   const family =

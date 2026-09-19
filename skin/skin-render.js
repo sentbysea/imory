@@ -106,6 +106,15 @@ function ensureSkinStylesheet(doc, stylesheetUrl, marker) {
 
 }
 
+/* 좌우 영역(IMORY_SIDES_DESIGN.md) — 같은 방식. 틀이 없는 스킨에서는
+   이 파일의 어느 선택자도 매치되지 않는다. */
+const SKIN_SIDES_STYLESHEET_URL =
+  new URL("./skin-sides.css", import.meta.url);
+
+function ensureSkinSidesStylesheet(doc) {
+  ensureSkinStylesheet(doc, SKIN_SIDES_STYLESHEET_URL, "data-imory-skin-sides");
+}
+
 function ensureSkinLayoutStylesheet(doc) {
   ensureSkinStylesheet(doc, SKIN_LAYOUT_STYLESHEET_URL, "data-imory-skin-layout");
 }
@@ -966,6 +975,7 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
     ensureContentWidthStylesheet(doc);
     ensureSkinLayoutStylesheet(doc);
     ensureSkinTransitionStylesheet(doc);
+    ensureSkinSidesStylesheet(doc);
 
     const safeHtml = sanitizeSkinHTML(String(currentSkin?.html || ""), doc);
 
@@ -976,6 +986,15 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
     }
 
     const safeCss = cssResult.ok ? cssResult.css : "";
+
+    /* 좌우 영역(IMORY_SIDES_DESIGN.md) — 비우기 **전에** 옛 틀을 내린다.
+       열린 패널이 스크롤을 잠가 두었으면 여기서 풀린다. 열려 있던 쪽은
+       새 틀에서 움직임 없이 다시 연다(Studio 가 글자 하나마다 다시
+       그려도 패널이 닫히지 않게). 틀이 없던 스킨이면 null 이다. */
+    const sidesOpenBefore =
+      typeof disposeSkinSides === "function"
+        ? disposeSkinSides(container)
+        : null;
 
     container.innerHTML = "";
 
@@ -1055,6 +1074,16 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
       compileSkinTransitionTree(root, { appear: transitionAppear !== false });
     }
 
+    /* 좌우 영역 — 설정(skin.sides, resolveSkinTemplate 이 regions 에서
+       만든다)과 틀(data-imory-sides="frame")이 만나는 자리. 틀이 없는
+       스킨에서는 아무 요소도 건드리지 않는다. */
+    if (typeof compileSkinSides === "function") {
+      compileSkinSides(root, currentSkin?.sides, {
+        container,
+        restoreOpen: sidesOpenBefore
+      });
+    }
+
   }
 
   mount();
@@ -1076,6 +1105,9 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
     },
 
     destroy() {
+      if (typeof disposeSkinSides === "function") {
+        disposeSkinSides(container);
+      }
       container.innerHTML = "";
       currentRoot = undefined;
     },

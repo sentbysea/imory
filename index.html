@@ -514,6 +514,10 @@
            배치와 같은 이유로 sanitize 보다 먼저다. dock 의 접기와
            페이지 전환도 이 파일의 움직임을 쓴다. */
         "./skin/skin-transition.js",
+
+        /* 좌우 영역(IMORY_SIDES_DESIGN.md) — sanitize 가 data-imory-sides*
+           를 이 파일의 표로 판정하므로 먼저 온다. */
+        "./skin/skin-sides.js",
         "./skin/skin-sanitize.js",
         "./skin/skin-image-slots.js",
         "./skin/skin-context.js",
@@ -713,6 +717,9 @@
            가로 넘침 방지(IMORY_TRANSITION_PRIMITIVE_DESIGN.md).
            renderSkin() 도 없으면 스스로 건다. */
         "./skin/skin-transition.css",
+
+        /* 좌우 영역 — 칼럼/패널의 자리(IMORY_SIDES_DESIGN.md) */
+        "./skin/skin-sides.css",
 
         /*
           본문이 그려지는 모든 화면의 공용 CSS — 형광펜 여백 ·

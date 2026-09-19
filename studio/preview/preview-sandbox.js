@@ -540,6 +540,15 @@ export async function renderSandboxPreview(options) {
       js: typeof opts.skin.js === "string" ? opts.skin.js : ""
     };
 
+  /* 좌우 영역 설정 — js 와 같은 사정이다(여기서 옮기지 않으면 sandbox
+     Preview 에서만 영역이 조용히 꺼진다). IMORY_SIDES_DESIGN.md */
+  if (opts.skin.sides && typeof opts.skin.sides === "object") {
+    template.sides = {
+      left: opts.skin.sides.left === true,
+      right: opts.skin.sides.right === true
+    };
+  }
+
 
   /* --- 이미 떠 있는 프레임이면 거기에 다시 그린다 ------- */
 

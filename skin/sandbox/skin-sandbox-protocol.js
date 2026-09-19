@@ -225,7 +225,33 @@ var SANDBOX_MESSAGE_TYPES = {
   INSPECT_CAPS: "IMORY_INSPECT_CAPS",
   INSPECT_TEXT: "IMORY_INSPECT_TEXT",
   INSPECT_DRAG: "IMORY_INSPECT_DRAG",
-  INSPECT_PREVIEW: "IMORY_INSPECT_PREVIEW"
+  INSPECT_PREVIEW: "IMORY_INSPECT_PREVIEW",
+
+
+  /* =======================================================
+     EDITORIAL-RESPONSIVE-HOME-1 — 좌우 영역의 모바일 패널
+     (IMORY_SIDES_DESIGN.md §7)
+
+     프레임은 콘텐츠 높이만큼 늘어나 있고 스크롤은 **부모**가 한다.
+     그래서 프레임 안의 position:fixed 패널은 화면이 아니라 프레임
+     전체에 붙는다 — 스크롤해 내려온 사람에게 패널의 위쪽이 화면
+     밖에 있다. 부모만 아는 두 가지를 주고받는다.
+
+       SIDES_STATE    frame -> parent { renderSeq, open }
+                      패널이 열렸다/닫혔다. 부모는 열린 동안 **자기
+                      스크롤**을 잠근다.
+       SIDES_VIEWPORT parent -> frame { renderSeq, top, height }
+                      프레임 좌표로 "지금 화면에 보이는 부분". 프레임은
+                      패널과 덮개를 그 안에 놓는다.
+       SIDES_CLOSE    parent -> frame { renderSeq }
+                      부모 쪽(프레임 바깥)을 눌렀다.
+
+     오가는 것은 참/거짓과 정수 둘뿐이다.
+  ======================================================= */
+
+  SIDES_STATE: "IMORY_SIDES_STATE",
+  SIDES_VIEWPORT: "IMORY_SIDES_VIEWPORT",
+  SIDES_CLOSE: "IMORY_SIDES_CLOSE"
 };
 
 
@@ -628,11 +654,25 @@ function isSandboxTemplate(value) {
 
   if (
     !isPlainSandboxObject(value) ||
-    !hasOnlyKnownSandboxKeys(value, ["html", "css", "js"]) ||
+    !hasOnlyKnownSandboxKeys(value, ["html", "css", "js", "sides"]) ||
     typeof value.html !== "string" ||
     typeof value.css !== "string" ||
     value.html.length > SANDBOX_MAX_TEMPLATE_CHARS ||
     value.css.length > SANDBOX_MAX_TEMPLATE_CHARS
+  ) {
+    return false;
+  }
+
+
+  /* 좌우 영역 설정 — { left: boolean, right: boolean } 정확히 그 모양만 */
+  if (
+    value.sides !== undefined &&
+    !(
+      isPlainSandboxObject(value.sides) &&
+      hasOnlyKnownSandboxKeys(value.sides, ["left", "right"]) &&
+      typeof value.sides.left === "boolean" &&
+      typeof value.sides.right === "boolean"
+    )
   ) {
     return false;
   }
@@ -1104,6 +1144,44 @@ var SANDBOX_MESSAGE_SPEC = {
         (payload.layoutY === undefined || isSandboxInspectRatio(payload.layoutY))
       );
 
+    }
+  },
+
+
+  /* 좌우 영역 — 위 SIDES_* 주석 */
+
+  IMORY_SIDES_STATE: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "open"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        typeof payload.open === "boolean"
+      );
+    }
+  },
+
+  IMORY_SIDES_VIEWPORT: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq", "top", "height"],
+    check: function (payload) {
+      return (
+        isSandboxRenderSeq(payload.renderSeq) &&
+        Number.isInteger(payload.top) &&
+        payload.top >= 0 &&
+        payload.top <= SANDBOX_MAX_FRAME_HEIGHT &&
+        Number.isInteger(payload.height) &&
+        payload.height >= 0 &&
+        payload.height <= SANDBOX_MAX_FRAME_HEIGHT
+      );
+    }
+  },
+
+  IMORY_SIDES_CLOSE: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq"],
+    check: function (payload) {
+      return isSandboxRenderSeq(payload.renderSeq);
     }
   }
 

@@ -332,6 +332,32 @@ function copySkinSanitizedAttributes(sourceEl, destEl, tag) {
 
     }
 
+    /* =====================================================
+       SIDES (data-imory-sides / -area / -open / -close) —
+       IMORY_SIDES_DESIGN.md
+
+       판정은 skin/skin-sides.js 의 표 한 곳이다. 값이 표에 없으면
+       속성만 사라진다. 런타임 상태(-layout · -on · -state …)는 표에
+       없으므로 여기서 조용히 사라진다 — 저장되는 HTML 에 들어갈 수
+       없다. skin-sides.js 가 없는 문서면 전부 버린다(진입 문서들은
+       이 파일보다 먼저 로드한다). */
+    if (
+      typeof isSkinSidesAttributeName === "function" &&
+      isSkinSidesAttributeName(name)
+    ) {
+
+      const stored = sanitizeSkinSidesAttributeValue(name, value);
+
+      if (stored !== null) {
+        destEl.setAttribute(name, stored);
+      } else {
+        console.warn(`[skin-sanitize] dropped unsupported ${name}="${value}"`);
+      }
+
+      return;
+
+    }
+
     if (name === SKIN_SANITIZE_DOCK_ATTR) {
       if (SKIN_SANITIZE_ALLOWED_DOCK_SLOTS.has(value)) {
         destEl.setAttribute(name, value);

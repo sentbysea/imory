@@ -910,6 +910,15 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         css: payload.template.css
       };
 
+    /* 좌우 영역 설정(IMORY_SIDES_DESIGN.md) — 프로토콜이 모양을 이미
+       확인했다({ left, right } 참/거짓). 없으면 키를 만들지 않는다. */
+    if (payload.template.sides) {
+      skin.sides = {
+        left: payload.template.sides.left === true,
+        right: payload.template.sides.right === true
+      };
+    }
+
 
     try {
 
@@ -1155,6 +1164,40 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
         sendError("no-body-region");
 
+      }
+
+      return;
+
+    }
+
+
+    /* =====================================================
+       좌우 영역 — 부모가 알려 주는 "보이는 부분"과 바깥 클릭
+       (skin/sandbox/skin-sandbox-protocol.js SIDES_*). 옛 화면의
+       것은 버린다.
+    ====================================================== */
+
+    if (
+      verdict.type === SANDBOX_MESSAGE_TYPES.SIDES_VIEWPORT ||
+      verdict.type === SANDBOX_MESSAGE_TYPES.SIDES_CLOSE
+    ) {
+
+      if (verdict.payload.renderSeq !== FRAME_STATE.renderSeq) {
+        return;
+      }
+
+      if (verdict.type === SANDBOX_MESSAGE_TYPES.SIDES_VIEWPORT) {
+        if (typeof setSkinSidesViewport === "function") {
+          setSkinSidesViewport(document, {
+            top: verdict.payload.top,
+            height: verdict.payload.height
+          });
+        }
+        return;
+      }
+
+      if (typeof closeAllSkinSides === "function") {
+        closeAllSkinSides(document);
       }
 
       return;
@@ -1433,6 +1476,33 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     window.addEventListener("message", onMessage);
 
     document.addEventListener("click", onFrameClick, true);
+
+
+    /* 좌우 영역 — 패널이 열리고 닫히는 것을 부모에게 알린다. 부모가
+       자기 스크롤을 잠그고 "보이는 부분"을 돌려준다
+       (skin/skin-sides.js 가 문서에 쏘는 이벤트). */
+    document.addEventListener(
+      "imory-sides-change",
+      function (event) {
+
+        const open =
+          !!(event && event.detail && event.detail.open);
+
+        if (!open && typeof setSkinSidesViewport === "function") {
+          setSkinSidesViewport(document, null);
+        }
+
+        send(
+          SANDBOX_MESSAGE_TYPES.SIDES_STATE,
+          {
+            contract: 1,
+            renderSeq: FRAME_STATE.renderSeq,
+            open: open
+          }
+        );
+
+      }
+    );
 
 
     /*

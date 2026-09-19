@@ -95,6 +95,15 @@ const STUDIO_LEFT_PANEL_MODES = {
     title: "BOTTOM DOCK",
     section: document.getElementById("studioLeftPanelDock"),
     button: document.getElementById("studioDockButton")
+  },
+
+  /* HOME 단 구성(IMORY_SIDES_DESIGN.md §6). 버튼은 Dock 옆(좁은
+     화면에서는 둘째 줄)이다. 들고 있는 상태가 없다 — 고르는 순간
+     적용되므로 떠날 때 할 일이 없다. */
+  layout: {
+    title: "HOME LAYOUT",
+    section: document.getElementById("studioLeftPanelLayout"),
+    button: document.getElementById("studioLayoutButton")
   }
 };
 
@@ -116,7 +125,8 @@ let studioLeftPanelOpen = false;
 const studioLeftPanelContentAlive = {
   select: true,
   images: false,
-  dock: false
+  dock: false,
+  layout: false
 };
 
 /* 좁은 화면에서 AI 를 열며 접어 둔 시트 — AI 를 닫으면 되돌린다 */
@@ -286,6 +296,10 @@ function enterStudioLeftPanelContent(mode) {
 
   if (mode === "dock" && typeof window.openSkinDockPanel === "function") {
     window.openSkinDockPanel();
+  }
+
+  if (mode === "layout" && typeof window.openSkinSidesPanel === "function") {
+    window.openSkinSidesPanel();
   }
 
   studioLeftPanelContentAlive[mode] = true;
@@ -480,7 +494,9 @@ function handleStudioSelectButton() {
     studioShellInspectorEnabled();
 
   const showingOther =
-    isStudioLeftPanelShowing("images") || isStudioLeftPanelShowing("dock");
+    isStudioLeftPanelShowing("images") ||
+    isStudioLeftPanelShowing("dock") ||
+    isStudioLeftPanelShowing("layout");
 
   if (enabled && !showingOther) {
 
@@ -528,6 +544,11 @@ STUDIO_LEFT_PANEL_MODES.images.button?.addEventListener(
 STUDIO_LEFT_PANEL_MODES.dock.button?.addEventListener(
   "click",
   () => handleStudioPanelModeButton("dock")
+);
+
+STUDIO_LEFT_PANEL_MODES.layout.button?.addEventListener(
+  "click",
+  () => handleStudioPanelModeButton("layout")
 );
 
 studioShellLeftPanelCollapse?.addEventListener(

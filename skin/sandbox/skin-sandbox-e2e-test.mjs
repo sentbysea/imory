@@ -5652,6 +5652,287 @@ async function runBodyParity(browser) {
 
 
 /* =========================================================
+   [sides] EDITORIAL-RESPONSIVE-HOME-1 — 좌우 영역(IMORY_SIDES_DESIGN.md)
+
+   진짜 index.html 로 공개 HOME 을 연다. 같은 스킨을 renderMode 만
+   바꿔 두 번(native · sandbox).
+
+   ★ 공개 HOME 은 문서가 아니라 #themeMount 가 스크롤한다. native 는
+     그 조상을, sandbox 는 **부모**가 자기 쪽을 잠가야 한다(프레임은
+     콘텐츠 높이만큼 늘어나 있어 안에서는 스크롤할 것이 없다).
+   ★ sandbox 프레임 안의 fixed 패널은 부모가 알려 준 "보이는 부분"
+     에 선다 — 스크롤해 내려온 뒤 열어도 패널 윗부분이 화면 밖으로
+     나가지 않는가를 좌표로 잰다.
+========================================================== */
+
+function readEditorialPkg(renderMode) {
+
+  const pkg =
+    JSON.parse(fs.readFileSync(path.join(ROOT, "skin", "test-skins", "imory-editorial-home-v1.json"), "utf8"));
+
+  if (renderMode) {
+    pkg.renderMode = renderMode;
+  }
+
+  return pkg;
+
+}
+
+
+async function readSidesIn(target) {
+
+  return target.evaluate(() => {
+    const frame = document.querySelector('[data-imory-sides="frame"]');
+    if (!frame) return null;
+    const area = (name) => {
+      const el = frame.querySelector(`[data-imory-sides-area="${name}"]`);
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      return { state: el.getAttribute("data-imory-sides-state"), top: Math.round(r.top), h: Math.round(r.height), x: Math.round(r.left), w: Math.round(r.width), visibility: cs.visibility };
+    };
+    const active = document.activeElement;
+    return {
+      layout: frame.getAttribute("data-imory-sides-layout"),
+      on: frame.getAttribute("data-imory-sides-on"),
+      active: frame.getAttribute("data-imory-sides-active"),
+      left: area("left"), main: area("main"), right: area("right"),
+      viewportTop: document.documentElement.style.getPropertyValue("--imory-sides-viewport-top"),
+      viewportHeight: document.documentElement.style.getPropertyValue("--imory-sides-viewport-height"),
+      focusInLeft: !!(active && active.closest && active.closest('[data-imory-sides-area="left"]')),
+      focusOpener: active && active.getAttribute ? active.getAttribute("data-imory-sides-open") : null,
+      overflowX: document.documentElement.scrollWidth - document.documentElement.clientWidth
+    };
+  });
+
+}
+
+
+async function readThemeMount(page) {
+
+  return page.evaluate(() => {
+    const mount = document.getElementById("themeMount");
+    return mount
+      ? {
+          overflow: getComputedStyle(mount).overflowY,
+          inline: mount.style.overflow,
+          scrollTop: Math.round(mount.scrollTop),
+          scrollable: mount.scrollHeight > mount.clientHeight
+        }
+      : null;
+  });
+
+}
+
+
+async function runSides(browser) {
+
+  console.log("\n[sides] 좌우 영역 — 공개 HOME (native · sandbox)");
+
+  const mobile = { width: 390, height: 844 };
+  const desktop = { width: 1280, height: 800 };
+
+
+  /* --- native ------------------------------------------------ */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, readEditorialPkg(null), "/", { viewport: mobile, sandbox: false });
+
+    await page.waitForSelector('#themeMount [data-imory-sides-layout]', { timeout: 15000 }).catch(() => {});
+
+    let s = await readSidesIn(page);
+
+    check("[sides] native 390: 스킨 HOME 에 틀이 있고 3단 패널",
+      s && s.layout === "drawer" && s.on === "left right", JSON.stringify(s && { l: s.layout, on: s.on }));
+
+    check("[sides] native: sandbox 프레임이 없다",
+      (await page.$$("iframe.imory-skin-sandbox-frame")).length === 0);
+
+    /* 스크롤할 거리를 만든다 — 기본 콘텐츠는 한 화면이라 스크롤이 없다 */
+    await page.evaluate(() => {
+      const main = document.querySelector('[data-imory-sides-area="main"]');
+      const pad = document.createElement("div");
+      pad.style.height = "900px";
+      main.appendChild(pad);
+      document.getElementById("themeMount").scrollTop = 200;
+    });
+
+    await page.click('[data-imory-sides-open="left"]');
+    await page.waitForTimeout(500);
+
+    s = await readSidesIn(page);
+    let m = await readThemeMount(page);
+
+    check("[sides] native: 왼쪽 패널이 화면 맨 위부터 열린다",
+      s.active === "left" && s.left.state === "open" && s.left.top === 0 && s.left.h === mobile.height && s.left.x === 0,
+      JSON.stringify(s.left));
+    check("[sides] native: 포커스가 패널 안", s.focusInLeft);
+    check("[sides] ★ native: #themeMount(공개 HOME 의 스크롤 주인)가 잠기고 위치 그대로",
+      m.overflow === "hidden" && m.scrollTop === 200, JSON.stringify(m));
+
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(500);
+
+    s = await readSidesIn(page);
+    m = await readThemeMount(page);
+
+    check("[sides] native: Escape → 닫힘 · 버튼으로 포커스 · 잠금 풀림 · 위치 그대로",
+      !s.active && s.focusOpener === "left" && m.overflow !== "hidden" && m.inline === "" && m.scrollTop === 200,
+      JSON.stringify({ a: s.active, f: s.focusOpener, m }));
+
+    /* 패널 안 링크 → 기존 SPA 라우터 → CATEGORY */
+    await page.click('[data-imory-sides-open="left"]');
+    await page.waitForTimeout(500);
+    await page.click('[data-imory-sides-area="left"] .ed-toc-link >> nth=0');
+    await page.waitForURL(/\/category\/1$/, { timeout: 8000 }).catch(() => {});
+    await page.waitForTimeout(600);
+
+    m = await readThemeMount(page);
+
+    check("[sides] native: 패널 안 카테고리 링크 → 주소가 CATEGORY 로",
+      /\/testuser\/category\/1$/.test(page.url()), page.url());
+    check("[sides] native: 이동하면서 잠금이 풀렸다", m.inline === "", JSON.stringify(m));
+
+    await page.goBack();
+    await page.waitForTimeout(800);
+
+    s = await readSidesIn(page);
+    check("[sides] native: 뒤로가기로 HOME — 패널은 닫힌 채", s && !s.active && s.left.state === "closed",
+      JSON.stringify(s && { a: s.active, st: s.left.state }));
+
+    check("[sides] native: 페이지 오류 없음", pageErrors.length === 0, pageErrors.join(" | "));
+
+    await ctx.close();
+  }
+
+  {
+    const { ctx, page } =
+      await openPublicPath(browser, readEditorialPkg(null), "/", { viewport: desktop, sandbox: false });
+
+    await page.waitForSelector('#themeMount [data-imory-sides-layout]', { timeout: 15000 }).catch(() => {});
+
+    const s = await readSidesIn(page);
+
+    check("[sides] native 1280: 세 칼럼이 나란히",
+      s && s.layout === "columns" && s.left.w > 0 && s.right.w > 0 && s.left.x + s.left.w <= s.main.x && s.main.x + s.main.w <= s.right.x,
+      JSON.stringify(s && { l: s.left, m: s.main, r: s.right }));
+
+    await ctx.close();
+  }
+
+
+  /* --- sandbox ---------------------------------------------- */
+
+  {
+    const { ctx, page, pageErrors } =
+      await openPublicPath(browser, readEditorialPkg("sandbox"), "/", { viewport: mobile });
+
+    const frame = await waitForSandboxPage(page, "home");
+
+    check("[sides] sandbox 390: 프레임이 떴다", Boolean(frame));
+
+    if (frame) {
+
+      await frame.waitForSelector("[data-imory-sides-layout]", { timeout: 8000 }).catch(() => {});
+
+      let s = await readSidesIn(frame);
+
+      check("[sides] sandbox: 프레임 안에서도 3단 패널(설정이 봉투로 왔다)",
+        s && s.layout === "drawer" && s.on === "left right", JSON.stringify(s && { l: s.layout, on: s.on }));
+
+      /* 프레임을 늘려 부모가 스크롤할 거리를 만든다 */
+      await frame.evaluate(() => {
+        const main = document.querySelector('[data-imory-sides-area="main"]');
+        const pad = document.createElement("div");
+        pad.style.height = "900px";
+        main.appendChild(pad);
+      });
+
+      await page.waitForTimeout(500);
+
+      await page.evaluate(() => { document.getElementById("themeMount").scrollTop = 300; });
+      await page.waitForTimeout(100);
+
+      const scrolled = await readThemeMount(page);
+
+      /* 여는 버튼은 프레임 맨 위(스크롤해 올라간 곳)에 있다 — 부모를
+         다시 올리지 않고 프레임 안에서 직접 누른다 */
+      await frame.evaluate(() => document.querySelector('[data-imory-sides-open="right"]').click());
+      await page.waitForTimeout(600);
+
+      s = await readSidesIn(frame);
+      const m = await readThemeMount(page);
+
+      check("[sides] sandbox: 오른쪽 패널이 열렸다", s.active === "right" && s.right.state === "open",
+        JSON.stringify({ a: s.active, st: s.right.state }));
+
+      check("[sides] ★ sandbox: 부모가 자기 스크롤(#themeMount)을 잠갔고 위치 그대로",
+        scrolled.scrollTop === 300 && m.overflow === "hidden" && m.scrollTop === 300, JSON.stringify({ scrolled, m }));
+
+      check("[sides] ★ sandbox: 패널이 '지금 보이는 부분'에 선다(프레임 맨 위가 아니라)",
+        s.viewportTop === "300px" && s.right.top === 300 && Math.abs(s.right.h - mobile.height) <= 1,
+        JSON.stringify({ vt: s.viewportTop, vh: s.viewportHeight, top: s.right.top, h: s.right.h }));
+
+      await frame.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })));
+      await page.waitForTimeout(600);
+
+      s = await readSidesIn(frame);
+      const after = await readThemeMount(page);
+
+      check("[sides] sandbox: Escape → 닫힘 · 부모 잠금 풀림 · 위치 그대로",
+        !s.active && after.inline === "" && after.scrollTop === 300, JSON.stringify({ a: s.active, after }));
+
+      /* 부모 쪽(프레임 바깥)을 누르면 닫힌다 */
+      await frame.evaluate(() => document.querySelector('[data-imory-sides-open="left"]').click());
+      await page.waitForTimeout(500);
+      await page.evaluate(() => document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true })));
+      await page.waitForTimeout(600);
+
+      s = await readSidesIn(frame);
+      check("[sides] sandbox: 프레임 바깥(부모)을 누르면 닫힌다", !s.active, String(s.active));
+
+      /* 패널 안 링크 → NAVIGATE → CATEGORY, 부모 잠금은 풀려 있어야 한다 */
+      await frame.evaluate(() => document.querySelector('[data-imory-sides-open="left"]').click());
+      await page.waitForTimeout(500);
+      await frame.evaluate(() => document.querySelector('[data-imory-sides-area="left"] .ed-toc-link').click());
+      await page.waitForURL(/\/category\/1$/, { timeout: 8000 }).catch(() => {});
+      await page.waitForTimeout(800);
+
+      const moved = await readThemeMount(page);
+
+      check("[sides] sandbox: 패널 안 링크 → CATEGORY", /\/testuser\/category\/1$/.test(page.url()), page.url());
+      check("[sides] ★ sandbox: 화면을 옮기면 부모 잠금이 남지 않는다", moved.inline === "", JSON.stringify(moved));
+
+    }
+
+    check("[sides] sandbox: 페이지 오류 없음", realPageErrors(pageErrors).length === 0, realPageErrors(pageErrors).join(" | "));
+
+    await ctx.close();
+  }
+
+  {
+    const { ctx, page } =
+      await openPublicPath(browser, readEditorialPkg("sandbox"), "/", { viewport: desktop });
+
+    const frame = await waitForSandboxPage(page, "home");
+
+    if (frame) {
+      await frame.waitForSelector("[data-imory-sides-layout]", { timeout: 8000 }).catch(() => {});
+      const s = await readSidesIn(frame);
+      check("[sides] sandbox 1280: 세 칼럼이 나란히 · 가로 넘침 0",
+        s && s.layout === "columns" && s.left.w > 0 && s.right.w > 0 && s.overflowX <= 0,
+        JSON.stringify(s && { l: s.layout, lw: s.left.w, rw: s.right.w, o: s.overflowX }));
+    } else {
+      check("[sides] sandbox 1280: 프레임이 떴다", false);
+    }
+
+    await ctx.close();
+  }
+
+}
+
+
+/* =========================================================
    RUN
 ========================================================== */
 
@@ -5712,6 +5993,9 @@ async function runBodyParity(browser) {
     /* --- TRANSITION-1 --- */
     if (shouldRun("transition")) await runTransition(browser);
     if (shouldRun("authorjspages")) await runAuthorJsPages(browser);
+
+    /* --- EDITORIAL-RESPONSIVE-HOME-1 --- */
+    if (shouldRun("sides")) await runSides(browser);
 
     if (shouldRun("regress")) await runRegress();
     if (shouldRun("env")) await runEnv();

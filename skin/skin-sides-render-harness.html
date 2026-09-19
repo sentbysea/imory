@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SKIN SIDES — 렌더 하네스</title>
+
+  <!--
+    =========================================================
+    EDITORIAL-RESPONSIVE-HOME-1 렌더 하네스
+    기준 문서: IMORY_SIDES_DESIGN.md
+
+    잡지 표지형 HOME(skin/test-skins/imory-editorial-home-v1.json)을
+    **실제 renderSkin()** 으로 그린다. 판정은 재는 쪽
+    (skin/skin-sides-e2e-test.mjs)이 한다.
+
+    공개 HOME 과 같이 문서가 아니라 #mount 가 스크롤한다
+    (#themeMount.theme-mount--skin 과 같은 모양 — home-base.css).
+    ?scroller=document 면 문서가 스크롤한다(Studio Preview 모양).
+
+    쿼리
+      count=1|2|3        regions 설정(기본 3)
+      data=full|empty|many|long   Context(기본 full)
+      palette=light|dark
+      cover=0            대표 사진 없음
+      scroller=document
+
+    로컬 정적 서버가 필요하다(ES 모듈). e2e 는 자기 서버를 띄운다.
+    =========================================================
+  -->
+
+  <style>
+    html, body { margin: 0; }
+    body { font: 13px system-ui, sans-serif; background: #eee; }
+    #mount {
+      position: fixed;
+      inset: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+    body.scroller-document #mount {
+      position: static;
+      overflow: visible;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="mount"></div>
+
+  <script src="../core/lib/build-version.js"></script>
+  <script src="./skin-layout.js"></script>
+  <script src="./skin-transition.js"></script>
+  <script src="./skin-sides.js"></script>
+  <script src="./skin-sanitize.js"></script>
+  <script src="./skin-template.js"></script>
+
+  <script type="module">
+
+    import { renderSkin } from "./skin-render.js";
+
+    const params = new URLSearchParams(location.search);
+
+    if (params.get("scroller") === "document") {
+      document.body.classList.add("scroller-document");
+    }
+
+    /* pad=N — 스킨 뒤에 N px 여백을 둬서 스크롤할 거리를 만든다(다시
+       그려도 남도록 스킨 바깥에 둔다). 스크롤 잠금 · 위치 유지 검사용. */
+    const pad = Number(params.get("pad") || 0);
+    if (pad > 0) {
+      const style = document.createElement("style");
+      style.textContent =
+        `#mount::after, body.scroller-document::after { content: ""; display: block; height: ${pad}px; }`;
+      document.head.appendChild(style);
+    }
+
+    const LONG_TITLE =
+      "아주 긴 블로그 제목이 두 줄 세 줄로 넘어가도 표지가 무너지지 않는지 보는 제목 — The Quiet Afternoon Chronicle";
+
+    function makeContext(kind, withCover) {
+
+      const categories =
+        kind === "empty"
+          ? []
+          : kind === "many" || kind === "long"
+            ? [
+                "기록", "여행의 조각들", "Reading Notes", "사진",
+                "오래 걸려서 쓴 아주 긴 카테고리 이름이 잘리지 않는지 보는 칸",
+                "Letters", "부엌", "음악", "Archive 2019–2026", "메모"
+              ]
+            : ["기록", "여행", "Reading Notes", "사진"];
+
+      const posts =
+        kind === "empty"
+          ? []
+          : Array.from({ length: kind === "many" || kind === "long" ? 10 : 5 }, (_, i) => ({
+              id: String(i + 1),
+              title:
+                i === 1 && kind === "long"
+                  ? "제목이 아주 길어서 좁은 오른쪽 영역에서 여러 줄로 감기는 글 — 잘리거나 겹치지 않아야 한다"
+                  : ["봄의 목록", "창가에서 읽은 것", "An Ordinary Tuesday", "편지 쓰는 법", "여름 끝의 사진", "기차에서", "Notes on Light", "부엌의 시간", "오래된 노트", "밤산책"][i],
+              href: `/test1/post/${i + 1}`,
+              publishedAtLabel: `2026.09.${String(19 - i).padStart(2, "0")}`,
+              isSecret: false
+            }));
+
+      const card = kind === "empty" ? null : {
+        excerpt: "마음에 남은 문장은\n다시 읽을 때마다 조금씩 다른 얼굴을 한다.",
+        sourcePathLabel: "기록 > 창가에서 읽은 것",
+        color: "#c9803f",
+        hasNote: false,
+        postHref: "/test1/post/2"
+      };
+
+      return {
+        site: {
+          title: kind === "long" ? LONG_TITLE : "Afternoon Journal",
+          slug: "test1",
+          description: null,
+          language: "ko"
+        },
+        profile: {
+          nickname: kind === "empty" ? "" : "sentbysea",
+          bio: kind === "empty" ? null : "창가의 빛과 오래된 문장을 모읍니다.",
+          avatarUrl: null
+        },
+        navigation: {
+          home: { name: "Afternoon Journal", href: "/test1", enabled: true, type: "home", iconKind: "home" },
+          categories: categories.map((name, i) => ({
+            id: String(i + 1), name, type: "post", iconKind: "post", href: `/test1/category/${i + 1}`, itemCount: null
+          })),
+          postCategories: [],
+          galleryCategories: [],
+          bannerCategories: [],
+          highlights: { name: "Highlights", href: "/test1/highlights", showStandaloneLink: true, iconKind: "highlight" }
+        },
+        home: {
+          recentPosts: posts,
+          highlights: {
+            cards: card ? [card] : [],
+            featured: card ? [card] : [],
+            card,
+            hasCard: !!card,
+            count: card ? 1 : 0,
+            isEmpty: !card,
+            hasError: false
+          }
+        },
+        images: {
+          cover: withCover && kind !== "empty" ? "/skin/test-skins/editorial-cover-sample.jpg" : null
+        },
+        viewer: { isOwner: false },
+        page: { type: "home" }
+      };
+
+    }
+
+    const DARK = { background: "#16171a", text: "#eeece6", accent: "#e0967a" };
+
+    let skinPackage = null;
+    let instance = null;
+
+    async function loadPackage() {
+      if (!skinPackage) {
+        const res = await fetch("./test-skins/imory-editorial-home-v1.json", { cache: "no-store" });
+        skinPackage = await res.json();
+      }
+      return skinPackage;
+    }
+
+    function withPalette(pkg, palette) {
+      if (palette !== "dark") {
+        return pkg;
+      }
+      const css = pkg.css
+        .replace(/--skin-background: #[0-9a-f]+;/i, `--skin-background: ${DARK.background};`)
+        .replace(/--skin-text: #[0-9a-f]+;/i, `--skin-text: ${DARK.text};`)
+        .replace(/--skin-accent: #[0-9a-f]+;/i, `--skin-accent: ${DARK.accent};`);
+      return { ...pkg, css };
+    }
+
+    /* e2e 와 손으로 보는 사람이 같은 창구를 쓴다 */
+    window.renderEditorial = async function (options) {
+
+      const o = options || {};
+      const pkg = withPalette(await loadPackage(), o.palette || "light");
+
+      const count = o.count || 3;
+      const withSides = {
+        ...pkg,
+        regions: o.regions || window.writeSkinSidesSetting(pkg.regions, window.skinSidesSettingForCount(count))
+      };
+
+      const template = window.resolveSkinTemplate(withSides, "home");
+      const context = makeContext(o.data || "full", o.cover !== false);
+
+      const mount = document.getElementById("mount");
+
+      if (instance && o.fresh !== true) {
+        instance.update(template, context);
+      } else {
+        if (instance) instance.destroy();
+        instance = renderSkin({ container: mount, skin: template, context, mode: "view" });
+      }
+
+      return { template };
+
+    };
+
+    /* 공개 화면의 SPA 라우터 흉내 — 링크는 이 문서를 떠나지 않고 기록만
+       남는다(패널 안 링크를 누르면 패널이 닫히는지 볼 때 쓴다). */
+    window.harnessNavigations = [];
+
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest && event.target.closest("a[href]");
+      if (link) {
+        event.preventDefault();
+        window.harnessNavigations.push(link.getAttribute("href"));
+      }
+    });
+
+    window.harnessReady =
+      window.renderEditorial({
+        count: Number(params.get("count") || 3),
+        data: params.get("data") || "full",
+        palette: params.get("palette") || "light",
+        cover: params.get("cover") !== "0"
+      });
+
+  </script>
+
+</body>
+</html>

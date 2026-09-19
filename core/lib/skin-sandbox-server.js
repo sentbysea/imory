@@ -168,6 +168,11 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/skin/skin-transition.js",
   "/skin/skin-transition.css",
 
+  /* 좌우 영역(IMORY_SIDES_DESIGN.md) — 프레임 안에서도 칼럼/패널이
+     같은 파일로 동작한다 */
+  "/skin/skin-sides.js",
+  "/skin/skin-sides.css",
+
   /* =====================================================
      SANDBOX-3.2 — POST 본문의 class 규칙. 공개 화면과 **같은
      파일**이다.

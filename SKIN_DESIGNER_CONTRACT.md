@@ -98,7 +98,7 @@
 | `templates.home/category/post.html` | string | **강제**(존재/문자열 여부만). 내용은 sanitize를 통과한 결과로 대체됨(2절). |
 | `css` | string | 공유 CSS. **강제 검증**(CSS validator, 8절). 검증 실패 시 저장 자체가 거부됨(`normalizeSkinPackageForDraft`가 throw). |
 | `imageSlots` | `{name,label,required,aspectRatioHint}[]` | `name`만 실제로 쓰입니다(`images.<name>` context 키가 됨, 10절). `label`/`required`/`aspectRatioHint`는 **코드 어디에서도 읽지 않는 순수 정보성 필드**입니다(Studio UI에서도 참조하는 곳이 없음). |
-| `regions` | array | **완전 미사용**. 항상 빈 배열(`[]`)로만 존재하고 렌더러/새니타이저 어디도 이 필드를 읽지 않습니다. `data-imory-region`(HTML 속성)과 이름이 비슷하지만 이 최상위 `regions` 필드와는 무관합니다. |
+| `regions` | array | **HOME 좌우 영역 설정**(EDITORIAL-RESPONSIVE-HOME-1, [IMORY_SIDES_DESIGN.md](IMORY_SIDES_DESIGN.md)). `{ "name": "left_sidebar" \| "right_sidebar", "enabled": boolean }` 두 이름만 읽고, 나머지 항목은 읽지 않고 그대로 보존합니다. 빈 배열(`[]`, 지금까지의 모든 스킨)은 "영역 설정 없음"이고 렌더 결과가 바뀌지 않습니다. 영역의 **자리와 모양**은 HTML의 `data-imory-sides*` 속성과 CSS가 정합니다. `data-imory-region`(HTML 속성, 플랫폼이 채우는 자리)과는 여전히 무관합니다. |
 | `bottomDock` | object (선택) | **강제 검증**(`normalizeSkinBottomDock`, [skin/skin-bottom-dock.js](skin/skin-bottom-dock.js)). 모르는 값·모양이 틀린 항목이 있으면 Import 거부. 렌더 시점에는 같은 함수로 한 번 더 좁히되 거부가 아니라 "dock 없음"으로 폴백합니다(공개 화면이 설정 하나 때문에 깨지지 않게). |
 | `metadata.supports` / `metadata.requiredContext` | object / string[] | **순수 정보성**. 렌더러/저장 RPC/Studio 어디도 이 값을 읽어서 분기하지 않습니다. 실제 지원 여부는 오직 `templates.<page>`가 존재하는지로만 판정됩니다. |
 

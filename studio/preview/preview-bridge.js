@@ -2050,6 +2050,12 @@ document.addEventListener(
       return;
     }
 
+    /* 좌우 영역의 모바일 패널이 열려 있으면 이 Escape 는 "패널 닫기"다
+       (skin/skin-sides.js 가 받는다) — 선택까지 한 번에 풀지 않는다. */
+    if (document.querySelector('[data-imory-sides-phase="open"]')) {
+      return;
+    }
+
     postToParent({ type: PREVIEW_MSG_INSPECT_ESCAPE });
 
   },

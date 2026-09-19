@@ -307,6 +307,12 @@ function bumpStudioWorkingRevision() {
     window.reconcileStudioInspectorSelection();
   }
 
+  /* HOME 좌우 영역 패널 — Undo · Import · Code 로 regions 나 HOME
+     마크업이 바뀌었을 수 있다(studio/sides/sides-panel.js) */
+  if (typeof window.syncSkinSidesPanel === "function") {
+    window.syncSkinSidesPanel();
+  }
+
 }
 
 
@@ -1529,12 +1535,112 @@ function setStudioBottomDock(dock) {
 
 function updateStudioDockButtonState() {
 
+  /* HOME 좌우 영역(Layout) 버튼도 같은 조건이다 — working draft 가
+     있으면 연다(틀이 없는 스킨이면 패널이 그 사실을 알려 준다). */
+  const layoutButton =
+    document.getElementById("studioLayoutButton");
+
+  if (layoutButton) {
+    layoutButton.disabled =
+      !currentWorkingSkin;
+  }
+
   if (!studioDockButton) {
     return;
   }
 
   studioDockButton.disabled =
     !currentWorkingSkin;
+
+}
+
+
+/* =========================================================
+   HOME 좌우 영역 — 1단 · 2단 · 3단 (IMORY_SIDES_DESIGN.md)
+
+   설정은 SkinPackage.regions 에 있다(skin/skin-sides.js 머리말).
+   studio/sides/sides-panel.js 가 쓰는 유일한 진입점이다.
+
+   ★ 이것은 draft 변경이다 — Undo 한 칸 · dirty · Preview 다시 그리기.
+     모바일 패널을 열고 닫는 것(스킨 안 버튼)은 여기를 지나지 않는다
+     — 그건 화면 상태일 뿐 저장되지 않는다.
+========================================================== */
+
+function getStudioHomeSides() {
+
+  if (!currentWorkingSkin || typeof resolveSkinSidesSetting !== "function") {
+    return null;
+  }
+
+  const setting =
+    resolveSkinSidesSetting(currentWorkingSkin) ||
+    { left: false, right: false };
+
+  const home =
+    typeof resolveSkinTemplate === "function"
+      ? resolveSkinTemplate(currentWorkingSkin, "home")
+      : null;
+
+  const markup =
+    typeof skinHtmlHasSidesFrame === "function"
+      ? skinHtmlHasSidesFrame(home ? home.html : "")
+      : { frame: false, left: false, right: false };
+
+  return {
+    left: setting.left,
+    right: setting.right,
+    count: skinSidesCount(setting),
+    markup
+  };
+
+}
+
+
+function setStudioHomeSides(setting) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, message: "편집 중인 스킨이 없습니다." };
+  }
+
+  if (typeof writeSkinSidesSetting !== "function") {
+    return { ok: false, message: "이 배포는 아직 좌우 영역을 지원하지 않습니다." };
+  }
+
+  const current =
+    resolveSkinSidesSetting(currentWorkingSkin) ||
+    { left: false, right: false };
+
+  const next = {
+    left: !!(setting && setting.left),
+    right: !!(setting && setting.right)
+  };
+
+  if (current.left === next.left && current.right === next.right) {
+    return { ok: true, unchanged: true };
+  }
+
+  const historyBefore =
+    captureStudioWorkingChange();
+
+  currentWorkingSkin = {
+    ...currentWorkingSkin,
+    regions: writeSkinSidesSetting(currentWorkingSkin.regions, next)
+  };
+
+  recordStudioWorkingChange(historyBefore);
+
+  isStudioDirty =
+    true;
+
+  bumpStudioWorkingRevision();
+
+  updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
+
+  renderPreviewAfterSkinPackageChange();
+
+  return { ok: true };
 
 }
 

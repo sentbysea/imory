@@ -57,7 +57,8 @@ const STUDIO_SHEET_STATE_NAMES = {
 
 const STUDIO_SHEET_PANEL_NAMES = {
   images: "이미지 바꾸기",
-  dock: "화면 아래 Dock"
+  dock: "화면 아래 Dock",
+  layout: "HOME 단 구성"
 };
 
 /* 내용 보기의 최대 높이 — 화면 높이에 대한 비율 */

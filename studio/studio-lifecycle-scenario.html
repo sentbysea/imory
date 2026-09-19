@@ -13,6 +13,7 @@
 <!-- studio/index.html과 같은 순서(images-panel 다음 inspector) -->
 <link rel="stylesheet" href="./images/images-panel.css">
 <link rel="stylesheet" href="./dock/dock-panel.css">
+<link rel="stylesheet" href="./sides/sides-panel.css">
 <link rel="stylesheet" href="../skin/skin-dock-icons.css">
 <link rel="stylesheet" href="./inspector/studio-inspector.css">
 <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 자리(맨 뒤) -->
@@ -77,6 +78,7 @@
         </section>
         <section class="studio-left-panel-section" id="studioLeftPanelImages" data-left-panel-mode="images" hidden></section>
         <section class="studio-left-panel-section" id="studioLeftPanelDock" data-left-panel-mode="dock" hidden></section>
+        <section class="studio-left-panel-section" id="studioLeftPanelLayout" data-left-panel-mode="layout" hidden></section>
       </div>
     </aside>
 
@@ -92,6 +94,7 @@
             <button type="button" class="studio-corner-button studio-mode-button" id="studioInspectorButton" aria-pressed="false" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Select</button>
             <button type="button" class="studio-corner-button studio-mode-button" id="studioImagesButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Images</button>
             <button type="button" class="studio-corner-button studio-mode-button" id="studioDockButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Dock</button>
+            <button type="button" class="studio-corner-button studio-mode-button" id="studioLayoutButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Layout</button>
           </div>
         </div>
         <div class="studio-top-dock-groups">
@@ -1296,6 +1299,33 @@
               }
 
               return { data: newVersionId, error: null };
+
+            },
+
+            /* EDITORIAL-RESPONSIVE-HOME-1 — 무엇이 공개되었는가를 기록한다
+               (studio/studio-sides-e2e-test.mjs 가 그 content 로 공개
+               화면을 연다) */
+            publish_skin: function (params) {
+
+              const skinRow =
+                state.tables.skins.find(function (row) {
+                  return row.id === params.p_skin_id;
+                });
+
+              if (skinRow) {
+                skinRow.current_published_version_id = skinRow.current_draft_version_id;
+              }
+
+              const version =
+                skinRow &&
+                state.tables.skin_versions.find(function (row) {
+                  return row.id === skinRow.current_published_version_id;
+                });
+
+              window.top.__publishedLay =
+                version ? version.content : null;
+
+              return { data: skinRow ? skinRow.current_published_version_id : null, error: null };
 
             }
           }
@@ -2619,6 +2649,7 @@
 
   <script src="../skin/skin-layout.js"></script>
   <script src="../skin/skin-transition.js"></script>
+  <script src="../skin/skin-sides.js"></script>
   <script src="../skin/skin-sanitize.js"></script>
   <script src="../skin/skin-package-normalize.js"></script>
   <!-- skin-generator.js는 위(mock 정의보다 먼저)에서 이미 로드했다 -->
@@ -2663,6 +2694,8 @@
   <script src="./images/images-panel.js"></script>
   <!-- BOTTOM-DOCK-1 — dock 설정 패널(실제 파일). studio/index.html 과 같은 자리 -->
   <script src="./dock/dock-panel.js"></script>
+  <!-- HOME 단 구성 패널 — studio/index.html 과 같은 자리 -->
+  <script src="./sides/sides-panel.js"></script>
   <script src="./studio-preview.js"></script>
   <script src="./preview/preview-route.js"></script>
   <!-- PHASE 1C-I — production과 동일한 순서(studio/index.html 참고) -->

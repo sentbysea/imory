@@ -396,7 +396,10 @@ working draft 는 한 글자도 바뀌지 않고, 성공하면 Undo 한 칸이 �
 
 - **모바일 drawer** — `mobile="hide"` 는 사이드바를 감추기만 하고, 버튼으로
   여는 UI 는 없다. 요구사항 7절이 "완전한 interaction 까지 필요 없다"고
-  명시했다.
+  명시했다. → **변경됨(EDITORIAL-RESPONSIVE-HOME-1)**: 버튼으로 여는 좌우
+  패널은 이 primitive 가 아니라 별도 계약 `data-imory-sides*` 가 한다
+  ([IMORY_SIDES_DESIGN.md](./IMORY_SIDES_DESIGN.md)). sidebar primitive 는
+  그대로다(두 칸 · 접히면 세로).
 - **`rotation`** — 속성 자리를 잡아 두지 않았다. `data-imory-item-rotate` 를
   규칙표에 한 줄 더하고 CSS 의 `transform` 에 합치면 되지만, 지금
   `transform` 은 free 좌표가 통째로 쓰고 있어 합성 규칙을 먼저 정해야 한다.

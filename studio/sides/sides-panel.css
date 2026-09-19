@@ -1,0 +1,116 @@
+/* =========================================================
+   SKIN STUDIO — HOME 단 구성 패널 (IMORY_SIDES_DESIGN.md §6)
+
+   왼쪽 패널 안에 앉는 내용. Studio 자신의 UI 라 --system-* 토큰을
+   쓴다(사용자 홈페이지의 색과 무관).
+========================================================== */
+
+.studio-sides-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  color: var(--system-text, #222222);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.studio-sides-lead,
+.studio-sides-help,
+.studio-sides-status {
+  margin: 0;
+}
+
+.studio-sides-help {
+  color: var(--system-text-muted, #777777);
+  font-size: 12px;
+}
+
+.studio-sides-status {
+  color: var(--system-text-muted, #777777);
+  font-size: 12px;
+}
+
+.studio-sides-status:empty {
+  display: none;
+}
+
+.studio-sides-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.studio-sides-option {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+  min-height: 56px;
+  padding: 10px 12px;
+  border: 1px solid var(--system-border-strong, #e2e2e2);
+  border-radius: 10px;
+  background: var(--system-bg, #ffffff);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.studio-sides-option:hover:not(:disabled) {
+  border-color: var(--system-accent-border, #e8a5bb);
+}
+
+.studio-sides-option[aria-checked="true"] {
+  border-color: var(--system-accent, #d9577f);
+  background: var(--system-accent-soft, #fff5f8);
+}
+
+.studio-sides-option:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--system-accent, #d9577f);
+}
+
+.studio-sides-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.studio-sides-diagram {
+  grid-row: 1 / span 2;
+  display: grid;
+  grid-template-columns: 10px 1fr 10px;
+  gap: 3px;
+  height: 34px;
+}
+
+.studio-sides-cell {
+  border: 1px solid var(--system-border-strong, #d8d8d8);
+  border-radius: 3px;
+}
+
+.studio-sides-cell--main {
+  background: var(--system-surface, #f6f6f6);
+}
+
+.studio-sides-diagram[data-count="1"] .studio-sides-cell--left,
+.studio-sides-diagram[data-count="1"] .studio-sides-cell--right,
+.studio-sides-diagram[data-count="2"] .studio-sides-cell--left {
+  border-style: dashed;
+  opacity: 0.35;
+}
+
+.studio-sides-option[aria-checked="true"] .studio-sides-cell {
+  border-color: var(--system-accent, #d9577f);
+}
+
+.studio-sides-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.studio-sides-desc {
+  color: var(--system-text-muted, #777777);
+  font-size: 12px;
+}

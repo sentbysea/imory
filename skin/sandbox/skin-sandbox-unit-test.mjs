@@ -365,8 +365,11 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
   그때 새 메시지의 검증을 함께 보게 된다.
 */
 
-check("[msg] 이번 라운드가 아는 type 은 정확히 스물셋이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 23,
+/* EDITORIAL-RESPONSIVE-HOME-1 — SIDES_STATE · SIDES_VIEWPORT · SIDES_CLOSE
+   (좌우 영역의 모바일 패널, IMORY_SIDES_DESIGN.md §7). 값 검사는
+   skin/skin-sides-test.mjs [protocol] 이 본다. */
+check("[msg] 이번 라운드가 아는 type 은 정확히 스물여섯이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 26,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
