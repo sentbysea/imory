@@ -244,7 +244,9 @@ let studioInspectorMovable = false;
 /* 이미지 자르기 라운드 — 여기도 전부 "아직 확정되지 않은 것"이다.
    studio/inspector/studio-inspector-crop.js가 읽고 쓴다.
 
-     studioInspectorCropDraft      { ratio, zoom, x, y, frameWidth, fixedWidth }
+     studioInspectorCropDraft      { ratio, zoom, x, y, frameWidth, fixedWidth, fill }
+                                   (fill — 프레임이 스킨의 자리를 채우는 방식,
+                                    IMAGE-CROP-PRIORITY-1)
      studioInspectorCropDrag       드래그 중인 정보(시작 좌표 · 프레임 크기)
      studioInspectorCropSurface    Preview 위에 얹는 투명한 드래그 판
                                    (DOM은 overlay가 만든다)

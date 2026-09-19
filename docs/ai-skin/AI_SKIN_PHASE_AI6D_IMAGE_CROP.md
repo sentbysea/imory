@@ -17,6 +17,17 @@ Select mode에서 이미지를 고른 뒤 **원본 파일은 그대로 두고** 
 > - 팝오버는 자르는 동안 프레임 **옆에** 앉고, 손이 무언가를 잡고 있는
 >   동안에는 움직이지 않는다.
 
+> **변경됨 → [IMORY_IMAGE_CROP_PRIORITY_DESIGN.md](../../IMORY_IMAGE_CROP_PRIORITY_DESIGN.md)**
+> (IMAGE-CROP-PRIORITY-1). 저장 방식은 그대로이고 두 가지가 더해졌다.
+>
+> - 스킨 CSS 가 사진에 `!important` 를 걸면 아래 2.2 의 두 규칙이 그대로
+>   밀렸다. 렌더러가 저장된 자르기 규칙을 읽어 **cascade layer 안의
+>   `!important` 보호 규칙**을 다시 싣고, 임시 미리보기는 같은 선언을
+>   inline `!important` 로 얹는다.
+> - 표식 `--imory-crop` 에 값 셋(`fill-width` · `fill` · `fill-absolute`)
+>   이 늘었다 — 스킨이 크기를 정한 자리를 프레임이 px 로 굽지 않고 같은
+>   방식으로 채운다.
+
 앞 라운드: [AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md](./AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md)
 (텍스트 내용 · 이미지 너비). 임시/확정을 나누는 구조, Undo 한 번,
 Escape 정리 규칙은 그 문서 그대로이고 여기서는 **다른 점만** 적는다.

@@ -76,6 +76,37 @@ const STUDIO_INSPECTOR_CROP_FRAME_STYLE_CONTROLS =
 const STUDIO_INSPECTOR_CROP_RESTORE_TO_IMAGE =
   ["border-radius", "border", "text-align", "margin-left", "margin-right"];
 
+/* 프레임의 방식(px 비율 / 폭 채우기 / 상자 채우기 / 겹쳐 채우기,
+   studio-inspector-crop-model.js INSPECTOR_CROP_FILL_MARKERS)이 정하는
+   선언. 적용할 때마다 걷고 이번 방식의 것으로 다시 쓴다. */
+const STUDIO_INSPECTOR_CROP_FRAME_GEOMETRY =
+  ["position", "inset", "width", "height", "aspect-ratio", "max-width"];
+
+
+/* =========================================================
+   프레임 모양을 바꿀 때 채우기 방식이 어떻게 이어지는가
+   (IMAGE-CROP-PRIORITY-1)
+
+   keepsWidth  폭은 그대로 두고 높이만 바꾸는가(비율 버튼, 위아래 변)
+
+     width      폭 채우기 — 폭을 그대로 두면 그대로, 폭을 끌면 px
+     flow       상자 채우기 — 높이를 정하는 순간 폭 채우기 + 비율
+     absolute   겹쳐 채우기 — 모양을 바꾸면 보통 프레임(px + 비율)
+========================================================== */
+
+function studioInspectorCropFillAfterReshape(fill, keepsWidth) {
+
+  const mode =
+    window.inspectorCropFillMode(fill);
+
+  if (!mode || mode === "absolute" || !keepsWidth) {
+    return null;
+  }
+
+  return "width";
+
+}
+
 
 /* =========================================================
    이 이미지에 이미 프레임(래퍼)이 있는가
@@ -201,20 +232,50 @@ function studioInspectorCropAwareCss(css, control, value, element) {
   const declarations =
     window.readInspectorEditDeclarations(next, targetId);
 
-  declarations[window.INSPECTOR_CROP_MARKER] =
+  const marker =
     wrapper.declarations[window.INSPECTOR_CROP_MARKER];
 
-  declarations.display = "block";
-  declarations.position = "relative";
-  declarations.overflow = "hidden";
-  declarations["max-width"] = "100%";
+  /* IMAGE-CROP-PRIORITY-1 — 스킨의 자리를 채우던 프레임(fill)에
+     사용자가 px 너비를 정하면 그때부터는 보통 프레임(px + 비율)이다.
+     비율은 지금 화면에 보이는 것을 그대로 쓴다 — 너비를 바꾼 것이지
+     모양을 바꾼 것이 아니다. */
+  let fill =
+    window.inspectorCropFillFromMarker(marker);
 
-  declarations["aspect-ratio"] =
+  let ratio =
     wrapper.declarations["aspect-ratio"] || declarations["aspect-ratio"];
+
+  const sizedByUser =
+    control === "size" && /px$/.test(String(declarations.width || "").trim());
+
+  if (fill && sizedByUser) {
+
+    fill = null;
+
+    ratio =
+      ratio || studioInspectorCropMeasuredRatio();
+
+    ["height", "inset"].forEach((property) => {
+      delete declarations[property];
+    });
+
+  }
+
+  declarations[window.INSPECTOR_CROP_MARKER] =
+    fill ? window.INSPECTOR_CROP_FILL_MARKERS[fill] : marker;
+
+  const structure =
+    window.inspectorCropFrameStructure(fill, ratio);
+
+  Object.keys(structure).forEach((property) => {
+    if (structure[property]) {
+      declarations[property] = structure[property];
+    }
+  });
 
   /* 너비를 사용자가 직접 정한 순간부터는 자르기를 풀 때 그 너비를
      되돌려 준다("기본"으로 지웠으면 다시 측정값 취급). */
-  if (control === "size") {
+  if (control === "size" && !fill) {
 
     declarations[window.INSPECTOR_CROP_MARKER] =
       declarations.width ? "fixed" : "1";
@@ -518,7 +579,7 @@ function renderStudioInspectorCropBlock(spec, info, declarations) {
    사진보다 커질 때만 덮는 데 필요한 최소 배율이 더해진다.
 ========================================================== */
 
-function chooseStudioInspectorCropRatio(ratio) {
+function chooseStudioInspectorCropRatio(ratio, options) {
 
   const draft =
     studioInspectorCropDraft;
@@ -529,6 +590,13 @@ function chooseStudioInspectorCropRatio(ratio) {
 
   showStudioInspectorCropLimit(false);
 
+  /* "현재 비율"은 모양을 바꾸지 않는다 — 스킨의 자리를 채우던
+     프레임은 계속 그 자리를 채운다. */
+  const fill =
+    (options && options.keepFill)
+      ? (draft.fill || null)
+      : studioInspectorCropFillAfterReshape(draft.fill, true);
+
   const box =
     studioInspectorCropFrameBox();
 
@@ -537,7 +605,7 @@ function chooseStudioInspectorCropRatio(ratio) {
 
   if (!(box.width > 0) || !(box.height > 0) || !(height > 0)) {
 
-    updateStudioInspectorCropDraft({ ratio, free: false });
+    updateStudioInspectorCropDraft({ ratio, fill, free: false });
 
     return;
 
@@ -557,6 +625,7 @@ function chooseStudioInspectorCropRatio(ratio) {
 
   updateStudioInspectorCropDraft({
     ratio,
+    fill,
     free: false,
 
     /* 임시 위치가 이미 얹혀 있으면 그 기준점도 왼쪽 위로 맞춘다 —
@@ -626,7 +695,7 @@ function renderStudioInspectorCropEditor(block) {
     }
 
     option.addEventListener("click", () => {
-      chooseStudioInspectorCropRatio(resolvedRatio || draft.ratio);
+      chooseStudioInspectorCropRatio(resolvedRatio || draft.ratio, { keepFill: ratio === null });
     });
 
     ratioRow.appendChild(option);
@@ -985,6 +1054,7 @@ function beginStudioInspectorCropEdit() {
       y: context.crop.y,
       frameWidth: context.crop.frameWidth || measuredWidth,
       fixedWidth: context.crop.fixedWidth,
+      fill: context.crop.fill || null,
       free: false,
 
       /* 임시 위치는 자르기를 여는 순간에는 없다 — 변을 처음 끌 때
@@ -1000,13 +1070,22 @@ function beginStudioInspectorCropEdit() {
     const declaredWidth =
       Number(window.readInspectorControlValue("size", resolved.declarations));
 
+    /* IMAGE-CROP-PRIORITY-1 — 사진이 스킨이 정한 자리를 그대로
+       채우고 있으면 프레임도 그 자리를 같은 방식으로 채운다
+       (studio-inspector-crop-model.js INSPECTOR_CROP_FILL_MARKERS).
+       그때 이미지 규칙에 남아 있던 px 너비는 스킨 CSS 에 밀려
+       화면에 없던 값이므로 "사용자가 정한 너비"로 치지 않는다. */
+    const fill =
+      window.inspectorCropFillMode(studioInspectorMetrics && studioInspectorMetrics.fill);
+
     studioInspectorCropDraft = {
       ratio: studioInspectorCropMeasuredRatio(),
       zoom: 1,
       x: 0,
       y: 0,
       frameWidth: measuredWidth,
-      fixedWidth: Number.isFinite(declaredWidth) && declaredWidth > 0,
+      fixedWidth: !fill && Number.isFinite(declaredWidth) && declaredWidth > 0,
+      fill,
       free: false,
       anchor: null
     };
@@ -1148,8 +1227,16 @@ function applyStudioInspectorCrop(draft) {
     const built =
       window.buildInspectorCropDeclarations(draft, {
         frameWidth: draft.frameWidth,
-        fixedWidth: !!draft.fixedWidth
+        fixedWidth: !!draft.fixedWidth,
+        fill: draft.fill
       });
+
+    /* 프레임의 자리·크기 선언은 이번 방식의 것만 남긴다 — 부모를
+       채우던 프레임(height:100% / inset:0)을 비율 프레임으로 바꿨는데
+       옛 height 가 남으면 aspect-ratio 가 무시된다. */
+    STUDIO_INSPECTOR_CROP_FRAME_GEOMETRY.forEach((property) => {
+      delete frameDeclarations[property];
+    });
 
     Object.assign(frameDeclarations, built.frame);
     Object.assign(imageDeclarations, built.image);
@@ -1822,10 +1909,20 @@ function moveStudioInspectorCropSideDrag(event) {
 
       showStudioInspectorCropLimit(fit.limited);
 
+      const widthEdge =
+        drag.edge.indexOf("e") !== -1 || drag.edge.indexOf("w") !== -1;
+
       updateStudioInspectorCropDraft(
         {
           ratio: window.inspectorAspectRatio(box.width / box.height) || drag.crop.ratio,
           frameWidth: box.width,
+
+          /* IMAGE-CROP-PRIORITY-1 — 변을 끄는 것은 프레임 모양을
+             직접 정하는 일이다(studioInspectorCropFillAfterReshape). */
+          fill:
+            (box.width === drag.startWidth && box.height === drag.startHeight)
+              ? (drag.crop.fill || null)
+              : studioInspectorCropFillAfterReshape(drag.crop.fill, !widthEdge),
 
           /* 가로를 직접 끈 순간부터 그 폭은 "사용자가 정한 값"이다 —
              자르기를 풀 때 되돌려 준다(래퍼 표식 "fixed"). */

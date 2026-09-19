@@ -1320,6 +1320,11 @@ export function validateAndScopeSkinCss(rawCss, options = {}) {
 
   const ast = csstree.parse(report.css, { positions: false });
 
+  /* 스코프를 붙이기 **전에** 읽는다 — 붙인 뒤에는 selector 가 두
+     칸짜리가 아니게 된다(IMAGE-CROP-PRIORITY-1, 아래 함수 참고). */
+  const editRules =
+    collectSkinEditIdRules(ast);
+
   /* 남은 모든 실제 selector에 스코프 강제 적용. @keyframes
      내부의 selector(0%/50%/from/to 등)는 DOM selector가 아니라
      타이밍 selector이므로 절대 접두어를 붙이면 안 된다 —
@@ -1345,8 +1350,122 @@ export function validateAndScopeSkinCss(rawCss, options = {}) {
     ok: true,
     warnings: report.removed.map(formatSkinCssIssue),
     scopeClass,
-    report
+    report,
+    editRules
   };
+
+}
+
+
+/* =========================================================
+   collectSkinEditIdRules(ast) -> { [editId]: { [property]: { value, important } } }
+
+   IMAGE-CROP-PRIORITY-1. Studio 직접 편집이 쓰는 규칙은 언제나
+
+     [data-imory-edit-id="X"][data-imory-edit-id="X"] { ... }
+
+   한 모양이다(studio/inspector/studio-inspector-model.js
+   buildInspectorEditSelector). 렌더러는 그중 **자르기 규칙**을 읽어
+   스킨 CSS 보다 강한 보호 규칙을 만든다(skin/skin-render.js
+   buildSkinCropGuardCss). 그래서 여기서는 판정 없이 "그 모양의
+   최상위 규칙"만 모아 준다.
+
+   - 최상위만 본다. Studio 는 규칙을 언제나 맨 뒤 최상위에 쓴다.
+     @media 안의 같은 모양은 스킨 작성자가 쓴 것이다.
+   - 같은 id 가 둘이면 **뒤의 것 하나**가 이긴다 — Studio 가 규칙을
+     읽는 방식(readInspectorEditDeclarations, 마지막 일치)과 같다.
+   - 값은 repair 를 통과한 AST 에서 다시 만든 글자다. 쓰는 쪽이
+     다시 모양을 검사한다(렌더러는 숫자 % 만 받는다).
+========================================================== */
+
+const SKIN_EDIT_ID_ATTR = "data-imory-edit-id";
+
+function skinEditIdOfAttributePart(part) {
+
+  if (
+    !part ||
+    part.type !== "AttributeSelector" ||
+    !part.name ||
+    part.name.name !== SKIN_EDIT_ID_ATTR ||
+    part.matcher !== "=" ||
+    part.flags ||
+    !part.value
+  ) {
+    return null;
+  }
+
+  if (part.value.type === "String") {
+    return String(part.value.value);
+  }
+
+  if (part.value.type === "Identifier") {
+    return String(part.value.name);
+  }
+
+  return null;
+
+}
+
+function collectSkinEditIdRules(ast) {
+
+  const rules = Object.create(null);
+
+  if (!ast || !ast.children) {
+    return rules;
+  }
+
+  ast.children.forEach((node) => {
+
+    if (
+      node.type !== "Rule" ||
+      !node.prelude ||
+      node.prelude.type !== "SelectorList" ||
+      !node.block
+    ) {
+      return;
+    }
+
+    const selectors =
+      node.prelude.children.toArray();
+
+    if (selectors.length !== 1 || !selectors[0].children) {
+      return;
+    }
+
+    const parts =
+      selectors[0].children.toArray();
+
+    if (parts.length !== 2) {
+      return;
+    }
+
+    const first = skinEditIdOfAttributePart(parts[0]);
+    const second = skinEditIdOfAttributePart(parts[1]);
+
+    if (!first || first !== second) {
+      return;
+    }
+
+    const declarations = Object.create(null);
+
+    node.block.children.forEach((declaration) => {
+
+      if (declaration.type !== "Declaration" || !declaration.value) {
+        return;
+      }
+
+      declarations[String(declaration.property).toLowerCase()] = {
+        value: csstree.generate(declaration.value).trim(),
+        important: !!declaration.important
+      };
+
+    });
+
+    rules[first] = declarations;
+
+  });
+
+  return rules;
 
 }
 

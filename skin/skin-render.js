@@ -686,6 +686,237 @@ function isValidSkinRegionName(name) {
 
 let skinRenderInstanceCounter = 0;
 
+
+/* =========================================================
+   IMAGE-CROP-PRIORITY-1 — 자르기 보호 규칙
+   (IMORY_IMAGE_CROP_PRIORITY_DESIGN.md)
+
+   ★ 무엇이 문제였나
+   Studio 자르기는 결과를 보통 CSS 규칙 둘로 저장한다(래퍼 = 프레임,
+   <img> = 사진, docs/ai-skin/AI_SKIN_PHASE_AI6D_IMAGE_CROP.md 2절).
+   그런데 스킨이 사진에
+
+       .foe-photo img { width:100% !important; object-position:center 29% !important }
+
+   처럼 !important 를 걸어 두면, 그보다 약한 자르기 규칙은 specificity
+   를 아무리 올려도 이길 수 없다 — 확대 181% 가 계산은 됐는데 화면은
+   100% 그대로였다(2026-09-19 FOREVER, MY FOE 실측).
+
+   ★ 어떻게 하나 — 저장은 그대로, 그릴 때 보호한다
+   저장된 자르기 규칙이 곧 자르기 데이터다. 렌더러는 그 값을 읽어
+   **cascade layer 안의 !important 선언**으로 한 번 더 싣는다.
+   CSS Cascade 5: !important 끼리는 layer 에 든 쪽이 layer 밖(스킨이
+   쓴 모든 규칙)을 specificity 와 무관하게 이긴다. 그래서 스킨이
+   선택자를 얼마나 세게 쓰든, 어떤 순서로 쓰든 자르기가 이긴다.
+
+   - 스킨 CSS 는 한 글자도 바꾸지 않는다. 보호 규칙은 저장되지도,
+     Export 되지도 않는다 — 렌더할 때마다 저장된 자르기 규칙에서
+     다시 만든다(공개 화면 · Studio Preview · sandbox 프레임이 모두
+     이 함수 하나를 지난다).
+   - 자르기 프레임(`--imory-crop` 표식)이 **이미지 하나만** 감싼
+     경우만 대상이다. 자르지 않은 이미지 · 아이콘 · SVG 는 스킨
+     디자인(object-fit/position 포함) 그대로다.
+   - 사진 쪽에서 막는 것은 "자르기가 정한 자리와 크기"를 흔드는
+     속성뿐이다: 위치·크기·여백·변형·비율·맞춤. filter · 테두리 ·
+     그림자 같은 장식은 스킨 것 그대로 남는다.
+   - 프레임 쪽은 잘라 주는 두 가지만 막는다(overflow · contain).
+     프레임의 크기·자리·모서리는 스킨과 자르기 규칙이 평소대로
+     정한다.
+
+   Studio 의 임시 미리보기(적용 전)도 같은 선언 묶음을 inline
+   !important 로 얹는다(studio/preview/preview-bridge.js) — 적용 전과
+   후가 같은 우선순위에서 그려진다.
+========================================================== */
+
+const SKIN_CROP_GUARD_LAYER = "imory-crop-guard";
+
+const SKIN_CROP_MARKER = "--imory-crop";
+
+const SKIN_CROP_EDIT_ID_ATTR = "data-imory-edit-id";
+
+/* skin/skin-sanitize.js SKIN_SANITIZE_EDIT_ID_PATTERN 과 같은 모양 */
+const SKIN_CROP_EDIT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+const SKIN_CROP_PERCENT_PATTERN = /^-?(?:\d+|\d*\.\d+)%$/;
+
+const SKIN_CROP_FIT_VALUES = ["cover", "contain"];
+
+
+/* =========================================================
+   buildSkinCropGuardDeclarations(image) -> { frame, image } | null
+
+   image: 저장된 사진 규칙의 선언 { 속성: "값" }.
+   자르기가 만든 모양(전부 %)이 아니면 null — 알 수 없는 값을
+   !important 로 올리지 않는다.
+========================================================== */
+
+export function buildSkinCropGuardDeclarations(image) {
+
+  const source =
+    image || {};
+
+  const read = (name) =>
+    String(source[name] === undefined || source[name] === null ? "" : source[name]).trim();
+
+  const left = read("left");
+  const top = read("top");
+  const width = read("width");
+  const height = read("height");
+
+  if (![left, top, width, height].every((value) => SKIN_CROP_PERCENT_PATTERN.test(value))) {
+    return null;
+  }
+
+  if (!(parseFloat(width) > 0) || !(parseFloat(height) > 0)) {
+    return null;
+  }
+
+  const position =
+    read("object-position").split(/\s+/).filter(Boolean);
+
+  const fit =
+    read("object-fit").toLowerCase();
+
+  return {
+    frame: {
+      overflow: "hidden",
+
+      /* 사진의 절대배치 기준을 프레임으로 못 박는다. position 을
+         건드리지 않아도 된다 — 스킨이 프레임을 absolute 로 옮겨
+         두었든 static 으로 눌러 두었든 paint containment 가 곧
+         containing block 이고, 넘친 부분도 잘라 준다. */
+      contain: "paint"
+    },
+    image: {
+      position: "absolute",
+      left,
+      top,
+      right: "auto",
+      bottom: "auto",
+      width,
+      height,
+      "min-width": "0",
+      "min-height": "0",
+      "max-width": "none",
+      "max-height": "none",
+      margin: "0",
+      padding: "0",
+      transform: "none",
+      translate: "none",
+      rotate: "none",
+      scale: "none",
+      "aspect-ratio": "auto",
+      "object-fit": SKIN_CROP_FIT_VALUES.includes(fit) ? fit : "cover",
+      "object-position":
+        (position.length === 2 && position.every((value) => SKIN_CROP_PERCENT_PATTERN.test(value)))
+          ? position.join(" ")
+          : "50% 50%"
+    }
+  };
+
+}
+
+
+function skinCropGuardDeclarationText(declarations) {
+
+  return Object.keys(declarations)
+    .map((property) => `${property}:${declarations[property]}!important`)
+    .join(";");
+
+}
+
+
+/* =========================================================
+   buildSkinCropGuardCss(fragment, editRules, scopeClass) -> string
+
+   fragment   sanitize 를 지난 template 내용(반복 clone 전 — 반복
+              항목은 같은 식별자를 나눠 쓰므로 규칙 하나로 충분하다)
+   editRules  validateAndScopeSkinCss 가 모아 준 직접 편집 규칙
+   scopeClass 이 렌더 인스턴스의 스코프 클래스
+
+   자르기가 하나도 없으면 "" — 그때는 <style> 내용이 이 라운드
+   이전과 한 글자도 다르지 않다.
+========================================================== */
+
+function buildSkinCropGuardCss(fragment, editRules, scopeClass) {
+
+  if (!fragment || !editRules || typeof scopeClass !== "string" || !scopeClass) {
+    return "";
+  }
+
+  const blocks = [];
+
+  const seen = new Set();
+
+  const selectorOf = (id) =>
+    `[${SKIN_CROP_EDIT_ID_ATTR}="${id}"][${SKIN_CROP_EDIT_ID_ATTR}="${id}"]`;
+
+  fragment.querySelectorAll(`[${SKIN_CROP_EDIT_ID_ATTR}]`).forEach((frame) => {
+
+    const frameId =
+      frame.getAttribute(SKIN_CROP_EDIT_ID_ATTR);
+
+    const frameRule =
+      SKIN_CROP_EDIT_ID_PATTERN.test(frameId || "") ? editRules[frameId] : null;
+
+    const marker =
+      frameRule && frameRule[SKIN_CROP_MARKER];
+
+    if (!marker || !String(marker.value || "").trim()) {
+      return;
+    }
+
+    /* 자르기 래퍼는 언제나 이미지 하나만 감싼다 — 표식을 가진
+       다른 상자를 프레임으로 착각하지 않는다. */
+    if (frame.children.length !== 1 || frame.firstElementChild.tagName !== "IMG") {
+      return;
+    }
+
+    const imageId =
+      frame.firstElementChild.getAttribute(SKIN_CROP_EDIT_ID_ATTR);
+
+    if (!SKIN_CROP_EDIT_ID_PATTERN.test(imageId || "") || !editRules[imageId]) {
+      return;
+    }
+
+    const key =
+      `${frameId}>${imageId}`;
+
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+
+    const values = {};
+
+    Object.keys(editRules[imageId]).forEach((property) => {
+      values[property] = editRules[imageId][property].value;
+    });
+
+    const guard =
+      buildSkinCropGuardDeclarations(values);
+
+    if (!guard) {
+      return;
+    }
+
+    const frameSelector =
+      `.${scopeClass} ${selectorOf(frameId)}`;
+
+    blocks.push(`${frameSelector}{${skinCropGuardDeclarationText(guard.frame)}}`);
+    blocks.push(`${frameSelector}>${selectorOf(imageId)}{${skinCropGuardDeclarationText(guard.image)}}`);
+
+  });
+
+  if (!blocks.length) {
+    return "";
+  }
+
+  return `@layer ${SKIN_CROP_GUARD_LAYER}{\n${blocks.join("\n")}\n}`;
+
+}
+
 /* =========================================================
    styleNonce (선택, SANDBOX-1)
 
@@ -769,11 +1000,25 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
       styleEl.nonce = styleNonce;
     }
 
-    styleEl.textContent = safeCss;
-    root.appendChild(styleEl);
-
     const template = doc.createElement("template");
     template.innerHTML = safeHtml;
+
+    /* IMAGE-CROP-PRIORITY-1 — 자르기 보호 규칙(위 buildSkinCropGuardCss).
+       layer 이름을 **맨 앞에서** 먼저 선언한다: !important 끼리는
+       먼저 선언된 layer 가 이긴다. 스킨이 자기 @layer 를 쓰더라도
+       이 layer 가 가장 먼저다. 자르기가 없으면 안 붙는다. */
+    const cropGuardCss =
+      cssResult.ok
+        ? buildSkinCropGuardCss(template.content, cssResult.editRules, cssResult.scopeClass)
+        : "";
+
+    styleEl.textContent =
+      cropGuardCss
+        ? `@layer ${SKIN_CROP_GUARD_LAYER};\n${safeCss}\n${cropGuardCss}`
+        : safeCss;
+
+    root.appendChild(styleEl);
+
     root.appendChild(template.content.cloneNode(true));
 
     container.appendChild(root);
@@ -892,4 +1137,8 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
    섞여 쓰일 수 있도록 window에도 노출한다(이 파일만 type="module"). */
 if (typeof window !== "undefined") {
   window.renderSkin = renderSkin;
+
+  /* Studio Preview 의 자르기 임시 미리보기가 같은 선언 묶음을 쓴다
+     (studio/preview/preview-bridge.js applyInspectorPreview). */
+  window.buildSkinCropGuardDeclarations = buildSkinCropGuardDeclarations;
 }

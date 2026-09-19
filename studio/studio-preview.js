@@ -2578,6 +2578,10 @@ function inspectorPreviewCropPayload(crop) {
     y: number(crop.y),
     frameWidth: number(crop.frameWidth),
     fixedWidth: crop.fixedWidth === true,
+
+    /* IMAGE-CROP-PRIORITY-1 — 프레임이 스킨의 자리를 채우는 방식.
+       이름 셋만 통과시킨다(studio-inspector-crop-model.js). */
+    fill: ["width", "flow", "absolute"].includes(crop.fill) ? crop.fill : undefined,
     anchor: inspectorPreviewCropAnchor(crop.anchor)
   };
 

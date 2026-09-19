@@ -65,7 +65,7 @@
    business logic을 깊게 알지 않게 하세요").
 ========================================================== */
 
-import { renderSkin } from "../../skin/skin-render.js";
+import { renderSkin, buildSkinCropGuardDeclarations } from "../../skin/skin-render.js";
 
 /*
   SANDBOX-4 — renderMode:"sandbox" 인 스킨은 이 문서가 직접 그리지
@@ -1166,6 +1166,11 @@ function inspectorMetricsOf(el) {
     height: rect.height,
     naturalWidth: Number(el.naturalWidth) || 0,
     naturalHeight: Number(el.naturalHeight) || 0,
+
+    /* IMAGE-CROP-PRIORITY-1 — 아직 자르지 않은 사진이 스킨이 정한
+       자리를 어떻게 채우고 있는가(inspectorCropFillOf). 자르기를
+       시작할 때 프레임이 같은 방식으로 그 자리를 채운다. */
+    fill: frame === el ? inspectorCropFillOf(el) : null,
     parentWidth: Math.max(0, Math.round(parentWidth)),
     parentHeight: Math.max(0, Math.round(parentHeight)),
     viewportWidth: document.documentElement.clientWidth || 0,
@@ -1181,6 +1186,141 @@ function inspectorMetricsOf(el) {
 
     cropped: frame !== el
   };
+
+}
+
+
+/* =========================================================
+   inspectorCropFillOf(img) -> "absolute" | "flow" | "width" | null
+   (IMAGE-CROP-PRIORITY-1)
+
+   "자르기 프레임이 이 사진 대신 들어서면, 어떤 방식으로 그려야
+   **지금 사진이 차지한 사각형과 똑같은 자리**가 되는가".
+
+   ★ 짐작하지 않고 잰다
+   부모 폭이 사진 폭과 같아 보여도, 부모가 사진 때문에 그 폭이 된
+   것(shrink-to-fit)이면 width:100% 프레임은 0 으로 무너진다. 높이는
+   더 그렇다. 그래서 사진을 잠깐 숨기고 **빈 상자 하나를 그 자리에
+   넣어 방식별로 그려 본다** — 그 상자의 사각형이 사진의 사각형과
+   같은 첫 방식이 답이다. 넣고 빼는 일은 한 작업 안에서 끝나므로
+   화면에 그려지지 않는다(레이아웃만 한 번 더 계산된다).
+
+     absolute  사진이 겹쳐 있다(position absolute) — 기준 상자를 채운다
+     flow      흐름 안에서 부모 상자를 폭·높이 모두 채운다
+     width     부모 폭을 채우고 높이는 비율로 정해진다
+
+   셋 다 아니면 null — 지금처럼 px 폭 + 비율 프레임이다.
+
+   ★ 결과는 요소·사각형·화면 폭이 같은 동안 기억해 둔다. 좌표는
+     스크롤마다 다시 올라가므로 매번 그려 볼 필요가 없다.
+========================================================== */
+
+const INSPECTOR_CROP_FILL_TOLERANCE = 1;
+
+const inspectorCropFillCache = new WeakMap();
+
+function inspectorCropFillOf(el) {
+
+  if (!el || el.tagName !== "IMG" || !el.isConnected || !el.parentElement) {
+    return null;
+  }
+
+  const rect =
+    el.getBoundingClientRect();
+
+  if (!(rect.width > 0) || !(rect.height > 0)) {
+    return null;
+  }
+
+  const key =
+    [
+      Math.round(rect.left), Math.round(rect.top),
+      Math.round(rect.width), Math.round(rect.height),
+      document.documentElement.clientWidth
+    ].join(",");
+
+  const cached =
+    inspectorCropFillCache.get(el);
+
+  if (cached && cached.key === key) {
+    return cached.fill;
+  }
+
+  /* 레이아웃 상자(offset*)로 견준다 — 스킨이 사진에 transform 을
+     걸어 두었어도(자르면 보호 규칙이 걷는 값이다) 자리는 같다. */
+  const box = (node) => ({
+    parent: node.offsetParent,
+    left: node.offsetLeft,
+    top: node.offsetTop,
+    width: node.offsetWidth,
+    height: node.offsetHeight
+  });
+
+  const layout =
+    box(el);
+
+  const same = (other) =>
+    other.parent === layout.parent &&
+    Math.abs(other.left - layout.left) <= INSPECTOR_CROP_FILL_TOLERANCE &&
+    Math.abs(other.top - layout.top) <= INSPECTOR_CROP_FILL_TOLERANCE &&
+    Math.abs(other.width - layout.width) <= INSPECTOR_CROP_FILL_TOLERANCE &&
+    Math.abs(other.height - layout.height) <= INSPECTOR_CROP_FILL_TOLERANCE;
+
+  let position = "";
+
+  try {
+    position = window.getComputedStyle(el).position;
+  } catch (err) {
+    return null;
+  }
+
+  const candidates =
+    (position === "absolute")
+      ? [["absolute", "display:block;position:absolute;inset:0;margin:0;padding:0;border:0"]]
+      : (position === "fixed" ? [] : [
+          ["flow", "display:block;position:relative;width:100%;height:100%;margin:0;padding:0;border:0"],
+          ["width", `display:block;position:relative;width:100%;aspect-ratio:${layout.width / Math.max(1, layout.height)};margin:0;padding:0;border:0`]
+        ]);
+
+  let fill = null;
+
+  if (candidates.length) {
+
+    const parent =
+      el.parentElement;
+
+    const probe =
+      document.createElement("span");
+
+    /* 사진의 style 속성은 건드리지 않는다 — 잠깐 자리를 비켜 줄
+       뿐이다(스킨 DOM 에 흔적이 남지 않게). 이미 불러온 <img> 는
+       다시 넣어도 다시 받지 않는다. */
+    parent.replaceChild(probe, el);
+
+    try {
+
+      for (const [mode, css] of candidates) {
+
+        probe.setAttribute("style", css);
+
+        if (same(box(probe))) {
+          fill = mode;
+          break;
+        }
+
+      }
+
+    } finally {
+
+      parent.replaceChild(el, probe);
+
+    }
+
+  }
+
+  inspectorCropFillCache.set(el, { key, fill });
+
+  return fill;
 
 }
 
@@ -1411,7 +1551,7 @@ function clearInspectorPreview(options) {
 /* 선언 묶음을 inline style로 얹는다 — 값이 null인 것은 건너뛴다.
    custom property(--imory-crop)도 함께 실려야 하므로 setProperty를
    쓴다(node.style.foo = ... 로는 custom property가 들어가지 않는다). */
-function applyInspectorInlineDeclarations(node, declarations) {
+function applyInspectorInlineDeclarations(node, declarations, important) {
 
   Object.keys(declarations || {}).forEach((property) => {
 
@@ -1422,7 +1562,7 @@ function applyInspectorInlineDeclarations(node, declarations) {
       return;
     }
 
-    node.style.setProperty(property, String(value));
+    node.style.setProperty(property, String(value), important ? "important" : "");
 
   });
 
@@ -1669,11 +1809,55 @@ function applyInspectorPreview(data) {
       const declarations =
         window.buildInspectorCropDeclarations(data.crop, {
           frameWidth: data.crop.frameWidth,
-          fixedWidth: !!data.crop.fixedWidth
+          fixedWidth: !!data.crop.fixedWidth,
+          fill: data.crop.fill
         });
+
+      /* 프레임 방식이 바뀌면(상자 채우기 → 비율, IMAGE-CROP-PRIORITY-1)
+         앞 방식의 자리·크기 선언이 남아 새 방식을 이긴다 — 옛
+         height:100% 가 남으면 aspect-ratio 가 무시된다. 적용하면
+         걷히는 값(studio-inspector-crop.js
+         STUDIO_INSPECTOR_CROP_FRAME_GEOMETRY)이므로 미리보기에서도
+         걷는다. 이미 확정된 프레임이면 확정 규칙의 값까지 눌러 둔다. */
+      const frameDeclarations =
+        declarations.frame;
+
+      ["position", "inset", "width", "height", "aspect-ratio", "max-width"].forEach((property) => {
+
+        if (frameDeclarations[property]) {
+          return;
+        }
+
+        wrapper.style.removeProperty(property);
+
+        if (!inspectorPreviewRestore.crop.created && (property === "height" || property === "inset")) {
+          wrapper.style.setProperty(property, "auto");
+        }
+
+      });
 
       applyInspectorInlineDeclarations(wrapper, declarations.frame);
       applyInspectorInlineDeclarations(selected, declarations.image);
+
+      /* =================================================
+         IMAGE-CROP-PRIORITY-1 — 스킨 CSS 보다 강하게
+
+         확정된 자르기는 렌더러가 cascade layer 안의 !important 로
+         보호한다(skin/skin-render.js buildSkinCropGuardCss). 적용
+         전에는 규칙이 아직 없으니 **같은 선언 묶음**을 inline
+         !important 로 얹는다 — inline !important 는 스킨이 어떤
+         선택자로 !important 를 걸었든 이긴다. 그래서 슬라이더를
+         움직이는 동안 보이는 것과 적용한 뒤 보이는 것이 같다.
+         clearInspectorPreview() 가 style 속성을 통째로 되돌리므로
+         취소하면 흔적이 남지 않는다.
+      ================================================== */
+      const guard =
+        buildSkinCropGuardDeclarations(declarations.image);
+
+      if (guard) {
+        applyInspectorInlineDeclarations(wrapper, guard.frame, true);
+        applyInspectorInlineDeclarations(selected, guard.image, true);
+      }
 
       pinInspectorCropFrame(wrapper, data.crop.anchor);
 

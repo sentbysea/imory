@@ -985,11 +985,17 @@
         y: {
           userId: "user-y",
           imageLibrary: {
+            /*
+              IMAGE-CROP-PRIORITY-1 — window.__scenarioYSlots 로 슬롯
+              연결을 더 심을 수 있다. 저장한 draft 로 문서를 새로 열 때
+              (addInitScript) 그 draft 의 슬롯 사진도 함께 돌아와야
+              "저장 → 새로고침 뒤에도 같은 자르기"를 잴 수 있다.
+            */
             versionSlots: {
-              "draft-y1": {
+              "draft-y1": Object.assign({
                 profile: { imageId: "img-profile", imageUrl: "https://example.com/profile.png" },
                 cover: { imageId: "img-cover", imageUrl: "https://example.com/cover.png" }
-              }
+              }, window.__scenarioYSlots || {})
             },
             images: [
               { id: "img-profile", public_url: "https://example.com/profile.png", file_name: "profile.png", byte_size: 100 },

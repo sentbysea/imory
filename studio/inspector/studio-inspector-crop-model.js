@@ -60,6 +60,109 @@
      "fixed"  사용자가 너비를 직접 정했다 */
 const INSPECTOR_CROP_MARKER = "--imory-crop";
 
+
+/* =========================================================
+   IMAGE-CROP-PRIORITY-1 — 프레임이 스킨의 자리를 그대로 채우는 경우
+
+   위 두 값("1"/"fixed")은 프레임을 **px 폭 + 비율**로 그린다. 스킨이
+   사진의 크기를 정해 둔 자리 — 영역을 꽉 채우는 배경 사진
+   (`position:absolute; inset:0`), 부모 폭을 채우는 헤더
+   (`width:100%`) — 에서는 그렇게 굽는 순간 화면 폭이 바뀌면
+   어긋난다. Mobile Preview(390px)에서 자르고 데스크톱으로 보면
+   hero 가 362px 기둥이 되었다(2026-09-19 FOREVER, MY FOE 실측).
+
+   그래서 자르기를 시작할 때 "사진이 부모가 정한 자리를 그대로
+   채우고 있는가"를 iframe 이 재서(preview-bridge.js
+   inspectorCropFillOf) 프레임도 그 자리를 **같은 방식으로** 채우게
+   한다. 표식 값이 그 방식이다.
+
+     "fill-width"     부모 폭을 채운다          width:100% + 비율
+     "fill"           부모 상자를 채운다(흐름)  width:100%; height:100%
+     "fill-absolute"  기준 상자를 채운다(겹침)  position:absolute; inset:0
+
+   세 경우 모두 폭을 사용자가 정한 것이 아니므로 자르기를 풀 때
+   아무 것도 돌려주지 않는다("1"과 같다).
+========================================================== */
+
+const INSPECTOR_CROP_FILL_MARKERS = {
+  width: "fill-width",
+  flow: "fill",
+  absolute: "fill-absolute"
+};
+
+
+function inspectorCropFillMode(value) {
+
+  return Object.prototype.hasOwnProperty.call(INSPECTOR_CROP_FILL_MARKERS, value)
+    ? value
+    : null;
+
+}
+
+
+function inspectorCropFillFromMarker(marker) {
+
+  const text =
+    String(marker || "").trim();
+
+  const found =
+    Object.keys(INSPECTOR_CROP_FILL_MARKERS)
+      .find((mode) => INSPECTOR_CROP_FILL_MARKERS[mode] === text);
+
+  return found || null;
+
+}
+
+
+/* =========================================================
+   inspectorCropFrameStructure(fill, ratio) -> 선언
+
+   프레임이 "자르기 프레임으로 살아 있기 위해" 필요한 선언. 처음
+   만들 때(buildInspectorCropDeclarations)와, 너비·모양·정렬 컨트롤이
+   프레임 규칙을 고친 뒤 다시 못 박을 때(studioInspectorCropAwareCss)
+   **같은 함수**를 쓴다.
+========================================================== */
+
+function inspectorCropFrameStructure(fill, ratio) {
+
+  const mode =
+    inspectorCropFillMode(fill);
+
+  if (mode === "absolute") {
+    return {
+      display: "block",
+      position: "absolute",
+      inset: "0",
+      overflow: "hidden"
+    };
+  }
+
+  if (mode === "flow") {
+    return {
+      display: "block",
+      position: "relative",
+      overflow: "hidden",
+      width: "100%",
+      height: "100%"
+    };
+  }
+
+  const structure = {
+    display: "block",
+    position: "relative",
+    overflow: "hidden",
+    "aspect-ratio": ratio || null,
+    "max-width": "100%"
+  };
+
+  if (mode === "width") {
+    structure.width = "100%";
+  }
+
+  return structure;
+
+}
+
 const INSPECTOR_CROP_ZOOM_MIN = 1;
 
 const INSPECTOR_CROP_ZOOM_MAX = 4;
@@ -190,18 +293,30 @@ function buildInspectorCropDeclarations(crop, options) {
   const slack =
     Math.max(0, zoomPercent - 100);
 
+  const fill =
+    inspectorCropFillMode(settings.fill);
+
   const frame = {};
 
   frame[INSPECTOR_CROP_MARKER] =
-    settings.fixedWidth ? "fixed" : "1";
+    fill
+      ? INSPECTOR_CROP_FILL_MARKERS[fill]
+      : (settings.fixedWidth ? "fixed" : "1");
 
-  frame.display = "block";
-  frame.position = "relative";
-  frame.overflow = "hidden";
-  frame["aspect-ratio"] = value.ratio;
-  frame["max-width"] = "100%";
+  const structure =
+    inspectorCropFrameStructure(fill, value.ratio);
 
-  if (Number.isFinite(Number(settings.frameWidth)) && Number(settings.frameWidth) > 0) {
+  Object.keys(structure).forEach((property) => {
+    if (structure[property]) {
+      frame[property] = structure[property];
+    }
+  });
+
+  if (
+    !fill &&
+    Number.isFinite(Number(settings.frameWidth)) &&
+    Number(settings.frameWidth) > 0
+  ) {
     frame.width = `${Math.round(Number(settings.frameWidth))}px`;
   }
 
@@ -767,7 +882,8 @@ function readInspectorCrop(frameDeclarations, imageDeclarations) {
     x: inspectorCropClampOffset(((percentX === null ? 50 : percentX) - 50) / 50),
     y: inspectorCropClampOffset(((percentY === null ? 50 : percentY) - 50) / 50),
     frameWidth: inspectorCropNumberFrom(frame.width, "px"),
-    fixedWidth: String(marker).trim() === "fixed"
+    fixedWidth: String(marker).trim() === "fixed",
+    fill: inspectorCropFillFromMarker(marker)
   };
 
 }
@@ -810,6 +926,10 @@ function buildInspectorCropWrapperId(editId, isUsed) {
 if (typeof window !== "undefined") {
 
   window.INSPECTOR_CROP_MARKER = INSPECTOR_CROP_MARKER;
+  window.INSPECTOR_CROP_FILL_MARKERS = INSPECTOR_CROP_FILL_MARKERS;
+  window.inspectorCropFillMode = inspectorCropFillMode;
+  window.inspectorCropFillFromMarker = inspectorCropFillFromMarker;
+  window.inspectorCropFrameStructure = inspectorCropFrameStructure;
   window.INSPECTOR_CROP_ZOOM_MIN = INSPECTOR_CROP_ZOOM_MIN;
   window.INSPECTOR_CROP_ZOOM_MAX = INSPECTOR_CROP_ZOOM_MAX;
   window.INSPECTOR_CROP_RATIO_PRESETS = INSPECTOR_CROP_RATIO_PRESETS;
