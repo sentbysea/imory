@@ -169,6 +169,49 @@
 }
 
 
+/* 제목(SELECT · IMAGES · BOTTOM DOCK)과, 좁은 화면에서만 보이는 요소
+   이름을 한 묶음으로 */
+.studio-left-panel-heading {
+  flex: 1 1 auto;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+
+  min-width: 0;
+}
+
+
+/* MOBILE-SHEET-1 — 시트 전용(좁은 화면에서만 보인다). 넓은 화면의 왼쪽
+   패널 머리는 예전 그대로 "제목 · ‹" 두 개다. */
+.studio-left-panel-handle,
+.studio-left-panel-name,
+.studio-left-panel-quick,
+.studio-left-panel-step {
+  display: none;
+}
+
+
+/* 단계가 바뀔 때 스크린리더에 읽어 주는 한 줄 — 화면에는 없다 */
+.studio-left-panel-status {
+  position: absolute;
+
+  width: 1px;
+  height: 1px;
+
+  margin: -1px;
+  padding: 0;
+
+  overflow: hidden;
+
+  clip: rect(0 0 0 0);
+
+  white-space: nowrap;
+
+  border: 0;
+}
+
+
 .studio-left-panel-title {
   flex: 1;
 
@@ -890,7 +933,38 @@
   }
 
 
-  /* 왼쪽 패널 = 아래에서 올라오는 시트 */
+  .studio-left-panel .images-panel-footer .images-panel-hint {
+    flex-basis: 100%;
+  }
+
+}
+
+
+
+/* =========================================================
+   MOBILE-SHEET-1 — 좁은 화면의 왼쪽 패널 = 세 단계 아래 시트
+
+   studio/studio-sheet.js 가 단계를 data-sheet-state 로 적는다.
+
+     peek     머리 한 줄(손잡이 · 이름 · Quick Bar · 단계 버튼)만.
+              본문은 높이 0 + visibility:hidden — display:none 이 아니다
+              (목록 · 입력칸의 스크롤 위치가 남아야 한다).
+     content  내용 높이만큼, --studio-sheet-content-max(화면의 52% ·
+              남은 자리 − 56px)까지. 넘치면 시트 안쪽만 스크롤.
+     full     --studio-sheet-top(상단 바 아래, 접었으면 맨 위)부터
+              화면 아래까지.
+
+   아래 끝은 --studio-sheet-keyboard — visualViewport 가 알려 준 키보드
+   높이만큼 올라간다(적용 · 취소가 키보드 뒤에 숨지 않는다). 위 끝의
+   한계 · 내용 보기 최대 높이도 같은 파일이 실측해서 적는다(100vh 에
+   기대지 않는다 — 주소창 · 키보드가 바꾸는 높이를 따라간다).
+
+   단계 규칙은 #studioLeftPanel 로 잡는다 — 바를 접었을 때의
+   `.studio-preview-shell:has(…) .studio-left-panel`(특정도 0,4,0)보다
+   이겨야 한다.
+========================================================== */
+
+@media (max-width: 720px) {
 
   .studio-preview-shell.has-left-panel .studio-preview-stage {
     left: 0;
@@ -903,15 +977,28 @@
   .studio-left-panel,
   .studio-preview-shell:has(.studio-top-dock-zone:not(.is-open)) .studio-left-panel {
     top: auto;
+  }
+
+  .studio-left-panel {
     right: 0;
+    bottom: var(--studio-sheet-keyboard, 0px);
 
     /* Top Dock(8)과 같은 층 — 바와는 겹치지 않고, 선택 테두리·핸들
        (Inspector 레이어 7)이 시트 위로 비쳐 올라오지 않는다. */
     z-index: 8;
 
     width: auto;
-    height: min(55%, calc(100% - var(--studio-top-dock-height, 48px) - 96px));
-    min-height: 220px;
+    height: auto;
+    max-height: calc(
+      100% -
+      var(--studio-sheet-top, var(--studio-top-dock-height, 48px)) -
+      var(--studio-sheet-keyboard, 0px)
+    );
+
+    /* iOS 홈 표시줄 자리. 이 문서는 viewport-fit=cover 를 쓰지 않아
+       지금은 0 이다(브라우저가 그 자리를 비워 둔다) — 쓰게 되면
+       그대로 비켜 선다. */
+    padding-bottom: env(safe-area-inset-bottom, 0px);
 
     border-right: 0;
     border-top: 1px solid var(--system-border-strong);
@@ -922,21 +1009,298 @@
     transform: translateY(100%);
   }
 
+  .studio-preview-shell.is-keyboard-open .studio-left-panel {
+    padding-bottom: 0;
+  }
+
   .studio-left-panel.is-open {
     transform: translateY(0);
   }
 
-  .studio-left-panel-collapse {
+  #studioLeftPanel[data-sheet-state="peek"] .studio-left-panel-body {
+    flex: 0 0 0px;
+
+    height: 0;
+    min-height: 0;
+
+    visibility: hidden;
+  }
+
+  #studioLeftPanel[data-sheet-state="content"] {
+    max-height: min(
+      var(--studio-sheet-content-max, 52%),
+      calc(
+        100% -
+        var(--studio-sheet-top, var(--studio-top-dock-height, 48px)) -
+        var(--studio-sheet-keyboard, 0px)
+      )
+    );
+  }
+
+  #studioLeftPanel[data-sheet-state="content"] .studio-left-panel-body,
+  #studioLeftPanel[data-sheet-state="content"] .studio-left-panel-section {
+    flex: 0 1 auto;
+  }
+
+  #studioLeftPanel[data-sheet-state="full"] {
+    top: var(--studio-sheet-top, var(--studio-top-dock-height, 48px));
+  }
+
+  /* 손잡이를 끄는 동안 — 인라인 height 가 그 높이다 */
+  #studioLeftPanel.is-sheet-dragging {
+    top: auto;
+
+    max-height: none;
+
+    transition: none;
+  }
+
+  #studioLeftPanel.is-sheet-dragging .studio-left-panel-body {
+    flex: 1 1 auto;
+
+    height: auto;
+
+    visibility: visible;
+  }
+
+
+  /* 머리 — 1줄 손잡이, 2줄 [SELECT / 요소 이름] [Quick Bar] [▾ ▴ ✕] */
+
+  .studio-left-panel-header {
+    flex-wrap: wrap;
+
+    column-gap: 2px;
+    row-gap: 0;
+
+    min-height: 0;
+
+    padding: 0 4px 4px 12px;
+  }
+
+  #studioLeftPanel[data-sheet-state="peek"]:not(.is-sheet-dragging) .studio-left-panel-header {
+    border-bottom-color: transparent;
+  }
+
+  .studio-left-panel-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    flex: 0 0 calc(100% + 16px);
+
+    height: 18px;
+
+    margin: 0 -4px 0 -12px;
+
+    cursor: grab;
+
+    /* 이 줄에서만 세로 끌기를 가로챈다 — 시트 안 목록 · 입력칸과
+       Preview 의 스크롤은 브라우저 기본 그대로다 */
+    touch-action: none;
+  }
+
+  .studio-left-panel.is-sheet-dragging .studio-left-panel-handle {
+    cursor: grabbing;
+  }
+
+  .studio-left-panel-handle-bar {
     width: 36px;
-    height: 36px;
+    height: 4px;
 
-    transform: rotate(-90deg);
+    border-radius: 2px;
+
+    background: var(--system-border-strong);
   }
 
-  .studio-left-panel .images-panel-footer .images-panel-hint {
-    flex-basis: 100%;
+  .studio-left-panel-heading {
+    flex: 1 1 104px;
   }
 
+  .studio-left-panel-title {
+    flex: none;
+
+    font-size: 10px;
+    line-height: 14px;
+
+    letter-spacing: 0.12em;
+  }
+
+  .studio-left-panel-name {
+    display: block;
+
+    margin: 0;
+
+    overflow: hidden;
+
+    color: var(--system-text);
+
+    font-size: var(--imory-font-size-300);
+    font-weight: var(--imory-font-weight-medium);
+    line-height: 20px;
+
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    cursor: pointer;
+  }
+
+  .studio-left-panel-name.is-hint {
+    color: var(--system-text-muted);
+
+    font-weight: normal;
+  }
+
+  .studio-left-panel-quick {
+    display: flex;
+
+    flex: 0 0 auto;
+
+    min-width: 0;
+  }
+
+  #studioLeftPanel:not([data-mode="select"]) .studio-left-panel-quick {
+    display: none;
+  }
+
+  .studio-left-panel-step:not([hidden]),
+  .studio-left-panel-collapse {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    flex: 0 0 auto;
+
+    width: 40px;
+    height: 44px;
+
+    padding: 0;
+
+    border: 1px solid transparent;
+    border-radius: var(--imory-radius-200);
+
+    background: transparent;
+
+    color: var(--system-text-muted);
+
+    font-family: inherit;
+    font-size: 16px;
+    line-height: 1;
+
+    cursor: pointer;
+  }
+
+  .studio-left-panel-step:hover,
+  .studio-left-panel-step:focus-visible {
+    color: var(--system-accent-hover);
+  }
+
+  /* 좁은 화면의 ‹ 는 "닫기"다(접기는 ▾) — 글자는 그대로 두고 ✕ 로 보인다 */
+  .studio-left-panel-collapse {
+    font-size: 0;
+  }
+
+  .studio-left-panel-collapse::before {
+    font-size: 15px;
+
+    content: "✕";
+  }
+
+  /* 요소 이름은 시트 머리가 보여 준다 — 본문에서 한 번 더 쓰지 않는다 */
+  .studio-left-panel .studio-inspector-popover-title {
+    display: none;
+  }
+
+
+  /* 시트 머리의 Quick Bar — 아이콘만, 한 줄, 넘치면 ··· 목록
+     (studio-inspector-quickbar.js layoutStudioInspectorQuickBar) */
+
+  .studio-left-panel-quick .studio-inspector-quickbar.is-docked {
+    flex-wrap: nowrap;
+
+    gap: 2px;
+
+    margin: 0;
+    padding: 0;
+
+    border: 0;
+
+    background: transparent;
+  }
+
+  .studio-left-panel-quick .studio-inspector-quickbar.is-docked > .studio-inspector-quick {
+    justify-content: center;
+
+    width: 40px;
+    min-height: 44px;
+
+    padding: 0;
+  }
+
+  .studio-left-panel-quick .studio-inspector-quickbar.is-docked > .studio-inspector-quick .studio-inspector-quick-text {
+    display: none;
+  }
+
+  .studio-left-panel-quick .studio-inspector-quick-icon {
+    font-size: 16px;
+  }
+
+  .studio-left-panel-quick [data-inspector-quick="image"] { order: 1; }
+  .studio-left-panel-quick [data-inspector-quick="ai"] { order: 2; }
+  .studio-left-panel-quick [data-inspector-quick="hide"] { order: 3; }
+  .studio-left-panel-quick [data-inspector-quick="forward"] { order: 4; }
+  .studio-left-panel-quick [data-inspector-quick="backward"] { order: 5; }
+  .studio-left-panel-quick [data-inspector-quick="more"] { order: 6; }
+
+  /* ··· 목록 — 시트 위 가장자리 바로 위에 뜬다(전체 화면이면 머리 아래) */
+  .studio-inspector-quick-menu {
+    position: absolute;
+    right: 8px;
+    bottom: calc(100% + 6px);
+
+    z-index: 1;
+
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+
+    gap: 2px;
+
+    min-width: 176px;
+
+    padding: 6px;
+
+    border: 1px solid var(--system-border-strong);
+    border-radius: var(--imory-radius-300);
+
+    background: var(--system-bg);
+
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  }
+
+  #studioLeftPanel[data-sheet-state="full"] .studio-inspector-quick-menu {
+    top: 64px;
+    bottom: auto;
+  }
+
+  .studio-inspector-quick-menu .studio-inspector-quick {
+    justify-content: flex-start;
+
+    gap: 10px;
+
+    min-height: 44px;
+
+    padding: 0 12px;
+  }
+
+  .studio-inspector-quick-menu .studio-inspector-quick-text {
+    display: inline;
+  }
+
+}
+
+
+.studio-inspector-quick-menu[hidden] {
+  display: none;
 }
 
 

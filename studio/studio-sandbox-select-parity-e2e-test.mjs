@@ -33,6 +33,9 @@
                Select 를 끈(공개와 같은) 렌더
      zoom      Mobile Preview(축소)에서 클릭 좌표 · 이름표 · 테두리 · 스크롤 뒤 이름표
      narrow    390px Studio 창 — 선택 · Quick Bar 는 시트 · 겹친 메뉴는 시트 · 넘침 0
+     sheet     (MOBILE-SHEET-1) 390px — 접힘으로 열림 · 바깥 Preview 문서 끝의 여유 ·
+               고른 요소가 시트에 덮이지 않음 · 펼치면 바깥 문서만 최소한 스크롤 ·
+               접어도 튀지 않음
      forge     프레임 realm 이 지어낸 후보/글자/지시 · 다른 origin 메시지 거부
 
    실행:
@@ -1634,6 +1637,93 @@ async function runNarrow(browser) {
 
 
 /* =========================================================
+   sheet — MOBILE-SHEET-1 세 단계 시트 · sandbox Preview
+
+   sandbox 스킨의 Preview 에서도 스크롤하는 것은 바깥 Preview 문서다
+   (안쪽 프레임은 내용 높이만큼 커지고 자기 스크롤이 없다). 그래서 시트가
+   덮은 만큼의 여유와 "고른 요소를 시트 위로"가 native 와 같은 길로 된다.
+========================================================== */
+
+async function runSheet(browser) {
+
+  const page = await openStudio(browser, { viewport: { width: 390, height: 844 }, tag: "sheet" });
+  await enableSelect(page);
+
+  const outer = () => page.evaluate(() => {
+    const win = document.getElementById("studioPreviewFrame").contentWindow;
+    const panel = document.getElementById("studioLeftPanel").getBoundingClientRect();
+    return {
+      scrollY: Math.round(win.scrollY),
+      inset: win.__imoryStudioSheetInset(),
+      sheetTop: Math.round(panel.top),
+      state: window.getStudioSheetState(),
+      frames: win.document.querySelectorAll("iframe[data-imory-sandbox-frame]").length
+    };
+  });
+
+  const noteRect = async () => {
+    const r = await fx(page, () => {
+      const b = document.querySelector(".dx-note").getBoundingClientRect();
+      return { left: b.left, top: b.top, width: b.width, height: b.height, innerScroll: Math.round(window.scrollY) };
+    });
+    const m = await mapFrameRect(page, r);
+    return { frameTop: Math.round(r.top), innerScroll: r.innerScroll, top: m.top, bottom: m.top + m.height, x: m.left + m.width / 2, y: m.top + m.height / 2 };
+  };
+
+  const o0 = await outer();
+  record(
+    "H1. sandbox — Select 를 켜면 접힘 · 바깥 Preview 문서 끝에 시트 높이만큼 Studio 전용 여유(프레임은 하나 그대로)",
+    o0.state === "peek" && o0.inset.inset > 0 && o0.inset.spacer && o0.frames === 1,
+    JSON.stringify(o0)
+  );
+
+  const n0 = await noteRect();
+  await page.mouse.click(n0.x, n0.y);
+  const picked = await waitSelected(page, "dx-note");
+  await sleep(300);
+  const o1 = await outer();
+  const n1 = await noteRect();
+  record(
+    "H2. sandbox — 프레임 안 요소를 고르면 접힘이고 그 요소가 시트에 덮이지 않는다",
+    picked && o1.state === "peek" && n1.bottom <= o1.sheetTop,
+    JSON.stringify({ o1, note: n1 })
+  );
+
+  await page.click("#studioLeftPanelSheetUp");
+  await sleep(500);
+  const o2 = await outer();
+  const n2 = await noteRect();
+  const label = await page.evaluate(() => {
+    const l = document.getElementById("studioInspectorSelectLabel");
+    const r = l.getBoundingClientRect();
+    return { hidden: l.hidden, bottom: Math.round(r.bottom) };
+  });
+  const gap = o2.sheetTop - n2.bottom;
+  record(
+    "H3. sandbox — 내용 보기로 펼치면 바깥 Preview 문서만 스크롤돼 요소가 시트 위(최소한 · 12px 여백) · 안쪽 프레임은 스크롤하지 않고 요소 자리도 그대로 · 이름표가 따라옴",
+    o2.state === "content" && o2.scrollY > o1.scrollY && gap >= 8 && gap <= 18 &&
+      n2.innerScroll === 0 && n2.frameTop === n0.frameTop && !label.hidden && label.bottom <= n2.top + 2 && o2.frames === 1,
+    JSON.stringify({ scrollY: [o1.scrollY, o2.scrollY], gap, frameTop: [n0.frameTop, n2.frameTop], label })
+  );
+
+  await page.click("#studioLeftPanelSheetDown");
+  await sleep(400);
+  const o3 = await outer();
+  record(
+    "H4. sandbox — 접힘으로 내려도 Preview 가 튀지 않는다",
+    o3.state === "peek" && o3.scrollY === o2.scrollY,
+    JSON.stringify({ scrollY: [o2.scrollY, o3.scrollY] })
+  );
+
+  const overflow = { studio: await noHorizontalOverflow(page), frame: await frameNoHorizontalOverflow(page) };
+  record("H5. sandbox — 390px Studio · 프레임 양쪽 가로 넘침 0", overflow.studio && overflow.frame, JSON.stringify(overflow));
+
+  await closeStudio(page);
+
+}
+
+
+/* =========================================================
    forge — 위조 · 다른 origin
 ========================================================== */
 
@@ -1755,6 +1845,7 @@ const SECTIONS = [
   ["preserve", runPreserve],
   ["zoom", runZoom],
   ["narrow", runNarrow],
+  ["sheet", runSheet],
   ["forge", runForge]
 ];
 

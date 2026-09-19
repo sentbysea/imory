@@ -1290,6 +1290,30 @@ function handleDockPanelApply() {
     return;
   }
 
+  /* MOBILE-SHEET-1 — 좁은 화면의 시트에서는 적용해도 닫지 않는다.
+     적용한 값으로 사본을 새로 만들어(working draft revision 이 올랐다)
+     같은 자리 · 같은 스크롤에 다시 보여 준다. 넓은 화면은 예전 그대로
+     닫는다(studio/studio-sheet.js studioSheetKeepsContentAfterApply). */
+  if (
+    typeof window.studioSheetKeepsContentAfterApply === "function" &&
+    window.studioSheetKeepsContentAfterApply("dock")
+  ) {
+
+    const scrollTop =
+      dockPanelBody ? dockPanelBody.scrollTop : 0;
+
+    openSkinDockPanel();
+
+    if (dockPanelBody) {
+      dockPanelBody.scrollTop = scrollTop;
+    }
+
+    setDockPanelMessage("적용했어요. Save를 눌러 저장하세요.");
+
+    return;
+
+  }
+
   closeSkinDockPanel();
 
 }

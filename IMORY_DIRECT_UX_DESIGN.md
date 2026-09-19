@@ -162,7 +162,11 @@ URL 입력칸은 일반 패널에 없다(Code 로).
 
 **현재 구현.** 데스크톱: 선택 테두리 오른쪽 위 **바깥**(자리가 없으면 아래,
 그것도 없으면 안쪽), Preview 프레임 안으로 눌러 넣는다. 좁은 화면: 요소 근처가
-아니라 Select 시트 맨 위(`#studioInspectorQuickBarSlot`). 모든 버튼에 tooltip.
+아니라 Select 시트 **머리 한 줄**(`#studioInspectorQuickBarSlot` — MOBILE-SHEET-1
+에서 시트 본문 맨 위에서 머리로 옮겼다, 접힌 시트에서도 보여야 해서). 그 줄에
+안 들어가면 자주 쓰는 것(이미지 변경 · AI로 수정 · 숨기기 순)만 직접 두고 나머지는
+`···` 목록으로 **같은 버튼을 옮긴다**(IMORY_STUDIO_SHELL_DESIGN.md §5-1). 모든
+버튼에 tooltip.
 
 | 버튼 | 하는 일 | 기존 경로 |
 | --- | --- | --- |
@@ -288,8 +292,9 @@ opacity → 투명도 · transition → 움직임 효과. selector 는 어디에
 
 ## §19 모바일(390px)
 
-Select 패널은 기존 아래 시트. Quick Bar 는 시트 맨 위. 겹친 요소 메뉴는 아래
-시트. 선택 · hover 이름표는 Preview 프레임 밖으로 나가지 않게 가로 위치를 눌러
+Select 패널은 아래 시트 — MOBILE-SHEET-1 부터 세 단계(접힘 · 내용 보기 · 전체 화면,
+IMORY_STUDIO_SHELL_DESIGN.md §5-1)이고 요소를 고르면 접힘으로 시작한다. Quick Bar
+는 시트 머리 한 줄. 겹친 요소 메뉴는 아래 시트. 선택 · hover 이름표는 Preview 프레임 밖으로 나가지 않게 가로 위치를 눌러
 넣는다(예전에는 오른쪽 끝 요소에서 최대 60px 삐져나갈 수 있었다). 가로 넘침 0
 (e2e `--only=narrow`).
 
@@ -302,9 +307,11 @@ Select 패널은 기존 아래 시트. Quick Bar 는 시트 맨 위. 겹친 요�
   같은 우선순위 · 겹친 요소 메뉴 · 바깥 영역 · 더블클릭 · 본체 끌기 · 패널 항목 ·
   Quick Bar 를 쓴다(`skin/sandbox/skin-sandbox-inspect-direct.js`). sandbox 에서만
   남은 차이는 **이미지 크기 조절 · 자르기**다(§S-7).
-- **390px 에서 아래 시트가 Preview 아래쪽 절반을 덮는다**(STUDIO-SHELL-1 의 셸
-  설계). 짧은 페이지는 스크롤로 끌어올릴 수 없어, 아래쪽 요소는 시트를 접고
-  눌러야 한다.
+- ~~**390px 에서 아래 시트가 Preview 아래쪽 절반을 덮는다**~~ → **MOBILE-SHEET-1
+  에서 닫았다**(IMORY_STUDIO_SHELL_DESIGN.md §5-1). 고르면 접힘(약 68px)이고,
+  시트가 열리면 Preview 문서 끝에 Studio 전용 여유가 생겨 짧은 페이지의 맨 아래
+  요소도 시트를 닫지 않고 스크롤해 고른다. 펼치면 고른 요소가 가려진 만큼만
+  Preview 가 스크롤된다.
 - 정렬선 · 스냅 · 끌어서 형제 순서 바꾸기(격자/세로)는 없다.
 - 배경 **이미지**(영역의 background-image)는 일반 패널에 없다 — `url()` 을 받는
   입구를 만들지 않았다. AI/Code 로.

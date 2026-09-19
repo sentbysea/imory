@@ -394,6 +394,13 @@ function beginStudioInspectorLayoutDrag(event, handle) {
   event.preventDefault();
   event.stopPropagation();
 
+  /* MOBILE-SHEET-1 — 좁은 화면에서 옮기기 시작하면 시트는 접힘으로
+     내려간다(Preview 를 넓게 쓰도록). 놓은 뒤 저절로 다시 펼치지
+     않는다. 넓은 화면에서는 아무 일도 없다. */
+  if (typeof window.noteStudioSheetPreviewMove === "function") {
+    window.noteStudioSheetPreviewMove();
+  }
+
   const params =
     layout.item.params;
 

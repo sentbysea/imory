@@ -39,7 +39,13 @@
 
    ★ 좁은 화면(720px 이하)에서는 왼쪽 패널(아래 시트)과 AI 패널
      (overlay)이 서로를 가린다 — 하나를 열면 다른 하나를 접는다.
-     데스크톱에서는 둘 다 열 수 있다.
+     데스크톱에서는 둘 다 열 수 있다. AI 때문에 접힌 시트는 AI 를
+     닫으면 그 내용 · 그 단계로 돌아온다(MOBILE-SHEET-1).
+
+   ★ 좁은 화면의 시트는 세 단계다(MOBILE-SHEET-1, studio/studio-sheet.js)
+     — 접힘(peek) · 내용 보기(content) · 전체 화면(full). 어느 단계로
+     열지는 이 파일이 정한다: Select 는 접힘, Images · Dock 은 내용
+     보기. 단계는 기록(Undo)에도 저장에도 들어가지 않는다.
 
    의존(호출 시점): studio-inspector.js(setStudioInspectorEnabled /
    getStudioInspectorState) · images-panel.js · dock-panel.js ·
@@ -103,6 +109,40 @@ const studioShellNarrowQuery =
 let studioLeftPanelMode = "select";
 
 let studioLeftPanelOpen = false;
+
+/* 내용이 지금 살아 있는가(열어 둔 채 숨었을 뿐인가). AI 때문에 잠시
+   접었다가 돌아올 때 Images 를 새로 읽지 않기 위해서다 — 새로 읽으면
+   고른 슬롯과 목록 스크롤이 처음으로 돌아간다. */
+const studioLeftPanelContentAlive = {
+  select: true,
+  images: false,
+  dock: false
+};
+
+/* 좁은 화면에서 AI 를 열며 접어 둔 시트 — AI 를 닫으면 되돌린다 */
+let studioLeftPanelHiddenForAi = null;
+
+/* Select 의 "이미지 변경"으로 Images 를 열었다 — 좁은 화면에서는 사진을
+   붙이면 고른 요소로 돌아간다 */
+let studioLeftPanelImagesReturnToSelect = false;
+
+
+function studioShellSheetState() {
+
+  return typeof window.getStudioSheetState === "function"
+    ? window.getStudioSheetState()
+    : null;
+
+}
+
+
+function setStudioShellSheetState(state, options) {
+
+  if (typeof window.setStudioSheetState === "function") {
+    window.setStudioSheetState(state, options);
+  }
+
+}
 
 
 function studioShellIsNarrow() {
@@ -191,6 +231,11 @@ function syncStudioLeftPanel() {
 
   syncStudioLeftPanelSelectHint();
 
+  /* 시트 머리(이름 · 단계 버튼)도 같은 순간에 맞춘다 */
+  if (typeof window.syncStudioSheet === "function") {
+    window.syncStudioSheet();
+  }
+
 }
 
 
@@ -243,6 +288,8 @@ function enterStudioLeftPanelContent(mode) {
     window.openSkinDockPanel();
   }
 
+  studioLeftPanelContentAlive[mode] = true;
+
 }
 
 
@@ -250,18 +297,35 @@ function leaveStudioLeftPanelContent(mode) {
 
   /* Dock 은 숨기기만 한다 — 적용하지 않은 사본을 지키기 위해서다
      (파일 머리말). */
-  if (mode === "images" && typeof window.closeSkinImagesPanel === "function") {
-    window.closeSkinImagesPanel();
+  if (mode === "images") {
+
+    studioLeftPanelContentAlive.images = false;
+
+    studioLeftPanelImagesReturnToSelect = false;
+
+    if (typeof window.closeSkinImagesPanel === "function") {
+      window.closeSkinImagesPanel();
+    }
+
   }
 
 }
 
 
-function showStudioLeftPanelMode(mode) {
+/* options (전부 선택)
+     sheet           좁은 화면의 시트 단계 — 없으면 새로 보여 줄 때만
+                     기본값(Select 는 peek, Images · Dock 은 content)
+     resume          숨겨 두었던 같은 내용을 다시 보여 준다(살아 있으면
+                     새로 열지 않는다 — AI 에서 돌아올 때)
+     returnToSelect  Images 를 Select 의 "이미지 변경"에서 열었다 */
+function showStudioLeftPanelMode(mode, options) {
 
   if (!STUDIO_LEFT_PANEL_MODES[mode]) {
     return;
   }
+
+  const opts =
+    options || {};
 
   const previous =
     studioLeftPanelMode;
@@ -276,10 +340,47 @@ function showStudioLeftPanelMode(mode) {
     leaveStudioLeftPanelContent(previous);
   }
 
+  const fresh =
+    previous !== mode || !wasShowing;
+
+  /* 단계를 먼저 정하고 연다 — 여는 순간의 높이가 곧 Preview 에 알릴
+     높이다(내용 보기로 그렸다가 접힘으로 줄어드는 깜박임이 없다). */
+  if (opts.sheet) {
+    setStudioShellSheetState(opts.sheet, { reveal: false });
+  } else if (fresh) {
+    setStudioShellSheetState(mode === "select" ? "peek" : "content", { reveal: false });
+  }
+
+  if (mode === "images" && fresh) {
+    studioLeftPanelImagesReturnToSelect =
+      opts.returnToSelect === true ||
+      (opts.resume === true && studioLeftPanelImagesReturnToSelect);
+  }
+
   setStudioLeftPanelOpen(true);
 
-  if (previous !== mode || !wasShowing) {
+  if (fresh && !(opts.resume === true && studioLeftPanelContentAlive[mode])) {
     enterStudioLeftPanelContent(mode);
+  }
+
+}
+
+
+/* 포커스가 사라지는 시트 안에 남지 않게 — 그 내용을 여는 상단 버튼으로 */
+function moveStudioLeftPanelFocusOut() {
+
+  if (
+    !studioShellLeftPanel ||
+    !studioShellLeftPanel.contains(document.activeElement)
+  ) {
+    return;
+  }
+
+  const button =
+    STUDIO_LEFT_PANEL_MODES[studioLeftPanelMode].button;
+
+  if (button && typeof button.focus === "function") {
+    button.focus();
   }
 
 }
@@ -290,6 +391,8 @@ function collapseStudioLeftPanel() {
   if (!studioLeftPanelOpen) {
     return;
   }
+
+  moveStudioLeftPanelFocusOut();
 
   setStudioLeftPanelOpen(false);
 
@@ -304,6 +407,10 @@ function collapseStudioLeftPanel() {
    있으면 Select 로 돌아가고, 아니면 접는다. */
 function handleStudioLeftPanelContentClosed(mode) {
 
+  if (mode !== "select") {
+    studioLeftPanelContentAlive[mode] = false;
+  }
+
   if (!isStudioLeftPanelShowing(mode)) {
     return;
   }
@@ -313,18 +420,52 @@ function handleStudioLeftPanelContentClosed(mode) {
     return;
   }
 
+  moveStudioLeftPanelFocusOut();
+
   setStudioLeftPanelOpen(false);
 
 }
 
 
 /* Preview 에서 요소를 골랐다(studio-inspector.js
-   setStudioInspectorSelection — 사용자의 클릭/탭에서만 온다) */
-function revealStudioLeftPanelForSelection() {
+   setStudioInspectorSelection — 사용자의 클릭/탭에서만 온다).
+   좁은 화면에서는 새로 고른 요소가 **접힘**으로 시작한다 — 시트가
+   Preview 를 가리지 않게. 같은 요소를 다시 누른 것은 지금 단계
+   그대로다. */
+function revealStudioLeftPanelForSelection(options) {
+
+  const sameElement =
+    !!(options && options.sameElement);
 
   if (!isStudioLeftPanelShowing("select")) {
-    showStudioLeftPanelMode("select");
+    showStudioLeftPanelMode("select", { sheet: "peek" });
+  } else if (!sameElement) {
+    setStudioShellSheetState("peek", { reveal: false });
   }
+
+  /* 고른 요소가 시트에 덮였으면 Preview 만 조금 올린다 */
+  if (typeof window.ensureSelectedElementVisibleAboveSheet === "function") {
+    window.ensureSelectedElementVisibleAboveSheet();
+  }
+
+}
+
+
+/* Images 에서 사진을 슬롯에 붙였다(images-panel.js). 좁은 화면에서
+   Select 의 "이미지 변경"으로 온 경우에만 고른 요소로 돌아간다 —
+   넓은 화면에서는 패널이 Preview 를 가리지 않으므로 그대로 둔다. */
+function handleStudioImageAttached() {
+
+  if (
+    !studioShellIsNarrow() ||
+    !studioLeftPanelImagesReturnToSelect ||
+    !isStudioLeftPanelShowing("images") ||
+    !studioShellInspectorEnabled()
+  ) {
+    return;
+  }
+
+  showStudioLeftPanelMode("select", { sheet: "peek" });
 
 }
 
@@ -402,14 +543,51 @@ window.addEventListener(
 );
 
 
-/* 좁은 화면 — AI 패널을 열면 아래 시트는 접는다 */
+/* 좁은 화면 — AI 패널을 열면 아래 시트는 **숨긴다**(내용은 그대로
+   둔다 — 고른 요소 · Images 목록 · Dock 사본). AI 를 닫았을 때 그
+   사이 다른 시트를 열지 않았으면 같은 내용 · 같은 단계로 돌아온다. */
 window.addEventListener(
   "studio-ai-panel-toggle",
   (event) => {
 
-    if (event.detail && event.detail.open && studioShellIsNarrow()) {
-      collapseStudioLeftPanel();
+    const open =
+      !!(event.detail && event.detail.open);
+
+    if (open) {
+
+      if (studioShellIsNarrow() && studioLeftPanelOpen) {
+
+        studioLeftPanelHiddenForAi = {
+          mode: studioLeftPanelMode,
+          sheet: studioShellSheetState()
+        };
+
+        moveStudioLeftPanelFocusOut();
+
+        setStudioLeftPanelOpen(false);
+
+      }
+
+      return;
+
     }
+
+    const memo =
+      studioLeftPanelHiddenForAi;
+
+    studioLeftPanelHiddenForAi =
+      null;
+
+    if (
+      !memo ||
+      studioLeftPanelOpen ||
+      !studioShellIsNarrow() ||
+      (memo.mode === "select" && !studioShellInspectorEnabled())
+    ) {
+      return;
+    }
+
+    showStudioLeftPanelMode(memo.mode, { sheet: memo.sheet || undefined, resume: true });
 
   }
 );
@@ -632,8 +810,10 @@ if (typeof window !== "undefined") {
   window.isStudioLeftPanelShowing = isStudioLeftPanelShowing;
   window.handleStudioLeftPanelContentClosed = handleStudioLeftPanelContentClosed;
   window.revealStudioLeftPanelForSelection = revealStudioLeftPanelForSelection;
+  window.handleStudioImageAttached = handleStudioImageAttached;
   window.updateStudioPageIndicator = updateStudioPageIndicator;
   window.setStudioMoreMenuOpen = setStudioMoreMenuOpen;
+  window.isStudioMoreMenuOpen = isStudioMoreMenuOpen;
 
   /* 테스트용 읽기 창구 — production 코드는 읽지 않는다 */
   window.getStudioShellState =
@@ -642,7 +822,8 @@ if (typeof window !== "undefined") {
         leftPanelOpen: studioLeftPanelOpen,
         leftPanelMode: studioLeftPanelMode,
         moreMenuOpen: isStudioMoreMenuOpen(),
-        narrow: studioShellIsNarrow()
+        narrow: studioShellIsNarrow(),
+        sheetState: studioShellSheetState()
       };
     };
 

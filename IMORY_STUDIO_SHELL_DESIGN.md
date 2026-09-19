@@ -1,4 +1,4 @@
-# Imory Skin Studio Shell — 기준 문서 (STUDIO-SHELL-1 · 1.1)
+# Imory Skin Studio Shell — 기준 문서 (STUDIO-SHELL-1 · 1.1 · MOBILE-SHEET-1)
 
 Skin Studio 화면의 **정보 구조**: 상단 도구 모음의 세 그룹, 왼쪽 편집
 패널, 오른쪽 AI 패널, 좁은 화면. 기능 동작(배치 엔진 · 전환 primitive ·
@@ -14,7 +14,8 @@ Bottom Dock 데이터 · AI 요청 · SkinPackage · Save/Publish · 선택 복�
 | 왼쪽 패널 여닫기 · 내용 바꾸기 · ··· 메뉴 · 현재 페이지 표시 | [studio/studio-shell.js](./studio/studio-shell.js) |
 | 모양(세 그룹 · 패널 · 좁은 화면) | [studio/studio-shell.css](./studio/studio-shell.css) |
 | Undo/Redo 기록 | [studio/studio-history.js](./studio/studio-history.js) |
-| E2E | `node studio/studio-shell-e2e-test.mjs` (8968, `--browser=webkit` 도 돈다) |
+| 좁은 화면의 세 단계 시트(단계 · Preview 가림 방지 · 키보드 · Escape) · 손잡이 드래그 | [studio/studio-sheet.js](./studio/studio-sheet.js) · [studio/studio-sheet-drag.js](./studio/studio-sheet-drag.js) · Preview 문서 쪽 [studio/preview/preview-sheet-inset.js](./studio/preview/preview-sheet-inset.js) |
+| E2E | `node studio/studio-shell-e2e-test.mjs` (8968, `--browser=webkit` 도 돈다) · 시트는 `node studio/studio-mobile-sheet-e2e-test.mjs` (8972, `--browser=webkit`) |
 
 ---
 
@@ -108,7 +109,7 @@ Images · Dock 을 여는 입구는 전부 셸을 거친다(`showStudioLeftPanel
 
 ### 2-3. Preview 위에 남는 것
 
-> **DIRECT-UX-1 에서 더해진 것 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md).** 테두리 · 이름표 · 핸들에 더해 hover 이름표와 작은 Quick Bar(데스크톱은 선택 테두리 옆, 720px 이하는 Select 시트 맨 위)가 있다. 긴 폼은 여전히 Preview 위에 뜨지 않는다. 이름표의 문구는 사람이 읽는 이름(§2)이고, 이름표 · Quick Bar 는 Preview 프레임 밖으로 나가지 않는다.
+> **DIRECT-UX-1 에서 더해진 것 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md).** 테두리 · 이름표 · 핸들에 더해 hover 이름표와 작은 Quick Bar(데스크톱은 선택 테두리 옆, 720px 이하는 시트 머리 한 줄 — §5-1)가 있다. 긴 폼은 여전히 Preview 위에 뜨지 않는다. 이름표의 문구는 사람이 읽는 이름(§2)이고, 이름표 · Quick Bar 는 Preview 프레임 밖으로 나가지 않는다.
 
 떠 있던 긴 Inspector 카드는 없어졌다. Preview 위에는 셋만 남는다.
 
@@ -221,10 +222,104 @@ STUDIO-SHELL-1 까지는 Inspector 팝오버 아래 "되돌리기"(직전 직접
 - ··· 는 `#studioTopDockFiles`(Code · Import · Export) 를 버튼 바로 아래
   세로 목록으로 띄운다. 메뉴 안 버튼을 누르거나 Escape · 바깥 누르기 ·
   Preview 누르기(창 blur)로 닫힌다.
-- 왼쪽 패널은 화면 아래에서 올라오는 **시트**(높이 55%)다. Preview 를
-  밀지 않고 위쪽이 보이므로 Select 로 요소를 계속 고를 수 있다.
+- 왼쪽 패널은 화면 아래에서 올라오는 **시트**다. Preview 를 밀지 않는다.
+  STUDIO-SHELL-1 에서는 높이 55% 하나였고 Preview 아래 절반을 늘 가렸다 —
+  MOBILE-SHEET-1 에서 세 단계가 됐다(§5-1).
 - AI 패널은 기존 overlay 그대로다. 이 폭에서는 둘이 서로를 가리므로
-  하나를 열면 다른 하나가 접힌다.
+  하나를 열면 다른 하나가 숨는다. AI 때문에 숨은 시트는 AI 를 닫으면 같은
+  내용 · 같은 단계로 돌아온다(그 사이 다른 시트를 열지 않았을 때).
+
+## 5-1. 세 단계 시트 — MOBILE-SHEET-1 (현재 구현)
+
+좁은 화면(셸의 기준 그대로 720px 이하 — 새 breakpoint 를 만들지 않았다)의
+왼쪽 패널에만 적용한다. 넓은 화면의 왼쪽 패널(폭 · stage 밀림 · 머리 모양 ·
+Quick Bar 자리)은 그대로다. 단계는 `studio/studio-sheet.js` 가 들고
+`#studioLeftPanel[data-sheet-state]` 로 적는다. CSS 는 좁은 화면에서만 읽는다.
+
+| 단계 | 높이(390×844 실측) | 보이는 것 |
+| --- | --- | --- |
+| 접힘 `peek` | 머리 한 줄 = 68px(손잡이 18 + 줄 44 + 여백 · 테두리) + `env(safe-area-inset-bottom)` | 손잡이 · 도구 이름(SELECT/IMAGES/BOTTOM DOCK) · 요소 이름 · Quick Bar · 펼치기 · 닫기. 본문은 높이 0 + `visibility:hidden` + `inert` |
+| 내용 보기 `content` | 내용 높이만큼, 최대 `--studio-sheet-content-max` = min(화면의 52%, 남은 자리 − 56px) — 390×844 에서 439px. 넘치면 시트 안쪽만 스크롤 | 머리(접기 · 전체 화면 · 닫기) + 본문 |
+| 전체 화면 `full` | 상단 도구 모음(바에 매달린 여닫기 탭까지) 아래 ~ 화면 아래(키보드 위) — 390×844 에서 742px(위 끝 102px = 바 86px + 여닫기 탭) | 머리(내리기 · 닫기) + 본문 |
+
+- **본문을 display:none 으로 숨기지 않는다** — 높이만 0 이다. 그래서 입력하던
+  값 · Images 목록 스크롤 · Dock 사본이 단계를 오가도 그대로다. 단계는 Undo
+  기록 · dirty · working draft 에 닿지 않는다.
+- **위 끝 · 아래 끝 · 최대 높이는 실측해서 CSS 변수로 적는다**(100vh 에 기대지
+  않는다): `--studio-sheet-top` · `--studio-sheet-keyboard` ·
+  `--studio-sheet-content-max` · 결과로 덮는 높이 `--studio-mobile-sheet-height`.
+  `visualViewport` 가 키보드 높이를 알려 주면 시트 아래 끝이 키보드 위로
+  올라간다(단계는 바꾸지 않는다 — 적용 · 취소가 키보드 뒤에 숨지 않는다).
+  확대(pinch) 중에는 재지 않는다.
+- **safe area** — 시트 아래 여백은 `env(safe-area-inset-bottom)`(키보드가 열려
+  있으면 0). 이 문서는 `viewport-fit=cover` 를 선언하지 않아 지금은 0 이고
+  Safari 가 그 자리를 비워 둔다 — 선언하게 되면 시트가 그대로 비켜 선다.
+
+### 단계 바꾸기
+
+- 버튼 — 펼치기(접힘 → 내용) · 전체 화면(내용 → 전체) · 접기(내용 → 접힘) ·
+  내리기(전체 → 내용) · 닫기(✕, 넓은 화면의 ‹ 와 같은 버튼 — 좁은 화면에서
+  모양과 이름 "편집 패널 닫기"만 바뀐다). 접힘에서 요소 이름을 눌러도 펼친다.
+- 손잡이 — 손잡이 줄에서만 세로 끌기를 받는다(`touch-action:none` 은 거기만).
+  끄는 동안 그 높이를 그대로 보여 준다. 24px 미만이면(빠르게 튕긴 게 아니면)
+  단계 그대로. 놓으면 가장 가까운 단계로 정착하되, 충분히 움직였으면 적어도
+  그 방향으로 한 단계. 접힘에서 아래로 끌면 닫힌다. 톡 누르면 접힘 ↔ 내용.
+- Escape — 전체 → 내용 → 접힘. 접힘에서의 Escape 는 예전 규칙 그대로(Select 는
+  선택 해제, Images/Dock 은 그 내용 닫기). Preview 안에서 누른 Escape(프레임이
+  올려 보낸다)도 같다. 먼저 받는 것: 시트 밖 입력칸(AI · 코드 편집기) · Select
+  글자 칸의 적용 전 초안 · 겹친 요소 메뉴 · 상단 ··· 메뉴 · Quick Bar ··· 목록 ·
+  끌기/자르기 중 · dialog.
+- 접근성 — 단계 버튼 둘 다 `aria-controls="studioLeftPanelBody"` ·
+  `aria-expanded`(접힘이면 false). 단계가 바뀌면 화면 밖 한 줄
+  (`#studioLeftPanelStatus`, aria-live)이 "SELECT · 내용 보기" 를 읽는다.
+  접힐 때 포커스가 본문 안에 있으면 펼치기 버튼으로, 시트가 닫힐 때 시트 안에
+  있으면 그 내용을 여는 상단 버튼으로 옮긴다.
+
+### 패널별 기본 단계
+
+| 무엇 | 단계 |
+| --- | --- |
+| Preview 에서 요소를 고름(다른 요소) | 접힘. 같은 요소를 다시 누르면 지금 단계 그대로 |
+| 상단 Select(고른 것 없음) | 접힘(이름 자리에 "Preview에서 고칠 요소를 누르세요") |
+| Preview 안 더블클릭 글자 편집 | 잠시 접힘 → 확정 · 취소하면 원래 단계 |
+| Preview 에서 요소 옮기기 시작(본체 끌기 · 이동 손잡이) | 접힘. 놓은 뒤 다시 펼치지 않는다 |
+| 상단 Images · Quick Bar 이미지 변경 | 내용 보기. Quick Bar 에서 왔으면 사진을 붙인 뒤 고른 요소(Select · 접힘)로 돌아간다 |
+| 상단 Dock | 내용 보기. **적용해도 닫지 않는다** — 적용한 값으로 사본을 새로 만들어 같은 자리 · 같은 스크롤에 다시 보여 준다(넓은 화면은 예전처럼 닫힌다) |
+| AI 를 열었다 닫음 | AI 가 열린 동안 숨고, 닫으면 같은 내용 · 같은 단계 · 같은 선택 |
+
+### Quick Bar — 시트 머리 한 줄
+
+`#studioInspectorQuickBarSlot` 이 시트 머리에 있다(셸 문서가 두고, Inspector 는
+그 자리가 있으면 새로 만들지 않는다). 아이콘만 · 칸마다 40×44 · 접근 이름과
+tooltip. 머리 줄의 실제 폭에서 칸 수를 재어, 넘치면 자주 쓰는 것(이미지 변경 ·
+AI로 수정 · 숨기기 · 앞으로 · 뒤로 순)만 직접 두고 나머지는 `···` 목록으로 **같은
+버튼을 옮긴다**(복제하지 않는다). 가로 스크롤은 없다. 390px 접힘에서는 네 개까지
+직접, 내용 보기(단계 버튼 둘)에서는 세 칸(둘 + ···). 목록은 시트 위 가장자리
+위에 뜨고(전체 화면이면 머리 아래) 누르면 그 일을 하고 닫힌다.
+
+### Preview 가림 방지
+
+- 시트가 덮는 높이를 재어(`offsetTop` 기준 — 여닫는 미끄럼 중에도 자리 잡은
+  뒤의 값) Preview 문서에 `"preview:viewport-inset" { bottom }`(프레임 CSS
+  px — Mobile 축소 배율로 나눈다)으로 알린다.
+- Preview 문서(`studio/preview/preview-sheet-inset.js`)는 자기 스크롤 끝에 그만큼
+  `+16px` 의 여유를 둔다 — `<html>` 의 마지막 자식인 Studio 전용
+  `<imory-studio-spacer>`(절대 위치 · 보이지 않음 · 누를 수 없음, `#previewRoot`
+  밖). 그리고 `<html>` 에 `scroll-padding-bottom`. 스킨 HTML · 스킨 CSS ·
+  SkinPackage · 공개 화면에는 아무것도 붙지 않는다. 그래서 짧은 페이지의 맨 아래
+  요소도 시트를 닫지 않고 스크롤해 고를 수 있다.
+- 여유는 줄어들 때 **지금 보고 있는 자리를 당기지 않는다** — 그 안까지 스크롤해
+  있으면 그만큼 남기고, 사용자가 위로 스크롤하는 만큼 따라 줄어든다(시트를 접거나
+  닫아도 Preview 가 튀지 않는다).
+- `ensureSelectedElementVisibleAboveSheet()`(studio-sheet.js) — 시트가 커질 때 ·
+  요소를 고를 때, 고른 요소가 시트(또는 상단 바)에 덮였으면 Preview 문서만
+  `"preview:scroll-by" { top }` 로 **가려진 만큼** 스크롤한다(시트 위 12px 여백).
+  이미 보이면 0 — 가운데로 맞추지 않는다. 요소가 보이는 띠보다 크면 48px 이상
+  보일 때 그대로, 아니면 윗부분이 보이게. 전체 화면 · 손잡이를 끄는 중 · 요소를
+  옮기는 중에는 움직이지 않는다. 보낸 스크롤이 좌표로 돌아오기 전에 한 번 더
+  불려도 두 번 올리지 않는다.
+- sandbox 스킨도 스크롤하는 것은 바깥 Preview 문서다(안쪽 프레임은 내용 높이만큼
+  커진다) — 같은 길이다.
 
 ## 6. 앞으로 지켜야 할 원칙
 
@@ -253,3 +348,14 @@ STUDIO-SHELL-1 까지는 Inspector 팝오버 아래 "되돌리기"(직전 직접
   Preview 를 누른 직후에는 버튼으로 되돌린다.
 - 좁은 화면에서 AI 패널을 연 채로 ↶ 가 가려지지 않는지는 ai-panel e2e H2
   가 본다. 실기기(iPhone Safari) 확인은 아직 없다.
+- (MOBILE-SHEET-1) 키보드 대응은 Playwright 에서 `visualViewport` 를 흉내 내어
+  확인했다(Chromium · WebKit 모두 실제 가상 키보드가 없다). iOS Safari 가 입력칸에
+  포커스를 줄 때 화면을 밀어 올리는 동작 · 실제 홈 표시줄 · 주소창 접힘과의
+  조합은 **실기기 확인 전**이다.
+- (MOBILE-SHEET-1) 스킨이 문서 대신 자기 상자(`body { overflow:auto;
+  height:100% }` 등)를 스크롤 주인으로 만들면 Preview 여유와 "시트 위로 올리기"가
+  그 상자에는 닿지 않는다(표시 공간 계약은 문서 스크롤이 기준이다).
+- (MOBILE-SHEET-1) 시트 높이는 단계 사이에서 애니메이션하지 않는다(여닫기의 미끄럼만
+  있다). 손잡이를 끄는 동안에는 손을 따라간다.
+- (MOBILE-SHEET-1) 전체 화면에서 상단 바를 여닫기 탭으로 접으면 시트 위 끝도 따라
+  올라간다(탭 아래). 탭 자체는 가리지 않는다.

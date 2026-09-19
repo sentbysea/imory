@@ -317,6 +317,13 @@ function handleStudioInspectorInlineText(data) {
   const text =
     typeof data.text === "string" ? data.text : null;
 
+  /* MOBILE-SHEET-1 — Preview 안에서 글자를 고치는 동안 좁은 화면의
+     시트는 잠시 접힘으로 내려가고, 끝나면 원래 단계로 돌아간다
+     (studio/studio-sheet.js). */
+  if (typeof window.noteStudioSheetInlineText === "function") {
+    window.noteStudioSheetInlineText(data.phase);
+  }
+
   if (data.phase === "begin" || data.phase === "input") {
 
     if (text === null) {

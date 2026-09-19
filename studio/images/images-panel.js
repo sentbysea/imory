@@ -702,6 +702,12 @@ function renderImagesPanelGrid() {
       renderImagesPanelSlots();
       renderImagesPanelGrid();
 
+      /* MOBILE-SHEET-1 — 좁은 화면에서 Select 의 "이미지 변경"으로 왔다면
+         고른 요소로 돌아간다(셸이 정한다 — 넓은 화면은 그대로 둔다). */
+      if (typeof window.handleStudioImageAttached === "function") {
+        window.handleStudioImageAttached();
+      }
+
     });
 
     actions.appendChild(attachButton);

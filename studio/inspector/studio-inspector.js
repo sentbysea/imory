@@ -392,7 +392,7 @@ function setStudioInspectorSelection(editId, tagName, rect, metrics, visibleRect
      않으므로 사용자가 접어 둔 패널이 저절로 열리지 않는다. 같은
      요소를 다시 누른 것도 "그 내용을 보여 달라"로 본다. */
   if (typeof window.revealStudioLeftPanelForSelection === "function") {
-    window.revealStudioLeftPanelForSelection();
+    window.revealStudioLeftPanelForSelection({ sameElement: isSameElement });
   }
 
   /* SANDBOX-6A — 프레임이 테두리를 그린 경우에는 여기서 또 그리지
@@ -509,8 +509,17 @@ function handleStudioInspectorMessage(data) {
   }
 
   if (data.type === "preview:inspect-escape") {
+
+    /* MOBILE-SHEET-1 — 좁은 화면에서 시트가 펼쳐져 있으면 Escape 는
+       먼저 시트를 한 단계 내린다(전체 → 내용 → 접힘). 접힘에서의
+       Escape 가 예전처럼 선택 해제다. */
+    if (typeof window.consumeStudioSheetEscape === "function" && window.consumeStudioSheetEscape()) {
+      return;
+    }
+
     clearStudioInspectorSelection();
     return;
+
   }
 
   if (data.type === "preview:inspect-hover") {

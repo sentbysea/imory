@@ -229,7 +229,9 @@
 
          좁은 화면(720px 이하)에서는 화면 아래에서 올라오는 시트가
          된다 — 위쪽 Preview 는 그대로 보여서 Select 로 요소를 계속
-         고를 수 있다.
+         고를 수 있다. 시트는 세 단계다(MOBILE-SHEET-1 · 접힘 ·
+         내용 보기 · 전체 화면, studio/studio-sheet.js). 손잡이 ·
+         요소 이름 · 단계 버튼 · Quick Bar 자리는 그 폭에서만 보인다.
     ====================================================== -->
 
     <aside
@@ -239,14 +241,55 @@
       aria-labelledby="studioLeftPanelTitle"
     >
 
-      <div class="studio-left-panel-header">
+      <div
+        class="studio-left-panel-header"
+        id="studioLeftPanelHeader"
+      >
 
-        <h2
-          class="studio-left-panel-title"
-          id="studioLeftPanelTitle"
-        >
-          SELECT
-        </h2>
+        <div
+          class="studio-left-panel-handle"
+          id="studioLeftPanelHandle"
+          aria-hidden="true"
+        ><span class="studio-left-panel-handle-bar"></span></div>
+
+        <div class="studio-left-panel-heading">
+
+          <h2
+            class="studio-left-panel-title"
+            id="studioLeftPanelTitle"
+          >
+            SELECT
+          </h2>
+
+          <p
+            class="studio-left-panel-name"
+            id="studioLeftPanelName"
+          ></p>
+
+        </div>
+
+        <div
+          class="studio-inspector-quickbar-slot studio-left-panel-quick"
+          id="studioInspectorQuickBarSlot"
+        ></div>
+
+        <button
+          type="button"
+          class="studio-left-panel-step"
+          id="studioLeftPanelSheetDown"
+          aria-controls="studioLeftPanelBody"
+          aria-expanded="true"
+          hidden
+        >▾</button>
+
+        <button
+          type="button"
+          class="studio-left-panel-step"
+          id="studioLeftPanelSheetUp"
+          aria-controls="studioLeftPanelBody"
+          aria-expanded="false"
+          hidden
+        >▴</button>
 
         <button
           type="button"
@@ -257,9 +300,18 @@
           aria-label="편집 패널 접기"
         >‹</button>
 
+        <p
+          class="studio-left-panel-status"
+          id="studioLeftPanelStatus"
+          aria-live="polite"
+        ></p>
+
       </div>
 
-      <div class="studio-left-panel-body">
+      <div
+        class="studio-left-panel-body"
+        id="studioLeftPanelBody"
+      >
 
         <section
           class="studio-left-panel-section"
@@ -1238,6 +1290,13 @@
            첫 화면이 그려질 때 이미 버튼이 연결돼 있어야 한다. */
         "./studio-history.js",
         "./studio-shell.js",
+
+        /* MOBILE-SHEET-1 — 좁은 화면의 세 단계 시트(접힘 · 내용 ·
+           전체). 셸이 여닫기를 정하고 이 파일은 그 폭에서의 높이 ·
+           손잡이 · Preview 가림 방지 · 키보드를 맡는다. 셸의
+           studioShellIsNarrow 를 로드 시점에 쓰므로 그 뒤다. */
+        "./studio-sheet.js",
+        "./studio-sheet-drag.js",
 
         /* DIRECT-UX-1 — Save 옆 상태 한 줄 · 처음 쓰는 사람 안내.
            둘 다 studio-preview.js 의 상태와 Top Dock 버튼을 읽으므로

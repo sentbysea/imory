@@ -58,11 +58,20 @@
 
     <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 왼쪽 패널(Select · Images · Dock 이 함께 쓴다) -->
     <aside class="studio-left-panel" id="studioLeftPanel" data-mode="select" aria-labelledby="studioLeftPanelTitle">
-      <div class="studio-left-panel-header">
-        <h2 class="studio-left-panel-title" id="studioLeftPanelTitle">SELECT</h2>
+      <!-- MOBILE-SHEET-1 — studio/index.html 과 같은 머리(손잡이 · 이름 · Quick Bar 자리 · 단계 버튼) -->
+      <div class="studio-left-panel-header" id="studioLeftPanelHeader">
+        <div class="studio-left-panel-handle" id="studioLeftPanelHandle" aria-hidden="true"><span class="studio-left-panel-handle-bar"></span></div>
+        <div class="studio-left-panel-heading">
+          <h2 class="studio-left-panel-title" id="studioLeftPanelTitle">SELECT</h2>
+          <p class="studio-left-panel-name" id="studioLeftPanelName"></p>
+        </div>
+        <div class="studio-inspector-quickbar-slot studio-left-panel-quick" id="studioInspectorQuickBarSlot"></div>
+        <button type="button" class="studio-left-panel-step" id="studioLeftPanelSheetDown" aria-controls="studioLeftPanelBody" aria-expanded="true" hidden>▾</button>
+        <button type="button" class="studio-left-panel-step" id="studioLeftPanelSheetUp" aria-controls="studioLeftPanelBody" aria-expanded="false" hidden>▴</button>
         <button type="button" class="studio-left-panel-collapse" id="studioLeftPanelCollapse" aria-expanded="false" aria-controls="studioLeftPanel" aria-label="편집 패널 접기">‹</button>
+        <p class="studio-left-panel-status" id="studioLeftPanelStatus" aria-live="polite"></p>
       </div>
-      <div class="studio-left-panel-body">
+      <div class="studio-left-panel-body" id="studioLeftPanelBody">
         <section class="studio-left-panel-section" id="studioLeftPanelSelect" data-left-panel-mode="select">
           <p class="studio-left-panel-empty" id="studioLeftPanelSelectEmpty">Preview에서 고칠 요소를 누르세요.</p>
         </section>
@@ -2691,6 +2700,8 @@
   <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 순서 -->
   <script src="./studio-history.js"></script>
   <script src="./studio-shell.js"></script>
+  <script src="./studio-sheet.js"></script>
+  <script src="./studio-sheet-drag.js"></script>
   <!-- DIRECT-UX-1 — studio/index.html 과 같은 자리. 처음 쓰는 사람
        안내는 이 시험 문서에서 **저절로 뜨지 않는다** — 수십 개의 e2e 가
        말풍선을 피해 다니지 않게 한다. 주소에 coach=1 을 붙이면 production

@@ -181,15 +181,25 @@ function buildStudioInspectorLayer() {
   head.appendChild(studioInspectorPopoverMeta);
   head.appendChild(actions);
 
-  /* 좁은 화면에서 Quick Bar 가 들어오는 자리(studio-inspector-quickbar.js) */
+  /* 좁은 화면에서 Quick Bar 가 들어오는 자리(studio-inspector-quickbar.js).
+     MOBILE-SHEET-1 — 셸 문서는 이 자리를 **시트 머리**에 미리 둔다
+     (접힌 시트에서도 Quick Bar 가 보여야 한다). 셸이 없는 문서에서만
+     예전처럼 팝오버 맨 위에 만든다. */
+  const shellQuickBarSlot =
+    document.getElementById("studioInspectorQuickBarSlot");
+
   const quickBarSlot =
-    document.createElement("div");
+    shellQuickBarSlot || document.createElement("div");
 
-  quickBarSlot.className =
-    "studio-inspector-quickbar-slot";
+  if (!shellQuickBarSlot) {
 
-  quickBarSlot.id =
-    "studioInspectorQuickBarSlot";
+    quickBarSlot.className =
+      "studio-inspector-quickbar-slot";
+
+    quickBarSlot.id =
+      "studioInspectorQuickBarSlot";
+
+  }
 
   /* 움직임 효과 상태 한 줄 — 효과가 있을 때만 보인다(§11) */
   studioInspectorMotion =
@@ -236,7 +246,11 @@ function buildStudioInspectorLayer() {
      그대로이고, 그것을 만지는 자리는 전부 건너뛴다. */
 
   studioInspectorPopover.appendChild(head);
-  studioInspectorPopover.appendChild(quickBarSlot);
+
+  if (!shellQuickBarSlot) {
+    studioInspectorPopover.appendChild(quickBarSlot);
+  }
+
   studioInspectorPopover.appendChild(studioInspectorNote);
   studioInspectorPopover.appendChild(studioInspectorMotion);
   studioInspectorPopover.appendChild(studioInspectorFields);

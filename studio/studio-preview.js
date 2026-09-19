@@ -2636,6 +2636,11 @@ window.addEventListener(
       previewFrameReady =
         true;
 
+      /* MOBILE-SHEET-1 — 편집 시트가 덮는 높이를 (새) Preview 문서에도 */
+      if (typeof window.republishStudioSheetInset === "function") {
+        window.republishStudioSheetInset();
+      }
+
       if (pendingRenderPayload) {
 
         const payload =

@@ -130,6 +130,8 @@ function buildStudioInspectorQuickBar(layer) {
      (선택을 유지한 채 AI Assistant 를 연다, 전송하지 않는다). */
   make("ai", "studioInspectorAiButton", "✦", "AI로 수정", handleStudioInspectorAiRequest);
 
+  buildStudioInspectorQuickOverflow();
+
   layer.appendChild(studioInspectorQuickBar);
 
   studioInspectorHoverLabel =
@@ -558,6 +560,9 @@ function renderStudioInspectorQuickBar(resolved, blocked) {
     return;
   }
 
+  /* 다른 요소로 바뀌면(또는 선택이 풀리면) 펼쳐 둔 ··· 메뉴는 닫는다 */
+  setStudioInspectorQuickMenuOpen(false);
+
   if (!resolved) {
     bar.hidden = true;
     return;
@@ -678,6 +683,8 @@ function paintStudioInspectorQuickBar(rect) {
     bar.style.removeProperty("top");
     bar.style.removeProperty("visibility");
 
+    layoutStudioInspectorQuickBar();
+
     return;
 
   }
@@ -687,6 +694,8 @@ function paintStudioInspectorQuickBar(rect) {
   }
 
   bar.classList.remove("is-docked");
+
+  layoutStudioInspectorQuickBar();
 
   const mapped =
     rect ? studioInspectorMapRect(rect) : null;
@@ -765,6 +774,239 @@ if (studioInspectorNarrowQuery) {
   }
 
 }
+
+
+/* =========================================================
+   MOBILE-SHEET-1 — 시트 머리의 Quick Bar 와 ··· 메뉴
+
+   좁은 화면에서 Quick Bar 는 시트 **머리 한 줄**(요소 이름 · 단계
+   버튼과 같은 줄)에 들어간다 — 접힌 시트에서도 보여야 하기 때문이다.
+   그 줄은 390px 에서 버튼 서너 개 자리뿐이라, 넘치면 자주 쓰는 것만
+   직접 두고 나머지는 ··· 가 여는 작은 목록으로 옮긴다. 가로 스크롤은
+   만들지 않는다.
+
+   ★ 버튼을 복제하지 않는다 — 같은 버튼 요소를 메뉴로 **옮길** 뿐이다
+     (상단 바의 ··· 메뉴와 같은 원칙, IMORY_STUDIO_SHELL_DESIGN.md §6).
+     그래서 id · 핸들러 · aria 가 한 벌이다.
+
+   ★ 순서 — 이미지 변경 · AI로 수정 · 숨기기 · 앞으로 · 뒤로. 몇 개가
+     직접 보일지는 그 줄의 실제 폭에서 잰다(단계 버튼이 둘인 "내용 보기"
+     는 하나인 "접힘"보다 한 칸 좁다).
+========================================================== */
+
+const STUDIO_INSPECTOR_QUICK_ORDER =
+  ["image", "forward", "backward", "hide", "ai"];
+
+const STUDIO_INSPECTOR_QUICK_PRIORITY =
+  ["image", "ai", "hide", "forward", "backward"];
+
+/* 머리 줄의 버튼 한 칸(40px) + 사이 2px */
+const STUDIO_INSPECTOR_QUICK_CELL = 42;
+
+/* 요소 이름이 지켜야 할 최소 폭 — 이보다 좁으면 이름이 두세 글자로 잘린다 */
+const STUDIO_INSPECTOR_QUICK_NAME_MIN = 104;
+
+
+let studioInspectorQuickMore = null;
+
+let studioInspectorQuickMenu = null;
+
+
+function buildStudioInspectorQuickOverflow() {
+
+  studioInspectorQuickMore =
+    document.createElement("button");
+
+  studioInspectorQuickMore.type = "button";
+  studioInspectorQuickMore.className = "studio-inspector-quick studio-inspector-quick--more";
+  studioInspectorQuickMore.id = "studioInspectorQuickMore";
+  studioInspectorQuickMore.dataset.inspectorQuick = "more";
+  studioInspectorQuickMore.title = "다른 동작";
+  studioInspectorQuickMore.setAttribute("aria-label", "다른 동작");
+  studioInspectorQuickMore.setAttribute("aria-haspopup", "true");
+  studioInspectorQuickMore.setAttribute("aria-expanded", "false");
+  studioInspectorQuickMore.setAttribute("aria-controls", "studioInspectorQuickMenu");
+  studioInspectorQuickMore.hidden = true;
+
+  const icon =
+    document.createElement("span");
+
+  icon.className = "studio-inspector-quick-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.textContent = "···";
+
+  studioInspectorQuickMore.appendChild(icon);
+
+  studioInspectorQuickMore.addEventListener("click", () => {
+    setStudioInspectorQuickMenuOpen(studioInspectorQuickMenu.hidden);
+  });
+
+  studioInspectorQuickMenu =
+    document.createElement("div");
+
+  studioInspectorQuickMenu.className = "studio-inspector-quick-menu";
+  studioInspectorQuickMenu.id = "studioInspectorQuickMenu";
+  studioInspectorQuickMenu.setAttribute("role", "group");
+  studioInspectorQuickMenu.setAttribute("aria-label", "다른 동작");
+  studioInspectorQuickMenu.hidden = true;
+
+  /* 목록 안 버튼의 일(target 단계)이 끝난 뒤 여기서 닫는다 */
+  studioInspectorQuickMenu.addEventListener("click", (event) => {
+    if (event.target.closest("button")) {
+      setStudioInspectorQuickMenuOpen(false);
+    }
+  });
+
+  studioInspectorQuickBar.appendChild(studioInspectorQuickMore);
+  studioInspectorQuickBar.appendChild(studioInspectorQuickMenu);
+
+}
+
+
+function setStudioInspectorQuickMenuOpen(open) {
+
+  if (!studioInspectorQuickMenu || !studioInspectorQuickMore) {
+    return;
+  }
+
+  const next =
+    !!open && !studioInspectorQuickMore.hidden;
+
+  studioInspectorQuickMenu.hidden = !next;
+
+  studioInspectorQuickMore.setAttribute("aria-expanded", String(next));
+
+}
+
+
+function isStudioInspectorQuickMenuOpen() {
+
+  return !!studioInspectorQuickMenu && !studioInspectorQuickMenu.hidden;
+
+}
+
+
+/* 시트 머리 줄에서 Quick Bar 에 남는 폭 → 직접 둘 버튼 수.
+   셸 머리 밖(팝오버 안의 예전 자리)이면 제한하지 않는다. */
+function studioInspectorQuickCapacity(slot) {
+
+  const header =
+    slot && slot.closest(".studio-left-panel-header");
+
+  if (!header) {
+    return Infinity;
+  }
+
+  const style =
+    window.getComputedStyle(header);
+
+  const gap =
+    parseFloat(style.columnGap) || 0;
+
+  let used =
+    0;
+
+  Array.from(header.children).forEach((child) => {
+
+    /* 이름 · 손잡이(제 줄을 따로 쓴다) · 화면 밖 상태 문구는 세지 않는다 */
+    if (
+      child === slot ||
+      child.classList.contains("studio-left-panel-heading") ||
+      child.classList.contains("studio-left-panel-handle") ||
+      child.getClientRects().length === 0 ||
+      window.getComputedStyle(child).position === "absolute"
+    ) {
+      return;
+    }
+
+    used += child.offsetWidth + gap;
+
+  });
+
+  const inner =
+    header.clientWidth -
+    (parseFloat(style.paddingLeft) || 0) -
+    (parseFloat(style.paddingRight) || 0);
+
+  const available =
+    inner - used - STUDIO_INSPECTOR_QUICK_NAME_MIN - gap;
+
+  return Math.max(1, Math.floor((available + 2) / STUDIO_INSPECTOR_QUICK_CELL));
+
+}
+
+
+function layoutStudioInspectorQuickBar() {
+
+  const bar =
+    studioInspectorQuickBar;
+
+  if (!bar || !studioInspectorQuickMore || !studioInspectorQuickMenu) {
+    return;
+  }
+
+  const buttons =
+    studioInspectorQuickBarButtons;
+
+  /* 먼저 전부 제자리로(원래 순서) */
+  STUDIO_INSPECTOR_QUICK_ORDER.forEach((key) => {
+    if (buttons[key] && buttons[key].parentElement !== bar) {
+      bar.insertBefore(buttons[key], studioInspectorQuickMore);
+    }
+  });
+
+  const docked =
+    bar.classList.contains("is-docked") && !bar.hidden;
+
+  const shown =
+    STUDIO_INSPECTOR_QUICK_PRIORITY.filter((key) => buttons[key] && !buttons[key].hidden);
+
+  const capacity =
+    docked ? studioInspectorQuickCapacity(bar.parentElement) : Infinity;
+
+  if (shown.length <= capacity) {
+
+    studioInspectorQuickMore.hidden = true;
+
+    setStudioInspectorQuickMenuOpen(false);
+
+    return;
+
+  }
+
+  const direct =
+    Math.max(1, capacity - 1);
+
+  shown.slice(direct).forEach((key) => {
+    studioInspectorQuickMenu.appendChild(buttons[key]);
+  });
+
+  studioInspectorQuickMore.hidden = false;
+
+}
+
+
+/* 바깥을 누르거나 Preview 를 누르면(창 blur) 닫는다 */
+document.addEventListener(
+  "pointerdown",
+  (event) => {
+
+    if (
+      !isStudioInspectorQuickMenuOpen() ||
+      studioInspectorQuickMenu.contains(event.target) ||
+      studioInspectorQuickMore.contains(event.target)
+    ) {
+      return;
+    }
+
+    setStudioInspectorQuickMenuOpen(false);
+
+  },
+  true
+);
+
+
+window.addEventListener("blur", () => setStudioInspectorQuickMenuOpen(false));
 
 
 /* =========================================================
@@ -959,7 +1201,7 @@ function openStudioInspectorImageChange() {
   }
 
   if (typeof window.showStudioLeftPanelMode === "function") {
-    window.showStudioLeftPanelMode("images");
+    window.showStudioLeftPanelMode("images", { returnToSelect: true });
   } else if (typeof window.openSkinImagesPanel === "function") {
     window.openSkinImagesPanel();
   } else {
@@ -1006,5 +1248,11 @@ if (typeof window !== "undefined") {
   window.commitStudioInspectorHidden = commitStudioInspectorHidden;
   window.commitStudioInspectorOrder = commitStudioInspectorOrder;
   window.selectStudioInspectorOuter = selectStudioInspectorOuter;
+
+  /* MOBILE-SHEET-1 — 시트 머리의 버튼 수가 바뀌면(단계 변경) 셸이
+     다시 재게 한다. ··· 목록의 Escape 도 셸이 먼저 받는다. */
+  window.layoutStudioInspectorQuickBar = layoutStudioInspectorQuickBar;
+  window.isStudioInspectorQuickMenuOpen = isStudioInspectorQuickMenuOpen;
+  window.setStudioInspectorQuickMenuOpen = setStudioInspectorQuickMenuOpen;
 
 }

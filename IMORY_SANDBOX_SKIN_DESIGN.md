@@ -3673,8 +3673,10 @@ Redo · Save · AI · Code · 이미지 변경 뒤 같은 요소가, 지운 요�
   좌표만 내려간다"는 이번 계약 밖이라 열지 않았다. 필요한 계약: `metrics` 에
   `naturalWidth/Height · loaded · cropped`, PREVIEW 에 `width · ratio · target` 과
   자르기 선언(`buildInspectorCropDeclarations` 의 결과를 CSSOM 으로만 쓰는 형태).
-- **390px 에서 아래 시트가 Preview 아래쪽을 덮는 문제**는 셸 구조라 이번에
-  바꾸지 않았다(DIRECT-UX-1 §남은 차이 그대로 — 별도 후속).
+- ~~**390px 에서 아래 시트가 Preview 아래쪽을 덮는 문제**는 셸 구조라 이번에
+  바꾸지 않았다~~ → MOBILE-SHEET-1 에서 닫았다(IMORY_STUDIO_SHELL_DESIGN.md §5-1).
+  sandbox 스킨도 스크롤하는 것은 바깥 Preview 문서라 native 와 같은 길이다
+  (e2e `studio/studio-sandbox-select-parity-e2e-test.mjs --only=sheet`).
 
 ### S-8. 바꾼 파일
 
