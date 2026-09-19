@@ -1365,32 +1365,6 @@ body.studio-ai-resizing {
 }
 
 
-.studio-ai-drawer-undo {
-  flex: 0 0 auto;
-
-  min-height: 24px;
-
-  padding: 2px 8px;
-
-  border: 1px solid var(--system-border-strong);
-  border-radius: var(--imory-radius-200);
-
-  background: var(--system-bg);
-
-  color: var(--system-text);
-
-  font-family: inherit;
-  font-size: var(--imory-font-size-300);
-
-  cursor: pointer;
-}
-
-
-.studio-ai-drawer-undo:hover {
-  color: var(--system-accent-hover);
-}
-
-
 /* =========================================================
    좁은 화면 fallback (PHASE AI-5A 10절)
 

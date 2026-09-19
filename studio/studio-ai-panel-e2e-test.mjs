@@ -1625,9 +1625,10 @@ async function runHappy(context) {
   );
 
   record(
-    "A6. drawer에 요약과 되돌리기가 표시된다",
-    panel.statusText.includes(MOCK_SUMMARY) && panel.undoVisible === true,
-    `statusText=${JSON.stringify(panel.statusText)}`
+    "A6. drawer에 요약이 표시되고, 되돌리기는 drawer 가 아니라 상단 ↶ 가 맡는다(STUDIO-SHELL-1.1)",
+    panel.statusText.includes(MOCK_SUMMARY) && panel.undoVisible === false &&
+      (await page.evaluate(() => document.getElementById("studioUndoButton").disabled === false)),
+    `statusText=${JSON.stringify(panel.statusText)} undoVisible=${panel.undoVisible}`
   );
 
   record(
@@ -1657,8 +1658,14 @@ async function runUndo(context) {
 
   const applied = await workingState(page);
 
-  await page.click("#studioAiDrawerUndo");
-  await page.waitForFunction(() => window.getStudioAiPanelDebugState().hasUndo === false, null, { timeout: 5000 });
+  /* STUDIO-SHELL-1.1 — AI 패널의 "되돌리기"는 걷었다. 상단 ↶ 가 유일한 되돌리기다. */
+  const historyBeforeUndo = await page.evaluate(() => window.getStudioHistoryState().undo);
+  await page.click("#studioUndoButton");
+  await page.waitForFunction(
+    (n) => window.getStudioHistoryState().undo === n - 1,
+    historyBeforeUndo,
+    { timeout: 5000 }
+  );
 
   const restored = await workingState(page);
 
@@ -1680,8 +1687,9 @@ async function runUndo(context) {
   );
 
   record(
-    "B4. 되돌린 뒤에는 되돌리기 버튼이 사라진다(1단계 undo)",
-    (await panelState(page)).undoVisible === false
+    "B4. AI 패널에는 되돌리기 버튼이 없다 — 되돌리기는 상단 ↶ 하나다(STUDIO-SHELL-1.1)",
+    (await panelState(page)).undoVisible === false &&
+      (await page.evaluate(() => !document.getElementById("studioAiDrawerUndo")))
   );
 
   await page.close();
@@ -2006,11 +2014,15 @@ async function runMobile(browser) {
 
   const box = await page.evaluate(() => {
     const dock = document.getElementById("studioAiDock").getBoundingClientRect();
-    const undo = document.getElementById("studioAiDrawerUndo").getBoundingClientRect();
+    /* STUDIO-SHELL-1.1 — 되돌리기는 상단 ↶ 하나다. AI 패널이 열린 채로
+       그 버튼이 실제로 눌리는 자리에 있는가(가려져 있지 않은가)를 본다. */
+    const undoEl = document.getElementById("studioUndoButton");
+    const undo = undoEl.getBoundingClientRect();
+    const hit = document.elementFromPoint(undo.left + undo.width / 2, undo.top + undo.height / 2);
     const input = document.getElementById("studioAiDrawerInput").getBoundingClientRect();
     return {
       dock: { left: dock.left, right: dock.right, top: dock.top, bottom: dock.bottom },
-      undo: { left: undo.left, right: undo.right, width: undo.width, height: undo.height },
+      undo: { left: undo.left, right: undo.right, width: undo.width, height: undo.height, reachable: !!hit && (hit === undoEl || undoEl.contains(hit)), disabled: undoEl.disabled },
       input: { width: input.width, height: input.height },
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight
@@ -2024,10 +2036,11 @@ async function runMobile(browser) {
   );
 
   record(
-    "H2. 모바일에서 textarea와 되돌리기 버튼이 실제로 보이고 누를 수 있다",
+    "H2. 모바일에서 textarea와 상단 ↶ 가 실제로 보이고 누를 수 있다(AI 패널이 열린 채로)",
     box.input.width > 100 && box.input.height > 20 &&
-      box.undo.width > 40 && box.undo.height >= 20 &&
-      box.undo.right <= box.innerWidth + 0.5,
+      box.undo.width >= 24 && box.undo.height >= 24 &&
+      box.undo.right <= box.innerWidth + 0.5 &&
+      box.undo.reachable === true && box.undo.disabled === false,
     JSON.stringify({ input: box.input, undo: box.undo })
   );
 
@@ -2166,10 +2179,12 @@ async function runSaveUndo(context) {
 
   /* ---------- 4. Undo (여기가 이 회귀의 핵심) ---------- */
 
-  await page.click("#studioAiDrawerUndo");
+  /* STUDIO-SHELL-1.1 — AI 패널의 "되돌리기"는 걷었다. 상단 ↶ 가 유일한 되돌리기다. */
+  const historyBeforeUndo = await page.evaluate(() => window.getStudioHistoryState().undo);
+  await page.click("#studioUndoButton");
   await page.waitForFunction(
-    () => window.getStudioAiPanelDebugState().hasUndo === false,
-    null,
+    (n) => window.getStudioHistoryState().undo === n - 1,
+    historyBeforeUndo,
     { timeout: 5000 }
   );
 
@@ -2510,10 +2525,12 @@ async function runImages(browser) {
 
   /* ---------- 4. 되돌리기 후에도 첨부 유지 ---------- */
 
-  await page.click("#studioAiDrawerUndo");
+  /* STUDIO-SHELL-1.1 — AI 패널의 "되돌리기"는 걷었다. 상단 ↶ 가 유일한 되돌리기다. */
+  const historyBeforeUndo = await page.evaluate(() => window.getStudioHistoryState().undo);
+  await page.click("#studioUndoButton");
   await page.waitForFunction(
-    () => window.getStudioAiPanelDebugState().hasUndo === false,
-    null,
+    (n) => window.getStudioHistoryState().undo === n - 1,
+    historyBeforeUndo,
     { timeout: 5000 }
   );
 

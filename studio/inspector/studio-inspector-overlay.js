@@ -18,7 +18,7 @@
      Studio overlay인지는 studio-inspector.js 머리말 참고.
 
    ★ 팝오버 **안의 내용**은 여기서 그리지 않는다 — 껍데기와 버튼
-     세 개(직접 수정 / ✦ AI 수정 / 되돌리기)까지만 만들고, 폼은
+     두 개(직접 수정 / ✦ AI 수정)까지만 만들고, 폼은
      studio-inspector-controls.js의 renderStudioInspectorPopover()가
      채운다. 그래야 "위치 계산"과 "무엇을 보여줄까"가 섞이지 않는다.
 
@@ -185,29 +185,17 @@ function buildStudioInspectorLayer() {
   studioInspectorFields.hidden =
     true;
 
-  studioInspectorUndoButton =
-    document.createElement("button");
-
-  studioInspectorUndoButton.type =
-    "button";
-
-  studioInspectorUndoButton.className =
-    "studio-inspector-undo";
-
-  studioInspectorUndoButton.id =
-    "studioInspectorUndoButton";
-
-  studioInspectorUndoButton.textContent =
-    "되돌리기";
-
-  studioInspectorUndoButton.hidden =
-    true;
+  /* STUDIO-SHELL-1.1 — 팝오버 아래의 "되돌리기" 버튼은 만들지 않는다.
+     직접 편집은 applyWorkingSkinChanges 를 지나 상단 ↶
+     (studio/studio-history.js)에 한 칸으로 쌓이고, 사용자가 되돌리는
+     곳은 그 하나다. undoStudioInspectorEdit() 와 studioInspectorUndo
+     기록은 호환 경로로 남는다 — studioInspectorUndoButton 은 null
+     그대로이고, 그것을 만지는 자리는 전부 건너뛴다. */
 
   studioInspectorPopover.appendChild(studioInspectorPopoverTitle);
   studioInspectorPopover.appendChild(actions);
   studioInspectorPopover.appendChild(studioInspectorNote);
   studioInspectorPopover.appendChild(studioInspectorFields);
-  studioInspectorPopover.appendChild(studioInspectorUndoButton);
 
   /* 자르기 중에 사진을 끌어 옮기는 투명한 판. 평소에는 hidden이라
      Preview가 hover/click을 그대로 받고, 자르기를 여는 동안에만
@@ -463,10 +451,12 @@ function buildStudioInspectorLayer() {
     handleStudioInspectorAiRequest
   );
 
-  studioInspectorUndoButton.addEventListener(
-    "click",
-    undoStudioInspectorEdit
-  );
+  if (studioInspectorUndoButton) {
+    studioInspectorUndoButton.addEventListener(
+      "click",
+      undoStudioInspectorEdit
+    );
+  }
 
 }
 

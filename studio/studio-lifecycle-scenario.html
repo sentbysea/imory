@@ -93,8 +93,8 @@
             <button type="button" class="studio-viewport-toggle-option" data-viewport-mode="mobile">Mobile</button>
           </div>
           <div class="studio-history-buttons" role="group" aria-label="변경 기록">
-            <button type="button" class="studio-icon-button" id="studioUndoButton" aria-label="Undo" title="Undo (Ctrl+Z)" disabled>↶</button>
-            <button type="button" class="studio-icon-button" id="studioRedoButton" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled>↷</button>
+            <button type="button" class="studio-icon-button" id="studioUndoButton" aria-label="실행 취소" aria-keyshortcuts="Control+Z Meta+Z" title="실행 취소 · Ctrl/⌘+Z" disabled>↶</button>
+            <button type="button" class="studio-icon-button" id="studioRedoButton" aria-label="다시 실행" aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z" title="다시 실행 · Ctrl/⌘+Shift+Z" disabled>↷</button>
           </div>
         </div>
         <div class="studio-top-dock-actions">
@@ -134,7 +134,6 @@
           <!-- PHASE AI-1 — studio/index.html과 동일한 상태 한 줄 -->
           <p class="studio-ai-drawer-status" id="studioAiDrawerStatus" role="status" aria-live="polite" hidden>
             <span id="studioAiDrawerStatusText"></span>
-            <button type="button" class="studio-ai-drawer-undo" id="studioAiDrawerUndo" hidden>되돌리기</button>
           </p>
         </div>
       </div>

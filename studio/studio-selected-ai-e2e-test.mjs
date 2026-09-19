@@ -2188,7 +2188,8 @@ async function runUndo(context) {
 
   const applied = await workingPackage(page);
 
-  await page.click("#studioAiDrawerUndo");
+  /* STUDIO-SHELL-1.1 — AI 패널의 "되돌리기"는 걷었다. 상단 ↶ 가 유일한 되돌리기다. */
+  await page.click("#studioUndoButton");
 
   await sleep(600);
 

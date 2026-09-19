@@ -22,6 +22,12 @@
               테두리 · 이름표 · 핸들만
      history  Undo/Redo 가 직접 편집 · Dock · 이미지 슬롯을 되돌리고
               다시 적용 · dirty · Save 뒤의 Undo · 단축키(입력칸 제외)
+     units    (STUDIO-SHELL-1.1) 되돌리는 곳은 상단 ↶ 하나 — Inspector ·
+              AI 패널에 "되돌리기" 버튼이 없다 · tooltip · 작업마다 정확히
+              한 칸(텍스트 · 크기 드래그 · 이미지 교체 · Dock · Code ·
+              AI · Import · 자유 배치 이동 드래그)과 ↶ 직전 / ↷ 직후가
+              글자 단위로 같다 · ↷ 는 AI 를 다시 부르지 않는다 · 편집기
+              textarea 안의 단축키 · Save/Publish 뒤 ↶ 는 RPC 0 + dirty
      fit      1600→320px 폭마다 컨트롤끼리 겹침 0 · 화면 밖 0 (AI 열림/닫힘) ·
               1280+AI 에서 한 줄(가장 긴 페이지 이름으로도)
      narrow   390px — 가로 넘침 0 · 첫 줄 Select/Images/Dock/Save/
@@ -334,6 +340,39 @@ async function runToolbar(context) {
     "A6. 현재 페이지 표시가 Preview 이동을 따라간다(HOME → CATEGORY → HOME)",
     before.trim() === "HOME" && after.trim() === "HOME",
     JSON.stringify({ before, after })
+  );
+
+  /* A6b. POST 도 정확히 · 표시는 고르는 곳이 아니다(STUDIO-SHELL-1.1) */
+  await previewClick(page, ".y-post-link");
+  await previewHas(page, ".y-post");
+  const onPost = await page.waitForFunction(
+    () => document.getElementById("studioPageIndicator").textContent.trim() === "POST",
+    null, { timeout: 4000 }
+  ).then(() => true, () => false);
+  const indicator = await page.evaluate(() => {
+    const el = document.getElementById("studioPageIndicator");
+    return {
+      tag: el.tagName.toLowerCase(),
+      role: el.getAttribute("role"),
+      tabIndex: el.tabIndex,
+      interactive: !!el.querySelector("button, select, a, input, [role='menu'], [role='listbox']"),
+      popup: el.getAttribute("aria-haspopup")
+    };
+  });
+  await page.click("#studioPageIndicator");
+  await sleep(150);
+  const stillPost = await page.evaluate(() => ({
+    text: document.getElementById("studioPageIndicator").textContent.trim(),
+    menus: document.querySelectorAll("[role='menu']:not([hidden]), [role='listbox']:not([hidden])").length
+  }));
+  await page.click("#studioPreviewBackButton");
+  await previewHas(page, ".y-home");
+  record(
+    "A6b. POST 도 정확히 표시하고, 표시는 드롭다운이 아니다(span · 포커스 없음 · 눌러도 아무 것도 열리지 않음)",
+    onPost && indicator.tag === "span" && indicator.role === null && indicator.tabIndex < 0 &&
+      !indicator.interactive && indicator.popup === null &&
+      stillPost.text === "POST" && stillPost.menus === 0,
+    JSON.stringify({ onPost, indicator, stillPost })
   );
 
   /* A7. Code / Import / Export 가 새 자리에서 동작 */
@@ -830,6 +869,461 @@ async function runHistory(context) {
 
 
 /* =========================================================
+   units — STUDIO-SHELL-1.1: 되돌리는 곳은 상단 ↶ 하나
+
+   작업마다 **정확히 한 칸**이 생기는가(드래그는 손을 뗄 때 한 번),
+   ↶ 가 그 작업 직전의 draft(SkinPackage + 슬롯 연결)로 돌아가는가,
+   ↷ 가 그 작업 직후와 **글자 단위로 같은** draft 를 다시 놓는가(AI 는
+   다시 부르지 않는다), Save/Publish 뒤의 ↶ 가 서버를 건드리지 않고
+   dirty 만 켜는가.
+========================================================== */
+
+function historyCount(page) {
+  return page.evaluate(() => window.getStudioHistoryState());
+}
+
+function draftSnapshot(page) {
+  return page.evaluate(() => {
+    const s = window.getStudioAiWorkingState({ includePackage: true });
+    return JSON.stringify({ skin: s.skinPackage, slots: s.imageSlotBindings });
+  });
+}
+
+/* 작업 하나를 해 보고: 칸 +1 · ↶ = 직전 · ↷ = 직후 · 다시 ↶↷ 로 원위치 */
+async function checkOneUnit(page, name, doWork, waitDone) {
+  const before = await draftSnapshot(page);
+  const countBefore = await historyCount(page);
+  await doWork();
+  await waitDone();
+  await sleep(250);
+  const after = await draftSnapshot(page);
+  const countAfter = await historyCount(page);
+
+  await page.click("#studioUndoButton");
+  await sleep(250);
+  const undone = await draftSnapshot(page);
+  await page.click("#studioRedoButton");
+  await sleep(250);
+  const redone = await draftSnapshot(page);
+  const countEnd = await historyCount(page);
+
+  const ok =
+    after !== before &&
+    countAfter.undo === countBefore.undo + 1 && countAfter.redo === 0 &&
+    undone === before && redone === after &&
+    countEnd.undo === countAfter.undo && countEnd.redo === 0;
+
+  record(
+    `${name} — 한 칸 · ↶ 직전 · ↷ 직후`,
+    ok,
+    JSON.stringify({
+      changed: after !== before,
+      countBefore, countAfter, countEnd,
+      undoRestores: undone === before,
+      redoRestores: redone === after
+    })
+  );
+  return ok;
+}
+
+async function runUnits(context) {
+
+  const page = await openStudio(context);
+
+  /* ---------- U0. 중복 되돌리기 UI 가 없다 · 상단 버튼의 tooltip ---------- */
+
+  const buttons = await page.evaluate(() => {
+    const u = document.getElementById("studioUndoButton");
+    const r = document.getElementById("studioRedoButton");
+    return {
+      undo: { title: u.title, label: u.getAttribute("aria-label"), keys: u.getAttribute("aria-keyshortcuts"), disabled: u.disabled },
+      redo: { title: r.title, label: r.getAttribute("aria-label"), keys: r.getAttribute("aria-keyshortcuts"), disabled: r.disabled },
+      aiUndo: !!document.getElementById("studioAiDrawerUndo")
+    };
+  });
+  record(
+    "U0. 상단 ↶ ↷ 는 처음에 비활성이고 tooltip 이 '실행 취소 · Ctrl/⌘+Z' / '다시 실행 · Ctrl/⌘+Shift+Z' 다",
+    buttons.undo.disabled && buttons.redo.disabled && buttons.aiUndo === false &&
+      buttons.undo.title === "실행 취소 · Ctrl/⌘+Z" &&
+      buttons.redo.title === "다시 실행 · Ctrl/⌘+Shift+Z" &&
+      buttons.undo.label === "실행 취소" && buttons.redo.label === "다시 실행" &&
+      /Control\+Z/.test(buttons.undo.keys) && /Meta\+Shift\+Z/.test(buttons.redo.keys),
+    JSON.stringify(buttons)
+  );
+
+  /* ---------- U1. 직접 텍스트 수정 ---------- */
+
+  await page.click("#studioInspectorButton");
+  await page.waitForFunction(() => window.getStudioInspectorState().enabled === true);
+  await previewHas(page, "[data-imory-edit-id]");
+  await page.waitForFunction(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    return !!(doc && doc.body && doc.body.classList.contains("imory-inspector-on"));
+  }, null, { timeout: 6000 }).catch(() => {});
+  await selectInPreview(page, ".y-heading");
+  for (let i = 0; i < 3; i += 1) {
+    if (await page.evaluate(() => window.getStudioInspectorState().editingOpen)) break;
+    await page.click("#studioInspectorDirectButton");
+    await sleep(200);
+  }
+
+  const noInspectorUndo = await page.evaluate(() => {
+    const pop = document.getElementById("studioInspectorPopover");
+    const texts = pop ? Array.from(pop.querySelectorAll("button")).map(b => b.textContent.trim()) : null;
+    return {
+      byId: !!document.getElementById("studioInspectorUndoButton"),
+      texts
+    };
+  });
+
+  await checkOneUnit(
+    page,
+    "U1. 직접 텍스트 수정",
+    async () => {
+      await page.fill('#studioInspectorFields [data-inspector-control="text"]', "Unit Heading");
+      await page.click("#studioInspectorTextApply");
+    },
+    () => page.waitForFunction(() =>
+      window.getStudioAiWorkingState({ includePackage: true }).skinPackage.templates.home.html.indexOf("Unit Heading") !== -1)
+  );
+
+  const afterEditPopover = await page.evaluate(() => {
+    const pop = document.getElementById("studioInspectorPopover");
+    return Array.from(pop.querySelectorAll("button"))
+      .filter(b => b.getClientRects().length > 0)
+      .map(b => b.textContent.trim());
+  });
+  record(
+    "U1b. Inspector 에는 '되돌리기' 버튼이 없다 — 편집을 적용한 뒤에도",
+    noInspectorUndo.byId === false &&
+      !afterEditPopover.some(t => t === "되돌리기") &&
+      !(noInspectorUndo.texts || []).some(t => t === "되돌리기"),
+    JSON.stringify({ noInspectorUndo, afterEditPopover })
+  );
+
+  /* ---------- U2. 요소 크기 — 모서리 드래그(여러 프레임)도 한 칸 ---------- */
+
+  await selectInPreview(page, ".y-static-image");
+  for (let i = 0; i < 3; i += 1) {
+    if (await page.evaluate(() => window.getStudioInspectorState().editingOpen)) break;
+    await page.click("#studioInspectorDirectButton");
+    await sleep(200);
+  }
+  await page.waitForFunction(() => {
+    const el = document.getElementById("studioInspectorHandle-se");
+    return !!el && !el.hidden && el.getBoundingClientRect().width > 0;
+  }, null, { timeout: 6000 });
+  const se = await page.evaluate(() => {
+    const r = document.getElementById("studioInspectorHandle-se").getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await checkOneUnit(
+    page,
+    "U2. 이미지 크기 모서리 드래그(pointermove 16번)",
+    async () => {
+      await page.mouse.move(se.x, se.y);
+      await page.mouse.down();
+      await page.mouse.move(se.x - 60, se.y - 20, { steps: 16 });
+      await page.mouse.up();
+    },
+    () => page.waitForFunction(() => window.getStudioInspectorState().dragging === false)
+  );
+
+  /* ---------- U3. 이미지 교체(Images 패널 — 슬롯에 다른 사진) ---------- */
+
+  await page.click("#studioImagesButton");
+  await page.waitForFunction(() => !document.querySelector("#studioLeftPanelImages .images-panel-overlay").hidden);
+  await page.waitForSelector("#studioLeftPanelImages .images-panel-card-attach", { timeout: 6000 });
+  await page.click("#studioLeftPanelImages .images-panel-slot-pick");
+  await checkOneUnit(
+    page,
+    "U3. 이미지 교체(슬롯 profile ← 다른 사진)",
+    async () => {
+      await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll("#studioLeftPanelImages .images-panel-card"));
+        const target = cards.find(c => /cover/.test(c.textContent)) || cards[cards.length - 1];
+        target.querySelector(".images-panel-card-attach").click();
+      });
+    },
+    () => page.waitForFunction(() => {
+      const s = window.getStudioAiWorkingState({ includePackage: true }).imageSlotBindings;
+      return !!s.profile && s.profile.imageId === "img-cover";
+    })
+  );
+  await page.click("#studioLeftPanelImages .images-panel-done-button");
+
+  /* ---------- U4. Dock 설정 Apply ---------- */
+
+  await page.click("#studioDockButton");
+  await page.waitForSelector("#studioLeftPanelDock .dock-panel-overlay--open");
+  await checkOneUnit(
+    page,
+    "U4. Dock 설정 Apply",
+    () => page.click("#studioLeftPanelDock .dock-panel-button--primary"),
+    () => page.waitForFunction(() => !!window.getStudioAiWorkingState({ includePackage: true }).skinPackage.bottomDock)
+  );
+
+  /* Select 를 끄고(선택 없는 AI 요청) 패널을 닫는다 */
+  await page.click("#studioInspectorButton");
+  await sleep(200);
+  if (await page.evaluate(() => window.getStudioInspectorState().enabled)) {
+    await page.click("#studioInspectorButton");
+  }
+  await page.waitForFunction(() => window.getStudioInspectorState().enabled === false);
+
+  /* ---------- U5. Code 적용 ---------- */
+
+  await page.click("#studioCodeButton");
+  await page.waitForFunction(() => { const o = document.querySelector(".code-editor-overlay"); return !!o && !o.hidden; });
+
+  /* 편집기 textarea 안의 Ctrl+Z 는 그 칸의 되돌리기다 — 기록을 건드리지 않는다 */
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  const textareas = await page.$$(".code-editor-textarea");
+  await textareas[1].click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" ");
+  const inEditorBefore = await historyCount(page);
+  const draftInEditorBefore = await draftSnapshot(page);
+  await page.keyboard.press(`${mod}+z`);
+  await page.keyboard.press(`${mod}+Shift+z`);
+  const inEditorAfter = await historyCount(page);
+  record(
+    "U5a. Code 편집기 textarea 안의 Ctrl/⌘+Z · Shift+Z 는 가로채지 않는다(기록 · draft 불변)",
+    JSON.stringify(inEditorBefore) === JSON.stringify(inEditorAfter) &&
+      draftInEditorBefore === await draftSnapshot(page),
+    JSON.stringify({ inEditorBefore, inEditorAfter })
+  );
+
+  await checkOneUnit(
+    page,
+    "U5. Code 적용",
+    async () => {
+      await textareas[1].fill((await textareas[1].inputValue()) + " .u-code { color: rgb(1, 2, 3); }");
+      await page.click(".code-editor-button--primary");
+    },
+    () => page.waitForFunction(() =>
+      window.getStudioAiWorkingState({ includePackage: true }).skinPackage.css.indexOf(".u-code") !== -1)
+  );
+  await page.evaluate(() => {
+    const o = document.querySelector(".code-editor-overlay");
+    if (o && !o.hidden) document.querySelector(".code-editor-close").click();
+  });
+
+  /* ---------- U6. AI 변경 적용 → ↶ → ↷(AI 를 다시 부르지 않는다) ---------- */
+
+  let aiCalls = 0;
+  await page.unroute("**/api/skin-ai");
+  await page.route("**/api/skin-ai", async (route) => {
+    aiCalls += 1;
+    const body = JSON.parse(route.request().postData() || "{}");
+    const pkg = body.skinPackage;
+    pkg.css = `${pkg.css} .u-ai-${aiCalls} { color: rgb(4, 5, 6); }`;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ok: true, skinPackage: pkg, summary: "AI 가 색을 바꿨습니다." })
+    });
+  });
+
+  await page.click("#studioAiToggleButton");
+  await page.waitForSelector("#studioAiDrawerInput", { state: "visible" });
+  await checkOneUnit(
+    page,
+    "U6. AI 변경 적용",
+    async () => {
+      await page.fill("#studioAiDrawerInput", "색을 바꿔 줘");
+      await page.click("#studioAiDrawerSend");
+    },
+    () => page.waitForFunction(() =>
+      window.getStudioAiWorkingState({ includePackage: true }).skinPackage.css.indexOf(".u-ai-1") !== -1, null, { timeout: 10000 })
+  );
+  const aiPanel = await page.evaluate(() => ({
+    debug: window.getStudioAiPanelDebugState(),
+    buttons: Array.from(document.querySelectorAll("#studioAiDrawerStatus button")).map(b => b.textContent.trim())
+  }));
+  record(
+    "U6b. ↶ ↷ 를 거쳐도 AI 요청은 한 번뿐이다(↷ 는 저장된 결과를 다시 놓는다) · AI 패널에 '되돌리기' 버튼이 없다",
+    aiCalls === 1 && aiPanel.debug.undoVisible === false && aiPanel.buttons.length === 0 &&
+      aiPanel.debug.statusText.indexOf("AI 가 색을 바꿨습니다.") !== -1,
+    JSON.stringify({ aiCalls, aiPanel })
+  );
+  await page.click("#studioAiPanelCollapse");
+
+  /* ---------- U7. Import 적용 ---------- */
+
+  const importPkg = await page.evaluate(() => {
+    const pkg = window.getStudioAiWorkingState({ includePackage: true }).skinPackage;
+    pkg.css = `${pkg.css} .u-import { color: rgb(7, 8, 9); }`;
+    return pkg;
+  });
+  await page.click("#studioImportButton");
+  await page.waitForSelector(".import-editor-textarea");
+  await checkOneUnit(
+    page,
+    "U7. Import 적용",
+    async () => {
+      await page.fill(".import-editor-textarea", JSON.stringify(importPkg));
+      await page.evaluate(() => {
+        Array.from(document.querySelectorAll(".import-editor-button")).find(b => b.textContent.trim() === "Validate").click();
+      });
+      await page.waitForFunction(() => {
+        const apply = Array.from(document.querySelectorAll(".import-editor-button")).find(b => b.textContent.trim() === "Apply to Draft");
+        return apply && !apply.disabled;
+      }, null, { timeout: 6000 });
+      await page.evaluate(() => {
+        Array.from(document.querySelectorAll(".import-editor-button")).find(b => b.textContent.trim() === "Apply to Draft").click();
+      });
+    },
+    () => page.waitForFunction(() =>
+      window.getStudioAiWorkingState({ includePackage: true }).skinPackage.css.indexOf(".u-import") !== -1)
+  );
+  await previewHas(page, ".y-home");
+
+  /* ---------- U8. 되돌린 채로 새 작업 → ↷ 는 사라진다 ---------- */
+
+  await page.click("#studioUndoButton");
+  await sleep(200);
+  const redoAvailable = await page.evaluate(() => !document.getElementById("studioRedoButton").disabled);
+  await page.evaluate(() => {
+    const pkg = window.getStudioAiWorkingState({ includePackage: true }).skinPackage;
+    applyWorkingSkinChanges("home", pkg.templates.home.html, `${pkg.css} .u-branch { color: red; }`, null);
+  });
+  const redoAfterBranch = await page.evaluate(() => ({
+    disabled: document.getElementById("studioRedoButton").disabled,
+    count: window.getStudioHistoryState()
+  }));
+  record(
+    "U8. ↶ 한 뒤 새 작업을 하면 ↷ 기록은 비워지고 ↷ 는 비활성이 된다",
+    redoAvailable === true && redoAfterBranch.disabled === true && redoAfterBranch.count.redo === 0,
+    JSON.stringify({ redoAvailable, redoAfterBranch })
+  );
+
+  /* ---------- U9. Save → ↶ : 서버는 그대로, draft 만 이전, dirty ---------- */
+
+  const serverCalls = () => page.evaluate(() => ({
+    saves: (window.__savedDraftCallsY || []).length,
+    row: window.__testHooks && window.__testHooks.getSkinRow ? window.__testHooks.getSkinRow() : null
+  }));
+
+  await page.click("#studioSaveButton");
+  await page.waitForFunction(() => window.getStudioAiWorkingState().isDirty === false, null, { timeout: 8000 });
+  const savedDraft = await draftSnapshot(page);
+  const afterSave = await serverCalls();
+
+  await page.click("#studioUndoButton");
+  await sleep(250);
+  const afterSaveUndo = await page.evaluate(() => ({
+    dirty: window.getStudioAiWorkingState().isDirty,
+    save: document.getElementById("studioSaveButton").disabled,
+    publish: document.getElementById("studioPublishButton").disabled
+  }));
+  const afterSaveUndoServer = await serverCalls();
+  const undoneDraft = await draftSnapshot(page);
+  record(
+    "U9. Save 뒤 ↶ — 저장 RPC 가 더 불리지 않고(서버 그대로) draft 만 이전으로, dirty · Save 활성 · Publish 잠김",
+    afterSaveUndo.dirty === true && afterSaveUndo.save === false && afterSaveUndo.publish === true &&
+      afterSaveUndoServer.saves === afterSave.saves &&
+      JSON.stringify(afterSaveUndoServer.row) === JSON.stringify(afterSave.row) &&
+      undoneDraft !== savedDraft,
+    JSON.stringify({ afterSaveUndo, afterSave, afterSaveUndoServer })
+  );
+
+  /* ↷ 하면 저장된 것과 같은 draft 지만, 기록한 뒤에 Save 가 있었으므로 여전히 dirty(보수적) */
+  await page.click("#studioRedoButton");
+  await sleep(250);
+
+  /* 다시 Save — 되돌린 draft 가 저장된다 */
+  await page.click("#studioUndoButton");
+  await sleep(250);
+  await page.click("#studioSaveButton");
+  await page.waitForFunction(() => window.getStudioAiWorkingState().isDirty === false, null, { timeout: 8000 });
+  const resaved = await page.evaluate(() => {
+    const calls = window.__savedDraftCallsY || [];
+    return { count: calls.length, css: calls.length ? calls[calls.length - 1].p_content.css : "" };
+  });
+  record(
+    "U10. 다시 Save 해야 되돌린 draft 가 저장된다",
+    resaved.count === afterSave.saves + 1 && resaved.css.indexOf(".u-branch") === -1,
+    JSON.stringify({ count: resaved.count, hasBranch: resaved.css.indexOf(".u-branch") !== -1 })
+  );
+
+  /* ---------- U11. Publish → ↶ : 공개본은 그대로, dirty ---------- */
+
+  await page.click("#studioPublishButton");
+  await page.waitForSelector(".studio-confirm-button--primary", { state: "visible" });
+  await page.click(".studio-confirm-button--primary");
+  await page.waitForFunction(
+    () => document.getElementById("studioPublishButton").textContent.trim() === "Published",
+    null, { timeout: 8000 }
+  );
+  const afterPublish = await serverCalls();
+  await page.click("#studioUndoButton");
+  await sleep(250);
+  const afterPublishUndo = await page.evaluate(() => ({
+    dirty: window.getStudioAiWorkingState().isDirty,
+    save: document.getElementById("studioSaveButton").disabled,
+    publish: document.getElementById("studioPublishButton").disabled
+  }));
+  const afterPublishUndoServer = await serverCalls();
+  record(
+    "U11. Publish 뒤 ↶ — 공개본 · 저장본 그대로(RPC 0), draft 만 이전, dirty · Save 활성 · Publish 잠김",
+    afterPublishUndo.dirty === true && afterPublishUndo.save === false && afterPublishUndo.publish === true &&
+      afterPublishUndoServer.saves === afterPublish.saves &&
+      JSON.stringify(afterPublishUndoServer.row) === JSON.stringify(afterPublish.row),
+    JSON.stringify({ afterPublishUndo, afterPublish, afterPublishUndoServer })
+  );
+
+  await page.close();
+
+  /* ---------- U12. 요소 이동 — 자유 배치 손잡이 드래그도 한 칸 ---------- */
+
+  const lay = await context.newPage();
+  await lay.setViewportSize({ width: 1280, height: 800 });
+  lay.on("pageerror", err => consoleErrors.push(`${lay.url()} :: ${err.message}`));
+  await lay.goto(SCENARIO_URL.replace("scenario=y", "scenario=lay"), { waitUntil: "load" });
+  await lay.waitForFunction(
+    () => window.getStudioAiWorkingState && window.getStudioAiWorkingState().hasWorkingSkin === true,
+    null, { timeout: 15000 }
+  );
+  await previewHas(lay, ".lay-home");
+  await lay.click("#studioInspectorButton");
+  await lay.waitForFunction(() => window.getStudioInspectorState().enabled === true);
+  await lay.waitForFunction(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    return !!(doc && doc.body && doc.body.classList.contains("imory-inspector-on"));
+  }, null, { timeout: 6000 }).catch(() => {});
+  await selectInPreview(lay, ".lay-f1");
+  for (let i = 0; i < 3; i += 1) {
+    if (await lay.evaluate(() => window.getStudioInspectorState().editingOpen)) break;
+    await lay.click("#studioInspectorDirectButton");
+    await sleep(200);
+  }
+  await lay.waitForFunction(() => {
+    const el = document.getElementById("studioInspectorMoveHandle");
+    return !!el && !el.hidden && el.getBoundingClientRect().width > 0;
+  }, null, { timeout: 6000 });
+  const handle = await lay.evaluate(() => {
+    const r = document.getElementById("studioInspectorMoveHandle").getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await checkOneUnit(
+    lay,
+    "U12. 요소 이동 — 자유 배치 손잡이 드래그(pointermove 16번)",
+    async () => {
+      await lay.mouse.move(handle.x, handle.y);
+      await lay.mouse.down();
+      await lay.mouse.move(handle.x + 80, handle.y + 30, { steps: 16 });
+      await lay.mouse.up();
+    },
+    () => lay.waitForFunction(() => window.getStudioInspectorState().dragging !== true)
+  );
+
+  await lay.close();
+
+}
+
+
+/* =========================================================
    narrow — 390px
 ========================================================== */
 
@@ -1101,6 +1595,7 @@ try {
   if (shouldRun("panels")) await runPanels(context);
   if (shouldRun("inspect")) await runInspect(context);
   if (shouldRun("history")) await runHistory(context);
+  if (shouldRun("units")) await runUnits(context);
   if (shouldRun("narrow")) await runNarrow(context);
   if (shouldRun("fit")) await runFit(context);
 } catch (err) {

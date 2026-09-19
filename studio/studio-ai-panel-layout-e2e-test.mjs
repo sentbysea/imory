@@ -1149,10 +1149,12 @@ async function runRoute(context) {
     `location=${JSON.stringify(categoryAfter)} rendered=${categoryRendered}`
   );
 
-  await page.click("#studioAiDrawerUndo");
+  /* STUDIO-SHELL-1.1 — AI 패널의 "되돌리기"는 걷었다. 상단 ↶ 가 유일한 되돌리기다. */
+  const historyBeforeUndo = await page.evaluate(() => window.getStudioHistoryState().undo);
+  await page.click("#studioUndoButton");
   await page.waitForFunction(
-    () => window.getStudioAiPanelDebugState().hasUndo === false,
-    null,
+    (n) => window.getStudioHistoryState().undo === n - 1,
+    historyBeforeUndo,
     { timeout: 5000 }
   );
 

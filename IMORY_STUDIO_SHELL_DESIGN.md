@@ -1,4 +1,4 @@
-# Imory Skin Studio Shell — 기준 문서 (STUDIO-SHELL-1)
+# Imory Skin Studio Shell — 기준 문서 (STUDIO-SHELL-1 · 1.1)
 
 Skin Studio 화면의 **정보 구조**: 상단 도구 모음의 세 그룹, 왼쪽 편집
 패널, 오른쪽 AI 패널, 좁은 화면. 기능 동작(배치 엔진 · 전환 primitive ·
@@ -150,8 +150,60 @@ draft 변경 기록**이다(studio/studio-history.js).
 - 단축키 — Ctrl/⌘+Z · Ctrl/⌘+Shift+Z · Ctrl+Y. 입력칸 · textarea ·
   contenteditable · dialog 안에서는 가로채지 않는다(그 자리의 되돌리기가
   먼저다). Preview iframe 에 포커스가 있으면 이 문서에 키가 오지 않는다.
-- Inspector 팝오버의 "되돌리기"와 AI 패널의 "되돌리기"는 그 자리의 문맥
-  도구로 남는다. 그 둘도 위 입구를 지나므로 기록에 한 칸으로 쌓인다.
+- 버튼 — `#studioUndoButton` / `#studioRedoButton`. 되돌릴 칸이 없거나
+  Save/Publish 진행 중이면 `disabled`. tooltip(`title`)은
+  "실행 취소 · Ctrl/⌘+Z" / "다시 실행 · Ctrl/⌘+Shift+Z", accessible name 은
+  "실행 취소" / "다시 실행", `aria-keyshortcuts` 도 함께 적는다.
+
+### 4-1. 되돌리는 곳은 하나다 (STUDIO-SHELL-1.1)
+
+STUDIO-SHELL-1 까지는 Inspector 팝오버 아래 "되돌리기"(직전 직접 편집
+한 번)와 AI 패널 상태 줄의 "되돌리기"(직전 AI 적용 한 번)가 상단 ↶ 와
+**같은 일을 다른 자리에서** 했다. 1.1 에서 두 버튼을 걷었다.
+
+- 걷은 것 — `#studioInspectorUndoButton`(studio-inspector-overlay.js 가
+  만들던 버튼)과 `#studioAiDrawerUndo`(studio/index.html ·
+  studio-lifecycle-scenario.html 의 마크업), 그 둘의 CSS.
+- 남긴 것 — `undoStudioInspectorEdit()` · `studioInspectorUndo` 기록,
+  `handleStudioAiUndo()` · `studioAiUndoSnapshot`. 누르는 버튼만 없다.
+  버튼 변수가 `null` 인 자리는 전부 건너뛴다.
+- AI 적용 → ↶ 는 AI 이전 draft, ↷ 는 **기록해 둔 AI 결과**를 다시 놓는다
+  (AI 를 다시 부르지 않는다). AI 패널의 결과 문장은 그대로 남는다.
+
+### 4-2. 한 칸이 되는 작업
+
+한 칸 = working draft 입구가 한 번 불린 것. 아래는 e2e(`--only=units`)가
+"칸 +1 · ↶ = 직전 draft · ↷ = 직후 draft 가 글자 단위로 같다"로 확인한다.
+
+| 작업 | 입구 | 한 칸이 되는 시점 |
+| --- | --- | --- |
+| 직접 텍스트 수정 | applyWorkingSkinChanges | "적용" 한 번 |
+| 요소 크기(이미지 모서리 드래그 · 슬라이더) | 〃 | 손을 뗄 때(`pointerup` · `change`) 한 번 — 끄는 동안은 Preview 임시 채널만 |
+| 요소 이동(자유 배치 손잡이 드래그) | 〃 | 손을 뗄 때 한 번 |
+| 이미지 교체(Images 패널 · Inspector "이미지 변경"도 이 패널로 온다) | setStudioImageSlot | 사진을 슬롯에 붙일 때 |
+| Dock 설정 Apply | setStudioBottomDock | Apply 한 번 |
+| Code 적용 | applyWorkingSkinChanges | Apply 한 번 |
+| AI 변경 적용 | applyImportedSkinPackage | 응답이 검증을 지나 적용될 때 |
+| Import 적용 | applyImportedSkinPackage | "Apply to Draft" 한 번 |
+
+- 요소 **삭제 · 복제**는 Studio 에 직접 편집 도구로 없다(Code · AI ·
+  Import 로 HTML 을 바꾸는 것뿐이고, 그러면 그 작업 한 칸이다). 이번
+  라운드에서 만들지 않았다.
+- 순서 ↑↓ · 배치 방식 · 전환 효과 · 스타일 컨트롤도 같은
+  applyWorkingSkinChanges 한 번이라 한 칸이다(layout/transition e2e 의
+  되돌리기 검사가 상단 ↶ 로 돈다).
+
+### 4-3. Save / Publish 경계
+
+- ↶ ↷ 는 working draft 만 바꾼다. **서버에는 아무 요청도 보내지 않는다**
+  — 저장된 draft 도 공개본도 그대로다.
+- 그 칸을 기록한 뒤로 Save 가 있었으면 되돌린 draft 는 저장본과 다르므로
+  dirty 가 켜지고 Save 가 다시 열리며 Publish 는 잠긴다. 다시 Save 해야
+  되돌린 draft 가 저장되고, 그 뒤에 Publish 해야 공개된다.
+- Publish 는 draftVersionId 를 바꾸지 않는다(저장본을 공개본으로 가리킬
+  뿐) — 그래서 Publish 뒤의 ↶ 도 같은 규칙이다: 공개본 그대로, draft 만
+  이전, dirty. Publish 버튼 글자는 "Published" 인 채 잠긴다(저장하지 않은
+  변경이 있다는 title 이 붙는다 — 편집 뒤와 같은 모양).
 
 ## 5. 좁은 화면 — 720px 이하 (현재 구현)
 
@@ -192,5 +244,10 @@ draft 변경 기록**이다(studio/studio-history.js).
 - 왼쪽 패널의 폭은 고정(320/280px)이다. AI 패널처럼 끌어서 바꾸지 않는다.
 - Undo 기록은 working draft 만 본다. Preview 안 이동(HOME → POST 등)과
   Desktop/Mobile, 패널 여닫기는 기록하지 않는다.
-- Inspector 의 "되돌리기"(직전 직접 편집)는 상단 Undo 와 겹치는 일을
-  한다. 이번 라운드는 기존 설정 항목을 지우지 않는다는 범위라 남겨 두었다.
+- ~~Inspector 의 "되돌리기"가 상단 Undo 와 겹친다~~ → 1.1 에서 걷었다(§4-1).
+- 기록은 문서가 살아 있는 동안만 있다. 새로고침하면 ↶ 할 것이 없다(저장된
+  draft 로 다시 시작한다).
+- Preview iframe 안에 포커스가 있으면 단축키가 이 문서에 오지 않는다 —
+  Preview 를 누른 직후에는 버튼으로 되돌린다.
+- 좁은 화면에서 AI 패널을 연 채로 ↶ 가 가려지지 않는지는 ai-panel e2e H2
+  가 본다. 실기기(iPhone Safari) 확인은 아직 없다.

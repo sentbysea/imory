@@ -843,8 +843,10 @@ function renderStudioInspectorPopover() {
 
   }
 
-  studioInspectorUndoButton.hidden =
-    !studioInspectorUndo;
+  if (studioInspectorUndoButton) {
+    studioInspectorUndoButton.hidden =
+      !studioInspectorUndo;
+  }
 
   paintStudioInspectorHandles(
     studioInspectorSelection ? studioInspectorSelection.rect : null,

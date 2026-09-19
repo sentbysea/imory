@@ -597,7 +597,7 @@ async function runText(context) {
 
   /* --- Undo --- */
 
-  await page.click("#studioInspectorUndoButton");
+  await page.click("#studioUndoButton");
   await sleep(500);
 
   const afterUndo = await previewBox(page, ".y-heading");
@@ -827,7 +827,7 @@ async function runImage(context) {
 
   /* --- K. Undo 한 번 --- */
 
-  await page.click("#studioInspectorUndoButton");
+  await page.click("#studioUndoButton");
   await sleep(500);
 
   const afterUndo = await previewBox(page, ".y-avatar");

@@ -982,7 +982,7 @@ async function run() {
         changed.slice(0, 400)
       );
 
-      await page.click("#studioInspectorUndoButton");
+      await page.click("#studioUndoButton");
 
       await sleep(500);
 

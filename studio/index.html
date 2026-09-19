@@ -463,8 +463,9 @@
               type="button"
               class="studio-icon-button"
               id="studioUndoButton"
-              aria-label="Undo"
-              title="Undo (Ctrl+Z)"
+              aria-label="실행 취소"
+              aria-keyshortcuts="Control+Z Meta+Z"
+              title="실행 취소 · Ctrl/⌘+Z"
               disabled
             >↶</button>
 
@@ -472,8 +473,9 @@
               type="button"
               class="studio-icon-button"
               id="studioRedoButton"
-              aria-label="Redo"
-              title="Redo (Ctrl+Shift+Z)"
+              aria-label="다시 실행"
+              aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z"
+              title="다시 실행 · Ctrl/⌘+Shift+Z"
               disabled
             >↷</button>
 
@@ -617,7 +619,7 @@
          AI-5A에서 VS Code/Cursor식 우측 패널로 바꿨다 — 요청을
          쓰는 곳과 그 결과(Preview)가 나란히 보이게 하기 위해서다.
          DOM 순서는 [resizer][패널]이고, 여닫기/폭 조절은
-         studio/ai/studio-ai-panel-layout.js가, 전송/로딩/되돌리기/
+         studio/ai/studio-ai-panel-layout.js가, 전송/로딩/
          참고 이미지는 studio/ai/studio-ai-panel.js가 담당한다
          (레이아웃과 기능을 다른 파일로 나눈다).
 
@@ -710,12 +712,9 @@
 
             <span id="studioAiDrawerStatusText"></span>
 
-            <button
-              type="button"
-              class="studio-ai-drawer-undo"
-              id="studioAiDrawerUndo"
-              hidden
-            >되돌리기</button>
+            <!-- STUDIO-SHELL-1.1 — 여기 있던 "되돌리기" 버튼은 걷었다.
+                 AI 적용도 상단 ↶ 한 칸으로 되돌린다
+                 (IMORY_STUDIO_SHELL_DESIGN.md §4-1). -->
 
           </p>
 

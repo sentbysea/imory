@@ -4,8 +4,15 @@
    studio/index.html에 이미 있던 AI 패널 shell(#studioAiDock /
    #studioAiDrawer / #studioAiDrawerInput / #studioAiDrawerSend)에
    실제 동작을 붙인다. 새 패널/새 UI를 따로 만들지 않는다 —
-   패널 안에 상태 한 줄(#studioAiDrawerStatus)과 되돌리기 버튼
-   (#studioAiDrawerUndo)만 더한다.
+   패널 안에 상태 한 줄(#studioAiDrawerStatus)만 더한다.
+
+   STUDIO-SHELL-1.1 — 이 패널의 "되돌리기" 버튼(#studioAiDrawerUndo)은
+   걷었다. AI 적용은 applyImportedSkinPackage 를 지나므로 상단 ↶
+   (studio/studio-history.js)에 한 칸으로 쌓이고, 사용자가 되돌리는
+   곳은 그 하나다. Redo 는 저장된 그 결과를 다시 적용할 뿐 AI 를 다시
+   부르지 않는다. 아래 handleStudioAiUndo · studioAiUndoSnapshot 은
+   호환 경로로 남겨 두었다 — 누르는 버튼만 없다(버튼이 없으면
+   studioAiPanelUndoButton 이 null 이고, 그 자리는 전부 건너뛴다).
 
    PHASE AI-5A — 패널의 **모양**(우측 사이드바 여닫기 / 폭 드래그 /
    Preview 클릭 시 접기)은 studio/ai/studio-ai-panel-layout.js가
@@ -21,7 +28,7 @@
        -> applyAiSkinPackage()         (studio/studio-preview.js bridge)
             -> applyImportedSkinPackage()
        -> Preview 재렌더 / dirty=true / Save 활성
-       -> 되돌리기(1단계)
+       -> 되돌리기는 상단 ↶ (studio/studio-history.js)
 
    AI 전용 sanitize/CSS validator/protected-region 검사를 새로
    만들지 않는다. 서버가 돌려준 SkinPackage는 **반드시** 기존
@@ -214,7 +221,8 @@ function ensureStudioAiLoadingElements() {
   elapsed.hidden =
     true;
 
-  /* 되돌리기 버튼보다 앞(=문장 바로 뒤)에 둔다. */
+  /* 되돌리기 버튼보다 앞(=문장 바로 뒤)에 둔다. 버튼이 없으면(STUDIO-
+     SHELL-1.1) insertBefore(…, null) 이 끝에 붙인다 — 같은 자리다. */
   studioAiPanelStatus.insertBefore(dots, studioAiPanelUndoButton);
   studioAiPanelStatus.insertBefore(elapsed, studioAiPanelUndoButton);
 
@@ -940,8 +948,10 @@ function setStudioAiStatus(text, options) {
     studioAiPanelStatusText.textContent =
       "";
 
-    studioAiPanelUndoButton.hidden =
-      true;
+    if (studioAiPanelUndoButton) {
+      studioAiPanelUndoButton.hidden =
+        true;
+    }
 
     return;
 
@@ -958,8 +968,10 @@ function setStudioAiStatus(text, options) {
   studioAiPanelStatus.hidden =
     false;
 
-  studioAiPanelUndoButton.hidden =
-    !showUndo;
+  if (studioAiPanelUndoButton) {
+    studioAiPanelUndoButton.hidden =
+      !showUndo;
+  }
 
   if (isLoading) {
     startStudioAiLoading();

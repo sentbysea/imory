@@ -689,13 +689,14 @@ async function runText(context) {
     `computed=${JSON.stringify(styleResult)} cssTail=${JSON.stringify(cssAfterStyle.slice(-160))}`
   );
 
-  /* --- Direct Edit 1-step undo --- */
+  /* --- Direct Edit undo — STUDIO-SHELL-1.1 부터 되돌리기는 상단 ↶ 하나다 --- */
 
   const undoVisible = await page.evaluate(
-    () => !document.getElementById("studioInspectorUndoButton").hidden
+    () => !document.getElementById("studioInspectorUndoButton") &&
+      document.getElementById("studioUndoButton").disabled === false
   );
 
-  await page.click("#studioInspectorUndoButton");
+  await page.click("#studioUndoButton");
 
   await page.waitForFunction(
     () => {
@@ -718,7 +719,7 @@ async function runText(context) {
   });
 
   record(
-    "G2. Direct Edit 1-step undo — 마지막 한 번만 되돌리고 그 앞 수정은 남는다",
+    "G2. Direct Edit 을 상단 ↶ 로 되돌린다(Inspector 에는 되돌리기 버튼 없음) — 마지막 한 번만 되돌리고 그 앞 수정은 남는다",
     undoVisible === true &&
       afterUndo.textAlign !== "center" &&
       afterUndo.fontSize === "28px" &&

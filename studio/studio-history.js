@@ -38,10 +38,18 @@
      다시 mount 하면 비운다(resetStudioHistory). Save/Publish 는 기록을
      건드리지 않는다 — 내용을 바꾸지 않기 때문이다.
 
-   ★ 기존 "되돌리기" 둘은 그대로다
-     Inspector 팝오버의 되돌리기(직전 직접 편집 한 번)와 AI 패널의
-     되돌리기(직전 AI 적용 한 번)는 그 자리의 문맥 도구로 남는다.
-     그 둘도 위 입구를 지나므로 이 기록에 한 칸으로 쌓인다.
+   ★ 사용자가 되돌리는 곳은 여기 하나다 (STUDIO-SHELL-1.1)
+     Inspector 팝오버와 AI 패널에 있던 1단계 "되돌리기" 버튼은
+     걷었다 — 같은 일을 두 자리에서 하던 UI 였다. 두 파일의 내부
+     함수(undoStudioInspectorEdit · handleStudioAiUndo)는 호환 경로로
+     남아 있고, 불리면 위 입구를 지나므로 이 기록에 한 칸으로 쌓인다.
+     AI 적용을 ↷ 하면 기록해 둔 그 결과를 다시 놓을 뿐 AI 를 다시
+     부르지 않는다.
+
+   ★ 한 칸 = 확정 한 번
+     기록은 입구가 불릴 때만 생긴다. 드래그(이미지 모서리 · 자유 배치
+     손잡이 · 자르기 구도)와 슬라이더는 끄는 동안 Preview 임시 채널만
+     쓰고 손을 뗄 때 한 번 확정하므로 한 칸이다(studio/inspector/*).
 
    의존: studio/studio-preview.js(currentWorkingSkin ·
    currentWorkingImageSlots · isStudioDirty · currentDraftVersionId ·

@@ -1070,7 +1070,7 @@ async function runTemp(context) {
   const applied = await cropGeometry(page, ".y-cover");
   const appliedPkg = await workingPackage(page);
 
-  await page.click("#studioInspectorUndoButton");
+  await page.click("#studioUndoButton");
   await sleep(700);
 
   const undone = await cropGeometry(page, ".y-cover");
@@ -1872,7 +1872,7 @@ async function runFree(context) {
 
   const beforeUndo = await cropGeometry(page, ".y-cover");
 
-  await page.click("#studioInspectorUndoButton");
+  await page.click("#studioUndoButton");
   await sleep(700);
 
   const afterUndo = await cropGeometry(page, ".y-cover");

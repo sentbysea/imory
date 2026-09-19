@@ -213,6 +213,11 @@ e2e 검사 **B**(테두리가 Preview 안쪽에 그려진다) · **U**(Mobile에
 └────────────────────────────────┘
 ```
 
+> **변경됨 (STUDIO-SHELL-1.1)** — 맨 아래 `[ 되돌리기 ]`(`#studioInspectorUndoButton`)는
+> 걷었다. 직접 편집은 상단 ↶ 한 칸으로 되돌린다 →
+> [IMORY_STUDIO_SHELL_DESIGN.md](../../IMORY_STUDIO_SHELL_DESIGN.md) §4.
+> `undoStudioInspectorEdit()` 는 호환 경로로 남아 있다.
+
 - 위치는 선택 요소 rect 기준 아래 → 넘치면 위 → 그래도 넘치면 클램프.
   기준 영역은 뷰포트가 아니라 **Preview stage**다(AI 패널이 열려 있을 때
   팝오버가 그 아래로 숨지 않게).

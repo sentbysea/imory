@@ -425,7 +425,7 @@ async function run() {
       const changed = await draftHtml(page);
       check("효과가 바뀌었다", changed !== before && openingTag(changed, "lay-text").indexOf('data-imory-transition="scale"') !== -1);
 
-      await page.click("#studioInspectorUndoButton");
+      await page.click("#studioUndoButton");
       await sleep(500);
       check("★ 되돌리기가 직전 한 벌을 그대로 복원한다", (await draftHtml(page)) === before);
     }

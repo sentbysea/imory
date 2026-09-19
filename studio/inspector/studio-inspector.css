@@ -821,32 +821,6 @@
 }
 
 
-.studio-inspector-undo {
-  margin-top: 10px;
-
-  width: 100%;
-
-  padding: 5px 8px;
-
-  border: 1px solid var(--system-border-strong);
-  border-radius: var(--imory-radius-200);
-
-  background: var(--system-bg);
-
-  color: var(--system-text-muted);
-
-  font-family: inherit;
-  font-size: var(--imory-font-size-200);
-
-  cursor: pointer;
-}
-
-
-.studio-inspector-undo:hover {
-  color: var(--system-accent-hover);
-}
-
-
 /* =========================================================
    Top Dock의 Select 버튼 — 켜져 있는 동안의 표시
 
