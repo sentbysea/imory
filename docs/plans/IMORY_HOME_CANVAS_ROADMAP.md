@@ -146,8 +146,9 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 각 행은 별도의 작업이다. 앞 단계가 완료됐다는 보고를 확인한 뒤 다음 단계로 넘어간다.
 
 > 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` · `CONTRACT-1C` ·
-> `RENDER-1A` · `RENDER-1B` 여섯이 끝났다.** 정적 렌더링은 **네 화면 전부**
-> 끝났고, `SELECT-1` 이후(조작 UI)는 하나도 구현되지 않았다.
+> `RENDER-1A` · `RENDER-1B` · `VENDOR-1` 일곱이 끝났다.** 정적 렌더링은
+> **네 화면 전부** 끝났고 편집기 라이브러리는 **저장소에 고정됐지만**,
+> `SELECT-1` 이후(조작 UI)는 하나도 구현되지 않았다.
 >
 > - `SPIKE-1` · `SPIKE-1B` — **Moveable + Selecto 채택 확정**(§8 의 완료 기록).
 >   실험이라 **운영 파일을 한 줄도 바꾸지 않았고**, 그래서 저장소에 vendor 파일도
@@ -167,6 +168,13 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 >   운영 파일을 남기지 않는 작업이라 저장소만 보고는 완료 사실을 알 수 없었던
 >   것이다 — 그 오류를 `HOME-CANVAS-SPIKE-DOC-1` 에서 정정했다.
 >   **Spike 를 다시 실행하지 않는다.**
+>
+> - `VENDOR-1` — **Moveable 0.53.0 · Selecto 1.26.3 UMD 를 저장소에 고정**하고
+>   Studio 전용 지연 로더와 sandbox allowlist 두 줄을 두었다. 계약은
+>   [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+>   **§13** 이다. **조작은 한 줄도 없다** — 아무도 로더를 부르지 않으므로 지금은
+>   어느 화면에서도 두 UMD 가 내려오지 않는다. §8-1 이 요구한 `cspNonce`
+>   대조군 넷은 실제 파일로 자동 테스트가 됐고, 결과는 Spike 의 판정 그대로다.
 
 | 순서 | 작업 ID | 목표 | 운영 기능 변경 | 상태 |
 |---:|---|---|---|---|
@@ -175,6 +183,7 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 1 | `HOME-CANVAS-CONTRACT-1` | 데이터 계약·소유권·마이그레이션 설계 | 없음 | **1B · 1C 완료** → [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 2 | `HOME-CANVAS-RENDER-1A` | 고정 fixture를 **native 두 화면**에 동일 렌더 | 읽기 전용 | **완료**(계약 문서 §12) |
 | 2b | `HOME-CANVAS-RENDER-1B` | 같은 결과를 **sandbox 두 화면**에도 | 읽기 전용 | **완료**(계약 문서 §12-6) |
+| 2c | `HOME-CANVAS-VENDOR-1` | Moveable·Selecto 파일 고정 + Studio 전용 loader | 없음 | **완료**(계약 문서 §13) |
 | 3 | `HOME-CANVAS-SELECT-1` | 단일 선택·이동·크기·회전 | Studio만 | 미착수 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
@@ -300,11 +309,30 @@ vendor · 연결 단계가 지켜야 할 조건(아직 구현되지 않았다 �
 - WebKit
 - 실제 iOS 기기
 
-### 8-2. Spike 이후 아직 없는 것
+### 8-2. `VENDOR-1` 결과 (완료)
 
-라이브러리는 **채택됐지만 저장소에는 아직 없다.** vendor 파일도, Studio 로드도,
-allowlist 등록도, nonce 회귀 테스트도 없다 — 그것은 `SELECT-1`(또는 그 앞의
-vendor 단계)의 일이다.
+Spike 가 요구한 vendor 조건은 **전부 지켜졌다.** 확정된 계약은
+[IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+**§13** 이 갖는다. 여기에는 결론만 적는다.
+
+| §8-1 이 요구한 것 | 상태 |
+| --- | --- |
+| 두 버전을 정확히 고정 | **완료** — 파일 이름에 버전 · SHA-256 을 테스트가 검사 |
+| Studio 에서만 로드 · 공개 비용 0 | **완료** — 공개 진입 · 공개 native · 공개 sandbox 전부 vendor 요청 0 |
+| 원본 minified 재가공 금지 · MIT 배너 유지 | **완료** — npm tarball 의 바이트 그대로 |
+| `?v=APP_BUILD_VERSION` · 고정 `<script src>` 금지 | **완료** — 동적 `<script>`(§13-2 의 ★) |
+| sandbox allowlist 등록 | **완료** — vendor JS **두 줄**만. 프레임 HTML 은 안 고쳤다 |
+| CSP 완화 금지 | **완료** — 한 글자도 안 바꿨다 |
+| `document.createElement` monkey patch 금지 | **완료** — 만들지 않았다 |
+| 두 생성자에 공식 `cspNonce` | **완료** — 넘기는 것은 부르는 쪽의 몫이고, 대조군 넷을 테스트가 못박는다 |
+| 대조군 넷의 회귀 테스트 | **완료** — `node studio/studio-home-canvas-vendor-e2e-test.mjs --only=nonce` |
+
+`cspNonce` 대조군 넷의 실측 결과는 **Spike 의 판정 그대로**였다(계약 문서
+§13-3 의 표). `both` 에서 위반 0 · 핸들 14×14 · Selecto 영역 정상 · 드래그
+정상이고, `selectoOnly` 에서는 Moveable 핸들이 **91×0 으로 붕괴**한다.
+
+**아직 없는 것**: Canvas 요소와의 연결, 프레임 안 조건부 load 와 Studio→frame
+메시지, 그리고 조작 UI 전부. 그것은 `SELECT-1` 의 일이다.
 
 ### `HOME-CANVAS-CONTRACT-1`
 

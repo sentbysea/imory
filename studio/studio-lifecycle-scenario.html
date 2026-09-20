@@ -2887,6 +2887,15 @@
   </script>
   <script src="./studio-save-status.js"></script>
   <script src="./studio-coach.js"></script>
+
+  <!-- HOME-CANVAS-VENDOR-1 — studio/index.html 과 같은 자리.
+       로더 한 파일만 읽는다. Moveable · Selecto UMD 두 개는
+       ensureHomeCanvasEditorVendors() 를 부른 뒤에야 오고, 지금은
+       아무도 부르지 않는다(SELECT-1 의 일이다). 이 시험 문서를
+       열기만 해서 vendor 요청이 0 인 것을
+       studio/studio-home-canvas-vendor-e2e-test.mjs 가 잰다. -->
+  <script src="./studio-home-canvas-vendor.js"></script>
+
   <script src="./studio-state.js"></script>
 
   <script>

@@ -1,12 +1,13 @@
 # IMORY HOME CANVAS — 데이터 계약
 
-> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 는 지금 코드가
-> 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집 UI 가 지켜야 할
-> 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
+> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 · §13 은 지금
+> 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집 UI 가
+> 지켜야 할 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
 >
 > 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
 > `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12) ·
-> `HOME-CANVAS-RENDER-1B`(2026-09-21, **sandbox 프레임까지 · 네 화면** — §12-6).
+> `HOME-CANVAS-RENDER-1B`(2026-09-21, **sandbox 프레임까지 · 네 화면** — §12-6) ·
+> `HOME-CANVAS-VENDOR-1`(2026-09-21, **Moveable · Selecto 고정과 지연 로더** — §13).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -24,11 +25,14 @@
 | 렌더러를 로드하는 **세** 문서 | [index.html](../../index.html) · [studio/preview/preview-frame.html](../../studio/preview/preview-frame.html) · [skin/sandbox/frame.html](../../skin/sandbox/frame.html) |
 | sandbox origin allowlist | [core/lib/skin-sandbox-server.js](../../core/lib/skin-sandbox-server.js) `SANDBOX_ALLOWED_PATHS` |
 | Studio sandbox 로 `canvas` 를 옮기는 자리 | [studio/preview/preview-sandbox.js](../../studio/preview/preview-sandbox.js) |
+| **고정한 편집기 라이브러리**(Moveable · Selecto UMD · MIT) | [studio/vendor/home-canvas/](../../studio/vendor/home-canvas/) — 출처 · 해시 · 보관 규칙은 그 폴더의 `README.md` |
+| **그 둘을 부를 때만 받는 로더** | [studio/studio-home-canvas-vendor.js](../../studio/studio-home-canvas-vendor.js) `ensureHomeCanvasEditorVendors` |
 
 관련 테스트: `node skin/skin-home-canvas-test.mjs` ·
 `node skin/skin-home-canvas-render-e2e-test.mjs` ·
 `node skin/skin-home-canvas-sandbox-e2e-test.mjs` ·
-`node studio/studio-home-canvas-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
+`node studio/studio-home-canvas-e2e-test.mjs` ·
+`node studio/studio-home-canvas-vendor-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
 
 ---
 
@@ -40,14 +44,15 @@
 | `CONTRACT-1C` | 도화지 전체의 세로 길이 `baseHeight` 한 칸(§4-1). 그 말고는 `1B` 계약이 그대로다 |
 | `RENDER-1A` | **정적 Renderer**(§12) — 저장된 Canvas 가 **공개 native HOME** 과 **Studio native Preview** 에서 같은 DOM · 같은 좌표로 그려진다 |
 | `RENDER-1B` | 그 **같은 렌더러**가 cross-origin sandbox 프레임에서도 돈다(§12-6). **네 화면 정적 parity 가 검증됐다** — 공개 native · Studio native Preview · 공개 sandbox · Studio sandbox Preview |
+| `VENDOR-1` | Moveable 0.53.0 · Selecto 1.26.3 UMD 를 **저장소에 바이트 그대로 고정**하고, Studio 전용 **지연 로더**와 sandbox allowlist 두 줄을 두었다(§13). **아직 Canvas 요소에 연결되지 않았다** |
 
-아직 **없는 것** — 이 둘을 구현된 것으로 읽지 않는다.
+아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
 
-- Moveable / Selecto 는 **채택은 끝났지만 저장소에 들어오지 않았다**(vendor
-  파일 없음 · Studio 로드 없음 · allowlist 등록 없음 · `cspNonce` 회귀
-  테스트 없음).
 - 선택 · 이동 · 크기 · 회전 조작 UI · 멀티 선택 · Inspector · Undo/Redo ·
   preset · 스티커 업로드 · widget — **하나도 없다**(§11).
+- `VENDOR-1` 은 라이브러리를 **놓아두었을 뿐**이다. 아무도
+  `ensureHomeCanvasEditorVendors()` 를 부르지 않으므로 지금은 어느 화면에서도
+  두 UMD 가 내려오지 않는다(§13-4).
 
 ---
 
@@ -419,6 +424,26 @@ sandbox 봉투는 그 payload 를 `skin-sandbox-protocol.js` 의
 
 ## 10. 라운드마다 바꾼 파일
 
+### `VENDOR-1` (Moveable · Selecto 고정)
+
+| 파일 | 무엇 |
+| --- | --- |
+| `studio/vendor/home-canvas/moveable-0.53.0.min.js` | **새 파일** — npm tarball 의 UMD 를 바이트 그대로 |
+| `studio/vendor/home-canvas/selecto-1.26.3.min.js` | **새 파일** — 같음 |
+| `studio/vendor/home-canvas/licenses/*.txt` | **새 파일** — MIT 전문 둘 |
+| `studio/vendor/home-canvas/README.md` | **새 파일** — 출처 · 크기 · SHA-256 · 보관 규칙의 **단일 원천** |
+| `studio/vendor/home-canvas/.gitattributes` | **새 파일** — `-text`. 이 저장소는 `core.autocrlf=true` 라 없으면 checkout 때 LF→CRLF 로 바이트가 바뀌어 위 해시가 틀어진다 |
+| `studio/studio-home-canvas-vendor.js` | **새 파일** — `ensureHomeCanvasEditorVendors()` 지연 로더 |
+| `studio/index.html` · `studio/studio-lifecycle-scenario.html` | 로더 **한 파일**을 읽는다(UMD 둘은 아니다) |
+| `core/lib/skin-sandbox-server.js` | allowlist 에 vendor JS **두 줄** — 프레임 HTML 은 안 고쳤다 |
+| `studio/studio-home-canvas-vendor-e2e-test.mjs` | **새 파일** — 파일 · 로더 · `cspNonce` 대조군 넷 · allowlist · 공개 비용 0 |
+
+`VENDOR-1` 은 그 외 어떤 파일도 고치지 않았다. 특히 **CSP 를 한 글자도
+바꾸지 않았고**(`script-src 'self'` 가 이미 허용한다), `skin/` 의 렌더러 ·
+계약 · sanitize · 프레임 문서는 **한 줄도 바뀌지 않았다.**
+
+`APP_BUILD_VERSION` 은 이번에 올리지 않았다(배포하지 않았다).
+
 ### `RENDER-1B` (sandbox 프레임)
 
 **새 렌더러를 만들지 않았다.** `RENDER-1A` 의 파일 두 장을 프레임이
@@ -526,11 +551,10 @@ E2E 가 네 화면을 실제로 띄워 **DOM 을 글자 단위로, 좌표를 1px
 드래그 · 크기 · 회전 · 세로 손잡이 · Inspector · Undo/Redo · preset ·
 사진 자동 매핑 · sticker 업로드 · widget · 그룹 선택 — **하나도 없다.**
 
-Moveable · Selecto 는 **채택은 끝났고 저장소에는 아직 없다.**
-`HOME-CANVAS-SPIKE-1` · `SPIKE-1B` 가 Moveable 0.53.0 + Selecto 1.26.3
-(둘 다 UMD · MIT)을 쓰기로 확정했지만, 그 Spike 는 운영 파일을 바꾸지 않는
-실험이었다 — vendor 파일도, Studio 로드도, sandbox allowlist 등록도,
-`cspNonce` 회귀 테스트도 **없다**. 채택 조건과 측정값은
+Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조작하지 않는다**
+(`VENDOR-1` — §13). 파일 · 로더 · allowlist · `cspNonce` 회귀 테스트는 있고,
+**Canvas 요소와의 연결과 프레임 조건부 load 메시지가 없다.** 채택 조건과
+좌표 측정값은
 [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) §8-1 ·
 §8-2 에 있다. **그 Spike 를 다시 실행하지 않는다.**
 
@@ -538,7 +562,8 @@ Moveable · Selecto 는 **채택은 끝났고 저장소에는 아직 없다.**
 
 | 빈 곳 | 어디서 정하나 |
 | --- | --- |
-| **Moveable 0.53.0 · Selecto 1.26.3 이 채택됐지만 아직 vendor·연결되지 않았다**(파일 없음 · Studio 로드 없음 · allowlist 등록 없음 · `cspNonce` 회귀 테스트 없음) | `HOME-CANVAS-SELECT-1`(또는 그 앞의 vendor 단계) — 조건은 로드맵 §8-1 |
+| **Moveable · Selecto 가 고정됐지만 Canvas 요소에 연결되지 않았다**(파일 · 로더 · allowlist · nonce 테스트는 있다 — §13) | `HOME-CANVAS-SELECT-1` |
+| **sandbox 프레임 안에서 vendor 를 조건부로 받는 메시지**(지금 프레임은 로더조차 읽지 않는다 — §13-5) | `HOME-CANVAS-SELECT-1` |
 | 390 저장 좌표 → 데스크톱 폭 변환 규칙 | `HOME-CANVAS-RESPONSIVE-1` |
 | 모바일/데스크톱 좌표 override 를 둘 것인가 | `HOME-CANVAS-RESPONSIVE-1` |
 | 좌우 패널(`left_sidebar` · `right_sidebar`) 안의 Canvas | `HOME-CANVAS-SIDES-1` |
@@ -741,3 +766,120 @@ fallback 표). 표식을 자동으로 만들지 않는다.
   있어도 그리지 않는다.
 
 `APP_BUILD_VERSION` 은 이번에 올리지 않았다(배포하지 않았다).
+
+---
+
+## 13. 편집기 라이브러리 고정 (`HOME-CANVAS-VENDOR-1`)
+
+**이 절은 지금 코드가 강제한다.** 다만 강제하는 것은 "어떻게 놓여 있는가"
+뿐이다 — **조작은 한 줄도 없다**(§13-4).
+
+### 13-1. 무엇이 고정됐나
+
+| 라이브러리 | 버전 | 형태 | 라이선스 | 파일 |
+| --- | ---: | --- | --- | --- |
+| Moveable | **0.53.0** | UMD minified | MIT | `studio/vendor/home-canvas/moveable-0.53.0.min.js` |
+| Selecto | **1.26.3** | UMD minified | MIT | `studio/vendor/home-canvas/selecto-1.26.3.min.js` |
+
+공식 npm registry tarball 의 `dist/*.min.js` 를 **바이트 그대로** 두었다.
+재번들 · 재압축 · 재minify 하지 않았고 첫 줄의 MIT 배너도 그대로다. ESM
+빌드는 넣지 않았다 — bare specifier 가 남아 있고 이 저장소에는 번들러가
+없다(CLAUDE.md §1).
+
+정확한 크기 · SHA-256 · tarball integrity · 보관 규칙은
+[studio/vendor/home-canvas/README.md](../../studio/vendor/home-canvas/README.md)
+가 **단일 원천**이고, `studio/studio-home-canvas-vendor-e2e-test.mjs` 가
+그 표를 읽어 실제 파일과 대조한다. 값을 다른 문서에 복사해 적지 않는다.
+
+버전을 파일 이름에 적는다. 주소가 그대로면 버전이 바뀐 것을 아무도 눈치채지
+못하기 때문이다.
+
+### 13-2. 어떻게 받는가 — 부를 때만
+
+```js
+const { Moveable, Selecto } = await ensureHomeCanvasEditorVendors();
+```
+
+[studio/studio-home-canvas-vendor.js](../../studio/studio-home-canvas-vendor.js)
+가 주는 전역 하나다. 규칙:
+
+- 같은 문서에서 몇 번을 불러도 **UMD 당 요청 한 번**.
+- 동시에 불러도 **같은 Promise**.
+- 하나라도 실패하면 **어떤 파일이 실패했는지 적힌 Error** 로 거절한다.
+  실패한 Promise 는 표에 남기지 않는다 — 다시 시도할 수 있다.
+- 로드 뒤 전역 `Moveable` · `Selecto` 가 실제로 생겼는지 확인한다. 200 인
+  SPA fallback HTML 을 성공으로 보지 않으려는 것과 같은 관문이다.
+- 주소는 **절대 경로 + `?v=${APP_BUILD_VERSION}`**. 값을 복사해 적지 않고
+  `core/lib/build-version.js` 의 전역에서 읽는다(CLAUDE.md §4).
+
+★ `loadVersionedScripts()` 를 쓰지 않는다. 그 loader 넷은 전부
+`document.write` 라 문서를 **파싱하는 동안에만** 쓸 수 있고, 이 로더는
+사람이 편집을 켠 뒤에 불린다. 같은 일을 동적 `<script>` 로 하되 붙이는
+주소는 똑같다. **어떤 HTML 에도 고정 URL vendor `<script>` 를 만들지
+않는다**(테스트가 다섯 문서에서 이것을 검사한다).
+
+### 13-3. `cspNonce` — 부르는 쪽이 넘긴다
+
+두 라이브러리는 런타임에 `<style data-styled-id="…">` 를 만들어 붙인다.
+sandbox 프레임의 CSP 는 `style-src 'self' 'nonce-…'` 라(§12-6 · SANDBOX-1)
+nonce 를 넘기지 않으면 그 style 이 통째로 막힌다. 로더는 이것을 대신해 주지
+않는다 — **생성자에 `cspNonce` 를 넘기는 것은 부르는 쪽의 몫**이다.
+
+`studio/studio-home-canvas-vendor-e2e-test.mjs --only=nonce` 가 **배포되는 그
+`buildSandboxCsp()`** 로 만든 정책 아래에서 대조군 넷을 실측한다(2026-09-21).
+
+| 대조군 | Moveable nonce | Selecto nonce | style-src 위반 | 실측 결과 |
+| --- | --- | --- | ---: | --- |
+| `both` | 전달 | 전달 | **0** | 두 style 적용 · Moveable 핸들 **14×14** · Selecto 영역 `fixed` · `1px` 테두리 · `rgba(68,170,255,0.5)` · 드래그 정상 |
+| `moveableOnly` | 전달 | 미전달 | 1 | **Selecto** 의 style 만 막힘 |
+| `selectoOnly` | 미전달 | 전달 | 1 | **Moveable** 의 style 만 막힘 · 핸들 **91×0 으로 붕괴** |
+| `neither` | 미전달 | 미전달 | 2 | 둘 다 막힘 |
+
+귀속은 위반 **건수가 아니라** 각 `<style data-styled-id>` 요소의
+`el.sheet` 로 가른다. CSP 는 요소의 삽입이 아니라 **적용**을 막으므로 막힌
+style 은 DOM 에 남고 `sheet` 만 `null` 이 된다.
+
+금지한 것은 그대로다 — `unsafe-inline` 없음 · CSP 완화 없음 ·
+`document.createElement` monkey patch 없음 · UMD 파일 수정 없음 · 런타임
+style 에 사후적으로 nonce 를 심는 짓 없음.
+
+★ **Moveable 0.53.0 의 `cspNonce` 는 작동하지만 deprecated 다.** 그것이
+버전을 정확히 고정하는 이유다 — 근거는 이 패키지가 끌어오는
+`react-moveable@0.56.0` 의 `declaration/types.d.ts` 에 붙은 `@deprecated`
+이고, 대체 옵션은 확인되지 않았다. 버전을 올리면 그 옵션이 조용히 사라져
+프레임 안에서 핸들이 CSP 에 막힐 수 있으므로, 올리기 전에 위 대조군 넷을
+새 파일로 다시 돌린다.
+
+### 13-4. 지금 아무도 부르지 않는다
+
+`studio/index.html` 과 `studio/studio-lifecycle-scenario.html` 이 **로더
+한 파일**(3KB)을 읽는다. UMD 둘(약 300KB)은 `ensureHomeCanvasEditorVendors()`
+를 부른 뒤에야 온다. **이 라운드에는 부르는 곳이 없다.**
+
+| 화면 | 로더 | UMD 둘 |
+| --- | --- | --- |
+| 공개 `index.html` | 안 읽음 | **요청 0** |
+| 공개 native HOME | 안 읽음 | **요청 0** |
+| 공개 sandbox 프레임 | 안 읽음 | **요청 0** |
+| Studio(열기만) | 읽음 | **요청 0** |
+
+**공개 화면의 전송 비용 증가는 0 이다.** 운영 HOME Renderer(§12)는 vendor 의
+존재를 모른 채 그대로 돈다.
+
+### 13-5. sandbox 는 길만 열어 두었다
+
+`core/lib/skin-sandbox-server.js` 의 `SANDBOX_ALLOWED_PATHS` 에 **두 vendor
+JS 경로 정확히 두 줄**이 올라가 있다. 그래서 sandbox origin 에서 직접
+요청하면 올바른 Content-Type 으로 200 이 나오고(`?v=` 가 붙어도 같다 —
+allowlist 는 pathname 만 본다), 평상시 공개 sandbox 렌더에서는 **요청 자체가
+생기지 않는다.**
+
+**프레임 HTML 에 vendor `<script>` 를 정적으로 넣지 않았다.** 프레임 안의
+조건부 load 와 Studio→frame 메시지는 `HOME-CANVAS-SELECT-1` 의 일이다.
+
+★ 이것이 sandbox origin 에서 나가는 **유일한 `/studio/` 경로**다. 디렉터리를
+연 것이 아니라 파일 두 개를 적은 것이고, 로더 자신
+(`/studio/studio-home-canvas-vendor.js`) 과 `studio/studio-preview.js` 를
+비롯한 나머지 Studio 코드는 **여전히 404** 다. 그럴 수 있는 이유는 이 둘이
+Imory 코드가 아니라 재가공하지 않은 MIT third-party UMD 이기 때문이다 —
+우리 데이터도 인증도 화면 구조도 들어 있지 않다.

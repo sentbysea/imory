@@ -225,7 +225,34 @@ export const SANDBOX_ALLOWED_PATHS = [
   ====================================================== */
 
   "/posts/posts-body-shared.css",
-  "/posts/posts-body-blocks.css"
+  "/posts/posts-body-blocks.css",
+
+  /* =====================================================
+     HOME-CANVAS-VENDOR-1 — 캔버스 편집기가 쓸 Moveable · Selecto.
+
+     ★ 이 둘은 지금 **아무도 로드하지 않는다.** 프레임 문서에
+       <script> 가 없고, 공개 렌더도 편집기도 이것을 부르지 않는다.
+       직접 요청하면 200 으로 나가지만 평상시 sandbox 렌더에서는
+       요청 자체가 생기지 않는다. 실제 조건부 로드와 메시지는
+       HOME-CANVAS-SELECT-1 의 일이다.
+
+       미리 여는 이유는 하나다 — 프레임 안 편집을 켜는 순간
+       studio/studio-home-canvas-vendor.js 가 **이 절대 경로 그대로**
+       요청한다. allowlist 는 pathname 만 보므로 ?v= 는 판정에
+       끼어들지 않는다.
+
+     ★ 이것이 sandbox origin 에서 나가는 유일한 /studio/ 경로다.
+       디렉터리를 연 것이 아니라 **파일 두 개**를 적은 것이고,
+       studio/studio-preview.js 를 비롯한 나머지 Studio 코드는
+       여전히 404 다(posts 의 본문 CSS 둘과 정확히 같은 사정).
+       그럴 수 있는 이유는 이 둘이 Imory 코드가 아니라 재가공하지
+       않은 MIT third-party UMD 이기 때문이다 — 우리 데이터도,
+       인증도, 화면 구조도 들어 있지 않다.
+       출처 · 해시 · 보관 규칙: studio/vendor/home-canvas/README.md
+  ====================================================== */
+
+  "/studio/vendor/home-canvas/moveable-0.53.0.min.js",
+  "/studio/vendor/home-canvas/selecto-1.26.3.min.js"
 ];
 
 

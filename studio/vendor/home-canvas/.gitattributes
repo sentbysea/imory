@@ -1,0 +1,11 @@
+# 이 폴더의 vendor 파일은 **바이트 그대로** 보관한다.
+#
+# 이 저장소는 Windows 에서 core.autocrlf=true 로 작업한다 — 그대로 두면
+# git 이 checkout 때 LF 를 CRLF 로 바꾼다. 그러면 fresh clone 의 파일이
+# npm tarball 과 다른 바이트가 되고, README.md 에 적어 둔 SHA-256 이
+# 맞지 않게 된다(studio/studio-home-canvas-vendor-e2e-test.mjs 가 그 해시를
+# 실제로 검사한다).
+#
+# -text = 줄끝 변환을 하지 않는다. diff 는 계속 텍스트로 본다.
+*.min.js -text
+licenses/*.txt -text
