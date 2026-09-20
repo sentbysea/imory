@@ -1,7 +1,7 @@
 /* =========================================================
    SKIN — "이 요소를 고를 수 있는가" (classic script, 의존 없음)
 
-   기준 문서: docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md
+   기준 문서: docs/features/studio/history/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md
              IMORY_SANDBOX_SKIN_DESIGN.md §P (SANDBOX-6A)
 
    ---------------------------------------------------------

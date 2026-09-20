@@ -8,7 +8,7 @@
 >
 > 목적: HOME/CATEGORY/POST 세 화면이 결국 하나의 Skin이 담당하게 될 때, 그 세 화면이 주고받을 **데이터와 바인딩 계약**을 먼저 확정해서, 이후 실제 구현(별도 Phase/Slice)이 코드를 짜다가 계약 자체를 다시 뒤집는 일이 없게 한다.
 >
-> 이 문서는 **Skin이 받는 데이터(Context)와 바인딩**을 다룬다. 그 Skin이 화면에서 받는 **자리와 전환**(표시 공간·스크롤·라우팅·소유자 관리 진입·Preview 일치)은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)가 관리한다.
+> 이 문서는 **Skin이 받는 데이터(Context)와 바인딩**을 다룬다. 그 Skin이 화면에서 받는 **자리와 전환**(표시 공간·스크롤·라우팅·소유자 관리 진입·Preview 일치)은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)가 관리한다.
 
 ---
 
@@ -29,7 +29,7 @@
   - `home.recentPosts[]`: `{ id, title(마스킹됨), href, publishedAt, categoryName }`
   - `banners.items[]`: `{ id, imageUrl, href, alt }`
   - `images`: `{ [slotName]: url|null }` — 렌더링할 Skin Version의 `imageSlots[].name` 목록이 있는 슬롯만 키로 존재. 값이 없는 슬롯은 기본값이 있으면 그 값으로 채워진다(지금은 `profile` 슬롯 하나 — Settings의 `site_settings.avatar_url`, 아래 참고).
-  - **`profile.avatarUrl` / `images.profile` 우선순위(Settings 연결 라운드)**: ① 스킨이 `profile` 이미지 슬롯에 연결한 이미지 → ② Settings > PROFILE PICTURE가 저장한 `site_settings.avatar_url` → ③ `null`. `skin/skin-context.js`의 `buildSkinImageSlotDefaults()` + `buildSkinImages(names, values, defaults)`가 이 순서를 구현하고, Studio Preview도 같은 함수를 쓴다(`studio/studio-preview.js syncImageSlotsIntoCurrentContext`). PHASE 1A 1-2절의 "avatarUrl은 images.profile의 미러일 뿐"은 이 라운드에서 철회됐다 → [AI_SKIN_PHASE1A_DESIGN.md](./AI_SKIN_PHASE1A_DESIGN.md) 1-2절.
+  - **`profile.avatarUrl` / `images.profile` 우선순위(Settings 연결 라운드)**: ① 스킨이 `profile` 이미지 슬롯에 연결한 이미지 → ② Settings > PROFILE PICTURE가 저장한 `site_settings.avatar_url` → ③ `null`. `skin/skin-context.js`의 `buildSkinImageSlotDefaults()` + `buildSkinImages(names, values, defaults)`가 이 순서를 구현하고, Studio Preview도 같은 함수를 쓴다(`studio/studio-preview.js syncImageSlotsIntoCurrentContext`). PHASE 1A 1-2절의 "avatarUrl은 images.profile의 미러일 뿐"은 이 라운드에서 철회됐다 → [AI_SKIN_PHASE1A_DESIGN.md](../archive/2026-09/AI_SKIN_PHASE1A_DESIGN.md) 1-2절.
 - **데이터 출처**: `profiles`(nickname/bio/slug), `site_settings`(blog_title/favicon_url/avatar_url, key-value), `categories`(id/name/type/sort_order, `user_id` scope), `posts`(id/title/created_at/visibility/category_id, 최근 5개), `banners`(`category.type === "banner"`인 카테고리에만 연결).
 - **published Skin 렌더 진입점**: `get_published_skin(p_user_id)` RPC → `{ skin, schemaVersion, imageSlotValues }` → `schemaVersion !== 1`이면 즉시 폴백(모르는 버전을 부분 렌더하지 않음) → `buildSkinContext()` → `renderSkin({ container, skin, context, mode:"view" })`.
 
@@ -305,7 +305,7 @@ Post Viewer(실제 페이지 컨트롤러)가 `renderSkin()`으로 Skin을 먼�
 
 ## 8. Binding 문법 표 (v0.1 — 기존 5종 그대로, 신규 제안 1종 별도 표기)
 
-> **변경됨 → [AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md](./AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md) 1절.**
+> **변경됨 → [AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md](../archive/2026-09/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md) 1절.**
 > 재료 일치 라운드에서 `data-imory-kind`(종류 토큰 → `data-kind`)와
 > `data-imory-color`(색 → `--imory-color`) 두 종이 더해졌다. 이 표의 5종은
 > 그대로다.

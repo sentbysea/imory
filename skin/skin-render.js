@@ -702,7 +702,7 @@ let skinRenderInstanceCounter = 0;
 
    ★ 무엇이 문제였나
    Studio 자르기는 결과를 보통 CSS 규칙 둘로 저장한다(래퍼 = 프레임,
-   <img> = 사진, docs/ai-skin/AI_SKIN_PHASE_AI6D_IMAGE_CROP.md 2절).
+   <img> = 사진, docs/features/images/AI_SKIN_PHASE_AI6D_IMAGE_CROP.md 2절).
    그런데 스킨이 사진에
 
        .foe-photo img { width:100% !important; object-position:center 29% !important }

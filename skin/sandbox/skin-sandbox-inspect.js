@@ -2,7 +2,7 @@
    SKIN SANDBOX — ELEMENT INSPECTOR (frame 쪽, classic script)
 
    기준 문서: IMORY_SANDBOX_SKIN_DESIGN.md §P (SANDBOX-6A)
-             docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md
+             docs/features/studio/history/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md
 
    ---------------------------------------------------------
    ★ 이 파일이 하는 일

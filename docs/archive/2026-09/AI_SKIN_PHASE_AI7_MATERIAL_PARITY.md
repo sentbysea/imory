@@ -2,7 +2,7 @@
 
 > 이 문서는 이 라운드의 **기록**이다. 앞 라운드의 계약을 바꾼 지점은 "바뀐 것"에
 > 모아 두었고, 디자이너가 읽을 최신 계약은
-> [SKIN_DESIGNER_CONTRACT.md](../contracts/SKIN_DESIGNER_CONTRACT.md)에 있다.
+> [SKIN_DESIGNER_CONTRACT.md](../../contracts/SKIN_DESIGNER_CONTRACT.md)에 있다.
 
 ## 0. 무엇을 고쳤나
 
@@ -24,8 +24,8 @@
 
 ## 1. 새 바인딩 두 종 (renderer + sanitizer)
 
-근거: [skin/skin-render.js](../../skin/skin-render.js),
-[skin/skin-sanitize.js](../../skin/skin-sanitize.js)
+근거: [skin/skin-render.js](../../../skin/skin-render.js),
+[skin/skin-sanitize.js](../../../skin/skin-sanitize.js)
 
 | directive | 결과 | 왜 |
 | --- | --- | --- |
@@ -48,7 +48,7 @@ template·생성기·실제 사용자 스킨 어디에서도 나오지 않았다
 
 ## 2. typed navigation material
 
-근거: [skin/skin-context.js](../../skin/skin-context.js)
+근거: [skin/skin-context.js](../../../skin/skin-context.js)
 `resolveSkinNavIconKind()`
 
 `navigation.categories[]` / `postCategories[]` / … 의 각 항목과
@@ -66,7 +66,7 @@ post → "document"   gallery → "image"   highlight → "quote"   banner → "
 나간다 — 카테고리 목록으로 그리든 이 링크로 그리든 같은 아이콘을 쓸 수 있어야
 한다.
 
-기본 생성 스킨([skin/skin-generator.js](../../skin/skin-generator.js))은 이제
+기본 생성 스킨([skin/skin-generator.js](../../../skin/skin-generator.js))은 이제
 `data-imory-kind="item.iconKind"` + `[data-kind="..."]::before` 순수 CSS 도형으로
 아이콘을 그린다. `nth-child`도 glyph도 쓰지 않는다.
 
@@ -74,8 +74,8 @@ post → "document"   gallery → "image"   highlight → "quote"   banner → "
 
 ## 3. 루트 글이 사라지지 않게 — `category.showPostsList`
 
-근거: [skin/skin-context.js](../../skin/skin-context.js),
-[skin/skin-template.js](../../skin/skin-template.js)
+근거: [skin/skin-context.js](../../../skin/skin-context.js),
+[skin/skin-template.js](../../../skin/skin-template.js)
 `skinTemplateUsesRootPostList()`
 
 ### 3-1. 문제
@@ -98,8 +98,8 @@ post → "document"   gallery → "image"   highlight → "quote"   banner → "
 **(b) 스킨이 `category.posts`를 아예 안 그린다면** — 플랫폼이 **페이지 나누기를
 켜지 않는다**. `buildCategorySkinContext`의 `paginationActive` 조건에
 `options.supportsRootPostList !== false`가 더해졌고, 호출자
-([skin/skin-category.js](../../skin/skin-category.js),
-[studio/preview/preview-navigation.js](../../studio/preview/preview-navigation.js))가
+([skin/skin-category.js](../../../skin/skin-category.js),
+[studio/preview/preview-navigation.js](../../../studio/preview/preview-navigation.js))가
 `skinTemplateUsesRootPostList()`로 판정해 넘긴다. 갤러리·페이지네이션 때와 같은
 "그 재료를 실제로 그리는 스킨에서만 켠다" 규칙의 세 번째 적용이다.
 
@@ -109,9 +109,9 @@ post → "document"   gallery → "image"   highlight → "quote"   banner → "
 
 ## 4. 하이라이트 카드의 원문 위치와 색
 
-근거: [skin/skin-context.js](../../skin/skin-context.js)
+근거: [skin/skin-context.js](../../../skin/skin-context.js)
 `buildHighlightsSkinContext()`,
-[posts/view/posts-view-highlight-store.js](../../posts/view/posts-view-highlight-store.js)
+[posts/view/posts-view-highlight-store.js](../../../posts/view/posts-view-highlight-store.js)
 
 카드에 다음이 추가됐다.
 
@@ -130,22 +130,22 @@ post → "document"   gallery → "image"   highlight → "quote"   banner → "
 원본 카테고리)와 섞이지 않게 store 쪽 이름은 **`postFolderId`** 다.
 
 플랫폼 기본 하이라이트 template
-([skin/skin-template.js](../../skin/skin-template.js)
+([skin/skin-template.js](../../../skin/skin-template.js)
 `getDefaultHighlightsTemplate()`)도 이제 `data-imory-color="item.color"`로
 카드 강조선을 그 하이라이트의 색과 잇고, 원문 위치를 `sourcePathLabel`로 그린다.
 
 Studio의 샘플 카드
-([studio/preview/preview-navigation.js](../../studio/preview/preview-navigation.js))도
+([studio/preview/preview-navigation.js](../../../studio/preview/preview-navigation.js))도
 **같은 shape**으로 맞췄다(폴더 안의 글 한 장 포함).
 
 ---
 
 ## 4-1. HOME에 놓는 발췌 카드 — `home.highlights`
 
-근거: [skin/skin-context.js](../../skin/skin-context.js)
+근거: [skin/skin-context.js](../../../skin/skin-context.js)
 `buildHomeSkinContext()` · `createSkinHighlightCardBuilder()` ·
 `fetchSkinHomeHighlights()`,
-[skin/skin-template.js](../../skin/skin-template.js)
+[skin/skin-template.js](../../../skin/skin-template.js)
 `skinTemplateUsesHomeHighlights()`
 
 ### 문제
@@ -203,7 +203,7 @@ Preview는 이 값을 넘기지 않아 항상 조회한다** — 편집 중에 �
 (`buildStudioHomeHighlightSampleContext()`) — 읽기에 성공했는데 0건일 때만이고,
 `hasError`면 절대 끼우지 않는다.
 
-기본 생성 스킨([skin/skin-generator.js](../../skin/skin-generator.js))의 HOME도
+기본 생성 스킨([skin/skin-generator.js](../../../skin/skin-generator.js))의 HOME도
 이제 이 자리를 갖는다(`.skin-home-highlight`, `featured` repeat +
 `data-imory-color`).
 
@@ -211,10 +211,10 @@ Preview는 이 값을 넘기지 않아 항상 조회한다** — 편집 중에 �
 
 ## 5. 검증 — `auditSkinPackageMaterials()`
 
-근거: [skin/skin-template.js](../../skin/skin-template.js)
+근거: [skin/skin-template.js](../../../skin/skin-template.js)
 
-Import([skin/skin-package-import.js](../../skin/skin-package-import.js) → 결과에
-`warnings[]`)와 Save([studio/studio-preview.js](../../studio/studio-preview.js) →
+Import([skin/skin-package-import.js](../../../skin/skin-package-import.js) → 결과에
+`warnings[]`)와 Save([studio/studio-preview.js](../../../studio/studio-preview.js) →
 토스트/콘솔)가 **같은 함수**를 쓴다. 네 가지를 경고한다.
 
 1. `supports.highlights`(또는 레거시 `supports.memos`)가 true인데 실제
@@ -233,7 +233,7 @@ Import([skin/skin-package-import.js](../../skin/skin-package-import.js) → 결�
 
 ## 6. AI 경로
 
-근거: [functions/api/skin-ai.js](../../functions/api/skin-ai.js)
+근거: [functions/api/skin-ai.js](../../../functions/api/skin-ai.js)
 
 ### 6-1. 버그 — 하이라이트 template이 결과에서 사라졌다
 

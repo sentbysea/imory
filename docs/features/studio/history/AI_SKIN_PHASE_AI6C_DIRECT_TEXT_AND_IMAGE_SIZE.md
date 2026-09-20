@@ -107,7 +107,7 @@ DOM 노드도 HTML 문자열도 올라가지 않는다(AI-6A 계약 유지).
   규칙에는 항상 `max-width: 100%`가 함께 들어간다(두 겹).
 
   > **변경됨 → 재료 일치 라운드
-  > ([AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md](./AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md)).**
+  > ([AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md](../../../archive/2026-09/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md)).**
   > 상한을 부모 안쪽 폭 그 자체로 두었더니, 실제 사이트보다 좁은 Preview
   > (Studio 사이드바·창 폭·Mobile 축소)에서는 **꽉 찬 너비를 만들 방법이
   > 아예 없었다** — 공개 화면에서 755px까지 늘어나는 이미지가 Studio
@@ -116,7 +116,7 @@ DOM 노드도 HTML 문자열도 올라가지 않는다(AI-6A 계약 유지).
   > "자리에 꽉 참"이 될 뿐이다), 지금 상한은 `부모 폭 × 2`(최소 1200px,
   > 절대 상한 2000px)다. 부모 폭은 상한이 아니라 **안내**로만 쓴다 —
   > 슬라이더 아래에 "지금 미리보기에서는 N px이면 자리에 꽉 차요"가 나온다
-  > ([studio/inspector/studio-inspector-image-size.js](../../studio/inspector/studio-inspector-image-size.js)
+  > ([studio/inspector/studio-inspector-image-size.js](../../../../studio/inspector/studio-inspector-image-size.js)
   > `studioInspectorSizeMax` / `studioInspectorSizeFullWidth`).
 - **초기값**은 "지금 화면에 실제로 보이는 폭"이다. 이미 이 요소에 크기
   규칙이 있으면 그 값이 곧 보이는 폭이므로 둘은 자연히 같다.
@@ -237,7 +237,7 @@ mock 하네스 위에서만 확인했다. 터치 입력은 `pointerdown/move/up`
    **→ 해소됨**: STUDIO-SHELL-1 이 working draft 전체의 여러 단계 기록(상단
    ↶ ↷)을 만들었고, STUDIO-SHELL-1.1 이 Inspector·AI 패널의 1단계
    "되돌리기" 버튼을 걷어 그 기록 하나로 합쳤다 →
-   [IMORY_STUDIO_SHELL_DESIGN.md](../features/studio/IMORY_STUDIO_SHELL_DESIGN.md) §4.
+   [IMORY_STUDIO_SHELL_DESIGN.md](../IMORY_STUDIO_SHELL_DESIGN.md) §4.
 2. **반복 항목**의 임시 미리보기는 클릭한 그 항목 하나에만 보이고, 확정하면
    같은 자리 전체에 적용된다(팝오버 안내 문구 그대로).
 3. **세로 크기만 따로 정하기**는 없다. 이번 계약은 "가로 하나 + 지금 보이는

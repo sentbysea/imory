@@ -4,9 +4,9 @@ Studio 이미지 자르기(확대 · 위치 · 프레임)의 결과가 **스킨 
 `!important` 에 밀려 화면에 나타나지 않던 문제**를 고친 라운드의 기준
 문서다. 자르기 자체의 데이터 모델은 앞 라운드 문서를 따른다.
 
-- 자르기 모델 · 래퍼 · 두 규칙: [AI_SKIN_PHASE_AI6D_IMAGE_CROP.md](../ai-skin/AI_SKIN_PHASE_AI6D_IMAGE_CROP.md)
-- 프레임 좌표 · 구도 이동 기어비: [AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md](../ai-skin/AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md)
-- 자유 비율: [AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md](../ai-skin/AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md)
+- 자르기 모델 · 래퍼 · 두 규칙: [AI_SKIN_PHASE_AI6D_IMAGE_CROP.md](../features/images/AI_SKIN_PHASE_AI6D_IMAGE_CROP.md)
+- 프레임 좌표 · 구도 이동 기어비: [AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md](../features/images/AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md)
+- 자유 비율: [AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md](../features/images/AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md)
 
 ---
 

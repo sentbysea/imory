@@ -7,7 +7,7 @@
 
 관련: [AI_SKIN_PHASE1A_DESIGN.md](./AI_SKIN_PHASE1A_DESIGN.md)
 (Skin Context v0.1, `navigation` 네임스페이스 원설계),
-[AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
+[AI_SKIN_PHASE1C_PAGE_CONTRACT.md](../../contracts/AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
 (HOME/CATEGORY/POST 세 page.type과 base namespace 공유 구조),
 [AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md](./AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md)
 (직전 Slice, 동일한 "감사 후 최소 계약" 방식론).
@@ -193,12 +193,12 @@ Slice는 이 확장이 **막혀있지 않다는 것**만 확인했다.
 
 ## 7. 변경 파일
 
-- [skin/skin-context.js](../../skin/skin-context.js) — `buildBaseSkinContext()`에
+- [skin/skin-context.js](../../../skin/skin-context.js) — `buildBaseSkinContext()`에
   `navigation.home`/`navigation.postCategories`/
   `navigation.bannerCategories` 추가. `siteTitle`을 지역 변수로
   뽑아 `site.title`과 `navigation.home.name`이 동일 source를
   재사용하게 정리. 파일 상단 주석에 이번 Slice 이력 기록.
-- [skin/skin-page-context-test.html](../../skin/skin-page-context-test.html) —
+- [skin/skin-page-context-test.html](../../../skin/skin-page-context-test.html) —
   신규 필드에 대한 assertion 9건 추가(HOME href/name/enabled,
   post/banner 필터 정확성, item shape 동일성, 빈 배열 정상 처리,
   다른 owner 혼입 없음, 기존 categories 필드 회귀 없음).

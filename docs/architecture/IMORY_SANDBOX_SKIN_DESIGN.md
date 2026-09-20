@@ -1876,7 +1876,7 @@ GALLERY   /:slug/category/:id  (category.type = "gallery")
 (`id`/`name`/`type`/`href`/`items[]{id,name,alt,href,imageUrl}`).
 `count`/`isEmpty` 같은 편의 칸을 sandbox 쪽에만 만들지 **않는다** —
 만들면 같은 스킨이 native 와 sandbox 에서 다르게 그려진다
-(`docs/ai-skin/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md`).
+(`docs/archive/2026-09/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md`).
 
 `highlights` 는 `view`/`allHref`/`foldersHref`/라벨/`cards[]`/`folders[]`/
 `folder`/`showCards`/`hasError` 를 옮기고, `count`·`isEmpty` 는
