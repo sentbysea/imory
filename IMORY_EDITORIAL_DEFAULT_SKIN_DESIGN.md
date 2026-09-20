@@ -329,7 +329,7 @@ skin/skin-sides.js 에 있다.
 | `studio/studio-editorial-default-e2e-test.mjs` chromium / webkit | 52/52 · 52/52 |
 | `studio/studio-crop-priority-e2e-test.mjs --only=editorial` chromium / webkit | 12/12 · 12/12(webkit 첫 회 1건 — 프레임 폭이 자리 잡기 전에 읽은 것. 읽기를 "두 번 같을 때까지"로 고친 뒤 반복 통과) |
 
-회귀는 CLAUDE.md 표의 각 행과 커밋 메시지를 본다.
+회귀는 [docs/TESTS.md](./docs/TESTS.md) 표의 각 행과 커밋 메시지를 본다.
 
 ## 14. 남은 차이
 
