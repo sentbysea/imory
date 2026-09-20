@@ -144,6 +144,9 @@ function clearStudioInspectorSelection() {
   studioInspectorResizable =
     false;
 
+  studioInspectorBoxResizable =
+    false;
+
   paintStudioInspectorHandles(null);
 
   if (studioInspectorSelectBox) {
@@ -1061,6 +1064,12 @@ if (typeof window !== "undefined") {
         composing: studioInspectorComposing,
         resizable: studioInspectorResizable,
         dragging: !!studioInspectorDrag,
+
+        /* COMMON-SELECT-BOX-1 — 이미지가 아닌 상자의 크기 조절.
+           손잡이는 같은 자리지만 주인이 다르다(위 resizable 은
+           이미지, 이쪽은 상자). 끄는 중인지도 함께 본다. */
+        boxResizable: studioInspectorBoxResizable,
+        boxDragging: !!studioInspectorBoxDrag,
 
         /* 이미지 자르기 라운드 — 확정 전 값. "취소/Escape/선택
            해제 뒤에 자르기 임시 편집이 남지 않는다"를 테스트가

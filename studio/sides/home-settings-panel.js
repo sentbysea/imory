@@ -103,6 +103,29 @@
     const wrap = el("div", "studio-sides-panel studio-home-settings");
 
 
+    /* --- 스킨 업데이트 (EDITORIAL-EXISTING-UPGRADE-1) ----- */
+
+    /* 이미 만들어 둔 아이모리 기본 스킨에 나중에 생긴 기능을 넣어
+       준다. 전체를 갈아끼우는 Import 가 아니라 모자란 구조만 채우고,
+       한 번 누르면 채울 것이 없어져 칸 자체가 사라진다(= 두 번 눌러
+       중복되지 않는다). 되돌리기는 상단 ↶ 한 칸이다. */
+
+    const upgrade = block("스킨 업데이트");
+
+    ui.upgrade = upgrade;
+
+    ui.upgradeNote = el("p", "studio-sides-help studio-home-upgrade-note");
+    ui.upgradeNote.setAttribute("aria-live", "polite");
+    upgrade.appendChild(ui.upgradeNote);
+
+    ui.upgradeButton = el("button", "studio-home-upgrade-button", "이 스킨 업데이트");
+    ui.upgradeButton.type = "button";
+    ui.upgradeButton.addEventListener("click", () => runUpgrade());
+    upgrade.appendChild(ui.upgradeButton);
+
+    wrap.appendChild(upgrade);
+
+
     /* --- 모바일 ------------------------------------------ */
 
     const mobile = block("모바일");
@@ -279,6 +302,74 @@
 
 
   /* =========================================================
+     스킨 업데이트 (EDITORIAL-EXISTING-UPGRADE-1)
+
+     "무엇을 채울 수 있는가"는 Studio 가 판단하지 않는다 — 순수
+     함수 하나가 답하고(describeImoryEditorialUpgrade) 여기는 그
+     결과를 사람 말로 옮길 뿐이다. 적용도 한 함수를 부르는 것이
+     전부라, 이 패널이 스킨의 HTML/CSS 를 직접 만지는 일이 없다.
+  ========================================================== */
+
+  function upgradePlan() {
+
+    return typeof window.getStudioEditorialUpgrade === "function"
+      ? window.getStudioEditorialUpgrade()
+      : null;
+
+  }
+
+
+  function runUpgrade() {
+
+    if (typeof window.applyStudioEditorialUpgrade !== "function") {
+      return;
+    }
+
+    const result =
+      window.applyStudioEditorialUpgrade();
+
+    if (!result || !result.ok) {
+      ui.status.textContent = (result && result.message) || "업데이트하지 못했어요.";
+      return;
+    }
+
+    ui.status.textContent =
+      `${result.steps.join(" · ")}을(를) 넣었어요. 되돌리려면 위쪽 되돌리기를 한 번 누르세요.`;
+
+    sync();
+
+  }
+
+
+  function syncUpgrade() {
+
+    const plan =
+      upgradePlan();
+
+    /* 아이모리 기본 스킨이 아니면 칸 자체를 두지 않는다 — 남의
+       스킨에 "업데이트" 버튼이 서 있으면 안 된다. */
+    ui.upgrade.hidden =
+      !plan || !plan.isEditorial || (!plan.applicable && plan.upToDate);
+
+    if (ui.upgrade.hidden) {
+      ui.upgradeButton.hidden = true;
+      ui.upgradeNote.textContent = "";
+      return;
+    }
+
+    ui.upgradeButton.hidden = !plan.applicable;
+    ui.upgradeButton.disabled = !plan.applicable;
+
+    ui.upgradeNote.textContent =
+      plan.applicable
+        ? `이 스킨에는 아직 ${plan.steps.map((step) => step.name).join(" · ")}이(가) 없어요. ` +
+          "지금 사진 · 색 · D-day · 단 구성과 직접 고친 부분은 그대로 두고 그 기능만 넣습니다."
+        : plan.reason;
+
+  }
+
+
+  /* =========================================================
      HOME 제목 — 글자 제목과 로고 (EDITORIAL-CUSTOMIZATION-1)
 
      따로 저장하는 "모드"가 없다. 슬롯이 비어 있으면 글자 제목이고
@@ -406,6 +497,10 @@
         : null;
 
     const lock = !state;
+
+
+    /* 스킨 업데이트 */
+    syncUpgrade();
 
 
     /* 모바일 */

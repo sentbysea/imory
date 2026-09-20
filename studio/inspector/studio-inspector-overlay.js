@@ -371,6 +371,8 @@ function buildStudioInspectorLayer() {
   studioInspectorHandles =
     STUDIO_INSPECTOR_HANDLE_CORNERS
       .concat(STUDIO_INSPECTOR_HANDLE_SIDES)
+      /* COMMON-SELECT-BOX-1 — 이미지가 아닌 상자의 위·아래 손잡이 */
+      .concat(STUDIO_INSPECTOR_HANDLE_VSIDES)
       .map((corner) => {
 
       const handle =
@@ -388,9 +390,16 @@ function buildStudioInspectorLayer() {
       handle.hidden =
         true;
 
+      /* 이미지 크기 조절과 상자 크기 조절이 같은 손잡이에서
+         시작한다 — 어느 쪽인지는 box.js 의 dispatcher 가 가른다
+         (COMMON-SELECT-BOX-1). 그 파일이 없는 문서에서는 예전처럼
+         이미지 드래그만 시작한다. */
       handle.addEventListener(
         "pointerdown",
-        (event) => beginStudioInspectorHandleDrag(event, corner, handle)
+        (event) =>
+          (typeof beginStudioInspectorAnyHandleDrag === "function"
+            ? beginStudioInspectorAnyHandleDrag
+            : beginStudioInspectorHandleDrag)(event, corner, handle)
       );
 
       /* move/up은 document에서 받는다(아래 리스너) — 포인터 캡처가
@@ -709,7 +718,7 @@ function paintStudioInspectorHandles(rect, visibleRect) {
   }
 
   const mapped =
-    (studioInspectorResizable && !studioInspectorCropDraft)
+    ((studioInspectorResizable || studioInspectorBoxResizable) && !studioInspectorCropDraft)
       ? studioInspectorMapRectRaw(rect)
       : null;
 
@@ -731,21 +740,34 @@ function paintStudioInspectorHandles(rect, visibleRect) {
     const corner =
       handle.dataset.inspectorHandle;
 
-    /* 좌우 손잡이는 "사진 영역 너비"를 고칠 수 있을 때만 나온다
-       (EDITORIAL-CUSTOMIZATION-1). 그 밖에는 모서리 넷 그대로다. */
+    /* 좌우 손잡이는 "사진 영역 너비"를 고칠 수 있을 때
+       (EDITORIAL-CUSTOMIZATION-1)와 이미지가 아닌 상자를 끌 수 있을
+       때(COMMON-SELECT-BOX-1) 나온다. 위·아래 손잡이는 상자에만
+       나온다 — 이미지의 높이는 비율이 정한다. */
     const isSide =
       STUDIO_INSPECTOR_HANDLE_SIDES.indexOf(corner) !== -1;
 
+    const isVSide =
+      STUDIO_INSPECTOR_HANDLE_VSIDES.indexOf(corner) !== -1;
+
     if (
       isSide &&
+      !studioInspectorBoxResizable &&
       !(typeof studioInspectorSizeOwner === "function" && studioInspectorSizeOwner())
     ) {
       handle.hidden = true;
       return;
     }
 
+    if (isVSide && !studioInspectorBoxResizable) {
+      handle.hidden = true;
+      return;
+    }
+
     const x =
-      corner.indexOf("w") === -1 ? mapped.right : mapped.left;
+      isVSide
+        ? (mapped.left + mapped.right) / 2
+        : (corner.indexOf("w") === -1 ? mapped.right : mapped.left);
 
     const y =
       isSide

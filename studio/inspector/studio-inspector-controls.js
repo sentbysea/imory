@@ -372,7 +372,10 @@ function appendStudioInspectorRow(label, controlNode, clearHandler) {
 
   }
 
-  studioInspectorFields.appendChild(row);
+  /* COMMON-SELECT-BOX-1 — "색상 · 꾸미기" 절이 열려 있으면 그
+     안쪽 상자에 붙는다(studio-inspector-box.js). 평소에는 null 이라
+     지금까지와 같은 자리다. */
+  (studioInspectorFieldTarget || studioInspectorFields).appendChild(row);
 
 }
 
@@ -423,6 +426,23 @@ function studioInspectorClearIf(hasValue, handler) {
 }
 
 
+/* COMMON-SELECT-BOX-1 — 크기 · 자리 · 여백 · 정렬 · 테두리의 행은
+   studio/inspector/studio-inspector-box.js 가 그린다. 이름으로만
+   이어 두어 그 파일이 없는 문서에서도 폼 전체가 멈추지 않는다. */
+const STUDIO_INSPECTOR_BOX_RENDERERS = {
+  boxWidth: "renderStudioInspectorBoxWidth",
+  boxHeight: "renderStudioInspectorBoxHeight",
+  boxPlace: "renderStudioInspectorBoxPlace",
+  boxAlign: "renderStudioInspectorBoxAlign",
+  boxPad: "renderStudioInspectorBoxPad",
+  boxSpace: "renderStudioInspectorBoxSpace",
+  boxBorder: "renderStudioInspectorBoxBorder",
+  boxRadius: "renderStudioInspectorBoxRadius",
+  borderColor: "renderStudioInspectorBorderColor",
+  details: "renderStudioInspectorDetails"
+};
+
+
 function renderStudioInspectorControl(spec, info, declarations, resolved) {
 
   if (spec.type === "section") {
@@ -444,6 +464,22 @@ function renderStudioInspectorControl(spec, info, declarations, resolved) {
   if (spec.type === "order") {
 
     renderStudioInspectorOrder(spec, resolved);
+
+    return;
+
+  }
+
+  /* COMMON-SELECT-BOX-1 — 크기 · 자리 · 여백 · 정렬 · 테두리
+     (studio/inspector/studio-inspector-box.js) */
+  const boxRenderer =
+    STUDIO_INSPECTOR_BOX_RENDERERS[spec.type];
+
+  if (boxRenderer) {
+
+    /* 상자 폼 파일이 없는 문서(옛 하네스)에서는 그 행만 건너뛴다 */
+    if (typeof window[boxRenderer] === "function") {
+      window[boxRenderer](spec, info, declarations, resolved);
+    }
 
     return;
 
@@ -787,6 +823,8 @@ function renderStudioInspectorPopover() {
 
     studioInspectorResizable = false;
 
+    studioInspectorBoxResizable = false;
+
     /* LAYOUT-1 — 이동 손잡이 자격도 여기서 한 번만 정한다
        (좌표 칠하기가 매번 다시 판단하지 않는 이유는
        studio/inspector/studio-inspector-layout.js
@@ -823,6 +861,13 @@ function renderStudioInspectorPopover() {
        실측값(자연 크기)이 오지 않으므로 슬라이더도 모서리 드래그도
        기준을 세울 수 없다(아래 sandboxImageNote). */
     !studioInspectorRemoteOverlay;
+
+  /* COMMON-SELECT-BOX-1 — 이미지가 아닌 상자도 손잡이로 끈다.
+     실측(display)이 "이 요소에 너비가 듣는가"를 답한다. */
+  studioInspectorBoxResizable =
+    !studioInspectorResizable &&
+    typeof studioInspectorBoxInfo === "function" &&
+    studioInspectorBoxInfo(resolved.info, resolved).canSize;
 
   studioInspectorMovable =
     typeof resolveStudioInspectorMovable === "function" &&
@@ -897,6 +942,11 @@ function renderStudioInspectorPopover() {
 
   studioInspectorFields.innerHTML =
     "";
+
+  /* 접힘 절의 상자는 폼과 함께 사라졌다 — 다음 행부터는 다시
+     폼 자신에 붙는다(COMMON-SELECT-BOX-1). */
+  studioInspectorFieldTarget =
+    null;
 
   studioInspectorFields.hidden =
     !studioInspectorEditingOpen || directEditBlocked;

@@ -1376,6 +1376,23 @@ function inspectorMetricsOf(el) {
     fontSize:
       Math.round(parseFloat(window.getComputedStyle(el).fontSize) || 0),
 
+    /* =====================================================
+       COMMON-SELECT-BOX-1 — 이 요소가 지금 **어떤 상자인가**
+
+       크기 · 상자 위치 · 내용 정렬 · 여백이 실제로 듣는지는
+       화면에서 잰 display/position 이 정한다(짐작하지 않는다):
+
+         inline      너비 · 자리 · 안쪽 여백이 듣지 않는다
+         absolute    바깥 간격(margin)이 뜻을 갖지 않는다
+         flex/grid   내용 정렬이 text-align 이 아니라 align 계열이다
+
+       Studio 는 이 셋만 보고 "이 요소에 실제로 작동하는 설정"만
+       그린다(studio/inspector/studio-inspector-box.js).
+    ====================================================== */
+    display: String(window.getComputedStyle(el).display || ""),
+    position: String(window.getComputedStyle(el).position || ""),
+    flexDirection: String(window.getComputedStyle(el).flexDirection || ""),
+
     /* EDITORIAL-CUSTOMIZATION-1 — 사진의 폭을 정하는 바깥 상자.
        자르지 않은 사진에서만 본다(자른 사진의 주인은 프레임이다).
        Studio 는 이 값이 있을 때 "사진 영역 너비"를 그 상자에 쓴다. */
@@ -1919,6 +1936,20 @@ function pinInspectorCropFrame(wrapper, anchor) {
 }
 
 
+/* COMMON-SELECT-BOX-1 — 임시 미리보기가 받는 상자 선언.
+   부모(studio/studio-preview.js INSPECTOR_PREVIEW_STYLE_PROPERTIES)가
+   이미 한 번 걸렀고, 여기서도 아는 이름과 모양만 받는다. */
+const INSPECTOR_PREVIEW_BOX_PROPERTIES = [
+  "width", "max-width", "height", "min-height",
+  "padding-top", "padding-right", "padding-bottom", "padding-left",
+  "margin-top", "margin-right", "margin-bottom", "margin-left",
+  "border", "border-radius",
+  "text-align", "justify-content", "align-items", "justify-items", "align-content"
+];
+
+const INSPECTOR_PREVIEW_BOX_VALUE = /^[0-9a-z.%#(), -]{1,40}$/i;
+
+
 function applyInspectorPreview(data) {
 
   const selected =
@@ -1970,6 +2001,21 @@ function applyInspectorPreview(data) {
     if (typeof data.style["font-size"] === "string") {
       selected.style.fontSize = data.style["font-size"];
     }
+
+    /* COMMON-SELECT-BOX-1 — 크기 · 여백 · 정렬은 확정 규칙에
+       !important 가 붙는다(studio-inspector-box-model.js 머리말).
+       끄는 동안 보이는 그림이 확정 뒤와 같으려면 임시 선언도 같은
+       무게여야 한다. 아는 이름만 받는다. */
+    INSPECTOR_PREVIEW_BOX_PROPERTIES.forEach((property) => {
+
+      const value =
+        data.style[property];
+
+      if (typeof value === "string" && INSPECTOR_PREVIEW_BOX_VALUE.test(value)) {
+        selected.style.setProperty(property, value, "important");
+      }
+
+    });
 
   }
 

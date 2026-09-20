@@ -564,3 +564,56 @@ Studio 전용 임시 CSS 는 없다. 공개 화면은 같은 SkinPackage 를 같
 - **실기기(iOS Safari)** — Playwright WebKit 으로만 보았다.
 - **실제 원화 · 실제 로고 PNG** — 테스트는 실행 때 만드는 색 SVG 를
   쓴다. 사용자가 올릴 투명 PNG 로의 확인은 배포 뒤 주인이 한다.
+
+---
+
+## 22. 이미 만들어진 스킨 올려 주기 (EDITORIAL-EXISTING-UPGRADE-1)
+
+**무엇이 문제였나.** §17(카테고리 줄 글자 크기)과 §18(HOME 제목 로고)이 더한
+것은 Studio 의 코드가 아니라 **그 스킨의 구조**에 들어 있다 — `.ied-nav-list`
+가 크기를 갖고 `.ied-nav-link` 가 `1em` 으로 물려받는 CSS, 그리고 `title_logo`
+이미지 슬롯과 제목 자리의 로고/글자 두 갈래. 그래서 37dee90 **뒤에 새로 만든**
+스킨에만 기능이 있고, 그 전에 만들어 둔 스킨에서는 Layout 패널의 그 칸이 잠긴
+채로 남는다. 전체 JSON 을 다시 Import 하면 사진 · 색 · D-day · 단 구성 ·
+직접 편집이 전부 날아간다.
+
+**현재 구현.** Studio 의 HOME 설정 맨 위에 "스킨 업데이트" 한 칸이 선다.
+채울 것이 없으면 **칸 자체가 없다** — 평소에는 보이지 않는다.
+
+**판정(임의의 사용자 스킨에는 절대 적용하지 않는다).** 네 가지가 모두 맞을
+때만 아이모리 기본 스킨으로 본다 — `metadata.generatedBy` 가
+`imory-editorial-default-v2` · HOME html 에 표식 넷
+(`ied ied-page--home` · `ied-sheet ied-home` · `ied-mast` · `ied-nav-list`) ·
+CSS 에 `--ied-bg: var(--imory-color-background` · `.ied-nav-list` 와
+`.ied-nav-link` 규칙. 하나라도 어긋나면 "여기서 올려 줄 수 없어요"로 끝난다.
+
+**무엇을 넣을지는 짓지 않는다.** `createImoryEditorialDefaultSkin()` 이 만든
+**오늘의 기본 스킨**에서 그 조각(로고 마크업 · 로고 CSS 절 · `title_logo`
+슬롯)을 떼어 쓴다. 같은 문자열을 두 곳에 적어 두면 한쪽만 고쳐지는 날이 온다.
+
+**화면은 한 픽셀도 바뀌지 않는다.** 카테고리 줄 단계는 링크에 있던 크기를
+**그대로 줄로 옮기고** 링크를 `1em` 으로 바꾼다(계산된 크기가 같다). 로고
+단계는 슬롯이 비어 있는 동안 지금까지와 똑같이 글자 제목을 보여 준다.
+
+**무엇을 건드리지 않는가.** `templates` 를 갈아끼우지 않는다 — HOME 의 `html`
+한 칸과 `css` · `imageSlots` 만 바뀌고 `category` · `post` · `regions`(사진 ·
+색 · D-day · 단 구성) · `metadata` · `renderMode` · `js` 는 들어온 그대로
+나간다. 원래 `<h1>` 의 속성은 직접 편집 식별자까지 한 글자도 안 바뀐다.
+
+**되돌리기 · 두 번 누르기.** 적용은 Studio 의 Import 와 **같은 한 걸음**이다
+(`applyImportedSkinPackage`) — 기록 한 칸 · dirty · Preview 다시 그리기 ·
+슬롯 정리가 이미 있는 길을 그대로 타고, 상단 ↶ 한 번이면 손대기 전으로
+돌아온다. DB 에는 손대지 않는다(실제 기록은 Save 가 할 때뿐이다). 각 단계는
+"이미 있는가"를 먼저 물으므로 한 번 넣으면 칸이 사라진다.
+
+**반쯤 고친 스킨을 만들지 않는다.** 넣을 조각이 없거나 제목 자리를 못 찾으면
+그 단계는 없는 것으로 두고, 이유를 사람 말로 돌려준다.
+
+**파일.** `skin/skin-editorial-upgrade.js`(`describeImoryEditorialUpgrade` —
+순수 함수) · `studio/studio-preview.js`(`getStudioEditorialUpgrade` /
+`applyStudioEditorialUpgrade`) · `studio/sides/home-settings-panel.js`(칸).
+
+**테스트.** `node skin/skin-editorial-upgrade-test.mjs` — fixture 를 지어내지
+않고 **45a576b(EDITORIAL-CUSTOMIZATION-1 직전 커밋)의 생성기를 git 에서 꺼내**
+그때의 스킨을 만들어 돌린다(판정 · 두 단계 · 넣은 결과 · 주인의 설정과 직접
+편집 보존 · 두 번 해도 같음).

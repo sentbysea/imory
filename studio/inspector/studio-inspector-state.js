@@ -219,6 +219,18 @@ let studioInspectorDrag = null;
 
 let studioInspectorResizable = false;
 
+/* COMMON-SELECT-BOX-1 — 지금 선택이 **이미지가 아닌 상자**이고
+   가로·세로를 손잡이로 끌 수 있는가. studioInspectorResizable 과
+   같은 이유로 폼을 다시 그릴 때 한 번만 정한다. */
+let studioInspectorBoxResizable = false;
+
+/* 그 상자를 끌고 있는 중인 정보(studio-inspector-box.js) */
+let studioInspectorBoxDrag = null;
+
+/* 지금 행을 붙일 자리. 보통은 studioInspectorFields 자신이고,
+   "색상 · 꾸미기" 접힘 절이 열리면 그 안쪽 상자가 된다. */
+let studioInspectorFieldTarget = null;
+
 let studioInspectorSizeRange = null;
 
 let studioInspectorSizeNumber = null;
@@ -311,6 +323,10 @@ const STUDIO_INSPECTOR_HANDLE_CORNERS = ["nw", "ne", "sw", "se"];
    모서리와 달리 가로 한 축만 바꾼다(높이는 스킨이 정한 비율이 따라
    온다). 사진 영역이 아닌 선택에서는 늘 숨어 있다. */
 const STUDIO_INSPECTOR_HANDLE_SIDES = ["w", "e"];
+
+/* COMMON-SELECT-BOX-1 — 이미지가 아닌 상자의 위·아래 손잡이.
+   세로 한 축만 바꾼다. 상자 크기를 끌 수 없는 선택에서는 숨는다. */
+const STUDIO_INSPECTOR_HANDLE_VSIDES = ["n", "s"];
 
 /* 자유 비율 자르기의 핸들 — 네 변 가운데와 네 모서리.
 

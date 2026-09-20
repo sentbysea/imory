@@ -312,3 +312,36 @@
 .studio-home-status {
   padding-top: 8px;
 }
+
+
+/* =========================================================
+   스킨 업데이트 (EDITORIAL-EXISTING-UPGRADE-1)
+
+   이미 만들어 둔 기본 스킨에 나중에 생긴 기능을 넣는 한 칸.
+   채울 것이 없으면 칸 자체가 사라지므로 평소에는 보이지 않는다.
+========================================================== */
+
+.studio-home-upgrade-button {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--system-accent-border, #e6b7c8);
+  border-radius: var(--imory-radius-200, 8px);
+  background: var(--system-accent-soft, #fdf1f5);
+  color: var(--system-accent-hover, #c66f8e);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.studio-home-upgrade-button:disabled {
+  border-color: var(--system-border, #eeeeee);
+  background: var(--system-bg, #ffffff);
+  color: var(--system-text-muted, #999999);
+  cursor: default;
+}
+
+.studio-home-upgrade-note {
+  margin: 0;
+}

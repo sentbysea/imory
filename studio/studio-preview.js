@@ -1802,6 +1802,51 @@ function setStudioHomeSetting(kind, value) {
 
 
 /* =========================================================
+   이미 만들어진 기본 스킨 올려 주기 (EDITORIAL-EXISTING-UPGRADE-1)
+
+   기준 문서: IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md §22
+
+   "무엇을 채울 수 있는가"는 순수 함수 하나가 답한다
+   (skin/skin-editorial-upgrade.js describeImoryEditorialUpgrade) —
+   Studio 는 그 결과를 그대로 그리고, 적용은 **Import 와 같은 한
+   걸음**으로 넘긴다(applyImportedSkinPackage). 그래서 기록 한 칸 ·
+   dirty · Preview 다시 그리기 · 슬롯 정리가 전부 이미 있는 길을
+   그대로 탄다 — 상단 ↶ 한 번이면 손대기 전으로 돌아온다.
+
+   DB 에는 손대지 않는다. 실제 기록은 Save 가 할 때뿐이다.
+========================================================== */
+
+function getStudioEditorialUpgrade() {
+
+  if (typeof window.describeImoryEditorialUpgrade !== "function") {
+    return null;
+  }
+
+  return window.describeImoryEditorialUpgrade(currentWorkingSkin);
+
+}
+
+
+function applyStudioEditorialUpgrade() {
+
+  const plan =
+    getStudioEditorialUpgrade();
+
+  if (!plan || !plan.applicable || !plan.upgraded) {
+    return { ok: false, message: (plan && plan.reason) || "지금은 업데이트할 수 없어요." };
+  }
+
+  applyImportedSkinPackage(plan.upgraded, { preserveNavigation: true });
+
+  return {
+    ok: true,
+    steps: plan.steps.map((step) => step.name)
+  };
+
+}
+
+
+/* =========================================================
    SKIN IMAGE LIBRARY — 슬롯 연결 변경 (v0.1)
 
    studio/images/images-panel.js가 쓰는 유일한 진입점. 연결/교체/
@@ -2833,7 +2878,20 @@ function inspectorPreviewCropAnchor(anchor) {
    Preview 문서로 나가는 유일한 문이기 때문이다.
 ========================================================== */
 
-const INSPECTOR_PREVIEW_STYLE_PROPERTIES = ["font-size"];
+/* 임시 미리보기로 내려보낼 수 있는 선언 이름.
+
+   COMMON-SELECT-BOX-1 — 크기 · 여백 · 정렬의 슬라이더와 손잡이가
+   끄는 동안 보이는 그림은 확정 뒤와 같아야 한다. 값은 아래
+   INSPECTOR_PREVIEW_STYLE_VALUE 모양만 지나가고, 프레임은 아는
+   이름만 그 자리에서 다시 확인한다(preview-bridge.js). */
+const INSPECTOR_PREVIEW_STYLE_PROPERTIES = [
+  "font-size",
+  "width", "max-width", "height", "min-height",
+  "padding-top", "padding-right", "padding-bottom", "padding-left",
+  "margin-top", "margin-right", "margin-bottom", "margin-left",
+  "border", "border-radius",
+  "text-align", "justify-content", "align-items", "justify-items", "align-content"
+];
 
 const INSPECTOR_PREVIEW_STYLE_VALUE = /^[0-9a-z.%#(), -]{1,40}$/i;
 

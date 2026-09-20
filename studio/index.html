@@ -916,7 +916,10 @@
         "../skin/skin-generator.js",
         /* 아이모리 기본 스킨(IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) — 첫 스킨을
            만드는 skin-initializer.js 가 이 파일의 함수를 부른다 */
-        "../skin/skin-default-editorial.js"
+        "../skin/skin-default-editorial.js",
+        /* 이미 만들어진 기본 스킨 올려 주기(EDITORIAL-EXISTING-UPGRADE-1) —
+           위 파일이 만든 "오늘의 기본 스킨"에서 조각을 떼어 쓴다 */
+        "../skin/skin-editorial-upgrade.js"
       ]
     );
 
@@ -1303,6 +1306,9 @@
            있다. skin/skin-inspect-target.js 머리말 참고. */
         "../skin/skin-inspect-target.js",
         "./inspector/studio-inspector-model.js",
+        /* COMMON-SELECT-BOX-1 — 크기 · 자리 · 여백 · 정렬 · 테두리의
+           값 규칙. model.js 가 모르는 컨트롤 이름을 이 파일로 넘긴다. */
+        "./inspector/studio-inspector-box-model.js",
         "./inspector/studio-inspector-crop-model.js",
         "./inspector/studio-inspector-state.js",
         "./inspector/studio-inspector-overlay.js",
@@ -1331,6 +1337,10 @@
         "./inspector/studio-inspector-names.js",
         "./inspector/studio-inspector-quickbar.js",
         "./inspector/studio-inspector-fields.js",
+        /* COMMON-SELECT-BOX-1 — 크기 · 상자 위치 · 내용 정렬 · 여백 ·
+           테두리 폼과 그 손잡이 드래그. controls.js 가 호출 시점에
+           이 파일의 render… 함수를 쓴다. */
+        "./inspector/studio-inspector-box.js",
         "./inspector/studio-inspector-controls.js",
         "./inspector/studio-inspector.js",
 

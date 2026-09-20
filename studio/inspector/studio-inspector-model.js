@@ -1095,6 +1095,20 @@ function inspectorLengthPx(value, max) {
 
 function buildInspectorStylePatch(control, value) {
 
+  /* COMMON-SELECT-BOX-1 — 크기 · 자리 · 여백 · 정렬 · 테두리의 값
+     규칙은 studio-inspector-box-model.js 가 갖는다. 모르는 이름이면
+     null 이 돌아와 아래 예전 표로 이어진다. */
+  if (typeof buildInspectorBoxStylePatch === "function") {
+
+    const boxPatch =
+      buildInspectorBoxStylePatch(control, value);
+
+    if (boxPatch) {
+      return boxPatch;
+    }
+
+  }
+
   const clear = (properties) => {
 
     const patch = {};
@@ -1307,6 +1321,19 @@ function buildInspectorStylePatch(control, value) {
 ========================================================== */
 
 function readInspectorControlValue(control, declarations) {
+
+  /* COMMON-SELECT-BOX-1 — 상자 컨트롤은 제 파일이 읽는다
+     (undefined 면 모르는 이름이라 아래 예전 표로 이어진다). */
+  if (typeof readInspectorBoxControlValue === "function") {
+
+    const boxValue =
+      readInspectorBoxControlValue(control, declarations);
+
+    if (boxValue !== undefined) {
+      return boxValue;
+    }
+
+  }
 
   const decl =
     declarations || {};

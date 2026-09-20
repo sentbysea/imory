@@ -1039,6 +1039,12 @@ async function runContainer(context) {
 
   await sleep(600);
 
+  /* COMMON-SELECT-BOX-1 — 테두리는 없음/있음을 먼저 고르고, "있음"
+     일 때만 굵기 칸이 나온다(무효한 칸을 늘어놓지 않는다). */
+  await page.click(`#studioInspectorFields [data-inspector-control="borderOn"][data-inspector-value="on"]`);
+
+  await sleep(600);
+
   await page.fill(controlSelector("borderWidth"), "2");
   await page.evaluate((sel) => {
     const input = document.querySelector(sel);
@@ -1084,7 +1090,7 @@ async function runContainer(context) {
   record(
     "M. 컨테이너 — 배경/테두리/모서리/여백 직접 수정이 모두 적용된다",
     controls.includes("background") &&
-      controls.includes("borderWidth") &&
+      controls.includes("borderOn") &&
       controls.includes("borderColor") &&
       controls.includes("radius") &&
       controls.includes("padding") &&

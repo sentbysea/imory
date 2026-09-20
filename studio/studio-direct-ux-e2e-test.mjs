@@ -996,9 +996,13 @@ async function runFields(context) {
   await enableSelect(page);
 
   const LAYOUT_OR_TRANSITION = ["layout", "transition", "layoutItem"];
+
+  /* COMMON-SELECT-BOX-1 — 일반 UI 에 **배치·전환 폼**이 없다는 뜻이지
+     "간격"이나 "최소 높이" 같은 낱말이 아예 없다는 뜻이 아니다(상자
+     폼이 그 말을 쓴다). 그래서 배치/전환에만 있는 이름으로 좁힌다. */
   const hasForbidden = async () => page.evaluate(() => {
     const text = document.getElementById("studioInspectorFields").textContent;
-    return /배치 방식|열 수|간격|칸 최소 폭|접히는 폭|최대 폭|최소 높이|넘칠 때|교차 정렬|가로 위치|세로 위치|전환 효과|속도|방향|움직임\b/.test(text) ||
+    return /배치 방식|열 수|칸 최소 폭|접히는 폭|교차 정렬|주 정렬|사이드바 자리|사이드바 폭|줄 간격|겹침 순서|좁을 때|넘칠 때|전환 효과/.test(text) ||
       !!document.querySelector("#studioInspectorFields select");
   });
 
@@ -1006,10 +1010,19 @@ async function runFields(context) {
   const text = await listControls(page);
   const textClear = await page.evaluate(() => document.querySelectorAll("#studioInspectorFields .studio-inspector-clear").length);
   record(
-    "F1. 텍스트 — 내용 · 글꼴 · 글자 크기 · 굵기 · 글자색 · 정렬 + 기타(표시 · 투명도), 값이 없는 칸에 '기본' 버튼이 줄지어 있지 않다",
-    /* EDITORIAL-CUSTOMIZATION-1 — 글자 크기는 슬라이더 + 숫자 한 줄이다
-       (fontSizeRange 가 그 슬라이더, fontSize 가 숫자칸). */
-    JSON.stringify(text) === JSON.stringify(["text", "fontFamily", "fontSizeRange", "fontSize", "fontWeight", "color", "align", "hidden", "opacity", "opacityNumber"]) &&
+    "F1. 텍스트 — 크기 · 상자 위치 · 내용 정렬 · 여백 · 내용 · 타이포그래피 · 테두리 · 표시 차례이고 색은 맨 아래 접힘 절이다",
+    /* COMMON-SELECT-BOX-1 — 아홉 절의 차례. 글자 크기는 슬라이더 +
+       숫자 한 줄이고(fontSizeRange/fontSize), 색 셋은 details 뒤다. */
+    JSON.stringify(text) === JSON.stringify([
+      "boxWidth", "boxWidthRange", "boxWidthNumber", "boxHeight",
+      "boxPlace", "align",
+      "padding", "paddingDetail", "spaceTop", "spaceBottom", "spaceSide",
+      "text", "fontFamily", "fontSizeRange", "fontSize", "fontWeight",
+      "borderOn", "radius",
+      "hidden", "opacity", "opacityNumber",
+      "details", "color", "borderColor"
+    ]) &&
+      text.indexOf("details") < text.indexOf("color") &&
       textClear === 0 && !(await hasForbidden()),
     JSON.stringify({ text, textClear })
   );
@@ -1021,9 +1034,11 @@ async function runFields(context) {
     crop: !!document.getElementById("studioInspectorCropOpen")
   }));
   record(
-    "F2. 이미지 — 이미지 변경 · 너비 · 맞춤(공간 채우기/이미지 전체 보기) · 자르기 · 모서리 · 정렬 + 기타",
+    "F2. 이미지 — 너비 · 상자 위치 · 바깥 간격 · 이미지/맞춤/자르기 · 테두리 · 모서리 + 표시. 안쪽 여백과 상자 가로 칸은 없다",
     imageButtons.change && imageButtons.crop &&
-      ["size", "objectFit", "shape", "imageAlign", "hidden", "opacity"].every(c => image.includes(c)) &&
+      ["size", "objectFit", "shape", "imageAlign", "spaceTop", "spaceBottom", "borderOn", "hidden", "opacity"]
+        .every(c => image.includes(c)) &&
+      !image.includes("padding") && !image.includes("boxWidth") &&
       !image.some(c => LAYOUT_OR_TRANSITION.includes(c)) && !(await hasForbidden()),
     JSON.stringify({ image, imageButtons })
   );
@@ -1033,9 +1048,16 @@ async function runFields(context) {
   const link = await listControls(page);
   const linkLabels = (await panelTexts(page)).fields;
   record(
-    "F3. 버튼·링크 — 표시 문구 · 이동할 곳 · 글자색 · 배경색 · 테두리 · 모서리 + 기타",
-    JSON.stringify(link) === JSON.stringify(["text", "href", "color", "background", "borderWidth", "borderColor", "radius", "hidden", "opacity", "opacityNumber"]) &&
+    "F3. 버튼·링크(inline) — 너비 · 상자 위치 · 위아래 간격은 듣지 않아 없고, 안쪽 여백 · 표시 문구 · 이동할 곳 · 테두리는 있다",
+    JSON.stringify(link) === JSON.stringify([
+      "padding", "paddingDetail",
+      "text", "href", "fontFamily", "fontSizeRange", "fontSize", "fontWeight",
+      "borderOn", "radius",
+      "hidden", "opacity", "opacityNumber",
+      "details", "color", "background", "borderColor"
+    ]) &&
       linkLabels.includes("표시 문구") && linkLabels.includes("이동할 곳") &&
+      !linkLabels.includes("부모 안에서") &&
       JSON.stringify(fitLabels) === JSON.stringify(["공간 채우기", "이미지 전체 보기"]),
     JSON.stringify({ link, linkLabels, fitLabels })
   );

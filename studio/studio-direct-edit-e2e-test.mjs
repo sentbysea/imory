@@ -460,14 +460,22 @@ async function runText(context) {
   await selectInPreview(page, ".y-heading");
   await openDirectEdit(page);
 
-  /* --- 폼 순서: 텍스트 내용이 스타일 옵션보다 먼저다 --- */
+  /* --- 폼 순서: 텍스트 내용이 타이포그래피 · 색보다 먼저다 ---
+
+     COMMON-SELECT-BOX-1 부터 패널의 맨 위는 **상자**(크기 · 자리 ·
+     여백)다. 내용 칸은 그 다음 절이고, 글꼴 · 글자색보다는 여전히
+     앞이다 — 무엇을 쓸지를 어떻게 꾸밀지보다 먼저 정한다. */
 
   const order = await page.evaluate(() => {
     const fields = document.getElementById("studioInspectorFields");
     const nodes = Array.from(fields.querySelectorAll("[data-inspector-control]"));
+    const names = nodes.map((node) => node.dataset.inspectorControl);
+    const textNode = nodes[names.indexOf("text")];
     return {
-      first: nodes[0] ? nodes[0].dataset.inspectorControl : null,
-      isTextarea: nodes[0] ? nodes[0].tagName.toLowerCase() : null,
+      first: names[0],
+      isTextarea: textNode ? textNode.tagName.toLowerCase() : null,
+      beforeFont: names.indexOf("text") < names.indexOf("fontFamily"),
+      beforeColor: names.indexOf("text") < names.indexOf("color"),
       hasApply: !!document.getElementById("studioInspectorTextApply"),
       hasCancel: !!document.getElementById("studioInspectorTextCancel"),
       value: document.getElementById("studioInspectorTextInput")?.value
@@ -475,9 +483,11 @@ async function runText(context) {
   });
 
   record(
-    "A1. '텍스트 내용'이 맨 위에 여러 줄 입력칸(textarea)으로 나오고 기존 문구가 채워져 있다",
-    order.first === "text" &&
+    "A1. '텍스트 내용'이 여러 줄 입력칸(textarea)으로 나오고 기존 문구가 채워져 있다 — 맨 위는 상자(크기), 내용은 글꼴 · 색보다 먼저",
+    order.first === "boxWidth" &&
       order.isTextarea === "textarea" &&
+      order.beforeFont === true &&
+      order.beforeColor === true &&
       order.hasApply === true &&
       order.hasCancel === true &&
       order.value === "Recent Notes",
@@ -689,7 +699,8 @@ async function runText(context) {
     "C. 데이터 연결 텍스트(profile.nickname) — 입력칸 대신 짧은 안내가 뜨고 연결이 그대로다",
     bound.hasTextarea === false &&
       /Settings/.test(bound.note || "") &&
-      bound.controls[0] === "textBinding" &&
+      bound.controls.includes("textBinding") &&
+      bound.controls.indexOf("textBinding") < bound.controls.indexOf("fontFamily") &&
       bound.rendered === "Scenario Y" &&
       bound.bindKept === true,
     JSON.stringify(bound)
@@ -1176,12 +1187,21 @@ async function runDrag(context) {
   const afterSelectText = await handleCenters(page);
   const textState = await inspectorState(page);
 
+  /* COMMON-SELECT-BOX-1 — 손잡이는 이제 이미지만의 것이 아니다.
+     글자 상자에서는 **상자 크기**의 손잡이로 주인이 바뀐다. 여기서
+     보는 것은 이미지 크기 조절의 임시 상태가 남지 않는가다. */
+
   record(
-    "F4. 이미지가 아닌 요소를 고르면 핸들이 사라지고 임시 상태도 남지 않는다",
-    Object.values(afterSelectText).every(v => v === null) &&
-      textState.resizable === false &&
-      textState.dragging === false,
-    JSON.stringify({ handles: afterSelectText, resizable: textState.resizable })
+    "F4. 이미지가 아닌 요소를 고르면 이미지 크기 조절 상태가 정리되고(손잡이의 주인이 상자로 바뀐다) 임시 상태도 남지 않는다",
+    textState.resizable === false &&
+      textState.dragging === false &&
+      textState.boxDragging === false &&
+      textState.boxResizable === true,
+    JSON.stringify({
+      handles: afterSelectText,
+      resizable: textState.resizable,
+      boxResizable: textState.boxResizable
+    })
   );
 
   await page.close();

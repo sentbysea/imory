@@ -132,6 +132,92 @@
 }
 
 
+/* COMMON-SELECT-BOX-1 — 이미지가 아닌 상자의 위·아래 손잡이.
+   좌우 알약을 눕힌 모양이다. */
+.studio-inspector-handle--n,
+.studio-inspector-handle--s {
+  width: 22px;
+  height: 8px;
+
+  margin: -4px 0 0 -11px;
+
+  border-radius: 999px;
+
+  cursor: ns-resize;
+}
+
+
+/* =========================================================
+   COMMON-SELECT-BOX-1 — "색상 · 꾸미기" 접힘 절
+
+   색을 지우지 않았다는 사실이 보이도록 절 제목은 늘 있고, 펼치기
+   전에는 그 안의 칸만 접혀 있다.
+========================================================== */
+
+/* 안쪽 여백의 "자세히" 토글 — 모양은 "기본"과 같지만 뜻이 다르다
+   (값을 지우지 않는다). 그래서 클래스도 따로 둔다. */
+.studio-inspector-detail-toggle {
+  flex: none;
+
+  padding: 4px 6px;
+
+  border: 0;
+
+  background: transparent;
+
+  color: var(--system-text-faint);
+
+  font-family: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-detail-toggle:hover {
+  color: var(--system-accent-hover);
+}
+
+
+.studio-inspector-details {
+  margin: 8px 0 0;
+
+  padding: 6px 0;
+
+  border: 0;
+  border-top: 1px solid var(--system-border);
+
+  background: transparent;
+
+  color: var(--system-text-faint, var(--system-text-muted));
+
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+
+  letter-spacing: 0.08em;
+
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.studio-inspector-details-body {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  padding-top: 4px;
+}
+
+
+.studio-inspector-details-body[hidden] {
+  display: none;
+}
+
+
 /* =========================================================
    LAYOUT-1 — 자유 배치의 이동 손잡이
 
