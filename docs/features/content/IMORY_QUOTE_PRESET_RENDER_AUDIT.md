@@ -16,7 +16,7 @@ canvas 설정을 Preview로 옮기고 `uniform`을 도입하기 위한 최소 �
   auto export 치수는 §12다.
 
 관련 문서: [IMORY_POST_BODY_IMAGE_DESIGN.md](./IMORY_POST_BODY_IMAGE_DESIGN.md) (발췌의 본문 사진),
-[CLAUDE.md](./CLAUDE.md) §3 (테스트 규약).
+[CLAUDE.md](../../../CLAUDE.md) §3 (테스트 규약).
 
 ---
 
@@ -25,9 +25,9 @@ canvas 설정을 Preview로 옮기고 `uniform`을 도입하기 위한 최소 �
 ### 1.1 저장
 
 canvas 관련 설정은 `quote_presets.settings` (jsonb) 하나에 통째로 들어간다.
-수집은 [`collectQuoteSettings()`](./admin/quote/admin-quote-live-inputs.js),
-되채우기는 [`applyQuoteSettings()`](./admin/quote/admin-quote-apply-preset.js),
-저장은 [`admin-quote-preset-crud.js`](./admin/quote/admin-quote-preset-crud.js)의
+수집은 [`collectQuoteSettings()`](../../../admin/quote/admin-quote-live-inputs.js),
+되채우기는 [`applyQuoteSettings()`](../../../admin/quote/admin-quote-apply-preset.js),
+저장은 [`admin-quote-preset-crud.js`](../../../admin/quote/admin-quote-preset-crud.js)의
 `createQuotePreset` / `updateQuotePreset`.
 
 | 항목 | 입력 | 저장 필드 | 수집 기본값 | 적용 기본값 |
@@ -572,7 +572,7 @@ paragraphSpacing 14 · 제목 off · 출처 on):
 - 관리 패널(`admin/index.html`)은 여전히 `Date.now()` 캐시 버스터와 고정 URL `<link>`를 쓴다.
   새 CSS/JS도 그 파일의 기존 방식을 따랐다 — `APP_BUILD_VERSION` 적용은 별도 라운드다.
   → **해소됨(2026-09-13)**: 관리 화면의 CSS·JS·HTML 조각이 전부
-  `?v=APP_BUILD_VERSION` 한 축이 되었다. 기준은 [core/lib/build-version.js](./core/lib/build-version.js)
+  `?v=APP_BUILD_VERSION` 한 축이 되었다. 기준은 [core/lib/build-version.js](../../../core/lib/build-version.js)
   상단 주석, 검증은 `admin/admin-asset-version-e2e-test.mjs`.
 - 문단 간격 블록은 인라인 서식 span **안에서** 문단이 나뉘면 block-in-inline이 된다.
   Chromium/WebKit과 html2canvas 캡처에서 문제없는 것을 확인했지만, 드문 구조라 눈으로도
@@ -764,7 +764,7 @@ paragraphSpacing 14 · 제목 off · 출처 on):
 
 허용 오차를 넓히지 않았고, 콘텐츠를 잘라내거나 이미지를 늘이지도 않았다.
 **나누기가 전부 끝난 뒤** 페이지의 자연 높이를 재서 정수 CSS 픽셀로 못박는다
-(`applyDefinitePostPageHeights` — [posts/preview/posts-page-layout.js](./posts/preview/posts-page-layout.js)).
+(`applyDefinitePostPageHeights` — [posts/preview/posts-page-layout.js](../../../posts/preview/posts-page-layout.js)).
 
 | | 무엇을 박는가 | 왜 |
 | --- | --- | --- |
@@ -806,7 +806,7 @@ e2e의 auto 허용 오차(±4px)는 **없앴다**(정확 일치).
 - **Escape는 모바일에서만** 접는다. 데스크톱은 예전에 섹션에 `is-open`이 붙지 않아 이
   핸들러가 아예 돌지 않았으므로, 그 감각을 그대로 뒀다.
 - **접은 채로 export/copy가 된다.** 기존 경로(`forceOpenSectionIfNeeded` —
-  [posts/export/posts-preview-export-section.js](./posts/export/posts-preview-export-section.js))를
+  [posts/export/posts-preview-export-section.js](../../../posts/export/posts-preview-export-section.js))를
   그대로 쓰되, 판정 기준이 "모바일인가"에서 **"지금 접혀 있는가"**로 바뀌어 데스크톱에서도
   돈다. 이미 펼쳐져 있으면 예전처럼 아무 것도 건드리지 않는다.
 - HTML 모드·gallery에서 발췌 UI를 숨겼다가 되돌아올 때 프리뷰도 원래 상태로 돌아온다
@@ -969,9 +969,9 @@ mock한다. 새 절 두 개를 더했다.
 - 옛 고정 비율(`"1:1"` · `"4:5"` · `"3:4"` · `"9:16"`)은 **custom + 가로 비/세로 비**로
   손실 없이 들어온다. 규칙이 두 곳에 있고 **같아야 한다** —
   `quoteRatioModeFromSettings` / `quoteRatioPartsFromSettings`
-  ([admin/quote/admin-quote-ratio-parser.js](./admin/quote/admin-quote-ratio-parser.js))와
+  ([admin/quote/admin-quote-ratio-parser.js](../../../admin/quote/admin-quote-ratio-parser.js))와
   `getPresetPreviewRatioMode` / `getPresetPreviewRatioParts`
-  ([posts/preview/posts-preview-settings.js](./posts/preview/posts-preview-settings.js)).
+  ([posts/preview/posts-preview-settings.js](../../../posts/preview/posts-preview-settings.js)).
 - Preview의 **출력 너비 입력칸은 없앴다.** 대신 지금 조건으로 저장하면 몇 픽셀이
   나오는지를 보여주는 읽기 전용 표시(`size 1200 × 1500`)만 남는다.
   `previewExportWidth` 변수는 지웠다 없앴다 하지 않고 **null로 남겨 뒀다** —

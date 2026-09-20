@@ -2,7 +2,7 @@
 
 > 이 문서는 이 라운드의 **기록**이다. 앞 라운드의 계약을 바꾼 지점은 "바뀐 것"에
 > 모아 두었고, 디자이너가 읽을 최신 계약은
-> [SKIN_DESIGNER_CONTRACT.md](../../SKIN_DESIGNER_CONTRACT.md)에 있다.
+> [SKIN_DESIGNER_CONTRACT.md](../contracts/SKIN_DESIGNER_CONTRACT.md)에 있다.
 
 ## 0. 무엇을 고쳤나
 

@@ -11,9 +11,9 @@ Skin Studio 의 Select 모드를 "누르고 → 이름을 보고 → 끌거나 �
 | e2e | `studio/studio-direct-ux-e2e-test.mjs` (8969, 시나리오 `?scenario=dux`) |
 
 관련 문서: [IMORY_STUDIO_SHELL_DESIGN.md](./IMORY_STUDIO_SHELL_DESIGN.md)(셸 · 왼쪽 패널 · Undo/Redo) ·
-[AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md)(식별자 · patch 방식) ·
-[IMORY_LAYOUT_PRIMITIVE_DESIGN.md](./IMORY_LAYOUT_PRIMITIVE_DESIGN.md) ·
-[IMORY_TRANSITION_PRIMITIVE_DESIGN.md](./IMORY_TRANSITION_PRIMITIVE_DESIGN.md)
+[AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](../../ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md)(식별자 · patch 방식) ·
+[IMORY_LAYOUT_PRIMITIVE_DESIGN.md](../../contracts/IMORY_LAYOUT_PRIMITIVE_DESIGN.md) ·
+[IMORY_TRANSITION_PRIMITIVE_DESIGN.md](../../contracts/IMORY_TRANSITION_PRIMITIVE_DESIGN.md)
 
 ---
 

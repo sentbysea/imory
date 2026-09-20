@@ -12,20 +12,20 @@
 
 | 무엇 | 어디 |
 | --- | --- |
-| 계약 · 값 규칙 · 정규화 · 컴파일러 · show/hide 런타임 · 패널 | [skin/skin-transition.js](./skin/skin-transition.js) |
-| appear · 클릭 차단 · 가로 넘침(CSS) | [skin/skin-transition.css](./skin/skin-transition.css) |
-| 저장 경계 | [skin/skin-sanitize.js](./skin/skin-sanitize.js) |
-| 렌더 진입 | [skin/skin-render.js](./skin/skin-render.js) `renderSkin({ transitionAppear })` |
-| HOME 복귀 재생 | [posts/view/posts-view-transition.js](./posts/view/posts-view-transition.js) `closePostArea` |
-| Bottom Dock 접기 | [skin/skin-bottom-dock-actions.js](./skin/skin-bottom-dock-actions.js) `setSkinDockCollapsed` · `runSkinDockOpenPanel` |
-| 직접 편집 | [studio/inspector/studio-inspector-transition.js](./studio/inspector/studio-inspector-transition.js) · Dock 패널 [studio/dock/dock-panel.js](./studio/dock/dock-panel.js) |
-| Preview | [studio/preview/preview-bridge.js](./studio/preview/preview-bridge.js) `replayPreviewPageTransition` · `preview:transition-play` |
-| AI 지시문 · 응답 스키마 | [functions/api/skin-ai.js](./functions/api/skin-ai.js) |
+| 계약 · 값 규칙 · 정규화 · 컴파일러 · show/hide 런타임 · 패널 | [skin/skin-transition.js](../../skin/skin-transition.js) |
+| appear · 클릭 차단 · 가로 넘침(CSS) | [skin/skin-transition.css](../../skin/skin-transition.css) |
+| 저장 경계 | [skin/skin-sanitize.js](../../skin/skin-sanitize.js) |
+| 렌더 진입 | [skin/skin-render.js](../../skin/skin-render.js) `renderSkin({ transitionAppear })` |
+| HOME 복귀 재생 | [posts/view/posts-view-transition.js](../../posts/view/posts-view-transition.js) `closePostArea` |
+| Bottom Dock 접기 | [skin/skin-bottom-dock-actions.js](../../skin/skin-bottom-dock-actions.js) `setSkinDockCollapsed` · `runSkinDockOpenPanel` |
+| 직접 편집 | [studio/inspector/studio-inspector-transition.js](../../studio/inspector/studio-inspector-transition.js) · Dock 패널 [studio/dock/dock-panel.js](../../studio/dock/dock-panel.js) |
+| Preview | [studio/preview/preview-bridge.js](../../studio/preview/preview-bridge.js) `replayPreviewPageTransition` · `preview:transition-play` |
+| AI 지시문 · 응답 스키마 | [functions/api/skin-ai.js](../../functions/api/skin-ai.js) |
 | 단위 테스트 | `node skin/skin-transition-test.mjs` |
 | 렌더 · 공개 화면 E2E | `node skin/skin-transition-e2e-test.mjs` (8966) |
 | Studio E2E | `node studio/studio-transition-e2e-test.mjs` (8967) |
 | sandbox 프레임 | `node skin/sandbox/skin-sandbox-e2e-test.mjs --only=transition` |
-| 예시 스킨 | [skin/test-skins/imory-transitions-v1.json](./skin/test-skins/imory-transitions-v1.json) (빌더 `build-transitions-v1.mjs`) |
+| 예시 스킨 | [skin/test-skins/imory-transitions-v1.json](../../skin/test-skins/imory-transitions-v1.json) (빌더 `build-transitions-v1.mjs`) |
 
 ---
 
@@ -233,9 +233,9 @@ left/right 로 미끄러지는 요소는 전환 동안 12px 옆에 있다. 폭�
 
 ## 8. 직접 편집 (Direct Edit)
 
-> **변경됨 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md) §11 (DIRECT-UX-1).** 아래 전환 폼(효과 · 속도 · 방향 · 움직임)은 **일반 Select 패널에서 걷었다.** 효과가 있는 요소에는 "움직임 효과 적용됨 [미리보기]" 한 줄만 보이고, 값은 그대로 보존된다. 효과를 더하거나 바꾸는 것은 AI · Code 다. 폼은 개발/테스트 스위치 `window.IMORY_STUDIO_ADVANCED_INSPECTOR = true` 에서만 그려진다(`studio-transition-e2e-test.mjs` 가 켠다).
+> **변경됨 → [IMORY_DIRECT_UX_DESIGN.md](../features/studio/IMORY_DIRECT_UX_DESIGN.md) §11 (DIRECT-UX-1).** 아래 전환 폼(효과 · 속도 · 방향 · 움직임)은 **일반 Select 패널에서 걷었다.** 효과가 있는 요소에는 "움직임 효과 적용됨 [미리보기]" 한 줄만 보이고, 값은 그대로 보존된다. 효과를 더하거나 바꾸는 것은 AI · Code 다. 폼은 개발/테스트 스위치 `window.IMORY_STUDIO_ADVANCED_INSPECTOR = true` 에서만 그려진다(`studio-transition-e2e-test.mjs` 가 켠다).
 
-[studio/inspector/studio-inspector-transition.js](./studio/inspector/studio-inspector-transition.js)
+[studio/inspector/studio-inspector-transition.js](../../studio/inspector/studio-inspector-transition.js)
 
 capability `transition` — 보호 구역(post-body) 밖이면 어떤 요소든.
 배치 폼 바로 다음에 **전환 효과** 칸이 나온다.

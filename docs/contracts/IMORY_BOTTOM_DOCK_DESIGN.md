@@ -8,12 +8,12 @@ primitive 중 하나지만 **모양은 규격화하지 않는다**.
 
 | 무엇 | 어디 |
 | --- | --- |
-| 설정 정규화 · Context 조립 · 기본 template (순수 함수) | [skin/skin-bottom-dock.js](./skin/skin-bottom-dock.js) |
-| 접기 상태 기계 · 다섯 가지 동작 (DOM) | [skin/skin-bottom-dock-actions.js](./skin/skin-bottom-dock-actions.js) |
-| 자리 · 여백 · 수명 (DOM) | [skin/skin-bottom-dock-mount.js](./skin/skin-bottom-dock-mount.js) |
-| 자리 계약 CSS (생김새는 한 줄도 없다) | [skin/skin-bottom-dock.css](./skin/skin-bottom-dock.css) |
-| Studio 설정 패널 | [studio/dock/dock-panel.js](./studio/dock/dock-panel.js) |
-| AI 처리 규칙 | [functions/api/skin-ai.js](./functions/api/skin-ai.js) `buildSkinAiSystemPrompt` / `sanitizeSkinAiBottomDock` |
+| 설정 정규화 · Context 조립 · 기본 template (순수 함수) | [skin/skin-bottom-dock.js](../../skin/skin-bottom-dock.js) |
+| 접기 상태 기계 · 다섯 가지 동작 (DOM) | [skin/skin-bottom-dock-actions.js](../../skin/skin-bottom-dock-actions.js) |
+| 자리 · 여백 · 수명 (DOM) | [skin/skin-bottom-dock-mount.js](../../skin/skin-bottom-dock-mount.js) |
+| 자리 계약 CSS (생김새는 한 줄도 없다) | [skin/skin-bottom-dock.css](../../skin/skin-bottom-dock.css) |
+| Studio 설정 패널 | [studio/dock/dock-panel.js](../../studio/dock/dock-panel.js) |
+| AI 처리 규칙 | [functions/api/skin-ai.js](../../functions/api/skin-ai.js) `buildSkinAiSystemPrompt` / `sanitizeSkinAiBottomDock` |
 | 단위 테스트 (브라우저 없이) | `node skin/skin-bottom-dock-test.mjs` |
 | 공개 화면 E2E | `node skin/skin-bottom-dock-e2e-test.mjs` (8962) |
 | Studio 패널 E2E | `node studio/dock/studio-dock-panel-e2e-test.mjs` (8963) |
@@ -41,7 +41,7 @@ Imory Bottom Dock 의 시그니처는 특정 색도 특정 모양도 아니다. 
 - 항상 같은 배경/blur
 - 순검정 `#000000` 을 기본값으로 쓰기
 
-그래서 [skin/skin-bottom-dock.css](./skin/skin-bottom-dock.css) 에는
+그래서 [skin/skin-bottom-dock.css](../../skin/skin-bottom-dock.css) 에는
 배경·테두리·반지름·그림자·blur·아이콘 크기·색이 **한 줄도 없다**. 거기
 있는 것은 자리(fixed/sticky/static) · 공간(safe area · 콘텐츠 여백 ·
 가로 넘침 0) · 상태(접힘 전환) · 손가락(최소 hit area) 넷뿐이다.
@@ -138,7 +138,7 @@ skin-specific custom design.
 star · image · camera · book · quote · edit · profile · menu · share ·
 top). 토큰 이름은 화면에 나오지 않고 그림과 한국어 이름만 보인다.
 
-그림은 [skin/skin-dock-icons.css](./skin/skin-dock-icons.css) 한 곳에
+그림은 [skin/skin-dock-icons.css](../../skin/skin-dock-icons.css) 한 곳에
 있다(mask + `currentColor` 라 스킨 글자색을 따르고, 크기는 `1.25em`).
 공개 화면 · Studio Preview · 패널의 고르기가 같은 파일을 읽는다. 목록과
 그림이 짝인지는 `skin/skin-bottom-dock-test.mjs` 가 두 파일을 실제로
@@ -146,7 +146,7 @@ top). 토큰 이름은 화면에 나오지 않고 그림과 한국어 이름만 
 
 #### 표시 채우기 — 스킨이 그리지 않은 자리만
 
-[skin/skin-bottom-dock-visual.js](./skin/skin-bottom-dock-visual.js)
+[skin/skin-bottom-dock-visual.js](../../skin/skin-bottom-dock-visual.js)
 `applySkinDockVisuals()` — 렌더 직후, 접힘을 얹기 **전**에 돈다.
 
 | 고른 표시 | 스킨이 이미 보여 주면 | 아니면 |
@@ -233,7 +233,7 @@ dock.items[]
 
 둘 다 선택이다. trigger 가 없으면 접기 기능이 없는 dock 이고, items 가
 없으면 접혀도 아무것도 사라지지 않는다. 그 외 값은 sanitizer 가 지운다
-([skin/skin-sanitize.js](./skin/skin-sanitize.js)).
+([skin/skin-sanitize.js](../../skin/skin-sanitize.js)).
 
 ### 플랫폼이 렌더 뒤에 얹는 상태 속성 넷
 
@@ -256,7 +256,7 @@ data-imory-dock-open        지금 열린 패널 이름 (없으면 속성 없음
 ```
 
 스킨 CSS 는 저장/렌더 시점에 인스턴스 scope class 가 selector 앞에
-붙는다([skin/skin-css-validate.js](./skin/skin-css-validate.js)
+붙는다([skin/skin-css-validate.js](../../skin/skin-css-validate.js)
 `scopeSkinCssSelector`). 그냥 `[data-imory-dock-open="pair"] .my-panel`
 이라고 쓰면 `.imory-skin-root-iN [data-…] .my-panel` 이 되어 **그 속성이
 찍힌 루트 자신**은 매치되지 않는다. `:root` 로 시작하면 그 자리에 scope
@@ -273,7 +273,7 @@ class 가 들어가므로 루트의 상태를 받을 수 있다 — PHASE 1H 가
 주소가 없는 동작(패널 · 공유 · 맨 위로)을 눌렀을 때 "어느 항목인가"를
 아는 유일한 근거다. 스킨 HTML 은 이 속성을 적을 수 없고, 렌더러가
 clone 을 만드는 그 자리에서 플랫폼이 찍는다
-([skin/skin-render.js](./skin/skin-render.js) `onRepeatItem`) —
+([skin/skin-render.js](../../skin/skin-render.js) `onRepeatItem`) —
 `data-imory-region-key` 와 정확히 같은 사정이다.
 
 ---
@@ -385,7 +385,7 @@ trigger 의 외형은 고정하지 않는다. 작은 점 · 화살표 · 하트 
 
 | 종류 | 누가 처리하나 |
 | --- | --- |
-| `navigate` | **기존 SPA 라우터**. dock 은 `renderSkin()` 이 그리므로 루트에 `.imory-skin-root` 가 붙고, 그 안의 `<a href>` 클릭은 [skin/skin-link-nav.js](./skin/skin-link-nav.js) 가 이미 가져간다. 별도 라우터를 만들지 않는다. |
+| `navigate` | **기존 SPA 라우터**. dock 은 `renderSkin()` 이 그리므로 루트에 `.imory-skin-root` 가 붙고, 그 안의 `<a href>` 클릭은 [skin/skin-link-nav.js](../../skin/skin-link-nav.js) 가 이미 가져간다. 별도 라우터를 만들지 않는다. |
 | `open` | 플랫폼이 dock 루트의 `data-imory-dock-open` 값만 바꾼다. 무엇이 어떻게 보일지는 **전적으로 스킨 CSS** 다: `:root[data-imory-dock-open="pair"] .my-panel { display: block }` (§4 의 `:root` 규칙). 같은 항목을 다시 누르면 닫힌다. |
 | `share` | `navigator.share` → 없으면 클립보드 복사 |
 | `theme` | 기존 `#startThemeToggle` 을 누른다(Imory 시스템 UI 테마). 그 버튼이 없으면 아무 일도 하지 않는다 — dock 이 자기 테마 상태를 따로 갖지 않는다. |
@@ -428,7 +428,7 @@ Top Dock 의 **Dock** 버튼, 또는 **Preview 안의 dock 을 클릭**하면
 것은 넷뿐이다 — ① Dock 켜기/끄기 ② 작은 열기 버튼의 모양 ③ 어떤 항목을
 넣을지 ④ 각 항목을 누르면 어디로 갈지.
 
-패널에서 고치는 것(현재 구현, [studio/dock/dock-panel.js](./studio/dock/dock-panel.js)):
+패널에서 고치는 것(현재 구현, [studio/dock/dock-panel.js](../../studio/dock/dock-panel.js)):
 
 - **Dock** — 사용 / 사용 안 함(`visible`, 설정은 남는다)
 - **독 열기 버튼** — 표시 방식 · 표시
@@ -476,7 +476,7 @@ position: "fixed" · collapsible: true · defaultState: "collapsed"
 
 열기 버튼은 공개 화면처럼 **실제로 펼치고 접는다**(접힌 채로 시작하므로
 그렇지 않으면 Preview 에서 항목을 볼 수 없다). 펼친 뒤 항목을 누르면
-설정 패널이 열린다([studio/preview/preview-bridge.js](./studio/preview/preview-bridge.js)).
+설정 패널이 열린다([studio/preview/preview-bridge.js](../../studio/preview/preview-bridge.js)).
 
 아래는 이 라운드 **이전**의 패널 목록이다(기록):
 
@@ -540,7 +540,7 @@ AI 는 dock 관련 자연어 요청을 **기존 primitive 의 property 변경**�
 통째로 실패한다.
 
 값 목록(enum)은 응답 스키마에도 박혀 있어 모델이 오탈자를 낼 자리가
-거의 없다. 목록의 원본은 [skin/skin-bottom-dock.js](./skin/skin-bottom-dock.js)
+거의 없다. 목록의 원본은 [skin/skin-bottom-dock.js](../../skin/skin-bottom-dock.js)
 이고, Pages Function 은 브라우저 전역을 쓸 수 없어 **값 목록만** 옮겨
 적는다 — 목록이 바뀌면 두 곳을 함께 고친다.
 
@@ -549,7 +549,7 @@ AI 는 dock 관련 자연어 요청을 **기존 primitive 의 property 변경**�
 ## 12. 남은 차이 (아직 없는 것)
 
 - **인라인 SVG** — sanitizer 가 `<svg>` 를 통째로 지운다
-  ([skin/skin-sanitize.js](./skin/skin-sanitize.js)). 그래서 이 계약에서
+  ([skin/skin-sanitize.js](../../skin/skin-sanitize.js)). 그래서 이 계약에서
   SVG 는 "주소로 불러오는 그림"(`visual.type: "svg"`, https URL)이다.
   인라인 마크업을 허용하려면 sanitizer 에 SVG 서브셋 화이트리스트가
   먼저 생겨야 한다.

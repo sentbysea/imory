@@ -6,10 +6,10 @@
 
 | 문서 | 내용 |
 | --- | --- |
-| [migration](./supabase/migrations/20260915100000_public_numbers_for_categories_and_posts.sql) | 컬럼 · 카운터 · 트리거 · backfill · rollback |
-| [core/lib/public-number.js](./core/lib/public-number.js) | 번호 ↔ 내부 id 환전소(프런트의 유일한 지점) |
-| [supabase/public-number-migration-test.mjs](./supabase/public-number-migration-test.mjs) | 실제 Postgres(PGlite)로 migration 실행 |
-| [skin/skin-public-number-e2e-test.mjs](./skin/skin-public-number-e2e-test.mjs) | 번호와 id 를 **일부러 다르게** 준 공개 화면 e2e |
+| [migration](../../supabase/migrations/20260915100000_public_numbers_for_categories_and_posts.sql) | 컬럼 · 카운터 · 트리거 · backfill · rollback |
+| [core/lib/public-number.js](../../core/lib/public-number.js) | 번호 ↔ 내부 id 환전소(프런트의 유일한 지점) |
+| [supabase/public-number-migration-test.mjs](../../supabase/public-number-migration-test.mjs) | 실제 Postgres(PGlite)로 migration 실행 |
+| [skin/skin-public-number-e2e-test.mjs](../../skin/skin-public-number-e2e-test.mjs) | 번호와 id 를 **일부러 다르게** 준 공개 화면 e2e |
 
 ---
 
@@ -107,7 +107,7 @@ user_id 로만 INSERT" 를 강제하고 있고, 여기서 `auth.uid()` 를 요�
 
 ### 2-5. 프런트 — 환전소 하나
 
-[core/lib/public-number.js](./core/lib/public-number.js) 가 번호와
+[core/lib/public-number.js](../../core/lib/public-number.js) 가 번호와
 내부 id 사이를 오가는 **유일한 지점**이다. 내부 id 를 주소 문자열에
 직접 끼워 넣는 코드는 저장소에 남아 있지 않다.
 
@@ -150,9 +150,9 @@ id 가 0 인 행은 존재할 수 없고, 그래서 기존 화면의 "없는 글
 
 | 경계 | 파일 |
 | --- | --- |
-| 공개 라우터 | [posts/editor/posts-router-init.js](./posts/editor/posts-router-init.js) `handlePostRoute()` |
-| 스킨 링크의 유일한 출구 | [skin/skin-link-nav.js](./skin/skin-link-nav.js) `navigateToSkinRoute()` — sandbox 프레임의 이동도 여기로 온다 |
-| Skin Studio Preview | [studio/preview/preview-navigation.js](./studio/preview/preview-navigation.js) `handlePreviewNavigateMessage()` |
+| 공개 라우터 | [posts/editor/posts-router-init.js](../../posts/editor/posts-router-init.js) `handlePostRoute()` |
+| 스킨 링크의 유일한 출구 | [skin/skin-link-nav.js](../../skin/skin-link-nav.js) `navigateToSkinRoute()` — sandbox 프레임의 이동도 여기로 온다 |
+| Skin Studio Preview | [studio/preview/preview-navigation.js](../../studio/preview/preview-navigation.js) `handlePreviewNavigateMessage()` |
 
 `resolveInSiteSkinRoute()` / `resolveStudioPreviewTarget()` 은 주소만
 보는 순수 함수라 DB 를 모른다 — 번호를 그대로 담아 돌려주고, 환전은
@@ -160,7 +160,7 @@ id 가 0 인 행은 존재할 수 없고, 그래서 기존 화면의 "없는 글
 
 화면 → 주소(id → 번호)는 href 를 만드는 모든 자리다. Skin Context 는
 네 함수로 모았다(`skinCategoryHref` / `skinCategoryHrefById` /
-`skinPostHref` / `skinPostHrefById`, [skin/skin-context.js](./skin/skin-context.js)).
+`skinPostHref` / `skinPostHrefById`, [skin/skin-context.js](../../skin/skin-context.js)).
 
 ### 2-8. 기존 주소가 어떻게 바뀌는가
 
@@ -236,7 +236,7 @@ id 가 0 인 행은 존재할 수 없고, 그래서 기존 화면의 "없는 글
    새 프런트가 붙어 `public_no` 를 고른 select 가 전부 실패한다 —
    공개 화면의 링크가 전부 `/` 가 되고 라우터가 글을 못 찾는다.
    (반대로 1 만 끝난 상태는 안전하다: 옛 프런트는 이 컬럼을 모른다.)
-3. `APP_BUILD_VERSION` 을 올린다([core/lib/build-version.js](./core/lib/build-version.js))
+3. `APP_BUILD_VERSION` 을 올린다([core/lib/build-version.js](../../core/lib/build-version.js))
    — 새 JS 가 옛 캐시에 가리지 않게 하는 유일한 장치다.
 4. 배포 뒤 확인: 공개 HOME 의 링크가 `/category/1` 로 시작하는가,
    글 하나를 새로 써서 다음 번호를 받는가, 지운 뒤 다시 써도 그

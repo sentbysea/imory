@@ -24,8 +24,8 @@ Viewer). 이 문서는 그 두 문서가 남겨 둔 두 가지를 다룬다.
 
 ## 1. 글쓰기 폼의 FOLDER 드롭다운
 
-**현재 구현**: [posts/editor/format/posts-editor-folder.js](./posts/editor/format/posts-editor-folder.js)
-· 마크업은 [posts/posts.html](./posts/posts.html)의 `#postEditorFolderField`.
+**현재 구현**: [posts/editor/format/posts-editor-folder.js](../../../posts/editor/format/posts-editor-folder.js)
+· 마크업은 [posts/posts.html](../../../posts/posts.html)의 `#postEditorFolderField`.
 
 - CATEGORY 드롭다운 바로 아래에 있고, **지금 고른 카테고리의 폴더만** 보여준다.
   카테고리를 바꾸면 목록을 다시 채우고 고르던 값은 버린다(DB 트리거도 같은
@@ -50,7 +50,7 @@ Viewer). 이 문서는 그 두 문서가 남겨 둔 두 가지를 다룬다.
 ### 1-1. 저장은 왜 `move_tree_node()`로만 하는가
 
 `posts.folder_id`에는 **INSERT/UPDATE GRANT가 없다**
-([20260908110000_add_posts_folder_id_sort_order.sql](./supabase/migrations/20260908110000_add_posts_folder_id_sort_order.sql)
+([20260908110000_add_posts_folder_id_sort_order.sql](../../../supabase/migrations/20260908110000_add_posts_folder_id_sort_order.sql)
 5절). 클라이언트가 직접 쓰면 depth/cycle/소유권 검증을 통째로 우회할 수 있기
 때문이다. 그래서 이 폼도 관리 트리의 drag와 **같은 RPC**를 쓴다.
 
@@ -73,9 +73,9 @@ Viewer). 이 문서는 그 두 문서가 남겨 둔 두 가지를 다룬다.
 
 ## 2. 폴더 안에서 WRITE
 
-**현재 구현**: `viewer.writeHref`(폴더 페이지) — [skin/skin-context.js](./skin/skin-context.js) ·
-라우터 — [posts/editor/posts-router-init.js](./posts/editor/posts-router-init.js) ·
-받는 쪽 — [posts/view/posts-view-compose.js](./posts/view/posts-view-compose.js).
+**현재 구현**: `viewer.writeHref`(폴더 페이지) — [skin/skin-context.js](../../../skin/skin-context.js) ·
+라우터 — [posts/editor/posts-router-init.js](../../../posts/editor/posts-router-init.js) ·
+받는 쪽 — [posts/view/posts-view-compose.js](../../../posts/view/posts-view-compose.js).
 
 주소는 새로 만들지 않는다. 폴더 경로에 기존 쿼리 하나만 붙인다.
 
@@ -119,8 +119,8 @@ root에 생긴다"는 DB 층위에서는 그대로다(2번 항목: 만든 뒤 �
 
 ## 4. 소유자 도구(＋ / edit)의 자리
 
-**현재 구현**: [posts/view/posts-view-owner-tools.js](./posts/view/posts-view-owner-tools.js)
-· CSS는 [posts/posts-base.css](./posts/posts-base.css)의 `--tools-anchored`.
+**현재 구현**: [posts/view/posts-view-owner-tools.js](../../../posts/view/posts-view-owner-tools.js)
+· CSS는 [posts/posts-base.css](../../../posts/posts-base.css)의 `--tools-anchored`.
 
 ### 4-1. 문제
 
@@ -129,7 +129,7 @@ PHASE 1E 이후 이 도구는 표시 공간(`#postArea`)의 오른쪽 위 12px�
 많아, 그 자리에 놓인 edit은 스킨의 어떤 줄과도 맞지 않고 장식 위에 "떠 있는"
 것처럼 보였다. 스킨이 바뀔 때마다 픽셀을 손보는 것은 특정 스킨에 의존하는 제품
 코드가 되므로 할 수 없다
-([SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) 0절).
+([SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) 0절).
 
 ### 4-2. 두 단계 규칙
 
@@ -154,7 +154,7 @@ PHASE 1E 이후 이 도구는 표시 공간(`#postArea`)의 오른쪽 위 12px�
 - 방문자에게는 빈 채로 남고 아무것도 나타나지 않는다. 그러니 고정 높이를 주거나
   테두리/라벨을 그리지 않는다.
 - 새니타이저 허용 값은 `post-body`와 `owner-tools` 둘뿐이다
-  ([skin/skin-sanitize.js](./skin/skin-sanitize.js)). 그 밖의 값은 저장 시점에
+  ([skin/skin-sanitize.js](../../../skin/skin-sanitize.js)). 그 밖의 값은 저장 시점에
   속성째 제거된다.
 
 **2) 지정하지 않았으면 재서 맞춘다.** 스킨의 **본문 블록**을 찾아 그 블록의
@@ -194,7 +194,7 @@ CSS 변수 두 개와 클래스 하나뿐이다.
 
 ## 5. AI가 만드는 스킨
 
-[functions/api/skin-ai.js](./functions/api/skin-ai.js)의 시스템 프롬프트에
+[functions/api/skin-ai.js](../../../functions/api/skin-ai.js)의 시스템 프롬프트에
 "모든 템플릿의 첫 콘텐츠 줄 오른쪽 끝에 `owner-tools` 자리를 하나 두라"를
 넣었다. 앞으로 생성되는 스킨은 4-2의 1)을 타고, 넣지 않은(또는 예전) 스킨은
 2)를 탄다.

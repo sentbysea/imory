@@ -1,6 +1,6 @@
 # Imory ToDo
 
-> 관련 문서: [Concept.md](./Concept.md) · [Design.md](./Design.md)
+> 관련 문서: [Concept.md](../architecture/Concept.md) · [Design.md](../architecture/Design.md)
 >
 > 살아있는 개발 계획서. 처음부터 다시 만드는 계획이 아니라, 현재 코드/DB를 기준으로 한 상태 체크리스트다. 2026-09-02 기준(`main`, `906dcc1`)으로 작성했으며, 이후 코드가 바뀌면 이 문서도 갱신되어야 한다.
 
@@ -183,7 +183,7 @@
 
 ### 14. 폴더와 중첩 구조
 - **목적**: 카테고리 **안에서** 글을 폴더로 묶는 기능(최대 3단계). 카테고리 자체를 계층화하는 것이 아니라, 카테고리 아래에 폴더 계층을 두는 쪽으로 범위가 정해졌다(FOLDER-1)
-- **현재 상태**: `[x]` — 기준 문서: [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md) · 로컬/mock 검증 완료, **실제 Supabase 적용과 실기기 drag 확인은 아직 안 함**
+- **현재 상태**: `[x]` — 기준 문서: [IMORY_FOLDER1_DESIGN.md](../features/content/IMORY_FOLDER1_DESIGN.md) · 로컬/mock 검증 완료, **실제 Supabase 적용과 실기기 drag 확인은 아직 안 함**
 - **관련 파일**: `posts/manage/posts-folder-{data,tree,sortable}.js`, `posts/manage/posts-folder-tree.css`, `posts/view/posts-view-list.js`, `posts/view/posts-view-list-select.js`, `skin/skin-context.js`, `skin/skin-render.js`, `supabase/migrations/20260908{100000,110000,120000}_*.sql`
 - **입력/출력**: `?manage=1` 관리 화면의 폴더 생성/이름수정/삭제 + drag / `post_folders` row, `posts.folder_id`·`sort_order`
 - **DB/Storage**: `post_folders`(id, user_id, category_id, parent_id, name, depth, sort_order, created_at, updated_at), `posts.folder_id`, `posts.sort_order`. 쓰기는 RPC 4종(`create_post_folder`/`rename_post_folder`/`delete_post_folder`/`move_tree_node`)으로만
@@ -680,4 +680,4 @@
 
 아직 테스트하지 않은 기능은 "구현 완료"라고 쓰지 않는다(5-1 검증 수준 원칙과 동일).
 
-공개 스킨 화면(HOME/CATEGORY/POST/BANNER)을 건드리는 변경의 완료 기준과, 원칙과 현재 구현 사이에 남아 있는 차이 목록(후속 목록)은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) 5~6절에 있다.
+공개 스킨 화면(HOME/CATEGORY/POST/BANNER)을 건드리는 변경의 완료 기준과, 원칙과 현재 구현 사이에 남아 있는 차이 목록(후속 목록)은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) 5~6절에 있다.

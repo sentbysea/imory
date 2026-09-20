@@ -1,7 +1,7 @@
 # HIGHLIGHT-2 — HIGHLIGHT 카테고리 · singleton 타입 · 설정 개편
 
 이 문서는 **현재 구현**의 기준 문서다. HIGHLIGHT-1
-([IMORY_HIGHLIGHT1_DESIGN.md](./IMORY_HIGHLIGHT1_DESIGN.md))이 만든 기능은
+([IMORY_HIGHLIGHT1_DESIGN.md](../archive/2026-09/IMORY_HIGHLIGHT1_DESIGN.md))이 만든 기능은
 그대로이고, **이름과 카테고리 계약**이 여기서 바뀌었다.
 
 ---
@@ -33,10 +33,10 @@
 
 "블로그당 하나"인 타입(**singleton**)의 목록은 두 곳에만 있다.
 
-- 프런트: [`core/lib/category-types.js`](./core/lib/category-types.js) 의
+- 프런트: [`core/lib/category-types.js`](../../core/lib/category-types.js) 의
   `SINGLETON_CATEGORY_TYPES`
 - DB: `categories_singleton_type_idx` 의 partial index predicate
-  ([20260913160000](./supabase/migrations/20260913160000_highlight_category_singleton_and_pagination.sql))
+  ([20260913160000](../../supabase/migrations/20260913160000_highlight_category_singleton_and_pagination.sql))
 
 둘이 어긋나면 `supabase/highlight2-migration-test.mjs` 의 `[contract]` 절이
 두 파일의 글자를 직접 비교해 깨진다.
@@ -94,7 +94,7 @@ alias 는 전부 **같은 값을 가리킨다**. 두 이름을 모두 쓴 스킨
   저장된 published/draft 스킨이 **한 벌도 남지 않았을 때** 지운다. 확인 방법:
   `skins`/`skin_versions` 의 JSON 에 `"memos"` 문자열이 없는지 세어 본다.
 - **`public.memo_folder_settings` view · 옛 RPC 3개 · `?memo=`** — CDN 의
-  CSS/JS 캐시 수명(최대 4시간, [CLAUDE.md](./CLAUDE.md) §4)이 지나면 기술적으로는
+  CSS/JS 캐시 수명(최대 4시간, [CLAUDE.md](../../CLAUDE.md) §4)이 지나면 기술적으로는
   안전하다. 다만 위 스킨 alias 와 함께 정리하는 편이 낫다 — 한 번에 한 후속
   migration 으로.
 - **`site_settings.hide_memo_entry` 키** — 지우지 않는다. 이미 저장된 사용자
@@ -216,7 +216,7 @@ create unique index categories_singleton_type_idx
 
 ### ADVANCED SETTINGS
 
-CATEGORIES 아래의 독립 영역([`admin/settings/admin-settings-advanced.js`](./admin/settings/admin-settings-advanced.js)).
+CATEGORIES 아래의 독립 영역([`admin/settings/admin-settings-advanced.js`](../../admin/settings/admin-settings-advanced.js)).
 맨 위 드롭다운이 카테고리를 이름 + 타입으로 보여 준다(`TXT · 글`, `IMG · 갤러리`,
 `BANNER · 배너`, `HIGHLIGHTS · 하이라이트`). 하나를 고르면 **그 타입에 필요한
 설정만** 아래에 나온다.
@@ -401,7 +401,7 @@ Skin import / export / normalize / sanitize / AI schema / Studio Preview 모두
 
 **그런데도 옛 이름을 남긴 이유**
 
-CSS/JS 는 CDN 에서 최대 4시간 캐시된다([CLAUDE.md](./CLAUDE.md) §4). migration
+CSS/JS 는 CDN 에서 최대 4시간 캐시된다([CLAUDE.md](../../CLAUDE.md) §4). migration
 적용 직후에도 브라우저는 `from("memo_folder_settings")` 를 부르는 예전 번들을
 들고 있을 수 있다. 그래서 옛 이름을 **읽기 전용 `security_invoker` view** 로
 남기고(밑에 있는 것은 같은 테이블 하나, RLS 도 그 테이블 정책 그대로),
@@ -436,7 +436,7 @@ HIGHLIGHT-1 때의 규칙을 유지한다. 이름을 바꾸면 이미 올라간 
 
 | 파일 | 무엇 |
 | --- | --- |
-| [`supabase/highlight2-migration-test.mjs`](./supabase/highlight2-migration-test.mjs) | **실제 Postgres(PGlite)** 로 migration 실행. `[type]` `[singleton]` `[pagination]` `[rename]` `[merge]` `[blocked]` `[retype]` `[contract]` |
+| [`supabase/highlight2-migration-test.mjs`](../../supabase/highlight2-migration-test.mjs) | **실제 Postgres(PGlite)** 로 migration 실행. `[type]` `[singleton]` `[pagination]` `[rename]` `[merge]` `[blocked]` `[retype]` `[contract]` |
 | `admin/admin-settings-e2e-test.mjs` | `--only=category` 타입 드롭다운 · `--only=singleton` disabled/우회 · `--only=advanced` 타입별 패널·draft 유지·모바일 390px · `--only=memofolder` 폴더 차례 |
 | `posts/posts-highlight-e2e-test.mjs` | `--only=legacy` 옛 주소 ↔ 새 주소가 같은 데이터·중복 렌더 없음 · `--only=entry` 진입점 칩과 스킨 링크(두 이름 모두) |
 | `studio/studio-highlight-preview-e2e-test.mjs` | Preview 카드 도구 + 옛 이름(`memos.cards`/`memo-tools`) 스킨 회귀 |

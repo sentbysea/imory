@@ -12,15 +12,15 @@
 
 | 무엇 | 어디 |
 | --- | --- |
-| 설정 읽기/쓰기 · 저장 경계 값 표 · 런타임(칼럼/패널 · 포커스 · 스크롤 잠금) | [skin/skin-sides.js](./skin/skin-sides.js) |
-| 자리 CSS(구조는 `!important`, 보기는 명시도 0) | [skin/skin-sides.css](./skin/skin-sides.css) |
-| 렌더 진입 | [skin/skin-render.js](./skin/skin-render.js) `renderSkin()` · [skin/skin-template.js](./skin/skin-template.js) `resolveSkinTemplate()` |
-| sandbox 봉투 · 메시지 | [skin/sandbox/skin-sandbox-protocol.js](./skin/sandbox/skin-sandbox-protocol.js) `SIDES_*` · [skin-sandbox-host.js](./skin/sandbox/skin-sandbox-host.js) · [skin-sandbox-frame.js](./skin/sandbox/skin-sandbox-frame.js) |
-| Studio 단 구성 패널 | [studio/sides/sides-panel.js](./studio/sides/sides-panel.js) · `getStudioHomeSides` / `setStudioHomeSides`([studio/studio-preview.js](./studio/studio-preview.js)) |
-| AI 지시문 | [functions/api/skin-ai.js](./functions/api/skin-ai.js) "Side areas" 절 |
-| 예시 스킨(잡지 표지형) | [skin/test-skins/build-editorial-home-v1.mjs](./skin/test-skins/build-editorial-home-v1.mjs) → `imory-editorial-home-v1.json` |
+| 설정 읽기/쓰기 · 저장 경계 값 표 · 런타임(칼럼/패널 · 포커스 · 스크롤 잠금) | [skin/skin-sides.js](../../skin/skin-sides.js) |
+| 자리 CSS(구조는 `!important`, 보기는 명시도 0) | [skin/skin-sides.css](../../skin/skin-sides.css) |
+| 렌더 진입 | [skin/skin-render.js](../../skin/skin-render.js) `renderSkin()` · [skin/skin-template.js](../../skin/skin-template.js) `resolveSkinTemplate()` |
+| sandbox 봉투 · 메시지 | [skin/sandbox/skin-sandbox-protocol.js](../../skin/sandbox/skin-sandbox-protocol.js) `SIDES_*` · [skin-sandbox-host.js](../../skin/sandbox/skin-sandbox-host.js) · [skin-sandbox-frame.js](../../skin/sandbox/skin-sandbox-frame.js) |
+| Studio 단 구성 패널 | [studio/sides/sides-panel.js](../../studio/sides/sides-panel.js) · `getStudioHomeSides` / `setStudioHomeSides`([studio/studio-preview.js](../../studio/studio-preview.js)) |
+| AI 지시문 | [functions/api/skin-ai.js](../../functions/api/skin-ai.js) "Side areas" 절 |
+| 예시 스킨(잡지 표지형) | [skin/test-skins/build-editorial-home-v1.mjs](../../skin/test-skins/build-editorial-home-v1.mjs) → `imory-editorial-home-v1.json` |
 | 단위 테스트 | `node skin/skin-sides-test.mjs` |
-| 렌더 E2E(하네스) | `node skin/skin-sides-e2e-test.mjs` (8976) · [skin/skin-sides-render-harness.html](./skin/skin-sides-render-harness.html) |
+| 렌더 E2E(하네스) | `node skin/skin-sides-e2e-test.mjs` (8976) · [skin/skin-sides-render-harness.html](../../skin/skin-sides-render-harness.html) |
 | 공개 화면 E2E | `node skin/sandbox/skin-sandbox-e2e-test.mjs --only=sides` (8957+8958) |
 | Studio E2E | `node studio/studio-sides-e2e-test.mjs` (8977) · `node studio/studio-sandbox-preview-e2e-test.mjs --only=sides` (8959+8960) |
 
@@ -86,7 +86,7 @@
 | 영역 항목이 하나도 없음(`[]`) | 설정 없음 = 둘 다 꺼짐. 틀이 없는 기존 스킨은 어차피 아무것도 바뀌지 않는다 |
 | 쓰기(`writeSkinSidesSetting`) | 항목을 **지우지 않고** `enabled` 만 바꾼다(항목의 다른 칸도 보존) — 숨겼다 다시 켜도 같은 자리 |
 | 1 · 2 · 3단 | `{}` · `{right}` · `{left,right}`. 2단은 오른쪽(요구사항 2절). 왼쪽만 켠 설정은 데이터로는 허용되고 렌더도 되지만 Studio 의 세 선택지에는 없다 |
-| `mobile: false` (EDITORIAL-DEFAULT-SKIN-2) | 그 쪽은 **패널(좁은 화면)일 때만** 꺼진 영역과 같다 — `off` · 여는 버튼 없음 · `-on` 에서 빠짐. 칼럼과 폭 판정은 그대로. 봉투에는 끈 쪽이 있을 때만 `sides.mobile = { left, right }`. 쓰기는 `writeSkinSidesMobileSetting`(두 영역에 같은 값 · 켜면 칸을 지운다). [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](./IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) §4-5 |
+| `mobile: false` (EDITORIAL-DEFAULT-SKIN-2) | 그 쪽은 **패널(좁은 화면)일 때만** 꺼진 영역과 같다 — `off` · 여는 버튼 없음 · `-on` 에서 빠짐. 칼럼과 폭 판정은 그대로. 봉투에는 끈 쪽이 있을 때만 `sides.mobile = { left, right }`. 쓰기는 `writeSkinSidesMobileSetting`(두 영역에 같은 값 · 켜면 칸을 지운다). [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](../features/skin/IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) §4-5 |
 
 렌더 재료: `resolveSkinTemplate()` 이 `sides: { left, right }` 를 싣는다 —
 **영역 항목이 없는 스킨이면 키 자체를 만들지 않는다**(sandbox 봉투 ·

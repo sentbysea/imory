@@ -30,10 +30,10 @@ secret/private 글의 접근 규칙을 한 줄도 바꾸지 않는다.
 
 | 어디서 | 파일 |
 | --- | --- |
-| 공개 라우터(직접 접속·새로고침·뒤로가기) | [posts/editor/posts-router-init.js](posts/editor/posts-router-init.js) `handlePostRoute()` — category 패턴 앞에 4-segment 패턴 |
-| 스킨 안 링크 → SPA | [skin/skin-link-nav.js](skin/skin-link-nav.js) `resolveInSiteSkinRoute()` → `openFolderPage()` |
-| Studio Preview | [studio/preview/preview-route.js](studio/preview/preview-route.js) `resolveStudioPreviewTarget()` → `{ type: "folder", categoryId, folderId }` |
-| 링크 생성 | [skin/skin-context.js](skin/skin-context.js) `buildSkinFolderHref()` |
+| 공개 라우터(직접 접속·새로고침·뒤로가기) | [posts/editor/posts-router-init.js](../../../posts/editor/posts-router-init.js) `handlePostRoute()` — category 패턴 앞에 4-segment 패턴 |
+| 스킨 안 링크 → SPA | [skin/skin-link-nav.js](../../../skin/skin-link-nav.js) `resolveInSiteSkinRoute()` → `openFolderPage()` |
+| Studio Preview | [studio/preview/preview-route.js](../../../studio/preview/preview-route.js) `resolveStudioPreviewTarget()` → `{ type: "folder", categoryId, folderId }` |
+| 링크 생성 | [skin/skin-context.js](../../../skin/skin-context.js) `buildSkinFolderHref()` |
 
 - `cid`를 URL에 두는 이유: 폴더의 `category_id`는 불변이고(`move_tree_node`가
   다른 카테고리로의 이동을 거절한다), 폴더가 다른 부모 밑으로 옮겨져도 주소가
@@ -53,7 +53,7 @@ secret/private 글의 접근 규칙을 한 줄도 바꾸지 않는다.
   > 않아 그대로 지운다.
 - history state는 `{ page: "folder", categoryId, folderId }`,
   `currentPostView`에 `"folder"` 값이 추가됐다(`currentPostFolderId`는
-  [posts/view/posts-view-folder.js](posts/view/posts-view-folder.js)가 선언).
+  [posts/view/posts-view-folder.js](../../../posts/view/posts-view-folder.js)가 선언).
 
 ### 1-2. 카테고리로 복귀하는 경우 (폴더 전용 폴백 없음)
 
@@ -71,7 +71,7 @@ history 항목을 카테고리 주소로 replace한 뒤 `openCategoryPage()`.
 
 ### 1-3. Skin Context
 
-**`category.tree`의 폴더 노드 (additive)** — [skin/skin-context.js](skin/skin-context.js) `buildSkinCategoryTree()`
+**`category.tree`의 폴더 노드 (additive)** — [skin/skin-context.js](../../../skin/skin-context.js) `buildSkinCategoryTree()`
 
 ```js
 { kind: "folder", id, name, depth,
@@ -129,7 +129,7 @@ viewer: { ...base, writeHref: 카테고리 ?write=1, manageHref: 카테고리 ?m
 
 ### 1-4. 렌더러 — repeat 안의 post-body region N개
 
-[skin/skin-render.js](skin/skin-render.js)
+[skin/skin-render.js](../../../skin/skin-render.js)
 
 - 폴더 템플릿은 `data-imory-repeat="folder.posts"` 안에 글마다
   `data-imory-region="post-body"`를 둔다. region 이름은 여전히 `post-body`
@@ -145,7 +145,7 @@ viewer: { ...base, writeHref: 카테고리 ?write=1, manageHref: 카테고리 ?m
 
 ### 1-5. Series Viewer — 본문 채우기 (published)
 
-[posts/view/posts-view-folder.js](posts/view/posts-view-folder.js) `openFolderPage()` → `fillFolderSeriesBodies()`
+[posts/view/posts-view-folder.js](../../../posts/view/posts-view-folder.js) `openFolderPage()` → `fillFolderSeriesBodies()`
 
 1. 스킨을 detached 스크래치에 그린 뒤(요청 순번 + 화면 종류로 늦은 응답
    차단) `#postList`로 옮기고 `revealPostArea(true)`. mount 클래스·소유자
@@ -164,8 +164,8 @@ viewer: { ...base, writeHref: 카테고리 ?write=1, manageHref: 카테고리 ?m
 
 | 함수 | 파일 | 무엇을 |
 | --- | --- | --- |
-| `renderPostBodyInto(target, contentType, contentText, quotePresetId)` | [posts/view/posts-view-detail.js](posts/view/posts-view-detail.js) | 원래 `renderPostDetailBody()`의 Skin 분기. POST region·폴더 region·비밀글 해제가 전부 이것을 쓴다 |
-| `requestSecretPostContent(postId, password)` | [posts/view/posts-view-secret-gate.js](posts/view/posts-view-secret-gate.js) | `get_secret_post_content` RPC 호출의 유일한 지점. legacy 싱글턴 폼과 `mountPostSecretGate()`가 공유 |
+| `renderPostBodyInto(target, contentType, contentText, quotePresetId)` | [posts/view/posts-view-detail.js](../../../posts/view/posts-view-detail.js) | 원래 `renderPostDetailBody()`의 Skin 분기. POST region·폴더 region·비밀글 해제가 전부 이것을 쓴다 |
+| `requestSecretPostContent(postId, password)` | [posts/view/posts-view-secret-gate.js](../../../posts/view/posts-view-secret-gate.js) | `get_secret_post_content` RPC 호출의 유일한 지점. legacy 싱글턴 폼과 `mountPostSecretGate()`가 공유 |
 
 `mountPostSecretGate(target, { postId, contentType, quotePresetId })`는 같은
 클래스 구조(`.post-secret-gate*`, id 없음)의 폼을 글마다 새로 만들어 그 글의
@@ -183,11 +183,11 @@ region에 둔다. legacy `#postSecretGate` 싱글턴은 POST 화면에서 그대
 
 - `previewHistory` 항목 `{ type: "folder", categoryId, folderId }`,
   `currentPreviewPageType = "folder"`(CODE 버튼이 `templates.folder`를 편집
-  대상으로 잡는다). [studio/preview/preview-navigation.js](studio/preview/preview-navigation.js) `renderFolderPreviewFor()`.
+  대상으로 잡는다). [studio/preview/preview-navigation.js](../../../studio/preview/preview-navigation.js) `renderFolderPreviewFor()`.
 - 본문은 `preview:post-body`와 같은 별도 채널 **`preview:folder-bodies`**
   (`{ bodies: [{ key, html, containerStyle, isHtmlContent }] }`).
-  [studio/preview/preview-post-body.js](studio/preview/preview-post-body.js)
-  `buildStudioFolderBodiesPayload()`가 만들고 [studio/preview/preview-bridge.js](studio/preview/preview-bridge.js)가
+  [studio/preview/preview-post-body.js](../../../studio/preview/preview-post-body.js)
+  `buildStudioFolderBodiesPayload()`가 만들고 [studio/preview/preview-bridge.js](../../../studio/preview/preview-bridge.js)가
   `getRegions()`의 키로 채운다. Studio는 소유자 세션이라 gate 분기가 없다.
 - `templates.folder`가 없으면 unsupported overlay("이 스킨에는 아직 FOLDER
   템플릿이 없습니다") — 공개 화면은 카테고리로 복귀하지만 편집자에게는 "없다"를
@@ -199,20 +199,20 @@ region에 둔다. legacy `#postSecretGate` 싱글턴은 POST 화면에서 그대
 
 ### 1-8. Import / Export / normalize / AI
 
-- `templates.folder`는 **선택**이다(banner와 같은 규칙) — [skin/skin-template.js](skin/skin-template.js)
-  `SKIN_TEMPLATE_PAGE_TYPES`, [skin/skin-package-import.js](skin/skin-package-import.js)
+- `templates.folder`는 **선택**이다(banner와 같은 규칙) — [skin/skin-template.js](../../../skin/skin-template.js)
+  `SKIN_TEMPLATE_PAGE_TYPES`, [skin/skin-package-import.js](../../../skin/skin-package-import.js)
   (있으면 post-body region 필수, reason `folder-template` / `folder-body-region`),
-  [skin/skin-package-normalize.js](skin/skin-package-normalize.js), [skin/skin-package-export.js](skin/skin-package-export.js).
-- [functions/api/skin-ai.js](functions/api/skin-ai.js): 스키마의 `templates.folder`(null 허용),
+  [skin/skin-package-normalize.js](../../../skin/skin-package-normalize.js), [skin/skin-package-export.js](../../../skin/skin-package-export.js).
+- [functions/api/skin-ai.js](../../../functions/api/skin-ai.js): 스키마의 `templates.folder`(null 허용),
   결과 병합은 banner와 같은 한 방향 관대함, 시스템 프롬프트에 `folderHref`
   규칙과 "### FOLDER" 절(경로·direct 글만·`folder.*` 필드·repeat 안 region·
   읽기 흐름). 검증: `studio/studio-ai-panel-e2e-test.mjs` A6 / K2 / K3 / K9.
 - Element Inspector / Selected AI는 pageType 일반형이라 `folder` 라벨만 추가됐다
-  ([studio/ai/studio-ai-selection.js](studio/ai/studio-ai-selection.js)).
+  ([studio/ai/studio-ai-selection.js](../../../studio/ai/studio-ai-selection.js)).
 
 ### 1-9. 예시 스킨
 
-[skin/test-skins/imory-finder-folders-v2.json](skin/test-skins/imory-finder-folders-v2.json)
+[skin/test-skins/imory-finder-folders-v2.json](../../../skin/test-skins/imory-finder-folders-v2.json)
 — v1에 (1) CATEGORY 폴더 카드 머리의 `OPEN` 링크(`data-imory-if="item.folderHref"`),
 (2) `templates.folder`: breadcrumb(HOME / 카테고리 / 열 수 있는 조상) →
 제목(`folder.name`) + 글 수 → 하위 폴더 칩 → `folder.posts` 반복(제목·날짜·
@@ -287,12 +287,12 @@ authenticated **비소유자** 계정으로는 실측하지 못했다(계정 없
 
 | 무엇을 | 어디서 |
 | --- | --- |
-| `getRegions()` 키 매핑 · 스킨이 쓴 `data-imory-region-key` 제거 · `getRegion()` 불변 | [skin/skin-render-test.html](skin/skin-render-test.html) D-4 |
-| `folderHref` 조건 · `postCount` · `buildFolderSkinContext()` shape/direct only/ancestors/children/editHref/null 경우 | [skin/skin-page-context-test.html](skin/skin-page-context-test.html) FOLDER-2 절 |
-| 공개 화면 — OPEN 링크 조건, 폴더 페이지(direct only·본문·children·breadcrumb·BACK·EDIT), 소유자 secret/private 본문, 방문자 글별 gate(오답/정답, 네트워크에 secret id 없음), 카테고리 복귀 5종, 직접 접속·뒤로가기·모바일, templates.folder 없는 스킨 | [skin/skin-folder-page-e2e-test.mjs](skin/skin-folder-page-e2e-test.mjs) (포트 8944) |
+| `getRegions()` 키 매핑 · 스킨이 쓴 `data-imory-region-key` 제거 · `getRegion()` 불변 | [skin/skin-render-test.html](../../../skin/skin-render-test.html) D-4 |
+| `folderHref` 조건 · `postCount` · `buildFolderSkinContext()` shape/direct only/ancestors/children/editHref/null 경우 | [skin/skin-page-context-test.html](../../../skin/skin-page-context-test.html) FOLDER-2 절 |
+| 공개 화면 — OPEN 링크 조건, 폴더 페이지(direct only·본문·children·breadcrumb·BACK·EDIT), 소유자 secret/private 본문, 방문자 글별 gate(오답/정답, 네트워크에 secret id 없음), 카테고리 복귀 5종, 직접 접속·뒤로가기·모바일, templates.folder 없는 스킨 | [skin/skin-folder-page-e2e-test.mjs](../../../skin/skin-folder-page-e2e-test.mjs) (포트 8944) |
 | Studio Preview — 같은 JSON으로 OPEN 링크·폴더 페이지·`preview:folder-bodies`·CODE 활성·empty/unsupported overlay | 같은 파일 `--only=preview` |
-| AI 프롬프트/스키마 계약 | [studio/studio-ai-panel-e2e-test.mjs](studio/studio-ai-panel-e2e-test.mjs) A6 / K2 / K3 / K9 |
-| 회귀 — folder-aware v1 스킨과 `category.posts` 스킨 5종 | [skin/skin-folder-tree-e2e-test.mjs](skin/skin-folder-tree-e2e-test.mjs) (8942) |
+| AI 프롬프트/스키마 계약 | [studio/studio-ai-panel-e2e-test.mjs](../../../studio/studio-ai-panel-e2e-test.mjs) A6 / K2 / K3 / K9 |
+| 회귀 — folder-aware v1 스킨과 `category.posts` 스킨 5종 | [skin/skin-folder-tree-e2e-test.mjs](../../../skin/skin-folder-tree-e2e-test.mjs) (8942) |
 
 **구분해서 읽을 것**: 위는 전부 mock/로컬 결과다. 실제 Supabase RLS는 §2-1의
 anon 실측만 했고, Cloudflare 배포 확인과 실기기 확인은 하지 않았다.

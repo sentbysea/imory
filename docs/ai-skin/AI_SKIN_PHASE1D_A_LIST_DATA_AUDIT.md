@@ -4,7 +4,7 @@
 디자인을 위해 사용 가능한 데이터 재료를 조사하고, 안전하게 확장
 가능한 필드와 보류해야 할 필드를 분류한 감사 문서다.
 
-관련: [AI_SKIN_PHASE1C_PAGE_CONTRACT.md](AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
+관련: [AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
 (Multi-page Skin Contract v0.1 — 5-4절에 `category.posts`가
 `categoryName`을 item마다 반복하지 않는 이유가 이미 기록돼 있고,
 이번 감사는 그 원칙을 그대로 계승한다).

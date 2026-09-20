@@ -18,7 +18,7 @@
 
 ## 1. 완전한 SkinPackage JSON shape
 
-근거: [skin/skin-template.js](skin/skin-template.js), [skin/skin-package-import.js](skin/skin-package-import.js), [skin/skin-package-normalize.js](skin/skin-package-normalize.js), [skin/skin-generator.js](skin/skin-generator.js)
+근거: [skin/skin-template.js](../../skin/skin-template.js), [skin/skin-package-import.js](../../skin/skin-package-import.js), [skin/skin-package-normalize.js](../../skin/skin-package-normalize.js), [skin/skin-generator.js](../../skin/skin-generator.js)
 
 현재 코드는 **두 가지 shape**을 동시에 지원합니다. `skin/skin-template.js`의 `resolveSkinTemplate()`이 이 우선순위로 읽습니다.
 
@@ -57,7 +57,7 @@
 - `templates.<page>.css`처럼 페이지별 `css` 필드를 넣는 것 **자체는 구조상 허용**되지만(`resolveSkinTemplate`이 있으면 그걸 쓰고 없으면 공유 `css`로 폴백), 저장 검증(`normalizeSkinPackageForDraft`)은 오직 공유 `css` 하나만 CSS validator에 통과시킵니다. 즉 페이지별 CSS를 넣어도 **검증되지 않은 채 그대로 저장**됩니다 — 현재 도구 체인은 "세 화면이 CSS 하나를 공유한다"는 전제로 만들어져 있으므로, 페이지별 CSS는 쓰지 않는 것을 권장합니다.
 - Studio의 "SkinPackage Import" 기능(13절)은 **`templates.home`/`templates.category`/`templates.post` 세 개가 전부 존재하고 각각 `.html` 문자열을 가질 것**을 요구합니다. 셋 중 하나라도 없으면 Import 자체가 거부됩니다. `templates.banner`와 `templates.folder`, `templates.highlights`는 **선택**입니다 — 있으면 함께 검증되고(folder는 post-body region 필수), 없으면 그 화면은 각각 legacy 배너 화면 / "폴더 페이지 없음"(폴더 링크가 그려지지 않음) / **플랫폼 기본 하이라이트 화면**으로 동작합니다.
 
-  `templates.highlights`만 폴백이 다릅니다. 하이라이트 화면에는 legacy 화면이 없어서 "지원하지 않으면 안 보여준다"가 성립하지 않기 때문에, 없으면 플랫폼이 들고 있는 기본 template(`getDefaultHighlightsTemplate()`, [skin/skin-template.js](skin/skin-template.js))으로 **같은 Context를 같은 renderer로** 그립니다. 그 기본값도 고정된 완성 HTML이 아니라 다른 스킨과 똑같은 `data-imory-*` 바인딩 마크업이므로, 그대로 복사해 고치는 것이 가장 빠른 출발점입니다.
+  `templates.highlights`만 폴백이 다릅니다. 하이라이트 화면에는 legacy 화면이 없어서 "지원하지 않으면 안 보여준다"가 성립하지 않기 때문에, 없으면 플랫폼이 들고 있는 기본 template(`getDefaultHighlightsTemplate()`, [skin/skin-template.js](../../skin/skin-template.js))으로 **같은 Context를 같은 renderer로** 그립니다. 그 기본값도 고정된 완성 HTML이 아니라 다른 스킨과 똑같은 `data-imory-*` 바인딩 마크업이므로, 그대로 복사해 고치는 것이 가장 빠른 출발점입니다.
 
   > **옛 이름 `templates.memos`** — HIGHLIGHT-1 때 저장·export 된 스킨은 같은 화면의 template을 `templates.memos` 라는 이름으로 갖고 있습니다. 그 파일도 **그대로 동작합니다**(우선순위: `highlights` → `memos` → 플랫폼 기본). 새로 만드는 스킨은 `templates.highlights` 하나만 쓰세요. 자세한 내용과 제거 시점: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) §2.
 
@@ -68,7 +68,7 @@
   | `bottomDock` | 어떤 항목이 있고 무엇을 하는가 · 접히는가 · 어디 놓이는가 | 블로그 주인(Studio의 **Dock** 패널)·AI |
   | `templates.dock` | 그것을 어떻게 그리는가 | 스킨 제작자(Code Editor)·AI |
 
-  `templates.dock`이 없으면 플랫폼 기본 template으로 그려집니다(`getDefaultSkinDockTemplate()`, [skin/skin-bottom-dock.js](skin/skin-bottom-dock.js)) — `templates.highlights`와 같은 폴백입니다. `bottomDock`이 없으면 그 스킨에는 dock이 아예 없습니다.
+  `templates.dock`이 없으면 플랫폼 기본 template으로 그려집니다(`getDefaultSkinDockTemplate()`, [skin/skin-bottom-dock.js](../../skin/skin-bottom-dock.js)) — `templates.highlights`와 같은 폴백입니다. `bottomDock`이 없으면 그 스킨에는 dock이 아예 없습니다.
 
   dock 템플릿 안에서는 `dock.*` 경로를 쓰고, 플랫폼이 붙잡아야 하는 자리 둘을 `data-imory-dock="trigger"` / `data-imory-dock="items"`로 표시합니다. 자리(fixed/sticky/static)·접기 전환·safe area·클릭 동작은 전부 플랫폼이 담당하며, **생김새는 한 줄도 강제하지 않습니다**. 전체 계약: [IMORY_BOTTOM_DOCK_DESIGN.md](./IMORY_BOTTOM_DOCK_DESIGN.md).
 
@@ -88,7 +88,7 @@
 ```
 
 - `templates` 필드가 아예 없으면 `resolveSkinTemplate(skin, "home")`이 top-level `html`/`css`로 폴백합니다. 단 이 shape은 **CATEGORY/POST를 지원할 수 없습니다**(`resolveSkinTemplate`이 category/post에는 `undefined`를 돌려줌 → 플랫폼이 자동으로 레거시 카테고리/글 화면을 보여줌).
-- 실제 예: [skin/test-skins/static-test-skin.json](skin/test-skins/static-test-skin.json).
+- 실제 예: [skin/test-skins/static-test-skin.json](../../skin/test-skins/static-test-skin.json).
 
 ### 1-3. 필드별 의미와 강제 여부
 
@@ -98,19 +98,19 @@
 | `templates.home/category/post.html` | string | **강제**(존재/문자열 여부만). 내용은 sanitize를 통과한 결과로 대체됨(2절). |
 | `css` | string | 공유 CSS. **강제 검증**(CSS validator, 8절). 검증 실패 시 저장 자체가 거부됨(`normalizeSkinPackageForDraft`가 throw). |
 | `imageSlots` | `{name,label,required,aspectRatioHint}[]` | `name`만 실제로 쓰입니다(`images.<name>` context 키가 됨, 10절). `label`/`required`/`aspectRatioHint`는 **코드 어디에서도 읽지 않는 순수 정보성 필드**입니다(Studio UI에서도 참조하는 곳이 없음). |
-| `regions` | array | **주인의 설정 자리**. HOME 좌우 영역(EDITORIAL-RESPONSIVE-HOME-1, [IMORY_SIDES_DESIGN.md](IMORY_SIDES_DESIGN.md)) `{ "name": "left_sidebar" \| "right_sidebar", "enabled": boolean, "mobile"?: false }`, 그리고 EDITORIAL-DEFAULT-SKIN-2([IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) §4)의 `theme_colors`(색 네 역할 → `var(--imory-color-background/-text/-accent/-accent-2, 기본값)`) · `home_photos`(사진 구성 → `data-imory-photos="set"` 의 `data-imory-photos-layout`) · `dday`(→ `settings.dday.*` 바인딩). 이 이름들만 읽고, 나머지 항목은 읽지 않고 그대로 보존합니다. 스킨 제작자(AI 포함)는 regions 를 쓰지 않고 읽기만 합니다. 빈 배열(`[]`, 지금까지의 모든 스킨)은 "영역 설정 없음"이고 렌더 결과가 바뀌지 않습니다. 영역의 **자리와 모양**은 HTML의 `data-imory-sides*` 속성과 CSS가 정합니다. `data-imory-region`(HTML 속성, 플랫폼이 채우는 자리)과는 여전히 무관합니다. |
-| `bottomDock` | object (선택) | **강제 검증**(`normalizeSkinBottomDock`, [skin/skin-bottom-dock.js](skin/skin-bottom-dock.js)). 모르는 값·모양이 틀린 항목이 있으면 Import 거부. 렌더 시점에는 같은 함수로 한 번 더 좁히되 거부가 아니라 "dock 없음"으로 폴백합니다(공개 화면이 설정 하나 때문에 깨지지 않게). |
+| `regions` | array | **주인의 설정 자리**. HOME 좌우 영역(EDITORIAL-RESPONSIVE-HOME-1, [IMORY_SIDES_DESIGN.md](./IMORY_SIDES_DESIGN.md)) `{ "name": "left_sidebar" \| "right_sidebar", "enabled": boolean, "mobile"?: false }`, 그리고 EDITORIAL-DEFAULT-SKIN-2([IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](../features/skin/IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) §4)의 `theme_colors`(색 네 역할 → `var(--imory-color-background/-text/-accent/-accent-2, 기본값)`) · `home_photos`(사진 구성 → `data-imory-photos="set"` 의 `data-imory-photos-layout`) · `dday`(→ `settings.dday.*` 바인딩). 이 이름들만 읽고, 나머지 항목은 읽지 않고 그대로 보존합니다. 스킨 제작자(AI 포함)는 regions 를 쓰지 않고 읽기만 합니다. 빈 배열(`[]`, 지금까지의 모든 스킨)은 "영역 설정 없음"이고 렌더 결과가 바뀌지 않습니다. 영역의 **자리와 모양**은 HTML의 `data-imory-sides*` 속성과 CSS가 정합니다. `data-imory-region`(HTML 속성, 플랫폼이 채우는 자리)과는 여전히 무관합니다. |
+| `bottomDock` | object (선택) | **강제 검증**(`normalizeSkinBottomDock`, [skin/skin-bottom-dock.js](../../skin/skin-bottom-dock.js)). 모르는 값·모양이 틀린 항목이 있으면 Import 거부. 렌더 시점에는 같은 함수로 한 번 더 좁히되 거부가 아니라 "dock 없음"으로 폴백합니다(공개 화면이 설정 하나 때문에 깨지지 않게). |
 | `metadata.supports` / `metadata.requiredContext` | object / string[] | **순수 정보성**. 렌더러/저장 RPC/Studio 어디도 이 값을 읽어서 분기하지 않습니다. 실제 지원 여부는 오직 `templates.<page>`가 존재하는지로만 판정됩니다. |
 
 ### 1-4. DB 저장 경로 (참고용)
 
-`skins` / `skin_versions` 테이블에 append-only로 저장되고(`content` 컬럼이 SkinPackage 전체를 JSONB로), RPC(`create_skin_with_initial_version`/`save_skin_draft_version`/`publish_skin`)는 **콘텐츠 자체를 재검증하지 않습니다** — sanitize/validate는 전부 클라이언트(Studio JS) 책임이고, 최종 방어선은 매 렌더마다 다시 도는 `skin-render.js`입니다([skin-render.js](skin/skin-render.js) 파일 상단 주석, [20260905100000_add_skin_draft_write_rpcs.sql](supabase/migrations/20260905100000_add_skin_draft_write_rpcs.sql)).
+`skins` / `skin_versions` 테이블에 append-only로 저장되고(`content` 컬럼이 SkinPackage 전체를 JSONB로), RPC(`create_skin_with_initial_version`/`save_skin_draft_version`/`publish_skin`)는 **콘텐츠 자체를 재검증하지 않습니다** — sanitize/validate는 전부 클라이언트(Studio JS) 책임이고, 최종 방어선은 매 렌더마다 다시 도는 `skin-render.js`입니다([skin-render.js](../../skin/skin-render.js) 파일 상단 주석, [20260905100000_add_skin_draft_write_rpcs.sql](../../supabase/migrations/20260905100000_add_skin_draft_write_rpcs.sql)).
 
 ---
 
 ## 2. HOME / CATEGORY / POST Context 필드 전체 + 실제 값 예시
 
-근거: [skin/skin-context.js](skin/skin-context.js)
+근거: [skin/skin-context.js](../../skin/skin-context.js)
 
 `site`/`profile`/`navigation`/`banners`/`images`는 **세 화면 공통**(top-level)이고, `page`/`home`/`category`/`post`는 페이지별로 하나만 채워집니다.
 
@@ -181,7 +181,7 @@
   `<a href>`가 있는지로만 하고, 스킨 이름이나 클래스는 전혀 보지 않습니다.
 - 기본 도구가 남는 경우 그 자리는 `data-imory-region="owner-tools"`로 지정할 수
   있습니다(3절). 지정하지 않으면 플랫폼이 스킨의 글 기둥 첫 줄을 재서 맞춥니다 —
-  자세한 규칙: [IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 4절.
+  자세한 규칙: [IMORY_FOLDER3_DESIGN.md](../features/content/IMORY_FOLDER3_DESIGN.md) 4절.
 
 ### 2-2. `page` namespace (공통, 항상 존재)
 
@@ -284,7 +284,7 @@ HOME의 하이라이트 자리를 "하이라이트 보기" 링크 하나로 퉁�
 
 #### 폴더를 쓰는 스킨 — `category.tree` / `category.hasFolders`
 
-기준 문서: [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md)
+기준 문서: [IMORY_FOLDER1_DESIGN.md](../features/content/IMORY_FOLDER1_DESIGN.md)
 
 사용자는 카테고리 안에서 글을 **폴더(최대 3단계)** 로 묶을 수 있습니다.
 그 계층은 `category.posts`와 **나란히** 별도 필드로 옵니다.
@@ -339,7 +339,7 @@ HOME의 하이라이트 자리를 "하이라이트 보기" 링크 하나로 퉁�
 
   `category.posts`만 쓰는(폴더를 모르는) 스킨은 이 값을 볼 필요가 없습니다 — 지금까지와 완전히 같습니다.
 - **방문자에게 보이는 글이 하나도 없는 폴더는 `tree`에 아예 오지 않습니다** — 빈 폴더 이름이 화면에 남지 않습니다.
-- **한 repeat 안에서 폴더 가지와 글 가지를 둘 다 두고 `data-imory-if`로 가릅니다.** 해당 없는 가지는 `hidden`이 되므로 스킨 CSS에 `[hidden] { display: none; }`이 있어야 합니다. 완성 예시: [skin/test-skins/imory-finder-folders-v1.json](skin/test-skins/imory-finder-folders-v1.json) — 1단계 폴더는 큰 폴더 카드, 그 안의 글은 작은 항목, 2·3단계 폴더는 카드 안의 들여쓴 묶음, root 글은 작은 항목입니다(글 하나하나가 폴더 카드가 되지 않습니다).
+- **한 repeat 안에서 폴더 가지와 글 가지를 둘 다 두고 `data-imory-if`로 가릅니다.** 해당 없는 가지는 `hidden`이 되므로 스킨 CSS에 `[hidden] { display: none; }`이 있어야 합니다. 완성 예시: [skin/test-skins/imory-finder-folders-v1.json](../../skin/test-skins/imory-finder-folders-v1.json) — 1단계 폴더는 큰 폴더 카드, 그 안의 글은 작은 항목, 2·3단계 폴더는 카드 안의 들여쓴 묶음, root 글은 작은 항목입니다(글 하나하나가 폴더 카드가 되지 않습니다).
 
 ```html
 <!-- 아코디언/들여쓰기 등 표현은 전적으로 스킨이 정합니다 -->
@@ -416,7 +416,7 @@ HOME의 하이라이트 자리를 "하이라이트 보기" 링크 하나로 퉁�
 
 ### 2-7. `folder` namespace (FOLDER 페이지 — Series Viewer, `templates.folder`가 있을 때만)
 
-기준 문서: [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md)
+기준 문서: [IMORY_FOLDER2_DESIGN.md](../features/content/IMORY_FOLDER2_DESIGN.md)
 
 주소 `/{slug}/category/{cid}/folder/{fid}`. 폴더 하나의 **직접 든 글**(하위 폴더의 글은 포함하지 않음)을 관리 화면 순서대로, 각 글의 **실제 본문**이 같은 페이지에 위에서 아래로 이어지도록 보여주는 화면입니다.
 
@@ -459,7 +459,7 @@ HOME의 하이라이트 자리를 "하이라이트 보기" 링크 하나로 퉁�
 ```
 
 - 비밀글은 방문자에게 그 글의 region 안에 비밀번호 폼으로 나타납니다(플랫폼 소유, 클래스 `.post-secret-gate*`). 소유자에게는 본문이 바로 보입니다. 비공개 글은 방문자에게 목록에도 없습니다.
-- 읽기 흐름이 목적이므로 글 사이의 구분은 최소로 두는 것을 권장합니다(제목·날짜·얇은 구분선). 완성 예시: [skin/test-skins/imory-finder-folders-v2.json](skin/test-skins/imory-finder-folders-v2.json).
+- 읽기 흐름이 목적이므로 글 사이의 구분은 최소로 두는 것을 권장합니다(제목·날짜·얇은 구분선). 완성 예시: [skin/test-skins/imory-finder-folders-v2.json](../../skin/test-skins/imory-finder-folders-v2.json).
 - 이 페이지를 그릴 수 없을 때(스킨에 `templates.folder`가 없음, 폴더 없음, 보이는 직접 글 없음) 플랫폼은 **그 카테고리 페이지로 돌려보냅니다** — 폴더 전용 폴백 화면은 없습니다.
 
 ### 2-5. `post` namespace (POST 페이지에서만 채워짐)
@@ -622,7 +622,7 @@ article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 
 ## 3. 지원되는 `data-imory-*` 속성 전체
 
-근거: [skin/skin-sanitize.js](skin/skin-sanitize.js) `SKIN_SANITIZE_BIND_ATTRS`/`SKIN_SANITIZE_REGION_ATTR`, [skin/skin-render.js](skin/skin-render.js)
+근거: [skin/skin-sanitize.js](../../skin/skin-sanitize.js) `SKIN_SANITIZE_BIND_ATTRS`/`SKIN_SANITIZE_REGION_ATTR`, [skin/skin-render.js](../../skin/skin-render.js)
 
 **정확히 9개**만 존재합니다(그중 8개가 렌더러가 해석하는 것이고, 마지막 하나는 Studio 전용 표식입니다). 이 외의 `data-imory-*` 속성은 이름 자체를 아예 인식하지 않고, 저장 시점에 조용히 제거됩니다(경고 로그만 남김).
 
@@ -637,8 +637,8 @@ article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 | `data-imory-color="path"` | dotted identifier | resolve한 값이 `#rgb` 또는 `#rrggbb`면 그 엘리먼트에 **CSS custom property `--imory-color`** 를 설정합니다. CSS에서 `var(--imory-color, <기본색>)`으로 받습니다. `style` 속성이 전면 금지라(8-4절) **항목마다 다른 색을 쓰는 유일한 방법**입니다 — 하이라이트 카드의 강조선(`item.color`, 2-8절)이 대표 용례입니다. |
 | `data-imory-region="post-body"` | 고정 문자열 `"post-body"` 만 허용 | 값은 resolve 대상이 아님(경로 아니라 식별자). mount 시 이 엘리먼트의 **자식을 전부 비운 뒤**, 플랫폼(Post Viewer)이 실제 글 본문을 그 안에 주입할 자리로 씁니다. POST 템플릿에는 하나, FOLDER 템플릿에는 `folder.posts` 반복 안에 글마다 하나(2-7절) — 반복 안의 region에는 렌더러가 항목 id를 `data-imory-region-key`로 찍습니다(스킨이 직접 쓰는 속성이 아니며, 써도 제거됩니다). |
 | `data-imory-region="highlight-tools"` | 고정 문자열 `"highlight-tools"`(레거시 `"memo-tools"` 도 허용) | **비워 두는 자리**입니다. 하이라이트 화면의 카드마다 하나씩 `highlights.cards` repeat 안에 둡니다 — 주인장에게만 카드 도구(⋮: 노트 추가/수정/삭제, 하이라이트 삭제)가 그 자리에 들어가고 방문자에게는 빈 채로 남습니다. 렌더러가 그 자리에 카드 id를 키로 찍어 주므로 DOM 순서가 아니라 키로 짝지어집니다. 자세한 규칙: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) §11. |
-| `data-imory-region="owner-tools"` | 고정 문자열 `"owner-tools"` 만 허용 | **비워 두는 자리**입니다. 주인장에게만 보이는 플랫폼 버튼(＋ 새 글 / edit)이 그 자리에 맞춰 놓입니다 — 방문자에게는 아무것도 나타나지 않습니다. 이 자리를 그리지 않아도 되고(그때는 플랫폼이 스킨의 글 기둥을 재서 맞춥니다), 그리면 정확히 그 줄·그 오른쪽 끝에 옵니다. 자세한 규칙: [IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 4절. |
-| `data-imory-edit-id="..."` | 영문으로 시작하는 영문/숫자/`_`/`-` 문자열, 최대 64자 | **렌더러가 해석하지 않는 순수 표식**입니다(PHASE AI-6A). Skin Studio의 Direct Edit이 "이 요소"를 재렌더/재저장 뒤에도 다시 찾기 위해 붙이며, 생성된 CSS 규칙의 `[data-imory-edit-id="..."]` selector가 이 값을 가리킵니다. 디자이너가 직접 쓸 필요는 없고, 형태가 맞지 않으면 저장 시점에 제거됩니다. 자세한 내용: [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) 2절. |
+| `data-imory-region="owner-tools"` | 고정 문자열 `"owner-tools"` 만 허용 | **비워 두는 자리**입니다. 주인장에게만 보이는 플랫폼 버튼(＋ 새 글 / edit)이 그 자리에 맞춰 놓입니다 — 방문자에게는 아무것도 나타나지 않습니다. 이 자리를 그리지 않아도 되고(그때는 플랫폼이 스킨의 글 기둥을 재서 맞춥니다), 그리면 정확히 그 줄·그 오른쪽 끝에 옵니다. 자세한 규칙: [IMORY_FOLDER3_DESIGN.md](../features/content/IMORY_FOLDER3_DESIGN.md) 4절. |
+| `data-imory-edit-id="..."` | 영문으로 시작하는 영문/숫자/`_`/`-` 문자열, 최대 64자 | **렌더러가 해석하지 않는 순수 표식**입니다(PHASE AI-6A). Skin Studio의 Direct Edit이 "이 요소"를 재렌더/재저장 뒤에도 다시 찾기 위해 붙이며, 생성된 CSS 규칙의 `[data-imory-edit-id="..."]` selector가 이 값을 가리킵니다. 디자이너가 직접 쓸 필요는 없고, 형태가 맞지 않으면 저장 시점에 제거됩니다. 자세한 내용: [AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](../ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) 2절. |
 
 ### 3-1. 속성 값(경로) 문법 제약
 
@@ -652,7 +652,7 @@ article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 
 ### 3-3. 배치 primitive (`data-imory-layout` · `data-imory-item` · `data-imory-slot`)
 
-근거: [skin/skin-layout.js](skin/skin-layout.js) · [skin/skin-layout.css](skin/skin-layout.css) · 기준 문서 [IMORY_LAYOUT_PRIMITIVE_DESIGN.md](./IMORY_LAYOUT_PRIMITIVE_DESIGN.md)
+근거: [skin/skin-layout.js](../../skin/skin-layout.js) · [skin/skin-layout.css](../../skin/skin-layout.css) · 기준 문서 [IMORY_LAYOUT_PRIMITIVE_DESIGN.md](./IMORY_LAYOUT_PRIMITIVE_DESIGN.md)
 
 위 9개와 **별개의 계층**입니다. 바인딩이 "무엇을 보여주는가"라면 이쪽은 **"어떻게 배치되는가"** 하나만 정합니다 — 색·테두리·둥글기·글꼴은 여전히 전부 CSS의 몫이라, 배치 속성을 붙였다고 디자인이 강제되지 않습니다.
 
@@ -720,7 +720,7 @@ article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 
 ### 3-4. 전환 primitive (`data-imory-transition` · `data-imory-panel` · `data-imory-toggle`)
 
-근거: [skin/skin-transition.js](skin/skin-transition.js) · [skin/skin-transition.css](skin/skin-transition.css) · 기준 문서 [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](./IMORY_TRANSITION_PRIMITIVE_DESIGN.md)
+근거: [skin/skin-transition.js](../../skin/skin-transition.js) · [skin/skin-transition.css](../../skin/skin-transition.css) · 기준 문서 [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](./IMORY_TRANSITION_PRIMITIVE_DESIGN.md)
 
 배치와 같은 **별개의 계층**입니다. 이쪽은 **"나타나고 사라질 때 어떻게 움직이는가"** 하나만 정합니다. 요소가 화면에 들어올 때(페이지 전환 포함) · 패널이 열리고 닫힐 때 · Bottom Dock이 접히고 펴질 때가 전부 같은 계약을 씁니다. 쓰지 않으면 지금까지와 한 글자도 다르지 않습니다.
 
@@ -759,7 +759,7 @@ article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 
 ## 4. repeat 안에서 쓸 수 있는 item 필드
 
-근거: [skin/skin-render.js](skin/skin-render.js) `makeSkinItemResolver`, [skin/skin-context.js](skin/skin-context.js)
+근거: [skin/skin-render.js](../../skin/skin-render.js) `makeSkinItemResolver`, [skin/skin-context.js](../../skin/skin-context.js)
 
 `data-imory-repeat="path"`가 걸린 엘리먼트 내부에서는 `item`(또는 `item.xxx`)이 그 배열의 현재 원소를 가리킵니다. `item`으로 시작하지 않는 경로는 **바깥(outer) 스코프로 그대로 폴백**합니다 — 즉 repeat 안에서도 `site.title` 같은 공통 값을 계속 쓸 수 있습니다.
 
@@ -782,7 +782,7 @@ article { border-left: 4px solid var(--imory-color, #d9d6d9); }
 
 ## 5. `data-imory-if`의 정확한 동작과 표현식 제한
 
-근거: [skin/skin-render.js](skin/skin-render.js) `applySkinIf`/`isSkinTruthy`
+근거: [skin/skin-render.js](../../skin/skin-render.js) `applySkinIf`/`isSkinTruthy`
 
 ```js
 function isSkinTruthy(value) {
@@ -802,7 +802,7 @@ el.hidden = !isSkinTruthy(value);
 
 ## 6. HOME / CATEGORY / POST 이동에 필요한 href 계약
 
-근거: [core/lib/site-path.js](core/lib/site-path.js) `buildSitePath()`, [skin/skin-context.js](skin/skin-context.js)
+근거: [core/lib/site-path.js](../../core/lib/site-path.js) `buildSitePath()`, [skin/skin-context.js](../../skin/skin-context.js)
 
 플랫폼이 생성해 Context에 넣어주는 모든 `href`는 이미 완성된 사이트 내부 경로이므로, 디자이너는 그 값을 그대로 `data-imory-href`에 바인딩하기만 하면 됩니다.
 
@@ -837,7 +837,7 @@ function isSafeSkinUrl(rawUrl) {
 
 ## 7. POST 본문 protected region의 필수 HTML
 
-근거: [skin/skin-render.js](skin/skin-render.js) `applySkinRegion`/`getRegion`, [skin/skin-post.js](skin/skin-post.js), [skin/skin-template.js](skin/skin-template.js) `htmlHasPostBodyRegion`
+근거: [skin/skin-render.js](../../skin/skin-render.js) `applySkinRegion`/`getRegion`, [skin/skin-post.js](../../skin/skin-post.js), [skin/skin-template.js](../../skin/skin-template.js) `htmlHasPostBodyRegion`
 
 ### 7-1. 왜 `post.content`를 직접 bind할 수 없는가
 
@@ -875,7 +875,7 @@ POST 템플릿 안에는 **정확히 이 속성을 가진 엘리먼트가 하나
 
 ## 8. 허용·금지되는 HTML 태그와 속성
 
-근거: [skin/skin-sanitize.js](skin/skin-sanitize.js)
+근거: [skin/skin-sanitize.js](../../skin/skin-sanitize.js)
 
 ### 8-1. 허용 태그(정확히 이 목록)
 
@@ -932,7 +932,7 @@ id
 
 ## 9. CSS 허용 범위와 금지 규칙
 
-근거: [skin/skin-css-validate.js](skin/skin-css-validate.js)
+근거: [skin/skin-css-validate.js](../../skin/skin-css-validate.js)
 
 파이프라인: `raw CSS → csstree로 파싱 → 위험 구문 제거 → 모든 selector 앞에 스코프 클래스 강제 삽입 → 문자열로 재생성`.
 
@@ -1012,7 +1012,7 @@ POST 화면에서 플랫폼이 스킨 루트에 속성 하나를 실어 줍니�
 
 ## 10. 이미지 및 imageSlots 사용법
 
-근거: [skin/skin-image-slots.js](skin/skin-image-slots.js), [skin/skin-context.js](skin/skin-context.js) `buildSkinImages`, [supabase/migrations/20260904100000_create_skins_skin_versions.sql](supabase/migrations/20260904100000_create_skins_skin_versions.sql)
+근거: [skin/skin-image-slots.js](../../skin/skin-image-slots.js), [skin/skin-context.js](../../skin/skin-context.js) `buildSkinImages`, [supabase/migrations/20260904100000_create_skins_skin_versions.sql](../../supabase/migrations/20260904100000_create_skins_skin_versions.sql)
 
 ### 10-1. 선언
 
@@ -1044,7 +1044,7 @@ POST 화면에서 플랫폼이 스킨 루트에 속성 하나를 실어 줍니�
 
 ## 11. Desktop/Mobile 반응형 조건
 
-근거: [studio/studio.css](studio/studio.css), [studio/studio-preview.js](studio/studio-preview.js), [index.html](index.html)
+근거: [studio/studio.css](../../studio/studio.css), [studio/studio-preview.js](../../studio/studio-preview.js), [index.html](../../index.html)
 
 ### 11-1. 실제 공개 페이지
 
@@ -1067,7 +1067,7 @@ Studio에는 데스크톱/모바일 두 미리보기 모드가 있고, 정확히
 
 ## 12. sanitizer/validator를 통과하지 못하는 사례
 
-근거: [skin/skin-sanitize.js](skin/skin-sanitize.js), [skin/skin-css-validate.js](skin/skin-css-validate.js), [skin/skin-package-import.js](skin/skin-package-import.js)
+근거: [skin/skin-sanitize.js](../../skin/skin-sanitize.js), [skin/skin-css-validate.js](../../skin/skin-css-validate.js), [skin/skin-package-import.js](../../skin/skin-package-import.js)
 
 ### 12-1. HTML — 제거되지만 저장 자체는 성공(조용히 걸러짐)
 
@@ -1119,7 +1119,7 @@ Studio에는 데스크톱/모바일 두 미리보기 모드가 있고, 정확히
 
 ## 13. Import 기능으로 한 번에 가져올 수 있는 정확한 JSON 예시
 
-근거: [skin/skin-package-import.js](skin/skin-package-import.js) `validateSkinPackageImport()`
+근거: [skin/skin-package-import.js](../../skin/skin-package-import.js) `validateSkinPackageImport()`
 
 Studio의 "SkinPackage Import"는 아래 최소 shape만 만족하면 통과합니다(`templates.home`/`category`/`post` 모두 존재 + `.html`이 문자열 + post에 post-body region + css가 유효한 CSS 문자열).
 
@@ -1148,7 +1148,7 @@ Studio의 "SkinPackage Import"는 아래 최소 shape만 만족하면 통과합�
 
 ### 13-1. 통과하지만 **경고가 붙는** 경우
 
-근거: [skin/skin-template.js](skin/skin-template.js) `auditSkinPackageMaterials()`
+근거: [skin/skin-template.js](../../skin/skin-template.js) `auditSkinPackageMaterials()`
 
 검증을 통과해도, "저장은 되지만 화면에서 조용히 잘못 나오는" 조합은 Import 창(검증 성공 문구)과 Save 직후 토스트에 한 줄로 알립니다. **거부가 아닙니다** — 이미 저장된 스킨을 다시 가져올 수 없게 만들지 않기 위해서이고, 일부는 의도한 선택일 수도 있습니다.
 
@@ -1165,7 +1165,7 @@ Studio의 "SkinPackage Import"는 아래 최소 shape만 만족하면 통과합�
 
 ## 14. 기존 `imory-diary-v0.1.json` 전체 내용
 
-근거: [skin/test-skins/imory-diary-v0.1.json](skin/test-skins/imory-diary-v0.1.json)
+근거: [skin/test-skins/imory-diary-v0.1.json](../../skin/test-skins/imory-diary-v0.1.json)
 
 이 파일은 실제로 13절의 Import 검증을 통과하는(HOME/CATEGORY/POST 템플릿 + post-body region 포함) 리포지토리 내 실물 테스트 스킨입니다. 3절~10절에서 설명한 계약이 실제로 어떻게 조합되는지 확인할 수 있는 참고 자료로 그대로 인용합니다.
 

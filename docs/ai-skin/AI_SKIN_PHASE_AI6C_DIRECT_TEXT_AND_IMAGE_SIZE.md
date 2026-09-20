@@ -237,7 +237,7 @@ mock 하네스 위에서만 확인했다. 터치 입력은 `pointerdown/move/up`
    **→ 해소됨**: STUDIO-SHELL-1 이 working draft 전체의 여러 단계 기록(상단
    ↶ ↷)을 만들었고, STUDIO-SHELL-1.1 이 Inspector·AI 패널의 1단계
    "되돌리기" 버튼을 걷어 그 기록 하나로 합쳤다 →
-   [IMORY_STUDIO_SHELL_DESIGN.md](../../IMORY_STUDIO_SHELL_DESIGN.md) §4.
+   [IMORY_STUDIO_SHELL_DESIGN.md](../features/studio/IMORY_STUDIO_SHELL_DESIGN.md) §4.
 2. **반복 항목**의 임시 미리보기는 클릭한 그 항목 하나에만 보이고, 확정하면
    같은 자리 전체에 적용된다(팝오버 안내 문구 그대로).
 3. **세로 크기만 따로 정하기**는 없다. 이번 계약은 "가로 하나 + 지금 보이는

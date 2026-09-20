@@ -17,6 +17,18 @@
   바꿨으면 앞 문서를 다시 쓰지 말고, 바뀐 지점에 "철회/변경됨 → 어느 문서"를
   적고 이 색인의 줄을 고친다.
 
+## 0. 폴더 구성
+
+| 폴더 | 무엇이 있나 |
+| --- | --- |
+| `docs/contracts/` | 지금 코드가 따르는 계약 문서 |
+| `docs/architecture/` | 구조 · 개념 · 디자인 시스템 |
+| `docs/features/studio/` · `skin/` · `content/` · `images/` | 기능별 설계 문서 |
+| `docs/plans/` | 방향 · 범위 · 상태 체크리스트 |
+| `docs/ai-skin/` | AI 스킨 라운드 문서(`AI_SKIN_*.md`) — 현행 계약과 기록이 섞여 있어 아래 §1 · §4 · §5 에서 갈라 적는다 |
+| `docs/archive/` | 뒤 라운드가 대체한 문서 |
+| 저장소 루트 | `CLAUDE.md` 하나 |
+
 ## 상태 표시
 
 | 표시 | 뜻 |
@@ -35,52 +47,52 @@
 
 | 문서 | 다루는 것 | 관련 코드 | 관련 테스트 |
 | --- | --- | --- | --- |
-| [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) | 공개 화면(HOME/CATEGORY/POST/BANNER)의 표시 공간 · 화면 전환 · 소유자와 관리 동선 · Preview 와 공개 화면 일치. **스킨/플랫폼 담당 범위의 기준 문서** | [skin/skin-render.js](../skin/skin-render.js) · [skin/skin-link-nav.js](../skin/skin-link-nav.js) | `skin/skin-published-frame-e2e-test.mjs` · `skin/skin-write-manage-e2e-test.mjs` |
-| [SKIN_DESIGNER_CONTRACT.md](../SKIN_DESIGNER_CONTRACT.md) | SkinPackage JSON 이 어떤 모양이어야 하는가(디자이너용). `data-imory-*` 바인딩 · region · **재료 일치**(`data-imory-kind`/`color` · `iconKind` · `category.showPostsList` · 하이라이트 `sourcePathLabel`) · `navigation.home`/`postCategories`/`bannerCategories` | [skin/skin-context.js](../skin/skin-context.js) · [skin/skin-render.js](../skin/skin-render.js) | `skin/skin-material-parity-e2e-test.mjs` |
+| [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) | 공개 화면(HOME/CATEGORY/POST/BANNER)의 표시 공간 · 화면 전환 · 소유자와 관리 동선 · Preview 와 공개 화면 일치. **스킨/플랫폼 담당 범위의 기준 문서** | [skin/skin-render.js](../skin/skin-render.js) · [skin/skin-link-nav.js](../skin/skin-link-nav.js) | `skin/skin-published-frame-e2e-test.mjs` · `skin/skin-write-manage-e2e-test.mjs` |
+| [SKIN_DESIGNER_CONTRACT.md](./contracts/SKIN_DESIGNER_CONTRACT.md) | SkinPackage JSON 이 어떤 모양이어야 하는가(디자이너용). `data-imory-*` 바인딩 · region · **재료 일치**(`data-imory-kind`/`color` · `iconKind` · `category.showPostsList` · 하이라이트 `sourcePathLabel`) · `navigation.home`/`postCategories`/`bannerCategories` | [skin/skin-context.js](../skin/skin-context.js) · [skin/skin-render.js](../skin/skin-render.js) | `skin/skin-material-parity-e2e-test.mjs` |
 | [ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md) | Skin Data Contract — 템플릿이 받는 데이터(HOME/CATEGORY/POST 의 Context 모양) | [skin/skin-context.js](../skin/skin-context.js) | `studio/studio-ai-panel-e2e-test.mjs` (K · L 절) |
-| [IMORY_CSS_IMPORT_DESIGN.md](../IMORY_CSS_IMPORT_DESIGN.md) | 스킨 CSS 판정(구조 오류는 차단 · 선언 하나만 제외 · 줄·열 오류 문장) · SkinPackage 공용 파이프라인 · 이미지 슬롯 정규화 | [skin/skin-css-validate.js](../skin/skin-css-validate.js) `analyzeSkinCss` · [skin/skin-package-images.js](../skin/skin-package-images.js) · [skin/skin-package-import.js](../skin/skin-package-import.js) `runSkinPackageContentPipeline` | `studio/studio-import-css-image-e2e-test.mjs` |
-| [IMORY_SANDBOX_SKIN_DESIGN.md](../IMORY_SANDBOX_SKIN_DESIGN.md) | Sandbox 스킨(별도 origin iframe) · `renderMode` · CSP/nonce · 프레임에 넘기는 데이터 · 프레임 안 이동(navId) · 저자 JS(§O) · 화면 전환 수명(§P) · 프레임 안 Select(§Q · §R · §S). **§G · §H · §J · §K · §L · §O · §P · §Q · §R · §S 가 구현이고 §A~§F 는 설계다**(문서 머리말 표 참고) | [skin/sandbox/skin-sandbox-author-js.js](../skin/sandbox/skin-sandbox-author-js.js) · [skin/sandbox/skin-sandbox-inspect.js](../skin/sandbox/skin-sandbox-inspect.js) · [skin/sandbox/skin-sandbox-inspect-direct.js](../skin/sandbox/skin-sandbox-inspect-direct.js) · [skin/sandbox/skin-sandbox-nav.js](../skin/sandbox/skin-sandbox-nav.js) | `skin/sandbox/skin-sandbox-e2e-test.mjs` · `studio/studio-sandbox-preview-e2e-test.mjs` · `studio/studio-sandbox-select-parity-e2e-test.mjs` |
+| [IMORY_CSS_IMPORT_DESIGN.md](./contracts/IMORY_CSS_IMPORT_DESIGN.md) | 스킨 CSS 판정(구조 오류는 차단 · 선언 하나만 제외 · 줄·열 오류 문장) · SkinPackage 공용 파이프라인 · 이미지 슬롯 정규화 | [skin/skin-css-validate.js](../skin/skin-css-validate.js) `analyzeSkinCss` · [skin/skin-package-images.js](../skin/skin-package-images.js) · [skin/skin-package-import.js](../skin/skin-package-import.js) `runSkinPackageContentPipeline` | `studio/studio-import-css-image-e2e-test.mjs` |
+| [IMORY_SANDBOX_SKIN_DESIGN.md](./architecture/IMORY_SANDBOX_SKIN_DESIGN.md) | Sandbox 스킨(별도 origin iframe) · `renderMode` · CSP/nonce · 프레임에 넘기는 데이터 · 프레임 안 이동(navId) · 저자 JS(§O) · 화면 전환 수명(§P) · 프레임 안 Select(§Q · §R · §S). **§G · §H · §J · §K · §L · §O · §P · §Q · §R · §S 가 구현이고 §A~§F 는 설계다**(문서 머리말 표 참고) | [skin/sandbox/skin-sandbox-author-js.js](../skin/sandbox/skin-sandbox-author-js.js) · [skin/sandbox/skin-sandbox-inspect.js](../skin/sandbox/skin-sandbox-inspect.js) · [skin/sandbox/skin-sandbox-inspect-direct.js](../skin/sandbox/skin-sandbox-inspect-direct.js) · [skin/sandbox/skin-sandbox-nav.js](../skin/sandbox/skin-sandbox-nav.js) | `skin/sandbox/skin-sandbox-e2e-test.mjs` · `studio/studio-sandbox-preview-e2e-test.mjs` · `studio/studio-sandbox-select-parity-e2e-test.mjs` |
 
 ### 1-2. 배치 · 전환 · Dock · HOME 구성
 
 | 문서 | 다루는 것 | 관련 코드 | 관련 테스트 |
 | --- | --- | --- | --- |
-| [IMORY_LAYOUT_PRIMITIVE_DESIGN.md](../IMORY_LAYOUT_PRIMITIVE_DESIGN.md) | 배치 primitive(stack · grid · free · sidebar · panel) · `data-imory-layout*` / `-item*` / `-slot` · 모바일 안전 | [skin/skin-layout.js](../skin/skin-layout.js) · [skin/skin-layout.css](../skin/skin-layout.css) | `skin/skin-layout-e2e-test.mjs` · `studio/studio-layout-e2e-test.mjs` |
-| [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](../IMORY_TRANSITION_PRIMITIVE_DESIGN.md) | 전환 primitive(none · fade · slide · scale · 조합 × duration · easing · direction) · `data-imory-transition*` / `-panel` / `-toggle` · appear · show/hide | [skin/skin-transition.js](../skin/skin-transition.js) · [skin/skin-transition.css](../skin/skin-transition.css) | `skin/skin-transition-e2e-test.mjs` · `studio/studio-transition-e2e-test.mjs` |
-| [IMORY_BOTTOM_DOCK_DESIGN.md](../IMORY_BOTTOM_DOCK_DESIGN.md) | Bottom Dock(`bottomDock` 설정 + `templates.dock`) · 자리(auto/fixed/sticky/static) · 접기와 trigger · Studio Dock 패널(§3 · §9) · 아이모리 아이콘 | [skin/skin-bottom-dock.js](../skin/skin-bottom-dock.js) · [skin/skin-bottom-dock-visual.js](../skin/skin-bottom-dock-visual.js) · [skin/skin-dock-icons.css](../skin/skin-dock-icons.css) | `skin/skin-bottom-dock-e2e-test.mjs` · `studio/dock/studio-dock-panel-e2e-test.mjs` |
-| [IMORY_SIDES_DESIGN.md](../IMORY_SIDES_DESIGN.md) | HOME 좌우 영역 1·2·3단(EDITORIAL-RESPONSIVE-HOME-1) · `regions` 의 `left_sidebar`/`right_sidebar` · `data-imory-sides*` · 모바일 오프캔버스 · Studio Layout 패널 | [skin/skin-sides.js](../skin/skin-sides.js) · [skin/skin-sides.css](../skin/skin-sides.css) · [studio/sides/sides-panel.js](../studio/sides/sides-panel.js) · 예시 스킨 생성기 [skin/test-skins/build-editorial-home-v1.mjs](../skin/test-skins/build-editorial-home-v1.mjs) | `skin/skin-sides-e2e-test.mjs` · `studio/studio-sides-e2e-test.mjs` |
-| [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](../IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) | 아이모리 기본 스킨(EDITORIAL-DEFAULT-SKIN-2) · 주인의 스킨 설정은 `regions` 의 이름 붙은 항목(`theme_colors` · `home_photos` · `dday` · `mobile`) · 색 네 역할 · HOME 사진 구성. **§15~§21** 기본 스킨 직접 조절(EDITORIAL-CUSTOMIZATION-1 — 사진 영역 너비 · 영역 글자 크기 · `title_logo`), **§22** 이미 만든 스킨 올려 주기(EDITORIAL-EXISTING-UPGRADE-1) | [skin/skin-default-editorial.js](../skin/skin-default-editorial.js) · [skin/skin-settings.js](../skin/skin-settings.js) · [skin/skin-editorial-upgrade.js](../skin/skin-editorial-upgrade.js) · [studio/sides/home-settings-panel.js](../studio/sides/home-settings-panel.js) | `skin/skin-editorial-default-e2e-test.mjs` · `studio/studio-editorial-default-e2e-test.mjs` · `studio/studio-editorial-customization-e2e-test.mjs` · `studio/studio-crop-priority-e2e-test.mjs --only=editorial` |
+| [IMORY_LAYOUT_PRIMITIVE_DESIGN.md](./contracts/IMORY_LAYOUT_PRIMITIVE_DESIGN.md) | 배치 primitive(stack · grid · free · sidebar · panel) · `data-imory-layout*` / `-item*` / `-slot` · 모바일 안전 | [skin/skin-layout.js](../skin/skin-layout.js) · [skin/skin-layout.css](../skin/skin-layout.css) | `skin/skin-layout-e2e-test.mjs` · `studio/studio-layout-e2e-test.mjs` |
+| [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](./contracts/IMORY_TRANSITION_PRIMITIVE_DESIGN.md) | 전환 primitive(none · fade · slide · scale · 조합 × duration · easing · direction) · `data-imory-transition*` / `-panel` / `-toggle` · appear · show/hide | [skin/skin-transition.js](../skin/skin-transition.js) · [skin/skin-transition.css](../skin/skin-transition.css) | `skin/skin-transition-e2e-test.mjs` · `studio/studio-transition-e2e-test.mjs` |
+| [IMORY_BOTTOM_DOCK_DESIGN.md](./contracts/IMORY_BOTTOM_DOCK_DESIGN.md) | Bottom Dock(`bottomDock` 설정 + `templates.dock`) · 자리(auto/fixed/sticky/static) · 접기와 trigger · Studio Dock 패널(§3 · §9) · 아이모리 아이콘 | [skin/skin-bottom-dock.js](../skin/skin-bottom-dock.js) · [skin/skin-bottom-dock-visual.js](../skin/skin-bottom-dock-visual.js) · [skin/skin-dock-icons.css](../skin/skin-dock-icons.css) | `skin/skin-bottom-dock-e2e-test.mjs` · `studio/dock/studio-dock-panel-e2e-test.mjs` |
+| [IMORY_SIDES_DESIGN.md](./contracts/IMORY_SIDES_DESIGN.md) | HOME 좌우 영역 1·2·3단(EDITORIAL-RESPONSIVE-HOME-1) · `regions` 의 `left_sidebar`/`right_sidebar` · `data-imory-sides*` · 모바일 오프캔버스 · Studio Layout 패널 | [skin/skin-sides.js](../skin/skin-sides.js) · [skin/skin-sides.css](../skin/skin-sides.css) · [studio/sides/sides-panel.js](../studio/sides/sides-panel.js) · 예시 스킨 생성기 [skin/test-skins/build-editorial-home-v1.mjs](../skin/test-skins/build-editorial-home-v1.mjs) | `skin/skin-sides-e2e-test.mjs` · `studio/studio-sides-e2e-test.mjs` |
+| [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](./features/skin/IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) | 아이모리 기본 스킨(EDITORIAL-DEFAULT-SKIN-2) · 주인의 스킨 설정은 `regions` 의 이름 붙은 항목(`theme_colors` · `home_photos` · `dday` · `mobile`) · 색 네 역할 · HOME 사진 구성. **§15~§21** 기본 스킨 직접 조절(EDITORIAL-CUSTOMIZATION-1 — 사진 영역 너비 · 영역 글자 크기 · `title_logo`), **§22** 이미 만든 스킨 올려 주기(EDITORIAL-EXISTING-UPGRADE-1) | [skin/skin-default-editorial.js](../skin/skin-default-editorial.js) · [skin/skin-settings.js](../skin/skin-settings.js) · [skin/skin-editorial-upgrade.js](../skin/skin-editorial-upgrade.js) · [studio/sides/home-settings-panel.js](../studio/sides/home-settings-panel.js) | `skin/skin-editorial-default-e2e-test.mjs` · `studio/studio-editorial-default-e2e-test.mjs` · `studio/studio-editorial-customization-e2e-test.mjs` · `studio/studio-crop-priority-e2e-test.mjs --only=editorial` |
 
 ### 1-3. Skin Studio — 화면 구조 · Select · 직접 편집 · AI
 
 | 문서 | 다루는 것 | 관련 코드 | 관련 테스트 |
 | --- | --- | --- | --- |
-| [IMORY_STUDIO_SHELL_DESIGN.md](../IMORY_STUDIO_SHELL_DESIGN.md) | Studio 화면 구조(상단 세 그룹 · 왼쪽 패널 Select/Images/Dock · Undo·Redo 는 상단 ↶↷ 하나) · 좁은 화면 · 모바일 편집 시트 세 단계(MOBILE-SHEET-1, §5-1) | [studio/studio-shell.js](../studio/studio-shell.js) · [studio/studio-sheet.js](../studio/studio-sheet.js) · [studio/studio-sheet-drag.js](../studio/studio-sheet-drag.js) · [studio/studio-history.js](../studio/studio-history.js) · [studio/preview/preview-sheet-inset.js](../studio/preview/preview-sheet-inset.js) · [studio/studio-shell.css](../studio/studio-shell.css) | `studio/studio-shell-e2e-test.mjs` · `studio/studio-mobile-sheet-e2e-test.mjs` |
-| [IMORY_DIRECT_UX_DESIGN.md](../IMORY_DIRECT_UX_DESIGN.md) | 클릭하고 바로 고치는 Select(DIRECT-UX-1) · 선택 우선순위 · 사람이 읽는 요소 이름 · 겹친 요소 메뉴 · 더블클릭 글자 편집 · 본체 끌기 · Quick Bar. **§20** 패널은 색이 아니라 상자에서 시작(COMMON-SELECT-BOX-1) | [skin/skin-inspect-target.js](../skin/skin-inspect-target.js) · [studio/inspector/studio-inspector-box.js](../studio/inspector/studio-inspector-box.js) · [studio/inspector/studio-inspector-box-model.js](../studio/inspector/studio-inspector-box-model.js) · [studio/inspector/studio-inspector-names.js](../studio/inspector/studio-inspector-names.js) · [studio/inspector/studio-inspector-quickbar.js](../studio/inspector/studio-inspector-quickbar.js) · [studio/preview/preview-inspect-direct.js](../studio/preview/preview-inspect-direct.js) | `studio/studio-direct-ux-e2e-test.mjs` · `studio/studio-sandbox-select-parity-e2e-test.mjs` |
+| [IMORY_STUDIO_SHELL_DESIGN.md](./features/studio/IMORY_STUDIO_SHELL_DESIGN.md) | Studio 화면 구조(상단 세 그룹 · 왼쪽 패널 Select/Images/Dock · Undo·Redo 는 상단 ↶↷ 하나) · 좁은 화면 · 모바일 편집 시트 세 단계(MOBILE-SHEET-1, §5-1) | [studio/studio-shell.js](../studio/studio-shell.js) · [studio/studio-sheet.js](../studio/studio-sheet.js) · [studio/studio-sheet-drag.js](../studio/studio-sheet-drag.js) · [studio/studio-history.js](../studio/studio-history.js) · [studio/preview/preview-sheet-inset.js](../studio/preview/preview-sheet-inset.js) · [studio/studio-shell.css](../studio/studio-shell.css) | `studio/studio-shell-e2e-test.mjs` · `studio/studio-mobile-sheet-e2e-test.mjs` |
+| [IMORY_DIRECT_UX_DESIGN.md](./features/studio/IMORY_DIRECT_UX_DESIGN.md) | 클릭하고 바로 고치는 Select(DIRECT-UX-1) · 선택 우선순위 · 사람이 읽는 요소 이름 · 겹친 요소 메뉴 · 더블클릭 글자 편집 · 본체 끌기 · Quick Bar. **§20** 패널은 색이 아니라 상자에서 시작(COMMON-SELECT-BOX-1) | [skin/skin-inspect-target.js](../skin/skin-inspect-target.js) · [studio/inspector/studio-inspector-box.js](../studio/inspector/studio-inspector-box.js) · [studio/inspector/studio-inspector-box-model.js](../studio/inspector/studio-inspector-box-model.js) · [studio/inspector/studio-inspector-names.js](../studio/inspector/studio-inspector-names.js) · [studio/inspector/studio-inspector-quickbar.js](../studio/inspector/studio-inspector-quickbar.js) · [studio/preview/preview-inspect-direct.js](../studio/preview/preview-inspect-direct.js) | `studio/studio-direct-ux-e2e-test.mjs` · `studio/studio-sandbox-select-parity-e2e-test.mjs` |
 | [ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md) | Element Inspector · Direct Edit 의 **기반 계약** — 요소 식별자(3절) · HTML/CSS patch 방식(7절) · 보호 계약(8절) | [studio/inspector/studio-inspector-model.js](../studio/inspector/studio-inspector-model.js) | `studio/studio-inspector-e2e-test.mjs` |
 | [ai-skin/AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md](./ai-skin/AI_SKIN_PHASE_AI6B_SELECTED_ELEMENT_AI.md) | 선택 요소 AI 수정 — `selectionContext` 계약 · 선택 범위 적용 | [functions/api/skin-ai.js](../functions/api/skin-ai.js) | `studio/studio-selected-ai-e2e-test.mjs` |
 | [ai-skin/AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md](./ai-skin/AI_SKIN_PHASE_AI6B1_SELECTED_AI_DIAGNOSTICS.md) | AI 실패 진단 — error code / stage / 로그 규칙 | [functions/api/skin-ai.js](../functions/api/skin-ai.js) | `studio/studio-selected-ai-e2e-test.mjs` |
 | [ai-skin/AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md](./ai-skin/AI_SKIN_PHASE_AI6C_DIRECT_TEXT_AND_IMAGE_SIZE.md) | 직접 편집 — 텍스트 내용 · 이미지 크기(임시/확정 분리 · 모서리 드래그). 기본 스킨에서 **폭 규칙을 받는 주인**은 `IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md` §15~ 가 바꿨다 | [studio/inspector/studio-inspector-image-size.js](../studio/inspector/studio-inspector-image-size.js) | `studio/studio-direct-edit-e2e-test.mjs` |
 | [ai-skin/AI_SKIN_PHASE_AI6D_IMAGE_CROP.md](./ai-skin/AI_SKIN_PHASE_AI6D_IMAGE_CROP.md) | 이미지 자르기의 **저장 방식**(프레임 래퍼 + 두 규칙 · `--imory-crop` 표식 · x/y 정규화). 좌표·팝오버·기어비는 AI-6E 가 바꿨다 | [studio/preview/preview-bridge.js](../studio/preview/preview-bridge.js) | `studio/studio-crop-e2e-test.mjs` |
 | [ai-skin/AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md](./ai-skin/AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md) | 프레임 좌표(보이는 사각형) · 팝오버 자리 · 구도 이동 기어비 | [studio/preview/preview-bridge.js](../studio/preview/preview-bridge.js) | `studio/studio-crop-e2e-test.mjs --only=frame` |
-| [ai-skin/AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md](./ai-skin/AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md) | 자유 비율 자르기(변 · 모서리 핸들) · Inspector 슬라이더 규칙 | [studio/inspector/](../studio/inspector/) | `studio/studio-crop-e2e-test.mjs --only=free` · `--only=sliders` |
-| [IMORY_IMAGE_CROP_PRIORITY_DESIGN.md](../IMORY_IMAGE_CROP_PRIORITY_DESIGN.md) | 스킨 CSS 의 `!important` 보다 자르기가 이긴다(`@layer imory-crop-guard`) · 프레임이 스킨의 자리를 채우는 방식(`--imory-crop`) | [skin/skin-render.js](../skin/skin-render.js) `buildSkinCropGuardCss` · [studio/preview/preview-bridge.js](../studio/preview/preview-bridge.js) `inspectorCropFillOf` | `studio/studio-crop-priority-e2e-test.mjs` · `skin/skin-crop-published-e2e-test.mjs` |
+| [ai-skin/AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md](./ai-skin/AI_SKIN_PHASE_AI6F_FREE_CROP_AND_SLIDERS.md) | 자유 비율 자르기(변 · 모서리 핸들) · Inspector 슬라이더 규칙 | [studio/inspector/](../studio/inspector) | `studio/studio-crop-e2e-test.mjs --only=free` · `--only=sliders` |
+| [IMORY_IMAGE_CROP_PRIORITY_DESIGN.md](./contracts/IMORY_IMAGE_CROP_PRIORITY_DESIGN.md) | 스킨 CSS 의 `!important` 보다 자르기가 이긴다(`@layer imory-crop-guard`) · 프레임이 스킨의 자리를 채우는 방식(`--imory-crop`) | [skin/skin-render.js](../skin/skin-render.js) `buildSkinCropGuardCss` · [studio/preview/preview-bridge.js](../studio/preview/preview-bridge.js) `inspectorCropFillOf` | `studio/studio-crop-priority-e2e-test.mjs` · `skin/skin-crop-published-e2e-test.mjs` |
 
 ### 1-4. 글 · 카테고리 · 폴더 · 갤러리
 
 | 문서 | 다루는 것 | 관련 코드 | 관련 테스트 |
 | --- | --- | --- | --- |
-| [IMORY_FOLDER1_DESIGN.md](../IMORY_FOLDER1_DESIGN.md) | 카테고리 안 3단계 폴더 · `category.tree` · 중첩 repeat | [posts/](../posts/) | `posts/posts-folder-manage-e2e-test.mjs` · `skin/skin-folder-tree-e2e-test.mjs` |
-| [IMORY_FOLDER2_DESIGN.md](../IMORY_FOLDER2_DESIGN.md) | 폴더 라우트 · Series Viewer · `folderHref` · `templates.folder` · repeat 안 post-body region | [skin/](../skin/) | `skin/skin-folder-page-e2e-test.mjs` |
-| [IMORY_FOLDER3_DESIGN.md](../IMORY_FOLDER3_DESIGN.md) | 글쓰기 폼의 폴더 선택 · 폴더 안에서 WRITE(`?write=1`) · 소유자 도구(＋/edit) 자리(`owner-tools` region) | [posts/](../posts/) | `skin/skin-folder-page-e2e-test.mjs --only=write` |
-| [IMORY_GALLERY1_DESIGN.md](../IMORY_GALLERY1_DESIGN.md) | 갤러리 표시 · 글 대표 이미지 · `category.gallery`/`pagination` · `?page=N`. **§13-6** 올리는 이미지 준비(메타데이터 제거 + 압축, 모든 업로드 경로 공용) | [core/lib/image-upload.js](../core/lib/image-upload.js) | `skin/skin-gallery-e2e-test.mjs` |
-| [IMORY_POST_BODY_IMAGE_DESIGN.md](../IMORY_POST_BODY_IMAGE_DESIGN.md) | 본문 사진(post/gallery 공통 에디터) · 대표 사진 지정 · 발췌(PREVIEW/export/copy)의 사진 | [posts/](../posts/) | `skin/skin-gallery-e2e-test.mjs --only=body` · `--only=excerpt` |
-| [IMORY_EDITOR_DECOR_DESIGN.md](../IMORY_EDITOR_DECOR_DESIGN.md) | 형광펜 높이 · 문단 강조선 · 캔버스 배경 사진 · 에디터 컬러피커 · 색 고르기 두 단계 · 본문 블록(복사 상자/메모/구분선) · HTML 디자인 PNG | [posts/](../posts/) | `posts/posts-editor-decor-e2e-test.mjs` |
-| [IMORY_QUOTE_PRESET_RENDER_AUDIT.md](../IMORY_QUOTE_PRESET_RENDER_AUDIT.md) | Quote Preset ↔ 에디터 PREVIEW ↔ export 렌더 기준 실측 · auto/uniform · 출력 조건(비율 · 가로 픽셀)은 프리셋 CANVAS 에서만 저장 | [admin/quote/](../admin/quote/) · [posts/preview/](../posts/preview/) | `admin/quote/quote-render-parity-e2e-test.mjs` |
-| [IMORY_HIGHLIGHT1_DESIGN.md](../IMORY_HIGHLIGHT1_DESIGN.md) | 글 뷰어 도구 메뉴(⋮) · 하이라이트/노트 · 하이라이트 화면 · 진입점 칩 · 위치 확인 3상태 · 폴더 차례 끌기. **이름 · 카테고리 계약만 HIGHLIGHT-2 가 대체했다**(그 부분은 근거로 쓰지 않는다) | [posts/](../posts/) | `posts/posts-highlight-e2e-test.mjs` · `studio/studio-highlight-preview-e2e-test.mjs` |
-| [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](../IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) | HIGHLIGHT 카테고리 · singleton 타입(banner/highlight) · `memo`→`highlight` 개명과 호환 alias · Settings ADVANCED SETTINGS · post/gallery 공용 페이지네이션 · 타입 변경 시 글 이동 | [core/lib/category-types.js](../core/lib/category-types.js) | `admin/admin-settings-e2e-test.mjs --only=advanced` · `supabase/highlight2-migration-test.mjs` |
-| [IMORY_PUBLIC_NUMBER_DESIGN.md](../IMORY_PUBLIC_NUMBER_DESIGN.md) | 공개 URL 번호(`categories.public_no` · `posts.public_no` — 블로그마다 1부터) · 번호↔내부 id 환전소 · 환전이 일어나는 세 경계 | [core/lib/public-number.js](../core/lib/public-number.js) | `skin/skin-public-number-e2e-test.mjs` · `supabase/public-number-migration-test.mjs` |
-| [IMORY_SHARE_CARD_DESIGN.md](../IMORY_SHARE_CARD_DESIGN.md) | 글 공유 카드(X large image) · SETTINGS > SHARE(BANNER/CARD) · og/twitter meta 주입 · `/api/og/post` | [functions/api/og/post.js](../functions/api/og/post.js) · [functions/_middleware.js](../functions/_middleware.js) | `admin/share-card-e2e-test.mjs` · `supabase/share-label-seq-migration-test.mjs` |
+| [IMORY_FOLDER1_DESIGN.md](./features/content/IMORY_FOLDER1_DESIGN.md) | 카테고리 안 3단계 폴더 · `category.tree` · 중첩 repeat | [posts/](../posts) | `posts/posts-folder-manage-e2e-test.mjs` · `skin/skin-folder-tree-e2e-test.mjs` |
+| [IMORY_FOLDER2_DESIGN.md](./features/content/IMORY_FOLDER2_DESIGN.md) | 폴더 라우트 · Series Viewer · `folderHref` · `templates.folder` · repeat 안 post-body region | [skin/](../skin) | `skin/skin-folder-page-e2e-test.mjs` |
+| [IMORY_FOLDER3_DESIGN.md](./features/content/IMORY_FOLDER3_DESIGN.md) | 글쓰기 폼의 폴더 선택 · 폴더 안에서 WRITE(`?write=1`) · 소유자 도구(＋/edit) 자리(`owner-tools` region) | [posts/](../posts) | `skin/skin-folder-page-e2e-test.mjs --only=write` |
+| [IMORY_GALLERY1_DESIGN.md](./features/content/IMORY_GALLERY1_DESIGN.md) | 갤러리 표시 · 글 대표 이미지 · `category.gallery`/`pagination` · `?page=N`. **§13-6** 올리는 이미지 준비(메타데이터 제거 + 압축, 모든 업로드 경로 공용) | [core/lib/image-upload.js](../core/lib/image-upload.js) | `skin/skin-gallery-e2e-test.mjs` |
+| [IMORY_POST_BODY_IMAGE_DESIGN.md](./features/content/IMORY_POST_BODY_IMAGE_DESIGN.md) | 본문 사진(post/gallery 공통 에디터) · 대표 사진 지정 · 발췌(PREVIEW/export/copy)의 사진 | [posts/](../posts) | `skin/skin-gallery-e2e-test.mjs --only=body` · `--only=excerpt` |
+| [IMORY_EDITOR_DECOR_DESIGN.md](./features/content/IMORY_EDITOR_DECOR_DESIGN.md) | 형광펜 높이 · 문단 강조선 · 캔버스 배경 사진 · 에디터 컬러피커 · 색 고르기 두 단계 · 본문 블록(복사 상자/메모/구분선) · HTML 디자인 PNG | [posts/](../posts) | `posts/posts-editor-decor-e2e-test.mjs` |
+| [IMORY_QUOTE_PRESET_RENDER_AUDIT.md](./features/content/IMORY_QUOTE_PRESET_RENDER_AUDIT.md) | Quote Preset ↔ 에디터 PREVIEW ↔ export 렌더 기준 실측 · auto/uniform · 출력 조건(비율 · 가로 픽셀)은 프리셋 CANVAS 에서만 저장 | [admin/quote/](../admin/quote) · [posts/preview/](../posts/preview) | `admin/quote/quote-render-parity-e2e-test.mjs` |
+| [IMORY_HIGHLIGHT1_DESIGN.md](./archive/2026-09/IMORY_HIGHLIGHT1_DESIGN.md) | 글 뷰어 도구 메뉴(⋮) · 하이라이트/노트 · 하이라이트 화면 · 진입점 칩 · 위치 확인 3상태 · 폴더 차례 끌기. **이름 · 카테고리 계약만 HIGHLIGHT-2 가 대체했다**(그 부분은 근거로 쓰지 않는다) | [posts/](../posts) | `posts/posts-highlight-e2e-test.mjs` · `studio/studio-highlight-preview-e2e-test.mjs` |
+| [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./contracts/IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) | HIGHLIGHT 카테고리 · singleton 타입(banner/highlight) · `memo`→`highlight` 개명과 호환 alias · Settings ADVANCED SETTINGS · post/gallery 공용 페이지네이션 · 타입 변경 시 글 이동 | [core/lib/category-types.js](../core/lib/category-types.js) | `admin/admin-settings-e2e-test.mjs --only=advanced` · `supabase/highlight2-migration-test.mjs` |
+| [IMORY_PUBLIC_NUMBER_DESIGN.md](./contracts/IMORY_PUBLIC_NUMBER_DESIGN.md) | 공개 URL 번호(`categories.public_no` · `posts.public_no` — 블로그마다 1부터) · 번호↔내부 id 환전소 · 환전이 일어나는 세 경계 | [core/lib/public-number.js](../core/lib/public-number.js) | `skin/skin-public-number-e2e-test.mjs` · `supabase/public-number-migration-test.mjs` |
+| [IMORY_SHARE_CARD_DESIGN.md](./features/content/IMORY_SHARE_CARD_DESIGN.md) | 글 공유 카드(X large image) · SETTINGS > SHARE(BANNER/CARD) · og/twitter meta 주입 · `/api/og/post` | [functions/api/og/post.js](../functions/api/og/post.js) · [functions/_middleware.js](../functions/_middleware.js) | `admin/share-card-e2e-test.mjs` · `supabase/share-label-seq-migration-test.mjs` |
 
 ---
 
@@ -88,9 +100,9 @@
 
 | 문서 | 다루는 것 | 비고 |
 | --- | --- | --- |
-| [Concept.md](../Concept.md) | 서비스 개념 · 화면과 데이터의 현재 모습 | **사실 / 계획 / 확인 필요**를 표시로 구분해 쓴다 |
-| [Design.md](../Design.md) | 디자인 토큰 · 컴포넌트 · 패턴 | 토큰 실체는 [core/design-tokens.css](../core/design-tokens.css) |
-| [ToDo.md](../ToDo.md) | 상태 체크리스트(살아 있는 개발 계획서) | `[x]` / `[-]` / `[ ]` 표시 규칙은 문서 §5-1 |
+| [Concept.md](./architecture/Concept.md) | 서비스 개념 · 화면과 데이터의 현재 모습 | **사실 / 계획 / 확인 필요**를 표시로 구분해 쓴다 |
+| [Design.md](./architecture/Design.md) | 디자인 토큰 · 컴포넌트 · 패턴 | 토큰 실체는 [core/design-tokens.css](../core/design-tokens.css) |
+| [ToDo.md](./plans/ToDo.md) | 상태 체크리스트(살아 있는 개발 계획서) | `[x]` / `[-]` / `[ ]` 표시 규칙은 문서 §5-1 |
 
 ---
 
@@ -98,8 +110,8 @@
 
 | 문서 | 다루는 것 | 비고 |
 | --- | --- | --- |
-| [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](../IMORY_AI_SKIN_CUSTOMIZE_PLAN.md) | AI 기반 Skin Customize 의 제품 방향 · PHASE 계획 | 공개 화면의 표시 공간 · 전환 · 관리 동선 · Preview 일치의 **상세 규칙은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) 가 갖는다** |
-| [SKIN_IMAGE_LIBRARY_PLAN.md](../SKIN_IMAGE_LIBRARY_PLAN.md) | Skin Image Library v0.1 데이터 모델과 흐름 | 문서 머리말 기준 "v0.1 구현 완료(프런트 + migration 파일) · 운영 Supabase 미적용". 지금의 이미지 슬롯 정규화 규칙은 [IMORY_CSS_IMPORT_DESIGN.md](../IMORY_CSS_IMPORT_DESIGN.md) 가 갖는다 |
+| [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](./plans/IMORY_AI_SKIN_CUSTOMIZE_PLAN.md) | AI 기반 Skin Customize 의 제품 방향 · PHASE 계획 | 공개 화면의 표시 공간 · 전환 · 관리 동선 · Preview 일치의 **상세 규칙은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) 가 갖는다** |
+| [SKIN_IMAGE_LIBRARY_PLAN.md](./features/images/SKIN_IMAGE_LIBRARY_PLAN.md) | Skin Image Library v0.1 데이터 모델과 흐름 | 문서 머리말 기준 "v0.1 구현 완료(프런트 + migration 파일) · 운영 Supabase 미적용". 지금의 이미지 슬롯 정규화 규칙은 [IMORY_CSS_IMPORT_DESIGN.md](./contracts/IMORY_CSS_IMPORT_DESIGN.md) 가 갖는다 |
 
 ---
 
@@ -109,15 +121,15 @@
 
 | 문서 | 무엇의 기록인가 | 지금 기준은 어디인가 |
 | --- | --- | --- |
-| [ai-skin/AI_SKIN_AUDIT.md](./ai-skin/AI_SKIN_AUDIT.md) | PHASE 0 — 기존 Customize/렌더러/스키마 조사. 코드 변경 없음 | [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](../IMORY_AI_SKIN_CUSTOMIZE_PLAN.md) |
-| [ai-skin/AI_SKIN_PHASE1A_DESIGN.md](./ai-skin/AI_SKIN_PHASE1A_DESIGN.md) | Skin Context v0.1 · HOME 렌더 경로(Slice 0~5) | [ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md) · [SKIN_DESIGNER_CONTRACT.md](../SKIN_DESIGNER_CONTRACT.md) |
-| [ai-skin/AI_SKIN_PHASE1B_DESIGN.md](./ai-skin/AI_SKIN_PHASE1B_DESIGN.md) | Skin Studio Foundation · Questionnaire(문서 안 v4 개정은 **폐기**되고 v5 가 뒤집었다) | [IMORY_STUDIO_SHELL_DESIGN.md](../IMORY_STUDIO_SHELL_DESIGN.md) · [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](../IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) |
+| [ai-skin/AI_SKIN_AUDIT.md](./ai-skin/AI_SKIN_AUDIT.md) | PHASE 0 — 기존 Customize/렌더러/스키마 조사. 코드 변경 없음 | [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](./plans/IMORY_AI_SKIN_CUSTOMIZE_PLAN.md) |
+| [ai-skin/AI_SKIN_PHASE1A_DESIGN.md](./ai-skin/AI_SKIN_PHASE1A_DESIGN.md) | Skin Context v0.1 · HOME 렌더 경로(Slice 0~5) | [ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md) · [SKIN_DESIGNER_CONTRACT.md](./contracts/SKIN_DESIGNER_CONTRACT.md) |
+| [ai-skin/AI_SKIN_PHASE1B_DESIGN.md](./ai-skin/AI_SKIN_PHASE1B_DESIGN.md) | Skin Studio Foundation · Questionnaire(문서 안 v4 개정은 **폐기**되고 v5 가 뒤집었다) | [IMORY_STUDIO_SHELL_DESIGN.md](./features/studio/IMORY_STUDIO_SHELL_DESIGN.md) · [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](./features/skin/IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) |
 | [ai-skin/AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md](./ai-skin/AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md) | 글 목록 데이터 재료 감사(넣은 것 / 보류한 것) | [ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md) |
-| [ai-skin/AI_SKIN_PHASE1D_B_NAVIGATION_CONTRACT.md](./ai-skin/AI_SKIN_PHASE1D_B_NAVIGATION_CONTRACT.md) | `navigation.home` / `postCategories` / `bannerCategories` 를 더한 Slice | [SKIN_DESIGNER_CONTRACT.md](../SKIN_DESIGNER_CONTRACT.md) |
-| [ai-skin/AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md](./ai-skin/AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md) | 작성 대상 선택 패널 제거 · 소유자 도구 위치 | 소유자 도구 자리는 [IMORY_FOLDER3_DESIGN.md](../IMORY_FOLDER3_DESIGN.md)(`owner-tools` region), 동선은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) |
-| [ai-skin/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md](./ai-skin/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md) | Skin / Studio / Public 재료 일치 라운드의 기록 | **디자이너가 읽을 최신 계약은 [SKIN_DESIGNER_CONTRACT.md](../SKIN_DESIGNER_CONTRACT.md)** (문서 머리말이 그렇게 적고 있다) |
-| [CATEGORY_GALLERY_MOBILE_20260911.md](./CATEGORY_GALLERY_MOBILE_20260911.md) | 2026-09-11 카테고리/갤러리 · 모바일 본문 조사와 결정 | [IMORY_GALLERY1_DESIGN.md](../IMORY_GALLERY1_DESIGN.md) · [IMORY_POST_BODY_IMAGE_DESIGN.md](../IMORY_POST_BODY_IMAGE_DESIGN.md) |
-| [core/design-tokens-mapping.md](../core/design-tokens-mapping.md) | 과거 리터럴 값 → 토큰 치환 **근거표**. 문서 스스로 "참고용이며 치환하지 않았다"고 적는다 | [Design.md](../Design.md) · [core/design-tokens.css](../core/design-tokens.css) |
+| [ai-skin/AI_SKIN_PHASE1D_B_NAVIGATION_CONTRACT.md](./ai-skin/AI_SKIN_PHASE1D_B_NAVIGATION_CONTRACT.md) | `navigation.home` / `postCategories` / `bannerCategories` 를 더한 Slice | [SKIN_DESIGNER_CONTRACT.md](./contracts/SKIN_DESIGNER_CONTRACT.md) |
+| [ai-skin/AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md](./ai-skin/AI_SKIN_PHASE1G_WRITE_TARGET_AND_OWNER_TOOLS.md) | 작성 대상 선택 패널 제거 · 소유자 도구 위치 | 소유자 도구 자리는 [IMORY_FOLDER3_DESIGN.md](./features/content/IMORY_FOLDER3_DESIGN.md)(`owner-tools` region), 동선은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) |
+| [ai-skin/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md](./ai-skin/AI_SKIN_PHASE_AI7_MATERIAL_PARITY.md) | Skin / Studio / Public 재료 일치 라운드의 기록 | **디자이너가 읽을 최신 계약은 [SKIN_DESIGNER_CONTRACT.md](./contracts/SKIN_DESIGNER_CONTRACT.md)** (문서 머리말이 그렇게 적고 있다) |
+| [CATEGORY_GALLERY_MOBILE_20260911.md](./CATEGORY_GALLERY_MOBILE_20260911.md) | 2026-09-11 카테고리/갤러리 · 모바일 본문 조사와 결정 | [IMORY_GALLERY1_DESIGN.md](./features/content/IMORY_GALLERY1_DESIGN.md) · [IMORY_POST_BODY_IMAGE_DESIGN.md](./features/content/IMORY_POST_BODY_IMAGE_DESIGN.md) |
+| [core/design-tokens-mapping.md](../core/design-tokens-mapping.md) | 과거 리터럴 값 → 토큰 치환 **근거표**. 문서 스스로 "참고용이며 치환하지 않았다"고 적는다 | [Design.md](./architecture/Design.md) · [core/design-tokens.css](../core/design-tokens.css) |
 
 ---
 
@@ -127,8 +139,8 @@
 
 | 문서 | 철회된 것 | 지금 기준은 어디인가 |
 | --- | --- | --- |
-| [ai-skin/AI_SKIN_PHASE1E_BANNER_AND_OWNER_LINKS.md](./ai-skin/AI_SKIN_PHASE1E_BANNER_AND_OWNER_LINKS.md) | WRITE 2단계 진입(→ 1F) · POST 의 `?manage=1` 과 소유자 도구의 위치·모양(→ 1G) | [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) |
-| [ai-skin/AI_SKIN_PHASE1F_WRITE_AND_MANAGE_FLOW.md](./ai-skin/AI_SKIN_PHASE1F_WRITE_AND_MANAGE_FLOW.md) | 카테고리 선택 패널(`#postComposePicker`) · 소유자 도구의 위치·모양(→ 1G) | [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) · [IMORY_FOLDER3_DESIGN.md](../IMORY_FOLDER3_DESIGN.md) |
+| [ai-skin/AI_SKIN_PHASE1E_BANNER_AND_OWNER_LINKS.md](./ai-skin/AI_SKIN_PHASE1E_BANNER_AND_OWNER_LINKS.md) | WRITE 2단계 진입(→ 1F) · POST 의 `?manage=1` 과 소유자 도구의 위치·모양(→ 1G) | [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) |
+| [ai-skin/AI_SKIN_PHASE1F_WRITE_AND_MANAGE_FLOW.md](./ai-skin/AI_SKIN_PHASE1F_WRITE_AND_MANAGE_FLOW.md) | 카테고리 선택 패널(`#postComposePicker`) · 소유자 도구의 위치·모양(→ 1G) | [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) · [IMORY_FOLDER3_DESIGN.md](./features/content/IMORY_FOLDER3_DESIGN.md) |
 
 ---
 
@@ -143,8 +155,8 @@
 | 프레임에서 어디로 갈 수 있는가(URL 허용/거부 · navId 표) | [skin/sandbox/skin-sandbox-nav.js](../skin/sandbox/skin-sandbox-nav.js) |
 | 카테고리 타입 / 페이지 번호 공용 상수(DB 제약과 짝) | [core/lib/category-types.js](../core/lib/category-types.js) |
 | 배포 버전 · 캐시(`APP_BUILD_VERSION` 하나가 유일한 원천) | [core/lib/build-version.js](../core/lib/build-version.js) · [_headers](../_headers) |
-| 본문이 그려지는 네 화면의 공용 CSS | [posts/posts-body-shared.css](../posts/posts-body-shared.css) (설명은 [IMORY_SANDBOX_SKIN_DESIGN.md](../IMORY_SANDBOX_SKIN_DESIGN.md) §N) |
-| 선택 복원의 근거(승격된 id vs 지문) · 관문 `bumpStudioWorkingRevision()` | [studio/inspector/studio-inspector-model.js](../studio/inspector/studio-inspector-model.js) `resolveInspectorSelectionTarget` (설명은 [IMORY_SANDBOX_SKIN_DESIGN.md](../IMORY_SANDBOX_SKIN_DESIGN.md) §R) |
+| 본문이 그려지는 네 화면의 공용 CSS | [posts/posts-body-shared.css](../posts/posts-body-shared.css) (설명은 [IMORY_SANDBOX_SKIN_DESIGN.md](./architecture/IMORY_SANDBOX_SKIN_DESIGN.md) §N) |
+| 선택 복원의 근거(승격된 id vs 지문) · 관문 `bumpStudioWorkingRevision()` | [studio/inspector/studio-inspector-model.js](../studio/inspector/studio-inspector-model.js) `resolveInspectorSelectionTarget` (설명은 [IMORY_SANDBOX_SKIN_DESIGN.md](./architecture/IMORY_SANDBOX_SKIN_DESIGN.md) §R) |
 
 ---
 
@@ -154,24 +166,27 @@
 
 | 옛 이름 | 지금 | 기준 문서 |
 | --- | --- | --- |
-| 메모 · `memo` (카테고리 타입) | `highlight` (호환 alias 유지) | [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](../IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) |
-| `/memos` 라우트 | `/highlights` (옛 주소도 같은 화면을 연다) | [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](../IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) |
-| `templates.memos` · `navigation.memos` · `memo-tools` region | `templates.highlights` · `navigation.highlights` · `highlight-tools` | [SKIN_DESIGNER_CONTRACT.md](../SKIN_DESIGNER_CONTRACT.md) |
-| PHASE AI-7 "재료 일치" 계약 | 디자이너가 읽는 최신 계약 | [SKIN_DESIGNER_CONTRACT.md](../SKIN_DESIGNER_CONTRACT.md) |
+| 메모 · `memo` (카테고리 타입) | `highlight` (호환 alias 유지) | [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./contracts/IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) |
+| `/memos` 라우트 | `/highlights` (옛 주소도 같은 화면을 연다) | [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./contracts/IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) |
+| `templates.memos` · `navigation.memos` · `memo-tools` region | `templates.highlights` · `navigation.highlights` · `highlight-tools` | [SKIN_DESIGNER_CONTRACT.md](./contracts/SKIN_DESIGNER_CONTRACT.md) |
+| PHASE AI-7 "재료 일치" 계약 | 디자이너가 읽는 최신 계약 | [SKIN_DESIGNER_CONTRACT.md](./contracts/SKIN_DESIGNER_CONTRACT.md) |
 | `AI_SKIN_*.md` (저장소 루트) | `docs/ai-skin/AI_SKIN_*.md` — 코드 주석은 아직 파일명만 적고 있다 | 이 색인 §1 · §4 |
-| Carrd 형 Customize · `home_customize` block JSON | SkinPackage + Skin Studio | [SKIN_DESIGNER_CONTRACT.md](../SKIN_DESIGNER_CONTRACT.md) |
+| 루트의 `IMORY_*_DESIGN.md` · `SKIN_*.md` · `Concept.md` · `Design.md` · `ToDo.md` | `docs/` 아래 기능별 폴더로 옮겼다(DOCS-CLEANUP-1B-1). **이름은 그대로**라 코드 주석의 파일명은 여전히 맞다 | 이 색인 §0 |
+| Carrd 형 Customize · `home_customize` block JSON | SkinPackage + Skin Studio | [SKIN_DESIGNER_CONTRACT.md](./contracts/SKIN_DESIGNER_CONTRACT.md) |
 | 자르기 좌표 · 팝오버 자리(AI-6D 본문의 값) | AI-6E 가 바꿨다 | [ai-skin/AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md](./ai-skin/AI_SKIN_PHASE_AI6E_FRAME_GEOMETRY.md) |
-| Inspector · AI 패널의 되돌리기 버튼 | 상단 ↶ ↷ 하나(STUDIO-SHELL-1.1 에서 걷었다) | [IMORY_STUDIO_SHELL_DESIGN.md](../IMORY_STUDIO_SHELL_DESIGN.md) |
-| 사진 "확대"로 자리를 넓히던 방식 | 사진 영역 너비는 **바깥 상자**가 받는다 | [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](../IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) §15~§21 |
+| Inspector · AI 패널의 되돌리기 버튼 | 상단 ↶ ↷ 하나(STUDIO-SHELL-1.1 에서 걷었다) | [IMORY_STUDIO_SHELL_DESIGN.md](./features/studio/IMORY_STUDIO_SHELL_DESIGN.md) |
+| 사진 "확대"로 자리를 넓히던 방식 | 사진 영역 너비는 **바깥 상자**가 받는다 | [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](./features/skin/IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md) §15~§21 |
 
 ---
 
 ## 8. 이 색인이 만들어진 방식
 
 DOCS-CLEANUP-1A 에서 `CLAUDE.md` 의 거대한 문서 표와 테스트 표를 갈라
-[INDEX.md](./INDEX.md)(이 문서)와 [TESTS.md](./TESTS.md) 로 옮겼다. 이 단계에서는
-**문서 파일을 옮기거나 이름을 바꾸거나 합치지 않았다** — 표의 경로는 전부 지금
-그대로의 위치다. 문서를 새로 만들거나 상태가 바뀌면 이 색인의 줄을 같이 고친다.
+[INDEX.md](./INDEX.md)(이 문서)와 [TESTS.md](./TESTS.md) 로 옮겼다.
+DOCS-CLEANUP-1B-1 에서 루트에 흩어져 있던 Markdown 28 개를 위 §0 의 폴더로
+`git mv` 했다 — **파일 이름은 하나도 바꾸지 않았고, 합치거나 지우지 않았다**.
+표의 링크는 전부 지금 그대로의 위치를 가리킨다. 문서를 새로 만들거나 자리나
+상태가 바뀌면 이 색인의 줄을 같이 고친다.
 
 알려진 문제: [CATEGORY_GALLERY_MOBILE_20260911.md](./CATEGORY_GALLERY_MOBILE_20260911.md)
 안의 `../posts/editor/posts-gallery.js` 링크는 대상 파일이 없다(이 라운드 이전부터).

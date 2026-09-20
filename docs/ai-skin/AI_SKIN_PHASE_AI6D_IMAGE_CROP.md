@@ -17,7 +17,7 @@ Select mode에서 이미지를 고른 뒤 **원본 파일은 그대로 두고** 
 > - 팝오버는 자르는 동안 프레임 **옆에** 앉고, 손이 무언가를 잡고 있는
 >   동안에는 움직이지 않는다.
 
-> **변경됨 → [IMORY_IMAGE_CROP_PRIORITY_DESIGN.md](../../IMORY_IMAGE_CROP_PRIORITY_DESIGN.md)**
+> **변경됨 → [IMORY_IMAGE_CROP_PRIORITY_DESIGN.md](../contracts/IMORY_IMAGE_CROP_PRIORITY_DESIGN.md)**
 > (IMAGE-CROP-PRIORITY-1). 저장 방식은 그대로이고 두 가지가 더해졌다.
 >
 > - 스킨 CSS 가 사진에 `!important` 를 걸면 아래 2.2 의 두 규칙이 그대로

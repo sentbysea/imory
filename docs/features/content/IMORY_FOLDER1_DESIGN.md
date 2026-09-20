@@ -25,9 +25,9 @@ DB에도 Skin Context에도 "폴더면 아이콘으로 보여라" 같은 UI 의�
 
 | 대상 | migration |
 | --- | --- |
-| `post_folders` 테이블 · 트리거 · RLS · GRANT | [20260908100000_create_post_folders.sql](supabase/migrations/20260908100000_create_post_folders.sql) |
-| `posts.folder_id` · `posts.sort_order` · backfill · 트리거 · GRANT | [20260908110000_add_posts_folder_id_sort_order.sql](supabase/migrations/20260908110000_add_posts_folder_id_sort_order.sql) |
-| 폴더 CRUD/이동 RPC | [20260908120000_add_post_folder_rpcs.sql](supabase/migrations/20260908120000_add_post_folder_rpcs.sql) |
+| `post_folders` 테이블 · 트리거 · RLS · GRANT | [20260908100000_create_post_folders.sql](../../../supabase/migrations/20260908100000_create_post_folders.sql) |
+| `posts.folder_id` · `posts.sort_order` · backfill · 트리거 · GRANT | [20260908110000_add_posts_folder_id_sort_order.sql](../../../supabase/migrations/20260908110000_add_posts_folder_id_sort_order.sql) |
+| 폴더 CRUD/이동 RPC | [20260908120000_add_post_folder_rpcs.sql](../../../supabase/migrations/20260908120000_add_post_folder_rpcs.sql) |
 
 ```
 post_folders
@@ -127,10 +127,10 @@ BEFORE INSERT 트리거). 오늘의 체감(`created_at DESC`라 새 글이 맨 �
 
 | 파일 | 책임 |
 | --- | --- |
-| [posts/manage/posts-folder-data.js](posts/manage/posts-folder-data.js) | 조회 · 트리 구성 · RPC 래퍼 · 스냅샷/롤백 |
-| [posts/manage/posts-folder-tree.js](posts/manage/posts-folder-tree.js) | 트리 DOM · 접기/펼치기 · 폴더 CRUD · 오류 문구 |
-| [posts/manage/posts-folder-sortable.js](posts/manage/posts-folder-sortable.js) | SortableJS 배선 · drop 판정 · 저장/롤백 |
-| [posts/manage/posts-folder-tree.css](posts/manage/posts-folder-tree.css) | 트리 전용 스타일 |
+| [posts/manage/posts-folder-data.js](../../../posts/manage/posts-folder-data.js) | 조회 · 트리 구성 · RPC 래퍼 · 스냅샷/롤백 |
+| [posts/manage/posts-folder-tree.js](../../../posts/manage/posts-folder-tree.js) | 트리 DOM · 접기/펼치기 · 폴더 CRUD · 오류 문구 |
+| [posts/manage/posts-folder-sortable.js](../../../posts/manage/posts-folder-sortable.js) | SortableJS 배선 · drop 판정 · 저장/롤백 |
+| [posts/manage/posts-folder-tree.css](../../../posts/manage/posts-folder-tree.css) | 트리 전용 스타일 |
 
 - ~~**한 화면에 정리와 삭제가 같이 있다**(사용자 결정 F-2)~~ —
   **철회됨(관리 UI 정리 라운드, 아래 1-6b)**. 모든 글 행에 체크박스가
@@ -156,14 +156,14 @@ BEFORE INSERT 트리거). 오늘의 체감(`created_at DESC`라 새 글이 맨 �
 | 삭제 모드 | `≡ □ 제목 … 날짜` | `+ folder` `+ post` `cancel` … `done` | 하나 이상 골랐을 때만 |
 
 - **체크박스는 삭제 모드에서만 만들어진다**(`postFolderDeleteModeOn`,
-  [posts/manage/posts-folder-tree.js](posts/manage/posts-folder-tree.js)).
+  [posts/manage/posts-folder-tree.js](../../../posts/manage/posts-folder-tree.js)).
   그때도 제목과 떨어진 독립 컬럼이 아니라 `≡` 바로 옆 — 관리 action
   영역에 붙는다. 모드를 나가면 선택 상태까지 함께 비운다.
 - 삭제 자체는 기존 `deleteSelectedPosts()`를 그대로 쓴다. 새 삭제
   경로를 만들지 않는다.
 - **legacy 헤더의 떠 있는 `edit` / `＋` 는 이 화면에서 감춘다**
   (`categoryManageScreenActive`,
-  [posts/view/posts-view-transition.js](posts/view/posts-view-transition.js)).
+  [posts/view/posts-view-transition.js](../../../posts/view/posts-view-transition.js)).
   같은 일을 하는 진입점이 툴바와 헤더에 둘 있으면 어느 쪽이 지금의
   관리 도구인지 알 수 없다. 그래서 나가는 길로 툴바에 `done`을 둔다 —
   `?manage=1`을 뗀 같은 카테고리를 `openCategoryPage()`로 다시 연다.
@@ -207,7 +207,7 @@ SortableJS **1.15.6 고정 버전**을 jsDelivr에서 받는다. 방문자에게
 
 ### 1-8. Skin Context
 
-[skin/skin-context.js](skin/skin-context.js)의 `buildCategorySkinContext()`가
+[skin/skin-context.js](../../../skin/skin-context.js)의 `buildCategorySkinContext()`가
 `category.posts` 옆에 **additive로** 두 필드를 더 준다.
 
 ```js
@@ -251,7 +251,7 @@ additive 키 **`folderHref`**(스킨에 `templates.folder`가 있고 direct 글�
 
 ### 1-9. Skin 렌더러 — 중첩 repeat
 
-[skin/skin-render.js](skin/skin-render.js)가 FOLDER-1부터 중첩
+[skin/skin-render.js](../../../skin/skin-render.js)가 FOLDER-1부터 중첩
 `data-imory-repeat`을 지원한다(`SKIN_MAX_REPEAT_DEPTH = 5`).
 
 그 전에는 `repeatDepth > 0`이면 경고 후 요소를 **삭제**했기 때문에 어떤
@@ -297,7 +297,7 @@ repeat 안에 두 가지를 모두 두고, 해당 없는 가지를 `hidden`으�
 - 폴더가 없는 카테고리에서도 `tree`에 root 글이 오므로 같은 템플릿이
   그대로 동작한다(`hasFolders`로 분기할 필요가 없다).
 
-**예시 스킨**: [skin/test-skins/imory-finder-folders-v1.json](skin/test-skins/imory-finder-folders-v1.json)
+**예시 스킨**: [skin/test-skins/imory-finder-folders-v1.json](../../../skin/test-skins/imory-finder-folders-v1.json)
 — 2026-09-09 현재 published된 finder 스타일(글마다 분홍 폴더 카드) 스킨을
 바탕으로, **1단계 폴더만 큰 분홍 폴더 카드**가 되고 그 안의 글은 작은
 항목(문서 아이콘 + 제목 + 날짜), 2·3단계 폴더는 카드 안의 들여쓴 묶음,
@@ -401,11 +401,11 @@ REST로 직접 읽을 수 있다. 화면에서 안 보이는 것과 접근할 �
 | 무엇을 | 어디서 | 결과 |
 | --- | --- | --- |
 | SQL 구조·트리거·RPC·backfill·GRANT | 실제 PostgreSQL(PGlite)에서 migration 3종을 그대로 실행 | 54/54 통과 |
-| 실제 Supabase 인스턴스 확인 절차 | [supabase/tests/20260908_post_folders_manual_test.sql](supabase/tests/20260908_post_folders_manual_test.sql) | **미실행 — 사용자 확인 필요** |
-| 관리 트리 렌더·CRUD·drop 판정·터치 drag·롤백 | [posts/posts-folder-manage-e2e-test.mjs](posts/posts-folder-manage-e2e-test.mjs) (포트 8941) | 30/30 통과 |
-| `category.tree` shape·마스킹·잘라내기·`category.posts` 불변 | [skin/skin-page-context-test.html](skin/skin-page-context-test.html) | 99/99 통과 |
-| 중첩 repeat 4단계 + 상한 · 폴더/글 분기 패턴(D-3) | [skin/skin-render-test.html](skin/skin-render-test.html) | 53/53 통과 |
-| folder-aware 스킨 — published CATEGORY(소유자/방문자 · 모바일/데스크톱 · 카드 안 글 → POST · 폴더 없음 · 빈 카테고리) + Studio Preview(`?scenario=t`) 동일 signature + `category.posts` 스킨 5종 회귀(폴더 유무에 innerHTML 동일) | [skin/skin-folder-tree-e2e-test.mjs](skin/skin-folder-tree-e2e-test.mjs) (포트 8942) | 56/56 통과 |
+| 실제 Supabase 인스턴스 확인 절차 | [supabase/tests/20260908_post_folders_manual_test.sql](../../../supabase/tests/20260908_post_folders_manual_test.sql) | **미실행 — 사용자 확인 필요** |
+| 관리 트리 렌더·CRUD·drop 판정·터치 drag·롤백 | [posts/posts-folder-manage-e2e-test.mjs](../../../posts/posts-folder-manage-e2e-test.mjs) (포트 8941) | 30/30 통과 |
+| `category.tree` shape·마스킹·잘라내기·`category.posts` 불변 | [skin/skin-page-context-test.html](../../../skin/skin-page-context-test.html) | 99/99 통과 |
+| 중첩 repeat 4단계 + 상한 · 폴더/글 분기 패턴(D-3) | [skin/skin-render-test.html](../../../skin/skin-render-test.html) | 53/53 통과 |
+| folder-aware 스킨 — published CATEGORY(소유자/방문자 · 모바일/데스크톱 · 카드 안 글 → POST · 폴더 없음 · 빈 카테고리) + Studio Preview(`?scenario=t`) 동일 signature + `category.posts` 스킨 5종 회귀(폴더 유무에 innerHTML 동일) | [skin/skin-folder-tree-e2e-test.mjs](../../../skin/skin-folder-tree-e2e-test.mjs) (포트 8942) | 56/56 통과 |
 | 기존 관리/스킨 동선 회귀 | `skin/skin-write-manage-e2e-test.mjs` · `skin-published-frame` · `skin-banner-page` · `studio/studio-inspector` | 147 / 64 / 216 / 34 전부 통과 |
 
 **구분해서 읽을 것**: 위 표에서 "통과"는 전부 **mock 또는 로컬 엔진** 결과다.

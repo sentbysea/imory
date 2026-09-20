@@ -1,7 +1,7 @@
 # 본문 사진 — post/gallery 공통 에디터
 
 관련 문서: [IMORY_GALLERY1_DESIGN.md](./IMORY_GALLERY1_DESIGN.md) (카테고리
-갤러리 표시 · post_covers · `?page=N`) · [CLAUDE.md](./CLAUDE.md)
+갤러리 표시 · post_covers · `?page=N`) · [CLAUDE.md](../../../CLAUDE.md)
 
 ---
 

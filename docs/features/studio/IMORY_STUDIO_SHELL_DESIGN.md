@@ -10,11 +10,11 @@ Bottom Dock 데이터 · AI 요청 · SkinPackage · Save/Publish · 선택 복�
 
 | 무엇 | 어디 |
 | --- | --- |
-| 마크업(상단 바 · 왼쪽 패널) | [studio/index.html](./studio/index.html) · 같은 모양을 [studio/studio-lifecycle-scenario.html](./studio/studio-lifecycle-scenario.html) 이 비춘다 |
-| 왼쪽 패널 여닫기 · 내용 바꾸기 · ··· 메뉴 · 현재 페이지 표시 | [studio/studio-shell.js](./studio/studio-shell.js) |
-| 모양(세 그룹 · 패널 · 좁은 화면) | [studio/studio-shell.css](./studio/studio-shell.css) |
-| Undo/Redo 기록 | [studio/studio-history.js](./studio/studio-history.js) |
-| 좁은 화면의 세 단계 시트(단계 · Preview 가림 방지 · 키보드 · Escape) · 손잡이 드래그 | [studio/studio-sheet.js](./studio/studio-sheet.js) · [studio/studio-sheet-drag.js](./studio/studio-sheet-drag.js) · Preview 문서 쪽 [studio/preview/preview-sheet-inset.js](./studio/preview/preview-sheet-inset.js) |
+| 마크업(상단 바 · 왼쪽 패널) | [studio/index.html](../../../studio/index.html) · 같은 모양을 [studio/studio-lifecycle-scenario.html](../../../studio/studio-lifecycle-scenario.html) 이 비춘다 |
+| 왼쪽 패널 여닫기 · 내용 바꾸기 · ··· 메뉴 · 현재 페이지 표시 | [studio/studio-shell.js](../../../studio/studio-shell.js) |
+| 모양(세 그룹 · 패널 · 좁은 화면) | [studio/studio-shell.css](../../../studio/studio-shell.css) |
+| Undo/Redo 기록 | [studio/studio-history.js](../../../studio/studio-history.js) |
+| 좁은 화면의 세 단계 시트(단계 · Preview 가림 방지 · 키보드 · Escape) · 손잡이 드래그 | [studio/studio-sheet.js](../../../studio/studio-sheet.js) · [studio/studio-sheet-drag.js](../../../studio/studio-sheet-drag.js) · Preview 문서 쪽 [studio/preview/preview-sheet-inset.js](../../../studio/preview/preview-sheet-inset.js) |
 | E2E | `node studio/studio-shell-e2e-test.mjs` (8968, `--browser=webkit` 도 돈다) · 시트는 `node studio/studio-mobile-sheet-e2e-test.mjs` (8972, `--browser=webkit`) |
 
 ---

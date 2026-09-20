@@ -5,11 +5,11 @@
 유지하면서 그 위에 `navigation.home`/`navigation.postCategories[]`/
 `navigation.bannerCategories[]`를 추가한 Slice.
 
-관련: [AI_SKIN_PHASE1A_DESIGN.md](AI_SKIN_PHASE1A_DESIGN.md)
+관련: [AI_SKIN_PHASE1A_DESIGN.md](./AI_SKIN_PHASE1A_DESIGN.md)
 (Skin Context v0.1, `navigation` 네임스페이스 원설계),
-[AI_SKIN_PHASE1C_PAGE_CONTRACT.md](AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
+[AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
 (HOME/CATEGORY/POST 세 page.type과 base namespace 공유 구조),
-[AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md](AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md)
+[AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md](./AI_SKIN_PHASE1D_A_LIST_DATA_AUDIT.md)
 (직전 Slice, 동일한 "감사 후 최소 계약" 방식론).
 
 ---

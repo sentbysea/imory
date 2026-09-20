@@ -46,7 +46,7 @@
 
 ## 1. 스킨 공개 화면 · 재료 일치 · 공개 URL 번호
 
-기준 문서: [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) · [SKIN_DESIGNER_CONTRACT.md](../SKIN_DESIGNER_CONTRACT.md) · [IMORY_PUBLIC_NUMBER_DESIGN.md](../IMORY_PUBLIC_NUMBER_DESIGN.md)
+기준 문서: [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) · [SKIN_DESIGNER_CONTRACT.md](./contracts/SKIN_DESIGNER_CONTRACT.md) · [IMORY_PUBLIC_NUMBER_DESIGN.md](./contracts/IMORY_PUBLIC_NUMBER_DESIGN.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -58,7 +58,7 @@
 
 ## 2. 폴더 (카테고리 안 3단계 · 폴더 페이지 · 폴더 안에서 쓰기)
 
-기준 문서: [IMORY_FOLDER1_DESIGN.md](../IMORY_FOLDER1_DESIGN.md) · [IMORY_FOLDER2_DESIGN.md](../IMORY_FOLDER2_DESIGN.md) · [IMORY_FOLDER3_DESIGN.md](../IMORY_FOLDER3_DESIGN.md)
+기준 문서: [IMORY_FOLDER1_DESIGN.md](./features/content/IMORY_FOLDER1_DESIGN.md) · [IMORY_FOLDER2_DESIGN.md](./features/content/IMORY_FOLDER2_DESIGN.md) · [IMORY_FOLDER3_DESIGN.md](./features/content/IMORY_FOLDER3_DESIGN.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -68,7 +68,7 @@
 
 ## 3. 갤러리 · 본문 사진 · 본문 장식 · 발췌 / Quote Preset
 
-기준 문서: [IMORY_GALLERY1_DESIGN.md](../IMORY_GALLERY1_DESIGN.md) · [IMORY_POST_BODY_IMAGE_DESIGN.md](../IMORY_POST_BODY_IMAGE_DESIGN.md) · [IMORY_EDITOR_DECOR_DESIGN.md](../IMORY_EDITOR_DECOR_DESIGN.md) · [IMORY_QUOTE_PRESET_RENDER_AUDIT.md](../IMORY_QUOTE_PRESET_RENDER_AUDIT.md)
+기준 문서: [IMORY_GALLERY1_DESIGN.md](./features/content/IMORY_GALLERY1_DESIGN.md) · [IMORY_POST_BODY_IMAGE_DESIGN.md](./features/content/IMORY_POST_BODY_IMAGE_DESIGN.md) · [IMORY_EDITOR_DECOR_DESIGN.md](./features/content/IMORY_EDITOR_DECOR_DESIGN.md) · [IMORY_QUOTE_PRESET_RENDER_AUDIT.md](./features/content/IMORY_QUOTE_PRESET_RENDER_AUDIT.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -78,7 +78,7 @@
 
 ## 4. 하이라이트
 
-기준 문서: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](../IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) · [IMORY_HIGHLIGHT1_DESIGN.md](../IMORY_HIGHLIGHT1_DESIGN.md)(기록)
+기준 문서: [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./contracts/IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) · [IMORY_HIGHLIGHT1_DESIGN.md](./archive/2026-09/IMORY_HIGHLIGHT1_DESIGN.md)(기록)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -87,7 +87,7 @@
 
 ## 5. 관리 설정 · 공유 카드 · 배포 버전
 
-기준 문서: [IMORY_SHARE_CARD_DESIGN.md](../IMORY_SHARE_CARD_DESIGN.md) · [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](../IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) · [core/lib/build-version.js](../core/lib/build-version.js)
+기준 문서: [IMORY_SHARE_CARD_DESIGN.md](./features/content/IMORY_SHARE_CARD_DESIGN.md) · [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./contracts/IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) · [core/lib/build-version.js](../core/lib/build-version.js)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -97,7 +97,7 @@
 
 ## 6. Skin Studio — 화면 구조 · 모바일 시트 · 파일 UX · Import
 
-기준 문서: [IMORY_STUDIO_SHELL_DESIGN.md](../IMORY_STUDIO_SHELL_DESIGN.md) · [IMORY_CSS_IMPORT_DESIGN.md](../IMORY_CSS_IMPORT_DESIGN.md)
+기준 문서: [IMORY_STUDIO_SHELL_DESIGN.md](./features/studio/IMORY_STUDIO_SHELL_DESIGN.md) · [IMORY_CSS_IMPORT_DESIGN.md](./contracts/IMORY_CSS_IMPORT_DESIGN.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -108,7 +108,7 @@
 
 ## 7. Skin Studio — Select · 직접 편집 · 이미지 자르기
 
-기준 문서: [IMORY_DIRECT_UX_DESIGN.md](../IMORY_DIRECT_UX_DESIGN.md) · [IMORY_IMAGE_CROP_PRIORITY_DESIGN.md](../IMORY_IMAGE_CROP_PRIORITY_DESIGN.md) · [docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md)
+기준 문서: [IMORY_DIRECT_UX_DESIGN.md](./features/studio/IMORY_DIRECT_UX_DESIGN.md) · [IMORY_IMAGE_CROP_PRIORITY_DESIGN.md](./contracts/IMORY_IMAGE_CROP_PRIORITY_DESIGN.md) · [docs/ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md](./ai-skin/AI_SKIN_PHASE_AI6A_ELEMENT_INSPECTOR.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -131,7 +131,7 @@
 
 ## 9. 배치 · 전환 · Bottom Dock primitive
 
-기준 문서: [IMORY_LAYOUT_PRIMITIVE_DESIGN.md](../IMORY_LAYOUT_PRIMITIVE_DESIGN.md) · [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](../IMORY_TRANSITION_PRIMITIVE_DESIGN.md) · [IMORY_BOTTOM_DOCK_DESIGN.md](../IMORY_BOTTOM_DOCK_DESIGN.md)
+기준 문서: [IMORY_LAYOUT_PRIMITIVE_DESIGN.md](./contracts/IMORY_LAYOUT_PRIMITIVE_DESIGN.md) · [IMORY_TRANSITION_PRIMITIVE_DESIGN.md](./contracts/IMORY_TRANSITION_PRIMITIVE_DESIGN.md) · [IMORY_BOTTOM_DOCK_DESIGN.md](./contracts/IMORY_BOTTOM_DOCK_DESIGN.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -144,7 +144,7 @@
 
 ## 10. HOME 좌우 영역 · 아이모리 기본 스킨
 
-기준 문서: [IMORY_SIDES_DESIGN.md](../IMORY_SIDES_DESIGN.md) · [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](../IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md)
+기준 문서: [IMORY_SIDES_DESIGN.md](./contracts/IMORY_SIDES_DESIGN.md) · [IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md](./features/skin/IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -156,7 +156,7 @@
 
 ## 11. Sandbox 스킨 (별도 origin 프레임)
 
-기준 문서: [IMORY_SANDBOX_SKIN_DESIGN.md](../IMORY_SANDBOX_SKIN_DESIGN.md)
+기준 문서: [IMORY_SANDBOX_SKIN_DESIGN.md](./architecture/IMORY_SANDBOX_SKIN_DESIGN.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |
@@ -167,7 +167,7 @@
 
 ## 12. DB migration (실제 Postgres / PGlite)
 
-기준 문서: [IMORY_PUBLIC_NUMBER_DESIGN.md](../IMORY_PUBLIC_NUMBER_DESIGN.md) · [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](../IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) · [IMORY_SHARE_CARD_DESIGN.md](../IMORY_SHARE_CARD_DESIGN.md)
+기준 문서: [IMORY_PUBLIC_NUMBER_DESIGN.md](./contracts/IMORY_PUBLIC_NUMBER_DESIGN.md) · [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./contracts/IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md) · [IMORY_SHARE_CARD_DESIGN.md](./features/content/IMORY_SHARE_CARD_DESIGN.md)
 
 | 파일 | 포트 | 범위 |
 | --- | --- | --- |

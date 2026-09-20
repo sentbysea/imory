@@ -4,9 +4,9 @@
 (1200 × 628, `summary_large_image`)과 그 설정 화면의 기준 문서다.
 
 관련 문서
-- 표시 공간/화면 전환 계약: [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
+- 표시 공간/화면 전환 계약: [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
 - 글 대표 이미지(post_covers)와 프록시: [IMORY_GALLERY1_DESIGN.md](./IMORY_GALLERY1_DESIGN.md) §3-5
-- 캐시/배포 버전: [core/lib/build-version.js](./core/lib/build-version.js)
+- 캐시/배포 버전: [core/lib/build-version.js](../../../core/lib/build-version.js)
 
 ---
 
@@ -14,16 +14,16 @@
 
 | 파일 | 역할 |
 | --- | --- |
-| [core/lib/share-card.js](./core/lib/share-card.js) | **카드 레이아웃의 유일한 출처**. 설정 값 정규화 + 카드 HTML 문서 한 장 생성. ES 모듈(브라우저·Workers 양쪽에서 돈다) |
-| [admin/settings/admin-share-card.js](./admin/settings/admin-share-card.js) | SETTINGS > SHARE > CARD 화면(미리보기·기본 사진·위치 조정 모달·오버레이 색/강도·폰트/제목 크기·카드 라벨·저장) |
-| [functions/api/og/post.js](./functions/api/og/post.js) | `/api/og/post` 카드 PNG + meta 조회/문자열 생성 |
-| [functions/_middleware.js](./functions/_middleware.js) | 공개 글 주소의 HTML 응답에 og/twitter meta 주입 |
-| [index.html](./index.html) | 사이트 기본 카드 meta 블록(서버가 이 블록을 교체한다) |
-| [images/share-card-default.png](./images/share-card-default.png) | 서비스 기본 카드(1200 × 628) |
-| [supabase/migrations/20260913170000_create_user_share_cards_bucket.sql](./supabase/migrations/20260913170000_create_user_share_cards_bucket.sql) | `user-share-cards` 공개 버킷 + 정책 |
-| [supabase/migrations/20260913180000_add_posts_share_label_seq.sql](./supabase/migrations/20260913180000_add_posts_share_label_seq.sql) | `posts.share_label_seq` — 자동 라벨 번호를 게시 시점에 굳힌다(§4-3) |
-| [admin/share-card-e2e-test.mjs](./admin/share-card-e2e-test.mjs) | e2e(포트 8954) — 설정 · 레이아웃 실측 · **실제 Pages Function** 응답 |
-| [supabase/share-label-seq-migration-test.mjs](./supabase/share-label-seq-migration-test.mjs) | **실제 Postgres(PGlite)** 로 위 migration 실행 — backfill · 번호 고정 · 트리거 순서 · GRANT |
+| [core/lib/share-card.js](../../../core/lib/share-card.js) | **카드 레이아웃의 유일한 출처**. 설정 값 정규화 + 카드 HTML 문서 한 장 생성. ES 모듈(브라우저·Workers 양쪽에서 돈다) |
+| [admin/settings/admin-share-card.js](../../../admin/settings/admin-share-card.js) | SETTINGS > SHARE > CARD 화면(미리보기·기본 사진·위치 조정 모달·오버레이 색/강도·폰트/제목 크기·카드 라벨·저장) |
+| [functions/api/og/post.js](../../../functions/api/og/post.js) | `/api/og/post` 카드 PNG + meta 조회/문자열 생성 |
+| [functions/_middleware.js](../../../functions/_middleware.js) | 공개 글 주소의 HTML 응답에 og/twitter meta 주입 |
+| [index.html](../../../index.html) | 사이트 기본 카드 meta 블록(서버가 이 블록을 교체한다) |
+| [images/share-card-default.png](../../../images/share-card-default.png) | 서비스 기본 카드(1200 × 628) |
+| [supabase/migrations/20260913170000_create_user_share_cards_bucket.sql](../../../supabase/migrations/20260913170000_create_user_share_cards_bucket.sql) | `user-share-cards` 공개 버킷 + 정책 |
+| [supabase/migrations/20260913180000_add_posts_share_label_seq.sql](../../../supabase/migrations/20260913180000_add_posts_share_label_seq.sql) | `posts.share_label_seq` — 자동 라벨 번호를 게시 시점에 굳힌다(§4-3) |
+| [admin/share-card-e2e-test.mjs](../../../admin/share-card-e2e-test.mjs) | e2e(포트 8954) — 설정 · 레이아웃 실측 · **실제 Pages Function** 응답 |
+| [supabase/share-label-seq-migration-test.mjs](../../../supabase/share-label-seq-migration-test.mjs) | **실제 Postgres(PGlite)** 로 위 migration 실행 — backfill · 번호 고정 · 트리거 순서 · GRANT |
 
 ---
 

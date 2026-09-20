@@ -2,7 +2,7 @@
 
 > **이 문서가 기준 문서다.** 공개 페이지(HOME / CATEGORY / POST / BANNER)의
 > 표시 공간, 화면 전환, 소유자·관리 동선, Preview와 공개 화면의 일치에 관한
-> 상세 규칙은 여기서만 관리한다. 작업 지침([CLAUDE.md](./CLAUDE.md))에는 핵심
+> 상세 규칙은 여기서만 관리한다. 작업 지침([CLAUDE.md](../../CLAUDE.md))에는 핵심
 > 원칙과 이 문서 링크만 둔다.
 >
 > 작성 기준: 2026-09-07, `main`(`9e3f029` + PHASE 1H 로컬 커밋). 아래 §1~§4의
@@ -13,8 +13,8 @@
 > **[차이]** 원칙과 현재 구현 사이에 남아 있는 간극(§5에 모아 둔다).
 >
 > 관련 문서: [SKIN_DESIGNER_CONTRACT.md](./SKIN_DESIGNER_CONTRACT.md)(SkinPackage
-> JSON shape) · [AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./docs/ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
-> (Skin Data Contract) · [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](./IMORY_AI_SKIN_CUSTOMIZE_PLAN.md)
+> JSON shape) · [AI_SKIN_PHASE1C_PAGE_CONTRACT.md](../ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
+> (Skin Data Contract) · [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](../plans/IMORY_AI_SKIN_CUSTOMIZE_PLAN.md)
 > (제품 방향).
 
 ---
@@ -79,7 +79,7 @@ throw하지 않고 `false`를 반환해 호출자가 legacy 화면으로 조용�
 있어(`position: absolute`) 스킨 프레임의 좌표·폭에 영향을 주지 않는다.
 
 **자리는 FOLDER-3에서 바뀌었다** — 기준 문서
-[IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 4절. "표시 공간 오른쪽 위
+[IMORY_FOLDER3_DESIGN.md](../features/content/IMORY_FOLDER3_DESIGN.md) 4절. "표시 공간 오른쪽 위
 12px 고정"은 이제 아무것도 잴 수 없을 때의 최후 fallback이고, 평소에는
 `posts/view/posts-view-owner-tools.js`가 (1) 스킨이 그린
 `[data-imory-region="owner-tools"]` 자리, 없으면 (2) 스킨의 글 기둥 첫 줄을 재서
@@ -353,7 +353,7 @@ URL을 만들 수 없기 때문이고, 진입 문서(HTML)는 `_headers`의 `no-
 | --- | --- | --- |
 | D1 | **표시 공간 계약이 두 벌이다.** HOME은 `.theme-mount--skin`(`home/home-base.css`), CATEGORY/POST/BANNER는 `.post-container--skin-active` + `.post-area--skin-active`(`posts/posts-base.css`). 결과 동작(가용 폭 + 내부 스크롤)은 같지만 공통 함수도 공통 클래스도 없다. §1-2의 "같은 표시 공간 계약"은 아직 **규칙**이지 코드가 아니다. | `home/home-base.css`, `posts/posts-base.css` |
 | D2 | **mount 클래스를 붙이는 곳이 흩어져 있다.** 벗기는 쪽만 `enterPlatformScreen()` 한 곳으로 모여 있고, 붙이는 쪽은 `posts-view-list.js`·`posts-view-detail.js`·`posts-view-banner.js`·`posts-view-list-select.js`에 10곳 넘게 반복된다. 새 페이지를 추가하면 그 반복이 한 벌 더 는다. | 위 4개 파일 |
-| ~~D3~~ | ~~**소유자 도구가 스킨 상단 띠와 겹칠 수 있다.**~~ **FOLDER-3에서 해소됨** — 스킨 계약에 자리(`data-imory-region="owner-tools"`)가 생겼고, 그리지 않은 스킨에서는 플랫폼이 스킨의 글 기둥 첫 줄을 재서 맞춘다. 기준 문서: [IMORY_FOLDER3_DESIGN.md](./IMORY_FOLDER3_DESIGN.md) 4절. 남은 것은 "표식이 없는 화면에서는 가장 높은 블록을 본문으로 본다"는 fallback 휴리스틱이 특이한 레이아웃에서 어긋날 수 있다는 점뿐이다(그때도 잰 값이 음수/비정상이면 예전 자리로 떨어진다). | `posts/view/posts-view-owner-tools.js`, `skin/skin-sanitize.js` |
+| ~~D3~~ | ~~**소유자 도구가 스킨 상단 띠와 겹칠 수 있다.**~~ **FOLDER-3에서 해소됨** — 스킨 계약에 자리(`data-imory-region="owner-tools"`)가 생겼고, 그리지 않은 스킨에서는 플랫폼이 스킨의 글 기둥 첫 줄을 재서 맞춘다. 기준 문서: [IMORY_FOLDER3_DESIGN.md](../features/content/IMORY_FOLDER3_DESIGN.md) 4절. 남은 것은 "표식이 없는 화면에서는 가장 높은 블록을 본문으로 본다"는 fallback 휴리스틱이 특이한 레이아웃에서 어긋날 수 있다는 점뿐이다(그때도 잰 값이 음수/비정상이면 예전 자리로 떨어진다). | `posts/view/posts-view-owner-tools.js`, `skin/skin-sanitize.js` |
 | D4 | **Preview와 공개 화면의 프레임 폭 일치를 자동으로 검증하지 않는다.** 공개 화면끼리의 일치(HOME 대 CATEGORY 대 POST 프레임 좌표/폭)는 `skin/skin-banner-page-e2e-test.mjs`의 `sameFrame()`이 보지만, Preview 쪽과 대조하는 테스트는 없다. §4-2의 2번은 아직 **규칙**이다. | `skin/skin-banner-page-e2e-test.mjs`, `studio/*-test.html` |
 | ~~D5~~ | ~~**`viewer` 계약이 좁다.**~~ **PHASE 1H에서 해소됨** — `viewer.manageHref`가 추가되어 목록 관리 진입점을 스킨 레이아웃 안에 둘 수 있고, 플랫폼은 그걸 알아보고 중복 도구를 접는다(§3-1). 남은 부분은 D8이다(D3는 FOLDER-3에서 해소). | `skin/skin-context.js`, `skin/skin-owner-entry.js` |
 | D8 | **`?manage=1` 화면에서 나가는 길이 뒤로가기뿐이다.** 스킨의 EDIT은 기존 `?manage=1` 화면(legacy 목록 + 선택 삭제)으로 들어가고, 거기서 선택 삭제를 꺼도 그 화면에 남는다(`togglePostListEditMode`의 복귀는 `categorySkinActive`가 true일 때만 동작하는데, `?manage=1`은 스킨을 건너뛰고 열리므로 false다). legacy 헤더의 뒤로가기는 HOME으로 간다. 주소·히스토리는 일치하므로(브라우저 뒤로가기가 그 카테고리 스킨으로 정확히 돌아온다) 이번 라운드에서는 그대로 두었다. 고치려면 "`?manage=1`을 스킨 위의 오버레이로 연다"와 "관리 화면에 명시적 종료 진입점을 둔다" 중 하나를 골라야 한다. | `posts/view/posts-view-list-select.js`, `posts/view/posts-view-list.js` |

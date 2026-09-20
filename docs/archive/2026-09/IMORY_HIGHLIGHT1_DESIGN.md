@@ -10,7 +10,7 @@
 > 지금 이 기능의 공식 이름은 전부 **highlight** 다.
 >
 > **변경됨 →
-> [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](./IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md)**
+> [IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md](../../contracts/IMORY_HIGHLIGHT2_CATEGORY_AND_SETTINGS.md)**
 >
 > | 이 문서가 쓴 이름 | 지금의 공식 이름 |
 > | --- | --- |
@@ -29,20 +29,20 @@
 
 | 구분 | 내용 |
 | --- | --- |
-| DB | [supabase/migrations/20260913100000_post_highlights_and_memo_folders.sql](./supabase/migrations/20260913100000_post_highlights_and_memo_folders.sql) · [20260913110000_grant_posts_updated_at_select.sql](./supabase/migrations/20260913110000_grant_posts_updated_at_select.sql) |
-| 위치 계산 | [posts/view/posts-view-highlight-anchor.js](./posts/view/posts-view-highlight-anchor.js) |
-| 저장소 | [posts/view/posts-view-highlight-store.js](./posts/view/posts-view-highlight-store.js) |
-| 화면·조작 | [posts/view/posts-view-highlight-mode.js](./posts/view/posts-view-highlight-mode.js) |
-| 도구 메뉴 | [posts/view/posts-view-tools-menu.js](./posts/view/posts-view-tools-menu.js) |
-| 팝오버 | [posts/view/posts-view-popover.js](./posts/view/posts-view-popover.js) |
-| 하이라이트 화면 | [posts/view/posts-view-highlights.js](./posts/view/posts-view-highlights.js) · [skin/skin-highlights.js](./skin/skin-highlights.js) |
-| 카드 ⋮ · 노트 팝업 · 토스트 | [posts/view/posts-view-highlight-card-tools.js](./posts/view/posts-view-highlight-card-tools.js) (공개 화면과 Studio Preview가 같이 쓴다) |
-| 진입점 칩 | [skin/skin-highlight-entry.js](./skin/skin-highlight-entry.js) |
-| 폴더 설정 | [admin/settings/admin-settings-highlight-folders.js](./admin/settings/admin-settings-highlight-folders.js) |
-| 폴더 차례(끌기) | [admin/settings/admin-settings-highlight-folder-order.js](./admin/settings/admin-settings-highlight-folder-order.js) |
-| Studio Preview | [studio/preview/preview-highlight-tools.js](./studio/preview/preview-highlight-tools.js) |
-| 스타일 | [posts/posts-highlight.css](./posts/posts-highlight.css) |
-| 테스트 | [posts/posts-highlight-e2e-test.mjs](./posts/posts-highlight-e2e-test.mjs) (8952) · [studio/studio-highlight-preview-e2e-test.mjs](./studio/studio-highlight-preview-e2e-test.mjs) (8953) · [admin/admin-settings-e2e-test.mjs](./admin/admin-settings-e2e-test.mjs) `--only=memofolder` (8949) |
+| DB | [supabase/migrations/20260913100000_post_highlights_and_memo_folders.sql](../../../supabase/migrations/20260913100000_post_highlights_and_memo_folders.sql) · [20260913110000_grant_posts_updated_at_select.sql](../../../supabase/migrations/20260913110000_grant_posts_updated_at_select.sql) |
+| 위치 계산 | [posts/view/posts-view-highlight-anchor.js](../../../posts/view/posts-view-highlight-anchor.js) |
+| 저장소 | [posts/view/posts-view-highlight-store.js](../../../posts/view/posts-view-highlight-store.js) |
+| 화면·조작 | [posts/view/posts-view-highlight-mode.js](../../../posts/view/posts-view-highlight-mode.js) |
+| 도구 메뉴 | [posts/view/posts-view-tools-menu.js](../../../posts/view/posts-view-tools-menu.js) |
+| 팝오버 | [posts/view/posts-view-popover.js](../../../posts/view/posts-view-popover.js) |
+| 하이라이트 화면 | [posts/view/posts-view-highlights.js](../../../posts/view/posts-view-highlights.js) · [skin/skin-highlights.js](../../../skin/skin-highlights.js) |
+| 카드 ⋮ · 노트 팝업 · 토스트 | [posts/view/posts-view-highlight-card-tools.js](../../../posts/view/posts-view-highlight-card-tools.js) (공개 화면과 Studio Preview가 같이 쓴다) |
+| 진입점 칩 | [skin/skin-highlight-entry.js](../../../skin/skin-highlight-entry.js) |
+| 폴더 설정 | [admin/settings/admin-settings-highlight-folders.js](../../../admin/settings/admin-settings-highlight-folders.js) |
+| 폴더 차례(끌기) | [admin/settings/admin-settings-highlight-folder-order.js](../../../admin/settings/admin-settings-highlight-folder-order.js) |
+| Studio Preview | [studio/preview/preview-highlight-tools.js](../../../studio/preview/preview-highlight-tools.js) |
+| 스타일 | [posts/posts-highlight.css](../../../posts/posts-highlight.css) |
+| 테스트 | [posts/posts-highlight-e2e-test.mjs](../../../posts/posts-highlight-e2e-test.mjs) (8952) · [studio/studio-highlight-preview-e2e-test.mjs](../../../studio/studio-highlight-preview-e2e-test.mjs) (8953) · [admin/admin-settings-e2e-test.mjs](../../../admin/admin-settings-e2e-test.mjs) `--only=memofolder` (8949) |
 
 ---
 
@@ -173,7 +173,7 @@ cover_focus_x / cover_focus_y smallint (0~100)
 ### 2-2. 자리
 
 떠 있는 도구의 좌표 계산은 기존
-[posts/view/posts-view-owner-tools.js](./posts/view/posts-view-owner-tools.js)를
+[posts/view/posts-view-owner-tools.js](../../../posts/view/posts-view-owner-tools.js)를
 그대로 쓴다. 바뀐 것은 판정 클래스 하나다 — 글 상세에서는
 `.post-container--owner-tools`가 아니라 `.post-container--viewer-tools`이고,
 CSS 규칙은 `:is(...)`로 둘 다 받는다.
@@ -248,7 +248,7 @@ UI(`[data-post-hl-ui]`). 세어지면 같은 글인데 주인장과 방문자의
 - 모바일은 꾹 눌러, 데스크톱은 드래그로 고른다 — 둘 다 브라우저의 기본 텍스트
   선택이고, 끝났다는 신호가 `selectionchange`다(320ms 디바운스).
 - 선택 범위 근처에 색 목록이 뜬다. UI는 에디터의 것을 그대로 재사용한다
-  (`openImoryColorMenu`, [posts/editor/posts-color-picker.js](./posts/editor/posts-color-picker.js)).
+  (`openImoryColorMenu`, [posts/editor/posts-color-picker.js](../../../posts/editor/posts-color-picker.js)).
 - **재사용하되 처리는 다르다**: `document.execCommand`도 본문 저장도 없고
   `save_own_post_highlight` RPC 하나만 부른다.
 
@@ -358,7 +358,7 @@ Settings의 카테고리 한 줄 아래, 갤러리 표시 설정과 같은 자�
 
 `templates.memos`는 banner/folder와 같은 **선택** 템플릿이지만 폴백이 다르다 —
 없으면 그 화면이 사라지는 게 아니라 **플랫폼 기본 template**으로 그려진다
-(`getDefaultMemosTemplate()`, [skin/skin-template.js](./skin/skin-template.js)).
+(`getDefaultMemosTemplate()`, [skin/skin-template.js](../../../skin/skin-template.js)).
 메모는 스킨의 장식이 아니라 사용자의 데이터라 legacy 화면이 따로 없기 때문이다.
 
 그래서 이 화면은 스킨이 있든 없든 **항상 같은 계약**(`data-imory-*`)으로
@@ -387,7 +387,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 
 갤러리 재료(`category.gallery`의 커버·비율·제목·링크·목록,
 `category.pagination`)는 GALLERY-1에서 이미 제공되고 있으며 이번 라운드에서
-바뀌지 않았다 — [IMORY_GALLERY1_DESIGN.md](./IMORY_GALLERY1_DESIGN.md) 참고.
+바뀌지 않았다 — [IMORY_GALLERY1_DESIGN.md](../../features/content/IMORY_GALLERY1_DESIGN.md) 참고.
 
 ### 8-3. `memo-tools` region
 
@@ -444,7 +444,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 
 `navigation.memos`만으로는 **기존 스킨**에서 메모 화면에 닿을 수 없었다. 그
 빈자리를 플랫폼이 메운다 — 남의 스킨 코드를 고쳐 쓰지 않고, 화면 오른쪽 아래에
-작은 칩 하나를 얹는다([skin/skin-highlight-entry.js](./skin/skin-highlight-entry.js)).
+작은 칩 하나를 얹는다([skin/skin-highlight-entry.js](../../../skin/skin-highlight-entry.js)).
 
 세 가지 규칙이 전부다.
 
@@ -468,7 +468,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
   CSS 한 줄로 내린다.
 - **버튼이 아니라 링크**다 — 새 탭으로 열기·주소 복사·수정키 클릭 같은 브라우저
   기본 동작이 그대로 산다. 평소 클릭은 `data-imory-platform-nav` 표식을 보고
-  기존 SPA 라우터가 가로챈다([skin/skin-link-nav.js](./skin/skin-link-nav.js)).
+  기존 SPA 라우터가 가로챈다([skin/skin-link-nav.js](../../../skin/skin-link-nav.js)).
   그 표식은 스킨 마크업에 들어갈 수 없다(새니타이저 허용 목록 밖).
 
 **`/memos`가 SPA 라우트가 됐다.** 그 전에는 스킨이 `navigation.memos.href`를
@@ -477,7 +477,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 `openMemoScreen()`으로 넘긴다.
 
 **새로 만드는 스킨**은 처음부터 메모 링크를 갖는다 —
-[skin/skin-generator.js](./skin/skin-generator.js)의 nav 조각에 한 줄이 붙었고,
+[skin/skin-generator.js](../../../skin/skin-generator.js)의 nav 조각에 한 줄이 붙었고,
 `navigation.memos.enabled`가 false면 렌더 단계에서 통째로 빠진다.
 
 **Studio Preview**도 같은 칩을 그린다(첫 라운드 §11-4 해소). Preview 문서가
@@ -508,7 +508,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
   현재 상태인 것처럼 남지 않는다. 주인장이 글을 저장할 때 그 글의 기록을
   아예 버리기도 한다(posts/editor/posts-save.js).
 - 그 대조에 필요한 컬럼 하나(`posts.updated_at`)의 SELECT 권한을 여는 것이
-  [20260913110000_grant_posts_updated_at_select.sql](./supabase/migrations/20260913110000_grant_posts_updated_at_select.sql)이다.
+  [20260913110000_grant_posts_updated_at_select.sql](../../../supabase/migrations/20260913110000_grant_posts_updated_at_select.sql)이다.
   카드 목록 쿼리가 이미 `posts`를 embed하므로 **추가 요청이 생기지 않는다** —
   카드마다 원문 본문을 받아 다시 판정하는 방식은 여전히 쓰지 않는다.
 - 그 migration이 적용되지 않은 배포에서는 그 컬럼만 빼고 한 번 더 물어본다.
@@ -534,7 +534,7 @@ Import / Export / normalize / AI 응답 스키마 / Studio Preview 전부 `memos
 ### 11-4. 메모 폴더 차례 — 꾹 눌러 끌기 (첫 라운드 §11-3 해소)
 
 Settings의 카테고리 목록 **아래**에 메모 폴더만 모은 목록이 따로 생겼다
-([admin/settings/admin-settings-highlight-folder-order.js](./admin/settings/admin-settings-highlight-folder-order.js)).
+([admin/settings/admin-settings-highlight-folder-order.js](../../../admin/settings/admin-settings-highlight-folder-order.js)).
 카테고리 줄마다 흩어져 있던 ↑↓는 그 목록으로 옮겼다 — 움직이는 배열이 다른데
 조작이 같은 자리에 섞여 있으면 무엇이 움직이는지 알 수 없다.
 
@@ -559,7 +559,7 @@ Settings의 카테고리 목록 **아래**에 메모 폴더만 모은 목록이 
 방법이 없다. 그래서 **실제로 열리게** 바꾼다.
 
 - 모양과 조작은 공개 화면과 **같은 코드**다
-  ([posts/view/posts-view-highlight-card-tools.js](./posts/view/posts-view-highlight-card-tools.js)를
+  ([posts/view/posts-view-highlight-card-tools.js](../../../posts/view/posts-view-highlight-card-tools.js)를
   Preview 문서도 읽는다). Preview용 복제본을 만들지 않는다.
 - **아무것도 저장하지 않는다.** Preview가 넘기는 handlers는 supabase를 전혀
   부르지 않고 화면의 카드 객체만 고친다. 매번 "미리보기에서는 저장되지

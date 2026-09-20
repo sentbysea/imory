@@ -25,7 +25,7 @@ OpenAI를 전혀 부르지 않고 Studio 자체 기능으로 끝내는 단계.
 > - sandbox 에서는 **직접 편집(텍스트/이미지 크기/자르기)이 잠긴다.**
 >   실측값과 임시 미리보기 채널이 프레임 계약에 아직 없다.
 >
-> 기준 문서: [IMORY_SANDBOX_SKIN_DESIGN.md](../../IMORY_SANDBOX_SKIN_DESIGN.md) §Q.
+> 기준 문서: [IMORY_SANDBOX_SKIN_DESIGN.md](../architecture/IMORY_SANDBOX_SKIN_DESIGN.md) §Q.
 
 > **변경됨 (2026-09-17)** — 이 문서는 선택을 `data-imory-edit-id` **하나로**
 > 되살린다고 적고 있다. 그것만으로는 부족하다: 임시 id 는 구조 경로라,
@@ -48,7 +48,7 @@ OpenAI를 전혀 부르지 않고 Studio 자체 기능으로 끝내는 단계.
 > 그리고 720px 이하에서 Select 버튼을 감추던 규칙을 걷었다 — 모바일
 > 에서도 Select 와 선택 요소 AI 를 쓸 수 있다.
 >
-> 기준 문서: [IMORY_SANDBOX_SKIN_DESIGN.md](../../IMORY_SANDBOX_SKIN_DESIGN.md) §R.
+> 기준 문서: [IMORY_SANDBOX_SKIN_DESIGN.md](../architecture/IMORY_SANDBOX_SKIN_DESIGN.md) §R.
 
 ---
 
@@ -203,7 +203,7 @@ e2e 검사 **B**(테두리가 Preview 안쪽에 그려진다) · **U**(Mobile에
 ```
 ┌────────────────────────────────┐
 │ HOME · 텍스트 <h1> · Recent... │  ← 무엇을 골랐는지
-> **변경됨 → [IMORY_DIRECT_UX_DESIGN.md](../../IMORY_DIRECT_UX_DESIGN.md) §9 (DIRECT-UX-1).** 아래 "직접 수정 | ✦ AI 수정" 두 버튼은 없어졌다. 패널 항목은 늘 펼쳐져 있고, AI 는 Quick Bar 의 "AI로 수정"(같은 id `studioInspectorAiButton`)으로 연다. 팝오버 제목의 `<태그>` · 바인딩 경로도 사람이 읽는 이름으로 바뀌었다(§2). 식별자 · patch 방식 · 보호 계약은 이 문서 그대로다.
+> **변경됨 → [IMORY_DIRECT_UX_DESIGN.md](../features/studio/IMORY_DIRECT_UX_DESIGN.md) §9 (DIRECT-UX-1).** 아래 "직접 수정 | ✦ AI 수정" 두 버튼은 없어졌다. 패널 항목은 늘 펼쳐져 있고, AI 는 Quick Bar 의 "AI로 수정"(같은 id `studioInspectorAiButton`)으로 연다. 팝오버 제목의 `<태그>` · 바인딩 경로도 사람이 읽는 이름으로 바뀌었다(§2). 식별자 · patch 방식 · 보호 계약은 이 문서 그대로다.
 
 │ [ 직접 수정 ] [ ✦ AI 수정 ]     │
 │ (안내문: 왜 어떤 옵션이 없는지) │
@@ -217,7 +217,7 @@ e2e 검사 **B**(테두리가 Preview 안쪽에 그려진다) · **U**(Mobile에
 
 > **변경됨 (STUDIO-SHELL-1.1)** — 맨 아래 `[ 되돌리기 ]`(`#studioInspectorUndoButton`)는
 > 걷었다. 직접 편집은 상단 ↶ 한 칸으로 되돌린다 →
-> [IMORY_STUDIO_SHELL_DESIGN.md](../../IMORY_STUDIO_SHELL_DESIGN.md) §4.
+> [IMORY_STUDIO_SHELL_DESIGN.md](../features/studio/IMORY_STUDIO_SHELL_DESIGN.md) §4.
 > `undoStudioInspectorEdit()` 는 호환 경로로 남아 있다.
 
 - 위치는 선택 요소 rect 기준 아래 → 넘치면 위 → 그래도 넘치면 클램프.

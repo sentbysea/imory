@@ -18,8 +18,8 @@
 
 | 무엇 | 문서 |
 | --- | --- |
-| 스킨/플랫폼 담당 범위 · 표시 공간 · 화면 전환 · 소유자 관리 · Preview 일치 | [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) |
-| SkinPackage JSON 이 어떤 모양이어야 하는가(디자이너용) · 재료 일치 | [SKIN_DESIGNER_CONTRACT.md](./SKIN_DESIGNER_CONTRACT.md) |
+| 스킨/플랫폼 담당 범위 · 표시 공간 · 화면 전환 · 소유자 관리 · Preview 일치 | [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./docs/contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) |
+| SkinPackage JSON 이 어떤 모양이어야 하는가(디자이너용) · 재료 일치 | [SKIN_DESIGNER_CONTRACT.md](./docs/contracts/SKIN_DESIGNER_CONTRACT.md) |
 | 템플릿이 받는 데이터(Skin Data Contract) | [docs/ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./docs/ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md) |
 | 그 밖의 모든 문서 · 옛 이름 별칭 표 | [docs/INDEX.md](./docs/INDEX.md) |
 
@@ -47,7 +47,7 @@
 
 ## 2. 핵심 원칙 — 스킨과 플랫폼
 
-상세: [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
+상세: [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./docs/contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md)
 
 ### 담당 범위
 

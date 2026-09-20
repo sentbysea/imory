@@ -1,8 +1,8 @@
 # IMORY — 스킨 CSS 판정 · SkinPackage 공용 파이프라인 · 이미지 슬롯 정규화 (IMPORT-CSS-IMAGE-1)
 
-이 문서가 기준이다. 코드: [skin/skin-css-validate.js](./skin/skin-css-validate.js) `analyzeSkinCss` ·
-[skin/skin-package-images.js](./skin/skin-package-images.js) `normalizeSkinPackageImageSlots` ·
-[skin/skin-package-import.js](./skin/skin-package-import.js) `runSkinPackageContentPipeline`.
+이 문서가 기준이다. 코드: [skin/skin-css-validate.js](../../skin/skin-css-validate.js) `analyzeSkinCss` ·
+[skin/skin-package-images.js](../../skin/skin-package-images.js) `normalizeSkinPackageImageSlots` ·
+[skin/skin-package-import.js](../../skin/skin-package-import.js) `runSkinPackageContentPipeline`.
 
 ---
 

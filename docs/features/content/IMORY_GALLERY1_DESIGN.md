@@ -19,10 +19,10 @@
 
 관련 문서:
 [IMORY_POST_BODY_IMAGE_DESIGN.md](./IMORY_POST_BODY_IMAGE_DESIGN.md) ·
-[SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) ·
+[SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](../../contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) ·
 [IMORY_FOLDER1_DESIGN.md](./IMORY_FOLDER1_DESIGN.md) ·
 [IMORY_FOLDER2_DESIGN.md](./IMORY_FOLDER2_DESIGN.md) ·
-[docs/ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md](./docs/ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
+[docs/ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md](../../ai-skin/AI_SKIN_PHASE1C_PAGE_CONTRACT.md)
 
 ---
 
@@ -763,7 +763,7 @@ SPA 안에서 카테고리·글·폴더를 오가도 그대로 유지된다.
 ### 13-6. 올리는 이미지 준비 — 모든 경로 공용 (2026-09-12)
 
 `prepareImoryUploadImage(file, { stripMetadata })`
-([core/lib/image-upload.js](./core/lib/image-upload.js)) **하나**가
+([core/lib/image-upload.js](../../../core/lib/image-upload.js)) **하나**가
 메타데이터 제거와 용량 압축을 함께 한다. `core/lib/content-protection.js`의
 `stripImageExifIfNeeded`는 없어졌다 — 그 함수는 일부 경로에서만 불려서,
 설정을 켜 둬도 **어느 경로로 올렸느냐에 따라** 메타데이터가 남았다.

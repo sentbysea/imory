@@ -4,7 +4,7 @@ title: Imory Design
 
 # Imory Design
 
-> 관련 문서: [Concept.md](./Concept.md) · [ToDo.md](./ToDo.md)
+> 관련 문서: [Concept.md](./Concept.md) · [ToDo.md](../plans/ToDo.md)
 >
 > 이 문서는 `core/design-tokens.css`, `core/components/*.css`, `core/patterns/*.css`, 그리고 실제 화면 CSS/HTML을 직접 읽고 작성했다. 표시 기준: **사실**(코드에 존재) / **계획**(사용자와 합의된 방향, 아직 미구현) / **제안**(이 문서에서 처음 제시하는 값, 코드에 없음) / **확인 필요**.
 >

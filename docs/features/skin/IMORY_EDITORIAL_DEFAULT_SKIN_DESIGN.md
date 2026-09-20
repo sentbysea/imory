@@ -4,22 +4,22 @@
 꾸밀 수 있는 **공용 기본 스킨 뼈대**. 특정 작품 전용 스킨이 아니다.
 
 이 문서는 "현재 구현" · "앞으로 지킬 원칙" · "남은 차이"(§14)를 나눠 적는다.
-좌우 영역(1·2·3단 · 칼럼/패널)의 계약 자체는 [IMORY_SIDES_DESIGN.md](./IMORY_SIDES_DESIGN.md)
+좌우 영역(1·2·3단 · 칼럼/패널)의 계약 자체는 [IMORY_SIDES_DESIGN.md](../../contracts/IMORY_SIDES_DESIGN.md)
 가 기준이고, 이 문서는 그 위에 얹은 것만 적는다.
 
 | 무엇 | 어디 |
 | --- | --- |
-| 기본 스킨(HTML · CSS · 슬롯 · regions 를 만드는 함수) | [skin/skin-default-editorial.js](./skin/skin-default-editorial.js) `createImoryEditorialDefaultSkin` |
-| Import 할 수 있는 JSON(같은 함수의 결과) | [skin/test-skins/build-imory-editorial-default-v2.mjs](./skin/test-skins/build-imory-editorial-default-v2.mjs) → `imory-editorial-default-v2.json` |
-| 주인의 스킨 설정(색 네 역할 · HOME 사진 구성 · D-day) — 읽기/쓰기 · 저장 경계 · 렌더 런타임 | [skin/skin-settings.js](./skin/skin-settings.js) |
-| 모바일에서 좌우 영역 끄기 | [skin/skin-sides.js](./skin/skin-sides.js) `readSkinSidesMobileSetting` / `writeSkinSidesMobileSetting` |
-| 렌더 진입 | [skin/skin-template.js](./skin/skin-template.js) `resolveSkinTemplate`(`settings` 키) · [skin/skin-render.js](./skin/skin-render.js) `renderSkin`(색 규칙 · `settings.*` 바인딩 · `compileSkinPhotos`) |
-| sandbox 봉투 | [skin/sandbox/skin-sandbox-protocol.js](./skin/sandbox/skin-sandbox-protocol.js) `isSandboxSkinSettings` · host `copySandboxSkinSettings` · frame |
-| Studio 첫 스킨 | [skin/skin-initializer.js](./skin/skin-initializer.js) |
-| Studio 설정 UI(Layout 패널 아래) | [studio/sides/home-settings-panel.js](./studio/sides/home-settings-panel.js) · `getStudioHomeSettings` / `setStudioHomeSetting`([studio/studio-preview.js](./studio/studio-preview.js)) |
-| AI 지시문 | [functions/api/skin-ai.js](./functions/api/skin-ai.js) "Owner settings the skin reads" 절 |
+| 기본 스킨(HTML · CSS · 슬롯 · regions 를 만드는 함수) | [skin/skin-default-editorial.js](../../../skin/skin-default-editorial.js) `createImoryEditorialDefaultSkin` |
+| Import 할 수 있는 JSON(같은 함수의 결과) | [skin/test-skins/build-imory-editorial-default-v2.mjs](../../../skin/test-skins/build-imory-editorial-default-v2.mjs) → `imory-editorial-default-v2.json` |
+| 주인의 스킨 설정(색 네 역할 · HOME 사진 구성 · D-day) — 읽기/쓰기 · 저장 경계 · 렌더 런타임 | [skin/skin-settings.js](../../../skin/skin-settings.js) |
+| 모바일에서 좌우 영역 끄기 | [skin/skin-sides.js](../../../skin/skin-sides.js) `readSkinSidesMobileSetting` / `writeSkinSidesMobileSetting` |
+| 렌더 진입 | [skin/skin-template.js](../../../skin/skin-template.js) `resolveSkinTemplate`(`settings` 키) · [skin/skin-render.js](../../../skin/skin-render.js) `renderSkin`(색 규칙 · `settings.*` 바인딩 · `compileSkinPhotos`) |
+| sandbox 봉투 | [skin/sandbox/skin-sandbox-protocol.js](../../../skin/sandbox/skin-sandbox-protocol.js) `isSandboxSkinSettings` · host `copySandboxSkinSettings` · frame |
+| Studio 첫 스킨 | [skin/skin-initializer.js](../../../skin/skin-initializer.js) |
+| Studio 설정 UI(Layout 패널 아래) | [studio/sides/home-settings-panel.js](../../../studio/sides/home-settings-panel.js) · `getStudioHomeSettings` / `setStudioHomeSetting`([studio/studio-preview.js](../../../studio/studio-preview.js)) |
+| AI 지시문 | [functions/api/skin-ai.js](../../../functions/api/skin-ai.js) "Owner settings the skin reads" 절 |
 | 단위 테스트 | `node skin/skin-settings-test.mjs` |
-| 렌더 E2E | `node skin/skin-editorial-default-e2e-test.mjs` (8978) · [skin/skin-editorial-default-render-harness.html](./skin/skin-editorial-default-render-harness.html) |
+| 렌더 E2E | `node skin/skin-editorial-default-e2e-test.mjs` (8978) · [skin/skin-editorial-default-render-harness.html](../../../skin/skin-editorial-default-render-harness.html) |
 | Studio E2E | `node studio/studio-editorial-default-e2e-test.mjs` (8980) |
 | 네 화면 일치(Studio native/sandbox · 공개 native/sandbox) · 자르기 · Save/Export/Import/Publish | `node studio/studio-crop-priority-e2e-test.mjs --only=editorial` (8974 + 8975) |
 
@@ -193,7 +193,7 @@ template.settings = { colors?: {…}, photos?: "…", dday?: { date, label? } }
 
 ## 5. 1·2·3단 · 데스크톱 칼럼 · 모바일 패널 (기본 스킨의 값)
 
-계약과 동작은 [IMORY_SIDES_DESIGN.md](./IMORY_SIDES_DESIGN.md) 그대로이고, 기본
+계약과 동작은 [IMORY_SIDES_DESIGN.md](../../contracts/IMORY_SIDES_DESIGN.md) 그대로이고, 기본
 스킨은 폭만 정한다.
 
 | 값 | 기본 스킨 |
@@ -329,7 +329,7 @@ skin/skin-sides.js 에 있다.
 | `studio/studio-editorial-default-e2e-test.mjs` chromium / webkit | 52/52 · 52/52 |
 | `studio/studio-crop-priority-e2e-test.mjs --only=editorial` chromium / webkit | 12/12 · 12/12(webkit 첫 회 1건 — 프레임 폭이 자리 잡기 전에 읽은 것. 읽기를 "두 번 같을 때까지"로 고친 뒤 반복 통과) |
 
-회귀는 [docs/TESTS.md](./docs/TESTS.md) 표의 각 행과 커밋 메시지를 본다.
+회귀는 [docs/TESTS.md](../../TESTS.md) 표의 각 행과 커밋 메시지를 본다.
 
 ## 14. 남은 차이
 

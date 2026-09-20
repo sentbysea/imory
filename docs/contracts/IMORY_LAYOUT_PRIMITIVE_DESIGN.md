@@ -11,15 +11,15 @@ Skin Studio 의 **배치 primitive** 다섯 가지를 정한다.
 
 | 무엇 | 어디 |
 | --- | --- |
-| 계약 · 값 규칙 · 컴파일러 | [skin/skin-layout.js](./skin/skin-layout.js) |
-| 배치 규칙(CSS) | [skin/skin-layout.css](./skin/skin-layout.css) |
-| 저장 경계 | [skin/skin-sanitize.js](./skin/skin-sanitize.js) |
-| 렌더 진입 | [skin/skin-render.js](./skin/skin-render.js) `renderSkin()` |
-| 직접 편집 | [studio/inspector/studio-inspector-layout.js](./studio/inspector/studio-inspector-layout.js) |
-| AI 지시문 | [functions/api/skin-ai.js](./functions/api/skin-ai.js) `buildSkinAiSystemPrompt` |
+| 계약 · 값 규칙 · 컴파일러 | [skin/skin-layout.js](../../skin/skin-layout.js) |
+| 배치 규칙(CSS) | [skin/skin-layout.css](../../skin/skin-layout.css) |
+| 저장 경계 | [skin/skin-sanitize.js](../../skin/skin-sanitize.js) |
+| 렌더 진입 | [skin/skin-render.js](../../skin/skin-render.js) `renderSkin()` |
+| 직접 편집 | [studio/inspector/studio-inspector-layout.js](../../studio/inspector/studio-inspector-layout.js) |
+| AI 지시문 | [functions/api/skin-ai.js](../../functions/api/skin-ai.js) `buildSkinAiSystemPrompt` |
 | 단위 테스트 | `node skin/skin-layout-test.mjs` |
 | 렌더 E2E | `node skin/skin-layout-e2e-test.mjs` (포트 8964) |
-| 손으로 보는 하네스 | [skin/skin-layout-render-harness.html](./skin/skin-layout-render-harness.html) |
+| 손으로 보는 하네스 | [skin/skin-layout-render-harness.html](../../skin/skin-layout-render-harness.html) |
 
 ---
 
@@ -278,9 +278,9 @@ grid  > repeat(글 목록)
 
 ## 6. 직접 편집 (Direct Edit)
 
-> **변경됨 → [IMORY_DIRECT_UX_DESIGN.md](./IMORY_DIRECT_UX_DESIGN.md) §7 · §10 (DIRECT-UX-1).** 아래 배치 폼(배치 방식 · 열 수 · 간격 · 좌표 숫자 …)은 **일반 Select 패널에서 걷었다** — 값은 지우지 않고(모든 확정이 속성 하나만 바꾼다) 배치는 AI · Code 로 고친다. 폼과 확정 함수는 그대로 있고 개발/테스트 스위치 `window.IMORY_STUDIO_ADVANCED_INSPECTOR = true` 에서만 그려진다(`studio-layout-e2e-test.mjs` 가 켠다). 자유 배치 요소는 이제 ✥ 손잡이뿐 아니라 **본체를 끌어도** 같은 엔진으로 움직이고, 형제 순서 · 겹침 순서는 Quick Bar 의 앞으로/뒤로다. 끄는 동안의 임시 미리보기가 프레임에 닿지 않던 버그(editId · layoutPosition 누락)도 그 라운드에서 고쳤다.
+> **변경됨 → [IMORY_DIRECT_UX_DESIGN.md](../features/studio/IMORY_DIRECT_UX_DESIGN.md) §7 · §10 (DIRECT-UX-1).** 아래 배치 폼(배치 방식 · 열 수 · 간격 · 좌표 숫자 …)은 **일반 Select 패널에서 걷었다** — 값은 지우지 않고(모든 확정이 속성 하나만 바꾼다) 배치는 AI · Code 로 고친다. 폼과 확정 함수는 그대로 있고 개발/테스트 스위치 `window.IMORY_STUDIO_ADVANCED_INSPECTOR = true` 에서만 그려진다(`studio-layout-e2e-test.mjs` 가 켠다). 자유 배치 요소는 이제 ✥ 손잡이뿐 아니라 **본체를 끌어도** 같은 엔진으로 움직이고, 형제 순서 · 겹침 순서는 Quick Bar 의 앞으로/뒤로다. 끄는 동안의 임시 미리보기가 프레임에 닿지 않던 버그(editId · layoutPosition 누락)도 그 라운드에서 고쳤다.
 
-[studio/inspector/studio-inspector-layout.js](./studio/inspector/studio-inspector-layout.js)
+[studio/inspector/studio-inspector-layout.js](../../studio/inspector/studio-inspector-layout.js)
 
 사용자 UI 에는 primitive 이름을 그대로 노출하지 않는다.
 
