@@ -117,6 +117,7 @@
 
 | 문서 | 다루는 것 | 비고 |
 | --- | --- | --- |
+| [IMORY_HOME_CANVAS_ROADMAP.md](./plans/IMORY_HOME_CANVAS_ROADMAP.md) | HOME 디자인 캔버스의 장기 로드맵과 단계별 작업 범위 | **아직 전체 구현되지 않았다.** HOME Canvas 의 새 기능 범위를 정할 때나, 사용자가 지정한 작업 ID(`HOME-CANVAS-*`) 하나를 수행할 때만 연다 — 읽었다는 것이 구현 허가가 아니고, 뒤 단계를 미리 만들지 않는다 |
 | [IMORY_AI_SKIN_CUSTOMIZE_PLAN.md](./plans/IMORY_AI_SKIN_CUSTOMIZE_PLAN.md) | AI 기반 Skin Customize 의 제품 방향 · PHASE 계획 | 공개 화면의 표시 공간 · 전환 · 관리 동선 · Preview 일치의 **상세 규칙은 [SKIN_SURFACE_AND_TRANSITION_CONTRACT.md](./contracts/SKIN_SURFACE_AND_TRANSITION_CONTRACT.md) 가 갖는다** |
 | [SKIN_IMAGE_LIBRARY_PLAN.md](./features/images/SKIN_IMAGE_LIBRARY_PLAN.md) | Skin Image Library v0.1 데이터 모델과 흐름 | 문서 머리말 기준 "v0.1 구현 완료(프런트 + migration 파일) · 운영 Supabase 미적용". 지금의 이미지 슬롯 정규화 규칙은 [IMORY_CSS_IMPORT_DESIGN.md](./contracts/IMORY_CSS_IMPORT_DESIGN.md) 가 갖는다 |
 
