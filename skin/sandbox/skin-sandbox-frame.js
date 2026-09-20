@@ -939,10 +939,11 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
        모양을 확인했고, 여기서 한 번 더 알려진 칸만 자기 리터럴로
        옮긴다(sides · settings 와 같은 규칙).
 
-       ★ HOME-CANVAS-CONTRACT-1B 에서는 여기까지가 전부다. renderSkin()
-         은 이 키를 읽지 않는다 — 요소 DOM 을 만드는 것은 다음 작업
-         (HOME-CANVAS-RENDER-1)이고, 지금은 표시 위치가 빈 채로 남는다
-         (계약 문서 §3 "marker 있음 + elements:[] = 빈 Canvas 면"). */
+       ★ HOME-CANVAS-RENDER-1B — 이제 renderSkin() 이 이 키를 읽는다.
+         이 문서가 /skin/skin-home-canvas-render.js 를 로드하므로
+         (frame.html) 프레임 안에서도 공개 화면과 **같은 렌더러**가
+         같은 DOM 을 만든다. 1B 이전에는 이 키가 여기까지만 오고
+         표시 위치가 빈 채로 남았다. */
     if (payload.template.canvas && typeof coerceSkinHomeCanvasRenderPayload === "function") {
       const canvas = coerceSkinHomeCanvasRenderPayload(payload.template.canvas);
       if (canvas) {

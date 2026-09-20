@@ -719,23 +719,44 @@ check("[docs] sandbox origin 에서 이 파일이 나온다(allowlist)",
   /"\/skin\/skin-home-canvas\.js"/.test(read("core/lib/skin-sandbox-server.js")));
 
 {
-  /* HOME-CANVAS-RENDER-1A — 정적 렌더러는 renderSkin() 을 실제로 부르는
-     두 문서에만 있다. sandbox 프레임에는 **일부러** 없다(RENDER-1B). */
+  /* HOME-CANVAS-RENDER-1A · 1B — 정적 렌더러는 renderSkin() 을 실제로
+     부르는 **세** 문서에 있다. 파일은 한 벌뿐이고 sandbox 전용 렌더러는
+     없다(계약 문서 §12). */
 
   const renderPaths = [
     ["index.html", "./skin/skin-home-canvas-render.js"],
-    ["studio/preview/preview-frame.html", "../../skin/skin-home-canvas-render.js"]
+    ["studio/preview/preview-frame.html", "../../skin/skin-home-canvas-render.js"],
+    ["skin/sandbox/frame.html", "/skin/skin-home-canvas-render.js"]
   ];
 
   const missing =
     renderPaths.filter(([file, p]) => read(file).indexOf(p) === -1);
 
-  check("★ [docs] 공개 진입 문서와 Studio Preview 문서가 렌더러를 로드한다",
+  check("★ [docs] 세 진입 문서(공개 · Studio Preview · sandbox 프레임)가 렌더러를 로드한다",
     missing.length === 0, missing.map((m) => m[0]).join(", "));
 
-  check("★ [docs] sandbox 프레임과 allowlist 에는 렌더러가 없다(RENDER-1B 의 몫)",
-    read("skin/sandbox/frame.html").indexOf("skin-home-canvas-render.js") === -1 &&
-    read("core/lib/skin-sandbox-server.js").indexOf("skin-home-canvas-render.js") === -1);
+  {
+    /* RENDER-1B — 프레임이 실제로 받으려면 JS 와 CSS 가 **둘 다**
+       sandbox origin allowlist 에 있어야 한다. 하나만 있으면 같은
+       스킨이 프레임에서만 좌표 없이 그려진다. */
+    const allow = read("core/lib/skin-sandbox-server.js");
+
+    check("★ [docs] sandbox allowlist 에 렌더러 JS 와 좌표 CSS 가 둘 다 있다",
+      /"\/skin\/skin-home-canvas-render\.js"/.test(allow) &&
+      /"\/skin\/skin-home-canvas-render\.css"/.test(allow));
+  }
+
+  {
+    /* ★ 함정. Studio sandbox Preview 는 template 을 **알려진 키만**
+       새 리터럴로 옮겨 프레임에 보낸다(studio/preview/preview-sandbox.js).
+       거기에 canvas 줄이 없으면 그 한 화면에서만 캔버스가 조용히
+       빠진다 — js · sides · settings 가 같은 이유로 그 파일에 적혀 있다. */
+    const previewSandbox = read("studio/preview/preview-sandbox.js");
+
+    check("★ [docs] Studio sandbox Preview 가 template.canvas 를 계약 파일로 옮긴다",
+      previewSandbox.indexOf("coerceSkinHomeCanvasRenderPayload") !== -1 &&
+      previewSandbox.indexOf("template.canvas") !== -1);
+  }
 
   check("[docs] 렌더러와 좌표 CSS 가 실제로 있다",
     fs.existsSync(path.join(ROOT, "skin/skin-home-canvas-render.js")) &&

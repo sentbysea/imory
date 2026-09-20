@@ -556,6 +556,30 @@ export async function renderSandboxPreview(options) {
     template.settings = settings;
   }
 
+  /*
+    HOME 캔버스의 실행 데이터 — js · sides · settings 와 **정확히 같은
+    사정**이다(IMORY_HOME_CANVAS_CONTRACT.md §12). 이 줄이 없으면
+    캔버스가 Studio sandbox Preview 에서만 조용히 빠진다: 공개 화면도,
+    Studio native Preview 도, 공개 sandbox 도 멀쩡한데 그 한 화면만
+    표시 위치가 빈 채로 그려진다.
+
+    판정과 복사는 계약 파일 하나에 맡긴다(skin/skin-home-canvas.js) —
+    이 파일이 칸 목록을 한 벌 더 갖지 않게.
+  */
+  if (
+    opts.skin.canvas &&
+    typeof coerceSkinHomeCanvasRenderPayload === "function"
+  ) {
+
+    const canvas =
+      coerceSkinHomeCanvasRenderPayload(opts.skin.canvas);
+
+    if (canvas) {
+      template.canvas = canvas;
+    }
+
+  }
+
 
   /* --- 이미 떠 있는 프레임이면 거기에 다시 그린다 ------- */
 

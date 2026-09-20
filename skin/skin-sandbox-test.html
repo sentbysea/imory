@@ -52,6 +52,18 @@
                               opt-in 이다(skin/sandbox/skin-sandbox-config.js)
       ?tall=1                 긴 콘텐츠(높이 반영 확인)
       ?transition=1           전환 primitive fixture(TRANSITION-1)
+      ?pageType=category|post|banner
+                              HOME 말고 다른 화면을 그린다
+                              (HOME-CANVAS-RENDER-1B — 캔버스가 HOME
+                               한 장인지 프레임에서도 본다). 기본 home
+      ?linkNav=1              공개 문서처럼 site-path.js + skin-link-nav.js
+                              를 로드한다 — 이것이 있어야 프레임 안
+                              링크가 navId 를 받는다(아래 주석)
+
+    ★ 재는 쪽이 끼워 넣는 창구 (테스트 하네스에만 있다)
+      window.__sandboxHarnessAuthorJsOverride    저자 JS 문자열
+      window.__sandboxHarnessSkinPackageOverride SkinPackage 통째로
+      window.__sandboxHarnessContextOverride     Context 통째로
 
       자동 판정은 skin/sandbox/skin-sandbox-e2e-test.mjs가 한다.
     =========================================================
@@ -195,8 +207,58 @@
 
   <script>
 
+    /* =========================================================
+       ?linkNav=1 — 프레임 안 링크가 실제로 navId 를 받게 한다
+       (HOME-CANVAS-RENDER-1B)
+
+       프레임은 주소가 아니라 **부모가 발급한 정수 navId** 를
+       돌려보낸다(skin/sandbox/skin-sandbox-nav.js). 그 표를 채우는
+       mint() 는 판정을 새로 만들지 않고 공개 링크와 **같은 함수**
+       (skin/skin-link-nav.js resolveInSiteSkinRoute)에 묻는다 —
+       그 파일이 없으면 모든 주소가 표에서 떨어지고, 프레임 안
+       링크는 눌러도 아무 일이 없다.
+
+       공개 진입 문서(index.html)는 원래 이 둘을 로드한다. 이
+       하네스는 **부르는 쪽이 요청할 때만** 로드한다 — 지금까지의
+       절(render/payload/height/…)이 보던 봉투가 한 글자도 달라지지
+       않게(표가 비어 있던 것도 그 절들이 본 사실이다).
+
+       siteOwnerSlug 는 실제 문서에서 home/site-owner.js 가 준다.
+       하네스에서는 재는 쪽이 fixture 의 slug 로 심는다.
+    ========================================================== */
+
+    if (new URLSearchParams(window.location.search).get("linkNav") === "1") {
+      loadVersionedScripts(
+        [
+          "../core/lib/site-path.js",
+          "./skin-link-nav.js",
+          /* 표를 만들고 발급하는 쪽 — 부모 전용이다. 이것이 없으면
+             투영 함수의 mint() 가 아예 불리지 않아 nav.entries 가
+             빈 채로 나간다(그 상태가 지금까지 이 하네스의 모습이다). */
+          "./sandbox/skin-sandbox-nav.js"
+        ]
+      );
+    }
+
     loadVersionedScripts(
       [
+        /*
+          HOME 캔버스(IMORY_HOME_CANVAS_CONTRACT.md) — 공개 진입 문서
+          (index.html)가 로드하는 것과 같은 둘이다.
+
+            skin-home-canvas.js        sanitize 가 data-imory-canvas-root 를
+                                       이 표로 판정하고, resolveSkinTemplate
+                                       이 **실행 payload** 를 만든다. 이것이
+                                       없으면 봉투에 canvas 가 실리지 않아
+                                       프레임의 표시 위치가 빈 채로 남는다.
+            skin-home-canvas-render.js ?native=1 비교 렌더가 쓰는 렌더러.
+                                       프레임 쪽은 자기 문서(frame.html)가
+                                       같은 파일을 따로 로드한다.
+
+          둘 다 sanitize 보다 **먼저**다.
+        */
+        "./skin-home-canvas.js",
+        "./skin-home-canvas-render.js",
         "./skin-sanitize.js",
         "./skin-template.js",
         "./sandbox/skin-sandbox-config.js",
@@ -553,6 +615,28 @@
         }
 
 
+        /* =====================================================
+           ★ HOME-CANVAS-RENDER-1B — 캔버스 fixture 를 끼워 넣는 자리
+
+           저자 JS 창구와 같은 이유다. 캔버스는 "요소 열둘 · 여섯
+           종류 · 회전 · hidden · locked · 빈 슬롯과 채운 슬롯"처럼
+           **재는 쪽이 정하는 값**이라, 그 값을 저장소의 예시 스킨
+           JSON 으로 박아 두면 테스트와 fixture 가 따로 논다. 그리고
+           네 화면 parity 는 **같은 객체 하나**를 네 곳에 넣어야
+           의미가 있다.
+
+           Context 도 같이 받는다 — 프레임과 native 가 같은 재료를
+           받아야 DOM 을 글자 단위로 비교할 수 있다.
+
+           이 창구는 **테스트 하네스에만** 있다. 공개 경로(index.html)
+           에도, Studio 에도 없다.
+        ====================================================== */
+
+        if (window.__sandboxHarnessSkinPackageOverride) {
+          skinPackage = window.__sandboxHarnessSkinPackageOverride;
+        }
+
+
         const renderMode =
           resolveSkinRenderMode(skinPackage);
 
@@ -560,11 +644,19 @@
           renderMode;
 
 
+        /* HOME-CANVAS-RENDER-1B — 캔버스가 HOME 한 장인지 프레임에서도
+           보려면 다른 화면을 한 번 그려 봐야 한다. 기본은 지금까지와
+           같은 "home" 이다. */
+        const pageType =
+          params.get("pageType") || "home";
+
+
         const template =
-          resolveSkinTemplate(skinPackage, "home");
+          resolveSkinTemplate(skinPackage, pageType);
 
 
         const context =
+          window.__sandboxHarnessContextOverride ||
           buildFixtureHomeContext({
             tall: params.get("tall") === "1"
           });
@@ -590,7 +682,7 @@
           */
 
           const projected =
-            projectSkinContextForSandbox(context, "home");
+            projectSkinContextForSandbox(context, pageType);
 
           window.renderSkin({
             container: document.getElementById("nativeMount"),
@@ -615,7 +707,7 @@
         */
 
         window.__sandboxProjected =
-          projectSkinContextForSandbox(context, "home");
+          projectSkinContextForSandbox(context, pageType);
 
 
         if (renderMode !== "sandbox") {
@@ -637,7 +729,7 @@
         const result =
           await host.mountSandboxSkin({
             container: document.getElementById("sandboxMount"),
-            pageType: "home",
+            pageType: pageType,
             template,
             context,
             onError: (reason) => {

@@ -5,7 +5,8 @@
 > 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
 >
 > 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
-> `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12).
+> `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12) ·
+> `HOME-CANVAS-RENDER-1B`(2026-09-21, **sandbox 프레임까지 · 네 화면** — §12-6).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -20,9 +21,13 @@
 | **정적 Renderer**(DOM 생성 · 갱신 · 제거) | [skin/skin-home-canvas-render.js](../../skin/skin-home-canvas-render.js) `compileSkinHomeCanvas` |
 | **좌표 구조 CSS**(색 · 글꼴 없음) | [skin/skin-home-canvas-render.css](../../skin/skin-home-canvas-render.css) |
 | Renderer 를 부르는 자리 | [skin/skin-render.js](../../skin/skin-render.js) `renderSkin` mount 끝 |
+| 렌더러를 로드하는 **세** 문서 | [index.html](../../index.html) · [studio/preview/preview-frame.html](../../studio/preview/preview-frame.html) · [skin/sandbox/frame.html](../../skin/sandbox/frame.html) |
+| sandbox origin allowlist | [core/lib/skin-sandbox-server.js](../../core/lib/skin-sandbox-server.js) `SANDBOX_ALLOWED_PATHS` |
+| Studio sandbox 로 `canvas` 를 옮기는 자리 | [studio/preview/preview-sandbox.js](../../studio/preview/preview-sandbox.js) |
 
 관련 테스트: `node skin/skin-home-canvas-test.mjs` ·
 `node skin/skin-home-canvas-render-e2e-test.mjs` ·
+`node skin/skin-home-canvas-sandbox-e2e-test.mjs` ·
 `node studio/studio-home-canvas-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
 
 ---
@@ -34,14 +39,15 @@
 | `CONTRACT-1B` | 데이터 계약 — 캔버스 데이터가 SkinPackage 안에 있을 수 있고, Import · Export · Save · 다시 열기 · Publish · AI 수정 · sandbox 봉투를 지나도 **한 칸도 잃지 않으며**, 잘못된 데이터가 조용히 고쳐지거나 지워지지 않는다 |
 | `CONTRACT-1C` | 도화지 전체의 세로 길이 `baseHeight` 한 칸(§4-1). 그 말고는 `1B` 계약이 그대로다 |
 | `RENDER-1A` | **정적 Renderer**(§12) — 저장된 Canvas 가 **공개 native HOME** 과 **Studio native Preview** 에서 같은 DOM · 같은 좌표로 그려진다 |
+| `RENDER-1B` | 그 **같은 렌더러**가 cross-origin sandbox 프레임에서도 돈다(§12-6). **네 화면 정적 parity 가 검증됐다** — 공개 native · Studio native Preview · 공개 sandbox · Studio sandbox Preview |
 
-아직 **없는 것** — 이 셋을 구현된 것으로 읽지 않는다.
+아직 **없는 것** — 이 둘을 구현된 것으로 읽지 않는다.
 
-- **sandbox 프레임 안의 Canvas 렌더**(`RENDER-1B`). 프레임 문서는 렌더러
-  파일을 로드하지 않는다 — 그래서 sandbox 스킨의 HOME 은 지금까지와 같다.
-- Moveable / Selecto 는 **채택은 끝났지만 저장소에 들어오지 않았다.**
-- 선택 · 드래그 · 크기 · 회전 · Inspector · Undo · preset · 스티커 업로드 UI
-  — **하나도 없다**(§11).
+- Moveable / Selecto 는 **채택은 끝났지만 저장소에 들어오지 않았다**(vendor
+  파일 없음 · Studio 로드 없음 · allowlist 등록 없음 · `cspNonce` 회귀
+  테스트 없음).
+- 선택 · 이동 · 크기 · 회전 조작 UI · 멀티 선택 · Inspector · Undo/Redo ·
+  preset · 스티커 업로드 · widget — **하나도 없다**(§11).
 
 ---
 
@@ -413,6 +419,36 @@ sandbox 봉투는 그 payload 를 `skin-sandbox-protocol.js` 의
 
 ## 10. 라운드마다 바꾼 파일
 
+### `RENDER-1B` (sandbox 프레임)
+
+**새 렌더러를 만들지 않았다.** `RENDER-1A` 의 파일 두 장을 프레임이
+읽게 하고, 한 곳에서 빠지던 칸 하나를 채운 것이 전부다.
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/sandbox/frame.html` | 렌더러를 로드한다(`skin-home-canvas.js` 바로 뒤 · sanitize 보다 먼저) |
+| `core/lib/skin-sandbox-server.js` | allowlist 에 렌더러 **JS 와 좌표 CSS 둘 다** — 하나만 넣으면 프레임에서만 좌표가 없다 |
+| `studio/preview/preview-sandbox.js` | **template.canvas 를 옮긴다** — 아래 ★ |
+| `skin/sandbox/skin-sandbox-frame.js` | 주석만(이제 `renderSkin()` 이 그 키를 읽는다) |
+| `skin/skin-sandbox-test.html` | 재는 쪽이 fixture · Context 를 끼우는 창구 · `?pageType=` · `?linkNav=1`(테스트 하네스 전용) |
+| `studio/studio-lifecycle-scenario.html` | `sb` 의 `skin_image_slot_values` 주입 창구(기본은 빈 배열) |
+| `skin/skin-home-canvas-sandbox-e2e-test.mjs` | **새 파일** — 실물 서버 · 실물 CSP 로 재는 E2E |
+| `skin/skin-home-canvas-test.mjs` | `[docs]` 절 — 세 문서 로드 · allowlist 두 칸 · 아래 ★ |
+
+★ **Studio sandbox Preview 만 캔버스가 빠지던 자리.**
+`preview-sandbox.js` 는 부모가 보낸 template 을 **알려진 키만** 새
+리터럴로 옮겨 프레임에 보낸다(`html` · `css` · `js` · `sides` ·
+`settings`). 거기에 `canvas` 줄이 없으면 공개 화면도, Studio native
+Preview 도, 공개 sandbox 도 멀쩡한데 **그 한 화면에서만** 표시 위치가
+빈 채로 그려진다. 그 파일이 `js` 에 대해 같은 함정을 주석으로 적어
+두었는데 캔버스가 정확히 같은 데 걸렸다. 칸 목록을 한 벌 더 만들지
+않으려고 판정과 복사는 `coerceSkinHomeCanvasRenderPayload()` 에 맡긴다.
+
+`RENDER-1B` 는 **CSP 를 한 글자도 바꾸지 않았다** — 렌더러 JS 는
+`script-src 'self'`, 좌표 CSS 는 `style-src 'self'` 가 이미 허용한다.
+`skin/skin-home-canvas-render.js` · `.css` · `skin/skin-render.js` 는
+**한 줄도 고치지 않았다.**
+
 ### `RENDER-1A` (정적 Renderer)
 
 | 파일 | 무엇 |
@@ -469,23 +505,21 @@ Save 는 스프레드). 테스트가 그 사실을 못박는다.
 
 **이 절은 계약이 아니라 앞으로의 약속과 빈 곳이다.**
 
-### 11-1. Renderer 의 남은 반쪽 (`HOME-CANVAS-RENDER-1B`)
+### 11-1. 정적 Renderer 는 끝났다 — 남은 것은 조작이다
 
-정적 Renderer 는 `RENDER-1A` 에서 구현됐다 — 그 계약은 **§12** 다. 네 화면 중
-둘이 남았다.
+**네 화면 전부 구현됐고 parity 가 검증됐다**(§12 · §12-6).
 
 | 화면 | 상태 |
 | --- | --- |
-| 공개 native | **구현됨**(§12) |
-| Studio native Preview | **구현됨**(§12) — 공개와 DOM · 좌표가 같다는 것을 E2E 가 잰다 |
-| 공개 sandbox | **없다** — `RENDER-1B` |
-| Studio sandbox Preview | **없다** — `RENDER-1B` |
+| 공개 native | **구현됨**(`RENDER-1A`) |
+| Studio native Preview | **구현됨**(`RENDER-1A`) |
+| 공개 sandbox | **구현됨**(`RENDER-1B`) |
+| Studio sandbox Preview | **구현됨**(`RENDER-1B`) |
 
-`RENDER-1B` 가 할 일은 프레임 문서(`skin/sandbox/frame.html`)에 렌더러를
-싣고 운영 allowlist(`core/lib/skin-sandbox-server.js`)에 등록하는 것이다.
-**실행 데이터는 이미 프레임까지 간다**(`CONTRACT-1B` 가 봉투를 만들어 두었고
-`skin-sandbox-frame.js` 가 `skin.canvas` 로 옮긴다) — 지금 없는 것은 그리는
-쪽뿐이다.
+E2E 가 네 화면을 실제로 띄워 **DOM 을 글자 단위로, 좌표를 1px · 회전을
+0.75° 안에서** 대조한다(TESTS.md §13).
+
+남은 것은 **조작**이다 — 다음 절.
 
 ### 11-2. UI (`SELECT-1` · `HISTORY-1` · `ELEMENTS-1` 이후)
 
@@ -521,9 +555,12 @@ Moveable · Selecto 는 **채택은 끝났고 저장소에는 아직 없다.**
 
 ---
 
-## 12. 정적 Renderer (`HOME-CANVAS-RENDER-1A`)
+## 12. 정적 Renderer (`HOME-CANVAS-RENDER-1A` · `1B`)
 
 **이 절은 지금 코드가 강제한다.** 조작 UI 는 여기 없다 — 그리기만 한다.
+
+**렌더러는 한 벌뿐이다.** 네 화면이 같은 파일을 읽는다 — sandbox 전용
+렌더러도, 화면별로 복제한 타입별 DOM 생성 코드도 없다.
 
 | 무엇 | 파일 |
 | --- | --- |
@@ -546,9 +583,17 @@ Moveable · Selecto 는 **채택은 끝났고 저장소에는 아직 없다.**
 하나라도 어긋나면 **기존 HOME DOM 을 한 글자도 건드리지 않는다**(§3 의
 fallback 표). 표식을 자동으로 만들지 않는다.
 
-그리는 화면은 **둘**이다 — 공개 native HOME 과 Studio native Preview. 둘 다
-같은 `renderSkin()` 을 쓰므로 렌더러 파일 하나로 두 화면이 같은 DOM 을 그린다.
-**sandbox 프레임에는 이 파일이 없다**(§12-6).
+그리는 화면은 **넷**이다.
+
+| 화면 | 어디서 도는가 |
+| --- | --- |
+| 공개 native HOME | `index.html` |
+| Studio native Preview | `studio/preview/preview-frame.html` |
+| 공개 sandbox HOME | `skin/sandbox/frame.html`(다른 origin) |
+| Studio sandbox Preview | 같은 프레임 문서 — Studio Preview 안에 한 겹 더 |
+
+넷 다 같은 `renderSkin()` 의 같은 자리에서 같은 파일을 부른다. 그래서
+"어디에 그렸는가"만 다르고 결과는 같다(§12-6).
 
 ### 12-2. 좌표 — ResizeObserver 도 매 프레임 재계산도 없다
 
@@ -652,7 +697,36 @@ fallback 표). 표식을 자동으로 만들지 않는다.
   여는 쪽의 기존 요청 순번이다(`skin/skin-home.js` 등) — 렌더러는 `renderSkin()`
   이 mount 를 끝내는 동기 시점에만 돈다.
 
-### 12-6. 기존 스킨 · sandbox
+### 12-6. sandbox — 같은 렌더러가 프레임 안에서도 돈다 (`RENDER-1B`)
+
+프레임 문서(`skin/sandbox/frame.html`)가 `skin-home-canvas-render.js` 를
+**공개 문서와 같은 자리**(`skin-home-canvas.js` 뒤 · sanitize 앞)에서
+로드한다. 그 뒤는 프레임 안에서도 `renderSkin()` 이 같은 조건으로 같은
+전역을 부른다.
+
+| 무엇 | 어디 |
+| --- | --- |
+| 렌더러 JS | `SANDBOX_ALLOWED_PATHS` 의 `/skin/skin-home-canvas-render.js` |
+| 좌표 CSS | 같은 목록의 `/skin/skin-home-canvas-render.css` |
+| 실행 데이터 | 이미 있던 봉투 — `skin-sandbox-host.js` 가 싣고 `isSandboxHomeCanvas()` 가 strict allowlist 로 다시 검사하며 `skin-sandbox-frame.js` 가 `skin.canvas` 로 옮긴다(§9) |
+| Studio sandbox 경로 | `preview-sandbox.js` 가 template 의 `canvas` 를 옮긴다(§10 의 ★) |
+
+- **둘 다** allowlist 에 있어야 한다. JS 만 넣으면 요소는 생기지만 좌표가
+  없고, CSS 만 넣으면 아무것도 생기지 않는다. allowlist 는 **pathname 만**
+  보므로 `?v=APP_BUILD_VERSION` 이 붙어도 같은 판정이다.
+- **CSP 는 한 글자도 바뀌지 않았다.** 렌더러 JS 는 `script-src 'self'`,
+  좌표 CSS 는 `style-src 'self'` 가 이미 허용한다. 좌표는
+  `element.style.setProperty()`(CSSOM)로 쓰므로 `style-src` 에
+  `'unsafe-inline'` 이 없어도 걸리지 않는다 — E2E 가 실제 CSP 아래에서
+  위반 0건과 적용된 좌표를 함께 잰다.
+- **부모는 frame DOM 에 손대지 않는다.** 캔버스 때문에 생긴 새 메시지도
+  없다 — 데이터는 기존 봉투로, 링크 클릭은 기존 `IMORY_NAVIGATE`(주소가
+  아니라 부모가 발급한 정수 `navId` 하나)로 간다.
+- 이미지 슬롯 주소는 프레임 CSP 의 `img-src` 가 허용하는 출처여야 한다
+  (배포에서는 Supabase Storage). 투영 함수가 루트 상대 주소를 부모 origin
+  기준 절대 주소로 바꿔 보내는 기존 규칙 그대로다.
+
+### 12-7. 기존 스킨
 
 - `home_canvas` 가 없는 스킨: **DOM 변화 0.** 플랫폼 CSS link 조차 붙지 않는다
   (`renderSkin` 이 `skin.canvas` 가 있을 때만 건다).
@@ -662,10 +736,8 @@ fallback 표). 표식을 자동으로 만들지 않는다.
 - 기존 스킨에 표식 · 요소 · 리스너를 자동으로 넣지 않는다. 기본 editorial 스킨도
   변환하지 않는다.
 - **리스너를 하나도 만들지 않는다** — 정적 렌더러라 전역 이벤트가 없다.
-- **sandbox 프레임에는 렌더러가 없다.** `skin/sandbox/frame.html` 도
-  `core/lib/skin-sandbox-server.js` 의 allowlist 도 이 파일을 싣지 않으므로
-  프레임 안에서는 `compileSkinHomeCanvas` 가 정의되지 않고, sandbox 스킨의
-  HOME 은 지금까지와 같다. 실행 데이터는 이미 프레임까지 간다 — 그리는 쪽만
-  `RENDER-1B` 에 남았다(§11-1).
+- 위 전부가 **네 화면에서 같다** — sandbox 프레임에서도 캔버스가 없는
+  스킨은 DOM 이 한 글자도 바뀌지 않고, CATEGORY · POST · BANNER 는 표식이
+  있어도 그리지 않는다.
 
 `APP_BUILD_VERSION` 은 이번에 올리지 않았다(배포하지 않았다).

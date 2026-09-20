@@ -185,6 +185,27 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/skin/skin-home-canvas.js",
 
   /* =====================================================
+     HOME-CANVAS-RENDER-1B — 캔버스의 **정적 렌더러**와 좌표 CSS.
+     공개 화면 · Studio Preview 와 **같은 두 파일**이다.
+
+     skin-home-canvas-render.js 는 renderSkin() 이 mount 끝에 부르는
+     전역(compileSkinHomeCanvas)을 준다. skin-home-canvas-render.css 는
+     그것이 써 넣은 custom property 를 읽어 실제로 배치하는 규칙이고,
+     renderSkin() 이 **캔버스를 그릴 때만** link 로 건다.
+
+     둘 중 하나라도 없으면 같은 스킨이 프레임에서만 표시 위치가
+     빈 채로(또는 요소가 좌표 없이 쌓인 채로) 그려진다 —
+     skin-layout.js/.css 와 정확히 같은 사정이다.
+
+     ★ CSS 의 주소에는 ?v=APP_BUILD_VERSION 이 붙지만, allowlist 는
+       pathname 만 본다(isSandboxAllowedPath). 질의 문자열은 판정에
+       끼어들지 않는다.
+  ====================================================== */
+
+  "/skin/skin-home-canvas-render.js",
+  "/skin/skin-home-canvas-render.css",
+
+  /* =====================================================
      SANDBOX-3.2 — POST 본문의 class 규칙. 공개 화면과 **같은
      파일**이다.
 

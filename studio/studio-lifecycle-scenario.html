@@ -878,7 +878,13 @@
                 }
               }
             ],
-            skin_image_slot_values: [],
+            /* HOME-CANVAS-RENDER-1B — 캔버스의 photo/logo/sticker 가
+               채워진 슬롯과 빈 슬롯을 모두 그리는지 Studio 두 화면
+               (native Preview · sandbox Preview)에서도 보려면 슬롯 값이
+               필요하다. 기본은 지금까지와 같이 빈 배열이다
+               ({ skin_id, slot_name, image_url }). lay 시나리오에도
+               같은 창구가 있다. */
+            skin_image_slot_values: window.__scenarioSandboxSkinImageSlotValues || [],
             profiles: [{ user_id: "user-sb", nickname: "Scenario SB", bio: null, slug: "scenario-sb" }],
             site_settings: [
               { user_id: "user-sb", key: "blog_title", value: "SANDBOX PREVIEW BLOG" }

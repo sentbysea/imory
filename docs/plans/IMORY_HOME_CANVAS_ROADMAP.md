@@ -146,8 +146,8 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 각 행은 별도의 작업이다. 앞 단계가 완료됐다는 보고를 확인한 뒤 다음 단계로 넘어간다.
 
 > 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` · `CONTRACT-1C` ·
-> `RENDER-1A` 다섯이 끝났다.** `RENDER-1B`(sandbox)와 `SELECT-1` 이후는 하나도
-> 구현되지 않았다.
+> `RENDER-1A` · `RENDER-1B` 여섯이 끝났다.** 정적 렌더링은 **네 화면 전부**
+> 끝났고, `SELECT-1` 이후(조작 UI)는 하나도 구현되지 않았다.
 >
 > - `SPIKE-1` · `SPIKE-1B` — **Moveable + Selecto 채택 확정**(§8 의 완료 기록).
 >   실험이라 **운영 파일을 한 줄도 바꾸지 않았고**, 그래서 저장소에 vendor 파일도
@@ -156,10 +156,12 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 >   [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)(CURRENT
 >   CONTRACT)가 갖는다. `1C` 는 도화지 전체의 세로 길이 `baseHeight` 한 칸을
 >   더한 보완이다(그 문서 §4-1).
-> - `RENDER-1A` — **정적 Renderer**. 저장된 Canvas 가 **공개 native HOME** 과
->   **Studio native Preview** 에서 같은 DOM · 같은 좌표로 그려진다. 계약은 그
->   문서 §12 다. **sandbox 프레임 렌더는 아직 없고**(`RENDER-1B`) 조작 UI 도
->   하나도 없다.
+> - `RENDER-1A` · `RENDER-1B` — **정적 Renderer**. 저장된 Canvas 가 **네 화면**
+>   (공개 native · Studio native Preview · 공개 sandbox · Studio sandbox
+>   Preview)에서 같은 DOM · 같은 좌표로 그려진다. 계약은 그 문서 §12 다.
+>   `1B` 는 새 렌더러를 만들지 않았다 — 같은 파일을 프레임이 읽게 하고
+>   `preview-sandbox.js` 에서 빠지던 칸 하나를 채웠다. **조작 UI 는 하나도
+>   없다.**
 >
 > ★ `CONTRACT-1B` 보고가 "`SPIKE-1` 미착수"라고 적은 것은 **틀렸다.** Spike 가
 >   운영 파일을 남기지 않는 작업이라 저장소만 보고는 완료 사실을 알 수 없었던
@@ -172,7 +174,7 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 0b | `HOME-CANVAS-SPIKE-1B` | 실제 cross-origin sandbox 에서 좌표 오차 재측정 | 없음 | **완료 — 허용치 안**(§8) |
 | 1 | `HOME-CANVAS-CONTRACT-1` | 데이터 계약·소유권·마이그레이션 설계 | 없음 | **1B · 1C 완료** → [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 2 | `HOME-CANVAS-RENDER-1A` | 고정 fixture를 **native 두 화면**에 동일 렌더 | 읽기 전용 | **완료**(계약 문서 §12) |
-| 2b | `HOME-CANVAS-RENDER-1B` | 같은 결과를 **sandbox 두 화면**에도 | 읽기 전용 | 미착수 |
+| 2b | `HOME-CANVAS-RENDER-1B` | 같은 결과를 **sandbox 두 화면**에도 | 읽기 전용 | **완료**(계약 문서 §12-6) |
 | 3 | `HOME-CANVAS-SELECT-1` | 단일 선택·이동·크기·회전 | Studio만 | 미착수 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
@@ -329,21 +331,22 @@ vendor 단계)의 일이다.
 
 ### `HOME-CANVAS-RENDER-1A` · `RENDER-1B`
 
-> **`1A` 완료 — 2026-09-21.** 확정된 렌더 계약은
+> **`1A` · `1B` 완료 — 2026-09-21.** 확정된 렌더 계약은
 > [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) **§12**
-> 가 갖는다. 아래 네 줄 중 "네 화면"만 **둘**로 줄었다 — 나머지 셋은 지켰다.
+> 가 갖는다. 아래 네 줄을 전부 지켰다.
 
 - 계약 fixture 하나를 DOM으로 렌더한다. → `1A`
 - Studio native/sandbox, 공개 native/sandbox 네 화면이 같은 결과여야 한다.
-  → `1A` 가 **native 둘**을 했고(E2E 가 두 화면의 DOM 과 좌표를 실제로 대조한다),
-  **sandbox 둘은 `1B`** 다. 프레임 문서가 렌더러 파일을 로드하지 않는 것으로
-  그 경계가 코드 모양으로 성립한다.
-- 기존 스킨은 byte 또는 의미 단위로 종전과 같아야 한다. → `1A`
-- 편집 핸들, 선택 UI, 추가 UI는 만들지 않는다. → `1A`
+  → `1A` 가 native 둘, `1B` 가 sandbox 둘. E2E 가 네 화면을 실제로 띄워
+  **DOM 을 글자 단위로, 좌표를 1px · 회전을 0.75° 안에서** 대조한다.
+- 기존 스킨은 byte 또는 의미 단위로 종전과 같아야 한다. → `1A` · `1B`
+- 편집 핸들, 선택 UI, 추가 UI는 만들지 않는다. → `1A` · `1B`
 
-`1B` 가 할 일: `skin/sandbox/frame.html` 에 렌더러를 싣고
-`core/lib/skin-sandbox-server.js` 의 `SANDBOX_ALLOWED_PATHS` 에 등록한 뒤,
-프레임과 native 의 결과를 대조한다. **실행 데이터는 이미 프레임까지 간다.**
+`1B` 가 실제로 한 일: 프레임 문서에 **같은 렌더러 파일**을 싣고
+`SANDBOX_ALLOWED_PATHS` 에 JS 와 CSS 를 등록했다. 새 렌더러도, CSP 완화도,
+새 메시지도 없다. 그 과정에서 **Studio sandbox Preview 에서만** 캔버스가
+빠지던 자리를 찾아 고쳤다(`studio/preview/preview-sandbox.js` 가 template 을
+알려진 키만 옮기는데 `canvas` 줄이 없었다 — 계약 문서 §10 의 ★).
 
 ### `HOME-CANVAS-SELECT-1`
 
@@ -491,6 +494,9 @@ vendor 단계)의 일이다.
 | 도화지의 `overflow` · 최대 폭 · 가운데 정렬 · viewport 높이를 플랫폼이 정하지 않는다 — 화면 맞춤은 스킨 CSS 와 `RESPONSIVE-1` | 확정 | `RENDER-1A` |
 | **글자 크기는 배율을 따라가지 않는다**(상자만 비례로 커진다) — 390 좌표를 데스크톱 폭으로 옮기는 규칙은 뒤로 | 확정 | `RENDER-1A` |
 | sandbox 프레임 렌더 여부는 "renderSkin 이 부르는가"가 아니라 **문서가 렌더러 파일을 로드했는가**로 가른다 | 확정 | `RENDER-1A` |
+| sandbox 에도 **같은 렌더러 파일 한 벌**을 쓴다 — sandbox 전용 렌더러도 복제된 타입별 DOM 코드도 만들지 않는다 | 확정 | `RENDER-1B` |
+| 캔버스를 위해 **CSP 를 넓히지 않는다** — 렌더러 JS 는 `script-src 'self'`, 좌표 CSS 는 `style-src 'self'`, 좌표는 CSSOM 쓰기라 `'unsafe-inline'` 이 필요 없다 | 확정 | `RENDER-1B` |
+| 캔버스 링크도 **기존 `IMORY_NAVIGATE`** 를 쓴다 — 주소가 아니라 부모가 발급한 정수 `navId` 하나. 새 메시지도 새 라우터도 없다 | 확정 | `RENDER-1B` |
 | 요소 id 는 `data-imory-edit-id` 규칙을 따른다(`canvas_` 접두 — UUID 는 숫자로 시작할 수 있다) | 확정 | `CONTRACT-1B` |
 | 보존용 원본과 실행용 payload 를 가른다(실행은 strict allowlist) | 확정 | `CONTRACT-1B` |
 | 미래 `canvas.version` 은 거부가 아니라 보존 + 실행 fallback | 확정 | `CONTRACT-1B` |
