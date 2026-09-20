@@ -145,16 +145,25 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 
 각 행은 별도의 작업이다. 앞 단계가 완료됐다는 보고를 확인한 뒤 다음 단계로 넘어간다.
 
-> 진행 상태(2026-09-21): **`HOME-CANVAS-CONTRACT-1B`(데이터 계약)만 끝났다.**
-> 그 결과는 이 문서가 아니라
-> [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)(CURRENT
-> CONTRACT)가 갖는다. `SPIKE-1` 은 아직 하지 않았고 — 데이터 계약은 라이브러리
-> 선택에 기대지 않아서 먼저 할 수 있었다 — `RENDER-1` 이후는 하나도 구현되지
-> 않았다.
+> 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` 셋이 끝났다.**
+> `RENDER-1` 이후는 하나도 구현되지 않았다.
+>
+> - `SPIKE-1` · `SPIKE-1B` — **Moveable + Selecto 채택 확정**(§8 의 완료 기록).
+>   실험이라 **운영 파일을 한 줄도 바꾸지 않았고**, 그래서 저장소에 vendor 파일도
+>   연결 코드도 없다. 결론만 이 문서에 남아 있다.
+> - `CONTRACT-1B` — 데이터 계약. 그 결과는 이 문서가 아니라
+>   [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)(CURRENT
+>   CONTRACT)가 갖는다.
+>
+> ★ `CONTRACT-1B` 보고가 "`SPIKE-1` 미착수"라고 적은 것은 **틀렸다.** Spike 가
+>   운영 파일을 남기지 않는 작업이라 저장소만 보고는 완료 사실을 알 수 없었던
+>   것이다 — 그 오류를 `HOME-CANVAS-SPIKE-DOC-1` 에서 정정했다.
+>   **Spike 를 다시 실행하지 않는다.**
 
 | 순서 | 작업 ID | 목표 | 운영 기능 변경 | 상태 |
 |---:|---|---|---|---|
-| 0 | `HOME-CANVAS-SPIKE-1` | Moveable/Selecto 적합성 검증 | 없음 | 미착수 |
+| 0 | `HOME-CANVAS-SPIKE-1` | Moveable/Selecto 적합성 검증 | 없음 | **완료 — 채택**(§8) |
+| 0b | `HOME-CANVAS-SPIKE-1B` | 실제 cross-origin sandbox 에서 좌표 오차 재측정 | 없음 | **완료 — 허용치 안**(§8) |
 | 1 | `HOME-CANVAS-CONTRACT-1` | 데이터 계약·소유권·마이그레이션 설계 | 없음 | **1B 완료** → [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 2 | `HOME-CANVAS-RENDER-1` | 고정 fixture를 네 화면에 동일 렌더 | 읽기 전용 | 미착수 |
 | 3 | `HOME-CANVAS-SELECT-1` | 단일 선택·이동·크기·회전 | Studio만 | 미착수 |
@@ -171,6 +180,9 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 ## 8. 단계별 완료 기준
 
 ### `HOME-CANVAS-SPIKE-1`
+
+> **완료 — 채택.** 아래 "할 일"과 "금지"는 그때의 지시문이고, 실제 결론은
+> 바로 아래 §8-1 에 있다. **이 Spike 를 다시 실행하지 않는다.**
 
 목적은 구현 착수가 아니라 기술 선택이다.
 
@@ -198,6 +210,92 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 - 의존성 크기와 라이선스
 - 재현 가능한 하네스와 자동 테스트
 - 운영 파일 변경이 있었다면 원복된 깨끗한 상태
+
+### 8-1. `SPIKE-1` · `SPIKE-1B` 결과 (완료 · 채택)
+
+> 이 절은 **계획이 아니라 끝난 실험의 결론**이다. 두 Spike 모두 운영 파일을
+> 한 줄도 바꾸지 않았기 때문에 저장소에는 그 흔적이 남지 않았다 — 그래서
+> 결론만 여기 적는다. 다음 작업은 이 실험을 반복하지 않는다.
+
+#### 무엇을 쟀나
+
+`SPIKE-1`
+
+- Moveable + Selecto 가 현재 Studio Preview 구조에 **적합하다고 판정**했다.
+- 부모 Preview 에 `transform: scale()` 이 걸린 **390px 조건**에서도 프레임 내부
+  좌표를 따로 보정하지 않고 정확하게 작동했다.
+- 스크롤 · 마우스 · **한 손가락 터치 드래그**를 확인했다.
+- 배포 형태는 **UMD 채택 · ESM 기각**. 기각 이유는 하나다 — ESM 빌드에
+  **bare specifier 가 남아 있고 이 저장소에는 번들러가 없다**(CLAUDE.md §1).
+
+`SPIKE-1B` — `SPIKE-1` 의 좁은 후속 실험
+
+- **실제 cross-origin sandbox 서버**를 띄우고 postMessage 왕복까지 검증했다.
+  부모 문서에서 frame DOM 접근이 **실제로 차단된** 조건에서 쟀다(같은 origin
+  으로 흉내 내지 않았다).
+- 좌표 최대 오차
+
+  | | 측정값 | 허용치 |
+  | --- | ---: | ---: |
+  | 이동 | 0.73px | 1px |
+  | 크기 | 0.09px | 1px |
+  | 회전 | 0.21° | 0.75° |
+
+- **CSP 위반 0건.**
+
+#### 채택한 것 — 버전을 정확히 고정한다
+
+| 파일 | 라이브러리 | 버전 | 형태 | 라이선스 |
+| --- | --- | --- | --- | --- |
+| `moveable.min.js` | Moveable | **0.53.0** | UMD | MIT |
+| `selecto.min.js` | Selecto | **1.26.3** | UMD | MIT |
+
+vendor · 연결 단계가 지켜야 할 조건(아직 구현되지 않았다 — §8-2):
+
+- 두 **버전을 정확히 고정**한다.
+- **Studio 에서만 로드**한다 — 공개 페이지 비용 0.
+- 원본 minified 파일을 **재가공하지 않는다**. 파일의 **MIT 라이선스 배너를
+  유지**한다.
+- `loadVersionedScripts()` 를 쓴다. **고정 `<script src>` 를 만들지 않는다**
+  (CLAUDE.md §4).
+- sandbox 에서 쓸 때만 운영 allowlist(`core/lib/skin-sandbox-server.js`
+  `SANDBOX_ALLOWED_PATHS`)에 등록한다.
+- **CSP 정책을 완화하지 않는다.**
+- **`document.createElement` 전역 monkey patch 를 만들지 않는다.**
+- 두 생성자에 **공식 `cspNonce` 옵션**을 전달한다.
+
+#### `cspNonce` 판정 — Moveable 버전 고정이 필수인 이유
+
+- Selecto 1.26.3 의 `cspNonce` 는 **정상 공식 옵션**이고 작동한다.
+- Moveable 0.53.0 의 `cspNonce` 도 **실제로 작동하지만 deprecated** 다.
+  대체 옵션은 확인되지 않았다.
+- 그래서 **Moveable 0.53.0 버전 고정과 nonce 회귀 테스트가 필수**다. 버전을
+  올리면 그 옵션이 조용히 사라져 프레임 안에서 핸들이 CSP 에 막힐 수 있다.
+- 전역 shim 은 **불필요하므로 철회**했다.
+
+후속 vendor/interaction 단계의 **회귀 테스트 요구** — 대조군 넷:
+
+| 대조군 | 기대 |
+| --- | --- |
+| 둘 다 `cspNonce` 전달 | **위반 0 · 핸들 정상** |
+| Moveable 만 전달 | 대조군 |
+| Selecto 만 전달 | 대조군 |
+| 둘 다 전달하지 않음 | 대조군 |
+
+#### 아직 검증하지 않은 것
+
+**채택 실패가 아니라 후속 검증 항목이다.**
+
+- 그룹 이동 · 그룹 회전
+- 핀치 · 두 손가락 회전
+- WebKit
+- 실제 iOS 기기
+
+### 8-2. Spike 이후 아직 없는 것
+
+라이브러리는 **채택됐지만 저장소에는 아직 없다.** vendor 파일도, Studio 로드도,
+allowlist 등록도, nonce 회귀 테스트도 없다 — 그것은 `SELECT-1`(또는 그 앞의
+vendor 단계)의 일이다.
 
 ### `HOME-CANVAS-CONTRACT-1`
 
@@ -364,8 +462,14 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 요소 id 는 `data-imory-edit-id` 규칙을 따른다(`canvas_` 접두 — UUID 는 숫자로 시작할 수 있다) | 확정 | `CONTRACT-1B` |
 | 보존용 원본과 실행용 payload 를 가른다(실행은 strict allowlist) | 확정 | `CONTRACT-1B` |
 | 미래 `canvas.version` 은 거부가 아니라 보존 + 실행 fallback | 확정 | `CONTRACT-1B` |
-| Moveable을 운영에 채택한다 | 미정 | `SPIKE-1` |
-| Selecto를 운영에 채택한다 | 미정 | `SPIKE-1` |
+| Moveable을 운영에 채택한다 | **확정 — 0.53.0 UMD(MIT), 버전 고정** | `SPIKE-1` · `SPIKE-1B` |
+| Selecto를 운영에 채택한다 | **확정 — 1.26.3 UMD(MIT), 버전 고정** | `SPIKE-1` · `SPIKE-1B` |
+| 배포 형태는 UMD 다 — ESM 은 기각(bare specifier 가 남아 있고 번들러가 없다) | 확정 | `SPIKE-1` |
+| Studio 에서만 로드한다(공개 페이지 비용 0) · 원본 minified 재가공 금지 · MIT 배너 유지 | 확정 | `SPIKE-1` |
+| `loadVersionedScripts()` 로만 싣는다 — 고정 `<script src>` 금지 | 확정 | `SPIKE-1` |
+| CSP 를 완화하지 않고 `document.createElement` 전역 monkey patch 도 만들지 않는다 — 두 생성자에 공식 `cspNonce` 를 넘긴다(전역 shim 은 철회) | 확정 | `SPIKE-1B` |
+| Moveable 0.53.0 의 `cspNonce` 는 작동하지만 **deprecated** 이고 대체 옵션이 없다 → 버전 고정 + nonce 회귀 테스트(대조군 넷, §8-1)가 필수 | 확정 | `SPIKE-1B` |
+| 그룹 이동·그룹 회전 · 핀치/두 손가락 회전 · WebKit · 실제 iOS 기기 | **미검증**(채택 실패가 아니라 후속 항목) | `SELECT-1` · `LAYERS-1` · `POLISH-1` |
 | 모바일 390 단일 좌표계를 데스크톱에서 확대한다 | 미정 | `RESPONSIVE-1` |
 | 모바일·데스크톱 override를 제공한다 | 미정 | `RESPONSIVE-1` |
 | 알파 경계 기반 스티커 칼선을 제공한다 | 미정 | `STICKER-1` |

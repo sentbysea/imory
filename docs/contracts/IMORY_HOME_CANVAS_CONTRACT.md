@@ -401,15 +401,22 @@ Save 는 스프레드). 테스트가 그 사실을 못박는다.
 
 ### 11-2. UI (`SELECT-1` · `HISTORY-1` · `ELEMENTS-1` 이후)
 
-Moveable · Selecto · 드래그 · 크기 · 회전 · 세로 손잡이 · Inspector ·
-Undo/Redo · preset · 사진 자동 매핑 · sticker 업로드 · widget · 그룹 선택 —
-**하나도 없다.** `HOME-CANVAS-SPIKE-1`(Moveable/Selecto 적합성)도 아직
-결론이 없다.
+드래그 · 크기 · 회전 · 세로 손잡이 · Inspector · Undo/Redo · preset ·
+사진 자동 매핑 · sticker 업로드 · widget · 그룹 선택 — **하나도 없다.**
+
+Moveable · Selecto 는 **채택은 끝났고 저장소에는 아직 없다.**
+`HOME-CANVAS-SPIKE-1` · `SPIKE-1B` 가 Moveable 0.53.0 + Selecto 1.26.3
+(둘 다 UMD · MIT)을 쓰기로 확정했지만, 그 Spike 는 운영 파일을 바꾸지 않는
+실험이었다 — vendor 파일도, Studio 로드도, sandbox allowlist 등록도,
+`cspNonce` 회귀 테스트도 **없다**. 채택 조건과 측정값은
+[IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) §8-1 ·
+§8-2 에 있다. **그 Spike 를 다시 실행하지 않는다.**
 
 ### 11-3. 남은 차이
 
 | 빈 곳 | 어디서 정하나 |
 | --- | --- |
+| **Moveable 0.53.0 · Selecto 1.26.3 이 채택됐지만 아직 vendor·연결되지 않았다**(파일 없음 · Studio 로드 없음 · allowlist 등록 없음 · `cspNonce` 회귀 테스트 없음) | `HOME-CANVAS-SELECT-1`(또는 그 앞의 vendor 단계) — 조건은 로드맵 §8-1 |
 | 390 저장 좌표 → 데스크톱 폭 변환 규칙 | `HOME-CANVAS-RESPONSIVE-1` |
 | 모바일/데스크톱 좌표 override 를 둘 것인가 | `HOME-CANVAS-RESPONSIVE-1` |
 | 좌우 패널(`left_sidebar` · `right_sidebar`) 안의 Canvas | `HOME-CANVAS-SIDES-1` |
