@@ -196,8 +196,10 @@ DOCS-CLEANUP-1B-1 에서 루트에 흩어져 있던 Markdown 28 개를, DOCS-CLE
 위치를 가리킨다. 문서를 새로 만들거나 자리나 상태가 바뀌면 이 색인의 줄을 같이
 고친다.
 
-알려진 문제: [CATEGORY_GALLERY_MOBILE_20260911.md](./contracts/CATEGORY_GALLERY_MOBILE_20260911.md)
-안의 `../posts/editor/posts-gallery.js` 링크는 대상 파일이 없다(이 라운드 이전부터).
-그 파일은 `8e200a9` 에서 지워졌고 같은 커밋이 `posts/editor/posts-body-images.js`
-를 새로 만들었다 — **같은 파일이 옮겨 간 것이 아니라서**(git 도 rename 으로 보지
-않는다) 링크를 바꾸지 않고 그대로 둔다.
+오래 깨져 있던 링크 하나는 정리했다.
+[CATEGORY_GALLERY_MOBILE_20260911.md](./contracts/CATEGORY_GALLERY_MOBILE_20260911.md)
+의 "변경 파일" 목록이 가리키던 `posts/editor/posts-gallery.js` 는 `8e200a9` 에서
+**지워진 파일**이다. 같은 커밋이 만든 `posts/editor/posts-body-images.js` 는 그
+파일이 옮겨 간 것도, 같은 계약을 물려받은 것도 아니므로(git 도 rename 으로 보지
+않는다) 주소를 바꿔 끼우지 않고, 지워진 파일은 링크 없는 코드 표기로 두고 이후
+구현만 따로 적었다. 지금 저장소의 Markdown 상대 링크는 **전부 살아 있다**.

@@ -128,7 +128,12 @@ HTML 본문 폭 측정(현재 갤러리 스킨 fixture, 단위 px):
 - [functions/api/skin-ai.js](../../functions/api/skin-ai.js)
 - [index.html](../../index.html)
 - [posts/editor/format/posts-editor.js](../../posts/editor/format/posts-editor.js)
-- [posts/editor/posts-gallery.js](../../posts/editor/posts-gallery.js)
+- `posts/editor/posts-gallery.js` — 이 라운드에서 만든 갤러리 전용 편집 파일.
+  2026-09-12 `8e200a9` 에서 **삭제됐다**(그래서 링크가 아니다).
+  이후 본문 이미지 구현은 [posts/editor/posts-body-images.js](../../posts/editor/posts-body-images.js)
+  이고, 이것은 post/gallery 공통 본문 에디터의 사진 담당이라 위 파일이 옮겨 간
+  것도, 같은 계약을 물려받은 것도 아니다 — 계약은
+  [IMORY_POST_BODY_IMAGE_DESIGN.md](../features/content/IMORY_POST_BODY_IMAGE_DESIGN.md) 에 있다.
 - [posts/editor/posts-save.js](../../posts/editor/posts-save.js)
 - [posts/posts.html](../../posts/posts.html)
 - [posts/posts-editor.css](../../posts/posts-editor.css)
