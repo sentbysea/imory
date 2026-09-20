@@ -718,6 +718,46 @@ console.log("\n[docs] 진입 문서와 allowlist");
 check("[docs] sandbox origin 에서 이 파일이 나온다(allowlist)",
   /"\/skin\/skin-home-canvas\.js"/.test(read("core/lib/skin-sandbox-server.js")));
 
+{
+  /* HOME-CANVAS-RENDER-1A — 정적 렌더러는 renderSkin() 을 실제로 부르는
+     두 문서에만 있다. sandbox 프레임에는 **일부러** 없다(RENDER-1B). */
+
+  const renderPaths = [
+    ["index.html", "./skin/skin-home-canvas-render.js"],
+    ["studio/preview/preview-frame.html", "../../skin/skin-home-canvas-render.js"]
+  ];
+
+  const missing =
+    renderPaths.filter(([file, p]) => read(file).indexOf(p) === -1);
+
+  check("★ [docs] 공개 진입 문서와 Studio Preview 문서가 렌더러를 로드한다",
+    missing.length === 0, missing.map((m) => m[0]).join(", "));
+
+  check("★ [docs] sandbox 프레임과 allowlist 에는 렌더러가 없다(RENDER-1B 의 몫)",
+    read("skin/sandbox/frame.html").indexOf("skin-home-canvas-render.js") === -1 &&
+    read("core/lib/skin-sandbox-server.js").indexOf("skin-home-canvas-render.js") === -1);
+
+  check("[docs] 렌더러와 좌표 CSS 가 실제로 있다",
+    fs.existsSync(path.join(ROOT, "skin/skin-home-canvas-render.js")) &&
+    fs.existsSync(path.join(ROOT, "skin/skin-home-canvas-render.css")));
+
+  check("★ [docs] 좌표 CSS 에 색 · 글꼴이 없다(캔버스가 디자인을 강제하지 않는다)",
+    !/(^|[\s;{])(color|background|background-color|font-family|font-size|box-shadow)\s*:/m
+      .test(read("skin/skin-home-canvas-render.css").replace(/\/\*[\s\S]*?\*\//g, "")));
+
+  check("[docs] 표시 위치 속성 이름이 계약 파일과 같다",
+    require(path.join(HERE, "skin-home-canvas-render.js")).SKIN_CANVAS_RENDER_ROOT_ATTR ===
+    canvas.SKIN_HOME_CANVAS_ROOT_ATTR);
+
+  check("★ [docs] 렌더러의 요소 id · 슬롯 이름 규칙이 계약 파일과 같다",
+    require(path.join(HERE, "skin-home-canvas-render.js"))
+      .SKIN_CANVAS_RENDER_ELEMENT_ID_PATTERN.source ===
+      canvas.SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.source &&
+    require(path.join(HERE, "skin-home-canvas-render.js"))
+      .SKIN_CANVAS_RENDER_SLOT_NAME_PATTERN.source ===
+      canvas.SKIN_HOME_CANVAS_SLOT_NAME_PATTERN.source);
+}
+
 check("[docs] 계약 문서가 있고 색인에 적혀 있다",
   fs.existsSync(path.join(ROOT, "docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md")) &&
   /IMORY_HOME_CANVAS_CONTRACT\.md/.test(read("docs/INDEX.md")) &&

@@ -525,6 +525,13 @@
         /* HOME 캔버스의 데이터 계약(IMORY_HOME_CANVAS_CONTRACT.md) — sanitize 가
            data-imory-canvas-root 를 이 파일의 표로 판정하므로 먼저 온다. */
         "./skin/skin-home-canvas.js",
+        /* HOME 캔버스의 **정적 렌더러**(HOME-CANVAS-RENDER-1A) — 데이터
+           계약 파일과 달리 sanitize 가 부르지 않는다. renderSkin() 이
+           mount 끝에 부르므로 순서 제약은 "그 전에 있기만 하면 된다"
+           뿐이고, 짝이 되는 파일 바로 옆에 둔다. sandbox 프레임
+           (skin/sandbox/frame.html)에는 **일부러 넣지 않는다** —
+           프레임 안 렌더는 HOME-CANVAS-RENDER-1B 다. */
+        "./skin/skin-home-canvas-render.js",
         "./skin/skin-sanitize.js",
         "./skin/skin-image-slots.js",
         "./skin/skin-context.js",

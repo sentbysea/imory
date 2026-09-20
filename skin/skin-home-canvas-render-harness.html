@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>HOME CANVAS — 렌더 하네스</title>
+
+  <!--
+    =========================================================
+    HOME-CANVAS-RENDER-1A 렌더 하네스
+    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
+
+    공개 HOME 과 **같은 renderSkin()** 으로 캔버스를 그린다
+    (skin/skin-home.js 가 부르는 그 함수다). 판정은 재는 쪽
+    (skin/skin-home-canvas-render-e2e-test.mjs)이 한다.
+
+    ★ 이 문서는 skin/sandbox/frame.html 과 달리 캔버스 렌더러를
+      로드한다. sandbox 프레임 안 렌더는 RENDER-1B 다.
+
+    창구
+      window.renderCanvasHarness({ skinPackage, context, width, fresh, pageType })
+        skinPackage  없으면 아래 기본 fixture
+        context      없으면 아래 기본 Context
+        width        #mount 의 폭(px). 없으면 창 폭 그대로
+        fresh        true 면 destroy 후 새로 mount(아니면 update)
+        pageType     기본 "home". category/post/banner 로 바꾸면
+                     그 template 을 그린다(캔버스가 HOME 한 장인지 확인)
+      window.harnessTemplate   마지막으로 그린 template(canvas 키 확인용)
+      window.harnessReady      첫 렌더 Promise
+
+    쿼리(손으로 열어 볼 때)
+      width=390|800   #mount 폭
+      blank=1         첫 렌더를 캔버스 **없는** 스킨으로 한다
+                      (캔버스를 한 번도 그리지 않은 문서를 재는 용)
+
+    로컬 정적 서버가 필요하다(ES 모듈). e2e 는 자기 서버를 띄운다.
+    =========================================================
+  -->
+
+  <style>
+    html, body { margin: 0; }
+    body { font: 13px system-ui, sans-serif; background: #eee; }
+
+    /* 공개 HOME 처럼 문서가 아니라 #mount 가 스크롤한다 */
+    #mount {
+      margin: 0 auto;
+      min-height: 100vh;
+      background: #fff;
+    }
+
+    /* 하네스가 그리는 기본 fixture 의 "스킨 CSS" 자리 —
+       플랫폼 CSS 가 색을 주지 않는다는 것을 눈으로 보기 위한 것이라
+       일부러 이 문서에 둔다(스킨 CSS 는 skinPackage.css 가 갖는다). */
+  </style>
+</head>
+<body>
+
+  <div id="mount"></div>
+
+  <script src="../core/lib/build-version.js"></script>
+  <script src="./skin-layout.js"></script>
+  <script src="./skin-transition.js"></script>
+  <script src="./skin-sides.js"></script>
+  <script src="./skin-settings.js"></script>
+  <script src="./skin-home-canvas.js"></script>
+  <script src="./skin-home-canvas-render.js"></script>
+  <script src="./skin-sanitize.js"></script>
+  <script src="./skin-template.js"></script>
+
+  <script type="module">
+
+    import { renderSkin } from "./skin-render.js";
+
+    const params = new URLSearchParams(location.search);
+
+    /* =========================================================
+       기본 fixture — 여섯 종류가 한 번씩
+
+       ★ 운영용 preset 도 예시 스킨도 아니다. 저장소에 JSON 을
+         만들지 않고 이 문서 안에만 둔다(로드맵 §9 금지 사항).
+         e2e 는 자기 fixture 를 넣어 부르므로 이 값에 기대지 않는다.
+    ========================================================== */
+
+    const DEFAULT_HOME_HTML =
+      '<div class="hc-home">' +
+      '<h1 class="hc-title" data-imory-bind="site.title"></h1>' +
+      '<div class="hc-canvas" data-imory-canvas-root></div>' +
+      "</div>";
+
+    const DEFAULT_CANVAS = {
+      version: 1,
+      baseWidth: 390,
+      baseHeight: 844,
+      elements: [
+        { id: "canvas_photo", type: "photo", x: 20, y: 120, width: 260, height: 320,
+          props: { slot: "photo_1" } },
+        { id: "canvas_shape", type: "shape", x: 240, y: 90, width: 90, height: 90,
+          rotation: 12, props: { kind: "ellipse" } },
+        { id: "canvas_logo", type: "logo", x: 20, y: 40, width: 160, height: 48,
+          props: { slot: "title_logo", fallback: "site_title" } },
+        { id: "canvas_text", type: "text", x: 20, y: 470, width: 260, height: "auto",
+          rotation: -2, props: { text: "A quiet archive.\n두 번째 줄.", role: "body" } },
+        { id: "canvas_sticker", type: "sticker", x: 250, y: 470, width: 80, height: 80,
+          props: { slot: "sticker_1" } },
+        { id: "canvas_nav", type: "category_nav", x: 20, y: 600, width: 300, height: "auto",
+          props: { mode: "all", categoryIds: [] } }
+      ]
+    };
+
+    const DEFAULT_PACKAGE = {
+      schemaVersion: 1,
+      templates: { home: { html: DEFAULT_HOME_HTML } },
+      css:
+        ".hc-home { padding: 0; }" +
+        ".hc-canvas { width: 100%; }" +
+        '[data-imory-canvas-type="shape"] { background: #d8cfc2; }' +
+        "[data-imory-canvas-nav] { display: flex; gap: 10px; }",
+      imageSlots: [
+        { name: "photo_1", label: "사진 1", required: false },
+        { name: "title_logo", label: "로고", required: false },
+        { name: "sticker_1", label: "스티커", required: false }
+      ],
+      regions: [
+        { name: "home_canvas", enabled: true, canvas: DEFAULT_CANVAS }
+      ],
+      metadata: {}
+    };
+
+    const DEFAULT_CONTEXT = {
+      site: { title: "Afternoon Journal", slug: "test1", description: null, language: "ko" },
+      profile: { nickname: "sentbysea", bio: null, avatarUrl: null },
+      navigation: {
+        home: { name: "Afternoon Journal", href: "/test1", enabled: true, type: "home", iconKind: "home" },
+        categories: [
+          { id: "1", name: "기록", type: "post", iconKind: "post", href: "/test1/category/1", itemCount: null },
+          { id: "2", name: "여행", type: "post", iconKind: "post", href: "/test1/category/2", itemCount: null },
+          { id: "3", name: "사진", type: "post", iconKind: "post", href: "/test1/category/3", itemCount: null }
+        ],
+        postCategories: [],
+        galleryCategories: [],
+        bannerCategories: []
+      },
+      home: { recentPosts: [] },
+      images: {
+        photo_1: "./test-skins/editorial-cover-sample.jpg",
+        title_logo: null,
+        sticker_1: "./test-skins/imory-diary-avatar-placeholder.svg"
+      },
+      viewer: { isOwner: false },
+      page: { type: "home" }
+    };
+
+
+    let instance = null;
+
+    window.harnessTemplate = null;
+
+    window.renderCanvasHarness = function (options) {
+
+      const o = options || {};
+
+      const mount = document.getElementById("mount");
+
+      if (typeof o.width === "number" && o.width > 0) {
+        mount.style.width = o.width + "px";
+      } else if (o.width === null) {
+        mount.style.removeProperty("width");
+      }
+
+      const skinPackage = o.skinPackage || DEFAULT_PACKAGE;
+      const context = o.context || DEFAULT_CONTEXT;
+
+      const template =
+        window.resolveSkinTemplate(skinPackage, o.pageType || "home");
+
+      window.harnessTemplate = template || null;
+
+      if (!template) {
+        if (instance) { instance.destroy(); instance = null; }
+        return { template: null };
+      }
+
+      if (instance && o.fresh !== true) {
+        instance.update(template, context);
+      } else {
+        if (instance) instance.destroy();
+        instance = renderSkin({ container: mount, skin: template, context, mode: "view" });
+      }
+
+      return { template };
+
+    };
+
+    /* 공개 화면의 SPA 라우터 흉내 — 링크는 이 문서를 떠나지 않고
+       기록만 남는다(캔버스 카테고리 링크가 내부 이동인지 볼 때). */
+    window.harnessNavigations = [];
+
+    document.addEventListener("click", (event) => {
+      const link = event.target.closest && event.target.closest("a[href]");
+      if (link) {
+        event.preventDefault();
+        window.harnessNavigations.push(link.getAttribute("href"));
+      }
+    });
+
+    window.harnessReady =
+      Promise.resolve(
+        window.renderCanvasHarness({
+          width: params.get("width") ? Number(params.get("width")) : undefined,
+          skinPackage:
+            params.get("blank") === "1"
+              ? { ...DEFAULT_PACKAGE, regions: [] }
+              : undefined
+        })
+      );
+
+  </script>
+
+</body>
+</html>

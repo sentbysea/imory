@@ -1267,7 +1267,11 @@
                 }
               }
             ],
-            skin_image_slot_values: [],
+            /* HOME-CANVAS-RENDER-1A — 캔버스의 photo/logo/sticker 가
+               채워진 슬롯과 빈 슬롯을 모두 그리는지 보려면 Studio
+               Preview 쪽에도 슬롯 값이 필요하다. 기본은 지금까지와
+               같이 빈 배열이다({ skin_id, slot_name, image_url }). */
+            skin_image_slot_values: window.__scenarioLaySkinImageSlotValues || [],
             profiles: [{ user_id: "user-lay", nickname: "Scenario LAY", bio: null, slug: "scenario-lay" }],
             site_settings: [{ user_id: "user-lay", key: "blog_title", value: "SCENARIO LAY BLOG" }],
             categories: [

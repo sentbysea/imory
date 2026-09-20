@@ -1,10 +1,11 @@
 # IMORY HOME CANVAS — 데이터 계약
 
-> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 은 지금 코드가 강제한다**.
-> **§11 은 아직 구현되지 않았다** — 앞으로 Renderer 와 편집 UI 가 지켜야 할
+> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 는 지금 코드가
+> 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집 UI 가 지켜야 할
 > 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
 >
-> 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1).
+> 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
+> `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -16,28 +17,31 @@
 | Import 검증 입구 | [skin/skin-package-import.js](../../skin/skin-package-import.js) |
 | 렌더 재료에 싣는 자리 | [skin/skin-template.js](../../skin/skin-template.js) `resolveSkinTemplate` |
 | sandbox 봉투의 strict allowlist | [skin/sandbox/skin-sandbox-protocol.js](../../skin/sandbox/skin-sandbox-protocol.js) `isSandboxHomeCanvas` |
+| **정적 Renderer**(DOM 생성 · 갱신 · 제거) | [skin/skin-home-canvas-render.js](../../skin/skin-home-canvas-render.js) `compileSkinHomeCanvas` |
+| **좌표 구조 CSS**(색 · 글꼴 없음) | [skin/skin-home-canvas-render.css](../../skin/skin-home-canvas-render.css) |
+| Renderer 를 부르는 자리 | [skin/skin-render.js](../../skin/skin-render.js) `renderSkin` mount 끝 |
 
 관련 테스트: `node skin/skin-home-canvas-test.mjs` ·
+`node skin/skin-home-canvas-render-e2e-test.mjs` ·
 `node studio/studio-home-canvas-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
 
 ---
 
-## 0. 이번 라운드가 실제로 한 일
+## 0. 지금까지 실제로 된 것
 
-HOME 을 한 폭짜리 디자인 캔버스로 꾸미는 기능의 **데이터 계약만** 만들었다.
+| 라운드 | 무엇 |
+| --- | --- |
+| `CONTRACT-1B` | 데이터 계약 — 캔버스 데이터가 SkinPackage 안에 있을 수 있고, Import · Export · Save · 다시 열기 · Publish · AI 수정 · sandbox 봉투를 지나도 **한 칸도 잃지 않으며**, 잘못된 데이터가 조용히 고쳐지거나 지워지지 않는다 |
+| `CONTRACT-1C` | 도화지 전체의 세로 길이 `baseHeight` 한 칸(§4-1). 그 말고는 `1B` 계약이 그대로다 |
+| `RENDER-1A` | **정적 Renderer**(§12) — 저장된 Canvas 가 **공개 native HOME** 과 **Studio native Preview** 에서 같은 DOM · 같은 좌표로 그려진다 |
 
-- 캔버스 요소는 **아직 화면에 그려지지 않는다.**
-- Moveable / Selecto 는 저장소에 **들어오지 않았다.**
-- 드래그 · 크기 · 회전 · Inspector · Undo · preset · 스티커 업로드 UI 는 **없다.**
+아직 **없는 것** — 이 셋을 구현된 것으로 읽지 않는다.
 
-지금 성립하는 것은 이것뿐이다: 캔버스 데이터가 SkinPackage 안에 있을 수 있고,
-Import · Export · Save · 다시 열기 · Publish · AI 수정 · sandbox 봉투를 지나도
-**한 칸도 잃지 않으며**, 잘못된 데이터가 조용히 고쳐지거나 지워지지 않는다.
-
-`1C` 가 여기에 하나를 더했다 — 도화지 전체의 세로 길이 `baseHeight`(§4-1).
-`1B` 에는 요소마다의 높이만 있고 **캔버스 자체가 어디까지인가**가 없었다.
-그 한 칸 말고는 `1B` 계약이 그대로다(알 수 없는 필드 보존 · 미래 version
-fallback · non-mutation · 세 갈래 fallback 전부 불변).
+- **sandbox 프레임 안의 Canvas 렌더**(`RENDER-1B`). 프레임 문서는 렌더러
+  파일을 로드하지 않는다 — 그래서 sandbox 스킨의 HOME 은 지금까지와 같다.
+- Moveable / Selecto 는 **채택은 끝났지만 저장소에 들어오지 않았다.**
+- 선택 · 드래그 · 크기 · 회전 · Inspector · Undo · preset · 스티커 업로드 UI
+  — **하나도 없다**(§11).
 
 ---
 
@@ -129,7 +133,8 @@ fallback 표 — 지금 코드가 그대로 따른다.
 것**으로 성립한다 — 그래서 캔버스가 없는 스킨에서는 Preview 메시지와 sandbox
 봉투가 지금까지와 byte 단위로 같다.
 
-`HOME-CANVAS-CONTRACT-1B` 는 이 요소 **안에 DOM 을 만들지 않는다.**
+이 요소 **안의 DOM 은 전부 Renderer 가 만든다**(§12). 스킨이 표식 안에 직접
+적어 둔 자식이 있으면 그것은 지워지지 않는다.
 
 ---
 
@@ -147,8 +152,7 @@ fallback 표 — 지금 코드가 그대로 따른다.
 | 절대 한계 | 좌표 ±100000 · 크기 0 초과 100000 이하 |
 
 `baseWidth: 390` 은 화면 폭을 390px 로 고정한다는 뜻이 **아니다.** 저장 좌표의
-기준 자만 390 으로 통일한다는 뜻이다. 실제 화면 폭 변환은 후속 Renderer 의 몫이다
-(§11).
+기준 자만 390 으로 통일한다는 뜻이다. 실제 화면 폭으로 어떻게 바뀌는지는 §12-2.
 
 데스크톱 전용 별도 좌표와 breakpoint override 는 이번에 만들지 않았다
 (`HOME-CANVAS-RESPONSIVE-1`).
@@ -176,9 +180,10 @@ fallback 표 — 지금 코드가 그대로 따른다.
   둔 여백이 사라지고, 요소를 하나 옮길 때마다 페이지 전체 높이가 예기치 않게
   바뀐다.
 - **요소가 Canvas 경계를 일부 벗어나는 것을 데이터 계약이 금지하지 않는다.**
-  넘친 것을 어떻게 다룰지(자르기 · 늘리기 · 스크롤)는 Renderer 계약의 몫이다.
-- 실제 viewport 에 맞춰 확대·축소하거나 스크롤하게 만드는 방식도 Renderer
-  계약에서 정한다(§11-1).
+  넘친 것을 어떻게 다룰지(자르기 · 늘리기 · 스크롤)는 Renderer 의 몫이고,
+  `RENDER-1A` 는 그것을 **스킨 CSS 에 남겼다** — 플랫폼 CSS 가 도화지에
+  `overflow` 를 정하지 않는다(§12-2).
+- 실제 viewport 에 맞춰 확대·축소하거나 스크롤하게 만드는 방식도 §12-2 다.
 - 향후 Studio 에서 주인이 이 값을 직접 조정할 수 있다 — 그 UI 는 아직 없다.
 - **데스크톱·모바일별 별도 높이는 이번에 추가하지 않았다**(`RESPONSIVE-1`).
 
@@ -234,8 +239,8 @@ payload 는 `baseWidth` 와 달리 상수가 아니라 **저장된 그 값**을 
 /^[A-Za-z][A-Za-z0-9_-]{0,63}$/
 ```
 
-**함정.** §8 은 각 요소가 후속 Renderer 에서 안정적인
-`data-imory-edit-id="<element.id>"` 를 받아야 한다고 적는다. 그런데 저장 경계의
+**함정.** 각 요소는 Renderer 에서 안정적인
+`data-imory-edit-id="<element.id>"` 를 받는다(§8 · §12-3). 그런데 저장 경계의
 edit-id 규칙(`skin/skin-sanitize.js` `SKIN_SANITIZE_EDIT_ID_PATTERN`)은 **점이
 없고, 64자 이하이고, 글자로 시작**해야 한다. `crypto.randomUUID()` 는
 `0e02b2c3-…` 처럼 **숫자로 시작할 수 있어서** 그 규칙을 통과하지 못한다.
@@ -406,7 +411,25 @@ sandbox 봉투는 그 payload 를 `skin-sandbox-protocol.js` 의
 
 ---
 
-## 10. 이번에 바꾼 파일
+## 10. 라운드마다 바꾼 파일
+
+### `RENDER-1A` (정적 Renderer)
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/skin-home-canvas-render.js` | **새 파일** — `compileSkinHomeCanvas()`. DOM 생성 · 갱신 · 제거 |
+| `skin/skin-home-canvas-render.css` | **새 파일** — 좌표 구조만(색 · 글꼴 · 테두리 0줄) |
+| `skin/skin-render.js` | `renderSkin()` mount **끝**에서 캔버스를 그린다 + 그때만 위 CSS 를 건다 |
+| `index.html` · `studio/preview/preview-frame.html` | 렌더러를 로드한다 — **이 둘뿐**이다 |
+| `skin/skin-home-canvas-render-harness.html` | **새 파일** — 공개 화면과 같은 `renderSkin()` 으로 그리는 하네스(테스트용) |
+| `skin/skin-home-canvas-render-e2e-test.mjs` | **새 파일** — 정적 Renderer E2E(TESTS.md §13) |
+| `skin/skin-home-canvas-test.mjs` | `[docs]` 절에 로드 위치 · 좌표 CSS 에 색이 없음 · 렌더러와 계약 파일의 규칙 대조 |
+| `studio/studio-lifecycle-scenario.html` | `lay` 의 `skin_image_slot_values` 를 주입할 수 있게(기본은 지금까지와 같은 빈 배열) |
+
+`RENDER-1A` 는 그 외 어떤 파일도 고치지 않았다. 특히 **`skin/skin-home-canvas.js`
+(데이터 계약)와 `skin/skin-template.js` 는 한 줄도 바뀌지 않았다** — 렌더러는
+이미 있던 실행 payload 를 받기만 한다. `skin/sandbox/*` 와
+`core/lib/skin-sandbox-server.js` 도 그대로다(§12-6).
 
 ### `1C` (baseHeight)
 
@@ -446,18 +469,23 @@ Save 는 스프레드). 테스트가 그 사실을 못박는다.
 
 **이 절은 계약이 아니라 앞으로의 약속과 빈 곳이다.**
 
-### 11-1. Renderer 가 지켜야 할 것 (`HOME-CANVAS-RENDER-1`)
+### 11-1. Renderer 의 남은 반쪽 (`HOME-CANVAS-RENDER-1B`)
 
-- `data-imory-canvas-root` 안에 요소 DOM 을 만든다.
-- 각 요소에 `data-imory-edit-id="<element.id>"` 를 준다(§5-1).
-- 배열 순서가 곧 앞뒤 순서다(`z` 필드를 새로 만들지 않는다).
-- `baseWidth: 390` 저장 좌표를 실제 화면 폭으로 변환한다 — 변환 규칙 자체가
-  아직 정해지지 않았다(§11-3).
-- `baseHeight` 를 실제 화면에서 어떻게 쓸지 정한다 — viewport 에 맞춰 확대·축소할지,
-  그대로 두고 스크롤할지, 요소가 그 밖으로 넘칠 때 자를지 늘릴지. **데이터 계약은
-  높이 숫자만 갖고 이 넷 중 무엇도 고르지 않았다**(§4-1).
-- Studio native / Studio sandbox / 공개 native / 공개 sandbox **네 화면**이 같은
-  결과여야 한다.
+정적 Renderer 는 `RENDER-1A` 에서 구현됐다 — 그 계약은 **§12** 다. 네 화면 중
+둘이 남았다.
+
+| 화면 | 상태 |
+| --- | --- |
+| 공개 native | **구현됨**(§12) |
+| Studio native Preview | **구현됨**(§12) — 공개와 DOM · 좌표가 같다는 것을 E2E 가 잰다 |
+| 공개 sandbox | **없다** — `RENDER-1B` |
+| Studio sandbox Preview | **없다** — `RENDER-1B` |
+
+`RENDER-1B` 가 할 일은 프레임 문서(`skin/sandbox/frame.html`)에 렌더러를
+싣고 운영 allowlist(`core/lib/skin-sandbox-server.js`)에 등록하는 것이다.
+**실행 데이터는 이미 프레임까지 간다**(`CONTRACT-1B` 가 봉투를 만들어 두었고
+`skin-sandbox-frame.js` 가 `skin.canvas` 로 옮긴다) — 지금 없는 것은 그리는
+쪽뿐이다.
 
 ### 11-2. UI (`SELECT-1` · `HISTORY-1` · `ELEMENTS-1` 이후)
 
@@ -482,7 +510,6 @@ Moveable · Selecto 는 **채택은 끝났고 저장소에는 아직 없다.**
 | 좌우 패널(`left_sidebar` · `right_sidebar`) 안의 Canvas | `HOME-CANVAS-SIDES-1` |
 | `canvas.background` · 요소별 `style` · `shape.fill/stroke` · `sticker.outline` | `DECOR-1` · `STICKER-1` |
 | 캔버스를 고치는 Studio 패널(지금은 UI 가 없어서, 깨진 캔버스를 사람이 고칠 길이 Import 창뿐이다) | `HOME-CANVAS-SELECT-1` 이후 |
-| 캔버스 요소가 카테고리 Context 를 실제로 읽는 방법(`category_nav` 는 지금 데이터만 있고 바인딩이 없다) | `HOME-CANVAS-ELEMENTS-1` |
 | `logo.fallback` 에 "아무것도 안 그림" 같은 값이 필요한가 | 아직 요청 없음 — 지금은 `site_title` 하나 |
 
 ### 11-4. 확장 방향 (기록만)
@@ -491,3 +518,154 @@ Moveable · Selecto 는 **채택은 끝났고 저장소에는 아직 없다.**
 수 있게 만들어 두었다. `skin/skin-home-canvas.js` 의 `validateSkinCanvasData()` ·
 `buildSkinCanvasRenderPayload()` 는 region 이름을 모른다 — 찾는 이름을 늘리는
 것만으로 좌우 Canvas 를 붙일 수 있다. **이번 라운드는 붙이지 않았다.**
+
+---
+
+## 12. 정적 Renderer (`HOME-CANVAS-RENDER-1A`)
+
+**이 절은 지금 코드가 강제한다.** 조작 UI 는 여기 없다 — 그리기만 한다.
+
+| 무엇 | 파일 |
+| --- | --- |
+| DOM 생성 · 갱신 · 제거 | `skin/skin-home-canvas-render.js` `compileSkinHomeCanvas(root, canvas, context)` |
+| 좌표 구조 CSS | `skin/skin-home-canvas-render.css` |
+| 부르는 자리 | `skin/skin-render.js` `renderSkin()` mount **끝** |
+
+### 12-1. 언제 그리는가 · 어디서 그리는가
+
+다섯이 전부 맞을 때만 그린다.
+
+1. HOME 화면이다
+2. 지원하는 v1 실행 payload 가 있다
+3. `enabled !== false`
+4. HOME template 안에 `[data-imory-canvas-root]` 가 **정확히 하나**
+5. 그 표식이 지금 그린 HOME template 의 것이다
+
+앞 셋은 `resolveSkinTemplate()` 이, 넷째는 그 함수와 렌더러가 **둘 다**,
+다섯째는 렌더러가 `renderSkin` 이 만든 root 안에서만 찾는 것으로 성립한다.
+하나라도 어긋나면 **기존 HOME DOM 을 한 글자도 건드리지 않는다**(§3 의
+fallback 표). 표식을 자동으로 만들지 않는다.
+
+그리는 화면은 **둘**이다 — 공개 native HOME 과 Studio native Preview. 둘 다
+같은 `renderSkin()` 을 쓰므로 렌더러 파일 하나로 두 화면이 같은 DOM 을 그린다.
+**sandbox 프레임에는 이 파일이 없다**(§12-6).
+
+### 12-2. 좌표 — ResizeObserver 도 매 프레임 재계산도 없다
+
+표식의 가로폭은 **template 와 스킨 CSS** 가 정한다. 플랫폼은 세로를 가로에
+묶기만 한다.
+
+```css
+[data-imory-canvas-active="true"] {
+  position: relative;
+  aspect-ratio: var(--imory-canvas-base-width) / var(--imory-canvas-base-height);
+}
+```
+
+요소의 네 값은 **백분율**이다. 백분율은 표식 상자를 기준으로 풀리므로 표식이
+넓어지면 네 값이 **같은 배율로** 함께 커진다.
+
+| CSS | 값 |
+| --- | --- |
+| `left` | `x / baseWidth * 100%` |
+| `top` | `y / baseHeight * 100%` |
+| `width` | `width / baseWidth * 100%` |
+| `height` | `height / baseHeight * 100%` (숫자 height 일 때만) |
+| `transform` | `rotate(<rotation>deg)` — `transform-origin` 기본값이 요소 **중심**이라 §4 가 그대로 성립한다 |
+
+- 값은 `element.style.setProperty()` 로 쓴다(CSSOM 쓰기는 CSP 가 막지 않는다 —
+  `skin/skin-layout.js` 와 같은 이유). **사용자 문자열이 CSS 문자열에 섞이지
+  않는다** — 실행 payload 가 검증한 숫자만 간다.
+- Renderer 가 정하지 **않는** 것: `max-width` · 가운데 정렬 · viewport 높이 ·
+  `overflow` · 배경. 경계를 넘친 요소를 자를지 보일지는 **스킨 CSS** 가 고른다.
+- 요소 위치로 도화지 높이를 다시 계산하지 않는다(§4-1).
+- **글자 크기는 배율에 따라 바뀌지 않는다.** 이 단계는 상자를 비례로 키울 뿐
+  조판을 바꾸지 않으므로, `height:"auto"` 요소의 실제 높이는 **스킨의 조판**이
+  정한다. 390 저장 좌표를 데스크톱 폭으로 옮기는 규칙은 `RESPONSIVE-1` 이다.
+
+### 12-3. 요소 DOM
+
+최상위는 **항상 `div`** 다. 종류마다 바깥 상자의 태그가 달라지면 좌표 · 회전 ·
+앞뒤 순서 규칙이 종류마다 갈라지고, 나중에 붙을 조작 손잡이도 대상 태그를 하나로
+못 잡는다. 의미가 있는 태그(`p` · `ul` · `a` · `img`)는 그 안에 넣는다.
+
+```html
+<div data-imory-canvas-element
+     data-imory-canvas-type="photo"
+     data-imory-canvas-height="fixed"
+     data-imory-edit-id="canvas_a1b2c3d4-…"></div>
+```
+
+| 속성 | 뜻 |
+| --- | --- |
+| `data-imory-canvas-element` | **렌더러가 만든 자식**이라는 표시(§12-5) |
+| `data-imory-canvas-type` | 여섯 종류 |
+| `data-imory-canvas-height` | `fixed` · `auto` |
+| `data-imory-edit-id` | `element.id`. Studio Inspector 가 이 선택자로 CSS 를 고친다(§8) |
+| `data-imory-canvas-hidden` | `hidden:true` 일 때. `hidden` 속성도 함께 붙어 **실제로 그려지지 않는다** |
+| `data-imory-canvas-locked` | `locked:true` 일 때. **공개 화면의 모양은 바뀌지 않는다** |
+| `data-imory-canvas-role` | `text` 의 의미 역할. 플랫폼이 이 값으로 글자 크기도 색도 주지 않는다 |
+| `data-imory-canvas-shape` | `rect` · `ellipse` · `line` |
+| `data-imory-canvas-nav-mode` | `all` · `selected` |
+
+**배열 순서가 곧 DOM 순서이고 그것이 앞뒤 순서다** — `z-index` 를 만들지 않는다.
+
+이 `data-imory-canvas-*` 들은 저장 경계의 화이트리스트에 **없다**
+(`data-imory-canvas-root` 하나만 있다) — 그래서 스킨 HTML 에서 올 수 없고,
+런타임 흔적이 저장되는 HTML 에 섞일 수도 없다.
+
+### 12-4. 종류별로 무엇을 그리는가
+
+| 종류 | 그리는 것 |
+| --- | --- |
+| `photo` · `sticker` | 슬롯에 이미지가 있으면 `<img alt="">`. **빈 슬롯이어도 wrapper 는 남고 플랫폼 placeholder 를 넣지 않는다** |
+| `logo` | 이미지가 있으면 `<img>`(alt 는 **지금 블로그의 실제 제목**). 비었고 `fallback:"site_title"` 이면 제목을 `<span>` 에 `textContent` 로. 제목이 비면 아무것도 안 그린다 |
+| `text` | `<p>` 하나에 `textContent`. 줄바꿈은 `white-space: pre-wrap` 이 살린다 |
+| `category_nav` | `<ul><li><a href>`. `all` 은 표시 가능한 카테고리 전체, `selected` 는 `categoryIds` **순서대로**(없는 id 는 건너뛰고 **저장 데이터는 고치지 않는다**). 결과가 비면 wrapper 만 |
+| `shape` | 속성 하나. **칠하지 않는다** — `ellipse` 의 `border-radius:50%` 만이 "타원이게" 하는 구조다 |
+
+- 이미지는 **기존 이미지 슬롯**(`context.images[slot]`), 카테고리는 **기존
+  Context**(`context.navigation.categories`), 제목은 `context.site.title` 이다.
+  새 저장 방식도 새 라우터도 만들지 않는다.
+- `href` 와 `src` 는 `isSafeSkinUrl()` 을 지난 값만 붙는다(`skin-render.js` 의
+  URL 바인딩과 **같은 단일 판정 함수**). 막히면 링크와 wrapper 는 남고 주소만
+  붙지 않는다.
+- 사용자 문자열은 **어디에도 `innerHTML` 로 들어가지 않는다.**
+- 카테고리 링크는 버튼이 아니라 실제 `<a href>` 이고, 클릭은 기존 공통 라우팅
+  (`skin/skin-link-nav.js`)이 가져간다 — 별도 라우터를 만들지 않는다.
+
+플랫폼 CSS 가 생김새에 손대는 곳은 **셋뿐**이고 전부 구조다: 이미지의
+`object-fit: cover`(세로가 정해진 틀에서 사진이 눌리지 않게), 생성한 `p`/`ul` 의
+`margin`·`list-style` 초기화(UA 기본값이 좌표를 밀어내지 않게), `ellipse` 의
+`border-radius`. 셋 다 선택자가 0,1,x 라 스킨 CSS(0,2,x)가 언제든 덮어쓴다.
+
+### 12-5. 다시 그리기 · 정리
+
+- 같은 표식에 여러 번 그려도 **요소가 중복되지 않는다** — 자기가 만든 자식
+  (`[data-imory-canvas-element]`)만 걷어내고 다시 만든다.
+- **표식 자체와 스킨이 표식에 준 class · 속성 · 스킨이 표식 안에 직접 적어 둔
+  자식은 지우지 않는다.**
+- 캔버스가 사라지거나 꺼지면 만든 DOM 과 활성 표시(`data-imory-canvas-active` ·
+  `-version` · 도화지 custom property)만 정리한다.
+- **입력 Canvas 데이터와 Context 를 mutate 하지 않는다.**
+- 늦게 도착한 응답이 최신 화면을 덮지 않게 하는 것은 이 파일이 아니라 화면을
+  여는 쪽의 기존 요청 순번이다(`skin/skin-home.js` 등) — 렌더러는 `renderSkin()`
+  이 mount 를 끝내는 동기 시점에만 돈다.
+
+### 12-6. 기존 스킨 · sandbox
+
+- `home_canvas` 가 없는 스킨: **DOM 변화 0.** 플랫폼 CSS link 조차 붙지 않는다
+  (`renderSkin` 이 `skin.canvas` 가 있을 때만 건다).
+- 표식이 없는 스킨: 렌더 결과가 **글자 단위로** 캔버스 이전과 같다.
+- CATEGORY · POST · BANNER 는 표식이 있어도 그리지 않는다(v1 의 캔버스는 HOME
+  한 장이다).
+- 기존 스킨에 표식 · 요소 · 리스너를 자동으로 넣지 않는다. 기본 editorial 스킨도
+  변환하지 않는다.
+- **리스너를 하나도 만들지 않는다** — 정적 렌더러라 전역 이벤트가 없다.
+- **sandbox 프레임에는 렌더러가 없다.** `skin/sandbox/frame.html` 도
+  `core/lib/skin-sandbox-server.js` 의 allowlist 도 이 파일을 싣지 않으므로
+  프레임 안에서는 `compileSkinHomeCanvas` 가 정의되지 않고, sandbox 스킨의
+  HOME 은 지금까지와 같다. 실행 데이터는 이미 프레임까지 간다 — 그리는 쪽만
+  `RENDER-1B` 에 남았다(§11-1).
+
+`APP_BUILD_VERSION` 은 이번에 올리지 않았다(배포하지 않았다).

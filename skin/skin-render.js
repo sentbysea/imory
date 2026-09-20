@@ -123,6 +123,16 @@ function ensureSkinTransitionStylesheet(doc) {
   ensureSkinStylesheet(doc, SKIN_TRANSITION_STYLESHEET_URL, "data-imory-skin-transition");
 }
 
+/* HOME 캔버스의 좌표 구조(IMORY_HOME_CANVAS_CONTRACT.md) — 위 셋과
+   다르게 **캔버스를 실제로 그릴 때만** 건다. 캔버스가 없는 스킨
+   (= 지금까지의 모든 스킨)에서는 이 link 조차 생기지 않는다. */
+const SKIN_HOME_CANVAS_STYLESHEET_URL =
+  new URL("./skin-home-canvas-render.css", import.meta.url);
+
+function ensureSkinHomeCanvasStylesheet(doc) {
+  ensureSkinStylesheet(doc, SKIN_HOME_CANVAS_STYLESHEET_URL, "data-imory-skin-home-canvas");
+}
+
 function ensureContentWidthStylesheet(doc) {
 
   const alreadyLinked =
@@ -1116,6 +1126,29 @@ export function renderSkin({ container, skin, context, mode = "view", styleNonce
         container,
         restoreOpen: sidesOpenBefore
       });
+    }
+
+    /* =====================================================
+       HOME 캔버스(IMORY_HOME_CANVAS_CONTRACT.md) — 실행 데이터
+       (skin.canvas, resolveSkinTemplate 이 regions 에서 만든다)와
+       표시 위치(data-imory-canvas-root)가 만나는 자리.
+
+       ★ 맨 **끝**이다. 앞의 컴파일 단계들(사진 · 배치 · 전환 ·
+         좌우 영역)은 스킨이 쓴 DOM 위에서 도는 규칙이고, 캔버스
+         요소는 플랫폼이 만든 DOM 이다 — 뒤에 두면 그 어느 단계도
+         캔버스 자식을 보지 않는다.
+
+       ★ 캔버스가 없는 스킨에서는 이 블록이 통째로 건너뛰어진다
+         — 요소도, 속성도, 스타일시트 link 도 생기지 않는다
+         (기존 스킨 회귀 0).
+
+       ★ sandbox 프레임에는 skin-home-canvas-render.js 가 없다.
+         그래서 프레임 안에서는 이 조건이 거짓이고 지금까지와 같은
+         HOME 이 그려진다(HOME-CANVAS-RENDER-1B 의 몫).
+    ====================================================== */
+    if (currentSkin?.canvas && typeof compileSkinHomeCanvas === "function") {
+      ensureSkinHomeCanvasStylesheet(doc);
+      compileSkinHomeCanvas(root, currentSkin.canvas, currentContext);
     }
 
   }
