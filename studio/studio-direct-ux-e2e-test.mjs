@@ -1007,7 +1007,9 @@ async function runFields(context) {
   const textClear = await page.evaluate(() => document.querySelectorAll("#studioInspectorFields .studio-inspector-clear").length);
   record(
     "F1. 텍스트 — 내용 · 글꼴 · 글자 크기 · 굵기 · 글자색 · 정렬 + 기타(표시 · 투명도), 값이 없는 칸에 '기본' 버튼이 줄지어 있지 않다",
-    JSON.stringify(text) === JSON.stringify(["text", "fontFamily", "fontSize", "fontWeight", "color", "align", "hidden", "opacity", "opacityNumber"]) &&
+    /* EDITORIAL-CUSTOMIZATION-1 — 글자 크기는 슬라이더 + 숫자 한 줄이다
+       (fontSizeRange 가 그 슬라이더, fontSize 가 숫자칸). */
+    JSON.stringify(text) === JSON.stringify(["text", "fontFamily", "fontSizeRange", "fontSize", "fontWeight", "color", "align", "hidden", "opacity", "opacityNumber"]) &&
       textClear === 0 && !(await hasForbidden()),
     JSON.stringify({ text, textClear })
   );

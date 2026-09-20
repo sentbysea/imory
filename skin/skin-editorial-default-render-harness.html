@@ -113,6 +113,9 @@
 
       images.pair_photo = o.pair ? "/__test-photo/pair.svg" : null;
 
+      /* EDITORIAL-CUSTOMIZATION-1 — HOME 제목 로고 슬롯 */
+      images.title_logo = o.logo ? "/__test-photo/logo.svg" : null;
+
       const title = kind === "long" ? LONG_TITLE : (o.title || "Forever, My Foe");
 
       const owner = o.owner === true;
@@ -172,7 +175,11 @@
 
     function buildRegions(o) {
 
-      const pkg = window.createImoryEditorialDefaultSkin({ columns: o.columns || 1 });
+      /* EDITORIAL-CUSTOMIZATION-1 — Studio 에서 고치고 저장/공개한
+         SkinPackage 를 그대로 그려 볼 수 있다(공개 화면이 Studio 와
+         같은 결과인지 재는 쪽이 쓴다). 주면 생성기를 부르지 않는다. */
+      const pkg =
+        o.package || window.createImoryEditorialDefaultSkin({ columns: o.columns || 1 });
 
       let regions = pkg.regions;
 

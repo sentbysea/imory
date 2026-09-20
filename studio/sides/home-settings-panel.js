@@ -4,10 +4,11 @@
    기준 문서: IMORY_EDITORIAL_DEFAULT_SKIN_DESIGN.md §7
 
    Layout 패널(studio/sides/sides-panel.js 의 1·2·3단) **아래에** 붙는
-   주인의 스킨 설정 넷.
+   주인의 스킨 설정 다섯.
 
      모바일      좌우 영역을 모바일에서도 버튼으로 열까
      HOME 사진   자동 · 사진 없이 · 한 장 · 두 장 · 세 장
+     HOME 제목   글자 제목 · 로고 이미지(EDITORIAL-CUSTOMIZATION-1)
      색          배경 · 글자 · 포인트 1 · 포인트 2 (+ 스킨 기본색으로)
      D-day      켜기 · 날짜 · 이름
 
@@ -164,6 +165,30 @@
     wrap.appendChild(photos);
 
 
+    /* --- HOME 제목 --------------------------------------- */
+
+    const title = block("HOME 제목");
+
+    ui.titleNote = el("p", "studio-sides-help");
+    ui.titleNote.setAttribute("aria-live", "polite");
+    title.appendChild(ui.titleNote);
+
+    const titleRow = el("div", "studio-home-buttons");
+
+    ui.titlePick = el("button", "studio-home-link", "로고 고르기");
+    ui.titlePick.type = "button";
+    ui.titlePick.addEventListener("click", () => openTitleLogoImages());
+
+    ui.titleClear = el("button", "studio-home-link", "로고 지우기");
+    ui.titleClear.type = "button";
+    ui.titleClear.addEventListener("click", () => clearTitleLogo());
+
+    titleRow.append(ui.titlePick, ui.titleClear);
+    title.appendChild(titleRow);
+
+    wrap.appendChild(title);
+
+
     /* --- 색 ---------------------------------------------- */
 
     const colors = block("색", "옅은 선과 흐린 글자는 이 네 색에서 저절로 만들어집니다.");
@@ -198,7 +223,7 @@
     ui.contrast.setAttribute("role", "status");
     colors.appendChild(ui.contrast);
 
-    ui.colorReset = el("button", "studio-home-link", "스킨 기본색으로");
+    ui.colorReset = el("button", "studio-home-link studio-home-color-reset", "스킨 기본색으로");
     ui.colorReset.type = "button";
     ui.colorReset.addEventListener("click", () => apply("colors", null));
     colors.appendChild(ui.colorReset);
@@ -249,6 +274,68 @@
     wrap.appendChild(ui.status);
 
     section.appendChild(wrap);
+
+  }
+
+
+  /* =========================================================
+     HOME 제목 — 글자 제목과 로고 (EDITORIAL-CUSTOMIZATION-1)
+
+     따로 저장하는 "모드"가 없다. 슬롯이 비어 있으면 글자 제목이고
+     채우면 로고다 — 그래서 "이미지 모드인데 이미지가 없어 깨진
+     아이콘이 뜬다"가 생길 수 없고, 로고를 지우면 글자 제목이 곧바로
+     돌아온다. 로고를 넣고 빼는 일은 여느 이미지 슬롯과 똑같이
+     Images 패널이 하고(= 업로드 · 되돌리기 계약도 그대로), 여기는
+     지금 어느 쪽인지 말해 주고 그 슬롯으로 보내 주는 자리다.
+  ========================================================== */
+
+  function titleLogoState() {
+
+    const state =
+      typeof window.getStudioHomeSettings === "function"
+        ? window.getStudioHomeSettings()
+        : null;
+
+    return (state && state.titleLogo) || null;
+
+  }
+
+
+  function openTitleLogoImages() {
+
+    const logo = titleLogoState();
+
+    if (!logo || !logo.available) {
+      return;
+    }
+
+    if (typeof window.setSkinImagesPanelSlot === "function") {
+      window.setSkinImagesPanelSlot(logo.slot);
+    }
+
+    if (typeof window.showStudioLeftPanelMode === "function") {
+      window.showStudioLeftPanelMode("images");
+    }
+
+  }
+
+
+  function clearTitleLogo() {
+
+    const logo = titleLogoState();
+
+    if (!logo || !logo.filled || typeof window.setStudioImageSlot !== "function") {
+      return;
+    }
+
+    if (!window.setStudioImageSlot(logo.slot, null)) {
+      ui.status.textContent = "로고를 지우지 못했어요.";
+      return;
+    }
+
+    ui.status.textContent = "";
+
+    sync();
 
   }
 
@@ -355,6 +442,20 @@
         `채운 사진 ${state.filledPhotos}장 · 지금 보이는 모양: ${LAYOUT_NAMES[decided] || "-"}. ` +
         "사진은 Images 에서 넣고 바꿉니다.";
     }
+
+
+    /* HOME 제목 */
+    const logo = state ? state.titleLogo : null;
+
+    ui.titlePick.disabled = !logo || !logo.available;
+    ui.titleClear.disabled = !logo || !logo.available || !logo.filled;
+    ui.titlePick.textContent = logo && logo.filled ? "로고 바꾸기" : "로고 고르기";
+
+    ui.titleNote.textContent =
+      !state ? ""
+        : !logo || !logo.available ? "이 스킨의 HOME 제목은 글자로만 되어 있어요."
+          : logo.filled ? "지금은 올린 로고 이미지가 제목 자리에 있어요. 지우면 블로그 이름 글자로 돌아갑니다."
+            : "지금은 블로그 이름이 글자로 나옵니다. 투명 PNG 로고를 올리면 그 자리에 로고가 섭니다.";
 
 
     /* 색 */

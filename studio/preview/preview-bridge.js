@@ -1106,6 +1106,186 @@ function inspectorVisibleRectOf(el) {
 
 
 /* =========================================================
+   inspectorSizeOwnerOf(img) — 이 사진의 폭을 **실제로 정하는 상자**
+   (EDITORIAL-CUSTOMIZATION-1)
+
+   ★ 무엇이 문제였나
+
+   스킨은 사진 자리를 흔히 "바깥 상자가 폭을 정하고 안쪽 <img> 는
+   그 상자를 가득 채운다"로 그린다(아이모리 기본 스킨의 HOME 사진 ·
+   갤러리 카드 · 헤더가 전부 그렇다).
+
+     .ied-photo       { width: 74%; }          ← 폭을 정하는 상자
+     .ied-photo-frame { display: block; aspect-ratio: 3 / 4; }
+     .ied-photo-img   { width: 100%; height: 100%; }
+
+   그 상태에서 <img> 에 `width: 320px` 을 써도 화면은 꿈쩍도 하지
+   않는다 — 크기 확정 규칙에는 늘 `max-width: 100%` 가 함께 들어가고
+   (buildInspectorStylePatch "size"), 그 100% 는 부모 상자의 폭이기
+   때문이다. 숫자만 커지고 사진은 그대로인, 사용자가 "무효"라고 느낀
+   바로 그 길이다.
+
+   ★ 무엇을 하는가
+
+   사진에서 위로 올라가며 "제 부모를 가로로 가득 채우고 있는가"를
+   묻는다. 가득 채우고 있으면 그 요소의 폭은 제 것이 아니라 부모의
+   것이므로 한 칸 더 올라간다. 더 이상 가득 채우지 않는 첫 요소가
+   **폭을 정하는 상자**다. 위 예에서는 `.ied-photo` 가 그것이다.
+
+   ★ 어디서 멈추나 (짐작하지 않는다)
+
+     - 사진이 둘 이상 든 상자    사진 묶음 전체이지 이 사진의 자리가
+                                 아니다
+     - post-body 같은 보호 영역   플랫폼이 채우는 자리다
+     - 식별자가 없는 요소        CSS 규칙을 쓸 수 없다
+     - 스킨 루트                 스킨 전체의 폭은 여기서 정하지 않는다
+     - 네 칸                     그보다 깊으면 짐작이다
+     - **제 폭을 갖지 않으면서 사진 말고 다른 글자도 담은 칸**
+       (예: 제목 · 소개 · 사진이 함께 든 머리 구역) — 그 칸의 폭을
+       줄이면 사진이 아니라 구역 전체가 줄어든다. 사진의 캡션은
+       여기 걸리지 않는다: 캡션을 가진 칸은 대개 제 폭(`74%` 등)을
+       갖고 있어 아래 첫 조건에서 이미 "주인"으로 뽑히기 때문이다.
+
+   자른 사진에는 쓰지 않는다 — 그때 폭의 주인은 자르기 프레임이고,
+   그 판정은 이미 inspectorFrameElementOf() 가 한다. 사진이 제
+   크기를 스스로 갖고 있으면(`width: 64px` · `width: auto` 인 로고)
+   첫 칸에서 바로 끝난다 — 그때는 지금까지처럼 사진 자신이 주인이다.
+========================================================== */
+
+const INSPECTOR_SIZE_OWNER_MAX_DEPTH = 4;
+
+
+function inspectorInnerWidthOf(el) {
+
+  const style =
+    window.getComputedStyle(el);
+
+  return (
+    el.clientWidth -
+    (parseFloat(style.paddingLeft) || 0) -
+    (parseFloat(style.paddingRight) || 0)
+  );
+
+}
+
+
+/* el 의 폭이 부모 안쪽 폭과 같은가(= 제 폭을 갖지 않는가) */
+function inspectorFillsParentWidth(el) {
+
+  const parent =
+    el && el.parentElement;
+
+  if (!parent) {
+    return false;
+  }
+
+  const parentWidth =
+    inspectorInnerWidthOf(parent);
+
+  return (
+    parentWidth > 0 &&
+    Math.abs(el.getBoundingClientRect().width - parentWidth) <= 1
+  );
+
+}
+
+
+/* skip(사진이 들어 있는 가지)을 뺀 나머지가 화면에 글자를 그리는가 */
+function inspectorHasOwnRenderedText(el, skip) {
+
+  return Array.from(el.childNodes).some((node) => {
+
+    if (node === skip) {
+      return false;
+    }
+
+    if (node.nodeType === 3) {
+      return node.textContent.trim() !== "";
+    }
+
+    if (node.nodeType !== 1 || !node.textContent.trim()) {
+      return false;
+    }
+
+    const rect =
+      node.getBoundingClientRect();
+
+    return rect.width > 0 && rect.height > 0;
+
+  });
+
+}
+
+
+function inspectorSizeOwnerOf(el) {
+
+  if (!el || el.tagName !== "IMG") {
+    return null;
+  }
+
+  const root =
+    inspectorSkinRoot();
+
+  if (!root || !root.contains(el)) {
+    return null;
+  }
+
+  let current = el;
+
+  let owner = null;
+
+  for (let depth = 0; depth < INSPECTOR_SIZE_OWNER_MAX_DEPTH; depth += 1) {
+
+    const parent =
+      current.parentElement;
+
+    if (!parent || parent === root || !root.contains(parent)) {
+      break;
+    }
+
+    if (parent.hasAttribute("data-imory-region")) {
+      break;
+    }
+
+    if (parent.querySelectorAll("img").length > 1) {
+      break;
+    }
+
+    if (!inspectorEditIdOf(parent)) {
+      break;
+    }
+
+    /* 지금 요소가 제 폭을 갖고 있으면 주인은 이미 정해졌다 */
+    if (!inspectorFillsParentWidth(current)) {
+      break;
+    }
+
+    const parentIsStretched =
+      inspectorFillsParentWidth(parent);
+
+    /* 제 폭도 없고 사진 말고 다른 글자도 담은 칸은 "사진의 자리"가
+       아니다 — 좁히면 구역 전체가 좁아진다. */
+    if (parentIsStretched && inspectorHasOwnRenderedText(parent, current)) {
+      break;
+    }
+
+    owner = parent;
+
+    current = parent;
+
+    /* 제 폭을 가진 칸을 만났으면 그 칸이 주인이다 */
+    if (!parentIsStretched) {
+      break;
+    }
+
+  }
+
+  return owner;
+
+}
+
+
+/* =========================================================
    inspectorMetricsOf(el) — Studio의 크기 컨트롤이 필요로 하는 실측값
 
    "초기값은 화면에 실제로 표시되는 크기를 기준으로 한다"와
@@ -1128,6 +1308,11 @@ function inspectorMetricsOf(el) {
      이고, 부모 폭도 프레임의 부모에서 잰다. */
   const frame =
     inspectorFrameElementOf(el);
+
+  /* 자르지 않은 사진이 스킨의 바깥 상자에 폭을 맡기고 있는가
+     (EDITORIAL-CUSTOMIZATION-1, inspectorSizeOwnerOf 머리말) */
+  const sizeOwner =
+    frame === el ? inspectorSizeOwnerOf(el) : null;
 
   const rect =
     frame.getBoundingClientRect();
@@ -1184,7 +1369,31 @@ function inspectorMetricsOf(el) {
         ? !!(el.complete && Number(el.naturalWidth) > 0)
         : null,
 
-    cropped: frame !== el
+    cropped: frame !== el,
+
+    /* EDITORIAL-CUSTOMIZATION-1 — 지금 실제로 그려진 글자 크기.
+       "기본"인 칸에 슬라이더가 어디서 시작할지의 근거다. */
+    fontSize:
+      Math.round(parseFloat(window.getComputedStyle(el).fontSize) || 0),
+
+    /* EDITORIAL-CUSTOMIZATION-1 — 사진의 폭을 정하는 바깥 상자.
+       자르지 않은 사진에서만 본다(자른 사진의 주인은 프레임이다).
+       Studio 는 이 값이 있을 때 "사진 영역 너비"를 그 상자에 쓴다. */
+    sizeOwner: sizeOwner
+      ? {
+          editId: inspectorEditIdOf(sizeOwner),
+          width: Math.round(sizeOwner.getBoundingClientRect().width),
+          height: Math.round(sizeOwner.getBoundingClientRect().height),
+          parentWidth: Math.max(
+            0,
+            Math.round(
+              sizeOwner.parentElement
+                ? inspectorInnerWidthOf(sizeOwner.parentElement)
+                : 0
+            )
+          )
+        }
+      : null
   };
 
 }
@@ -1511,6 +1720,24 @@ function clearInspectorPreview(options) {
     node.removeAttribute("style");
   }
 
+  /* EDITORIAL-CUSTOMIZATION-1 — 폭을 정하는 바깥 상자에 임시로 쓴
+     선언도 같은 방식으로 되돌린다(그 상자는 스킨의 것이므로 지우지
+     않고 style 속성만 원래대로 둔다). */
+  if (restore.owner && restore.owner.element && restore.owner.element.isConnected) {
+
+    const owner =
+      restore.owner.element;
+
+    owner.style.cssText = "";
+
+    if (typeof restore.owner.style === "string" && restore.owner.style.trim()) {
+      owner.setAttribute("style", restore.owner.style);
+    } else {
+      owner.removeAttribute("style");
+    }
+
+  }
+
   if (!restore.crop) {
     return;
   }
@@ -1735,28 +1962,71 @@ function applyInspectorPreview(data) {
 
   }
 
+  /* EDITORIAL-CUSTOMIZATION-1 — 선언 임시 반영(글자 크기 슬라이더).
+     부모가 이름과 값 모양을 이미 걸렀고, 여기서도 아는 속성만
+     받는다. 되돌리기는 위에서 기억해 둔 style 속성 원본이 한다. */
+  if (data.style && typeof data.style === "object") {
+
+    if (typeof data.style["font-size"] === "string") {
+      selected.style.fontSize = data.style["font-size"];
+    }
+
+  }
+
   if (typeof data.width === "number" && Number.isFinite(data.width)) {
 
-    /* 자른 이미지에서 "너비"는 프레임의 너비다 — 안쪽 사진에
-       px를 박으면 프레임 안이 어긋나 빈틈이 생긴다. */
+    /* 세 가지 대상이 있다.
+
+         "frame"      자른 사진의 프레임(래퍼) — 안쪽 사진에 px 를
+                      박으면 프레임 안이 어긋나 빈틈이 생긴다
+         "sizeOwner"  스킨이 폭을 정해 둔 바깥 상자
+                      (EDITORIAL-CUSTOMIZATION-1) — 비율·높이는
+                      스킨이 정한 그대로 두고 폭만 바꾼다
+         그 밖        사진 자신 */
+    const sizeOwner =
+      data.target === "sizeOwner" ? inspectorSizeOwnerOf(selected) : null;
+
     const sizeTarget =
-      (data.target === "frame" && inspectorFrameElementOf(selected) !== selected)
+      sizeOwner ||
+      ((data.target === "frame" && inspectorFrameElementOf(selected) !== selected)
         ? ensureInspectorCropWrapper(selected, inspectorPreviewRestore)
-        : selected;
+        : selected);
 
     if (sizeTarget) {
 
-      sizeTarget.style.width = `${Math.round(data.width)}px`;
-      sizeTarget.style.maxWidth = "100%";
+      /* 바깥 상자는 선택한 요소가 아니라 그 조상이다 — 임시 반영을
+         걷을 때 되돌릴 수 있게 style 속성 원본을 따로 기억한다. */
+      if (sizeOwner && !inspectorPreviewRestore.owner) {
+        inspectorPreviewRestore.owner = {
+          element: sizeOwner,
+          style: sizeOwner.getAttribute("style")
+        };
+      }
+
+      /* 바깥 상자의 확정 규칙에는 !important 가 붙는다
+         (studio-inspector-model.js frameSize) — 끄는 동안 보이는
+         그림이 확정 뒤와 같으려면 임시 선언도 같은 무게여야 한다. */
+      if (sizeOwner) {
+        sizeTarget.style.setProperty("width", `${Math.round(data.width)}px`, "important");
+        sizeTarget.style.setProperty("max-width", "100%", "important");
+      } else {
+        sizeTarget.style.width = `${Math.round(data.width)}px`;
+        sizeTarget.style.maxWidth = "100%";
+      }
 
       if (sizeTarget === selected) {
         sizeTarget.style.height = "auto";
       }
 
-      sizeTarget.style.aspectRatio =
-        (typeof data.ratio === "number" && Number.isFinite(data.ratio) && data.ratio > 0)
-          ? String(data.ratio)
-          : "";
+      /* 바깥 상자의 비율은 스킨의 것이다 — 덮어쓰지 않는다 */
+      if (!sizeOwner) {
+
+        sizeTarget.style.aspectRatio =
+          (typeof data.ratio === "number" && Number.isFinite(data.ratio) && data.ratio > 0)
+            ? String(data.ratio)
+            : "";
+
+      }
 
     }
 

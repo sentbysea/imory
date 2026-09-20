@@ -460,6 +460,15 @@ function renderStudioInspectorControl(spec, info, declarations, resolved) {
 
   }
 
+  /* 숫자 + 슬라이더 한 줄 (EDITORIAL-CUSTOMIZATION-1 — 글자 크기) */
+  if (spec.type === "numberRange") {
+
+    renderStudioInspectorNumberRange(spec, current, resolved);
+
+    return;
+
+  }
+
   if (spec.type === "textBlock") {
 
     renderStudioInspectorTextBlock(spec, info);
@@ -931,12 +940,17 @@ function renderStudioInspectorPopover() {
 
       /* 컨트롤마다 "지금 값"을 어느 규칙에서 읽을지 물어본다 —
          자른 이미지의 너비·모양·정렬은 이미지가 아니라 프레임
-         (래퍼)의 규칙에 들어 있다(studio-inspector-crop.js). */
+         (래퍼)의 규칙에 들어 있다(studio-inspector-crop.js).
+         "사진 영역 너비"는 한 칸 더 밖, 스킨이 자리를 정해 둔
+         바깥 상자의 규칙이다(studio-inspector-image-size.js
+         studioInspectorSizeDeclarations, EDITORIAL-CUSTOMIZATION-1). */
       controls.forEach((spec) => {
         renderStudioInspectorControl(
           spec,
           resolved.info,
-          studioInspectorCropDeclarationsFor(spec.control, resolved),
+          spec.type === "imageSize"
+            ? studioInspectorSizeDeclarations(resolved)
+            : studioInspectorCropDeclarationsFor(spec.control, resolved),
           resolved
         );
       });

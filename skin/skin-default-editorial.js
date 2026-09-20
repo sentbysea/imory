@@ -256,8 +256,17 @@ function imoryEditorialHomeHtml() {
   const main =
     '<main class="ied-main" data-imory-sides-area="main">' +
       imoryEditorialTop("01", '<p class="ied-top-page">Home</p>', true) +
+      /* 제목 — 글자 제목과 로고 제목이 같은 자리에 있다. 로고 슬롯이
+         비어 있으면 로고 쪽이 접히고(data-imory-if) 글자 제목이
+         보인다. 슬롯을 채우면 로고가 서고 바로 뒤 글자 제목이
+         CSS 한 줄로 물러난다(:has() 없이 형제 선택자로).
+         EDITORIAL-CUSTOMIZATION-1 */
       '<section class="ied-mast">' +
-        '<h1 class="ied-title" data-imory-bind="site.title"></h1>' +
+        '<h1 class="ied-title ied-title--logo" data-imory-if="images.title_logo">' +
+          '<img class="ied-logo-img" data-imory-src="images.title_logo" alt="">' +
+          '<span class="ied-sr" data-imory-bind="site.title"></span>' +
+        '</h1>' +
+        '<h1 class="ied-title ied-title--text" data-imory-bind="site.title"></h1>' +
         '<p class="ied-sub" data-imory-if="profile.bio" data-imory-bind="profile.bio"></p>' +
       '</section>' +
       imoryEditorialNav(true) +
@@ -634,6 +643,43 @@ function imoryEditorialCss() {
 
 .ied-title--small { font-size: clamp(18px, 0.8vw + 15px, 24px); }
 
+/* ── HOME 제목 로고 (EDITORIAL-CUSTOMIZATION-1) ───────────
+   로고가 서면 바로 뒤 글자 제목이 물러난다. :has() 를 쓰지 않는다 —
+   형제 선택자면 충분하고, 지원 범위가 넓다. */
+.ied-title--logo {
+  display: block;
+  max-width: 100%;
+  margin: 0;
+  font-size: 0;
+}
+
+.ied-title--logo:not([hidden]) ~ .ied-title--text { display: none; }
+
+/* 투명 PNG 의 배경을 그대로 둔다 — 잘라내지도, 채우지도 않는다.
+   폭은 제 것이다(width: auto) — 그래야 Studio 의 "너비"가 이 로고에
+   그대로 걸린다. 화면이 좁아지면 max-width 가 받는다. */
+.ied-logo-img {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 320px);
+  object-fit: contain;
+}
+
+/* 화면에는 없고 읽어 주기에는 있는 글자 — 로고의 대체 텍스트가
+   실제 블로그 제목이 되게 한다 */
+.ied-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .ied-sub {
   max-width: var(--ied-measure);
   font-size: 11px;
@@ -653,10 +699,15 @@ function imoryEditorialCss() {
   margin: 0 auto;
 }
 
+/* 줄 전체가 글자 크기 하나를 갖는다 — 링크는 그 크기를 1em 으로
+   물려받으므로, Studio 에서 이 줄을 골라 글자 크기를 바꾸면 다섯
+   항목이 한꺼번에 커지고 줄어든다(링크를 하나씩 고르지 않는다,
+   EDITORIAL-CUSTOMIZATION-1). */
 .ied-nav-list {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
+  font-size: 11.5px;
   column-gap: clamp(18px, 7%, 36px);
   row-gap: 6px;
 }
@@ -666,7 +717,7 @@ function imoryEditorialCss() {
 .ied-nav-link {
   display: inline-block;
   padding: 8px 0 7px;
-  font-size: 11.5px;
+  font-size: 1em;
   letter-spacing: 0.26em;
   text-transform: uppercase;
   color: var(--ied-ink);
@@ -1387,7 +1438,12 @@ function createImoryEditorialDefaultSkin(options) {
       slot("photo_2", "HOME 사진 2", "3:4"),
       slot("photo_3", "HOME 사진 3", "3:4"),
       slot("photo_4", "HOME 사진 4", "3:4"),
-      slot("pair_photo", "프로필 사진(왼쪽 영역)", "3:5")
+      slot("pair_photo", "프로필 사진(왼쪽 영역)", "3:5"),
+
+      /* HOME 제목 자리 — 비어 있으면 글자 제목이 선다
+         (EDITORIAL-CUSTOMIZATION-1). 투명 PNG 를 그대로 보여 주므로
+         비율을 권하지 않는다. */
+      slot("title_logo", "HOME 제목 로고 (투명 PNG)", "")
     ],
     regions,
     /* metadata 에는 문답의 답을 남기지 않는다(studio-lifecycle-test B4) */

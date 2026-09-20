@@ -101,7 +101,7 @@ function buildStudioInspectorControls(info, resolved) {
           label: "글꼴",
           options: [["sans", "고딕"], ["serif", "명조"], ["mono", "고정폭"]]
         },
-        { control: "fontSize", type: "number", label: "글자 크기", unit: "px" },
+        { control: "fontSize", type: "numberRange", label: "글자 크기", unit: "px" },
         {
           control: "fontWeight",
           type: "choice",
@@ -149,8 +149,23 @@ function buildStudioInspectorControls(info, resolved) {
       controls.push({ control: "imageSource", type: "image", label: "이미지" });
     }
 
+    /* EDITORIAL-CUSTOMIZATION-1 — 스킨이 자리를 정해 둔 사진에서는
+       사진 자신의 너비가 아니라 **그 자리의 너비**를 고친다. 이름이
+       다른 이유는 하는 일이 다르기 때문이다 — 사진을 크게 보는 일은
+       아래 "자르기"의 확대가 맡는다. 폼은 한 벌뿐이라 "같은 일을
+       하는 칸이 둘"이 생기지 않는다. */
     if (can.size) {
-      controls.push({ control: "size", type: "imageSize", label: "너비", unit: "px" });
+
+      const framed =
+        typeof studioInspectorSizeOwner === "function" && !!studioInspectorSizeOwner();
+
+      controls.push({
+        control: "size",
+        type: "imageSize",
+        label: framed ? "사진 영역 너비" : "너비",
+        unit: "px"
+      });
+
     }
 
     /* 자른 이미지는 구도를 자르기가 정한다 — 맞춤을 따로 두면 둘이
@@ -195,6 +210,13 @@ function buildStudioInspectorControls(info, resolved) {
        바꾸는 값이라 둔다(글자 하나하나를 고르지 않아도 된다). */
     if (can.color) {
       controls.push({ control: "color", type: "color", label: "글자색" });
+    }
+
+    /* 안에 든 글자 전체의 크기 — 색과 같은 결이다
+       (EDITORIAL-CUSTOMIZATION-1). 카테고리 줄처럼 링크가 여럿인
+       자리를 한 번에 키우고 줄인다. */
+    if (can.typography) {
+      controls.push({ control: "fontSize", type: "numberRange", label: "글자 크기", unit: "px" });
     }
 
     if (can.padding) {
@@ -342,6 +364,114 @@ function renderStudioInspectorOpacity(spec, current) {
     `${spec.label} (${spec.unit})`,
     group,
     studioInspectorClearIf(current !== "", () => commitStudioInspectorStyle("opacity", ""))
+  );
+
+}
+
+
+/* =========================================================
+   숫자 + 슬라이더 한 줄 (EDITORIAL-CUSTOMIZATION-1)
+
+   글자 크기처럼 "조금씩 밀어 보며 고르는" 값에 쓴다. 숫자칸의
+   data-inspector-control 은 예전 숫자칸과 같은 이름 그대로다 —
+   슬라이더가 옆에 생겼을 뿐 고치는 값도, 확정 경로도 같다.
+
+   슬라이더는 끄는 동안 **임시 미리보기**를 보내고(저장 없음), 손을
+   뗐을 때 한 번만 확정한다 = 드래그 한 번이 Undo 한 칸이다.
+   숫자 · 슬라이더 · 확정이 같은 commitStudioInspectorStyle() 하나를
+   지나므로 "슬라이더와 숫자가 서로 다른 값을 만든다"가 없다.
+========================================================== */
+
+const STUDIO_INSPECTOR_NUMBER_RANGE = {
+  fontSize: { min: 8, max: 72, fallback: 16 }
+};
+
+
+function renderStudioInspectorNumberRange(spec, current, resolved) {
+
+  const bounds =
+    STUDIO_INSPECTOR_NUMBER_RANGE[spec.control] || { min: 0, max: 100, fallback: 0 };
+
+  /* 값이 없으면 지금 화면에서 실제로 그려진 크기를 첫 자리로 쓴다 —
+     "기본"과 사용자가 고른 값이 같은 자에서 시작한다(실측은 iframe
+     이 한다, preview-bridge.js inspectorMetricsOf). */
+  const measured =
+    spec.control === "fontSize" && studioInspectorMetrics
+      ? Math.round(Number(studioInspectorMetrics.fontSize) || 0)
+      : 0;
+
+  const start =
+    current !== ""
+      ? Number(current)
+      : (measured > 0 ? measured : bounds.fallback);
+
+  const value =
+    Math.min(Math.max(start, bounds.min), bounds.max);
+
+  const group =
+    document.createElement("span");
+
+  group.className =
+    "studio-inspector-range-group";
+
+  const range =
+    document.createElement("input");
+
+  range.type = "range";
+  range.min = String(bounds.min);
+  range.max = String(bounds.max);
+  range.step = "1";
+  range.className = "studio-inspector-range";
+  range.id = `studioInspector${spec.control.charAt(0).toUpperCase()}${spec.control.slice(1)}Range`;
+  range.dataset.inspectorControl = `${spec.control}Range`;
+  range.value = String(value);
+  range.setAttribute("aria-label", spec.label);
+
+  const number =
+    document.createElement("input");
+
+  number.type = "number";
+  number.min = String(bounds.min);
+  number.max = String(bounds.max);
+  number.className = "studio-inspector-input studio-inspector-input--number";
+  number.dataset.inspectorControl = spec.control;
+  number.value = current === "" ? "" : String(value);
+  number.placeholder = "기본";
+
+  bindStudioInspectorRange(range);
+
+  range.addEventListener("input", () => {
+
+    number.value = range.value;
+
+    if (studioInspectorSelection) {
+
+      sendStudioInspectorPreview({
+        editId: studioInspectorSelection.editId,
+        style: window.buildInspectorStylePatch(spec.control, range.value)
+      });
+
+    }
+
+  });
+
+  range.addEventListener("change", () => {
+    clearStudioInspectorPreview();
+    commitStudioInspectorStyle(spec.control, range.value);
+  });
+
+  number.addEventListener("change", () => {
+    clearStudioInspectorPreview();
+    commitStudioInspectorStyle(spec.control, number.value);
+  });
+
+  group.appendChild(range);
+  group.appendChild(number);
+
+  appendStudioInspectorRow(
+    `${spec.label}${spec.unit ? ` (${spec.unit})` : ""}`,
+    group,
+    studioInspectorClearIf(current !== "", () => commitStudioInspectorStyle(spec.control, ""))
   );
 
 }

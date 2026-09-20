@@ -65,10 +65,74 @@
    안내로만 쓴다(studioInspectorSizeFullWidth).
 ========================================================== */
 
+/* =========================================================
+   너비의 주인은 셋 중 하나다 (EDITORIAL-CUSTOMIZATION-1)
+
+     사진 자신    보통의 이미지
+     자르기 프레임 자른 사진 — "너비"는 잘라 보여 주는 창의 너비다
+     바깥 상자    스킨이 `width: 74%` 같은 식으로 자리를 정해 두고
+                  사진은 그 안을 가득 채우는 경우
+                  (studio/preview/preview-bridge.js inspectorSizeOwnerOf)
+
+   셋째가 이 라운드에서 생겼다. 그 전에는 사진에 `width: 320px` 을
+   써도 화면이 꿈쩍하지 않았다 — 같이 들어가는 `max-width: 100%` 가
+   바깥 상자의 폭에 붙들리기 때문이다. 그래서 그 경우에는 컨트롤
+   이름이 "size" 가 아니라 "frameSize" 가 되고, 규칙은 바깥 상자가
+   받는다. 사진을 **더 키워 보는 일**(확대·구도)은 자르기가 맡는다 —
+   두 일이 이름도 대상도 겹치지 않는다.
+========================================================== */
+
+/* 스킨이 폭을 정해 둔 바깥 상자가 있는가 — 있으면 그 실측값 */
+function studioInspectorSizeOwner() {
+
+  const owner =
+    studioInspectorMetrics && studioInspectorMetrics.sizeOwner;
+
+  return (
+    owner &&
+    typeof owner.editId === "string" &&
+    window.isValidInspectorEditId(owner.editId)
+  )
+    ? owner
+    : null;
+
+}
+
+
+function studioInspectorSizeOwnerEditId() {
+
+  const owner =
+    studioInspectorSizeOwner();
+
+  return owner ? owner.editId : null;
+
+}
+
+
+/* 이번 선택에서 너비를 쓰는 컨트롤의 이름 */
+function studioInspectorSizeControl() {
+
+  return studioInspectorSizeOwner() ? "frameSize" : "size";
+
+}
+
+
 /* 크기 컨트롤이 읽고 써야 할 선언. 자른 이미지에서는 이미지가
-   아니라 **프레임(래퍼)**의 규칙이다 — 자른 뒤의 "너비"는 사진의
-   너비가 아니라 잘라 보여주는 창의 너비이기 때문이다. */
+   아니라 **프레임(래퍼)**의 규칙이고, 스킨이 자리를 정해 둔
+   사진에서는 **바깥 상자**의 규칙이다. */
 function studioInspectorSizeDeclarations(resolved) {
+
+  const owner =
+    studioInspectorSizeOwner();
+
+  if (owner && resolved) {
+
+    return window.readInspectorEditDeclarations(
+      resolved.source.css,
+      owner.editId
+    );
+
+  }
 
   return studioInspectorCropDeclarationsFor("size", resolved);
 
@@ -86,6 +150,17 @@ function studioInspectorSizeTargetsFrame() {
 
 
 function studioInspectorSizeRatio(declarations) {
+
+  /* 바깥 상자를 끌 때의 비율은 그 상자가 지금 화면에서 가진
+     비율이다 — 사진의 비율이 아니다(상자 안에 캡션이 함께 있을 수
+     있다). 확정 규칙에는 비율이 들어가지 않는다(buildInspectorStylePatch
+     "frameSize") — 모서리 드래그의 손맛에만 쓴다. */
+  const owner =
+    studioInspectorSizeOwner();
+
+  if (owner) {
+    return (owner.width > 0 && owner.height > 0) ? owner.width / owner.height : null;
+  }
 
   const declared =
     Number(window.readInspectorControlValue("sizeRatio", declarations));
@@ -112,11 +187,24 @@ function studioInspectorSizeRatio(declarations) {
 
 function studioInspectorSizeBaseline(declarations) {
 
+  /* 이번 선택의 컨트롤 이름으로 읽는다 — "사진 영역 너비"의 선언에는
+     !important 가 붙어 있어 "size" 로 읽으면 빈 값이 되고, 그러면
+     폼이 **실측값**으로 떨어진다. 실측은 확정 직후 한 박자 늦게
+     도착하므로 방금 고른 숫자가 칸에서 되돌아가 보인다. */
   const declared =
-    Number(window.readInspectorControlValue("size", declarations));
+    Number(window.readInspectorControlValue(studioInspectorSizeControl(), declarations));
 
   if (Number.isFinite(declared) && declared > 0) {
     return Math.round(declared);
+  }
+
+  /* 바깥 상자가 주인이면 지금 값은 그 상자의 실측 폭이다 —
+     사진의 폭이 아니다(둘이 같은 경우가 많지만 같다는 보장이 없다). */
+  const owner =
+    studioInspectorSizeOwner();
+
+  if (owner && owner.width > 0) {
+    return Math.round(owner.width);
   }
 
   const metrics =
@@ -128,8 +216,16 @@ function studioInspectorSizeBaseline(declarations) {
 
 
 /* 이 자리에서 "꽉 참"이 되는 폭 — 부모 안쪽 폭이다. 상한이 아니라
-   안내용이고, 못 쟀으면 0이다. */
+   안내용이고, 못 쟀으면 0이다. 바깥 상자가 주인이면 그 상자를 담고
+   있는 칸(= HOME 가운데 칼럼)의 안쪽 폭이다. */
 function studioInspectorSizeFullWidth() {
+
+  const owner =
+    studioInspectorSizeOwner();
+
+  if (owner) {
+    return owner.parentWidth > 0 ? Math.round(owner.parentWidth) : 0;
+  }
 
   const metrics =
     studioInspectorMetrics;
@@ -145,6 +241,20 @@ function studioInspectorSizeMax(currentWidth) {
 
   const parentWidth =
     studioInspectorSizeFullWidth();
+
+  /* 사진 영역(바깥 상자)의 상한은 담고 있는 칸의 폭이다 — 그보다 큰
+     값은 어차피 max-width:100% 에 눌려 같은 그림이고, 슬라이더의
+     오른쪽 끝이 "칸을 꽉 채운 자리"라는 뜻을 갖는 편이 낫다.
+     칸을 못 쟀으면 아래 일반 규칙으로 떨어진다. */
+  if (studioInspectorSizeOwner() && parentWidth) {
+
+    return Math.max(
+      parentWidth,
+      currentWidth || 0,
+      STUDIO_INSPECTOR_SIZE_MIN + 1
+    );
+
+  }
 
   /* 부모 폭의 몇 배까지 — 꽉 찬 너비를 훌쩍 넘겨 고를 수 있으면서도
      슬라이더 한 칸이 쓸 수 없을 만큼 커지지는 않는 폭이다. 아주 좁은
@@ -213,7 +323,7 @@ function renderStudioInspectorSizeBlock(spec, info, declarations) {
 
     clearStudioInspectorPreview();
 
-    commitStudioInspectorStyle("size", "");
+    commitStudioInspectorStyle(studioInspectorSizeControl(), "");
 
   });
 
@@ -284,12 +394,43 @@ function renderStudioInspectorSizeBlock(spec, info, declarations) {
   block.appendChild(head);
   block.appendChild(row);
 
-  /* "왜 여기서 안 늘어나지"의 답을 슬라이더 옆에 적어 둔다 — 꽉 차는
-     폭은 Preview 폭에 따라 달라지고(공개 화면은 더 넓다), 그보다 큰
-     값도 넘치지 않고 꽉 찬 채로 보인다. 부모를 못 쟀으면 생략한다. */
   const fullWidth =
     studioInspectorSizeFullWidth();
 
+  const owner =
+    studioInspectorSizeOwner();
+
+  /* 사진 영역이면 "칸을 꽉 채우기"를 한 번에 고를 수 있다. 값은 px 가
+     아니라 100% 라 데스크톱에서도 모바일에서도 그 칸을 꽉 채운다. */
+  if (owner && fullWidth) {
+
+    const filled =
+      window.readInspectorControlValue("frameSizeFill", declarations) === "fill";
+
+    const fit =
+      document.createElement("button");
+
+    fit.type = "button";
+    fit.className = "studio-inspector-clear studio-inspector-size-fit";
+    fit.id = "studioInspectorSizeFit";
+    fit.textContent = "콘텐츠 폭에 맞추기";
+    fit.setAttribute("aria-pressed", String(filled));
+
+    fit.addEventListener("click", () => {
+
+      clearStudioInspectorPreview();
+
+      commitStudioInspectorStyle("frameSize", filled ? "" : "fill");
+
+    });
+
+    block.appendChild(fit);
+
+  }
+
+  /* "왜 여기서 안 늘어나지"의 답을 슬라이더 옆에 적어 둔다 — 꽉 차는
+     폭은 Preview 폭에 따라 달라지고(공개 화면은 더 넓다), 그보다 큰
+     값도 넘치지 않고 꽉 찬 채로 보인다. 부모를 못 쟀으면 생략한다. */
   if (fullWidth) {
 
     const note =
@@ -297,9 +438,14 @@ function renderStudioInspectorSizeBlock(spec, info, declarations) {
 
     note.className = "studio-inspector-block-note";
     note.id = "studioInspectorSizeNote";
+
     note.textContent =
-      `지금 미리보기에서는 ${fullWidth}px이면 자리에 꽉 차요 — ` +
-      `더 크게 두어도 넘치지 않고 꽉 찬 채로 보여요.`;
+      owner
+        ? `사진이 놓이는 자리(바깥 여백 · 테두리 포함)의 너비예요. ` +
+          `이 칸은 ${fullWidth}px 까지 넓힐 수 있고, 그 안의 사진을 ` +
+          `크게 보고 싶으면 아래 "자르기"에서 확대합니다.`
+        : `지금 미리보기에서는 ${fullWidth}px이면 자리에 꽉 차요 — ` +
+          `더 크게 두어도 넘치지 않고 꽉 찬 채로 보여요.`;
 
     block.appendChild(note);
 
@@ -394,7 +540,10 @@ function previewStudioInspectorSize(width, options) {
     editId: studioInspectorSelection.editId,
     width: value,
     ratio: ratio || undefined,
-    target: studioInspectorSizeTargetsFrame() ? "frame" : "image"
+    target:
+      studioInspectorSizeOwner()
+        ? "sizeOwner"
+        : (studioInspectorSizeTargetsFrame() ? "frame" : "image")
   });
 
 }
@@ -434,7 +583,10 @@ function commitStudioInspectorSize(width, options) {
 
   clearStudioInspectorPreview();
 
-  return commitStudioInspectorStyle("size", { width: value, ratio });
+  return commitStudioInspectorStyle(
+    studioInspectorSizeControl(),
+    { width: value, ratio }
+  );
 
 }
 
@@ -498,6 +650,12 @@ function beginStudioInspectorHandleDrag(event, corner, handle) {
     pointerId: event.pointerId,
     handle,
     corner,
+
+    /* 좌우 손잡이는 가로 한 축만 바꾼다 — 세로 이동량을 섞으면
+       손이 위아래로 흔들리는 만큼 폭이 따라 흔들린다. */
+    axis:
+      STUDIO_INSPECTOR_HANDLE_SIDES.indexOf(corner) === -1 ? "" : "x",
+
     scale: mapped.scale,
     /* 반대쪽 모서리 */
     anchorX: corner.indexOf("w") === -1 ? mapped.left : mapped.right,
@@ -543,7 +701,9 @@ function moveStudioInspectorHandleDrag(event) {
      한쪽 축에서만 반응하는 느낌이 된다 — 두 축이 각각 요구하는
      너비의 평균을 쓴다. */
   const next =
-    studioInspectorClampSize(drag.ratio ? (dx + dy) / 2 : dx);
+    studioInspectorClampSize(
+      (drag.ratio && drag.axis !== "x") ? (dx + dy) / 2 : dx
+    );
 
   if (next === null || next === drag.width) {
     return;

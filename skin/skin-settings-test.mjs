@@ -355,9 +355,24 @@ console.log("\n[skin] 아이모리 기본 스킨");
 
   check("[skin] 세 template · 공용 css · schemaVersion 1",
     one.schemaVersion === 1 && !!one.templates.home.html && !!one.templates.category.html && !!one.templates.post.html && typeof one.css === "string");
-  check("[skin] 사진은 전부 이미지 슬롯(photo_1~4 + pair_photo) · 이름 규칙",
-    same(one.imageSlots.map((s) => s.name), ["photo_1", "photo_2", "photo_3", "photo_4", "pair_photo"]) &&
+  check("[skin] 사진은 전부 이미지 슬롯(photo_1~4 + pair_photo + title_logo) · 이름 규칙",
+    same(one.imageSlots.map((s) => s.name), ["photo_1", "photo_2", "photo_3", "photo_4", "pair_photo", "title_logo"]) &&
     one.imageSlots.every((s) => /^[a-z][a-z0-9_]{0,49}$/.test(s.name) && s.required === false));
+
+  /* EDITORIAL-CUSTOMIZATION-1 — HOME 제목은 글자와 로고 두 벌이고,
+     로고 슬롯이 비어 있으면 글자 제목이 선다(깨진 이미지가 아니라). */
+  check("[skin] HOME 제목 로고 — 슬롯이 비면 글자 제목, 채우면 로고",
+    /data-imory-if="images\.title_logo"/.test(one.templates.home.html) &&
+    /data-imory-src="images\.title_logo"/.test(one.templates.home.html) &&
+    /class="ied-title ied-title--text" data-imory-bind="site\.title"/.test(one.templates.home.html) &&
+    /\.ied-title--logo:not\(\[hidden\]\) ~ \.ied-title--text \{ display: none; \}/.test(one.css) &&
+    /object-fit: contain/.test(one.css));
+
+  /* 카테고리 줄은 한 덩어리로 커지고 줄어든다 — 링크가 1em 이라
+     줄(.ied-nav-list)의 글자 크기 하나가 다섯 항목을 함께 움직인다 */
+  check("[skin] 카테고리 줄의 글자 크기는 줄이 갖는다(링크는 1em)",
+    /\.ied-nav-list \{[^}]*font-size: 11\.5px;/.test(one.css) &&
+    /\.ied-nav-link \{[^}]*font-size: 1em;/.test(one.css));
   check("[skin] 1 · 2 · 3단 → regions",
     same(sides.readSkinSidesSetting(one.regions), { left: false, right: false }) &&
     same(sides.readSkinSidesSetting(two.regions), { left: false, right: true }) &&

@@ -198,15 +198,27 @@ function stampInspectorEditIds(html) {
    commitInspectorEditId(stamped, keepEditId) -> html
 
    stampInspectorEditIds()가 만든 doc에서 임시 id를 전부 지우고,
-   방금 실제로 편집한 요소의 id **하나만** 남긴 HTML을 돌려준다 —
+   방금 실제로 편집한 요소의 id **만** 남긴 HTML을 돌려준다 —
    그 결과가 SkinPackage에 저장될 값이다.
 
    "선택만 해도 id가 박힌다"를 피하려는 것이다. Inspector를 켜고
    화면을 훑기만 한 사용자의 스킨 HTML은 단 한 글자도 바뀌지
    않아야 한다.
+
+   keepEditId 는 문자열 하나이거나 문자열 배열이다 — 한 번의 확정이
+   두 요소의 규칙을 건드리는 경우가 있다(EDITORIAL-CUSTOMIZATION-1
+   의 "사진 영역 너비": 규칙은 사진의 **바깥 상자**에 쓰고 선택은
+   사진에 남는다). 규칙을 받은 요소의 id 가 HTML 에 남지 않으면 그
+   규칙은 다음 렌더에서 다른 요소에 붙는다.
 ========================================================== */
 
 function commitInspectorEditId(stamped, keepEditId) {
+
+  const keep =
+    new Set(
+      (Array.isArray(keepEditId) ? keepEditId : [keepEditId])
+        .filter((value) => typeof value === "string" && value)
+    );
 
   Array.from(
     stamped.doc.body.querySelectorAll(`[${INSPECTOR_EDIT_ID_ATTR}]`)
@@ -215,7 +227,7 @@ function commitInspectorEditId(stamped, keepEditId) {
     const value =
       el.getAttribute(INSPECTOR_EDIT_ID_ATTR);
 
-    if (stamped.autoIds.has(value) && value !== keepEditId) {
+    if (stamped.autoIds.has(value) && !keep.has(value)) {
       el.removeAttribute(INSPECTOR_EDIT_ID_ATTR);
     }
 
@@ -802,7 +814,11 @@ function describeInspectorElement(el, options) {
     transition: canStyle && !!transition,
     text: canEditText,
     href: canEditHref,
-    typography: canStyle && (kind === "text" || kind === "link"),
+    /* EDITORIAL-CUSTOMIZATION-1 — 영역(container)도 글자 크기를
+       갖는다. 안에 든 글자 전체에 걸리는 값이라 `color` 와 같은
+       결이다: 카테고리 줄처럼 "링크 여럿이 한 줄"인 자리를 하나씩
+       고르지 않고 줄 전체로 키우고 줄일 수 있다. */
+    typography: canStyle && (kind === "text" || kind === "link" || kind === "container"),
     color: canStyle && (kind === "text" || kind === "link" || kind === "container"),
     background: canStyle && (kind === "link" || kind === "container"),
     align: canStyle && kind !== "image",
@@ -1162,6 +1178,48 @@ function buildInspectorStylePatch(control, value) {
 
     }
 
+    /* =====================================================
+       EDITORIAL-CUSTOMIZATION-1 — 사진 영역(바깥 상자)의 너비
+
+       "size"와 달리 **폭 하나만** 쓴다: 높이와 비율은 스킨이 그
+       상자 안에서 이미 정해 두었고(예: 안쪽 프레임의 aspect-ratio),
+       여기서 덮어쓰면 그 자리의 모양이 통째로 무너진다.
+       max-width:100% 는 그대로 함께 간다 — 좁은 화면에서 가로
+       넘침이 생기지 않는 것은 이 한 줄 덕분이다.
+
+       ★ 여기만 !important 를 쓴다
+
+       사진의 자리를 정하는 규칙은 스킨에서 대개 특정도가 높다
+       (`.ied-photos[data-imory-photos-layout="hero"] .ied-photo`
+       = 0,3,0). 직접 수정 규칙의 선택자는 0,2,0 이라 그대로는
+       **숫자만 바뀌고 화면은 그대로**다 — 사용자가 "무효"라고 느낀
+       바로 그 자리다. 자르기가 같은 문제를 !important 로 푼 것과
+       같은 판단이다(IMORY_IMAGE_CROP_PRIORITY_DESIGN.md): 사용자가
+       손으로 정한 크기는 스킨의 기본값을 이긴다. max-width 에도
+       함께 붙여 "그래서 넘친다"가 생기지 않게 한다. AI 와 Code 는
+       이 규칙 자체를 지우거나 고칠 수 있으므로 막다른 길이 아니다.
+    ====================================================== */
+    case "frameSize": {
+
+      const raw =
+        (value !== null && typeof value === "object") ? value.width : value;
+
+      /* "콘텐츠 폭에 맞추기" — px 가 아니라 100% 다. 어느 화면에서
+         재든 그 자리의 칼럼을 꽉 채우므로 모바일과 데스크톱에 같은
+         px 를 못 박지 않는다. */
+      if (String(raw) === "fill") {
+        return { width: "100% !important", "max-width": "100% !important" };
+      }
+
+      const length =
+        inspectorLengthPx(raw, 2000);
+
+      return length
+        ? { width: `${length} !important`, "max-width": "100% !important" }
+        : clear(["width", "max-width"]);
+
+    }
+
     case "border": {
 
       const width =
@@ -1258,6 +1316,11 @@ function readInspectorControlValue(control, declarations) {
       ? value.slice(0, -2)
       : "";
 
+  /* "사진 영역 너비"의 선언에는 !important 가 붙어 있다(위 frameSize).
+     폼이 지금 값을 되읽을 때는 그 표식을 떼고 본다. */
+  const plain = (value) =>
+    String(value || "").replace(/\s*!\s*important\s*$/i, "").trim();
+
   switch (control) {
 
     case "fontSize":
@@ -1298,6 +1361,13 @@ function readInspectorControlValue(control, declarations) {
 
     case "size":
       return px(decl.width);
+
+    case "frameSize":
+      return px(plain(decl.width));
+
+    /* "콘텐츠 폭에 맞추기"가 켜져 있는가 (EDITORIAL-CUSTOMIZATION-1) */
+    case "frameSizeFill":
+      return plain(decl.width) === "100%" ? "fill" : "";
 
     /* 지금 규칙에 적혀 있는 비율(문자열). 없으면 빈 문자열 —
        그때는 UI가 화면에서 잰 비율을 쓴다. */

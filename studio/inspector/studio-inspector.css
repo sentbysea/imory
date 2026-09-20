@@ -116,6 +116,22 @@
 }
 
 
+/* EDITORIAL-CUSTOMIZATION-1 — "사진 영역 너비"의 좌우 손잡이.
+   모서리(동그라미)와 하는 일이 달라 모양도 다르다: 세로로 긴 알약이라
+   "이 변을 좌우로 끈다"가 손에 먼저 읽힌다. */
+.studio-inspector-handle--w,
+.studio-inspector-handle--e {
+  width: 8px;
+  height: 22px;
+
+  margin: -11px 0 0 -4px;
+
+  border-radius: 999px;
+
+  cursor: ew-resize;
+}
+
+
 /* =========================================================
    LAYOUT-1 — 자유 배치의 이동 손잡이
 

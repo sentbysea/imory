@@ -1663,6 +1663,12 @@ function setStudioHomeSides(setting) {
      같은 값이면 아무 일도 없다(기록 0).
 ========================================================== */
 
+/* HOME 제목 로고가 들어가는 슬롯 이름 — 스킨이 이 이름의 슬롯을
+   선언하고 HOME 에서 그 값을 쓰면 Layout 패널에 "HOME 제목" 칸이
+   나온다(EDITORIAL-CUSTOMIZATION-1). */
+const SKIN_TITLE_LOGO_SLOT = "title_logo";
+
+
 function getStudioHomeSettings() {
 
   if (!currentWorkingSkin || typeof readSkinThemeColors !== "function") {
@@ -1704,6 +1710,21 @@ function getStudioHomeSettings() {
     usesDday: skinHtmlUsesDday(html),
     sidesOn: !!(sides.left || sides.right),
     mobilePanels: mobile.left && mobile.right,
+
+    /* EDITORIAL-CUSTOMIZATION-1 — HOME 제목 로고. 설정이 아니라
+       **이미지 슬롯 하나**다(images.title_logo): 채우면 로고가 서고
+       비우면 글자 제목이 돌아온다. 따로 저장하는 모드가 없으므로
+       "이미지 없이 이미지 모드"라는 상태 자체가 생기지 않는다.
+       여기서는 Layout 패널이 그 상태를 보여 주고 Images 로 보내
+       줄 수 있게 세 가지만 알려 준다. */
+    titleLogo: {
+      slot: SKIN_TITLE_LOGO_SLOT,
+      available:
+        currentImageSlotNames.includes(SKIN_TITLE_LOGO_SLOT) &&
+        html.indexOf(`images.${SKIN_TITLE_LOGO_SLOT}`) !== -1,
+      filled: !!currentImageSlotValues[SKIN_TITLE_LOGO_SLOT]
+    },
+
     hasSidesFrame:
       typeof skinHtmlHasSidesFrame === "function"
         ? skinHtmlHasSidesFrame(html).frame
@@ -2803,6 +2824,43 @@ function inspectorPreviewCropAnchor(anchor) {
 }
 
 
+/* =========================================================
+   선언 임시 반영 (EDITORIAL-CUSTOMIZATION-1)
+
+   슬라이더를 끄는 동안 "저장하지 않고" Preview 에만 비추는 선언이다.
+   값은 buildInspectorStylePatch() 가 만든 것뿐이지만, 이 창구는
+   그것을 믿지 않고 **속성 이름과 값 모양을 다시 본다** — 이 함수가
+   Preview 문서로 나가는 유일한 문이기 때문이다.
+========================================================== */
+
+const INSPECTOR_PREVIEW_STYLE_PROPERTIES = ["font-size"];
+
+const INSPECTOR_PREVIEW_STYLE_VALUE = /^[0-9a-z.%#(), -]{1,40}$/i;
+
+
+function inspectorPreviewStylePayload(style) {
+
+  if (!style || typeof style !== "object") {
+    return undefined;
+  }
+
+  const out = {};
+
+  INSPECTOR_PREVIEW_STYLE_PROPERTIES.forEach((property) => {
+
+    const value = style[property];
+
+    if (typeof value === "string" && INSPECTOR_PREVIEW_STYLE_VALUE.test(value)) {
+      out[property] = value;
+    }
+
+  });
+
+  return Object.keys(out).length ? out : undefined;
+
+}
+
+
 function inspectorPreviewCropPayload(crop) {
 
   if (!crop || typeof crop !== "object") {
@@ -2865,9 +2923,18 @@ function postInspectorPreviewToFrame(payload) {
           width: typeof payload.width === "number" ? payload.width : undefined,
           ratio: typeof payload.ratio === "number" ? payload.ratio : undefined,
 
-          /* 자른 이미지에서 "너비"는 프레임의 너비다 — 어느 쪽에
-             적용할지를 이 한 글자가 정한다. */
-          target: payload.target === "frame" ? "frame" : undefined,
+          /* "너비"를 어디에 적용할지 — 자른 사진은 프레임("frame"),
+             스킨이 폭을 정해 둔 사진은 그 바깥 상자("sizeOwner",
+             EDITORIAL-CUSTOMIZATION-1), 그 밖은 사진 자신이다. */
+          target:
+            (payload.target === "frame" || payload.target === "sizeOwner")
+              ? payload.target
+              : undefined,
+
+          /* EDITORIAL-CUSTOMIZATION-1 — 슬라이더를 끄는 동안의 선언
+             임시 반영. 통과시키는 속성 이름은 아래 목록뿐이고 값은
+             모양까지 본다 — 임의의 CSS 가 Preview 로 넘어가지 않는다. */
+          style: inspectorPreviewStylePayload(payload.style),
 
           crop: inspectorPreviewCropPayload(payload.crop),
 

@@ -284,10 +284,29 @@
 }
 
 
-.studio-left-panel-section[data-left-panel-mode="select"] {
+/* Select 와 Layout 은 "머리는 고정 · 본문만 세로 스크롤" 한 벌이다 —
+   Images/Dock 과 달리 안쪽에 따로 스크롤 상자를 두지 않으므로 이
+   section 자신이 스크롤한다.
+
+   EDITORIAL-CUSTOMIZATION-1 — Layout 에는 이 규칙이 없어서 낮은
+   화면(600px 등)에서 아래쪽 설정(색 · D-day)에 손이 닿지 않았다.
+   스크롤하는 것은 이 상자뿐이라 Studio 문서도 Preview 도 함께 밀리지
+   않고, 스크롤바를 숨기지도 않는다. 좁은 화면(시트)에서는 단계별
+   높이가 이 상자를 줄이고 안쪽이 그대로 스크롤한다. */
+.studio-left-panel-section[data-left-panel-mode="select"],
+.studio-left-panel-section[data-left-panel-mode="layout"] {
   overflow-y: auto;
 
+  /* 관성 스크롤이 패널 끝에서 Preview 문서로 이어지지 않는다 */
+  overscroll-behavior: contain;
+
   padding: 12px 14px 16px;
+}
+
+
+/* Layout 안쪽(studio/sides/sides-panel.css)은 자기 여백을 갖고 있다 */
+.studio-left-panel-section[data-left-panel-mode="layout"] {
+  padding: 0;
 }
 
 

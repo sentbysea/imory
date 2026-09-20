@@ -1850,7 +1850,8 @@ async function runEditorial(browser) {
     const exported = JSON.parse(exportedText);
     record("E6. Export — 같은 regions · 슬롯 선언",
       JSON.stringify(exported.regions) === JSON.stringify(saved.regions) &&
-        JSON.stringify(exported.imageSlots.map((s) => s.name)) === JSON.stringify(["photo_1", "photo_2", "photo_3", "photo_4", "pair_photo"]),
+        JSON.stringify(exported.imageSlots.map((s) => s.name)) ===
+          JSON.stringify(["photo_1", "photo_2", "photo_3", "photo_4", "pair_photo", "title_logo"]),
       JSON.stringify(exported.regions));
 
     await page.click("#studioPublishButton");

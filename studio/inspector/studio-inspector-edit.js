@@ -114,8 +114,16 @@ function applyStudioInspectorPatch(patch) {
     nextCss = result.css;
   }
 
+  /* 규칙을 받은 요소의 id 는 전부 HTML 에 남아야 한다 — 선택한
+     요소 말고 다른 요소의 규칙을 함께 쓴 경우(자르기 프레임 ·
+     "사진 영역 너비"의 바깥 상자) patch 가 그 id 를 돌려준다. */
   const nextHtml =
-    window.commitInspectorEditId(stamped, editId);
+    window.commitInspectorEditId(
+      stamped,
+      [editId].concat(
+        Array.isArray(result.keepEditIds) ? result.keepEditIds : []
+      )
+    );
 
   const snapshot = {
     pageType,
@@ -227,9 +235,29 @@ function commitStudioInspectorHref(value) {
 
 function commitStudioInspectorStyle(control, value) {
 
-  return applyStudioInspectorPatch((element, css) => ({
-    css: studioInspectorCropAwareCss(css, control, value, element)
-  }));
+  return applyStudioInspectorPatch((element, css) => {
+
+    /* EDITORIAL-CUSTOMIZATION-1 — "사진 영역 너비"의 규칙은 선택한
+       사진이 아니라 그 폭을 정하는 **바깥 상자**가 갖는다. 어느
+       상자인지는 iframe 이 재어 알려 준 식별자 하나다
+       (studio/preview/preview-bridge.js inspectorSizeOwnerOf). */
+    const ownerId =
+      control === "frameSize" ? studioInspectorSizeOwnerEditId() : null;
+
+    if (ownerId) {
+
+      return {
+        css: mergeStudioInspectorDeclarations(css, ownerId, control, value),
+        keepEditIds: [ownerId]
+      };
+
+    }
+
+    return {
+      css: studioInspectorCropAwareCss(css, control, value, element)
+    };
+
+  });
 
 }
 

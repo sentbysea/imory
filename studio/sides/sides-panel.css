@@ -274,6 +274,13 @@
   cursor: default;
 }
 
+/* 한 줄에 놓이는 글자 버튼 둘 (HOME 제목 — 고르기 · 지우기) */
+.studio-home-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
 .studio-home-field {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr);

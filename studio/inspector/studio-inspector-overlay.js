@@ -369,7 +369,9 @@ function buildStudioInspectorLayer() {
      스크롤로 반쯤 나간 요소에서는 실제 모서리와 다른 자리다),
      핸들은 잘리지 않은 좌표로 따로 찍어야 한다. */
   studioInspectorHandles =
-    STUDIO_INSPECTOR_HANDLE_CORNERS.map((corner) => {
+    STUDIO_INSPECTOR_HANDLE_CORNERS
+      .concat(STUDIO_INSPECTOR_HANDLE_SIDES)
+      .map((corner) => {
 
       const handle =
         document.createElement("div");
@@ -729,11 +731,26 @@ function paintStudioInspectorHandles(rect, visibleRect) {
     const corner =
       handle.dataset.inspectorHandle;
 
+    /* 좌우 손잡이는 "사진 영역 너비"를 고칠 수 있을 때만 나온다
+       (EDITORIAL-CUSTOMIZATION-1). 그 밖에는 모서리 넷 그대로다. */
+    const isSide =
+      STUDIO_INSPECTOR_HANDLE_SIDES.indexOf(corner) !== -1;
+
+    if (
+      isSide &&
+      !(typeof studioInspectorSizeOwner === "function" && studioInspectorSizeOwner())
+    ) {
+      handle.hidden = true;
+      return;
+    }
+
     const x =
       corner.indexOf("w") === -1 ? mapped.right : mapped.left;
 
     const y =
-      corner.indexOf("n") === -1 ? mapped.bottom : mapped.top;
+      isSide
+        ? (mapped.top + mapped.bottom) / 2
+        : (corner.indexOf("n") === -1 ? mapped.bottom : mapped.top);
 
     const inside =
       x >= mapped.frame.left - 1 &&

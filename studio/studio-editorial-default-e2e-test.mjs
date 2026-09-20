@@ -200,7 +200,7 @@ function readStudio(page) {
         colors: Object.fromEntries(Array.from(root.querySelectorAll(".studio-home-color-input")).map((i) => [i.dataset.role, i.value])),
         colorsDisabled: Array.from(root.querySelectorAll(".studio-home-color-input")).every((i) => i.disabled),
         warning: root.querySelector(".studio-home-warning").textContent,
-        resetDisabled: root.querySelector(".studio-home-link").disabled,
+        resetDisabled: root.querySelector(".studio-home-color-reset").disabled,
         ddayOn: root.querySelector(".studio-home-dday-on").checked,
         ddayDisabled: root.querySelector(".studio-home-dday-on").disabled,
         ddayDate: root.querySelector(".studio-home-dday-date").value,
@@ -289,8 +289,8 @@ async function runPanel(browser) {
   await openLayout(page);
   const s = await readStudio(page);
   const defaults = editorial.IMORY_EDITORIAL_PALETTES.light;
-  check("Layout 패널 아래에 HOME 설정 넷(모바일 · HOME 사진 · 색 · D-day)",
-    ["모바일", "HOME 사진", "색", "D-day"].every((t) => s.panel.text.includes(t)));
+  check("Layout 패널 아래에 HOME 설정 다섯(모바일 · HOME 사진 · HOME 제목 · 색 · D-day)",
+    ["모바일", "HOME 사진", "HOME 제목", "색", "D-day"].every((t) => s.panel.text.includes(t)));
   check("1·2·3단 고르기도 같은 패널에 그대로", await page.evaluate(() => document.querySelectorAll("#studioLeftPanelLayout .studio-sides-option").length === 3));
   check("지금 값 — 사진 자동 · 채운 사진 1장 · 한 장", s.panel.photoChecked === "auto" && /1장/.test(s.panel.photoNote) && /한 장/.test(s.panel.photoNote), s.panel.photoNote);
   check("지금 값 — 색 칸 = 스킨 기본색", JSON.stringify(s.panel.colors) === JSON.stringify(defaults), JSON.stringify(s.panel.colors));
@@ -370,7 +370,7 @@ async function runColors(browser) {
   s = await readStudio(page);
   check("글자가 배경과 비슷하면 대비 경고", /대비/.test(s.panel.warning), s.panel.warning);
 
-  await page.click(".studio-home-link");
+  await page.click(".studio-home-color-reset");
   await sleep(350);
   s = await readStudio(page);
   p = await readPreview(page);
