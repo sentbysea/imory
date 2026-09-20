@@ -383,6 +383,37 @@ function copySkinSanitizedAttributes(sourceEl, destEl, tag) {
 
     }
 
+    /* =====================================================
+       HOME 캔버스의 표시 위치(data-imory-canvas-root) —
+       IMORY_HOME_CANVAS_CONTRACT.md §3
+
+       sides · photos 와 같은 규칙이다: 판정은 skin/skin-home-canvas.js
+       의 표 한 곳이고 여기서는 묻기만 한다. 값이 표에 없으면 속성만
+       사라지고 요소와 내용은 그대로 남는다 — 캔버스가 없는 평범한
+       div 가 되므로 기존 HOME 과 똑같이 그려진다(그 문서가
+       skin-home-canvas.js 를 로드하지 않았을 때도 마찬가지다.
+       진입 문서들은 이 파일보다 먼저 로드한다).
+
+       ★ 표식이 저장되는 것과 캔버스가 실행되는 것은 다른 일이다.
+         표식만 있고 regions 에 home_canvas 가 없으면 기존 HOME 을
+         그대로 그린다(계약의 fallback 표). */
+    if (
+      typeof isSkinHomeCanvasAttributeName === "function" &&
+      isSkinHomeCanvasAttributeName(name)
+    ) {
+
+      const stored = sanitizeSkinHomeCanvasAttributeValue(name, value);
+
+      if (stored !== null) {
+        destEl.setAttribute(name, stored);
+      } else {
+        console.warn(`[skin-sanitize] dropped unsupported ${name}="${value}"`);
+      }
+
+      return;
+
+    }
+
     if (name === SKIN_SANITIZE_DOCK_ATTR) {
       if (SKIN_SANITIZE_ALLOWED_DOCK_SLOTS.has(value)) {
         destEl.setAttribute(name, value);

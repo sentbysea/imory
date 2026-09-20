@@ -721,11 +721,232 @@ function isSandboxSkinSettings(value) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-CONTRACT-1B — template.canvas
+
+   HOME 캔버스의 **실행용** 데이터(skin/skin-home-canvas.js
+   buildSkinCanvasRenderPayload). 캔버스가 없는 스킨은 키가 없다
+   (봉투가 지금까지와 같다).
+
+   ★ 값 목록을 여기 한 번 더 적는다. 이 파일은 "의존 없음"이고
+     (부모 realm 과 frame realm 이 같은 파일을 각각 로드한다),
+     skin-home-canvas.js 를 부를 수 없는 문서에서도 메시지 검사는
+     돌아야 한다 — SKIN_PACKAGE_EXPORT_RENDER_MODES 와 같은 판단이다.
+     두 곳이 갈라지지 않게 단위 테스트가 양방향으로 대조한다
+     (skin/skin-home-canvas-test.mjs [protocol] 절).
+
+   ★ 여기가 **strict allowlist** 다. 계약에 없는 칸은 하나도 통과하지
+     못한다 — 보존용 원본(regions 안의 그 객체)과 실행용 payload 를
+     가르는 마지막 관문이다.
+========================================================== */
+
+var SANDBOX_CANVAS_VERSION = 1;
+
+var SANDBOX_CANVAS_BASE_WIDTH = 390;
+
+var SANDBOX_CANVAS_MAX_ELEMENTS = 200;
+
+var SANDBOX_CANVAS_MAX_TEXT_CHARS = 2000;
+
+var SANDBOX_CANVAS_MAX_CATEGORY_IDS = 50;
+
+var SANDBOX_CANVAS_MAX_CATEGORY_ID_CHARS = 64;
+
+var SANDBOX_CANVAS_MAX_COORD = 100000;
+
+var SANDBOX_CANVAS_ELEMENT_TYPES =
+  ["photo", "text", "logo", "category_nav", "sticker", "shape"];
+
+var SANDBOX_CANVAS_AUTO_HEIGHT_TYPES = ["text", "category_nav"];
+
+var SANDBOX_CANVAS_TEXT_ROLES =
+  ["title", "subtitle", "body", "caption", "label"];
+
+var SANDBOX_CANVAS_NAV_MODES = ["all", "selected"];
+
+var SANDBOX_CANVAS_SHAPE_KINDS = ["rect", "ellipse", "line"];
+
+var SANDBOX_CANVAS_LOGO_FALLBACKS = ["site_title"];
+
+/* skin/skin-sanitize.js SKIN_SANITIZE_EDIT_ID_PATTERN 과 같은 형태 */
+var SANDBOX_CANVAS_ELEMENT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+/* skin/skin-package-images.js SKIN_IMAGE_SLOT_NAME_PATTERN 과 같은 형태 */
+var SANDBOX_CANVAS_SLOT_NAME_PATTERN = /^[a-z][a-z0-9_]{0,49}$/;
+
+
+function isSandboxCanvasCoord(value) {
+
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    Math.abs(value) <= SANDBOX_CANVAS_MAX_COORD
+  );
+
+}
+
+
+function isSandboxCanvasSize(value) {
+
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > 0 &&
+    value <= SANDBOX_CANVAS_MAX_COORD
+  );
+
+}
+
+
+function isSandboxCanvasSlot(value) {
+
+  return typeof value === "string" && SANDBOX_CANVAS_SLOT_NAME_PATTERN.test(value);
+
+}
+
+
+function isSandboxCanvasProps(type, props) {
+
+  if (!isPlainSandboxObject(props)) {
+    return false;
+  }
+
+  if (type === "photo" || type === "sticker") {
+    return hasOnlyKnownSandboxKeys(props, ["slot"]) && isSandboxCanvasSlot(props.slot);
+  }
+
+  if (type === "logo") {
+    return (
+      hasOnlyKnownSandboxKeys(props, ["slot", "fallback"]) &&
+      isSandboxCanvasSlot(props.slot) &&
+      SANDBOX_CANVAS_LOGO_FALLBACKS.indexOf(props.fallback) !== -1
+    );
+  }
+
+  if (type === "text") {
+    return (
+      hasOnlyKnownSandboxKeys(props, ["text", "role"]) &&
+      typeof props.text === "string" &&
+      props.text.length <= SANDBOX_CANVAS_MAX_TEXT_CHARS &&
+      SANDBOX_CANVAS_TEXT_ROLES.indexOf(props.role) !== -1
+    );
+  }
+
+  if (type === "category_nav") {
+    return (
+      hasOnlyKnownSandboxKeys(props, ["mode", "categoryIds"]) &&
+      SANDBOX_CANVAS_NAV_MODES.indexOf(props.mode) !== -1 &&
+      Array.isArray(props.categoryIds) &&
+      props.categoryIds.length <= SANDBOX_CANVAS_MAX_CATEGORY_IDS &&
+      props.categoryIds.every((id) =>
+        typeof id === "string" && !!id && id.length <= SANDBOX_CANVAS_MAX_CATEGORY_ID_CHARS
+      )
+    );
+  }
+
+  /* shape */
+  return (
+    hasOnlyKnownSandboxKeys(props, ["kind"]) &&
+    SANDBOX_CANVAS_SHAPE_KINDS.indexOf(props.kind) !== -1
+  );
+
+}
+
+
+function isSandboxCanvasElement(value) {
+
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(
+      value,
+      ["id", "type", "x", "y", "width", "height", "rotation", "hidden", "locked", "props"]
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    !SANDBOX_CANVAS_ELEMENT_ID_PATTERN.test(value.id) ||
+    SANDBOX_CANVAS_ELEMENT_TYPES.indexOf(value.type) === -1
+  ) {
+    return false;
+  }
+
+  if (
+    !isSandboxCanvasCoord(value.x) ||
+    !isSandboxCanvasCoord(value.y) ||
+    !isSandboxCanvasSize(value.width)
+  ) {
+    return false;
+  }
+
+  const autoAllowed =
+    SANDBOX_CANVAS_AUTO_HEIGHT_TYPES.indexOf(value.type) !== -1;
+
+  if (value.height === "auto") {
+    if (!autoAllowed) {
+      return false;
+    }
+  } else if (!isSandboxCanvasSize(value.height)) {
+    return false;
+  }
+
+  if (
+    typeof value.rotation !== "number" ||
+    !Number.isFinite(value.rotation) ||
+    typeof value.hidden !== "boolean" ||
+    typeof value.locked !== "boolean"
+  ) {
+    return false;
+  }
+
+  return isSandboxCanvasProps(value.type, value.props);
+
+}
+
+
+function isSandboxHomeCanvas(value) {
+
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(value, ["version", "baseWidth", "elements"]) ||
+    value.version !== SANDBOX_CANVAS_VERSION ||
+    value.baseWidth !== SANDBOX_CANVAS_BASE_WIDTH ||
+    !Array.isArray(value.elements) ||
+    value.elements.length > SANDBOX_CANVAS_MAX_ELEMENTS
+  ) {
+    return false;
+  }
+
+  const seen = Object.create(null);
+
+  for (let i = 0; i < value.elements.length; i++) {
+
+    const element = value.elements[i];
+
+    if (!isSandboxCanvasElement(element)) {
+      return false;
+    }
+
+    if (seen[element.id]) {
+      return false;
+    }
+
+    seen[element.id] = true;
+
+  }
+
+  return true;
+
+}
+
+
 function isSandboxTemplate(value) {
 
   if (
     !isPlainSandboxObject(value) ||
-    !hasOnlyKnownSandboxKeys(value, ["html", "css", "js", "sides", "settings"]) ||
+    !hasOnlyKnownSandboxKeys(value, ["html", "css", "js", "sides", "settings", "canvas"]) ||
     typeof value.html !== "string" ||
     typeof value.css !== "string" ||
     value.html.length > SANDBOX_MAX_TEMPLATE_CHARS ||
@@ -761,6 +982,12 @@ function isSandboxTemplate(value) {
 
 
   if (value.settings !== undefined && !isSandboxSkinSettings(value.settings)) {
+    return false;
+  }
+
+
+  /* HOME 캔버스 실행 데이터 — 캔버스가 없는 스킨은 키가 없다 */
+  if (value.canvas !== undefined && !isSandboxHomeCanvas(value.canvas)) {
     return false;
   }
 
@@ -1576,6 +1803,23 @@ if (typeof module !== "undefined" && module.exports) {
     isSandboxRenderSeq,
     isSandboxTemplate,
     isSandboxSkinSettings,
+    SANDBOX_CANVAS_VERSION,
+    SANDBOX_CANVAS_BASE_WIDTH,
+    SANDBOX_CANVAS_MAX_ELEMENTS,
+    SANDBOX_CANVAS_MAX_TEXT_CHARS,
+    SANDBOX_CANVAS_MAX_CATEGORY_IDS,
+    SANDBOX_CANVAS_MAX_CATEGORY_ID_CHARS,
+    SANDBOX_CANVAS_MAX_COORD,
+    SANDBOX_CANVAS_ELEMENT_TYPES,
+    SANDBOX_CANVAS_AUTO_HEIGHT_TYPES,
+    SANDBOX_CANVAS_TEXT_ROLES,
+    SANDBOX_CANVAS_NAV_MODES,
+    SANDBOX_CANVAS_SHAPE_KINDS,
+    SANDBOX_CANVAS_LOGO_FALLBACKS,
+    SANDBOX_CANVAS_ELEMENT_ID_PATTERN,
+    SANDBOX_CANVAS_SLOT_NAME_PATTERN,
+    isSandboxCanvasElement,
+    isSandboxHomeCanvas,
     isPlainSandboxObject,
     hasOnlyKnownSandboxKeys,
     buildSandboxMessage,

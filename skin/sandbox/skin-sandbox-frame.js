@@ -935,6 +935,21 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
       }
     }
 
+    /* HOME 캔버스의 실행 데이터(skin/skin-home-canvas.js) — 프로토콜이
+       모양을 확인했고, 여기서 한 번 더 알려진 칸만 자기 리터럴로
+       옮긴다(sides · settings 와 같은 규칙).
+
+       ★ HOME-CANVAS-CONTRACT-1B 에서는 여기까지가 전부다. renderSkin()
+         은 이 키를 읽지 않는다 — 요소 DOM 을 만드는 것은 다음 작업
+         (HOME-CANVAS-RENDER-1)이고, 지금은 표시 위치가 빈 채로 남는다
+         (계약 문서 §3 "marker 있음 + elements:[] = 빈 Canvas 면"). */
+    if (payload.template.canvas && typeof coerceSkinHomeCanvasRenderPayload === "function") {
+      const canvas = coerceSkinHomeCanvasRenderPayload(payload.template.canvas);
+      if (canvas) {
+        skin.canvas = canvas;
+      }
+    }
+
 
     try {
 

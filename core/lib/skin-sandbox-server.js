@@ -178,6 +178,12 @@ export const SANDBOX_ALLOWED_PATHS = [
      기본색 · 사진 전부 · D-day 없음으로 그려진다. */
   "/skin/skin-settings.js",
 
+  /* HOME 캔버스의 데이터 계약(IMORY_HOME_CANVAS_CONTRACT.md) — 저장
+     경계가 data-imory-canvas-root 를 이 파일의 표로 판정하고, 프레임이
+     봉투의 canvas 를 이 파일로 한 번 더 걸러 받는다. 없으면 같은 스킨이
+     프레임에서만 표시 위치를 잃는다(skin-settings.js 와 같은 사정). */
+  "/skin/skin-home-canvas.js",
+
   /* =====================================================
      SANDBOX-3.2 — POST 본문의 class 규칙. 공개 화면과 **같은
      파일**이다.

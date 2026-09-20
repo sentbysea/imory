@@ -1674,6 +1674,23 @@ export function copySandboxSidesSetting(sides) {
 }
 
 
+/* HOME 캔버스 봉투 — 모양이 틀리면 undefined(키를 만들지 않는다).
+   판정과 복사를 둘 다 skin/skin-home-canvas.js 한 곳에 맡긴다
+   (IMORY_HOME_CANVAS_CONTRACT.md). 그 파일이 없는 문서에서는 키를
+   만들지 않는다 — 검사 규칙을 여기 복사하면 두 곳이 갈라진다. */
+export function copySandboxHomeCanvas(canvas) {
+
+  if (!canvas || typeof canvas !== "object") {
+    return undefined;
+  }
+
+  return typeof coerceSkinHomeCanvasRenderPayload === "function"
+    ? coerceSkinHomeCanvasRenderPayload(canvas)
+    : undefined;
+
+}
+
+
 /* 스킨 설정 봉투 — 모양이 틀리거나 비었으면 undefined(키를 만들지 않는다) */
 export function copySandboxSkinSettings(settings) {
 
@@ -1707,6 +1724,14 @@ function buildSandboxTemplatePayload(template, authorJs) {
 
   if (settings) {
     payload.settings = settings;
+  }
+
+  /* HOME 캔버스 — resolveSkinTemplate 이 regions + 표시 위치에서
+     만든다. 캔버스가 없는 스킨은 키 자체가 없다. */
+  const canvas = copySandboxHomeCanvas(template.canvas);
+
+  if (canvas) {
+    payload.canvas = canvas;
   }
 
   if (typeof authorJs === "string" && authorJs) {

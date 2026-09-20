@@ -433,6 +433,34 @@ function resolveSkinTemplate(
       ? buildSkinSettingsRenderSetting(skinPackage)
       : undefined;
 
+  /*
+    HOME-CANVAS-CONTRACT-1B — HOME 캔버스의 **실행용** 데이터
+    (IMORY_HOME_CANVAS_CONTRACT.md). sides · settings 와 같은 이유로
+    여기서 싣는다.
+
+    ★ 다른 점 둘.
+
+      1) HOME 에만 싣는다. v1 의 캔버스는 HOME 한 장이다
+         (좌우 패널 Canvas 는 아직 없다 — 계약 문서 §11 남은 차이).
+      2) template.html 에 표시 위치(data-imory-canvas-root)가 정확히
+         하나 있을 때만 싣는다. 표식이 없거나 둘 이상이면 키 자체를
+         만들지 않는다 — 그릴 자리가 없는 데이터를 프레임까지 보내지
+         않는다.
+
+    저장된 데이터가 계약을 어기거나 이 배포가 모르는 canvas.version
+    이면 resolveSkinHomeCanvas() 가 undefined 를 준다(원본은 regions
+    에 그대로 남아 있고, 화면만 기존 HOME 으로 간다).
+
+    캔버스가 없는 스킨(= 지금까지의 모든 스킨)에서는 키가 생기지
+    않는다 — sandbox 봉투와 Preview 메시지가 byte 단위로 그대로다.
+  */
+
+  const canvasOf =
+    (html) =>
+      (pageType === "home" && typeof resolveSkinHomeCanvas === "function")
+        ? resolveSkinHomeCanvas(skinPackage, html)
+        : undefined;
+
   const withSides =
     (template) => {
       let next = template;
@@ -441,6 +469,10 @@ function resolveSkinTemplate(
       }
       if (settings) {
         next = { ...next, settings };
+      }
+      const canvas = canvasOf(template.html);
+      if (canvas) {
+        next = { ...next, canvas };
       }
       return next;
     };

@@ -226,8 +226,11 @@ async function runSkinPackageContentPipeline(candidate, options) {
   reason 값: empty-input / json-parse / not-object / schema-version /
   render-mode / author-js / templates-missing / required-template /
   banner-template / folder-template / highlights-template /
-  dock-template / bottom-dock / css-type / post-body-region /
-  folder-body-region / css-validator.
+  dock-template / bottom-dock / home-canvas / css-type /
+  post-body-region / folder-body-region / css-validator.
+
+  home-canvas 실패에는 canvasErrorPath(`regions[2].canvas.elements[1].width`)
+  가 함께 온다 — message 안에도 같은 경로가 들어 있다.
 
   sanitizeSkinHTML()은 거부하지 않고 **조용히 지운다** — 그래서
   "sanitizer violation"이라는 reason은 존재할 수 없다. 허용되지 않은
@@ -567,6 +570,65 @@ async function validateSkinPackageImport(rawJsonText, options) {
     Array.isArray(parsed.regions)
       ? parsed.regions
       : [];
+
+  /*
+    HOME-CANVAS-CONTRACT-1B — regions 의 `home_canvas` 항목
+    (IMORY_HOME_CANVAS_CONTRACT.md §9 "새 Import 가 잘못된 경우").
+
+    ★ regions 전체를 검사하지 않는다. 이 배포가 **아는 이름 하나**만
+      보고, 모르는 이름과 모르는 칸은 지금까지처럼 읽지 않고 그대로
+      보존한다.
+
+    ★ 거부의 이유는 renderMode / bottomDock 과 같다: "저장은 됐는데
+      화면에 캔버스가 안 나오는" 상태를 파일만 보고 구분할 수 없게
+      두지 않는다. 조용히 고치지도 않는다(중복 id 를 새 id 로
+      바꾸거나, 잘못된 요소만 빼거나 하지 않는다).
+
+    ★ 이 배포가 모르는 미래 canvas.version 은 **거부가 아니다** —
+      통과시켜 보존하고, 렌더 때 기존 HOME 으로 폴백한다.
+
+    message 에 path 를 함께 적는다(`regions[2].canvas.elements[1].width`).
+    Import 창은 이 문장 하나를 그대로 보여 준다.
+
+    ★ options.canvasSource — "file"(기본) 이면 거부하고, "draft" 면
+      거부하지 않고 그대로 보존한다.
+
+      계약이 세 경우를 가르기 때문이다(§9). 사용자가 붙여넣은 **새
+      파일**의 잘못된 캔버스는 그가 고칠 수 있으므로 경로를 보여
+      주고 막는다. 그런데 AI 경로는 같은 함수를 지나면서도 regions
+      를 사용자가 쓴 것이 아니다 — 서버가 지금 draft 의 regions 를
+      **그대로 되돌려 준다**(functions/api/skin-ai.js). 이미 저장된
+      캔버스가 깨져 있을 때 여기서 막으면, 그 사람은 캔버스와 아무
+      상관 없는 AI 수정조차 영영 못 하게 된다(지금은 캔버스를 고칠
+      UI 도 없다). 그 경우의 계약은 "삭제하지 않고 fallback" 이지
+      "막기" 가 아니다.
+
+      그래서 draft 에서 온 캔버스는 통과시키고, 렌더 단계의
+      resolveSkinHomeCanvas() 가 undefined 를 돌려주어 기존 HOME 이
+      그려진다. 원본은 regions 에 그대로 남는다.
+  */
+
+  const canvasSource =
+    (options && options.canvasSource === "draft") ? "draft" : "file";
+
+  if (
+    canvasSource === "file" &&
+    typeof validateSkinHomeCanvasRegions === "function"
+  ) {
+
+    const canvasCheck =
+      validateSkinHomeCanvasRegions(regions);
+
+    if (!canvasCheck.ok) {
+      return {
+        ok: false,
+        reason: "home-canvas",
+        message: `${canvasCheck.path} — ${canvasCheck.message}`,
+        canvasErrorPath: canvasCheck.path
+      };
+    }
+
+  }
 
   const metadata =
     (parsed.metadata && typeof parsed.metadata === "object" && !Array.isArray(parsed.metadata))

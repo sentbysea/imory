@@ -41,6 +41,7 @@
 - [10. HOME 좌우 영역 · 아이모리 기본 스킨](#10-home-좌우-영역--아이모리-기본-스킨) — 5개
 - [11. Sandbox 스킨 (별도 origin 프레임)](#11-sandbox-스킨-별도-origin-프레임) — 4개
 - [12. DB migration (실제 Postgres / PGlite)](#12-db-migration-실제-postgres--pglite) — 3개
+- [13. HOME 캔버스 (데이터 계약)](#13-home-캔버스-데이터-계약) — 2개
 
 ---
 
@@ -174,6 +175,15 @@
 | `supabase/public-number-migration-test.mjs` | — | **실제 Postgres(PGlite)로 migration 실행** — 공개 URL 번호(`categories.public_no` / `posts.public_no`). 사용자별 `created_at`·`id` 순 backfill(블로그마다 1부터·재실행 안전) · 카운터에서 원자적으로 발급 · **맨 끝 번호를 지워도 재사용하지 않고 앞 번호를 지워도 당겨지지 않는다** · UPDATE 로 바꿀 수 없다 · `(user_id, public_no)` UNIQUE 가 우회를 막는다 · 한 문장 50건 동시 삽입에도 번호 중복 0 · **id/FK 불변** · GRANT 는 SELECT 만이고 카운터 테이블은 anon/authenticated 권한 0 + RLS · 파일 안의 rollback 블록을 **실제로 실행**해 원상복구·재적용까지. `node supabase/public-number-migration-test.mjs` 로 돈다. |
 | `supabase/highlight2-migration-test.mjs` | — | **실제 Postgres(PGlite)로 migration 실행** — `categories.type='highlight'` 허용 · singleton unique index(두 번째 생성/타입 변경 우회 거절, 사용자별 독립) · 중복 BANNER 통합(**배너 항목 손실 0**·대표 선정 결정적·상대 순서 보존·재실행 안전·글이 남아 있으면 **중단**) · `memo_folder_settings`→`highlight_folder_settings` rename(행 보존·옛 이름 view·옛 RPC wrapper) · 페이지네이션 컬럼 제약 · `change_own_category_type`(글/폴더 이동·rollback·`post_highlights` 보존) · `[contract]` 프런트 상수와 DB predicate 일치. Playwright가 아니라 `node supabase/highlight2-migration-test.mjs` 로 돈다. |
 | `supabase/share-label-seq-migration-test.mjs` | — | **실제 Postgres(PGlite)로 migration 실행** — 공유 카드 자동 라벨의 번호(`posts.share_label_seq`). 기존 공개 글 backfill(컨테이너별 created_at asc · 재실행 안전) · 새 글은 공개되는 순간 max+1 · **앞 글을 지우거나 비공개로 돌려도 번호가 바뀌지 않는다**(이 컬럼의 존재 이유) · 폴더/카테고리 이동 시 그쪽 맨 끝 · 기존 folder/sort_order 트리거가 **먼저** 도는 이름 순서 · GRANT는 SELECT만. `node supabase/share-label-seq-migration-test.mjs` 로 돈다. |
+
+## 13. HOME 캔버스 (데이터 계약)
+
+기준 문서: [IMORY_HOME_CANVAS_CONTRACT.md](./contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+
+| 파일 | 포트 | 범위 |
+| --- | --- | --- |
+| `skin/skin-home-canvas-test.mjs` | — | **HOME-CANVAS-CONTRACT-1B 데이터 계약**(브라우저 없이 `node skin/skin-home-canvas-test.mjs`) — `marker`: 표시 위치 `data-imory-canvas-root` 의 저장 경계 값 표 · 0/1/2개 세기(**정확히 하나**) · 비슷한 이름에 안 걸림 · sanitize 가 복붙한 값 목록을 갖지 않음 · `contract`: 여섯 종류 · 공통 필드 아홉 가지 잘못 · 타입별 props 열 가지 잘못 · canvas 자체의 다섯 가지 · 요소 수 상한 · **중복 id 차단** · **오류가 정확한 필드 경로**(`regions[2].canvas.elements[1].width`) · 같은 이름이 둘이면 둘 다 검사 · `version`: 미래 `canvas.version` 은 **거부가 아니라 보존**이고 실행만 안 된다 · `preserve`: 모르는 region · 모르는 canvas 칸 · 모르는 요소 칸 보존 · **입력 mutate 0** · **`enabled:false` 가 데이터를 지우지 않는다** · `payload`: 실행용은 **알려진 칸만**(모르는 props 도 `z`도 `style`도 없음) · 빠진 `rotation`/`hidden`/`locked` 기본값 · 타입별 기본값 · 새 리터럴 · 깨진 데이터는 payload 자체를 안 만든다 · **canvas 없음 ≠ `elements:[]`** · `template`: `resolveSkinTemplate` — 캔버스 없는 기존 스킨은 **키조차 없다**(봉투 불변) · 표식 없음/둘 이상도 키 없음 · HOME 에만 · `enabled:false` 면 안 실음 · **깨진 저장 데이터는 fallback 하고 원본은 남는다** · `protocol`: sandbox 봉투의 strict allowlist 열두 가지 거부 + **프로토콜과 계약 파일의 값 목록·정규식 양방향 대조**(둘이 갈라지지 않게) · `patterns`: **요소 id 규칙 = `SKIN_SANITIZE_EDIT_ID_PATTERN`**(UUID 는 숫자로 시작할 수 있어 `canvas_` 접두가 필요하다는 함정) · `props.slot` 규칙 = `SKIN_IMAGE_SLOT_NAME_PATTERN` · `docs`: 다섯 진입 문서가 sanitize 보다 먼저 로드 · sandbox allowlist · 색인 |
+| `studio/studio-home-canvas-e2e-test.mjs` | 8982 | **저장 왕복**(`?scenario=lay` + 캔버스 fixture) — 픽셀은 재지 않는다(이 라운드는 요소를 그리지 않는다). `import`: 표시 위치가 Preview 문서에 살아 있음 · 잘못된 canvas / 중복 id / photo 의 `"auto"` 높이를 **실제 Import 창이 필드 경로와 함께 거부**하고 draft 는 그대로 · 미래 version 은 통과하고 적용 뒤 **그대로 보존** · `roundtrip`: Export 파일에 canvas 가 모르는 칸까지 그대로 → 고쳐서 다시 Import → **요소 id 불변** · `persist`: Save payload → 그 content 로 다시 열기 → Publish → **발행된 SkinPackage 를 실제 `resolveSkinTemplate()` 에** 넣어 실행용 canvas 확인(모르는 칸이 없고 CATEGORY 에는 안 실림) · `ai`: AI 응답(서버가 regions 를 그대로 되돌려 준다)을 적용해도 canvas 가 안 사라지고, **이미 깨진 canvas 가 AI 수정 전체를 막지 않는다**(`canvasSource:"draft"`) · `legacy`: 캔버스 없는 스킨은 `regions:[]` 그대로이고 공개 resolve 에 `canvas` 키조차 없다 |
 
 ---
 

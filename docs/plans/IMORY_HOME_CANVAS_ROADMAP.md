@@ -145,21 +145,28 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 
 각 행은 별도의 작업이다. 앞 단계가 완료됐다는 보고를 확인한 뒤 다음 단계로 넘어간다.
 
-| 순서 | 작업 ID | 목표 | 운영 기능 변경 |
-|---:|---|---|---|
-| 0 | `HOME-CANVAS-SPIKE-1` | Moveable/Selecto 적합성 검증 | 없음 |
-| 1 | `HOME-CANVAS-CONTRACT-1` | 데이터 계약·소유권·마이그레이션 설계 | 없음 |
-| 2 | `HOME-CANVAS-RENDER-1` | 고정 fixture를 네 화면에 동일 렌더 | 읽기 전용 |
-| 3 | `HOME-CANVAS-SELECT-1` | 단일 선택·이동·크기·회전 | Studio만 |
-| 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 |
-| 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 |
-| 6 | `HOME-CANVAS-PRESETS-1` | 사진 1·2·3·4장 프리셋, 라이트/다크 | 프리셋 |
-| 7 | `HOME-CANVAS-STICKER-1` | 스티커 업로드·회전·외곽선·칼선 | 스티커 |
-| 8 | `HOME-CANVAS-LAYERS-1` | 다중 선택·앞뒤 순서·정렬·그룹 | 고급 조작 |
-| 9 | `HOME-CANVAS-DECOR-1` | 선·도형·인덱스·장식 부착 | 장식 조각 |
-| 10 | `HOME-CANVAS-RESPONSIVE-1` | 데스크톱 전용 재배치 또는 override | 반응형 |
-| 11 | `HOME-CANVAS-SIDES-1` | 기존 1·2·3단과 최종 통합 | 패널 통합 |
-| 12 | `HOME-CANVAS-POLISH-1` | 접근성·성능·실기기·문서·회귀 | 출시 준비 |
+> 진행 상태(2026-09-21): **`HOME-CANVAS-CONTRACT-1B`(데이터 계약)만 끝났다.**
+> 그 결과는 이 문서가 아니라
+> [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)(CURRENT
+> CONTRACT)가 갖는다. `SPIKE-1` 은 아직 하지 않았고 — 데이터 계약은 라이브러리
+> 선택에 기대지 않아서 먼저 할 수 있었다 — `RENDER-1` 이후는 하나도 구현되지
+> 않았다.
+
+| 순서 | 작업 ID | 목표 | 운영 기능 변경 | 상태 |
+|---:|---|---|---|---|
+| 0 | `HOME-CANVAS-SPIKE-1` | Moveable/Selecto 적합성 검증 | 없음 | 미착수 |
+| 1 | `HOME-CANVAS-CONTRACT-1` | 데이터 계약·소유권·마이그레이션 설계 | 없음 | **1B 완료** → [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
+| 2 | `HOME-CANVAS-RENDER-1` | 고정 fixture를 네 화면에 동일 렌더 | 읽기 전용 | 미착수 |
+| 3 | `HOME-CANVAS-SELECT-1` | 단일 선택·이동·크기·회전 | Studio만 | 미착수 |
+| 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
+| 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
+| 6 | `HOME-CANVAS-PRESETS-1` | 사진 1·2·3·4장 프리셋, 라이트/다크 | 프리셋 | 미착수 |
+| 7 | `HOME-CANVAS-STICKER-1` | 스티커 업로드·회전·외곽선·칼선 | 스티커 | 미착수 |
+| 8 | `HOME-CANVAS-LAYERS-1` | 다중 선택·앞뒤 순서·정렬·그룹 | 고급 조작 | 미착수 |
+| 9 | `HOME-CANVAS-DECOR-1` | 선·도형·인덱스·장식 부착 | 장식 조각 | 미착수 |
+| 10 | `HOME-CANVAS-RESPONSIVE-1` | 데스크톱 전용 재배치 또는 override | 반응형 | 미착수 |
+| 11 | `HOME-CANVAS-SIDES-1` | 기존 1·2·3단과 최종 통합 | 패널 통합 | 미착수 |
+| 12 | `HOME-CANVAS-POLISH-1` | 접근성·성능·실기기·문서·회귀 | 출시 준비 | 미착수 |
 
 ## 8. 단계별 완료 기준
 
@@ -193,6 +200,14 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 - 운영 파일 변경이 있었다면 원복된 깨끗한 상태
 
 ### `HOME-CANVAS-CONTRACT-1`
+
+> **1B(데이터 계약) 완료 — 2026-09-21.** 확정된 내용은
+> [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 에
+> 있다. 아래 목록 중 "렌더링과 편집의 속성 소유권 표"까지가 그 문서 §1·§8 이고,
+> "조작 UI 를 만들지 않는다"도 지켰다. 이 문서의 §4 예시는 **비규범**이었고,
+> 확정된 모양은 그 예시와 두 곳이 다르다 — `settings` 대신 `canvas` 아래
+> `version`/`baseWidth`/`elements` 셋이고, **`z` 필드는 두지 않는다**(배열 순서가
+> 앞뒤 순서다).
 
 - 기존 `regions`, templates, images, direct edit 규칙을 조사한다.
 - 저장 위치와 스키마를 정한다.
@@ -342,6 +357,13 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 |---|---|---|
 | HOME은 DOM 기반 캔버스로 렌더한다 | 확정 | 초기 기획 |
 | 기존 Imory 저장·렌더 파이프라인을 유지한다 | 확정 | 초기 기획 |
+| 캔버스는 새 최상위 필드가 아니라 `regions` 의 `home_canvas` 항목에 저장한다 | 확정 | `CONTRACT-1B` |
+| 표시 위치는 HOME 안 `data-imory-canvas-root` **정확히 하나**다 | 확정 | `CONTRACT-1B` |
+| 앞뒤 순서는 배열 순서다 — `z` 필드를 두지 않는다 | 확정 | `CONTRACT-1B` |
+| 시각 스타일은 캔버스 JSON 이 아니라 스킨 CSS 가 갖는다(`data-imory-edit-id` 선택자) | 확정 | `CONTRACT-1B` |
+| 요소 id 는 `data-imory-edit-id` 규칙을 따른다(`canvas_` 접두 — UUID 는 숫자로 시작할 수 있다) | 확정 | `CONTRACT-1B` |
+| 보존용 원본과 실행용 payload 를 가른다(실행은 strict allowlist) | 확정 | `CONTRACT-1B` |
+| 미래 `canvas.version` 은 거부가 아니라 보존 + 실행 fallback | 확정 | `CONTRACT-1B` |
 | Moveable을 운영에 채택한다 | 미정 | `SPIKE-1` |
 | Selecto를 운영에 채택한다 | 미정 | `SPIKE-1` |
 | 모바일 390 단일 좌표계를 데스크톱에서 확대한다 | 미정 | `RESPONSIVE-1` |

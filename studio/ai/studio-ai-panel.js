@@ -1718,6 +1718,17 @@ async function handleStudioAiSend() {
     await window.validateSkinPackageImport(
       JSON.stringify(payload.skinPackage),
       {
+        /*
+          HOME-CANVAS-CONTRACT-1B — 이 JSON 의 regions 는 사용자가 쓴
+          것이 아니라 **지금 draft 의 regions 를 서버가 그대로
+          되돌려 준 것**이다(functions/api/skin-ai.js). 이미 저장된
+          캔버스가 깨져 있다는 이유로 AI 수정 전체를 막지 않는다 —
+          그 경우의 계약은 "삭제하지 않고 fallback" 이다
+          (IMORY_HOME_CANVAS_CONTRACT.md §9 · skin-package-import.js
+          의 canvasSource 주석).
+        */
+        canvasSource: "draft",
+
         attachments:
           attachmentSources.map((attachment) => ({
             aspectRatioHint:
