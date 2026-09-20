@@ -1,5 +1,6 @@
 /* =========================================================
-   SKIN HOME CANVAS — HOME 캔버스 **데이터 계약** (HOME-CANVAS-CONTRACT-1B)
+   SKIN HOME CANVAS — HOME 캔버스 **데이터 계약**
+   (HOME-CANVAS-CONTRACT-1B · 1C)
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
    로드맵:    docs/plans/IMORY_HOME_CANVAS_ROADMAP.md (PLAN)
@@ -30,6 +31,7 @@
          "canvas": {
            "version": 1,
            "baseWidth": 390,
+           "baseHeight": 844,
            "elements": [
              { "id": "canvas_a1b2c3d4-...", "type": "photo",
                "x": 20, "y": 120, "width": 260, "height": 320,
@@ -108,6 +110,27 @@ const SKIN_HOME_CANVAS_VERSION = 1;
 
 /* v1 의 저장 좌표 기준 자. 화면 폭을 390px 로 고정한다는 뜻이 아니다. */
 const SKIN_HOME_CANVAS_BASE_WIDTH = 390;
+
+/* =========================================================
+   도화지 전체의 세로 길이 (HOME-CANVAS-CONTRACT-1C)
+
+   ★ 각 요소의 height 와 **다른 것**이다. baseHeight 는 "이 캔버스가
+     어디까지인가"이고, 요소 height 는 "그 요소가 얼마나 큰가"다.
+
+   ★ 요소의 가장 아래 좌표로 **자동 계산하지 않는다.** 그렇게 하면
+     아래쪽에 일부러 둔 여백이 사라지고, 요소를 하나 옮길 때마다
+     페이지 전체 높이가 예기치 않게 바뀐다. 요소가 하나도 없는
+     캔버스도 높이를 갖는다.
+
+   ★ 요소가 이 경계를 일부 벗어나는 것을 데이터 계약이 금지하지
+     않는다. 넘친 것을 어떻게 다룰지(자르기 · 늘리기 · 스크롤)는
+     Renderer 계약의 몫이다.
+
+   기본값 844 는 새 캔버스 하나의 출발점이다(390×844 = 한 화면형).
+   긴 스크롤형 캔버스는 이 값을 키워서 만든다 — 그 구분이 곧
+   baseHeight 다.
+========================================================== */
+const SKIN_HOME_CANVAS_BASE_HEIGHT = 844;
 
 /* 표시 위치 — 마크업 계약. 저장 경계(skin/skin-sanitize.js)가 이 표에 묻는다 */
 const SKIN_HOME_CANVAS_ROOT_ATTR = "data-imory-canvas-root";
@@ -616,6 +639,25 @@ function validateSkinCanvasData(canvas, path) {
     );
   }
 
+  /*
+    HOME-CANVAS-CONTRACT-1C — 도화지 전체의 세로 길이.
+
+    baseWidth 와 달리 **고정값이 아니다**(긴 스크롤형 캔버스가
+    그래서 가능하다). v1 의 필수 필드다 — 지금까지 저장된 실제
+    사용자 캔버스가 하나도 없으므로 옵션으로 둘 이유가 없고,
+    빠진 것을 조용히 844 로 채우면 "한 화면형으로 만든 캔버스"와
+    "높이를 안 적은 캔버스"가 파일만 보고 구분되지 않는다.
+
+    상한은 좌표·크기와 같은 자를 쓴다(SKIN_HOME_CANVAS_MAX_COORD) —
+    요소가 그 밖으로 못 나가는데 도화지만 더 클 이유가 없다.
+  */
+  if (!isSkinHomeCanvasSize(canvas.baseHeight)) {
+    return skinHomeCanvasFail(
+      `${path}.baseHeight`,
+      `canvas.baseHeight는 0보다 크고 ${SKIN_HOME_CANVAS_MAX_COORD} 이하인 숫자여야 합니다(도화지 전체의 세로 길이 — 요소의 height 와 다릅니다).`
+    );
+  }
+
   if (!Array.isArray(canvas.elements)) {
     return skinHomeCanvasFail(`${path}.elements`, "canvas.elements는 배열이어야 합니다.");
   }
@@ -840,12 +882,16 @@ function mergeSkinHomeCanvasRegionEntry(entry, changes) {
 }
 
 
-/* 빈 v1 캔버스 — 프리셋이 아니라 "아무것도 놓이지 않은 면" 하나다 */
+/*
+  빈 v1 캔버스 — 프리셋이 아니라 "아무것도 놓이지 않은 면" 하나다.
+  요소가 없어도 도화지는 높이를 갖는다(baseHeight, 기본 844).
+*/
 function createEmptySkinHomeCanvas() {
 
   return {
     version: SKIN_HOME_CANVAS_VERSION,
     baseWidth: SKIN_HOME_CANVAS_BASE_WIDTH,
+    baseHeight: SKIN_HOME_CANVAS_BASE_HEIGHT,
     elements: []
   };
 
@@ -881,9 +927,15 @@ function buildSkinCanvasRenderPayload(canvas) {
     return undefined;
   }
 
+  /*
+    baseWidth 는 v1 고정값이라 상수를 쓰고, baseHeight 는 캔버스마다
+    다르므로 **검증을 통과한 그 값**을 싣는다(위 validateSkinCanvasData
+    가 이미 양수임을 보장한다).
+  */
   return {
     version: SKIN_HOME_CANVAS_VERSION,
     baseWidth: SKIN_HOME_CANVAS_BASE_WIDTH,
+    baseHeight: canvas.baseHeight,
     elements: canvas.elements.map(buildSkinCanvasElementPayload)
   };
 
@@ -1017,6 +1069,7 @@ if (typeof window !== "undefined") {
   window.SKIN_HOME_CANVAS_REGION_NAME = SKIN_HOME_CANVAS_REGION_NAME;
   window.SKIN_HOME_CANVAS_VERSION = SKIN_HOME_CANVAS_VERSION;
   window.SKIN_HOME_CANVAS_BASE_WIDTH = SKIN_HOME_CANVAS_BASE_WIDTH;
+  window.SKIN_HOME_CANVAS_BASE_HEIGHT = SKIN_HOME_CANVAS_BASE_HEIGHT;
   window.SKIN_HOME_CANVAS_ROOT_ATTR = SKIN_HOME_CANVAS_ROOT_ATTR;
   window.SKIN_HOME_CANVAS_ELEMENT_TYPES = SKIN_HOME_CANVAS_ELEMENT_TYPES;
 
@@ -1046,6 +1099,7 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_HOME_CANVAS_REGION_NAME,
     SKIN_HOME_CANVAS_VERSION,
     SKIN_HOME_CANVAS_BASE_WIDTH,
+    SKIN_HOME_CANVAS_BASE_HEIGHT,
     SKIN_HOME_CANVAS_ROOT_ATTR,
     SKIN_HOME_CANVAS_ATTRIBUTE_RULES,
     SKIN_HOME_CANVAS_ELEMENT_TYPES,

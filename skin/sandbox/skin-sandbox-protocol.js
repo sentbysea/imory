@@ -744,6 +744,12 @@ var SANDBOX_CANVAS_VERSION = 1;
 
 var SANDBOX_CANVAS_BASE_WIDTH = 390;
 
+/* HOME-CANVAS-CONTRACT-1C — 도화지 전체의 세로 길이. baseWidth 와 달리
+   고정값이 아니라 캔버스마다 다르다(0 초과 SANDBOX_CANVAS_MAX_COORD 이하).
+   이 기본값은 "새 캔버스의 출발점"이고 봉투 검사에는 쓰이지 않는다 —
+   계약 파일과 갈라지지 않게 값만 함께 적어 둔다. */
+var SANDBOX_CANVAS_BASE_HEIGHT = 844;
+
 var SANDBOX_CANVAS_MAX_ELEMENTS = 200;
 
 var SANDBOX_CANVAS_MAX_TEXT_CHARS = 2000;
@@ -910,9 +916,11 @@ function isSandboxHomeCanvas(value) {
 
   if (
     !isPlainSandboxObject(value) ||
-    !hasOnlyKnownSandboxKeys(value, ["version", "baseWidth", "elements"]) ||
+    !hasOnlyKnownSandboxKeys(value, ["version", "baseWidth", "baseHeight", "elements"]) ||
     value.version !== SANDBOX_CANVAS_VERSION ||
     value.baseWidth !== SANDBOX_CANVAS_BASE_WIDTH ||
+    /* baseHeight 는 고정값이 아니다 — 양수이기만 하면 된다(1C) */
+    !isSandboxCanvasSize(value.baseHeight) ||
     !Array.isArray(value.elements) ||
     value.elements.length > SANDBOX_CANVAS_MAX_ELEMENTS
   ) {
@@ -1805,6 +1813,7 @@ if (typeof module !== "undefined" && module.exports) {
     isSandboxSkinSettings,
     SANDBOX_CANVAS_VERSION,
     SANDBOX_CANVAS_BASE_WIDTH,
+    SANDBOX_CANVAS_BASE_HEIGHT,
     SANDBOX_CANVAS_MAX_ELEMENTS,
     SANDBOX_CANVAS_MAX_TEXT_CHARS,
     SANDBOX_CANVAS_MAX_CATEGORY_IDS,

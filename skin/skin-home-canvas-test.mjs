@@ -1,5 +1,5 @@
 /* =========================================================
-   HOME CANVAS — 데이터 계약 단위 테스트 (HOME-CANVAS-CONTRACT-1B)
+   HOME CANVAS — 데이터 계약 단위 테스트 (HOME-CANVAS-CONTRACT-1B · 1C)
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
 
@@ -8,6 +8,8 @@
      [marker]    표시 위치 — 저장 경계의 값 표 · 0개/1개/2개 세기
      [contract]  요소 계약 — 종류 · 좌표 · 폭 · 높이("auto" 는 둘만) ·
                  id 규칙 · 중복 id · 타입별 props · **오류 경로**
+     [baseheight] 도화지 전체의 세로 길이(1C) — 필수 · 양수 · 기본 844 ·
+                 요소의 height 와 별개 · 자동 계산 안 함 · 오류 경로
      [version]   미래 canvas.version 은 통과(보존)하고 실행만 안 한다
      [preserve]  모르는 region · 모르는 canvas 칸 보존 · 원본 불변 ·
                  enabled:false 가 데이터를 지우지 않는다
@@ -92,6 +94,7 @@ const element = (over) =>
 const canvasData = (elements) => ({
   version: 1,
   baseWidth: 390,
+  baseHeight: 844,
   elements: elements || [
     element(),
     element({
@@ -278,7 +281,7 @@ function propsFor(type) {
     ["version 0", { name: "home_canvas", canvas: { version: 0, baseWidth: 390, elements: [] } }, "regions[0].canvas.version"],
     ["version 문자열", { name: "home_canvas", canvas: { version: "1", baseWidth: 390, elements: [] } }, "regions[0].canvas.version"],
     ["baseWidth 375", { name: "home_canvas", canvas: { version: 1, baseWidth: 375, elements: [] } }, "regions[0].canvas.baseWidth"],
-    ["elements 객체", { name: "home_canvas", canvas: { version: 1, baseWidth: 390, elements: {} } }, "regions[0].canvas.elements"]
+    ["elements 객체", { name: "home_canvas", canvas: { version: 1, baseWidth: 390, baseHeight: 844, elements: {} } }, "regions[0].canvas.elements"]
   ];
   const wrong = cases.filter(([, entry, path]) => {
     const bad = okOf([entry]);
@@ -286,6 +289,101 @@ function propsFor(type) {
   });
   check("[contract] canvas 자체의 다섯 가지 잘못", wrong.length === 0, wrong.map((c) => c[0]).join(", "));
 }
+
+
+/* ---------------------------------------------------------- */
+console.log("\n[baseheight] 도화지 전체의 세로 길이 (CONTRACT-1C)");
+
+const canvasWithHeight = (baseHeight) => {
+  const data = canvasData();
+  if (baseHeight === undefined) {
+    delete data.baseHeight;
+  } else {
+    data.baseHeight = baseHeight;
+  }
+  return { name: "home_canvas", canvas: data };
+};
+
+check("[baseheight] 기본값은 844(새 캔버스 = 한 화면형 390×844)",
+  canvas.SKIN_HOME_CANVAS_BASE_HEIGHT === 844 &&
+  canvas.createEmptySkinHomeCanvas().baseHeight === 844);
+
+check("★ [baseheight] 844 가 통과한다", okOf([canvasWithHeight(844)]).ok === true);
+
+check("★ [baseheight] 다른 양수도 통과한다(긴 스크롤형 캔버스)",
+  [1, 200, 844, 1600, 4000, 99999.5, canvas.SKIN_HOME_CANVAS_MAX_COORD]
+    .every((h) => okOf([canvasWithHeight(h)]).ok === true));
+
+{
+  const rejects = [
+    ["0", 0],
+    ["음수", -844],
+    ["NaN", NaN],
+    ["Infinity", Infinity],
+    ["문자열 \"844\"", "844"],
+    ["\"auto\"", "auto"],
+    ["null", null],
+    ["상한 초과", canvas.SKIN_HOME_CANVAS_MAX_COORD + 1],
+    ["누락", undefined]
+  ].filter(([, value]) => {
+    const bad = okOf([canvasWithHeight(value)]);
+    return bad.ok || bad.path !== "regions[0].canvas.baseHeight";
+  });
+
+  check("★ [baseheight] 0 · 음수 · NaN · 문자열 · 누락 등 아홉 가지를 모두 거부하고 경로가 baseHeight",
+    rejects.length === 0, rejects.map((r) => r[0]).join(", "));
+}
+
+check("★ [baseheight] 오류 경로가 regions[n] 의 n 을 따라간다",
+  okOf([{ name: "other" }, { name: "x" }, canvasWithHeight(0)]).path ===
+    "regions[2].canvas.baseHeight");
+
+check("★ [baseheight] 요소가 없어도 도화지는 높이를 갖는다(elements:[] 보존)",
+  (() => {
+    const payload = canvas.buildSkinCanvasRenderPayload(
+      { version: 1, baseWidth: 390, baseHeight: 1200, elements: [] });
+    return payload.baseHeight === 1200 && payload.elements.length === 0;
+  })());
+
+check("★ [baseheight] 요소의 height 와 별개다 — 요소가 도화지를 넘어도 막지 않는다",
+  okOf([{
+    name: "home_canvas",
+    canvas: Object.assign(canvasData([element({ y: 800, height: 900 })]), { baseHeight: 844 })
+  }]).ok === true);
+
+check("★ [baseheight] 요소를 옮겨도 baseHeight 를 자동으로 바꾸지 않는다",
+  (() => {
+    const low = canvas.buildSkinCanvasRenderPayload(
+      Object.assign(canvasData([element({ y: 10 })]), { baseHeight: 844 }));
+    const high = canvas.buildSkinCanvasRenderPayload(
+      Object.assign(canvasData([element({ y: 5000 })]), { baseHeight: 844 }));
+    return low.baseHeight === 844 && high.baseHeight === 844;
+  })());
+
+check("[baseheight] 미래 version 은 baseHeight 없이도 통과한다(v1 규칙을 적용하지 않는다)",
+  okOf([{ name: "home_canvas", canvas: { version: 2, baseWidth: 999, elements: [] } }]).ok === true);
+
+check("★ [baseheight] 실행용 payload 는 상수가 아니라 저장된 그 값을 싣는다",
+  canvas.buildSkinCanvasRenderPayload(
+    Object.assign(canvasData(), { baseHeight: 2400 })).baseHeight === 2400);
+
+{
+  const data = Object.assign(canvasData(), { baseHeight: 1600 });
+  const before = JSON.stringify(data);
+  canvas.buildSkinCanvasRenderPayload(data);
+  canvas.validateSkinCanvasData(data, "canvas");
+  check("[baseheight] 입력을 mutate 하지 않는다", JSON.stringify(data) === before);
+}
+
+check("★ [baseheight] sandbox 봉투가 baseHeight 를 요구하고 값을 통과시킨다",
+  protocol.isSandboxHomeCanvas(
+    canvas.buildSkinCanvasRenderPayload(Object.assign(canvasData(), { baseHeight: 1600 }))) === true &&
+  protocol.isSandboxHomeCanvas({ version: 1, baseWidth: 390, elements: [] }) === false &&
+  protocol.isSandboxHomeCanvas({ version: 1, baseWidth: 390, baseHeight: 0, elements: [] }) === false &&
+  protocol.isSandboxHomeCanvas({ version: 1, baseWidth: 390, baseHeight: "844", elements: [] }) === false);
+
+check("[baseheight] 프로토콜의 기본값 상수도 계약 파일과 같다",
+  protocol.SANDBOX_CANVAS_BASE_HEIGHT === canvas.SKIN_HOME_CANVAS_BASE_HEIGHT);
 
 {
   const many = [];
@@ -370,7 +468,7 @@ console.log("\n[preserve] 보존과 불변");
   });
   check("[preserve] 항목이 없으면 끝에 더하고 다른 설정은 자리 그대로",
     made.length === 2 && made[0].name === "dday" && made[1].name === "home_canvas" &&
-    same(made[1].canvas, { version: 1, baseWidth: 390, elements: [] }));
+    same(made[1].canvas, { version: 1, baseWidth: 390, baseHeight: 844, elements: [] }));
 
   const twice = canvas.writeSkinHomeCanvasRegion(
     [canvasRegion(), canvasRegion({ canvas: canvas.createEmptySkinHomeCanvas() })],
@@ -407,7 +505,7 @@ console.log("\n[payload] 실행용 payload");
   const payload = canvas.buildSkinCanvasRenderPayload(data);
 
   check("★ [payload] 알려진 칸만 — 모르는 요소 칸도 모르는 props 칸도 실리지 않는다",
-    same(Object.keys(payload).sort(), ["baseWidth", "elements", "version"]) &&
+    same(Object.keys(payload).sort(), ["baseHeight", "baseWidth", "elements", "version"]) &&
     same(Object.keys(payload.elements[0]).sort(),
       ["height", "hidden", "id", "locked", "props", "rotation", "type", "width", "x", "y"]) &&
     same(Object.keys(payload.elements[0].props), ["slot"]),
@@ -444,7 +542,7 @@ check("★ [payload] canvas 없음 ≠ elements:[] — 빈 캔버스 면은 실�
   same(
     canvas.resolveSkinHomeCanvas(
       skinWith([{ name: "home_canvas", canvas: canvas.createEmptySkinHomeCanvas() }]), CANVAS_HTML),
-    { version: 1, baseWidth: 390, elements: [] }
+    { version: 1, baseWidth: 390, baseHeight: 844, elements: [] }
   ));
 
 
@@ -519,18 +617,18 @@ const envelope = (over) =>
     protocol.isSandboxTemplate(envelope({ canvas: payload })) === true);
 
   const rejects = [
-    ["모르는 최상위 칸", { version: 1, baseWidth: 390, elements: [], background: "#fff" }],
+    ["모르는 최상위 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [], background: "#fff" }],
     ["모르는 version", { version: 2, baseWidth: 390, elements: [] }],
     ["다른 baseWidth", { version: 1, baseWidth: 375, elements: [] }],
-    ["모르는 요소 칸", { version: 1, baseWidth: 390, elements: [Object.assign(element(), { z: 3 })] }],
-    ["모르는 props 칸", { version: 1, baseWidth: 390, elements: [element({ props: { slot: "photo_1", style: "x" } })] }],
-    ["요소별 style", { version: 1, baseWidth: 390, elements: [Object.assign(element(), { style: {} })] }],
-    ["rotation 없음", { version: 1, baseWidth: 390, elements: [(() => { const e = element(); delete e.rotation; return e; })()] }],
-    ["photo 의 auto 높이", { version: 1, baseWidth: 390, elements: [element({ height: "auto" })] }],
-    ["중복 id", { version: 1, baseWidth: 390, elements: [element(), element()] }],
-    ["모르는 종류", { version: 1, baseWidth: 390, elements: [element({ type: "widget" })] }],
-    ["점이 든 id", { version: 1, baseWidth: 390, elements: [element({ id: "a.b" })] }],
-    ["너무 긴 글자", { version: 1, baseWidth: 390, elements: [element({ type: "text", props: { text: "x".repeat(2001), role: "body" } })] }]
+    ["모르는 요소 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [Object.assign(element(), { z: 3 })] }],
+    ["모르는 props 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element({ props: { slot: "photo_1", style: "x" } })] }],
+    ["요소별 style", { version: 1, baseWidth: 390, baseHeight: 844, elements: [Object.assign(element(), { style: {} })] }],
+    ["rotation 없음", { version: 1, baseWidth: 390, baseHeight: 844, elements: [(() => { const e = element(); delete e.rotation; return e; })()] }],
+    ["photo 의 auto 높이", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element({ height: "auto" })] }],
+    ["중복 id", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element(), element()] }],
+    ["모르는 종류", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element({ type: "widget" })] }],
+    ["점이 든 id", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element({ id: "a.b" })] }],
+    ["너무 긴 글자", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element({ type: "text", props: { text: "x".repeat(2001), role: "body" } })] }]
   ].filter(([, value]) => protocol.isSandboxTemplate(envelope({ canvas: value })) !== false);
 
   check("★ [protocol] strict allowlist — 열두 가지를 전부 거부",

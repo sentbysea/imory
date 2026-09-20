@@ -1,5 +1,5 @@
 /* =========================================================
-   HOME CANVAS — 저장 왕복 E2E (HOME-CANVAS-CONTRACT-1B)
+   HOME CANVAS — 저장 왕복 E2E (HOME-CANVAS-CONTRACT-1B · 1C)
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
 
@@ -73,6 +73,10 @@ const CANVAS_REGION = {
   canvas: {
     version: 1,
     baseWidth: 390,
+    /* HOME-CANVAS-CONTRACT-1C — 도화지 전체의 세로 길이. 기본 844 가
+       아니라 일부러 긴 스크롤형 값을 쓴다: 어느 단계에서든 844 로
+       "기본값이 채워진" 것을 왕복 성공으로 착각하지 않게. */
+    baseHeight: 1600,
     elements: [
       {
         id: "canvas_photo1",
@@ -391,6 +395,25 @@ async function run() {
         r.isError && r.message.includes("regions[1].canvas.elements[0].height"),
         r.message);
 
+      /* 도화지 전체 높이(1C) — 0 · 누락 둘 다 baseHeight 경로로 거부 */
+      const badBase = clone(CANVAS_SKIN);
+      badBase.regions[1].canvas.baseHeight = 0;
+
+      r = await importJson(page, JSON.stringify(badBase));
+
+      check("★ baseHeight 0 거부 · 경로가 regions[1].canvas.baseHeight",
+        r.isError && !r.canApply && r.message.includes("regions[1].canvas.baseHeight"),
+        r.message);
+
+      const noBase = clone(CANVAS_SKIN);
+      delete noBase.regions[1].canvas.baseHeight;
+
+      r = await importJson(page, JSON.stringify(noBase));
+
+      check("★ baseHeight 누락도 거부(v1 필수 필드 — 조용히 844 로 채우지 않는다)",
+        r.isError && !r.canApply && r.message.includes("regions[1].canvas.baseHeight"),
+        r.message);
+
       check("거부된 Import 는 draft 를 바꾸지 않았다(원래 값 그대로)",
         same(canvasOf(await draftRegions(page)), CANVAS_REGION.canvas));
 
@@ -439,8 +462,13 @@ async function run() {
       check("모르는 region 도 자리 그대로",
         same(exported.regions[0], CANVAS_SKIN.regions[0]) && exported.regions.length === 2);
 
-      /* 그 파일을 고쳐서 다시 Import */
+      check("★ Export 파일의 baseHeight 가 844 로 되돌아가지 않는다",
+        canvasOf(exported.regions).baseHeight === 1600,
+        String(canvasOf(exported.regions).baseHeight));
+
+      /* 그 파일을 고쳐서 다시 Import — 도화지 높이도 함께 바꾼다 */
       const edited = clone(exported);
+      edited.regions[1].canvas.baseHeight = 2400;
       edited.regions[1].canvas.elements.push({
         id: "canvas_shape1",
         type: "shape",
@@ -464,6 +492,13 @@ async function run() {
       check("왕복 뒤에도 모르는 칸이 살아 있다",
         same(after.futureCanvasField, { keep: true }) &&
         after.elements[0].futureElementField === "keep me");
+
+      check("★ 고쳐 넣은 baseHeight(2400)가 draft 에 그대로 들어간다",
+        after.baseHeight === 2400, String(after.baseHeight));
+
+      check("★ 요소를 하나 더해도 baseHeight 는 저절로 바뀌지 않는다",
+        await page.evaluate(() =>
+          window.resolveSkinTemplate(currentWorkingSkin, "home").canvas.baseHeight === 2400));
 
       await context.close();
 
@@ -537,6 +572,11 @@ async function run() {
         published && same(canvasOf(published.regions), CANVAS_REGION.canvas),
         JSON.stringify(published && canvasOf(published.regions)));
 
+      check("★ Save → 다시 열기 → Publish 세 단계 모두 baseHeight 1600 (844 로 안 돌아간다)",
+        canvasOf(saved.regions).baseHeight === 1600 &&
+        canvasOf(await draftRegions(reopened.page)).baseHeight === 1600 &&
+        canvasOf(published.regions).baseHeight === 1600);
+
       /*
         ★ 공개 resolve — 발행된 그 SkinPackage 를 실제
         resolveSkinTemplate() 에 넣어 "공개 화면이 받을 재료"를 만든다.
@@ -557,6 +597,7 @@ async function run() {
         resolved.canvas &&
         resolved.canvas.version === 1 &&
         resolved.canvas.baseWidth === 390 &&
+        resolved.canvas.baseHeight === 1600 &&
         resolved.canvas.elements.length === 2,
         JSON.stringify(resolved.keys));
 

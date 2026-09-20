@@ -145,15 +145,16 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 
 각 행은 별도의 작업이다. 앞 단계가 완료됐다는 보고를 확인한 뒤 다음 단계로 넘어간다.
 
-> 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` 셋이 끝났다.**
-> `RENDER-1` 이후는 하나도 구현되지 않았다.
+> 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` · `CONTRACT-1C`
+> 넷이 끝났다.** `RENDER-1` 이후는 하나도 구현되지 않았다.
 >
 > - `SPIKE-1` · `SPIKE-1B` — **Moveable + Selecto 채택 확정**(§8 의 완료 기록).
 >   실험이라 **운영 파일을 한 줄도 바꾸지 않았고**, 그래서 저장소에 vendor 파일도
 >   연결 코드도 없다. 결론만 이 문서에 남아 있다.
-> - `CONTRACT-1B` — 데이터 계약. 그 결과는 이 문서가 아니라
+> - `CONTRACT-1B` · `CONTRACT-1C` — 데이터 계약. 그 결과는 이 문서가 아니라
 >   [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)(CURRENT
->   CONTRACT)가 갖는다.
+>   CONTRACT)가 갖는다. `1C` 는 도화지 전체의 세로 길이 `baseHeight` 한 칸을
+>   더한 보완이다(그 문서 §4-1).
 >
 > ★ `CONTRACT-1B` 보고가 "`SPIKE-1` 미착수"라고 적은 것은 **틀렸다.** Spike 가
 >   운영 파일을 남기지 않는 작업이라 저장소만 보고는 완료 사실을 알 수 없었던
@@ -164,7 +165,7 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 |---:|---|---|---|---|
 | 0 | `HOME-CANVAS-SPIKE-1` | Moveable/Selecto 적합성 검증 | 없음 | **완료 — 채택**(§8) |
 | 0b | `HOME-CANVAS-SPIKE-1B` | 실제 cross-origin sandbox 에서 좌표 오차 재측정 | 없음 | **완료 — 허용치 안**(§8) |
-| 1 | `HOME-CANVAS-CONTRACT-1` | 데이터 계약·소유권·마이그레이션 설계 | 없음 | **1B 완료** → [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
+| 1 | `HOME-CANVAS-CONTRACT-1` | 데이터 계약·소유권·마이그레이션 설계 | 없음 | **1B · 1C 완료** → [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 2 | `HOME-CANVAS-RENDER-1` | 고정 fixture를 네 화면에 동일 렌더 | 읽기 전용 | 미착수 |
 | 3 | `HOME-CANVAS-SELECT-1` | 단일 선택·이동·크기·회전 | Studio만 | 미착수 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
@@ -299,13 +300,19 @@ vendor 단계)의 일이다.
 
 ### `HOME-CANVAS-CONTRACT-1`
 
-> **1B(데이터 계약) 완료 — 2026-09-21.** 확정된 내용은
+> **1B(데이터 계약) · 1C(`baseHeight`) 완료 — 2026-09-21.** 확정된 내용은
 > [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 에
 > 있다. 아래 목록 중 "렌더링과 편집의 속성 소유권 표"까지가 그 문서 §1·§8 이고,
 > "조작 UI 를 만들지 않는다"도 지켰다. 이 문서의 §4 예시는 **비규범**이었고,
-> 확정된 모양은 그 예시와 두 곳이 다르다 — `settings` 대신 `canvas` 아래
-> `version`/`baseWidth`/`elements` 셋이고, **`z` 필드는 두지 않는다**(배열 순서가
-> 앞뒤 순서다).
+> 확정된 모양은 그 예시와 세 곳이 다르다 — `settings` 대신 `canvas` 아래
+> `version`/`baseWidth`/`baseHeight`/`elements` 넷이고, **`z` 필드는 두지 않으며**
+> (배열 순서가 앞뒤 순서다), 예시의 `settings.minHeight: 760` 자리는
+> **`canvas.baseHeight`(기본 844)** 가 대신한다 — "최소" 가 아니라 **도화지
+> 전체의 세로 길이**이고, 요소 위치로 자동 계산하지 않는다(계약 문서 §4-1).
+> 예시의 `settings.background` 는 아직 계약에 없다(그 문서 §8).
+>
+> `1C` 가 `1B` 계약을 바꾸지는 않았다 — 알 수 없는 필드 보존 · 미래 version
+> fallback · non-mutation · 세 갈래 fallback 은 전부 그대로다.
 
 - 기존 `regions`, templates, images, direct edit 규칙을 조사한다.
 - 저장 위치와 스키마를 정한다.
@@ -458,6 +465,9 @@ vendor 단계)의 일이다.
 | 캔버스는 새 최상위 필드가 아니라 `regions` 의 `home_canvas` 항목에 저장한다 | 확정 | `CONTRACT-1B` |
 | 표시 위치는 HOME 안 `data-imory-canvas-root` **정확히 하나**다 | 확정 | `CONTRACT-1B` |
 | 앞뒤 순서는 배열 순서다 — `z` 필드를 두지 않는다 | 확정 | `CONTRACT-1B` |
+| 도화지 전체의 세로 길이는 `canvas.baseHeight`(v1 필수 · 양수 · 기본 844)이고, **요소 위치로 자동 계산하지 않는다** | 확정 | `CONTRACT-1C` |
+| 요소가 Canvas 경계를 벗어나는 것을 **데이터 계약이 금지하지 않는다** — 넘친 것을 자를지 늘릴지 스크롤할지는 Renderer 가 정한다 | 확정 | `CONTRACT-1C` |
+| 데스크톱·모바일별 별도 Canvas 높이 | 미정 | `RESPONSIVE-1` |
 | 시각 스타일은 캔버스 JSON 이 아니라 스킨 CSS 가 갖는다(`data-imory-edit-id` 선택자) | 확정 | `CONTRACT-1B` |
 | 요소 id 는 `data-imory-edit-id` 규칙을 따른다(`canvas_` 접두 — UUID 는 숫자로 시작할 수 있다) | 확정 | `CONTRACT-1B` |
 | 보존용 원본과 실행용 payload 를 가른다(실행은 strict allowlist) | 확정 | `CONTRACT-1B` |

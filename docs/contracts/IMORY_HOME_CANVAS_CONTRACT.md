@@ -4,7 +4,7 @@
 > **§11 은 아직 구현되지 않았다** — 앞으로 Renderer 와 편집 UI 가 지켜야 할
 > 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
 >
-> 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21).
+> 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -33,6 +33,11 @@ HOME 을 한 폭짜리 디자인 캔버스로 꾸미는 기능의 **데이터 �
 지금 성립하는 것은 이것뿐이다: 캔버스 데이터가 SkinPackage 안에 있을 수 있고,
 Import · Export · Save · 다시 열기 · Publish · AI 수정 · sandbox 봉투를 지나도
 **한 칸도 잃지 않으며**, 잘못된 데이터가 조용히 고쳐지거나 지워지지 않는다.
+
+`1C` 가 여기에 하나를 더했다 — 도화지 전체의 세로 길이 `baseHeight`(§4-1).
+`1B` 에는 요소마다의 높이만 있고 **캔버스 자체가 어디까지인가**가 없었다.
+그 한 칸 말고는 `1B` 계약이 그대로다(알 수 없는 필드 보존 · 미래 version
+fallback · non-mutation · 세 갈래 fallback 전부 불변).
 
 ---
 
@@ -68,6 +73,7 @@ v1 에서 구현한 것은 `home_canvas` 하나다.
       "canvas": {
         "version": 1,
         "baseWidth": 390,
+        "baseHeight": 844,
         "elements": []
       }
     }
@@ -132,6 +138,7 @@ fallback 표 — 지금 코드가 그대로 따른다.
 | 규칙 | 값 |
 | --- | --- |
 | `baseWidth` | `390` 고정 |
+| `baseHeight` | 양수(고정값 아님). 새 캔버스 기본 `844` — §4-1 |
 | `x` · `y` | Canvas 왼쪽 위 기준 |
 | `width` | 양수 |
 | `height` | §6 |
@@ -145,6 +152,43 @@ fallback 표 — 지금 코드가 그대로 따른다.
 
 데스크톱 전용 별도 좌표와 breakpoint override 는 이번에 만들지 않았다
 (`HOME-CANVAS-RESPONSIVE-1`).
+
+### 4-1. `baseHeight` — 도화지 전체의 세로 길이 (`CONTRACT-1C`)
+
+`1B` 에는 요소마다의 `height` 는 있었지만 **도화지 자체가 어디까지인가**가
+없었다. 그래서 다음을 안정적으로 정할 수 없었다.
+
+- 요소가 하나도 없는 빈 Canvas 의 높이
+- HOME 의 의도된 마지막 지점과 아래쪽 디자인 여백
+- 한 화면형 Canvas 와 긴 스크롤형 Canvas 의 구분
+- 편집기에서 도화지 전체 높이를 늘리거나 줄이는 기능
+
+| 규칙 | |
+| --- | --- |
+| 타입 | 유한한 **양수**(상한은 좌표와 같은 100000 — 요소가 못 나가는데 도화지만 클 이유가 없다) |
+| 필수 여부 | **v1 필수 필드** |
+| 새 Canvas 기본값 | `844`(390×844 = 한 화면형) |
+| 요소의 `height` 와 | **별개다.** `baseHeight` 는 "캔버스가 어디까지인가", 요소 `height` 는 "그 요소가 얼마나 큰가" |
+| 요소가 없을 때 | 그래도 캔버스는 `baseHeight` 를 갖는다 |
+| 오류 경로 | `regions[n].canvas.baseHeight` |
+
+- **요소의 가장 아래 좌표로 자동 계산하지 않는다.** 그렇게 하면 아래쪽에 일부러
+  둔 여백이 사라지고, 요소를 하나 옮길 때마다 페이지 전체 높이가 예기치 않게
+  바뀐다.
+- **요소가 Canvas 경계를 일부 벗어나는 것을 데이터 계약이 금지하지 않는다.**
+  넘친 것을 어떻게 다룰지(자르기 · 늘리기 · 스크롤)는 Renderer 계약의 몫이다.
+- 실제 viewport 에 맞춰 확대·축소하거나 스크롤하게 만드는 방식도 Renderer
+  계약에서 정한다(§11-1).
+- 향후 Studio 에서 주인이 이 값을 직접 조정할 수 있다 — 그 UI 는 아직 없다.
+- **데스크톱·모바일별 별도 높이는 이번에 추가하지 않았다**(`RESPONSIVE-1`).
+
+**왜 필수인가.** 지금까지 저장된 실제 사용자 Canvas 데이터가 **하나도 없다.**
+그래서 옵션으로 둘 이유가 없고, 빠진 것을 조용히 `844` 로 채우면 "한 화면형으로
+만든 캔버스"와 "높이를 안 적은 캔버스"가 파일만 보고 구분되지 않는다. 누락된
+새 Import 는 위 경로와 함께 **거부**한다.
+
+`baseHeight` 는 보존용 원본과 실행용 payload **양쪽 모두**에 실린다. 실행용
+payload 는 `baseWidth` 와 달리 상수가 아니라 **저장된 그 값**을 그대로 싣는다.
 
 ---
 
@@ -364,6 +408,19 @@ sandbox 봉투는 그 payload 를 `skin-sandbox-protocol.js` 의
 
 ## 10. 이번에 바꾼 파일
 
+### `1C` (baseHeight)
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/skin-home-canvas.js` | `SKIN_HOME_CANVAS_BASE_HEIGHT`(844) · 필수 검증 · 실행 payload · 빈 캔버스 기본값 |
+| `skin/sandbox/skin-sandbox-protocol.js` | 봉투 allowlist 에 `baseHeight` 추가 — **이걸 빼면 봉투가 캔버스를 통째로 거부한다**(strict allowlist 라서 새 칸이 곧 거부 사유가 된다) |
+| `skin/skin-home-canvas-test.mjs` · `studio/studio-home-canvas-e2e-test.mjs` | `[baseheight]` 절과 왕복 검증 |
+
+`1C` 는 그 외 어떤 파일도 고치지 않았다 — `regions` 를 통째로 보존하는
+Import·Export·Save·Publish·AI 경로는 새 칸이 생겨도 그대로 지나간다.
+
+### `1B` (계약 전체)
+
 | 파일 | 무엇 |
 | --- | --- |
 | `skin/skin-home-canvas.js` | **새 파일** — 계약 · 검증 · 보존 · 실행 payload 의 단일 원천 |
@@ -396,6 +453,9 @@ Save 는 스프레드). 테스트가 그 사실을 못박는다.
 - 배열 순서가 곧 앞뒤 순서다(`z` 필드를 새로 만들지 않는다).
 - `baseWidth: 390` 저장 좌표를 실제 화면 폭으로 변환한다 — 변환 규칙 자체가
   아직 정해지지 않았다(§11-3).
+- `baseHeight` 를 실제 화면에서 어떻게 쓸지 정한다 — viewport 에 맞춰 확대·축소할지,
+  그대로 두고 스크롤할지, 요소가 그 밖으로 넘칠 때 자를지 늘릴지. **데이터 계약은
+  높이 숫자만 갖고 이 넷 중 무엇도 고르지 않았다**(§4-1).
 - Studio native / Studio sandbox / 공개 native / 공개 sandbox **네 화면**이 같은
   결과여야 한다.
 
