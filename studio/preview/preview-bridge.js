@@ -2392,21 +2392,39 @@ function ensureCanvasFrameController() {
 
             },
 
-            /* HOME-CANVAS-TRANSFORM-1A — 이동의 확정 **요청**.
-               확정이 아니다(위 머리말) — Studio 가 자기 draft 로
-               선택 · 순번 · expected · 범위를 다시 본다. */
+            /* HOME-CANVAS-TRANSFORM-1A · 1B — 이동 · 리사이즈의 확정
+               **요청**. 확정이 아니다(위 머리말) — Studio 가 자기
+               draft 로 선택 · 순번 · expected · 범위를 다시 본다.
+
+               ★ 옮기는 칸은 `kind` 가 정한다. 이동 요청에 width 칸을
+                 만들어 두면 Studio 의 "정확히 이 키들" 판정에 걸려
+                 메시지 전체가 거부된다(계약 §18-6). */
             onTransform: (request) => {
 
               if (!request || !request.expected || !request.next) {
                 return;
               }
 
+              const box =
+                (value) => {
+
+                  const out = { x: value.x, y: value.y };
+
+                  if (request.kind === "resize") {
+                    out.width = value.width;
+                    out.height = value.height;
+                  }
+
+                  return out;
+
+                };
+
               postToParent({
                 type: PREVIEW_MSG_CANVAS_TRANSFORM,
                 kind: request.kind,
                 id: typeof request.id === "string" ? request.id : null,
-                expected: { x: request.expected.x, y: request.expected.y },
-                next: { x: request.next.x, y: request.next.y },
+                expected: box(request.expected),
+                next: box(request.next),
                 generation:
                   Number.isInteger(request.generation) && request.generation >= 0
                     ? request.generation
@@ -2569,6 +2587,10 @@ function routeCanvasGeometryMessage(data) {
     window.isValidInspectorEditId(data.id) &&
     Number.isFinite(data.x) &&
     Number.isFinite(data.y) &&
+    /* HOME-CANVAS-TRANSFORM-1B — 크기가 없으면 조작할 수 있는 단독
+       선택이 아니다. `height` 는 숫자이거나 `"auto"` 다. */
+    Number.isFinite(data.width) && data.width > 0 &&
+    (data.height === "auto" || (Number.isFinite(data.height) && data.height > 0)) &&
     data.baseWidth > 0 &&
     data.baseHeight > 0;
 
@@ -2577,6 +2599,8 @@ function routeCanvasGeometryMessage(data) {
     id: active ? data.id : null,
     x: active ? data.x : 0,
     y: active ? data.y : 0,
+    width: active ? data.width : 0,
+    height: active ? data.height : 0,
     baseWidth: active ? data.baseWidth : 0,
     baseHeight: active ? data.baseHeight : 0,
     generation:

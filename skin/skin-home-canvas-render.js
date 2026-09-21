@@ -256,6 +256,147 @@ function restoreSkinCanvasElementPositionVars(el, saved) {
 
 
 /* =========================================================
+   0-2. 크기를 쓰는 **한 곳** (HOME-CANVAS-TRANSFORM-1B)
+
+   ★ 요소 하나의 geometry 를 쓰는 함수는 이 파일에 **하나**다.
+
+   아래 applySkinCanvasElementBox() 는 렌더러가 요소를 처음 만들 때
+   (buildSkinCanvasElementNode) 와 편집기가 리사이즈 중 임시로 고칠
+   때 **둘 다** 부르는 그 함수다. 백분율 · 자릿수 · `height:"auto"`
+   판정을 두 벌 두지 않기 위한 것이고, 이것이 없는 문서에서는
+   편집기가 **리사이즈를 켜지 않는다**.
+
+   ★ `height` 는 숫자이거나 `"auto"` 다.
+
+   숫자면 `--imory-canvas-height` 와 `data-imory-canvas-height="fixed"`,
+   `"auto"` 면 그 칸을 **지우고** `"auto"` 로 적는다(계약 §6). 둘 다
+   한 함수 안에 있어야 "숫자로 바뀌었는데 속성은 auto 로 남았다"가
+   생기지 않는다.
+
+   ★ transform 을 건드리지 않는다 — 회전은 `--imory-canvas-rotation`
+     이 갖고 있고 이 함수는 네 칸만 쓴다.
+========================================================== */
+
+function applySkinCanvasElementBox(el, box, baseWidth, baseHeight) {
+
+  if (!el || !el.style || !box) {
+    return false;
+  }
+
+  const left =
+    skinCanvasRenderPercent(box.x, baseWidth);
+
+  const top =
+    skinCanvasRenderPercent(box.y, baseHeight);
+
+  const width =
+    skinCanvasRenderPercent(box.width, baseWidth);
+
+  if (left === null || top === null || width === null) {
+    return false;
+  }
+
+  /* 숫자 높이는 비율까지 만들어 본 뒤에 쓴다 — 하나라도 만들 수
+     없으면 **한 칸도 쓰지 않는다**(반쪽만 적용된 geometry 금지) */
+  const fixedHeight =
+    isSkinCanvasRenderNumber(box.height)
+      ? skinCanvasRenderPercent(box.height, baseHeight)
+      : null;
+
+  if (isSkinCanvasRenderNumber(box.height) && fixedHeight === null) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.x, left);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.y, top);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.width, width);
+
+  if (fixedHeight !== null) {
+
+    el.setAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR, "fixed");
+
+    setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.height, fixedHeight);
+
+  } else {
+
+    /*
+      `"auto"` — 고정 높이를 주지 않는다. 내용이 정한다(계약 §6).
+      ★ 칸을 **지운다**. 남겨 두면 나중에 CSS 가 그 변수를 다시
+        읽게 되는 날 옛 높이가 되살아난다.
+    */
+    el.setAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR, "auto");
+
+    setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.height, null);
+
+  }
+
+  return true;
+
+}
+
+
+/*
+  setSkinCanvasElementBox(el, box, baseWidth, baseHeight)
+
+  편집기가 부르는 이름. 위 함수 그대로다 — 렌더러 쪽 이름과 편집기
+  쪽 이름을 가르는 이유는, 편집기가 `window` 에서 찾는 이름이
+  하나로 고정되어야 "이 문서가 그 계산을 갖고 있는가"를 한 줄로
+  물어볼 수 있기 때문이다(editor-runtime 의 positionApi()).
+*/
+function setSkinCanvasElementBox(el, box, baseWidth, baseHeight) {
+
+  return applySkinCanvasElementBox(el, box, baseWidth, baseHeight);
+
+}
+
+
+/*
+  readSkinCanvasElementBoxVars(el) -> { x, y, width, height, heightMode }
+
+  지금 요소에 적혀 있는 **원본 문자열** 넷과 높이 모드. 제스처를
+  취소할 때 그대로 되돌려 쓰기 위한 것이라 숫자로 바꾸지 않는다 —
+  다시 파싱해서 다시 쓰면 한 번 버린 자릿수가 두 번 버려진다.
+*/
+function readSkinCanvasElementBoxVars(el) {
+
+  if (!el || !el.style) {
+    return null;
+  }
+
+  return {
+    x: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.x),
+    y: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.y),
+    width: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.width),
+    height: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.height),
+    heightMode: el.getAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR) || ""
+  };
+
+}
+
+
+function restoreSkinCanvasElementBoxVars(el, saved) {
+
+  if (!el || !el.style || !saved) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.x, saved.x || null);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.y, saved.y || null);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.width, saved.width || null);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.height, saved.height || null);
+
+  /* 높이 모드도 되돌린다 — `"auto"` 에서 숫자로 바꾸던 제스처를
+     취소하면 속성까지 `"auto"` 로 돌아가야 한다 */
+  if (saved.heightMode === "fixed" || saved.heightMode === "auto") {
+    el.setAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR, saved.heightMode);
+  }
+
+  return true;
+
+}
+
+
+/* =========================================================
    1. Context 읽기 — 기존 경로를 그대로 쓴다
 
    이미지는 이미 있는 이미지 슬롯(context.images), 카테고리는 이미
@@ -371,33 +512,22 @@ function buildSkinCanvasElementNode(doc, element, canvas, context) {
     node.setAttribute(SKIN_CANVAS_RENDER_EDIT_ID_ATTR, element.id);
   }
 
-  /* ── 좌표 ── */
+  /* ── 좌표와 크기 ──
 
-  setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_VARS.x,
-    skinCanvasRenderPercent(element.x, canvas.baseWidth));
+     ★ 편집기가 리사이즈 중에 부르는 그 함수다(§0-2). 백분율 ·
+       자릿수 · `height:"auto"` 판정을 여기 한 벌 더 적지 않는다 —
+       두 벌이 되면 한쪽만 고쳐지는 날 "끄는 동안"과 "다시 그린 뒤"
+       의 크기가 미세하게 달라진다.
 
-  setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_VARS.y,
-    skinCanvasRenderPercent(element.y, canvas.baseHeight));
+     height:"auto" 는 "높이를 적지 않는다"이지 "높이를 못 고친다"가
+     아니다(계약 §6). 고정 높이를 주지 않고 내용이 정하게 둔다. */
 
-  setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_VARS.width,
-    skinCanvasRenderPercent(element.width, canvas.baseWidth));
-
-  /*
-    height:"auto" 는 "높이를 적지 않는다"이지 "높이를 못 고친다"가
-    아니다(계약 §6). 고정 높이를 주지 않고 내용이 정하게 둔다.
-  */
-  if (isSkinCanvasRenderNumber(element.height)) {
-
-    node.setAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR, "fixed");
-
-    setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_VARS.height,
-      skinCanvasRenderPercent(element.height, canvas.baseHeight));
-
-  } else {
-
-    node.setAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR, "auto");
-
-  }
+  applySkinCanvasElementBox(
+    node,
+    { x: element.x, y: element.y, width: element.width, height: element.height },
+    canvas.baseWidth,
+    canvas.baseHeight
+  );
 
   /* 회전 중심은 요소 중심이다 — transform-origin 기본값이 그것이라
      따로 적지 않는다(적으면 스킨이 바꿀 여지만 줄어든다). */
@@ -735,6 +865,11 @@ if (typeof window !== "undefined") {
   window.readSkinCanvasElementPositionVars = readSkinCanvasElementPositionVars;
   window.restoreSkinCanvasElementPositionVars = restoreSkinCanvasElementPositionVars;
 
+  /* HOME-CANVAS-TRANSFORM-1B — 편집 runtime 이 **크기**를 쓰는 한 곳 */
+  window.setSkinCanvasElementBox = setSkinCanvasElementBox;
+  window.readSkinCanvasElementBoxVars = readSkinCanvasElementBoxVars;
+  window.restoreSkinCanvasElementBoxVars = restoreSkinCanvasElementBoxVars;
+
   window.compileSkinHomeCanvas = compileSkinHomeCanvas;
   window.clearSkinHomeCanvas = clearSkinHomeCanvas;
 
@@ -763,6 +898,10 @@ if (typeof module !== "undefined" && module.exports) {
     setSkinCanvasElementPosition,
     readSkinCanvasElementPositionVars,
     restoreSkinCanvasElementPositionVars,
+    applySkinCanvasElementBox,
+    setSkinCanvasElementBox,
+    readSkinCanvasElementBoxVars,
+    restoreSkinCanvasElementBoxVars,
     readSkinCanvasImageUrl,
     readSkinCanvasCategories,
 

@@ -1496,6 +1496,12 @@ Undo/Redo · Canvas Inspector 입력 필드 · 텍스트 편집 · 이미지 교
 바뀌는 것은 **`x` · `y` 두 칸뿐**이다. 크기 · 회전 · 그룹 이동 · 손가락
 이동은 이 라운드에 없다(§17-10).
 
+> **일부 변경됨 → §18(`HOME-CANVAS-TRANSFORM-1B`).** 그 라운드가 크기를
+> 더하면서 이 절의 셋이 넓어졌다 — `kind` 는 이제 `move` 하나가 아니고
+> (§17-7 · §17-8), 메시지에 `width` · `height` 가 함께 실리며(§18-9),
+> 손잡이가 생겼다(§18-11). **이동 자체의 규칙은 한 줄도 바뀌지
+> 않았다** — 아래를 그대로 읽어도 된다.
+
 ### 17-1. 관련 파일
 
 | 파일 | 이 라운드에서 하는 일 |
@@ -1615,10 +1621,16 @@ canvasDeltaY = frameDeltaY / scale
 취소되면 **시작할 때 적혀 있던 원본 문자열 두 개**를 그대로 되돌려 쓴다.
 숫자로 바꿔 다시 쓰지 않는다 — 한 번 버린 자릿수가 두 번 버려진다.
 
+> **읽기 · 되돌리기의 범위가 넓어졌다 → §18-5.** 지금은 제스처가
+> 무엇이었든 네 칸(+ 높이 모드)을 **한 벌로** 읽고 되돌린다
+> (`readSkinCanvasElementBoxVars` / `restore…`). 이동이 건드리지 않는 세
+> 칸은 되돌려도 그대로이므로 규칙 자체는 위와 같다.
+
 ### 17-5. 불변 수정 — 두 칸만 바뀐다
 
 `writeSkinHomeCanvasElementPosition(regions, id, next, expected)` 가 순수
-함수로 한다.
+함수로 한다(§18-6 부터 그 복사 규칙은 리사이즈와 공용인
+`writeSkinHomeCanvasElementFields` 가 맡는다 — 보존 범위는 같다).
 
 ```text
 regions[ name === "home_canvas" ].canvas.elements[ id === <선택> ].x
@@ -1662,7 +1674,8 @@ AI 적용 · 선택 변경 · 요소 삭제가 있었을 수 있고, 위조된 �
 (`commitStudioCanvasElementTransform`).
 
 1. Canvas 편집이 켜져 있다
-2. `kind` 는 `"move"` 하나
+2. `kind` 는 `"move"` 하나 — **변경됨 → §18-6** (`"resize"` 가 늘었고,
+   `kind` 가 `expected` · `next` 의 허용 키를 정한다)
 3. id 형태가 맞다
 4. 지금 선택이 **정확히 그 하나**이고 primary 도 그것
 5. 순번이 최신이다 — 늦게 도착한 옛 제스처를 버린다
@@ -1686,6 +1699,10 @@ AI 적용 · 선택 변경 · 요소 삭제가 있었을 수 있고, 위조된 �
 
 native 와 sandbox 가 **같은 부모 확정 함수**를 쓴다. 다른 것은 메시지가 가는
 길뿐이다.
+
+> **모양이 넓어졌다 → §18-9.** 아래 두 메시지에 `width` · `height` 가
+> 늘었고 `kind` 에 `resize` 가 더해졌다. 답에 요청 번호를 다는 규칙과
+> 아래 함정 셋은 그대로다.
 
 ```text
 canvas-geometry   부모 -> 프레임
@@ -1754,6 +1771,357 @@ Escape 는 **끄는 동안에만** 가로챈다. 그때는 그 키의 뜻이 "�
 교체 · Crop · 레이어 목록 · effect hook · preset · widget · 좌우 패널 Canvas
 — **하나도 없다.**
 
+> **셋이 채워졌다 → §18.** 크기 조작 · 손잡이는 `TRANSFORM-1B` 가
+> 더했다(§18-1 · §18-11). 나머지는 그대로 없고, 그 목록은 §18-13 이
+> 다시 적는다.
+
 저자 CSS/JS 가 geometry 를 강제로 덮는 경우의 최종 우선순위는
 `HOME-CANVAS-EFFECT-HOOK-1` 에서 정한다. 이번에는 **기존 transform 을
 파괴하지 않는 것**까지만 보장한다.
+
+
+---
+
+## 18. 단일 요소 리사이즈 (`HOME-CANVAS-TRANSFORM-1B`)
+
+`1A`(§17)가 연 길을 그대로 쓴다. 바뀌는 것은 **소유하는 칸이 둘에서
+넷으로 늘었다**는 것뿐이다 — `x` · `y` · `width` · `height`.
+
+회전 조작 · 그룹 조작 · Shift 비율 고정 · Alt 중심 확대 · flip · 스냅 ·
+키보드 · Inspector 숫자 입력은 이 라운드에 없다(§18-13).
+
+### 18-1. 관련 파일과 켜지는 조건
+
+| 파일 | 이 라운드에서 하는 일 |
+| --- | --- |
+| `skin/skin-home-canvas-render.js` | `applySkinCanvasElementBox()` — 네 칸과 `height` 모드를 쓰는 **한 곳**(§18-5). 요소를 처음 만들 때도 이 함수다 |
+| `skin/skin-home-canvas.js` | `writeSkinHomeCanvasElementBox()` — 순수 불변 수정. `writeSkinHomeCanvasElementPosition()` 과 **같은 복사 규칙**을 공유한다(`writeSkinHomeCanvasElementFields`) |
+| `skin/skin-home-canvas-editor-runtime.js` | 손잡이 · 제스처 · 임시 크기 · 확정 요청 · 취소 (두 프레임 공용) |
+| `skin/skin-inspect-target.js` | `inspectorEditChromeAncestor()` — "이 입력은 Inspector 의 것이 아니다"(§18-11) |
+| `studio/preview/preview-inspect-direct.js` · `skin/sandbox/skin-sandbox-inspect.js` | 그 판정을 실제로 쓰는 두 realm |
+| `studio/inspector/studio-canvas-selection.js` | `commitStudioCanvasElementTransform()` — `kind` 가 하나 늘었다(§18-6) |
+| `studio/studio-preview.js` | `setStudioCanvasElementBox()` — draft · 기록 · dirty · 다시 그리기 |
+| `skin/sandbox/skin-sandbox-protocol.js` · `-host.js` · `-frame.js` | 메시지 둘에 크기가 늘었다(§18-9) |
+
+켜지는 조건은 **이동과 똑같다**(§17-1 의 일곱). 관문 함수도 하나다
+(`dragGate()`) — 둘이 요구하는 것이 같기 때문이다. 다른 것은 제스처가
+그 값에서 무엇을 바꾸는가뿐이다.
+
+단독 선택에서 손잡이 여덟(`nw` `n` `ne` `e` `se` `s` `sw` `w`)을
+표시한다. **여럿을 고르면 손잡이가 없다** — 그룹 리사이즈는 다음
+단계다.
+
+> **함정 — able 은 처음부터 켜고, 손잡이 목록으로 여닫는다.**
+> `resizable` 을 나중에 켜면 그 렌더 뒤에야 손잡이의 gesto 가
+> 만들어진다 — §17-1 의 `draggable` 함정과 같은 사정이다. 그래서
+> `resizable: true` 로 만들어 두고 그룹에서는 `renderDirections` 를
+> **빈 배열**로 준다. 그것은 그리기에만 쓰이므로 setState 의 지연이
+> 문제가 되지 않고, 잡을 손잡이가 아예 없으니 그룹에서는 리사이즈가
+> 시작될 수 없다.
+
+> **함정 — DOM 에 남아 있는 손잡이와 잡을 수 있는 손잡이는 다르다.**
+> 0.53.0 은 target 을 풀면 control box 를 `display:none` 으로 만들 뿐
+> **자식 손잡이를 지우지 않는다**(2026-09-21 실측: 선택이 비었는데
+> 노드는 여덟 그대로였다). 그래서 "여럿을 고르면 손잡이가 없다"를
+> 노드 수로 세면 틀린 답이 나온다 — 진단과 테스트는
+> `getClientRects().length` 로 **화면에 실제로 있는 것**만 센다.
+
+### 18-2. 자유 비율 · 최소 크기 · 상한
+
+- 가로와 세로를 독립적으로 바꾼다. 여덟 손잡이가 모두 동작한다.
+- 요소를 도화지 경계 안으로 **자동 clamp 하지 않는다**. `x` · `y` 는
+  계속 음수를 허용한다.
+- `width` 와 숫자 `height` 는 양수여야 하고, 최소는 Canvas 좌표
+  기준 **1** 이다.
+- 상한은 계약의 기존 자를 그대로 쓴다(`±100000` — §5).
+- 저장값은 **소수점 셋째 자리**까지. 정확한 정수면 정수 그대로다.
+- 배열 순서 · `rotation` · `props` · 알 수 없는 필드는 바뀌지 않는다.
+
+사진 · 스티커 · 로고의 이미지가 비틀어지지 않는 것은 기존
+`object-fit: cover` 구조가 그대로 남아 있기 때문이다(§12). 이 라운드가
+바꾸는 것은 **요소 프레임의 크기**다.
+
+> Moveable 은 자기 계산에서 크기를 `0` 에서 멈추고 우리는 `1` 에서
+> 멈춘다. 그래서 요소를 한계까지 줄인 그 순간에는 반대편 기준점이
+> 최대 1 Canvas 단위만큼 어긋날 수 있다. 실사용 범위가 아니므로
+> 맞추지 않았다.
+
+### 18-3. `height:"auto"` — 언제 숫자가 되는가
+
+`"auto"` 는 "높이를 적지 않는다"이지 "높이를 못 고친다"가 아니다(§6).
+
+| 손잡이 | 결과 |
+| --- | --- |
+| `e` · `w` | `width` 와 필요한 `x` 만 바꾸고 **`"auto"` 유지** |
+| `n` · `s` · 네 모서리 | 실제 세로 변화가 있으면 **숫자 높이로 전환** |
+
+전환 조건은 **둘 다** 참일 때다.
+
+1. 세로가 움직일 수 있는 손잡이였다(`direction[1] !== 0`)
+2. 실제 세로 변화가 0 이 아니다
+
+(1)만 보면 모서리를 잡고 가로로만 끌어도 숫자가 되고, (2)만 보면
+단순 클릭의 미세한 떨림이 숫자로 바꾼다.
+
+기준 높이는 **그 순간 화면에 그려진 실제 세로 길이**를 Canvas 좌표로
+환산한 값이다. 저장된 숫자가 없으므로 화면에서 한 번 재는 것이 유일한
+출발점이다.
+
+> **재는 자는 computed `height` 다.**
+> `getBoundingClientRect()` 를 쓰지 않는다 — 회전한 요소에서 그것은
+> 축에 정렬된 바깥 상자라 요소의 세로 길이가 아니다. computed
+> `height` 는 회전과 무관한 레이아웃 값이고, 그것이 곧 우리가
+> `--imory-canvas-height` 로 쓰는 그 칸의 단위다.
+
+한 번 숫자가 된 요소를 **자동으로 `"auto"` 로 되돌리지 않는다.**
+`내용에 맞추기` UI 는 뒤의 Inspector 단계다. 다만 Undo 하면 정확히
+`"auto"` 로 돌아간다(§18-7).
+
+`"auto"` 를 유지하는 좌우 리사이즈에서는 높이 칸을 화면에도 쓰지
+않는다 — 폭이 바뀌어 줄바꿈이 달라진 만큼 브라우저가 다시 계산한다.
+그동안 Moveable 의 바깥 상자는 시작 높이에 머물러 있다(제스처 도중에
+`updateRect()` 를 부르지 않기 때문이다 — §17-4). 손을 놓으면 다시
+그린 DOM 에 붙으면서 맞는다.
+
+### 18-4. 픽셀을 Canvas 좌표로 — Moveable 이 준 것을 쓴다
+
+배율은 이동과 같다(§17-3 — 도화지의 가로폭 하나, 부모 Preview 의
+`transform: scale()` 은 다시 적용하지 않는다).
+
+```text
+dw = e.dist[0] / scale                    width  의 누적 변화
+dh = e.dist[1] / scale                    height 의 누적 변화
+x  = 시작 x + e.drag.beforeTranslate[0] / scale
+y  = 시작 y + e.drag.beforeTranslate[1] / scale
+```
+
+- `resizeStart` 에서 네 칸을 snapshot 하고, 이후에는 언제나 **시작값 +
+  누적 변화**다. 직전 이벤트의 값에 더하지 않으므로 이벤트 수와
+  무관하고 반올림이 쌓이지 않는다.
+- 배율도 `resizeStart` 에서 한 번 재고 그 제스처 동안 유지한다.
+
+> **★ 삼각함수를 새로 적지 않았다.**
+> 회전한 요소에서 반대편 기준점을 유지하려면 요소의 **중심**이
+> 움직여야 한다(회전 중심이 중심이므로). 그 양은 Moveable 이 이미
+> 계산해 준다 — `drag.beforeTranslate` 다. 그 값은
+> `transform: translate(tx,ty) rotate(θ)` 의 앞 translate 이므로
+> **부모 좌표계**의 양이고, 우리 요소는 그 좌표계에서 `left` · `top`
+> 으로 놓여 있다. 그래서 `x` · `y` 에 **그대로 더하면** 된다.
+>
+> 2026-09-21 실측(20° · 45°, `e` · `n` · `nw` · `se`)에서 그 값이 중심
+> 회전 공식과 소수점까지 같았고, 고정되어야 하는 반대편 기준점은
+> **0.9px 안에서** 유지됐다(그 오차는 렌더러가 백분율을 여섯 자리에서
+> 자르기 때문이다).
+
+> **★ 크기는 `dist` 다 — `width` · `height` 는 쓰지 않는다.**
+> 0.53.0 의 resize payload 에서 `width` · `height` · `boundingWidth` 는
+> 우리처럼 `style.width` 를 적용하지 않는 사용법에서는 **시작값에
+> 머문다**(2026-09-21 실측: 40px 를 끌어 `dist:[40,0]` 인데 `width` 는
+> 그대로 90). `dist` 는 요소 **자기 축**에서의 누적 크기 변화이므로
+> 회전과 무관하고, delta 라서 padding · border 같은 box model 차이도
+> 상쇄된다.
+
+> **★ 끄는 동안 크기를 실제로 적용해도 `dist` 는 선형이다.**
+> Moveable 은 기준점을 `resizeStart` 에서 잡아 두고 그 뒤로는 포인터
+> 이동만 보므로, 우리가 적용한 크기를 두 번 세지 않는다(실측으로
+> 확인했다 — 그렇지 않았다면 끌 때마다 가속됐을 것이다).
+
+### 18-5. 끄는 동안에는 아무것도 저장되지 않는다
+
+드래그 중에 움직이는 것은 **프레임 안의 custom property 넷과 높이
+모드 속성**뿐이다.
+
+- Canvas JSON · working draft · Undo 기록 · 스킨 CSS — 한 글자도
+  바뀌지 않는다.
+- `rotation` 을 덮어쓰지 않는다. 임시 `translate()` 를 덧붙이지도
+  않는다 — 렌더러와 **같은 칸들**을 갱신한다.
+- 그 칸들을 쓰는 함수는 렌더러의 것 하나다
+  (`applySkinCanvasElementBox` — §18-1). 편집기가 백분율 · 자릿수 ·
+  `"auto"` 판정을 복제하지 않고, 그 함수가 없는 문서에서는
+  **리사이즈도 이동도 켜지 않는다**.
+- 읽기 · 되돌리기도 네 칸을 **한 벌로** 한다
+  (`readSkinCanvasElementBoxVars` / `restore…`). 이동에서도 같은 쌍을
+  쓴다 — 제스처마다 되돌리는 범위가 갈라지면 "크기를 바꾸다 취소한
+  뒤 위치만 돌아왔다"가 생긴다.
+- 취소되면 **시작할 때 적혀 있던 원본 문자열들**을 그대로 되돌려
+  쓴다(높이 모드 속성까지). 숫자로 바꿔 다시 쓰지 않는다.
+
+제스처가 정상 종료될 때만 부모에 한 번 확정을 요청한다. 그 요청 ·
+기다림 · 요청 번호 · 상한 시간은 이동과 **한 벌**이다
+(`sendTransform()`).
+
+### 18-6. 부모 확정 — `kind` 가 소유하는 칸을 정한다
+
+```text
+canvas-transform  프레임 -> 부모
+  { kind, id, expected, next, generation, requestId }
+
+  kind "move"     expected · next = { x, y }
+  kind "resize"   expected · next = { x, y, width, height }
+```
+
+`height` 는 기존 값과 다음 값 모두 숫자이거나 `"auto"` 다.
+
+부모는 확정 전에 **처음부터 다시** 본다(§17-7 의 그 아홉을 넓힌 것이다).
+
+1. Canvas 편집이 켜져 있다
+2. `kind` 는 `"move"` 또는 `"resize"`
+3. id 형태가 맞다
+4. 지금 선택이 **정확히 그 하나**이고 primary 도 그것
+5. 순번이 최신이다
+6. 그 요소가 지금 draft 에 있고 hidden 도 locked 도 아니다
+7. `expected` · `next` 는 그 `kind` 가 소유한 칸뿐이고 유한한 숫자다
+8. 지금 draft 의 그 칸들이 `expected` 와 **정확히** 같다
+9. `next` 가 계약의 좌표 · 크기 범위 안이고, `width` 와 숫자
+   `height` 가 양수다
+10. `"auto"` 는 그 요소의 type 이 허용할 때만이다(§6 — `text` ·
+    `category_nav`)
+
+> **모르는 키는 버리지 않고 거부한다.** 리사이즈 요청에 `rotation`
+> 이 섞이면 메시지 전체가 버려지고, **반대로** 리사이즈 요청에 좌표
+> 둘만 실려 와도 버려진다. `kind` 마다 소유하는 모양이 하나이므로
+> 서로의 자리에 들어갈 수 없다(§17-7 의 그 함정을 양방향으로 넓힌
+> 것이다).
+
+> **네 칸이 한 요청이다.** 폭만 바뀌는 좌우 리사이즈에서도 `x` · `y` ·
+> `height` 가 함께 온다(값이 같을 뿐이다). 칸마다 메시지를 가르면
+> "폭은 저장됐는데 x 는 안 됐다"는 중간 상태가 생긴다.
+
+성공하면 한 요소의 네 칸만 불변 방식으로 바뀐다. element id · type ·
+`rotation` · hidden · locked · `props` · 모르는 element 필드 · 다른
+요소 · 배열 순서 · 다른 regions 항목 · 모르는 region/canvas 필드는
+전부 보존된다. 입력 SkinPackage 를 제자리에서 고치지 않는다.
+
+그 복사 규칙은 이동과 **같은 함수**가 한다
+(`writeSkinHomeCanvasElementFields`) — 둘로 나뉘면 서로의 보존 범위가
+서서히 달라지고, 달라지는 쪽은 늘 느슨한 쪽이다.
+
+### 18-7. Undo · Redo
+
+이동과 같다(§17-6). 한 번의 리사이즈 제스처가 Undo 한 칸이고, 변화 0
+과 거부는 기록을 만들지 않는다. 기존 Studio history 를 그대로 쓴다
+(`captureStudioWorkingChange` / `recordStudioWorkingChange`).
+
+- Undo 하면 리사이즈 전 네 칸으로, Redo 하면 뒤 값으로 돌아간다.
+- **`"auto"` 에서 숫자로 바뀐 리사이즈를 Undo 하면 정확히 `"auto"` 로
+  돌아간다** — JSON 도, 화면의 `data-imory-canvas-height` 속성도.
+- Undo · Redo 뒤에도 선택 ID 는 유지되고, 다시 그려진 DOM 에 Moveable
+  target 과 손잡이 여덟이 다시 붙는다.
+
+### 18-8. 취소
+
+§17-9 그대로다 — Escape · pointercancel · 프레임 교체 · HOME 이탈 ·
+Select 종료 · 선택 변경 · 요소 삭제 · Canvas 비활성화 · **시작 값이
+달라짐**(Undo · Import) · 부모 거부 · vendor/runtime 오류.
+
+> 시작 값 비교는 이제 **네 칸을 모두** 본다. 이동 중에 폭이 달라졌다는
+> 것도 "그 사이에 draft 가 바뀌었다"이고, 그때의 이동은 이미 옛 화면을
+> 근거로 한 것이다.
+
+늦게 도착한 성공 · 실패 응답이 최신 상태를 덮어쓰지 않는 장치도 그대로
+다 — 답에는 요청 번호가 붙고, 프레임은 자기 번호와 같은 답에만
+반응한다(§17-8).
+
+### 18-9. 메시지
+
+```text
+canvas-geometry   부모 -> 프레임
+  { active, id?, x?, y?, width?, height?,
+    baseWidth?, baseHeight?, generation, answering? }
+```
+
+`width` · `height` 는 `active` 면 **반드시 있다** — 프레임은 크기를
+모르는 채로 리사이즈를 시작할 수 없다. `height` 는 숫자이거나
+`"auto"` 다. 단독 선택이 아닐 때는 `active:false` 로 내려가고 나머지
+칸은 **아예 없다**(크기 칸까지).
+
+크기가 **내려가야 하는** 이유는 좌표와 같다(§17-8) — 렌더러가 써 넣은
+백분율은 이미 여섯 자리에서 자른 값이라 거꾸로 풀면 원본이 아니다.
+
+sandbox 메시지 층의 검사: 알려진 키만 · `kind` 는 `move` · `resize` 두
+이름 · id 형태 · 좌표와 크기의 유한성 · 양수 · 상한 · `"auto"` 문자열
+하나(`"AUTO"` · `"100px"` 는 거부) · origin · source · `renderSeq`.
+
+native 와 sandbox 가 **같은 부모 확정 함수**를 쓴다. 2026-09-21 실측에서
+같은 픽셀 제스처의 최종 JSON 이 두 경로에서 **같은 숫자**였다(`width`
+114.375, `"auto"` 전환 높이 22.75).
+
+### 18-10. 화면 배율 · 스크롤
+
+- 도화지 폭이 390 이 아니어도(배율 1.477 · 2.462 실측) 픽셀이 Canvas
+  좌표로 환산된다.
+- 부모 Preview 에 `transform: scale(0.8)` 이 걸려 있어도 **두 번
+  보정하지 않는다** — 프레임 안의 좌표계에서 둘 다 같은 배율을 받으므로
+  나누면 사라진다(§17-3).
+- Preview 내부를 스크롤한 뒤에도 손잡이 자리와 좌표가 맞는다.
+
+> **함정(테스트) — sandbox 에서 스크롤하는 것은 프레임이 아니다.**
+> 프레임 구조가 parent → `#studioPreviewFrame` → `.imory-skin-sandbox-frame`
+> 이고, 안쪽 sandbox iframe 은 자기 내용 높이만큼 늘어나 있어 **스스로
+> 스크롤하지 않는다**. 그 안에서 `window.scrollBy` 를 불러도 아무 일도
+> 일어나지 않는다 — 2026-09-21 에 그것 때문에 화면 밖 좌표로 클릭해
+> sandbox 의 두 번째 선택이 되지 않았고, 여전히 고른 채였던 앞 요소를
+> 리사이즈하고 있었다. 밀어야 하는 것은 **Preview 문서**다.
+
+### 18-11. 손잡이의 hit area — 편집 UI 는 Inspector 의 것이 아니다
+
+control box 는 `pointer-events: none` 이다(§15-7) — 요소의 가장자리를
+정확히 누른 클릭이 스킨 DOM 에 닿아야 하기 때문이다. 그 값은
+상속되므로 손잡이도 함께 꺼진다(0.53.0 의 `.control` 규칙에는
+pointer-events 가 아예 없다 — 번들 실측).
+
+그래서 **리사이즈 손잡이에만** `auto` 를 되돌려 준다. 테두리 네 줄과
+그룹의 `.moveable-area` 는 그대로 꺼 둔다. CSSOM 으로 쓰는 인라인 값은
+CSP 의 style-src 검사를 받지 않으므로(검사 대상은 마크업의 style
+**속성**이다) 우리 몫의 `<style>` 을 새로 만들지 않는다.
+
+손잡이 **요소 자체**는 방향 목록이 바뀔 때 새로 만들어지므로, target 이
+바뀔 때와 따라가기 루프(rAF)에서 다시 쓴다(여덟 노드다).
+
+> **★ 그 순간 Inspector 가 끼어든다.**
+>
+> `1A` 까지 control box 는 통째로 `pointer-events: none` 이라 어떤
+> 입력의 대상도 아니었다. 손잡이가 그것을 되돌려 받자마자, 손잡이를
+> 누른 pointerdown · click · dblclick · hover 가 Inspector 에도
+> 닿는다. 그대로 두면 손잡이 아래에 깔린 것이 새로 골라지거나(모서리
+> 손잡이는 요소 밖에 반쯤 걸쳐 있다) 아무것도 없는 자리로 읽혀
+> **선택이 풀리고**, 방금 시작한 리사이즈가 그 자리에서 취소된다.
+> sandbox 는 **pointerdown** 에서 고르므로 움직이기도 전에 그렇게 된다.
+>
+> 그래서 세 realm 이 함께 쓰는 파일에 판정 하나를 둔다
+> (`skin/skin-inspect-target.js` `inspectorEditChromeAncestor()` —
+> control box 의 `data-imory-canvas-frame` 표식을 찾는다). 그것이
+> 무언가를 돌려주면 Inspector 는 **아무 일도 하지 않고 빠져나간다** —
+> 선택을 풀지도, 다시 고르지도, 오류를 알리지도 않는다.
+>
+> "고를 것이 없다"가 아니라 **"내 입력이 아니다"** 다. 그 입력의 주인은
+> Moveable 이고, 그쪽은 `mousedown` · `touchstart` 로 받는다(0.53.0 은
+> pointer 이벤트를 쓰지 않는다 — 번들 실측). Inspector 가 비켜서기만
+> 하면 둘이 싸우지 않는다.
+
+Selecto 는 이미 `isMoveableElement()` 로 control 에서 시작한 드래그를
+거부한다(§16-7) — 손잡이를 끌어도 lasso 는 시작되지 않고, 빈 도화지
+lasso 는 그대로다.
+
+손잡이 모양과 선은 Studio 편집 UI 가 소유한다. Canvas 요소 DOM 에는
+편집용 class 도 인라인 transform 도 영구히 남지 않는다(§18-5).
+
+### 18-12. 손가락
+
+**손가락으로는 크기도 바꾸지 않는다.** 이동과 같은 이유이고(§17-2) 같은
+판정 함수(`isCoarsePointerEvent`)를 쓴다 — 도화지를 덮는 요소가 선택된
+상태에서 한 손가락 드래그를 가로채면 모바일 Preview 가 아예 스크롤되지
+않는다. 단일 탭 선택과 `touchmove` 는 그대로다(`preventDefault` 되지
+않는다).
+
+### 18-13. 이번 단계에 **없는 것**
+
+회전 조작 · 그룹 이동 · 그룹 리사이즈 · 그룹 회전 · Shift 비율 고정 ·
+Alt 중심 기준 확대 · flip · 음수 크기 전환 · 스냅 · 가이드 · 키보드
+이동과 크기 조절 · Inspector geometry 입력 필드 · `"auto"` 로 되돌리는
+UI · 텍스트 직접 편집 · 이미지 교체 · Crop · 레이어 목록 · effect
+hook · preset · widget · 좌우 패널 Canvas · responsive override ·
+**손가락 조작** — 하나도 없다.
+
+저자 CSS/JS 가 geometry 를 강제로 덮는 경우의 최종 우선순위는 여전히
+`HOME-CANVAS-EFFECT-HOOK-1` 의 몫이다(§17-10).

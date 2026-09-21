@@ -203,7 +203,9 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3b-1 | `HOME-CANVAS-SELECT-1B-1` | 조건부 vendor load + 단일 Moveable **표시 전용** 회전 틀 | Studio만 | **완료**(계약 문서 §15) |
 | 3b-2 | `HOME-CANVAS-SELECT-1B-2` | Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 | Studio만 | **완료**(계약 문서 §16) |
 | 3c-1 | `HOME-CANVAS-TRANSFORM-1A` | **단일 요소 이동**을 `canvas.elements[].x/.y` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §17) |
-| 3c-2 | `HOME-CANVAS-TRANSFORM-1B` | 크기 · 회전 · 그룹 이동 | 저장 가능 | 미착수 |
+| 3c-2 | `HOME-CANVAS-TRANSFORM-1B` | **단일 요소 리사이즈**를 `canvas.elements[].x/.y/.width/.height` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §18) |
+| 3c-3 | `HOME-CANVAS-TRANSFORM-1C` | 회전 조작 | 저장 가능 | 미착수 |
+| 3c-4 | `HOME-CANVAS-TRANSFORM-1D` | 그룹 이동 · 그룹 리사이즈 · 그룹 회전 | 저장 가능 | 미착수 |
 | 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
@@ -500,11 +502,39 @@ HTML 에 없다.
   요소는 배경처럼 본다(계약 §17-2).
 - **손가락 이동은 의도적 미지원**이다 — 그 자리는 Preview 스크롤이 지킨다.
 
-### `HOME-CANVAS-TRANSFORM-1B`
+### `HOME-CANVAS-TRANSFORM-1B` (완료)
 
-- 크기 · 회전 · 그룹 이동. `1A` 가 연 길을 그대로 쓴다 — 메시지의 `kind` 에
-  이름을 더하고 `expected`/`next` 의 허용 키를 늘린다.
-- 스냅 · 가이드 · 키보드 화살표 이동 · Inspector geometry 입력 필드.
+→ [계약 문서 §18](../contracts/IMORY_HOME_CANVAS_CONTRACT.md#18-단일-요소-리사이즈-home-canvas-transform-1b)
+
+- **단독 선택 요소의 리사이즈.** 손잡이 여덟(`nw` `n` `ne` `e` `se` `s`
+  `sw` `w`)을 마우스 · 펜으로 끌어 크기를 바꾸고, 그 결과가
+  `canvas.elements[]` 의 `x` · `y` · `width` · `height` **네 칸**에
+  저장된다. 자유 비율이다.
+- `1A` 가 연 길을 그대로 쓴다 — 메시지의 `kind` 에 `resize` 를 더하고
+  `expected`/`next` 의 허용 키를 넷으로 늘렸다. 관문 · 기다림 · 요청 번호 ·
+  Undo · 취소는 **한 벌을 공유한다**. 불변 수정의 복사 규칙도 이동과 같은
+  함수다(`writeSkinHomeCanvasElementFields`).
+- **회전한 요소의 기준점은 Moveable 이 준 `drag.beforeTranslate` 로 잡는다** —
+  삼각함수를 새로 적지 않았다(계약 §18-4). 20° · 45° 에서 반대편 기준점이
+  0.9px 안에서 유지되는 것을 실측했다.
+- `height:"auto"` 는 좌우 손잡이에서 유지되고, 세로 · 모서리 손잡이에서
+  실제 세로 변화가 있을 때만 숫자로 전환된다. Undo 하면 정확히 `"auto"` 로
+  돌아간다(계약 §18-3 · §18-7).
+- **손잡이가 hit area 를 되돌려 받으면서 Inspector 와 경계를 그어야 했다** —
+  손잡이 위의 입력은 Inspector 의 것이 아니다(계약 §18-11).
+- 손가락 조작은 의도적 미지원. 그 자리는 Preview 스크롤이 지킨다.
+
+### `HOME-CANVAS-TRANSFORM-1C`
+
+- 회전 조작. 같은 확정 경로에 `kind: "rotate"` 를 더하고 `rotation` 칸을
+  소유한다.
+
+### `HOME-CANVAS-TRANSFORM-1D`
+
+- 그룹 이동 · 그룹 리사이즈 · 그룹 회전. MoveableGroup 의 기준점과 "여러
+  요소를 한 번에 확정한다"의 경계를 정한다.
+- 스냅 · 가이드 · 키보드 화살표 이동 · Inspector geometry 입력 필드 ·
+  Shift 비율 고정 · Alt 중심 확대 · `"auto"` 로 되돌리는 UI.
 
 ### `HOME-CANVAS-HISTORY-1`
 

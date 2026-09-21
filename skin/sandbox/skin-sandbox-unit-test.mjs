@@ -684,9 +684,12 @@ const canvasTransformFrom = (payload) =>
     }
   );
 
+/* HOME-CANVAS-TRANSFORM-1B — width · height 는 active 면 **반드시**
+   있다. 프레임은 크기를 모르는 채로 리사이즈를 시작할 수 없다. */
 const GEOMETRY_ON = {
   contract: 1, renderSeq: 3, active: true, id: "cvPhoto",
-  x: 20, y: 40, baseWidth: 390, baseHeight: 844, generation: 5
+  x: 20, y: 40, width: 90, height: 60,
+  baseWidth: 390, baseHeight: 844, generation: 5
 };
 
 const MOVE_OK = {
@@ -725,9 +728,14 @@ check("[canvas-move] 음수 좌표를 막지 않는다",
   canvasTransformFrom({ ...MOVE_OK, next: { x: -12.5, y: -3 } }).ok === true,
   "도화지 밖으로 나가는 것은 계약이 허용한다(자동 clamp 없음)");
 
-check("[canvas-move] ★ kind 는 move 하나다",
-  canvasTransformFrom({ ...MOVE_OK, kind: "resize" }).ok === false &&
-  canvasTransformFrom({ ...MOVE_OK, kind: "rotate" }).ok === false);
+check("[canvas-move] ★ 아직 이름이 없는 kind 는 거부된다",
+  canvasTransformFrom({ ...MOVE_OK, kind: "rotate" }).ok === false &&
+  canvasTransformFrom({ ...MOVE_OK, kind: "scale" }).ok === false,
+  "회전 · 그룹 조작은 그 단계에서 이 배열에 이름을 더한다");
+
+check("[canvas-move] ★ kind 를 resize 로 바꿔 달기만 하면 거부된다",
+  canvasTransformFrom({ ...MOVE_OK, kind: "resize" }).ok === false,
+  "resize 가 소유하는 것은 네 칸이다 — 좌표 둘만 실린 resize 는 그 모양이 아니다");
 
 check("[canvas-move] ★ next 에 width 가 섞이면 메시지 전체가 거부된다",
   canvasTransformFrom({
@@ -787,6 +795,138 @@ check("[canvas-move] ★ 알려진 칸만 새 리터럴로 옮겨진다",
 
   })(),
   "contract · renderSeq · kind · id · expected · next · generation · requestId 여덟 뿐이다");
+
+
+/* =========================================================
+   [canvas-resize] HOME-CANVAS-TRANSFORM-1B — 크기 확정
+
+   ★ 이번 단계가 소유하는 것은 **네 칸**이다(x · y · width · height).
+     그래서 여기서 가장 많이 보는 것도 "크기가 맞는가"가 아니라
+     "**그 밖의 것이 들어올 수 없는가**"다 — rotation 이 섞인
+     메시지는 통째로 버려져야 하고, 좌표 둘만 실린 resize 도
+     그 모양이 아니므로 버려져야 한다.
+========================================================== */
+
+console.log("\n[canvas-resize] 크기 확정 (HOME-CANVAS-TRANSFORM-1B)");
+
+const RESIZE_OK = {
+  contract: 1, renderSeq: 3, kind: "resize", id: "cvPhoto",
+  expected: { x: 20, y: 40, width: 90, height: 60 },
+  next: { x: 20, y: 40, width: 130.5, height: 60 },
+  generation: 5, requestId: 2
+};
+
+check("[canvas-resize] 정상 리사이즈 요청을 부모가 받는다",
+  canvasTransformFrom(RESIZE_OK).ok === true);
+
+check("[canvas-resize] height 는 \"auto\" 일 수 있다",
+  canvasTransformFrom({
+    ...RESIZE_OK,
+    expected: { x: 20, y: 40, width: 90, height: "auto" },
+    next: { x: 20, y: 40, width: 130, height: "auto" }
+  }).ok === true,
+  "좌우 손잡이만 쓴 리사이즈는 auto 를 그대로 둔다(계약 §18-3)");
+
+check("[canvas-resize] \"auto\" 에서 숫자로 바뀌는 요청도 통과한다",
+  canvasTransformFrom({
+    ...RESIZE_OK,
+    expected: { x: 20, y: 40, width: 90, height: "auto" },
+    next: { x: 20, y: 40, width: 90, height: 82 }
+  }).ok === true,
+  "어느 type 이 auto 를 쓸 수 있는지는 부모가 자기 draft 로 본다");
+
+check("[canvas-resize] ★ 그 밖의 문자열 높이는 거부된다",
+  canvasTransformFrom({
+    ...RESIZE_OK, next: { x: 20, y: 40, width: 90, height: "100px" }
+  }).ok === false &&
+  canvasTransformFrom({
+    ...RESIZE_OK, next: { x: 20, y: 40, width: 90, height: "AUTO" }
+  }).ok === false);
+
+check("[canvas-resize] ★ 0 이하의 크기는 거부된다",
+  canvasTransformFrom({
+    ...RESIZE_OK, next: { x: 20, y: 40, width: 0, height: 60 }
+  }).ok === false &&
+  canvasTransformFrom({
+    ...RESIZE_OK, next: { x: 20, y: 40, width: 90, height: -5 }
+  }).ok === false,
+  "width 와 숫자 height 는 양수여야 한다(계약 §18-2)");
+
+check("[canvas-resize] ★ 상한을 넘는 크기는 거부된다",
+  canvasTransformFrom({
+    ...RESIZE_OK, next: { x: 20, y: 40, width: 1e9, height: 60 }
+  }).ok === false);
+
+check("[canvas-resize] ★ next 에 rotation 이 섞이면 메시지 전체가 거부된다",
+  canvasTransformFrom({
+    ...RESIZE_OK, next: { x: 20, y: 40, width: 90, height: 60, rotation: 30 }
+  }).ok === false,
+  "이번 단계는 회전을 바꾸지 않는다 — 그 계약이 메시지 층에도 있다");
+
+check("[canvas-resize] ★ 칸이 하나라도 빠지면 거부된다",
+  canvasTransformFrom({
+    ...RESIZE_OK, next: { x: 20, y: 40, width: 90 }
+  }).ok === false &&
+  canvasTransformFrom({
+    ...RESIZE_OK, expected: { x: 20, y: 40 }
+  }).ok === false,
+  "네 칸이 한 요청이다 — '폭은 저장됐는데 x 는 안 됐다'를 만들지 않는다");
+
+check("[canvas-resize] ★ move 에 크기가 섞이면 여전히 거부된다",
+  canvasTransformFrom({
+    ...MOVE_OK,
+    expected: { x: 20, y: 40, width: 90, height: 60 },
+    next: { x: 42, y: 117, width: 130, height: 60 }
+  }).ok === false,
+  "kind 마다 소유하는 모양이 하나다 — 서로의 자리에 들어갈 수 없다");
+
+check("[canvas-resize] 좌표는 음수여도 된다",
+  canvasTransformFrom({
+    ...RESIZE_OK, next: { x: -30.5, y: -12, width: 90, height: 60 }
+  }).ok === true,
+  "도화지 밖으로 나가는 것은 계약이 허용한다(자동 clamp 없음)");
+
+check("[canvas-resize] 좌표 메시지에 크기가 함께 내려간다",
+  (() => {
+
+    const verdict =
+      canvasGeometryTo(GEOMETRY_ON);
+
+    return (
+      verdict.ok === true &&
+      verdict.payload.width === 90 &&
+      verdict.payload.height === 60
+    );
+
+  })());
+
+check("[canvas-resize] 좌표 메시지의 height 도 \"auto\" 일 수 있다",
+  canvasGeometryTo({ ...GEOMETRY_ON, height: "auto" }).ok === true);
+
+check("[canvas-resize] ★ 크기가 빠진 좌표 메시지는 거부된다",
+  canvasGeometryTo({ ...GEOMETRY_ON, width: undefined }).ok === false &&
+  canvasGeometryTo({ ...GEOMETRY_ON, height: undefined }).ok === false,
+  "프레임은 크기를 모르는 채로 리사이즈를 시작할 수 없다");
+
+check("[canvas-resize] ★ 해제에는 크기 칸도 없다",
+  canvasGeometryTo({
+    contract: 1, renderSeq: 3, active: false, width: 90, generation: 5
+  }).ok === false);
+
+check("[canvas-resize] ★ 알려진 칸만 새 리터럴로 옮겨진다",
+  (() => {
+
+    const verdict =
+      canvasTransformFrom({ ...RESIZE_OK, rotation: 30, css: "x" });
+
+    return (
+      verdict.ok === true &&
+      verdict.payload.rotation === undefined &&
+      verdict.payload.css === undefined &&
+      Object.keys(verdict.payload).length === 8
+    );
+
+  })());
 
 
 /* =========================================================

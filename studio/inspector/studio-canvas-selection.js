@@ -614,6 +614,15 @@ function studioCanvasSingleGeometry() {
   const payload =
     studioCanvasDraftPayload();
 
+  /* HOME-CANVAS-TRANSFORM-1B — width · height 도 같이 내려간다.
+     `height` 는 숫자이거나 `"auto"` 이고, 그 밖의 값이면 이 요소는
+     애초에 계약을 어긴 것이므로 아무것도 내려보내지 않는다. */
+  const heightOk =
+    element.height === "auto" ||
+    (typeof element.height === "number" &&
+      Number.isFinite(element.height) &&
+      element.height > 0);
+
   if (
     !payload ||
     !(payload.baseWidth > 0) ||
@@ -621,7 +630,11 @@ function studioCanvasSingleGeometry() {
     typeof element.x !== "number" ||
     typeof element.y !== "number" ||
     !Number.isFinite(element.x) ||
-    !Number.isFinite(element.y)
+    !Number.isFinite(element.y) ||
+    typeof element.width !== "number" ||
+    !Number.isFinite(element.width) ||
+    !(element.width > 0) ||
+    !heightOk
   ) {
     return null;
   }
@@ -631,6 +644,8 @@ function studioCanvasSingleGeometry() {
     id: id,
     x: element.x,
     y: element.y,
+    width: element.width,
+    height: element.height,
     baseWidth: payload.baseWidth,
     baseHeight: payload.baseHeight,
     generation: studioCanvasSelection.generation
@@ -652,6 +667,8 @@ function postStudioCanvasGeometryToFrame(answering) {
       id: null,
       x: 0,
       y: 0,
+      width: 0,
+      height: 0,
       baseWidth: 0,
       baseHeight: 0,
       generation: studioCanvasSelectionGeneration
@@ -1051,17 +1068,28 @@ function proposeStudioCanvasSelection(proposal) {
 
 
 /* =========================================================
-   HOME-CANVAS-TRANSFORM-1A — 이동의 **확정**
+   HOME-CANVAS-TRANSFORM-1A · 1B — 이동 · 리사이즈의 **확정**
 
    commitStudioCanvasElementTransform(request)
 
    request = {
-     kind       : "move"
+     kind       : "move" | "resize"
      id         : element id
-     expected   : { x, y }   프레임이 끌기 시작할 때의 좌표
-     next       : { x, y }   놓은 자리
+     expected   : 프레임이 제스처를 시작할 때의 값
+     next       : 손을 놓은 값
      generation : 선택 순번
    }
+
+   `kind` 가 소유하는 칸이 다르다.
+
+     move     { x, y }
+     resize   { x, y, width, height }   height 는 숫자 또는 "auto"
+
+   ★ 그 밖에는 **한 줄도 갈라지지 않는다.** 선택 · 순번 · expected ·
+     허용 키 · 범위를 보는 관문이 하나이고, 불변 수정도 그 순수 함수
+     한 쌍이 한다(skin/skin-home-canvas.js 의 공용
+     writeSkinHomeCanvasElementFields). 리사이즈가 별도 저장 경로를
+     만들지 않는다.
 
    → { accepted: boolean, reason }
 
@@ -1073,15 +1101,18 @@ function proposeStudioCanvasSelection(proposal) {
    본다 — 프레임에서 온 값 중 살아남는 것은 숫자 넷과 id 하나뿐이다.
 
      1  Canvas 편집이 켜져 있다(HOME · 유효한 canvas · Select)
-     2  kind 는 "move" 하나
+     2  kind 는 "move" 또는 "resize"
      3  id 형태가 맞다
      4  지금 선택이 **정확히 그 하나**이고 primary 도 그것
      5  순번이 최신이다(늦게 도착한 옛 제스처를 버린다)
      6  그 요소가 지금 draft 에 있고 hidden 도 locked 도 아니다
-     7  expected · next 는 x · y 두 칸뿐이고 유한한 숫자다
-     8  지금 draft 의 x · y 가 expected 와 **정확히** 같다
-     9  next 가 계약의 좌표 범위 안이다 (7~9 는 순수 함수가 본다 —
-        skin/skin-home-canvas.js writeSkinHomeCanvasElementPosition)
+     7  expected · next 는 그 kind 가 소유한 칸뿐이고 유한한 숫자다
+        (리사이즈의 height 만 "auto" 도 된다 — 그 요소의 type 이
+         허용할 때만)
+     8  지금 draft 의 그 칸들이 expected 와 **정확히** 같다
+     9  next 가 계약의 좌표 · 크기 범위 안이다 (7~9 는 순수 함수가
+        본다 — skin/skin-home-canvas.js
+        writeSkinHomeCanvasElementPosition · …ElementBox)
 
    ★ 거부해도 화면은 되돌아간다.
 
@@ -1117,8 +1148,8 @@ function commitStudioCanvasElementTransform(request) {
       if (!accepted) {
 
         console.info(
-          "[studio-canvas] 이동 확정을 받아들이지 않았습니다",
-          { reason: reason }
+          "[studio-canvas] 조작 확정을 받아들이지 않았습니다",
+          { kind: value && value.kind, reason: reason }
         );
 
       }
@@ -1132,7 +1163,7 @@ function commitStudioCanvasElementTransform(request) {
     return answer(false, "shape");
   }
 
-  if (value.kind !== "move") {
+  if (value.kind !== "move" && value.kind !== "resize") {
     return answer(false, "kind");
   }
 
@@ -1167,7 +1198,13 @@ function commitStudioCanvasElementTransform(request) {
     return answer(false, "element");
   }
 
-  if (typeof window.setStudioCanvasElementPosition !== "function") {
+  /* 그 kind 를 실제로 draft 에 쓸 수 있는 함수가 이 문서에 있는가 */
+  const writer =
+    value.kind === "resize"
+      ? window.setStudioCanvasElementBox
+      : window.setStudioCanvasElementPosition;
+
+  if (typeof writer !== "function") {
     return answer(false, "unsupported");
   }
 
@@ -1176,17 +1213,26 @@ function commitStudioCanvasElementTransform(request) {
     ★ 모르는 키는 **버리지 않고 거부한다.**
 
     처음에는 x · y 만 새 리터럴로 옮겨 담았다. 그러면 `next` 에
-    width 가 섞여 와도 조용히 빠지고 나머지는 저장된다 — 이번
-    라운드의 e2e 가 그것을 "받아들였다"로 잡았다. 조용히 고쳐 주면
-    "이 메시지가 소유하는 것은 좌표 둘"이라는 계약이 **말로만**
-    남는다. 어긋난 메시지는 통째로 버리는 편이 맞다(sandbox
-    프로토콜도 같은 판정을 한 번 더 한다).
+    width 가 섞여 와도 조용히 빠지고 나머지는 저장된다 — 1A 의
+    e2e 가 그것을 "받아들였다"로 잡았다. 조용히 고쳐 주면 "이
+    메시지가 소유하는 것은 이 칸들"이라는 계약이 **말로만** 남는다.
+    어긋난 메시지는 통째로 버리는 편이 맞다(sandbox 프로토콜도 같은
+    판정을 한 번 더 한다).
+
+    ★ 1B 에서 허용 키가 kind 마다 달라졌다. 그래도 "정확히 이 키들"
+      이라는 규칙은 그대로다 — 리사이즈 요청에 좌표 둘만 오거나,
+      이동 요청에 width 가 섞이면 둘 다 거부다.
 
     거부한 뒤에 넘기는 값은 그래도 **새 리터럴**이다 — 프레임이
     보낸 객체 자체는 이 줄 뒤로 넘어가지 않는다.
   */
 
-  const asPoint =
+  const wanted =
+    value.kind === "resize"
+      ? ["x", "y", "width", "height"]
+      : ["x", "y"];
+
+  const asBox =
     (point) => {
 
       if (!point || typeof point !== "object" || Array.isArray(point)) {
@@ -1197,22 +1243,27 @@ function commitStudioCanvasElementTransform(request) {
         Object.keys(point);
 
       if (
-        keys.length !== 2 ||
-        keys.indexOf("x") === -1 ||
-        keys.indexOf("y") === -1
+        keys.length !== wanted.length ||
+        wanted.some((key) => keys.indexOf(key) === -1)
       ) {
         return null;
       }
 
-      return { x: point.x, y: point.y };
+      const copy = {};
+
+      wanted.forEach((key) => {
+        copy[key] = point[key];
+      });
+
+      return copy;
 
     };
 
   const next =
-    asPoint(value.next);
+    asBox(value.next);
 
   const expected =
-    asPoint(value.expected);
+    asBox(value.expected);
 
   if (!next || !expected) {
     return answer(false, "point");
@@ -1220,7 +1271,7 @@ function commitStudioCanvasElementTransform(request) {
 
 
   const result =
-    window.setStudioCanvasElementPosition(value.id, next, expected);
+    writer(value.id, next, expected);
 
   if (!result || !result.ok) {
     return answer(false, (result && result.reason) || "rejected");

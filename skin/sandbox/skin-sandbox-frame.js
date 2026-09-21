@@ -1252,13 +1252,19 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
               },
 
               /*
-                HOME-CANVAS-TRANSFORM-1A — 이동의 **확정 요청**이다.
-                확정이 아니다: 부모가 지금 draft 로 선택 · 순번 ·
-                `expected` · 범위를 전부 다시 본 뒤에만 쓴다.
+                HOME-CANVAS-TRANSFORM-1A · 1B — 이동 · 리사이즈의
+                **확정 요청**이다. 확정이 아니다: 부모가 지금 draft 로
+                선택 · 순번 · `expected` · 범위를 전부 다시 본 뒤에만
+                쓴다.
 
                 ★ 여기서 값을 만들지 않는다. runtime 이 준 것을 알려진
                   칸만 새 리터럴로 옮겨 보내고, 프로토콜이 한 번 더
-                  거른다(kind · id 형태 · 좌표 범위 · 모르는 키).
+                  거른다(kind · id 형태 · 좌표 · 크기 범위 · 모르는 키).
+
+                ★ 옮기는 칸은 **kind 가 정한다**. 리사이즈에서만
+                  width · height 를 옮긴다 — 이동 요청에 그 칸을
+                  `undefined` 로라도 만들어 두면 프로토콜의 "모르는
+                  키" 판정에 걸려 메시지 전체가 버려진다.
               */
               onTransform: function (request) {
 
@@ -1266,19 +1272,29 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
                   return;
                 }
 
+                var box = function (value) {
+
+                  var out = {
+                    x: value ? value.x : undefined,
+                    y: value ? value.y : undefined
+                  };
+
+                  if (request.kind === "resize") {
+                    out.width = value ? value.width : undefined;
+                    out.height = value ? value.height : undefined;
+                  }
+
+                  return out;
+
+                };
+
                 send(SANDBOX_MESSAGE_TYPES.CANVAS_TRANSFORM, {
                   contract: 1,
                   renderSeq: FRAME_STATE.renderSeq,
                   kind: request.kind,
                   id: request.id,
-                  expected: {
-                    x: request.expected ? request.expected.x : undefined,
-                    y: request.expected ? request.expected.y : undefined
-                  },
-                  next: {
-                    x: request.next ? request.next.x : undefined,
-                    y: request.next ? request.next.y : undefined
-                  },
+                  expected: box(request.expected),
+                  next: box(request.next),
                   generation:
                     Number.isInteger(request.generation) && request.generation >= 0
                       ? request.generation
@@ -1549,7 +1565,7 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
 
     /* =====================================================
-       HOME-CANVAS-TRANSFORM-1A — 단일 선택의 Canvas 좌표
+       HOME-CANVAS-TRANSFORM-1A · 1B — 단일 선택의 Canvas geometry
 
        ★ 이 메시지만으로는 runtime 을 받아 오지 않는다. 좌표는
          선택과 **짝지어** 내려오고, runtime 을 켜는 관문은 여전히
@@ -1567,6 +1583,9 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         id: verdict.payload.id,
         x: verdict.payload.x,
         y: verdict.payload.y,
+        /* HOME-CANVAS-TRANSFORM-1B — 리사이즈의 시작 크기 */
+        width: verdict.payload.width,
+        height: verdict.payload.height,
         baseWidth: verdict.payload.baseWidth,
         baseHeight: verdict.payload.baseHeight,
         generation: verdict.payload.generation,

@@ -238,6 +238,60 @@ const INSPECTOR_CANVAS_ELEMENT_ATTR = "data-imory-canvas-element";
 const INSPECTOR_CANVAS_LOCKED_ATTR = "data-imory-canvas-locked";
 
 
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1B — 편집 UI 는 Inspector 의 것이 아니다
+
+   `data-imory-canvas-frame` 은 Canvas 편집 runtime 이 Moveable 의
+   control box 에 붙이는 표식이다(skin/skin-home-canvas-editor-runtime.js
+   markControlBox). 그 상자와 그 안의 손잡이 · 테두리가 여기 걸린다.
+
+   ★ 왜 필요해졌는가
+
+   `1A` 까지 control box 는 통째로 `pointer-events: none` 이라 어떤
+   입력의 대상도 되지 않았다. `1B` 에서 **리사이즈 손잡이만** 그것을
+   되돌려 받으면서(§18-11), 손잡이를 누른 pointerdown · click 이
+   Inspector 에도 닿게 됐다. 그대로 두면 손잡이 아래에 있는 것이
+   새로 골라지거나(모서리 손잡이는 요소 밖에 반쯤 걸쳐 있다) 아무
+   것도 없는 자리로 읽혀 **선택이 풀리고**, 방금 시작한 리사이즈가
+   그 자리에서 취소된다.
+
+   ★ "고를 것이 없다"가 아니라 "내 입력이 아니다"다.
+
+   그래서 부르는 쪽은 이 함수가 무언가를 돌려주면 **아무 일도 하지
+   않고 빠져나간다** — 선택을 풀지도, 다시 고르지도, 오류를 알리지도
+   않는다. 그 입력의 주인은 Moveable 이고, 그쪽은 mousedown 으로
+   받으므로(0.53.0 은 pointer 이벤트를 쓰지 않는다 — 번들 실측)
+   Inspector 가 비켜서기만 하면 된다.
+========================================================== */
+
+const INSPECTOR_EDIT_CHROME_ATTR = "data-imory-canvas-frame";
+
+
+function inspectorEditChromeAncestor(node) {
+
+  let current =
+    (node && node.nodeType === 1)
+      ? node
+      : (node ? node.parentElement : null);
+
+  while (current) {
+
+    if (
+      current.hasAttribute &&
+      current.hasAttribute(INSPECTOR_EDIT_CHROME_ATTR)
+    ) {
+      return current;
+    }
+
+    current = current.parentElement;
+
+  }
+
+  return null;
+
+}
+
+
 /*
   inspectorLockedCanvasAncestor(node, root) -> Element | null
 
@@ -569,9 +623,11 @@ if (typeof module !== "undefined" && module.exports) {
     INSPECTOR_COMPONENT_ATTRS,
     INSPECTOR_CANVAS_ELEMENT_ATTR,
     INSPECTOR_CANVAS_LOCKED_ATTR,
+    INSPECTOR_EDIT_CHROME_ATTR,
     isInspectableElement,
     resolveInspectableAncestor,
     inspectorLockedCanvasAncestor,
+    inspectorEditChromeAncestor,
     inspectorRectCovers,
     inspectorCanvasPairIsNested,
     inspectorSelectionRank,

@@ -2795,16 +2795,21 @@ export function sendSandboxCanvasSelect(handle, selection) {
 
 
 /* =========================================================
-   HOME-CANVAS-TRANSFORM-1A — 단일 선택 요소의 Canvas 좌표
+   HOME-CANVAS-TRANSFORM-1A · 1B — 단일 선택 요소의 Canvas geometry
 
    sendSandboxCanvasGeometry(handle, geometry) -> boolean
 
-   geometry = { active, id, x, y, baseWidth, baseHeight, generation }
+   geometry = { active, id, x, y, width, height,
+                baseWidth, baseHeight, generation }
 
    ★ 선택과 같은 규칙이다 — 호출자의 객체를 그대로 넘기지 않고,
      알려진 칸만 새 리터럴로 옮긴다. 옮길 수 없는 값이 하나라도
-     있으면 `active:false`(= 지금은 옮길 수 있는 단독 선택이 없다)
+     있으면 `active:false`(= 지금은 조작할 수 있는 단독 선택이 없다)
      로 내려간다. 여기서 "고쳐서" 보내지 않는다.
+
+   ★ 1B 에서 width · height 가 늘었고, `height` 는 숫자이거나
+     `"auto"` 다. 둘 중 하나가 빠지면 `active:false` 다 — 프레임은
+     크기를 모르는 채로 리사이즈를 시작할 수 없다.
 ========================================================== */
 
 export function sendSandboxCanvasGeometry(handle, geometry) {
@@ -2831,6 +2836,9 @@ export function sendSandboxCanvasGeometry(handle, geometry) {
       typeof value.id === "string" && value.id &&
       Number.isFinite(value.x) &&
       Number.isFinite(value.y) &&
+      Number.isFinite(value.width) && value.width > 0 &&
+      (value.height === "auto" ||
+        (Number.isFinite(value.height) && value.height > 0)) &&
       value.baseWidth > 0 &&
       value.baseHeight > 0
     );
@@ -2855,6 +2863,8 @@ export function sendSandboxCanvasGeometry(handle, geometry) {
     payload.id = value.id;
     payload.x = value.x;
     payload.y = value.y;
+    payload.width = value.width;
+    payload.height = value.height;
     payload.baseWidth = value.baseWidth;
     payload.baseHeight = value.baseHeight;
   }

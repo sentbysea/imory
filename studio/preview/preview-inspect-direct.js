@@ -99,6 +99,28 @@
   }
 
 
+  /* =========================================================
+     HOME-CANVAS-TRANSFORM-1B — 편집 UI 위의 입력은 내 것이 아니다
+
+     Canvas 의 리사이즈 손잡이를 누른 pointerdown · click · dblclick ·
+     hover 는 Moveable 의 것이다(그쪽은 mousedown 으로 받는다). 여기서
+     비켜서지 않으면 손잡이 아래에 깔린 것이 새로 골라지거나 선택이
+     풀려 **방금 시작한 리사이즈가 취소된다**.
+
+     판정은 세 realm 이 함께 쓰는 그 파일에 있다
+     (skin/skin-inspect-target.js inspectorEditChromeAncestor).
+  ========================================================== */
+  function fromEditChrome(event) {
+
+    return (
+      !!event &&
+      typeof window.inspectorEditChromeAncestor === "function" &&
+      !!window.inspectorEditChromeAncestor(event.target)
+    );
+
+  }
+
+
   function pickAt(x, y) {
 
     const root = api.root();
@@ -199,6 +221,11 @@
       return true;
     }
 
+    /* 손잡이 위로 들어온 것은 hover 가 아니다(위 fromEditChrome) */
+    if (fromEditChrome(event)) {
+      return true;
+    }
+
     const target = hoverTargetFor(event);
 
     if (target === undefined) {
@@ -217,6 +244,12 @@
   function onPointerMoveHover(event) {
 
     if (!active() || editing || (press && press.started) || !pointUsable(event)) {
+      return;
+    }
+
+    /* 손잡이 위에서는 hover 표시를 바꾸지 않는다 — 고른 요소의
+       테두리가 그 자리에서 깜박이지 않게 */
+    if (fromEditChrome(event)) {
       return;
     }
 
@@ -250,6 +283,11 @@
   ========================================================== */
 
   function handleClick(event) {
+
+    /* 손잡이를 누른 클릭이다 — 선택을 바꾸지도 풀지도 않는다 */
+    if (fromEditChrome(event)) {
+      return true;
+    }
 
     if (Date.now() < suppressClickUntil) {
       suppressClickUntil = 0;
@@ -633,6 +671,11 @@
       return;
     }
 
+    /* 손잡이 두 번 누르기는 글자 편집이 아니다 */
+    if (fromEditChrome(event)) {
+      return;
+    }
+
     event.preventDefault();
     event.stopPropagation();
 
@@ -668,6 +711,11 @@
   function onPointerDown(event) {
 
     if (!active() || editing || event.button !== 0 || event.isPrimary === false) {
+      return;
+    }
+
+    /* 손잡이에서 시작한 누름은 본체 끌기가 아니다 */
+    if (fromEditChrome(event)) {
       return;
     }
 

@@ -616,18 +616,23 @@ var SANDBOX_CANVAS_SELECT_MODES = ["replace", "toggle"];
 
 
 /*
-  HOME-CANVAS-TRANSFORM-1A — 프레임이 올릴 수 있는 조작의 뜻은
-  이번 단계에 **하나**다. 크기 · 회전이 들어오면 그때 이 배열에
-  이름을 더한다(더하지 않은 값은 메시지 층에서 거부된다).
+  HOME-CANVAS-TRANSFORM-1A · 1B — 프레임이 올릴 수 있는 조작의 뜻.
+
+  회전 · 그룹 조작이 들어오면 그때 이 배열에 이름을 더한다(더하지
+  않은 값은 메시지 층에서 거부된다).
+
+  ★ kind 마다 `expected` · `next` 의 허용 키가 다르다. 아래
+    CANVAS_TRANSFORM 의 check 가 그 표를 본다 — "좌표 둘"과
+    "좌표 둘 + 크기 둘"이 서로의 자리에 들어갈 수 없다.
 */
 
-var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move"];
+var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move", "resize"];
 
 
 /*
   좌표 한 쌍 — x · y 둘뿐이고, 둘 다 계약의 좌표 범위 안이어야
   한다. **모르는 키가 하나라도 있으면 거짓**이다: width · height ·
-  rotation 이 이 메시지로 새어 들어갈 길을 여기서 막는다.
+  rotation 이 이동 메시지로 새어 들어갈 길을 여기서 막는다.
 */
 
 function isSandboxCanvasPoint(value) {
@@ -638,6 +643,48 @@ function isSandboxCanvasPoint(value) {
     isSandboxCanvasCoord(value.x) &&
     isSandboxCanvasCoord(value.y)
   );
+
+}
+
+
+/*
+  HOME-CANVAS-TRANSFORM-1B — 요소 하나의 상자.
+
+  x · y · width · height 넷뿐이고, 여기서도 **모르는 키가 하나라도
+  있으면 거짓**이다 — rotation 이 리사이즈 메시지로 새어 들어갈 길을
+  막는다(이번 단계는 회전을 바꾸지 않는다).
+
+  ★ `height` 는 숫자이거나 `"auto"` 다. 어느 type 이 `"auto"` 를 쓸
+    수 있는지는 부모가 자기 draft 로 본다(§6) — 메시지 층은 "그
+    모양이 올 수 있다"까지만 안다.
+*/
+
+function isSandboxCanvasHeight(value) {
+
+  return value === "auto" || isSandboxCanvasSize(value);
+
+}
+
+
+function isSandboxCanvasBox(value) {
+
+  return (
+    isPlainSandboxObject(value) &&
+    hasOnlyKnownSandboxKeys(value, ["x", "y", "width", "height"]) &&
+    isSandboxCanvasCoord(value.x) &&
+    isSandboxCanvasCoord(value.y) &&
+    isSandboxCanvasSize(value.width) &&
+    isSandboxCanvasHeight(value.height)
+  );
+
+}
+
+
+/* kind 가 소유하는 모양은 하나다 — 이동은 점, 리사이즈는 상자 */
+
+function sandboxCanvasTransformShapeCheck(kind) {
+
+  return kind === "resize" ? isSandboxCanvasBox : isSandboxCanvasPoint;
 
 }
 
@@ -1821,7 +1868,8 @@ var SANDBOX_MESSAGE_SPEC = {
     direction: "to-frame",
     keys: [
       "contract", "renderSeq", "active", "id",
-      "x", "y", "baseWidth", "baseHeight", "generation", "answering"
+      "x", "y", "width", "height",
+      "baseWidth", "baseHeight", "generation", "answering"
     ],
     check: function (payload) {
 
@@ -1851,6 +1899,8 @@ var SANDBOX_MESSAGE_SPEC = {
           payload.id === undefined &&
           payload.x === undefined &&
           payload.y === undefined &&
+          payload.width === undefined &&
+          payload.height === undefined &&
           payload.baseWidth === undefined &&
           payload.baseHeight === undefined
         );
@@ -1861,6 +1911,11 @@ var SANDBOX_MESSAGE_SPEC = {
         isSandboxInspectEditId(payload.id) &&
         isSandboxCanvasCoord(payload.x) &&
         isSandboxCanvasCoord(payload.y) &&
+        /* HOME-CANVAS-TRANSFORM-1B — 크기도 함께 온다. 프레임은 이
+           값 없이는 리사이즈를 시작할 수 없으므로 **선택 칸이
+           아니다** — active 면 반드시 있다. */
+        isSandboxCanvasSize(payload.width) &&
+        isSandboxCanvasHeight(payload.height) &&
         isSandboxCanvasSize(payload.baseWidth) &&
         isSandboxCanvasSize(payload.baseHeight)
       );
@@ -1875,10 +1930,15 @@ var SANDBOX_MESSAGE_SPEC = {
      ★ 확정이 아니다. 부모가 자기 draft 로 전부 다시 본다
        (위 CANVAS_TRANSFORM 주석).
 
-     ★ `expected` 와 `next` 는 x · y 두 칸뿐이다. width · height ·
-       rotation 이 섞인 메시지는 여기서 통째로 버려진다 — 이번
-       단계가 소유하는 것은 좌표 둘이라는 계약이 메시지 층에도
-       있어야 한다.
+     ★ `expected` 와 `next` 의 허용 키는 **kind 가 정한다**.
+
+         move     x · y
+         resize   x · y · width · height  (height 는 숫자 또는 "auto")
+
+       그 밖의 키가 섞인 메시지는 여기서 통째로 버려진다 — 이동
+       메시지에 width 가, 리사이즈 메시지에 rotation 이 들어갈 수
+       없다는 계약이 메시지 층에도 있어야 한다. 반대 방향도 막는다:
+       리사이즈 요청에 좌표 둘만 오면 그것도 거부다.
   ======================================================= */
 
   IMORY_CANVAS_TRANSFORM: {
@@ -1910,9 +1970,12 @@ var SANDBOX_MESSAGE_SPEC = {
         return false;
       }
 
+      const shapeOk =
+        sandboxCanvasTransformShapeCheck(payload.kind);
+
       return (
-        isSandboxCanvasPoint(payload.expected) &&
-        isSandboxCanvasPoint(payload.next)
+        shapeOk(payload.expected) &&
+        shapeOk(payload.next)
       );
 
     }
@@ -2218,6 +2281,8 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_CANVAS_TRANSFORM_KINDS,
     isSandboxCanvasIdList,
     isSandboxCanvasPoint,
+    isSandboxCanvasHeight,
+    isSandboxCanvasBox,
     isSandboxInspectEditId,
     isSandboxInspectRect,
     isSandboxInspectTarget,

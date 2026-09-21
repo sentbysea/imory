@@ -2188,6 +2188,10 @@ if (typeof window !== "undefined") {
   window.setStudioCanvasElementPosition =
     setStudioCanvasElementPosition;
 
+  /* HOME-CANVAS-TRANSFORM-1B */
+  window.setStudioCanvasElementBox =
+    setStudioCanvasElementBox;
+
 }
 
 
@@ -2814,20 +2818,36 @@ function postCanvasSelectionToFrame(selection) {
 
 
 /* =========================================================
-   HOME-CANVAS-TRANSFORM-1A — 단일 선택의 Canvas 좌표를 Preview 문서로
+   HOME-CANVAS-TRANSFORM-1A · 1B — 단일 선택의 Canvas geometry 를
+   Preview 문서로
 
    postCanvasGeometryToFrame(geometry)
 
-   geometry = { active, id, x, y, baseWidth, baseHeight, generation }
+   geometry = { active, id, x, y, width, height, baseWidth, baseHeight,
+                generation }
 
    ★ 이 함수도 **옮기기만** 한다. 무엇이 옮길 수 있는 단독 선택인가는
      studio/inspector/studio-canvas-selection.js 가 draft 에서 정했고,
-     프레임은 받은 값으로 시작 좌표만 잡는다.
+     프레임은 받은 값으로 시작 geometry 만 잡는다.
 
-   ★ 좌표가 **내려가는** 이유는 프레임이 그것을 잴 수 없기 때문이다 —
-     렌더러가 써 넣은 백분율은 이미 잘린 값이라 거꾸로 풀면 원본이
-     아니다(skin/sandbox/skin-sandbox-protocol.js CANVAS_GEOMETRY).
+   ★ geometry 가 **내려가는** 이유는 프레임이 그것을 잴 수 없기
+     때문이다 — 렌더러가 써 넣은 백분율은 이미 잘린 값이라 거꾸로
+     풀면 원본이 아니다(skin/sandbox/skin-sandbox-protocol.js
+     CANVAS_GEOMETRY).
+
+   ★ 1B 에서 width · height 가 늘었다. `height` 는 숫자이거나
+     `"auto"` 이고, 프레임은 그 둘을 구분해서 리사이즈를 시작한다
+     (계약 §18-3).
 ========================================================== */
+
+/* height 는 양수이거나 `"auto"` 다 — 그 밖의 값이면 geometry 전체가
+   쓸 수 없는 것이다(프레임도 같은 판정을 한 번 더 한다) */
+function isStudioCanvasGeometryHeight(value) {
+
+  return value === "auto" || (Number.isFinite(value) && value > 0);
+
+}
+
 
 function postCanvasGeometryToFrame(geometry) {
 
@@ -2841,6 +2861,8 @@ function postCanvasGeometryToFrame(geometry) {
       typeof value.id === "string" && value.id &&
       Number.isFinite(value.x) &&
       Number.isFinite(value.y) &&
+      Number.isFinite(value.width) && value.width > 0 &&
+      isStudioCanvasGeometryHeight(value.height) &&
       value.baseWidth > 0 &&
       value.baseHeight > 0
     );
@@ -2851,6 +2873,8 @@ function postCanvasGeometryToFrame(geometry) {
     id: active ? value.id : null,
     x: active ? value.x : 0,
     y: active ? value.y : 0,
+    width: active ? value.width : 0,
+    height: active ? value.height : 0,
     baseWidth: active ? value.baseWidth : 0,
     baseHeight: active ? value.baseHeight : 0,
     generation:
@@ -2889,18 +2913,18 @@ function postCanvasGeometryToFrame(geometry) {
      만들지 않는다.
 ========================================================== */
 
-function setStudioCanvasElementPosition(elementId, next, expected) {
+function writeStudioCanvasElementGeometry(writerName, elementId, next, expected) {
 
   if (!currentWorkingSkin) {
     return { ok: false, reason: "no-skin" };
   }
 
-  if (typeof window.writeSkinHomeCanvasElementPosition !== "function") {
+  if (typeof window[writerName] !== "function") {
     return { ok: false, reason: "unsupported" };
   }
 
   const result =
-    window.writeSkinHomeCanvasElementPosition(
+    window[writerName](
       currentWorkingSkin.regions,
       elementId,
       next,
@@ -2911,7 +2935,7 @@ function setStudioCanvasElementPosition(elementId, next, expected) {
     return { ok: false, reason: (result && result.reason) || "rejected" };
   }
 
-  /* 같은 자리다 — 기록도 dirty 도 만들지 않는다(§17-6) */
+  /* 같은 값이다 — 기록도 dirty 도 만들지 않는다(§17-6) */
   if (result.unchanged) {
     return { ok: true, unchanged: true, previous: result.previous };
   }
@@ -2938,6 +2962,40 @@ function setStudioCanvasElementPosition(elementId, next, expected) {
   renderPreviewAfterSkinPackageChange();
 
   return { ok: true, previous: result.previous };
+
+}
+
+
+function setStudioCanvasElementPosition(elementId, next, expected) {
+
+  return writeStudioCanvasElementGeometry(
+    "writeSkinHomeCanvasElementPosition",
+    elementId,
+    next,
+    expected
+  );
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1B — 캔버스 요소 하나의 x·y·width·height 를 draft 에
+
+   setStudioCanvasElementBox(elementId, next, expected) -> result
+
+   위 이동과 **같은 다섯 줄**을 쓴다(기록 한 칸 · dirty · 다시 그리기).
+   다른 것은 어느 순수 함수가 불변 수정을 하는가뿐이다 —
+   skin/skin-home-canvas.js writeSkinHomeCanvasElementBox.
+========================================================== */
+
+function setStudioCanvasElementBox(elementId, next, expected) {
+
+  return writeStudioCanvasElementGeometry(
+    "writeSkinHomeCanvasElementBox",
+    elementId,
+    next,
+    expected
+  );
 
 }
 
@@ -3519,12 +3577,19 @@ window.addEventListener(
     }
 
     /*
-      HOME-CANVAS-TRANSFORM-1A — 프레임의 이동 **확정 요청**.
+      HOME-CANVAS-TRANSFORM-1A · 1B — 프레임의 이동 · 리사이즈
+      **확정 요청**.
 
       확정이 아니다 — 아래 함수가 지금 draft 로 선택 · 순번 ·
       expected · 허용 키 · 범위를 전부 다시 보고, 하나라도 어긋나면
       쓰지 않는다(studio/inspector/studio-canvas-selection.js).
-      승인이든 거부든 그 함수가 프레임에 지금 좌표를 다시 내려 준다.
+      승인이든 거부든 그 함수가 프레임에 지금 geometry 를 다시
+      내려 준다.
+
+      ★ `expected` · `next` 를 여기서 해석하지 않는다. `kind` 마다
+        허용되는 키가 다르고(이동은 둘 · 리사이즈는 넷) 그 판정은
+        확정 함수 한 곳이 한다 — 여기서 미리 골라 담으면 모르는 키를
+        **조용히 버리는** 길이 생긴다(계약 §17-7 의 그 함정).
     */
     if (data.type === "preview:canvas-transform") {
 

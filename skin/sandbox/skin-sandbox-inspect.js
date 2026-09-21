@@ -790,9 +790,32 @@ function createSandboxInspector(options) {
   }
 
 
+  /* =========================================================
+     HOME-CANVAS-TRANSFORM-1B — 편집 UI 위의 입력은 내 것이 아니다
+
+     Canvas 리사이즈 손잡이를 누른 입력은 Moveable 의 것이다. 여기서
+     비켜서지 않으면 손잡이 아래에 깔린 것이 새로 골라지거나 선택이
+     풀려 방금 시작한 리사이즈가 취소된다 — sandbox 는 **pointerdown**
+     에서 고르므로 움직이기도 전에 그렇게 된다(계약 §18-11).
+
+     ★ 전파도 끊지 않는다. Moveable 은 mousedown 으로 받지만(0.53.0
+       실측), 그것과 무관하게 "내 것이 아닌 입력"에 손대지 않는 편이
+       맞다 — 저자 JS 가 손잡이 위에서 무언가를 할 일은 없다.
+  ========================================================== */
+  function fromEditChrome(event) {
+
+    return (
+      !!event &&
+      typeof inspectorEditChromeAncestor === "function" &&
+      !!inspectorEditChromeAncestor(event.target)
+    );
+
+  }
+
+
   function onPointerDown(event) {
 
-    if (!state.enabled) {
+    if (!state.enabled || fromEditChrome(event)) {
       return;
     }
 
@@ -836,6 +859,11 @@ function createSandboxInspector(options) {
       return;
     }
 
+    /* 손잡이 위에서는 hover 표시를 바꾸지 않는다 */
+    if (fromEditChrome(event)) {
+      return;
+    }
+
     setHover(resolveTarget(event.target));
 
   }
@@ -868,7 +896,7 @@ function createSandboxInspector(options) {
   /* 더블클릭 = 고른 글자를 그 자리에서 고치기(Studio 가 허락한 것만) */
   function onDblClick(event) {
 
-    if (!state.enabled) {
+    if (!state.enabled || fromEditChrome(event)) {
       return;
     }
 

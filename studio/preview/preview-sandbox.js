@@ -1084,23 +1084,43 @@ function handleSandboxInspect(kind, payload) {
 
 
   /*
-    HOME-CANVAS-TRANSFORM-1A — 프레임의 이동 **확정 요청**.
+    HOME-CANVAS-TRANSFORM-1A · 1B — 프레임의 이동 · 리사이즈
+    **확정 요청**.
 
     여기서도 해석하지 않는다 — 알려진 칸만 옮겨 Studio 로 올린다.
-    그 좌표를 실제로 써도 되는지(선택 · 순번 · expected · 범위)는
+    그 값을 실제로 써도 되는지(선택 · 순번 · expected · 범위)는
     Studio 가 자기 draft 로 정한다
     (studio/inspector/studio-canvas-selection.js
      commitStudioCanvasElementTransform).
+
+    ★ 옮기는 칸은 `kind` 가 정한다. 프로토콜이 이미 그 kind 의
+      모양만 통과시켰으므로(isSandboxCanvasPoint / …Box) 여기서는
+      그 모양을 그대로 새 리터럴로 옮긴다 — 이동 요청에 width 칸을
+      만들어 두면 Studio 의 "정확히 이 키들" 판정에 걸린다.
   */
   if (kind === "canvas-transform") {
+
+    const box =
+      (value) => {
+
+        const out = { x: value.x, y: value.y };
+
+        if (payload.kind === "resize") {
+          out.width = value.width;
+          out.height = value.height;
+        }
+
+        return out;
+
+      };
 
     sandboxInspectRelay({
       type: "preview:canvas-transform",
       remote: true,
       kind: payload.kind,
       id: payload.id,
-      expected: { x: payload.expected.x, y: payload.expected.y },
-      next: { x: payload.next.x, y: payload.next.y },
+      expected: box(payload.expected),
+      next: box(payload.next),
       generation: Number.isInteger(payload.generation) ? payload.generation : 0,
       requestId: Number.isInteger(payload.requestId) ? payload.requestId : 0
     });

@@ -883,21 +883,26 @@ function mergeSkinHomeCanvasRegionEntry(entry, changes) {
 
 
 /* =========================================================
-   4-1. 요소 하나의 x · y 만 바꾼다 (HOME-CANVAS-TRANSFORM-1A)
+   4-1. 요소 하나의 geometry 만 바꾼다
+        (HOME-CANVAS-TRANSFORM-1A · 1B)
 
-   writeSkinHomeCanvasElementPosition(regions, elementId, next, expected)
-     -> { ok: true,  regions, previous: { x, y } }
+   writeSkinHomeCanvasElementPosition — x · y 둘 (이동, 1A)
+   writeSkinHomeCanvasElementBox      — x · y · width · height (리사이즈, 1B)
+
+     -> { ok: true,  regions, previous: { ...그 칸들 } }
      -> { ok: false, reason }
 
-   ★ 이 함수가 바꾸는 것은 **두 칸뿐**이다.
+   ★ 두 함수가 **같은 불변 수정 한 곳**을 쓴다.
 
-     regions[name === "home_canvas"].canvas.elements[id === elementId].x
-                                                                     .y
+   아래 writeSkinHomeCanvasElementFields() 가 그 한 곳이고, 위의 둘은
+   "어떤 칸을 소유하는가"와 "그 값이 유효한가"만 다르게 준다. 복사
+   규칙(모르는 필드 보존 · 배열 순서 · 입력 non-mutation)이 두 벌이
+   되면 한쪽만 고쳐지는 날 이동과 리사이즈의 보존 범위가 갈라진다.
 
-   나머지는 전부 그대로 새 객체로 옮긴다 — regions 의 모르는 항목 ·
-   항목의 모르는 칸 · canvas 의 모르는 칸 · element 의 모르는 칸 ·
-   props · width · height · rotation · hidden · locked · 배열 순서 ·
-   다른 요소 객체(같은 참조로 옮긴다).
+   ★ 바뀌는 칸 밖은 전부 그대로 새 객체로 옮긴다 — regions 의 모르는
+   항목 · 항목의 모르는 칸 · canvas 의 모르는 칸 · element 의 모르는
+   칸 · props · rotation · hidden · locked · 배열 순서 · 다른 요소
+   객체(같은 참조로 옮긴다). 이동은 width · height 까지 보존한다.
 
    ★ 입력을 mutate 하지 않는다. 바뀌는 경로 위의 객체(regions 배열 ·
      home_canvas 항목 · canvas · elements 배열 · 그 요소)만 새로
@@ -909,12 +914,13 @@ function mergeSkinHomeCanvasRegionEntry(entry, changes) {
      프레임이 본 화면과 지금 draft 가 다르면(늦게 도착한 확정 ·
      그 사이의 Undo · Import) 쓰지 않고 거부한다.
 
-   ★ 모르는 키를 받지 않는다. next 는 x · y 둘뿐이고, 하나라도 더
-     있으면 거부한다 — 이 함수로 width · rotation 이 새어 들어갈
-     길을 만들지 않는다.
+   ★ 모르는 키를 받지 않는다. `next` 의 키는 소유한 칸과 **정확히**
+     같아야 하고, 하나라도 더 있으면 거부한다 — 이동 메시지로
+     width 가, 리사이즈 메시지로 rotation 이 새어 들어갈 길을
+     만들지 않는다.
 ========================================================== */
 
-function writeSkinHomeCanvasElementPosition(regions, elementId, next, expected) {
+function writeSkinHomeCanvasElementFields(regions, elementId, next, expected, spec) {
 
   if (
     typeof elementId !== "string" ||
@@ -931,15 +937,10 @@ function writeSkinHomeCanvasElementPosition(regions, elementId, next, expected) 
     Object.keys(next);
 
   if (
-    keys.length !== 2 ||
-    keys.indexOf("x") === -1 ||
-    keys.indexOf("y") === -1
+    keys.length !== spec.keys.length ||
+    spec.keys.some((key) => keys.indexOf(key) === -1)
   ) {
     return { ok: false, reason: "keys" };
-  }
-
-  if (!isSkinHomeCanvasCoord(next.x) || !isSkinHomeCanvasCoord(next.y)) {
-    return { ok: false, reason: "coord" };
   }
 
   const found =
@@ -971,22 +972,43 @@ function writeSkinHomeCanvasElementPosition(regions, elementId, next, expected) 
   const current =
     hits[0];
 
-  if (!isSkinHomeCanvasCoord(current.x) || !isSkinHomeCanvasCoord(current.y)) {
-    return { ok: false, reason: "current" };
+  /*
+    ★ 값 검사는 요소를 찾은 **뒤에** 한다.
+
+    `height:"auto"` 가 허용되는지는 그 요소의 type 이 정하므로
+    (§6), 요소 없이는 `next` 가 유효한지조차 말할 수 없다.
+  */
+  const nextReason =
+    spec.checkNext(next, current);
+
+  if (nextReason) {
+    return { ok: false, reason: nextReason };
   }
+
+  const currentReason =
+    spec.checkCurrent(current);
+
+  if (currentReason) {
+    return { ok: false, reason: currentReason };
+  }
+
+  const previous = {};
+
+  spec.keys.forEach((key) => {
+    previous[key] = current[key];
+  });
 
   if (isSkinHomeCanvasPlainObject(expected)) {
 
-    if (expected.x !== current.x || expected.y !== current.y) {
+    /* 지금 값과 **정확히** 같을 때만 쓴다. `"auto"` 도 이 한 줄이
+       가른다 — 문자열과 숫자는 === 로 절대 같지 않다. */
+    if (spec.keys.some((key) => expected[key] !== current[key])) {
       return { ok: false, reason: "expected" };
     }
 
   }
 
-  const previous =
-    { x: current.x, y: current.y };
-
-  if (current.x === next.x && current.y === next.y) {
+  if (spec.keys.every((key) => current[key] === next[key])) {
     return { ok: true, regions: regions, previous: previous, unchanged: true };
   }
 
@@ -1007,8 +1029,9 @@ function writeSkinHomeCanvasElementPosition(regions, elementId, next, expected) 
           }
         });
 
-        copy.x = next.x;
-        copy.y = next.y;
+        spec.keys.forEach((key) => {
+          copy[key] = next[key];
+        });
 
         return copy;
 
@@ -1052,6 +1075,107 @@ function writeSkinHomeCanvasElementPosition(regions, elementId, next, expected) 
 
 
   return { ok: true, regions: nextRegions, previous: previous };
+
+}
+
+
+function writeSkinHomeCanvasElementPosition(regions, elementId, next, expected) {
+
+  return writeSkinHomeCanvasElementFields(
+    regions,
+    elementId,
+    next,
+    expected,
+    {
+      keys: ["x", "y"],
+
+      checkNext: (value) =>
+        (isSkinHomeCanvasCoord(value.x) && isSkinHomeCanvasCoord(value.y))
+          ? ""
+          : "coord",
+
+      checkCurrent: (element) =>
+        (isSkinHomeCanvasCoord(element.x) && isSkinHomeCanvasCoord(element.y))
+          ? ""
+          : "current"
+    }
+  );
+
+}
+
+
+/*
+  HOME-CANVAS-TRANSFORM-1B — 리사이즈가 소유하는 것은 **네 칸**이다.
+
+  ★ `height` 는 숫자이거나 `"auto"` 다. `"auto"` 는 그 요소의 type 이
+    허용할 때만이고(§6), 그 판정은 요소를 찾은 뒤에 한다 — 검사
+    함수가 요소를 함께 받는 이유다.
+
+  ★ 네 칸이 한 요청이다. 폭만 바뀌는 좌우 리사이즈에서도 x · y ·
+    height 가 함께 온다(값이 같을 뿐이다). 칸마다 메시지를 가르면
+    "폭은 저장됐는데 x 는 안 됐다"는 중간 상태가 생긴다.
+*/
+function writeSkinHomeCanvasElementBox(regions, elementId, next, expected) {
+
+  return writeSkinHomeCanvasElementFields(
+    regions,
+    elementId,
+    next,
+    expected,
+    {
+      keys: ["x", "y", "width", "height"],
+
+      checkNext: (value, element) => {
+
+        if (!isSkinHomeCanvasCoord(value.x) || !isSkinHomeCanvasCoord(value.y)) {
+          return "coord";
+        }
+
+        if (!isSkinHomeCanvasSize(value.width)) {
+          return "size";
+        }
+
+        if (value.height === SKIN_HOME_CANVAS_AUTO_HEIGHT) {
+
+          return skinHomeCanvasAutoHeightAllowed(element) ? "" : "auto";
+
+        }
+
+        return isSkinHomeCanvasSize(value.height) ? "" : "size";
+
+      },
+
+      checkCurrent: (element) => {
+
+        if (!isSkinHomeCanvasCoord(element.x) || !isSkinHomeCanvasCoord(element.y)) {
+          return "current";
+        }
+
+        if (!isSkinHomeCanvasSize(element.width)) {
+          return "current";
+        }
+
+        if (element.height === SKIN_HOME_CANVAS_AUTO_HEIGHT) {
+          return skinHomeCanvasAutoHeightAllowed(element) ? "" : "current";
+        }
+
+        return isSkinHomeCanvasSize(element.height) ? "" : "current";
+
+      }
+    }
+  );
+
+}
+
+
+/* 그 요소의 type 이 `height:"auto"` 를 쓸 수 있는가(§6) — 검증기와
+   같은 표를 본다(SKIN_HOME_CANVAS_AUTO_HEIGHT_TYPES) */
+function skinHomeCanvasAutoHeightAllowed(element) {
+
+  return (
+    isSkinHomeCanvasPlainObject(element) &&
+    SKIN_HOME_CANVAS_AUTO_HEIGHT_TYPES.indexOf(element.type) !== -1
+  );
 
 }
 
@@ -1262,6 +1386,9 @@ if (typeof window !== "undefined") {
   /* HOME-CANVAS-TRANSFORM-1A */
   window.writeSkinHomeCanvasElementPosition = writeSkinHomeCanvasElementPosition;
 
+  /* HOME-CANVAS-TRANSFORM-1B */
+  window.writeSkinHomeCanvasElementBox = writeSkinHomeCanvasElementBox;
+
   window.createEmptySkinHomeCanvas = createEmptySkinHomeCanvas;
   window.createSkinHomeCanvasElementId = createSkinHomeCanvasElementId;
 
@@ -1308,6 +1435,7 @@ if (typeof module !== "undefined" && module.exports) {
     readSkinHomeCanvasRegion,
     writeSkinHomeCanvasRegion,
     writeSkinHomeCanvasElementPosition,
+    writeSkinHomeCanvasElementBox,
     createEmptySkinHomeCanvas,
     createSkinHomeCanvasElementId,
 

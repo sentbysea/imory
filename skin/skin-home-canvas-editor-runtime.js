@@ -116,9 +116,26 @@ const SHIFT_CLICK_SLOP = 5;
 
 const CANVAS_MOVE_KIND = "move";
 
+/* HOME-CANVAS-TRANSFORM-1B */
+const CANVAS_RESIZE_KIND = "resize";
+
+/*
+  손잡이 여덟. 순서가 곧 DOM 순서이므로 **시계 방향 한 바퀴**로
+  적는다 — 테스트가 `data-direction` 으로 찾으므로 순서에 기대지는
+  않지만, 읽는 사람이 빠진 것을 바로 알 수 있다.
+*/
+const CANVAS_RESIZE_DIRECTIONS = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+
+/* Canvas 좌표 기준 최소 크기(계약 §18-2). 0 을 허용하면 그 요소는
+   다시 잡을 수 없고, 계약의 `width > 0` 도 어긴다. */
+const CANVAS_MIN_SIZE = 1;
+
 const CANVAS_COORD_DECIMALS = 1000;
 
 const CANVAS_COMMIT_TIMEOUT_MS = 4000;
+
+/* `height:"auto"` 를 나타내는 그 문자열 하나(계약 §6) */
+const CANVAS_AUTO_HEIGHT = "auto";
 
 /* 규칙표를 못박을 때 쓰는 수. 한 화면에 이만큼의 컴포넌트가 동시에
    붙었다 떨어지는 일은 없다(위 pinEditorStyleSheets). */
@@ -443,7 +460,27 @@ function displayOnlyMoveableOptions(target, nonce) {
 
     preventClickEventOnDrag: true,
 
-    resizable: false,
+    /*
+      HOME-CANVAS-TRANSFORM-1B — 리사이즈.
+
+      ★ able 은 **처음부터 켠다**(위 draggable 의 그 사정과 같다).
+        able 을 나중에 켜면 그 렌더 뒤에야 손잡이의 gesto 가 만들어
+        지므로, 켠 직후에 누르면 제스처가 시작되지 않는다.
+
+      ★ 켜고 끄는 것은 able 이 아니라 **손잡이 목록**이다
+        (renderDirections). 그것은 그리기에만 쓰이므로 setState 의
+        지연이 문제가 되지 않는다 — 여럿을 골랐을 때 빈 배열을 주면
+        잡을 손잡이가 아예 없다(§18-1).
+
+      ★ 자유 비율이다. Shift 비율 고정 · Alt 중심 확대 · flip 은
+        이번 단계에 없다(계약 §18-2).
+    */
+    resizable: true,
+    throttleResize: 0,
+    keepRatio: false,
+    renderDirections:
+      (Array.isArray(target) && target.length > 1) ? [] : CANVAS_RESIZE_DIRECTIONS,
+
     scalable: false,
     rotatable: false,
     warpable: false,
@@ -470,8 +507,7 @@ function displayOnlyMoveableOptions(target, nonce) {
 
     passDragArea: false,
 
-    /* 손잡이와 기준점 표시 */
-    renderDirections: [],
+    /* 기준점 표시 — 손잡이 목록은 위 resizable 절에 있다 */
     origin: false,
     hideDefaultLines: false,
 
@@ -878,6 +914,11 @@ export function createHomeCanvasSelectionFrame(options) {
       return;
     }
 
+    /* HOME-CANVAS-TRANSFORM-1B — 손잡이 요소는 방향 목록이 바뀔 때
+       새로 만들어진다. 우리가 되돌려 준 hit area 를 그때 잃지 않게
+       매 프레임 다시 쓴다(여덟 노드 — 위 markResizeHandles) */
+    markResizeHandles(controlBoxElement());
+
     const elements =
       targetElements();
 
@@ -1012,6 +1053,87 @@ export function createHomeCanvasSelectionFrame(options) {
 
     box.setAttribute("data-imory-canvas-frame", "1");
 
+    markResizeHandles(box);
+
+  }
+
+
+  /* =========================================================
+     markResizeHandles(box) — 손잡이만 다시 잡을 수 있게 한다
+
+     ★ control box 는 `pointer-events: none` 이다(위 markControlBox).
+
+     그 값은 상속되므로 손잡이도 함께 꺼진다 — 0.53.0 의 `.control`
+     규칙에는 pointer-events 가 아예 없어서 부모 값을 그대로 받는다
+     (번들 실측). 그래서 리사이즈 손잡이에만 `auto` 를 되돌려 준다.
+
+     테두리 네 줄(`.moveable-line`)과 그룹의 `.moveable-area` 는
+     그대로 꺼 둔다 — 요소의 가장자리를 정확히 누른 클릭이 스킨 DOM
+     에 닿아야 하고, 그 자리는 여전히 "이 요소를 고른다"다.
+
+     ★ CSSOM 으로 쓰는 인라인 값은 CSP 의 style-src 검사를 받지
+       않는다(검사 대상은 마크업의 style **속성**이다). 우리 몫의
+       `<style>` 을 새로 만들지 않는다.
+
+     ★ 매 렌더마다 다시 해야 한다. preact 는 vnode 의 style 만
+       되돌리므로 우리가 따로 쓴 이 칸은 지워지지 않지만, 손잡이
+       **요소 자체**는 방향 목록이 바뀔 때 새로 만들어진다. 그래서
+       target 이 바뀔 때(markControlBox)와 따라가기 루프(tick) 둘
+       다에서 부른다 — 여덟 노드이고 이미 그 루프가 요소마다
+       getBoundingClientRect 를 재고 있다.
+  ========================================================== */
+
+  function markResizeHandles(box) {
+
+    if (!box) {
+      return 0;
+    }
+
+    const handles =
+      box.querySelectorAll(".moveable-control[data-direction]");
+
+    Array.prototype.forEach.call(handles, (handle) => {
+      handle.style.pointerEvents = "auto";
+    });
+
+    return handles.length;
+
+  }
+
+
+  function controlBoxElement() {
+
+    return (state.moveable && typeof state.moveable.getControlBoxElement === "function")
+      ? state.moveable.getControlBoxElement()
+      : null;
+
+  }
+
+
+  /*
+    resizeHandleNodes(hitOnly)
+
+    이 문서에서 **실제로 화면에 있는** 리사이즈 손잡이들. 진단이
+    쓴다(위 debugState 의 ★ 주석 — DOM 에 남아 있는 것과 잡을 수
+    있는 것은 다르다).
+  */
+  function resizeHandleNodes(hitOnly) {
+
+    return Array.prototype.filter.call(
+      doc.querySelectorAll(".moveable-control[data-direction]"),
+      (handle) => {
+
+        if (!handle.getClientRects || handle.getClientRects().length === 0) {
+          return false;
+        }
+
+        return hitOnly
+          ? win.getComputedStyle(handle).pointerEvents !== "none"
+          : true;
+
+      }
+    );
+
   }
 
 
@@ -1122,11 +1244,15 @@ export function createHomeCanvasSelectionFrame(options) {
       state.moveable =
         new state.ctor(doc.body, displayOnlyMoveableOptions(first, frameNonce()));
 
-      /* HOME-CANVAS-TRANSFORM-1A — 옵션이 아니라 여기서 건다
+      /* HOME-CANVAS-TRANSFORM-1A · 1B — 옵션이 아니라 여기서 건다
          (위 displayOnlyMoveableOptions 의 ★ 주석) */
       state.moveable.on("dragStart", onCanvasDragStart);
       state.moveable.on("drag", onCanvasDrag);
       state.moveable.on("dragEnd", onCanvasDragEnd);
+
+      state.moveable.on("resizeStart", onCanvasResizeStart);
+      state.moveable.on("resize", onCanvasResize);
+      state.moveable.on("resizeEnd", onCanvasResizeEnd);
 
       /*
         ★ 여기서 한 번 **flush** 한다.
@@ -1235,6 +1361,20 @@ export function createHomeCanvasSelectionFrame(options) {
          그룹의 요구가 다르다(위 주석). */
       state.moveable.dragArea =
         Array.isArray(target) && target.length > 1;
+
+      /* =====================================================
+         HOME-CANVAS-TRANSFORM-1B — 손잡이는 **단독 선택에만** 있다.
+
+         그룹 이동 · 그룹 리사이즈는 이번 단계에 없다(계약 §18-13).
+         able 을 끄는 대신 방향 목록을 비운다 — able 을 나중에 켜면
+         그 렌더 뒤에야 gesto 가 생긴다는 그 함정이 여기에도 있고,
+         방향 목록은 그리기에만 쓰이므로 안전하다. 잡을 손잡이가
+         아예 없으니 그룹에서는 리사이즈가 시작될 수 없다.
+      ====================================================== */
+      state.moveable.renderDirections =
+        (Array.isArray(target) && target.length > 1)
+          ? []
+          : CANVAS_RESIZE_DIRECTIONS;
 
       state.moveable.target = target;
       state.moveable.updateRect();
@@ -1349,16 +1489,29 @@ export function createHomeCanvasSelectionFrame(options) {
 
     if (
       typeof win.setSkinCanvasElementPosition !== "function" ||
-      typeof win.readSkinCanvasElementPositionVars !== "function" ||
-      typeof win.restoreSkinCanvasElementPositionVars !== "function"
+      typeof win.setSkinCanvasElementBox !== "function" ||
+      typeof win.readSkinCanvasElementBoxVars !== "function" ||
+      typeof win.restoreSkinCanvasElementBoxVars !== "function"
     ) {
       return null;
     }
 
     return {
       set: win.setSkinCanvasElementPosition,
-      read: win.readSkinCanvasElementPositionVars,
-      restore: win.restoreSkinCanvasElementPositionVars
+
+      /*
+        HOME-CANVAS-TRANSFORM-1B — 크기까지 쓰는 함수와,
+        **네 칸을 한 벌로** 읽고 되돌리는 함수.
+
+        ★ 읽기 · 되돌리기는 이동에서도 이 한 쌍을 쓴다. 제스처가
+          무엇이었든 "시작할 때 적혀 있던 그 문자열들"로 되돌리면
+          되고, 이동이 건드리지 않은 세 칸은 되돌려도 그대로다 —
+          제스처마다 되돌리는 범위가 갈라지면 "크기를 바꾸다 취소한
+          뒤 위치만 돌아왔다"가 생긴다.
+      */
+      setBox: win.setSkinCanvasElementBox,
+      read: win.readSkinCanvasElementBoxVars,
+      restore: win.restoreSkinCanvasElementBoxVars
     };
 
   }
@@ -1407,10 +1560,17 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   /*
-    지금 이동을 켜도 되는가 — 이유를 문자열로 돌려준다(§17-1).
+    지금 이동 · 리사이즈를 켜도 되는가 — 이유를 문자열로 돌려준다
+    (§17-1 · §18-1).
 
-    "ok" 가 아닌 값은 전부 진단용이고, 그 상태에서는 Moveable 의
-    draggable 이 꺼져 있어 애초에 제스처가 시작되지 않는다.
+    "ok" 가 아닌 값은 전부 진단용이고, 그 상태에서는 제스처가
+    시작되는 그 자리(dragStart · resizeStart)에서 거절된다.
+
+    ★ 관문은 **한 곳**이다. 이동과 리사이즈가 요구하는 것이 같기
+      때문이다 — 단독 선택 · 그 요소가 화면에 있다 · 잠기지 않았다 ·
+      부모가 내려 준 geometry 가 그 요소의 최신 값이다 · 렌더러의
+      계산이 이 문서에 있다 · 배율을 잴 수 있다. 다른 것은 제스처가
+      그 값에서 무엇을 바꾸는가뿐이다.
   */
   function dragGate() {
 
@@ -1648,6 +1808,7 @@ export function createHomeCanvasSelectionFrame(options) {
     }
 
     state.drag = {
+      kind: CANVAS_MOVE_KIND,
       id: geometry.id,
       el: el,
       scale: scale,
@@ -1655,12 +1816,16 @@ export function createHomeCanvasSelectionFrame(options) {
       startY: event.clientY,
       baseX: geometry.x,
       baseY: geometry.y,
+      baseW: geometry.width,
+      baseH: geometry.height,
       baseWidth: geometry.baseWidth,
       baseHeight: geometry.baseHeight,
       generation: state.generation,
       saved: api.read(el),
       nextX: geometry.x,
       nextY: geometry.y,
+      nextW: geometry.width,
+      nextH: geometry.height,
       cancelled: false
     };
 
@@ -1671,12 +1836,296 @@ export function createHomeCanvasSelectionFrame(options) {
   }
 
 
+  /* =========================================================
+     HOME-CANVAS-TRANSFORM-1B — 리사이즈
+
+     ★ 삼각함수를 새로 적지 않는다.
+
+     회전한 요소의 반대편 기준점을 유지하려면 요소의 중심이
+     움직여야 하고(회전 중심이 중심이므로), 그 양은 Moveable 이
+     이미 계산해서 준다 — `drag.beforeTranslate` 다. 그 값은
+     `transform: translate(tx,ty) rotate(θ)` 의 앞 translate 이므로
+     **부모 좌표계**의 양이고, 우리 요소는 그 좌표계에서 left · top
+     으로 놓여 있다. 그래서 x · y 에 **그대로 더하면** 된다.
+
+     2026-09-21 실측(20° · 45°, e · nw · n · se 손잡이)에서 그 값이
+     중심 회전 공식과 소수점까지 같았고, 고정되어야 하는 반대편
+     기준점은 0.5px 안에서 유지됐다(그 오차는 렌더러가 백분율을
+     여섯 자리에서 자르기 때문이고, 1px 허용치 안이다).
+
+     ★ 크기는 `dist` 다 — `width` · `height` 는 쓰지 않는다.
+
+     0.53.0 의 resize payload 에서 `width` · `height` 는 우리가
+     style 을 적용하지 않는 사용법에서는 **시작값에 머문다**(실측:
+     40px 를 끌어 `dist:[40,0]` 인데 `width` 는 그대로 90). `dist` 는
+     요소 **자기 축**에서의 누적 크기 변화이므로 회전과 무관하고,
+     delta 라서 padding · border 같은 box model 차이도 상쇄된다.
+
+     ★ 끄는 동안 크기를 실제로 적용해도 `dist` 는 선형이다(실측).
+       Moveable 은 기준점을 resizeStart 에서 잡아 두고 그 뒤로는
+       포인터 이동만 보므로 우리가 적용한 크기를 두 번 세지 않는다.
+  ========================================================== */
+
+  /*
+    지금 화면에 그려진 **실제 세로 길이**를 Canvas 좌표로.
+
+    `height:"auto"` 를 숫자로 바꿀 때의 기준 높이다(§18-3).
+
+    ★ getBoundingClientRect() 를 쓰지 않는다. 회전한 요소에서 그것은
+      축에 정렬된 바깥 상자라 요소의 세로 길이가 아니다. computed
+      `height` 는 회전과 무관한 **레이아웃 값**이고, 그 값이 곧
+      우리가 `--imory-canvas-height` 로 쓰는 그 칸의 단위다.
+  */
+  function renderedHeightIn(el, scale) {
+
+    if (!el || !(scale > 0)) {
+      return 0;
+    }
+
+    const value =
+      parseFloat(win.getComputedStyle(el).height);
+
+    return Number.isFinite(value) ? (value / scale) : 0;
+
+  }
+
+
+  function onCanvasResizeStart(event) {
+
+    const gate =
+      dragGate();
+
+    if (gate !== "ok") {
+      return refuseDrag(event, gate);
+    }
+
+    /* 손가락으로는 크기도 바꾸지 않는다 — 이동과 같은 이유이고
+       같은 판정 함수를 쓴다(§17-2 · §18-1) */
+    if (isCoarsePointerEvent(event && event.inputEvent)) {
+      return refuseDrag(event, "coarse-pointer");
+    }
+
+    const geometry =
+      state.geometry;
+
+    const el =
+      elementFor(geometry.id);
+
+    const api =
+      positionApi();
+
+    const scale =
+      canvasScale(geometry.baseWidth);
+
+    if (!el || !api || !(scale > 0)) {
+      return refuseDrag(event, "no-basis");
+    }
+
+    const direction =
+      (event && Array.isArray(event.direction)) ? event.direction : [0, 0];
+
+    /* 세로가 움직일 수 있는 제스처인가 — `"auto"` 를 숫자로 바꿀지
+       가르는 첫 조건이다(§18-3). 좌우 손잡이는 direction[1] 이 0 이다. */
+    const verticalHandle =
+      direction[1] !== 0;
+
+    const autoHeight =
+      geometry.height === CANVAS_AUTO_HEIGHT;
+
+    state.drag = {
+      kind: CANVAS_RESIZE_KIND,
+      id: geometry.id,
+      el: el,
+      scale: scale,
+      direction: [direction[0], direction[1]],
+      verticalHandle: verticalHandle,
+      autoHeight: autoHeight,
+      baseX: geometry.x,
+      baseY: geometry.y,
+      baseW: geometry.width,
+      baseH: geometry.height,
+
+      /*
+        `"auto"` 인 요소의 기준 높이. 숫자로 바뀌는 순간부터 이
+        값에 누적 변화를 더한다 — 저장된 값이 없으므로 화면에서
+        한 번 재는 것이 유일한 출발점이다.
+      */
+      autoBaseH: autoHeight ? renderedHeightIn(el, scale) : 0,
+
+      baseWidth: geometry.baseWidth,
+      baseHeight: geometry.baseHeight,
+      generation: state.generation,
+      saved: api.read(el),
+      nextX: geometry.x,
+      nextY: geometry.y,
+      nextW: geometry.width,
+      nextH: geometry.height,
+      cancelled: false
+    };
+
+    state.lastMoveGate = "ok";
+
+    return true;
+
+  }
+
+
+  function onCanvasResize(event) {
+
+    const gesture =
+      state.drag;
+
+    if (!gesture || gesture.cancelled || gesture.kind !== CANVAS_RESIZE_KIND) {
+      return;
+    }
+
+    if (!gesture.el.isConnected) {
+      cancelDrag("detached");
+      return;
+    }
+
+    const api =
+      positionApi();
+
+    if (!api) {
+      cancelDrag("no-renderer");
+      return;
+    }
+
+    const dist =
+      (event && Array.isArray(event.dist)) ? event.dist : [0, 0];
+
+    const translate =
+      (event && event.drag && Array.isArray(event.drag.beforeTranslate))
+        ? event.drag.beforeTranslate
+        : [0, 0];
+
+    if (
+      !Number.isFinite(dist[0]) || !Number.isFinite(dist[1]) ||
+      !Number.isFinite(translate[0]) || !Number.isFinite(translate[1])
+    ) {
+      return;
+    }
+
+    /* ★ 시작값 + **누적** 변화다. 직전 프레임의 값에 더하지 않으므로
+       프레임 수와 무관하고 반올림이 쌓이지 않는다(§17-3). */
+
+    const dw =
+      dist[0] / gesture.scale;
+
+    const dh =
+      dist[1] / gesture.scale;
+
+    gesture.nextX =
+      roundCanvasCoord(gesture.baseX + translate[0] / gesture.scale);
+
+    gesture.nextY =
+      roundCanvasCoord(gesture.baseY + translate[1] / gesture.scale);
+
+    gesture.nextW =
+      roundCanvasCoord(Math.max(CANVAS_MIN_SIZE, gesture.baseW + dw));
+
+    /* =====================================================
+       `height:"auto"` — 언제 숫자가 되는가(§18-3)
+
+       ★ 두 조건이 **모두** 참일 때만이다.
+
+         1) 세로가 움직일 수 있는 손잡이였다(n · s · 네 모서리)
+         2) 실제 세로 변화가 0 이 아니다
+
+       (1) 만 보면 모서리를 잡고 가로로만 끌어도 숫자가 되고,
+       (2) 만 보면 단순 클릭의 미세한 떨림이 숫자로 바꾼다. 한 번
+       숫자가 된 요소를 자동으로 `"auto"` 로 되돌리지는 않는다 —
+       그 UI 는 뒤 Inspector 단계다.
+    ====================================================== */
+
+    if (gesture.autoHeight && (!gesture.verticalHandle || dh === 0)) {
+
+      gesture.nextH = CANVAS_AUTO_HEIGHT;
+
+    }
+    else {
+
+      const baseH =
+        gesture.autoHeight ? gesture.autoBaseH : gesture.baseH;
+
+      gesture.nextH =
+        roundCanvasCoord(Math.max(CANVAS_MIN_SIZE, baseH + dh));
+
+    }
+
+    try {
+
+      api.setBox(
+        gesture.el,
+        {
+          x: gesture.nextX,
+          y: gesture.nextY,
+          width: gesture.nextW,
+          height: gesture.nextH
+        },
+        gesture.baseWidth,
+        gesture.baseHeight
+      );
+
+    }
+    catch (err) {
+      cancelDrag("write-failed");
+    }
+
+  }
+
+
+  function onCanvasResizeEnd() {
+
+    const gesture =
+      state.drag;
+
+    if (!gesture || gesture.kind !== CANVAS_RESIZE_KIND) {
+      return;
+    }
+
+    state.drag = null;
+
+    if (gesture.cancelled) {
+      return;
+    }
+
+    /* 바뀐 것이 없다 — 확정도, 기록도 없다(§17-6).
+       ★ `"auto"` 가 그대로면 nextH 도 같은 문자열이라 이 한 줄이
+         "단순 클릭은 auto 를 숫자로 바꾸지 않는다"까지 함께 본다. */
+    if (
+      gesture.nextX === gesture.baseX &&
+      gesture.nextY === gesture.baseY &&
+      gesture.nextW === gesture.baseW &&
+      gesture.nextH === gesture.baseH
+    ) {
+      restoreDragPosition(gesture);
+      state.lastMoveGate = "no-resize";
+      return;
+    }
+
+    sendTransform(gesture, {
+      x: gesture.baseX,
+      y: gesture.baseY,
+      width: gesture.baseW,
+      height: gesture.baseH
+    }, {
+      x: gesture.nextX,
+      y: gesture.nextY,
+      width: gesture.nextW,
+      height: gesture.nextH
+    });
+
+  }
+
+
   function onCanvasDrag(event) {
 
     const gesture =
       state.drag;
 
-    if (!gesture || gesture.cancelled) {
+    if (!gesture || gesture.cancelled || gesture.kind !== CANVAS_MOVE_KIND) {
       return;
     }
 
@@ -1732,9 +2181,13 @@ export function createHomeCanvasSelectionFrame(options) {
     const gesture =
       state.drag;
 
+    if (!gesture || gesture.kind !== CANVAS_MOVE_KIND) {
+      return;
+    }
+
     state.drag = null;
 
-    if (!gesture || gesture.cancelled) {
+    if (gesture.cancelled) {
       return;
     }
 
@@ -1745,20 +2198,38 @@ export function createHomeCanvasSelectionFrame(options) {
       return;
     }
 
+    sendTransform(
+      gesture,
+      { x: gesture.baseX, y: gesture.baseY },
+      { x: gesture.nextX, y: gesture.nextY }
+    );
+
+  }
+
+
+  /* =========================================================
+     sendTransform(gesture, expected, next)
+
+     제스처가 끝난 뒤의 **확정 요청** — 이동과 리사이즈가 함께 쓴다.
+     다른 것은 `kind` 와 `expected` · `next` 의 칸뿐이고, 기다림 ·
+     요청 번호 · 상한 시간 · 진단은 한 벌이다.
+
+     ★ 임시 값을 **그대로 둔 채** 답을 기다린다.
+
+     여기서 먼저 시작 값으로 되돌리면 승인된 경우에도 한 프레임
+     제자리로 튀었다가 다시 간다. 부모의 답(새 geometry)이 그
+     기다림을 끝낸다 — 승인이면 방금 값을 그대로 확정하고, 거부면
+     부모가 내려 준 현재 값으로 되돌아간다.
+  ========================================================== */
+
+  function sendTransform(gesture, expected, next) {
+
     if (typeof opts.onTransform !== "function") {
       restoreDragPosition(gesture);
       state.lastMoveGate = "no-channel";
       return;
     }
 
-    /*
-      ★ 임시 위치를 **그대로 둔 채** 답을 기다린다.
-
-      여기서 먼저 시작 자리로 되돌리면 승인된 경우에도 한 프레임
-      제자리로 튀었다가 다시 간다. 부모의 답(새 geometry)이 그
-      기다림을 끝낸다 — 승인이면 방금 자리를 그대로 확정하고,
-      거부면 부모가 내려 준 현재 값으로 되돌아간다.
-    */
     state.requestSeq += 1;
 
     gesture.requestId = state.requestSeq;
@@ -1768,9 +2239,10 @@ export function createHomeCanvasSelectionFrame(options) {
     state.moveCount += 1;
 
     state.lastCommit = {
+      kind: gesture.kind,
       id: gesture.id,
-      expected: { x: gesture.baseX, y: gesture.baseY },
-      next: { x: gesture.nextX, y: gesture.nextY },
+      expected: expected,
+      next: next,
       generation: gesture.generation,
       requestId: gesture.requestId
     };
@@ -1782,24 +2254,28 @@ export function createHomeCanvasSelectionFrame(options) {
     try {
 
       opts.onTransform({
-        kind: CANVAS_MOVE_KIND,
+        kind: gesture.kind,
         id: gesture.id,
-        expected: { x: gesture.baseX, y: gesture.baseY },
-        next: { x: gesture.nextX, y: gesture.nextY },
+        expected: expected,
+        next: next,
         generation: gesture.generation,
         requestId: gesture.requestId
       });
 
     }
     catch (err) {
-      cancelDrag("send-failed");
+      /* 보내지 못했으면 기다릴 것도 없다 — 그 자리로 되돌린다 */
+      state.pending = null;
+      restoreDragPosition(gesture);
+      state.lastSettle = "cancel:send-failed";
+      syncDraggable();
       return;
     }
 
     clearPendingTimer();
 
     /* 답이 아예 오지 않는 경우(프레임 교체 · 부모 오류)에도 임시
-       위치가 영영 남지 않게 한다 */
+       값이 영영 남지 않게 한다 */
     state.pendingTimer =
       win.setTimeout(
         () => {
@@ -1821,18 +2297,35 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   /* =========================================================
-     setGeometry(payload) — 부모가 내려 준 단일 선택의 Canvas 좌표
+     setGeometry(payload) — 부모가 내려 준 단일 선택의 Canvas geometry
 
-     payload = { active, id, x, y, baseWidth, baseHeight, generation }
+     payload = { active, id, x, y, width, height,
+                 baseWidth, baseHeight, generation }
 
      ★ 두 가지 일을 한다.
 
-       1) 다음 드래그의 **시작 좌표**를 정한다.
+       1) 다음 제스처의 **시작 값**을 정한다(이동은 x · y, 리사이즈는
+          거기에 width · height 까지).
        2) 확정을 기다리는 중이었다면 그 기다림을 **끝낸다** —
-          승인이면 받은 값이 방금 놓은 자리와 같고, 거부면 예전
+          승인이면 받은 값이 방금 놓은 값과 같고, 거부면 예전
           값이라 화면이 제자리로 돌아간다. 프레임은 둘을 구분해
           행동하지 않는다: 언제나 "부모가 말한 값"으로 맞춘다.
+
+     ★ `height` 는 숫자이거나 `"auto"` 다(계약 §6). 프레임은 그 둘을
+       그대로 들고 있다가 리사이즈에서 가른다 — 여기서 숫자로
+       바꿔치기하지 않는다.
   ========================================================== */
+
+  /* 조작의 시작값이 될 수 있는 높이인가 */
+  function usableGeometryHeight(value) {
+
+    return (
+      value === CANVAS_AUTO_HEIGHT ||
+      (Number.isFinite(value) && value > 0)
+    );
+
+  }
+
 
   function setGeometry(payload) {
 
@@ -1846,6 +2339,8 @@ export function createHomeCanvasSelectionFrame(options) {
             id: typeof payload.id === "string" ? payload.id : "",
             x: payload.x,
             y: payload.y,
+            width: payload.width,
+            height: payload.height,
             baseWidth: payload.baseWidth,
             baseHeight: payload.baseHeight,
             generation:
@@ -1853,11 +2348,12 @@ export function createHomeCanvasSelectionFrame(options) {
           }
         : null;
 
-    /* 진단 — 마지막 몇 개의 좌표 메시지. "승인인데 왜 되돌아갔나"를
+    /* 진단 — 마지막 몇 개의 geometry 메시지. "승인인데 왜 되돌아갔나"를
        다시 재현하지 않고 읽을 수 있게 남긴다. */
     state.geometryLog.push(
       value
-        ? `${value.id}@${value.x},${value.y}#${value.generation}${state.pending ? "*" : ""}`
+        ? `${value.id}@${value.x},${value.y} ${value.width}x${value.height}` +
+            `#${value.generation}${state.pending ? "*" : ""}`
         : `off${state.pending ? "*" : ""}`
     );
 
@@ -1870,6 +2366,8 @@ export function createHomeCanvasSelectionFrame(options) {
       CANVAS_ELEMENT_ID_PATTERN.test(value.id) &&
       Number.isFinite(value.x) &&
       Number.isFinite(value.y) &&
+      Number.isFinite(value.width) && value.width > 0 &&
+      usableGeometryHeight(value.height) &&
       value.baseWidth > 0 &&
       value.baseHeight > 0 &&
       value.generation >= 0;
@@ -1893,11 +2391,16 @@ export function createHomeCanvasSelectionFrame(options) {
 
     if (state.drag) {
 
+      /* ★ 네 칸을 **모두** 본다. 이동 중에 폭이 달라졌다는 것도
+         "그 사이에 draft 가 바뀌었다"이고, 그때의 이동은 이미 옛
+         화면을 근거로 한 것이다. */
       if (
         usable &&
         value.id === state.drag.id &&
         value.x === state.drag.baseX &&
-        value.y === state.drag.baseY
+        value.y === state.drag.baseY &&
+        value.width === state.drag.baseW &&
+        value.height === state.drag.baseH
       ) {
         state.drag.generation = value.generation;
       }
@@ -1957,7 +2460,23 @@ export function createHomeCanvasSelectionFrame(options) {
         if (api && el) {
 
           try {
-            api.set(el, value.x, value.y, value.baseWidth, value.baseHeight);
+
+            /* ★ 네 칸을 한 벌로 맞춘다. 이동의 답에서도 그렇게 한다 —
+               부모가 말한 값이 곧 지금 draft 이고, 그 중 세 칸이
+               이동 때문에 달라질 일이 없으니 같은 값을 다시 쓰는
+               것뿐이다(§18-5). */
+            api.setBox(
+              el,
+              {
+                x: value.x,
+                y: value.y,
+                width: value.width,
+                height: value.height
+              },
+              value.baseWidth,
+              value.baseHeight
+            );
+
           }
           catch (err) {
             /* 이미 갈린 노드다 — 새 DOM 이 제자리를 그린다 */
@@ -1966,7 +2485,12 @@ export function createHomeCanvasSelectionFrame(options) {
         }
 
         state.lastSettle =
-          (value.x === pending.nextX && value.y === pending.nextY)
+          (
+            value.x === pending.nextX &&
+            value.y === pending.nextY &&
+            value.width === pending.nextW &&
+            value.height === pending.nextH
+          )
             ? "accepted"
             : "restored";
 
@@ -2871,9 +3395,7 @@ export function createHomeCanvasSelectionFrame(options) {
     debugState: function () {
 
       const box =
-        (state.moveable && typeof state.moveable.getControlBoxElement === "function")
-          ? state.moveable.getControlBoxElement()
-          : null;
+        controlBoxElement();
 
       let rect = null;
 
@@ -2932,13 +3454,45 @@ export function createHomeCanvasSelectionFrame(options) {
         draggable: dragGate() === "ok",
         dragGate: dragGate(),
         dragging: !!state.drag,
+        dragKind: state.drag ? state.drag.kind : "",
         pendingCommit: !!state.pending,
+
+        /* =================================================
+           HOME-CANVAS-TRANSFORM-1B — 지금 이 **문서 전체**에서
+           실제로 잡을 수 있는 리사이즈 손잡이.
+
+           ★ control box 하나만 세지 않는다. MoveableGroup 은 감싸는
+             상자 말고 자식 target 마다 상자를 하나 더 그리므로
+             (§15 의 controlBoxes 주석), "여럿을 골랐을 때 잡을
+             손잡이가 없다"는 문서 전체로 세어야 참이 된다.
+
+           ★ DOM 에 남아 있는 것과 잡을 수 있는 것은 다르다.
+
+           0.53.0 은 target 을 풀면 control box 를 `display:none` 으로
+           만들 뿐 **자식 손잡이를 지우지 않는다**(2026-09-21 실측:
+           선택이 비었는데 노드는 여덟 그대로였다). 그래서 노드 수로
+           세면 "고른 것이 없는데 손잡이가 여덟"이 된다. 실제로 화면에
+           있는 것만 세려면 상자를 물어봐야 한다 —
+           `getClientRects().length` 는 display:none 인 조상 밑에서 0 이다.
+
+           `hit` 는 거기에 더해 pointer-events 까지 살아 있는 것의
+           수다(control box 의 `none` 을 되돌려 받았는가 — §18-11).
+        ================================================= */
+        resizeHandles: resizeHandleNodes(false).length,
+        resizeHandleDirections:
+          resizeHandleNodes(false).map(
+            (handle) => handle.getAttribute("data-direction")
+          ),
+        resizeHandleHit: resizeHandleNodes(true).length,
+
         geometry:
           state.geometry
             ? {
                 id: state.geometry.id,
                 x: state.geometry.x,
                 y: state.geometry.y,
+                width: state.geometry.width,
+                height: state.geometry.height,
                 generation: state.geometry.generation
               }
             : null,
