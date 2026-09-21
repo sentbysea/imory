@@ -22,6 +22,9 @@
      [patterns]  id ↔ SKIN_SANITIZE_EDIT_ID_PATTERN ·
                  slot ↔ SKIN_IMAGE_SLOT_NAME_PATTERN · 새 id 가 둘 다 통과
      [docs]      진입 문서 로드 순서(sanitize 보다 먼저) · sandbox allowlist
+     [manual]    수동 테스트 스킨(MILESTONE-1) — 계약 통과 · 표식 1개 ·
+                 resolve · id 유일 · 순서 보존 · 확인할 구조가 다 있는가 ·
+                 **제품 기본 스킨 불변**
 
    Import → Export → Save → 다시 열기 → Publish 왕복과 AI 경로는
    브라우저가 필요하다 — studio/studio-home-canvas-e2e-test.mjs.
@@ -783,6 +786,162 @@ check("[docs] 계약 문서가 있고 색인에 적혀 있다",
   fs.existsSync(path.join(ROOT, "docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md")) &&
   /IMORY_HOME_CANVAS_CONTRACT\.md/.test(read("docs/INDEX.md")) &&
   /skin-home-canvas-test\.mjs/.test(read("docs/TESTS.md")));
+
+
+/* ---------------------------------------------------------- */
+/*
+  [manual] 수동 테스트 스킨 (HOME-CANVAS-MILESTONE-1)
+
+  skin/test-skins/imory-home-canvas-manual-v1.json 은 주인이 Studio
+  에서 직접 Import 해서 이동 · 리사이즈 · 회전을 **손으로** 확인하는
+  파일이다. Studio 에 Canvas 생성 UI 가 아직 없어서(로드맵
+  ELEMENTS-1) 그 파일이 없으면 배포된 화면에서 시험할 방법이 없다.
+
+  여기서 보는 것은 브라우저가 필요 없는 것들이다 — 계약 통과 ·
+  표식 1개 · resolve · id 유일 · 순서 보존 · 빌더 재현성. Import
+  검증 · 실제 렌더 · Export→Import 왕복 · sandbox parity 는 브라우저
+  가 필요하다(studio/studio-home-canvas-manual-skin-e2e-test.mjs).
+
+  ★ 이 파일이 제품 기본 스킨을 건드리지 않는다는 것도 여기서 본다 —
+    기본 스킨(imory-editorial-default-v2.json)에 home_canvas 나 표식이
+    생기면 "가입할 때 자동으로 캔버스가 붙는" 변경이므로 즉시 실패해야
+    한다.
+*/
+console.log("\n[manual] 수동 테스트 스킨");
+
+const MANUAL_REL = "skin/test-skins/imory-home-canvas-manual-v1.json";
+
+check("[manual] JSON 과 builder 가 둘 다 있다",
+  fs.existsSync(path.join(ROOT, MANUAL_REL)) &&
+  fs.existsSync(path.join(ROOT, "skin/test-skins/build-home-canvas-manual-v1.mjs")));
+
+{
+  const manual = JSON.parse(read(MANUAL_REL));
+
+  const region =
+    canvas.readSkinHomeCanvasRegion(manual);
+
+  check("[manual] home_canvas region 이 하나 있고 켜져 있다",
+    !!region && region.enabled === true);
+
+  const verdict =
+    canvas.validateSkinHomeCanvasRegions(manual.regions);
+
+  check("★ [manual] 새 Import 의 계약 검증을 통과한다",
+    verdict.ok === true,
+    verdict.ok ? "" : `${verdict.path || ""} ${verdict.message || ""}`);
+
+  check("★ [manual] HOME 에 표시 위치가 **정확히 하나**다",
+    canvas.countSkinHomeCanvasRoots(manual.templates.home.html) === 1,
+    String(canvas.countSkinHomeCanvasRoots(manual.templates.home.html)));
+
+  /* 다른 화면에는 표식을 두지 않았다 — 이번 마일스톤은 HOME 이다 */
+  check("[manual] CATEGORY · POST · BANNER · FOLDER 에는 표식이 없다",
+    ["category", "post", "banner", "folder"].every((key) =>
+      canvas.countSkinHomeCanvasRoots(manual.templates[key].html) === 0));
+
+  /* POST · FOLDER 의 본문 자리 — 기존 Import 계약 */
+  check("[manual] POST · FOLDER 에 본문 자리(post-body region)가 있다",
+    ['post', 'folder'].every((key) =>
+      manual.templates[key].html.indexOf('data-imory-region="post-body"') !== -1));
+
+  const els = region.canvas.elements;
+
+  check("★ [manual] element id 가 전부 유일하다",
+    new Set(els.map((el) => el.id)).size === els.length,
+    `${els.length}개`);
+
+  /* resolve — 실행용 payload 가 만들어지는가(표식 · 데이터 둘 다 필요) */
+  const payload =
+    canvas.resolveSkinHomeCanvas(manual, manual.templates.home.html);
+
+  check("★ [manual] resolveSkinHomeCanvas 가 실행용 payload 를 만든다",
+    !!payload && payload.elements.length === els.length &&
+    payload.baseWidth === 390 && payload.baseHeight === 844,
+    payload ? `${payload.elements.length}개` : "payload 없음");
+
+  check("★ [manual] 요소 순서가 payload 에서도 배열 그대로다(= 앞뒤 순서)",
+    !!payload &&
+    payload.elements.map((el) => el.id).join() === els.map((el) => el.id).join());
+
+  /* 이번 마일스톤이 손으로 확인하려는 구조가 실제로 들어 있는가.
+     하나라도 빠지면 안내문의 그 단계를 시험할 수 없다. */
+  const kinds = els.map((el) => el.type);
+
+  check("[manual] 잠긴 배경이 도화지 전체를 덮는다",
+    els.some((el) =>
+      el.locked === true && el.type === "shape" &&
+      el.x <= 0 && el.y <= 0 &&
+      el.width >= region.canvas.baseWidth &&
+      el.height >= region.canvas.baseHeight));
+
+  check("[manual] photo · sticker · logo · category_nav 가 있다",
+    ["photo", "sticker", "logo", "category_nav"].every((t) => kinds.includes(t)),
+    kinds.join(" "));
+
+  check('[manual] height:"auto" 글자와 숫자 height 요소가 둘 다 있다',
+    els.some((el) => el.height === "auto" && el.type === "text") &&
+    els.some((el) => typeof el.height === "number"));
+
+  check("[manual] 초기 rotation 이 있는 요소가 둘 이상이다",
+    els.filter((el) => typeof el.rotation === "number" && el.rotation !== 0).length >= 2,
+    String(els.filter((el) => el.rotation).length));
+
+  check("[manual] 도화지 밖으로 일부 나간 장식이 있다(음수 x)",
+    els.some((el) => el.x < 0));
+
+  /* 겹침 — 회전을 뺀 축 정렬 상자로 본다(겹쳤다는 사실만 보면 된다) */
+  const overlaps = (a, b) => {
+    const ah = typeof a.height === "number" ? a.height : 40;
+    const bh = typeof b.height === "number" ? b.height : 40;
+    return a.x < b.x + b.width && b.x < a.x + a.width &&
+      a.y < b.y + bh && b.y < a.y + ah;
+  };
+
+  const movable = els.filter((el) => !el.locked);
+
+  check("[manual] 서로 일부 겹친 요소가 있다",
+    movable.some((a, i) =>
+      movable.slice(i + 1).some((b) => overlaps(a, b))));
+
+  /* 이미지 슬롯 — 세 종류가 선언돼 있고 저장소에 그림이 없다 */
+  const slots = (manual.imageSlots || []).map((s) => s.name);
+
+  check("★ [manual] photo · sticker · logo 의 슬롯이 imageSlots 에 나온다",
+    els
+      .filter((el) => ["photo", "sticker", "logo"].includes(el.type))
+      .every((el) => slots.includes(el.props.slot)),
+    slots.join(" "));
+
+  check("[manual] 슬롯 이름이 snake_case 규칙을 지킨다",
+    slots.every((name) => canvas.SKIN_HOME_CANVAS_SLOT_NAME_PATTERN.test(name)));
+
+  check("[manual] 필수 이미지가 없다(그림 없이도 시험할 수 있다)",
+    (manual.imageSlots || []).every((s) => s.required !== true));
+
+  check("[manual] metadata 제목에 수동 테스트용임이 적혀 있다",
+    /manual test/i.test(String(manual.metadata.title)),
+    String(manual.metadata.title));
+
+  /* 빌더 재현성 — JSON 을 손으로만 관리하지 않는다 */
+  const builder =
+    read("skin/test-skins/build-home-canvas-manual-v1.mjs");
+
+  check("[manual] builder 가 그 JSON 파일을 쓴다",
+    builder.indexOf("imory-home-canvas-manual-v1.json") !== -1);
+}
+
+/*
+  ★ 기본 스킨 불변 — 이번 라운드가 건드리지 않았다는 것을 파일로
+    확인한다. 여기가 깨지면 "가입하면 캔버스가 자동으로 붙는다"는
+    뜻이므로 계약 §3 위반이다.
+*/
+check("★ [manual] 제품 기본 스킨에는 캔버스가 없다(자동 삽입 0)",
+  (() => {
+    const base = read("skin/test-skins/imory-editorial-default-v2.json");
+    return base.indexOf("home_canvas") === -1 &&
+      base.indexOf("data-imory-canvas-root") === -1;
+  })());
 
 
 console.log(`\n${passed} passed, ${failed} failed`);

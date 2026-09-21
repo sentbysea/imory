@@ -1,0 +1,243 @@
+{
+  "schemaVersion": 1,
+  "templates": {
+    "home": {
+      "html": "<div class=\"hcm-page\"><p class=\"hcm-badge\">HOME CANVAS — manual test v1</p><div class=\"hcm-canvas\" data-imory-canvas-root></div><p class=\"hcm-owner\" data-imory-if=\"viewer.isOwner\"><a class=\"hcm-owner-link\" data-imory-if=\"viewer.writeHref\" data-imory-href=\"viewer.writeHref\">WRITE</a><a class=\"hcm-owner-link\" data-imory-if=\"viewer.manageHref\" data-imory-href=\"viewer.manageHref\">EDIT</a></p><p class=\"hcm-foot\">수동 검사용 스킨입니다. 확인이 끝나면 원래 스킨을 다시 Import 하세요.</p></div>"
+    },
+    "category": {
+      "html": "<div class=\"hcm-page\"><p class=\"hcm-crumb\"><a data-imory-href=\"navigation.home.href\" data-imory-bind=\"site.title\"></a></p><h1 class=\"hcm-head\" data-imory-bind=\"category.name\"></h1><p class=\"hcm-owner\" data-imory-if=\"viewer.isOwner\"><a class=\"hcm-owner-link\" data-imory-if=\"viewer.writeHref\" data-imory-href=\"viewer.writeHref\">WRITE</a><a class=\"hcm-owner-link\" data-imory-if=\"viewer.manageHref\" data-imory-href=\"viewer.manageHref\">EDIT</a></p><ul class=\"hcm-list\"><li class=\"hcm-list-item\" data-imory-repeat=\"category.posts\"><a class=\"hcm-list-link\" data-imory-href=\"item.href\" data-imory-bind=\"item.title\"></a></li></ul></div>"
+    },
+    "post": {
+      "html": "<div class=\"hcm-page\"><p class=\"hcm-crumb\"><a data-imory-href=\"post.categoryHref\" data-imory-bind=\"post.categoryName\"></a></p><h1 class=\"hcm-head\" data-imory-bind=\"post.title\"></h1><p class=\"hcm-date\" data-imory-bind=\"post.publishedAtLabel\"></p><p class=\"hcm-owner\" data-imory-if=\"viewer.isOwner\"><a class=\"hcm-owner-link\" data-imory-if=\"viewer.writeHref\" data-imory-href=\"viewer.writeHref\">WRITE</a><a class=\"hcm-owner-link\" data-imory-if=\"viewer.manageHref\" data-imory-href=\"viewer.manageHref\">EDIT</a></p><article class=\"hcm-body\" data-imory-region=\"post-body\"></article></div>"
+    },
+    "banner": {
+      "html": "<div class=\"hcm-page\"><h1 class=\"hcm-head\" data-imory-bind=\"bannerCategory.name\"></h1><ul class=\"hcm-list\"><li class=\"hcm-list-item\" data-imory-repeat=\"bannerCategory.items\"><a class=\"hcm-list-link\" data-imory-href=\"item.linkUrl\" data-imory-bind=\"item.title\"></a></li></ul></div>"
+    },
+    "folder": {
+      "html": "<div class=\"hcm-page\"><p class=\"hcm-crumb\"><a data-imory-href=\"folder.parentHref\">← BACK</a></p><h1 class=\"hcm-head\" data-imory-bind=\"folder.name\"></h1><div class=\"hcm-series\" data-imory-repeat=\"folder.posts\"><h2 class=\"hcm-series-title\" data-imory-bind=\"item.title\"></h2><article class=\"hcm-body\" data-imory-region=\"post-body\"></article></div></div>"
+    }
+  },
+  "css": ".hcm-page {\nmax-width: 560px;\nmargin: 0 auto;\npadding: 16px 12px 48px;\ncolor: #22262b;\nfont-family: system-ui, -apple-system, \"Segoe UI\", sans-serif;\nline-height: 1.6;\n}\n.hcm-badge {\nmargin: 0 0 10px;\nfont-size: 11px;\nletter-spacing: 0.08em;\ntext-transform: uppercase;\ncolor: #5b6b80;\n}\n/* ---- 도화지 ------------------------------------------- */\n/* 실제 크기를 눈으로 확인할 수 있게 얇은 테두리를 두른다 */\n.hcm-canvas {\nwidth: 100%;\nmax-width: 520px;\nmargin: 0 auto;\nbackground: #ffffff;\noutline: 1px solid #c6cfda;\n}\n/* ---- 요소 공통 ---------------------------------------- */\n/* 경계가 보이도록 아주 얇은 선만 준다 — 배치를 확인하는 선이다 */\n.hcm-canvas [data-imory-canvas-element] {\noutline: 1px dashed rgba(91, 107, 128, 0.55);\n}\n/* 잠긴 배경은 선을 빼고 아주 옅은 바탕만 준다 */\n.hcm-canvas [data-imory-canvas-locked] {\noutline: none;\nbackground: #f7f9fb;\n}\n/* ---- photo · sticker · logo --------------------------- */\n/* 빈 슬롯에서도 틀이 보이게 — 그림이 들어오면 그 위를 덮는다 */\n.hcm-canvas [data-imory-canvas-type=\"photo\"],\n.hcm-canvas [data-imory-canvas-type=\"sticker\"],\n.hcm-canvas [data-imory-canvas-type=\"logo\"] {\nbackground: #eef2f7;\n}\n/* object-fit 이 듣는지 보려면 틀과 그림의 비율이 달라야 한다 */\n.hcm-canvas [data-imory-canvas-image] {\nborder-radius: 2px;\n}\n.hcm-canvas [data-imory-canvas-logo-text] {\nfont-size: 18px;\nfont-weight: 600;\nletter-spacing: 0.04em;\ncolor: #1d3557;\n}\n/* ---- 글자 --------------------------------------------- */\n.hcm-canvas [data-imory-canvas-role=\"title\"] {\nfont-size: 22px;\nfont-weight: 700;\nletter-spacing: -0.01em;\ncolor: #1a1d21;\n}\n.hcm-canvas [data-imory-canvas-role=\"body\"] {\nfont-size: 13px;\ncolor: #2f353c;\n}\n.hcm-canvas [data-imory-canvas-role=\"caption\"] {\nfont-size: 12px;\ncolor: #5b6b80;\n}\n/* ---- 도형 --------------------------------------------- */\n.hcm-canvas [data-imory-canvas-shape=\"rect\"] {\nbackground: #eaeff5;\n}\n.hcm-canvas [data-imory-canvas-shape=\"ellipse\"] {\nbackground: #1d3557;\nopacity: 0.18;\n}\n.hcm-canvas [data-imory-canvas-shape=\"line\"] {\nbackground: #1d3557;\n}\n/* 잠긴 배경은 위의 rect 규칙보다 뒤에 와서 옅은 바탕을 지킨다 */\n.hcm-canvas [data-imory-canvas-locked][data-imory-canvas-shape=\"rect\"] {\nbackground: #f7f9fb;\n}\n/* ---- 카테고리 ----------------------------------------- */\n.hcm-canvas [data-imory-canvas-nav-item] {\ndisplay: inline-block;\nmargin: 0 10px 4px 0;\nfont-size: 12px;\nletter-spacing: 0.06em;\ntext-transform: uppercase;\ncolor: #1d3557;\ntext-decoration: none;\nborder-bottom: 1px solid #1d3557;\n}\n/* ---- 도화지 밖 ---------------------------------------- */\n.hcm-owner {\nmargin: 14px 0 0;\ndisplay: flex;\ngap: 10px;\n}\n.hcm-owner-link {\nfont-size: 11px;\nletter-spacing: 0.08em;\ncolor: #1d3557;\ntext-decoration: none;\nborder: 1px solid #c6cfda;\npadding: 4px 10px;\n}\n.hcm-foot {\nmargin: 20px 0 0;\nfont-size: 11px;\ncolor: #7c8798;\n}\n/* ---- 다른 화면 ---------------------------------------- */\n.hcm-crumb {\nmargin: 0 0 8px;\nfont-size: 11px;\nletter-spacing: 0.08em;\ntext-transform: uppercase;\n}\n.hcm-crumb a {\ncolor: #5b6b80;\ntext-decoration: none;\n}\n.hcm-head {\nmargin: 0 0 6px;\nfont-size: 20px;\nfont-weight: 700;\n}\n.hcm-date {\nmargin: 0 0 14px;\nfont-size: 11px;\ncolor: #7c8798;\n}\n.hcm-list {\nmargin: 14px 0 0;\npadding: 0;\nlist-style: none;\n}\n.hcm-list-item {\nborder-top: 1px solid #e6eaf0;\n}\n.hcm-list-link {\ndisplay: block;\npadding: 10px 0;\nfont-size: 14px;\ncolor: #22262b;\ntext-decoration: none;\n}\n.hcm-series {\nmargin: 24px 0 0;\nborder-top: 1px solid #e6eaf0;\npadding-top: 14px;\n}\n.hcm-series-title {\nmargin: 0 0 8px;\nfont-size: 16px;\nfont-weight: 600;\n}\n.hcm-body {\nfont-size: 14px;\n}",
+  "imageSlots": [
+    {
+      "name": "photo_main",
+      "label": "캔버스 사진",
+      "required": false,
+      "aspectRatioHint": "4:5"
+    },
+    {
+      "name": "sticker_1",
+      "label": "캔버스 스티커",
+      "required": false,
+      "aspectRatioHint": "1:1"
+    },
+    {
+      "name": "title_logo",
+      "label": "캔버스 로고",
+      "required": false,
+      "aspectRatioHint": "4:1"
+    }
+  ],
+  "regions": [
+    {
+      "name": "home_canvas",
+      "enabled": true,
+      "canvas": {
+        "version": 1,
+        "baseWidth": 390,
+        "baseHeight": 844,
+        "elements": [
+          {
+            "id": "canvas_backdrop",
+            "type": "shape",
+            "x": 0,
+            "y": 0,
+            "width": 390,
+            "height": 844,
+            "rotation": 0,
+            "hidden": false,
+            "locked": true,
+            "props": {
+              "kind": "rect"
+            }
+          },
+          {
+            "id": "canvas_logo",
+            "type": "logo",
+            "x": 24,
+            "y": 36,
+            "width": 150,
+            "height": 40,
+            "rotation": 0,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "slot": "title_logo",
+              "fallback": "site_title"
+            }
+          },
+          {
+            "id": "canvas_title",
+            "type": "text",
+            "x": 24,
+            "y": 92,
+            "width": 300,
+            "height": "auto",
+            "rotation": 0,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "text": "고요한 기록\nHOME CANVAS",
+              "role": "title"
+            }
+          },
+          {
+            "id": "canvas_photo",
+            "type": "photo",
+            "x": 24,
+            "y": 168,
+            "width": 236,
+            "height": 290,
+            "rotation": -4,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "slot": "photo_main"
+            }
+          },
+          {
+            "id": "canvas_edge_mark",
+            "type": "shape",
+            "x": -46,
+            "y": 250,
+            "width": 120,
+            "height": 120,
+            "rotation": 30,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "kind": "ellipse"
+            }
+          },
+          {
+            "id": "canvas_sticker",
+            "type": "sticker",
+            "x": 214,
+            "y": 392,
+            "width": 104,
+            "height": 104,
+            "rotation": 16,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "slot": "sticker_1"
+            }
+          },
+          {
+            "id": "canvas_note_panel",
+            "type": "shape",
+            "x": 24,
+            "y": 516,
+            "width": 342,
+            "height": 132,
+            "rotation": 0,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "kind": "rect"
+            }
+          },
+          {
+            "id": "canvas_note_text",
+            "type": "text",
+            "x": 40,
+            "y": 532,
+            "width": 310,
+            "height": 100,
+            "rotation": 0,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "text": "숫자 높이 글자.\n뒤의 판과 겹쳐 앞뒤 순서를 본다.",
+              "role": "body"
+            }
+          },
+          {
+            "id": "canvas_rule",
+            "type": "shape",
+            "x": 24,
+            "y": 672,
+            "width": 342,
+            "height": 2,
+            "rotation": 0,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "kind": "line"
+            }
+          },
+          {
+            "id": "canvas_caption",
+            "type": "text",
+            "x": 24,
+            "y": 688,
+            "width": 260,
+            "height": "auto",
+            "rotation": 0,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "text": "auto 높이 — 가로를 줄이면 줄이 늘고 높이가 따라온다.",
+              "role": "caption"
+            }
+          },
+          {
+            "id": "canvas_nav",
+            "type": "category_nav",
+            "x": 24,
+            "y": 752,
+            "width": 342,
+            "height": "auto",
+            "rotation": 0,
+            "hidden": false,
+            "locked": false,
+            "props": {
+              "mode": "all",
+              "categoryIds": []
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "metadata": {
+    "title": "IMORY HOME CANVAS — manual test v1",
+    "generatedBy": "manual",
+    "supports": {
+      "home": true,
+      "category": true,
+      "post": true,
+      "banner": true,
+      "folder": true
+    },
+    "requiredContext": [
+      "site.title",
+      "navigation.home.href",
+      "navigation.categories",
+      "viewer.isOwner",
+      "viewer.writeHref",
+      "viewer.manageHref",
+      "category.name",
+      "category.posts",
+      "post.title",
+      "post.publishedAtLabel",
+      "post.categoryName",
+      "post.categoryHref",
+      "bannerCategory.name",
+      "bannerCategory.items",
+      "folder.name",
+      "folder.posts",
+      "folder.parentHref"
+    ]
+  }
+}

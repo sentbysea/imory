@@ -74,6 +74,26 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 
+/*
+  배포 버전의 **유일한 원천**에서 읽는다(CLAUDE.md §4). 그 파일은
+  classic script 라 require 가 안 되므로 상수 한 줄만 꺼낸다 —
+  값을 이 파일에 복사해 두면 배포마다 둘이 어긋난다.
+*/
+const APP_BUILD_VERSION = (() => {
+
+  const text =
+    fs.readFileSync(path.join(ROOT, "core", "lib", "build-version.js"), "utf8");
+
+  const m = text.match(/const\s+APP_BUILD_VERSION\s*=\s*"([^"]+)"/);
+
+  if (!m) {
+    throw new Error("core/lib/build-version.js 에서 APP_BUILD_VERSION 을 찾지 못했습니다");
+  }
+
+  return m[1];
+
+})();
+
 const PARENT_PORT = 8984;
 const SANDBOX_PORT = 8985;
 
@@ -758,7 +778,12 @@ async function run() {
 
       for (const [p, kind] of CANVAS_ASSETS) {
 
-        for (const suffix of ["", "?v=2026-09-20-3"]) {
+        /* ★ 배포 버전 문자열을 여기 복사해 적지 않는다 — 원천은
+           core/lib/build-version.js 의 APP_BUILD_VERSION 하나다
+           (CLAUDE.md §4). allowlist 는 pathname 만 보므로 어떤 값이
+           붙어도 판정이 같아야 하고, 그것을 **실제 배포 값**으로
+           확인한다. */
+        for (const suffix of ["", `?v=${APP_BUILD_VERSION}`]) {
 
           const res = await fetch(SANDBOX_ORIGIN + p + suffix);
           const type = (res.headers.get("content-type") || "").toLowerCase();

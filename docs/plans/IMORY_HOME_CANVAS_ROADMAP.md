@@ -205,6 +205,7 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3c-1 | `HOME-CANVAS-TRANSFORM-1A` | **단일 요소 이동**을 `canvas.elements[].x/.y` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §17) |
 | 3c-2 | `HOME-CANVAS-TRANSFORM-1B` | **단일 요소 리사이즈**를 `canvas.elements[].x/.y/.width/.height` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §18) |
 | 3c-3 | `HOME-CANVAS-TRANSFORM-1C` | **단일 요소 회전**을 `canvas.elements[].rotation` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §19) |
+| 3c-M | `HOME-CANVAS-MILESTONE-1` | **기본 조작 마일스톤** — 이동 · 리사이즈 · 회전을 실제 배포에서 손으로 시험할 수 있게 한다(수동 테스트 스킨 + 통합 smoke). 새 편집 기능 없음 | 없음(도구) | **완료** — §8-M |
 | 3c-4 | `HOME-CANVAS-TRANSFORM-1D` | 그룹 이동 · 그룹 리사이즈 · 그룹 회전 | 저장 가능 | 미착수 |
 | 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
@@ -548,6 +549,66 @@ HTML 에 없다.
   `rotatable: true` 로 주면 리사이즈용 `renderDirections` 가 회전
   손잡이 여덟으로 한 번 더 그려진다(계약 §19-1 의 함정).
 - 손가락 조작은 의도적 미지원. 그 자리는 Preview 스크롤이 지킨다.
+
+### `HOME-CANVAS-MILESTONE-1` (완료)
+
+**이동 · 리사이즈 · 회전으로 기본 조작이 갖춰진 지점을 실제 배포에서 손으로
+시험할 수 있게 만든 마일스톤이다. 새 편집 기능은 하나도 넣지 않았다.**
+
+- **왜 필요했나.** Studio 에는 아직 Canvas 를 새로 만들거나 요소를 추가하는
+  UI 가 없다(`ELEMENTS-1`). 구현된 것은 **이미 있는 요소**를 고치는 경로
+  뿐이고, 기존 스킨 · 기본 스킨 · 공개 HOME 에는 `home_canvas` 와 표시 위치
+  (`data-imory-canvas-root`)가 **자동으로 생기지 않는다**(계약 §3). 그래서
+  그 둘을 이미 갖고 있는 파일이 없으면 주인이 배포된 화면에서 이동 ·
+  리사이즈 · 회전을 시험할 방법이 없었다.
+
+- **수동 테스트 스킨** —
+  [`skin/test-skins/imory-home-canvas-manual-v1.json`](../../skin/test-skins/imory-home-canvas-manual-v1.json),
+  빌더는
+  [`build-home-canvas-manual-v1.mjs`](../../skin/test-skins/build-home-canvas-manual-v1.mjs)
+  (`node skin/test-skins/build-home-canvas-manual-v1.mjs` 로 같은 JSON 이
+  다시 나온다).
+
+  - **제품 기본 스킨도 preset 도 아니다.** `metadata.title` 이
+    `IMORY HOME CANVAS — manual test v1` 이고, 기본 스킨 변경 · 가입 시 자동
+    적용 · 기존 계정 migration · 자동 Publish · DB 변경이 전부 **없다**.
+    주인이 Studio 에서 직접 Import 해야만 쓰인다.
+  - 요소 **11개**: 도화지 전체를 덮는 **잠긴** 배경(그 위에서 lasso 가
+    시작된다) · photo · sticker · logo · `height:"auto"` 글자 둘 ·
+    숫자 height 글자와 도형 · line 도형 · `category_nav`(mode `all`) ·
+    음수 `x`(-46)로 도화지 왼쪽을 삐져나간 장식. 초기 회전이 있는 요소가
+    **셋**(-4° · 16° · 30°)이고 photo↔sticker · 판↔글자가 **겹친다**.
+  - **저장소에 그림을 넣지 않았다.** photo · sticker · logo 는 이미지 슬롯
+    (`photo_main` · `sticker_1` · `title_logo`)만 선언하고 비워 둔다 —
+    주인이 Studio Images 에서 자기 그림을 넣고, 비어 있어도 wrapper 가 남아
+    선택 · 조작을 전부 확인할 수 있다(계약 §12-4). 자동 테스트가 쓰는 SVG
+    는 실행 중에만 만든다.
+  - **`renderMode` 가 없다**(= native). sandbox parity 는 테스트가 사본에만
+    모드를 켜서 확인한다 — 파일에 모드를 박지 않는다.
+
+- **통합 smoke** —
+  [`studio/studio-home-canvas-manual-skin-e2e-test.mjs`](../../studio/studio-home-canvas-manual-skin-e2e-test.mjs)
+  (포트 9002 · 9003). 합성 fixture 가 아니라 **저장소의 그 JSON 파일을 읽어**
+  Import → Validate → Apply → 렌더 → Select → 이동 · 리사이즈 · 회전 +
+  Undo/Redo → lasso · 다중 선택 → Save → 다시 열기 → Export → 재Import →
+  Publish resolve → sandbox parity 를 한 번 지난다. 브라우저 없이 되는
+  계약 검사는 `skin/skin-home-canvas-test.mjs` 의 `[manual]` 절이 갖는다.
+
+- **`--browser=webkit` 을 받지만 포인터 조작 절은 Chromium 에서만** 돈다 —
+  Moveable · Selecto 제스처를 재는 형제 e2e 여섯이 모두 그렇다. WebKit 에서는
+  그 절을 건너뛴다고 찍고, `[round]` 는 부모의 확정 함수
+  (`commitStudioCanvasElementTransform()`)를 직접 불러 **같은 관문을 지나는**
+  변경을 만든 뒤 Save · Export · Publish 왕복을 그대로 확인한다(Save 버튼은
+  바뀐 것이 없으면 disabled 라 제스처를 건너뛴 채로는 왕복을 볼 수 없다).
+
+- **이 라운드에서 제품 코드는 한 줄도 바뀌지 않았다.** 바뀐 것은 테스트 스킨
+  빌더 · 그 JSON · 테스트 둘 · 문서 · `APP_BUILD_VERSION` 뿐이다.
+
+- **아직 없는 것**(이 마일스톤이 만들지 않았다): Canvas 생성 UI · 요소
+  추가 · 삭제 UI · preset 선택 UI · 그룹 이동 · 리사이즈 · 회전
+  (`TRANSFORM-1D`) · 효과 hook(`EFFECT-HOOK-1`) · 레이어 패널 · Inspector
+  geometry 입력 필드 · 이미지 Crop 연결 · 텍스트 직접 편집 · responsive
+  override · 손가락 조작.
 
 ### `HOME-CANVAS-TRANSFORM-1D`
 

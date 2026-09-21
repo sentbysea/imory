@@ -62,6 +62,7 @@
 | `TRANSFORM-1A` | **단독으로 고른 요소 하나의 이동**(§17) — 마우스 · 펜으로 끌어 옮기고 그 결과가 `canvas.elements[].x` · `.y` 에 저장된다. **여기서부터 Canvas JSON 이 바뀐다.** 한 제스처가 Undo 한 칸이고, Save · Export/Import · Publish resolve 를 그대로 지난다. 크기 · 회전 · 그룹 이동 · 손가락 이동은 **없다** |
 | `TRANSFORM-1B` | **단독 선택 요소의 리사이즈**(§18) — 손잡이 여덟으로 크기를 바꾸고 `x` · `y` · `width` · `height` **네 칸**에 저장한다. `"auto"` 높이가 언제 숫자가 되는지도 여기서 정해졌다. 확정 경로 · Undo · 취소는 `1A` 와 **한 벌**이다 |
 | `TRANSFORM-1C` | **단독 선택 요소의 회전**(§19) — 손잡이 하나로 돌리고 `rotation` **한 칸**에 저장한다. 상자 네 칸은 바뀌지 않는다(회전 중심이 요소 상자의 정중앙이다). 같은 확정 경로에 `kind:"rotate"` 가 늘었다. **이동 · 리사이즈 · 회전으로 기본 조작이 갖춰졌다** |
+| `MILESTONE-1` | **계약이 하나도 바뀌지 않은 라운드**(§20). 위 기본 조작을 배포된 화면에서 **손으로** 시험할 수 있게 `home_canvas` 와 표시 위치를 이미 갖춘 **수동 테스트 스킨**과 그것을 끝까지 지나는 통합 smoke 를 두었다. 제품 코드 · 기본 스킨 · 저장 데이터는 무변경이다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
 
@@ -2391,3 +2392,130 @@ override · **손가락 조작** — 하나도 없다.
 
 저자 CSS/JS 가 geometry 를 강제로 덮는 경우의 최종 우선순위는 여전히
 `HOME-CANVAS-EFFECT-HOOK-1` 의 몫이다(§17-10).
+
+---
+
+## 20. 기본 조작 마일스톤 (`HOME-CANVAS-MILESTONE-1`)
+
+**이 절은 계약을 바꾸지 않는다.** §1~§19 가 그대로 유효하고, 이 라운드는
+제품 코드를 한 줄도 고치지 않았다. 여기 적는 것은 "그 계약을 **손으로**
+확인할 수 있는 수단이 어디에 있는가" 하나다.
+
+### 20-1. 왜 파일이 하나 더 필요했나
+
+Studio 에는 아직 **Canvas 를 새로 만들거나 요소를 추가하는 UI 가 없다**
+(로드맵 `ELEMENTS-1`). 구현된 쓰기 경로는 **이미 있는 요소**의 다섯 칸
+(`x` · `y` · `width` · `height` · `rotation`)뿐이다. 그리고 §3 이 정한 대로
+**기존 스킨 · 제품 기본 스킨 · 공개 HOME 에는 `home_canvas` 도 표시 위치
+(`data-imory-canvas-root`)도 자동으로 생기지 않는다.**
+
+두 사실을 합치면, 그 둘을 **이미 갖고 있는 SkinPackage 파일**이 없는 동안은
+주인이 배포된 화면에서 이동 · 리사이즈 · 회전을 시험할 방법이 없다. 그래서
+Import 용 파일 한 벌을 저장소에 두었다.
+
+### 20-2. 그 파일
+
+| 무엇 | 어디 |
+| --- | --- |
+| 수동 테스트 스킨 | [`skin/test-skins/imory-home-canvas-manual-v1.json`](../../skin/test-skins/imory-home-canvas-manual-v1.json) |
+| 빌더 | [`skin/test-skins/build-home-canvas-manual-v1.mjs`](../../skin/test-skins/build-home-canvas-manual-v1.mjs) |
+
+`node skin/test-skins/build-home-canvas-manual-v1.mjs` 로 **같은 JSON 이
+다시 나온다** — JSON 을 손으로만 관리하지 않는다(저장소의 다른 test-skin 과
+같은 규칙).
+
+**이 파일은 제품 기본 스킨도 사용자용 preset 도 아니다.**
+
+- `metadata.title` 이 `IMORY HOME CANVAS — manual test v1` 이다.
+- 제품 기본 스킨(`imory-editorial-default-v2.json`)은 **바뀌지 않았다** —
+  `home_canvas` 도 표시 위치도 여전히 없다.
+- 가입 시 자동 적용 · 기존 계정 migration · 실제 계정 자동 Publish · DB 변경
+  이 **하나도 없다.** 주인이 Studio 에서 직접 Import 해야만 쓰이고, Publish
+  도 직접 해야 한다.
+- `renderMode` 를 **갖지 않는다**(= native). sandbox parity 는 테스트가
+  **사본에만** 모드를 켜서 확인한다 — 파일에 모드를 박으면 그 파일을 쓰는
+  주인이 선택하지 않은 렌더 경로에 들어간다.
+
+### 20-3. 무엇이 들어 있나 — 눈으로 구분되게
+
+요소 **11개**이고, 각각 §7 의 여섯 종류와 §5 · §6 의 필드 규칙을 그대로
+쓴다(계약에 없는 필드를 새로 만들지 않았다).
+
+| 요소 | 무엇을 손으로 볼 수 있나 |
+| --- | --- |
+| `canvas_backdrop` | 도화지 전체를 덮는 **잠긴** 배경 — 그 위에서 lasso 가 시작되고(§17-2 에서 잠긴 요소는 배경이다) 클릭으로는 골라지지 않는다(§14-3) |
+| `canvas_logo` | logo — 슬롯이 비면 블로그 제목이 글자로 나온다(§12-4) |
+| `canvas_title` · `canvas_caption` | `height:"auto"` 글자 — 가로를 줄이면 줄이 늘고 높이가 따라온다. 세로 손잡이를 끌면 숫자로 바뀌고 Undo 하면 정확히 `"auto"` 로 돌아온다(§18-6) |
+| `canvas_photo` | photo + **초기 회전 -4°** — `object-fit: cover` 와 회전 요소의 리사이즈 기준점(§18-5) |
+| `canvas_edge_mark` | **음수 `x`(-46)** — 도화지 왼쪽으로 삐져나간 장식. 넘친 것을 자를지 보일지는 스킨 CSS 의 몫이라(§4-1 · §12-2) 이 스킨은 보이게 둔다 |
+| `canvas_sticker` | sticker + **초기 회전 16°** — photo 와 **겹친다**(겹친 자리에서 앞의 것이 골라지는가) |
+| `canvas_note_panel` · `canvas_note_text` | 숫자 height 도형과 글자 — 서로 겹쳐 **배열 순서 = 앞뒤 순서**(§4)를 눈으로 본다 |
+| `canvas_rule` | `kind:"line"` 도형 — 아주 얇은 것도 고를 수 있는가 |
+| `canvas_nav` | `category_nav`(mode `all`) — 실제 `<a href>` 가 나오고 클릭이 기존 공통 라우팅으로 간다(§12-4) |
+
+초기 회전이 있는 요소가 **셋**(-4° · 16° · 30°)이다 — 회전 요소의 리사이즈
+기준점은 하나만으로는 확인이 부족하다.
+
+### 20-4. 이미지 — 저장소에 그림을 넣지 않았다
+
+photo · sticker · logo 는 **기존 이미지 슬롯 계약만** 선언하고 비워 둔다
+(`photo_main` · `sticker_1` · `title_logo` — 이름 규칙은 §7 의
+`SKIN_IMAGE_SLOT_NAME_PATTERN`, **snake_case 소문자**다). `required` 는 전부
+`false` 다.
+
+- 주인이 Studio Images 에서 자기 그림을 넣는다.
+- **비어 있어도** wrapper 가 남으므로(§12-4) 선택 · 이동 · 리사이즈 · 회전을
+  전부 확인할 수 있다.
+- 자동 테스트가 쓰는 SVG 는 **실행 중에만** 만들고 JSON 에 넣지 않는다.
+
+> **함정.** 슬롯 값에 `http://localhost:PORT/...` 같은 절대 주소를 넣으면
+> 이미지가 **붙지 않는다.** `isSafeSkinUrl()`(`skin/skin-sanitize.js` —
+> sanitizer 와 런타임 URL 바인딩의 단일 판정 함수)은 최종 protocol 이
+> `https:` 인 것만 통과시키고, 막히면 계약대로 wrapper 는 남고 `src` 만
+> 붙지 않는다(§12-4). 테스트는 **루트 상대 주소**를 쓴다 — 판정용 base 가
+> https 라서 통과하고 실제 문서에서는 그 파일로 풀린다.
+
+### 20-5. 통합 smoke
+
+[`studio/studio-home-canvas-manual-skin-e2e-test.mjs`](../../studio/studio-home-canvas-manual-skin-e2e-test.mjs)
+(포트 9002 · 9003, 배포되는 `functions/_middleware.js` 를 그대로 태운다).
+
+**대상이 합성 fixture 가 아니라 저장소의 그 JSON 파일이다** — builder 가
+만든 것을 테스트가 다시 손으로 조립하면 파일이 깨져도 테스트는 통과한다.
+사용자가 고를 그 바이트가 Import 를 지나는지가 이 라운드의 산출물이다.
+
+한 흐름을 끝까지 지난다: Import → Validate → Apply to Draft → 렌더 →
+Select → 단일 선택 → 이동 · 리사이즈 · 회전 + 각각 Undo/Redo → lasso ·
+Shift 다중 선택(다중에는 손잡이가 **없다**) → Save → 다시 열기 → Export →
+재Import → Publish resolve → sandbox parity → 공개 화면 안전.
+
+브라우저 없이 되는 계약 검사는 `skin/skin-home-canvas-test.mjs` 의
+`[manual]` 절이 갖는다(계약 통과 · 표식 정확히 1개 · resolve · id 유일 ·
+순서 보존 · 확인할 구조가 다 있는가 · **제품 기본 스킨 불변**).
+
+### 20-6. WebKit 에서 무엇이 돌고 무엇이 안 도나
+
+이 파일은 `--browser=webkit` 을 받지만 **포인터 조작 절은 Chromium 에서만**
+돈다 — Moveable · Selecto 제스처를 재는 형제 e2e 여섯이 모두 그렇다
+(`select` · `moveable` · `selecto` · `transform` · `resize` · `rotate`).
+WebKit 에서는 그 절들을 건너뛴다고 찍는다.
+
+WebKit 에서도 도는 것: Import · 렌더 · 이미지 슬롯 · Select 모드와 단일
+선택 · 저장 왕복 · sandbox 정적 parity · 공개 화면 안전.
+
+> **함정.** `[round]` 를 WebKit 에서 제스처 없이 돌리면 **Save 버튼이
+> disabled 다** — 바뀐 것이 없으니 그게 맞는 동작이다. 그래서 그 절은
+> 부모의 확정 함수 `commitStudioCanvasElementTransform()` 를 직접 불러
+> 변경을 만든다. 프레임이 요청을 올렸을 때 부모가 지나는 **그 경로
+> 그대로**이고(선택 · 순번 · `expected` · 허용 키를 다시 보는 관문 포함)
+> 빠지는 것은 포인터 입력뿐이라, 두 브라우저가 "바뀐 좌표가 Save ·
+> Export · Publish 를 지나 살아남는가"를 같은 무게로 묻는다.
+
+### 20-7. 이 라운드가 만들지 않은 것
+
+Canvas 생성 UI · 요소 추가 · 삭제 UI · preset 선택 UI · 그룹 조작
+(`TRANSFORM-1D`) · 효과 hook(`EFFECT-HOOK-1`) · 저자 JS 변경 · Inspector
+geometry 입력 필드 · 레이어 패널 · 이미지 Crop 연결 · 텍스트 직접 편집 ·
+responsive override · 손가락 조작 · 기본 스킨 자동 변경 · 기존 계정
+migration · 실제 계정 자동 Publish · DB migration · **계약 확장** —
+하나도 없다.
