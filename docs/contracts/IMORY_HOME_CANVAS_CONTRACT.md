@@ -1,13 +1,14 @@
 # IMORY HOME CANVAS — 데이터 계약
 
-> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 · §13 은 지금
-> 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집 UI 가
+> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 · §13 · §14 는
+> 지금 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집 UI 가
 > 지켜야 할 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
 >
 > 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
 > `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12) ·
 > `HOME-CANVAS-RENDER-1B`(2026-09-21, **sandbox 프레임까지 · 네 화면** — §12-6) ·
-> `HOME-CANVAS-VENDOR-1`(2026-09-21, **Moveable · Selecto 고정과 지연 로더** — §13).
+> `HOME-CANVAS-VENDOR-1`(2026-09-21, **Moveable · Selecto 고정과 지연 로더** — §13) ·
+> `HOME-CANVAS-SELECT-1A`(2026-09-21, **선택 소유권과 단일 선택 기반** — §14).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -27,12 +28,16 @@
 | Studio sandbox 로 `canvas` 를 옮기는 자리 | [studio/preview/preview-sandbox.js](../../studio/preview/preview-sandbox.js) |
 | **고정한 편집기 라이브러리**(Moveable · Selecto UMD · MIT) | [studio/vendor/home-canvas/](../../studio/vendor/home-canvas/) — 출처 · 해시 · 보관 규칙은 그 폴더의 `README.md` |
 | **그 둘을 부를 때만 받는 로더** | [studio/studio-home-canvas-vendor.js](../../studio/studio-home-canvas-vendor.js) `ensureHomeCanvasEditorVendors` |
+| **캔버스 선택 상태**(기존 Inspector 와 다른 소유자) | [studio/inspector/studio-canvas-selection.js](../../studio/inspector/studio-canvas-selection.js) |
+| **선택 소유권을 정하는 한 곳** | [studio/inspector/studio-inspector.js](../../studio/inspector/studio-inspector.js) `routeStudioInspectSelectMessage` |
+| **캔버스를 아는 공통 hit-test**(세 realm 이 같은 파일) | [skin/skin-inspect-target.js](../../skin/skin-inspect-target.js) |
 
 관련 테스트: `node skin/skin-home-canvas-test.mjs` ·
 `node skin/skin-home-canvas-render-e2e-test.mjs` ·
 `node skin/skin-home-canvas-sandbox-e2e-test.mjs` ·
 `node studio/studio-home-canvas-e2e-test.mjs` ·
-`node studio/studio-home-canvas-vendor-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
+`node studio/studio-home-canvas-vendor-e2e-test.mjs` ·
+`node studio/studio-home-canvas-select-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
 
 ---
 
@@ -45,14 +50,17 @@
 | `RENDER-1A` | **정적 Renderer**(§12) — 저장된 Canvas 가 **공개 native HOME** 과 **Studio native Preview** 에서 같은 DOM · 같은 좌표로 그려진다 |
 | `RENDER-1B` | 그 **같은 렌더러**가 cross-origin sandbox 프레임에서도 돈다(§12-6). **네 화면 정적 parity 가 검증됐다** — 공개 native · Studio native Preview · 공개 sandbox · Studio sandbox Preview |
 | `VENDOR-1` | Moveable 0.53.0 · Selecto 1.26.3 UMD 를 **저장소에 바이트 그대로 고정**하고, Studio 전용 **지연 로더**와 sandbox allowlist 두 줄을 두었다(§13). **아직 Canvas 요소에 연결되지 않았다** |
+| `SELECT-1A` | **캔버스 요소를 고르고 푸는 것**(§14) — 캔버스 전용 선택 상태(배열 모양, 지금은 최대 1개) · 기존 Inspector 와의 **소유권 분리** · 캔버스를 아는 공통 hit-test · draft 존재 검증 · 축에 평행한 임시 테두리. **고치는 것은 하나도 없다** |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
 
-- 선택 · 이동 · 크기 · 회전 조작 UI · 멀티 선택 · Inspector · Undo/Redo ·
-  preset · 스티커 업로드 · widget — **하나도 없다**(§11).
+- 이동 · 크기 · 회전 조작 UI · 멀티 선택 · Canvas Inspector 입력 필드 ·
+  Undo/Redo · preset · 스티커 업로드 · widget — **하나도 없다**(§11).
+- `SELECT-1A` 는 **고르고 푸는 것까지**다. 고른 요소의 좌표도 props 도
+  바꿀 수 없고, Canvas JSON 을 쓰는 경로가 없다(§14-6).
 - `VENDOR-1` 은 라이브러리를 **놓아두었을 뿐**이다. 아무도
   `ensureHomeCanvasEditorVendors()` 를 부르지 않으므로 지금은 어느 화면에서도
-  두 UMD 가 내려오지 않는다(§13-4).
+  두 UMD 가 내려오지 않는다(§13-4) — **캔버스 요소를 골라도 그렇다**(§14-5).
 
 ---
 
@@ -548,8 +556,12 @@ E2E 가 네 화면을 실제로 띄워 **DOM 을 글자 단위로, 좌표를 1px
 
 ### 11-2. UI (`SELECT-1` · `HISTORY-1` · `ELEMENTS-1` 이후)
 
-드래그 · 크기 · 회전 · 세로 손잡이 · Inspector · Undo/Redo · preset ·
-사진 자동 매핑 · sticker 업로드 · widget · 그룹 선택 — **하나도 없다.**
+드래그 · 크기 · 회전 · 세로 손잡이 · Inspector 입력 필드 · Undo/Redo ·
+preset · 사진 자동 매핑 · sticker 업로드 · widget · 그룹 선택 —
+**하나도 없다.**
+
+**고르고 푸는 것만 있다**(`SELECT-1A` — §14). 고른 뒤에 할 수 있는 일이
+아직 없다는 뜻이다.
 
 Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조작하지 않는다**
 (`VENDOR-1` — §13). 파일 · 로더 · allowlist · `cspNonce` 회귀 테스트는 있고,
@@ -562,8 +574,13 @@ Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조�
 
 | 빈 곳 | 어디서 정하나 |
 | --- | --- |
-| **Moveable · Selecto 가 고정됐지만 Canvas 요소에 연결되지 않았다**(파일 · 로더 · allowlist · nonce 테스트는 있다 — §13) | `HOME-CANVAS-SELECT-1` |
-| **sandbox 프레임 안에서 vendor 를 조건부로 받는 메시지**(지금 프레임은 로더조차 읽지 않는다 — §13-5) | `HOME-CANVAS-SELECT-1` |
+| **Moveable · Selecto 가 고정됐지만 Canvas 요소에 연결되지 않았다**(파일 · 로더 · allowlist · nonce 테스트는 있다 — §13) | `HOME-CANVAS-SELECT-1B` |
+| **sandbox 프레임 안에서 vendor 를 조건부로 받는 메시지**(지금 프레임은 로더조차 읽지 않는다 — §13-5) | `HOME-CANVAS-SELECT-1B` |
+| **회전을 따라가는 선택 틀**(지금 테두리는 축에 평행한 사각형이라 회전 요소에서는 외곽 상자를 그린다 — §14-4) | `HOME-CANVAS-SELECT-1B` |
+| **다중 선택 UI**(상태는 배열이지만 `ids` 가 최대 1개다 — §14-2) | `HOME-CANVAS-SELECT-1B` |
+| **이동 · 크기 · 회전을 Canvas JSON 에 쓰는 경로**(기존 `applyStudioInspectorPatch` 는 HTML/CSS 전용이라 쓸 수 없다 — §14-6) | `HOME-CANVAS-TRANSFORM-1` |
+| **캔버스 요소의 Inspector 입력 필드**(글꼴 · 색 · 글자 내용 · 이미지 교체 · 자르기) | `HOME-CANVAS-INSPECT-1` |
+| **hidden · locked 를 다루는 레이어 목록**(지금 숨긴 요소는 Studio 에서 다시 고를 방법이 없다 — §14-3) | `HOME-CANVAS-LAYERS-1` |
 | 390 저장 좌표 → 데스크톱 폭 변환 규칙 | `HOME-CANVAS-RESPONSIVE-1` |
 | 모바일/데스크톱 좌표 override 를 둘 것인가 | `HOME-CANVAS-RESPONSIVE-1` |
 | 좌우 패널(`left_sidebar` · `right_sidebar`) 안의 Canvas | `HOME-CANVAS-SIDES-1` |
@@ -883,3 +900,154 @@ allowlist 는 pathname 만 본다), 평상시 공개 sandbox 렌더에서는 **�
 비롯한 나머지 Studio 코드는 **여전히 404** 다. 그럴 수 있는 이유는 이 둘이
 Imory 코드가 아니라 재가공하지 않은 MIT third-party UMD 이기 때문이다 —
 우리 데이터도 인증도 화면 구조도 들어 있지 않다.
+
+---
+
+## 14. 선택 소유권과 단일 선택 기반 (`HOME-CANVAS-SELECT-1A`)
+
+**이 절은 구현이다.** 캔버스 요소를 **고르고 푸는 것**까지이고, 고친 뒤
+저장하는 경로는 하나도 없다(§14-6).
+
+조사 근거: `HOME-CANVAS-SELECT-AUDIT-1`. 그 조사가 밝힌 것은 기존 Inspector
+선택이 캔버스 요소를 **원리적으로** 담을 수 없다는 것이었다 — 그 상태는
+언제나 template HTML 을 다시 파싱해서 "그 식별자가 지금도 그 요소인가"를
+따지는데, 캔버스 요소는 그 HTML 에 없기 때문이다.
+
+### 14-1. 소유자가 둘이고, 동시에 켜지지 않는다
+
+| 상태 | 무엇을 가리키나 | 어디 |
+| --- | --- | --- |
+| `studioInspectorSelection` | template HTML 안의 요소 | `studio/inspector/studio-inspector.js` |
+| **캔버스 선택** | `regions.home_canvas.canvas.elements[]` 의 요소 | `studio/inspector/studio-canvas-selection.js` |
+
+전환 규칙은 **한 곳**이 정한다 —
+`routeStudioInspectSelectMessage(data)`(`studio-inspector.js`).
+
+| 프레임이 올린 것 | 결과 |
+| --- | --- |
+| 지금 draft 의 **고를 수 있는** 캔버스 요소 | 캔버스 선택(기존 Inspector 선택은 풀린다) |
+| 캔버스 요소이지만 hidden · locked | **거부** — 어느 상태도 만들지 않는다 |
+| 그 밖의 식별자 | 기존 Inspector 선택(캔버스 선택은 풀린다) |
+| 식별자 없음(빈 곳) | 둘 다 풀린다 |
+| sandbox 에서 온, draft 에 없는 식별자 | **거부**(§14-3) |
+
+프레임은 "이 자리에서 이것이 잡혔다"까지만 올린다. **소유자를 고르지
+않는다.** 새 메시지를 만들지 않았다 — 기존 `preview:inspect-select` 하나가
+그대로 두 소유자에게 간다. native 와 sandbox 가 같은 확정 함수를 지난다.
+
+★ **소유권이 넘어갈 때 프레임에는 해제를 내려보내지 않는다.**
+`clearStudioInspectorSelection({ keepFrameSelection: true })` 가 그것이다.
+프레임이 고른 것은 바로 그 캔버스 요소이고, 풀어 버리면 곧 돌아오는
+`preview:inspect-rects` 가 `selected:null` 이라 **방금 만든 선택이 스스로
+풀린다**. 반대 방향(캔버스 → 일반)도 같은 이유로 같은 옵션을 쓴다.
+
+### 14-2. 상태는 처음부터 배열이다
+
+```js
+getStudioCanvasSelection()
+// -> { ids: [], primaryId: null, items: [], generation: n }
+```
+
+`items[]` 의 한 칸: `{ id, type, locked, hidden, label, rect, visibleRect }`.
+
+**이번 단계의 `ids` 는 0개 또는 1개다.** 다중 선택 UI 는 없다. 모양을 배열로
+둔 이유는 뒤 단계(Selecto)에서 상태를 통째로 바꾸면 이 상태에 매달린 쪽이
+전부 "첫 번째만 본다"로 조용히 퇴화하기 때문이다.
+
+밖으로 내는 쓰기 함수는 `setStudioCanvasSelection` ·
+`clearStudioCanvasSelection` · `syncStudioCanvasSelectionRects` ·
+`reconcileStudioCanvasSelection` 넷이고, 넷 다 `applyStudioCanvasSelection()`
+하나를 지난다. 상태를 직접 대입하는 곳은 없다. 읽기는 언제나 복사본이다.
+
+### 14-3. 무엇을 고를 수 있는가
+
+판정은 **두 겹**이다.
+
+**(가) 화면 쪽** — `skin/skin-inspect-target.js`(세 realm 이 같은 파일을
+읽는다: Studio · native Preview · sandbox 프레임).
+
+| 규칙 | 왜 |
+| --- | --- |
+| `data-imory-canvas-element` 를 component 근거로 인정한다 | 캔버스 요소의 최상위는 늘 자식이 있는 `<div>` 라, 이 줄이 없으면 **스킨 CSS 가 배경을 준 요소만** 고를 수 있다. 생김새로 갈리면 안 된다 |
+| 캔버스 요소는 `inspectorIsPageLevel()` 판정에서 뺀다 | 도화지를 꽉 채운 배경 사진이 `page`(= 누를 것이 없는 자리)로 오판된다 |
+| 잠긴 캔버스 요소(`data-imory-canvas-locked="true"`)는 후보에서 **뺀다** | 순위만 낮추면 조상 탐색이 표식까지 올라가 **그 밑에 깔린 요소**를 가린다. 빼 두면 "잠긴 요소가 없는 것과 같은 자리"가 된다 |
+| 캔버스 형제끼리는 **사각형**으로 포함을 읽는다(`inspectorCanvasPairIsNested`) | 캔버스 요소는 전부 형제라 DOM 으로는 서로를 담지 않는다. 그대로 두면 **바탕 요소 하나만 있어도 모든 클릭이 후보 메뉴**를 띄운다. 한쪽이 다른 쪽을 완전히 덮으면 묻지 않고, **걸친** 두 요소는 지금까지처럼 묻는다 |
+
+내부 자식(`<img>` · `<p>` · `<ul>` · `<li>` · `<a>`)에 식별자를 복제하지
+않는다. 기존 `resolveInspectableAncestor()` 가 요소 wrapper 하나로 올려
+준다 — 캔버스 자식에는 `data-imory-edit-id` 가 없기 때문이다.
+
+숨긴 요소는 `hidden` 속성 때문에 상자가 없어 애초에 잡히지 않는다.
+**Studio 에서 다시 고를 방법이 아직 없다** — 레이어 목록은 후속이다.
+
+**(나) 데이터 쪽** — `studioCanvasSelectableElement(id)`
+(`studio-canvas-selection.js`). 관문을 새로 만들지 않고
+`resolveSkinHomeCanvas(skinPackage, templateHtml)` 을 그대로 쓴다. 그래서
+다음이 **한 번에** 검사된다.
+
+- 지금 화면이 HOME 인가
+- template HTML 에 표식이 정확히 하나 있는가
+- `home_canvas` 항목이 있고 `enabled !== false` 인가
+- 이 배포가 아는 `canvas.version` 인가(미래 버전 → 없음)
+- 데이터가 계약을 지키는가
+- 요소 id 가 캔버스 안에서 **유일**한가(중복이면 캔버스 전체가 무효)
+- 그 id 가 정확히 있고, **hidden 도 locked 도 아닌가**
+
+`studioInspectorEditIdExistsInDraft(editId)` 는 이제 **근거를 둘** 인정한다 —
+template HTML 의 요소이거나, 위 판정을 통과한 캔버스 요소이거나. sandbox
+위조 선택 방어(SANDBOX-6A 9절)를 **푼 것이 아니라 근거를 하나 더 준 것**이다.
+임의 문자열도, 지워진 요소의 옛 id 도, 잠기거나 숨겨진 요소도 통과하지 않는다.
+
+### 14-4. 테두리 — 임시 표시
+
+캔버스 선택은 **자기 overlay 를 갖는다**(`#studioCanvasSelectBox` ·
+`#studioCanvasSelectLabel`, 둘 다 `data-imory-select-owner="canvas"`).
+기존 Inspector 의 상자를 함께 쓰지 않는다 — "지금 저 테두리는 누구 것인가"를
+코드가 아니라 눈으로 추적하게 되기 때문이다. 둘이 동시에 보이지 않는 것은
+§14-1 의 라우터가 보장한다.
+
+- 좌표 변환은 기존 `studioInspectorMapRect()` 를 그대로 쓴다 — Preview 부모에
+  **축소가 걸린 조건**에서도 실측 오차 **0.01px** 이다(native · sandbox 각각).
+- **회전은 따라가지 않는다.** 회전한 요소에서는 외곽 bounding box 를 그린다.
+  지금 좌표는 프레임이 잰 사각형 하나뿐이고 회전각이 들어 있지 않다.
+  **회전을 따라가는 선택 틀과 핸들은 `HOME-CANVAS-SELECT-1B` 의 Moveable 몫**이다.
+- sandbox 에서는 **프레임이 자기 realm 에서 그린다** — 부모는 그리지 않는다
+  (기존 Inspector 와 같은 규칙, `studioInspectorRemoteOverlay`).
+- 이름표는 종류만 보여 준다(`Canvas 사진` · `Canvas 글자` …).
+  **색 · 크기 · 위치 입력 필드는 만들지 않았다.**
+
+`AUDIT-1` 이 찾은 **유령 테두리**(테두리는 떠 있는데 패널은 비어 있는 선택)는
+사라졌다 — 캔버스 요소는 더 이상 `studioInspectorSelection` 을 만들지 않고,
+고를 수 없는 캔버스 식별자는 라우터가 거부한다.
+
+### 14-5. 선택은 vendor 를 부르지 않는다
+
+공개 HOME · 공개 sandbox HOME · Studio 열기 · Select 켜기 · **캔버스 요소
+단일 선택** — 다섯 조건 전부에서 Moveable · Selecto UMD 요청은 **0** 이다
+(실측). sandbox 프레임 문서에는 로더조차 아직 없다(§13-5).
+
+### 14-6. 이 단계가 저장하는 것은 없다
+
+캔버스 선택은 **읽기만** 한다. 고르기만으로 draft 의 `regions` 가 한 글자도
+바뀌지 않는다(실측). `resolveSkinHomeCanvas()` 가 언제나 새 리터럴을
+돌려주므로 선택 상태가 draft 객체를 붙들지도 않는다.
+
+기존 확정 경로(`applyStudioInspectorPatch`)는 **쓸 수 없다** — 그 함수는 첫
+줄에서 대상 요소를 template HTML 에서 찾고, 캔버스 요소는 거기 없다. 좌표를
+`canvas.elements[]` 에 쓰는 **새 경로**가 필요하고, 그것은
+`HOME-CANVAS-TRANSFORM-1` 의 일이다.
+
+### 14-7. draft 가 바뀌면 조용히 푼다
+
+`reconcileStudioCanvasSelection()` 이 `bumpStudioWorkingRevision()` 한 곳에서
+불린다(기존 Inspector 의 reconcile 과 같은 자리 — Direct Edit · Code Apply ·
+Import · AI 적용 · 되돌리기 · 이미지 슬롯 · remount 가 전부 그곳을 지난다).
+
+요소 삭제 · 캔버스 삭제 · `enabled:false` · 미래 version · 데이터가 깨짐 ·
+그 요소가 hidden/locked 로 바뀜 · HOME 이 아닌 페이지로 이동 · 다른 스킨
+Import · Save 후 다시 열기 · native ↔ sandbox 전환 — 전부 여기서 풀린다.
+
+**없어진 요소를 임의의 다른 요소로 바꾸지 않는다.** 오류도 토스트도 아니다.
+
+프레임이 올리는 좌표(`preview:inspect-rects`)도 같은 일을 한다 — 프레임이 더
+이상 그 요소를 가리키지 않으면 선택을 푼다.

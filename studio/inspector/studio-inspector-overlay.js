@@ -927,6 +927,14 @@ function repaintStudioInspectorOverlay() {
     return;
   }
 
+  /* HOME-CANVAS-SELECT-1A — 캔버스 선택 테두리도 stage 가 움직이면
+     따라가야 한다(창 크기 · 왼쪽/AI 패널 · Desktop/Mobile 축소).
+     좌표 자체는 다시 묻지 않는다 — iframe 안에서는 아무 일도
+     일어나지 않았다. */
+  if (typeof repaintStudioCanvasSelection === "function") {
+    repaintStudioCanvasSelection();
+  }
+
   paintStudioInspectorBox(studioInspectorHoverBox, studioInspectorHover);
 
   if (typeof paintStudioInspectorHoverLabel === "function") {

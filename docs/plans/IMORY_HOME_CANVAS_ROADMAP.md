@@ -146,9 +146,10 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 각 행은 별도의 작업이다. 앞 단계가 완료됐다는 보고를 확인한 뒤 다음 단계로 넘어간다.
 
 > 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` · `CONTRACT-1C` ·
-> `RENDER-1A` · `RENDER-1B` · `VENDOR-1` 일곱이 끝났다.** 정적 렌더링은
-> **네 화면 전부** 끝났고 편집기 라이브러리는 **저장소에 고정됐지만**,
-> `SELECT-1` 이후(조작 UI)는 하나도 구현되지 않았다.
+> `RENDER-1A` · `RENDER-1B` · `VENDOR-1` · `SELECT-1A` 여덟이 끝났다.** 정적
+> 렌더링은 **네 화면 전부** 끝났고, 편집기 라이브러리는 **저장소에 고정됐고**,
+> 캔버스 요소를 **고르고 푸는 것**까지 됐다. **고치는 것은 하나도 구현되지
+> 않았다** — 이동 · 크기 · 회전 · 다중 선택 · Inspector 입력 필드는 전부 뒤다.
 >
 > - `SPIKE-1` · `SPIKE-1B` — **Moveable + Selecto 채택 확정**(§8 의 완료 기록).
 >   실험이라 **운영 파일을 한 줄도 바꾸지 않았고**, 그래서 저장소에 vendor 파일도
@@ -184,7 +185,9 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 2 | `HOME-CANVAS-RENDER-1A` | 고정 fixture를 **native 두 화면**에 동일 렌더 | 읽기 전용 | **완료**(계약 문서 §12) |
 | 2b | `HOME-CANVAS-RENDER-1B` | 같은 결과를 **sandbox 두 화면**에도 | 읽기 전용 | **완료**(계약 문서 §12-6) |
 | 2c | `HOME-CANVAS-VENDOR-1` | Moveable·Selecto 파일 고정 + Studio 전용 loader | 없음 | **완료**(계약 문서 §13) |
-| 3 | `HOME-CANVAS-SELECT-1` | 단일 선택·이동·크기·회전 | Studio만 | 미착수 |
+| 3a | `HOME-CANVAS-SELECT-1A` | 캔버스 선택 소유권 + 단일 선택 기반(**고치지 않는다**) | Studio만 | **완료**(계약 문서 §14) |
+| 3b | `HOME-CANVAS-SELECT-1B` | Selecto·Moveable 연결 · 다중 선택 · 회전 틀 · 프레임 vendor load | Studio만 | 미착수 |
+| 3c | `HOME-CANVAS-TRANSFORM-1` | 이동·크기·회전을 `canvas.elements[]` 에 쓰는 확정 경로 | 저장 가능 | 미착수 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
 | 6 | `HOME-CANVAS-PRESETS-1` | 사진 1·2·3·4장 프리셋, 라이트/다크 | 프리셋 | 미착수 |
@@ -376,12 +379,41 @@ Spike 가 요구한 vendor 조건은 **전부 지켜졌다.** 확정된 계약�
 빠지던 자리를 찾아 고쳤다(`studio/preview/preview-sandbox.js` 가 template 을
 알려진 키만 옮기는데 `canvas` 줄이 없었다 — 계약 문서 §10 의 ★).
 
-### `HOME-CANVAS-SELECT-1`
+### `HOME-CANVAS-SELECT-1A` (완료)
 
-- 단일 요소 선택, 본체 드래그, 크기 조절, 회전을 제공한다.
+셋으로 나뉘었다. 조사(`HOME-CANVAS-SELECT-AUDIT-1`)가 "기존 Inspector 선택은
+캔버스 요소를 **원리적으로** 담을 수 없다"를 확인했기 때문이다 — 그 상태는
+언제나 template HTML 을 다시 파싱해 식별자를 되찾는데, 캔버스 요소는 그
+HTML 에 없다.
+
+`1A` 가 한 일은 **고르고 푸는 것까지**다. 결과는 이 문서가 아니라
+[IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+**§14** 가 갖는다.
+
+- 캔버스 전용 선택 상태(배열 모양, 지금은 최대 1개)와 **소유권 라우터 한 곳**.
+- 캔버스를 아는 공통 hit-test — 배경 없는 요소 · 전면 요소 · 회전 요소 ·
+  내부 자식 · 잠긴 요소 아래 요소까지 native 와 sandbox 가 같은 판정.
+- sandbox 위조 선택 방어에 **근거를 하나 더** 인정(방어를 풀지 않았다).
+- 축에 평행한 임시 테두리. **회전은 따라가지 않는다.**
+- **고치는 경로는 하나도 없다.** Moveable · Selecto 를 부르지 않는다.
+
+### `HOME-CANVAS-SELECT-1B`
+
+- Selecto · Moveable 인스턴스를 **대상 DOM 이 있는 문서**에서 만든다
+  (native Preview 문서 · sandbox 프레임 문서 — Studio 부모가 아니다).
+- 두 문서에 vendor loader 를 **조건부로** 연결한다. sandbox 쪽은
+  `SANDBOX_ALLOWED_PATHS` 에 로더 자신을 올릴지부터 정한다(계약 문서 §13-5).
+- 회전을 따라가는 선택 틀과 8방향 핸들.
+- 다중 선택(상태는 이미 배열이다 — 계약 문서 §14-2).
 - 조작 중 Preview에 즉시 반영한다.
-- 이 단계에서는 다중 선택·그룹·스냅을 넣지 않는다.
 - 이미지 안쪽 구도 조절과 바깥 요소 프레임 크기 조절을 혼동하지 않는다.
+
+### `HOME-CANVAS-TRANSFORM-1`
+
+- 이동 · 크기 · 회전의 결과를 `regions.home_canvas.canvas.elements[]` 에 쓴다.
+- 기존 `applyStudioInspectorPatch()` 를 **쓰지 않는다** — 그 함수는 첫 줄에서
+  대상 요소를 template HTML 에서 찾으므로 캔버스 요소에 닿을 수 없다
+  (계약 문서 §14-6).
 
 ### `HOME-CANVAS-HISTORY-1`
 

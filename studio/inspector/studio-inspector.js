@@ -125,7 +125,22 @@ function clearStudioInspectorTransient() {
    선택 / hover 상태
 ========================================================== */
 
-function clearStudioInspectorSelection() {
+/*
+  clearStudioInspectorSelection(options)
+
+  options.keepFrameSelection
+    HOME-CANVAS-SELECT-1A. 보통은 프레임에도 "선택을 풀어라"를
+    내려보낸다. 하지만 **소유권이 캔버스로 넘어가는 경우**에는
+    프레임이 고른 요소가 그대로 맞다 — 같은 DOM 노드를 이제
+    캔버스 상태가 갖는 것뿐이다. 그때 프레임까지 풀어 버리면
+    곧바로 오는 좌표 메시지가 selected:null 이라 방금 만든 캔버스
+    선택이 스스로 풀리고(rects 처리), sandbox 에서는 프레임이 그린
+    테두리까지 사라진다.
+
+    caps 는 어느 쪽이든 null 로 내려보낸다 — 캔버스 요소는 아직
+    끌 수도, 더블클릭으로 글자를 고칠 수도 없다(SELECT-1B).
+*/
+function clearStudioInspectorSelection(options) {
 
   /* 확정되지 않은 입력/드래그가 남아 있으면 먼저 걷어낸다 —
      선택이 사라진 뒤에 걷어내려 하면 어느 요소에 되돌릴지 알 수
@@ -177,7 +192,10 @@ function clearStudioInspectorSelection() {
 
   notifyStudioInspectorSelectionChanged();
 
-  if (typeof window.postInspectorSelectionToFrame === "function") {
+  if (
+    !(options && options.keepFrameSelection) &&
+    typeof window.postInspectorSelectionToFrame === "function"
+  ) {
     window.postInspectorSelectionToFrame(null);
   }
 
@@ -252,7 +270,153 @@ function studioInspectorDraftElement(editId) {
 
 function studioInspectorEditIdExistsInDraft(editId) {
 
-  return !!studioInspectorDraftElement(editId);
+  if (studioInspectorDraftElement(editId)) {
+    return true;
+  }
+
+  /* =====================================================
+     HOME-CANVAS-SELECT-1A — 근거가 하나 더 있다
+
+     캔버스 요소는 template HTML 에 없다. 렌더러가
+     `regions.home_canvas.canvas.elements[]` 로 그 자리에서 만든
+     DOM 이다. 그래서 template 만 보면 프레임이 올린 **정당한**
+     캔버스 선택이 전부 위조로 걸린다(HOME-CANVAS-SELECT-AUDIT-1 §2 —
+     sandbox 에서 실제로 그랬다).
+
+     방어를 푸는 것이 아니라 근거를 하나 더 인정하는 것이다.
+     studioCanvasSelectableElement() 는 "지금 draft 에, 지원하는
+     version 의, enabled 된, 검증을 통과한(= id 가 유일한) 캔버스
+     안에, 그 id 가 정확히 있고, hidden 도 locked 도 아니다"를
+     전부 본다. 임의 문자열도, 지워진 요소의 옛 id 도 통과하지
+     않는다.
+  ====================================================== */
+  return (
+    typeof studioCanvasSelectableElement === "function" &&
+    !!studioCanvasSelectableElement(editId)
+  );
+
+}
+
+
+/* =========================================================
+   routeStudioInspectSelectMessage(data)
+
+   HOME-CANVAS-SELECT-1A — **선택 소유권을 정하는 한 곳**.
+
+   프레임(native · sandbox)은 "이 자리에서 이것이 잡혔다"까지만
+   올린다. 그것이 캔버스 요소인지 template 요소인지, 그래서 어느
+   상태가 주인이 되는지는 언제나 이 문서가 지금 draft 를 보고
+   정한다 — 프레임이 소유자를 고르지 않는다.
+
+     캔버스 요소   → 캔버스 선택(기존 Inspector 선택은 풀린다)
+     template 요소 → 기존 Inspector 선택(캔버스 선택은 풀린다)
+     빈 곳(id 없음) → 둘 다 풀린다
+     어느 쪽도 아님 → 거부(위조이거나 이미 지나간 화면의 메시지)
+
+   ★ 새 메시지를 만들지 않았다. 기존 preview:inspect-select 하나가
+     그대로 두 소유자에게 간다 — native 와 sandbox 가 같은 확정
+     함수를 지난다.
+========================================================== */
+
+function routeStudioInspectSelectMessage(data) {
+
+  const editId =
+    data.editId;
+
+  /* ── 1. 캔버스 요소인가 (native · sandbox 같은 판정) ── */
+
+  const canvasElement =
+    (editId && typeof studioCanvasDraftElement === "function")
+      ? studioCanvasDraftElement(editId)
+      : null;
+
+  if (canvasElement) {
+
+    /* 고를 수 없는 캔버스 요소다 — 거부한다.
+
+       hit-test 가 이미 잠긴 요소를 후보에서 빼고 숨긴 요소는 상자가
+       없어 잡히지 않으므로(skin/skin-inspect-target.js), 여기까지
+       오는 것은 늦게 도착한 메시지이거나 위조다. 이것을 아래 3번으로
+       흘려보내면 **template 에 없는 식별자로 일반 선택이 만들어져**
+       테두리만 남고 패널은 비는 유령 선택이 된다
+       (HOME-CANVAS-SELECT-AUDIT-1 §5). */
+    if (canvasElement.hidden === true || canvasElement.locked === true) {
+
+      console.warn(
+        "[studio-inspector] 고를 수 없는 캔버스 요소입니다 — 무시합니다.",
+        { id: editId, hidden: canvasElement.hidden, locked: canvasElement.locked }
+      );
+
+      return;
+
+    }
+
+    /* 소유권이 넘어온다 — 기존 선택을 먼저 걷는다.
+
+       ★ 프레임에는 해제를 내려보내지 않는다. 프레임이 고른 것은
+         바로 그 캔버스 요소이고, 풀어 버리면 곧 오는 좌표
+         메시지가 방금 만든 캔버스 선택을 지운다(위 머리말).
+
+       ★ clearStudioInspectorSelection 은 캔버스를 건드리지 않는다 —
+         건드리면 넘겨받은 선택을 스스로 지운다. */
+    clearStudioInspectorSelection({ keepFrameSelection: true });
+
+    setStudioCanvasSelection(editId, data.rect, data.visibleRect);
+
+    return;
+
+  }
+
+  /* ── 2. 위조 선택 거부 (SANDBOX-6A 요구사항 9절) ──
+
+     프레임 안에서는 스킨 저자의 JS 가 돈다. 그 코드가 부모에
+     메시지를 쏠 수는 없지만(봉투·origin·source 검사), "프레임이
+     무엇이든 보낼 수 있다"고 **가정하고** 한 겹 더 둔다:
+
+     지금 draft 에 그 식별자가 **실제로 있는가**. 없으면 선택 자체를
+     만들지 않는다 — 팝오버도, AI 선택 chip 도, selectionContext 도
+     생기지 않는다.
+
+     ★ hidden · locked 는 1번이 이미 잡았다. 여기까지 오는 캔버스
+       식별자는 **draft 에서 아예 사라진 요소**뿐이고, 그것도
+       통과하지 못한다 — 그것이 "이미 지나간 화면의 메시지를 받지
+       않는다"이다.
+
+     native 경로는 지금까지처럼 그대로 둔다(remote 가 아닐 때는 이
+     관문을 지나지 않는다) — 그 메시지는 같은 origin 의 같은 스킨
+     DOM 에서 온 것이고, 이 라운드가 바꾸지 않기로 한 흐름이다.
+     그래서 native 에서 **방금 지워진** 캔버스 요소를 가리키는 늦은
+     메시지는 3번으로 흘러 잠깐 일반 선택이 될 수 있다. 오래 남지는
+     않는다 — 바로 뒤에 오는 좌표 메시지와 draft reconcile 이 둘 다
+     그것을 걷어낸다. */
+
+  if (
+    studioInspectorRemoteOverlay &&
+    editId &&
+    !studioInspectorEditIdExistsInDraft(editId)
+  ) {
+
+    console.warn(
+      "[studio-inspector] 프레임이 보낸 선택이 지금 draft 에 없습니다 — 무시합니다."
+    );
+
+    return;
+
+  }
+
+  /* ── 3. template 요소 · 빈 곳 ──
+
+     setStudioInspectorSelection() 이 첫 줄에서 캔버스 선택을
+     걷는다(id 가 없어 곧바로 해제되는 경우에도 그렇다) — 그래서
+     빈 곳 클릭 한 번으로 둘 다 풀린다. */
+
+  setStudioInspectorSelection(
+    editId,
+    data.tagName,
+    data.rect,
+    data.metrics,
+    data.visibleRect
+  );
 
 }
 
@@ -332,6 +496,16 @@ function reconcileStudioInspectorSelection() {
 
 
 function setStudioInspectorSelection(editId, tagName, rect, metrics, visibleRect) {
+
+  /* HOME-CANVAS-SELECT-1A — 소유권은 한 번에 하나다.
+
+     여기가 "일반 요소가 선택되었다"의 모든 입구이므로, 캔버스
+     선택을 걷는 것도 여기 한 줄이면 된다. id 가 없어 아래에서
+     곧바로 해제되는 경우(= 빈 곳 클릭)에도 먼저 지나므로 둘이
+     함께 풀린다. */
+  if (typeof clearStudioCanvasSelection === "function") {
+    clearStudioCanvasSelection({ keepFrameSelection: true });
+  }
 
   if (!editId || !window.isValidInspectorEditId(editId)) {
     clearStudioInspectorSelection();
@@ -520,6 +694,19 @@ function handleStudioInspectorMessage(data) {
       return;
     }
 
+    /* HOME-CANVAS-SELECT-1A — 캔버스 선택도 Escape 로 풀린다.
+       (포커스가 Preview 안에 있을 때는 이 메시지가 유일한 Escape 다) */
+    if (
+      typeof studioCanvasSelectionIsActive === "function" &&
+      studioCanvasSelectionIsActive()
+    ) {
+
+      clearStudioCanvasSelection();
+
+      return;
+
+    }
+
     clearStudioInspectorSelection();
     return;
 
@@ -598,43 +785,7 @@ function handleStudioInspectorMessage(data) {
 
   if (data.type === "preview:inspect-select") {
 
-    /* =====================================================
-       ★ 위조 선택 거부 (SANDBOX-6A 요구사항 9절)
-
-       프레임 안에서는 스킨 저자의 JS 가 돈다. 그 코드가 부모에
-       메시지를 쏠 수는 없지만(봉투·origin·source 검사), "프레임이
-       무엇이든 보낼 수 있다"고 **가정하고** 한 겹 더 둔다:
-
-       지금 draft 의 이 페이지 template 에 그 식별자를 가진 요소가
-       **실제로 있는가**. 없으면 선택 자체를 만들지 않는다 —
-       팝오버도, AI 선택 chip 도, selectionContext 도 생기지 않는다.
-
-       native 경로는 지금까지처럼 그대로 둔다(remote 가 아닐 때는
-       이 관문을 지나지 않는다) — 그 메시지는 같은 origin 의 같은
-       스킨 DOM 에서 온 것이고, 이 라운드가 바꾸지 않기로 한 흐름이다.
-    ====================================================== */
-
-    if (
-      studioInspectorRemoteOverlay &&
-      data.editId &&
-      !studioInspectorEditIdExistsInDraft(data.editId)
-    ) {
-
-      console.warn(
-        "[studio-inspector] 프레임이 보낸 선택이 지금 template 에 없습니다 — 무시합니다."
-      );
-
-      return;
-
-    }
-
-    setStudioInspectorSelection(
-      data.editId,
-      data.tagName,
-      data.rect,
-      data.metrics,
-      data.visibleRect
-    );
+    routeStudioInspectSelectMessage(data);
 
     return;
 
@@ -656,6 +807,13 @@ function handleStudioInspectorMessage(data) {
 
     if (typeof paintStudioInspectorHoverLabel === "function") {
       paintStudioInspectorHoverLabel(studioInspectorHover, studioInspectorHoverEditId);
+    }
+
+    /* HOME-CANVAS-SELECT-1A — 캔버스 선택도 같은 좌표 흐름을 탄다.
+       프레임이 더 이상 그 요소를 가리키지 않으면(페이지 이동 ·
+       스킨 교체 · 요소 삭제) 캔버스 선택이 여기서 풀린다. */
+    if (typeof syncStudioCanvasSelectionRects === "function") {
+      syncStudioCanvasSelectionRects(data.selected);
     }
 
     if (!studioInspectorSelection) {
@@ -764,6 +922,13 @@ function setStudioInspectorEnabled(enabled) {
   if (!next) {
 
     clearStudioInspectorSelection();
+
+    /* HOME-CANVAS-SELECT-1A — Select mode 를 끄면 캔버스 선택도
+       함께 걷는다(레이어가 숨겨져도 상태가 남으면 다시 켤 때
+       옛 테두리가 되살아난다) */
+    if (typeof clearStudioCanvasSelection === "function") {
+      clearStudioCanvasSelection();
+    }
 
     studioInspectorHover = null;
     studioInspectorHoverEditId = null;
@@ -929,6 +1094,18 @@ document.addEventListener(
       event.preventDefault();
 
       cancelStudioInspectorTextDraft();
+
+      return;
+
+    }
+
+    /* HOME-CANVAS-SELECT-1A — 캔버스 선택도 Escape 로 풀린다 */
+    if (
+      typeof studioCanvasSelectionIsActive === "function" &&
+      studioCanvasSelectionIsActive()
+    ) {
+
+      clearStudioCanvasSelection();
 
       return;
 

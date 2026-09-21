@@ -468,6 +468,40 @@ function studioInspectorDescribeEditId(editId) {
     return null;
   }
 
+  /* =====================================================
+     HOME-CANVAS-SELECT-1A — 캔버스 요소는 template 에 없다
+
+     겹친 요소 후보 메뉴가 이 함수로 칸 이름을 만든다
+     (studio-inspector-quickbar.js showStudioInspectorPickMenu) —
+     이름을 붙이지 못한 후보는 칸이 만들어지지 않으므로, 이 줄이
+     없으면 캔버스 요소는 겹침 메뉴에서 통째로 사라진다.
+
+     이번 단계의 이름은 종류를 구분할 수 있는 최소한이다
+     (스킨 계약에서 이름을 길어 올리는 것은 후속 단계다).
+     hidden · locked 요소는 애초에 후보가 되지 않으므로
+     (skin/skin-inspect-target.js · studioCanvasSelectableElement)
+     여기서도 이름을 만들지 않는다.
+  ====================================================== */
+  if (typeof studioCanvasSelectableElement === "function") {
+
+    const canvasElement =
+      studioCanvasSelectableElement(editId);
+
+    if (canvasElement) {
+
+      const canvasName =
+        studioCanvasElementLabel(canvasElement.type);
+
+      return {
+        name: canvasName,
+        kindName: canvasName,
+        text: ""
+      };
+
+    }
+
+  }
+
   const source =
     studioInspectorTemplateSource();
 

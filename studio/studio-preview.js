@@ -307,6 +307,14 @@ function bumpStudioWorkingRevision() {
     window.reconcileStudioInspectorSelection();
   }
 
+  /* HOME-CANVAS-SELECT-1A — 캔버스 선택도 같은 관문을 지난다.
+     요소 삭제 · 캔버스 삭제 · enabled:false · 미래 version ·
+     hidden/locked 로 바뀜 · 다른 스킨 Import 가 전부 여기서 갈린다
+     (studio/inspector/studio-canvas-selection.js). */
+  if (typeof window.reconcileStudioCanvasSelection === "function") {
+    window.reconcileStudioCanvasSelection();
+  }
+
   /* HOME 좌우 영역 패널 — Undo · Import · Code 로 regions 나 HOME
      마크업이 바뀌었을 수 있다(studio/sides/sides-panel.js) */
   if (typeof window.syncSkinSidesPanel === "function") {

@@ -1316,6 +1316,13 @@
         "./inspector/studio-inspector-crop-model.js",
         "./inspector/studio-inspector-state.js",
         "./inspector/studio-inspector-overlay.js",
+
+        /* HOME-CANVAS-SELECT-1A — HOME 캔버스 선택(기존 Inspector
+           선택과 **다른 소유자**). state 의 studioInspectorLayer 와
+           overlay 의 좌표 변환을 **호출 시점에** 쓰므로 그 뒤이고,
+           선택 라우터를 가진 studio-inspector.js 보다는 앞이다. */
+        "./inspector/studio-canvas-selection.js",
+
         "./inspector/studio-inspector-edit.js",
         "./inspector/studio-inspector-text.js",
         "./inspector/studio-inspector-image-size.js",

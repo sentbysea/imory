@@ -38,8 +38,19 @@
    전역으로 노출되는 것(classic script 최상위 선언):
      INSPECTOR_NEVER_SELECTABLE_TAGS
      INSPECTOR_TEXTUAL_TAGS
+     INSPECTOR_CANVAS_ELEMENT_ATTR
+     INSPECTOR_CANVAS_LOCKED_ATTR
      isInspectableElement(el)
      resolveInspectableAncestor(node, root, editIdOf)
+     inspectorLockedCanvasAncestor(node, root)
+
+   ★ HOME 캔버스(HOME-CANVAS-SELECT-1A)
+
+   캔버스 요소는 DOM 이 렌더러가 만든 것이라 "생김새"로 고를 수
+   있는지가 갈리면 안 되고, 도화지를 덮는 요소가 page 로 오판되면
+   안 되며, 잠긴 요소는 아예 없는 자리로 보여야 한다. 셋 다 이
+   파일 한 곳에서 처리한다 — 세 realm 이 같은 파일을 읽으므로
+   native Preview 와 sandbox 프레임의 판정이 저절로 같아진다.
 ========================================================== */
 
 
@@ -197,8 +208,76 @@ const INSPECTOR_COMPONENT_ATTRS = [
   "data-imory-layout",
   "data-imory-transition",
   "data-imory-panel",
-  "data-imory-toggle"
+  "data-imory-toggle",
+
+  /* HOME-CANVAS-SELECT-1A — 캔버스 요소는 **언제나** 하나의 단위다.
+
+     캔버스 요소의 최상위는 늘 자식이 있는 <div> 라서, 이 줄이 없으면
+     아래 순위 판정이 text · image · link 분기를 전부 지나치고
+     inspectorHasVisibleBox() 하나에 걸린다 — 스킨 CSS 가 배경이나
+     테두리를 준 요소만 고를 수 있고, 투명한 사진 · 글자 · 도형은
+     "빈 곳"이 되어 클릭이 선택을 푼다(HOME-CANVAS-SELECT-AUDIT-1 §1).
+
+     생김새로 고를 수 있는지가 갈리면 안 된다. 이 속성은 렌더러만
+     붙이고 저장 경계의 화이트리스트에 없으므로(skin/skin-sanitize.js)
+     스킨 HTML 이 흉내 낼 수도 없다. */
+  "data-imory-canvas-element"
 ];
+
+
+/* =========================================================
+   HOME-CANVAS-SELECT-1A — 캔버스 요소를 알아보는 속성
+
+   skin/skin-home-canvas-render.js 가 붙이는 이름과 같다. 이 파일은
+   의존이 하나도 없어야 해서(세 realm 이 각자 로드한다) 상수를 한 번
+   더 적고, 단위 테스트가 둘을 대조한다.
+========================================================== */
+
+const INSPECTOR_CANVAS_ELEMENT_ATTR = "data-imory-canvas-element";
+
+const INSPECTOR_CANVAS_LOCKED_ATTR = "data-imory-canvas-locked";
+
+
+/*
+  inspectorLockedCanvasAncestor(node, root) -> Element | null
+
+  눌린 노드가 **잠긴** 캔버스 요소 안에 있는가.
+
+  잠긴 요소는 화면 클릭으로 고르지 않는다(계약 §5 · SELECT-1A §2).
+  "고르지 않는다"를 순위를 낮추는 것으로 표현하지 않고 후보 목록에서
+  아예 빼는 이유는, 순위만 낮추면 조상 탐색이 그 위의 표식까지 올라가
+  **잠긴 요소 밑에 깔린 다른 요소**를 가려 버리기 때문이다. 빼 두면
+  그 자리는 "잠긴 요소가 없는 것과 같은 자리"가 된다 — 밑에 다른
+  요소가 있으면 그것이 잡히고, 없으면 표식(= 캔버스 바탕)을 누른
+  것과 같아진다.
+*/
+function inspectorLockedCanvasAncestor(node, root) {
+
+  let current =
+    (node && node.nodeType === 1)
+      ? node
+      : (node ? node.parentElement : null);
+
+  while (current && current !== root) {
+
+    if (
+      current.hasAttribute &&
+      current.hasAttribute(INSPECTOR_CANVAS_ELEMENT_ATTR)
+    ) {
+
+      return current.getAttribute(INSPECTOR_CANVAS_LOCKED_ATTR) === "true"
+        ? current
+        : null;
+
+    }
+
+    current = current.parentElement;
+
+  }
+
+  return null;
+
+}
 
 
 function inspectorIsTransparentColor(value) {
@@ -317,7 +396,16 @@ function inspectorSelectionRank(el, root, win) {
     return INSPECTOR_RANK.text;
   }
 
-  if (inspectorIsPageLevel(el, root)) {
+  /* HOME-CANVAS-SELECT-1A — 캔버스 요소는 "페이지 전체 래퍼"가 아니다.
+
+     도화지를 꽉 채운 배경 사진은 루트와 거의 같은 크기라서 아래
+     판정이 page(6)로 매긴다 — 그러면 한 번도 고를 수 없다. page 는
+     "누를 것이 없는 자리"를 뜻하는 등급이고, 캔버스 요소는 언제나
+     사용자가 놓은 하나의 물건이므로 그 등급에 들어갈 수 없다. */
+  if (
+    !el.hasAttribute(INSPECTOR_CANVAS_ELEMENT_ATTR) &&
+    inspectorIsPageLevel(el, root)
+  ) {
     return INSPECTOR_RANK.page;
   }
 
@@ -351,6 +439,58 @@ function inspectorSelectionRank(el, root, win) {
             묻는 클릭이 된다.
 ========================================================== */
 
+/* =========================================================
+   HOME-CANVAS-SELECT-1A — 캔버스에서 "겹쳤다"는 무엇인가
+
+   겹친 요소 메뉴는 "서로를 담지 않는 후보가 둘 이상"일 때 뜬다.
+   캔버스 요소는 전부 형제라 DOM 으로는 서로를 담는 일이 없다 —
+   그래서 이 규칙을 그대로 두면 **도화지를 덮는 배경 사진 하나만
+   있어도 모든 클릭이 한 번 더 묻는 클릭**이 된다. 실제 캔버스는
+   거의 언제나 바탕 요소를 깔고 시작한다.
+
+   캔버스에서는 형제 사이의 포함을 **사각형**으로 읽는다. 한쪽이
+   다른 쪽을 완전히 덮고 있으면 묻지 않는다 — 앞뒤 순서는 사용자가
+   직접 정한 것이고, 덮은 쪽 위에서 누른 것이 무엇인지에 이견이
+   없기 때문이다. **부분적으로** 걸친 두 요소는 지금까지처럼 묻는다.
+
+   ★ 캔버스 요소끼리만이다. 스킨 DOM 의 후보 판정은 한 글자도
+     바뀌지 않는다(둘 중 하나라도 캔버스 요소가 아니면 false).
+========================================================== */
+
+function inspectorRectCovers(outer, inner) {
+
+  /* 0.5px 은 반올림 여유다 — 백분율 좌표에서 경계가 딱 맞는 두
+     요소가 소수점 때문에 "덮지 않는다"로 읽히지 않게. */
+  const pad = 0.5;
+
+  return (
+    outer.left <= inner.left + pad &&
+    outer.top <= inner.top + pad &&
+    outer.right >= inner.right - pad &&
+    outer.bottom >= inner.bottom - pad
+  );
+
+}
+
+
+function inspectorCanvasPairIsNested(a, b) {
+
+  if (
+    !a || !b ||
+    !a.hasAttribute(INSPECTOR_CANVAS_ELEMENT_ATTR) ||
+    !b.hasAttribute(INSPECTOR_CANVAS_ELEMENT_ATTR)
+  ) {
+    return false;
+  }
+
+  const ra = a.getBoundingClientRect();
+  const rb = b.getBoundingClientRect();
+
+  return inspectorRectCovers(ra, rb) || inspectorRectCovers(rb, ra);
+
+}
+
+
 function pickInspectableAtPoint(stack, root, editIdOf, win) {
 
   const seen = new Set();
@@ -360,6 +500,11 @@ function pickInspectableAtPoint(stack, root, editIdOf, win) {
   (stack || []).forEach((node) => {
 
     if (!node || node === root || !root || !root.contains(node)) {
+      return;
+    }
+
+    /* 잠긴 캔버스 요소는 이 자리에 없는 것으로 친다(위 머리말) */
+    if (inspectorLockedCanvasAncestor(node, root)) {
       return;
     }
 
@@ -388,10 +533,19 @@ function pickInspectableAtPoint(stack, root, editIdOf, win) {
 
   for (let i = 0; i < candidates.length && !overlap; i += 1) {
     for (let j = i + 1; j < candidates.length; j += 1) {
-      if (!candidates[i].contains(candidates[j]) && !candidates[j].contains(candidates[i])) {
-        overlap = true;
-        break;
+
+      if (candidates[i].contains(candidates[j]) || candidates[j].contains(candidates[i])) {
+        continue;
       }
+
+      /* 캔버스에서 "담고 있다"는 DOM 이 아니라 사각형이다(아래) */
+      if (inspectorCanvasPairIsNested(candidates[i], candidates[j])) {
+        continue;
+      }
+
+      overlap = true;
+      break;
+
     }
   }
 
@@ -412,8 +566,14 @@ if (typeof module !== "undefined" && module.exports) {
     INSPECTOR_NEVER_SELECTABLE_TAGS,
     INSPECTOR_TEXTUAL_TAGS,
     INSPECTOR_RANK,
+    INSPECTOR_COMPONENT_ATTRS,
+    INSPECTOR_CANVAS_ELEMENT_ATTR,
+    INSPECTOR_CANVAS_LOCKED_ATTR,
     isInspectableElement,
     resolveInspectableAncestor,
+    inspectorLockedCanvasAncestor,
+    inspectorRectCovers,
+    inspectorCanvasPairIsNested,
     inspectorSelectionRank,
     pickInspectableAtPoint
   };
