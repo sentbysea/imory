@@ -147,10 +147,20 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 
 > 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` · `CONTRACT-1C` ·
 > `RENDER-1A` · `RENDER-1B` · `VENDOR-1` · `SELECT-1A` · `SELECT-1B-1` ·
-> `SELECT-1B-2` 열이 끝났다.** 정적 렌더링은 **네 화면 전부** 끝났고, 편집기 라이브러리는
-> **저장소에 고정됐고**, 캔버스 요소를 **고르고(단일 · lasso · Shift 다중) ·
-> 풀고 · 틀로 보여 주는 것**까지 됐다. **고치는 것은 하나도 구현되지
-> 않았다** — 이동 · 크기 · 회전 · Inspector 입력 필드는 전부 뒤다.
+> `SELECT-1B-2` · `TRANSFORM-1A` · `TRANSFORM-1B` · `TRANSFORM-1C` ·
+> `MILESTONE-1` 열넷이 끝났다.** 정적 렌더링은 **네 화면 전부** 끝났고, 편집기
+> 라이브러리는 **저장소에 고정됐고**, 캔버스 요소를 **고르고(단일 · lasso ·
+> Shift 다중) · 풀고 · 틀로 보여 주는 것**에 더해 **단독 선택 요소 하나의
+> 이동 · 리사이즈 · 회전**까지 됐다(`x` · `y` · `width` · `height` ·
+> `rotation` 다섯 칸). **그룹 조작 · 스냅 · 키보드 조작 · 손가락 조작 ·
+> Inspector 입력 필드 · 요소 추가 UI 는 아직 하나도 없다.**
+>
+> ★ 그 위에 **`COMPOSITION-CONTRACT-1`(2026-09-21)** 이 다음 구조를 확정했다 —
+> **자동 배치 블록 + `main_visual` 자유 레이어(`canvas.version:2`)**. 설계는
+> **[§14](#14-조합형-home-canvas-v2-설계-home-canvas-composition-contract-1)**
+> 에 있고, **문서만 바꾼 라운드라 코드에는 한 줄도 없다.** v1 은 폐기되지
+> 않는다 — v2 의 자유 배치 층(페이지 장식 · 프레임 내부)을 v1 엔진이 그대로
+> 맡는다.
 >
 > - `SELECT-1B-1` — **조건부 vendor 활성화와 표시 전용 Moveable 틀**. 첫
 >   Canvas 요소를 고른 그 순간에만 프레임 문서가 runtime · 로더 · UMD 를 받고,
@@ -207,6 +217,14 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3c-3 | `HOME-CANVAS-TRANSFORM-1C` | **단일 요소 회전**을 `canvas.elements[].rotation` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §19) |
 | 3c-M | `HOME-CANVAS-MILESTONE-1` | **기본 조작 마일스톤** — 이동 · 리사이즈 · 회전을 실제 배포에서 손으로 시험할 수 있게 한다(수동 테스트 스킨 + 통합 smoke). 새 편집 기능 없음 | 없음(도구) | **완료** — §8-M |
 | 3c-4 | `HOME-CANVAS-TRANSFORM-1D` | 그룹 이동 · 그룹 리사이즈 · 그룹 회전 | 저장 가능 | 미착수 |
+| 3c-X | `HOME-CANVAS-COMPOSITION-CONTRACT-1` | **조합형 HOME(v2) 설계 확정** — 자동 배치 블록 + `main_visual` 자유 레이어. 문서만 | 없음(문서) | **완료** — §14 |
+| 3c-U | `HOME-CANVAS-MANUAL-UX-FIX-1` | 수동 테스트에서 나온 v1 편집기 수정 — 30° 자석 회전 · 모서리 비율 유지 · 이미지 `contain` · 텍스트 선택 chrome | Studio만 | 미착수 — §14-14 |
+| 3c-I | `HOME-CANVAS-INSPECTOR-1A` | Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(지금은 패널이 비어 있다) | Studio만 | 미착수 — §14-15 |
+| 3e-1 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 없음(데이터) | 미착수 — §14-13 |
+| 3e-2 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow + logo · category_nav · text · divider 렌더, native/sandbox parity | 읽기 전용 | 미착수 — §14-13 |
+| 3e-3 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform | 읽기 전용 | 미착수 — §14-13 |
+| 3e-4 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 저장 가능 | 미착수 — §14-13 |
+| 3e-5 | `HOME-CANVAS-V2-ATTACH-1` | `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` + Undo/Redo | 저장 가능 | 미착수 — §14-13 |
 | 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
@@ -773,4 +791,614 @@ HTML 에 없다.
 | 모바일 390 단일 좌표계를 데스크톱에서 확대한다 | 미정 | `RESPONSIVE-1` |
 | 모바일·데스크톱 override를 제공한다 | 미정 | `RESPONSIVE-1` |
 | 알파 경계 기반 스티커 칼선을 제공한다 | 미정 | `STICKER-1` |
+| HOME 편집을 **모든 요소의 절대좌표 편집기로 만들지 않는다** — 자동 배치 층과 자유 배치 층 둘로 가른다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| 조합형 구조는 `canvas.version:2` 다. **v1 을 폐기하지 않고 자동 변환도 migration 도 하지 않는다** — v1 은 v2 의 자유 배치 층 엔진으로 계속 쓴다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| v2 canvas 에 **최상위 `elements` 를 두지 않는다**(`flow` + `overlays` 뿐). v1 writer 가 version 을 안 보고 `canvas.elements` 를 찾기 때문이다. 둘을 동시에 가지면 Import 거부 | 확정 | `COMPOSITION-CONTRACT-1` |
+| 블록 배열 순서가 위에서 아래 순서다 — 별도 `order` · `z` 칸을 두지 않는다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| 블록 폭은 `width` 숫자 하나고 "가용 폭 전부"는 `align:"stretch"` 가 뜻한다. `width:"auto"` 를 두지 않는다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| `flow.gap` 과 블록 `margin` 은 **합산**이다 — CSS margin collapse 를 흉내 내지 않는다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| `hidden:true` 는 자동 배치에서 **자리도 차지하지 않는다**(아래 블록이 올라온다) | 확정 | `COMPOSITION-CONTRACT-1` |
+| `main_visual` 은 사진 한 장이 아니라 **로컬 좌표계를 가진 편집 프레임**이고, 로컬 자는 `props.baseWidth`/`baseHeight` 다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| primary photo 는 요소 쪽 플래그가 아니라 **`props.primaryId` 포인터 하나**로 가리킨다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| 프레임 내부 장식은 `follow: "transform" \| "pin"` 둘 중 하나다. transform 은 프레임 배율을 받고 pin 은 받지 않는다(화면 배율만) | 확정 | `COMPOSITION-CONTRACT-1` |
+| 프레임 배율은 **가로 배율 하나**다 — 균등 배율이라야 `rotation` 이 보존되고 장식이 찌그러지지 않는다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| pin 은 `anchor`(대상의 점)와 `origin`(자기 점)을 **둘 다** 갖는다 — 하나만 두면 크기를 바꿀 때 편집기가 `offset` 을 몰래 다시 계산하게 된다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| 안 쓰는 칸을 지우지 않는다 — stretch 의 `width`, pin 의 `x`/`y`, transform 의 `pin` 은 보존되고 렌더에만 안 쓰인다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| 블록 id · 프레임 내부 요소 id · overlay id 는 **한 이름 공간**이고 전부 유일하다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| **lasso 는 소속이 아니라 선택 수단**이다 — `메인 비주얼로 묶기` 는 명시적 동작이고 묶기 · 해제가 각각 Undo 한 칸이다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| 장식임을 나타내는 **별도 플래그를 두지 않는다** — `overlays` 배열에 있다는 것이 구분이다 | 확정 | `COMPOSITION-CONTRACT-1` |
+| v2 에도 `overflow` 칸을 두지 않는다(기본 `visible`) — 자르기는 스킨 CSS 의 몫이라는 v1 결정을 유지 | 확정 | `COMPOSITION-CONTRACT-1` |
+| v2 첫 범위는 column flow · 블록 다섯 · `main_visual` **한 단계** 내부 · page overlay 까지다 — 재귀 container · row · grid · 중첩 section 은 후속 | 확정 | `COMPOSITION-CONTRACT-1` |
+| 회전 흡착(0·30·60·90° ±4°)과 모서리 손잡이 비율 유지 · 이미지 `contain` 기본 · 텍스트 선택 chrome 여유 | 확정(구현 전) | `MANUAL-UX-FIX-1` |
+| 프레임 `height:"auto"` 에서 슬롯이 빈 photo 의 폴백 비율 | 미정 | `V2-MAIN-VISUAL-1` |
+| 자동 배치 블록 본체의 직접 드래그를 순서 변경으로 볼 것인가 margin 조정으로 볼 것인가 | 미정 | `V2-INSPECTOR-1` |
 
+## 14. 조합형 HOME Canvas v2 설계 (`HOME-CANVAS-COMPOSITION-CONTRACT-1`)
+
+> **PLAN 이다. 이 절에 적힌 것은 코드에 하나도 없다.** 지금 배포된 것은
+> [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)의 v1(평면 자유
+> Canvas)뿐이고, 이 절을 구현된 것으로 읽지 않는다. 이 라운드
+> (`HOME-CANVAS-COMPOSITION-CONTRACT-1`, 2026-09-21)는 **문서만 바꿨다** —
+> 제품 코드 · 렌더러 · Studio UI · validator · `APP_BUILD_VERSION` 전부
+> 무변경이다.
+
+### 14-1. 왜 나누는가
+
+v1 은 모든 요소가 도화지 좌표에 떠 있는 **평면 자유 Canvas** 다. 이동 ·
+리사이즈 · 회전이 갖춰지고(`TRANSFORM-1A · 1B · 1C`) 수동 테스트
+(`MILESTONE-1`)를 지나면서 그 모델의 한계가 드러났다.
+
+- 로고 · 카테고리 · 제목 · 본문처럼 **글자가 늘어나는** 것까지 절대좌표에
+  두면, 한 줄이 늘 때마다 주인이 아래 것들을 전부 손으로 다시 옮겨야 한다.
+- 반대로 사진 뒤의 기울어진 종이 · 테이프 · 인덱스 조각은 **흐름에 넣을 수
+  없다** — 겹치는 것이 목적이기 때문이다.
+
+그래서 HOME 편집을 "모든 요소의 절대좌표 편집기"로 만들지 않고 **두 층**으로
+가른다. **v1 을 폐기하지 않는다** — v1 이 만든 선택 · lasso · 이동 ·
+리사이즈 · 회전 · Undo 는 그대로 아래 층(자유 배치)의 엔진이 된다.
+
+| 층 | 무엇이 놓이나 | 배치 | 엔진 |
+| --- | --- | --- | --- |
+| **자동 배치** | logo · category_nav · main_visual · text · divider (후속 photo_grid · widget) | 위에서 아래로 흐른다. 앞 블록이 커지면 뒤 블록이 밀린다 | 새로 만든다(`V2-FLOW-RENDER-1`) |
+| **자유 배치** | 사진 주변 인덱스 · 종이 · 테이프 · 리본 · 라벨 · 스티커 · 페이지 구석 꽃잎 · 큰 숫자 | x/y/rotation 절대좌표. 흐름을 밀어내지 않는다 | **v1 을 그대로 쓴다** |
+
+핵심 콘텐츠를 자유 배치로 만드는 것은 **기본 생성 경로가 아니다**. 자유
+드래그로 로고를 아무 좌표에나 던지는 것이 기본 UX 가 되어서는 안 된다.
+
+### 14-2. 레퍼런스에서 뽑은 구조 원칙
+
+주인이 보여 준 레퍼런스 넷에서 **구조적 원리만** 가져온다. 이미지를 저장소에
+복사하지 않고 작품 자체를 재현하지 않는다(§9 의 금지 그대로).
+
+| 레퍼런스 | 무엇이 흐름이고 무엇이 자유인가 |
+| --- | --- |
+| **A** 큰 사진 + 종이 + 좌우 인덱스 | 제목 · 짧은 문구 · 구분선은 **자동 배치**. 사진은 `main_visual` 블록 하나. 사진 뒤 기울어진 종이 · 겹친 테두리 · 좌우 인덱스 조각은 **그 블록 안의 자유 요소**. 사진 아래 캡션은 블록 소속 캡션이거나 다음 `text` 블록. 화면 구석 꽃잎과 희미한 큰 숫자는 **페이지 자유 장식** |
+| **B** 긴 에디토리얼 페이지 | 제목 · 와이드 사진 · 본문+사진 · 2열 사진은 **순서가 있는 자동 배치 섹션**. 사진 위 작은 라벨만 그 섹션의 자유 장식. 페이지 전체를 하나의 거대한 절대좌표 Canvas 로 만들지 않는다. row · grid 는 첫 구현 범위가 아니라 **후속 블록 종류** |
+| **C** 큰 메인 사진과 주변 UI 조각 | 메인 사진과 색상칩 · 하트 · 인용부호 · 작은 라벨은 **하나의 `main_visual`**. 화살표 · 페이지 번호처럼 **실제 기능을 가진 것은 장식과 구분**한다(장식이 아니라 후속 widget). 아래 작은 사진 · 날짜 · 텍스트는 별도 자동 배치 블록. 화면 전체의 넓은 여백은 자유좌표가 아니라 **블록 margin 과 정렬**로 만든다 |
+| **D** 큰 사진 + 2×2 사진 + 정보 카드 | 큰 사진 · 사진 그리드 · 정보 카드는 **각각 자동 배치 블록**. 사진 번호 · 작은 프로필 · 라벨은 각 블록에 소속된 장식. **grid 자체는 후속 블록 종류**로 남긴다 — v2 첫 구현은 column 흐름과 `main_visual` 하나에 집중한다 |
+
+### 14-3. v2 의 모양
+
+```json
+{
+  "name": "home_canvas",
+  "enabled": true,
+  "canvas": {
+    "version": 2,
+    "baseWidth": 390,
+    "baseHeight": 844,
+    "flow": {
+      "direction": "column",
+      "padding": { "top": 0, "right": 0, "bottom": 0, "left": 0 },
+      "gap": 0,
+      "blocks": []
+    },
+    "overlays": []
+  }
+}
+```
+
+**저장 위치는 v1 과 같다** — `SkinPackage.regions` 의 `home_canvas` 항목이고,
+표시 위치도 HOME 안 `data-imory-canvas-root` 정확히 하나다(계약 문서 §2 ·
+§3). 새 최상위 필드를 만들지 않는다.
+
+`baseWidth` · `baseHeight` 의 뜻은 v1 과 **글자 그대로 같다**(계약 문서 §4 ·
+§4-1). `baseWidth` 는 `390` 고정이고, `baseHeight` 는 양수 필수이며 **블록
+높이의 합으로 자동 계산하지 않는다**. flow 가 `baseHeight` 보다 길면 넘치고,
+자를지 늘릴지 스크롤할지는 v1 과 같이 **스킨 CSS 의 몫**이다. Studio 가
+`baseHeight` 를 몰래 늘리지 않는다 — "내용에 맞추기"는 주인이 누르는 명시적
+동작이고 Undo 한 칸이다(`V2-INSPECTOR-1`).
+
+#### 최소 블록 예시
+
+```json
+{
+  "version": 2,
+  "baseWidth": 390,
+  "baseHeight": 1240,
+  "flow": {
+    "direction": "column",
+    "padding": { "top": 48, "right": 24, "bottom": 64, "left": 24 },
+    "gap": 20,
+    "blocks": [
+      {
+        "id": "canvas_b1logo",
+        "type": "logo",
+        "width": 120,
+        "height": 40,
+        "align": "center",
+        "props": { "slot": "title_logo", "fallback": "site_title" }
+      },
+      {
+        "id": "canvas_b2nav",
+        "type": "category_nav",
+        "width": 342,
+        "height": "auto",
+        "align": "stretch",
+        "margin": { "top": 8 },
+        "props": { "mode": "all", "categoryIds": [] }
+      },
+      {
+        "id": "canvas_b3title",
+        "type": "text",
+        "width": 300,
+        "height": "auto",
+        "align": "center",
+        "props": { "text": "FOREVER YOUNG", "role": "title" }
+      },
+      {
+        "id": "canvas_b4rule",
+        "type": "divider",
+        "width": 120,
+        "height": 1,
+        "align": "center",
+        "margin": { "top": 12, "bottom": 12 }
+      },
+      {
+        "id": "canvas_b5main",
+        "type": "main_visual",
+        "width": 300,
+        "height": "auto",
+        "align": "center",
+        "margin": { "top": 24, "bottom": 24 },
+        "props": {
+          "baseWidth": 300,
+          "baseHeight": 380,
+          "primaryId": "canvas_m1photo",
+          "elements": [
+            {
+              "id": "canvas_m0paper",
+              "type": "shape",
+              "follow": "transform",
+              "x": -18,
+              "y": 26,
+              "width": 300,
+              "height": 360,
+              "rotation": -6,
+              "props": { "kind": "rect" }
+            },
+            {
+              "id": "canvas_m1photo",
+              "type": "photo",
+              "follow": "transform",
+              "x": 0,
+              "y": 0,
+              "width": 300,
+              "height": 380,
+              "props": { "slot": "photo_main" }
+            },
+            {
+              "id": "canvas_m2left",
+              "type": "text",
+              "follow": "pin",
+              "width": 92,
+              "height": 22,
+              "pin": {
+                "target": "photo",
+                "anchor": "left",
+                "origin": "right",
+                "offset": { "x": 8, "y": -40 }
+              },
+              "props": { "text": "puppy !", "role": "label" }
+            },
+            {
+              "id": "canvas_m3right",
+              "type": "text",
+              "follow": "pin",
+              "width": 92,
+              "height": 22,
+              "pin": {
+                "target": "photo",
+                "anchor": "right",
+                "origin": "left",
+                "offset": { "x": -8, "y": 90 }
+              },
+              "props": { "text": "kitty !", "role": "label" }
+            },
+            {
+              "id": "canvas_m4cap",
+              "type": "text",
+              "follow": "pin",
+              "width": 240,
+              "height": "auto",
+              "pin": {
+                "target": "frame",
+                "anchor": "bottom",
+                "origin": "top",
+                "offset": { "x": 0, "y": 10 }
+              },
+              "props": { "text": "2025 / 05 / 12", "role": "caption" }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "overlays": [
+    {
+      "id": "canvas_o1number",
+      "type": "text",
+      "x": -46,
+      "y": 980,
+      "width": 260,
+      "height": 200,
+      "rotation": 0,
+      "props": { "text": "01", "role": "label" }
+    }
+  ]
+}
+```
+
+### 14-4. 자동 배치 블록 계약
+
+블록 하나의 **공통 칸**은 v1 요소의 공통 칸(계약 문서 §5)을 그대로 잇는다 —
+종류별 내용은 전부 `props` 안이라는 규칙도 같다.
+
+| 칸 | 필수 | 규칙 |
+| --- | --- | --- |
+| `id` | ✔ | **v1 §5-1 과 같은 규칙**(`/^[A-Za-z][A-Za-z0-9_-]{0,63}$/`, `canvas_` 접두). 렌더러가 `data-imory-edit-id` 로 쓴다 |
+| `type` | ✔ | `logo` · `category_nav` · `text` · `divider` · `main_visual` — **v2 첫 범위는 이 다섯** |
+| `width` | ✔ | **`baseWidth`(390) 좌표계의 양수**. `"auto"` 는 없다 — 가용 폭 전부는 `align:"stretch"` 가 뜻한다 |
+| `height` | ✔ | 양수 **또는** `"auto"`. `"auto"` 를 쓸 수 있는 종류는 `text` · `category_nav` · `divider` · `main_visual` 넷이고 `logo` 는 양수다(v1 §6 의 자를 그대로 쓴다) |
+| `align` | | `left` · `center` · `right` · `stretch`. 빠지면 `left` |
+| `margin` | | `{ top, right, bottom, left }`, 각 칸 선택이고 빠지면 `0`. **음수 허용**(일부러 겹치기 위해) |
+| `maxWidth` | | 양수. **`align:"stretch"` 일 때만 뜻이 있다** |
+| `hidden` | | boolean. 빠지면 `false` |
+| `locked` | | boolean. 빠지면 `false` |
+| `props` | | 객체. 빠지면 `{}`. 종류별 필수 칸은 아래 |
+
+- **배열 순서가 위에서 아래 순서**다. 별도 `order` · `z` 칸을 두지 않는다
+  (v1 이 `z` 를 두지 않은 것과 같은 이유).
+- **`align:"stretch"` 여도 `width` 를 버리지 않는다.** 렌더에 쓰지 않을
+  뿐이고 저장값은 남는다 — 정렬을 stretch ↔ center 로 오가도 폭을 잃지
+  않는다. `hidden` 을 켰다 꺼도 마찬가지다.
+- **`hidden:true` 는 자리도 차지하지 않는다**(아래 블록이 올라온다). 빈 칸을
+  남기는 것은 `hidden` 이 아니라 CSS `visibility` 의 뜻이다.
+- `locked:true` 는 편집기에서 고를 수 없다는 뜻이다(v1 §14-3 과 같다).
+
+#### `flow.gap` 과 개별 `margin` 의 관계 — **합산이다. collapse 하지 않는다**
+
+두 블록 사이의 실제 간격 = `flow.gap` + 앞 블록 `margin.bottom` + 뒤 블록
+`margin.top`. 첫 블록 위와 마지막 블록 아래에는 `gap` 이 붙지 않고
+`flow.padding` 과 그 블록의 `margin` 만 있다.
+
+CSS 의 margin collapse 를 흉내 내지 않는다. 흉내 내면 저장값과 화면이
+어긋나고, 편집기에서 "여백을 늘렸는데 아무 일도 안 일어난다"가 생긴다.
+
+#### `align` 과 좌우 `margin` 이 함께 작동하는 방식
+
+| `align` | 가로 위치 | `margin.left` · `margin.right` |
+| --- | --- | --- |
+| `left` | `flow.padding.left` 에 붙는다 | `left` 가 더 민다. `right` 는 쓰이지 않는다(보존) |
+| `center` | 가용 폭의 가운데 | 둘이 함께 기준 폭을 깎아 중심을 옮긴다 |
+| `right` | `flow.padding.right` 에 붙는다 | `right` 가 더 민다. `left` 는 쓰이지 않는다(보존) |
+| `stretch` | 가용 폭 전부(`maxWidth` 가 있으면 거기까지, 그 뒤 가운데) | 양쪽에서 폭을 깎는다 |
+
+★ **이름 함정.** `skin/skin-layout.js` 의 배치 primitive 에도 `align` 이
+있지만 값이 `start · center · end · stretch · baseline` 이고 **교차축**을
+뜻한다. 그쪽은 스킨 템플릿의 HTML 속성 층이고 이쪽은 Canvas JSON 이라 한
+객체에 같이 나오지 않지만, 두 문서를 오가며 읽을 때 값 표를 섞지 않는다.
+
+#### 종류별 `props`
+
+| `type` | `props` | 비고 |
+| --- | --- | --- |
+| `logo` | `slot` · `fallback` | **v1 §7 과 같다**(`fallback` 은 `site_title` 하나) |
+| `category_nav` | `mode` · `categoryIds` | **v1 §7 과 같다** |
+| `text` | `text` · `role` | **v1 §7 과 같다**(`role` 은 title · subtitle · body · caption · label) |
+| `divider` | 없음 | 흐름 안의 가로 구분선. **v1 의 `shape{kind:"line"}` 과 다른 층이다** — 그쪽은 자유 좌표 장식이고 `overlays` 에서 계속 쓰인다 |
+| `main_visual` | `baseWidth` · `baseHeight` · `primaryId` · `elements` | §14-5 |
+
+v1 과 뜻이 같은 것은 **같은 이름 · 같은 값 표**를 쓴다. 같은 의미의 칸을 두
+벌 만들지 않는다.
+
+### 14-5. `main_visual` — 사진 한 장이 아니라 편집 프레임 하나
+
+```text
+main_visual
+├─ primary photo        ← props.primaryId 가 가리킨다
+├─ background paper     ← follow: "transform"
+├─ border               ← follow: "transform"
+├─ left index           ← follow: "pin"
+├─ right index          ← follow: "pin"
+├─ tape / ribbon / sticker
+└─ caption              ← follow: "pin" (frame bottom)
+```
+
+**블록 자체는 자동 배치 영역에 속한다** — 순서 · `align` · `width` ·
+`height` · `margin` 은 다른 블록과 똑같다. 내부만 로컬 좌표계다.
+
+| `props` 칸 | 필수 | 규칙 |
+| --- | --- | --- |
+| `baseWidth` · `baseHeight` | ✔ | 양수. **내부 요소 좌표의 자**다. 블록의 `width` 와 같을 필요가 없고, 블록 `height:"auto"` 에서도 이 자는 흔들리지 않는다 |
+| `primaryId` | ✔ | `elements` 안의 id 하나. 그 요소는 **`type:"photo"` 여야 하고 `hidden` 일 수 없다** — 아니면 Import 거부 |
+| `elements` | ✔ | 내부 자유 요소 배열. **비어 있을 수 없다**(최소한 primary 하나) |
+
+- **내부 요소 배열 순서가 앞뒤 순서**다(앞쪽이 뒤, 뒤쪽이 앞 — v1 과 같다).
+- 내부 요소 좌표의 원점은 **프레임 상자의 왼쪽 위**(margin 바깥이 아니다).
+  음수와 프레임 밖 좌표를 **허용한다** — 삐져나오는 것이 목적이기 때문이다.
+  상한은 v1 과 같은 자를 쓴다(좌표 ±100000 · 크기 0 초과 100000 이하).
+- **`overflow` 칸을 두지 않는다.** 렌더러가 프레임에 `overflow` 를 쓰지
+  않으므로 브라우저 기본값 `visible` 이고, 자를지 말지는 스킨 CSS 가 정한다
+  — 플랫폼 CSS 가 도화지의 `overflow` 를 정하지 않는다는 v1 결정(계약 문서
+  §4-1 · §12-2)을 뒤집지 않는다.
+- **`height:"auto"` 는 primary photo 의 비율을 따른다.** 비율을 두 곳에서
+  정하면 충돌하므로 별도 `aspectRatio` 칸을 두지 않는다. 슬롯이 비어 비율을
+  모를 때의 폴백 비율은 **`V2-MAIN-VISUAL-1` 이 정한다** — 데이터 계약이
+  아니라 렌더 결정이다.
+- **primary photo 를 교체해도 장식 관계가 유지된다.** 교체는 그 요소의
+  `props.slot` 을 바꾸는 것이고, `primaryId` 도 pin 의 `target:"photo"` 도
+  id 를 보기 때문이다.
+- **photo Crop 은 사진 콘텐츠 안쪽 일이다** — 주변 장식은 그대로다.
+
+#### id 는 Canvas 하나 안에서 전부 유일하다
+
+블록 id · `main_visual` 내부 요소 id · overlay id 가 **한 이름 공간**이다.
+중복이면 새 Import 를 거부한다(v1 §5-1 과 같은 판정).
+
+이유 둘. (1) 렌더러가 전부 `data-imory-edit-id` 로 내보내는데 그것이 문서
+안에서 유일해야 Inspector 선택자와 스킨 CSS 가 성립한다. (2) §14-7 의
+묶기 · 해제가 **id 를 바꾸지 않고 소속만 옮기므로**, 층을 옮길 때 이름이
+부딪히면 안 된다.
+
+### 14-6. `pin` 과 `transform` — 프레임이 커질 때 무엇을 따라가나
+
+내부 요소마다 `follow` 를 하나 갖는다. 빠지면 `"transform"`.
+
+| | `transform` | `pin` |
+| --- | --- | --- |
+| 무엇이 따라가나 | **위치와 크기가 함께 비례 변경** | 기준점 위치만 따라간다. **자기 크기는 유지** |
+| 쓰는 칸 | `x` · `y` · `width` · `height` · `rotation` | `width` · `height` · `rotation` · `pin{...}` |
+| 안 쓰는 칸 | `pin`(보존만) | `x` · `y`(보존만) |
+| 어울리는 것 | 사진 뒤 기울어진 종이 · 겹친 테두리 · 가로지르는 테이프 · 사진 크기에 맞춘 큰 도형 | 좌우 인덱스 · 작은 하트 · 모서리 라벨 · 짧은 글자 조각 · 작은 PNG 스티커 |
+
+**안 쓰는 칸을 지우지 않는다.** `follow` 를 pin ↔ transform 으로 토글해도
+좌표와 pin 설정을 잃지 않는다(§14-4 의 stretch ↔ width 와 같은 규칙).
+
+#### 배율 — 자가 둘이다
+
+화면 배율 `S_page` = 실제 도화지 폭 ÷ `canvas.baseWidth`.
+프레임 배율 `S_frame` = 프레임의 해결된 폭 ÷ `props.baseWidth`.
+
+| | 최종 크기 · 오프셋 | 최종 위치 |
+| --- | --- | --- |
+| `transform` | 로컬값 × `S_frame` × `S_page` | 로컬 `x`·`y` × `S_frame` × `S_page` |
+| `pin` | 로컬값 × `S_page` (**`S_frame` 없음**) | `anchor` 기준점 + `offset` × `S_page` |
+
+★ **`S_frame` 은 가로 배율 하나다.** 세로 배율을 따로 쓰지 않는다 — 균등
+배율이라야 `rotation` 이 보존되고(계약 문서 §19-2 가 각도에 배율을 보정하지
+않는 것과 같은 이유) 종이 · 테이프가 찌그러지지 않는다. 프레임이 세로로만
+늘어나면 transform 장식은 위쪽에 몰린다. **그것이 의도한 동작이다.**
+
+pin 이 `S_frame` 을 안 받는 덕분에 "프레임을 키워도 인덱스 글자는 안 커지고,
+화면이 커지면 전체와 함께 커진다"가 성립한다.
+
+#### `pin` 의 모양
+
+```json
+"pin": {
+  "target": "frame",
+  "anchor": "bottom-right",
+  "origin": "top-left",
+  "offset": { "x": 8, "y": -4 }
+}
+```
+
+| 칸 | 필수 | 규칙 |
+| --- | --- | --- |
+| `target` | | `frame` · `photo`. 빠지면 `frame`. `photo` 는 `primaryId` 요소의 상자다 |
+| `anchor` | | **대상의** 어느 점에 붙나. 아래 아홉. 빠지면 `center` |
+| `origin` | | **장식 자신의** 어느 점을 그 자리에 놓나. 같은 아홉. 빠지면 `center` |
+| `offset` | | `{ x, y }` 숫자. 빠지면 `{x:0,y:0}`. 음수 허용. 자는 `canvas.baseWidth`(= `S_page` 를 받는다) |
+
+```text
+top-left     top     top-right
+left         center  right
+bottom-left  bottom  bottom-right
+```
+
+★ **`anchor` 와 `origin` 을 둘 다 두는 이유.** 자기 기준점이 없으면 장식의
+크기를 바꿀 때마다 붙은 자리가 밀리고, 그것을 맞추려면 편집기가
+`offset` 을 **저장값에서 몰래 다시 계산**해야 한다. v1 §9 의 "조용히 고치지
+않는다"에 정면으로 어긋난다.
+
+### 14-7. lasso 선택과 명시적 묶기
+
+**lasso 는 소속이 아니라 선택 수단이다.** 끌어서 여러 개를 고른 것이 영구
+그룹이 되지 않는다.
+
+1. 주인이 메인 사진과 장식들을 lasso 또는 Shift+클릭으로 고른다
+   (`SELECT-1B-2` 가 이미 만든 그 선택이다).
+2. **`메인 비주얼로 묶기`** 를 명시적으로 실행한다.
+3. 선택 목록에서 **primary photo 를 하나 지정**한다.
+4. 나머지 요소가 `main_visual` 내부 **로컬 좌표로 변환**된다 — 화면 위치가
+   유지되도록 변환하고, 그 결과가 곧 저장값이다.
+5. 각 장식은 기본적으로 `pin` 또는 `transform` 중 하나를 받는다.
+6. **`묶기 해제`** 는 현재 화면 위치를 유지한 채 페이지 자유 요소
+   (`overlays`)로 되돌린다 — 위 변환의 역이다.
+
+- **id 는 바뀌지 않는다.** 소속과 좌표계만 바뀐다(§14-5 의 한 이름 공간이
+  그래서 필요하다).
+- **묶기 · 해제는 각각 Undo 한 칸**이다(v1 의 "한 제스처 = Undo 한 칸"과 같은
+  자).
+
+이유: 단순 다중 선택과 영구 소속은 다른 행위다. 실수로 걸린 요소가 자동으로
+그룹이 되면 주인이 그것을 알아차릴 자리가 없다.
+
+### 14-8. 페이지 자유 장식 (`overlays`)
+
+`overlays` 항목 하나의 모양은 **v1 요소 하나와 정확히 같다** —
+`id` · `type` · `x` · `y` · `width` · `height` · `rotation` · `hidden` ·
+`locked` · `props`, 좌표 기준은 도화지 왼쪽 위와 `canvas.baseWidth` ·
+`baseHeight`.
+
+같게 두는 이유가 전부다: **v1 이 만든 확정 경로**(선택 · lasso · 이동 ·
+리사이즈 · 회전 · 요청 번호 · Undo 한 칸)를 한 줄도 새로 쓰지 않고 그대로
+쓴다.
+
+- 자동 배치 블록의 흐름에 **영향을 주지 않는다**.
+- **장식임을 데이터에서 구분하는 별도 플래그를 두지 않는다** —
+  `overlays` 배열에 있다는 것 자체가 구분이다.
+- 모바일에서 잘릴 위험이 있으므로 **후속 responsive 계약의 대상**이다
+  (`RESPONSIVE-1`).
+
+### 14-9. v1 과의 관계 · 미래 version fallback (**실제 코드 확인 결과**)
+
+**v1 을 깨지도 바꾸지도 않는다.**
+
+- `canvas.version:1` 은 지금 그대로 렌더 · 편집된다.
+- 기존 수동 테스트 스킨(`skin/test-skins/imory-home-canvas-manual-v1.json`)도
+  그대로 동작한다.
+- **기존 v1 JSON 을 자동 변환하거나 migration 하지 않는다.**
+- 배포된 renderer · sandbox · selection · transform 계약을 유지한다.
+
+★ **오늘 `version:2` 가 이미 "보존하되 실행하지 않는" 자리에 있다** —
+2026-09-21 코드 실측.
+
+| 확인한 것 | 파일 · 위치 | 결과 |
+| --- | --- | --- |
+| 실행 가능한 version 은 상수 하나 | `skin/skin-home-canvas.js` `SKIN_HOME_CANVAS_VERSION = 1` | v2 는 이 값이 아니다 |
+| 모르는 version 은 **거부가 아니다** | 같은 파일 `validateSkinCanvasData()` — `canvas.version !== SKIN_HOME_CANVAS_VERSION` 이면 `{ ok:true, future:true }` | 파일이 통과한다(= Import · Save · Export · Publish · AI 에서 보존된다) |
+| 모르는 version 의 내용을 v1 규칙으로 검사하지 않는다 | 같은 분기가 `baseWidth` · `baseHeight` · `elements` 검사 **앞에서** 돌아온다 | v2 의 `flow` · `overlays` 가 v1 규칙에 걸리지 않는다 |
+| 실행 payload 를 만들지 않는다 | `buildSkinCanvasRenderPayload()` — `check.future` 면 `undefined` | 기존 HOME 이 그려진다(계약 문서 §3 의 fallback 표) |
+| 그래서 sandbox 로도 나가지 않는다 | payload 가 없으므로 `isSandboxHomeCanvas()` 까지 가지 않는다 | 봉투가 지금과 byte 단위로 같다 |
+| Studio 선택도 꺼진다 | `studio/inspector/studio-canvas-selection.js` 가 같은 `resolveSkinHomeCanvas()` 를 쓴다 | v2 데이터에서는 **고를 요소가 아예 없다** |
+
+즉 **오늘 v2 파일을 넣으면 조용히 보존되고 아무것도 실행되지 않는다.** 이
+라운드가 코드를 바꾸지 않아도 되는 이유가 이것이다.
+
+#### v2 를 켤 때의 함정 셋 (`V2-DATA-1` 이 반드시 본다)
+
+1. ★ **기존 테스트가 `version: 2` 를 "미래 version" 사례로 쓰고 있다** —
+   `skin/skin-home-canvas-test.mjs` 의 `[version]` 절 · `[baseheight]` 절 ·
+   `[protocol]` 의 reject 목록이 전부 `{ version: 2, ... }` 다. v2 를 실행
+   가능하게 만드는 순간 그 행들은 **틀린 것을 단언하게 된다** — 다른 미지원
+   숫자로 옮겨야 하고, 옮겼다는 사실이 보고에 남아야 한다.
+2. **v2 canvas 에 최상위 `elements` 를 두지 않는다.** v1 의 불변 수정 함수
+   `writeSkinHomeCanvasElementFields()` 는 version 을 보지 않고
+   `canvas.elements` 배열을 찾아 id 로 쓴다 — 그 칸이 없어야 v1 writer 가
+   v2 데이터에 **절대 닿을 수 없다**. 한 canvas 가 `elements` 와 `flow` 를
+   동시에 가지면 **Import 거부**한다(어느 쪽이 진짜인지 파일만 보고 알 수
+   없게 두지 않는다).
+3. **`studio/preview/preview-sandbox.js` 가 template 칸을 알려진 키만
+   옮긴다** — `RENDER-1B` 에서 캔버스가 sandbox Preview 에만 안 보이던 진짜
+   원인이 이것이었다. v2 payload 의 모양이 바뀌면 그 자리를 같이 본다.
+
+### 14-10. 편집 UX 계약 (구현은 `V2-INSPECTOR-1` · `V2-ATTACH-1`)
+
+#### 자동 배치 블록을 고르면
+
+왼쪽 패널에서 **블록 종류와 이름 · 콘텐츠 · `width` · `height`/auto · 정렬 ·
+`margin` 네 칸 · `hidden`/`locked` · 순서 이동**을 편집한다. 미리보기
+손잡이로 `width` · `height` 를 조절할 수 있다.
+
+**블록 본체를 자유 x/y 로 끄는 것은 기본 동작이 아니다.** 향후 직접 드래그는
+**순서 변경** 또는 **margin 조정** 중 하나로 별도 설계하고, 이번 계약에서는
+구현하지 않는다.
+
+#### `main_visual`
+
+| 동작 | 결과 |
+| --- | --- |
+| 한 번 클릭 | **블록 전체 선택** — 폭 · 높이 · 정렬 · margin 편집 |
+| `내부 편집` 또는 더블클릭 | primary photo 와 장식을 **개별 선택** — `SELECT-1B-*` · `TRANSFORM-1A~1C` 의 Moveable · Selecto 이동 · 리사이즈 · 회전을 그대로 쓴다 |
+| Escape 또는 `프레임 나가기` | 블록 전체 선택으로 복귀 |
+
+#### 페이지 장식
+
+**지금 v1 요소와 똑같다.** 바로 이동 · 리사이즈 · 회전한다.
+
+#### 두 Inspector 의 책임을 섞지 않는다
+
+| | v2 블록 Inspector | v1 자유 요소 Inspector |
+| --- | --- | --- |
+| 대상 | `flow.blocks[n]` | `overlays[n]` · `main_visual` 내부 요소 |
+| 위치를 정하는 것 | **순서 · 정렬 · margin** | **x · y** |
+| 크기 | `width` · `height`/auto · `maxWidth` | `width` · `height` |
+| 회전 | 없다(흐름 블록은 돌리지 않는다) | `rotation` |
+| 손잡이 | 크기만 | 이동 · 크기 · 회전 |
+
+### 14-11. 반응형 원칙 (구현은 `RESPONSIVE-1`)
+
+이번 단계에서 override 를 구현하지 않지만 방향은 고정한다.
+
+- 자동 배치 블록은 화면 폭이 바뀌어도 **순서와 margin 관계를 유지**한다.
+- `main_visual` 은 **하나의 단위로 축소**된다.
+- 내부 `transform` 장식은 같이 비례 축소되고, `pin` 장식은 **기준점 관계를
+  유지**한다(§14-6 의 배율 표가 그대로 답이다).
+- 페이지 자유 장식은 향후 **hide / reposition override** 의 대상이다.
+- 사진 교체 · 텍스트 줄바꿈이 **다른 블록의 흐름을 깨지 않는다**.
+- **모바일과 데스크톱의 별도 좌표 복사를 첫 해결책으로 쓰지 않는다.**
+
+### 14-12. v2 첫 범위의 경계
+
+**들어가는 것**: top-level column flow · 일반 블록 다섯 · `main_visual` **한
+단계** 내부 자유 레이어 · page overlay.
+
+**들어가지 않는 것**: 재귀 container · 무한 중첩 · row · grid · 중첩 section.
+그것들은 후속 version 또는 후속 블록 종류다.
+
+### 14-13. 단계별 후속 작업
+
+| 순서 | 작업 ID | 무엇 | 상태 |
+| --- | --- | --- | --- |
+| 1 | `HOME-CANVAS-COMPOSITION-CONTRACT-1` | 이 절 — 설계 확정. 문서만 | **완료**(2026-09-21) |
+| 2 | `HOME-CANVAS-MANUAL-UX-FIX-1` | 현재 v1 편집기의 UX 수정 넷(§14-14) | 미착수 |
+| 3 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 미착수 |
+| 4 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | 미착수 |
+| 5 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform 렌더 | 미착수 |
+| 6 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 미착수 |
+| 7 | `HOME-CANVAS-V2-ATTACH-1` | lasso/Shift 선택 → `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` · Undo/Redo | 미착수 |
+| 8 | `HOME-CANVAS-EFFECT-HOOK-1` | 안정된 선택자 · 수명주기 · 정리. `main_visual` 과 sandbox 저자 JS 의 공존 | 미착수(§8 에 완료 기준) |
+
+그룹 전체 transform(`TRANSFORM-1D`) · row/grid · responsive override
+(`RESPONSIVE-1`) · layer panel(`LAYERS-1`) 은 각각 그대로 후속이다.
+
+### 14-14. 수동 테스트에서 나온 v1 편집기 수정 (`HOME-CANVAS-MANUAL-UX-FIX-1`)
+
+`MILESTONE-1` 의 수동 테스트에서 주인이 찾은 것들이다. **v2 구조와 무관하게
+지금 v1 편집기를 고치는 작업이고, 이 라운드에서 구현하지 않았다.**
+
+#### 회전
+
+- 자유 회전을 유지한다.
+- **0 · 30 · 60 · 90… 도 근처에서 자석처럼 붙는다.** 권장 흡착 범위 **±4°**.
+- 모든 움직임을 강제로 30° 단위로 **양자화하지 않는다**.
+
+#### 리사이즈
+
+- **모서리 손잡이 넷**: 현재 비율 유지.
+- **변 중앙 손잡이 넷**: 가로 또는 세로 자유 조절.
+- Shift · Alt 추가 동작은 후속(`TRANSFORM-1D`).
+
+★ 지금 계약은 손잡이 여덟이 **모두 자유 비율**이다(계약 문서 §18-2). 이 항목은
+그 계약을 바꾸므로, 구현할 때 §18-2 를 같이 고쳐야 한다.
+
+#### 이미지 표시
+
+- `photo` · `logo` · `sticker` 는 **명시적 Crop 전까지 전체 이미지를 보여
+  준다** — 기본 `contain`.
+- 주인이 Crop 을 고른 경우에만 `cover` 또는 crop frame 을 쓴다.
+- **PNG 로고 · 스티커가 프레임 때문에 잘리면 안 된다.**
+- 변 중앙 손잡이로 프레임 비율을 바꿨을 때 남는 공간은 허용한다.
+
+#### 텍스트 선택 chrome
+
+- **선택선이 글자를 관통하면 안 된다.**
+- 편집 chrome 은 렌더된 glyph/content 영역 **바깥으로 4~6px** 여유를 둔다.
+- 줄바꿈 뒤 **즉시 재측정**한다.
+- `height:"auto"` 는 실제 내용 전체를 감싼다.
+- 숫자 `height` 보다 내용이 넘쳐도 선택선이 글자를 통과하지 않는다.
+- ★ **편집용 여유가 공개 화면의 저장 geometry 를 몰래 바꾸지 않는다.**
+
+### 14-15. Canvas Inspector 최소 범위 (`HOME-CANVAS-INSPECTOR-1A`)
+
+Canvas `text` 를 골랐을 때 왼쪽 패널이 비어 있는 것은 **지금 미구현 상태**다
+(계약 문서 §11-2 · §11-3 의 "캔버스 요소의 Inspector 입력 필드"). 별도 후속
+작업으로 둔다.
+
+최소 범위: **text 내용 · `width` · `height`/auto · 정렬 · margin 또는 Canvas
+geometry · `rotation` · `hidden`/`locked`**.
+
+책임 구분은 §14-10 의 마지막 표다 — v2 블록 Inspector 와 v1 자유 요소
+Inspector 가 같은 칸을 두 벌로 갖지 않는다.

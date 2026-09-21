@@ -1,8 +1,17 @@
 # IMORY HOME CANVAS — 데이터 계약
 
 > 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 · §13 · §14 ·
-> §15 · §16 은 지금 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집
-> UI 가 지켜야 할 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
+> §15 · §16 · §17 · §18 · §19 · §20 은 지금 코드가 강제한다**. **§11 은 아직
+> 구현되지 않았다** — 앞으로 편집 UI 가 지켜야 할 약속과 남은 차이다. 그 절을
+> 구현된 것으로 읽지 않는다.
+>
+> ★ **이 문서는 `canvas.version:1`(평면 자유 Canvas) 하나만 다룬다.** 다음
+> 구조인 **조합형 `canvas.version:2`**(자동 배치 블록 + `main_visual` 자유
+> 레이어)는 **아직 PLAN 이고 코드에 한 줄도 없다** — 설계는 로드맵
+> [§14](../plans/IMORY_HOME_CANVAS_ROADMAP.md#14-조합형-home-canvas-v2-설계-home-canvas-composition-contract-1)
+> 에 있다. 여기 적힌 v1 계약은 **폐기되지 않는다**: v2 에서도 페이지 자유
+> 장식과 `main_visual` 내부 자유 레이어를 v1 의 선택 · 이동 · 리사이즈 ·
+> 회전 엔진이 그대로 맡는다(§11-4).
 >
 > 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
 > `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12) ·
@@ -11,7 +20,14 @@
 > `HOME-CANVAS-SELECT-1A`(2026-09-21, **선택 소유권과 단일 선택 기반** — §14) ·
 > `HOME-CANVAS-SELECT-1B-1`(2026-09-21, **조건부 vendor 활성화와 회전을 따라가는
 > 선택 틀** — §15) ·
-> `HOME-CANVAS-SELECT-1B-2`(2026-09-21, **Selecto lasso 와 다중 선택** — §16).
+> `HOME-CANVAS-SELECT-1B-2`(2026-09-21, **Selecto lasso 와 다중 선택** — §16) ·
+> `HOME-CANVAS-TRANSFORM-1A`(2026-09-21, **단일 요소 이동** — §17) ·
+> `1B`(2026-09-21, **단일 요소 리사이즈** — §18) ·
+> `1C`(2026-09-21, **단일 요소 회전** — §19) ·
+> `HOME-CANVAS-MILESTONE-1`(2026-09-21, **수동 테스트 스킨과 통합 smoke —
+> 계약 무변경** — §20) ·
+> `HOME-CANVAS-COMPOSITION-CONTRACT-1`(2026-09-21, **v2 설계 확정 — 이 문서는
+> 상태 문장과 §9-(3) · §11-4 의 가리키는 곳만 바뀌었다. v1 계약 무변경**).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -421,6 +437,20 @@ UI 도 없다). 그래서 `validateSkinPackageImport(raw, { canvasSource })` 가
   그 elements 를 이 배포의 v1 규칙으로 검사하지도 않으며, 실행만 하지 않는다.
 - sandbox 로 보내는 **실행 데이터는 strict allowlist** 다.
 
+★ **`version: 2` 는 이미 이 자리에 있다.** 다음 구조인 조합형 Canvas 가
+그 번호를 쓸 예정인데(로드맵 §14), 지금 배포는 그것을 **보존하되 실행하지
+않는다** — `validateSkinCanvasData()` 가 `{ ok:true, future:true }` 를
+돌려주고 `buildSkinCanvasRenderPayload()` 가 `undefined` 를 주므로 기존
+HOME 이 그려지고(§3 의 fallback 표) sandbox 봉투도 지금과 같다. Studio 선택도
+같은 `resolveSkinHomeCanvas()` 를 쓰므로 v2 데이터에서는 고를 요소가 없다.
+그래서 **v2 파일을 오늘 넣어도 조용히 보존될 뿐 아무것도 실행되지 않는다.**
+
+함정: `skin/skin-home-canvas-test.mjs` 의 `[version]` · `[baseheight]` ·
+`[protocol]` 절이 **`version: 2` 를 바로 그 "모르는 version" 사례로 쓰고
+있다.** v2 를 실행 가능하게 만드는 라운드(`HOME-CANVAS-V2-DATA-1`)는 그
+행들을 다른 미지원 숫자로 옮겨야 한다 — 옮기지 않으면 그 단언들이 틀린 것을
+지키게 된다.
+
 ### 보존용 원본 ↔ 실행용 payload
 
 두 길이 다르다. 이것이 §9 의 핵심이다.
@@ -623,6 +653,27 @@ Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조�
 수 있게 만들어 두었다. `skin/skin-home-canvas.js` 의 `validateSkinCanvasData()` ·
 `buildSkinCanvasRenderPayload()` 는 region 이름을 모른다 — 찾는 이름을 늘리는
 것만으로 좌우 Canvas 를 붙일 수 있다. **이번 라운드는 붙이지 않았다.**
+
+#### 조합형 v2 — **PLAN. 이 문서가 갖지 않는다**
+
+로고 · 카테고리 · 제목 · 본문처럼 **내용이 늘어나는** 것까지 절대좌표에 두면
+한 줄이 늘 때마다 주인이 아래 것들을 손으로 다시 옮겨야 한다. 그래서 다음
+구조(`canvas.version:2`)는 화면을 두 층으로 가른다 — 위에서 아래로 흐르는
+**자동 배치 블록**과, 그 안팎의 **자유 배치 장식**이다.
+
+- 상세 설계(JSON 모양 · 블록 계약 · `main_visual` · `pin`/`transform` ·
+  묶기 UX · 단계별 작업 ID)는 **전부 로드맵
+  [§14](../plans/IMORY_HOME_CANVAS_ROADMAP.md#14-조합형-home-canvas-v2-설계-home-canvas-composition-contract-1)**
+  가 갖는다. 이 문서에 v2 를 옮겨 적지 않는다 — **아직 코드가 강제하는 것이
+  하나도 없기 때문이다.**
+- **v1 은 그대로 남는다.** v2 의 페이지 자유 장식(`overlays`)은 v1 요소와
+  **같은 모양**이고, `main_visual` 내부 자유 요소도 같은 선택 · lasso ·
+  이동 · 리사이즈 · 회전 · Undo 경로를 쓴다(§14 · §16 · §17 · §18 · §19).
+  v1 JSON 을 자동 변환하거나 migration 하지 않는다.
+- 두 version 을 가르는 것은 `canvas.version` 숫자 하나다. **v2 canvas 는
+  최상위 `elements` 를 갖지 않는다** — 그 칸이 없어야 v1 의
+  `writeSkinHomeCanvasElementFields()`(version 을 보지 않고 `canvas.elements`
+  를 찾는다)가 v2 데이터에 닿을 수 없다.
 
 ---
 
