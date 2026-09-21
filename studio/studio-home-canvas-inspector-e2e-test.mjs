@@ -385,11 +385,17 @@ function futurePackage() {
   const entry =
     pkg.regions.find((r) => r.name === "home_canvas");
 
+  /*
+    ★ 숫자는 **3** 이다. HOME-CANVAS-V2-DATA-1 부터 `version: 2` 는
+      실제로 검증되는 조합형 Canvas 라, 그 숫자로는 "이 배포가 모르는
+      version" 을 더 이상 만들 수 없다. 이 함수가 보려는 것은 그대로다
+      — 실행되지 않는 canvas 에서는 고를 요소가 없다.
+  */
   entry.canvas = {
-    version: 2,
+    version: 3,
     baseWidth: 390,
     baseHeight: 844,
-    elements: [{ id: "v2only", kind: "flow", something: "else" }]
+    elements: [{ id: "v3only", kind: "flow", something: "else" }]
   };
 
   return pkg;
@@ -1170,10 +1176,10 @@ async function main() {
 
       const futureKept = await readCanvas(page);
 
-      check("v2 데이터는 보존되고 실행되지 않는다",
-        futureKept && futureKept.canvas.version === 2 &&
+      check("미래 version 데이터는 보존되고 실행되지 않는다",
+        futureKept && futureKept.canvas.version === 3 &&
         futureKept.canvas.elements.length === 1 &&
-        futureKept.canvas.elements[0].id === "v2only",
+        futureKept.canvas.elements[0].id === "v3only",
         JSON.stringify(futureKept && futureKept.canvas.version));
 
       /* --- HOME 이외 화면 ---

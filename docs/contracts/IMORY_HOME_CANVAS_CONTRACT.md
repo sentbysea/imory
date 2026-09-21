@@ -5,13 +5,16 @@
 > 구현되지 않았다** — 앞으로 편집 UI 가 지켜야 할 약속과 남은 차이다. 그 절을
 > 구현된 것으로 읽지 않는다.
 >
-> ★ **이 문서는 `canvas.version:1`(평면 자유 Canvas) 하나만 다룬다.** 다음
-> 구조인 **조합형 `canvas.version:2`**(자동 배치 블록 + `main_visual` 자유
-> 레이어)는 **아직 PLAN 이고 코드에 한 줄도 없다** — 설계는 로드맵
+> ★ **이 문서의 §1~§8 과 §12~§22 는 `canvas.version:1`(평면 자유 Canvas)
+> 을 다룬다.** 다음 구조인 **조합형 `canvas.version:2`**(자동 배치 블록 +
+> `main_visual` 자유 레이어)는 `V2-DATA-1`(2026-09-21)부터 **데이터 검증과
+> 보존만** 코드에 있다 — 현행 상태는 **§9-(3)** 이고, 전체 설계는 로드맵
 > [§14](../plans/IMORY_HOME_CANVAS_ROADMAP.md#14-조합형-home-canvas-v2-설계-home-canvas-composition-contract-1)
-> 에 있다. 여기 적힌 v1 계약은 **폐기되지 않는다**: v2 에서도 페이지 자유
-> 장식과 `main_visual` 내부 자유 레이어를 v1 의 선택 · 이동 · 리사이즈 ·
-> 회전 엔진이 그대로 맡는다(§11-4).
+> 다. **v2 를 그리는 코드는 아직 하나도 없다** — 렌더러 · Studio 패널 ·
+> 자동 배치 · `main_visual` 출력은 후속 작업이고, 유효한 v2 스킨도 화면은
+> 기존 HOME 이다. 여기 적힌 v1 계약은 **폐기되지 않는다**: v2 에서도 페이지
+> 자유 장식과 `main_visual` 내부 자유 레이어를 v1 의 선택 · 이동 ·
+> 리사이즈 · 회전 엔진이 그대로 맡는다(§11-4).
 >
 > 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
 > `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12) ·
@@ -27,7 +30,9 @@
 > `HOME-CANVAS-MILESTONE-1`(2026-09-21, **수동 테스트 스킨과 통합 smoke —
 > 계약 무변경** — §20) ·
 > `HOME-CANVAS-COMPOSITION-CONTRACT-1`(2026-09-21, **v2 설계 확정 — 이 문서는
-> 상태 문장과 §9-(3) · §11-4 의 가리키는 곳만 바뀌었다. v1 계약 무변경**).
+> 상태 문장과 §9-(3) · §11-4 의 가리키는 곳만 바뀌었다. v1 계약 무변경**) ·
+> `HOME-CANVAS-V2-DATA-1`(2026-09-21, **`version:2` 데이터 검증과 보존 —
+> 렌더는 없다** — §9-(3). v1 계약 무변경).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -80,6 +85,7 @@
 | `TRANSFORM-1C` | **단독 선택 요소의 회전**(§19) — 손잡이 하나로 돌리고 `rotation` **한 칸**에 저장한다. 상자 네 칸은 바뀌지 않는다(회전 중심이 요소 상자의 정중앙이다). 같은 확정 경로에 `kind:"rotate"` 가 늘었다. **이동 · 리사이즈 · 회전으로 기본 조작이 갖춰졌다** |
 | `MANUAL-UX-FIX-1` | **직접 조작 사용성 넷**(§21) — 회전의 **30° 자석**(±4° 안에서만 붙는다) · **모서리 손잡이는 비율 유지 · 변 중앙은 한 축 자유** · 자르기를 고르지 않은 Canvas 그림은 **contain**(전체가 보인다) · 글자 요소의 **편집 chrome 여유**(선이 글자를 가로지르지 않는다 — 저장 geometry 는 불변). 새 데이터 칸 · 새 메시지 · 새 파일은 없다 |
 | `INSPECTOR-1A` | **왼쪽 Canvas Inspector**(§22) — Canvas 요소를 고르면 왼쪽 패널이 그 요소의 화면이 된다. 글자 요소의 **내용**(`props.text`)을 실제로 고칠 수 있고, 공통 geometry 다섯 칸을 숫자로 넣을 수 있다. **글자 한 칸이 v1 에서 처음으로 `props` 를 바꾼다** — 그 전까지 바뀌는 것은 요소 자신의 다섯 칸뿐이었다. 다중 선택은 안내만이고, `hidden`/`locked` 는 아직 내놓지 않는다 |
+| `V2-DATA-1` | **조합형 Canvas `version:2` 의 데이터 검증과 보존**(§9-(3)) — 로드맵 §14 가 정한 `flow.blocks` + `overlays` 두 층을 저장 경계가 **엄격히 검증**한다. 잘못된 v2 는 새 Import 에서 정확한 JSON 경로와 함께 거부되고, 올바른 v2 는 Import · Save · 다시 열기 · Export · Publish · AI 를 한 칸도 잃지 않고 지난다. **화면은 아직 기존 HOME 이다** — 렌더러 · Studio 패널 · 자동 배치 · `main_visual` 출력은 하나도 없다(다음 작업이 `V2-FLOW-RENDER-1`). v1 은 한 줄도 바뀌지 않았다 |
 | `MILESTONE-1` | **계약이 하나도 바뀌지 않은 라운드**(§20). 위 기본 조작을 배포된 화면에서 **손으로** 시험할 수 있게 `home_canvas` 와 표시 위치를 이미 갖춘 **수동 테스트 스킨**과 그것을 끝까지 지나는 통합 smoke 를 두었다. 제품 코드 · 기본 스킨 · 저장 데이터는 무변경이다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
@@ -445,19 +451,53 @@ UI 도 없다). 그래서 `validateSkinPackageImport(raw, { canvasSource })` 가
   그 elements 를 이 배포의 v1 규칙으로 검사하지도 않으며, 실행만 하지 않는다.
 - sandbox 로 보내는 **실행 데이터는 strict allowlist** 다.
 
-★ **`version: 2` 는 이미 이 자리에 있다.** 다음 구조인 조합형 Canvas 가
-그 번호를 쓸 예정인데(로드맵 §14), 지금 배포는 그것을 **보존하되 실행하지
-않는다** — `validateSkinCanvasData()` 가 `{ ok:true, future:true }` 를
-돌려주고 `buildSkinCanvasRenderPayload()` 가 `undefined` 를 주므로 기존
-HOME 이 그려지고(§3 의 fallback 표) sandbox 봉투도 지금과 같다. Studio 선택도
-같은 `resolveSkinHomeCanvas()` 를 쓰므로 v2 데이터에서는 고를 요소가 없다.
-그래서 **v2 파일을 오늘 넣어도 조용히 보존될 뿐 아무것도 실행되지 않는다.**
+#### `canvas.version` 은 **세 갈래**다 (`V2-DATA-1`)
 
-함정: `skin/skin-home-canvas-test.mjs` 의 `[version]` · `[baseheight]` ·
-`[protocol]` 절이 **`version: 2` 를 바로 그 "모르는 version" 사례로 쓰고
-있다.** v2 를 실행 가능하게 만드는 라운드(`HOME-CANVAS-V2-DATA-1`)는 그
-행들을 다른 미지원 숫자로 옮겨야 한다 — 옮기지 않으면 그 단언들이 틀린 것을
-지키게 된다.
+| version | 검증 | 실행 | 돌려주는 것 |
+| --- | --- | --- | --- |
+| `1` | v1 규칙(§5 · §6 · §7) | **그린다** | `{ ok:true, renderable:true }` |
+| `2` | **로드맵 §14 규칙으로 엄격히** | 아직 안 그린다 | `{ ok:true, version:2, renderable:false }` |
+| `3` 이상 | 내용을 보지 않는다 | 안 그린다 | `{ ok:true, future:true, renderable:false }` |
+
+`buildSkinCanvasRenderPayload()` 는 `renderable` 이 아닌 것에 `undefined` 를
+준다 — 그래서 v2 는 **파일로서는 올바른데 화면은 기존 HOME** 이고(§3 의
+fallback 표), sandbox 봉투에도 실리지 않으며, Studio 선택도 같은
+`resolveSkinHomeCanvas()` 를 쓰므로 고를 요소가 없다.
+
+★ **`version: 2` 는 더 이상 "모르는 version" 이 아니다.** `V2-DATA-1` 이
+그것을 그 자리에서 꺼냈다. 조합형 Canvas(로드맵 §14)의 `flow` · `blocks` ·
+`main_visual` · `pin` · `overlays` 가 새 Import 에서 실제로 검사되고, 잘못
+적힌 v2 는 **정확한 JSON 경로**와 함께 거부된다
+(`regions[1].canvas.flow.blocks[4].props.primaryId` 처럼).
+
+v2 에서 **거부하는 것** — 블록 다섯 종류 밖의 `type`, 블록 `width` 의
+`"auto"`, `logo` 블록의 `height:"auto"`, 네 값 밖의 `align`, 숫자가 아닌
+`margin` · `padding` · `gap` · `maxWidth`, `column` 이 아닌 `direction`,
+빈 `main_visual.elements`, 프레임 안의 다른 요소를 가리키지 않거나 사진이
+아니거나 `hidden` 인 `primaryId`, 모르는 `follow`, 아홉 점 밖의 `anchor` ·
+`origin`, 프레임 안의 `main_visual` · `container`(중첩 · 재귀), 그리고
+**블록 · 프레임 내부 요소 · overlay 를 통틀어 중복된 id**.
+
+**허용하는 것** — 음수 `margin` · 음수 `offset`(일부러 겹치기 위해),
+프레임 밖으로 나가는 내부 좌표, `follow` 를 토글해도 남아 있는 `x` · `y` ·
+`pin`(안 쓰는 칸을 지우지 않는다), 그리고 **모르는 칸 전부**.
+
+★ **v2 canvas 에 최상위 `elements` 가 있으면 거부한다.** v1 의 불변 수정
+`writeSkinHomeCanvasElementFields()` 는 version 을 보지 않고
+`canvas.elements` 를 찾으므로, 그 칸이 없다는 것이 곧 "v1 writer 는 v2 에
+닿을 수 없다"의 근거다. 반대 방향(v1 에 섞인 `flow`)은 거부하지 않는다 —
+v1 에서 진짜는 언제나 `elements` 라 애매하지 않고, 거기에 새 거부를 만들면
+"모르는 칸은 보존"이 v1 에서 깨진다.
+
+★ **`V2-DATA-1` 이 만들지 않은 것**: v2 DOM · CSS · Preview/sandbox
+렌더러 변경 · Studio 패널 · v1→v2 자동 변환 · migration. 유효한 v2 를
+그리는 것은 다음 작업(`V2-FLOW-RENDER-1` · `V2-MAIN-VISUAL-1`)이다.
+
+함정(**해결됨**): `skin/skin-home-canvas-test.mjs` 의 `[version]` ·
+`[baseheight]` · `[protocol]` 절과 두 Studio e2e 가 **`version: 2` 를 바로
+그 "모르는 version" 사례로 쓰고 있었다.** `V2-DATA-1` 이 그 행들을
+`version: 3` 으로 옮겼다 — 뜻은 그대로 두고 숫자만 아직 아무도 쓰지 않는
+값으로 바꿨다. 앞으로 "모르는 version" 이 필요하면 **3 이상**을 쓴다.
 
 ### 보존용 원본 ↔ 실행용 payload
 

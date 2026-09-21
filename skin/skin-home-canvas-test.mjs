@@ -368,7 +368,7 @@ check("★ [baseheight] 요소를 옮겨도 baseHeight 를 자동으로 바꾸�
   })());
 
 check("[baseheight] 미래 version 은 baseHeight 없이도 통과한다(v1 규칙을 적용하지 않는다)",
-  okOf([{ name: "home_canvas", canvas: { version: 2, baseWidth: 999, elements: [] } }]).ok === true);
+  okOf([{ name: "home_canvas", canvas: { version: 3, baseWidth: 999, elements: [] } }]).ok === true);
 
 check("★ [baseheight] 실행용 payload 는 상수가 아니라 저장된 그 값을 싣는다",
   canvas.buildSkinCanvasRenderPayload(
@@ -408,8 +408,18 @@ check("[contract] 같은 이름이 둘이면 **둘 다** 검사한다",
 /* ---------------------------------------------------------- */
 console.log("\n[version] 미래 canvas.version");
 
+/*
+  ★ 여기서 쓰는 "미래 version" 은 **3** 이다.
+
+  V2-DATA-1 이전에는 이 자리가 `version: 2` 였다. v2 가 실제로
+  검증되는 지금 그 숫자를 그대로 두면 이 절이 **틀린 것을 단언하게
+  된다** — 2 는 더 이상 "내용을 보지 않고 통과시키는 version" 이
+  아니다. 단언의 뜻(모르는 version 은 거부가 아니고, 그 내용을 v1
+  규칙으로 검사하지 않으며, 그래도 실행하지 않는다)은 그대로 두고
+  숫자만 아직 아무도 쓰지 않는 값으로 옮긴다.
+*/
 {
-  const future = { version: 2, baseWidth: 999, elements: [{ nonsense: true }] };
+  const future = { version: 3, baseWidth: 999, elements: [{ nonsense: true }] };
 
   check("★ [version] 모르는 version 은 거부가 아니다(파일이 통과한다 = 보존)",
     okOf([{ name: "home_canvas", canvas: future }]).ok === true);
@@ -420,6 +430,453 @@ console.log("\n[version] 미래 canvas.version");
   check("★ [version] 그래도 실행하지 않는다(기존 HOME fallback)",
     canvas.buildSkinCanvasRenderPayload(future) === undefined &&
     canvas.resolveSkinHomeCanvas(skinWith([{ name: "home_canvas", canvas: future }]), CANVAS_HTML) === undefined);
+
+  check("[version] version 2 는 더 이상 이 자리에 있지 않다(내용을 검사한다)",
+    canvas.validateSkinCanvasData({ version: 2, baseWidth: 999, elements: [] }, "canvas").future === undefined);
+}
+
+
+/* ---------------------------------------------------------- */
+console.log("\n[v2] 조합형 Canvas 데이터 (V2-DATA-1)");
+
+/*
+  로드맵 §14-3 의 예시 그대로다 — 문서가 "이 모양이어야 한다"고 적은
+  파일이 실제로 통과하는지를 먼저 본다. 아래 거부 사례는 전부 이
+  fixture 한 칸만 고쳐서 만든다.
+*/
+const v2Full = () => ({
+  version: 2,
+  baseWidth: 390,
+  baseHeight: 1240,
+  flow: {
+    direction: "column",
+    padding: { top: 48, right: 24, bottom: 64, left: 24 },
+    gap: 20,
+    blocks: [
+      {
+        id: "canvas_b1logo",
+        type: "logo",
+        width: 120,
+        height: 40,
+        align: "center",
+        props: { slot: "title_logo", fallback: "site_title" }
+      },
+      {
+        id: "canvas_b2nav",
+        type: "category_nav",
+        width: 342,
+        height: "auto",
+        align: "stretch",
+        margin: { top: 8 },
+        props: { mode: "all", categoryIds: [] }
+      },
+      {
+        id: "canvas_b3title",
+        type: "text",
+        width: 300,
+        height: "auto",
+        align: "center",
+        props: { text: "FOREVER YOUNG", role: "title" }
+      },
+      {
+        id: "canvas_b4rule",
+        type: "divider",
+        width: 120,
+        height: 1,
+        align: "center",
+        margin: { top: 12, bottom: 12 }
+      },
+      {
+        id: "canvas_b5main",
+        type: "main_visual",
+        width: 300,
+        height: "auto",
+        align: "center",
+        margin: { top: 24, bottom: 24 },
+        props: {
+          baseWidth: 300,
+          baseHeight: 380,
+          primaryId: "canvas_m1photo",
+          elements: [
+            {
+              id: "canvas_m0paper",
+              type: "shape",
+              follow: "transform",
+              x: -18, y: 26, width: 300, height: 360, rotation: -6,
+              props: { kind: "rect" }
+            },
+            {
+              id: "canvas_m1photo",
+              type: "photo",
+              follow: "transform",
+              x: 0, y: 0, width: 300, height: 380,
+              props: { slot: "photo_main" }
+            },
+            {
+              id: "canvas_m2left",
+              type: "text",
+              follow: "pin",
+              width: 92, height: 22,
+              pin: {
+                target: "photo", anchor: "left", origin: "right",
+                offset: { x: 8, y: -40 }
+              },
+              props: { text: "puppy !", role: "label" }
+            },
+            {
+              id: "canvas_m4cap",
+              type: "text",
+              follow: "pin",
+              width: 240, height: "auto",
+              pin: {
+                target: "frame", anchor: "bottom", origin: "top",
+                offset: { x: 0, y: 10 }
+              },
+              props: { text: "2025 / 05 / 12", role: "caption" }
+            }
+          ]
+        }
+      }
+    ]
+  },
+  overlays: [
+    {
+      id: "canvas_o1number",
+      type: "text",
+      x: -46, y: 980, width: 260, height: 200, rotation: 0,
+      props: { text: "01", role: "label" }
+    }
+  ]
+});
+
+/* 최소 유효 v2 — 필수 칸만 */
+const v2Min = () => ({
+  version: 2,
+  baseWidth: 390,
+  baseHeight: 844,
+  flow: { blocks: [] }
+});
+
+const v2Of = (data) => okOf([{ name: "home_canvas", canvas: data }]);
+
+/* 한 칸만 고친 v2 의 오류 경로("(통과)" 면 거부되지 않았다는 뜻) */
+const v2FailPath = (mutate) => {
+  const data = v2Full();
+  mutate(data);
+  const r = v2Of(data);
+  return r.ok ? "(통과)" : r.path;
+};
+
+const v2Block = (data, index) => data.flow.blocks[index];
+const v2Frame = (data) => data.flow.blocks[4].props;
+
+check("★ [v2] 로드맵 §14-3 의 예시가 그대로 통과한다", v2Of(v2Full()).ok === true,
+  JSON.stringify(v2Of(v2Full())));
+
+check("★ [v2] 최소 유효 v2 — flow.blocks 만 있으면 된다(overlays 는 선택)",
+  v2Of(v2Min()).ok === true && v2Of(Object.assign(v2Min(), { overlays: [] })).ok === true);
+
+check("[v2] version 2 는 내용을 검사한 뒤 version 2 로 답한다(미래 version 이 아니다)",
+  (() => {
+    const r = canvas.validateSkinCanvasData(v2Full(), "canvas");
+    return r.ok === true && r.version === 2 && r.renderable === false && r.future === undefined;
+  })());
+
+/* ---- 1) flow 블록 각 타입 ---- */
+{
+  const one = (block) => {
+    const data = v2Min();
+    data.flow.blocks = [block];
+    return v2Of(data);
+  };
+
+  const types = [
+    ["logo", { id: "canvas_t1", type: "logo", width: 120, height: 40, props: { slot: "title_logo" } }],
+    ["category_nav", { id: "canvas_t2", type: "category_nav", width: 342, height: "auto", props: { mode: "selected", categoryIds: ["c1"] } }],
+    ["text", { id: "canvas_t3", type: "text", width: 300, height: "auto", props: { text: "hi", role: "body" } }],
+    ["divider", { id: "canvas_t4", type: "divider", width: 120, height: 1 }],
+    ["main_visual", { id: "canvas_t5", type: "main_visual", width: 300, height: "auto", props: v2Frame(v2Full()) }]
+  ].filter(([, block]) => one(block).ok !== true);
+
+  check("★ [v2] 블록 다섯 종류가 각각 통과한다", types.length === 0,
+    types.map(([name]) => name).join(", "));
+
+  check("★ [v2] 블록 width 에 \"auto\" 는 없다(가용 폭 전부는 align:\"stretch\")",
+    one({ id: "canvas_t6", type: "text", width: "auto", height: "auto", props: { text: "x" } }).path ===
+      "regions[0].canvas.flow.blocks[0].width");
+
+  check("★ [v2] logo 블록만 height \"auto\" 를 못 쓴다(나머지 넷은 쓴다)",
+    one({ id: "canvas_t7", type: "logo", width: 120, height: "auto", props: { slot: "title_logo" } }).path ===
+      "regions[0].canvas.flow.blocks[0].height" &&
+    one({ id: "canvas_t8", type: "divider", width: 120, height: "auto" }).ok === true);
+
+  check("[v2] 모르는 블록 종류는 거부(v1 의 photo · sticker · shape 도 블록이 아니다)",
+    ["photo", "sticker", "shape", "widget", "photo_grid"].every((type) =>
+      one({ id: "canvas_t9", type: type, width: 100, height: 100, props: { slot: "photo_1", kind: "rect" } }).path ===
+        "regions[0].canvas.flow.blocks[0].type"));
+
+  check("[v2] 블록 props 는 v1 과 같은 표를 쓴다(text 는 문자열 · role 목록 · nav mode)",
+    one({ id: "canvas_ta", type: "text", width: 100, height: "auto", props: { text: 7 } }).path ===
+      "regions[0].canvas.flow.blocks[0].props.text" &&
+    one({ id: "canvas_tb", type: "text", width: 100, height: "auto", props: { text: "x", role: "huge" } }).path ===
+      "regions[0].canvas.flow.blocks[0].props.role" &&
+    one({ id: "canvas_tc", type: "category_nav", width: 100, height: "auto", props: { mode: "some" } }).path ===
+      "regions[0].canvas.flow.blocks[0].props.mode" &&
+    one({ id: "canvas_td", type: "logo", width: 100, height: 40, props: {} }).path ===
+      "regions[0].canvas.flow.blocks[0].props.slot");
+
+  check("[v2] divider 는 props 가 없어도 되고, 있어도 내용을 보지 않는다",
+    one({ id: "canvas_te", type: "divider", width: 120, height: 1 }).ok === true &&
+    one({ id: "canvas_tf", type: "divider", width: 120, height: 1, props: { whatever: 1 } }).ok === true);
+}
+
+/* ---- 2) main_visual · primary · pin/transform ---- */
+{
+  check("★ [v2] main_visual 의 baseWidth · baseHeight 는 양수 필수(프레임 내부 좌표의 자)",
+    v2FailPath((d) => { v2Frame(d).baseWidth = 0; }) ===
+      "regions[0].canvas.flow.blocks[4].props.baseWidth" &&
+    v2FailPath((d) => { delete v2Frame(d).baseHeight; }) ===
+      "regions[0].canvas.flow.blocks[4].props.baseHeight");
+
+  check("★ [v2] elements 는 비어 있을 수 없다(최소한 primary 하나)",
+    v2FailPath((d) => { v2Frame(d).elements = []; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements");
+
+  check("★ [v2] transform 요소는 x · y 가 필요하고, pin 요소는 없어도 된다",
+    v2FailPath((d) => { delete v2Frame(d).elements[1].x; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[1].x" &&
+    v2Of(v2Full()).ok === true);
+
+  check("★ [v2] follow 가 빠지면 transform 이다(그래서 x · y 를 요구한다)",
+    v2FailPath((d) => {
+      const el = v2Frame(d).elements[2];
+      delete el.follow;
+    }) === "regions[0].canvas.flow.blocks[4].props.elements[2].x");
+
+  check("[v2] 안 쓰는 칸을 지우지 않는다 — pin 요소의 x·y 도, transform 요소의 pin 도 보존되고 모양만 본다",
+    v2Of((() => { const d = v2Full(); v2Frame(d).elements[2].x = 12; v2Frame(d).elements[2].y = 4; return d; })()).ok === true &&
+    v2Of((() => { const d = v2Full(); v2Frame(d).elements[0].pin = { anchor: "top" }; return d; })()).ok === true &&
+    v2FailPath((d) => { v2Frame(d).elements[0].pin = { anchor: "north" }; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[0].pin.anchor");
+
+  check("[v2] 모르는 follow 값은 거부",
+    v2FailPath((d) => { v2Frame(d).elements[0].follow = "stick"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[0].follow");
+
+  check("★ [v2] primaryId 는 같은 프레임의 실제 요소를 가리켜야 한다",
+    v2FailPath((d) => { v2Frame(d).primaryId = "canvas_o1number"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.primaryId" &&
+    v2FailPath((d) => { delete v2Frame(d).primaryId; }) ===
+      "regions[0].canvas.flow.blocks[4].props.primaryId");
+
+  check("★ [v2] primaryId 가 가리키는 요소는 photo 여야 하고 hidden 일 수 없다",
+    v2FailPath((d) => { v2Frame(d).primaryId = "canvas_m0paper"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.primaryId" &&
+    v2FailPath((d) => { v2Frame(d).elements[1].hidden = true; }) ===
+      "regions[0].canvas.flow.blocks[4].props.primaryId");
+
+  check("[v2] 프레임 내부 요소는 프레임 밖 좌표도 쓸 수 있다(삐져나오는 것이 목적)",
+    v2Of((() => { const d = v2Full(); v2Frame(d).elements[0].x = -400; v2Frame(d).elements[0].y = 900; return d; })()).ok === true);
+
+  check("[v2] 그래도 v1 과 같은 자를 넘으면 거부(좌표 ±100000)",
+    v2FailPath((d) => { v2Frame(d).elements[0].x = canvas.SKIN_HOME_CANVAS_MAX_COORD + 1; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[0].x");
+}
+
+/* ---- 3) overlay ---- */
+{
+  check("★ [v2] overlays 항목은 v1 요소 하나와 정확히 같은 모양이다",
+    v2Of(v2Full()).ok === true &&
+    v2FailPath((d) => { d.overlays[0].width = -1; }) === "regions[0].canvas.overlays[0].width" &&
+    v2FailPath((d) => { d.overlays[0].type = "divider"; }) === "regions[0].canvas.overlays[0].type" &&
+    v2FailPath((d) => { delete d.overlays[0].x; }) === "regions[0].canvas.overlays[0].x");
+
+  check("[v2] overlays 는 배열이어야 한다",
+    v2FailPath((d) => { d.overlays = { }; }) === "regions[0].canvas.overlays");
+}
+
+/* ---- 4) 전역 id 이름 공간 ---- */
+{
+  /*
+    ★ 걸리는 자리는 **나중에 나온 쪽**이다 — 블록 → 프레임 내부 요소
+      → overlay 순으로 걸으며 이름을 등록하므로, 같은 이름이 둘이면
+      뒤에서 만난 자리가 오류 경로가 된다. 아래 셋은 그 셋을 각각
+      뒤에 두어 확인한다.
+  */
+  check("★ [v2] 블록 · 프레임 내부 요소 · overlay 가 한 이름 공간이다",
+    v2FailPath((d) => { v2Block(d, 1).id = "canvas_b1logo"; }) ===
+      "regions[0].canvas.flow.blocks[1].id" &&
+    v2FailPath((d) => { v2Frame(d).elements[0].id = "canvas_b1logo"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[0].id" &&
+    v2FailPath((d) => { d.overlays[0].id = "canvas_m1photo"; }) ===
+      "regions[0].canvas.overlays[0].id" &&
+    v2FailPath((d) => { d.overlays[0].id = "canvas_b3title"; }) ===
+      "regions[0].canvas.overlays[0].id" &&
+    v2FailPath((d) => { v2Frame(d).elements[2].id = "canvas_m0paper"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[2].id");
+
+  check("[v2] 블록 id 도 v1 의 edit-id 규칙을 쓴다",
+    v2FailPath((d) => { v2Block(d, 0).id = "1logo"; }) ===
+      "regions[0].canvas.flow.blocks[0].id" &&
+    v2FailPath((d) => { v2Block(d, 0).id = "a.b"; }) ===
+      "regions[0].canvas.flow.blocks[0].id" &&
+    v2FailPath((d) => { delete v2Block(d, 0).id; }) ===
+      "regions[0].canvas.flow.blocks[0].id");
+}
+
+/* ---- 5) 재귀 · 중첩 거부 ---- */
+{
+  check("★ [v2] main_visual 안에 main_visual 을 다시 넣을 수 없다",
+    v2FailPath((d) => { v2Frame(d).elements[0].type = "main_visual"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[0].type");
+
+  check("★ [v2] container 도 없다(재귀 container 는 v2 첫 범위가 아니다)",
+    v2FailPath((d) => { v2Frame(d).elements[0].type = "container"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[0].type" &&
+    v2FailPath((d) => { v2Block(d, 0).type = "container"; }) ===
+      "regions[0].canvas.flow.blocks[0].type");
+
+  check("[v2] overlay 도 main_visual 이 될 수 없다(자유 층은 v1 여섯 종류다)",
+    v2FailPath((d) => { d.overlays[0].type = "main_visual"; }) ===
+      "regions[0].canvas.overlays[0].type");
+}
+
+/* ---- 6) align · margin · gap · padding · anchor · origin ---- */
+{
+  check("★ [v2] align 은 네 값뿐이다(skin-layout.js 의 start/end 가 아니다)",
+    canvas.SKIN_HOME_CANVAS_BLOCK_ALIGNS.join() === "left,center,right,stretch" &&
+    v2FailPath((d) => { v2Block(d, 0).align = "start"; }) ===
+      "regions[0].canvas.flow.blocks[0].align" &&
+    v2FailPath((d) => { v2Block(d, 0).align = "baseline"; }) ===
+      "regions[0].canvas.flow.blocks[0].align");
+
+  check("★ [v2] margin 은 음수를 허용한다(일부러 겹치기 위해)",
+    v2Of((() => { const d = v2Full(); v2Block(d, 1).margin = { top: -24, left: -8 }; return d; })()).ok === true &&
+    v2FailPath((d) => { v2Block(d, 1).margin = { top: "8px" }; }) ===
+      "regions[0].canvas.flow.blocks[1].margin.top" &&
+    v2FailPath((d) => { v2Block(d, 1).margin = 8; }) ===
+      "regions[0].canvas.flow.blocks[1].margin");
+
+  check("[v2] flow.padding 도 같은 자를 쓴다",
+    v2FailPath((d) => { d.flow.padding.left = NaN; }) === "regions[0].canvas.flow.padding.left" &&
+    v2FailPath((d) => { d.flow.padding = [1, 2]; }) === "regions[0].canvas.flow.padding");
+
+  check("[v2] flow.gap 은 유한한 숫자 · direction 은 column 하나",
+    v2FailPath((d) => { d.flow.gap = "20px"; }) === "regions[0].canvas.flow.gap" &&
+    v2FailPath((d) => { d.flow.direction = "row"; }) === "regions[0].canvas.flow.direction" &&
+    v2Of((() => { const d = v2Full(); delete d.flow.direction; return d; })()).ok === true);
+
+  check("★ [v2] pin 의 anchor · origin 은 아홉 점, target 은 둘, offset 은 숫자 둘",
+    canvas.SKIN_HOME_CANVAS_PIN_POINTS.length === 9 &&
+    v2FailPath((d) => { v2Frame(d).elements[2].pin.origin = "middle"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[2].pin.origin" &&
+    v2FailPath((d) => { v2Frame(d).elements[2].pin.target = "block"; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[2].pin.target" &&
+    v2FailPath((d) => { v2Frame(d).elements[2].pin.offset = { x: "8" }; }) ===
+      "regions[0].canvas.flow.blocks[4].props.elements[2].pin.offset.x");
+
+  check("[v2] pin 의 네 칸은 전부 선택이다(빈 pin · pin 없는 pin 요소도 유효)",
+    v2Of((() => { const d = v2Full(); v2Frame(d).elements[2].pin = {}; return d; })()).ok === true &&
+    v2Of((() => { const d = v2Full(); delete v2Frame(d).elements[2].pin; return d; })()).ok === true);
+
+  check("[v2] maxWidth · hidden · locked 도 모양은 본다",
+    v2FailPath((d) => { v2Block(d, 1).maxWidth = 0; }) === "regions[0].canvas.flow.blocks[1].maxWidth" &&
+    v2FailPath((d) => { v2Block(d, 1).hidden = "yes"; }) === "regions[0].canvas.flow.blocks[1].hidden" &&
+    v2FailPath((d) => { v2Block(d, 1).locked = 1; }) === "regions[0].canvas.flow.blocks[1].locked");
+}
+
+/* ---- 7) 최상위 모양 · elements 금지 ---- */
+{
+  check("★ [v2] 최상위 elements 를 거부한다(v1 writer 가 v2 에 닿을 길을 막는다)",
+    v2FailPath((d) => { d.elements = []; }) === "regions[0].canvas.elements" &&
+    v2FailPath((d) => { d.elements = [element()]; }) === "regions[0].canvas.elements");
+
+  check("★ [v2] baseWidth 는 390 · baseHeight 는 양수 필수(블록 합으로 계산하지 않는다)",
+    v2FailPath((d) => { d.baseWidth = 375; }) === "regions[0].canvas.baseWidth" &&
+    v2FailPath((d) => { delete d.baseHeight; }) === "regions[0].canvas.baseHeight" &&
+    v2FailPath((d) => { d.baseHeight = 0; }) === "regions[0].canvas.baseHeight");
+
+  check("★ [v2] flow 는 필수다(빠진 것을 빈 흐름으로 읽지 않는다)",
+    v2FailPath((d) => { delete d.flow; }) === "regions[0].canvas.flow" &&
+    v2FailPath((d) => { d.flow = { }; }) === "regions[0].canvas.flow.blocks");
+
+  check("[v2] 오류 경로가 regions[n] 의 n 을 따라간다",
+    (() => {
+      const d = v2Full();
+      v2Block(d, 2).width = -1;
+      return okOf([{ name: "x" }, { name: "y" }, { name: "home_canvas", canvas: d }]).path ===
+        "regions[2].canvas.flow.blocks[2].width";
+    })());
+
+  check("[v2] 블록 수 · 프레임 요소 수 · overlay 수 상한은 v1 의 그 자다",
+    (() => {
+      const over = canvas.SKIN_HOME_CANVAS_MAX_ELEMENTS + 1;
+      const blocks = [];
+      for (let i = 0; i < over; i++) {
+        blocks.push({ id: `canvas_x${i}`, type: "divider", width: 10, height: 1 });
+      }
+      const d = v2Min();
+      d.flow.blocks = blocks;
+      return v2Of(d).path === "regions[0].canvas.flow.blocks";
+    })());
+}
+
+/* ---- 8) 보존 · 불변 · 실행 안 함 ---- */
+{
+  const data = v2Full();
+  data.futureCanvasField = { keep: true };
+  data.flow.futureFlowField = "keep";
+  data.flow.blocks[0].futureBlockField = 7;
+  v2Frame(data).elements[0].futureElementField = "keep";
+  data.overlays[0].futureOverlayField = [1, 2];
+
+  check("★ [v2] 모르는 칸이 섞여 있어도 통과한다(보존 대상이다)",
+    v2Of(data).ok === true, JSON.stringify(v2Of(data)));
+
+  const regions = [{ name: "other", deep: { a: 1 } }, { name: "home_canvas", enabled: true, canvas: data }];
+  const before = JSON.stringify(regions);
+
+  canvas.validateSkinHomeCanvasRegions(regions);
+  canvas.buildSkinCanvasRenderPayload(data);
+  canvas.resolveSkinHomeCanvas(skinWith(regions), CANVAS_HTML);
+
+  check("★ [v2] 어떤 판정 함수도 입력을 mutate 하지 않는다",
+    JSON.stringify(regions) === before);
+
+  const off = canvas.writeSkinHomeCanvasRegion(regions, { enabled: false });
+
+  check("★ [v2] enabled:false 는 v2 데이터를 지우지 않고 모르는 칸도 남는다",
+    off[1].enabled === false &&
+    same(off[1].canvas, data) &&
+    JSON.stringify(regions) === before);
+
+  check("★ [v2] 유효한 v2 도 아직 렌더되지 않는다(실행 payload 없음 = 기존 HOME fallback)",
+    canvas.buildSkinCanvasRenderPayload(data) === undefined &&
+    canvas.buildSkinCanvasRenderPayload(v2Full()) === undefined &&
+    canvas.buildSkinCanvasRenderPayload(v2Min()) === undefined &&
+    canvas.resolveSkinHomeCanvas(skinWith(regions), CANVAS_HTML) === undefined);
+
+  check("★ [v2] 이미 저장된 **잘못된** v2 도 지우거나 고치지 않는다 — 실행만 안 한다",
+    (() => {
+      const bad = v2Full();
+      v2Block(bad, 0).width = -5;
+      const badRegions = [{ name: "home_canvas", canvas: bad }];
+      const snapshot = JSON.stringify(badRegions);
+      const payload = canvas.resolveSkinHomeCanvas(skinWith(badRegions), CANVAS_HTML);
+      return payload === undefined && JSON.stringify(badRegions) === snapshot;
+    })());
+
+  check("★ [v2] v1 writer 가 v2 에 닿지 않는다(canvas.elements 가 없다)",
+    (() => {
+      const targets = ["canvas_b1logo", "canvas_m1photo", "canvas_o1number"];
+      return targets.every((id) => {
+        const moved = canvas.writeSkinHomeCanvasElementPosition(regions, id, { x: 1, y: 1 });
+        const boxed = canvas.writeSkinHomeCanvasElementBox(regions, id, { x: 1, y: 1, width: 10, height: 10 });
+        const turned = canvas.writeSkinHomeCanvasElementRotation(regions, id, { rotation: 10 });
+        const typed = canvas.writeSkinHomeCanvasElementText(regions, id, { text: "x" });
+        return [moved, boxed, turned, typed].every((r) => r.ok === false && r.reason === "canvas");
+      }) && JSON.stringify(regions) === before;
+    })());
 }
 
 
@@ -625,7 +1082,8 @@ const envelope = (over) =>
 
   const rejects = [
     ["모르는 최상위 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [], background: "#fff" }],
-    ["모르는 version", { version: 2, baseWidth: 390, elements: [] }],
+    ["모르는 version", { version: 3, baseWidth: 390, elements: [] }],
+    ["v2 조합형 canvas", { version: 2, baseWidth: 390, baseHeight: 844, flow: { blocks: [] }, overlays: [] }],
     ["다른 baseWidth", { version: 1, baseWidth: 375, elements: [] }],
     ["모르는 요소 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [Object.assign(element(), { z: 3 })] }],
     ["모르는 props 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element({ props: { slot: "photo_1", style: "x" } })] }],
@@ -638,7 +1096,7 @@ const envelope = (over) =>
     ["너무 긴 글자", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element({ type: "text", props: { text: "x".repeat(2001), role: "body" } })] }]
   ].filter(([, value]) => protocol.isSandboxTemplate(envelope({ canvas: value })) !== false);
 
-  check("★ [protocol] strict allowlist — 열두 가지를 전부 거부",
+  check("★ [protocol] strict allowlist — 열세 가지를 전부 거부",
     rejects.length === 0, rejects.map((r) => r[0]).join(", "));
 }
 

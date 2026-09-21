@@ -1322,6 +1322,14 @@ bottom-left  bottom  bottom-right
 즉 **오늘 v2 파일을 넣으면 조용히 보존되고 아무것도 실행되지 않는다.** 이
 라운드가 코드를 바꾸지 않아도 되는 이유가 이것이다.
 
+> **위 표는 `COMPOSITION-CONTRACT-1`(2026-09-21) 시점의 실측이다.**
+> 그 뒤 `V2-DATA-1` 이 v2 를 "모르는 version" 자리에서 꺼냈다 — 이제
+> `version: 2` 는 이 절의 규칙으로 **실제 검증**되고, 잘못 적힌 v2 는 새
+> Import 에서 경로와 함께 거부된다. 바뀌지 않은 것은 **실행**이다:
+> 유효한 v2 도 payload 가 만들어지지 않아 기존 HOME 이 그려지고 sandbox
+> 봉투도 그대로다. 현행 상태는
+> [계약 문서 §9-(3)](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 이다.
+
 #### v2 를 켤 때의 함정 셋 (`V2-DATA-1` 이 반드시 본다)
 
 1. ★ **기존 테스트가 `version: 2` 를 "미래 version" 사례로 쓰고 있다** —
@@ -1329,6 +1337,10 @@ bottom-left  bottom  bottom-right
    `[protocol]` 의 reject 목록이 전부 `{ version: 2, ... }` 다. v2 를 실행
    가능하게 만드는 순간 그 행들은 **틀린 것을 단언하게 된다** — 다른 미지원
    숫자로 옮겨야 하고, 옮겼다는 사실이 보고에 남아야 한다.
+   → **처리됨**(`V2-DATA-1`). 그 셋과 함께
+   `studio/studio-home-canvas-e2e-test.mjs` ·
+   `studio/studio-home-canvas-inspector-e2e-test.mjs` 도 같은 숫자를 쓰고
+   있었다. 전부 `version: 3` 으로 옮겼고 단언의 뜻은 그대로다.
 2. **v2 canvas 에 최상위 `elements` 를 두지 않는다.** v1 의 불변 수정 함수
    `writeSkinHomeCanvasElementFields()` 는 version 을 보지 않고
    `canvas.elements` 배열을 찾아 id 로 쓴다 — 그 칸이 없어야 v1 writer 가
@@ -1400,8 +1412,8 @@ bottom-left  bottom  bottom-right
 | 1 | `HOME-CANVAS-COMPOSITION-CONTRACT-1` | 이 절 — 설계 확정. 문서만 | **완료**(2026-09-21) |
 | 2 | `HOME-CANVAS-MANUAL-UX-FIX-1` | 현재 v1 편집기의 UX 수정 넷(§14-14) | **완료**(2026-09-21) — 결과는 [계약 문서 §21](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 3 | `HOME-CANVAS-INSPECTOR-1A` | v1 Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(§14-15) | **완료**(2026-09-21) — 결과는 [계약 문서 §22](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
-| 4 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | **미착수 — 다음 작업** |
-| 5 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | 미착수 |
+| 4 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | **완료**(2026-09-21) — 결과는 [계약 문서 §9-(3)](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
+| 5 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | **미착수 — 다음 작업** |
 | 6 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform 렌더 | 미착수 |
 | 7 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 미착수 |
 | 8 | `HOME-CANVAS-V2-ATTACH-1` | lasso/Shift 선택 → `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` · Undo/Redo | 미착수 |

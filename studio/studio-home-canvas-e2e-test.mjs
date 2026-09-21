@@ -20,6 +20,10 @@
    [ai]        AI 응답(서버가 regions 를 그대로 되돌려 준다)을 적용해도
                canvas 가 사라지지 않는다. 이미 깨져 있는 canvas 도
                AI 수정을 막지 않는다
+   [v2]        조합형 Canvas(`version:2`, V2-DATA-1) — 잘못된 v2 는
+               **정확한 경로**와 함께 거부되고, 유효한 v2 는 Import →
+               Save → 다시 열기 → Export → Publish → AI 를 한 칸도
+               잃지 않고 지난다. 그러면서도 **아직 그려지지 않는다**
    [legacy]    캔버스가 없는 기존 스킨은 Save/Export 결과가 그대로다
 
    계약 자체(요소 규칙 · 오류 경로 · 실행 payload · 봉투)는 브라우저
@@ -122,6 +126,141 @@ const CANVAS_SKIN = {
     CANVAS_REGION
   ],
   metadata: { title: "HOME Canvas fixture" }
+};
+
+/* =========================================================
+   v2 fixture — 조합형 Canvas 하나 (HOME-CANVAS-V2-DATA-1)
+
+   로드맵 §14-3 의 예시에 **모르는 칸 넷**을 섞어 둔 것이다
+   (canvas · flow · block · 프레임 내부 요소 · overlay). 이 라운드가
+   v2 를 검증하기 시작했으므로, 검증이 "통과시킨다"에서 끝나지 않고
+   Import → Save → 다시 열기 → Export → Publish → AI 를 지나도 **한
+   칸도 잃지 않는지**를 v1 과 같은 자로 본다.
+
+   ★ 유효한 v2 라도 **아직 그려지지 않는다** — 이 절은 그것도 함께
+     확인한다(공개 resolve 에 canvas 키가 없다 = 기존 HOME fallback).
+========================================================== */
+
+const V2_REGION = {
+  name: "home_canvas",
+  enabled: true,
+  canvas: {
+    version: 2,
+    baseWidth: 390,
+    baseHeight: 1240,
+    flow: {
+      direction: "column",
+      padding: { top: 48, right: 24, bottom: 64, left: 24 },
+      gap: 20,
+      blocks: [
+        {
+          id: "canvas_b1logo",
+          type: "logo",
+          width: 120,
+          height: 40,
+          align: "center",
+          props: { slot: "title_logo", fallback: "site_title" },
+          futureBlockField: "keep me"
+        },
+        {
+          id: "canvas_b2nav",
+          type: "category_nav",
+          width: 342,
+          height: "auto",
+          align: "stretch",
+          margin: { top: 8 },
+          props: { mode: "all", categoryIds: [] }
+        },
+        {
+          id: "canvas_b3title",
+          type: "text",
+          width: 300,
+          height: "auto",
+          align: "center",
+          props: { text: "FOREVER YOUNG", role: "title" }
+        },
+        {
+          id: "canvas_b4rule",
+          type: "divider",
+          width: 120,
+          height: 1,
+          align: "center",
+          margin: { top: 12, bottom: 12 }
+        },
+        {
+          id: "canvas_b5main",
+          type: "main_visual",
+          width: 300,
+          height: "auto",
+          align: "center",
+          margin: { top: 24, bottom: 24 },
+          props: {
+            baseWidth: 300,
+            baseHeight: 380,
+            primaryId: "canvas_m1photo",
+            elements: [
+              {
+                id: "canvas_m0paper",
+                type: "shape",
+                follow: "transform",
+                x: -18, y: 26, width: 300, height: 360, rotation: -6,
+                props: { kind: "rect" },
+                futureElementField: "keep me"
+              },
+              {
+                id: "canvas_m1photo",
+                type: "photo",
+                follow: "transform",
+                x: 0, y: 0, width: 300, height: 380,
+                props: { slot: "photo_main" }
+              },
+              {
+                id: "canvas_m2left",
+                type: "text",
+                follow: "pin",
+                width: 92, height: 22,
+                pin: {
+                  target: "photo", anchor: "left", origin: "right",
+                  offset: { x: 8, y: -40 }
+                },
+                props: { text: "puppy !", role: "label" }
+              }
+            ]
+          }
+        }
+      ],
+      futureFlowField: { keep: true }
+    },
+    overlays: [
+      {
+        id: "canvas_o1number",
+        type: "text",
+        x: -46, y: 980, width: 260, height: 200, rotation: 0,
+        props: { text: "01", role: "label" },
+        futureOverlayField: [1, 2]
+      }
+    ],
+    futureCanvasField: { keep: true }
+  }
+};
+
+const V2_SKIN = {
+  schemaVersion: 1,
+  templates: {
+    home: { html: CANVAS_HOME_HTML },
+    category: { html: '<div class="hc-category"></div>' },
+    post: { html: '<div class="hc-post"><div data-imory-region="post-body"></div></div>' }
+  },
+  css: ".hc-home { padding: 8px; }",
+  imageSlots: [
+    { name: "title_logo", label: "로고", required: false },
+    { name: "photo_main", label: "메인 사진", required: false }
+  ],
+  regions: [
+    { name: "someone_elses_thing", payload: { deep: [1, 2] } },
+    V2_REGION
+  ],
+  metadata: { title: "HOME Canvas v2 fixture" }
 };
 
 const PLAIN_SKIN = {
@@ -417,9 +556,15 @@ async function run() {
       check("거부된 Import 는 draft 를 바꾸지 않았다(원래 값 그대로)",
         same(canvasOf(await draftRegions(page)), CANVAS_REGION.canvas));
 
-      /* 미래 version — 거부가 아니다 */
+      /*
+        미래 version — 거부가 아니다.
+
+        ★ 숫자는 **3** 이다. HOME-CANVAS-V2-DATA-1 부터 `version: 2` 는
+          §14 규칙으로 실제 검증되는 조합형 Canvas 라 "내용을 보지 않고
+          통과시키는 version" 의 예가 될 수 없다. 단언의 뜻은 그대로다.
+      */
       const future = clone(CANVAS_SKIN);
-      future.regions[1].canvas = { version: 2, baseWidth: 999, elements: [{ nonsense: true }] };
+      future.regions[1].canvas = { version: 3, baseWidth: 999, elements: [{ nonsense: true }] };
 
       r = await importJson(page, JSON.stringify(future));
 
@@ -669,6 +814,175 @@ async function run() {
           window.resolveSkinTemplate(currentWorkingSkin, "home").canvas === undefined));
 
       await broken.context.close();
+
+    }
+
+
+    /* ------------------------------------------------- */
+    if (wants("v2")) {
+
+      section("v2");
+
+      const { context, page, errors } = await openStudio(browser, { skin: V2_SKIN, ai: true });
+
+      check("여는 순간의 draft 에 v2 canvas 가 그대로(모르는 칸 다섯 곳 포함)",
+        same(canvasOf(await draftRegions(page)), V2_REGION.canvas),
+        JSON.stringify(canvasOf(await draftRegions(page))));
+
+      check("★ 유효한 v2 도 아직 그려지지 않는다(공개 resolve 에 canvas 키 없음 = 기존 HOME fallback)",
+        await page.evaluate(() =>
+          window.resolveSkinTemplate(currentWorkingSkin, "home").canvas === undefined));
+
+      check("그래도 표시 위치는 Preview 문서에 살아 있다",
+        (await previewHasCanvasRoot(page)) === 1);
+
+      /* 잘못된 v2 — 정확한 경로와 함께 거부 */
+      const badBlock = clone(V2_SKIN);
+      badBlock.regions[1].canvas.flow.blocks[2].width = -3;
+
+      let r = await importJson(page, JSON.stringify(badBlock));
+
+      check("★ 잘못된 블록은 거부되고 **필드 경로**를 보여 준다",
+        r.isError && !r.canApply &&
+        r.message.includes("regions[1].canvas.flow.blocks[2].width"),
+        r.message);
+
+      const badPrimary = clone(V2_SKIN);
+      badPrimary.regions[1].canvas.flow.blocks[4].props.primaryId = "canvas_m0paper";
+
+      r = await importJson(page, JSON.stringify(badPrimary));
+
+      check("★ primaryId 가 사진이 아니면 거부(경로는 props.primaryId)",
+        r.isError && !r.canApply &&
+        r.message.includes("regions[1].canvas.flow.blocks[4].props.primaryId"),
+        r.message);
+
+      const dupId = clone(V2_SKIN);
+      dupId.regions[1].canvas.overlays[0].id = "canvas_b3title";
+
+      r = await importJson(page, JSON.stringify(dupId));
+
+      check("★ 블록 id 와 overlay id 가 부딪히면 거부(한 이름 공간)",
+        r.isError && !r.canApply &&
+        r.message.includes("regions[1].canvas.overlays[0].id"),
+        r.message);
+
+      const withElements = clone(V2_SKIN);
+      withElements.regions[1].canvas.elements = [];
+
+      r = await importJson(page, JSON.stringify(withElements));
+
+      check("★ v2 에 최상위 elements 가 있으면 거부(v1 writer 가 닿을 길을 막는다)",
+        r.isError && !r.canApply &&
+        r.message.includes("regions[1].canvas.elements"),
+        r.message);
+
+      check("거부된 Import 는 draft 를 바꾸지 않았다(원래 값 그대로)",
+        same(canvasOf(await draftRegions(page)), V2_REGION.canvas));
+
+      /* 고친 v2 를 넣는다 — Save 를 일으키려면 dirty 여야 하므로 css 도 바꾼다 */
+      const edited = clone(V2_SKIN);
+      edited.css = ".hc-home { padding: 12px; }";
+      edited.regions[1].canvas.baseHeight = 2400;
+      edited.regions[1].canvas.flow.blocks.push({
+        id: "canvas_b6note",
+        type: "text",
+        width: 300,
+        height: "auto",
+        align: "left",
+        margin: { top: -8 },
+        props: { text: "an added block", role: "caption" }
+      });
+
+      r = await importJson(page, JSON.stringify(edited));
+      check("고친 v2 파일이 Import 된다", !r.isError && r.canApply, r.message);
+
+      await page.click(".import-editor-button--primary");
+      await page.waitForTimeout(600);
+
+      check("★ 적용된 v2 가 draft 에 그대로(새 블록 · 음수 margin · 2400 포함)",
+        same(canvasOf(await draftRegions(page)), edited.regions[1].canvas),
+        JSON.stringify(canvasOf(await draftRegions(page))));
+
+      /* Export */
+      const downloadPromise = page.waitForEvent("download", { timeout: 10000 });
+      await page.click("#studioExportButton");
+      const download = await downloadPromise;
+      const exported = JSON.parse(fs.readFileSync(await download.path(), "utf8"));
+
+      check("★ Export 파일의 v2 canvas 가 한 칸도 빠지지 않는다",
+        same(canvasOf(exported.regions), edited.regions[1].canvas),
+        JSON.stringify(canvasOf(exported.regions)));
+
+      /* Save */
+      await page.evaluate(() => { window.top.__savedDraftCallsLay = []; });
+      await page.click("#studioSaveButton");
+      await page.waitForFunction(() => (window.top.__savedDraftCallsLay || []).length > 0, null, { timeout: 8000 });
+
+      const saved = await page.evaluate(() => {
+        const calls = window.top.__savedDraftCallsLay;
+        return calls[calls.length - 1].p_content;
+      });
+
+      check("★ Save payload 의 v2 canvas 가 그대로",
+        same(canvasOf(saved.regions), edited.regions[1].canvas),
+        JSON.stringify(canvasOf(saved.regions)));
+
+      /* 저장한 content 로 다시 열고 Publish */
+      const reopened = await openStudio(browser, { skin: saved });
+
+      check("★ 다시 열어도 v2 canvas 가 그대로",
+        same(canvasOf(await draftRegions(reopened.page)), edited.regions[1].canvas));
+
+      await reopened.page.evaluate(() => {
+        window.top.__savedDraftCallsLay = [];
+        window.top.__publishedLay = undefined;
+      });
+
+      const r2 = await importJson(reopened.page, JSON.stringify(
+        Object.assign(clone(saved), { css: ".hc-home { padding: 16px; }" })
+      ));
+      check("Publish 전 Save 를 일으킬 Import 통과", !r2.isError && r2.canApply, r2.message);
+      await reopened.page.click(".import-editor-button--primary");
+      await reopened.page.waitForTimeout(600);
+
+      await reopened.page.click("#studioSaveButton");
+      await reopened.page.waitForFunction(() => (window.top.__savedDraftCallsLay || []).length > 0, null, { timeout: 8000 });
+      await reopened.page.waitForFunction(() => !document.getElementById("studioPublishButton").disabled, null, { timeout: 8000 });
+      await reopened.page.click("#studioPublishButton");
+      await reopened.page.click(".studio-confirm-button--primary");
+      await reopened.page.waitForFunction(() => window.top.__publishedLay !== undefined, null, { timeout: 8000 });
+
+      const published = await reopened.page.evaluate(() => window.top.__publishedLay);
+
+      check("★ Publish 된 content 의 v2 canvas 가 그대로",
+        published && same(canvasOf(published.regions), edited.regions[1].canvas),
+        JSON.stringify(published && canvasOf(published.regions)));
+
+      check("★ 발행된 v2 스킨도 공개 resolve 에 canvas 키가 없다(렌더러가 아직 없다)",
+        await reopened.page.evaluate((pkg) =>
+          window.resolveSkinTemplate(pkg, "home").canvas === undefined, published));
+
+      await reopened.context.close();
+
+      /* AI — 서버가 regions 를 그대로 돌려줄 때 v2 를 잃지 않는가 */
+      await page.click("#studioAiToggleButton");
+      await page.waitForSelector("#studioAiDrawerInput", { timeout: 5000 });
+      await page.fill("#studioAiDrawerInput", "글씨 색을 조금 바꿔줘");
+      await page.click("#studioAiDrawerSend");
+
+      await page.waitForFunction(
+        () => /imory-ai canvas fixture/.test(currentWorkingSkin.css || ""),
+        null, { timeout: 15000 }
+      );
+
+      check("★ AI 수정 뒤에도 v2 canvas 가 그대로(블록도 프레임 내부도 모르는 칸도)",
+        same(canvasOf(await draftRegions(page)), edited.regions[1].canvas),
+        JSON.stringify(canvasOf(await draftRegions(page))));
+
+      check("페이지 오류 없음", errors.length === 0, errors.join(" | "));
+
+      await context.close();
 
     }
 
