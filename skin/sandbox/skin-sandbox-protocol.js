@@ -318,8 +318,8 @@ var SANDBOX_MESSAGE_TYPES = {
      HOME-CANVAS-TRANSFORM-1A — 단일 요소 이동
 
        CANVAS_GEOMETRY  parent -> frame
-         { renderSeq, active, id?, x?, y?, baseWidth?, baseHeight?,
-           generation, answering? }
+         { renderSeq, active, id?, x?, y?, width?, height?, rotation?,
+           baseWidth?, baseHeight?, generation, answering? }
        CANVAS_TRANSFORM frame  -> parent
          { renderSeq, kind, id, expected, next, generation, requestId }
 
@@ -364,10 +364,12 @@ var SANDBOX_MESSAGE_TYPES = {
      어긋나면 **쓰지 않는다**(studio/inspector/studio-canvas-selection.js
      commitStudioCanvasElementTransform).
 
-     ★ `kind` 는 이번 단계에 `"move"` 하나다. 크기 · 회전은 이
-       메시지로 들어올 수 없다 — `expected` 와 `next` 는 x · y 두
-       칸만 허용하고, width · height · rotation 이 섞이면 메시지
-       전체를 버린다.
+     ★ `kind` 는 `"move"`(1A) · `"resize"`(1B) · `"rotate"`(1C)
+       셋이다. 그 이름마다 `expected` · `next` 의 모양이 **하나로**
+       정해져 있고(아래 IMORY_CANVAS_TRANSFORM), 서로의 자리에
+       들어갈 수 없다 — 이동 메시지에 width 가, 회전 메시지에
+       좌표가 섞이면 메시지 전체를 버린다. 그룹 조작은 아직 이
+       목록에 없다.
   ======================================================= */
 
   CANVAS_GEOMETRY: "IMORY_CANVAS_GEOMETRY",
@@ -616,17 +618,18 @@ var SANDBOX_CANVAS_SELECT_MODES = ["replace", "toggle"];
 
 
 /*
-  HOME-CANVAS-TRANSFORM-1A · 1B — 프레임이 올릴 수 있는 조작의 뜻.
+  HOME-CANVAS-TRANSFORM-1A · 1B · 1C — 프레임이 올릴 수 있는 조작의 뜻.
 
-  회전 · 그룹 조작이 들어오면 그때 이 배열에 이름을 더한다(더하지
-  않은 값은 메시지 층에서 거부된다).
+  그룹 조작이 들어오면 그때 이 배열에 이름을 더한다(더하지 않은
+  값은 메시지 층에서 거부된다).
 
   ★ kind 마다 `expected` · `next` 의 허용 키가 다르다. 아래
-    CANVAS_TRANSFORM 의 check 가 그 표를 본다 — "좌표 둘"과
-    "좌표 둘 + 크기 둘"이 서로의 자리에 들어갈 수 없다.
+    CANVAS_TRANSFORM 의 check 가 그 표를 본다 — "좌표 둘" ·
+    "좌표 둘 + 크기 둘" · "각도 하나"가 서로의 자리에 들어갈 수
+    없다.
 */
 
-var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move", "resize"];
+var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move", "resize", "rotate"];
 
 
 /*
@@ -680,11 +683,47 @@ function isSandboxCanvasBox(value) {
 }
 
 
-/* kind 가 소유하는 모양은 하나다 — 이동은 점, 리사이즈는 상자 */
+/*
+  HOME-CANVAS-TRANSFORM-1C — 요소 하나의 각도.
+
+  `rotation` 한 칸뿐이고, 여기서도 **모르는 키가 하나라도 있으면
+  거짓**이다 — 좌표나 크기가 회전 메시지로 새어 들어갈 길을 막는다
+  (회전은 상자를 바꾸지 않는다).
+
+  ★ 범위는 계약이 이미 가진 그것 하나다 — **유한한 숫자**(§5).
+    좌표의 ±100000 을 각도에 빌려 오지 않는다. 그렇게 하면 이미
+    저장된 큰 각도를 가진 요소를 영영 돌릴 수 없게 된다 —
+    `expected` 는 **저장된 그 값 그대로** 올라오기 때문이다.
+*/
+
+function isSandboxCanvasAngle(value) {
+
+  return typeof value === "number" && Number.isFinite(value);
+
+}
+
+
+function isSandboxCanvasRotation(value) {
+
+  return (
+    isPlainSandboxObject(value) &&
+    hasOnlyKnownSandboxKeys(value, ["rotation"]) &&
+    isSandboxCanvasAngle(value.rotation)
+  );
+
+}
+
+
+/* kind 가 소유하는 모양은 하나다 — 이동은 점, 리사이즈는 상자,
+   회전은 각도 */
 
 function sandboxCanvasTransformShapeCheck(kind) {
 
-  return kind === "resize" ? isSandboxCanvasBox : isSandboxCanvasPoint;
+  if (kind === "resize") {
+    return isSandboxCanvasBox;
+  }
+
+  return kind === "rotate" ? isSandboxCanvasRotation : isSandboxCanvasPoint;
 
 }
 
@@ -1868,7 +1907,7 @@ var SANDBOX_MESSAGE_SPEC = {
     direction: "to-frame",
     keys: [
       "contract", "renderSeq", "active", "id",
-      "x", "y", "width", "height",
+      "x", "y", "width", "height", "rotation",
       "baseWidth", "baseHeight", "generation", "answering"
     ],
     check: function (payload) {
@@ -1901,6 +1940,7 @@ var SANDBOX_MESSAGE_SPEC = {
           payload.y === undefined &&
           payload.width === undefined &&
           payload.height === undefined &&
+          payload.rotation === undefined &&
           payload.baseWidth === undefined &&
           payload.baseHeight === undefined
         );
@@ -1916,6 +1956,9 @@ var SANDBOX_MESSAGE_SPEC = {
            아니다** — active 면 반드시 있다. */
         isSandboxCanvasSize(payload.width) &&
         isSandboxCanvasHeight(payload.height) &&
+        /* HOME-CANVAS-TRANSFORM-1C — 각도도 같은 이유로 반드시
+           있다. 요소에 `rotation` 이 없으면 부모가 0 을 싣는다. */
+        isSandboxCanvasAngle(payload.rotation) &&
         isSandboxCanvasSize(payload.baseWidth) &&
         isSandboxCanvasSize(payload.baseHeight)
       );
@@ -1934,11 +1977,13 @@ var SANDBOX_MESSAGE_SPEC = {
 
          move     x · y
          resize   x · y · width · height  (height 는 숫자 또는 "auto")
+         rotate   rotation                (유한한 숫자 하나)
 
        그 밖의 키가 섞인 메시지는 여기서 통째로 버려진다 — 이동
-       메시지에 width 가, 리사이즈 메시지에 rotation 이 들어갈 수
-       없다는 계약이 메시지 층에도 있어야 한다. 반대 방향도 막는다:
-       리사이즈 요청에 좌표 둘만 오면 그것도 거부다.
+       메시지에 width 가, 리사이즈 메시지에 rotation 이, 회전
+       메시지에 좌표가 들어갈 수 없다는 계약이 메시지 층에도
+       있어야 한다. 반대 방향도 막는다: 리사이즈 요청에 좌표 둘만
+       오면 그것도 거부다.
   ======================================================= */
 
   IMORY_CANVAS_TRANSFORM: {
@@ -2283,6 +2328,8 @@ if (typeof module !== "undefined" && module.exports) {
     isSandboxCanvasPoint,
     isSandboxCanvasHeight,
     isSandboxCanvasBox,
+    isSandboxCanvasAngle,
+    isSandboxCanvasRotation,
     isSandboxInspectEditId,
     isSandboxInspectRect,
     isSandboxInspectTarget,

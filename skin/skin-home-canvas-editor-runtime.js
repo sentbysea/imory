@@ -100,8 +100,9 @@ const SHIFT_CLICK_SLOP = 5;
 /* =========================================================
    HOME-CANVAS-TRANSFORM-1A — 이동
 
-   ★ 이번 단계가 켜는 조작은 `draggable` **하나**다. 손잡이(크기 ·
-     회전)는 여전히 만들지 않는다.
+   ★ 그 단계가 켠 조작은 `draggable` **하나**였다. 손잡이는
+     `TRANSFORM-1B`(크기 여덟) · `1C`(회전 하나)가 더했고, 확정
+     경로 한 벌을 셋이 함께 쓴다.
 
    ★ 저장 단위는 소수점 셋째 자리까지다. 390 자 도화지에서 0.001 은
      실제 화면의 1/1000 px 보다 작고, 그보다 더 적으면 같은 자리를
@@ -125,6 +126,22 @@ const CANVAS_RESIZE_KIND = "resize";
   않지만, 읽는 사람이 빠진 것을 바로 알 수 있다.
 */
 const CANVAS_RESIZE_DIRECTIONS = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+
+/* HOME-CANVAS-TRANSFORM-1C */
+const CANVAS_ROTATE_KIND = "rotate";
+
+/*
+  회전 손잡이를 **그릴 자리**. 0.53.0 의 `rotationPosition` 이고,
+  `"none"` 이면 손잡이를 아예 만들지 않는다(번들 실측 — Ji()
+  첫 줄이 빈 배열을 돌려준다). 리사이즈의 `renderDirections: []`
+  과 같은 자리다: able 은 처음부터 켜 두고 **그릴 것**으로 여닫는다.
+*/
+const CANVAS_ROTATION_POSITION = "top";
+const CANVAS_ROTATION_POSITION_NONE = "none";
+
+/* 한 바퀴. 확정 값의 표현을 정할 때 쓰는 그 수 하나다(아래
+   normalizeCanvasRotation) */
+const CANVAS_FULL_TURN = 360;
 
 /* Canvas 좌표 기준 최소 크기(계약 §18-2). 0 을 허용하면 그 요소는
    다시 잡을 수 없고, 계약의 `width > 0` 도 어긴다. */
@@ -481,8 +498,33 @@ function displayOnlyMoveableOptions(target, nonce) {
     renderDirections:
       (Array.isArray(target) && target.length > 1) ? [] : CANVAS_RESIZE_DIRECTIONS,
 
+    /*
+      HOME-CANVAS-TRANSFORM-1C — 회전.
+
+      ★ able 은 여기서도 **처음부터 켠다**(위 resizable 의 그 사정).
+        여닫는 것은 `rotationPosition` 이다 — `"none"` 이면 손잡이를
+        아예 그리지 않으므로 그룹에서는 회전이 시작될 수 없다.
+
+      ★ `rotatable` 을 **객체로** 준다. 0.53.0 의 Rotatable 은
+        `Vo(props,"rotatable")` 로 자기 옵션을 읽는데, 그 함수는
+        `props.rotatable` 이 객체가 아니면 **props 를 통째로** 본다
+        (번들 실측). 그러면 우리가 리사이즈용으로 준
+        `renderDirections` 여덟을 **회전용 손잡이 여덟**으로 한 번 더
+        그려 버린다 — `.moveable-control[data-direction]` 이 열여섯이
+        되고 손잡이 계산이 통째로 어긋난다. 객체 안에서 `false` 로
+        덮어 그 길을 막는다.
+
+      ★ 각도를 반올림하지 않는다(throttleRotate 0). 우리는 Moveable
+        의 transform 을 쓰지 않고 `dist` 만 쓴다.
+    */
     scalable: false,
-    rotatable: false,
+    rotatable: { renderDirections: false },
+    rotationPosition:
+      (Array.isArray(target) && target.length > 1)
+        ? CANVAS_ROTATION_POSITION_NONE
+        : CANVAS_ROTATION_POSITION,
+    throttleRotate: 0,
+    rotateAroundControls: false,
     warpable: false,
     pinchable: false,
     clippable: false,
@@ -1067,9 +1109,10 @@ export function createHomeCanvasSelectionFrame(options) {
      규칙에는 pointer-events 가 아예 없어서 부모 값을 그대로 받는다
      (번들 실측). 그래서 리사이즈 손잡이에만 `auto` 를 되돌려 준다.
 
-     테두리 네 줄(`.moveable-line`)과 그룹의 `.moveable-area` 는
-     그대로 꺼 둔다 — 요소의 가장자리를 정확히 누른 클릭이 스킨 DOM
-     에 닿아야 하고, 그 자리는 여전히 "이 요소를 고른다"다.
+     테두리 네 줄(`.moveable-line`) · 회전 손잡이의 막대
+     (`.moveable-rotation-line`) · 그룹의 `.moveable-area` 는 그대로
+     꺼 둔다 — 요소의 가장자리를 정확히 누른 클릭이 스킨 DOM 에
+     닿아야 하고, 그 자리는 여전히 "이 요소를 고른다"다.
 
      ★ CSSOM 으로 쓰는 인라인 값은 CSP 의 style-src 검사를 받지
        않는다(검사 대상은 마크업의 style **속성**이다). 우리 몫의
@@ -1096,6 +1139,25 @@ export function createHomeCanvasSelectionFrame(options) {
       handle.style.pointerEvents = "auto";
     });
 
+    /* =====================================================
+       HOME-CANVAS-TRANSFORM-1C — 회전 손잡이도 같은 사정이다.
+
+       ★ 되돌려 주는 것은 **손잡이 하나**다. 그것을 매달고 있는
+         막대(`.moveable-rotation-line`)와 그 감싸개는 그대로 꺼
+         둔다 — 요소 위쪽의 그 띠가 입력을 먹으면 바로 밑의 스킨
+         DOM 을 누를 수 없게 된다.
+
+       ★ 회전 손잡이에는 `data-direction` 이 **없다**(0.53.0 실측:
+         class 가 `control rotation-control` 뿐이다). 그래서 위
+         리사이즈 손잡이 셈에 섞이지 않는다.
+    ====================================================== */
+    Array.prototype.forEach.call(
+      box.querySelectorAll(".moveable-rotation-control"),
+      (handle) => {
+        handle.style.pointerEvents = "auto";
+      }
+    );
+
     return handles.length;
 
   }
@@ -1119,8 +1181,29 @@ export function createHomeCanvasSelectionFrame(options) {
   */
   function resizeHandleNodes(hitOnly) {
 
+    return visibleHandleNodes(".moveable-control[data-direction]", hitOnly);
+
+  }
+
+
+  /*
+    rotationHandleNodes(hitOnly)
+
+    HOME-CANVAS-TRANSFORM-1C — 회전 손잡이도 같은 자로 센다. 여럿을
+    골랐을 때 "회전 손잡이가 없다"는 노드 수가 아니라 **화면에
+    실제로 있는 것**으로 물어야 참이 된다(위 ★ 주석).
+  */
+  function rotationHandleNodes(hitOnly) {
+
+    return visibleHandleNodes(".moveable-rotation-control", hitOnly);
+
+  }
+
+
+  function visibleHandleNodes(selector, hitOnly) {
+
     return Array.prototype.filter.call(
-      doc.querySelectorAll(".moveable-control[data-direction]"),
+      doc.querySelectorAll(selector),
       (handle) => {
 
         if (!handle.getClientRects || handle.getClientRects().length === 0) {
@@ -1254,6 +1337,10 @@ export function createHomeCanvasSelectionFrame(options) {
       state.moveable.on("resize", onCanvasResize);
       state.moveable.on("resizeEnd", onCanvasResizeEnd);
 
+      state.moveable.on("rotateStart", onCanvasRotateStart);
+      state.moveable.on("rotate", onCanvasRotate);
+      state.moveable.on("rotateEnd", onCanvasRotateEnd);
+
       /*
         ★ 여기서 한 번 **flush** 한다.
 
@@ -1376,6 +1463,14 @@ export function createHomeCanvasSelectionFrame(options) {
           ? []
           : CANVAS_RESIZE_DIRECTIONS;
 
+      /* HOME-CANVAS-TRANSFORM-1C — 회전 손잡이도 **단독 선택에만**
+         있다. 그릴 자리를 `"none"` 으로 주면 손잡이가 아예 만들어
+         지지 않는다(위 displayOnlyMoveableOptions 의 ★ 주석). */
+      state.moveable.rotationPosition =
+        (Array.isArray(target) && target.length > 1)
+          ? CANVAS_ROTATION_POSITION_NONE
+          : CANVAS_ROTATION_POSITION;
+
       state.moveable.target = target;
       state.moveable.updateRect();
 
@@ -1490,6 +1585,7 @@ export function createHomeCanvasSelectionFrame(options) {
     if (
       typeof win.setSkinCanvasElementPosition !== "function" ||
       typeof win.setSkinCanvasElementBox !== "function" ||
+      typeof win.setSkinCanvasElementRotation !== "function" ||
       typeof win.readSkinCanvasElementBoxVars !== "function" ||
       typeof win.restoreSkinCanvasElementBoxVars !== "function"
     ) {
@@ -1510,6 +1606,11 @@ export function createHomeCanvasSelectionFrame(options) {
           뒤 위치만 돌아왔다"가 생긴다.
       */
       setBox: win.setSkinCanvasElementBox,
+
+      /* HOME-CANVAS-TRANSFORM-1C — 각도를 쓰는 함수(§0-3).
+         읽기 · 되돌리기는 위 한 쌍이 각도까지 함께 한다. */
+      setRotation: win.setSkinCanvasElementRotation,
+
       read: win.readSkinCanvasElementBoxVars,
       restore: win.restoreSkinCanvasElementBoxVars
     };
@@ -1524,6 +1625,49 @@ export function createHomeCanvasSelectionFrame(options) {
       Math.round(value * CANVAS_COORD_DECIMALS) / CANVAS_COORD_DECIMALS;
 
     return Object.is(rounded, -0) ? 0 : rounded;
+
+  }
+
+
+  /* =========================================================
+     HOME-CANVAS-TRANSFORM-1C — 확정 값의 표현을 정하는 **한 곳**
+
+     normalizeCanvasRotation(deg)
+
+     제스처 **도중**에는 연속 각도를 그대로 쓴다(시작 각도 + 누적
+     회전량). 그래야 한 바퀴를 넘는 순간에도 화면이 반대로 튀지
+     않는다 — 350° 에서 조금 더 돌린 값은 365° 이지 5° 가 아니다.
+
+     저장할 때만 한 바퀴 안으로 접는다.
+
+       · 화면에서 보이는 각도는 같다(365° 와 5° 는 같은 그림이다)
+       · 같은 자리를 여러 번 돌려도 숫자가 계속 자라지 않는다
+
+     ★ 이미 저장된 값을 일괄로 고치지 않는다. 여기서 접히는 것은
+       **이번 제스처가 실제로 바꾼 그 요소의 새 값** 하나뿐이고,
+       손대지 않은 요소의 -30 · 400 은 그대로 남는다(계약 §5 는
+       "유한한 숫자"까지만 요구한다).
+
+     ★ 자릿수 규칙은 좌표와 같다 — 소수 셋째 자리까지(위
+       roundCanvasCoord). 접은 뒤에 반올림해야 359.9996 이
+       360 으로 저장되지 않는다.
+  ========================================================== */
+
+  function normalizeCanvasRotation(deg) {
+
+    if (!Number.isFinite(deg)) {
+      return 0;
+    }
+
+    const folded =
+      ((deg % CANVAS_FULL_TURN) + CANVAS_FULL_TURN) % CANVAS_FULL_TURN;
+
+    const rounded =
+      roundCanvasCoord(folded);
+
+    /* 359.9999 는 접은 뒤에도 한 바퀴 안이지만, 반올림이 그것을
+       360 으로 만들 수 있다 — 그때는 0 이다. */
+    return rounded === CANVAS_FULL_TURN ? 0 : rounded;
 
   }
 
@@ -1818,6 +1962,12 @@ export function createHomeCanvasSelectionFrame(options) {
       baseY: geometry.y,
       baseW: geometry.width,
       baseH: geometry.height,
+
+      /* 이동은 각도를 바꾸지 않는다 — 시작값을 그대로 들고 있다가
+         부모의 답과 대조할 때만 쓴다(HOME-CANVAS-TRANSFORM-1C) */
+      baseRot: geometry.rotation,
+      nextRot: geometry.rotation,
+
       baseWidth: geometry.baseWidth,
       baseHeight: geometry.baseHeight,
       generation: state.generation,
@@ -1951,6 +2101,10 @@ export function createHomeCanvasSelectionFrame(options) {
         한 번 재는 것이 유일한 출발점이다.
       */
       autoBaseH: autoHeight ? renderedHeightIn(el, scale) : 0,
+
+      /* 리사이즈도 각도를 바꾸지 않는다(HOME-CANVAS-TRANSFORM-1C) */
+      baseRot: geometry.rotation,
+      nextRot: geometry.rotation,
 
       baseWidth: geometry.baseWidth,
       baseHeight: geometry.baseHeight,
@@ -2116,6 +2270,196 @@ export function createHomeCanvasSelectionFrame(options) {
       width: gesture.nextW,
       height: gesture.nextH
     });
+
+  }
+
+
+  /* =========================================================
+     HOME-CANVAS-TRANSFORM-1C — 회전
+
+     ★ 누적 회전량은 Moveable 이 준 `dist` 다.
+
+     0.53.0 의 rotate payload 는 `{ delta, dist, rotate, beforeDist,
+     beforeDelta, beforeRotate, … }` 이고, 번들 안에서
+     `rotation = 시작각 + dist` 로 만들어진다(실측: `rotate` 와
+     `dist` 의 차가 제스처 내내 시작각 그대로였다). 그래서
+     **우리가 쓰는 것은 `dist` 하나**다.
+
+       최종 각도 = 시작 rotation(부모가 준 값) + dist
+
+     · CSS transform 문자열을 파싱해 지금 각도를 역산하지 않는다 —
+       그 값은 우리가 쓴 그 칸에서 나온 것이고, 되돌려 읽으면
+       자릿수가 한 번 더 버려진다.
+     · 축에 정렬된 바깥 상자(getBoundingClientRect)로 각도를 재지
+       않는다 — 그 상자는 회전을 지운 그림자다.
+     · 매 이벤트의 `delta` 를 직전 값에 더하지 않는다. 이벤트 수와
+       무관하고 반올림이 쌓이지 않아야 한다(이동 · 리사이즈와 같은
+       규칙 — §17-3).
+
+     ★ 부모 Preview 의 `transform: scale()` 을 각도에 보정하지
+       않는다. 균등 배율은 각도를 바꾸지 않는다 — 길이만 바꾼다.
+       (배율이 축마다 다르면 각도가 달라지지만, 도화지는 가로에
+       세로를 묶어 두었으므로 그런 경우가 없다 — §12-2.)
+
+     ★ 상자는 한 칸도 바뀌지 않는다. 회전 중심이 요소 상자의
+       정중앙이라(transform-origin 기본값) x · y · width · height 가
+       그대로여도 화면이 맞는다 — `"auto"` 높이도 그대로다.
+  ========================================================== */
+
+  function onCanvasRotateStart(event) {
+
+    const gate =
+      dragGate();
+
+    if (gate !== "ok") {
+      return refuseDrag(event, gate);
+    }
+
+    /* 손가락으로는 돌리지 않는다 — 이동 · 리사이즈와 같은 이유이고
+       같은 판정 함수를 쓴다(§17-2 · §18-12) */
+    if (isCoarsePointerEvent(event && event.inputEvent)) {
+      return refuseDrag(event, "coarse-pointer");
+    }
+
+    const geometry =
+      state.geometry;
+
+    const el =
+      elementFor(geometry.id);
+
+    const api =
+      positionApi();
+
+    if (!el || !api) {
+      return refuseDrag(event, "no-basis");
+    }
+
+    state.drag = {
+      kind: CANVAS_ROTATE_KIND,
+      id: geometry.id,
+      el: el,
+
+      /* 배율은 각도에 들어가지 않지만(위 ★), 상자 네 칸은 확정의
+         `expected` 로 올라가지 않으므로 여기서는 시작값만 들고
+         있으면 된다 */
+      scale: canvasScale(geometry.baseWidth),
+
+      baseX: geometry.x,
+      baseY: geometry.y,
+      baseW: geometry.width,
+      baseH: geometry.height,
+
+      /* 시작 각도. 부모가 내려 준 값 하나이고, `rotation` 이 없는
+         요소는 부모가 이미 0 으로 만들어 보냈다(계약 §5). */
+      baseRot: geometry.rotation,
+
+      /* 화면에 지금 적혀 있는 연속 각도(한 바퀴를 넘을 수 있다) */
+      viewRot: geometry.rotation,
+
+      /* 확정으로 올릴 값 — 한 바퀴 안으로 접은 표현이다 */
+      nextRot: geometry.rotation,
+
+      baseWidth: geometry.baseWidth,
+      baseHeight: geometry.baseHeight,
+      generation: state.generation,
+      saved: api.read(el),
+      nextX: geometry.x,
+      nextY: geometry.y,
+      nextW: geometry.width,
+      nextH: geometry.height,
+      cancelled: false
+    };
+
+    state.lastMoveGate = "ok";
+
+    return true;
+
+  }
+
+
+  function onCanvasRotate(event) {
+
+    const gesture =
+      state.drag;
+
+    if (!gesture || gesture.cancelled || gesture.kind !== CANVAS_ROTATE_KIND) {
+      return;
+    }
+
+    if (!gesture.el.isConnected) {
+      cancelDrag("detached");
+      return;
+    }
+
+    const api =
+      positionApi();
+
+    if (!api) {
+      cancelDrag("no-renderer");
+      return;
+    }
+
+    const dist =
+      (event && Number.isFinite(event.dist)) ? event.dist : null;
+
+    if (dist === null) {
+      return;
+    }
+
+    /* ★ 시작값 + **누적** 회전량이다(위 머리말) */
+    gesture.viewRot =
+      roundCanvasCoord(gesture.baseRot + dist);
+
+    gesture.nextRot =
+      normalizeCanvasRotation(gesture.baseRot + dist);
+
+    try {
+
+      /* 끄는 동안 움직이는 것은 이 **한 칸**이다 — 상자 네 칸도
+         JSON 도 draft 도 Undo 도 한 글자 바뀌지 않는다(§18-5) */
+      api.setRotation(gesture.el, gesture.viewRot);
+
+    }
+    catch (err) {
+      cancelDrag("write-failed");
+    }
+
+  }
+
+
+  function onCanvasRotateEnd() {
+
+    const gesture =
+      state.drag;
+
+    if (!gesture || gesture.kind !== CANVAS_ROTATE_KIND) {
+      return;
+    }
+
+    state.drag = null;
+
+    if (gesture.cancelled) {
+      return;
+    }
+
+    /* =====================================================
+       돌지 않았다 — 확정도, 기록도 없다(§17-6).
+
+       ★ 판정은 **연속 각도**로 한다. 접은 값으로 보면 손잡이를
+         누르기만 한 요소의 저장된 400° 가 40° 로 조용히 바뀐다 —
+         이번 제스처가 실제로 돌린 것만 저장한다.
+    ====================================================== */
+    if (gesture.viewRot === gesture.baseRot) {
+      restoreDragPosition(gesture);
+      state.lastMoveGate = "no-rotate";
+      return;
+    }
+
+    sendTransform(
+      gesture,
+      { rotation: gesture.baseRot },
+      { rotation: gesture.nextRot }
+    );
 
   }
 
@@ -2341,6 +2685,11 @@ export function createHomeCanvasSelectionFrame(options) {
             y: payload.y,
             width: payload.width,
             height: payload.height,
+
+            /* HOME-CANVAS-TRANSFORM-1C — 시작 각도. 요소에 `rotation`
+               이 없으면 부모가 0 으로 만들어 보낸다(계약 §5) */
+            rotation: payload.rotation,
+
             baseWidth: payload.baseWidth,
             baseHeight: payload.baseHeight,
             generation:
@@ -2353,7 +2702,7 @@ export function createHomeCanvasSelectionFrame(options) {
     state.geometryLog.push(
       value
         ? `${value.id}@${value.x},${value.y} ${value.width}x${value.height}` +
-            `#${value.generation}${state.pending ? "*" : ""}`
+            `r${value.rotation}#${value.generation}${state.pending ? "*" : ""}`
         : `off${state.pending ? "*" : ""}`
     );
 
@@ -2368,6 +2717,9 @@ export function createHomeCanvasSelectionFrame(options) {
       Number.isFinite(value.y) &&
       Number.isFinite(value.width) && value.width > 0 &&
       usableGeometryHeight(value.height) &&
+      /* 각도 없이는 회전을 시작할 수 없다 — 크기와 같은 이유로
+         **선택 칸이 아니다**(계약 §19-6) */
+      Number.isFinite(value.rotation) &&
       value.baseWidth > 0 &&
       value.baseHeight > 0 &&
       value.generation >= 0;
@@ -2391,16 +2743,17 @@ export function createHomeCanvasSelectionFrame(options) {
 
     if (state.drag) {
 
-      /* ★ 네 칸을 **모두** 본다. 이동 중에 폭이 달라졌다는 것도
-         "그 사이에 draft 가 바뀌었다"이고, 그때의 이동은 이미 옛
-         화면을 근거로 한 것이다. */
+      /* ★ **다섯 칸을 모두** 본다(1C 에서 각도가 늘었다). 이동 중에
+         폭이나 각도가 달라졌다는 것도 "그 사이에 draft 가 바뀌었다"
+         이고, 그때의 제스처는 이미 옛 화면을 근거로 한 것이다. */
       if (
         usable &&
         value.id === state.drag.id &&
         value.x === state.drag.baseX &&
         value.y === state.drag.baseY &&
         value.width === state.drag.baseW &&
-        value.height === state.drag.baseH
+        value.height === state.drag.baseH &&
+        value.rotation === state.drag.baseRot
       ) {
         state.drag.generation = value.generation;
       }
@@ -2477,6 +2830,11 @@ export function createHomeCanvasSelectionFrame(options) {
               value.baseHeight
             );
 
+            /* HOME-CANVAS-TRANSFORM-1C — 각도도 같은 한 벌로 맞춘다.
+               회전의 답에서는 접힌 값이 내려오고(365° → 5°), 이동 ·
+               리사이즈의 답에서는 시작값이 그대로 내려온다. */
+            api.setRotation(el, value.rotation);
+
           }
           catch (err) {
             /* 이미 갈린 노드다 — 새 DOM 이 제자리를 그린다 */
@@ -2489,7 +2847,8 @@ export function createHomeCanvasSelectionFrame(options) {
             value.x === pending.nextX &&
             value.y === pending.nextY &&
             value.width === pending.nextW &&
-            value.height === pending.nextH
+            value.height === pending.nextH &&
+            value.rotation === pending.nextRot
           )
             ? "accepted"
             : "restored";
@@ -3485,6 +3844,11 @@ export function createHomeCanvasSelectionFrame(options) {
           ),
         resizeHandleHit: resizeHandleNodes(true).length,
 
+        /* HOME-CANVAS-TRANSFORM-1C — 회전 손잡이는 **하나**이고,
+           같은 자로 센다(화면에 있는 것 · 잡을 수 있는 것) */
+        rotationHandles: rotationHandleNodes(false).length,
+        rotationHandleHit: rotationHandleNodes(true).length,
+
         geometry:
           state.geometry
             ? {
@@ -3493,6 +3857,7 @@ export function createHomeCanvasSelectionFrame(options) {
                 y: state.geometry.y,
                 width: state.geometry.width,
                 height: state.geometry.height,
+                rotation: state.geometry.rotation,
                 generation: state.geometry.generation
               }
             : null,
@@ -3511,7 +3876,12 @@ export function createHomeCanvasSelectionFrame(options) {
         lastHit: state.lastHit,
         lastSelectable: state.lastSelectable,
         controlBoxDisplay: box ? box.style.display : null,
-        lines: box ? box.querySelectorAll(".moveable-line").length : 0,
+        /* 테두리 **네 줄**. 회전 손잡이의 막대
+           (`.moveable-rotation-line`)는 외곽이 아니므로 빼고 센다
+           (HOME-CANVAS-TRANSFORM-1C). */
+        lines: box
+          ? box.querySelectorAll(".moveable-line:not(.moveable-rotation-line)").length
+          : 0,
         rect: rect
       };
 

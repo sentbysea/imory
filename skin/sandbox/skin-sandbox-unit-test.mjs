@@ -686,9 +686,11 @@ const canvasTransformFrom = (payload) =>
 
 /* HOME-CANVAS-TRANSFORM-1B — width · height 는 active 면 **반드시**
    있다. 프레임은 크기를 모르는 채로 리사이즈를 시작할 수 없다. */
+/* HOME-CANVAS-TRANSFORM-1C — `rotation` 도 active 면 **반드시**
+   있다. 요소에 그 칸이 없으면 부모가 0 을 싣는다. */
 const GEOMETRY_ON = {
   contract: 1, renderSeq: 3, active: true, id: "cvPhoto",
-  x: 20, y: 40, width: 90, height: 60,
+  x: 20, y: 40, width: 90, height: 60, rotation: 0,
   baseWidth: 390, baseHeight: 844, generation: 5
 };
 
@@ -729,9 +731,13 @@ check("[canvas-move] 음수 좌표를 막지 않는다",
   "도화지 밖으로 나가는 것은 계약이 허용한다(자동 clamp 없음)");
 
 check("[canvas-move] ★ 아직 이름이 없는 kind 는 거부된다",
-  canvasTransformFrom({ ...MOVE_OK, kind: "rotate" }).ok === false &&
-  canvasTransformFrom({ ...MOVE_OK, kind: "scale" }).ok === false,
-  "회전 · 그룹 조작은 그 단계에서 이 배열에 이름을 더한다");
+  canvasTransformFrom({ ...MOVE_OK, kind: "scale" }).ok === false &&
+  canvasTransformFrom({ ...MOVE_OK, kind: "group-move" }).ok === false,
+  "그룹 조작은 그 단계에서 이 배열에 이름을 더한다");
+
+check("[canvas-move] ★ kind 를 rotate 로 바꿔 달기만 하면 거부된다",
+  canvasTransformFrom({ ...MOVE_OK, kind: "rotate" }).ok === false,
+  "rotate 가 소유하는 것은 각도 한 칸이다 — 좌표 둘이 실린 rotate 는 그 모양이 아니다");
 
 check("[canvas-move] ★ kind 를 resize 로 바꿔 달기만 하면 거부된다",
   canvasTransformFrom({ ...MOVE_OK, kind: "resize" }).ok === false,
@@ -927,6 +933,81 @@ check("[canvas-resize] ★ 알려진 칸만 새 리터럴로 옮겨진다",
     );
 
   })());
+
+
+/* =========================================================
+   [canvas-rotate] HOME-CANVAS-TRANSFORM-1C — 각도 확정
+
+   ★ 이번 단계가 소유하는 것은 **한 칸**이다(rotation). 상자 네 칸은
+     회전이 바꾸지 않으므로(회전 중심이 요소 상자의 정중앙이다),
+     좌표나 크기가 섞인 회전 메시지는 통째로 버려져야 한다.
+
+   ★ 각도의 허용 범위는 계약이 이미 가진 그것 하나다 — **유한한
+     숫자**. 좌표의 ±100000 을 빌려 오지 않는다: `expected` 는 저장된
+     그 값 그대로 올라오므로, 범위를 새로 만들면 이미 저장된 큰
+     각도를 가진 요소를 영영 돌릴 수 없게 된다.
+========================================================== */
+
+console.log("\n[canvas-rotate] 각도 확정 (HOME-CANVAS-TRANSFORM-1C)");
+
+const ROTATE_OK = {
+  contract: 1, renderSeq: 3, kind: "rotate", id: "cvPhoto",
+  expected: { rotation: 0 }, next: { rotation: 32.125 },
+  generation: 5, requestId: 3
+};
+
+check("[canvas-rotate] 정상 회전 요청을 부모가 받는다",
+  canvasTransformFrom(ROTATE_OK).ok === true);
+
+check("[canvas-rotate] 음수 각도도 통과한다",
+  canvasTransformFrom({ ...ROTATE_OK, expected: { rotation: -30 } }).ok === true,
+  "이미 저장된 값이 `expected` 로 그대로 올라온다 — 일괄 정규화하지 않는다");
+
+check("[canvas-rotate] 한 바퀴를 넘는 기존 값도 통과한다",
+  canvasTransformFrom({ ...ROTATE_OK, expected: { rotation: 400 } }).ok === true);
+
+check("[canvas-rotate] ★ next 에 좌표가 섞이면 메시지 전체가 거부된다",
+  canvasTransformFrom({
+    ...ROTATE_OK, next: { rotation: 30, x: 10, y: 20 }
+  }).ok === false,
+  "회전은 상자를 바꾸지 않는다 — 그 계약이 메시지 층에도 있다");
+
+check("[canvas-rotate] ★ 각도가 빠지면 거부된다",
+  canvasTransformFrom({ ...ROTATE_OK, next: {} }).ok === false &&
+  canvasTransformFrom({ ...ROTATE_OK, expected: {} }).ok === false);
+
+check("[canvas-rotate] ★ 유한하지 않은 각도는 거부된다",
+  canvasTransformFrom({ ...ROTATE_OK, next: { rotation: "30" } }).ok === false &&
+  canvasTransformFrom({ ...ROTATE_OK, next: { rotation: Infinity } }).ok === false &&
+  canvasTransformFrom({ ...ROTATE_OK, next: { rotation: NaN } }).ok === false);
+
+check("[canvas-rotate] ★ move · resize 에 각도가 섞이면 여전히 거부된다",
+  canvasTransformFrom({
+    ...MOVE_OK, next: { x: 1, y: 2, rotation: 30 }
+  }).ok === false &&
+  canvasTransformFrom({
+    ...RESIZE_OK, expected: { rotation: 0 }
+  }).ok === false,
+  "kind 마다 소유하는 모양이 하나다 — 서로의 자리에 들어갈 수 없다");
+
+check("[canvas-rotate] 좌표 메시지에 각도가 함께 내려간다",
+  (() => {
+
+    const verdict =
+      canvasGeometryTo({ ...GEOMETRY_ON, rotation: -12.5 });
+
+    return verdict.ok === true && verdict.payload.rotation === -12.5;
+
+  })());
+
+check("[canvas-rotate] ★ 각도가 빠진 좌표 메시지는 거부된다",
+  canvasGeometryTo({ ...GEOMETRY_ON, rotation: undefined }).ok === false,
+  "프레임은 시작 각도를 모르는 채로 회전을 시작할 수 없다");
+
+check("[canvas-rotate] ★ 해제에는 각도 칸도 없다",
+  canvasGeometryTo({
+    contract: 1, renderSeq: 3, active: false, rotation: 0, generation: 5
+  }).ok === false);
 
 
 /* =========================================================

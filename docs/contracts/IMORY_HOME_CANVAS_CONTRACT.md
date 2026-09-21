@@ -60,16 +60,20 @@
 | `SELECT-1B-1` | **조건부 vendor 활성화와 회전을 따라가는 선택 틀**(§15) — 첫 Canvas 요소를 고른 그 순간에만 프레임 안에서 runtime · 로더 · UMD 를 받고, 단일 선택 요소에 Moveable 로 테두리 하나를 그린다. **표시 전용**이다 — 손잡이 · 조작 · Canvas JSON 쓰기는 없다 |
 | `SELECT-1B-2` | **Selecto lasso 와 다중 선택**(§16) — 끌어서 여러 개를 고르고 Shift 로 더하고 뺀다. 관문이 "첫 선택"에서 "Canvas 가 있는 HOME 에서 Select 를 켬"으로 앞당겨졌다. 프레임은 **제안만** 하고 부모가 draft 로 전부 다시 보고 확정한다. 여전히 **고르는 것까지**다 |
 | `TRANSFORM-1A` | **단독으로 고른 요소 하나의 이동**(§17) — 마우스 · 펜으로 끌어 옮기고 그 결과가 `canvas.elements[].x` · `.y` 에 저장된다. **여기서부터 Canvas JSON 이 바뀐다.** 한 제스처가 Undo 한 칸이고, Save · Export/Import · Publish resolve 를 그대로 지난다. 크기 · 회전 · 그룹 이동 · 손가락 이동은 **없다** |
+| `TRANSFORM-1B` | **단독 선택 요소의 리사이즈**(§18) — 손잡이 여덟으로 크기를 바꾸고 `x` · `y` · `width` · `height` **네 칸**에 저장한다. `"auto"` 높이가 언제 숫자가 되는지도 여기서 정해졌다. 확정 경로 · Undo · 취소는 `1A` 와 **한 벌**이다 |
+| `TRANSFORM-1C` | **단독 선택 요소의 회전**(§19) — 손잡이 하나로 돌리고 `rotation` **한 칸**에 저장한다. 상자 네 칸은 바뀌지 않는다(회전 중심이 요소 상자의 정중앙이다). 같은 확정 경로에 `kind:"rotate"` 가 늘었다. **이동 · 리사이즈 · 회전으로 기본 조작이 갖춰졌다** |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
 
-- 크기 · 회전 조작 UI · 손잡이 · 그룹 이동 · Canvas Inspector 입력 필드 ·
-  preset · 스티커 업로드 · widget — **하나도 없다**(§11).
+- **그룹 조작**(그룹 이동 · 그룹 리사이즈 · 그룹 회전) · 스냅 · 가이드 ·
+  키보드 조작 · Canvas Inspector 입력 필드 · preset · 스티커 업로드 ·
+  widget — **하나도 없다**(§11 · §19-12).
 - `SELECT-1A` · `SELECT-1B-1` · `SELECT-1B-2` 는 **고르고 · 푸는 것 · 그것을
   보여 주는 것**까지다(§14-6 · §15-8 · §16-9). 고른 뒤에 바꿀 수 있는 것은
-  `TRANSFORM-1A` 가 연 **x · y 두 칸뿐**이다(§17).
-- **모바일 lasso 도 손가락 이동도 의도적으로 미지원**이다 — 그 자리는 단일
-  탭 선택과 Preview 스크롤이 지킨다(§16-3 · §17-2).
+  `TRANSFORM-1A · 1B · 1C` 가 연 **x · y · width · height · rotation
+  다섯 칸뿐**이다(§17 · §18 · §19).
+- **모바일 lasso 도 손가락 조작도 의도적으로 미지원**이다 — 그 자리는 단일
+  탭 선택과 Preview 스크롤이 지킨다(§16-3 · §17-2 · §18-12 · §19-10).
 
 ---
 
@@ -565,11 +569,14 @@ E2E 가 네 화면을 실제로 띄워 **DOM 을 글자 단위로, 좌표를 1px
 
 ### 11-2. UI (`SELECT-1` · `HISTORY-1` · `ELEMENTS-1` 이후)
 
-**있는 것은 단일 요소 이동 하나다**(`TRANSFORM-1A` — §17). 마우스 · 펜으로
-끌어 `x` · `y` 를 바꾸고, 한 제스처가 Undo 한 칸이다.
+**있는 것은 단독 선택 요소의 이동 · 리사이즈 · 회전 셋이다**
+(`TRANSFORM-1A` — §17, `1B` — §18, `1C` — §19). 마우스 · 펜으로 끌어
+`x` · `y` · `width` · `height` · `rotation` 을 바꾸고, 한 제스처가 Undo
+한 칸이다.
 
-크기 · 회전 · 세로 손잡이 · 그룹 이동 · 손가락 이동 · Inspector 입력 필드 ·
-preset · 사진 자동 매핑 · sticker 업로드 · widget — **아직 하나도 없다.**
+**그룹 조작**(이동 · 리사이즈 · 회전) · 스냅 · 가이드 · 키보드 조작 ·
+손가락 조작 · Inspector 입력 필드 · preset · 사진 자동 매핑 · sticker
+업로드 · widget — **아직 하나도 없다.**
 
 그 밖에는 **고르고 · 푸는 것 · 그것을 보여 주는 것만 있다**
 (`SELECT-1A` — §14, `SELECT-1B-1` — §15, `SELECT-1B-2` — §16).
@@ -595,9 +602,11 @@ Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조�
 | **회전을 따라가는 선택 틀**(지금 테두리는 축에 평행한 사각형이라 회전 요소에서는 외곽 상자를 그린다 — §14-4) | `HOME-CANVAS-SELECT-1B` |
 | **다중 선택 UI**(상태는 배열이지만 `ids` 가 최대 1개다 — §14-2) | `HOME-CANVAS-SELECT-1B` |
 | ~~이동을 Canvas JSON 에 쓰는 경로~~ — **`TRANSFORM-1A` 에서 끝났다**(§17). 기존 `applyStudioInspectorPatch` 는 HTML/CSS 전용이라 쓰지 않는다(§14-6) | 완료 |
-| **크기 · 회전을 Canvas JSON 에 쓰는 경로**(이동은 §17 이 연 길을 그대로 쓴다 — `kind` 에 이름을 더하고 `expected`/`next` 의 허용 키를 늘린다) | `HOME-CANVAS-TRANSFORM-1B` |
-| **그룹 이동**(지금은 여럿을 고르면 틀만 남고 이동이 꺼진다 — §17-1) | `HOME-CANVAS-TRANSFORM-1B` |
-| **손가락 이동**(의도적 미지원 — 그 자리는 Preview 스크롤이 지킨다 — §17-2) | `HOME-CANVAS-LAYERS-1` 의 모바일 다중 선택과 함께 |
+| ~~크기를 Canvas JSON 에 쓰는 경로~~ — **`TRANSFORM-1B` 에서 끝났다**(§18) | 완료 |
+| ~~회전을 Canvas JSON 에 쓰는 경로~~ — **`TRANSFORM-1C` 에서 끝났다**(§19) | 완료 |
+| **그룹 조작**(지금은 여럿을 고르면 틀만 남고 이동 · 손잡이가 전부 꺼진다 — §17-1 · §18-1 · §19-1) | `HOME-CANVAS-TRANSFORM-1D` |
+| **스냅 · 가이드 · 키보드 조작 · Shift 각도 스냅 · 사용자 지정 회전 중심**(§19-12) | `HOME-CANVAS-TRANSFORM-1D` |
+| **손가락 조작**(의도적 미지원 — 그 자리는 Preview 스크롤이 지킨다 — §17-2 · §18-12 · §19-10) | `HOME-CANVAS-LAYERS-1` 의 모바일 다중 선택과 함께 |
 | **캔버스 요소의 Inspector 입력 필드**(글꼴 · 색 · 글자 내용 · 이미지 교체 · 자르기) | `HOME-CANVAS-INSPECT-1` |
 | **hidden · locked 를 다루는 레이어 목록**(지금 숨긴 요소는 Studio 에서 다시 고를 방법이 없다 — §14-3) | `HOME-CANVAS-LAYERS-1` |
 | 390 저장 좌표 → 데스크톱 폭 변환 규칙 | `HOME-CANVAS-RESPONSIVE-1` |
@@ -2122,6 +2131,263 @@ Alt 중심 기준 확대 · flip · 음수 크기 전환 · 스냅 · 가이드 
 UI · 텍스트 직접 편집 · 이미지 교체 · Crop · 레이어 목록 · effect
 hook · preset · widget · 좌우 패널 Canvas · responsive override ·
 **손가락 조작** — 하나도 없다.
+
+> **하나가 채워졌다 → §19(`HOME-CANVAS-TRANSFORM-1C`).** 회전 조작과
+> 회전 손잡이는 그 라운드가 더했다. 나머지는 그대로 없고, 그 목록은
+> §19-12 가 다시 적는다.
+
+저자 CSS/JS 가 geometry 를 강제로 덮는 경우의 최종 우선순위는 여전히
+`HOME-CANVAS-EFFECT-HOOK-1` 의 몫이다(§17-10).
+
+
+---
+
+## 19. 단일 요소 회전 (`HOME-CANVAS-TRANSFORM-1C`)
+
+`1A`(§17) · `1B`(§18)가 연 길을 그대로 쓴다. 바뀌는 것은 **소유하는
+칸이 `rotation` 하나**라는 것뿐이다.
+
+**상자는 한 칸도 바뀌지 않는다.** 회전 중심이 요소 상자의 정중앙이라
+(§4 · `transform-origin` 기본값) `x` · `y` · `width` · `height` 가
+그대로여도 화면이 맞는다. `height:"auto"` 도 `"auto"` 그대로다.
+
+그룹 회전 · Shift 각도 스냅 · 15° 스냅 · 가이드 · 사용자 지정 중심점은
+이 라운드에 없다(§19-12).
+
+### 19-1. 관련 파일과 켜지는 조건
+
+| 파일 | 이 라운드에서 하는 일 |
+| --- | --- |
+| `skin/skin-home-canvas-render.js` | `applySkinCanvasElementRotation()` — 각도를 쓰는 **한 곳**(§19-4). 요소를 처음 만들 때도 이 함수다. 읽기 · 되돌리기 한 벌에도 각도가 들어왔다 |
+| `skin/skin-home-canvas.js` | `writeSkinHomeCanvasElementRotation()` — 순수 불변 수정. 이동 · 리사이즈와 **같은 복사 규칙**을 공유한다(`writeSkinHomeCanvasElementFields`) |
+| `skin/skin-home-canvas-editor-runtime.js` | 회전 손잡이 · 제스처 · 임시 각도 · 확정 요청 · 취소 · `normalizeCanvasRotation()` (두 프레임 공용) |
+| `studio/inspector/studio-canvas-selection.js` | `commitStudioCanvasElementTransform()` — `kind` 가 하나 더 늘었다(§19-6) |
+| `studio/studio-preview.js` | `setStudioCanvasElementRotation()` — draft · 기록 · dirty · 다시 그리기 |
+| `skin/sandbox/skin-sandbox-protocol.js` · `-host.js` · `-frame.js` | 메시지 둘에 각도가 늘었다(§19-9) |
+
+켜지는 조건은 **이동 · 리사이즈와 똑같다**(§17-1 의 그 일곱, 같은
+`dragGate()`). 다른 것은 제스처가 그 값에서 무엇을 바꾸는가뿐이다.
+
+단독 선택에서 회전 손잡이 **하나**를 요소 위쪽에 표시한다. **여럿을
+고르면 회전 손잡이가 없다** — 그룹 회전은 다음 단계다.
+
+> **함정 — `rotatable` 을 `true` 로 주면 손잡이가 여덟 개 더 생긴다.**
+> 0.53.0 의 Rotatable 은 자기 옵션을 `Vo(props,"rotatable")` 로 읽는데,
+> 그 함수는 `props.rotatable` 이 **객체가 아니면 props 를 통째로**
+> 본다(번들 실측). 그러면 우리가 리사이즈용으로 준
+> `renderDirections` 여덟을 **회전용 방향 손잡이 여덟**으로 한 번 더
+> 그린다 — `.moveable-control[data-direction]` 이 열여섯이 되고 손잡이
+> 계산이 통째로 어긋난다. 그래서 `rotatable: { renderDirections: false }`
+> 로 **객체로** 준다.
+
+> **able 은 여기서도 처음부터 켠다.** 여닫는 것은 `rotationPosition`
+> 이다 — `"none"` 이면 손잡이를 아예 그리지 않는다(번들 실측: `Ji()`
+> 첫 줄이 빈 배열을 돌려준다). 리사이즈의 `renderDirections: []` 과
+> 같은 자리이고, 같은 이유다(§18-1 의 그 함정).
+
+> **함정 — 회전 손잡이는 `.moveable-line` 을 하나 더 만든다.**
+> 손잡이를 요소에 매다는 40px 막대가 `.moveable-line
+> .moveable-rotation-line` 이다. "테두리 네 줄"을 `.moveable-line` 으로
+> 세던 자리(`SELECT-1B-1` 의 e2e · runtime 의 `debugState().lines`)가
+> 그때부터 **다섯**을 센다. 세는 쪽에서 `:not(.moveable-rotation-line)`
+> 으로 가른다 — 그 막대는 외곽이 아니다.
+
+### 19-2. 회전 기준
+
+- 회전 중심은 요소 상자의 **정중앙**이다. 별도의 `transform-origin`
+  필드를 만들지 않는다(§4).
+- `x` · `y` · `width` · `height` 는 회전 중 · 확정 후 모두 바뀌지
+  않는다. `"auto"` 높이도 그대로다.
+- 각도는 기존 `rotation` 칸 **하나**에 저장한다.
+- `rotation` 이 없는 요소는 화면상 `0°` 로 계산한다(§5).
+- **첫 회전 전까지는 단순 선택만으로 `rotation:0` 을 JSON 에 만들지
+  않는다.** 실제로 돌린 제스처만 그 칸을 만든다.
+- 허용 범위는 계약이 이미 가진 그것 하나다 — **유한한 숫자**(§5).
+  회전용으로 새 범위를 만들지 않고, 좌표의 `±100000` 을 빌려 오지도
+  않는다(§19-9).
+- 도화지 경계에 맞추는 clamp 는 하지 않는다.
+- 저장값은 **소수점 셋째 자리**까지(좌표와 같은 자).
+
+### 19-3. 한 바퀴를 넘을 때 — 제스처 중과 저장값을 가른다
+
+```text
+제스처 중 : 시작 rotation + 누적 회전량   (연속 각도 — 360 을 넘는다)
+저장값     : 그 값을 한 바퀴 안으로 접은 것 [0, 360)
+```
+
+- 350° 에서 조금 더 돌린 값은 **365° 이지 5° 가 아니다.** 제스처 중에
+  접으면 화면이 반대 방향으로 튄다.
+- 접는 것은 손을 놓을 때 **한 번**이고, 그 표현을 정하는 곳은 한 벌의
+  helper 하나다(`normalizeCanvasRotation()`). 접은 뒤에 반올림하므로
+  359.9996 이 `360` 으로 저장되지 않는다.
+- 접힌 값과 연속 값은 **같은 그림**이다(365° 와 5° 의 `rotate()` 는
+  같은 행렬이다). 그래서 확정 뒤 부모가 접힌 값을 내려보내도 화면이
+  달라지지 않는다.
+- **이미 저장된 값을 일괄로 고치지 않는다.** 접히는 것은 이번 제스처가
+  실제로 바꾼 그 요소의 새 값 하나뿐이고, 손대지 않은 요소의 `-30` ·
+  `400` 은 그대로 남는다(2026-09-21 e2e: Export → Import 뒤에도 `-30`).
+
+> **판정은 접은 값이 아니라 연속 각도로 한다.** "돌지 않았다"를 접은
+> 값으로 보면, 손잡이를 누르기만 한 요소의 저장된 `400°` 가 `40°` 로
+> 조용히 바뀐다. 이번 제스처의 누적 회전량이 0 이면 확정도 기록도
+> 없다.
+
+### 19-4. 각도를 쓰는 **한 곳**
+
+렌더러의 `applySkinCanvasElementRotation()` 하나다
+(`skin/skin-home-canvas-render.js` §0-3). 요소를 처음 만들 때도, 편집기가
+회전 중에 임시로 고칠 때도 그 함수다 — 자릿수 규칙이 두 벌이 되면
+"끄는 동안"과 "다시 그린 뒤"의 각도가 미세하게 달라진다. **이것이 없는
+문서에서는 편집기가 회전을 켜지 않는다**(이동 · 리사이즈와 같은 규칙).
+
+그 함수가 쓰는 것은 custom property 한 칸
+(`--imory-canvas-rotation`)이다. `transform` 문자열을 만들지 않는다 —
+요소의 transform 은 스킨 CSS 가 `rotate(var(…))` 로 갖고 있다
+(`skin/skin-home-canvas-render.css` §2).
+
+읽기 · 되돌리기는 **네 칸 + 높이 모드 + 각도를 한 벌로** 한다
+(`readSkinCanvasElementBoxVars` / `restore…`). 제스처마다 되돌리는
+범위가 갈라지면 "돌리다 취소했는데 크기만 돌아왔다"가 생긴다(§18-5 의
+그 이유 그대로다).
+
+### 19-5. 끄는 동안에는 아무것도 저장되지 않는다
+
+드래그 중에 움직이는 것은 **프레임 안의 custom property 한 칸**뿐이다.
+Canvas JSON · working draft · Undo 기록 · 스킨 CSS 는 한 글자도 바뀌지
+않는다. 상자 네 칸도 건드리지 않는다.
+
+제스처가 정상 종료될 때만 부모에 한 번 확정을 요청한다. 그 요청 ·
+기다림 · 요청 번호 · 상한 시간은 이동 · 리사이즈와 **한 벌**이다
+(`sendTransform()`).
+
+### 19-6. 부모 확정 — `kind` 가 소유하는 칸을 정한다
+
+```text
+canvas-transform  프레임 -> 부모
+  { kind, id, expected, next, generation, requestId }
+
+  kind "move"     expected · next = { x, y }
+  kind "resize"   expected · next = { x, y, width, height }
+  kind "rotate"   expected · next = { rotation }
+```
+
+부모가 다시 보는 것은 §18-6 의 그 열이고, 달라지는 것은 7 · 9 뿐이다 —
+`expected` · `next` 의 키가 **정확히 `rotation` 하나**이고 유한한
+숫자여야 한다.
+
+> **모르는 키는 버리지 않고 거부한다.** 회전 요청에 좌표가 섞이면
+> 메시지 전체가 버려지고, 반대로 이동 · 리사이즈 요청에 `rotation` 이
+> 섞여도 버려진다. `kind` 마다 소유하는 모양이 하나다.
+
+> **`rotation` 이 없는 요소의 `expected` 는 `0` 이다.** 부모가 내려
+> 보내는 geometry 가 그 요소의 각도를 0 으로 싣고(§19-9), 순수 함수도
+> **같은 자로** 지금 값을 읽는다(`spec.readCurrent`). 이 한 줄이
+> 없으면 "한 번도 돌린 적 없는 요소는 영영 돌릴 수 없다"가 된다 —
+> `0 !== undefined` 라서 `expected` 검사가 언제나 어긋난다.
+
+성공하면 한 요소의 `rotation` 한 칸만 불변 방식으로 바뀐다. element
+id · type · `x` · `y` · `width` · `height` · hidden · locked · `props` ·
+모르는 element 필드 · 다른 요소 · 배열 순서 · 다른 regions 항목 · 모르는
+region/canvas 필드는 전부 보존된다. 입력 SkinPackage 를 제자리에서
+고치지 않는다.
+
+### 19-7. Undo · Redo
+
+이동 · 리사이즈와 같다(§17-6 · §18-7). 한 번의 회전 제스처가 Undo 한
+칸이고, 회전량 0 과 거부는 기록을 만들지 않는다. 기존 Studio history 를
+그대로 쓴다.
+
+- **`rotation` 칸이 새로 생긴 회전을 Undo 하면 그 칸이 없던 상태로
+  정확히 돌아간다** — 기록이 draft 스냅샷을 참조로 들고 있기 때문이다.
+- Undo · Redo 뒤에도 선택 ID 는 유지되고, 다시 그려진 DOM 에 Moveable
+  target 과 손잡이들이 다시 붙는다.
+
+### 19-8. 취소
+
+§18-8 그대로다 — Escape · pointercancel · 프레임 교체 · HOME 이탈 ·
+Select 종료 · 선택 변경 · 요소 삭제 · Canvas 비활성화 · **시작 값이
+달라짐** · 부모 거부 · vendor/runtime 오류.
+
+> 시작 값 비교는 이제 **다섯 칸을 모두** 본다(네 칸 + 각도). 이동 중에
+> 각도가 달라졌다는 것도 "그 사이에 draft 가 바뀌었다"이다.
+
+### 19-9. 메시지
+
+```text
+canvas-geometry   부모 -> 프레임
+  { active, id?, x?, y?, width?, height?, rotation?,
+    baseWidth?, baseHeight?, generation, answering? }
+```
+
+`rotation` 은 `active` 면 **반드시 있다** — 프레임은 시작 각도를 모르는
+채로 회전을 시작할 수 없다. 요소에 그 칸이 없으면 부모가 `0` 을 싣는다.
+단독 선택이 아닐 때는 `active:false` 로 내려가고 나머지 칸은 **아예
+없다**(각도 칸까지).
+
+sandbox 메시지 층의 검사: 알려진 키만 · `kind` 는 `move` · `resize` ·
+`rotate` 세 이름 · id 형태 · 각도의 **유한성**(범위는 두지 않는다 —
+`expected` 가 저장된 그 값 그대로 올라오므로 범위를 만들면 이미 저장된
+큰 각도를 가진 요소를 영영 돌릴 수 없다) · origin · source ·
+`renderSeq`.
+
+native 와 sandbox 가 **같은 부모 확정 함수**를 쓴다. 2026-09-21 실측에서
+같은 포인터 제스처의 최종 JSON 이 두 경로에서 **같은 숫자**였다
+(`rotation` 40.203).
+
+### 19-10. Moveable 의 누적 회전량 — 실측한 것을 쓴다
+
+```text
+최종 각도 = 시작 rotation(부모가 준 값) + e.dist
+```
+
+0.53.0 의 rotate payload 는 `{ delta, dist, rotate, beforeDist,
+beforeDelta, beforeRotate, … }` 이고, 번들 안에서 `rotation = 시작각 +
+dist` 로 만들어진다(실측). 그래서 우리가 쓰는 것은 **`dist` 하나**다.
+
+- **CSS transform 문자열을 파싱해 지금 각도를 역산하지 않는다** — 그
+  값은 우리가 쓴 칸에서 나온 것이고, 되돌려 읽으면 자릿수가 한 번 더
+  버려진다.
+- **축에 정렬된 바깥 상자로 각도를 계산하지 않는다** — 그 상자는
+  회전을 지운 그림자다.
+- **매 이벤트의 `delta` 를 직전 값에 더하지 않는다.** 언제나 시작값 +
+  누적량이므로 이벤트 수와 무관하고 반올림이 쌓이지 않는다.
+- **부모 Preview 의 `transform: scale()` 을 각도에 보정하지 않는다.**
+  균등 배율은 길이만 바꾸고 각도는 바꾸지 않는다(도화지는 세로를
+  가로에 묶어 두었으므로 축마다 다른 배율이 없다 — §12-2).
+- `throttleRotate: 0` — 각도를 정수로 스냅하지 않는다.
+
+2026-09-21 실측(Chromium, 12 걸음의 호): 화면 각도가 의도한 호를 **최대
+0.3° 안에서** 따라왔고, 20° 에서 시작한 요소는 20° 에서 이어졌으며,
+갔다가 되돌아오면 정확히 시작 각도였다.
+
+**손가락으로는 돌리지 않는다.** 이동 · 리사이즈와 같은 이유이고 같은
+판정 함수(`isCoarsePointerEvent`)를 쓴다(§17-2 · §18-12).
+
+### 19-11. 손잡이의 hit area
+
+§18-11 그대로다. control box 는 `pointer-events: none` 이고, 우리가
+`auto` 를 되돌려 주는 것은 **잡는 것들**뿐이다 — 리사이즈 손잡이 여덟과
+회전 손잡이 하나. 테두리 네 줄 · 회전 막대 · 그룹의 `.moveable-area` 는
+그대로 꺼 둔다.
+
+회전 손잡이는 control box 안에 있으므로 `inspectorEditChromeAncestor()`
+가 이미 "내 입력이 아니다"로 읽는다(§18-11) — 손잡이를 눌러도 선택이
+풀리지 않는다. Selecto 도 `isMoveableElement()` 로 control 에서 시작한
+드래그를 거부하므로 회전 손잡이를 끌어도 lasso 가 시작되지 않는다.
+
+> 0.53.0 의 회전 시작 판정(`Qi`)은 `rotation-control` class 또는
+> `control` + `rotatable` class 를 본다. 우리 리사이즈 손잡이는
+> `control direction <dir> resizable` 이라 회전이 시작되지 않고, 회전
+> 손잡이에는 `data-direction` 이 **없어서** 리사이즈 손잡이 셈에도
+> 섞이지 않는다(번들 실측).
+
+### 19-12. 이번 단계에 **없는 것**
+
+그룹 이동 · 그룹 리사이즈 · 그룹 회전 · Shift 각도 스냅 · 15° 스냅 ·
+가이드 · **사용자 지정 회전 중심점** · 키보드 회전 · Inspector 각도 입력
+필드 · flip · 텍스트 직접 편집 · 이미지 교체 · Crop · 레이어 목록 ·
+effect hook · preset · widget · 좌우 패널 Canvas · responsive
+override · **손가락 조작** — 하나도 없다.
 
 저자 CSS/JS 가 geometry 를 강제로 덮는 경우의 최종 우선순위는 여전히
 `HOME-CANVAS-EFFECT-HOOK-1` 의 몫이다(§17-10).

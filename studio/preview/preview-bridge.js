@@ -2408,6 +2408,14 @@ function ensureCanvasFrameController() {
               const box =
                 (value) => {
 
+                  /* HOME-CANVAS-TRANSFORM-1C — 회전이 옮기는 것은
+                     **각도 한 칸**뿐이다. 좌표를 함께 담으면 Studio
+                     의 "정확히 이 키들" 판정에 걸려 메시지 전체가
+                     거부된다(계약 §19-6). */
+                  if (request.kind === "rotate") {
+                    return { rotation: value.rotation };
+                  }
+
                   const out = { x: value.x, y: value.y };
 
                   if (request.kind === "resize") {
@@ -2591,6 +2599,9 @@ function routeCanvasGeometryMessage(data) {
        선택이 아니다. `height` 는 숫자이거나 `"auto"` 다. */
     Number.isFinite(data.width) && data.width > 0 &&
     (data.height === "auto" || (Number.isFinite(data.height) && data.height > 0)) &&
+    /* HOME-CANVAS-TRANSFORM-1C — 각도가 없으면 회전을 시작할 수
+       있는 단독 선택이 아니다(크기와 같은 자리) */
+    Number.isFinite(data.rotation) &&
     data.baseWidth > 0 &&
     data.baseHeight > 0;
 
@@ -2601,6 +2612,7 @@ function routeCanvasGeometryMessage(data) {
     y: active ? data.y : 0,
     width: active ? data.width : 0,
     height: active ? data.height : 0,
+    rotation: active ? data.rotation : 0,
     baseWidth: active ? data.baseWidth : 0,
     baseHeight: active ? data.baseHeight : 0,
     generation:

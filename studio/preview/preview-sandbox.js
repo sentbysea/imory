@@ -1103,6 +1103,11 @@ function handleSandboxInspect(kind, payload) {
     const box =
       (value) => {
 
+        /* HOME-CANVAS-TRANSFORM-1C — 회전은 **각도 한 칸**이다 */
+        if (payload.kind === "rotate") {
+          return { rotation: value.rotation };
+        }
+
         const out = { x: value.x, y: value.y };
 
         if (payload.kind === "resize") {

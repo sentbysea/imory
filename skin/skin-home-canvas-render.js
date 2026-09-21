@@ -350,12 +350,63 @@ function setSkinCanvasElementBox(el, box, baseWidth, baseHeight) {
 }
 
 
-/*
-  readSkinCanvasElementBoxVars(el) -> { x, y, width, height, heightMode }
+/* =========================================================
+   0-3. 각도를 쓰는 **한 곳** (HOME-CANVAS-TRANSFORM-1C)
 
-  지금 요소에 적혀 있는 **원본 문자열** 넷과 높이 모드. 제스처를
+   ★ 회전도 `transform` 문자열을 만들지 않는다.
+
+   요소의 transform 은 스킨 CSS 가 갖고 있고(`rotate(var(…))` —
+   skin/skin-home-canvas-render.css §2), 우리가 쓰는 것은 그 변수
+   **한 칸**이다. 그래서 회전 중에도 이동 · 리사이즈와 똑같이
+   custom property 만 움직이고, x · y · width · height 는 한 글자도
+   건드리지 않는다.
+
+   ★ 회전 중심은 요소 상자의 정중앙이다 — `transform-origin` 의
+     기본값이 그것이라 아무 데도 적지 않는다(계약 §4). 별도의
+     origin 필드를 만들지 않는다.
+
+   ★ 이것이 없는 문서에서는 편집기가 **회전을 켜지 않는다**(이동 ·
+     리사이즈와 같은 규칙 — editor-runtime 의 positionApi()).
+========================================================== */
+
+function applySkinCanvasElementRotation(el, rotation) {
+
+  if (!el || !el.style || !isSkinCanvasRenderNumber(rotation)) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(
+    el,
+    SKIN_CANVAS_RENDER_VARS.rotation,
+    skinCanvasRenderTrimNumber(rotation) + "deg"
+  );
+
+  return true;
+
+}
+
+
+/* 편집기가 `window` 에서 찾는 이름(위 setSkinCanvasElementBox 의 그 사정) */
+function setSkinCanvasElementRotation(el, rotation) {
+
+  return applySkinCanvasElementRotation(el, rotation);
+
+}
+
+
+/*
+  readSkinCanvasElementBoxVars(el)
+    -> { x, y, width, height, heightMode, rotation }
+
+  지금 요소에 적혀 있는 **원본 문자열**들과 높이 모드. 제스처를
   취소할 때 그대로 되돌려 쓰기 위한 것이라 숫자로 바꾸지 않는다 —
   다시 파싱해서 다시 쓰면 한 번 버린 자릿수가 두 번 버려진다.
+
+  ★ HOME-CANVAS-TRANSFORM-1C 에서 `rotation` 이 이 한 벌에 들어왔다.
+    제스처마다 되돌리는 범위가 갈라지면 "돌리다 취소했는데 크기만
+    돌아왔다"가 생긴다(계약 §18-5 의 그 이유 그대로다). 이동 ·
+    리사이즈가 각도를 건드리지 않으므로, 그쪽에서 되돌려도 같은
+    문자열이 다시 쓰일 뿐이다.
 */
 function readSkinCanvasElementBoxVars(el) {
 
@@ -368,7 +419,8 @@ function readSkinCanvasElementBoxVars(el) {
     y: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.y),
     width: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.width),
     height: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.height),
-    heightMode: el.getAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR) || ""
+    heightMode: el.getAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR) || "",
+    rotation: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.rotation)
   };
 
 }
@@ -384,6 +436,9 @@ function restoreSkinCanvasElementBoxVars(el, saved) {
   setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.y, saved.y || null);
   setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.width, saved.width || null);
   setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.height, saved.height || null);
+
+  /* HOME-CANVAS-TRANSFORM-1C — 각도도 같은 한 벌이다(위 read 주석) */
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.rotation, saved.rotation || null);
 
   /* 높이 모드도 되돌린다 — `"auto"` 에서 숫자로 바꾸던 제스처를
      취소하면 속성까지 `"auto"` 로 돌아가야 한다 */
@@ -530,11 +585,15 @@ function buildSkinCanvasElementNode(doc, element, canvas, context) {
   );
 
   /* 회전 중심은 요소 중심이다 — transform-origin 기본값이 그것이라
-     따로 적지 않는다(적으면 스킨이 바꿀 여지만 줄어든다). */
-  setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_VARS.rotation,
-    skinCanvasRenderTrimNumber(
-      isSkinCanvasRenderNumber(element.rotation) ? element.rotation : 0
-    ) + "deg");
+     따로 적지 않는다(적으면 스킨이 바꿀 여지만 줄어든다).
+
+     ★ 편집기가 회전 중에 부르는 그 함수다(§0-3). 자릿수 규칙을
+       여기 한 벌 더 적지 않는다. 빠진 `rotation` 은 화면에서만 0 이고
+       (계약 §5), 그것을 JSON 에 써 넣지는 않는다. */
+  applySkinCanvasElementRotation(
+    node,
+    isSkinCanvasRenderNumber(element.rotation) ? element.rotation : 0
+  );
 
   /* ── 상태 ── */
 
@@ -870,6 +929,9 @@ if (typeof window !== "undefined") {
   window.readSkinCanvasElementBoxVars = readSkinCanvasElementBoxVars;
   window.restoreSkinCanvasElementBoxVars = restoreSkinCanvasElementBoxVars;
 
+  /* HOME-CANVAS-TRANSFORM-1C — 편집 runtime 이 **각도**를 쓰는 한 곳 */
+  window.setSkinCanvasElementRotation = setSkinCanvasElementRotation;
+
   window.compileSkinHomeCanvas = compileSkinHomeCanvas;
   window.clearSkinHomeCanvas = clearSkinHomeCanvas;
 
@@ -902,6 +964,8 @@ if (typeof module !== "undefined" && module.exports) {
     setSkinCanvasElementBox,
     readSkinCanvasElementBoxVars,
     restoreSkinCanvasElementBoxVars,
+    applySkinCanvasElementRotation,
+    setSkinCanvasElementRotation,
     readSkinCanvasImageUrl,
     readSkinCanvasCategories,
 

@@ -204,7 +204,7 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3b-2 | `HOME-CANVAS-SELECT-1B-2` | Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 | Studio만 | **완료**(계약 문서 §16) |
 | 3c-1 | `HOME-CANVAS-TRANSFORM-1A` | **단일 요소 이동**을 `canvas.elements[].x/.y` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §17) |
 | 3c-2 | `HOME-CANVAS-TRANSFORM-1B` | **단일 요소 리사이즈**를 `canvas.elements[].x/.y/.width/.height` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §18) |
-| 3c-3 | `HOME-CANVAS-TRANSFORM-1C` | 회전 조작 | 저장 가능 | 미착수 |
+| 3c-3 | `HOME-CANVAS-TRANSFORM-1C` | **단일 요소 회전**을 `canvas.elements[].rotation` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §19) |
 | 3c-4 | `HOME-CANVAS-TRANSFORM-1D` | 그룹 이동 · 그룹 리사이즈 · 그룹 회전 | 저장 가능 | 미착수 |
 | 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
@@ -524,10 +524,30 @@ HTML 에 없다.
   손잡이 위의 입력은 Inspector 의 것이 아니다(계약 §18-11).
 - 손가락 조작은 의도적 미지원. 그 자리는 Preview 스크롤이 지킨다.
 
-### `HOME-CANVAS-TRANSFORM-1C`
+### `HOME-CANVAS-TRANSFORM-1C` (완료)
 
-- 회전 조작. 같은 확정 경로에 `kind: "rotate"` 를 더하고 `rotation` 칸을
-  소유한다.
+→ [계약 문서 §19](../contracts/IMORY_HOME_CANVAS_CONTRACT.md#19-단일-요소-회전-home-canvas-transform-1c)
+
+- **단독 선택 요소의 회전.** 요소 위쪽의 손잡이 하나를 마우스 · 펜으로
+  끌어 돌리고, 그 결과가 `canvas.elements[].rotation` **한 칸**에
+  저장된다. 같은 확정 경로에 `kind: "rotate"` 를 더했을 뿐, 관문 ·
+  기다림 · 요청 번호 · Undo · 취소는 **한 벌을 그대로 공유한다**.
+- **상자는 한 칸도 바뀌지 않는다** — 회전 중심이 요소 상자의 정중앙이라
+  `x` · `y` · `width` · `height` 가 그대로여도 화면이 맞는다(계약 §19-2).
+  `height:"auto"` 도 `"auto"` 그대로다.
+- **제스처 중에는 연속 각도, 저장은 한 바퀴 안**이다(계약 §19-3).
+  350° 에서 더 돌린 값은 화면에서 365° 이고 저장은 5° 다. 접는 자리는
+  helper 하나(`normalizeCanvasRotation`)이고, **손대지 않은 요소의
+  저장값은 일괄로 고치지 않는다**.
+- **누적 회전량은 Moveable 의 `dist` 를 실측해 쓴다**(계약 §19-10) —
+  transform 문자열을 역산하지도, 바깥 상자로 각도를 재지도, 매 이벤트의
+  delta 를 쌓지도 않는다. 12 걸음의 호에서 최대 오차 0.3° 를 실측했다.
+- `rotation` 이 **없는** 요소는 화면상 0° 이고, 고르기만 해서는 그 칸이
+  JSON 에 생기지 않는다. 실제로 돌린 제스처만 만든다(계약 §19-2 · §19-6).
+- **able 은 처음부터 켜고 `rotationPosition` 으로 여닫는다** —
+  `rotatable: true` 로 주면 리사이즈용 `renderDirections` 가 회전
+  손잡이 여덟으로 한 번 더 그려진다(계약 §19-1 의 함정).
+- 손가락 조작은 의도적 미지원. 그 자리는 Preview 스크롤이 지킨다.
 
 ### `HOME-CANVAS-TRANSFORM-1D`
 

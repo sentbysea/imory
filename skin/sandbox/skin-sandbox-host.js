@@ -2839,6 +2839,8 @@ export function sendSandboxCanvasGeometry(handle, geometry) {
       Number.isFinite(value.width) && value.width > 0 &&
       (value.height === "auto" ||
         (Number.isFinite(value.height) && value.height > 0)) &&
+      /* HOME-CANVAS-TRANSFORM-1C — 각도도 active 면 반드시 있다 */
+      Number.isFinite(value.rotation) &&
       value.baseWidth > 0 &&
       value.baseHeight > 0
     );
@@ -2865,6 +2867,7 @@ export function sendSandboxCanvasGeometry(handle, geometry) {
     payload.y = value.y;
     payload.width = value.width;
     payload.height = value.height;
+    payload.rotation = value.rotation;
     payload.baseWidth = value.baseWidth;
     payload.baseHeight = value.baseHeight;
   }

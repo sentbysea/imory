@@ -646,6 +646,21 @@ function studioCanvasSingleGeometry() {
     y: element.y,
     width: element.width,
     height: element.height,
+
+    /* =====================================================
+       HOME-CANVAS-TRANSFORM-1C — 각도도 같이 내려간다.
+
+       ★ `rotation` 은 요소에 **없을 수 있다**. 그때 화면의 각도는
+         0 이므로(계약 §5 · 렌더러의 기본값) 여기서도 0 으로
+         내려보낸다. 그것이 곧 프레임이 돌리기 시작할 자리이고,
+         확정의 `expected` 도 그 값이다 — draft 에 `rotation:0` 을
+         **써 넣지는 않는다**. 고르기만 해서 JSON 이 자라지 않게.
+    ====================================================== */
+    rotation:
+      (typeof element.rotation === "number" && Number.isFinite(element.rotation))
+        ? element.rotation
+        : 0,
+
     baseWidth: payload.baseWidth,
     baseHeight: payload.baseHeight,
     generation: studioCanvasSelection.generation
@@ -669,6 +684,7 @@ function postStudioCanvasGeometryToFrame(answering) {
       y: 0,
       width: 0,
       height: 0,
+      rotation: 0,
       baseWidth: 0,
       baseHeight: 0,
       generation: studioCanvasSelectionGeneration
@@ -1068,12 +1084,12 @@ function proposeStudioCanvasSelection(proposal) {
 
 
 /* =========================================================
-   HOME-CANVAS-TRANSFORM-1A · 1B — 이동 · 리사이즈의 **확정**
+   HOME-CANVAS-TRANSFORM-1A · 1B · 1C — 이동 · 리사이즈 · 회전의 **확정**
 
    commitStudioCanvasElementTransform(request)
 
    request = {
-     kind       : "move" | "resize"
+     kind       : "move" | "resize" | "rotate"
      id         : element id
      expected   : 프레임이 제스처를 시작할 때의 값
      next       : 손을 놓은 값
@@ -1084,6 +1100,7 @@ function proposeStudioCanvasSelection(proposal) {
 
      move     { x, y }
      resize   { x, y, width, height }   height 는 숫자 또는 "auto"
+     rotate   { rotation }              유한한 숫자 하나
 
    ★ 그 밖에는 **한 줄도 갈라지지 않는다.** 선택 · 순번 · expected ·
      허용 키 · 범위를 보는 관문이 하나이고, 불변 수정도 그 순수 함수
@@ -1101,7 +1118,7 @@ function proposeStudioCanvasSelection(proposal) {
    본다 — 프레임에서 온 값 중 살아남는 것은 숫자 넷과 id 하나뿐이다.
 
      1  Canvas 편집이 켜져 있다(HOME · 유효한 canvas · Select)
-     2  kind 는 "move" 또는 "resize"
+     2  kind 는 "move" · "resize" · "rotate" 셋 중 하나
      3  id 형태가 맞다
      4  지금 선택이 **정확히 그 하나**이고 primary 도 그것
      5  순번이 최신이다(늦게 도착한 옛 제스처를 버린다)
@@ -1163,7 +1180,11 @@ function commitStudioCanvasElementTransform(request) {
     return answer(false, "shape");
   }
 
-  if (value.kind !== "move" && value.kind !== "resize") {
+  if (
+    value.kind !== "move" &&
+    value.kind !== "resize" &&
+    value.kind !== "rotate"
+  ) {
     return answer(false, "kind");
   }
 
@@ -1202,7 +1223,11 @@ function commitStudioCanvasElementTransform(request) {
   const writer =
     value.kind === "resize"
       ? window.setStudioCanvasElementBox
-      : window.setStudioCanvasElementPosition;
+      : (
+          value.kind === "rotate"
+            ? window.setStudioCanvasElementRotation
+            : window.setStudioCanvasElementPosition
+        );
 
   if (typeof writer !== "function") {
     return answer(false, "unsupported");
@@ -1227,10 +1252,12 @@ function commitStudioCanvasElementTransform(request) {
     보낸 객체 자체는 이 줄 뒤로 넘어가지 않는다.
   */
 
+  /* HOME-CANVAS-TRANSFORM-1C — 회전이 소유하는 것은 **한 칸**이다.
+     좌표 둘이 실린 rotate 도, rotation 이 섞인 move 도 거부다. */
   const wanted =
     value.kind === "resize"
       ? ["x", "y", "width", "height"]
-      : ["x", "y"];
+      : (value.kind === "rotate" ? ["rotation"] : ["x", "y"]);
 
   const asBox =
     (point) => {

@@ -668,8 +668,16 @@ const measure = (frame, elementId) => frame.evaluate((id) => {
     return out;
   }
 
+  /* ★ 테두리 **네 줄**만 센다.
+
+     HOME-CANVAS-TRANSFORM-1C 가 회전 손잡이를 켜면서 control box 에
+     `.moveable-line.moveable-rotation-line` 이 하나 더 생겼다 —
+     요소 위로 뻗은 40px 막대이고, 외곽이 아니다. 그것까지 세면
+     "네 줄이 요소 외곽과 일치하는가"가 참일 수 없다. */
   const lines =
-    Array.prototype.slice.call(box.querySelectorAll(".moveable-line"));
+    Array.prototype.slice.call(
+      box.querySelectorAll(".moveable-line:not(.moveable-rotation-line)")
+    );
 
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 

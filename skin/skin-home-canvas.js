@@ -884,25 +884,27 @@ function mergeSkinHomeCanvasRegionEntry(entry, changes) {
 
 /* =========================================================
    4-1. 요소 하나의 geometry 만 바꾼다
-        (HOME-CANVAS-TRANSFORM-1A · 1B)
+        (HOME-CANVAS-TRANSFORM-1A · 1B · 1C)
 
    writeSkinHomeCanvasElementPosition — x · y 둘 (이동, 1A)
    writeSkinHomeCanvasElementBox      — x · y · width · height (리사이즈, 1B)
+   writeSkinHomeCanvasElementRotation — rotation 하나 (회전, 1C)
 
      -> { ok: true,  regions, previous: { ...그 칸들 } }
      -> { ok: false, reason }
 
-   ★ 두 함수가 **같은 불변 수정 한 곳**을 쓴다.
+   ★ 세 함수가 **같은 불변 수정 한 곳**을 쓴다.
 
-   아래 writeSkinHomeCanvasElementFields() 가 그 한 곳이고, 위의 둘은
+   아래 writeSkinHomeCanvasElementFields() 가 그 한 곳이고, 위의 셋은
    "어떤 칸을 소유하는가"와 "그 값이 유효한가"만 다르게 준다. 복사
    규칙(모르는 필드 보존 · 배열 순서 · 입력 non-mutation)이 두 벌이
    되면 한쪽만 고쳐지는 날 이동과 리사이즈의 보존 범위가 갈라진다.
 
    ★ 바뀌는 칸 밖은 전부 그대로 새 객체로 옮긴다 — regions 의 모르는
    항목 · 항목의 모르는 칸 · canvas 의 모르는 칸 · element 의 모르는
-   칸 · props · rotation · hidden · locked · 배열 순서 · 다른 요소
-   객체(같은 참조로 옮긴다). 이동은 width · height 까지 보존한다.
+   칸 · props · hidden · locked · 배열 순서 · 다른 요소 객체(같은
+   참조로 옮긴다). 이동은 width · height · rotation 까지, 리사이즈는
+   rotation 까지, 회전은 x · y · width · height 까지 보존한다.
 
    ★ 입력을 mutate 하지 않는다. 바뀌는 경로 위의 객체(regions 배열 ·
      home_canvas 항목 · canvas · elements 배열 · 그 요소)만 새로
@@ -992,23 +994,39 @@ function writeSkinHomeCanvasElementFields(regions, elementId, next, expected, sp
     return { ok: false, reason: currentReason };
   }
 
+  /*
+    ★ 지금 값을 **무엇으로 읽는가**는 spec 이 정한다.
+
+    x · y · width · height 는 요소에 반드시 적혀 있으므로 그대로
+    읽는다. `rotation` 은 **빠져 있을 수 있고**, 그때 화면상 값은
+    0 이다(계약 §5). 프레임은 그 화면값을 근거로 돌리므로
+    `expected.rotation` 은 0 으로 올라온다 — 여기서도 같은 자로
+    읽지 않으면 "한 번도 돌린 적 없는 요소는 영영 돌릴 수 없다"가
+    된다(HOME-CANVAS-TRANSFORM-1C).
+  */
+  const readCurrent =
+    (key) =>
+      (typeof spec.readCurrent === "function")
+        ? spec.readCurrent(current, key)
+        : current[key];
+
   const previous = {};
 
   spec.keys.forEach((key) => {
-    previous[key] = current[key];
+    previous[key] = readCurrent(key);
   });
 
   if (isSkinHomeCanvasPlainObject(expected)) {
 
     /* 지금 값과 **정확히** 같을 때만 쓴다. `"auto"` 도 이 한 줄이
        가른다 — 문자열과 숫자는 === 로 절대 같지 않다. */
-    if (spec.keys.some((key) => expected[key] !== current[key])) {
+    if (spec.keys.some((key) => expected[key] !== readCurrent(key))) {
       return { ok: false, reason: "expected" };
     }
 
   }
 
-  if (spec.keys.every((key) => current[key] === next[key])) {
+  if (spec.keys.every((key) => readCurrent(key) === next[key])) {
     return { ok: true, regions: regions, previous: previous, unchanged: true };
   }
 
@@ -1162,6 +1180,53 @@ function writeSkinHomeCanvasElementBox(regions, elementId, next, expected) {
         return isSkinHomeCanvasSize(element.height) ? "" : "current";
 
       }
+    }
+  );
+
+}
+
+
+/*
+  HOME-CANVAS-TRANSFORM-1C — 회전이 소유하는 것은 **한 칸**이다.
+
+  ★ `rotation` 은 요소에 **없을 수 있다**(계약 §5 — 빠지면 0).
+    그래서 지금 값을 읽는 자를 따로 준다(위 readCurrent). 화면도
+    부모도 프레임도 "없으면 0"으로 같은 값을 보고, 실제로 돌린
+    제스처만 그 칸을 JSON 에 만든다 — 고르기만 해서는 `rotation:0`
+    이 새로 생기지 않는다.
+
+  ★ 허용 범위는 계약이 이미 가진 그것 하나다 — **유한한 숫자**
+    (§5 의 검증 규칙). 회전용으로 새 범위를 만들지 않는다.
+
+  ★ x · y · width · height 는 회전이 바꾸지 않는다. 회전 중심이
+    요소 상자의 정중앙이므로 상자 자체는 그대로다(§4) — 네 칸은
+    공용 복사 규칙이 보존한다.
+*/
+function writeSkinHomeCanvasElementRotation(regions, elementId, next, expected) {
+
+  return writeSkinHomeCanvasElementFields(
+    regions,
+    elementId,
+    next,
+    expected,
+    {
+      keys: ["rotation"],
+
+      readCurrent: (element) =>
+        isSkinHomeCanvasFiniteNumber(element.rotation) ? element.rotation : 0,
+
+      checkNext: (value) =>
+        isSkinHomeCanvasFiniteNumber(value.rotation) ? "" : "rotation",
+
+      /* 적혀 있지 않은 것은 잘못이 아니다 — 그때의 지금 값이 0 이다.
+         적혀 있는데 숫자가 아니면 그 요소는 애초에 계약을 어긴 것이다. */
+      checkCurrent: (element) =>
+        (
+          element.rotation === undefined ||
+          isSkinHomeCanvasFiniteNumber(element.rotation)
+        )
+          ? ""
+          : "current"
     }
   );
 
@@ -1389,6 +1454,9 @@ if (typeof window !== "undefined") {
   /* HOME-CANVAS-TRANSFORM-1B */
   window.writeSkinHomeCanvasElementBox = writeSkinHomeCanvasElementBox;
 
+  /* HOME-CANVAS-TRANSFORM-1C */
+  window.writeSkinHomeCanvasElementRotation = writeSkinHomeCanvasElementRotation;
+
   window.createEmptySkinHomeCanvas = createEmptySkinHomeCanvas;
   window.createSkinHomeCanvasElementId = createSkinHomeCanvasElementId;
 
@@ -1436,6 +1504,7 @@ if (typeof module !== "undefined" && module.exports) {
     writeSkinHomeCanvasRegion,
     writeSkinHomeCanvasElementPosition,
     writeSkinHomeCanvasElementBox,
+    writeSkinHomeCanvasElementRotation,
     createEmptySkinHomeCanvas,
     createSkinHomeCanvasElementId,
 

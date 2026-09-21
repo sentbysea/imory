@@ -1274,6 +1274,14 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
                 var box = function (value) {
 
+                  /* HOME-CANVAS-TRANSFORM-1C — 회전이 옮기는 것은
+                     **각도 한 칸**이다. 좌표 칸을 `undefined` 로라도
+                     만들어 두면 프로토콜의 "모르는 키" 판정에 걸려
+                     메시지 전체가 버려진다. */
+                  if (request.kind === "rotate") {
+                    return { rotation: value ? value.rotation : undefined };
+                  }
+
                   var out = {
                     x: value ? value.x : undefined,
                     y: value ? value.y : undefined
@@ -1586,6 +1594,8 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         /* HOME-CANVAS-TRANSFORM-1B — 리사이즈의 시작 크기 */
         width: verdict.payload.width,
         height: verdict.payload.height,
+        /* HOME-CANVAS-TRANSFORM-1C — 회전의 시작 각도 */
+        rotation: verdict.payload.rotation,
         baseWidth: verdict.payload.baseWidth,
         baseHeight: verdict.payload.baseHeight,
         generation: verdict.payload.generation,

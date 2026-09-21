@@ -2192,6 +2192,10 @@ if (typeof window !== "undefined") {
   window.setStudioCanvasElementBox =
     setStudioCanvasElementBox;
 
+  /* HOME-CANVAS-TRANSFORM-1C */
+  window.setStudioCanvasElementRotation =
+    setStudioCanvasElementRotation;
+
 }
 
 
@@ -2818,13 +2822,13 @@ function postCanvasSelectionToFrame(selection) {
 
 
 /* =========================================================
-   HOME-CANVAS-TRANSFORM-1A · 1B — 단일 선택의 Canvas geometry 를
+   HOME-CANVAS-TRANSFORM-1A · 1B · 1C — 단일 선택의 Canvas geometry 를
    Preview 문서로
 
    postCanvasGeometryToFrame(geometry)
 
-   geometry = { active, id, x, y, width, height, baseWidth, baseHeight,
-                generation }
+   geometry = { active, id, x, y, width, height, rotation,
+                baseWidth, baseHeight, generation }
 
    ★ 이 함수도 **옮기기만** 한다. 무엇이 옮길 수 있는 단독 선택인가는
      studio/inspector/studio-canvas-selection.js 가 draft 에서 정했고,
@@ -2863,6 +2867,10 @@ function postCanvasGeometryToFrame(geometry) {
       Number.isFinite(value.y) &&
       Number.isFinite(value.width) && value.width > 0 &&
       isStudioCanvasGeometryHeight(value.height) &&
+      /* HOME-CANVAS-TRANSFORM-1C — 각도 없이는 회전을 시작할 수
+         없다. 요소에 `rotation` 이 없으면 부모가 0 으로 만들어
+         보낸다(studio/inspector/studio-canvas-selection.js). */
+      Number.isFinite(value.rotation) &&
       value.baseWidth > 0 &&
       value.baseHeight > 0
     );
@@ -2875,6 +2883,7 @@ function postCanvasGeometryToFrame(geometry) {
     y: active ? value.y : 0,
     width: active ? value.width : 0,
     height: active ? value.height : 0,
+    rotation: active ? value.rotation : 0,
     baseWidth: active ? value.baseWidth : 0,
     baseHeight: active ? value.baseHeight : 0,
     generation:
@@ -2992,6 +3001,31 @@ function setStudioCanvasElementBox(elementId, next, expected) {
 
   return writeStudioCanvasElementGeometry(
     "writeSkinHomeCanvasElementBox",
+    elementId,
+    next,
+    expected
+  );
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1C — 캔버스 요소 하나의 rotation 을 draft 에
+
+   setStudioCanvasElementRotation(elementId, next, expected) -> result
+
+   위 둘과 **같은 다섯 줄**을 쓴다(기록 한 칸 · dirty · 다시 그리기).
+   다른 것은 어느 순수 함수가 불변 수정을 하는가뿐이다 —
+   skin/skin-home-canvas.js writeSkinHomeCanvasElementRotation.
+
+   ★ `rotation` 이 없던 요소는 이 호출로 그 칸이 **생긴다**. 고르기만
+     해서는 생기지 않는다(그 판정은 순수 함수가 한다).
+========================================================== */
+
+function setStudioCanvasElementRotation(elementId, next, expected) {
+
+  return writeStudioCanvasElementGeometry(
+    "writeSkinHomeCanvasElementRotation",
     elementId,
     next,
     expected

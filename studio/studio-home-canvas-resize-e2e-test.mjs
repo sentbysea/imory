@@ -2042,10 +2042,18 @@ async function main() {
         next: { ...base, height: "auto" }, generation: gen, requestId: 1
       }, "auto 는 text · category_nav 만 (계약 §6)");
 
+      /* ★ `rotate` 는 TRANSFORM-1C 에서 **이름이 생겼다**. 그래도 이
+         모양(네 칸)으로는 여전히 거부된다 — kind 마다 소유하는
+         모양이 하나이기 때문이다. 아직 이름이 없는 것은 `scale` 이다. */
       await unchanged("모르는 kind 는 거부된다", {
-        kind: "rotate", id: "cvA", expected: base,
+        kind: "scale", id: "cvA", expected: base,
         next: { ...base, width: 200 }, generation: gen, requestId: 1
       });
+
+      await unchanged("★ kind 만 rotate 로 바꿔 달아도 거부된다", {
+        kind: "rotate", id: "cvA", expected: base,
+        next: { ...base, width: 200 }, generation: gen, requestId: 1
+      }, "rotate 가 소유하는 것은 각도 한 칸이다");
 
       await unchanged("고르지 않은 요소는 거부된다", {
         kind: "resize", id: "cvB",
