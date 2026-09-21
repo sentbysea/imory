@@ -562,6 +562,111 @@ function syncStudioCanvasFrameMode() {
 
   postStudioCanvasSelectionToFrame();
 
+  postStudioCanvasGeometryToFrame();
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 단독 선택의 Canvas 좌표를 프레임으로
+
+   ★ 왜 좌표가 내려가는가
+
+   프레임은 Canvas JSON 을 갖고 있지 않고, DOM 에서 그 값을 되찾을
+   수도 없다 — 렌더러가 써 넣은 것은 여섯 자리에서 자른 백분율이라
+   거꾸로 풀면 원본과 미세하게 다르다. 그 값을 시작점으로 삼으면
+   끌지도 않은 요소가 저장될 때마다 조금씩 움직인다.
+
+   ★ **단독 선택일 때만** 내려간다.
+
+   여럿을 골랐거나 아무것도 고르지 않았으면 `active:false` 다. 그것이
+   곧 "지금은 옮길 수 있는 것이 없다"이고, 프레임은 그 말을 받으면
+   이동을 끈다(그룹 이동은 이번 단계에 없다).
+
+   ★ 확정의 **답**이기도 하다.
+
+   commitStudioCanvasElementTransform 은 승인이든 거부든 끝에서 이
+   함수를 부른다. 승인이면 방금 놓은 자리가, 거부면 예전 자리가
+   내려가고 프레임은 언제나 "부모가 말한 값"으로 맞춘다 — 거부를
+   따로 알릴 메시지를 만들지 않는다.
+========================================================== */
+
+function studioCanvasSingleGeometry() {
+
+  if (!studioCanvasSelection || studioCanvasSelection.ids.length !== 1) {
+    return null;
+  }
+
+  const id =
+    studioCanvasSelection.ids[0];
+
+  if (studioCanvasSelection.primaryId !== id) {
+    return null;
+  }
+
+  const element =
+    studioCanvasSelectableElement(id);
+
+  if (!element) {
+    return null;
+  }
+
+  const payload =
+    studioCanvasDraftPayload();
+
+  if (
+    !payload ||
+    !(payload.baseWidth > 0) ||
+    !(payload.baseHeight > 0) ||
+    typeof element.x !== "number" ||
+    typeof element.y !== "number" ||
+    !Number.isFinite(element.x) ||
+    !Number.isFinite(element.y)
+  ) {
+    return null;
+  }
+
+  return {
+    active: true,
+    id: id,
+    x: element.x,
+    y: element.y,
+    baseWidth: payload.baseWidth,
+    baseHeight: payload.baseHeight,
+    generation: studioCanvasSelection.generation
+  };
+
+}
+
+
+function postStudioCanvasGeometryToFrame(answering) {
+
+  if (typeof window.postCanvasGeometryToFrame !== "function") {
+    return;
+  }
+
+  const geometry =
+    studioCanvasSingleGeometry() ||
+    {
+      active: false,
+      id: null,
+      x: 0,
+      y: 0,
+      baseWidth: 0,
+      baseHeight: 0,
+      generation: studioCanvasSelectionGeneration
+    };
+
+  /* ★ 확정의 **답**에만 번호가 붙는다. 그 밖의 좌표 메시지는
+     번호가 없고, 프레임은 그것을 답으로 읽지 않는다 — 좌표는 선택 ·
+     재렌더 · draft 변경 때마다 나가므로 "확정 뒤 처음 온 것"을 답으로
+     읽으면 엉뚱한 것을 답으로 읽는 날이 온다(계약 §17-8). */
+  if (Number.isInteger(answering) && answering >= 1) {
+    geometry.answering = answering;
+  }
+
+  window.postCanvasGeometryToFrame(geometry);
+
 }
 
 
@@ -636,6 +741,10 @@ function applyStudioCanvasSelection(entries, options) {
   ====================================================== */
 
   postStudioCanvasSelectionToFrame();
+
+  /* HOME-CANVAS-TRANSFORM-1A — 좌표는 언제나 선택 **뒤에** 나간다.
+     프레임은 둘이 짝을 이룰 때만 이동을 켠다(같은 generation). */
+  postStudioCanvasGeometryToFrame();
 
   /* =====================================================
      프레임에도 해제를 알린다 — 단, 소유권이 넘어가는 경우는 뺀다
@@ -941,6 +1050,191 @@ function proposeStudioCanvasSelection(proposal) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 이동의 **확정**
+
+   commitStudioCanvasElementTransform(request)
+
+   request = {
+     kind       : "move"
+     id         : element id
+     expected   : { x, y }   프레임이 끌기 시작할 때의 좌표
+     next       : { x, y }   놓은 자리
+     generation : 선택 순번
+   }
+
+   → { accepted: boolean, reason }
+
+   ★ 프레임이 보낸 값을 그대로 draft 에 쓰지 않는다.
+
+   프레임은 자기 DOM 과 부모가 내려 준 좌표만 안다. 그 사이에
+   Undo · Import · AI 적용 · 선택 변경 · 요소 삭제가 있었을 수
+   있고, 위조된 메시지일 수도 있다. 그래서 여기서 **처음부터 다시**
+   본다 — 프레임에서 온 값 중 살아남는 것은 숫자 넷과 id 하나뿐이다.
+
+     1  Canvas 편집이 켜져 있다(HOME · 유효한 canvas · Select)
+     2  kind 는 "move" 하나
+     3  id 형태가 맞다
+     4  지금 선택이 **정확히 그 하나**이고 primary 도 그것
+     5  순번이 최신이다(늦게 도착한 옛 제스처를 버린다)
+     6  그 요소가 지금 draft 에 있고 hidden 도 locked 도 아니다
+     7  expected · next 는 x · y 두 칸뿐이고 유한한 숫자다
+     8  지금 draft 의 x · y 가 expected 와 **정확히** 같다
+     9  next 가 계약의 좌표 범위 안이다 (7~9 는 순수 함수가 본다 —
+        skin/skin-home-canvas.js writeSkinHomeCanvasElementPosition)
+
+   ★ 거부해도 화면은 되돌아간다.
+
+   끝에서 언제나 지금 좌표를 프레임에 다시 내려보낸다. 승인이면
+   방금 놓은 자리가, 거부면 예전 자리가 내려가므로 프레임은 별도의
+   "거부" 메시지 없이 원상 복원된다.
+
+   ★ 한 제스처 = Undo 한 칸.
+
+   기록은 draft 를 실제로 바꿀 때 한 번만 생긴다(아래 setStudio…
+   한 줄). 끄는 동안에는 아무것도 기록되지 않고, 이동량 0 과 거부는
+   그 줄에 닿지 않는다.
+========================================================== */
+
+function commitStudioCanvasElementTransform(request) {
+
+  const value =
+    (request && typeof request === "object") ? request : null;
+
+  const requestId =
+    (value && Number.isInteger(value.requestId) && value.requestId >= 1)
+      ? value.requestId
+      : 0;
+
+  const answer =
+    (accepted, reason) => {
+
+      /* 승인이든 거부든 **여기 한 번**이 그 요청의 답이다. 답에만
+         요청 번호를 달아 보내므로, 그 사이에 오간 다른 좌표 메시지가
+         답으로 읽히지 않는다(계약 §17-8). */
+      postStudioCanvasGeometryToFrame(requestId);
+
+      if (!accepted) {
+
+        console.info(
+          "[studio-canvas] 이동 확정을 받아들이지 않았습니다",
+          { reason: reason }
+        );
+
+      }
+
+      return { accepted: accepted, reason: reason };
+
+    };
+
+
+  if (!value) {
+    return answer(false, "shape");
+  }
+
+  if (value.kind !== "move") {
+    return answer(false, "kind");
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.id)
+  ) {
+    return answer(false, "id");
+  }
+
+  if (!studioCanvasEditingIsOn()) {
+    return answer(false, "not-editing");
+  }
+
+  if (
+    !studioCanvasSelection ||
+    studioCanvasSelection.ids.length !== 1 ||
+    studioCanvasSelection.ids[0] !== value.id ||
+    studioCanvasSelection.primaryId !== value.id
+  ) {
+    return answer(false, "selection");
+  }
+
+  if (
+    !Number.isInteger(value.generation) ||
+    value.generation !== studioCanvasSelection.generation
+  ) {
+    return answer(false, "generation");
+  }
+
+  if (!studioCanvasSelectableElement(value.id)) {
+    return answer(false, "element");
+  }
+
+  if (typeof window.setStudioCanvasElementPosition !== "function") {
+    return answer(false, "unsupported");
+  }
+
+
+  /*
+    ★ 모르는 키는 **버리지 않고 거부한다.**
+
+    처음에는 x · y 만 새 리터럴로 옮겨 담았다. 그러면 `next` 에
+    width 가 섞여 와도 조용히 빠지고 나머지는 저장된다 — 이번
+    라운드의 e2e 가 그것을 "받아들였다"로 잡았다. 조용히 고쳐 주면
+    "이 메시지가 소유하는 것은 좌표 둘"이라는 계약이 **말로만**
+    남는다. 어긋난 메시지는 통째로 버리는 편이 맞다(sandbox
+    프로토콜도 같은 판정을 한 번 더 한다).
+
+    거부한 뒤에 넘기는 값은 그래도 **새 리터럴**이다 — 프레임이
+    보낸 객체 자체는 이 줄 뒤로 넘어가지 않는다.
+  */
+
+  const asPoint =
+    (point) => {
+
+      if (!point || typeof point !== "object" || Array.isArray(point)) {
+        return null;
+      }
+
+      const keys =
+        Object.keys(point);
+
+      if (
+        keys.length !== 2 ||
+        keys.indexOf("x") === -1 ||
+        keys.indexOf("y") === -1
+      ) {
+        return null;
+      }
+
+      return { x: point.x, y: point.y };
+
+    };
+
+  const next =
+    asPoint(value.next);
+
+  const expected =
+    asPoint(value.expected);
+
+  if (!next || !expected) {
+    return answer(false, "point");
+  }
+
+
+  const result =
+    window.setStudioCanvasElementPosition(value.id, next, expected);
+
+  if (!result || !result.ok) {
+    return answer(false, (result && result.reason) || "rejected");
+  }
+
+  if (result.unchanged) {
+    return answer(true, "unchanged");
+  }
+
+  return answer(true, "ok");
+
+}
+
+
 function studioCanvasSelectionIsActive() {
 
   return !!studioCanvasSelection;
@@ -1201,6 +1495,11 @@ if (typeof window !== "undefined") {
   window.syncStudioCanvasSelectionRects = syncStudioCanvasSelectionRects;
 
   window.setStudioCanvasFrameActive = setStudioCanvasFrameActive;
+
+  /* HOME-CANVAS-TRANSFORM-1A */
+  window.commitStudioCanvasElementTransform = commitStudioCanvasElementTransform;
+  window.postStudioCanvasGeometryToFrame = postStudioCanvasGeometryToFrame;
+  window.studioCanvasSingleGeometry = studioCanvasSingleGeometry;
 
   /* HOME-CANVAS-SELECT-1B-2 */
   window.proposeStudioCanvasSelection = proposeStudioCanvasSelection;

@@ -166,6 +166,10 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     canvasFramePromise: null,
     canvasSelection: null,
 
+    /* HOME-CANVAS-TRANSFORM-1A — 부모가 내려 준 단일 선택의 Canvas
+       좌표. runtime 이 아직 없을 때를 위해 여기에도 남긴다. */
+    canvasGeometry: null,
+
     sentReady: false,
     acked: false,
     seq: 0,
@@ -1096,6 +1100,10 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         vendor 를 받아 오는 계기가 되지 않게.
     */
 
+    /* HOME-CANVAS-TRANSFORM-1A — 옛 화면의 좌표는 버린다. 부모가
+       이 렌더 뒤에 지금 값을 다시 내려 준다(flushSandboxInspectState). */
+    FRAME_STATE.canvasGeometry = null;
+
     if (FRAME_STATE.canvasFrame) {
       FRAME_STATE.canvasFrame.onRender();
     }
@@ -1241,6 +1249,46 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
                 send(SANDBOX_MESSAGE_TYPES.CANVAS_PROPOSE, payload);
 
+              },
+
+              /*
+                HOME-CANVAS-TRANSFORM-1A — 이동의 **확정 요청**이다.
+                확정이 아니다: 부모가 지금 draft 로 선택 · 순번 ·
+                `expected` · 범위를 전부 다시 본 뒤에만 쓴다.
+
+                ★ 여기서 값을 만들지 않는다. runtime 이 준 것을 알려진
+                  칸만 새 리터럴로 옮겨 보내고, 프로토콜이 한 번 더
+                  거른다(kind · id 형태 · 좌표 범위 · 모르는 키).
+              */
+              onTransform: function (request) {
+
+                if (!request || typeof request !== "object") {
+                  return;
+                }
+
+                send(SANDBOX_MESSAGE_TYPES.CANVAS_TRANSFORM, {
+                  contract: 1,
+                  renderSeq: FRAME_STATE.renderSeq,
+                  kind: request.kind,
+                  id: request.id,
+                  expected: {
+                    x: request.expected ? request.expected.x : undefined,
+                    y: request.expected ? request.expected.y : undefined
+                  },
+                  next: {
+                    x: request.next ? request.next.x : undefined,
+                    y: request.next ? request.next.y : undefined
+                  },
+                  generation:
+                    Number.isInteger(request.generation) && request.generation >= 0
+                      ? request.generation
+                      : 0,
+                  requestId:
+                    Number.isInteger(request.requestId) && request.requestId >= 1
+                      ? request.requestId
+                      : 0
+                });
+
               }
 
             });
@@ -1289,7 +1337,20 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     }
 
     ensureCanvasFrame()
-      .then((frame) => frame.apply(FRAME_STATE.canvasSelection))
+      .then(
+        (frame) => {
+
+          frame.apply(FRAME_STATE.canvasSelection);
+
+          /* HOME-CANVAS-TRANSFORM-1A — 좌표가 선택보다 먼저 왔거나
+             runtime 이 이제 막 올라온 경우다. 마지막으로 받은 값을
+             한 번 더 태운다(같은 값이면 아무 일도 하지 않는다). */
+          if (FRAME_STATE.canvasGeometry) {
+            frame.setGeometry(FRAME_STATE.canvasGeometry);
+          }
+
+        }
+      )
       .catch(
         (err) => {
 
@@ -1481,6 +1542,45 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
             : null,
         generation: verdict.payload.generation
       });
+
+      return;
+
+    }
+
+
+    /* =====================================================
+       HOME-CANVAS-TRANSFORM-1A — 단일 선택의 Canvas 좌표
+
+       ★ 이 메시지만으로는 runtime 을 받아 오지 않는다. 좌표는
+         선택과 **짝지어** 내려오고, runtime 을 켜는 관문은 여전히
+         CANVAS_SELECT 의 `editing` 하나다(계약 §16-2).
+    ====================================================== */
+
+    if (verdict.type === SANDBOX_MESSAGE_TYPES.CANVAS_GEOMETRY) {
+
+      if (verdict.payload.renderSeq !== FRAME_STATE.renderSeq) {
+        return;
+      }
+
+      FRAME_STATE.canvasGeometry = {
+        active: verdict.payload.active === true,
+        id: verdict.payload.id,
+        x: verdict.payload.x,
+        y: verdict.payload.y,
+        baseWidth: verdict.payload.baseWidth,
+        baseHeight: verdict.payload.baseHeight,
+        generation: verdict.payload.generation,
+        answering: verdict.payload.answering
+      };
+
+      if (FRAME_STATE.canvasFrame) {
+        FRAME_STATE.canvasFrame.setGeometry(FRAME_STATE.canvasGeometry);
+      }
+
+      /* ★ 답은 한 번만 쓴다. 이 값은 렌더 뒤에 runtime 이 아직
+         없었을 때를 위해 다시 태우는 자리가 있는데, 거기서 옛 답이
+         한 번 더 답으로 읽히면 안 된다(계약 §17-8). */
+      FRAME_STATE.canvasGeometry.answering = undefined;
 
       return;
 

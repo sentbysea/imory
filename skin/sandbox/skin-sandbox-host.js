@@ -1962,6 +1962,12 @@ async function renderSandboxPageIntoHandle(handle, opts) {
            것인지는 부모 realm 의 Studio 가 자기 draft 로 판단한다. */
         handle.handlers[TYPES.CANVAS_PROPOSE] = inspectRelay("canvas-propose");
 
+        /* HOME-CANVAS-TRANSFORM-1A — 이동의 확정 **요청**. 여기서도
+           해석하지 않는다 — "지금 화면의 것인가" 하나만 보고 그대로
+           올린다. 그 좌표를 실제로 써도 되는지는 부모 realm 의
+           Studio 가 자기 draft 로 판단한다. */
+        handle.handlers[TYPES.CANVAS_TRANSFORM] = inspectRelay("canvas-transform");
+
         handle.handlers[TYPES.INSPECT_CANDIDATES] = inspectRelay("candidates");
         handle.handlers[TYPES.INSPECT_TEXT] = inspectRelay("text");
         handle.handlers[TYPES.INSPECT_DRAG] = inspectRelay("drag");
@@ -2782,6 +2788,81 @@ export function sendSandboxCanvasSelect(handle, selection) {
   return sendToSandboxFrame(
     handle,
     handle.TYPES.CANVAS_SELECT,
+    payload
+  );
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 단일 선택 요소의 Canvas 좌표
+
+   sendSandboxCanvasGeometry(handle, geometry) -> boolean
+
+   geometry = { active, id, x, y, baseWidth, baseHeight, generation }
+
+   ★ 선택과 같은 규칙이다 — 호출자의 객체를 그대로 넘기지 않고,
+     알려진 칸만 새 리터럴로 옮긴다. 옮길 수 없는 값이 하나라도
+     있으면 `active:false`(= 지금은 옮길 수 있는 단독 선택이 없다)
+     로 내려간다. 여기서 "고쳐서" 보내지 않는다.
+========================================================== */
+
+export function sendSandboxCanvasGeometry(handle, geometry) {
+
+  if (!handle || handle.destroyed || !handle.TYPES || !handle.renderSeq) {
+    return false;
+  }
+
+
+  const value =
+    (geometry && typeof geometry === "object") ? geometry : null;
+
+
+  const generation =
+    (value && Number.isInteger(value.generation) && value.generation >= 0)
+      ? value.generation
+      : 0;
+
+
+  const active =
+    !!(
+      value &&
+      value.active === true &&
+      typeof value.id === "string" && value.id &&
+      Number.isFinite(value.x) &&
+      Number.isFinite(value.y) &&
+      value.baseWidth > 0 &&
+      value.baseHeight > 0
+    );
+
+
+  const payload = {
+    contract: 1,
+    renderSeq: handle.renderSeq,
+    active: active,
+    generation: generation
+  };
+
+  /* 확정의 **답**에만 붙는 번호다(프로토콜의 CANVAS_GEOMETRY 주석).
+     그 밖의 좌표 메시지에는 이 칸 자체를 만들지 않는다. */
+  if (value && Number.isInteger(value.answering) && value.answering >= 1) {
+    payload.answering = value.answering;
+  }
+
+  /* 해제에는 나머지 칸 자체를 만들지 않는다 — 프로토콜이 그 모양을
+     요구한다(CANVAS_SELECT 의 primaryId 와 같은 결). */
+  if (active) {
+    payload.id = value.id;
+    payload.x = value.x;
+    payload.y = value.y;
+    payload.baseWidth = value.baseWidth;
+    payload.baseHeight = value.baseHeight;
+  }
+
+
+  return sendToSandboxFrame(
+    handle,
+    handle.TYPES.CANVAS_GEOMETRY,
     payload
   );
 

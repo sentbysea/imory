@@ -1,8 +1,8 @@
 /* =========================================================
    HOME CANVAS — 프레임 안 편집 runtime
-   (HOME-CANVAS-SELECT-1B-1 · 1B-2)
+   (HOME-CANVAS-SELECT-1B-1 · 1B-2 · TRANSFORM-1A)
 
-   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §15 · §16
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §15 · §16 · §17
    로드맵:    docs/plans/IMORY_HOME_CANVAS_ROADMAP.md (PLAN)
 
    ── 이 파일이 하는 것 / 하지 않는 것 ────────────────────
@@ -12,11 +12,14 @@
              여럿이면 그룹 틀 하나).
            2) Selecto 로 끌어서 고른 결과와 Shift 클릭을 **제안**으로
              올려보낸다.
+           3) TRANSFORM-1A — 단독으로 고른 요소 하나를 마우스 · 펜으로
+             끌어 옮기고, 그 결과를 **확정 요청**으로 올려보낸다.
 
-   안 한다: 이동 · 크기 · 회전 조작 · 손잡이 · Canvas JSON 수정 ·
-           Undo · **최종 선택의 확정**. Moveable 은 여전히 **표시
-           전용**이고, 이 파일은 스킨 DOM 에도 Canvas 데이터에도 한
-           글자도 쓰지 않는다.
+   안 한다: 크기 · 회전 조작 · 손잡이 · 그룹 이동 · 손가락 이동 ·
+           Canvas JSON 수정 · Undo · **최종 선택과 최종 좌표의
+           확정**. 끄는 동안 이 문서에서 움직이는 것은 custom
+           property 두 칸뿐이고, 무엇을 실제로 저장할지는 언제나
+           부모가 자기 draft 를 보고 정한다.
 
    ── 누가 정하는가 ───────────────────────────────────────
    프레임은 "이것들이 잡혔다"까지만 말한다. 무엇이 최종 선택인지 ·
@@ -93,6 +96,29 @@ const CANVAS_ELEMENT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 /* Shift + 클릭이 "끌기"가 아니라고 보는 움직임의 상한(px). 이보다
    더 움직였으면 그 입력은 Shift + lasso 다. */
 const SHIFT_CLICK_SLOP = 5;
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 이동
+
+   ★ 이번 단계가 켜는 조작은 `draggable` **하나**다. 손잡이(크기 ·
+     회전)는 여전히 만들지 않는다.
+
+   ★ 저장 단위는 소수점 셋째 자리까지다. 390 자 도화지에서 0.001 은
+     실제 화면의 1/1000 px 보다 작고, 그보다 더 적으면 같은 자리를
+     여러 번 끌었을 때 문자열이 계속 길어진다.
+
+   ★ 확정을 올려보낸 뒤 **답을 기다리는 동안**에도 임시 위치를
+     유지한다. 부모가 승인하면 그 값이 그대로 남고, 거부하면 부모가
+     내려 준 현재 값으로 되돌아간다(§9). 답이 아예 오지 않는 경우
+     (프레임 교체 · 부모 오류)를 위해 상한을 하나 둔다 — 그때는
+     마지막으로 알고 있던 값으로 돌아간다.
+========================================================== */
+
+const CANVAS_MOVE_KIND = "move";
+
+const CANVAS_COORD_DECIMALS = 1000;
+
+const CANVAS_COMMIT_TIMEOUT_MS = 4000;
 
 /* 규칙표를 못박을 때 쓰는 수. 한 화면에 이만큼의 컴포넌트가 동시에
    붙었다 떨어지는 일은 없다(위 pinEditorStyleSheets). */
@@ -336,20 +362,46 @@ function lassoSelectoOptions(doc, getSelectable, condition, nonce) {
 
 
 /* =========================================================
-   표시 전용 Moveable 설정 — 이번 단계가 켜는 것은 테두리뿐
+   Moveable 설정 — 테두리, 그리고 **본체 이동 하나**
 
-   ★ 조작 able 을 **전부** 끈다.
+   ★ 손잡이 able 은 여전히 전부 꺼져 있다. 켜는 것은 `draggable`
+     하나이고, 그것도 생성 시점에는 false 다 — 조건이 맞을 때만
+     setDraggableState() 가 켠다(계약 §17-1).
 
-   그래서 이 Moveable 은 target 에 pointer 리스너를 하나도 달지
-   않는다 — 0.53.0 의 _updateEvents() 는 "dragStart 를 가진 able 이
-   하나도 없으면" targetGesto 를 만들지 않고 이미 있으면 떼어 낸다.
-   기존 Select 의 pointerdown 선택(skin/sandbox/skin-sandbox-inspect.js ·
-   studio/preview/preview-inspect-direct.js)이 그대로 산다.
+   ★ 그래서 이 Moveable 은 조건이 맞을 때 target 에 pointer 리스너를
+     단다(0.53.0 의 _updateEvents 는 "dragStart 를 가진 able 이 하나
+     라도 있으면" targetGesto 를 만든다). 그 gesto 는 mousedown /
+     touchstart 를 듣고, 기존 Select 는 document capture 의
+     **pointerdown** 을 듣는다 — 서로 다른 이벤트라 한쪽이 다른 쪽을
+     지우지 않는다(Selecto 와 같은 사정).
+
+   ★ preventClickEventOnDrag: true 가 이번에 켜졌다.
+
+     native Preview 의 Inspector 는 **click** 으로 고른다. 끌고 난 뒤
+     따라오는 click 을 그대로 두면 방금 옮긴 요소를 한 번 더 고르는
+     메시지가 왕복한다(선택은 그대로지만 순번이 헛돈다). gesto 가
+     **끌었을 때만** 그 한 번을 막는다 — 끌지 않은 평범한 클릭에는
+     손대지 않으므로 SELECT-1A 의 단일 클릭 선택은 그대로다.
 
    ★ renderDirections: [] 는 손잡이(모서리 · 변)를 만들지 않는다.
      hideDefaultLines 는 **끄지 않는다** — 그 네 줄이 우리가 원하는
      "회전을 따라가는 테두리"다(내부 state.renderLines 는 요소의
      네 꼭짓점 pos1~pos4 에서 나오므로 축에 평행한 상자가 아니다).
+
+   ★ 이벤트 handler 는 **`.on()` 으로만** 건다. 옵션으로 넘기면
+     한 번도 불리지 않는다.
+
+     0.53.0 의 vanilla 래퍼는 생성자에서 옵션을 복사한 뒤 모든
+     `onXxx` 칸을 **자기 emitter 로 덮어쓴다**(번들 실측:
+     `su.forEach(t => u["on"+Camel(t)] = e => this.trigger(t, e))`).
+     그래서 우리가 넣은 `onDragStart` 는 그 자리에서 사라진다 —
+     2026-09-21 에 실제로 그렇게 만들었다가, 관문도 통과하고
+     targetGesto 도 붙었는데 드래그가 **한 번도 시작되지 않는**
+     상태를 보고서야 알았다.
+
+     거절은 `e.stop()` 이다. emitter 의 `emit()` 은 listener 중
+     하나라도 `stop()` 을 부르면 false 를 돌려주고, Draggable 은
+     그 값을 보고 제스처를 접는다(`!1 !== (parentEvent || trigger)`).
 
    ★ cspNonce 는 공식 옵션이다. 전역 createElement 를 가로채지도,
      style 태그를 사후에 훑지도, CSP 를 넓히지도 않는다. 0.53.0 에서
@@ -363,8 +415,34 @@ function displayOnlyMoveableOptions(target, nonce) {
 
     target: target,
 
-    /* 조작 — 전부 끈다 */
-    draggable: false,
+    /*
+      조작 — 이동 하나만. **생성 시점에 켠다.**
+
+      ★ 처음에 끄고 조건이 맞을 때 `moveable.draggable = true` 로
+        켜는 길을 먼저 만들었다가 되돌렸다. 0.53.0 의 vanilla 래퍼는
+        prop 마다 setter 를 두지만 그 setter 는 `setState` 이고,
+        preact 의 setState 는 **렌더를 미룬다**. able 목록과 target
+        gesto 는 그 렌더 뒤의 `_updateEvents()` 에서 만들어지므로,
+        켠 직후에 누르면 pointer 리스너가 아직 없다 — 2026-09-21
+        실측에서 `props.draggable` 은 true 인데 `targetGesto` 가
+        없었고, 드래그가 **한 번도 시작되지 않았다**.
+
+      ★ 켜 둔 채로 두어도 "고르지 않은 요소가 끌린다"가 생기지
+        않는다. Moveable 의 target 은 언제나 **부모가 확정한 선택**
+        이고, 그 위에서 dragStart 가 다시 dragGate() 를 지난다
+        (거기서 false 를 돌려주면 0.53.0 은 그 자리에서 제스처를
+        접는다 — 번들 실측). 관문이 한 곳이라 켜고 끄는 타이밍을
+        추적할 일이 없다.
+    */
+    draggable: true,
+
+    /* 움직임을 반올림하지 않는다 — 우리는 Moveable 의 translate 를
+       쓰지 않고 clientX/clientY 를 직접 쓴다(§17-3) */
+    throttleDrag: 0,
+    throttleDragRotate: 0,
+
+    preventClickEventOnDrag: true,
+
     resizable: false,
     scalable: false,
     rotatable: false,
@@ -401,7 +479,6 @@ function displayOnlyMoveableOptions(target, nonce) {
     checkInput: false,
     preventDefault: false,
     preventClickDefault: false,
-    preventClickEventOnDrag: false,
 
     /* 따라가기는 아래 rAF 한 곳이 맡는다 — 관측기를 두 벌 두지
        않는다(어느 것이 갱신했는지 추적할 수 없게 된다) */
@@ -486,6 +563,41 @@ export function createHomeCanvasSelectionFrame(options) {
 
     /* 마지막 lasso 가 시작된 자리(도화지 안이었는가) */
     dragAllowed: false,
+
+    /* =====================================================
+       HOME-CANVAS-TRANSFORM-1A — 이동
+
+       geometry  부모가 내려 준 **단일 선택 요소의 Canvas 좌표**.
+                 프레임은 JSON 을 갖고 있지 않으므로 이 값 없이는
+                 "무엇에서 얼마나 움직였는가"를 말할 수 없다.
+                 DOM 의 백분율을 거꾸로 풀지 않는다 — 그 값은 이미
+                 여섯 자리에서 잘린 것이라 되돌리면 원본이 아니다.
+
+       drag      지금 진행 중인 제스처. 시작 시점의 clientX/Y 와
+                 **시작 좌표**를 들고 있고, 매 프레임 그 시작값에
+                 누적 이동량을 더한다(직전 프레임의 delta 를 계속
+                 더하지 않는다 — §17-3).
+
+       pending   확정을 올려보내고 답을 기다리는 중. 그동안 임시
+                 위치를 유지하고 새 드래그를 받지 않는다.
+    ====================================================== */
+
+    geometry: null,
+    geometryLog: [],
+    drag: null,
+    pending: null,
+    pendingTimer: 0,
+
+    /* 확정 요청마다 하나씩 오른다. 부모는 답에 이 번호를 달아
+       돌려주고, 프레임은 **자기 번호와 같은 답**에만 반응한다 —
+       좌표 메시지는 이 답 말고도 나오기 때문이다(계약 §17-8). */
+    requestSeq: 0,
+
+    /* 진단 — 마지막 이동이 어떻게 끝났는가 */
+    moveCount: 0,
+    lastMoveGate: "",
+    lastCommit: null,
+    lastSettle: "",
 
     /* 진단 — 마지막 드래그가 어디서 걸렸는가 · 몇 개를 잡았는가 */
     shiftPress: null,
@@ -750,6 +862,22 @@ export function createHomeCanvasSelectionFrame(options) {
       return;
     }
 
+    /* =====================================================
+       HOME-CANVAS-TRANSFORM-1A — 끄는 동안에는 재지 않는다.
+
+       Moveable 은 제스처가 도는 동안 자기 control box 를 **자기
+       계산으로** 그린다(우리가 target 에 transform 을 쓰지 않아도
+       따라온다). 그 사이 우리가 updateRect() 를 부르면 그 계산의
+       기준이 제자리에서 갈려 테두리가 요소와 어긋난다.
+
+       우리가 옮기는 양과 Moveable 이 그리는 양은 둘 다 같은
+       clientX/Y 차이에서 나오므로, 재지 않아도 둘은 붙어 있다.
+    ====================================================== */
+    if (state.drag) {
+      state.rafId = win.requestAnimationFrame(tick);
+      return;
+    }
+
     const elements =
       targetElements();
 
@@ -994,6 +1122,12 @@ export function createHomeCanvasSelectionFrame(options) {
       state.moveable =
         new state.ctor(doc.body, displayOnlyMoveableOptions(first, frameNonce()));
 
+      /* HOME-CANVAS-TRANSFORM-1A — 옵션이 아니라 여기서 건다
+         (위 displayOnlyMoveableOptions 의 ★ 주석) */
+      state.moveable.on("dragStart", onCanvasDragStart);
+      state.moveable.on("drag", onCanvasDrag);
+      state.moveable.on("dragEnd", onCanvasDragEnd);
+
       /*
         ★ 여기서 한 번 **flush** 한다.
 
@@ -1032,6 +1166,21 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   function setMoveableTarget(elements) {
+
+    /* =====================================================
+       HOME-CANVAS-TRANSFORM-1A — 끄는 동안 같은 target 을 다시
+       잡지 않는다.
+
+       sandbox 에서는 끌기 시작과 거의 동시에 "같은 것을 골랐다"가
+       한 번 더 내려온다(위 apply 의 함정 주석). 그때 updateRect()
+       를 부르면 Moveable 이 제스처 도중에 기준을 다시 재어 테두리가
+       요소와 어긋난다 — tick 이 끄는 동안 재지 않는 것과 같은
+       이유다.
+    ====================================================== */
+    if (state.drag && state.moveable && sameTargets(elements)) {
+      markControlBox();
+      return true;
+    }
 
     try {
 
@@ -1121,6 +1270,10 @@ export function createHomeCanvasSelectionFrame(options) {
 
     syncSelectoSelection(elements);
 
+    /* HOME-CANVAS-TRANSFORM-1A — 조건이 맞으면 여기서 이동이 켜진다.
+       맞지 않으면(여럿 · 좌표 없음 · 잠김) 꺼진 채로 테두리만 남는다. */
+    syncDraggable();
+
     report(true);
 
     startFollow();
@@ -1139,6 +1292,8 @@ export function createHomeCanvasSelectionFrame(options) {
     다시 고를 때 요청도 생성도 새로 하지 않는다.
   */
   function detach() {
+
+    cancelDrag("detach");
 
     stopFollow();
 
@@ -1160,6 +1315,732 @@ export function createHomeCanvasSelectionFrame(options) {
     syncSelectoSelection([]);
 
     report(false);
+
+  }
+
+
+  /* =========================================================
+     HOME-CANVAS-TRANSFORM-1A — 단일 요소 이동
+
+     ★ 이 프레임은 Canvas JSON 을 갖고 있지 않다.
+
+     그래서 "지금 몇이냐"를 스스로 알 수 없다. DOM 에 적힌 백분율을
+     거꾸로 풀지도 않는다 — 그 값은 렌더러가 이미 여섯 자리에서
+     자른 것이라 되돌리면 원본과 미세하게 다르고, 그 차이가 그대로
+     저장되면 끌지도 않은 요소가 조금씩 움직인다.
+
+     대신 부모가 **선택과 짝지어** 좌표 하나를 내려 준다
+     (setGeometry). 이동은 그 값에서 시작하고, 확정도 그 값을
+     `expected` 로 달고 올라간다 — 부모는 자기 draft 의 현재 값과
+     대조한 뒤에만 쓴다.
+
+     ★ 끄는 동안 Canvas JSON 도 working draft 도 Undo 도 스킨 CSS 도
+       한 글자 바뀌지 않는다. 이 프레임 안에서 custom property 두
+       칸이 움직일 뿐이다(§17-4).
+  ========================================================== */
+
+  /*
+    좌표를 쓰는 함수는 렌더러의 것을 그대로 쓴다
+    (skin/skin-home-canvas-render.js §0-1). 이 문서가 그 파일을
+    읽지 않았으면 **이동을 켜지 않는다** — 계산을 여기에 한 벌 더
+    적지 않는다.
+  */
+  function positionApi() {
+
+    if (
+      typeof win.setSkinCanvasElementPosition !== "function" ||
+      typeof win.readSkinCanvasElementPositionVars !== "function" ||
+      typeof win.restoreSkinCanvasElementPositionVars !== "function"
+    ) {
+      return null;
+    }
+
+    return {
+      set: win.setSkinCanvasElementPosition,
+      read: win.readSkinCanvasElementPositionVars,
+      restore: win.restoreSkinCanvasElementPositionVars
+    };
+
+  }
+
+
+  /* 소수점 셋째 자리까지. 정확한 정수면 정수 그대로다(-0 은 0). */
+  function roundCanvasCoord(value) {
+
+    const rounded =
+      Math.round(value * CANVAS_COORD_DECIMALS) / CANVAS_COORD_DECIMALS;
+
+    return Object.is(rounded, -0) ? 0 : rounded;
+
+  }
+
+
+  /*
+    frame px → Canvas 좌표의 배율.
+
+    ★ 도화지의 **가로폭 하나**로 정한다. 세로는 렌더러가
+      `aspect-ratio: baseWidth / baseHeight` 로 가로에 묶어 두었으므로
+      같은 배율이다(skin/skin-home-canvas-render.css §1). 세로를 따로
+      재면 스킨이 높이를 덮어썼을 때 x 와 y 가 서로 다른 자로
+      움직인다.
+
+    ★ 부모 문서의 Preview `transform: scale()` 은 여기에 들어오지
+      않는다. 이 문서 안의 getBoundingClientRect 와 pointer 의
+      clientX 는 둘 다 **이 프레임의 좌표계**이고, 바깥의 scale 은
+      둘 다에 똑같이 적용되므로 나누면 사라진다.
+  */
+  function canvasScale(baseWidth) {
+
+    const root =
+      canvasRoot();
+
+    if (!root || !(baseWidth > 0)) {
+      return 0;
+    }
+
+    const box =
+      root.getBoundingClientRect();
+
+    return box.width > 0 ? (box.width / baseWidth) : 0;
+
+  }
+
+
+  /*
+    지금 이동을 켜도 되는가 — 이유를 문자열로 돌려준다(§17-1).
+
+    "ok" 가 아닌 값은 전부 진단용이고, 그 상태에서는 Moveable 의
+    draggable 이 꺼져 있어 애초에 제스처가 시작되지 않는다.
+  */
+  function dragGate() {
+
+    if (state.disposed || !state.editing) {
+      return "not-editing";
+    }
+
+    if (state.pending) {
+      return "pending";
+    }
+
+    if (state.targetIds.length !== 1) {
+      return "not-single";
+    }
+
+    const id =
+      state.targetIds[0];
+
+    if (primaryId() !== id) {
+      return "not-primary";
+    }
+
+    const geometry =
+      state.geometry;
+
+    if (!geometry || geometry.id !== id) {
+      return "no-geometry";
+    }
+
+    if (geometry.generation !== state.generation) {
+      return "stale-geometry";
+    }
+
+    const el =
+      elementFor(id);
+
+    if (!el) {
+      return "no-element";
+    }
+
+    /* 부모가 draft 에서 이미 본 것이지만 화면에서도 한 번 더 본다 —
+       늦게 온 재렌더가 그 사이에 잠갔을 수 있다 */
+    if (el.hasAttribute("hidden") || el.getAttribute(CANVAS_LOCKED_ATTR) === "true") {
+      return "locked";
+    }
+
+    if (!positionApi()) {
+      return "no-renderer";
+    }
+
+    if (!(canvasScale(geometry.baseWidth) > 0)) {
+      return "no-scale";
+    }
+
+    return "ok";
+
+  }
+
+
+  /*
+    syncDraggable()
+
+    able 을 켜고 끄지 않는다(위 displayOnlyMoveableOptions 주석) —
+    지금 이동을 받을 수 있는지 다시 재어 진단에 남길 뿐이다. 실제
+    판정은 언제나 제스처가 시작될 때 dragGate() 가 한다.
+  */
+  function syncDraggable() {
+
+    if (!state.moveable) {
+      return false;
+    }
+
+    const gate =
+      dragGate();
+
+    state.lastMoveGate = gate;
+
+    return gate === "ok";
+
+  }
+
+
+  function restoreDragPosition(gesture) {
+
+    const api =
+      positionApi();
+
+    if (!api || !gesture || !gesture.el || !gesture.saved) {
+      return;
+    }
+
+    try {
+      api.restore(gesture.el, gesture.saved);
+    }
+    catch (err) {
+      /* 이미 사라진 노드다 — 재렌더가 제자리를 그린다 */
+    }
+
+  }
+
+
+  function clearPendingTimer() {
+
+    if (state.pendingTimer) {
+      win.clearTimeout(state.pendingTimer);
+      state.pendingTimer = 0;
+    }
+
+  }
+
+
+  /*
+    cancelDrag(reason)
+
+    **끄는 중인 제스처만** 접는다 — 시작 자리로 되돌리고 부모에게는
+    아무 말도 하지 않는다(확정을 보낸 적이 없다, §9).
+
+    ★ 이미 확정을 보내 **답을 기다리는 중인 것은 건드리지 않는다.**
+
+    승인된 확정은 곧바로 화면을 다시 그리게 하고, 그 재렌더가
+    이 함수를 부른다(onRender). 거기서 기다림까지 접으면 **정상적으로
+    저장된 이동이 "답을 못 받았다"가 되어** 화면만 제자리로 돌아간다
+    (2026-09-21 이 라운드의 e2e 가 그렇게 잡았다). 기다림을 끝내는
+    것은 번호가 붙은 답 하나, 상한 시간, 그리고 dispose() 뿐이다.
+  */
+  function cancelDrag(reason) {
+
+    if (!state.drag) {
+      return;
+    }
+
+    const gesture =
+      state.drag;
+
+    state.drag = null;
+
+    gesture.cancelled = true;
+
+    restoreDragPosition(gesture);
+
+    if (state.moveable && typeof state.moveable.stopDrag === "function") {
+
+      try {
+        state.moveable.stopDrag("target");
+      }
+      catch (err) {
+        /* 이미 끝난 제스처다 */
+      }
+
+    }
+
+    state.lastMoveGate = "cancel:" + (reason || "");
+
+  }
+
+
+  /*
+    abandonPendingCommit(reason)
+
+    기다림 자체를 접는다. 이 문서가 사라지는 경우(dispose)에만
+    쓴다 — 그 밖에는 답이 오거나 상한 시간이 끝낸다.
+  */
+  function abandonPendingCommit(reason) {
+
+    if (!state.pending) {
+      return;
+    }
+
+    const pending =
+      state.pending;
+
+    state.pending = null;
+
+    clearPendingTimer();
+
+    restoreDragPosition(pending);
+
+    state.lastSettle = "cancel:" + (reason || "");
+
+  }
+
+
+  /*
+    거절은 `event.stop()` 이다 — 반환값이 아니다(위
+    displayOnlyMoveableOptions 의 ★ 주석). emitter 가 그 호출을 보고
+    false 를 돌려주면 Draggable 이 그 자리에서 제스처를 접는다.
+  */
+  function refuseDrag(event, reason) {
+
+    state.lastMoveGate = reason;
+
+    if (event && typeof event.stop === "function") {
+      event.stop();
+    }
+
+    return false;
+
+  }
+
+
+  function onCanvasDragStart(event) {
+
+    const gate =
+      dragGate();
+
+    if (gate !== "ok") {
+      return refuseDrag(event, gate);
+    }
+
+    /*
+      손가락으로는 본체를 끌지 않는다(§17-2).
+
+      도화지 전체를 덮는 배경 사진이 선택된 상태에서 한 손가락
+      드래그를 가로채면 모바일 Preview 가 아예 스크롤되지 않는다.
+      lasso 와 같은 이유이고, 같은 판정 함수를 쓴다.
+    */
+    if (isCoarsePointerEvent(event && event.inputEvent)) {
+      return refuseDrag(event, "coarse-pointer");
+    }
+
+    const geometry =
+      state.geometry;
+
+    const el =
+      elementFor(geometry.id);
+
+    const api =
+      positionApi();
+
+    const scale =
+      canvasScale(geometry.baseWidth);
+
+    if (!el || !api || !(scale > 0)) {
+      return refuseDrag(event, "no-basis");
+    }
+
+    state.drag = {
+      id: geometry.id,
+      el: el,
+      scale: scale,
+      startX: event.clientX,
+      startY: event.clientY,
+      baseX: geometry.x,
+      baseY: geometry.y,
+      baseWidth: geometry.baseWidth,
+      baseHeight: geometry.baseHeight,
+      generation: state.generation,
+      saved: api.read(el),
+      nextX: geometry.x,
+      nextY: geometry.y,
+      cancelled: false
+    };
+
+    state.lastMoveGate = "ok";
+
+    return true;
+
+  }
+
+
+  function onCanvasDrag(event) {
+
+    const gesture =
+      state.drag;
+
+    if (!gesture || gesture.cancelled) {
+      return;
+    }
+
+    if (!gesture.el.isConnected) {
+      cancelDrag("detached");
+      return;
+    }
+
+    const api =
+      positionApi();
+
+    if (!api) {
+      cancelDrag("no-renderer");
+      return;
+    }
+
+    /*
+      ★ 시작값 + **누적** 이동량이다.
+
+      직전 프레임의 delta 를 계속 더하면 반올림이 매 프레임 쌓여
+      한 번의 드래그 안에서도 어긋난다. 여기서는 언제나 시작
+      clientX/Y 와의 차이를 쓰므로 프레임 수와 무관하다(§17-3).
+    */
+    const dx =
+      (event.clientX - gesture.startX) / gesture.scale;
+
+    const dy =
+      (event.clientY - gesture.startY) / gesture.scale;
+
+    gesture.nextX = roundCanvasCoord(gesture.baseX + dx);
+    gesture.nextY = roundCanvasCoord(gesture.baseY + dy);
+
+    try {
+
+      api.set(
+        gesture.el,
+        gesture.nextX,
+        gesture.nextY,
+        gesture.baseWidth,
+        gesture.baseHeight
+      );
+
+    }
+    catch (err) {
+      cancelDrag("write-failed");
+    }
+
+  }
+
+
+  function onCanvasDragEnd() {
+
+    const gesture =
+      state.drag;
+
+    state.drag = null;
+
+    if (!gesture || gesture.cancelled) {
+      return;
+    }
+
+    /* 움직이지 않았다 — 확정도, 기록도 없다(§17-6) */
+    if (gesture.nextX === gesture.baseX && gesture.nextY === gesture.baseY) {
+      restoreDragPosition(gesture);
+      state.lastMoveGate = "no-move";
+      return;
+    }
+
+    if (typeof opts.onTransform !== "function") {
+      restoreDragPosition(gesture);
+      state.lastMoveGate = "no-channel";
+      return;
+    }
+
+    /*
+      ★ 임시 위치를 **그대로 둔 채** 답을 기다린다.
+
+      여기서 먼저 시작 자리로 되돌리면 승인된 경우에도 한 프레임
+      제자리로 튀었다가 다시 간다. 부모의 답(새 geometry)이 그
+      기다림을 끝낸다 — 승인이면 방금 자리를 그대로 확정하고,
+      거부면 부모가 내려 준 현재 값으로 되돌아간다.
+    */
+    state.requestSeq += 1;
+
+    gesture.requestId = state.requestSeq;
+
+    state.pending = gesture;
+
+    state.moveCount += 1;
+
+    state.lastCommit = {
+      id: gesture.id,
+      expected: { x: gesture.baseX, y: gesture.baseY },
+      next: { x: gesture.nextX, y: gesture.nextY },
+      generation: gesture.generation,
+      requestId: gesture.requestId
+    };
+
+    state.lastSettle = "pending";
+
+    syncDraggable();
+
+    try {
+
+      opts.onTransform({
+        kind: CANVAS_MOVE_KIND,
+        id: gesture.id,
+        expected: { x: gesture.baseX, y: gesture.baseY },
+        next: { x: gesture.nextX, y: gesture.nextY },
+        generation: gesture.generation,
+        requestId: gesture.requestId
+      });
+
+    }
+    catch (err) {
+      cancelDrag("send-failed");
+      return;
+    }
+
+    clearPendingTimer();
+
+    /* 답이 아예 오지 않는 경우(프레임 교체 · 부모 오류)에도 임시
+       위치가 영영 남지 않게 한다 */
+    state.pendingTimer =
+      win.setTimeout(
+        () => {
+
+          state.pendingTimer = 0;
+
+          if (state.pending === gesture) {
+            state.pending = null;
+            restoreDragPosition(gesture);
+            state.lastSettle = "timeout";
+            syncDraggable();
+          }
+
+        },
+        CANVAS_COMMIT_TIMEOUT_MS
+      );
+
+  }
+
+
+  /* =========================================================
+     setGeometry(payload) — 부모가 내려 준 단일 선택의 Canvas 좌표
+
+     payload = { active, id, x, y, baseWidth, baseHeight, generation }
+
+     ★ 두 가지 일을 한다.
+
+       1) 다음 드래그의 **시작 좌표**를 정한다.
+       2) 확정을 기다리는 중이었다면 그 기다림을 **끝낸다** —
+          승인이면 받은 값이 방금 놓은 자리와 같고, 거부면 예전
+          값이라 화면이 제자리로 돌아간다. 프레임은 둘을 구분해
+          행동하지 않는다: 언제나 "부모가 말한 값"으로 맞춘다.
+  ========================================================== */
+
+  function setGeometry(payload) {
+
+    if (state.disposed) {
+      return;
+    }
+
+    const value =
+      (payload && typeof payload === "object" && payload.active === true)
+        ? {
+            id: typeof payload.id === "string" ? payload.id : "",
+            x: payload.x,
+            y: payload.y,
+            baseWidth: payload.baseWidth,
+            baseHeight: payload.baseHeight,
+            generation:
+              Number.isInteger(payload.generation) ? payload.generation : -1
+          }
+        : null;
+
+    /* 진단 — 마지막 몇 개의 좌표 메시지. "승인인데 왜 되돌아갔나"를
+       다시 재현하지 않고 읽을 수 있게 남긴다. */
+    state.geometryLog.push(
+      value
+        ? `${value.id}@${value.x},${value.y}#${value.generation}${state.pending ? "*" : ""}`
+        : `off${state.pending ? "*" : ""}`
+    );
+
+    if (state.geometryLog.length > 8) {
+      state.geometryLog.shift();
+    }
+
+    const usable =
+      !!value &&
+      CANVAS_ELEMENT_ID_PATTERN.test(value.id) &&
+      Number.isFinite(value.x) &&
+      Number.isFinite(value.y) &&
+      value.baseWidth > 0 &&
+      value.baseHeight > 0 &&
+      value.generation >= 0;
+
+    state.geometry =
+      usable ? value : null;
+
+
+    /* =====================================================
+       끌고 있는 중에 좌표가 왔다.
+
+       ★ 시작 좌표가 그대로면 **같은 선택을 다시 확정한 것**이다
+         (위 apply 의 함정 주석). 진행 중인 제스처가 새 순번을
+         받아 간다 — 확정이 그 순번으로 올라가야 부모의 관문을
+         지난다.
+
+       ★ 시작 좌표가 달라졌으면 그 사이에 draft 가 바뀐 것이다
+         (Undo · Import · AI 적용). 지금 끌고 있는 값은 더 이상
+         근거가 없으므로 접는다(§9).
+    ====================================================== */
+
+    if (state.drag) {
+
+      if (
+        usable &&
+        value.id === state.drag.id &&
+        value.x === state.drag.baseX &&
+        value.y === state.drag.baseY
+      ) {
+        state.drag.generation = value.generation;
+      }
+      else {
+        cancelDrag("geometry");
+      }
+
+    }
+
+
+    /* =====================================================
+       ★ 답은 **번호가 붙은 것 하나**다.
+
+       좌표 메시지는 이 답 말고도 나온다 — 선택이 바뀔 때, 다시
+       그린 뒤, draft 가 바뀔 때마다. 실제로 확정이 부모에 닿기
+       **전에** 확정 전 값을 그대로 담은 좌표가 한 번 더 내려왔고,
+       그것을 답으로 읽었더니 승인된 이동이 "거부됐다"가 되어
+       제자리로 돌아갔다(2026-09-21 이 라운드의 e2e 가 잡았다).
+
+       그래서 기다리는 동안에는 **자기 요청 번호를 단 메시지**만
+       답으로 받는다. 나머지는 다음 이동의 시작점만 갱신한다.
+    ====================================================== */
+
+    const pending =
+      (state.pending && payload && payload.answering === state.pending.requestId)
+        ? state.pending
+        : null;
+
+    if (pending) {
+
+      const api =
+        positionApi();
+
+      const el =
+        elementFor(pending.id);
+
+      state.pending = null;
+
+      clearPendingTimer();
+
+      if (usable && value.id === pending.id) {
+
+        /* =================================================
+           ★ 판정은 **값**으로 한다 — 그릴 수 있었는가가 아니라.
+
+           승인된 확정 뒤에는 부모가 화면을 다시 그린다. 그래서 이
+           메시지를 처리하는 순간 우리가 끌던 노드가 이미 새 노드로
+           갈려 있을 수 있다. 그것을 "되돌렸다"로 적으면 정상적으로
+           저장된 이동이 실패로 보인다(2026-09-21 이 라운드의 e2e 가
+           실제로 그렇게 읽었다).
+
+           부모가 말한 값이 우리가 부탁한 값과 같으면 승인이다.
+           화면은 새 DOM 이 이미 그 자리에 그려 놓았거나, 아래
+           한 줄이 맞춰 준다.
+        ================================================= */
+
+        if (api && el) {
+
+          try {
+            api.set(el, value.x, value.y, value.baseWidth, value.baseHeight);
+          }
+          catch (err) {
+            /* 이미 갈린 노드다 — 새 DOM 이 제자리를 그린다 */
+          }
+
+        }
+
+        state.lastSettle =
+          (value.x === pending.nextX && value.y === pending.nextY)
+            ? "accepted"
+            : "restored";
+
+      }
+      else {
+
+        restoreDragPosition(pending);
+
+        state.lastSettle = "restored";
+
+      }
+
+    }
+
+    syncDraggable();
+
+  }
+
+
+  /*
+    topCanvasElementAt(x, y)
+
+    그 자리에서 **가장 위에 있는** 캔버스 요소. lasso 와 본체 이동을
+    가르는 판정이다(§17-2).
+
+      고를 수 있는 요소가 위에 있다  → 그 요소(= lasso 금지)
+      잠긴 요소가 위에 있다          → null (배경처럼 본다)
+      도화지 바탕                    → null (lasso)
+
+    숨긴 요소는 상자가 없어 애초에 이 목록에 오지 않고, `pointer-events:
+    none` 인 것(사용자 JS 효과 레이어 · Moveable control box)도 오지
+    않는다 — 브라우저의 elementsFromPoint 가 이미 걸러 준다.
+  */
+  function topCanvasElementAt(x, y) {
+
+    const root =
+      canvasRoot();
+
+    if (!root || typeof doc.elementsFromPoint !== "function") {
+      return null;
+    }
+
+    const stack =
+      doc.elementsFromPoint(x, y) || [];
+
+    for (let i = 0; i < stack.length; i += 1) {
+
+      let el =
+        stack[i];
+
+      while (el && el.nodeType === 1) {
+
+        /* 도화지 바탕에 먼저 닿았다 — 이 자리에는 요소가 없다 */
+        if (el === root) {
+          return null;
+        }
+
+        if (
+          typeof el.hasAttribute === "function" &&
+          el.hasAttribute(CANVAS_ELEMENT_ATTR) &&
+          root.contains(el)
+        ) {
+
+          return el.getAttribute(CANVAS_LOCKED_ATTR) === "true" ? null : el;
+
+        }
+
+        el = el.parentElement;
+
+      }
+
+    }
+
+    return null;
 
   }
 
@@ -1312,6 +2193,31 @@ export function createHomeCanvasSelectionFrame(options) {
       state.moveable.isMoveableElement(target)
     ) {
       return gate("moveable-control");
+    }
+
+    /* =====================================================
+       HOME-CANVAS-TRANSFORM-1A — 요소 위에서 시작한 끌기는
+       lasso 가 아니다(§17-2).
+
+       ★ SELECT-1B-2 에서는 `preventDragFromInside:false` 로 두어
+         **요소 위에서도** lasso 가 시작됐다. 도화지 전체를 덮는
+         배경 사진이 흔해서 시작할 빈 자리가 없었기 때문이다. 이제
+         그 자리에서 시작한 끌기는 "이 요소를 옮긴다"는 뜻이 될 수
+         있으므로 둘을 갈라야 한다.
+
+         고를 수 있는 요소 위     lasso 시작 금지
+                                  (고른 요소면 Moveable 이 옮기고,
+                                   아니면 아무 일도 없다 — 먼저
+                                   클릭해서 고른다)
+         잠긴 요소 위             배경처럼 보고 lasso 허용
+         빈 도화지                lasso
+
+       그래서 배경 사진 위에서 lasso 를 하려면 그 사진을 잠근다 —
+       "건드리지 않겠다"는 표시가 곧 "배경으로 쓰겠다"가 된다.
+    ====================================================== */
+
+    if (topCanvasElementAt(event.clientX, event.clientY)) {
+      return gate("canvas-element");
     }
 
     state.dragAllowed = true;
@@ -1655,6 +2561,39 @@ export function createHomeCanvasSelectionFrame(options) {
       return false;
     }
 
+    /* =====================================================
+       HOME-CANVAS-TRANSFORM-1A — 선택이 갈리면 제스처도 끝이다(§9).
+
+       ★ 순번이 올랐다고 취소하지 않는다. **같은 요소를 다시
+         확정한 것**이면 이어 간다.
+
+       함정: sandbox 프레임의 Inspector 는 **pointerdown** 에서
+       고른다(skin/sandbox/skin-sandbox-inspect.js). 그래서 이미
+       고른 요소를 끌기 시작하는 그 순간에도 "이것을 골랐다"가 한
+       번 더 올라가고, 부모는 같은 선택을 새 순번으로 확정해 내려
+       준다. 그 메시지는 언제나 dragStart **뒤에** 도착한다
+       (postMessage 는 비동기다). 그것을 취소로 읽으면 sandbox 에서는
+       이동이 **한 번도 성립하지 않는다**(2026-09-21 실측).
+
+       그래서 가르는 기준을 순번이 아니라 **무엇을 골랐는가**로
+       둔다. 같은 단독 선택이면 진행 중인 제스처가 새 순번을
+       받아 간다(아래) — 확정도 그 순번으로 올라가므로 부모의
+       "최신 순번인가" 관문을 그대로 지난다.
+    ====================================================== */
+
+    const stillSame =
+      !!state.drag &&
+      !!value &&
+      value.active === true &&
+      Array.isArray(value.ids) &&
+      value.ids.length === 1 &&
+      value.ids[0] === state.drag.id &&
+      value.primaryId === state.drag.id;
+
+    if (generation !== state.generation && !stillSame) {
+      cancelDrag("generation");
+    }
+
     state.generation = generation;
 
     state.lastPayload = value;
@@ -1683,6 +2622,8 @@ export function createHomeCanvasSelectionFrame(options) {
 
     if (!editing) {
 
+      state.geometry = null;
+
       detach();
 
       destroySelecto();
@@ -1699,6 +2640,16 @@ export function createHomeCanvasSelectionFrame(options) {
       (value && value.active === true && Array.isArray(value.ids))
         ? value.ids.filter((id) => !!elementFor(id))
         : [];
+
+
+    /* 끌고 있던 요소가 더 이상 **단독 선택**이 아니다 — 제스처를
+       접는다(선택 변경 · 삭제 · 다중 선택으로 넓힘, §9) */
+    if (
+      state.drag &&
+      (wanted.length !== 1 || wanted[0] !== state.drag.id)
+    ) {
+      cancelDrag("selection");
+    }
 
 
     state.targetIds = wanted;
@@ -1799,6 +2750,10 @@ export function createHomeCanvasSelectionFrame(options) {
       return;
     }
 
+    /* 화면이 다시 그려졌다 — 끌고 있던 노드는 이미 없다(§9).
+       확정을 기다리는 중이었다면 그 답은 곧 새 좌표로 온다. */
+    cancelDrag("render");
+
     if (!state.lastPayload) {
       detach();
       return;
@@ -1810,6 +2765,10 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   function dispose() {
+
+    cancelDrag("dispose");
+
+    abandonPendingCommit("dispose");
 
     state.disposed = true;
 
@@ -1838,8 +2797,11 @@ export function createHomeCanvasSelectionFrame(options) {
 
     state.listeners = [];
 
+    clearPendingTimer();
+
     state.targetIds = [];
     state.lastPayload = null;
+    state.geometry = null;
     state.editing = false;
 
     report(false);
@@ -1852,13 +2814,52 @@ export function createHomeCanvasSelectionFrame(options) {
      빠져나간다("껐는데 하나가 남아 있다"를 만들지 않는다). */
   on(win, "pointerdown", onShiftPointerDown);
   on(win, "pointerup", onShiftPointerUp);
-  on(win, "pointercancel", function () { state.shiftPress = null; });
+
+  on(win, "pointercancel", function () {
+
+    state.shiftPress = null;
+
+    /* HOME-CANVAS-TRANSFORM-1A — 손을 놓은 것이 아니라 입력이
+       끊긴 것이다(§9). 확정하지 않고 시작 자리로 돌린다. */
+    cancelDrag("pointercancel");
+
+  });
+
+
+  /* =========================================================
+     HOME-CANVAS-TRANSFORM-1A — Escape 는 이동을 취소한다(§9)
+
+     ★ 끄는 동안에만 가로챈다. 그때는 이 키의 뜻이 "지금 옮기던
+       것을 없던 일로"이고, 그대로 흘려보내면 Inspector 가 **선택
+       까지** 풀어 버린다(skin/sandbox/skin-sandbox-inspect.js ·
+       studio/preview/preview-inspect-direct.js 의 Escape). 끌고
+       있지 않을 때는 손대지 않는다 — 그 키의 기존 뜻 그대로다.
+  ========================================================== */
+
+  on(win, "keydown", function (event) {
+
+    if (!state.drag || event.key !== "Escape") {
+      return;
+    }
+
+    cancelDrag("escape");
+
+    event.stopPropagation();
+
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+
+    event.preventDefault();
+
+  });
 
 
   return {
 
     apply: apply,
     onRender: onRender,
+    setGeometry: setGeometry,
     dispose: dispose,
 
     isActive: function () {
@@ -1926,6 +2927,27 @@ export function createHomeCanvasSelectionFrame(options) {
         instances: doc.querySelectorAll('[data-imory-canvas-frame="1"]').length,
         controlBoxes: doc.querySelectorAll(".moveable-control-box").length,
         moveableTargets: targets ? targets.length : 0,
+        /* HOME-CANVAS-TRANSFORM-1A — "지금 끌면 옮겨지는가".
+           able 은 언제나 켜져 있고, 판정은 이 관문 하나다. */
+        draggable: dragGate() === "ok",
+        dragGate: dragGate(),
+        dragging: !!state.drag,
+        pendingCommit: !!state.pending,
+        geometry:
+          state.geometry
+            ? {
+                id: state.geometry.id,
+                x: state.geometry.x,
+                y: state.geometry.y,
+                generation: state.geometry.generation
+              }
+            : null,
+        moveCount: state.moveCount,
+        lastMoveGate: state.lastMoveGate,
+        lastCommit: state.lastCommit,
+        lastSettle: state.lastSettle,
+        geometryLog: state.geometryLog.slice(),
+
         hasSelecto: !!state.selecto,
         selectoInstances: doc.querySelectorAll(".selecto-selection").length,
         lassoCount: state.lassoCount,

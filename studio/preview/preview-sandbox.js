@@ -126,6 +126,7 @@ import {
   sendSandboxInspectCaps,
   sendSandboxInspectPreview,
   sendSandboxCanvasSelect,
+  sendSandboxCanvasGeometry,
   destroySandboxSkinFrame,
   copySandboxSidesSetting,
   copySandboxSkinSettings
@@ -194,6 +195,13 @@ let sandboxInspectRelay =
 ========================================================== */
 
 let sandboxCanvasSelection =
+  null;
+
+
+/* HOME-CANVAS-TRANSFORM-1A — 단일 선택의 Canvas 좌표. 선택과 같은
+   사정이라 같은 자리에서 기억하고 같은 자리에서 다시 보낸다. */
+
+let sandboxCanvasGeometry =
   null;
 
 
@@ -1075,6 +1083,33 @@ function handleSandboxInspect(kind, payload) {
   }
 
 
+  /*
+    HOME-CANVAS-TRANSFORM-1A — 프레임의 이동 **확정 요청**.
+
+    여기서도 해석하지 않는다 — 알려진 칸만 옮겨 Studio 로 올린다.
+    그 좌표를 실제로 써도 되는지(선택 · 순번 · expected · 범위)는
+    Studio 가 자기 draft 로 정한다
+    (studio/inspector/studio-canvas-selection.js
+     commitStudioCanvasElementTransform).
+  */
+  if (kind === "canvas-transform") {
+
+    sandboxInspectRelay({
+      type: "preview:canvas-transform",
+      remote: true,
+      kind: payload.kind,
+      id: payload.id,
+      expected: { x: payload.expected.x, y: payload.expected.y },
+      next: { x: payload.next.x, y: payload.next.y },
+      generation: Number.isInteger(payload.generation) ? payload.generation : 0,
+      requestId: Number.isInteger(payload.requestId) ? payload.requestId : 0
+    });
+
+    return;
+
+  }
+
+
   if (kind === "select") {
 
     const selected =
@@ -1236,6 +1271,9 @@ export function setSandboxPreviewInspectMode(enabled) {
        늦거나 유실돼도 이 기억이 남아 다음 렌더에서 되살아나지
        않게 한다. */
     sandboxCanvasSelection = null;
+
+    /* HOME-CANVAS-TRANSFORM-1A — 좌표도 같이 버린다 */
+    sandboxCanvasGeometry = null;
   }
 
   if (!hasSandboxPreviewFrame()) {
@@ -1307,6 +1345,42 @@ export function setSandboxPreviewCanvasSelection(selection) {
   */
 
   return sendSandboxCanvasSelect(sandboxHandle, value);
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 단일 선택의 Canvas 좌표를 프레임으로
+
+   setSandboxPreviewCanvasGeometry(geometry) -> boolean
+
+   ★ 여기서 판단하지 않는다. "옮길 수 있는 단독 선택인가"는 Studio 가
+     자기 draft 에서 이미 정했다(studio-canvas-selection.js). 이 함수는
+     선택 메시지와 똑같이 **옮기기만** 한다.
+
+   ★ 해제(active:false)도 기억한다. 선택과 달리 이 값은 렌더 뒤에
+     다시 보내야 할 이유가 "켜져 있을 때"로 한정되지 않는다 — 프레임
+     쪽이 옛 좌표를 들고 있으면 안 되기 때문이다.
+========================================================== */
+
+export function setSandboxPreviewCanvasGeometry(geometry) {
+
+  const value =
+    (geometry && typeof geometry === "object")
+      ? geometry
+      : { active: false, generation: 0 };
+
+  /* ★ 기억해 두는 값에는 답 번호를 남기지 않는다. 이 값은 렌더 뒤에
+     한 번 더 내려가는데(flushSandboxInspectState), 거기서 옛 답이
+     다시 답으로 읽히면 안 된다(계약 §17-8). */
+  sandboxCanvasGeometry =
+    { ...value, answering: 0 };
+
+  if (!hasSandboxPreviewFrame()) {
+    return false;
+  }
+
+  return sendSandboxCanvasGeometry(sandboxHandle, value);
 
 }
 
@@ -1447,7 +1521,16 @@ function flushSandboxInspectState() {
   */
 
   if (sandboxCanvasSelection && sandboxCanvasSelection.editing === true) {
+
     sendSandboxCanvasSelect(sandboxHandle, sandboxCanvasSelection);
+
+    /* HOME-CANVAS-TRANSFORM-1A — 좌표도 같은 사정이다. 프레임은
+       렌더마다 옛 좌표를 버리므로(skin/sandbox/skin-sandbox-frame.js)
+       여기서 다시 주지 않으면 이동이 켜지지 않는다. */
+    if (sandboxCanvasGeometry) {
+      sendSandboxCanvasGeometry(sandboxHandle, sandboxCanvasGeometry);
+    }
+
   }
 
 }

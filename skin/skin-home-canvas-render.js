@@ -177,6 +177,85 @@ function setSkinCanvasRenderVar(el, name, value) {
 
 
 /* =========================================================
+   0-1. 좌표를 쓰는 **한 곳** (HOME-CANVAS-TRANSFORM-1A)
+
+   ★ 편집기가 이 계산을 복제하지 않게 한다.
+
+   드래그 중의 임시 위치도, 확정된 뒤 다시 그려진 위치도 결국
+   같은 두 custom property(`--imory-canvas-x` · `--imory-canvas-y`)
+   다. 그 값을 만드는 규칙(백분율 · 소수 여섯 자리 · 꼬리 0 제거)을
+   편집 runtime 이 자기 쪽에 한 벌 더 적으면, 한쪽만 고쳐지는 날
+   드래그 중과 확정 뒤의 자리가 미세하게 달라진다.
+
+   그래서 렌더러가 요소를 처음 만들 때 쓰는 그 함수를 그대로
+   내보내고(skin/skin-home-canvas-editor-runtime.js 가 부른다),
+   이것이 없는 문서에서는 편집기가 **이동을 켜지 않는다**.
+
+   ★ transform 을 건드리지 않는다. 회전은 `--imory-canvas-rotation`
+     이 갖고 있고 이 함수는 x · y 두 칸만 쓴다 — 임시 translate()
+     를 덧붙이지 않으므로 회전한 요소도 그대로 돈다.
+========================================================== */
+
+function setSkinCanvasElementPosition(el, x, y, baseWidth, baseHeight) {
+
+  if (!el || !el.style) {
+    return false;
+  }
+
+  const left =
+    skinCanvasRenderPercent(x, baseWidth);
+
+  const top =
+    skinCanvasRenderPercent(y, baseHeight);
+
+  if (left === null || top === null) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.x, left);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.y, top);
+
+  return true;
+
+}
+
+
+/*
+  readSkinCanvasElementPositionVars(el) -> { x, y } | null
+
+  지금 요소에 적혀 있는 **원본 문자열** 둘. 드래그를 취소할 때
+  그대로 되돌려 쓰기 위한 것이라 숫자로 바꾸지 않는다 — 다시
+  파싱해서 다시 쓰면 위에서 한 번 버린 자릿수가 두 번 버려진다.
+*/
+function readSkinCanvasElementPositionVars(el) {
+
+  if (!el || !el.style) {
+    return null;
+  }
+
+  return {
+    x: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.x),
+    y: el.style.getPropertyValue(SKIN_CANVAS_RENDER_VARS.y)
+  };
+
+}
+
+
+function restoreSkinCanvasElementPositionVars(el, saved) {
+
+  if (!el || !el.style || !saved) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.x, saved.x || null);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.y, saved.y || null);
+
+  return true;
+
+}
+
+
+/* =========================================================
    1. Context 읽기 — 기존 경로를 그대로 쓴다
 
    이미지는 이미 있는 이미지 슬롯(context.images), 카테고리는 이미
@@ -651,6 +730,11 @@ if (typeof window !== "undefined") {
   window.SKIN_CANVAS_RENDER_ELEMENT_ATTR = SKIN_CANVAS_RENDER_ELEMENT_ATTR;
   window.SKIN_CANVAS_RENDER_VARS = SKIN_CANVAS_RENDER_VARS;
 
+  /* HOME-CANVAS-TRANSFORM-1A — 편집 runtime 이 좌표를 쓰는 한 곳 */
+  window.setSkinCanvasElementPosition = setSkinCanvasElementPosition;
+  window.readSkinCanvasElementPositionVars = readSkinCanvasElementPositionVars;
+  window.restoreSkinCanvasElementPositionVars = restoreSkinCanvasElementPositionVars;
+
   window.compileSkinHomeCanvas = compileSkinHomeCanvas;
   window.clearSkinHomeCanvas = clearSkinHomeCanvas;
 
@@ -676,6 +760,9 @@ if (typeof module !== "undefined" && module.exports) {
 
     skinCanvasRenderTrimNumber,
     skinCanvasRenderPercent,
+    setSkinCanvasElementPosition,
+    readSkinCanvasElementPositionVars,
+    restoreSkinCanvasElementPositionVars,
     readSkinCanvasImageUrl,
     readSkinCanvasCategories,
 

@@ -372,11 +372,17 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
    HOME-CANVAS-SELECT-1B-1 에서 하나가 늘어 스물일곱이었고
    (CANVAS_SELECT — 부모가 확정한 캔버스 선택. 프레임은 받은 id 를
     자기 DOM 에서 다시 확인한 뒤에만 그린다),
-   HOME-CANVAS-SELECT-1B-2 에서 하나 더 늘어 스물여덟이다
+   HOME-CANVAS-SELECT-1B-2 에서 하나 더 늘어 스물여덟이었고
    (CANVAS_PROPOSE — lasso · Shift 클릭의 **제안**. 확정이 아니라
-    부모가 자기 draft 로 전부 다시 본다). */
-check("[msg] 이번 라운드가 아는 type 은 정확히 스물여덟이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 28,
+    부모가 자기 draft 로 전부 다시 본다),
+   HOME-CANVAS-TRANSFORM-1A 에서 둘이 늘어 서른이다
+   (CANVAS_GEOMETRY — 단독 선택 요소의 Canvas 좌표. 프레임이 DOM
+    에서 잴 수 없는 값이라 부모가 내려 준다. 확정의 **답**이기도
+    하고, 그때만 `answering` 번호가 붙는다.
+    CANVAS_TRANSFORM — 이동의 확정 **요청**. 확정이 아니라 부모가
+    지금 draft 로 선택 · 순번 · expected · 범위를 다시 본다). */
+check("[msg] 이번 라운드가 아는 type 은 정확히 서른이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 30,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -633,6 +639,154 @@ check("[canvas-propose] ★ 부모는 이 메시지를 프레임에 보낼 수 �
       direction: "to-frame"
     }
   ).ok === false);
+
+
+/* =========================================================
+   [canvas-move] HOME-CANVAS-TRANSFORM-1A — 좌표와 이동 확정
+
+   ★ 이번 단계가 소유하는 것은 **x · y 두 칸**이다. 그래서 여기서
+     가장 많이 보는 것은 "좌표가 맞는가"가 아니라 "**그 밖의 것이
+     들어올 수 없는가**"다 — width · height · rotation 이 섞인
+     메시지는 메시지 층에서 통째로 버려져야 한다.
+========================================================== */
+
+console.log("\n[canvas-move] 좌표와 이동 확정 (HOME-CANVAS-TRANSFORM-1A)");
+
+const canvasGeometryTo = (payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_GEOMETRY, payload, 1
+      )
+    },
+    {
+      originAllowList: ["https://imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-frame"
+    }
+  );
+
+const canvasTransformFrom = (payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://skin.imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_TRANSFORM, payload, 1
+      )
+    },
+    {
+      originAllowList: ["https://skin.imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-parent"
+    }
+  );
+
+const GEOMETRY_ON = {
+  contract: 1, renderSeq: 3, active: true, id: "cvPhoto",
+  x: 20, y: 40, baseWidth: 390, baseHeight: 844, generation: 5
+};
+
+const MOVE_OK = {
+  contract: 1, renderSeq: 3, kind: "move", id: "cvPhoto",
+  expected: { x: 20, y: 40 }, next: { x: 42.125, y: 117.5 },
+  generation: 5, requestId: 1
+};
+
+check("[canvas-move] 단독 선택의 좌표가 프레임으로 내려간다",
+  canvasGeometryTo(GEOMETRY_ON).ok === true);
+
+check("[canvas-move] 옮길 수 있는 단독 선택이 없으면 active:false 만 내려간다",
+  canvasGeometryTo({ contract: 1, renderSeq: 3, active: false, generation: 5 }).ok === true);
+
+check("[canvas-move] ★ active:false 인데 값이 딸려 오면 거부된다",
+  canvasGeometryTo({
+    contract: 1, renderSeq: 3, active: false, id: "cvPhoto", generation: 5
+  }).ok === false,
+  "해제에는 나머지 칸 자체를 만들지 않는다 — CANVAS_SELECT 와 같은 모양");
+
+check("[canvas-move] ★ 도화지 크기가 0 이면 거부된다",
+  canvasGeometryTo({ ...GEOMETRY_ON, baseWidth: 0 }).ok === false,
+  "배율의 분모가 된다 — 0 을 받으면 프레임이 나눌 수 없다");
+
+check("[canvas-move] 확정의 답에는 번호가 붙는다",
+  canvasGeometryTo({ ...GEOMETRY_ON, answering: 7 }).ok === true);
+
+check("[canvas-move] ★ 답 번호가 정수가 아니면 거부된다",
+  canvasGeometryTo({ ...GEOMETRY_ON, answering: 0 }).ok === false &&
+  canvasGeometryTo({ ...GEOMETRY_ON, answering: 1.5 }).ok === false);
+
+check("[canvas-move] 정상 확정 요청을 부모가 받는다",
+  canvasTransformFrom(MOVE_OK).ok === true);
+
+check("[canvas-move] 음수 좌표를 막지 않는다",
+  canvasTransformFrom({ ...MOVE_OK, next: { x: -12.5, y: -3 } }).ok === true,
+  "도화지 밖으로 나가는 것은 계약이 허용한다(자동 clamp 없음)");
+
+check("[canvas-move] ★ kind 는 move 하나다",
+  canvasTransformFrom({ ...MOVE_OK, kind: "resize" }).ok === false &&
+  canvasTransformFrom({ ...MOVE_OK, kind: "rotate" }).ok === false);
+
+check("[canvas-move] ★ next 에 width 가 섞이면 메시지 전체가 거부된다",
+  canvasTransformFrom({
+    ...MOVE_OK, next: { x: 1, y: 2, width: 300 }
+  }).ok === false,
+  "이번 단계가 소유하는 것은 좌표 둘이라는 계약이 메시지 층에도 있다");
+
+check("[canvas-move] ★ expected 에 rotation 이 섞여도 거부된다",
+  canvasTransformFrom({
+    ...MOVE_OK, expected: { x: 20, y: 40, rotation: 30 }
+  }).ok === false);
+
+check("[canvas-move] ★ 유한하지 않은 좌표는 거부된다",
+  canvasTransformFrom({ ...MOVE_OK, next: { x: "10", y: 2 } }).ok === false);
+
+check("[canvas-move] ★ 상한을 넘는 좌표는 거부된다",
+  canvasTransformFrom({ ...MOVE_OK, next: { x: 1e9, y: 0 } }).ok === false);
+
+check("[canvas-move] ★ 요청 번호가 없으면 거부된다",
+  canvasTransformFrom({
+    contract: 1, renderSeq: 3, kind: "move", id: "cvPhoto",
+    expected: { x: 20, y: 40 }, next: { x: 1, y: 2 }, generation: 5
+  }).ok === false,
+  "답을 이 번호로 돌려받는다 — 없으면 어느 요청의 답인지 가를 수 없다");
+
+check("[canvas-move] ★ 프레임은 좌표 메시지를 부모에게 보낼 수 없다 (방향)",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://skin.imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_GEOMETRY, GEOMETRY_ON, 1
+      )
+    },
+    {
+      originAllowList: ["https://skin.imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-parent"
+    }
+  ).ok === false);
+
+check("[canvas-move] ★ 알려진 칸만 새 리터럴로 옮겨진다",
+  (() => {
+
+    /* 봉투를 만드는 쪽이 이미 알려진 칸만 담는다(다른 메시지와
+       같은 규칙) — 그래서 css · selector 는 프레임 밖으로 나가지도
+       못하고, 부모가 읽는 payload 에도 없다. */
+    const verdict =
+      canvasTransformFrom({ ...MOVE_OK, css: "x", selector: "y" });
+
+    return (
+      verdict.ok === true &&
+      verdict.payload.css === undefined &&
+      verdict.payload.selector === undefined &&
+      Object.keys(verdict.payload).length === 8
+    );
+
+  })(),
+  "contract · renderSeq · kind · id · expected · next · generation · requestId 여덟 뿐이다");
 
 
 /* =========================================================

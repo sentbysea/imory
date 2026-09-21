@@ -202,7 +202,8 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3a | `HOME-CANVAS-SELECT-1A` | 캔버스 선택 소유권 + 단일 선택 기반(**고치지 않는다**) | Studio만 | **완료**(계약 문서 §14) |
 | 3b-1 | `HOME-CANVAS-SELECT-1B-1` | 조건부 vendor load + 단일 Moveable **표시 전용** 회전 틀 | Studio만 | **완료**(계약 문서 §15) |
 | 3b-2 | `HOME-CANVAS-SELECT-1B-2` | Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 | Studio만 | **완료**(계약 문서 §16) |
-| 3c | `HOME-CANVAS-TRANSFORM-1` | 이동·크기·회전을 `canvas.elements[]` 에 쓰는 확정 경로 | 저장 가능 | 미착수 |
+| 3c-1 | `HOME-CANVAS-TRANSFORM-1A` | **단일 요소 이동**을 `canvas.elements[].x/.y` 에 쓰는 확정 경로 + Undo | 저장 가능 | **완료**(계약 문서 §17) |
+| 3c-2 | `HOME-CANVAS-TRANSFORM-1B` | 크기 · 회전 · 그룹 이동 | 저장 가능 | 미착수 |
 | 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
@@ -478,12 +479,32 @@ HTML 에 없다.
 요소를 움직이면 선택 틀이 그 움직임을 따라간다 — 막지 않는다
 (계약 문서 §15-7-1). 뒤 단계도 이 선을 넘지 않는다.
 
-### `HOME-CANVAS-TRANSFORM-1`
+### `HOME-CANVAS-TRANSFORM-1A` (완료)
 
-- 이동 · 크기 · 회전의 결과를 `regions.home_canvas.canvas.elements[]` 에 쓴다.
+→ [계약 문서 §17](../contracts/IMORY_HOME_CANVAS_CONTRACT.md#17-단일-요소-이동-home-canvas-transform-1a)
+
+- **여기서부터 Canvas JSON 이 바뀐다.** 단독으로 고른 요소 하나를 마우스 ·
+  펜으로 끌어 옮기고, 그 결과가 `regions.home_canvas.canvas.elements[].x` ·
+  `.y` **두 칸**에 저장된다.
 - 기존 `applyStudioInspectorPatch()` 를 **쓰지 않는다** — 그 함수는 첫 줄에서
   대상 요소를 template HTML 에서 찾으므로 캔버스 요소에 닿을 수 없다
-  (계약 문서 §14-6).
+  (계약 문서 §14-6). 불변 수정은 순수 함수
+  `writeSkinHomeCanvasElementPosition()` 하나가 한다.
+- 끄는 동안에는 프레임 안의 custom property 두 칸만 움직인다 — JSON · draft ·
+  Undo · 스킨 CSS 는 한 글자도 바뀌지 않는다.
+- 프레임은 **확정을 요청**할 뿐이고, 부모가 선택 · 순번 · `expected` · 허용
+  키 · 범위를 전부 다시 보고 쓴다. 답에는 요청 번호가 붙는다.
+- **한 제스처 = Undo 한 칸.** 이동량 0 과 거부는 기록을 만들지 않는다.
+- `preventDragFromInside:false` 로 남겨 두었던 lasso ↔ 본체 끌기의 경계를
+  여기서 갈랐다 — 고를 수 있는 요소 위에서는 lasso 가 시작되지 않고, 잠긴
+  요소는 배경처럼 본다(계약 §17-2).
+- **손가락 이동은 의도적 미지원**이다 — 그 자리는 Preview 스크롤이 지킨다.
+
+### `HOME-CANVAS-TRANSFORM-1B`
+
+- 크기 · 회전 · 그룹 이동. `1A` 가 연 길을 그대로 쓴다 — 메시지의 `kind` 에
+  이름을 더하고 `expected`/`next` 의 허용 키를 늘린다.
+- 스냅 · 가이드 · 키보드 화살표 이동 · Inspector geometry 입력 필드.
 
 ### `HOME-CANVAS-HISTORY-1`
 

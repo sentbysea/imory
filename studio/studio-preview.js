@@ -2181,6 +2181,13 @@ if (typeof window !== "undefined") {
   window.postCanvasSelectionToFrame =
     postCanvasSelectionToFrame;
 
+  /* HOME-CANVAS-TRANSFORM-1A */
+  window.postCanvasGeometryToFrame =
+    postCanvasGeometryToFrame;
+
+  window.setStudioCanvasElementPosition =
+    setStudioCanvasElementPosition;
+
 }
 
 
@@ -2807,6 +2814,135 @@ function postCanvasSelectionToFrame(selection) {
 
 
 /* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 단일 선택의 Canvas 좌표를 Preview 문서로
+
+   postCanvasGeometryToFrame(geometry)
+
+   geometry = { active, id, x, y, baseWidth, baseHeight, generation }
+
+   ★ 이 함수도 **옮기기만** 한다. 무엇이 옮길 수 있는 단독 선택인가는
+     studio/inspector/studio-canvas-selection.js 가 draft 에서 정했고,
+     프레임은 받은 값으로 시작 좌표만 잡는다.
+
+   ★ 좌표가 **내려가는** 이유는 프레임이 그것을 잴 수 없기 때문이다 —
+     렌더러가 써 넣은 백분율은 이미 잘린 값이라 거꾸로 풀면 원본이
+     아니다(skin/sandbox/skin-sandbox-protocol.js CANVAS_GEOMETRY).
+========================================================== */
+
+function postCanvasGeometryToFrame(geometry) {
+
+  const value =
+    (geometry && typeof geometry === "object") ? geometry : null;
+
+  const active =
+    !!(
+      value &&
+      value.active === true &&
+      typeof value.id === "string" && value.id &&
+      Number.isFinite(value.x) &&
+      Number.isFinite(value.y) &&
+      value.baseWidth > 0 &&
+      value.baseHeight > 0
+    );
+
+  postToPreviewFrameIfReady({
+    type: "preview:canvas-geometry",
+    active: active,
+    id: active ? value.id : null,
+    x: active ? value.x : 0,
+    y: active ? value.y : 0,
+    baseWidth: active ? value.baseWidth : 0,
+    baseHeight: active ? value.baseHeight : 0,
+    generation:
+      (value && Number.isInteger(value.generation) && value.generation >= 0)
+        ? value.generation
+        : 0,
+
+    /* 답일 때만 있는 칸이다(계약 §17-8) */
+    answering:
+      (value && Number.isInteger(value.answering) && value.answering >= 1)
+        ? value.answering
+        : 0
+  });
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 캔버스 요소 하나의 x · y 를 draft 에
+
+   setStudioCanvasElementPosition(elementId, next, expected) -> result
+
+   ★ 이 함수는 **관문이 아니다**. "지금 그 요소가 단독으로 골라져
+     있는가 · 순번이 최신인가" 같은 편집 상태는 부르는 쪽이 이미
+     보았다(studio/inspector/studio-canvas-selection.js
+     commitStudioCanvasElementTransform). 여기서 보는 것은 데이터다.
+
+   ★ 바뀌는 것은 두 칸뿐이고, 그 불변 수정은 순수 함수 하나가 한다
+     (skin/skin-home-canvas.js writeSkinHomeCanvasElementPosition) —
+     regions 의 모르는 항목 · canvas 와 element 의 모르는 칸 · props ·
+     width · height · rotation · hidden · locked · 배열 순서가 전부
+     그대로 남는다.
+
+   ★ 기록 한 칸 · dirty · Preview 다시 그리기는 좌우 영역 · 스킨 설정과
+     **같은 다섯 줄**이다(setStudioHomeSides). 별도 Undo stack 을
+     만들지 않는다.
+========================================================== */
+
+function setStudioCanvasElementPosition(elementId, next, expected) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, reason: "no-skin" };
+  }
+
+  if (typeof window.writeSkinHomeCanvasElementPosition !== "function") {
+    return { ok: false, reason: "unsupported" };
+  }
+
+  const result =
+    window.writeSkinHomeCanvasElementPosition(
+      currentWorkingSkin.regions,
+      elementId,
+      next,
+      expected
+    );
+
+  if (!result || !result.ok) {
+    return { ok: false, reason: (result && result.reason) || "rejected" };
+  }
+
+  /* 같은 자리다 — 기록도 dirty 도 만들지 않는다(§17-6) */
+  if (result.unchanged) {
+    return { ok: true, unchanged: true, previous: result.previous };
+  }
+
+  const historyBefore =
+    captureStudioWorkingChange();
+
+  currentWorkingSkin = {
+    ...currentWorkingSkin,
+    regions: result.regions
+  };
+
+  recordStudioWorkingChange(historyBefore);
+
+  isStudioDirty =
+    true;
+
+  bumpStudioWorkingRevision();
+
+  updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
+
+  renderPreviewAfterSkinPackageChange();
+
+  return { ok: true, previous: result.previous };
+
+}
+
+
+/* =========================================================
    DIRECT-UX-1 — Preview 안 직접 조작(studio/preview/preview-inspect-direct.js)
 
      preview:inspector-caps    고른 요소를 끌 수 있는가 · 더블클릭으로
@@ -3374,6 +3510,33 @@ window.addEventListener(
           primaryId: typeof data.primaryId === "string" ? data.primaryId : null,
           mode: data.mode === "toggle" ? "toggle" : "replace",
           generation: Number.isInteger(data.generation) ? data.generation : 0
+        });
+
+      }
+
+      return;
+
+    }
+
+    /*
+      HOME-CANVAS-TRANSFORM-1A — 프레임의 이동 **확정 요청**.
+
+      확정이 아니다 — 아래 함수가 지금 draft 로 선택 · 순번 ·
+      expected · 허용 키 · 범위를 전부 다시 보고, 하나라도 어긋나면
+      쓰지 않는다(studio/inspector/studio-canvas-selection.js).
+      승인이든 거부든 그 함수가 프레임에 지금 좌표를 다시 내려 준다.
+    */
+    if (data.type === "preview:canvas-transform") {
+
+      if (typeof window.commitStudioCanvasElementTransform === "function") {
+
+        window.commitStudioCanvasElementTransform({
+          kind: data.kind,
+          id: data.id,
+          expected: data.expected,
+          next: data.next,
+          generation: Number.isInteger(data.generation) ? data.generation : -1,
+          requestId: Number.isInteger(data.requestId) ? data.requestId : 0
         });
 
       }

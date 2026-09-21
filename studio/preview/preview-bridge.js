@@ -102,7 +102,8 @@ import {
   setSandboxPreviewInspectSelection,
   forwardSandboxPreviewInspectDirective,
   refreshSandboxPreviewInspectRects,
-  setSandboxPreviewCanvasSelection
+  setSandboxPreviewCanvasSelection,
+  setSandboxPreviewCanvasGeometry
 } from "./preview-sandbox.js";
 
 const PREVIEW_MSG_RENDER = "preview:render";
@@ -176,6 +177,32 @@ const PREVIEW_MSG_TRANSITION_PLAY = "preview:transition-play";
 const PREVIEW_MSG_CANVAS_SELECT = "preview:canvas-select";
 const PREVIEW_MSG_CANVAS_FRAME = "preview:canvas-frame";
 const PREVIEW_MSG_CANVAS_PROPOSE = "preview:canvas-propose";
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 단일 요소 이동
+
+   canvas-geometry   Studio -> 이 문서
+                     { active, id, x, y, baseWidth, baseHeight,
+                       generation }
+                     단독으로 고른 요소의 **Canvas 좌표**다.
+                     canvas-select 가 일부러 싣지 않는 그 값이고,
+                     이유는 DOM 에서 잴 수 없기 때문이다 — 렌더러가
+                     써 넣은 백분율은 이미 잘린 값이라 거꾸로 풀면
+                     원본이 아니다(skin/sandbox/skin-sandbox-protocol.js
+                     의 CANVAS_GEOMETRY 주석).
+
+                     확정 요청의 **답**이기도 하다. 승인이면 방금
+                     놓은 자리가, 거부면 예전 자리가 내려온다.
+
+   canvas-transform  이 문서 -> Studio
+                     { kind, id, expected, next, generation }
+                     이동의 **확정 요청**이다. 확정이 아니다 —
+                     Studio 가 지금 draft 로 선택 · 순번 · expected ·
+                     범위를 전부 다시 보고, 하나라도 어긋나면 쓰지
+                     않는다.
+========================================================== */
+const PREVIEW_MSG_CANVAS_GEOMETRY = "preview:canvas-geometry";
+const PREVIEW_MSG_CANVAS_TRANSFORM = "preview:canvas-transform";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -2284,6 +2311,10 @@ let canvasFramePromise = null;
 
 let canvasFrameSelection = null;
 
+/* HOME-CANVAS-TRANSFORM-1A — 마지막으로 받은 좌표. runtime 이 아직
+   없을 때(좌표가 선택보다 먼저 온 경우) 한 번 더 태우기 위해 둔다. */
+let canvasFrameGeometry = null;
+
 
 function canvasEditorRuntimeUrl() {
 
@@ -2359,6 +2390,33 @@ function ensureCanvasFrameController() {
                     : 0
               });
 
+            },
+
+            /* HOME-CANVAS-TRANSFORM-1A — 이동의 확정 **요청**.
+               확정이 아니다(위 머리말) — Studio 가 자기 draft 로
+               선택 · 순번 · expected · 범위를 다시 본다. */
+            onTransform: (request) => {
+
+              if (!request || !request.expected || !request.next) {
+                return;
+              }
+
+              postToParent({
+                type: PREVIEW_MSG_CANVAS_TRANSFORM,
+                kind: request.kind,
+                id: typeof request.id === "string" ? request.id : null,
+                expected: { x: request.expected.x, y: request.expected.y },
+                next: { x: request.next.x, y: request.next.y },
+                generation:
+                  Number.isInteger(request.generation) && request.generation >= 0
+                    ? request.generation
+                    : 0,
+                requestId:
+                  Number.isInteger(request.requestId) && request.requestId >= 1
+                    ? request.requestId
+                    : 0
+              });
+
             }
 
           });
@@ -2409,6 +2467,13 @@ function applyNativeCanvasSelection(selection) {
           canvasFrameSelection ||
           { editing: false, active: false, ids: [], primaryId: null, generation: 0 }
         );
+
+        /* HOME-CANVAS-TRANSFORM-1A — 좌표가 선택보다 먼저 왔거나
+           runtime 이 이제 막 올라온 경우다(같은 값이면 아무 일도
+           하지 않는다). */
+        if (canvasFrameGeometry) {
+          controller.setGeometry(canvasFrameGeometry);
+        }
 
       }
     )
@@ -2481,6 +2546,69 @@ function routeCanvasSelectionMessage(data) {
   }
 
   applyNativeCanvasSelection(selection);
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-TRANSFORM-1A — 단일 선택의 Canvas 좌표를 화면 쪽으로
+
+   ★ 여기서도 판단하지 않는다. 무엇을 옮길 수 있는가는 Studio 가
+     자기 draft 로 정했고(studio-canvas-selection.js), 이 함수는 어느
+     문서가 화면을 맡고 있는가만 본다.
+
+   ★ 이 메시지만으로는 runtime 을 불러오지 않는다. 좌표는 선택과
+     짝지어 오고, 켜는 관문은 여전히 canvas-select 의 `editing` 이다.
+========================================================== */
+
+function routeCanvasGeometryMessage(data) {
+
+  const active =
+    data.active === true &&
+    typeof data.id === "string" &&
+    window.isValidInspectorEditId(data.id) &&
+    Number.isFinite(data.x) &&
+    Number.isFinite(data.y) &&
+    data.baseWidth > 0 &&
+    data.baseHeight > 0;
+
+  const geometry = {
+    active: active,
+    id: active ? data.id : null,
+    x: active ? data.x : 0,
+    y: active ? data.y : 0,
+    baseWidth: active ? data.baseWidth : 0,
+    baseHeight: active ? data.baseHeight : 0,
+    generation:
+      Number.isInteger(data.generation) && data.generation >= 0
+        ? data.generation
+        : 0,
+
+    /* 확정의 답일 때만 있는 번호다(위 머리말) */
+    answering:
+      Number.isInteger(data.answering) && data.answering >= 1
+        ? data.answering
+        : 0
+  };
+
+  if (hasSandboxPreviewFrame()) {
+    setSandboxPreviewCanvasGeometry(geometry);
+    return;
+  }
+
+  /* ★ 기억해 두는 값에는 답 번호를 남기지 않는다 — runtime 이 늦게
+     올라왔을 때 한 번 더 태우는 자리가 있고(ensureCanvasFrameController),
+     거기서 옛 답이 다시 답으로 읽히면 안 된다. */
+  canvasFrameGeometry =
+    { ...geometry, answering: 0 };
+
+  /* 아직 한 번도 만들지 않았으면 여기서 만들지 않는다 — 좌표
+     하나가 vendor 를 받아 오는 계기가 되지 않게 한다. */
+  if (!canvasFrameController) {
+    return;
+  }
+
+  canvasFrameController.setGeometry(geometry);
 
 }
 
@@ -2958,6 +3086,14 @@ window.addEventListener("message", (event) => {
   if (data.type === PREVIEW_MSG_CANVAS_SELECT) {
 
     routeCanvasSelectionMessage(data);
+
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_CANVAS_GEOMETRY) {
+
+    routeCanvasGeometryMessage(data);
 
     return;
 

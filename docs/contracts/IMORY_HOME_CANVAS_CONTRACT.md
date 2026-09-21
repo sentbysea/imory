@@ -59,15 +59,17 @@
 | `SELECT-1A` | **캔버스 요소를 고르고 푸는 것**(§14) — 캔버스 전용 선택 상태(배열 모양, 지금은 최대 1개) · 기존 Inspector 와의 **소유권 분리** · 캔버스를 아는 공통 hit-test · draft 존재 검증 · 축에 평행한 임시 테두리. **고치는 것은 하나도 없다** |
 | `SELECT-1B-1` | **조건부 vendor 활성화와 회전을 따라가는 선택 틀**(§15) — 첫 Canvas 요소를 고른 그 순간에만 프레임 안에서 runtime · 로더 · UMD 를 받고, 단일 선택 요소에 Moveable 로 테두리 하나를 그린다. **표시 전용**이다 — 손잡이 · 조작 · Canvas JSON 쓰기는 없다 |
 | `SELECT-1B-2` | **Selecto lasso 와 다중 선택**(§16) — 끌어서 여러 개를 고르고 Shift 로 더하고 뺀다. 관문이 "첫 선택"에서 "Canvas 가 있는 HOME 에서 Select 를 켬"으로 앞당겨졌다. 프레임은 **제안만** 하고 부모가 draft 로 전부 다시 보고 확정한다. 여전히 **고르는 것까지**다 |
+| `TRANSFORM-1A` | **단독으로 고른 요소 하나의 이동**(§17) — 마우스 · 펜으로 끌어 옮기고 그 결과가 `canvas.elements[].x` · `.y` 에 저장된다. **여기서부터 Canvas JSON 이 바뀐다.** 한 제스처가 Undo 한 칸이고, Save · Export/Import · Publish resolve 를 그대로 지난다. 크기 · 회전 · 그룹 이동 · 손가락 이동은 **없다** |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
 
-- 이동 · 크기 · 회전 조작 UI · 멀티 선택 · Canvas Inspector 입력 필드 ·
-  Undo/Redo · preset · 스티커 업로드 · widget — **하나도 없다**(§11).
+- 크기 · 회전 조작 UI · 손잡이 · 그룹 이동 · Canvas Inspector 입력 필드 ·
+  preset · 스티커 업로드 · widget — **하나도 없다**(§11).
 - `SELECT-1A` · `SELECT-1B-1` · `SELECT-1B-2` 는 **고르고 · 푸는 것 · 그것을
-  보여 주는 것**까지다. 고른 요소의 좌표도 props 도 바꿀 수 없고, Canvas JSON
-  을 쓰는 경로가 없다(§14-6 · §15-8 · §16-9).
-- **모바일 lasso 는 의도적으로 미지원**이다 — 그 자리는 단일 탭이 지킨다(§16-3).
+  보여 주는 것**까지다(§14-6 · §15-8 · §16-9). 고른 뒤에 바꿀 수 있는 것은
+  `TRANSFORM-1A` 가 연 **x · y 두 칸뿐**이다(§17).
+- **모바일 lasso 도 손가락 이동도 의도적으로 미지원**이다 — 그 자리는 단일
+  탭 선택과 Preview 스크롤이 지킨다(§16-3 · §17-2).
 
 ---
 
@@ -563,13 +565,14 @@ E2E 가 네 화면을 실제로 띄워 **DOM 을 글자 단위로, 좌표를 1px
 
 ### 11-2. UI (`SELECT-1` · `HISTORY-1` · `ELEMENTS-1` 이후)
 
-드래그 · 크기 · 회전 · 세로 손잡이 · Inspector 입력 필드 · Undo/Redo ·
-preset · 사진 자동 매핑 · sticker 업로드 · widget · 그룹 선택 —
-**하나도 없다.**
+**있는 것은 단일 요소 이동 하나다**(`TRANSFORM-1A` — §17). 마우스 · 펜으로
+끌어 `x` · `y` 를 바꾸고, 한 제스처가 Undo 한 칸이다.
 
-**고르고 · 푸는 것 · 그것을 보여 주는 것만 있다**
-(`SELECT-1A` — §14, `SELECT-1B-1` — §15, `SELECT-1B-2` — §16). 고른 뒤에
-**바꿀 수 있는 일이** 아직 없다는 뜻이다.
+크기 · 회전 · 세로 손잡이 · 그룹 이동 · 손가락 이동 · Inspector 입력 필드 ·
+preset · 사진 자동 매핑 · sticker 업로드 · widget — **아직 하나도 없다.**
+
+그 밖에는 **고르고 · 푸는 것 · 그것을 보여 주는 것만 있다**
+(`SELECT-1A` — §14, `SELECT-1B-1` — §15, `SELECT-1B-2` — §16).
 
 효과(파티클 · 꽃잎 · 복합 모션)를 sandbox 사용자 JS 가 Canvas 요소에 거는
 **공식 hook** 도 아직 없다 — 지금은 저자 JS 가 DOM 을 직접 만지는 것을 이
@@ -591,7 +594,10 @@ Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조�
 | **sandbox 프레임 안에서 vendor 를 조건부로 받는 메시지**(지금 프레임은 로더조차 읽지 않는다 — §13-5) | `HOME-CANVAS-SELECT-1B` |
 | **회전을 따라가는 선택 틀**(지금 테두리는 축에 평행한 사각형이라 회전 요소에서는 외곽 상자를 그린다 — §14-4) | `HOME-CANVAS-SELECT-1B` |
 | **다중 선택 UI**(상태는 배열이지만 `ids` 가 최대 1개다 — §14-2) | `HOME-CANVAS-SELECT-1B` |
-| **이동 · 크기 · 회전을 Canvas JSON 에 쓰는 경로**(기존 `applyStudioInspectorPatch` 는 HTML/CSS 전용이라 쓸 수 없다 — §14-6) | `HOME-CANVAS-TRANSFORM-1` |
+| ~~이동을 Canvas JSON 에 쓰는 경로~~ — **`TRANSFORM-1A` 에서 끝났다**(§17). 기존 `applyStudioInspectorPatch` 는 HTML/CSS 전용이라 쓰지 않는다(§14-6) | 완료 |
+| **크기 · 회전을 Canvas JSON 에 쓰는 경로**(이동은 §17 이 연 길을 그대로 쓴다 — `kind` 에 이름을 더하고 `expected`/`next` 의 허용 키를 늘린다) | `HOME-CANVAS-TRANSFORM-1B` |
+| **그룹 이동**(지금은 여럿을 고르면 틀만 남고 이동이 꺼진다 — §17-1) | `HOME-CANVAS-TRANSFORM-1B` |
+| **손가락 이동**(의도적 미지원 — 그 자리는 Preview 스크롤이 지킨다 — §17-2) | `HOME-CANVAS-LAYERS-1` 의 모바일 다중 선택과 함께 |
 | **캔버스 요소의 Inspector 입력 필드**(글꼴 · 색 · 글자 내용 · 이미지 교체 · 자르기) | `HOME-CANVAS-INSPECT-1` |
 | **hidden · locked 를 다루는 레이어 목록**(지금 숨긴 요소는 Studio 에서 다시 고를 방법이 없다 — §14-3) | `HOME-CANVAS-LAYERS-1` |
 | 390 저장 좌표 → 데스크톱 폭 변환 규칙 | `HOME-CANVAS-RESPONSIVE-1` |
@@ -1479,3 +1485,275 @@ Undo/Redo · Canvas Inspector 입력 필드 · 텍스트 편집 · 이미지 교
 **하나도 없다.**
 
 **모바일 lasso 는 의도적으로 미지원**이고, 그 자리는 단일 탭이 지킨다(§16-3).
+
+---
+
+## 17. 단일 요소 이동 (`HOME-CANVAS-TRANSFORM-1A`)
+
+**이 절부터가 "고치는 것"이다.** 앞의 세 라운드(§14 · §15 · §16)는 고르고
+보여 주는 것까지였고, 여기서 처음으로 Canvas JSON 이 바뀐다.
+
+바뀌는 것은 **`x` · `y` 두 칸뿐**이다. 크기 · 회전 · 그룹 이동 · 손가락
+이동은 이 라운드에 없다(§17-10).
+
+### 17-1. 관련 파일
+
+| 파일 | 이 라운드에서 하는 일 |
+| --- | --- |
+| `skin/skin-home-canvas.js` | `writeSkinHomeCanvasElementPosition()` — 순수 불변 수정(§17-5) |
+| `skin/skin-home-canvas-render.js` | `setSkinCanvasElementPosition()` 외 둘 — 좌표를 쓰는 **한 곳**(§17-4) |
+| `skin/skin-home-canvas-editor-runtime.js` | 제스처 · 임시 위치 · 확정 요청 · 취소 (두 프레임 공용) |
+| `studio/inspector/studio-canvas-selection.js` | `commitStudioCanvasElementTransform()` — 부모의 관문(§17-7) |
+| `studio/studio-preview.js` | `setStudioCanvasElementPosition()` — draft · 기록 · dirty · 다시 그리기 |
+| `studio/preview/preview-bridge.js` · `preview-sandbox.js` | native · sandbox 로 가르는 두 줄 |
+| `skin/sandbox/skin-sandbox-protocol.js` · `-host.js` · `-frame.js` | 메시지 둘(§17-8) |
+
+이동이 켜지는 조건은 일곱이고, **전부 참일 때만** 제스처가 시작된다
+(runtime 의 `dragGate()`).
+
+1. Canvas 편집 runtime 이 켜져 있다(§16-2 의 그 관문)
+2. 캔버스 선택이 **정확히 하나**다
+3. `primaryId` 가 그 하나다
+4. 그 요소가 지금 draft 에 있다
+5. hidden 도 locked 도 아니다 — 프레임은 **DOM 속성으로 한 번 더** 본다
+6. 그 요소가 지금 이 문서에 실제로 그려져 있다
+7. 그 순간의 입력이 **마우스 또는 펜**이다(§17-2)
+
+여럿을 골랐을 때는 그룹 틀만 남고 이동은 꺼진다.
+
+> **함정 — able 을 나중에 켜지 마라.**
+> 처음에는 `draggable:false` 로 만들고 조건이 맞을 때
+> `moveable.draggable = true` 로 켰다. vanilla 래퍼의 그 setter 는
+> `setState` 이고 preact 의 setState 는 **렌더를 미룬다**. able 목록과 target
+> gesto 는 그 렌더 뒤의 `_updateEvents()` 에서 만들어지므로, 켠 직후에 누르면
+> pointer 리스너가 아직 없다 — 2026-09-21 실측에서 `props.draggable` 은 true
+> 인데 `targetGesto` 가 없었고 드래그가 **한 번도 시작되지 않았다**. 그래서
+> able 은 **처음부터 켜 두고** 관문은 `dragStart` 한 곳에서만 본다.
+
+> **함정 — 이벤트는 `.on()` 으로만 걸린다.**
+> vanilla 래퍼는 생성자에서 옵션을 복사한 뒤 모든 `onXxx` 칸을 **자기
+> emitter 로 덮어쓴다**. 옵션으로 넘긴 `onDragStart` 는 한 번도 불리지 않는다.
+> 거절도 반환값이 아니라 **`e.stop()`** 이다 — emitter 의 `emit()` 이 그
+> 호출을 보고 false 를 돌려주고, Draggable 이 그 값으로 제스처를 접는다.
+
+### 17-2. 무엇이 lasso 이고 무엇이 이동인가
+
+pointer 가 **시작된 자리**가 가른다.
+
+| 시작 위치 | 동작 |
+| --- | --- |
+| 고른 단일 unlocked 요소 | Moveable 이동 |
+| 고르지 않은 unlocked 요소 | 아무 일도 없다 — 먼저 클릭해서 고른다 |
+| 빈 도화지 | Selecto lasso |
+| locked 요소 | 배경처럼 보고 lasso |
+| Moveable control | Selecto 금지(§16-7 의 그 관문) |
+| 도화지 밖 | 둘 다 시작하지 않음 |
+
+`SELECT-1B-2` 는 `preventDragFromInside:false` 로 두어 **요소 위에서도**
+lasso 가 시작됐다. 도화지 전체를 덮는 배경 사진이 흔해서 시작할 빈 자리가
+없었기 때문이다. 이제 그 자리는 "이 요소를 옮긴다"가 될 수 있으므로 둘을
+가른다 — 판정은 시작점의 `elementsFromPoint` 로 하고, **가장 위에 있는
+캔버스 요소**가 unlocked 이면 lasso 를 시작하지 않는다.
+
+> 그래서 배경 사진 위에서 lasso 를 하려면 그 사진을 **잠근다**. "건드리지
+> 않겠다"는 표시가 곧 "배경으로 쓰겠다"가 된다.
+
+처음 누른 **미선택** 요소를 같은 제스처에서 바로 옮기는 기능은 만들지
+않았다. 먼저 고르고, 다음 드래그에서 옮긴다.
+
+**손가락으로는 본체를 옮기지 않는다.** 도화지 전체를 덮는 배경 사진이
+선택된 상태에서 한 손가락 드래그를 가로채면 모바일 Preview 가 아예
+스크롤되지 않는다. lasso 와 같은 이유이고(§16-3) 같은 판정 함수를 쓴다 —
+`(pointer: fine)` 질의가 아니라 **그 순간 이벤트의 종류**를 본다. 손가락
+단일 탭 선택과 Preview 스크롤은 그대로다.
+
+### 17-3. 픽셀을 Canvas 좌표로
+
+Canvas JSON 이 좌표의 유일한 source of truth 다.
+
+```text
+scale        = 도화지의 실제 가로폭 / baseWidth
+canvasDeltaX = frameDeltaX / scale
+canvasDeltaY = frameDeltaY / scale
+```
+
+- 배율은 **가로폭 하나**로 정한다. 세로는 렌더러가
+  `aspect-ratio: baseWidth / baseHeight` 로 가로에 묶어 두었으므로 같은
+  배율이다(§12-2). 세로를 따로 재면 스킨이 높이를 덮었을 때 x 와 y 가 서로
+  다른 자로 움직인다.
+- 부모 문서의 Preview `transform: scale()` 은 **다시 적용하지 않는다**.
+  프레임 안의 `getBoundingClientRect()` 와 pointer 의 `clientX` 는 둘 다 그
+  프레임의 좌표계이고, 바깥의 scale 은 둘 다에 똑같이 걸리므로 나누면
+  사라진다.
+- 배율은 **dragStart 에서 한 번** 재고 그 제스처 동안 유지한다.
+- `dragStart` 에서 시작 좌표를 snapshot 하고, 매 프레임 **시작값 + 누적
+  이동량**을 쓴다. 직전 프레임의 delta 를 계속 더하지 않으므로 프레임 수와
+  무관하다.
+- 저장값은 **소수점 셋째 자리**까지. 정확한 정수면 정수 그대로다.
+- `x` · `y` 는 **음수를 허용**한다. 도화지 밖으로 나가는 것을 자동으로
+  되돌리지 않는다 — 계약의 유한 숫자 · 상한(`±100000`)만 지킨다.
+- 회전한 요소도 `x` · `y` 만 바뀌고 `rotation` 은 그대로다.
+
+### 17-4. 끄는 동안에는 아무것도 저장되지 않는다
+
+드래그 중에 움직이는 것은 **프레임 안의 custom property 두 칸**뿐이다.
+
+- Canvas JSON · working draft · Undo 기록 · 스킨 CSS — 한 글자도 바뀌지 않는다.
+- `applyStudioInspectorPatch()` 를 쓰지 않는다(그 함수는 template HTML 전용이라
+  캔버스 요소에 닿을 수 없다 — §14-6).
+- 요소의 `transform: rotate()` 를 덮어쓰지 않는다. 임시 `translate()` 를
+  덧붙이지도 않는다 — 렌더러와 **같은 두 칸**(`--imory-canvas-x` ·
+  `--imory-canvas-y`)을 갱신한다.
+- 그 두 칸을 쓰는 함수는 렌더러의 것 하나다
+  (`setSkinCanvasElementPosition` — skin/skin-home-canvas-render.js §0-1).
+  편집기가 백분율 · 자릿수 계산을 복제하지 않는다. 그 함수가 없는 문서에서는
+  **이동을 켜지 않는다**.
+- 끄는 동안에는 `updateRect()` 를 부르지 않는다. Moveable 은 제스처 도중
+  control box 를 자기 계산으로 그리고, 그 양이 우리가 옮기는 양과 같은
+  clientX/Y 차이에서 나오므로 둘은 재지 않아도 붙어 있다.
+
+취소되면 **시작할 때 적혀 있던 원본 문자열 두 개**를 그대로 되돌려 쓴다.
+숫자로 바꿔 다시 쓰지 않는다 — 한 번 버린 자릿수가 두 번 버려진다.
+
+### 17-5. 불변 수정 — 두 칸만 바뀐다
+
+`writeSkinHomeCanvasElementPosition(regions, id, next, expected)` 가 순수
+함수로 한다.
+
+```text
+regions[ name === "home_canvas" ].canvas.elements[ id === <선택> ].x
+                                                                 .y
+```
+
+보존되는 것: regions 의 **알 수 없는 항목** · 항목의 모르는 칸 · canvas 의
+모르는 칸 · element 의 모르는 칸 · `props` · `width` · `height` ·
+`rotation` · `hidden` · `locked` · 요소 배열 **순서** · 다른 요소 객체 ·
+image slot · template · css · js.
+
+입력을 **제자리에서 고치지 않는다.** 바뀌는 경로 위의 객체(regions 배열 ·
+`home_canvas` 항목 · canvas · elements 배열 · 그 요소)만 새로 만들고 나머지는
+참조로 옮긴다 — 그래서 Undo 가 들고 있는 직전 스냅샷이 이 호출로 바뀌지
+않는다.
+
+같은 id 가 둘이면 캔버스 전체가 무효이므로(§5-1) 쓰지 않는다. 기존 좌표를
+CSS 로 새로 적지 않는다.
+
+### 17-6. 한 제스처 = Undo 한 칸
+
+| 언제 | 기록 |
+| --- | --- |
+| dragStart · drag 중 | 없음 |
+| dragEnd 에서 x · y 가 실제로 바뀌었다 | **한 칸** |
+| 이동량 0 | 없음 |
+| 취소 · 거부 | 없음 |
+
+기록은 기존 Studio history 를 그대로 쓴다(`captureStudioWorkingChange` /
+`recordStudioWorkingChange` — 좌우 영역 · 스킨 설정과 **같은 다섯 줄**).
+별도 Undo stack 을 만들지 않는다.
+
+Undo 는 드래그 전 좌표로, Redo 는 드래그 후 좌표로 돌아가고, **선택 ID 는
+유지된다.** 다시 그려진 뒤 Moveable target 은 새 DOM 에 다시 붙는다.
+
+### 17-7. 부모가 다시 본다
+
+프레임은 자기 DOM 과 부모가 내려 준 좌표만 안다. 그 사이에 Undo · Import ·
+AI 적용 · 선택 변경 · 요소 삭제가 있었을 수 있고, 위조된 메시지일 수도 있다.
+그래서 확정은 **처음부터 다시** 본다
+(`commitStudioCanvasElementTransform`).
+
+1. Canvas 편집이 켜져 있다
+2. `kind` 는 `"move"` 하나
+3. id 형태가 맞다
+4. 지금 선택이 **정확히 그 하나**이고 primary 도 그것
+5. 순번이 최신이다 — 늦게 도착한 옛 제스처를 버린다
+6. 그 요소가 지금 draft 에 있고 hidden 도 locked 도 아니다
+7. `expected` · `next` 는 **키가 정확히 x · y 둘**이다
+8. 지금 draft 의 x · y 가 `expected` 와 **정확히** 같다
+9. `next` 가 계약의 좌표 범위 안이다
+
+> **모르는 키는 버리지 않고 거부한다.** 처음에는 x · y 만 새 리터럴로 옮겨
+> 담았는데, 그러면 `next` 에 `width` 가 섞여 와도 조용히 빠지고 나머지는
+> 저장된다 — 이 라운드의 e2e 가 그것을 "받아들였다"로 잡았다. 조용히 고쳐
+> 주면 "이 메시지가 소유하는 것은 좌표 둘"이라는 계약이 말로만 남는다.
+
+거부해도 화면은 되돌아간다 — 끝에서 언제나 지금 좌표를 프레임에 다시
+내려보내기 때문이다(§17-8). 승인이면 방금 놓은 자리가, 거부면 예전 자리가
+내려간다. **"거부"를 따로 알리는 메시지를 만들지 않았다.**
+
+오류 때문에 캔버스 선택을 일반 Inspector 선택으로 바꾸지 않는다.
+
+### 17-8. 메시지 둘
+
+native 와 sandbox 가 **같은 부모 확정 함수**를 쓴다. 다른 것은 메시지가 가는
+길뿐이다.
+
+```text
+canvas-geometry   부모 -> 프레임
+  { active, id?, x?, y?, baseWidth?, baseHeight?, generation, answering? }
+
+canvas-transform  프레임 -> 부모
+  { kind, id, expected:{x,y}, next:{x,y}, generation, requestId }
+```
+
+**왜 좌표가 내려가는가.** `canvas-select` 는 일부러 id 와 순번만 싣는다 —
+프레임은 자리를 자기 DOM 에서 스스로 잰다(§15-4). 그런데 **Canvas 좌표**는
+DOM 에서 잴 수 없다. 렌더러가 써 넣은 것은 여섯 자리에서 자른 백분율이고,
+거꾸로 풀면 원본과 미세하게 다른 숫자가 나온다. 그 값을 시작점으로 삼으면
+끌지도 않은 요소가 저장될 때마다 조금씩 움직인다.
+
+단독 선택이 아닐 때(0개 · 2개 이상 · 잠김 · 숨김)는 `active:false` 로 내려가고
+나머지 칸은 **아예 없다** — `canvas-select` 의 해제와 같은 모양이다.
+
+> **함정 — "확정 뒤 처음 온 좌표"를 답으로 읽지 마라.**
+> 좌표 메시지는 답 말고도 나간다: 선택이 바뀔 때, 다시 그린 뒤, draft 가
+> 바뀔 때마다. 2026-09-21 실측에서 확정이 부모에 닿기 **전에** 확정 전 값을
+> 그대로 담은 좌표가 한 번 더 내려왔고, 프레임은 승인된 이동을 "거부됐다"로
+> 읽어 제자리로 돌렸다. 그래서 답에만 **요청 번호**(`answering` = 그 요청의
+> `requestId`)를 달고, 프레임은 자기 번호와 같은 답에만 반응한다. 기억해
+> 두었다가 렌더 뒤에 다시 보내는 값에서는 그 번호를 **지운다** — 옛 답이 두
+> 번 답이 되지 않게.
+
+> **함정 — 재렌더가 확정을 죽이지 않게 하라.**
+> 승인된 확정은 곧바로 화면을 다시 그리게 한다. 재렌더에서 제스처와 함께
+> **기다림까지** 접으면 정상적으로 저장된 이동이 "답을 못 받았다"가 되어
+> 화면만 제자리로 돌아간다. 재렌더가 접는 것은 **제스처뿐**이고, 기다림을
+> 끝내는 것은 번호가 붙은 답 하나 · 상한 시간 · `dispose()` 셋이다.
+
+> **함정 — sandbox 에서는 누르는 순간 선택이 한 번 더 확정된다.**
+> sandbox 프레임의 Inspector 는 **pointerdown** 에서 고른다. 그래서 이미 고른
+> 요소를 끌기 시작하는 그 순간에도 "이것을 골랐다"가 올라가고, 부모는 같은
+> 선택을 **새 순번**으로 확정해 내려 준다(언제나 dragStart 뒤에 도착한다).
+> 순번이 달라졌다고 취소하면 sandbox 에서는 이동이 한 번도 성립하지 않는다.
+> 가르는 기준은 순번이 아니라 **무엇을 골랐는가**이고, 같은 단독 선택이면
+> 진행 중인 제스처가 새 순번을 받아 간다.
+
+메시지 층의 검사: 알려진 키만 · `kind` 는 `move` 하나 · id 형태 · 좌표의
+유한성과 상한 · `expected` 와 `next` 는 x · y 두 칸 · origin · source ·
+`renderSeq`. `width` · `height` · `rotation` 이 섞이면 **메시지 전체가**
+버려진다.
+
+### 17-9. 취소
+
+다음에서는 확정하지 않고 시작 자리로 되돌린다.
+
+Escape · pointercancel · 프레임 교체 · HOME 이탈 · Select 종료 · 선택 변경 ·
+요소 삭제 · Canvas 비활성화 · 시작 좌표가 달라짐(Undo · Import) · 부모 거부 ·
+vendor/runtime 오류.
+
+Escape 는 **끄는 동안에만** 가로챈다. 그때는 그 키의 뜻이 "지금 옮기던 것을
+없던 일로"이고, 그대로 흘려보내면 Inspector 가 **선택까지** 푼다. 끌고 있지
+않을 때는 손대지 않는다.
+
+답이 아예 오지 않는 경우(프레임 교체 · 부모 오류)를 위해 기다림에 상한을
+둔다 — 그때는 마지막으로 알고 있던 값으로 돌아간다.
+
+### 17-10. 이번 단계에 **없는 것**
+
+크기 · 회전 조작 · 손잡이 · 그룹 이동 · **손가락 이동** · 스냅 · 가이드 ·
+키보드 화살표 이동 · Inspector geometry 입력 필드 · 텍스트 편집 · 이미지
+교체 · Crop · 레이어 목록 · effect hook · preset · widget · 좌우 패널 Canvas
+— **하나도 없다.**
+
+저자 CSS/JS 가 geometry 를 강제로 덮는 경우의 최종 우선순위는
+`HOME-CANVAS-EFFECT-HOOK-1` 에서 정한다. 이번에는 **기존 transform 을
+파괴하지 않는 것**까지만 보장한다.

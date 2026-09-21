@@ -311,7 +311,67 @@ var SANDBOX_MESSAGE_TYPES = {
   ======================================================= */
 
   CANVAS_SELECT: "IMORY_CANVAS_SELECT",
-  CANVAS_PROPOSE: "IMORY_CANVAS_PROPOSE"
+  CANVAS_PROPOSE: "IMORY_CANVAS_PROPOSE",
+
+
+  /* =======================================================
+     HOME-CANVAS-TRANSFORM-1A — 단일 요소 이동
+
+       CANVAS_GEOMETRY  parent -> frame
+         { renderSeq, active, id?, x?, y?, baseWidth?, baseHeight?,
+           generation, answering? }
+       CANVAS_TRANSFORM frame  -> parent
+         { renderSeq, kind, id, expected, next, generation, requestId }
+
+     ★ 왜 좌표가 **내려가야** 하는가
+
+     CANVAS_SELECT 는 일부러 id 와 순번만 싣는다 — 프레임은 자기
+     DOM 에서 자리를 스스로 잰다. 그런데 **Canvas 좌표**는 DOM 에서
+     잴 수 없다. 렌더러가 써 넣은 것은 여섯 자리에서 자른 백분율
+     이고, 그것을 거꾸로 풀면 원본과 미세하게 다른 숫자가 나온다.
+     끌지도 않은 요소가 저장될 때마다 조금씩 움직이는 일을 만들지
+     않으려면, 시작 좌표는 **부모가 말해 주어야** 한다.
+
+     그래서 이 메시지가 두 가지 일을 한다.
+
+       1) 다음 이동의 시작 좌표(= `expected` 의 근거)
+       2) 확정 요청의 **답**. 승인이면 방금 놓은 자리가, 거부면
+          예전 자리가 내려온다. 프레임은 둘을 구분하지 않고 언제나
+          "부모가 말한 값"으로 맞춘다(원상 복원이 곧 거부의 표현).
+
+     단일 선택이 아닐 때(0개 · 2개 이상 · 잠김 · 숨김)는
+     `active:false` 로 내려가고 그 밖의 칸은 아예 없다 —
+     CANVAS_SELECT 의 해제와 같은 모양이다.
+
+     ★ 답에는 **번호가 붙는다**(`answering` = 그 요청의 `requestId`).
+
+     좌표 메시지는 이 답 말고도 나간다 — 선택이 바뀔 때, 화면을
+     다시 그린 뒤, draft 가 바뀔 때마다. 그래서 "확정을 보낸 뒤
+     처음 도착한 좌표"를 답으로 읽으면 **틀린 것을 답으로 읽는
+     날**이 온다: 2026-09-21 실측에서, 확정이 부모에 닿기 전에
+     확정 전 값을 그대로 담은 좌표 메시지가 한 번 더 내려왔고,
+     프레임은 승인된 이동을 "거부됐다"로 읽어 제자리로 돌렸다.
+
+     그래서 답에만 번호를 달고, 프레임은 **자기 요청 번호와 같은
+     답**에만 반응한다. 번호가 없는 좌표 메시지는 다음 이동의
+     시작점을 갱신할 뿐이다.
+
+     ★ CANVAS_TRANSFORM 은 **요청**이지 확정이 아니다.
+
+     부모는 받은 값을 그대로 쓰지 않는다. 지금 그 요소가 단독으로
+     골라져 있는가 · 순번이 최신인가 · 지금 x · y 가 `expected` 와
+     같은가 · `next` 가 계약 범위 안인가를 전부 다시 보고, 하나라도
+     어긋나면 **쓰지 않는다**(studio/inspector/studio-canvas-selection.js
+     commitStudioCanvasElementTransform).
+
+     ★ `kind` 는 이번 단계에 `"move"` 하나다. 크기 · 회전은 이
+       메시지로 들어올 수 없다 — `expected` 와 `next` 는 x · y 두
+       칸만 허용하고, width · height · rotation 이 섞이면 메시지
+       전체를 버린다.
+  ======================================================= */
+
+  CANVAS_GEOMETRY: "IMORY_CANVAS_GEOMETRY",
+  CANVAS_TRANSFORM: "IMORY_CANVAS_TRANSFORM"
 };
 
 
@@ -553,6 +613,33 @@ var SANDBOX_CANVAS_MAX_SELECTED = 64;
 /* HOME-CANVAS-SELECT-1B-2 — 프레임이 올릴 수 있는 제안의 뜻은 둘뿐이다 */
 
 var SANDBOX_CANVAS_SELECT_MODES = ["replace", "toggle"];
+
+
+/*
+  HOME-CANVAS-TRANSFORM-1A — 프레임이 올릴 수 있는 조작의 뜻은
+  이번 단계에 **하나**다. 크기 · 회전이 들어오면 그때 이 배열에
+  이름을 더한다(더하지 않은 값은 메시지 층에서 거부된다).
+*/
+
+var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move"];
+
+
+/*
+  좌표 한 쌍 — x · y 둘뿐이고, 둘 다 계약의 좌표 범위 안이어야
+  한다. **모르는 키가 하나라도 있으면 거짓**이다: width · height ·
+  rotation 이 이 메시지로 새어 들어갈 길을 여기서 막는다.
+*/
+
+function isSandboxCanvasPoint(value) {
+
+  return (
+    isPlainSandboxObject(value) &&
+    hasOnlyKnownSandboxKeys(value, ["x", "y"]) &&
+    isSandboxCanvasCoord(value.x) &&
+    isSandboxCanvasCoord(value.y)
+  );
+
+}
 
 
 /*
@@ -1718,6 +1805,117 @@ var SANDBOX_MESSAGE_SPEC = {
       );
 
     }
+  },
+
+
+  /* =======================================================
+     HOME-CANVAS-TRANSFORM-1A — 단일 선택 요소의 Canvas 좌표
+     (위 CANVAS_GEOMETRY 주석)
+
+     active:false 면 나머지 칸이 **하나도 없다**. 그것이 "지금은
+     옮길 수 있는 단독 선택이 없다"이고, 프레임은 그 말을 받으면
+     이동을 끈다 — CANVAS_SELECT 의 해제와 같은 모양이다.
+  ======================================================= */
+
+  IMORY_CANVAS_GEOMETRY: {
+    direction: "to-frame",
+    keys: [
+      "contract", "renderSeq", "active", "id",
+      "x", "y", "baseWidth", "baseHeight", "generation", "answering"
+    ],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (typeof payload.active !== "boolean") {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.generation) || payload.generation < 0) {
+        return false;
+      }
+
+      /* 답일 때만 있는 칸이다 — 있으면 양의 정수여야 한다 */
+      if (
+        payload.answering !== undefined &&
+        (!Number.isInteger(payload.answering) || payload.answering < 1)
+      ) {
+        return false;
+      }
+
+      if (!payload.active) {
+
+        return (
+          payload.id === undefined &&
+          payload.x === undefined &&
+          payload.y === undefined &&
+          payload.baseWidth === undefined &&
+          payload.baseHeight === undefined
+        );
+
+      }
+
+      return (
+        isSandboxInspectEditId(payload.id) &&
+        isSandboxCanvasCoord(payload.x) &&
+        isSandboxCanvasCoord(payload.y) &&
+        isSandboxCanvasSize(payload.baseWidth) &&
+        isSandboxCanvasSize(payload.baseHeight)
+      );
+
+    }
+  },
+
+
+  /* =======================================================
+     HOME-CANVAS-TRANSFORM-1A — 프레임의 이동 **확정 요청**
+
+     ★ 확정이 아니다. 부모가 자기 draft 로 전부 다시 본다
+       (위 CANVAS_TRANSFORM 주석).
+
+     ★ `expected` 와 `next` 는 x · y 두 칸뿐이다. width · height ·
+       rotation 이 섞인 메시지는 여기서 통째로 버려진다 — 이번
+       단계가 소유하는 것은 좌표 둘이라는 계약이 메시지 층에도
+       있어야 한다.
+  ======================================================= */
+
+  IMORY_CANVAS_TRANSFORM: {
+    direction: "to-parent",
+    keys: [
+      "contract", "renderSeq", "kind", "id", "expected", "next",
+      "generation", "requestId"
+    ],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (SANDBOX_CANVAS_TRANSFORM_KINDS.indexOf(payload.kind) === -1) {
+        return false;
+      }
+
+      if (!isSandboxInspectEditId(payload.id)) {
+        return false;
+      }
+
+      /* 답을 이 번호로 돌려받는다(위 CANVAS_GEOMETRY 의 ★ 주석) */
+      if (!Number.isInteger(payload.requestId) || payload.requestId < 1) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.generation) || payload.generation < 0) {
+        return false;
+      }
+
+      return (
+        isSandboxCanvasPoint(payload.expected) &&
+        isSandboxCanvasPoint(payload.next)
+      );
+
+    }
   }
 
 };
@@ -2017,7 +2215,9 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_INSPECT_MAX_CANDIDATES,
     SANDBOX_CANVAS_MAX_SELECTED,
     SANDBOX_CANVAS_SELECT_MODES,
+    SANDBOX_CANVAS_TRANSFORM_KINDS,
     isSandboxCanvasIdList,
+    isSandboxCanvasPoint,
     isSandboxInspectEditId,
     isSandboxInspectRect,
     isSandboxInspectTarget,

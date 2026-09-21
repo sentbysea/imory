@@ -882,6 +882,180 @@ function mergeSkinHomeCanvasRegionEntry(entry, changes) {
 }
 
 
+/* =========================================================
+   4-1. 요소 하나의 x · y 만 바꾼다 (HOME-CANVAS-TRANSFORM-1A)
+
+   writeSkinHomeCanvasElementPosition(regions, elementId, next, expected)
+     -> { ok: true,  regions, previous: { x, y } }
+     -> { ok: false, reason }
+
+   ★ 이 함수가 바꾸는 것은 **두 칸뿐**이다.
+
+     regions[name === "home_canvas"].canvas.elements[id === elementId].x
+                                                                     .y
+
+   나머지는 전부 그대로 새 객체로 옮긴다 — regions 의 모르는 항목 ·
+   항목의 모르는 칸 · canvas 의 모르는 칸 · element 의 모르는 칸 ·
+   props · width · height · rotation · hidden · locked · 배열 순서 ·
+   다른 요소 객체(같은 참조로 옮긴다).
+
+   ★ 입력을 mutate 하지 않는다. 바뀌는 경로 위의 객체(regions 배열 ·
+     home_canvas 항목 · canvas · elements 배열 · 그 요소)만 새로
+     만들고, 그 밖의 값은 참조로 옮긴다. 그래서 Undo 가 들고 있는
+     직전 스냅샷이 이 호출로 바뀌지 않는다(studio/studio-history.js
+     머리말 "참조로 들고 있다").
+
+   ★ `expected` 를 주면 **지금 값과 정확히 같을 때만** 쓴다.
+     프레임이 본 화면과 지금 draft 가 다르면(늦게 도착한 확정 ·
+     그 사이의 Undo · Import) 쓰지 않고 거부한다.
+
+   ★ 모르는 키를 받지 않는다. next 는 x · y 둘뿐이고, 하나라도 더
+     있으면 거부한다 — 이 함수로 width · rotation 이 새어 들어갈
+     길을 만들지 않는다.
+========================================================== */
+
+function writeSkinHomeCanvasElementPosition(regions, elementId, next, expected) {
+
+  if (
+    typeof elementId !== "string" ||
+    !SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(elementId)
+  ) {
+    return { ok: false, reason: "id" };
+  }
+
+  if (!isSkinHomeCanvasPlainObject(next)) {
+    return { ok: false, reason: "shape" };
+  }
+
+  const keys =
+    Object.keys(next);
+
+  if (
+    keys.length !== 2 ||
+    keys.indexOf("x") === -1 ||
+    keys.indexOf("y") === -1
+  ) {
+    return { ok: false, reason: "keys" };
+  }
+
+  if (!isSkinHomeCanvasCoord(next.x) || !isSkinHomeCanvasCoord(next.y)) {
+    return { ok: false, reason: "coord" };
+  }
+
+  const found =
+    findSkinHomeCanvasRegion(regions);
+
+  if (!found) {
+    return { ok: false, reason: "region" };
+  }
+
+  const canvas =
+    found.entry.canvas;
+
+  if (!isSkinHomeCanvasPlainObject(canvas) || !Array.isArray(canvas.elements)) {
+    return { ok: false, reason: "canvas" };
+  }
+
+  /* 같은 id 가 둘이면 캔버스 전체가 무효다(§5-1) — 그런 데이터에
+     쓰지 않는다. 고르는 쪽도 같은 이유로 이미 거부한다. */
+  const hits =
+    canvas.elements.filter(
+      (element) =>
+        isSkinHomeCanvasPlainObject(element) && element.id === elementId
+    );
+
+  if (hits.length !== 1) {
+    return { ok: false, reason: hits.length ? "duplicate" : "missing" };
+  }
+
+  const current =
+    hits[0];
+
+  if (!isSkinHomeCanvasCoord(current.x) || !isSkinHomeCanvasCoord(current.y)) {
+    return { ok: false, reason: "current" };
+  }
+
+  if (isSkinHomeCanvasPlainObject(expected)) {
+
+    if (expected.x !== current.x || expected.y !== current.y) {
+      return { ok: false, reason: "expected" };
+    }
+
+  }
+
+  const previous =
+    { x: current.x, y: current.y };
+
+  if (current.x === next.x && current.y === next.y) {
+    return { ok: true, regions: regions, previous: previous, unchanged: true };
+  }
+
+
+  const nextElements =
+    canvas.elements.map(
+      (element) => {
+
+        if (element !== current) {
+          return element;
+        }
+
+        const copy = {};
+
+        Object.keys(element).forEach((key) => {
+          if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
+            copy[key] = element[key];
+          }
+        });
+
+        copy.x = next.x;
+        copy.y = next.y;
+
+        return copy;
+
+      }
+    );
+
+
+  const nextCanvas = {};
+
+  Object.keys(canvas).forEach((key) => {
+    if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
+      nextCanvas[key] = canvas[key];
+    }
+  });
+
+  nextCanvas.elements = nextElements;
+
+
+  const nextRegions =
+    regions.map(
+      (entry, index) => {
+
+        if (index !== found.index) {
+          return entry;
+        }
+
+        const copy = {};
+
+        Object.keys(entry).forEach((key) => {
+          if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
+            copy[key] = entry[key];
+          }
+        });
+
+        copy.canvas = nextCanvas;
+
+        return copy;
+
+      }
+    );
+
+
+  return { ok: true, regions: nextRegions, previous: previous };
+
+}
+
+
 /*
   빈 v1 캔버스 — 프리셋이 아니라 "아무것도 놓이지 않은 면" 하나다.
   요소가 없어도 도화지는 높이를 갖는다(baseHeight, 기본 844).
@@ -1084,6 +1258,10 @@ if (typeof window !== "undefined") {
   window.findSkinHomeCanvasRegion = findSkinHomeCanvasRegion;
   window.readSkinHomeCanvasRegion = readSkinHomeCanvasRegion;
   window.writeSkinHomeCanvasRegion = writeSkinHomeCanvasRegion;
+
+  /* HOME-CANVAS-TRANSFORM-1A */
+  window.writeSkinHomeCanvasElementPosition = writeSkinHomeCanvasElementPosition;
+
   window.createEmptySkinHomeCanvas = createEmptySkinHomeCanvas;
   window.createSkinHomeCanvasElementId = createSkinHomeCanvasElementId;
 
@@ -1129,6 +1307,7 @@ if (typeof module !== "undefined" && module.exports) {
     findSkinHomeCanvasRegion,
     readSkinHomeCanvasRegion,
     writeSkinHomeCanvasRegion,
+    writeSkinHomeCanvasElementPosition,
     createEmptySkinHomeCanvas,
     createSkinHomeCanvasElementId,
 
