@@ -367,10 +367,118 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
 
 /* EDITORIAL-RESPONSIVE-HOME-1 — SIDES_STATE · SIDES_VIEWPORT · SIDES_CLOSE
    (좌우 영역의 모바일 패널, IMORY_SIDES_DESIGN.md §7). 값 검사는
-   skin/skin-sides-test.mjs [protocol] 이 본다. */
-check("[msg] 이번 라운드가 아는 type 은 정확히 스물여섯이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 26,
+   skin/skin-sides-test.mjs [protocol] 이 본다.
+
+   HOME-CANVAS-SELECT-1B-1 에서 하나가 늘어 스물일곱이다
+   (CANVAS_SELECT — 부모가 확정한 캔버스 선택. 프레임은 받은 id 를
+    자기 DOM 에서 다시 확인한 뒤에만 그린다). */
+check("[msg] 이번 라운드가 아는 type 은 정확히 스물일곱이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 27,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
+
+
+/* =========================================================
+   [canvas-select] HOME-CANVAS-SELECT-1B-1 — 캔버스 선택 메시지
+========================================================== */
+
+console.log("\n[canvas-select] 캔버스 선택 (HOME-CANVAS-SELECT-1B-1)");
+
+const CANVAS_PARENT_WIN = { name: "canvas-parent" };
+
+const canvasSelectTo = (payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_SELECT, payload, 1
+      )
+    },
+    {
+      originAllowList: ["https://imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-frame"
+    }
+  );
+
+check("[canvas-select] 정상 선택을 프레임이 받는다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: true,
+    ids: ["cvPhoto"], primaryId: "cvPhoto", generation: 5
+  }).ok === true);
+
+check("[canvas-select] 빈 선택(해제)도 받는다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: false, ids: [], generation: 5
+  }).ok === true);
+
+check("[canvas-select] ★ active:true 인데 primaryId 가 없으면 거부된다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: true, ids: ["cvPhoto"], generation: 5
+  }).ok === false,
+  "골랐다는데 무엇을 골랐는지 없는 모양을 메시지 층에서 막는다");
+
+check("[canvas-select] ★ primaryId 가 ids 에 없으면 거부된다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: true,
+    ids: ["cvPhoto"], primaryId: "cvText", generation: 5
+  }).ok === false);
+
+check("[canvas-select] ★ active:false 인데 ids/primaryId 가 실려 오면 거부된다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: false,
+    ids: ["cvPhoto"], primaryId: "cvPhoto", generation: 5
+  }).ok === false);
+
+check("[canvas-select] ★ 식별자 형태가 Inspector 와 같다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: true,
+    ids: ["cv Photo"], primaryId: "cv Photo", generation: 5
+  }).ok === false &&
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: true,
+    ids: ["<img>"], primaryId: "<img>", generation: 5
+  }).ok === false);
+
+check("[canvas-select] ★ generation 이 음수거나 정수가 아니면 거부된다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: false, ids: [], generation: -1
+  }).ok === false &&
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: false, ids: [], generation: 1.5
+  }).ok === false);
+
+check("[canvas-select] ★ 모르는 키(nonce · css · rect)는 옮겨지지 않는다",
+  (() => {
+    const verdict = canvasSelectTo({
+      contract: 1, renderSeq: 3, active: true,
+      ids: ["cvPhoto"], primaryId: "cvPhoto", generation: 5,
+      nonce: "abc", css: "body{}", rect: { left: 0, top: 0, width: 1, height: 1 }
+    });
+    return verdict.ok === true &&
+      verdict.payload.nonce === undefined &&
+      verdict.payload.css === undefined &&
+      verdict.payload.rect === undefined;
+  })(),
+  "nonce 는 프레임 밖으로도 안으로도 메시지에 실리지 않는다");
+
+check("[canvas-select] ★ 프레임은 이 메시지를 부모에게 보낼 수 없다 (방향)",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://skin-frame.imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_SELECT,
+        { contract: 1, renderSeq: 3, active: false, ids: [], generation: 0 },
+        1
+      )
+    },
+    {
+      originAllowList: ["https://skin-frame.imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-parent"
+    }
+  ).ok === false);
 
 
 /* =========================================================

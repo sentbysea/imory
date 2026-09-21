@@ -94,6 +94,21 @@ let studioCanvasSelectBox = null;
 
 let studioCanvasSelectLabel = null;
 
+/* =========================================================
+   HOME-CANVAS-SELECT-1B-1 — 프레임이 회전 틀을 잡았는가
+
+   Preview 문서가 Moveable 로 **회전을 따라가는 테두리**를 실제로
+   붙이면 true 가 된다(studio/preview/preview-bridge.js 의
+   preview:canvas-frame). 그동안 이 문서의 축 평행 상자는 내린다 —
+   둘 다 그리면 회전한 요소에서 상자가 덧그려져 보인다.
+
+   ★ 선택 상태가 아니다. 이 값이 무엇이든 캔버스 선택 자체는
+     그대로다 — vendor 로드가 실패하면 false 로 돌아오고, 그때는
+     아래 축 평행 테두리가 그대로 fallback 이 된다(로드맵 §7).
+========================================================== */
+
+let studioCanvasFrameActive = false;
+
 
 /* =========================================================
    1. 지금 draft 의 캔버스
@@ -360,8 +375,24 @@ function repaintStudioCanvasSelection() {
   const rect =
     item ? (item.visibleRect || item.rect) : null;
 
+  /* =====================================================
+     HOME-CANVAS-SELECT-1B-1 — 상자만 넘기고 이름표는 남긴다
+
+     Moveable 이 잡고 있으면 **축에 평행한 상자**는 그리지 않는다 —
+     회전한 요소에서 그것이 덧그려지면 사용자가 보는 테두리가 둘이
+     된다.
+
+     ★ 이름표는 넘기지 않는다. Moveable 에는 "무엇을 골랐는가"를
+       보여 주는 것이 없고, 그 자리를 비우면 이 라운드가 **기능을
+       하나 없앤 것**이 된다. 이름표는 상자가 아니므로 겹쳐 보이지도
+       않는다.
+  ====================================================== */
+
   if (typeof paintStudioInspectorBox === "function") {
-    paintStudioInspectorBox(studioCanvasSelectBox, rect);
+    paintStudioInspectorBox(
+      studioCanvasSelectBox,
+      studioCanvasFrameActive ? null : rect
+    );
   }
 
   const mapped =
@@ -438,13 +469,57 @@ function applyStudioCanvasSelection(entries, options) {
     next;
 
   if (!next) {
+
     hideStudioCanvasOverlay();
+
+    /* 프레임의 회전 틀도 곧 내려간다(아래 메시지). 그 보고를
+       기다리지 않고 여기서 먼저 false 로 돌린다 — 다음 선택까지
+       이 문서의 테두리가 숨은 채로 남지 않게. */
+    studioCanvasFrameActive = false;
+
   }
   else {
     ensureStudioCanvasOverlay();
   }
 
   repaintStudioCanvasSelection();
+
+
+  /* =====================================================
+     HOME-CANVAS-SELECT-1B-1 — 확정된 선택을 Preview 문서로
+
+     ★ 여기 한 곳에서만 나간다. set / clear / sync / reconcile 이
+       전부 이 함수를 지나므로(위 머리말) "선택이 바뀌었는데
+       프레임만 모른다"가 생기지 않는다.
+
+     ★ 좌표도 nonce 도 draft 도 싣지 않는다 — id 와 순번뿐이다.
+       프레임은 그 id 를 자기 DOM 에서 다시 확인한 뒤에만 그린다.
+
+     ★ 값이 같아도 보낸다(changed 를 보지 않는다). 프레임이 새로
+       만들어졌거나 재렌더로 target 을 놓쳤을 때 같은 값을 한 번
+       더 받는 것이 정답이고, 받는 쪽은 같은 값이면 아무 일도
+       하지 않는다.
+  ====================================================== */
+
+  if (typeof window.postCanvasSelectionToFrame === "function") {
+
+    window.postCanvasSelectionToFrame(
+      next
+        ? {
+            active: true,
+            ids: next.ids.slice(),
+            primaryId: next.primaryId,
+            generation: next.generation
+          }
+        : {
+            active: false,
+            ids: [],
+            primaryId: null,
+            generation: studioCanvasSelectionGeneration
+          }
+    );
+
+  }
 
   /* =====================================================
      프레임에도 해제를 알린다 — 단, 소유권이 넘어가는 경우는 뺀다
@@ -534,6 +609,33 @@ function clearStudioCanvasSelection(options) {
 function studioCanvasSelectionIsActive() {
 
   return !!studioCanvasSelection;
+
+}
+
+
+/*
+  setStudioCanvasFrameActive(active, editId)
+
+  HOME-CANVAS-SELECT-1B-1 — Preview 문서의 보고다(위
+  studioCanvasFrameActive 주석). 지금 고른 요소에 대한 보고가
+  아니면 받지 않는다 — 늦게 도착한 옛 요소의 "붙었다"가 새 선택의
+  테두리를 지우지 않게.
+*/
+
+function setStudioCanvasFrameActive(active, editId) {
+
+  const next =
+    !!active &&
+    !!studioCanvasSelection &&
+    (typeof editId !== "string" || editId === studioCanvasSelection.primaryId);
+
+  if (studioCanvasFrameActive === next) {
+    return;
+  }
+
+  studioCanvasFrameActive = next;
+
+  repaintStudioCanvasSelection();
 
 }
 
@@ -635,12 +737,19 @@ function reconcileStudioCanvasSelection() {
 function getStudioCanvasSelection() {
 
   if (!studioCanvasSelection) {
-    return { ids: [], primaryId: null, items: [], generation: studioCanvasSelectionGeneration };
+    return {
+      ids: [],
+      primaryId: null,
+      items: [],
+      generation: studioCanvasSelectionGeneration,
+      frameActive: false
+    };
   }
 
   return {
     ids: studioCanvasSelection.ids.slice(),
     primaryId: studioCanvasSelection.primaryId,
+    frameActive: studioCanvasFrameActive,
     items: studioCanvasSelection.items.map((item) => ({
       id: item.id,
       type: item.type,
@@ -665,7 +774,11 @@ if (typeof window !== "undefined") {
   window.repaintStudioCanvasSelection = repaintStudioCanvasSelection;
   window.syncStudioCanvasSelectionRects = syncStudioCanvasSelectionRects;
 
+  window.setStudioCanvasFrameActive = setStudioCanvasFrameActive;
+
   window.studioCanvasSelectionIsActive = studioCanvasSelectionIsActive;
+
+  window.studioCanvasFrameIsActive = () => studioCanvasFrameActive;
   window.studioCanvasSelectableElement = studioCanvasSelectableElement;
   window.studioCanvasDraftElement = studioCanvasDraftElement;
   window.studioCanvasDraftPayload = studioCanvasDraftPayload;

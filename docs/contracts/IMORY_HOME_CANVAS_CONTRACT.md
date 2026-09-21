@@ -1,14 +1,16 @@
 # IMORY HOME CANVAS — 데이터 계약
 
-> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 · §13 · §14 는
-> 지금 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집 UI 가
-> 지켜야 할 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
+> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 · §13 · §14 ·
+> §15 는 지금 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집
+> UI 가 지켜야 할 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
 >
 > 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
 > `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12) ·
 > `HOME-CANVAS-RENDER-1B`(2026-09-21, **sandbox 프레임까지 · 네 화면** — §12-6) ·
 > `HOME-CANVAS-VENDOR-1`(2026-09-21, **Moveable · Selecto 고정과 지연 로더** — §13) ·
-> `HOME-CANVAS-SELECT-1A`(2026-09-21, **선택 소유권과 단일 선택 기반** — §14).
+> `HOME-CANVAS-SELECT-1A`(2026-09-21, **선택 소유권과 단일 선택 기반** — §14) ·
+> `HOME-CANVAS-SELECT-1B-1`(2026-09-21, **조건부 vendor 활성화와 회전을 따라가는
+> 선택 틀** — §15).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -31,13 +33,15 @@
 | **캔버스 선택 상태**(기존 Inspector 와 다른 소유자) | [studio/inspector/studio-canvas-selection.js](../../studio/inspector/studio-canvas-selection.js) |
 | **선택 소유권을 정하는 한 곳** | [studio/inspector/studio-inspector.js](../../studio/inspector/studio-inspector.js) `routeStudioInspectSelectMessage` |
 | **캔버스를 아는 공통 hit-test**(세 realm 이 같은 파일) | [skin/skin-inspect-target.js](../../skin/skin-inspect-target.js) |
+| **프레임 안 편집 runtime**(native · sandbox 공용 한 벌, §15) | [skin/skin-home-canvas-editor-runtime.js](../../skin/skin-home-canvas-editor-runtime.js) `createHomeCanvasSelectionFrame` |
 
 관련 테스트: `node skin/skin-home-canvas-test.mjs` ·
 `node skin/skin-home-canvas-render-e2e-test.mjs` ·
 `node skin/skin-home-canvas-sandbox-e2e-test.mjs` ·
 `node studio/studio-home-canvas-e2e-test.mjs` ·
 `node studio/studio-home-canvas-vendor-e2e-test.mjs` ·
-`node studio/studio-home-canvas-select-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
+`node studio/studio-home-canvas-select-e2e-test.mjs` ·
+`node studio/studio-home-canvas-moveable-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
 
 ---
 
@@ -51,16 +55,18 @@
 | `RENDER-1B` | 그 **같은 렌더러**가 cross-origin sandbox 프레임에서도 돈다(§12-6). **네 화면 정적 parity 가 검증됐다** — 공개 native · Studio native Preview · 공개 sandbox · Studio sandbox Preview |
 | `VENDOR-1` | Moveable 0.53.0 · Selecto 1.26.3 UMD 를 **저장소에 바이트 그대로 고정**하고, Studio 전용 **지연 로더**와 sandbox allowlist 두 줄을 두었다(§13). **아직 Canvas 요소에 연결되지 않았다** |
 | `SELECT-1A` | **캔버스 요소를 고르고 푸는 것**(§14) — 캔버스 전용 선택 상태(배열 모양, 지금은 최대 1개) · 기존 Inspector 와의 **소유권 분리** · 캔버스를 아는 공통 hit-test · draft 존재 검증 · 축에 평행한 임시 테두리. **고치는 것은 하나도 없다** |
+| `SELECT-1B-1` | **조건부 vendor 활성화와 회전을 따라가는 선택 틀**(§15) — 첫 Canvas 요소를 고른 그 순간에만 프레임 안에서 runtime · 로더 · UMD 를 받고, 단일 선택 요소에 Moveable 로 테두리 하나를 그린다. **표시 전용**이다 — 손잡이 · 조작 · Selecto · Canvas JSON 쓰기는 없다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
 
 - 이동 · 크기 · 회전 조작 UI · 멀티 선택 · Canvas Inspector 입력 필드 ·
   Undo/Redo · preset · 스티커 업로드 · widget — **하나도 없다**(§11).
-- `SELECT-1A` 는 **고르고 푸는 것까지**다. 고른 요소의 좌표도 props 도
-  바꿀 수 없고, Canvas JSON 을 쓰는 경로가 없다(§14-6).
-- `VENDOR-1` 은 라이브러리를 **놓아두었을 뿐**이다. 아무도
-  `ensureHomeCanvasEditorVendors()` 를 부르지 않으므로 지금은 어느 화면에서도
-  두 UMD 가 내려오지 않는다(§13-4) — **캔버스 요소를 골라도 그렇다**(§14-5).
+- `SELECT-1A` · `SELECT-1B-1` 은 **고르고 · 푸는 것 · 그것을 보여 주는 것**
+  까지다. 고른 요소의 좌표도 props 도 바꿀 수 없고, Canvas JSON 을 쓰는
+  경로가 없다(§14-6 · §15-8).
+- `VENDOR-1` 이 놓아둔 두 UMD 중 **Moveable 만** 실제로 인스턴스가 된다.
+  Selecto 는 로더가 한 벌로 내려주므로 파일은 오지만 생성자를 부르는 곳이
+  없다(§15-8).
 
 ---
 
@@ -560,8 +566,14 @@ E2E 가 네 화면을 실제로 띄워 **DOM 을 글자 단위로, 좌표를 1px
 preset · 사진 자동 매핑 · sticker 업로드 · widget · 그룹 선택 —
 **하나도 없다.**
 
-**고르고 푸는 것만 있다**(`SELECT-1A` — §14). 고른 뒤에 할 수 있는 일이
+**고르고 · 푸는 것 · 그것을 보여 주는 것만 있다**
+(`SELECT-1A` — §14, `SELECT-1B-1` — §15). 고른 뒤에 **바꿀 수 있는 일이**
 아직 없다는 뜻이다.
+
+효과(파티클 · 꽃잎 · 복합 모션)를 sandbox 사용자 JS 가 Canvas 요소에 거는
+**공식 hook** 도 아직 없다 — 지금은 저자 JS 가 DOM 을 직접 만지는 것을 이
+라운드가 **막지 않는다**는 것까지다(§15-7-1). 범위는 로드맵의
+`HOME-CANVAS-EFFECT-HOOK-1`.
 
 Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조작하지 않는다**
 (`VENDOR-1` — §13). 파일 · 로더 · allowlist · `cspNonce` 회귀 테스트는 있고,
@@ -1051,3 +1063,209 @@ Import · Save 후 다시 열기 · native ↔ sandbox 전환 — 전부 여기�
 
 프레임이 올리는 좌표(`preview:inspect-rects`)도 같은 일을 한다 — 프레임이 더
 이상 그 요소를 가리키지 않으면 선택을 푼다.
+
+---
+
+## 15. 조건부 vendor 활성화와 단일 Moveable 선택 틀 (`HOME-CANVAS-SELECT-1B-1`)
+
+`SELECT-1A` 가 고른 요소에 **회전을 따라가는 테두리 하나**를 붙인다.
+여전히 **표시 전용**이다 — 이동 · 크기 · 회전 조작 · 손잡이 · Selecto ·
+다중 선택 · Canvas JSON 쓰기는 **하나도 없다**(§15-8).
+
+### 15-1. 관련 파일
+
+| 무엇 | 파일 |
+| --- | --- |
+| **프레임 안 편집 runtime**(native · sandbox 공용 한 벌) | [skin/skin-home-canvas-editor-runtime.js](../../skin/skin-home-canvas-editor-runtime.js) `createHomeCanvasSelectionFrame` |
+| 그 runtime 이 부르는 **로더 한 파일** | [studio/studio-home-canvas-vendor.js](../../studio/studio-home-canvas-vendor.js) `ensureHomeCanvasEditorVendors` (§13) |
+| Studio → Preview 문서 | [studio/studio-preview.js](../../studio/studio-preview.js) `postCanvasSelectionToFrame` |
+| 확정된 선택이 나가는 **단 한 곳** | [studio/inspector/studio-canvas-selection.js](../../studio/inspector/studio-canvas-selection.js) `applyStudioCanvasSelection` |
+| native 연결 · sandbox 로 넘기는 갈림 | [studio/preview/preview-bridge.js](../../studio/preview/preview-bridge.js) `routeCanvasSelectionMessage` |
+| Studio → sandbox 프레임 | [studio/preview/preview-sandbox.js](../../studio/preview/preview-sandbox.js) `setSandboxPreviewCanvasSelection` · [skin/sandbox/skin-sandbox-host.js](../../skin/sandbox/skin-sandbox-host.js) `sendSandboxCanvasSelect` |
+| sandbox 봉투 | [skin/sandbox/skin-sandbox-protocol.js](../../skin/sandbox/skin-sandbox-protocol.js) `IMORY_CANVAS_SELECT` |
+| sandbox 프레임 연결 | [skin/sandbox/skin-sandbox-frame.js](../../skin/sandbox/skin-sandbox-frame.js) `applyCanvasSelection` |
+| sandbox origin allowlist(**두 줄 추가**) | [core/lib/skin-sandbox-server.js](../../core/lib/skin-sandbox-server.js) `SANDBOX_ALLOWED_PATHS` |
+
+테스트: `node studio/studio-home-canvas-moveable-e2e-test.mjs` — TESTS.md §13.
+
+### 15-2. vendor 는 **언제** 켜지는가
+
+다음을 **전부** 지난 뒤에만 UMD 가 내려온다.
+
+1. Studio 안의 Preview다
+2. HOME 화면이다
+3. 유효하고 활성화된 `home_canvas` 가 있다
+4. Select 모드가 켜져 있다
+5. Canvas selection 의 `primaryId` 가 있다
+6. 그 요소가 hidden 도 locked 도 아니다
+7. **그리고** 그 id 를 가진 캔버스 요소가 **지금 그 프레임의 DOM 에 실제로 있다**
+
+1~6 은 Studio 가 자기 draft 에서 본다(`studioCanvasSelectableElement`).
+7 은 프레임이 자기 DOM 에서 다시 본다
+(`[data-imory-canvas-element][data-imory-edit-id="…"]`). **둘 다 통과해야**
+틀이 붙는다.
+
+그래서 다음은 계속 **요청 0** 이다 — runtime 도 UMD 도 오지 않는다.
+
+- 공개 HOME · 공개 sandbox HOME
+- Studio 를 열기만 한 상태
+- Select 모드만 켠 상태
+- 일반 template 요소만 고른 상태
+- Canvas 가 없는 스킨
+
+실측은 `--only=cost` 에 있다.
+
+### 15-3. 실행 위치 — 부모는 주인, 프레임은 실행자
+
+Moveable 은 **Canvas DOM 이 있는 문서**에서 돈다.
+
+| 화면 | 문서 |
+| --- | --- |
+| native | `studio/preview/preview-frame.html` |
+| sandbox | `skin/sandbox/frame.html` (별도 origin) |
+
+Studio 부모 문서에는 Moveable 인스턴스를 만들지 않는다. sandbox 쪽 DOM 은
+부모가 아예 볼 수 없고, native 쪽도 부모가 그리면 좌표가 한 프레임씩
+늦는다 — 프레임 안 Inspector 테두리가 이미 쓰는 경계와 같다.
+
+**실행 코드는 한 벌이다.** 두 문서가 같은
+`skin/skin-home-canvas-editor-runtime.js` 를 동적 `import()` 로 받고, 다른
+것은 연결(렌더 루트 · nonce · 보고 대상)뿐이다. `?v=APP_BUILD_VERSION` 은
+부르는 쪽이 붙인다(CLAUDE.md §4). 이 파일에는 **정적 import 가 없어서**
+어느 문서의 import map 에도 올릴 것이 없다.
+
+### 15-4. 메시지 — id 와 순번뿐이다
+
+```
+Studio ──preview:canvas-select──▶ Preview 문서 ──IMORY_CANVAS_SELECT──▶ sandbox 프레임
+       ◀─preview:canvas-frame─── (native 만)
+```
+
+`{ active, ids[], primaryId, generation }`.
+
+- **실리지 않는 것**: nonce · draft · SkinPackage · CSS · 좌표.
+  프레임은 좌표를 자기 DOM 에서 스스로 잰다.
+- sandbox 는 기존 strict allowlist 를 그대로 지난다 — origin · source ·
+  contract · renderSeq · 알려진 키만.
+- `generation` 은 부모가 매긴 선택 순번이다. 프레임은 자기가 본 것보다
+  **낮은 번호를 버린다**. `renderSeq` 가 "어느 화면인가"를 가르고
+  `generation` 이 "같은 화면 안의 몇 번째 선택인가"를 가른다.
+  ★ **해제 메시지에도 같은 번호를 싣는다** — 0 으로 보내면 프레임이 그것을
+  옛 메시지로 보고 버려서 "선택은 풀렸는데 틀만 남는" 상태가 된다
+  (2026-09-21 이 라운드의 e2e 가 실제로 잡은 버그).
+- `preview:canvas-frame` 은 **표시만** 가른다. 선택을 만들지도 지우지도
+  않는다.
+
+확정된 선택이 나가는 곳은 `applyStudioCanvasSelection()` **한 곳**이다 —
+set · clear · sync · reconcile 이 전부 그 함수를 지나므로 "선택이 바뀌었는데
+프레임만 모른다"가 생기지 않는다.
+
+### 15-5. CSP nonce
+
+Moveable 생성 시 **공식 `cspNonce` 옵션**으로 그 프레임의 nonce 를 넘긴다.
+
+- 전역 `document.createElement` 를 가로채지 않는다
+- CSP 를 넓히지 않는다 (`style-src` 한 글자도 바뀌지 않았다)
+- `unsafe-inline` 을 더하지 않는다
+- style 태그를 사후에 훑어 nonce 를 끼우지 않는다
+- **nonce 를 부모 메시지로 보내지 않는다** — 프레임 밖으로 나가지 않는다는
+  계약 그대로다(`skin/sandbox/frame.html` 머리말)
+- localStorage · dataset · 공개 전역 문자열에 저장하지 않는다
+
+sandbox 는 기존 경로를 그대로 쓴다 — `FRAME_STATE.nonce`(bridge 의 클로저)
+하나이고, runtime 은 그것을 읽는 함수만 받는다. native Preview 에는 CSP
+nonce 가 없으므로 라이브러리 기본값과 같은 빈 문자열을 넘긴다 — 그 차이
+때문에 코드를 두 벌로 나누지 않는다.
+
+**배포되는 `buildSandboxCsp()` 아래 실측**(`--only=sandbox`):
+`securitypolicyviolation` 0건 · 콘솔 CSP 오류 0건 ·
+Moveable 의 `<style data-styled-id>` 가 `sheet !== null` · 틀 크기 정상.
+
+`cspNonce` 가 0.53.0 에서 **작동하지만 deprecated** 라는 §13 의 판정은
+그대로다 — 버전을 올리기 전에 `studio-home-canvas-vendor-e2e-test.mjs
+--only=nonce` 를 다시 돌린다.
+
+### 15-6. 표시 전용 Moveable
+
+끄는 것: `draggable` · `resizable` · `scalable` · `rotatable` · `warpable` ·
+`pinchable` · `clippable` · `roundable` · `snappable` · `edgeDraggable` ·
+`dragArea` · `origin` · `renderDirections: []`(손잡이 없음).
+
+켜는 것: 기본 네 줄(`hideDefaultLines: false`).
+
+★ 조작 able 을 전부 끄면 Moveable 은 **target 에 pointer 리스너를 하나도
+달지 않는다** — 0.53.0 의 `_updateEvents()` 가 "dragStart 를 가진 able 이
+하나도 없으면" `targetGesto` 를 만들지 않고 이미 있으면 떼어 낸다. 기존
+Select 의 `pointerdown` 선택이 그대로 산다.
+
+★ control box 에 `pointerEvents = "none"` 을 준다. 네 줄은 요소 외곽 **위에**
+놓이므로, 그냥 두면 테두리를 정확히 누른 클릭이 스킨 DOM 에 닿지 않는다.
+CSSOM 으로 쓰는 값은 CSP 의 검사 대상이 아니다(검사 대상은 마크업의 `style`
+**속성**이다).
+
+Moveable 이벤트로 DOM style 도 Canvas JSON 도 바꾸지 않는다. 틀이 붙어 있는
+동안 draft 의 `regions` 가 한 글자도 바뀌지 않고, 요소의
+`x · y · width · height · rotation` 변화가 0 임을 e2e 가 잰다.
+
+**따라가기는 rAF 한 곳**이다(`useResizeObserver` · `useMutationObserver` 는
+끈다 — 관측기를 두 벌 두면 어느 것이 갱신했는지 추적할 수 없다). 요소의
+사각형 + `transform` 이 바뀐 프레임에만 `updateRect()` 를 부른다. 스크롤 ·
+부모 `scale` · 늦게 온 이미지 · 글꼴 교체 · `height:"auto"` 의 재조판이
+전부 그 한 값에 나타난다.
+
+**실측 최대 오차(±1.5px)** — 회전 0° · 20° · 45°, 숫자 높이와 `"auto"`,
+부모 `scale(0.8)`, Preview 내부 스크롤에서 틀의 외곽이 요소의 외곽과
+1.5px 안에서 일치한다. 네 줄의 길이는 요소의 (가로, 가로, 세로, 세로)와
+3px 안에서 같다(줄 두께 1px 이 축 평행 외곽의 대각선을 √(L²+t²+2Lt·sin2θ)
+만큼 부풀린다 — 45° 에서 정확히 `L+t`).
+
+### 15-7. 테두리의 주인은 언제나 하나
+
+| 화면 | 평소 | Moveable 이 잡은 동안 |
+| --- | --- | --- |
+| native | Studio 의 `#studioCanvasSelectBox`(축 평행) | 내려간다 |
+| sandbox | 프레임의 `.imory-sandbox-inspect-box--select` | 내려간다 |
+
+★ **이름표(`#studioCanvasSelectLabel`)는 넘기지 않는다.** Moveable 에
+"무엇을 골랐는가"를 보여 주는 자리가 없고, 상자가 아니라 겹쳐 보이지도
+않는다.
+
+다음에서 Moveable 을 걷고 기존 상태를 맞춘다: 선택 해제 · 일반 요소 선택 ·
+Select 모드 종료 · HOME 이탈 · 캔버스 비활성화 · 선택 요소 삭제 ·
+Preview 재렌더 · frame 교체.
+
+**vendor 로드 또는 Moveable 생성이 실패하면**
+
+- Canvas selection 자체는 **유지된다**
+- 기존 축 평행 테두리가 그대로 fallback 이 된다
+- 실패 때문에 일반 Inspector selection 으로 바꾸지 않는다
+- 경고는 문서당 **한 줄**이다(중복 토스트 없음). 다음 선택에서 재시도는
+  막지 않는다 — 로더가 실패한 Promise 를 버린다(§13)
+
+### 15-7-1. Canvas 는 sandbox 스킨의 대체물이 아니다
+
+Canvas 는 **아이모리 재료**(로고 · 카테고리 · 사진 · 글자 · 스티커 · 도형)의
+구조와 배치를 담당하고, **같은 Canvas 가 native 와 sandbox 양쪽에서 그려진다**
+(§12-6 의 네 화면 parity). 시각 디자인 · hover · transition 은 **스킨 CSS** 가
+갖고, sandbox 의 **사용자 JS** 는 같은 Canvas DOM 에 파티클 · 꽃잎 · 복합
+모션을 더할 수 있어야 한다.
+
+그래서 이 라운드는 Canvas 요소의 DOM 을 **한 글자도 건드리지 않는다.**
+
+- Canvas 요소에 속성 · class · 인라인 style 을 붙이지 않는다
+- Canvas 요소의 `pointer-events` 를 바꾸지 않는다(control box 쪽만 끈다)
+- 저자 JS 가 요소를 움직이면 rAF 따라가기가 **그 움직임을 따라간다** —
+  막지 않는다
+
+효과 시스템 자체는 이 라운드의 범위가 아니다. 다음 후속 작업
+`HOME-CANVAS-EFFECT-HOOK-1` 이 로드맵에 있다.
+
+### 15-8. 이번 단계에 **없는 것**
+
+Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 · Moveable 핸들 · 드래그 ·
+리사이즈 · 회전 조작 · Canvas JSON 쓰기 · Undo/Redo · Canvas Inspector 입력
+필드 · 텍스트 편집 · 이미지 교체 · Crop · 레이어 목록 · preset · widget ·
+좌우 패널 Canvas — **하나도 없다.**
+
+로더가 두 UMD 를 한 벌로 돌려주므로 **Selecto 파일도 함께 내려오지만**,
+이번 단계에서 그 생성자를 부르는 곳은 없다(e2e 가 인스턴스 0 을 잰다).

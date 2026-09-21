@@ -101,7 +101,8 @@ import {
   setSandboxPreviewInspectMode,
   setSandboxPreviewInspectSelection,
   forwardSandboxPreviewInspectDirective,
-  refreshSandboxPreviewInspectRects
+  refreshSandboxPreviewInspectRects,
+  setSandboxPreviewCanvasSelection
 } from "./preview-sandbox.js";
 
 const PREVIEW_MSG_RENDER = "preview:render";
@@ -142,6 +143,27 @@ const PREVIEW_MSG_INSPECT_PREVIEW = "preview:inspect-preview";
 
 /* TRANSITION-1 — Direct Edit 의 전환 "미리 보기" (editId 하나만 받는다) */
 const PREVIEW_MSG_TRANSITION_PLAY = "preview:transition-play";
+
+/* =========================================================
+   HOME-CANVAS-SELECT-1B-1 — HOME 캔버스 선택
+
+   canvas-select  Studio -> 이 문서
+                  { active, ids[], primaryId, generation }
+                  Studio 가 **확정한** 캔버스 선택. 무엇을 고를 수
+                  있는가는 Studio 가 자기 draft 에서 정했고, 이
+                  문서(또는 sandbox 프레임)는 받은 id 를 자기 DOM
+                  에서 한 번 더 확인한 뒤에만 틀을 붙인다.
+
+   canvas-frame   이 문서 -> Studio
+                  { active, editId }
+                  회전을 따라가는 Moveable 틀이 실제로 붙었는가.
+                  Studio 는 이 신호를 받은 동안 자기 축 평행
+                  overlay 를 내린다 — 둘 다 그리면 회전한 요소에서
+                  상자가 덧그려져 보인다. 실패하면 active:false 가
+                  올라가 예전 테두리가 그대로 fallback 이 된다.
+========================================================== */
+const PREVIEW_MSG_CANVAS_SELECT = "preview:canvas-select";
+const PREVIEW_MSG_CANVAS_FRAME = "preview:canvas-frame";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -586,6 +608,18 @@ function handleRenderMessage(data) {
 
       postInspectorRects();
 
+    }
+
+    /*
+      HOME-CANVAS-SELECT-1B-1 — 캔버스 DOM 도 통째로 다시 만들어졌다.
+      같은 id 의 새 요소로 target 을 옮기고, 그 요소가 사라졌으면
+      틀을 걷는다.
+
+      ★ 한 번도 만들지 않았으면 여기서 만들지 않는다 — 재렌더가
+        runtime 과 vendor 를 받아 오는 계기가 되지 않게.
+    */
+    if (canvasFrameController) {
+      canvasFrameController.onRender();
     }
 
   } catch (err) {
@@ -2212,6 +2246,213 @@ function setInspectorEnabled(enabled) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-SELECT-1B-1 — native Preview 의 캔버스 선택 틀
+
+   ★ 실행 코드는 이 파일에 없다. sandbox 프레임과 **같은 파일
+     한 벌**(skin/skin-home-canvas-editor-runtime.js)을 쓰고, 이
+     문서는 "렌더 루트를 넘겨 주고, 틀이 붙었다고 Studio 에
+     알리는 것"만 한다.
+
+   ★ 언제 처음 받는가
+
+   Studio 가 active:true 로 캔버스 선택을 내려보낸 순간이다. 그
+   메시지는 HOME · 유효한 canvas · Select 모드 · 고를 수 있는
+   요소를 전부 지난 뒤에만 나간다. 해제 메시지만으로는 모듈을
+   받아 오지 않는다 — 아래 첫 관문이 그것이다.
+
+   ★ native Preview 에는 CSP nonce 가 없다(sandbox 프레임에만
+     있다). Moveable 의 cspNonce 기본값이 빈 문자열이므로 그대로
+     빈 문자열을 넘긴다 — 코드를 두 벌로 나누지 않는다.
+========================================================== */
+
+let canvasFrameController = null;
+
+let canvasFramePromise = null;
+
+let canvasFrameSelection = null;
+
+
+function canvasEditorRuntimeUrl() {
+
+  const path =
+    "/skin/skin-home-canvas-editor-runtime.js";
+
+  /* 저장소 규칙: 주소에 ?v=APP_BUILD_VERSION(CLAUDE.md §4). 값은
+     여기에 적지 않고 build-version.js 의 전역에서 읽는다. */
+  return (typeof window.APP_BUILD_VERSION === "string" && window.APP_BUILD_VERSION)
+    ? `${path}?v=${encodeURIComponent(window.APP_BUILD_VERSION)}`
+    : path;
+
+}
+
+
+function ensureCanvasFrameController() {
+
+  if (canvasFrameController) {
+    return Promise.resolve(canvasFrameController);
+  }
+
+  if (canvasFramePromise) {
+    return canvasFramePromise;
+  }
+
+  const loading =
+    import(canvasEditorRuntimeUrl()).then(
+      (mod) => {
+
+        if (typeof mod.createHomeCanvasSelectionFrame !== "function") {
+          throw new Error("createHomeCanvasSelectionFrame 이 없습니다");
+        }
+
+        canvasFrameController =
+          mod.createHomeCanvasSelectionFrame({
+
+            doc: document,
+
+            getRoot: () => previewRoot,
+
+            /* 이 문서에는 CSP nonce 가 없다 — 라이브러리 기본값과
+               같은 빈 문자열이다(위 머리말). */
+            getNonce: () => "",
+
+            onActiveChange: (active, editId) => {
+
+              postToParent({
+                type: PREVIEW_MSG_CANVAS_FRAME,
+                active: active === true,
+                editId: typeof editId === "string" ? editId : null
+              });
+
+            }
+
+          });
+
+        return canvasFrameController;
+
+      }
+    );
+
+  canvasFramePromise = loading;
+
+  loading.catch(
+    () => {
+
+      /* 다음 선택이 다시 시도할 수 있게 표에서 뺀다 */
+      if (canvasFramePromise === loading) {
+        canvasFramePromise = null;
+      }
+
+    }
+  );
+
+  return loading;
+
+}
+
+
+function applyNativeCanvasSelection(selection) {
+
+  canvasFrameSelection =
+    (selection && selection.active === true) ? selection : null;
+
+  /* 해제인데 아직 한 번도 만들지 않았다 — 만들 이유가 없다 */
+  if (!canvasFrameController && !canvasFrameSelection) {
+    return;
+  }
+
+  ensureCanvasFrameController()
+    .then(
+      (controller) => {
+
+        controller.apply(
+          canvasFrameSelection ||
+          { active: false, ids: [], primaryId: null, generation: selection ? selection.generation : 0 }
+        );
+
+      }
+    )
+    .catch(
+      (err) => {
+
+        console.warn(
+          "[preview-bridge] 캔버스 선택 틀을 불러오지 못했습니다 — " +
+          "기존 테두리로 표시합니다.",
+          err && err.message ? err.message : err
+        );
+
+        /* Studio 의 축 평행 overlay 가 그대로 남아야 한다 */
+        postToParent({
+          type: PREVIEW_MSG_CANVAS_FRAME,
+          active: false,
+          editId: null
+        });
+
+      }
+    );
+
+}
+
+
+/*
+  Studio 가 보낸 것을 sandbox 프레임 / 이 문서 중 화면을 맡은
+  쪽으로 보낸다. **판단은 없다** — 어느 쪽이 그리고 있는가만 본다.
+*/
+
+function routeCanvasSelectionMessage(data) {
+
+  const ids =
+    Array.isArray(data.ids)
+      ? data.ids.filter((id) => typeof id === "string" && window.isValidInspectorEditId(id))
+      : [];
+
+  const primaryId =
+    (typeof data.primaryId === "string" && window.isValidInspectorEditId(data.primaryId))
+      ? data.primaryId
+      : null;
+
+  const selection = {
+    active: data.active === true && !!primaryId && ids.indexOf(primaryId) !== -1,
+    ids: ids,
+    primaryId: primaryId,
+    generation: Number.isInteger(data.generation) && data.generation >= 0 ? data.generation : 0
+  };
+
+  if (!selection.active) {
+    selection.ids = [];
+    selection.primaryId = null;
+  }
+
+  if (hasSandboxPreviewFrame()) {
+
+    setSandboxPreviewCanvasSelection(selection);
+
+    /* sandbox 에서는 테두리도 프레임이 그린다 — Studio 는 이미
+       자기 overlay 를 내려 두었다(studioInspectorRemoteOverlay).
+       그래서 canvas-frame 신호를 올려보내지 않는다. */
+    return;
+
+  }
+
+  applyNativeCanvasSelection(selection);
+
+}
+
+
+/*
+  진단용 — e2e 가 이 문서 안에서 "인스턴스가 몇 개인가 · 틀이
+  회전을 따라가는가"를 잰다. 읽기 전용이고, 이 창구로 선택을
+  바꿀 수는 없다(sandbox 프레임의 같은 이름과 짝이다).
+*/
+
+window.__imoryCanvasFrameState =
+  function () {
+
+    return canvasFrameController ? canvasFrameController.debugState() : null;
+
+  };
+
+
 /* DIRECT-UX-1 — 직접 조작 모듈에 이 문서의 Inspector 상태를 빌려준다
    (studio/preview/preview-inspect-direct.js). 그 파일은 이 함수들로만
    읽고 쓴다. */
@@ -2663,6 +2904,14 @@ window.addEventListener("message", (event) => {
         : null,
       { silent: true }
     );
+
+    return;
+
+  }
+
+  if (data.type === PREVIEW_MSG_CANVAS_SELECT) {
+
+    routeCanvasSelectionMessage(data);
 
     return;
 

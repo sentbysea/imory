@@ -125,6 +125,7 @@ import {
   sendSandboxInspectParent,
   sendSandboxInspectCaps,
   sendSandboxInspectPreview,
+  sendSandboxCanvasSelect,
   destroySandboxSkinFrame,
   copySandboxSidesSetting,
   copySandboxSkinSettings
@@ -180,6 +181,19 @@ let sandboxInspectCaps =
   null;
 
 let sandboxInspectRelay =
+  null;
+
+
+/* =========================================================
+   HOME-CANVAS-SELECT-1B-1 — 캔버스 선택
+
+   Studio 가 확정한 선택을 그대로 들고 있다가 프레임에 내려보낸다.
+   프레임이 아직 없거나 아직 한 장도 그리지 않았으면 값만 기억해
+   두고, 렌더가 끝난 직후에 보낸다(flushSandboxInspectState) —
+   Inspector 의 mode/pick 과 정확히 같은 사정이다.
+========================================================== */
+
+let sandboxCanvasSelection =
   null;
 
 
@@ -1192,6 +1206,12 @@ export function setSandboxPreviewInspectMode(enabled) {
     sandboxInspectCaps = null;
     sandboxInspectLastHover = null;
     sandboxInspectLastSelected = null;
+
+    /* HOME-CANVAS-SELECT-1B-1 — Select 를 끄면 캔버스 선택도 없다.
+       Studio 쪽도 같은 순간에 풀어 해제 메시지를 보내지만, 그것이
+       늦거나 유실돼도 이 기억이 남아 다음 렌더에서 되살아나지
+       않게 한다. */
+    sandboxCanvasSelection = null;
   }
 
   if (!hasSandboxPreviewFrame()) {
@@ -1219,6 +1239,49 @@ export function setSandboxPreviewInspectSelection(editId) {
   }
 
   return sendSandboxInspectPick(sandboxHandle, sandboxInspectEditId);
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-SELECT-1B-1 — 캔버스 선택을 프레임으로
+
+   setSandboxPreviewCanvasSelection(selection) -> boolean
+
+   selection = { active, ids[], primaryId|null, generation }
+
+   ★ 여기서 판단하지 않는다. "고를 수 있는 요소인가"는 Studio 가
+     자기 draft 에서 이미 정했고(studio-canvas-selection.js), 프레임은
+     받은 id 를 자기 DOM 에서 한 번 더 확인한다. 이 함수는 옮기기만
+     한다.
+========================================================== */
+
+export function setSandboxPreviewCanvasSelection(selection) {
+
+  const value =
+    (selection && typeof selection === "object")
+      ? selection
+      : { active: false, ids: [], primaryId: null, generation: 0 };
+
+  /* 렌더 뒤에 다시 보낼 것은 **고른 것이 있을 때뿐**이다(아래
+     flushSandboxInspectState) */
+  sandboxCanvasSelection =
+    value.active === true ? value : null;
+
+  if (!hasSandboxPreviewFrame()) {
+    return false;
+  }
+
+  /*
+    ★ 해제에도 **받은 그 generation** 을 그대로 싣는다.
+
+    프레임은 자기가 본 것보다 낮은 번호를 버린다. 여기서 0 을
+    만들어 보내면 이미 3번 선택을 본 프레임이 "0번 해제"를 옛
+    메시지로 보고 버려서, 선택을 풀었는데 틀만 남는다
+    (2026-09-21 이 테스트가 실제로 잡았다).
+  */
+
+  return sendSandboxCanvasSelect(sandboxHandle, value);
 
 }
 
@@ -1344,6 +1407,21 @@ function flushSandboxInspectState() {
       sendSandboxInspectCaps(sandboxHandle, sandboxInspectCaps);
     }
 
+  }
+
+
+  /*
+    HOME-CANVAS-SELECT-1B-1 — 캔버스 선택도 같은 사정이다. 새
+    realm 의 runtime 은 아직 없고, 같은 realm 이라도 renderSeq 가
+    올랐으므로 프레임은 옛 번호의 메시지를 이미 버렸다.
+
+    ★ 고른 것이 없으면 **보내지 않는다** — 해제를 보내는 것만으로도
+      프레임이 runtime 을 받아 오게 하지 않는다(프레임 쪽에서도
+      한 겹 더 막는다).
+  */
+
+  if (sandboxCanvasSelection && sandboxCanvasSelection.active === true) {
+    sendSandboxCanvasSelect(sandboxHandle, sandboxCanvasSelection);
   }
 
 }

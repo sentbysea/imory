@@ -146,10 +146,17 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 각 행은 별도의 작업이다. 앞 단계가 완료됐다는 보고를 확인한 뒤 다음 단계로 넘어간다.
 
 > 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` · `CONTRACT-1C` ·
-> `RENDER-1A` · `RENDER-1B` · `VENDOR-1` · `SELECT-1A` 여덟이 끝났다.** 정적
-> 렌더링은 **네 화면 전부** 끝났고, 편집기 라이브러리는 **저장소에 고정됐고**,
-> 캔버스 요소를 **고르고 푸는 것**까지 됐다. **고치는 것은 하나도 구현되지
-> 않았다** — 이동 · 크기 · 회전 · 다중 선택 · Inspector 입력 필드는 전부 뒤다.
+> `RENDER-1A` · `RENDER-1B` · `VENDOR-1` · `SELECT-1A` · `SELECT-1B-1` 아홉이
+> 끝났다.** 정적 렌더링은 **네 화면 전부** 끝났고, 편집기 라이브러리는
+> **저장소에 고정됐고**, 캔버스 요소를 **고르고 · 풀고 · 회전을 따라가는 틀로
+> 보여 주는 것**까지 됐다. **고치는 것은 하나도 구현되지 않았다** — 이동 ·
+> 크기 · 회전 · 다중 선택 · Inspector 입력 필드는 전부 뒤다.
+>
+> - `SELECT-1B-1` — **조건부 vendor 활성화와 표시 전용 Moveable 틀**. 첫
+>   Canvas 요소를 고른 그 순간에만 프레임 문서가 runtime · 로더 · UMD 를 받고,
+>   그 전까지는(공개 화면 포함) 요청이 0 이다. 계약은
+>   [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+>   **§15** 다. **손잡이도 조작도 Selecto 인스턴스도 없다.**
 >
 > - `SPIKE-1` · `SPIKE-1B` — **Moveable + Selecto 채택 확정**(§8 의 완료 기록).
 >   실험이라 **운영 파일을 한 줄도 바꾸지 않았고**, 그래서 저장소에 vendor 파일도
@@ -186,8 +193,10 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 2b | `HOME-CANVAS-RENDER-1B` | 같은 결과를 **sandbox 두 화면**에도 | 읽기 전용 | **완료**(계약 문서 §12-6) |
 | 2c | `HOME-CANVAS-VENDOR-1` | Moveable·Selecto 파일 고정 + Studio 전용 loader | 없음 | **완료**(계약 문서 §13) |
 | 3a | `HOME-CANVAS-SELECT-1A` | 캔버스 선택 소유권 + 단일 선택 기반(**고치지 않는다**) | Studio만 | **완료**(계약 문서 §14) |
-| 3b | `HOME-CANVAS-SELECT-1B` | Selecto·Moveable 연결 · 다중 선택 · 회전 틀 · 프레임 vendor load | Studio만 | 미착수 |
+| 3b-1 | `HOME-CANVAS-SELECT-1B-1` | 조건부 vendor load + 단일 Moveable **표시 전용** 회전 틀 | Studio만 | **완료**(계약 문서 §15) |
+| 3b-2 | `HOME-CANVAS-SELECT-1B-2` | Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 | Studio만 | 미착수 |
 | 3c | `HOME-CANVAS-TRANSFORM-1` | 이동·크기·회전을 `canvas.elements[]` 에 쓰는 확정 경로 | 저장 가능 | 미착수 |
+| 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
 | 6 | `HOME-CANVAS-PRESETS-1` | 사진 1·2·3·4장 프리셋, 라이트/다크 | 프리셋 | 미착수 |
@@ -397,16 +406,57 @@ HTML 에 없다.
 - 축에 평행한 임시 테두리. **회전은 따라가지 않는다.**
 - **고치는 경로는 하나도 없다.** Moveable · Selecto 를 부르지 않는다.
 
-### `HOME-CANVAS-SELECT-1B`
+### `HOME-CANVAS-SELECT-1B-1` (완료)
 
-- Selecto · Moveable 인스턴스를 **대상 DOM 이 있는 문서**에서 만든다
-  (native Preview 문서 · sandbox 프레임 문서 — Studio 부모가 아니다).
-- 두 문서에 vendor loader 를 **조건부로** 연결한다. sandbox 쪽은
-  `SANDBOX_ALLOWED_PATHS` 에 로더 자신을 올릴지부터 정한다(계약 문서 §13-5).
-- 회전을 따라가는 선택 틀과 8방향 핸들.
-- 다중 선택(상태는 이미 배열이다 — 계약 문서 §14-2).
-- 조작 중 Preview에 즉시 반영한다.
-- 이미지 안쪽 구도 조절과 바깥 요소 프레임 크기 조절을 혼동하지 않는다.
+`1B` 를 둘로 나눴다. 결과는 이 문서가 아니라
+[IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+**§15** 가 갖는다.
+
+- **조건부 vendor 활성화** — 첫 Canvas 요소를 실제로 고른 그 순간에만
+  프레임 문서가 runtime · 로더 · UMD 를 받는다. 공개 화면 · Studio 열기 ·
+  Select 모드만 켜기 · 일반 요소 선택은 계속 **요청 0**.
+- Moveable 인스턴스를 **대상 DOM 이 있는 문서**에서 만든다(native Preview
+  문서 · sandbox 프레임 문서 — Studio 부모가 아니다). 실행 코드는 두 문서가
+  같은 파일 한 벌을 쓴다.
+- `SANDBOX_ALLOWED_PATHS` 에 **두 줄**이 올라갔다 — runtime 과 로더 자신.
+  vendor 디렉터리를 연 것이 아니라 파일 두 개다.
+- 회전을 따라가는 선택 틀 **하나**. **핸들도 조작도 없다**(표시 전용).
+- `cspNonce` 를 공식 옵션으로 넘긴다 — CSP 무변경, 위반 0 실측.
+- **Selecto 인스턴스 · 다중 선택 · Canvas JSON 쓰기는 없다.**
+
+### `HOME-CANVAS-SELECT-1B-2`
+
+- Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택(상태는 이미 배열이다 —
+  계약 문서 §14-2).
+- 여러 요소를 한 틀로 묶어 보여 주기.
+- 조작은 여전히 `TRANSFORM-1` 의 일이다 — 이 단계도 **표시까지**다.
+
+### `HOME-CANVAS-EFFECT-HOOK-1`
+
+**Canvas 는 sandbox 스킨을 대체하는 기능이 아니다.** Canvas 는 아이모리
+재료(로고 · 카테고리 · 사진 · 글자 · 스티커 · 도형)의 **구조와 배치**를
+담당하고, 같은 Canvas 가 native 와 sandbox 양쪽에서 렌더된다. 그 위의
+**시각 디자인 · hover · transition 은 스킨 CSS** 가 갖고, **파티클 · 꽃잎 ·
+복합 모션 같은 효과는 sandbox 사용자 JS** 가 같은 Canvas DOM 에 붙인다.
+
+이 단계가 정할 것.
+
+- 스킨 CSS 가 Canvas 요소를 고르는 **공식 선택자 계약**(종류 · 역할 ·
+  상태). 지금은 `data-imory-canvas-*` 가 사실상 그 자리이지만 "저자가
+  기대어도 되는 것"으로 문서화된 적이 없다.
+- sandbox 저자 JS 가 Canvas 요소를 찾고 효과를 붙였다 떼는 **hook**
+  (`imorySkin` API 의 어느 자리인가 · 언제 불리는가 · 재렌더에서 어떻게
+  되는가 · 정리는 누가 하는가).
+- 그 효과가 편집 중(Select · 선택 틀 · 뒤 단계의 드래그)과 **어떻게
+  공존하는가**. 편집 틀이 저자 효과를 지우지 않고, 저자 효과가 선택을
+  막지 않아야 한다.
+- 효과가 붙은 요소의 좌표를 편집기가 무엇으로 재는가(저자가 `transform`
+  을 덧씌운 경우).
+
+★ `SELECT-1B-1` 이 지킨 선: Canvas 요소의 DOM 을 **한 글자도 건드리지
+않는다**(속성 · class · 인라인 style · `pointer-events` 전부). 저자 JS 가
+요소를 움직이면 선택 틀이 그 움직임을 따라간다 — 막지 않는다
+(계약 문서 §15-7-1). 뒤 단계도 이 선을 넘지 않는다.
 
 ### `HOME-CANVAS-TRANSFORM-1`
 

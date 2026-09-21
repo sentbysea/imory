@@ -143,6 +143,29 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     ====================================================== */
 
     inspector: null,
+
+    /* =====================================================
+       HOME-CANVAS-SELECT-1B-1 — 캔버스 선택 틀 (Moveable)
+
+       canvasFrame        skin/skin-home-canvas-editor-runtime.js 의
+                          controller. **첫 Canvas 요소가 실제로
+                          골라졌을 때** 처음 만들어진다.
+       canvasFramePromise 그 모듈을 받아 오는 중인 Promise(문서당
+                          하나). 실패하면 버려서 다음 선택이 다시
+                          시도할 수 있게 한다.
+       canvasSelection    마지막으로 받은 선택. 재렌더 뒤 되살릴 때
+                          쓴다(같은 화면을 다시 그리면 캔버스 DOM 이
+                          새로 만들어진다).
+
+       ★ 공개 화면에서는 이 셋이 전부 비어 있다. 부모가 캔버스
+         선택 메시지를 보내는 곳은 Studio 하나뿐이므로, 공개 방문자
+         에게는 runtime 도 vendor UMD 도 요청되지 않는다.
+    ====================================================== */
+
+    canvasFrame: null,
+    canvasFramePromise: null,
+    canvasSelection: null,
+
     sentReady: false,
     acked: false,
     seq: 0,
@@ -1064,6 +1087,20 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
     }
 
 
+    /*
+      HOME-CANVAS-SELECT-1B-1 — 캔버스 DOM 도 통째로 다시 만들어졌다.
+      같은 id 의 새 요소로 target 을 옮기고, 그 요소가 사라졌으면
+      (캔버스 제거 · HOME 이탈 · 요소 삭제) 틀을 걷는다.
+
+      ★ 한 번도 만들지 않았으면 여기서 만들지 않는다 — 재렌더가
+        vendor 를 받아 오는 계기가 되지 않게.
+    */
+
+    if (FRAME_STATE.canvasFrame) {
+      FRAME_STATE.canvasFrame.onRender();
+    }
+
+
     const el =
       notice();
 
@@ -1090,6 +1127,138 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         height: height
       }
     );
+
+  }
+
+
+  /* =========================================================
+     HOME-CANVAS-SELECT-1B-1 — 캔버스 선택 틀
+
+     ★ 언제 처음 받는가
+
+     "부모가 active:true 로 캔버스 선택을 내려보낸 순간"이다. 그
+     메시지는 Studio 에서만, 그것도 HOME · 유효한 canvas · Select
+     모드 · 고를 수 있는 요소를 전부 지난 뒤에 나간다
+     (studio/inspector/studio-canvas-selection.js). 그래서
+
+       공개 sandbox HOME · 아직 아무것도 고르지 않은 Studio ·
+       일반 template 요소만 고른 Studio
+
+     에서는 아래 import() 가 한 번도 실행되지 않는다 — runtime 도,
+     그것이 부르는 Moveable · Selecto UMD 도 요청 0 이다.
+
+     ★ 실행 코드는 native Preview 와 **같은 파일 한 벌**이다.
+       이 함수가 하는 일은 "이 문서의 렌더 루트와 nonce 를 넘겨
+       주고, 틀이 붙었는지 Inspector 에 알리는 것"뿐이다.
+  ========================================================== */
+
+  function canvasEditorRuntimeUrl() {
+
+    const path =
+      "/skin/skin-home-canvas-editor-runtime.js";
+
+    /* 저장소 규칙: 주소에 ?v=APP_BUILD_VERSION(CLAUDE.md §4).
+       값은 여기에 적지 않고 build-version.js 의 전역에서 읽는다. */
+    return (typeof APP_BUILD_VERSION === "string" && APP_BUILD_VERSION)
+      ? `${path}?v=${encodeURIComponent(APP_BUILD_VERSION)}`
+      : path;
+
+  }
+
+
+  function ensureCanvasFrame() {
+
+    if (FRAME_STATE.canvasFrame) {
+      return Promise.resolve(FRAME_STATE.canvasFrame);
+    }
+
+    if (FRAME_STATE.canvasFramePromise) {
+      return FRAME_STATE.canvasFramePromise;
+    }
+
+    const loading =
+      import(canvasEditorRuntimeUrl()).then(
+        (mod) => {
+
+          if (typeof mod.createHomeCanvasSelectionFrame !== "function") {
+            throw new Error("createHomeCanvasSelectionFrame 이 없습니다");
+          }
+
+          FRAME_STATE.canvasFrame =
+            mod.createHomeCanvasSelectionFrame({
+
+              doc: document,
+
+              getRoot: root,
+
+              /* ★ nonce 는 이 realm 안에서만 오간다 — 메시지에도,
+                 SkinPackage 에도 실리지 않는다(frame.html 머리말).
+                 Moveable 은 이것을 공식 cspNonce 옵션으로 받는다. */
+              getNonce: function () {
+                return FRAME_STATE.nonce;
+              },
+
+              /* 틀이 붙으면 축에 평행한 Inspector 테두리를 내린다 */
+              onActiveChange: function (active) {
+
+                if (FRAME_STATE.inspector &&
+                    typeof FRAME_STATE.inspector.setCanvasFrameActive === "function") {
+
+                  FRAME_STATE.inspector.setCanvasFrameActive(active);
+
+                }
+
+              }
+
+            });
+
+          return FRAME_STATE.canvasFrame;
+
+        }
+      );
+
+    FRAME_STATE.canvasFramePromise = loading;
+
+    loading.catch(
+      () => {
+
+        /* 다음 선택이 다시 시도할 수 있게 표에서 뺀다 */
+        if (FRAME_STATE.canvasFramePromise === loading) {
+          FRAME_STATE.canvasFramePromise = null;
+        }
+
+      }
+    );
+
+    return loading;
+
+  }
+
+
+  function applyCanvasSelection(payload) {
+
+    FRAME_STATE.canvasSelection = payload;
+
+    /* 해제인데 아직 한 번도 만들지 않았다 — 만들 이유가 없다
+       (여기서 만들면 "Select 를 켜고 아무것도 고르지 않았는데
+        vendor 를 받는다"가 된다) */
+    if (!FRAME_STATE.canvasFrame && !(payload && payload.active === true)) {
+      return;
+    }
+
+    ensureCanvasFrame()
+      .then((frame) => frame.apply(FRAME_STATE.canvasSelection))
+      .catch(
+        (err) => {
+
+          console.warn(
+            "[sandbox-frame] 캔버스 선택 틀을 불러오지 못했습니다 — " +
+            "기존 테두리로 표시합니다.",
+            err && err.message ? err.message : err
+          );
+
+        }
+      );
 
   }
 
@@ -1245,6 +1414,35 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
          (프레임이 올려보내는 쪽도 언제나 지금 renderSeq 를
           달고 나간다 — skin-sandbox-inspect.js send())
     ====================================================== */
+
+    /* =====================================================
+       HOME-CANVAS-SELECT-1B-1 — 캔버스 선택
+
+       옛 화면의 것은 버린다(위 INSPECT_* 와 같은 규칙). 늦게
+       도착한 **같은 화면 안의** 옛 선택은 runtime 이 generation
+       으로 한 번 더 거른다.
+    ====================================================== */
+
+    if (verdict.type === SANDBOX_MESSAGE_TYPES.CANVAS_SELECT) {
+
+      if (verdict.payload.renderSeq !== FRAME_STATE.renderSeq) {
+        return;
+      }
+
+      applyCanvasSelection({
+        active: verdict.payload.active === true,
+        ids: verdict.payload.ids,
+        primaryId:
+          typeof verdict.payload.primaryId === "string"
+            ? verdict.payload.primaryId
+            : null,
+        generation: verdict.payload.generation
+      });
+
+      return;
+
+    }
+
 
     if (
       verdict.type === SANDBOX_MESSAGE_TYPES.INSPECT_MODE ||
@@ -1553,6 +1751,23 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
               { renderSeq: FRAME_STATE.renderSeq },
               FRAME_STATE.inspector.debugState()
             )
+          : null;
+
+      };
+
+
+    /*
+      HOME-CANVAS-SELECT-1B-1 — 같은 성격의 읽기 전용 창구. 이
+      realm 밖(부모)은 cross-origin 이라 읽을 수 없고, e2e 가
+      프레임 안에서 "인스턴스가 몇 개인가 · 틀이 회전을 따라가는가"
+      를 잰다. 이 창구로 선택을 바꿀 수는 없다.
+    */
+
+    window.__imoryCanvasFrameState =
+      function () {
+
+        return FRAME_STATE.canvasFrame
+          ? FRAME_STATE.canvasFrame.debugState()
           : null;
 
       };

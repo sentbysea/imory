@@ -251,7 +251,41 @@ var SANDBOX_MESSAGE_TYPES = {
 
   SIDES_STATE: "IMORY_SIDES_STATE",
   SIDES_VIEWPORT: "IMORY_SIDES_VIEWPORT",
-  SIDES_CLOSE: "IMORY_SIDES_CLOSE"
+  SIDES_CLOSE: "IMORY_SIDES_CLOSE",
+
+
+  /* =======================================================
+     HOME-CANVAS-SELECT-1B-1 — 캔버스 선택을 프레임에 알린다
+
+       CANVAS_SELECT parent -> frame
+         { renderSeq, active, ids[], primaryId?, generation }
+
+     ★ 새 소유자를 만드는 메시지가 아니다.
+
+     선택의 주인은 여전히 부모(Studio)다. 부모는 자기 draft 에서
+     "그 id 가 지금 캔버스에 있고 hidden 도 locked 도 아니다"를
+     이미 확인했고, 이 메시지는 그 **확정된 결과**만 내려보낸다.
+     프레임은 받은 id 를 자기 DOM 의 [data-imory-canvas-element]
+     에서 다시 확인하고, 없으면 **아무 것도 그리지 않는다**(다른
+     요소로 대체하지 않는다).
+
+     ★ 실리지 않는 것: nonce · draft · SkinPackage · CSS · 좌표.
+
+     프레임이 아는 것은 "이 id 를 골랐다"뿐이고, 그 좌표는 자기
+     DOM 에서 스스로 잰다. nonce 가 프레임 밖으로 나가지 않는다는
+     계약은 그대로다(skin/sandbox/frame.html 머리말).
+
+     ★ generation 은 부모가 매긴 선택 순번이다. 프레임은 자기가
+       본 것보다 낮은 번호를 버린다 — 늦게 도착한 옛 선택이 새
+       선택을 덮지 않는다. renderSeq 가 "어느 화면인가"를 가르는
+       것과 같은 결의 장치이고, 둘 다 있어야 한다(같은 화면 안에서
+       선택만 여러 번 바뀔 수 있다).
+
+     ids 는 지금 0개 또는 1개다. 배열로 두는 이유는 부모 상태와
+     같다 — 뒤 단계의 다중 선택에서 모양이 바뀌지 않게.
+  ======================================================= */
+
+  CANVAS_SELECT: "IMORY_CANVAS_SELECT"
 };
 
 
@@ -478,6 +512,16 @@ var SANDBOX_INSPECT_MAX_CANDIDATES = 7;
 var SANDBOX_INSPECT_TEXT_PHASES = ["begin", "input", "commit", "cancel"];
 
 var SANDBOX_INSPECT_DRAG_PHASES = ["start", "move", "end", "cancel"];
+
+
+/*
+  HOME-CANVAS-SELECT-1B-1 — 한 번에 내려보낼 수 있는 캔버스 선택의
+  상한. 지금 UI 는 단일 선택이라 실제로는 0 또는 1 이지만, 모양이
+  배열이므로 상한을 못박아 둔다(뒤 단계의 다중 선택도 이 숫자를
+  넘지 않는다 — 넘어야 한다면 그때 이 줄을 고친다).
+*/
+
+var SANDBOX_CANVAS_MAX_SELECTED = 64;
 
 
 function isSandboxInspectMetrics(value) {
@@ -1505,6 +1549,63 @@ var SANDBOX_MESSAGE_SPEC = {
     check: function (payload) {
       return isSandboxRenderSeq(payload.renderSeq);
     }
+  },
+
+
+  /* =======================================================
+     HOME-CANVAS-SELECT-1B-1 — 캔버스 선택 (위 CANVAS_SELECT 주석)
+
+     active:false 면 ids 는 빈 배열이고 primaryId 는 없다. 그것이
+     "풀어라"다. active:true 면 primaryId 가 반드시 있고 ids 안에
+     들어 있어야 한다 — "골랐다는데 무엇을 골랐는지 없는" 모양을
+     메시지 층에서 막는다.
+
+     식별자 규칙은 Inspector 와 **같은 것**을 쓴다
+     (SANDBOX_INSPECT_EDIT_ID_PATTERN) — 캔버스 요소의 id 규칙과
+     같은 글자 집합이고, 둘을 따로 두면 느슨한 쪽이 생긴다.
+  ======================================================= */
+
+  IMORY_CANVAS_SELECT: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq", "active", "ids", "primaryId", "generation"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (typeof payload.active !== "boolean") {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.generation) || payload.generation < 0) {
+        return false;
+      }
+
+      if (!Array.isArray(payload.ids)) {
+        return false;
+      }
+
+      if (payload.ids.length > SANDBOX_CANVAS_MAX_SELECTED) {
+        return false;
+      }
+
+      for (let i = 0; i < payload.ids.length; i += 1) {
+        if (!isSandboxInspectEditId(payload.ids[i])) {
+          return false;
+        }
+      }
+
+      if (!payload.active) {
+        return payload.ids.length === 0 && payload.primaryId === undefined;
+      }
+
+      return (
+        isSandboxInspectEditId(payload.primaryId) &&
+        payload.ids.indexOf(payload.primaryId) !== -1
+      );
+
+    }
   }
 
 };
@@ -1802,6 +1903,7 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_INSPECT_MAX_COORD,
     SANDBOX_INSPECT_MAX_TEXT_CHARS,
     SANDBOX_INSPECT_MAX_CANDIDATES,
+    SANDBOX_CANVAS_MAX_SELECTED,
     isSandboxInspectEditId,
     isSandboxInspectRect,
     isSandboxInspectTarget,

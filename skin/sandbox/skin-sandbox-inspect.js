@@ -212,6 +212,11 @@ function createSandboxInspector(options) {
     lastSentAt: 0,
     lastSentKey: "",
 
+    /* HOME-CANVAS-SELECT-1B-1 — 지금 이 문서에서 Moveable 이 캔버스
+       선택 틀을 잡고 있는가. bridge 가 runtime 의 보고를 그대로
+       옮겨 준다(skin/sandbox/skin-sandbox-frame.js). */
+    canvasFrameActive: false,
+
     listeners: [],
     disposed: false
   };
@@ -492,7 +497,17 @@ function createSandboxInspector(options) {
   function repaint() {
 
     paintBox(state.hoverBox, rectOf(state.hoverEl));
-    paintBox(state.selectBox, rectOf(state.selectedEl));
+
+    /* HOME-CANVAS-SELECT-1B-1 — 캔버스 요소는 Moveable 이 회전을
+       따라가는 틀을 그린다(skin/skin-home-canvas-editor-runtime.js).
+       둘 다 그리면 회전한 요소에서 **축에 평행한 상자가 덧그려져**
+       보인다 — 그래서 그 틀이 실제로 붙어 있는 동안만 이쪽을
+       내린다. 붙지 못했으면(vendor 실패) 이 테두리가 그대로
+       fallback 이다. */
+    paintBox(
+      state.selectBox,
+      state.canvasFrameActive ? null : rectOf(state.selectedEl)
+    );
 
   }
 
@@ -1181,6 +1196,24 @@ function createSandboxInspector(options) {
     onRender: onRender,
     dispose: dispose,
 
+    /* HOME-CANVAS-SELECT-1B-1 — 캔버스 선택 틀이 이 테두리를
+       대신하고 있는가(위 repaint 주석). 값이 같으면 아무 일도
+       하지 않는다. */
+    setCanvasFrameActive: function (active) {
+
+      const next =
+        !!active;
+
+      if (state.canvasFrameActive === next) {
+        return;
+      }
+
+      state.canvasFrameActive = next;
+
+      repaint();
+
+    },
+
     /* 부모의 INSPECT_CHOOSE / _PARENT / _CAPS / _PREVIEW */
     choose: whenEnabled(function (index) { direct.choose(index); }),
     selectParent: whenEnabled(function () { direct.selectParent(); }),
@@ -1196,6 +1229,8 @@ function createSandboxInspector(options) {
       return {
         enabled: state.enabled,
         selectedEditId: state.selectedEditId,
+        canvasFrameActive: state.canvasFrameActive,
+        selectBoxVisible: !!(state.selectBox && state.selectBox.hasAttribute("data-visible")),
         hoverEditId: editIdOf(state.hoverEl),
         boxes: doc.querySelectorAll(".imory-sandbox-inspect-box").length,
         direct: direct ? direct.debugState() : null

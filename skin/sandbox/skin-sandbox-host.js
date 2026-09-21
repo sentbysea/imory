@@ -2703,6 +2703,76 @@ export function sendSandboxInspectPreview(handle, value) {
 
 
 /* =========================================================
+   HOME-CANVAS-SELECT-1B-1 — 캔버스 선택을 프레임에 알린다
+
+   sendSandboxCanvasSelect(handle, selection) -> boolean
+
+   selection = { active, ids[], primaryId|null, generation }
+
+   ★ 호출자의 객체를 그대로 넘기지 않는다 — 알려진 칸만 새
+     리터럴로 옮긴다(위 네 지시와 같은 규칙). 프로토콜이 한 번 더
+     거른다.
+
+   ★ 아직 한 장도 그리지 않은 프레임(renderSeq 0)에는 보내지
+     않는다. 부모가 렌더 직후에 다시 보낸다
+     (studio/preview/preview-sandbox.js flushSandboxInspectState).
+========================================================== */
+
+export function sendSandboxCanvasSelect(handle, selection) {
+
+  if (!handle || handle.destroyed || !handle.TYPES || !handle.renderSeq) {
+    return false;
+  }
+
+
+  const value =
+    (selection && typeof selection === "object") ? selection : null;
+
+
+  const ids =
+    (value && Array.isArray(value.ids))
+      ? value.ids.filter((id) => typeof id === "string" && id)
+      : [];
+
+
+  const primaryId =
+    (value && typeof value.primaryId === "string" && value.primaryId)
+      ? value.primaryId
+      : null;
+
+
+  const active =
+    !!(value && value.active === true && primaryId && ids.indexOf(primaryId) !== -1);
+
+
+  const payload = {
+    contract: 1,
+    renderSeq: handle.renderSeq,
+    active: active,
+    ids: active ? ids.slice() : [],
+    generation:
+      (value && Number.isInteger(value.generation) && value.generation >= 0)
+        ? value.generation
+        : 0
+  };
+
+  /* 해제에는 primaryId 칸 자체를 만들지 않는다 — 프로토콜이 그
+     모양을 요구한다(INSPECT_PICK 의 editId 와 같은 결). */
+  if (active) {
+    payload.primaryId = primaryId;
+  }
+
+
+  return sendToSandboxFrame(
+    handle,
+    handle.TYPES.CANVAS_SELECT,
+    payload
+  );
+
+}
+
+
+/* =========================================================
    destroySandboxSkinFrame(handle)
 
    리스너를 떼고 iframe을 없앤다. 두 번 불러도 안전하다.

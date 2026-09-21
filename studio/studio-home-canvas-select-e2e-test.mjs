@@ -29,7 +29,20 @@
    [reconcile] 삭제 · enabled:false · 페이지 이동 뒤 선택이 풀린다
    [sandbox]   native 와 같은 primary id · 위조 거부
    [scale]     Preview 부모에 scale 이 걸린 조건에서의 overlay 오차
-   [vendor]    Moveable · Selecto UMD 요청 0
+   [vendor]    Moveable · Selecto UMD 는 **고르기 전까지** 요청 0
+
+   ★ HOME-CANVAS-SELECT-1B-1 이후
+
+   캔버스 요소를 고르면 프레임 안에서 Moveable 이 **회전을 따라가는
+   틀**을 잡고, 이 파일이 재는 축에 평행한 테두리는 그동안 내려간다
+   (계약 §15). 그래서 이 파일의 두 자리가 뜻이 바뀌었다.
+
+     [scale]  vendor 를 막아 **fallback 조건**을 만든 뒤 잰다 —
+              그 테두리는 사라진 것이 아니라 "vendor 를 못 받았을
+              때 쓰는 것"으로 남았고, 그때도 자리가 맞아야 한다.
+     [vendor] 관문 **앞까지**가 0 임을 지킨다. 관문 뒤의 회계는
+              studio/studio-home-canvas-moveable-e2e-test.mjs 가
+              통째로 갖는다(같은 수를 두 파일에서 세지 않는다).
 
    Chromium 만 쓴다(§11).
 
@@ -371,6 +384,24 @@ async function openStudio(browser, options) {
   await page.route("**/api/skin-ai", (route) =>
     route.fulfill({ status: 500, body: "must not be called" }));
 
+  /* =====================================================
+     HOME-CANVAS-SELECT-1B-1 — 이 파일이 재는 테두리는 **축에
+     평행한 쪽**이다.
+
+     1B-1 부터 캔버스 요소를 고르면 프레임 안 Moveable 이 회전을
+     따라가는 틀을 잡고, 그동안 이 테두리는 내려간다(계약 §15).
+     그 새 틀의 정확도는 studio-home-canvas-moveable-e2e-test.mjs
+     가 잰다.
+
+     그렇다고 이 측정을 버리지 않는다 — 축에 평행한 테두리는
+     **vendor 를 못 받았을 때의 fallback** 으로 살아 있고, 그때도
+     자리가 맞아야 한다. 그래서 그 조건을 여기서 만든다(UMD 를
+     받지 못하게 막는다).
+  ====================================================== */
+  if (o.noVendor) {
+    await page.route("**/studio/vendor/home-canvas/*", (route) => route.abort());
+  }
+
   await page.addInitScript(
     ([pkg, slots]) => {
       window.__scenarioLaySkinPackage = pkg;
@@ -613,6 +644,8 @@ const readState = (page) => page.evaluate(() => {
     inspectorApi: inspector ? inspector.editId : null,
     inspectorRaw: raw.selection ? raw.selection.editId : null,
     canvasBox: boxOf("studioCanvasSelectBox"),
+    /* HOME-CANVAS-SELECT-1B-1 — 프레임이 회전 틀을 잡고 있는가 */
+    canvasFrameActive: canvas.frameActive === true,
     inspectorBox: boxOf("studioInspectorSelectBox"),
     canvasLabelText: (() => {
       const el = document.getElementById("studioCanvasSelectLabel");
@@ -774,10 +807,20 @@ async function main() {
         afterCanvas.inspectorApi === null && afterCanvas.inspectorRaw === null,
         `canvas=${afterCanvas.canvas.primaryId} inspectorRaw=${afterCanvas.inspectorRaw}`);
 
-      /* 21 — 유령 테두리 없음 */
+      /* 21 — 유령 테두리 없음
+
+         ★ SELECT-1B-1 부터 **캔버스 쪽 테두리의 주인이 갈린다**:
+           Moveable 이 잡았으면 회전을 따라가는 틀이 프레임 안에
+           있고 이 문서의 축 평행 상자는 내려간다. 둘 중 정확히
+           하나만 있어야 한다는 것이 이 검사의 뜻이다. 이름표는
+           어느 쪽이든 남는다(Moveable 에 그 자리가 없다). */
       check("★ 유령 Inspector 테두리가 남지 않는다(캔버스 선택 중 #studioInspectorSelectBox 는 숨어 있다)",
-        afterCanvas.inspectorBox === null && afterCanvas.canvasBox !== null,
+        afterCanvas.inspectorBox === null,
         `inspectorBox=${JSON.stringify(afterCanvas.inspectorBox)}`);
+
+      check("★ 캔버스 테두리의 주인은 정확히 하나다(회전 틀 ↔ 축 평행 상자)",
+        (afterCanvas.canvasFrameActive === true) !== (afterCanvas.canvasBox !== null),
+        `frameActive=${afterCanvas.canvasFrameActive} box=${JSON.stringify(afterCanvas.canvasBox)}`);
 
       /* 11 — 일반 요소를 고르면 캔버스 선택이 풀린다 */
       await clickIn(page, ".hc-foot");
@@ -1321,7 +1364,7 @@ async function main() {
 
       /* native — overlay 는 부모 문서가 그린다.
          프레임 안 좌표를 부모 좌표로 옮겨 실제 사각형과 견준다. */
-      const page = await openStudio(browser, { scale: 0.8 });
+      const page = await openStudio(browser, { scale: 0.8, noVendor: true });
       await canvasFrame(page, false);
       await enableSelect(page);
 
@@ -1377,7 +1420,7 @@ async function main() {
 
       /* sandbox — 테두리를 프레임이 그린다. 둘 다 프레임 좌표라
          부모 scale 은 양쪽에 똑같이 걸린다(그것이 맞는지 본다). */
-      const spage = await openStudio(browser, { sandbox: true, scale: 0.8 });
+      const spage = await openStudio(browser, { sandbox: true, scale: 0.8, noVendor: true });
       const sframe = await canvasFrame(spage, true);
 
       await enableSelect(spage);
@@ -1423,7 +1466,16 @@ async function main() {
 
 
     /* ======================================================
-       [vendor] — Moveable · Selecto UMD 요청 0
+       [vendor] — Moveable · Selecto UMD 는 **고르기 전까지** 0
+
+       ★ HOME-CANVAS-SELECT-1B-1 에서 이 절의 뜻이 바뀌었다.
+
+       SELECT-1A 때는 "부르는 곳이 아예 없다"가 사실이어서 캔버스
+       요소를 골라도 요청이 0 이었다. 이제 첫 Canvas 선택이 vendor
+       를 켜는 관문이다(계약 §15) — 그래서 여기서는 **그 관문 앞까지**
+       가 0 임을 지키고, 관문 뒤의 회계(각각 1회 · 재선택 추가 0 ·
+       공개 화면 0)는 studio/studio-home-canvas-moveable-e2e-test.mjs
+       [cost] 가 통째로 갖는다. 같은 수를 두 파일에서 세지 않는다.
     ====================================================== */
     if (wants("vendor")) {
 
@@ -1440,12 +1492,18 @@ async function main() {
       check("Select 를 켰을 때 UMD 요청 0",
         page.__vendorHits.length === 0, page.__vendorHits.join(" | "));
 
+      /* 일반 template 요소는 캔버스가 아니다 — 관문을 열지 않는다 */
+      await clickIn(page, ".hc-foot");
+
+      check("★ 일반 template 요소를 골랐을 때도 UMD 요청 0",
+        page.__vendorHits.length === 0, page.__vendorHits.join(" | "));
+
       await clickIn(page, byId("cvPhoto"));
 
       const picked = await readState(page);
 
-      check("캔버스 요소를 골랐을 때도 UMD 요청 0",
-        picked.canvas.primaryId === "cvPhoto" && page.__vendorHits.length === 0,
+      check("캔버스 요소를 고르면 그때 vendor 가 켜진다(SELECT-1B-1)",
+        picked.canvas.primaryId === "cvPhoto" && page.__vendorHits.length > 0,
         `primary=${picked.canvas.primaryId} hits=${page.__vendorHits.length}`);
 
       await page.__ctx.close();
@@ -1458,17 +1516,18 @@ async function main() {
       await sframe.waitForSelector("body.imory-sandbox-inspect-on",
         { state: "attached", timeout: 8000 });
 
-      await clickInSandbox(spage, sframe, byId("cvShape"));
-
-      check("sandbox 에서 골랐을 때도 UMD 요청 0",
+      check("sandbox — 아직 고르지 않았을 때 UMD 요청 0",
         spage.__vendorHits.length === 0, spage.__vendorHits.join(" | "));
 
-      /* 프레임 쪽 문서도 loader 를 부르지 않는다 */
+      await clickInSandbox(spage, sframe, byId("cvShape"));
+      await sleep(1200);
+
+      /* 프레임 쪽 문서가 **그때** 로더를 받는다 */
       const frameHasLoader = await sframe.evaluate(() =>
         typeof window.ensureHomeCanvasEditorVendors);
 
-      check("sandbox 프레임 문서에는 vendor loader 가 아직 없다(SELECT-1B 의 일)",
-        frameHasLoader === "undefined", frameHasLoader);
+      check("★ sandbox 프레임 문서는 고른 뒤에야 로더를 갖는다",
+        frameHasLoader === "function", frameHasLoader);
 
       await spage.__ctx.close();
 

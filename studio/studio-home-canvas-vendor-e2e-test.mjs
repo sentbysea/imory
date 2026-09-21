@@ -982,13 +982,34 @@ async function runPathsSection() {
 
   }
 
+  /* =======================================================
+     HOME-CANVAS-SELECT-1B-1 — 로더가 allowlist 에 올라왔다.
+
+     VENDOR-1 에서는 "부르는 곳이 없다"가 사실이었으므로 이 경로가
+     404 인 것을 여기서 못박았다. 이제 프레임 안 runtime 이 이
+     파일 하나를 실제로 부르므로(계약 §15) **열려야** 하고, 그
+     사실을 같은 자리에서 다시 못박는다 — 늘어난 것은 정확히 이
+     한 파일이지 /studio/ 디렉터리가 아니다.
+  ======================================================= */
+
+  const LOADER_PATH =
+    "/studio/studio-home-canvas-vendor.js";
+
+  {
+    const res = await get(SANDBOX_ORIGIN, LOADER_PATH);
+
+    check("[paths] ★ 로더 한 파일은 sandbox origin 에서 200 JS",
+      res.status === 200 && isJs(res) && !isSpaHtml(res),
+      `${res.status} ${res.type}`);
+  }
+
   /* 이웃 경로는 열리지 않는다 */
   for (const [label, p] of [
     ["잘못된 버전", "/studio/vendor/home-canvas/moveable-0.53.1.min.js"],
     ["같은 폴더의 README", "/studio/vendor/home-canvas/README.md"],
     ["라이선스 파일", "/studio/vendor/home-canvas/licenses/moveable-MIT.txt"],
-    ["로더 자신", "/studio/studio-home-canvas-vendor.js"],
     ["다른 Studio 파일", "/studio/studio-preview.js"],
+    ["Studio Inspector", "/studio/inspector/studio-canvas-selection.js"],
     ["vendor 디렉터리", "/studio/vendor/home-canvas/"]
   ]) {
 
@@ -1000,12 +1021,13 @@ async function runPathsSection() {
 
   }
 
-  check("[paths] allowlist 판정 함수도 두 경로만 통과시킨다",
+  check("[paths] allowlist 판정 함수도 vendor 둘 + 로더 하나만 통과시킨다",
     sandboxServer.isSandboxAllowedPath(MOVEABLE_PATH) === true &&
     sandboxServer.isSandboxAllowedPath(SELECTO_PATH) === true &&
-    sandboxServer.isSandboxAllowedPath("/studio/studio-home-canvas-vendor.js") === false &&
+    sandboxServer.isSandboxAllowedPath(LOADER_PATH) === true &&
+    sandboxServer.isSandboxAllowedPath("/studio/studio-preview.js") === false &&
     sandboxServer.isSandboxAllowedPath("/studio/vendor/home-canvas/README.md") === false,
-    "로더 자신과 나머지 Studio 는 SELECT-1 까지 계속 404 다");
+    "늘어난 것은 로더 한 파일뿐이고 나머지 Studio 는 계속 404 다");
 
 }
 

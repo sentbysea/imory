@@ -252,7 +252,36 @@ export const SANDBOX_ALLOWED_PATHS = [
   ====================================================== */
 
   "/studio/vendor/home-canvas/moveable-0.53.0.min.js",
-  "/studio/vendor/home-canvas/selecto-1.26.3.min.js"
+  "/studio/vendor/home-canvas/selecto-1.26.3.min.js",
+
+  /* =====================================================
+     HOME-CANVAS-SELECT-1B-1 — 캔버스 선택 틀을 켜는 두 파일.
+
+     skin-home-canvas-editor-runtime.js
+       프레임 안에서 Moveable 을 붙였다 떼는 **실행 코드**다.
+       native Preview 문서와 **같은 파일 한 벌**을 쓴다 — 기능을
+       두 벌로 두면 한쪽만 고쳐지는 날이 온다.
+
+     studio-home-canvas-vendor.js
+       그 runtime 이 부르는 **로더 한 파일**이다. 위 두 UMD 의
+       주소를 갖고 있고, 프레임은 이 파일을 통해서만 그것을
+       받는다(주소를 두 곳에 적지 않는다).
+
+     ★ 둘 다 **부를 때만** 요청된다. frame.html 에 <script> 가
+       없고, 부모가 캔버스 선택을 내려보내는 곳은 Studio 하나뿐
+       이므로 공개 sandbox HOME 에서는 요청 자체가 생기지 않는다.
+       allowlist 에 있다는 것은 "요청하면 200"이지 "요청한다"가
+       아니다(위 vendor 두 줄과 같은 사정).
+
+     ★ 이것이 sandbox origin 에서 나가는 세 번째 /studio/ 경로다.
+       여전히 디렉터리가 아니라 **파일 하나**이고, 나머지 Studio
+       코드는 404 다. 이 파일에는 우리 데이터도 인증도 화면 구조도
+       없다 — 두 UMD 의 경로와 `?v=` 규칙, 그리고 "전역이 실제로
+       생겼는가" 확인뿐이다.
+  ====================================================== */
+
+  "/skin/skin-home-canvas-editor-runtime.js",
+  "/studio/studio-home-canvas-vendor.js"
 ];
 
 

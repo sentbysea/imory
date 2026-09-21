@@ -2178,6 +2178,9 @@ if (typeof window !== "undefined") {
   window.postInspectorPreviewToFrame =
     postInspectorPreviewToFrame;
 
+  window.postCanvasSelectionToFrame =
+    postCanvasSelectionToFrame;
+
 }
 
 
@@ -2757,6 +2760,45 @@ function postInspectorSelectionToFrame(editId) {
 
 
 /* =========================================================
+   HOME-CANVAS-SELECT-1B-1 — 캔버스 선택을 Preview 문서로
+
+   postCanvasSelectionToFrame(selection)
+
+   selection = { active, ids[], primaryId|null, generation }
+
+   ★ 이 함수는 **옮기기만** 한다. 무엇을 고를 수 있는가는
+     studio/inspector/studio-canvas-selection.js 가 draft 에서 이미
+     정했고, 프레임은 받은 id 를 자기 DOM 에서 한 번 더 확인한다.
+
+   ★ sandbox 스킨이면 Preview 문서가 다시 프레임으로 넘긴다
+     (studio/preview/preview-bridge.js routeCanvasSelectionMessage) —
+     이 파일은 그 갈림을 몰라도 된다.
+========================================================== */
+
+function postCanvasSelectionToFrame(selection) {
+
+  const value =
+    (selection && typeof selection === "object") ? selection : null;
+
+  const ids =
+    (value && Array.isArray(value.ids)) ? value.ids.slice() : [];
+
+  postToPreviewFrameIfReady({
+    type: "preview:canvas-select",
+    active: !!(value && value.active === true && ids.length),
+    ids: ids,
+    primaryId:
+      (value && typeof value.primaryId === "string") ? value.primaryId : null,
+    generation:
+      (value && Number.isInteger(value.generation) && value.generation >= 0)
+        ? value.generation
+        : 0
+  });
+
+}
+
+
+/* =========================================================
    DIRECT-UX-1 — Preview 안 직접 조작(studio/preview/preview-inspect-direct.js)
 
      preview:inspector-caps    고른 요소를 끌 수 있는가 · 더블클릭으로
@@ -3295,6 +3337,29 @@ window.addEventListener(
         } else {
           window.openSkinDockPanel?.();
         }
+      }
+
+      return;
+
+    }
+
+    /*
+      HOME-CANVAS-SELECT-1B-1 — Preview 문서 안에서 Moveable 이
+      캔버스 선택 틀을 실제로 잡았는가. 잡았으면 Studio 는 자기
+      축 평행 overlay 를 내린다 — 둘 다 그리면 회전한 요소에서
+      상자가 덧그려져 보인다.
+
+      ★ 이 신호는 선택을 만들지도 지우지도 않는다. 표시만 가른다.
+    */
+    if (data.type === "preview:canvas-frame") {
+
+      if (typeof window.setStudioCanvasFrameActive === "function") {
+
+        window.setStudioCanvasFrameActive(
+          data.active === true,
+          typeof data.editId === "string" ? data.editId : null
+        );
+
       }
 
       return;
