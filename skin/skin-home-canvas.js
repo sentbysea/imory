@@ -41,12 +41,12 @@
          } }
      ]
 
-   ── canvas.version — 세 갈래 (HOME-CANVAS-V2-DATA-1) ────
+   ── canvas.version — 세 갈래 (V2-DATA-1 · V2-FLOW-RENDER-1) ────
      1     평면 자유 Canvas. 위 모양. 검증하고 **그린다**
      2     조합형 Canvas(로드맵 §14) — `flow.blocks` + `overlays`.
-           이 라운드부터 **엄격히 검증**하지만 아직 그리지 않는다
-           (DOM renderer 가 다음 작업이다). 통과해도 화면은 기존
-           HOME 이고, 실행 봉투에도 실리지 않는다
+           엄격히 검증하고(V2-DATA-1) **그린다**(V2-FLOW-RENDER-1).
+           `main_visual` 은 아직 **외곽 프레임까지**다 — 내부 사진과
+           장식은 V2-MAIN-VISUAL-1 이다
      3+    내용을 보지 않고 보존만 한다(미래 version)
 
    - 모르는 이름 · 모르는 칸은 읽지 않고 **그대로 보존**한다.
@@ -803,16 +803,17 @@ function validateSkinCanvasElementProps(type, props, path) {
     이 배포가 모르는 version 의 elements 를 이 배포의 v1 규칙으로
     검사하는 것은 틀린 판정이다.
 
-  ★ **세 갈래다**(HOME-CANVAS-V2-DATA-1).
+  ★ **세 갈래다**(V2-DATA-1 · V2-FLOW-RENDER-1).
 
       version 1   v1 규칙으로 검사하고 **실행한다**(renderable:true)
-      version 2   §14 규칙으로 **엄격히 검사**하되 실행하지 않는다
-                  (renderable:false — 렌더러가 아직 없다)
+      version 2   §14 규칙으로 엄격히 검사하고 **실행한다**
+                  (renderable:true · version:2 — 부르는 쪽이 이
+                   숫자를 보고 어느 payload 빌더를 쓸지 고른다)
       version 3+  내용을 보지 않고 보존만 한다(future:true)
 
-    v2 를 "모르는 version" 자리에서 꺼낸 것이 이 라운드다. 그래서
-    v2 파일은 이제 **잘못 적혀 있으면 새 Import 에서 거부**되고,
-    올바르면 통과하되 화면은 여전히 기존 HOME 이다.
+    `renderable` 과 `version` 을 따로 두는 이유가 여기 있다 —
+    "그려도 되는가"와 "무슨 모양인가"는 다른 질문이고, version 4 가
+    생기는 날 앞의 답만 false 로 바뀐다.
 */
 function validateSkinCanvasData(canvas, path) {
 
@@ -1018,10 +1019,12 @@ function readSkinHomeCanvasRegion(skinPackage) {
      - `enabled: false`
      - canvas 칸이 없다
      - 이 배포가 모르는 canvas.version (미래 버전)
-     - **유효한 v2 조합형 Canvas** — 검증은 하지만 그리는 렌더러가
-       아직 없다(HOME-CANVAS-V2-DATA-1). 실행 봉투에 v2 를 싣지
-       않으므로 sandbox 프로토콜도 지금과 같다
      - 저장된 데이터가 계약을 어긴다 (조용히 고치거나 지우지 않는다)
+
+   ★ **v1 과 v2 둘 다 실행된다**(HOME-CANVAS-V2-FLOW-RENDER-1).
+     모양은 version 마다 다르지만(v1 은 `elements`, v2 는 `flow` +
+     `overlays`) 성질은 같다 — 알려진 칸만 · 새 리터럴 · 입력 불변.
+     v2 의 빌더는 형제 파일에 있다(skin/skin-home-canvas-v2.js).
 ========================================================== */
 
 function buildSkinCanvasRenderPayload(canvas) {
@@ -1029,10 +1032,14 @@ function buildSkinCanvasRenderPayload(canvas) {
   const check =
     validateSkinCanvasData(canvas, "canvas");
 
-  /* 실행 가능한 것은 지금 v1 하나다 — 미래 version 도 유효한 v2 도
-     renderable 이 아니다 */
+  /* 미래 version 은 renderable 이 아니다 — 파일은 통과하지만
+     실행 payload 를 만들지 않는다(§9) */
   if (!check.ok || !check.renderable) {
     return undefined;
+  }
+
+  if (check.version === SKIN_HOME_CANVAS_V2_VERSION) {
+    return buildSkinCanvasV2RenderPayload(canvas);
   }
 
   /*
@@ -1241,7 +1248,11 @@ if (typeof module !== "undefined" && module.exports) {
     validateSkinCanvasId,
     validateSkinCanvasElement,
     validateSkinCanvasElementProps,
-    findSkinHomeCanvasRegion
+    findSkinHomeCanvasRegion,
+    /* HOME-CANVAS-V2-FLOW-RENDER-1 — v2 payload 빌더가 call time 에
+       찾는 v1 의 그 두 함수(같은 의미의 칸을 두 벌 만들지 않는다) */
+    buildSkinCanvasElementPayload,
+    buildSkinCanvasPropsPayload
   });
 
   /* 가르기 전과 **같은 한 덩어리**를 낸다 — require 의 입구는 이 파일이다 */

@@ -1,6 +1,6 @@
 /* =========================================================
    SKIN HOME CANVAS RENDER — HOME 캔버스의 **정적 렌더러**
-   (HOME-CANVAS-RENDER-1A)
+   (HOME-CANVAS-RENDER-1A · 1B · V2-FLOW-RENDER-1)
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
    로드맵:    docs/plans/IMORY_HOME_CANVAS_ROADMAP.md (PLAN)
@@ -14,21 +14,24 @@
    스킨 CSS 의 몫이다(계약 문서 §8) — 요소마다 붙는
    `data-imory-edit-id="<element.id>"` 가 그 선택자다.
 
-   ── 이 라운드가 하는 것 / 하지 않는 것 ──────────────────
-   한다:   공개 native HOME · Studio native Preview 에서 저장된
-           Canvas 를 같은 DOM · 같은 좌표로 그린다.
-   안 한다: sandbox 프레임 렌더(RENDER-1B) · 선택 · 드래그 · 크기 ·
-           회전 · Inspector · Undo · preset · 위젯. 조작 UI 가
-           하나도 없다 — 이 파일은 리스너를 단 하나도 만들지 않는다.
+   ── 이 파일이 하는 것 / 하지 않는 것 ──────────────────
+   한다:   저장된 Canvas 를 **네 화면**에서 같은 DOM · 같은 좌표로
+           그린다 — 공개 native HOME · Studio native Preview ·
+           공개 sandbox · Studio sandbox Preview(RENDER-1A · 1B).
+           v1(평면 자유)과 v2(조합형 — 흐름 + 자유 장식, §3-1)를
+           둘 다 그린다.
+   안 한다: 선택 · 드래그 · 크기 · 회전 · Inspector · Undo · preset ·
+           위젯, 그리고 v2 `main_visual` 의 **내부**(V2-MAIN-VISUAL-1).
+           조작 UI 가 하나도 없다 — 이 파일은 리스너를 단 하나도
+           만들지 않는다.
 
-   ★ sandbox 프레임에 이 파일이 없다
+   ★ 그리는가 마는가의 판정
 
-   판정은 "renderSkin 이 부르는가"가 아니라 **문서가 이 파일을
-   로드했는가**다. skin/sandbox/frame.html 은 이 파일을 로드하지
-   않으므로(그리고 core/lib/skin-sandbox-server.js 의 allowlist 에도
-   없으므로) 프레임 안에서는 compileSkinHomeCanvas 가 아예 정의되지
-   않고, 프레임은 지금까지와 같은 HOME 을 그린다. sides · settings 가
-   쓰는 `typeof … === "function"` 관문과 같은 규칙이다.
+   "renderSkin 이 부르는가"가 아니라 **문서가 이 파일을 로드했는가**다
+   (sides · settings 가 쓰는 `typeof … === "function"` 관문과 같은
+   규칙). RENDER-1B 부터는 skin/sandbox/frame.html 도 이 파일을
+   로드하고 core/lib/skin-sandbox-server.js 의 allowlist 에도 있으므로,
+   **sandbox 전용 렌더러는 없다** — 파일 한 벌이 네 문서에서 돈다.
 
    ── 좌표를 어떻게 그리는가 ─────────────────────────────
    저장 좌표는 `baseWidth`(390) × `baseHeight` 자 위의 숫자다. 실제
@@ -101,6 +104,26 @@ const SKIN_CANVAS_RENDER_TEXT_ATTR = "data-imory-canvas-text";
 const SKIN_CANVAS_RENDER_IMAGE_ATTR = "data-imory-canvas-image";
 const SKIN_CANVAS_RENDER_LOGO_TEXT_ATTR = "data-imory-canvas-logo-text";
 
+/* ── v2 조합형 Canvas (HOME-CANVAS-V2-FLOW-RENDER-1) ──
+
+   층이 둘이라 표식도 둘이다. `data-imory-canvas-element` 는 **자유
+   배치**(v1 요소 · v2 overlays)의 표식으로 그대로 두고, 흐름 층은
+   자기 이름을 쓴다 — 좌표 CSS 가 한쪽에만 걸려야 하고, 나중에
+   Studio 선택이 "이것이 블록인가 자유 요소인가"를 한 속성으로
+   물어볼 수 있어야 한다. */
+const SKIN_CANVAS_RENDER_FLOW_ATTR = "data-imory-canvas-flow";
+const SKIN_CANVAS_RENDER_BLOCK_ATTR = "data-imory-canvas-block";
+const SKIN_CANVAS_RENDER_ALIGN_ATTR = "data-imory-canvas-align";
+
+/* overlays 임을 스킨 CSS 와 재는 쪽이 볼 수 있게 한다. v1 요소에는
+   붙지 않으므로 v1 DOM 은 한 글자도 바뀌지 않는다. */
+const SKIN_CANVAS_RENDER_OVERLAY_ATTR = "data-imory-canvas-overlay";
+
+/* main_visual 의 **외곽 프레임**. 이 라운드는 여기까지다 — 내부
+   primary 사진과 장식은 V2-MAIN-VISUAL-1 이 이 표식 안에 그린다.
+   자리를 채우는 임시 문구도 기본 디자인도 넣지 않는다. */
+const SKIN_CANVAS_RENDER_FRAME_ATTR = "data-imory-canvas-frame";
+
 /* Studio Inspector 가 나중에 이 선택자로 CSS 를 고친다(계약 §8) */
 const SKIN_CANVAS_RENDER_EDIT_ID_ATTR = "data-imory-edit-id";
 
@@ -121,6 +144,40 @@ const SKIN_CANVAS_RENDER_VARS = {
   width: "--imory-canvas-width",
   height: "--imory-canvas-height",
   rotation: "--imory-canvas-rotation"
+};
+
+/*
+  v2 흐름 층의 custom property (HOME-CANVAS-V2-FLOW-RENDER-1).
+
+  ★ 자유 배치의 이름(`--imory-canvas-x` …)을 재사용하지 않는다.
+    한 문서 안에서 블록과 자유 요소가 같이 살고, 스킨 CSS 가 상속된
+    변수를 읽는 순간 둘이 섞이기 때문이다.
+
+  ★ `gap` 과 `margin-top` 이 **따로** 있는 이유는 §14-4 의 "합산이다.
+    collapse 하지 않는다" 다. 둘을 JS 에서 미리 더해 한 칸으로 보내면
+    화면은 같지만 "여백을 늘렸는데 아무 일도 안 일어난다"를 만드는
+    자리가 생기고, 나중에 Inspector 가 두 값을 갈라 보여 줄 수 없다.
+    더하기는 CSS 의 calc() 이 한다.
+*/
+const SKIN_CANVAS_RENDER_FLOW_VARS = {
+  paddingTop: "--imory-canvas-flow-padding-top",
+  paddingRight: "--imory-canvas-flow-padding-right",
+  paddingBottom: "--imory-canvas-flow-padding-bottom",
+  paddingLeft: "--imory-canvas-flow-padding-left"
+};
+
+const SKIN_CANVAS_RENDER_BLOCK_VARS = {
+  gap: "--imory-canvas-block-gap",
+  marginTop: "--imory-canvas-block-margin-top",
+  marginRight: "--imory-canvas-block-margin-right",
+  marginBottom: "--imory-canvas-block-margin-bottom",
+  marginLeft: "--imory-canvas-block-margin-left",
+  width: "--imory-canvas-block-width",
+  stretchWidth: "--imory-canvas-block-stretch-width",
+  maxWidth: "--imory-canvas-block-max-width",
+  height: "--imory-canvas-block-height",
+  frameBaseWidth: "--imory-canvas-frame-base-width",
+  frameBaseHeight: "--imory-canvas-frame-base-height"
 };
 
 
@@ -772,6 +829,12 @@ function buildSkinCanvasImage(doc, url, alt) {
    3. 표식 하나에 그리기 · 지우기
 ========================================================== */
 
+/*
+  ★ 렌더러가 표식 **바로 아래**에 만드는 것은 두 가지다 — 자유 배치
+    요소(v1 요소 · v2 overlays)와 v2 의 흐름 층 하나. 둘 다 여기서
+    걷어내야 "다시 그려도 중복되지 않는다"와 "제거하면 스킨이 적어
+    둔 자식만 남는다"가 v1 · v2 양쪽에서 성립한다.
+*/
 function findSkinCanvasOwnedChildren(marker) {
 
   return Array.prototype.filter.call(
@@ -779,7 +842,10 @@ function findSkinCanvasOwnedChildren(marker) {
     (child) =>
       child.nodeType === 1 &&
       child.hasAttribute &&
-      child.hasAttribute(SKIN_CANVAS_RENDER_ELEMENT_ATTR)
+      (
+        child.hasAttribute(SKIN_CANVAS_RENDER_ELEMENT_ATTR) ||
+        child.hasAttribute(SKIN_CANVAS_RENDER_FLOW_ATTR)
+      )
   );
 
 }
@@ -837,6 +903,351 @@ function renderSkinHomeCanvasInto(marker, canvas, context) {
     marker.appendChild(
       buildSkinCanvasElementNode(doc, element, canvas, context)
     );
+  });
+
+}
+
+
+/* =========================================================
+   3-1. v2 — 자동 배치 흐름과 페이지 자유 장식
+   (HOME-CANVAS-V2-FLOW-RENDER-1 · 로드맵 §14)
+
+   ── 두 층이 한 표식 안에 있다 ───────────────────────────
+
+     [표식]
+       └ [흐름 층]  position:absolute; inset:0  ← 블록이 위에서 아래로
+           ├ 블록
+           └ 블록
+       └ 자유 장식(overlays)  ← v1 요소와 **정확히 같은 DOM**
+
+   흐름 층을 절대 배치로 깔아 두는 이유는 v1 이 ResizeObserver 를
+   안 쓰는 그 이유와 같다. 표식은 `aspect-ratio` 로 세로가 가로에
+   묶여 있으므로(§12-2) inset:0 인 자식은 **확정된 높이**를 받고,
+   그 안에서 백분율 세로값이 풀린다. 폭을 재서 매번 고쳐 쓸 필요가
+   없고, 표식이 넓어지면 블록의 크기 · padding · gap · margin 이
+   **한 배율로** 함께 커진다.
+
+     가로값  v / baseWidth  * 100%   (width · padding · gap · margin)
+     세로값  v / baseHeight * 100%   (height)
+
+   두 자가 달라 보이지만 표식의 높이가 `폭 × baseHeight / baseWidth`
+   라서 결과 배율은 **같다**. CSS 에서 백분율 margin · padding 은
+   세로 칸도 가로 폭을 기준으로 풀리므로(그것이 CSS 의 규칙이다)
+   위 표대로 적는 것만으로 맞는다.
+
+   ── 흐름 층이 flex 인 이유 ──────────────────────────────
+
+   보통 블록 흐름에서는 위아래 margin 이 **collapse** 한다. §14-4 는
+   그 반대를 계약으로 정했다("합산이다. collapse 하지 않는다").
+   flex item 의 margin 은 collapse 하지 않으므로 세로 flex 하나가
+   그 계약을 그대로 만든다. `align` 네 값도 `align-self` 네 값에
+   그대로 얹힌다(§14-4 의 표가 flex 의 교차축 정렬과 같은 뜻이다).
+
+   ── 이 파일이 정하지 않는 것 ────────────────────────────
+
+   글꼴 · 색 · 테두리 · 배경 · 구분선의 두께. `divider` 조차 상자
+   하나일 뿐이고 선을 긋는 것은 스킨 CSS 다(계약 §8). 흐름이
+   `baseHeight` 를 넘으면 넘치고, 자를지 말지도 스킨이 정한다
+   (§14-3 · v1 의 overflow 결정과 같다).
+========================================================== */
+
+/*
+  블록 하나의 상자. v1 의 applySkinCanvasElementBox() 와 **나란한**
+  함수이지 그것의 변형이 아니다 — 자유 요소는 x · y 로 자리를 정하고
+  블록은 순서 · 정렬 · margin 으로 정한다(§14-10 의 책임 표).
+
+  ★ `height` 판정만은 v1 과 글자 그대로 같은 규칙을 쓴다(숫자면
+    `"fixed"` + 변수, `"auto"` 면 변수를 **지우고** `"auto"`).
+    속성 이름도 같아서 스킨 CSS 의 선택자가 두 층에서 같다.
+
+  ★ **백분율의 자가 `baseWidth` 가 아니라 흐름 층의 content box 다.**
+
+    블록은 흐름 층 **안에** 있으므로 CSS 가 백분율을 푸는 기준은
+    도화지가 아니라 "padding 을 뺀 흐름 층"이다(가로 · 세로 모두 —
+    세로 margin 조차 가로 폭으로 푼다는 CSS 규칙까지 포함해서).
+    그래서 렌더러도 같은 자를 쓴다(`metrics`).
+
+      metrics.width  = baseWidth  − padding.left − padding.right
+      metrics.height = baseHeight − padding.top  − padding.bottom
+
+    결과 배율은 계약이 말한 그대로다. 흐름 층의 실제 content 폭이
+    `화면폭 × metrics.width / baseWidth` 이므로, 이 자로 적은
+    백분율은 결국 `값 × 화면폭 / baseWidth` 가 된다 — §14 가 요구한
+    "baseWidth 기준 한 배율"이 여기서 성립한다.
+
+    ★ padding 이 도화지보다 커서 자가 0 이하가 되면
+      skinCanvasRenderPercent 가 null 을 준다 → 변수를 지우고 CSS 의
+      기본값(폭 auto · margin 0%)으로 간다. 그런 캔버스는 놓을 자리가
+      없다는 뜻이고, 숫자를 지어내지 않는다.
+*/
+function applySkinCanvasBlockBox(el, block, metrics, gap) {
+
+  const vars = SKIN_CANVAS_RENDER_BLOCK_VARS;
+
+  const base = metrics.width;
+
+  const margin =
+    (block.margin && typeof block.margin === "object") ? block.margin : {};
+
+  const edge = (value) =>
+    skinCanvasRenderPercent(
+      isSkinCanvasRenderNumber(value) ? value : 0,
+      base
+    );
+
+  /* 앞 블록과의 사이 — 첫(보이는) 블록에는 붙지 않는다(§14-4) */
+  setSkinCanvasRenderVar(el, vars.gap, edge(gap));
+
+  setSkinCanvasRenderVar(el, vars.marginTop, edge(margin.top));
+  setSkinCanvasRenderVar(el, vars.marginRight, edge(margin.right));
+  setSkinCanvasRenderVar(el, vars.marginBottom, edge(margin.bottom));
+  setSkinCanvasRenderVar(el, vars.marginLeft, edge(margin.left));
+
+  const align =
+    typeof block.align === "string" && block.align ? block.align : "left";
+
+  el.setAttribute(SKIN_CANVAS_RENDER_ALIGN_ATTR, align);
+
+  /*
+    ★ `stretch` 는 **가용 폭에서 좌우 margin 을 뺀 만큼**이다(§14-4).
+
+    flex 의 `align-self: stretch` 로도 같은 폭이 나오지만, `maxWidth`
+    가 걸려 폭이 깎이는 순간 flex 는 stretch 를 flex-start 로 떨어
+    뜨린다 — 계약은 "그 뒤 가운데" 다. 그래서 stretch 도 가운데
+    정렬로 두고 폭을 직접 적는다. 백분율 margin 과 이 `100%` 가
+    **같은 상자**(흐름 층의 content box)를 기준으로 풀리므로 calc 이
+    정확히 "가용 폭 − 좌 − 우" 가 된다.
+
+    width 저장값은 stretch 에서도 버리지 않는다 — 쓰지 않을 뿐이다.
+  */
+  setSkinCanvasRenderVar(
+    el, vars.width, skinCanvasRenderPercent(block.width, base));
+
+  if (align === "stretch") {
+
+    const sides =
+      (isSkinCanvasRenderNumber(margin.left) ? margin.left : 0) +
+      (isSkinCanvasRenderNumber(margin.right) ? margin.right : 0);
+
+    const sidePercent =
+      skinCanvasRenderPercent(Math.abs(sides), base);
+
+    setSkinCanvasRenderVar(
+      el,
+      vars.stretchWidth,
+      sides === 0
+        ? "100%"
+        : `calc(100% ${sides > 0 ? "-" : "+"} ${sidePercent})`
+    );
+
+    setSkinCanvasRenderVar(
+      el,
+      vars.maxWidth,
+      isSkinCanvasRenderNumber(block.maxWidth)
+        ? skinCanvasRenderPercent(block.maxWidth, base)
+        : null
+    );
+
+  }
+
+  if (isSkinCanvasRenderNumber(block.height)) {
+
+    el.setAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR, "fixed");
+
+    setSkinCanvasRenderVar(
+      el, vars.height,
+      skinCanvasRenderPercent(block.height, metrics.height));
+
+  } else {
+
+    el.setAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR, "auto");
+
+    setSkinCanvasRenderVar(el, vars.height, null);
+
+  }
+
+}
+
+
+/*
+  블록 하나의 DOM.
+
+  ★ 종류별 내용은 **v1 의 그 함수**가 만든다. logo · category_nav ·
+    text 는 두 층에서 같은 재료 · 같은 안쪽 태그 · 같은 속성을 쓰고
+    (§14-4 "같은 의미의 칸을 두 벌 만들지 않는다"), 그래서 스킨
+    CSS 선택자와 카테고리 링크의 탐색 경로가 층마다 갈라지지 않는다.
+
+  ★ `divider` 는 상자 하나다. 선의 색 · 두께 · 점선 여부는 스킨 CSS
+    가 정한다 — 플랫폼이 기본 선을 그리면 그것이 곧 디자인이다.
+
+  ★ `main_visual` 은 **외곽 프레임까지**다(§14-5 의 내부 렌더는
+    V2-MAIN-VISUAL-1). 안에 아무것도 넣지 않고, 대신 내부 좌표의
+    자(props.baseWidth · baseHeight)를 변수로 남겨 둔다.
+*/
+function buildSkinCanvasBlockNode(doc, block, metrics, context, gap) {
+
+  const node = doc.createElement("div");
+
+  node.setAttribute(SKIN_CANVAS_RENDER_BLOCK_ATTR, "");
+  node.setAttribute(SKIN_CANVAS_RENDER_TYPE_ATTR, block.type);
+
+  if (
+    typeof block.id === "string" &&
+    SKIN_CANVAS_RENDER_ELEMENT_ID_PATTERN.test(block.id)
+  ) {
+    node.setAttribute(SKIN_CANVAS_RENDER_EDIT_ID_ATTR, block.id);
+  }
+
+  applySkinCanvasBlockBox(node, block, metrics, gap);
+
+  if (block.hidden === true) {
+    node.hidden = true;
+    node.setAttribute(SKIN_CANVAS_RENDER_HIDDEN_ATTR, "true");
+  }
+
+  if (block.locked === true) {
+    node.setAttribute(SKIN_CANVAS_RENDER_LOCKED_ATTR, "true");
+  }
+
+  const props =
+    (block.props && typeof block.props === "object") ? block.props : {};
+
+  if (block.type === "main_visual") {
+
+    node.setAttribute(SKIN_CANVAS_RENDER_FRAME_ATTR, "");
+
+    setSkinCanvasRenderVar(
+      node,
+      SKIN_CANVAS_RENDER_BLOCK_VARS.frameBaseWidth,
+      isSkinCanvasRenderNumber(props.baseWidth)
+        ? skinCanvasRenderTrimNumber(props.baseWidth)
+        : null
+    );
+
+    setSkinCanvasRenderVar(
+      node,
+      SKIN_CANVAS_RENDER_BLOCK_VARS.frameBaseHeight,
+      isSkinCanvasRenderNumber(props.baseHeight)
+        ? skinCanvasRenderTrimNumber(props.baseHeight)
+        : null
+    );
+
+    return node;
+
+  }
+
+  if (block.type === "divider") {
+    return node;
+  }
+
+  fillSkinCanvasElementNode(doc, node, block, context);
+
+  return node;
+
+}
+
+
+function buildSkinCanvasFlowNode(doc, canvas, context) {
+
+  const flow = canvas.flow;
+
+  const node = doc.createElement("div");
+
+  node.setAttribute(SKIN_CANVAS_RENDER_FLOW_ATTR, flow.direction);
+
+  const padding =
+    (flow.padding && typeof flow.padding === "object") ? flow.padding : {};
+
+  const pad = (value) =>
+    isSkinCanvasRenderNumber(value) ? value : 0;
+
+  /*
+    ★ padding 만은 **도화지 자**로 적는다. 흐름 층 자신은 표식 안에
+      절대 배치돼 있으므로 그 백분율이 도화지의 폭으로 풀린다 —
+      아래 블록들의 자(metrics)와 기준이 다른 것이 정상이고, 두 자가
+      가리키는 실제 배율은 같다(applySkinCanvasBlockBox 의 ★).
+  */
+  const edge = (value) =>
+    skinCanvasRenderPercent(pad(value), canvas.baseWidth);
+
+  setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_FLOW_VARS.paddingTop, edge(padding.top));
+  setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_FLOW_VARS.paddingRight, edge(padding.right));
+  setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_FLOW_VARS.paddingBottom, edge(padding.bottom));
+  setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_FLOW_VARS.paddingLeft, edge(padding.left));
+
+  /* 블록이 쓰는 자 — padding 을 뺀 흐름 층의 content box */
+  const metrics = {
+    width: canvas.baseWidth - pad(padding.left) - pad(padding.right),
+    height: canvas.baseHeight - pad(padding.top) - pad(padding.bottom)
+  };
+
+  /*
+    ★ `hidden` 블록은 **자리도 차지하지 않는다**(§14-4). 그래서
+      `gap` 도 보이는 블록 사이에만 붙는다 — 숨긴 첫 블록 때문에
+      둘째 블록 위에 빈 자리가 남으면 "아래 블록이 올라온다"가
+      깨진다. 숨긴 블록도 DOM 에는 남는다(스킨 CSS 와 나중의 레이어
+      목록이 그것을 볼 수 있어야 한다).
+  */
+  let shown = 0;
+
+  const gapOf = flow.gap;
+
+  flow.blocks.forEach((block) => {
+
+    const visible = block.hidden !== true;
+
+    const gap =
+      (visible && shown > 0 && isSkinCanvasRenderNumber(gapOf)) ? gapOf : 0;
+
+    node.appendChild(
+      buildSkinCanvasBlockNode(doc, block, metrics, context, gap)
+    );
+
+    if (visible) {
+      shown += 1;
+    }
+
+  });
+
+  return node;
+
+}
+
+
+function renderSkinHomeCanvasV2Into(marker, canvas, context) {
+
+  const doc = marker.ownerDocument;
+
+  /* 다시 그려도 중복되지 않는다 — 먼저 자기 것만 걷어낸다 */
+  findSkinCanvasOwnedChildren(marker).forEach((child) => {
+    marker.removeChild(child);
+  });
+
+  marker.setAttribute(SKIN_CANVAS_RENDER_ACTIVE_ATTR, "true");
+  marker.setAttribute(SKIN_CANVAS_RENDER_VERSION_ATTR, String(canvas.version));
+
+  setSkinCanvasRenderVar(marker, SKIN_CANVAS_RENDER_VARS.baseWidth,
+    skinCanvasRenderTrimNumber(canvas.baseWidth));
+
+  setSkinCanvasRenderVar(marker, SKIN_CANVAS_RENDER_VARS.baseHeight,
+    skinCanvasRenderTrimNumber(canvas.baseHeight));
+
+  marker.appendChild(buildSkinCanvasFlowNode(doc, canvas, context));
+
+  /*
+    페이지 자유 장식 — **v1 요소와 정확히 같은 DOM** 이다(§14-8).
+    같은 함수를 부르므로 좌표 · 회전 · 이미지 · 글자 규칙이 한 벌이고,
+    절대 배치라 흐름을 밀어내지 않는다. 흐름 뒤에 놓여 위에 뜬다.
+  */
+  canvas.overlays.forEach((element) => {
+
+    const node =
+      buildSkinCanvasElementNode(doc, element, canvas, context);
+
+    node.setAttribute(SKIN_CANVAS_RENDER_OVERLAY_ATTR, "");
+
+    marker.appendChild(node);
+
   });
 
 }
@@ -901,7 +1312,37 @@ function compileSkinHomeCanvas(root, canvas, context) {
       ? coerceSkinHomeCanvasRenderPayload(canvas)
       : undefined;
 
-  if (!payload || !Array.isArray(payload.elements)) {
+  if (!payload) {
+    clearSkinHomeCanvas(marker);
+    return null;
+  }
+
+  /*
+    version 이 그리는 방법을 고른다(HOME-CANVAS-V2-FLOW-RENDER-1).
+
+    ★ 관문을 한 번 더 좁힌다. 위 coerce 가 이미 계약 전체를 통과시킨
+      값만 돌려주지만, 여기서 **모양까지** 확인하고 아니면 기존 HOME
+      으로 간다 — 이 판정이 곧 "모르는 version 은 그리지 않는다"의
+      마지막 자리다(version 4 가 생겨도 이 함수는 그대로다).
+  */
+  if (payload.version === 2) {
+
+    if (
+      !payload.flow ||
+      !Array.isArray(payload.flow.blocks) ||
+      !Array.isArray(payload.overlays)
+    ) {
+      clearSkinHomeCanvas(marker);
+      return null;
+    }
+
+    renderSkinHomeCanvasV2Into(marker, payload, context);
+
+    return marker;
+
+  }
+
+  if (!Array.isArray(payload.elements)) {
     clearSkinHomeCanvas(marker);
     return null;
   }
@@ -954,6 +1395,15 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_CANVAS_RENDER_ELEMENT_ID_PATTERN,
     SKIN_CANVAS_RENDER_SLOT_NAME_PATTERN,
     SKIN_CANVAS_RENDER_VARS,
+
+    /* HOME-CANVAS-V2-FLOW-RENDER-1 */
+    SKIN_CANVAS_RENDER_FLOW_ATTR,
+    SKIN_CANVAS_RENDER_BLOCK_ATTR,
+    SKIN_CANVAS_RENDER_ALIGN_ATTR,
+    SKIN_CANVAS_RENDER_OVERLAY_ATTR,
+    SKIN_CANVAS_RENDER_FRAME_ATTR,
+    SKIN_CANVAS_RENDER_FLOW_VARS,
+    SKIN_CANVAS_RENDER_BLOCK_VARS,
 
     skinCanvasRenderTrimNumber,
     skinCanvasRenderPercent,

@@ -85,7 +85,8 @@
 | `TRANSFORM-1C` | **단독 선택 요소의 회전**(§19) — 손잡이 하나로 돌리고 `rotation` **한 칸**에 저장한다. 상자 네 칸은 바뀌지 않는다(회전 중심이 요소 상자의 정중앙이다). 같은 확정 경로에 `kind:"rotate"` 가 늘었다. **이동 · 리사이즈 · 회전으로 기본 조작이 갖춰졌다** |
 | `MANUAL-UX-FIX-1` | **직접 조작 사용성 넷**(§21) — 회전의 **30° 자석**(±4° 안에서만 붙는다) · **모서리 손잡이는 비율 유지 · 변 중앙은 한 축 자유** · 자르기를 고르지 않은 Canvas 그림은 **contain**(전체가 보인다) · 글자 요소의 **편집 chrome 여유**(선이 글자를 가로지르지 않는다 — 저장 geometry 는 불변). 새 데이터 칸 · 새 메시지 · 새 파일은 없다 |
 | `INSPECTOR-1A` | **왼쪽 Canvas Inspector**(§22) — Canvas 요소를 고르면 왼쪽 패널이 그 요소의 화면이 된다. 글자 요소의 **내용**(`props.text`)을 실제로 고칠 수 있고, 공통 geometry 다섯 칸을 숫자로 넣을 수 있다. **글자 한 칸이 v1 에서 처음으로 `props` 를 바꾼다** — 그 전까지 바뀌는 것은 요소 자신의 다섯 칸뿐이었다. 다중 선택은 안내만이고, `hidden`/`locked` 는 아직 내놓지 않는다 |
-| `V2-DATA-1` | **조합형 Canvas `version:2` 의 데이터 검증과 보존**(§9-(3)) — 로드맵 §14 가 정한 `flow.blocks` + `overlays` 두 층을 저장 경계가 **엄격히 검증**한다. 잘못된 v2 는 새 Import 에서 정확한 JSON 경로와 함께 거부되고, 올바른 v2 는 Import · Save · 다시 열기 · Export · Publish · AI 를 한 칸도 잃지 않고 지난다. **화면은 아직 기존 HOME 이다** — 렌더러 · Studio 패널 · 자동 배치 · `main_visual` 출력은 하나도 없다(다음 작업이 `V2-FLOW-RENDER-1`). v1 은 한 줄도 바뀌지 않았다 |
+| `V2-DATA-1` | **조합형 Canvas `version:2` 의 데이터 검증과 보존**(§9-(3)) — 로드맵 §14 가 정한 `flow.blocks` + `overlays` 두 층을 저장 경계가 **엄격히 검증**한다. 잘못된 v2 는 새 Import 에서 정확한 JSON 경로와 함께 거부되고, 올바른 v2 는 Import · Save · 다시 열기 · Export · Publish · AI 를 한 칸도 잃지 않고 지난다. 그 라운드에서 **화면은 아직 기존 HOME 이었다**. v1 은 한 줄도 바뀌지 않았다 |
+| `V2-FLOW-RENDER-1` | **v2 의 화면 출력**(§23) — 자동 배치 흐름(`flow`)과 페이지 자유 장식(`overlays`)이 **공개 native HOME · Studio native Preview · 공개 sandbox · Studio sandbox Preview** 네 화면에서 같은 DOM · 같은 좌표로 그려진다. 블록 순서 · `align` 네 값 · `width`/`maxWidth` · 숫자 `height` 와 `"auto"` · **collapse 하지 않는 `gap` + `margin` 합산** · `hidden` 이 자리를 남기지 않음까지다. **`main_visual` 은 외곽 프레임까지**이고 내부 사진 · 장식 · `pin`/`transform` 은 아직 그리지 않는다(`V2-MAIN-VISUAL-1`). 선택 · 드래그 · Inspector 도 없다 — **읽기 전용**이다 |
 | `MILESTONE-1` | **계약이 하나도 바뀌지 않은 라운드**(§20). 위 기본 조작을 배포된 화면에서 **손으로** 시험할 수 있게 `home_canvas` 와 표시 위치를 이미 갖춘 **수동 테스트 스킨**과 그것을 끝까지 지나는 통합 smoke 를 두었다. 제품 코드 · 기본 스킨 · 저장 데이터는 무변경이다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
@@ -185,8 +186,9 @@ fallback 표 — 지금 코드가 그대로 따른다.
 | `home_canvas` 있음 + 표식 없음 | 기존 HOME 을 그대로 렌더 |
 | 표식이 둘 이상 | 기존 HOME 을 그대로 렌더 |
 | 표식 있음 + `elements: []` | **빈 Canvas 면**으로 취급(실행 데이터가 실린다) |
+| 표식 있음 + `flow.blocks: []` (v2) | 같다 — **빈 Canvas 면**(흐름 층은 생기고 블록이 없다) |
 | 표식 있음 + 잘못된 Canvas 데이터 | 기존 HOME 을 그대로 렌더(원본은 남는다) |
-| 표식 있음 + 모르는 `canvas.version` | 기존 HOME 을 그대로 렌더(원본은 남는다) |
+| 표식 있음 + 모르는 `canvas.version`(**3 이상**) | 기존 HOME 을 그대로 렌더(원본은 남는다) |
 
 "기존 HOME 을 그대로 렌더" 는 코드에서 **`template.canvas` 키를 만들지 않는
 것**으로 성립한다 — 그래서 캔버스가 없는 스킨에서는 Preview 메시지와 sandbox
@@ -451,18 +453,23 @@ UI 도 없다). 그래서 `validateSkinPackageImport(raw, { canvasSource })` 가
   그 elements 를 이 배포의 v1 규칙으로 검사하지도 않으며, 실행만 하지 않는다.
 - sandbox 로 보내는 **실행 데이터는 strict allowlist** 다.
 
-#### `canvas.version` 은 **세 갈래**다 (`V2-DATA-1`)
+#### `canvas.version` 은 **세 갈래**다 (`V2-DATA-1` · `V2-FLOW-RENDER-1`)
 
 | version | 검증 | 실행 | 돌려주는 것 |
 | --- | --- | --- | --- |
 | `1` | v1 규칙(§5 · §6 · §7) | **그린다** | `{ ok:true, renderable:true }` |
-| `2` | **로드맵 §14 규칙으로 엄격히** | 아직 안 그린다 | `{ ok:true, version:2, renderable:false }` |
+| `2` | **로드맵 §14 규칙으로 엄격히** | **그린다**(§23) | `{ ok:true, version:2, renderable:true }` |
 | `3` 이상 | 내용을 보지 않는다 | 안 그린다 | `{ ok:true, future:true, renderable:false }` |
 
 `buildSkinCanvasRenderPayload()` 는 `renderable` 이 아닌 것에 `undefined` 를
-준다 — 그래서 v2 는 **파일로서는 올바른데 화면은 기존 HOME** 이고(§3 의
-fallback 표), sandbox 봉투에도 실리지 않으며, Studio 선택도 같은
-`resolveSkinHomeCanvas()` 를 쓰므로 고를 요소가 없다.
+준다. `renderable` 과 `version` 을 **따로** 두는 이유가 여기 있다 — "그려도
+되는가"와 "무슨 모양인가"는 다른 질문이고, 부르는 쪽은 뒤의 답으로 어느
+payload 빌더를 쓸지 고른다.
+
+> ★ 이 표의 `2` 행은 `V2-DATA-1` 시점에 "검증하되 아직 안 그린다
+> (`renderable:false`)" 였다. **`V2-FLOW-RENDER-1` 이 그 칸을 바꿨다** —
+> 유효한 v2 는 이제 실행 payload를 만들고 화면에 그려진다. 무엇이
+> 그려지고 무엇이 아직 아닌지는 **§23** 이다.
 
 ★ **`version: 2` 는 더 이상 "모르는 version" 이 아니다.** `V2-DATA-1` 이
 그것을 그 자리에서 꺼냈다. 조합형 Canvas(로드맵 §14)의 `flow` · `blocks` ·
@@ -490,8 +497,9 @@ v1 에서 진짜는 언제나 `elements` 라 애매하지 않고, 거기에 새 
 "모르는 칸은 보존"이 v1 에서 깨진다.
 
 ★ **`V2-DATA-1` 이 만들지 않은 것**: v2 DOM · CSS · Preview/sandbox
-렌더러 변경 · Studio 패널 · v1→v2 자동 변환 · migration. 유효한 v2 를
-그리는 것은 다음 작업(`V2-FLOW-RENDER-1` · `V2-MAIN-VISUAL-1`)이다.
+렌더러 변경 · Studio 패널 · v1→v2 자동 변환 · migration. 그중 **화면
+출력은 `V2-FLOW-RENDER-1` 이 만들었다**(§23). Studio 패널 · v1→v2 자동
+변환 · migration 은 여전히 없다.
 
 함정(**해결됨**): `skin/skin-home-canvas-test.mjs` 의 `[version]` ·
 `[baseheight]` · `[protocol]` 절과 두 Studio e2e 가 **`version: 2` 를 바로
@@ -3179,7 +3187,9 @@ UI · 레이어 목록 · 다중 일괄 편집 · 그룹 transform · 글꼴 · 
 > **`HOME-CANVAS-V2-INSPECTOR-1` 은 여전히 별도 PLAN 이다**
 > (로드맵 §14-13 의 7 번). 이 절은 **지금 v1** 자유 배치 요소의
 > 패널이고, 그쪽은 v2 의 flow block 과 `main_visual` 을 편집하는
-> 작업이다. `canvas.version: 2` 는 **아직 구현되지 않았다**(§9-(3)).
+> 작업이다. `canvas.version: 2` 는 그 뒤 `V2-FLOW-RENDER-1` 에서
+> **그려지게 됐지만**(§23) 편집은 아직 없다 — v2 블록은 고를 수
+> 없다.
 
 ### 22-8. 이 라운드가 바꾼 파일
 
@@ -3195,3 +3205,191 @@ UI · 레이어 목록 · 다중 일괄 편집 · 그룹 transform · 글꼴 · 
 | `studio/studio-home-canvas-inspector-e2e-test.mjs` | **새 테스트**(TESTS.md §13) |
 
 `APP_BUILD_VERSION` 은 이 라운드에서 올리지 않았다(배포하지 않았다).
+
+---
+
+## 23. v2 자동 배치 화면 출력 (`HOME-CANVAS-V2-FLOW-RENDER-1`)
+
+조합형 Canvas(로드맵 §14)의 `flow` 와 `overlays` 가 **실제로 그려진다.**
+`V2-DATA-1` 이 검증까지만 하고 멈춰 둔 자리를 여기서 화면까지 잇는다.
+
+**읽기 전용 라운드다.** 선택 · 드래그 · 리사이즈 · 회전 · Inspector ·
+묶기/해제 · v1→v2 변환은 하나도 없다.
+
+### 23-1. 관련 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/skin-home-canvas-v2.js` | v2 **실행용 payload** 빌더(`buildSkinCanvasV2RenderPayload`) · `renderable:true` |
+| `skin/skin-home-canvas.js` | `buildSkinCanvasRenderPayload()` 의 version 분기 한 줄 |
+| `skin/skin-home-canvas-render.js` | 흐름 층 · 블록 · overlay 의 DOM(`renderSkinHomeCanvasV2Into`) |
+| `skin/skin-home-canvas-render.css` | §4 — 흐름의 **배치 구조만** |
+| `skin/sandbox/skin-sandbox-protocol.js` | 봉투의 v2 strict allowlist(`isSandboxHomeCanvasV2`) |
+
+**새 파일도 새 진입 문서 로드도 없다.** 네 화면이 이미 같은 렌더러 파일을
+쓰고 있었으므로(§12-6) sandbox allowlist 도 그대로다 — 늘어난 것은
+프로토콜의 **칸 목록**뿐이다.
+
+### 23-2. 무엇을 그리고 무엇을 아직 안 그리나
+
+| | 이 라운드 |
+| --- | --- |
+| `flow` 의 블록 순서 · `direction:"column"` | **그린다** |
+| `align` 네 값 · `width` · `maxWidth` | **그린다** |
+| 숫자 `height` · `height:"auto"` | **그린다** |
+| `padding` · `gap` · `margin` 합산 | **그린다** |
+| `hidden`(자리도 차지하지 않음) · `locked`(표시만) | **그린다** |
+| `logo` · `text` · `divider` · `category_nav` | **그린다**(v1 과 같은 재료) |
+| `main_visual` | **외곽 프레임까지**. 내부는 안 그린다 |
+| `overlays` | **그린다**(v1 요소와 같은 DOM) |
+| `main_visual` 내부 사진 · 장식 · `pin` · `transform` | `V2-MAIN-VISUAL-1` |
+| v2 선택 · Moveable · Inspector · 묶기/해제 | `V2-INSPECTOR-1` · `V2-ATTACH-1` |
+
+★ **`main_visual` 은 빈 상자다.** 임시 placeholder 문구도 기본 사진 틀도
+공개 화면에 넣지 않는다 — 넣으면 그것이 곧 계약이 된다. `height:"auto"`
+인 프레임은 그래서 **높이가 0** 이다. §14-5 가 "auto 는 primary photo 의
+비율을 따른다"고 정했고 슬롯이 빌 때의 폴백 비율은 **`V2-MAIN-VISUAL-1`
+이 정할 렌더 결정**이므로, 여기서 먼저 숫자를 지어내지 않는다.
+
+내부 좌표의 자(`props.baseWidth` · `baseHeight`)는 프레임에
+`--imory-canvas-frame-base-width` · `-height` 로 남겨 둔다. 내부 요소는
+**실행 payload 에는 실린다** — 봉투가 프레임 내용을 잃은 채로 sandbox 까지
+가면 다음 라운드가 같은 길을 두 번 내야 한다.
+
+### 23-3. DOM — 한 표식 안의 두 층
+
+```html
+<div data-imory-canvas-root
+     data-imory-canvas-active="true" data-imory-canvas-version="2">
+
+  <div data-imory-canvas-flow="column">        <!-- 자동 배치 -->
+    <div data-imory-canvas-block
+         data-imory-canvas-type="logo"
+         data-imory-canvas-align="left"
+         data-imory-canvas-height="fixed"
+         data-imory-edit-id="canvas_b1logo"> … </div>
+    …
+    <div data-imory-canvas-block
+         data-imory-canvas-type="main_visual"
+         data-imory-canvas-frame
+         data-imory-edit-id="canvas_b5main"></div>
+  </div>
+
+  <div data-imory-canvas-element                <!-- 자유 배치 -->
+       data-imory-canvas-overlay
+       data-imory-canvas-type="text"
+       data-imory-edit-id="canvas_o1number"> … </div>
+
+</div>
+```
+
+- 자유 배치의 표식(`data-imory-canvas-element`)은 **그대로 둔다.** v1 요소와
+  v2 의 `overlays` 가 같은 DOM 이고, 좌표 CSS(§2)가 한쪽에만 걸려야 한다.
+- 블록은 그 표식을 **갖지 않는다.** "이것이 블록인가 자유 요소인가"를 한
+  속성으로 물을 수 있어야 하고, 그래서 지금 Studio 선택은 v2 블록을 아예
+  후보로 보지 않는다(고를 것이 없는 것이 이 라운드의 의도다).
+- `logo` · `text` · `divider` · `category_nav` 의 **안쪽 DOM 은 v1 의 그
+  함수**(`fillSkinCanvasElementNode`)가 만든다. 같은 타입 렌더러를 두 벌
+  만들지 않는 것이 §14-4 의 "같은 의미의 칸을 두 벌 만들지 않는다"이고,
+  그래서 스킨 CSS 선택자와 카테고리 링크의 탐색 경로가 층마다 갈라지지
+  않는다. 카테고리는 여전히 실제 `a[href]` 이고 클릭은 기존 SPA 라우팅
+  (`skin/skin-link-nav.js`)이 가져간다.
+- `divider` 는 **빈 상자**다. 선의 색 · 두께 · 점선은 스킨 CSS 다(§8).
+
+### 23-4. 좌표 — 자가 둘이고 배율은 하나다
+
+흐름 층은 표식을 꽉 채운다(`position:absolute; inset:0`). 표식은
+`aspect-ratio` 로 세로가 가로에 묶여 있으므로(§12-2) 흐름 층은 **확정된
+높이**를 받고, 그 안에서 백분율 세로값이 풀린다. **`ResizeObserver` 도 매
+프레임 재계산도 없다** — v1 과 같은 이유, 같은 방법이다.
+
+| 무엇 | 자 |
+| --- | --- |
+| `flow.padding` 네 칸 | `canvas.baseWidth` |
+| 블록의 `width` · `maxWidth` · `margin` · `gap` | **`baseWidth − padding.left − padding.right`** |
+| 블록의 숫자 `height` | **`baseHeight − padding.top − padding.bottom`** |
+
+★ **자가 둘인 것은 CSS 가 백분율을 푸는 기준이 둘이기 때문이다.** 흐름 층
+자신은 표식 안에 절대 배치돼 있어 그 백분율이 도화지 폭으로 풀리고, 블록은
+흐름 층 **안**에 있어 padding 을 뺀 content box 로 풀린다. 결과 배율은
+하나다 — 흐름 층의 실제 content 폭이 `화면폭 × metrics.width / baseWidth`
+이므로 위 자로 적은 백분율은 결국 `값 × 화면폭 / baseWidth` 가 된다.
+세로도 같다(표식 높이가 `폭 × baseHeight / baseWidth` 이므로).
+
+즉 **`390px` 과 `780px` 에서 모든 숫자가 정확히 두 배**다. `"auto"` 높이만
+예외이고, 그것은 배율이 아니라 **스킨 조판**이 정한다(플랫폼은 글자 크기를
+정하지 않는다 — §8. 그 변환 규칙은 `RESPONSIVE-1`).
+
+padding 이 도화지보다 커서 자가 0 이하가 되면 백분율을 쓰지 않고 변수를
+지운다(폭 `auto` · margin `0%`). 숫자를 지어내지 않는다.
+
+### 23-5. `gap` 과 `margin` — 합산이고 collapse 하지 않는다
+
+흐름 층이 **flex 세로 컬럼**인 이유가 이것이다. 보통 블록 흐름에서는 위아래
+margin 이 collapse 하는데 §14-4 는 그 반대를 계약으로 정했다. flex item 의
+margin 은 collapse 하지 않는다.
+
+`gap` 과 블록 자신의 `margin.top` 은 **다른 변수**로 나가고 CSS 가 더한다.
+
+```css
+margin-top: calc(var(--imory-canvas-block-gap, 0%)
+                 + var(--imory-canvas-block-margin-top, 0%));
+```
+
+JS 에서 미리 더해 한 칸으로 보내면 화면은 같지만 나중에 Inspector 가 두 값을
+갈라 보여 줄 수 없고, "여백을 늘렸는데 아무 일도 안 일어난다"를 만드는 자리가
+생긴다.
+
+★ **`gap` 은 `hidden` 이 아닌 블록 사이에만 붙는다.** `hidden:true` 는 자리도
+차지하지 않으므로(§14-4), 숨긴 첫 블록 때문에 둘째 블록 위에 빈 자리가 남으면
+"아래 블록이 올라온다"가 깨진다. 숨긴 블록도 **DOM 에는 남는다** — 스킨 CSS 와
+나중의 레이어 목록이 그것을 볼 수 있어야 한다.
+
+### 23-6. `align` — `stretch` 만 flex 와 다르게 푼다
+
+| `align` | CSS |
+| --- | --- |
+| `left` | `align-self: flex-start` + `width: <width>%` |
+| `center` | `align-self: center` + `width: <width>%` |
+| `right` | `align-self: flex-end` + `width: <width>%` |
+| `stretch` | `align-self: **center**` + `width: calc(100% − 좌 − 우)` + `max-width` |
+
+★ **`stretch` 가 `align-self: stretch` 가 아닌 이유는 `maxWidth` 다.** flex 는
+stretch 된 item 의 크기가 `max-width` 로 깎이는 순간 정렬을 `flex-start` 로
+떨어뜨린다 — §14-4 는 "그 뒤 가운데"라고 정했다. 그래서 가운데 정렬로 두고
+폭을 렌더러가 `calc()` 로 적는다. 백분율 margin 과 그 `100%` 가 **같은
+상자**(흐름 층의 content box)로 풀리므로 결과가 정확히 "가용 폭 − 좌 − 우"다.
+
+`align:"stretch"` 여도 **`width` 저장값은 버리지 않는다**(§14-4) — 쓰지 않을
+뿐이고, 변수로는 계속 나간다.
+
+### 23-7. 봉투 — 늘어난 것은 칸 목록뿐이다
+
+`isSandboxHomeCanvas()` 가 `version` 을 보고 v1 표와 v2 표로 갈린다. v2 표도
+**strict allowlist** 이고, 프로토콜 파일은 "의존 없음"이라 값 목록을 한 벌 더
+갖는다 — 둘이 갈라지지 않게 `skin/skin-home-canvas-test.mjs` 의 `[protocol]`
+절이 v1 · v2 목록을 **양방향으로 대조**한다.
+
+v1 과 다른 점 하나: **빠져도 되는 칸이 있다.**
+
+| 칸 | 왜 조건부인가 |
+| --- | --- |
+| 블록의 `maxWidth` | "상한 없음"의 기본값이 숫자가 아니라 **부재**다(§14-4) |
+| 프레임 내부 요소의 `x` · `y` | `follow:"transform"` 일 때만 실린다 |
+| 프레임 내부 요소의 `pin` | `follow:"pin"` 일 때만 실린다 |
+
+★ **`pin` 요소에 좌표가 함께 오면 거부한다.** 저장값으로는 둘 다 보존되지만
+(§14-6 "안 쓰는 칸을 지우지 않는다") 실행 payload 에 둘 다 실리면 받는 쪽이
+"어느 것이 이 요소의 자리인가"를 다시 판단하게 된다.
+
+**CSP 는 한 글자도 넓히지 않았다.** geometry 는 지금까지처럼
+`style.setProperty()`(CSSOM)로 쓴다 — `style` 속성도 inline style 도 아니다.
+
+### 23-8. 이 라운드가 만들지 않은 것
+
+v2 선택 · Moveable · Selecto · Inspector · 블록 순서 변경 UI · `main_visual`
+내부 렌더 · `pin`/`transform` follow · 묶기/해제 · v1→v2 변환 · 기본 스킨
+변경 · 테스트 스킨 · Effect Hook · 모바일 시트 수정 · responsive override ·
+`row`/`grid` 블록 · CATEGORY/POST/BANNER 캔버스.
+
+`APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).

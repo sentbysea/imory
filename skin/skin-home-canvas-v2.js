@@ -1,6 +1,6 @@
 /* =========================================================
-   SKIN HOME CANVAS — v2(조합형) Canvas 의 **데이터 검증**
-   (HOME-CANVAS-V2-DATA-1 · CODE-SPLIT-1)
+   SKIN HOME CANVAS — v2(조합형) Canvas 의 **데이터 검증과 실행 payload**
+   (HOME-CANVAS-V2-DATA-1 · CODE-SPLIT-1 · V2-FLOW-RENDER-1)
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
    로드맵:    docs/plans/IMORY_HOME_CANVAS_ROADMAP.md §14 (PLAN)
@@ -13,6 +13,7 @@
      v2 의 값 표(블록 종류 · 정렬 · 흐름 방향 · 모서리 · pin)
      flow · block · main_visual · 프레임 내부 요소 · pin · overlays 검증
      v2 전용 오류 경로
+     v2 의 **실행용 payload 빌더**(§2-2 — V2-FLOW-RENDER-1)
 
    여기 없는 것
 
@@ -26,18 +27,18 @@
      validateSkinCanvasV2Data 를 부르고, 반대로 여기서는 그 파일의
      공용 판정만 부른다.
 
-   ★ 통과해도 **그려지지 않는다**. renderable:false 이므로 실행
-     payload 가 만들어지지 않고 화면은 기존 HOME 이다 — v2 렌더러는
-     후속 작업이다(V2-FLOW-RENDER-1).
+   ★ 통과하면 **그려진다**(V2-FLOW-RENDER-1). 이 파일이 검증과 실행용
+     payload 를 둘 다 갖고, DOM 은 skin/skin-home-canvas-render.js 가
+     만든다. 아직 그려지지 않는 것은 `main_visual` **내부**뿐이다
+     (V2-MAIN-VISUAL-1 — 계약 문서 §23).
 ========================================================== */
 
 /* =========================================================
    v2 — 조합형 Canvas의 값 표 (HOME-CANVAS-V2-DATA-1)
 
-   로드맵 §14 가 정한 모양이다. 이 라운드는 **데이터만** 안다 —
-   v2 를 그리는 DOM 도 CSS 도 Studio 패널도 없다. 유효한 v2 도
-   실행용 payload 를 만들지 않으므로 화면은 기존 HOME 이다(§3 의
-   fallback 표). 그래서 아래 목록은 **검증기만** 쓴다.
+   로드맵 §14 가 정한 모양이다. 이 목록은 **검증기와 payload 빌더**가
+   함께 쓴다 — 두 벌로 갈라지지 않게 한 곳에 둔다. Studio 패널은
+   아직 없다(V2-INSPECTOR-1).
 
      v1  평면 자유 Canvas — `canvas.elements` 하나
      v2  두 층 — `canvas.flow.blocks`(자동 배치) + `canvas.overlays`(자유)
@@ -47,7 +48,7 @@
    범위를 만들지 않는다.
 ========================================================== */
 
-/* 조합형 Canvas 의 version. 이 배포는 **보존하고 검증만** 한다. */
+/* 조합형 Canvas 의 version. 검증하고 **그린다**(계약 문서 §23). */
 const SKIN_HOME_CANVAS_V2_VERSION = 2;
 
 /* 자동 배치 블록 종류 — v2 첫 범위는 이 다섯이다(§14-4) */
@@ -98,10 +99,8 @@ const SKIN_HOME_CANVAS_PIN_POINTS = [
    필요한 자리에서는 v1 이 이미 쓰는 자(좌표 ±100000 · 크기 0 초과
    100000 이하 · 요소 수 200)를 그대로 빌려 쓴다.
 
-   ★ 통과해도 **실행되지 않는다**. validateSkinCanvasData 가 v2 에
-     `renderable:false` 를 붙이므로 buildSkinCanvasRenderPayload 가
-     undefined 를 주고 기존 HOME 이 그려진다(§3 fallback). 이 라운드는
-     "파일이 올바른가"만 말한다.
+   ★ 이 함수는 **"파일이 올바른가"만** 말한다. 통과한 뒤 무엇을
+     그릴지는 아래 §2-2 의 payload 빌더와 렌더러의 몫이다.
 
    ★ 필수와 선택을 가르는 자는 v1 §5 의 그것이다 — **안전한 기본값이
      하나뿐인 칸은 선택**(빠진 것과 기본값을 적은 것이 같은 뜻),
@@ -650,7 +649,235 @@ function validateSkinCanvasV2Data(canvas, path) {
 
   }
 
-  return { ok: true, version: SKIN_HOME_CANVAS_V2_VERSION, renderable: false };
+  return { ok: true, version: SKIN_HOME_CANVAS_V2_VERSION, renderable: true };
+
+}
+
+
+/* =========================================================
+   2-2. v2 실행용 payload (HOME-CANVAS-V2-FLOW-RENDER-1)
+
+   ★ 여기부터가 "보존"이 아니라 "실행"이다 — v1 의 §5 와 같은 규칙이다.
+
+     결과는 항상 **새 리터럴**이다. 입력 객체와 배열을 mutate 하지
+     않고, 입력의 어떤 객체도 결과에 그대로 실리지 않는다.
+     모르는 칸은 보존 대상이지 **실행 대상이 아니다** — regions 안의
+     원본에는 남고 이 결과에는 하나도 실리지 않는다.
+
+   ★ 빠진 선택 칸을 여기서 **기본값으로 채운다**. 검증기는 "빠진 것과
+     기본값을 적은 것이 같은 뜻"이라고 말했고(§14-4), 렌더러는 두
+     경우를 갈라 볼 이유가 없다. 그래서 `align` · `margin` ·
+     `padding` · `gap` · `direction` · `follow` · `pin` 은 payload 에서
+     언제나 채워져 있고, 렌더러와 sandbox 프로토콜은 한 모양만 본다.
+
+   ★ 반대로 **`maxWidth` 는 채우지 않는다.** "상한 없음"의 기본값이
+     숫자가 아니라 부재이기 때문이다(§14-4 — align:"stretch" 일 때만
+     뜻이 있다). 0 이나 큰 수를 지어내면 그것이 곧 새 계약이 된다.
+
+   ★ `main_visual` 의 내부 요소는 **payload 에 실린다**. 이 라운드의
+     렌더러가 아직 그리지 않을 뿐이고(외곽 프레임만 — §14-5 의 내부
+     렌더는 V2-MAIN-VISUAL-1), 실행 데이터에서 빼 버리면 봉투가
+     프레임 내용을 잃은 채로 sandbox 까지 가서 다음 라운드가 같은
+     길을 두 번 내야 한다.
+========================================================== */
+
+/*
+  padding · margin 의 네 칸. 빠진 칸은 0 이다(§14-4).
+
+  ★ 네 칸을 **언제나 다** 싣는다. 부분만 실으면 렌더러가 "이 칸이
+    없다"와 "0 이다"를 가르게 되는데, 계약은 둘을 같은 뜻으로 정했다.
+*/
+function buildSkinCanvasEdgesPayload(value) {
+
+  const source =
+    isSkinHomeCanvasPlainObject(value) ? value : {};
+
+  const payload = {};
+
+  for (const edge of SKIN_HOME_CANVAS_EDGES) {
+    payload[edge] =
+      isSkinHomeCanvasFiniteNumber(source[edge]) ? source[edge] : 0;
+  }
+
+  return payload;
+
+}
+
+
+/* pin 의 네 칸 — 기본값은 frame · center · center · {x:0,y:0}(§14-6) */
+function buildSkinCanvasPinPayload(pin) {
+
+  const source =
+    isSkinHomeCanvasPlainObject(pin) ? pin : {};
+
+  const offset =
+    isSkinHomeCanvasPlainObject(source.offset) ? source.offset : {};
+
+  return {
+    target:
+      SKIN_HOME_CANVAS_PIN_TARGETS.indexOf(source.target) !== -1
+        ? source.target
+        : SKIN_HOME_CANVAS_PIN_TARGETS[0],
+    anchor:
+      SKIN_HOME_CANVAS_PIN_POINTS.indexOf(source.anchor) !== -1
+        ? source.anchor
+        : "center",
+    origin:
+      SKIN_HOME_CANVAS_PIN_POINTS.indexOf(source.origin) !== -1
+        ? source.origin
+        : "center",
+    offset: {
+      x: isSkinHomeCanvasFiniteNumber(offset.x) ? offset.x : 0,
+      y: isSkinHomeCanvasFiniteNumber(offset.y) ? offset.y : 0
+    }
+  };
+}
+
+
+/*
+  main_visual 내부 요소 하나.
+
+  ★ `x` · `y` 는 **`follow:"transform"` 일 때만 실린다.** `pin` 요소의
+    좌표는 저장값으로는 보존되지만(§14-6 "안 쓰는 칸을 지우지 않는다")
+    실행에서는 쓰이지 않는다 — 실어 보내면 받는 쪽이 둘 중 어느 것이
+    이 요소의 자리인지 다시 판단하게 된다. 반대 방향도 같다: `pin` 은
+    `follow:"pin"` 일 때(또는 실제로 적혀 있을 때)만 실린다.
+*/
+function buildSkinCanvasFrameElementPayload(element) {
+
+  const props =
+    isSkinHomeCanvasPlainObject(element.props) ? element.props : {};
+
+  const follow =
+    SKIN_HOME_CANVAS_FOLLOW_MODES.indexOf(element.follow) !== -1
+      ? element.follow
+      : SKIN_HOME_CANVAS_FOLLOW_MODES[0];
+
+  const payload = {
+    id: element.id,
+    type: element.type,
+    follow: follow,
+    width: element.width,
+    height: element.height,
+    rotation:
+      isSkinHomeCanvasFiniteNumber(element.rotation) ? element.rotation : 0,
+    hidden: element.hidden === true,
+    locked: element.locked === true,
+    props: buildSkinCanvasPropsPayload(element.type, props)
+  };
+
+  if (follow === "transform") {
+    payload.x = element.x;
+    payload.y = element.y;
+  }
+
+  if (follow === "pin" || isSkinHomeCanvasPlainObject(element.pin)) {
+    payload.pin = buildSkinCanvasPinPayload(element.pin);
+  }
+
+  return payload;
+
+}
+
+
+function buildSkinCanvasMainVisualPropsPayload(props) {
+
+  return {
+    baseWidth: props.baseWidth,
+    baseHeight: props.baseHeight,
+    primaryId: props.primaryId,
+    elements: props.elements.map(buildSkinCanvasFrameElementPayload)
+  };
+
+}
+
+
+/*
+  블록 종류별 props — logo · category_nav · text 는 **v1 의 그 함수**를
+  그대로 부른다(§14-4 "같은 의미의 칸을 두 벌 만들지 않는다").
+*/
+function buildSkinCanvasBlockPropsPayload(type, props) {
+
+  if (type === "divider") {
+    return {};
+  }
+
+  if (type === "main_visual") {
+    return buildSkinCanvasMainVisualPropsPayload(props);
+  }
+
+  return buildSkinCanvasPropsPayload(type, props);
+
+}
+
+
+function buildSkinCanvasBlockPayload(block) {
+
+  const props =
+    isSkinHomeCanvasPlainObject(block.props) ? block.props : {};
+
+  const payload = {
+    id: block.id,
+    type: block.type,
+    width: block.width,
+    height: block.height,
+    align:
+      SKIN_HOME_CANVAS_BLOCK_ALIGNS.indexOf(block.align) !== -1
+        ? block.align
+        : SKIN_HOME_CANVAS_BLOCK_ALIGNS[0],
+    margin: buildSkinCanvasEdgesPayload(block.margin),
+    hidden: block.hidden === true,
+    locked: block.locked === true,
+    props: buildSkinCanvasBlockPropsPayload(block.type, props)
+  };
+
+  /* 위 ★ — 없으면 싣지 않는다. `align:"stretch"` 가 아니어도 저장값은
+     남아 있으므로(§14-4) 여기서 버리는 것은 화면 몫뿐이다. */
+  if (isSkinHomeCanvasSize(block.maxWidth)) {
+    payload.maxWidth = block.maxWidth;
+  }
+
+  return payload;
+
+}
+
+
+/*
+  buildSkinCanvasV2RenderPayload(canvas) -> payload
+
+  ★ 부르는 쪽(skin/skin-home-canvas.js buildSkinCanvasRenderPayload)이
+    validateSkinCanvasV2Data 를 **먼저** 통과시킨 뒤에만 부른다.
+    그래서 여기서는 다시 검사하지 않는다 — v1 의 payload 빌더와 같은
+    규약이다.
+*/
+function buildSkinCanvasV2RenderPayload(canvas) {
+
+  const flow =
+    isSkinHomeCanvasPlainObject(canvas.flow) ? canvas.flow : {};
+
+  return {
+    version: SKIN_HOME_CANVAS_V2_VERSION,
+    baseWidth: SKIN_HOME_CANVAS_BASE_WIDTH,
+    baseHeight: canvas.baseHeight,
+    flow: {
+      direction:
+        SKIN_HOME_CANVAS_FLOW_DIRECTIONS.indexOf(flow.direction) !== -1
+          ? flow.direction
+          : SKIN_HOME_CANVAS_FLOW_DIRECTIONS[0],
+      padding: buildSkinCanvasEdgesPayload(flow.padding),
+      gap: isSkinHomeCanvasFiniteNumber(flow.gap) ? flow.gap : 0,
+      blocks:
+        Array.isArray(flow.blocks)
+          ? flow.blocks.map(buildSkinCanvasBlockPayload)
+          : []
+    },
+    /* 없으면 빈 배열이다 — 렌더러가 "칸이 없다"와 "장식이 없다"를
+       가를 이유가 없다(§14-8) */
+    overlays:
+      Array.isArray(canvas.overlays)
+        ? canvas.overlays.map(buildSkinCanvasElementPayload)
+        : []
+  };
 
 }
 
@@ -680,7 +907,14 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_HOME_CANVAS_PIN_TARGETS,
     SKIN_HOME_CANVAS_PIN_POINTS,
 
-    validateSkinCanvasV2Data
+    validateSkinCanvasV2Data,
+
+    /* HOME-CANVAS-V2-FLOW-RENDER-1 — 실행용 payload */
+    buildSkinCanvasEdgesPayload,
+    buildSkinCanvasPinPayload,
+    buildSkinCanvasFrameElementPayload,
+    buildSkinCanvasBlockPayload,
+    buildSkinCanvasV2RenderPayload
 
   };
 

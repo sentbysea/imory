@@ -151,3 +151,101 @@
 [data-imory-canvas-shape="ellipse"] {
   border-radius: 50%;
 }
+
+
+/* =========================================================
+   4. v2 — 자동 배치 흐름 (HOME-CANVAS-V2-FLOW-RENDER-1)
+
+   값을 채우는 쪽: skin/skin-home-canvas-render.js
+                  (buildSkinCanvasFlowNode · applySkinCanvasBlockBox)
+   계약: docs/plans/IMORY_HOME_CANVAS_ROADMAP.md §14-3 · §14-4
+
+   여기도 **배치 구조만** 한다. 글꼴 · 색 · 테두리 · 배경 · 구분선의
+   두께는 한 줄도 없다 — `divider` 조차 빈 상자다(계약 §8).
+
+   ── 왜 absolute + flex 인가 ────────────────────────────
+   흐름 층이 표식을 꽉 채우면(inset:0) 표식의 `aspect-ratio` 가 준
+   **확정된 높이**를 물려받는다 → 블록의 백분율 height 가 풀린다.
+   그리고 flex item 의 margin 은 **collapse 하지 않으므로**
+   "gap + 앞 margin.bottom + 뒤 margin.top" 이라는 §14-4 의 합산이
+   그대로 화면이 된다.
+
+   overflow 를 정하지 않는다 — 흐름이 baseHeight 보다 길면 넘치고,
+   자를지 늘릴지 스크롤할지는 스킨 CSS 가 고른다(§14-3 · §1 과 같은
+   결정).
+========================================================== */
+
+[data-imory-canvas-flow] {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding:
+    var(--imory-canvas-flow-padding-top, 0%)
+    var(--imory-canvas-flow-padding-right, 0%)
+    var(--imory-canvas-flow-padding-bottom, 0%)
+    var(--imory-canvas-flow-padding-left, 0%);
+}
+
+
+/*
+  블록 하나.
+
+  `flex: 0 0 auto` — 늘어나지도 **줄어들지도** 않는다. 줄어들게 두면
+  내용이 baseHeight 를 넘는 순간 블록들이 저장값보다 작아진다
+  ("내용이 길어져도 임의로 자르지 않는다").
+
+  margin-top 이 calc 인 것이 §14-4 의 합산이다 — gap 과 블록 자신의
+  margin 은 **다른 값**이고 여기서 더해진다.
+*/
+[data-imory-canvas-block] {
+  flex: 0 0 auto;
+  width: var(--imory-canvas-block-width, auto);
+  margin-top:
+    calc(var(--imory-canvas-block-gap, 0%) + var(--imory-canvas-block-margin-top, 0%));
+  margin-right: var(--imory-canvas-block-margin-right, 0%);
+  margin-bottom: var(--imory-canvas-block-margin-bottom, 0%);
+  margin-left: var(--imory-canvas-block-margin-left, 0%);
+}
+
+/* 높이 — 자유 배치 요소와 **같은 속성 이름**을 쓴다(§2) */
+[data-imory-canvas-block][data-imory-canvas-height="fixed"] {
+  height: var(--imory-canvas-block-height, auto);
+}
+
+[data-imory-canvas-block][data-imory-canvas-height="auto"] {
+  height: auto;
+}
+
+
+/*
+  가로 정렬 — §14-4 의 표 그대로다.
+
+    left    padding.left 에 붙는다(margin.left 가 더 민다)
+    center  가용 폭의 가운데(좌우 margin 이 중심을 옮긴다)
+    right   padding.right 에 붙는다(margin.right 가 더 민다)
+    stretch 가용 폭 전부 − 좌우 margin, maxWidth 가 있으면 거기까지
+            **그 뒤 가운데**
+
+  ★ stretch 가 `align-self: stretch` 가 아닌 이유는 maxWidth 다.
+    flex 는 stretch 된 item 의 크기가 max-width 로 깎이면 정렬을
+    flex-start 로 떨어뜨린다 — 계약은 가운데다. 그래서 가운데 정렬로
+    두고 폭을 렌더러가 calc 으로 적는다.
+*/
+[data-imory-canvas-block][data-imory-canvas-align="left"] {
+  align-self: flex-start;
+}
+
+[data-imory-canvas-block][data-imory-canvas-align="center"] {
+  align-self: center;
+}
+
+[data-imory-canvas-block][data-imory-canvas-align="right"] {
+  align-self: flex-end;
+}
+
+[data-imory-canvas-block][data-imory-canvas-align="stretch"] {
+  align-self: center;
+  width: var(--imory-canvas-block-stretch-width, 100%);
+  max-width: var(--imory-canvas-block-max-width, none);
+}

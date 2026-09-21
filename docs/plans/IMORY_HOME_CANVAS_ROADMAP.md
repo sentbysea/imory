@@ -167,7 +167,14 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 > Canvas 요소를 고르면 왼쪽 패널이 그 요소의 화면이 되고, 글자 요소의
 > 내용과 geometry 다섯 칸을 고칠 수 있다. 계약은
 > [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
-> **§22** 다. **다음 작업은 `HOME-CANVAS-V2-DATA-1`** 이다(§14-13 의 4 번).
+> **§22** 다.
+>
+> ★ **`HOME-CANVAS-V2-DATA-1`(2026-09-21)과
+> `HOME-CANVAS-V2-FLOW-RENDER-1`(2026-09-22)이 끝났다** — `version:2` 가
+> 엄격히 검증되고(계약 **§9-(3)**) 자동 배치 흐름과 페이지 자유 장식이
+> 네 화면에서 실제로 **그려진다**(계약 **§23**). `main_visual` 은 아직
+> **외곽 프레임까지**다. **다음 작업은 `HOME-CANVAS-V2-MAIN-VISUAL-1`**
+> 이다(§14-13 의 6 번).
 >
 > ★ 그 위에 **`COMPOSITION-CONTRACT-1`(2026-09-21)** 이 다음 구조를 확정했다 —
 > **자동 배치 블록 + `main_visual` 자유 레이어(`canvas.version:2`)**. 설계는
@@ -235,7 +242,7 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3c-U | `HOME-CANVAS-MANUAL-UX-FIX-1` | 수동 테스트에서 나온 v1 편집기 수정 — 30° 자석 회전 · 모서리 비율 유지 · 이미지 `contain` · 텍스트 선택 chrome | Studio만 | **완료**(계약 문서 §21) |
 | 3c-I | `HOME-CANVAS-INSPECTOR-1A` | Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드** — 글자 내용 한 칸 + geometry 다섯 칸 + 타입별 읽기 전용 요약 | Studio만 | **완료**(계약 문서 §22) |
 | 3e-1 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 없음(데이터) | **미착수 — 다음 작업**. §14-13 |
-| 3e-2 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow + logo · category_nav · text · divider 렌더, native/sandbox parity | 읽기 전용 | 미착수 — §14-13 |
+| 3e-2 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow + logo · category_nav · text · divider 렌더, native/sandbox parity | 읽기 전용 | **완료**(2026-09-22) — 결과는 [계약 문서 §23](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 3e-3 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform | 읽기 전용 | 미착수 — §14-13 |
 | 3e-4 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 저장 가능 | 미착수 — §14-13 |
 | 3e-5 | `HOME-CANVAS-V2-ATTACH-1` | `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` + Undo/Redo | 저장 가능 | 미착수 — §14-13 |
@@ -870,7 +877,15 @@ HTML 에 없다.
 
 ## 14. 조합형 HOME Canvas v2 설계 (`HOME-CANVAS-COMPOSITION-CONTRACT-1`)
 
-> **PLAN 이다. 이 절에 적힌 것은 코드에 하나도 없다.** 지금 배포된 것은
+> **PLAN 이다.** 이 절은 `COMPOSITION-CONTRACT-1`(2026-09-21) 이 확정한
+> 설계이고, **그중 데이터 검증(`V2-DATA-1`)과 자동 배치 화면 출력
+> (`V2-FLOW-RENDER-1`)은 그 뒤 구현됐다** — 지금 코드가 강제하는 것은
+> [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) **§9-(3)** 과
+> **§23** 이다. 아직 구현되지 않은 것(`main_visual` 내부 · Inspector ·
+> 묶기/해제)은 §14-13 의 표가 상태를 갖는다. 아래는 그 라운드 시점의
+> 기록이다:
+>
+> 지금 배포된 것은
 > [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)의 v1(평면 자유
 > Canvas)뿐이고, 이 절을 구현된 것으로 읽지 않는다. 이 라운드
 > (`HOME-CANVAS-COMPOSITION-CONTRACT-1`, 2026-09-21)는 **문서만 바꿨다** —
@@ -1323,12 +1338,15 @@ bottom-left  bottom  bottom-right
 라운드가 코드를 바꾸지 않아도 되는 이유가 이것이다.
 
 > **위 표는 `COMPOSITION-CONTRACT-1`(2026-09-21) 시점의 실측이다.**
-> 그 뒤 `V2-DATA-1` 이 v2 를 "모르는 version" 자리에서 꺼냈다 — 이제
-> `version: 2` 는 이 절의 규칙으로 **실제 검증**되고, 잘못 적힌 v2 는 새
-> Import 에서 경로와 함께 거부된다. 바뀌지 않은 것은 **실행**이다:
-> 유효한 v2 도 payload 가 만들어지지 않아 기존 HOME 이 그려지고 sandbox
-> 봉투도 그대로다. 현행 상태는
-> [계약 문서 §9-(3)](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 이다.
+> 그 뒤 두 라운드가 이 표를 낡게 만들었다. `V2-DATA-1`(2026-09-21)이 v2 를
+> "모르는 version" 자리에서 꺼내 이 절의 규칙으로 **실제 검증**하게 했고,
+> `V2-FLOW-RENDER-1`(2026-09-22)이 **실행까지** 이었다 — 유효한 v2 는 이제
+> 실행 payload 를 만들고, sandbox 봉투에 실리며, 네 화면에 그려진다.
+> 그래서 위 표에서 아직 맞는 줄은 **`version: 3 이상`** 에 대한 것뿐이다.
+> 현행 상태는
+> [계약 문서 §9-(3) · §23](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 이다.
+> 아직 안 그려지는 것은 `main_visual` **내부**뿐이고, Studio 선택은 v2
+> 블록을 여전히 후보로 보지 않는다.
 
 #### v2 를 켤 때의 함정 셋 (`V2-DATA-1` 이 반드시 본다)
 
@@ -1413,8 +1431,8 @@ bottom-left  bottom  bottom-right
 | 2 | `HOME-CANVAS-MANUAL-UX-FIX-1` | 현재 v1 편집기의 UX 수정 넷(§14-14) | **완료**(2026-09-21) — 결과는 [계약 문서 §21](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 3 | `HOME-CANVAS-INSPECTOR-1A` | v1 Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(§14-15) | **완료**(2026-09-21) — 결과는 [계약 문서 §22](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 4 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | **완료**(2026-09-21) — 결과는 [계약 문서 §9-(3)](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
-| 5 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | **미착수 — 다음 작업** |
-| 6 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform 렌더 | 미착수 |
+| 5 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | **완료**(2026-09-22) — 결과는 [계약 문서 §23](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). `main_visual` 은 **외곽 프레임까지** |
+| 6 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` **내부** — primary photo · 자유 장식 · pin/transform 렌더 · `height:"auto"` 의 폴백 비율 | **미착수 — 다음 작업** |
 | 7 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 미착수 |
 | 8 | `HOME-CANVAS-V2-ATTACH-1` | lasso/Shift 선택 → `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` · Undo/Redo | 미착수 |
 | 9 | `HOME-CANVAS-EFFECT-HOOK-1` | 안정된 선택자 · 수명주기 · 정리. `main_visual` 과 sandbox 저자 JS 의 공존 | 미착수(§8 에 완료 기준) |

@@ -3,10 +3,11 @@
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
 
-   ★ 이 라운드는 **데이터 계약만** 구현한다. 캔버스 요소는 아직
-     화면에 그려지지 않는다 — 그래서 이 파일은 픽셀을 재지 않고,
-     SkinPackage 가 실제 Studio 를 지나 돌아올 때 `regions` 의
-     `home_canvas` 항목이 **한 칸도 잃지 않는가**만 본다.
+   ★ 이 파일은 **픽셀을 재지 않는다.** SkinPackage 가 실제 Studio 를
+     지나 돌아올 때 `regions` 의 `home_canvas` 항목이 **한 칸도 잃지
+     않는가**만 본다 — 캔버스가 실제로 어떻게 그려지는가는
+     skin/skin-home-canvas-render-e2e-test.mjs 와
+     skin/skin-home-canvas-sandbox-e2e-test.mjs 의 몫이다.
 
    studio/studio-lifecycle-scenario.html?scenario=lay 에
    `__scenarioLaySkinPackage` 로 캔버스 fixture 를 심어 연다.
@@ -23,7 +24,9 @@
    [v2]        조합형 Canvas(`version:2`, V2-DATA-1) — 잘못된 v2 는
                **정확한 경로**와 함께 거부되고, 유효한 v2 는 Import →
                Save → 다시 열기 → Export → Publish → AI 를 한 칸도
-               잃지 않고 지난다. 그러면서도 **아직 그려지지 않는다**
+               잃지 않고 지난다. V2-FLOW-RENDER-1 부터는 **실행 payload
+               까지 만들어진다** — 픽셀은 여기서 재지 않는다
+               (skin/skin-home-canvas-render-e2e-test.mjs [v2-flow])
    [legacy]    캔버스가 없는 기존 스킨은 Save/Export 결과가 그대로다
 
    계약 자체(요소 규칙 · 오류 경로 · 실행 payload · 봉투)는 브라우저
@@ -137,8 +140,9 @@ const CANVAS_SKIN = {
    Import → Save → 다시 열기 → Export → Publish → AI 를 지나도 **한
    칸도 잃지 않는지**를 v1 과 같은 자로 본다.
 
-   ★ 유효한 v2 라도 **아직 그려지지 않는다** — 이 절은 그것도 함께
-     확인한다(공개 resolve 에 canvas 키가 없다 = 기존 HOME fallback).
+   ★ V2-FLOW-RENDER-1 부터 유효한 v2 는 **실행 payload 를 만든다** —
+     이 절은 그 payload 가 생긴다는 것까지만 보고, 화면은 보지 않는다
+     (이 파일은 픽셀을 재지 않는다 — 위 머리말).
 ========================================================== */
 
 const V2_REGION = {
@@ -829,9 +833,18 @@ async function run() {
         same(canvasOf(await draftRegions(page)), V2_REGION.canvas),
         JSON.stringify(canvasOf(await draftRegions(page))));
 
-      check("★ 유효한 v2 도 아직 그려지지 않는다(공개 resolve 에 canvas 키 없음 = 기존 HOME fallback)",
+      check("★ 유효한 v2 가 실행 payload 를 만든다(V2-FLOW-RENDER-1 — 그 전까지는 canvas 키가 없었다)",
+        await page.evaluate(() => {
+          const canvas = window.resolveSkinTemplate(currentWorkingSkin, "home").canvas;
+          return !!canvas && canvas.version === 2 &&
+            Array.isArray(canvas.flow && canvas.flow.blocks) &&
+            Array.isArray(canvas.overlays);
+        }));
+
+      check("★ 실행 payload 에는 모르는 칸이 실리지 않는다(보존은 draft 의 몫이다)",
         await page.evaluate(() =>
-          window.resolveSkinTemplate(currentWorkingSkin, "home").canvas === undefined));
+          JSON.stringify(window.resolveSkinTemplate(currentWorkingSkin, "home").canvas)
+            .indexOf("future") === -1));
 
       check("그래도 표시 위치는 Preview 문서에 살아 있다",
         (await previewHasCanvasRoot(page)) === 1);
@@ -959,9 +972,12 @@ async function run() {
         published && same(canvasOf(published.regions), edited.regions[1].canvas),
         JSON.stringify(published && canvasOf(published.regions)));
 
-      check("★ 발행된 v2 스킨도 공개 resolve 에 canvas 키가 없다(렌더러가 아직 없다)",
-        await reopened.page.evaluate((pkg) =>
-          window.resolveSkinTemplate(pkg, "home").canvas === undefined, published));
+      check("★ 발행된 v2 스킨도 공개 resolve 에서 같은 실행 payload 를 만든다",
+        await reopened.page.evaluate((pkg) => {
+          const canvas = window.resolveSkinTemplate(pkg, "home").canvas;
+          return !!canvas && canvas.version === 2 &&
+            canvas.flow.blocks.length === 6 && canvas.overlays.length === 1;
+        }, published));
 
       await reopened.context.close();
 

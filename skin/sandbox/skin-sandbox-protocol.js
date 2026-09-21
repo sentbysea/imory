@@ -1192,10 +1192,353 @@ function isSandboxCanvasElement(value) {
 }
 
 
-function isSandboxHomeCanvas(value) {
+/* =========================================================
+   HOME-CANVAS-V2-FLOW-RENDER-1 — template.canvas 의 v2 모양
+
+   조합형 Canvas(로드맵 §14)의 **실행용** payload 다
+   (skin/skin-home-canvas-v2.js buildSkinCanvasV2RenderPayload).
+
+   ★ 위 v1 표와 같은 사정으로 값 목록을 여기 한 번 더 적는다 —
+     이 파일은 의존이 없고, 단위 테스트가 계약 파일과 양방향으로
+     대조한다(skin/skin-home-canvas-test.mjs [protocol] 절).
+
+   ★ 여기도 strict allowlist 다. 다만 v1 과 달리 **빠져도 되는 칸이
+     하나 있다**: `maxWidth`. 계약이 "상한 없음"을 숫자가 아니라
+     부재로 적기 때문이고(§14-4), payload 빌더도 그때만 싣는다.
+     블록 내부 요소의 `x` · `y` · `pin` 도 같은 뜻으로 `follow` 가
+     정하는 칸이라 조건부다(§14-6).
+========================================================== */
+
+var SANDBOX_CANVAS_V2_VERSION = 2;
+
+var SANDBOX_CANVAS_BLOCK_TYPES =
+  ["logo", "category_nav", "text", "divider", "main_visual"];
+
+var SANDBOX_CANVAS_BLOCK_AUTO_HEIGHT_TYPES =
+  ["text", "category_nav", "divider", "main_visual"];
+
+var SANDBOX_CANVAS_BLOCK_ALIGNS = ["left", "center", "right", "stretch"];
+
+var SANDBOX_CANVAS_FLOW_DIRECTIONS = ["column"];
+
+var SANDBOX_CANVAS_EDGES = ["top", "right", "bottom", "left"];
+
+var SANDBOX_CANVAS_FOLLOW_MODES = ["transform", "pin"];
+
+var SANDBOX_CANVAS_PIN_TARGETS = ["frame", "photo"];
+
+var SANDBOX_CANVAS_PIN_POINTS = [
+  "top-left", "top", "top-right",
+  "left", "center", "right",
+  "bottom-left", "bottom", "bottom-right"
+];
+
+
+/* padding · margin — 네 칸이 **전부** 숫자로 들어 있다(payload 가 채운다) */
+function isSandboxCanvasEdges(value) {
 
   if (
     !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(value, SANDBOX_CANVAS_EDGES)
+  ) {
+    return false;
+  }
+
+  for (let i = 0; i < SANDBOX_CANVAS_EDGES.length; i += 1) {
+    if (!isSandboxCanvasCoord(value[SANDBOX_CANVAS_EDGES[i]])) {
+      return false;
+    }
+  }
+
+  return true;
+
+}
+
+
+function isSandboxCanvasPin(value) {
+
+  return (
+    isPlainSandboxObject(value) &&
+    hasOnlyKnownSandboxKeys(value, ["target", "anchor", "origin", "offset"]) &&
+    SANDBOX_CANVAS_PIN_TARGETS.indexOf(value.target) !== -1 &&
+    SANDBOX_CANVAS_PIN_POINTS.indexOf(value.anchor) !== -1 &&
+    SANDBOX_CANVAS_PIN_POINTS.indexOf(value.origin) !== -1 &&
+    isSandboxCanvasPoint(value.offset) &&
+    hasOnlyKnownSandboxKeys(value.offset, ["x", "y"])
+  );
+
+}
+
+
+/*
+  main_visual 내부의 자유 요소 하나.
+
+  v1 요소와 같은 칸에 `follow` 와 `pin` 이 더 있고, `x` · `y` 는
+  `follow:"transform"` 일 때만 실린다(§14-6). 종류는 v1 의 여섯이다 —
+  `main_visual` 과 `container` 는 그 목록에 없으므로 중첩이 여기서도
+  막힌다(§14-12).
+*/
+function isSandboxCanvasFrameElement(value) {
+
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(
+      value,
+      ["id", "type", "follow", "x", "y", "width", "height",
+       "rotation", "hidden", "locked", "pin", "props"]
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    !SANDBOX_CANVAS_ELEMENT_ID_PATTERN.test(value.id) ||
+    SANDBOX_CANVAS_ELEMENT_TYPES.indexOf(value.type) === -1 ||
+    SANDBOX_CANVAS_FOLLOW_MODES.indexOf(value.follow) === -1
+  ) {
+    return false;
+  }
+
+  if (value.follow === "transform") {
+
+    if (!isSandboxCanvasCoord(value.x) || !isSandboxCanvasCoord(value.y)) {
+      return false;
+    }
+
+  } else if (value.x !== undefined || value.y !== undefined) {
+
+    /* pin 요소의 자리는 anchor 가 정한다 — 좌표가 함께 오면 받는
+       쪽이 둘 중 어느 것이 자리인지 고르게 된다 */
+    return false;
+
+  }
+
+  if (value.pin !== undefined && !isSandboxCanvasPin(value.pin)) {
+    return false;
+  }
+
+  if (value.follow === "pin" && value.pin === undefined) {
+    return false;
+  }
+
+  if (!isSandboxCanvasSize(value.width)) {
+    return false;
+  }
+
+  const autoAllowed =
+    SANDBOX_CANVAS_AUTO_HEIGHT_TYPES.indexOf(value.type) !== -1;
+
+  if (value.height === "auto") {
+    if (!autoAllowed) {
+      return false;
+    }
+  } else if (!isSandboxCanvasSize(value.height)) {
+    return false;
+  }
+
+  if (
+    typeof value.rotation !== "number" ||
+    !Number.isFinite(value.rotation) ||
+    typeof value.hidden !== "boolean" ||
+    typeof value.locked !== "boolean"
+  ) {
+    return false;
+  }
+
+  return isSandboxCanvasProps(value.type, value.props);
+
+}
+
+
+function isSandboxCanvasMainVisualProps(value, seen) {
+
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(value, ["baseWidth", "baseHeight", "primaryId", "elements"]) ||
+    !isSandboxCanvasSize(value.baseWidth) ||
+    !isSandboxCanvasSize(value.baseHeight) ||
+    typeof value.primaryId !== "string" ||
+    !Array.isArray(value.elements) ||
+    value.elements.length === 0 ||
+    value.elements.length > SANDBOX_CANVAS_MAX_ELEMENTS
+  ) {
+    return false;
+  }
+
+  let primary = null;
+
+  for (let i = 0; i < value.elements.length; i += 1) {
+
+    const element = value.elements[i];
+
+    if (!isSandboxCanvasFrameElement(element) || seen[element.id]) {
+      return false;
+    }
+
+    seen[element.id] = true;
+
+    if (element.id === value.primaryId) {
+      primary = element;
+    }
+
+  }
+
+  return !!primary && primary.type === "photo" && primary.hidden === false;
+
+}
+
+
+function isSandboxCanvasBlockProps(type, props, seen) {
+
+  if (type === "divider") {
+    return isPlainSandboxObject(props) && hasOnlyKnownSandboxKeys(props, []);
+  }
+
+  if (type === "main_visual") {
+    return isSandboxCanvasMainVisualProps(props, seen);
+  }
+
+  return isSandboxCanvasProps(type, props);
+
+}
+
+
+function isSandboxCanvasBlock(value, seen) {
+
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(
+      value,
+      ["id", "type", "width", "height", "align", "margin",
+       "maxWidth", "hidden", "locked", "props"]
+    )
+  ) {
+    return false;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    !SANDBOX_CANVAS_ELEMENT_ID_PATTERN.test(value.id) ||
+    seen[value.id] ||
+    SANDBOX_CANVAS_BLOCK_TYPES.indexOf(value.type) === -1
+  ) {
+    return false;
+  }
+
+  seen[value.id] = true;
+
+  /* width 에 "auto" 는 없다 — 가용 폭 전부는 align:"stretch" 다 */
+  if (!isSandboxCanvasSize(value.width)) {
+    return false;
+  }
+
+  const autoAllowed =
+    SANDBOX_CANVAS_BLOCK_AUTO_HEIGHT_TYPES.indexOf(value.type) !== -1;
+
+  if (value.height === "auto") {
+    if (!autoAllowed) {
+      return false;
+    }
+  } else if (!isSandboxCanvasSize(value.height)) {
+    return false;
+  }
+
+  if (
+    SANDBOX_CANVAS_BLOCK_ALIGNS.indexOf(value.align) === -1 ||
+    !isSandboxCanvasEdges(value.margin) ||
+    typeof value.hidden !== "boolean" ||
+    typeof value.locked !== "boolean"
+  ) {
+    return false;
+  }
+
+  if (value.maxWidth !== undefined && !isSandboxCanvasSize(value.maxWidth)) {
+    return false;
+  }
+
+  return isSandboxCanvasBlockProps(value.type, value.props, seen);
+
+}
+
+
+function isSandboxCanvasFlow(value, seen) {
+
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(value, ["direction", "padding", "gap", "blocks"]) ||
+    SANDBOX_CANVAS_FLOW_DIRECTIONS.indexOf(value.direction) === -1 ||
+    !isSandboxCanvasEdges(value.padding) ||
+    !isSandboxCanvasCoord(value.gap) ||
+    !Array.isArray(value.blocks) ||
+    value.blocks.length > SANDBOX_CANVAS_MAX_ELEMENTS
+  ) {
+    return false;
+  }
+
+  for (let i = 0; i < value.blocks.length; i += 1) {
+    if (!isSandboxCanvasBlock(value.blocks[i], seen)) {
+      return false;
+    }
+  }
+
+  return true;
+
+}
+
+
+/*
+  ★ id 는 canvas 하나 안에서 **전부** 유일하다 — 블록 · 프레임 내부
+    요소 · overlay 가 한 이름 공간이다(§14-5). 렌더러가 셋 다
+    `data-imory-edit-id` 로 내보내기 때문이다.
+*/
+function isSandboxHomeCanvasV2(value) {
+
+  if (
+    !hasOnlyKnownSandboxKeys(value, ["version", "baseWidth", "baseHeight", "flow", "overlays"]) ||
+    value.baseWidth !== SANDBOX_CANVAS_BASE_WIDTH ||
+    !isSandboxCanvasSize(value.baseHeight) ||
+    !Array.isArray(value.overlays) ||
+    value.overlays.length > SANDBOX_CANVAS_MAX_ELEMENTS
+  ) {
+    return false;
+  }
+
+  const seen = Object.create(null);
+
+  if (!isSandboxCanvasFlow(value.flow, seen)) {
+    return false;
+  }
+
+  for (let i = 0; i < value.overlays.length; i += 1) {
+
+    const overlay = value.overlays[i];
+
+    if (!isSandboxCanvasElement(overlay) || seen[overlay.id]) {
+      return false;
+    }
+
+    seen[overlay.id] = true;
+
+  }
+
+  return true;
+
+}
+
+
+function isSandboxHomeCanvas(value) {
+
+  if (!isPlainSandboxObject(value)) {
+    return false;
+  }
+
+  /* version 이 어느 표를 쓸지 고른다(HOME-CANVAS-V2-FLOW-RENDER-1) */
+  if (value.version === SANDBOX_CANVAS_V2_VERSION) {
+    return isSandboxHomeCanvasV2(value);
+  }
+
+  if (
     !hasOnlyKnownSandboxKeys(value, ["version", "baseWidth", "baseHeight", "elements"]) ||
     value.version !== SANDBOX_CANVAS_VERSION ||
     value.baseWidth !== SANDBOX_CANVAS_BASE_WIDTH ||
@@ -2357,6 +2700,19 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_CANVAS_SLOT_NAME_PATTERN,
     isSandboxCanvasElement,
     isSandboxHomeCanvas,
+
+    /* HOME-CANVAS-V2-FLOW-RENDER-1 — 조합형 Canvas 의 값 목록 */
+    SANDBOX_CANVAS_V2_VERSION,
+    SANDBOX_CANVAS_BLOCK_TYPES,
+    SANDBOX_CANVAS_BLOCK_AUTO_HEIGHT_TYPES,
+    SANDBOX_CANVAS_BLOCK_ALIGNS,
+    SANDBOX_CANVAS_FLOW_DIRECTIONS,
+    SANDBOX_CANVAS_EDGES,
+    SANDBOX_CANVAS_FOLLOW_MODES,
+    SANDBOX_CANVAS_PIN_TARGETS,
+    SANDBOX_CANVAS_PIN_POINTS,
+    isSandboxCanvasBlock,
+    isSandboxHomeCanvasV2,
     isPlainSandboxObject,
     hasOnlyKnownSandboxKeys,
     buildSandboxMessage,

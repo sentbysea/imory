@@ -56,6 +56,10 @@
    [rerender] 재렌더 중복 0 · 제거 시 정리 · 스킨이 쓴 자식 보존
    [nav]      category 링크 클릭이 **기존 sandbox navigation 메시지**로
               부모에 올라온다(프레임은 자기 문서를 떠나지 않는다)
+   [v2-flow]  조합형 Canvas v2(V2-FLOW-RENDER-1)가 프레임 안에서도
+              같은 DOM · 같은 좌표다 — 흐름 층 · 정렬 · 합산 여백 ·
+              hidden · main_visual 외곽 · overlays · CSP 위반 0 ·
+              잘못된 v2 는 프레임에도 안 실린다
    [pages]    CATEGORY · POST · BANNER 는 프레임에서도 캔버스를 안 그린다
    [parity]   네 화면
 
@@ -378,6 +382,67 @@ const canvasData = (overrides) => ({
   ...(overrides || {})
 });
 
+
+/* =========================================================
+   v2 조합형 Canvas fixture (HOME-CANVAS-V2-FLOW-RENDER-1)
+
+   RENDER-1A 쪽(skin/skin-home-canvas-render-e2e-test.mjs)이 쓰는 것과
+   **같은 모양**이다 — 그 파일이 native 에서 숫자를 검산했으므로 여기서
+   할 일은 "프레임 안에서도 같은가" 하나다. 종류 다섯 · 정렬 네 값 ·
+   maxWidth · hidden · overlay 가 한 번씩 들어 있다.
+========================================================== */
+
+const V2_BLOCKS = [
+  { id: "canvas_v2logo", type: "logo", width: 120, height: 40, align: "left",
+    props: { slot: "logo_empty", fallback: "site_title" } },
+
+  { id: "canvas_v2gone", type: "divider", width: 100, height: 8, align: "center", hidden: true },
+
+  { id: "canvas_v2title", type: "text", width: 300, height: "auto", align: "center",
+    margin: { top: 6, bottom: 4 }, props: { text: "FLOW TITLE", role: "title" } },
+
+  { id: "canvas_v2rule", type: "divider", width: 120, height: 2, align: "right",
+    margin: { right: 10 } },
+
+  { id: "canvas_v2nav", type: "category_nav", width: 340, height: "auto", align: "stretch",
+    margin: { left: 8, right: 12 }, props: { mode: "selected", categoryIds: ["302", "nope", "301"] } },
+
+  { id: "canvas_v2wide", type: "text", width: 340, height: 30, align: "stretch",
+    maxWidth: 120, locked: true, props: { text: "CLAMP", role: "label" } },
+
+  { id: "canvas_v2main", type: "main_visual", width: 300, height: 60, align: "center",
+    margin: { top: 12 },
+    props: {
+      baseWidth: 300, baseHeight: 380, primaryId: "canvas_v2photo",
+      elements: [
+        { id: "canvas_v2photo", type: "photo", follow: "transform",
+          x: 0, y: 0, width: 300, height: 380, props: { slot: "photo_1" } },
+        { id: "canvas_v2label", type: "text", follow: "pin", width: 92, height: 22,
+          pin: { target: "photo", anchor: "left", origin: "right", offset: { x: 8, y: -40 } },
+          props: { text: "pin !", role: "label" } }
+      ]
+    } }
+];
+
+const V2_OVERLAYS = [
+  { id: "canvas_v2over", type: "text", x: -20, y: 700, width: 100, height: 40,
+    rotation: 15, props: { text: "01", role: "label" } }
+];
+
+const v2CanvasData = (overrides) => ({
+  version: 2,
+  baseWidth: 390,
+  baseHeight: 1000,
+  flow: {
+    direction: "column",
+    padding: { top: 40, right: 20, bottom: 30, left: 20 },
+    gap: 10,
+    blocks: V2_BLOCKS
+  },
+  overlays: V2_OVERLAYS,
+  ...(overrides || {})
+});
+
 function skinPackage(options) {
 
   const o = options || {};
@@ -532,6 +597,147 @@ const READ_DOC = readCanvasSource("[data-imory-canvas-root]");
 
 /* 공개 하네스는 native 와 sandbox 를 한 문서에 함께 그린다 */
 const READ_NATIVE_MOUNT = readCanvasSource("#nativeMount [data-imory-canvas-root]");
+
+
+/* =========================================================
+   v2 읽기 (HOME-CANVAS-V2-FLOW-RENDER-1)
+
+   층이 둘이므로 읽는 것도 둘이다 — 흐름 층의 블록과 표식 바로
+   아래의 자유 장식. 좌표는 전부 표식 기준 상대값이다.
+========================================================== */
+
+const readV2Source = (rootSelector) => `(() => {
+  const root = document.querySelector(${JSON.stringify(rootSelector)});
+  if (!root) return { found: false };
+  const rr = root.getBoundingClientRect();
+  const flow = root.querySelector(":scope > [data-imory-canvas-flow]");
+  const angle = (el) => {
+    const m = /^matrix\\(([^)]+)\\)$/.exec(getComputedStyle(el).transform);
+    if (!m) return 0;
+    const n = m[1].split(",").map(Number);
+    return Math.round(Math.atan2(n[1], n[0]) * 180 / Math.PI * 100) / 100;
+  };
+  const round = (v) => Math.round(v * 100) / 100;
+  const overlays = Array.prototype.filter.call(root.children, (el) =>
+    el.hasAttribute && el.hasAttribute("data-imory-canvas-element"));
+  const blocks = flow
+    ? Array.prototype.filter.call(flow.children, (el) =>
+        el.hasAttribute && el.hasAttribute("data-imory-canvas-block"))
+    : [];
+  return {
+    found: true,
+    active: root.getAttribute("data-imory-canvas-active"),
+    version: root.getAttribute("data-imory-canvas-version"),
+    rootW: rr.width,
+    rootH: rr.height,
+    childCount: root.children.length,
+    hasFlow: !!flow,
+    flowDirection: flow ? flow.getAttribute("data-imory-canvas-flow") : null,
+    flowPosition: flow ? getComputedStyle(flow).position : null,
+    flowDisplay: flow ? getComputedStyle(flow).display : null,
+    padTop: flow ? round(parseFloat(getComputedStyle(flow).paddingTop)) : null,
+    padLeft: flow ? round(parseFloat(getComputedStyle(flow).paddingLeft)) : null,
+    blocks: blocks.map((el) => {
+      const r = el.getBoundingClientRect();
+      const cs = getComputedStyle(el);
+      const text = el.querySelector("[data-imory-canvas-text]");
+      const logoText = el.querySelector("[data-imory-canvas-logo-text]");
+      const img = el.querySelector("[data-imory-canvas-image]");
+      return {
+        tag: el.tagName.toLowerCase(),
+        type: el.getAttribute("data-imory-canvas-type"),
+        editId: el.getAttribute("data-imory-edit-id"),
+        align: el.getAttribute("data-imory-canvas-align"),
+        heightMode: el.getAttribute("data-imory-canvas-height"),
+        role: el.getAttribute("data-imory-canvas-role"),
+        navMode: el.getAttribute("data-imory-canvas-nav-mode"),
+        hiddenAttr: el.getAttribute("data-imory-canvas-hidden"),
+        lockedAttr: el.getAttribute("data-imory-canvas-locked"),
+        isFrame: el.hasAttribute("data-imory-canvas-frame"),
+        displayed: cs.display !== "none",
+        frameBaseW: el.style.getPropertyValue("--imory-canvas-frame-base-width").trim(),
+        frameBaseH: el.style.getPropertyValue("--imory-canvas-frame-base-height").trim(),
+        vars: {
+          gap: el.style.getPropertyValue("--imory-canvas-block-gap").trim(),
+          marginTop: el.style.getPropertyValue("--imory-canvas-block-margin-top").trim(),
+          width: el.style.getPropertyValue("--imory-canvas-block-width").trim(),
+          stretchWidth: el.style.getPropertyValue("--imory-canvas-block-stretch-width").trim(),
+          maxWidth: el.style.getPropertyValue("--imory-canvas-block-max-width").trim(),
+          height: el.style.getPropertyValue("--imory-canvas-block-height").trim()
+        },
+        x: round(r.left - rr.left),
+        y: round(r.top - rr.top),
+        w: round(r.width),
+        h: round(r.height),
+        innerTags: Array.from(el.querySelectorAll("*")).map((n) => n.tagName.toLowerCase()).join(","),
+        text: text ? text.textContent : null,
+        logoText: logoText ? logoText.textContent : null,
+        imgSrc: img ? img.getAttribute("src") : null,
+        links: Array.from(el.querySelectorAll("[data-imory-canvas-nav-item]"))
+          .map((a) => ({ name: a.textContent, href: a.getAttribute("href") }))
+      };
+    }),
+    overlays: overlays.map((el) => {
+      const r = el.getBoundingClientRect();
+      const text = el.querySelector("[data-imory-canvas-text]");
+      return {
+        type: el.getAttribute("data-imory-canvas-type"),
+        editId: el.getAttribute("data-imory-edit-id"),
+        isOverlay: el.hasAttribute("data-imory-canvas-overlay"),
+        position: getComputedStyle(el).position,
+        vars: {
+          x: el.style.getPropertyValue("--imory-canvas-x").trim(),
+          y: el.style.getPropertyValue("--imory-canvas-y").trim(),
+          width: el.style.getPropertyValue("--imory-canvas-width").trim(),
+          height: el.style.getPropertyValue("--imory-canvas-height").trim(),
+          rotation: el.style.getPropertyValue("--imory-canvas-rotation").trim()
+        },
+        cx: round(r.left + r.width / 2 - rr.left),
+        cy: round(r.top + r.height / 2 - rr.top),
+        w: el.offsetWidth,
+        h: el.offsetHeight,
+        angle: angle(el),
+        text: text ? text.textContent : null
+      };
+    })
+  };
+})()`;
+
+const READ_V2_DOC = readV2Source("[data-imory-canvas-root]");
+const READ_V2_NATIVE = readV2Source("#nativeMount [data-imory-canvas-root]");
+
+/*
+  대조용 — 좌표는 서브픽셀 때문에 따로 본다(v1 의 domShape 과 같은 규약).
+  href 는 두 쌍이 slug 규칙으로만 다를 수 있어 옵션이다.
+*/
+function v2DomShape(reading, options) {
+
+  const withHref = !options || options.href !== false;
+
+  return {
+    active: reading.active,
+    version: reading.version,
+    hasFlow: reading.hasFlow,
+    flowDirection: reading.flowDirection,
+    flowPosition: reading.flowPosition,
+    flowDisplay: reading.flowDisplay,
+    childCount: reading.childCount,
+    blocks: reading.blocks.map((b) => ({
+      tag: b.tag, type: b.type, editId: b.editId, align: b.align,
+      heightMode: b.heightMode, role: b.role, navMode: b.navMode,
+      hiddenAttr: b.hiddenAttr, lockedAttr: b.lockedAttr,
+      isFrame: b.isFrame, displayed: b.displayed,
+      frameBaseW: b.frameBaseW, frameBaseH: b.frameBaseH,
+      vars: b.vars, innerTags: b.innerTags,
+      text: b.text, logoText: b.logoText, imgSrc: b.imgSrc,
+      links: withHref ? b.links : b.links.map((l) => l.name)
+    })),
+    overlays: reading.overlays.map((o) => ({
+      type: o.type, editId: o.editId, isOverlay: o.isOverlay,
+      position: o.position, vars: o.vars, angle: o.angle, text: o.text
+    }))
+  };
+}
 
 
 /* 대조용 — 좌표는 따로 본다(서브픽셀 허용치가 필요하다) */
@@ -1058,6 +1264,162 @@ async function run() {
       }
 
       await pub.ctx.close();
+
+    }
+
+
+    /* ------------------------------------------------- */
+    if (wants("v2-flow")) {
+
+      section("v2-flow");
+
+      /*
+        같은 문서에서 native 와 sandbox 를 함께 그린다(공개 쌍 A 와
+        같은 하네스). 숫자 검산은 native 쪽에서 이미 끝났으므로
+        (skin/skin-home-canvas-render-e2e-test.mjs [v2-flow] 절)
+        여기서 묻는 것은 **프레임 안에서도 같은가** 다.
+      */
+      const pub = await openPublic(browser, {
+        skinPackage: skinPackage({
+          regions: [{ name: "home_canvas", enabled: true, canvas: v2CanvasData() }]
+        })
+      });
+
+      const frameRead = await pub.frame.evaluate(READ_V2_DOC);
+      const nativeRead = await pub.page.evaluate(READ_V2_NATIVE);
+
+      check("★ 공개 sandbox 프레임이 v2 를 그렸다",
+        frameRead.found && frameRead.active === "true" && frameRead.version === "2" &&
+        frameRead.hasFlow && frameRead.blocks.length === V2_BLOCKS.length,
+        JSON.stringify({ v: frameRead.version, f: frameRead.hasFlow, n: frameRead.blocks.length }));
+
+      check("★ 프레임 안에서도 흐름 층이 absolute + flex 다(구조 CSS 가 닿았다)",
+        frameRead.flowPosition === "absolute" && frameRead.flowDisplay === "flex" &&
+        frameRead.flowDirection === "column",
+        JSON.stringify({ p: frameRead.flowPosition, d: frameRead.flowDisplay }));
+
+      check("★ 블록 배열 순서 = DOM 순서",
+        frameRead.blocks.map((b) => b.editId).join(",") === V2_BLOCKS.map((b) => b.id).join(","),
+        frameRead.blocks.map((b) => b.editId).join(","));
+
+      const fBlock = (id) => frameRead.blocks.find((b) => b.editId === id);
+
+      /* 저장 좌표 390 → 도화지 320. padding 을 뺀 자가 350 이다 */
+      const scale = 320 / 390;
+
+      check("★ 프레임에서도 정렬 네 값이 같은 배율로 풀린다",
+        near(fBlock("canvas_v2logo").x, 20 * scale, 1) &&
+        near(fBlock("canvas_v2logo").w, 120 * scale, 1) &&
+        near(fBlock("canvas_v2title").x, 45 * scale, 1) &&
+        near(fBlock("canvas_v2rule").x, 240 * scale, 1) &&
+        near(fBlock("canvas_v2nav").w, 330 * scale, 1) &&
+        near(fBlock("canvas_v2wide").w, 120 * scale, 1),
+        JSON.stringify([fBlock("canvas_v2logo").x, fBlock("canvas_v2title").x,
+          fBlock("canvas_v2rule").x, fBlock("canvas_v2nav").w]));
+
+      check("★ padding · gap · margin 합산도 프레임에서 같다(40·10+6)",
+        near(frameRead.padTop, 40 * scale, 1) &&
+        near(fBlock("canvas_v2title").y -
+          (fBlock("canvas_v2logo").y + fBlock("canvas_v2logo").h), 16 * scale, 1),
+        `${frameRead.padTop} / ${fBlock("canvas_v2title").y}`);
+
+      check("★ hidden 블록이 프레임에서도 자리를 차지하지 않는다",
+        fBlock("canvas_v2gone").displayed === false && near(fBlock("canvas_v2gone").h, 0, 0.1));
+
+      check("★ main_visual 은 프레임 안에서도 외곽까지다(내부 요소 0)",
+        fBlock("canvas_v2main").isFrame === true &&
+        fBlock("canvas_v2main").innerTags === "" &&
+        await pub.frame.evaluate(() =>
+          document.querySelectorAll(
+            '[data-imory-edit-id="canvas_v2photo"],[data-imory-edit-id="canvas_v2label"]').length === 0));
+
+      check("★ category 링크가 프레임에서도 실제 a[href] 이고 내부 주소를 쓴다",
+        fBlock("canvas_v2nav").links.length === 2 &&
+        fBlock("canvas_v2nav").links.every((l) => (l.href || "").startsWith("/scenario-sb/")),
+        JSON.stringify(fBlock("canvas_v2nav").links.map((l) => l.href)));
+
+      check("★ 자유 장식이 프레임에서도 v1 규칙대로다(위치 · 크기 · 회전)",
+        frameRead.overlays.length === 1 &&
+        frameRead.overlays[0].isOverlay === true &&
+        frameRead.overlays[0].position === "absolute" &&
+        frameRead.overlays[0].vars.rotation === "15deg" &&
+        near(frameRead.overlays[0].cx, 30 * scale, 1) &&
+        near(frameRead.overlays[0].cy, 720 * scale, 1) &&
+        near(frameRead.overlays[0].angle, 15, 0.75),
+        JSON.stringify(frameRead.overlays[0] && frameRead.overlays[0].vars));
+
+      /* ---- native ↔ sandbox parity ---- */
+
+      check("★ native ↔ sandbox — DOM 이 글자 단위로 같다",
+        JSON.stringify(v2DomShape(nativeRead)) === JSON.stringify(v2DomShape(frameRead)),
+        JSON.stringify(v2DomShape(frameRead)).slice(0, 300));
+
+      /* ★ 숨긴 블록은 상자가 없다(display:none 의 rect 는 전부 0) —
+         두 문서에서 도화지의 화면 위치가 다르므로 상대 좌표가 의미를
+         갖지 않는다. 안 그려졌다는 사실은 위 [hidden] 검사가 본다. */
+      const boxDiff = frameRead.blocks.filter((b, i) => {
+        const n = nativeRead.blocks[i];
+        if (!n) return true;
+        if (b.displayed === false) return n.displayed !== false;
+        return !near(n.x, b.x, 1) || !near(n.y, b.y, 1) ||
+          !near(n.w, b.w, 1) || !near(n.h, b.h, 1);
+      });
+
+      check("★ native ↔ sandbox — 블록 좌표와 크기가 같다",
+        boxDiff.length === 0, boxDiff.map((b) => b.editId).join(", "));
+
+      check("★ native ↔ sandbox — 자유 장식의 중심 · 크기 · 각도가 같다",
+        nativeRead.overlays.length === frameRead.overlays.length &&
+        frameRead.overlays.every((o, i) =>
+          near(nativeRead.overlays[i].cx, o.cx, 1) &&
+          near(nativeRead.overlays[i].cy, o.cy, 1) &&
+          near(nativeRead.overlays[i].w, o.w, 1) &&
+          near(nativeRead.overlays[i].angle, o.angle, 0.1)));
+
+      /* ---- 봉투 · CSP ---- */
+
+      const violations = await collectCspViolations(pub.page);
+
+      check("★ v2 를 그려도 CSP 위반 0건(완화 없음)",
+        violations.length === 0, violations.slice(0, 4).join(" | "));
+
+      check("★ 스크립트 오류 0건", pub.pageErrors.length === 0,
+        pub.pageErrors.slice(0, 3).join(" | "));
+
+      /*
+        ★ 봉투 자체는 여기서 다시 재지 않는다. 프레임이 v2 를 그렸다는
+          것이 곧 "부모의 strict allowlist(isSandboxTemplate)를 지났고,
+          프레임이 자기 쪽에서 한 번 더 payload 로 옮겼다"의 증거다.
+          칸 목록은 브라우저 없이 도는 skin/skin-home-canvas-test.mjs
+          [protocol] 절이 양방향으로 본다.
+      */
+
+      /* ---- 잘못된 v2 는 프레임에도 가지 않는다 ---- */
+
+      await pub.ctx.close();
+
+      const badPub = await openPublic(browser, {
+        skinPackage: skinPackage({
+          regions: [{
+            name: "home_canvas", enabled: true,
+            canvas: v2CanvasData({
+              flow: {
+                direction: "column", padding: {}, gap: 0,
+                blocks: [{ id: "canvas_bad", type: "logo", width: 120, height: "auto",
+                  props: { slot: "logo_empty" } }]
+              }
+            })
+          }]
+        })
+      });
+
+      const badFrame = await badPub.frame.evaluate(READ_V2_DOC);
+
+      check("★ 잘못된 v2 는 프레임에도 실리지 않는다(기존 HOME)",
+        badFrame.found && badFrame.active === null && badFrame.hasFlow === false,
+        JSON.stringify({ a: badFrame.active, f: badFrame.hasFlow }));
+
+      await badPub.ctx.close();
 
     }
 

@@ -14,6 +14,9 @@
      [preserve]  모르는 region · 모르는 canvas 칸 보존 · 원본 불변 ·
                  enabled:false 가 데이터를 지우지 않는다
      [payload]   실행용 payload 는 알려진 칸만 · 기본값 · 입력 mutate 0
+     [v2-payload] v2 실행용 payload(V2-FLOW-RENDER-1) — flow · overlays ·
+                 기본값 채우기 · maxWidth 는 채우지 않음 · follow 가
+                 쓰는 칸만 · 왕복 고정점
      [template]  resolveSkinTemplate — 캔버스 없는 기존 스킨은 키조차
                  없고(회귀), 표식 없는 스킨도 없고, 깨진 저장 데이터는
                  fallback 이다
@@ -579,7 +582,10 @@ check("★ [v2] 최소 유효 v2 — flow.blocks 만 있으면 된다(overlays �
 check("[v2] version 2 는 내용을 검사한 뒤 version 2 로 답한다(미래 version 이 아니다)",
   (() => {
     const r = canvas.validateSkinCanvasData(v2Full(), "canvas");
-    return r.ok === true && r.version === 2 && r.renderable === false && r.future === undefined;
+    /* V2-FLOW-RENDER-1 에서 renderable 이 true 가 됐다 — 그 전까지는
+       "검증하지만 그리지 않는다" 였다. `version` 칸은 그대로다:
+       부르는 쪽이 어느 payload 빌더를 쓸지 이 숫자로 고른다. */
+    return r.ok === true && r.version === 2 && r.renderable === true && r.future === undefined;
   })());
 
 /* ---- 1) flow 블록 각 타입 ---- */
@@ -850,11 +856,26 @@ check("[v2] version 2 는 내용을 검사한 뒤 version 2 로 답한다(미래
     same(off[1].canvas, data) &&
     JSON.stringify(regions) === before);
 
-  check("★ [v2] 유효한 v2 도 아직 렌더되지 않는다(실행 payload 없음 = 기존 HOME fallback)",
-    canvas.buildSkinCanvasRenderPayload(data) === undefined &&
-    canvas.buildSkinCanvasRenderPayload(v2Full()) === undefined &&
-    canvas.buildSkinCanvasRenderPayload(v2Min()) === undefined &&
-    canvas.resolveSkinHomeCanvas(skinWith(regions), CANVAS_HTML) === undefined);
+  check("★ [v2] 유효한 v2 는 실행된다(V2-FLOW-RENDER-1 — 그 전까지는 payload 가 없었다)",
+    (() => {
+      const made = canvas.buildSkinCanvasRenderPayload(data);
+      return (
+        !!made && made.version === 2 &&
+        !!canvas.buildSkinCanvasRenderPayload(v2Full()) &&
+        !!canvas.buildSkinCanvasRenderPayload(v2Min()) &&
+        !!canvas.resolveSkinHomeCanvas(skinWith(regions), CANVAS_HTML)
+      );
+    })());
+
+  check("★ [v2] 실행 payload 에는 **모르는 칸이 하나도** 실리지 않는다(보존은 regions 의 몫)",
+    (() => {
+      const made = canvas.buildSkinCanvasRenderPayload(data);
+      const text = JSON.stringify(made);
+      return (
+        text.indexOf("future") === -1 &&
+        same(Object.keys(made).sort(), ["baseHeight", "baseWidth", "flow", "overlays", "version"])
+      );
+    })());
 
   check("★ [v2] 이미 저장된 **잘못된** v2 도 지우거나 고치지 않는다 — 실행만 안 한다",
     (() => {
@@ -877,6 +898,140 @@ check("[v2] version 2 는 내용을 검사한 뒤 version 2 로 답한다(미래
         return [moved, boxed, turned, typed].every((r) => r.ok === false && r.reason === "canvas");
       }) && JSON.stringify(regions) === before;
     })());
+}
+
+
+/* ---------------------------------------------------------- */
+console.log("\n[v2-payload] v2 실행용 payload (V2-FLOW-RENDER-1)");
+
+/*
+  ★ 여기서 재는 것은 **모양**이다 — 화면은 브라우저가 필요하고
+    (skin/skin-home-canvas-render-e2e-test.mjs 의 [v2-flow] 절),
+    봉투 통과는 아래 [protocol] 절이 잰다.
+
+  ★ 기본값을 payload 가 채운다는 것이 이 절의 핵심이다. 검증기는
+    "빠진 것과 기본값을 적은 것이 같은 뜻"이라고 말했으므로(§14-4)
+    렌더러가 두 경우를 갈라 볼 이유가 없다 — 대신 `maxWidth` 처럼
+    기본값이 **부재**인 칸은 채우지 않는다.
+*/
+{
+  const payload = canvas.buildSkinCanvasRenderPayload(v2Full());
+
+  const block = (i) => payload.flow.blocks[i];
+  const frame = () => payload.flow.blocks[4].props;
+
+  check("★ [v2-payload] 최상위는 다섯 칸 — elements 가 아니라 flow · overlays 다",
+    same(Object.keys(payload).sort(), ["baseHeight", "baseWidth", "flow", "overlays", "version"]) &&
+    payload.version === 2 && payload.baseWidth === 390 && payload.baseHeight === 1240,
+    JSON.stringify(Object.keys(payload)));
+
+  check("★ [v2-payload] 빠진 선택 칸을 채운다 — direction · padding 네 칸 · gap · align · margin 네 칸",
+    same(Object.keys(payload.flow).sort(), ["blocks", "direction", "gap", "padding"]) &&
+    payload.flow.direction === "column" &&
+    same(payload.flow.padding, { top: 48, right: 24, bottom: 64, left: 24 }) &&
+    payload.flow.gap === 20 &&
+    /* 원본에 align 도 margin 도 없던 블록 */
+    block(2).align === "center" &&
+    same(block(0).margin, { top: 0, right: 0, bottom: 0, left: 0 }) &&
+    same(block(1).margin, { top: 8, right: 0, bottom: 0, left: 0 }),
+    JSON.stringify(block(0)));
+
+  check("★ [v2-payload] maxWidth 는 **채우지 않는다**(기본값이 숫자가 아니라 부재다)",
+    block(1).maxWidth === undefined &&
+    (() => {
+      const d = v2Full();
+      d.flow.blocks[1].maxWidth = 320;
+      return canvas.buildSkinCanvasRenderPayload(d).flow.blocks[1].maxWidth === 320;
+    })());
+
+  check("[v2-payload] 블록 칸 목록이 고정이다(maxWidth 만 조건부)",
+    same(Object.keys(block(0)).sort(),
+      ["align", "height", "hidden", "id", "locked", "margin", "props", "type", "width"]),
+    JSON.stringify(Object.keys(block(0))));
+
+  check("[v2-payload] 블록 순서 · height 의 숫자와 \"auto\" 가 그대로다",
+    same(payload.flow.blocks.map((b) => b.id),
+      ["canvas_b1logo", "canvas_b2nav", "canvas_b3title", "canvas_b4rule", "canvas_b5main"]) &&
+    block(0).height === 40 && block(1).height === "auto" && block(3).height === 1);
+
+  check("[v2-payload] 블록 props 는 v1 의 그 빌더가 만든다(기본값도 같다)",
+    same(block(0).props, { slot: "title_logo", fallback: "site_title" }) &&
+    same(block(1).props, { mode: "all", categoryIds: [] }) &&
+    same(block(2).props, { text: "FOREVER YOUNG", role: "title" }) &&
+    same(block(3).props, {}),
+    JSON.stringify(block(3).props));
+
+  check("★ [v2-payload] main_visual 의 내부 요소는 payload 에 실린다(렌더만 아직 외곽까지다)",
+    same(Object.keys(frame()).sort(), ["baseHeight", "baseWidth", "elements", "primaryId"]) &&
+    frame().baseWidth === 300 && frame().baseHeight === 380 &&
+    frame().primaryId === "canvas_m1photo" &&
+    frame().elements.length === 4);
+
+  check("★ [v2-payload] follow 가 쓰는 칸만 실린다 — transform 은 x·y, pin 은 pin",
+    (() => {
+      const paper = frame().elements[0];
+      const label = frame().elements[2];
+      return (
+        paper.follow === "transform" && paper.x === -18 && paper.y === 26 &&
+        paper.pin === undefined &&
+        label.follow === "pin" && label.x === undefined && label.y === undefined &&
+        same(label.pin, { target: "photo", anchor: "left", origin: "right", offset: { x: 8, y: -40 } })
+      );
+    })(), JSON.stringify(frame().elements[2]));
+
+  check("[v2-payload] pin 의 빠진 칸은 frame · center · center · {0,0} 이다",
+    (() => {
+      const d = v2Full();
+      d.flow.blocks[4].props.elements[2].pin = {};
+      const made = canvas.buildSkinCanvasRenderPayload(d);
+      return same(made.flow.blocks[4].props.elements[2].pin,
+        { target: "frame", anchor: "center", origin: "center", offset: { x: 0, y: 0 } });
+    })());
+
+  check("[v2-payload] follow 가 빠지면 transform 이고 x·y 가 실린다",
+    (() => {
+      const d = v2Full();
+      delete d.flow.blocks[4].props.elements[1].follow;
+      const made = canvas.buildSkinCanvasRenderPayload(d).flow.blocks[4].props.elements[1];
+      return made.follow === "transform" && made.x === 0 && made.y === 0;
+    })());
+
+  check("★ [v2-payload] overlays 는 v1 요소 payload 와 **글자 단위로 같은 모양**이다",
+    same(Object.keys(payload.overlays[0]).sort(),
+      ["height", "hidden", "id", "locked", "props", "rotation", "type", "width", "x", "y"]) &&
+    payload.overlays[0].rotation === 0 &&
+    payload.overlays[0].hidden === false &&
+    same(payload.overlays[0].props, { text: "01", role: "label" }));
+
+  check("[v2-payload] overlays 가 없으면 빈 배열이다(칸 없음과 장식 없음을 가르지 않는다)",
+    same(canvas.buildSkinCanvasRenderPayload(v2Min()).overlays, []) &&
+    same(canvas.buildSkinCanvasRenderPayload(v2Min()).flow.blocks, []));
+
+  check("★ [v2-payload] 결과는 새 리터럴 — 입력의 어떤 객체도 그대로 실리지 않는다",
+    (() => {
+      const source = v2Full();
+      const made = canvas.buildSkinCanvasRenderPayload(source);
+      return (
+        made.flow !== source.flow &&
+        made.flow.blocks[0] !== source.flow.blocks[0] &&
+        made.flow.blocks[0].props !== source.flow.blocks[0].props &&
+        made.flow.padding !== source.flow.padding &&
+        made.overlays[0] !== source.overlays[0]
+      );
+    })());
+
+  check("★ [v2-payload] 봉투에서 돌아온 값이 같은 규칙으로 다시 옮겨진다(왕복 고정점)",
+    same(canvas.coerceSkinHomeCanvasRenderPayload(payload), payload));
+
+  check("[v2-payload] 깨진 v2 는 payload 를 만들지 않는다(조용히 그 블록만 빼지 않는다)",
+    (() => {
+      const d = v2Full();
+      d.flow.blocks[2].width = -1;
+      return canvas.buildSkinCanvasRenderPayload(d) === undefined;
+    })());
+
+  check("★ [v2-payload] version 3 은 여전히 실행되지 않는다(모르는 version 은 보존만)",
+    canvas.buildSkinCanvasRenderPayload({ version: 3, flow: { blocks: [] } }) === undefined);
 }
 
 
@@ -1046,6 +1201,18 @@ const templateApi = new Function(
     withCanvas.canvas && withCanvas.canvas.version === 1 && withCanvas.canvas.elements.length === 2,
     JSON.stringify(Object.keys(withCanvas)));
 
+  const withV2 =
+    templateApi.resolveSkinTemplate(skinWith([{ name: "home_canvas", enabled: true, canvas: v2Full() }]), "home");
+
+  check("★ [template] v2 도 같은 자리에 실린다(V2-FLOW-RENDER-1)",
+    !!withV2.canvas && withV2.canvas.version === 2 &&
+    withV2.canvas.flow.blocks.length === 5 && withV2.canvas.overlays.length === 1,
+    JSON.stringify(withV2.canvas && Object.keys(withV2.canvas)));
+
+  check("★ [template] v2 도 CATEGORY · POST 에는 싣지 않는다",
+    templateApi.resolveSkinTemplate(skinWith([{ name: "home_canvas", canvas: v2Full() }]), "category").canvas === undefined &&
+    templateApi.resolveSkinTemplate(skinWith([{ name: "home_canvas", canvas: v2Full() }]), "post").canvas === undefined);
+
   check("[template] HOME 에만 싣는다(v1 의 캔버스는 HOME 한 장)",
     templateApi.resolveSkinTemplate(skinWith([canvasRegion()]), "category").canvas === undefined &&
     templateApi.resolveSkinTemplate(skinWith([canvasRegion()]), "post").canvas === undefined);
@@ -1088,7 +1255,10 @@ const envelope = (over) =>
   const rejects = [
     ["모르는 최상위 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [], background: "#fff" }],
     ["모르는 version", { version: 3, baseWidth: 390, elements: [] }],
-    ["v2 조합형 canvas", { version: 2, baseWidth: 390, baseHeight: 844, flow: { blocks: [] }, overlays: [] }],
+    /* ★ V2-FLOW-RENDER-1 전에는 "v2 라서" 거부였다. 지금 거부되는
+       이유는 다르다 — **payload 가 아닌** 생 v2 이기 때문이다(선택
+       칸이 채워져 있지 않다). 봉투는 언제나 실행용 payload 만 받는다. */
+    ["채워지지 않은 생 v2", { version: 2, baseWidth: 390, baseHeight: 844, flow: { blocks: [] }, overlays: [] }],
     ["다른 baseWidth", { version: 1, baseWidth: 375, elements: [] }],
     ["모르는 요소 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [Object.assign(element(), { z: 3 })] }],
     ["모르는 props 칸", { version: 1, baseWidth: 390, baseHeight: 844, elements: [element({ props: { slot: "photo_1", style: "x" } })] }],
@@ -1103,6 +1273,65 @@ const envelope = (over) =>
 
   check("★ [protocol] strict allowlist — 열세 가지를 전부 거부",
     rejects.length === 0, rejects.map((r) => r[0]).join(", "));
+}
+
+/* ---- v2 봉투 (HOME-CANVAS-V2-FLOW-RENDER-1) ---- */
+{
+  const v2Payload = canvas.buildSkinCanvasRenderPayload(v2Full());
+
+  check("★ [protocol] 계약 파일이 만든 **v2** payload 를 프로토콜이 받는다",
+    protocol.isSandboxTemplate(envelope({ canvas: v2Payload })) === true);
+
+  /* 한 칸만 망가뜨린다 — 전부 payload 에서 출발한다 */
+  const broken = (mutate) => {
+    const value = clone(v2Payload);
+    mutate(value);
+    return protocol.isSandboxTemplate(envelope({ canvas: value }));
+  };
+
+  const v2Rejects = [
+    ["모르는 최상위 칸", (v) => { v.background = "#fff"; }],
+    ["v1 의 elements 가 섞임", (v) => { v.elements = []; }],
+    ["flow 없음", (v) => { delete v.flow; }],
+    ["overlays 없음", (v) => { delete v.overlays; }],
+    ["모르는 flow 칸", (v) => { v.flow.wrap = true; }],
+    ["direction 이 row", (v) => { v.flow.direction = "row"; }],
+    ["padding 이 네 칸이 아님", (v) => { delete v.flow.padding.left; }],
+    ["모르는 블록 칸", (v) => { v.flow.blocks[0].z = 3; }],
+    ["블록이 아닌 종류(v1 의 photo)", (v) => { v.flow.blocks[0].type = "photo"; }],
+    ["logo 의 auto 높이", (v) => { v.flow.blocks[0].height = "auto"; }],
+    ["블록 width 가 auto", (v) => { v.flow.blocks[0].width = "auto"; }],
+    ["모르는 align", (v) => { v.flow.blocks[0].align = "start"; }],
+    ["margin 이 채워지지 않음", (v) => { delete v.flow.blocks[0].margin; }],
+    ["maxWidth 가 0", (v) => { v.flow.blocks[1].maxWidth = 0; }],
+    ["divider 에 props 가 생김", (v) => { v.flow.blocks[3].props = { kind: "line" }; }],
+    ["프레임 요소가 비어 있음", (v) => { v.flow.blocks[4].props.elements = []; }],
+    ["primaryId 가 없는 id", (v) => { v.flow.blocks[4].props.primaryId = "canvas_nope"; }],
+    ["primary 가 photo 가 아님", (v) => { v.flow.blocks[4].props.primaryId = "canvas_m0paper"; }],
+    ["프레임 안에 프레임", (v) => { v.flow.blocks[4].props.elements[0].type = "main_visual"; }],
+    ["transform 인데 좌표 없음", (v) => { delete v.flow.blocks[4].props.elements[0].x; }],
+    ["pin 인데 좌표가 함께 옴", (v) => { v.flow.blocks[4].props.elements[2].x = 0; }],
+    ["pin 인데 pin 이 없음", (v) => { delete v.flow.blocks[4].props.elements[2].pin; }],
+    ["모르는 anchor", (v) => { v.flow.blocks[4].props.elements[2].pin.anchor = "middle"; }],
+    ["모르는 follow", (v) => { v.flow.blocks[4].props.elements[0].follow = "none"; }],
+    ["overlay 가 블록 종류", (v) => { v.overlays[0].type = "divider"; }],
+    ["id 가 두 층에서 겹침", (v) => { v.overlays[0].id = "canvas_b1logo"; }],
+    ["id 가 블록과 프레임에서 겹침", (v) => { v.flow.blocks[0].id = "canvas_m1photo"; }]
+  ].filter(([, mutate]) => broken(mutate) !== false);
+
+  check("★ [protocol] v2 strict allowlist — 스물일곱 가지를 전부 거부",
+    v2Rejects.length === 0, v2Rejects.map((r) => r[0]).join(", "));
+
+  check("[protocol] v2 값 목록도 계약 파일과 글자 단위로 같다",
+    protocol.SANDBOX_CANVAS_V2_VERSION === canvas.SKIN_HOME_CANVAS_V2_VERSION &&
+    same(protocol.SANDBOX_CANVAS_BLOCK_TYPES, canvas.SKIN_HOME_CANVAS_BLOCK_TYPES) &&
+    same(protocol.SANDBOX_CANVAS_BLOCK_AUTO_HEIGHT_TYPES, canvas.SKIN_HOME_CANVAS_BLOCK_AUTO_HEIGHT_TYPES) &&
+    same(protocol.SANDBOX_CANVAS_BLOCK_ALIGNS, canvas.SKIN_HOME_CANVAS_BLOCK_ALIGNS) &&
+    same(protocol.SANDBOX_CANVAS_FLOW_DIRECTIONS, canvas.SKIN_HOME_CANVAS_FLOW_DIRECTIONS) &&
+    same(protocol.SANDBOX_CANVAS_EDGES, canvas.SKIN_HOME_CANVAS_EDGES) &&
+    same(protocol.SANDBOX_CANVAS_FOLLOW_MODES, canvas.SKIN_HOME_CANVAS_FOLLOW_MODES) &&
+    same(protocol.SANDBOX_CANVAS_PIN_TARGETS, canvas.SKIN_HOME_CANVAS_PIN_TARGETS) &&
+    same(protocol.SANDBOX_CANVAS_PIN_POINTS, canvas.SKIN_HOME_CANVAS_PIN_POINTS));
 }
 
 check("★ [protocol] 값 목록이 계약 파일과 글자 단위로 같다(둘이 갈라지지 않는다)",
