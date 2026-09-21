@@ -148,11 +148,22 @@ const PREVIEW_MSG_TRANSITION_PLAY = "preview:transition-play";
    HOME-CANVAS-SELECT-1B-1 — HOME 캔버스 선택
 
    canvas-select  Studio -> 이 문서
-                  { active, ids[], primaryId, generation }
-                  Studio 가 **확정한** 캔버스 선택. 무엇을 고를 수
-                  있는가는 Studio 가 자기 draft 에서 정했고, 이
-                  문서(또는 sandbox 프레임)는 받은 id 를 자기 DOM
-                  에서 한 번 더 확인한 뒤에만 틀을 붙인다.
+                  { editing, active, ids[], primaryId, generation }
+                  `editing` 은 "지금 캔버스 편집이 켜져 있는가"다 —
+                  **선택이 없어도 참일 수 있다**(HOME-CANVAS-SELECT-1B-2:
+                  lasso 는 빈 상태에서 시작한다). 이 값이 runtime 과
+                  vendor 를 불러오는 관문이다.
+
+                  나머지 칸은 Studio 가 **확정한** 캔버스 선택이다.
+                  무엇을 고를 수 있는가는 Studio 가 자기 draft 에서
+                  정했고, 이 문서(또는 sandbox 프레임)는 받은 id 를
+                  자기 DOM 에서 한 번 더 확인한 뒤에만 틀을 붙인다.
+
+   canvas-propose 이 문서 -> Studio
+                  { ids[], primaryId, mode, generation }
+                  lasso · Shift 클릭의 **제안**이다. 확정이 아니다 —
+                  Studio 가 자기 draft 로 모든 id 를 다시 보고,
+                  하나라도 고를 수 없으면 메시지 전체를 버린다.
 
    canvas-frame   이 문서 -> Studio
                   { active, editId }
@@ -164,6 +175,7 @@ const PREVIEW_MSG_TRANSITION_PLAY = "preview:transition-play";
 ========================================================== */
 const PREVIEW_MSG_CANVAS_SELECT = "preview:canvas-select";
 const PREVIEW_MSG_CANVAS_FRAME = "preview:canvas-frame";
+const PREVIEW_MSG_CANVAS_PROPOSE = "preview:canvas-propose";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -2324,6 +2336,29 @@ function ensureCanvasFrameController() {
                 editId: typeof editId === "string" ? editId : null
               });
 
+            },
+
+            /* HOME-CANVAS-SELECT-1B-2 — lasso · Shift 클릭의 제안.
+               확정이 아니다(위 머리말) — Studio 가 자기 draft 로
+               모든 id 를 다시 본다. */
+            onPropose: (proposal) => {
+
+              if (!proposal || !Array.isArray(proposal.ids)) {
+                return;
+              }
+
+              postToParent({
+                type: PREVIEW_MSG_CANVAS_PROPOSE,
+                ids: proposal.ids.slice(),
+                primaryId:
+                  typeof proposal.primaryId === "string" ? proposal.primaryId : null,
+                mode: proposal.mode === "toggle" ? "toggle" : "replace",
+                generation:
+                  Number.isInteger(proposal.generation) && proposal.generation >= 0
+                    ? proposal.generation
+                    : 0
+              });
+
             }
 
           });
@@ -2354,10 +2389,15 @@ function ensureCanvasFrameController() {
 function applyNativeCanvasSelection(selection) {
 
   canvasFrameSelection =
-    (selection && selection.active === true) ? selection : null;
+    selection || null;
 
-  /* 해제인데 아직 한 번도 만들지 않았다 — 만들 이유가 없다 */
-  if (!canvasFrameController && !canvasFrameSelection) {
+  /*
+    HOME-CANVAS-SELECT-1B-2 — 관문이 `editing` 으로 옮겨졌다.
+    편집이 꺼진 상태에서 아직 한 번도 만들지 않았으면 만들지
+    않는다(공개 비용 0 과 Canvas 없는 스킨의 요청 0 이 여기서
+    지켜진다).
+  */
+  if (!canvasFrameController && !(selection && selection.editing === true)) {
     return;
   }
 
@@ -2367,7 +2407,7 @@ function applyNativeCanvasSelection(selection) {
 
         controller.apply(
           canvasFrameSelection ||
-          { active: false, ids: [], primaryId: null, generation: selection ? selection.generation : 0 }
+          { editing: false, active: false, ids: [], primaryId: null, generation: 0 }
         );
 
       }
@@ -2412,6 +2452,7 @@ function routeCanvasSelectionMessage(data) {
       : null;
 
   const selection = {
+    editing: data.editing === true,
     active: data.active === true && !!primaryId && ids.indexOf(primaryId) !== -1,
     ids: ids,
     primaryId: primaryId,
@@ -2421,6 +2462,11 @@ function routeCanvasSelectionMessage(data) {
   if (!selection.active) {
     selection.ids = [];
     selection.primaryId = null;
+  }
+
+  /* 고른 것이 있으면 편집 중인 것이 당연하다 */
+  if (selection.active) {
+    selection.editing = true;
   }
 
   if (hasSandboxPreviewFrame()) {

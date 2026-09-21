@@ -1051,6 +1051,30 @@ function handleSandboxInspect(kind, payload) {
   }
 
 
+  /*
+    HOME-CANVAS-SELECT-1B-2 — 프레임의 캔버스 선택 **제안**.
+
+    여기서도 해석하지 않는다 — 알려진 칸만 옮겨 Studio 로 올린다.
+    그 id 들이 실제로 고를 수 있는 것인지, 무엇과 합쳐야 하는지는
+    Studio 가 자기 draft 로 정한다(studio/inspector/studio-canvas-selection.js
+    proposeStudioCanvasSelection).
+  */
+  if (kind === "canvas-propose") {
+
+    sandboxInspectRelay({
+      type: "preview:canvas-propose",
+      remote: true,
+      ids: Array.isArray(payload.ids) ? payload.ids.slice() : [],
+      primaryId: typeof payload.primaryId === "string" ? payload.primaryId : null,
+      mode: payload.mode === "toggle" ? "toggle" : "replace",
+      generation: Number.isInteger(payload.generation) ? payload.generation : 0
+    });
+
+    return;
+
+  }
+
+
   if (kind === "select") {
 
     const selected =
@@ -1261,12 +1285,13 @@ export function setSandboxPreviewCanvasSelection(selection) {
   const value =
     (selection && typeof selection === "object")
       ? selection
-      : { active: false, ids: [], primaryId: null, generation: 0 };
+      : { editing: false, active: false, ids: [], primaryId: null, generation: 0 };
 
-  /* 렌더 뒤에 다시 보낼 것은 **고른 것이 있을 때뿐**이다(아래
-     flushSandboxInspectState) */
+  /* 렌더 뒤에 다시 보낼 것은 **편집이 켜져 있을 때**다(아래
+     flushSandboxInspectState). 1B-1 에서는 "고른 것이 있을
+     때뿐"이었지만, 이제 빈 선택으로도 lasso 가 돌아야 한다. */
   sandboxCanvasSelection =
-    value.active === true ? value : null;
+    value.editing === true ? value : null;
 
   if (!hasSandboxPreviewFrame()) {
     return false;
@@ -1415,12 +1440,13 @@ function flushSandboxInspectState() {
     realm 의 runtime 은 아직 없고, 같은 realm 이라도 renderSeq 가
     올랐으므로 프레임은 옛 번호의 메시지를 이미 버렸다.
 
-    ★ 고른 것이 없으면 **보내지 않는다** — 해제를 보내는 것만으로도
-      프레임이 runtime 을 받아 오게 하지 않는다(프레임 쪽에서도
-      한 겹 더 막는다).
+    ★ 편집이 켜져 있지 않으면 **보내지 않는다** — 꺼진 상태를
+      보내는 것만으로도 프레임이 runtime 을 받아 오게 하지 않는다
+      (프레임 쪽에서도 한 겹 더 막는다). 1B-2 에서 기준이
+      "고른 것이 있는가"에서 "편집이 켜졌는가"로 옮겨졌다.
   */
 
-  if (sandboxCanvasSelection && sandboxCanvasSelection.active === true) {
+  if (sandboxCanvasSelection && sandboxCanvasSelection.editing === true) {
     sendSandboxCanvasSelect(sandboxHandle, sandboxCanvasSelection);
   }
 

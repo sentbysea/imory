@@ -1956,6 +1956,12 @@ async function renderSandboxPageIntoHandle(handle, opts) {
 
         /* SANDBOX-SELECT-PARITY-1 — 겹친 후보 · 더블클릭 글자 · 본체
            끌기. 같은 관문(지금 화면의 것인가)만 지나고 해석하지 않는다. */
+        /* HOME-CANVAS-SELECT-1B-2 — 프레임의 캔버스 선택 **제안**.
+           여기서도 해석하지 않는다 — "지금 화면의 것인가" 하나만
+           보고 그대로 올린다. 그 id 들이 실제로 고를 수 있는
+           것인지는 부모 realm 의 Studio 가 자기 draft 로 판단한다. */
+        handle.handlers[TYPES.CANVAS_PROPOSE] = inspectRelay("canvas-propose");
+
         handle.handlers[TYPES.INSPECT_CANDIDATES] = inspectRelay("candidates");
         handle.handlers[TYPES.INSPECT_TEXT] = inspectRelay("text");
         handle.handlers[TYPES.INSPECT_DRAG] = inspectRelay("drag");
@@ -2731,7 +2737,10 @@ export function sendSandboxCanvasSelect(handle, selection) {
 
   const ids =
     (value && Array.isArray(value.ids))
-      ? value.ids.filter((id) => typeof id === "string" && id)
+      ? value.ids.filter(
+          (id, index, list) =>
+            typeof id === "string" && id && list.indexOf(id) === index
+        )
       : [];
 
 
@@ -2745,9 +2754,16 @@ export function sendSandboxCanvasSelect(handle, selection) {
     !!(value && value.active === true && primaryId && ids.indexOf(primaryId) !== -1);
 
 
+  /* HOME-CANVAS-SELECT-1B-2 — 고른 것이 있으면 편집 중인 것이
+     당연하고, 고른 것이 없어도 편집 중일 수 있다(lasso). */
+  const editing =
+    active || !!(value && value.editing === true);
+
+
   const payload = {
     contract: 1,
     renderSeq: handle.renderSeq,
+    editing: editing,
     active: active,
     ids: active ? ids.slice() : [],
     generation:

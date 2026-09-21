@@ -146,17 +146,24 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 각 행은 별도의 작업이다. 앞 단계가 완료됐다는 보고를 확인한 뒤 다음 단계로 넘어간다.
 
 > 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` · `CONTRACT-1C` ·
-> `RENDER-1A` · `RENDER-1B` · `VENDOR-1` · `SELECT-1A` · `SELECT-1B-1` 아홉이
-> 끝났다.** 정적 렌더링은 **네 화면 전부** 끝났고, 편집기 라이브러리는
-> **저장소에 고정됐고**, 캔버스 요소를 **고르고 · 풀고 · 회전을 따라가는 틀로
-> 보여 주는 것**까지 됐다. **고치는 것은 하나도 구현되지 않았다** — 이동 ·
-> 크기 · 회전 · 다중 선택 · Inspector 입력 필드는 전부 뒤다.
+> `RENDER-1A` · `RENDER-1B` · `VENDOR-1` · `SELECT-1A` · `SELECT-1B-1` ·
+> `SELECT-1B-2` 열이 끝났다.** 정적 렌더링은 **네 화면 전부** 끝났고, 편집기 라이브러리는
+> **저장소에 고정됐고**, 캔버스 요소를 **고르고(단일 · lasso · Shift 다중) ·
+> 풀고 · 틀로 보여 주는 것**까지 됐다. **고치는 것은 하나도 구현되지
+> 않았다** — 이동 · 크기 · 회전 · Inspector 입력 필드는 전부 뒤다.
 >
 > - `SELECT-1B-1` — **조건부 vendor 활성화와 표시 전용 Moveable 틀**. 첫
 >   Canvas 요소를 고른 그 순간에만 프레임 문서가 runtime · 로더 · UMD 를 받고,
 >   그 전까지는(공개 화면 포함) 요청이 0 이다. 계약은
 >   [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
->   **§15** 다. **손잡이도 조작도 Selecto 인스턴스도 없다.**
+>   **§15** 다. **손잡이도 조작도 없다.**
+>
+> - `SELECT-1B-2` — **Selecto lasso 와 다중 선택**. 끌어서 여러 개를 고르고
+>   Shift 로 더하고 뺀다. 관문이 "첫 선택"에서 "Canvas 가 있는 HOME 에서
+>   Select 를 켬"으로 앞당겨졌고, 프레임은 **제안만** 하고 부모가 draft 로
+>   전부 다시 보고 확정한다. 계약은 같은 문서 **§16** 이다. 모바일 lasso 는
+>   **의도적으로 미지원**이고 그 자리는 단일 탭이 지킨다. **조작은 여전히
+>   한 줄도 없다.**
 >
 > - `SPIKE-1` · `SPIKE-1B` — **Moveable + Selecto 채택 확정**(§8 의 완료 기록).
 >   실험이라 **운영 파일을 한 줄도 바꾸지 않았고**, 그래서 저장소에 vendor 파일도
@@ -194,14 +201,14 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 2c | `HOME-CANVAS-VENDOR-1` | Moveable·Selecto 파일 고정 + Studio 전용 loader | 없음 | **완료**(계약 문서 §13) |
 | 3a | `HOME-CANVAS-SELECT-1A` | 캔버스 선택 소유권 + 단일 선택 기반(**고치지 않는다**) | Studio만 | **완료**(계약 문서 §14) |
 | 3b-1 | `HOME-CANVAS-SELECT-1B-1` | 조건부 vendor load + 단일 Moveable **표시 전용** 회전 틀 | Studio만 | **완료**(계약 문서 §15) |
-| 3b-2 | `HOME-CANVAS-SELECT-1B-2` | Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 | Studio만 | 미착수 |
+| 3b-2 | `HOME-CANVAS-SELECT-1B-2` | Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 | Studio만 | **완료**(계약 문서 §16) |
 | 3c | `HOME-CANVAS-TRANSFORM-1` | 이동·크기·회전을 `canvas.elements[]` 에 쓰는 확정 경로 | 저장 가능 | 미착수 |
 | 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
 | 6 | `HOME-CANVAS-PRESETS-1` | 사진 1·2·3·4장 프리셋, 라이트/다크 | 프리셋 | 미착수 |
 | 7 | `HOME-CANVAS-STICKER-1` | 스티커 업로드·회전·외곽선·칼선 | 스티커 | 미착수 |
-| 8 | `HOME-CANVAS-LAYERS-1` | 다중 선택·앞뒤 순서·정렬·그룹 | 고급 조작 | 미착수 |
+| 8 | `HOME-CANVAS-LAYERS-1` | 레이어 목록·앞뒤 순서·정렬·그룹(+ **모바일 다중 선택**) | 고급 조작 | 미착수 |
 | 9 | `HOME-CANVAS-DECOR-1` | 선·도형·인덱스·장식 부착 | 장식 조각 | 미착수 |
 | 10 | `HOME-CANVAS-RESPONSIVE-1` | 데스크톱 전용 재배치 또는 override | 반응형 | 미착수 |
 | 11 | `HOME-CANVAS-SIDES-1` | 기존 1·2·3단과 최종 통합 | 패널 통합 | 미착수 |
@@ -424,12 +431,25 @@ HTML 에 없다.
 - `cspNonce` 를 공식 옵션으로 넘긴다 — CSP 무변경, 위반 0 실측.
 - **Selecto 인스턴스 · 다중 선택 · Canvas JSON 쓰기는 없다.**
 
-### `HOME-CANVAS-SELECT-1B-2`
+### `HOME-CANVAS-SELECT-1B-2` (완료)
 
-- Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택(상태는 이미 배열이다 —
-  계약 문서 §14-2).
-- 여러 요소를 한 틀로 묶어 보여 주기.
-- 조작은 여전히 `TRANSFORM-1` 의 일이다 — 이 단계도 **표시까지**다.
+결과는 이 문서가 아니라
+[IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+**§16** 이 갖는다.
+
+- **활성화 관문이 한 칸 앞으로** — lasso 는 아무것도 고르지 않은 상태에서
+  시작돼야 하므로 "Canvas 가 있는 HOME 에서 Select 를 켬"이 관문이다.
+  Canvas 가 없는 스킨과 공개 화면은 **여전히 요청 0**.
+- Selecto 인스턴스 하나 · Moveable 인스턴스 하나(프레임당).
+- 일반 lasso(교체) · Shift + lasso(XOR) · Shift + 클릭(XOR) ·
+  Shift + 빈 곳(유지) · 빈 lasso(해제).
+- **손가락으로는 lasso 를 시작하지 않는다** — 세로 스크롤과 가를 수 없다.
+  모바일은 단일 탭 그대로다(의도적 미지원).
+- 프레임은 **제안만** 한다(`CANVAS_PROPOSE`). 부모가 모든 id 를 draft 로
+  다시 보고, 하나라도 어긋나면 **메시지 전체를 거부**한다. 정렬(배열 순서)과
+  primary 도 부모가 정한다.
+- 2개 이상이면 Moveable **그룹 틀 하나**. 조작은 여전히 전부 꺼져 있다.
+- **Canvas JSON 쓰기는 없다** — 그것은 `TRANSFORM-1` 의 일이다.
 
 ### `HOME-CANVAS-EFFECT-HOOK-1`
 

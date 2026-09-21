@@ -335,6 +335,26 @@ function skinPackage(options) {
 
   const o = options || {};
 
+  /* HOME-CANVAS-SELECT-1B-2 — 표시 위치조차 없는 스킨. Select 를
+     켜도 편집 모드가 켜지지 않아야 한다(계약 §15-2). */
+  if (o.noCanvas) {
+
+    return {
+      schemaVersion: 1,
+      templates: {
+        home: { html: '<div class="hc-home"><p class="hc-foot">평범한 스킨 요소</p></div>' },
+        category: { html: '<div class="hc-category"></div>' },
+        post: { html: '<div class="hc-post"><div data-imory-region="post-body"></div></div>' },
+        banner: { html: '<div class="hc-banner"></div>' }
+      },
+      css: ".hc-home { padding: 40px; }",
+      imageSlots: [],
+      regions: [],
+      metadata: {}
+    };
+
+  }
+
   const pkg = {
     schemaVersion: 1,
     templates: {
@@ -831,18 +851,39 @@ async function main() {
       check("★ Studio 를 열기만 하면 편집 runtime 요청 0",
         countRequests(page, RUNTIME_URL_PART) === 0);
 
-      /* 4 — Select 모드만 켰다 */
+      /* =====================================================
+         4 — Select 모드를 켰다
+
+         ★ HOME-CANVAS-SELECT-1B-2 에서 이 칸의 뜻이 바뀌었다.
+
+         1B-1 에서는 "첫 요소를 골랐을 때"가 관문이었으므로 Select 만
+         켜면 요청이 0 이었다. 이제 lasso 가 **아무것도 고르지 않은
+         상태에서** 시작돼야 하므로, Canvas 가 있는 HOME 에서 Select 를
+         켜는 순간이 관문이다(계약 §15-2).
+
+         Canvas 가 **없는** 스킨에서는 여전히 0 이고, 그것은 아래
+         [cost-nocanvas] 가 따로 잰다.
+      ====================================================== */
       await enableSelect(page);
-      await sleep(500);
 
-      check("★ Select 모드만 켜도 vendor UMD 요청 0",
-        countRequests(page, MOVEABLE_URL_PART) === 0 &&
-        countRequests(page, SELECTO_URL_PART) === 0);
+      await page.waitForFunction(
+        () => window.studioCanvasEditingIsOn && window.studioCanvasEditingIsOn() === true,
+        null, { timeout: 10000 }
+      );
 
-      check("★ Select 모드만 켜도 편집 runtime 요청 0",
-        countRequests(page, RUNTIME_URL_PART) === 0);
+      await sleep(900);
 
-      /* 5 — 일반 template 요소 선택 */
+      check("★ Canvas 가 있는 HOME 에서 Select 를 켜면 그때 vendor 를 받는다",
+        countRequests(page, MOVEABLE_URL_PART) === 1 &&
+        countRequests(page, SELECTO_URL_PART) === 1,
+        `moveable=${countRequests(page, MOVEABLE_URL_PART)} ` +
+        `selecto=${countRequests(page, SELECTO_URL_PART)}`);
+
+      check("★ 편집 runtime 도 그때 한 번만 받는다",
+        countRequests(page, RUNTIME_URL_PART) === 1,
+        `${countRequests(page, RUNTIME_URL_PART)}회`);
+
+      /* 5 — 일반 template 요소 선택: 추가 요청이 없다 */
       await clickIn(page, ".hc-foot");
       await sleep(400);
 
@@ -852,12 +893,10 @@ async function main() {
         plainState.inspectorId !== null && plainState.primaryId === null,
         `inspector=${plainState.inspectorId}`);
 
-      check("★ 일반 template 요소를 골라도 vendor UMD 요청 0",
-        countRequests(page, MOVEABLE_URL_PART) === 0 &&
-        countRequests(page, SELECTO_URL_PART) === 0);
-
-      check("★ 일반 template 요소를 골라도 편집 runtime 요청 0",
-        countRequests(page, RUNTIME_URL_PART) === 0);
+      check("★ 일반 template 요소를 골라도 추가 요청 0",
+        countRequests(page, MOVEABLE_URL_PART) === 1 &&
+        countRequests(page, SELECTO_URL_PART) === 1 &&
+        countRequests(page, RUNTIME_URL_PART) === 1);
 
       /* 6 — 첫 Canvas 선택 */
       await clickIn(page, byId("cvPlain"));
@@ -867,11 +906,11 @@ async function main() {
         null, { timeout: 15000 }
       );
 
-      check("★ 첫 Canvas 선택 뒤 Moveable UMD 요청 정확히 1",
+      check("★ 첫 Canvas 선택 뒤에도 Moveable UMD 요청은 정확히 1",
         countRequests(page, MOVEABLE_URL_PART) === 1,
         `${countRequests(page, MOVEABLE_URL_PART)}회`);
 
-      check("★ 첫 Canvas 선택 뒤 Selecto UMD 요청 정확히 1",
+      check("★ 첫 Canvas 선택 뒤에도 Selecto UMD 요청은 정확히 1",
         countRequests(page, SELECTO_URL_PART) === 1,
         "로더가 두 파일을 한 벌로 돌려준다(§4)");
 
@@ -907,16 +946,50 @@ async function main() {
         `selecto=${countRequests(page, SELECTO_URL_PART)} ` +
         `runtime=${countRequests(page, RUNTIME_URL_PART)}`);
 
-      /* 10 — Selecto 인스턴스 0 */
+      /* 10 — Moveable 은 여전히 하나다
+
+         ★ HOME-CANVAS-SELECT-1B-2 에서 Selecto 인스턴스가 **하나**
+           생긴다(lasso). 그 수와 동작은
+           studio/studio-home-canvas-selecto-e2e-test.mjs 가 갖는다 —
+           이 파일이 지키는 것은 "Moveable 은 프레임당 하나"다. */
       const m = await measure(frame, "cvRot45");
 
-      check("★ Selecto 인스턴스 0 (이번 단계는 생성자를 부르지 않는다)",
-        m.selecto === 0, `${m.selecto}개`);
+      check("★ Moveable 인스턴스는 하나다",
+        m.instances === 1, `${m.instances}개`);
 
       check("Studio 쪽 스크립트 오류 없음",
         page.__errors.length === 0, page.__errors.slice(0, 3).join(" | "));
 
       await page.__ctx.close();
+
+
+      /* =====================================================
+         Canvas 가 **없는** 스킨에서는 Select 를 켜도 요청 0
+
+         1B-2 가 관문을 앞으로 옮겼어도 "Canvas 가 있을 때만"은
+         그대로다(계약 §15-2).
+      ====================================================== */
+      const bare = await openStudio(browser, { noCanvas: true });
+
+      await bare.waitForFunction(
+        () => window.getStudioAiWorkingState().hasWorkingSkin === true,
+        null, { timeout: 20000 }
+      );
+
+      await enableSelect(bare);
+      await sleep(1200);
+
+      check("★ Canvas 가 없는 스킨은 Select 를 켜도 vendor UMD 요청 0",
+        countRequests(bare, MOVEABLE_URL_PART) === 0 &&
+        countRequests(bare, SELECTO_URL_PART) === 0,
+        `moveable=${countRequests(bare, MOVEABLE_URL_PART)} ` +
+        `selecto=${countRequests(bare, SELECTO_URL_PART)}`);
+
+      check("★ Canvas 가 없는 스킨은 편집 runtime 요청도 0",
+        countRequests(bare, RUNTIME_URL_PART) === 0,
+        `${countRequests(bare, RUNTIME_URL_PART)}회`);
+
+      await bare.__ctx.close();
 
     }
 
@@ -1158,8 +1231,8 @@ async function main() {
         `lens=${rot.lines.map((l) => l.len.toFixed(1)).join(",")} ` +
         `offset=${JSON.stringify(rot.offset)}`);
 
-      check("★ sandbox — Selecto 인스턴스 0",
-        rot.selecto === 0, `${rot.selecto}개`);
+      check("★ sandbox — Moveable 인스턴스는 하나다",
+        rot.instances === 1, `${rot.instances}개`);
 
       /* 요청 회계 — sandbox origin 에서 정확히 한 벌 */
       const fromSandbox = (part) =>

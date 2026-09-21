@@ -2783,9 +2783,17 @@ function postCanvasSelectionToFrame(selection) {
   const ids =
     (value && Array.isArray(value.ids)) ? value.ids.slice() : [];
 
+  const active =
+    !!(value && value.active === true && ids.length);
+
   postToPreviewFrameIfReady({
     type: "preview:canvas-select",
-    active: !!(value && value.active === true && ids.length),
+
+    /* HOME-CANVAS-SELECT-1B-2 — "지금 캔버스 편집이 켜져 있는가".
+       선택이 없어도 참일 수 있다(lasso 는 빈 상태에서 시작한다). */
+    editing: active || !!(value && value.editing === true),
+
+    active: active,
     ids: ids,
     primaryId:
       (value && typeof value.primaryId === "string") ? value.primaryId : null,
@@ -3351,6 +3359,29 @@ window.addEventListener(
 
       ★ 이 신호는 선택을 만들지도 지우지도 않는다. 표시만 가른다.
     */
+    /*
+      HOME-CANVAS-SELECT-1B-2 — 프레임의 캔버스 선택 **제안**
+      (lasso · Shift 클릭). 확정이 아니다 — 아래 함수가 지금 draft 로
+      모든 id 를 다시 보고, 하나라도 고를 수 없으면 메시지 전체를
+      버린다(studio/inspector/studio-canvas-selection.js).
+    */
+    if (data.type === "preview:canvas-propose") {
+
+      if (typeof window.proposeStudioCanvasSelection === "function") {
+
+        window.proposeStudioCanvasSelection({
+          ids: Array.isArray(data.ids) ? data.ids : [],
+          primaryId: typeof data.primaryId === "string" ? data.primaryId : null,
+          mode: data.mode === "toggle" ? "toggle" : "replace",
+          generation: Number.isInteger(data.generation) ? data.generation : 0
+        });
+
+      }
+
+      return;
+
+    }
+
     if (data.type === "preview:canvas-frame") {
 
       if (typeof window.setStudioCanvasFrameActive === "function") {

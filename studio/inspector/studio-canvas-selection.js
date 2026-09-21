@@ -59,6 +59,11 @@
    식별자를 대조할 때 쓰는 규칙은 같아야 한다. */
 const STUDIO_CANVAS_ELEMENT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
+/* HOME-CANVAS-SELECT-1B-2 — 한 번에 고를 수 있는 상한. sandbox 봉투의
+   SANDBOX_CANVAS_MAX_SELECTED 와 같은 값이어야 한다(그쪽은 메시지
+   층에서, 여기는 native 경로까지 함께 막는다). */
+const STUDIO_CANVAS_MAX_SELECTED = 64;
+
 
 const STUDIO_CANVAS_TYPE_LABELS = {
   photo: "Canvas 사진",
@@ -108,6 +113,17 @@ let studioCanvasSelectLabel = null;
 ========================================================== */
 
 let studioCanvasFrameActive = false;
+
+/* =========================================================
+   HOME-CANVAS-SELECT-1B-2 — 프레임에 "이것을 집어라"를 내려보낸 뒤
+   아직 그 확인을 못 받은 식별자.
+
+   lasso · Shift 클릭은 **부모가** 확정하므로, 그 직후에는 프레임 안
+   Inspector 의 선택이 잠시 다른 것을 가리킨다. 그 어긋남을 "프레임이
+   놓았다"로 읽지 않기 위한 기대값 하나다(syncStudioCanvasSelectionRects).
+========================================================== */
+
+let studioCanvasExpectedFrameId = null;
 
 
 /* =========================================================
@@ -354,6 +370,22 @@ function paintStudioCanvasSelectLabel(mapped, text) {
 }
 
 
+/* 지금 primary 요소의 항목. 선택이 없으면 null 이다. */
+function studioCanvasPrimaryItem() {
+
+  if (!studioCanvasSelection) {
+    return null;
+  }
+
+  return (
+    studioCanvasSelection.items.find(
+      (item) => item.id === studioCanvasSelection.primaryId
+    ) || studioCanvasSelection.items[0] || null
+  );
+
+}
+
+
 function repaintStudioCanvasSelection() {
 
   if (!studioCanvasSelection) {
@@ -369,8 +401,11 @@ function repaintStudioCanvasSelection() {
     return;
   }
 
+  /* HOME-CANVAS-SELECT-1B-2 — 여러 개를 골랐을 때의 fallback 은
+     **primary 하나**다(§10). 이 테두리는 축에 평행한 사각형 하나라
+     그룹을 표현할 수 없고, 그룹 틀은 Moveable 의 몫이다. */
   const item =
-    studioCanvasSelection.items[0] || null;
+    studioCanvasPrimaryItem();
 
   const rect =
     item ? (item.visibleRect || item.rect) : null;
@@ -439,13 +474,112 @@ function studioCanvasRectLiteral(rect) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-SELECT-1B-2 — 캔버스 편집이 켜져 있는가
+
+   ★ 1B-1 에서는 "첫 요소를 골랐을 때"가 프레임의 편집 runtime 과
+     vendor 를 켜는 관문이었다. lasso 는 **아무것도 고르지 않은
+     상태에서** 시작돼야 하므로 관문이 한 칸 앞으로 온다.
+
+   여기서 보는 것은 다섯이다.
+
+     1. Studio 안의 Preview 다        (이 파일이 Studio 에만 있다)
+     2. HOME 화면이다                 ┐
+     3. 유효하고 활성화된 home_canvas ├ studioCanvasDraftPayload()
+     4. 표식이 정확히 하나            ┘ (resolveSkinHomeCanvas 가 전부 본다)
+     5. Select 모드가 켜져 있다       getStudioInspectorState().enabled
+
+   `primaryId` 존재는 **관문에서 빠졌다**(그것이 이 라운드의 변경이다).
+
+   Canvas 가 없는 스킨에서는 3 이 거짓이라 여전히 요청 0 이다.
+========================================================== */
+
+function studioCanvasEditingIsOn() {
+
+  if (typeof studioInspectorEnabled !== "undefined" && !studioInspectorEnabled) {
+    return false;
+  }
+
+  return !!studioCanvasDraftPayload();
+
+}
+
+
+/* =========================================================
+   확정된 상태를 Preview 문서로 — **여기 한 곳에서만 나간다**
+
+   set / clear / sync / reconcile / propose 와 Select 모드 토글이
+   전부 이 함수를 지난다. "선택이 바뀌었는데 프레임만 모른다"도,
+   "Select 를 켰는데 프레임은 아직 꺼진 줄 안다"도 생기지 않는다.
+
+   ★ 좌표도 nonce 도 draft 도 싣지 않는다 — id 와 순번뿐이다.
+     프레임은 그 id 를 자기 DOM 에서 다시 확인한 뒤에만 그린다.
+
+   ★ 값이 같아도 보낸다. 프레임이 새로 만들어졌거나 재렌더로
+     target 을 놓쳤을 때 같은 값을 한 번 더 받는 것이 정답이고,
+     받는 쪽은 같은 값이면 아무 일도 하지 않는다.
+========================================================== */
+
+function postStudioCanvasSelectionToFrame() {
+
+  if (typeof window.postCanvasSelectionToFrame !== "function") {
+    return;
+  }
+
+  const editing =
+    studioCanvasEditingIsOn();
+
+  window.postCanvasSelectionToFrame(
+    studioCanvasSelection
+      ? {
+          editing: true,
+          active: true,
+          ids: studioCanvasSelection.ids.slice(),
+          primaryId: studioCanvasSelection.primaryId,
+          generation: studioCanvasSelection.generation
+        }
+      : {
+          editing: editing,
+          active: false,
+          ids: [],
+          primaryId: null,
+          generation: studioCanvasSelectionGeneration
+        }
+  );
+
+}
+
+
+/*
+  syncStudioCanvasFrameMode()
+
+  선택이 바뀌지 않아도 편집 모드가 바뀔 수 있다 — Select 토글 ·
+  페이지 이동 · Import · AI 적용으로 캔버스가 생기거나 사라지는 것.
+  그 자리들이 이 함수를 부른다.
+*/
+
+function syncStudioCanvasFrameMode() {
+
+  postStudioCanvasSelectionToFrame();
+
+}
+
+
 function applyStudioCanvasSelection(entries, options) {
+
+  /* HOME-CANVAS-SELECT-1B-2 — primary 를 호출자가 정할 수 있다.
+     주지 않으면 지금까지처럼 첫 칸이다(단일 선택 경로). */
+  const wantedPrimary =
+    (options && typeof options.primaryId === "string") ? options.primaryId : null;
 
   const next =
     (Array.isArray(entries) && entries.length)
       ? {
           ids: entries.map((entry) => entry.id),
-          primaryId: entries[0].id,
+          primaryId:
+            (wantedPrimary && entries.some((entry) => entry.id === wantedPrimary))
+              ? wantedPrimary
+              : entries[0].id,
           items: entries.map((entry) => ({
             id: entry.id,
             type: entry.type,
@@ -501,25 +635,7 @@ function applyStudioCanvasSelection(entries, options) {
        하지 않는다.
   ====================================================== */
 
-  if (typeof window.postCanvasSelectionToFrame === "function") {
-
-    window.postCanvasSelectionToFrame(
-      next
-        ? {
-            active: true,
-            ids: next.ids.slice(),
-            primaryId: next.primaryId,
-            generation: next.generation
-          }
-        : {
-            active: false,
-            ids: [],
-            primaryId: null,
-            generation: studioCanvasSelectionGeneration
-          }
-    );
-
-  }
+  postStudioCanvasSelectionToFrame();
 
   /* =====================================================
      프레임에도 해제를 알린다 — 단, 소유권이 넘어가는 경우는 뺀다
@@ -598,10 +714,229 @@ function clearStudioCanvasSelection(options) {
 
   if (!studioCanvasSelection) {
     hideStudioCanvasOverlay();
+
+    /* 선택은 원래 비어 있었어도 편집 모드는 바뀌었을 수 있다 */
+    syncStudioCanvasFrameMode();
+
     return;
   }
 
   applyStudioCanvasSelection(null, options);
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-SELECT-1B-2 — 프레임의 **제안**을 확정한다
+
+   proposeStudioCanvasSelection({ ids, primaryId, mode, generation })
+
+   프레임(lasso · Shift 클릭)은 "이것들이 잡혔다"까지만 올린다.
+   무엇이 최종 선택인지는 **언제나 이 문서가 지금 draft 를 보고**
+   정한다 — 프레임이 보낸 순서도, 개수도, 존재도 믿지 않는다.
+
+   ★ 하나라도 어긋나면 **메시지 전체를 거부**한다.
+
+   "절반만 반영"을 만들지 않는다. 지워진 요소의 옛 id 하나가 섞인
+   lasso 결과가 나머지를 조용히 바꾸면, 사용자가 본 것과 상태가
+   달라진다. 거부하면 화면은 직전 상태 그대로이고, 다음 lasso 가
+   맞는 결과를 올린다.
+
+   ★ 정렬과 primary 는 여기서 정한다(§6).
+
+     ids      draft 의 canvas.elements[] **배열 순서**
+     primary  제안된 primary 가 결과에 남아 있으면 그것,
+              아니면 배열상 **마지막** id(= 가장 앞에 보이는 요소)
+     비면     primaryId: null
+========================================================== */
+
+function proposeStudioCanvasSelection(proposal) {
+
+  const value =
+    (proposal && typeof proposal === "object") ? proposal : null;
+
+  if (!value || !Array.isArray(value.ids)) {
+    return false;
+  }
+
+  const mode =
+    value.mode === "toggle" ? "toggle" : "replace";
+
+  /* 편집이 꺼져 있으면 제안 자체가 성립하지 않는다 */
+  if (!studioCanvasEditingIsOn()) {
+    return false;
+  }
+
+  const payload =
+    studioCanvasDraftPayload();
+
+  if (!payload) {
+    return false;
+  }
+
+
+  /* ── 1. 형태 · 중복 · 존재 · 고를 수 있는가 ── */
+
+  const proposed =
+    [];
+
+  for (let i = 0; i < value.ids.length; i += 1) {
+
+    const id =
+      value.ids[i];
+
+    if (typeof id !== "string" || proposed.indexOf(id) !== -1) {
+
+      console.warn(
+        "[studio-canvas] 제안에 중복되거나 잘못된 식별자가 있습니다 — 전체를 무시합니다.",
+        { id }
+      );
+
+      return false;
+
+    }
+
+    if (!studioCanvasSelectableElement(id)) {
+
+      console.warn(
+        "[studio-canvas] 제안된 식별자를 지금 draft 에서 고를 수 없습니다 — 전체를 무시합니다.",
+        { id }
+      );
+
+      return false;
+
+    }
+
+    proposed.push(id);
+
+  }
+
+  if (proposed.length > STUDIO_CANVAS_MAX_SELECTED) {
+    return false;
+  }
+
+  if (!proposed.length && mode === "toggle") {
+    /* 뜻이 없는 제안이다(Shift + 빈 lasso 는 프레임이 이미 걸렀다) */
+    return false;
+  }
+
+
+  /* ── 2. 합치기 ── */
+
+  const current =
+    studioCanvasSelection ? studioCanvasSelection.ids.slice() : [];
+
+  let wanted;
+
+  if (mode === "replace") {
+    wanted = proposed;
+  }
+  else {
+
+    wanted = current.slice();
+
+    proposed.forEach(
+      (id) => {
+
+        const at =
+          wanted.indexOf(id);
+
+        if (at === -1) {
+          wanted.push(id);
+        }
+        else {
+          wanted.splice(at, 1);
+        }
+
+      }
+    );
+
+  }
+
+
+  /* ── 3. 정규화 — draft 의 배열 순서 ── */
+
+  const order =
+    payload.elements.map((element) => element.id);
+
+  const ids =
+    order.filter((id) => wanted.indexOf(id) !== -1);
+
+
+  if (!ids.length) {
+
+    studioCanvasSelectionGeneration += 1;
+
+    clearStudioCanvasSelection({ keepFrameSelection: true });
+
+    return true;
+
+  }
+
+
+  /* ── 4. primary ── */
+
+  const proposedPrimary =
+    (typeof value.primaryId === "string" && ids.indexOf(value.primaryId) !== -1)
+      ? value.primaryId
+      : null;
+
+  const primaryId =
+    proposedPrimary || ids[ids.length - 1];
+
+
+  /* ── 5. 확정 ── */
+
+  studioCanvasSelectionGeneration += 1;
+
+  const entries =
+    ids.map(
+      (id) => {
+
+        const element =
+          studioCanvasSelectableElement(id);
+
+        const previous =
+          studioCanvasSelection
+            ? studioCanvasSelection.items.find((item) => item.id === id)
+            : null;
+
+        return {
+          id: element.id,
+          type: element.type,
+          locked: element.locked,
+          hidden: element.hidden,
+
+          /* 좌표는 프레임이 곧 올려 준다(preview:inspect-rects) —
+             제안 메시지에는 싣지 않는다. 이미 알고 있는 것이
+             있으면 그동안 그것을 쓴다. */
+          rect: previous ? previous.rect : null,
+          visibleRect: previous ? previous.visibleRect : null
+        };
+
+      }
+    );
+
+  const applied =
+    applyStudioCanvasSelection(entries, { primaryId: primaryId });
+
+
+  /* =====================================================
+     프레임 안 Inspector 도 primary 를 가리키게 한다.
+
+     그래야 좌표 보고(preview:inspect-rects)가 primary 의 것이 되고,
+     fallback 테두리와 팝오버 자리가 맞는다. 프레임 쪽 pick() 은
+     조용하다(silent) — 되받아 올려보내지 않으므로 왕복이 생기지
+     않는다(skin/sandbox/skin-sandbox-inspect.js · preview-bridge.js).
+  ====================================================== */
+
+  studioCanvasExpectedFrameId = primaryId;
+
+  if (typeof window.postInspectorSelectionToFrame === "function") {
+    window.postInspectorSelectionToFrame(primaryId);
+  }
+
+  return applied;
 
 }
 
@@ -656,7 +991,31 @@ function syncStudioCanvasSelectionRects(selected) {
   const rect =
     selected ? studioCanvasRectLiteral(selected.rect) : null;
 
-  if (!rect || selected.editId !== studioCanvasSelection.primaryId) {
+  const matches =
+    !!rect && selected.editId === studioCanvasSelection.primaryId;
+
+
+  if (!matches) {
+
+    /* =====================================================
+       HOME-CANVAS-SELECT-1B-2 — **부모가 방금 바꾼 선택**이면
+       프레임이 아직 따라오지 않은 것뿐이다.
+
+       lasso 와 Shift 클릭은 부모가 확정한다. 그 직후 프레임 안
+       Inspector 는 아직 **클릭으로 잡았던 옛 요소**(또는 아무것도
+       아닌 것)를 가리키고 있고, 그 좌표 보고가 한 박자 먼저
+       올라온다. 그것을 "프레임이 놓았다"로 읽으면 방금 만든
+       다중 선택이 곧바로 지워진다.
+
+       그래서 부모가 프레임에 "이것을 집어라"를 내려보낸 뒤로는,
+       프레임이 그 id 를 실제로 집었다고 알려 줄 때까지 어긋난
+       보고를 **무시**한다. 프레임이 스스로 놓은 경우(기대가 없는
+       경우)는 지금까지처럼 선택을 푼다.
+    ====================================================== */
+
+    if (studioCanvasExpectedFrameId === studioCanvasSelection.primaryId) {
+      return;
+    }
 
     /* 프레임이 이미 그 요소를 놓았다는 소식이다 — 되받아 보내지
        않는다(같은 말을 왕복시키면 늦게 도착한 메시지가 다음 선택을
@@ -667,8 +1026,17 @@ function syncStudioCanvasSelectionRects(selected) {
 
   }
 
+
+  /* 프레임이 따라왔다 */
+  studioCanvasExpectedFrameId = null;
+
+
   const item =
-    studioCanvasSelection.items[0];
+    studioCanvasPrimaryItem();
+
+  if (!item) {
+    return;
+  }
 
   item.rect = rect;
 
@@ -699,17 +1067,34 @@ function syncStudioCanvasSelectionRects(selected) {
 function reconcileStudioCanvasSelection() {
 
   if (!studioCanvasSelection) {
+
+    /* 선택은 없어도 편집 모드는 바뀌었을 수 있다 — 캔버스가
+       생기거나 사라지는 것이 전부 이 관문을 지난다 */
+    syncStudioCanvasFrameMode();
+
     return;
+
   }
 
-  const element =
-    studioCanvasSelectableElement(studioCanvasSelection.primaryId);
 
-  if (!element) {
+  /* =====================================================
+     HOME-CANVAS-SELECT-1B-2 — **살아남은 것만 남긴다**
+
+     하나가 지워졌다고 나머지 선택까지 풀지 않는다(§11). 전부
+     사라졌을 때만 해제한다.
+  ====================================================== */
+
+  const survivors =
+    studioCanvasSelection.items
+      .map((item) => ({ item, element: studioCanvasSelectableElement(item.id) }))
+      .filter((entry) => !!entry.element);
+
+
+  if (!survivors.length) {
 
     console.info(
       "[studio-canvas] 캔버스 선택을 유지할 근거가 없어 해제합니다",
-      { id: studioCanvasSelection.primaryId }
+      { ids: studioCanvasSelection.ids }
     );
 
     clearStudioCanvasSelection();
@@ -718,11 +1103,52 @@ function reconcileStudioCanvasSelection() {
 
   }
 
-  /* 종류가 바뀌었을 수 있다(Code Apply · Import) — 이름표만 따라간다 */
-  studioCanvasSelection.items[0].type =
-    element.type;
 
-  repaintStudioCanvasSelection();
+  if (survivors.length === studioCanvasSelection.items.length) {
+
+    /* 종류가 바뀌었을 수 있다(Code Apply · Import) — 이름표만 따라간다 */
+    survivors.forEach((entry) => {
+      entry.item.type = entry.element.type;
+    });
+
+    repaintStudioCanvasSelection();
+
+    syncStudioCanvasFrameMode();
+
+    return;
+
+  }
+
+
+  /* 일부가 사라졌다 — primary 가 살아 있으면 그대로 두고, 아니면
+     배열상 마지막(= 가장 앞에 보이는 요소)으로 옮긴다(§6). */
+
+  const ids =
+    survivors.map((entry) => entry.item.id);
+
+  const primaryId =
+    ids.indexOf(studioCanvasSelection.primaryId) !== -1
+      ? studioCanvasSelection.primaryId
+      : ids[ids.length - 1];
+
+
+  console.info(
+    "[studio-canvas] 사라진 요소만 선택에서 뺍니다",
+    { kept: ids, primaryId }
+  );
+
+
+  applyStudioCanvasSelection(
+    survivors.map((entry) => ({
+      id: entry.item.id,
+      type: entry.element.type,
+      locked: entry.element.locked,
+      hidden: entry.element.hidden,
+      rect: entry.item.rect,
+      visibleRect: entry.item.visibleRect
+    })),
+    { primaryId: primaryId }
+  );
 
 }
 
@@ -775,6 +1201,11 @@ if (typeof window !== "undefined") {
   window.syncStudioCanvasSelectionRects = syncStudioCanvasSelectionRects;
 
   window.setStudioCanvasFrameActive = setStudioCanvasFrameActive;
+
+  /* HOME-CANVAS-SELECT-1B-2 */
+  window.proposeStudioCanvasSelection = proposeStudioCanvasSelection;
+  window.syncStudioCanvasFrameMode = syncStudioCanvasFrameMode;
+  window.studioCanvasEditingIsOn = studioCanvasEditingIsOn;
 
   window.studioCanvasSelectionIsActive = studioCanvasSelectionIsActive;
 

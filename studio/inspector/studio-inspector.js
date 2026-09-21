@@ -966,6 +966,21 @@ function setStudioInspectorEnabled(enabled) {
     window.postInspectorModeToFrame(next);
   }
 
+  /* =====================================================
+     HOME-CANVAS-SELECT-1B-2 — 캔버스 편집 모드도 함께 알린다.
+
+     lasso 는 **아무것도 고르지 않은 상태에서** 시작돼야 하므로,
+     프레임의 편집 runtime 을 켜는 관문이 "첫 선택"이 아니라
+     "Select 모드 + 유효한 캔버스"로 옮겨졌다(계약 §15-2).
+
+     ★ 끌 때도 보낸다. 위 clearStudioCanvasSelection() 은 고른 것이
+       있을 때만 메시지를 내므로, 아무것도 고르지 않은 채 Select 를
+       끈 경우가 여기서 덮인다.
+  ====================================================== */
+  if (typeof window.syncStudioCanvasFrameMode === "function") {
+    window.syncStudioCanvasFrameMode();
+  }
+
   if (currentWorkingSkin && typeof renderCurrentPreviewEntry === "function") {
     renderCurrentPreviewEntry();
   }

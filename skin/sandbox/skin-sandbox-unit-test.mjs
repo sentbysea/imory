@@ -369,11 +369,14 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
    (좌우 영역의 모바일 패널, IMORY_SIDES_DESIGN.md §7). 값 검사는
    skin/skin-sides-test.mjs [protocol] 이 본다.
 
-   HOME-CANVAS-SELECT-1B-1 에서 하나가 늘어 스물일곱이다
+   HOME-CANVAS-SELECT-1B-1 에서 하나가 늘어 스물일곱이었고
    (CANVAS_SELECT — 부모가 확정한 캔버스 선택. 프레임은 받은 id 를
-    자기 DOM 에서 다시 확인한 뒤에만 그린다). */
-check("[msg] 이번 라운드가 아는 type 은 정확히 스물일곱이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 27,
+    자기 DOM 에서 다시 확인한 뒤에만 그린다),
+   HOME-CANVAS-SELECT-1B-2 에서 하나 더 늘어 스물여덟이다
+   (CANVAS_PROPOSE — lasso · Shift 클릭의 **제안**. 확정이 아니라
+    부모가 자기 draft 로 전부 다시 본다). */
+check("[msg] 이번 라운드가 아는 type 은 정확히 스물여덟이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 28,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -403,55 +406,55 @@ const canvasSelectTo = (payload) =>
 
 check("[canvas-select] 정상 선택을 프레임이 받는다",
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: true,
+    contract: 1, renderSeq: 3, editing: true, active: true,
     ids: ["cvPhoto"], primaryId: "cvPhoto", generation: 5
   }).ok === true);
 
 check("[canvas-select] 빈 선택(해제)도 받는다",
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: false, ids: [], generation: 5
+    contract: 1, renderSeq: 3, editing: false, active: false, ids: [], generation: 5
   }).ok === true);
 
 check("[canvas-select] ★ active:true 인데 primaryId 가 없으면 거부된다",
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: true, ids: ["cvPhoto"], generation: 5
+    contract: 1, renderSeq: 3, editing: true, active: true, ids: ["cvPhoto"], generation: 5
   }).ok === false,
   "골랐다는데 무엇을 골랐는지 없는 모양을 메시지 층에서 막는다");
 
 check("[canvas-select] ★ primaryId 가 ids 에 없으면 거부된다",
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: true,
+    contract: 1, renderSeq: 3, editing: true, active: true,
     ids: ["cvPhoto"], primaryId: "cvText", generation: 5
   }).ok === false);
 
 check("[canvas-select] ★ active:false 인데 ids/primaryId 가 실려 오면 거부된다",
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: false,
+    contract: 1, renderSeq: 3, editing: false, active: false,
     ids: ["cvPhoto"], primaryId: "cvPhoto", generation: 5
   }).ok === false);
 
 check("[canvas-select] ★ 식별자 형태가 Inspector 와 같다",
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: true,
+    contract: 1, renderSeq: 3, editing: true, active: true,
     ids: ["cv Photo"], primaryId: "cv Photo", generation: 5
   }).ok === false &&
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: true,
+    contract: 1, renderSeq: 3, editing: true, active: true,
     ids: ["<img>"], primaryId: "<img>", generation: 5
   }).ok === false);
 
 check("[canvas-select] ★ generation 이 음수거나 정수가 아니면 거부된다",
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: false, ids: [], generation: -1
+    contract: 1, renderSeq: 3, editing: false, active: false, ids: [], generation: -1
   }).ok === false &&
   canvasSelectTo({
-    contract: 1, renderSeq: 3, active: false, ids: [], generation: 1.5
+    contract: 1, renderSeq: 3, editing: false, active: false, ids: [], generation: 1.5
   }).ok === false);
 
 check("[canvas-select] ★ 모르는 키(nonce · css · rect)는 옮겨지지 않는다",
   (() => {
     const verdict = canvasSelectTo({
-      contract: 1, renderSeq: 3, active: true,
+      contract: 1, renderSeq: 3, editing: true, active: true,
       ids: ["cvPhoto"], primaryId: "cvPhoto", generation: 5,
       nonce: "abc", css: "body{}", rect: { left: 0, top: 0, width: 1, height: 1 }
     });
@@ -469,7 +472,7 @@ check("[canvas-select] ★ 프레임은 이 메시지를 부모에게 보낼 수
       source: CANVAS_PARENT_WIN,
       data: protocol.buildSandboxMessage(
         protocol.SANDBOX_MESSAGE_TYPES.CANVAS_SELECT,
-        { contract: 1, renderSeq: 3, active: false, ids: [], generation: 0 },
+        { contract: 1, renderSeq: 3, editing: false, active: false, ids: [], generation: 0 },
         1
       )
     },
@@ -477,6 +480,157 @@ check("[canvas-select] ★ 프레임은 이 메시지를 부모에게 보낼 수
       originAllowList: ["https://skin-frame.imory.me"],
       source: CANVAS_PARENT_WIN,
       direction: "to-parent"
+    }
+  ).ok === false);
+
+
+/* =========================================================
+   [canvas-propose] HOME-CANVAS-SELECT-1B-2 — lasso · Shift 제안
+========================================================== */
+
+console.log("\n[canvas-propose] 캔버스 선택 제안 (HOME-CANVAS-SELECT-1B-2)");
+
+/* 편집 모드 — 고른 것이 없어도 켜질 수 있다(lasso 는 빈 상태에서 시작) */
+
+check("[canvas-propose] ★ editing:true · active:false 는 정상이다(빈 lasso 대기)",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, editing: true, active: false, ids: [], generation: 7
+  }).ok === true,
+  "이것이 1B-2 에서 vendor 를 켜는 관문이다");
+
+check("[canvas-propose] ★ editing:false 인데 active:true 는 거부된다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, editing: false, active: true,
+    ids: ["cvPhoto"], primaryId: "cvPhoto", generation: 7
+  }).ok === false,
+  "고른 것이 있는데 편집이 꺼져 있다는 모양은 없다");
+
+check("[canvas-propose] ★ editing 칸이 없으면 거부된다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, active: false, ids: [], generation: 7
+  }).ok === false);
+
+check("[canvas-propose] ★ 여러 개를 고른 상태를 프레임이 받는다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, editing: true, active: true,
+    ids: ["cvA", "cvB", "cvC"], primaryId: "cvB", generation: 9
+  }).ok === true);
+
+check("[canvas-propose] ★ 중복 id 가 섞이면 거부된다",
+  canvasSelectTo({
+    contract: 1, renderSeq: 3, editing: true, active: true,
+    ids: ["cvA", "cvA"], primaryId: "cvA", generation: 9
+  }).ok === false,
+  "중복은 상한을 우회하는 흔한 위조 모양이다");
+
+
+const canvasProposeUp = (payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://skin-frame.imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_PROPOSE, payload, 1
+      )
+    },
+    {
+      originAllowList: ["https://skin-frame.imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-parent"
+    }
+  );
+
+check("[canvas-propose] 정상 replace 제안을 부모가 받는다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3,
+    ids: ["cvA", "cvB"], primaryId: "cvB", mode: "replace", generation: 4
+  }).ok === true);
+
+check("[canvas-propose] 정상 toggle 제안을 부모가 받는다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3,
+    ids: ["cvA"], primaryId: "cvA", mode: "toggle", generation: 4
+  }).ok === true);
+
+check("[canvas-propose] ★ 빈 replace 는 '전체 해제'라 통과한다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3, ids: [], mode: "replace", generation: 4
+  }).ok === true);
+
+check("[canvas-propose] ★ 빈 toggle 은 뜻이 없어 거부된다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3, ids: [], mode: "toggle", generation: 4
+  }).ok === false);
+
+check("[canvas-propose] ★ 모르는 mode 는 거부된다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3,
+    ids: ["cvA"], primaryId: "cvA", mode: "add", generation: 4
+  }).ok === false &&
+  canvasProposeUp({
+    contract: 1, renderSeq: 3,
+    ids: ["cvA"], primaryId: "cvA", generation: 4
+  }).ok === false);
+
+check("[canvas-propose] ★ primaryId 가 ids 에 없으면 거부된다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3,
+    ids: ["cvA"], primaryId: "cvB", mode: "replace", generation: 4
+  }).ok === false);
+
+check("[canvas-propose] ★ 중복 id 는 거부된다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3,
+    ids: ["cvA", "cvB", "cvA"], primaryId: "cvA", mode: "replace", generation: 4
+  }).ok === false);
+
+check("[canvas-propose] ★ 상한을 넘는 배열은 거부된다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3,
+    ids: Array.from(
+      { length: protocol.SANDBOX_CANVAS_MAX_SELECTED + 1 },
+      (_, i) => "cv" + i
+    ),
+    primaryId: "cv0", mode: "replace", generation: 4
+  }).ok === false,
+  `상한 ${protocol.SANDBOX_CANVAS_MAX_SELECTED}`);
+
+check("[canvas-propose] ★ 식별자 형태가 Inspector 와 같다",
+  canvasProposeUp({
+    contract: 1, renderSeq: 3,
+    ids: ["<script>"], primaryId: "<script>", mode: "replace", generation: 4
+  }).ok === false);
+
+check("[canvas-propose] ★ 모르는 키(rect · css · selector)는 옮겨지지 않는다",
+  (() => {
+    const verdict = canvasProposeUp({
+      contract: 1, renderSeq: 3,
+      ids: ["cvA"], primaryId: "cvA", mode: "replace", generation: 4,
+      rect: { left: 0, top: 0, width: 1, height: 1 },
+      css: "body{}", selector: ".x"
+    });
+    return verdict.ok === true &&
+      verdict.payload.rect === undefined &&
+      verdict.payload.css === undefined &&
+      verdict.payload.selector === undefined;
+  })(),
+  "프레임은 식별자 · 순번 · 뜻 하나만 올린다");
+
+check("[canvas-propose] ★ 부모는 이 메시지를 프레임에 보낼 수 없다 (방향)",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_PROPOSE,
+        { contract: 1, renderSeq: 3, ids: [], mode: "replace", generation: 0 },
+        1
+      )
+    },
+    {
+      originAllowList: ["https://imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-frame"
     }
   ).ok === false);
 

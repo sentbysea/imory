@@ -257,8 +257,20 @@ var SANDBOX_MESSAGE_TYPES = {
   /* =======================================================
      HOME-CANVAS-SELECT-1B-1 — 캔버스 선택을 프레임에 알린다
 
-       CANVAS_SELECT parent -> frame
-         { renderSeq, active, ids[], primaryId?, generation }
+       CANVAS_SELECT  parent -> frame
+         { renderSeq, editing, active, ids[], primaryId?, generation }
+       CANVAS_PROPOSE frame  -> parent
+         { renderSeq, ids[], primaryId, mode, generation }
+
+     ★ HOME-CANVAS-SELECT-1B-2 에서 두 칸이 늘었다.
+
+     `editing` 은 "지금 이 프레임에서 캔버스 편집이 켜져 있는가"다.
+     선택이 **없어도** 참일 수 있다 — lasso 는 아무것도 고르지 않은
+     상태에서 시작되기 때문이다(1B-1 에서는 첫 선택이 관문이었다).
+     부모가 HOME · 유효한 canvas · Select 모드를 전부 보고 정한다.
+
+     `CANVAS_PROPOSE` 는 프레임의 **제안**이다. 확정이 아니다 —
+     아래 규칙을 보라.
 
      ★ 새 소유자를 만드는 메시지가 아니다.
 
@@ -281,11 +293,25 @@ var SANDBOX_MESSAGE_TYPES = {
        것과 같은 결의 장치이고, 둘 다 있어야 한다(같은 화면 안에서
        선택만 여러 번 바뀔 수 있다).
 
-     ids 는 지금 0개 또는 1개다. 배열로 두는 이유는 부모 상태와
-     같다 — 뒤 단계의 다중 선택에서 모양이 바뀌지 않게.
+     ★ 프레임은 **최종 선택을 확정하지 않는다**(1B-2).
+
+     lasso · Shift 클릭의 결과는 `CANVAS_PROPOSE` 로 올라가고, 부모가
+     자기 draft 로 전부 다시 검증한 뒤 `CANVAS_SELECT` 로 **승인한
+     상태**를 내려보낸다. 한 id 라도 지금 draft 에 없거나 hidden ·
+     locked 면 **메시지 전체를 거부**하고 기존 선택을 유지한다 —
+     "절반만 반영"이 없다.
+
+     `mode` 는 둘뿐이다.
+
+       replace  이 결과로 **갈아 끼운다**(일반 lasso)
+       toggle   기존 선택과 **XOR** 한다(Shift + lasso · Shift + 클릭)
+
+     정렬도 부모가 한다 — 프레임이 보낸 순서를 그대로 믿지 않고
+     지금 draft 의 `canvas.elements[]` 배열 순서로 정규화한다.
   ======================================================= */
 
-  CANVAS_SELECT: "IMORY_CANVAS_SELECT"
+  CANVAS_SELECT: "IMORY_CANVAS_SELECT",
+  CANVAS_PROPOSE: "IMORY_CANVAS_PROPOSE"
 };
 
 
@@ -522,6 +548,43 @@ var SANDBOX_INSPECT_DRAG_PHASES = ["start", "move", "end", "cancel"];
 */
 
 var SANDBOX_CANVAS_MAX_SELECTED = 64;
+
+
+/* HOME-CANVAS-SELECT-1B-2 — 프레임이 올릴 수 있는 제안의 뜻은 둘뿐이다 */
+
+var SANDBOX_CANVAS_SELECT_MODES = ["replace", "toggle"];
+
+
+/*
+  캔버스 식별자 목록 — 상한을 넘지 않고, 전부 형태가 맞고, **같은
+  것이 두 번 오지 않는다**.
+
+  중복을 메시지 층에서 막는 이유: 중복은 위조의 흔한 모양이고
+  (길이 상한을 우회해 부모에게 큰 배열을 만들게 한다), 정상 경로가
+  그것을 만들 이유가 하나도 없다.
+*/
+
+function isSandboxCanvasIdList(value) {
+
+  if (!Array.isArray(value) || value.length > SANDBOX_CANVAS_MAX_SELECTED) {
+    return false;
+  }
+
+  for (var i = 0; i < value.length; i += 1) {
+
+    if (!isSandboxInspectEditId(value[i])) {
+      return false;
+    }
+
+    if (value.indexOf(value[i]) !== i) {
+      return false;
+    }
+
+  }
+
+  return true;
+
+}
 
 
 function isSandboxInspectMetrics(value) {
@@ -1567,7 +1630,9 @@ var SANDBOX_MESSAGE_SPEC = {
 
   IMORY_CANVAS_SELECT: {
     direction: "to-frame",
-    keys: ["contract", "renderSeq", "active", "ids", "primaryId", "generation"],
+    keys: [
+      "contract", "renderSeq", "editing", "active", "ids", "primaryId", "generation"
+    ],
     check: function (payload) {
 
       if (!isSandboxRenderSeq(payload.renderSeq)) {
@@ -1578,26 +1643,73 @@ var SANDBOX_MESSAGE_SPEC = {
         return false;
       }
 
+      /* HOME-CANVAS-SELECT-1B-2 — 편집 모드. 선택이 없어도 참일 수
+         있고(lasso 는 빈 상태에서 시작한다), 거짓이면 선택도 없다. */
+      if (typeof payload.editing !== "boolean") {
+        return false;
+      }
+
+      if (payload.active && !payload.editing) {
+        return false;
+      }
+
       if (!Number.isInteger(payload.generation) || payload.generation < 0) {
         return false;
       }
 
-      if (!Array.isArray(payload.ids)) {
+      if (!isSandboxCanvasIdList(payload.ids)) {
         return false;
-      }
-
-      if (payload.ids.length > SANDBOX_CANVAS_MAX_SELECTED) {
-        return false;
-      }
-
-      for (let i = 0; i < payload.ids.length; i += 1) {
-        if (!isSandboxInspectEditId(payload.ids[i])) {
-          return false;
-        }
       }
 
       if (!payload.active) {
         return payload.ids.length === 0 && payload.primaryId === undefined;
+      }
+
+      return (
+        isSandboxInspectEditId(payload.primaryId) &&
+        payload.ids.indexOf(payload.primaryId) !== -1
+      );
+
+    }
+  },
+
+
+  /* =======================================================
+     HOME-CANVAS-SELECT-1B-2 — 프레임의 선택 **제안**
+
+     ★ 이것은 확정이 아니다. 부모가 자기 draft 로 모든 id 를 다시
+       보고, 하나라도 없거나 hidden · locked 면 **메시지 전체를
+       거부**한다(위 CANVAS_PROPOSE 주석).
+
+     빈 제안(`ids: []`)도 뜻이 있다 — "아무것도 못 잡은 일반 lasso"
+     이고, 그것은 `replace` 로 오면 **전체 해제**다. `toggle` 로
+     오는 빈 제안은 아무 일도 하지 않으므로 거부한다(뜻이 없는
+     메시지를 받지 않는다).
+  ======================================================= */
+
+  IMORY_CANVAS_PROPOSE: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "ids", "primaryId", "mode", "generation"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (SANDBOX_CANVAS_SELECT_MODES.indexOf(payload.mode) === -1) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.generation) || payload.generation < 0) {
+        return false;
+      }
+
+      if (!isSandboxCanvasIdList(payload.ids)) {
+        return false;
+      }
+
+      if (!payload.ids.length) {
+        return payload.mode === "replace" && payload.primaryId === undefined;
       }
 
       return (
@@ -1904,6 +2016,8 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_INSPECT_MAX_TEXT_CHARS,
     SANDBOX_INSPECT_MAX_CANDIDATES,
     SANDBOX_CANVAS_MAX_SELECTED,
+    SANDBOX_CANVAS_SELECT_MODES,
+    isSandboxCanvasIdList,
     isSandboxInspectEditId,
     isSandboxInspectRect,
     isSandboxInspectTarget,

@@ -44,6 +44,14 @@
               studio/studio-home-canvas-moveable-e2e-test.mjs 가
               통째로 갖는다(같은 수를 두 파일에서 세지 않는다).
 
+   ★ HOME-CANVAS-SELECT-1B-2 이후
+
+   관문이 한 칸 더 앞으로 왔다 — **Canvas 가 있는 HOME 에서 Select 를
+   켜는 순간**이다(lasso 는 아무것도 고르지 않은 상태에서 시작돼야
+   한다, 계약 §15-2). 그래서 [vendor] 절의 0 은 "Select 를 켜기
+   전까지"가 됐다. lasso · 다중 선택의 회계와 동작은
+   studio/studio-home-canvas-selecto-e2e-test.mjs 가 갖는다.
+
    Chromium 만 쓴다(§11).
 
    실행:
@@ -1488,22 +1496,30 @@ async function main() {
 
       await canvasFrame(page, false);
       await enableSelect(page);
+      await sleep(1200);
 
-      check("Select 를 켰을 때 UMD 요청 0",
-        page.__vendorHits.length === 0, page.__vendorHits.join(" | "));
+      /* ★ HOME-CANVAS-SELECT-1B-2 — 관문이 한 칸 더 앞으로 왔다.
+         Canvas 가 있는 HOME 에서 Select 를 켜는 순간이다(lasso 는
+         아무것도 고르지 않은 상태에서 시작돼야 한다). */
+      check("★ Canvas 가 있는 HOME 에서 Select 를 켜면 그때 vendor 가 켜진다(SELECT-1B-2)",
+        page.__vendorHits.length > 0,
+        `hits=${page.__vendorHits.length}`);
 
-      /* 일반 template 요소는 캔버스가 아니다 — 관문을 열지 않는다 */
+      const beforePlain = page.__vendorHits.length;
+
       await clickIn(page, ".hc-foot");
 
-      check("★ 일반 template 요소를 골랐을 때도 UMD 요청 0",
-        page.__vendorHits.length === 0, page.__vendorHits.join(" | "));
+      check("일반 template 요소를 골라도 추가 요청 0",
+        page.__vendorHits.length === beforePlain,
+        page.__vendorHits.join(" | "));
 
       await clickIn(page, byId("cvPhoto"));
 
       const picked = await readState(page);
 
-      check("캔버스 요소를 고르면 그때 vendor 가 켜진다(SELECT-1B-1)",
-        picked.canvas.primaryId === "cvPhoto" && page.__vendorHits.length > 0,
+      check("캔버스 요소 선택도 추가 요청 없이 된다",
+        picked.canvas.primaryId === "cvPhoto" &&
+        page.__vendorHits.length === beforePlain,
         `primary=${picked.canvas.primaryId} hits=${page.__vendorHits.length}`);
 
       await page.__ctx.close();
@@ -1512,22 +1528,30 @@ async function main() {
       const spage = await openStudio(browser, { sandbox: true });
       const sframe = await canvasFrame(spage, true);
 
+      check("sandbox — Select 를 켜기 전에는 UMD 요청 0",
+        spage.__vendorHits.length === 0, spage.__vendorHits.join(" | "));
+
       await enableSelect(spage);
       await sframe.waitForSelector("body.imory-sandbox-inspect-on",
         { state: "attached", timeout: 8000 });
 
-      check("sandbox — 아직 고르지 않았을 때 UMD 요청 0",
-        spage.__vendorHits.length === 0, spage.__vendorHits.join(" | "));
-
-      await clickInSandbox(spage, sframe, byId("cvShape"));
-      await sleep(1200);
+      await sleep(1500);
 
       /* 프레임 쪽 문서가 **그때** 로더를 받는다 */
       const frameHasLoader = await sframe.evaluate(() =>
         typeof window.ensureHomeCanvasEditorVendors);
 
-      check("★ sandbox 프레임 문서는 고른 뒤에야 로더를 갖는다",
+      check("★ sandbox 프레임 문서는 Select 를 켠 뒤에 로더를 갖는다",
         frameHasLoader === "function", frameHasLoader);
+
+      await clickInSandbox(spage, sframe, byId("cvShape"));
+      await sleep(600);
+
+      const sPicked = await readState(spage);
+
+      check("sandbox — 그 뒤 캔버스 선택이 정상이다",
+        sPicked.canvas.primaryId === "cvShape",
+        `primary=${sPicked.canvas.primaryId}`);
 
       await spage.__ctx.close();
 

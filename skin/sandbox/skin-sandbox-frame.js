@@ -1208,6 +1208,39 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
                 }
 
+              },
+
+              /*
+                HOME-CANVAS-SELECT-1B-2 — lasso · Shift 클릭의 결과는
+                **제안**이다. 확정은 부모가 자기 draft 로 한다.
+
+                ★ 여기서 값을 만들지 않는다. runtime 이 준 것을 알려진
+                  칸만 새 리터럴로 옮겨 보낸다 — 프로토콜이 한 번 더
+                  거른다(형태 · 중복 · 상한 · mode).
+              */
+              onPropose: function (proposal) {
+
+                if (!proposal || !Array.isArray(proposal.ids)) {
+                  return;
+                }
+
+                const payload = {
+                  contract: 1,
+                  renderSeq: FRAME_STATE.renderSeq,
+                  ids: proposal.ids.slice(),
+                  mode: proposal.mode === "toggle" ? "toggle" : "replace",
+                  generation:
+                    Number.isInteger(proposal.generation) && proposal.generation >= 0
+                      ? proposal.generation
+                      : 0
+                };
+
+                if (typeof proposal.primaryId === "string" && proposal.primaryId) {
+                  payload.primaryId = proposal.primaryId;
+                }
+
+                send(SANDBOX_MESSAGE_TYPES.CANVAS_PROPOSE, payload);
+
               }
 
             });
@@ -1239,10 +1272,19 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
 
     FRAME_STATE.canvasSelection = payload;
 
-    /* 해제인데 아직 한 번도 만들지 않았다 — 만들 이유가 없다
-       (여기서 만들면 "Select 를 켜고 아무것도 고르지 않았는데
-        vendor 를 받는다"가 된다) */
-    if (!FRAME_STATE.canvasFrame && !(payload && payload.active === true)) {
+    /* =====================================================
+       HOME-CANVAS-SELECT-1B-2 — 관문이 `editing` 으로 옮겨졌다.
+
+       lasso 는 아무것도 고르지 않은 상태에서 시작돼야 하므로,
+       "고른 것이 있는가"가 아니라 "캔버스 편집이 켜졌는가"가
+       runtime 을 불러오는 자리다. 부모가 HOME · 유효한 canvas ·
+       Select 모드를 전부 보고 정한 값이다.
+
+       꺼진 상태(editing:false)에서 아직 한 번도 만들지 않았으면
+       만들지 않는다 — 공개 화면과 Canvas 없는 스킨의 요청 0 이
+       여기서 지켜진다.
+    ====================================================== */
+    if (!FRAME_STATE.canvasFrame && !(payload && payload.editing === true)) {
       return;
     }
 
@@ -1430,6 +1472,7 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
       }
 
       applyCanvasSelection({
+        editing: verdict.payload.editing === true,
         active: verdict.payload.active === true,
         ids: verdict.payload.ids,
         primaryId:

@@ -1,7 +1,7 @@
 # IMORY HOME CANVAS — 데이터 계약
 
 > 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 · §13 · §14 ·
-> §15 는 지금 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집
+> §15 · §16 은 지금 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집
 > UI 가 지켜야 할 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
 >
 > 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
@@ -10,7 +10,8 @@
 > `HOME-CANVAS-VENDOR-1`(2026-09-21, **Moveable · Selecto 고정과 지연 로더** — §13) ·
 > `HOME-CANVAS-SELECT-1A`(2026-09-21, **선택 소유권과 단일 선택 기반** — §14) ·
 > `HOME-CANVAS-SELECT-1B-1`(2026-09-21, **조건부 vendor 활성화와 회전을 따라가는
-> 선택 틀** — §15).
+> 선택 틀** — §15) ·
+> `HOME-CANVAS-SELECT-1B-2`(2026-09-21, **Selecto lasso 와 다중 선택** — §16).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -41,7 +42,8 @@
 `node studio/studio-home-canvas-e2e-test.mjs` ·
 `node studio/studio-home-canvas-vendor-e2e-test.mjs` ·
 `node studio/studio-home-canvas-select-e2e-test.mjs` ·
-`node studio/studio-home-canvas-moveable-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
+`node studio/studio-home-canvas-moveable-e2e-test.mjs` ·
+`node studio/studio-home-canvas-selecto-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
 
 ---
 
@@ -55,18 +57,17 @@
 | `RENDER-1B` | 그 **같은 렌더러**가 cross-origin sandbox 프레임에서도 돈다(§12-6). **네 화면 정적 parity 가 검증됐다** — 공개 native · Studio native Preview · 공개 sandbox · Studio sandbox Preview |
 | `VENDOR-1` | Moveable 0.53.0 · Selecto 1.26.3 UMD 를 **저장소에 바이트 그대로 고정**하고, Studio 전용 **지연 로더**와 sandbox allowlist 두 줄을 두었다(§13). **아직 Canvas 요소에 연결되지 않았다** |
 | `SELECT-1A` | **캔버스 요소를 고르고 푸는 것**(§14) — 캔버스 전용 선택 상태(배열 모양, 지금은 최대 1개) · 기존 Inspector 와의 **소유권 분리** · 캔버스를 아는 공통 hit-test · draft 존재 검증 · 축에 평행한 임시 테두리. **고치는 것은 하나도 없다** |
-| `SELECT-1B-1` | **조건부 vendor 활성화와 회전을 따라가는 선택 틀**(§15) — 첫 Canvas 요소를 고른 그 순간에만 프레임 안에서 runtime · 로더 · UMD 를 받고, 단일 선택 요소에 Moveable 로 테두리 하나를 그린다. **표시 전용**이다 — 손잡이 · 조작 · Selecto · Canvas JSON 쓰기는 없다 |
+| `SELECT-1B-1` | **조건부 vendor 활성화와 회전을 따라가는 선택 틀**(§15) — 첫 Canvas 요소를 고른 그 순간에만 프레임 안에서 runtime · 로더 · UMD 를 받고, 단일 선택 요소에 Moveable 로 테두리 하나를 그린다. **표시 전용**이다 — 손잡이 · 조작 · Canvas JSON 쓰기는 없다 |
+| `SELECT-1B-2` | **Selecto lasso 와 다중 선택**(§16) — 끌어서 여러 개를 고르고 Shift 로 더하고 뺀다. 관문이 "첫 선택"에서 "Canvas 가 있는 HOME 에서 Select 를 켬"으로 앞당겨졌다. 프레임은 **제안만** 하고 부모가 draft 로 전부 다시 보고 확정한다. 여전히 **고르는 것까지**다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
 
 - 이동 · 크기 · 회전 조작 UI · 멀티 선택 · Canvas Inspector 입력 필드 ·
   Undo/Redo · preset · 스티커 업로드 · widget — **하나도 없다**(§11).
-- `SELECT-1A` · `SELECT-1B-1` 은 **고르고 · 푸는 것 · 그것을 보여 주는 것**
-  까지다. 고른 요소의 좌표도 props 도 바꿀 수 없고, Canvas JSON 을 쓰는
-  경로가 없다(§14-6 · §15-8).
-- `VENDOR-1` 이 놓아둔 두 UMD 중 **Moveable 만** 실제로 인스턴스가 된다.
-  Selecto 는 로더가 한 벌로 내려주므로 파일은 오지만 생성자를 부르는 곳이
-  없다(§15-8).
+- `SELECT-1A` · `SELECT-1B-1` · `SELECT-1B-2` 는 **고르고 · 푸는 것 · 그것을
+  보여 주는 것**까지다. 고른 요소의 좌표도 props 도 바꿀 수 없고, Canvas JSON
+  을 쓰는 경로가 없다(§14-6 · §15-8 · §16-9).
+- **모바일 lasso 는 의도적으로 미지원**이다 — 그 자리는 단일 탭이 지킨다(§16-3).
 
 ---
 
@@ -567,8 +568,8 @@ preset · 사진 자동 매핑 · sticker 업로드 · widget · 그룹 선택 �
 **하나도 없다.**
 
 **고르고 · 푸는 것 · 그것을 보여 주는 것만 있다**
-(`SELECT-1A` — §14, `SELECT-1B-1` — §15). 고른 뒤에 **바꿀 수 있는 일이**
-아직 없다는 뜻이다.
+(`SELECT-1A` — §14, `SELECT-1B-1` — §15, `SELECT-1B-2` — §16). 고른 뒤에
+**바꿀 수 있는 일이** 아직 없다는 뜻이다.
 
 효과(파티클 · 꽃잎 · 복합 모션)를 sandbox 사용자 JS 가 Canvas 요소에 거는
 **공식 hook** 도 아직 없다 — 지금은 저자 JS 가 DOM 을 직접 만지는 것을 이
@@ -1260,7 +1261,10 @@ Canvas 는 **아이모리 재료**(로고 · 카테고리 · 사진 · 글자 ·
 효과 시스템 자체는 이 라운드의 범위가 아니다. 다음 후속 작업
 `HOME-CANVAS-EFFECT-HOOK-1` 이 로드맵에 있다.
 
-### 15-8. 이번 단계에 **없는 것**
+### 15-8. 그 단계에 **없던 것**
+
+★ 이 중 Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택은
+`HOME-CANVAS-SELECT-1B-2` 에서 구현됐다(§16). 나머지는 아직 없다.
 
 Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 · Moveable 핸들 · 드래그 ·
 리사이즈 · 회전 조작 · Canvas JSON 쓰기 · Undo/Redo · Canvas Inspector 입력
@@ -1269,3 +1273,209 @@ Selecto 인스턴스 · lasso · 다중 선택 · Shift 선택 · Moveable 핸�
 
 로더가 두 UMD 를 한 벌로 돌려주므로 **Selecto 파일도 함께 내려오지만**,
 이번 단계에서 그 생성자를 부르는 곳은 없다(e2e 가 인스턴스 0 을 잰다).
+
+---
+
+## 16. Selecto lasso 와 다중 선택 (`HOME-CANVAS-SELECT-1B-2`)
+
+`SELECT-1B-1` 의 단일 선택 위에 **끌어서 여러 개 고르기**를 올린다.
+여전히 **고르는 것까지**다 — 이동 · 크기 · 회전 조작 · Canvas JSON 쓰기는
+하나도 없다(§16-9).
+
+### 16-1. 관련 파일
+
+§15-1 의 표에 더해 다음이 이 라운드의 것이다.
+
+| 무엇 | 파일 |
+| --- | --- |
+| lasso · Shift · 제안 | [skin/skin-home-canvas-editor-runtime.js](../../skin/skin-home-canvas-editor-runtime.js) |
+| **제안을 확정하는 한 곳** | [studio/inspector/studio-canvas-selection.js](../../studio/inspector/studio-canvas-selection.js) `proposeStudioCanvasSelection` |
+| 편집 모드를 프레임에 알리는 한 곳 | 같은 파일 `postStudioCanvasSelectionToFrame` · `syncStudioCanvasFrameMode` |
+| Select 토글에서 그것을 부르는 자리 | [studio/inspector/studio-inspector.js](../../studio/inspector/studio-inspector.js) `setStudioInspectorEnabled` |
+| sandbox 봉투 | [skin/sandbox/skin-sandbox-protocol.js](../../skin/sandbox/skin-sandbox-protocol.js) `IMORY_CANVAS_PROPOSE` · `IMORY_CANVAS_SELECT` 의 `editing` |
+
+테스트: `node studio/studio-home-canvas-selecto-e2e-test.mjs` — TESTS.md §13.
+
+### 16-2. 활성화 조건이 한 칸 앞으로 왔다
+
+lasso 는 **아무것도 고르지 않은 상태에서** 시작돼야 한다. 그래서 프레임의
+편집 runtime 과 vendor 를 켜는 관문이 "첫 선택"에서 다음 다섯으로 바뀌었다.
+
+1. Studio 안의 Preview
+2. HOME 화면
+3. 유효하고 활성화된 `home_canvas`
+4. 표식이 정확히 하나
+5. Select 모드 활성
+
+`primaryId` 존재는 **관문에서 빠졌다**. 2~4 는 `resolveSkinHomeCanvas()` 가
+전부 보므로 판정은 `studioCanvasEditingIsOn()` 한 줄이다.
+
+| 화면 | UMD · runtime |
+| --- | --- |
+| 공개 HOME · 공개 sandbox HOME | **0** |
+| Studio 를 열기만 함 | **0** |
+| **Canvas 가 없는 스킨**에서 Select 켜기 | **0** |
+| Canvas 가 있는 HOME 에서 Select 켜기 | 각각 **1회** |
+| 그 뒤 재선택 · 모드 재진입 | 추가 **0** |
+
+### 16-3. 포인터 정책 — 손가락으로는 lasso 를 시작하지 않는다
+
+마우스와 펜에서만 lasso 를 연다. 손가락 드래그는 세로 스크롤인지 선택
+상자인지 가를 방법이 없고, 가로채면 모바일 Preview 가 스크롤되지 않는다.
+모바일에서는 `SELECT-1A` 의 **단일 탭 선택이 그대로** 남는다.
+
+`(pointer: fine)` 만 믿지 않는다 — 터치와 마우스가 함께 있는 기기에서 그
+질의는 참이고, 그래도 그 순간의 입력은 손가락일 수 있다. **실제 이벤트의
+종류**(`pointerType` · `touch*`)를 먼저 본다.
+
+모바일 다중 선택은 후속 레이어 목록의 몫이다(§11).
+
+### 16-4. 무엇을 고르는가
+
+대상은 정확히 `[data-imory-canvas-element]` 다. 그래서 **template 요소 ·
+사용자 JS 가 만든 꽃잎 · 파티클 · 효과 레이어 · Moveable 의 control box ·
+Selecto 자신의 사각형은 애초에 후보가 아니다** — 그 속성이 없고, 그 속성은
+저장 경계의 화이트리스트에도 없다(§16-8).
+
+여기서 더 빼는 것은 셋이다: `hidden` · `locked` · 지금 도화지 밖의 노드.
+
+| 입력 | 뜻 |
+| --- | --- |
+| 단일 클릭 | 기존 `SELECT-1A` 경로 그대로(하나만) |
+| 빈 곳 클릭 | 전체 해제 |
+| 일반 lasso | 결과로 **교체**. 사각형이 요소 넓이의 **1% 이상**을 덮으면 잡힌다 |
+| 결과 0개인 일반 lasso | 전체 해제 |
+| Shift + 클릭 | 그 요소를 **더하거나 뺀다**(XOR) |
+| Shift + lasso | 결과를 기존 선택과 **XOR** |
+| Shift + 도화지 안 빈 곳 | 기존 선택 **유지** |
+
+드래그는 **도화지 안에서 시작한 것만** lasso 가 된다. 시작점이 도화지 밖이면
+lasso 를 만들지 않는다(사각형이 도화지를 넘어가는 것은 상관없다 — 판정
+대상이 캔버스 요소뿐이므로).
+
+`Moveable` 의 control 요소에서 시작한 드래그도 lasso 가 아니다
+(`moveable.isMoveableElement(target)`). 이번 단계에는 손잡이가 없어 실제
+포인터로는 그 상황이 생기지 않지만(control box 가 클릭을 통과시킨다),
+조작이 들어오는 `HOME-CANVAS-TRANSFORM-1` 에서 깨지지 않도록 관문을 지금
+넣어 두었다.
+
+### 16-5. 프레임은 제안하고, 부모가 확정한다
+
+```
+프레임 ──CANVAS_PROPOSE {ids, primaryId, mode, generation}──▶ Studio
+      ◀─CANVAS_SELECT   {editing, active, ids, primaryId, generation}──
+```
+
+`mode` 는 `replace` 와 `toggle` 둘뿐이다.
+
+부모(`proposeStudioCanvasSelection`)가 하는 일.
+
+- 모든 id 를 **지금 draft 에서 다시** 본다(존재 · hidden · locked · 중복 ·
+  상한 64).
+- **한 id 라도 어긋나면 메시지 전체를 거부**하고 기존 선택을 유지한다.
+  "절반만 반영"을 만들지 않는다 — 지워진 요소의 옛 id 하나가 섞인 lasso 가
+  나머지를 조용히 바꾸면 사용자가 본 것과 상태가 달라진다.
+- `replace` 는 갈아 끼우고, `toggle` 은 기존 선택과 XOR 한다.
+- 결과를 **draft 의 `canvas.elements[]` 배열 순서**로 정규화한다. 프레임이
+  보낸 순서를 그대로 믿지 않는다.
+- `primaryId` 를 정한다 — 제안된 primary 가 결과에 남아 있으면 그것,
+  아니면 **배열상 마지막**(= 가장 앞에 보이는 요소). 비면 `null`.
+- 승인한 상태를 다시 프레임에 내려보낸다.
+
+프레임은 **최종 선택을 확정하지 않는다.**
+
+★ 확정 뒤 부모는 프레임 안 Inspector 에도 primary 를 집으라고 내려보낸다
+(`postInspectorSelectionToFrame`). 그래야 좌표 보고가 primary 의 것이 되고
+fallback 테두리와 팝오버 자리가 맞는다. 그 사이에 도착하는 **어긋난 좌표
+보고는 무시한다** — 그것을 "프레임이 놓았다"로 읽으면 방금 만든 다중 선택이
+곧바로 지워진다(`studioCanvasExpectedFrameId`).
+
+### 16-6. Moveable 표시 — 단일과 그룹
+
+| 고른 수 | 표시 |
+| --- | --- |
+| 0 | 틀 없음(`target: null`) |
+| 1 | `SELECT-1B-1` 의 회전을 따라가는 단일 틀 |
+| 2 이상 | Moveable **그룹 틀 하나** |
+
+0.53.0 은 `target` 에 배열을 받으면 스스로 그룹으로 간다. 조작은 여전히
+전부 false 다(§15-6) — Moveable 도 Selecto 도 DOM geometry 와 Canvas JSON 을
+바꾸지 않는다.
+
+**함정 셋**(전부 2026-09-21 실측).
+
+1. `MoveableGroup` 의 `dragArea` 기본값은 `true` 이고, 그것을 `false` 로
+   덮으면 그룹이 mount 중에 죽는다(`componentDidMount → _updateEvents →
+   updateRect` 에서 `null.style`). 그래서 그룹에서는 켜 둔다 — 그 영역이
+   클릭을 삼키지 않는 것은 control box 의 `pointer-events: none` 이
+   상속되기 때문이다.
+2. 날것의 `.moveable-control-box` 수는 그룹에서 **3 이상**이 된다(감싸는
+   상자 + 자식 하나씩). "인스턴스가 몇 개인가"는 우리가 표시한 바깥 상자
+   (`[data-imory-canvas-frame="1"]`)로 센다.
+3. 단일 ↔ 그룹 전환에서 옛 control box 요소가 문서에 남는 경우가 있다.
+   새 상자를 표시할 때 옛 표시를 걷고 감춘다(지우지는 않는다).
+
+### 16-6-1. ★ 그룹 전환이 CSP nonce 를 잃던 문제
+
+Moveable 과 Selecto 는 규칙표를 `<style data-styled-id data-styled-count>`
+하나로 공유하고, 컴포넌트가 mount 할 때 count 를 올리고 unmount 할 때
+내린다. **0 이 되면 그 요소를 지운다.**
+
+단일 → 그룹 전환은 컴포넌트를 통째로 갈아 끼우는데, 그 사이 count 가 0 을
+찍으면 규칙표가 지워지고 곧바로 이어지는 그룹 쪽 주입이 **nonce 없이** 새로
+만든다. sandbox 의 `style-src` 가 그것을 막아 선택 틀이 통째로 무너진다
+(실측: `nonce` 속성 없음 · `sheet === null`).
+
+CSP 는 **삽입 시점에** 판정하므로 나중에 nonce 를 붙여도 되살아나지 않는다.
+그래서 되살리는 대신 **처음부터 지워지지 않게** 한다 — 이미 nonce 를 달고
+정상으로 들어간 그 요소의 count 를 크게 올려 못박는다
+(`pinEditorStyleSheets`).
+
+**CSP 를 넓히지 않는다.** style 을 새로 만들지도, 나중에 주입하지도 않는다.
+우리가 만든 요소 하나의 수명을 늘릴 뿐이고, `securitypolicyviolation` 0건 ·
+콘솔 CSP 오류 0건 · 두 `<style>` 모두 `sheet !== null` 을 e2e 가 잰다.
+
+Selecto 생성자에도 같은 `cspNonce` 를 공식 옵션으로 넘긴다.
+
+### 16-7. Selecto 설정 — 1.26.3 의 실제 번들을 읽고 정했다
+
+| 옵션 | 값 | 이유 |
+| --- | --- | --- |
+| `selectByClick` | `false` | 기본값 `true` 다. 두면 평범한 클릭까지 Selecto 가 처리해 `SELECT-1A` 경로와 주인이 둘이 된다 |
+| `hitRate` | `1` | 번들의 hitTest 는 `round(교집합 넓이 / 대상 넓이 × 100) >= hitRate` 다(단위 없는 수는 퍼센트) |
+| `preventDragFromInside` | `false` | 기본값 `true` 면 요소 **위에서** 시작한 드래그가 lasso 가 되지 않는다. 실제 HOME 은 도화지를 덮는 배경 사진을 흔히 써서 시작할 빈 자리가 없다 |
+| `preventClickEventOnDrag` | `true` | 끈 뒤 따라오는 click 하나를 삼킨다 — 없으면 native Inspector 의 click 선택이 **방금 만든 lasso 결과를 지운다**(실측) |
+| `rootContainer` | 주지 않음 | 주면 선택 사각형이 `absolute`, 없으면 `fixed` 다. 뷰포트 좌표 그대로가 스크롤 · 부모 scale 에서 한 겹 적다 |
+| `toggleContinueSelect` | 주지 않음 | Shift 의 뜻은 **부모**가 정한다. Selecto 가 자기 안에서 합치면 canonical 상태가 두 벌이 된다 |
+| `dragContainer` | `doc.body` | 도화지 요소를 주면 재렌더마다 Selecto 를 새로 만들어야 한다. "도화지 안에서 시작했는가"는 `dragCondition` 이 좌표로 본다 |
+
+★ 기존 Inspector 와 부딪히지 않는다 — 저쪽은 document capture 에서
+**pointerdown** 의 전파를 끊고, Selecto 의 gesto 는 **mousedown / touchstart**
+를 듣는다. 서로 다른 이벤트다.
+
+★ Shift + 클릭은 **window capture** 에서 받는다. capture 경로가
+Window → Document 이므로 document capture 에 건 Inspector 보다 먼저 돌고,
+거기서 전파를 끊어 "하나만 고르기"가 아예 돌지 않게 한다. 제안은 **누를 때가
+아니라 뗄 때** 낸다 — Shift 를 누른 채 끌면 그것은 Shift + lasso 이고, 누르는
+순간 토글하면 lasso 결과와 두 번 겹친다.
+
+### 16-8. 사용자 JS 효과와의 공존
+
+`SELECT-1B-1` 이 세운 선(§15-7-1)이 그대로다. 이 라운드도 Canvas 요소의 DOM 을
+한 글자도 건드리지 않는다 — lasso 는 그 요소들을 **읽기만** 한다.
+
+사용자 JS 가 나중에 붙일 배경 꽃잎 · 파티클 · 빛 효과 · front/back 효과
+레이어 · 임의 장식 DOM 은 `[data-imory-canvas-element]` 가 아니므로 **선택
+대상이 아니다**. 사용자 JS 가 Canvas 요소의 `transform` 을 바꾸면 선택 시점의
+**실제 DOM geometry** 를 기준으로 틀이 따라간다(rAF 한 곳, §15-6).
+
+effect hook 자체는 이번 범위가 아니다 — `HOME-CANVAS-EFFECT-HOOK-1`.
+
+### 16-9. 이번 단계에 **없는 것**
+
+Moveable 드래그 · 리사이즈 · 회전 조작 · 손잡이 · Canvas JSON 쓰기 ·
+Undo/Redo · Canvas Inspector 입력 필드 · 텍스트 편집 · 이미지 교체 · Crop ·
+레이어 목록 · effect hook · preset · widget · 좌우 패널 Canvas —
+**하나도 없다.**
+
+**모바일 lasso 는 의도적으로 미지원**이고, 그 자리는 단일 탭이 지킨다(§16-3).
