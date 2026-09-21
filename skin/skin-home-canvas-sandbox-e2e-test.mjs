@@ -511,6 +511,10 @@ const readCanvasSource = (rootSelector) => `(() => {
         h: el.offsetHeight,
         angle: angle(el),
         imgSrc: img ? img.getAttribute("src") : null,
+        /* HOME-CANVAS-MANUAL-UX-FIX-1 — 자르기를 고르지 않은 그림의
+           기본값(계약 §21-3). 네 화면 parity 가 이 값까지 대조하므로
+           한 화면만 cover 로 돌아가면 그 자리에서 잡힌다. */
+        imgFit: img ? getComputedStyle(img).objectFit : null,
         imgAlt: img ? img.getAttribute("alt") : null,
         imgOk: img ? (img.complete && img.naturalWidth > 0) : null,
         innerTags: Array.from(el.querySelectorAll("*")).map((n) => n.tagName.toLowerCase()).join(","),
@@ -546,7 +550,8 @@ function domShape(reading, options) {
       role: e.role, shape: e.shape, navMode: e.navMode,
       hiddenAttr: e.hiddenAttr, lockedAttr: e.lockedAttr, displayed: e.displayed,
       vars: e.vars, angle: e.angle,
-      imgSrc: e.imgSrc, imgAlt: e.imgAlt, innerTags: e.innerTags,
+      imgSrc: e.imgSrc, imgAlt: e.imgAlt, imgFit: e.imgFit,
+      innerTags: e.innerTags,
       text: e.text, logoText: e.logoText,
       links: withHref ? e.links : e.links.map((l) => l.name)
     }))

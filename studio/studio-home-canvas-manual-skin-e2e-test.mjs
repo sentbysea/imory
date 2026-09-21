@@ -1239,8 +1239,12 @@ async function main() {
       check("[images] alt 는 빈 문자열이다(장식 이미지)",
         shown.alt === "");
 
-      check("[images] object-fit:cover 가 듣는다(사진이 눌리지 않는다)",
-        shown.fit === "cover", String(shown.fit));
+      /* HOME-CANVAS-MANUAL-UX-FIX-1 — 자르기를 고르지 않은 그림의
+         기본값이 contain 으로 바뀌었다(계약 §21-3). 사진이 눌리지
+         않는다는 뜻은 그대로이고, 달라진 것은 남는 쪽을 **자르지
+         않는다**는 것이다. */
+      check("[images] object-fit:contain 이 듣는다(눌리지도 잘리지도 않는다)",
+        shown.fit === "contain", String(shown.fit));
 
       check("[images] 안 채운 슬롯은 여전히 비어 있다",
         shown.hasStickerImg === false);

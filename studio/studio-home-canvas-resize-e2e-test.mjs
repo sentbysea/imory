@@ -1342,6 +1342,326 @@ async function main() {
 
 
     /* ======================================================
+       [ratio] — 모서리는 비율 유지 · 변 중앙은 자유
+                 (HOME-CANVAS-MANUAL-UX-FIX-1 · 계약 §21-2)
+
+       ★ 비율은 **픽셀이 아니라 Canvas JSON 으로** 잰다. 계약이
+         말하는 것은 390 자 위의 네 숫자다.
+
+       ★ "반대편이 제자리인가"는 여전히 손잡이 자신의 자리로 잰다
+         (§18 의 그 이유 — 회전한 요소의 변은 bounding box 로 알 수
+         없다).
+    ====================================================== */
+    if (wants("ratio")) {
+
+      section("ratio");
+
+      const page = await openStudio(browser, {});
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      const START = 90 / 60;
+
+      /* --- 모서리 넷: 시작 비율을 지킨다 --- */
+
+      for (const [dir, dx, dy] of [
+        ["se", 40, 10],
+        ["nw", -30, -5],
+        ["ne", 35, -8],
+        ["sw", -25, 12]
+      ]) {
+
+        await pick(page, frame, false, "cvA");
+
+        const start = boxOf(await readCanvas(page), "cvA");
+
+        const startRatio =
+          start.width / start.height;
+
+        const opposite = {
+          se: "nw", nw: "se", ne: "sw", sw: "ne"
+        }[dir];
+
+        const handlesBefore =
+          await resizeBy(page, frame, false, "cvA", dir, dx, dy);
+
+        const handlesAfter =
+          await handleCenters(page, frame, false);
+
+        const box = boxOf(await readCanvas(page), "cvA");
+
+        check(`★ ${dir} 모서리가 시작 비율을 지킨다`,
+          box && Math.abs(box.width / box.height - startRatio) < 0.01,
+          `${(box.width / box.height).toFixed(4)} vs 시작 ${startRatio.toFixed(4)} — ${JSON.stringify(box)}`);
+
+        check(`${dir} 모서리에서 두 칸이 함께 바뀐다`,
+          box && box.width !== start.width && box.height !== start.height,
+          `${JSON.stringify(start)} → ${JSON.stringify(box)}`);
+
+        check(`★ ${dir} 를 끌면 ${opposite} 모서리가 제자리다`,
+          near(handlesBefore[opposite], handlesAfter[opposite], 1.5),
+          gap(handlesBefore[opposite], handlesAfter[opposite]));
+
+      }
+
+      const afterCorners = boxOf(await readCanvas(page), "cvA");
+
+      check("★ 모서리를 네 번 이어 끌어도 비율 오차가 쌓이지 않는다",
+        Math.abs(afterCorners.width / afterCorners.height - START) < 0.01,
+        `${(afterCorners.width / afterCorners.height).toFixed(4)} vs 1.5000`);
+
+      /* --- 변 중앙 넷: 한 축만 --- */
+
+      for (const [dir, dx, dy, axis] of [
+        ["e", 30, 0, "width"],
+        ["w", -20, 0, "width"],
+        ["s", 0, 25, "height"],
+        ["n", 0, -15, "height"]
+      ]) {
+
+        await pick(page, frame, false, "cvB");
+
+        const start = boxOf(await readCanvas(page), "cvB");
+
+        await resizeBy(page, frame, false, "cvB", dir, dx, dy);
+
+        const box = boxOf(await readCanvas(page), "cvB");
+
+        const other =
+          axis === "width" ? "height" : "width";
+
+        check(`★ ${dir} 변 중앙은 ${axis} 만 바꾼다(자유 조정)`,
+          box && box[axis] !== start[axis] && box[other] === start[other],
+          `${JSON.stringify(start)} → ${JSON.stringify(box)}`);
+
+      }
+
+      const afterEdges = boxOf(await readCanvas(page), "cvB");
+
+      check("★ 변 중앙만 끌면 비율이 **바뀐다**(모서리와 뜻이 다르다)",
+        Math.abs(afterEdges.width / afterEdges.height - 80 / 50) > 0.05,
+        `${(afterEdges.width / afterEdges.height).toFixed(4)} vs 시작 1.6000`);
+
+      /* --- 회전한 요소 --- */
+
+      for (const [id, degrees] of [["cvRot20", 20], ["cvRot45", 45]]) {
+
+        await pick(page, frame, false, id);
+
+        const start = boxOf(await readCanvas(page), id);
+
+        const handlesBefore =
+          await resizeBy(page, frame, false, id, "se", 30, 10);
+
+        const handlesAfter =
+          await handleCenters(page, frame, false);
+
+        const box = boxOf(await readCanvas(page), id);
+        const el = elementOf(await readCanvas(page), id);
+
+        check(`★ ${degrees}° 요소의 모서리도 비율을 지킨다`,
+          box && Math.abs(box.width / box.height - start.width / start.height) < 0.01,
+          `${(box.width / box.height).toFixed(4)} vs ${(start.width / start.height).toFixed(4)}`);
+
+        check(`★ ${degrees}° 에서 nw 모서리가 밀리지 않는다`,
+          near(handlesBefore.nw, handlesAfter.nw, 1.5),
+          gap(handlesBefore.nw, handlesAfter.nw));
+
+        check(`${degrees}° 의 rotation 은 그대로다`,
+          el && el.rotation === degrees, String(el && el.rotation));
+
+      }
+
+      /* --- 0° 대조군: 같은 제스처에서 기준점이 정확히 제자리 --- */
+
+      await pick(page, frame, false, "cvFar");
+
+      const farBefore = await resizeBy(page, frame, false, "cvFar", "se", 30, 10);
+      const farAfter = await handleCenters(page, frame, false);
+
+      check("★ 0° 요소는 nw 모서리가 1px 안에서 제자리다",
+        near(farBefore.nw, farAfter.nw, 1),
+        gap(farBefore.nw, farAfter.nw));
+
+      /* --- Undo · Redo — 한 제스처가 한 칸이다 --- */
+
+      await pick(page, frame, false, "cvA");
+
+      const undoStart = await historyState(page);
+      const undoBox = boxOf(await readCanvas(page), "cvA");
+
+      await resizeBy(page, frame, false, "cvA", "se", 30, 10);
+
+      const grown = boxOf(await readCanvas(page), "cvA");
+
+      check("비율 유지 제스처도 Undo 한 칸이다",
+        (await historyState(page)).undo === undoStart.undo + 1,
+        `${undoStart.undo} → ${(await historyState(page)).undo}`);
+
+      await page.click("#studioUndoButton");
+      await sleep(900);
+
+      check("Undo 가 네 칸을 함께 되돌린다",
+        JSON.stringify(boxOf(await readCanvas(page), "cvA")) ===
+        JSON.stringify(undoBox),
+        JSON.stringify(boxOf(await readCanvas(page), "cvA")));
+
+      await page.click("#studioRedoButton");
+      await sleep(900);
+
+      check("Redo 가 비율 유지 결과로 돌아온다",
+        JSON.stringify(boxOf(await readCanvas(page), "cvA")) ===
+        JSON.stringify(grown),
+        JSON.stringify(boxOf(await readCanvas(page), "cvA")));
+
+      /* --- 모서리를 그냥 누르기만 하면 --- */
+
+      const clickHistory = await historyState(page);
+      const clickBox = boxOf(await readCanvas(page), "cvA");
+      const centers = await handleCenters(page, frame, false);
+
+      await page.mouse.move(centers.se.x, centers.se.y);
+      await page.mouse.down();
+      await page.mouse.up();
+      await sleep(700);
+
+      check("★ 모서리를 누르기만 하면 상자가 그대로다",
+        JSON.stringify(boxOf(await readCanvas(page), "cvA")) ===
+        JSON.stringify(clickBox),
+        JSON.stringify(boxOf(await readCanvas(page), "cvA")));
+
+      check("0 변화는 기록을 만들지 않는다",
+        (await historyState(page)).undo === clickHistory.undo);
+
+      check("pageerror 0", page.__errors.length === 0, page.__errors[0] || "");
+
+      await close(page);
+
+      /* --- height:"auto" 의 모서리 — 렌더된 세로가 기준이다 --- */
+
+      const autoPage = await openStudio(browser, {});
+      const autoFrame = await canvasFrame(autoPage, false);
+
+      await enableCanvasEditing(autoPage);
+      await pick(autoPage, autoFrame, false, "cvAuto");
+
+      const autoStart = boxOf(await readCanvas(autoPage), "cvAuto");
+
+      /* 그 순간 화면에 그려진 실제 세로 — 전환의 기준값(§18-3) */
+      const rendered = await autoPage.evaluate((sel) => {
+        const doc = document.getElementById("studioPreviewFrame").contentDocument;
+        const node = doc.querySelector(sel);
+        const root = doc.querySelector("[data-imory-canvas-root]");
+        if (!node || !root) return null;
+        const scale = root.getBoundingClientRect().width / 390;
+        return parseFloat(getComputedStyle(node).height) / scale;
+      }, byId("cvAuto"));
+
+      check('시작은 height:"auto" 다',
+        autoStart && autoStart.height === "auto", JSON.stringify(autoStart));
+
+      const autoBefore =
+        await resizeBy(autoPage, autoFrame, false, "cvAuto", "se", 40, 10);
+
+      const autoAfter = await handleCenters(autoPage, autoFrame, false);
+
+      const autoBox = boxOf(await readCanvas(autoPage), "cvAuto");
+
+      check('★ "auto" 모서리가 숫자 높이로 전환된다',
+        autoBox && typeof autoBox.height === "number" && autoBox.height > 0,
+        JSON.stringify(autoBox));
+
+      check("★ 그 비율의 기준은 **렌더된 실제 높이**다",
+        autoBox && rendered > 0 &&
+        Math.abs(autoBox.width / autoBox.height - autoStart.width / rendered) < 0.02,
+        `${(autoBox.width / autoBox.height).toFixed(4)} vs ${(autoStart.width / rendered).toFixed(4)} (렌더 ${rendered.toFixed(2)})`);
+
+      check('"auto" 모서리에서도 nw 모서리가 제자리다',
+        near(autoBefore.nw, autoAfter.nw, 1.5),
+        gap(autoBefore.nw, autoAfter.nw));
+
+      /* --- "auto" 좌우 중앙은 여전히 auto --- */
+
+      await pick(autoPage, autoFrame, false, "cvAuto2");
+
+      await resizeBy(autoPage, autoFrame, false, "cvAuto2", "e", 40, 0);
+
+      const auto2 = boxOf(await readCanvas(autoPage), "cvAuto2");
+
+      check('★ "auto" 의 좌우 중앙은 비율을 지키지 않고 auto 도 유지한다',
+        auto2 && auto2.height === "auto" && auto2.width > 120,
+        JSON.stringify(auto2));
+
+      /* --- Undo 하면 정확히 "auto" 로 --- */
+
+      await pick(autoPage, autoFrame, false, "cvAuto");
+
+      await autoPage.click("#studioUndoButton");
+      await sleep(900);
+      await autoPage.click("#studioUndoButton");
+      await sleep(900);
+
+      check('★ 비율 유지로 숫자가 된 높이를 Undo 하면 정확히 "auto" 다',
+        boxOf(await readCanvas(autoPage), "cvAuto").height === "auto",
+        JSON.stringify(boxOf(await readCanvas(autoPage), "cvAuto")));
+
+      check("pageerror 0(auto)", autoPage.__errors.length === 0,
+        autoPage.__errors[0] || "");
+
+      await close(autoPage);
+
+      /* --- 부모 scale — 두 번 보정하지 않는다 --- */
+
+      const scaled = await openStudio(browser, { scale: 0.8 });
+      const scaledFrame = await canvasFrame(scaled, false);
+
+      await enableCanvasEditing(scaled);
+      await pick(scaled, scaledFrame, false, "cvA");
+
+      await resizeBy(scaled, scaledFrame, false, "cvA", "se", 40, 10);
+
+      const scaledBox = boxOf(await readCanvas(scaled), "cvA");
+
+      check("★ 부모 scale(0.8) 에서도 모서리 비율이 그대로다",
+        scaledBox && Math.abs(scaledBox.width / scaledBox.height - START) < 0.01,
+        `${(scaledBox.width / scaledBox.height).toFixed(4)} vs 1.5000`);
+
+      check("pageerror 0(scale)", scaled.__errors.length === 0,
+        scaled.__errors[0] || "");
+
+      await close(scaled);
+
+      /* --- sandbox — 같은 제스처, 같은 JSON --- */
+
+      const sandbox = await openStudio(browser, { sandbox: true });
+      const sandboxFrame = await canvasFrame(sandbox, true);
+
+      await enableCanvasEditing(sandbox);
+      await clickElement(sandbox, sandboxFrame, true, "cvA");
+      await waitForHandles(sandbox, sandboxFrame, 8);
+
+      await resizeBy(sandbox, sandboxFrame, true, "cvA", "se", 40, 10);
+
+      const sandboxBox = boxOf(await readCanvas(sandbox), "cvA");
+
+      check("★ sandbox 에서도 모서리가 비율을 지킨다",
+        sandboxBox && Math.abs(sandboxBox.width / sandboxBox.height - START) < 0.01,
+        `${(sandboxBox.width / sandboxBox.height).toFixed(4)} vs 1.5000`);
+
+      check("CSP 위반 0(sandbox ratio)",
+        (await cspViolations(sandboxFrame)).length === 0,
+        JSON.stringify(await cspViolations(sandboxFrame)));
+
+      check("pageerror 0(sandbox)", sandbox.__errors.length === 0,
+        sandbox.__errors[0] || "");
+
+      await close(sandbox);
+
+    }
+
+
+    /* ======================================================
        [rotate] — 회전한 요소의 반대편 기준점
     ====================================================== */
     if (wants("rotate")) {

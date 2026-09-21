@@ -25,6 +25,10 @@
      [manual]    수동 테스트 스킨(MILESTONE-1) — 계약 통과 · 표식 1개 ·
                  resolve · id 유일 · 순서 보존 · 확인할 구조가 다 있는가 ·
                  **제품 기본 스킨 불변**
+     [ux-fix]    직접 조작 사용성(MANUAL-UX-FIX-1)의 **순수 helper 둘** —
+                 30° 자석의 경계값(±4° 안에서만 붙는다 · 음수 · 한 바퀴
+                 너머)과 모서리 비율 유지의 정사영. 편집기 runtime 이
+                 export 한 그 함수를 그대로 부른다
 
    Import → Export → Save → 다시 열기 → Publish 왕복과 AI 경로는
    브라우저가 필요하다 — studio/studio-home-canvas-e2e-test.mjs.
@@ -942,6 +946,151 @@ check("★ [manual] 제품 기본 스킨에는 캔버스가 없다(자동 삽입
     return base.indexOf("home_canvas") === -1 &&
       base.indexOf("data-imory-canvas-root") === -1;
   })());
+
+
+/* =========================================================
+   [ux-fix] — 직접 조작 사용성의 순수 helper 둘
+   (HOME-CANVAS-MANUAL-UX-FIX-1 — 계약 §21-1 · §21-2)
+
+   ★ 편집기 runtime 이 **export 한 그 함수**를 부른다. 여기에 식을
+     다시 적으면 두 벌이 되고, 나중에 한쪽만 바뀐다.
+
+   회전 자석은 각도 하나를 받아 각도 하나를 돌려주고, 비율 유지는
+   px 넷과 Canvas 좌표 둘을 받아 px 짝을 돌려준다 — 둘 다 DOM 도
+   Moveable 도 보지 않으므로 여기서 경계를 직접 찍을 수 있다.
+========================================================== */
+
+console.log(`\n[ux-fix]`);
+
+{
+  const runtime =
+    await import(
+      "file://" +
+      path.join(HERE, "skin-home-canvas-editor-runtime.js").replace(/\\\\/g, "/")
+    );
+
+  const snap = runtime.snapCanvasRotation;
+  const keep = runtime.canvasResizeKeepRatioBox;
+
+  check("[ux-fix] runtime 이 두 helper 를 내보낸다",
+    typeof snap === "function" && typeof keep === "function");
+
+  /* ── 30° 자석 — 붙는 경계는 ±4° 다(계약 §21-1) ── */
+
+  const cases = [
+    [0, 0], [25, 25], [26, 30], [30, 30], [34, 30], [35, 35],
+    [56, 60], [86, 90], [90, 90], [356, 360], [360, 360],
+    [15, 15], [45, 45], [44, 44], [46, 46],
+    [-26, -30], [-34, -30], [-35, -35], [-25, -25], [-4, 0], [-5, -5],
+    [380, 380], [386, 390], [385, 385], [720, 720], [716, 720]
+  ];
+
+  const wrong =
+    cases.filter(([input, want]) => snap(input) !== want)
+      .map(([input, want]) => `${input}->${snap(input)}(기대 ${want})`);
+
+  check("★ [ux-fix] 30° 자석은 ±4° 안에서만 붙는다 — 26 개 경계",
+    wrong.length === 0, wrong.join(" · ") || `${cases.length} 개 전부 일치`);
+
+  check("★ [ux-fix] 양자화가 아니다 — 흡착 범위 밖은 받은 각도 그대로",
+    snap(25) === 25 && snap(35) === 35 && snap(47) === 47 && snap(100) === 100,
+    `25/35/47/100 -> ${[25, 35, 47, 100].map(snap).join("/")}`);
+
+  check("[ux-fix] 붙는 양은 최대 4° 다(어느 입력에서도 크게 튀지 않는다)",
+    (() => {
+      for (let deg = -400; deg <= 400; deg += 0.25) {
+        if (Math.abs(snap(deg) - deg) > 4 + 1e-9) return false;
+      }
+      return true;
+    })());
+
+  check("[ux-fix] 자석은 단조 비감소다(제스처 중 화면이 거꾸로 돌지 않는다)",
+    (() => {
+      let last = -Infinity;
+      for (let deg = -400; deg <= 400; deg += 0.25) {
+        const value = snap(deg);
+        if (value < last - 1e-9) return false;
+        last = value;
+      }
+      return true;
+    })());
+
+  check("[ux-fix] 유한하지 않은 값은 그대로 돌려준다(판정만 한다)",
+    Number.isNaN(snap(NaN)) && snap(Infinity) === Infinity);
+
+  /* ── 모서리 비율 유지 — 정사영(계약 §21-2) ── */
+
+  /* 90×60 상자를 대각선으로 (25, 25) 끌었다 */
+  const box = keep(90, 60, 115, 85, 90, 60);
+
+  check("★ [ux-fix] 모서리는 시작 비율을 지킨다 — 90:60",
+    box && Math.abs(box[0] / box[1] - 90 / 60) < 1e-9,
+    JSON.stringify(box));
+
+  check("[ux-fix] 정사영이라 손이 간 방향을 따라간다(두 축 모두 늘었다)",
+    box && box[0] > 90 && box[1] > 60, JSON.stringify(box));
+
+  /* 납작한 글자 상자 — 축 하나를 고르는 방식이 튀던 자리 */
+  const flat = keep(120, 21, 150, 51, 120, 21);
+
+  check("★ [ux-fix] 납작한 상자에서도 비율이 그대로다 — 120:21",
+    flat && Math.abs(flat[0] / flat[1] - 120 / 21) < 1e-9,
+    JSON.stringify(flat));
+
+  check("★ [ux-fix] 납작한 상자의 가로가 튀지 않는다(정사영 34.2 · 축 선택이면 171)",
+    flat && Math.abs(flat[0] - 154.2) < 0.5, JSON.stringify(flat));
+
+  /* 가로로만 끈 모서리 · 세로로만 끈 모서리 */
+  const onlyX = keep(90, 60, 130, 60, 90, 60);
+  const onlyY = keep(90, 60, 90, 100, 90, 60);
+
+  check("[ux-fix] 가로로만 끌어도 세로가 비율만큼 따라온다",
+    onlyX && onlyX[1] > 60 && Math.abs(onlyX[0] / onlyX[1] - 1.5) < 1e-9,
+    JSON.stringify(onlyX));
+
+  check("★ [ux-fix] 세로로만 끌어도 움직인다(가로만 보는 방식은 여기서 멈춘다)",
+    onlyY && onlyY[0] > 90 && Math.abs(onlyY[0] / onlyY[1] - 1.5) < 1e-9,
+    JSON.stringify(onlyY));
+
+  /* height:"auto" — 기준 세로가 렌더된 값이다 */
+  const auto = keep(120, 22.75, 160, 22.75, 120, 22.75);
+
+  check('[ux-fix] "auto" 의 렌더된 세로를 기준으로도 비율이 성립한다',
+    auto && Math.abs(auto[0] / auto[1] - 120 / 22.75) < 1e-9,
+    JSON.stringify(auto));
+
+  /* 변화 0 */
+  const zero = keep(90, 60, 90, 60, 90, 60);
+
+  check("★ [ux-fix] 변화량 0 이면 시작 크기 그대로다(클릭이 크기를 바꾸지 않는다)",
+    zero && zero[0] === 90 && zero[1] === 60, JSON.stringify(zero));
+
+  /* 축소 · 한계 */
+  const shrunk = keep(90, 60, 50, 30, 90, 60);
+
+  check("[ux-fix] 줄일 때도 비율이 같다",
+    shrunk && Math.abs(shrunk[0] / shrunk[1] - 1.5) < 1e-9 && shrunk[0] < 90,
+    JSON.stringify(shrunk));
+
+  check("[ux-fix] 한계까지 줄여도 px 1 아래로 내려가지 않는다",
+    (() => {
+      const tiny = keep(90, 60, -500, -500, 90, 60);
+      return tiny && tiny[0] >= 1 && tiny[1] >= 1;
+    })());
+
+  check("[ux-fix] 못 쓸 입력에서는 null 이다(그 판에서는 자유 비율로 돈다)",
+    keep(0, 60, 10, 10, 90, 60) === null &&
+    keep(90, 60, NaN, 10, 90, 60) === null &&
+    keep(90, 60, 10, 10, 90, 0) === null);
+
+  /* px 시작값은 dist 에만 들어간다 — 저장 비율은 Canvas 좌표가 정한다 */
+  const skewed = keep(200, 40, 240, 40, 90, 60);
+
+  check("★ [ux-fix] 비율의 기준은 px 상자가 아니라 Canvas 좌표 둘이다",
+    skewed &&
+    Math.abs((skewed[0] - 200) / (skewed[1] - 40) - 90 / 60) < 1e-9,
+    JSON.stringify(skewed));
+}
 
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -313,7 +313,29 @@ const CANVAS_ELEMENTS = [
     rotation: 0, hidden: false, locked: false, props: { slot: "photo_1" } },
 
   { id: "cvGone", type: "shape", x: 40, y: 560, width: 140, height: 80,
-    rotation: 0, hidden: false, locked: false, props: { kind: "rect" } }
+    rotation: 0, hidden: false, locked: false, props: { kind: "rect" } },
+
+  /* HOME-CANVAS-MANUAL-UX-FIX-1 — 편집 chrome 여유(계약 §21-4)
+
+     cvOne    한 줄 글자 · 숫자 height 가 내용보다 **크다** —
+              여유만 필요한 자리.
+     cvOver   숫자 height 10 에 여러 줄 — 내용이 **넘쳐 나간다**.
+              옛 동작에서 선이 글자를 가로지르던 그 자리다.
+     cvMulti  여러 줄 auto — 폭을 줄여 재줄바꿈을 만드는 자리. */
+  { id: "cvOne", type: "text", x: 210, y: 350, width: 150, height: 40,
+    rotation: 0, hidden: false, locked: false,
+    props: { text: "한 줄", role: "body" } },
+
+  { id: "cvOver", type: "text", x: 210, y: 430, width: 150, height: 10,
+    rotation: 0, hidden: false, locked: false,
+    props: { text: "넘치는 글자 한 줄\n두 줄\n세 줄", role: "body" } },
+
+  { id: "cvMulti", type: "text", x: 20, y: 650, width: 240, height: "auto",
+    rotation: 0, hidden: false, locked: false,
+    props: {
+      text: "여러 줄로 감기는 긴 글자 내용이며 폭을 줄이면 줄 수가 늘어난다",
+      role: "body"
+    } }
 ];
 
 const IMAGE_SLOTS = [
@@ -655,6 +677,9 @@ const measure = (frame, elementId) => frame.evaluate((id) => {
     union: null,
     elRect: null,
     offset: null,
+    contentRect: null,
+    chromePadding: null,
+    scale: 1,
     transform: el ? getComputedStyle(el).transform : null
   };
 
@@ -662,7 +687,43 @@ const measure = (frame, elementId) => frame.evaluate((id) => {
     const r = el.getBoundingClientRect();
     out.elRect = { x: r.left, y: r.top, w: r.width, h: r.height };
     out.offset = { w: el.offsetWidth, h: el.offsetHeight };
+
+    /* HOME-CANVAS-MANUAL-UX-FIX-1 — 실제로 보이는 내용 상자와,
+       편집 chrome 이 받은 여유(계약 §21-4).
+
+       여유는 **요소 자기 좌표계의 px** 라 화면에서는 배율만큼
+       곱해진다 — 그 배율을 함께 돌려줘야 화면에서 잰 union 과
+       비교할 수 있다. */
+    const inner =
+      el.querySelector(
+        "[data-imory-canvas-text],[data-imory-canvas-nav],[data-imory-canvas-logo-text]"
+      );
+
+    if (inner) {
+      const ir = inner.getBoundingClientRect();
+      out.contentRect = { x: ir.left, y: ir.top, w: ir.width, h: ir.height };
+    }
+
+    /*
+      요소 자기 px → 이 문서에서 잰 px 의 배율.
+
+      ★ 실측 1.0 이다. 부모 Preview 의 transform: scale() 은 iframe
+        **경계를 넘지 않는다** — 이 문서 안의 getBoundingClientRect
+        는 자기 viewport 기준이다. 그래도 자를 남겨 둔다: 나중에
+        도화지 자신에 배율이 걸리면 이 한 줄이 그것을 잡는다.
+    */
+    const root =
+      document.querySelector("[data-imory-canvas-root]");
+
+    if (root && root.offsetWidth > 0) {
+      out.scale = root.getBoundingClientRect().width / root.offsetWidth;
+    }
   }
+
+  out.chromePadding =
+    (typeof window.__imoryCanvasFrameState === "function")
+      ? (window.__imoryCanvasFrameState().chromePadding || null)
+      : null;
 
   if (!box) {
     return out;
@@ -726,6 +787,55 @@ function unionMatches(m, tol) {
     near(m.union.h, m.elRect.h, tol)
   );
 }
+
+/* =========================================================
+   HOME-CANVAS-MANUAL-UX-FIX-1 — 편집 chrome 여유(계약 §21-4)
+
+   글자를 직접 보여 주는 요소에서는 틀이 요소 상자와 **일치하지
+   않는다** — 내용 바깥으로 여유만큼 밀려 있다. 그 여유는
+   표시 전용이고 저장 geometry 에는 들어가지 않는다.
+
+   회전 0° 요소에서만 쓴다 — 회전한 요소의 축 평행 외곽은 여유를
+   sin/cos 로 섞으므로 그 자리는 "내용을 덮지 않는가"로 본다.
+========================================================== */
+function unionMatchesPadded(m, tol) {
+
+  if (!m.union || !m.elRect || !m.chromePadding) {
+    return false;
+  }
+
+  const s = m.scale || 1;
+  const pad = m.chromePadding;
+
+  return (
+    near(m.union.x, m.elRect.x - pad.left * s, tol) &&
+    near(m.union.y, m.elRect.y - pad.top * s, tol) &&
+    near(m.union.w, m.elRect.w + (pad.left + pad.right) * s, tol) &&
+    near(m.union.h, m.elRect.h + (pad.top + pad.bottom) * s, tol)
+  );
+
+}
+
+/* 내용 상자가 틀 안에 있고, 사방으로 tol 이상 떨어져 있는가 */
+function contentInsideUnion(m, min, max) {
+
+  if (!m.union || !m.contentRect) {
+    return null;
+  }
+
+  return {
+    left: m.contentRect.x - m.union.x,
+    top: m.contentRect.y - m.union.y,
+    right: (m.union.x + m.union.w) - (m.contentRect.x + m.contentRect.w),
+    bottom: (m.union.y + m.union.h) - (m.contentRect.y + m.contentRect.h)
+  };
+
+}
+
+const allGaps = (g, min, max) =>
+  !!g &&
+  [g.left, g.top, g.right, g.bottom].every((v) => v >= min && v <= max);
+
 
 /*
   네 줄의 길이가 요소의 (가로, 가로, 세로, 세로)인가
@@ -1077,14 +1187,35 @@ async function main() {
 
         const m = await measure(frame, id);
 
-        check(`★ ${label} — 실제 조판 높이를 쓴다`,
-          lengthsMatch(m, 3) && m.offset.h > 0,
-          `offset=${JSON.stringify(m.offset)} ` +
+        /* ★ HOME-CANVAS-MANUAL-UX-FIX-1 부터 **글자 요소의 틀은
+             요소 상자보다 크다** — 내용 바깥으로 여유만큼 밀려
+             있다(계약 §21-4). 그래서 줄 길이도 외곽도 그 여유를
+             더해서 비교한다. 저장 geometry 는 그대로다([data] 절이
+             draft 불변을 따로 찍는다). */
+
+        const padded =
+          m.chromePadding
+            ? {
+                w: m.offset.w + m.chromePadding.left + m.chromePadding.right,
+                h: m.offset.h + m.chromePadding.top + m.chromePadding.bottom
+              }
+            : m.offset;
+
+        check(`★ ${label} — 실제 조판 높이를 쓴다(+ 편집 chrome 여유)`,
+          lengthsMatch({ ...m, offset: padded }, 3) && m.offset.h > 0,
+          `offset=${JSON.stringify(m.offset)} pad=${JSON.stringify(m.chromePadding)} ` +
           `lens=${m.lines.map((l) => l.len.toFixed(1)).join(",")}`);
 
-        check(`${label} — 외곽 일치(±1.5px)`,
-          unionMatches(m, 1.5),
-          `union=${JSON.stringify(m.union)} el=${JSON.stringify(m.elRect)}`);
+        check(`${label} — 외곽이 요소 상자 + 여유와 일치(±1.5px)`,
+          diagonal
+            ? (m.union.w > m.elRect.w && m.union.h > m.elRect.h)
+            : unionMatchesPadded(m, 1.5),
+          `union=${JSON.stringify(m.union)} el=${JSON.stringify(m.elRect)} ` +
+          `pad=${JSON.stringify(m.chromePadding)} scale=${m.scale}`);
+
+        check(`★ ${label} — 선이 글자를 가로지르지 않는다`,
+          allGaps(contentInsideUnion(m), 3, 40),
+          JSON.stringify(contentInsideUnion(m)));
 
         check(`${label} — ${diagonal ? "대각선" : "축 평행"}`,
           diagonal ? allDiagonal(m) : allAxisAligned(m));
@@ -1145,6 +1276,313 @@ async function main() {
         scaledMeasure.instances === 1, `${scaledMeasure.instances}개`);
 
       await scaled.__ctx.close();
+
+    }
+
+
+    /* ======================================================
+       [chrome] — 글자 위에 선이 지나가지 않는다
+                  (HOME-CANVAS-MANUAL-UX-FIX-1 · 계약 §21-4)
+
+       ★ 재는 것은 네 가지의 **분리**다.
+
+         1. 저장되는 Canvas 상자        JSON 의 네 칸
+         2. 실제 보이는 content bounds  p · ul · span 의 상자
+         3. 편집 chrome 이 표시할 bounds  1 ∪ 2 + 여유
+         4. resize 확정에 쓰는 geometry  = 1 (Moveable getRect)
+
+       3 만 커지고 1 · 4 는 한 픽셀도 달라지지 않아야 한다.
+    ====================================================== */
+    if (wants("chrome")) {
+
+      section("chrome");
+
+      const page = await openStudio(browser, {});
+      const frame = await canvasFrame(page, false);
+
+      await enableSelect(page);
+
+      /* --- 여유를 받는 것과 받지 않는 것 --- */
+
+      for (const [id, want, why] of [
+        ["cvOne", true, "한 줄 글자"],
+        ["cvMulti", true, "여러 줄 글자"],
+        ["cvOver", true, "내용이 넘치는 숫자 height"],
+        ["cvPlain", false, "도형"],
+        ["cvPhoto", false, "사진"]
+      ]) {
+
+        await clickIn(page, byId(id));
+        await sleep(400);
+
+        const m = await measure(frame, id);
+
+        check(`${want ? "★ " : ""}${why}(${id}) 는 편집 chrome 여유를 ${want ? "받는다" : "받지 않는다"}`,
+          want ? !!m.chromePadding : m.chromePadding === null,
+          JSON.stringify(m.chromePadding));
+
+        if (!want) {
+          check(`${why} 의 틀은 요소 외곽 그대로다(±1.5px)`,
+            unionMatches(m, 1.5),
+            `union=${JSON.stringify(m.union)} el=${JSON.stringify(m.elRect)}`);
+        }
+
+      }
+
+      /* --- 한 줄: 내용보다 큰 숫자 height --- */
+
+      await clickIn(page, byId("cvOne"));
+      await sleep(400);
+
+      const one = await measure(frame, "cvOne");
+
+      check("★ 한 줄 — 여유는 사방 5px 다(내용이 넘치지 않으므로)",
+        one.chromePadding &&
+        one.chromePadding.left === 5 && one.chromePadding.top === 5 &&
+        one.chromePadding.right === 5 && one.chromePadding.bottom === 5,
+        JSON.stringify(one.chromePadding));
+
+      /* ★ 아래 여유가 크다 — 주인이 정한 숫자 height 40 이 한 줄보다
+         훨씬 높기 때문이다. 그때 틀이 따라가는 것은 **주인의 상자**이고
+         그것이 맞다(내용에 맞춰 줄이면 저장값과 보이는 것이 달라진다).
+         여유 규칙이 걸리는 자리는 틀이 내용에 **닿는** 세 변이다. */
+      check("★ 한 줄 — 선이 글자 바깥에 있다(사방 모두)",
+        (() => {
+          const g = contentInsideUnion(one);
+          return !!g && [g.left, g.top, g.right, g.bottom].every((v) => v >= 3);
+        })(),
+        JSON.stringify(contentInsideUnion(one)));
+
+      check("★ 한 줄 — 내용에 닿는 세 변의 여유가 4~8px 다",
+        (() => {
+          const g = contentInsideUnion(one);
+          return !!g && [g.left, g.top, g.right].every((v) => v >= 4 && v <= 8);
+        })(),
+        JSON.stringify(contentInsideUnion(one)));
+
+      check("★ 한 줄 — 아래는 주인이 정한 상자를 따라간다(내용에 맞춰 줄이지 않는다)",
+        Math.abs(one.union.y + one.union.h -
+          (one.elRect.y + one.elRect.h + one.chromePadding.bottom * (one.scale || 1))) <= 1.5,
+        `union bottom ${(one.union.y + one.union.h).toFixed(1)} vs ` +
+        `el bottom + pad ${(one.elRect.y + one.elRect.h + one.chromePadding.bottom).toFixed(1)}`);
+
+      /* --- 내용이 넘치는 숫자 height — 옛 동작에서 선이 글자를
+             가로지르던 그 자리 --- */
+
+      await clickIn(page, byId("cvOver"));
+      await sleep(400);
+
+      const over = await measure(frame, "cvOver");
+
+      check("★ 넘치는 글자 — 상자보다 내용이 크다(재현 조건이 성립한다)",
+        over.contentRect && over.contentRect.h > over.elRect.h + 10,
+        `content ${over.contentRect && over.contentRect.h.toFixed(1)} vs box ${over.elRect.h.toFixed(1)}`);
+
+      check("★ 넘치는 글자 — 아래 여유가 넘친 만큼 더 커진다",
+        over.chromePadding && over.chromePadding.bottom > 5 + 10,
+        JSON.stringify(over.chromePadding));
+
+      check("★ 넘치는 글자 — 선이 글자를 가로지르지 않는다",
+        allGaps(contentInsideUnion(over), 3, 40),
+        JSON.stringify(contentInsideUnion(over)));
+
+      check("★ 넘치는 글자 — 틀이 요소 상자 + 여유와 일치한다(±1.5px)",
+        unionMatchesPadded(over, 1.5),
+        `union=${JSON.stringify(over.union)} el=${JSON.stringify(over.elRect)} ` +
+        `pad=${JSON.stringify(over.chromePadding)}`);
+
+      /* --- 회전 손잡이도 본문을 덮지 않는다 --- */
+
+      const knob = await frame.evaluate(() => {
+
+        const handle =
+          document.querySelector(".moveable-rotation-control");
+
+        const inner =
+          document.querySelector(
+            '[data-imory-edit-id="cvOver"] [data-imory-canvas-text]'
+          );
+
+        if (!handle || !inner) return null;
+
+        const h = handle.getBoundingClientRect();
+        const t = inner.getBoundingClientRect();
+
+        return {
+          overlaps:
+            h.right > t.left && h.left < t.right &&
+            h.bottom > t.top && h.top < t.bottom,
+          handleBottom: h.bottom,
+          textTop: t.top
+        };
+
+      });
+
+      check("★ 회전 손잡이가 본문을 덮지 않는다",
+        knob && knob.overlaps === false,
+        JSON.stringify(knob));
+
+      /* --- 저장 geometry 는 한 픽셀도 달라지지 않았다 --- */
+
+      const sep = await frame.evaluate(() => {
+
+        const state = window.__imoryCanvasFrameState();
+
+        const el =
+          document.querySelector('[data-imory-edit-id="cvOver"]');
+
+        return {
+          /* 4. resize 확정에 쓰는 geometry — Moveable 의 getRect */
+          rect: state.rect
+            ? { w: state.rect.width, h: state.rect.height }
+            : null,
+          /* 1. 저장되는 상자를 부모가 내려 준 값 */
+          geometry: state.geometry,
+          offset: { w: el.offsetWidth, h: el.offsetHeight },
+          padding: state.chromePadding
+        };
+
+      });
+
+      check("★ Moveable 의 getRect 는 **여유가 없는** 요소 상자다(=4 는 1 이다)",
+        sep.rect && sep.offset &&
+        Math.abs(sep.rect.w - sep.offset.w) <= 1 &&
+        Math.abs(sep.rect.h - sep.offset.h) <= 1,
+        JSON.stringify(sep));
+
+      check("★ 프레임이 들고 있는 geometry 에 여유가 섞이지 않았다",
+        sep.geometry && sep.geometry.width === 150 && sep.geometry.height === 10,
+        JSON.stringify(sep.geometry));
+
+      /* --- 고르기만 해서는 JSON 이 안 바뀐다 --- */
+
+      const jsonAfterSelect = await page.evaluate(() => {
+        const entry =
+          (currentWorkingSkin.regions || []).find((r) => r && r.name === "home_canvas");
+        return JSON.stringify(entry);
+      });
+
+      const jsonExpected = await page.evaluate(() => {
+        const entry =
+          (currentWorkingSkin.regions || []).find((r) => r && r.name === "home_canvas");
+        return JSON.stringify(
+          entry.canvas.elements.map((el) => [el.id, el.x, el.y, el.width, el.height])
+        );
+      });
+
+      check("★ 글자 요소를 고르기만 해서는 JSON 이 한 글자도 안 바뀐다",
+        jsonAfterSelect.indexOf('"width":150') !== -1 &&
+        jsonAfterSelect.indexOf('"height":10') !== -1 &&
+        jsonAfterSelect.indexOf("chromePadding") === -1,
+        jsonExpected.slice(0, 120));
+
+      /* --- 폭을 줄여 재줄바꿈 → 다시 잰다 --- */
+
+      await clickIn(page, byId("cvMulti"));
+      await sleep(400);
+
+      const wideMeasure = await measure(frame, "cvMulti");
+
+      await page.evaluate(() => window.setStudioCanvasElementBox(
+        "cvMulti",
+        { x: 20, y: 650, width: 90, height: "auto" },
+        { x: 20, y: 650, width: 240, height: "auto" }
+      ));
+
+      await sleep(900);
+
+      const narrowMeasure = await measure(frame, "cvMulti");
+
+      check("★ 폭을 줄이면 줄 수가 늘어난다(재줄바꿈이 실제로 일어났다)",
+        narrowMeasure.offset.h > wideMeasure.offset.h,
+        `${wideMeasure.offset.h} → ${narrowMeasure.offset.h}`);
+
+      check("★ 재줄바꿈 뒤 **즉시 다시 재어** 틀이 내용을 감싼다",
+        unionMatchesPadded(narrowMeasure, 1.5) &&
+        allGaps(contentInsideUnion(narrowMeasure), 3, 40),
+        `union=${JSON.stringify(narrowMeasure.union)} ` +
+        `el=${JSON.stringify(narrowMeasure.elRect)} ` +
+        `gaps=${JSON.stringify(contentInsideUnion(narrowMeasure))}`);
+
+      /* --- Preview 내부 스크롤 뒤 --- */
+
+      await frame.evaluate(() => window.scrollBy(0, 120));
+      await sleep(500);
+
+      const scrolledText = await measure(frame, "cvMulti");
+
+      check("★ Preview 내부 스크롤 뒤에도 여유가 그대로다",
+        unionMatchesPadded(scrolledText, 1.5),
+        `union=${JSON.stringify(scrolledText.union)} el=${JSON.stringify(scrolledText.elRect)}`);
+
+      /* --- 여럿을 고르면 여유가 없다 --- */
+
+      await clickIn(page, byId("cvOne"));
+      await sleep(300);
+      await page.keyboard.down("Shift");
+      await clickIn(page, byId("cvPlain"));
+      await page.keyboard.up("Shift");
+      await sleep(700);
+
+      const group = await frameState(frame);
+
+      check("★ 여럿을 고르면 여유가 내려간다(그룹 조작은 아직 없다)",
+        group && group.moveableTargets === 2 && group.chromePadding === null,
+        `targets=${group && group.moveableTargets} pad=${JSON.stringify(group && group.chromePadding)}`);
+
+      check("Studio 쪽 스크립트 오류 없음",
+        page.__errors.length === 0, page.__errors.slice(0, 3).join(" | "));
+
+      await page.__ctx.close();
+
+      /* --- 부모 scale(0.8) --- */
+
+      const scaled = await openStudio(browser, { scale: 0.8 });
+      const scaledFrame = await canvasFrame(scaled, false);
+
+      await enableSelect(scaled);
+      await clickIn(scaled, byId("cvOver"));
+      await sleep(600);
+
+      const scaledText = await measure(scaledFrame, "cvOver");
+
+      check("★ 부모 scale(0.8) 에서도 글자 바깥에 선이 있다",
+        !!scaledText.chromePadding &&
+        allGaps(contentInsideUnion(scaledText), 3, 40),
+        `pad=${JSON.stringify(scaledText.chromePadding)} ` +
+        `gaps=${JSON.stringify(contentInsideUnion(scaledText))}`);
+
+      await scaled.__ctx.close();
+
+      /* --- sandbox — 같은 여유, 같은 자리 --- */
+
+      const remote = await openStudio(browser, { sandbox: true });
+      const remoteFrame = await canvasFrame(remote, true);
+
+      await enableSelect(remote);
+      await clickInSandbox(remote, remoteFrame, byId("cvOver"));
+      await sleep(1200);
+
+      const remoteText = await measure(remoteFrame, "cvOver");
+
+      check("★ sandbox 에서도 같은 여유를 받는다(같은 runtime 한 벌)",
+        !!remoteText.chromePadding &&
+        remoteText.chromePadding.left === 5 &&
+        remoteText.chromePadding.bottom > 15,
+        JSON.stringify(remoteText.chromePadding));
+
+      check("★ sandbox 에서도 선이 글자를 가로지르지 않는다",
+        allGaps(contentInsideUnion(remoteText), 3, 40),
+        JSON.stringify(contentInsideUnion(remoteText)));
+
+      check("CSP 위반 0(sandbox chrome)",
+        (await cspViolations(remoteFrame)).length === 0,
+        JSON.stringify(await cspViolations(remoteFrame)));
+
+      check("sandbox 쪽 스크립트 오류 없음",
+        remote.__errors.length === 0, remote.__errors.slice(0, 3).join(" | "));
+
+      await remote.__ctx.close();
 
     }
 

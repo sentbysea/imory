@@ -148,12 +148,24 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 > 진행 상태(2026-09-21): **`SPIKE-1` · `SPIKE-1B` · `CONTRACT-1B` · `CONTRACT-1C` ·
 > `RENDER-1A` · `RENDER-1B` · `VENDOR-1` · `SELECT-1A` · `SELECT-1B-1` ·
 > `SELECT-1B-2` · `TRANSFORM-1A` · `TRANSFORM-1B` · `TRANSFORM-1C` ·
-> `MILESTONE-1` 열넷이 끝났다.** 정적 렌더링은 **네 화면 전부** 끝났고, 편집기
-> 라이브러리는 **저장소에 고정됐고**, 캔버스 요소를 **고르고(단일 · lasso ·
-> Shift 다중) · 풀고 · 틀로 보여 주는 것**에 더해 **단독 선택 요소 하나의
-> 이동 · 리사이즈 · 회전**까지 됐다(`x` · `y` · `width` · `height` ·
-> `rotation` 다섯 칸). **그룹 조작 · 스냅 · 키보드 조작 · 손가락 조작 ·
-> Inspector 입력 필드 · 요소 추가 UI 는 아직 하나도 없다.**
+> `MILESTONE-1` · `MANUAL-UX-FIX-1` 열다섯이 끝났다.** 정적 렌더링은
+> **네 화면 전부** 끝났고, 편집기 라이브러리는 **저장소에 고정됐고**, 캔버스
+> 요소를 **고르고(단일 · lasso · Shift 다중) · 풀고 · 틀로 보여 주는 것**에
+> 더해 **단독 선택 요소 하나의 이동 · 리사이즈 · 회전**까지 됐다(`x` ·
+> `y` · `width` · `height` · `rotation` 다섯 칸). **그룹 조작 · 스냅 ·
+> 키보드 조작 · 손가락 조작 · Inspector 입력 필드 · 요소 추가 UI 는 아직
+> 하나도 없다.**
+>
+> ★ `MANUAL-UX-FIX-1`(2026-09-21) 은 그 기본 조작의 **사용성 넷**을 고쳤다 —
+> 회전의 **30° 자석**(±4° 안에서만) · **모서리 손잡이는 비율 유지 · 변
+> 중앙은 한 축 자유** · 자르기를 고르지 않은 Canvas 그림은 **contain** ·
+> 글자 요소의 **편집 chrome 여유**(저장 geometry 는 불변). 계약은
+> [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> **§21** 이고, 새 데이터 칸 · 새 메시지 · 새 파일은 없다.
+>
+> ★ **다음 작업은 `HOME-CANVAS-INSPECTOR-1A` 다**(§14-15) — Canvas 요소를
+> 골랐을 때 왼쪽 패널이 비어 있는 문제. v2 구현(`V2-DATA-1` 이후)은 그
+> 뒤다(§14-13).
 >
 > ★ 그 위에 **`COMPOSITION-CONTRACT-1`(2026-09-21)** 이 다음 구조를 확정했다 —
 > **자동 배치 블록 + `main_visual` 자유 레이어(`canvas.version:2`)**. 설계는
@@ -218,8 +230,8 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3c-M | `HOME-CANVAS-MILESTONE-1` | **기본 조작 마일스톤** — 이동 · 리사이즈 · 회전을 실제 배포에서 손으로 시험할 수 있게 한다(수동 테스트 스킨 + 통합 smoke). 새 편집 기능 없음 | 없음(도구) | **완료** — §8-M |
 | 3c-4 | `HOME-CANVAS-TRANSFORM-1D` | 그룹 이동 · 그룹 리사이즈 · 그룹 회전 | 저장 가능 | 미착수 |
 | 3c-X | `HOME-CANVAS-COMPOSITION-CONTRACT-1` | **조합형 HOME(v2) 설계 확정** — 자동 배치 블록 + `main_visual` 자유 레이어. 문서만 | 없음(문서) | **완료** — §14 |
-| 3c-U | `HOME-CANVAS-MANUAL-UX-FIX-1` | 수동 테스트에서 나온 v1 편집기 수정 — 30° 자석 회전 · 모서리 비율 유지 · 이미지 `contain` · 텍스트 선택 chrome | Studio만 | 미착수 — §14-14 |
-| 3c-I | `HOME-CANVAS-INSPECTOR-1A` | Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(지금은 패널이 비어 있다) | Studio만 | 미착수 — §14-15 |
+| 3c-U | `HOME-CANVAS-MANUAL-UX-FIX-1` | 수동 테스트에서 나온 v1 편집기 수정 — 30° 자석 회전 · 모서리 비율 유지 · 이미지 `contain` · 텍스트 선택 chrome | Studio만 | **완료**(계약 문서 §21) |
+| 3c-I | `HOME-CANVAS-INSPECTOR-1A` | Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(지금은 패널이 비어 있다) | Studio만 | **미착수 — 다음 작업**. §14-15 |
 | 3e-1 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 없음(데이터) | 미착수 — §14-13 |
 | 3e-2 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow + logo · category_nav · text · divider 렌더, native/sandbox parity | 읽기 전용 | 미착수 — §14-13 |
 | 3e-3 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform | 읽기 전용 | 미착수 — §14-13 |
@@ -567,6 +579,47 @@ HTML 에 없다.
   `rotatable: true` 로 주면 리사이즈용 `renderDirections` 가 회전
   손잡이 여덟으로 한 번 더 그려진다(계약 §19-1 의 함정).
 - 손가락 조작은 의도적 미지원. 그 자리는 Preview 스크롤이 지킨다.
+
+### `HOME-CANVAS-MANUAL-UX-FIX-1` (완료)
+
+**수동 테스트에서 나온 v1 편집기 사용성 넷을 고쳤다. 계약은
+[계약 문서 §21](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 이 갖는다 —
+여기에는 나중에 다시 부딪힐 판정과 함정만 적는다.**
+
+- **30° 자석은 양자화가 아니다.** `|deg - 가까운 30 배수| <= 4` 일 때만
+  붙고, 그 밖에서는 자유 회전 그대로다. 판정은 **접기 전의 연속 각도**에
+  걸고, 그 함수는 단조 비감소라 제스처 중 화면이 거꾸로 돌지 않는다.
+- **"돌지 않았다"는 자석이 붙기 전의 날것으로 본다** — 보정된 값으로 보면
+  저장된 31° 요소의 손잡이를 누르기만 해도 30° 가 확정된다. 자석이 제자리로
+  되돌린 제스처(30° → 32° → 붙어서 30°)도 확정하지 않는다(빈 Undo 한 칸이
+  생긴다).
+- **모서리 비율은 Moveable 의 `keepRatio` prop 이 아니라 `beforeResize` 의
+  `setSize()` 로 한다.** 그 prop 의 setter 는 vanilla 래퍼에서
+  setTimeout 으로 미뤄지고(`draggable` 과 같은 함정), 기준이
+  `state.width/height` 라 border · padding 과 `"auto"` 소수점이 섞이고,
+  모서리에서 가로만 본다. `beforeResize` 에서 고치면 그 뒤의 `dist` 와
+  `drag.beforeTranslate` 가 **둘 다** 우리 값에서 나오므로 삼각함수를 새로
+  적지 않아도 반대편 기준점이 유지된다.
+- **비율을 지켜야 하는 것은 px 상자가 아니라 `dist` 다** — 저장값이
+  `시작값 + dist / 배율` 이기 때문이다. 시작 px 는 `U - startW` 에만
+  들어가 양쪽에서 상쇄된다.
+- **끄는 축은 대각선 정사영이다.** 한 축을 고르면 (가로 고정) 아래로만 끈
+  `se` 가 멈추거나, (상대 변화 큰 축) 납작한 상자에서 가로가 171px 튄다.
+- **Canvas 이미지 기본값이 `contain` 이다.** 지금 payload 에 Crop 칸이
+  **하나도 없다**(`photo`/`sticker` 는 `slot`, `logo` 는 `slot`+`fallback`)
+  — 그래서 기본값으로 확정했고 Crop 연결은 남은 차이다. 범위는 렌더러가
+  붙인 `[data-imory-canvas-image]` 하나다.
+- **편집 chrome 여유는 Moveable 의 `padding` prop 이다.** 0.53.0 의
+  `updateRenderPoses()` 는 그 값으로 `renderPoses`/`renderLines` 만
+  로컬 축 방향으로 밀고 `pos1~pos4` · `state.width/height` 는 건드리지
+  않는다(번들 실측). 그래서 저장 geometry 와 완전히 분리된다 — 저장값에
+  4~6px 를 더하는 방식으로는 이 계약을 지킬 수 없다.
+- **여유는 글자를 직접 보여 주는 요소만 받는다**(`text` · `category_nav` ·
+  `logo` 대체 글자). 프레임은 JSON type 을 모르므로 렌더러가 붙인 표식으로
+  가른다. 사진 · 도형은 틀과 딱 붙은 테두리가 맞다.
+- **내용 크기를 따라가기 루프의 지문에 넣어야 한다** — 숫자 height 요소는
+  상자가 그대로인데 내용만 커질 수 있고, 바깥 상자만 보면 그때 여유가 옛
+  값에 머문다.
 
 ### `HOME-CANVAS-MILESTONE-1` (완료)
 
@@ -1343,13 +1396,22 @@ bottom-left  bottom  bottom-right
 | 순서 | 작업 ID | 무엇 | 상태 |
 | --- | --- | --- | --- |
 | 1 | `HOME-CANVAS-COMPOSITION-CONTRACT-1` | 이 절 — 설계 확정. 문서만 | **완료**(2026-09-21) |
-| 2 | `HOME-CANVAS-MANUAL-UX-FIX-1` | 현재 v1 편집기의 UX 수정 넷(§14-14) | 미착수 |
-| 3 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 미착수 |
-| 4 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | 미착수 |
-| 5 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform 렌더 | 미착수 |
-| 6 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 미착수 |
-| 7 | `HOME-CANVAS-V2-ATTACH-1` | lasso/Shift 선택 → `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` · Undo/Redo | 미착수 |
-| 8 | `HOME-CANVAS-EFFECT-HOOK-1` | 안정된 선택자 · 수명주기 · 정리. `main_visual` 과 sandbox 저자 JS 의 공존 | 미착수(§8 에 완료 기준) |
+| 2 | `HOME-CANVAS-MANUAL-UX-FIX-1` | 현재 v1 편집기의 UX 수정 넷(§14-14) | **완료**(2026-09-21) — 결과는 [계약 문서 §21](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
+| 3 | `HOME-CANVAS-INSPECTOR-1A` | v1 Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(§14-15). 지금 왼쪽 패널이 비어 있다 | **미착수 — 다음 작업** |
+| 4 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 미착수 |
+| 5 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | 미착수 |
+| 6 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform 렌더 | 미착수 |
+| 7 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 미착수 |
+| 8 | `HOME-CANVAS-V2-ATTACH-1` | lasso/Shift 선택 → `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` · Undo/Redo | 미착수 |
+| 9 | `HOME-CANVAS-EFFECT-HOOK-1` | 안정된 선택자 · 수명주기 · 정리. `main_visual` 과 sandbox 저자 JS 의 공존 | 미착수(§8 에 완료 기준) |
+
+> **★ `INSPECTOR-1A` 와 `V2-INSPECTOR-1` 은 다른 작업이다.**
+>
+> `INSPECTOR-1A`(3 번)는 **지금 v1** 자유 배치 요소를 골랐을 때 왼쪽
+> 패널이 비어 있는 문제를 푸는 작업이고, `V2-INSPECTOR-1`(7 번)은 그
+> 뒤 v2 의 **flow block 과 `main_visual`** 을 편집하는 작업이다. 둘을
+> 같은 작업으로 합치거나 하나로 대체하지 않는다 — 책임 구분은 §14-10
+> 의 마지막 표다.
 
 그룹 전체 transform(`TRANSFORM-1D`) · row/grid · responsive override
 (`RESPONSIVE-1`) · layer panel(`LAYERS-1`) 은 각각 그대로 후속이다.
@@ -1357,7 +1419,14 @@ bottom-left  bottom  bottom-right
 ### 14-14. 수동 테스트에서 나온 v1 편집기 수정 (`HOME-CANVAS-MANUAL-UX-FIX-1`)
 
 `MILESTONE-1` 의 수동 테스트에서 주인이 찾은 것들이다. **v2 구조와 무관하게
-지금 v1 편집기를 고치는 작업이고, 이 라운드에서 구현하지 않았다.**
+지금 v1 편집기를 고치는 작업이었다.**
+
+> **✅ 2026-09-21 에 넷 다 구현됐다 — 이 절은 그때의 요구 기록이고,
+> 지금 코드가 강제하는 것은
+> [계약 문서 §21](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 이다.**
+> 실제 판정식 · 경계값 · 구현 함정은 그쪽을 본다. 아래에서 그때의
+> 요구와 달라진 것은 하나뿐이다: 모서리 비율의 **끄는 축**을 한 축으로
+> 고르지 않고 **대각선 정사영**으로 했다(§21-2 의 그 이유).
 
 #### 회전
 
@@ -1395,7 +1464,9 @@ bottom-left  bottom  bottom-right
 
 Canvas `text` 를 골랐을 때 왼쪽 패널이 비어 있는 것은 **지금 미구현 상태**다
 (계약 문서 §11-2 · §11-3 의 "캔버스 요소의 Inspector 입력 필드"). 별도 후속
-작업으로 둔다.
+작업으로 둔다 — `MANUAL-UX-FIX-1`(완료) **다음**이고 v2 보다 **앞**이다
+(§14-13 의 3 번). `MANUAL-UX-FIX-1` 은 이 패널에 임시 입력창을 붙이지
+않았다(계약 문서 §21-5).
 
 최소 범위: **text 내용 · `width` · `height`/auto · 정렬 · margin 또는 Canvas
 geometry · `rotation` · `hidden`/`locked`**.

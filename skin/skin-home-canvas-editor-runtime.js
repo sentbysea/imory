@@ -143,6 +143,16 @@ const CANVAS_ROTATION_POSITION_NONE = "none";
    normalizeCanvasRotation) */
 const CANVAS_FULL_TURN = 360;
 
+/* =========================================================
+   HOME-CANVAS-MANUAL-UX-FIX-1 — 30° 자석
+
+   양자화가 **아니다**. 가장 가까운 30° 배수와의 차이가 흡착 범위
+   안일 때만 그 각도에 붙고, 그 밖에서는 자유 회전 그대로다
+   (계약 §21-1).
+========================================================== */
+const CANVAS_ROTATION_SNAP_STEP = 30;
+const CANVAS_ROTATION_SNAP_RANGE = 4;
+
 /* Canvas 좌표 기준 최소 크기(계약 §18-2). 0 을 허용하면 그 요소는
    다시 잡을 수 없고, 계약의 `width > 0` 도 어긴다. */
 const CANVAS_MIN_SIZE = 1;
@@ -153,6 +163,164 @@ const CANVAS_COMMIT_TIMEOUT_MS = 4000;
 
 /* `height:"auto"` 를 나타내는 그 문자열 하나(계약 §6) */
 const CANVAS_AUTO_HEIGHT = "auto";
+
+/* =========================================================
+   HOME-CANVAS-MANUAL-UX-FIX-1 — 순수 helper 둘
+
+   이 두 함수는 DOM · Moveable · 상태를 **한 줄도** 보지 않는다.
+   그래서 module 밖으로 내보내고, 경계값은 브라우저 없는 단위
+   테스트가 직접 검사한다(skin/skin-home-canvas-test.mjs
+   [ux-fix] 절). 제스처 쪽은 같은 함수를 부르므로 두 벌이 되지
+   않는다.
+========================================================== */
+
+/* =========================================================
+   HOME-CANVAS-MANUAL-UX-FIX-1 — 30° 자석 (계약 §21-1)
+
+   snapCanvasRotation(deg) -> deg
+
+   **양자화가 아니다.** 가장 가까운 30° 배수와의 차이가 ±4° 안일
+   때만 그 배수로 붙고, 그 밖에서는 받은 각도를 **그대로** 돌려
+   준다.
+
+     25 -> 25      26 -> 30      34 -> 30      35 -> 35
+     56 -> 60      86 -> 90      356 -> 360(= 저장 0)
+     -26 -> -30    380 -> 380(390 까지 10 이라 자유)
+
+   ★ 접기(normalizeCanvasRotation) 전의 **연속 각도**에 건다.
+     그래서 356° 는 360° 로 붙고 접히면서 0° 가 되며, 350° 에서
+     조금 더 돌린 385° 는 자유 회전 그대로다 — 어느 쪽도 화면이
+     반대로 튀지 않는다(붙는 양이 최대 4° 다).
+
+   ★ 음수도 같은 식이다. Math.round 가 0 쪽으로 반올림하는
+     경계(±15°)에서도 차이가 15° 라 흡착 범위 밖이므로, 어느
+     쪽으로 반올림하든 결과가 같다.
+
+   ★ 판정만 하고 반올림 · 접기는 하지 않는다 — 자릿수와 한 바퀴의
+     표현을 정하는 곳은 아래 한 곳이다(normalizeCanvasRotation).
+========================================================== */
+
+export function snapCanvasRotation(deg) {
+
+  if (!Number.isFinite(deg)) {
+    return deg;
+  }
+
+  const nearest =
+    Math.round(deg / CANVAS_ROTATION_SNAP_STEP) * CANVAS_ROTATION_SNAP_STEP;
+
+  return (
+    Math.abs(deg - nearest) <= CANVAS_ROTATION_SNAP_RANGE ? nearest : deg
+  );
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-MANUAL-UX-FIX-1 — 모서리 손잡이의 비율 유지
+   (계약 §21-2)
+
+   canvasResizeKeepRatioBox(startW, startH, width, height,
+                            ratioW, ratioH) -> [w, h] | null
+
+   Moveable 이 자기 계산으로 낸 다음 크기(width · height, 요소
+   **px**)를 받아, 우리가 저장할 네 칸이 시작 비율을 지키도록 그
+   짝을 다시 정한다. `onBeforeResize` 에서 `setSize()` 로 돌려
+   주므로 그 뒤의 `dist` 와 `drag.beforeTranslate` 가 **둘 다**
+   이 값에서 나온다 — 삼각함수를 새로 적지 않아도 회전한 요소의
+   반대편 기준점이 유지된다(§18-4 의 그 성질을 그대로 쓴다).
+
+   ── 왜 절대값이 아니라 시작값 + 변화인가 ──────────────
+   우리가 저장하는 것은 Canvas 좌표의 네 칸이고, 그 계산은
+   `시작값 + dist / 배율` 이다(§18-4). 그래서 비율을 지켜야 하는
+   것은 **px 상자의 비율이 아니라 dist 의 비율**이다.
+
+     dist[1] / dist[0] = ratioH / ratioW
+
+   px 상자의 비율로 맞추면 안 된다 — `offsetWidth` 에는 저자
+   CSS 의 border · padding 이 섞여 있고, `height:"auto"` 요소의
+   시작 세로는 우리가 재는 computed height 와 소수점이 다르다.
+   dist 로 맞추면 그 차이가 **양쪽에서 상쇄된다**(시작 px 는
+   U - startW 에만 들어간다).
+
+   ── 어느 축이 끄는가 — 어느 쪽도 아니다 ───────────────
+   변화량 `(dw, dh)` 를 **대각선 방향 `(ratioW, ratioH)` 에 정사영**
+   한다.
+
+     k   = (dw·ratioW + dh·ratioH) / (ratioW² + ratioH²)
+     dw' = k · ratioW
+     dh' = k · ratioH
+
+   한 축을 고르는 방식은 두 가지가 다 나쁘다.
+
+     · 언제나 가로(0.53.0 의 `keepRatio` 가 모서리에서 그렇게
+       한다 — `isWidth` 가 참이다): se 손잡이를 **아래로만** 끌면
+       아무 일도 일어나지 않는다.
+     · 상대 변화가 큰 축: 납작한 글자 상자(120×21)에서 대각선으로
+       30px 끌면 세로가 이겨 **가로가 171px 튄다**. 게다가 두 축이
+       비길 때 결과가 끊긴다.
+
+   정사영은 끊긴 자리가 없고 손이 간 방향을 따라간다. 축에 평행한
+   드래그도 자연스럽게 들어온다(위 120×21 에 (30,30) 이면
+   가로 +34.2 · 세로 +6.0).
+
+   ratioW · ratioH 는 **Canvas 좌표의 시작 가로와 실제 세로**다
+   (`height:"auto"` 면 그 순간 렌더된 세로 — §18-3 과 같은 자).
+   정사영은 방향만 쓰므로 px 와 Canvas 좌표를 섞어도 된다 — 두 축의
+   배율이 같기 때문이다(§12-2).
+========================================================== */
+
+export function canvasResizeKeepRatioBox(startW, startH, width, height, ratioW, ratioH) {
+
+  if (
+    !(startW > 0) || !(startH > 0) ||
+    !(ratioW > 0) || !(ratioH > 0) ||
+    !Number.isFinite(width) || !Number.isFinite(height)
+  ) {
+    return null;
+  }
+
+  const dw =
+    width - startW;
+
+  const dh =
+    height - startH;
+
+  const k =
+    (dw * ratioW + dh * ratioH) / (ratioW * ratioW + ratioH * ratioH);
+
+  const box =
+    [startW + k * ratioW, startH + k * ratioH];
+
+  /*
+    한계까지 줄인 그 순간에는 비율이 깨질 수 있다 — Moveable 은
+    0 에서, 우리는 Canvas 좌표 1 에서 멈추므로(§18-2 의 그 주석)
+    여기서도 px 0 이하로는 내려 보내지 않는다. 실사용 범위가
+    아니므로 맞추지 않았다.
+  */
+  return [Math.max(1, box[0]), Math.max(1, box[1])];
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-MANUAL-UX-FIX-1 — 편집 chrome 의 시각적 여유
+
+   글자를 직접 보여 주는 요소에서 선택선 · 손잡이가 **글자 바깥**에
+   놓이게 하는 여유다(계약 §21-4). 저장되는 상자에는 한 픽셀도
+   더해지지 않는다 — Moveable 의 `padding` 은 renderPoses 만 밖으로
+   밀고 pos1~pos4 · state.width/height 는 건드리지 않는다(번들 실측).
+
+   단위는 **요소 자기 좌표계의 px** 다. 부모 Preview 에 scale 이
+   걸려 있으면 화면에서는 그만큼 함께 줄고 늘어난다.
+========================================================== */
+const CANVAS_EDIT_CHROME_GAP = 5;
+
+/* 그 여유를 받을 요소 — 글자를 **직접** 보여 주는 것들이다.
+   종류 이름이 아니라 렌더러가 붙인 표식으로 가른다(프레임은 JSON
+   type 을 모른다 — 계약 §21-4). */
+const CANVAS_TEXT_CONTENT_SELECTOR =
+  "[data-imory-canvas-text],[data-imory-canvas-nav],[data-imory-canvas-logo-text]";
 
 /* 규칙표를 못박을 때 쓰는 수. 한 화면에 이만큼의 컴포넌트가 동시에
    붙었다 떨어지는 일은 없다(위 pinEditorStyleSheets). */
@@ -630,6 +798,17 @@ export function createHomeCanvasSelectionFrame(options) {
     /* 마지막으로 받은 payload — 재렌더 뒤 되살릴 때 쓴다 */
     lastPayload: null,
 
+    /* =====================================================
+       HOME-CANVAS-MANUAL-UX-FIX-1 — 편집 chrome 의 여유
+       (계약 §21-4)
+
+       Moveable 에 준 `padding` 과 그 지문. **표시 전용**이고 저장
+       geometry 에는 들어가지 않는다 — 지문을 들고 있는 것은 prop
+       setter 가 setState 라 같은 값을 다시 쓰지 않기 위해서다.
+    ====================================================== */
+    chromePadding: null,
+    chromePaddingKey: "",
+
     /* onActiveChange 로 마지막에 알린 값 */
     reported: false,
 
@@ -898,6 +1077,150 @@ export function createHomeCanvasSelectionFrame(options) {
      선택이 없으면 돌지 않는다.
   ========================================================== */
 
+  /* =========================================================
+     HOME-CANVAS-MANUAL-UX-FIX-1 — 편집 chrome 이 표시할 bounds
+     (계약 §21-4)
+
+     canvasEditChromePadding(el) -> {left,top,right,bottom} | null
+
+     네 가지를 확실히 가른다.
+
+       1. **저장되는 Canvas 상자**      x · y · width · height (JSON)
+       2. **실제 보이는 content bounds** 아래에서 재는 자식들의 상자
+       3. **편집 chrome 이 표시할 bounds** 1 ∪ 2 + 여유(이 함수의 답)
+       4. **resize 확정에 쓰는 원래 geometry**  1 그대로
+
+     3 만 Moveable 에게 준다. 0.53.0 의 `padding` prop 은
+     `updateRenderPoses()` 에서 **renderPoses 와 renderLines 만**
+     요소의 로컬 축 방향으로 밀고, `pos1`~`pos4` · `state.width` ·
+     `state.height` 는 한 글자도 건드리지 않는다(번들 실측). 손잡이도
+     그 renderPoses 위에 놓이고(`Vr()`), 회전 손잡이도 같다(`Ji()`).
+
+     그래서 **저장 좌표 계산에 섞일 길이 없다** — dist · startRatio ·
+     `drag.beforeTranslate` · `getRect()` 는 전부 pos 와 state 에서
+     나온다. 고르기만 해도 JSON 이 불변이고, 여유를 넓혀도 이동 ·
+     리사이즈의 변환량이 달라지지 않는다.
+
+     ── 어떤 요소가 받는가 ────────────────────────────────
+     **글자를 직접 보여 주는 것**뿐이다(text · category_nav · logo 의
+     대체 글자). 사진 · 스티커 · 도형에서는 틀과 딱 붙은 테두리가
+     오히려 맞다 — 그것이 그 요소의 실제 경계다. 프레임은 JSON
+     type 을 모르므로 렌더러가 붙인 표식으로 가른다.
+
+     ── 왜 재야 하는가 ────────────────────────────────────
+     · `height:"auto"` 는 상자가 곧 내용이라 테두리가 글자에 **딱
+       붙는다** → 여유가 필요하다.
+     · 숫자 height 가 내용보다 작으면 내용이 **넘쳐 나간다** →
+       그만큼 더 밀어야 선이 글자를 가로지르지 않는다.
+     · 폭이 바뀌어 줄바꿈이 달라지면 내용 크기가 바뀐다 → 따라가기
+       루프의 지문(signatureOf)에 이 값이 들어 있어 다시 잰다.
+
+     자는 **offsetLeft/Top/Width/Height** 다 —
+     `getBoundingClientRect()` 를 쓰지 않는다. 회전한 요소에서 그것은
+     축에 정렬된 바깥 상자이고, 우리가 필요한 것은 요소 자기 축의
+     넘침이다(§18-3 의 그 이유 그대로다).
+  ========================================================== */
+
+  function canvasEditChromePadding(el) {
+
+    if (!el || typeof el.querySelector !== "function") {
+      return null;
+    }
+
+    if (!el.querySelector(CANVAS_TEXT_CONTENT_SELECTOR)) {
+      return null;
+    }
+
+    const width =
+      el.offsetWidth;
+
+    const height =
+      el.offsetHeight;
+
+    if (!Number.isFinite(width) || !Number.isFinite(height)) {
+      return null;
+    }
+
+    let left = 0;
+    let top = 0;
+    let right = width;
+    let bottom = height;
+
+    Array.prototype.forEach.call(
+      el.children,
+      (child) => {
+
+        if (child.nodeType !== 1) {
+          return;
+        }
+
+        const cx = child.offsetLeft;
+        const cy = child.offsetTop;
+        const cw = child.offsetWidth;
+        const ch = child.offsetHeight;
+
+        if (
+          !Number.isFinite(cx) || !Number.isFinite(cy) ||
+          !Number.isFinite(cw) || !Number.isFinite(ch)
+        ) {
+          return;
+        }
+
+        left = Math.min(left, cx);
+        top = Math.min(top, cy);
+        right = Math.max(right, cx + cw);
+        bottom = Math.max(bottom, cy + ch);
+
+      }
+    );
+
+    return {
+      left: CANVAS_EDIT_CHROME_GAP + Math.max(0, -left),
+      top: CANVAS_EDIT_CHROME_GAP + Math.max(0, -top),
+      right: CANVAS_EDIT_CHROME_GAP + Math.max(0, right - width),
+      bottom: CANVAS_EDIT_CHROME_GAP + Math.max(0, bottom - height)
+    };
+
+  }
+
+
+  /* 그 여유를 Moveable 에 준다 — 값이 실제로 달라졌을 때만 쓴다
+     (prop setter 는 setState 라 부를 때마다 렌더가 예약된다). */
+  function applyEditChromePadding(elements) {
+
+    if (!state.moveable) {
+      return;
+    }
+
+    /* 여럿을 고르면 여유가 없다 — 그룹 틀에는 손잡이도 없고
+       (§18-1) 그룹 조작은 아직 없다(계약 §21-5). */
+    const padding =
+      (elements && elements.length === 1)
+        ? canvasEditChromePadding(elements[0])
+        : null;
+
+    const key =
+      padding
+        ? [padding.left, padding.top, padding.right, padding.bottom].join(",")
+        : "";
+
+    if (key === state.chromePaddingKey) {
+      return;
+    }
+
+    state.chromePaddingKey = key;
+    state.chromePadding = padding;
+
+    try {
+      state.moveable.padding = padding || {};
+    }
+    catch (err) {
+      /* 여유가 없어도 틀은 그대로 둔다 */
+    }
+
+  }
+
+
   function signatureOf(elements) {
 
     return elements.map(
@@ -910,12 +1233,22 @@ export function createHomeCanvasSelectionFrame(options) {
         const box =
           el.getBoundingClientRect();
 
+        /* HOME-CANVAS-MANUAL-UX-FIX-1 — 내용 크기도 지문에 넣는다.
+
+           줄바꿈 · 글꼴 교체 · 늦게 온 이미지로 **상자는 그대로인데
+           내용만** 커지는 일이 있다(숫자 height 요소가 그렇다).
+           바깥 상자만 보면 그때 chrome 여유가 옛 값에 머무르고
+           선이 글자를 가로지른다(계약 §21-4). */
+        const pad =
+          canvasEditChromePadding(el);
+
         return [
           Math.round(box.left * 100),
           Math.round(box.top * 100),
           Math.round(box.width * 100),
           Math.round(box.height * 100),
-          win.getComputedStyle(el).transform
+          win.getComputedStyle(el).transform,
+          pad ? `${pad.left}/${pad.top}/${pad.right}/${pad.bottom}` : "-"
         ].join(",");
 
       }
@@ -1334,6 +1667,11 @@ export function createHomeCanvasSelectionFrame(options) {
       state.moveable.on("dragEnd", onCanvasDragEnd);
 
       state.moveable.on("resizeStart", onCanvasResizeStart);
+
+      /* HOME-CANVAS-MANUAL-UX-FIX-1 — 모서리 비율 유지는 크기가
+         확정되기 전 이 한 자리에서 끼어든다(계약 §21-2) */
+      state.moveable.on("beforeResize", onCanvasBeforeResize);
+
       state.moveable.on("resize", onCanvasResize);
       state.moveable.on("resizeEnd", onCanvasResizeEnd);
 
@@ -1438,6 +1776,8 @@ export function createHomeCanvasSelectionFrame(options) {
 
       if (state.promoteAfter > 0 && elements.length > 1) {
 
+        applyEditChromePadding(elements);
+
         markControlBox();
 
         return true;
@@ -1470,6 +1810,11 @@ export function createHomeCanvasSelectionFrame(options) {
         (Array.isArray(target) && target.length > 1)
           ? CANVAS_ROTATION_POSITION_NONE
           : CANVAS_ROTATION_POSITION;
+
+      /* HOME-CANVAS-MANUAL-UX-FIX-1 — 표시할 bounds 는 여기서
+         한 번만 정한다(계약 §21-4). target 과 같은 자리에 두어
+         "틀이 옮겨갔는데 여유는 앞 요소의 것"이 생기지 않게 한다. */
+      applyEditChromePadding(elements);
 
       state.moveable.target = target;
       state.moveable.updateRect();
@@ -1536,6 +1881,10 @@ export function createHomeCanvasSelectionFrame(options) {
     state.signature = "";
 
     if (state.moveable) {
+
+      /* HOME-CANVAS-MANUAL-UX-FIX-1 — 다음에 고른 것이 사진이면
+         앞 요소의 글자 여유가 남아 있어서는 안 된다(계약 §21-4) */
+      applyEditChromePadding([]);
 
       try {
         state.moveable.target = null;
@@ -2079,8 +2428,48 @@ export function createHomeCanvasSelectionFrame(options) {
     const verticalHandle =
       direction[1] !== 0;
 
+    /* =====================================================
+       HOME-CANVAS-MANUAL-UX-FIX-1 — 손잡이의 뜻이 둘로 갈린다
+       (계약 §21-2)
+
+         모서리 넷(nw · ne · se · sw) : 시작 비율 유지
+         변 중앙 넷(n · e · s · w)    : 한 축만 자유
+
+       판정은 방향 한 쌍뿐이다 — 두 칸이 모두 0 이 아니면 모서리다.
+    ====================================================== */
+    const corner =
+      direction[0] !== 0 && direction[1] !== 0;
+
     const autoHeight =
       geometry.height === CANVAS_AUTO_HEIGHT;
+
+    /*
+      비율 유지의 시작 px. **Moveable 이 쓰는 그 값**이어야 한다 —
+      dist 는 `U - state.width` 이므로(번들 실측) 우리가 setSize 로
+      돌려주는 값도 같은 자에서 나와야 dist 가 의도한 짝이 된다.
+      `getRect().offsetWidth/offsetHeight` 가 곧 그 state.width /
+      state.height 다(번들 실측).
+    */
+    let startPxW = 0;
+    let startPxH = 0;
+
+    if (corner && state.moveable && typeof state.moveable.getRect === "function") {
+
+      try {
+
+        const px =
+          state.moveable.getRect();
+
+        startPxW = Number(px && px.offsetWidth) || 0;
+        startPxH = Number(px && px.offsetHeight) || 0;
+
+      }
+      catch (err) {
+        startPxW = 0;
+        startPxH = 0;
+      }
+
+    }
 
     state.drag = {
       kind: CANVAS_RESIZE_KIND,
@@ -2089,6 +2478,12 @@ export function createHomeCanvasSelectionFrame(options) {
       scale: scale,
       direction: [direction[0], direction[1]],
       verticalHandle: verticalHandle,
+
+      /* HOME-CANVAS-MANUAL-UX-FIX-1 — 모서리면 비율을 지킨다 */
+      corner: corner,
+      startPxW: startPxW,
+      startPxH: startPxH,
+
       autoHeight: autoHeight,
       baseX: geometry.x,
       baseY: geometry.y,
@@ -2120,6 +2515,80 @@ export function createHomeCanvasSelectionFrame(options) {
     state.lastMoveGate = "ok";
 
     return true;
+
+  }
+
+
+  /* =========================================================
+     HOME-CANVAS-MANUAL-UX-FIX-1 — 모서리 비율 유지가 끼어드는 곳
+     (계약 §21-2)
+
+     Moveable 0.53.0 의 `beforeResize` 는 크기를 정한 **뒤**,
+     `dist` 와 `drag.beforeTranslate` 를 만들기 **전**에 돈다
+     (번들 실측: dragControl 안에서 at() → onBeforeResize →
+     bounds/min/max → dist = U - startOffsetWidth → kr() → drag).
+
+     그래서 여기서 `setSize()` 로 짝을 다시 정하면 그 뒤의 모든
+     것이 **우리가 정한 크기에서** 나온다.
+
+       · dist               우리가 정한 누적 변화
+       · beforeTranslate    그 크기로 반대편 기준점을 지키는 이동
+
+     ★ 그래서 `keepRatio` prop 을 켜지 않는다. 세 가지 이유다.
+
+       1. 그 prop 은 vanilla 래퍼의 setter 를 거치는데 그 setter 는
+          **setTimeout 으로 미뤄진다**(0.53.0 실측 — draggable 의
+          그 함정과 같은 사정이다, 위 displayOnlyMoveableOptions).
+          제스처가 시작된 뒤에 켜면 첫 몇 프레임이 자유 비율로 돈다.
+       2. 그 prop 의 기준은 `state.width / state.height` 라 저자
+          CSS 의 border · padding 과 `height:"auto"` 의 소수점이
+          섞인다. 우리가 지켜야 하는 것은 **저장되는 네 칸의**
+          비율이다.
+       3. 모서리에서 가로만 끌게 된다(`isWidth`) — 아래로만 끈
+          se 손잡이가 아무 일도 하지 않는다.
+
+     ★ 변 중앙 손잡이에서는 아무것도 하지 않는다 — 한 축 자유
+       조정이 그대로 남는다.
+  ========================================================== */
+
+  function onCanvasBeforeResize(event) {
+
+    const gesture =
+      state.drag;
+
+    if (!gesture || gesture.cancelled || gesture.kind !== CANVAS_RESIZE_KIND) {
+      return;
+    }
+
+    if (!gesture.corner || !event || typeof event.setSize !== "function") {
+      return;
+    }
+
+    /* 비율의 기준은 **Canvas 좌표의** 시작 가로와 실제 세로다.
+       `"auto"` 면 그 순간 렌더된 세로(§18-3 과 같은 자). */
+    const ratioH =
+      gesture.autoHeight ? gesture.autoBaseH : gesture.baseH;
+
+    const box =
+      canvasResizeKeepRatioBox(
+        gesture.startPxW,
+        gesture.startPxH,
+        event.boundingWidth,
+        event.boundingHeight,
+        gesture.baseW,
+        ratioH
+      );
+
+    if (!box) {
+      return;
+    }
+
+    try {
+      event.setSize(box);
+    }
+    catch (err) {
+      /* 이 판에서는 자유 비율로 돈다 — 제스처를 깨지 않는다 */
+    }
 
   }
 
@@ -2353,7 +2822,16 @@ export function createHomeCanvasSelectionFrame(options) {
          요소는 부모가 이미 0 으로 만들어 보냈다(계약 §5). */
       baseRot: geometry.rotation,
 
-      /* 화면에 지금 적혀 있는 연속 각도(한 바퀴를 넘을 수 있다) */
+      /*
+        이번 제스처의 **날것** 연속 각도(시작 각도 + 누적 회전량).
+        자석이 붙기 전의 값이고, "돌지 않았다"를 이 값으로 판정한다
+        (HOME-CANVAS-MANUAL-UX-FIX-1 — 계약 §21-1).
+      */
+      rawRot: geometry.rotation,
+
+      /* 화면에 지금 적혀 있는 연속 각도(한 바퀴를 넘을 수 있다).
+         자석이 붙은 뒤의 값이다 — 제스처 중에도 보정된 각도를
+         보여 준다. */
       viewRot: geometry.rotation,
 
       /* 확정으로 올릴 값 — 한 바퀴 안으로 접은 표현이다 */
@@ -2407,11 +2885,31 @@ export function createHomeCanvasSelectionFrame(options) {
     }
 
     /* ★ 시작값 + **누적** 회전량이다(위 머리말) */
+    const raw =
+      gesture.baseRot + dist;
+
+    gesture.rawRot =
+      roundCanvasCoord(raw);
+
+    /* =====================================================
+       HOME-CANVAS-MANUAL-UX-FIX-1 — 30° 자석(계약 §21-1)
+
+       ★ 아직 돌지 않았으면(dist 0) 자석도 걸지 않는다. 걸면
+         손잡이를 **누르기만 한** 요소의 저장된 31° 가 화면에서
+         30° 로 슬쩍 움직이고, 손을 놓는 순간 그것이 확정돼
+         "고르기만 해도 각도가 바뀐다"가 된다.
+
+       ★ 화면과 확정값에 **같은** 보정을 쓴다. 제스처 중에 보이던
+         각도와 저장된 각도가 다르면 손을 놓을 때 그림이 튄다.
+    ====================================================== */
+    const snapped =
+      dist === 0 ? gesture.baseRot : snapCanvasRotation(raw);
+
     gesture.viewRot =
-      roundCanvasCoord(gesture.baseRot + dist);
+      roundCanvasCoord(snapped);
 
     gesture.nextRot =
-      normalizeCanvasRotation(gesture.baseRot + dist);
+      normalizeCanvasRotation(snapped);
 
     try {
 
@@ -2448,8 +2946,22 @@ export function createHomeCanvasSelectionFrame(options) {
        ★ 판정은 **연속 각도**로 한다. 접은 값으로 보면 손잡이를
          누르기만 한 요소의 저장된 400° 가 40° 로 조용히 바뀐다 —
          이번 제스처가 실제로 돌린 것만 저장한다.
+
+       ★ 그 연속 각도는 자석이 붙기 **전**의 날것이다
+         (HOME-CANVAS-MANUAL-UX-FIX-1). 자석이 붙은 값으로 보면
+         저장된 31° 를 고르고 손잡이를 누르기만 해도 30° 가
+         확정된다 — 그것은 이번 제스처가 돌린 것이 아니다.
     ====================================================== */
-    if (gesture.viewRot === gesture.baseRot) {
+    /* ★ 자석이 제자리로 되돌린 제스처도 여기서 멈춘다.
+
+       25° 에서 26° 로 조금 돌렸다가 다시 25° 쪽으로 온 것이 아니라,
+       **30° 요소를 32° 까지 돌렸는데 자석이 30° 로 붙인** 경우다.
+       확정 값이 시작 값과 같으므로 보낼 것이 없고, 보내면 아무것도
+       바뀌지 않는 Undo 한 칸이 생긴다(계약 §21-1). */
+    if (
+      gesture.rawRot === gesture.baseRot ||
+      gesture.nextRot === gesture.baseRot
+    ) {
       restoreDragPosition(gesture);
       state.lastMoveGate = "no-rotate";
       return;
@@ -3848,6 +4360,19 @@ export function createHomeCanvasSelectionFrame(options) {
            같은 자로 센다(화면에 있는 것 · 잡을 수 있는 것) */
         rotationHandles: rotationHandleNodes(false).length,
         rotationHandleHit: rotationHandleNodes(true).length,
+
+        /* HOME-CANVAS-MANUAL-UX-FIX-1 — 편집 chrome 이 표시할
+           여유. **표시 전용**이고 저장 geometry 와는 무관하다
+           (계약 §21-4). */
+        chromePadding:
+          state.chromePadding
+            ? {
+                left: state.chromePadding.left,
+                top: state.chromePadding.top,
+                right: state.chromePadding.right,
+                bottom: state.chromePadding.bottom
+              }
+            : null,
 
         geometry:
           state.geometry

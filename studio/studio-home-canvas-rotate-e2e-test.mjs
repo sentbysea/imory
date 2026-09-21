@@ -62,6 +62,11 @@ import os from "node:os";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
+/* HOME-CANVAS-MANUAL-UX-FIX-1 — 30° 자석의 판정은 **제품 코드의 그
+   함수** 하나다. 여기에 식을 다시 적으면 두 벌이 되고, 나중에 한쪽만
+   바뀐다(계약 §21-1). */
+import { snapCanvasRotation } from "../skin/skin-home-canvas-editor-runtime.js";
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 
@@ -1379,9 +1384,19 @@ async function main() {
       check("★ 고르기만 해서는 각도가 달라지지 않는다(20° 그대로)",
         Math.abs(first - 20) < 0.001, String(first));
 
+      /* ★ 기대값에 **자석을 함께** 태운다(HOME-CANVAS-MANUAL-UX-FIX-1).
+         20° 에서 +30° 로 가는 호는 27.5° · 31.25° 를 지나는데 그 둘은
+         30° 에서 ±4° 안이라 30° 로 붙는다 — 화면이 보정된 각도를 보여
+         주는 것이 이 라운드의 계약이다(§21-1). */
       check("★ 시작 각도에서 **이어서** 돈다(dist 는 절대 각도가 아니다)",
-        cont.samples.every((s) => Math.abs(s.got - s.want) <= 1.5),
-        cont.samples.map((s) => `${s.want.toFixed(0)}/${s.got.toFixed(2)}`).join(" "));
+        cont.samples.every((s) => Math.abs(s.got - snapCanvasRotation(s.want)) <= 1.5),
+        cont.samples.map(
+          (s) => `${s.want.toFixed(2)}→${snapCanvasRotation(s.want).toFixed(2)}/${s.got.toFixed(2)}`
+        ).join(" "));
+
+      check("★ 그 호가 실제로 자석 구간을 지난다(이 절이 자석을 재고 있다)",
+        cont.samples.some((s) => snapCanvasRotation(s.want) !== s.want),
+        cont.samples.map((s) => s.want.toFixed(2)).join(" "));
 
       const after20 = await readCanvas(page);
 
@@ -1600,8 +1615,23 @@ async function main() {
         onStep: async () => screenRotation(page, frame, false, "cvTurn")
       });
 
-      check("★ 한 바퀴를 넘는 동안 화면 각도가 계속 커진다(반대로 튀지 않는다)",
-        walk.samples.every((v, i) => i === 0 || v > walk.samples[i - 1]),
+      /* ★ **단조 비감소**다 — 자석이 평탄한 구간을 만든다.
+
+         30° 배수 근처(±4°)에서는 여러 걸음이 같은 각도에 붙으므로
+         360° · 390° 자리에 같은 값이 두 번 나온다. 자석이 뒤로
+         돌리지는 않는다(붙는 양이 최대 4° 이고 snap 은 단조 비감소
+         함수다 — skin/skin-home-canvas-test.mjs [ux-fix] 가 그것을
+         -400°~400° 에서 찍는다). */
+      check("★ 한 바퀴를 넘는 동안 화면 각도가 거꾸로 가지 않는다",
+        walk.samples.every((v, i) => i === 0 || v >= walk.samples[i - 1] - 0.001),
+        walk.samples.map((v) => v.toFixed(1)).join(" → "));
+
+      check("★ 그래도 호 전체로는 커진다(멈춘 것이 아니다)",
+        walk.samples[walk.samples.length - 1] - walk.samples[0] > 30,
+        `${walk.samples[0].toFixed(1)} → ${walk.samples[walk.samples.length - 1].toFixed(1)}`);
+
+      check("★ 360° 자리에 자석이 붙는다(356° 부근이 0° 로 접힌다)",
+        walk.samples.some((v) => Math.abs(v - 360) < 0.001),
         walk.samples.map((v) => v.toFixed(1)).join(" → "));
 
       check("★ 제스처 중에는 한 바퀴를 넘은 연속 각도를 그대로 쓴다",
@@ -1641,6 +1671,266 @@ async function main() {
       check("pageerror 0", page.__errors.length === 0, page.__errors[0] || "");
 
       await close(page);
+
+    }
+
+
+    /* ======================================================
+       [snap] — 30° 자석 (HOME-CANVAS-MANUAL-UX-FIX-1 · 계약 §21-1)
+
+       ★ **양자화가 아니다.** 가장 가까운 30° 배수와의 차이가 ±4°
+         안일 때만 붙는다.
+
+       ★ 경계값 자체(25 · 26 · 34 · 35 …)는 브라우저 없는 단위
+         테스트가 찍는다(skin/skin-home-canvas-test.mjs [ux-fix]).
+         여기서 재는 것은 **실제 제스처가 그 helper 를 지나는가**
+         이므로 목표 각도를 경계에서 3° 이상 띄운다 — 포인터 호는
+         0.3° 안에서 따라오고(§19-10), 경계에 딱 맞추면 그 오차가
+         답을 뒤집는다.
+    ====================================================== */
+    if (wants("snap")) {
+
+      section("snap");
+
+      const page = await openStudio(browser, {});
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      /* --- 흡착 범위 안과 밖 --- */
+
+      for (const [id, deg, want, why] of [
+        ["cvA", 27, 30, "30° 안쪽(3°)"],
+        ["cvB", 33, 30, "30° 안쪽(3°) — 넘어간 쪽"],
+        ["cvFar", 24, 24, "30° 에서 6° — 자유"],
+        ["cvAuto", 36, 36, "30° 에서 6° — 자유(넘어간 쪽)"]
+      ]) {
+
+        await pick(page, frame, false, id);
+
+        await rotateBy(page, frame, false, id, deg);
+
+        const stored = rotationOf(await readCanvas(page), id);
+
+        check(`★ ${deg}° 로 돌리면 ${want}° 다 — ${why}`,
+          Math.abs(stored - want) <= 1.5,
+          `${stored} (기대 ${want})`);
+
+      }
+
+      check("pageerror 0", page.__errors.length === 0, page.__errors[0] || "");
+
+      await close(page);
+
+      /* --- 60° · 90° 자리 --- */
+
+      const far = await openStudio(browser, {});
+      const farFrame = await canvasFrame(far, false);
+
+      await enableCanvasEditing(far);
+
+      for (const [id, deg, want] of [["cvA", 57, 60], ["cvB", 87, 90]]) {
+
+        await pick(far, farFrame, false, id);
+        await rotateBy(far, farFrame, false, id, deg);
+
+        const stored = rotationOf(await readCanvas(far), id);
+
+        check(`★ ${deg}° 는 ${want}° 에 붙는다(0 · 30 만이 아니다)`,
+          Math.abs(stored - want) <= 1.5, `${stored} (기대 ${want})`);
+
+      }
+
+      /* --- 제스처 **중에도** 보정된 각도를 보여 준다 --- */
+
+      await pick(far, farFrame, false, "cvFar");
+
+      const walk = await rotateBy(far, farFrame, false, "cvFar", 36, {
+        steps: 12,
+        onStep: async (i, want) => ({
+          want: want,
+          got: await screenRotation(far, farFrame, false, "cvFar")
+        })
+      });
+
+      const inZone =
+        walk.samples.filter((sample) => snapCanvasRotation(sample.want) !== sample.want);
+
+      check("★ 그 호가 자석 구간을 지난다(27° · 30° · 33° 자리)",
+        inZone.length >= 2,
+        walk.samples.map((sample) => sample.want.toFixed(0)).join(" "));
+
+      /* ★ 0° 자리도 자석 구간이다 — 3° 는 0° 로 붙는다. 그래서
+         기대값은 30° 하나가 아니라 **그 걸음의 보정된 각도**다. */
+      check("★ 제스처 **중에도** 화면이 보정된 각도를 보여 준다",
+        inZone.every(
+          (sample) => Math.abs(sample.got - snapCanvasRotation(sample.want)) <= 1.5
+        ),
+        inZone.map(
+          (sample) => `${sample.want.toFixed(1)}→${snapCanvasRotation(sample.want)}/${sample.got.toFixed(2)}`
+        ).join(" "));
+
+      const lastScreen =
+        await screenRotation(far, farFrame, false, "cvFar");
+
+      const lastStored =
+        rotationOf(await readCanvas(far), "cvFar");
+
+      check("★ 손을 놓은 뒤 화면과 저장값이 일치한다",
+        Math.abs(lastScreen - lastStored) < 0.001,
+        `${lastScreen} vs ${lastStored}`);
+
+      check("pageerror 0(far)", far.__errors.length === 0, far.__errors[0] || "");
+
+      await close(far);
+
+      /* --- 360° 경계 · 음수 --- */
+
+      const edge = await openStudio(browser, {});
+      const edgeFrame = await canvasFrame(edge, false);
+
+      await enableCanvasEditing(edge);
+
+      await pick(edge, edgeFrame, false, "cvTurn");
+
+      await rotateBy(edge, edgeFrame, false, "cvTurn", 6);
+
+      const turned = rotationOf(await readCanvas(edge), "cvTurn");
+
+      check("★ 350° 에서 +6° 는 356° 가 아니라 **0°** 다(360° 에 붙고 접힌다)",
+        turned === 0, `${turned} (기대 0)`);
+
+      const turnedScreen =
+        await screenRotation(edge, edgeFrame, false, "cvTurn");
+
+      check("★ 그 0° 이 화면에서 반대로 크게 돌아간 것이 아니다(같은 그림)",
+        Math.abs(turnedScreen - turned) < 0.001,
+        `${turnedScreen} vs ${turned}`);
+
+      /* 이동은 각도를 새로 만들지도 정규화하지도 않는다 — 회전 전에
+         본다(저장된 -30° 가 그대로여야 한다) */
+      await pick(edge, edgeFrame, false, "cvNeg");
+
+      const negBefore = rotationOf(await readCanvas(edge), "cvNeg");
+
+      await dragElement(edge, edgeFrame, false, "cvNeg", 20, 10);
+
+      check("★ 이동은 저장된 음수 각도를 정규화하지 않는다(자석도 걸지 않는다)",
+        rotationOf(await readCanvas(edge), "cvNeg") === negBefore && negBefore === -30,
+        `${negBefore} → ${rotationOf(await readCanvas(edge), "cvNeg")}`);
+
+      await rotateBy(edge, edgeFrame, false, "cvNeg", 3);
+
+      const negStored = rotationOf(await readCanvas(edge), "cvNeg");
+
+      check("★ 음수 각도에서도 같은 규칙이다 — -30° 에서 +3° 는 -30° 에 붙어 330° 로 저장된다",
+        Math.abs(negStored - 330) <= 1.5, `${negStored} (기대 330)`);
+
+      /* --- 이미 20° 인 요소에서 시작 --- */
+
+      await pick(edge, edgeFrame, false, "cvRot20");
+
+      await rotateBy(edge, edgeFrame, false, "cvRot20", 13);
+
+      const from20 = rotationOf(await readCanvas(edge), "cvRot20");
+
+      check("★ 20° 요소에서 +13° 는 33° 가 아니라 30° 다",
+        Math.abs(from20 - 30) <= 1.5, `${from20} (기대 30)`);
+
+      /* --- 자석이 제자리로 되돌린 제스처는 기록을 만들지 않는다 --- */
+
+      const beforeNoop = await historyState(edge);
+      const beforeNoopJson = await readCanvas(edge);
+
+      await rotateBy(edge, edgeFrame, false, "cvRot20", 2);
+
+      check("★ 30° 에서 +2° 는 자석이 30° 로 되돌리므로 JSON 이 불변이다",
+        JSON.stringify(await readCanvas(edge)) === JSON.stringify(beforeNoopJson),
+        String(rotationOf(await readCanvas(edge), "cvRot20")));
+
+      check("★ 그 제스처는 Undo 칸을 만들지 않는다(아무것도 안 바뀐 기록 0)",
+        (await historyState(edge)).undo === beforeNoop.undo,
+        `${beforeNoop.undo} → ${(await historyState(edge)).undo}`);
+
+      /* --- 손잡이를 누르기만 하면 --- */
+
+      const knob = await rotationHandle(edge, edgeFrame, false);
+
+      await edge.mouse.move(knob.x, knob.y);
+      await edge.mouse.down();
+      await edge.mouse.up();
+      await sleep(700);
+
+      check("★ 30° 요소의 손잡이를 누르기만 해도 30° 그대로다(날것 각도로 판정)",
+        JSON.stringify(await readCanvas(edge)) === JSON.stringify(beforeNoopJson),
+        String(rotationOf(await readCanvas(edge), "cvRot20")));
+
+      check("pageerror 0(edge)", edge.__errors.length === 0, edge.__errors[0] || "");
+
+      await close(edge);
+
+      /* --- Undo · Redo --- */
+
+      const undoPage = await openStudio(browser, {});
+      const undoFrame = await canvasFrame(undoPage, false);
+
+      await enableCanvasEditing(undoPage);
+      await pick(undoPage, undoFrame, false, "cvA");
+
+      const undoStart = await historyState(undoPage);
+
+      await rotateBy(undoPage, undoFrame, false, "cvA", 27);
+
+      const snapped = rotationOf(await readCanvas(undoPage), "cvA");
+
+      check("자석이 붙은 제스처도 Undo 한 칸이다",
+        (await historyState(undoPage)).undo === undoStart.undo + 1 && snapped === 30,
+        `${undoStart.undo} → ${(await historyState(undoPage)).undo} · ${snapped}`);
+
+      await undoPage.click("#studioUndoButton");
+      await sleep(900);
+
+      check("★ Undo 하면 rotation 칸이 없던 상태로 돌아간다",
+        elementOf(await readCanvas(undoPage), "cvA").rotation === undefined ||
+        elementOf(await readCanvas(undoPage), "cvA").rotation === 0,
+        JSON.stringify(elementOf(await readCanvas(undoPage), "cvA").rotation));
+
+      await undoPage.click("#studioRedoButton");
+      await sleep(900);
+
+      check("Redo 는 보정된 30° 로 돌아온다",
+        rotationOf(await readCanvas(undoPage), "cvA") === 30,
+        String(rotationOf(await readCanvas(undoPage), "cvA")));
+
+      check("pageerror 0(undo)", undoPage.__errors.length === 0,
+        undoPage.__errors[0] || "");
+
+      await close(undoPage);
+
+      /* --- sandbox — 같은 제스처, 같은 보정 --- */
+
+      const sandbox = await openStudio(browser, { sandbox: true });
+      const sandboxFrame = await canvasFrame(sandbox, true);
+
+      await enableCanvasEditing(sandbox);
+      await clickElement(sandbox, sandboxFrame, true, "cvA");
+      await waitForRotationHandle(sandbox, sandboxFrame, 1);
+
+      await rotateBy(sandbox, sandboxFrame, true, "cvA", 27);
+
+      const sandboxStored = rotationOf(await readCanvas(sandbox), "cvA");
+
+      check("★ sandbox 에서도 27° 가 30° 로 붙는다(같은 helper 한 벌)",
+        sandboxStored === 30, String(sandboxStored));
+
+      check("CSP 위반 0(sandbox snap)",
+        (await cspViolations(sandboxFrame)).length === 0,
+        JSON.stringify(await cspViolations(sandboxFrame)));
+
+      check("pageerror 0(sandbox)", sandbox.__errors.length === 0,
+        sandbox.__errors[0] || "");
+
+      await close(sandbox);
 
     }
 

@@ -22,6 +22,9 @@
    [coords]   x·y·width·height · 폭을 바꿔도 같은 배율 · auto/fixed · 회전
    [state]    hidden · locked
    [safety]   글자와 카테고리 이름에서 HTML 이 실행되지 않는다
+   [image]    자르기를 고르지 않은 그림은 **전체가 보인다**(contain) —
+              가로긴 그림 → 세로 틀 · 세로긴 그림 → 가로 틀 · 정사각 →
+              긴 틀 · logo · sticker · 비틀림 0 (MANUAL-UX-FIX-1)
    [content]  채워진 슬롯 · 빈 슬롯 · logo fallback · category all/selected
    [rerender] 재렌더 중복 없음 · 제거 시 정리 · 입력 non-mutation
    [pages]    CATEGORY · POST · BANNER 무영향
@@ -56,6 +59,20 @@ const FIXTURE_IMAGE_PATH = "/__canvas-fixture__/swatch.svg";
 const FIXTURE_IMAGE_BODY =
   '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80">' +
   '<rect width="80" height="80" fill="#c9803f"/></svg>';
+
+/* HOME-CANVAS-MANUAL-UX-FIX-1 — 틀과 **비율이 다른** 그림 둘
+   (계약 §21-3). 자르기를 고르지 않았을 때 전체가 보이는가를 물어보려면
+   정사각 하나로는 부족하다 — 가로긴 그림을 세로 틀에, 세로긴 그림을
+   가로 틀에 넣어 봐야 한다. 저장소에 파일을 넣지 않고 서버가 만든다. */
+const FIXTURE_WIDE_PATH = "/__canvas-fixture__/wide.svg";
+const FIXTURE_WIDE_BODY =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="40">' +
+  '<rect width="120" height="40" fill="#3f7fc9"/></svg>';
+
+const FIXTURE_TALL_PATH = "/__canvas-fixture__/tall.svg";
+const FIXTURE_TALL_BODY =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="120">' +
+  '<rect width="40" height="120" fill="#4fa05a"/></svg>';
 
 const args = process.argv.slice(2);
 const argOf = (name, fallback) => {
@@ -126,6 +143,12 @@ function startServer() {
     if (url.pathname === FIXTURE_IMAGE_PATH) {
       res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" });
       res.end(FIXTURE_IMAGE_BODY);
+      return;
+    }
+
+    if (url.pathname === FIXTURE_WIDE_PATH || url.pathname === FIXTURE_TALL_PATH) {
+      res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "no-store" });
+      res.end(url.pathname === FIXTURE_WIDE_PATH ? FIXTURE_WIDE_BODY : FIXTURE_TALL_BODY);
       return;
     }
 
@@ -377,6 +400,10 @@ const READ_CANVAS = `(() => {
         h: el.offsetHeight,
         angle: angle(el),
         imgSrc: img ? img.getAttribute("src") : null,
+        /* HOME-CANVAS-MANUAL-UX-FIX-1 — 자르기를 고르지 않은 그림의
+           기본값(계약 §21-3). 네 화면 parity 가 이 값까지 대조하므로
+           한 화면만 cover 로 돌아가면 그 자리에서 잡힌다. */
+        imgFit: img ? getComputedStyle(img).objectFit : null,
         imgAlt: img ? img.getAttribute("alt") : null,
         innerTags: Array.from(el.querySelectorAll("*")).map((n) => n.tagName.toLowerCase()).join(","),
         text: text ? text.textContent : null,
@@ -418,7 +445,8 @@ function parityDom(reading) {
       role: e.role, shape: e.shape, navMode: e.navMode,
       hiddenAttr: e.hiddenAttr, lockedAttr: e.lockedAttr, displayed: e.displayed,
       vars: e.vars, angle: e.angle,
-      imgSrc: e.imgSrc, imgAlt: e.imgAlt, innerTags: e.innerTags,
+      imgSrc: e.imgSrc, imgAlt: e.imgAlt, imgFit: e.imgFit,
+      innerTags: e.innerTags,
       text: e.text, logoText: e.logoText,
       names: e.links.map((l) => l.name)
     }))
@@ -848,6 +876,183 @@ async function run() {
           document.querySelector('[data-imory-edit-id="canvas_photo_filled"]').children.length === 0));
 
       check("스크립트 오류 없음", errors.length === 0, errors.join(" | "));
+
+      await ctx.close();
+
+    }
+
+
+    /* ------------------------------------------------- */
+    if (wants("image")) {
+
+      section("image");
+
+      const { ctx, page, errors } = await openHarness(browser);
+
+      /*
+        ★ 틀과 비율이 다른 그림을 넣는다.
+
+          canvas_photo_filled  260×320 세로 틀  ← 120×40 가로긴 그림
+          canvas_sticker        80×80  정사각 틀 ← 40×120 세로긴 그림
+          canvas_logo_image     60×40  가로 틀  ← photo_1(가로긴 그림)
+
+        ★ 자르기 정보는 지금 Canvas payload 에 **없다**(계약 §21-3).
+          그래서 여기서 재는 것은 "고르지 않았을 때의 기본값"이다.
+      */
+      await render(page, {
+        skinPackage: skinPackage(),
+        context: {
+          ...CONTEXT,
+          images: {
+            ...CONTEXT.images,
+            photo_1: FIXTURE_WIDE_PATH,
+            sticker_1: FIXTURE_TALL_PATH
+          }
+        },
+        width: 390,
+        fresh: true
+      });
+
+      const shown = await page.evaluate(() => {
+
+        const read = (id) => {
+
+          const img =
+            document.querySelector(`[data-imory-edit-id="${id}"] img`);
+
+          if (!img) return null;
+
+          const box = img.getBoundingClientRect();
+          const wrap = img.parentElement.getBoundingClientRect();
+
+          const nat = { w: img.naturalWidth, h: img.naturalHeight };
+
+          /* contain 과 cover 가 각각 그려 낼 크기 — CSS 규칙을 그대로
+             적은 것이고, 둘 중 어느 쪽이 실제인지는 objectFit 이 말한다 */
+          const containK = Math.min(box.width / nat.w, box.height / nat.h);
+          const coverK = Math.max(box.width / nat.w, box.height / nat.h);
+
+          return {
+            fit: getComputedStyle(img).objectFit,
+            nat: nat,
+            box: { w: box.width, h: box.height },
+            wrap: { w: wrap.width, h: wrap.height },
+            contain: { w: nat.w * containK, h: nat.h * containK },
+            cover: { w: nat.w * coverK, h: nat.h * coverK },
+            loaded: img.complete && img.naturalWidth > 0
+          };
+
+        };
+
+        return {
+          photo: read("canvas_photo_filled"),
+          sticker: read("canvas_sticker"),
+          logo: read("canvas_logo_image")
+        };
+
+      });
+
+      for (const [key, label, natRatio] of [
+        ["photo", "photo — 가로긴 그림(120×40)을 세로 틀(260×320)에", 3],
+        ["sticker", "sticker — 세로긴 그림(40×120)을 정사각 틀에", 1 / 3],
+        ["logo", "logo — 가로긴 그림을 가로 틀(60×40)에", 3]
+      ]) {
+
+        const m = shown[key];
+
+        check(`${label} — 그림이 로드됐다`,
+          !!m && m.loaded === true, JSON.stringify(m && m.nat));
+
+        check(`★ ${label} — object-fit 이 contain 이다(자르지 않는다)`,
+          !!m && m.fit === "contain", String(m && m.fit));
+
+        check(`★ ${label} — 그려진 그림이 틀 안에 전부 들어온다`,
+          !!m &&
+          m.contain.w <= m.box.w + 0.5 && m.contain.h <= m.box.h + 0.5,
+          `그림 ${m && m.contain.w.toFixed(1)}×${m && m.contain.h.toFixed(1)} ` +
+          `틀 ${m && m.box.w.toFixed(1)}×${m && m.box.h.toFixed(1)}`);
+
+        check(`★ ${label} — 비율이 그대로다(늘여 비틀지 않는다)`,
+          !!m && Math.abs(m.contain.w / m.contain.h - natRatio) < 0.01,
+          `${m && (m.contain.w / m.contain.h).toFixed(4)} vs ${natRatio.toFixed(4)}`);
+
+        check(`${label} — cover 였다면 실제로 잘렸을 비율이다(이 절이 그 차이를 재고 있다)`,
+          !!m &&
+          (m.cover.w > m.box.w + 1 || m.cover.h > m.box.h + 1),
+          `cover ${m && m.cover.w.toFixed(1)}×${m && m.cover.h.toFixed(1)}`);
+
+        check(`${label} — img 자체는 틀을 그대로 채운다(레이아웃은 안 바뀐다)`,
+          !!m &&
+          Math.abs(m.box.w - m.wrap.w) <= 0.5 &&
+          Math.abs(m.box.h - m.wrap.h) <= 0.5,
+          `img ${m && m.box.w.toFixed(1)}×${m && m.box.h.toFixed(1)} ` +
+          `wrapper ${m && m.wrap.w.toFixed(1)}×${m && m.wrap.h.toFixed(1)}`);
+
+      }
+
+      /* --- 정사각 그림 → 긴 틀 --- */
+
+      await render(page, {
+        skinPackage: skinPackage(),
+        context: CONTEXT,
+        width: 390
+      });
+
+      const square = await page.evaluate(() => {
+
+        const img =
+          document.querySelector('[data-imory-edit-id="canvas_photo_filled"] img');
+
+        if (!img) return null;
+
+        const box = img.getBoundingClientRect();
+        const k = Math.min(box.width / img.naturalWidth, box.height / img.naturalHeight);
+
+        return {
+          fit: getComputedStyle(img).objectFit,
+          nat: { w: img.naturalWidth, h: img.naturalHeight },
+          box: { w: box.width, h: box.height },
+          drawn: { w: img.naturalWidth * k, h: img.naturalHeight * k }
+        };
+
+      });
+
+      check("★ 정사각 그림(80×80)을 긴 틀(260×320)에 — 전체가 보이고 정사각이다",
+        square && square.fit === "contain" &&
+        Math.abs(square.drawn.w - square.drawn.h) < 0.01 &&
+        square.drawn.h <= square.box.h + 0.5,
+        JSON.stringify(square));
+
+      check("★ 그래서 세로로 빈 자리가 남는다(계약이 허용하는 그 빈 자리)",
+        square && square.box.h - square.drawn.h > 1,
+        `${square && (square.box.h - square.drawn.h).toFixed(1)}px`);
+
+      /* --- 빈 자리를 임의의 배경으로 칠하지 않는다 --- */
+
+      const paint = await page.evaluate(() => {
+
+        const el =
+          document.querySelector('[data-imory-edit-id="canvas_photo_filled"]');
+
+        const img = el.querySelector("img");
+
+        const cs = getComputedStyle(img);
+        const wrapCs = getComputedStyle(el);
+
+        return {
+          imgBackground: cs.backgroundColor,
+          imgImage: cs.backgroundImage,
+          wrapBackground: wrapCs.backgroundColor
+        };
+
+      });
+
+      check("★ 플랫폼이 빈 자리를 칠하지 않는다(칠은 스킨 CSS 의 몫)",
+        paint.imgBackground === "rgba(0, 0, 0, 0)" &&
+        paint.imgImage === "none",
+        JSON.stringify(paint));
+
+      check("pageerror 0", errors.length === 0, errors[0] || "");
 
       await ctx.close();
 
