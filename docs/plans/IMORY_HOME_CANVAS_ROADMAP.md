@@ -163,9 +163,11 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 > [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
 > **§21** 이고, 새 데이터 칸 · 새 메시지 · 새 파일은 없다.
 >
-> ★ **다음 작업은 `HOME-CANVAS-INSPECTOR-1A` 다**(§14-15) — Canvas 요소를
-> 골랐을 때 왼쪽 패널이 비어 있는 문제. v2 구현(`V2-DATA-1` 이후)은 그
-> 뒤다(§14-13).
+> ★ **`HOME-CANVAS-INSPECTOR-1A` 는 2026-09-21 에 완료됐다**(§14-15) —
+> Canvas 요소를 고르면 왼쪽 패널이 그 요소의 화면이 되고, 글자 요소의
+> 내용과 geometry 다섯 칸을 고칠 수 있다. 계약은
+> [IMORY_HOME_CANVAS_CONTRACT.md](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> **§22** 다. **다음 작업은 `HOME-CANVAS-V2-DATA-1`** 이다(§14-13 의 4 번).
 >
 > ★ 그 위에 **`COMPOSITION-CONTRACT-1`(2026-09-21)** 이 다음 구조를 확정했다 —
 > **자동 배치 블록 + `main_visual` 자유 레이어(`canvas.version:2`)**. 설계는
@@ -231,8 +233,8 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3c-4 | `HOME-CANVAS-TRANSFORM-1D` | 그룹 이동 · 그룹 리사이즈 · 그룹 회전 | 저장 가능 | 미착수 |
 | 3c-X | `HOME-CANVAS-COMPOSITION-CONTRACT-1` | **조합형 HOME(v2) 설계 확정** — 자동 배치 블록 + `main_visual` 자유 레이어. 문서만 | 없음(문서) | **완료** — §14 |
 | 3c-U | `HOME-CANVAS-MANUAL-UX-FIX-1` | 수동 테스트에서 나온 v1 편집기 수정 — 30° 자석 회전 · 모서리 비율 유지 · 이미지 `contain` · 텍스트 선택 chrome | Studio만 | **완료**(계약 문서 §21) |
-| 3c-I | `HOME-CANVAS-INSPECTOR-1A` | Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(지금은 패널이 비어 있다) | Studio만 | **미착수 — 다음 작업**. §14-15 |
-| 3e-1 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 없음(데이터) | 미착수 — §14-13 |
+| 3c-I | `HOME-CANVAS-INSPECTOR-1A` | Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드** — 글자 내용 한 칸 + geometry 다섯 칸 + 타입별 읽기 전용 요약 | Studio만 | **완료**(계약 문서 §22) |
+| 3e-1 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 없음(데이터) | **미착수 — 다음 작업**. §14-13 |
 | 3e-2 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow + logo · category_nav · text · divider 렌더, native/sandbox parity | 읽기 전용 | 미착수 — §14-13 |
 | 3e-3 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform | 읽기 전용 | 미착수 — §14-13 |
 | 3e-4 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 저장 가능 | 미착수 — §14-13 |
@@ -1397,8 +1399,8 @@ bottom-left  bottom  bottom-right
 | --- | --- | --- | --- |
 | 1 | `HOME-CANVAS-COMPOSITION-CONTRACT-1` | 이 절 — 설계 확정. 문서만 | **완료**(2026-09-21) |
 | 2 | `HOME-CANVAS-MANUAL-UX-FIX-1` | 현재 v1 편집기의 UX 수정 넷(§14-14) | **완료**(2026-09-21) — 결과는 [계약 문서 §21](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
-| 3 | `HOME-CANVAS-INSPECTOR-1A` | v1 Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(§14-15). 지금 왼쪽 패널이 비어 있다 | **미착수 — 다음 작업** |
-| 4 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | 미착수 |
+| 3 | `HOME-CANVAS-INSPECTOR-1A` | v1 Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(§14-15) | **완료**(2026-09-21) — 결과는 [계약 문서 §22](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
+| 4 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | **미착수 — 다음 작업** |
 | 5 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | 미착수 |
 | 6 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` 프레임 · primary photo · 내부 자유 요소 · pin/transform 렌더 | 미착수 |
 | 7 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 미착수 |
@@ -1462,14 +1464,24 @@ bottom-left  bottom  bottom-right
 
 ### 14-15. Canvas Inspector 최소 범위 (`HOME-CANVAS-INSPECTOR-1A`)
 
-Canvas `text` 를 골랐을 때 왼쪽 패널이 비어 있는 것은 **지금 미구현 상태**다
-(계약 문서 §11-2 · §11-3 의 "캔버스 요소의 Inspector 입력 필드"). 별도 후속
-작업으로 둔다 — `MANUAL-UX-FIX-1`(완료) **다음**이고 v2 보다 **앞**이다
-(§14-13 의 3 번). `MANUAL-UX-FIX-1` 은 이 패널에 임시 입력창을 붙이지
-않았다(계약 문서 §21-5).
+> **✅ 2026-09-21 에 구현됐다 — 이 절은 그때의 요구 기록이고, 지금 코드가
+> 강제하는 것은
+> [계약 문서 §22](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 다.**
+> 실제 필드 · 확정 경로 · Undo 규칙 · 구현 함정은 그쪽을 본다.
 
-최소 범위: **text 내용 · `width` · `height`/auto · 정렬 · margin 또는 Canvas
-geometry · `rotation` · `hidden`/`locked`**.
+그때의 요구는 이랬다 — **text 내용 · `width` · `height`/auto · 정렬 ·
+margin 또는 Canvas geometry · `rotation` · `hidden`/`locked`**.
+
+실제로 구현된 것과 **달라진 둘**:
+
+- **정렬 · margin 은 넣지 않았다.** v1 은 자유 배치라 그 두 개념이 없고,
+  그 자리는 Canvas geometry(`x` · `y` · `width` · `height` · `rotation`)가
+  이미 갖는다. 정렬 · margin 은 v2 의 자동 배치 블록이 갖는 칸이다(§14-10).
+- **`hidden`/`locked` 토글은 일부러 뺐다.** 레이어 목록이 없어 켠 뒤에
+  되돌릴 안정적인 길이 없다(숨기면 화면에서 다시 고를 수 없다). 임시
+  우회 UI 를 만들지 않고 `HOME-CANVAS-LAYERS-1` 로 미뤘다 — 계약 문서
+  §22-7.
 
 책임 구분은 §14-10 의 마지막 표다 — v2 블록 Inspector 와 v1 자유 요소
-Inspector 가 같은 칸을 두 벌로 갖지 않는다.
+Inspector 가 같은 칸을 두 벌로 갖지 않는다. **`V2-INSPECTOR-1` 은 여전히
+별도 작업이다**(§14-13 의 7 번).

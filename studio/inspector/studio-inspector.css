@@ -1603,3 +1603,107 @@
 .studio-inspector-pick.is-sheet .studio-inspector-pick-item {
   min-height: 44px;
 }
+
+/* =========================================================
+   HOME CANVAS Inspector (HOME-CANVAS-INSPECTOR-1A)
+
+   왼쪽 패널의 Select 자리에 기존 팝오버와 나란히 산다(둘이 동시에
+   보이지 않는 것은 선택 라우터가 보장한다). 새 모양을 만들지 않고
+   위 행 · 블록 · 안내 문구의 클래스를 그대로 쓴다 — 여기서는 이
+   패널에만 있는 것(제목 · 보조 줄 · 읽기 전용 값 · 칸별 오류)만
+   정의한다.
+========================================================== */
+
+.studio-canvas-inspector-body {
+  display: flex;
+  flex-direction: column;
+
+  gap: 10px;
+}
+
+
+.studio-canvas-inspector-title {
+  margin: 0;
+
+  color: var(--system-text);
+
+  font-size: var(--imory-font-size-300);
+  font-weight: var(--imory-font-weight-medium);
+}
+
+
+.studio-canvas-inspector-meta {
+  margin: 2px 0 0;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+
+  overflow-wrap: anywhere;
+}
+
+
+.studio-canvas-inspector-type,
+.studio-canvas-inspector-geometry {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  padding-top: 10px;
+
+  border-top: 1px solid var(--system-border);
+}
+
+
+.studio-canvas-inspector-field {
+  display: flex;
+  flex-direction: column;
+
+  gap: 4px;
+}
+
+
+.studio-canvas-inspector-value {
+  min-width: 0;
+
+  color: var(--system-text);
+
+  font-size: var(--imory-font-size-300);
+
+  overflow-wrap: anywhere;
+}
+
+
+.studio-canvas-inspector-auto {
+  display: flex;
+
+  align-items: center;
+
+  gap: 6px;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+/* 그 칸 바로 아래 한 줄. 비어 있으면 hidden 이라 자리도 차지하지
+   않는다(칸이 다섯이라 자리를 미리 비워 두면 패널이 길어진다). */
+.studio-canvas-inspector-error {
+  margin: 0 0 0 90px;
+
+  color: var(--system-danger, #b3261e);
+
+  font-size: var(--imory-font-size-200);
+  line-height: var(--imory-line-height-snug);
+
+  word-break: keep-all;
+}
+
+
+.studio-canvas-inspector-text .studio-canvas-inspector-error {
+  margin-left: 0;
+}

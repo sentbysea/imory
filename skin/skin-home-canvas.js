@@ -192,6 +192,78 @@ const SKIN_HOME_CANVAS_MAX_COORD = 100000;
 
 
 /* =========================================================
+   저장되는 숫자의 **표현**을 정하는 한 곳
+   (HOME-CANVAS-TRANSFORM-1C 에서 생겼고, INSPECTOR-1A 에서 여기로
+    올라왔다 — 그 전에는 프레임 runtime 안에만 있었다)
+
+   ★ 왜 이 파일인가. 이 규칙을 쓰는 realm 이 셋이다 — Studio 부모의
+     왼쪽 패널 입력칸 · native Preview 프레임 · sandbox 프레임.
+     셋 다 이 파일을 classic script 로 이미 읽는다(studio/index.html ·
+     studio/preview/preview-frame.html · skin/sandbox/frame.html ·
+     index.html). 한 벌만 두려면 여기다.
+
+   ★ 검증기는 이 규칙을 **쓰지 않는다.** 계약이 `rotation` 에
+     요구하는 것은 여전히 "유한한 숫자" 하나이고(§5), 이미 저장된
+     -30 · 400 은 그대로 남는다. 접는 것은 **새로 확정되는 값**
+     하나뿐이다 — 쓰는 쪽이 부르고, 순수 함수 writer 는 부르지
+     않는다(조용히 고치지 않는다, §9).
+========================================================== */
+
+const SKIN_HOME_CANVAS_FULL_TURN = 360;
+
+const SKIN_HOME_CANVAS_COORD_DECIMALS = 1000;
+
+
+/* 소수점 셋째 자리까지. 정확한 정수면 정수 그대로다(-0 은 0). */
+function roundSkinHomeCanvasCoord(value) {
+
+  if (!Number.isFinite(value)) {
+    return value;
+  }
+
+  const rounded =
+    Math.round(value * SKIN_HOME_CANVAS_COORD_DECIMALS) /
+    SKIN_HOME_CANVAS_COORD_DECIMALS;
+
+  return Object.is(rounded, -0) ? 0 : rounded;
+
+}
+
+
+/*
+  normalizeSkinHomeCanvasRotation(deg) -> deg
+
+  한 바퀴 안으로 접고 좌표와 같은 자릿수로 반올림한다.
+
+    365 -> 5      -30 -> 330     359.9996 -> 0     400 -> 40
+
+  ★ 제스처 **도중**에는 부르지 않는다. 그때는 연속 각도를 써야
+    한 바퀴를 넘는 순간 화면이 반대로 튀지 않는다 — 접는 것은
+    확정 한 번뿐이다(계약 §19-3).
+
+  ★ 숫자가 아니면 0 이다(계약 §5 의 기본값).
+*/
+function normalizeSkinHomeCanvasRotation(deg) {
+
+  if (!Number.isFinite(deg)) {
+    return 0;
+  }
+
+  const folded =
+    ((deg % SKIN_HOME_CANVAS_FULL_TURN) + SKIN_HOME_CANVAS_FULL_TURN) %
+    SKIN_HOME_CANVAS_FULL_TURN;
+
+  const rounded =
+    roundSkinHomeCanvasCoord(folded);
+
+  /* 359.9999 는 접은 뒤에도 한 바퀴 안이지만, 반올림이 그것을
+     360 으로 만들 수 있다 — 그때는 0 이다. */
+  return rounded === SKIN_HOME_CANVAS_FULL_TURN ? 0 : rounded;
+
+}
+
+
+/* =========================================================
    0. 작은 도구
 ========================================================== */
 
@@ -209,6 +281,27 @@ function isSkinHomeCanvasPlainObject(value) {
 function isSkinHomeCanvasFiniteNumber(value) {
 
   return typeof value === "number" && Number.isFinite(value);
+
+}
+
+/*
+  얕은 복사 — 불변 수정이 쓰는 한 줄.
+
+  `__proto__` · `constructor` · `prototype` 은 옮기지 않는다(프로토타입
+  오염). 요소 · canvas · regions 항목 · props 네 자리가 같은 규칙을
+  써야 하므로 여기 한 곳에 둔다.
+*/
+function copySkinHomeCanvasObject(source) {
+
+  const copy = {};
+
+  Object.keys(source || {}).forEach((key) => {
+    if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
+      copy[key] = source[key];
+    }
+  });
+
+  return copy;
 
 }
 
@@ -1004,11 +1097,28 @@ function writeSkinHomeCanvasElementFields(regions, elementId, next, expected, sp
     읽지 않으면 "한 번도 돌린 적 없는 요소는 영영 돌릴 수 없다"가
     된다(HOME-CANVAS-TRANSFORM-1C).
   */
+  /*
+    ★ 바뀌는 칸이 **요소 자신인가 `props` 안인가**는 spec 이 정한다
+      (HOME-CANVAS-INSPECTOR-1A).
+
+    geometry 다섯 칸은 요소 자신에 있고, 글자 내용(`props.text`)은 한
+    겹 안에 있다. 그 한 겹 때문에 복사 규칙 · expected 검사 · 모르는
+    필드 보존을 두 벌로 만들지 않는다 — 읽는 자리와 쓰는 자리만
+    갈라진다.
+  */
+  const inProps =
+    spec.container === "props";
+
+  const owner =
+    inProps
+      ? (isSkinHomeCanvasPlainObject(current.props) ? current.props : {})
+      : current;
+
   const readCurrent =
     (key) =>
       (typeof spec.readCurrent === "function")
         ? spec.readCurrent(current, key)
-        : current[key];
+        : owner[key];
 
   const previous = {};
 
@@ -1039,17 +1149,30 @@ function writeSkinHomeCanvasElementFields(regions, elementId, next, expected, sp
           return element;
         }
 
-        const copy = {};
+        const copy =
+          copySkinHomeCanvasObject(element);
 
-        Object.keys(element).forEach((key) => {
-          if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
-            copy[key] = element[key];
-          }
-        });
+        if (inProps) {
 
-        spec.keys.forEach((key) => {
-          copy[key] = next[key];
-        });
+          /* props 의 모르는 칸(`role` · 뒤 버전이 쓸 칸)은 그대로 옮기고
+             소유한 칸만 갈아 끼운다 */
+          const propsCopy =
+            copySkinHomeCanvasObject(owner);
+
+          spec.keys.forEach((key) => {
+            propsCopy[key] = next[key];
+          });
+
+          copy.props = propsCopy;
+
+        }
+        else {
+
+          spec.keys.forEach((key) => {
+            copy[key] = next[key];
+          });
+
+        }
 
         return copy;
 
@@ -1057,13 +1180,8 @@ function writeSkinHomeCanvasElementFields(regions, elementId, next, expected, sp
     );
 
 
-  const nextCanvas = {};
-
-  Object.keys(canvas).forEach((key) => {
-    if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
-      nextCanvas[key] = canvas[key];
-    }
-  });
+  const nextCanvas =
+    copySkinHomeCanvasObject(canvas);
 
   nextCanvas.elements = nextElements;
 
@@ -1076,13 +1194,8 @@ function writeSkinHomeCanvasElementFields(regions, elementId, next, expected, sp
           return entry;
         }
 
-        const copy = {};
-
-        Object.keys(entry).forEach((key) => {
-          if (key !== "__proto__" && key !== "constructor" && key !== "prototype") {
-            copy[key] = entry[key];
-          }
-        });
+        const copy =
+          copySkinHomeCanvasObject(entry);
 
         copy.canvas = nextCanvas;
 
@@ -1232,6 +1345,66 @@ function writeSkinHomeCanvasElementRotation(regions, elementId, next, expected) 
 
 }
 
+
+/*
+  HOME-CANVAS-INSPECTOR-1A — 글자 요소의 **내용 한 칸**(`props.text`).
+
+  ★ 소유하는 것은 `props.text` 하나다. `role` 도 `x` · `y` · `width` ·
+    `height` · `rotation` 도 이 함수가 건드리지 않는다 — 위 셋과 같은
+    공용 불변 수정을 쓰고, 다른 것은 `container: "props"` 한 줄뿐이다.
+
+  ★ 규칙은 검증기가 이미 가진 그것 하나다(§7 의 text) — 문자열이고
+    2000자 이하. **빈 문자열도 유효하다**(계약에 최소 길이가 없다).
+    여기서 새 규칙을 만들지 않는다.
+
+  ★ 들어온 것은 평문이다. `<b>` 가 섞여 있어도 그대로 저장되고,
+    렌더러가 `textContent` 로 그리므로 화면에서도 글자 그대로다
+    (skin/skin-home-canvas-render.js §12-4). 줄바꿈도 문자열이라
+    그대로 남는다.
+*/
+function writeSkinHomeCanvasElementText(regions, elementId, next, expected) {
+
+  return writeSkinHomeCanvasElementFields(
+    regions,
+    elementId,
+    next,
+    expected,
+    {
+      container: "props",
+      keys: ["text"],
+
+      checkNext: (value, element) => {
+
+        if (element.type !== "text") {
+          return "type";
+        }
+
+        if (typeof value.text !== "string") {
+          return "text";
+        }
+
+        return (value.text.length <= SKIN_HOME_CANVAS_MAX_TEXT_CHARS)
+          ? ""
+          : "length";
+
+      },
+
+      checkCurrent: (element) => {
+
+        if (element.type !== "text") {
+          return "current";
+        }
+
+        const props =
+          isSkinHomeCanvasPlainObject(element.props) ? element.props : {};
+
+        return (typeof props.text === "string") ? "" : "current";
+
+      }
+    }
+  );
+
+}
 
 /* 그 요소의 type 이 `height:"auto"` 를 쓸 수 있는가(§6) — 검증기와
    같은 표를 본다(SKIN_HOME_CANVAS_AUTO_HEIGHT_TYPES) */
@@ -1457,6 +1630,11 @@ if (typeof window !== "undefined") {
   /* HOME-CANVAS-TRANSFORM-1C */
   window.writeSkinHomeCanvasElementRotation = writeSkinHomeCanvasElementRotation;
 
+  /* HOME-CANVAS-INSPECTOR-1A */
+  window.writeSkinHomeCanvasElementText = writeSkinHomeCanvasElementText;
+  window.roundSkinHomeCanvasCoord = roundSkinHomeCanvasCoord;
+  window.normalizeSkinHomeCanvasRotation = normalizeSkinHomeCanvasRotation;
+
   window.createEmptySkinHomeCanvas = createEmptySkinHomeCanvas;
   window.createSkinHomeCanvasElementId = createSkinHomeCanvasElementId;
 
@@ -1505,6 +1683,9 @@ if (typeof module !== "undefined" && module.exports) {
     writeSkinHomeCanvasElementPosition,
     writeSkinHomeCanvasElementBox,
     writeSkinHomeCanvasElementRotation,
+    writeSkinHomeCanvasElementText,
+    roundSkinHomeCanvasCoord,
+    normalizeSkinHomeCanvasRotation,
     createEmptySkinHomeCanvas,
     createSkinHomeCanvasElementId,
 

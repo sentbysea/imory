@@ -1355,6 +1355,13 @@
         "./inspector/studio-inspector-controls.js",
         "./inspector/studio-inspector.js",
 
+        /* HOME-CANVAS-INSPECTOR-1A — Canvas 요소를 골랐을 때의 왼쪽
+           패널. 기존 팝오버와 **같은 자리**에 들어가고 소유권은
+           위 선택 라우터가 정한다. 그 라우터와 캔버스 선택 상태를
+           호출 시점에 쓰므로 둘 다 뒤이고, 기록 손잡이
+           (studio-history.js)도 호출 시점에만 읽는다. */
+        "./inspector/studio-canvas-inspector.js",
+
         /* STUDIO-SHELL-1 — Undo/Redo 기록과 셸(왼쪽 패널 · ··· 메뉴 ·
            현재 페이지 표시). 둘 다 studio-preview.js 의 상태와
            Inspector/Images/Dock 의 창구를 **호출 시점에** 쓰므로 그

@@ -139,10 +139,6 @@ const CANVAS_ROTATE_KIND = "rotate";
 const CANVAS_ROTATION_POSITION = "top";
 const CANVAS_ROTATION_POSITION_NONE = "none";
 
-/* 한 바퀴. 확정 값의 표현을 정할 때 쓰는 그 수 하나다(아래
-   normalizeCanvasRotation) */
-const CANVAS_FULL_TURN = 360;
-
 /* =========================================================
    HOME-CANVAS-MANUAL-UX-FIX-1 — 30° 자석
 
@@ -156,8 +152,6 @@ const CANVAS_ROTATION_SNAP_RANGE = 4;
 /* Canvas 좌표 기준 최소 크기(계약 §18-2). 0 을 허용하면 그 요소는
    다시 잡을 수 없고, 계약의 `width > 0` 도 어긴다. */
 const CANVAS_MIN_SIZE = 1;
-
-const CANVAS_COORD_DECIMALS = 1000;
 
 const CANVAS_COMMIT_TIMEOUT_MS = 4000;
 
@@ -1967,13 +1961,46 @@ export function createHomeCanvasSelectionFrame(options) {
   }
 
 
-  /* 소수점 셋째 자리까지. 정확한 정수면 정수 그대로다(-0 은 0). */
+  /* =========================================================
+     자릿수와 한 바퀴 — 규칙은 skin/skin-home-canvas.js 한 곳이다
+     (HOME-CANVAS-INSPECTOR-1A 에서 그리로 올라갔다).
+
+     ★ 이 문서도 그 파일을 classic script 로 읽는다
+       (studio/preview/preview-frame.html · skin/sandbox/frame.html).
+       그래서 여기서는 **부르기만** 한다 — 같은 식을 두 벌 두면
+       한쪽만 고쳐지는 날 왼쪽 패널과 손으로 끈 결과가 다른
+       자릿수로 저장된다.
+
+     ★ 없으면(옛 캐시가 남은 문서) 아무것도 접지 않는 편이
+       조용히 다른 규칙으로 저장하는 것보다 낫다 — 부모가 어차피
+       expected 로 다시 본다.
+  ========================================================== */
+
+  function canvasNumberRules() {
+
+    const win =
+      (typeof window !== "undefined") ? window : null;
+
+    return {
+      round:
+        (win && typeof win.roundSkinHomeCanvasCoord === "function")
+          ? win.roundSkinHomeCanvasCoord
+          : null,
+      fold:
+        (win && typeof win.normalizeSkinHomeCanvasRotation === "function")
+          ? win.normalizeSkinHomeCanvasRotation
+          : null
+    };
+
+  }
+
+
   function roundCanvasCoord(value) {
 
-    const rounded =
-      Math.round(value * CANVAS_COORD_DECIMALS) / CANVAS_COORD_DECIMALS;
+    const round =
+      canvasNumberRules().round;
 
-    return Object.is(rounded, -0) ? 0 : rounded;
+    return round ? round(value) : value;
 
   }
 
@@ -2004,19 +2031,10 @@ export function createHomeCanvasSelectionFrame(options) {
 
   function normalizeCanvasRotation(deg) {
 
-    if (!Number.isFinite(deg)) {
-      return 0;
-    }
+    const fold =
+      canvasNumberRules().fold;
 
-    const folded =
-      ((deg % CANVAS_FULL_TURN) + CANVAS_FULL_TURN) % CANVAS_FULL_TURN;
-
-    const rounded =
-      roundCanvasCoord(folded);
-
-    /* 359.9999 는 접은 뒤에도 한 바퀴 안이지만, 반올림이 그것을
-       360 으로 만들 수 있다 — 그때는 0 이다. */
-    return rounded === CANVAS_FULL_TURN ? 0 : rounded;
+    return fold ? fold(deg) : deg;
 
   }
 

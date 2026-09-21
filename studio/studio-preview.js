@@ -2196,6 +2196,10 @@ if (typeof window !== "undefined") {
   window.setStudioCanvasElementRotation =
     setStudioCanvasElementRotation;
 
+  /* HOME-CANVAS-INSPECTOR-1A */
+  window.setStudioCanvasElementText =
+    setStudioCanvasElementText;
+
 }
 
 
@@ -2922,7 +2926,24 @@ function postCanvasGeometryToFrame(geometry) {
      만들지 않는다.
 ========================================================== */
 
-function writeStudioCanvasElementGeometry(writerName, elementId, next, expected) {
+/*
+  HOME-CANVAS-INSPECTOR-1A — `options.coalesceHistory`
+
+  ★ 왼쪽 패널의 **글자 입력 한 세션**은 Undo 한 칸이다.
+
+  입력 중에는 한 글자마다 draft 가 바뀌어야 Preview 가 즉시 따라오고
+  그 사이 Save 를 눌러도 최신 값이 실린다. 그러나 기록까지 한 글자에
+  한 칸씩 쌓이면 ↶ 를 스무 번 눌러야 한 문장이 돌아간다.
+
+  그래서 그 경로만 이 함수의 기록을 끈다 — 세션을 여는 쪽이
+  focus 에서 captureStudioHistoryState() 를 잡고 blur 에서
+  recordStudioHistory() 로 **한 칸**을 남긴다
+  (studio/inspector/studio-canvas-inspector.js).
+
+  드래그 · 리사이즈 · 회전과 숫자 입력은 손을 놓을 때 한 번만 쓰므로
+  이 손잡이를 쓰지 않는다(기본값 = 여기서 한 칸을 남긴다).
+*/
+function writeStudioCanvasElementChange(writerName, elementId, next, expected, options) {
 
   if (!currentWorkingSkin) {
     return { ok: false, reason: "no-skin" };
@@ -2949,8 +2970,11 @@ function writeStudioCanvasElementGeometry(writerName, elementId, next, expected)
     return { ok: true, unchanged: true, previous: result.previous };
   }
 
+  const coalesce =
+    !!(options && options.coalesceHistory === true);
+
   const historyBefore =
-    captureStudioWorkingChange();
+    coalesce ? null : captureStudioWorkingChange();
 
   currentWorkingSkin = {
     ...currentWorkingSkin,
@@ -2977,7 +3001,7 @@ function writeStudioCanvasElementGeometry(writerName, elementId, next, expected)
 
 function setStudioCanvasElementPosition(elementId, next, expected) {
 
-  return writeStudioCanvasElementGeometry(
+  return writeStudioCanvasElementChange(
     "writeSkinHomeCanvasElementPosition",
     elementId,
     next,
@@ -2999,7 +3023,7 @@ function setStudioCanvasElementPosition(elementId, next, expected) {
 
 function setStudioCanvasElementBox(elementId, next, expected) {
 
-  return writeStudioCanvasElementGeometry(
+  return writeStudioCanvasElementChange(
     "writeSkinHomeCanvasElementBox",
     elementId,
     next,
@@ -3024,11 +3048,36 @@ function setStudioCanvasElementBox(elementId, next, expected) {
 
 function setStudioCanvasElementRotation(elementId, next, expected) {
 
-  return writeStudioCanvasElementGeometry(
+  return writeStudioCanvasElementChange(
     "writeSkinHomeCanvasElementRotation",
     elementId,
     next,
     expected
+  );
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-INSPECTOR-1A — 캔버스 글자 요소의 `props.text` 를 draft 에
+
+   setStudioCanvasElementText(elementId, next, expected, options) -> result
+
+   위 셋과 **같은 다섯 줄**을 쓴다(기록 한 칸 · dirty · 다시 그리기).
+   다른 것은 둘이다 — 불변 수정을 하는 순수 함수
+   (skin/skin-home-canvas.js writeSkinHomeCanvasElementText)와,
+   입력 세션이 기록을 스스로 맡을 수 있는 `options.coalesceHistory`
+   (위 머리말).
+========================================================== */
+
+function setStudioCanvasElementText(elementId, next, expected, options) {
+
+  return writeStudioCanvasElementChange(
+    "writeSkinHomeCanvasElementText",
+    elementId,
+    next,
+    expected,
+    options
   );
 
 }

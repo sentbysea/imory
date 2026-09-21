@@ -328,6 +328,14 @@
 }
 
 
+/* HOME-CANVAS-INSPECTOR-1A — Canvas 패널도 같은 자리 · 같은 규칙이다.
+   둘이 동시에 보이지 않는 것은 선택 라우터가 보장한다
+   (studio/inspector/studio-inspector.js). */
+.studio-canvas-inspector:not([hidden]) ~ .studio-left-panel-empty {
+  display: none;
+}
+
+
 
 /* =========================================================
    Select — Inspector 팝오버를 패널 내용으로

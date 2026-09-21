@@ -79,17 +79,20 @@
 | `TRANSFORM-1B` | **단독 선택 요소의 리사이즈**(§18) — 손잡이 여덟으로 크기를 바꾸고 `x` · `y` · `width` · `height` **네 칸**에 저장한다. `"auto"` 높이가 언제 숫자가 되는지도 여기서 정해졌다. 확정 경로 · Undo · 취소는 `1A` 와 **한 벌**이다 |
 | `TRANSFORM-1C` | **단독 선택 요소의 회전**(§19) — 손잡이 하나로 돌리고 `rotation` **한 칸**에 저장한다. 상자 네 칸은 바뀌지 않는다(회전 중심이 요소 상자의 정중앙이다). 같은 확정 경로에 `kind:"rotate"` 가 늘었다. **이동 · 리사이즈 · 회전으로 기본 조작이 갖춰졌다** |
 | `MANUAL-UX-FIX-1` | **직접 조작 사용성 넷**(§21) — 회전의 **30° 자석**(±4° 안에서만 붙는다) · **모서리 손잡이는 비율 유지 · 변 중앙은 한 축 자유** · 자르기를 고르지 않은 Canvas 그림은 **contain**(전체가 보인다) · 글자 요소의 **편집 chrome 여유**(선이 글자를 가로지르지 않는다 — 저장 geometry 는 불변). 새 데이터 칸 · 새 메시지 · 새 파일은 없다 |
+| `INSPECTOR-1A` | **왼쪽 Canvas Inspector**(§22) — Canvas 요소를 고르면 왼쪽 패널이 그 요소의 화면이 된다. 글자 요소의 **내용**(`props.text`)을 실제로 고칠 수 있고, 공통 geometry 다섯 칸을 숫자로 넣을 수 있다. **글자 한 칸이 v1 에서 처음으로 `props` 를 바꾼다** — 그 전까지 바뀌는 것은 요소 자신의 다섯 칸뿐이었다. 다중 선택은 안내만이고, `hidden`/`locked` 는 아직 내놓지 않는다 |
 | `MILESTONE-1` | **계약이 하나도 바뀌지 않은 라운드**(§20). 위 기본 조작을 배포된 화면에서 **손으로** 시험할 수 있게 `home_canvas` 와 표시 위치를 이미 갖춘 **수동 테스트 스킨**과 그것을 끝까지 지나는 통합 smoke 를 두었다. 제품 코드 · 기본 스킨 · 저장 데이터는 무변경이다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
 
 - **그룹 조작**(그룹 이동 · 그룹 리사이즈 · 그룹 회전) · 스냅 · 가이드 ·
-  키보드 조작 · Canvas Inspector 입력 필드 · preset · 스티커 업로드 ·
-  widget — **하나도 없다**(§11 · §19-12).
+  키보드 조작 · preset · 스티커 업로드 · widget · 레이어 목록 ·
+  `hidden`/`locked` 토글 · 다중 일괄 편집 — **하나도 없다**
+  (§11 · §19-12 · §22-7).
 - `SELECT-1A` · `SELECT-1B-1` · `SELECT-1B-2` 는 **고르고 · 푸는 것 · 그것을
   보여 주는 것**까지다(§14-6 · §15-8 · §16-9). 고른 뒤에 바꿀 수 있는 것은
   `TRANSFORM-1A · 1B · 1C` 가 연 **x · y · width · height · rotation
-  다섯 칸뿐**이다(§17 · §18 · §19).
+  다섯 칸**과, `INSPECTOR-1A` 가 연 **`text` 요소의 `props.text` 한 칸**
+  뿐이다(§17 · §18 · §19 · §22).
 - **모바일 lasso 도 손가락 조작도 의도적으로 미지원**이다 — 그 자리는 단일
   탭 선택과 Preview 스크롤이 지킨다(§16-3 · §17-2 · §18-12 · §19-10).
 
@@ -314,10 +317,10 @@ edit-id 규칙(`skin/skin-sanitize.js` `SKIN_SANITIZE_EDIT_ID_PATTERN`)은 **점
 | `photo` · `logo` · `sticker` · `shape` | 양수 |
 | `text` · `category_nav` | 양수 **또는** `"auto"` |
 
-`"auto"` 는 **높이 조정 불가라는 뜻이 아니다.** 후속 Inspector 에서 세로
-손잡이를 조작하면 `"auto"` 를 실제 숫자 높이로 바꿀 수 있어야 하고,
-`내용에 맞추기` 를 고르면 다시 `"auto"` 로 돌아갈 수 있어야 한다.
-그 손잡이와 Inspector UI 는 이번에 만들지 않았다(§11).
+`"auto"` 는 **높이 조정 불가라는 뜻이 아니다.** 세로 손잡이를 끌면
+`"auto"` 가 실제 숫자 높이가 되고(§18-3), 왼쪽 Inspector 의
+`내용에 맞추기(Auto)` 스위치를 다시 켜면 `"auto"` 로 돌아온다(§22-3).
+둘 다 같은 `kind:"resize"` 확정 한 번이다.
 
 ---
 
@@ -393,6 +396,10 @@ Canvas JSON 이 갖는 것
 
 **이번 계약에 넣지 않은 필드**: `canvas.background` · 요소별 `style` ·
 `shape.fill` · `shape.stroke` · `sticker.outline` · `z`.
+
+그래서 왼쪽 Canvas Inspector 에도 글꼴 · 크기 · 색 · 행간 · 정렬 ·
+`shape` 스타일 칸이 **없다**(§22-2). 그 자리를 JSON 으로 옮기는 것은
+이 계약을 바꾸는 일이고, 지금은 스킨 CSS 가 갖는다.
 
 ---
 
@@ -606,9 +613,13 @@ E2E 가 네 화면을 실제로 띄워 **DOM 을 글자 단위로, 좌표를 1px
 `x` · `y` · `width` · `height` · `rotation` 을 바꾸고, 한 제스처가 Undo
 한 칸이다.
 
+왼쪽 패널에는 **최소 Inspector** 가 생겼다(`INSPECTOR-1A` — §22) — 글자
+내용 한 칸과 geometry 다섯 칸이다.
+
 **그룹 조작**(이동 · 리사이즈 · 회전) · 스냅 · 가이드 · 키보드 조작 ·
-손가락 조작 · Inspector 입력 필드 · preset · 사진 자동 매핑 · sticker
-업로드 · widget — **아직 하나도 없다.**
+손가락 조작 · 글꼴/색/정렬 같은 스타일 칸 · 레이어 목록 ·
+`hidden`/`locked` 토글 · 다중 일괄 편집 · preset · 사진 자동 매핑 ·
+sticker 업로드 · widget — **아직 하나도 없다.**
 
 그 밖에는 **고르고 · 푸는 것 · 그것을 보여 주는 것만 있다**
 (`SELECT-1A` — §14, `SELECT-1B-1` — §15, `SELECT-1B-2` — §16).
@@ -639,14 +650,18 @@ Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조�
 | **그룹 조작**(지금은 여럿을 고르면 틀만 남고 이동 · 손잡이가 전부 꺼진다 — §17-1 · §18-1 · §19-1) | `HOME-CANVAS-TRANSFORM-1D` |
 | **스냅 · 가이드 · 키보드 조작 · Shift 각도 스냅 · 사용자 지정 회전 중심**(§19-12) | `HOME-CANVAS-TRANSFORM-1D` |
 | **손가락 조작**(의도적 미지원 — 그 자리는 Preview 스크롤이 지킨다 — §17-2 · §18-12 · §19-10) | `HOME-CANVAS-LAYERS-1` 의 모바일 다중 선택과 함께 |
-| **캔버스 요소의 Inspector 입력 필드**(글꼴 · 색 · 글자 내용 · 이미지 교체 · 자르기) — 지금 Canvas 요소를 고르면 **왼쪽 패널이 비어 있다** | `HOME-CANVAS-INSPECTOR-1A`(최소 범위) → `HOME-CANVAS-INSPECT-1` |
+| ~~캔버스 요소의 Inspector 입력 필드(글자 내용 · geometry)~~ — **`INSPECTOR-1A` 에서 끝났다**(§22) | 완료 |
+| **글꼴 · 글자 크기 · 색 · 행간 · 정렬 · `shape` 스타일 칸** — 그 값들이 Canvas JSON 에 **없다**(§8). 넣으려면 계약을 먼저 바꾼다 | `DECOR-1` · `STICKER-1` |
+| **이미지 교체 · 자르기 UI 를 Canvas 패널 안에서** — 지금은 슬롯 이름과 "Images 에서 바꾼다" 안내뿐이다(§22-2) | `HOME-CANVAS-INSPECTOR-1A` 이후의 자르기 UI |
+| **`category_nav` 의 카테고리 고르기 · 순서** — 지금은 개수 요약만 읽기 전용으로 보여 준다(§22-2) | 아직 요청 없음 |
+| **`hidden` · `locked` 를 왼쪽 패널에서 켜고 끄기** — 레이어 목록이 없어 **되돌릴 길이 없다**(숨기면 다시 고를 수 없다 — §14-3). 그래서 일부러 내놓지 않았다(§22-7) | `HOME-CANVAS-LAYERS-1` |
 | **명시적 Crop 정보를 Canvas payload 에 잇는 경로** — 지금 `photo` · `sticker` · `logo` 의 props 는 `slot`(+ `fallback`) 뿐이어서 "주인이 자르기를 골랐다"를 나타낼 칸이 **하나도 없다**. 그래서 기본값을 `contain` 으로 확정했다(§21-3) | `HOME-CANVAS-INSPECTOR-1A` 이후의 자르기 UI |
 | **hidden · locked 를 다루는 레이어 목록**(지금 숨긴 요소는 Studio 에서 다시 고를 방법이 없다 — §14-3) | `HOME-CANVAS-LAYERS-1` |
 | 390 저장 좌표 → 데스크톱 폭 변환 규칙 | `HOME-CANVAS-RESPONSIVE-1` |
 | 모바일/데스크톱 좌표 override 를 둘 것인가 | `HOME-CANVAS-RESPONSIVE-1` |
 | 좌우 패널(`left_sidebar` · `right_sidebar`) 안의 Canvas | `HOME-CANVAS-SIDES-1` |
 | `canvas.background` · 요소별 `style` · `shape.fill/stroke` · `sticker.outline` | `DECOR-1` · `STICKER-1` |
-| 캔버스를 고치는 Studio 패널(지금은 UI 가 없어서, 깨진 캔버스를 사람이 고칠 길이 Import 창뿐이다) | `HOME-CANVAS-SELECT-1` 이후 |
+| **깨진 캔버스를 사람이 고치는 길** — 유효하지 않은 캔버스에서는 고를 요소가 없어 왼쪽 패널도 열리지 않는다(§22-1). 여전히 Import 창뿐이다 | `HOME-CANVAS-LAYERS-1` 이후 |
 | `logo.fallback` 에 "아무것도 안 그림" 같은 값이 필요한가 | 아직 요청 없음 — 지금은 `site_title` 하나 |
 
 ### 11-4. 확장 방향 (기록만)
@@ -2864,3 +2879,279 @@ Canvas — **하나도 없다**.
 > **Canvas 요소를 눌렀을 때 왼쪽 패널이 비어 있는 것은 그대로다.**
 > 그것은 `HOME-CANVAS-INSPECTOR-1A` 의 몫이고(로드맵 §14-15), 이
 > 라운드에 임시 입력창을 붙이지 않았다.
+
+> **★ 그 자리는 `HOME-CANVAS-INSPECTOR-1A` 가 채웠다 — §22.**
+
+---
+
+## 22. 왼쪽 Canvas Inspector (`HOME-CANVAS-INSPECTOR-1A`)
+
+Canvas 요소를 고르면 왼쪽 패널이 **그 요소의 화면**이 된다. 그 전까지는
+선택 상태만 있고 표시할 화면이 없어서 "Preview에서 고칠 요소를 누르세요"
+만 보였다(§21-5).
+
+**이 라운드가 연 것**
+
+- 타입마다 다른 단일 선택 화면(여섯 종류 전부)
+- 글자 요소의 **실제 내용** — v1 에서 `props` 가 바뀌는 **첫 경로**
+- 공통 geometry 다섯 칸의 숫자 입력과 `Auto` 높이 스위치
+- 다중 선택에서의 **안내 한 줄**
+
+**이 라운드가 열지 않은 것** — §22-7.
+
+### 22-1. 선택 소유권 — 같은 자리, 두 화면, 절대 동시에 아님
+
+왼쪽 패널의 Select 자리(`#studioLeftPanelSelect`)에 이제 둘이 산다.
+
+| 선택 상태 | 왼쪽 패널 |
+| --- | --- |
+| template 요소 1개 | 기존 Inspector 팝오버(`#studioInspectorPopover`) |
+| Canvas 요소 1개 | **새 Canvas 패널**(`#studioCanvasInspector`) |
+| Canvas 요소 2개 이상 | 개수 + "여러 요소 편집은 아직 지원하지 않습니다" |
+| 아무것도 없음 | 기존 안내 문구 |
+| 빈 곳 클릭 | 둘 다 닫히고 안내 |
+| Select 모드 종료 | Canvas 패널도 닫힌다 |
+| HOME 이 아님 · 유효하지 않은 Canvas · 미래 `version` | Canvas 패널 없음 |
+
+★ **소유권을 정하는 곳은 늘지 않았다.** 둘이 동시에 켜지지 않는 것은
+`SELECT-1A` 가 이미 세운 선택 라우터가 지킨다(§14-1 —
+`routeStudioInspectSelectMessage` · `setStudioInspectorSelection`).
+Canvas 패널은 그 **결과를 읽어서 그릴 뿐** 누가 주인인지 다시 판단하지
+않는다.
+
+★ **세 번째 상태 저장소를 만들지 않았다.** 패널이 값을 들고 있지 않고,
+그릴 때마다 `getStudioCanvasSelection()` 과 지금 draft 에서 다시 읽는다.
+Canvas 요소를 `applyStudioInspectorPatch()`(HTML/CSS 전용)에 억지로
+넣지도 않는다 — §14-6 의 그 이유 그대로다.
+
+★ **기존 template Inspector 는 한 줄도 바뀌지 않았다.** 패널 DOM 은
+안내 문구 **앞**에 들어가고, 안내를 물리는 CSS 규칙만 팝오버와 같은
+모양으로 하나 늘었다(`studio/studio-shell.css`).
+
+### 22-2. 무엇을 고칠 수 있나 — 타입별
+
+공통(모든 타입): **X · Y · Width · Height · Rotation** — §22-3.
+
+| type | 그 타입만의 칸 |
+| --- | --- |
+| `text` | **`props.text`** 여러 줄 입력(편집 가능) · `role` 읽기 전용 |
+| `photo` · `sticker` | `slot` 이름 읽기 전용 + "이미지는 Images에서 변경합니다" |
+| `logo` | `slot` · `fallback`(= 블로그 제목) 읽기 전용 + 같은 안내 |
+| `category_nav` | `mode` 와 카테고리 **개수** 읽기 전용 |
+| `shape` | `kind`(`rect`/`ellipse`/`line`) 읽기 전용 |
+
+**글자는 평문이다.**
+
+- 입력은 plain text이고 `<`, `>`, `&` 가 HTML 로 실행되지 않는다 —
+  렌더러가 `textContent` 로 그리기 때문이다(§12-4). 패널은 HTML
+  편집기를 만들지 않는다.
+- 줄바꿈은 문자열 그대로 남고, 화면에서는 플랫폼 CSS 의 `white-space`
+  가 살린다.
+- 길이 규칙은 검증기가 이미 가진 그것 하나다 — **2000자 이하**(§7).
+  입력칸 자체가 `maxlength` 로 멈추고, 넘는 요청은 `reason:"length"`
+  로 거부된다.
+- **빈 문자열도 유효하다.** 계약에 최소 길이가 없다(§7) — 패널이 새
+  규칙을 만들지 않는다.
+
+**편집할 수 있는 칸이 없는 타입에는 억지 입력창을 만들지 않았다.**
+이미지 교체는 Images 패널이 갖고(업로드 · Crop · slot picker 를 이
+패널에 복제하지 않는다), 색 · 테두리 · 그림자 · 글꼴은 **스킨 CSS** 가
+갖는다(§8). `category_nav` 의 카테고리 고르기 · 순서 UI 도 만들지
+않았다.
+
+### 22-3. Geometry 다섯 칸
+
+표시 단위는 **Canvas 좌표 px**(390 자 기준 — §4).
+
+| 칸 | 규칙 | 어느 `kind` 로 쓰나 |
+| --- | --- | --- |
+| X · Y | 음수 허용. ±100000 안의 유한한 숫자 | `move` |
+| Width | 0 초과 100000 이하 | `resize` |
+| Height | 같은 규칙. 허용 타입에서는 `Auto` | `resize` |
+| Rotation | 유한한 숫자 → 한 바퀴 안으로 접힌다 | `rotate` |
+
+- 범위 규칙을 새로 만들지 않았다 — Import 검증기와 순수 writer 가 쓰는
+  그 함수들이다(`isSkinHomeCanvasCoord` · `isSkinHomeCanvasSize`).
+- `Auto` 스위치는 계약이 허용하는 타입에만 나온다(`text` ·
+  `category_nav` — §6). 켜면 `height:"auto"`, 끄면 **지금 화면에 그려진**
+  높이를 Canvas 좌표로 되돌려 숫자로 굳힌다. 둘 다 `resize` 확정 한
+  번이다. 허용되지 않는 타입에 `"auto"` 를 넣는 요청은
+  `reason:"auto"` 로 거부된다.
+- `Auto` 가 켜져 있는 동안 Height 숫자 칸은 **잠긴다**. 그 상태의
+  표시값은 빈 문자열이라(§6 의 `"auto"`), 잠그지 않으면 칸에 들어갔다
+  나오기만 해도 "값을 입력하세요" 가 뜬다.
+- 잘못된 입력은 **draft 를 일부만 고치지 않는다.** 빈 문자열 · `NaN` ·
+  `Infinity` · 범위 밖은 전부 거부되고, 오류가 그 칸 바로 아래에
+  한 줄로 적힌다. **빈 문자열을 0 으로 저장하지 않는다.**
+
+> **★ 숫자로 Width 만 바꾸는 것은 "모서리 리사이즈" 가 아니다.**
+>
+> 손잡이의 모서리 넷은 비율을 지킨다(§21-2). 그러나 왼쪽 패널에서
+> Width 한 칸에 숫자를 넣는 것은 **그 칸 하나를 지정하는 것**이므로
+> Height 를 따라 움직이지 않는다. 두 동작을 같은 규칙으로 묶으면,
+> "가로만 140 으로" 라고 적은 사람이 세로가 달라진 상자를 받는다.
+>
+> `resize` 는 네 칸이 한 요청이므로(§18-6) x · y · height 도 함께
+> 실리지만, **값이 지금과 같을 뿐**이다.
+
+**Rotation 의 표현.** 입력값은 한 바퀴 안으로 접히고 소수 셋째 자리까지
+반올림된다(`400 → 40` · `-30 → 330`). 손으로 돌린 결과와 **같은 자**를
+쓴다 — 그 규칙 하나는 이 라운드에서 `skin/skin-home-canvas.js` 의
+`normalizeSkinHomeCanvasRotation()` 으로 올라왔고, 프레임 runtime 의
+`normalizeCanvasRotation()` 은 이제 그것을 부르기만 한다(§19-3).
+세 realm(부모 · native 프레임 · sandbox 프레임)이 전부 그 파일을 classic
+script 로 이미 읽으므로 한 벌이면 충분하다.
+
+★ 검증기는 여전히 접지 않는다. 계약이 `rotation` 에 요구하는 것은
+"유한한 숫자" 하나이고(§5), 이미 저장된 `-30` · `400` 은 그대로 남는다.
+접히는 것은 **새로 확정되는 값** 하나뿐이다.
+
+### 22-4. 한 번의 편집 = Undo 한 칸
+
+| 입력 | 언제 draft 가 바뀌나 | 언제 기록이 생기나 |
+| --- | --- | --- |
+| 글자 | **입력할 때마다** | focus → blur **한 세션에 한 칸** |
+| 숫자 | Enter · blur 에서 한 번 | 그 한 번이 곧 한 칸 |
+
+**글자**
+
+- 입력마다 draft 를 고친다. 그래야 Preview 가 즉시 따라오고, **입력
+  중에 Save 를 눌러도 최신 값이 실린다**.
+- 그러나 한 글자에 한 칸씩 쌓이면 ↶ 를 스무 번 눌러야 한 문장이
+  돌아간다. 그래서 그 경로만 기록을 끄고(`coalesceHistory`), 세션을
+  여는 쪽이 focus 에서 `captureStudioHistoryState()` 를 잡고 blur 에서
+  `recordStudioHistory()` 로 **한 칸**을 남긴다.
+- **Escape** 는 focus 시작 문구로 되돌리고 기록을 남기지 않는다.
+- 시작값과 같으면(한 글자도 안 바뀌었으면) 기록 **0 칸**이다.
+- 선택이 다른 요소로 넘어가거나 사라지면 열려 있던 세션도 그 자리에서
+  닫힌다 — 그때까지의 변화만큼 한 칸이다.
+
+> **★ 이 textarea 는 부모 문서에 있다.**
+>
+> 기존 template 텍스트 편집은 "적용/취소" 두 버튼으로 나뉘어 있다 —
+> 고치는 대상이 **프레임 안 요소**라 한 글자마다 스킨을 다시 그리면
+> 그 안의 입력칸이 새로 만들어지고 한글 조합이 끊기기 때문이다
+> (`studio/inspector/studio-inspector-text.js` 머리말).
+>
+> Canvas 패널의 입력칸은 **왼쪽 패널**에 있다. Preview 를 몇 번을 다시
+> 그려도 이 칸은 다시 만들어지지 않으므로 조합이 끊기지 않는다. 그래서
+> 임시 채널도 적용 버튼도 필요 없다.
+
+**숫자**
+
+- 입력 중에는 아무것도 쓰지 않는다. `-` · `.` · 빈 문자열처럼 아직
+  숫자가 아닌 **중간 상태를 JSON 에 넣지 않는다.**
+- Enter 또는 blur 에서 한 번 확정하고, Escape 로 취소한다.
+- 변화량 0 이면 기록 **0 칸**이다(같은 값을 다시 넣는 것 포함).
+
+### 22-5. 쓰기 경로 — 관문 하나, 입구 둘
+
+패널이 draft 를 직접 만지는 줄은 **없다.** 모든 수정이 프레임의 직접
+조작이 쓰는 그 관문 한 벌을 그대로 지난다.
+
+```text
+왼쪽 패널 입력칸
+  → commitStudioCanvasInspectorEdit()      ─┐
+프레임 제스처(preview:canvas-transform)      ├→ commitStudioCanvasElementChange()
+  → commitStudioCanvasElementTransform()   ─┘   (선택 · 순번 · hidden/locked ·
+                                                 허용 키 · expected · 범위)
+                                              → setStudioCanvasElement*()
+                                              → writeSkinHomeCanvasElement*()  (순수)
+```
+
+★ **두 입구의 권한이 다르다.**
+
+| 입구 | 쓸 수 있는 `kind` | `coalesce` |
+| --- | --- | --- |
+| 프레임(`commitStudioCanvasElementTransform`) | `move` · `resize` · `rotate` | 불가 |
+| 왼쪽 패널(`commitStudioCanvasInspectorEdit`) | + `text` | `text` 에서만 |
+
+프레임 안에서는 스킨 저자의 JS 가 돈다(§15-7-1). 그 길로 들어올 수
+있는 것은 처음부터 **손으로 끈 결과**가 소유한 세 kind 뿐이다. 글자
+내용은 프레임이 닿을 수 없는 자리(부모 realm 의 입력칸)에서만 바뀐다.
+`coalesce` 도 패널 전용이다 — "한 제스처 = Undo 한 칸"(§17-6)을 프레임이
+끌 수 있게 두지 않는다.
+
+★ **불변 수정도 한 곳이다.** `writeSkinHomeCanvasElementText()` 는 위
+셋과 같은 `writeSkinHomeCanvasElementFields()` 를 쓰고, 다른 것은
+`container: "props"` 한 줄뿐이다. 그래서 보존 범위가 갈라지지 않는다.
+
+**한 번의 확정이 보존하는 것** (글자 기준)
+
+- `props` 의 다른 칸(`role` · **모르는 칸**)
+- 요소의 다른 칸(`x` · `y` · `width` · `height` · `rotation` ·
+  `hidden` · `locked` · **모르는 칸**)
+- `canvas` 의 모르는 칸 · `regions` 항목의 모르는 칸 · `regions` 의
+  다른 항목 · 다른 요소 · **배열 순서**
+- 입력 객체 non-mutation(Undo 가 들고 있는 직전 스냅샷이 바뀌지 않는다)
+
+**미래 version 은 손대지 않는다.** `canvas.version: 2` 에서는
+`resolveSkinHomeCanvas()` 가 payload 를 만들지 않으므로 고를 요소가
+없고, 따라서 패널도 열리지 않는다(§9-(3)). 그 데이터는 그대로 보존된다.
+
+### 22-6. 다시 그리는 때 — 신호 하나
+
+패널이 낡는 자리는 선택 변경만이 아니다. 드래그 · 리사이즈 · 회전 ·
+Undo/Redo · Import/Apply · draft 재로드 · 요소 삭제는 **선택은 그대로인
+채 값만** 바꾼다.
+
+그래서 알림은 `studio-canvas-panel` 이벤트 하나이고, 두 자리에서 나간다
+(`notifyStudioCanvasPanel`).
+
+| 어디 | 무엇이 지나가나 |
+| --- | --- |
+| `applyStudioCanvasSelection()` | 선택 확정 · 해제 |
+| `syncStudioCanvasFrameMode()` | 편집 모드 변경 · `reconcileStudioCanvasSelection()` (= draft 변경 관문 `bumpStudioWorkingRevision`) · Select 토글 |
+
+- 이벤트는 값을 싣지 않는다. 받는 쪽이 선택과 draft 를 **다시 읽는다**.
+- 화면의 **모양**(선택 id + type + 개수)이 같으면 DOM 을 다시 만들지
+  않고 값만 갈아 끼운다 — 다시 만들면 입력 중이던 칸이 포커스와 커서를
+  잃는다.
+- **포커스가 있는 칸은 건너뛴다.** 입력 중인 글자를 저장값으로 덮으면
+  방금 친 글자가 사라진다.
+- 패널을 갱신하려고 Preview 를 다시 그리거나 선택을 풀지 않는다.
+- native 와 sandbox 가 **같은 부모 패널**을 쓴다. sandbox 에서도 패널은
+  부모 realm 에 있으므로 CSP 를 한 줄도 완화하지 않는다.
+
+**선택 chrome 과의 공존.** 글자를 고쳐 줄 수가 늘거나 줄면 프레임의
+따라가기 루프가 그 프레임에서 content bounds 를 다시 잰다 — 그 값이
+이미 지문에 들어 있기 때문이다(§21-4). 그래서 패널이 chrome 에 따로
+말하지 않고, **저장 geometry 도 한 칸 바뀌지 않는다**(실측: 숫자 height
+24 인 요소에 다섯 줄을 넣어 아래 여유가 5 → 51 로 늘었고 `x` · `y` ·
+`width` · `height` · `rotation` 은 그대로였다).
+
+### 22-7. 이 라운드가 만들지 않은 것
+
+**`hidden` · `locked` 토글을 일부러 넣지 않았다.**
+
+지금은 레이어 목록이 없다. 숨긴 요소는 상자가 없어 화면에서 다시 고를
+수 없고, 잠근 요소는 hit-test 가 후보에서 뺀다(§14-3). 그래서 패널에
+토글을 달면 **켠 뒤에 되돌릴 안정적인 길이 없다**. 임시 우회 UI 를
+만들지 않고 남은 차이로 둔다 → `HOME-CANVAS-LAYERS-1`(§11-3).
+
+그 밖에 이 라운드에 **없는 것**: v2 데이터 · 렌더러 · migration ·
+flow block Inspector · `main_visual` Inspector · alignment/margin/order
+UI · 레이어 목록 · 다중 일괄 편집 · 그룹 transform · 글꼴 · 글자 크기 ·
+색 · 행간 · 정렬 · `shape` 스타일 칸 · 이미지 업로드 · Crop UI ·
+카테고리 선택 · 순서 UI · HTML 편집 · Effect Hook · preset · widget ·
+모바일 touch 조작.
+
+> **`HOME-CANVAS-V2-INSPECTOR-1` 은 여전히 별도 PLAN 이다**
+> (로드맵 §14-13 의 7 번). 이 절은 **지금 v1** 자유 배치 요소의
+> 패널이고, 그쪽은 v2 의 flow block 과 `main_visual` 을 편집하는
+> 작업이다. `canvas.version: 2` 는 **아직 구현되지 않았다**(§9-(3)).
+
+### 22-8. 이 라운드가 바꾼 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `studio/inspector/studio-canvas-inspector.js` | **새 파일** — 패널 전체(화면 · 입력 세션 · 오류) |
+| `studio/inspector/studio-canvas-selection.js` | 입구 둘로 가른 확정 관문 · `notifyStudioCanvasPanel()` |
+| `studio/studio-preview.js` | `setStudioCanvasElementText()` · `coalesceHistory` |
+| `skin/skin-home-canvas.js` | `writeSkinHomeCanvasElementText()` · `container:"props"` · `normalizeSkinHomeCanvasRotation()` · `copySkinHomeCanvasObject()` |
+| `skin/skin-home-canvas-editor-runtime.js` | 자릿수 · 한 바퀴 규칙을 위 파일에 위임 |
+| `studio/inspector/studio-inspector.css` · `studio/studio-shell.css` | 패널 모양과 안내 문구 물리기 |
+| `studio/index.html` · `studio/studio-lifecycle-scenario.html` | 새 파일 로드 한 줄 |
+| `studio/studio-home-canvas-inspector-e2e-test.mjs` | **새 테스트**(TESTS.md §13) |
+
+`APP_BUILD_VERSION` 은 이 라운드에서 올리지 않았다(배포하지 않았다).

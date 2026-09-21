@@ -65,6 +65,25 @@ const STUDIO_CANVAS_ELEMENT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const STUDIO_CANVAS_MAX_SELECTED = 64;
 
 
+/* =========================================================
+   HOME-CANVAS-INSPECTOR-1A — 어떤 입구가 어떤 `kind` 를 쓸 수 있나
+
+   ★ 두 입구의 권한이 다르다.
+
+   프레임(native · sandbox)이 올리는 `preview:canvas-transform` 은
+   **손으로 끈 결과**다. 그 안에서는 스킨 저자의 JS 가 도므로, 그
+   길로 들어올 수 있는 것은 처음부터 직접 조작이 소유한 세 kind 뿐이다.
+
+   왼쪽 패널의 입력칸은 이 문서(부모 realm)에서만 열린다 — 프레임이
+   닿을 수 없는 자리다. 그래서 글자 내용은 **그 입구에만** 있다.
+   같은 관문 · 같은 불변 수정을 쓰되, 들어올 수 있는 문을 가른다.
+========================================================== */
+
+const STUDIO_CANVAS_FRAME_KINDS = ["move", "resize", "rotate"];
+
+const STUDIO_CANVAS_PANEL_KINDS = ["move", "resize", "rotate", "text"];
+
+
 const STUDIO_CANVAS_TYPE_LABELS = {
   photo: "Canvas 사진",
   logo: "Canvas 로고",
@@ -520,6 +539,28 @@ function studioCanvasEditingIsOn() {
      받는 쪽은 같은 값이면 아무 일도 하지 않는다.
 ========================================================== */
 
+/* =========================================================
+   HOME-CANVAS-INSPECTOR-1A — 왼쪽 패널에 "다시 그려라"
+
+   ★ 선택이 바뀌지 않아도 패널은 낡는다. 드래그 · 리사이즈 · 회전 ·
+     Undo/Redo · Import · draft 재로드는 **같은 요소의 값**을 바꾸기
+     때문이다. 그래서 알림은 선택 변경이 아니라 **세 자리**에서 나간다.
+
+     applyStudioCanvasSelection   선택이 확정될 때(해제 포함)
+     syncStudioCanvasFrameMode    편집 모드 · draft 가 바뀔 때
+                                  (reconcile · Select 토글 · 페이지 이동)
+
+   ★ 세 번째 상태 저장소를 만들지 않는다. 이 이벤트는 값을 싣지 않고,
+     받는 쪽이 getStudioCanvasSelection() 과 draft 를 **다시 읽는다**.
+========================================================== */
+
+function notifyStudioCanvasPanel() {
+
+  window.dispatchEvent(new CustomEvent("studio-canvas-panel"));
+
+}
+
+
 function postStudioCanvasSelectionToFrame() {
 
   if (typeof window.postCanvasSelectionToFrame !== "function") {
@@ -563,6 +604,8 @@ function syncStudioCanvasFrameMode() {
   postStudioCanvasSelectionToFrame();
 
   postStudioCanvasGeometryToFrame();
+
+  notifyStudioCanvasPanel();
 
 }
 
@@ -803,6 +846,10 @@ function applyStudioCanvasSelection(entries, options) {
   if (changed) {
     window.dispatchEvent(new CustomEvent("studio-canvas-selection"));
   }
+
+  /* ★ changed 를 보지 않는다 — 같은 요소의 **값**이 바뀌었을 때도
+     패널은 낡는다(위 notifyStudioCanvasPanel 머리말). */
+  notifyStudioCanvasPanel();
 
   return !!next;
 
@@ -1084,16 +1131,24 @@ function proposeStudioCanvasSelection(proposal) {
 
 
 /* =========================================================
-   HOME-CANVAS-TRANSFORM-1A · 1B · 1C — 이동 · 리사이즈 · 회전의 **확정**
+   HOME-CANVAS-TRANSFORM-1A · 1B · 1C + INSPECTOR-1A — 한 벌의 **확정**
 
-   commitStudioCanvasElementTransform(request)
+   commitStudioCanvasElementChange(request, gate)
+
+   입구가 둘이고, 뒤 본체는 하나다.
+
+     commitStudioCanvasElementTransform  프레임의 직접 조작
+                                         (move · resize · rotate)
+     commitStudioCanvasInspectorEdit     왼쪽 패널의 입력칸
+                                         (+ text · 세션 기록)
 
    request = {
-     kind       : "move" | "resize" | "rotate"
+     kind       : "move" | "resize" | "rotate" | "text"
      id         : element id
-     expected   : 프레임이 제스처를 시작할 때의 값
-     next       : 손을 놓은 값
+     expected   : 제스처를 시작할 때 · 입력을 시작할 때의 값
+     next       : 손을 놓은 값 · 확정한 값
      generation : 선택 순번
+     coalesce   : (패널 · text 전용) 기록은 세션이 맡는다
    }
 
    `kind` 가 소유하는 칸이 다르다.
@@ -1101,6 +1156,7 @@ function proposeStudioCanvasSelection(proposal) {
      move     { x, y }
      resize   { x, y, width, height }   height 는 숫자 또는 "auto"
      rotate   { rotation }              유한한 숫자 하나
+     text     { text }                  2000자 이하 문자열 (props 안)
 
    ★ 그 밖에는 **한 줄도 갈라지지 않는다.** 선택 · 순번 · expected ·
      허용 키 · 범위를 보는 관문이 하나이고, 불변 수정도 그 순수 함수
@@ -1127,9 +1183,10 @@ function proposeStudioCanvasSelection(proposal) {
         (리사이즈의 height 만 "auto" 도 된다 — 그 요소의 type 이
          허용할 때만)
      8  지금 draft 의 그 칸들이 expected 와 **정확히** 같다
-     9  next 가 계약의 좌표 · 크기 범위 안이다 (7~9 는 순수 함수가
-        본다 — skin/skin-home-canvas.js
-        writeSkinHomeCanvasElementPosition · …ElementBox)
+     9  next 가 계약의 좌표 · 크기 · 길이 범위 안이다 (7~9 는 순수
+        함수가 본다 — skin/skin-home-canvas.js
+        writeSkinHomeCanvasElementPosition · …ElementBox ·
+        …ElementRotation · …ElementText)
 
    ★ 거부해도 화면은 되돌아간다.
 
@@ -1144,7 +1201,10 @@ function proposeStudioCanvasSelection(proposal) {
    그 줄에 닿지 않는다.
 ========================================================== */
 
-function commitStudioCanvasElementTransform(request) {
+function commitStudioCanvasElementChange(request, gate) {
+
+  const kinds =
+    (gate && Array.isArray(gate.kinds)) ? gate.kinds : STUDIO_CANVAS_FRAME_KINDS;
 
   const value =
     (request && typeof request === "object") ? request : null;
@@ -1180,11 +1240,7 @@ function commitStudioCanvasElementTransform(request) {
     return answer(false, "shape");
   }
 
-  if (
-    value.kind !== "move" &&
-    value.kind !== "resize" &&
-    value.kind !== "rotate"
-  ) {
+  if (typeof value.kind !== "string" || kinds.indexOf(value.kind) === -1) {
     return answer(false, "kind");
   }
 
@@ -1221,13 +1277,14 @@ function commitStudioCanvasElementTransform(request) {
 
   /* 그 kind 를 실제로 draft 에 쓸 수 있는 함수가 이 문서에 있는가 */
   const writer =
-    value.kind === "resize"
-      ? window.setStudioCanvasElementBox
-      : (
-          value.kind === "rotate"
-            ? window.setStudioCanvasElementRotation
-            : window.setStudioCanvasElementPosition
-        );
+    {
+      move: window.setStudioCanvasElementPosition,
+      resize: window.setStudioCanvasElementBox,
+      rotate: window.setStudioCanvasElementRotation,
+
+      /* HOME-CANVAS-INSPECTOR-1A — 글자 내용 한 칸(`props.text`) */
+      text: window.setStudioCanvasElementText
+    }[value.kind];
 
   if (typeof writer !== "function") {
     return answer(false, "unsupported");
@@ -1254,10 +1311,15 @@ function commitStudioCanvasElementTransform(request) {
 
   /* HOME-CANVAS-TRANSFORM-1C — 회전이 소유하는 것은 **한 칸**이다.
      좌표 둘이 실린 rotate 도, rotation 이 섞인 move 도 거부다. */
+  /* HOME-CANVAS-INSPECTOR-1A — 글자는 `text` **한 칸**이다. 좌표가
+     섞인 text 도, text 가 섞인 move 도 거부다(위와 같은 규칙). */
   const wanted =
-    value.kind === "resize"
-      ? ["x", "y", "width", "height"]
-      : (value.kind === "rotate" ? ["rotation"] : ["x", "y"]);
+    {
+      move: ["x", "y"],
+      resize: ["x", "y", "width", "height"],
+      rotate: ["rotation"],
+      text: ["text"]
+    }[value.kind];
 
   const asBox =
     (point) => {
@@ -1297,8 +1359,26 @@ function commitStudioCanvasElementTransform(request) {
   }
 
 
+  /* =====================================================
+     HOME-CANVAS-INSPECTOR-1A — 기록을 세션이 맡는 경우
+
+     ★ 패널 입구에서만, 그리고 글자에서만 켜진다. 프레임이 보낸
+       메시지에 이 칸이 섞여 와도 `gate.allowCoalesce` 가 없으므로
+       읽지 않는다 — 한 제스처 = Undo 한 칸이라는 계약을 프레임이
+       끌 수 있게 두지 않는다(§17-6).
+  ====================================================== */
+  const coalesce =
+    !!(gate && gate.allowCoalesce) &&
+    value.kind === "text" &&
+    value.coalesce === true;
+
   const result =
-    writer(value.id, next, expected);
+    writer(
+      value.id,
+      next,
+      expected,
+      coalesce ? { coalesceHistory: true } : undefined
+    );
 
   if (!result || !result.ok) {
     return answer(false, (result && result.reason) || "rejected");
@@ -1309,6 +1389,39 @@ function commitStudioCanvasElementTransform(request) {
   }
 
   return answer(true, "ok");
+
+}
+
+
+/*
+  프레임(native · sandbox)의 직접 조작 확정 — 이동 · 리사이즈 · 회전.
+  기존 이름과 기존 권한 그대로다.
+*/
+function commitStudioCanvasElementTransform(request) {
+
+  return commitStudioCanvasElementChange(
+    request,
+    { kinds: STUDIO_CANVAS_FRAME_KINDS, allowCoalesce: false }
+  );
+
+}
+
+
+/*
+  HOME-CANVAS-INSPECTOR-1A — 왼쪽 패널의 입력칸이 쓰는 입구.
+
+  ★ 같은 관문 한 벌을 그대로 지난다(선택 · 순번 · hidden/locked ·
+    허용 키 · expected · 범위). 패널용으로 검사를 덜지 않는다.
+
+  ★ 더 쓸 수 있는 것은 `kind:"text"` 하나와, 글자 입력 세션이
+    기록을 스스로 맡는 `coalesce` 하나다.
+*/
+function commitStudioCanvasInspectorEdit(request) {
+
+  return commitStudioCanvasElementChange(
+    request,
+    { kinds: STUDIO_CANVAS_PANEL_KINDS, allowCoalesce: true }
+  );
 
 }
 
@@ -1576,6 +1689,10 @@ if (typeof window !== "undefined") {
 
   /* HOME-CANVAS-TRANSFORM-1A */
   window.commitStudioCanvasElementTransform = commitStudioCanvasElementTransform;
+
+  /* HOME-CANVAS-INSPECTOR-1A */
+  window.commitStudioCanvasInspectorEdit = commitStudioCanvasInspectorEdit;
+  window.notifyStudioCanvasPanel = notifyStudioCanvasPanel;
   window.postStudioCanvasGeometryToFrame = postStudioCanvasGeometryToFrame;
   window.studioCanvasSingleGeometry = studioCanvasSingleGeometry;
 
