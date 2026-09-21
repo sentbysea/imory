@@ -1017,6 +1017,11 @@ const templateApi = new Function(
   read("skin/skin-sides.js") + "\n" +
   read("skin/skin-settings.js") + "\n" +
   read("skin/skin-home-canvas.js") + "\n" +
+  /* 계약은 세 파일이다(HOME-CANVAS-CODE-SPLIT-1). 진입 문서와 같은
+     순서로, 공통 파일 다음에 싣는다 — version 분기가 v2 파일의
+     이름을 call time 에 찾는다. */
+  read("skin/skin-home-canvas-v2.js") + "\n" +
+  read("skin/skin-home-canvas-write.js") + "\n" +
   read("skin/skin-template.js") +
   "\nreturn { resolveSkinTemplate };"
 )();

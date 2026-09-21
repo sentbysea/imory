@@ -915,6 +915,11 @@
            data-imory-canvas-root 를 이 파일의 표로 판정하므로 먼저 온다.
            Import 검증(skin-package-import.js)도 이 파일에 묻는다. */
         "../skin/skin-home-canvas.js",
+        /* 같은 계약의 나머지 두 파일(HOME-CANVAS-CODE-SPLIT-1) — v2 검증과
+           v1 불변 writer. 공통 파일이 version 분기에서 v2 를 부르고
+           Inspector 가 writer 를 부르므로 **반드시 그 다음**이다. */
+        "../skin/skin-home-canvas-v2.js",
+        "../skin/skin-home-canvas-write.js",
         "../skin/skin-sanitize.js",
         "../skin/skin-package-normalize.js",
         "../skin/skin-generator.js",

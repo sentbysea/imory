@@ -184,6 +184,13 @@ export const SANDBOX_ALLOWED_PATHS = [
      프레임에서만 표시 위치를 잃는다(skin-settings.js 와 같은 사정). */
   "/skin/skin-home-canvas.js",
 
+  /* 같은 계약의 나머지 두 파일(HOME-CANVAS-CODE-SPLIT-1) — 한 파일이
+     커져서 책임만 가른 것이고 계약은 그대로다. 프레임 문서가 공통
+     파일 **다음에** 이 둘을 싣는다(frame.html). 디렉터리를 열지 않고
+     파일 단위로 적는다. */
+  "/skin/skin-home-canvas-v2.js",
+  "/skin/skin-home-canvas-write.js",
+
   /* =====================================================
      HOME-CANVAS-RENDER-1B — 캔버스의 **정적 렌더러**와 좌표 CSS.
      공개 화면 · Studio Preview 와 **같은 두 파일**이다.
