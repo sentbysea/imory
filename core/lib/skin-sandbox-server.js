@@ -190,6 +190,7 @@ export const SANDBOX_ALLOWED_PATHS = [
      파일 단위로 적는다. */
   "/skin/skin-home-canvas-v2.js",
   "/skin/skin-home-canvas-write.js",
+  "/skin/skin-home-canvas-write-v2.js",
 
   /* =====================================================
      HOME-CANVAS-RENDER-1B — 캔버스의 **정적 렌더러**와 좌표 CSS.

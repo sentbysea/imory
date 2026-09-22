@@ -1,0 +1,995 @@
+/* =========================================================
+   STUDIO — HOME 캔버스 Inspector 의 **v2 화면** (HOME-CANVAS-V2-EDITOR-1A)
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §25
+   로드맵:    docs/plans/IMORY_HOME_CANVAS_ROADMAP.md §14 (PLAN)
+
+   ── 왜 파일이 갈라졌나 ─────────────────────────────────
+   studio/inspector/studio-canvas-inspector.js 는 **v1 자유 배치
+   요소**의 화면이다 — 자리(x·y)와 크기와 각도. v2 의 자동 배치
+   블록에는 그 다섯 칸이 아예 없고(위치는 순서 · 정렬 · 여백이
+   정한다 — §14-10 의 책임 표) 대신 흐름 안의 칸이 있다. 한 파일에
+   두 화면을 넣으면 "지금 어느 칸이 보이는가"를 조건문으로 추적하게
+   된다.
+
+   ★ classic script 다. 앞 파일의 최상위 `let`(studioCanvasInspectorBody ·
+     …Inputs · …Errors · …TextSession)과 함수를 **그대로** 쓴다 —
+     classic script 의 최상위 바인딩은 같은 전역 렉시컬 환경을
+     공유한다. window 에 올려 다리를 놓지 않는다.
+
+   ── 무엇을 고칠 수 있나 ────────────────────────────────
+
+     블록(logo · category_nav · text · divider · main_visual)
+       순서 · 정렬 · 여백 네 칸 · 폭 · 높이("auto" 포함)
+       + text 블록은 문구
+
+     프레임 내부 요소 · overlay
+       **읽기 전용 요약**(+ text 면 문구). 좌표 편집과 직접 조작은
+       다음 라운드다(§25-7) — 여기서 절반만 열면 "패널로는 되는데
+       손으로는 안 되는" 자리가 생긴다.
+
+   ── 쓰기 ────────────────────────────────────────────────
+   전부 commitStudioCanvasInspectorField() 하나를 지난다(앞 파일).
+   그 뒤는 v1 과 **같은 관문 한 벌**이고(선택 · 순번 · 허용 키 ·
+   expected) 불변 수정만 v2 writer 가 한다.
+
+   ── 한 번의 입력 = Undo 한 칸 ──────────────────────────
+   숫자 · 정렬 · 순서는 한 번 확정할 때 한 번 쓴다. 글자만 세션이
+   기록을 맡는다(v1 과 같은 규칙 · 같은 세션 변수).
+========================================================== */
+
+
+/* 블록 정렬 — 값 표는 skin/skin-home-canvas-v2.js 하나다 */
+const STUDIO_CANVAS_V2_ALIGN_LABELS = {
+  left: "왼쪽",
+  center: "가운데",
+  right: "오른쪽",
+  stretch: "가득"
+};
+
+const STUDIO_CANVAS_V2_EDGE_LABELS = {
+  top: "위",
+  right: "오른쪽",
+  bottom: "아래",
+  left: "왼쪽"
+};
+
+/* 프레임 내부 요소가 프레임이 커질 때 무엇을 따라가나(계약 §24-3) */
+const STUDIO_CANVAS_V2_FOLLOW_LABELS = {
+  transform: "프레임을 따라 커진다",
+  pin: "기준점만 따라간다(크기 유지)"
+};
+
+
+function studioCanvasV2Aligns() {
+
+  return (Array.isArray(window.SKIN_HOME_CANVAS_BLOCK_ALIGNS))
+    ? window.SKIN_HOME_CANVAS_BLOCK_ALIGNS
+    : ["left", "center", "right", "stretch"];
+
+}
+
+
+function studioCanvasV2Edges() {
+
+  return (Array.isArray(window.SKIN_HOME_CANVAS_EDGES))
+    ? window.SKIN_HOME_CANVAS_EDGES
+    : ["top", "right", "bottom", "left"];
+
+}
+
+
+/* 그 블록이 `height:"auto"` 를 쓸 수 있는가(§14-4) */
+function studioCanvasV2AutoAllowed(type) {
+
+  const list =
+    (Array.isArray(window.SKIN_HOME_CANVAS_BLOCK_AUTO_HEIGHT_TYPES))
+      ? window.SKIN_HOME_CANVAS_BLOCK_AUTO_HEIGHT_TYPES
+      : ["text", "category_nav", "divider", "main_visual"];
+
+  return list.indexOf(type) !== -1;
+
+}
+
+
+/* =========================================================
+   지금 값 — `expected` 가 되는 자리
+
+   ★ 빠진 칸은 **화면의 값**으로 읽는다. `align` 이 없으면 left,
+     `margin` 이 없으면 네 칸 다 0 이다(§14-4). writer 쪽
+     readCurrent 와 **같은 자**여야 한다 — 어긋나면 "한 번도 적지
+     않은 칸은 영영 못 고친다"가 된다.
+========================================================== */
+
+function studioCanvasV2Current(node, kind) {
+
+  if (kind === "v2-align") {
+
+    return {
+      align:
+        (studioCanvasV2Aligns().indexOf(node.align) !== -1)
+          ? node.align
+          : studioCanvasV2Aligns()[0]
+    };
+
+  }
+
+  if (kind === "v2-width") {
+    return { width: node.width };
+  }
+
+  if (kind === "v2-height") {
+    return { height: node.height };
+  }
+
+  if (kind === "v2-margin") {
+
+    const margin =
+      (node.margin && typeof node.margin === "object") ? node.margin : {};
+
+    const out = {};
+
+    studioCanvasV2Edges().forEach((edge) => {
+      out[edge] =
+        (typeof margin[edge] === "number" && Number.isFinite(margin[edge]))
+          ? margin[edge]
+          : 0;
+    });
+
+    return out;
+
+  }
+
+  /* v2-text */
+  const props =
+    (node.props && typeof node.props === "object") ? node.props : {};
+
+  return { text: typeof props.text === "string" ? props.text : "" };
+
+}
+
+
+/* =========================================================
+   1. 순서 — 위로 · 아래로
+
+   ★ `hidden` 블록도 배열의 한 칸이다(화면에서는 건너뛰지만 —
+     계약 §23-5). 그래서 "몇 번째"는 언제나 배열 자리다. 그러지
+     않으면 저장값과 화면이 어긋난다.
+========================================================== */
+
+function studioCanvasV2OrderRow(view) {
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "studio-inspector-row studio-canvas-inspector-order";
+
+  const label =
+    document.createElement("span");
+
+  label.className =
+    "studio-inspector-row-label";
+
+  label.textContent =
+    "순서";
+
+  row.appendChild(label);
+
+  const total =
+    view.blockCount;
+
+  const at =
+    view.index;
+
+  const button =
+    (text, delta, disabled, id) => {
+
+      const el =
+        document.createElement("button");
+
+      el.type = "button";
+      el.className = "studio-inspector-mini-button";
+      el.id = id;
+      el.textContent = text;
+      el.disabled = disabled;
+
+      el.addEventListener("click", () => {
+
+        const now =
+          studioCanvasInspectorView();
+
+        if (now.mode !== "single" || now.kind !== "block") {
+          return;
+        }
+
+        const result =
+          commitStudioCanvasInspectorField(
+            "v2-order",
+            { index: now.index + delta },
+            { index: now.index }
+          );
+
+        if (!result || !result.accepted) {
+          setStudioCanvasInspectorError(
+            "order",
+            studioCanvasInspectorRejectText(result && result.reason)
+          );
+          return;
+        }
+
+        setStudioCanvasInspectorError("order", "");
+
+      });
+
+      return el;
+
+    };
+
+  const up =
+    button("↑ 위로", -1, at <= 0, "studioCanvasInspectorOrderUp");
+
+  const down =
+    button("↓ 아래로", 1, at >= total - 1, "studioCanvasInspectorOrderDown");
+
+  const at_ =
+    document.createElement("span");
+
+  at_.className = "studio-canvas-inspector-value";
+  at_.id = "studioCanvasInspectorOrderAt";
+  at_.textContent = `${at + 1} / ${total}`;
+
+  row.appendChild(up);
+  row.appendChild(down);
+  row.appendChild(at_);
+
+  const error =
+    studioCanvasInspectorErrorNode("order");
+
+  const box =
+    document.createElement("div");
+
+  box.appendChild(row);
+  box.appendChild(error);
+
+  studioCanvasInspectorInputs.orderUp = up;
+  studioCanvasInspectorInputs.orderDown = down;
+  studioCanvasInspectorInputs.orderAt = at_;
+  studioCanvasInspectorErrors.order = error;
+
+  return box;
+
+}
+
+
+/* =========================================================
+   2. 정렬 — 네 값 중 하나
+========================================================== */
+
+function studioCanvasV2AlignRow(view) {
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "studio-inspector-row studio-canvas-inspector-align";
+
+  const label =
+    document.createElement("label");
+
+  label.className = "studio-inspector-row-label";
+  label.htmlFor = "studioCanvasInspectorAlign";
+  label.textContent = "정렬";
+
+  const select =
+    document.createElement("select");
+
+  select.className = "studio-inspector-select";
+  select.id = "studioCanvasInspectorAlign";
+  select.dataset.canvasField = "align";
+
+  studioCanvasV2Aligns().forEach((value) => {
+
+    const option =
+      document.createElement("option");
+
+    option.value = value;
+
+    option.textContent =
+      Object.prototype.hasOwnProperty.call(STUDIO_CANVAS_V2_ALIGN_LABELS, value)
+        ? STUDIO_CANVAS_V2_ALIGN_LABELS[value]
+        : value;
+
+    select.appendChild(option);
+
+  });
+
+  select.value =
+    studioCanvasV2Current(view.node, "v2-align").align;
+
+  select.addEventListener("change", () => {
+
+    const now =
+      studioCanvasInspectorView();
+
+    if (now.mode !== "single" || now.kind !== "block") {
+      return;
+    }
+
+    const result =
+      commitStudioCanvasInspectorField(
+        "v2-align",
+        { align: select.value },
+        studioCanvasV2Current(now.node, "v2-align")
+      );
+
+    if (!result || !result.accepted) {
+
+      setStudioCanvasInspectorError(
+        "align",
+        studioCanvasInspectorRejectText(result && result.reason)
+      );
+
+      select.value = studioCanvasV2Current(now.node, "v2-align").align;
+
+      return;
+
+    }
+
+    setStudioCanvasInspectorError("align", "");
+
+  });
+
+  row.appendChild(label);
+  row.appendChild(select);
+
+  const error =
+    studioCanvasInspectorErrorNode("align");
+
+  const box =
+    document.createElement("div");
+
+  box.appendChild(row);
+  box.appendChild(error);
+
+  studioCanvasInspectorInputs.align = select;
+  studioCanvasInspectorErrors.align = error;
+
+  return box;
+
+}
+
+
+/* =========================================================
+   3. 숫자 칸 — 폭 · 높이 · 여백 네 칸
+
+   ★ v1 과 같은 규칙이다(계약 §22-3). 입력 중에는 아무것도 쓰지
+     않고 Enter · blur 에서 **한 번** 쓴다 — `-` 나 빈 문자열 같은
+     중간 상태가 JSON 에 들어가지 않는다.
+========================================================== */
+
+function studioCanvasV2CommitNumber(field) {
+
+  const view =
+    studioCanvasInspectorView();
+
+  if (view.mode !== "single" || view.kind !== "block") {
+    return false;
+  }
+
+  const input =
+    studioCanvasInspectorInputs ? studioCanvasInspectorInputs[field] : null;
+
+  if (!input) {
+    return false;
+  }
+
+  const raw =
+    input.value.trim();
+
+  const value =
+    Number(raw);
+
+  if (!raw || !Number.isFinite(value)) {
+
+    setStudioCanvasInspectorError(field, "숫자를 넣어 주세요.");
+
+    input.value = studioCanvasV2Display(view, field);
+
+    return false;
+
+  }
+
+  const edges =
+    studioCanvasV2Edges();
+
+  const isEdge =
+    edges.indexOf(field) !== -1;
+
+  const kind =
+    isEdge ? "v2-margin" : (field === "width" ? "v2-width" : "v2-height");
+
+  const expected =
+    studioCanvasV2Current(view.node, kind);
+
+  /* margin 은 네 칸을 함께 보낸다 — 한 칸만 바뀐 새 리터럴이다
+     (계약 §25-4의 그 이유) */
+  const next =
+    isEdge ? { ...expected, [field]: value } : { [field]: value };
+
+  const result =
+    commitStudioCanvasInspectorField(kind, next, expected);
+
+  if (!result || !result.accepted) {
+
+    setStudioCanvasInspectorError(
+      field,
+      studioCanvasInspectorRejectText(result && result.reason)
+    );
+
+    input.value = studioCanvasV2Display(studioCanvasInspectorView(), field);
+
+    return false;
+
+  }
+
+  setStudioCanvasInspectorError(field, "");
+
+  return true;
+
+}
+
+
+function studioCanvasV2Display(view, field) {
+
+  if (view.mode !== "single" || !view.node) {
+    return "";
+  }
+
+  if (field === "width") {
+    return String(view.node.width);
+  }
+
+  if (field === "height") {
+    return view.node.height === "auto" ? "" : String(view.node.height);
+  }
+
+  return String(studioCanvasV2Current(view.node, "v2-margin")[field]);
+
+}
+
+
+function studioCanvasV2NumberRow(field, label, view) {
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "studio-inspector-row studio-canvas-inspector-number";
+
+  const name =
+    document.createElement("label");
+
+  name.className = "studio-inspector-row-label";
+  name.htmlFor = `studioCanvasInspectorV2-${field}`;
+  name.textContent = label;
+
+  const input =
+    document.createElement("input");
+
+  input.type = "text";
+  input.inputMode = "numeric";
+  input.className = "studio-inspector-input studio-inspector-input--number";
+  input.id = `studioCanvasInspectorV2-${field}`;
+  input.dataset.canvasField = field;
+
+  input.value =
+    studioCanvasV2Display(view, field);
+
+  /* ★ 처음 그릴 때도 잠근다. renderStudioCanvasInspector() 는 화면을
+     새로 만든 뒤 sync 를 부르지 않고 돌아가므로(모양이 바뀐 자리),
+     여기서 적지 않으면 `height:"auto"` 인 블록의 Height 칸이 **처음
+     한 번만** 열려 있다. */
+  if (field === "height") {
+    input.disabled = view.node.height === "auto";
+  }
+
+  input.addEventListener("keydown", (event) => {
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      studioCanvasV2CommitNumber(field);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      input.value = studioCanvasV2Display(studioCanvasInspectorView(), field);
+      setStudioCanvasInspectorError(field, "");
+      input.blur();
+    }
+
+  });
+
+  input.addEventListener("blur", () => {
+    studioCanvasV2CommitNumber(field);
+  });
+
+  row.appendChild(name);
+  row.appendChild(input);
+
+  const error =
+    studioCanvasInspectorErrorNode(field);
+
+  const box =
+    document.createElement("div");
+
+  box.appendChild(row);
+  box.appendChild(error);
+
+  studioCanvasInspectorInputs[field] = input;
+  studioCanvasInspectorErrors[field] = error;
+
+  return box;
+
+}
+
+
+/* =========================================================
+   4. 높이 Auto 스위치 — 켜면 `"auto"`, 끄면 지금 숫자
+
+   ★ 끌 때 무슨 숫자로 가는가. v1 은 화면에서 잰 높이를 썼지만
+     (계약 §22-3) v2 블록의 실제 높이는 흐름과 스킨 조판이 정하므로
+     프레임에서 재야 한다. 이 라운드는 재지 않고 **저장된 자를
+     그대로 쓴다** — `props.baseHeight` 가 있는 main_visual 이든
+     아니든, 마지막으로 적혀 있던 숫자가 없으면 스위치를 켜기만
+     하고 끄지는 못한다(숫자를 지어내지 않는다).
+========================================================== */
+
+function studioCanvasV2AutoToggle(view) {
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "studio-inspector-row studio-canvas-inspector-auto";
+
+  const label =
+    document.createElement("label");
+
+  label.className = "studio-inspector-row-label";
+  label.htmlFor = "studioCanvasInspectorV2Auto";
+  label.textContent = "높이 Auto";
+
+  const input =
+    document.createElement("input");
+
+  input.type = "checkbox";
+  input.id = "studioCanvasInspectorV2Auto";
+  input.checked = view.node.height === "auto";
+
+  input.addEventListener("change", () => {
+
+    const now =
+      studioCanvasInspectorView();
+
+    if (now.mode !== "single" || now.kind !== "block") {
+      return;
+    }
+
+    const expected =
+      studioCanvasV2Current(now.node, "v2-height");
+
+    let next;
+
+    if (input.checked) {
+      next = { height: "auto" };
+    }
+    else {
+
+      const typed =
+        studioCanvasInspectorInputs.height
+          ? Number(studioCanvasInspectorInputs.height.value.trim())
+          : NaN;
+
+      if (!Number.isFinite(typed) || !(typed > 0)) {
+
+        setStudioCanvasInspectorError(
+          "height",
+          "Auto 를 끄려면 Height 에 숫자를 먼저 넣어 주세요."
+        );
+
+        input.checked = true;
+
+        return;
+
+      }
+
+      next = { height: typed };
+
+    }
+
+    const result =
+      commitStudioCanvasInspectorField("v2-height", next, expected);
+
+    if (!result || !result.accepted) {
+
+      setStudioCanvasInspectorError(
+        "height",
+        studioCanvasInspectorRejectText(result && result.reason)
+      );
+
+      input.checked = expected.height === "auto";
+
+      return;
+
+    }
+
+    setStudioCanvasInspectorError("height", "");
+
+  });
+
+  row.appendChild(label);
+  row.appendChild(input);
+
+  studioCanvasInspectorInputs.v2auto = input;
+
+  return row;
+
+}
+
+
+/* =========================================================
+   5. 글자 — v1 과 **같은 세션 변수 · 같은 규칙**
+
+   focus 에서 기록 한 칸을 잡고, 입력마다 draft 를 고치되 기록은
+   만들지 않으며(coalesce), blur 에서 한 칸으로 확정한다. Escape 는
+   시작값으로 되돌리고 기록하지 않는다(계약 §22-4).
+
+   ★ 평문이다. 렌더러가 textContent 로 넣으므로 `<b>` 가 실행되지
+     않고 줄바꿈은 그대로 남는다(계약 §8 · §23-3).
+========================================================== */
+
+function writeStudioCanvasV2Text(value) {
+
+  const view =
+    studioCanvasInspectorView();
+
+  if (view.mode !== "single" || view.type !== "text") {
+    return false;
+  }
+
+  const expected =
+    studioCanvasV2Current(view.node, "v2-text");
+
+  if (expected.text === value) {
+    setStudioCanvasInspectorError("text", "");
+    return true;
+  }
+
+  const result =
+    commitStudioCanvasInspectorField(
+      "v2-text",
+      { text: value },
+      expected,
+      { coalesce: !!studioCanvasInspectorTextSession }
+    );
+
+  if (!result || !result.accepted) {
+
+    setStudioCanvasInspectorError(
+      "text",
+      studioCanvasInspectorRejectText(result && result.reason)
+    );
+
+    return false;
+
+  }
+
+  setStudioCanvasInspectorError("text", "");
+
+  return true;
+
+}
+
+
+function studioCanvasV2TextBlock(view) {
+
+  const block =
+    document.createElement("div");
+
+  block.className =
+    "studio-inspector-block studio-canvas-inspector-text";
+
+  const label =
+    document.createElement("label");
+
+  label.className = "studio-inspector-block-label";
+  label.htmlFor = "studioCanvasInspectorText";
+  label.textContent = "글자";
+
+  const input =
+    document.createElement("textarea");
+
+  input.className = "studio-inspector-textarea";
+  input.id = "studioCanvasInspectorText";
+  input.rows = 3;
+  input.dataset.canvasField = "text";
+
+  input.maxLength =
+    (typeof window.SKIN_HOME_CANVAS_MAX_TEXT_CHARS === "number")
+      ? window.SKIN_HOME_CANVAS_MAX_TEXT_CHARS
+      : 2000;
+
+  input.value =
+    studioCanvasV2Current(view.node, "v2-text").text;
+
+  input.addEventListener("focus", () => {
+
+    studioCanvasInspectorTextSession = {
+      id: view.id,
+      start: input.value,
+      before:
+        (typeof window.captureStudioHistoryState === "function")
+          ? window.captureStudioHistoryState()
+          : null
+    };
+
+  });
+
+  input.addEventListener("input", () => {
+    writeStudioCanvasV2Text(input.value);
+  });
+
+  input.addEventListener("keydown", (event) => {
+
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const session =
+      studioCanvasInspectorTextSession;
+
+    if (session) {
+      writeStudioCanvasV2Text(session.start);
+      input.value = session.start;
+      setStudioCanvasInspectorError("text", "");
+      studioCanvasInspectorTextSession = null;
+    }
+
+    input.blur();
+
+  });
+
+  input.addEventListener("blur", () => {
+    closeStudioCanvasInspectorTextSession();
+  });
+
+  block.appendChild(label);
+  block.appendChild(input);
+
+  const error =
+    studioCanvasInspectorErrorNode("text");
+
+  block.appendChild(error);
+
+  studioCanvasInspectorInputs.text = input;
+  studioCanvasInspectorErrors.text = error;
+
+  return block;
+
+}
+
+
+/* =========================================================
+   6. 화면 하나
+
+   ★ 무엇이 골라졌는지 **먼저** 적는다(계약 §25-3). `main_visual`
+     안에서는 프레임과 내부 요소가 같은 자리에 겹쳐 있으므로, 이
+     한 줄이 없으면 주인이 지금 무엇을 고치고 있는지 알 수 없다.
+========================================================== */
+
+function studioCanvasV2WhereNote(view) {
+
+  if (view.kind === "block") {
+
+    return (view.type === "main_visual")
+      ? "메인 비주얼 **프레임 전체**를 고르고 있습니다. 한 번 더 누르면 안쪽 요소로 들어갑니다."
+      : "자동 배치 블록입니다 — 흐름 안의 자리를 고칩니다.";
+
+  }
+
+  if (view.kind === "frame-element") {
+    return "메인 비주얼 **안쪽 요소**입니다. 프레임으로 나가려면 프레임 밖을 누르세요.";
+  }
+
+  return "페이지 자유 장식(overlay)입니다.";
+
+}
+
+
+function buildStudioCanvasV2Inspector(view) {
+
+  studioCanvasInspectorBody.appendChild(
+    studioCanvasInspectorNote(
+      studioCanvasV2WhereNote(view).replace(/\*\*/g, ""),
+      "studioCanvasInspectorWhere"
+    )
+  );
+
+  if (view.type === "text") {
+    studioCanvasInspectorBody.appendChild(studioCanvasV2TextBlock(view));
+  }
+
+  if (view.kind !== "block") {
+
+    /* 프레임 내부 요소 · overlay — 읽기 전용 요약(§25-7) */
+    const box =
+      document.createElement("div");
+
+    box.className = "studio-canvas-inspector-type";
+    box.id = "studioCanvasInspectorV2Read";
+
+    if (view.kind === "frame-element") {
+
+      const follow =
+        view.node.follow === "pin" ? "pin" : "transform";
+
+      box.appendChild(
+        studioCanvasInspectorReadRow(
+          "따라가기",
+          STUDIO_CANVAS_V2_FOLLOW_LABELS[follow]
+        )
+      );
+
+    }
+
+    box.appendChild(
+      studioCanvasInspectorReadRow(
+        "크기",
+        `${view.node.width} × ${view.node.height === "auto" ? "auto" : view.node.height}`
+      )
+    );
+
+    box.appendChild(
+      studioCanvasInspectorNote(
+        "자리와 크기는 아직 여기서 고칠 수 없습니다.",
+        "studioCanvasInspectorV2ReadNote"
+      )
+    );
+
+    studioCanvasInspectorBody.appendChild(box);
+
+    return;
+
+  }
+
+  const layout =
+    document.createElement("div");
+
+  layout.className = "studio-canvas-inspector-geometry";
+  layout.id = "studioCanvasInspectorV2Layout";
+
+  const caption =
+    document.createElement("p");
+
+  caption.className = "studio-inspector-block-label";
+  caption.textContent = "흐름 안의 자리 (Canvas px)";
+
+  layout.appendChild(caption);
+
+  layout.appendChild(studioCanvasV2OrderRow(view));
+  layout.appendChild(studioCanvasV2AlignRow(view));
+  layout.appendChild(studioCanvasV2NumberRow("width", "Width", view));
+  layout.appendChild(studioCanvasV2NumberRow("height", "Height", view));
+
+  if (studioCanvasV2AutoAllowed(view.type)) {
+    layout.appendChild(studioCanvasV2AutoToggle(view));
+  }
+
+  const marginCaption =
+    document.createElement("p");
+
+  marginCaption.className = "studio-inspector-block-label";
+  marginCaption.textContent = "여백 (음수도 됩니다)";
+
+  layout.appendChild(marginCaption);
+
+  studioCanvasV2Edges().forEach((edge) => {
+    layout.appendChild(
+      studioCanvasV2NumberRow(edge, STUDIO_CANVAS_V2_EDGE_LABELS[edge], view)
+    );
+  });
+
+  studioCanvasInspectorBody.appendChild(layout);
+
+}
+
+
+/*
+  값만 갈아 끼운다 — DOM 은 그대로다.
+  **포커스가 있는 칸은 건너뛴다**(v1 과 같은 이유).
+*/
+function syncStudioCanvasV2Inspector(view) {
+
+  if (view.mode !== "single" || !studioCanvasInspectorInputs) {
+    return;
+  }
+
+  const active =
+    document.activeElement;
+
+  const text =
+    studioCanvasInspectorInputs.text;
+
+  if (text && text !== active) {
+
+    const value =
+      studioCanvasV2Current(view.node, "v2-text").text;
+
+    if (text.value !== value) {
+      text.value = value;
+    }
+
+  }
+
+  if (view.kind !== "block") {
+    return;
+  }
+
+  ["width", "height"].concat(studioCanvasV2Edges()).forEach((field) => {
+
+    const input =
+      studioCanvasInspectorInputs[field];
+
+    if (!input || input === active) {
+      return;
+    }
+
+    if (field === "height") {
+      input.disabled = view.node.height === "auto";
+    }
+
+    const value =
+      studioCanvasV2Display(view, field);
+
+    if (input.value !== value) {
+      input.value = value;
+    }
+
+  });
+
+  const align =
+    studioCanvasInspectorInputs.align;
+
+  if (align && align !== active) {
+    align.value = studioCanvasV2Current(view.node, "v2-align").align;
+  }
+
+  const auto =
+    studioCanvasInspectorInputs.v2auto;
+
+  if (auto && auto !== active) {
+    auto.checked = view.node.height === "auto";
+  }
+
+  const at =
+    studioCanvasInspectorInputs.orderAt;
+
+  if (at) {
+    at.textContent = `${view.index + 1} / ${view.blockCount}`;
+  }
+
+  if (studioCanvasInspectorInputs.orderUp) {
+    studioCanvasInspectorInputs.orderUp.disabled = view.index <= 0;
+  }
+
+  if (studioCanvasInspectorInputs.orderDown) {
+    studioCanvasInspectorInputs.orderDown.disabled =
+      view.index >= view.blockCount - 1;
+  }
+
+}

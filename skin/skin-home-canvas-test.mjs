@@ -1556,6 +1556,68 @@ check("[docs] sandbox origin 에서 이 파일이 나온다(allowlist)",
         metrics
       ) === null);
   }
+
+  {
+    /* =====================================================
+       HOME-CANVAS-V2-EDITOR-1A — v2 불변 writer 가 실려 있는가
+
+       v1 writer 와 **같은 자리**에 있어야 한다. 한 문서에서만 빠지면
+       그 화면에서만 v2 편집이 조용히 죽는다 — v1 writer 는 v2 데이터에
+       닿을 수 없으므로 대신 받아 주지도 않는다.
+    ===================================================== */
+
+    const docs = [
+      "index.html",
+      "studio/index.html",
+      "skin/sandbox/frame.html",
+      "studio/preview/preview-frame.html",
+      "studio/studio-lifecycle-scenario.html"
+    ];
+
+    const missing =
+      docs.filter((file) => read(file).indexOf("skin-home-canvas-write-v2.js") === -1);
+
+    check("★ [docs] v1 writer 를 싣는 문서가 v2 writer 도 싣는다",
+      missing.length === 0, missing.join(", "));
+
+    const orderBroken =
+      docs.filter((file) => {
+        const text = read(file);
+        return text.indexOf("skin-home-canvas-write-v2.js") <
+          text.indexOf("skin-home-canvas-v2.js");
+      });
+
+    check("★ [docs] v2 writer 는 v2 값 표(skin-home-canvas-v2.js) **다음**이다",
+      orderBroken.length === 0, orderBroken.join(", "));
+
+    check("[docs] sandbox allowlist 에도 있다",
+      /"\/skin\/skin-home-canvas-write-v2\.js"/.test(read("core/lib/skin-sandbox-server.js")));
+
+    /* ★ v1 writer 는 여전히 v2 에 닿지 않는다 — 그 한 줄이 두 파일을
+       가르는 근거다(§14-9 함정 2 · 계약 §25-1) */
+    const v2Regions = [{
+      name: "home_canvas",
+      enabled: true,
+      canvas: {
+        version: 2, baseWidth: 390, baseHeight: 900,
+        flow: { direction: "column", padding: {}, gap: 0, blocks: [
+          { id: "canvas_b1", type: "text", width: 100, height: "auto", props: { text: "a" } }
+        ] },
+        overlays: []
+      }
+    }];
+
+    check("★ [docs] v1 writer 는 v2 데이터를 고치지 못한다(reason: canvas)",
+      canvas.writeSkinHomeCanvasElementText(v2Regions, "canvas_b1", { text: "b" }).reason === "canvas");
+
+    const written =
+      canvas.writeSkinHomeCanvasV2NodeText(v2Regions, "canvas_b1", { text: "b" }, { text: "a" });
+
+    check("★ [docs] v2 writer 는 같은 데이터를 고치고 입력을 mutate 하지 않는다",
+      written.ok === true &&
+      written.regions[0].canvas.flow.blocks[0].props.text === "b" &&
+      v2Regions[0].canvas.flow.blocks[0].props.text === "a");
+  }
 }
 
 check("[docs] 계약 문서가 있고 색인에 적혀 있다",

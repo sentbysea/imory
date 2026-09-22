@@ -88,6 +88,7 @@
 | `V2-DATA-1` | **조합형 Canvas `version:2` 의 데이터 검증과 보존**(§9-(3)) — 로드맵 §14 가 정한 `flow.blocks` + `overlays` 두 층을 저장 경계가 **엄격히 검증**한다. 잘못된 v2 는 새 Import 에서 정확한 JSON 경로와 함께 거부되고, 올바른 v2 는 Import · Save · 다시 열기 · Export · Publish · AI 를 한 칸도 잃지 않고 지난다. 그 라운드에서 **화면은 아직 기존 HOME 이었다**. v1 은 한 줄도 바뀌지 않았다 |
 | `V2-FLOW-RENDER-1` | **v2 의 화면 출력**(§23) — 자동 배치 흐름(`flow`)과 페이지 자유 장식(`overlays`)이 **공개 native HOME · Studio native Preview · 공개 sandbox · Studio sandbox Preview** 네 화면에서 같은 DOM · 같은 좌표로 그려진다. 블록 순서 · `align` 네 값 · `width`/`maxWidth` · 숫자 `height` 와 `"auto"` · **collapse 하지 않는 `gap` + `margin` 합산** · `hidden` 이 자리를 남기지 않음까지다. 그 라운드에서 `main_visual` 은 **외곽 프레임까지**였다(내부는 `V2-MAIN-VISUAL-1` 이 채웠다 — §24). 선택 · 드래그 · Inspector 는 없다 — **읽기 전용**이다 |
 | `V2-MAIN-VISUAL-1` | **`main_visual` 내부**(§24) — primary 사진과 그 주변 장식(종이 · 테이프 · 좌우 인덱스 · 캡션)이 프레임 안에 **배열 순서대로** 그려진다. `follow:"transform"` 은 위치와 크기가 `S_frame` 으로 함께 커지고, `follow:"pin"` 은 `anchor`/`origin`/`offset` 으로 기준점만 따라가며 **자기 크기는 유지**한다. `height:"auto"` 프레임의 높이는 **primary 사진 상자의 비율**이다. 프레임 밖으로 나온 장식은 그대로 보인다. **데이터 · 봉투 · Studio · CSP 무변경**이고 여전히 **읽기 전용**이다 |
+| `V2-EDITOR-1A` | **v2 의 선택과 기본 배치 조정**(§25) — v2 블록을 Studio 에서 고를 수 있고, 왼쪽 패널에서 **순서 · 정렬 · 여백 네 칸 · 폭 · 높이**와 글자 문구를 고칠 수 있다. `main_visual` 은 **한 번 클릭하면 프레임 전체**이고 한 번 더 누르면 안쪽 요소로 들어간다. `data-imory-canvas-frame` **이름 충돌**(§24-7)이 여기서 풀렸다 — 값 `1` 인 Moveable control box 만 편집 chrome 이다. 수정은 **v2 전용 불변 writer** 가 하고, 관문 · Undo 한 칸 · 보존 범위는 v1 과 한 벌이다. v2 드래그 · 리사이즈 · 회전과 묶기/해제는 **아직 없다** |
 | `MILESTONE-1` | **계약이 하나도 바뀌지 않은 라운드**(§20). 위 기본 조작을 배포된 화면에서 **손으로** 시험할 수 있게 `home_canvas` 와 표시 위치를 이미 갖춘 **수동 테스트 스킨**과 그것을 끝까지 지나는 통합 smoke 를 두었다. 제품 코드 · 기본 스킨 · 저장 데이터는 무변경이다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
@@ -3594,12 +3595,14 @@ CSS 선택자와 나중의 Inspector 가 성립한다.
 Studio 에서 `main_visual` 안을 누르면 Inspector 가 "내 입력이 아니다"로 읽고
 비켜선다(§18-11).
 
-지금 라운드에서는 **결과가 같다** — v2 선택이 아직 없으므로 프레임 안을 눌러도
-할 일이 없고, 내부 요소가 v1 편집기에 잘못 걸리지도 않는다. 이 라운드가 그
-판정을 바꾸지도 않았다(프레임 블록은 `V2-FLOW-RENDER-1` 부터 이미 그 속성을
-갖고 있었다). **`V2-EDITOR-1` 이 v2 선택을 열 때 이 이름 충돌을 먼저 풀어야
-한다** — 편집 runtime 쪽 선택자는 이미 `[data-imory-canvas-frame="1"]` 로
-값을 보고 있으므로, 고칠 자리는 `inspectorEditChromeAncestor()` 한 곳이다.
+그 라운드에서는 **결과가 같았다** — v2 선택이 아직 없으므로 프레임 안을 눌러도
+할 일이 없고, 내부 요소가 v1 편집기에 잘못 걸리지도 않았다. 그 라운드가 판정을
+바꾼 것도 아니다(프레임 블록은 `V2-FLOW-RENDER-1` 부터 이미 그 속성을 갖고
+있었다).
+
+> **✅ `V2-EDITOR-1A` 가 이 충돌을 풀었다 — §25-2 를 본다.** 값 `"1"` 인
+> Moveable control box만 편집 chrome 으로 읽는다. 고친 자리는 예상대로
+> `inspectorEditChromeAncestor()` 한 곳이었다.
 
 ★ **회전한 요소의 `getBoundingClientRect()` 는 회전 뒤의 외곽 상자다.**
 프레임 내부 좌표를 잴 때 변(`left`/`right`)이 아니라 **중심**으로 봐야 한다
@@ -3611,5 +3614,154 @@ v2 선택 · Moveable · Selecto · v2 Inspector · 프레임 내부 진입/나�
 `메인 비주얼로 묶기`/`묶기 해제` · 블록 순서 변경 · v1→v2 변환 · 기본 스킨
 변경 · 정식 테스트 스킨 · Effect Hook · responsive override · `row`/`grid`
 블록 · CATEGORY/POST/BANNER 캔버스.
+
+`APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).
+
+---
+
+## 25. v2 요소 선택과 기본 배치 조정 (`HOME-CANVAS-V2-EDITOR-1A`)
+
+`V2-FLOW-RENDER-1` · `V2-MAIN-VISUAL-1` 이 그리기만 하던 v2 를 **Studio 에서
+고를 수 있고 기본 배치를 고칠 수 있게** 한다. v1 의 선택 · 확정 · Undo 경로를
+그대로 쓰고, 갈라지는 것은 **불변 수정을 하는 순수 함수**와 **왼쪽 패널의
+화면** 둘뿐이다.
+
+### 25-1. 관련 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/skin-inspect-target.js` | 편집 chrome 판정을 **값으로** 가른다 · v2 블록을 하나의 단위로 |
+| `skin/skin-home-canvas-write-v2.js` | **새 파일** — v2 트리 탐색 + 불변 writer |
+| `studio/inspector/studio-canvas-selection.js` | draft · 선택 · 확정이 v2 를 안다 |
+| `studio/inspector/studio-inspector.js` | 선택 라우터가 프레임 진입 규칙을 적용한다 |
+| `studio/studio-preview.js` | v2 writer 여섯을 draft 에 잇는 wrapper |
+| `studio/inspector/studio-canvas-inspector-v2.js` | **새 파일** — v2 패널 화면 |
+| `studio/inspector/studio-inspector.css` | select · 순서 버튼 두 규칙 |
+
+**v1 writer 는 한 줄도 바뀌지 않았다.** `skin/skin-home-canvas-write.js` 는
+여전히 `canvas.elements` 를 찾고, 그 칸이 없다는 것이 곧 "v2 데이터에 닿을 수
+없다"의 근거다(§14-9 함정 2). 두 파일은 서로를 부르지 않는다.
+
+★ **새 메시지도 새 봉투 칸도 없다.** 프레임은 지금까지처럼 "이 자리에서
+이것이 잡혔다"는 id 하나만 올리고, 무엇을 고를지 · 무엇을 고칠 수 있는지는
+언제나 부모가 draft 를 보고 정한다(§14 의 소유권). sandbox strict allowlist 도
+그대로다.
+
+### 25-2. 이름 충돌을 풀었다 — `data-imory-canvas-frame`
+
+`V2-MAIN-VISUAL-1` 이 §24-7 에 남긴 함정이다. 같은 속성을 둘이 쓴다.
+
+| 쓰는 곳 | 값 |
+| --- | --- |
+| Moveable control box (`skin/skin-home-canvas-editor-runtime.js` markControlBox) | `"1"` |
+| v2 `main_visual` 프레임 (렌더러) | `""` |
+
+`inspectorEditChromeAncestor()` 가 **값을 보지 않고** 속성만 봤기 때문에,
+`main_visual` 안을 누른 입력이 전부 "편집 UI 위의 입력"으로 읽혀 Inspector 가
+비켜섰다 — 프레임도, 그 안의 사진 · 장식도 고를 수 없었다.
+
+★ **값으로 가른다.** 편집 runtime 은 처음부터 `="1"` 로 쓰고 자기 선택자도
+`[data-imory-canvas-frame="1"]` 이므로, 고칠 자리는 그 판정 한 줄이었다.
+v1 의 손잡이(리사이즈 · 회전) 동작은 그대로다 — control box 는 여전히 걸린다.
+
+또 하나. v2 블록은 자유 배치 요소가 아니라서 `data-imory-canvas-element` 를
+갖지 않는다. 그래서 `data-imory-canvas-block` 을 **컴포넌트 속성 목록**에
+넣었다 — `divider` 처럼 스킨 CSS 가 아직 칠하지 않은 빈 상자가 "누를 것이
+없는 자리"로 떨어지지 않게(§14 의 캔버스 요소와 같은 이유), 그리고
+`align:"stretch"` 블록이 "페이지 전체 래퍼"로 매겨지지 않게.
+
+### 25-3. `main_visual` 에 들어가고 나오는 법
+
+| 지금 선택 | 프레임 안을 누르면 |
+| --- | --- |
+| 프레임 밖 · 아무것도 없음 | **프레임 블록 전체**가 골라진다 |
+| 그 프레임 블록 | 누른 **안쪽 요소**가 골라진다(들어간다) |
+| 같은 프레임의 다른 안쪽 요소 | 누른 안쪽 요소로 바로 옮겨 간다 |
+
+★ **새 상태를 만들지 않았다.** "들어와 있는가"는 지금 선택으로 읽는다
+(`studioCanvasSelectTargetId`). 그래서 다른 곳을 고르거나 빈 곳을 누르면 저절로
+나가지고, 되돌릴 별도의 "나가기"가 없다.
+
+★ 바꿔 고를 때는 **좌표를 쓰지 않는다.** 프레임이 올린 rect 는 안쪽 요소의
+것이라 프레임 상자와 다르다. 그래서 그 길은 기존 제안 경로
+(`proposeStudioCanvasSelection`)로 넘어가고, 그 함수가 프레임에 "이것을
+집어라"를 내려보내 올바른 좌표를 다시 받는다.
+
+★ 패널은 **무엇이 골라졌는지 먼저 적는다**(프레임 전체 / 안쪽 요소 /
+페이지 자유 장식). 겹쳐 있는 자리라 그 한 줄이 없으면 주인이 지금 무엇을
+고치고 있는지 알 수 없다.
+
+### 25-4. 고칠 수 있는 것
+
+| 무엇 | 칸 |
+| --- | --- |
+| 블록(logo · category_nav · text · divider · main_visual) | 순서 · 정렬 · 여백 네 칸 · 폭 · 높이(`"auto"` 포함) |
+| `text` 인 것(블록 · 프레임 내부 · overlay) | `props.text` |
+| 프레임 내부 요소 · overlay | **읽기 전용 요약**(따라가기 방식 · 크기) |
+
+- **여백은 네 칸을 함께 쓴다.** `margin` 이 통째로 빠져 있을 수 있고(빠지면 네
+  칸 다 0 — §14-4), 그때 한 칸만 새로 만들면 나머지 셋이 "없음"인 채로 남아
+  다음 입력의 `expected` 가 `undefined` 와 `0` 사이에서 갈린다. 한 번의 입력은
+  그중 한 칸만 바꾸므로 **Undo 한 칸은 그대로**다. 음수를 허용한다(§14-4).
+- **순서는 배열 자리다.** `hidden` 블록도 한 칸을 차지한다 — 화면에서는
+  건너뛰지만(§23-5) 배열에서는 한 칸이고, 그 둘을 다르게 세면 저장값과 화면이
+  어긋난다.
+- **`height:"auto"` 를 쓸 수 있는 블록 종류는 계약의 표 하나**를 본다
+  (`SKIN_HOME_CANVAS_BLOCK_AUTO_HEIGHT_TYPES` — `logo` 는 못 쓴다). 쓸 수 없는
+  블록에는 스위치 자체를 그리지 않는다.
+- **Auto 를 끌 때 숫자를 지어내지 않는다.** v1 은 화면에서 잰 높이를 썼지만
+  (§22-3) v2 블록의 실제 높이는 흐름과 스킨 조판이 정하므로 프레임에서 재야
+  한다. 이 라운드는 재지 않고, Height 칸에 적힌 숫자를 쓴다 — 비어 있으면
+  끄지 못하고 그 이유를 적는다.
+- **빠진 칸은 화면의 값으로 읽는다.** `align` 이 없으면 `left`, `margin` 이
+  없으면 0, `props.text` 가 없으면 빈 문자열이다. 패널과 writer 가 **같은 자**
+  를 써야 "한 번도 적지 않은 칸은 영영 못 고친다"가 생기지 않는다.
+
+### 25-5. 쓰기 — 관문 하나, writer 만 갈라진다
+
+v1 의 확정 경로(`commitStudioCanvasInspectorEdit` →
+`commitStudioCanvasElementChange`)를 **그대로** 지난다 — 선택 · 순번 ·
+hidden/locked · 허용 키 정확 일치 · `expected` 정확 일치. 늘어난 것은 `kind`
+여섯(`v2-align` · `v2-width` · `v2-height` · `v2-margin` · `v2-order` ·
+`v2-text`)과 그것이 고르는 writer뿐이다.
+
+★ **v1 의 kind 이름을 재사용하지 않았다.** 같은 `"width"` 라도 v1 은 도화지
+좌표의 자유 요소이고 v2 블록은 흐름 안의 폭이라 writer 도 값 표도 보존 범위도
+다르다. 이름을 나눠 두면 한 메시지가 엉뚱한 writer 로 새어 들어갈 길 자체가
+없다.
+
+★ **프레임(직접 조작)이 쓸 수 있는 kind 는 여전히 셋**이다(move · resize ·
+rotate). v2 는 전부 **패널 전용**이고, 그래서 프레임에서 올라온 메시지로는
+v2 를 한 칸도 고칠 수 없다.
+
+**무엇을 보존하는가** — 바뀌는 칸 밖은 전부 그대로 새 객체로 옮긴다: regions 의
+모르는 항목 · 항목의 모르는 칸 · canvas 의 모르는 칸(`overlays` 포함) · flow 의
+모르는 칸 · 다른 블록(같은 참조) · 그 블록의 모르는 칸 · `props` 의 모르는 칸 ·
+프레임 내부 배열의 다른 요소 · **배열 순서**. 입력은 한 칸도 mutate 하지
+않는다.
+
+**한 번의 입력 = Undo 한 칸.** 숫자 · 정렬 · 순서는 확정할 때 한 번 쓰고,
+글자만 세션이 기록을 맡는다(focus 에서 한 칸을 잡고 blur 에서 확정 · Escape 는
+시작값 복귀 · 기록 0 — v1 §22-4 와 같은 규칙, 같은 세션 변수).
+
+### 25-6. 직접 조작은 v2 에 내려가지 않는다
+
+`studioCanvasSingleGeometry()` 가 v2 선택에서 **null 을 돌려준다**. 그 값은
+끌기 · 크기 · 회전의 시작점이고, 프레임은 그것이 없으면 제스처를 시작하지
+않는다(editor-runtime 의 `dragGate` → `"no-geometry"`).
+
+★ **막는 것이 아니라 애초에 주지 않는다.** 관문을 한 곳에 두는 편이 "패널로는
+고쳐지는데 손으로 끌면 엉뚱한 칸이 저장된다"를 만들지 않는다. v2 overlay 는
+v1 요소와 같은 모양이라 좌표가 있지만, 같은 이유로 아직 내려보내지 않는다.
+
+**공개 화면은 그대로다** — 편집 UI 도 vendor 요청도 0이고, 이 라운드는 공개
+경로의 코드를 한 줄도 바꾸지 않았다.
+
+### 25-7. 이 라운드가 만들지 않은 것
+
+v2 드래그 · 리사이즈 · 회전 · 프레임 내부 요소의 좌표 편집 · overlay 의 좌표
+편집 · `메인 비주얼로 묶기`/`묶기 해제` · 그룹 조작 · 레이어 목록 · 효과 설정 ·
+블록 추가/삭제 · `hidden`/`locked` 토글 · v1→v2 변환 · 기본 스킨 변경 ·
+`row`/`grid` 블록 · CATEGORY/POST/BANNER 캔버스.
 
 `APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).

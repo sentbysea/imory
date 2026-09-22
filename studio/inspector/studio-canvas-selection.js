@@ -81,7 +81,24 @@ const STUDIO_CANVAS_MAX_SELECTED = 64;
 
 const STUDIO_CANVAS_FRAME_KINDS = ["move", "resize", "rotate"];
 
-const STUDIO_CANVAS_PANEL_KINDS = ["move", "resize", "rotate", "text"];
+/* =========================================================
+   HOME-CANVAS-V2-EDITOR-1A — v2 의 기본 배치 칸
+
+   ★ v1 의 kind 이름을 재사용하지 않는다. 같은 "width" 라도 v1 은
+     도화지 좌표의 자유 요소이고 v2 블록은 흐름 안의 폭이라 쓰는
+     writer 도, 값 표도, 보존 범위도 다르다. 이름을 나눠 두면 한
+     메시지가 엉뚱한 writer 로 새어 들어갈 길 자체가 없다.
+
+   ★ 전부 **패널 전용**이다 — 프레임(직접 조작)이 쓸 수 있는 kind 는
+     여전히 STUDIO_CANVAS_FRAME_KINDS 셋뿐이고, v2 드래그 · 리사이즈 ·
+     회전은 이 라운드에 없다(계약 §25-7).
+========================================================== */
+
+const STUDIO_CANVAS_V2_PANEL_KINDS =
+  ["v2-align", "v2-width", "v2-height", "v2-margin", "v2-order", "v2-text"];
+
+const STUDIO_CANVAS_PANEL_KINDS =
+  ["move", "resize", "rotate", "text"].concat(STUDIO_CANVAS_V2_PANEL_KINDS);
 
 
 const STUDIO_CANVAS_TYPE_LABELS = {
@@ -90,7 +107,11 @@ const STUDIO_CANVAS_TYPE_LABELS = {
   sticker: "Canvas 스티커",
   text: "Canvas 글자",
   category_nav: "Canvas 카테고리",
-  shape: "Canvas 도형"
+  shape: "Canvas 도형",
+
+  /* HOME-CANVAS-V2-EDITOR-1A — v2 에만 있는 두 종류 */
+  divider: "Canvas 구분선",
+  main_visual: "Canvas 메인 비주얼"
 };
 
 
@@ -192,18 +213,106 @@ function studioCanvasDraftPayload() {
     return null;
   }
 
-  return (payload && Array.isArray(payload.elements)) ? payload : null;
+  /* =====================================================
+     HOME-CANVAS-V2-EDITOR-1A — v2 도 여기를 지난다.
+
+     V2-MAIN-VISUAL-1 까지 이 줄은 `Array.isArray(payload.elements)`
+     하나였다. v2 payload 에는 그 칸이 없으므로(있는 것은 `flow` 와
+     `overlays` 다 — 계약 §23) **모든 v2 캔버스에서 이 함수가 null 을
+     돌려주고**, 그래서 studioCanvasEditingIsOn() 도 거짓이고 선택도
+     패널도 통째로 꺼져 있었다. 그리기만 되고 고를 수는 없던 자리가
+     여기였다.
+
+     ★ 판정을 새로 만들지 않는다. resolveSkinHomeCanvas() 가 이미
+       version 별 계약 전체를 본 뒤에만 payload 를 준다 — 여기서는
+       "아는 모양인가"만 한 번 더 확인한다(받는 쪽이 자기 리터럴로
+       다시 보는 §9 의 그 규칙).
+  ====================================================== */
+  return studioCanvasPayloadVersion(payload) ? payload : null;
 
 }
 
 
 /*
-  studioCanvasDraftElement(elementId) -> element | null
+  studioCanvasPayloadVersion(payload) -> 1 | 2 | null
 
-  "그 id 를 가진 요소가 지금 draft 의 캔버스에 실제로 있는가."
-  hidden · locked 는 보지 않는다 — 존재 여부만이다.
+  실행 payload 의 모양으로 버전을 가른다. 모르는 모양이면 null 이고,
+  그때는 선택도 편집도 켜지지 않는다(그리지도 않는다 — 렌더러가 같은
+  판정을 한다).
 */
-function studioCanvasDraftElement(elementId) {
+function studioCanvasPayloadVersion(payload) {
+
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  if (payload.version === 2) {
+
+    return (
+      payload.flow &&
+      typeof payload.flow === "object" &&
+      Array.isArray(payload.flow.blocks) &&
+      Array.isArray(payload.overlays)
+    ) ? 2 : null;
+
+  }
+
+  return Array.isArray(payload.elements) ? 1 : null;
+
+}
+
+
+/*
+  studioCanvasNodeList() -> [{ id, kind, type, parentId }]
+
+  지금 draft 에서 고를 수 있는 것 **전부를 화면 순서로**. 버전을
+  가리지 않는 한 벌이라, 이 목록을 쓰는 쪽(정렬 · 진입 판정)은
+  v1 · v2 를 나누어 적지 않는다.
+
+    v1  요소 하나하나가 kind:"element"
+    v2  블록 → 그 프레임의 내부 요소 → … → overlay
+        (listSkinHomeCanvasV2Nodes — skin/skin-home-canvas-write-v2.js)
+*/
+function studioCanvasNodeList() {
+
+  const payload =
+    studioCanvasDraftPayload();
+
+  if (!payload) {
+    return [];
+  }
+
+  if (studioCanvasPayloadVersion(payload) === 2) {
+
+    return (typeof window.listSkinHomeCanvasV2Nodes === "function")
+      ? window.listSkinHomeCanvasV2Nodes(payload)
+      : [];
+
+  }
+
+  return payload.elements.map(
+    (element) => ({
+      id: element.id,
+      kind: "element",
+      type: element.type,
+      parentId: null
+    })
+  );
+
+}
+
+
+/*
+  studioCanvasNodeInfo(id) -> { id, type, kind, parentId, node } | null
+
+  id 하나가 지금 draft 의 **무엇인가**. v1 에서는 언제나
+  kind:"element" 이고, v2 에서는 block · frame-element · overlay 셋
+  중 하나다(계약 §25-2).
+
+  ★ id 는 canvas 하나 안에서 전부 유일하므로(§14-5) 부르는 쪽이
+    경로를 들고 다니지 않는다.
+*/
+function studioCanvasNodeInfo(elementId) {
 
   if (
     typeof elementId !== "string" ||
@@ -219,10 +328,120 @@ function studioCanvasDraftElement(elementId) {
     return null;
   }
 
-  const hit =
-    payload.elements.find((element) => element && element.id === elementId);
+  if (studioCanvasPayloadVersion(payload) === 2) {
 
-  return hit || null;
+    const hit =
+      (typeof window.findSkinHomeCanvasV2Node === "function")
+        ? window.findSkinHomeCanvasV2Node(payload, elementId)
+        : null;
+
+    if (!hit) {
+      return null;
+    }
+
+    return {
+      id: elementId,
+      type: hit.node.type,
+      kind: hit.kind,
+      parentId: hit.parentId,
+      index: hit.index,
+      node: hit.node
+    };
+
+  }
+
+  const element =
+    payload.elements.find((item) => item && item.id === elementId);
+
+  return element
+    ? {
+        id: elementId,
+        type: element.type,
+        kind: "element",
+        parentId: null,
+        index: payload.elements.indexOf(element),
+        node: element
+      }
+    : null;
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-V2-EDITOR-1A — `main_visual` 에 들어가는 최소 동작
+
+   studioCanvasSelectTargetId(hitId) -> id | null
+
+   프레임이 "이 자리에서 이것이 잡혔다"고 올린 id 를 **무엇으로 읽을
+   것인가**. 바꾸는 경우는 하나뿐이다.
+
+     프레임 내부 요소가 잡혔는데 아직 그 프레임 **밖에** 있으면
+     → 프레임 블록을 고른다
+
+   그래서 `main_visual` 은 **한 번 클릭하면 프레임 전체**이고, 그
+   상태에서 **한 번 더 누르면 그 안의 요소**가 골라진다. 사진 하나를
+   누를 때마다 종이 · 테이프 · 라벨 중 무엇이 잡혔는지 주인이 모르는
+   채로 안쪽이 골라지지 않게 하는 것이 목적이다.
+
+   ★ 새 상태를 만들지 않는다. "들어와 있는가"는 **지금 선택**으로
+     읽는다 — 선택이 그 프레임이거나 같은 프레임 안의 요소면 들어와
+     있는 것이다. 그래서 다른 곳을 고르거나 빈 곳을 누르면 저절로
+     나가지고, 되돌릴 별도의 "나가기"가 없다.
+
+   ★ 새 메시지도 만들지 않는다. 프레임은 지금까지처럼 잡힌 id 하나만
+     올리고, 무엇을 고를지는 언제나 이 문서가 정한다(§14 의 소유권).
+========================================================== */
+
+function studioCanvasSelectTargetId(hitId) {
+
+  const info =
+    studioCanvasNodeInfo(hitId);
+
+  if (!info) {
+    return hitId;
+  }
+
+  if (info.kind !== "frame-element" || !info.parentId) {
+    return hitId;
+  }
+
+  const current =
+    studioCanvasSelection ? studioCanvasSelection.primaryId : null;
+
+  if (current === info.parentId) {
+    /* 프레임을 고른 채로 그 안을 눌렀다 — 들어간다 */
+    return hitId;
+  }
+
+  const currentInfo =
+    current ? studioCanvasNodeInfo(current) : null;
+
+  if (
+    currentInfo &&
+    currentInfo.kind === "frame-element" &&
+    currentInfo.parentId === info.parentId
+  ) {
+    /* 이미 같은 프레임 안이다 — 형제끼리는 바로 옮겨 다닌다 */
+    return hitId;
+  }
+
+  return info.parentId;
+
+}
+
+
+/*
+  studioCanvasDraftElement(elementId) -> element | null
+
+  "그 id 를 가진 요소가 지금 draft 의 캔버스에 실제로 있는가."
+  hidden · locked 는 보지 않는다 — 존재 여부만이다.
+*/
+function studioCanvasDraftElement(elementId) {
+
+  const info =
+    studioCanvasNodeInfo(elementId);
+
+  return info ? info.node : null;
 
 }
 
@@ -657,6 +876,23 @@ function studioCanvasSingleGeometry() {
   const payload =
     studioCanvasDraftPayload();
 
+  /* =====================================================
+     HOME-CANVAS-V2-EDITOR-1A — v2 에서는 좌표가 내려가지 않는다.
+
+     이 값은 **직접 조작**(끌기 · 크기 · 회전)의 시작점이고, 프레임은
+     이것이 없으면 제스처를 시작하지 않는다(editor-runtime 의
+     dragGate → "no-geometry"). v2 의 드래그 · 리사이즈 · 회전은 이
+     라운드의 범위가 아니므로(§25-7) 여기서 **막는 것이 아니라 애초에
+     주지 않는다** — 관문을 한 곳에 두는 편이 "패널로는 고쳐지는데
+     손으로 끌면 엉뚱한 칸이 저장된다"를 만들지 않는다.
+
+     v2 overlay 는 v1 요소와 같은 모양이라 좌표가 있지만, 그것도
+     같은 이유로 아직 내려보내지 않는다.
+  ====================================================== */
+  if (studioCanvasPayloadVersion(payload) !== 1) {
+    return null;
+  }
+
   /* HOME-CANVAS-TRANSFORM-1B — width · height 도 같이 내려간다.
      `height` 는 숫자이거나 `"auto"` 이고, 그 밖의 값이면 이 요소는
      애초에 계약을 어긴 것이므로 아무것도 내려보내지 않는다. */
@@ -1043,10 +1279,14 @@ function proposeStudioCanvasSelection(proposal) {
   }
 
 
-  /* ── 3. 정규화 — draft 의 배열 순서 ── */
+  /* ── 3. 정규화 — draft 의 배열 순서 ──
+
+     HOME-CANVAS-V2-EDITOR-1A: 그 순서를 아는 곳이 한 곳으로 모였다
+     (studioCanvasNodeList — v1 은 요소 배열, v2 는 블록 → 프레임 내부
+     → overlay). 여기서 버전을 나누어 적지 않는다. */
 
   const order =
-    payload.elements.map((element) => element.id);
+    studioCanvasNodeList().map((node) => node.id);
 
   const ids =
     order.filter((id) => wanted.indexOf(id) !== -1);
@@ -1283,7 +1523,18 @@ function commitStudioCanvasElementChange(request, gate) {
       rotate: window.setStudioCanvasElementRotation,
 
       /* HOME-CANVAS-INSPECTOR-1A — 글자 내용 한 칸(`props.text`) */
-      text: window.setStudioCanvasElementText
+      text: window.setStudioCanvasElementText,
+
+      /* HOME-CANVAS-V2-EDITOR-1A — v2 의 기본 배치. 전부 v2 전용
+         불변 writer 를 지난다(skin/skin-home-canvas-write-v2.js) —
+         v1 writer 는 `canvas.elements` 를 찾으므로 v2 데이터에
+         애초에 닿지 않는다(계약 §25-1). */
+      "v2-align": window.setStudioCanvasV2BlockAlign,
+      "v2-width": window.setStudioCanvasV2BlockWidth,
+      "v2-height": window.setStudioCanvasV2BlockHeight,
+      "v2-margin": window.setStudioCanvasV2BlockMargin,
+      "v2-order": window.setStudioCanvasV2BlockOrder,
+      "v2-text": window.setStudioCanvasV2NodeText
     }[value.kind];
 
   if (typeof writer !== "function") {
@@ -1313,12 +1564,22 @@ function commitStudioCanvasElementChange(request, gate) {
      좌표 둘이 실린 rotate 도, rotation 이 섞인 move 도 거부다. */
   /* HOME-CANVAS-INSPECTOR-1A — 글자는 `text` **한 칸**이다. 좌표가
      섞인 text 도, text 가 섞인 move 도 거부다(위와 같은 규칙). */
+  /* HOME-CANVAS-V2-EDITOR-1A — v2 칸도 같은 규칙이다. `margin` 은
+     네 칸을 **함께** 소유한다(한 칸만 새로 만들면 나머지 셋이 "없음"
+     인 채로 남아 다음 입력의 expected 가 갈린다 — 계약 §25-4). */
   const wanted =
     {
       move: ["x", "y"],
       resize: ["x", "y", "width", "height"],
       rotate: ["rotation"],
-      text: ["text"]
+      text: ["text"],
+
+      "v2-align": ["align"],
+      "v2-width": ["width"],
+      "v2-height": ["height"],
+      "v2-margin": ["top", "right", "bottom", "left"],
+      "v2-order": ["index"],
+      "v2-text": ["text"]
     }[value.kind];
 
   const asBox =
@@ -1369,7 +1630,7 @@ function commitStudioCanvasElementChange(request, gate) {
   ====================================================== */
   const coalesce =
     !!(gate && gate.allowCoalesce) &&
-    value.kind === "text" &&
+    (value.kind === "text" || value.kind === "v2-text") &&
     value.coalesce === true;
 
   const result =
@@ -1708,5 +1969,11 @@ if (typeof window !== "undefined") {
   window.studioCanvasDraftElement = studioCanvasDraftElement;
   window.studioCanvasDraftPayload = studioCanvasDraftPayload;
   window.studioCanvasElementLabel = studioCanvasElementLabel;
+
+  /* HOME-CANVAS-V2-EDITOR-1A */
+  window.studioCanvasPayloadVersion = studioCanvasPayloadVersion;
+  window.studioCanvasNodeInfo = studioCanvasNodeInfo;
+  window.studioCanvasNodeList = studioCanvasNodeList;
+  window.studioCanvasSelectTargetId = studioCanvasSelectTargetId;
 
 }

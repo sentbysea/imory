@@ -2200,6 +2200,14 @@ if (typeof window !== "undefined") {
   window.setStudioCanvasElementText =
     setStudioCanvasElementText;
 
+  /* HOME-CANVAS-V2-EDITOR-1A */
+  window.setStudioCanvasV2BlockAlign = setStudioCanvasV2BlockAlign;
+  window.setStudioCanvasV2BlockWidth = setStudioCanvasV2BlockWidth;
+  window.setStudioCanvasV2BlockHeight = setStudioCanvasV2BlockHeight;
+  window.setStudioCanvasV2BlockMargin = setStudioCanvasV2BlockMargin;
+  window.setStudioCanvasV2BlockOrder = setStudioCanvasV2BlockOrder;
+  window.setStudioCanvasV2NodeText = setStudioCanvasV2NodeText;
+
 }
 
 
@@ -3080,6 +3088,50 @@ function setStudioCanvasElementText(elementId, next, expected, options) {
     options
   );
 
+}
+
+
+/* =========================================================
+   HOME-CANVAS-V2-EDITOR-1A — v2 의 기본 배치를 draft 에
+
+   위 넷과 **같은 다섯 줄**(기록 한 칸 · dirty · revision · 다시
+   그리기)을 그대로 쓴다 — writeStudioCanvasElementChange() 는 순수
+   함수의 **이름만** 받으므로 v2 라고 따로 만들 것이 없다.
+
+   다른 것은 어느 순수 함수가 불변 수정을 하는가뿐이다
+   (skin/skin-home-canvas-write-v2.js). v1 writer 는 `canvas.elements`
+   를 찾으므로 v2 데이터에 애초에 닿지 않는다(계약 §25-1).
+========================================================== */
+
+function setStudioCanvasV2BlockAlign(id, next, expected) {
+  return writeStudioCanvasElementChange(
+    "writeSkinHomeCanvasV2BlockAlign", id, next, expected);
+}
+
+function setStudioCanvasV2BlockWidth(id, next, expected) {
+  return writeStudioCanvasElementChange(
+    "writeSkinHomeCanvasV2BlockWidth", id, next, expected);
+}
+
+function setStudioCanvasV2BlockHeight(id, next, expected) {
+  return writeStudioCanvasElementChange(
+    "writeSkinHomeCanvasV2BlockHeight", id, next, expected);
+}
+
+function setStudioCanvasV2BlockMargin(id, next, expected) {
+  return writeStudioCanvasElementChange(
+    "writeSkinHomeCanvasV2BlockMargin", id, next, expected);
+}
+
+function setStudioCanvasV2BlockOrder(id, next, expected) {
+  return writeStudioCanvasElementChange(
+    "writeSkinHomeCanvasV2BlockOrder", id, next, expected);
+}
+
+/* 글자만 입력 세션이 기록을 스스로 맡는다(위 v1 text 와 같은 사정) */
+function setStudioCanvasV2NodeText(id, next, expected, options) {
+  return writeStudioCanvasElementChange(
+    "writeSkinHomeCanvasV2NodeText", id, next, expected, options);
 }
 
 

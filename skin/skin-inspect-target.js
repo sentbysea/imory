@@ -221,7 +221,17 @@ const INSPECTOR_COMPONENT_ATTRS = [
      생김새로 고를 수 있는지가 갈리면 안 된다. 이 속성은 렌더러만
      붙이고 저장 경계의 화이트리스트에 없으므로(skin/skin-sanitize.js)
      스킨 HTML 이 흉내 낼 수도 없다. */
-  "data-imory-canvas-element"
+  "data-imory-canvas-element",
+
+  /* HOME-CANVAS-V2-EDITOR-1A — v2 의 자동 배치 블록도 **언제나 하나의
+     단위**다(계약 §23-3 · §24-2).
+
+     블록은 자유 배치 요소가 아니라서 `data-imory-canvas-element` 를
+     갖지 않는다. 그 한 줄이 없으면 `divider` 처럼 스킨 CSS 가 아직
+     칠하지 않은 빈 상자가 inspectorHasVisibleBox() 에 걸리지 않아
+     "누를 것이 없는 자리"로 떨어진다 — 위 캔버스 요소와 같은 이유,
+     같은 해법이다. */
+  "data-imory-canvas-block"
 ];
 
 
@@ -236,6 +246,9 @@ const INSPECTOR_COMPONENT_ATTRS = [
 const INSPECTOR_CANVAS_ELEMENT_ATTR = "data-imory-canvas-element";
 
 const INSPECTOR_CANVAS_LOCKED_ATTR = "data-imory-canvas-locked";
+
+/* HOME-CANVAS-V2-EDITOR-1A — v2 자동 배치 블록(계약 §23-3) */
+const INSPECTOR_CANVAS_BLOCK_ATTR = "data-imory-canvas-block";
 
 
 /* =========================================================
@@ -266,6 +279,30 @@ const INSPECTOR_CANVAS_LOCKED_ATTR = "data-imory-canvas-locked";
 
 const INSPECTOR_EDIT_CHROME_ATTR = "data-imory-canvas-frame";
 
+/* =========================================================
+   ★ 같은 이름이 두 곳에서 쓰인다 (HOME-CANVAS-V2-EDITOR-1A)
+
+   `data-imory-canvas-frame` 을 쓰는 것이 둘이다.
+
+     Moveable control box   `="1"`  편집 runtime 이 붙인다
+                                    (skin/skin-home-canvas-editor-runtime.js
+                                     markControlBox)
+     v2 `main_visual` 프레임 `=""`   렌더러가 붙인다
+                                    (skin/skin-home-canvas-render.js · 계약 §24-2)
+
+   V2-MAIN-VISUAL-1 까지는 값을 보지 않고 **속성만** 봤다. 그래서
+   `main_visual` 안을 누른 입력이 전부 "편집 UI 위의 입력"으로 읽혀
+   Inspector 가 비켜섰다 — 프레임도 그 안의 사진 · 장식도 고를 수
+   없었다(계약 §24-7 이 남긴 함정).
+
+   ★ 값으로 가른다. 편집 runtime 은 **처음부터** `="1"` 로 쓰고 자기
+     선택자도 `[data-imory-canvas-frame="1"]` 이므로(같은 파일의
+     markControlBox · 진단), 여기서 값을 보는 것만으로 두 뜻이 갈린다.
+     렌더러가 붙이는 빈 값은 더 이상 이 관문에 걸리지 않는다.
+========================================================== */
+
+const INSPECTOR_EDIT_CHROME_VALUE = "1";
+
 
 function inspectorEditChromeAncestor(node) {
 
@@ -277,8 +314,8 @@ function inspectorEditChromeAncestor(node) {
   while (current) {
 
     if (
-      current.hasAttribute &&
-      current.hasAttribute(INSPECTOR_EDIT_CHROME_ATTR)
+      current.getAttribute &&
+      current.getAttribute(INSPECTOR_EDIT_CHROME_ATTR) === INSPECTOR_EDIT_CHROME_VALUE
     ) {
       return current;
     }
@@ -456,8 +493,12 @@ function inspectorSelectionRank(el, root, win) {
      판정이 page(6)로 매긴다 — 그러면 한 번도 고를 수 없다. page 는
      "누를 것이 없는 자리"를 뜻하는 등급이고, 캔버스 요소는 언제나
      사용자가 놓은 하나의 물건이므로 그 등급에 들어갈 수 없다. */
+  /* HOME-CANVAS-V2-EDITOR-1A — v2 블록도 같은 이유로 제외한다.
+     `align:"stretch"` 블록은 흐름 층의 폭을 거의 다 쓰므로 아래
+     판정이 page(6)로 매긴다 — 그러면 한 번도 고를 수 없다. */
   if (
     !el.hasAttribute(INSPECTOR_CANVAS_ELEMENT_ATTR) &&
+    !el.hasAttribute(INSPECTOR_CANVAS_BLOCK_ATTR) &&
     inspectorIsPageLevel(el, root)
   ) {
     return INSPECTOR_RANK.page;
@@ -623,7 +664,9 @@ if (typeof module !== "undefined" && module.exports) {
     INSPECTOR_COMPONENT_ATTRS,
     INSPECTOR_CANVAS_ELEMENT_ATTR,
     INSPECTOR_CANVAS_LOCKED_ATTR,
+    INSPECTOR_CANVAS_BLOCK_ATTR,
     INSPECTOR_EDIT_CHROME_ATTR,
+    INSPECTOR_EDIT_CHROME_VALUE,
     isInspectableElement,
     resolveInspectableAncestor,
     inspectorLockedCanvasAncestor,

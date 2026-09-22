@@ -169,11 +169,63 @@ function studioCanvasInspectorView() {
     return { mode: "none" };
   }
 
+  /* =====================================================
+     HOME-CANVAS-V2-EDITOR-1A — v2 는 다른 화면을 쓴다.
+
+     같은 "single" 이지만 고칠 수 있는 칸이 통째로 다르다(자유 좌표
+     다섯 칸 ↔ 흐름 안의 자리). 그래서 `version` 과 `kind` 를 view 에
+     싣고, 그리는 쪽이 갈린다(studio-canvas-inspector-v2.js).
+
+     ★ `node` 는 `element` 와 같은 객체다. 이름을 둘 두는 이유는 v1
+       코드가 `view.element` 를 그대로 읽기 때문이고, v2 쪽은 "요소"가
+       아니라 블록일 수도 있어 `node` 로 부른다.
+  ====================================================== */
+  const version =
+    (typeof window.studioCanvasPayloadVersion === "function")
+      ? window.studioCanvasPayloadVersion(window.studioCanvasDraftPayload())
+      : 1;
+
+  if (version === 2) {
+
+    const info =
+      (typeof window.studioCanvasNodeInfo === "function")
+        ? window.studioCanvasNodeInfo(element.id)
+        : null;
+
+    if (!info) {
+      return { mode: "none" };
+    }
+
+    const payload =
+      window.studioCanvasDraftPayload();
+
+    return {
+      mode: "single",
+      version: 2,
+      kind: info.kind,
+      id: element.id,
+      type: element.type,
+      element: element,
+      node: element,
+      index: info.index,
+      parentId: info.parentId,
+      blockCount:
+        (payload && payload.flow && Array.isArray(payload.flow.blocks))
+          ? payload.flow.blocks.length
+          : 0,
+      generation: selection.generation
+    };
+
+  }
+
   return {
     mode: "single",
+    version: 1,
+    kind: "element",
     id: element.id,
     type: element.type,
     element: element,
+    node: element,
     generation: selection.generation
   };
 
@@ -200,7 +252,11 @@ function studioCanvasInspectorAutoAllowed(type) {
 function studioCanvasInspectorShapeOf(view) {
 
   if (view.mode === "single") {
-    return `single:${view.id}:${view.type}`;
+    /* HOME-CANVAS-V2-EDITOR-1A — 같은 요소라도 v1 화면과 v2 화면은
+       DOM 이 다르고, v2 안에서도 블록 · 프레임 내부 · overlay 가
+       다르다. 지문에 그 둘을 넣지 않으면 화면이 바뀌어야 할 때
+       옛 DOM 이 남는다. */
+    return `single:${view.version || 1}:${view.kind || "element"}:${view.id}:${view.type}`;
   }
 
   if (view.mode === "multi") {
@@ -1379,6 +1435,12 @@ function buildStudioCanvasInspector(view) {
 
   }
 
+  /* HOME-CANVAS-V2-EDITOR-1A — v2 는 통째로 다른 화면이다 */
+  if (view.version === 2) {
+    buildStudioCanvasV2Inspector(view);
+    return;
+  }
+
   studioCanvasInspectorBody.appendChild(studioCanvasInspectorTypeBlock(view));
 
   const geometry =
@@ -1425,6 +1487,12 @@ function buildStudioCanvasInspector(view) {
 function syncStudioCanvasInspectorValues(view) {
 
   if (view.mode !== "single" || !studioCanvasInspectorInputs) {
+    return;
+  }
+
+  /* HOME-CANVAS-V2-EDITOR-1A — v2 화면의 칸은 v2 파일이 맞춘다 */
+  if (view.version === 2) {
+    syncStudioCanvasV2Inspector(view);
     return;
   }
 

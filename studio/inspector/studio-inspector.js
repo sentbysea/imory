@@ -361,6 +361,36 @@ function routeStudioInspectSelectMessage(data) {
          건드리면 넘겨받은 선택을 스스로 지운다. */
     clearStudioInspectorSelection({ keepFrameSelection: true });
 
+    /* =====================================================
+       HOME-CANVAS-V2-EDITOR-1A — `main_visual` 은 한 번 클릭하면
+       프레임 전체다(계약 §25-3).
+
+       프레임은 잡힌 것 하나만 올린다 — 그것이 프레임 안의 사진인지
+       프레임 자신인지는 이 문서가 **지금 선택**을 보고 정한다.
+       바꿔야 할 때는 좌표를 쓰지 않고 제안 경로로 넘긴다: 올라온
+       rect 는 **안쪽 요소의 것**이라 프레임 상자와 다르고, 그 길은
+       프레임에 "이것을 집어라"를 내려보내 올바른 좌표를 다시 받는다
+       (proposeStudioCanvasSelection 의 마지막 절).
+    ====================================================== */
+    const target =
+      (typeof studioCanvasSelectTargetId === "function")
+        ? studioCanvasSelectTargetId(editId)
+        : editId;
+
+    if (target && target !== editId) {
+
+      if (typeof proposeStudioCanvasSelection === "function") {
+        proposeStudioCanvasSelection({
+          ids: [target],
+          primaryId: target,
+          mode: "replace"
+        });
+      }
+
+      return;
+
+    }
+
     setStudioCanvasSelection(editId, data.rect, data.visibleRect);
 
     return;

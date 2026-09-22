@@ -1259,6 +1259,10 @@ if (typeof module !== "undefined" && module.exports) {
   const v2 = require("./skin-home-canvas-v2.js");
   const write = require("./skin-home-canvas-write.js");
 
+  /* HOME-CANVAS-V2-EDITOR-1A — v2 의 불변 writer. v2 값 표(위 v2)를
+     call time 에 찾으므로 그 **다음에** 싣는다. */
+  const writeV2 = require("./skin-home-canvas-write-v2.js");
+
   module.exports = Object.assign({
     SKIN_HOME_CANVAS_REGION_NAME,
     SKIN_HOME_CANVAS_VERSION,
@@ -1300,6 +1304,6 @@ if (typeof module !== "undefined" && module.exports) {
     resolveSkinHomeCanvas,
     buildSkinCanvasRenderPayload,
     coerceSkinHomeCanvasRenderPayload
-  }, v2, write);
+  }, v2, write, writeV2);
 
 }

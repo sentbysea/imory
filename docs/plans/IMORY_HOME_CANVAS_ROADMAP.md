@@ -1442,15 +1442,16 @@ bottom-left  bottom  bottom-right
 | 4 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | **완료**(2026-09-21) — 결과는 [계약 문서 §9-(3)](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 5 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | **완료**(2026-09-22) — 결과는 [계약 문서 §23](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). `main_visual` 은 **외곽 프레임까지** |
 | 6 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` **내부** — primary photo · 자유 장식 · pin/transform 렌더 · `height:"auto"` 의 비율 | **완료**(2026-09-22) — 결과는 [계약 문서 §24](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). 비율은 **primary 사진 상자**이고 폴백은 필요하지 않았다(§14-5) |
-| 7 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | **미착수 — 다음 작업**(`V2-EDITOR-1`). ★ 열기 전에 `data-imory-canvas-frame` **이름 충돌**을 먼저 푼다(계약 문서 §24-7) |
+| 7 | `HOME-CANVAS-V2-EDITOR-1A` | v2 선택 + 블록의 **순서 · 정렬 · 여백 · 폭 · 높이** · 글자 · 프레임 진입 | **완료**(2026-09-22) — 결과는 [계약 문서 §25](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). `data-imory-canvas-frame` 이름 충돌도 여기서 풀렸다 |
+| 7-1 | `HOME-CANVAS-V2-EDITOR-1B` | v2 **직접 조작**(드래그 · 리사이즈 · 회전) · 프레임 내부와 overlay 의 좌표 편집 · 블록 추가/삭제 | **미착수 — 다음 작업** |
 | 8 | `HOME-CANVAS-V2-ATTACH-1` | lasso/Shift 선택 → `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` · Undo/Redo | 미착수 |
 | 9 | `HOME-CANVAS-EFFECT-HOOK-1` | 안정된 선택자 · 수명주기 · 정리. `main_visual` 과 sandbox 저자 JS 의 공존 | 미착수(§8 에 완료 기준) |
 
-> **★ `INSPECTOR-1A` 와 `V2-INSPECTOR-1` 은 다른 작업이다.**
+> **★ `INSPECTOR-1A` 와 `V2-EDITOR-1A` 는 다른 작업이다.**
 >
 > `INSPECTOR-1A`(3 번)는 **지금 v1** 자유 배치 요소를 골랐을 때 왼쪽
-> 패널이 비어 있는 문제를 푸는 작업이고, `V2-INSPECTOR-1`(7 번)은 그
-> 뒤 v2 의 **flow block 과 `main_visual`** 을 편집하는 작업이다. 둘을
+> 패널이 비어 있는 문제를 풀었고, `V2-EDITOR-1A`(7 번)는 그 뒤 v2 의
+> **flow block 과 `main_visual`** 을 편집하는 작업이다. 둘을
 > 같은 작업으로 합치거나 하나로 대체하지 않는다 — 책임 구분은 §14-10
 > 의 마지막 표다.
 

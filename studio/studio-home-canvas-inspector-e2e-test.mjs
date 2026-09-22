@@ -71,6 +71,8 @@ const section = (name) => console.log(`\n[${name}]`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
 let passed = 0;
 const failures = [];
 
@@ -328,7 +330,9 @@ const CANVAS_CSS =
   '[data-imory-canvas-type="sticker"] { background: #e8dcc8; }' +
   '[data-imory-canvas-type="category_nav"] { background: #dce8e2; }' +
   '[data-imory-canvas-type="photo"] { background: #efe3d2; }' +
-  '[data-imory-canvas-type="logo"] { background: #e6e0f0; }';
+  '[data-imory-canvas-type="logo"] { background: #e6e0f0; }' +
+  /* v2 의 divider — 칠하지 않으면 4px 투명 상자라 손으로 누르기 어렵다 */
+  '[data-imory-canvas-type="divider"] { background: #cdc3b6; }';
 
 
 function skinPackage(options) {
@@ -367,6 +371,86 @@ function skinPackage(options) {
   if (o.sandbox) {
     pkg.renderMode = "sandbox";
   }
+
+  return pkg;
+
+}
+
+
+/* =========================================================
+   v2 fixture (HOME-CANVAS-V2-EDITOR-1A)
+
+   블록 다섯이 §14-4 의 표를 한 번씩 밟는다 — logo · text · divider ·
+   category_nav · main_visual. `main_visual` 안에는 사진과 장식이
+   있어서 "한 번 클릭 → 프레임 / 한 번 더 → 안쪽"을 잴 수 있다.
+
+     v2Text    글자 블록. 이 절의 주인공.
+               `zzz` 는 **모르는 블록 필드**, `props.mystery` 는
+               **모르는 props 필드**다(§25-1 보존).
+     v2Main    main_visual — 그 안에 v2Photo(사진) · v2Paper(장식)
+     v2Wide    align:"stretch" — 흐름 폭을 거의 다 쓴다(hit-test 가
+               "페이지 전체 래퍼"로 떨어뜨리지 않는지 본다)
+========================================================== */
+
+const V2_BLOCKS = [
+  { id: "v2Logo", type: "logo", width: 160, height: 48, align: "left",
+    props: { slot: "title_logo", fallback: "site_title" } },
+
+  { id: "v2Text", type: "text", width: 300, height: "auto", align: "center",
+    margin: { top: 10, right: 0, bottom: 6, left: 0 },
+    zzz: { keep: "unknown-block-field" },
+    props: { text: "한 줄", role: "title", mystery: "keep-props" } },
+
+  { id: "v2Rule", type: "divider", width: 120, height: 14, align: "center" },
+
+  { id: "v2Wide", type: "category_nav", width: 342, height: 60, align: "stretch",
+    props: { mode: "selected", categoryIds: ["cat-a"] } },
+
+  { id: "v2Main", type: "main_visual", width: 300, height: 200, align: "center",
+    margin: { top: 12, right: 0, bottom: 0, left: 0 },
+    props: {
+      baseWidth: 150, baseHeight: 100, primaryId: "v2Photo",
+      elements: [
+        { id: "v2Paper", type: "shape", follow: "transform",
+          x: -5, y: 0, width: 150, height: 90, rotation: -4, props: { kind: "rect" } },
+        { id: "v2Photo", type: "photo", follow: "transform",
+          x: 10, y: 5, width: 120, height: 80, props: { slot: "photo_1" } },
+        { id: "v2Tag", type: "text", follow: "pin", width: 60, height: 20,
+          pin: { target: "photo", anchor: "right", origin: "left", offset: { x: 6, y: 0 } },
+          props: { text: "tag", role: "label" } }
+      ]
+    } }
+];
+
+const V2_OVERLAYS = [
+  { id: "v2Over", type: "text", x: 20, y: 700, width: 120, height: 40,
+    rotation: 0, props: { text: "overlay", role: "label" } }
+];
+
+
+function v2Package(options) {
+
+  const o = options || {};
+
+  const pkg =
+    skinPackage(o);
+
+  const entry =
+    pkg.regions.find((r) => r.name === "home_canvas");
+
+  entry.canvas = {
+    version: 2,
+    baseWidth: 390,
+    baseHeight: 1100,
+    extra: "unknown-canvas-field",
+    flow: {
+      direction: "column",
+      padding: { top: 40, right: 24, bottom: 40, left: 24 },
+      gap: 10,
+      blocks: JSON.parse(JSON.stringify(V2_BLOCKS))
+    },
+    overlays: JSON.parse(JSON.stringify(V2_OVERLAYS))
+  };
 
   return pkg;
 
@@ -619,8 +703,7 @@ async function bringIntoView(page, frame, sandbox, selector) {
     await frame.evaluate((sel) => {
       const el = document.querySelector(sel);
       if (!el) return;
-      const r = el.getBoundingClientRect();
-      window.scrollBy(0, r.top + r.height / 2 - window.innerHeight * 0.55);
+      el.scrollIntoView({ block: "center", inline: "center" });
     }, selector);
 
   }
@@ -630,10 +713,11 @@ async function bringIntoView(page, frame, sandbox, selector) {
       const doc = document.getElementById("studioPreviewFrame").contentDocument;
       const el = doc.querySelector(sel);
       if (!el) return;
-      const r = el.getBoundingClientRect();
-      doc.defaultView.scrollBy(
-        0, r.top + r.height / 2 - doc.defaultView.innerHeight * 0.55
-      );
+      /* ★ scrollBy 가 아니라 scrollIntoView 다. 앞의 것은 "지금 자리에서
+         얼마나" 라서 스크롤 담당 요소가 window 가 아니거나 그 사이에
+         다시 그려지면 어긋난 만큼이 그대로 쌓인다 — v2 절에서 블록이
+         화면 밖(-1600px)으로 밀려 클릭이 통째로 빗나갔다. */
+      el.scrollIntoView({ block: "center", inline: "center" });
     }, selector);
 
   }
@@ -721,6 +805,151 @@ const geometryOf = (canvas, id) => {
     ? { x: el.x, y: el.y, width: el.width, height: el.height, rotation: el.rotation }
     : null;
 };
+
+
+/* ---- v2 (HOME-CANVAS-V2-EDITOR-1A) ---- */
+
+const v2Blocks = (canvas) =>
+  (canvas && canvas.canvas && canvas.canvas.flow) ? canvas.canvas.flow.blocks : [];
+
+const v2BlockOf = (canvas, id) =>
+  v2Blocks(canvas).find((b) => b && b.id === id) || null;
+
+/* 블록 · 프레임 내부 · overlay 어디에 있든 찾는다 */
+const v2NodeOf = (canvas, id) => {
+
+  const block = v2BlockOf(canvas, id);
+
+  if (block) {
+    return block;
+  }
+
+  for (const b of v2Blocks(canvas)) {
+    const inner = (b && b.props && b.props.elements) || [];
+    const hit = inner.find((e) => e && e.id === id);
+    if (hit) return hit;
+  }
+
+  const overlays = (canvas && canvas.canvas && canvas.canvas.overlays) || [];
+
+  return overlays.find((e) => e && e.id === id) || null;
+
+};
+
+const v2OrderOf = (canvas) =>
+  v2Blocks(canvas).map((b) => b.id).join(",");
+
+const v2TextOf = (canvas, id) => {
+  const node = v2NodeOf(canvas, id);
+  return node && node.props ? node.props.text : null;
+};
+
+
+/* v2 패널이 지금 무엇을 보여 주는가 */
+const readV2Panel = (page) => page.evaluate(() => {
+
+  const textOfId = (id) => {
+    const el = document.getElementById(id);
+    return el ? el.textContent.trim() : null;
+  };
+
+  const valueOf = (field) => {
+    const el = document.getElementById(`studioCanvasInspectorV2-${field}`);
+    return el ? el.value : null;
+  };
+
+  const errorOf = (field) => {
+    const el = document.getElementById(`studioCanvasInspectorError-${field}`);
+    return el && !el.hidden ? el.textContent.trim() : "";
+  };
+
+  const align =
+    document.getElementById("studioCanvasInspectorAlign");
+
+  const auto =
+    document.getElementById("studioCanvasInspectorV2Auto");
+
+  const up =
+    document.getElementById("studioCanvasInspectorOrderUp");
+
+  const down =
+    document.getElementById("studioCanvasInspectorOrderDown");
+
+  const text =
+    document.getElementById("studioCanvasInspectorText");
+
+  return {
+    title: textOfId("studioCanvasInspectorTitle"),
+    meta: textOfId("studioCanvasInspectorMeta"),
+    where: textOfId("studioCanvasInspectorWhere"),
+    hasLayout: !!document.getElementById("studioCanvasInspectorV2Layout"),
+    hasReadOnly: !!document.getElementById("studioCanvasInspectorV2Read"),
+    /* v1 화면의 자리 — v2 에서는 없어야 한다 */
+    hasV1Geometry: !!document.getElementById("studioCanvasInspectorGeometry"),
+    hasText: !!text,
+    textValue: text ? text.value : null,
+    align: align ? align.value : null,
+    alignOptions: align ? Array.from(align.options).map((o) => o.value) : null,
+    auto: auto ? auto.checked : null,
+    orderAt: textOfId("studioCanvasInspectorOrderAt"),
+    upDisabled: up ? up.disabled : null,
+    downDisabled: down ? down.disabled : null,
+    heightDisabled: (() => {
+      const el = document.getElementById("studioCanvasInspectorV2-height");
+      return el ? el.disabled : null;
+    })(),
+    values: {
+      width: valueOf("width"),
+      height: valueOf("height"),
+      top: valueOf("top"),
+      right: valueOf("right"),
+      bottom: valueOf("bottom"),
+      left: valueOf("left")
+    },
+    errors: {
+      width: errorOf("width"),
+      height: errorOf("height"),
+      top: errorOf("top"),
+      align: errorOf("align"),
+      order: errorOf("order"),
+      text: errorOf("text")
+    },
+    canvasSelection: window.getStudioCanvasSelection().ids,
+    primaryId: window.getStudioCanvasSelection().primaryId
+  };
+
+});
+
+
+/* v2 숫자 칸에 값을 넣고 확정한다(Enter) */
+async function typeV2Number(page, field, value) {
+
+  const sel = `#studioCanvasInspectorV2-${field}`;
+
+  await page.focus(sel);
+
+  await page.evaluate((s) => {
+    const el = document.querySelector(s);
+    el.setSelectionRange(0, el.value.length);
+  }, sel);
+
+  await page.keyboard.press("Delete");
+
+  await page.keyboard.type(String(value), { delay: 10 });
+
+  await page.keyboard.press("Enter");
+
+  /* ★ 확정한 뒤 포커스를 놓는다. 다음 typeV2Number 가 잠긴 칸을
+     겨냥하면 Playwright 는 포커스를 옮기지 못하고, 그러면 글자가
+     **이 칸에** 그대로 이어 붙는다(실제로 -8 이 -890 이 됐다). */
+  await page.evaluate((f) => {
+    const el = document.querySelector(f);
+    if (el) el.blur();
+  }, sel);
+
+  await sleep(350);
+
+}
 
 
 /* 왼쪽 패널이 지금 무엇을 보여 주고 있는가 — DOM 그대로 읽는다 */
@@ -1900,6 +2129,484 @@ async function main() {
         JSON.stringify(drawnAgain && drawnAgain.text));
 
       await close(reopened);
+
+    }
+
+
+    /* ======================================================
+       [v2] — 조합형 Canvas 의 선택과 기본 배치 (V2-EDITOR-1A)
+    ====================================================== */
+    if (wants("v2")) {
+
+      section("v2");
+
+      const page = await openStudio(browser, { package: v2Package({}) });
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      /* ---- 1. 블록을 고를 수 있다 ---- */
+
+      await clickElement(page, frame, false, "v2Text");
+
+      let panel = await readV2Panel(page);
+
+      check("★ v2 글자 블록을 누르면 Canvas 패널이 그 블록을 연다",
+        same(panel.canvasSelection, ["v2Text"]) &&
+        panel.meta === "Canvas · v2Text" &&
+        panel.title === "Canvas 글자",
+        JSON.stringify({ s: panel.canvasSelection, m: panel.meta, t: panel.title }));
+
+      check("★ v2 화면은 흐름 칸이고 v1 의 자유 좌표 칸은 없다",
+        panel.hasLayout === true && panel.hasV1Geometry === false &&
+        panel.values.width === "300" && panel.values.height === "" &&
+        panel.align === "center",
+        JSON.stringify(panel.values));
+
+      check("★ 정렬은 계약의 네 값이다",
+        same(panel.alignOptions, ["left", "center", "right", "stretch"]),
+        JSON.stringify(panel.alignOptions));
+
+      check("★ 여백 네 칸이 저장값대로다(빠진 칸은 0)",
+        panel.values.top === "10" && panel.values.bottom === "6" &&
+        panel.values.right === "0" && panel.values.left === "0",
+        JSON.stringify(panel.values));
+
+      check("★ height \"auto\" 면 Auto 가 켜져 있고 Height 칸이 잠긴다",
+        panel.auto === true && panel.heightDisabled === true);
+
+      check("★ 순서가 몇 번째인지 보인다(배열 자리 — 숨긴 블록도 한 칸)",
+        panel.orderAt === "2 / 5" && panel.upDisabled === false,
+        panel.orderAt);
+
+      /* ---- 2. 선택 전환 ---- */
+
+      await clickElement(page, frame, false, "v2Rule");
+
+      panel = await readV2Panel(page);
+
+      check("★ 다른 블록으로 옮겨 가면 그 블록의 화면이 된다(divider)",
+        same(panel.canvasSelection, ["v2Rule"]) &&
+        panel.title === "Canvas 구분선" &&
+        panel.values.width === "120" && panel.values.height === "14",
+        JSON.stringify({ s: panel.canvasSelection, v: panel.values }));
+
+      await clickElement(page, frame, false, "v2Wide");
+
+      panel = await readV2Panel(page);
+
+      check("★ align:\"stretch\" 블록도 고를 수 있다(페이지 래퍼로 떨어지지 않는다)",
+        same(panel.canvasSelection, ["v2Wide"]) && panel.align === "stretch",
+        JSON.stringify(panel.canvasSelection));
+
+      /* ---- 3. main_visual — 한 번 클릭은 프레임, 한 번 더는 안쪽 ---- */
+
+      await clickElement(page, frame, false, "v2Photo");
+
+      panel = await readV2Panel(page);
+
+      check("★ main_visual 안을 누르면 **프레임 전체**가 골라진다",
+        same(panel.canvasSelection, ["v2Main"]) &&
+        panel.title === "Canvas 메인 비주얼" &&
+        panel.hasLayout === true,
+        JSON.stringify({ s: panel.canvasSelection, t: panel.title }));
+
+      check("★ 패널이 지금 프레임을 고르고 있다고 적는다",
+        typeof panel.where === "string" && panel.where.indexOf("프레임 전체") !== -1,
+        panel.where);
+
+      await clickElement(page, frame, false, "v2Photo");
+
+      panel = await readV2Panel(page);
+
+      check("★ 한 번 더 누르면 프레임 **안쪽 요소**로 들어간다",
+        same(panel.canvasSelection, ["v2Photo"]) &&
+        panel.title === "Canvas 사진",
+        JSON.stringify({ s: panel.canvasSelection, t: panel.title }));
+
+      check("★ 안쪽 요소는 읽기 전용 요약이고 흐름 칸이 없다(§25-7)",
+        panel.hasReadOnly === true && panel.hasLayout === false,
+        JSON.stringify({ r: panel.hasReadOnly, l: panel.hasLayout }));
+
+      check("★ 패널이 지금 안쪽 요소를 고르고 있다고 적는다",
+        typeof panel.where === "string" && panel.where.indexOf("안쪽 요소") !== -1,
+        panel.where);
+
+      /* 같은 프레임 안에서는 형제끼리 바로 옮겨 다닌다.
+
+         ★ v2Paper 가 아니라 v2Tag 를 쓴다 — 종이는 사진 **뒤에** 깔려
+           있어서 가운데를 누르면 위에 있는 사진이 잡힌다(그것이 맞는
+           동작이다). pin 라벨은 사진 밖에 있어 겹치지 않는다. */
+      await clickElement(page, frame, false, "v2Tag");
+
+      panel = await readV2Panel(page);
+
+      check("★ 들어와 있는 동안에는 형제 장식으로 바로 옮겨 간다",
+        same(panel.canvasSelection, ["v2Tag"]),
+        JSON.stringify(panel.canvasSelection));
+
+      /* 프레임 밖으로 나가면 다시 "밖" 이다 */
+      await clickElement(page, frame, false, "v2Text");
+      await clickElement(page, frame, false, "v2Photo");
+
+      panel = await readV2Panel(page);
+
+      check("★ 프레임 밖을 한 번 거치면 다시 프레임 전체부터다",
+        same(panel.canvasSelection, ["v2Main"]),
+        JSON.stringify(panel.canvasSelection));
+
+      /* ---- 4. 기본 칸 — 저장 · 보존 · Undo 한 칸 ---- */
+
+      const before = await readCanvas(page);
+
+      check("아직 draft 는 그대로다", v2BlockOf(before, "v2Text").align === "center");
+
+      await clickElement(page, frame, false, "v2Text");
+
+      /* align */
+
+      let h0 = await historyState(page);
+
+      await page.selectOption("#studioCanvasInspectorAlign", "right");
+      await sleep(400);
+
+      let now = await readCanvas(page);
+      let h1 = await historyState(page);
+
+      check("★ 정렬을 바꾸면 그 칸만 바뀐다",
+        v2BlockOf(now, "v2Text").align === "right" &&
+        v2BlockOf(now, "v2Text").width === 300 &&
+        v2BlockOf(now, "v2Text").props.text === "한 줄",
+        JSON.stringify(v2BlockOf(now, "v2Text")));
+
+      check("★ 정렬 한 번이 Undo 한 칸이다",
+        h1.undo === h0.undo + 1, `${h0.undo} → ${h1.undo}`);
+
+      check("★ 모르는 블록 필드 · 모르는 props 필드가 그대로다",
+        v2BlockOf(now, "v2Text").zzz.keep === "unknown-block-field" &&
+        v2BlockOf(now, "v2Text").props.mystery === "keep-props" &&
+        v2BlockOf(now, "v2Text").props.role === "title",
+        JSON.stringify(v2BlockOf(now, "v2Text").props));
+
+      check("★ 다른 블록 · 프레임 내부 · overlay 가 한 글자도 안 바뀐다",
+        v2OrderOf(now) === "v2Logo,v2Text,v2Rule,v2Wide,v2Main" &&
+        v2NodeOf(now, "v2Photo").width === 120 &&
+        v2NodeOf(now, "v2Tag").pin.offset.x === 6 &&
+        v2NodeOf(now, "v2Over").x === 20,
+        v2OrderOf(now));
+
+      check("★ canvas 의 모르는 칸도 그대로다",
+        now.canvas.extra === "unknown-canvas-field" &&
+        now.canvas.flow.gap === 10 &&
+        now.canvas.flow.padding.top === 40);
+
+      /* width */
+
+      h0 = await historyState(page);
+
+      await typeV2Number(page, "width", 240);
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+
+      check("★ 폭을 고치면 저장된다 · Undo 한 칸",
+        v2BlockOf(now, "v2Text").width === 240 && h1.undo === h0.undo + 1,
+        `${v2BlockOf(now, "v2Text").width} / ${h0.undo}→${h1.undo}`);
+
+      /* margin — 한 칸을 바꿔도 네 칸이 함께 실린다 */
+
+      h0 = await historyState(page);
+
+      await typeV2Number(page, "top", -8);
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+
+      check("★ 여백은 음수도 된다 · 나머지 세 칸은 그대로 · Undo 한 칸",
+        same(v2BlockOf(now, "v2Text").margin, { top: -8, right: 0, bottom: 6, left: 0 }) &&
+        h1.undo === h0.undo + 1,
+        JSON.stringify(v2BlockOf(now, "v2Text").margin));
+
+      /* height — Auto 끄기 · 켜기 */
+
+      panel = await readV2Panel(page);
+
+      check("★ Auto 가 켜진 동안 Height 칸은 잠겨 있다(그 칸으로는 못 고친다)",
+        panel.heightDisabled === true &&
+        v2BlockOf(await readCanvas(page), "v2Text").height === "auto",
+        String(panel.heightDisabled));
+
+      await page.evaluate(() => {
+        const el = document.getElementById("studioCanvasInspectorV2-height");
+        el.disabled = false;
+        el.value = "90";
+      });
+
+      await page.click("#studioCanvasInspectorV2Auto");
+      await sleep(400);
+
+      now = await readCanvas(page);
+
+      check("★ Auto 를 끄면 적어 둔 숫자로 간다",
+        v2BlockOf(now, "v2Text").height === 90,
+        String(v2BlockOf(now, "v2Text").height));
+
+      h0 = await historyState(page);
+
+      await page.click("#studioCanvasInspectorV2Auto");
+      await sleep(400);
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+
+      check("★ Auto 를 켜면 \"auto\" 로 돌아간다 · Undo 한 칸",
+        v2BlockOf(now, "v2Text").height === "auto" && h1.undo === h0.undo + 1,
+        String(v2BlockOf(now, "v2Text").height));
+
+      /* logo 는 auto 를 쓸 수 없다 — 스위치 자체가 없다 */
+
+      await clickElement(page, frame, false, "v2Logo");
+
+      const logoPanel = await page.evaluate(() =>
+        !!document.getElementById("studioCanvasInspectorV2Auto"));
+
+      check("★ logo 블록에는 Auto 스위치가 없다(계약의 표 그대로)",
+        logoPanel === false);
+
+      /* ---- 5. 순서 ---- */
+
+      await clickElement(page, frame, false, "v2Rule");
+
+      panel = await readV2Panel(page);
+
+      check("순서를 옮기기 전에 그 블록이 골라져 있다",
+        same(panel.canvasSelection, ["v2Rule"]) && panel.orderAt === "3 / 5",
+        JSON.stringify({ s: panel.canvasSelection, at: panel.orderAt }));
+
+      h0 = await historyState(page);
+
+      await page.click("#studioCanvasInspectorOrderUp");
+      await sleep(400);
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+
+      check("★ 위로 한 칸 — 배열 순서가 바뀌고 나머지는 그대로다",
+        v2OrderOf(now) === "v2Logo,v2Rule,v2Text,v2Wide,v2Main" &&
+        h1.undo === h0.undo + 1,
+        v2OrderOf(now));
+
+      panel = await readV2Panel(page);
+
+      check("★ 옮긴 뒤 패널의 자리 표시도 따라간다",
+        panel.orderAt === "2 / 5" && same(panel.canvasSelection, ["v2Rule"]),
+        panel.orderAt);
+
+      await page.click("#studioCanvasInspectorOrderUp");
+      await sleep(400);
+
+      panel = await readV2Panel(page);
+
+      check("★ 맨 위에서는 ↑ 가 잠긴다",
+        panel.orderAt === "1 / 5" && panel.upDisabled === true,
+        JSON.stringify({ at: panel.orderAt, up: panel.upDisabled }));
+
+      /* ---- 6. 글자 ---- */
+
+      await clickElement(page, frame, false, "v2Text");
+
+      h0 = await historyState(page);
+
+      await typeText(page, "v2 여러 줄\n<b>굵게</b>");
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+
+      check("★ 글자를 고치면 평문 그대로 저장된다(줄바꿈 유지)",
+        v2TextOf(now, "v2Text") === "v2 여러 줄\n<b>굵게</b>",
+        JSON.stringify(v2TextOf(now, "v2Text")));
+
+      check("★ 글자 한 세션이 Undo 한 칸이다",
+        h1.undo === h0.undo + 1, `${h0.undo} → ${h1.undo}`);
+
+      const drawn = await drawnText(page, frame, false, "v2Text");
+
+      check("★ 화면에도 HTML 이 실행되지 않는다",
+        drawn && drawn.bold === 0 && drawn.text.indexOf("<b>") !== -1,
+        JSON.stringify(drawn));
+
+      /* 프레임 내부의 글자 장식도 같은 칸을 쓴다 */
+
+      await clickElement(page, frame, false, "v2Photo");
+      await clickElement(page, frame, false, "v2Tag");
+
+      panel = await readV2Panel(page);
+
+      if (same(panel.canvasSelection, ["v2Tag"])) {
+
+        await typeText(page, "새 태그");
+
+        now = await readCanvas(page);
+
+        check("★ 프레임 안쪽 글자도 같은 경로로 고쳐진다",
+          v2TextOf(now, "v2Tag") === "새 태그" &&
+          v2NodeOf(now, "v2Tag").pin.target === "photo",
+          JSON.stringify(v2TextOf(now, "v2Tag")));
+
+      }
+      else {
+        check("★ 프레임 안쪽 글자도 같은 경로로 고쳐진다", false,
+          "v2Tag 를 고르지 못했다: " + JSON.stringify(panel.canvasSelection));
+      }
+
+      /* ---- 7. Undo 한 번이 정말 한 칸을 되돌린다 ---- */
+
+      const beforeUndo = await readCanvas(page);
+
+      await page.click("#studioUndoButton");
+      await sleep(600);
+
+      const afterUndo = await readCanvas(page);
+
+      check("★ ↶ 한 번이 방금 친 글자 전체를 되돌린다",
+        v2TextOf(afterUndo, "v2Tag") === "tag" &&
+        v2TextOf(beforeUndo, "v2Tag") === "새 태그",
+        JSON.stringify({ before: v2TextOf(beforeUndo, "v2Tag"), after: v2TextOf(afterUndo, "v2Tag") }));
+
+      /* ---- 8. 입력 non-mutation · Export → Import ---- */
+
+      const untouched = await page.evaluate(() => {
+        const pkg = window.__scenarioLaySkinPackage;
+        const entry = (pkg.regions || []).find((r) => r && r.name === "home_canvas");
+        const block = entry.canvas.flow.blocks.find((b) => b.id === "v2Text");
+        return { align: block.align, width: block.width, text: block.props.text };
+      });
+
+      check("★ 들어온 SkinPackage 원본을 제자리에서 고치지 않았다",
+        untouched.align === "center" && untouched.width === 300 &&
+        untouched.text === "한 줄",
+        JSON.stringify(untouched));
+
+      const roundTrip = await page.evaluate(async () => {
+
+        const exported = window.buildSkinPackageExport(currentWorkingSkin);
+
+        if (!exported.ok) return { ok: false, message: exported.message };
+
+        const text = window.serializeSkinPackageExport(exported.skinPackage);
+
+        const result = await window.validateSkinPackageImport(text);
+
+        if (!result.ok) return { ok: false, message: result.message };
+
+        const entry =
+          (result.skinPackage.regions || []).find((r) => r && r.name === "home_canvas");
+
+        const blocks = entry ? entry.canvas.flow.blocks : [];
+        const block = blocks.find((b) => b.id === "v2Text");
+
+        return {
+          ok: true,
+          order: blocks.map((b) => b.id).join(","),
+          align: block ? block.align : null,
+          width: block ? block.width : null,
+          margin: block ? block.margin : null,
+          height: block ? block.height : null,
+          text: block ? block.props.text : null,
+          mystery: block ? block.props.mystery : null,
+          zzz: block ? block.zzz : null,
+          version: entry ? entry.canvas.version : null,
+          extra: entry ? entry.canvas.extra : null
+        };
+
+      });
+
+      check("★ Export → Import 왕복에서 v2 의 고친 값과 모르는 칸이 전부 살아남는다",
+        roundTrip.ok &&
+        roundTrip.version === 2 &&
+        roundTrip.order === "v2Rule,v2Logo,v2Text,v2Wide,v2Main" &&
+        roundTrip.align === "right" &&
+        roundTrip.width === 240 &&
+        roundTrip.height === "auto" &&
+        roundTrip.margin.top === -8 &&
+        roundTrip.text === "v2 여러 줄\n<b>굵게</b>" &&
+        roundTrip.mystery === "keep-props" &&
+        roundTrip.zzz.keep === "unknown-block-field" &&
+        roundTrip.extra === "unknown-canvas-field",
+        JSON.stringify(roundTrip));
+
+      /* ---- 9. 빈 곳 · 소유권 ---- */
+
+      await clickSelector(page, frame, false, ".hc-outside");
+
+      const after = await readV2Panel(page);
+
+      check("★ 도화지 밖 요소를 누르면 Canvas 선택이 풀린다(소유권이 넘어간다)",
+        after.canvasSelection.length === 0,
+        JSON.stringify(after.canvasSelection));
+
+      check("스크립트 오류 0", page.__errors.length === 0,
+        page.__errors.slice(0, 2).join(" | "));
+
+      await page.__ctx.close();
+
+
+      /* ---- 10. 별도 origin 프레임에서도 같은 결과 ---- */
+
+      const sbPage = await openStudio(browser, {
+        package: v2Package({ sandbox: true }),
+        sandbox: true
+      });
+
+      const sbFrame = await canvasFrame(sbPage, true);
+
+      await enableCanvasEditing(sbPage);
+
+      await clickElement(sbPage, sbFrame, true, "v2Text");
+
+      let sbPanel = await readV2Panel(sbPage);
+
+      check("★ sandbox 에서도 같은 부모 패널이 v2 블록을 연다",
+        same(sbPanel.canvasSelection, ["v2Text"]) &&
+        sbPanel.hasLayout === true && sbPanel.align === "center",
+        JSON.stringify({ s: sbPanel.canvasSelection, a: sbPanel.align }));
+
+      await sbPage.selectOption("#studioCanvasInspectorAlign", "left");
+      await sleep(400);
+
+      const sbCanvas = await readCanvas(sbPage);
+
+      check("★ sandbox 에서도 고친 값이 draft 에 쓰인다",
+        v2BlockOf(sbCanvas, "v2Text").align === "left",
+        String(v2BlockOf(sbCanvas, "v2Text").align));
+
+      /* main_visual 의 진입 규칙도 프레임 밖(부모)이 정한다 */
+      await clickElement(sbPage, sbFrame, true, "v2Photo");
+
+      sbPanel = await readV2Panel(sbPage);
+
+      check("★ sandbox 에서도 한 번 클릭은 프레임 전체다",
+        same(sbPanel.canvasSelection, ["v2Main"]),
+        JSON.stringify(sbPanel.canvasSelection));
+
+      await clickElement(sbPage, sbFrame, true, "v2Photo");
+
+      sbPanel = await readV2Panel(sbPage);
+
+      check("★ sandbox 에서도 한 번 더 누르면 안쪽 요소다",
+        same(sbPanel.canvasSelection, ["v2Photo"]),
+        JSON.stringify(sbPanel.canvasSelection));
+
+      check("★ 프레임 CSP 위반 0", (await cspViolations(sbFrame)).length === 0,
+        JSON.stringify(await cspViolations(sbFrame)));
+
+      check("★ 부모 CSP 위반 0", (await cspViolations(sbPage)).length === 0,
+        JSON.stringify(await cspViolations(sbPage)));
+
+      check("sandbox pageerror 0", sbPage.__errors.length === 0,
+        sbPage.__errors.slice(0, 2).join(" | "));
+
+      await sbPage.__ctx.close();
 
     }
 
