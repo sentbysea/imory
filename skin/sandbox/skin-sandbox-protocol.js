@@ -373,7 +373,37 @@ var SANDBOX_MESSAGE_TYPES = {
   ======================================================= */
 
   CANVAS_GEOMETRY: "IMORY_CANVAS_GEOMETRY",
-  CANVAS_TRANSFORM: "IMORY_CANVAS_TRANSFORM"
+  CANVAS_TRANSFORM: "IMORY_CANVAS_TRANSFORM",
+
+
+  /* =======================================================
+     HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 **페이지 자리**
+
+       CANVAS_LAYOUT  frame -> parent
+         { renderSeq, frames: [{ id, x, y }] }
+
+     ★ 왜 이 값만 올라오는가
+
+     프레임의 폭 · 높이 · 배율은 부모가 저장값에서 계산한다(계약
+     §24-3). 그런데 `main_visual` 이 흐름 안에서 **어디에 놓였는가**
+     는 앞 블록들의 실제 높이가 정하고, 글자 블록의 `height:"auto"`
+     는 스킨 조판이 정하므로 저장값만으로는 알 수 없다. 묶기 · 빼기
+     (계약 §28)가 "화면의 그 자리"를 지키려면 그 한 값이 필요하다.
+
+     그래서 이 메시지는 **자리 하나**만 나른다. 크기도 배율도 싣지
+     않는다 — 데이터가 주는 값을 프레임에서 한 번 더 받으면 어느
+     쪽이 맞는지 가르는 규칙이 새로 생긴다.
+
+     ★ 단위는 **도화지 폭의 분수**다. 픽셀이 올라오면 부모가 지금
+       Preview 의 배율을 알아야 하고(그 값은 부모 문서의 CSS 다),
+       분수면 `canvas.baseWidth` 한 번 곱해서 끝난다.
+
+     ★ 이것은 **보고**이지 요청이 아니다. 부모는 이 값을 그대로
+       저장하지 않는다 — 묶기 · 빼기를 누른 그 순간에만 자로 쓰고,
+       저장되는 숫자는 부모가 자기 draft 로 계산한다.
+  ======================================================= */
+
+  CANVAS_LAYOUT: "IMORY_CANVAS_LAYOUT"
 };
 
 
@@ -2415,6 +2445,61 @@ var SANDBOX_MESSAGE_SPEC = {
       return (
         shapeOk(payload.expected) &&
         shapeOk(payload.next)
+      );
+
+    }
+  },
+
+
+  /* =======================================================
+     HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 페이지 자리
+     (위 CANVAS_LAYOUT 주석)
+
+     ★ 값은 **분수**다. 도화지 폭으로 나눈 값이므로 ±1 을 크게
+       벗어날 일이 없지만, 상한은 좌표와 같은 자(±100000)를 빌려
+       쓴다 — 새 숫자 표를 만들지 않는다.
+
+     ★ 프레임이 하나도 없는 캔버스에서는 **빈 배열**이 올라온다.
+       "프레임이 없다"는 뜻이 하나뿐이므로 거부하지 않는다.
+  ======================================================= */
+
+  IMORY_CANVAS_LAYOUT: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "frames"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (
+        !Array.isArray(payload.frames) ||
+        payload.frames.length > SANDBOX_CANVAS_MAX_ELEMENTS
+      ) {
+        return false;
+      }
+
+      const seen = [];
+
+      return payload.frames.every(
+        (frame) => {
+
+          if (
+            !isPlainSandboxObject(frame) ||
+            !hasOnlyKnownSandboxKeys(frame, ["id", "x", "y"]) ||
+            !isSandboxInspectEditId(frame.id) ||
+            seen.indexOf(frame.id) !== -1 ||
+            !isSandboxCanvasCoord(frame.x) ||
+            !isSandboxCanvasCoord(frame.y)
+          ) {
+            return false;
+          }
+
+          seen.push(frame.id);
+
+          return true;
+
+        }
       );
 
     }

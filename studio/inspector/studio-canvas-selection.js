@@ -94,8 +94,12 @@ const STUDIO_CANVAS_FRAME_KINDS = ["move", "resize", "rotate"];
      회전은 이 라운드에 없다(계약 §25-7).
 ========================================================== */
 
+/* HOME-CANVAS-V2-ELEMENTS-1 — 따라가기 방식(`v2-follow`)과 pin 의 기준
+   셋(`v2-pin`)도 **패널 전용**이다. 둘 다 자리를 유지한 채 바꾸므로
+   좌표를 함께 쓰지만, 그 계산은 확정 뒤 번역 한 곳이 한다(§28-4). */
 const STUDIO_CANVAS_V2_PANEL_KINDS =
-  ["v2-align", "v2-width", "v2-height", "v2-margin", "v2-order", "v2-text"];
+  ["v2-align", "v2-width", "v2-height", "v2-margin", "v2-order", "v2-text",
+   "v2-follow", "v2-pin"];
 
 /* =========================================================
    HOME-CANVAS-V2-EDITOR-1B — v2 의 자리 · 크기 · 각도
@@ -1655,7 +1659,12 @@ function commitStudioCanvasElementChange(request, gate) {
          있다(studio/inspector/studio-canvas-v2-space.js). */
       "v2-move": window.setStudioCanvasV2NodeMove,
       "v2-resize": window.setStudioCanvasV2NodeResize,
-      "v2-rotate": window.setStudioCanvasV2NodeRotation
+      "v2-rotate": window.setStudioCanvasV2NodeRotation,
+
+      /* HOME-CANVAS-V2-ELEMENTS-1 — 따라가기 방식과 pin 의 기준.
+         둘 다 자리를 유지한 채 바꾼다(계약 §28-4). */
+      "v2-follow": window.setStudioCanvasV2NodeFollow,
+      "v2-pin": window.setStudioCanvasV2NodePin
     }[kind];
 
   if (typeof writer !== "function") {
@@ -1707,7 +1716,13 @@ function commitStudioCanvasElementChange(request, gate) {
          (§26-2), 그 값이 무슨 자인지는 부모만 안다. */
       "v2-move": ["x", "y"],
       "v2-resize": ["x", "y", "width", "height"],
-      "v2-rotate": ["rotation"]
+      "v2-rotate": ["rotation"],
+
+      /* HOME-CANVAS-V2-ELEMENTS-1 — 메시지가 소유하는 것은 **고른
+         값**뿐이다. 그것을 유지하기 위해 함께 바뀌는 좌표 · offset 은
+         번역이 계산해 순수 함수에 넘긴다(계약 §28-4). */
+      "v2-follow": ["follow"],
+      "v2-pin": ["target", "anchor", "origin"]
     }[kind];
 
   const asBox =
@@ -1863,7 +1878,10 @@ function studioCanvasV2AddTypes(target) {
 
   }
 
-  if (target === "overlay") {
+  /* HOME-CANVAS-V2-ELEMENTS-1 — `main_visual` **안**도 같은 표다.
+     프레임 내부 요소는 자유 배치 요소와 **같은 모양**이고(§14-5)
+     다른 것은 좌표를 푸는 자 하나뿐이다. */
+  if (target === "overlay" || target === "frame") {
 
     return Array.isArray(window.SKIN_HOME_CANVAS_ELEMENT_TYPES)
       ? window.SKIN_HOME_CANVAS_ELEMENT_TYPES
@@ -1908,11 +1926,23 @@ function commitStudioCanvasAddNode(request) {
     return { accepted: false, reason: "unsupported" };
   }
 
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 프레임 안에 넣을 때는 **어느
+     프레임인가**가 요청에 있어야 한다. 지금 선택에서 추측하지
+     않는다(계약 §28-2 — 소속은 언제나 명시적이다). */
+  if (
+    value.target === "frame" &&
+    (typeof value.frameId !== "string" ||
+      !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.frameId))
+  ) {
+    return { accepted: false, reason: "frame" };
+  }
+
   const result =
     window.addStudioCanvasV2Node({
       target: value.target,
       type: value.type,
-      slot: (typeof value.slot === "string") ? value.slot : ""
+      slot: (typeof value.slot === "string") ? value.slot : "",
+      frameId: (typeof value.frameId === "string") ? value.frameId : ""
     });
 
   if (!result || !result.ok) {
@@ -1938,6 +1968,113 @@ function commitStudioCanvasAddNode(request) {
     slot: result.slot || null,
     declaredSlot: result.declaredSlot || null
   };
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-V2-ELEMENTS-1 — 소속을 옮기고 지우는 입구
+
+   commitStudioCanvasStructureNode({ op, id, frameId })
+
+     op  "attach"  overlay → 그 `main_visual` 안
+         "detach"  프레임 안 → 페이지 자유 장식
+         "remove"  지운다
+
+     -> { accepted:true, id, op }
+     -> { accepted:false, reason }
+
+   ★ **추가와 같은 문이지 고치는 문이 아니다.** 바뀌는 것이 노드의
+     한 칸이 아니라 **어느 배열에 있는가**라서 `expected` 로 지킬
+     "지금 값"이 없다. 대신 순수 함수가 옮긴 뒤 캔버스 전체를 다시
+     검증한다(skin/skin-home-canvas-write-v2.js).
+
+   ★ 그래도 **지금 고른 것 하나**여야 한다. 이 셋은 전부 왼쪽 패널의
+     버튼이고 그 패널이 가리키는 것은 단독 선택이므로, 화면에 보이는
+     것과 바뀌는 것을 어긋나게 두지 않는다(계약 §28-5).
+
+   ★ 프레임은 이 문을 쓸 수 없다 — 닿는 것은 부모 realm 의 패널뿐이다
+     (추가 · 글자 내용과 같은 사정).
+========================================================== */
+
+const STUDIO_CANVAS_STRUCTURE_OPS = ["attach", "detach", "remove"];
+
+
+function commitStudioCanvasStructureNode(request) {
+
+  const value =
+    (request && typeof request === "object") ? request : null;
+
+  if (!value || STUDIO_CANVAS_STRUCTURE_OPS.indexOf(value.op) === -1) {
+    return { accepted: false, reason: "op" };
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.id)
+  ) {
+    return { accepted: false, reason: "id" };
+  }
+
+  if (!studioCanvasEditingIsOn()) {
+    return { accepted: false, reason: "not-editing" };
+  }
+
+  if (studioCanvasPayloadVersion(studioCanvasDraftPayload()) !== 2) {
+    return { accepted: false, reason: "canvas" };
+  }
+
+  if (
+    !studioCanvasSelection ||
+    studioCanvasSelection.ids.length !== 1 ||
+    studioCanvasSelection.primaryId !== value.id
+  ) {
+    return { accepted: false, reason: "selection" };
+  }
+
+  if (
+    value.op === "attach" &&
+    (typeof value.frameId !== "string" ||
+      !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.frameId))
+  ) {
+    return { accepted: false, reason: "frame" };
+  }
+
+  if (typeof window.moveStudioCanvasV2Node !== "function") {
+    return { accepted: false, reason: "unsupported" };
+  }
+
+  const result =
+    window.moveStudioCanvasV2Node({
+      op: value.op,
+      id: value.id,
+      frameId: (typeof value.frameId === "string") ? value.frameId : ""
+    });
+
+  if (!result || !result.ok) {
+
+    console.info(
+      "[studio-canvas] 소속을 옮기지 않았습니다",
+      { op: value.op, id: value.id, reason: result && result.reason }
+    );
+
+    return { accepted: false, reason: (result && result.reason) || "rejected" };
+
+  }
+
+  /* =====================================================
+     지운 것은 고를 수 없다 — 선택을 푼다.
+
+     ★ 옮긴 것은 **id 가 그대로**이므로(§14-7) 다시 고르지 않는다.
+       draft 가 바뀌면 reconcile 이 그 선택을 한 번 더 보고(자가
+       바뀌었으므로 좌표도 다시 내려간다), 화면의 틀은 프레임이
+       다시 그린 뒤 올려 준다.
+  ====================================================== */
+  if (value.op === "remove") {
+    clearStudioCanvasSelection();
+  }
+
+  return { accepted: true, id: value.id, op: value.op };
 
 }
 
@@ -2212,6 +2349,9 @@ if (typeof window !== "undefined") {
   /* HOME-CANVAS-V2-ADD-1 — 새 재료 하나(왼쪽 패널 전용 입구) */
   window.commitStudioCanvasAddNode = commitStudioCanvasAddNode;
   window.studioCanvasV2AddTypes = studioCanvasV2AddTypes;
+
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 묶기 · 빼기 · 삭제(같은 자리) */
+  window.commitStudioCanvasStructureNode = commitStudioCanvasStructureNode;
   window.notifyStudioCanvasPanel = notifyStudioCanvasPanel;
   window.postStudioCanvasGeometryToFrame = postStudioCanvasGeometryToFrame;
   window.studioCanvasSingleGeometry = studioCanvasSingleGeometry;

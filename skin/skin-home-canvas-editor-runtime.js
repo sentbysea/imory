@@ -103,6 +103,18 @@ const CANVAS_BLOCK_ATTR = "data-imory-canvas-block";
 
 const CANVAS_LOCKED_ATTR = "data-imory-canvas-locked";
 
+/* =========================================================
+   HOME-CANVAS-V2-ELEMENTS-1 — `main_visual` 프레임의 표식
+
+   ★ 같은 속성을 둘이 쓴다(계약 §25-2). 값 `"1"` 은 이 파일이
+     Moveable control box 에 붙이는 것이고, 렌더러가 v2 프레임
+     블록에 붙이는 것은 빈 값이다. 그래서 프레임을 세는 자리는
+     **값과 `data-imory-canvas-block` 을 함께** 본다.
+========================================================== */
+const CANVAS_FRAME_ATTR = "data-imory-canvas-frame";
+
+const CANVAS_CONTROL_BOX_VALUE = "1";
+
 /* skin/skin-home-canvas.js SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN 과
    같은 규칙. 이 값이 querySelector 의 문자열이 되므로 관문을 겹친다. */
 const CANVAS_ELEMENT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
@@ -756,6 +768,8 @@ function displayOnlyMoveableOptions(target, nonce) {
      getRoot        : () => Element|null   렌더 컨테이너
      getNonce       : () => string         이 문서의 CSP nonce
      onActiveChange : (active, editId) => void
+     onLayout       : ({ frames }) => void  v2 프레임의 페이지 자리
+                                            (도화지 폭의 분수 — §28-3)
    }
 
    controller = {
@@ -825,6 +839,11 @@ export function createHomeCanvasSelectionFrame(options) {
 
     /* 이 프레임에서 lasso 를 몇 번 했는가 — 진단용 */
     lassoCount: 0,
+
+    /* HOME-CANVAS-V2-ELEMENTS-1 — 마지막으로 올려보낸 프레임 자리의
+       지문. 같은 값을 다시 보내지 않기 위한 것이고, 그래서 화면이
+       그대로면 메시지도 0 이다. */
+    layoutShape: "",
 
     /* 마지막 lasso 가 시작된 자리(도화지 안이었는가) */
     dragAllowed: false,
@@ -2173,6 +2192,126 @@ export function createHomeCanvasSelectionFrame(options) {
       root.getBoundingClientRect();
 
     return box.width > 0 ? (box.width / baseWidth) : 0;
+
+  }
+
+
+  /* =========================================================
+     HOME-CANVAS-V2-ELEMENTS-1 — 프레임의 **페이지 자리**를 알린다
+     (계약 §28-3)
+
+     ★ 여기서 재는 것은 **데이터가 줄 수 없는 한 가지**뿐이다.
+
+     프레임의 폭 · 높이 · 배율은 렌더러가 저장값에서 계산한다(계약
+     §24-3). 그러나 프레임이 흐름 안에서 **어디에 놓였는가**는 앞
+     블록들의 실제 높이가 정하고, 글자 블록의 `height:"auto"` 는
+     스킨 조판이 정하므로(계약 §8) 저장값만으로는 알 수 없다.
+     "묶기 · 빼기 전후에 화면 자리가 유지된다"에는 그 한 값이
+     필요하다 — 그래서 그것만 잰다.
+
+     ★ 단위는 **도화지 폭의 분수**다. 부모가 `canvas.baseWidth` 를
+       곱하면 곧 Canvas 좌표가 된다. 이 문서는 baseWidth 를 알 필요가
+       없고 부모는 픽셀을 받지 않는다(§14 의 소유권과 같은 결).
+
+     ★ 기준 상자는 도화지의 **padding box** 다 — 자유 배치 요소의
+       백분율이 풀리는 그 상자이고, 스킨이 도화지에 테두리를 주면
+       getBoundingClientRect 의 바깥 상자와 한 칸 어긋난다.
+
+     ★ 바깥 문서의 Preview `transform: scale()` 은 나눠져 사라진다.
+       레이아웃 px(`offsetWidth` · `clientLeft`)과 화면 px(rect)을
+       함께 쓰므로 그 배율 하나만 맞춰 준다.
+  ========================================================== */
+
+  function reportLayout() {
+
+    if (typeof opts.onLayout !== "function") {
+      return;
+    }
+
+    const root =
+      canvasRoot();
+
+    if (!root) {
+      return;
+    }
+
+    const rect =
+      root.getBoundingClientRect();
+
+    if (!(rect.width > 0) || !(root.offsetWidth > 0)) {
+      return;
+    }
+
+    /* 레이아웃 px → 화면 px */
+    const px =
+      rect.width / root.offsetWidth;
+
+    const left =
+      rect.left + root.clientLeft * px;
+
+    const top =
+      rect.top + root.clientTop * px;
+
+    const inner =
+      root.clientWidth * px;
+
+    if (!(inner > 0)) {
+      return;
+    }
+
+    const trim =
+      (value) => Math.round(value * 1000000) / 1000000;
+
+    const frames = [];
+
+    Array.prototype.forEach.call(
+      root.querySelectorAll(`[${CANVAS_BLOCK_ATTR}][${CANVAS_FRAME_ATTR}]`),
+      (el) => {
+
+        /* 위 ★ — 값이 "1" 인 것은 이 파일이 만든 control box 다 */
+        if (el.getAttribute(CANVAS_FRAME_ATTR) === CANVAS_CONTROL_BOX_VALUE) {
+          return;
+        }
+
+        const id =
+          el.getAttribute(CANVAS_EDIT_ID_ATTR) || "";
+
+        if (!CANVAS_ELEMENT_ID_PATTERN.test(id)) {
+          return;
+        }
+
+        const box =
+          el.getBoundingClientRect();
+
+        if (!(box.width > 0)) {
+          return;
+        }
+
+        frames.push({
+          id: id,
+          x: trim((box.left - left) / inner),
+          y: trim((box.top - top) / inner)
+        });
+
+      }
+    );
+
+    const shape =
+      JSON.stringify(frames);
+
+    if (shape === state.layoutShape) {
+      return;
+    }
+
+    state.layoutShape = shape;
+
+    try {
+      opts.onLayout({ frames: frames });
+    }
+    catch (err) {
+      /* 알림이 실패해도 화면은 그대로다 — 다음 렌더에서 다시 보낸다 */
+      state.layoutShape = "";
+    }
 
   }
 
@@ -4230,6 +4369,8 @@ export function createHomeCanvasSelectionFrame(options) {
 
       state.geometry = null;
 
+      state.layoutShape = "";
+
       detach();
 
       destroySelecto();
@@ -4237,6 +4378,13 @@ export function createHomeCanvasSelectionFrame(options) {
       return false;
 
     }
+
+
+    /* HOME-CANVAS-V2-ELEMENTS-1 — 지금 화면에서 프레임이 어디에
+       놓였는가. 선택과 무관하므로(묶을 프레임은 고르지 않은 채로도
+       고를 수 있다) 이 관문 바로 뒤에서 한 번 본다. 값이 그대로면
+       메시지는 나가지 않는다. */
+    reportLayout();
 
 
     /* 부모가 승인한 목록 — 지금 화면에 실제로 있는 것만 남긴다.

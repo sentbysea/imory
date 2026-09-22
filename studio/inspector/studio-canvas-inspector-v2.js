@@ -1046,6 +1046,514 @@ function studioCanvasV2FreeNumberRow(field, view) {
 }
 
 
+/* =========================================================
+   5-2. 소속과 따라가기 (HOME-CANVAS-V2-ELEMENTS-1)
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §28
+
+   ── 여기 있는 칸 ───────────────────────────────────────
+
+     따라가기        transform ↔ pin            (kind: v2-follow)
+     기준 대상 · 기준점 · 자기 기준점  (pin 일 때 · kind: v2-pin)
+     메인 비주얼로 묶기 / 에서 빼기 / 삭제      (구조 입구)
+
+   ★ 앞 셋은 **자리를 유지한 채** 바뀐다. 그 계산은 패널이 하지
+     않는다 — 확정 뒤 번역 한 곳이 렌더러의 자로 한다
+     (studio/inspector/studio-canvas-v2-space.js).
+
+   ★ 뒤 셋은 고치는 관문이 아니라 **구조 입구**를 지난다
+     (commitStudioCanvasStructureNode). 바뀌는 것이 한 칸이 아니라
+     소속이라 `expected` 로 지킬 지금 값이 없기 때문이다(§28-5).
+========================================================== */
+
+const STUDIO_CANVAS_V2_PIN_TARGET_LABELS = {
+  frame: "프레임 전체",
+  photo: "대표 사진"
+};
+
+const STUDIO_CANVAS_V2_PIN_POINT_LABELS = {
+  "top-left": "왼쪽 위",
+  top: "위",
+  "top-right": "오른쪽 위",
+  left: "왼쪽",
+  center: "가운데",
+  right: "오른쪽",
+  "bottom-left": "왼쪽 아래",
+  bottom: "아래",
+  "bottom-right": "오른쪽 아래"
+};
+
+
+function studioCanvasV2PinTargets() {
+
+  return Array.isArray(window.SKIN_HOME_CANVAS_PIN_TARGETS)
+    ? window.SKIN_HOME_CANVAS_PIN_TARGETS
+    : ["frame", "photo"];
+
+}
+
+
+function studioCanvasV2PinPoints() {
+
+  return Array.isArray(window.SKIN_HOME_CANVAS_PIN_POINTS)
+    ? window.SKIN_HOME_CANVAS_PIN_POINTS
+    : Object.keys(STUDIO_CANVAS_V2_PIN_POINT_LABELS);
+
+}
+
+
+/* 지금 pin 의 세 칸 — 실행 payload 는 언제나 채워져 있다(§23-2) */
+function studioCanvasV2PinCurrent(node) {
+
+  const pin =
+    (node && node.pin && typeof node.pin === "object") ? node.pin : {};
+
+  return {
+    target: pin.target === "photo" ? "photo" : "frame",
+    anchor:
+      (studioCanvasV2PinPoints().indexOf(pin.anchor) !== -1) ? pin.anchor : "center",
+    origin:
+      (studioCanvasV2PinPoints().indexOf(pin.origin) !== -1) ? pin.origin : "center"
+  };
+
+}
+
+
+/* select 한 줄 — 값 표 · 이름 표 · 고쳤을 때 할 일만 다르다 */
+function studioCanvasV2ChoiceRow(spec) {
+
+  const row =
+    document.createElement("div");
+
+  row.className = "studio-inspector-row";
+
+  const label =
+    document.createElement("label");
+
+  label.className = "studio-inspector-row-label";
+  label.htmlFor = spec.id;
+  label.textContent = spec.label;
+
+  const select =
+    document.createElement("select");
+
+  select.className = "studio-inspector-select";
+  select.id = spec.id;
+
+  spec.values.forEach((value) => {
+
+    const option =
+      document.createElement("option");
+
+    option.value = value;
+
+    option.textContent =
+      Object.prototype.hasOwnProperty.call(spec.labels, value)
+        ? spec.labels[value]
+        : value;
+
+    select.appendChild(option);
+
+  });
+
+  select.value = spec.value;
+
+  select.addEventListener("change", () => spec.onChange(select));
+
+  row.appendChild(label);
+  row.appendChild(select);
+
+  const error =
+    studioCanvasInspectorErrorNode(spec.field);
+
+  const box =
+    document.createElement("div");
+
+  box.appendChild(row);
+  box.appendChild(error);
+
+  studioCanvasInspectorInputs[spec.field] = select;
+  studioCanvasInspectorErrors[spec.field] = error;
+
+  return box;
+
+}
+
+
+/*
+  따라가기 방식.
+
+  ★ 고르는 순간 **자리가 유지된 채** 바뀐다. `pin` 으로 갈 때는
+    왼쪽 위 기준으로 시작하고(계약 §28-4), 기준점은 아래 칸에서
+    바꾼다 — 그때도 자리는 그대로다.
+*/
+function studioCanvasV2FollowRow(view) {
+
+  return studioCanvasV2ChoiceRow({
+
+    id: "studioCanvasInspectorFollow",
+    field: "follow",
+    label: "따라가기",
+    values: ["transform", "pin"],
+    labels: STUDIO_CANVAS_V2_FOLLOW_LABELS,
+    value: view.space.follow === "pin" ? "pin" : "transform",
+
+    onChange: (select) => {
+
+      const now =
+        studioCanvasInspectorView();
+
+      if (now.mode !== "single" || now.kind !== "frame-element") {
+        return;
+      }
+
+      const current =
+        (now.space && now.space.follow === "pin") ? "pin" : "transform";
+
+      if (select.value === current) {
+        return;
+      }
+
+      const result =
+        commitStudioCanvasInspectorField(
+          "v2-follow",
+          { follow: select.value },
+          { follow: current }
+        );
+
+      if (!result || !result.accepted) {
+
+        setStudioCanvasInspectorError(
+          "follow",
+          studioCanvasInspectorRejectText(result && result.reason)
+        );
+
+        select.value = current;
+
+        return;
+
+      }
+
+      setStudioCanvasInspectorError("follow", "");
+
+    }
+
+  });
+
+}
+
+
+/*
+  pin 의 세 칸. 하나를 바꿔도 **자리는 그대로**이고 offset 만
+  다시 계산된다(계약 §28-4) — 그래서 셋이 한 요청이다.
+*/
+function studioCanvasV2PinRow(view, field, label, values, labels) {
+
+  const current =
+    studioCanvasV2PinCurrent(view.node);
+
+  return studioCanvasV2ChoiceRow({
+
+    id: `studioCanvasInspectorPin-${field}`,
+    field: `pin-${field}`,
+    label: label,
+    values: values,
+    labels: labels,
+    value: current[field],
+
+    onChange: (select) => {
+
+      const now =
+        studioCanvasInspectorView();
+
+      if (now.mode !== "single" || now.kind !== "frame-element") {
+        return;
+      }
+
+      const before =
+        studioCanvasV2PinCurrent(now.node);
+
+      const next =
+        Object.assign({}, before);
+
+      next[field] = select.value;
+
+      const result =
+        commitStudioCanvasInspectorField("v2-pin", next, before);
+
+      if (!result || !result.accepted) {
+
+        setStudioCanvasInspectorError(
+          `pin-${field}`,
+          studioCanvasInspectorRejectText(result && result.reason)
+        );
+
+        select.value = before[field];
+
+        return;
+
+      }
+
+      setStudioCanvasInspectorError(`pin-${field}`, "");
+
+    }
+
+  });
+
+}
+
+
+function studioCanvasV2PinBlock(view) {
+
+  const box =
+    document.createElement("div");
+
+  box.className = "studio-canvas-inspector-pin";
+  box.id = "studioCanvasInspectorPin";
+
+  const caption =
+    document.createElement("p");
+
+  caption.className = "studio-inspector-block-label";
+  caption.textContent = "기준점 — 프레임이 커질 때 붙어 있을 자리";
+
+  box.appendChild(caption);
+
+  box.appendChild(
+    studioCanvasV2PinRow(
+      view, "target", "기준 대상",
+      studioCanvasV2PinTargets(), STUDIO_CANVAS_V2_PIN_TARGET_LABELS)
+  );
+
+  box.appendChild(
+    studioCanvasV2PinRow(
+      view, "anchor", "대상의 기준점",
+      studioCanvasV2PinPoints(), STUDIO_CANVAS_V2_PIN_POINT_LABELS)
+  );
+
+  box.appendChild(
+    studioCanvasV2PinRow(
+      view, "origin", "자기 기준점",
+      studioCanvasV2PinPoints(), STUDIO_CANVAS_V2_PIN_POINT_LABELS)
+  );
+
+  return box;
+
+}
+
+
+/* 지금 draft 의 `main_visual` 블록들 — 묶을 수 있는 자리 */
+function studioCanvasV2Frames() {
+
+  if (typeof window.studioCanvasDraftPayload !== "function") {
+    return [];
+  }
+
+  const payload =
+    window.studioCanvasDraftPayload();
+
+  const blocks =
+    (payload && payload.flow && Array.isArray(payload.flow.blocks))
+      ? payload.flow.blocks
+      : [];
+
+  return blocks.filter(
+    (block) => block && typeof block === "object" && block.type === "main_visual"
+  );
+
+}
+
+
+/* 구조 입구 하나 — 누르면 소속이 바뀌거나 사라진다 */
+function studioCanvasV2StructureButton(spec) {
+
+  const button =
+    document.createElement("button");
+
+  button.type = "button";
+  button.className = "studio-inspector-mini-button studio-canvas-structure-button";
+  button.id = spec.id;
+  button.textContent = spec.label;
+
+  button.addEventListener("click", () => {
+
+    const now =
+      studioCanvasInspectorView();
+
+    if (now.mode !== "single") {
+      return;
+    }
+
+    if (typeof window.commitStudioCanvasStructureNode !== "function") {
+      return;
+    }
+
+    const request =
+      { op: spec.op, id: now.id };
+
+    if (spec.op === "attach") {
+
+      const select =
+        studioCanvasInspectorInputs && studioCanvasInspectorInputs.attachFrame;
+
+      request.frameId = select ? select.value : "";
+
+    }
+
+    const result =
+      window.commitStudioCanvasStructureNode(request);
+
+    setStudioCanvasInspectorError(
+      "structure",
+      (result && result.accepted)
+        ? ""
+        : studioCanvasInspectorRejectText(result && result.reason)
+    );
+
+  });
+
+  return button;
+
+}
+
+
+/*
+  소속을 바꾸는 자리.
+
+  ★ 묶을 프레임은 **주인이 고른다**(계약 §28-2). 하나뿐이어도
+    고르는 칸을 그린다 — lasso 나 가까움으로 소속이 정해지지 않는
+    다는 것이 이 계약의 요점이다.
+*/
+function studioCanvasV2StructureBlock(view) {
+
+  const box =
+    document.createElement("div");
+
+  box.className = "studio-canvas-inspector-structure";
+  box.id = "studioCanvasInspectorStructure";
+
+  const caption =
+    document.createElement("p");
+
+  caption.className = "studio-inspector-block-label";
+  caption.textContent = "소속";
+
+  box.appendChild(caption);
+
+  if (view.kind === "overlay") {
+
+    const frames =
+      studioCanvasV2Frames();
+
+    if (frames.length) {
+
+      box.appendChild(
+        studioCanvasV2ChoiceRow({
+          id: "studioCanvasInspectorAttachFrame",
+          field: "attachFrame",
+          label: "묶을 메인 비주얼",
+          values: frames.map((frame) => frame.id),
+          labels: {},
+          value: frames[0].id,
+          onChange: () => {}
+        })
+      );
+
+      box.appendChild(
+        studioCanvasV2StructureButton({
+          id: "studioCanvasAttach",
+          op: "attach",
+          label: "메인 비주얼로 묶기"
+        })
+      );
+
+    }
+    else {
+
+      box.appendChild(
+        studioCanvasInspectorNote(
+          "묶을 메인 비주얼이 없습니다 — 먼저 흐름에 하나 만드세요.",
+          "studioCanvasInspectorNoFrame"
+        )
+      );
+
+    }
+
+  }
+
+  if (view.kind === "frame-element") {
+
+    box.appendChild(
+      studioCanvasV2StructureButton({
+        id: "studioCanvasDetach",
+        op: "detach",
+        label: "메인 비주얼에서 빼기"
+      })
+    );
+
+  }
+
+  box.appendChild(
+    studioCanvasV2StructureButton({
+      id: "studioCanvasRemove",
+      op: "remove",
+      label: "삭제"
+    })
+  );
+
+  const error =
+    studioCanvasInspectorErrorNode("structure");
+
+  studioCanvasInspectorErrors.structure = error;
+
+  box.appendChild(error);
+
+  return box;
+
+}
+
+
+/*
+  따라가기 · pin 세 칸의 값만 갈아 끼운다(Undo · Import 로 바뀐다).
+  **포커스가 있는 칸은 건너뛴다** — v1 과 같은 이유다.
+*/
+function syncStudioCanvasV2FollowInputs(view) {
+
+  if (view.kind !== "frame-element" || !studioCanvasInspectorInputs) {
+    return;
+  }
+
+  const active =
+    document.activeElement;
+
+  const follow =
+    studioCanvasInspectorInputs.follow;
+
+  if (follow && follow !== active) {
+    follow.value = view.space.follow === "pin" ? "pin" : "transform";
+  }
+
+  if (view.space.follow !== "pin") {
+    return;
+  }
+
+  const current =
+    studioCanvasV2PinCurrent(view.node);
+
+  ["target", "anchor", "origin"].forEach((field) => {
+
+    const select =
+      studioCanvasInspectorInputs[`pin-${field}`];
+
+    if (select && select !== active) {
+      select.value = current[field];
+    }
+
+  });
+
+}
+
+
 /* 그 자가 무슨 자인지 한 줄로 — 숫자만 보면 알 수 없다 */
 function studioCanvasV2SpaceCaption(view) {
 
@@ -1076,17 +1584,11 @@ function studioCanvasV2FreeBlock(view) {
 
   layout.appendChild(caption);
 
+  /* HOME-CANVAS-V2-ELEMENTS-1 — `1B` 에서는 읽기 전용 한 줄이었다.
+     이제 고를 수 있고, 고르면 **자리를 유지한 채** 방식이 바뀐다
+     (계약 §28-4). */
   if (view.kind === "frame-element") {
-
-    layout.appendChild(
-      studioCanvasInspectorReadRow(
-        "따라가기",
-        STUDIO_CANVAS_V2_FOLLOW_LABELS[
-          view.space.follow === "pin" ? "pin" : "transform"
-        ]
-      )
-    );
-
+    layout.appendChild(studioCanvasV2FollowRow(view));
   }
 
   STUDIO_CANVAS_V2_FREE_FIELDS.forEach((field) => {
@@ -1191,8 +1693,18 @@ function buildStudioCanvasV2Inspector(view) {
     ====================================================== */
 
     if (view.space) {
+
       studioCanvasInspectorBody.appendChild(studioCanvasV2FreeBlock(view));
+
+      /* HOME-CANVAS-V2-ELEMENTS-1 — pin 의 기준 셋과 소속 */
+      if (view.kind === "frame-element" && view.space.follow === "pin") {
+        studioCanvasInspectorBody.appendChild(studioCanvasV2PinBlock(view));
+      }
+
+      studioCanvasInspectorBody.appendChild(studioCanvasV2StructureBlock(view));
+
       return;
+
     }
 
     const box =
@@ -1230,6 +1742,12 @@ function buildStudioCanvasV2Inspector(view) {
     );
 
     studioCanvasInspectorBody.appendChild(box);
+
+    /* 자를 만들 수 없어도 **지우고 빼는 것은 할 수 있다** — 자리
+       계산이 필요 없는 동작이고(빼기는 필요하다 · 거기서 다시
+       거절된다), 고칠 수 없는 요소가 지울 수도 없으면 주인이
+       손쓸 길이 없다 */
+    studioCanvasInspectorBody.appendChild(studioCanvasV2StructureBlock(view));
 
     return;
 
@@ -1274,6 +1792,10 @@ function buildStudioCanvasV2Inspector(view) {
 
   studioCanvasInspectorBody.appendChild(layout);
 
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 블록도 지울 수 있다. `main_visual` 을
+     지우면 그 안의 장식도 함께 없어진다 — 프레임이 곧 그 자리다. */
+  studioCanvasInspectorBody.appendChild(studioCanvasV2StructureBlock(view));
+
 }
 
 
@@ -1310,6 +1832,7 @@ function syncStudioCanvasV2Inspector(view) {
        다섯 칸. 자가 없으면 그릴 것도 없다(읽기 전용 요약). */
     if (view.space) {
       syncStudioCanvasV2FreeInputs(view);
+      syncStudioCanvasV2FollowInputs(view);
     }
 
     return;

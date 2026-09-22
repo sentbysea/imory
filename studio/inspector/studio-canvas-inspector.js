@@ -87,7 +87,17 @@ const STUDIO_CANVAS_REJECT_MESSAGES = {
   generation: "고른 요소가 바뀌었습니다.",
   element: "그 요소를 더 이상 고칠 수 없습니다.",
   "not-editing": "지금은 캔버스를 고칠 수 없습니다.",
-  current: "저장된 값이 계약을 어기고 있어 고칠 수 없습니다."
+  current: "저장된 값이 계약을 어기고 있어 고칠 수 없습니다.",
+
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기(계약 §28) */
+  layout: "프레임이 지금 화면의 어디에 있는지 아직 모릅니다 — 잠시 뒤에 다시 눌러 주세요.",
+  "auto-origin": "높이가 Auto 이고 세로 기준점이 위가 아니라서 자리를 정확히 옮길 수 없습니다 — 높이를 숫자로 둔 뒤에 해 주세요.",
+  primary: "메인 비주얼의 대표 사진은 빼거나 지울 수 없습니다.",
+  frame: "어느 메인 비주얼에 묶을지 골라 주세요.",
+  pin: "먼저 따라가기 방식을 기준점으로 바꿔 주세요.",
+  limit: "이 자리에는 더 넣을 수 없습니다(한 층에 200개).",
+  invalid: "계약을 어기는 모양이라 바꾸지 않았습니다.",
+  space: "지금은 이 프레임의 자를 만들 수 없습니다."
 };
 
 
@@ -300,9 +310,13 @@ function studioCanvasInspectorShapeOf(view) {
        HOME-CANVAS-V2-EDITOR-1B — 자를 만들 수 있는가도 지문이다.
        같은 요소라도 자가 없으면 입력칸 대신 읽기 전용 요약을
        그리므로, 그 둘을 한 지문으로 두면 옛 DOM 이 남는다. */
+    /* HOME-CANVAS-V2-ELEMENTS-1 — 따라가기 방식도 지문이다. `pin` 이
+       되면 기준 대상 · 기준점 칸이 생기므로(계약 §28-4) 그 둘을 한
+       지문으로 두면 옛 DOM 이 남는다. */
     return (
       `single:${view.version || 1}:${view.kind || "element"}:` +
-      `${view.id}:${view.type}:${view.space ? "geo" : "ro"}`
+      `${view.id}:${view.type}:${view.space ? "geo" : "ro"}:` +
+      `${(view.space && view.space.follow) || ""}`
     );
   }
 

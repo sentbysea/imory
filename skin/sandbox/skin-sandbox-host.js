@@ -1968,6 +1968,12 @@ async function renderSandboxPageIntoHandle(handle, opts) {
            Studio 가 자기 draft 로 판단한다. */
         handle.handlers[TYPES.CANVAS_TRANSFORM] = inspectRelay("canvas-transform");
 
+        /* HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 페이지 자리.
+           여기서도 해석하지 않는다 — "지금 화면의 것인가" 하나만
+           보고 그대로 올린다. 그 숫자를 무엇에 쓸지는 부모 realm 의
+           Studio 가 정한다(묶기 · 빼기의 자). */
+        handle.handlers[TYPES.CANVAS_LAYOUT] = inspectRelay("canvas-layout");
+
         handle.handlers[TYPES.INSPECT_CANDIDATES] = inspectRelay("candidates");
         handle.handlers[TYPES.INSPECT_TEXT] = inspectRelay("text");
         handle.handlers[TYPES.INSPECT_DRAG] = inspectRelay("drag");

@@ -178,10 +178,13 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 > `V2-EDITOR-1B`(2026-09-22, **§26** — 프레임 내부 요소 · overlay 의 자리 ·
 > 크기 · 각도, 패널과 직접 조작) → `V2-ADD-1`(2026-09-22, **§27** —
 > **재료 추가**. 흐름 다섯 · 자유 장식 여섯 · `main_visual` 의 primary
-> 사진과 빈 이미지 슬롯을 함께 만든다)까지 끝났다. **다음 작업은
-> `HOME-CANVAS-V2-ELEMENTS-1` 의 남은 절반**(삭제 · `hidden`/`locked`
-> 토글 · 순서 밖의 구조 편집)이고, 그 뒤가 `V2-ATTACH-1`(묶기/해제)이다
-> (§14-13).
+> 사진과 빈 이미지 슬롯을 함께 만든다) → `V2-ELEMENTS-1`(2026-09-22,
+> **§28** — **소속과 따라가기**. `main_visual` 안에 장식 추가 · 묶기 ·
+> 빼기 · `follow`/`pin` 의 기준 · 삭제. 화면 자리를 유지하고, 그
+> 계산에 필요한 값 중 저장값이 줄 수 없는 하나만 프레임이 분수로
+> 보고한다)까지 끝났다. **다음 작업은 `V2-GROUP-1`**(여럿을 한 번에
+> 묶기 · primary 지정 · 그룹 조작)이고 `hidden`/`locked` 토글은 아직
+> 남아 있다(§14-13).
 >
 > ★ 그 위에 **`COMPOSITION-CONTRACT-1`(2026-09-21)** 이 다음 구조를 확정했다 —
 > **자동 배치 블록 + `main_visual` 자유 레이어(`canvas.version:2`)**. 설계는
@@ -254,8 +257,8 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3e-4 | `HOME-CANVAS-V2-EDITOR-1A` | 블록 정렬 · margin · size · 순서 · 내용 편집 + 프레임 내부 진입/나가기 | 저장 가능 | **완료**(2026-09-22) — 결과는 [계약 문서 §25](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 3e-4b | `HOME-CANVAS-V2-EDITOR-1B` | 프레임 내부 요소 · overlay 의 **자리 · 크기 · 각도**(패널 다섯 칸 + 직접 조작) | 저장 가능 | **완료**(2026-09-22) — 결과는 [계약 문서 §26](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 3e-4c | `HOME-CANVAS-V2-ADD-1` | v2 **재료 추가**(흐름 다섯 · 페이지 자유 장식 여섯 · `main_visual` + primary 사진 + 빈 이미지 슬롯) | 저장 가능 | **완료**(2026-09-22) — 결과는 [계약 문서 §27](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
-| 3e-4d | `HOME-CANVAS-V2-ELEMENTS-1` | v2 **삭제** · `hidden`/`locked` 토글 · 순서 밖의 구조 편집 | 저장 가능 | 미착수 — 다음 작업. §14-13 |
-| 3e-5 | `HOME-CANVAS-V2-ATTACH-1` | `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` + Undo/Redo | 저장 가능 | 미착수 — §14-13 |
+| 3e-4d | `HOME-CANVAS-V2-ELEMENTS-1` | `main_visual` **안**에 장식 추가 · `메인 비주얼로 묶기`/`빼기` · `follow`/`pin` 기준 · v2 **삭제** | 저장 가능 | **완료**(2026-09-22) — 결과는 [계약 문서 §28](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). `hidden`/`locked` 토글은 아직 없다 |
+| 3e-5 | `HOME-CANVAS-V2-GROUP-1` | 여러 개를 한 번에 묶기 · **primary 지정** · 그룹 조작 | 저장 가능 | 미착수 — §14-13 |
 | 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |
 | 5 | `HOME-CANVAS-ELEMENTS-1` | 사진·텍스트·로고·카테고리 추가 | 핵심 요소 | 미착수 |
@@ -1293,6 +1296,13 @@ bottom-left  bottom  bottom-right
 
 ### 14-7. lasso 선택과 명시적 묶기
 
+> **✅ `V2-ELEMENTS-1`(2026-09-22)이 이 절의 **단독 선택 하나**짜리
+> 묶기 · 빼기를 구현했다 — 지금 코드가 강제하는 것은
+> [계약 문서 §28](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 이다.**
+> 묶을 프레임은 패널의 select 로 고르고, 화면 자리 · 크기 · 각도가
+> 유지되며, 한 번이 Undo 한 칸이다. **아래 1~3(lasso 로 여럿을 고른 뒤
+> 한꺼번에 묶기 · primary 지정)은 아직 없다** — `V2-GROUP-1`.
+
 **lasso 는 소속이 아니라 선택 수단이다.** 끌어서 여러 개를 고른 것이 영구
 그룹이 되지 않는다.
 
@@ -1388,7 +1398,7 @@ bottom-left  bottom  bottom-right
    옮긴다** — `RENDER-1B` 에서 캔버스가 sandbox Preview 에만 안 보이던 진짜
    원인이 이것이었다. v2 payload 의 모양이 바뀌면 그 자리를 같이 본다.
 
-### 14-10. 편집 UX 계약 (구현은 `V2-INSPECTOR-1` · `V2-ATTACH-1`)
+### 14-10. 편집 UX 계약 (구현은 `V2-EDITOR-1A`·`1B` · `V2-ADD-1` · `V2-ELEMENTS-1`)
 
 #### 자동 배치 블록을 고르면
 
@@ -1455,8 +1465,8 @@ bottom-left  bottom  bottom-right
 | 7 | `HOME-CANVAS-V2-EDITOR-1A` | v2 선택 + 블록의 **순서 · 정렬 · 여백 · 폭 · 높이** · 글자 · 프레임 진입 | **완료**(2026-09-22) — 결과는 [계약 문서 §25](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). `data-imory-canvas-frame` 이름 충돌도 여기서 풀렸다 |
 | 7-1 | `HOME-CANVAS-V2-EDITOR-1B` | v2 **직접 조작**(드래그 · 리사이즈 · 회전)과 프레임 내부 · overlay 의 좌표 편집 | **완료**(2026-09-22) — 결과는 [계약 문서 §26](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). 선택 하나마다 **자를 하나** 정하고(프레임 내부 좌표 / 프레임 상자 / 도화지) 프레임에는 그 자 위의 숫자만 내려간다 — 프레임의 메시지와 kind 는 **한 글자도 바뀌지 않았다**. `pin` 은 `pin.offset` 두 칸을 쓰고 크기를 바꿀 때 `origin` 몫을 좌표에 되돌린다. **블록 추가/삭제와 새 요소 추가는 이 작업에 넣지 않았다** — 아래 7-2 |
 | 7-2 | `HOME-CANVAS-V2-ADD-1` | v2 **재료 추가** — 흐름에 블록 다섯 · 페이지 자유 장식 여섯 · `main_visual` 은 primary 사진과 빈 이미지 슬롯을 함께 만든다 | **완료**(2026-09-22) — 결과는 [계약 문서 §27](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). 기본값과 새 id 는 **순수 함수**가 정하고, 넣은 뒤 **캔버스 전체를 다시 검증**한다. 한 번 = Undo 한 칸이고 만든 것이 곧바로 골라진다. 블록을 고를 때 남아 있던 **쓸 수 없는 Moveable 손잡이**도 여기서 감췄다(§26-8 의 남은 차이) |
-| 7-3 | `HOME-CANVAS-V2-ELEMENTS-1` | v2 **삭제** · `hidden`/`locked` 토글 · 순서 밖의 구조 편집 · `main_visual` **안**에 장식 추가 | 미착수 — 다음 작업 |
-| 8 | `HOME-CANVAS-V2-ATTACH-1` | lasso/Shift 선택 → `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` · Undo/Redo. **`pin.target`/`anchor`/`origin` 을 고르는 UI 도 여기서**(계약 §26-8) | 미착수 |
+| 7-3 | `HOME-CANVAS-V2-ELEMENTS-1` | `main_visual` **안**에 장식 추가 · 기존 장식을 `메인 비주얼로 묶기`/`빼기` · `follow` 와 `pin` 의 기준 셋 · v2 **삭제** | **완료**(2026-09-22) — 결과는 [계약 문서 §28](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). 소속은 **언제나 명시적**이고(lasso 가 묶지 않는다), 묶기 · 빼기 · follow 전환은 **화면 자리를 유지**한다. 그 계산에 필요한 값 중 저장값이 줄 수 없는 하나(프레임이 흐름 안에서 어디에 놓였는가)만 프레임이 **분수로 보고**한다 — 새 메시지 `CANVAS_LAYOUT` 하나(§28-3). `pin.target`/`anchor`/`origin` 을 고르는 UI 도 여기서 났다(§26-8 의 남은 차이) |
+| 8 | `HOME-CANVAS-V2-GROUP-1` | lasso/Shift 로 고른 **여럿을 한 번에** 묶기 · **primary 지정** · 그룹 조작 | 미착수 — 단독 선택 하나짜리 묶기 · 빼기는 7-3 이 이미 한다(계약 §28-2) |
 | 9 | `HOME-CANVAS-EFFECT-HOOK-1` | 안정된 선택자 · 수명주기 · 정리. `main_visual` 과 sandbox 저자 JS 의 공존 | 미착수(§8 에 완료 기준) |
 
 > **★ `INSPECTOR-1A` 와 `V2-EDITOR-1A` 는 다른 작업이다.**

@@ -492,10 +492,622 @@ function planStudioCanvasV2Transform(kind, elementId, next, expected) {
 }
 
 
+/* =========================================================
+   소속을 옮기는 계산 (HOME-CANVAS-V2-ELEMENTS-1)
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §28
+
+   ── 재는 것은 하나뿐이다 ───────────────────────────────
+
+   프레임의 폭 · 높이 · 배율 · primary 사진 상자 · pin 기준점은 전부
+   렌더러가 **저장값에서** 계산한다(§24-3 · §26-3). 데이터가 줄 수
+   없는 것은 하나다 — `main_visual` 이 흐름 안에서 **어디에
+   놓였는가**. 앞 블록들의 실제 높이가 그것을 정하고, 글자 블록의
+   `height:"auto"` 는 스킨 조판이 정한다.
+
+   그래서 프레임이 그 한 값만 보고하고(도화지 폭의 분수 —
+   `preview:canvas-layout`), 이 파일이 그것을 Canvas 좌표로 읽어
+   묶기 · 빼기의 자로 쓴다. 나머지는 지금까지처럼 draft 에서 나온다.
+
+   ── 왜 이 계산이 writer 에 없는가 ──────────────────────
+
+   §26-4 의 그 경계 그대로다. 순수 writer 는 regions 하나만 보고
+   불변으로 옮겨 적고, "그 자리를 새 자로 얼마라고 적어야 하는가"는
+   렌더러의 자를 아는 이 realm 이 정한다. 자를 두 벌 만들지 않는다.
+
+   ── 높이가 Auto 인 pin 장식 ────────────────────────────
+
+   `pin` 요소의 화면 자리는 `기준점 + offset − origin × 자기 크기`
+   이고, 그 마지막 항은 높이를 알아야 한다. `height:"auto"` 의 실제
+   높이는 스킨 조판이 정하므로 우리는 모른다 — 그래서 **세로
+   기준점이 위가 아닐 때만** 문제가 되고, 그때는 숫자를 지어내지
+   않고 `auto-origin` 으로 거절한다(§25-4 의 "Auto 를 끌 때 숫자를
+   지어내지 않는다"와 같은 자리).
+========================================================== */
+
+/* 프레임이 마지막으로 보고한 자리 — id → { x, y }(도화지 폭의 분수) */
+let studioCanvasV2FrameLayout = {};
+
+
+/*
+  setStudioCanvasFrameLayout(frames)
+
+  Preview(native · sandbox)가 올린 **보고**다. 저장되는 값이 아니고,
+  묶기 · 빼기를 누른 그 순간의 자로만 쓰인다.
+
+  ★ 모르는 칸은 버린다. 여기 들어오는 것은 프레임 하나의 id 와
+    분수 둘뿐이다.
+*/
+function setStudioCanvasFrameLayout(frames) {
+
+  const next = {};
+
+  (Array.isArray(frames) ? frames : []).forEach(
+    (frame) => {
+
+      if (
+        !frame ||
+        typeof frame !== "object" ||
+        typeof frame.id !== "string" ||
+        typeof frame.x !== "number" || !Number.isFinite(frame.x) ||
+        typeof frame.y !== "number" || !Number.isFinite(frame.y)
+      ) {
+        return;
+      }
+
+      next[frame.id] = { x: frame.x, y: frame.y };
+
+    }
+  );
+
+  studioCanvasV2FrameLayout = next;
+
+}
+
+
+/* 그 프레임의 왼쪽 위 — **Canvas 좌표**. 보고가 없으면 null 이다 */
+function studioCanvasV2FrameOrigin(frameId) {
+
+  const hit =
+    Object.prototype.hasOwnProperty.call(studioCanvasV2FrameLayout, frameId)
+      ? studioCanvasV2FrameLayout[frameId]
+      : null;
+
+  if (!hit || typeof window.studioCanvasDraftPayload !== "function") {
+    return null;
+  }
+
+  const payload =
+    window.studioCanvasDraftPayload();
+
+  if (!payload || !(payload.baseWidth > 0)) {
+    return null;
+  }
+
+  return {
+    x: hit.x * payload.baseWidth,
+    y: hit.y * payload.baseWidth
+  };
+
+}
+
+
+/* 소수 셋째 자리 — 저장되는 좌표의 자는 언제나 그 하나다(§17-5) */
+function studioCanvasV2Round(value) {
+
+  return (typeof window.roundSkinHomeCanvasCoord === "function")
+    ? window.roundSkinHomeCanvasCoord(value)
+    : Math.round(value * 1000) / 1000;
+
+}
+
+
+/*
+  그 프레임 블록의 자 — 렌더러의 계산 하나다(§26-3).
+
+  -> { block, frame, origin } | null
+*/
+function studioCanvasV2FrameSpace(payload, frameId) {
+
+  if (
+    !payload ||
+    typeof window.resolveSkinCanvasFrameGeometry !== "function" ||
+    typeof frameId !== "string"
+  ) {
+    return null;
+  }
+
+  const blocks =
+    (payload.flow && Array.isArray(payload.flow.blocks)) ? payload.flow.blocks : [];
+
+  const block =
+    blocks.find(
+      (item) =>
+        item && typeof item === "object" &&
+        item.id === frameId && item.type === "main_visual"
+    ) || null;
+
+  if (!block) {
+    return null;
+  }
+
+  const frame =
+    window.resolveSkinCanvasFrameGeometry(
+      block,
+      studioCanvasV2FlowMetrics(payload)
+    );
+
+  if (!frame || !(frame.width > 0) || !(frame.height > 0) || !(frame.scale > 0)) {
+    return null;
+  }
+
+  const origin =
+    studioCanvasV2FrameOrigin(frameId);
+
+  return origin ? { block: block, frame: frame, origin: origin } : null;
+
+}
+
+
+/* `pin` 이 가리키는 상자 — 렌더러와 같은 fallback 이다(§24-4) */
+function studioCanvasV2PinTargetBox(frame, target) {
+
+  return (target === "photo" && frame.photo)
+    ? frame.photo
+    : { x: 0, y: 0, width: frame.width, height: frame.height };
+
+}
+
+
+/*
+  프레임 내부 요소 하나의 **프레임 좌표 위 왼쪽 위와 크기**.
+
+  -> { x, y, width, height } | { reason }
+
+  ★ `height:"auto"` 는 그대로 "auto" 로 돌려준다 — 옮긴 뒤에도
+    내용이 높이를 정하는 것이 맞다. 세로 자리를 계산하는 데 높이가
+    필요한 경우(위 머리말)에만 거절한다.
+*/
+function studioCanvasV2FrameElementBox(node, frame) {
+
+  const auto =
+    node.height === "auto";
+
+  if (node.follow !== "pin") {
+
+    if (
+      typeof node.x !== "number" || !Number.isFinite(node.x) ||
+      typeof node.y !== "number" || !Number.isFinite(node.y)
+    ) {
+      return { reason: "space" };
+    }
+
+    return {
+      x: node.x * frame.scale,
+      y: node.y * frame.scale,
+      width: node.width * frame.scale,
+      height: auto ? "auto" : node.height * frame.scale
+    };
+
+  }
+
+  const pin =
+    (node.pin && typeof node.pin === "object") ? node.pin : {};
+
+  const point =
+    window.resolveSkinCanvasPinPoint(
+      pin,
+      studioCanvasV2PinTargetBox(frame, pin.target)
+    );
+
+  const origin =
+    studioCanvasV2PinFraction(pin.origin);
+
+  if (auto && origin.y !== 0) {
+    return { reason: "auto-origin" };
+  }
+
+  return {
+    x: point.x - origin.x * node.width,
+    y: point.y - origin.y * (auto ? 0 : node.height),
+    width: node.width,
+    height: auto ? "auto" : node.height
+  };
+
+}
+
+
+/* 두 계산이 함께 쓰는 입구 — 지금 draft 가 v2 인가 · 그 id 가 무엇인가 */
+function studioCanvasV2Locate(elementId) {
+
+  if (
+    typeof window.studioCanvasDraftPayload !== "function" ||
+    typeof window.findSkinHomeCanvasV2Node !== "function" ||
+    typeof window.resolveSkinCanvasPinPoint !== "function"
+  ) {
+    return null;
+  }
+
+  const payload =
+    window.studioCanvasDraftPayload();
+
+  if (!payload || payload.version !== 2) {
+    return null;
+  }
+
+  const hit =
+    window.findSkinHomeCanvasV2Node(payload, elementId);
+
+  return hit ? { payload: payload, hit: hit } : null;
+
+}
+
+
+/*
+  planStudioCanvasV2Attach(elementId, frameId)
+
+    -> { ok:true, next: { x, y, width, height } }   프레임 내부 좌표
+    -> { ok:false, reason }
+
+  overlay 하나를 그 프레임 안의 같은 화면 자리로 옮긴다.
+
+      로컬값 = (도화지 좌표 − 프레임의 왼쪽 위) ÷ S_frame
+
+  ★ 새 소속은 `transform` 이다(writer 가 그렇게 적는다 — §28-2).
+    그래서 크기도 `S_frame` 으로 나눈다.
+*/
+function planStudioCanvasV2Attach(elementId, frameId) {
+
+  const found =
+    studioCanvasV2Locate(elementId);
+
+  if (!found) {
+    return { ok: false, reason: "space" };
+  }
+
+  if (found.hit.kind !== "overlay") {
+    return { ok: false, reason: "kind" };
+  }
+
+  const space =
+    studioCanvasV2FrameSpace(found.payload, frameId);
+
+  if (!space) {
+    return { ok: false, reason: "layout" };
+  }
+
+  const node =
+    found.hit.node;
+
+  if (
+    typeof node.x !== "number" || !Number.isFinite(node.x) ||
+    typeof node.y !== "number" || !Number.isFinite(node.y)
+  ) {
+    return { ok: false, reason: "space" };
+  }
+
+  const s =
+    space.frame.scale;
+
+  return {
+    ok: true,
+    next: {
+      x: studioCanvasV2Round((node.x - space.origin.x) / s),
+      y: studioCanvasV2Round((node.y - space.origin.y) / s),
+      width: studioCanvasV2Round(node.width / s),
+      height:
+        node.height === "auto"
+          ? "auto"
+          : studioCanvasV2Round(node.height / s)
+    }
+  };
+
+}
+
+
+/*
+  planStudioCanvasV2Detach(elementId)
+
+    -> { ok:true, next: { x, y, width, height } }   도화지 좌표
+    -> { ok:false, reason }
+
+  묶기의 역이다. `transform` 은 로컬값에 `S_frame` 을 곱하고,
+  `pin` 은 이미 프레임 상자 자 위의 값이라 곱하지 않는다(§24-3 의 표).
+*/
+function planStudioCanvasV2Detach(elementId) {
+
+  const found =
+    studioCanvasV2Locate(elementId);
+
+  if (!found) {
+    return { ok: false, reason: "space" };
+  }
+
+  if (found.hit.kind !== "frame-element") {
+    return { ok: false, reason: "kind" };
+  }
+
+  const space =
+    studioCanvasV2FrameSpace(found.payload, found.hit.parentId);
+
+  if (!space) {
+    return { ok: false, reason: "layout" };
+  }
+
+  const box =
+    studioCanvasV2FrameElementBox(found.hit.node, space.frame);
+
+  if (box.reason) {
+    return { ok: false, reason: box.reason };
+  }
+
+  return {
+    ok: true,
+    next: {
+      x: studioCanvasV2Round(space.origin.x + box.x),
+      y: studioCanvasV2Round(space.origin.y + box.y),
+      width: studioCanvasV2Round(box.width),
+      height: box.height === "auto" ? "auto" : studioCanvasV2Round(box.height)
+    }
+  };
+
+}
+
+
+/*
+  planStudioCanvasV2Follow(elementId, next, expected)
+
+    next     { follow }   바꿀 방식
+    expected { follow }   지금 방식
+
+    -> { ok:true, writer, next, expected }
+    -> { ok:false, reason }
+
+  **자리를 유지한 채** 따라가기 방식을 바꾼다. 두 방식은 쓰는 칸도
+  자도 다르므로(§14-6 · §26-2) 방식만 바꾸면 장식이 다른 자리로
+  튄다 — 그래서 이 한 요청이 방식과 그 방식에서의 자리를 함께
+  소유한다.
+
+  ★ `transform` → `pin` 은 **왼쪽 위 기준**으로 시작한다(§28-4).
+    기준점이 가운데면 자기 크기를 알아야 offset 이 나오고,
+    `height:"auto"` 장식에서는 그 값이 없다. 기준 대상 · 기준점은
+    바꾼 뒤에 패널에서 고른다(그때도 자리는 그대로다).
+*/
+function planStudioCanvasV2Follow(elementId, next, expected) {
+
+  if (!next || typeof next !== "object" || !expected || typeof expected !== "object") {
+    return { ok: false, reason: "shape" };
+  }
+
+  const found =
+    studioCanvasV2Locate(elementId);
+
+  if (!found) {
+    return { ok: false, reason: "space" };
+  }
+
+  if (found.hit.kind !== "frame-element") {
+    return { ok: false, reason: "kind" };
+  }
+
+  const node =
+    found.hit.node;
+
+  const current =
+    node.follow === "pin" ? "pin" : "transform";
+
+  if (expected.follow !== current) {
+    return { ok: false, reason: "expected" };
+  }
+
+  if (next.follow !== "pin" && next.follow !== "transform") {
+    return { ok: false, reason: "follow" };
+  }
+
+  if (next.follow === current) {
+    return { ok: false, reason: "unchanged" };
+  }
+
+  const space =
+    studioCanvasV2FrameSpace(found.payload, found.hit.parentId);
+
+  if (!space) {
+    return { ok: false, reason: "layout" };
+  }
+
+  const box =
+    studioCanvasV2FrameElementBox(node, space.frame);
+
+  if (box.reason) {
+    return { ok: false, reason: box.reason };
+  }
+
+  const s =
+    space.frame.scale;
+
+  if (next.follow === "pin") {
+
+    /* 왼쪽 위 기준 — 기준점 (0,0) 이므로 offset 이 곧 프레임 좌표다 */
+    return {
+      ok: true,
+      writer: "writeSkinHomeCanvasV2NodeFollow",
+      next: {
+        follow: "pin",
+        offsetX: studioCanvasV2Round(box.x),
+        offsetY: studioCanvasV2Round(box.y),
+        width: studioCanvasV2Round(box.width),
+        height: box.height === "auto" ? "auto" : studioCanvasV2Round(box.height),
+        target: "frame",
+        anchor: "top-left",
+        origin: "top-left"
+      },
+      expected: { follow: current }
+    };
+
+  }
+
+  return {
+    ok: true,
+    writer: "writeSkinHomeCanvasV2NodeFollow",
+    next: {
+      follow: "transform",
+      x: studioCanvasV2Round(box.x / s),
+      y: studioCanvasV2Round(box.y / s),
+      width: studioCanvasV2Round(box.width / s),
+      height: box.height === "auto" ? "auto" : studioCanvasV2Round(box.height / s)
+    },
+    expected: { follow: current }
+  };
+
+}
+
+
+/*
+  planStudioCanvasV2Pin(elementId, next, expected)
+
+    next · expected { target, anchor, origin }
+
+    -> { ok:true, writer, next: { …셋 + offsetX · offsetY }, expected }
+    -> { ok:false, reason }
+
+  기준 대상 · 기준점 · 자기 기준점을 바꾸되 **지금 자리는 그대로**
+  두도록 offset 을 다시 계산한다.
+
+      화면 자리 = 기준점 + offset − origin × 자기 크기
+
+  세 칸 중 하나가 바뀌면 그 식의 다른 항이 달라지므로, 같은 자리에
+  있으려면 offset 이 함께 바뀌어야 한다. 그것이 §14-6 이 `anchor` 와
+  `origin` 을 둘 다 둔 이유이고, 그래서 **바꾸는 요청이 offset 을
+  함께 소유한다**(편집기가 몰래 다시 계산하지 않는다).
+*/
+function planStudioCanvasV2Pin(elementId, next, expected) {
+
+  if (!next || typeof next !== "object" || !expected || typeof expected !== "object") {
+    return { ok: false, reason: "shape" };
+  }
+
+  const found =
+    studioCanvasV2Locate(elementId);
+
+  if (!found) {
+    return { ok: false, reason: "space" };
+  }
+
+  if (found.hit.kind !== "frame-element" || found.hit.node.follow !== "pin") {
+    return { ok: false, reason: "pin" };
+  }
+
+  const node =
+    found.hit.node;
+
+  /* 실행 payload 의 `pin` 은 네 칸이 언제나 채워져 있다(§23-2 의
+     그 규칙) — 빠진 칸을 여기서 다시 가르지 않는다 */
+  const pin =
+    (node.pin && typeof node.pin === "object") ? node.pin : {};
+
+  const offset =
+    (pin.offset && typeof pin.offset === "object") ? pin.offset : {};
+
+  const num =
+    (value) => (typeof value === "number" && Number.isFinite(value)) ? value : 0;
+
+  const now = {
+    target: pin.target === "photo" ? "photo" : "frame",
+    anchor: pin.anchor,
+    origin: pin.origin
+  };
+
+  if (
+    expected.target !== now.target ||
+    expected.anchor !== now.anchor ||
+    expected.origin !== now.origin
+  ) {
+    return { ok: false, reason: "expected" };
+  }
+
+  const space =
+    studioCanvasV2FrameSpace(found.payload, found.hit.parentId);
+
+  if (!space) {
+    return { ok: false, reason: "layout" };
+  }
+
+  const frame =
+    space.frame;
+
+  const point =
+    window.resolveSkinCanvasPinPoint(
+      pin,
+      studioCanvasV2PinTargetBox(frame, now.target)
+    );
+
+  const originNow =
+    studioCanvasV2PinFraction(now.origin);
+
+  const originNext =
+    studioCanvasV2PinFraction(next.origin);
+
+  const auto =
+    node.height === "auto";
+
+  if (auto && originNow.y !== originNext.y) {
+    return { ok: false, reason: "auto-origin" };
+  }
+
+  /* 새 `origin` 이 놓일 자리 — 화면 자리는 그대로다 */
+  const wanted = {
+    x: point.x + (originNext.x - originNow.x) * node.width,
+    y: point.y + (originNext.y - originNow.y) * (auto ? 0 : node.height)
+  };
+
+  const anchorPoint =
+    window.resolveSkinCanvasPinPoint(
+      { anchor: next.anchor },
+      studioCanvasV2PinTargetBox(frame, next.target)
+    );
+
+  if (!Number.isFinite(anchorPoint.x) || !Number.isFinite(anchorPoint.y)) {
+    return { ok: false, reason: "space" };
+  }
+
+  return {
+    ok: true,
+    writer: "writeSkinHomeCanvasV2NodePin",
+    next: {
+      target: next.target,
+      anchor: next.anchor,
+      origin: next.origin,
+      offsetX: studioCanvasV2Round(wanted.x - anchorPoint.x),
+      offsetY: studioCanvasV2Round(wanted.y - anchorPoint.y)
+    },
+    expected: {
+      target: now.target,
+      anchor: now.anchor,
+      origin: now.origin,
+      offsetX: num(offset.x),
+      offsetY: num(offset.y)
+    }
+  };
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.STUDIO_CANVAS_V2_SPACE_KINDS = STUDIO_CANVAS_V2_SPACE_KINDS;
   window.studioCanvasV2Space = studioCanvasV2Space;
   window.planStudioCanvasV2Transform = planStudioCanvasV2Transform;
+
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기 */
+  window.setStudioCanvasFrameLayout = setStudioCanvasFrameLayout;
+  window.studioCanvasV2FrameOrigin = studioCanvasV2FrameOrigin;
+  window.planStudioCanvasV2Attach = planStudioCanvasV2Attach;
+  window.planStudioCanvasV2Detach = planStudioCanvasV2Detach;
+  window.planStudioCanvasV2Follow = planStudioCanvasV2Follow;
+  window.planStudioCanvasV2Pin = planStudioCanvasV2Pin;
+
+  /* 진단 · 테스트가 보는 한 줄 */
+  window.getStudioCanvasFrameLayout =
+    () => JSON.parse(JSON.stringify(studioCanvasV2FrameLayout));
 
 }

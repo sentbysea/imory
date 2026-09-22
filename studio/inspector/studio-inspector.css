@@ -1825,3 +1825,31 @@
 .studio-canvas-add-message--error {
   color: var(--system-danger, #b3261e);
 }
+
+
+/* =========================================================
+   HOME-CANVAS-V2-ELEMENTS-1 — 기준점과 소속
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §28
+
+   ★ 새 색도 새 크기도 만들지 않는다. 위 재료 추가 자리와 같은
+     간격 · 같은 버튼 · 같은 구분선을 쓴다.
+========================================================== */
+
+.studio-canvas-inspector-pin,
+.studio-canvas-inspector-structure {
+  display: flex;
+  flex-direction: column;
+
+  gap: 6px;
+
+  margin-top: 10px;
+  padding-top: 10px;
+
+  border-top: 1px solid var(--system-border);
+}
+
+
+.studio-canvas-structure-button {
+  align-self: flex-start;
+}

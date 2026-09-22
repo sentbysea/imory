@@ -1219,6 +1219,34 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
               },
 
               /*
+                HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임이 흐름 안에서
+                **어디에 놓였는가**(도화지 폭의 분수). 저장값으로는
+                알 수 없는 그 한 값이고(프로토콜의 CANVAS_LAYOUT
+                주석), 무엇에 쓸지는 부모가 정한다.
+
+                ★ 여기서 값을 만들지 않는다. runtime 이 준 것을
+                  알려진 칸만 새 리터럴로 옮겨 보내고, 프로토콜이
+                  한 번 더 거른다(id 형태 · 숫자 · 중복 · 상한).
+              */
+              onLayout: function (layout) {
+
+                if (!layout || !Array.isArray(layout.frames)) {
+                  return;
+                }
+
+                send(SANDBOX_MESSAGE_TYPES.CANVAS_LAYOUT, {
+                  contract: 1,
+                  renderSeq: FRAME_STATE.renderSeq,
+                  frames: layout.frames.map(
+                    function (frame) {
+                      return { id: frame.id, x: frame.x, y: frame.y };
+                    }
+                  )
+                });
+
+              },
+
+              /*
                 HOME-CANVAS-SELECT-1B-2 — lasso · Shift 클릭의 결과는
                 **제안**이다. 확정은 부모가 자기 draft 로 한다.
 

@@ -179,6 +179,23 @@ const PREVIEW_MSG_CANVAS_FRAME = "preview:canvas-frame";
 const PREVIEW_MSG_CANVAS_PROPOSE = "preview:canvas-propose";
 
 /* =========================================================
+   HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 **페이지 자리**
+
+   canvas-layout  이 문서 -> Studio
+                  { frames: [{ id, x, y }] }
+                  단위는 **도화지 폭의 분수**다(픽셀이 아니다).
+                  Studio 가 `canvas.baseWidth` 를 곱해 Canvas 좌표로
+                  읽는다.
+
+                  ★ 재는 값이 이것뿐인 이유는 계약 §28-3 이다 —
+                    프레임의 폭 · 높이 · 배율은 저장값에서 계산되지만
+                    흐름 안의 **자리**는 앞 블록들의 실제 높이가
+                    정하므로 데이터만으로는 알 수 없다. 묶기 · 빼기가
+                    화면 자리를 지키려면 그 한 값이 필요하다.
+========================================================== */
+const PREVIEW_MSG_CANVAS_LAYOUT = "preview:canvas-layout";
+
+/* =========================================================
    HOME-CANVAS-TRANSFORM-1A — 단일 요소 이동
 
    canvas-geometry   Studio -> 이 문서
@@ -2365,6 +2382,24 @@ function ensureCanvasFrameController() {
                 type: PREVIEW_MSG_CANVAS_FRAME,
                 active: active === true,
                 editId: typeof editId === "string" ? editId : null
+              });
+
+            },
+
+            /* HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 페이지 자리.
+               숫자만 올라간다(위 머리말) — 무엇에 쓸지는 Studio 가
+               자기 draft 를 보고 정한다. */
+            onLayout: (layout) => {
+
+              if (!layout || !Array.isArray(layout.frames)) {
+                return;
+              }
+
+              postToParent({
+                type: PREVIEW_MSG_CANVAS_LAYOUT,
+                frames: layout.frames.map(
+                  (frame) => ({ id: frame.id, x: frame.x, y: frame.y })
+                )
               });
 
             },

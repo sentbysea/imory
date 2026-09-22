@@ -1003,12 +1003,15 @@ function writeSkinHomeCanvasV2BlockOrder(regions, id, next, expected) {
 
    writeSkinHomeCanvasV2AddNode(regions, request)
 
-     request { target, type, slot }
+     request { target, type, slot, frameId }
 
        target  "flow"    → canvas.flow.blocks 의 **맨 뒤**
                "overlay" → canvas.overlays 의 **맨 뒤**
-       type    그 자리가 허용하는 종류(아래 두 표)
+               "frame"   → 그 `main_visual` 의 `props.elements` 맨 뒤
+                           (HOME-CANVAS-V2-ELEMENTS-1)
+       type    그 자리가 허용하는 종류(아래 표들)
        slot    사진이 들어가는 종류에만 — 이미지 슬롯 이름
+       frameId `target:"frame"` 일 때 그 프레임 블록의 id
 
      -> { ok:true, regions, id, target, type }
      -> { ok:false, reason }
@@ -1026,12 +1029,11 @@ function writeSkinHomeCanvasV2BlockOrder(regions, id, next, expected) {
      만드는 것보다 안전하고, 여기서 막히면 draft 는 한 글자도
      바뀌지 않는다.
 
-   ★ 이 라운드에 **삭제는 없다**(계약 §27-7). 지우는 경로가 생기면
-     "고른 요소가 사라졌다"를 선택 · 패널 · 프레임이 함께 다뤄야
-     한다 — 추가와 같은 라운드에 넣지 않는다.
+   ★ 삭제는 `HOME-CANVAS-V2-ELEMENTS-1` 이 아래 §5 에 더했다
+     (writeSkinHomeCanvasV2RemoveNode).
 ========================================================== */
 
-const SKIN_HOME_CANVAS_V2_ADD_TARGETS = ["flow", "overlay"];
+const SKIN_HOME_CANVAS_V2_ADD_TARGETS = ["flow", "overlay", "frame"];
 
 /*
   이미지 슬롯이 **필수**인 종류(v1 props 표 — skin/skin-home-canvas.js
@@ -1264,6 +1266,75 @@ function buildSkinHomeCanvasV2NewOverlay(type, slot, id, index) {
 }
 
 
+/*
+  HOME-CANVAS-V2-ELEMENTS-1 — `main_visual` **안**에 들어가는 새 장식.
+
+  ★ 값 표를 새로 만들지 않는다. 종류마다의 크기는 위 자유 장식의 그
+    표 하나이고, 여기서는 **프레임의 자에 맞춰 줄인다** — 프레임
+    내부 좌표는 `props.baseWidth` 가 자이므로(계약 §24-3) 도화지
+    기준의 160×200 을 그대로 넣으면 자가 150 인 프레임에서는 새
+    장식이 프레임을 통째로 덮는다.
+
+      k = min(1, props.baseWidth ÷ 390)
+
+  ★ 자리도 같은 자로 줄인다. 프레임 안은 도화지보다 좁으므로
+    24px 계단이 몇 개만에 프레임 밖으로 나간다.
+
+  ★ `follow` 는 `transform` 이다(계약의 기본값 — §14-6). `pin` 으로
+    바꾸는 것은 패널의 따라가기 칸이고, 그때 자리를 유지하는 계산은
+    studio/inspector/studio-canvas-v2-space.js 가 한다.
+*/
+function buildSkinHomeCanvasV2NewFrameElement(frame, type, slot, id) {
+
+  const spec =
+    SKIN_HOME_CANVAS_V2_OVERLAY_DEFAULTS[type];
+
+  const props =
+    isSkinHomeCanvasPlainObject(frame.props) ? frame.props : {};
+
+  const base =
+    isSkinHomeCanvasFiniteNumber(props.baseWidth) && props.baseWidth > 0
+      ? props.baseWidth
+      : SKIN_HOME_CANVAS_BASE_WIDTH;
+
+  const k =
+    Math.min(1, base / SKIN_HOME_CANVAS_BASE_WIDTH);
+
+  const count =
+    Array.isArray(props.elements) ? props.elements.length : 0;
+
+  const step =
+    (count % SKIN_HOME_CANVAS_V2_OVERLAY_CASCADE) *
+    Math.max(2, Math.round(SKIN_HOME_CANVAS_V2_OVERLAY_STEP * k));
+
+  const origin =
+    Math.max(2, Math.round(SKIN_HOME_CANVAS_V2_OVERLAY_ORIGIN * k));
+
+  const element = {
+    id: id,
+    type: type,
+    follow: SKIN_HOME_CANVAS_FOLLOW_MODES[0],
+    x: origin + step,
+    y: origin + step,
+    width: Math.max(1, Math.round(spec.width * k)),
+    height:
+      spec.height === SKIN_HOME_CANVAS_AUTO_HEIGHT
+        ? SKIN_HOME_CANVAS_AUTO_HEIGHT
+        : Math.max(1, Math.round(spec.height * k))
+  };
+
+  const built =
+    buildSkinHomeCanvasV2NewProps(type, slot);
+
+  if (built) {
+    element.props = built;
+  }
+
+  return element;
+
+}
+
+
 function writeSkinHomeCanvasV2AddNode(regions, request) {
 
   const value =
@@ -1281,7 +1352,7 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
     value.target;
 
   /* 어느 자리가 어떤 종류를 받는가 — 두 표는 v1 · v2 의 그것
-     그대로다(자동 배치는 블록 다섯, 자유 층은 v1 여섯) */
+     그대로다(자동 배치는 블록 다섯, 자유 층과 프레임 안은 v1 여섯) */
   const allowed =
     (target === "flow")
       ? SKIN_HOME_CANVAS_BLOCK_TYPES
@@ -1321,8 +1392,22 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
   const overlays =
     Array.isArray(canvas.overlays) ? canvas.overlays : [];
 
+  /* HOME-CANVAS-V2-ELEMENTS-1 — `main_visual` 안에 넣는 경우.
+     프레임은 **부르는 쪽이 명시적으로 고른다**(계약 §28-2) — 지금
+     선택에서 추측하지 않는다. */
+  const frameHit =
+    (target === "frame")
+      ? skinHomeCanvasV2FrameHit(canvas, value.frameId)
+      : null;
+
+  if (target === "frame" && !frameHit) {
+    return { ok: false, reason: "frame" };
+  }
+
   const list =
-    (target === "flow") ? flow.blocks : overlays;
+    (target === "flow")
+      ? flow.blocks
+      : (target === "frame" ? frameHit.node.props.elements : overlays);
 
   if (list.length >= SKIN_HOME_CANVAS_MAX_ELEMENTS) {
     return { ok: false, reason: "limit" };
@@ -1354,10 +1439,17 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
     return { ok: false, reason: "id" };
   }
 
-  const node =
-    (target === "flow")
-      ? buildSkinHomeCanvasV2NewBlock(flow, type, slot, id, used)
-      : buildSkinHomeCanvasV2NewOverlay(type, slot, id, overlays.length);
+  let node;
+
+  if (target === "flow") {
+    node = buildSkinHomeCanvasV2NewBlock(flow, type, slot, id, used);
+  }
+  else if (target === "frame") {
+    node = buildSkinHomeCanvasV2NewFrameElement(frameHit.node, type, slot, id);
+  }
+  else {
+    node = buildSkinHomeCanvasV2NewOverlay(type, slot, id, overlays.length);
+  }
 
   if (!node) {
     return { ok: false, reason: "id" };
@@ -1374,6 +1466,16 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
     nextFlow.blocks = flow.blocks.concat([node]);
 
     nextCanvas.flow = nextFlow;
+
+  }
+  else if (target === "frame") {
+
+    nextCanvas.flow =
+      skinHomeCanvasV2FlowWithFrameElements(
+        flow,
+        frameHit,
+        frameHit.node.props.elements.concat([node])
+      );
 
   }
   else {
@@ -1419,6 +1521,734 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
 }
 
 
+/* =========================================================
+   5. 소속과 따라가기 — 묶기 · 빼기 · 삭제 · follow · pin
+      (HOME-CANVAS-V2-ELEMENTS-1)
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §28
+
+   ── 이 절이 하는 일과 하지 않는 일 ─────────────────────
+
+   여기 있는 함수는 **이미 계산이 끝난 숫자**를 받는다. "화면의 그
+   자리를 프레임 안 좌표로 얼마라고 적어야 하는가"는 부모 realm 의
+   한 곳이 렌더러의 자로 계산하고
+   (studio/inspector/studio-canvas-v2-space.js), 이 파일은 그 결과를
+   **불변으로 옮겨 적기만** 한다 — 계약 §26-4 가 정한 그 경계 그대로다.
+
+     writeSkinHomeCanvasV2AttachNode   overlay  → 프레임 내부
+     writeSkinHomeCanvasV2DetachNode   프레임 내부 → overlay
+     writeSkinHomeCanvasV2RemoveNode   블록 · 프레임 내부 · overlay 삭제
+     writeSkinHomeCanvasV2NodeFollow   transform ↔ pin
+     writeSkinHomeCanvasV2NodePin      pin 의 대상 · 기준점 · 자기 기준점
+
+   ── id 는 바뀌지 않는다 ────────────────────────────────
+   묶기 · 해제는 **소속과 좌표계만** 옮긴다(§14-7). id 가 그대로라서
+   한 이름 공간(§14-5)이 필요했고, 그래서 옮긴 뒤에도 선택 · 스킨
+   CSS 선택자 · 이미지 슬롯 연결이 끊기지 않는다.
+
+   ── 넣어 본 뒤 전체를 다시 검증한다 ────────────────────
+   추가(§4)와 같은 규칙이다. 소속이 바뀌면 "프레임 안에 넣을 수 없는
+   종류인가" · "primary 가 여전히 프레임 안의 사진인가" · "elements 가
+   비지 않았는가" 같은 판정이 한꺼번에 걸리는데, 그 한 벌은 이미
+   validateSkinCanvasV2Data() 가 갖고 있다. 막히면 regions 는 한
+   글자도 바뀌지 않는다.
+========================================================== */
+
+/* pin 의 빠진 기준점 기본값(§14-6) */
+const SKIN_HOME_CANVAS_V2_PIN_DEFAULT_POINT = "center";
+
+/* 자리를 유지한 채 pin 이 될 때 쓰는 기준점 — §28-4 의 그 결정 */
+const SKIN_HOME_CANVAS_V2_PIN_START_POINT = "top-left";
+
+
+/* 그 id 가 이 캔버스의 `main_visual` 블록인가 */
+function skinHomeCanvasV2FrameHit(canvas, frameId) {
+
+  const hit =
+    findSkinHomeCanvasV2Node(canvas, frameId);
+
+  if (
+    !hit ||
+    hit.kind !== "block" ||
+    hit.node.type !== "main_visual" ||
+    !isSkinHomeCanvasPlainObject(hit.node.props) ||
+    !Array.isArray(hit.node.props.elements)
+  ) {
+    return null;
+  }
+
+  return hit;
+
+}
+
+
+/* 프레임 하나의 내부 배열만 갈아 끼운 **새 flow** */
+function skinHomeCanvasV2FlowWithFrameElements(flow, frameHit, elements) {
+
+  const nextFlow =
+    copySkinHomeCanvasObject(flow);
+
+  nextFlow.blocks =
+    flow.blocks.map(
+      (block, index) => {
+
+        if (index !== frameHit.index) {
+          return block;
+        }
+
+        const blockCopy =
+          copySkinHomeCanvasObject(block);
+
+        const propsCopy =
+          copySkinHomeCanvasObject(block.props);
+
+        propsCopy.elements = elements;
+
+        blockCopy.props = propsCopy;
+
+        return blockCopy;
+
+      }
+    );
+
+  return nextFlow;
+
+}
+
+
+/* 바뀐 canvas 하나를 제자리에 끼운 **새 regions** */
+function skinHomeCanvasV2ReplaceCanvas(regions, found, nextCanvas) {
+
+  return regions.map(
+    (entry, index) => {
+
+      if (index !== found.index) {
+        return entry;
+      }
+
+      const copy =
+        copySkinHomeCanvasObject(entry);
+
+      copy.canvas = nextCanvas;
+
+      return copy;
+
+    }
+  );
+
+}
+
+
+/*
+  소속을 옮기는 요청이 공통으로 지나는 자리 — 이 캔버스가 v2 인가 ·
+  그 id 가 무엇인가.
+*/
+function skinHomeCanvasV2Locate(regions, id) {
+
+  if (
+    typeof id !== "string" ||
+    !SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(id)
+  ) {
+    return { ok: false, reason: "id" };
+  }
+
+  const found =
+    findSkinHomeCanvasRegion(regions);
+
+  if (!found) {
+    return { ok: false, reason: "region" };
+  }
+
+  const canvas =
+    found.entry.canvas;
+
+  if (
+    !isSkinHomeCanvasPlainObject(canvas) ||
+    canvas.version !== SKIN_HOME_CANVAS_V2_VERSION ||
+    !isSkinHomeCanvasPlainObject(canvas.flow) ||
+    !Array.isArray(canvas.flow.blocks)
+  ) {
+    return { ok: false, reason: "canvas" };
+  }
+
+  const hit =
+    findSkinHomeCanvasV2Node(canvas, id);
+
+  if (!hit) {
+    return { ok: false, reason: "missing" };
+  }
+
+  return { ok: true, found: found, canvas: canvas, hit: hit };
+
+}
+
+
+/*
+  자리와 크기 네 칸 — 묶기 · 빼기가 받는 그 값.
+
+  ★ 검사는 v1 · §26 의 그 규칙 그대로다. 옮긴다고 좌표 범위나
+    `height:"auto"` 의 허용 종류가 달라지지 않는다.
+*/
+function skinHomeCanvasV2CheckPlacement(next, node) {
+
+  if (!isSkinHomeCanvasPlainObject(next)) {
+    return "shape";
+  }
+
+  const keys =
+    Object.keys(next);
+
+  const wanted =
+    ["x", "y", "width", "height"];
+
+  if (
+    keys.length !== wanted.length ||
+    wanted.some((key) => keys.indexOf(key) === -1)
+  ) {
+    return "keys";
+  }
+
+  if (!isSkinHomeCanvasCoord(next.x) || !isSkinHomeCanvasCoord(next.y)) {
+    return "coord";
+  }
+
+  if (!isSkinHomeCanvasSize(next.width)) {
+    return "size";
+  }
+
+  if (next.height === SKIN_HOME_CANVAS_AUTO_HEIGHT) {
+    return skinHomeCanvasV2NodeAutoHeightAllowed(node) ? null : "auto";
+  }
+
+  return isSkinHomeCanvasSize(next.height) ? null : "size";
+
+}
+
+
+/*
+  writeSkinHomeCanvasV2AttachNode(regions, request)
+
+    request { id, frameId, next: { x, y, width, height } }
+
+  `next` 는 **프레임 내부 좌표**다(props.baseWidth 의 자).
+
+  ★ 새 소속의 따라가기 방식은 `transform` 이다 — 계약의 기본값이고
+    (§14-6), 그래야 "프레임과 함께 커진다"가 묶기의 뜻이 된다.
+    `pin` 으로 바꾸는 것은 그 다음 동작이다(아래 Follow).
+
+  ★ `pin` 이 남아 있으면 **그대로 둔다**. 예전에 프레임 안에 있던
+    장식이 돌아온 경우 그 설정이 살아 있는 편이 맞고, 안 쓰는 칸을
+    지우지 않는 것이 §14-6 이다.
+*/
+function writeSkinHomeCanvasV2AttachNode(regions, request) {
+
+  const value =
+    isSkinHomeCanvasPlainObject(request) ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  const located =
+    skinHomeCanvasV2Locate(regions, value.id);
+
+  if (!located.ok) {
+    return located;
+  }
+
+  const hit =
+    located.hit;
+
+  if (hit.kind !== "overlay") {
+    return { ok: false, reason: "kind" };
+  }
+
+  const frameHit =
+    skinHomeCanvasV2FrameHit(located.canvas, value.frameId);
+
+  if (!frameHit) {
+    return { ok: false, reason: "frame" };
+  }
+
+  if (frameHit.node.props.elements.length >= SKIN_HOME_CANVAS_MAX_ELEMENTS) {
+    return { ok: false, reason: "limit" };
+  }
+
+  const reason =
+    skinHomeCanvasV2CheckPlacement(value.next, hit.node);
+
+  if (reason) {
+    return { ok: false, reason: reason };
+  }
+
+  const nextNode =
+    copySkinHomeCanvasObject(hit.node);
+
+  nextNode.follow = SKIN_HOME_CANVAS_FOLLOW_MODES[0];
+  nextNode.x = value.next.x;
+  nextNode.y = value.next.y;
+  nextNode.width = value.next.width;
+  nextNode.height = value.next.height;
+
+  const nextCanvas =
+    copySkinHomeCanvasObject(located.canvas);
+
+  nextCanvas.overlays =
+    located.canvas.overlays.filter((item, index) => index !== hit.index);
+
+  nextCanvas.flow =
+    skinHomeCanvasV2FlowWithFrameElements(
+      located.canvas.flow,
+      frameHit,
+      frameHit.node.props.elements.concat([nextNode])
+    );
+
+  const verdict =
+    (typeof validateSkinCanvasV2Data === "function")
+      ? validateSkinCanvasV2Data(nextCanvas, "canvas")
+      : { ok: true };
+
+  if (!verdict.ok) {
+    return { ok: false, reason: "invalid", path: verdict.path, message: verdict.message };
+  }
+
+  return {
+    ok: true,
+    regions: skinHomeCanvasV2ReplaceCanvas(regions, located.found, nextCanvas),
+    id: value.id,
+    frameId: value.frameId
+  };
+
+}
+
+
+/*
+  writeSkinHomeCanvasV2DetachNode(regions, request)
+
+    request { id, next: { x, y, width, height } }
+
+  `next` 는 **도화지 좌표**다(canvas.baseWidth 의 자).
+
+  ★ primary 사진은 뺄 수 없다. `primaryId` 가 가리키는 요소가
+    프레임 안에 있어야 한다는 것이 계약(§14-5)이고, 그것을 빼면
+    프레임 자체가 저장될 수 없는 모양이 된다. 거부 이유를 따로 두어
+    (`primary`) 패널이 "왜 안 되는가"를 말할 수 있게 한다.
+
+  ★ `follow` 와 `pin` 은 그대로 둔다. overlay 에서는 **읽지 않는
+    칸**이고(§14-8 — overlay 는 v1 요소 판정을 쓴다), 다시 묶었을 때
+    그 설정이 살아 있는 편이 맞다.
+*/
+function writeSkinHomeCanvasV2DetachNode(regions, request) {
+
+  const value =
+    isSkinHomeCanvasPlainObject(request) ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  const located =
+    skinHomeCanvasV2Locate(regions, value.id);
+
+  if (!located.ok) {
+    return located;
+  }
+
+  const hit =
+    located.hit;
+
+  if (hit.kind !== "frame-element") {
+    return { ok: false, reason: "kind" };
+  }
+
+  const frameHit =
+    skinHomeCanvasV2FrameHit(located.canvas, hit.parentId);
+
+  if (!frameHit) {
+    return { ok: false, reason: "frame" };
+  }
+
+  if (frameHit.node.props.primaryId === value.id) {
+    return { ok: false, reason: "primary" };
+  }
+
+  const overlays =
+    Array.isArray(located.canvas.overlays) ? located.canvas.overlays : [];
+
+  if (overlays.length >= SKIN_HOME_CANVAS_MAX_ELEMENTS) {
+    return { ok: false, reason: "limit" };
+  }
+
+  const reason =
+    skinHomeCanvasV2CheckPlacement(value.next, hit.node);
+
+  if (reason) {
+    return { ok: false, reason: reason };
+  }
+
+  const nextNode =
+    copySkinHomeCanvasObject(hit.node);
+
+  nextNode.x = value.next.x;
+  nextNode.y = value.next.y;
+  nextNode.width = value.next.width;
+  nextNode.height = value.next.height;
+
+  const nextCanvas =
+    copySkinHomeCanvasObject(located.canvas);
+
+  nextCanvas.flow =
+    skinHomeCanvasV2FlowWithFrameElements(
+      located.canvas.flow,
+      frameHit,
+      frameHit.node.props.elements.filter((item, index) => index !== hit.index)
+    );
+
+  nextCanvas.overlays =
+    overlays.concat([nextNode]);
+
+  const verdict =
+    (typeof validateSkinCanvasV2Data === "function")
+      ? validateSkinCanvasV2Data(nextCanvas, "canvas")
+      : { ok: true };
+
+  if (!verdict.ok) {
+    return { ok: false, reason: "invalid", path: verdict.path, message: verdict.message };
+  }
+
+  return {
+    ok: true,
+    regions: skinHomeCanvasV2ReplaceCanvas(regions, located.found, nextCanvas),
+    id: value.id,
+    frameId: hit.parentId
+  };
+
+}
+
+
+/*
+  writeSkinHomeCanvasV2RemoveNode(regions, request)
+
+    request { id }
+
+  블록 · 프레임 내부 요소 · overlay 셋 다 지운다. 블록을 지우면 그
+  안의 요소도 함께 없어진다 — 프레임이 곧 그 요소들의 자리다.
+
+  ★ **primary 사진은 지울 수 없다**(위 Detach 와 같은 이유). 계약을
+    깨는 동작을 "지운 뒤 검증에서 걸린다"로 처리하지 않고 이름 있는
+    이유로 먼저 막는다 — 주인에게 무엇이 문제인지 말할 수 있어야
+    한다.
+
+  ★ 되살리는 것은 Undo 다(§27-7 의 그 결정 그대로). 지운 요소를
+    어딘가에 담아 두지 않는다.
+*/
+function writeSkinHomeCanvasV2RemoveNode(regions, request) {
+
+  const value =
+    isSkinHomeCanvasPlainObject(request) ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  const located =
+    skinHomeCanvasV2Locate(regions, value.id);
+
+  if (!located.ok) {
+    return located;
+  }
+
+  const hit =
+    located.hit;
+
+  const canvas =
+    located.canvas;
+
+  const nextCanvas =
+    copySkinHomeCanvasObject(canvas);
+
+  if (hit.kind === "overlay") {
+
+    nextCanvas.overlays =
+      canvas.overlays.filter((item, index) => index !== hit.index);
+
+  }
+  else if (hit.kind === "block") {
+
+    const nextFlow =
+      copySkinHomeCanvasObject(canvas.flow);
+
+    nextFlow.blocks =
+      canvas.flow.blocks.filter((item, index) => index !== hit.index);
+
+    nextCanvas.flow = nextFlow;
+
+  }
+  else {
+
+    const frameHit =
+      skinHomeCanvasV2FrameHit(canvas, hit.parentId);
+
+    if (!frameHit) {
+      return { ok: false, reason: "frame" };
+    }
+
+    if (frameHit.node.props.primaryId === value.id) {
+      return { ok: false, reason: "primary" };
+    }
+
+    nextCanvas.flow =
+      skinHomeCanvasV2FlowWithFrameElements(
+        canvas.flow,
+        frameHit,
+        frameHit.node.props.elements.filter((item, index) => index !== hit.index)
+      );
+
+  }
+
+  const verdict =
+    (typeof validateSkinCanvasV2Data === "function")
+      ? validateSkinCanvasV2Data(nextCanvas, "canvas")
+      : { ok: true };
+
+  if (!verdict.ok) {
+    return { ok: false, reason: "invalid", path: verdict.path, message: verdict.message };
+  }
+
+  return {
+    ok: true,
+    regions: skinHomeCanvasV2ReplaceCanvas(regions, located.found, nextCanvas),
+    id: value.id,
+    kind: hit.kind,
+    parentId: hit.parentId
+  };
+
+}
+
+
+/*
+  writeSkinHomeCanvasV2NodeFollow(regions, id, next, expected)
+
+    next      { follow: "transform", x, y, width, height }
+              { follow: "pin", offsetX, offsetY, width, height,
+                target, anchor, origin }
+    expected  { follow }   지금의 따라가기 방식
+
+  ★ **자리를 함께 쓴다.** `transform` 과 `pin` 은 쓰는 칸도 자도
+    다르므로(§14-6 · §26-2), 방식만 바꾸고 좌표를 그대로 두면 장식이
+    다른 자리로 튄다. 그래서 이 한 요청이 "방식 + 그 방식에서의
+    지금 자리"를 함께 소유한다 — 한 번의 전환이 Undo 한 칸이다.
+
+  ★ `pin` 으로 바뀔 때 `target` · `anchor` · `origin` 을 **함께
+    적는다**. 부르는 쪽(자를 아는 곳)이 자리를 유지하는 기준점을
+    골라 오기 때문이고, 그것을 여기서 다시 고르면 계산과 저장이
+    갈라진다.
+
+  ★ 반대 방향(`pin` → `transform`)에서는 `pin` 을 지우지 않는다 —
+    다시 pin 으로 돌아올 때 그 설정이 살아 있어야 한다(§14-6).
+*/
+function writeSkinHomeCanvasV2NodeFollow(regions, id, next, expected) {
+
+  if (!isSkinHomeCanvasPlainObject(next)) {
+    return { ok: false, reason: "shape" };
+  }
+
+  const follow =
+    next.follow;
+
+  if (SKIN_HOME_CANVAS_FOLLOW_MODES.indexOf(follow) === -1) {
+    return { ok: false, reason: "follow" };
+  }
+
+  const toPin =
+    follow === "pin";
+
+  const keys =
+    toPin
+      ? ["follow", "offsetX", "offsetY", "width", "height",
+         "target", "anchor", "origin"]
+      : ["follow", "x", "y", "width", "height"];
+
+  return writeSkinHomeCanvasV2NodeFields(regions, id, next, expected, {
+
+    keys: keys,
+    kinds: ["frame-element"],
+
+    checkNext: (value, node) => {
+
+      if (!isSkinHomeCanvasSize(value.width)) {
+        return "size";
+      }
+
+      if (value.height !== SKIN_HOME_CANVAS_AUTO_HEIGHT) {
+
+        if (!isSkinHomeCanvasSize(value.height)) {
+          return "size";
+        }
+
+      }
+      else if (!skinHomeCanvasV2NodeAutoHeightAllowed(node)) {
+        return "auto";
+      }
+
+      if (!toPin) {
+        return (isSkinHomeCanvasCoord(value.x) && isSkinHomeCanvasCoord(value.y))
+          ? null
+          : "coord";
+      }
+
+      if (
+        !isSkinHomeCanvasCoord(value.offsetX) ||
+        !isSkinHomeCanvasCoord(value.offsetY)
+      ) {
+        return "coord";
+      }
+
+      return skinHomeCanvasV2CheckPinSettings(value);
+
+    },
+
+    /* `expected` 는 따라가기 방식 한 칸만 본다 — 나머지 네댓 칸은
+       부르는 쪽이 방금 그 자에서 계산한 값이라 대조할 "지금 값"이
+       없다(자가 바뀌는 전환이다). */
+    readCurrent: (node, key) =>
+      (key === "follow")
+        ? (node.follow === "pin" ? "pin" : "transform")
+        : undefined,
+
+    applyNext: (nodeCopy, value, node) => {
+
+      nodeCopy.follow = value.follow;
+      nodeCopy.width = value.width;
+      nodeCopy.height = value.height;
+
+      if (!toPin) {
+
+        nodeCopy.x = value.x;
+        nodeCopy.y = value.y;
+
+        return;
+
+      }
+
+      const pin =
+        copySkinHomeCanvasObject(
+          isSkinHomeCanvasPlainObject(node.pin) ? node.pin : {}
+        );
+
+      pin.target = value.target;
+      pin.anchor = value.anchor;
+      pin.origin = value.origin;
+      pin.offset = { x: value.offsetX, y: value.offsetY };
+
+      nodeCopy.pin = pin;
+
+    }
+
+  });
+
+}
+
+
+/* pin 의 세 칸 — 값 표는 skin/skin-home-canvas-v2.js 하나다 */
+function skinHomeCanvasV2CheckPinSettings(value) {
+
+  if (SKIN_HOME_CANVAS_PIN_TARGETS.indexOf(value.target) === -1) {
+    return "target";
+  }
+
+  if (SKIN_HOME_CANVAS_PIN_POINTS.indexOf(value.anchor) === -1) {
+    return "anchor";
+  }
+
+  return (SKIN_HOME_CANVAS_PIN_POINTS.indexOf(value.origin) === -1)
+    ? "origin"
+    : null;
+
+}
+
+
+/*
+  writeSkinHomeCanvasV2NodePin(regions, id, next, expected)
+
+    next · expected { target, anchor, origin, offsetX, offsetY }
+
+  ★ 다섯 칸이 한 요청이다. 기준 대상 · 기준점 · 자기 기준점 중 하나만
+    바뀌어도 **같은 자리에 있으려면 offset 이 함께 바뀌어야** 한다
+    (§14-6 의 그 이유 — 편집기가 offset 을 몰래 다시 계산하면 안 되고,
+    그래서 바꾸는 쪽이 셋과 offset 을 함께 소유한다).
+
+  ★ `follow:"pin"` 인 요소에만 쓴다. transform 요소의 pin 은 보존
+    대상이지 지금 쓰는 칸이 아니다 — 방식을 먼저 바꾼다.
+*/
+function writeSkinHomeCanvasV2NodePin(regions, id, next, expected) {
+
+  return writeSkinHomeCanvasV2NodeFields(regions, id, next, expected, {
+
+    keys: ["target", "anchor", "origin", "offsetX", "offsetY"],
+    kinds: ["frame-element"],
+
+    checkNext: (value, node, hit) => {
+
+      if (!skinHomeCanvasV2NodeIsPinned(node, hit)) {
+        return "pin";
+      }
+
+      if (
+        !isSkinHomeCanvasCoord(value.offsetX) ||
+        !isSkinHomeCanvasCoord(value.offsetY)
+      ) {
+        return "coord";
+      }
+
+      return skinHomeCanvasV2CheckPinSettings(value);
+
+    },
+
+    readCurrent: (node, key) => {
+
+      if (key === "offsetX" || key === "offsetY") {
+        return skinHomeCanvasV2ReadPinField(node, key);
+      }
+
+      const pin =
+        isSkinHomeCanvasPlainObject(node.pin) ? node.pin : {};
+
+      if (key === "target") {
+        return (SKIN_HOME_CANVAS_PIN_TARGETS.indexOf(pin.target) !== -1)
+          ? pin.target
+          : SKIN_HOME_CANVAS_PIN_TARGETS[0];
+      }
+
+      /* 빠진 칸의 기본값은 실행 payload 를 만드는 그 자다
+         (buildSkinCanvasPinPayload — anchor · origin 둘 다 center) */
+      return (SKIN_HOME_CANVAS_PIN_POINTS.indexOf(pin[key]) !== -1)
+        ? pin[key]
+        : SKIN_HOME_CANVAS_V2_PIN_DEFAULT_POINT;
+
+    },
+
+    applyNext: (nodeCopy, value, node) => {
+
+      const pin =
+        copySkinHomeCanvasObject(
+          isSkinHomeCanvasPlainObject(node.pin) ? node.pin : {}
+        );
+
+      pin.target = value.target;
+      pin.anchor = value.anchor;
+      pin.origin = value.origin;
+      pin.offset = { x: value.offsetX, y: value.offsetY };
+
+      nodeCopy.pin = pin;
+
+    }
+
+  });
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.findSkinHomeCanvasV2Node = findSkinHomeCanvasV2Node;
@@ -1440,6 +2270,16 @@ if (typeof window !== "undefined") {
 
   /* HOME-CANVAS-V2-ADD-1 — 새 재료 하나 */
   window.writeSkinHomeCanvasV2AddNode = writeSkinHomeCanvasV2AddNode;
+
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기 */
+  window.writeSkinHomeCanvasV2AttachNode = writeSkinHomeCanvasV2AttachNode;
+  window.writeSkinHomeCanvasV2DetachNode = writeSkinHomeCanvasV2DetachNode;
+  window.writeSkinHomeCanvasV2RemoveNode = writeSkinHomeCanvasV2RemoveNode;
+  window.writeSkinHomeCanvasV2NodeFollow = writeSkinHomeCanvasV2NodeFollow;
+  window.writeSkinHomeCanvasV2NodePin = writeSkinHomeCanvasV2NodePin;
+
+  window.SKIN_HOME_CANVAS_V2_PIN_START_POINT =
+    SKIN_HOME_CANVAS_V2_PIN_START_POINT;
 
 }
 
@@ -1474,7 +2314,17 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_HOME_CANVAS_V2_OVERLAY_DEFAULTS,
     SKIN_HOME_CANVAS_V2_NEW_FRAME,
     SKIN_HOME_CANVAS_V2_NEW_TEXT,
-    writeSkinHomeCanvasV2AddNode
+    writeSkinHomeCanvasV2AddNode,
+
+    /* HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기 */
+    SKIN_HOME_CANVAS_V2_PIN_DEFAULT_POINT,
+    SKIN_HOME_CANVAS_V2_PIN_START_POINT,
+    skinHomeCanvasV2FrameHit,
+    writeSkinHomeCanvasV2AttachNode,
+    writeSkinHomeCanvasV2DetachNode,
+    writeSkinHomeCanvasV2RemoveNode,
+    writeSkinHomeCanvasV2NodeFollow,
+    writeSkinHomeCanvasV2NodePin
   };
 
   module.exports = api;

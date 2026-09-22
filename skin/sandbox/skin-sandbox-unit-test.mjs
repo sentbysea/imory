@@ -380,9 +380,15 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
     에서 잴 수 없는 값이라 부모가 내려 준다. 확정의 **답**이기도
     하고, 그때만 `answering` 번호가 붙는다.
     CANVAS_TRANSFORM — 이동의 확정 **요청**. 확정이 아니라 부모가
-    지금 draft 로 선택 · 순번 · expected · 범위를 다시 본다). */
-check("[msg] 이번 라운드가 아는 type 은 정확히 서른이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 30,
+    지금 draft 로 선택 · 순번 · expected · 범위를 다시 본다),
+   HOME-CANVAS-V2-ELEMENTS-1 에서 하나 더 늘어 서른하나다
+   (CANVAS_LAYOUT — v2 `main_visual` 이 흐름 안에서 **어디에
+    놓였는가**. 프레임의 폭 · 높이 · 배율은 부모가 저장값에서
+    계산하지만 그 자리만은 앞 블록들의 실제 높이가 정해 데이터로는
+    알 수 없다. 묶기 · 빼기가 화면 자리를 지키는 데 쓰는 **보고**
+    이고, 단위는 도화지 폭의 분수다 — 계약 §28-3). */
+check("[msg] 이번 라운드가 아는 type 은 정확히 서른하나다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 31,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -1072,6 +1078,97 @@ check("[canvas-space] ★ 확정 요청에는 v2 표시가 없다(부모가 draf
   canvasTransformFrom({ ...MOVE_OK, scopeId: "v2Main" })
     .payload.scopeId === undefined,
   "프레임이 쓸 수 있는 kind 는 여전히 move · resize · rotate 셋이다");
+
+
+/* =========================================================
+   [canvas-layout] HOME-CANVAS-V2-ELEMENTS-1 — 프레임의 페이지 자리
+
+   ★ 이것은 **보고**다. 부모는 이 숫자를 저장하지 않고, 묶기 · 빼기를
+     누른 그 순간의 자로만 쓴다(계약 §28-3).
+
+   ★ 나르는 것이 자리 하나뿐인 이유도 거기 있다 — 폭 · 높이 · 배율은
+     부모가 저장값에서 계산하므로, 프레임에서 한 번 더 받으면 어느
+     쪽이 맞는지 가르는 규칙이 새로 생긴다.
+========================================================== */
+
+console.log("\n[canvas-layout] 프레임의 페이지 자리 (HOME-CANVAS-V2-ELEMENTS-1)");
+
+const canvasLayoutFrom = (payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://skin.imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_LAYOUT, payload, 1
+      )
+    },
+    {
+      originAllowList: ["https://skin.imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-parent"
+    }
+  );
+
+const LAYOUT_OK = {
+  contract: 1,
+  renderSeq: 3,
+  frames: [{ id: "v2Main", x: 0.12, y: 0.4831 }]
+};
+
+check("[canvas-layout] 정상 보고를 부모가 받는다",
+  canvasLayoutFrom(LAYOUT_OK).ok === true);
+
+check("[canvas-layout] 프레임이 없는 캔버스는 빈 배열이다",
+  canvasLayoutFrom({ ...LAYOUT_OK, frames: [] }).ok === true,
+  "\"프레임이 없다\"는 뜻이 하나뿐이라 거부하지 않는다");
+
+check("[canvas-layout] ★ 음수 자리도 통과한다",
+  canvasLayoutFrom({ ...LAYOUT_OK, frames: [{ id: "v2Main", x: -0.2, y: -1.5 }] })
+    .ok === true,
+  "프레임이 도화지 밖으로 나갈 수 있다(margin 은 음수를 받는다)");
+
+check("[canvas-layout] ★ 모르는 칸이 섞이면 메시지 전체가 거부된다",
+  canvasLayoutFrom({
+    ...LAYOUT_OK,
+    frames: [{ id: "v2Main", x: 0.1, y: 0.2, width: 0.5 }]
+  }).ok === false,
+  "크기는 저장값이 준다 — 프레임에서 받지 않는다");
+
+check("[canvas-layout] ★ 숫자가 아니거나 유한하지 않으면 거부된다",
+  canvasLayoutFrom({ ...LAYOUT_OK, frames: [{ id: "v2Main", x: "0.1", y: 0 }] })
+    .ok === false &&
+  canvasLayoutFrom({ ...LAYOUT_OK, frames: [{ id: "v2Main", x: 0, y: Infinity }] })
+    .ok === false);
+
+check("[canvas-layout] ★ 식별자 규칙은 캔버스 요소의 그것과 같다",
+  canvasLayoutFrom({ ...LAYOUT_OK, frames: [{ id: "1bad", x: 0, y: 0 }] })
+    .ok === false &&
+  canvasLayoutFrom({ ...LAYOUT_OK, frames: [{ id: "", x: 0, y: 0 }] })
+    .ok === false);
+
+check("[canvas-layout] ★ 같은 id 가 둘이면 거부된다",
+  canvasLayoutFrom({
+    ...LAYOUT_OK,
+    frames: [{ id: "v2Main", x: 0, y: 0 }, { id: "v2Main", x: 1, y: 1 }]
+  }).ok === false,
+  "한 캔버스 안에서 id 는 유일하다(계약 §14-5) — 봉투도 그것을 본다");
+
+check("[canvas-layout] ★ 부모 → 프레임 방향으로는 보낼 수 없다",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_LAYOUT, LAYOUT_OK, 1
+      )
+    },
+    {
+      originAllowList: ["https://imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-frame"
+    }
+  ).ok === false,
+  "재는 쪽은 언제나 프레임이다");
 
 
 /* =========================================================

@@ -19,8 +19,9 @@
 
      자동 배치(흐름)  logo · category_nav · text · divider · main_visual
      페이지 자유 장식  photo · text · logo · category_nav · sticker · shape
+     메인 비주얼 안    같은 여섯(HOME-CANVAS-V2-ELEMENTS-1 · 계약 §28-2)
 
-   두 표는 **계약의 그 두 표**이고, 이 파일은 관문
+   앞 두 표는 **계약의 그 두 표**이고, 이 파일은 관문
    (studio/inspector/studio-canvas-selection.js studioCanvasV2AddTypes)
    에 묻는다. 여기서 종류 목록을 한 벌 더 적지 않는다.
 
@@ -56,6 +57,47 @@ const STUDIO_CANVAS_V2_ADD_GROUPS = [
 ];
 
 
+/* =========================================================
+   HOME-CANVAS-V2-ELEMENTS-1 — `main_visual` **안**에 넣는 자리
+
+   ★ 이 한 줄만 선택을 본다. 다른 두 자리는 "어디에 넣을지"가
+     언제나 정해져 있지만(흐름의 맨 뒤 · 자유 층의 맨 뒤) 프레임
+     안은 **어느 프레임인가**를 먼저 알아야 하고, 그것을 추측으로
+     정하지 않는 것이 계약 §28-2 다. 그래서 지금 고른 것이
+     프레임이거나 그 안의 요소일 때만 이 자리가 보인다.
+========================================================== */
+function studioCanvasV2AddFrameId() {
+
+  if (
+    typeof window.getStudioCanvasSelection !== "function" ||
+    typeof window.studioCanvasNodeInfo !== "function"
+  ) {
+    return null;
+  }
+
+  const selection =
+    window.getStudioCanvasSelection();
+
+  if (!selection || selection.ids.length !== 1 || !selection.primaryId) {
+    return null;
+  }
+
+  const info =
+    window.studioCanvasNodeInfo(selection.primaryId);
+
+  if (!info) {
+    return null;
+  }
+
+  if (info.kind === "block") {
+    return info.type === "main_visual" ? info.id : null;
+  }
+
+  return (info.kind === "frame-element") ? info.parentId : null;
+
+}
+
+
 /* 거부 사유 → 사람이 읽는 한 줄 */
 const STUDIO_CANVAS_V2_ADD_REJECT = {
   slot: "이미지 슬롯을 만들 수 없습니다 — Images 에서 슬롯을 확인해 주세요.",
@@ -63,7 +105,10 @@ const STUDIO_CANVAS_V2_ADD_REJECT = {
   canvas: "지금 캔버스는 v2 가 아닙니다.",
   "not-editing": "지금은 캔버스를 고칠 수 없습니다.",
   invalid: "계약을 어기는 모양이라 만들지 않았습니다.",
-  "no-skin": "스킨을 아직 불러오지 못했습니다."
+  "no-skin": "스킨을 아직 불러오지 못했습니다.",
+
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 프레임 안에 넣는 자리 */
+  frame: "어느 메인 비주얼 안인지 알 수 없습니다 — 그 프레임을 다시 골라 주세요."
 };
 
 
@@ -253,7 +298,13 @@ function addStudioCanvasV2Material(target, type) {
     window.commitStudioCanvasAddNode({
       target: target,
       type: type,
-      slot: select ? select.value : ""
+      slot: select ? select.value : "",
+
+      /* HOME-CANVAS-V2-ELEMENTS-1 — 프레임 안은 **어느 프레임인가**를
+         함께 보낸다. 누르는 그 순간의 선택에서 읽으므로, 그리고 나서
+         선택이 바뀌었으면 관문이 다시 본다. */
+      frameId:
+        (target === "frame") ? (studioCanvasV2AddFrameId() || "") : ""
     });
 
   if (!result || !result.accepted) {
@@ -321,7 +372,18 @@ function buildStudioCanvasV2AddSection() {
 
   box.appendChild(caption);
 
-  STUDIO_CANVAS_V2_ADD_GROUPS.forEach((group) => {
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 지금 프레임 안에 있으면 그 자리가
+     맨 위다. 고른 것이 프레임(또는 그 안의 요소)일 때만 있다. */
+  const frameId =
+    studioCanvasV2AddFrameId();
+
+  const groups =
+    frameId
+      ? [{ target: "frame", label: "메인 비주얼 안 — 사진 주변 장식" }]
+          .concat(STUDIO_CANVAS_V2_ADD_GROUPS)
+      : STUDIO_CANVAS_V2_ADD_GROUPS;
+
+  groups.forEach((group) => {
 
     const types =
       (typeof window.studioCanvasV2AddTypes === "function")
@@ -392,6 +454,10 @@ if (typeof window !== "undefined") {
       return {
         on: studioCanvasV2AddIsOn(),
         visible: !!document.getElementById("studioCanvasAdd"),
+
+        /* HOME-CANVAS-V2-ELEMENTS-1 — 지금 프레임 안에 넣을 수 있는가 */
+        frameId: studioCanvasV2AddFrameId(),
+
         slot: select ? select.value : null,
         slotOptions:
           select ? Array.from(select.options).map((option) => option.value) : []

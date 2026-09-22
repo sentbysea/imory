@@ -41,6 +41,10 @@
    [v2add]    v2 재료 추가 — 흐름 다섯 · 자유 장식 · main_visual 과
               primary 사진 · 빈 이미지 슬롯 · 즉시 선택 · Undo 한 칸 ·
               왕복 · 블록의 손잡이 (HOME-CANVAS-V2-ADD-1)
+   [v2elements] 소속과 따라가기 — 추가 → 배치 → 묶기 → 프레임 크기
+              변경 → 빼기 → Undo/Redo 한 길 · 프레임의 페이지 자리
+              보고 · pin 의 기준 셋 · primary 거부 · 삭제 ·
+              native ↔ sandbox (HOME-CANVAS-V2-ELEMENTS-1)
    [sandbox]  별도 origin 프레임에서 같은 결과 + CSP 위반 0
 
    Chromium 만 쓴다.
@@ -3946,6 +3950,587 @@ async function main() {
         sbBlockHandles.resizeHandles === 0 && sbBlockHandles.rotationHandles === 0,
         JSON.stringify({
           r: sbBlockHandles.resizeHandles, o: sbBlockHandles.rotationHandles }));
+
+      check("★ 프레임 CSP 위반 0", (await cspViolations(sbFrame)).length === 0,
+        JSON.stringify(await cspViolations(sbFrame)));
+
+      check("★ 부모 CSP 위반 0", (await cspViolations(sbPage)).length === 0,
+        JSON.stringify(await cspViolations(sbPage)));
+
+      check("sandbox pageerror 0", sbPage.__errors.length === 0,
+        sbPage.__errors.slice(0, 2).join(" | "));
+
+      await sbPage.__ctx.close();
+
+    }
+
+
+    /* ======================================================
+       [v2elements] HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기
+
+       ★ 이 절이 지나는 길은 **하나**다.
+
+         추가 → 배치 → 묶기 → 프레임 크기 변경 → 빼기 → Undo/Redo
+
+       그 길에서 매번 다시 보는 것도 하나다 — **화면의 그 자리가
+       유지되는가**. 계약이 말하는 자리는 도화지 좌표이고 화면
+       픽셀은 배율에 따라 달라지므로, 재는 값은 도화지 자로 환산한
+       숫자다(canvasPlace).
+    ====================================================== */
+    if (wants("v2elements")) {
+
+      section("v2elements");
+
+      /* 그 요소가 지금 화면에서 **도화지 자로** 어디에 있나.
+         스크롤 · 배율이 끼어들지 않게 도화지 상자를 함께 재서
+         나눈다 — 회전한 요소는 외곽 상자이고, 같은 요소의 전후를
+         견주는 자리에서는 그것으로 충분하다. */
+      const canvasPlace = async (page, frame, sandbox, id) => {
+
+        const sels =
+          [byId(id), "[data-imory-canvas-root]"];
+
+        const rects =
+          sandbox
+            ? await sandboxRects(page, frame, sels)
+            : await nativeRects(page, sels);
+
+        const el = rects[sels[0]];
+        const root = rects[sels[1]];
+
+        if (!el || !root || !(root.width > 0)) {
+          return null;
+        }
+
+        const to = (value) => Math.round(value / root.width * 390 * 10) / 10;
+
+        return {
+          x: to(el.left - root.left),
+          y: to(el.top - root.top),
+          w: to(el.width),
+          h: to(el.height)
+        };
+
+      };
+
+      const near = (a, b, slack) =>
+        !!a && !!b &&
+        Math.abs(a.x - b.x) <= (slack || 1.5) &&
+        Math.abs(a.y - b.y) <= (slack || 1.5) &&
+        Math.abs(a.w - b.w) <= (slack || 1.5) &&
+        Math.abs(a.h - b.h) <= (slack || 1.5);
+
+      const panelState = (p) =>
+        p.evaluate(() => window.getStudioCanvasInspectorState());
+
+      const addState = (p) =>
+        p.evaluate(() =>
+          window.getStudioCanvasAddState ? window.getStudioCanvasAddState() : null);
+
+      const selectedId = (p) =>
+        p.evaluate(() => window.getStudioCanvasSelection().primaryId);
+
+      const structureState = (p) =>
+        p.evaluate(() => ({
+          attach: !!document.getElementById("studioCanvasAttach"),
+          detach: !!document.getElementById("studioCanvasDetach"),
+          remove: !!document.getElementById("studioCanvasRemove"),
+          follow: (() => {
+            const el = document.getElementById("studioCanvasInspectorFollow");
+            return el ? el.value : null;
+          })(),
+          pinTarget: (() => {
+            const el = document.getElementById("studioCanvasInspectorPin-target");
+            return el ? el.value : null;
+          })(),
+          pinAnchor: (() => {
+            const el = document.getElementById("studioCanvasInspectorPin-anchor");
+            return el ? el.value : null;
+          })(),
+          pinOrigin: (() => {
+            const el = document.getElementById("studioCanvasInspectorPin-origin");
+            return el ? el.value : null;
+          })(),
+          error: (() => {
+            const el = document.getElementById("studioCanvasInspectorError-structure");
+            return el && !el.hidden ? el.textContent.trim() : "";
+          })()
+        }));
+
+      /* =====================================================
+         고르기 — 프레임은 **두 번 눌러야** 안으로 들어간다(계약 §25-3)
+
+         ★ 그래서 "그 블록을 고른다"와 "그 안의 요소를 고른다"를
+           helper 로 가른다. 겹쳐 있는 자리를 한 번에 누르려고 하면
+           지금 선택이 무엇이었는가에 따라 결과가 갈린다.
+      ====================================================== */
+
+      const pickBlock = async (p, f, sandbox, id) => {
+
+        /* 빈 곳을 눌러 선택을 푼다 — 그 다음 한 번이 프레임 전체다 */
+        await clickSelector(p, f, sandbox, ".hc-gap");
+
+        await clickElement(p, f, sandbox, id);
+
+        return (await selectedId(p)) === id;
+
+      };
+
+      const pickInner = async (p, f, sandbox, frameId, id) => {
+
+        await pickBlock(p, f, sandbox, frameId);
+
+        await clickElement(p, f, sandbox, id);
+
+        return (await selectedId(p)) === id;
+
+      };
+
+      const page = await openStudio(browser, { package: v2Package({}) });
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+
+      /* ---- 0. 프레임의 자리가 부모에 보고돼 있다 ---- */
+
+      const layout =
+        await page.evaluate(() =>
+          window.getStudioCanvasFrameLayout
+            ? window.getStudioCanvasFrameLayout()
+            : null);
+
+      check("★ 프레임이 자기 **페이지 자리**를 부모에 알린다",
+        !!layout && !!layout.v2Main &&
+        typeof layout.v2Main.x === "number" && layout.v2Main.y > 0,
+        JSON.stringify(layout));
+
+      check("★ 보고는 자리 하나뿐이다(폭 · 높이는 저장값이 준다)",
+        !!layout && Object.keys(layout.v2Main).join(",") === "x,y",
+        JSON.stringify(layout && layout.v2Main));
+
+
+      /* ---- 1. 프레임을 고르면 그 안에 장식을 더할 수 있다 ---- */
+
+      check("프레임 블록을 고를 수 있다",
+        await pickBlock(page, frame, false, "v2Main"),
+        await selectedId(page));
+
+      const onFrame = await addState(page);
+
+      check("★ 프레임을 골라야 '메인 비주얼 안' 자리가 생긴다",
+        onFrame.frameId === "v2Main" &&
+        await page.locator("#studioCanvasAdd-frame-shape").count() === 1,
+        JSON.stringify({ f: onFrame.frameId }));
+
+      await page.click("#studioCanvasAdd-frame-shape");
+      await sleep(1000);
+
+      const innerId = await selectedId(page);
+      const inner = v2NodeOf(await readCanvas(page), innerId);
+      const innerFrame = v2BlockOf(await readCanvas(page), "v2Main");
+
+      check("★ 새 장식은 그 프레임 안에 생기고 곧바로 골라진다",
+        !!inner && inner.type === "shape" && inner.follow === "transform" &&
+        innerFrame.props.elements.some((el) => el.id === innerId),
+        JSON.stringify(inner));
+
+      check("★ 프레임 안의 새 장식이 화면에 그려진다",
+        await page.evaluate((id) => {
+          const doc = document.getElementById("studioPreviewFrame").contentDocument;
+          const el = doc.querySelector(`[data-imory-edit-id="${id}"]`);
+          return !!el && !!el.closest("[data-imory-canvas-block]");
+        }, innerId),
+        innerId);
+
+      const innerPanel = await readV2Free(page);
+
+      check("★ 그 장식의 자는 **프레임 내부 좌표**다",
+        innerPanel.hasFree === true &&
+        innerPanel.caption === "프레임 내부 좌표 (Canvas px)" &&
+        innerPanel.space.scopeId === "v2Main",
+        JSON.stringify({ c: innerPanel.caption, s: innerPanel.space.scopeId }));
+
+
+      /* ---- 2. 배치 — 패널에서 자리를 고친다 ---- */
+
+      await typeV2Number(page, "x", 12);
+      await typeV2Number(page, "y", 30);
+
+      const placed = v2NodeOf(await readCanvas(page), innerId);
+
+      check("★ 프레임 안에서 자리를 고칠 수 있다",
+        placed.x === 12 && placed.y === 30,
+        JSON.stringify({ x: placed.x, y: placed.y }));
+
+
+      /* ---- 3. 묶기 — 화면 자리가 유지된다 ---- */
+
+      await clickElement(page, frame, false, "v2Over");
+
+      check("페이지 자유 장식을 고를 수 있다",
+        (await selectedId(page)) === "v2Over", await selectedId(page));
+
+      const overStructure = await structureState(page);
+
+      check("★ overlay 에는 '묶기' 가 있고 '빼기' 는 없다",
+        overStructure.attach === true && overStructure.detach === false &&
+        overStructure.remove === true,
+        JSON.stringify(overStructure));
+
+      check("★ 묶을 프레임을 **주인이 고른다**",
+        await page.locator("#studioCanvasInspectorAttachFrame").count() === 1 &&
+        await page.locator("#studioCanvasInspectorAttachFrame option").count() === 1);
+
+      const beforeAttach = await canvasPlace(page, frame, false, "v2Over");
+
+      await page.click("#studioCanvasAttach");
+      await sleep(1000);
+
+      const attachedCanvas = await readCanvas(page);
+      const attachedNode = v2NodeOf(attachedCanvas, "v2Over");
+      const attachedFrame = v2BlockOf(attachedCanvas, "v2Main");
+
+      check("★ 묶으면 overlay 가 프레임 내부로 옮겨 간다",
+        (attachedCanvas.canvas.overlays || []).length === 0 &&
+        attachedFrame.props.elements.some((el) => el.id === "v2Over") &&
+        attachedNode.follow === "transform",
+        JSON.stringify({
+          o: (attachedCanvas.canvas.overlays || []).length,
+          f: attachedNode && attachedNode.follow }));
+
+      const afterAttach = await canvasPlace(page, frame, false, "v2Over");
+
+      check("★ 묶어도 화면의 그 자리 · 크기가 그대로다",
+        near(beforeAttach, afterAttach, 2),
+        JSON.stringify({ b: beforeAttach, a: afterAttach }));
+
+      check("★ id 는 바뀌지 않는다(§14-7)",
+        (await selectedId(page)) === "v2Over" && !!attachedNode);
+
+
+      /* ---- 4. 프레임 크기를 바꾼다 — transform 은 함께 커진다 ---- */
+
+      await pickBlock(page, frame, false, "v2Main");
+
+      const beforeWide = await canvasPlace(page, frame, false, "v2Over");
+
+      await typeV2Number(page, "width", 330);
+      await sleep(600);
+
+      const afterWide = await canvasPlace(page, frame, false, "v2Over");
+
+      check("★ 프레임이 커지면 transform 장식도 함께 커진다",
+        !!beforeWide && !!afterWide && afterWide.w > beforeWide.w + 1,
+        JSON.stringify({ b: beforeWide.w, a: afterWide.w }));
+
+      /* ★ 330 이다(342 가 아니라). 블록 폭이 흐름의 가용 폭
+         (390 − padding 48 = 342)을 넘으면 flex 가 도로 줄이므로,
+         저장값에서 계산한 `frame.scale` 과 실제 상자가 갈린다 —
+         계약 §28-7 의 남은 차이다. 이 절이 보려는 것은 그것이
+         아니므로 가용 폭 안에서 잰다. */
+
+      /* 되돌려 둔다 — 다음 걸음은 원래 폭에서 잰다 */
+      await typeV2Number(page, "width", 300);
+      await sleep(600);
+
+
+      /* ---- 5. 따라가기 — pin 으로 바꿔도 자리는 그대로 ---- */
+
+      check("묶인 장식을 프레임 안에서 고를 수 있다",
+        await pickInner(page, frame, false, "v2Main", "v2Over"),
+        await selectedId(page));
+
+      const beforeFollow = await canvasPlace(page, frame, false, "v2Over");
+
+      await page.selectOption("#studioCanvasInspectorFollow", "pin");
+      await sleep(900);
+
+      const pinnedNode = v2NodeOf(await readCanvas(page), "v2Over");
+
+      check("★ pin 으로 바꾸면 offset 과 기준점이 함께 적힌다",
+        pinnedNode.follow === "pin" &&
+        pinnedNode.pin.anchor === "top-left" &&
+        pinnedNode.pin.origin === "top-left" &&
+        typeof pinnedNode.pin.offset.x === "number",
+        JSON.stringify(pinnedNode.pin));
+
+      const afterFollow = await canvasPlace(page, frame, false, "v2Over");
+
+      check("★ 따라가기를 바꿔도 화면 자리가 그대로다",
+        near(beforeFollow, afterFollow, 2),
+        JSON.stringify({ b: beforeFollow, a: afterFollow }));
+
+      const pinPanel = await structureState(page);
+
+      check("★ pin 이면 기준 대상 · 기준점을 패널에서 알 수 있고 바꿀 수 있다",
+        pinPanel.follow === "pin" && pinPanel.pinTarget === "frame" &&
+        pinPanel.pinAnchor === "top-left" && pinPanel.pinOrigin === "top-left",
+        JSON.stringify(pinPanel));
+
+      /* 기준점을 바꿔도 자리는 그대로여야 한다 — offset 이 함께 바뀐다 */
+      const beforeAnchor = await canvasPlace(page, frame, false, "v2Over");
+
+      await page.selectOption("#studioCanvasInspectorPin-anchor", "bottom-right");
+      await sleep(900);
+
+      const anchored = v2NodeOf(await readCanvas(page), "v2Over");
+      const afterAnchor = await canvasPlace(page, frame, false, "v2Over");
+
+      check("★ 기준점을 바꾸면 offset 이 함께 바뀌고 자리는 그대로다",
+        anchored.pin.anchor === "bottom-right" &&
+        near(beforeAnchor, afterAnchor, 2),
+        JSON.stringify({ p: anchored.pin, b: beforeAnchor, a: afterAnchor }));
+
+      /* pin 장식은 프레임이 커져도 **크기가 그대로다**(§14-6) */
+      await pickBlock(page, frame, false, "v2Main");
+      await typeV2Number(page, "width", 330);
+      await sleep(700);
+
+      const pinWide = await canvasPlace(page, frame, false, "v2Over");
+
+      check("★ pin 장식은 프레임이 커져도 크기가 유지된다",
+        Math.abs(pinWide.w - afterAnchor.w) <= 2,
+        JSON.stringify({ b: afterAnchor.w, a: pinWide.w }));
+
+      await typeV2Number(page, "width", 300);
+      await sleep(700);
+
+
+      /* ---- 6. 빼기 — 화면 자리가 유지된다 ---- */
+
+      await pickInner(page, frame, false, "v2Main", "v2Over");
+
+      const beforeDetach = await canvasPlace(page, frame, false, "v2Over");
+
+      const beforeDetachJson = JSON.stringify(await readCanvas(page));
+      const beforeDetachHistory = await historyState(page);
+
+      await page.click("#studioCanvasDetach");
+      await sleep(1000);
+
+      const detachedCanvas = await readCanvas(page);
+
+      check("★ 빼면 페이지 자유 장식으로 돌아온다",
+        (detachedCanvas.canvas.overlays || []).some((el) => el.id === "v2Over") &&
+        !v2BlockOf(detachedCanvas, "v2Main").props.elements
+          .some((el) => el.id === "v2Over"),
+        JSON.stringify((detachedCanvas.canvas.overlays || []).map((el) => el.id)));
+
+      const afterDetach = await canvasPlace(page, frame, false, "v2Over");
+
+      check("★ 빼도 화면의 그 자리가 그대로다",
+        near(beforeDetach, afterDetach, 2),
+        JSON.stringify({ b: beforeDetach, a: afterDetach }));
+
+      const afterDetachHistory = await historyState(page);
+
+      check("★ 빼기 한 번이 Undo 한 칸이다",
+        afterDetachHistory.undo === beforeDetachHistory.undo + 1,
+        JSON.stringify({ b: beforeDetachHistory.undo, a: afterDetachHistory.undo }));
+
+
+      /* ---- 7. Undo · Redo ---- */
+
+      await page.click("#studioUndoButton");
+      await sleep(1000);
+
+      check("★ Undo 하면 소속과 좌표가 글자 단위로 돌아온다",
+        JSON.stringify(await readCanvas(page)) === beforeDetachJson);
+
+      await page.click("#studioRedoButton");
+      await sleep(1000);
+
+      const overlayIds =
+        (canvas) => ((canvas && canvas.canvas.overlays) || []).map((el) => el.id);
+
+      check("★ Redo 하면 다시 빠진다",
+        overlayIds(await readCanvas(page)).indexOf("v2Over") !== -1,
+        JSON.stringify(overlayIds(await readCanvas(page))));
+
+
+      /* ---- 8. 삭제 — 프레임 계약을 깨는 것은 거부한다 ---- */
+
+      check("primary 사진을 고를 수 있다",
+        await pickInner(page, frame, false, "v2Main", "v2Photo"),
+        await selectedId(page));
+
+      const primaryStructure = await structureState(page);
+
+      check("프레임 안 요소에는 '빼기' 가 있다",
+        primaryStructure.detach === true && primaryStructure.remove === true,
+        JSON.stringify(primaryStructure));
+
+      await page.click("#studioCanvasRemove");
+      await sleep(800);
+
+      const refused = await structureState(page);
+
+      check("★ primary 사진은 지울 수 없고 이유를 적는다",
+        !!v2NodeOf(await readCanvas(page), "v2Photo") &&
+        refused.error.indexOf("대표 사진") !== -1,
+        JSON.stringify(refused.error));
+
+      await page.click("#studioCanvasDetach");
+      await sleep(800);
+
+      check("★ primary 사진은 뺄 수도 없다",
+        !!v2BlockOf(await readCanvas(page), "v2Main").props.elements
+          .find((el) => el.id === "v2Photo"),
+        "프레임 계약을 깨는 동작은 한 자리에서 막는다");
+
+      /* 아까 프레임 안에 만든 장식은 지울 수 있다 */
+      await pickInner(page, frame, false, "v2Main", innerId);
+
+      const beforeRemoveJson = JSON.stringify(await readCanvas(page));
+
+      await page.click("#studioCanvasRemove");
+      await sleep(1000);
+
+      check("★ 잘못 만든 장식은 지울 수 있다",
+        v2NodeOf(await readCanvas(page), innerId) === null &&
+        (await panelState(page)).mode === "none",
+        "지운 것은 고를 수 없다 — 선택도 함께 푼다");
+
+      await page.click("#studioUndoButton");
+      await sleep(1000);
+
+      check("★ 삭제도 Undo 로 돌아온다",
+        JSON.stringify(await readCanvas(page)) === beforeRemoveJson);
+
+
+      /* ---- 9. 왕복 — Save · Export 에서도 소속이 그대로 ---- */
+
+      const round = await page.evaluate(async () => {
+
+        const exported = window.buildSkinPackageExport(currentWorkingSkin);
+
+        if (!exported.ok) return { ok: false, message: exported.message };
+
+        const text = window.serializeSkinPackageExport(exported.skinPackage);
+        const result = await window.validateSkinPackageImport(text);
+
+        if (!result.ok) return { ok: false, message: result.message };
+
+        const entry =
+          (result.skinPackage.regions || []).find((r) => r && r.name === "home_canvas");
+
+        const frameBlock =
+          entry.canvas.flow.blocks.find((b) => b.id === "v2Main");
+
+        return {
+          ok: true,
+          inner: frameBlock.props.elements.map((el) => el.id),
+          overlays: (entry.canvas.overlays || []).map((el) => el.id)
+        };
+
+      });
+
+      check("★ Export → Import 에서 소속과 좌표가 그대로다",
+        round.ok === true &&
+        round.overlays.indexOf("v2Over") !== -1 &&
+        round.inner.indexOf("v2Over") === -1,
+        JSON.stringify(round));
+
+      check("pageerror 0", page.__errors.length === 0,
+        page.__errors.slice(0, 2).join(" | "));
+
+
+      /* ---- 9-1. Save → 다시 열기 ---- */
+
+      const beforeSave =
+        JSON.stringify(await readCanvas(page));
+
+      await page.click("#studioSaveButton");
+
+      await page.waitForFunction(
+        () => Array.isArray(window.__savedDraftCallsLay) &&
+          window.__savedDraftCallsLay.length > 0,
+        null, { timeout: 15000 }
+      );
+
+      const savedContent = await page.evaluate(() => {
+        const calls = window.__savedDraftCallsLay;
+        return calls[calls.length - 1].p_content;
+      });
+
+      await close(page);
+
+      const again = await openStudio(browser, { package: savedContent });
+
+      await canvasFrame(again, false);
+
+      check("★ Save → 다시 열기에서 소속과 좌표가 글자 단위로 같다",
+        JSON.stringify(await readCanvas(again)) === beforeSave);
+
+      check("다시 열기 pageerror 0", again.__errors.length === 0,
+        again.__errors.slice(0, 2).join(" | "));
+
+      await close(again);
+
+
+      /* ---- 10. 별도 origin 프레임에서 같은 한 길 ---- */
+
+      const sbPage = await openStudio(browser, {
+        package: v2Package({ sandbox: true }),
+        sandbox: true
+      });
+
+      const sbFrame = await canvasFrame(sbPage, true);
+
+      await enableCanvasEditing(sbPage);
+
+      const sbLayout =
+        await sbPage.evaluate(() => window.getStudioCanvasFrameLayout());
+
+      check("★ sandbox 프레임도 자기 자리를 보고한다",
+        !!sbLayout && !!sbLayout.v2Main && sbLayout.v2Main.y > 0,
+        JSON.stringify(sbLayout));
+
+      await pickBlock(sbPage, sbFrame, true, "v2Main");
+
+      check("★ sandbox 에서도 프레임 안 추가 자리가 열린다",
+        (await addState(sbPage)).frameId === "v2Main");
+
+      await sbPage.click("#studioCanvasAdd-frame-sticker");
+      await sleep(1200);
+
+      const sbInnerId = await selectedId(sbPage);
+
+      check("★ sandbox 프레임 안에 새 장식이 그려진다",
+        await sbFrame.evaluate((id) =>
+          !!document.querySelector(`[data-imory-edit-id="${id}"]`), sbInnerId),
+        sbInnerId);
+
+      await clickElement(sbPage, sbFrame, true, "v2Over");
+
+      const sbBefore = await canvasPlace(sbPage, sbFrame, true, "v2Over");
+
+      await sbPage.click("#studioCanvasAttach");
+      await sleep(1200);
+
+      const sbAfter = await canvasPlace(sbPage, sbFrame, true, "v2Over");
+
+      check("★ sandbox 에서도 묶기가 화면 자리를 지킨다",
+        !!v2BlockOf(await readCanvas(sbPage), "v2Main").props.elements
+          .find((el) => el.id === "v2Over") &&
+        near(sbBefore, sbAfter, 2),
+        JSON.stringify({ b: sbBefore, a: sbAfter }));
+
+      await pickInner(sbPage, sbFrame, true, "v2Main", "v2Over");
+
+      const sbDetachBefore = await canvasPlace(sbPage, sbFrame, true, "v2Over");
+
+      await sbPage.click("#studioCanvasDetach");
+      await sleep(1200);
+
+      const sbDetachAfter = await canvasPlace(sbPage, sbFrame, true, "v2Over");
+
+      check("★ sandbox 에서도 빼기가 화면 자리를 지킨다",
+        (await readCanvas(sbPage)).canvas.overlays
+          .some((el) => el.id === "v2Over") &&
+        near(sbDetachBefore, sbDetachAfter, 2),
+        JSON.stringify({ b: sbDetachBefore, a: sbDetachAfter }));
 
       check("★ 프레임 CSP 위반 0", (await cspViolations(sbFrame)).length === 0,
         JSON.stringify(await cspViolations(sbFrame)));

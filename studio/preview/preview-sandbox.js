@@ -1084,6 +1084,31 @@ function handleSandboxInspect(kind, payload) {
 
 
   /*
+    HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 **페이지 자리**.
+
+    여기서도 해석하지 않는다 — 알려진 칸만 옮겨 Studio 로 올린다.
+    단위는 도화지 폭의 분수이고(프로토콜의 CANVAS_LAYOUT 주석),
+    그것을 Canvas 좌표로 읽는 것도 무엇에 쓰는지도 Studio 가 한다.
+  */
+  if (kind === "canvas-layout") {
+
+    sandboxInspectRelay({
+      type: "preview:canvas-layout",
+      remote: true,
+      frames:
+        Array.isArray(payload.frames)
+          ? payload.frames.map(
+              (frame) => ({ id: frame.id, x: frame.x, y: frame.y })
+            )
+          : []
+    });
+
+    return;
+
+  }
+
+
+  /*
     HOME-CANVAS-TRANSFORM-1A · 1B — 프레임의 이동 · 리사이즈
     **확정 요청**.
 

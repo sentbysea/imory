@@ -2216,6 +2216,11 @@ if (typeof window !== "undefined") {
   /* HOME-CANVAS-V2-ADD-1 */
   window.addStudioCanvasV2Node = addStudioCanvasV2Node;
 
+  /* HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기 */
+  window.setStudioCanvasV2NodeFollow = setStudioCanvasV2NodeFollow;
+  window.setStudioCanvasV2NodePin = setStudioCanvasV2NodePin;
+  window.moveStudioCanvasV2Node = moveStudioCanvasV2Node;
+
 }
 
 
@@ -3209,6 +3214,52 @@ function applyStudioCanvasV2Transform(kind, id, next, expected) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-V2-ELEMENTS-1 — 따라가기 방식과 pin 의 기준
+
+   위 셋과 **같은 모양**이다. 자 위의 요청 하나를 받아 번역을 지나고
+   (studio/inspector/studio-canvas-v2-space.js), 그 결과를 같은 다섯
+   줄에 넘긴다. 다른 것은 어느 plan 이 번역하는가뿐이다.
+========================================================== */
+
+function setStudioCanvasV2NodeFollow(id, next, expected) {
+
+  if (typeof window.planStudioCanvasV2Follow !== "function") {
+    return { ok: false, reason: "unsupported" };
+  }
+
+  const plan =
+    window.planStudioCanvasV2Follow(id, next, expected);
+
+  if (!plan || !plan.ok) {
+    return { ok: false, reason: (plan && plan.reason) || "space" };
+  }
+
+  return writeStudioCanvasElementChange(
+    plan.writer, id, plan.next, plan.expected);
+
+}
+
+
+function setStudioCanvasV2NodePin(id, next, expected) {
+
+  if (typeof window.planStudioCanvasV2Pin !== "function") {
+    return { ok: false, reason: "unsupported" };
+  }
+
+  const plan =
+    window.planStudioCanvasV2Pin(id, next, expected);
+
+  if (!plan || !plan.ok) {
+    return { ok: false, reason: (plan && plan.reason) || "space" };
+  }
+
+  return writeStudioCanvasElementChange(
+    plan.writer, id, plan.next, plan.expected);
+
+}
+
+
 function setStudioCanvasV2NodeMove(id, next, expected) {
   return applyStudioCanvasV2Transform("v2-move", id, next, expected);
 }
@@ -3349,7 +3400,13 @@ function addStudioCanvasV2Node(request) {
   const result =
     window.writeSkinHomeCanvasV2AddNode(
       currentWorkingSkin.regions,
-      { target: value.target, type: value.type, slot: slotName }
+      {
+        target: value.target,
+        type: value.type,
+        slot: slotName,
+        /* HOME-CANVAS-V2-ELEMENTS-1 — `main_visual` 안에 넣을 때 */
+        frameId: (typeof value.frameId === "string") ? value.frameId : ""
+      }
     );
 
   if (!result || !result.ok) {
@@ -3402,6 +3459,133 @@ function addStudioCanvasV2Node(request) {
     slot: slotName || null,
     declaredSlot: declare ? declare.name : null
   };
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-V2-ELEMENTS-1 — 소속을 옮기고 지우는 것을 draft 에
+
+   moveStudioCanvasV2Node(request) -> { ok, id } | { ok:false, reason }
+
+     request { op, id, frameId }
+       op  "attach"  overlay → 그 프레임 안
+           "detach"  프레임 안 → overlay
+           "remove"  지운다
+
+   ★ 추가(addStudioCanvasV2Node)와 **같은 자리**다. 고치는 writer 들과
+     달리 `expected` 가 없고(바뀌는 것이 한 칸이 아니라 소속이다),
+     대신 순수 함수가 옮긴 뒤 **캔버스 전체를 다시 검증한다**.
+
+   ★ 자리 계산은 여기서 하지 않는다. "화면의 그 자리를 새 자로 얼마라고
+     적는가"는 studio/inspector/studio-canvas-v2-space.js 의 plan 이
+     정하고(렌더러의 자 하나 — 계약 §28-3), 이 함수는 그 결과를
+     순수 함수에 넘긴다.
+
+   ★ 기록 한 칸 · dirty · revision · 다시 그리기는 위 writer 들과
+     **같은 다섯 줄**이다.
+========================================================== */
+
+function moveStudioCanvasV2Node(request) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, reason: "no-skin" };
+  }
+
+  const value =
+    (request && typeof request === "object") ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  /* 순수 함수 세 벌이 이 문서에 있는가 — 없으면 아무것도 하지 않는다
+     (다른 writer 들과 같은 `unsupported`) */
+  if (
+    typeof window.writeSkinHomeCanvasV2AttachNode !== "function" ||
+    typeof window.writeSkinHomeCanvasV2DetachNode !== "function" ||
+    typeof window.writeSkinHomeCanvasV2RemoveNode !== "function"
+  ) {
+    return { ok: false, reason: "unsupported" };
+  }
+
+  let result;
+
+  if (value.op === "attach") {
+
+    const plan =
+      (typeof window.planStudioCanvasV2Attach === "function")
+        ? window.planStudioCanvasV2Attach(value.id, value.frameId)
+        : null;
+
+    if (!plan || !plan.ok) {
+      return { ok: false, reason: (plan && plan.reason) || "space" };
+    }
+
+    result =
+      window.writeSkinHomeCanvasV2AttachNode(
+        currentWorkingSkin.regions,
+        { id: value.id, frameId: value.frameId, next: plan.next }
+      );
+
+  }
+  else if (value.op === "detach") {
+
+    const plan =
+      (typeof window.planStudioCanvasV2Detach === "function")
+        ? window.planStudioCanvasV2Detach(value.id)
+        : null;
+
+    if (!plan || !plan.ok) {
+      return { ok: false, reason: (plan && plan.reason) || "space" };
+    }
+
+    result =
+      window.writeSkinHomeCanvasV2DetachNode(
+        currentWorkingSkin.regions,
+        { id: value.id, next: plan.next }
+      );
+
+  }
+  else if (value.op === "remove") {
+
+    result =
+      window.writeSkinHomeCanvasV2RemoveNode(
+        currentWorkingSkin.regions,
+        { id: value.id }
+      );
+
+  }
+  else {
+    return { ok: false, reason: "op" };
+  }
+
+  if (!result || !result.ok) {
+    return { ok: false, reason: (result && result.reason) || "rejected" };
+  }
+
+  const historyBefore =
+    captureStudioWorkingChange();
+
+  currentWorkingSkin = {
+    ...currentWorkingSkin,
+    regions: result.regions
+  };
+
+  recordStudioWorkingChange(historyBefore);
+
+  isStudioDirty =
+    true;
+
+  bumpStudioWorkingRevision();
+
+  updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
+
+  renderPreviewAfterSkinPackageChange();
+
+  return { ok: true, id: value.id, op: value.op, kind: result.kind || null };
 
 }
 
@@ -4010,6 +4194,28 @@ window.addEventListener(
           generation: Number.isInteger(data.generation) ? data.generation : -1,
           requestId: Number.isInteger(data.requestId) ? data.requestId : 0
         });
+
+      }
+
+      return;
+
+    }
+
+    /*
+      HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임이 흐름 안에서 어디에
+      놓였는가(도화지 폭의 분수).
+
+      ★ 이것은 **보고**이지 요청이 아니다. 저장되는 숫자는 하나도
+        없고, 묶기 · 빼기를 누른 그 순간의 자로만 쓰인다(계약 §28-3).
+        그래서 여기서도 해석하지 않고 알려진 칸만 옮긴다.
+    */
+    if (data.type === "preview:canvas-layout") {
+
+      if (typeof window.setStudioCanvasFrameLayout === "function") {
+
+        window.setStudioCanvasFrameLayout(
+          Array.isArray(data.frames) ? data.frames : []
+        );
 
       }
 

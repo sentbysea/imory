@@ -30,6 +30,9 @@
                  **제품 기본 스킨 불변**
      [v2-add]    새 재료 하나(V2-ADD-1) — 자리마다 받는 종류 · 기본값 ·
                  슬롯 · 보존 · 새 id · 추가 패널 파일의 로드 자리
+     [v2-elements] 소속과 따라가기(V2-ELEMENTS-1) — 묶기 · 빼기 ·
+                 삭제(primary 거부) · follow 전환 · pin 의 기준 셋 ·
+                 프레임 안에 새 장식 · 보존과 불변
      [ux-fix]    직접 조작 사용성(MANUAL-UX-FIX-1)의 **순수 helper 둘** —
                  30° 자석의 경계값(±4° 안에서만 붙는다 · 음수 · 한 바퀴
                  너머)과 모서리 비율 유지의 정사영. 편집기 runtime 이
@@ -2411,8 +2414,11 @@ console.log("\n[v2-add] 새 재료 하나 (V2-ADD-1)");
     add("overlay", "main_visual", "photo_1").reason === "type" &&
     add("overlay", "divider").reason === "type");
 
+  /* ★ `"frame"` 은 HOME-CANVAS-V2-ELEMENTS-1 에서 **실제 자리**가
+     됐다(계약 §28-2). 그래서 모르는 자리의 예를 바꾸고, 프레임 자리는
+     [v2-elements] 절이 따로 본다. */
   check("[v2-add] 모르는 자리 · 모양이 아닌 요청은 거부",
-    add("frame", "text").reason === "target" &&
+    add("nowhere", "text").reason === "target" &&
     canvas.writeSkinHomeCanvasV2AddNode(addRegions(), null).reason === "shape");
 
   /* ---- 슬롯 ---- */
@@ -2496,6 +2502,388 @@ console.log("\n[v2-add] 새 재료 하나 (V2-ADD-1)");
 
     check("[v2-add] 추가 패널 파일은 v2 Inspector **다음**이다",
       orderBroken.length === 0, orderBroken.join(", "));
+  }
+}
+
+
+/* =========================================================
+  [v2-elements] 소속과 따라가기 (HOME-CANVAS-V2-ELEMENTS-1)
+
+  브라우저가 필요 없는 것만 본다 — **무엇이 옮겨지고 무엇이
+  거부되며 무엇이 그대로 남는가**. 좌표를 계산하는 자(프레임의
+  페이지 자리)와 패널 · Undo · Preview 는 브라우저가 필요하다
+  (studio/studio-home-canvas-inspector-e2e-test.mjs --only=v2elements).
+========================================================== */
+console.log("\n[v2-elements] 소속과 따라가기 (V2-ELEMENTS-1)");
+
+{
+  const elRegions = () => [
+    { name: "some_other", enabled: true, payload: { keep: true } },
+    {
+      name: "home_canvas",
+      enabled: true,
+      note: "unknown-entry",
+      canvas: {
+        version: 2,
+        baseWidth: 390,
+        baseHeight: 900,
+        extra: "unknown-canvas",
+        flow: {
+          direction: "column",
+          padding: { top: 40, right: 24, bottom: 40, left: 24 },
+          gap: 10,
+          zzz: "unknown-flow",
+          blocks: [
+            { id: "canvas_b0", type: "text", width: 200, height: "auto",
+              mystery: "keep-block", props: { text: "a" } },
+            { id: "canvas_main", type: "main_visual", width: 300, height: 200,
+              align: "center", odd: "keep-block",
+              props: {
+                baseWidth: 150, baseHeight: 100, primaryId: "canvas_photo",
+                strange: "keep-props",
+                elements: [
+                  { id: "canvas_photo", type: "photo", follow: "transform",
+                    x: 10, y: 5, width: 120, height: 80,
+                    props: { slot: "photo_1" } },
+                  { id: "canvas_tag", type: "text", follow: "pin",
+                    width: 60, height: 20, weird: "keep-element",
+                    pin: { target: "photo", anchor: "right", origin: "left",
+                           offset: { x: 6, y: 0 }, extra: "keep-pin" },
+                    props: { text: "tag" } }
+                ]
+              } }
+          ]
+        },
+        overlays: [
+          { id: "canvas_over", type: "text", x: 20, y: 700, width: 120,
+            height: 40, rotation: 12, hidden: false, locked: false,
+            odd: "keep-overlay", props: { text: "o" } }
+        ]
+      }
+    }
+  ];
+
+  const canvasOf = (result) => result.regions[1].canvas;
+  const framesOf = (result) => canvasOf(result).flow.blocks;
+  const innerOf = (result) => framesOf(result)[1].props.elements;
+  const overlaysOf = (result) => canvasOf(result).overlays;
+
+  const nodeIn = (list, id) => list.find((item) => item.id === id) || null;
+
+
+  /* ---- 묶기 ---- */
+
+  const attached =
+    canvas.writeSkinHomeCanvasV2AttachNode(elRegions(), {
+      id: "canvas_over", frameId: "canvas_main",
+      next: { x: 4, y: 8, width: 40, height: 20 }
+    });
+
+  check("★ [v2-elements] 묶기는 overlay 를 프레임 내부 **맨 뒤**로 옮긴다",
+    attached.ok === true &&
+    overlaysOf(attached).length === 0 &&
+    innerOf(attached).length === 3 &&
+    innerOf(attached)[2].id === "canvas_over",
+    JSON.stringify(innerOf(attached).map((node) => node.id)));
+
+  check("★ [v2-elements] 묶인 장식은 transform 과 프레임 내부 좌표를 받는다",
+    (() => {
+      const node = nodeIn(innerOf(attached), "canvas_over");
+      return node.follow === "transform" &&
+        node.x === 4 && node.y === 8 && node.width === 40 && node.height === 20;
+    })(),
+    JSON.stringify(nodeIn(innerOf(attached), "canvas_over")));
+
+  check("★ [v2-elements] id · 각도 · props · 모르는 칸은 그대로다",
+    (() => {
+      const node = nodeIn(innerOf(attached), "canvas_over");
+      return node.id === "canvas_over" && node.rotation === 12 &&
+        node.props.text === "o" && node.odd === "keep-overlay";
+    })(),
+    "묶기는 소속과 좌표계만 옮긴다(§14-7)");
+
+  check("[v2-elements] 프레임이 아닌 id 로는 묶을 수 없다",
+    canvas.writeSkinHomeCanvasV2AttachNode(elRegions(), {
+      id: "canvas_over", frameId: "canvas_b0",
+      next: { x: 1, y: 1, width: 10, height: 10 }
+    }).reason === "frame");
+
+  check("[v2-elements] 프레임 내부 요소를 다시 묶을 수는 없다",
+    canvas.writeSkinHomeCanvasV2AttachNode(elRegions(), {
+      id: "canvas_tag", frameId: "canvas_main",
+      next: { x: 1, y: 1, width: 10, height: 10 }
+    }).reason === "kind");
+
+  check("[v2-elements] 좌표 · 크기는 v1 과 같은 자로 검사한다",
+    canvas.writeSkinHomeCanvasV2AttachNode(elRegions(), {
+      id: "canvas_over", frameId: "canvas_main",
+      next: { x: 1, y: 1, width: 0, height: 10 }
+    }).reason === "size" &&
+    canvas.writeSkinHomeCanvasV2AttachNode(elRegions(), {
+      id: "canvas_over", frameId: "canvas_main",
+      next: { x: "1", y: 1, width: 10, height: 10 }
+    }).reason === "coord" &&
+    canvas.writeSkinHomeCanvasV2AttachNode(elRegions(), {
+      id: "canvas_over", frameId: "canvas_main",
+      next: { x: 1, y: 1, width: 10 }
+    }).reason === "keys");
+
+
+  /* ---- 빼기 ---- */
+
+  const detached =
+    canvas.writeSkinHomeCanvasV2DetachNode(elRegions(), {
+      id: "canvas_tag", next: { x: 100, y: 200, width: 60, height: 20 }
+    });
+
+  check("★ [v2-elements] 빼기는 프레임 내부 요소를 overlays **맨 뒤**로 옮긴다",
+    detached.ok === true &&
+    innerOf(detached).length === 1 &&
+    overlaysOf(detached).length === 2 &&
+    overlaysOf(detached)[1].id === "canvas_tag",
+    JSON.stringify(overlaysOf(detached).map((node) => node.id)));
+
+  check("★ [v2-elements] 뺀 장식은 도화지 좌표를 받고 follow · pin 은 보존된다",
+    (() => {
+      const node = nodeIn(overlaysOf(detached), "canvas_tag");
+      return node.x === 100 && node.y === 200 &&
+        node.follow === "pin" && node.pin.anchor === "right" &&
+        node.pin.extra === "keep-pin" && node.weird === "keep-element";
+    })(),
+    "overlay 에서는 읽지 않는 칸이고(§14-8), 다시 묶으면 살아난다");
+
+  check("★ [v2-elements] primary 사진은 뺄 수 없다",
+    canvas.writeSkinHomeCanvasV2DetachNode(elRegions(), {
+      id: "canvas_photo", next: { x: 1, y: 1, width: 10, height: 10 }
+    }).reason === "primary");
+
+
+  /* ---- 삭제 ---- */
+
+  const removedTag =
+    canvas.writeSkinHomeCanvasV2RemoveNode(elRegions(), { id: "canvas_tag" });
+
+  check("★ [v2-elements] 프레임 내부 장식을 지운다",
+    removedTag.ok === true &&
+    innerOf(removedTag).length === 1 &&
+    overlaysOf(removedTag).length === 1,
+    JSON.stringify(innerOf(removedTag).map((node) => node.id)));
+
+  check("★ [v2-elements] primary 사진은 지울 수 없다",
+    canvas.writeSkinHomeCanvasV2RemoveNode(elRegions(), { id: "canvas_photo" })
+      .reason === "primary",
+    "프레임 계약을 깨는 동작은 이름 있는 이유로 먼저 막는다");
+
+  const removedBlock =
+    canvas.writeSkinHomeCanvasV2RemoveNode(elRegions(), { id: "canvas_main" });
+
+  check("★ [v2-elements] 블록을 지우면 그 안의 장식도 함께 없어진다",
+    removedBlock.ok === true &&
+    framesOf(removedBlock).length === 1 &&
+    canvas.findSkinHomeCanvasV2Node(canvasOf(removedBlock), "canvas_tag") === null,
+    "프레임이 곧 그 요소들의 자리다");
+
+  check("[v2-elements] overlay 도 지운다 · 없는 id 는 거부",
+    canvas.writeSkinHomeCanvasV2RemoveNode(elRegions(), { id: "canvas_over" })
+      .ok === true &&
+    canvas.writeSkinHomeCanvasV2RemoveNode(elRegions(), { id: "canvas_none" })
+      .reason === "missing");
+
+
+  /* ---- 따라가기 ---- */
+
+  const toPin =
+    canvas.writeSkinHomeCanvasV2NodeFollow(elRegions(), "canvas_photo",
+      { follow: "pin", offsetX: 20, offsetY: 10, width: 240, height: 160,
+        target: "frame", anchor: "top-left", origin: "top-left" },
+      { follow: "transform" });
+
+  check("★ [v2-elements] transform → pin 은 방식 · 크기 · offset 을 함께 쓴다",
+    (() => {
+      const node = nodeIn(innerOf(toPin), "canvas_photo");
+      return toPin.ok === true && node.follow === "pin" &&
+        node.width === 240 && node.height === 160 &&
+        node.pin.offset.x === 20 && node.pin.offset.y === 10 &&
+        node.pin.anchor === "top-left" && node.pin.origin === "top-left";
+    })(),
+    JSON.stringify(nodeIn(innerOf(toPin), "canvas_photo")));
+
+  check("★ [v2-elements] 안 쓰는 칸은 지우지 않는다",
+    (() => {
+      const node = nodeIn(innerOf(toPin), "canvas_photo");
+      return node.x === 10 && node.y === 5;
+    })(),
+    "pin 이 되어도 옛 좌표가 남는다(§14-6)");
+
+  const toTransform =
+    canvas.writeSkinHomeCanvasV2NodeFollow(elRegions(), "canvas_tag",
+      { follow: "transform", x: 50, y: 20, width: 30, height: 10 },
+      { follow: "pin" });
+
+  check("★ [v2-elements] pin → transform 은 좌표를 쓰고 pin 설정을 남긴다",
+    (() => {
+      const node = nodeIn(innerOf(toTransform), "canvas_tag");
+      return toTransform.ok === true && node.follow === "transform" &&
+        node.x === 50 && node.y === 20 &&
+        node.pin.anchor === "right" && node.pin.offset.x === 6;
+    })(),
+    JSON.stringify(nodeIn(innerOf(toTransform), "canvas_tag")));
+
+  check("[v2-elements] 지금 방식이 expected 와 다르면 쓰지 않는다",
+    canvas.writeSkinHomeCanvasV2NodeFollow(elRegions(), "canvas_photo",
+      { follow: "pin", offsetX: 0, offsetY: 0, width: 10, height: 10,
+        target: "frame", anchor: "top-left", origin: "top-left" },
+      { follow: "pin" }).reason === "expected");
+
+  check("[v2-elements] overlay · 블록에는 따라가기가 없다",
+    canvas.writeSkinHomeCanvasV2NodeFollow(elRegions(), "canvas_over",
+      { follow: "transform", x: 1, y: 1, width: 10, height: 10 },
+      { follow: "transform" }).reason === "kind" &&
+    canvas.writeSkinHomeCanvasV2NodeFollow(elRegions(), "canvas_main",
+      { follow: "transform", x: 1, y: 1, width: 10, height: 10 },
+      { follow: "transform" }).reason === "kind");
+
+
+  /* ---- pin 의 기준 셋 ---- */
+
+  const pinned =
+    canvas.writeSkinHomeCanvasV2NodePin(elRegions(), "canvas_tag",
+      { target: "frame", anchor: "bottom", origin: "center",
+        offsetX: -3, offsetY: 7 },
+      { target: "photo", anchor: "right", origin: "left",
+        offsetX: 6, offsetY: 0 });
+
+  check("★ [v2-elements] 기준 셋과 offset 이 한 요청이다",
+    (() => {
+      const node = nodeIn(innerOf(pinned), "canvas_tag");
+      return pinned.ok === true &&
+        node.pin.target === "frame" && node.pin.anchor === "bottom" &&
+        node.pin.origin === "center" &&
+        node.pin.offset.x === -3 && node.pin.offset.y === 7 &&
+        node.pin.extra === "keep-pin";
+    })(),
+    JSON.stringify(nodeIn(innerOf(pinned), "canvas_tag").pin));
+
+  check("[v2-elements] 값 표 밖의 기준은 거부된다",
+    canvas.writeSkinHomeCanvasV2NodePin(elRegions(), "canvas_tag",
+      { target: "somewhere", anchor: "bottom", origin: "center",
+        offsetX: 0, offsetY: 0 },
+      { target: "photo", anchor: "right", origin: "left",
+        offsetX: 6, offsetY: 0 }).reason === "target" &&
+    canvas.writeSkinHomeCanvasV2NodePin(elRegions(), "canvas_tag",
+      { target: "frame", anchor: "middle", origin: "center",
+        offsetX: 0, offsetY: 0 },
+      { target: "photo", anchor: "right", origin: "left",
+        offsetX: 6, offsetY: 0 }).reason === "anchor");
+
+  check("★ [v2-elements] transform 요소의 pin 은 지금 쓰는 칸이 아니다",
+    canvas.writeSkinHomeCanvasV2NodePin(elRegions(), "canvas_photo",
+      { target: "frame", anchor: "top", origin: "top",
+        offsetX: 0, offsetY: 0 },
+      { target: "frame", anchor: "center", origin: "center",
+        offsetX: 0, offsetY: 0 }).reason === "pin",
+    "먼저 따라가기 방식을 바꾼다");
+
+
+  /* ---- 프레임 안에 새 장식 ---- */
+
+  const addedIn =
+    canvas.writeSkinHomeCanvasV2AddNode(elRegions(), {
+      target: "frame", frameId: "canvas_main", type: "shape"
+    });
+
+  check("★ [v2-elements] 프레임 안에 새 장식을 만든다",
+    addedIn.ok === true && innerOf(addedIn).length === 3 &&
+    innerOf(addedIn)[2].type === "shape" &&
+    innerOf(addedIn)[2].follow === "transform",
+    JSON.stringify(innerOf(addedIn)[2]));
+
+  check("★ [v2-elements] 기본 크기 · 자리는 **프레임 자에 맞춰** 줄어든다",
+    (() => {
+      const node = innerOf(addedIn)[2];
+      /* 자유 장식의 shape 는 120×120 이고 프레임 자는 150 이다 */
+      return node.width < 120 && node.width > 0 &&
+        node.x > 0 && node.x < 150;
+    })(),
+    JSON.stringify({ w: innerOf(addedIn)[2].width, x: innerOf(addedIn)[2].x }));
+
+  check("[v2-elements] 프레임 안에는 main_visual · divider 를 넣을 수 없다",
+    canvas.writeSkinHomeCanvasV2AddNode(elRegions(), {
+      target: "frame", frameId: "canvas_main", type: "main_visual",
+      slot: "photo_1"
+    }).reason === "type" &&
+    canvas.writeSkinHomeCanvasV2AddNode(elRegions(), {
+      target: "frame", frameId: "canvas_main", type: "divider"
+    }).reason === "type");
+
+  check("[v2-elements] 프레임 id 가 없거나 프레임이 아니면 거부된다",
+    canvas.writeSkinHomeCanvasV2AddNode(elRegions(), {
+      target: "frame", type: "shape"
+    }).reason === "frame" &&
+    canvas.writeSkinHomeCanvasV2AddNode(elRegions(), {
+      target: "frame", frameId: "canvas_b0", type: "shape"
+    }).reason === "frame");
+
+
+  /* ---- 보존과 불변 ---- */
+
+  check("★ [v2-elements] 모르는 항목 · 모르는 칸 · 다른 층이 그대로다",
+    (() => {
+      const next = canvasOf(attached);
+      return next.extra === "unknown-canvas" &&
+        next.flow.zzz === "unknown-flow" &&
+        next.flow.blocks[0].mystery === "keep-block" &&
+        next.flow.blocks[1].odd === "keep-block" &&
+        next.flow.blocks[1].props.strange === "keep-props" &&
+        attached.regions[0].payload.keep === true &&
+        attached.regions[1].note === "unknown-entry";
+    })());
+
+  check("★ [v2-elements] 입력을 한 칸도 mutate 하지 않는다",
+    (() => {
+
+      const source = elRegions();
+      const before = JSON.stringify(source);
+
+      canvas.writeSkinHomeCanvasV2AttachNode(source, {
+        id: "canvas_over", frameId: "canvas_main",
+        next: { x: 1, y: 1, width: 5, height: 5 } });
+
+      canvas.writeSkinHomeCanvasV2DetachNode(source, {
+        id: "canvas_tag", next: { x: 1, y: 1, width: 5, height: 5 } });
+
+      canvas.writeSkinHomeCanvasV2RemoveNode(source, { id: "canvas_tag" });
+
+      return JSON.stringify(source) === before;
+
+    })(),
+    "Undo 가 들고 있는 직전 스냅샷이 이 호출로 바뀌면 안 된다");
+
+  check("★ [v2-elements] 옮긴 결과가 계약을 그대로 지난다",
+    canvas.validateSkinCanvasV2Data(canvasOf(attached), "canvas").ok === true &&
+    canvas.validateSkinCanvasV2Data(canvasOf(detached), "canvas").ok === true &&
+    canvas.validateSkinCanvasV2Data(canvasOf(removedBlock), "canvas").ok === true);
+
+  check("★ [v2-elements] v1 canvas 에는 닿지 않는다",
+    canvas.writeSkinHomeCanvasV2RemoveNode(
+      [{ name: "home_canvas", enabled: true,
+         canvas: { version: 1, baseWidth: 390, baseHeight: 844,
+                   elements: [{ id: "e1", type: "shape", x: 0, y: 0,
+                                width: 10, height: 10, props: { kind: "rect" } }] } }],
+      { id: "e1" }
+    ).reason === "canvas");
+
+
+  /* ---- Studio 가 자 파일을 싣는가 ---- */
+
+  {
+    const docs = ["studio/index.html", "studio/studio-lifecycle-scenario.html"];
+
+    const missing =
+      docs.filter((file) => read(file).indexOf("studio-canvas-v2-space.js") === -1);
+
+    check("[v2-elements] Studio 문서가 자 파일을 싣는다(묶기 · 빼기가 그 자를 쓴다)",
+      missing.length === 0, missing.join(", "));
   }
 }
 
