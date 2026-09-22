@@ -1118,6 +1118,111 @@ const LAYOUT_OK = {
 check("[canvas-layout] 정상 보고를 부모가 받는다",
   canvasLayoutFrom(LAYOUT_OK).ok === true);
 
+
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 같은 보고에 실리는 두 가지
+   (계약 §29-3 · §29-6)
+
+     blocks  블록이 **화면에서 갖는 높이**(도화지 폭의 분수)
+             — Auto 스위치를 끌 때 굳힐 숫자다
+     look    고른 요소가 **지금 물려받고 있는 모양**
+             — 묶기 · 빼기가 그 값을 그 요소의 규칙으로 못박는다
+
+   look 은 **스킨 CSS 로 들어가는 값**이라 여기서 가장 좁게 본다.
+========================================================== */
+
+const LAYOUT_BLOCKS = {
+  ...LAYOUT_OK,
+  blocks: [{ id: "v2Text", h: 0.1387 }, { id: "v2Main", h: 0.8333 }]
+};
+
+check("[canvas-layout] ★ 블록의 그려진 높이가 함께 온다",
+  canvasLayoutFrom(LAYOUT_BLOCKS).ok === true);
+
+check("[canvas-layout] ★ 블록 높이도 모르는 칸 · 중복 · 숫자 아님을 거부한다",
+  canvasLayoutFrom({
+    ...LAYOUT_OK, blocks: [{ id: "v2Text", h: 0.1, w: 0.2 }]
+  }).ok === false &&
+  canvasLayoutFrom({
+    ...LAYOUT_OK, blocks: [{ id: "v2Text", h: 0.1 }, { id: "v2Text", h: 0.2 }]
+  }).ok === false &&
+  canvasLayoutFrom({
+    ...LAYOUT_OK, blocks: [{ id: "v2Text", h: "tall" }]
+  }).ok === false);
+
+const layoutLook = (props) => ({ ...LAYOUT_OK, look: { id: "v2Over", props } });
+
+check("[canvas-layout] ★ 물려받은 모양이 함께 온다(글꼴 · 색)",
+  canvasLayoutFrom(layoutLook({
+    "font-family": 'Georgia, "Times New Roman", serif',
+    "color": "rgb(43, 39, 35)",
+    "line-height": "25.9px",
+    "letter-spacing": "0.24em",
+    "white-space": "pre-wrap"
+  })).ok === true);
+
+check("[canvas-layout] ★ 규칙을 탈출할 수 있는 값은 메시지 층에서 막힌다",
+  canvasLayoutFrom(layoutLook({
+    "color": "red; } body { display: none } .x {"
+  })).ok === false &&
+  canvasLayoutFrom(layoutLook({
+    "color": "url(javascript:alert(1))"
+  })).ok === false,
+  "이 값은 스킨 CSS 의 선언이 된다");
+
+check("[canvas-layout] ★ 목록에 없는 속성은 받지 않는다",
+  canvasLayoutFrom(layoutLook({ "background-image": "url(x.png)" })).ok === false &&
+  canvasLayoutFrom(layoutLook({})).ok === false,
+  "빈 목록도 뜻이 없다");
+
+check("[canvas-layout] ★ look 은 **한 요소**의 것이고 id 형태를 지킨다",
+  canvasLayoutFrom({
+    ...LAYOUT_OK, look: { id: "not an id", props: { color: "red" } }
+  }).ok === false &&
+  canvasLayoutFrom({
+    ...LAYOUT_OK, look: { id: "v2Over", props: { color: "red" }, extra: 1 }
+  }).ok === false);
+
+
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 폭(계약 §29-4)
+
+   부모 → 프레임 : geometry 에 `mode:"block"` 한 칸
+   프레임 → 부모 : `kind:"width"` 의 확정 요청(폭 한 칸)
+========================================================== */
+
+const GEOMETRY_BLOCK = {
+  contract: 1, renderSeq: 3, active: true, id: "v2Text", mode: "block",
+  x: 0, y: 0, width: 300, height: "auto", rotation: 0,
+  baseWidth: 390, baseHeight: 900, generation: 5
+};
+
+check("[canvas-width] ★ 블록 표시가 실린 geometry 를 프레임이 받는다",
+  canvasGeometryTo(GEOMETRY_BLOCK).ok === true);
+
+check("[canvas-width] ★ 그 값은 \"block\" 하나뿐이다",
+  canvasGeometryTo({ ...GEOMETRY_BLOCK, mode: "frame" }).ok === false &&
+  canvasGeometryTo({ ...GEOMETRY_BLOCK, mode: true }).ok === false);
+
+check("[canvas-width] ★ 해제에는 블록 표시도 없다",
+  canvasGeometryTo({
+    contract: 1, renderSeq: 3, active: false, generation: 5, mode: "block"
+  }).ok === false);
+
+const WIDTH_OK = {
+  contract: 1, renderSeq: 3, kind: "width", id: "v2Text",
+  expected: { width: 300 }, next: { width: 341.786 },
+  generation: 5, requestId: 2
+};
+
+check("[canvas-width] ★ 폭 확정은 폭 한 칸이다",
+  canvasTransformFrom(WIDTH_OK).ok === true);
+
+check("[canvas-width] ★ 좌표 · 높이가 섞이면 메시지 전체가 거부된다",
+  canvasTransformFrom({ ...WIDTH_OK, next: { width: 341, x: 0 } }).ok === false &&
+  canvasTransformFrom({ ...WIDTH_OK, expected: { x: 0, y: 0 } }).ok === false &&
+  canvasTransformFrom({ ...WIDTH_OK, next: { width: 0 } }).ok === false);
+
 check("[canvas-layout] 프레임이 없는 캔버스는 빈 배열이다",
   canvasLayoutFrom({ ...LAYOUT_OK, frames: [] }).ok === true,
   "\"프레임이 없다\"는 뜻이 하나뿐이라 거부하지 않는다");

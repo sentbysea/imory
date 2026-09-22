@@ -536,14 +536,28 @@ function studioCanvasV2NumberRow(field, label, view) {
 
 
 /* =========================================================
-   4. 높이 Auto 스위치 — 켜면 `"auto"`, 끄면 지금 숫자
+   4. 높이 Auto 스위치 — 켜면 `"auto"`, 끄면 **지금 그려진 높이**
 
-   ★ 끌 때 무슨 숫자로 가는가. v1 은 화면에서 잰 높이를 썼지만
-     (계약 §22-3) v2 블록의 실제 높이는 흐름과 스킨 조판이 정하므로
-     프레임에서 재야 한다. 이 라운드는 재지 않고 **저장된 자를
-     그대로 쓴다** — `props.baseHeight` 가 있는 main_visual 이든
-     아니든, 마지막으로 적혀 있던 숫자가 없으면 스위치를 켜기만
-     하고 끄지는 못한다(숫자를 지어내지 않는다).
+   ★ 끌 때 무슨 숫자로 가는가(HOME-CANVAS-V2-MANUAL-FIX-1 ·
+     계약 §29-3).
+
+   처음에는 "Height 칸에 적혀 있는 숫자"를 썼다. 그런데 Auto 인
+   동안 그 칸은 **잠겨 있어서**(아래 studioCanvasV2NumberRow) 숫자를
+   넣을 수 없고, 스위치를 끄면 "숫자를 먼저 넣어 주세요"만 나왔다 —
+   클릭 한 번으로는 Auto 를 끌 수 없었다.
+
+   이제 v1 과 같은 답을 쓴다: **지금 화면에 그려진 높이**다. v2
+   블록의 실제 높이는 흐름과 스킨 조판이 정하므로 부모가 재지
+   못하고(sandbox 는 cross-origin), 프레임이 보고한 값을 쓴다
+   (`preview:canvas-layout` 의 `blocks` · 계약 §29-3).
+
+   ★ 그 보고가 아직 없으면(방금 그렸다 · 그 블록이 화면에 없다)
+     Height 칸에 적혀 있던 숫자를 쓰고, 그것도 없으면 그때만
+     "숫자를 먼저" 라고 말한다 — 숫자를 지어내지 않는다.
+
+   ★ Undo 는 정확히 `"auto"` 로 돌아간다. 한 번의 확정이 한 칸이고
+     (commitStudioCanvasInspectorField) `expected` 가 `"auto"` 이기
+     때문이다.
 ========================================================== */
 
 function studioCanvasV2AutoToggle(view) {
@@ -587,16 +601,29 @@ function studioCanvasV2AutoToggle(view) {
     }
     else {
 
+      /* 1순위 — 지금 화면에 그려진 높이(계약 §29-3) */
+      const measured =
+        (typeof window.studioCanvasV2MeasuredHeight === "function")
+          ? window.studioCanvasV2MeasuredHeight(now.node.id)
+          : null;
+
+      /* 2순위 — 칸에 적혀 있던 숫자(Auto 인 동안에는 잠겨 있지만,
+         숫자 → Auto → 다시 숫자로 돌아오는 길에서는 값이 남아 있다) */
       const typed =
         studioCanvasInspectorInputs.height
           ? Number(studioCanvasInspectorInputs.height.value.trim())
           : NaN;
 
-      if (!Number.isFinite(typed) || !(typed > 0)) {
+      const value =
+        (Number.isFinite(measured) && measured > 0)
+          ? measured
+          : ((Number.isFinite(typed) && typed > 0) ? typed : null);
+
+      if (value === null) {
 
         setStudioCanvasInspectorError(
           "height",
-          "Auto 를 끄려면 Height 에 숫자를 먼저 넣어 주세요."
+          "지금 높이를 잴 수 없어요. Height 에 숫자를 넣어 주세요."
         );
 
         input.checked = true;
@@ -605,7 +632,7 @@ function studioCanvasV2AutoToggle(view) {
 
       }
 
-      next = { height: typed };
+      next = { height: value };
 
     }
 

@@ -79,7 +79,10 @@ const STUDIO_CANVAS_MAX_SELECTED = 64;
    같은 관문 · 같은 불변 수정을 쓰되, 들어올 수 있는 문을 가른다.
 ========================================================== */
 
-const STUDIO_CANVAS_FRAME_KINDS = ["move", "resize", "rotate"];
+/* HOME-CANVAS-V2-MANUAL-FIX-1 — `width` 는 **흐름 블록의 폭**이다
+   (계약 §29-4). 블록은 자리를 좌표로 갖지 않으므로 move · resize 를
+   줄 수 없고, 쓸 수 있는 것이 폭 한 칸뿐이라 이름도 하나다. */
+const STUDIO_CANVAS_FRAME_KINDS = ["move", "resize", "rotate", "width"];
 
 /* =========================================================
    HOME-CANVAS-V2-EDITOR-1A — v2 의 기본 배치 칸
@@ -127,7 +130,13 @@ const STUDIO_CANVAS_V2_TRANSFORM_KINDS =
 const STUDIO_CANVAS_V2_KIND_OF = {
   move: "v2-move",
   resize: "v2-resize",
-  rotate: "v2-rotate"
+  rotate: "v2-rotate",
+
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 손잡이로 끈 블록 폭은 패널의
+     Width 칸과 **같은 writer** 를 지난다(계약 §29-4). v1 캔버스에서
+     이 이름이 오면 바뀌지 않고, 그 이름의 writer 가 없어
+     "unsupported" 로 거부된다. */
+  width: "v2-width"
 };
 
 const STUDIO_CANVAS_PANEL_KINDS =
@@ -888,6 +897,67 @@ function syncStudioCanvasFrameMode() {
    따로 알릴 메시지를 만들지 않는다.
 ========================================================== */
 
+/*
+  HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 폭 손잡이용 geometry
+  (계약 §29-4)
+
+  -> { active:true, mode:"block", … } | null
+
+  ★ 근거는 **지금 draft** 하나다. 화면에서 재지 않는다 — 시작 폭은
+    저장값이어야 확정의 `expected` 와 어긋나지 않는다.
+*/
+function studioCanvasV2BlockWidthGeometry(id) {
+
+  const info =
+    (typeof window.studioCanvasNodeInfo === "function")
+      ? window.studioCanvasNodeInfo(id)
+      : null;
+
+  if (!info || info.kind !== "block") {
+    return null;
+  }
+
+  const node =
+    info.node;
+
+  const payload =
+    studioCanvasDraftPayload();
+
+  if (
+    !node ||
+    node.locked === true ||
+    node.hidden === true ||
+    node.align === "stretch" ||
+    typeof node.width !== "number" ||
+    !Number.isFinite(node.width) ||
+    !(node.width > 0) ||
+    !payload ||
+    !(payload.baseWidth > 0) ||
+    !(payload.baseHeight > 0)
+  ) {
+    return null;
+  }
+
+  return {
+    active: true,
+    mode: "block",
+    id: id,
+    x: 0,
+    y: 0,
+    width: node.width,
+    height: "auto",
+    rotation: 0,
+    scopeId: null,
+    originX: 0,
+    originY: 0,
+    baseWidth: payload.baseWidth,
+    baseHeight: payload.baseHeight,
+    generation: studioCanvasSelection.generation
+  };
+
+}
+
+
 function studioCanvasSingleGeometry() {
 
   if (!studioCanvasSelection || studioCanvasSelection.ids.length !== 1) {
@@ -926,6 +996,31 @@ function studioCanvasSingleGeometry() {
        (블록의 자리는 좌표가 아니다, §14-10).
   ====================================================== */
   if (studioCanvasPayloadVersion(payload) === 2) {
+
+    /* =====================================================
+       HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 **폭 손잡이**
+       (계약 §29-4)
+
+       블록의 자리는 좌표가 아니라 순서 · 정렬 · margin 이다(§14-10).
+       그래서 지금까지 블록 선택에는 geometry 를 한 칸도 내려보내지
+       않았고, 화면에는 잡을 것 없는 틀만 남았다(§27 이 그것을
+       감췄다). 이제 **폭 한 칸**은 손으로 잡을 수 있다.
+
+       ★ 내려보내는 값도 한 칸뿐이다. x · y · rotation 은 0 이고
+         height 는 `"auto"` 다 — 프레임은 `mode:"block"` 을 보고
+         좌우 손잡이만 그리며 그 칸들을 쓰지 않는다.
+
+       ★ `align:"stretch"` 블록에는 주지 않는다. 그 블록의 폭은
+         저장된 width 가 아니라 가용 폭(과 maxWidth)이 정하므로
+         (§14-4) 손잡이를 끌어도 화면이 따라오지 않는다 — 패널의
+         Width 칸과 같은 사정이고, 남은 차이는 §29-7 이다.
+    ====================================================== */
+    const blockGeometry =
+      studioCanvasV2BlockWidthGeometry(id);
+
+    if (blockGeometry) {
+      return blockGeometry;
+    }
 
     const space =
       (typeof window.studioCanvasV2Space === "function")
@@ -1045,6 +1140,9 @@ function postStudioCanvasGeometryToFrame(answering) {
       scopeId: null,
       originX: 0,
       originY: 0,
+
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — 해제에는 블록 표시도 없다 */
+      mode: null,
 
       baseWidth: 0,
       baseHeight: 0,
@@ -1717,6 +1815,10 @@ function commitStudioCanvasElementChange(request, gate) {
       "v2-move": ["x", "y"],
       "v2-resize": ["x", "y", "width", "height"],
       "v2-rotate": ["rotation"],
+
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록 폭은 **한 칸**이다
+         (계약 §29-4). 좌표가 섞이면 메시지 전체를 거부한다. */
+      width: ["width"],
 
       /* HOME-CANVAS-V2-ELEMENTS-1 — 메시지가 소유하는 것은 **고른
          값**뿐이다. 그것을 유지하기 위해 함께 바뀌는 좌표 · offset 은

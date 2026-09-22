@@ -119,6 +119,22 @@ const SKIN_CANVAS_RENDER_ALIGN_ATTR = "data-imory-canvas-align";
    붙지 않으므로 v1 DOM 은 한 글자도 바뀌지 않는다. */
 const SKIN_CANVAS_RENDER_OVERLAY_ATTR = "data-imory-canvas-overlay";
 
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 이 요소의 자가 무엇인가(계약 §29-1)
+
+   v2 도화지는 내용을 따라 **자란다**(render.css §6). 그래서 세로값을
+   도화지 높이의 백분율로 적으면 내용이 길어질 때 장식이 함께 내려간다
+   — v2 의 자유 장식은 네 칸 전부 **도화지 폭의 자**(100cqw)로 적는다.
+
+   ★ 표식은 요소 **자신**에 있다. 좌표를 쓰는 함수는 렌더러와 편집
+     runtime 이 함께 쓰는 한 벌이므로(§0-1 · §0-2), 자를 요소에서
+     읽으면 "다시 그린 자리"와 "끄는 동안의 자리"가 갈라질 수 없다.
+
+   ★ 값이 `"cqw"` 인 요소만 그 자를 쓴다. v1 요소 · 프레임 내부
+     요소에는 이 속성이 없고 지금까지의 백분율 그대로다. */
+const SKIN_CANVAS_RENDER_UNIT_ATTR = "data-imory-canvas-unit";
+const SKIN_CANVAS_RENDER_UNIT_CQW = "cqw";
+
 /* main_visual 의 **외곽 프레임**. V2-MAIN-VISUAL-1 부터 이 표식 안에
    primary 사진과 주변 장식이 그려진다. 자리를 채우는 임시 문구도
    기본 디자인도 넣지 않는다 — 그릴 것은 저장된 요소뿐이다. */
@@ -190,7 +206,11 @@ const SKIN_CANVAS_RENDER_FLOW_VARS = {
   paddingTop: "--imory-canvas-flow-padding-top",
   paddingRight: "--imory-canvas-flow-padding-right",
   paddingBottom: "--imory-canvas-flow-padding-bottom",
-  paddingLeft: "--imory-canvas-flow-padding-left"
+  paddingLeft: "--imory-canvas-flow-padding-left",
+
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 도화지의 **바닥**(계약 §29-1).
+     흐름이 이보다 짧으면 여기까지 오고, 길면 그만큼 늘어난다. */
+  minHeight: "--imory-canvas-flow-min-height"
 };
 
 const SKIN_CANVAS_RENDER_BLOCK_VARS = {
@@ -301,6 +321,48 @@ function skinCanvasRenderPercent(value, base) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 도화지 폭의 자(계약 §29-1)
+
+   `calc(v / baseWidth * 100cqw)` — 100cqw 는 도화지의 안쪽 폭이고
+   (render.css §6 이 도화지에 container-type 을 준다), baseWidth 로
+   나누면 곧 "Canvas px 하나"다. 백분율 자와 **같은 배율**이면서
+   도화지의 세로 길이에 흔들리지 않는다.
+
+   ★ 자릿수 규칙은 백분율과 같은 함수를 쓴다 — 두 자가 다른 반올림을
+     하면 같은 저장값이 자에 따라 다른 자리에 놓인다.
+========================================================== */
+function skinCanvasRenderCqw(value, baseWidth) {
+
+  if (
+    !isSkinCanvasRenderNumber(value) ||
+    !isSkinCanvasRenderNumber(baseWidth) ||
+    baseWidth <= 0
+  ) {
+    return null;
+  }
+
+  return `calc(${skinCanvasRenderTrimNumber(value)} / ` +
+    `${skinCanvasRenderTrimNumber(baseWidth)} * 100cqw)`;
+
+}
+
+
+/*
+  이 요소가 쓰는 자. `"cqw"` 표식이 있으면 네 칸 전부 도화지 폭으로
+  적고, 없으면 지금까지의 백분율이다(v1 요소 · 프레임 내부 요소).
+*/
+function skinCanvasRenderUsesCqw(el) {
+
+  return !!(
+    el &&
+    typeof el.getAttribute === "function" &&
+    el.getAttribute(SKIN_CANVAS_RENDER_UNIT_ATTR) === SKIN_CANVAS_RENDER_UNIT_CQW
+  );
+
+}
+
+
 function setSkinCanvasRenderVar(el, name, value) {
 
   if (value === null) {
@@ -339,11 +401,19 @@ function setSkinCanvasElementPosition(el, x, y, baseWidth, baseHeight) {
     return false;
   }
 
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 자는 요소가 갖고 있다(계약 §29-1) */
+  const cqw =
+    skinCanvasRenderUsesCqw(el);
+
   const left =
-    skinCanvasRenderPercent(x, baseWidth);
+    cqw
+      ? skinCanvasRenderCqw(x, baseWidth)
+      : skinCanvasRenderPercent(x, baseWidth);
 
   const top =
-    skinCanvasRenderPercent(y, baseHeight);
+    cqw
+      ? skinCanvasRenderCqw(y, baseWidth)
+      : skinCanvasRenderPercent(y, baseHeight);
 
   if (left === null || top === null) {
     return false;
@@ -420,14 +490,24 @@ function applySkinCanvasElementBox(el, box, baseWidth, baseHeight) {
     return false;
   }
 
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 자는 요소가 갖고 있다(계약 §29-1) */
+  const cqw =
+    skinCanvasRenderUsesCqw(el);
+
   const left =
-    skinCanvasRenderPercent(box.x, baseWidth);
+    cqw
+      ? skinCanvasRenderCqw(box.x, baseWidth)
+      : skinCanvasRenderPercent(box.x, baseWidth);
 
   const top =
-    skinCanvasRenderPercent(box.y, baseHeight);
+    cqw
+      ? skinCanvasRenderCqw(box.y, baseWidth)
+      : skinCanvasRenderPercent(box.y, baseHeight);
 
   const width =
-    skinCanvasRenderPercent(box.width, baseWidth);
+    cqw
+      ? skinCanvasRenderCqw(box.width, baseWidth)
+      : skinCanvasRenderPercent(box.width, baseWidth);
 
   if (left === null || top === null || width === null) {
     return false;
@@ -437,7 +517,9 @@ function applySkinCanvasElementBox(el, box, baseWidth, baseHeight) {
      없으면 **한 칸도 쓰지 않는다**(반쪽만 적용된 geometry 금지) */
   const fixedHeight =
     isSkinCanvasRenderNumber(box.height)
-      ? skinCanvasRenderPercent(box.height, baseHeight)
+      ? (cqw
+          ? skinCanvasRenderCqw(box.height, baseWidth)
+          : skinCanvasRenderPercent(box.height, baseHeight))
       : null;
 
   if (isSkinCanvasRenderNumber(box.height) && fixedHeight === null) {
@@ -742,6 +824,22 @@ function applySkinCanvasElementState(node, element) {
 function buildSkinCanvasElementNode(doc, element, canvas, context) {
 
   const node = buildSkinCanvasElementShell(doc, element);
+
+  /* =====================================================
+     HOME-CANVAS-V2-MANUAL-FIX-1 — v2 의 자유 장식은 도화지 폭의 자
+     (계약 §29-1)
+
+     v2 도화지는 내용을 따라 자라므로 세로값을 도화지 높이의
+     백분율로 적을 수 없다 — 그러면 글자가 길어질 때 장식이 함께
+     내려간다. **좌표를 쓰기 전에** 표식을 달아 두면 아래 한 줄과
+     편집 runtime 의 임시 좌표가 같은 자를 쓴다.
+
+     ★ v1 에는 달지 않는다 — v1 DOM 은 한 글자도 바뀌지 않는다.
+  ====================================================== */
+  if (canvas.version === 2) {
+    node.setAttribute(
+      SKIN_CANVAS_RENDER_UNIT_ATTR, SKIN_CANVAS_RENDER_UNIT_CQW);
+  }
 
   /* ── 좌표와 크기 ──
 
@@ -1162,9 +1260,18 @@ function applySkinCanvasBlockBox(el, block, metrics, gap) {
 
     el.setAttribute(SKIN_CANVAS_RENDER_HEIGHT_ATTR, "fixed");
 
+    /* =====================================================
+       HOME-CANVAS-V2-MANUAL-FIX-1 — 숫자 높이의 자는 **도화지 폭**
+       (계약 §29-1)
+
+       흐름 층 높이의 백분율이었다. 흐름 층이 내용을 따라 자라게
+       된 순간(render.css §6) 그 자도 함께 자라서, 내용이 길어지면
+       `height:40` 인 로고가 저장값보다 커진다. 도화지 폭의 자는
+       가로값이 이미 쓰던 배율과 같고 흐름 길이에 흔들리지 않는다.
+    ====================================================== */
     setSkinCanvasRenderVar(
       el, vars.height,
-      skinCanvasRenderPercent(block.height, metrics.height));
+      skinCanvasRenderCqw(block.height, metrics.baseWidth));
 
   } else {
 
@@ -1424,10 +1531,11 @@ function resolveSkinCanvasFrameGeometry(block, metrics) {
 
   if (isSkinCanvasRenderNumber(block.height)) {
 
-    /* 숫자 height 는 `metrics.height` 자로 CSS 에 갔다 — 그 자가
-       없으면 화면에서도 `auto` 다(applySkinCanvasBlockBox) */
+    /* 숫자 height 는 도화지 폭의 자로 CSS 에 갔다 — 그 자가 없으면
+       화면에서도 `auto` 다(applySkinCanvasBlockBox ·
+       HOME-CANVAS-V2-MANUAL-FIX-1 에서 `metrics.height` 에서 옮겼다) */
     if (
-      !isSkinCanvasRenderNumber(metrics.height) || metrics.height <= 0 ||
+      !isSkinCanvasRenderNumber(metrics.baseWidth) || metrics.baseWidth <= 0 ||
       block.height <= 0
     ) {
       return null;
@@ -1722,8 +1830,30 @@ function buildSkinCanvasFlowNode(doc, canvas, context) {
   setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_FLOW_VARS.paddingBottom, edge(padding.bottom));
   setSkinCanvasRenderVar(node, SKIN_CANVAS_RENDER_FLOW_VARS.paddingLeft, edge(padding.left));
 
-  /* 블록이 쓰는 자 — padding 을 뺀 흐름 층의 content box */
+  /* =====================================================
+     HOME-CANVAS-V2-MANUAL-FIX-1 — 도화지의 바닥(계약 §29-1)
+
+     `baseHeight` 는 이제 **최소**다. 흐름이 그보다 길어지면 도화지가
+     함께 길어지므로 스킨이 칠한 배경이 끊기지 않고, 짧으면 지금까지와
+     똑같이 `baseWidth : baseHeight` 비율에 머문다.
+
+     ★ 저장값은 한 칸도 바뀌지 않는다 — 고정 높이를 늘려 가리는 것이
+       아니다.
+  ====================================================== */
+  setSkinCanvasRenderVar(
+    node,
+    SKIN_CANVAS_RENDER_FLOW_VARS.minHeight,
+    skinCanvasRenderCqw(canvas.baseHeight, canvas.baseWidth)
+  );
+
+  /* 블록이 쓰는 자 — padding 을 뺀 흐름 층의 content box
+
+     ★ `baseWidth` 도 함께 둔다(HOME-CANVAS-V2-MANUAL-FIX-1). 숫자
+       height 는 이제 도화지 폭의 자(100cqw)로 적으므로 그 값이
+       필요하다 — `height` 칸은 `main_visual` 의 비율 계산이 아직
+       쓰고 있어 그대로 둔다. */
   const metrics = {
+    baseWidth: canvas.baseWidth,
     width: canvas.baseWidth - pad(padding.left) - pad(padding.right),
     height: canvas.baseHeight - pad(padding.top) - pad(padding.bottom)
   };
@@ -1957,6 +2087,10 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_CANVAS_RENDER_PIN_FRACTIONS,
     SKIN_CANVAS_RENDER_PIN_DEFAULT_POINT,
     resolveSkinCanvasBlockWidth,
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록 상자의 자(§29-1) 를 단위
+       테스트가 브라우저 없이 본다 */
+    applySkinCanvasBlockBox,
     skinCanvasFramePhotoRatio,
     resolveSkinCanvasFramePhotoRect,
     resolveSkinCanvasFrameGeometry,

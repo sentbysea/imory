@@ -1542,10 +1542,15 @@ async function run() {
       /* 배율 1 — 아래 기대값이 그대로 px 이다 */
       const s = r.rootW / 390;
 
+      /* ★ HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 층은 **문서 흐름 안**이다
+         (계약 §29-1). 예전에는 `position:absolute; inset:0` 이었고,
+         그래서 내용이 baseHeight 를 넘으면 도화지가 그 자리에서
+         끝나 스킨 배경이 끊겼다. 지금은 높이를 내용이 정하고
+         baseHeight 는 **최소**다. */
       check("★ 도화지가 v2 로 활성화되고 흐름 층이 하나 생긴다",
         r.active === "true" && r.version === "2" && r.hasFlow &&
         r.flowDirection === "column" &&
-        r.flowPosition === "absolute" && r.flowDisplay === "flex",
+        r.flowPosition === "relative" && r.flowDisplay === "flex",
         JSON.stringify({ v: r.version, f: r.hasFlow, p: r.flowPosition, d: r.flowDisplay }));
 
       check("★ 배율 1 — 도화지가 baseWidth · baseHeight 비율이다(390 × 1000)",
@@ -1676,13 +1681,18 @@ async function run() {
 
       /* ---- 자유 장식(overlays) ---- */
 
-      check("★ overlays 는 v1 요소와 같은 좌표 · 크기 · 회전 규칙이다",
+      /* ★ HOME-CANVAS-V2-MANUAL-FIX-1 — v2 의 자유 장식은 네 칸 전부
+         **도화지 폭의 자**(100cqw)다(계약 §29-1). 도화지가 내용을
+         따라 길어져도 y=920 인 장식이 함께 내려가지 않게 하는 값이고,
+         실제 자리는 바로 아래 절이 px 로 다시 잰다(같은 배율이다).
+         v1 요소는 지금도 백분율이다. */
+      check("★ overlays 는 도화지 폭의 자로 네 칸을 쓴다(v2)",
         r.overlays.length === 1 &&
         r.overlays[0].position === "absolute" &&
-        r.overlays[0].vars.x === "-5.128205%" &&
-        r.overlays[0].vars.y === "90%" &&
-        r.overlays[0].vars.width === "25.641026%" &&
-        r.overlays[0].vars.height === "4%" &&
+        r.overlays[0].vars.x === "calc(-20 / 390 * 100cqw)" &&
+        r.overlays[0].vars.y === "calc(900 / 390 * 100cqw)" &&
+        r.overlays[0].vars.width === "calc(100 / 390 * 100cqw)" &&
+        r.overlays[0].vars.height === "calc(40 / 390 * 100cqw)" &&
         r.overlays[0].vars.rotation === "15deg",
         JSON.stringify(r.overlays[0] && r.overlays[0].vars));
 
@@ -1826,6 +1836,136 @@ async function run() {
 
       check("★ 공개 화면이 Studio 편집 라이브러리를 한 번도 받지 않는다",
         vendorHits.length === 0, vendorHits.join(" | "));
+
+      check("스크립트 오류 없음", errors.length === 0, errors.join(" | "));
+
+      await ctx.close();
+
+    }
+
+
+    /* ------------------------------------------------- */
+    if (wants("grow")) {
+
+      section("grow");
+
+      /* =================================================
+         도화지가 내용을 따라 자란다 (V2-MANUAL-FIX-1 · 계약 §29-1)
+
+         주인이 수동 테스트에서 찾은 현상: `height:"auto"` 글자를
+         길게 고치면 아래 블록은 밀리는데 **스킨이 칠한 배경이 그
+         전에 끝났다**. 도화지가 `aspect-ratio` 로 세로를 확정하고
+         흐름 층이 그 상자 밖으로 넘쳤기 때문이다.
+
+         여기서 보는 것은 셋이다.
+
+           1. 짧은 내용에서는 지금까지와 **정확히 같다**(baseHeight)
+           2. 긴 내용에서는 도화지 · 배경이 **함께** 길어진다
+           3. 그래도 숫자 height 인 블록은 저장값 그대로다
+              (세로값의 자가 도화지 폭이라 흐름 길이에 흔들리지 않는다)
+      ================================================== */
+
+      const { ctx, page, errors } = await openHarness(browser, { width: 500, height: 900 });
+
+      /* 배경을 칠하는 것은 **스킨**이다 — 도화지를 감싼 상자에
+         색을 주고, 그 상자가 어디서 끝나는지를 잰다. */
+      const growHtml =
+        '<div class="hc-home grow-page">' +
+        '<div class="hc-canvas" data-imory-canvas-root></div>' +
+        "</div>";
+
+      const growCss =
+        CANVAS_CSS +
+        " .grow-page { background: rgb(240, 230, 210); }" +
+        " .hc-canvas { width: 100%; }";
+
+      const growPackage = (text) =>
+        skinPackage({
+          homeHtml: growHtml,
+          css: growCss,
+          regions: [{
+            name: "home_canvas",
+            enabled: true,
+            canvas: v2CanvasData({
+              flow: {
+                direction: "column",
+                padding: { top: 40, right: 20, bottom: 30, left: 20 },
+                gap: 10,
+                blocks: [
+                  { id: "canvas_g1", type: "logo", width: 120, height: 40,
+                    align: "left", props: { slot: "title_logo", fallback: "site_title" } },
+                  { id: "canvas_g2", type: "text", width: 300, height: "auto",
+                    align: "left", props: { text: text, role: "body" } }
+                ]
+              },
+              overlays: [
+                { id: "canvas_gover", type: "text", x: 20, y: 900,
+                  width: 100, height: 40, rotation: 0,
+                  props: { text: "over", role: "label" } }
+              ]
+            })
+          }]
+        });
+
+      const readGrow = (p) => p.evaluate(() => {
+        const root = document.querySelector("[data-imory-canvas-root]");
+        const flow = document.querySelector("[data-imory-canvas-flow]");
+        const page = document.querySelector(".grow-page");
+        const logo = document.querySelector('[data-imory-edit-id="canvas_g1"]');
+        const over = document.querySelector('[data-imory-edit-id="canvas_gover"]');
+        const r = (el) => {
+          const box = el.getBoundingClientRect();
+          return { top: box.top, height: box.height, bottom: box.bottom };
+        };
+        return {
+          rootWidth: root.getBoundingClientRect().width,
+          root: r(root),
+          flow: r(flow),
+          flowScroll: flow.scrollHeight,
+          page: r(page),
+          logoHeight: logo.getBoundingClientRect().height,
+          overTop: over.getBoundingClientRect().top - root.getBoundingClientRect().top
+        };
+      });
+
+      await render(page, { skinPackage: growPackage("짧은 한 줄"), context: CONTEXT, width: 390, fresh: true });
+
+      const short = await readGrow(page);
+
+      /* 배율 1 — baseHeight 1000 이 그대로 px 이다 */
+      check("★ 짧은 내용에서는 도화지가 baseHeight 그대로다(지금까지와 같다)",
+        near(short.rootWidth, 390, 1) && near(short.root.height, 1000, 1.5),
+        `${short.rootWidth} × ${short.root.height}`);
+
+      check("★ 흐름 층은 문서 흐름 안에 있고 도화지를 꽉 채운다",
+        near(short.flow.height, short.root.height, 0.5) &&
+        near(short.flow.top, short.root.top, 0.5),
+        JSON.stringify({ flow: short.flow.height, root: short.root.height }));
+
+      await render(page, {
+        skinPackage: growPackage("길어진 글 ".repeat(320)),  /* 글자 상한(2000) 아래 */
+        context: CONTEXT, width: 390, fresh: true
+      });
+
+      const tall = await readGrow(page);
+
+      check("★ 내용이 baseHeight 를 넘으면 도화지가 그만큼 길어진다",
+        tall.root.height > 1000 &&
+        near(tall.root.height, tall.flowScroll, 2),
+        JSON.stringify({ root: tall.root.height, content: tall.flowScroll }));
+
+      check("★ 스킨이 칠한 배경이 그 끝까지 이어진다(현상 1 의 그 자리)",
+        near(tall.page.bottom, tall.root.bottom, 1) &&
+        tall.page.height >= tall.root.height - 1,
+        JSON.stringify({ page: tall.page.bottom, root: tall.root.bottom }));
+
+      check("★ 숫자 height 인 블록은 내용이 길어져도 저장값 그대로다(40)",
+        near(short.logoHeight, 40, 0.5) && near(tall.logoHeight, 40, 0.5),
+        JSON.stringify({ short: short.logoHeight, tall: tall.logoHeight }));
+
+      check("★ 페이지 자유 장식도 도화지가 길어져도 제자리다(y=900)",
+        near(short.overTop, 900, 1) && near(tall.overTop, 900, 1),
+        JSON.stringify({ short: short.overTop, tall: tall.overTop }));
 
       check("스크립트 오류 없음", errors.length === 0, errors.join(" | "));
 

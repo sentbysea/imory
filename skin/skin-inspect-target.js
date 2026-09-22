@@ -43,6 +43,7 @@
      isInspectableElement(el)
      resolveInspectableAncestor(node, root, editIdOf)
      inspectorLockedCanvasAncestor(node, root)
+     inspectorCanvasContentRect(el, rect)
 
    ★ HOME 캔버스(HOME-CANVAS-SELECT-1A)
 
@@ -654,6 +655,105 @@ function pickInspectableAtPoint(stack, root, editIdOf, win) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 선택선이 글자를 가로지르지 않게
+   (계약 §29-2)
+
+   inspectorCanvasContentRect(el, rect) -> rect
+
+   ── 무엇이 문제였나 ────────────────────────────────────
+   `Height:40` 인 로고 블록에 여러 줄짜리 대체 글자가 들어가면 글자가
+   상자 밖으로 넘친다. 그때 Studio 가 그리는 **축에 평행한 선택
+   테두리**는 저장된 40px 상자에 그대로 남아 글자 한가운데를 가로질렀다.
+
+   ── 무엇을 하나 ────────────────────────────────────────
+   글자를 **직접 보여 주는** 요소에서만, 자식이 실제로 차지한 자리를
+   합쳐 상자를 넓히고 바깥에 여유를 둔다. Moveable 의 편집 chrome 이
+   쓰는 규칙(계약 §21-4)과 **같은 뜻 · 같은 여유**이고, 그쪽이 손잡이
+   달린 틀이라면 이쪽은 손잡이 없는 테두리다.
+
+   ★ 저장된 Width · Height 는 한 픽셀도 바뀌지 않는다. 이 값이 가는
+     곳은 테두리 · 이름표뿐이고(studio/inspector/studio-canvas-selection.js
+     repaintStudioCanvasSelection), 좌표를 확정하는 쪽은 언제나
+     draft 의 저장값을 쓴다.
+
+   ★ 사진 · 스티커 · 도형에는 넓히지 않는다 — 그 요소의 실제 경계가
+     곧 상자다(§21-4 의 그 판정 그대로).
+
+   ★ 세 realm 이 같은 파일을 읽으므로 native Preview 와 sandbox
+     프레임의 테두리가 저절로 같다.
+========================================================== */
+
+/* 글자를 직접 보여 주는 표식 — render.js 가 붙이는 이름들이다 */
+const INSPECTOR_CANVAS_TEXT_SELECTOR =
+  "[data-imory-canvas-text],[data-imory-canvas-nav],[data-imory-canvas-logo-text]";
+
+/* 여유(px) — 편집 chrome 의 그것과 같은 값(계약 §21-4) */
+const INSPECTOR_CANVAS_CONTENT_GAP = 5;
+
+
+function inspectorCanvasContentRect(el, rect) {
+
+  if (!el || !rect || typeof el.getAttribute !== "function") {
+    return rect;
+  }
+
+  /* 캔버스 요소 · 블록만 */
+  if (
+    !el.hasAttribute(INSPECTOR_CANVAS_ELEMENT_ATTR) &&
+    !el.hasAttribute(INSPECTOR_CANVAS_BLOCK_ATTR)
+  ) {
+    return rect;
+  }
+
+  if (
+    typeof el.querySelector !== "function" ||
+    !el.querySelector(INSPECTOR_CANVAS_TEXT_SELECTOR)
+  ) {
+    return rect;
+  }
+
+  var left = rect.left;
+  var top = rect.top;
+  var right = rect.left + rect.width;
+  var bottom = rect.top + rect.height;
+
+  var children = el.children || [];
+
+  for (var i = 0; i < children.length; i += 1) {
+
+    var child = children[i];
+
+    if (!child || child.nodeType !== 1 || typeof child.getBoundingClientRect !== "function") {
+      continue;
+    }
+
+    var box = child.getBoundingClientRect();
+
+    /* 자리를 차지하지 않는 자식은 상자를 넓히지 않는다 */
+    if (!(box.width > 0) && !(box.height > 0)) {
+      continue;
+    }
+
+    left = Math.min(left, box.left);
+    top = Math.min(top, box.top);
+    right = Math.max(right, box.right);
+    bottom = Math.max(bottom, box.bottom);
+
+  }
+
+  var gap = INSPECTOR_CANVAS_CONTENT_GAP;
+
+  return {
+    left: left - gap,
+    top: top - gap,
+    width: (right - left) + gap * 2,
+    height: (bottom - top) + gap * 2
+  };
+
+}
+
+
 /* node(단위 테스트)에서도 같은 파일을 읽을 수 있게 */
 if (typeof module !== "undefined" && module.exports) {
 
@@ -671,6 +771,7 @@ if (typeof module !== "undefined" && module.exports) {
     resolveInspectableAncestor,
     inspectorLockedCanvasAncestor,
     inspectorEditChromeAncestor,
+    inspectorCanvasContentRect,
     inspectorRectCovers,
     inspectorCanvasPairIsNested,
     inspectorSelectionRank,

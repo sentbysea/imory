@@ -1090,15 +1090,22 @@ function inspectorRectOf(el) {
     return null;
   }
 
-  const rect =
-    inspectorFrameElementOf(el).getBoundingClientRect();
+  const target =
+    inspectorFrameElementOf(el);
 
-  return {
+  const rect =
+    target.getBoundingClientRect();
+
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 캔버스의 글자 요소는 넘친 글자까지
+     감싼다(계약 §29-2). 규칙은 세 realm 공용 파일에 있다
+     (skin/skin-inspect-target.js) — sandbox 프레임의 테두리와 같은
+     상자가 나온다. 캔버스 요소가 아니면 그대로 돌아온다. */
+  return inspectorCanvasContentRect(target, {
     left: rect.left,
     top: rect.top,
     width: rect.width,
     height: rect.height
-  };
+  });
 
 }
 
@@ -1185,12 +1192,15 @@ function inspectorVisibleRectOf(el) {
     return { left: rect.left, top: rect.top, width: 0, height: 0 };
   }
 
-  return {
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 위 inspectorRectOf 와 같은 규칙.
+     조상이 자르지 않는 한(자르면 위에서 이미 좁혀졌다) 캔버스 글자
+     요소의 테두리는 넘친 글자 바깥에 놓인다(계약 §29-2). */
+  return inspectorCanvasContentRect(target, {
     left,
     top,
     width: right - left,
     height: bottom - top
-  };
+  });
 
 }
 
@@ -2399,7 +2409,20 @@ function ensureCanvasFrameController() {
                 type: PREVIEW_MSG_CANVAS_LAYOUT,
                 frames: layout.frames.map(
                   (frame) => ({ id: frame.id, x: frame.x, y: frame.y })
-                )
+                ),
+
+                /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록의 그려진 높이
+                   (도화지 폭의 분수 · 계약 §29-3) */
+                blocks: Array.isArray(layout.blocks)
+                  ? layout.blocks.map((block) => ({ id: block.id, h: block.h }))
+                  : [],
+
+                /* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 요소가 지금
+                   물려받고 있는 모양(계약 §29-6) */
+                look:
+                  (layout.look && typeof layout.look === "object")
+                    ? { id: layout.look.id, props: { ...layout.look.props } }
+                    : null
               });
 
             },
@@ -2449,6 +2472,13 @@ function ensureCanvasFrameController() {
                      거부된다(계약 §19-6). */
                   if (request.kind === "rotate") {
                     return { rotation: value.rotation };
+                  }
+
+                  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 폭도
+                     **한 칸**이다(계약 §29-4). 블록에는 좌표가 없어
+                     함께 담으면 Studio 가 메시지 전체를 거부한다. */
+                  if (request.kind === "width") {
+                    return { width: value.width };
                   }
 
                   const out = { x: value.x, y: value.y };
@@ -2671,6 +2701,11 @@ function routeCanvasGeometryMessage(data) {
         : null,
     originX: (active && Number.isFinite(data.originX)) ? data.originX : 0,
     originY: (active && Number.isFinite(data.originY)) ? data.originY : 0,
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 것이 흐름 블록인가
+       (계약 §29-4). sandbox 프로토콜과 **같은 한 값**이고, 모르는
+       값은 자유 배치 요소로 읽는다. */
+    mode: (active && data.mode === "block") ? "block" : null,
     baseWidth: active ? data.baseWidth : 0,
     baseHeight: active ? data.baseHeight : 0,
     generation:

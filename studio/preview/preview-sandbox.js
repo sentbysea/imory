@@ -1100,7 +1100,21 @@ function handleSandboxInspect(kind, payload) {
           ? payload.frames.map(
               (frame) => ({ id: frame.id, x: frame.x, y: frame.y })
             )
-          : []
+          : [],
+
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록의 그려진 높이
+         (도화지 폭의 분수 · 계약 §29-3) */
+      blocks:
+        Array.isArray(payload.blocks)
+          ? payload.blocks.map((block) => ({ id: block.id, h: block.h }))
+          : [],
+
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 요소가 물려받고 있는
+         모양(계약 §29-6). 여기서도 해석하지 않는다. */
+      look:
+        (payload.look && typeof payload.look === "object")
+          ? { id: payload.look.id, props: { ...payload.look.props } }
+          : null
     });
 
     return;

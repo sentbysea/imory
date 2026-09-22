@@ -2664,20 +2664,35 @@ async function main() {
         v2BlockOf(await readCanvas(page), "v2Text").height === "auto",
         String(panel.heightDisabled));
 
-      await page.evaluate(() => {
-        const el = document.getElementById("studioCanvasInspectorV2-height");
-        el.disabled = false;
-        el.value = "90";
-      });
+      /* =====================================================
+         HOME-CANVAS-V2-MANUAL-FIX-1 — Auto 를 끄면 **지금 그려진
+         높이**로 굳는다(계약 §29-3).
+
+         예전에는 "Height 칸에 적어 둔 숫자"였다. 그런데 그 칸은
+         Auto 인 동안 잠겨 있어서(바로 위 절) 주인은 숫자를 넣을 수
+         없었고, 스위치를 끄면 "숫자를 먼저 넣어 주세요"만 나왔다 —
+         클릭 한 번으로는 Auto 를 끌 수 없었다. 그래서 이 절도 칸을
+         억지로 열어 값을 적어 넣고 있었다(아래 주석 처리된 줄).
+      ====================================================== */
+
+      const drawnHeight =
+        await page.evaluate(() =>
+          window.studioCanvasV2MeasuredHeight("v2Text"));
 
       await page.click("#studioCanvasInspectorV2Auto");
       await sleep(400);
 
       now = await readCanvas(page);
 
-      check("★ Auto 를 끄면 적어 둔 숫자로 간다",
-        v2BlockOf(now, "v2Text").height === 90,
-        String(v2BlockOf(now, "v2Text").height));
+      check("★ Auto 를 끄면 지금 그려진 높이로 굳는다(클릭 한 번)",
+        drawnHeight > 0 &&
+        v2BlockOf(now, "v2Text").height === drawnHeight,
+        JSON.stringify({ drawn: drawnHeight, saved: v2BlockOf(now, "v2Text").height }));
+
+      check("★ 그 값은 화면에서 잰 그 높이다(패널 칸도 같은 값)",
+        (await page.evaluate(() =>
+          document.getElementById("studioCanvasInspectorV2-height").value)) ===
+          String(drawnHeight));
 
       h0 = await historyState(page);
 
@@ -2981,7 +2996,7 @@ async function main() {
         free.values.x === "10" && free.values.y === "5" &&
         free.values.width === "120" && free.values.height === "80" &&
         free.values.rotation === "0",
-        JSON.stringify(free.values));
+        JSON.stringify({ ids: free.ids, hasFree: free.hasFree, values: free.values }));
 
       check("★ 그 자는 프레임 내부 좌표다(도화지가 아니다)",
         free.space &&
@@ -3709,19 +3724,56 @@ async function main() {
           r: shapeHandles.resizeHandles, o: shapeHandles.rotationHandles }));
 
 
-      /* ---- 4. 블록에는 쓸 수 없는 손잡이가 보이지 않는다 ---- */
+      /* ---- 4. 블록에는 **쓸 수 있는 손잡이만** 보인다 ---- */
+
+      /* =====================================================
+         HOME-CANVAS-V2-MANUAL-FIX-1 — 폭은 손으로 잡을 수 있다
+         (계약 §29-4).
+
+         §27-6 은 "블록을 고르면 손잡이가 사라진다"였다. 이제 블록도
+         Moveable 의 target 이 되고 **좌우 둘**이 남는다 — 폭 한 칸은
+         실제로 바꿀 수 있기 때문이다. 위아래 · 모서리 · 회전은 블록이
+         쓸 수 없는 칸이라 그대로 없다.
+      ====================================================== */
 
       await clickElement(page, frame, false, "v2Rule");
 
       const blockHandles = await frameState(frame);
 
-      check("★ 블록을 고르면 손잡이가 화면에서 사라진다(계약 §27-6)",
-        blockHandles.resizeHandles === 0 && blockHandles.rotationHandles === 0 &&
-        blockHandles.moveableTargets === 0,
+      check("★ 블록을 고르면 좌우 손잡이 둘만 남는다(계약 §29-4)",
+        blockHandles.resizeHandles === 2 && blockHandles.rotationHandles === 0 &&
+        blockHandles.moveableTargets === 1,
         JSON.stringify({
           r: blockHandles.resizeHandles,
           o: blockHandles.rotationHandles,
           t: blockHandles.moveableTargets
+        }));
+
+      const blockDirections = await frame.evaluate(() => {
+        const box = document.querySelector('[data-imory-canvas-frame="1"]');
+        return box
+          ? Array.prototype.map.call(
+              box.querySelectorAll(".moveable-control[data-direction]"),
+              (el) => el.getAttribute("data-direction")
+            ).sort().join(",")
+          : "";
+      });
+
+      check("★ 그 둘은 좌우다(w · e)", blockDirections === "e,w", blockDirections);
+
+      /* stretch 블록 — 폭을 저장값이 정하지 않으므로 잡을 것이 없다 */
+
+      await clickElement(page, frame, false, "v2Wide");
+
+      const stretchHandles = await frameState(frame);
+
+      check("★ stretch 블록에는 손잡이도 틀도 없다(§29-4 의 남은 차이)",
+        stretchHandles.resizeHandles === 0 &&
+        stretchHandles.rotationHandles === 0 &&
+        stretchHandles.controlBoxDisplay === "none",
+        JSON.stringify({
+          r: stretchHandles.resizeHandles,
+          d: stretchHandles.controlBoxDisplay
         }));
 
       /* 다시 자유 장식을 고르면 돌아온다 — 감춘 것이 영구가 아니다 */
@@ -3946,8 +3998,11 @@ async function main() {
 
       const sbBlockHandles = await frameState(sbFrame);
 
-      check("★ sandbox 에서도 블록에는 손잡이가 없다",
-        sbBlockHandles.resizeHandles === 0 && sbBlockHandles.rotationHandles === 0,
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — sandbox 도 같은 손잡이다
+         (계약 §29-4). 프레임 안의 runtime 이 같은 파일 한 벌이므로
+         native 와 갈라질 자리가 없다. */
+      check("★ sandbox 에서도 블록에는 좌우 손잡이 둘만 있다",
+        sbBlockHandles.resizeHandles === 2 && sbBlockHandles.rotationHandles === 0,
         JSON.stringify({
           r: sbBlockHandles.resizeHandles, o: sbBlockHandles.rotationHandles }));
 
@@ -4542,6 +4597,292 @@ async function main() {
         sbPage.__errors.slice(0, 2).join(" | "));
 
       await sbPage.__ctx.close();
+
+    }
+
+
+
+    /* ======================================================
+       [v2fix] HOME-CANVAS-V2-MANUAL-FIX-1 — 수동 테스트에서 나온 다섯
+       (계약 §29)
+
+       §29-1(도화지가 자란다)은 렌더러의 몫이라
+       skin/skin-home-canvas-render-e2e-test.mjs --only=grow 가 보고,
+       §29-3(Auto 끄기)은 [v2] 절이 이미 본다. 여기서는 Studio 에서만
+       알 수 있는 셋이다.
+
+         · 폭 손잡이로 실제로 끌어 고친다(§29-4)
+         · 넘친 글자를 선택선이 가로지르지 않는다(§29-2)
+         · 만든 도형이 보이고(§29-5), 묶어도 모양이 그대로다(§29-6)
+    ====================================================== */
+    if (wants("v2fix")) {
+
+      section("v2fix");
+
+      /* 로고 블록만 좁고 낮게 — 대체 글자가 상자를 넘치게 해서
+         §29-2 의 그 자리를 이 절이 실제로 밟는다. */
+      const fixPackage = v2Package({});
+
+      const fixLogo =
+        fixPackage.regions
+          .find((r) => r.name === "home_canvas")
+          .canvas.flow.blocks.find((b) => b.id === "v2Logo");
+
+      fixLogo.width = 30;
+      fixLogo.height = 10;
+
+      /* ★ 블록에 색을 준다 — 스킨이 흔히 하는 그 한 줄이고(실측한
+         사용자 스킨도 `[data-imory-canvas-block] { font-family; color }`
+         였다), 이것이 있어야 §29-6 이 실제로 무언가를 지킨다: 도화지
+         아래 장식은 이 색을 **물려받지 않고**, 프레임 안으로 들어가면
+         물려받기 때문이다. */
+      fixPackage.css +=
+        " [data-imory-canvas-block] { color: rgb(10, 20, 30); }";
+
+      const page = await openStudio(browser, { package: fixPackage });
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      /* 지금 draft 의 CSS 한 줄 */
+      const workingCss = (p) =>
+        p.evaluate(() =>
+          (window.getStudioAiWorkingState({ includePackage: true })
+            .skinPackage || {}).css || "");
+
+
+      /* ---- 1. 폭 손잡이(§29-4) ---- */
+
+      await clickElement(page, frame, false, "v2Text");
+
+      /* 손잡이는 따라가기 루프의 첫 프레임에서 정해진다(계약 §29-4 의
+         그 함정) — 붙을 때까지 기다린다. */
+      await page.waitForFunction(
+        () => true, null, { timeout: 1000 }).catch(() => {});
+
+      await sleep(900);
+
+      const widthStart = v2BlockOf(await readCanvas(page), "v2Text").width;
+
+      let h0 = await historyState(page);
+
+      /* 끄는 **동안** 흐름이 다시 조판되는가 — 아래 블록이 따라온다 */
+      await bringIntoView(page, frame, false, byId("v2Text"));
+
+      const beforeBox =
+        (await nativeRects(page, [byId("v2Text")]))[byId("v2Text")];
+
+      /* ★ 왼쪽 손잡이를 쓴다 — 이 화면에서 오른쪽 손잡이는 1285px 에
+         있어 1280 폭 창 **밖**이다(글자 요소의 chrome 여유가 그만큼
+         밖으로 밀기 때문이다 · 계약 §21-4). 폭이 커지는 것은 같다. */
+      await dragHandle(page, frame, false, "v2Text", "w", -40, 0, { noView: true });
+
+      const now = await readCanvas(page);
+      const h1 = await historyState(page);
+
+      const widthNext = v2BlockOf(now, "v2Text").width;
+
+      /* 끈 양은 화면 px 40 이고 이 Preview 의 배율이 2.46 이므로
+         Canvas 좌표로는 16 남짓이다 — 자가 하나라는 것까지 함께
+         본다(아래 화면 폭 검산). */
+      check("★ 좌우 손잡이로 블록 폭이 바뀐다(§29-4)",
+        widthNext > widthStart + 10,
+        JSON.stringify({ before: widthStart, after: widthNext }));
+
+      check("★ 폭 말고는 한 칸도 바뀌지 않는다(정렬 · 순서 · 여백 · 높이)",
+        same(v2BlockOf(now, "v2Text").margin, { top: 10, right: 0, bottom: 6, left: 0 }) &&
+        v2BlockOf(now, "v2Text").align === "center" &&
+        v2BlockOf(now, "v2Text").height === "auto" &&
+        v2Blocks(now).map((b) => b.id).join(",") ===
+          v2Blocks(await readCanvas(page)).map((b) => b.id).join(","),
+        JSON.stringify(v2BlockOf(now, "v2Text")));
+
+      check("★ 한 제스처 = Undo 한 칸", h1.undo === h0.undo + 1,
+        `${h0.undo} → ${h1.undo}`);
+
+      const afterBox =
+        (await nativeRects(page, [byId("v2Text")]))[byId("v2Text")];
+
+      const grew =
+        (afterBox.right - afterBox.left) - (beforeBox.right - beforeBox.left);
+
+      check("★ 확정 뒤 화면이 저장값과 맞는다(끈 만큼 넓어졌다)",
+        Math.abs(grew - 40) <= 3 &&
+        Math.abs(
+          (afterBox.right - afterBox.left) /
+            (beforeBox.right - beforeBox.left) -
+          widthNext / widthStart) < 0.01,
+        JSON.stringify({ grew: grew, saved: [widthStart, widthNext] }));
+
+      await page.evaluate(() => window.undoStudioHistory());
+      await sleep(700);
+
+      check("★ Undo 하면 저장된 폭이 그대로 돌아온다",
+        v2BlockOf(await readCanvas(page), "v2Text").width === widthStart,
+        String(v2BlockOf(await readCanvas(page), "v2Text").width));
+
+      /* 블록은 **끌어서 옮기지 않는다** — 좌표가 생기지 않는다 */
+
+      const dragKeys = Object.keys(v2BlockOf(await readCanvas(page), "v2Text"));
+
+      await dragElement(page, frame, false, "v2Text", 30, 30, { noView: true });
+      await sleep(600);
+
+      check("★ 블록 본체를 끌어도 좌표가 생기지 않는다(자리는 흐름이 정한다)",
+        same(Object.keys(v2BlockOf(await readCanvas(page), "v2Text")), dragKeys),
+        JSON.stringify(Object.keys(v2BlockOf(await readCanvas(page), "v2Text"))));
+
+
+      /* ---- 2. 선택선이 글자를 가로지르지 않는다(§29-2) ---- */
+
+      await clickElement(page, frame, false, "v2Logo");
+
+      const logoBox = await page.evaluate(() => {
+        const sel = window.getStudioCanvasSelection();
+        const item = sel.items[0];
+        return item ? item.visibleRect || item.rect : null;
+      });
+
+      const logoText = await frame.evaluate(() => {
+        const el = document.querySelector('[data-imory-edit-id="v2Logo"]');
+        const span = el.querySelector("[data-imory-canvas-logo-text]");
+        const a = el.getBoundingClientRect();
+        const b = span.getBoundingClientRect();
+        return {
+          blockTop: a.top, blockBottom: a.bottom,
+          textTop: b.top, textBottom: b.bottom
+        };
+      });
+
+      const overflowsUp =
+        logoText.textTop < logoText.blockTop - 0.5;
+
+      const overflowsDown =
+        logoText.textBottom > logoText.blockBottom + 0.5;
+
+      check("★ 고른 로고의 글자가 실제로 상자를 넘친다(그래서 이 절이 있다)",
+        overflowsUp || overflowsDown,
+        JSON.stringify(logoText));
+
+      check("★ 선택선이 글자 바깥에 놓인다(넘친 만큼 넓어진다)",
+        !!logoBox &&
+        logoBox.height >=
+          (logoText.textBottom - logoText.textTop) +
+          (logoText.blockBottom - logoText.blockTop) * 0 + 9,
+        JSON.stringify({ box: logoBox && logoBox.height, text: logoText }));
+
+
+      /* ---- 3. 만든 도형이 보인다(§29-5) ---- */
+
+      const cssBefore = await workingCss(page);
+
+      await page.click("#studioCanvasAdd-overlay-shape");
+      await sleep(900);
+
+      const shapeId = await page.evaluate(() =>
+        window.getStudioCanvasSelection().primaryId);
+
+      const shapeLook = await frame.evaluate((id) => {
+        const el = document.querySelector(`[data-imory-edit-id="${id}"]`);
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return { background: cs.backgroundColor, opacity: cs.opacity };
+      }, shapeId);
+
+      check("★ 새 도형이 스킨의 색으로 실제로 칠해진다(§29-5)",
+        !!shapeLook &&
+        shapeLook.background !== "rgba(0, 0, 0, 0)" &&
+        Number(shapeLook.opacity) > 0 && Number(shapeLook.opacity) < 1,
+        JSON.stringify(shapeLook));
+
+      const cssAfter = await workingCss(page);
+
+      check("★ 그 색은 스킨 CSS 안의 규칙 하나다(Code 에서 보이고 지울 수 있다)",
+        cssAfter.indexOf(`[data-imory-edit-id="${shapeId}"]`) !== -1 &&
+        cssAfter.indexOf("currentColor") !== -1 &&
+        cssBefore.indexOf(shapeId) === -1);
+
+      const beforeUndo = await historyState(page);
+
+      await page.evaluate(() => window.undoStudioHistory());
+      await sleep(700);
+
+      check("★ Undo 한 번이면 요소와 규칙이 함께 사라진다(기록 한 칸)",
+        (await workingCss(page)).indexOf(shapeId) === -1 &&
+        !v2NodeOf(await readCanvas(page), shapeId) &&
+        beforeUndo.undo > 0);
+
+
+      /* ---- 4. 묶어도 모양이 그대로다(§29-6) ---- */
+
+      await page.click("#studioCanvasAdd-overlay-text");
+      await sleep(900);
+
+      const movedId = await page.evaluate(() =>
+        window.getStudioCanvasSelection().primaryId);
+
+      const lookOf = (id) => frame.evaluate((elementId) => {
+        const el = document.querySelector(`[data-imory-edit-id="${elementId}"]`);
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return {
+          fontFamily: cs.fontFamily,
+          fontSize: cs.fontSize,
+          lineHeight: cs.lineHeight,
+          letterSpacing: cs.letterSpacing,
+          color: cs.color,
+          textAlign: cs.textAlign
+        };
+      }, id);
+
+      const lookBefore = await lookOf(movedId);
+
+      const attached = await page.evaluate((id) =>
+        window.commitStudioCanvasStructureNode({
+          op: "attach", id: id, frameId: "v2Main"
+        }), movedId);
+
+      await sleep(900);
+
+      const lookAfter = await lookOf(movedId);
+
+      check("★ 묶기가 받아들여졌다(자리는 §28 이 이미 본다)",
+        attached && attached.accepted === true, JSON.stringify(attached));
+
+      check("★ 묶기 전에는 블록의 색을 물려받지 않는다(이 절이 지킬 것이 있다)",
+        lookBefore && lookBefore.color !== "rgb(10, 20, 30)",
+        JSON.stringify(lookBefore));
+
+      check("★ 묶어도 글꼴 · 크기 · 줄간격 · 색 · 정렬이 그대로다(§29-6)",
+        same(lookBefore, lookAfter),
+        JSON.stringify({ before: lookBefore, after: lookAfter }));
+
+      const pinnedRule =
+        (await workingCss(page))
+          .split("\n")
+          .find((line) => line.indexOf(`[data-imory-edit-id="${movedId}"]`) !== -1) || "";
+
+      check("★ 그 유지는 그 요소 하나의 규칙이다(다른 요소는 건드리지 않는다)",
+        pinnedRule.indexOf("color") !== -1 &&
+        pinnedRule.indexOf("font-family") !== -1,
+        pinnedRule.slice(0, 160));
+
+      /* 빼면 다시 도화지 아래로 나가는데, 그때도 모양은 그대로다 */
+
+      const detached = await page.evaluate((id) =>
+        window.commitStudioCanvasStructureNode({ op: "detach", id: id }), movedId);
+
+      await sleep(900);
+
+      check("★ 다시 빼도 모양이 그대로다(§29-6 은 양쪽이다)",
+        detached && detached.accepted === true &&
+        same(await lookOf(movedId), lookBefore),
+        JSON.stringify({ ok: detached && detached.accepted, look: await lookOf(movedId) }));
+
+      check("pageerror 0", page.__errors.length === 0,
+        page.__errors.slice(0, 2).join(" | "));
+
+      await close(page);
 
     }
 

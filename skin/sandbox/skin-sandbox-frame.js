@@ -1241,7 +1241,34 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
                     function (frame) {
                       return { id: frame.id, x: frame.x, y: frame.y };
                     }
-                  )
+                  ),
+
+                  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록의 그려진
+                     높이(도화지 폭의 분수 · 계약 §29-3) */
+                  blocks: (Array.isArray(layout.blocks) ? layout.blocks : []).map(
+                    function (block) {
+                      return { id: block.id, h: block.h };
+                    }
+                  ),
+
+                  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 요소가 지금
+                     물려받고 있는 모양(계약 §29-6). 값을 만들지
+                     않고 runtime 이 준 것을 그대로 싣는다 —
+                     프로토콜이 키 · 길이 · 글자를 다시 본다. */
+                  look:
+                    (layout.look && typeof layout.look === "object" &&
+                      layout.look.props && typeof layout.look.props === "object")
+                      ? {
+                          id: layout.look.id,
+                          props: Object.keys(layout.look.props).reduce(
+                            function (out, key) {
+                              out[key] = layout.look.props[key];
+                              return out;
+                            },
+                            {}
+                          )
+                        }
+                      : undefined
                 });
 
               },
@@ -1629,6 +1656,9 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         scopeId: verdict.payload.scopeId,
         originX: verdict.payload.originX,
         originY: verdict.payload.originY,
+        /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록이면 "block"
+           (계약 §29-4). 없으면 runtime 이 자유 배치 요소로 읽는다. */
+        mode: verdict.payload.mode,
         baseWidth: verdict.payload.baseWidth,
         baseHeight: verdict.payload.baseHeight,
         generation: verdict.payload.generation,

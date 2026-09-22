@@ -1365,8 +1365,11 @@ async function run() {
         frameRead.hasFlow && frameRead.blocks.length === V2_BLOCKS.length,
         JSON.stringify({ v: frameRead.version, f: frameRead.hasFlow, n: frameRead.blocks.length }));
 
-      check("★ 프레임 안에서도 흐름 층이 absolute + flex 다(구조 CSS 가 닿았다)",
-        frameRead.flowPosition === "absolute" && frameRead.flowDisplay === "flex" &&
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 층은 문서 흐름 안이다
+         (계약 §29-1). 보는 것은 그대로다: **구조 CSS 가 프레임 안까지
+         닿았는가**. */
+      check("★ 프레임 안에서도 흐름 층이 relative + flex 다(구조 CSS 가 닿았다)",
+        frameRead.flowPosition === "relative" && frameRead.flowDisplay === "flex" &&
         frameRead.flowDirection === "column",
         JSON.stringify({ p: frameRead.flowPosition, d: frameRead.flowDisplay }));
 

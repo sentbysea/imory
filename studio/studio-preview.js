@@ -2940,6 +2940,10 @@ function postCanvasGeometryToFrame(geometry) {
         : null,
     originX: active && Number.isFinite(value.originX) ? value.originX : 0,
     originY: active && Number.isFinite(value.originY) ? value.originY : 0,
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 것이 흐름 블록인가
+       (계약 §29-4). 프레임은 이 한 값으로 좌우 손잡이만 그린다. */
+    mode: (active && value.mode === "block") ? "block" : null,
     baseWidth: active ? value.baseWidth : 0,
     baseHeight: active ? value.baseHeight : 0,
     generation:
@@ -3339,6 +3343,68 @@ function nextStudioCanvasV2SlotName(seed) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 방금 만든 재료가 **보이게**
+   (계약 §29-5)
+
+   Canvas 렌더러는 색을 한 줄도 정하지 않는다(계약 §8) — 도형과
+   구분선은 내용이 없는 빈 상자라, 스킨 CSS 에 그 규칙이 없으면
+   추가 직후 화면에 아무것도 없다(선택 상자만 보인다). 그렇다고
+   플랫폼이 모든 스킨의 도형에 색을 강제할 수는 없다.
+
+   그래서 **만드는 그 순간 그 요소 하나에** 시작 규칙을 적는다.
+
+     · 색은 `currentColor` — 스킨이 이미 정한 글자색을 따른다.
+       임의의 팔레트를 들여오지 않는다.
+     · 스킨 CSS 안의 평범한 규칙이므로 Code 에서 보이고 Select 에서
+       고칠 수 있으며 지울 수도 있다.
+     · 추가와 **같은 기록 한 칸**에 들어간다(Undo 한 번이면 요소와
+       규칙이 함께 사라진다).
+     · 이미 그 id 의 규칙이 있으면 건드리지 않는다(있을 수 없지만,
+       id 를 물려받는 경로가 생겨도 덮어쓰지 않게).
+
+   내용이 있는 재료(글자 · 카테고리)와 그림 슬롯을 갖는 재료
+   (사진 · 스티커 · 로고 · 메인 비주얼)에는 적지 않는다 — 전자는
+   이미 보이고, 후자는 Images 에서 사진을 넣는 것이 그 자리다.
+========================================================== */
+
+const STUDIO_CANVAS_V2_STARTER_STYLE = {
+  shape: { "background": "currentColor", "opacity": "0.18" },
+  divider: { "background": "currentColor", "opacity": "0.35" }
+};
+
+
+function studioCanvasV2StarterCss(css, type, id) {
+
+  const starter =
+    Object.prototype.hasOwnProperty.call(STUDIO_CANVAS_V2_STARTER_STYLE, type)
+      ? STUDIO_CANVAS_V2_STARTER_STYLE[type]
+      : null;
+
+  if (
+    !starter ||
+    typeof id !== "string" ||
+    typeof window.readInspectorEditDeclarations !== "function" ||
+    typeof window.writeInspectorEditDeclarations !== "function"
+  ) {
+    return null;
+  }
+
+  const base =
+    typeof css === "string" ? css : "";
+
+  const already =
+    window.readInspectorEditDeclarations(base, id);
+
+  if (already && Object.keys(already).length) {
+    return null;
+  }
+
+  return window.writeInspectorEditDeclarations(base, id, { ...starter });
+
+}
+
+
 function addStudioCanvasV2Node(request) {
 
   if (!currentWorkingSkin) {
@@ -3421,6 +3487,14 @@ function addStudioCanvasV2Node(request) {
     regions: result.regions
   };
 
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 빈 상자 재료의 시작 규칙(위 ★) */
+  const starterCss =
+    studioCanvasV2StarterCss(currentWorkingSkin.css, value.type, result.id);
+
+  if (typeof starterCss === "string") {
+    nextSkin.css = starterCss;
+  }
+
   if (declare) {
 
     nextSkin.imageSlots =
@@ -3485,6 +3559,79 @@ function addStudioCanvasV2Node(request) {
    ★ 기록 한 칸 · dirty · revision · 다시 그리기는 위 writer 들과
      **같은 다섯 줄**이다.
 ========================================================== */
+
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 묶기 · 빼기가 **모양도** 유지한다
+   (계약 §29-6)
+
+   소속이 바뀌면 그 요소의 DOM 부모가 바뀐다 — 도화지 ↔ 블록. 스킨이
+   블록에 글꼴 · 색을 적어 두었다면(흔하다) 자리는 그대로인데 글꼴과
+   색이 따라 바뀐다. 2026-09-22 실측: 페이지 장식은 도화지의
+   Times New Roman 을, 프레임 안 장식은 `[data-imory-canvas-block]`
+   의 Georgia 를 물려받았다.
+
+   플랫폼이 모든 스킨에서 그 상속을 끊지는 않는다 — 프레임 안 캡션이
+   블록의 조판을 따르는 것은 스킨의 의도다. 대신 **옮기기 직전의
+   값**을 그 요소 하나의 규칙으로 못박는다(도형의 시작 규칙과 같은
+   경로 · 같은 기록 한 칸).
+
+     · 값은 프레임이 보고한 computed style 이다(§29-6). 그 보고가
+       없으면(고른 것이 아니다 · 아직 안 왔다) 아무것도 적지 않는다 —
+       지어내지 않는다.
+     · 스킨이 **이미 그 요소에 적어 둔 속성**은 건드리지 않는다.
+     · Undo 한 번이면 소속과 규칙이 함께 되돌아간다.
+     · 지우기(remove)에는 하지 않는다 — 지운 요소의 규칙을 남기면
+       CSS 만 자란다.
+========================================================== */
+
+function studioCanvasV2PinnedLookCss(css, id) {
+
+  if (
+    typeof window.studioCanvasV2NodeLook !== "function" ||
+    typeof window.readInspectorEditDeclarations !== "function" ||
+    typeof window.writeInspectorEditDeclarations !== "function"
+  ) {
+    return null;
+  }
+
+  const look =
+    window.studioCanvasV2NodeLook(id);
+
+  if (!look) {
+    return null;
+  }
+
+  const base =
+    typeof css === "string" ? css : "";
+
+  const declarations =
+    window.readInspectorEditDeclarations(base, id) || {};
+
+  let added = 0;
+
+  Object.keys(look).forEach(
+    (property) => {
+
+      /* 스킨이 이미 정한 것은 그대로 둔다 */
+      if (Object.prototype.hasOwnProperty.call(declarations, property)) {
+        return;
+      }
+
+      declarations[property] = look[property];
+
+      added += 1;
+
+    }
+  );
+
+  if (!added) {
+    return null;
+  }
+
+  return window.writeInspectorEditDeclarations(base, id, declarations);
+
+}
+
 
 function moveStudioCanvasV2Node(request) {
 
@@ -3567,10 +3714,26 @@ function moveStudioCanvasV2Node(request) {
   const historyBefore =
     captureStudioWorkingChange();
 
-  currentWorkingSkin = {
+  const nextSkin = {
     ...currentWorkingSkin,
     regions: result.regions
   };
+
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 옮기기 직전의 모양을 못박는다
+     (위 ★ · 계약 §29-6). 지우기에는 하지 않는다. */
+  if (value.op === "attach" || value.op === "detach") {
+
+    const pinnedCss =
+      studioCanvasV2PinnedLookCss(currentWorkingSkin.css, value.id);
+
+    if (typeof pinnedCss === "string") {
+      nextSkin.css = pinnedCss;
+    }
+
+  }
+
+  currentWorkingSkin =
+    nextSkin;
 
   recordStudioWorkingChange(historyBefore);
 
@@ -4214,7 +4377,15 @@ window.addEventListener(
       if (typeof window.setStudioCanvasFrameLayout === "function") {
 
         window.setStudioCanvasFrameLayout(
-          Array.isArray(data.frames) ? data.frames : []
+          Array.isArray(data.frames) ? data.frames : [],
+
+          /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록의 그려진 높이
+             (계약 §29-3). 같은 보고에 실려 온다. */
+          Array.isArray(data.blocks) ? data.blocks : [],
+
+          /* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 요소가 물려받고
+             있는 모양(계약 §29-6) */
+          (data.look && typeof data.look === "object") ? data.look : null
         );
 
       }

@@ -182,9 +182,13 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 > **§28** — **소속과 따라가기**. `main_visual` 안에 장식 추가 · 묶기 ·
 > 빼기 · `follow`/`pin` 의 기준 · 삭제. 화면 자리를 유지하고, 그
 > 계산에 필요한 값 중 저장값이 줄 수 없는 하나만 프레임이 분수로
-> 보고한다)까지 끝났다. **다음 작업은 `V2-GROUP-1`**(여럿을 한 번에
-> 묶기 · primary 지정 · 그룹 조작)이고 `hidden`/`locked` 토글은 아직
-> 남아 있다(§14-13).
+> 보고한다) → `V2-MANUAL-FIX-1`(2026-09-22, **§29** — **수동 테스트에서
+> 나온 다섯**. 도화지가 내용을 따라 자라고(배경이 끊기지 않는다 · v2 의
+> 세로값 자가 도화지 폭으로 옮겨 갔다) · 선택선이 넘친 글자를 가로지르지
+> 않고 · Auto 를 클릭 한 번으로 끄고 · 흐름 블록에 **폭 손잡이**가 생기고 ·
+> 만든 도형이 보이며 묶어도 모양이 유지된다)까지 끝났다. **다음 작업은
+> `V2-GROUP-1`**(여럿을 한 번에 묶기 · primary 지정 · 그룹 조작)이고
+> `hidden`/`locked` 토글은 아직 남아 있다(§14-13).
 >
 > ★ 그 위에 **`COMPOSITION-CONTRACT-1`(2026-09-21)** 이 다음 구조를 확정했다 —
 > **자동 배치 블록 + `main_visual` 자유 레이어(`canvas.version:2`)**. 설계는
@@ -258,6 +262,7 @@ HOME 바깥의 글 목록, 글 본문, CATEGORY, POST, 양옆 정보 패널은 �
 | 3e-4b | `HOME-CANVAS-V2-EDITOR-1B` | 프레임 내부 요소 · overlay 의 **자리 · 크기 · 각도**(패널 다섯 칸 + 직접 조작) | 저장 가능 | **완료**(2026-09-22) — 결과는 [계약 문서 §26](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 3e-4c | `HOME-CANVAS-V2-ADD-1` | v2 **재료 추가**(흐름 다섯 · 페이지 자유 장식 여섯 · `main_visual` + primary 사진 + 빈 이미지 슬롯) | 저장 가능 | **완료**(2026-09-22) — 결과는 [계약 문서 §27](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 3e-4d | `HOME-CANVAS-V2-ELEMENTS-1` | `main_visual` **안**에 장식 추가 · `메인 비주얼로 묶기`/`빼기` · `follow`/`pin` 기준 · v2 **삭제** | 저장 가능 | **완료**(2026-09-22) — 결과는 [계약 문서 §28](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). `hidden`/`locked` 토글은 아직 없다 |
+| 3e-4e | `HOME-CANVAS-V2-MANUAL-FIX-1` | 수동 테스트에서 나온 표시 · 편집 문제 다섯 — 도화지가 **내용을 따라 자란다**(배경이 끊기지 않는다) · 선택선이 넘친 글자를 안 가로지른다 · Auto 를 **클릭 한 번**으로 끈다 · 흐름 블록의 **폭 손잡이** · 만든 도형이 보이고 묶어도 모양이 그대로다 | 저장 가능 | **완료**(2026-09-22) — 결과는 [계약 문서 §29](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 3e-5 | `HOME-CANVAS-V2-GROUP-1` | 여러 개를 한 번에 묶기 · **primary 지정** · 그룹 조작 | 저장 가능 | 미착수 — §14-13 |
 | 3d | `HOME-CANVAS-EFFECT-HOOK-1` | Canvas 요소에 **스킨 CSS 효과와 sandbox 사용자 JS 효과**를 거는 공식 hook | 스킨/저자 | 미착수 — 아래 완료 기준 |
 | 4 | `HOME-CANVAS-HISTORY-1` | Undo/Redo·dirty·Save 경계 연결 | 저장 가능 | 미착수 |

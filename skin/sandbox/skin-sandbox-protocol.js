@@ -659,7 +659,10 @@ var SANDBOX_CANVAS_SELECT_MODES = ["replace", "toggle"];
     없다.
 */
 
-var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move", "resize", "rotate"];
+/* HOME-CANVAS-V2-MANUAL-FIX-1 — `"width"` 는 흐름 블록의 폭 한 칸이다
+   (계약 §29-4). 프레임이 보낼 수 있는 확정 요청의 이름은 이 넷뿐이고,
+   그 이름이 어느 writer 를 고르는가는 언제나 부모가 정한다. */
+var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move", "resize", "rotate", "width"];
 
 
 /*
@@ -753,7 +756,79 @@ function sandboxCanvasTransformShapeCheck(kind) {
     return isSandboxCanvasBox;
   }
 
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 폭은 **한 칸**이다
+     (계약 §29-4). 좌표가 섞이면 메시지 전체가 버려진다. */
+  if (kind === "width") {
+    return isSandboxCanvasWidth;
+  }
+
   return kind === "rotate" ? isSandboxCanvasRotation : isSandboxCanvasPoint;
+
+}
+
+
+/* =======================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 물려받은 모양(계약 §29-6)
+
+   값이 스킨 CSS 의 선언이 되므로 **가장 좁은 자**를 쓴다.
+======================================================= */
+
+var SANDBOX_CANVAS_LOOK_PROPERTIES = [
+  "font-family", "font-size", "font-weight", "font-style",
+  "line-height", "letter-spacing", "text-transform", "text-align",
+  "color", "white-space"
+];
+
+/* CSS 값에 쓸 수 있는 글자만 — 규칙을 탈출할 수 있는 글자는 없다 */
+var SANDBOX_CANVAS_LOOK_VALUE = /^[-A-Za-z0-9 ,.%#()'"\/]{1,120}$/;
+
+
+function isSandboxCanvasLook(value) {
+
+  if (
+    !isPlainSandboxObject(value) ||
+    !hasOnlyKnownSandboxKeys(value, ["id", "props"]) ||
+    !isSandboxInspectEditId(value.id) ||
+    !isPlainSandboxObject(value.props)
+  ) {
+    return false;
+  }
+
+  var keys =
+    Object.keys(value.props);
+
+  if (!keys.length || keys.length > SANDBOX_CANVAS_LOOK_PROPERTIES.length) {
+    return false;
+  }
+
+  for (var i = 0; i < keys.length; i += 1) {
+
+    if (SANDBOX_CANVAS_LOOK_PROPERTIES.indexOf(keys[i]) === -1) {
+      return false;
+    }
+
+    var entry =
+      value.props[keys[i]];
+
+    if (typeof entry !== "string" || !SANDBOX_CANVAS_LOOK_VALUE.test(entry)) {
+      return false;
+    }
+
+  }
+
+  return true;
+
+}
+
+
+/* 폭 한 칸 — 크기의 자(0 초과 · 유한 · 상한)를 그대로 쓴다 */
+function isSandboxCanvasWidth(value) {
+
+  return (
+    isPlainSandboxObject(value) &&
+    hasOnlyKnownSandboxKeys(value, ["width"]) &&
+    isSandboxCanvasSize(value.width)
+  );
 
 }
 
@@ -2306,6 +2381,10 @@ var SANDBOX_MESSAGE_SPEC = {
       /* HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자와 pin 의 origin.
          **선택 칸**이다(v1 요소 · v2 overlay 에는 없다). */
       "scopeId", "originX", "originY",
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 것이 **흐름 블록**인가
+         (계약 §29-4). 있으면 값은 "block" 하나뿐이고, 프레임은 그때
+         좌우 손잡이만 그리며 폭 한 칸만 바꾼다. */
+      "mode",
       "baseWidth", "baseHeight", "generation", "answering"
     ],
     check: function (payload) {
@@ -2334,6 +2413,7 @@ var SANDBOX_MESSAGE_SPEC = {
 
         return (
           payload.id === undefined &&
+          payload.mode === undefined &&
           payload.x === undefined &&
           payload.y === undefined &&
           payload.width === undefined &&
@@ -2361,6 +2441,12 @@ var SANDBOX_MESSAGE_SPEC = {
         payload.scopeId !== undefined &&
         !isSandboxInspectEditId(payload.scopeId)
       ) {
+        return false;
+      }
+
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록 표시(계약 §29-4).
+         **선택 칸**이고 값이 있으면 "block" 하나뿐이다. */
+      if (payload.mode !== undefined && payload.mode !== "block") {
         return false;
       }
 
@@ -2402,6 +2488,8 @@ var SANDBOX_MESSAGE_SPEC = {
          move     x · y
          resize   x · y · width · height  (height 는 숫자 또는 "auto")
          rotate   rotation                (유한한 숫자 하나)
+         width    width                   (흐름 블록의 폭 한 칸 —
+                                           HOME-CANVAS-V2-MANUAL-FIX-1)
 
        그 밖의 키가 섞인 메시지는 여기서 통째로 버려진다 — 이동
        메시지에 width 가, 리사이즈 메시지에 rotation 이, 회전
@@ -2465,7 +2553,7 @@ var SANDBOX_MESSAGE_SPEC = {
 
   IMORY_CANVAS_LAYOUT: {
     direction: "to-parent",
-    keys: ["contract", "renderSeq", "frames"],
+    keys: ["contract", "renderSeq", "frames", "blocks", "look"],
     check: function (payload) {
 
       if (!isSandboxRenderSeq(payload.renderSeq)) {
@@ -2476,6 +2564,66 @@ var SANDBOX_MESSAGE_SPEC = {
         !Array.isArray(payload.frames) ||
         payload.frames.length > SANDBOX_CANVAS_MAX_ELEMENTS
       ) {
+        return false;
+      }
+
+      /* =====================================================
+         HOME-CANVAS-V2-MANUAL-FIX-1 — 블록의 그려진 높이
+         (계약 §29-3)
+
+         ★ 값은 프레임 자리와 **같은 자**(도화지 폭의 분수)이고
+           같은 상한을 쓴다. 블록이 하나도 없는 캔버스에서는 빈
+           배열이 올라온다 — 뜻이 하나뿐이라 거부하지 않는다.
+      ====================================================== */
+      if (payload.blocks !== undefined) {
+
+        if (
+          !Array.isArray(payload.blocks) ||
+          payload.blocks.length > SANDBOX_CANVAS_MAX_ELEMENTS
+        ) {
+          return false;
+        }
+
+        const seenBlocks = [];
+
+        const blocksOk =
+          payload.blocks.every(
+            (block) => {
+
+              if (
+                !isPlainSandboxObject(block) ||
+                !hasOnlyKnownSandboxKeys(block, ["id", "h"]) ||
+                !isSandboxInspectEditId(block.id) ||
+                seenBlocks.indexOf(block.id) !== -1 ||
+                !isSandboxCanvasCoord(block.h)
+              ) {
+                return false;
+              }
+
+              seenBlocks.push(block.id);
+
+              return true;
+
+            }
+          );
+
+        if (!blocksOk) {
+          return false;
+        }
+
+      }
+
+      /* =====================================================
+         HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 요소가 물려받고 있는
+         모양(계약 §29-6)
+
+         ★ 이 값은 **스킨 CSS 로 들어간다**(묶기 · 빼기가 모양을
+           유지하는 방법). 그래서 여기서 가장 좁게 본다 — 키는
+           아래 표에 적힌 것만, 값은 짧은 문자열이고 `;` `{` `}`
+           `<` `>` `@` `\\` 같은 글자는 하나도 없다. 규칙 하나를
+           탈출해 다른 선택자를 쓰는 길을 메시지 층에서 막는다.
+      ====================================================== */
+      if (payload.look !== undefined && !isSandboxCanvasLook(payload.look)) {
         return false;
       }
 

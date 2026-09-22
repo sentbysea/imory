@@ -103,6 +103,12 @@ function studioCanvasV2FlowMetrics(payload) {
     (value) => (typeof value === "number" && Number.isFinite(value)) ? value : 0;
 
   return {
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 렌더러가 만드는 metrics 와
+       **같은 모양**이어야 한다. 숫자 height 의 자가 흐름 층 높이에서
+       도화지 폭으로 옮겨 가면서(계약 §29-1) 이 칸이 생겼고, 빠지면
+       숫자 height 인 프레임의 자를 만들 수 없어 패널이 읽기 전용으로
+       떨어진다(2026-09-22 e2e 가 그것을 잡았다). */
+    baseWidth: payload.baseWidth,
     width: payload.baseWidth - pad(padding.left) - pad(padding.right),
     height: payload.baseHeight - pad(padding.top) - pad(padding.bottom)
   };
@@ -528,6 +534,25 @@ function planStudioCanvasV2Transform(kind, elementId, next, expected) {
 /* 프레임이 마지막으로 보고한 자리 — id → { x, y }(도화지 폭의 분수) */
 let studioCanvasV2FrameLayout = {};
 
+/* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록이 화면에서 갖는 높이
+   (id → 도화지 폭의 분수 · 계약 §29-3). 같은 보고에 실려 온다. */
+let studioCanvasV2BlockLayout = {};
+
+/* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 요소가 지금 물려받고 있는 모양
+   ({ id, props } · 계약 §29-6). 묶기 · 빼기가 그 자리에서 읽는다. */
+let studioCanvasV2Look = null;
+
+/* 그 규칙에 적어도 되는 속성 — 프레임이 보낸 키를 그대로 믿지 않는다 */
+const STUDIO_CANVAS_V2_LOOK_PROPERTIES = [
+  "font-family", "font-size", "font-weight", "font-style",
+  "line-height", "letter-spacing", "text-transform", "text-align",
+  "color", "white-space"
+];
+
+/* 값에 쓸 수 있는 글자 — sandbox 프로토콜과 같은 자다(native 도
+   같은 자를 지나게 해서 두 화면이 갈라지지 않게 한다) */
+const STUDIO_CANVAS_V2_LOOK_VALUE = /^[-A-Za-z0-9 ,.%#()'"\/]{1,120}$/;
+
 
 /*
   setStudioCanvasFrameLayout(frames)
@@ -538,7 +563,33 @@ let studioCanvasV2FrameLayout = {};
   ★ 모르는 칸은 버린다. 여기 들어오는 것은 프레임 하나의 id 와
     분수 둘뿐이다.
 */
-function setStudioCanvasFrameLayout(frames) {
+function setStudioCanvasFrameLayout(frames, blocks, look) {
+
+  studioCanvasV2Look =
+    studioCanvasV2LookLiteral(look);
+
+  const nextBlocks = {};
+
+  (Array.isArray(blocks) ? blocks : []).forEach(
+    (block) => {
+
+      if (
+        !block ||
+        typeof block !== "object" ||
+        typeof block.id !== "string" ||
+        typeof block.h !== "number" ||
+        !Number.isFinite(block.h) ||
+        !(block.h > 0)
+      ) {
+        return;
+      }
+
+      nextBlocks[block.id] = block.h;
+
+    }
+  );
+
+  studioCanvasV2BlockLayout = nextBlocks;
 
   const next = {};
 
@@ -561,6 +612,96 @@ function setStudioCanvasFrameLayout(frames) {
   );
 
   studioCanvasV2FrameLayout = next;
+
+}
+
+
+/*
+  HOME-CANVAS-V2-MANUAL-FIX-1 — 보고된 모양을 새 리터럴로(계약 §29-6)
+
+  봉투에서 온 객체를 그대로 들고 있지 않고, 아는 키 · 아는 모양의
+  값만 옮겨 담는다. native 도 sandbox 와 **같은 자**를 지난다.
+*/
+function studioCanvasV2LookLiteral(look) {
+
+  if (
+    !look ||
+    typeof look !== "object" ||
+    typeof look.id !== "string" ||
+    !look.props ||
+    typeof look.props !== "object"
+  ) {
+    return null;
+  }
+
+  const props = {};
+
+  STUDIO_CANVAS_V2_LOOK_PROPERTIES.forEach(
+    (name) => {
+
+      const value =
+        look.props[name];
+
+      if (typeof value === "string" && STUDIO_CANVAS_V2_LOOK_VALUE.test(value)) {
+        props[name] = value;
+      }
+
+    }
+  );
+
+  return Object.keys(props).length ? { id: look.id, props: props } : null;
+
+}
+
+
+/*
+  그 요소가 **지금 물려받고 있는 모양**. 보고가 없거나 다른 요소의
+  것이면 null 이다 — 숫자도 문자열도 지어내지 않는다.
+*/
+function studioCanvasV2NodeLook(id) {
+
+  if (
+    !studioCanvasV2Look ||
+    typeof id !== "string" ||
+    studioCanvasV2Look.id !== id
+  ) {
+    return null;
+  }
+
+  return { ...studioCanvasV2Look.props };
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 그 블록이 **화면에서 갖는 높이**
+   (Canvas 좌표 · 계약 §29-3)
+
+   Auto 스위치를 끌 때 "지금 보이는 그 높이"로 굳히는 데 쓴다.
+   보고가 없으면(아직 안 왔다 · 그 블록이 화면에 없다) null 이고,
+   그때는 숫자를 지어내지 않는다.
+========================================================== */
+function studioCanvasV2MeasuredHeight(id) {
+
+  if (
+    typeof id !== "string" ||
+    !Object.prototype.hasOwnProperty.call(studioCanvasV2BlockLayout, id) ||
+    typeof window.studioCanvasDraftPayload !== "function"
+  ) {
+    return null;
+  }
+
+  const payload =
+    window.studioCanvasDraftPayload();
+
+  if (!payload || !(payload.baseWidth > 0)) {
+    return null;
+  }
+
+  const value =
+    studioCanvasV2Round(studioCanvasV2BlockLayout[id] * payload.baseWidth);
+
+  return (Number.isFinite(value) && value > 0) ? value : null;
 
 }
 
@@ -1106,8 +1247,16 @@ if (typeof window !== "undefined") {
   window.planStudioCanvasV2Follow = planStudioCanvasV2Follow;
   window.planStudioCanvasV2Pin = planStudioCanvasV2Pin;
 
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록이 화면에서 갖는 높이 ·
+     고른 요소가 물려받고 있는 모양 */
+  window.studioCanvasV2MeasuredHeight = studioCanvasV2MeasuredHeight;
+  window.studioCanvasV2NodeLook = studioCanvasV2NodeLook;
+
   /* 진단 · 테스트가 보는 한 줄 */
   window.getStudioCanvasFrameLayout =
     () => JSON.parse(JSON.stringify(studioCanvasV2FrameLayout));
+
+  window.getStudioCanvasBlockLayout =
+    () => JSON.parse(JSON.stringify(studioCanvasV2BlockLayout));
 
 }

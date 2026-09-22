@@ -1504,7 +1504,10 @@ check("[docs] sandbox origin 에서 이 파일이 나온다(allowlist)",
 
     /* ---- 프레임 폭을 푸는 식이 CSS 와 같은가 (§23-6 의 그 calc) ---- */
 
-    const metrics = { width: 350, height: 930 };
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 층의 자에 `baseWidth` 가
+       생겼다(숫자 height 는 이제 도화지 폭의 자로 간다 · 계약 §29-1).
+       렌더러가 만드는 metrics 와 같은 모양이어야 한다. */
+    const metrics = { baseWidth: 390, width: 350, height: 930 };
 
     const widthOf = (block) => render.resolveSkinCanvasBlockWidth(block, metrics);
 
@@ -2885,6 +2888,164 @@ console.log("\n[v2-elements] 소속과 따라가기 (V2-ELEMENTS-1)");
     check("[v2-elements] Studio 문서가 자 파일을 싣는다(묶기 · 빼기가 그 자를 쓴다)",
       missing.length === 0, missing.join(", "));
   }
+}
+
+
+/* =========================================================
+   [v2-fix] 수동 테스트에서 나온 다섯 (HOME-CANVAS-V2-MANUAL-FIX-1)
+
+   계약 §29. 여기서 보는 것은 **브라우저 없이 볼 수 있는 것**뿐이다 —
+   자(단위) 셋과 테두리 규칙 하나. 화면에서만 알 수 있는 것(도화지가
+   실제로 자라는가 · 손잡이가 몇 개인가 · Auto 를 끄면 무슨 숫자가
+   되는가)은 e2e 가 본다(docs/TESTS.md §6).
+========================================================== */
+
+console.log("\n[v2-fix] 자와 테두리 (V2-MANUAL-FIX-1 · 계약 §29)");
+
+{
+  const render = require(path.join(HERE, "skin-home-canvas-render.js"));
+
+  /* ---- 29-1. 세로값의 자가 도화지 폭이다 ---- */
+
+  const styleOf = (el) => el.props;
+
+  const fakeEl = (attrs) => {
+
+    const store = Object.assign({}, attrs || {});
+    const props = {};
+
+    return {
+      attributes: store,
+      props: props,
+      getAttribute: (name) =>
+        Object.prototype.hasOwnProperty.call(store, name) ? store[name] : null,
+      setAttribute: (name, value) => { store[name] = String(value); },
+      hasAttribute: (name) => Object.prototype.hasOwnProperty.call(store, name),
+      style: {
+        setProperty: (name, value) => { props[name] = value; },
+        removeProperty: (name) => { delete props[name]; },
+        getPropertyValue: (name) => props[name] || ""
+      }
+    };
+
+  };
+
+  const block = fakeEl({});
+
+  render.applySkinCanvasBlockBox(
+    block,
+    { id: "canvas_b", type: "logo", width: 220, height: 40, align: "center" },
+    { baseWidth: 390, width: 342, height: 844 },
+    0
+  );
+
+  check("★ [v2-fix] 블록의 숫자 height 는 도화지 폭의 자다(흐름 길이에 흔들리지 않는다)",
+    styleOf(block)["--imory-canvas-block-height"] === "calc(40 / 390 * 100cqw)" &&
+    block.getAttribute("data-imory-canvas-height") === "fixed",
+    styleOf(block)["--imory-canvas-block-height"]);
+
+  check("★ [v2-fix] 가로값은 흐름 층 content box 의 백분율 그대로다(자를 둘 다 쓴다)",
+    styleOf(block)["--imory-canvas-block-width"] === "64.327485%",
+    styleOf(block)["--imory-canvas-block-width"]);
+
+  /* v2 자유 장식 — 네 칸 전부 도화지 폭의 자 */
+
+  const overlay = fakeEl({ "data-imory-canvas-unit": "cqw" });
+
+  render.setSkinCanvasElementBox(
+    overlay, { x: -20, y: 900, width: 100, height: 40 }, 390, 1000);
+
+  check("★ [v2-fix] cqw 표식이 있는 요소는 네 칸 전부 도화지 폭의 자다",
+    styleOf(overlay)["--imory-canvas-x"] === "calc(-20 / 390 * 100cqw)" &&
+    styleOf(overlay)["--imory-canvas-y"] === "calc(900 / 390 * 100cqw)" &&
+    styleOf(overlay)["--imory-canvas-width"] === "calc(100 / 390 * 100cqw)" &&
+    styleOf(overlay)["--imory-canvas-height"] === "calc(40 / 390 * 100cqw)",
+    JSON.stringify(overlay.props));
+
+  const v1 = fakeEl({});
+
+  render.setSkinCanvasElementBox(
+    v1, { x: -20, y: 900, width: 100, height: 40 }, 390, 1000);
+
+  check("★ [v2-fix] 표식이 없으면 v1 그대로 백분율이다(v1 은 한 글자도 바뀌지 않는다)",
+    styleOf(v1)["--imory-canvas-x"] === "-5.128205%" &&
+    styleOf(v1)["--imory-canvas-y"] === "90%" &&
+    styleOf(v1)["--imory-canvas-height"] === "4%",
+    JSON.stringify(v1.props));
+
+  /* 끄는 동안 쓰는 함수도 같은 자를 쓴다(자는 요소가 갖고 있다) */
+
+  render.setSkinCanvasElementPosition(overlay, 10, 20, 390, 1000);
+
+  check("★ [v2-fix] 끌 때 쓰는 함수도 요소의 자를 읽는다(화면이 확정 뒤와 갈라지지 않는다)",
+    styleOf(overlay)["--imory-canvas-x"] === "calc(10 / 390 * 100cqw)" &&
+    styleOf(overlay)["--imory-canvas-y"] === "calc(20 / 390 * 100cqw)");
+
+  /* ---- 29-1. 흐름 층의 바닥과 CSS 의 짝 ---- */
+
+  const css = read("skin/skin-home-canvas-render.css");
+
+  check("★ [v2-fix] CSS 가 흐름 층의 최소 높이를 그 변수로 읽는다",
+    css.indexOf("min-height: var(--imory-canvas-flow-min-height, 0px)") !== -1);
+
+  check("★ [v2-fix] v2 도화지는 세로를 묶지 않고 container 가 된다",
+    /\[data-imory-canvas-active="true"\]:where\(\[data-imory-canvas-version="2"\]\)/
+      .test(css) &&
+    css.indexOf("container-type: inline-size") !== -1 &&
+    css.indexOf("aspect-ratio: auto") !== -1);
+
+  check("[v2-fix] v1 도화지의 aspect-ratio 규칙은 그대로다",
+    css.indexOf(
+      "aspect-ratio: var(--imory-canvas-base-width, 390) / " +
+      "var(--imory-canvas-base-height, 844)") !== -1);
+
+  /* ---- 29-2. 선택선이 글자 바깥에 놓이는 규칙 ---- */
+
+  const target = require(path.join(HERE, "skin-inspect-target.js"));
+
+  const rectEl = (attrs, children) => ({
+    getAttribute: (name) => (attrs && attrs[name] !== undefined) ? attrs[name] : null,
+    hasAttribute: (name) => !!(attrs && attrs[name] !== undefined),
+    querySelector: (sel) =>
+      (children || []).some((c) => sel.indexOf(c.mark) !== -1) ? {} : null,
+    children: (children || []).map((c) => ({
+      nodeType: 1,
+      getBoundingClientRect: () => c.rect
+    }))
+  });
+
+  const box = { left: 100, top: 100, width: 200, height: 40 };
+
+  const overflowing =
+    target.inspectorCanvasContentRect(
+      rectEl(
+        { "data-imory-canvas-block": "" },
+        [{ mark: "data-imory-canvas-logo-text",
+           rect: { left: 100, top: 90, right: 300, bottom: 160,
+                   width: 200, height: 70 } }]
+      ),
+      box
+    );
+
+  check("★ [v2-fix] 넘친 글자까지 감싸고 바깥에 여유를 둔다(5px)",
+    overflowing.left === 95 && overflowing.top === 85 &&
+    overflowing.width === 210 && overflowing.height === 80,
+    JSON.stringify(overflowing));
+
+  const photo =
+    target.inspectorCanvasContentRect(
+      rectEl({ "data-imory-canvas-element": "" }, []),
+      box
+    );
+
+  check("★ [v2-fix] 글자를 보여 주지 않는 요소는 상자 그대로다(사진 · 도형)",
+    same(photo, box), JSON.stringify(photo));
+
+  check("[v2-fix] 캔버스 요소가 아니면 손대지 않는다",
+    same(
+      target.inspectorCanvasContentRect(rectEl({ "data-foo": "" }, []), box),
+      box));
+
 }
 
 

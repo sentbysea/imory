@@ -153,6 +153,20 @@ const CANVAS_RESIZE_KIND = "resize";
 */
 const CANVAS_RESIZE_DIRECTIONS = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 폭(계약 §29-4)
+
+   블록은 자리를 좌표로 갖지 않는다(순서 · 정렬 · margin). 그래서
+   이동도 회전도 없고, 손으로 잡을 수 있는 것은 **좌우 두 손잡이**로
+   바꾸는 폭 한 칸뿐이다. 부모가 geometry 에 `mode:"block"` 을
+   실어 주면 그때만 이 제스처가 열린다.
+========================================================== */
+const CANVAS_WIDTH_KIND = "width";
+
+/* 그 두 손잡이. 여덟 중 좌우만 그린다 — 잡을 수 없는 손잡이를
+   화면에 두지 않는다(§27 의 그 결정과 같다). */
+const CANVAS_WIDTH_DIRECTIONS = ["w", "e"];
+
 /* HOME-CANVAS-TRANSFORM-1C */
 const CANVAS_ROTATE_KIND = "rotate";
 
@@ -768,7 +782,9 @@ function displayOnlyMoveableOptions(target, nonce) {
      getRoot        : () => Element|null   렌더 컨테이너
      getNonce       : () => string         이 문서의 CSP nonce
      onActiveChange : (active, editId) => void
-     onLayout       : ({ frames }) => void  v2 프레임의 페이지 자리
+     onLayout       : ({ frames, blocks }) => void
+                                            v2 프레임의 페이지 자리와
+                                            블록의 그려진 높이
                                             (도화지 폭의 분수 — §28-3)
    }
 
@@ -819,6 +835,15 @@ export function createHomeCanvasSelectionFrame(options) {
 
     /* 마지막으로 받은 payload — 재렌더 뒤 되살릴 때 쓴다 */
     lastPayload: null,
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 지금 그려 둔 손잡이의 지문
+       (syncMoveableHandles). 같은 값을 다시 쓰지 않기 위한 것이다. */
+    handleKey: "",
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 지금 고른 것이 흐름 블록인가
+       ("block" 또는 null). 손잡이를 다시 그릴지 가르는 지문이다
+       (계약 §29-4). */
+    geometryMode: null,
 
     /* =====================================================
        HOME-CANVAS-MANUAL-UX-FIX-1 — 편집 chrome 의 여유
@@ -951,12 +976,38 @@ export function createHomeCanvasSelectionFrame(options) {
       return null;
     }
 
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 **블록**도 틀이 붙는다
+       (계약 §29-4). 폭 손잡이를 달려면 Moveable 의 target 이 되어야
+       하고, 잡을 것이 없는 블록에서는 틀 자체를 감춘다
+       (markControlBox). lasso 후보는 지금도 자유 배치 요소뿐이다. */
     const el =
       container.querySelector(
-        `[${CANVAS_ELEMENT_ATTR}][${CANVAS_EDIT_ID_ATTR}="${id}"]`
+        `[${CANVAS_ELEMENT_ATTR}][${CANVAS_EDIT_ID_ATTR}="${id}"],` +
+        `[${CANVAS_BLOCK_ATTR}][${CANVAS_EDIT_ID_ATTR}="${id}"]`
       );
 
     return (el && el.isConnected) ? el : null;
+
+  }
+
+
+  /*
+    HOME-CANVAS-V2-MANUAL-FIX-1 — 지금 붙어 있는 것이 흐름 블록인가
+    (화면 기준). geometryIsBlock() 은 **부모가 뭐라고 했나**이고
+    이것은 **무엇에 붙어 있나**다 — 좌표가 늦게 오거나 아예 오지
+    않는 블록(예: align:"stretch")을 그 사이에 자유 요소처럼
+    다루지 않기 위해 둘을 가른다.
+  */
+  function targetIsFlowBlock() {
+
+    if (state.targetIds.length !== 1) {
+      return false;
+    }
+
+    const el =
+      elementFor(state.targetIds[0]);
+
+    return !!(el && el.hasAttribute && el.hasAttribute(CANVAS_BLOCK_ATTR));
 
   }
 
@@ -1316,6 +1367,18 @@ export function createHomeCanvasSelectionFrame(options) {
       return;
     }
 
+    /* =====================================================
+       HOME-CANVAS-V2-MANUAL-FIX-1 — 손잡이 **목록**도 여기서 맞춘다
+       (계약 §29-4)
+
+       0.53.0 의 vanilla 래퍼는  대입을 미뤘다가 처리한다
+       (2026-09-22 실측: 대입 직후 getTargets() 가 아직 비어 있다).
+       그래서 "지금 붙어 있는 것이 블록인가"는 대입 그 자리에서
+       물어볼 수 없고, 답이 실제로 정해지는 첫 프레임이 여기다.
+       지문이 같으면 아무 일도 하지 않는다(syncMoveableHandles).
+    ====================================================== */
+    syncMoveableHandles();
+
     /* HOME-CANVAS-TRANSFORM-1B — 손잡이 요소는 방향 목록이 바뀔 때
        새로 만들어진다. 우리가 되돌려 준 hit area 를 그때 잃지 않게
        매 프레임 다시 쓴다(여덟 노드 — 위 markResizeHandles) */
@@ -1414,6 +1477,102 @@ export function createHomeCanvasSelectionFrame(options) {
       (0.53.0 은 key 가 "single" 과 "group" 으로 갈린다 — 번들 실측).
       그래서 target 을 바꿀 때마다 다시 표시한다.
   */
+  /*
+    HOME-CANVAS-V2-MANUAL-FIX-1 — 지금 선택에 맞는 손잡이
+    (계약 §29-4)
+
+    setMoveableTarget 안의 그 두 줄과 **같은 규칙**이다. 여기서만
+    다시 부를 수 있게 뺐다 — 좌표가 선택보다 늦게 오기 때문이다.
+  */
+  /*
+    HOME-CANVAS-V2-MANUAL-FIX-1 — 단독 선택에 그릴 손잡이(계약 §29-4)
+
+      자유 배치 요소   여덟
+      흐름 블록        좌우 둘 — 부모가 폭의 자를 내려 줬을 때만
+      그 밖             없음(그때는 틀 자체를 감춘다)
+  */
+  function canvasHandleDirections() {
+
+    if (!targetIsFlowBlock()) {
+      return CANVAS_RESIZE_DIRECTIONS;
+    }
+
+    return geometryIsBlock() ? CANVAS_WIDTH_DIRECTIONS : [];
+
+  }
+
+
+  /*
+    틀을 보일 것인가 — "잡을 것이 없으면 틀도 없다"(§27)를 블록까지
+    넓힌 판정이다. 폭을 잡을 수 없는 블록에서는 부모의 축 평행
+    테두리가 그대로 그 자리를 지킨다.
+  */
+  function canvasFrameShouldShow() {
+
+    if (!moveableHasTarget()) {
+      return false;
+    }
+
+    return !(targetIsFlowBlock() && !geometryIsBlock());
+
+  }
+
+
+  function syncMoveableHandles() {
+
+    if (!state.moveable || !moveableHasTarget()) {
+      state.handleKey = "";
+      return;
+    }
+
+    const many =
+      state.targetIds.length > 1;
+
+    /* 지금 그려야 하는 손잡이의 지문. 값이 그대로면 아무것도 하지
+       않는다 — prop setter 는 setState 라 부를 때마다 렌더가
+       예약된다(applyEditChromePadding 과 같은 이유). */
+    const key =
+      `${many ? "many" : "one"}|${targetIsFlowBlock() ? "block" : "free"}` +
+      `|${geometryIsBlock() ? "sized" : "plain"}`;
+
+    if (key === state.handleKey) {
+      return;
+    }
+
+    state.handleKey = key;
+
+    try {
+
+      state.moveable.renderDirections =
+        many ? [] : canvasHandleDirections();
+
+      state.moveable.rotationPosition =
+        (many || targetIsFlowBlock())
+          ? CANVAS_ROTATION_POSITION_NONE
+          : CANVAS_ROTATION_POSITION;
+
+      /* ★ prop 만 바꾸면 손잡이는 다시 그려지지 않는다. 0.53.0 의
+         vanilla 래퍼는 prop setter 를 setState 로 미루고, 손잡이
+         요소는 그 다음 렌더에서 만들어진다 — setMoveableTarget 에서는
+         바로 뒤의 target 대입이 그 렌더를 일으키지만 여기서는 우리가
+         일으켜야 한다(2026-09-22 실측: 이 줄이 없으면 블록을 골라도
+         손잡이가 0 개였다). */
+      if (typeof state.moveable.forceUpdate === "function") {
+        state.moveable.forceUpdate();
+      }
+
+      state.moveable.updateRect();
+
+      markControlBox();
+
+    }
+    catch (err) {
+      /* 손잡이를 못 바꿔도 틀은 그대로다 — 제스처는 관문이 막는다 */
+    }
+
+  }
+
+
   function markControlBox() {
 
     const box =
@@ -1473,7 +1632,7 @@ export function createHomeCanvasSelectionFrame(options) {
          대상이 아니다(위 markControlBox 머리말과 같은 이유).
     ====================================================== */
     box.style.display =
-      moveableHasTarget() ? "" : "none";
+      canvasFrameShouldShow() ? "" : "none";
 
     markResizeHandles(box);
 
@@ -1876,16 +2035,21 @@ export function createHomeCanvasSelectionFrame(options) {
          방향 목록은 그리기에만 쓰이므로 안전하다. 잡을 손잡이가
          아예 없으니 그룹에서는 리사이즈가 시작될 수 없다.
       ====================================================== */
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — 손잡이는 아래 target 대입
+         **뒤에** 한 곳에서 정한다(syncMoveableHandles). 여기서 미리
+         적어 두면 그 지문이 실제로 그려진 것과 어긋난다. */
+      state.handleKey = "";
+
       state.moveable.renderDirections =
         (Array.isArray(target) && target.length > 1)
           ? []
-          : CANVAS_RESIZE_DIRECTIONS;
+          : canvasHandleDirections();
 
       /* HOME-CANVAS-TRANSFORM-1C — 회전 손잡이도 **단독 선택에만**
          있다. 그릴 자리를 `"none"` 으로 주면 손잡이가 아예 만들어
          지지 않는다(위 displayOnlyMoveableOptions 의 ★ 주석). */
       state.moveable.rotationPosition =
-        (Array.isArray(target) && target.length > 1)
+        (Array.isArray(target) && target.length > 1 || targetIsFlowBlock())
           ? CANVAS_ROTATION_POSITION_NONE
           : CANVAS_ROTATION_POSITION;
 
@@ -1896,6 +2060,11 @@ export function createHomeCanvasSelectionFrame(options) {
 
       state.moveable.target = target;
       state.moveable.updateRect();
+
+      /* HOME-CANVAS-V2-MANUAL-FIX-1 — target 이 정해진 **뒤에**
+         손잡이를 정한다. 블록인지 아닌지는 지금 붙은 요소가
+         정하고(targetIsFlowBlock), 그 요소는 이 줄 위에서 정해진다. */
+      syncMoveableHandles();
 
       markControlBox();
 
@@ -1932,7 +2101,18 @@ export function createHomeCanvasSelectionFrame(options) {
        맞지 않으면(여럿 · 좌표 없음 · 잠김) 꺼진 채로 테두리만 남는다. */
     syncDraggable();
 
-    report(true);
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 무엇을 골랐는지 정해진 **뒤에**
+       한 번 더 보고한다(계약 §29-6). apply() 의 보고는 관문 바로
+       뒤라 그때의 targetIds 는 아직 **앞 선택**이고, "고른 요소가
+       물려받고 있는 모양"은 그 값으로 정해지기 때문이다. 값이
+       그대로면 메시지는 나가지 않는다. */
+    reportLayout();
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 틀을 감춘 선택에서는 "붙었다"고
+       하지 않는다(계약 §29-4). 그 말을 들은 부모는 자기 축 평행
+       테두리를 내리므로, 감춘 틀과 함께 화면에 아무 테두리도 남지
+       않는다 — 폭을 잡을 수 없는 블록이 그 경우다. */
+    report(canvasFrameShouldShow());
 
     startFollow();
 
@@ -2222,6 +2402,84 @@ export function createHomeCanvasSelectionFrame(options) {
        함께 쓰므로 그 배율 하나만 맞춰 준다.
   ========================================================== */
 
+  /* =========================================================
+     HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 요소가 지금 **물려받고 있는
+     모양**(계약 §29-6)
+
+     ★ 왜 필요한가.
+
+     장식을 `main_visual` 안으로 묶으면 그 요소의 DOM 부모가 도화지
+     에서 **블록**으로 바뀐다. 스킨이 블록에 글꼴 · 색을 적어 두었다면
+     (흔하다 — `[data-imory-canvas-block] { font-family: … }`) 자리는
+     그대로인데 글꼴과 색이 바뀐다. 2026-09-22 실측: Times New Roman
+     → Georgia, #000 → #2b2723.
+
+     플랫폼이 모든 스킨에서 그 상속을 끊을 수는 없다(프레임 안 캡션이
+     블록의 조판을 따르는 것은 스킨의 의도다). 그래서 **옮기는 그
+     순간의 값**을 그 요소 하나의 규칙으로 못박는다 — 그 값을 아는
+     곳은 화면을 갖고 있는 이 문서뿐이다.
+
+     ★ 올려보내는 것은 **고른 것 하나**의 고정된 목록뿐이다. 값은
+       computed style 의 문자열이고, 프로토콜이 길이 · 글자 · 키를
+       한 번 더 본다.
+  ========================================================== */
+
+  const CANVAS_LOOK_PROPERTIES = [
+    "font-family", "font-size", "font-weight", "font-style",
+    "line-height", "letter-spacing", "text-transform", "text-align",
+    "color", "white-space"
+  ];
+
+
+  function selectedLook() {
+
+    if (state.targetIds.length !== 1) {
+      return null;
+    }
+
+    const id =
+      state.targetIds[0];
+
+    const el =
+      elementFor(id);
+
+    if (!el) {
+      return null;
+    }
+
+    let style;
+
+    try {
+      style = win.getComputedStyle(el);
+    }
+    catch (err) {
+      return null;
+    }
+
+    if (!style) {
+      return null;
+    }
+
+    const props = {};
+
+    CANVAS_LOOK_PROPERTIES.forEach(
+      (name) => {
+
+        const value =
+          style.getPropertyValue(name);
+
+        if (typeof value === "string" && value && value.length <= 120) {
+          props[name] = value.trim();
+        }
+
+      }
+    );
+
+    return Object.keys(props).length ? { id: id, props: props } : null;
+
+  }
+
+
   function reportLayout() {
 
     if (typeof opts.onLayout !== "function") {
@@ -2262,6 +2520,46 @@ export function createHomeCanvasSelectionFrame(options) {
     const trim =
       (value) => Math.round(value * 1000000) / 1000000;
 
+    /* =====================================================
+       HOME-CANVAS-V2-MANUAL-FIX-1 — 블록의 **그려진 높이**
+       (계약 §29-3)
+
+       `height:"auto"` 인 블록의 실제 높이는 스킨 조판이 정하므로
+       저장값이 줄 수 없다(§28-3 의 그 사정 그대로다). Auto 스위치를
+       끌 때 "지금 보이는 그 높이"로 굳히려면 그 한 값이 필요하다.
+
+       단위는 프레임 자리와 같은 **도화지 폭의 분수**다 — 부모가
+       `baseWidth` 를 곱하면 곧 Canvas 좌표다.
+    ====================================================== */
+    const blocks = [];
+
+    Array.prototype.forEach.call(
+      root.querySelectorAll(`[${CANVAS_BLOCK_ATTR}]`),
+      (el) => {
+
+        if (el.getAttribute(CANVAS_FRAME_ATTR) === CANVAS_CONTROL_BOX_VALUE) {
+          return;
+        }
+
+        const id =
+          el.getAttribute(CANVAS_EDIT_ID_ATTR) || "";
+
+        if (!CANVAS_ELEMENT_ID_PATTERN.test(id)) {
+          return;
+        }
+
+        const box =
+          el.getBoundingClientRect();
+
+        if (!(box.height > 0)) {
+          return;
+        }
+
+        blocks.push({ id: id, h: trim(box.height / inner) });
+
+      }
+    );
+
     const frames = [];
 
     Array.prototype.forEach.call(
@@ -2296,8 +2594,12 @@ export function createHomeCanvasSelectionFrame(options) {
       }
     );
 
+    const look =
+      selectedLook();
+
     const shape =
-      JSON.stringify(frames);
+      JSON.stringify(frames) + "|" + JSON.stringify(blocks) +
+      "|" + JSON.stringify(look);
 
     if (shape === state.layoutShape) {
       return;
@@ -2306,7 +2608,7 @@ export function createHomeCanvasSelectionFrame(options) {
     state.layoutShape = shape;
 
     try {
-      opts.onLayout({ frames: frames });
+      opts.onLayout({ frames: frames, blocks: blocks, look: look });
     }
     catch (err) {
       /* 알림이 실패해도 화면은 그대로다 — 다음 렌더에서 다시 보낸다 */
@@ -2329,6 +2631,14 @@ export function createHomeCanvasSelectionFrame(options) {
       계산이 이 문서에 있다 · 배율을 잴 수 있다. 다른 것은 제스처가
       그 값에서 무엇을 바꾸는가뿐이다.
   */
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 지금 고른 것이 흐름 블록인가 */
+  function geometryIsBlock() {
+
+    return !!(state.geometry && state.geometry.mode === "block");
+
+  }
+
+
   function dragGate() {
 
     if (state.disposed || !state.editing) {
@@ -2374,7 +2684,10 @@ export function createHomeCanvasSelectionFrame(options) {
       return "locked";
     }
 
-    if (!positionApi()) {
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록은 렌더러의 좌표 API 를
+       쓰지 않는다. 끄는 동안의 폭은 이 문서가 인라인으로 적고
+       (아래 onCanvasWidth*), 확정된 값은 부모가 다시 그린다. */
+    if (!geometryIsBlock() && !positionApi()) {
       return "no-renderer";
     }
 
@@ -2411,6 +2724,21 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   function restoreDragPosition(gesture) {
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록은 인라인 폭 한 칸이다
+       (계약 §29-4). 걷어내면 스킨 CSS 의 규칙으로 돌아간다. */
+    if (gesture && gesture.kind === CANVAS_WIDTH_KIND) {
+
+      try {
+        gesture.el.style.width = gesture.savedWidth || "";
+      }
+      catch (err) {
+        /* 이미 사라진 노드다 — 재렌더가 제자리를 그린다 */
+      }
+
+      return;
+
+    }
 
     const api =
       positionApi();
@@ -2537,6 +2865,18 @@ export function createHomeCanvasSelectionFrame(options) {
       return refuseDrag(event, gate);
     }
 
+    /* =====================================================
+       HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록은 **끌어서 옮기지
+       않는다**(계약 §29-4).
+
+       블록의 자리는 순서 · 정렬 · margin 이 정한다(§14-10). 본체를
+       끌어 좌표를 쓰면 블록에 자유 요소의 변수가 생기고, 그 값은
+       어떤 CSS 도 읽지 않으므로 화면은 그대로인 채 JSON 만 자란다.
+    ====================================================== */
+    if (geometryIsBlock()) {
+      return refuseDrag(event, "block");
+    }
+
     /*
       손가락으로는 본체를 끌지 않는다(§17-2).
 
@@ -2659,6 +2999,150 @@ export function createHomeCanvasSelectionFrame(options) {
   }
 
 
+  /* =========================================================
+     HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 폭 제스처(계약 §29-4)
+
+     ★ 렌더러의 좌표 API 를 쓰지 않는다.
+
+     블록의 폭은 `--imory-canvas-block-width` 이고 그 값은 **흐름 층
+     content box 의 백분율**이다 — 이 문서는 그 자(padding 을 뺀
+     baseWidth)를 모른다. 그래서 끄는 동안에는 인라인 `width` 한 칸을
+     px 로 적고, 손을 놓으면 그것을 걷어낸 뒤 부모가 확정한 값으로
+     다시 그린다. 인라인 값은 CSSOM 으로 쓰므로 CSP 의 style-src 에
+     걸리지 않는다(markControlBox 머리말과 같은 이유).
+
+     ★ 덕분에 **줄바꿈과 아래 블록이 끄는 동안 즉시 따라온다** —
+       흐름이 그 자리에서 다시 조판되기 때문이다.
+  ========================================================== */
+
+  function onCanvasWidthStart(event) {
+
+    /* 손가락으로는 폭도 바꾸지 않는다(§17-2 · §18-1 과 같은 판정) */
+    if (isCoarsePointerEvent(event && event.inputEvent)) {
+      return refuseDrag(event, "coarse-pointer");
+    }
+
+    const geometry =
+      state.geometry;
+
+    const el =
+      elementFor(geometry.id);
+
+    const scale =
+      canvasScale(geometry.baseWidth, geometry.scopeId);
+
+    if (!el || !(scale > 0)) {
+      return refuseDrag(event, "no-basis");
+    }
+
+    state.drag = {
+      kind: CANVAS_WIDTH_KIND,
+      id: geometry.id,
+      el: el,
+      scale: scale,
+
+      /* 블록에는 좌표 · 각도가 없다. 그래도 같은 이름을 둔다 —
+         geometry 가 다시 내려올 때의 "그 사이에 draft 가 바뀌었나"
+         비교가 이 이름들을 본다(setGeometry). */
+      baseX: geometry.x,
+      baseY: geometry.y,
+      baseH: geometry.height,
+      baseRot: geometry.rotation,
+      originX: geometry.originX,
+      originY: geometry.originY,
+      nextX: geometry.x,
+      nextY: geometry.y,
+      nextH: geometry.height,
+      nextRot: geometry.rotation,
+
+      baseW: geometry.width,
+      nextW: geometry.width,
+
+      baseWidth: geometry.baseWidth,
+      baseHeight: geometry.baseHeight,
+      generation: state.generation,
+
+      /* 되돌릴 것은 인라인 한 칸이다 — 없었으면 빈 문자열 */
+      savedWidth: el.style.width,
+      cancelled: false
+    };
+
+    state.lastMoveGate = "ok";
+
+    return true;
+
+  }
+
+
+  function onCanvasWidth(event) {
+
+    const gesture =
+      state.drag;
+
+    if (!gesture || gesture.cancelled || gesture.kind !== CANVAS_WIDTH_KIND) {
+      return;
+    }
+
+    if (!gesture.el.isConnected) {
+      cancelDrag("detached");
+      return;
+    }
+
+    const dist =
+      (event && Array.isArray(event.dist)) ? event.dist : [0, 0];
+
+    if (!Number.isFinite(dist[0])) {
+      return;
+    }
+
+    /* 시작값 + 누적 변화(§17-3) */
+    const nextW =
+      roundCanvasCoord(
+        Math.max(CANVAS_MIN_SIZE, gesture.baseW + dist[0] / gesture.scale));
+
+    gesture.nextW = nextW;
+
+    try {
+      gesture.el.style.width = (nextW * gesture.scale) + "px";
+    }
+    catch (err) {
+      cancelDrag("write-failed");
+    }
+
+  }
+
+
+  function onCanvasWidthEnd() {
+
+    const gesture =
+      state.drag;
+
+    if (!gesture || gesture.kind !== CANVAS_WIDTH_KIND) {
+      return;
+    }
+
+    state.drag = null;
+
+    if (gesture.cancelled) {
+      return;
+    }
+
+    /* 바뀐 것이 없다 — 확정도 기록도 없다(§17-6) */
+    if (gesture.nextW === gesture.baseW) {
+      restoreDragPosition(gesture);
+      state.lastMoveGate = "no-resize";
+      return;
+    }
+
+    sendTransform(
+      gesture,
+      { width: gesture.baseW },
+      { width: gesture.nextW }
+    );
+
+  }
+
+
   function onCanvasResizeStart(event) {
 
     const gate =
@@ -2666,6 +3150,11 @@ export function createHomeCanvasSelectionFrame(options) {
 
     if (gate !== "ok") {
       return refuseDrag(event, gate);
+    }
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록이면 폭 한 칸이다 */
+    if (geometryIsBlock()) {
+      return onCanvasWidthStart(event);
     }
 
     /* 손가락으로는 크기도 바꾸지 않는다 — 이동과 같은 이유이고
@@ -2889,6 +3378,11 @@ export function createHomeCanvasSelectionFrame(options) {
     const gesture =
       state.drag;
 
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 폭 제스처 */
+    if (gesture && gesture.kind === CANVAS_WIDTH_KIND) {
+      return onCanvasWidth(event);
+    }
+
     if (!gesture || gesture.cancelled || gesture.kind !== CANVAS_RESIZE_KIND) {
       return;
     }
@@ -3020,6 +3514,11 @@ export function createHomeCanvasSelectionFrame(options) {
     const gesture =
       state.drag;
 
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록의 폭 제스처 */
+    if (gesture && gesture.kind === CANVAS_WIDTH_KIND) {
+      return onCanvasWidthEnd();
+    }
+
     if (!gesture || gesture.kind !== CANVAS_RESIZE_KIND) {
       return;
     }
@@ -3098,6 +3597,12 @@ export function createHomeCanvasSelectionFrame(options) {
 
     if (gate !== "ok") {
       return refuseDrag(event, gate);
+    }
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록은 돌리지 않는다
+       (손잡이도 그리지 않지만, 관문도 함께 막는다 — 계약 §29-4) */
+    if (geometryIsBlock()) {
+      return refuseDrag(event, "block");
     }
 
     /* 손가락으로는 돌리지 않는다 — 이동 · 리사이즈와 같은 이유이고
@@ -3539,6 +4044,10 @@ export function createHomeCanvasSelectionFrame(options) {
             originX: Number.isFinite(payload.originX) ? payload.originX : 0,
             originY: Number.isFinite(payload.originY) ? payload.originY : 0,
 
+            /* HOME-CANVAS-V2-MANUAL-FIX-1 — 흐름 블록이면 "block"
+               (계약 §29-4). 모르는 값은 자유 배치 요소로 읽는다. */
+            mode: payload.mode === "block" ? "block" : null,
+
             baseWidth: payload.baseWidth,
             baseHeight: payload.baseHeight,
             generation:
@@ -3583,6 +4092,24 @@ export function createHomeCanvasSelectionFrame(options) {
 
     state.geometry =
       usable ? value : null;
+
+    /* =====================================================
+       HOME-CANVAS-V2-MANUAL-FIX-1 — 무엇을 고르든 **손잡이가 그
+       선택에 맞아야** 한다(계약 §29-4).
+
+       좌표는 선택 **뒤에** 따로 내려오므로(§17), setMoveableTarget
+       이 돌 때 이 문서는 아직 "블록인가"를 모른다. 그래서 그 값이
+       실제로 달라졌을 때 한 번 더 맞춘다 — 손잡이 여덟이 블록에
+       남거나, 자유 요소에 좌우 둘만 남는 일이 없게.
+    ====================================================== */
+    state.geometryMode =
+      (usable && value.mode === "block") ? "block" : null;
+
+    /* 끄는 동안에는 손대지 않는다 — 제스처 도중에 손잡이를 다시
+       만들면 잡고 있던 그 노드가 사라진다. */
+    if (!state.drag) {
+      syncMoveableHandles();
+    }
 
 
     /* =====================================================
@@ -3656,7 +4183,27 @@ export function createHomeCanvasSelectionFrame(options) {
 
       clearPendingTimer();
 
-      if (usable && value.id === pending.id) {
+      /* =================================================
+         HOME-CANVAS-V2-MANUAL-FIX-1 — 블록의 답(계약 §29-4)
+
+         블록에는 좌표 네 칸이 없다. 여기서 api.setBox 를 부르면
+         **블록에 자유 요소의 변수와 height 속성**을 쓰게 되고,
+         그 한 줄이 `data-imory-canvas-height` 를 "auto" 로 바꿔
+         저장된 숫자 높이를 화면에서 지운다. 그래서 블록의 답은
+         인라인 폭을 걷어내는 것뿐이고, 승인이든 거부든 부모가
+         다시 그린 DOM 이 정답을 그린다.
+      ================================================= */
+      if (pending.kind === CANVAS_WIDTH_KIND) {
+
+        restoreDragPosition(pending);
+
+        state.lastSettle =
+          (usable && value.id === pending.id && value.width === pending.nextW)
+            ? "accepted"
+            : "restored";
+
+      }
+      else if (usable && value.id === pending.id) {
 
         /* =================================================
            ★ 판정은 **값**으로 한다 — 그릴 수 있었는가가 아니라.
@@ -4746,6 +5293,12 @@ export function createHomeCanvasSelectionFrame(options) {
               }
             : null,
         moveCount: state.moveCount,
+
+        /* HOME-CANVAS-V2-MANUAL-FIX-1 — 지금 고른 것이 흐름 블록인가
+           (부모가 내려 준 값 · 계약 §29-4) */
+        geometryMode: state.geometryMode,
+        targetIsBlock: targetIsFlowBlock(),
+
         lastMoveGate: state.lastMoveGate,
         lastCommit: state.lastCommit,
         lastSettle: state.lastSettle,

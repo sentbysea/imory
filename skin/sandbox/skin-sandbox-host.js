@@ -2908,6 +2908,12 @@ export function sendSandboxCanvasGeometry(handle, geometry) {
     if (Number.isFinite(value.originY) && value.originY !== 0) {
       payload.originY = value.originY;
     }
+
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 고른 것이 흐름 블록이면 그
+       한 칸(계약 §29-4). 자유 배치 요소에는 아예 만들지 않는다. */
+    if (value.mode === "block") {
+      payload.mode = "block";
+    }
   }
 
 

@@ -359,11 +359,21 @@ function createSandboxInspector(options) {
     var box =
       el.getBoundingClientRect();
 
+    /* HOME-CANVAS-V2-MANUAL-FIX-1 — 캔버스의 글자 요소는 넘친 글자
+       까지 감싼다(계약 §29-2). native Preview 와 **같은 공용 파일**
+       이므로 두 화면의 테두리가 저절로 같다. */
+    var shown =
+      (typeof inspectorCanvasContentRect === "function")
+        ? inspectorCanvasContentRect(el, {
+            left: box.left, top: box.top, width: box.width, height: box.height
+          })
+        : box;
+
     return {
-      left: Math.round(box.left * 100) / 100,
-      top: Math.round(box.top * 100) / 100,
-      width: Math.round(box.width * 100) / 100,
-      height: Math.round(box.height * 100) / 100
+      left: Math.round(shown.left * 100) / 100,
+      top: Math.round(shown.top * 100) / 100,
+      width: Math.round(shown.width * 100) / 100,
+      height: Math.round(shown.height * 100) / 100
     };
 
   }
