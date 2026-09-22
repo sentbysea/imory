@@ -2634,12 +2634,22 @@ var SANDBOX_MESSAGE_SPEC = {
 
           if (
             !isPlainSandboxObject(frame) ||
-            !hasOnlyKnownSandboxKeys(frame, ["id", "x", "y"]) ||
+            !hasOnlyKnownSandboxKeys(frame, ["id", "x", "y", "w"]) ||
             !isSandboxInspectEditId(frame.id) ||
             seen.indexOf(frame.id) !== -1 ||
             !isSandboxCanvasCoord(frame.x) ||
             !isSandboxCanvasCoord(frame.y)
           ) {
+            return false;
+          }
+
+          /* =================================================
+             HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 프레임의 **그려진
+             폭**(계약 §30-3). 자도 상한도 자리와 같고, 없어도
+             거부하지 않는다 — 옛 프레임 문서가 보내지 않을 수 있고
+             그때는 부모가 저장값에서 계산하던 그 길로 간다.
+          ================================================== */
+          if (frame.w !== undefined && !isSandboxCanvasCoord(frame.w)) {
             return false;
           }
 

@@ -115,6 +115,26 @@ const CANVAS_FRAME_ATTR = "data-imory-canvas-frame";
 
 const CANVAS_CONTROL_BOX_VALUE = "1";
 
+/* =========================================================
+   HOME-CANVAS-V2-MANUAL-FIX-1 — 요소가 쓰는 **자**의 표식
+
+   렌더러가 v2 의 페이지 자유 장식에만 붙인다(계약 §29-1 ·
+   skin/skin-home-canvas-render.js SKIN_CANVAS_RENDER_UNIT_ATTR).
+   그 요소만 도화지 폭의 자(`100cqw`)를 쓰고, 그래서 그 요소만
+   render.css §7 의 "화면 밖으로 밀리지 않는다" 규칙을 받는다.
+   이름을 여기 한 번 더 적는 이유는 이 파일이 렌더러 없이도
+   로드될 수 있어야 하기 때문이다(§0-1 의 그 규칙과 같다).
+========================================================== */
+const CANVAS_UNIT_ATTR = "data-imory-canvas-unit";
+
+const CANVAS_UNIT_CQW = "cqw";
+
+/* 창 폭이 바뀐 뒤 프레임의 자리 · 폭을 몇 프레임이나 다시 재는가
+   (HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 후속 · 계약 §30-3-1).
+   전환이 한 프레임에 끝나지 않을 수 있어 넉넉히 두되, 값이 그대로면
+   메시지는 나가지 않으므로 헛도는 비용이 없다. */
+const CANVAS_LAYOUT_SETTLE_FRAMES = 20;
+
 /* skin/skin-home-canvas.js SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN 과
    같은 규칙. 이 값이 querySelector 의 문자열이 되므로 관문을 겹친다. */
 const CANVAS_ELEMENT_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
@@ -359,6 +379,41 @@ const CANVAS_TEXT_CONTENT_SELECTOR =
 /* 규칙표를 못박을 때 쓰는 수. 한 화면에 이만큼의 컴포넌트가 동시에
    붙었다 떨어지는 일은 없다(위 pinEditorStyleSheets). */
 const STYLE_PIN_COUNT = 1000000;
+
+
+/* =========================================================
+   HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 이동 손잡이
+   (계약 §30-2)
+
+   ── 왜 필요한가 ────────────────────────────────────────
+   본체 끌기는 **요소 자신**에 붙은 gesto 다(0.53.0 은 단일 target
+   에서 target 요소에 mousedown 을 건다). 그래서 앞에 그려진 다른
+   요소가 그 자리를 덮고 있으면 mousedown 이 그쪽으로 가고, 고른
+   요소는 **끌 수 없다**. 실측(2026-09-22)에서는 그 누름이 클릭으로
+   이어져 선택까지 앞의 요소로 넘어갔다.
+
+   ── 왜 이 방법인가 ─────────────────────────────────────
+   · 앞 요소에 `pointer-events: none` 을 주지 않는다. 그러면 그
+     요소를 고르거나 끌 수 없게 되고, 문제를 반대쪽으로 옮길 뿐이다.
+   · `dragArea` 를 켜지 않는다. 선택 상자 전체가 입력을 먹으면 그
+     안쪽을 누른 클릭이 스킨 DOM 에 닿지 않아 "겹친 것을 눌러 고른다"
+     (DIRECT-UX-1)가 통째로 죽는다.
+   · 그래서 **손잡이 하나**다. 리사이즈 · 회전 손잡이가 이미 쓰는
+     그 길(control box 안에서 pointer-events 만 되돌려 받는다)을
+     그대로 쓰고, 덮는 면적은 이 정사각형뿐이다.
+
+   ── 본체 끌기는 그대로다 ───────────────────────────────
+   `dragTarget`(손잡이) + `dragTargetSelf: true` 를 함께 준다.
+   0.53.0 의 gesto 목록은 그때 [control box, 손잡이, target] 이 된다
+   (번들 실측 — `Rs()` 의 `!a && u && s && e!==s && dragTargetSelf`).
+   덮이지 않은 자리에서는 지금까지처럼 본체를 잡으면 된다.
+========================================================== */
+const CANVAS_MOVE_GRIP_ATTR = "data-imory-canvas-move-grip";
+
+const CANVAS_MOVE_GRIP_SIZE = 18;
+
+/* 손잡이 중심이 `nw` 손잡이에서 얼마나 바깥으로 물러나 있나 */
+const CANVAS_MOVE_GRIP_OFFSET = 20;
 
 
 /* VENDOR-1 의 지연 로더. **이 한 파일**만 부른다 — Moveable ·
@@ -645,11 +700,30 @@ function lassoSelectoOptions(doc, getSelectable, condition, nonce) {
      버전을 고정해 두었다(계약 §13).
 ========================================================== */
 
-function displayOnlyMoveableOptions(target, nonce) {
+function displayOnlyMoveableOptions(target, nonce, grip) {
+
+  const many =
+    Array.isArray(target) && target.length > 1;
 
   return {
 
     target: target,
+
+    /* =====================================================
+       HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 이동 손잡이(계약 §30-2)
+
+       ★ 둘 다 있어야 한다. `dragTarget` 만 주면 gesto 가 손잡이
+         **하나**에만 붙어 본체 끌기가 사라지고, `dragTargetSelf`
+         만 주면(=`dragTarget` 이 없으면) 그 줄이 아예 돌지 않는다
+         (번들 실측 — `Rs()` 는 `u`(dragTarget)가 있을 때만 target
+         을 목록에 더한다).
+
+       ★ 그룹에는 주지 않는다. MoveableGroup 은 `dragTarget` 이
+         없을 때 자기 `areaElement` 를 쓰고, 그 요소가 곧 그룹 틀의
+         기준점이다(위 dragArea 주석의 그 사정).
+    ====================================================== */
+    dragTarget: (!many && grip) ? grip : null,
+    dragTargetSelf: true,
 
     /*
       조작 — 이동 하나만. **생성 시점에 켠다.**
@@ -925,7 +999,16 @@ export function createHomeCanvasSelectionFrame(options) {
     loggedFailure: false,
 
     rafId: 0,
-    signature: ""
+    signature: "",
+
+    /* HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 이동 손잡이(계약 §30-2).
+       문서 하나당 하나이고 control box 안에 산다. */
+    moveGrip: null,
+
+    /* 창 폭이 바뀐 뒤 프레임 자리 · 폭을 다시 재는 짧은 루프
+       (계약 §30-3-1) */
+    layoutRaf: 0,
+    layoutSettle: 0
 
   };
 
@@ -1197,7 +1280,74 @@ export function createHomeCanvasSelectionFrame(options) {
      `getBoundingClientRect()` 를 쓰지 않는다. 회전한 요소에서 그것은
      축에 정렬된 바깥 상자이고, 우리가 필요한 것은 요소 자기 축의
      넘침이다(§18-3 의 그 이유 그대로다).
+
+     ★ 그 값은 **el 기준이 아니다** (HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1
+       · 계약 §30-1). `offsetLeft/Top` 은 `offsetParent` 기준이고,
+       `offsetParent` 는 **가장 가까운 위치 지정 조상**이다. v2 의
+       흐름 블록은 `position: static` 이라 그 조상이 블록 자신이
+       아니라 **도화지**이고, 그래서 자식의 `offsetTop` 이 "블록 안의
+       자리"가 아니라 "도화지 위에서의 자리"로 들어왔다. 아래 union
+       이 그 값을 그대로 넘침으로 읽어, 도화지 위쪽에 있는 블록일수록
+       아래쪽 여유가 크게 잡혔다 — 글자를 고르면 파란 조작 틀이 그
+       아래 메인 비주얼까지 뻗던 것이 이 한 줄이다(2026-09-22 실측:
+       블록 높이 73, 자식 offsetTop 211 → 아래 여유 216).
+
+       그래서 자식의 자리는 offsetParent 사슬을 **el 까지 되짚어**
+       잰다. 값의 출처(offsetLeft/Top)는 그대로이므로 회전 요소에서
+       "자기 축의 넘침"이라는 성질도 그대로다.
   ========================================================== */
+
+  /*
+    canvasChildOffsetWithin(el, child) -> { x, y } | null
+
+    `child` 의 왼쪽 위가 `el` 의 왼쪽 위에서 얼마나 떨어져 있는가.
+
+    두 요소가 같은 기준(`el.offsetParent`)까지 올라간 뒤 그 차이를
+    본다 — `el` 자신이 위치 지정 요소라 사슬 안에 있어도(그때는
+    `el.offsetLeft` 가 한 번 더해졌다가 그대로 빠진다), static 이라
+    사슬이 `el` 을 건너뛰어도 같은 답이 나온다.
+
+    사슬이 그 기준에 닿지 않으면(`position: fixed` 자식 등) null 이고,
+    그런 자식은 넘침 계산에서 **빠진다** — 자리를 지어내지 않는다.
+  */
+  function canvasChildOffsetWithin(el, child) {
+
+    const base =
+      el.offsetParent || null;
+
+    let node = child;
+    let x = 0;
+    let y = 0;
+    let guard = 0;
+
+    while (node && node !== base && guard < 64) {
+
+      if (
+        !Number.isFinite(node.offsetLeft) ||
+        !Number.isFinite(node.offsetTop)
+      ) {
+        return null;
+      }
+
+      x += node.offsetLeft;
+      y += node.offsetTop;
+
+      node = node.offsetParent;
+      guard += 1;
+
+    }
+
+    if (node !== base) {
+      return null;
+    }
+
+    return {
+      x: x - el.offsetLeft,
+      y: y - el.offsetTop
+    };
+
+  }
+
 
   function canvasEditChromePadding(el) {
 
@@ -1232,8 +1382,16 @@ export function createHomeCanvasSelectionFrame(options) {
           return;
         }
 
-        const cx = child.offsetLeft;
-        const cy = child.offsetTop;
+        /* el 의 왼쪽 위 기준 — offsetParent 기준이 아니다(위 ★) */
+        const at =
+          canvasChildOffsetWithin(el, child);
+
+        if (!at) {
+          return;
+        }
+
+        const cx = at.x;
+        const cy = at.y;
         const cw = child.offsetWidth;
         const ch = child.offsetHeight;
 
@@ -1383,6 +1541,25 @@ export function createHomeCanvasSelectionFrame(options) {
        새로 만들어진다. 우리가 되돌려 준 hit area 를 그때 잃지 않게
        매 프레임 다시 쓴다(여덟 노드 — 위 markResizeHandles) */
     markResizeHandles(controlBoxElement());
+
+    /* HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 이동 손잡이는 `nw` 손잡이
+       에서 자리를 잰다(계약 §30-2). 그 손잡이가 방금 새로 만들어
+       졌을 수 있으므로 같은 프레임에서 함께 맞춘다. */
+    syncMoveGrip(controlBoxElement());
+
+    /* =====================================================
+       HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 프레임의 자리 · **폭**도
+       따라가기 루프에서 다시 본다(계약 §30-3).
+
+       V2-ELEMENTS-1 의 보고는 선택이 바뀔 때와 관문 뒤에만 나갔다.
+       자리와 높이는 **도화지 폭의 분수**라 창 폭이 바뀌어도 값이
+       그대로였기 때문이다. 데스크톱 최대 폭이 생기면서 프레임의
+       폭만은 그렇지 않다 — 도화지가 넓어지면 그 분수는 작아진다.
+       그래서 화면이 달라질 수 있는 매 프레임에서 다시 잰다.
+
+       ★ 값이 그대로면 메시지는 나가지 않는다(layoutShape 지문).
+    ====================================================== */
+    reportLayout();
 
     const elements =
       targetElements();
@@ -1635,6 +1812,146 @@ export function createHomeCanvasSelectionFrame(options) {
       canvasFrameShouldShow() ? "" : "none";
 
     markResizeHandles(box);
+
+    syncMoveGrip(box);
+
+  }
+
+
+  /* =========================================================
+     HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 이동 손잡이(계약 §30-2)
+
+     ensureMoveGrip()  문서 하나당 하나. Moveable 을 만들기 **전에**
+                       만들어 `dragTarget` 으로 넘긴다 — prop setter
+                       는 setState 라 나중에 넘기면 그 렌더 뒤에야
+                       gesto 가 붙는다(위 draggable 의 그 사정).
+
+     syncMoveGrip(box) control box 안에 두고 자리를 맞춘다. 끌 수 없는
+                       상태에서는 감춘다 — 잡아도 아무 일이 없는
+                       손잡이를 남기지 않는다(§27-6 과 같은 판정).
+
+     ★ 자리는 `nw` 손잡이에서 잰다. 그 손잡이는 이미 회전과
+       chrome 여유(§21-4)를 따라 움직이므로, 여기서 renderPoses 를
+       다시 풀지 않아도 언제나 선택 틀의 왼쪽 위 바깥이다.
+
+     ★ 인라인 값은 CSSOM 으로 쓴다 — CSP 의 style-src 검사 대상이
+       아니다(위 markControlBox 머리말과 같은 이유).
+  ========================================================== */
+
+  function ensureMoveGrip() {
+
+    if (state.moveGrip || state.disposed) {
+      return state.moveGrip;
+    }
+
+    const grip =
+      doc.createElement("div");
+
+    grip.setAttribute(CANVAS_MOVE_GRIP_ATTR, "1");
+    grip.setAttribute("aria-hidden", "true");
+    grip.title = "이동";
+
+    const px = (n) => `${n}px`;
+
+    grip.style.setProperty("position", "absolute");
+    grip.style.setProperty("left", "0");
+    grip.style.setProperty("top", "0");
+    grip.style.setProperty("width", px(CANVAS_MOVE_GRIP_SIZE));
+    grip.style.setProperty("height", px(CANVAS_MOVE_GRIP_SIZE));
+    grip.style.setProperty("box-sizing", "border-box");
+    grip.style.setProperty("border-radius", "5px");
+    grip.style.setProperty("background", "var(--moveable-color, #4af)");
+    grip.style.setProperty("border", "2px solid #fff");
+    grip.style.setProperty("box-shadow", "0 1px 3px rgba(0,0,0,0.35)");
+    grip.style.setProperty("cursor", "move");
+    grip.style.setProperty("touch-action", "none");
+    grip.style.setProperty("display", "none");
+
+    /* control box 는 `pointer-events: none` 이고 그 값은 상속된다 —
+       손잡이만 되돌려 받는다(markResizeHandles 와 같다) */
+    grip.style.setProperty("pointer-events", "auto");
+
+    state.moveGrip = grip;
+
+    return grip;
+
+  }
+
+
+  function hideMoveGrip() {
+
+    if (state.moveGrip) {
+      state.moveGrip.style.setProperty("display", "none");
+    }
+
+  }
+
+
+  function syncMoveGrip(box) {
+
+    const grip =
+      state.moveGrip;
+
+    if (!grip) {
+      return;
+    }
+
+    /* 끌 수 없는 상태 · 흐름 블록 · 여럿 선택에는 손잡이가 없다.
+       블록은 순서와 정렬이 자리를 정하므로 애초에 끌지 않는다
+       (§29-4), 그룹 조작은 아직 없다(§21-5). */
+    if (
+      !box ||
+      state.targetIds.length !== 1 ||
+      geometryIsBlock() ||
+      !canvasFrameShouldShow() ||
+      dragGate() !== "ok"
+    ) {
+      hideMoveGrip();
+      return;
+    }
+
+    const anchor =
+      box.querySelector('.moveable-control[data-direction="nw"]');
+
+    if (!anchor) {
+      hideMoveGrip();
+      return;
+    }
+
+    if (grip.parentElement !== box) {
+      box.appendChild(grip);
+    }
+
+    const boxRect =
+      box.getBoundingClientRect();
+
+    const anchorRect =
+      anchor.getBoundingClientRect();
+
+    if (!anchorRect.width && !anchorRect.height) {
+      hideMoveGrip();
+      return;
+    }
+
+    const x =
+      (anchorRect.left + anchorRect.width / 2) - boxRect.left
+        - CANVAS_MOVE_GRIP_OFFSET;
+
+    const y =
+      (anchorRect.top + anchorRect.height / 2) - boxRect.top
+        - CANVAS_MOVE_GRIP_OFFSET;
+
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      hideMoveGrip();
+      return;
+    }
+
+    grip.style.setProperty(
+      "transform",
+      `translate(-50%, -50%) translate(${Math.round(x)}px, ${Math.round(y)}px)`
+    );
+
+    grip.style.setProperty("display", "block");
 
   }
 
@@ -1895,7 +2212,10 @@ export function createHomeCanvasSelectionFrame(options) {
     try {
 
       state.moveable =
-        new state.ctor(doc.body, displayOnlyMoveableOptions(first, frameNonce()));
+        new state.ctor(
+          doc.body,
+          displayOnlyMoveableOptions(first, frameNonce(), ensureMoveGrip())
+        );
 
       /* HOME-CANVAS-TRANSFORM-1A · 1B — 옵션이 아니라 여기서 건다
          (위 displayOnlyMoveableOptions 의 ★ 주석) */
@@ -2025,6 +2345,14 @@ export function createHomeCanvasSelectionFrame(options) {
          그룹의 요구가 다르다(위 주석). */
       state.moveable.dragArea =
         Array.isArray(target) && target.length > 1;
+
+      /* HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 이동 손잡이도 같은
+         자리에서 갈린다. 그룹에서는 `areaElement` 가 기준이어야
+         하므로 넘기지 않는다(계약 §30-2). */
+      state.moveable.dragTarget =
+        (Array.isArray(target) && target.length > 1)
+          ? null
+          : ensureMoveGrip();
 
       /* =====================================================
          HOME-CANVAS-TRANSFORM-1B — 손잡이는 **단독 선택에만** 있다.
@@ -2588,7 +2916,22 @@ export function createHomeCanvasSelectionFrame(options) {
         frames.push({
           id: id,
           x: trim((box.left - left) / inner),
-          y: trim((box.top - top) / inner)
+          y: trim((box.top - top) / inner),
+
+          /* =================================================
+             HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 프레임의 **그려진
+             폭**(계약 §30-3)
+
+             V2-ELEMENTS-1 은 폭을 싣지 않았다 — 그때는 저장값에서
+             언제나 계산할 수 있었기 때문이다(§24-3). 데스크톱 최대
+             폭이 생기면서 그것이 더는 참이 아니다: 화면이 설계 폭보다
+             넓으면 프레임은 저장값이 말하는 폭보다 **좁게** 그려진다.
+
+             그래서 자리와 **같은 자**(도화지 폭의 분수)로 한 칸 더
+             보낸다. 어느 쪽이 맞는가에 새 규칙이 생기지 않는다 —
+             그려진 것이 맞고, 저장값은 그 상한 전의 값이다.
+          ================================================== */
+          w: trim(box.width / inner)
         });
 
       }
@@ -2696,6 +3039,98 @@ export function createHomeCanvasSelectionFrame(options) {
     }
 
     return "ok";
+
+  }
+
+
+  /* =========================================================
+     canvasPageDragBounds(el, geometry)
+       -> { min, max } | null
+     (HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 후속 · 계약 §30-4-1)
+
+     v2 의 **페이지 자유 장식**은 화면 밖으로 나갈 자리가 없으면
+     그만큼 안쪽에 그려진다(render.css §7). 그 규칙이 표시 쪽에만
+     있으면, 가장자리에서 더 끌 때 **화면은 멈추고 저장 x 만 변하는**
+     상태가 된다 — 확정 뒤에도 튀지 않지만 "지금 보이는 자리"와
+     "저장된 자리"가 갈라진다.
+
+     그래서 끄는 동안 저장값도 **같은 범위**로 자른다. 범위의 식은
+     render.css §7 의 `clamp()` 두 끝 그대로다.
+
+       room = max(0, (창 폭 − 도화지 안쪽 폭) ÷ 2)
+       min  = −room
+       max  = baseWidth + room − 요소 폭
+       (뒤집히면 정렬한다 — 도화지보다 넓은 전면 배경)
+
+     ★ 자는 **레이아웃 px** 다. `100cqw` 는 도화지의 content box 이고
+       `100vw` 는 이 프레임의 뷰포트다. 바깥 Preview 의
+       `transform: scale()` 은 둘 다에 들어가지 않으므로 나누지
+       않는다(`canvasScale` 의 화면 px 자와 다른 자다).
+
+     ★ 적용 범위는 그 규칙이 닿는 요소뿐이다 — `unit="cqw"` 이고
+       도화지가 기준인 것. v1 요소 · 프레임 내부 장식 · 블록은 null
+       이라 지금까지와 한 글자도 같다.
+  ========================================================== */
+
+  function canvasPageDragBounds(el, geometry) {
+
+    if (
+      !el ||
+      !geometry ||
+      geometry.scopeId ||
+      typeof el.getAttribute !== "function" ||
+      el.getAttribute(CANVAS_UNIT_ATTR) !== CANVAS_UNIT_CQW
+    ) {
+      return null;
+    }
+
+    const root =
+      canvasRoot();
+
+    if (!root || !(geometry.baseWidth > 0) || !(geometry.width > 0)) {
+      return null;
+    }
+
+    const style =
+      win.getComputedStyle(root);
+
+    const basis =
+      root.clientWidth -
+      (parseFloat(style.paddingLeft) || 0) -
+      (parseFloat(style.paddingRight) || 0);
+
+    if (!(basis > 0)) {
+      return null;
+    }
+
+    const unit =
+      basis / geometry.baseWidth;
+
+    const room =
+      Math.max(0, (win.innerWidth - basis) / 2) / unit;
+
+    const lo =
+      -room;
+
+    const hi =
+      geometry.baseWidth + room - geometry.width;
+
+    return {
+      min: Math.min(lo, hi),
+      max: Math.max(lo, hi)
+    };
+
+  }
+
+
+  /* 범위가 없으면 그대로다 — 숫자를 지어내지 않는다 */
+  function clampCanvasPageX(value, bounds) {
+
+    if (!bounds || !Number.isFinite(value)) {
+      return value;
+    }
+
+    return Math.min(Math.max(value, bounds.min), bounds.max);
 
   }
 
@@ -2856,6 +3291,30 @@ export function createHomeCanvasSelectionFrame(options) {
   }
 
 
+  /* 이 노드가 이동 손잡이(또는 그 안)인가(계약 §30-2) */
+  function nodeIsMoveGrip(node) {
+
+    const grip =
+      state.moveGrip;
+
+    return !!(
+      grip && node &&
+      (node === grip || (grip.contains && grip.contains(node)))
+    );
+
+  }
+
+
+  /* 이 제스처가 이동 손잡이에서 시작했는가 */
+  function dragStartedOnMoveGrip(event) {
+
+    return nodeIsMoveGrip(
+      (event && event.inputEvent) ? event.inputEvent.target : null
+    );
+
+  }
+
+
   function onCanvasDragStart(event) {
 
     const gate =
@@ -2883,8 +3342,18 @@ export function createHomeCanvasSelectionFrame(options) {
       도화지 전체를 덮는 배경 사진이 선택된 상태에서 한 손가락
       드래그를 가로채면 모바일 Preview 가 아예 스크롤되지 않는다.
       lasso 와 같은 이유이고, 같은 판정 함수를 쓴다.
+
+      ★ **이동 손잡이는 예외다**(HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 ·
+        계약 §30-2). 그 이유가 "한 손가락 드래그가 스크롤인지 이동
+        인지 가를 수 없다" 였는데, 손잡이를 짚은 손가락은 가를 것이
+        없다 — 18px 짜리 그 자리를 누른 것 자체가 의사 표시다.
+        손잡이에는 `touch-action: none` 이 걸려 있어 스크롤과
+        겹치지도 않는다.
     */
-    if (isCoarsePointerEvent(event && event.inputEvent)) {
+    if (
+      !dragStartedOnMoveGrip(event) &&
+      isCoarsePointerEvent(event && event.inputEvent)
+    ) {
       return refuseDrag(event, "coarse-pointer");
     }
 
@@ -2931,6 +3400,12 @@ export function createHomeCanvasSelectionFrame(options) {
       baseHeight: geometry.baseHeight,
       generation: state.generation,
       saved: api.read(el),
+
+      /* HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 후속 — 이 화면에서 놓을
+         수 있는 가로 범위(계약 §30-4-1). 해당 없는 요소에서는 null
+         이고 그때 아래 clamp 는 한 글자도 하지 않는다. */
+      pageBounds: canvasPageDragBounds(el, geometry),
+
       nextX: geometry.x,
       nextY: geometry.y,
       nextW: geometry.width,
@@ -3837,7 +4312,22 @@ export function createHomeCanvasSelectionFrame(options) {
     const dy =
       (event.clientY - gesture.startY) / gesture.scale;
 
-    gesture.nextX = roundCanvasCoord(gesture.baseX + dx);
+    /* =====================================================
+       HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 후속 — 화면 가장자리에서
+       **화면과 저장값이 함께** 멈춘다(계약 §30-4-1).
+
+       render.css §7 이 표시 쪽에서 이미 이 범위로 자른다. 저장값을
+       자르지 않으면 가장자리에서 더 끄는 동안 화면은 멈추고 x 만
+       계속 바뀐다 — 확정 뒤에도 튀지는 않지만 "지금 보이는 자리"가
+       저장된 자리가 아니게 된다.
+
+       ★ 누적 식(`baseX + dx`)은 그대로 두고 **결과만** 자른다.
+         매 프레임 기준을 옮기면 반올림이 쌓인다(§17-3).
+    ====================================================== */
+    gesture.nextX =
+      roundCanvasCoord(
+        clampCanvasPageX(gesture.baseX + dx, gesture.pageBounds));
+
     gesture.nextY = roundCanvasCoord(gesture.baseY + dy);
 
     try {
@@ -4487,6 +4977,16 @@ export function createHomeCanvasSelectionFrame(options) {
       return gate("moveable-control");
     }
 
+    /* ★ 이동 손잡이도 같다(HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 ·
+       계약 §30-2). 위 판정은 요소의 **class** 에 `moveable-` 이
+       들어 있는가인데(번들 실측 — `isMoveableElement`), 우리 손잡이는
+       라이브러리가 만든 것이 아니라 그 이름이 없다. 이 줄이 없으면
+       손잡이를 짚은 드래그가 lasso 로도 읽혀 **방금 고른 것이
+       풀린다**(2026-09-22 실측: 이동은 저장됐는데 선택이 비었다). */
+    if (nodeIsMoveGrip(target)) {
+      return gate("move-grip");
+    }
+
     /* =====================================================
        HOME-CANVAS-TRANSFORM-1A — 요소 위에서 시작한 끌기는
        lasso 가 아니다(§17-2).
@@ -5090,6 +5590,22 @@ export function createHomeCanvasSelectionFrame(options) {
 
     }
 
+    /* 이동 손잡이는 control box 의 자식이라 대개 함께 사라지지만,
+       라이브러리가 그 상자를 남겨 두는 경우가 있다(markControlBox 의
+       ★) — 우리가 만든 것은 우리가 걷는다. */
+    if (state.moveGrip && state.moveGrip.parentElement) {
+      state.moveGrip.parentElement.removeChild(state.moveGrip);
+    }
+
+    state.moveGrip = null;
+
+    if (state.layoutRaf) {
+      win.cancelAnimationFrame(state.layoutRaf);
+      state.layoutRaf = 0;
+    }
+
+    state.layoutSettle = 0;
+
     state.listeners.forEach(
       ([target, type, handler]) => {
         target.removeEventListener(type, handler, true);
@@ -5125,6 +5641,68 @@ export function createHomeCanvasSelectionFrame(options) {
     cancelDrag("pointercancel");
 
   });
+
+
+  /* =========================================================
+     HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 후속 — 창 폭이 바뀌면
+     프레임의 자리 · 폭을 다시 알린다(계약 §30-3-1)
+
+     ★ 따라가기 루프만으로는 모자란다. 그 루프는 **선택이 있을 때만**
+       돌기 때문에, 아무것도 고르지 않은 채 창 폭을 바꾸거나
+       MOBILE/DESKTOP 을 전환하면 부모가 든 `w` 는 앞 화면의 것이다.
+       그 상태에서 곧바로 묶기 · 빼기를 누르면 옛 폭으로 변환된다
+       (2026-09-22 실측: 1280 시절의 0.234375 가 960 화면에 남아
+       있었다).
+
+     ★ **여러 프레임에 걸쳐** 다시 잰다. 전환이 한 프레임에 끝나지
+       않을 수 있고(레이아웃 · 애니메이션), 값이 그대로면 메시지는
+       나가지 않는다(`layoutShape` 지문). 그래서 헛도는 비용이 없다.
+
+     ★ ResizeObserver 를 켜지 않는다 — 관측기를 두 벌 두지 않는다는
+       이 파일의 규칙 그대로다(displayOnlyMoveableOptions 의 ★).
+       `resize` 는 이 프레임 문서의 뷰포트가 바뀔 때 오고, 그것이
+       곧 `100vw` · `100cqw` 가 바뀌는 때다.
+  ========================================================== */
+
+  on(win, "resize", function () {
+    scheduleLayoutResettle();
+  });
+
+
+  function scheduleLayoutResettle() {
+
+    if (state.disposed || !state.editing) {
+      return;
+    }
+
+    state.layoutSettle = CANVAS_LAYOUT_SETTLE_FRAMES;
+
+    if (state.layoutRaf) {
+      return;
+    }
+
+    const step = () => {
+
+      state.layoutRaf = 0;
+
+      if (state.disposed || !state.editing) {
+        state.layoutSettle = 0;
+        return;
+      }
+
+      reportLayout();
+
+      state.layoutSettle -= 1;
+
+      if (state.layoutSettle > 0) {
+        state.layoutRaf = win.requestAnimationFrame(step);
+      }
+
+    };
+
+    state.layoutRaf = win.requestAnimationFrame(step);
+
+  }
 
 
   /* =========================================================

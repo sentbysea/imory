@@ -2138,17 +2138,44 @@ async function run() {
       const wideLabel = at(wide, "canvas_v2main", "canvas_v2label");
       const wideTag = at(wide, "canvas_v2main", "canvas_v2tag");
 
-      check("★ 780px — 화면 배율은 transform 과 pin **둘 다** 받는다(정확히 두 배)",
-        near(wideFrame.w, 600, 1) &&
-        near(widePaper.w, 600, 1) && near(widePaper.h, 300, 1) &&
-        near(widePhoto.w, 400, 1) &&
-        near(wideLabel.w, 80, 1) && near(wideLabel.h, 44, 1) &&
-        near(wideTag.w, 80, 1),
-        JSON.stringify([widePaper.w, widePhoto.w, wideLabel.w, wideTag.w]));
+      /* =================================================
+         HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 데스크톱 최대 폭
+         (계약 §30-3)
 
-      check("★ 780px — 기준점도 두 배다(태그 중심 320 → 640 · 라벨 중심 −8 → −16)",
-        near(wideTag.cx, 640, 1.5) && near(wideLabel.cx, -16, 1.5),
+         V2-MAIN-VISUAL-1 은 여기서 "정확히 두 배"를 못박았다 —
+         도화지가 넓어지면 프레임도 그 배율을 그대로 받았다. 그대로
+         두면 200×250 사진이 데스크톱에서 화면을 덮는다(수동 테스트
+         이미지 3). 이제 프레임은 **저장된 설계 폭**에서 멈춘다.
+
+         ★ 안쪽은 전부 프레임 상자의 백분율이므로 사진 · 종이 ·
+           테이프 · 인덱스가 **같은 비율로** 함께 멈춘다 — 390px 의
+           그 숫자 그대로다. 기준점도 그대로다.
+      ================================================== */
+      check("★ 780px — 메인 비주얼은 설계 폭에서 멈춘다(두 배가 되지 않는다)",
+        near(wideFrame.w, 300, 1) &&
+        near(widePaper.w, 300, 1) && near(widePaper.h, 150, 1) &&
+        near(widePhoto.w, 200, 1) &&
+        near(wideLabel.w, 40, 1) && near(wideLabel.h, 22, 1) &&
+        near(wideTag.w, 40, 1),
+        JSON.stringify([wideFrame.w, widePaper.w, widePhoto.w, wideLabel.w, wideTag.w]));
+
+      check("★ 780px — 기준점은 390px 의 그 자리 그대로다(태그 중심 320 · 라벨 중심 −8)",
+        near(wideTag.cx, 320, 1.5) && near(wideLabel.cx, -8, 1.5),
         `${wideTag.cx} / ${wideLabel.cx}`);
+
+      check("★ 780px — 프레임은 여전히 가운데다(상한이 물려도 가장자리로 붙지 않는다)",
+        near(wideFrame.x + wideFrame.w / 2, 390, 2),
+        `${wideFrame.x} + ${wideFrame.w}`);
+
+      /* ★ 상한은 **프레임에만** 있다 — 다른 블록은 지금까지처럼
+         도화지 배율을 그대로 받는다(계약 §23-4). */
+      check("★ 780px — 상한은 프레임 하나에만 있다(다른 블록은 두 배 그대로)",
+        near(findBlock(wide, "canvas_v2title").w,
+          findBlock(r, "canvas_v2title").w * 2, 2),
+        JSON.stringify({
+          wide: findBlock(wide, "canvas_v2title").w,
+          base: findBlock(r, "canvas_v2title").w
+        }));
 
       check("★ 백분율 문자열이 두 폭에서 **같다**(부모 배율을 중복 보정하지 않는다)",
         same(wide.blocks.find((b) => b.editId === "canvas_v2main").inner.map((n) => n.vars),

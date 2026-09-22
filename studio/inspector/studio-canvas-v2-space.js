@@ -606,7 +606,17 @@ function setStudioCanvasFrameLayout(frames, blocks, look) {
         return;
       }
 
-      next[frame.id] = { x: frame.x, y: frame.y };
+      /* HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 그려진 폭(계약 §30-3).
+         옛 프레임 문서는 보내지 않는다 — 그때는 지금까지처럼
+         저장값에서 계산한다. */
+      next[frame.id] = {
+        x: frame.x,
+        y: frame.y,
+        w:
+          (typeof frame.w === "number" && Number.isFinite(frame.w) && frame.w > 0)
+            ? frame.w
+            : null
+      };
 
     }
   );
@@ -706,6 +716,55 @@ function studioCanvasV2MeasuredHeight(id) {
 }
 
 
+/* =========================================================
+   studioCanvasV2FramePageScale(payload, frame, blockId)
+   (HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 · 계약 §30-3)
+
+   프레임 상자 자 ↔ **도화지 자**의 배율. 없으면 1 이다.
+
+   ── 왜 1 이 아닌 때가 생겼나 ───────────────────────────
+   V2-ELEMENTS-1 까지 이 둘은 **같은 자**였다. 프레임 상자의 폭이 곧
+   `frame.width` 도화지 단위였기 때문이다(§24-3). 데스크톱 최대
+   폭(§30-3)이 생기면서, 화면이 설계 폭보다 넓으면 프레임은 저장값이
+   말하는 폭보다 좁게 그려진다 — 그만큼 두 자가 갈린다.
+
+     k = 그려진 폭(도화지 단위) ÷ frame.width
+
+   ── 무엇에 쓰고 무엇에 쓰지 않는가 ─────────────────────
+   **도화지 ↔ 프레임 상자**를 오가는 계산에만 쓴다 — 묶기와 빼기
+   둘이다. 그 밖의 자는 전부 저장 공간 안에서만 도므로 k 와 무관하다:
+
+     `frame.scale`(로컬 ↔ 프레임 상자)   저장값끼리의 비다
+     pin 의 자(프레임 상자)              저장값 그대로다
+     프레임이 재는 배율                  DOM 을 재므로 이미 맞다
+
+   ★ 보고가 없으면(옛 프레임 문서 · 아직 첫 보고 전) 1 이다 —
+     지금까지의 그 계산으로 돌아간다. 숫자를 지어내지 않는다.
+========================================================== */
+function studioCanvasV2FramePageScale(payload, frame, blockId) {
+
+  if (!payload || !frame || !(frame.width > 0) || !(payload.baseWidth > 0)) {
+    return 1;
+  }
+
+  const hit =
+    (typeof blockId === "string" &&
+      Object.prototype.hasOwnProperty.call(studioCanvasV2FrameLayout, blockId))
+      ? studioCanvasV2FrameLayout[blockId]
+      : null;
+
+  if (!hit || typeof hit.w !== "number" || !(hit.w > 0)) {
+    return 1;
+  }
+
+  const k =
+    (hit.w * payload.baseWidth) / frame.width;
+
+  return (Number.isFinite(k) && k > 0) ? k : 1;
+
+}
+
+
 /* 그 프레임의 왼쪽 위 — **Canvas 좌표**. 보고가 없으면 null 이다 */
 function studioCanvasV2FrameOrigin(frameId) {
 
@@ -785,7 +844,17 @@ function studioCanvasV2FrameSpace(payload, frameId) {
   const origin =
     studioCanvasV2FrameOrigin(frameId);
 
-  return origin ? { block: block, frame: frame, origin: origin } : null;
+  return origin
+    ? {
+        block: block,
+        frame: frame,
+        origin: origin,
+
+        /* HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 프레임 상자 자 ↔
+           도화지 자의 배율. 묶기 · 빼기만 쓴다(계약 §30-3). */
+        pageScale: studioCanvasV2FramePageScale(payload, frame, frameId)
+      }
+    : null;
 
 }
 
@@ -927,8 +996,11 @@ function planStudioCanvasV2Attach(elementId, frameId) {
     return { ok: false, reason: "space" };
   }
 
+  /* 도화지 자 → 로컬 자. `frame.scale` 은 로컬 ↔ 프레임 상자이고,
+     프레임 상자 ↔ 도화지는 `pageScale` 이다(계약 §30-3) —
+     상한이 물리지 않은 화면에서는 그 값이 1 이라 지금까지와 같다. */
   const s =
-    space.frame.scale;
+    space.frame.scale * space.pageScale;
 
   return {
     ok: true,
@@ -982,13 +1054,21 @@ function planStudioCanvasV2Detach(elementId) {
     return { ok: false, reason: box.reason };
   }
 
+  /* 프레임 상자 자 → 도화지 자(계약 §30-3). 상한이 물리지 않은
+     화면에서는 1 이라 지금까지와 같은 식이다. */
+  const k =
+    space.pageScale;
+
   return {
     ok: true,
     next: {
-      x: studioCanvasV2Round(space.origin.x + box.x),
-      y: studioCanvasV2Round(space.origin.y + box.y),
-      width: studioCanvasV2Round(box.width),
-      height: box.height === "auto" ? "auto" : studioCanvasV2Round(box.height)
+      x: studioCanvasV2Round(space.origin.x + box.x * k),
+      y: studioCanvasV2Round(space.origin.y + box.y * k),
+      width: studioCanvasV2Round(box.width * k),
+      height:
+        box.height === "auto"
+          ? "auto"
+          : studioCanvasV2Round(box.height * k)
     }
   };
 

@@ -1095,10 +1095,12 @@ function handleSandboxInspect(kind, payload) {
     sandboxInspectRelay({
       type: "preview:canvas-layout",
       remote: true,
+      /* `w` 는 HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 이 더한 **그려진
+         폭**이다(계약 §30-3) */
       frames:
         Array.isArray(payload.frames)
           ? payload.frames.map(
-              (frame) => ({ id: frame.id, x: frame.x, y: frame.y })
+              (frame) => ({ id: frame.id, x: frame.x, y: frame.y, w: frame.w })
             )
           : [],
 

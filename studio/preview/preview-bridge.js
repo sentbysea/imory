@@ -2407,8 +2407,10 @@ function ensureCanvasFrameController() {
 
               postToParent({
                 type: PREVIEW_MSG_CANVAS_LAYOUT,
+                /* `w` 는 HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 이 더한
+                   **그려진 폭**이다(계약 §30-3) */
                 frames: layout.frames.map(
-                  (frame) => ({ id: frame.id, x: frame.x, y: frame.y })
+                  (frame) => ({ id: frame.id, x: frame.x, y: frame.y, w: frame.w })
                 ),
 
                 /* HOME-CANVAS-V2-MANUAL-FIX-1 — 블록의 그려진 높이

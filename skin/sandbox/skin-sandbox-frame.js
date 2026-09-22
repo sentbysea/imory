@@ -1237,9 +1237,11 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
                 send(SANDBOX_MESSAGE_TYPES.CANVAS_LAYOUT, {
                   contract: 1,
                   renderSeq: FRAME_STATE.renderSeq,
+                  /* `w` 는 HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 이 더한
+                     **그려진 폭**이다(계약 §30-3) */
                   frames: layout.frames.map(
                     function (frame) {
-                      return { id: frame.id, x: frame.x, y: frame.y };
+                      return { id: frame.id, x: frame.x, y: frame.y, w: frame.w };
                     }
                   ),
 

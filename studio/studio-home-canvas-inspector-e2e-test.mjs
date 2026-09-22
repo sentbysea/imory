@@ -4160,8 +4160,20 @@ async function main() {
         typeof layout.v2Main.x === "number" && layout.v2Main.y > 0,
         JSON.stringify(layout));
 
-      check("★ 보고는 자리 하나뿐이다(폭 · 높이는 저장값이 준다)",
-        !!layout && Object.keys(layout.v2Main).join(",") === "x,y",
+      /* =====================================================
+         HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 보고에 **폭**이 더해졌다
+         (계약 §30-3)
+
+         V2-ELEMENTS-1 은 "자리 하나뿐"을 못박았다. 프레임 폭이
+         저장값에서 언제나 계산됐기 때문이다(§24-3). 데스크톱 최대
+         폭이 생기면서 그것이 더는 참이 아니다 — 화면이 설계 폭보다
+         넓으면 프레임은 저장값보다 좁게 그려지고, 묶기 · 빼기는 그
+         **그려진 폭**을 알아야 한다. 높이는 여전히 보내지 않는다
+         (상자 비율이 가로 · 세로를 함께 줄인다).
+      ====================================================== */
+      check("★ 보고는 자리와 그려진 폭이다(높이는 상자 비율이 준다)",
+        !!layout && Object.keys(layout.v2Main).sort().join(",") === "w,x,y" &&
+        typeof layout.v2Main.w === "number" && layout.v2Main.w > 0,
         JSON.stringify(layout && layout.v2Main));
 
 
@@ -4883,6 +4895,333 @@ async function main() {
         page.__errors.slice(0, 2).join(" | "));
 
       await close(page);
+
+    }
+
+
+    /* ======================================================
+       [v2resp] 창 폭이 바뀐 직후의 좌표 (계약 §30-3-1 · §30-4-1)
+
+       §30 이 남긴 두 가지를 본다.
+
+         1. 창 폭 · MOBILE/DESKTOP 전환 **직후 곧바로** 묶기 · 빼기를
+            해도 그 순간 실제로 그려진 프레임 폭 · 자리를 기준으로
+            변환되는가(= 앞 화면의 `CANVAS_LAYOUT.w` 를 쓰지 않는가).
+         2. 화면 가장자리에서 장식을 끌 때 **화면만 멈추고 저장 x 만
+            변하는** 상태가 없는가 — 제스처 중 자리 · 확정 뒤 자리 ·
+            Undo 뒤 자리가 어긋나지 않는가.
+
+       두 경우 모두 390 ↔ 데스크톱, native ↔ sandbox 에서 돈다.
+    ====================================================== */
+    if (wants("v2resp")) {
+
+      section("v2resp");
+
+      /* 그 요소가 지금 화면에서 **도화지 자로** 어디에 있나
+         ([v2elements] 의 canvasPlace 와 같은 식이다) */
+      const place = async (page, frame, sandbox, id) => {
+
+        const sels = [byId(id), "[data-imory-canvas-root]"];
+
+        const rects =
+          sandbox
+            ? await sandboxRects(page, frame, sels)
+            : await nativeRects(page, sels);
+
+        const el = rects[sels[0]];
+        const root = rects[sels[1]];
+
+        if (!el || !root || !(root.width > 0)) {
+          return null;
+        }
+
+        const to = (v) => Math.round(v / root.width * 390 * 10) / 10;
+
+        return {
+          x: to(el.left - root.left),
+          y: to(el.top - root.top),
+          w: to(el.width),
+          h: to(el.height)
+        };
+
+      };
+
+      const near = (a, b, slack) =>
+        !!a && !!b &&
+        Math.abs(a.x - b.x) <= (slack || 2) &&
+        Math.abs(a.y - b.y) <= (slack || 2) &&
+        Math.abs(a.w - b.w) <= (slack || 2) &&
+        Math.abs(a.h - b.h) <= (slack || 2);
+
+      /* 프레임이 지금 **실제로** 그려진 폭(도화지 폭의 분수) */
+      const drawnFraction = async (page, frame, sandbox, id) => {
+
+        const sels = [byId(id), "[data-imory-canvas-root]"];
+
+        const rects =
+          sandbox
+            ? await sandboxRects(page, frame, sels)
+            : await nativeRects(page, sels);
+
+        const el = rects[sels[0]];
+        const root = rects[sels[1]];
+
+        return (el && root && root.width > 0) ? (el.width / root.width) : null;
+
+      };
+
+      const reportedFraction = (page, id) =>
+        page.evaluate((frameId) => {
+          const all =
+            window.getStudioCanvasFrameLayout
+              ? window.getStudioCanvasFrameLayout()
+              : null;
+          const hit = all ? all[frameId] : null;
+          return hit && typeof hit.w === "number" ? hit.w : null;
+        }, id);
+
+      const selected = (p) =>
+        p.evaluate(() => {
+          const s = window.getStudioCanvasSelection();
+          return s && s.primaryId ? s.primaryId : null;
+        });
+
+      /* 선택을 푼다 — 따라가기 루프가 멈춘 상태를 만든다 */
+      const deselect = async (page) => {
+        await page.keyboard.press("Escape");
+        await sleep(500);
+      };
+
+      /* 390 에서는 왼쪽 패널이 **시트**다(MOBILE-SHEET-1) — `peek` 인
+         동안 그 안의 버튼은 화면에 없다. 누르기 전에 한 칸 올린다. */
+      const openPanel = async (page) => {
+
+        const opened =
+          await page.evaluate(() => {
+
+            if (typeof window.getStudioSheetState !== "function") {
+              return "no-sheet";
+            }
+
+            if (window.getStudioSheetState() !== "peek") {
+              return window.getStudioSheetState();
+            }
+
+            if (typeof window.setStudioSheetState === "function") {
+              window.setStudioSheetState("content");
+              return window.getStudioSheetState();
+            }
+
+            return "stuck";
+
+          });
+
+        if (opened !== "no-sheet") {
+          await sleep(400);
+        }
+
+      };
+
+      /* 가장자리 장식을 하나 더 얹는다 — 공용 fixture 의 overlay 수를
+         세는 다른 절을 건드리지 않으려고 이 절에서만 더한다 */
+      const respPackage = (sandbox) => {
+
+        const pkg = v2Package({ sandbox: sandbox });
+
+        const canvas =
+          pkg.regions.find((r) => r.name === "home_canvas").canvas;
+
+        canvas.overlays.push({
+          id: "v2Edge", type: "text",
+          x: 4, y: 760, width: 90, height: 30, rotation: 0,
+          props: { text: "edge", role: "label" }
+        });
+
+        return pkg;
+
+      };
+
+      for (const sandbox of [false, true]) {
+
+        const realm = sandbox ? "sandbox" : "native";
+
+        const page = await openStudio(browser, {
+          package: respPackage(sandbox),
+          sandbox: sandbox
+        });
+
+        const frame = await canvasFrame(page, sandbox);
+
+        await enableCanvasEditing(page);
+
+        /* ---- 1. 선택이 없는 채로 창 폭을 바꿔도 보고가 따라온다 ---- */
+
+        await deselect(page);
+
+        await page.setViewportSize({ width: 390, height: 900 });
+        await sleep(250);
+
+        const narrowDrawn = await drawnFraction(page, frame, sandbox, "v2Main");
+        const narrowSaid = await reportedFraction(page, "v2Main");
+
+        check(`★ [${realm}] 390 전환 직후 — 보고된 폭이 그 순간 그려진 폭이다`,
+          narrowDrawn !== null && narrowSaid !== null &&
+          Math.abs(narrowDrawn - narrowSaid) < 0.01,
+          `그려진 ${narrowDrawn} · 보고 ${narrowSaid}`);
+
+        /* ---- 2. 그 자리에서 곧바로 묶기 · 빼기 ---- */
+
+        await clickElement(page, frame, sandbox, "v2Over");
+
+        check(`[${realm}] 390 에서 페이지 장식을 고를 수 있다`,
+          (await selected(page)) === "v2Over", await selected(page));
+
+        const beforeAttach = await place(page, frame, sandbox, "v2Over");
+
+        await openPanel(page);
+        await page.click("#studioCanvasAttach");
+        await sleep(1000);
+
+        const afterAttach = await place(page, frame, sandbox, "v2Over");
+
+        check(`★ [${realm}] 390 전환 직후 묶어도 화면 자리가 그대로다`,
+          near(beforeAttach, afterAttach),
+          JSON.stringify({ b: beforeAttach, a: afterAttach }));
+
+        await openPanel(page);
+        await page.click("#studioCanvasDetach");
+        await sleep(1000);
+
+        const afterDetach = await place(page, frame, sandbox, "v2Over");
+
+        check(`★ [${realm}] 390 에서 빼도 화면 자리가 그대로다`,
+          near(beforeAttach, afterDetach),
+          JSON.stringify({ b: beforeAttach, a: afterDetach }));
+
+        /* ---- 3. 데스크톱으로 돌아온 직후에도 같다 ---- */
+
+        await deselect(page);
+
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await sleep(250);
+
+        const wideDrawn = await drawnFraction(page, frame, sandbox, "v2Main");
+        const wideSaid = await reportedFraction(page, "v2Main");
+
+        check(`★ [${realm}] 데스크톱 복귀 직후 — 보고된 폭이 그 순간 그려진 폭이다`,
+          wideDrawn !== null && wideSaid !== null &&
+          Math.abs(wideDrawn - wideSaid) < 0.01 &&
+          Math.abs(wideDrawn - narrowDrawn) > 0.05,
+          `390 ${narrowDrawn} → 1280 그려진 ${wideDrawn} · 보고 ${wideSaid}`);
+
+        await clickElement(page, frame, sandbox, "v2Over");
+
+        const beforeWide = await place(page, frame, sandbox, "v2Over");
+
+        await openPanel(page);
+        await page.click("#studioCanvasAttach");
+        await sleep(1000);
+
+        const afterWide = await place(page, frame, sandbox, "v2Over");
+
+        check(`★ [${realm}] 데스크톱 복귀 직후 묶어도 화면 자리가 그대로다`,
+          near(beforeWide, afterWide),
+          JSON.stringify({ b: beforeWide, a: afterWide }));
+
+        await openPanel(page);
+        await page.click("#studioCanvasDetach");
+        await sleep(1000);
+
+        check(`★ [${realm}] 데스크톱에서 빼도 화면 자리가 그대로다`,
+          near(beforeWide, await place(page, frame, sandbox, "v2Over")),
+          JSON.stringify(await place(page, frame, sandbox, "v2Over")));
+
+        /* ---- 4. 가장자리 드래그 — 화면과 저장값이 함께 멈춘다 ---- */
+
+        await page.setViewportSize({ width: 390, height: 900 });
+        await sleep(800);
+
+        const storedX = (p) =>
+          p.evaluate(() => {
+            const n = window.studioCanvasDraftElement("v2Edge");
+            return n ? n.x : null;
+          });
+
+        /* ★ 먼저 푼다 — 바로 앞 걸음에서 고른 것이 남아 있으면 그
+           위에서 시작한 클릭이 "겹친 요소" 로 읽힐 수 있다. 한 번
+           빗나가면 다시 한 번 짚는다(재렌더 직후의 좌표). */
+        await deselect(page);
+
+        await clickElement(page, frame, sandbox, "v2Edge");
+
+        if ((await selected(page)) !== "v2Edge") {
+          await sleep(600);
+          await clickElement(page, frame, sandbox, "v2Edge");
+        }
+
+        check(`[${realm}] 가장자리 장식을 고를 수 있다`,
+          (await selected(page)) === "v2Edge", await selected(page));
+
+        const startPlace = await place(page, frame, sandbox, "v2Edge");
+        const startStored = await storedX(page);
+
+        const rects =
+          sandbox
+            ? await sandboxRects(page, frame, [byId("v2Edge")])
+            : await nativeRects(page, [byId("v2Edge")]);
+
+        const box = rects[byId("v2Edge")];
+
+        const cx = box.left + box.width / 2;
+        const cy = box.top + box.height / 2;
+
+        await page.mouse.move(cx, cy);
+        await page.mouse.down();
+
+        for (let i = 1; i <= 12; i += 1) {
+          await page.mouse.move(cx - i * 5, cy);
+        }
+
+        const duringPlace = await place(page, frame, sandbox, "v2Edge");
+
+        await page.mouse.up();
+        await sleep(1000);
+
+        const endPlace = await place(page, frame, sandbox, "v2Edge");
+        const endStored = await storedX(page);
+
+        check(`★ [${realm}] 가장자리에서 끌면 확정 뒤 자리가 제스처 중 자리와 같다`,
+          near(duringPlace, endPlace),
+          JSON.stringify({ d: duringPlace, e: endPlace }));
+
+        check(`★ [${realm}] 저장된 x 가 **보이는 자리**다(화면만 멈추지 않는다)`,
+          endStored !== null && endPlace !== null &&
+          Math.abs(endStored - endPlace.x) <= 1.5,
+          `저장 ${endStored} · 화면 ${endPlace && endPlace.x}`);
+
+        check(`★ [${realm}] 가장자리 밖으로는 저장값도 나가지 않는다`,
+          startStored !== null && endStored !== null && endStored < startStored &&
+          endStored >= -1.5,
+          `${startStored} → ${endStored}`);
+
+        await page.click("#studioUndoButton");
+        await sleep(900);
+
+        check(`★ [${realm}] Undo 가 끌기 전 자리로 정확히 돌린다`,
+          near(startPlace, await place(page, frame, sandbox, "v2Edge")) &&
+          (await storedX(page)) === startStored,
+          JSON.stringify({ s: startPlace, u: await place(page, frame, sandbox, "v2Edge") }));
+
+        if (sandbox) {
+          check("sandbox CSP 위반 0", (await cspViolations(frame)).length === 0);
+        }
+
+        check(`[${realm}] pageerror 0`, page.__errors.length === 0,
+          page.__errors.slice(0, 2).join(" | "));
+
+        await close(page);
+
+      }
 
     }
 

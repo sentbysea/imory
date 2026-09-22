@@ -236,7 +236,37 @@ const SKIN_CANVAS_RENDER_BLOCK_VARS = {
     그 이유).
   */
   frameRatioWidth: "--imory-canvas-frame-ratio-width",
-  frameRatioHeight: "--imory-canvas-frame-ratio-height"
+  frameRatioHeight: "--imory-canvas-frame-ratio-height",
+
+  /*
+    HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 프레임의 **데스크톱 최대 폭**
+    (계약 §30-3)
+
+    프레임 상자의 폭을 **저장값 그대로의 px** 로 한 번 더 적는다.
+    도화지가 `baseWidth` 보다 넓어져도(데스크톱) 메인 비주얼은 그
+    폭에서 멈춘다 — 사진 · 종이 · 테이프가 화면 폭을 따라 같이
+    커지던 것이 이 한 칸이다.
+
+    ★ 다른 블록에는 붙지 않는다. 글자 · 구분선 · 카테고리는 지금까지
+      대로 도화지 배율을 그대로 받는다(§23-4).
+
+    ★ 안쪽 좌표는 한 칸도 바뀌지 않는다 — 내부 요소는 전부 프레임
+      상자의 **백분율**이므로(§24-3 · §24-4) 상자가 작아지면 사진과
+      `transform` · `pin` 장식이 **같은 비율로** 함께 작아진다. 기준점
+      (anchor · origin)은 그대로다.
+  */
+  frameMaxWidth: "--imory-canvas-frame-max-width",
+
+  /*
+    프레임 **상자**의 비율 — `frame.width : frame.height`.
+
+    위 `frameRatio*` 는 primary 사진 상자의 비율이고 `height:"auto"`
+    프레임의 높이를 정한다. 이쪽은 **모든** 프레임의 상자 비율이고,
+    데스크톱 최대 폭이 물렸을 때 높이를 같은 비율로 줄이는 데 쓴다
+    (render.css §5). 두 값은 `"auto"` 프레임에서 같은 수다.
+  */
+  frameBoxRatioWidth: "--imory-canvas-frame-box-ratio-width",
+  frameBoxRatioHeight: "--imory-canvas-frame-box-ratio-height"
 };
 
 
@@ -1776,6 +1806,42 @@ function buildSkinCanvasBlockNode(doc, block, metrics, context, gap) {
       SKIN_CANVAS_RENDER_BLOCK_VARS.frameRatioHeight,
       isSkinCanvasRenderNumber(frame.ratioHeight)
         ? skinCanvasRenderTrimNumber(frame.ratioHeight)
+        : null
+    );
+
+    /*
+      데스크톱 최대 폭 — 프레임 상자의 폭을 **px 로** 한 번 더
+      (HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 · 계약 §30-3).
+
+      `frame.width` 는 CSS 가 백분율로 푸는 그 폭과 **같은 식**에서
+      나온 도화지 자 위의 숫자다(resolveSkinCanvasBlockWidth). 도화지
+      폭이 `baseWidth` 와 같을 때(=모바일) 백분율의 결과가 정확히 이
+      px 이므로 그 아래에서는 이 상한이 물리지 않고, 도화지가 넓어진
+      만큼만 상한이 된다 — 지어낸 숫자가 아니라 **저장된 설계 크기**다.
+    */
+    setSkinCanvasRenderVar(
+      node,
+      SKIN_CANVAS_RENDER_BLOCK_VARS.frameMaxWidth,
+      isSkinCanvasRenderNumber(frame.width) && frame.width > 0
+        ? skinCanvasRenderTrimNumber(frame.width) + "px"
+        : null
+    );
+
+    /* 상자의 비율 — 상한이 물리면 높이도 같은 비율로 줄어든다
+       (render.css §5 · 계약 §30-3) */
+    setSkinCanvasRenderVar(
+      node,
+      SKIN_CANVAS_RENDER_BLOCK_VARS.frameBoxRatioWidth,
+      isSkinCanvasRenderNumber(frame.width) && frame.width > 0
+        ? skinCanvasRenderTrimNumber(frame.width)
+        : null
+    );
+
+    setSkinCanvasRenderVar(
+      node,
+      SKIN_CANVAS_RENDER_BLOCK_VARS.frameBoxRatioHeight,
+      isSkinCanvasRenderNumber(frame.height) && frame.height > 0
+        ? skinCanvasRenderTrimNumber(frame.height)
         : null
     );
 
