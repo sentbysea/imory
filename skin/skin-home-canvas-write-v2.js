@@ -622,6 +622,256 @@ function writeSkinHomeCanvasV2NodeText(regions, id, next, expected) {
 
 
 /* =========================================================
+   3-2. 자리 · 크기 · 각도 — 프레임 내부 요소와 overlay
+        (HOME-CANVAS-V2-EDITOR-1B)
+
+   ★ **블록에는 없는 칸이다.** 블록의 자리는 순서 · 정렬 · 여백이
+     정하고(§14-10 의 책임 표), 좌표를 갖는 것은 `main_visual` 내부
+     요소와 페이지 `overlays` 둘뿐이다. 그래서 아래 writer 들은
+     `kinds` 로 그 둘만 받는다 — 블록 id 로 부르면 "kind" 로 거부다.
+
+   ── 두 규칙이 서로 다른 칸을 쓴다 ──────────────────────
+
+     follow:"transform" · overlay   x · y            (좌표를 직접)
+     follow:"pin"                   pin.offset.x · y (기준점에서 얼마나)
+
+   그래서 writer 도 갈라진다. 한 함수에 담아 `follow` 로 분기하면
+   `next.x` 가 어떤 때는 좌표고 어떤 때는 offset 이 되어, 부르는 쪽이
+   틀리면 조용히 엉뚱한 칸이 저장된다. 이름이 다르면 그 길이 없다.
+
+     writeSkinHomeCanvasV2NodePosition  x · y
+     writeSkinHomeCanvasV2NodeBox       x · y · width · height
+     writeSkinHomeCanvasV2NodePinOffset offsetX · offsetY
+     writeSkinHomeCanvasV2NodePinBox    offsetX · offsetY · width · height
+     writeSkinHomeCanvasV2NodeRotation  rotation
+
+   ★ **화면 좌표를 여기까지 들고 오지 않는다.** pin 요소의 화면
+     자리(`기준점 + offset`)를 offset 으로 되돌리는 계산은 부모
+     realm 의 한 곳(studio/inspector/studio-canvas-v2-space.js)이
+     하고, 이 파일은 이미 storage 칸으로 번역된 값만 받는다 —
+     렌더러의 자를 두 벌 만들지 않기 위해서다(계약 §26-3).
+
+   ★ `height:"auto"` 를 쓸 수 있는 종류는 **v1 의 표**다. 프레임
+     내부 요소와 overlay 는 v1 요소와 같은 모양이므로(§14-8)
+     `SKIN_HOME_CANVAS_AUTO_HEIGHT_TYPES` 를 그대로 본다 — 블록의
+     표(SKIN_HOME_CANVAS_BLOCK_AUTO_HEIGHT_TYPES)와 다른 표다.
+========================================================== */
+
+/* 좌표를 갖는 자리 — 블록은 여기 없다 */
+const SKIN_HOME_CANVAS_V2_FREE_KINDS = ["frame-element", "overlay"];
+
+
+/* 그 요소가 `height:"auto"` 를 쓸 수 있는가(v1 §6 의 표) */
+function skinHomeCanvasV2NodeAutoHeightAllowed(node) {
+
+  return (
+    isSkinHomeCanvasPlainObject(node) &&
+    SKIN_HOME_CANVAS_AUTO_HEIGHT_TYPES.indexOf(node.type) !== -1
+  );
+
+}
+
+
+/*
+  지금 그 요소가 **pin 으로 놓이는가**.
+
+  ★ `hit.kind` 를 함께 본다. overlay 에 `follow:"pin"` 이 적혀 있어도
+    그것은 **모르는 칸**이고(§14-8 — overlay 는 v1 요소 판정을 쓴다)
+    렌더러도 그 칸을 읽지 않는다. 데이터에 적힌 글자 하나로 저장
+    경로가 갈리면, 화면과 저장이 서로 다른 규칙을 보게 된다.
+*/
+function skinHomeCanvasV2NodeIsPinned(node, hit) {
+
+  return !!(hit && hit.kind === "frame-element" && node && node.follow === "pin");
+
+}
+
+
+/* x · y · width · height 의 값 검사 — v1 의 그 규칙 그대로다 */
+function skinHomeCanvasV2CheckBoxValue(value, node, keys) {
+
+  if (keys.indexOf("x") !== -1) {
+
+    if (!isSkinHomeCanvasCoord(value.x) || !isSkinHomeCanvasCoord(value.y)) {
+      return "coord";
+    }
+
+  }
+
+  if (keys.indexOf("offsetX") !== -1) {
+
+    if (!isSkinHomeCanvasCoord(value.offsetX) || !isSkinHomeCanvasCoord(value.offsetY)) {
+      return "coord";
+    }
+
+  }
+
+  if (keys.indexOf("width") === -1) {
+    return null;
+  }
+
+  if (!isSkinHomeCanvasSize(value.width)) {
+    return "size";
+  }
+
+  if (value.height === SKIN_HOME_CANVAS_AUTO_HEIGHT) {
+    return skinHomeCanvasV2NodeAutoHeightAllowed(node) ? null : "auto";
+  }
+
+  return isSkinHomeCanvasSize(value.height) ? null : "size";
+
+}
+
+
+/*
+  pin 의 지금 값. `pin` 이 통째로 빠져 있을 수 있고, 그때 offset 은
+  네 칸 기본값 그대로 0 이다(§14-6) — 실행 payload 도 0 을 채워
+  보내므로 패널 · 프레임 · 여기가 **같은 자**를 쓴다.
+*/
+function skinHomeCanvasV2ReadPinField(node, key) {
+
+  if (key !== "offsetX" && key !== "offsetY") {
+    return node[key];
+  }
+
+  const pin =
+    isSkinHomeCanvasPlainObject(node.pin) ? node.pin : {};
+
+  const offset =
+    isSkinHomeCanvasPlainObject(pin.offset) ? pin.offset : {};
+
+  const value =
+    key === "offsetX" ? offset.x : offset.y;
+
+  return isSkinHomeCanvasFiniteNumber(value) ? value : 0;
+
+}
+
+
+/*
+  ★ `pin` 의 나머지 세 칸(`target` · `anchor` · `origin`)과 모르는
+    칸은 그대로 옮긴다. 자리를 옮긴다고 고정 관계가 바뀌지 않는
+    것이 §14-6 이고, 이 라운드가 고치는 것은 offset 두 칸뿐이다.
+*/
+function skinHomeCanvasV2ApplyPinField(nodeCopy, value, node, keys) {
+
+  const pin =
+    copySkinHomeCanvasObject(
+      isSkinHomeCanvasPlainObject(node.pin) ? node.pin : {}
+    );
+
+  const offset =
+    copySkinHomeCanvasObject(
+      isSkinHomeCanvasPlainObject(pin.offset) ? pin.offset : {}
+    );
+
+  offset.x = value.offsetX;
+  offset.y = value.offsetY;
+
+  pin.offset = offset;
+
+  nodeCopy.pin = pin;
+
+  if (keys.indexOf("width") !== -1) {
+    nodeCopy.width = value.width;
+    nodeCopy.height = value.height;
+  }
+
+}
+
+
+function writeSkinHomeCanvasV2NodePosition(regions, id, next, expected) {
+
+  return writeSkinHomeCanvasV2NodeFields(regions, id, next, expected, {
+    keys: ["x", "y"],
+    kinds: SKIN_HOME_CANVAS_V2_FREE_KINDS,
+    checkNext: (value, node, hit) =>
+      skinHomeCanvasV2NodeIsPinned(node, hit)
+        ? "pin"
+        : skinHomeCanvasV2CheckBoxValue(value, node, ["x"])
+  });
+
+}
+
+
+/*
+  ★ 네 칸이 한 요청이다. 폭만 바뀌는 좌우 리사이즈에서도 x · y ·
+    height 가 함께 온다(값이 같을 뿐이다) — v1 §18-2 와 같은 규칙이고
+    같은 이유다(칸마다 메시지를 가르면 중간 상태가 생긴다).
+*/
+function writeSkinHomeCanvasV2NodeBox(regions, id, next, expected) {
+
+  return writeSkinHomeCanvasV2NodeFields(regions, id, next, expected, {
+    keys: ["x", "y", "width", "height"],
+    kinds: SKIN_HOME_CANVAS_V2_FREE_KINDS,
+    checkNext: (value, node, hit) =>
+      skinHomeCanvasV2NodeIsPinned(node, hit)
+        ? "pin"
+        : skinHomeCanvasV2CheckBoxValue(value, node, ["x", "width"])
+  });
+
+}
+
+
+function writeSkinHomeCanvasV2NodePinOffset(regions, id, next, expected) {
+
+  return writeSkinHomeCanvasV2NodeFields(regions, id, next, expected, {
+    keys: ["offsetX", "offsetY"],
+    kinds: ["frame-element"],
+    checkNext: (value, node, hit) =>
+      skinHomeCanvasV2NodeIsPinned(node, hit)
+        ? skinHomeCanvasV2CheckBoxValue(value, node, ["offsetX"])
+        : "pin",
+    readCurrent: skinHomeCanvasV2ReadPinField,
+    applyNext: (nodeCopy, value, node) =>
+      skinHomeCanvasV2ApplyPinField(nodeCopy, value, node, ["offsetX", "offsetY"])
+  });
+
+}
+
+
+function writeSkinHomeCanvasV2NodePinBox(regions, id, next, expected) {
+
+  return writeSkinHomeCanvasV2NodeFields(regions, id, next, expected, {
+    keys: ["offsetX", "offsetY", "width", "height"],
+    kinds: ["frame-element"],
+    checkNext: (value, node, hit) =>
+      skinHomeCanvasV2NodeIsPinned(node, hit)
+        ? skinHomeCanvasV2CheckBoxValue(value, node, ["offsetX", "width"])
+        : "pin",
+    readCurrent: skinHomeCanvasV2ReadPinField,
+    applyNext: (nodeCopy, value, node) =>
+      skinHomeCanvasV2ApplyPinField(
+        nodeCopy, value, node, ["offsetX", "offsetY", "width", "height"])
+  });
+
+}
+
+
+/*
+  ★ 각도는 두 규칙이 같은 칸을 쓴다. 회전 중심이 요소 상자의
+    정중앙이라(§4) `translate` 로 옮긴 pin 장식도 자기 중심을 돌고,
+    그래서 `pin` 과 `transform` 이 나뉠 이유가 없다.
+
+  ★ `rotation` 이 없는 요소의 지금 값은 0 이다(§5). 고르기만 해서는
+    그 칸이 생기지 않고, 실제로 돌린 제스처만 만든다 — v1 §19 와
+    같은 자다.
+*/
+function writeSkinHomeCanvasV2NodeRotation(regions, id, next, expected) {
+
+  return writeSkinHomeCanvasV2NodeFields(regions, id, next, expected, {
+    keys: ["rotation"],
+    kinds: SKIN_HOME_CANVAS_V2_FREE_KINDS,
+    checkNext: (value) =>
+      isSkinHomeCanvasFiniteNumber(value.rotation) ? null : "rotation",
+    readCurrent: (node) =>
+      isSkinHomeCanvasFiniteNumber(node.rotation) ? node.rotation : 0
+  });
+
+}
+
+
+/* =========================================================
    4. 순서 — 배열 안의 자리를 옮긴다
 
    writeSkinHomeCanvasV2BlockOrder(regions, id, next, expected)
@@ -760,6 +1010,13 @@ if (typeof window !== "undefined") {
   window.writeSkinHomeCanvasV2BlockOrder = writeSkinHomeCanvasV2BlockOrder;
   window.writeSkinHomeCanvasV2NodeText = writeSkinHomeCanvasV2NodeText;
 
+  /* HOME-CANVAS-V2-EDITOR-1B — 프레임 내부 요소 · overlay 의 자리 */
+  window.writeSkinHomeCanvasV2NodePosition = writeSkinHomeCanvasV2NodePosition;
+  window.writeSkinHomeCanvasV2NodeBox = writeSkinHomeCanvasV2NodeBox;
+  window.writeSkinHomeCanvasV2NodePinOffset = writeSkinHomeCanvasV2NodePinOffset;
+  window.writeSkinHomeCanvasV2NodePinBox = writeSkinHomeCanvasV2NodePinBox;
+  window.writeSkinHomeCanvasV2NodeRotation = writeSkinHomeCanvasV2NodeRotation;
+
 }
 
 
@@ -775,7 +1032,16 @@ if (typeof module !== "undefined" && module.exports) {
     writeSkinHomeCanvasV2BlockMargin,
     writeSkinHomeCanvasV2BlockOrder,
     writeSkinHomeCanvasV2NodeText,
-    skinHomeCanvasV2AutoHeightAllowed
+    skinHomeCanvasV2AutoHeightAllowed,
+
+    /* HOME-CANVAS-V2-EDITOR-1B */
+    SKIN_HOME_CANVAS_V2_FREE_KINDS,
+    skinHomeCanvasV2NodeAutoHeightAllowed,
+    writeSkinHomeCanvasV2NodePosition,
+    writeSkinHomeCanvasV2NodeBox,
+    writeSkinHomeCanvasV2NodePinOffset,
+    writeSkinHomeCanvasV2NodePinBox,
+    writeSkinHomeCanvasV2NodeRotation
   };
 
   module.exports = api;

@@ -1,20 +1,22 @@
 # IMORY HOME CANVAS — 데이터 계약
 
-> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12 · §13 · §14 ·
-> §15 · §16 · §17 · §18 · §19 · §20 은 지금 코드가 강제한다**. **§11 은 아직
-> 구현되지 않았다** — 앞으로 편집 UI 가 지켜야 할 약속과 남은 차이다. 그 절을
-> 구현된 것으로 읽지 않는다.
+> 상태: **CURRENT CONTRACT**. 여기 적힌 것 중 **§1~§10 과 §12~§26 은 지금
+> 코드가 강제한다**. **§11 은 아직 구현되지 않았다** — 앞으로 편집 UI 가
+> 지켜야 할 약속과 남은 차이다. 그 절을 구현된 것으로 읽지 않는다.
 >
 > ★ **이 문서의 §1~§8 과 §12~§22 는 `canvas.version:1`(평면 자유 Canvas)
-> 을 다룬다.** 다음 구조인 **조합형 `canvas.version:2`**(자동 배치 블록 +
-> `main_visual` 자유 레이어)는 `V2-DATA-1`(2026-09-21)부터 **데이터 검증과
-> 보존만** 코드에 있다 — 현행 상태는 **§9-(3)** 이고, 전체 설계는 로드맵
+> 을 다루고, §23~§26 이 조합형 `canvas.version:2`(자동 배치 블록 +
+> `main_visual` 자유 레이어)다.** v2 의 전체 설계는 로드맵
 > [§14](../plans/IMORY_HOME_CANVAS_ROADMAP.md#14-조합형-home-canvas-v2-설계-home-canvas-composition-contract-1)
-> 다. **v2 를 그리는 코드는 아직 하나도 없다** — 렌더러 · Studio 패널 ·
-> 자동 배치 · `main_visual` 출력은 후속 작업이고, 유효한 v2 스킨도 화면은
-> 기존 HOME 이다. 여기 적힌 v1 계약은 **폐기되지 않는다**: v2 에서도 페이지
-> 자유 장식과 `main_visual` 내부 자유 레이어를 v1 의 선택 · 이동 ·
-> 리사이즈 · 회전 엔진이 그대로 맡는다(§11-4).
+> 이고, 지금 코드가 강제하는 범위는 **§9-(3)**(데이터 검증 · `V2-DATA-1`) ·
+> **§23**(자동 배치 화면 출력) · **§24**(`main_visual` 내부) ·
+> **§25**(선택과 기본 배치 조정) · **§26**(프레임 내부 요소 · overlay 의
+> 자리 · 크기 · 각도)다. v2 에서 **아직 없는 것**은 새 요소 추가 · `메인
+> 비주얼로 묶기`/`묶기 해제` · 그룹 조작 · 블록 추가/삭제 · `row`/`grid`
+> 블록 · v1→v2 변환이다. 여기 적힌 v1 계약은 **폐기되지 않는다**: v2 의
+> 페이지 자유 장식과 `main_visual` 내부 자유 요소는 v1 의 선택 · 이동 ·
+> 리사이즈 · 회전 엔진을 **그대로** 쓰고, 갈라지는 것은 좌표의 자와 불변
+> writer 둘뿐이다(§26).
 >
 > 라운드: `HOME-CANVAS-CONTRACT-1B`(2026-09-21) · `1C`(2026-09-21, `baseHeight` 추가 — §4-1) ·
 > `HOME-CANVAS-RENDER-1A`(2026-09-21, **정적 Renderer** — §12) ·
@@ -32,7 +34,13 @@
 > `HOME-CANVAS-COMPOSITION-CONTRACT-1`(2026-09-21, **v2 설계 확정 — 이 문서는
 > 상태 문장과 §9-(3) · §11-4 의 가리키는 곳만 바뀌었다. v1 계약 무변경**) ·
 > `HOME-CANVAS-V2-DATA-1`(2026-09-21, **`version:2` 데이터 검증과 보존 —
-> 렌더는 없다** — §9-(3). v1 계약 무변경).
+> 렌더는 없다** — §9-(3). v1 계약 무변경) ·
+> `HOME-CANVAS-INSPECTOR-1A`(2026-09-22, **왼쪽 Canvas 패널** — §22) ·
+> `HOME-CANVAS-V2-FLOW-RENDER-1`(2026-09-21, **v2 자동 배치 화면 출력** — §23) ·
+> `HOME-CANVAS-V2-MAIN-VISUAL-1`(2026-09-21, **`main_visual` 내부** — §24) ·
+> `HOME-CANVAS-V2-EDITOR-1A`(2026-09-22, **v2 선택과 기본 배치 조정** — §25) ·
+> `HOME-CANVAS-V2-EDITOR-1B`(2026-09-22, **프레임 내부 요소 · overlay 의
+> 자리 · 크기 · 각도 — 패널과 직접 조작** — §26. v1 계약 무변경).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
 
 관련 코드
@@ -47,7 +55,8 @@
 | **정적 Renderer**(DOM 생성 · 갱신 · 제거) | [skin/skin-home-canvas-render.js](../../skin/skin-home-canvas-render.js) `compileSkinHomeCanvas` |
 | **좌표 구조 CSS**(색 · 글꼴 없음) | [skin/skin-home-canvas-render.css](../../skin/skin-home-canvas-render.css) |
 | Renderer 를 부르는 자리 | [skin/skin-render.js](../../skin/skin-render.js) `renderSkin` mount 끝 |
-| 렌더러를 로드하는 **세** 문서 | [index.html](../../index.html) · [studio/preview/preview-frame.html](../../studio/preview/preview-frame.html) · [skin/sandbox/frame.html](../../skin/sandbox/frame.html) |
+| 렌더러를 로드하는 문서 — 그리는 **셋** | [index.html](../../index.html) · [studio/preview/preview-frame.html](../../studio/preview/preview-frame.html) · [skin/sandbox/frame.html](../../skin/sandbox/frame.html) |
+| 같은 렌더러를 **자를 재려고만** 싣는 문서(§26-3) | [studio/index.html](../../studio/index.html) · [studio/studio-lifecycle-scenario.html](../../studio/studio-lifecycle-scenario.html) |
 | sandbox origin allowlist | [core/lib/skin-sandbox-server.js](../../core/lib/skin-sandbox-server.js) `SANDBOX_ALLOWED_PATHS` |
 | Studio sandbox 로 `canvas` 를 옮기는 자리 | [studio/preview/preview-sandbox.js](../../studio/preview/preview-sandbox.js) |
 | **고정한 편집기 라이브러리**(Moveable · Selecto UMD · MIT) | [studio/vendor/home-canvas/](../../studio/vendor/home-canvas/) — 출처 · 해시 · 보관 규칙은 그 폴더의 `README.md` |
@@ -56,6 +65,11 @@
 | **선택 소유권을 정하는 한 곳** | [studio/inspector/studio-inspector.js](../../studio/inspector/studio-inspector.js) `routeStudioInspectSelectMessage` |
 | **캔버스를 아는 공통 hit-test**(세 realm 이 같은 파일) | [skin/skin-inspect-target.js](../../skin/skin-inspect-target.js) |
 | **프레임 안 편집 runtime**(native · sandbox 공용 한 벌, §15) | [skin/skin-home-canvas-editor-runtime.js](../../skin/skin-home-canvas-editor-runtime.js) `createHomeCanvasSelectionFrame` |
+| **v1 의 불변 writer** | [skin/skin-home-canvas-write.js](../../skin/skin-home-canvas-write.js) |
+| **v2 의 값 표 · 검증 · 실행 payload** | [skin/skin-home-canvas-v2.js](../../skin/skin-home-canvas-v2.js) |
+| **v2 의 트리 탐색과 불변 writer** | [skin/skin-home-canvas-write-v2.js](../../skin/skin-home-canvas-write-v2.js) |
+| **v2 선택 하나의 좌표 자와 storage 번역**(§26-2 · §26-4) | [studio/inspector/studio-canvas-v2-space.js](../../studio/inspector/studio-canvas-v2-space.js) `studioCanvasV2Space` · `planStudioCanvasV2Transform` |
+| **왼쪽 Canvas 패널**(v1 · v2 두 화면) | [studio/inspector/studio-canvas-inspector.js](../../studio/inspector/studio-canvas-inspector.js) · [studio/inspector/studio-canvas-inspector-v2.js](../../studio/inspector/studio-canvas-inspector-v2.js) |
 
 관련 테스트: `node skin/skin-home-canvas-test.mjs` ·
 `node skin/skin-home-canvas-render-e2e-test.mjs` ·
@@ -64,7 +78,13 @@
 `node studio/studio-home-canvas-vendor-e2e-test.mjs` ·
 `node studio/studio-home-canvas-select-e2e-test.mjs` ·
 `node studio/studio-home-canvas-moveable-e2e-test.mjs` ·
-`node studio/studio-home-canvas-selecto-e2e-test.mjs` — [TESTS.md](../TESTS.md) §13.
+`node studio/studio-home-canvas-selecto-e2e-test.mjs` ·
+`node studio/studio-home-canvas-transform-e2e-test.mjs` ·
+`node studio/studio-home-canvas-resize-e2e-test.mjs` ·
+`node studio/studio-home-canvas-rotate-e2e-test.mjs` ·
+`node studio/studio-home-canvas-inspector-e2e-test.mjs`
+(`--only=panel|text|geometry|round|v2|v2free|sandbox`) ·
+`node skin/sandbox/skin-sandbox-unit-test.mjs` — [TESTS.md](../TESTS.md) §13.
 
 ---
 
@@ -89,6 +109,7 @@
 | `V2-FLOW-RENDER-1` | **v2 의 화면 출력**(§23) — 자동 배치 흐름(`flow`)과 페이지 자유 장식(`overlays`)이 **공개 native HOME · Studio native Preview · 공개 sandbox · Studio sandbox Preview** 네 화면에서 같은 DOM · 같은 좌표로 그려진다. 블록 순서 · `align` 네 값 · `width`/`maxWidth` · 숫자 `height` 와 `"auto"` · **collapse 하지 않는 `gap` + `margin` 합산** · `hidden` 이 자리를 남기지 않음까지다. 그 라운드에서 `main_visual` 은 **외곽 프레임까지**였다(내부는 `V2-MAIN-VISUAL-1` 이 채웠다 — §24). 선택 · 드래그 · Inspector 는 없다 — **읽기 전용**이다 |
 | `V2-MAIN-VISUAL-1` | **`main_visual` 내부**(§24) — primary 사진과 그 주변 장식(종이 · 테이프 · 좌우 인덱스 · 캡션)이 프레임 안에 **배열 순서대로** 그려진다. `follow:"transform"` 은 위치와 크기가 `S_frame` 으로 함께 커지고, `follow:"pin"` 은 `anchor`/`origin`/`offset` 으로 기준점만 따라가며 **자기 크기는 유지**한다. `height:"auto"` 프레임의 높이는 **primary 사진 상자의 비율**이다. 프레임 밖으로 나온 장식은 그대로 보인다. **데이터 · 봉투 · Studio · CSP 무변경**이고 여전히 **읽기 전용**이다 |
 | `V2-EDITOR-1A` | **v2 의 선택과 기본 배치 조정**(§25) — v2 블록을 Studio 에서 고를 수 있고, 왼쪽 패널에서 **순서 · 정렬 · 여백 네 칸 · 폭 · 높이**와 글자 문구를 고칠 수 있다. `main_visual` 은 **한 번 클릭하면 프레임 전체**이고 한 번 더 누르면 안쪽 요소로 들어간다. `data-imory-canvas-frame` **이름 충돌**(§24-7)이 여기서 풀렸다 — 값 `1` 인 Moveable control box 만 편집 chrome 이다. 수정은 **v2 전용 불변 writer** 가 하고, 관문 · Undo 한 칸 · 보존 범위는 v1 과 한 벌이다. v2 드래그 · 리사이즈 · 회전과 묶기/해제는 **아직 없다** |
+| `V2-EDITOR-1B` | **프레임 내부 요소와 overlay 의 자리 · 크기 · 각도**(§26) — `main_visual` 안의 사진 · 장식과 페이지 자유 장식을 **왼쪽 패널의 다섯 칸**으로 고칠 수 있고 **Preview 에서 직접 끌고 · 키우고 · 돌릴 수 있다**. 선택 하나마다 **자를 하나** 정해(프레임 내부 좌표 / 프레임 상자 / 도화지) 그 자 위의 숫자만 프레임에 내려보내므로, 프레임은 v1 인지 v2 인지 모른 채 지금까지와 **같은 메시지**를 돌려준다. `follow:"transform"` 은 `x`·`y`(+크기)를, `follow:"pin"` 은 **`pin.offset` 두 칸**을 쓰고 `target`·`anchor`·`origin` 은 그대로다. 크기를 바꿀 때 `origin` 몫을 좌표에 되돌려 **고정 기준점이 튀지 않는다**. 블록의 자리는 여전히 좌표가 아니다(자를 주지 않으므로 제스처가 시작되지 않는다). 새 요소 추가 · 묶기/해제 · 그룹 조작 · Crop · 효과는 **없다** |
 | `MILESTONE-1` | **계약이 하나도 바뀌지 않은 라운드**(§20). 위 기본 조작을 배포된 화면에서 **손으로** 시험할 수 있게 `home_canvas` 와 표시 위치를 이미 갖춘 **수동 테스트 스킨**과 그것을 끝까지 지나는 통합 smoke 를 두었다. 제품 코드 · 기본 스킨 · 저장 데이터는 무변경이다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
@@ -3746,6 +3767,10 @@ v2 를 한 칸도 고칠 수 없다.
 
 ### 25-6. 직접 조작은 v2 에 내려가지 않는다
 
+> **⚠ 이 절은 `V2-EDITOR-1B` 가 바꿨다 — §26 을 본다.** 프레임 내부 요소와
+> overlay 에는 이제 자와 좌표가 내려간다. 아래 판정이 그대로 남는 것은
+> **블록**뿐이다(블록의 자리는 좌표가 아니다 — §14-10).
+
 `studioCanvasSingleGeometry()` 가 v2 선택에서 **null 을 돌려준다**. 그 값은
 끌기 · 크기 · 회전의 시작점이고, 프레임은 그것이 없으면 제스처를 시작하지
 않는다(editor-runtime 의 `dragGate` → `"no-geometry"`).
@@ -3763,5 +3788,223 @@ v2 드래그 · 리사이즈 · 회전 · 프레임 내부 요소의 좌표 편�
 편집 · `메인 비주얼로 묶기`/`묶기 해제` · 그룹 조작 · 레이어 목록 · 효과 설정 ·
 블록 추가/삭제 · `hidden`/`locked` 토글 · v1→v2 변환 · 기본 스킨 변경 ·
 `row`/`grid` 블록 · CATEGORY/POST/BANNER 캔버스.
+
+> **✅ 앞의 셋은 `V2-EDITOR-1B` 가 채웠다** — v2 드래그 · 리사이즈 · 회전과
+> 프레임 내부 요소 · overlay 의 좌표 편집(§26). 나머지는 그대로 남아 있다.
+
+`APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).
+
+---
+
+## 26. v2 프레임 내부 요소 · overlay 의 자리 (`HOME-CANVAS-V2-EDITOR-1B`)
+
+`V2-EDITOR-1A` 가 고를 수 있게만 해 둔 **`main_visual` 안의 사진 · 장식**과
+**페이지 `overlays`** 의 자리 · 크기 · 각도를, 왼쪽 패널의 다섯 칸과
+**Preview 의 직접 조작**으로 고친다. 로드맵 §14-5 · §14-6 의 두 규칙이
+여기서 편집이 된다.
+
+v1 의 선택 · 확정 · Undo · 제스처 엔진을 **그대로** 쓴다. 갈라지는 것은
+셋이다 — **좌표의 자**, **불변 writer**, **패널의 그 화면**.
+
+### 26-1. 관련 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `studio/inspector/studio-canvas-v2-space.js` | **새 파일** — 선택 하나의 자(§26-2)와 자 → storage 번역(§26-4) |
+| `skin/skin-home-canvas-write-v2.js` | 순수 writer 다섯이 늘었다(§26-4) |
+| `skin/skin-home-canvas-editor-runtime.js` | 자의 기준 상자(`scopeId`)와 pin 의 `origin` 보정(§26-5) |
+| `studio/inspector/studio-canvas-selection.js` | v2 선택에 좌표를 내려보내고, 프레임의 kind 를 v2 의 kind 로 옮긴다 |
+| `studio/studio-preview.js` | 자 번역을 지나는 wrapper 셋 |
+| `studio/inspector/studio-canvas-inspector-v2.js` | 다섯 칸의 패널 화면 |
+| `studio/preview/preview-bridge.js` · `skin/sandbox/skin-sandbox-host.js` · `-protocol.js` · `-frame.js` | geometry 메시지에 자 칸 셋(선택) |
+| `studio/index.html` · `studio/studio-lifecycle-scenario.html` | Studio 가 **렌더러 파일**과 새 자 파일을 싣는다(§26-3) |
+
+### 26-2. 선택 하나 = 자 하나
+
+v1 에서는 자가 언제나 도화지였다. v2 는 **어디에 있는 요소인가**가 자를
+정한다.
+
+| 고른 것 | 자 | `scopeId` | x · y 의 뜻 |
+| --- | --- | --- | --- |
+| overlay | 도화지(`canvas.baseWidth` · `baseHeight`) | 없음 | 저장된 `x` · `y` |
+| 프레임 내부 `follow:"transform"` | 프레임 내부 좌표(`props.baseWidth`) | 프레임 블록 id | 저장된 `x` · `y` |
+| 프레임 내부 `follow:"pin"` | **프레임 상자**(`frame.width` · `height`) | 프레임 블록 id | `기준점 + pin.offset` |
+| 블록 | **없다** | — | 블록의 자리는 좌표가 아니다(§14-10) |
+
+`studioCanvasV2Space(id)` 가 그 자와 **지금 값**을 함께 돌려주고, 패널과
+직접 조작이 그 하나를 같이 쓴다.
+
+★ **세로 자는 저장값이 아니라 계산값이다**(내부 `transform`).
+`props.baseHeight` 는 내부 좌표의 자일 뿐이고 프레임의 실제 세로 길이는 숫자
+`height` 또는 primary 사진의 비율이 정한다(§24-5). 그래서
+
+```text
+  baseHeight' = 프레임 높이 ÷ S_frame
+```
+
+로 두면 네 칸이 **저장된 그 숫자 그대로** 자 위의 값이 되고, 가로 · 세로
+배율이 하나가 된다(프레임 상자가 이미 그 비율이므로).
+
+★ **새 메시지도 새 kind 도 프레임에는 없다.** 프레임은 자기가 v1 인지 v2 인지
+모른다 — 알 필요도 없다. 부모가 자와 시작값을 내려 주고, 프레임은 손으로 끈
+결과를 그 자 위의 다섯 칸으로 돌려준다. 그래서 프레임이 올리는 kind 는 여전히
+`move` · `resize` · `rotate` 셋이고, **부모가 지금 draft 의 version 을 보고**
+`v2-move` · `v2-resize` · `v2-rotate` 로 바꿔 부른다
+(`studioCanvasEffectiveKind` — 관문을 지난 **뒤**의 한 줄이다).
+
+봉투에 늘어난 것은 **선택 칸 셋**뿐이다.
+
+| 칸 | 뜻 | 없으면 |
+| --- | --- | --- |
+| `scopeId` | 백분율과 배율의 기준이 되는 **상자의 edit id** | 도화지 |
+| `originX` · `originY` | 자기 상자의 어느 점이 그 자리에 놓이는가(0~1) | 0 |
+
+v1 요소와 v2 overlay 는 도화지 자에 origin 0 이므로 **그 칸이 아예 없는
+메시지가 지금까지의 그 메시지**다. 그래서 `TRANSFORM-1A~1C` 의 프로토콜
+테스트가 한 줄도 바뀌지 않았다.
+
+★ `origin` 의 범위는 **0~1** 이다 — 자기 상자 **안**의 한 점이므로 좌표의
+±100000 을 빌려 오지 않는다. `scopeId` 가 가리키는 상자가 지금 화면에 없으면
+runtime 이 자를 만들 수 없다고 보고 제스처를 시작하지 않는다.
+
+### 26-3. 자를 재는 계산은 렌더러의 그것 하나다
+
+프레임 폭 · 프레임 높이 · primary 사진 상자 · pin 기준점은 전부
+`skin/skin-home-canvas-render.js` 가 계산한다
+(`resolveSkinCanvasFrameGeometry` · `resolveSkinCanvasPinPoint` ·
+`skinCanvasRenderPinFraction`). 그래서 **Studio 문서도 그 파일을 로드한다** —
+그리지는 않고 자만 빌려 쓴다.
+
+★ **왜 한 벌 더 적지 않았나.** 프레임 폭은 `align` · `margin` · `maxWidth` ·
+가용 폭이 함께 정하는 값이고(§24-3), 그 식은 CSS 의 calc 과 글자 단위로 같아야
+한다. 패널이 그 계산을 따로 가지면 한쪽만 고쳐지는 날 **패널의 숫자와 화면의
+자리가 갈라진다** — 그 어긋남은 "저장은 됐는데 엉뚱한 자리에 그려진다"로
+나타나고 원인을 찾기 어렵다.
+
+★ `compileSkinHomeCanvas()` 는 부르는 곳이 없으므로 Studio 문서가 캔버스를
+그리지는 않는다. 로드 시점에 하는 일도 없다(함수 선언뿐이다).
+
+### 26-4. 쓰기 — 관문 하나, 번역 한 곳, writer 다섯
+
+확정 경로는 v1 의 그 한 벌이다(`commitStudioCanvasElementChange` — 선택 ·
+순번 · hidden/locked · 허용 키 정확 일치 · `expected` 정확 일치 · 요청 번호가
+붙은 답). 늘어난 것은 **자 → storage 번역** 한 걸음이다.
+
+```text
+  프레임 · 패널 → (자 위의 다섯 칸)
+                → planStudioCanvasV2Transform()   자 → storage
+                → writeSkinHomeCanvasV2Node…()    불변 수정
+```
+
+| 고른 것 | `v2-move` | `v2-resize` | `v2-rotate` |
+| --- | --- | --- | --- |
+| overlay · 내부 `transform` | `x` · `y` | `x` · `y` · `width` · `height` | `rotation` |
+| 내부 `pin` | `pin.offset.x` · `.y` | `pin.offset` 둘 + `width` · `height` | `rotation` |
+
+writer 이름을 `Position` / `Box` / `PinOffset` / `PinBox` / `Rotation` 으로
+나눈 이유는 **`next.x` 가 어떤 때는 좌표이고 어떤 때는 offset 이 되지 않게**
+하기 위해서다. pin writer 의 키는 `offsetX` · `offsetY` 이고, 좌표 writer 는
+pin 요소를 만나면 `reason:"pin"` 으로 거부한다(반대 방향도 막는다).
+
+★ **`pin` 의 나머지 세 칸은 그대로다.** 자리를 옮긴다고 `target` · `anchor` ·
+`origin` 이 바뀌지 않는 것이 §14-6 이고, 이 라운드가 고치는 것은 offset 두
+칸뿐이다. `pin` 요소가 갖고 있는 안 쓰는 `x` · `y` 도 손대지 않는다(§14-6
+"안 쓰는 칸을 지우지 않는다").
+
+★ **`expected` 는 자 위에서 본다.** storage 로 옮긴 뒤에 비교하면 pin 의
+`x − 기준점` 이 부동소수점 한 칸 어긋나는 날 "그 사이에 값이 바뀌었습니다"가
+뜬다 — 비교하는 두 값이 **같은 계산의 결과**여야 그런 일이 없다(둘 다 지금
+draft 에서 나온다). 그리고 자리가 그대로면 **저장된 offset 을 그대로 쓴다**:
+`(기준점 + offset) − 기준점` 이 원래 offset 과 마지막 비트까지 같다는 보장이
+없어서, 한 칸도 옮기지 않은 요청이 Undo 한 칸을 만들 수 있다.
+
+★ 보존 범위는 v1 과 한 벌이다 — regions 의 모르는 항목 · 항목의 모르는 칸 ·
+canvas 의 모르는 칸 · flow 의 모르는 칸 · 다른 블록 · 그 블록의 모르는 칸 ·
+프레임 내부 배열의 다른 요소 · **배열 순서** · `props` · `pin` 의 모르는 칸.
+입력은 한 칸도 mutate 하지 않는다.
+
+### 26-5. 크기를 바꿀 때 `origin` 몫을 좌표에 되돌린다
+
+`follow:"pin"` 요소의 좌표는 **자기 상자의 왼쪽 위가 아니라 `origin` 이 놓일
+자리**이고, 그 차이는 CSS 의 백분율 `translate` 가 뺀다(§24-4). 그래서 상자
+크기가 바뀌면 **같은 좌표가 가리키는 화면 자리도 바뀐다**.
+
+Moveable 이 주는 `drag.beforeTranslate` 는 "화면 상자의 왼쪽 위가 얼마나
+움직여야 하는가"이므로, 좌표에는 크기 변화 × origin 만큼을 더 얹는다.
+
+```text
+  새 좌표 = 시작 좌표 + 이동량 + origin × (새 크기 − 시작 크기)
+```
+
+- v1 요소와 overlay 는 `origin` 이 0 이라 **이 항이 사라진다** — 지금까지의
+  식 그대로다.
+- `height:"auto"` 가 그대로 남는 동안에는 세로 항이 0 이다. 높이를 숫자로
+  쓰지 않았으므로 화면의 세로 길이는 브라우저가 내용으로 정하고 백분율
+  translate 도 그 새 상자에서 다시 풀린다 — 우리가 끼어들 숫자가 없다(그래서
+  끌기 중과 확정 뒤가 같다).
+- 세로 좌표는 **높이를 정한 뒤에** 계산한다(그 항이 새 높이를 알아야 한다).
+
+★ **이것이 "고정 기준점이 튀지 않는다"의 뜻이다.** 보정이 없으면 `origin` 이
+`right` 인 테이프를 오른쪽으로 키울 때 상자가 **왼쪽으로** 자라고, 손을 놓는
+순간 다시 그려진 자리가 끌던 자리와 다르다. 보정이 있으면 반대편 변이 제자리에
+남고 live preview 와 재렌더가 같다(실측: 위쪽 변 0.00px).
+
+### 26-6. 패널의 다섯 칸
+
+프레임 내부 요소와 overlay 를 고르면 왼쪽 패널이 **X · Y · Width · Height ·
+Rotation** 이 된다(`1A` 에서는 읽기 전용 요약이었다).
+
+- 값은 **그 선택의 자 위의 숫자**다 — 직접 조작이 쓰는 그 자 하나이므로,
+  손으로 끈 결과와 패널의 숫자가 언제나 같은 단위다.
+- 무슨 자인지 **패널이 한 줄로 적는다**(도화지 좌표 / 프레임 내부 좌표 /
+  프레임 좌표 — 기준점에서 옮긴 자리). 숫자만 보면 알 수 없다.
+- `follow` 는 읽기 전용으로 함께 보여 준다(프레임 내부만).
+- 숫자 칸의 규칙은 v1 · v2 블록과 같다(§22-3 · §25-4) — 입력 중에는 아무것도
+  쓰지 않고 Enter · blur 에서 **한 번** 쓴다. 그래서 한 칸의 한 편집 세션이
+  Undo 한 칸이고, `-` 나 빈 문자열 같은 중간 상태가 JSON 에 들어가지 않는다.
+- 각도는 한 바퀴 안으로 접힌다(`normalizeSkinHomeCanvasRotation` — 손으로 돌린
+  결과와 같은 자).
+- 화면에 적는 숫자는 **소수 셋째 자리까지**다(pin 의 X · Y 는 배율에 따라 긴
+  소수가 될 수 있다). 저장값을 깎는 것이 아니고, `expected` 는 언제나 자에서
+  읽은 그 숫자다.
+- `height:"auto"` 인 요소의 Height 칸은 **잠긴다**. 여기서 숫자를 지어내지
+  않는다 — 세로 손잡이로 끌면 화면에서 잰 높이로 숫자가 된다(§18-3).
+- 자를 만들 수 없는 프레임(가용 폭이 0 등)에서는 예전처럼 **읽기 전용
+  요약**과 그 이유를 적는다.
+
+### 26-7. 블록은 그대로 — 자를 주지 않는다
+
+블록을 고르면 `studioCanvasV2Space()` 가 null 이고, 따라서 geometry 도
+내려가지 않는다. 프레임은 그것이 없으면 제스처를 시작하지 않는다
+(`dragGate` → `"no-geometry"`). **막는 것이 아니라 애초에 주지 않는다** —
+§25-6 의 그 결정이 블록에는 그대로 남는다.
+
+블록의 순서 · 정렬 · 여백 · 폭 · 높이 패널(§25-4)과 v1 의 이동 · 리사이즈 ·
+회전은 한 줄도 바뀌지 않았다(E2E 가 그 둘을 직접 다시 본다).
+
+### 26-8. 남은 차이
+
+- **블록을 고르면 Moveable 손잡이 DOM 이 남아 있다.** 블록은 자유 배치
+  요소가 아니라 Moveable 의 target 이 `null` 이고, 0.53.0 은 그때도 control
+  box 를 만든다. 자를 주지 않으므로 **끌어도 저장값은 한 칸도 바뀌지
+  않지만**(E2E 가 그것을 본다) 쓸 수 없는 손잡이가 보인다. 고치는 자리는
+  runtime 의 `setMoveableTarget()` 한 곳이고, 그 변경은 v1 그룹 선택과 함께
+  봐야 한다 — `HOME-CANVAS-TRANSFORM-1D`.
+- **`pin.target` · `anchor` · `origin` 을 고르는 UI 가 없다.** 지금은 저장된
+  고정 관계를 유지하면서 offset 만 바뀐다. 그 세 칸을 바꾸는 것은 묶기 UX 와
+  함께 정한다 — `HOME-CANVAS-V2-GROUP-1`.
+- **`height:"auto"` 를 패널에서 켜고 끄는 스위치가 없다.** v1 은 화면에서 잰
+  높이를 쓰지만(§22-3) v2 프레임 내부의 실제 높이는 프레임에서 재야 한다 —
+  이 라운드는 재지 않았다. 세로 손잡이로 끌면 숫자가 되고, 되돌리는 것은
+  Undo 다.
+- **새 요소 추가 · `메인 비주얼로 묶기`/`묶기 해제` · 그룹 조작 · Crop 연결 ·
+  효과 설정 · 레이어 목록 · `hidden`/`locked` 토글** — 그대로 없다.
+
+### 26-9. 이 라운드가 만들지 않은 것
+
+새 요소 추가 · 블록 추가/삭제 · `메인 비주얼로 묶기`/`묶기 해제` · 그룹
+조작 · Crop · 효과 설정 · 레이어 목록 · `hidden`/`locked` 토글 · v1→v2 변환 ·
+기본 스킨 변경 · `row`/`grid` 블록 · responsive override ·
+CATEGORY/POST/BANNER 캔버스 · 손가락 조작(v1 과 같은 이유로 의도적 미지원).
 
 `APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).

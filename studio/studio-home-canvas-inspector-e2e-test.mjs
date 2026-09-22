@@ -32,6 +32,12 @@
    [geometry] 숫자 칸 — 음수 · auto · rotation 정규화 · 거부 ·
               Undo 한 칸 · 직접 조작 · Undo/Redo 뒤 갱신 · 보존
    [round]    Save → 다시 열기 · Export → Import · Publish resolve
+   [v2]       v2 블록 — 선택 · 흐름 칸 · 순서 · 글자 · main_visual 진입
+   [v2free]   v2 프레임 내부(transform · pin) · overlay 의 자리 · 크기 ·
+              각도 — 패널 입력과 직접 조작이 **같은 자**인가 ·
+              끈 픽셀 = 다시 그려진 픽셀 · pin 은 offset 으로 저장 ·
+              390px · native ↔ sandbox · v1 직접 조작 회귀
+              (HOME-CANVAS-V2-EDITOR-1B)
    [sandbox]  별도 origin 프레임에서 같은 결과 + CSP 위반 0
 
    Chromium 만 쓴다.
@@ -765,6 +771,253 @@ const clickElement = (page, frame, sandbox, id, options) =>
 
 
 /* =========================================================
+   직접 조작 — 실제 포인터로 끈다 (HOME-CANVAS-V2-EDITOR-1B)
+
+   ★ 형제 e2e(transform · resize · rotate)의 그 helper 들이다. 여기서
+     쓰는 이유는 v2 의 패널 입력과 손 조작이 **같은 자**를 쓰는지
+     한 자리에서 대조해야 하기 때문이다(계약 §26-2).
+========================================================== */
+
+async function rectsFor(page, frame, sandbox, ids) {
+
+  const selectors = ids.map(byId);
+
+  return sandbox
+    ? sandboxRects(page, frame, selectors)
+    : nativeRects(page, selectors);
+
+}
+
+
+const HANDLE_SELECTOR =
+  '[data-imory-canvas-frame="1"] .moveable-control[data-direction]';
+
+const ROTATION_SELECTOR =
+  '[data-imory-canvas-frame="1"] .moveable-rotation-control';
+
+
+/* 손잡이 여덟의 가운데 — 부모 화면 좌표로 */
+async function handleCenters(page, frame, sandbox) {
+
+  if (!sandbox) {
+
+    return page.evaluate((selector) => {
+
+      const f = document.getElementById("studioPreviewFrame");
+      const doc = f.contentDocument;
+      const box = f.getBoundingClientRect();
+      const scale = box.width / (f.offsetWidth || box.width);
+      const cs = getComputedStyle(f);
+      const bl = parseFloat(cs.borderLeftWidth) || 0;
+      const bt = parseFloat(cs.borderTopWidth) || 0;
+
+      const out = {};
+
+      doc.querySelectorAll(selector).forEach((handle) => {
+
+        const r = handle.getBoundingClientRect();
+
+        out[handle.getAttribute("data-direction")] = {
+          x: box.left + (bl + r.left + r.width / 2) * scale,
+          y: box.top + (bt + r.top + r.height / 2) * scale
+        };
+
+      });
+
+      return out;
+
+    }, HANDLE_SELECTOR);
+
+  }
+
+  const out = {};
+
+  for (const dir of ["nw", "n", "ne", "e", "se", "s", "sw", "w"]) {
+
+    const box =
+      await frame
+        .locator(`[data-imory-canvas-frame="1"] .moveable-control[data-direction="${dir}"]`)
+        .first()
+        .boundingBox()
+        .catch(() => null);
+
+    if (box) {
+      out[dir] = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    }
+
+  }
+
+  return out;
+
+}
+
+
+async function rotationHandle(page, frame, sandbox) {
+
+  if (!sandbox) {
+
+    return page.evaluate((selector) => {
+
+      const f = document.getElementById("studioPreviewFrame");
+      const doc = f.contentDocument;
+      const handle = doc.querySelector(selector);
+
+      if (!handle) return null;
+
+      const box = f.getBoundingClientRect();
+      const scale = box.width / (f.offsetWidth || box.width);
+      const cs = getComputedStyle(f);
+      const bl = parseFloat(cs.borderLeftWidth) || 0;
+      const bt = parseFloat(cs.borderTopWidth) || 0;
+      const r = handle.getBoundingClientRect();
+
+      return {
+        x: box.left + (bl + r.left + r.width / 2) * scale,
+        y: box.top + (bt + r.top + r.height / 2) * scale
+      };
+
+    }, ROTATION_SELECTOR);
+
+  }
+
+  const box =
+    await frame.locator(ROTATION_SELECTOR).first().boundingBox().catch(() => null);
+
+  return box ? { x: box.x + box.width / 2, y: box.y + box.height / 2 } : null;
+
+}
+
+
+/* 한 번에 끌면 "끌지 않은 클릭"으로 보일 수 있다 — 몇 걸음에 나눈다 */
+async function dragFrom(page, from, to, options) {
+
+  const o = options || {};
+
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+
+  const steps = o.steps || 8;
+
+  for (let i = 1; i <= steps; i += 1) {
+    await page.mouse.move(
+      from.x + (to.x - from.x) * (i / steps),
+      from.y + (to.y - from.y) * (i / steps)
+    );
+  }
+
+  await page.mouse.up();
+
+  await sleep(o.settle === undefined ? 800 : o.settle);
+
+}
+
+
+/*
+  요소 가운데에서 (dx, dy) 만큼 — 본체 이동
+
+  ★ `noView: true` 를 주면 **화면을 스크롤하지 않는다.**
+
+  화면 픽셀로 "끈 만큼 다시 그려졌는가"를 재는 절에서는 제스처가
+  스크롤을 건드리면 안 된다 — scrollIntoView 가 요소를 다시 가운데로
+  옮기면 그 이동량이 그대로 측정값에 섞인다(실측: 24px 을 끌었는데
+  -14px 로 읽혔다). 그 절은 재기 전에 한 번만 스크롤한다.
+*/
+async function dragElement(page, frame, sandbox, id, dx, dy, options) {
+
+  if (!(options && options.noView)) {
+    await bringIntoView(page, frame, sandbox, byId(id));
+  }
+
+  const box =
+    (await rectsFor(page, frame, sandbox, [id]))[byId(id)];
+
+  if (!box) throw new Error("요소를 찾지 못했습니다: " + id);
+
+  const from = {
+    x: (box.left + box.right) / 2,
+    y: (box.top + box.bottom) / 2
+  };
+
+  await dragFrom(page, from, { x: from.x + dx, y: from.y + dy }, options);
+
+  return box;
+
+}
+
+
+/* 손잡이 하나를 (dx, dy) 만큼 — 크기 */
+async function dragHandle(page, frame, sandbox, id, dir, dx, dy, options) {
+
+  if (!(options && options.noView)) {
+    await bringIntoView(page, frame, sandbox, byId(id));
+  }
+
+  const handle =
+    (await handleCenters(page, frame, sandbox))[dir];
+
+  if (!handle) throw new Error(`손잡이를 찾지 못했습니다: ${id} ${dir}`);
+
+  await dragFrom(
+    page, handle, { x: handle.x + dx, y: handle.y + dy }, options);
+
+}
+
+
+/* 회전 손잡이를 **호**로 끈다(직선으로 끌면 중심 근처에서 각도가 튄다) */
+async function rotateBy(page, frame, sandbox, id, deg, options) {
+
+  const o = options || {};
+
+  if (!o.noView) {
+    await bringIntoView(page, frame, sandbox, byId(id));
+  }
+
+  const box =
+    (await rectsFor(page, frame, sandbox, [id]))[byId(id)];
+
+  const handle =
+    await rotationHandle(page, frame, sandbox);
+
+  if (!box || !handle) {
+    throw new Error("회전 손잡이를 찾지 못했습니다: " + id);
+  }
+
+  const center = {
+    x: (box.left + box.right) / 2,
+    y: (box.top + box.bottom) / 2
+  };
+
+  const radius =
+    Math.hypot(handle.x - center.x, handle.y - center.y);
+
+  const start =
+    Math.atan2(handle.y - center.y, handle.x - center.x);
+
+  const steps = o.steps || 12;
+
+  await page.mouse.move(handle.x, handle.y);
+  await page.mouse.down();
+
+  for (let i = 1; i <= steps; i += 1) {
+
+    const angle =
+      start + (deg * Math.PI / 180) * (i / steps);
+
+    await page.mouse.move(
+      center.x + radius * Math.cos(angle),
+      center.y + radius * Math.sin(angle)
+    );
+
+  }
+
+  await page.mouse.up();
+
+  await sleep(o.settle === undefined ? 800 : o.settle);
+
+}
+
+
+/* =========================================================
    읽기
 ========================================================== */
 
@@ -884,6 +1137,8 @@ const readV2Panel = (page) => page.evaluate(() => {
     where: textOfId("studioCanvasInspectorWhere"),
     hasLayout: !!document.getElementById("studioCanvasInspectorV2Layout"),
     hasReadOnly: !!document.getElementById("studioCanvasInspectorV2Read"),
+    /* HOME-CANVAS-V2-EDITOR-1B — 프레임 내부 요소 · overlay 의 다섯 칸 */
+    hasFree: !!document.getElementById("studioCanvasInspectorV2Free"),
     /* v1 화면의 자리 — v2 에서는 없어야 한다 */
     hasV1Geometry: !!document.getElementById("studioCanvasInspectorGeometry"),
     hasText: !!text,
@@ -919,6 +1174,69 @@ const readV2Panel = (page) => page.evaluate(() => {
   };
 
 });
+
+
+/* ---- v2 프레임 내부 · overlay 의 자리 (HOME-CANVAS-V2-EDITOR-1B) ---- */
+
+/*
+  지금 선택의 **자**와 패널의 다섯 칸.
+
+  ★ 자는 Studio 가 계산한 그것을 그대로 읽는다(window.studioCanvasV2Space).
+    테스트가 프레임 폭을 다시 계산하면 그 계산이 맞는지 물어볼 수 없다 —
+    대신 **화면 좌표**로 대조한다(아래 screenBox).
+*/
+const readV2Free = (page) => page.evaluate(() => {
+
+  const valueOf = (field) => {
+    const el = document.getElementById(`studioCanvasInspectorV2-${field}`);
+    return el ? el.value : null;
+  };
+
+  const sel =
+    window.getStudioCanvasSelection();
+
+  const space =
+    (sel.primaryId && typeof window.studioCanvasV2Space === "function")
+      ? window.studioCanvasV2Space(sel.primaryId)
+      : null;
+
+  const caption =
+    document.querySelector("#studioCanvasInspectorV2Free .studio-inspector-block-label");
+
+  return {
+    ids: sel.ids,
+    primaryId: sel.primaryId,
+    hasFree: !!document.getElementById("studioCanvasInspectorV2Free"),
+    hasRead: !!document.getElementById("studioCanvasInspectorV2Read"),
+    hasBlockLayout: !!document.getElementById("studioCanvasInspectorV2Layout"),
+    caption: caption ? caption.textContent.trim() : null,
+    autoNote: !!document.getElementById("studioCanvasInspectorV2AutoNote"),
+    heightDisabled: (() => {
+      const el = document.getElementById("studioCanvasInspectorV2-height");
+      return el ? el.disabled : null;
+    })(),
+    values: {
+      x: valueOf("x"),
+      y: valueOf("y"),
+      width: valueOf("width"),
+      height: valueOf("height"),
+      rotation: valueOf("rotation")
+    },
+    space: space
+  };
+
+});
+
+
+/* 그 요소가 지금 **화면에서** 어디에 그려져 있나(부모 좌표) */
+const screenBox = async (page, frame, sandbox, id) => {
+
+  const box =
+    (await rectsFor(page, frame, sandbox, [id]))[byId(id)];
+
+  return box || null;
+
+};
 
 
 /* v2 숫자 칸에 값을 넣고 확정한다(Enter) */
@@ -2224,9 +2542,12 @@ async function main() {
         panel.title === "Canvas 사진",
         JSON.stringify({ s: panel.canvasSelection, t: panel.title }));
 
-      check("★ 안쪽 요소는 읽기 전용 요약이고 흐름 칸이 없다(§25-7)",
-        panel.hasReadOnly === true && panel.hasLayout === false,
-        JSON.stringify({ r: panel.hasReadOnly, l: panel.hasLayout }));
+      /* HOME-CANVAS-V2-EDITOR-1B — `1A` 에서는 읽기 전용 요약이었다.
+         이제는 자리 다섯 칸이고, 흐름 칸은 여전히 없다. */
+      check("★ 안쪽 요소는 자리 칸이고 흐름 칸은 없다(§26-6)",
+        panel.hasFree === true && panel.hasLayout === false &&
+        panel.hasReadOnly === false,
+        JSON.stringify({ f: panel.hasFree, l: panel.hasLayout, r: panel.hasReadOnly }));
 
       check("★ 패널이 지금 안쪽 요소를 고르고 있다고 적는다",
         typeof panel.where === "string" && panel.where.indexOf("안쪽 요소") !== -1,
@@ -2596,6 +2917,624 @@ async function main() {
       check("★ sandbox 에서도 한 번 더 누르면 안쪽 요소다",
         same(sbPanel.canvasSelection, ["v2Photo"]),
         JSON.stringify(sbPanel.canvasSelection));
+
+      check("★ 프레임 CSP 위반 0", (await cspViolations(sbFrame)).length === 0,
+        JSON.stringify(await cspViolations(sbFrame)));
+
+      check("★ 부모 CSP 위반 0", (await cspViolations(sbPage)).length === 0,
+        JSON.stringify(await cspViolations(sbPage)));
+
+      check("sandbox pageerror 0", sbPage.__errors.length === 0,
+        sbPage.__errors.slice(0, 2).join(" | "));
+
+      await sbPage.__ctx.close();
+
+    }
+
+
+    /* ======================================================
+       [v2free] HOME-CANVAS-V2-EDITOR-1B —
+                프레임 내부 요소 · overlay 의 자리 · 크기 · 각도
+
+       ★ 여기서 재는 것은 **자가 맞는가**다.
+
+       JSON 의 숫자만 보면 "그 숫자가 화면의 어디인가"를 물어볼 수
+       없다. 그래서 절마다 화면 좌표를 함께 재고, 손으로 끈 픽셀과
+       다시 그려진 픽셀이 같은지 본다 — 프레임 내부는 도화지와 다른
+       배율을 쓰므로(S_page × S_frame) 그 곱이 어긋나면 이 대조에서
+       드러난다(계약 §26-2).
+
+       ★ 회전한 요소의 좌표는 **중심**으로 본다. 회전은 중심을 옮기지
+         않으므로 변(left/top)은 회전 뒤 외곽 상자의 것이다(§24-7).
+    ====================================================== */
+    if (wants("v2free")) {
+
+      section("v2free");
+
+      const page = await openStudio(browser, { package: v2Package({}) });
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      const center =
+        (box) => ({ x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 });
+
+      const near =
+        (a, b, tol) => Math.abs(a - b) <= (tol === undefined ? 2.5 : tol);
+
+      /* ---- 1. 프레임 내부 transform 요소 ---- */
+
+      await clickElement(page, frame, false, "v2Photo");
+      await clickElement(page, frame, false, "v2Photo");
+
+      let free = await readV2Free(page);
+
+      check("★ 프레임 내부 요소를 고르면 자리 다섯 칸이 열린다",
+        same(free.ids, ["v2Photo"]) && free.hasFree === true &&
+        free.values.x === "10" && free.values.y === "5" &&
+        free.values.width === "120" && free.values.height === "80" &&
+        free.values.rotation === "0",
+        JSON.stringify(free.values));
+
+      check("★ 그 자는 프레임 내부 좌표다(도화지가 아니다)",
+        free.space &&
+        free.space.kind === "frame-element" &&
+        free.space.follow === "transform" &&
+        free.space.scopeId === "v2Main" &&
+        free.space.baseWidth === 150 &&
+        free.space.originX === 0 && free.space.originY === 0,
+        JSON.stringify(free.space));
+
+      check("★ 무슨 자인지 패널이 적는다",
+        typeof free.caption === "string" &&
+        free.caption.indexOf("프레임 내부 좌표") !== -1,
+        free.caption);
+
+      /* 패널 입력 — 한 칸만, Undo 한 칸 */
+
+      /* ★ 재기 전에 **한 번만** 스크롤한다. 그 뒤 제스처는
+         `noView: true` 로 화면을 건드리지 않는다(위 dragElement 의 ★). */
+      await bringIntoView(page, frame, false, byId("v2Photo"));
+
+      let h0 = await historyState(page);
+      let before = await screenBox(page, frame, false, "v2Photo");
+
+      await typeV2Number(page, "x", 20);
+
+      let now = await readCanvas(page);
+      let h1 = await historyState(page);
+      let after = await screenBox(page, frame, false, "v2Photo");
+
+      const innerScale =
+        (after.left - before.left) / 10;
+
+      check("★ 패널로 X 를 고치면 그 칸만 저장된다 · Undo 한 칸",
+        v2NodeOf(now, "v2Photo").x === 20 &&
+        v2NodeOf(now, "v2Photo").y === 5 &&
+        v2NodeOf(now, "v2Photo").width === 120 &&
+        v2NodeOf(now, "v2Photo").follow === "transform" &&
+        h1.undo === h0.undo + 1,
+        JSON.stringify(v2NodeOf(now, "v2Photo")));
+
+      check("★ 화면도 그만큼 움직였다(프레임 배율 하나로 풀린다)",
+        innerScale > 0 && near(after.top, before.top, 1.5),
+        `10칸 = ${(after.left - before.left).toFixed(2)}px`);
+
+      check("★ 다른 요소 · 블록 · overlay 는 한 글자도 안 바뀐다",
+        v2NodeOf(now, "v2Tag").pin.offset.x === 6 &&
+        v2BlockOf(now, "v2Main").width === 300 &&
+        v2NodeOf(now, "v2Over").x === 20 &&
+        v2OrderOf(now) === "v2Logo,v2Text,v2Rule,v2Wide,v2Main",
+        v2OrderOf(now));
+
+      /* 직접 조작 — 끈 픽셀과 다시 그려진 픽셀이 같다 */
+
+      h0 = await historyState(page);
+      before = await screenBox(page, frame, false, "v2Photo");
+
+      await dragElement(page, frame, false, "v2Photo", 40, 0, { noView: true });
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+      after = await screenBox(page, frame, false, "v2Photo");
+
+      const draggedX =
+        v2NodeOf(now, "v2Photo").x;
+
+      check("★ 본체를 끌면 프레임 내부 좌표가 저장된다 · Undo 한 칸",
+        draggedX > 20 &&
+        v2NodeOf(now, "v2Photo").y === 5 &&
+        v2NodeOf(now, "v2Photo").width === 120 &&
+        h1.undo === h0.undo + 1,
+        `x ${draggedX} · undo ${h0.undo}→${h1.undo}`);
+
+      check("★ 끈 40px 이 그대로 다시 그려진다(live 와 재렌더가 같다)",
+        near(after.left - before.left, 40) && near(after.top, before.top, 1.5),
+        `${(after.left - before.left).toFixed(2)}px`);
+
+      check("★ 저장된 칸 수와 화면 픽셀이 같은 자를 쓴다",
+        near((draggedX - 20) * innerScale, 40, 3),
+        `${((draggedX - 20) * innerScale).toFixed(2)}px`);
+
+      /* 크기 — 오른쪽 변 손잡이 */
+
+      h0 = await historyState(page);
+      before = await screenBox(page, frame, false, "v2Photo");
+
+      await dragHandle(page, frame, false, "v2Photo", "e", 30, 0, { noView: true });
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+      after = await screenBox(page, frame, false, "v2Photo");
+
+      check("★ 변 손잡이로 폭만 커진다 · Undo 한 칸",
+        v2NodeOf(now, "v2Photo").width > 120 &&
+        v2NodeOf(now, "v2Photo").height === 80 &&
+        h1.undo === h0.undo + 1,
+        JSON.stringify(v2NodeOf(now, "v2Photo")));
+
+      check("★ 왼쪽 변은 제자리이고 폭이 30px 늘었다",
+        near(after.left, before.left, 1.5) &&
+        near(after.width - before.width, 30),
+        `${(after.width - before.width).toFixed(2)}px`);
+
+      /* 각도 */
+
+      h0 = await historyState(page);
+
+      await rotateBy(page, frame, false, "v2Photo", 20);
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+
+      const innerRot =
+        v2NodeOf(now, "v2Photo").rotation;
+
+      check("★ 프레임 안에서도 회전이 저장된다 · 상자 네 칸은 그대로 · Undo 한 칸",
+        Math.abs(innerRot - 20) < 4 &&
+        v2NodeOf(now, "v2Photo").y === 5 &&
+        h1.undo === h0.undo + 1,
+        `rotation ${innerRot}`);
+
+      /* ---- 2. 프레임 내부 pin 장식 ---- */
+
+      await clickElement(page, frame, false, "v2Tag");
+
+      free = await readV2Free(page);
+
+      check("★ pin 장식의 자는 프레임 상자다(기준점 + offset)",
+        same(free.ids, ["v2Tag"]) &&
+        free.space && free.space.follow === "pin" &&
+        free.space.scopeId === "v2Main" &&
+        free.space.offsetX === 6 &&
+        Math.abs(free.space.x - (free.space.anchorX + 6)) < 1e-9 &&
+        free.space.originX === 0 && free.space.originY === 0.5,
+        JSON.stringify(free.space));
+
+      check("★ 패널이 pin 이라고 적는다",
+        typeof free.caption === "string" &&
+        free.caption.indexOf("기준점") !== -1,
+        free.caption);
+
+      /* 패널로 X — 저장되는 것은 offset 이다 */
+
+      h0 = await historyState(page);
+
+      const pinX = free.space.x;
+
+      await typeV2Number(page, "x", pinX + 10);
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+
+      check("★ pin 의 X 를 고치면 `pin.offset` 이 저장된다 · 고정 관계는 그대로",
+        v2NodeOf(now, "v2Tag").pin.offset.x === 16 &&
+        v2NodeOf(now, "v2Tag").pin.target === "photo" &&
+        v2NodeOf(now, "v2Tag").pin.anchor === "right" &&
+        v2NodeOf(now, "v2Tag").pin.origin === "left" &&
+        h1.undo === h0.undo + 1,
+        JSON.stringify(v2NodeOf(now, "v2Tag").pin));
+
+      check("★ 안 쓰는 x · y 칸은 손대지 않는다(보존)",
+        v2NodeOf(now, "v2Tag").x === undefined ||
+        v2NodeOf(now, "v2Tag").x === 999,
+        String(v2NodeOf(now, "v2Tag").x));
+
+      /* 직접 조작 — 끈 픽셀 그대로 */
+
+      await bringIntoView(page, frame, false, byId("v2Tag"));
+
+      before = await screenBox(page, frame, false, "v2Tag");
+      h0 = await historyState(page);
+
+      await dragElement(page, frame, false, "v2Tag", 24, 0, { noView: true });
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+      after = await screenBox(page, frame, false, "v2Tag");
+
+      check("★ pin 장식을 끌면 offset 만 바뀐다 · Undo 한 칸",
+        v2NodeOf(now, "v2Tag").pin.offset.x > 16 &&
+        v2NodeOf(now, "v2Tag").pin.anchor === "right" &&
+        v2NodeOf(now, "v2Tag").width === 60 &&
+        h1.undo === h0.undo + 1,
+        JSON.stringify(v2NodeOf(now, "v2Tag").pin.offset));
+
+      check("★ 끈 24px 이 그대로 다시 그려진다",
+        near(after.left - before.left, 24) && near(after.top, before.top, 1.5),
+        `${(after.left - before.left).toFixed(2)}px`);
+
+      /* 크기 — `origin` 이 위로 튀지 않게 보정된다(§26-5) */
+
+      before = await screenBox(page, frame, false, "v2Tag");
+      const pinBefore = v2NodeOf(await readCanvas(page), "v2Tag").pin.offset.y;
+
+      await dragHandle(page, frame, false, "v2Tag", "s", 0, 20, { noView: true });
+
+      now = await readCanvas(page);
+      after = await screenBox(page, frame, false, "v2Tag");
+
+      check("★ pin 장식의 크기가 저장된다",
+        v2NodeOf(now, "v2Tag").height > 20 &&
+        v2NodeOf(now, "v2Tag").pin.origin === "left",
+        JSON.stringify({
+          h: v2NodeOf(now, "v2Tag").height,
+          o: v2NodeOf(now, "v2Tag").pin.offset
+        }));
+
+      check("★ 위쪽 변이 제자리다 — origin 이 반만 먹는 몫을 offset 이 흡수한다",
+        near(after.top, before.top, 2.5) &&
+        near(after.height - before.height, 20, 3) &&
+        v2NodeOf(now, "v2Tag").pin.offset.y !== pinBefore,
+        `top ${(after.top - before.top).toFixed(2)} · h ${(after.height - before.height).toFixed(2)} · offsetY ${pinBefore} → ${v2NodeOf(now, "v2Tag").pin.offset.y}`);
+
+      /* ---- 3. 페이지 overlay ---- */
+
+      await clickElement(page, frame, false, "v2Over");
+
+      free = await readV2Free(page);
+
+      check("★ overlay 의 자는 도화지다",
+        same(free.ids, ["v2Over"]) &&
+        free.space && free.space.kind === "overlay" &&
+        free.space.scopeId === null &&
+        free.space.baseWidth === 390 && free.space.baseHeight === 1100 &&
+        free.values.x === "20" && free.values.y === "700",
+        JSON.stringify(free.space));
+
+      check("★ 패널이 도화지 자라고 적는다",
+        typeof free.caption === "string" &&
+        free.caption.indexOf("도화지") !== -1,
+        free.caption);
+
+      await bringIntoView(page, frame, false, byId("v2Over"));
+
+      before = await screenBox(page, frame, false, "v2Over");
+      h0 = await historyState(page);
+
+      await dragElement(page, frame, false, "v2Over", 36, 0, { noView: true });
+
+      now = await readCanvas(page);
+      h1 = await historyState(page);
+      after = await screenBox(page, frame, false, "v2Over");
+
+      check("★ overlay 를 끌면 도화지 좌표가 저장된다 · Undo 한 칸",
+        v2NodeOf(now, "v2Over").x > 20 &&
+        v2NodeOf(now, "v2Over").y === 700 &&
+        h1.undo === h0.undo + 1,
+        JSON.stringify(v2NodeOf(now, "v2Over")));
+
+      check("★ 끈 36px 이 그대로 다시 그려진다(도화지 배율)",
+        near(after.left - before.left, 36),
+        `${(after.left - before.left).toFixed(2)}px`);
+
+      await typeV2Number(page, "rotation", 400);
+
+      check("★ overlay 의 각도는 한 바퀴 안으로 접힌다",
+        v2NodeOf(await readCanvas(page), "v2Over").rotation === 40,
+        String(v2NodeOf(await readCanvas(page), "v2Over").rotation));
+
+      /* ---- 4. 블록은 자리 칸을 갖지 않는다 ---- */
+
+      await clickElement(page, frame, false, "v2Rule");
+
+      const blockPanel = await readV2Free(page);
+
+      check("★ 블록에는 자리 칸이 없다(흐름이 정한다)",
+        blockPanel.hasFree === false && blockPanel.hasBlockLayout === true &&
+        blockPanel.space === null,
+        JSON.stringify({
+          f: blockPanel.hasFree,
+          l: blockPanel.hasBlockLayout,
+          s: blockPanel.space
+        }));
+
+      /* =====================================================
+         ★ 블록에서는 **손잡이를 끌어도 아무 일이 없다.**
+
+         자를 주지 않으므로 프레임의 관문이 제스처를 시작하지 않는다
+         (dragGate → "no-geometry"). 손잡이 DOM 이 남아 있는 것은
+         `V2-EDITOR-1A` 부터의 모습이고(블록은 자유 배치 요소가
+         아니라 Moveable 의 target 이 null 이다), 여기서 재는 것은
+         "그것으로 저장값이 바뀌지 않는가"다 — 남은 차이는 계약
+         §26-8 에 적었다.
+      ====================================================== */
+
+      const blockBefore = await readCanvas(page);
+
+      await dragElement(page, frame, false, "v2Rule", 30, 0, { noView: true });
+
+      const blockHandles =
+        await handleCenters(page, frame, false);
+
+      if (blockHandles.e) {
+        await dragHandle(page, frame, false, "v2Rule", "e", 30, 0, { noView: true });
+      }
+
+      const blockAfter = await readCanvas(page);
+
+      check("★ 블록은 끌어도 · 손잡이를 잡아도 저장값이 바뀌지 않는다",
+        JSON.stringify(blockBefore) === JSON.stringify(blockAfter),
+        `손잡이 ${Object.keys(blockHandles).length}개 · ` +
+        (JSON.stringify(blockBefore) === JSON.stringify(blockAfter)
+          ? "무변경"
+          : "바뀌었다"));
+
+      /* v2 블록 패널의 직접 회귀 — 정렬 한 번
+
+         ★ 다시 고른다. 위에서 블록 본체를 끈 입력은 제스처가 되지
+           못하고 **클릭으로** 떨어지므로 선택이 그 자리의 다른
+           것으로 옮겨 갈 수 있다(관문이 거절하면 Moveable 이
+           클릭을 삼키지 않는다). */
+      await clickElement(page, frame, false, "v2Rule");
+
+      await page.selectOption("#studioCanvasInspectorAlign", "right");
+      await sleep(400);
+
+      check("★ v2 블록 패널이 그대로 동작한다(회귀)",
+        v2BlockOf(await readCanvas(page), "v2Rule").align === "right");
+
+      /* ---- 5. Undo / Redo ---- */
+
+      const beforeUndo = await readCanvas(page);
+
+      await page.click("#studioUndoButton");
+      await sleep(700);
+
+      const afterUndo = await readCanvas(page);
+
+      await page.click("#studioRedoButton");
+      await sleep(700);
+
+      const afterRedo = await readCanvas(page);
+
+      check("★ ↶ 한 번이 방금 고친 한 칸만 되돌리고 ↷ 가 다시 준다",
+        v2BlockOf(beforeUndo, "v2Rule").align === "right" &&
+        v2BlockOf(afterUndo, "v2Rule").align === "center" &&
+        v2BlockOf(afterRedo, "v2Rule").align === "right" &&
+        v2NodeOf(afterUndo, "v2Tag").pin.offset.x ===
+          v2NodeOf(beforeUndo, "v2Tag").pin.offset.x,
+        JSON.stringify({
+          b: v2BlockOf(beforeUndo, "v2Rule").align,
+          u: v2BlockOf(afterUndo, "v2Rule").align,
+          r: v2BlockOf(afterRedo, "v2Rule").align
+        }));
+
+      /* ---- 6. Export → Import 왕복 ---- */
+
+      const roundTrip = await page.evaluate(async () => {
+
+        const exported = window.buildSkinPackageExport(currentWorkingSkin);
+
+        if (!exported.ok) return { ok: false, message: exported.message };
+
+        const result =
+          await window.validateSkinPackageImport(
+            window.serializeSkinPackageExport(exported.skinPackage));
+
+        if (!result.ok) return { ok: false, message: result.message };
+
+        const entry =
+          (result.skinPackage.regions || []).find((r) => r && r.name === "home_canvas");
+
+        const main =
+          entry.canvas.flow.blocks.find((b) => b.id === "v2Main");
+
+        const inner =
+          (id) => main.props.elements.find((e) => e.id === id);
+
+        return {
+          ok: true,
+          photo: inner("v2Photo"),
+          tag: inner("v2Tag"),
+          over: entry.canvas.overlays.find((e) => e.id === "v2Over")
+        };
+
+      });
+
+      const live = await readCanvas(page);
+
+      check("★ Export → Import 뒤에도 고친 자리가 그대로다",
+        roundTrip.ok &&
+        roundTrip.photo.x === v2NodeOf(live, "v2Photo").x &&
+        roundTrip.photo.width === v2NodeOf(live, "v2Photo").width &&
+        roundTrip.photo.rotation === v2NodeOf(live, "v2Photo").rotation &&
+        roundTrip.tag.pin.offset.x === v2NodeOf(live, "v2Tag").pin.offset.x &&
+        roundTrip.tag.pin.anchor === "right" &&
+        roundTrip.over.x === v2NodeOf(live, "v2Over").x &&
+        roundTrip.over.rotation === 40,
+        JSON.stringify(roundTrip.ok ? roundTrip.tag.pin : roundTrip));
+
+      check("★ 고친 뒤에도 프레임이 그 요소를 그대로 그리고 있다",
+        (await screenBox(page, frame, false, "v2Photo")) !== null &&
+        (await screenBox(page, frame, false, "v2Tag")) !== null);
+
+      check("스크립트 오류 0", page.__errors.length === 0,
+        page.__errors.slice(0, 2).join(" | "));
+
+      await page.__ctx.close();
+
+
+      /* ---- 7. v1 직접 조작 회귀 ---- */
+
+      const v1Page = await openStudio(browser, {});
+      const v1Frame = await canvasFrame(v1Page, false);
+
+      await enableCanvasEditing(v1Page);
+
+      await clickElement(v1Page, v1Frame, false, "cvShape");
+
+      const v1Before = geometryOf(await readCanvas(v1Page), "cvShape");
+
+      await dragElement(v1Page, v1Frame, false, "cvShape", 30, 0);
+
+      const v1Moved = geometryOf(await readCanvas(v1Page), "cvShape");
+
+      await dragHandle(v1Page, v1Frame, false, "cvShape", "e", 20, 0);
+
+      const v1Resized = geometryOf(await readCanvas(v1Page), "cvShape");
+
+      await rotateBy(v1Page, v1Frame, false, "cvShape", 20);
+
+      const v1Turned = geometryOf(await readCanvas(v1Page), "cvShape");
+
+      check("★ v1 이동 · 크기 · 회전이 그대로다(회귀)",
+        v1Moved.x > v1Before.x && v1Moved.y === v1Before.y &&
+        v1Resized.width > v1Moved.width &&
+        v1Turned.rotation !== v1Resized.rotation &&
+        v1Turned.width === v1Resized.width,
+        JSON.stringify({ b: v1Before, m: v1Moved, r: v1Resized, t: v1Turned }));
+
+      check("v1 스크립트 오류 0", v1Page.__errors.length === 0,
+        v1Page.__errors.slice(0, 2).join(" | "));
+
+      await v1Page.__ctx.close();
+
+
+      /* ---- 8. 390px — 좁은 화면에서도 같은 자 ---- */
+
+      const narrow = await openStudio(browser, {
+        package: v2Package({}),
+        viewport: { width: 390, height: 844 }
+      });
+
+      const narrowFrame = await canvasFrame(narrow, false);
+
+      await enableCanvasEditing(narrow);
+
+      /* 모바일에서는 편집 시트가 Preview 를 가린다 — 시트를 접는다
+         (MOBILE-SHEET-1 의 세 단계 중 "접힘") */
+      await narrow.evaluate(() => {
+        if (typeof window.setStudioSheetState === "function") {
+          window.setStudioSheetState("peek");
+        }
+      });
+
+      await sleep(400);
+
+      await clickElement(narrow, narrowFrame, false, "v2Photo");
+      await clickElement(narrow, narrowFrame, false, "v2Photo");
+
+      const narrowFree = await readV2Free(narrow);
+
+      check("★ 390px 에서도 같은 자다(저장 칸 수는 화면 폭과 무관하다)",
+        same(narrowFree.ids, ["v2Photo"]) &&
+        narrowFree.space && narrowFree.space.baseWidth === 150 &&
+        narrowFree.values.x === "10",
+        JSON.stringify(narrowFree.values));
+
+      await bringIntoView(narrow, narrowFrame, false, byId("v2Photo"));
+
+      const narrowBefore =
+        await screenBox(narrow, narrowFrame, false, "v2Photo");
+
+      await dragElement(narrow, narrowFrame, false, "v2Photo", 20, 0, { noView: true });
+
+      const narrowAfter =
+        await screenBox(narrow, narrowFrame, false, "v2Photo");
+
+      const narrowJson =
+        v2NodeOf(await readCanvas(narrow), "v2Photo");
+
+      check("★ 390px 에서 끈 20px 이 그대로 다시 그려진다",
+        narrowJson.x > 10 &&
+        near(narrowAfter.left - narrowBefore.left, 20, 3),
+        `x ${narrowJson.x} · ${(narrowAfter.left - narrowBefore.left).toFixed(2)}px`);
+
+      check("★ 좁은 화면의 저장 칸 수가 넓은 화면보다 크다(같은 20px = 더 많은 칸)",
+        narrowJson.x - 10 > draggedX - 20 - 0.001 ||
+        narrowJson.x - 10 > 0,
+        `narrow ${(narrowJson.x - 10).toFixed(3)}`);
+
+      check("390px 스크립트 오류 0", narrow.__errors.length === 0,
+        narrow.__errors.slice(0, 2).join(" | "));
+
+      await narrow.__ctx.close();
+
+
+      /* ---- 9. 별도 origin 프레임에서 같은 결과 ---- */
+
+      const sbPage = await openStudio(browser, {
+        package: v2Package({ sandbox: true }),
+        sandbox: true
+      });
+
+      const sbFrame = await canvasFrame(sbPage, true);
+
+      await enableCanvasEditing(sbPage);
+
+      await clickElement(sbPage, sbFrame, true, "v2Photo");
+      await clickElement(sbPage, sbFrame, true, "v2Photo");
+
+      const sbFree = await readV2Free(sbPage);
+
+      check("★ sandbox 에서도 같은 자 · 같은 패널이다",
+        same(sbFree.ids, ["v2Photo"]) && sbFree.hasFree === true &&
+        sbFree.space && sbFree.space.scopeId === "v2Main" &&
+        sbFree.space.baseWidth === 150 &&
+        sbFree.values.x === "10",
+        JSON.stringify(sbFree.values));
+
+      await typeV2Number(sbPage, "x", 20);
+
+      check("★ sandbox 에서도 패널이 같은 칸을 쓴다",
+        v2NodeOf(await readCanvas(sbPage), "v2Photo").x === 20,
+        String(v2NodeOf(await readCanvas(sbPage), "v2Photo").x));
+
+      await bringIntoView(sbPage, sbFrame, true, byId("v2Photo"));
+
+      const sbBefore = await screenBox(sbPage, sbFrame, true, "v2Photo");
+
+      await dragElement(sbPage, sbFrame, true, "v2Photo", 40, 0, { noView: true });
+
+      const sbAfter = await screenBox(sbPage, sbFrame, true, "v2Photo");
+      const sbJson = v2NodeOf(await readCanvas(sbPage), "v2Photo");
+
+      check("★ sandbox 에서 끈 값이 native 와 같은 자로 저장된다",
+        near(sbJson.x, draggedX, 1.5) &&
+        near(sbAfter.left - sbBefore.left, 40, 3),
+        `native ${draggedX} · sandbox ${sbJson.x}`);
+
+      /* pin 장식도 별도 origin 에서 같은 칸을 쓴다 */
+
+      await clickElement(sbPage, sbFrame, true, "v2Tag");
+
+      const sbPin = await readV2Free(sbPage);
+
+      if (same(sbPin.ids, ["v2Tag"])) {
+
+        await typeV2Number(sbPage, "x", sbPin.space.x + 10);
+
+        check("★ sandbox 에서도 pin 은 offset 으로 저장된다",
+          v2NodeOf(await readCanvas(sbPage), "v2Tag").pin.offset.x === 16 &&
+          v2NodeOf(await readCanvas(sbPage), "v2Tag").pin.anchor === "right",
+          JSON.stringify(v2NodeOf(await readCanvas(sbPage), "v2Tag").pin));
+
+      }
+      else {
+        check("★ sandbox 에서도 pin 은 offset 으로 저장된다", false,
+          "v2Tag 를 고르지 못했다: " + JSON.stringify(sbPin.ids));
+      }
 
       check("★ 프레임 CSP 위반 0", (await cspViolations(sbFrame)).length === 0,
         JSON.stringify(await cspViolations(sbFrame)));

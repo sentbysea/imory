@@ -97,8 +97,39 @@ const STUDIO_CANVAS_FRAME_KINDS = ["move", "resize", "rotate"];
 const STUDIO_CANVAS_V2_PANEL_KINDS =
   ["v2-align", "v2-width", "v2-height", "v2-margin", "v2-order", "v2-text"];
 
+/* =========================================================
+   HOME-CANVAS-V2-EDITOR-1B — v2 의 자리 · 크기 · 각도
+
+   ★ **프레임도 이 kind 를 쓴다.** 위 여섯과 다른 점이다.
+
+   프레임(native · sandbox)은 자기가 v1 인지 v2 인지 모른다 — 알
+   필요도 없다. 부모가 자와 시작값을 내려 주고, 프레임은 손으로 끈
+   결과를 그 자 위의 다섯 칸으로 돌려준다. 그래서 프레임이 보내는
+   kind 는 여전히 `move` · `resize` · `rotate` 셋이고, **부모가 지금
+   draft 의 version 을 보고** 이 이름으로 바꿔 부른다
+   (studioCanvasEffectiveKind). 새 메시지도 새 봉투 칸도 없다.
+
+   ★ 이름을 v1 과 나누는 이유는 §25-5 그대로다 — 같은 `resize` 라도
+     v1 은 `canvas.elements` 의 요소이고 v2 는 프레임 내부 요소 ·
+     overlay 이며, pin 요소에서는 저장되는 칸 자체가 다르다
+     (`pin.offset`). writer 를 고르는 이름이 하나면 한 메시지가
+     엉뚱한 곳으로 새어 들어갈 길이 생긴다.
+========================================================== */
+
+const STUDIO_CANVAS_V2_TRANSFORM_KINDS =
+  ["v2-move", "v2-resize", "v2-rotate"];
+
+/* 프레임의 kind → v2 의 kind. 이 표 밖의 이름은 바뀌지 않는다. */
+const STUDIO_CANVAS_V2_KIND_OF = {
+  move: "v2-move",
+  resize: "v2-resize",
+  rotate: "v2-rotate"
+};
+
 const STUDIO_CANVAS_PANEL_KINDS =
-  ["move", "resize", "rotate", "text"].concat(STUDIO_CANVAS_V2_PANEL_KINDS);
+  ["move", "resize", "rotate", "text"]
+    .concat(STUDIO_CANVAS_V2_PANEL_KINDS)
+    .concat(STUDIO_CANVAS_V2_TRANSFORM_KINDS);
 
 
 const STUDIO_CANVAS_TYPE_LABELS = {
@@ -877,18 +908,58 @@ function studioCanvasSingleGeometry() {
     studioCanvasDraftPayload();
 
   /* =====================================================
-     HOME-CANVAS-V2-EDITOR-1A — v2 에서는 좌표가 내려가지 않는다.
+     HOME-CANVAS-V2-EDITOR-1B — v2 도 좌표를 내려보낸다.
 
-     이 값은 **직접 조작**(끌기 · 크기 · 회전)의 시작점이고, 프레임은
-     이것이 없으면 제스처를 시작하지 않는다(editor-runtime 의
-     dragGate → "no-geometry"). v2 의 드래그 · 리사이즈 · 회전은 이
-     라운드의 범위가 아니므로(§25-7) 여기서 **막는 것이 아니라 애초에
-     주지 않는다** — 관문을 한 곳에 두는 편이 "패널로는 고쳐지는데
-     손으로 끌면 엉뚱한 칸이 저장된다"를 만들지 않는다.
+     `1A` 에서는 여기서 null 을 돌려주어 직접 조작을 애초에 주지
+     않았다. 이제는 **자를 하나 정해** 그 자 위의 다섯 칸을 내려
+     준다 — 어느 상자를 기준으로 재는지(`scopeId`)와 pin 의
+     `origin` 몫이 함께 간다(계약 §26-2).
 
-     v2 overlay 는 v1 요소와 같은 모양이라 좌표가 있지만, 그것도
-     같은 이유로 아직 내려보내지 않는다.
+     ★ 자를 만드는 곳은 한 곳이다
+       (studio/inspector/studio-canvas-v2-space.js). 그 함수가 null
+       이면 여기서도 null 이고, 그때 프레임은 제스처를 시작하지
+       않는다(dragGate → "no-geometry") — 블록 선택이 그 경우다
+       (블록의 자리는 좌표가 아니다, §14-10).
   ====================================================== */
+  if (studioCanvasPayloadVersion(payload) === 2) {
+
+    const space =
+      (typeof window.studioCanvasV2Space === "function")
+        ? window.studioCanvasV2Space(id)
+        : null;
+
+    if (
+      !space ||
+      !Number.isFinite(space.x) ||
+      !Number.isFinite(space.y) ||
+      !Number.isFinite(space.width) || !(space.width > 0) ||
+      !(space.height === "auto" ||
+        (Number.isFinite(space.height) && space.height > 0)) ||
+      !Number.isFinite(space.rotation) ||
+      !(space.baseWidth > 0) ||
+      !(space.baseHeight > 0)
+    ) {
+      return null;
+    }
+
+    return {
+      active: true,
+      id: id,
+      x: space.x,
+      y: space.y,
+      width: space.width,
+      height: space.height,
+      rotation: space.rotation,
+      scopeId: space.scopeId,
+      originX: space.originX,
+      originY: space.originY,
+      baseWidth: space.baseWidth,
+      baseHeight: space.baseHeight,
+      generation: studioCanvasSelection.generation
+    };
+
+  }
+
   if (studioCanvasPayloadVersion(payload) !== 1) {
     return null;
   }
@@ -964,6 +1035,13 @@ function postStudioCanvasGeometryToFrame(answering) {
       width: 0,
       height: 0,
       rotation: 0,
+
+      /* HOME-CANVAS-V2-EDITOR-1B — 해제에도 자 칸을 빈 값으로 둔다.
+         프레임은 `scopeId` 가 없으면 도화지로 읽는다(계약 §26-2). */
+      scopeId: null,
+      originX: 0,
+      originY: 0,
+
       baseWidth: 0,
       baseHeight: 0,
       generation: studioCanvasSelectionGeneration
@@ -1441,6 +1519,28 @@ function proposeStudioCanvasSelection(proposal) {
    그 줄에 닿지 않는다.
 ========================================================== */
 
+/*
+  HOME-CANVAS-V2-EDITOR-1B — 그 kind 가 실제로 고르는 writer 이름
+
+  studioCanvasEffectiveKind("resize") -> "resize" | "v2-resize"
+
+  ★ 지금 draft 가 v2 일 때만 바꾼다. 패널은 이미 v2 이름으로
+    보내므로(그 화면은 version 을 안다) 이 함수를 두 번 지나도
+    같은 값이다.
+*/
+function studioCanvasEffectiveKind(kind) {
+
+  if (!Object.prototype.hasOwnProperty.call(STUDIO_CANVAS_V2_KIND_OF, kind)) {
+    return kind;
+  }
+
+  return (studioCanvasPayloadVersion(studioCanvasDraftPayload()) === 2)
+    ? STUDIO_CANVAS_V2_KIND_OF[kind]
+    : kind;
+
+}
+
+
 function commitStudioCanvasElementChange(request, gate) {
 
   const kinds =
@@ -1515,6 +1615,20 @@ function commitStudioCanvasElementChange(request, gate) {
     return answer(false, "element");
   }
 
+  /* =====================================================
+     HOME-CANVAS-V2-EDITOR-1B — 프레임의 kind 를 v2 의 kind 로
+
+     ★ 관문을 지난 **뒤에** 바꾼다. 무엇이 들어올 수 있는가는
+       여전히 위 `kinds` 가 정하고(프레임은 셋뿐), 여기서 바뀌는
+       것은 "그 이름이 어느 writer 를 고르는가"뿐이다.
+
+     ★ 판정의 근거는 **지금 draft** 하나다. 프레임이 보낸 값에는
+       version 도 자도 실려 있지 않다 — 그것을 아는 곳은 언제나
+       이 문서다(§14 의 소유권).
+  ====================================================== */
+  const kind =
+    studioCanvasEffectiveKind(value.kind);
+
   /* 그 kind 를 실제로 draft 에 쓸 수 있는 함수가 이 문서에 있는가 */
   const writer =
     {
@@ -1534,8 +1648,15 @@ function commitStudioCanvasElementChange(request, gate) {
       "v2-height": window.setStudioCanvasV2BlockHeight,
       "v2-margin": window.setStudioCanvasV2BlockMargin,
       "v2-order": window.setStudioCanvasV2BlockOrder,
-      "v2-text": window.setStudioCanvasV2NodeText
-    }[value.kind];
+      "v2-text": window.setStudioCanvasV2NodeText,
+
+      /* HOME-CANVAS-V2-EDITOR-1B — 프레임 내부 요소 · overlay 의
+         자리. 자 위의 값을 storage 칸으로 옮기는 번역이 그 안에
+         있다(studio/inspector/studio-canvas-v2-space.js). */
+      "v2-move": window.setStudioCanvasV2NodeMove,
+      "v2-resize": window.setStudioCanvasV2NodeResize,
+      "v2-rotate": window.setStudioCanvasV2NodeRotation
+    }[kind];
 
   if (typeof writer !== "function") {
     return answer(false, "unsupported");
@@ -1579,8 +1700,15 @@ function commitStudioCanvasElementChange(request, gate) {
       "v2-height": ["height"],
       "v2-margin": ["top", "right", "bottom", "left"],
       "v2-order": ["index"],
-      "v2-text": ["text"]
-    }[value.kind];
+      "v2-text": ["text"],
+
+      /* HOME-CANVAS-V2-EDITOR-1B — v1 의 세 kind 와 **같은 칸**이다.
+         프레임이 보내는 메시지의 모양이 바뀌지 않는 것이 그 뜻이고
+         (§26-2), 그 값이 무슨 자인지는 부모만 안다. */
+      "v2-move": ["x", "y"],
+      "v2-resize": ["x", "y", "width", "height"],
+      "v2-rotate": ["rotation"]
+    }[kind];
 
   const asBox =
     (point) => {
@@ -1630,7 +1758,7 @@ function commitStudioCanvasElementChange(request, gate) {
   ====================================================== */
   const coalesce =
     !!(gate && gate.allowCoalesce) &&
-    (value.kind === "text" || value.kind === "v2-text") &&
+    (kind === "text" || kind === "v2-text") &&
     value.coalesce === true;
 
   const result =
@@ -1975,5 +2103,8 @@ if (typeof window !== "undefined") {
   window.studioCanvasNodeInfo = studioCanvasNodeInfo;
   window.studioCanvasNodeList = studioCanvasNodeList;
   window.studioCanvasSelectTargetId = studioCanvasSelectTargetId;
+
+  /* HOME-CANVAS-V2-EDITOR-1B */
+  window.studioCanvasEffectiveKind = studioCanvasEffectiveKind;
 
 }

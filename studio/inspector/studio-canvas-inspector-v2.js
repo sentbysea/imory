@@ -785,6 +785,362 @@ function studioCanvasV2TextBlock(view) {
 
 
 /* =========================================================
+   5-2. 자리 · 크기 · 각도 — 프레임 내부 요소와 overlay
+        (HOME-CANVAS-V2-EDITOR-1B)
+
+   ★ 값은 **그 선택의 자 위의 숫자**다(`view.space`). 직접 조작이
+     쓰는 그 자 하나이고, 그래서 손으로 끈 결과와 패널의 숫자가
+     언제나 같은 단위다(계약 §26-2).
+
+     프레임 내부 transform   프레임 내부 좌표(props.baseWidth 자)
+     프레임 내부 pin         프레임 상자 좌표 — `기준점 + offset`
+     overlay                 도화지 좌표(v1 요소와 같다)
+
+   ★ pin 의 X · Y 는 **기준점에서 옮긴 결과**를 적는다. 저장되는
+     것은 `pin.offset` 이고 그 환산은 쓰기 관문 앞의 한 곳이 한다
+     (studio/inspector/studio-canvas-v2-space.js) — 패널은 화면에
+     보이는 그 자리를 그대로 보여 준다.
+
+   ★ 숫자 칸의 규칙은 v1 · v2 블록과 같다(계약 §22-3 · §25-4):
+     입력 중에는 아무것도 쓰지 않고 Enter · blur 에서 한 번 쓴다.
+     그래서 한 칸의 한 편집 세션이 Undo 한 칸이다.
+========================================================== */
+
+const STUDIO_CANVAS_V2_FREE_FIELDS = ["x", "y", "width", "height", "rotation"];
+
+const STUDIO_CANVAS_V2_FREE_LABELS = {
+  x: "X",
+  y: "Y",
+  width: "Width",
+  height: "Height",
+  rotation: "Rotation"
+};
+
+
+/* 그 칸이 어느 kind 에 실려 가는가 — v1 의 그 표와 나란하다 */
+function studioCanvasV2FreeKind(field) {
+
+  if (field === "x" || field === "y") {
+    return "v2-move";
+  }
+
+  if (field === "width" || field === "height") {
+    return "v2-resize";
+  }
+
+  return "v2-rotate";
+
+}
+
+
+/* 그 kind 가 소유한 칸들의 **지금 값**(= `expected`) */
+function studioCanvasV2FreeCurrent(space, kind) {
+
+  if (kind === "v2-move") {
+    return { x: space.x, y: space.y };
+  }
+
+  if (kind === "v2-resize") {
+    return {
+      x: space.x,
+      y: space.y,
+      width: space.width,
+      height: space.height
+    };
+  }
+
+  return { rotation: space.rotation };
+
+}
+
+
+/*
+  ★ 화면에는 소수 셋째 자리까지만 적는다.
+
+  pin 의 X · Y 는 `기준점 + offset` 이라 배율에 따라 긴 소수가 될 수
+  있다(프레임 폭이 나누어지지 않는 경우). 손으로 끈 결과의 자릿수도
+  셋째 자리이므로(editor-runtime 의 roundCanvasCoord) 같은 자를 쓴다.
+
+  ★ **저장값을 깎지 않는다.** 이것은 보여 주는 문자열일 뿐이고,
+    `expected` 는 언제나 자에서 읽은 그 숫자다(계약 §26-4).
+*/
+function studioCanvasV2FreeNumberText(value) {
+
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return String(value);
+  }
+
+  return String(Math.round(value * 1000) / 1000);
+
+}
+
+
+function studioCanvasV2FreeDisplay(view, field) {
+
+  if (view.mode !== "single" || !view.space) {
+    return "";
+  }
+
+  if (field === "height" && view.space.height === "auto") {
+    return "";
+  }
+
+  return studioCanvasV2FreeNumberText(view.space[field]);
+
+}
+
+
+function studioCanvasV2CommitFree(field) {
+
+  const view =
+    studioCanvasInspectorView();
+
+  if (view.mode !== "single" || view.kind === "block" || !view.space) {
+    return false;
+  }
+
+  const input =
+    studioCanvasInspectorInputs ? studioCanvasInspectorInputs[field] : null;
+
+  if (!input) {
+    return false;
+  }
+
+  const raw =
+    String(input.value).trim();
+
+  const value =
+    Number(raw);
+
+  if (!raw || !Number.isFinite(value)) {
+
+    setStudioCanvasInspectorError(field, "숫자를 넣어 주세요.");
+
+    input.value = studioCanvasV2FreeDisplay(view, field);
+
+    return false;
+
+  }
+
+  const kind =
+    studioCanvasV2FreeKind(field);
+
+  const expected =
+    studioCanvasV2FreeCurrent(view.space, kind);
+
+  const next =
+    { ...expected };
+
+  /* ★ 각도의 표현은 계약 파일 한 곳이 정한다 — 손으로 돌린 결과와
+     같은 자로 접고 반올림한다(§19-3 · §22-3). */
+  next[field] =
+    (field === "rotation" &&
+      typeof window.normalizeSkinHomeCanvasRotation === "function")
+      ? window.normalizeSkinHomeCanvasRotation(value)
+      : value;
+
+  const result =
+    commitStudioCanvasInspectorField(kind, next, expected);
+
+  if (!result || !result.accepted) {
+
+    setStudioCanvasInspectorError(
+      field,
+      studioCanvasInspectorRejectText(result && result.reason)
+    );
+
+    input.value = studioCanvasV2FreeDisplay(studioCanvasInspectorView(), field);
+
+    return false;
+
+  }
+
+  setStudioCanvasInspectorError(field, "");
+
+  /* 접힌 각도처럼 저장값이 입력과 다를 수 있다 — 화면을 저장값으로
+     맞춘다(v1 과 같은 이유) */
+  const after =
+    studioCanvasInspectorView();
+
+  if (after.mode === "single" && after.space) {
+    input.value = studioCanvasV2FreeDisplay(after, field);
+  }
+
+  return true;
+
+}
+
+
+function studioCanvasV2FreeNumberRow(field, view) {
+
+  const row =
+    document.createElement("div");
+
+  row.className =
+    "studio-inspector-row studio-canvas-inspector-number";
+
+  const name =
+    document.createElement("label");
+
+  name.className = "studio-inspector-row-label";
+  name.htmlFor = `studioCanvasInspectorV2-${field}`;
+  name.textContent = STUDIO_CANVAS_V2_FREE_LABELS[field];
+
+  const input =
+    document.createElement("input");
+
+  input.type = "text";
+  input.inputMode = "numeric";
+  input.className = "studio-inspector-input studio-inspector-input--number";
+  input.id = `studioCanvasInspectorV2-${field}`;
+  input.dataset.canvasField = field;
+
+  input.value =
+    studioCanvasV2FreeDisplay(view, field);
+
+  /* ★ `height:"auto"` 인 요소의 Height 칸은 잠긴다. 여기서 숫자를
+     지어내지 않는다 — 세로 손잡이로 끌면 화면에서 잰 높이로 숫자가
+     된다(계약 §18-3 · §26-6). */
+  if (field === "height") {
+    input.disabled = view.space.height === "auto";
+  }
+
+  input.addEventListener("keydown", (event) => {
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      studioCanvasV2CommitFree(field);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      input.value = studioCanvasV2FreeDisplay(studioCanvasInspectorView(), field);
+      setStudioCanvasInspectorError(field, "");
+      input.blur();
+    }
+
+  });
+
+  input.addEventListener("blur", () => {
+    studioCanvasV2CommitFree(field);
+  });
+
+  row.appendChild(name);
+  row.appendChild(input);
+
+  const error =
+    studioCanvasInspectorErrorNode(field);
+
+  const box =
+    document.createElement("div");
+
+  box.appendChild(row);
+  box.appendChild(error);
+
+  studioCanvasInspectorInputs[field] = input;
+  studioCanvasInspectorErrors[field] = error;
+
+  return box;
+
+}
+
+
+/* 그 자가 무슨 자인지 한 줄로 — 숫자만 보면 알 수 없다 */
+function studioCanvasV2SpaceCaption(view) {
+
+  if (view.kind === "overlay") {
+    return "도화지 좌표 (Canvas px)";
+  }
+
+  return (view.space.follow === "pin")
+    ? "프레임 좌표 (기준점에서 옮긴 자리)"
+    : "프레임 내부 좌표 (Canvas px)";
+
+}
+
+
+function studioCanvasV2FreeBlock(view) {
+
+  const layout =
+    document.createElement("div");
+
+  layout.className = "studio-canvas-inspector-geometry";
+  layout.id = "studioCanvasInspectorV2Free";
+
+  const caption =
+    document.createElement("p");
+
+  caption.className = "studio-inspector-block-label";
+  caption.textContent = studioCanvasV2SpaceCaption(view);
+
+  layout.appendChild(caption);
+
+  if (view.kind === "frame-element") {
+
+    layout.appendChild(
+      studioCanvasInspectorReadRow(
+        "따라가기",
+        STUDIO_CANVAS_V2_FOLLOW_LABELS[
+          view.space.follow === "pin" ? "pin" : "transform"
+        ]
+      )
+    );
+
+  }
+
+  STUDIO_CANVAS_V2_FREE_FIELDS.forEach((field) => {
+    layout.appendChild(studioCanvasV2FreeNumberRow(field, view));
+  });
+
+  if (view.space.height === "auto") {
+
+    layout.appendChild(
+      studioCanvasInspectorNote(
+        "높이가 Auto 입니다 — 세로 손잡이로 끌면 숫자가 됩니다.",
+        "studioCanvasInspectorV2AutoNote"
+      )
+    );
+
+  }
+
+  return layout;
+
+}
+
+
+/* 값만 갈아 끼운다 — 포커스가 있는 칸은 건너뛴다(v1 과 같은 이유) */
+function syncStudioCanvasV2FreeInputs(view) {
+
+  const active =
+    document.activeElement;
+
+  STUDIO_CANVAS_V2_FREE_FIELDS.forEach((field) => {
+
+    const input =
+      studioCanvasInspectorInputs[field];
+
+    if (!input || input === active) {
+      return;
+    }
+
+    if (field === "height") {
+      input.disabled = view.space.height === "auto";
+    }
+
+    const value =
+      studioCanvasV2FreeDisplay(view, field);
+
+    if (input.value !== value) {
+      input.value = value;
+    }
+
+  });
+
+}
+
+
+/* =========================================================
    6. 화면 하나
 
    ★ 무엇이 골라졌는지 **먼저** 적는다(계약 §25-3). `main_visual`
@@ -826,7 +1182,19 @@ function buildStudioCanvasV2Inspector(view) {
 
   if (view.kind !== "block") {
 
-    /* 프레임 내부 요소 · overlay — 읽기 전용 요약(§25-7) */
+    /* =====================================================
+       HOME-CANVAS-V2-EDITOR-1B — 자리 · 크기 · 각도를 고친다
+
+       `1A` 에서는 여기가 읽기 전용 요약이었다. 이제는 자 위의
+       다섯 칸이 입력이고, 자를 만들 수 없을 때만 예전처럼 요약을
+       그린다(숫자를 지어내지 않는다 — 계약 §26-6).
+    ====================================================== */
+
+    if (view.space) {
+      studioCanvasInspectorBody.appendChild(studioCanvasV2FreeBlock(view));
+      return;
+    }
+
     const box =
       document.createElement("div");
 
@@ -856,7 +1224,7 @@ function buildStudioCanvasV2Inspector(view) {
 
     box.appendChild(
       studioCanvasInspectorNote(
-        "자리와 크기는 아직 여기서 고칠 수 없습니다.",
+        "이 프레임의 자를 만들 수 없어 자리와 크기를 고칠 수 없습니다.",
         "studioCanvasInspectorV2ReadNote"
       )
     );
@@ -937,7 +1305,15 @@ function syncStudioCanvasV2Inspector(view) {
   }
 
   if (view.kind !== "block") {
+
+    /* HOME-CANVAS-V2-EDITOR-1B — 프레임 내부 요소 · overlay 의
+       다섯 칸. 자가 없으면 그릴 것도 없다(읽기 전용 요약). */
+    if (view.space) {
+      syncStudioCanvasV2FreeInputs(view);
+    }
+
     return;
+
   }
 
   ["width", "height"].concat(studioCanvasV2Edges()).forEach((field) => {

@@ -1596,6 +1596,11 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         height: verdict.payload.height,
         /* HOME-CANVAS-TRANSFORM-1C — 회전의 시작 각도 */
         rotation: verdict.payload.rotation,
+        /* HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자와 pin 의 origin.
+           없으면 runtime 이 "도화지 · 0" 으로 읽는다(계약 §26-2). */
+        scopeId: verdict.payload.scopeId,
+        originX: verdict.payload.originX,
+        originY: verdict.payload.originY,
         baseWidth: verdict.payload.baseWidth,
         baseHeight: verdict.payload.baseHeight,
         generation: verdict.payload.generation,

@@ -87,6 +87,20 @@ const CANVAS_EDIT_ID_ATTR = "data-imory-edit-id";
 /* 도화지(표시 위치) 자신 — lasso 를 시작할 수 있는 범위다(§3) */
 const CANVAS_ROOT_ATTR = "data-imory-canvas-root";
 
+/* =========================================================
+   HOME-CANVAS-V2-EDITOR-1B — 자의 기준이 되는 상자
+
+   v1 에서는 그 상자가 언제나 도화지였다. v2 의 `main_visual` 내부
+   요소는 **프레임 상자** 위에 놓이므로(백분율도 배율도 그 상자에서
+   풀린다 — 계약 §24-3), 부모가 내려 주는 `scopeId` 로 그 상자를
+   찾는다. `scopeId` 가 없으면 지금까지처럼 도화지다.
+
+   ★ 프레임 블록은 자유 배치 요소가 아니라 `data-imory-canvas-block`
+     이다(§25-2). 그래서 요소를 찾는 선택자와 자를 찾는 선택자가
+     다르다.
+========================================================== */
+const CANVAS_BLOCK_ATTR = "data-imory-canvas-block";
+
 const CANVAS_LOCKED_ATTR = "data-imory-canvas-locked";
 
 /* skin/skin-home-canvas.js SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN 과
@@ -2053,10 +2067,48 @@ export function createHomeCanvasSelectionFrame(options) {
       clientX 는 둘 다 **이 프레임의 좌표계**이고, 바깥의 scale 은
       둘 다에 똑같이 적용되므로 나누면 사라진다.
   */
-  function canvasScale(baseWidth) {
+  /* =========================================================
+     HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자
+
+     `scopeId` 가 있으면 그 블록 상자가 기준이다(v2 `main_visual`
+     내부 요소). 없으면 도화지다(v1 요소 · v2 overlay).
+
+     ★ 못 찾으면 null 이다 — 비슷한 다른 상자로 바꿔 주지 않는다.
+       그러면 canvasScale 이 0 을 돌려주고 관문이 "no-scale" 로
+       제스처를 거절한다.
+  ========================================================== */
+
+  function canvasScopeBox(scopeId) {
+
+    if (typeof scopeId !== "string" || !scopeId) {
+      return canvasRoot();
+    }
+
+    if (!CANVAS_ELEMENT_ID_PATTERN.test(scopeId)) {
+      return null;
+    }
+
+    const container =
+      renderRoot();
+
+    if (!container || typeof container.querySelector !== "function") {
+      return null;
+    }
+
+    const el =
+      container.querySelector(
+        `[${CANVAS_BLOCK_ATTR}][${CANVAS_EDIT_ID_ATTR}="${scopeId}"]`
+      );
+
+    return (el && el.isConnected) ? el : null;
+
+  }
+
+
+  function canvasScale(baseWidth, scopeId) {
 
     const root =
-      canvasRoot();
+      canvasScopeBox(scopeId);
 
     if (!root || !(baseWidth > 0)) {
       return 0;
@@ -2132,7 +2184,7 @@ export function createHomeCanvasSelectionFrame(options) {
       return "no-renderer";
     }
 
-    if (!(canvasScale(geometry.baseWidth) > 0)) {
+    if (!(canvasScale(geometry.baseWidth, geometry.scopeId) > 0)) {
       return "no-scale";
     }
 
@@ -2312,7 +2364,7 @@ export function createHomeCanvasSelectionFrame(options) {
       positionApi();
 
     const scale =
-      canvasScale(geometry.baseWidth);
+      canvasScale(geometry.baseWidth, geometry.scopeId);
 
     if (!el || !api || !(scale > 0)) {
       return refuseDrag(event, "no-basis");
@@ -2334,6 +2386,12 @@ export function createHomeCanvasSelectionFrame(options) {
          부모의 답과 대조할 때만 쓴다(HOME-CANVAS-TRANSFORM-1C) */
       baseRot: geometry.rotation,
       nextRot: geometry.rotation,
+
+      /* HOME-CANVAS-V2-EDITOR-1B — 이동은 크기를 바꾸지 않으므로
+         origin 몫이 0 이다. 그래도 들고 있는 이유는 setGeometry 가
+         "그 사이에 자가 바뀌었는가"를 이 값으로 보기 때문이다. */
+      originX: geometry.originX,
+      originY: geometry.originY,
 
       baseWidth: geometry.baseWidth,
       baseHeight: geometry.baseHeight,
@@ -2432,7 +2490,7 @@ export function createHomeCanvasSelectionFrame(options) {
       positionApi();
 
     const scale =
-      canvasScale(geometry.baseWidth);
+      canvasScale(geometry.baseWidth, geometry.scopeId);
 
     if (!el || !api || !(scale > 0)) {
       return refuseDrag(event, "no-basis");
@@ -2501,6 +2559,27 @@ export function createHomeCanvasSelectionFrame(options) {
       corner: corner,
       startPxW: startPxW,
       startPxH: startPxH,
+
+      /* =====================================================
+         HOME-CANVAS-V2-EDITOR-1B — pin 장식의 `origin` 몫
+
+         v2 의 `follow:"pin"` 요소는 좌표가 **자기 상자의 왼쪽
+         위가 아니라 `origin` 이 놓일 자리**이고, 그 차이는 CSS 의
+         백분율 translate 가 뺀다(계약 §24-4). 그래서 상자 크기가
+         바뀌면 같은 좌표가 가리키는 화면 자리도 바뀐다.
+
+         Moveable 이 준 `drag.beforeTranslate` 는 **화면 상자의
+         왼쪽 위**가 얼마나 움직여야 하는가이므로, 좌표에는 크기
+         변화 × origin 만큼을 더 얹어야 한다.
+
+           새 좌표 = 시작 좌표 + 이동량 + origin × (새 크기 − 시작 크기)
+
+         그래야 끄는 동안과 확정 뒤가 같은 자리이고(§26-5), 고정
+         기준점이 손잡이를 따라간다. v1 요소와 overlay 는 origin 이
+         0 이라 이 항이 사라진다 — 지금까지의 식 그대로다.
+      ====================================================== */
+      originX: geometry.originX,
+      originY: geometry.originY,
 
       autoHeight: autoHeight,
       baseX: geometry.x,
@@ -2657,14 +2736,19 @@ export function createHomeCanvasSelectionFrame(options) {
     const dh =
       dist[1] / gesture.scale;
 
-    gesture.nextX =
-      roundCanvasCoord(gesture.baseX + translate[0] / gesture.scale);
-
-    gesture.nextY =
-      roundCanvasCoord(gesture.baseY + translate[1] / gesture.scale);
+    const nextW =
+      roundCanvasCoord(Math.max(CANVAS_MIN_SIZE, gesture.baseW + dw));
 
     gesture.nextW =
-      roundCanvasCoord(Math.max(CANVAS_MIN_SIZE, gesture.baseW + dw));
+      nextW;
+
+    /* HOME-CANVAS-V2-EDITOR-1B — pin 장식의 `origin` 몫(위 주석).
+       v1 요소 · overlay 는 0 이라 이 항이 사라진다. */
+    gesture.nextX =
+      roundCanvasCoord(
+        gesture.baseX + translate[0] / gesture.scale +
+          gesture.originX * (nextW - gesture.baseW)
+      );
 
     /* =====================================================
        `height:"auto"` — 언제 숫자가 되는가(§18-3)
@@ -2680,6 +2764,18 @@ export function createHomeCanvasSelectionFrame(options) {
        그 UI 는 뒤 Inspector 단계다.
     ====================================================== */
 
+    /*
+      ★ 세로 좌표는 높이를 정한 **뒤에** 정한다 — `origin` 몫이
+        새 높이를 알아야 계산되기 때문이다(위 originX 주석).
+
+      `"auto"` 로 남는 동안에는 그 항이 0 이다. 높이를 숫자로 쓰지
+      않았으므로 화면의 세로 길이는 브라우저가 내용으로 정하고,
+      백분율 translate 도 그 새 상자에서 다시 풀린다 — 우리가 끼어들
+      숫자가 없다(그래서 끌기 중과 확정 뒤가 같다).
+    */
+
+    let originH = 0;
+
     if (gesture.autoHeight && (!gesture.verticalHandle || dh === 0)) {
 
       gesture.nextH = CANVAS_AUTO_HEIGHT;
@@ -2693,7 +2789,15 @@ export function createHomeCanvasSelectionFrame(options) {
       gesture.nextH =
         roundCanvasCoord(Math.max(CANVAS_MIN_SIZE, baseH + dh));
 
+      originH =
+        gesture.originY * (gesture.nextH - baseH);
+
     }
+
+    gesture.nextY =
+      roundCanvasCoord(
+        gesture.baseY + translate[1] / gesture.scale + originH
+      );
 
     try {
 
@@ -2829,7 +2933,7 @@ export function createHomeCanvasSelectionFrame(options) {
       /* 배율은 각도에 들어가지 않지만(위 ★), 상자 네 칸은 확정의
          `expected` 로 올라가지 않으므로 여기서는 시작값만 들고
          있으면 된다 */
-      scale: canvasScale(geometry.baseWidth),
+      scale: canvasScale(geometry.baseWidth, geometry.scopeId),
 
       baseX: geometry.x,
       baseY: geometry.y,
@@ -2854,6 +2958,11 @@ export function createHomeCanvasSelectionFrame(options) {
 
       /* 확정으로 올릴 값 — 한 바퀴 안으로 접은 표현이다 */
       nextRot: geometry.rotation,
+
+      /* HOME-CANVAS-V2-EDITOR-1B — 회전도 상자를 바꾸지 않는다.
+         이동과 같은 이유로 시작값만 들고 있는다. */
+      originX: geometry.originX,
+      originY: geometry.originY,
 
       baseWidth: geometry.baseWidth,
       baseHeight: geometry.baseHeight,
@@ -3220,6 +3329,22 @@ export function createHomeCanvasSelectionFrame(options) {
                이 없으면 부모가 0 으로 만들어 보낸다(계약 §5) */
             rotation: payload.rotation,
 
+            /* =================================================
+               HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자와 origin
+
+               ★ **선택 칸이다.** v1 요소와 v2 overlay 의 자는
+                 도화지이고 origin 은 0 이라, 부모가 그 칸을 싣지
+                 않아도 지금까지와 똑같이 움직여야 한다. 그래서
+                 여기서 기본값을 채운다 — 없는 것과 "도화지 · 0" 을
+                 적은 것이 같은 뜻이다(계약 §5 의 그 규칙).
+            ================================================== */
+            scopeId:
+              (typeof payload.scopeId === "string" && payload.scopeId)
+                ? payload.scopeId
+                : "",
+            originX: Number.isFinite(payload.originX) ? payload.originX : 0,
+            originY: Number.isFinite(payload.originY) ? payload.originY : 0,
+
             baseWidth: payload.baseWidth,
             baseHeight: payload.baseHeight,
             generation:
@@ -3231,7 +3356,8 @@ export function createHomeCanvasSelectionFrame(options) {
        다시 재현하지 않고 읽을 수 있게 남긴다. */
     state.geometryLog.push(
       value
-        ? `${value.id}@${value.x},${value.y} ${value.width}x${value.height}` +
+        ? `${value.id}${value.scopeId ? "/" + value.scopeId : ""}` +
+            `@${value.x},${value.y} ${value.width}x${value.height}` +
             `r${value.rotation}#${value.generation}${state.pending ? "*" : ""}`
         : `off${state.pending ? "*" : ""}`
     );
@@ -3250,6 +3376,13 @@ export function createHomeCanvasSelectionFrame(options) {
       /* 각도 없이는 회전을 시작할 수 없다 — 크기와 같은 이유로
          **선택 칸이 아니다**(계약 §19-6) */
       Number.isFinite(value.rotation) &&
+      /* HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자가 지정됐으면 그
+         상자가 **지금 화면에 있어야** 한다. 없으면 자를 만들 수
+         없으므로 조작을 켜지 않는다(§26-2). origin 은 자기 상자
+         안의 분수다. */
+      (!value.scopeId || !!canvasScopeBox(value.scopeId)) &&
+      value.originX >= 0 && value.originX <= 1 &&
+      value.originY >= 0 && value.originY <= 1 &&
       value.baseWidth > 0 &&
       value.baseHeight > 0 &&
       value.generation >= 0;
@@ -3276,6 +3409,9 @@ export function createHomeCanvasSelectionFrame(options) {
       /* ★ **다섯 칸을 모두** 본다(1C 에서 각도가 늘었다). 이동 중에
          폭이나 각도가 달라졌다는 것도 "그 사이에 draft 가 바뀌었다"
          이고, 그때의 제스처는 이미 옛 화면을 근거로 한 것이다. */
+      /* HOME-CANVAS-V2-EDITOR-1B — 자까지 함께 본다. 같은 요소라도
+         자의 기준 상자나 origin 이 달라졌다면(프레임 크기를 바꾼
+         편집 · Undo) 지금 끌고 있는 값은 더 이상 근거가 없다. */
       if (
         usable &&
         value.id === state.drag.id &&
@@ -3283,7 +3419,9 @@ export function createHomeCanvasSelectionFrame(options) {
         value.y === state.drag.baseY &&
         value.width === state.drag.baseW &&
         value.height === state.drag.baseH &&
-        value.rotation === state.drag.baseRot
+        value.rotation === state.drag.baseRot &&
+        value.originX === state.drag.originX &&
+        value.originY === state.drag.originY
       ) {
         state.drag.generation = value.generation;
       }

@@ -2587,6 +2587,18 @@ function routeCanvasSelectionMessage(data) {
      짝지어 오고, 켜는 관문은 여전히 canvas-select 의 `editing` 이다.
 ========================================================== */
 
+/* HOME-CANVAS-V2-EDITOR-1B — pin 장식의 `origin` 분수(선택 칸) */
+function previewCanvasOriginOk(value) {
+
+  return (
+    value === undefined ||
+    value === null ||
+    (Number.isFinite(value) && value >= 0 && value <= 1)
+  );
+
+}
+
+
 function routeCanvasGeometryMessage(data) {
 
   const active =
@@ -2602,6 +2614,11 @@ function routeCanvasGeometryMessage(data) {
     /* HOME-CANVAS-TRANSFORM-1C — 각도가 없으면 회전을 시작할 수
        있는 단독 선택이 아니다(크기와 같은 자리) */
     Number.isFinite(data.rotation) &&
+    /* HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자(`scopeId`)와
+       `origin` 은 **선택 칸**이다. v1 요소 · v2 overlay 는 도화지
+       자에 origin 0 이라 없어도 같은 뜻이다(계약 §26-2). */
+    previewCanvasOriginOk(data.originX) &&
+    previewCanvasOriginOk(data.originY) &&
     data.baseWidth > 0 &&
     data.baseHeight > 0;
 
@@ -2613,6 +2630,12 @@ function routeCanvasGeometryMessage(data) {
     width: active ? data.width : 0,
     height: active ? data.height : 0,
     rotation: active ? data.rotation : 0,
+    scopeId:
+      (active && typeof data.scopeId === "string" && data.scopeId)
+        ? data.scopeId
+        : null,
+    originX: (active && Number.isFinite(data.originX)) ? data.originX : 0,
+    originY: (active && Number.isFinite(data.originY)) ? data.originY : 0,
     baseWidth: active ? data.baseWidth : 0,
     baseHeight: active ? data.baseHeight : 0,
     generation:

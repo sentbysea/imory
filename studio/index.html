@@ -921,6 +921,16 @@
         "../skin/skin-home-canvas-v2.js",
         "../skin/skin-home-canvas-write.js",
         "../skin/skin-home-canvas-write-v2.js",
+        /* HOME-CANVAS-V2-EDITOR-1B — Studio 는 캔버스를 **그리지
+           않는다**(그것은 Preview 문서와 sandbox 프레임의 일이다).
+           그래도 이 파일이 필요한 이유는 v2 `main_visual` 의 자를
+           재는 계산(프레임 폭 · 높이 · primary 사진 상자 · pin
+           기준점)이 여기 있고, 그 자를 왼쪽 패널과 직접 조작이 함께
+           써야 하기 때문이다 — 한 벌을 더 적으면 패널의 숫자와
+           화면의 자리가 갈라진다(계약 §26-3).
+           studio/inspector/studio-canvas-v2-space.js 가 호출 시점에
+           이 파일의 함수를 찾으므로 그 앞이면 된다. */
+        "../skin/skin-home-canvas-render.js",
         "../skin/skin-sanitize.js",
         "../skin/skin-package-normalize.js",
         "../skin/skin-generator.js",
@@ -1328,6 +1338,12 @@
            overlay 의 좌표 변환을 **호출 시점에** 쓰므로 그 뒤이고,
            선택 라우터를 가진 studio-inspector.js 보다는 앞이다. */
         "./inspector/studio-canvas-selection.js",
+
+        /* HOME-CANVAS-V2-EDITOR-1B — v2 선택 하나의 **좌표 자**와
+           storage 번역. 위 선택 파일이 호출 시점에 이 함수를
+           찾으므로(studioCanvasSingleGeometry) 순서는 강제되지
+           않지만, 읽는 순서를 의존 방향과 맞춰 바로 뒤에 둔다. */
+        "./inspector/studio-canvas-v2-space.js",
 
         "./inspector/studio-inspector-edit.js",
         "./inspector/studio-inspector-text.js",

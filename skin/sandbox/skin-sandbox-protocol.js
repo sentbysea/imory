@@ -1072,6 +1072,28 @@ function isSandboxCanvasCoord(value) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-V2-EDITOR-1B — pin 의 `origin` 분수
+
+   자기 상자 **안**의 한 점이므로 0~1 이다. 좌표의 ±100000 을 빌려
+   오지 않는다 — 그 자를 쓰면 상자 밖의 값도 통과한다.
+
+   ★ 없어도 된다(선택 칸). v1 요소와 v2 overlay 의 origin 은 0 이고,
+     그때는 이 칸 자체를 만들지 않는다.
+========================================================== */
+function isSandboxCanvasOrigin(value) {
+
+  return (
+    value === undefined ||
+    (typeof value === "number" &&
+      Number.isFinite(value) &&
+      value >= 0 &&
+      value <= 1)
+  );
+
+}
+
+
 function isSandboxCanvasSize(value) {
 
   return (
@@ -2251,6 +2273,9 @@ var SANDBOX_MESSAGE_SPEC = {
     keys: [
       "contract", "renderSeq", "active", "id",
       "x", "y", "width", "height", "rotation",
+      /* HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자와 pin 의 origin.
+         **선택 칸**이다(v1 요소 · v2 overlay 에는 없다). */
+      "scopeId", "originX", "originY",
       "baseWidth", "baseHeight", "generation", "answering"
     ],
     check: function (payload) {
@@ -2284,10 +2309,36 @@ var SANDBOX_MESSAGE_SPEC = {
           payload.width === undefined &&
           payload.height === undefined &&
           payload.rotation === undefined &&
+          payload.scopeId === undefined &&
+          payload.originX === undefined &&
+          payload.originY === undefined &&
           payload.baseWidth === undefined &&
           payload.baseHeight === undefined
         );
 
+      }
+
+      /* =====================================================
+         HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자와 origin
+
+         ★ **선택 칸이다.** v1 요소와 v2 overlay 의 자는 도화지이고
+           origin 은 0 이라, 그 칸이 아예 없는 메시지가 지금까지의
+           그 메시지다. 있으면 모양을 본다 — `scopeId` 는 편집
+           식별자, origin 은 0~1 의 분수다(자기 상자 안의 점이므로
+           좌표의 ±100000 을 빌려 오지 않는다).
+      ====================================================== */
+      if (
+        payload.scopeId !== undefined &&
+        !isSandboxInspectEditId(payload.scopeId)
+      ) {
+        return false;
+      }
+
+      if (
+        !isSandboxCanvasOrigin(payload.originX) ||
+        !isSandboxCanvasOrigin(payload.originY)
+      ) {
+        return false;
       }
 
       return (

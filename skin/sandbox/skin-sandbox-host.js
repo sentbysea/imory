@@ -2812,6 +2812,18 @@ export function sendSandboxCanvasSelect(handle, selection) {
      크기를 모르는 채로 리사이즈를 시작할 수 없다.
 ========================================================== */
 
+/* HOME-CANVAS-V2-EDITOR-1B — pin 장식의 `origin` 분수(선택 칸) */
+function sandboxCanvasOriginOk(value) {
+
+  return (
+    value === undefined ||
+    value === null ||
+    (Number.isFinite(value) && value >= 0 && value <= 1)
+  );
+
+}
+
+
 export function sendSandboxCanvasGeometry(handle, geometry) {
 
   if (!handle || handle.destroyed || !handle.TYPES || !handle.renderSeq) {
@@ -2841,6 +2853,12 @@ export function sendSandboxCanvasGeometry(handle, geometry) {
         (Number.isFinite(value.height) && value.height > 0)) &&
       /* HOME-CANVAS-TRANSFORM-1C — 각도도 active 면 반드시 있다 */
       Number.isFinite(value.rotation) &&
+      /* HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자(`scopeId`)와 pin 의
+         `origin` 은 **선택 칸**이다. v1 요소 · v2 overlay 는 도화지
+         자에 origin 0 이라 없어도 같은 뜻이다(계약 §26-2). 값이
+         범위를 벗어나면 고쳐 보내지 않고 `active:false` 다. */
+      sandboxCanvasOriginOk(value.originX) &&
+      sandboxCanvasOriginOk(value.originY) &&
       value.baseWidth > 0 &&
       value.baseHeight > 0
     );
@@ -2870,6 +2888,20 @@ export function sendSandboxCanvasGeometry(handle, geometry) {
     payload.rotation = value.rotation;
     payload.baseWidth = value.baseWidth;
     payload.baseHeight = value.baseHeight;
+
+    /* HOME-CANVAS-V2-EDITOR-1B — 없을 수 있는 칸이라 **있을 때만**
+       만든다. 프로토콜은 그 모양을 그대로 받는다(선택 칸). */
+    if (typeof value.scopeId === "string" && value.scopeId) {
+      payload.scopeId = value.scopeId;
+    }
+
+    if (Number.isFinite(value.originX) && value.originX !== 0) {
+      payload.originX = value.originX;
+    }
+
+    if (Number.isFinite(value.originY) && value.originY !== 0) {
+      payload.originY = value.originY;
+    }
   }
 
 

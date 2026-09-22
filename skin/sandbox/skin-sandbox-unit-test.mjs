@@ -1011,6 +1011,70 @@ check("[canvas-rotate] ★ 해제에는 각도 칸도 없다",
 
 
 /* =========================================================
+   [canvas-space] HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자와 origin
+
+   ★ **선택 칸이다.** v1 요소와 v2 overlay 의 자는 도화지이고
+     origin 은 0 이라, 그 칸이 아예 없는 메시지가 지금까지의 그
+     메시지다(위 [canvas-move] 가 그것을 계속 본다).
+
+   ★ 프레임이 올리는 확정 요청은 **한 글자도 바뀌지 않았다**. v2 냐
+     v1 이냐는 부모가 자기 draft 로 정하므로(계약 §26-2) 메시지에
+     v2 라는 표시가 없다 — 그 사실을 여기서 못박는다.
+========================================================== */
+
+console.log("\n[canvas-space] 자의 기준 상자와 origin (V2-EDITOR-1B)");
+
+check("[canvas-space] 프레임 상자를 기준으로 재는 좌표가 내려간다",
+  (() => {
+
+    const verdict =
+      canvasGeometryTo({
+        ...GEOMETRY_ON, scopeId: "v2Main", originX: 0, originY: 0.5
+      });
+
+    return (
+      verdict.ok === true &&
+      verdict.payload.scopeId === "v2Main" &&
+      verdict.payload.originY === 0.5
+    );
+
+  })());
+
+check("[canvas-space] ★ 두 칸이 없어도 통과한다(v1 · overlay 의 그 메시지)",
+  canvasGeometryTo(GEOMETRY_ON).ok === true &&
+  canvasGeometryTo(GEOMETRY_ON).payload.scopeId === undefined);
+
+check("[canvas-space] ★ scopeId 는 편집 식별자여야 한다",
+  canvasGeometryTo({ ...GEOMETRY_ON, scopeId: "v2 Main" }).ok === false &&
+  canvasGeometryTo({ ...GEOMETRY_ON, scopeId: 7 }).ok === false &&
+  canvasGeometryTo({ ...GEOMETRY_ON, scopeId: "" }).ok === false);
+
+check("[canvas-space] ★ origin 은 0~1 의 분수다(좌표의 자를 빌려 오지 않는다)",
+  canvasGeometryTo({ ...GEOMETRY_ON, originX: 1 }).ok === true &&
+  canvasGeometryTo({ ...GEOMETRY_ON, originX: 1.5 }).ok === false &&
+  canvasGeometryTo({ ...GEOMETRY_ON, originY: -0.1 }).ok === false &&
+  canvasGeometryTo({ ...GEOMETRY_ON, originY: "0.5" }).ok === false);
+
+check("[canvas-space] ★ 해제에는 그 두 칸도 없다",
+  canvasGeometryTo({
+    contract: 1, renderSeq: 3, active: false, scopeId: "v2Main", generation: 5
+  }).ok === false &&
+  canvasGeometryTo({
+    contract: 1, renderSeq: 3, active: false, originX: 0, generation: 5
+  }).ok === false);
+
+check("[canvas-space] ★ 확정 요청에는 v2 표시가 없다(부모가 draft 로 정한다)",
+  canvasTransformFrom(MOVE_OK).ok === true &&
+  /* v2 이름으로는 올려보낼 수 없다 */
+  canvasTransformFrom({ ...MOVE_OK, kind: "v2-move" }).ok === false &&
+  /* 자를 끼워 보내도 봉투가 그 칸을 나르지 않는다 — 자는 부모의
+     것이고 프레임은 그 위의 숫자만 돌려준다 */
+  canvasTransformFrom({ ...MOVE_OK, scopeId: "v2Main" })
+    .payload.scopeId === undefined,
+  "프레임이 쓸 수 있는 kind 는 여전히 move · resize · rotate 셋이다");
+
+
+/* =========================================================
    [host] 호스트 분기
 ========================================================== */
 

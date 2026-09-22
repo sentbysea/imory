@@ -2208,6 +2208,11 @@ if (typeof window !== "undefined") {
   window.setStudioCanvasV2BlockOrder = setStudioCanvasV2BlockOrder;
   window.setStudioCanvasV2NodeText = setStudioCanvasV2NodeText;
 
+  /* HOME-CANVAS-V2-EDITOR-1B */
+  window.setStudioCanvasV2NodeMove = setStudioCanvasV2NodeMove;
+  window.setStudioCanvasV2NodeResize = setStudioCanvasV2NodeResize;
+  window.setStudioCanvasV2NodeRotation = setStudioCanvasV2NodeRotation;
+
 }
 
 
@@ -2865,6 +2870,18 @@ function isStudioCanvasGeometryHeight(value) {
 }
 
 
+/* HOME-CANVAS-V2-EDITOR-1B — `origin` 은 자기 상자 안의 분수다.
+   빠진 것과 0 을 적은 것이 같은 뜻이다(v1 · overlay). */
+function studioCanvasGeometryOriginOk(value) {
+
+  return (
+    value === undefined ||
+    (Number.isFinite(value) && value >= 0 && value <= 1)
+  );
+
+}
+
+
 function postCanvasGeometryToFrame(geometry) {
 
   const value =
@@ -2883,6 +2900,19 @@ function postCanvasGeometryToFrame(geometry) {
          없다. 요소에 `rotation` 이 없으면 부모가 0 으로 만들어
          보낸다(studio/inspector/studio-canvas-selection.js). */
       Number.isFinite(value.rotation) &&
+      /* =====================================================
+         HOME-CANVAS-V2-EDITOR-1B — 자의 기준 상자와 origin
+
+         v2 `main_visual` 내부 요소의 좌표는 도화지가 아니라
+         **프레임 상자** 위에서 풀린다(계약 §24-3). 그 상자를
+         가리키는 것이 `scopeId` 이고, `pin` 장식이 자기 상자의
+         어느 점을 그 자리에 놓는가가 `originX` · `originY` 다.
+
+         ★ 둘 다 **선택 칸**이다. v1 요소와 v2 overlay 는 도화지
+           자에 origin 0 이라 이 칸이 없어도 지금까지와 같다.
+      ====================================================== */
+      studioCanvasGeometryOriginOk(value.originX) &&
+      studioCanvasGeometryOriginOk(value.originY) &&
       value.baseWidth > 0 &&
       value.baseHeight > 0
     );
@@ -2896,6 +2926,12 @@ function postCanvasGeometryToFrame(geometry) {
     width: active ? value.width : 0,
     height: active ? value.height : 0,
     rotation: active ? value.rotation : 0,
+    scopeId:
+      (active && typeof value.scopeId === "string" && value.scopeId)
+        ? value.scopeId
+        : null,
+    originX: active && Number.isFinite(value.originX) ? value.originX : 0,
+    originY: active && Number.isFinite(value.originY) ? value.originY : 0,
     baseWidth: active ? value.baseWidth : 0,
     baseHeight: active ? value.baseHeight : 0,
     generation:
@@ -3132,6 +3168,54 @@ function setStudioCanvasV2BlockOrder(id, next, expected) {
 function setStudioCanvasV2NodeText(id, next, expected, options) {
   return writeStudioCanvasElementChange(
     "writeSkinHomeCanvasV2NodeText", id, next, expected, options);
+}
+
+
+/* =========================================================
+   HOME-CANVAS-V2-EDITOR-1B — v2 의 자리 · 크기 · 각도를 draft 에
+
+   ★ 위 여섯과 다른 것은 **한 걸음이 더 있다**는 것뿐이다.
+
+   프레임(과 패널)이 보내는 값은 "그 선택의 자 위의 숫자"이고,
+   저장되는 칸은 어디에 있는 요소인가에 따라 다르다 — `follow:"pin"`
+   장식은 좌표가 아니라 `pin.offset` 을 쓴다. 그 번역을 하는 곳이
+   studio/inspector/studio-canvas-v2-space.js 한 곳이고, 여기서는
+   그 결과(쓸 순수 함수의 이름 + storage 칸)를 받아 **같은 다섯 줄**
+   에 넘긴다.
+
+   ★ `expected` 는 그 함수가 draft 에서 다시 읽은 값이다. 자 위의
+     비교는 이미 거기서 끝났다(계약 §26-4의 ★).
+========================================================== */
+
+function applyStudioCanvasV2Transform(kind, id, next, expected) {
+
+  if (typeof window.planStudioCanvasV2Transform !== "function") {
+    return { ok: false, reason: "unsupported" };
+  }
+
+  const plan =
+    window.planStudioCanvasV2Transform(kind, id, next, expected);
+
+  if (!plan || !plan.ok) {
+    return { ok: false, reason: (plan && plan.reason) || "space" };
+  }
+
+  return writeStudioCanvasElementChange(
+    plan.writer, id, plan.next, plan.expected);
+
+}
+
+
+function setStudioCanvasV2NodeMove(id, next, expected) {
+  return applyStudioCanvasV2Transform("v2-move", id, next, expected);
+}
+
+function setStudioCanvasV2NodeResize(id, next, expected) {
+  return applyStudioCanvasV2Transform("v2-resize", id, next, expected);
+}
+
+function setStudioCanvasV2NodeRotation(id, next, expected) {
+  return applyStudioCanvasV2Transform("v2-rotate", id, next, expected);
 }
 
 

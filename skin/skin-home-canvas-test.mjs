@@ -1927,6 +1927,317 @@ console.log(`\n[ux-fix]`);
 }
 
 
+/* ---------------------------------------------------------- */
+/*
+  [v2-free] 프레임 내부 요소 · overlay 의 자리 writer
+            (HOME-CANVAS-V2-EDITOR-1B)
+
+  브라우저가 필요 없는 것만 본다 — **어떤 칸이 저장되고 무엇이
+  보존되는가**. 자를 만드는 계산(프레임 폭 · pin 기준점)과 화면
+  좌표는 브라우저가 필요하다
+  (studio/studio-home-canvas-inspector-e2e-test.mjs --only=v2free).
+*/
+console.log("\n[v2-free] 프레임 내부 · overlay 의 자리 writer (V2-EDITOR-1B)");
+
+{
+  const freeRegions = () => [
+    { name: "some_other", enabled: true, payload: { keep: true } },
+    {
+      name: "home_canvas",
+      enabled: true,
+      note: "unknown-entry",
+      canvas: {
+        version: 2,
+        baseWidth: 390,
+        baseHeight: 900,
+        extra: "unknown-canvas",
+        flow: {
+          direction: "column",
+          padding: { top: 10 },
+          gap: 8,
+          blocks: [
+            { id: "canvas_b0", type: "text", width: 200, height: "auto",
+              props: { text: "a" } },
+            {
+              id: "canvas_main", type: "main_visual", width: 300, height: 200,
+              align: "center",
+              props: {
+                baseWidth: 150, baseHeight: 100, primaryId: "canvas_photo",
+                elements: [
+                  { id: "canvas_photo", type: "photo", follow: "transform",
+                    x: 10, y: 5, width: 120, height: 80, zzz: "keep-el",
+                    props: { slot: "photo_1" } },
+                  { id: "canvas_tag", type: "text", follow: "pin",
+                    width: 60, height: 20, rotation: 8,
+                    x: 999, y: 999,
+                    pin: {
+                      target: "photo", anchor: "right", origin: "left",
+                      offset: { x: 6, y: 0 }, mystery: "keep-pin"
+                    },
+                    props: { text: "tag" } }
+                ]
+              }
+            }
+          ]
+        },
+        overlays: [
+          { id: "canvas_over", type: "text", x: 20, y: 700,
+            width: 120, height: 40, props: { text: "o" } }
+        ]
+      }
+    }
+  ];
+
+  const nodeOf = (regions, id) => {
+    const c = regions[1].canvas;
+    const block = c.flow.blocks.find((b) => b.id === id);
+    if (block) return block;
+    for (const b of c.flow.blocks) {
+      const hit = ((b.props && b.props.elements) || []).find((e) => e.id === id);
+      if (hit) return hit;
+    }
+    return c.overlays.find((e) => e.id === id) || null;
+  };
+
+  /* ---- overlay — v1 요소와 같은 칸 ---- */
+
+  const movedOverlay =
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_over", { x: 44, y: 701 }, { x: 20, y: 700 });
+
+  check("★ [v2-free] overlay 의 x · y 를 쓴다",
+    movedOverlay.ok === true &&
+    nodeOf(movedOverlay.regions, "canvas_over").x === 44 &&
+    nodeOf(movedOverlay.regions, "canvas_over").y === 701 &&
+    nodeOf(movedOverlay.regions, "canvas_over").width === 120,
+    JSON.stringify(nodeOf(movedOverlay.regions, "canvas_over")));
+
+  check("[v2-free] expected 가 다르면 거부다",
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_over", { x: 44, y: 1 }, { x: 21, y: 700 }
+    ).reason === "expected");
+
+  check("[v2-free] 같은 값이면 unchanged(기록도 dirty 도 없다)",
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_over", { x: 20, y: 700 }, { x: 20, y: 700 }
+    ).unchanged === true);
+
+  /* ---- 내부 transform ---- */
+
+  const movedInner =
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_photo", { x: 12.5, y: 5 }, { x: 10, y: 5 });
+
+  check("★ [v2-free] 프레임 내부 transform 요소도 x · y 를 쓴다 · 모르는 칸 보존",
+    movedInner.ok === true &&
+    nodeOf(movedInner.regions, "canvas_photo").x === 12.5 &&
+    nodeOf(movedInner.regions, "canvas_photo").zzz === "keep-el" &&
+    nodeOf(movedInner.regions, "canvas_photo").props.slot === "photo_1",
+    JSON.stringify(nodeOf(movedInner.regions, "canvas_photo")));
+
+  check("★ [v2-free] 다른 요소 · 다른 블록 · overlay · 모르는 항목이 그대로다",
+    nodeOf(movedInner.regions, "canvas_tag").pin.offset.x === 6 &&
+    nodeOf(movedInner.regions, "canvas_b0").props.text === "a" &&
+    nodeOf(movedInner.regions, "canvas_over").x === 20 &&
+    movedInner.regions[0].payload.keep === true &&
+    movedInner.regions[1].note === "unknown-entry" &&
+    movedInner.regions[1].canvas.extra === "unknown-canvas");
+
+  const resizedInner =
+    canvas.writeSkinHomeCanvasV2NodeBox(
+      freeRegions(), "canvas_photo",
+      { x: 10, y: 5, width: 130, height: 90 },
+      { x: 10, y: 5, width: 120, height: 80 });
+
+  check("★ [v2-free] 리사이즈는 네 칸을 함께 쓴다",
+    resizedInner.ok === true &&
+    same(
+      (({ x, y, width, height }) => ({ x, y, width, height }))(
+        nodeOf(resizedInner.regions, "canvas_photo")),
+      { x: 10, y: 5, width: 130, height: 90 }));
+
+  check("★ [v2-free] photo 에는 height \"auto\" 를 쓸 수 없다(v1 §6 의 표)",
+    canvas.writeSkinHomeCanvasV2NodeBox(
+      freeRegions(), "canvas_photo",
+      { x: 10, y: 5, width: 130, height: "auto" },
+      { x: 10, y: 5, width: 120, height: 80 }
+    ).reason === "auto");
+
+  check("★ [v2-free] 블록 id 로는 좌표를 쓸 수 없다(블록의 자리는 좌표가 아니다)",
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_main", { x: 1, y: 1 }, { x: 0, y: 0 }
+    ).reason === "kind" &&
+    canvas.writeSkinHomeCanvasV2NodeRotation(
+      freeRegions(), "canvas_b0", { rotation: 5 }, { rotation: 0 }
+    ).reason === "kind");
+
+  /* ---- 내부 pin ---- */
+
+  check("★ [v2-free] pin 요소에는 좌표 writer 가 닿지 않는다(reason: pin)",
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_tag", { x: 1, y: 1 }, { x: 0, y: 0 }
+    ).reason === "pin" &&
+    canvas.writeSkinHomeCanvasV2NodeBox(
+      freeRegions(), "canvas_tag",
+      { x: 1, y: 1, width: 60, height: 20 },
+      { x: 0, y: 0, width: 60, height: 20 }
+    ).reason === "pin");
+
+  check("★ [v2-free] transform 요소 · overlay 에는 pin writer 가 닿지 않는다",
+    canvas.writeSkinHomeCanvasV2NodePinOffset(
+      freeRegions(), "canvas_photo", { offsetX: 1, offsetY: 1 },
+      { offsetX: 0, offsetY: 0 }
+    ).reason === "pin" &&
+    canvas.writeSkinHomeCanvasV2NodePinOffset(
+      freeRegions(), "canvas_over", { offsetX: 1, offsetY: 1 },
+      { offsetX: 0, offsetY: 0 }
+    ).reason === "kind");
+
+  const movedPin =
+    canvas.writeSkinHomeCanvasV2NodePinOffset(
+      freeRegions(), "canvas_tag",
+      { offsetX: -4.25, offsetY: 12 }, { offsetX: 6, offsetY: 0 });
+
+  check("★ [v2-free] pin 은 offset 두 칸만 쓴다 — target · anchor · origin 은 그대로",
+    movedPin.ok === true &&
+    same(nodeOf(movedPin.regions, "canvas_tag").pin, {
+      target: "photo", anchor: "right", origin: "left",
+      offset: { x: -4.25, y: 12 }, mystery: "keep-pin"
+    }),
+    JSON.stringify(nodeOf(movedPin.regions, "canvas_tag").pin));
+
+  check("★ [v2-free] pin 을 옮겨도 안 쓰는 x · y 와 크기 · 각도는 손대지 않는다",
+    nodeOf(movedPin.regions, "canvas_tag").x === 999 &&
+    nodeOf(movedPin.regions, "canvas_tag").width === 60 &&
+    nodeOf(movedPin.regions, "canvas_tag").rotation === 8);
+
+  const resizedPin =
+    canvas.writeSkinHomeCanvasV2NodePinBox(
+      freeRegions(), "canvas_tag",
+      { offsetX: 6, offsetY: 0, width: 72, height: "auto" },
+      { offsetX: 6, offsetY: 0, width: 60, height: 20 });
+
+  check("★ [v2-free] pin 리사이즈는 offset 둘 + 크기 둘이다(text 는 auto 를 쓴다)",
+    resizedPin.ok === true &&
+    nodeOf(resizedPin.regions, "canvas_tag").width === 72 &&
+    nodeOf(resizedPin.regions, "canvas_tag").height === "auto" &&
+    nodeOf(resizedPin.regions, "canvas_tag").pin.offset.x === 6,
+    JSON.stringify(nodeOf(resizedPin.regions, "canvas_tag")));
+
+  check("[v2-free] pin 의 expected 는 저장된 offset 이다(빠진 pin 은 0 으로 읽는다)",
+    canvas.writeSkinHomeCanvasV2NodePinOffset(
+      freeRegions(), "canvas_tag", { offsetX: 1, offsetY: 1 },
+      { offsetX: 0, offsetY: 0 }
+    ).reason === "expected");
+
+  /* ---- rotation — 두 규칙이 같은 칸 ---- */
+
+  const turnedInner =
+    canvas.writeSkinHomeCanvasV2NodeRotation(
+      freeRegions(), "canvas_photo", { rotation: -12.5 }, { rotation: 0 });
+
+  check("★ [v2-free] rotation 이 없는 요소의 지금 값은 0 이다(그 칸이 생긴다)",
+    turnedInner.ok === true &&
+    nodeOf(turnedInner.regions, "canvas_photo").rotation === -12.5 &&
+    nodeOf(turnedInner.regions, "canvas_photo").x === 10);
+
+  const turnedPin =
+    canvas.writeSkinHomeCanvasV2NodeRotation(
+      freeRegions(), "canvas_tag", { rotation: 20 }, { rotation: 8 });
+
+  check("★ [v2-free] pin 장식도 같은 칸을 돈다 — pin 은 한 글자도 안 바뀐다",
+    turnedPin.ok === true &&
+    nodeOf(turnedPin.regions, "canvas_tag").rotation === 20 &&
+    nodeOf(turnedPin.regions, "canvas_tag").pin.offset.x === 6);
+
+  /* ---- 허용 키 · 모르는 키 · v1 데이터 ---- */
+
+  check("★ [v2-free] 모르는 키가 섞이면 메시지 전체를 거부한다",
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_over", { x: 1, y: 2, width: 3 }, { x: 20, y: 700 }
+    ).reason === "keys" &&
+    canvas.writeSkinHomeCanvasV2NodeRotation(
+      freeRegions(), "canvas_over", { rotation: 1, x: 2 }, { rotation: 0 }
+    ).reason === "keys" &&
+    canvas.writeSkinHomeCanvasV2NodeBox(
+      freeRegions(), "canvas_over", { x: 1, y: 2 },
+      { x: 20, y: 700, width: 120, height: 40 }
+    ).reason === "keys");
+
+  check("★ [v2-free] v1 canvas 에는 닿지 않는다(reason: canvas)",
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      [canvasRegion()], "canvas_photo1", { x: 1, y: 2 }, { x: 20, y: 120 }
+    ).reason === "canvas");
+
+  check("[v2-free] 없는 id · 범위 밖 값은 거부",
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_nope", { x: 1, y: 2 }, { x: 0, y: 0 }
+    ).reason === "missing" &&
+    canvas.writeSkinHomeCanvasV2NodePosition(
+      freeRegions(), "canvas_over", { x: 1e9, y: 2 }, { x: 20, y: 700 }
+    ).reason === "coord" &&
+    canvas.writeSkinHomeCanvasV2NodeBox(
+      freeRegions(), "canvas_over",
+      { x: 1, y: 2, width: 0, height: 40 },
+      { x: 20, y: 700, width: 120, height: 40 }
+    ).reason === "size");
+
+  check("★ [v2-free] 입력을 한 칸도 mutate 하지 않는다",
+    (() => {
+      const input = freeRegions();
+      const before = JSON.stringify(input);
+      canvas.writeSkinHomeCanvasV2NodePinBox(
+        input, "canvas_tag",
+        { offsetX: 1, offsetY: 2, width: 70, height: 30 },
+        { offsetX: 6, offsetY: 0, width: 60, height: 20 });
+      canvas.writeSkinHomeCanvasV2NodeBox(
+        input, "canvas_photo",
+        { x: 1, y: 2, width: 70, height: 30 },
+        { x: 10, y: 5, width: 120, height: 80 });
+      return JSON.stringify(input) === before;
+    })());
+
+  /* ---- 고친 결과가 계약을 그대로 통과한다 ---- */
+
+  check("★ [v2-free] 고친 canvas 가 검증을 그대로 통과한다(Save → 다시 열기)",
+    canvas.validateSkinCanvasData(
+      resizedPin.regions[1].canvas, "regions[1].canvas").ok === true &&
+    canvas.validateSkinCanvasData(
+      movedPin.regions[1].canvas, "regions[1].canvas").ok === true);
+
+  /* ---- Studio 문서가 자를 재는 파일을 싣는가 ---- */
+
+  {
+    const docs = ["studio/index.html", "studio/studio-lifecycle-scenario.html"];
+
+    const missingRender =
+      docs.filter((file) => read(file).indexOf("skin-home-canvas-render.js") === -1);
+
+    check("★ [v2-free] Studio 문서가 자를 재는 렌더러 파일을 싣는다(계약 §26-3)",
+      missingRender.length === 0, missingRender.join(", "));
+
+    const missingSpace =
+      docs.filter((file) => read(file).indexOf("studio-canvas-v2-space.js") === -1);
+
+    check("★ [v2-free] Studio 문서가 자 파일을 싣는다",
+      missingSpace.length === 0, missingSpace.join(", "));
+
+    /* ★ 로드 줄만 센다 — 주석에 파일 이름이 먼저 나올 수 있다.
+       두 문서가 쓰는 표기는 다르지만(loadVersionedScripts 의 배열
+       ↔ script src) 둘 다 닫는 따옴표로 끝난다. */
+    const orderBroken =
+      docs.filter((file) => {
+        const text = read(file);
+        return text.indexOf('studio-canvas-v2-space.js"') <
+          text.indexOf('skin-home-canvas-render.js"');
+      });
+
+    check("[v2-free] 자 파일은 렌더러 **다음**이다",
+      orderBroken.length === 0, orderBroken.join(", "));
+  }
+}
+
+
 console.log(`\n${passed} passed, ${failed} failed`);
 
 if (failed) {

@@ -199,6 +199,27 @@ function studioCanvasInspectorView() {
     const payload =
       window.studioCanvasDraftPayload();
 
+    /* =====================================================
+       HOME-CANVAS-V2-EDITOR-1B — 그 요소의 **좌표 자**
+
+       프레임 내부 요소와 overlay 는 자리 · 크기 · 각도를 갖는다.
+       그런데 그 값이 어느 자 위의 숫자인가는 어디에 있는 요소인가가
+       정하고(§26-2), `follow:"pin"` 은 저장된 칸이 자리 자체도
+       아니다. 그래서 패널도 **자를 통해** 읽고 쓴다 — 직접 조작이
+       쓰는 그 자 하나다.
+
+       ★ 값을 들고 있지 않는다. 그릴 때마다 · sync 할 때마다 다시
+         계산한다(이 파일 머리말의 그 규칙).
+
+       ★ null 일 수 있다. 블록이면 애초에 없고(자리가 좌표가 아니다),
+         프레임의 자를 만들 수 없는 데이터에서도 null 이다 — 그때는
+         읽기 전용 요약만 그린다.
+    ====================================================== */
+    const space =
+      (info.kind !== "block" && typeof window.studioCanvasV2Space === "function")
+        ? window.studioCanvasV2Space(element.id)
+        : null;
+
     return {
       mode: "single",
       version: 2,
@@ -207,6 +228,7 @@ function studioCanvasInspectorView() {
       type: element.type,
       element: element,
       node: element,
+      space: space,
       index: info.index,
       parentId: info.parentId,
       blockCount:
@@ -255,8 +277,15 @@ function studioCanvasInspectorShapeOf(view) {
     /* HOME-CANVAS-V2-EDITOR-1A — 같은 요소라도 v1 화면과 v2 화면은
        DOM 이 다르고, v2 안에서도 블록 · 프레임 내부 · overlay 가
        다르다. 지문에 그 둘을 넣지 않으면 화면이 바뀌어야 할 때
-       옛 DOM 이 남는다. */
-    return `single:${view.version || 1}:${view.kind || "element"}:${view.id}:${view.type}`;
+       옛 DOM 이 남는다.
+
+       HOME-CANVAS-V2-EDITOR-1B — 자를 만들 수 있는가도 지문이다.
+       같은 요소라도 자가 없으면 입력칸 대신 읽기 전용 요약을
+       그리므로, 그 둘을 한 지문으로 두면 옛 DOM 이 남는다. */
+    return (
+      `single:${view.version || 1}:${view.kind || "element"}:` +
+      `${view.id}:${view.type}:${view.space ? "geo" : "ro"}`
+    );
   }
 
   if (view.mode === "multi") {
