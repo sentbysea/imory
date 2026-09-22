@@ -56,9 +56,11 @@
    [rerender] 재렌더 중복 0 · 제거 시 정리 · 스킨이 쓴 자식 보존
    [nav]      category 링크 클릭이 **기존 sandbox navigation 메시지**로
               부모에 올라온다(프레임은 자기 문서를 떠나지 않는다)
-   [v2-flow]  조합형 Canvas v2(V2-FLOW-RENDER-1)가 프레임 안에서도
-              같은 DOM · 같은 좌표다 — 흐름 층 · 정렬 · 합산 여백 ·
-              hidden · main_visual 외곽 · overlays · CSP 위반 0 ·
+   [v2-flow]  조합형 Canvas v2(V2-FLOW-RENDER-1 · V2-MAIN-VISUAL-1)가
+              프레임 안에서도 같은 DOM · 같은 좌표다 — 흐름 층 · 정렬 ·
+              합산 여백 · hidden · overlays · main_visual **내부**
+              (사진 슬롯 · transform/pin · origin translate · 회전 ·
+              height:"auto" 비율) · CSP 위반 0 ·
               잘못된 v2 는 프레임에도 안 실린다
    [pages]    CATEGORY · POST · BANNER 는 프레임에서도 캔버스를 안 그린다
    [parity]   네 화면
@@ -410,16 +412,38 @@ const V2_BLOCKS = [
   { id: "canvas_v2wide", type: "text", width: 340, height: 30, align: "stretch",
     maxWidth: 120, locked: true, props: { text: "CLAMP", role: "label" } },
 
-  { id: "canvas_v2main", type: "main_visual", width: 300, height: 60, align: "center",
+  /* V2-MAIN-VISUAL-1 — 내부까지 RENDER-1A 쪽과 **같은 fixture** 다.
+     숫자 검산은 그 파일이 native 에서 했고(§[v2-frame]) 여기서는
+     "프레임 안에서도 같은가"만 본다. */
+  { id: "canvas_v2main", type: "main_visual", width: 300, height: 200, align: "center",
     margin: { top: 12 },
     props: {
-      baseWidth: 300, baseHeight: 380, primaryId: "canvas_v2photo",
+      baseWidth: 150, baseHeight: 80, primaryId: "canvas_v2photo",
       elements: [
+        { id: "canvas_v2paper", type: "shape", follow: "transform",
+          x: -5, y: 0, width: 150, height: 75, rotation: -6, props: { kind: "rect" } },
         { id: "canvas_v2photo", type: "photo", follow: "transform",
-          x: 0, y: 0, width: 300, height: 380, props: { slot: "photo_1" } },
-        { id: "canvas_v2label", type: "text", follow: "pin", width: 92, height: 22,
-          pin: { target: "photo", anchor: "left", origin: "right", offset: { x: 8, y: -40 } },
-          props: { text: "pin !", role: "label" } }
+          x: 10, y: 5, width: 100, height: 50, props: { slot: "photo_1" } },
+        { id: "canvas_v2label", type: "text", follow: "pin", width: 40, height: 22,
+          pin: { target: "photo", anchor: "left", origin: "right", offset: { x: -8, y: 0 } },
+          props: { text: "pin !", role: "label" } },
+        { id: "canvas_v2tag", type: "text", follow: "pin", width: 40, height: 20, rotation: 8,
+          pin: { target: "photo", anchor: "right", origin: "left", offset: { x: 80, y: -10 } },
+          props: { text: "tag", role: "label" } },
+        { id: "canvas_v2cap", type: "text", follow: "pin", width: 240, height: "auto",
+          pin: { target: "frame", anchor: "bottom", origin: "top", offset: { x: 0, y: 10 } },
+          props: { text: "2026 / 09 / 22", role: "caption" } }
+      ]
+    } },
+
+  /* height:"auto" 프레임 — 높이가 primary 사진 상자의 비율이다 */
+  { id: "canvas_v2auto", type: "main_visual", width: 200, height: "auto", align: "left",
+    margin: { top: 8 },
+    props: {
+      baseWidth: 100, baseHeight: 400, primaryId: "canvas_v2autophoto",
+      elements: [
+        { id: "canvas_v2autophoto", type: "photo", follow: "transform",
+          x: 0, y: 0, width: 100, height: 40, props: { slot: "photo_1" } }
       ]
     } }
 ];
@@ -657,6 +681,45 @@ const readV2Source = (rootSelector) => `(() => {
         displayed: cs.display !== "none",
         frameBaseW: el.style.getPropertyValue("--imory-canvas-frame-base-width").trim(),
         frameBaseH: el.style.getPropertyValue("--imory-canvas-frame-base-height").trim(),
+        frameRatioW: el.style.getPropertyValue("--imory-canvas-frame-ratio-width").trim(),
+        frameRatioH: el.style.getPropertyValue("--imory-canvas-frame-ratio-height").trim(),
+        /* V2-MAIN-VISUAL-1 — main_visual 내부. 좌표는 **프레임 상자
+           기준** 상대값이라 두 문서의 화면 위치가 달라도 대조된다. */
+        inner: Array.from(el.querySelectorAll("[data-imory-canvas-element]")).map((n) => {
+          const nr = n.getBoundingClientRect();
+          const nt = n.querySelector("[data-imory-canvas-text]");
+          const ni = n.querySelector("[data-imory-canvas-image]");
+          return {
+            editId: n.getAttribute("data-imory-edit-id"),
+            type: n.getAttribute("data-imory-canvas-type"),
+            follow: n.getAttribute("data-imory-canvas-follow"),
+            heightMode: n.getAttribute("data-imory-canvas-height"),
+            role: n.getAttribute("data-imory-canvas-role"),
+            shape: n.getAttribute("data-imory-canvas-shape"),
+            position: getComputedStyle(n).position,
+            vars: {
+              x: n.style.getPropertyValue("--imory-canvas-x").trim(),
+              y: n.style.getPropertyValue("--imory-canvas-y").trim(),
+              width: n.style.getPropertyValue("--imory-canvas-width").trim(),
+              height: n.style.getPropertyValue("--imory-canvas-height").trim(),
+              rotation: n.style.getPropertyValue("--imory-canvas-rotation").trim(),
+              tx: n.style.getPropertyValue("--imory-canvas-translate-x").trim(),
+              ty: n.style.getPropertyValue("--imory-canvas-translate-y").trim()
+            },
+            cx: round(nr.left + nr.width / 2 - r.left),
+            cy: round(nr.top + nr.height / 2 - r.top),
+            w: n.offsetWidth,
+            h: n.offsetHeight,
+            left: round(nr.left - r.left),
+            right: round(nr.right - r.left),
+            bottom: round(nr.bottom - r.top),
+            angle: angle(n),
+            imgSrc: ni ? ni.getAttribute("src") : null,
+            imgFit: ni ? getComputedStyle(ni).objectFit : null,
+            text: nt ? nt.textContent : null,
+            innerTags: Array.from(n.querySelectorAll("*")).map((t) => t.tagName.toLowerCase()).join(",")
+          };
+        }),
         vars: {
           gap: el.style.getPropertyValue("--imory-canvas-block-gap").trim(),
           marginTop: el.style.getPropertyValue("--imory-canvas-block-margin-top").trim(),
@@ -728,7 +791,16 @@ function v2DomShape(reading, options) {
       hiddenAttr: b.hiddenAttr, lockedAttr: b.lockedAttr,
       isFrame: b.isFrame, displayed: b.displayed,
       frameBaseW: b.frameBaseW, frameBaseH: b.frameBaseH,
+      frameRatioW: b.frameRatioW, frameRatioH: b.frameRatioH,
       vars: b.vars, innerTags: b.innerTags,
+      /* V2-MAIN-VISUAL-1 — 좌표(cx · left …)는 서브픽셀 때문에 아래
+         boxDiff 처럼 따로 보고, 여기서는 DOM 과 변수 문자열만 본다 */
+      inner: b.inner.map((n) => ({
+        editId: n.editId, type: n.type, follow: n.follow,
+        heightMode: n.heightMode, role: n.role, shape: n.shape,
+        position: n.position, vars: n.vars, angle: n.angle,
+        imgSrc: n.imgSrc, imgFit: n.imgFit, text: n.text, innerTags: n.innerTags
+      })),
       text: b.text, logoText: b.logoText, imgSrc: b.imgSrc,
       links: withHref ? b.links : b.links.map((l) => l.name)
     })),
@@ -1326,12 +1398,49 @@ async function run() {
       check("★ hidden 블록이 프레임에서도 자리를 차지하지 않는다",
         fBlock("canvas_v2gone").displayed === false && near(fBlock("canvas_v2gone").h, 0, 0.1));
 
-      check("★ main_visual 은 프레임 안에서도 외곽까지다(내부 요소 0)",
-        fBlock("canvas_v2main").isFrame === true &&
-        fBlock("canvas_v2main").innerTags === "" &&
-        await pub.frame.evaluate(() =>
-          document.querySelectorAll(
-            '[data-imory-edit-id="canvas_v2photo"],[data-imory-edit-id="canvas_v2label"]').length === 0));
+      /* ---- main_visual 내부 (V2-MAIN-VISUAL-1) ---- */
+
+      const fMain = fBlock("canvas_v2main");
+      const fInner = (id) => fMain.inner.find((n) => n.editId === id);
+
+      check("★ main_visual 내부가 프레임 안에서도 배열 순서로 그려진다",
+        fMain.isFrame === true &&
+        fMain.inner.map((n) => n.editId).join(",") ===
+          "canvas_v2paper,canvas_v2photo,canvas_v2label,canvas_v2tag,canvas_v2cap" &&
+        fMain.inner.map((n) => n.follow).join(",") ===
+          "transform,transform,pin,pin,pin",
+        fMain.inner.map((n) => n.editId).join(","));
+
+      check("★ 프레임 안에서도 primary 사진이 이미지 슬롯으로 그려진다(CSP img-src 통과)",
+        fInner("canvas_v2photo").innerTags === "img" &&
+        typeof fInner("canvas_v2photo").imgSrc === "string" &&
+        fInner("canvas_v2photo").imgSrc.startsWith("https://") &&
+        fInner("canvas_v2photo").imgFit === "contain",
+        JSON.stringify({ s: fInner("canvas_v2photo").imgSrc, f: fInner("canvas_v2photo").imgFit }));
+
+      check("★ 프레임 안에서도 transform 은 S_frame 을 받고 pin 은 안 받는다",
+        near(fInner("canvas_v2paper").w, 300 * scale, 1) &&
+        near(fInner("canvas_v2photo").w, 200 * scale, 1) &&
+        near(fInner("canvas_v2label").w, 40 * scale, 1) &&
+        near(fInner("canvas_v2tag").w, 40 * scale, 1),
+        JSON.stringify([fInner("canvas_v2paper").w, fInner("canvas_v2photo").w,
+          fInner("canvas_v2label").w, fInner("canvas_v2tag").w]));
+
+      check("★ 프레임 안에서도 pin 의 origin 을 CSS translate 가 뺀다(라벨 오른쪽 변이 기준점)",
+        fInner("canvas_v2label").vars.tx === "-100%" &&
+        fInner("canvas_v2label").vars.ty === "-50%" &&
+        near(fInner("canvas_v2label").right, 12 * scale, 1),
+        `${fInner("canvas_v2label").right}`);
+
+      check("★ 프레임 안에서도 회전이 translate 뒤에 걸린다(태그 8°)",
+        near(fInner("canvas_v2tag").angle, 8, 0.75), String(fInner("canvas_v2tag").angle));
+
+      check("★ height \"auto\" 프레임의 비율이 프레임 안에서도 primary 사진 상자다(200 × 80)",
+        fBlock("canvas_v2auto").frameRatioW === "100" &&
+        fBlock("canvas_v2auto").frameRatioH === "40" &&
+        near(fBlock("canvas_v2auto").w, 200 * scale, 1) &&
+        near(fBlock("canvas_v2auto").h, 80 * scale, 1),
+        `${fBlock("canvas_v2auto").w} × ${fBlock("canvas_v2auto").h}`);
 
       check("★ category 링크가 프레임에서도 실제 a[href] 이고 내부 주소를 쓴다",
         fBlock("canvas_v2nav").links.length === 2 &&
@@ -1367,6 +1476,31 @@ async function run() {
 
       check("★ native ↔ sandbox — 블록 좌표와 크기가 같다",
         boxDiff.length === 0, boxDiff.map((b) => b.editId).join(", "));
+
+      /* V2-MAIN-VISUAL-1 — 프레임 내부는 **프레임 기준** 상대좌표로 잰다 */
+      const innerDiff = [];
+
+      frameRead.blocks.forEach((b, i) => {
+        const n = nativeRead.blocks[i];
+        if (!n || b.displayed === false) return;
+        b.inner.forEach((item, k) => {
+          const other = n.inner[k];
+          if (!other || other.editId !== item.editId) {
+            innerDiff.push(item.editId + "(없음)");
+            return;
+          }
+          if (
+            !near(other.cx, item.cx, 1) || !near(other.cy, item.cy, 1) ||
+            !near(other.w, item.w, 1) || !near(other.h, item.h, 1) ||
+            !near(other.angle, item.angle, 0.1)
+          ) {
+            innerDiff.push(item.editId);
+          }
+        });
+      });
+
+      check("★ native ↔ sandbox — main_visual 내부 요소의 좌표 · 크기 · 각도가 같다",
+        innerDiff.length === 0, innerDiff.join(", "));
 
       check("★ native ↔ sandbox — 자유 장식의 중심 · 크기 · 각도가 같다",
         nativeRead.overlays.length === frameRead.overlays.length &&

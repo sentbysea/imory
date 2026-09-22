@@ -86,7 +86,8 @@
 | `MANUAL-UX-FIX-1` | **직접 조작 사용성 넷**(§21) — 회전의 **30° 자석**(±4° 안에서만 붙는다) · **모서리 손잡이는 비율 유지 · 변 중앙은 한 축 자유** · 자르기를 고르지 않은 Canvas 그림은 **contain**(전체가 보인다) · 글자 요소의 **편집 chrome 여유**(선이 글자를 가로지르지 않는다 — 저장 geometry 는 불변). 새 데이터 칸 · 새 메시지 · 새 파일은 없다 |
 | `INSPECTOR-1A` | **왼쪽 Canvas Inspector**(§22) — Canvas 요소를 고르면 왼쪽 패널이 그 요소의 화면이 된다. 글자 요소의 **내용**(`props.text`)을 실제로 고칠 수 있고, 공통 geometry 다섯 칸을 숫자로 넣을 수 있다. **글자 한 칸이 v1 에서 처음으로 `props` 를 바꾼다** — 그 전까지 바뀌는 것은 요소 자신의 다섯 칸뿐이었다. 다중 선택은 안내만이고, `hidden`/`locked` 는 아직 내놓지 않는다 |
 | `V2-DATA-1` | **조합형 Canvas `version:2` 의 데이터 검증과 보존**(§9-(3)) — 로드맵 §14 가 정한 `flow.blocks` + `overlays` 두 층을 저장 경계가 **엄격히 검증**한다. 잘못된 v2 는 새 Import 에서 정확한 JSON 경로와 함께 거부되고, 올바른 v2 는 Import · Save · 다시 열기 · Export · Publish · AI 를 한 칸도 잃지 않고 지난다. 그 라운드에서 **화면은 아직 기존 HOME 이었다**. v1 은 한 줄도 바뀌지 않았다 |
-| `V2-FLOW-RENDER-1` | **v2 의 화면 출력**(§23) — 자동 배치 흐름(`flow`)과 페이지 자유 장식(`overlays`)이 **공개 native HOME · Studio native Preview · 공개 sandbox · Studio sandbox Preview** 네 화면에서 같은 DOM · 같은 좌표로 그려진다. 블록 순서 · `align` 네 값 · `width`/`maxWidth` · 숫자 `height` 와 `"auto"` · **collapse 하지 않는 `gap` + `margin` 합산** · `hidden` 이 자리를 남기지 않음까지다. **`main_visual` 은 외곽 프레임까지**이고 내부 사진 · 장식 · `pin`/`transform` 은 아직 그리지 않는다(`V2-MAIN-VISUAL-1`). 선택 · 드래그 · Inspector 도 없다 — **읽기 전용**이다 |
+| `V2-FLOW-RENDER-1` | **v2 의 화면 출력**(§23) — 자동 배치 흐름(`flow`)과 페이지 자유 장식(`overlays`)이 **공개 native HOME · Studio native Preview · 공개 sandbox · Studio sandbox Preview** 네 화면에서 같은 DOM · 같은 좌표로 그려진다. 블록 순서 · `align` 네 값 · `width`/`maxWidth` · 숫자 `height` 와 `"auto"` · **collapse 하지 않는 `gap` + `margin` 합산** · `hidden` 이 자리를 남기지 않음까지다. 그 라운드에서 `main_visual` 은 **외곽 프레임까지**였다(내부는 `V2-MAIN-VISUAL-1` 이 채웠다 — §24). 선택 · 드래그 · Inspector 는 없다 — **읽기 전용**이다 |
+| `V2-MAIN-VISUAL-1` | **`main_visual` 내부**(§24) — primary 사진과 그 주변 장식(종이 · 테이프 · 좌우 인덱스 · 캡션)이 프레임 안에 **배열 순서대로** 그려진다. `follow:"transform"` 은 위치와 크기가 `S_frame` 으로 함께 커지고, `follow:"pin"` 은 `anchor`/`origin`/`offset` 으로 기준점만 따라가며 **자기 크기는 유지**한다. `height:"auto"` 프레임의 높이는 **primary 사진 상자의 비율**이다. 프레임 밖으로 나온 장식은 그대로 보인다. **데이터 · 봉투 · Studio · CSP 무변경**이고 여전히 **읽기 전용**이다 |
 | `MILESTONE-1` | **계약이 하나도 바뀌지 않은 라운드**(§20). 위 기본 조작을 배포된 화면에서 **손으로** 시험할 수 있게 `home_canvas` 와 표시 위치를 이미 갖춘 **수동 테스트 스킨**과 그것을 끝까지 지나는 통합 smoke 를 두었다. 제품 코드 · 기본 스킨 · 저장 데이터는 무변경이다 |
 
 아직 **없는 것** — 이것을 구현된 것으로 읽지 않는다.
@@ -3240,16 +3241,20 @@ UI · 레이어 목록 · 다중 일괄 편집 · 그룹 transform · 글꼴 · 
 | `padding` · `gap` · `margin` 합산 | **그린다** |
 | `hidden`(자리도 차지하지 않음) · `locked`(표시만) | **그린다** |
 | `logo` · `text` · `divider` · `category_nav` | **그린다**(v1 과 같은 재료) |
-| `main_visual` | **외곽 프레임까지**. 내부는 안 그린다 |
+| `main_visual` | **외곽 프레임까지**. 내부는 안 그린다 → **`V2-MAIN-VISUAL-1` 이 그린다(§24)** |
 | `overlays` | **그린다**(v1 요소와 같은 DOM) |
-| `main_visual` 내부 사진 · 장식 · `pin` · `transform` | `V2-MAIN-VISUAL-1` |
+| `main_visual` 내부 사진 · 장식 · `pin` · `transform` | **`V2-MAIN-VISUAL-1` — 완료(§24)** |
 | v2 선택 · Moveable · Inspector · 묶기/해제 | `V2-INSPECTOR-1` · `V2-ATTACH-1` |
 
-★ **`main_visual` 은 빈 상자다.** 임시 placeholder 문구도 기본 사진 틀도
-공개 화면에 넣지 않는다 — 넣으면 그것이 곧 계약이 된다. `height:"auto"`
-인 프레임은 그래서 **높이가 0** 이다. §14-5 가 "auto 는 primary photo 의
-비율을 따른다"고 정했고 슬롯이 빌 때의 폴백 비율은 **`V2-MAIN-VISUAL-1`
-이 정할 렌더 결정**이므로, 여기서 먼저 숫자를 지어내지 않는다.
+★ **그 라운드에서 `main_visual` 은 빈 상자였다.** 임시 placeholder 문구도
+기본 사진 틀도 공개 화면에 넣지 않았다 — 넣으면 그것이 곧 계약이 된다.
+`height:"auto"` 인 프레임은 그래서 **높이가 0** 이었다. §14-5 가 "auto 는
+primary photo 의 비율을 따른다"고 정했고 그 비율의 출처는
+**`V2-MAIN-VISUAL-1` 이 정할 렌더 결정**이었으므로, 여기서 먼저 숫자를
+지어내지 않았다.
+
+> **→ 이제는 그린다.** 내부 렌더와 `height:"auto"` 의 비율 규칙은 **§24**
+> 가 갖는다. 위 표의 "안 그린다"는 `V2-FLOW-RENDER-1` 시점의 기록이다.
 
 내부 좌표의 자(`props.baseWidth` · `baseHeight`)는 프레임에
 `--imory-canvas-frame-base-width` · `-height` 로 남겨 둔다. 내부 요소는
@@ -3387,9 +3392,224 @@ v1 과 다른 점 하나: **빠져도 되는 칸이 있다.**
 
 ### 23-8. 이 라운드가 만들지 않은 것
 
+(그중 `main_visual` 내부 렌더와 `pin`/`transform` follow 는 **§24 에서
+만들어졌다**. 나머지는 그대로 후속이다.)
+
 v2 선택 · Moveable · Selecto · Inspector · 블록 순서 변경 UI · `main_visual`
 내부 렌더 · `pin`/`transform` follow · 묶기/해제 · v1→v2 변환 · 기본 스킨
 변경 · 테스트 스킨 · Effect Hook · 모바일 시트 수정 · responsive override ·
 `row`/`grid` 블록 · CATEGORY/POST/BANNER 캔버스.
+
+`APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).
+
+---
+
+## 24. v2 `main_visual` 내부 — 사진과 주변 장식 (`HOME-CANVAS-V2-MAIN-VISUAL-1`)
+
+`V2-FLOW-RENDER-1` 이 빈 상자로 남겨 둔 프레임 안에 **primary 사진과 그
+주변 장식**이 실제로 그려진다. 로드맵 §14-5 · §14-6 의 `transform` · `pin`
+두 규칙이 여기서 화면이 된다.
+
+**여전히 읽기 전용 라운드다.** v2 선택 · 드래그 · Inspector · `메인 비주얼로
+묶기`/`묶기 해제` 는 하나도 없다(`V2-EDITOR-1`).
+
+### 24-1. 관련 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/skin-home-canvas-render.js` | §3-2 — 프레임의 자(`resolveSkinCanvasFrameGeometry`) · 두 규칙(`applySkinCanvasFrameElementBox`) · 내부 요소 DOM |
+| `skin/skin-home-canvas-render.css` | §5 — 프레임의 `position` 과 `height:"auto"` 의 `aspect-ratio` **두 줄뿐** |
+
+**데이터 · 봉투 · Studio 는 한 줄도 바뀌지 않았다.** 내부 요소는 `V2-FLOW-RENDER-1`
+부터 이미 실행 payload 에 실려 네 화면에 도착해 있었고(§23-2 의 그 결정),
+sandbox strict allowlist(`isSandboxCanvasFrameElement`)도 이미 그 칸들을 알고
+있었다. 이 라운드는 **도착한 값을 그리기만** 한다 — 새 파일 · 새 메시지 ·
+새 진입 문서 로드 · CSP 완화 전부 없다.
+
+### 24-2. DOM — 프레임 상자의 직계 자식 하나의 층
+
+```html
+<div data-imory-canvas-block
+     data-imory-canvas-type="main_visual"
+     data-imory-canvas-frame
+     data-imory-canvas-height="auto"
+     data-imory-edit-id="canvas_b5main">
+
+  <div data-imory-canvas-element
+       data-imory-canvas-type="shape"
+       data-imory-canvas-follow="transform"
+       data-imory-edit-id="canvas_m0paper"></div>
+
+  <div data-imory-canvas-element
+       data-imory-canvas-type="photo"
+       data-imory-canvas-follow="transform"
+       data-imory-edit-id="canvas_m1photo"><img data-imory-canvas-image …></div>
+
+  <div data-imory-canvas-element
+       data-imory-canvas-type="text"
+       data-imory-canvas-follow="pin"
+       data-imory-edit-id="canvas_m2left"><p data-imory-canvas-text>…</p></div>
+
+</div>
+```
+
+- **자유 배치의 표식(`data-imory-canvas-element`)을 그대로 쓴다.** 프레임
+  내부 요소도 좌표로 놓이는 자유 요소이고, 좌표 CSS(§12-2 · §2)가 그 한
+  선택자에 걸려 있다. 층을 가르는 물음은 "프레임 안에 있는가"
+  (= `[data-imory-canvas-frame]` 의 자손인가)다.
+- **종류별 안쪽 DOM 은 v1 의 그 함수**(`fillSkinCanvasElementNode`)가
+  만든다 — v1 요소 · `overlays` · 프레임 내부가 **같은 껍데기 · 같은 재료**
+  이고 다른 것은 좌표를 푸는 자 하나뿐이다. 사진은 기존 이미지 슬롯
+  (`context.images`)을 그대로 읽고, `isSafeSkinUrl()` 관문도 그대로다.
+- `data-imory-canvas-follow` 는 **표시용**이다 — 스킨 CSS 와 재는 쪽이 두
+  규칙을 구분할 수 있게 남긴다. 값은 `transform` · `pin` 둘.
+
+★ **왜 프레임 안에 또 하나의 좌표 층을 만들지 않았나.**
+
+내부 좌표의 자를 `aspect-ratio` 상자 하나로 깔면 `transform` 요소는 저절로
+풀린다. 그런데 `pin` 요소는 그 상자의 세로 자를 쓸 수 없어(자기 크기가
+`S_frame` 을 받지 않는다) 상자 밖으로 나가야 하고, 그 순간 **배열 순서가
+두 덩어리로 쪼개진다**. §14-5 는 배열 순서가 곧 앞뒤 순서라고 정했다.
+그래서 층을 하나로 두고, 렌더러가 두 규칙을 **숫자로 풀어** 같은 네 칸
+(`x` · `y` · `width` · `height`)에 적는다.
+
+### 24-3. 자 — `S_frame` 을 저장값에서 계산한다
+
+```text
+  S_page  = 실제 도화지 폭 ÷ canvas.baseWidth      (백분율이 알아서 준다)
+  S_frame = 프레임 폭 ÷ props.baseWidth            (렌더러가 계산한다)
+```
+
+프레임 폭은 **재지 않는다** — CSS 가 §23-6 에서 푸는 그 식을 그대로 쓴다.
+
+| `align` | 프레임 폭(도화지 자) |
+| --- | --- |
+| `left` · `center` · `right` | 블록의 `width` |
+| `stretch` | `가용 폭 − margin.left − margin.right`, `maxWidth` 가 더 작으면 거기까지 |
+
+그래서 `ResizeObserver` 도 매 프레임 재계산도 **여전히 없다**(§12-2 와 같은
+규칙). 자를 만들 수 없으면(가용 폭이 0 이하 등) 프레임은 **빈 상자로 남는다**
+— 숫자를 지어내지 않는다.
+
+| | 최종 크기 | 최종 위치 |
+| --- | --- | --- |
+| `transform` | 로컬값 × `S_frame` | 로컬 `x`·`y` × `S_frame` |
+| `pin` | 로컬값 **그대로**(`S_frame` 없음) | `anchor` 기준점 + `offset` |
+
+둘 다 마지막에 **프레임 상자의 백분율**로 적히므로 `S_page` 는 양쪽에 똑같이
+붙는다. 즉 **화면이 넓어지면 둘 다 커지고, 프레임만 커지면 `transform` 만
+커진다** — §14-6 이 요구한 그대로다.
+
+★ `S_frame` 은 **가로 배율 하나**다. 프레임이 세로로만 늘어나면 `transform`
+장식은 위쪽에 몰린다 — 의도한 동작이다(§14-6).
+
+### 24-4. `pin` — `origin` 은 CSS 가 뺀다
+
+```css
+transform:
+  translate(var(--imory-canvas-translate-x, 0%), var(--imory-canvas-translate-y, 0%))
+  rotate(var(--imory-canvas-rotation, 0deg));
+```
+
+`anchor` 기준점 + `offset` 까지는 렌더러가 숫자로 풀어 `x` · `y` 에 적고,
+`origin`(장식 **자신의** 어느 점)은 `translate` 의 **백분율**이 뺀다.
+
+★ **왜 좌표에 미리 더하지 않는가.** `origin` 은 자기 크기를 알아야 계산되는데
+`height:"auto"` 인 pin 장식의 높이는 **스킨 조판**이 정하므로(§8 — 플랫폼은
+글자 크기를 정하지 않는다) 렌더 시점에 숫자가 없다. `translate` 의 백분율은
+요소 **자기 상자**를 기준으로 풀리므로 브라우저가 그 몫을 대신 뺀다 — 재지
+않고, 지어내지도 않는다.
+
+★ `translate` 가 `rotate` **앞**이다. `transform-origin` 기본값이 요소 중심
+이라 "옮긴 자리에서 자기 중심을 돈다"가 되고, 회전 기준(§4)이 그대로
+성립한다. v1 요소와 `overlays` 는 두 변수를 쓰지 않으므로
+`translate(0%, 0%)` 이고 **결과 행렬이 지금까지와 같다**.
+
+`pin.target` 의 상자:
+
+| `target` | 상자 |
+| --- | --- |
+| `frame`(기본) | `(0, 0, 프레임 폭, 프레임 높이)` |
+| `photo` | `primaryId` 요소의 상자 — `transform` 이면 `S_frame` 을 받은 상자, 그 자신이 `pin` 이면 pin 으로 푼 상자 |
+
+★ primary 자신이 `follow:"pin"` 이고 `target:"photo"` 면 **자기 자신**을
+가리키게 된다. 그때는 프레임으로 읽는다 — 순환을 만들지 않는다.
+`target:"photo"` 인데 그 상자를 풀 수 없으면 역시 프레임으로 읽는다(장식을
+잃지 않고, 자리를 지어내지도 않는다).
+
+### 24-5. `height:"auto"` 프레임의 높이 — **primary 사진 상자의 비율**
+
+§14-5 가 "auto 는 primary photo 의 비율을 따른다"고 정했고, 그 비율의 출처를
+이 라운드가 정했다: **`primaryId` 요소의 저장된 `width` : `height`** 다.
+
+```css
+[data-imory-canvas-frame][data-imory-canvas-height="auto"] {
+  aspect-ratio:
+    var(--imory-canvas-frame-ratio-width) / var(--imory-canvas-frame-ratio-height);
+}
+```
+
+- **`props.baseWidth` : `baseHeight` 가 아니다.** 그쪽은 내부 좌표의 자일
+  뿐이고, 비율을 두 곳에서 정하면 충돌한다(§14-5 가 별도 `aspectRatio` 칸을
+  두지 않은 그 이유).
+- **그림 파일의 비율도 아니다.** primary 는 `type:"photo"` 여야 하고
+  (§14-5), `photo` 에는 `height:"auto"` 가 없으므로(§6 의 자) 그 비율은
+  **언제나 숫자**다. 그래서 §14-5 가 남겨 둔 "슬롯이 비어 비율을 모를 때의
+  폴백 비율"은 **필요하지 않다** — 슬롯이 비어도, 그림이 아직 안 받아졌어도
+  높이가 같고, 그림이 늦게 도착해도 프레임이 튀지 않는다.
+- `aspect-ratio` 는 폭이 이미 확정돼 있으므로(§23-6) 높이를 확정값으로
+  만들고, 그 안에서 내부 요소의 백분율 세로값이 풀린다. **`align:"stretch"`
+  에서도 숫자 없이 성립한다.**
+- 변수가 없으면 이 선언은 무효가 되어 `aspect-ratio: auto` 로 돌아간다(= 높이를
+  정하지 않는다).
+
+★ **결과 하나를 알아 두어야 한다.** primary 사진이 프레임 폭을 다 쓰지 않으면
+(예: `props.baseWidth` 260 · 사진 폭 200) 프레임은 **사진보다 세로로 길어진다**
+— 비율이 사진 상자의 것이기 때문이다. 프레임을 사진에 딱 맞추려면
+`props.baseWidth` 를 사진 폭과 같게 두면 된다.
+
+### 24-6. overflow — 삐져나오는 것이 목적이다
+
+종이 · 테이프 · 좌우 인덱스는 **일부러** 프레임 밖으로 나온다(§14-5). 그래서
+렌더러도 플랫폼 CSS 도 프레임에 `overflow` 를 쓰지 않는다 — 자를지 보일지는
+스킨 CSS 가 고른다(§4-1 · §12-2 와 같은 결정).
+
+화면 전체의 가로 넘침은 **플랫폼 표시 공간이 이미 막고 있다** —
+`home/home-base.css` 의 `.theme-mount--skin { overflow-x: hidden }` 이 공개
+HOME 의 스크롤 담당 요소다. 도화지 **안**에서 프레임 밖으로 나온 장식은
+그대로 보이고, 도화지 **밖**으로까지 나간 장식은 거기서 잘린다.
+
+### 24-7. 함정
+
+★ **id 는 canvas 하나 안에서 전부 유일하다**(§14-5). 블록 · 프레임 내부 요소 ·
+overlay 가 한 이름 공간이므로, 프레임에 장식을 넣을 때 이미 쓰고 있는 블록
+id 나 overlay id 를 다시 쓰면 **새 Import 자체가 거부된다**. 화면에는
+`data-imory-edit-id` 로 셋 다 나가므로 그것이 문서 안에서 유일해야 스킨
+CSS 선택자와 나중의 Inspector 가 성립한다.
+
+★ **`data-imory-canvas-frame` 이라는 이름이 두 곳에서 쓰인다.** Canvas
+**편집 runtime** 도 Moveable control box 에 같은 속성을 붙이고(`="1"` —
+`markControlBox`), `skin/skin-inspect-target.js` 의
+`inspectorEditChromeAncestor()` 는 **값을 보지 않고** 그 속성만 본다. 그래서
+Studio 에서 `main_visual` 안을 누르면 Inspector 가 "내 입력이 아니다"로 읽고
+비켜선다(§18-11).
+
+지금 라운드에서는 **결과가 같다** — v2 선택이 아직 없으므로 프레임 안을 눌러도
+할 일이 없고, 내부 요소가 v1 편집기에 잘못 걸리지도 않는다. 이 라운드가 그
+판정을 바꾸지도 않았다(프레임 블록은 `V2-FLOW-RENDER-1` 부터 이미 그 속성을
+갖고 있었다). **`V2-EDITOR-1` 이 v2 선택을 열 때 이 이름 충돌을 먼저 풀어야
+한다** — 편집 runtime 쪽 선택자는 이미 `[data-imory-canvas-frame="1"]` 로
+값을 보고 있으므로, 고칠 자리는 `inspectorEditChromeAncestor()` 한 곳이다.
+
+★ **회전한 요소의 `getBoundingClientRect()` 는 회전 뒤의 외곽 상자다.**
+프레임 내부 좌표를 잴 때 변(`left`/`right`)이 아니라 **중심**으로 봐야 한다
+(회전은 중심을 옮기지 않는다) — 테스트가 그 규약을 쓴다.
+
+### 24-8. 이 라운드가 만들지 않은 것
+
+v2 선택 · Moveable · Selecto · v2 Inspector · 프레임 내부 진입/나가기 UI ·
+`메인 비주얼로 묶기`/`묶기 해제` · 블록 순서 변경 · v1→v2 변환 · 기본 스킨
+변경 · 정식 테스트 스킨 · Effect Hook · responsive override · `row`/`grid`
+블록 · CATEGORY/POST/BANNER 캔버스.
 
 `APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).

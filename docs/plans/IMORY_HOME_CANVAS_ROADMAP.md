@@ -878,12 +878,12 @@ HTML 에 없다.
 ## 14. 조합형 HOME Canvas v2 설계 (`HOME-CANVAS-COMPOSITION-CONTRACT-1`)
 
 > **PLAN 이다.** 이 절은 `COMPOSITION-CONTRACT-1`(2026-09-21) 이 확정한
-> 설계이고, **그중 데이터 검증(`V2-DATA-1`)과 자동 배치 화면 출력
-> (`V2-FLOW-RENDER-1`)은 그 뒤 구현됐다** — 지금 코드가 강제하는 것은
-> [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) **§9-(3)** 과
-> **§23** 이다. 아직 구현되지 않은 것(`main_visual` 내부 · Inspector ·
-> 묶기/해제)은 §14-13 의 표가 상태를 갖는다. 아래는 그 라운드 시점의
-> 기록이다:
+> 설계이고, **그중 데이터 검증(`V2-DATA-1`) · 자동 배치 화면 출력
+> (`V2-FLOW-RENDER-1`) · `main_visual` 내부(`V2-MAIN-VISUAL-1`)는 그 뒤
+> 구현됐다** — 지금 코드가 강제하는 것은
+> [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) **§9-(3)** ·
+> **§23** · **§24** 다. 아직 구현되지 않은 것(v2 Inspector · 묶기/해제)은
+> §14-13 의 표가 상태를 갖는다. 아래는 그 라운드 시점의 기록이다:
 >
 > 지금 배포된 것은
 > [계약 문서](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)의 v1(평면 자유
@@ -1193,9 +1193,18 @@ main_visual
   — 플랫폼 CSS 가 도화지의 `overflow` 를 정하지 않는다는 v1 결정(계약 문서
   §4-1 · §12-2)을 뒤집지 않는다.
 - **`height:"auto"` 는 primary photo 의 비율을 따른다.** 비율을 두 곳에서
-  정하면 충돌하므로 별도 `aspectRatio` 칸을 두지 않는다. 슬롯이 비어 비율을
-  모를 때의 폴백 비율은 **`V2-MAIN-VISUAL-1` 이 정한다** — 데이터 계약이
-  아니라 렌더 결정이다.
+  정하면 충돌하므로 별도 `aspectRatio` 칸을 두지 않는다.
+
+  > **✅ `V2-MAIN-VISUAL-1`(2026-09-22)이 그 비율의 출처를 정했다 — 지금
+  > 코드가 강제하는 것은
+  > [계약 문서 §24-5](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 다.**
+  >
+  > 비율은 **`primaryId` 요소의 저장된 `width` : `height`** 이고,
+  > `props.baseWidth`:`baseHeight` 도 그림 파일의 비율도 아니다. primary 는
+  > `type:"photo"` 여야 하고 photo 에는 `height:"auto"` 가 없으므로 그
+  > 비율은 **언제나 숫자**다 — 그래서 위에서 남겨 둔 **"슬롯이 비어 비율을
+  > 모를 때의 폴백"은 필요하지 않다**. 슬롯이 비어도 높이가 같고, 그림이
+  > 늦게 도착해도 프레임이 튀지 않는다.
 - **primary photo 를 교체해도 장식 관계가 유지된다.** 교체는 그 요소의
   `props.slot` 을 바꾸는 것이고, `primaryId` 도 pin 의 `target:"photo"` 도
   id 를 보기 때문이다.
@@ -1432,8 +1441,8 @@ bottom-left  bottom  bottom-right
 | 3 | `HOME-CANVAS-INSPECTOR-1A` | v1 Canvas 요소를 골랐을 때의 **최소 Inspector 입력 필드**(§14-15) | **완료**(2026-09-21) — 결과는 [계약 문서 §22](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 4 | `HOME-CANVAS-V2-DATA-1` | v2 normalize · validate · resolve · 보존. **DOM renderer 없음** | **완료**(2026-09-21) — 결과는 [계약 문서 §9-(3)](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) |
 | 5 | `HOME-CANVAS-V2-FLOW-RENDER-1` | column flow 와 logo · category_nav · text · divider 렌더 + native/sandbox parity | **완료**(2026-09-22) — 결과는 [계약 문서 §23](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). `main_visual` 은 **외곽 프레임까지** |
-| 6 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` **내부** — primary photo · 자유 장식 · pin/transform 렌더 · `height:"auto"` 의 폴백 비율 | **미착수 — 다음 작업** |
-| 7 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | 미착수 |
+| 6 | `HOME-CANVAS-V2-MAIN-VISUAL-1` | `main_visual` **내부** — primary photo · 자유 장식 · pin/transform 렌더 · `height:"auto"` 의 비율 | **완료**(2026-09-22) — 결과는 [계약 문서 §24](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). 비율은 **primary 사진 상자**이고 폴백은 필요하지 않았다(§14-5) |
+| 7 | `HOME-CANVAS-V2-INSPECTOR-1` | 블록 정렬 · margin · size · 내용 편집 + 프레임 내부 진입/나가기 | **미착수 — 다음 작업**(`V2-EDITOR-1`). ★ 열기 전에 `data-imory-canvas-frame` **이름 충돌**을 먼저 푼다(계약 문서 §24-7) |
 | 8 | `HOME-CANVAS-V2-ATTACH-1` | lasso/Shift 선택 → `메인 비주얼로 묶기` · primary 지정 · `묶기 해제` · Undo/Redo | 미착수 |
 | 9 | `HOME-CANVAS-EFFECT-HOOK-1` | 안정된 선택자 · 수명주기 · 정리. `main_visual` 과 sandbox 저자 JS 의 공존 | 미착수(§8 에 완료 기준) |
 

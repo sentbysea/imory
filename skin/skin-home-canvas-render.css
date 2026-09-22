@@ -1,5 +1,6 @@
 /* =========================================================
-   SKIN HOME CANVAS — 좌표 구조 (HOME-CANVAS-RENDER-1A)
+   SKIN HOME CANVAS — 좌표 구조
+   (HOME-CANVAS-RENDER-1A · V2-FLOW-RENDER-1 · V2-MAIN-VISUAL-1)
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
    값을 채우는 쪽: skin/skin-home-canvas-render.js (compileSkinHomeCanvas)
@@ -57,12 +58,28 @@
    회전 중심은 transform-origin 기본값(요소 중심)이다.
 ========================================================== */
 
+/*
+  ★ translate 가 rotate **앞**에 있다(HOME-CANVAS-V2-MAIN-VISUAL-1).
+
+  `main_visual` 의 `pin` 요소는 "장식 자신의 어느 점을 그 자리에
+  놓나"(origin)를 자기 크기의 백분율로 뺀다 — `height:"auto"` 인
+  장식의 높이는 스킨 조판이 정하므로 렌더러가 숫자로 알 수 없다.
+  translate 의 백분율은 요소 **자기 상자**를 기준으로 풀리므로 그
+  몫을 브라우저가 대신 뺀다.
+
+  회전은 그 뒤에 오고, transform-origin 기본값이 요소 중심이라
+  "옮긴 자리에서 자기 중심을 돌린다"가 된다 — 계약 §4 의 회전 기준이
+  그대로 성립한다. v1 요소와 overlay 는 두 변수를 쓰지 않으므로
+  `translate(0%, 0%)` 이고 결과 행렬이 지금까지와 같다.
+*/
 [data-imory-canvas-element] {
   position: absolute;
   left: var(--imory-canvas-x, 0%);
   top: var(--imory-canvas-y, 0%);
   width: var(--imory-canvas-width, 0%);
-  transform: rotate(var(--imory-canvas-rotation, 0deg));
+  transform:
+    translate(var(--imory-canvas-translate-x, 0%), var(--imory-canvas-translate-y, 0%))
+    rotate(var(--imory-canvas-rotation, 0deg));
 }
 
 /* 숫자 height — 저장된 비율대로 */
@@ -248,4 +265,55 @@
   align-self: center;
   width: var(--imory-canvas-block-stretch-width, 100%);
   max-width: var(--imory-canvas-block-max-width, none);
+}
+
+
+/* =========================================================
+   5. v2 — main_visual 프레임 (HOME-CANVAS-V2-MAIN-VISUAL-1)
+
+   값을 채우는 쪽: skin/skin-home-canvas-render.js §3-2
+                  (resolveSkinCanvasFrameGeometry ·
+                   applySkinCanvasFrameElementBox)
+   계약: docs/plans/IMORY_HOME_CANVAS_ROADMAP.md §14-5 · §14-6
+
+   규칙이 **둘**뿐이다. 내부 요소의 좌표는 §2 의 그 네 변수로 오므로
+   여기에 좌표 규칙을 한 벌 더 두지 않는다.
+
+   ── overflow 를 정하지 않는다 ──────────────────────────
+   종이 · 테이프 · 인덱스는 **일부러 프레임 밖으로 나온다**(§14-5).
+   그래서 프레임에 overflow 를 쓰지 않고, 자를지 보일지는 스킨 CSS 가
+   고른다(§1 · §4 와 같은 결정). 화면 전체의 가로 넘침은 플랫폼
+   표시 공간이 이미 막고 있다(home/home-base.css 의
+   `.theme-mount--skin { overflow-x: hidden }`).
+
+   ── 선택자를 왜 두 겹으로 쓰나 ─────────────────────────
+   ★ `data-imory-canvas-frame` 은 Canvas **편집 runtime** 이 Moveable
+     control box 에도 붙이는 이름이다(`="1"` —
+     skin/skin-home-canvas-editor-runtime.js markControlBox · 계약
+     §18-11). 그 상자에 position 이나 비율을 걸면 편집 UI 가 어긋난다.
+     그래서 여기서는 **블록과 함께** 물어본다 — control box 에는
+     `data-imory-canvas-block` 도 `data-imory-canvas-height` 도 없다.
+========================================================== */
+
+/*
+  내부 요소 좌표의 기준점 — 프레임 상자의 왼쪽 위(§14-5).
+  이것이 없으면 절대 배치 자식이 도화지 표식을 기준으로 잡힌다.
+*/
+[data-imory-canvas-block][data-imory-canvas-frame] {
+  position: relative;
+}
+
+/*
+  `height:"auto"` 프레임의 세로 길이 = **primary 사진 상자의 비율**.
+
+  블록의 폭은 이미 확정돼 있으므로(§4 의 width · stretch calc) 비율
+  하나로 높이가 정해지고, 그 높이가 확정값이라 내부 요소의 백분율
+  세로값이 그 안에서 풀린다 — 여기서도 `ResizeObserver` 가 없다.
+
+  변수가 없으면 이 선언은 무효가 되어 `aspect-ratio: auto` 로 돌아간다
+  (= 높이를 정하지 않는다). 숫자를 지어내지 않는다.
+*/
+[data-imory-canvas-frame][data-imory-canvas-height="auto"] {
+  aspect-ratio:
+    var(--imory-canvas-frame-ratio-width) / var(--imory-canvas-frame-ratio-height);
 }

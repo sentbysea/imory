@@ -1476,6 +1476,86 @@ check("[docs] sandbox origin 에서 이 파일이 나온다(allowlist)",
     require(path.join(HERE, "skin-home-canvas-render.js"))
       .SKIN_CANVAS_RENDER_SLOT_NAME_PATTERN.source ===
       canvas.SKIN_HOME_CANVAS_SLOT_NAME_PATTERN.source);
+
+  {
+    /* =====================================================
+       HOME-CANVAS-V2-MAIN-VISUAL-1 — 프레임 내부의 자
+
+       렌더러는 pin 의 아홉 점을 **자기 표**로 갖는다(의존 없이 그릴 수
+       있어야 한다 — 요소 id 규칙과 같은 사정). 두 벌이 갈라지면 어떤
+       anchor 가 조용히 center 로 떨어진다.
+    ===================================================== */
+
+    const render = require(path.join(HERE, "skin-home-canvas-render.js"));
+
+    check("★ [docs] 렌더러의 pin 아홉 점이 계약 파일의 목록과 글자 단위로 같다",
+      JSON.stringify(Object.keys(render.SKIN_CANVAS_RENDER_PIN_FRACTIONS).sort()) ===
+      JSON.stringify(canvas.SKIN_HOME_CANVAS_PIN_POINTS.slice().sort()),
+      Object.keys(render.SKIN_CANVAS_RENDER_PIN_FRACTIONS).join(" "));
+
+    check("[docs] 빠진 anchor · origin 의 기본값이 계약과 같다(center)",
+      render.SKIN_CANVAS_RENDER_PIN_DEFAULT_POINT === "center" &&
+      canvas.SKIN_HOME_CANVAS_PIN_POINTS.indexOf("center") !== -1);
+
+    /* ---- 프레임 폭을 푸는 식이 CSS 와 같은가 (§23-6 의 그 calc) ---- */
+
+    const metrics = { width: 350, height: 930 };
+
+    const widthOf = (block) => render.resolveSkinCanvasBlockWidth(block, metrics);
+
+    check("★ [frame] align 이 stretch 가 아니면 프레임 폭은 저장된 width 다",
+      widthOf({ align: "center", width: 300 }) === 300 &&
+      widthOf({ width: 120 }) === 120);
+
+    check("★ [frame] stretch 는 가용 폭에서 좌우 margin 을 뺀 만큼이다(350−8−12)",
+      widthOf({ align: "stretch", width: 340, margin: { left: 8, right: 12 } }) === 330);
+
+    check("★ [frame] stretch + maxWidth 는 거기서 멈춘다(더 크면 무시한다)",
+      widthOf({ align: "stretch", width: 340, maxWidth: 120 }) === 120 &&
+      widthOf({ align: "stretch", width: 340, maxWidth: 999 }) === 350);
+
+    check("[frame] 자가 0 이하면 폭을 지어내지 않는다(null)",
+      render.resolveSkinCanvasBlockWidth({ align: "center", width: 300 }, { width: 0, height: 930 }) === null &&
+      widthOf({ align: "stretch", width: 340, margin: { left: 400 } }) === null);
+
+    /* ---- height:"auto" 는 primary 사진 상자의 비율이다 (§14-5) ---- */
+
+    const frameBlock = (over) => Object.assign({
+      id: "canvas_m", type: "main_visual", width: 300, height: 200, align: "center",
+      props: {
+        baseWidth: 150, baseHeight: 80, primaryId: "canvas_mphoto",
+        elements: [
+          { id: "canvas_mphoto", type: "photo", follow: "transform",
+            x: 10, y: 5, width: 100, height: 50, props: { slot: "photo_1" } }
+        ]
+      }
+    }, over || {});
+
+    const fixed = render.resolveSkinCanvasFrameGeometry(frameBlock(), metrics);
+
+    check("★ [frame] S_frame 은 **가로 배율 하나**다(300 / 150 = 2)",
+      fixed.scale === 2 && fixed.width === 300 && fixed.height === 200,
+      JSON.stringify(fixed));
+
+    check("★ [frame] pin.target:\"photo\" 의 상자는 S_frame 을 받은 사진 상자다",
+      JSON.stringify(fixed.photo) === JSON.stringify({ x: 20, y: 10, width: 200, height: 100 }),
+      JSON.stringify(fixed.photo));
+
+    const auto = render.resolveSkinCanvasFrameGeometry(frameBlock({ height: "auto" }), metrics);
+
+    check("★ [frame] height \"auto\" 의 높이는 사진 비율이다(300 × 50/100 = 150)",
+      auto.height === 150 && auto.ratioWidth === 100 && auto.ratioHeight === 50,
+      JSON.stringify({ h: auto.height, r: [auto.ratioWidth, auto.ratioHeight] }));
+
+    check("★ [frame] 그 비율은 props.baseWidth/baseHeight(150:80 → 160)가 아니다",
+      auto.height !== 160);
+
+    check("[frame] 내부 요소가 비면 프레임의 자를 만들지 않는다(빈 상자로 남는다)",
+      render.resolveSkinCanvasFrameGeometry(
+        frameBlock({ props: { baseWidth: 150, baseHeight: 80, primaryId: "x", elements: [] } }),
+        metrics
+      ) === null);
+  }
 }
 
 check("[docs] 계약 문서가 있고 색인에 적혀 있다",

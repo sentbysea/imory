@@ -30,9 +30,14 @@
    [v2-flow]  조합형 Canvas v2(V2-FLOW-RENDER-1) — 블록 순서 · 정렬
               네 값 · width/maxWidth · 숫자 height 와 auto ·
               padding/gap/margin 합산 · hidden 이 자리를 안 남김 ·
-              종류 다섯의 DOM · main_visual 은 외곽 프레임만 ·
-              overlays · 같은 배율 · 잘못된 v2 와 version 3 fallback ·
+              종류 다섯의 DOM · main_visual 프레임 · overlays ·
+              같은 배율 · 잘못된 v2 와 version 3 fallback ·
               v1 회귀 · 공개 화면의 vendor 요청 0
+   [v2-frame] main_visual **내부**(V2-MAIN-VISUAL-1) — 사진과 장식의
+              DOM · 배열 순서 · transform 은 S_frame 을 받고 pin 은
+              안 받는다 · frame/photo anchor · origin 의 translate ·
+              height:"auto" 프레임의 비율 · 사진 교체 뒤 장식 위치 ·
+              프레임 밖 장식과 가로 스크롤 0
    [pages]    CATEGORY · POST · BANNER 무영향
    [parity]   공개 native ↔ Studio native Preview 의 DOM · 좌표
 
@@ -332,19 +337,57 @@ const V2_BLOCKS = [
   { id: "canvas_v2wide", type: "text", width: 340, height: 30, align: "stretch",
     maxWidth: 120, locked: true, props: { text: "CLAMP", role: "label" } },
 
-  /* 6 — 외곽 프레임만. 내부 요소는 payload 에만 있고 화면에는 없다 */
-  { id: "canvas_v2main", type: "main_visual", width: 300, height: 60, align: "center",
+  /* 6 — main_visual. 숫자 height 이고 내부 자가 150 이라 S_frame = 2 다
+         (V2-MAIN-VISUAL-1 — 손으로 검산할 수 있는 배율을 고른다).
+
+     props.baseHeight 80 인데 프레임 높이는 200 이다 — 균등 배율이
+     160 이므로 transform 장식은 **위쪽에 몰린다**(§14-6 의 의도).
+
+       프레임 상자   300 × 200   (도화지 자, 가운데 정렬이라 x = 45)
+       S_frame       300 / 150 = 2
+       paper         x -10 · y 0 · 300 × 150   (프레임 왼쪽으로 10 넘침)
+       photo         x  20 · y 10 · 200 × 100
+       label(pin)    photo 왼쪽 가운데 − 8 → 오른쪽 변이 x 12
+                     (자기 크기는 40 × 22 — S_frame 을 받지 않는다)
+       tag(pin)      photo 오른쪽 가운데 + 80 → 왼쪽 변이 x 300
+                     (프레임 오른쪽으로 40 넘침 · 8° 회전)
+       cap(pin)      프레임 아래 가운데 + 10 → y 210 · 가로 가운데
+                     (height "auto" — origin 은 CSS 가 뺀다) */
+  { id: "canvas_v2main", type: "main_visual", width: 300, height: 200, align: "center",
     margin: { top: 12 },
     props: {
-      baseWidth: 300, baseHeight: 380, primaryId: "canvas_v2photo",
+      baseWidth: 150, baseHeight: 80, primaryId: "canvas_v2photo",
       elements: [
         { id: "canvas_v2paper", type: "shape", follow: "transform",
-          x: -10, y: 8, width: 300, height: 360, rotation: -6, props: { kind: "rect" } },
+          x: -5, y: 0, width: 150, height: 75, rotation: -6, props: { kind: "rect" } },
         { id: "canvas_v2photo", type: "photo", follow: "transform",
-          x: 0, y: 0, width: 300, height: 380, props: { slot: "photo_1" } },
-        { id: "canvas_v2label", type: "text", follow: "pin", width: 92, height: 22,
-          pin: { target: "photo", anchor: "left", origin: "right", offset: { x: 8, y: -40 } },
-          props: { text: "pin !", role: "label" } }
+          x: 10, y: 5, width: 100, height: 50, props: { slot: "photo_1" } },
+        { id: "canvas_v2label", type: "text", follow: "pin", width: 40, height: 22,
+          pin: { target: "photo", anchor: "left", origin: "right", offset: { x: -8, y: 0 } },
+          props: { text: "pin !", role: "label" } },
+        { id: "canvas_v2tag", type: "text", follow: "pin", width: 40, height: 20, rotation: 8,
+          pin: { target: "photo", anchor: "right", origin: "left", offset: { x: 80, y: -10 } },
+          props: { text: "tag", role: "label" } },
+        { id: "canvas_v2cap", type: "text", follow: "pin", width: 240, height: "auto",
+          pin: { target: "frame", anchor: "bottom", origin: "top", offset: { x: 0, y: 10 } },
+          props: { text: "2026 / 09 / 22", role: "caption" } }
+      ]
+    } },
+
+  /* 7 — height:"auto" 프레임. 높이는 **primary 사진 상자의 비율**이다
+         (§14-5). props.baseHeight 400 은 그 비율이 아니다 — 그쪽은
+         내부 좌표의 자일 뿐이므로 이 블록이 둘을 갈라 준다.
+
+           S_frame = 200 / 100 = 2
+           비율    = 100 : 40 → 프레임 200 × 80
+                     (props.baseWidth·baseHeight 였다면 800 이다) */
+  { id: "canvas_v2auto", type: "main_visual", width: 200, height: "auto", align: "left",
+    margin: { top: 8 },
+    props: {
+      baseWidth: 100, baseHeight: 400, primaryId: "canvas_v2autophoto",
+      elements: [
+        { id: "canvas_v2autophoto", type: "photo", follow: "transform",
+          x: 0, y: 0, width: 100, height: 40, props: { slot: "photo_1" } }
       ]
     } }
 ];
@@ -617,11 +660,52 @@ const READ_V2_CANVAS = `(() => {
         marginRight: parseFloat(cs.marginRight),
         frameBaseW: el.style.getPropertyValue("--imory-canvas-frame-base-width").trim(),
         frameBaseH: el.style.getPropertyValue("--imory-canvas-frame-base-height").trim(),
+        frameRatioW: el.style.getPropertyValue("--imory-canvas-frame-ratio-width").trim(),
+        frameRatioH: el.style.getPropertyValue("--imory-canvas-frame-ratio-height").trim(),
         x: r.left - rr.left,
         y: r.top - rr.top,
         w: r.width,
         h: r.height,
         childCount: el.children.length,
+        /* V2-MAIN-VISUAL-1 — main_visual 내부 요소. 좌표는 **프레임
+           상자 기준** 상대값이고, 회전한 요소는 중심으로 본다
+           (bbox 는 회전 뒤의 외곽 상자이므로). */
+        inner: Array.from(el.querySelectorAll("[data-imory-canvas-element]")).map((n) => {
+          const nr = n.getBoundingClientRect();
+          const nt = n.querySelector("[data-imory-canvas-text]");
+          const ni = n.querySelector("[data-imory-canvas-image]");
+          return {
+            editId: n.getAttribute("data-imory-edit-id"),
+            type: n.getAttribute("data-imory-canvas-type"),
+            follow: n.getAttribute("data-imory-canvas-follow"),
+            heightMode: n.getAttribute("data-imory-canvas-height"),
+            role: n.getAttribute("data-imory-canvas-role"),
+            shape: n.getAttribute("data-imory-canvas-shape"),
+            position: getComputedStyle(n).position,
+            vars: {
+              x: n.style.getPropertyValue("--imory-canvas-x").trim(),
+              y: n.style.getPropertyValue("--imory-canvas-y").trim(),
+              width: n.style.getPropertyValue("--imory-canvas-width").trim(),
+              height: n.style.getPropertyValue("--imory-canvas-height").trim(),
+              rotation: n.style.getPropertyValue("--imory-canvas-rotation").trim(),
+              tx: n.style.getPropertyValue("--imory-canvas-translate-x").trim(),
+              ty: n.style.getPropertyValue("--imory-canvas-translate-y").trim()
+            },
+            cx: nr.left + nr.width / 2 - r.left,
+            cy: nr.top + nr.height / 2 - r.top,
+            w: n.offsetWidth,
+            h: n.offsetHeight,
+            /* 넘침을 재기 위한 실제 변(회전 없는 요소에서만 뜻이 있다) */
+            left: nr.left - r.left,
+            right: nr.right - r.left,
+            bottom: nr.bottom - r.top,
+            angle: angle(n),
+            imgSrc: ni ? ni.getAttribute("src") : null,
+            imgFit: ni ? getComputedStyle(ni).objectFit : null,
+            text: nt ? nt.textContent : null,
+            innerTags: Array.from(n.querySelectorAll("*")).map((t) => t.tagName.toLowerCase()).join(",")
+          };
+        }),
         innerTags: Array.from(el.querySelectorAll("*")).map((n) => n.tagName.toLowerCase()).join(","),
         text: text ? text.textContent : null,
         logoText: logoText ? logoText.textContent : null,
@@ -1483,7 +1567,8 @@ async function run() {
 
       check("★ 종류가 전부 최상위 div 에 붙는다(logo · divider · text · category_nav · main_visual)",
         same(r.blocks.map((b) => b.type),
-          ["logo", "divider", "text", "divider", "category_nav", "text", "main_visual"]) &&
+          ["logo", "divider", "text", "divider", "category_nav", "text",
+            "main_visual", "main_visual"]) &&
         r.blocks.every((b) => b.tag === "div"),
         r.blocks.map((b) => b.type).join(","));
 
@@ -1521,19 +1606,15 @@ async function run() {
           ["/scenario-lay/category/302", "/scenario-lay/category/301"]),
         JSON.stringify(nav.links));
 
-      check("★ main_visual — **외곽 프레임만** 있고 내부 요소가 하나도 없다",
-        frame.isFrame === true && frame.childCount === 0 && frame.innerTags === "",
-        JSON.stringify({ f: frame.isFrame, c: frame.childCount }));
+      check("★ main_visual — 외곽 프레임 표식 위에 내부 요소가 배열 순서로 그려진다",
+        frame.isFrame === true && frame.childCount === 5 &&
+        same(frame.inner.map((n) => n.editId),
+          ["canvas_v2paper", "canvas_v2photo", "canvas_v2label", "canvas_v2tag", "canvas_v2cap"]),
+        JSON.stringify({ c: frame.childCount, ids: frame.inner.map((n) => n.editId) }));
 
-      check("★ main_visual 내부 좌표의 자를 변수로 남긴다(V2-MAIN-VISUAL-1 이 쓴다)",
-        frame.frameBaseW === "300" && frame.frameBaseH === "380",
+      check("★ main_visual 내부 좌표의 자를 변수로 남긴다(스킨 CSS 가 본다)",
+        frame.frameBaseW === "150" && frame.frameBaseH === "80",
         `${frame.frameBaseW} / ${frame.frameBaseH}`);
-
-      check("★ 프레임 내부 요소 id 가 화면 어디에도 없다(payload 에만 있다)",
-        await page.evaluate(() =>
-          document.querySelectorAll(
-            '[data-imory-edit-id="canvas_v2photo"],[data-imory-edit-id="canvas_v2paper"],[data-imory-edit-id="canvas_v2label"]'
-          ).length === 0));
 
       /* ---- 가로: 정렬 · width · maxWidth · margin ---- */
 
@@ -1558,9 +1639,9 @@ async function run() {
 
       /* ---- 세로: 숫자 height · auto · gap+margin 합산 · hidden ---- */
 
-      check("★ 숫자 height 는 baseHeight 자로 풀린다(logo 40 · rule 2 · clamp 30 · frame 60)",
+      check("★ 숫자 height 는 baseHeight 자로 풀린다(logo 40 · rule 2 · clamp 30 · frame 200)",
         logo.heightMode === "fixed" && near(logo.h, 40) &&
-        near(rule.h, 2) && near(clamp.h, 30) && near(frame.h, 60),
+        near(rule.h, 2) && near(clamp.h, 30) && near(frame.h, 200),
         JSON.stringify([logo.h, rule.h, clamp.h, frame.h]));
 
       check("★ height \"auto\" 는 실제 내용 높이다(0 보다 크고 고정값이 아니다)",
@@ -1666,7 +1747,7 @@ async function run() {
         };
       });
 
-      check("★ 세 번 그려도 흐름 층 하나 · 블록 일곱 · 장식 하나다(중복 0)",
+      check("★ 세 번 그려도 흐름 층 하나 · 블록 여덟 · 장식 하나다(중복 0)",
         repeat.flows === 1 && repeat.blocks === V2_BLOCKS.length && repeat.overlays === 1,
         JSON.stringify(repeat));
 
@@ -1745,6 +1826,278 @@ async function run() {
 
       check("★ 공개 화면이 Studio 편집 라이브러리를 한 번도 받지 않는다",
         vendorHits.length === 0, vendorHits.join(" | "));
+
+      check("스크립트 오류 없음", errors.length === 0, errors.join(" | "));
+
+      await ctx.close();
+
+    }
+
+
+    /* ------------------------------------------------- */
+    if (wants("v2-frame")) {
+
+      section("v2-frame");
+
+      /* =================================================
+         main_visual 내부 — 사진과 주변 장식 (V2-MAIN-VISUAL-1)
+
+         손으로 검산한 기대값은 V2_BLOCKS 의 6번 블록 주석에 있다.
+         도화지 폭을 390 으로 두면 S_page = 1 이라 아래 숫자가 그대로
+         px 이고, 좌표는 전부 **프레임 상자 기준** 상대값이다.
+      ================================================== */
+
+      const { ctx, page, errors } = await openHarness(browser, { width: 390, height: 900 });
+
+      /* 프레임 하나만 바꿔 다시 그린다 — 다른 블록은 [v2-flow] 가 본다 */
+      const framePackage = (mutate) => {
+        const canvas = JSON.parse(JSON.stringify(v2CanvasData()));
+        const main = canvas.flow.blocks.find((b) => b.id === "canvas_v2main");
+        if (mutate) mutate(main, canvas);
+        return skinPackage({
+          regions: [{ name: "home_canvas", enabled: true, canvas: canvas }]
+        });
+      };
+
+      await render(page, { skinPackage: framePackage(), context: CONTEXT, width: 390, fresh: true });
+
+      const r = await readV2Canvas(page);
+
+      const frame = findBlock(r, "canvas_v2main");
+      const auto = findBlock(r, "canvas_v2auto");
+
+      const at = (reading, blockId, id) =>
+        findBlock(reading, blockId).inner.find((n) => n.editId === id);
+
+      const paper = at(r, "canvas_v2main", "canvas_v2paper");
+      const photo = at(r, "canvas_v2main", "canvas_v2photo");
+      const label = at(r, "canvas_v2main", "canvas_v2label");
+      const tag = at(r, "canvas_v2main", "canvas_v2tag");
+      const cap = at(r, "canvas_v2main", "canvas_v2cap");
+
+      /* ---- DOM — v1 요소와 같은 재료 · 같은 안쪽 태그 ---- */
+
+      check("★ 배율 1 · 프레임 상자가 저장값대로다(300 × 200, x=45)",
+        near(r.rootW, 390, 1) && near(frame.w, 300) && near(frame.h, 200) &&
+        near(frame.x, 45),
+        `${frame.w} × ${frame.h} @ ${frame.x}`);
+
+      check("★ 내부 요소는 자유 배치 요소와 **같은 표식**이다(absolute · element 속성)",
+        frame.inner.length === 5 &&
+        frame.inner.every((n) => n.position === "absolute"),
+        frame.inner.map((n) => n.position).join(","));
+
+      check("★ follow 가 속성으로 남는다(transform 둘 · pin 셋)",
+        same(frame.inner.map((n) => n.follow),
+          ["transform", "transform", "pin", "pin", "pin"]),
+        frame.inner.map((n) => n.follow).join(","));
+
+      check("★ primary 사진이 **기존 이미지 슬롯 경로**로 그려진다(img · contain)",
+        photo.type === "photo" && photo.innerTags === "img" &&
+        photo.imgSrc === FIXTURE_IMAGE_PATH && photo.imgFit === "contain",
+        JSON.stringify({ t: photo.innerTags, s: photo.imgSrc, f: photo.imgFit }));
+
+      check("★ 종이는 shape, 글자 장식은 p + role — v1 과 같은 안쪽 DOM",
+        paper.shape === "rect" && paper.innerTags === "" &&
+        label.innerTags === "p" && label.role === "label" &&
+        cap.role === "caption" && cap.text === "2026 / 09 / 22",
+        JSON.stringify({ sh: paper.shape, lt: label.innerTags, ct: cap.text }));
+
+      /* ---- transform — 위치와 크기가 S_frame 으로 함께 커진다 ---- */
+
+      check("★ transform 종이 — 300 × 150 · 중심 (140, 75) · −6°",
+        near(paper.w, 300) && near(paper.h, 150) &&
+        near(paper.cx, 140, 1) && near(paper.cy, 75, 1) &&
+        near(paper.angle, -6, 0.1),
+        JSON.stringify([paper.w, paper.h, paper.cx, paper.cy, paper.angle]));
+
+      check("★ transform 사진 — 200 × 100 · 중심 (120, 60)",
+        near(photo.w, 200) && near(photo.h, 100) &&
+        near(photo.cx, 120, 1) && near(photo.cy, 60, 1),
+        JSON.stringify([photo.w, photo.h, photo.cx, photo.cy]));
+
+      check("★ 프레임이 세로로만 늘어난 몫은 transform 이 따라가지 않는다(200 아닌 150)",
+        near(paper.h, 150) && near(frame.h, 200),
+        `${paper.h} / ${frame.h}`);
+
+      /* ---- pin — 기준점만 따라가고 자기 크기는 유지한다 ---- */
+
+      check("★ pin 라벨 — 사진 왼쪽 가운데 기준 · 오른쪽 변이 x=12 · 40 × 22",
+        near(label.w, 40) && near(label.h, 22) &&
+        near(label.cx, -8, 1) && near(label.cy, 60, 1) &&
+        label.vars.tx === "-100%" && label.vars.ty === "-50%",
+        JSON.stringify([label.w, label.h, label.cx, label.cy, label.vars.tx]));
+
+      check("★ pin 라벨의 오른쪽 변이 정확히 기준점이다(x=12)",
+        near(label.right, 12, 1), String(label.right));
+
+      check("★ pin 태그 — 사진 오른쪽 + 80 · 왼쪽 변이 x=300 · 8° 회전이 함께 걸린다",
+        near(tag.w, 40) && near(tag.h, 20) &&
+        near(tag.cx, 320, 1) && near(tag.cy, 50, 1) &&
+        near(tag.angle, 8, 0.1) && tag.vars.tx === "0%" && tag.vars.ty === "-50%",
+        JSON.stringify([tag.cx, tag.cy, tag.angle, tag.vars.tx]));
+
+      check("★ pin 캡션 — **프레임** 아래 가운데 기준(사진 아래가 아니다) · y=210",
+        cap.heightMode === "auto" && cap.h > 0 &&
+        near(cap.w, 240) && near(cap.left, 30, 1) && near(cap.cy, 210 + cap.h / 2, 1) &&
+        cap.vars.tx === "-50%" && cap.vars.ty === "0%",
+        JSON.stringify([cap.w, cap.left, cap.cy, cap.h]));
+
+      /* target 을 photo 로 바꾸면 같은 anchor 가 **사진 아래**가 된다 */
+      await render(page, {
+        skinPackage: framePackage((main) => {
+          main.props.elements[4].pin.target = "photo";
+        }),
+        context: CONTEXT, width: 390, fresh: true
+      });
+
+      const capPhoto = at(await readV2Canvas(page), "canvas_v2main", "canvas_v2cap");
+
+      /* 프레임 아래 가운데 (150, 200) → 사진 아래 가운데 (120, 110) 로
+         옮겨 가므로 세로도 가로도 함께 움직인다 */
+      check("★ 같은 anchor 라도 target:frame 과 target:photo 가 다른 자리다(210 → 120)",
+        near(capPhoto.cy, 120 + capPhoto.h / 2, 1) && near(capPhoto.left, 0, 1),
+        `${capPhoto.cy} / ${capPhoto.left} (h=${capPhoto.h})`);
+
+      /* ---- 두 규칙이 갈리는 자리 — 프레임만 커질 때 ---- */
+
+      await render(page, {
+        skinPackage: framePackage((main) => { main.width = 150; }),
+        context: CONTEXT, width: 390, fresh: true
+      });
+
+      const half = await readV2Canvas(page);
+      const halfFrame = findBlock(half, "canvas_v2main");
+      const halfPaper = at(half, "canvas_v2main", "canvas_v2paper");
+      const halfLabel = at(half, "canvas_v2main", "canvas_v2label");
+      const halfTag = at(half, "canvas_v2main", "canvas_v2tag");
+
+      check("★ 프레임 폭이 절반(S_frame 2 → 1)이면 transform 장식은 절반이 된다",
+        near(halfFrame.w, 150) && near(halfPaper.w, 150) && near(halfPaper.h, 75),
+        `${halfFrame.w} / ${halfPaper.w} × ${halfPaper.h}`);
+
+      check("★ 같은 변화에서 pin 장식의 **크기는 그대로**다(40 × 22 · 40 × 20)",
+        near(halfLabel.w, 40) && near(halfLabel.h, 22) &&
+        near(halfTag.w, 40) && near(halfTag.h, 20),
+        JSON.stringify([halfLabel.w, halfLabel.h, halfTag.w, halfTag.h]));
+
+      /* ★ 태그는 8° 돌아 있어 bbox 의 변이 아니라 **중심**으로 잰다
+         (회전은 중심을 옮기지 않는다 — READ_V2_CANVAS 의 그 규약) */
+      check("★ pin 의 **자리**는 줄어든 사진을 따라간다(태그 중심 320 → 210)",
+        near(halfTag.cx, 210, 1) && near(halfLabel.right, 2, 1),
+        `${halfTag.cx} / ${halfLabel.right}`);
+
+      /* ---- 390 ↔ 780 — 화면 배율은 둘 다 같이 받는다 ---- */
+
+      await render(page, { skinPackage: framePackage(), context: CONTEXT, width: 780, fresh: true });
+
+      const wide = await readV2Canvas(page);
+      const wideFrame = findBlock(wide, "canvas_v2main");
+      const widePaper = at(wide, "canvas_v2main", "canvas_v2paper");
+      const widePhoto = at(wide, "canvas_v2main", "canvas_v2photo");
+      const wideLabel = at(wide, "canvas_v2main", "canvas_v2label");
+      const wideTag = at(wide, "canvas_v2main", "canvas_v2tag");
+
+      check("★ 780px — 화면 배율은 transform 과 pin **둘 다** 받는다(정확히 두 배)",
+        near(wideFrame.w, 600, 1) &&
+        near(widePaper.w, 600, 1) && near(widePaper.h, 300, 1) &&
+        near(widePhoto.w, 400, 1) &&
+        near(wideLabel.w, 80, 1) && near(wideLabel.h, 44, 1) &&
+        near(wideTag.w, 80, 1),
+        JSON.stringify([widePaper.w, widePhoto.w, wideLabel.w, wideTag.w]));
+
+      check("★ 780px — 기준점도 두 배다(태그 중심 320 → 640 · 라벨 중심 −8 → −16)",
+        near(wideTag.cx, 640, 1.5) && near(wideLabel.cx, -16, 1.5),
+        `${wideTag.cx} / ${wideLabel.cx}`);
+
+      check("★ 백분율 문자열이 두 폭에서 **같다**(부모 배율을 중복 보정하지 않는다)",
+        same(wide.blocks.find((b) => b.editId === "canvas_v2main").inner.map((n) => n.vars),
+          r.blocks.find((b) => b.editId === "canvas_v2main").inner.map((n) => n.vars)),
+        JSON.stringify(wideTag.vars));
+
+      /* ---- height:"auto" 프레임 ---- */
+
+      check("★ height \"auto\" 프레임의 높이는 **primary 사진 상자의 비율**이다(200 × 80)",
+        auto.heightMode === "auto" && near(auto.w, 200) && near(auto.h, 80, 1),
+        `${auto.w} × ${auto.h}`);
+
+      check("★ 그 비율은 props.baseWidth/baseHeight(100:400 → 800)가 아니다",
+        auto.frameRatioW === "100" && auto.frameRatioH === "40" && auto.h < 200,
+        `${auto.frameRatioW}:${auto.frameRatioH} → ${auto.h}`);
+
+      check("★ auto 프레임 안에서도 백분율 세로값이 풀린다(사진이 프레임을 꽉 채운다)",
+        near(at(r, "canvas_v2auto", "canvas_v2autophoto").w, 200) &&
+        near(at(r, "canvas_v2auto", "canvas_v2autophoto").h, 80, 1),
+        JSON.stringify([at(r, "canvas_v2auto", "canvas_v2autophoto").w,
+          at(r, "canvas_v2auto", "canvas_v2autophoto").h]));
+
+      /* ---- 사진 교체 — 장식은 같은 기준점을 따라간다 ---- */
+
+      await render(page, {
+        skinPackage: framePackage((main) => {
+          main.props.elements[1].props.slot = "sticker_1";
+        }),
+        context: CONTEXT, width: 390, fresh: true
+      });
+
+      const swapped = await readV2Canvas(page);
+
+      await render(page, {
+        skinPackage: framePackage((main) => {
+          main.props.elements[1].props.slot = "photo_empty";
+        }),
+        context: CONTEXT, width: 390, fresh: true
+      });
+
+      const emptied = await readV2Canvas(page);
+
+      const innerVars = (reading) =>
+        findBlock(reading, "canvas_v2main").inner.map((n) => ({ id: n.editId, ...n.vars }));
+
+      check("★ 사진 슬롯을 바꿔도 장식의 좌표가 한 칸도 움직이지 않는다",
+        same(innerVars(swapped), innerVars(r)) && same(innerVars(emptied), innerVars(r)),
+        JSON.stringify(innerVars(emptied).slice(2, 3)));
+
+      check("★ 빈 슬롯이어도 사진 요소의 상자는 남고 img 만 없다(placeholder 없음)",
+        near(at(emptied, "canvas_v2main", "canvas_v2photo").w, 200) &&
+        at(emptied, "canvas_v2main", "canvas_v2photo").imgSrc === null &&
+        at(emptied, "canvas_v2main", "canvas_v2photo").innerTags === "",
+        JSON.stringify({ s: at(emptied, "canvas_v2main", "canvas_v2photo").imgSrc }));
+
+      check("★ 그림이 바뀌어도 auto 프레임의 높이가 같다(비율의 출처가 파일이 아니다)",
+        near(findBlock(swapped, "canvas_v2auto").h, 80, 1) &&
+        near(findBlock(emptied, "canvas_v2auto").h, 80, 1),
+        `${findBlock(swapped, "canvas_v2auto").h} / ${findBlock(emptied, "canvas_v2auto").h}`);
+
+      /* ---- 프레임 밖 장식 · 가로 스크롤 ---- */
+
+      await render(page, { skinPackage: framePackage(), context: CONTEXT, width: 390, fresh: true });
+
+      const spill = await page.evaluate(() => {
+        const block = document.querySelector('[data-imory-canvas-type="main_visual"]');
+        const cs = getComputedStyle(block);
+        return {
+          overflowX: cs.overflowX,
+          overflowY: cs.overflowY,
+          position: cs.position,
+          docScrollW: document.documentElement.scrollWidth,
+          docClientW: document.documentElement.clientWidth,
+          bodyScrollW: document.body.scrollWidth
+        };
+      });
+
+      check("★ 프레임은 overflow 를 정하지 않는다(자를지는 스킨 CSS 의 몫)",
+        spill.overflowX === "visible" && spill.overflowY === "visible" &&
+        spill.position === "relative",
+        JSON.stringify(spill));
+
+      check("★ 장식이 실제로 프레임 밖으로 나온다(왼쪽 −10 · 오른쪽 +40 · 아래 +10)",
+        paper.left < -5 && tag.right > 300 && cap.bottom > 200,
+        JSON.stringify({ l: paper.left, r: tag.right, b: cap.bottom }));
+
+      check("★ 390px 화면에서 페이지 전체에 가로 스크롤이 생기지 않는다",
+        spill.docScrollW <= spill.docClientW,
+        `${spill.docScrollW} / ${spill.docClientW}`);
 
       check("스크립트 오류 없음", errors.length === 0, errors.join(" | "));
 

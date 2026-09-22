@@ -1,6 +1,6 @@
 /* =========================================================
    SKIN HOME CANVAS RENDER — HOME 캔버스의 **정적 렌더러**
-   (HOME-CANVAS-RENDER-1A · 1B · V2-FLOW-RENDER-1)
+   (HOME-CANVAS-RENDER-1A · 1B · V2-FLOW-RENDER-1 · V2-MAIN-VISUAL-1)
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md
    로드맵:    docs/plans/IMORY_HOME_CANVAS_ROADMAP.md (PLAN)
@@ -19,10 +19,10 @@
            그린다 — 공개 native HOME · Studio native Preview ·
            공개 sandbox · Studio sandbox Preview(RENDER-1A · 1B).
            v1(평면 자유)과 v2(조합형 — 흐름 + 자유 장식, §3-1)를
-           둘 다 그린다.
+           둘 다 그린다. v2 `main_visual` 의 **내부**(primary 사진과
+           주변 장식 · `transform` · `pin`)도 그린다(§3-2).
    안 한다: 선택 · 드래그 · 크기 · 회전 · Inspector · Undo · preset ·
-           위젯, 그리고 v2 `main_visual` 의 **내부**(V2-MAIN-VISUAL-1).
-           조작 UI 가 하나도 없다 — 이 파일은 리스너를 단 하나도
+           위젯. 조작 UI 가 하나도 없다 — 이 파일은 리스너를 단 하나도
            만들지 않는다.
 
    ★ 그리는가 마는가의 판정
@@ -119,10 +119,20 @@ const SKIN_CANVAS_RENDER_ALIGN_ATTR = "data-imory-canvas-align";
    붙지 않으므로 v1 DOM 은 한 글자도 바뀌지 않는다. */
 const SKIN_CANVAS_RENDER_OVERLAY_ATTR = "data-imory-canvas-overlay";
 
-/* main_visual 의 **외곽 프레임**. 이 라운드는 여기까지다 — 내부
-   primary 사진과 장식은 V2-MAIN-VISUAL-1 이 이 표식 안에 그린다.
-   자리를 채우는 임시 문구도 기본 디자인도 넣지 않는다. */
+/* main_visual 의 **외곽 프레임**. V2-MAIN-VISUAL-1 부터 이 표식 안에
+   primary 사진과 주변 장식이 그려진다. 자리를 채우는 임시 문구도
+   기본 디자인도 넣지 않는다 — 그릴 것은 저장된 요소뿐이다. */
 const SKIN_CANVAS_RENDER_FRAME_ATTR = "data-imory-canvas-frame";
+
+/* 프레임 내부 요소가 프레임이 커질 때 **무엇을 따라가나**(§14-6 ·
+   V2-MAIN-VISUAL-1). 값은 `transform` · `pin` 둘이고, 스킨 CSS 와
+   재는 쪽이 두 규칙을 구분할 수 있게 속성으로 남긴다.
+
+   ★ 자유 배치의 표식(`data-imory-canvas-element`)을 **그대로 쓴다** —
+     프레임 내부 요소도 좌표로 놓이는 자유 요소이고, 좌표 CSS(§2)가
+     그 한 선택자에 걸려 있다. 층을 가르는 것은 "프레임 안에 있는가"
+     (= `[data-imory-canvas-frame]` 의 자손인가)다. */
+const SKIN_CANVAS_RENDER_FOLLOW_ATTR = "data-imory-canvas-follow";
 
 /* Studio Inspector 가 나중에 이 선택자로 CSS 를 고친다(계약 §8) */
 const SKIN_CANVAS_RENDER_EDIT_ID_ATTR = "data-imory-edit-id";
@@ -143,7 +153,24 @@ const SKIN_CANVAS_RENDER_VARS = {
   y: "--imory-canvas-y",
   width: "--imory-canvas-width",
   height: "--imory-canvas-height",
-  rotation: "--imory-canvas-rotation"
+  rotation: "--imory-canvas-rotation",
+
+  /*
+    V2-MAIN-VISUAL-1 — `pin` 요소의 **자기 기준점**(§14-6 의 `origin`).
+
+    ★ 왜 좌표에 미리 더하지 않고 transform 으로 빼는가.
+
+    `origin` 은 "장식 **자신의** 어느 점을 그 자리에 놓나"라서 자기
+    크기를 알아야 계산된다. 그런데 `height:"auto"` 인 pin 요소의 높이는
+    **스킨 조판**이 정하므로 렌더 시점에 숫자가 없다(§8 — 플랫폼은
+    글자 크기를 정하지 않는다). 백분율 translate 는 요소 **자기 상자**
+    를 기준으로 풀리므로 브라우저가 그 몫을 대신 빼 준다 — 재지 않고
+    (ResizeObserver 없음), 숫자를 지어내지도 않는다.
+
+    v1 요소와 overlay 는 이 칸을 쓰지 않는다(CSS 기본값 `0%`).
+  */
+  translateX: "--imory-canvas-translate-x",
+  translateY: "--imory-canvas-translate-y"
 };
 
 /*
@@ -177,8 +204,61 @@ const SKIN_CANVAS_RENDER_BLOCK_VARS = {
   maxWidth: "--imory-canvas-block-max-width",
   height: "--imory-canvas-block-height",
   frameBaseWidth: "--imory-canvas-frame-base-width",
-  frameBaseHeight: "--imory-canvas-frame-base-height"
+  frameBaseHeight: "--imory-canvas-frame-base-height",
+
+  /*
+    V2-MAIN-VISUAL-1 — `height:"auto"` 프레임의 비율.
+
+    **primary 사진 요소의 저장된 상자 비율 하나**다(§14-5 "auto 는
+    primary photo 의 비율을 따른다"). `props.baseWidth` · `baseHeight`
+    의 비율이 **아니다** — 그쪽은 내부 좌표의 자일 뿐이고, 비율을 두
+    곳에서 정하면 충돌한다(§14-5 가 별도 `aspectRatio` 칸을 두지 않은
+    그 이유).
+  */
+  frameRatioWidth: "--imory-canvas-frame-ratio-width",
+  frameRatioHeight: "--imory-canvas-frame-ratio-height"
 };
+
+
+/* =========================================================
+   pin 의 아홉 점 (V2-MAIN-VISUAL-1 · 로드맵 §14-6)
+
+   `anchor`(대상의 어느 점)와 `origin`(장식 자신의 어느 점)이 **같은
+   아홉 이름**을 쓴다. 이름 목록은 계약 파일
+   (skin/skin-home-canvas-v2.js 의 SKIN_HOME_CANVAS_PIN_POINTS)과 같아야
+   하고, 브라우저 없이 도는 skin/skin-home-canvas-test.mjs 가 둘을
+   대조한다 — 이 파일은 그 파일 없이도 그릴 수 있어야 해서 값을 한 벌
+   더 갖는다(요소 id 규칙 · 슬롯 이름 규칙과 같은 사정).
+========================================================== */
+
+const SKIN_CANVAS_RENDER_PIN_FRACTIONS = {
+  "top-left": { x: 0, y: 0 },
+  "top": { x: 0.5, y: 0 },
+  "top-right": { x: 1, y: 0 },
+  "left": { x: 0, y: 0.5 },
+  "center": { x: 0.5, y: 0.5 },
+  "right": { x: 1, y: 0.5 },
+  "bottom-left": { x: 0, y: 1 },
+  "bottom": { x: 0.5, y: 1 },
+  "bottom-right": { x: 1, y: 1 }
+};
+
+/* 빠진 `anchor` · `origin` 의 기본값(§14-6 의 표) */
+const SKIN_CANVAS_RENDER_PIN_DEFAULT_POINT = "center";
+
+
+function skinCanvasRenderPinFraction(name) {
+
+  if (
+    typeof name === "string" &&
+    Object.prototype.hasOwnProperty.call(SKIN_CANVAS_RENDER_PIN_FRACTIONS, name)
+  ) {
+    return SKIN_CANVAS_RENDER_PIN_FRACTIONS[name];
+  }
+
+  return SKIN_CANVAS_RENDER_PIN_FRACTIONS[SKIN_CANVAS_RENDER_PIN_DEFAULT_POINT];
+
+}
 
 
 /* =========================================================
@@ -610,7 +690,19 @@ function readSkinCanvasCategories(context, props) {
    의미가 있는 태그(p · ul · a · img)는 그 안에 넣는다.
 ========================================================== */
 
-function buildSkinCanvasElementNode(doc, element, canvas, context) {
+/*
+  요소 하나의 **껍데기**. 표식 · 종류 · edit-id 까지다.
+
+  ★ V2-MAIN-VISUAL-1 에서 갈라 냈다. v1 요소 · overlay · `main_visual`
+    내부 요소가 **같은 DOM** 이어야 하고(§23-3 · §14-5), 다른 것은
+    좌표를 푸는 자 하나뿐이다. 껍데기와 종류별 내용을 두 벌 만들면
+    스킨 CSS 선택자가 층마다 갈라진다.
+
+  ★ 속성을 쓰는 **순서**를 바꾸지 않는다 — 직렬화된 HTML 의 속성
+    순서가 두 화면 대조(글자 단위)의 일부다. 그래서 상태(hidden ·
+    locked)는 좌표 뒤에 쓰는 별도 함수로 남는다.
+*/
+function buildSkinCanvasElementShell(doc, element) {
 
   const node = doc.createElement("div");
 
@@ -623,6 +715,33 @@ function buildSkinCanvasElementNode(doc, element, canvas, context) {
   ) {
     node.setAttribute(SKIN_CANVAS_RENDER_EDIT_ID_ATTR, element.id);
   }
+
+  return node;
+
+}
+
+
+function applySkinCanvasElementState(node, element) {
+
+  if (element.hidden === true) {
+    /* `hidden` 속성이 실제로 감추고, data 속성은 재는 쪽과 스킨
+       CSS 가 상태를 볼 수 있게 한다. 플랫폼 CSS 가 display 를
+       건드리지 않으므로 UA 의 [hidden] 이 그대로 이긴다. */
+    node.hidden = true;
+    node.setAttribute(SKIN_CANVAS_RENDER_HIDDEN_ATTR, "true");
+  }
+
+  if (element.locked === true) {
+    /* 공개 화면의 모양을 바꾸지 않는다 — 표시만 한다(계약 §5) */
+    node.setAttribute(SKIN_CANVAS_RENDER_LOCKED_ATTR, "true");
+  }
+
+}
+
+
+function buildSkinCanvasElementNode(doc, element, canvas, context) {
+
+  const node = buildSkinCanvasElementShell(doc, element);
 
   /* ── 좌표와 크기 ──
 
@@ -654,18 +773,7 @@ function buildSkinCanvasElementNode(doc, element, canvas, context) {
 
   /* ── 상태 ── */
 
-  if (element.hidden === true) {
-    /* `hidden` 속성이 실제로 감추고, data 속성은 재는 쪽과 스킨
-       CSS 가 상태를 볼 수 있게 한다. 플랫폼 CSS 가 display 를
-       건드리지 않으므로 UA 의 [hidden] 이 그대로 이긴다. */
-    node.hidden = true;
-    node.setAttribute(SKIN_CANVAS_RENDER_HIDDEN_ATTR, "true");
-  }
-
-  if (element.locked === true) {
-    /* 공개 화면의 모양을 바꾸지 않는다 — 표시만 한다(계약 §5) */
-    node.setAttribute(SKIN_CANVAS_RENDER_LOCKED_ATTR, "true");
-  }
+  applySkinCanvasElementState(node, element);
 
   /* ── 종류별 내용 ── */
 
@@ -1069,6 +1177,406 @@ function applySkinCanvasBlockBox(el, block, metrics, gap) {
 }
 
 
+/* =========================================================
+   3-2. main_visual 프레임 내부 (V2-MAIN-VISUAL-1 · 로드맵 §14-5 · §14-6)
+
+   ── 왜 프레임 안에 또 하나의 층을 만들지 않았나 ─────────
+
+   내부 좌표의 자(`props.baseWidth` · `baseHeight`)를 `aspect-ratio`
+   상자 하나로 깔고 그 안에 요소를 넣으면 `transform` 요소는 저절로
+   풀린다. 그런데 그러면 **배열 순서가 깨진다** — `pin` 요소는 그
+   상자의 세로 자를 쓸 수 없어(자기 크기가 `S_frame` 을 안 받는다)
+   상자 밖으로 나가야 하고, 그 순간 "paper → photo → label → sticker"
+   같은 앞뒤 순서가 두 덩어리로 쪼개진다. §14-5 는 배열 순서가 곧
+   앞뒤 순서라고 정했다.
+
+   그래서 **내부 요소 전부가 프레임 상자의 직계 자식**이고, 렌더러가
+   두 규칙을 **숫자로** 풀어 같은 네 칸(x · y · width · height)에
+   적는다. 층이 하나라 앞뒤 순서가 배열 그대로다.
+
+   ── 숫자로 풀 수 있는 이유 ──────────────────────────────
+
+   프레임의 폭은 **저장값에서 계산된다**. `align` 이 stretch 가 아니면
+   블록의 `width` 이고, stretch 면 `가용 폭 − 좌우 margin`(`maxWidth`
+   가 더 작으면 거기까지)이다 — CSS 가 calc 으로 푸는 그 식과 같은
+   식이다(§23-6). 그래서
+
+     S_frame = 프레임 폭 ÷ props.baseWidth      (가로 배율 **하나**)
+
+   를 렌더 시점에 알 수 있고, `ResizeObserver` 도 매 프레임 재계산도
+   여전히 없다. 화면 배율 `S_page` 는 두 규칙 모두 백분율이 알아서
+   준다(프레임 상자가 이미 `S_page` 로 커져 있으므로).
+
+   ── 두 규칙이 같은 네 칸에 어떻게 들어가나 ──────────────
+
+     transform  로컬값 × S_frame → 프레임 상자의 백분율
+                (결과적으로 left% = x / props.baseWidth — 가로는
+                 S_frame 이 약분된다. 세로는 프레임 높이가 자라서
+                 약분되지 않는다 → 프레임이 세로로만 늘어나면 장식은
+                 위쪽에 몰린다. §14-6 이 의도한 동작이다.)
+
+     pin        anchor 기준점 + offset → 프레임 상자의 백분율
+                크기는 로컬값 **그대로**(S_frame 없음) → 프레임을
+                키워도 인덱스 글자는 커지지 않는다.
+                origin 은 `--imory-canvas-translate-*` 가 뺀다.
+
+   ── 프레임의 세로 길이 ──────────────────────────────────
+
+   숫자 `height` 면 그 값이고, `"auto"` 면 **primary 사진 요소의 저장된
+   상자 비율**을 `aspect-ratio` 로 건다(§14-5). primary 는 `type:"photo"`
+   이고 photo 에는 `height:"auto"` 가 없으므로(v1 §6 의 자) 그 비율은
+   **언제나 숫자**다 — 슬롯이 비어 있어도, 그림이 아직 안 받아졌어도
+   같은 높이다. §14-5 가 남겨 둔 "슬롯이 비어 비율을 모를 때의 폴백"
+   은 그래서 **필요하지 않다**: 비율의 출처가 그림 파일이 아니라
+   저장값이기 때문이고, 덕분에 그림이 늦게 도착해도 프레임이 튀지
+   않는다.
+========================================================== */
+
+/*
+  블록의 폭을 **저장값에서** 푼다(위 ★). 돌려주는 값은 도화지 자
+  (`baseWidth`) 위의 양수이고, 풀 수 없으면 null 이다.
+
+  ★ CSS 와 같은 식을 쓴다 — 여기서 다른 답을 내면 프레임 상자와 그
+    안의 백분율이 서로 다른 폭을 가정하게 된다(§23-6 의 그 calc).
+*/
+function resolveSkinCanvasBlockWidth(block, metrics) {
+
+  const base = metrics.width;
+
+  if (!isSkinCanvasRenderNumber(base) || base <= 0) {
+    /* 자가 없으면 CSS 도 폭을 적지 않았다(`auto`) — 숫자를 지어내지
+       않는다(applySkinCanvasBlockBox 의 ★와 같은 판정) */
+    return null;
+  }
+
+  if (block.align === "stretch") {
+
+    const margin =
+      (block.margin && typeof block.margin === "object") ? block.margin : {};
+
+    const sides =
+      (isSkinCanvasRenderNumber(margin.left) ? margin.left : 0) +
+      (isSkinCanvasRenderNumber(margin.right) ? margin.right : 0);
+
+    let width = base - sides;
+
+    if (
+      isSkinCanvasRenderNumber(block.maxWidth) &&
+      block.maxWidth > 0 &&
+      block.maxWidth < width
+    ) {
+      width = block.maxWidth;
+    }
+
+    return width > 0 ? width : null;
+
+  }
+
+  return (isSkinCanvasRenderNumber(block.width) && block.width > 0)
+    ? block.width
+    : null;
+
+}
+
+
+/* primary 사진 상자의 비율. 없거나 0 이면 null(위 ★ — 실제로는
+   계약이 양수를 보장한다) */
+function skinCanvasFramePhotoRatio(primary) {
+
+  if (
+    !primary ||
+    !isSkinCanvasRenderNumber(primary.width) || primary.width <= 0 ||
+    !isSkinCanvasRenderNumber(primary.height) || primary.height <= 0
+  ) {
+    return null;
+  }
+
+  return primary.width / primary.height;
+
+}
+
+
+/*
+  pin 하나를 풀어 **왼쪽 위 좌표**로 만든다(프레임 자 위의 숫자).
+
+  `origin` 의 몫은 여기서 빼지 않는다 — 자기 크기를 모를 수 있으므로
+  CSS 의 백분율 translate 가 뺀다(SKIN_CANVAS_RENDER_VARS 의 ★).
+*/
+function resolveSkinCanvasPinPoint(pin, target) {
+
+  const source = (pin && typeof pin === "object") ? pin : {};
+
+  const anchor = skinCanvasRenderPinFraction(source.anchor);
+
+  const offset =
+    (source.offset && typeof source.offset === "object") ? source.offset : {};
+
+  return {
+    x:
+      target.x + anchor.x * target.width +
+      (isSkinCanvasRenderNumber(offset.x) ? offset.x : 0),
+    y:
+      target.y + anchor.y * target.height +
+      (isSkinCanvasRenderNumber(offset.y) ? offset.y : 0)
+  };
+
+}
+
+
+/*
+  primary 사진의 상자(프레임 자 위의 숫자). `pin.target:"photo"` 가
+  가리키는 그 상자다.
+
+  ★ primary 자신이 `follow:"pin"` 이면 그 상자도 pin 으로 푼다. 그때의
+    `target:"photo"` 는 **자기 자신**이라 답이 없으므로 프레임으로
+    읽는다 — 순환을 만들지 않는다.
+*/
+function resolveSkinCanvasFramePhotoRect(frame, primary) {
+
+  if (
+    !primary ||
+    !isSkinCanvasRenderNumber(primary.width) || primary.width <= 0 ||
+    !isSkinCanvasRenderNumber(primary.height) || primary.height <= 0
+  ) {
+    return null;
+  }
+
+  const frameRect =
+    { x: 0, y: 0, width: frame.width, height: frame.height };
+
+  if (primary.follow === "pin") {
+
+    const origin = skinCanvasRenderPinFraction(
+      (primary.pin && typeof primary.pin === "object") ? primary.pin.origin : undefined
+    );
+
+    const point = resolveSkinCanvasPinPoint(primary.pin, frameRect);
+
+    return {
+      x: point.x - origin.x * primary.width,
+      y: point.y - origin.y * primary.height,
+      width: primary.width,
+      height: primary.height
+    };
+
+  }
+
+  if (
+    !isSkinCanvasRenderNumber(primary.x) ||
+    !isSkinCanvasRenderNumber(primary.y)
+  ) {
+    return null;
+  }
+
+  return {
+    x: primary.x * frame.scale,
+    y: primary.y * frame.scale,
+    width: primary.width * frame.scale,
+    height: primary.height * frame.scale
+  };
+
+}
+
+
+/*
+  프레임 하나의 자.
+
+    baseWidth · baseHeight  내부 좌표의 자(props)
+    width · height          프레임 상자(도화지 자 위의 숫자)
+    scale                   S_frame — **가로 배율 하나**
+    ratioWidth · ratioHeight  height:"auto" 의 비율(primary 사진 상자)
+    photo                   pin.target:"photo" 가 가리키는 상자
+
+  하나라도 풀 수 없으면 null 이고, 그때 프레임은 **빈 상자로 남는다**
+  — 자리를 채우는 임의의 그림도 문구도 넣지 않는다.
+*/
+function resolveSkinCanvasFrameGeometry(block, metrics) {
+
+  const props =
+    (block.props && typeof block.props === "object") ? block.props : {};
+
+  const baseWidth = props.baseWidth;
+  const baseHeight = props.baseHeight;
+
+  if (
+    !isSkinCanvasRenderNumber(baseWidth) || baseWidth <= 0 ||
+    !isSkinCanvasRenderNumber(baseHeight) || baseHeight <= 0 ||
+    !Array.isArray(props.elements) || props.elements.length === 0
+  ) {
+    return null;
+  }
+
+  const width = resolveSkinCanvasBlockWidth(block, metrics);
+
+  if (width === null) {
+    return null;
+  }
+
+  const primary =
+    props.elements.find(
+      (item) =>
+        item && typeof item === "object" && item.id === props.primaryId
+    ) || null;
+
+  const ratio = skinCanvasFramePhotoRatio(primary);
+
+  let height;
+
+  if (isSkinCanvasRenderNumber(block.height)) {
+
+    /* 숫자 height 는 `metrics.height` 자로 CSS 에 갔다 — 그 자가
+       없으면 화면에서도 `auto` 다(applySkinCanvasBlockBox) */
+    if (
+      !isSkinCanvasRenderNumber(metrics.height) || metrics.height <= 0 ||
+      block.height <= 0
+    ) {
+      return null;
+    }
+
+    height = block.height;
+
+  } else {
+
+    if (ratio === null) {
+      return null;
+    }
+
+    height = width / ratio;
+
+  }
+
+  const frame = {
+    baseWidth: baseWidth,
+    baseHeight: baseHeight,
+    width: width,
+    height: height,
+    scale: width / baseWidth,
+    ratioWidth: primary ? primary.width : null,
+    ratioHeight: primary ? primary.height : null,
+    photo: null
+  };
+
+  frame.photo = resolveSkinCanvasFramePhotoRect(frame, primary);
+
+  return frame;
+
+}
+
+
+/*
+  프레임 내부 요소 하나의 geometry.
+
+  ★ 좌표를 쓰는 함수는 여전히 **하나**다(§0-2). 이 함수는 두 규칙을
+    숫자로 풀어 그 함수에 넘길 뿐이고, 백분율 · 자릿수 ·
+    `height:"auto"` 판정을 한 벌 더 갖지 않는다.
+*/
+function applySkinCanvasFrameElementBox(el, element, frame) {
+
+  const follow = element.follow === "pin" ? "pin" : "transform";
+
+  el.setAttribute(SKIN_CANVAS_RENDER_FOLLOW_ATTR, follow);
+
+  if (follow === "transform") {
+
+    if (
+      !isSkinCanvasRenderNumber(element.x) ||
+      !isSkinCanvasRenderNumber(element.y)
+    ) {
+      return false;
+    }
+
+    return applySkinCanvasElementBox(
+      el,
+      {
+        x: element.x * frame.scale,
+        y: element.y * frame.scale,
+        width:
+          isSkinCanvasRenderNumber(element.width)
+            ? element.width * frame.scale
+            : element.width,
+        height:
+          isSkinCanvasRenderNumber(element.height)
+            ? element.height * frame.scale
+            : element.height
+      },
+      frame.width,
+      frame.height
+    );
+
+  }
+
+  const pin = (element.pin && typeof element.pin === "object") ? element.pin : {};
+
+  /* `target:"photo"` 인데 그 상자를 풀 수 없으면 프레임으로 읽는다 —
+     장식을 잃지 않고, 자리를 지어내지도 않는다 */
+  const target =
+    (pin.target === "photo" && frame.photo)
+      ? frame.photo
+      : { x: 0, y: 0, width: frame.width, height: frame.height };
+
+  const point = resolveSkinCanvasPinPoint(pin, target);
+
+  /* 크기는 로컬값 그대로다 — `S_frame` 을 받지 않는다(§14-6) */
+  const ok =
+    applySkinCanvasElementBox(
+      el,
+      {
+        x: point.x,
+        y: point.y,
+        width: element.width,
+        height: element.height
+      },
+      frame.width,
+      frame.height
+    );
+
+  if (!ok) {
+    return false;
+  }
+
+  const origin = skinCanvasRenderPinFraction(pin.origin);
+
+  setSkinCanvasRenderVar(
+    el,
+    SKIN_CANVAS_RENDER_VARS.translateX,
+    skinCanvasRenderTrimNumber(-origin.x * 100) + "%"
+  );
+
+  setSkinCanvasRenderVar(
+    el,
+    SKIN_CANVAS_RENDER_VARS.translateY,
+    skinCanvasRenderTrimNumber(-origin.y * 100) + "%"
+  );
+
+  return true;
+
+}
+
+
+/*
+  프레임 내부 요소 하나의 DOM — **v1 요소와 같은 껍데기 · 같은 종류별
+  내용**이고 좌표를 푸는 자만 다르다(위 §3-2).
+*/
+function buildSkinCanvasFrameElementNode(doc, element, frame, context) {
+
+  const node = buildSkinCanvasElementShell(doc, element);
+
+  applySkinCanvasFrameElementBox(node, element, frame);
+
+  applySkinCanvasElementRotation(
+    node,
+    isSkinCanvasRenderNumber(element.rotation) ? element.rotation : 0
+  );
+
+  applySkinCanvasElementState(node, element);
+
+  fillSkinCanvasElementNode(doc, node, element, context);
+
+  return node;
+
+}
+
+
 /*
   블록 하나의 DOM.
 
@@ -1080,9 +1588,9 @@ function applySkinCanvasBlockBox(el, block, metrics, gap) {
   ★ `divider` 는 상자 하나다. 선의 색 · 두께 · 점선 여부는 스킨 CSS
     가 정한다 — 플랫폼이 기본 선을 그리면 그것이 곧 디자인이다.
 
-  ★ `main_visual` 은 **외곽 프레임까지**다(§14-5 의 내부 렌더는
-    V2-MAIN-VISUAL-1). 안에 아무것도 넣지 않고, 대신 내부 좌표의
-    자(props.baseWidth · baseHeight)를 변수로 남겨 둔다.
+  ★ `main_visual` 은 외곽 프레임과 **그 안의 primary 사진 · 주변 장식**
+    이다(V2-MAIN-VISUAL-1 · §3-2). 내부 좌표의 자(props.baseWidth ·
+    baseHeight)는 스킨 CSS 가 볼 수 있게 변수로도 남긴다.
 */
 function buildSkinCanvasBlockNode(doc, block, metrics, context, gap) {
 
@@ -1131,6 +1639,45 @@ function buildSkinCanvasBlockNode(doc, block, metrics, context, gap) {
         ? skinCanvasRenderTrimNumber(props.baseHeight)
         : null
     );
+
+    /* ── 내부 (V2-MAIN-VISUAL-1) ── */
+
+    const frame = resolveSkinCanvasFrameGeometry(block, metrics);
+
+    if (!frame) {
+      /* 자를 만들 수 없는 프레임은 **빈 상자로 남는다**(§3-2) */
+      return node;
+    }
+
+    /*
+      `height:"auto"` 의 비율 — primary 사진 상자 하나다(§14-5). 숫자
+      `height` 에서는 CSS 가 이 변수를 읽지 않지만, 스킨 CSS 와 나중의
+      편집 UI 가 같은 비율을 볼 수 있게 언제나 적는다(지어낸 값이
+      아니라 저장값이다).
+    */
+    setSkinCanvasRenderVar(
+      node,
+      SKIN_CANVAS_RENDER_BLOCK_VARS.frameRatioWidth,
+      isSkinCanvasRenderNumber(frame.ratioWidth)
+        ? skinCanvasRenderTrimNumber(frame.ratioWidth)
+        : null
+    );
+
+    setSkinCanvasRenderVar(
+      node,
+      SKIN_CANVAS_RENDER_BLOCK_VARS.frameRatioHeight,
+      isSkinCanvasRenderNumber(frame.ratioHeight)
+        ? skinCanvasRenderTrimNumber(frame.ratioHeight)
+        : null
+    );
+
+    /* 배열 순서가 곧 앞뒤 순서다 — 두 규칙(transform · pin)이 한 층에
+       섞여 있고, 그래서 순서가 쪼개지지 않는다(§3-2) */
+    props.elements.forEach((element) => {
+      node.appendChild(
+        buildSkinCanvasFrameElementNode(doc, element, frame, context)
+      );
+    });
 
     return node;
 
@@ -1404,6 +1951,16 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_CANVAS_RENDER_FRAME_ATTR,
     SKIN_CANVAS_RENDER_FLOW_VARS,
     SKIN_CANVAS_RENDER_BLOCK_VARS,
+
+    /* HOME-CANVAS-V2-MAIN-VISUAL-1 */
+    SKIN_CANVAS_RENDER_FOLLOW_ATTR,
+    SKIN_CANVAS_RENDER_PIN_FRACTIONS,
+    SKIN_CANVAS_RENDER_PIN_DEFAULT_POINT,
+    resolveSkinCanvasBlockWidth,
+    skinCanvasFramePhotoRatio,
+    resolveSkinCanvasFramePhotoRect,
+    resolveSkinCanvasFrameGeometry,
+    applySkinCanvasFrameElementBox,
 
     skinCanvasRenderTrimNumber,
     skinCanvasRenderPercent,
