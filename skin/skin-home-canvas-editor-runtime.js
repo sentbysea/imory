@@ -1436,6 +1436,26 @@ export function createHomeCanvasSelectionFrame(options) {
 
     box.setAttribute("data-imory-canvas-frame", "1");
 
+    /* =====================================================
+       HOME-CANVAS-V2-ADD-1 — **잡을 것이 없으면 틀도 보이지 않는다**
+
+       Moveable 0.53.0 은 target 이 null 이어도 control box 를 만든다.
+       v2 의 자동 배치 블록은 자유 배치 요소가 아니라 target 이
+       될 수 없고(§26-8), 그래서 블록을 고르면 **끌어도 아무 일이
+       없는 손잡이 여덟**이 화면에 남아 있었다.
+
+       ★ 판정은 "지금 Moveable 이 무엇을 들고 있는가" 하나다 —
+         v2 인지 블록인지 묻지 않는다. 들고 있는 것이 없으면
+         그 틀로 할 수 있는 일도 없다(해제 · 소유권이 넘어간
+         경우도 같다). v1 요소 · v2 프레임 내부 요소 · overlay 는
+         target 이 있으므로 지금까지 그대로다.
+
+       ★ 인라인 값은 CSSOM 으로 쓴다 — CSP 의 style-src 검사
+         대상이 아니다(위 markControlBox 머리말과 같은 이유).
+    ====================================================== */
+    box.style.display =
+      moveableHasTarget() ? "" : "none";
+
     markResizeHandles(box);
 
   }
@@ -1500,6 +1520,37 @@ export function createHomeCanvasSelectionFrame(options) {
     );
 
     return handles.length;
+
+  }
+
+
+  /*
+    Moveable 이 지금 **실제로** 들고 있는 것이 있는가.
+
+    ★ 우리가 마지막으로 넘긴 목록(state.targetIds)이 아니라
+      라이브러리에게 묻는다. 그 둘이 갈리는 자리가 바로 이
+      문제였다 — 부모는 블록 하나를 골랐다고 하는데 이 문서에는
+      그 id 를 가진 **캔버스 요소**가 없어서 target 은 null 이다.
+  */
+  function moveableHasTarget() {
+
+    if (!state.moveable) {
+      return false;
+    }
+
+    try {
+
+      const targets =
+        (typeof state.moveable.getTargets === "function")
+          ? state.moveable.getTargets()
+          : null;
+
+      return !!(targets && targets.length);
+
+    }
+    catch (err) {
+      return false;
+    }
 
   }
 
@@ -1901,6 +1952,10 @@ export function createHomeCanvasSelectionFrame(options) {
       catch (err) {
         /* 이미 무너진 인스턴스다 — 아래에서 알림만 맞춘다 */
       }
+
+      /* HOME-CANVAS-V2-ADD-1 — 0.53.0 의 display 판정에 기대지
+         않고 여기서도 한 번 확실히 감춘다(위 markControlBox 의 ★) */
+      markControlBox();
 
     }
 

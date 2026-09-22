@@ -1768,3 +1768,60 @@
 
   gap: 6px;
 }
+
+
+/* =========================================================
+   HOME-CANVAS-V2-ADD-1 — 재료 추가
+
+   그리는 쪽: studio/inspector/studio-canvas-add-v2.js
+   계약: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §27
+
+   고른 것이 없을 때도 이 블록 하나만 보인다 — 그래서 위 블록들과
+   달리 윗줄(border-top)을 갖지 않고 아래로 경계를 긋는다.
+========================================================== */
+
+.studio-canvas-inspector-add {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  padding-bottom: 10px;
+
+  border-bottom: 1px solid var(--system-border);
+}
+
+
+.studio-canvas-add-group {
+  margin: 2px 0 0;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+}
+
+
+.studio-canvas-add-row {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 6px;
+}
+
+
+.studio-canvas-add-message {
+  margin: 0;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  line-height: var(--imory-line-height-snug);
+
+  word-break: keep-all;
+}
+
+
+.studio-canvas-add-message--error {
+  color: var(--system-danger, #b3261e);
+}

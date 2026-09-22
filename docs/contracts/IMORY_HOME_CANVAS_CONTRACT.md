@@ -3984,12 +3984,11 @@ Rotation** 이 된다(`1A` 에서는 읽기 전용 요약이었다).
 
 ### 26-8. 남은 차이
 
-- **블록을 고르면 Moveable 손잡이 DOM 이 남아 있다.** 블록은 자유 배치
-  요소가 아니라 Moveable 의 target 이 `null` 이고, 0.53.0 은 그때도 control
-  box 를 만든다. 자를 주지 않으므로 **끌어도 저장값은 한 칸도 바뀌지
-  않지만**(E2E 가 그것을 본다) 쓸 수 없는 손잡이가 보인다. 고치는 자리는
-  runtime 의 `setMoveableTarget()` 한 곳이고, 그 변경은 v1 그룹 선택과 함께
-  봐야 한다 — `HOME-CANVAS-TRANSFORM-1D`.
+- ~~**블록을 고르면 Moveable 손잡이 DOM 이 남아 있다.**~~ **→ `V2-ADD-1`
+  이 닫았다(§27-6).** 잡을 것이 없으면(= Moveable 이 들고 있는 target 이
+  없으면) control box 를 감춘다. 손잡이 **노드**는 여전히 DOM 에 남지만
+  화면에는 없고, 끌어도 저장값이 바뀌지 않는 것은 그대로다. v1 그룹
+  선택의 손잡이 정책은 여전히 `HOME-CANVAS-TRANSFORM-1D` 다.
 - **`pin.target` · `anchor` · `origin` 을 고르는 UI 가 없다.** 지금은 저장된
   고정 관계를 유지하면서 offset 만 바뀐다. 그 세 칸을 바꾸는 것은 묶기 UX 와
   함께 정한다 — `HOME-CANVAS-V2-GROUP-1`.
@@ -3997,14 +3996,220 @@ Rotation** 이 된다(`1A` 에서는 읽기 전용 요약이었다).
   높이를 쓰지만(§22-3) v2 프레임 내부의 실제 높이는 프레임에서 재야 한다 —
   이 라운드는 재지 않았다. 세로 손잡이로 끌면 숫자가 되고, 되돌리는 것은
   Undo 다.
-- **새 요소 추가 · `메인 비주얼로 묶기`/`묶기 해제` · 그룹 조작 · Crop 연결 ·
-  효과 설정 · 레이어 목록 · `hidden`/`locked` 토글** — 그대로 없다.
+- ~~**새 요소 추가**~~ **→ `V2-ADD-1`(§27).** `메인 비주얼로 묶기`/`묶기
+  해제` · 그룹 조작 · Crop 연결 · 효과 설정 · 레이어 목록 ·
+  `hidden`/`locked` 토글 · **삭제**는 그대로 없다.
 
 ### 26-9. 이 라운드가 만들지 않은 것
 
-새 요소 추가 · 블록 추가/삭제 · `메인 비주얼로 묶기`/`묶기 해제` · 그룹
-조작 · Crop · 효과 설정 · 레이어 목록 · `hidden`/`locked` 토글 · v1→v2 변환 ·
+새 요소 추가(**→ `V2-ADD-1` · §27**) · 블록 삭제 · `메인 비주얼로 묶기`/
+`묶기 해제` · 그룹 조작 · Crop · 효과 설정 · 레이어 목록 ·
+`hidden`/`locked` 토글 · v1→v2 변환 ·
 기본 스킨 변경 · `row`/`grid` 블록 · responsive override ·
 CATEGORY/POST/BANNER 캔버스 · 손가락 조작(v1 과 같은 이유로 의도적 미지원).
+
+`APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).
+
+---
+
+## 27. v2 재료 추가 (`HOME-CANVAS-V2-ADD-1`)
+
+`V2-EDITOR-1A` · `1B` 가 **이미 있는 것**을 고르고 고치는 데까지 왔다.
+여기서 처음으로 **없던 것이 생긴다** — 주인이 JSON 을 직접 고치지 않고
+Studio 에서 v2 HOME 의 기본 재료를 더한다.
+
+**추가뿐이다.** 삭제 · 묶기/해제 · 그룹 조작 · `hidden`/`locked` 토글 ·
+효과 설정은 하나도 없다(§27-7).
+
+### 27-1. 관련 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `skin/skin-home-canvas-write-v2.js` | 순수 함수 `writeSkinHomeCanvasV2AddNode()` 와 **기본값 표** |
+| `skin/skin-home-canvas-v2.js` | v2 값 표를 `window` 로 — 패널이 사본이 아니라 그 표를 본다 |
+| `skin/skin-home-canvas.js` | Node 결선 둘(`SKIN_HOME_CANVAS_SLOT_NAME_PATTERN` · `createSkinHomeCanvasElementId`) |
+| `studio/studio-preview.js` | `addStudioCanvasV2Node()` — draft · 기록 한 칸 · **슬롯 선언** |
+| `studio/inspector/studio-canvas-selection.js` | `commitStudioCanvasAddNode()` — 새 입구 하나 · 만든 것을 곧바로 고른다 |
+| `studio/inspector/studio-canvas-add-v2.js` | **새 파일** — 추가 패널 화면 |
+| `studio/inspector/studio-canvas-inspector.js` | 선택이 없어도 패널을 연다(추가 자리만) |
+| `skin/skin-home-canvas-editor-runtime.js` | 잡을 것이 없으면 control box 를 감춘다(§27-6) |
+| `studio/inspector/studio-inspector.css` · `studio/index.html` · `studio/studio-lifecycle-scenario.html` | 새 규칙 다섯 · 로드 자리 하나 |
+
+**새 메시지도 새 봉투 칸도 없다.** 추가는 부모 realm 안에서 끝나고,
+프레임은 다시 그려진 화면을 받을 뿐이다. sandbox strict allowlist 도
+CSP 도 그대로다.
+
+### 27-2. 두 자리, 두 표
+
+| 자리 | 받는 종류 | 어디에 |
+| --- | --- | --- |
+| 자동 배치(흐름) | `logo` · `category_nav` · `text` · `divider` · `main_visual` | `canvas.flow.blocks` 의 **맨 뒤** |
+| 페이지 자유 장식 | `photo` · `text` · `logo` · `category_nav` · `sticker` · `shape` | `canvas.overlays` 의 **맨 뒤** |
+
+두 표는 새로 적은 것이 아니라 계약의 그 둘이다
+(`SKIN_HOME_CANVAS_BLOCK_TYPES` · `SKIN_HOME_CANVAS_ELEMENT_TYPES`).
+그래서 흐름은 `photo` 를 받지 않고(사진은 자유 층의 것이거나
+`main_visual` 안의 것이다), 자유 층은 `main_visual` 과 `divider` 를
+받지 않는다.
+
+★ **`main_visual` **안**에 장식을 더하는 길은 이 라운드에 없다.**
+그것은 "이 장식을 저 프레임에 붙인다"와 같은 질문이고(소속을 옮기는
+일), 답은 묶기 UX 와 함께 정해야 한다 — `V2-ATTACH-1`.
+
+★ **맨 뒤에 붙는 이유**는 "지금 고른 것 옆"이 흐름에서는 뜻이 둘이기
+때문이다(위 · 아래). 순서는 이미 패널의 ↑↓ 가 고칠 수 있으므로
+(§25-4) 만드는 자리를 한 곳으로 두고, 옮기는 일은 그 한 경로에
+맡긴다.
+
+### 27-3. 기본값은 **순수 함수**가 정한다
+
+패널이 값을 만들어 보내면 같은 "새 요소"가 입구마다 다른 모양으로
+태어난다. 부르는 쪽이 정하는 것은 **어디에 · 무엇을 · (사진이면)
+어느 슬롯**까지다.
+
+| 자리 | 종류 | width | height | props |
+| --- | --- | --- | --- | --- |
+| 흐름 | `logo` | 160(가용 폭보다 크면 가용 폭) | 40 | `slot` · `fallback:"site_title"` |
+| 흐름 | `category_nav` | 가용 폭 | 48 | `mode:"all"` |
+| 흐름 | `text` | 가용 폭 | `"auto"` | `text:"새 텍스트"` · `role:"body"` |
+| 흐름 | `divider` | 가용 폭 | 2 | — |
+| 흐름 | `main_visual` | 240 | `"auto"` | 프레임 자 240×300 · primary 사진 하나 |
+| 자유 | `photo` | 160 | 200 | `slot` |
+| 자유 | `sticker` | 96 | 96 | `slot` |
+| 자유 | `logo` | 160 | 48 | `slot` · `fallback` |
+| 자유 | `text` | 200 | `"auto"` | `text` · `role` |
+| 자유 | `shape` | 120 | 120 | `kind:"rect"` |
+| 자유 | `category_nav` | 200 | 48 | `mode:"all"` |
+
+- **가용 폭은 흐름의 자다** — `390 − flow.padding.left − flow.padding.right`
+  (§23-4). padding 이 도화지보다 커서 0 이하가 되면 숫자를 지어내지
+  않고 도화지 폭을 쓴다.
+- **블록은 `align:"center"` 로 태어난다.** 흐름 기본값은 `left` 지만
+  (§14-4), 방금 만든 것이 한쪽에 붙어 있으면 "안 생겼다"로 읽히기
+  쉽다. 빠진 칸이 아니라 **적힌 값**이므로 패널의 정렬 칸이 그대로
+  고친다.
+- **`height` 가 대개 숫자인 것은 곧바로 보이고 잡히기 위해서다.**
+  `category_nav` 를 `"auto"` 로 두면 카테고리가 없는 블로그에서 높이
+  0 이 되고, 주인은 아무것도 생기지 않았다고 읽는다. 글자는 내용이
+  곧 높이라 `"auto"` 가 맞고, `main_visual` 의 `"auto"` 는 primary
+  사진 상자의 비율이라(§24-5) 언제나 보인다.
+- **자유 장식은 `(24,24)` 에서 시작해 12px 씩 계단으로 밀린다**(여섯
+  칸마다 처음으로). 같은 자리에 겹쳐 쌓이면 뒤엣것을 잡을 수 없다.
+- **새 글자에는 내용이 있다.** 빈 문자열이면 상자가 0 이라 고를 수
+  없고, 그러면 방금 만든 것을 지울 수도 고칠 수도 없다.
+
+★ **`main_visual` 은 primary 사진을 함께 만든다.** 계약이
+"`elements` 는 비어 있을 수 없다 · `primaryId` 는 그 안의 `photo` 를
+가리킨다"이므로(§9-(3)) 빈 프레임은 애초에 저장할 수 없다. 그 사진은
+프레임 내부 자를 **꽉 채운다**(0,0,240,300) — 그래야 `height:"auto"`
+가 곧 그 비율이 된다.
+
+### 27-4. 사진이 들어가는 종류 — 슬롯
+
+`photo` · `sticker` · `logo` 와 `main_visual` 의 primary 사진은
+**이미지 슬롯 이름**이 필요하다(§7 — 그림 자체가 아니라 자리의
+이름이다). 패널에 그 칸이 하나 있다.
+
+| 고른 값 | 무슨 일이 일어나나 |
+| --- | --- |
+| 선언된 슬롯 이름 | 그 이름을 그대로 쓴다. 선언 목록은 **늘지 않는다** |
+| `새 슬롯 만들기` | `canvas_photo` · `canvas_sticker` · `canvas_logo` 뿌리에서 **비어 있는 첫 이름**을 골라 `imageSlots` 에 **함께 선언한다** |
+
+- **기본값은 사진이 아직 없는 첫 슬롯**이다. 이미 사진이 붙은 슬롯을
+  말없이 나눠 쓰면 다른 요소의 그림이 함께 바뀐다.
+- **선언되지 않은 이름은 받지 않는다.** 그런 이름이 들어가면 Images
+  패널에 그 자리가 보이지 않아 **영영 그림을 넣을 수 없는** 요소가
+  된다(`setStudioImageSlot()` 도 같은 판정을 한다).
+- **그림이 없어도 만들어지고 그려진다.** 빈 슬롯의 `photo` 는 지금도
+  wrapper 만 그리는 것이 계약이고(§6 — 플랫폼 placeholder 를 넣지
+  않는다), 그 상태 그대로 Save · Export 된다.
+- **슬롯 선언과 새 요소는 같은 Undo 한 칸**이다. 기록이 잡는 것은
+  `currentWorkingSkin` **하나**이고 `imageSlots` 가 그 안에 있다
+  (`studio/studio-history.js`).
+
+★ **새 슬롯 이름은 무작위가 아니다.** 그 이름이 Images 패널에 그대로
+보이기 때문이다. 반대로 **요소 id 는 무작위**다(아래) — 그것은 사람이
+읽는 이름이 아니다.
+
+### 27-5. 쓰기 — 문이 하나 더 났다
+
+고치는 관문(`commitStudioCanvasElementChange`)을 빌리지 않는다. 그
+문은 "지금 고른 그 요소의 이 칸을 이 값으로"를 확정하는 곳이고
+— 선택 · 순번 · `expected` 가 전부 그 하나를 가리킨다 — 추가에는 그
+셋이 없다.
+
+```text
+  패널 버튼
+    → commitStudioCanvasAddNode()      편집 중인가 · v2 인가 · 그 자리가 그 종류를 받는가
+    → addStudioCanvasV2Node()          슬롯(고른 것 · 새로 선언) · 기록 한 칸 · dirty · 다시 그리기
+    → writeSkinHomeCanvasV2AddNode()   기본값 · 새 id · 불변 삽입 · **전체 재검증**
+    → proposeStudioCanvasSelection()   만든 것을 곧바로 고른다
+```
+
+- **`expected` 대신 전체 재검증이다.** 새 노드 하나만 보면 "id 가 이
+  캔버스 안에서 유일한가" · "`primaryId` 가 프레임 안의 사진을
+  가리키는가" 같은 판정이 빠진다. 넣어 본 캔버스를
+  `validateSkinCanvasV2Data()` 에 그대로 태우고, 막히면 draft 는 한
+  글자도 바뀌지 않는다(`reason:"invalid"`).
+- **새 id 는 v1 의 그 함수 하나다**(`createSkinHomeCanvasElementId` —
+  `canvas_` + UUID). 여기서 `canvas_text_1` 같은 뜻이 있는 이름을
+  만들지 않는다: 뜻이 있으면 나중에 종류를 바꿨을 때 이름이 거짓말을
+  하고, Import 로 합쳐진 두 캔버스에서 같은 이름이 만나기 쉽다.
+  만들고 나서 **이 캔버스 안의 모든 id** 와 대조한다(§14-5 의 한 이름
+  공간).
+- **보존 범위는 고치는 writer 와 한 벌**이다 — regions 의 모르는 항목 ·
+  항목의 모르는 칸 · canvas 의 모르는 칸 · flow 의 모르는 칸 · 다른
+  블록 · 다른 층 · **배열 순서**. 입력은 한 칸도 mutate 하지 않는다.
+- **한 번 누르면 Undo 한 칸**이고, ↶ 는 그 재료만 걷어 간다(나머지
+  JSON 은 글자 단위로 같다 — e2e 가 문자열로 대조한다).
+- **만든 것을 곧바로 고른다.** 기존 제안 경로 하나를 그대로 쓰므로
+  (`proposeStudioCanvasSelection`) 순서 · primary · 프레임 통지가
+  lasso 와 같은 길을 지나고, 좌표는 프레임이 다시 그린 뒤 올려
+  준다(§26-2 의 그 왕복). 그래서 native 와 sandbox 에서 같은 동작이다.
+- **프레임은 이 문을 쓸 수 없다.** 닿는 것은 부모 realm 의 왼쪽
+  패널뿐이다(글자 내용과 같은 사정 — §22-5).
+
+★ **패널이 선택 없이도 열린다.** 추가 자리는 "무엇을 골랐는가"와
+무관하므로 v2 캔버스를 편집 중이면 언제나 왼쪽 패널 맨 위에 있고,
+고른 것이 없을 때는 그것만 보인다. **v1 캔버스에서는 그리지 않는다** —
+v1 에 재료를 더하는 것은 이 라운드의 범위가 아니고(`ELEMENTS-1`),
+"고른 것이 없으면 패널도 없다"는 v1 의 모습이 그대로 남는다.
+
+### 27-6. 블록을 고르면 손잡이가 **보이지 않는다**
+
+§26-8 의 첫 번째 남은 차이가 여기서 닫혔다.
+
+Moveable 0.53.0 은 `target` 이 `null` 이어도 control box 를 만든다.
+v2 의 자동 배치 블록은 자유 배치 요소가 아니라 `target` 이 될 수
+없고(§26-7), 그래서 블록을 고르면 **끌어도 아무 일이 없는 손잡이
+여덟**이 화면에 남아 있었다.
+
+★ **판정은 "지금 Moveable 이 무엇을 들고 있는가" 하나다.** v2 인지
+블록인지 묻지 않는다 — 들고 있는 것이 없으면 그 틀로 할 수 있는 일도
+없다. 그래서 v1 요소 · v2 프레임 내부 요소 · overlay 는 지금까지
+그대로이고(손잡이 여덟 · 회전 하나), 선택이 비었을 때와 소유권이 일반
+Inspector 로 넘어갔을 때도 같은 규칙이 적용된다.
+
+- 감추는 방법은 control box 의 `display` 한 칸이고 CSSOM 으로 쓴다 —
+  `style` 속성이 아니라 CSP 검사 대상이 아니다(§18-11 과 같은 방법).
+- **손잡이 노드는 DOM 에 남는다**(0.53.0 은 target 을 풀어도 자식
+  손잡이를 지우지 않는다). 그래서 "보이지 않는다"는 노드 수가 아니라
+  `getClientRects()` 로 재야 참이 된다 — 진단의 `resizeHandles` ·
+  `rotationHandles` 가 그 자다(§18-13 의 그 주석).
+- 블록의 순서 · 정렬 · 여백 · 폭 · 높이 패널(§25-4)과 "끌어도 저장값이
+  바뀌지 않는다"(§26-7)는 한 줄도 바뀌지 않았다.
+
+### 27-7. 이 라운드가 만들지 않은 것
+
+삭제 · `main_visual` 안에 장식 추가 · 기존 장식을 `메인 비주얼로
+묶기`/`묶기 해제` · `pin.target`/`anchor`/`origin` 을 고르는 UI · 그룹
+조작 · 효과 설정 · 레이어 목록 · `hidden`/`locked` 토글 · preset ·
+Crop 연결 · v1 캔버스의 요소 추가 · v1→v2 변환 · 기본 스킨 변경 ·
+`row`/`grid` 블록 · CATEGORY/POST/BANNER 캔버스.
+
+★ **삭제를 같은 라운드에 넣지 않은 이유.** 지우는 경로가 생기면
+"고른 것이 사라졌다"를 선택 · 패널 · 프레임이 함께 다뤄야 하고
+(reconcile · 제스처 취소 · Undo 로 되살아난 id), 그것은 추가와는 다른
+문제다. 지금은 **Undo 가 방금 만든 것을 걷는 길**이다.
 
 `APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).

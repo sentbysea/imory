@@ -998,6 +998,427 @@ function writeSkinHomeCanvasV2BlockOrder(regions, id, next, expected) {
 }
 
 
+/* =========================================================
+   4. 새 재료 하나 — 추가 (HOME-CANVAS-V2-ADD-1)
+
+   writeSkinHomeCanvasV2AddNode(regions, request)
+
+     request { target, type, slot }
+
+       target  "flow"    → canvas.flow.blocks 의 **맨 뒤**
+               "overlay" → canvas.overlays 의 **맨 뒤**
+       type    그 자리가 허용하는 종류(아래 두 표)
+       slot    사진이 들어가는 종류에만 — 이미지 슬롯 이름
+
+     -> { ok:true, regions, id, target, type }
+     -> { ok:false, reason }
+
+   ★ **기본값을 여기서 정한다.** 패널이 값을 만들어 보내면 같은
+     "새 요소"가 입구마다 다른 모양으로 태어난다 — 지금은 왼쪽
+     패널 하나뿐이지만, 그 하나가 계약이 되면 다음 입구(AI · 단축키)
+     가 그것을 다시 적게 된다. 부르는 쪽이 정하는 것은 **어디에
+     무엇을** 까지다.
+
+   ★ 넣은 뒤 **전체를 다시 검증한다**(validateSkinCanvasV2Data).
+     새 노드 하나만 보면 "id 가 이 캔버스 안에서 유일한가" ·
+     "프레임 내부 요소가 primaryId 를 가리키는가" 같은 판정이
+     빠진다. 기존 규칙 한 벌을 그대로 지나는 편이 새 판정을
+     만드는 것보다 안전하고, 여기서 막히면 draft 는 한 글자도
+     바뀌지 않는다.
+
+   ★ 이 라운드에 **삭제는 없다**(계약 §27-7). 지우는 경로가 생기면
+     "고른 요소가 사라졌다"를 선택 · 패널 · 프레임이 함께 다뤄야
+     한다 — 추가와 같은 라운드에 넣지 않는다.
+========================================================== */
+
+const SKIN_HOME_CANVAS_V2_ADD_TARGETS = ["flow", "overlay"];
+
+/*
+  이미지 슬롯이 **필수**인 종류(v1 props 표 — skin/skin-home-canvas.js
+  validateSkinCanvasSlotProp 의 required 가 참인 셋). `main_visual` 은
+  자기 props 에 slot 이 없지만 계약상 primary 사진을 함께 만들어야
+  하므로(§14-5) 같은 칸을 받는다.
+*/
+const SKIN_HOME_CANVAS_V2_SLOT_TYPES = ["photo", "sticker", "logo"];
+
+/*
+  블록의 기본 크기(§14-4 의 자 — 폭은 흐름의 가용 폭, 높이는 그 종류가
+  쓸 수 있는 값).
+
+    fill  폭을 가용 폭 전부로. false 면 아래 width 와 가용 폭 중 작은 쪽.
+
+  ★ `height` 가 대개 숫자인 것은 **새로 만든 것이 곧바로 보이고
+    잡히기** 위해서다. `category_nav` 를 "auto" 로 두면 카테고리가
+    없는 블로그에서 높이 0 이 되고, 주인은 아무것도 생기지 않았다고
+    읽는다. 글자는 내용이 곧 높이라 "auto" 가 맞고, `main_visual` 의
+    "auto" 는 primary 사진 상자의 비율이므로(§24-5) 언제나 보인다.
+*/
+const SKIN_HOME_CANVAS_V2_BLOCK_DEFAULTS = {
+  logo:         { width: 160, height: 40, fill: false },
+  category_nav: { width: 0, height: 48, fill: true },
+  text:         { width: 0, height: SKIN_HOME_CANVAS_AUTO_HEIGHT, fill: true },
+  divider:      { width: 0, height: 2, fill: true },
+  main_visual:  { width: 240, height: SKIN_HOME_CANVAS_AUTO_HEIGHT, fill: false }
+};
+
+/* 페이지 자유 장식의 기본 크기(도화지 좌표 — 계약 §4) */
+const SKIN_HOME_CANVAS_V2_OVERLAY_DEFAULTS = {
+  photo:        { width: 160, height: 200 },
+  sticker:      { width: 96, height: 96 },
+  logo:         { width: 160, height: 48 },
+  text:         { width: 200, height: SKIN_HOME_CANVAS_AUTO_HEIGHT },
+  shape:        { width: 120, height: 120 },
+  category_nav: { width: 200, height: 48 }
+};
+
+/* main_visual 을 새로 만들 때의 프레임 내부 자와 primary 사진 상자 */
+const SKIN_HOME_CANVAS_V2_NEW_FRAME = { baseWidth: 240, baseHeight: 300 };
+
+/* 새 글자 요소의 내용 — 빈 문자열이면 화면에 아무것도 없어 잡을 수 없다 */
+const SKIN_HOME_CANVAS_V2_NEW_TEXT = "새 텍스트";
+
+/* 새 장식이 겹쳐 쌓이지 않게 조금씩 밀어 둔다(도화지 좌표) */
+const SKIN_HOME_CANVAS_V2_OVERLAY_ORIGIN = 24;
+const SKIN_HOME_CANVAS_V2_OVERLAY_STEP = 12;
+const SKIN_HOME_CANVAS_V2_OVERLAY_CASCADE = 6;
+
+
+/*
+  이 캔버스 안에서 아직 쓰이지 않은 새 id.
+
+  ★ id 규칙도 만드는 법도 v1 의 그 하나다
+    (createSkinHomeCanvasElementId — skin/skin-home-canvas.js).
+    여기서 `canvas_text_1` 같은 **뜻이 있는 이름**을 새로 만들지
+    않는다: 뜻이 있으면 나중에 종류를 바꿨을 때 이름이 거짓말을
+    하고, Import 로 합쳐진 두 캔버스에서 같은 이름이 만나기 쉽다.
+*/
+function skinHomeCanvasV2NewId(used) {
+
+  for (let i = 0; i < 8; i += 1) {
+
+    const id =
+      (typeof createSkinHomeCanvasElementId === "function")
+        ? createSkinHomeCanvasElementId()
+        : null;
+
+    if (
+      typeof id === "string" &&
+      SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(id) &&
+      !used.has(id)
+    ) {
+      used.add(id);
+      return id;
+    }
+
+  }
+
+  return null;
+
+}
+
+
+/* 흐름 안에서 블록이 쓸 수 있는 가로 폭(§23-4 의 자) */
+function skinHomeCanvasV2FlowWidth(flow) {
+
+  const padding =
+    isSkinHomeCanvasPlainObject(flow.padding) ? flow.padding : {};
+
+  const left =
+    isSkinHomeCanvasFiniteNumber(padding.left) ? padding.left : 0;
+
+  const right =
+    isSkinHomeCanvasFiniteNumber(padding.right) ? padding.right : 0;
+
+  const inner =
+    Math.round(SKIN_HOME_CANVAS_BASE_WIDTH - left - right);
+
+  /* 자가 0 이하다(padding 이 도화지보다 크다) — 숫자를 지어내지
+     않고 도화지 폭을 쓴다. 화면에서는 어차피 그 자가 다시 정한다 */
+  return inner > 0 ? inner : SKIN_HOME_CANVAS_BASE_WIDTH;
+
+}
+
+
+/* 종류별 props — 값 표는 v1 의 그것 하나다(§14-4) */
+function buildSkinHomeCanvasV2NewProps(type, slot) {
+
+  if (type === "photo" || type === "sticker") {
+    return { slot: slot };
+  }
+
+  if (type === "logo") {
+    return { slot: slot, fallback: SKIN_HOME_CANVAS_LOGO_FALLBACKS[0] };
+  }
+
+  if (type === "text") {
+    return { text: SKIN_HOME_CANVAS_V2_NEW_TEXT, role: "body" };
+  }
+
+  if (type === "category_nav") {
+    return { mode: SKIN_HOME_CANVAS_NAV_MODES[0] };
+  }
+
+  if (type === "shape") {
+    return { kind: SKIN_HOME_CANVAS_SHAPE_KINDS[0] };
+  }
+
+  /* divider — props 가 없다(§14-4) */
+  return null;
+
+}
+
+
+function buildSkinHomeCanvasV2NewBlock(flow, type, slot, id, used) {
+
+  const spec =
+    SKIN_HOME_CANVAS_V2_BLOCK_DEFAULTS[type];
+
+  const available =
+    skinHomeCanvasV2FlowWidth(flow);
+
+  const block = {
+    id: id,
+    type: type,
+    width: spec.fill ? available : Math.min(spec.width, available),
+    height: spec.height,
+    align: "center"
+  };
+
+  if (type === "main_visual") {
+
+    const photoId =
+      skinHomeCanvasV2NewId(used);
+
+    if (!photoId) {
+      return null;
+    }
+
+    /*
+      ★ primary 사진을 **함께** 만든다. 계약이 "elements 는 비어 있을
+        수 없다 · primaryId 는 그 안의 photo 를 가리킨다"이므로(§9-(3)),
+        빈 프레임은 애초에 저장할 수 없다.
+
+      ★ 사진 상자가 프레임 내부 자를 꽉 채운다 — 그래야 `height:"auto"`
+        가 곧 그 비율이 된다(§24-5).
+    */
+    block.props = {
+      baseWidth: SKIN_HOME_CANVAS_V2_NEW_FRAME.baseWidth,
+      baseHeight: SKIN_HOME_CANVAS_V2_NEW_FRAME.baseHeight,
+      primaryId: photoId,
+      elements: [
+        {
+          id: photoId,
+          type: "photo",
+          follow: SKIN_HOME_CANVAS_FOLLOW_MODES[0],
+          x: 0,
+          y: 0,
+          width: SKIN_HOME_CANVAS_V2_NEW_FRAME.baseWidth,
+          height: SKIN_HOME_CANVAS_V2_NEW_FRAME.baseHeight,
+          props: { slot: slot }
+        }
+      ]
+    };
+
+    return block;
+
+  }
+
+  const props =
+    buildSkinHomeCanvasV2NewProps(type, slot);
+
+  if (props) {
+    block.props = props;
+  }
+
+  return block;
+
+}
+
+
+function buildSkinHomeCanvasV2NewOverlay(type, slot, id, index) {
+
+  const spec =
+    SKIN_HOME_CANVAS_V2_OVERLAY_DEFAULTS[type];
+
+  const step =
+    (index % SKIN_HOME_CANVAS_V2_OVERLAY_CASCADE) * SKIN_HOME_CANVAS_V2_OVERLAY_STEP;
+
+  const overlay = {
+    id: id,
+    type: type,
+    x: SKIN_HOME_CANVAS_V2_OVERLAY_ORIGIN + step,
+    y: SKIN_HOME_CANVAS_V2_OVERLAY_ORIGIN + step,
+    width: spec.width,
+    height: spec.height
+  };
+
+  const props =
+    buildSkinHomeCanvasV2NewProps(type, slot);
+
+  if (props) {
+    overlay.props = props;
+  }
+
+  return overlay;
+
+}
+
+
+function writeSkinHomeCanvasV2AddNode(regions, request) {
+
+  const value =
+    isSkinHomeCanvasPlainObject(request) ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  if (SKIN_HOME_CANVAS_V2_ADD_TARGETS.indexOf(value.target) === -1) {
+    return { ok: false, reason: "target" };
+  }
+
+  const target =
+    value.target;
+
+  /* 어느 자리가 어떤 종류를 받는가 — 두 표는 v1 · v2 의 그것
+     그대로다(자동 배치는 블록 다섯, 자유 층은 v1 여섯) */
+  const allowed =
+    (target === "flow")
+      ? SKIN_HOME_CANVAS_BLOCK_TYPES
+      : SKIN_HOME_CANVAS_ELEMENT_TYPES;
+
+  if (allowed.indexOf(value.type) === -1) {
+    return { ok: false, reason: "type" };
+  }
+
+  const type =
+    value.type;
+
+  const found =
+    findSkinHomeCanvasRegion(regions);
+
+  if (!found) {
+    return { ok: false, reason: "region" };
+  }
+
+  const canvas =
+    found.entry.canvas;
+
+  if (
+    !isSkinHomeCanvasPlainObject(canvas) ||
+    canvas.version !== SKIN_HOME_CANVAS_V2_VERSION
+  ) {
+    return { ok: false, reason: "canvas" };
+  }
+
+  const flow =
+    isSkinHomeCanvasPlainObject(canvas.flow) ? canvas.flow : null;
+
+  if (!flow || !Array.isArray(flow.blocks)) {
+    return { ok: false, reason: "canvas" };
+  }
+
+  const overlays =
+    Array.isArray(canvas.overlays) ? canvas.overlays : [];
+
+  const list =
+    (target === "flow") ? flow.blocks : overlays;
+
+  if (list.length >= SKIN_HOME_CANVAS_MAX_ELEMENTS) {
+    return { ok: false, reason: "limit" };
+  }
+
+  /* 슬롯 — 이름만 본다. **비어 있어도 된다**(아직 연결되지 않은
+     슬롯은 그냥 그림이 없는 요소다 — 계약 §6 · §27-4) */
+  const needsSlot =
+    SKIN_HOME_CANVAS_V2_SLOT_TYPES.indexOf(type) !== -1 ||
+    type === "main_visual";
+
+  const slot =
+    needsSlot ? value.slot : "";
+
+  if (
+    needsSlot &&
+    (typeof slot !== "string" || !SKIN_HOME_CANVAS_SLOT_NAME_PATTERN.test(slot))
+  ) {
+    return { ok: false, reason: "slot" };
+  }
+
+  const used =
+    new Set(listSkinHomeCanvasV2Nodes(canvas).map((node) => node.id));
+
+  const id =
+    skinHomeCanvasV2NewId(used);
+
+  if (!id) {
+    return { ok: false, reason: "id" };
+  }
+
+  const node =
+    (target === "flow")
+      ? buildSkinHomeCanvasV2NewBlock(flow, type, slot, id, used)
+      : buildSkinHomeCanvasV2NewOverlay(type, slot, id, overlays.length);
+
+  if (!node) {
+    return { ok: false, reason: "id" };
+  }
+
+  const nextCanvas =
+    copySkinHomeCanvasObject(canvas);
+
+  if (target === "flow") {
+
+    const nextFlow =
+      copySkinHomeCanvasObject(flow);
+
+    nextFlow.blocks = flow.blocks.concat([node]);
+
+    nextCanvas.flow = nextFlow;
+
+  }
+  else {
+    nextCanvas.overlays = overlays.concat([node]);
+  }
+
+  /* 위 ★ — 기존 규칙 한 벌을 그대로 지난다 */
+  const verdict =
+    (typeof validateSkinCanvasV2Data === "function")
+      ? validateSkinCanvasV2Data(nextCanvas, "canvas")
+      : { ok: true };
+
+  if (!verdict.ok) {
+    return { ok: false, reason: "invalid", path: verdict.path, message: verdict.message };
+  }
+
+  const nextRegions =
+    regions.map(
+      (entry, index) => {
+
+        if (index !== found.index) {
+          return entry;
+        }
+
+        const copy =
+          copySkinHomeCanvasObject(entry);
+
+        copy.canvas = nextCanvas;
+
+        return copy;
+
+      }
+    );
+
+  return {
+    ok: true,
+    regions: nextRegions,
+    id: id,
+    target: target,
+    type: type
+  };
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.findSkinHomeCanvasV2Node = findSkinHomeCanvasV2Node;
@@ -1016,6 +1437,9 @@ if (typeof window !== "undefined") {
   window.writeSkinHomeCanvasV2NodePinOffset = writeSkinHomeCanvasV2NodePinOffset;
   window.writeSkinHomeCanvasV2NodePinBox = writeSkinHomeCanvasV2NodePinBox;
   window.writeSkinHomeCanvasV2NodeRotation = writeSkinHomeCanvasV2NodeRotation;
+
+  /* HOME-CANVAS-V2-ADD-1 — 새 재료 하나 */
+  window.writeSkinHomeCanvasV2AddNode = writeSkinHomeCanvasV2AddNode;
 
 }
 
@@ -1041,7 +1465,16 @@ if (typeof module !== "undefined" && module.exports) {
     writeSkinHomeCanvasV2NodeBox,
     writeSkinHomeCanvasV2NodePinOffset,
     writeSkinHomeCanvasV2NodePinBox,
-    writeSkinHomeCanvasV2NodeRotation
+    writeSkinHomeCanvasV2NodeRotation,
+
+    /* HOME-CANVAS-V2-ADD-1 — 새 재료 하나 */
+    SKIN_HOME_CANVAS_V2_ADD_TARGETS,
+    SKIN_HOME_CANVAS_V2_SLOT_TYPES,
+    SKIN_HOME_CANVAS_V2_BLOCK_DEFAULTS,
+    SKIN_HOME_CANVAS_V2_OVERLAY_DEFAULTS,
+    SKIN_HOME_CANVAS_V2_NEW_FRAME,
+    SKIN_HOME_CANVAS_V2_NEW_TEXT,
+    writeSkinHomeCanvasV2AddNode
   };
 
   module.exports = api;

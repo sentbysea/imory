@@ -269,6 +269,24 @@ function studioCanvasInspectorAutoAllowed(type) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-V2-ADD-1 — 추가 자리를 그릴 때인가
+
+   ★ 선택을 보지 않는다. 지금 캔버스가 v2 이고 편집 중이면 그린다
+     (studio/inspector/studio-canvas-add-v2.js studioCanvasV2AddIsOn).
+     그 파일이 없는 문서에서도 이 패널은 그대로 돈다.
+========================================================== */
+function studioCanvasInspectorAddIsOn() {
+
+  return (
+    typeof studioCanvasV2AddIsOn === "function" &&
+    typeof buildStudioCanvasV2AddSection === "function" &&
+    studioCanvasV2AddIsOn()
+  );
+
+}
+
+
 /* 지금 화면이 그려야 할 **모양**의 지문. 값은 들어가지 않는다 —
    값이 바뀌었다고 DOM 을 다시 만들면 입력 중인 칸이 죽는다. */
 function studioCanvasInspectorShapeOf(view) {
@@ -1449,6 +1467,23 @@ function buildStudioCanvasInspector(view) {
   studioCanvasInspectorBody.textContent =
     "";
 
+  /* =====================================================
+     HOME-CANVAS-V2-ADD-1 — 재료 추가는 **선택과 무관하다**
+
+     고른 것이 있든 없든 같은 자리에 같은 모양으로 있어야 하므로
+     맨 위에 한 번 그린다. 무엇을 만들 수 있는지 · 슬롯은 어떤
+     것이 있는지는 그 파일이 정한다
+     (studio/inspector/studio-canvas-add-v2.js).
+  ====================================================== */
+  if (studioCanvasInspectorAddIsOn()) {
+    studioCanvasInspectorBody.appendChild(buildStudioCanvasV2AddSection());
+  }
+
+  /* 고른 것이 없다 — 추가 자리만 그리고 끝이다 */
+  if (view.mode === "none") {
+    return;
+  }
+
   studioCanvasInspectorBody.appendChild(studioCanvasInspectorHead(view));
 
   if (view.mode === "multi") {
@@ -1590,10 +1625,15 @@ function renderStudioCanvasInspector() {
   const view =
     studioCanvasInspectorView();
 
-  const shape =
-    studioCanvasInspectorShapeOf(view);
+  /* HOME-CANVAS-V2-ADD-1 — 지문에 함께 넣는다. 추가 자리가 생기고
+     사라지는 것도 **화면의 모양**이 바뀌는 일이다. */
+  const canAdd =
+    studioCanvasInspectorAddIsOn();
 
-  if (view.mode === "none") {
+  const shape =
+    studioCanvasInspectorShapeOf(view) + (canAdd ? "|add" : "");
+
+  if (view.mode === "none" && !canAdd) {
 
     /* 고른 것이 사라졌다 — 열려 있던 세션도 함께 닫는다(기록은
        그때까지의 변화만큼 한 칸이다) */
@@ -1642,6 +1682,10 @@ function renderStudioCanvasInspector() {
 
   }
 
+  if (canAdd) {
+    syncStudioCanvasV2AddSection();
+  }
+
   syncStudioCanvasInspectorValues(view);
 
 }
@@ -1672,6 +1716,7 @@ if (typeof window !== "undefined") {
         type: view.mode === "single" ? view.type : null,
         count: view.mode === "multi" ? view.count : (view.mode === "single" ? 1 : 0),
         visible: !!(studioCanvasInspectorRoot && !studioCanvasInspectorRoot.hidden),
+        add: studioCanvasInspectorAddIsOn(),
         textSession: !!studioCanvasInspectorTextSession,
         numberSession:
           studioCanvasInspectorNumberSession

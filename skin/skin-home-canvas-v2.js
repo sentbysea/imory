@@ -888,6 +888,14 @@ if (typeof window !== "undefined") {
      call time 에 읽는다(파일 상단). */
   window.SKIN_HOME_CANVAS_V2_VERSION = SKIN_HOME_CANVAS_V2_VERSION;
 
+  /* HOME-CANVAS-V2-ADD-1 — Studio 패널이 이 표를 본다(값 표는
+     언제나 이 파일 하나다 — 패널의 fallback 사본이 아니라) */
+  window.SKIN_HOME_CANVAS_BLOCK_TYPES = SKIN_HOME_CANVAS_BLOCK_TYPES;
+  window.SKIN_HOME_CANVAS_BLOCK_ALIGNS = SKIN_HOME_CANVAS_BLOCK_ALIGNS;
+  window.SKIN_HOME_CANVAS_BLOCK_AUTO_HEIGHT_TYPES =
+    SKIN_HOME_CANVAS_BLOCK_AUTO_HEIGHT_TYPES;
+  window.SKIN_HOME_CANVAS_EDGES = SKIN_HOME_CANVAS_EDGES;
+
 }
 
 

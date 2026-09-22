@@ -28,6 +28,8 @@
      [manual]    수동 테스트 스킨(MILESTONE-1) — 계약 통과 · 표식 1개 ·
                  resolve · id 유일 · 순서 보존 · 확인할 구조가 다 있는가 ·
                  **제품 기본 스킨 불변**
+     [v2-add]    새 재료 하나(V2-ADD-1) — 자리마다 받는 종류 · 기본값 ·
+                 슬롯 · 보존 · 새 id · 추가 패널 파일의 로드 자리
      [ux-fix]    직접 조작 사용성(MANUAL-UX-FIX-1)의 **순수 helper 둘** —
                  30° 자석의 경계값(±4° 안에서만 붙는다 · 음수 · 한 바퀴
                  너머)과 모서리 비율 유지의 정사영. 편집기 runtime 이
@@ -2233,6 +2235,266 @@ console.log("\n[v2-free] 프레임 내부 · overlay 의 자리 writer (V2-EDITO
       });
 
     check("[v2-free] 자 파일은 렌더러 **다음**이다",
+      orderBroken.length === 0, orderBroken.join(", "));
+  }
+}
+
+
+
+/* ---------------------------------------------------------- */
+/*
+  [v2-add] 새 재료 하나 (HOME-CANVAS-V2-ADD-1)
+
+  브라우저가 필요 없는 것만 본다 — **무엇이 만들어지고 무엇이
+  거부되며 무엇이 그대로 남는가**. 패널 · 선택 · Undo · Preview 는
+  브라우저가 필요하다
+  (studio/studio-home-canvas-inspector-e2e-test.mjs --only=v2add).
+*/
+console.log("\n[v2-add] 새 재료 하나 (V2-ADD-1)");
+
+{
+  const addRegions = () => [
+    { name: "some_other", enabled: true, payload: { keep: true } },
+    {
+      name: "home_canvas",
+      enabled: true,
+      note: "unknown-entry",
+      canvas: {
+        version: 2,
+        baseWidth: 390,
+        baseHeight: 900,
+        extra: "unknown-canvas",
+        flow: {
+          direction: "column",
+          padding: { top: 40, right: 24, bottom: 40, left: 24 },
+          gap: 10,
+          zzz: "unknown-flow",
+          blocks: [
+            { id: "canvas_b0", type: "text", width: 200, height: "auto",
+              mystery: "keep-block", props: { text: "a" } }
+          ]
+        },
+        overlays: [
+          { id: "canvas_over", type: "text", x: 20, y: 700,
+            width: 120, height: 40, props: { text: "o" } }
+        ]
+      }
+    }
+  ];
+
+  const add = (target, type, slot) =>
+    canvas.writeSkinHomeCanvasV2AddNode(
+      addRegions(),
+      slot === undefined ? { target, type } : { target, type, slot });
+
+  const blocksOf = (r) => r.regions[1].canvas.flow.blocks;
+  const overlaysOf = (r) => r.regions[1].canvas.overlays;
+  const lastBlock = (r) => blocksOf(r)[blocksOf(r).length - 1];
+  const lastOverlay = (r) => overlaysOf(r)[overlaysOf(r).length - 1];
+
+  /* ---- 흐름의 다섯 ---- */
+
+  {
+    const made =
+      canvas.SKIN_HOME_CANVAS_BLOCK_TYPES.map((type) => add("flow", type, "photo_1"));
+
+    check("★ [v2-add] 자동 배치 블록 다섯 종류가 다 만들어진다",
+      made.every((r) => r.ok === true),
+      made.map((r, i) =>
+        `${canvas.SKIN_HOME_CANVAS_BLOCK_TYPES[i]}:${r.ok ? "ok" : r.reason}`).join(" "));
+
+    check("★ [v2-add] 만든 뒤의 canvas 가 계약을 그대로 통과한다",
+      made.every((r) =>
+        canvas.validateSkinCanvasData(
+          r.regions[1].canvas, "regions[1].canvas").ok === true));
+
+    check("★ [v2-add] 폭은 흐름의 가용 폭이 정한다(390 − 좌우 padding = 342)",
+      lastBlock(add("flow", "text", "photo_1")).width === 342 &&
+      lastBlock(add("flow", "divider")).width === 342 &&
+      lastBlock(add("flow", "logo", "photo_1")).width === 160,
+      JSON.stringify([
+        lastBlock(add("flow", "text")).width,
+        lastBlock(add("flow", "logo", "photo_1")).width
+      ]));
+
+    check("★ [v2-add] 글자만 \"auto\" 높이다(카테고리는 숫자 — 빈 목록에서 0 이 되지 않게)",
+      lastBlock(add("flow", "text")).height === "auto" &&
+      typeof lastBlock(add("flow", "category_nav")).height === "number" &&
+      typeof lastBlock(add("flow", "logo", "photo_1")).height === "number",
+      JSON.stringify([
+        lastBlock(add("flow", "text")).height,
+        lastBlock(add("flow", "category_nav")).height
+      ]));
+
+    check("[v2-add] 새 글자에는 읽을 내용이 있다(빈 문자열이면 잡을 것이 없다)",
+      lastBlock(add("flow", "text")).props.text.length > 0);
+
+    check("★ [v2-add] 맨 뒤에 붙고 기존 블록은 그대로다",
+      blocksOf(add("flow", "divider")).length === 2 &&
+      blocksOf(add("flow", "divider"))[0].id === "canvas_b0" &&
+      blocksOf(add("flow", "divider"))[0].mystery === "keep-block");
+  }
+
+  /* ---- main_visual — primary 사진을 함께 만든다 ---- */
+
+  {
+    const made =
+      add("flow", "main_visual", "photo_1");
+
+    const frame =
+      lastBlock(made);
+
+    const primary =
+      frame.props.elements.find((el) => el.id === frame.props.primaryId);
+
+    check("★ [v2-add] main_visual 은 primary 사진을 함께 만든다",
+      made.ok === true &&
+      frame.props.elements.length === 1 &&
+      !!primary && primary.type === "photo" &&
+      primary.props.slot === "photo_1",
+      JSON.stringify(frame.props));
+
+    check("★ [v2-add] primary 사진이 프레임 내부 자를 꽉 채운다(auto 높이의 비율)",
+      primary.width === frame.props.baseWidth &&
+      primary.height === frame.props.baseHeight &&
+      primary.x === 0 && primary.y === 0 &&
+      frame.height === "auto");
+
+    check("★ [v2-add] 프레임 id 와 사진 id 가 서로 다르고 둘 다 규칙을 지킨다",
+      frame.id !== primary.id &&
+      canvas.SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(frame.id) &&
+      canvas.SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(primary.id),
+      `${frame.id} / ${primary.id}`);
+  }
+
+  /* ---- 페이지 자유 장식 ---- */
+
+  {
+    const made =
+      canvas.SKIN_HOME_CANVAS_ELEMENT_TYPES.map((type) => add("overlay", type, "photo_1"));
+
+    check("★ [v2-add] 페이지 자유 장식은 v1 여섯 종류가 다 만들어진다",
+      made.every((r) => r.ok === true),
+      made.map((r, i) =>
+        `${canvas.SKIN_HOME_CANVAS_ELEMENT_TYPES[i]}:${r.ok ? "ok" : r.reason}`).join(" "));
+
+    const shape =
+      lastOverlay(add("overlay", "shape"));
+
+    check("★ [v2-add] 자유 장식은 도화지 좌표와 크기를 갖는다",
+      typeof shape.x === "number" && typeof shape.y === "number" &&
+      shape.width > 0 && shape.height > 0 && shape.props.kind === "rect",
+      JSON.stringify(shape));
+
+    /* 두 번째는 조금 밀려 있다 — 같은 자리에 겹쳐 쌓이면 뒤엣것을
+       잡을 수 없다 */
+    const twice =
+      canvas.writeSkinHomeCanvasV2AddNode(
+        add("overlay", "shape").regions, { target: "overlay", type: "shape" });
+
+    const stacked =
+      twice.regions[1].canvas.overlays.slice(-2);
+
+    check("★ [v2-add] 새 장식이 같은 자리에 겹쳐 쌓이지 않는다",
+      twice.ok === true && stacked[0].x !== stacked[1].x,
+      JSON.stringify(stacked.map((el) => [el.x, el.y])));
+  }
+
+  /* ---- 자리마다 받는 종류가 다르다 ---- */
+
+  check("★ [v2-add] 흐름은 블록 다섯만 받는다(photo · sticker · shape 는 블록이 아니다)",
+    add("flow", "photo", "photo_1").reason === "type" &&
+    add("flow", "sticker", "photo_1").reason === "type" &&
+    add("flow", "shape").reason === "type");
+
+  check("★ [v2-add] 자유 층은 main_visual 을 받지 않는다(프레임은 흐름의 것이다)",
+    add("overlay", "main_visual", "photo_1").reason === "type" &&
+    add("overlay", "divider").reason === "type");
+
+  check("[v2-add] 모르는 자리 · 모양이 아닌 요청은 거부",
+    add("frame", "text").reason === "target" &&
+    canvas.writeSkinHomeCanvasV2AddNode(addRegions(), null).reason === "shape");
+
+  /* ---- 슬롯 ---- */
+
+  check("★ [v2-add] 사진이 들어가는 종류는 슬롯 이름이 필요하다",
+    add("flow", "logo").reason === "slot" &&
+    add("flow", "main_visual").reason === "slot" &&
+    add("overlay", "photo").reason === "slot" &&
+    add("overlay", "sticker").reason === "slot");
+
+  check("[v2-add] 슬롯 이름 규칙은 이미지 슬롯의 그것이다",
+    add("overlay", "photo", "Photo 1").reason === "slot" &&
+    add("overlay", "photo", "").reason === "slot");
+
+  check("★ [v2-add] 슬롯은 이름만 본다 — 그림이 없어도 만들어진다",
+    add("overlay", "photo", "not_bound_yet").ok === true);
+
+  check("[v2-add] 슬롯이 필요 없는 종류에는 슬롯을 적지 않는다",
+    lastBlock(add("flow", "divider", "photo_1")).props === undefined &&
+    lastOverlay(add("overlay", "shape", "photo_1")).props.slot === undefined);
+
+  /* ---- 보존 · 불변 ---- */
+
+  check("★ [v2-add] 모르는 항목 · 모르는 칸 · 다른 층이 그대로다",
+    (() => {
+      const r = add("overlay", "text");
+      return (
+        r.regions[0].payload.keep === true &&
+        r.regions[1].note === "unknown-entry" &&
+        r.regions[1].canvas.extra === "unknown-canvas" &&
+        r.regions[1].canvas.flow.zzz === "unknown-flow" &&
+        r.regions[1].canvas.flow.blocks.length === 1 &&
+        r.regions[1].canvas.overlays[0].id === "canvas_over"
+      );
+    })());
+
+  check("★ [v2-add] 입력을 한 칸도 mutate 하지 않는다",
+    (() => {
+      const input = addRegions();
+      const before = JSON.stringify(input);
+      canvas.writeSkinHomeCanvasV2AddNode(input, { target: "flow", type: "text" });
+      canvas.writeSkinHomeCanvasV2AddNode(
+        input, { target: "overlay", type: "photo", slot: "photo_1" });
+      return JSON.stringify(input) === before;
+    })());
+
+  check("★ [v2-add] 새 id 는 이 캔버스 안에서 유일하다",
+    (() => {
+      const r = add("flow", "main_visual", "photo_1");
+      const ids = canvas.listSkinHomeCanvasV2Nodes(r.regions[1].canvas).map((n) => n.id);
+      return ids.length === new Set(ids).size && ids.length === 4;
+    })());
+
+  /* ---- v1 에는 닿지 않는다 ---- */
+
+  check("★ [v2-add] v1 canvas 에는 닿지 않는다(reason: canvas)",
+    canvas.writeSkinHomeCanvasV2AddNode(
+      [{ name: "home_canvas", enabled: true,
+         canvas: { version: 1, baseWidth: 390, baseHeight: 844, elements: [] } }],
+      { target: "flow", type: "text" }
+    ).reason === "canvas");
+
+  /* ---- Studio 문서가 그 파일을 싣는가 ---- */
+
+  {
+    const docs = ["studio/index.html", "studio/studio-lifecycle-scenario.html"];
+
+    const missing =
+      docs.filter((file) => read(file).indexOf("studio-canvas-add-v2.js") === -1);
+
+    check("★ [v2-add] Studio 문서가 추가 패널 파일을 싣는다",
+      missing.length === 0, missing.join(", "));
+
+    /* 앞 파일의 최상위 함수를 호출 시점에 쓴다 — 그 **뒤**여야 한다 */
+    const orderBroken =
+      docs.filter((file) => {
+        const text = read(file);
+        return text.indexOf('studio-canvas-add-v2.js"') <
+          text.indexOf('studio-canvas-inspector-v2.js"');
+      });
+
+    check("[v2-add] 추가 패널 파일은 v2 Inspector **다음**이다",
       orderBroken.length === 0, orderBroken.join(", "));
   }
 }

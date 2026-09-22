@@ -1239,6 +1239,13 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_HOME_CANVAS_MAX_ELEMENTS,
     SKIN_HOME_CANVAS_MAX_TEXT_CHARS,
     SKIN_HOME_CANVAS_MAX_COORD,
+    /* HOME-CANVAS-V2-ADD-1 — 새 재료의 기본값이 call time 에 찾는다 */
+    SKIN_HOME_CANVAS_SLOT_NAME_PATTERN,
+    SKIN_HOME_CANVAS_TEXT_ROLES,
+    SKIN_HOME_CANVAS_NAV_MODES,
+    SKIN_HOME_CANVAS_SHAPE_KINDS,
+    SKIN_HOME_CANVAS_LOGO_FALLBACKS,
+    createSkinHomeCanvasElementId,
     isSkinHomeCanvasPlainObject,
     isSkinHomeCanvasFiniteNumber,
     isSkinHomeCanvasCoord,

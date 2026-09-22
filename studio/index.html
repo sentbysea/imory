@@ -1385,6 +1385,11 @@
         "./inspector/studio-canvas-inspector.js",
         "./inspector/studio-canvas-inspector-v2.js",
 
+        /* HOME-CANVAS-V2-ADD-1 — v2 재료 추가. 위 두 파일의 최상위
+           함수(안내 문구 · 입력 목록)를 호출 시점에 쓰므로 그
+           **뒤**여야 한다. */
+        "./inspector/studio-canvas-add-v2.js",
+
         /* STUDIO-SHELL-1 — Undo/Redo 기록과 셸(왼쪽 패널 · ··· 메뉴 ·
            현재 페이지 표시). 둘 다 studio-preview.js 의 상태와
            Inspector/Images/Dock 의 창구를 **호출 시점에** 쓰므로 그

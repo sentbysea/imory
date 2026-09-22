@@ -2213,6 +2213,9 @@ if (typeof window !== "undefined") {
   window.setStudioCanvasV2NodeResize = setStudioCanvasV2NodeResize;
   window.setStudioCanvasV2NodeRotation = setStudioCanvasV2NodeRotation;
 
+  /* HOME-CANVAS-V2-ADD-1 */
+  window.addStudioCanvasV2Node = addStudioCanvasV2Node;
+
 }
 
 
@@ -3217,6 +3220,191 @@ function setStudioCanvasV2NodeResize(id, next, expected) {
 function setStudioCanvasV2NodeRotation(id, next, expected) {
   return applyStudioCanvasV2Transform("v2-rotate", id, next, expected);
 }
+
+
+/* =========================================================
+   HOME-CANVAS-V2-ADD-1 — 새 재료 하나를 draft 에
+
+   addStudioCanvasV2Node(request) -> { ok, id, slot } | { ok:false, reason }
+
+   위 writer 들과 **같은 다섯 줄**(기록 한 칸 · dirty · revision ·
+   다시 그리기)을 쓴다. 다른 것은 둘이다.
+
+     ① `expected` 가 없다. 고치는 것이 아니라 **없던 것을 만드는**
+        일이라 대조할 지금 값이 없다. 대신 새 노드를 넣은 **캔버스
+        전체**를 계약으로 다시 검증하는 것이 순수 함수 안에 있다
+        (skin/skin-home-canvas-write-v2.js).
+
+     ② 사진이 들어가는 종류는 **이미지 슬롯 이름**이 필요하다.
+        이미 선언된 슬롯을 고르거나, 여기서 **새 슬롯 하나를 함께
+        선언한다** — 그 선언과 새 요소는 같은 Undo 한 칸이다
+        (기록은 currentWorkingSkin 하나를 통째로 잡는다 —
+        studio/studio-history.js).
+
+   ★ 선언되지 않은 슬롯 이름은 받지 않는다. 그런 이름이 들어가면
+     Images 패널에 그 자리가 보이지 않아 **영영 그림을 넣을 수 없는**
+     요소가 된다(setStudioImageSlot 도 같은 판정을 한다).
+========================================================== */
+
+/* 새 슬롯의 이름 뿌리와 사람이 읽는 이름 — 종류마다 하나씩 */
+const STUDIO_CANVAS_V2_SLOT_SEED = {
+  photo: { name: "canvas_photo", label: "캔버스 사진" },
+  sticker: { name: "canvas_sticker", label: "캔버스 스티커" },
+  logo: { name: "canvas_logo", label: "캔버스 로고" },
+  main_visual: { name: "canvas_photo", label: "캔버스 사진" }
+};
+
+
+/*
+  아직 선언되지 않은 슬롯 이름 하나.
+
+  ★ 이름 규칙은 skin/skin-package-images.js 의 그것이다(영소문자로
+    시작 · 영소문자 · 숫자 · `_` · 50자). 뒤에 숫자를 붙여 가며
+    비어 있는 첫 이름을 찾는다 — 무작위 이름을 쓰지 않는 이유는
+    이 이름이 **Images 패널에 그대로 보이기** 때문이다.
+*/
+function nextStudioCanvasV2SlotName(seed) {
+
+  const declared =
+    new Set(currentImageSlotNames);
+
+  if (!declared.has(seed)) {
+    return seed;
+  }
+
+  for (let i = 2; i <= 99; i += 1) {
+
+    const name =
+      `${seed}_${i}`;
+
+    if (!declared.has(name)) {
+      return name;
+    }
+
+  }
+
+  return null;
+
+}
+
+
+function addStudioCanvasV2Node(request) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, reason: "no-skin" };
+  }
+
+  if (typeof window.writeSkinHomeCanvasV2AddNode !== "function") {
+    return { ok: false, reason: "unsupported" };
+  }
+
+  const value =
+    (request && typeof request === "object") ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  const seed =
+    STUDIO_CANVAS_V2_SLOT_SEED[value.type] || null;
+
+  /* ── 슬롯 — 고른 것 · 새로 선언할 것 · 쓰지 않는 것 ── */
+
+  let slotName =
+    (typeof value.slot === "string") ? value.slot : "";
+
+  let declare =
+    null;
+
+  if (seed) {
+
+    if (slotName) {
+
+      /* 위 ★ — 선언된 것만 */
+      if (currentImageSlotNames.indexOf(slotName) === -1) {
+        return { ok: false, reason: "slot" };
+      }
+
+    }
+    else {
+
+      const name =
+        nextStudioCanvasV2SlotName(seed.name);
+
+      if (!name) {
+        return { ok: false, reason: "slot" };
+      }
+
+      declare = { name: name, label: seed.label };
+
+      slotName = name;
+
+    }
+
+  }
+  else {
+    slotName = "";
+  }
+
+  const result =
+    window.writeSkinHomeCanvasV2AddNode(
+      currentWorkingSkin.regions,
+      { target: value.target, type: value.type, slot: slotName }
+    );
+
+  if (!result || !result.ok) {
+    return { ok: false, reason: (result && result.reason) || "rejected" };
+  }
+
+  const historyBefore =
+    captureStudioWorkingChange();
+
+  const nextSkin = {
+    ...currentWorkingSkin,
+    regions: result.regions
+  };
+
+  if (declare) {
+
+    nextSkin.imageSlots =
+      (Array.isArray(currentWorkingSkin.imageSlots)
+        ? currentWorkingSkin.imageSlots
+        : []
+      ).concat([{ name: declare.name, label: declare.label, required: false }]);
+
+  }
+
+  currentWorkingSkin =
+    nextSkin;
+
+  recordStudioWorkingChange(historyBefore);
+
+  /* 선언 목록이 늘었다 — 파생 상태(이름 목록 · 연결 · context)를
+     그 한 곳에서 다시 읽는다 */
+  if (declare) {
+    pruneWorkingImageSlotsToDeclared();
+  }
+
+  isStudioDirty =
+    true;
+
+  bumpStudioWorkingRevision();
+
+  updateStudioSaveButtonState();
+
+  updateStudioPublishButtonState();
+
+  renderPreviewAfterSkinPackageChange();
+
+  return {
+    ok: true,
+    id: result.id,
+    slot: slotName || null,
+    declaredSlot: declare ? declare.name : null
+  };
+
+}
+
 
 
 /* =========================================================

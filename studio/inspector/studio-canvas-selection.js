@@ -1815,6 +1815,133 @@ function commitStudioCanvasInspectorEdit(request) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-V2-ADD-1 — 새 재료 하나를 만드는 입구
+
+   commitStudioCanvasAddNode({ target, type, slot })
+
+     -> { accepted:true, id, slot, declaredSlot }
+     -> { accepted:false, reason }
+
+   ★ **고치는 관문과 같은 문이 아니다.** 위
+     commitStudioCanvasElementChange() 는 "지금 고른 그 요소의 이
+     칸을 이 값으로"를 확정한다 — 선택 · 순번 · expected 가 전부
+     그 하나를 가리킨다. 추가에는 그 셋이 없다(없던 것을 만든다).
+     그래서 문을 따로 두고, 여기서 보는 것은 셋이다.
+
+       편집 중인가        studioCanvasEditingIsOn()
+       지금 draft 가 v2 인가
+       그 자리가 그 종류를 받는가(아래 두 표)
+
+     데이터가 계약을 지키는지는 순수 함수가 **넣어 본 뒤 전체를**
+     다시 검증한다(skin/skin-home-canvas-write-v2.js).
+
+   ★ 만든 뒤 **곧바로 고른다.** 기존 제안 경로 하나를 그대로 쓰므로
+     (proposeStudioCanvasSelection) 순서 · primary · 프레임 통지가
+     lasso 와 같은 길을 지나고, 좌표는 프레임이 다시 그린 뒤 올려
+     준다(§26-2 의 그 왕복).
+
+   ★ 프레임은 이 문을 쓸 수 없다. 여기에 닿는 것은 부모 realm 의
+     왼쪽 패널뿐이다(글자 내용과 같은 사정 — 위 두 입구의 권한 표).
+========================================================== */
+
+/*
+  어느 자리가 어떤 종류를 받는가.
+
+  ★ 값 표를 새로 적지 않는다 — 자동 배치는 계약의 블록 다섯이고
+    (SKIN_HOME_CANVAS_BLOCK_TYPES), 페이지 자유 장식은 v1 요소
+    여섯이다(SKIN_HOME_CANVAS_ELEMENT_TYPES). 둘 다 skin 쪽 파일이
+    선언한 그 배열을 call time 에 읽는다.
+*/
+function studioCanvasV2AddTypes(target) {
+
+  if (target === "flow") {
+
+    return Array.isArray(window.SKIN_HOME_CANVAS_BLOCK_TYPES)
+      ? window.SKIN_HOME_CANVAS_BLOCK_TYPES
+      : null;
+
+  }
+
+  if (target === "overlay") {
+
+    return Array.isArray(window.SKIN_HOME_CANVAS_ELEMENT_TYPES)
+      ? window.SKIN_HOME_CANVAS_ELEMENT_TYPES
+      : null;
+
+  }
+
+  return null;
+
+}
+
+
+function commitStudioCanvasAddNode(request) {
+
+  const value =
+    (request && typeof request === "object") ? request : null;
+
+  if (!value) {
+    return { accepted: false, reason: "shape" };
+  }
+
+  if (!studioCanvasEditingIsOn()) {
+    return { accepted: false, reason: "not-editing" };
+  }
+
+  if (studioCanvasPayloadVersion(studioCanvasDraftPayload()) !== 2) {
+    return { accepted: false, reason: "canvas" };
+  }
+
+  const types =
+    studioCanvasV2AddTypes(value.target);
+
+  if (!types) {
+    return { accepted: false, reason: "target" };
+  }
+
+  if (types.indexOf(value.type) === -1) {
+    return { accepted: false, reason: "type" };
+  }
+
+  if (typeof window.addStudioCanvasV2Node !== "function") {
+    return { accepted: false, reason: "unsupported" };
+  }
+
+  const result =
+    window.addStudioCanvasV2Node({
+      target: value.target,
+      type: value.type,
+      slot: (typeof value.slot === "string") ? value.slot : ""
+    });
+
+  if (!result || !result.ok) {
+
+    console.info(
+      "[studio-canvas] 새 재료를 만들지 않았습니다",
+      { target: value.target, type: value.type, reason: result && result.reason }
+    );
+
+    return { accepted: false, reason: (result && result.reason) || "rejected" };
+
+  }
+
+  proposeStudioCanvasSelection({
+    ids: [result.id],
+    primaryId: result.id,
+    mode: "replace"
+  });
+
+  return {
+    accepted: true,
+    id: result.id,
+    slot: result.slot || null,
+    declaredSlot: result.declaredSlot || null
+  };
+
+}
+
+
 function studioCanvasSelectionIsActive() {
 
   return !!studioCanvasSelection;
@@ -2081,6 +2208,10 @@ if (typeof window !== "undefined") {
 
   /* HOME-CANVAS-INSPECTOR-1A */
   window.commitStudioCanvasInspectorEdit = commitStudioCanvasInspectorEdit;
+
+  /* HOME-CANVAS-V2-ADD-1 — 새 재료 하나(왼쪽 패널 전용 입구) */
+  window.commitStudioCanvasAddNode = commitStudioCanvasAddNode;
+  window.studioCanvasV2AddTypes = studioCanvasV2AddTypes;
   window.notifyStudioCanvasPanel = notifyStudioCanvasPanel;
   window.postStudioCanvasGeometryToFrame = postStudioCanvasGeometryToFrame;
   window.studioCanvasSingleGeometry = studioCanvasSingleGeometry;

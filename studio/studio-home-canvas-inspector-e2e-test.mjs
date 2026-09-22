@@ -38,6 +38,9 @@
               끈 픽셀 = 다시 그려진 픽셀 · pin 은 offset 으로 저장 ·
               390px · native ↔ sandbox · v1 직접 조작 회귀
               (HOME-CANVAS-V2-EDITOR-1B)
+   [v2add]    v2 재료 추가 — 흐름 다섯 · 자유 장식 · main_visual 과
+              primary 사진 · 빈 이미지 슬롯 · 즉시 선택 · Undo 한 칸 ·
+              왕복 · 블록의 손잡이 (HOME-CANVAS-V2-ADD-1)
    [sandbox]  별도 origin 프레임에서 같은 결과 + CSP 위반 0
 
    Chromium 만 쓴다.
@@ -3253,11 +3256,15 @@ async function main() {
          ★ 블록에서는 **손잡이를 끌어도 아무 일이 없다.**
 
          자를 주지 않으므로 프레임의 관문이 제스처를 시작하지 않는다
-         (dragGate → "no-geometry"). 손잡이 DOM 이 남아 있는 것은
-         `V2-EDITOR-1A` 부터의 모습이고(블록은 자유 배치 요소가
-         아니라 Moveable 의 target 이 null 이다), 여기서 재는 것은
-         "그것으로 저장값이 바뀌지 않는가"다 — 남은 차이는 계약
-         §26-8 에 적었다.
+         (dragGate → "no-geometry"). 여기서 재는 것은 "그것으로
+         저장값이 바뀌지 않는가"다.
+
+         ★ 손잡이 **노드**는 DOM 에 남아 있다(0.53.0 은 target 을
+           풀어도 자식 손잡이를 지우지 않는다). 그러나 `V2-ADD-1`
+           부터 control box 가 `display:none` 이라 **화면에는
+           없다** — 그것을 재는 자리는 여기가 아니라
+           `--only=v2add` 다(노드 수가 아니라 getClientRects 로
+           센다. 계약 §27-6).
       ====================================================== */
 
       const blockBefore = await readCanvas(page);
@@ -3535,6 +3542,410 @@ async function main() {
         check("★ sandbox 에서도 pin 은 offset 으로 저장된다", false,
           "v2Tag 를 고르지 못했다: " + JSON.stringify(sbPin.ids));
       }
+
+      check("★ 프레임 CSP 위반 0", (await cspViolations(sbFrame)).length === 0,
+        JSON.stringify(await cspViolations(sbFrame)));
+
+      check("★ 부모 CSP 위반 0", (await cspViolations(sbPage)).length === 0,
+        JSON.stringify(await cspViolations(sbPage)));
+
+      check("sandbox pageerror 0", sbPage.__errors.length === 0,
+        sbPage.__errors.slice(0, 2).join(" | "));
+
+      await sbPage.__ctx.close();
+
+    }
+
+
+
+    /* ======================================================
+       [v2add] HOME-CANVAS-V2-ADD-1 — Studio 에서 재료 추가
+
+       ★ 여기서 재는 것은 **한 번 누른 결과 전부**다.
+
+       JSON 에 옳은 모양으로 들어갔는가 · 곧바로 Preview 에 그려지고
+       골라졌는가 · Undo 한 칸인가 · 왕복에서 살아남는가. 그리고
+       고른 것이 블록일 때 **쓸 수 없는 손잡이가 보이지 않는가**
+       (계약 §27-6 — §26-8 의 남은 차이가 여기서 닫혔다).
+    ====================================================== */
+    if (wants("v2add")) {
+
+      section("v2add");
+
+      const page = await openStudio(browser, { package: v2Package({}) });
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      const addState = (p) =>
+        p.evaluate(() =>
+          window.getStudioCanvasAddState ? window.getStudioCanvasAddState() : null);
+
+      const panelState = (p) =>
+        p.evaluate(() => window.getStudioCanvasInspectorState());
+
+      const slotState = (p) =>
+        p.evaluate(() =>
+          window.getStudioImageSlotState().slots.map(
+            (slot) => ({ name: slot.name, filled: !!slot.binding })));
+
+      const drawnIds = (p) =>
+        p.evaluate(() => {
+          const doc = document.getElementById("studioPreviewFrame").contentDocument;
+          return Array.from(
+            doc.querySelectorAll("[data-imory-edit-id]")
+          ).map((el) => el.getAttribute("data-imory-edit-id"));
+        });
+
+      /* 한 번 누르고 draft 가 조용해질 때까지 기다린다 */
+      async function clickAdd(p, target, type) {
+        await p.click(`#studioCanvasAdd-${target}-${type}`);
+        await sleep(900);
+      }
+
+      const newIdOf = (p) =>
+        p.evaluate(() => window.getStudioCanvasSelection().primaryId);
+
+
+      /* ---- 1. 고른 것이 없어도 추가 자리가 있다 ---- */
+
+      await clickSelector(page, frame, false, ".hc-gap");
+
+      const idle = await addState(page);
+      const idlePanel = await panelState(page);
+
+      check("★ 고른 것이 없어도 재료 추가 자리가 열려 있다",
+        idle && idle.on === true && idle.visible === true &&
+        idlePanel.mode === "none" && idlePanel.visible === true &&
+        idlePanel.add === true,
+        JSON.stringify({ a: idle, p: idlePanel }));
+
+      check("★ 사진 슬롯 칸이 선언된 슬롯 + 새 슬롯을 준다",
+        Array.isArray(idle.slotOptions) &&
+        idle.slotOptions.indexOf("photo_1") !== -1 &&
+        idle.slotOptions.indexOf("") !== -1,
+        JSON.stringify(idle.slotOptions));
+
+      check("아직 아무 슬롯에도 사진이 없으면 첫 슬롯을 가리킨다",
+        idle.slot === "photo_1", String(idle.slot));
+
+      /* 첫 슬롯에 사진을 붙여 두면 그 다음 **비어 있는** 슬롯으로
+         옮겨 간다 — 사진이 붙은 슬롯을 말없이 나눠 쓰면 다른
+         요소의 그림이 함께 바뀐다 */
+      await page.evaluate((url) => {
+        window.setStudioImageSlot("photo_1", { id: "img-fixture", public_url: url });
+        window.renderStudioCanvasInspector();
+      }, FIXTURE_IMAGE_URL);
+
+      await sleep(500);
+
+      const bound = await addState(page);
+
+      check("★ 기본값은 사진이 없는 첫 슬롯이다",
+        bound.slot === "title_logo", String(bound.slot));
+
+
+      /* ---- 2. 흐름의 다섯 ---- */
+
+      const beforeBlocks =
+        v2Blocks(await readCanvas(page)).length;
+
+      for (const type of ["logo", "category_nav", "text", "divider"]) {
+
+        await clickAdd(page, "flow", type);
+
+        const canvasNow = await readCanvas(page);
+        const blocks = v2Blocks(canvasNow);
+        const last = blocks[blocks.length - 1];
+        const selected = await newIdOf(page);
+
+        check(`★ 흐름에 ${type} 이(가) 맨 뒤에 생기고 곧바로 골라진다`,
+          last.type === type && selected === last.id &&
+          (await drawnIds(page)).indexOf(last.id) !== -1,
+          JSON.stringify({ t: last.type, id: last.id, sel: selected }));
+
+      }
+
+      check("네 번 눌러 블록이 넷 늘었다",
+        v2Blocks(await readCanvas(page)).length === beforeBlocks + 4,
+        String(v2Blocks(await readCanvas(page)).length));
+
+      const blockPanel = await readV2Panel(page);
+
+      check("★ 새 블록의 패널이 곧바로 흐름 칸을 보여 준다",
+        blockPanel.hasLayout === true && blockPanel.align === "center",
+        JSON.stringify({ l: blockPanel.hasLayout, a: blockPanel.align }));
+
+
+      /* ---- 3. 페이지 자유 장식 ---- */
+
+      await clickAdd(page, "overlay", "shape");
+
+      const shapeId = await newIdOf(page);
+      const shape = v2NodeOf(await readCanvas(page), shapeId);
+
+      check("★ 자유 장식은 도화지 좌표를 갖고 곧바로 그려진다",
+        shape && shape.type === "shape" &&
+        typeof shape.x === "number" && shape.width > 0 &&
+        (await drawnIds(page)).indexOf(shapeId) !== -1,
+        JSON.stringify(shape));
+
+      const shapeFree = await readV2Free(page);
+
+      check("★ 새 장식은 다섯 칸(자리 · 크기 · 각도)을 곧바로 받는다",
+        shapeFree.hasFree === true && shapeFree.values.width === String(shape.width),
+        JSON.stringify(shapeFree.values));
+
+      /* 손잡이 — 자유 장식에는 있다 */
+      const shapeHandles = await frameState(frame);
+
+      check("★ 새 장식에는 손잡이 여덟과 회전 손잡이가 있다",
+        shapeHandles.resizeHandles === 8 && shapeHandles.rotationHandles === 1,
+        JSON.stringify({
+          r: shapeHandles.resizeHandles, o: shapeHandles.rotationHandles }));
+
+
+      /* ---- 4. 블록에는 쓸 수 없는 손잡이가 보이지 않는다 ---- */
+
+      await clickElement(page, frame, false, "v2Rule");
+
+      const blockHandles = await frameState(frame);
+
+      check("★ 블록을 고르면 손잡이가 화면에서 사라진다(계약 §27-6)",
+        blockHandles.resizeHandles === 0 && blockHandles.rotationHandles === 0 &&
+        blockHandles.moveableTargets === 0,
+        JSON.stringify({
+          r: blockHandles.resizeHandles,
+          o: blockHandles.rotationHandles,
+          t: blockHandles.moveableTargets
+        }));
+
+      /* 다시 자유 장식을 고르면 돌아온다 — 감춘 것이 영구가 아니다 */
+      await clickElement(page, frame, false, shapeId);
+
+      const backHandles = await frameState(frame);
+
+      check("★ 자유 요소로 돌아오면 손잡이도 돌아온다",
+        backHandles.resizeHandles === 8,
+        String(backHandles.resizeHandles));
+
+
+      /* ---- 5. 사진 — 이미 선언된 슬롯을 그대로 쓴다 ---- */
+
+      await page.selectOption("#studioCanvasAddSlot", "title_logo");
+      await clickAdd(page, "overlay", "photo");
+
+      const photoId = await newIdOf(page);
+      const photo = v2NodeOf(await readCanvas(page), photoId);
+
+      check("★ 고른 슬롯이 그대로 새 사진의 슬롯이다",
+        photo && photo.type === "photo" && photo.props.slot === "title_logo",
+        JSON.stringify(photo && photo.props));
+
+      check("고른 슬롯을 쓸 때는 슬롯 선언이 늘지 않는다",
+        (await slotState(page)).length === 3,
+        JSON.stringify(await slotState(page)));
+
+
+      /* ---- 6. main_visual — primary 사진과 빈 슬롯을 함께 ---- */
+
+      await page.selectOption("#studioCanvasAddSlot", "");
+      await clickAdd(page, "flow", "main_visual");
+
+      const frameId = await newIdOf(page);
+      const made = v2BlockOf(await readCanvas(page), frameId);
+      const primary =
+        made ? made.props.elements.find((el) => el.id === made.props.primaryId) : null;
+
+      check("★ main_visual 은 primary 사진과 함께 만들어진다",
+        !!primary && primary.type === "photo" && made.height === "auto",
+        JSON.stringify(made && made.props));
+
+      const slots = await slotState(page);
+
+      check("★ 빈 이미지 슬롯이 함께 선언된다(Images 에서 사진을 넣을 자리)",
+        slots.length === 4 &&
+        slots.some((slot) => slot.name === primary.props.slot && !slot.filled),
+        JSON.stringify(slots));
+
+      check("★ 그림이 없어도 프레임과 사진이 화면에 그려진다",
+        (await drawnIds(page)).indexOf(frameId) !== -1 &&
+        (await drawnIds(page)).indexOf(primary.id) !== -1,
+        JSON.stringify({ f: frameId, p: primary.id }));
+
+      check("★ 새 재료로도 계약이 그대로 통과한다(Publish 이 쓰는 resolve)",
+        await page.evaluate(() => {
+          const payload =
+            window.resolveSkinHomeCanvas(
+              currentWorkingSkin, currentWorkingSkin.templates.home.html);
+          return !!(payload && payload.version === 2);
+        }));
+
+
+      /* ---- 7. 추가 한 번 = Undo 한 칸 ---- */
+
+      const beforeAdd = await historyState(page);
+      const beforeJson = JSON.stringify(await readCanvas(page));
+
+      await clickAdd(page, "overlay", "text");
+
+      const addedId = await newIdOf(page);
+      const afterAdd = await historyState(page);
+
+      check("★ 추가 한 번이 Undo 한 칸이다",
+        afterAdd.undo === beforeAdd.undo + 1,
+        JSON.stringify({ b: beforeAdd.undo, a: afterAdd.undo }));
+
+      await page.click("#studioUndoButton");
+      await sleep(900);
+
+      check("★ Undo 하면 그 재료만 사라지고 나머지는 그대로다",
+        JSON.stringify(await readCanvas(page)) === beforeJson &&
+        v2NodeOf(await readCanvas(page), addedId) === null,
+        String(v2NodeOf(await readCanvas(page), addedId)));
+
+      await page.click("#studioRedoButton");
+      await sleep(900);
+
+      check("★ Redo 하면 같은 id 로 돌아온다",
+        !!v2NodeOf(await readCanvas(page), addedId),
+        addedId);
+
+
+      /* ---- 8. Export → Import → 다시 열기 ---- */
+
+      const round = await page.evaluate(async (wanted) => {
+
+        const exported = window.buildSkinPackageExport(currentWorkingSkin);
+
+        if (!exported.ok) return { ok: false, message: exported.message };
+
+        const text = window.serializeSkinPackageExport(exported.skinPackage);
+
+        const result = await window.validateSkinPackageImport(text);
+
+        if (!result.ok) return { ok: false, message: result.message };
+
+        const entry =
+          (result.skinPackage.regions || []).find((r) => r && r.name === "home_canvas");
+
+        const blocks = entry.canvas.flow.blocks;
+        const overlays = entry.canvas.overlays;
+
+        const frameBlock = blocks.find((b) => b.id === wanted.frameId);
+
+        /* 다시 열기 — 저장된 그 파일을 그대로 다시 싣는다 */
+        window.applyImportedSkinPackage(result.skinPackage, {});
+
+        return {
+          ok: true,
+          blocks: blocks.length,
+          overlays: overlays.length,
+          frame: !!frameBlock,
+          slot: frameBlock
+            ? frameBlock.props.elements[0].props.slot
+            : null,
+          declared: (result.skinPackage.imageSlots || []).map((slot) => slot.name)
+        };
+
+      }, { frameId });
+
+      await sleep(1200);
+
+      const reopened = await readCanvas(page);
+
+      check("★ Export → Import → 다시 열기에서 새 재료가 그대로다",
+        round.ok === true &&
+        round.frame === true &&
+        !!v2BlockOf(reopened, frameId) &&
+        v2Blocks(reopened).length === round.blocks,
+        JSON.stringify(round));
+
+      check("★ 함께 선언한 빈 슬롯도 파일에 남는다",
+        round.ok === true &&
+        round.declared.indexOf(round.slot) !== -1,
+        JSON.stringify({ s: round.slot, d: round.declared }));
+
+      check("pageerror 0", page.__errors.length === 0,
+        page.__errors.slice(0, 2).join(" | "));
+
+
+      /* ---- 8-1. Save → 다시 열기 ---- */
+
+      await page.click("#studioSaveButton");
+
+      await page.waitForFunction(
+        () => Array.isArray(window.__savedDraftCallsLay) &&
+          window.__savedDraftCallsLay.length > 0,
+        null, { timeout: 15000 }
+      );
+
+      const savedContent = await page.evaluate(() => {
+        const calls = window.__savedDraftCallsLay;
+        return calls[calls.length - 1].p_content;
+      });
+
+      await close(page);
+
+      const again = await openStudio(browser, { package: savedContent });
+
+      await canvasFrame(again, false);
+
+      const savedCanvas = await readCanvas(again);
+      const savedFrame = v2BlockOf(savedCanvas, frameId);
+
+      check("★ Save → 다시 열기에서 새 재료가 그대로다",
+        !!savedFrame &&
+        savedFrame.props.elements.length === 1 &&
+        savedFrame.props.primaryId === savedFrame.props.elements[0].id,
+        JSON.stringify(savedFrame && savedFrame.props && savedFrame.props.primaryId));
+
+      check("★ 다시 연 화면이 그 재료를 실제로 그린다",
+        await again.evaluate((id) => {
+          const doc = document.getElementById("studioPreviewFrame").contentDocument;
+          return !!doc.querySelector(`[data-imory-edit-id="${id}"]`);
+        }, frameId),
+        frameId);
+
+      check("다시 열기 pageerror 0", again.__errors.length === 0,
+        again.__errors.slice(0, 2).join(" | "));
+
+      await close(again);
+
+
+      /* ---- 9. 별도 origin 프레임에서도 같은 결과 ---- */
+
+      const sbPage = await openStudio(browser, {
+        package: v2Package({ sandbox: true }),
+        sandbox: true
+      });
+
+      const sbFrame = await canvasFrame(sbPage, true);
+
+      await enableCanvasEditing(sbPage);
+
+      await sbPage.click("#studioCanvasAdd-overlay-text");
+      await sleep(1200);
+
+      const sbId =
+        await sbPage.evaluate(() => window.getStudioCanvasSelection().primaryId);
+
+      const sbDrawn =
+        await sbFrame.evaluate((id) =>
+          !!document.querySelector(`[data-imory-edit-id="${id}"]`), sbId);
+
+      check("★ sandbox 프레임에도 새 재료가 곧바로 그려지고 골라진다",
+        !!sbId && sbDrawn === true && !!v2NodeOf(await readCanvas(sbPage), sbId),
+        JSON.stringify({ id: sbId, drawn: sbDrawn }));
+
+      await clickElement(sbPage, sbFrame, true, "v2Rule");
+
+      const sbBlockHandles = await frameState(sbFrame);
+
+      check("★ sandbox 에서도 블록에는 손잡이가 없다",
+        sbBlockHandles.resizeHandles === 0 && sbBlockHandles.rotationHandles === 0,
+        JSON.stringify({
+          r: sbBlockHandles.resizeHandles, o: sbBlockHandles.rotationHandles }));
 
       check("★ 프레임 CSP 위반 0", (await cspViolations(sbFrame)).length === 0,
         JSON.stringify(await cspViolations(sbFrame)));
