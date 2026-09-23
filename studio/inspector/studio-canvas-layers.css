@@ -720,7 +720,11 @@
 }
 
 
+/* STUDIO-LAYERS-MATERIALS-1C — 칸이 손잡이의 기준이다(계약 §37-3).
+   손잡이는 카드 단추 **바깥**의 형제라 여기 절대 위치로 선다. */
 .studio-material-cell {
+  position: relative;
+
   min-width: 0;
 
   display: flex;
@@ -912,14 +916,12 @@
   cursor: pointer;
 
   /*
-    ★ 끌기가 이 단추에서 시작한다(studio-canvas-materials-drag.js).
-      터치에서 브라우저가 먼저 스크롤을 가져가면 350ms 길게 누르기가
-      영영 오지 않으므로 여기서만 끈다 — Layers 가 손잡이 하나에만
-      둔 그 규칙과 같은 이유다(패널 전체에 주면 세로 스크롤이 죽는다).
-      재료는 분류마다 넷 이하라 목록이 짧고, 패널은 카드 사이 여백과
-      아래 슬롯 칸에서 넘긴다(계약 §36-9 의 남은 차이).
+    ★ STUDIO-LAYERS-MATERIALS-1C — 카드 본문 위의 손가락은
+      **브라우저 것**이다(계약 §37-3). 끌기는 손잡이에서만 시작하므로
+      여기서 세로 스크롤을 뺏을 이유가 없다 — 1B 까지 여기 있던
+      `touch-action: none` 이 좁은 화면에서 목록을 못 넘기게 했다.
   */
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 
@@ -937,6 +939,90 @@
 
 .studio-material-item[data-material-state="added"] {
   border-color: var(--system-accent, currentColor);
+}
+
+
+/* ── 끌기 손잡이 (STUDIO-LAYERS-MATERIALS-1C · 계약 §37-3) ──
+
+   Layers 행의 그 손잡이와 같은 글자 · 같은 규칙이다
+   (.studio-canvas-layers-handle) — 자리만 다르다.
+
+   ★ `touch-action: none` 은 **이 요소 하나**에만 있다. 카드나
+     패널에 주면 좁은 화면에서 목록을 세로로 넘길 수 없다.
+========================================================== */
+
+.studio-material-item-handle {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+
+  z-index: 1;
+
+  width: 22px;
+  height: 22px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  border-radius: 6px;
+
+  background: var(--system-surface, rgba(255, 255, 255, 0.72));
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  line-height: 1;
+
+  opacity: 0.55;
+
+  cursor: grab;
+
+  /* 이 요소 위의 손가락만 브라우저에서 가져오지 않는다 */
+  touch-action: none;
+
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+
+/* 카드에 손이 올라가면 **분명하게** 보인다 — 무엇을 끌 수 있는지
+   모르고 지나치지 않게 */
+.studio-material-cell:hover .studio-material-item-handle,
+.studio-material-cell:focus-within .studio-material-item-handle,
+.studio-material-item-handle:hover {
+  opacity: 1;
+
+  color: inherit;
+
+  box-shadow: inset 0 0 0 1px var(--system-border, rgba(0, 0, 0, 0.16));
+}
+
+
+.studio-material-item-handle[hidden] {
+  display: none;
+}
+
+
+body.studio-material-dragging .studio-material-item-handle {
+  cursor: grabbing;
+}
+
+
+/* 390px 시트 — 손가락이 닿을 크기로 키운다. 카드 본문은 그대로
+   `pan-y` 라 세로 스크롤은 살아 있다(계약 §37-3). */
+@media (max-width: 720px) {
+
+  .studio-material-item-handle {
+    top: 6px;
+    right: 6px;
+
+    width: 30px;
+    height: 30px;
+
+    opacity: 0.8;
+  }
+
 }
 
 

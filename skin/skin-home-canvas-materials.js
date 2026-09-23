@@ -22,7 +22,23 @@
      size    새 노드의 width · height (계약의 그 두 칸)
      props   그 종류가 **실제로 받는** props (아래 표)
      style   그 요소 하나의 **스킨 CSS 선언**
-     targets 어느 자리에 넣을 수 있는가(우선순위)
+     targets 어느 자리에 넣을 수 있는가(아래 ★)
+
+   ── targets 는 **집합이자 누르기의 우선순위**다 (1C · §37-1) ──
+
+   이 배열은 두 가지로 읽힌다.
+
+     집합   그 재료가 놓일 수 있는 자리 전부. `flow` · `overlay` ·
+            `frame` 세 표(계약 §27-2)가 허용하는 조합만 적는다.
+     순서   **누르기**의 기본 자리 — 앞에서부터 "지금 그 자리가 이
+            종류를 받는가"를 물어 첫 번째로 되는 곳에 만든다.
+
+   ★ **끌기는 순서를 쓰지 않는다.** 끌어다 놓을 때 자리를 가르는 것은
+     포인터가 있는 곳이다(프레임 위 → 흐름 띠 위 → 그 밖의 도화지
+     안 — studio/inspector/studio-canvas-materials-drag.js). 그래서
+     `flow` 와 `overlay` 를 **둘 다** 받는 재료는 누르기와 끌기가
+     서로 다른 자리에 닿고, 계약의 두 표가 허용하는 자리가 전부
+     화면에서 도달 가능해진다.
 
    ★ **새 저장 칸을 만들지 않는다.** 위 넷 중 앞 둘은 계약 §5 · §8 의
      기존 칸이고, `style` 은 `addStudioCanvasV2Node()` 가 이미
@@ -126,7 +142,11 @@ const SKIN_HOME_CANVAS_MATERIAL_CATEGORIES = [
     key: "logo",
     group: "home",
     type: "logo",
-    targets: ["flow"],
+
+    /* STUDIO-LAYERS-MATERIALS-1C — `logo` 는 블록 표에도 요소 표에도
+       있다(§37-1). 맨 앞이 `flow` 라 **누르면** 지금까지처럼 흐름에
+       들어가고, 자유 층 · 프레임 안은 **끌어다 놓아야** 닿는다. */
+    targets: ["flow", "overlay", "frame"],
     unique: true,
     label: "로고",
     desc: "사이트 이름이나 로고 이미지",
@@ -137,7 +157,7 @@ const SKIN_HOME_CANVAS_MATERIAL_CATEGORIES = [
     key: "category_nav",
     group: "home",
     type: "category_nav",
-    targets: ["flow"],
+    targets: ["flow", "overlay", "frame"],
     unique: true,
     label: "카테고리 메뉴",
     desc: "글 목록으로 이동하는 메뉴",
@@ -148,6 +168,9 @@ const SKIN_HOME_CANVAS_MATERIAL_CATEGORIES = [
     key: "main_visual",
     group: "home",
     type: "main_visual",
+
+    /* 흐름만이다 — `main_visual` 은 요소 표에 없다(프레임 안의 프레임을
+       만들지 않는다 · §37-1 의 제외 이유 표) */
     targets: ["flow"],
     unique: true,
     label: "메인 비주얼",
@@ -170,7 +193,11 @@ const SKIN_HOME_CANVAS_MATERIAL_CATEGORIES = [
     key: "text",
     group: "decor",
     type: "text",
-    targets: ["frame", "overlay"],
+
+    /* STUDIO-LAYERS-MATERIALS-1C — `text` 는 블록 표에도 요소 표에도
+       있다(§37-1). 맨 앞이 `frame`·`overlay` 라 **누르면** 지금까지처럼
+       자유 층이고, 흐름은 **흐름 띠 위에 끌어다 놓아야** 닿는다. */
+    targets: ["frame", "overlay", "flow"],
     unique: false,
     label: "글자",
     desc: "제목이나 설명 추가",

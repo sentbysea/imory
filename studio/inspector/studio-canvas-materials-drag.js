@@ -1,18 +1,32 @@
 /* =========================================================
    STUDIO — 재료를 Preview 로 **끌어다 놓기**
-   (STUDIO-LAYERS-MATERIALS-1B)
+   (STUDIO-LAYERS-MATERIALS-1B · 1C)
 
-   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §36-5 · §36-6
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §36-5 · §36-6 ·
+              §37
    로드맵:    docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §3
 
    ── 무엇을 끄는가 ──────────────────────────────────────
-   **재료 목록의 재료 단추**뿐이다(`.studio-material-item`). 분류
-   카드는 끌 수 없다 — 그것은 "무엇을 만들지"가 아직 정해지지 않은
-   자리이고, 끌어다 놓는 순간에는 만들 것이 하나로 정해져 있어야
+   **재료 카드의 손잡이(⠿)**뿐이다(`.studio-material-item-handle`).
+   분류 카드는 끌 수 없다 — 그것은 "무엇을 만들지"가 아직 정해지지
+   않은 자리이고, 끌어다 놓는 순간에는 만들 것이 하나로 정해져 있어야
    한다.
 
-     데스크톱(mouse · pen)  누르면 곧바로 시작
-     좁은 화면(touch)       **길게** 눌러야 시작(350ms)
+     데스크톱(mouse · pen)  손잡이를 누르고 움직이면 시작(슬롭 4px)
+     좁은 화면(touch)       손잡이를 **길게** 눌러야 시작(350ms)
+
+   ★ **1C — 손잡이가 카드 본문과 갈라졌다.** 1B 에서는 카드 단추
+     자체가 끌기의 시작점이었고, 그래서 `touch-action: none` 이 카드
+     전체에 있었다 — 손가락이 카드 위에서 위아래로 쓸면 브라우저가
+     스크롤을 내주지 않아 좁은 화면에서 목록을 넘길 수 없었다
+     (계약 §36-9 의 그 남은 차이). 이제 규칙은 Layers 의 그것과 같다.
+
+       카드 본문   touch-action: pan-y   → 세로 스크롤은 브라우저 것
+       손잡이      touch-action: none    → 여기서만 끌기가 시작한다
+
+     손잡이는 카드 **단추 바깥**에 있다(같은 칸 안의 형제). 안에 두면
+     손잡이를 눌렀다 뗀 click 이 카드로 올라가 "그냥 눌렀다"가 되어
+     재료가 하나 만들어진다 — 끌 생각만 했는데 생긴다.
 
    그 350ms 는 Layers 의 끌기가 실측으로 정한 그 값이다
    (studio/inspector/studio-canvas-layers-drag.js) — 여기서 다시
@@ -78,9 +92,9 @@ function studioMaterialDragLongPressMs() {
   지금 끌고 있는 것. 없으면 null 이다.
 
     itemId     재료 카탈로그의 id — **이것 하나**가 만들 것을 정한다
-    node       눌린 단추(pointer capture 를 들고 있다)
+    handle     눌린 손잡이(pointer capture 를 들고 있다)
     pointerId
-    started    길게 누르기를 지났는가(touch) · 곧바로 true(mouse)
+    started    길게 누르기를 지났는가(touch) · 슬롭을 넘었는가(mouse)
     timer      길게 누르기 타이머
     origin     { x, y } 누른 자리
     plan       지금 자리의 drop 계획(아래 studioMaterialDropPlan)
@@ -104,18 +118,38 @@ let studioMaterialDrag = null;
   ★ 끌기가 **시작된** 경우에만 세운다. 시작하지 않은 누르기는 그냥
     누르기이고, 그 click 은 그대로 흘러야 한다(계약 §36-4).
 
-  ★ **그 단추의, 곧바로 오는** click 하나만 먹는다. 브라우저가
+  ★ **그 손잡이의, 곧바로 오는** click 하나만 먹는다. 브라우저가
     click 을 아예 보내지 않는 경우도 있어서(손을 멀리서 놓으면
     엔진마다 다르다) 조건 없이 세워 두면 그 표식이 살아남아
     **다음에 누르는 엉뚱한 단추**를 먹는다.
 
     2026-09-23 실측: 금지 자리 drop 뒤에 `＋ 재료 추가` 가 한 번
     안 열렸다 — 그 표식이 토글의 click 을 먹은 것이었다.
+
+  ★ 1C — 손잡이가 카드 단추 **바깥**으로 나온 뒤에도 이 표식은
+    남긴다. 손잡이는 이제 click 으로 아무것도 하지 않지만, 엔진에
+    따라 capture 뒤의 click 이 손잡이가 아니라 **공통 조상**으로
+    가기도 한다(`.studio-material-cell`). 그 조상이 카드를 품고
+    있으므로, 그 한 번을 여기서 세워 두고 확실히 막는다.
 */
 let studioMaterialEatClick = null;
 
 /* 그 표식이 살아 있는 시간 — 같은 제스처의 click 은 이 안에 온다 */
 const STUDIO_MATERIAL_CLICK_GRACE_MS = 600;
+
+
+/* 표식 하나 — 먹을 범위는 **그 재료의 칸**이다(위 ★). 칸을 찾지
+   못하면 손잡이 자신으로 좁힌다. */
+function studioMaterialClickMark(handle) {
+
+  const scope =
+    (handle && typeof handle.closest === "function")
+      ? (handle.closest(".studio-material-cell") || handle)
+      : handle;
+
+  return { scope: scope, at: Date.now() };
+
+}
 
 
 /* 따라다니는 그림자와 윤곽 — 전부 `pointer-events:none` 이다
@@ -157,6 +191,93 @@ function studioMaterialTargetAccepts(target, type) {
     window.studioCanvasV2AddTypes(target);
 
   return Array.isArray(types) && types.indexOf(type) !== -1;
+
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1C — **흐름 띠** (계약 §37-2)
+
+   `text` 처럼 흐름과 자유 층을 **둘 다** 받는 재료는 "놓은 자리"가
+   둘 중 하나를 골라야 한다. 1B 까지는 자유 층이 도화지 안 전부를
+   가져가서 흐름에는 영영 닿지 못했다.
+
+   띠는 **도화지 위 끝부터 마지막 블록의 아래 끝까지**다(가로는
+   도화지 폭 전체). 그 아래는 블록이 하나도 없는 빈 자리이고, 거기
+   놓은 것은 자유 장식이다.
+
+     흐름 띠 위   →  흐름의 삽입선
+     그 아래      →  자유 층 · 놓은 그 자리
+
+   ★ 띠를 **재는 값**으로 만든다(블록 상자의 합). 저장값의 padding ·
+     gap 으로 계산하면 정렬 · 숨김 · 데스크톱 최대 폭에서 화면과
+     어긋난다(§30-3 과 같은 사정).
+
+   ★ 블록이 하나도 없으면 띠의 높이가 0 이라 겨눌 수 없다. 그때도
+     흐름에 닿을 수 있게 도화지 위 끝에 **최소 높이**를 준다.
+
+   ★ **흐름만 받는 재료에는 이 띠를 묻지 않는다.** 구분선을 도화지
+     아래쪽에 놓아도 삽입선이어야 한다(§36-5 의 그 표 그대로).
+========================================================== */
+const STUDIO_MATERIAL_FLOW_BAND_MIN = 24;
+
+
+function studioMaterialFlowBand() {
+
+  const boxes =
+    (typeof window.studioCanvasBoxesSnapshot === "function")
+      ? window.studioCanvasBoxesSnapshot()
+      : null;
+
+  const root =
+    (boxes && boxes.root) ? boxes.root : null;
+
+  if (!root || !(root.height > 0)) {
+    return null;
+  }
+
+  const blocks =
+    boxes.blocks || {};
+
+  let bottom =
+    root.top;
+
+  Object.keys(blocks).forEach((id) => {
+
+    const rect =
+      blocks[id];
+
+    if (!rect) {
+      return;
+    }
+
+    const edge =
+      rect.top + rect.height;
+
+    if (edge > bottom) {
+      bottom = edge;
+    }
+
+  });
+
+  return {
+    top: root.top,
+    bottom:
+      Math.min(
+        root.top + root.height,
+        Math.max(bottom, root.top + STUDIO_MATERIAL_FLOW_BAND_MIN)
+      )
+  };
+
+}
+
+
+function studioMaterialInFlowBand(previewY) {
+
+  const band =
+    studioMaterialFlowBand();
+
+  return !!band && previewY >= band.top && previewY <= band.bottom;
 
 }
 
@@ -278,32 +399,16 @@ function studioMaterialDropPlan(itemId, previewX, previewY) {
 
   }
 
-  /* ── 자유 층 — 놓은 그 자리 ── */
+  /* ── 흐름 — 유효한 삽입선 ──
 
-  if (
-    preset.targets.indexOf("overlay") !== -1 &&
-    studioMaterialTargetAccepts("overlay", preset.type)
-  ) {
-
-    const boxes =
-      window.studioCanvasBoxesSnapshot();
-
-    return {
-      ok: true,
-      target: "overlay",
-      frameId: "",
-      at: { x: canvas.x, y: canvas.y },
-      index: null,
-      rect: studioMaterialOutlineRect(preset, boxes.root, previewX, previewY, null)
-    };
-
-  }
-
-  /* ── 흐름 — 유효한 삽입선 ── */
+     STUDIO-LAYERS-MATERIALS-1C — 자유 층을 **함께** 받는 재료는
+     흐름 띠 위에서만 흐름이다(위 §). 흐름만 받는 재료는 도화지 안
+     어디서나 흐름이고, 그것이 §36-5 의 그 표다. */
 
   if (
     preset.targets.indexOf("flow") !== -1 &&
-    studioMaterialTargetAccepts("flow", preset.type)
+    studioMaterialTargetAccepts("flow", preset.type) &&
+    (preset.targets.indexOf("overlay") === -1 || studioMaterialInFlowBand(previewY))
   ) {
 
     const insert =
@@ -327,6 +432,27 @@ function studioMaterialDropPlan(itemId, previewX, previewY) {
       };
 
     }
+
+  }
+
+  /* ── 자유 층 — 놓은 그 자리 ── */
+
+  if (
+    preset.targets.indexOf("overlay") !== -1 &&
+    studioMaterialTargetAccepts("overlay", preset.type)
+  ) {
+
+    const boxes =
+      window.studioCanvasBoxesSnapshot();
+
+    return {
+      ok: true,
+      target: "overlay",
+      frameId: "",
+      at: { x: canvas.x, y: canvas.y },
+      index: null,
+      rect: studioMaterialOutlineRect(preset, boxes.root, previewX, previewY, null)
+    };
 
   }
 
@@ -699,16 +825,41 @@ function paintStudioMaterialHint(plan) {
    4. 제스처
 ========================================================== */
 
+/*
+  이 pointerdown 이 끌기의 시작점인가 — **손잡이 위**여야 한다.
+
+  ★ 카드 본문은 여기서 null 로 끝난다. 그래야 카드 위의 손가락이
+    목록을 세로로 넘길 수 있고(§37-3), 길게 눌러도 끌기가 시작되지
+    않는다.
+
+  ★ `준비 중` 재료는 손잡이가 아예 그려지지 않지만(add-v2), 합성
+    이벤트 · 낡은 화면에서 새어 들어올 수 있으므로 짝이 되는 카드
+    단추가 눌리는 상태인지 한 번 더 본다(클릭 경로의 그 방식과 같다).
+*/
 function studioMaterialDragTarget(node) {
 
   if (!node || typeof node.closest !== "function") {
     return null;
   }
 
-  const button =
-    node.closest(".studio-material-item");
+  const handle =
+    node.closest(".studio-material-item-handle");
 
-  return (button && button.dataset.materialId) ? button : null;
+  if (!handle || !handle.dataset.materialId || handle.hidden) {
+    return null;
+  }
+
+  const cell =
+    handle.closest(".studio-material-cell");
+
+  const button =
+    cell ? cell.querySelector(".studio-material-item") : null;
+
+  if (!button || button.disabled) {
+    return null;
+  }
+
+  return handle;
 
 }
 
@@ -803,7 +954,7 @@ function finishStudioMaterialDrag() {
   }
 
   /* 위 ★ — 그 단추의, 곧바로 오는 click 하나를 먹는다 */
-  studioMaterialEatClick = { node: drag.node, at: Date.now() };
+  studioMaterialEatClick = studioMaterialClickMark(drag.handle);
 
   const plan =
     drag.plan;
@@ -863,7 +1014,7 @@ function cancelStudioMaterialDrag() {
   }
 
   if (studioMaterialDrag.started) {
-    studioMaterialEatClick = { node: studioMaterialDrag.node, at: Date.now() };
+    studioMaterialEatClick = studioMaterialClickMark(studioMaterialDrag.handle);
   }
 
   releaseStudioMaterialCapture();
@@ -880,12 +1031,12 @@ function releaseStudioMaterialCapture() {
   const drag =
     studioMaterialDrag;
 
-  if (!drag || !drag.node || typeof drag.node.releasePointerCapture !== "function") {
+  if (!drag || !drag.handle || typeof drag.handle.releasePointerCapture !== "function") {
     return;
   }
 
   try {
-    drag.node.releasePointerCapture(drag.pointerId);
+    drag.handle.releasePointerCapture(drag.pointerId);
   }
   catch (err) {
     /* 이미 풀렸다 — 그대로 둔다 */
@@ -900,10 +1051,10 @@ function onStudioMaterialPointerDown(event) {
     return;
   }
 
-  const node =
+  const handle =
     studioMaterialDragTarget(event.target);
 
-  if (!node || node.disabled) {
+  if (!handle) {
     return;
   }
 
@@ -917,8 +1068,8 @@ function onStudioMaterialPointerDown(event) {
     event.pointerType === "touch";
 
   studioMaterialDrag = {
-    itemId: node.dataset.materialId,
-    node: node,
+    itemId: handle.dataset.materialId,
+    handle: handle,
     pointerId: event.pointerId,
     touch: touch,
 
@@ -931,7 +1082,7 @@ function onStudioMaterialPointerDown(event) {
   };
 
   try {
-    node.setPointerCapture(event.pointerId);
+    handle.setPointerCapture(event.pointerId);
   }
   catch (err) {
     /* capture 를 못 걸면 끌기를 포기한다 — 반쯤 붙잡힌 채로
@@ -1018,8 +1169,10 @@ function onStudioMaterialPointerUp(event) {
 
   releaseStudioMaterialCapture();
 
-  /* 시작하지 않았으면 그냥 **누르기**다 — 단추의 click 이 그대로
-     흘러 기본 자리에 만든다(계약 §36-4). */
+  /* 시작하지 않았다 — 손잡이를 그냥 눌렀다 뗀 것이고, **아무 일도
+     일어나지 않는다**(1C · §37-3). 손잡이는 카드 단추 바깥이라 그
+     click 이 카드로 올라가지 않는다. 기본 자리에 만드는 길은 카드
+     본문을 누르는 그 하나다(계약 §36-4). */
   if (!drag.started) {
     studioMaterialDrag = null;
     studioMaterialClearVisuals();
@@ -1047,7 +1200,11 @@ function onStudioMaterialClick(event) {
     return;
   }
 
-  if (!mark.node || !mark.node.contains(event.target)) {
+  /* **그 칸 안의** click 하나다 — 손잡이 자신이든, 엔진이 공통
+     조상으로 올려 보낸 칸이든, 그 칸이 품은 카드 단추든. 칸 밖
+     (다른 카드 · `＋ 재료 추가` · 패널의 다른 단추)은 건드리지
+     않는다(§37-3). */
+  if (!mark.scope || !mark.scope.contains(event.target)) {
     return;
   }
 
@@ -1107,6 +1264,10 @@ if (typeof window !== "undefined" && typeof document !== "undefined") {
           ? (studioMaterialHint.dataset.hintKind || "")
           : ""
     });
+
+  /* STUDIO-LAYERS-MATERIALS-1C — 흐름 띠(Preview 문서 좌표).
+     진단과 테스트가 "지금 어디까지가 흐름인가"를 본다. */
+  window.studioMaterialFlowBand = studioMaterialFlowBand;
 
   /* 테스트가 끌기 없이 계획만 물어보는 창구(좌표는 Studio 화면 좌표) */
   window.studioMaterialDropPlanAt =

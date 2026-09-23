@@ -1,8 +1,9 @@
 /* =========================================================
    STUDIO — v2 HOME 캔버스에 **재료를 추가하는 자리**
-   (HOME-CANVAS-V2-ADD-1 · STUDIO-LAYERS-MATERIALS-1A · 1B)
+   (HOME-CANVAS-V2-ADD-1 · STUDIO-LAYERS-MATERIALS-1A · 1B · 1C)
 
-   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §27 · §35 · §36
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §27 · §35 · §36 ·
+              §37
    로드맵:    docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §3
 
    ── 왜 파일이 갈라져 있나 ──────────────────────────────
@@ -44,6 +45,21 @@
                이 종류를 받는가"를 관문에 물어 첫 번째로 되는 곳을
                쓴다. 되는 곳이 없으면 그 카드는 **준비 중**이다.
      unique    이미 있으면 새로 만들지 않고 **그것을 고른다**(§35-4)
+
+   ★ 그 순서는 **누르기**의 것이다. 끌어다 놓을 때는 포인터가 있는
+     곳이 자리를 정한다(§37-2) — 그래서 `text` 처럼 흐름과 자유 층을
+     둘 다 받는 재료가 두 자리 모두에 닿는다.
+
+   ── 이 라운드가 바꾼 것 (STUDIO-LAYERS-MATERIALS-1C) ────
+
+   재료 칸이 **둘로 갈라졌다**.
+
+     카드 본문   누르면 기본 자리에 만든다 · 세로 스크롤은 브라우저 것
+     손잡이 ⠿    끌어다 놓는 유일한 시작점 (`touch-action: none`)
+
+   1B 에서는 카드 단추 자체가 끌기의 시작점이라 `touch-action: none`
+   이 카드 전체에 있었고, 좁은 화면에서 카드 위의 손가락이 목록을
+   넘기지 못했다(계약 §36-9 의 그 남은 차이 → §37-3).
 
    ── 사진이 들어가는 종류 ───────────────────────────────
    `photo` · `sticker` · `logo` 와 `main_visual` 의 primary 사진은
@@ -441,6 +457,11 @@ let studioCanvasMaterialCardNodes = {};
 
 /* 지금 그려져 있는 재료 단추들 — id → button */
 let studioCanvasMaterialItemNodes = {};
+
+/* STUDIO-LAYERS-MATERIALS-1C — 그 재료의 **끌기 손잡이** — id → span.
+   단추와 따로 들고 있는 이유는 `준비 중` 일 때 손잡이만 내리기
+   때문이다(단추는 `disabled` 로 남아 이유를 읽힌다). */
+let studioCanvasMaterialItemHandles = {};
 
 
 /* =========================================================
@@ -1139,8 +1160,7 @@ function studioCanvasMaterialItemButton(item) {
   button.className = "studio-material-item";
   button.id = `studioCanvasAddItem-${item.id}`;
 
-  /* ★ 끌기가 보는 그 한 줄이다(studio-canvas-materials-drag.js).
-     DOM 이 들고 있는 것은 **id 뿐**이고, 무엇을 만들지는 카탈로그와
+  /* ★ DOM 이 들고 있는 것은 **id 뿐**이고, 무엇을 만들지는 카탈로그와
      순수 함수가 정한다(계약 §36-2). */
   button.dataset.materialId = item.id;
   button.dataset.materialCategory = item.category;
@@ -1186,6 +1206,58 @@ function studioCanvasMaterialItemButton(item) {
 }
 
 
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1C — 끌기 손잡이 (계약 §37-3)
+
+   Layers 의 행 손잡이와 **같은 글자 · 같은 규칙**이다(⠿ ·
+   `touch-action: none` 은 이 요소 하나에만). 다른 점은 자리뿐이다 —
+   행은 왼쪽 끝에 두고, 카드는 칸 안에서 위 오른쪽에 띄운다.
+
+   ★ **카드 단추 안에 넣지 않는다.** 안에 있으면 손잡이를 눌렀다
+     뗀 click 이 단추로 올라가 재료가 하나 만들어진다. 칸(`cell`)
+     안의 **형제**로 두고 절대 위치로 띄운다.
+
+   ★ 단추가 아니라 `role="img"` 인 span 이다. 눌러서 일어나는 일이
+     없는 요소를 단추로 만들면 키보드로 들어갔을 때 아무 일도
+     하지 않는 자리가 생긴다 — 키보드는 카드 본문 하나로 전부
+     할 수 있다(누르면 기본 자리에 만든다).
+========================================================== */
+function studioCanvasMaterialItemHandle(item) {
+
+  const handle =
+    document.createElement("span");
+
+  handle.className = "studio-material-item-handle";
+  handle.id = `studioCanvasAddHandle-${item.id}`;
+
+  handle.textContent = "⠿";
+
+  /* 끌기가 보는 그 한 줄이다(studio-canvas-materials-drag.js) */
+  handle.dataset.materialId = item.id;
+
+  handle.setAttribute("role", "img");
+  handle.setAttribute("aria-label", "끌어서 추가");
+
+  studioCanvasMaterialItemHandles[item.id] = handle;
+
+  return handle;
+
+}
+
+
+/* 카드 하나의 칸 — 단추와 손잡이가 함께 선다 */
+function studioCanvasMaterialItemCell(item) {
+
+  const cell =
+    studioCanvasMaterialCell(studioCanvasMaterialItemButton(item));
+
+  cell.appendChild(studioCanvasMaterialItemHandle(item));
+
+  return cell;
+
+}
+
+
 function syncStudioCanvasMaterialItem(item) {
 
   const button =
@@ -1224,6 +1296,16 @@ function syncStudioCanvasMaterialItem(item) {
           ? `${item.label} — 지금 넣을 자리가 없습니다`
           : `${item.label} 추가 — ${item.desc || ""}`)
   );
+
+  /* STUDIO-LAYERS-MATERIALS-1C — 만들 자리가 없으면 끌 것도 없다.
+     `추가됨` 은 손잡이를 남긴다 — 끌면 "이미 있습니다"가 뜨고
+     아무것도 만들지 않는 그 길이 계약이다(§36-7). */
+  const handle =
+    studioCanvasMaterialItemHandles[item.id];
+
+  if (handle) {
+    handle.hidden = (now.state === "soon");
+  }
 
 }
 
@@ -1390,7 +1472,7 @@ function buildStudioCanvasV2AddItems(box, categoryKey) {
   grid.classList.add("studio-material-grid--items");
 
   items.forEach((item) => {
-    grid.appendChild(studioCanvasMaterialCell(studioCanvasMaterialItemButton(item)));
+    grid.appendChild(studioCanvasMaterialItemCell(item));
   });
 
   box.appendChild(grid);
@@ -1402,6 +1484,7 @@ function buildStudioCanvasV2AddSection() {
 
   studioCanvasMaterialCardNodes = {};
   studioCanvasMaterialItemNodes = {};
+  studioCanvasMaterialItemHandles = {};
 
   const box =
     document.createElement("div");
@@ -1538,6 +1621,9 @@ if (typeof window !== "undefined") {
             const node =
               studioCanvasMaterialItemNodes[item.id];
 
+            const handle =
+              studioCanvasMaterialItemHandles[item.id];
+
             return {
               id: item.id,
               category: item.category,
@@ -1546,7 +1632,15 @@ if (typeof window !== "undefined") {
               drawn: !!(node && node.isConnected),
               state: node ? (node.dataset.materialState || "") : "",
               target: node ? (node.dataset.addTarget || "") : "",
-              disabled: node ? !!node.disabled : null
+              disabled: node ? !!node.disabled : null,
+
+              /* STUDIO-LAYERS-MATERIALS-1C — 끌기 손잡이가 있는가 ·
+                 계약이 이 재료에 허용하는 자리는 무엇인가(§37-1) */
+              handle: !!(handle && handle.isConnected && !handle.hidden),
+              targets:
+                (typeof window.resolveSkinHomeCanvasMaterialPreset === "function")
+                  ? ((window.resolveSkinHomeCanvasMaterialPreset(item.id) || {}).targets || [])
+                  : []
             };
 
           })

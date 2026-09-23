@@ -1,8 +1,8 @@
 /* =========================================================
    STUDIO — Layers 의 재료 탐색 화면 E2E
-   (STUDIO-LAYERS-MATERIALS-1A · 1B)
+   (STUDIO-LAYERS-MATERIALS-1A · 1B · 1C)
 
-   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §35 · §36
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §35 · §36 · §37
    계획:      docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §3
 
    ── 이 파일이 재는 것 ───────────────────────────────────
@@ -33,12 +33,20 @@
    [add]      재료 클릭 추가 · Undo 한 칸 · 새 요소 선택 ·
               Preview 외곽선 · Layers 행 연결
    [drop]     ★ 1B — Preview 로 끌어다 놓기: 자유 층 포인터 자리 ·
-              프레임 명시 · 흐름 삽입선 · 금지 · 취소 · scale/scroll
+              프레임 명시 · 흐름 삽입선 · 금지 · 취소 · scale/scroll ·
+              ★ 1C — 흐름 띠 안/밖이 가르는 `text` 의 두 자리
+   [handle]   ★ 1C — 끌기 손잡이: 단추 바깥 · aria-label ·
+              touch-action 둘 · 카드 본문에서는 시작하지 않는다 ·
+              drop 뒤 중복 생성 0 · 남의 click 을 먹지 않는다
+   [reach]    ★ 1C — 계약의 두 표와 카탈로그 targets 의 **전수 비교** ·
+              누르기의 기본 자리 무변경 · 끌기로 세 자리 모두 도달 ·
+              금지 조합 무변경
    [dupe]     홈 구성 중복 생성 방지 · `추가됨` 카드가 기존 요소를
               고른다 · 처음부터 있는 스킨
    [soon]     준비 중 카드는 눌리지 않고 데이터를 쓰지 않는다
    [back]     Escape · `←` 두 단계 · 초점
-   [mobile]   390px — 가로 스크롤 0 · 잘림 0 · 터치 350ms
+   [mobile]   390px — 가로 스크롤 0 · 잘림 0 · 손잡이 350ms ·
+              ★ 1C — 카드 본문 세로 swipe 가 목록을 넘긴다 · 빠른 탭 한 번
    [sandbox]  별도 origin 프레임에서 같은 결과 + CSP 위반 0
 
    Chromium 만 쓴다.
@@ -345,6 +353,35 @@ function fullPackage(options) {
 }
 
 
+/*
+  STUDIO-LAYERS-MATERIALS-1C — 도달 범위를 재는 스킨.
+
+  흐름 띠와 프레임이 **둘 다** 있으면서 `logo` · `category_nav` 는
+  **아직 없다**. 그 둘이 있으면 `추가됨` 이 되어(§35-4) 자리 판정
+  자체가 오지 않는다 — 여기서 보려는 것은 그 앞 단계다.
+*/
+function reachPackage(options) {
+
+  return skinPackage({
+    ...(options || {}),
+    blocks: [
+      { id: "mtText", type: "text", width: 300, height: "auto", align: "center",
+        props: { text: "씨앗", role: "title" } },
+
+      { id: "mtMain", type: "main_visual", width: 300, height: 200, align: "center",
+        props: {
+          baseWidth: 150, baseHeight: 100, primaryId: "mtPhoto",
+          elements: [
+            { id: "mtPhoto", type: "photo", follow: "transform",
+              x: 10, y: 5, width: 120, height: 80, props: { slot: "photo_1" } }
+          ]
+        } }
+    ]
+  });
+
+}
+
+
 /* 빈 캔버스는 그릴 것이 없어 프레임 준비 판정이 어렵다 — 아무
    자리에도 걸리지 않는 글자 블록 하나를 둔다. */
 function seedPackage(options) {
@@ -532,6 +569,24 @@ async function openMaterials(page) {
 
   await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
 
+  /* 하위 화면이 열려 있으면 **트리까지 물러난다**. 그 화면에서는
+     `＋ 재료 추가` 가 숨어 있어(§35-1) 곧바로 누를 수 없다 — 1C 에서
+     재료 목록에 머문 채 다음 절로 넘어가는 자리가 생겼다. */
+  for (let i = 0; i < 3; i += 1) {
+
+    const deep =
+      await page.evaluate(() =>
+        window.getStudioCanvasLayersState().screen === "add");
+
+    if (!deep) {
+      break;
+    }
+
+    await page.click("#studioCanvasAddBack");
+    await sleep(300);
+
+  }
+
   await page.waitForSelector("#studioCanvasLayersAddToggle", { state: "visible", timeout: 8000 });
 
   const open =
@@ -633,7 +688,39 @@ async function canvasScreenPoints(page) {
       frame: frameId ? at(boxes.frames[frameId], 0.5, 0.5) : null,
       blockIds: blockIds,
       firstBlockTop:
-        blockIds.length ? at(boxes.blocks[blockIds[0]], 0.5, 0.15) : null
+        blockIds.length ? at(boxes.blocks[blockIds[0]], 0.5, 0.15) : null,
+
+      /* STUDIO-LAYERS-MATERIALS-1C — 흐름 띠의 안과 밖(계약 §37-2).
+         `text` 처럼 둘 다 받는 재료가 어디로 가는지는 이 두 점이
+         가른다. 띠는 코드가 재는 그 값 하나를 그대로 쓴다. */
+      band:
+        (() => {
+
+          const band =
+            (typeof window.studioMaterialFlowBand === "function")
+              ? window.studioMaterialFlowBand()
+              : null;
+
+          const root =
+            boxes.root;
+
+          if (!band || !root) {
+            return null;
+          }
+
+          const line =
+            (y) => at({ left: root.left, top: y, width: root.width, height: 0 }, 0.5, 0);
+
+          return {
+            /* 띠 안 — 첫 블록보다 위(프레임 위가 아니어야 한다) */
+            inside: line(band.top + Math.min(8, (band.bottom - band.top) / 2)),
+
+            /* 띠 아래 — 블록이 하나도 없는 빈 자리 */
+            below:
+              line(Math.min(band.bottom + 30, root.top + root.height - 8))
+          };
+
+        })()
     };
 
   });
@@ -641,30 +728,54 @@ async function canvasScreenPoints(page) {
 }
 
 
+/* 재료 칸의 한 점 — **손잡이**이거나 **카드 본문**이다(계약 §37-3).
+
+   ★ 카드 본문은 손잡이를 피해 아래쪽을 잡는다. 위 오른쪽 모서리는
+     손잡이가 덮고 있어서, 거기를 누르면 "카드 본문을 눌렀다"가
+     아니라 "손잡이를 눌렀다"가 된다. */
+async function materialPointOf(page, materialId, part) {
+
+  return page.evaluate(({ id, want }) => {
+
+    const node =
+      document.getElementById(
+        want === "handle"
+          ? `studioCanvasAddHandle-${id}`
+          : `studioCanvasAddItem-${id}`);
+
+    if (!node) {
+      return null;
+    }
+
+    const r = node.getBoundingClientRect();
+
+    if (!(r.width > 0 && r.height > 0)) {
+      return null;
+    }
+
+    return (want === "handle")
+      ? { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+      : { x: r.left + r.width / 2, y: r.bottom - 12 };
+
+  }, { id: materialId, want: part });
+
+}
+
+
 /* 끌어다 놓기 — 실제 포인터로 한다(pointer capture 를 지나야
-   iframe 위에서도 부모가 이벤트를 받는다는 것이 계약 §36-5 다) */
+   iframe 위에서도 부모가 이벤트를 받는다는 것이 계약 §36-5 다).
+
+   ★ 1C — 시작점은 **손잡이**다(§37-3). `from: "body"` 로 카드 본문을
+     잡으면 끌기가 시작되지 않아야 하고, 그것도 여기서 잰다. */
 async function dragMaterialTo(page, materialId, point, options) {
 
   const o = options || {};
 
   const from =
-    await page.evaluate((id) => {
-
-      const node =
-        document.getElementById(`studioCanvasAddItem-${id}`);
-
-      if (!node) {
-        return null;
-      }
-
-      const r = node.getBoundingClientRect();
-
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-
-    }, materialId);
+    await materialPointOf(page, materialId, o.from || "handle");
 
   if (!from) {
-    throw new Error(`재료 단추를 찾지 못했습니다: ${materialId}`);
+    throw new Error(`재료 ${o.from || "handle"} 를 찾지 못했습니다: ${materialId}`);
   }
 
   await page.mouse.move(from.x, from.y);
@@ -1442,6 +1553,67 @@ async function main() {
       await page.evaluate(() => window.undoStudioHistory());
       await sleep(800);
 
+      /* ---- 3-1. 흐름과 자유 층을 **둘 다** 받는 재료 (1C · §37-2) ----
+
+         `text` 는 계약의 두 표에 모두 있다. 1B 까지는 자유 층이
+         도화지 안 전부를 가져가 흐름에는 닿지 못했다 — 이제 놓은
+         자리가 가른다. */
+
+      await openMaterialItems(page, "text");
+
+      const flowBefore =
+        v2Blocks(await readCanvas(page)).map((b) => b.id);
+
+      const textFlow =
+        await dragMaterialTo(page, "text_title", points.band.inside);
+
+      check("★ 글자를 흐름 띠 위에 놓으면 **흐름**이다(삽입선)",
+        textFlow.plan && textFlow.plan.ok === true &&
+        textFlow.plan.target === "flow" && textFlow.hint === "flow",
+        JSON.stringify(textFlow.plan));
+
+      const flowAfter =
+        v2Blocks(await readCanvas(page));
+
+      const newBlock =
+        flowAfter.find((b) => flowBefore.indexOf(b.id) === -1) || null;
+
+      check("★ 흐름에 글자 블록이 하나 생겼다(자유 층에는 없다)",
+        flowAfter.length === flowBefore.length + 1 &&
+        !!newBlock && newBlock.type === "text" &&
+        v2Overlays(await readCanvas(page)).length === 0,
+        JSON.stringify(newBlock && { id: newBlock.id, type: newBlock.type }));
+
+      check("★ 프리셋 그대로다(제목 · auto 높이)",
+        !!newBlock && newBlock.props && newBlock.props.role === "title" &&
+        newBlock.height === "auto",
+        JSON.stringify(newBlock && { p: newBlock.props, h: newBlock.height }));
+
+      check("★ 끌어 놓은 흐름 추가도 Undo 한 칸이다",
+        await (async () => {
+          await page.evaluate(() => window.undoStudioHistory());
+          await sleep(800);
+          return v2Blocks(await readCanvas(page)).length === flowBefore.length;
+        })(),
+        "");
+
+      /* 같은 재료 · 같은 끌기 — 띠 **아래**면 자유 층이다 */
+
+      await openMaterialItems(page, "text");
+
+      const textOverlay =
+        await dragMaterialTo(page, "text_title", points.band.below);
+
+      check("★ 같은 글자를 띠 아래에 놓으면 **자유 층**이다",
+        textOverlay.plan && textOverlay.plan.ok === true &&
+        textOverlay.plan.target === "overlay" &&
+        v2Overlays(await readCanvas(page)).length === 1 &&
+        v2Blocks(await readCanvas(page)).length === flowBefore.length,
+        JSON.stringify(textOverlay.plan));
+
+      await page.evaluate(() => window.undoStudioHistory());
+      await sleep(800);
+
       /* ---- 4. 금지 자리 · 취소 ---- */
 
       await openMaterialItems(page, "shape");
@@ -1543,6 +1715,402 @@ async function main() {
         Math.abs(zoomed.canvasX - 195) <= 6 &&
         Math.abs(zoomed.canvasY - 45) <= 10,
         JSON.stringify(zoomed));
+
+      check("페이지 오류 0", page.__errors.length === 0,
+        page.__errors.slice(0, 2).join(" | "));
+
+      await page.__ctx.close();
+
+    }
+
+
+    /* =====================================================
+       [handle] — 끌기 손잡이 (STUDIO-LAYERS-MATERIALS-1C · §37-3)
+
+       ★ 여기서 재는 것은 **어디서 끌리기 시작하는가**다. 무엇이
+         만들어지는지는 위 [add] · [drop] 이 이미 봤다.
+    ====================================================== */
+
+    if (wants("handle")) {
+
+      section("handle");
+
+      const page = await openStudio(browser, { package: reachPackage({}) });
+
+      await canvasFrame(page, false);
+      await enableCanvasEditing(page);
+
+      await openMaterialItems(page, "shape");
+
+      /* ---- 1. 칸 하나의 생김새 ---- */
+
+      const shape = await page.evaluate(() => {
+
+        const cells =
+          Array.from(document.querySelectorAll("#studioCanvasAdd .studio-material-cell"));
+
+        return cells.map((cell) => {
+
+          const button =
+            cell.querySelector(".studio-material-item");
+
+          const handle =
+            cell.querySelector(".studio-material-item-handle");
+
+          return {
+            id: button ? button.dataset.materialId : "",
+
+            /* 손잡이는 단추 **바깥**이어야 한다 — 안에 있으면 그
+               click 이 단추로 올라가 재료가 하나 만들어진다 */
+            outside: !!(handle && button && !button.contains(handle)),
+
+            handleId: handle ? handle.id : "",
+            label: handle ? handle.getAttribute("aria-label") : "",
+            handleTouch: handle ? getComputedStyle(handle).touchAction : "",
+            bodyTouch: button ? getComputedStyle(button).touchAction : "",
+
+            /* 손잡이가 칸 안에 그려져 있는가(밖으로 나가지 않는다) */
+            inCell:
+              (() => {
+                if (!handle) return false;
+                const h = handle.getBoundingClientRect();
+                const c = cell.getBoundingClientRect();
+                return h.width > 0 && h.height > 0 &&
+                  h.left >= c.left - 1 && h.right <= c.right + 1;
+              })()
+          };
+
+        });
+
+      });
+
+      check("★ 재료마다 손잡이가 하나 있고 카드 단추 **바깥**이다",
+        shape.length === 4 && shape.every((cell) =>
+          cell.outside && cell.handleId === `studioCanvasAddHandle-${cell.id}` &&
+          cell.inCell),
+        JSON.stringify(shape.map((c) => [c.id, c.outside, c.inCell])));
+
+      check("★ 손잡이에 `끌어서 추가` 가 읽힌다",
+        shape.every((cell) => cell.label === "끌어서 추가"),
+        JSON.stringify(shape.map((c) => c.label)));
+
+      check("★ `touch-action` 은 손잡이에만 `none` 이고 카드 본문은 `pan-y` 다",
+        shape.every((cell) =>
+          cell.handleTouch === "none" && cell.bodyTouch === "pan-y"),
+        JSON.stringify(shape.map((c) => [c.handleTouch, c.bodyTouch])));
+
+      /* ---- 2. 카드 본문에서는 끌기가 시작되지 않는다 ---- */
+
+      await page.evaluate(() => window.postCanvasProbeToFrame());
+      await sleep(500);
+
+      const points = await canvasScreenPoints(page);
+
+      const clean = JSON.stringify(await readCanvas(page));
+
+      const bodyDrag =
+        await dragMaterialTo(page, "shape_rect", points.band.below, { from: "body" });
+
+      check("★ 카드 본문을 눌러 끌어도 끌기가 시작되지 않는다",
+        bodyDrag.dragging === false && bodyDrag.ghost === false &&
+        bodyDrag.plan === null,
+        JSON.stringify(bodyDrag));
+
+      /* 손을 카드 밖에서 뗐으므로 click 도 오지 않는다 — 끌기도
+         아니었고 누르기도 아니었다. 데이터는 그대로여야 한다. */
+      check("★ 그 제스처는 데이터를 한 줄도 바꾸지 않았다",
+        JSON.stringify(await readCanvas(page)) === clean, "");
+
+      /* ---- 3. 손잡이로 끌면 **하나만** 생긴다 ---- */
+
+      await openMaterialItems(page, "shape");
+
+      const handleDrag =
+        await dragMaterialTo(page, "shape_rect", points.band.below);
+
+      check("★ 손잡이를 끌면 끌기가 시작되고 자리를 겨눈다",
+        handleDrag.dragging === true && handleDrag.ghost === true &&
+        handleDrag.plan && handleDrag.plan.ok === true &&
+        handleDrag.plan.target === "overlay",
+        JSON.stringify(handleDrag));
+
+      check("★ 손잡이 drop 뒤에 카드 click 추가가 따라오지 않는다(하나뿐이다)",
+        v2Overlays(await readCanvas(page)).length === 1,
+        String(v2Overlays(await readCanvas(page)).length));
+
+      check("★ 그 끌기도 Undo 한 칸이다",
+        await (async () => {
+          await page.evaluate(() => window.undoStudioHistory());
+          await sleep(800);
+          return v2Overlays(await readCanvas(page)).length === 0;
+        })(),
+        "");
+
+      /* ---- 4. 끌기 뒤의 click 은 **그 칸만** 먹는다 ---- */
+
+      await openMaterialItems(page, "shape");
+
+      const before = JSON.stringify(await readCanvas(page));
+
+      /* 금지 자리에 놓는다 — 화면은 재료 목록에 머문다 */
+      const outsidePoint = points.outside;
+
+      await page.mouse.move(
+        (await materialPointOf(page, "shape_rect", "handle")).x,
+        (await materialPointOf(page, "shape_rect", "handle")).y);
+
+      await page.mouse.down();
+      await sleep(450);
+      await page.mouse.move(outsidePoint.x, outsidePoint.y, { steps: 8 });
+      await sleep(150);
+      await page.mouse.up();
+
+      check("★ 금지 자리 drop 은 데이터를 한 줄도 바꾸지 않는다",
+        JSON.stringify(await readCanvas(page)) === before, "");
+
+      /* **곧바로** 다른 재료를 누른다 — 표식이 남의 click 을 먹으면
+         안 된다(계약 §36-5 의 그 실측) */
+      await page.click("#studioCanvasAddItem-shape_ellipse");
+      await sleep(900);
+
+      const other =
+        v2Overlays(await readCanvas(page)).slice(-1)[0] || null;
+
+      check("★ 끌기 직후에도 **다른 재료의 click** 은 살아 있다",
+        v2Overlays(await readCanvas(page)).length === 1 &&
+        !!other && other.props && other.props.kind === "ellipse",
+        JSON.stringify(other && other.props));
+
+      /* 트리로 돌아왔다 — `＋ 재료 추가` 가 다시 열려야 한다 */
+      await page.click("#studioCanvasLayersAddToggle");
+      await sleep(500);
+
+      check("★ 끌기 뒤에도 `＋ 재료 추가` 가 정상으로 열린다",
+        (await layersState(page)).screen === "add" &&
+        (await addState(page)).screen === "categories",
+        JSON.stringify((await layersState(page)).screen));
+
+      await page.evaluate(() => window.undoStudioHistory());
+      await sleep(800);
+
+      /* ---- 5. 준비 중 재료에는 손잡이가 없다 ---- */
+
+      await openMaterialItems(page, "shape");
+
+      await sleep(200);
+
+      const soonHandles = await page.evaluate(() => {
+
+        window.SKIN_HOME_CANVAS_ELEMENT_TYPES =
+          window.SKIN_HOME_CANVAS_ELEMENT_TYPES.filter((type) => type !== "shape");
+
+        window.syncStudioCanvasV2AddSection();
+
+        return window.getStudioCanvasAddState().items.map((item) => ({
+          id: item.id, state: item.state, handle: item.handle
+        }));
+
+      });
+
+      check("★ 받는 자리가 없으면 손잡이도 사라진다(끌 것이 없다)",
+        soonHandles.length === 4 &&
+        soonHandles.every((item) => item.state === "soon" && item.handle === false),
+        JSON.stringify(soonHandles));
+
+      check("그 상태에서 손잡이를 눌러도 끌기가 시작되지 않는다",
+        await page.evaluate(() => {
+
+          const handle =
+            document.getElementById("studioCanvasAddHandle-shape_rect");
+
+          handle.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+
+          return window.getStudioMaterialDragState().itemId === null;
+
+        }),
+        "");
+
+      check("페이지 오류 0", page.__errors.length === 0,
+        page.__errors.slice(0, 2).join(" | "));
+
+      await page.__ctx.close();
+
+    }
+
+
+    /* =====================================================
+       [reach] — 계약이 허용하는 자리에 UI 로 닿는가
+                 (STUDIO-LAYERS-MATERIALS-1C · §37-1)
+    ====================================================== */
+
+    if (wants("reach")) {
+
+      section("reach");
+
+      const page = await openStudio(browser, { package: reachPackage({}) });
+
+      await canvasFrame(page, false);
+      await enableCanvasEditing(page);
+
+      await openMaterials(page);
+
+      /* ---- 1. 전수 비교 — 카탈로그 targets == 계약이 허용하는 집합 ----
+
+         ★ 표를 여기에 옮겨 적지 않는다. 계약의 두 배열을 **그대로
+           읽어** 비교한다 — 사본을 만들면 표가 바뀐 날 테스트만 통과한다. */
+
+      const matrix = await page.evaluate(() => {
+
+        const allowed = {
+          flow: window.SKIN_HOME_CANVAS_BLOCK_TYPES,
+          overlay: window.SKIN_HOME_CANVAS_ELEMENT_TYPES,
+          frame: window.SKIN_HOME_CANVAS_ELEMENT_TYPES
+        };
+
+        return window.SKIN_HOME_CANVAS_MATERIALS.map((item) => {
+
+          const preset =
+            window.resolveSkinHomeCanvasMaterialPreset(item.id);
+
+          const contract =
+            ["flow", "overlay", "frame"].filter(
+              (target) => allowed[target].indexOf(preset.type) !== -1);
+
+          return {
+            id: item.id,
+            type: preset.type,
+            targets: preset.targets.slice().sort(),
+            contract: contract.sort()
+          };
+
+        });
+
+      });
+
+      check("★ 계약이 허용하는 자리와 카탈로그의 자리가 **완전히** 같다",
+        matrix.length === 19 &&
+        matrix.every((row) => row.targets.join("/") === row.contract.join("/")),
+        JSON.stringify(
+          matrix
+            .filter((row) => row.targets.join("/") !== row.contract.join("/"))
+            .map((row) => [row.id, row.targets.join("/"), row.contract.join("/")])));
+
+      check("★ 계약 밖 자리를 연 재료가 없다(금지 표 무변경)",
+        matrix.every((row) =>
+          row.targets.every((target) => row.contract.indexOf(target) !== -1)),
+        JSON.stringify(matrix.map((row) => [row.id, row.targets.join("/")]).slice(0, 3)));
+
+      /* ---- 2. 누르기의 기본 자리는 1B 그대로다 ---- */
+
+      await openMaterialItems(page, "text");
+
+      const textClick =
+        (await addState(page)).items.find((item) => item.id === "text_title");
+
+      check("★ 글자를 **누르면** 지금까지처럼 자유 층이다",
+        textClick && textClick.state === "add" && textClick.target === "overlay",
+        JSON.stringify(textClick && { s: textClick.state, t: textClick.target }));
+
+      await openMaterialItems(page, "logo");
+
+      const logoClick =
+        (await addState(page)).items.find((item) => item.id === "logo_basic");
+
+      check("★ 로고를 **누르면** 지금까지처럼 흐름이다",
+        logoClick && logoClick.state === "add" && logoClick.target === "flow",
+        JSON.stringify(logoClick && { s: logoClick.state, t: logoClick.target }));
+
+      /* ---- 3. 끌기로는 계약의 **모든** 자리에 닿는다 ---- */
+
+      await page.evaluate(() => window.postCanvasProbeToFrame());
+      await sleep(600);
+
+      const points = await canvasScreenPoints(page);
+
+      check("이 스킨에는 흐름 띠와 프레임이 함께 있다",
+        !!points.band && !!points.band.inside && !!points.band.below && !!points.frame,
+        JSON.stringify({ band: !!points.band, frame: !!points.frameId }));
+
+      const planAt = (id, at) =>
+        page.evaluate(
+          (arg) => window.studioMaterialDropPlanAt(arg.id, arg.at.x, arg.at.y),
+          { id: id, at: at });
+
+      const reach = {};
+
+      for (const id of ["text_title", "logo_basic", "nav_all"]) {
+
+        reach[id] = {
+          flow: (await planAt(id, points.band.inside)).target || "",
+          overlay: (await planAt(id, points.band.below)).target || "",
+          frame: (await planAt(id, points.frame)).target || ""
+        };
+
+      }
+
+      check("★ 글자는 끌기로 흐름 · 자유 층 · 프레임 안 **셋 모두**에 닿는다",
+        reach.text_title.flow === "flow" &&
+        reach.text_title.overlay === "overlay" &&
+        reach.text_title.frame === "frame",
+        JSON.stringify(reach.text_title));
+
+      check("★ 로고도 셋 모두에 닿는다(아직 만들지 않은 스킨에서)",
+        reach.logo_basic.flow === "flow" &&
+        reach.logo_basic.overlay === "overlay" &&
+        reach.logo_basic.frame === "frame",
+        JSON.stringify(reach.logo_basic));
+
+      check("★ 카테고리 메뉴도 셋 모두에 닿는다",
+        reach.nav_all.flow === "flow" &&
+        reach.nav_all.overlay === "overlay" &&
+        reach.nav_all.frame === "frame",
+        JSON.stringify(reach.nav_all));
+
+      /* ---- 4. 금지 조합은 그대로 막혀 있다 ---- */
+
+      const forbidden = await page.evaluate((frameId) => {
+
+        const at =
+          (target, type, materialId) =>
+            window.commitStudioCanvasAddNode({
+              target: target, type: type, materialId: materialId,
+              slot: "", frameId: frameId
+            });
+
+        return {
+          dividerOverlay: at("overlay", "divider", "divider_thin"),
+          dividerFrame: at("frame", "divider", "divider_thin"),
+          photoFlow: at("flow", "photo", "photo_basic"),
+          shapeFlow: at("flow", "shape", "shape_rect"),
+          stickerFlow: at("flow", "sticker", "sticker_tape"),
+          mainFrame: at("frame", "main_visual", "main_visual_basic"),
+          mainOverlay: at("overlay", "main_visual", "main_visual_basic")
+        };
+
+      }, points.frameId);
+
+      check("★ 계약이 막는 조합은 관문이 그대로 거절한다",
+        Object.keys(forbidden).every((key) =>
+          forbidden[key].accepted === false && forbidden[key].reason === "target"),
+        JSON.stringify(
+          Object.keys(forbidden).map((key) => [key, forbidden[key].reason])));
+
+      check("★ 거절된 요청은 데이터를 한 줄도 쓰지 않았다",
+        v2Overlays(await readCanvas(page)).length === 0 &&
+        v2Blocks(await readCanvas(page)).length === 2,
+        JSON.stringify(v2Blocks(await readCanvas(page)).map((b) => b.type)));
+
+      /* 흐름 전용 재료는 프레임 위에서도 흐름이다(§36-5 무변경) */
+      const dividerOnFrame =
+        await planAt("divider_thin", points.frame);
+
+      const dividerBelow =
+        await planAt("divider_thin", points.band.below);
+
+      check("★ 흐름 전용 재료는 띠 안이든 밖이든 · 프레임 위든 흐름이다",
+        dividerOnFrame.ok === true && dividerOnFrame.target === "flow" &&
+        dividerBelow.ok === true && dividerBelow.target === "flow",
+        JSON.stringify({ f: dividerOnFrame.target, b: dividerBelow.target }));
 
       check("페이지 오류 0", page.__errors.length === 0,
         page.__errors.slice(0, 2).join(" | "));
@@ -1944,8 +2512,26 @@ async function main() {
           }).length,
           cut: items.filter((node) => node.scrollWidth > node.clientWidth + 1).length,
 
-          /* 끌기가 되려면 브라우저가 먼저 스크롤을 가져가면 안 된다 */
-          touchAction: items.length ? getComputedStyle(items[0]).touchAction : ""
+          /* 끌기가 되려면 브라우저가 먼저 스크롤을 가져가면 안 된다 —
+             1C 에서 그 규칙은 **손잡이 하나**로 좁아졌다(§37-3) */
+          touchAction: items.length ? getComputedStyle(items[0]).touchAction : "",
+          handleTouchAction:
+            (() => {
+              const handle =
+                screen.querySelector(".studio-material-item-handle");
+              return handle ? getComputedStyle(handle).touchAction : "";
+            })(),
+          handles: screen.querySelectorAll(".studio-material-item-handle").length,
+
+          /* 손가락이 닿을 크기인가 — 390px 에서 키운다 */
+          handleBox:
+            (() => {
+              const handle =
+                screen.querySelector(".studio-material-item-handle");
+              if (!handle) return null;
+              const r = handle.getBoundingClientRect();
+              return { w: Math.round(r.width), h: Math.round(r.height) };
+            })()
         };
 
       });
@@ -1955,27 +2541,72 @@ async function main() {
         itemBox.clipped === 0 && itemBox.cut === 0,
         JSON.stringify(itemBox));
 
-      check("★ 재료 단추는 touch-action 이 none 이다(350ms 길게 누르기)",
-        itemBox.touchAction === "none", itemBox.touchAction);
+      check("★ 1C — 카드 본문은 `pan-y`, 손잡이만 `none` 이다",
+        itemBox.touchAction === "pan-y" &&
+        itemBox.handleTouchAction === "none" &&
+        itemBox.handles === 4,
+        JSON.stringify({ body: itemBox.touchAction, handle: itemBox.handleTouchAction }));
 
-      /* 터치 길게 누르기 — 350ms 전에는 시작하지 않는다.
+      check("★ 390px 에서 손잡이가 손가락에 닿을 크기다(28px 이상)",
+        !!itemBox.handleBox &&
+        itemBox.handleBox.w >= 28 && itemBox.handleBox.h >= 28,
+        JSON.stringify(itemBox.handleBox));
 
-         ★ **진짜 터치 이벤트**로 잰다. 합성 PointerEvent 는
-           setPointerCapture() 에서 던지고(브라우저가 모르는
-           pointerId), 그 실패는 코드가 일부러 끌기를 포기하는
-           자리라 이 관문을 지나지 못한다. */
+      /* ---- 터치 제스처 — **진짜 터치 이벤트**로 잰다 ----
+
+         ★ 합성 PointerEvent 는 setPointerCapture() 에서 던지고
+           (브라우저가 모르는 pointerId), 그 실패는 코드가 일부러
+           끌기를 포기하는 자리라 이 관문을 지나지 못한다. */
       const cdp = await page.context().newCDPSession(page);
 
-      const touchAt = await page.evaluate(() => {
-        const r =
-          document.getElementById("studioCanvasAddItem-shape_rect")
-            .getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      });
+      const touchPointOf = (id, part) => materialPointOf(page, id, part);
+
+      const press = async (at, hold) => {
+
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: at.x, y: at.y }]
+        });
+
+        await sleep(hold);
+
+        const state =
+          await page.evaluate(() => window.getStudioMaterialDragState().dragging);
+
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: []
+        });
+
+        await sleep(300);
+
+        return state;
+
+      };
+
+      /* 1) 손잡이가 **아닌** 곳을 길게 눌러도 끌기가 아니다 */
+
+      const bodyHold =
+        await press(await touchPointOf("shape_rect", "body"), 600);
+
+      check("★ 카드 본문을 길게 눌러도 끌기가 시작되지 않는다",
+        bodyHold === false, String(bodyHold));
+
+      /* ★ 그 길게 누르기가 **탭으로 끝났는지**는 엔진이 정한다(길게
+         누르기에서 click 을 보내지 않는 경우가 있다). 여기서 보려는
+         것은 "끌기가 아니었다" 하나이므로 그 뒤를 단언하지 않고,
+         다음 절이 자기 기준선을 다시 잰다. */
+
+      await openMaterialItems(page, "shape");
+
+      /* 2) 손잡이는 350ms 를 지나야 시작한다 */
+
+      const handleAt =
+        await touchPointOf("shape_rect", "handle");
 
       await cdp.send("Input.dispatchTouchEvent", {
         type: "touchStart",
-        touchPoints: [{ x: touchAt.x, y: touchAt.y }]
+        touchPoints: [{ x: handleAt.x, y: handleAt.y }]
       });
 
       await sleep(150);
@@ -1995,9 +2626,119 @@ async function main() {
 
       await sleep(400);
 
-      check("★ 터치는 350ms 길게 눌러야 끌기가 시작된다",
+      check("★ 손잡이 터치는 350ms 길게 눌러야 끌기가 시작된다",
         touchEarly === false && touchLate === true,
         JSON.stringify({ early: touchEarly, late: touchLate }));
+
+      /* 3) 빠른 탭은 **한 번**만 만든다 */
+
+      await openMaterialItems(page, "shape");
+
+      const beforeTap =
+        v2Overlays(await readCanvas(page)).length;
+
+      const tapAt =
+        await touchPointOf("shape_ellipse", "body");
+
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchStart",
+        touchPoints: [{ x: tapAt.x, y: tapAt.y }]
+      });
+
+      await cdp.send("Input.dispatchTouchEvent", {
+        type: "touchEnd",
+        touchPoints: []
+      });
+
+      await sleep(1000);
+
+      check("★ 빠른 탭은 재료를 **하나만** 만든다",
+        v2Overlays(await readCanvas(page)).length === beforeTap + 1,
+        JSON.stringify({ before: beforeTap,
+          after: v2Overlays(await readCanvas(page)).length }));
+
+      /* 4) 카드 본문 위의 세로 swipe 는 **목록을 넘긴다** */
+
+      await openMaterials(page);
+
+      const scroller = await page.evaluate(() => {
+
+        let node =
+          document.getElementById("studioCanvasAdd");
+
+        while (node && node !== document.body) {
+
+          if (node.scrollHeight > node.clientHeight + 4) {
+
+            if (!node.id) {
+              node.id = "studioMaterialScrollProbe";
+            }
+
+            return { id: node.id, top: node.scrollTop };
+
+          }
+
+          node = node.parentElement;
+
+        }
+
+        return null;
+
+      });
+
+      check("재료 화면이 세로로 넘길 수 있는 길이다(swipe 를 잴 수 있다)",
+        !!scroller, JSON.stringify(scroller));
+
+      if (scroller) {
+
+        const swipeAt =
+          await page.evaluate(() => {
+
+            const card =
+              document.getElementById("studioCanvasAddCard-photo");
+
+            const r = card.getBoundingClientRect();
+
+            return { x: r.left + r.width / 2, y: r.bottom - 10 };
+
+          });
+
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: swipeAt.x, y: swipeAt.y }]
+        });
+
+        for (let step = 1; step <= 6; step += 1) {
+
+          await cdp.send("Input.dispatchTouchEvent", {
+            type: "touchMove",
+            touchPoints: [{ x: swipeAt.x, y: swipeAt.y - step * 12 }]
+          });
+
+          await sleep(20);
+
+        }
+
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: []
+        });
+
+        await sleep(500);
+
+        const moved = await page.evaluate(
+          (id) => document.getElementById(id).scrollTop, scroller.id);
+
+        check("★ 카드 본문 위의 세로 swipe 가 실제로 목록을 넘긴다",
+          moved > scroller.top, JSON.stringify({ from: scroller.top, to: moved }));
+
+        check("그 swipe 는 끌기가 아니었다(그림자가 없다)",
+          await page.evaluate(() =>
+            window.getStudioMaterialDragState().dragging === false &&
+            !document.getElementById("studioMaterialGhost")),
+          "");
+
+      }
 
       check("페이지 오류 0", page.__errors.length === 0,
         page.__errors.slice(0, 2).join(" | "));
