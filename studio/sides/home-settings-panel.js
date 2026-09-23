@@ -405,7 +405,8 @@
     }
 
     if (typeof window.showStudioLeftPanelMode === "function") {
-      window.showStudioLeftPanelMode("images");
+      /* STUDIO-LAYERS-MEDIA-1 — ← 는 이 패널로 돌아온다 */
+      window.showStudioLeftPanelMode("images", { returnTo: "layout" });
     }
 
   }

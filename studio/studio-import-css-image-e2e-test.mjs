@@ -899,7 +899,7 @@ async function runSlots(context) {
     );
 
     await applyImport(page);
-    await page.click("#studioImagesButton");
+    await openImagesPanel(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 8000 });
 
     const panel = await page.evaluate(() => Array.from(document.querySelectorAll(".images-panel-slot")).map((li) => ({
@@ -908,12 +908,18 @@ async function runSlots(context) {
       empty: !!li.querySelector(".images-panel-slot-thumb--empty")
     })));
 
-    const heroRow = panel.find((row) => row.sub.indexOf("hero_photo") === 0);
+    const heroRow = panel.find((row) => row.label === "페어 메인 이미지");
 
     record(
       "S8. Images 패널에 새 슬롯이 '비어 있음'으로 나오고 기존 슬롯은 연결 그대로",
-      heroRow && heroRow.empty && heroRow.label === "페어 메인 이미지" && heroRow.sub.indexOf("필수") !== -1 &&
-        panel.some((row) => row.sub.indexOf("cover") === 0 && !row.empty),
+      heroRow && heroRow.empty && heroRow.sub.indexOf("필수") !== -1 &&
+        panel.some((row) => row.label !== "페어 메인 이미지" && !row.empty),
+      JSON.stringify(panel)
+    );
+
+    record(
+      "S8-b. STUDIO-LAYERS-MEDIA-1 — 슬롯 줄에 기술 이름(hero_photo)이 없다",
+      panel.every((row) => row.sub.indexOf("hero_photo") === -1 && row.label.indexOf("hero_photo") === -1),
       JSON.stringify(panel)
     );
 
@@ -927,6 +933,20 @@ async function runSlots(context) {
 /* =========================================================
    [ai] AI 첨부 이미지 → 슬롯
 ========================================================== */
+
+/* STUDIO-LAYERS-MEDIA-1 — 상단 Images 버튼이 없어졌다. 슬롯을 정하지
+   않고 여는 길(목록 화면)로 연다. */
+async function openImagesPanel(page) {
+  await page.evaluate(() => {
+    window.showStudioLeftPanelMode("layers");
+    window.showStudioLeftPanelMode("images");
+  });
+  await page.waitForFunction(() => {
+    const o = document.querySelector("#studioLeftPanelImages .images-panel-overlay");
+    return !!o && !o.hidden;
+  });
+}
+
 
 async function openAiPanel(page) {
   const isOpen = await page.evaluate(() => document.getElementById("studioAiDrawer").classList.contains("is-open"));
@@ -1063,11 +1083,11 @@ async function runAi(context) {
     record("A6. 상태 줄이 슬롯에 넣었다고 알린다", /슬롯에 넣었습니다/.test(status) || /슬롯에 넣었습니다/.test(await page.evaluate(() => document.getElementById("studioAiDrawer").textContent)), status);
 
     /* Images 패널에서 바꾸기 */
-    await page.click("#studioImagesButton");
+    await openImagesPanel(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 8000 });
 
     const heroRow = await page.evaluate(() => {
-      const row = Array.from(document.querySelectorAll(".images-panel-slot")).find((li) => li.querySelector(".images-panel-slot-sub").textContent.indexOf("hero_photo") === 0);
+      const row = Array.from(document.querySelectorAll(".images-panel-slot")).find((li) => li.querySelector(".images-panel-slot-label").textContent === "페어 메인 이미지");
       if (!row) return null;
       const img = row.querySelector(".images-panel-slot-thumb img");
       return { label: row.querySelector(".images-panel-slot-label").textContent, thumb: img ? img.getAttribute("src") : "" };
@@ -1080,7 +1100,7 @@ async function runAi(context) {
     );
 
     await page.evaluate(() => {
-      const row = Array.from(document.querySelectorAll(".images-panel-slot")).find((li) => li.querySelector(".images-panel-slot-sub").textContent.indexOf("hero_photo") === 0);
+      const row = Array.from(document.querySelectorAll(".images-panel-slot")).find((li) => li.querySelector(".images-panel-slot-label").textContent === "페어 메인 이미지");
       row.querySelector(".images-panel-slot-pick").click();
     });
     await page.waitForSelector(".images-panel-grid-item, .images-panel-image", { timeout: 8000 }).catch(() => {});

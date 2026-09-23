@@ -3203,12 +3203,33 @@ window.addEventListener("message", (event) => {
     const root =
       inspectorSkinRoot();
 
-    setInspectorSelection(
+    const picked =
       (root && typeof data.editId === "string" && window.isValidInspectorEditId(data.editId))
         ? root.querySelector(`[data-imory-edit-id="${data.editId}"]`)
-        : null,
-      { silent: true }
-    );
+        : null;
+
+    setInspectorSelection(picked, { silent: true });
+
+    /* =====================================================
+       STUDIO-LAYERS-MEDIA-1 — 부모가 시킨 선택에도 **좌표를 한 번
+       올린다**(setInspectorSelection 머리말이 이미 약속한 그 보고다).
+
+       silent 는 "선택했다는 말을 되돌려 보내지 않는다"는 뜻이지
+       "좌표를 숨긴다"가 아니다. 그런데 이 경로에서는 아무도
+       postInspectorRects() 를 부르지 않아, Layers 처럼 **부모가
+       고르는 입구**로 고른 요소는 부모가 좌표를 영영 모른 채로
+       남았다 — 캔버스의 축 평행 테두리와 이름표는 그 좌표가 있어야
+       그려지므로 화면에 아무것도 표시되지 않았다(§5). Moveable 틀이
+       붙는 종류는 그 틀이 대신 보여서 가려져 있었을 뿐이다.
+
+       ★ 고른 것이 없을 때는 보내지 않는다. selected:null 보고는
+         "프레임이 그 요소를 놓았다"는 뜻으로 읽히는 자리가 있어
+         (studio/inspector/studio-inspector.js 의 rects 처리) 부모가
+         방금 푼 선택에 그 말을 되풀이할 이유가 없다.
+    ====================================================== */
+    if (picked) {
+      postInspectorRects();
+    }
 
     return;
 

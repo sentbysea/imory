@@ -77,6 +77,16 @@ const STUDIO_CANVAS_LAYER_LABELS = {
 };
 
 
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 그림이 들어가는 재료
+
+   이 셋만 `props.slot` 을 갖는다(계약 §14-4). 행을 누르면 선택과
+   **동시에** 그 자리의 이미지 선택기로 넘어가는 것도 이 셋이다.
+========================================================== */
+const STUDIO_CANVAS_LAYER_IMAGE_TYPES =
+  ["photo", "sticker", "logo"];
+
+
 /* 트리의 두 묶음 — 계획 문서 §2-1 의 그 표 */
 const STUDIO_CANVAS_LAYER_GROUPS = [
   { key: "flow", label: "자동 배치" },
@@ -121,6 +131,11 @@ let studioCanvasLayersAddToggle = null;
 let studioCanvasLayersAddHost = null;
 
 let studioCanvasLayersNote = null;
+
+/* STUDIO-LAYERS-MEDIA-1 — 트리 아래의 "스킨 이미지" 구역 */
+let studioCanvasLayersMedia = null;
+
+let studioCanvasLayersMediaList = null;
 
 
 /* 재료 추가 자리가 펼쳐져 있는가 — 화면 상태다(저장되지 않는다) */
@@ -249,9 +264,25 @@ function studioCanvasLayersRows() {
       return;
     }
 
+    const props =
+      (node.props && typeof node.props === "object") ? node.props : null;
+
     stateOf[node.id] = {
       hidden: node.hidden === true,
-      locked: node.locked === true
+      locked: node.locked === true,
+
+      /* STUDIO-LAYERS-MEDIA-1 — 그림이 들어가는 자리를 가진 행인가.
+         사진 · 스티커 · 로고가 그 셋이고(계약 §14-4 의 표), 자리
+         이름은 `props.slot` 하나다. 메인 비주얼 자신은 자리를 갖지
+         않는다 — 그 안의 사진이 갖는다. */
+      slot:
+        (
+          STUDIO_CANVAS_LAYER_IMAGE_TYPES.indexOf(node.type) !== -1 &&
+          props &&
+          typeof props.slot === "string"
+        )
+          ? props.slot
+          : ""
     };
 
   };
@@ -299,6 +330,9 @@ function studioCanvasLayersRows() {
 
     hidden: stateOf[node.id] ? stateOf[node.id].hidden : false,
     locked: stateOf[node.id] ? stateOf[node.id].locked : false,
+
+    /* 그림 자리 이름(없으면 "") — STUDIO-LAYERS-MEDIA-1 */
+    slot: stateOf[node.id] ? stateOf[node.id].slot : "",
 
     primary:
       node.kind === "frame-element" &&
@@ -405,6 +439,100 @@ function selectStudioCanvasLayer(id, additive) {
     primaryId: id,
     mode: additive ? "toggle" : "replace"
   });
+
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 사진 행을 누르면 그 자리의 이미지 화면
+
+   상단 Images 버튼이 없어진 자리를 메우는 길이다. 행을 한 번 누르면
+   **고르는 일과 여는 일이 함께** 일어난다 — Preview 에는 파란 테두리,
+   왼쪽 패널에는 그 자리의 이미지 선택기. ← Layers 로 돌아오면 트리와
+   선택이 그대로다(선택은 이 파일이 들고 있지 않고 캔버스 선택 하나가
+   원천이라 저절로 그렇다).
+
+   ★ 여는 조건을 좁게 잡는다(사용자 지시)
+
+     · 수식키(Ctrl/⌘ · Shift)가 눌린 클릭은 **고르기만** 한다
+       — 여러 개를 고르는 중에 화면이 바뀌면 그 흐름이 끊긴다.
+     · 끌고 있는 동안에는 열지 않는다.
+     · 손잡이 · 눈 · 자물쇠 · 삭제는 애초에 이 핸들러에 오지 않는다
+       (그 단추들이 pointerdown/click 을 멈춘다).
+     · 그림 자리가 없는 종류(글자 · 도형 · 카테고리 …)는 고르기만
+       한다 — 바꿀 사진이 없다.
+
+   ★ 슬롯 이름이 지금 선언에 없으면 열지 않는다. 그런 자리는 패널이
+     보여 줄 수 없고(setStudioImageSlot 도 거절한다), 빈 화면으로
+     넘어가느니 트리에 남는 편이 낫다.
+========================================================== */
+
+function studioCanvasLayersDeclaredSlot(slotName) {
+
+  if (
+    typeof slotName !== "string" ||
+    !slotName ||
+    typeof window.getStudioImageSlotState !== "function"
+  ) {
+    return null;
+  }
+
+  const state =
+    window.getStudioImageSlotState();
+
+  if (!state || !Array.isArray(state.slots)) {
+    return null;
+  }
+
+  return state.slots.find((slot) => slot.name === slotName) || null;
+
+}
+
+
+function openStudioCanvasLayerImages(slotName) {
+
+  if (!studioCanvasLayersDeclaredSlot(slotName)) {
+    return false;
+  }
+
+  if (typeof window.setSkinImagesPanelSlot !== "function") {
+    return false;
+  }
+
+  window.setSkinImagesPanelSlot(slotName);
+
+  if (typeof window.showStudioLeftPanelMode !== "function") {
+    return false;
+  }
+
+  window.showStudioLeftPanelMode("images", { returnTo: "layers" });
+
+  return true;
+
+}
+
+
+/* 그 자리에 지금 걸린 이미지의 식별자(없으면 "") — 트리 지문용 */
+function studioCanvasLayersThumbKey(slotName) {
+
+  const declared =
+    studioCanvasLayersDeclaredSlot(slotName);
+
+  return (declared && declared.binding) ? declared.binding.imageId : "";
+
+}
+
+
+function studioCanvasLayersIsDragging() {
+
+  if (typeof window.getStudioCanvasLayersDragState !== "function") {
+    return false;
+  }
+
+  const state =
+    window.getStudioCanvasLayersDragState();
+
+  return !!(state && state.dragging);
 
 }
 
@@ -528,6 +656,47 @@ function ensureStudioCanvasLayers() {
     "studioCanvasLayersEmpty";
 
   studioCanvasLayersRoot.appendChild(studioCanvasLayersEmpty);
+
+
+  /* ── STUDIO-LAYERS-MEDIA-1 — 스킨 이미지 ──
+
+     트리의 행으로 표현되지 않는 그림 자리들이다. 캔버스가 아닌
+     스킨(legacy · v1)에서는 **모든** 자리가 여기 있고, v2 에서는
+     HOME 캔버스가 쓰지 않는 자리(CATEGORY · POST · BANNER 템플릿이
+     쓰는 그림 · 파비콘류)만 남는다.
+
+     ★ 상단 Images 버튼을 되살리지 않기 위한 자리다. 그 버튼이
+       사라져도 "예전에 바꿀 수 있던 그림"에 손이 닿아야 한다.
+     ★ 기술 이름(slot.name)은 적지 않는다 — 사람이 읽는 label 만.
+  */
+
+  studioCanvasLayersMedia =
+    studioCanvasLayersEl("section", "studio-canvas-layers-media");
+
+  studioCanvasLayersMedia.id =
+    "studioCanvasLayersMedia";
+
+  studioCanvasLayersMedia.hidden =
+    true;
+
+  const mediaHeading =
+    studioCanvasLayersEl(
+      "p",
+      "studio-canvas-layers-media-heading",
+      "스킨 이미지"
+    );
+
+  studioCanvasLayersMedia.appendChild(mediaHeading);
+
+  studioCanvasLayersMediaList =
+    studioCanvasLayersEl("div", "studio-canvas-layers-media-list");
+
+  studioCanvasLayersMediaList.id =
+    "studioCanvasLayersMediaList";
+
+  studioCanvasLayersMedia.appendChild(studioCanvasLayersMediaList);
+
+  studioCanvasLayersRoot.appendChild(studioCanvasLayersMedia);
 
 
   host.appendChild(studioCanvasLayersRoot);
@@ -827,6 +996,39 @@ function studioCanvasLayersRowNode(row, expanded) {
   pick.type = "button";
   pick.id = `studioCanvasLayer-${row.id}`;
 
+  /* ── STUDIO-LAYERS-MEDIA-1 — 사진 행의 작은 미리보기 ──
+     지금 그 자리에 무엇이 들어 있는지 트리에서 바로 보인다. 빈
+     자리는 빈 네모로 남는다(가짜 그림을 넣지 않는다). */
+
+  const declared =
+    row.slot ? studioCanvasLayersDeclaredSlot(row.slot) : null;
+
+  if (declared) {
+
+    const thumb =
+      studioCanvasLayersEl("span", "studio-canvas-layers-thumb");
+
+    thumb.dataset.layerThumb = declared.binding ? "filled" : "empty";
+
+    if (declared.binding) {
+
+      const img =
+        document.createElement("img");
+
+      img.src = declared.binding.imageUrl;
+      img.alt = "";
+      img.loading = "lazy";
+
+      thumb.appendChild(img);
+
+    }
+
+    pick.appendChild(thumb);
+
+  }
+
+  /* 이름은 지금까지처럼 **종류**다 — 트리는 구조를 읽는 화면이고,
+     그 자리의 사람이 읽는 이름은 넘어간 화면의 제목이 된다. */
   pick.appendChild(
     studioCanvasLayersEl(
       "span",
@@ -836,13 +1038,33 @@ function studioCanvasLayersRowNode(row, expanded) {
   );
 
   pick.title =
-    `${studioCanvasLayerLabel(row.type)} · ${row.id}`;
+    declared
+      ? `${declared.label} — 누르면 사진을 고릅니다`
+      : `${studioCanvasLayerLabel(row.type)} · ${row.id}`;
 
   pick.addEventListener("click", (event) => {
 
     /* Ctrl/⌘ 는 **더하기/빼기**다(계획 문서 §2-2). 그 판정도 여기서
        하지 않는다 — mode 만 넘기고 합치는 것은 선택 관문이 한다. */
-    selectStudioCanvasLayer(row.id, event.ctrlKey || event.metaKey);
+    const additive =
+      event.ctrlKey || event.metaKey;
+
+    const picked =
+      selectStudioCanvasLayer(row.id, additive);
+
+    /* STUDIO-LAYERS-MEDIA-1 — 수식키 없는 사진 행의 단일 클릭만
+       이미지 화면으로 넘어간다(위 ★). */
+    if (
+      !picked ||
+      additive ||
+      event.shiftKey ||
+      !row.slot ||
+      studioCanvasLayersIsDragging()
+    ) {
+      return;
+    }
+
+    openStudioCanvasLayerImages(row.slot);
 
   });
 
@@ -912,7 +1134,13 @@ function studioCanvasLayersShapeOf(rows, version) {
       `${row.id}:${row.kind}:${row.type}:${row.parentId || ""}:${row.index}` +
       `:${row.primary ? "p" : ""}${row.canBePrimary ? "P" : ""}` +
       `:${row.hidden ? "h" : ""}${row.locked ? "l" : ""}` +
-      `:${(row.kind === "block" && row.type === "main_visual" && !studioCanvasLayersExpanded(row.id)) ? "c" : ""}`
+      `:${(row.kind === "block" && row.type === "main_visual" && !studioCanvasLayersExpanded(row.id)) ? "c" : ""}` +
+
+      /* STUDIO-LAYERS-MEDIA-1 — 행의 작은 미리보기도 **모양**이다.
+         사진을 바꾸면 draft 의 구조는 그대로라 이 한 조각이 없으면
+         트리가 옛 그림을 그대로 들고 있는다(슬롯 연결은 구조가
+         아니라 값이라 위 칸들 중 어디에도 나타나지 않는다). */
+      `:${row.slot || ""}=${studioCanvasLayersThumbKey(row.slot)}`
   ).join(",");
 
 }
@@ -985,6 +1213,110 @@ function paintStudioCanvasLayersSelection() {
     때 이미 최신이어야 한다. 무거운 일(추가 자리 만들기)만 열려
     있을 때 한다.
 */
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 스킨 이미지 구역 그리기
+
+   트리가 비어 있든(legacy 스킨 · Select 가 꺼짐) 가득 차 있든 **늘**
+   그린다. 이 구역이 상단 Images 버튼을 대신하므로, 트리가 없다는
+   이유로 함께 사라지면 그 스킨의 그림에 손이 닿지 않는다.
+========================================================== */
+
+function studioCanvasLayersMediaSlots(rows) {
+
+  if (typeof window.getStudioImageSlotState !== "function") {
+    return [];
+  }
+
+  const state =
+    window.getStudioImageSlotState();
+
+  if (!state || !state.hasWorkingSkin || !Array.isArray(state.slots)) {
+    return [];
+  }
+
+  /* 트리의 행이 이미 보여 주는 자리는 뺀다(같은 자리를 두 곳에서
+     고르게 하지 않는다). v2 가 아니면 행 자체가 없으므로 전부 남는다.
+
+     ★ rows 는 부르는 쪽이 이미 만든 것을 넘긴다 — 여기서 다시 만들면
+       캔버스 전체를 한 번 더 풀고 다시 검증한다(파일 머리말의 그 비용). */
+  const shown =
+    new Set(
+      (Array.isArray(rows) ? rows : [])
+        .map((row) => row.slot)
+        .filter(Boolean)
+    );
+
+  return state.slots.filter((slot) => !shown.has(slot.name));
+
+}
+
+
+function renderStudioCanvasLayersMedia(rows) {
+
+  if (!studioCanvasLayersMedia || !studioCanvasLayersMediaList) {
+    return;
+  }
+
+  const slots =
+    studioCanvasLayersMediaSlots(rows);
+
+  studioCanvasLayersMedia.hidden =
+    !slots.length;
+
+  studioCanvasLayersMediaList.textContent =
+    "";
+
+  slots.forEach((slot) => {
+
+    const button =
+      studioCanvasLayersEl("button", "studio-canvas-layers-media-item");
+
+    button.type = "button";
+    button.id = `studioCanvasLayersMedia-${slot.name}`;
+    button.dataset.mediaSlot = slot.name;
+
+    const thumb =
+      studioCanvasLayersEl("span", "studio-canvas-layers-thumb");
+
+    thumb.dataset.layerThumb = slot.binding ? "filled" : "empty";
+
+    if (slot.binding) {
+
+      const img =
+        document.createElement("img");
+
+      img.src = slot.binding.imageUrl;
+      img.alt = "";
+      img.loading = "lazy";
+
+      thumb.appendChild(img);
+
+    }
+
+    button.appendChild(thumb);
+
+    button.appendChild(
+      studioCanvasLayersEl(
+        "span",
+        "studio-canvas-layers-media-name",
+        slot.label
+      )
+    );
+
+    button.title =
+      `${slot.label} — 누르면 사진을 고릅니다`;
+
+    button.addEventListener("click", () => {
+      openStudioCanvasLayerImages(slot.name);
+    });
+
+    studioCanvasLayersMediaList.appendChild(button);
+
+  });
+
+}
+
+
 function renderStudioCanvasLayers(force) {
 
   const root =
@@ -1001,6 +1333,13 @@ function renderStudioCanvasLayers(force) {
 
   const editing =
     studioCanvasLayersEditing();
+
+  /* 트리에 그릴 행들 — 한 번만 만든다. v2 가 아니면 빈 배열이고,
+     그때는 선언된 그림 자리가 **전부** 아래 구역으로 간다. */
+  const rows =
+    studioCanvasLayersRows();
+
+  renderStudioCanvasLayersMedia(rows);
 
 
   /* ── 트리를 그릴 수 없는 경우들 — 왜 비었는지 말해 준다 ── */
@@ -1022,9 +1361,6 @@ function renderStudioCanvasLayers(force) {
 
   }
 
-
-  const rows =
-    studioCanvasLayersRows();
 
   if (!rows.length) {
 
@@ -1200,6 +1536,9 @@ if (typeof window !== "undefined") {
           canBePrimary: row.canBePrimary,
           hidden: row.hidden,
           locked: row.locked,
+
+          /* STUDIO-LAYERS-MEDIA-1 — 그림 자리 이름(없으면 "") */
+          slot: row.slot || "",
           expanded:
             (row.kind === "block" && row.type === "main_visual")
               ? studioCanvasLayersExpanded(row.id)
@@ -1221,6 +1560,17 @@ if (typeof window !== "undefined") {
 
         selectedIds: selection.ids.slice(),
         primaryId: selection.primaryId,
+
+        /* STUDIO-LAYERS-MEDIA-1 — 트리 아래의 스킨 이미지 구역 */
+        media: {
+          visible: !!(studioCanvasLayersMedia && !studioCanvasLayersMedia.hidden),
+          slots:
+            studioCanvasLayersMediaList
+              ? Array.from(
+                  studioCanvasLayersMediaList.querySelectorAll(".studio-canvas-layers-media-item")
+                ).map((node) => node.dataset.mediaSlot)
+              : []
+        },
 
         add: {
           on:

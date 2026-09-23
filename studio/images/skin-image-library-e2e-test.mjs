@@ -167,6 +167,9 @@ function createMockBackend(options = {}) {
 
   const libraryReady = options.libraryReady !== false;
 
+  /* STUDIO-LAYERS-MEDIA-1 — 새 RPC 가 적용된 배포인가 */
+  options.everywhereReady = options.everywhereReady !== false;
+
   const state = {
     images: [],
     /* versionId -> { slotName: imageId } */
@@ -188,7 +191,11 @@ function createMockBackend(options = {}) {
     /* Image Library 도입 이전에 시드된 옛 슬롯 값 */
     legacySlotValues: options.seedLegacySlotValues || [],
     calls: [],
-    uploads: []
+    uploads: [],
+
+    /* STUDIO-LAYERS-MEDIA-1 */
+    removed: [],
+    failNextStorageRemove: !!options.failStorageRemove
   };
 
   if (options.seedImages) state.images.push(...options.seedImages);
@@ -237,6 +244,31 @@ function createMockBackend(options = {}) {
       }
       const idx = state.images.findIndex(i => i.id === body.p_image_id);
       if (idx < 0) return { status: 400, body: { message: "image not found or not owned by caller" } };
+      const [removed] = state.images.splice(idx, 1);
+      return { status: 200, body: removed.storage_path };
+    }
+
+    /* STUDIO-LAYERS-MEDIA-1 — 사용처에서 제거하고 삭제.
+       migration 20260923100000 의 계약 그대로: 모든 버전의 연결을 떼고
+       row 를 지운 뒤 storage_path 를 돌려준다. */
+    if (name === "delete_skin_image_everywhere") {
+
+      if (!options.everywhereReady) {
+        return {
+          status: 404,
+          body: { code: "PGRST202", message: "Could not find the function public.delete_skin_image_everywhere" }
+        };
+      }
+
+      const idx = state.images.findIndex(i => i.id === body.p_image_id);
+      if (idx < 0) return { status: 400, body: { message: "image not found or not owned by caller" } };
+
+      Object.keys(state.versionSlots).forEach((versionId) => {
+        Object.entries(state.versionSlots[versionId]).forEach(([slot, imageId]) => {
+          if (imageId === body.p_image_id) delete state.versionSlots[versionId][slot];
+        });
+      });
+
       const [removed] = state.images.splice(idx, 1);
       return { status: 200, body: removed.storage_path };
     }
@@ -336,6 +368,19 @@ function createMockBackend(options = {}) {
         return { status: 404, body: { code: "42P01", message: "does not exist" } };
       }
 
+      /* STUDIO-LAYERS-MEDIA-1 — 사용처 세기(image_id 로 거른다) */
+      const byImage = params.get("image_id") || "";
+      if (byImage.startsWith("eq.")) {
+        const imageId = byImage.slice(3);
+        const rows = [];
+        Object.entries(state.versionSlots).forEach(([versionId, slots]) => {
+          Object.entries(slots).forEach(([slot, id]) => {
+            if (id === imageId) rows.push({ version_id: versionId, slot_name: slot });
+          });
+        });
+        return { status: 200, body: rows };
+      }
+
       const eq = params.get("version_id") || "";
       const versionId = eq.startsWith("eq.") ? eq.slice(3) : eq;
       const rows = Object.entries(state.versionSlots[versionId] || {}).map(([slot, imageId]) => {
@@ -348,6 +393,16 @@ function createMockBackend(options = {}) {
     if (table === "skins") return { status: 200, body: [state.skin] };
 
     if (table === "skin_versions") {
+      /* STUDIO-LAYERS-MEDIA-1 — 사용처 세기의 둘째 질의 */
+      const inList = params.get("id") || "";
+      if (inList.startsWith("in.(")) {
+        const ids = inList.slice(4, -1).split(",").map(s => s.replace(/^"|"$/g, ""));
+        return {
+          status: 200,
+          body: ids.filter(id => state.versions[id]).map(id => ({ id, skin_id: SKIN_ID }))
+        };
+      }
+
       const eq = params.get("id") || "";
       const id = eq.startsWith("eq.") ? eq.slice(3) : eq;
       const v = state.versions[id];
@@ -427,7 +482,20 @@ async function installMock(page, backend) {
     }
 
     if (url.pathname === "/storage/v1/object/skin-images") {
-      /* remove() */
+      /* remove() — STUDIO-LAYERS-MEDIA-1: 무엇을 지웠는지 기록하고,
+         테스트가 요청하면 한 번 실패시킨다(파일만 남는 경우). */
+      let removed = [];
+      try { removed = (JSON.parse(req.postData() || "{}").prefixes) || []; } catch { /* 무시 */ }
+      backend.state.removed.push(...removed);
+
+      if (backend.state.failNextStorageRemove) {
+        backend.state.failNextStorageRemove = false;
+        return route.fulfill({
+          status: 400, headers, contentType: "application/json",
+          body: JSON.stringify({ message: "storage unavailable" })
+        });
+      }
+
       return route.fulfill({ status: 200, headers, contentType: "application/json", body: "[]" });
     }
 
@@ -578,7 +646,9 @@ async function openStudio(playwright, backend) {
   }
   await installMock(page, backend);
   await page.goto(`http://localhost:${PORT}/studio/`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector("#studioImagesButton:not([disabled])", { timeout: 20000, state: "attached" });
+  /* STUDIO-LAYERS-MEDIA-1 — Images 버튼이 없어졌다. 같은 관문
+     ("working draft 가 있는가")을 들고 있는 Layers 버튼을 기다린다. */
+  await page.waitForSelector("#studioLayersButton:not([disabled])", { timeout: 20000, state: "attached" });
   return { browser, page, errors };
 }
 
@@ -633,6 +703,34 @@ async function pasteInto(page, selector, payload) {
   때만 연다(studio-ai-panel-layout-e2e-test.mjs openTopDock과 같은
   규칙).
 */
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 이미지 화면을 여는 두 길
+
+   openImagesList()  슬롯을 정하지 않고 연다(목록 폴백). 예전
+                     "#studioImagesButton 클릭" 자리를 그대로 대신한다.
+   openImagesFor()   그 자리 하나로 연다(Layers 의 사진 행 · Select 의
+                     "이미지 변경" 이 쓰는 그 길).
+========================================================== */
+
+async function openImagesList(page) {
+  /* Layers 를 한 번 거친다 — 자리 하나 화면은 **방문 한 번**만
+     사는데(images-panel.js closeSkinImagesPanel), 그 닫힘이 여기서
+     일어난다. production 창구만 쓰는 길이다. */
+  await page.evaluate(() => {
+    window.showStudioLeftPanelMode("layers");
+    window.showStudioLeftPanelMode("images");
+  });
+  await page.waitForSelector(".images-panel-overlay:not([hidden])", { timeout: 10000 });
+}
+
+async function openImagesFor(page, slotName) {
+  await page.evaluate((slot) => {
+    window.setSkinImagesPanelSlot(slot);
+    window.showStudioLeftPanelMode("images", { returnTo: "layers" });
+  }, slotName);
+  await page.waitForSelector(".images-panel-overlay:not([hidden])", { timeout: 10000 });
+}
+
 async function openTopDock(page) {
   const isOpen = await page.evaluate(
     () => document.getElementById("studioTopDockZone").classList.contains("is-open")
@@ -659,7 +757,7 @@ async function testPanelFlow(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
     const slotNames = await page.$$eval(
@@ -737,7 +835,7 @@ async function testDraftPublishSeparation(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "a.png", PNG_BYTES, "image/png");
     await page.waitForSelector(".images-panel-card", { timeout: 10000 });
@@ -817,7 +915,7 @@ async function testReloadRestoresDraftBindings(playwright) {
       !!avatarSrc && avatarSrc.includes("seed.png"), String(avatarSrc));
 
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
     const thumbCount = await page.$$eval(
@@ -847,7 +945,7 @@ async function testValidationAndDeletionGuard(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
     /* 허용되지 않는 형식 */
@@ -866,29 +964,429 @@ async function testValidationAndDeletionGuard(playwright) {
     check("[guard] 5MB 초과 파일은 거절되고 사유가 보인다",
       /너무 커/.test(message || ""), String(message));
 
-    /* 정상 업로드 후 연결 → 삭제 버튼 비활성 */
+    /* =====================================================
+       STUDIO-LAYERS-MEDIA-1 — 연결된 이미지도 **막지 않는다**
+
+       예전에는 버튼이 disabled 였다. 이제는 누르면 어디서 쓰는지
+       세어 보여 주고, 취소하면 아무것도 바뀌지 않는다.
+    ====================================================== */
+
+    /* 정상 업로드 후 연결 */
     await attachFile(page, "ok.png", PNG_BYTES, "image/png");
     await page.waitForSelector(".images-panel-card", { timeout: 10000 });
     await page.click(".images-panel-card-attach");
     await page.waitForTimeout(300);
 
     const deleteDisabled = await page.getAttribute(".images-panel-card-delete", "disabled");
-    check("[guard] 지금 슬롯에 연결된 이미지는 삭제 버튼이 막힌다",
-      deleteDisabled !== null, `disabled=${deleteDisabled}`);
+    check("[guard] 지금 쓰는 이미지도 삭제 버튼이 살아 있다(막지 않는다)",
+      deleteDisabled === null, `disabled=${deleteDisabled}`);
 
-    /* 저장된 버전이 참조하는 이미지 — RPC가 거절하고 그 사유가 보인다 */
-    await page.click(".images-panel-slot .images-panel-slot-clear");
-    await page.waitForTimeout(200);
+    check("[guard] 대신 '지금 쓰는 중' 표식이 붙는다",
+      await page.evaluate(() =>
+        !!document.querySelector(".images-panel-card--in-use")), "");
+
+    /* 저장된 버전도 그 이미지를 쓴다 — 사용처가 둘이 된다 */
     backend.state.versionSlots[PUBLISHED_V0] = { profile: "img-1" };
 
     await page.click(".images-panel-card-delete");
-    await page.waitForTimeout(600);
-    message = await page.textContent(".images-panel-message");
-    check("[guard] 과거 버전이 참조하는 이미지는 삭제되지 않고 사유가 보인다",
-      /still used/.test(message || "") && backend.state.images.length === 1,
-      `${message} / images=${backend.state.images.length}`);
+    await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 });
+
+    const dialog = await page.evaluate(() => ({
+      message: document.querySelector(".studio-confirm-message").textContent,
+      confirm: document.querySelector(".studio-confirm-button--primary").textContent,
+      cancel: document.querySelector(".studio-confirm-button:not(.studio-confirm-button--primary)").textContent
+    }));
+
+    check("[guard] 몇 곳에서 쓰는지와 어디인지를 보여 준다",
+      /2곳에서 사용 중/.test(dialog.message) &&
+      /지금 편집 중인 화면/.test(dialog.message) &&
+      /공개 중인 스킨/.test(dialog.message),
+      JSON.stringify(dialog.message));
+
+    check("[guard] 확인 문구가 지시한 그대로다",
+      dialog.message.includes("사용처에서 이미지를 비우고 파일을 삭제할까요?") &&
+      dialog.confirm === "사용처에서 제거하고 삭제" &&
+      dialog.cancel === "취소",
+      JSON.stringify(dialog));
+
+    await page.click(".studio-confirm-button:not(.studio-confirm-button--primary)");
+    await page.waitForTimeout(400);
+
+    check("[guard] 취소하면 데이터도 파일도 그대로다",
+      backend.state.images.length === 1 &&
+      backend.state.removed.length === 0 &&
+      !backend.state.calls.some(c => c.name === "delete_skin_image_everywhere") &&
+      Object.keys(backend.state.versionSlots[PUBLISHED_V0] || {}).length === 1,
+      JSON.stringify({
+        images: backend.state.images.length,
+        removed: backend.state.removed.length,
+        published: backend.state.versionSlots[PUBLISHED_V0]
+      }));
 
     check("[guard] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+  } finally {
+    await browser.close();
+  }
+}
+
+
+/* ---------------------------------------------------------
+   4-b) STUDIO-LAYERS-MEDIA-1 — 사용처에서 제거하고 삭제
+
+   쓰지 않는 사진 · 쓰는 사진 · Storage 실패 · migration 미적용
+   네 갈래를 한 번씩 밟는다.
+--------------------------------------------------------- */
+
+async function testDeleteEverywhere(playwright) {
+  console.log("\n[delete] 미사용 삭제 / 사용처에서 제거하고 삭제 / 파일 실패 재시도 / 미적용 배포");
+
+  /* ---- 1. 쓰지 않는 사진 ---- */
+  {
+    const backend = createMockBackend();
+    const { browser, page, errors } = await openStudio(playwright, backend);
+
+    try {
+      await openTopDock(page);
+      await openImagesList(page);
+      await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+      await attachFile(page, "free.png", PNG_BYTES, "image/png");
+      await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+
+      await page.click(".images-panel-card-delete");
+      await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 });
+
+      const message = await page.textContent(".studio-confirm-message");
+
+      check("[delete] 쓰지 않는 사진은 '사용 중' 문구 없이 한 번만 묻는다",
+        !/사용 중/.test(message) && /되돌릴 수 없어요/.test(message),
+        JSON.stringify(message));
+
+      await page.click(".studio-confirm-button--primary");
+      await page.waitForTimeout(700);
+
+      check("[delete] 기존 delete_skin_image RPC 로 지운다",
+        backend.state.calls.some(c => c.name === "delete_skin_image") &&
+        !backend.state.calls.some(c => c.name === "delete_skin_image_everywhere") &&
+        backend.state.images.length === 0,
+        JSON.stringify(backend.state.calls.map(c => c.name)));
+
+      check("[delete] Storage 파일도 지운다",
+        backend.state.removed.length === 1, JSON.stringify(backend.state.removed));
+
+      check("[delete] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+    } finally {
+      await browser.close();
+    }
+  }
+
+  /* ---- 2. 쓰는 사진 — 사용처에서 제거하고 삭제 ---- */
+  {
+    const backend = createMockBackend();
+    const { browser, page, errors } = await openStudio(playwright, backend);
+
+    try {
+      await openTopDock(page);
+      await openImagesList(page);
+      await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+      await attachFile(page, "used.png", PNG_BYTES, "image/png");
+      await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+      await page.click(".images-panel-card-attach");
+      await page.waitForTimeout(300);
+
+      backend.state.versionSlots[PUBLISHED_V0] = { profile: "img-1" };
+      backend.state.versionSlots[DRAFT_V1] = { profile: "img-1" };
+
+      await page.click(".images-panel-card-delete");
+      await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 });
+      await page.click(".studio-confirm-button--primary");
+      await page.waitForTimeout(900);
+
+      check("[delete] 새 RPC 로 모든 사용처의 연결을 뗀다",
+        backend.state.calls.some(c => c.name === "delete_skin_image_everywhere") &&
+        Object.keys(backend.state.versionSlots[PUBLISHED_V0]).length === 0 &&
+        Object.keys(backend.state.versionSlots[DRAFT_V1]).length === 0,
+        JSON.stringify({
+          published: backend.state.versionSlots[PUBLISHED_V0],
+          draft: backend.state.versionSlots[DRAFT_V1]
+        }));
+
+      check("[delete] DB row 와 Storage 파일이 모두 정리된다",
+        backend.state.images.length === 0 && backend.state.removed.length === 1,
+        JSON.stringify({ images: backend.state.images.length, removed: backend.state.removed }));
+
+      check("[delete] 지금 편집 중인 화면의 그 자리도 비워진다(깨진 URL 이 남지 않는다)",
+        await page.evaluate(() =>
+          window.getStudioImageSlotState().slots.every((slot) => !slot.binding)),
+        JSON.stringify(await page.evaluate(() =>
+          window.getStudioImageSlotState().slots.map(s => [s.name, !!s.binding]))));
+
+      check("[delete] 되돌릴 수 없다는 것을 말해 준다",
+        /되돌릴 수 없어요/.test(await page.textContent(".images-panel-message") || ""),
+        String(await page.textContent(".images-panel-message")));
+
+      check("[delete] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+    } finally {
+      await browser.close();
+    }
+  }
+
+  /* ---- 3. 참조는 지웠는데 파일 삭제만 실패 ---- */
+  {
+    const backend = createMockBackend({ failStorageRemove: true });
+    const { browser, page, errors } = await openStudio(playwright, backend);
+
+    try {
+      await openTopDock(page);
+      await openImagesList(page);
+      await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+      await attachFile(page, "half.png", PNG_BYTES, "image/png");
+      await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+      await page.click(".images-panel-card-attach");
+      await page.waitForTimeout(300);
+
+      await page.click(".images-panel-card-delete");
+      await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 });
+      await page.click(".studio-confirm-button--primary");
+      await page.waitForTimeout(900);
+
+      const failMessage = await page.textContent(".images-panel-message");
+
+      check("[delete] Storage 만 실패하면 그 사실을 분명히 말한다",
+        /파일을 지우지 못했어요/.test(failMessage || ""), String(failMessage));
+
+      check("[delete] 다시 시도할 수 있는 줄이 생긴다",
+        await page.evaluate(() => {
+          const button = document.getElementById("skinImagesPanelRetry");
+          return !!button && button.hidden === false;
+        }), "");
+
+      await page.click("#skinImagesPanelRetry");
+      await page.waitForTimeout(700);
+
+      check("[delete] 재시도하면 파일이 지워진다",
+        /파일까지 지웠어요/.test(await page.textContent(".images-panel-message") || "") &&
+        backend.state.removed.length === 2,
+        JSON.stringify({
+          message: await page.textContent(".images-panel-message"),
+          removed: backend.state.removed
+        }));
+
+      check("[delete] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+    } finally {
+      await browser.close();
+    }
+  }
+
+  /* ---- 4. migration 미적용 배포 — fail closed ---- */
+  {
+    const backend = createMockBackend({ everywhereReady: false });
+    const { browser, page, errors } = await openStudio(playwright, backend);
+
+    try {
+      await openTopDock(page);
+      await openImagesList(page);
+      await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+      await attachFile(page, "blocked.png", PNG_BYTES, "image/png");
+      await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+      await page.click(".images-panel-card-attach");
+      await page.waitForTimeout(300);
+
+      await page.click(".images-panel-card-delete");
+      await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 });
+      await page.click(".studio-confirm-button--primary");
+      await page.waitForTimeout(900);
+
+      check("[delete] RPC 가 없는 배포에서는 지우지 못했다고 분명히 말한다",
+        /지울 수 없어요/.test(await page.textContent(".images-panel-message") || ""),
+        String(await page.textContent(".images-panel-message")));
+
+      check("[delete] 그때 파일은 한 개도 지우지 않는다(깨진 참조 0)",
+        backend.state.images.length === 1 && backend.state.removed.length === 0,
+        JSON.stringify({ images: backend.state.images.length, removed: backend.state.removed }));
+
+      check("[delete] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+    } finally {
+      await browser.close();
+    }
+  }
+}
+
+
+/* ---------------------------------------------------------
+   4-c) STUDIO-LAYERS-MEDIA-1 — 자리 하나 화면
+
+   Layers 의 사진 행 · Select 의 "이미지 변경" · Layout 의 제목 로고가
+   여는 그 화면이다. 상단 Images 버튼이 없어진 뒤로 **대부분의 방문이
+   이 모양**이므로, 그 화면에서 넣기 · 비우기 · ↶ 가 예전 목록 화면과
+   똑같이 동작하는지 본다.
+--------------------------------------------------------- */
+
+async function testFocusedSlotScreen(playwright) {
+  console.log("\n[focus] 자리 하나 화면 — 미리보기 · 비우기 · 넣기 · ← 돌아가기");
+
+  const backend = createMockBackend();
+  const { browser, page, errors } = await openStudio(playwright, backend);
+
+  try {
+    await openTopDock(page);
+
+    /* 먼저 사진 한 장을 올려 둔다(목록 화면에서) */
+    await openImagesList(page);
+    await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+    await attachFile(page, "one.png", PNG_BYTES, "image/png");
+    await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+
+    /* 자리 하나로 다시 연다 */
+    await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
+    await openImagesFor(page, "profile");
+    await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+
+    const head = await page.evaluate(() => ({
+      title: document.querySelector(".images-panel-title").textContent,
+      back: document.getElementById("skinImagesPanelBack").textContent,
+      backHidden: document.getElementById("skinImagesPanelBack").hidden,
+      focusHidden: document.getElementById("skinImagesPanelFocus").hidden,
+      slotsHidden: document.querySelector("#studioLeftPanelImages .images-panel-column").hidden,
+      attachLabel: document.querySelector(".images-panel-card-attach").textContent,
+      raw: document.getElementById("studioLeftPanelImages").textContent
+    }));
+
+    check("[focus] 제목이 그 자리의 사람이 읽는 이름이다",
+      head.title === "프로필 사진", JSON.stringify(head.title));
+
+    check("[focus] ← 가 온 자리를 가리킨다",
+      head.back === "← Layers" && head.backHidden === false, JSON.stringify(head));
+
+    check("[focus] 그 자리의 미리보기가 있고 슬롯 목록은 접힌다",
+      head.focusHidden === false && head.slotsHidden === true, JSON.stringify(head));
+
+    check("[focus] 기술적인 slot 이름(profile · cover)이 화면에 없다",
+      !head.raw.includes("profile") && !head.raw.includes("cover"),
+      JSON.stringify(head.raw.slice(0, 200)));
+
+    check("[focus] 넣기 단추 문구가 그 자리를 가리킨다",
+      head.attachLabel === "이 자리에 넣기", JSON.stringify(head.attachLabel));
+
+    /* ---- 넣기 = ↶ 한 칸 ---- */
+
+    await page.click(".images-panel-card-attach");
+    await page.waitForTimeout(400);
+
+    check("[focus] 그 자리에 들어간다",
+      await page.evaluate(() => {
+        const slot = window.getStudioImageSlotState().slots.find(s => s.name === "profile");
+        return !!(slot && slot.binding);
+      }), "");
+
+    check("[focus] 머리의 미리보기가 방금 넣은 사진으로 바뀐다",
+      await page.evaluate(() =>
+        !!document.querySelector("#skinImagesPanelFocus img")), "");
+
+    await page.evaluate(() => window.undoStudioHistory());
+    await page.waitForTimeout(500);
+
+    check("[focus] ↶ 한 번이면 넣기 전으로 돌아간다",
+      await page.evaluate(() => {
+        const slot = window.getStudioImageSlotState().slots.find(s => s.name === "profile");
+        return !!(slot && !slot.binding);
+      }), "");
+
+    await page.evaluate(() => window.redoStudioHistory());
+    await page.waitForTimeout(500);
+
+    check("[focus] ↷ 하면 다시 들어간다",
+      await page.evaluate(() => {
+        const slot = window.getStudioImageSlotState().slots.find(s => s.name === "profile");
+        return !!(slot && slot.binding);
+      }), "");
+
+    /* ---- 비우기 ---- */
+
+    await page.click("#skinImagesPanelFocusClear");
+    await page.waitForTimeout(400);
+
+    check("[focus] 비우기가 그 자리를 비운다",
+      await page.evaluate(() => {
+        const slot = window.getStudioImageSlotState().slots.find(s => s.name === "profile");
+        return !!(slot && !slot.binding);
+      }), "");
+
+    check("[focus] 비우기도 ↶ 한 칸이다",
+      await page.evaluate(async () => {
+        window.undoStudioHistory();
+        await new Promise(r => setTimeout(r, 300));
+        const slot = window.getStudioImageSlotState().slots.find(s => s.name === "profile");
+        return !!(slot && slot.binding);
+      }), "");
+
+    /* ---- ← 로 돌아가기 ---- */
+
+    await page.click("#skinImagesPanelBack");
+    await page.waitForTimeout(500);
+
+    check("[focus] ← 를 누르면 Layers 로 돌아간다",
+      await page.evaluate(() => window.getStudioShellState().leftPanelMode === "layers" &&
+        window.getStudioShellState().leftPanelOpen === true), "");
+
+    /* ---- Select 에서 왔으면 Select 로 ---- */
+
+    await page.evaluate(() => {
+      window.setSkinImagesPanelSlot("profile");
+      window.showStudioLeftPanelMode("images", { returnTo: "select" });
+    });
+    await page.waitForTimeout(400);
+
+    check("[focus] Select 에서 왔는데 Select 가 꺼져 있으면 Layers 로 보낸다",
+      await page.evaluate(() =>
+        document.getElementById("skinImagesPanelBack").textContent === "← Layers"),
+      String(await page.evaluate(() =>
+        document.getElementById("skinImagesPanelBack").textContent)));
+
+    /* ---- 390px — 시트 안에서도 머리와 미리보기가 들어간다 ---- */
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.waitForTimeout(400);
+
+    await page.evaluate(() => {
+      window.setSkinImagesPanelSlot("profile");
+      window.showStudioLeftPanelMode("images", { returnTo: "layers", sheet: "full" });
+    });
+    await page.waitForTimeout(500);
+
+    const narrow = await page.evaluate(() => {
+      const section = document.getElementById("studioLeftPanelImages");
+      const box = section.getBoundingClientRect();
+      const inside = (el) => {
+        if (!el) return false;
+        const b = el.getBoundingClientRect();
+        return b.left >= box.left - 0.5 && b.right <= box.right + 0.5;
+      };
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        innerWidth: window.innerWidth,
+        back: inside(document.getElementById("skinImagesPanelBack")),
+        focus: inside(document.getElementById("skinImagesPanelFocus")),
+        card: inside(document.querySelector(".images-panel-card"))
+      };
+    });
+
+    check("[focus] 390px 에서 가로 넘침 0 이고 머리 · 미리보기 · 카드가 시트 안이다",
+      narrow.scrollWidth <= narrow.innerWidth &&
+      narrow.back && narrow.focus && narrow.card,
+      JSON.stringify(narrow));
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+
+    check("[focus] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
 
   } finally {
     await browser.close();
@@ -907,7 +1405,7 @@ async function testLibraryNotReady(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForTimeout(500);
 
     const notice = await page.textContent(".images-panel-notice");
@@ -957,7 +1455,7 @@ async function testImportPrunesSlots(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "a.png", PNG_BYTES, "image/png");
     await page.waitForSelector(".images-panel-card", { timeout: 10000 });
@@ -1048,7 +1546,7 @@ async function testClearedSlotsDoNotRestoreLegacy(playwright) {
   try {
     /* 새 모델로 한 번 연결하고 저장 → 발행 */
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "new.png", PNG_BYTES, "image/png");
     await page.waitForSelector(".images-panel-card", { timeout: 10000 });
@@ -1072,7 +1570,7 @@ async function testClearedSlotsDoNotRestoreLegacy(playwright) {
       JSON.stringify(afterBind.imageSlotValues));
 
     /* 이제 슬롯을 전부 비우고 저장 → 발행 */
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await page.click(".images-panel-slot .images-panel-slot-clear");
     await page.waitForTimeout(300);
@@ -1146,7 +1644,7 @@ async function testDraftSaveDoesNotAffectPublished(playwright) {
   try {
     /* draft B: 새 모델로 이미지를 연결하고 Save (Publish 하지 않는다) */
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "b.png", PNG_BYTES, "image/png");
     await page.waitForSelector(".images-panel-card", { timeout: 10000 });
@@ -1255,7 +1753,7 @@ async function testRestorePreservesBindingsAndFlag(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await attachFile(page, "r.png", PNG_BYTES, "image/png");
     await page.waitForSelector(".images-panel-card", { timeout: 10000 });
@@ -1268,7 +1766,7 @@ async function testRestorePreservesBindingsAndFlag(playwright) {
     boundVersionId = backend.state.skin.current_draft_version_id;
 
     /* 그 다음 전부 비우고 다시 Save — draft는 "새 모델 + 빈 연결" */
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
     await page.click(".images-panel-slot .images-panel-slot-clear");
     await page.waitForTimeout(300);
@@ -1332,7 +1830,7 @@ async function testPasteUpload(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
     const zoneText = (await page.textContent(".images-panel-pastezone") || "").trim();
@@ -1430,7 +1928,7 @@ async function testPasteLimits(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
     /* 형식 — SVG는 image/*지만 화이트리스트 밖이다 */
@@ -1510,7 +2008,7 @@ async function testPasteLeavesTextAlone(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
     /* (a) 순수 텍스트 */
@@ -1640,7 +2138,7 @@ async function testDropUpload(playwright) {
 
   try {
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
     const urlBefore = page.url();
@@ -1771,7 +2269,7 @@ async function testRealClipboardPaste(playwright) {
     );
 
     await openTopDock(page);
-    await page.click("#studioImagesButton");
+    await openImagesList(page);
     await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
 
     /* OS 클립보드에 PNG를 실제로 넣는다 */
@@ -1837,6 +2335,8 @@ try {
   await testDraftPublishSeparation(playwright);
   await testReloadRestoresDraftBindings(playwright);
   await testValidationAndDeletionGuard(playwright);
+  await testDeleteEverywhere(playwright);
+  await testFocusedSlotScreen(playwright);
   await testLibraryNotReady(playwright);
   await testImportPrunesSlots(playwright);
   await testClearedSlotsDoNotRestoreLegacy(playwright);

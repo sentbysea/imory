@@ -1,3 +1,12 @@
+> **STUDIO-LAYERS-MEDIA-1(2026-09-23) 에서 바뀐 것** — 이 문서의 "사용
+> 중인 이미지는 지울 수 없다"는 더 이상 현행이 아니다. 사용처를 보여 주고
+> 확인받은 뒤 **사용처에서 떼고 지운다**(새 RPC
+> `delete_skin_image_everywhere` ·
+> [supabase/migrations/20260923100000_delete_skin_image_everywhere.sql](../../../supabase/migrations/20260923100000_delete_skin_image_everywhere.sql)).
+> 화면 쪽 변화(상단 Images 버튼 제거 · "자리 하나" 화면)는
+> [IMORY_STUDIO_SHELL_DESIGN.md §2-3](../studio/IMORY_STUDIO_SHELL_DESIGN.md) 에 있다.
+> 자세한 내용은 이 문서 맨 끝의 **"사용 중인 이미지 삭제(STUDIO-LAYERS-MEDIA-1)"**.
+
 # Skin Image Library v0.1 — 설계 및 구현 계획
 
 작성일: 2026-09-07
@@ -397,3 +406,75 @@ where o.bucket_id = 'skin-images'
 - 용량 사용량 표시 / 초과 시 안내
 - avatar/favicon/banner를 같은 라이브러리로 통합
 - 슬롯별 권장 비율(`aspectRatioHint`) 기반 크롭
+
+
+---
+
+## 사용 중인 이미지 삭제 (STUDIO-LAYERS-MEDIA-1 · 2026-09-23)
+
+### 무엇이 막혀 있었나
+
+연결은 **버전 단위**다(`skin_version_image_slots`). Save 는 새 버전 row 에
+연결을 insert 하므로, 한 번이라도 Save 한 이미지는 화면에서 비워도 과거
+버전이 계속 참조한다. 그리고 그 참조를 지울 방법이 클라이언트에 없었다 —
+그 표는 authenticated 에게 **select 만** grant 돼 있고, 쓰는 RPC 는
+`save_skin_draft_version_with_image_slots`(새 버전 insert) 하나뿐이다.
+그래서 `delete_skin_image()` 가 영원히 거절했고 Storage 용량도 돌려받을 수
+없었다.
+
+### 지금 동작 (현재 구현)
+
+1. 카드의 "삭제"를 누르면 **먼저 사용처를 센다**
+   (`skinImageLibrary.usage(imageId)` — 새 RPC 없이 select 로만 읽는다).
+   - `published` 지금 공개 중인 버전 · `draft` 마지막으로 저장한 편집본 ·
+     `past` 그 밖의 지난 저장본
+   - 아직 저장하지 않은 **지금 화면의 연결**은 DB 에 없으므로
+     `getStudioImageSlotState()` 에서 따로 센다. 두 수를 합친 것이 "N곳"이다.
+2. 0곳이면 한 번 확인하고 기존 `delete_skin_image()` 로 지운다(변화 없음).
+3. 1곳 이상이면 어디인지 줄줄이 보여 주고 묻는다 —
+   "이 이미지는 스킨의 N곳에서 사용 중입니다 … 사용처에서 이미지를 비우고
+   파일을 삭제할까요?" / 버튼은 **취소** · **사용처에서 제거하고 삭제**.
+4. 확인하면 `delete_skin_image_everywhere(p_image_id)` 가 **한 트랜잭션**에서
+   호출자 소유 버전의 연결을 전부 떼고 `skin_images` row 를 지운 뒤
+   `storage_path` 를 돌려준다. 그 다음에야 Storage object 를 지운다.
+   지금 화면의 그 자리도 함께 비운다(`setStudioImageSlot(slot, null)`).
+
+### 순서와 실패
+
+| 어디서 실패 | 결과 |
+| --- | --- |
+| 사용처 세기 | 삭제를 **멈춘다**(무엇을 지우는지 모른 채 지우지 않는다) |
+| 참조 제거(RPC) | 파일을 지우지 않는다 — 깨진 URL 이 남지 않는다 |
+| Storage 만 실패 | DB 는 이미 지워졌다. 그 사실을 분명히 말하고 **"파일 다시 지우기"** 줄을 띄운다(재시도는 DB 를 다시 만지지 않는다) |
+| migration 미적용 배포 | RPC 가 없으므로 **fail closed** — "이 배포에서는 사용 중인 사진을 지울 수 없어요"로 남는다(예전 동작 그대로) |
+
+### 되돌릴 수 없다
+
+Studio 의 ↶ 는 메모리 안의 working draft 기록이라 **지워진 파일을 되살리지
+못한다**. 그래서 확인 문구와 성공 메시지에 그 말을 적고, 일반 Undo 로 복원
+되는 것처럼 보이지 않게 한다(사용처를 뗀 것 = 슬롯 비우기는 Save 전이면
+↶ 로 되돌아가지만 **파일은 이미 없다**).
+
+### 공개본이 조용히 바뀌지 않는가
+
+바뀐다 — 다만 **조용히는 아니다**. 확인 문구가 "공개 중인 스킨 N곳"과
+"공개 중인 화면의 그 자리는 비어 보이게 된다"를 먼저 말한다. 그 확인 없이
+공개 버전의 연결을 지우는 경로는 없다(RPC 는 프런트의 그 흐름에서만 불린다).
+
+### 남은 차이
+
+- **CSS 안에 직접 박은 URL**(`url("https://…/skin-images/…")`)은 어느
+  표에도 참조가 없어 셀 수 없다. 그런 자리는 사용처 수에 잡히지 않고,
+  파일을 지우면 그 자리는 깨진다. (슬롯을 거치는 모든 경로는 잡힌다.)
+- 옛 `skin_image_slot_values`(URL 문자열)도 마찬가지다 — 애플리케이션이
+  쓰는 경로가 없어 지금은 문제가 되지 않지만, 참조를 세는 대상은 아니다.
+- 고아 파일(등록 실패로 남은 object) 자동 정리는 여전히 없다(7절).
+
+### 검증
+
+- `node supabase/delete-skin-image-everywhere-migration-test.mjs` — PGlite(실제
+  Postgres)에서 새 RPC 를 돌린다: 미사용 삭제 · 참조 있으면 기존 함수 거절 ·
+  모든 버전의 연결 제거 · 남의 이미지 거절 · 남의 버전이 참조하면 **전체 롤백** ·
+  grant. **운영 Supabase 에는 아직 적용하지 않았다.**
+- `node studio/images/skin-image-library-e2e-test.mjs` — 프런트 흐름
+  (`[guard]` · `[delete]` · `[focus]`).

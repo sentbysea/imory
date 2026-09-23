@@ -91,10 +91,30 @@ const STUDIO_LEFT_PANEL_MODES = {
     section: document.getElementById("studioLeftPanelSelect"),
     button: document.getElementById("studioInspectorButton")
   },
+  /* =====================================================
+     STUDIO-LAYERS-MEDIA-1 — Images 는 **상단 버튼이 없는 내용**이
+     되었다(Dock 에 이어 둘째다).
+
+     사진을 바꾸는 일은 "어느 사진을 바꾸는가"가 정해진 뒤에야
+     뜻이 있다. 상단에 따로 두면 슬롯 목록부터 고르게 되고, 그
+     목록은 사용자에게 `canvas_photo_2` 같은 **기술 이름**으로
+     보인다. 그래서 여는 길을 세 자리로 옮겼다.
+
+       · Layers 의 사진 행을 누른다(그 행이 곧 그 슬롯이다)
+       · Select 의 "이미지 변경"(studio-inspector-quickbar.js)
+       · Layout 의 제목 로고(studio/sides/home-settings-panel.js)
+
+     셋 다 **어느 슬롯인지 알고** 연다. 그래서 이 자리는 늘
+     "돌아갈 곳"을 함께 들고 있고(studioLeftPanelImagesReturnTo),
+     맨 위의 ← 가 그리로 돌려보낸다.
+
+     데이터도 저장 경로도 한 글자 바뀌지 않았다 — 패널 자체는
+     studio/images/images-panel.js 그대로다.
+  ====================================================== */
   images: {
     title: "IMAGES",
     section: document.getElementById("studioLeftPanelImages"),
-    button: document.getElementById("studioImagesButton")
+    button: null
   },
   /* =====================================================
      STUDIO-LAYERS-SHELL-1 — HOME 캔버스의 구조 한눈에 보기 +
@@ -168,9 +188,25 @@ const studioLeftPanelContentAlive = {
 /* 좁은 화면에서 AI 를 열며 접어 둔 시트 — AI 를 닫으면 되돌린다 */
 let studioLeftPanelHiddenForAi = null;
 
-/* Select 의 "이미지 변경"으로 Images 를 열었다 — 좁은 화면에서는 사진을
-   붙이면 고른 요소로 돌아간다 */
-let studioLeftPanelImagesReturnToSelect = false;
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — Images 를 연 자리
+
+   "어디서 왔는가" 하나다. 맨 위의 ← 가 이리로 돌려보내고, 좁은
+   화면에서는 사진을 붙인 뒤에도 이리로 돌아간다(시트가 Preview 를
+   가리지 않게 — MOBILE-SHEET-1 이 Select 에 대해 하던 그 일을
+   세 입구에 똑같이 한다).
+
+   ★ 값이 없으면 Layers 다. Images 는 이제 **스스로 열리는 자리가
+     아니어서**, 어떤 옛 경로가 이름만으로 이 자리를 열어도
+     사용자는 돌아갈 곳이 있는 화면에 선다.
+========================================================== */
+const STUDIO_IMAGES_RETURN_LABELS = {
+  layers: "Layers",
+  select: "Select",
+  layout: "Layout"
+};
+
+let studioLeftPanelImagesReturnTo = "layers";
 
 
 function studioShellSheetState() {
@@ -355,7 +391,8 @@ function leaveStudioLeftPanelContent(mode) {
 
     studioLeftPanelContentAlive.images = false;
 
-    studioLeftPanelImagesReturnToSelect = false;
+    /* 돌아갈 곳은 지우지 않는다 — 다음에 이름만으로 열리는 경우에도
+       기본값(Layers)이 남아 있어야 한다(위 상수 머리말). */
 
     if (typeof window.closeSkinImagesPanel === "function") {
       window.closeSkinImagesPanel();
@@ -371,7 +408,10 @@ function leaveStudioLeftPanelContent(mode) {
                      기본값(Select 는 peek, Images · Dock 은 content)
      resume          숨겨 두었던 같은 내용을 다시 보여 준다(살아 있으면
                      새로 열지 않는다 — AI 에서 돌아올 때)
-     returnToSelect  Images 를 Select 의 "이미지 변경"에서 열었다 */
+     returnTo        Images 를 연 자리("layers" · "select" · "layout")
+                     — 맨 위의 ← 가 돌아갈 곳이다
+                     (STUDIO-LAYERS-MEDIA-1)
+     returnToSelect  옛 이름. `returnTo:"select"` 와 같다 */
 function showStudioLeftPanelMode(mode, options) {
 
   if (!STUDIO_LEFT_PANEL_MODES[mode]) {
@@ -406,9 +446,21 @@ function showStudioLeftPanelMode(mode, options) {
   }
 
   if (mode === "images" && fresh) {
-    studioLeftPanelImagesReturnToSelect =
-      opts.returnToSelect === true ||
-      (opts.resume === true && studioLeftPanelImagesReturnToSelect);
+
+    const asked =
+      opts.returnToSelect === true ? "select" : opts.returnTo;
+
+    /* 되돌아온 것(resume)이면 지금 값을 지킨다. 모르는 이름이면
+       Layers — Images 는 스스로 서는 자리가 아니다. */
+    studioLeftPanelImagesReturnTo =
+      (opts.resume === true && !asked)
+        ? studioLeftPanelImagesReturnTo
+        : (
+            Object.prototype.hasOwnProperty.call(STUDIO_IMAGES_RETURN_LABELS, asked)
+              ? asked
+              : "layers"
+          );
+
   }
 
   setStudioLeftPanelOpen(true);
@@ -472,6 +524,14 @@ function handleStudioLeftPanelContentClosed(mode) {
     return;
   }
 
+  /* STUDIO-LAYERS-MEDIA-1 — Images 는 어디선가 열린 하위 화면이다.
+     닫기 · Escape 도 ← 와 같은 곳으로 간다(Select 로 새어 나가
+     "레이어를 고르던 중이었는데 다른 화면에 서 있다"가 되지 않게). */
+  if (mode === "images") {
+    returnFromStudioImagesPanel();
+    return;
+  }
+
   if (mode !== "select" && studioShellInspectorEnabled()) {
     showStudioLeftPanelMode("select");
     return;
@@ -508,21 +568,66 @@ function revealStudioLeftPanelForSelection(options) {
 }
 
 
-/* Images 에서 사진을 슬롯에 붙였다(images-panel.js). 좁은 화면에서
-   Select 의 "이미지 변경"으로 온 경우에만 고른 요소로 돌아간다 —
-   넓은 화면에서는 패널이 Preview 를 가리지 않으므로 그대로 둔다. */
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — Images 에서 돌아가기
+
+   맨 위의 ← · 닫기 · Escape 가 전부 여기로 온다. 돌아갈 자리가
+   Select 인데 Select 모드가 꺼져 있으면(고른 요소가 없다) Layers 로
+   간다 — 빈 Select 안내문 앞에 세우지 않는다.
+========================================================== */
+
+function studioImagesPanelReturnMode() {
+
+  const mode =
+    studioLeftPanelImagesReturnTo || "layers";
+
+  if (mode === "select" && !studioShellInspectorEnabled()) {
+    return "layers";
+  }
+
+  return mode;
+
+}
+
+
+/* 패널이 ← 에 적을 말을 물어 온다(images-panel.js) */
+function getStudioImagesPanelReturn() {
+
+  const mode =
+    studioImagesPanelReturnMode();
+
+  return {
+    mode: mode,
+    label: STUDIO_IMAGES_RETURN_LABELS[mode] || STUDIO_IMAGES_RETURN_LABELS.layers
+  };
+
+}
+
+
+function returnFromStudioImagesPanel() {
+
+  showStudioLeftPanelMode(studioImagesPanelReturnMode());
+
+}
+
+
+/* Images 에서 사진을 슬롯에 붙였다(images-panel.js). 좁은 화면에서는
+   온 자리로 돌아간다 — 시트가 방금 바뀐 사진을 가리기 때문이다.
+   넓은 화면에서는 패널이 Preview 를 가리지 않으므로 그대로 둔다
+   (한 슬롯에 여러 장을 번갈아 대 보는 흐름을 끊지 않는다). */
 function handleStudioImageAttached() {
 
   if (
     !studioShellIsNarrow() ||
-    !studioLeftPanelImagesReturnToSelect ||
-    !isStudioLeftPanelShowing("images") ||
-    !studioShellInspectorEnabled()
+    !isStudioLeftPanelShowing("images")
   ) {
     return;
   }
 
-  showStudioLeftPanelMode("select", { sheet: "peek" });
+  showStudioLeftPanelMode(
+    studioImagesPanelReturnMode(),
+    { sheet: "peek" }
+  );
 
 }
 
@@ -580,10 +685,9 @@ STUDIO_LEFT_PANEL_MODES.select.button?.addEventListener(
   handleStudioSelectButton
 );
 
-STUDIO_LEFT_PANEL_MODES.images.button?.addEventListener(
-  "click",
-  () => handleStudioPanelModeButton("images")
-);
+/* images 도 상단 버튼이 없다(STUDIO-LAYERS-MEDIA-1, 위 표) — 여는
+   길은 Layers 의 사진 행 · Select 의 "이미지 변경" · Layout 의 제목
+   로고 셋이다. */
 
 STUDIO_LEFT_PANEL_MODES.layers.button?.addEventListener(
   "click",
@@ -981,6 +1085,8 @@ if (typeof window !== "undefined") {
   window.handleStudioLeftPanelContentClosed = handleStudioLeftPanelContentClosed;
   window.revealStudioLeftPanelForSelection = revealStudioLeftPanelForSelection;
   window.handleStudioImageAttached = handleStudioImageAttached;
+  window.getStudioImagesPanelReturn = getStudioImagesPanelReturn;
+  window.returnFromStudioImagesPanel = returnFromStudioImagesPanel;
   window.updateStudioPageIndicator = updateStudioPageIndicator;
   window.setStudioMoreMenuOpen = setStudioMoreMenuOpen;
   window.isStudioMoreMenuOpen = isStudioMoreMenuOpen;

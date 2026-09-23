@@ -477,7 +477,27 @@
 }
 
 
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 머리를 다시 보여 준다(← 때문에)
+
+   예전에는 패널 머리(제목 · ✕)가 셸의 머리와 겹쳐서 통째로 숨겼다.
+   이제 이 줄에는 **온 자리로 돌아가는 ←** 와 **그 자리의 이름**이
+   있다 — 둘 다 셸의 머리에 없는 정보다. ✕ 만 계속 숨긴다(셸의
+   ‹ 가 같은 일을 한다).
+========================================================== */
+
 .studio-left-panel .images-panel-header {
+  padding: 10px 12px;
+}
+
+
+.studio-left-panel .images-panel-close {
+  display: none;
+}
+
+
+/* 자리 하나 화면에서는 목록 열이 접힌다(images-panel.js) */
+.studio-left-panel .images-panel-column[hidden] {
   display: none;
 }
 
@@ -496,6 +516,8 @@
 
 /* 가운데(본문)만 스크롤하고 머리·안내·꼬리는 줄어들지 않는다 —
    줄어들면 두 줄짜리 안내 문구가 꼬리 버튼 위로 겹친다. */
+.studio-left-panel .images-panel-header,
+.studio-left-panel .images-panel-focus,
 .studio-left-panel .images-panel-message,
 .studio-left-panel .images-panel-footer,
 .studio-left-panel .dock-panel-header,
@@ -809,7 +831,7 @@
 
    ★ 상단 — 두 줄로 명시한다
 
-     1줄: Select · Images · Dock ………… Save · Publish · ···
+     1줄: Select · Layers ………………… Save · Publish · ···
      2줄: ← · 현재 페이지 · Desktop|Mobile · ↶ ↷ ……… AI
 
    그룹 wrapper 셋은 display:contents 로 풀고 버튼마다 order 를 준다
@@ -852,9 +874,12 @@
     height: 6px;
   }
 
+  /* 첫 줄의 자리 — STUDIO-LAYERS-MEDIA-1 에서 Images 가 빠지고
+     Layers 가 그 자리를 이어받았다(Dock 은 STUDIO-LAYERS-SHELL-1
+     에서 이미 상단을 떠났다). 번호를 적지 않으면 order:0 이 되어
+     Select 앞에 서므로, 남은 둘을 명시한다. */
   #studioInspectorButton { order: 1; }
-  #studioImagesButton { order: 2; }
-  #studioDockButton { order: 3; }
+  #studioLayersButton { order: 2; }
 
   /* HOME 단 구성 — 첫 줄은 이미 꽉 찼다. 둘째 줄 ↶ ↷ 다음, AI 앞 */
   #studioLayoutButton { order: 13; }

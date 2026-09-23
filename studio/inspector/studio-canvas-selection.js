@@ -542,11 +542,12 @@ function studioCanvasElementLabel(type) {
    회전각이 들어 있지 않기 때문이다. 회전을 따라가는 선택 틀과
    핸들은 HOME-CANVAS-SELECT-1B 의 Moveable 몫이다.
 
-   ★ sandbox 에서는 그리지 않는다.
+   ★ sandbox 에서는 **상자만** 그리지 않는다.
 
    프레임이 자기 realm 에서 이미 테두리를 그린다
    (studioInspectorRemoteOverlay). 둘 다 그리면 겹쳐 보인다 —
-   기존 Inspector 선택과 같은 규칙이다.
+   기존 Inspector 선택과 같은 규칙이다. 이름표는 그 realm 에 없으므로
+   이쪽이 그린다(STUDIO-LAYERS-MEDIA-1, repaint 의 그 표).
 ========================================================== */
 
 function ensureStudioCanvasOverlay() {
@@ -678,12 +679,6 @@ function repaintStudioCanvasSelection() {
 
   ensureStudioCanvasOverlay();
 
-  /* sandbox — 프레임이 그린다 */
-  if (studioInspectorRemoteOverlay) {
-    hideStudioCanvasOverlay();
-    return;
-  }
-
   /* HOME-CANVAS-SELECT-1B-2 — 여러 개를 골랐을 때의 fallback 은
      **primary 하나**다(§10). 이 테두리는 축에 평행한 사각형 하나라
      그룹을 표현할 수 없고, 그룹 틀은 Moveable 의 몫이다. */
@@ -706,10 +701,25 @@ function repaintStudioCanvasSelection() {
        않는다.
   ====================================================== */
 
+  /* =====================================================
+     STUDIO-LAYERS-MEDIA-1 — 상자를 내리는 이유가 둘이다
+
+       studioCanvasFrameActive     Moveable 이 회전을 따라가는 틀을
+                                   붙였다(위 ★)
+       studioInspectorRemoteOverlay sandbox — 테두리를 프레임이 그린다
+
+     ★ 이름표는 **두 경우 모두** 이쪽이 그린다. 상자가 아니므로 겹쳐
+       보이지 않고, 좌표는 같은 rects 메시지로 이미 와 있다. 기존
+       Inspector 의 이름표가 sandbox 에서도 부모가 그리는 것과 같은
+       규칙이다(studio/inspector/studio-inspector-overlay.js
+       paintStudioInspectorSelectLabel 머리말). 예전에는 sandbox 에서
+       상자와 이름표를 함께 내려, 프레임의 테두리만 있고 "무엇을
+       골랐는가"는 사라졌다(§5 의 native/sandbox 일치).
+  ====================================================== */
   if (typeof paintStudioInspectorBox === "function") {
     paintStudioInspectorBox(
       studioCanvasSelectBox,
-      studioCanvasFrameActive ? null : rect
+      (studioCanvasFrameActive || studioInspectorRemoteOverlay) ? null : rect
     );
   }
 

@@ -233,7 +233,8 @@
 
 
     <!-- =====================================================
-         LEFT PANEL — Select · Images · Layers · Layout 이 함께 쓰는 자리
+         LEFT PANEL — Select · Layers · Layout · (Images · Dock) 이
+         함께 쓰는 자리
          (STUDIO-SHELL-1, IMORY_STUDIO_SHELL_DESIGN.md)
 
          예전에는 셋이 서로 다른 모양이었다 — Select 는 Preview 위에
@@ -394,7 +395,7 @@
     <!-- =====================================================
          TOP DOCK — 세 그룹 (STUDIO-SHELL-1)
 
-           왼쪽   ← back · Select · Images · Layers · Layout   (왼쪽 패널을 여는 넷)
+           왼쪽   ← back · Select · Layers · Layout   (왼쪽 패널을 여는 셋)
            가운데 현재 페이지 · Desktop|Mobile · Undo/Redo
            오른쪽 Code · Import|Export · Save · Publish · AI Assistant
 
@@ -422,10 +423,15 @@
       >
 
         <!-- =================================================
-             LEAD — 나가기 + 왼쪽 패널을 여는 넷(Select · Images · Layers · Layout)
+             LEAD — 나가기 + 왼쪽 패널을 여는 셋(Select · Layers · Layout)
+
+             Images 와 Dock 은 같은 패널의 내용이지만 **상단 버튼이
+             없다** — 여는 길은 각각 Layers 의 사진 행(그리고 Select
+             의 "이미지 변경" · Layout 의 제목 로고)과 Preview 의
+             dock 이다(STUDIO-LAYERS-MEDIA-1).
 
              Select 의 aria-pressed 는 "Inspector 모드가 켜져 있는가"
-             다(studio/inspector/studio-inspector.js). 세 버튼의
+             다(studio/inspector/studio-inspector.js). 나머지 버튼의
              aria-expanded 는 "왼쪽 패널이 지금 그 내용을 보여 주는가"
              다(studio/studio-shell.js). Images/Dock 으로 옮겨 가도
              Select 모드는 꺼지지 않는다 — 그래야 돌아왔을 때 고른
@@ -461,20 +467,14 @@
             </button>
 
             <!--
-                 Skin Image Library — 지금 Skin이 선언한 imageSlots에
-                 내 이미지를 연결/교체/비운다. working draft가 있을 때만
-                 활성화된다(studio-preview.js updateStudioImagesButtonState).
+                 STUDIO-LAYERS-MEDIA-1 — 여기 있던 Images 버튼은
+                 **없어졌다**. 사진을 바꾸는 일은 "어느 사진인가"가
+                 정해진 뒤에야 뜻이 있어서, 여는 길을 Layers 의 사진
+                 행 · Select 의 "이미지 변경" · Layout 의 제목 로고로
+                 옮겼다. 패널 자리(#studioLeftPanelImages)도 데이터도
+                 저장 경로도 그대로다(studio/studio-shell.js 의
+                 STUDIO_LEFT_PANEL_MODES.images 머리말).
             -->
-            <button
-              type="button"
-              class="studio-corner-button studio-mode-button"
-              id="studioImagesButton"
-              aria-expanded="false"
-              aria-controls="studioLeftPanel"
-              disabled
-            >
-              Images
-            </button>
 
             <!--
                  STUDIO-LAYERS-SHELL-1 — HOME 캔버스의 전체 구조와

@@ -5443,10 +5443,10 @@ async function main() {
         p.evaluate(() => window.getStudioCanvasSelection().primaryId);
 
 
-      /* ---- 1. 상단 진입점 넷 ---- */
+      /* ---- 1. 상단 진입점 셋 (STUDIO-LAYERS-MEDIA-1) ---- */
 
       const lead = await page.evaluate(() => {
-        const ids = ["studioInspectorButton", "studioImagesButton",
+        const ids = ["studioInspectorButton",
                      "studioLayersButton", "studioLayoutButton"];
         return {
           labels: ids.map((id) => {
@@ -5457,16 +5457,25 @@ async function main() {
             const el = document.getElementById(id);
             return !!el && !!el.closest(".studio-top-dock-lead");
           }),
+          imagesButton: !!document.getElementById("studioImagesButton"),
+          imagesSection: !!document.getElementById("studioLeftPanelImages"),
           dockButton: !!document.getElementById("studioDockButton"),
           dockSection: !!document.getElementById("studioLeftPanelDock")
         };
       });
 
-      check("★ 상단 진입점이 Select · Images · Layers · Layout 이다",
+      check("★ 상단 진입점이 Select · Layers · Layout 이다(Images 가 빠졌다)",
         lead.inLead &&
-        lead.labels.join("·") === "Select·Images·Layers·Layout" &&
+        lead.labels.join("·") === "Select·Layers·Layout" &&
+        lead.imagesButton === false &&
         lead.dockButton === false,
         JSON.stringify(lead));
+
+      check("★ Images 는 자리도 저장 경로도 그대로다(버튼만 없어졌다)",
+        lead.imagesSection === true &&
+        await page.evaluate(() => typeof window.openSkinImagesPanel === "function" &&
+          typeof window.setSkinImagesPanelSlot === "function"),
+        JSON.stringify(lead.imagesSection));
 
       check("★ Dock 은 자리도 저장 경로도 그대로다(상단 버튼만 없어졌다)",
         lead.dockSection === true &&
@@ -5578,6 +5587,146 @@ async function main() {
             .getAttribute("aria-selected") === "true" &&
           document.querySelectorAll(".studio-canvas-layers-row.is-selected").length === 1),
         "");
+
+
+      /* ---- 4-b. STUDIO-LAYERS-MEDIA-1 — 고른 것이 Preview 에 **보인다** ----
+
+         Layers 로 고르면 부모는 좌표를 모른 채였다(프레임이 부모가
+         시킨 선택에 좌표를 올리지 않았다). 크기를 조절할 수 있는
+         종류는 Moveable 틀이 대신 보여서 가려져 있었고, 흐름 폭을
+         꽉 채운 카테고리 블록(align:"stretch")은 **아무 표시도 없었다**.
+      */
+
+      const outline = async (p, id) => {
+        await p.evaluate((rowId) => {
+          window.showStudioLeftPanelMode("layers");
+          document.getElementById("studioCanvasLayer-" + rowId).click();
+        }, id);
+        await sleep(800);
+        return p.evaluate(() => {
+          const box = document.getElementById("studioCanvasSelectBox");
+          const label = document.getElementById("studioCanvasSelectLabel");
+          const sel = window.getStudioCanvasSelection();
+          const item = sel.items[0] || null;
+          return {
+            primary: sel.primaryId,
+            frameActive: sel.frameActive,
+            rect: item ? item.rect : null,
+            boxHidden: box ? box.hidden : null,
+            labelHidden: label ? label.hidden : null,
+            labelText: label ? label.textContent : ""
+          };
+        });
+      };
+
+      const navPick = await outline(page, "v2Wide");
+
+      const navDom = await page.evaluate(() => {
+        const doc = document.getElementById("studioPreviewFrame").contentDocument;
+        const el = doc.querySelector('[data-imory-edit-id="v2Wide"]');
+        const r = el.getBoundingClientRect();
+        return { width: Math.round(r.width), height: Math.round(r.height) };
+      });
+
+      check("★ 카테고리 행을 고르면 실제 렌더 DOM 의 좌표가 올라온다",
+        !!navPick.rect &&
+        Math.abs(navPick.rect.width - navDom.width) <= 2 &&
+        Math.abs(navPick.rect.height - navDom.height) <= 2,
+        JSON.stringify({ rect: navPick.rect, dom: navDom }));
+
+      check("★ 그 좌표로 파란 외곽선과 이름표가 실제로 그려진다",
+        navPick.boxHidden === false &&
+        navPick.labelHidden === false &&
+        navPick.labelText === "Canvas 카테고리",
+        JSON.stringify(navPick));
+
+      check("★ 직접 크기를 조절할 수 없는 자리에는 손잡이 틀을 붙이지 않는다(외곽선만)",
+        navPick.frameActive === false,
+        JSON.stringify({ frameActive: navPick.frameActive }));
+
+      const textPick = await outline(page, "v2Text");
+
+      check("★ 다른 레이어를 누르면 곧바로 그 요소로 표시가 옮겨 간다",
+        textPick.primary === "v2Text" &&
+        textPick.labelText === "Canvas 글자" &&
+        !!textPick.rect,
+        JSON.stringify(textPick));
+
+
+      /* ---- 4-c. STUDIO-LAYERS-MEDIA-1 — 사진 행은 이미지 화면으로 ---- */
+
+      await openLayers(page);
+
+      const mediaTree = await layersState(page);
+
+      check("★ 사진 자리를 가진 행만 그림 자리 이름을 들고 있다",
+        mediaTree.rows.filter((r) => r.slot).map((r) => r.id + ":" + r.slot).join(",") ===
+          "v2Logo:title_logo,v2Photo:photo_1",
+        JSON.stringify(mediaTree.rows.map((r) => r.id + ":" + (r.slot || "-"))));
+
+      check("★ 트리의 행으로 표현되지 않는 스킨 이미지는 아래 구역에 남는다",
+        mediaTree.media.visible === true &&
+        mediaTree.media.slots.join(",") === "sticker_1",
+        JSON.stringify(mediaTree.media));
+
+      await page.evaluate(() =>
+        document.getElementById("studioCanvasLayer-v2Photo").click());
+      await sleep(800);
+
+      const afterPhoto = await page.evaluate(() => ({
+        mode: window.getStudioShellState().leftPanelMode,
+        open: window.getStudioShellState().leftPanelOpen,
+        back: (document.getElementById("skinImagesPanelBack") || {}).textContent,
+        sel: window.getStudioCanvasSelection().ids,
+        labelHidden: document.getElementById("studioCanvasSelectLabel").hidden
+      }));
+
+      check("★ 사진 행을 한 번 누르면 고르면서 그 자리의 이미지 화면으로 넘어간다",
+        afterPhoto.mode === "images" && afterPhoto.open === true &&
+        afterPhoto.sel.join(",") === "v2Photo" &&
+        afterPhoto.back === "← Layers",
+        JSON.stringify(afterPhoto));
+
+      await page.click("#skinImagesPanelBack");
+      await sleep(500);
+
+      const backToTree = await page.evaluate(() => ({
+        mode: window.getStudioShellState().leftPanelMode,
+        sel: window.getStudioCanvasSelection().ids,
+        rowSelected: document.querySelector('[data-layer-id="v2Photo"]')
+          .getAttribute("aria-selected")
+      }));
+
+      check("★ ← Layers 로 돌아오면 트리와 선택이 그대로다",
+        backToTree.mode === "layers" &&
+        backToTree.sel.join(",") === "v2Photo" &&
+        backToTree.rowSelected === "true",
+        JSON.stringify(backToTree));
+
+      await page.evaluate(() => {
+        const row = document.getElementById("studioCanvasLayer-v2Photo");
+        row.dispatchEvent(new MouseEvent("click", { bubbles: true, ctrlKey: true }));
+      });
+      await sleep(600);
+
+      check("★ Ctrl/⌘ 클릭은 고르기만 한다(이미지 화면으로 넘어가지 않는다)",
+        (await page.evaluate(() => window.getStudioShellState().leftPanelMode)) === "layers",
+        String(await page.evaluate(() => window.getStudioShellState().leftPanelMode)));
+
+      await page.click("#studioCanvasLayerEye-v2Photo");
+      await sleep(500);
+
+      check("★ 눈 · 자물쇠 · 삭제를 눌러도 이미지 화면으로 넘어가지 않는다",
+        (await page.evaluate(() => window.getStudioShellState().leftPanelMode)) === "layers",
+        String(await page.evaluate(() => window.getStudioShellState().leftPanelMode)));
+
+      await page.click("#studioCanvasLayerEye-v2Photo");
+      await sleep(400);
+
+      await page.evaluate(() => window.proposeStudioCanvasSelection({
+        ids: ["v2Over"], primaryId: "v2Over", mode: "replace"
+      }));
+      await sleep(400);
 
 
       /* ---- 5. Preview 선택 → Layers 행 ---- */
@@ -5735,12 +5884,30 @@ async function main() {
       const empty = await plain.evaluate(() => ({
         rows: window.getStudioCanvasLayersState().rows.length,
         message: (document.getElementById("studioCanvasLayersEmpty") || {}).textContent || "",
-        addDisabled: document.getElementById("studioCanvasLayersAddToggle").disabled
+        addDisabled: document.getElementById("studioCanvasLayersAddToggle").disabled,
+        media: window.getStudioCanvasLayersState().media
       }));
 
       check("★ 캔버스(v2)가 아닌 HOME 에서는 목록 대신 이유를 보여 준다",
         empty.rows === 0 && empty.message.length > 0 && empty.addDisabled === true,
-        JSON.stringify(empty));
+        JSON.stringify({ rows: empty.rows, message: empty.message, addDisabled: empty.addDisabled }));
+
+      /* STUDIO-LAYERS-MEDIA-1 — 트리가 없어도 그림 자리에는 손이 닿아야
+         한다. 상단 Images 버튼이 없어졌으므로 이 구역이 그 스킨의
+         유일한 길이다(계약 §34-2). */
+      check("★ 캔버스가 아닌 스킨에서는 선언된 그림 자리가 **전부** 스킨 이미지 구역에 있다",
+        empty.media.visible === true &&
+        empty.media.slots.join(",") === "photo_1,title_logo,sticker_1",
+        JSON.stringify(empty.media));
+
+      check("★ 그 구역의 항목을 누르면 그 자리의 이미지 화면이 열린다",
+        await plain.evaluate(async () => {
+          document.getElementById("studioCanvasLayersMedia-title_logo").click();
+          await new Promise((r) => setTimeout(r, 400));
+          return window.getStudioShellState().leftPanelMode === "images" &&
+            (document.getElementById("skinImagesPanelBack") || {}).textContent === "← Layers";
+        }),
+        "");
 
       await close(plain);
 
@@ -5813,6 +5980,31 @@ async function main() {
         await sbFrame.evaluate(() =>
           !!document.querySelector('[data-imory-edit-id="v2Wide"]')),
         String(await pickedId(sbPage)));
+
+      const sbOutline = await sbPage.evaluate(() => {
+        const box = document.getElementById("studioCanvasSelectBox");
+        const label = document.getElementById("studioCanvasSelectLabel");
+        const sel = window.getStudioCanvasSelection();
+        return {
+          rect: (sel.items[0] || {}).rect || null,
+          boxHidden: box ? box.hidden : null,
+          labelHidden: label ? label.hidden : null,
+          labelText: label ? label.textContent : ""
+        };
+      });
+
+      const sbFrameBox = await sbFrame.evaluate(() =>
+        window.__imorySandboxInspectState ? window.__imorySandboxInspectState() : null);
+
+      check("★ sandbox 에서도 같은 표시다 — 테두리는 프레임이, 이름표는 부모가",
+        !!sbOutline.rect &&
+        sbFrameBox.selectedEditId === "v2Wide" &&
+        sbFrameBox.selectBoxVisible === true &&
+        sbOutline.boxHidden === true &&
+        sbOutline.labelHidden === false &&
+        sbOutline.labelText === "Canvas 카테고리",
+        JSON.stringify({ parent: sbOutline, frame: sbFrameBox && {
+          selected: sbFrameBox.selectedEditId, box: sbFrameBox.selectBoxVisible } }));
 
       await clickElement(sbPage, sbFrame, true, "v2Logo");
       await sleep(700);
@@ -6742,10 +6934,15 @@ async function main() {
       await multi.evaluate(() => window.showStudioLeftPanelMode("layers"));
       await sleep(400);
 
-      await multi.click("#studioCanvasLayer-v2Logo");
+      /* ★ STUDIO-LAYERS-MEDIA-1 — 먼저 누르는 행은 **그림 자리가 없는**
+         것이어야 한다. 사진 · 스티커 · 로고 행을 수식키 없이 누르면 그
+         자리의 이미지 화면으로 넘어가므로(계약 §34-1) 트리가 화면에서
+         사라지고 다음 클릭이 닿지 않는다. 수식키를 누른 클릭은 예전처럼
+         고르기만 한다. */
+      await multi.click("#studioCanvasLayer-v2Text");
       await sleep(400);
 
-      await multi.click("#studioCanvasLayer-v2Text", { modifiers: ["Control"] });
+      await multi.click("#studioCanvasLayer-v2Logo", { modifiers: ["Control"] });
       await sleep(500);
 
       const picked = await multi.evaluate(() =>

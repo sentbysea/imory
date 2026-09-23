@@ -773,13 +773,19 @@ async function runLogo(browser) {
   check("개발자 낱말이 없다", !/imageSlot|title_logo|data-imory|regions/i.test(panel.text), "");
 
   await page.evaluate(() => document.querySelector("#studioLeftPanelLayout .studio-home-buttons button").click());
-  await page.waitForSelector("#studioLeftPanelImages .images-panel-slot-list", { timeout: 5000 });
-  const opened = await page.evaluate(() => {
-    const active = document.querySelector("#studioLeftPanelImages .images-panel-slot--selected");
-    return { mode: window.getStudioShellState().leftPanelMode, slot: active ? active.textContent : "" };
-  });
-  check("그 버튼이 Images 를 'HOME 제목 로고' 슬롯에 맞춘 채 연다",
-    opened.mode === "images" && /HOME 제목 로고/.test(opened.slot), JSON.stringify(opened));
+  await page.waitForSelector("#skinImagesPanelFocus", { timeout: 5000 });
+  const opened = await page.evaluate(() => ({
+    mode: window.getStudioShellState().leftPanelMode,
+    /* STUDIO-LAYERS-MEDIA-1 — 목록이 아니라 **그 자리 하나** 화면이다 */
+    title: document.querySelector("#studioLeftPanelImages .images-panel-title").textContent,
+    focusHidden: document.getElementById("skinImagesPanelFocus").hidden,
+    back: document.getElementById("skinImagesPanelBack").textContent
+  }));
+  check("그 버튼이 Images 를 'HOME 제목 로고' 자리 하나로 연다",
+    opened.mode === "images" && opened.focusHidden === false &&
+    /HOME 제목 로고/.test(opened.title), JSON.stringify(opened));
+  check("그 화면의 ← 는 Layout 으로 돌아간다(STUDIO-LAYERS-MEDIA-1)",
+    opened.back === "← Layout", JSON.stringify(opened.back));
 
   check("오류 0", errors.length === 0, errors.join(" | "));
   await context.close();

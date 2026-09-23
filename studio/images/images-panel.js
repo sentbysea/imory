@@ -21,6 +21,21 @@
        + 내 이미지 그리드. 각 이미지 카드에서 "연결"(선택된 슬롯으로)
        / "삭제".
 
+   ★ STUDIO-LAYERS-MEDIA-1 — 대개는 **자리 하나**로 열린다
+
+   상단 Images 버튼이 없어지고, 이 화면은 "어느 사진을 바꾸는가"를
+   이미 아는 세 입구에서만 열린다(Layers 의 사진 행 · Select 의
+   "이미지 변경" · Layout 의 제목 로고). 그래서 슬롯 이름이 함께
+   오면 **그 자리 하나**를 머리에 크게 보여 주고 왼쪽 목록은 접는다
+   — 사용자가 `canvas_photo_2` 같은 기술 이름 사이에서 자기 사진을
+   다시 찾을 일이 없다. 목록 화면은 슬롯 없이 열렸을 때의 폴백으로
+   남는다.
+
+   기술 이름은 어느 화면에도 적지 않는다(사람이 읽는 label 만).
+
+   맨 위의 ← 는 온 자리로 돌아간다 — 어디로 돌아갈지는 셸이 안다
+   (studio/studio-shell.js getStudioImagesPanelReturn).
+
    업로드 영역은 tabindex=0인 포커스 가능한 영역이다 — 거기에만
    paste 리스너를 건다(document이 아니다). 그래서 Code/Import
    modal이나 AI 입력창의 붙여넣기는 이 코드를 아예 지나가지 않는다.
@@ -46,6 +61,13 @@
 ========================================================== */
 
 let imagesPanelOverlay = null;
+let imagesPanelBackButton = null;
+let imagesPanelTitle = null;
+let imagesPanelSlotsColumn = null;
+let imagesPanelFocusHead = null;
+let imagesPanelFocusThumb = null;
+let imagesPanelFocusLabel = null;
+let imagesPanelFocusClear = null;
 let imagesPanelSlotList = null;
 let imagesPanelGrid = null;
 let imagesPanelMessage = null;
@@ -58,12 +80,23 @@ let imagesPanelBody = null;
 
 let imagesPanelIsOpen = false;
 let imagesPanelSelectedSlot = null;
+
+/* STUDIO-LAYERS-MEDIA-1 — "자리 하나" 화면인가. 슬롯 이름과 함께
+   열렸으면 참이고, 슬롯 없이 열리면 거짓(목록 폴백)이다. */
+let imagesPanelFocusMode = false;
 let imagesPanelImages = [];
 let imagesPanelIsBusy = false;
 
 /* drag & drop — dragenter/dragleave는 자식 요소를 지날 때마다 쌍으로
    발생하므로 깊이를 세어야 "정말 영역 밖으로 나갔는가"를 안다. */
 let imagesPanelDragDepth = 0;
+
+/* STUDIO-LAYERS-MEDIA-1 — DB 에서는 지워졌는데 Storage 파일만 남은
+   경로. 화면 상태다(다시 열면 사라진다) — 사용자가 "파일 다시
+   지우기"를 누를 동안만 산다. */
+let imagesPanelPendingObject = null;
+
+let imagesPanelRetryButton = null;
 
 
 function setImagesPanelMessage(text, isError) {
@@ -101,6 +134,16 @@ function setImagesPanelBusy(busy) {
 
   if (imagesPanelOverlay) {
     imagesPanelOverlay.classList.toggle("images-panel-overlay--busy", busy);
+  }
+
+}
+
+
+/* STUDIO-LAYERS-MEDIA-1 — "파일 다시 지우기" 를 보일까 */
+function syncImagesPanelRetry() {
+
+  if (imagesPanelRetryButton) {
+    imagesPanelRetryButton.hidden = !imagesPanelPendingObject;
   }
 
 }
@@ -148,6 +191,16 @@ function buildImagesPanelDom() {
 
   header.className = "images-panel-header";
 
+  /* STUDIO-LAYERS-MEDIA-1 — 온 자리로 돌아가는 ← */
+  const backButton =
+    document.createElement("button");
+
+  backButton.type = "button";
+  backButton.className = "images-panel-back";
+  backButton.id = "skinImagesPanelBack";
+  backButton.hidden = true;
+  header.appendChild(backButton);
+
   const title =
     document.createElement("h2");
 
@@ -181,6 +234,51 @@ function buildImagesPanelDom() {
     document.createElement("div");
 
   body.className = "images-panel-body";
+
+  /* =====================================================
+     STUDIO-LAYERS-MEDIA-1 — 자리 하나 화면의 머리
+
+     지금 그 자리에 무엇이 들어 있는지(작은 미리보기)와 "비우기"
+     하나다. 새 저장 경로를 만들지 않는다 — 비우기는 지금까지와
+     같은 setStudioImageSlot(slot, null) 이고 Undo 한 칸이다.
+  ====================================================== */
+
+  const focusHead =
+    document.createElement("div");
+
+  focusHead.className = "images-panel-focus";
+  focusHead.id = "skinImagesPanelFocus";
+  focusHead.hidden = true;
+
+  const focusThumb =
+    document.createElement("span");
+
+  focusThumb.className = "images-panel-focus-thumb";
+  focusHead.appendChild(focusThumb);
+
+  const focusMeta =
+    document.createElement("div");
+
+  focusMeta.className = "images-panel-focus-meta";
+
+  const focusLabel =
+    document.createElement("p");
+
+  focusLabel.className = "images-panel-focus-label";
+  focusMeta.appendChild(focusLabel);
+
+  const focusClear =
+    document.createElement("button");
+
+  focusClear.type = "button";
+  focusClear.className = "images-panel-focus-clear";
+  focusClear.id = "skinImagesPanelFocusClear";
+  focusClear.textContent = "비우기";
+  focusMeta.appendChild(focusClear);
+
+  focusHead.appendChild(focusMeta);
+
+  modal.appendChild(focusHead);
 
   const slotsColumn =
     document.createElement("section");
@@ -300,6 +398,19 @@ function buildImagesPanelDom() {
     "슬롯 연결은 Save를 눌러야 저장되고, Publish해야 공개 화면에 반영돼요.";
   footer.appendChild(hint);
 
+  /* STUDIO-LAYERS-MEDIA-1 — 파일만 남았을 때의 재시도.
+     평소에는 없다(지울 파일이 없으면 보여 줄 이유가 없다). */
+  const retryButton =
+    document.createElement("button");
+
+  retryButton.type = "button";
+  retryButton.className = "images-panel-retry-button";
+  retryButton.id = "skinImagesPanelRetry";
+  retryButton.textContent = "파일 다시 지우기";
+  retryButton.hidden = true;
+  retryButton.addEventListener("click", retryImagesPanelObjectDelete);
+  footer.appendChild(retryButton);
+
   const doneButton =
     document.createElement("button");
 
@@ -316,6 +427,13 @@ function buildImagesPanelDom() {
   (host || document.body).appendChild(overlay);
 
   imagesPanelOverlay = overlay;
+  imagesPanelBackButton = backButton;
+  imagesPanelTitle = title;
+  imagesPanelSlotsColumn = slotsColumn;
+  imagesPanelFocusHead = focusHead;
+  imagesPanelFocusThumb = focusThumb;
+  imagesPanelFocusLabel = focusLabel;
+  imagesPanelFocusClear = focusClear;
   imagesPanelSlotList = slotList;
   imagesPanelGrid = grid;
   imagesPanelMessage = message;
@@ -324,10 +442,42 @@ function buildImagesPanelDom() {
   imagesPanelUploadButton = uploadButton;
   imagesPanelPasteZone = pasteZone;
   imagesPanelPasteZonePick = pasteZonePick;
+  imagesPanelRetryButton = retryButton;
   imagesPanelBody = body;
 
   closeButton.addEventListener("click", closeSkinImagesPanel);
   doneButton.addEventListener("click", closeSkinImagesPanel);
+
+  /* ← 와 "비우기"(STUDIO-LAYERS-MEDIA-1) */
+
+  backButton.addEventListener("click", () => {
+
+    if (typeof window.returnFromStudioImagesPanel === "function") {
+      window.returnFromStudioImagesPanel();
+      return;
+    }
+
+    closeSkinImagesPanel();
+
+  });
+
+  focusClear.addEventListener("click", () => {
+
+    const slot =
+      focusedImagesPanelSlot();
+
+    if (!slot || !slot.binding) {
+      return;
+    }
+
+    window.setStudioImageSlot(slot.name, null);
+
+    setImagesPanelMessage(`"${slot.label}"을(를) 비웠어요. Save를 눌러 저장하세요.`);
+
+    renderImagesPanelSlots();
+    renderImagesPanelGrid();
+
+  });
 
   /* 바깥(어두운 배경)을 눌러 닫기 — modal 로 뜰 때만 의미가 있다.
      왼쪽 패널 안에서는 바깥이 Preview 이고, 거기를 누르는 것은
@@ -473,10 +623,113 @@ function buildImagesPanelDom() {
    슬롯 목록 렌더
 ========================================================== */
 
+/* 지금 고른 자리의 상태(label · binding) — 없으면 null */
+function focusedImagesPanelSlot() {
+
+  if (typeof window.getStudioImageSlotState !== "function") {
+    return null;
+  }
+
+  const state =
+    window.getStudioImageSlotState();
+
+  if (!state || !Array.isArray(state.slots)) {
+    return null;
+  }
+
+  return state.slots.find((slot) => slot.name === imagesPanelSelectedSlot) || null;
+
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 머리(← · 제목 · 자리 하나 미리보기)
+
+   제목은 focus 화면에서 **그 자리의 사람이 읽는 이름**이다. 슬롯
+   없이 열린 목록 화면에서만 예전 "IMAGES" 로 돌아간다.
+========================================================== */
+
+function syncImagesPanelHead() {
+
+  if (!imagesPanelOverlay) {
+    return;
+  }
+
+  const back =
+    (typeof window.getStudioImagesPanelReturn === "function")
+      ? window.getStudioImagesPanelReturn()
+      : null;
+
+  if (imagesPanelBackButton) {
+
+    imagesPanelBackButton.hidden = !back;
+
+    if (back) {
+      imagesPanelBackButton.textContent = `← ${back.label}`;
+      imagesPanelBackButton.setAttribute("aria-label", `${back.label}(으)로 돌아가기`);
+    }
+
+  }
+
+  const slot =
+    imagesPanelFocusMode ? focusedImagesPanelSlot() : null;
+
+  if (imagesPanelTitle) {
+    imagesPanelTitle.textContent = slot ? slot.label : "IMAGES";
+  }
+
+  /* 목록 열은 focus 화면에서 접는다 — 같은 정보를 두 번 보여 주지
+     않고, 기술 이름이 늘어선 목록을 첫 화면으로 두지 않는다. */
+  if (imagesPanelSlotsColumn) {
+    imagesPanelSlotsColumn.hidden = !!slot;
+  }
+
+  if (!imagesPanelFocusHead) {
+    return;
+  }
+
+  imagesPanelFocusHead.hidden = !slot;
+
+  if (!slot) {
+    return;
+  }
+
+  imagesPanelFocusThumb.innerHTML = "";
+
+  imagesPanelFocusThumb.classList.toggle(
+    "images-panel-focus-thumb--empty",
+    !slot.binding
+  );
+
+  if (slot.binding) {
+
+    const img =
+      document.createElement("img");
+
+    img.src = slot.binding.imageUrl;
+    img.alt = "";
+    imagesPanelFocusThumb.appendChild(img);
+
+  } else {
+    imagesPanelFocusThumb.textContent = "비어 있음";
+  }
+
+  imagesPanelFocusLabel.textContent =
+    slot.binding
+      ? "지금 이 자리에 있는 사진이에요."
+      : "아직 사진이 없는 자리예요.";
+
+  imagesPanelFocusClear.disabled = !slot.binding;
+
+}
+
+
 function renderImagesPanelSlots() {
 
   const state =
     window.getStudioImageSlotState();
+
+  syncImagesPanelHead();
 
   imagesPanelSlotList.innerHTML = "";
 
@@ -560,10 +813,12 @@ function renderImagesPanelSlots() {
     const sub =
       document.createElement("span");
 
+    /* STUDIO-LAYERS-MEDIA-1 — slot.name(기술 이름)은 적지 않는다.
+       사용자에게 뜻이 없고, 같은 이름이 화면마다 달라 보일 이유도
+       없다. 사람이 읽는 label 은 바로 위 줄에 이미 있다. */
     sub.className = "images-panel-slot-sub";
     sub.textContent =
       [
-        slot.name,
         slot.required ? "필수" : null,
         slot.aspectRatioHint
       ]
@@ -593,7 +848,7 @@ function renderImagesPanelSlots() {
 
       window.setStudioImageSlot(slot.name, null);
 
-      setImagesPanelMessage(`"${slot.label}" 슬롯을 비웠어요. Save를 눌러 저장하세요.`);
+      setImagesPanelMessage(`"${slot.label}"을(를) 비웠어요. Save를 눌러 저장하세요.`);
 
       renderImagesPanelSlots();
       renderImagesPanelGrid();
@@ -677,8 +932,12 @@ function renderImagesPanelGrid() {
 
     attachButton.type = "button";
     attachButton.className = "images-panel-card-attach";
+    /* STUDIO-LAYERS-MEDIA-1 — 자리 하나 화면에서는 "이 자리에 넣기".
+       목록 화면에서는 예전 문구 그대로다. */
     attachButton.textContent =
-      imagesPanelSelectedSlot ? "이 슬롯에 연결" : "연결";
+      imagesPanelSelectedSlot
+        ? (imagesPanelFocusMode ? "이 자리에 넣기" : "이 슬롯에 연결")
+        : "연결";
     attachButton.disabled = !imagesPanelSelectedSlot;
 
     attachButton.addEventListener("click", () => {
@@ -691,12 +950,16 @@ function renderImagesPanelGrid() {
         window.setStudioImageSlot(imagesPanelSelectedSlot, image);
 
       if (!applied) {
-        setImagesPanelMessage("이 슬롯에는 연결할 수 없어요.", true);
+        setImagesPanelMessage("이 자리에는 넣을 수 없어요.", true);
         return;
       }
 
+      /* 사람이 읽는 이름으로만 말한다(기술 이름을 적지 않는다) */
+      const named =
+        focusedImagesPanelSlot();
+
       setImagesPanelMessage(
-        `"${imagesPanelSelectedSlot}" 슬롯에 연결했어요. Save를 눌러 저장하세요.`
+        `"${named ? named.label : "고른 자리"}"에 넣었어요. Save를 눌러 저장하세요.`
       );
 
       renderImagesPanelSlots();
@@ -720,15 +983,21 @@ function renderImagesPanelGrid() {
     deleteButton.textContent = "삭제";
 
     /*
-      "지금 편집 중인 draft가 쓰고 있는 이미지"는 버튼 자체를 막아
-      실수를 줄인다. 그 밖에 "과거에 저장/발행된 버전이 쓰는
-      이미지"는 여기서 알 수 없으므로, 최종 판정은 delete_skin_image()
-      RPC가 하고(참조가 하나라도 있으면 거절) 그 메시지를 그대로
-      보여준다.
+      STUDIO-LAYERS-MEDIA-1 — **막지 않는다**.
+
+      예전에는 "지금 편집 중인 draft 가 쓰는 이미지"면 버튼을
+      disabled 로 두고, 저장/발행된 버전이 쓰는 이미지는
+      delete_skin_image() RPC 가 거절하게 두었다. 그래서 한 번이라도
+      Save 한 이미지는 화면에서 비워도 **영영 지울 수 없었고** 용량도
+      돌려받지 못했다.
+
+      이제는 누르면 어디서 쓰는지 세어 보여 주고, 사용자가 확인하면
+      사용처에서 떼고 지운다(handleImagesPanelDelete). "지금 쓰는
+      중"이라는 사실은 버튼을 막는 대신 표식으로만 남긴다.
     */
     if (usedImageIds.has(image.id)) {
-      deleteButton.disabled = true;
-      deleteButton.title = "지금 슬롯에 연결되어 있어요. 먼저 비워주세요.";
+      deleteButton.title = "지금 이 스킨에서 쓰고 있는 사진이에요.";
+      card.classList.add("images-panel-card--in-use");
     }
 
     deleteButton.addEventListener("click", () => {
@@ -793,7 +1062,11 @@ async function uploadImagesPanelFile(file) {
 
     setImagesPanelMessage(
       imagesPanelSelectedSlot
-        ? "업로드했어요. 카드의 \"이 슬롯에 연결\"을 눌러 연결하세요."
+        ? (
+            imagesPanelFocusMode
+              ? "업로드했어요. 카드의 \"이 자리에 넣기\"를 누르세요."
+              : "업로드했어요. 카드의 \"이 슬롯에 연결\"을 눌러 연결하세요."
+          )
         : "업로드했어요."
     );
 
@@ -1012,32 +1285,191 @@ function handleImagesPanelDrop(event) {
 }
 
 
-async function handleImagesPanelDelete(image) {
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 삭제
+
+   세 갈래다.
+
+     쓰지 않는 사진   한 번 확인하고 지운다(예전과 같은 RPC).
+     쓰는 사진        어디서 몇 곳에서 쓰는지 보여 주고, 사용자가
+                      확인하면 **사용처에서 떼고** 지운다.
+     준비 안 된 배포  새 RPC 가 없는 배포에서는 예전처럼 "사용 중이라
+                      지울 수 없다"로 남는다(fail closed).
+
+   ★ 어디를 세는가 — 두 곳이다
+
+     지금 편집 중인 화면   메모리의 working draft
+                           (getStudioImageSlotState — 아직 저장 안 됨)
+     저장된 버전들         skin_version_image_slots
+                           (공개 중 · 마지막 저장본 · 지난 저장본)
+
+   ★ 되돌릴 수 없다
+
+   Studio 의 ↶ 는 메모리 기록이라 지워진 파일을 되살리지 못한다.
+   그래서 확인 문구에 그 말을 적고, 성공 메시지에도 "되돌릴 수 없다"를
+   남긴다. 사용처에서 뗀 것(=슬롯 비우기)은 Save 전이면 ↶ 로 되돌릴
+   수 있지만 **파일은 이미 없다** — 되살아나는 것처럼 보이지 않도록
+   working draft 의 그 자리도 함께 비운다.
+
+   ★ 순서 — 참조 → DB row → 파일
+
+   파일부터 지우면 "URL 은 남았는데 그림이 없는" 화면이 된다. 그래서
+   언제나 참조를 먼저 떼고(RPC 한 트랜잭션), 성공한 뒤에만 파일을
+   지운다. 파일 삭제만 실패하면 그 사실을 분명히 말하고 다시 시도할
+   수 있게 한다(아래 재시도 줄).
+========================================================== */
+
+/* 지금 편집 중인 화면에서 이 사진을 쓰는 자리들 */
+function imagesPanelWorkingUses(imageId) {
+
+  if (typeof window.getStudioImageSlotState !== "function") {
+    return [];
+  }
+
+  const state =
+    window.getStudioImageSlotState();
+
+  if (!state || !Array.isArray(state.slots)) {
+    return [];
+  }
+
+  return state.slots.filter(
+    (slot) => slot.binding && slot.binding.imageId === imageId
+  );
+
+}
+
+
+function describeImagesPanelUsage(working, usage) {
+
+  const lines = [];
+
+  if (working.length) {
+    lines.push(
+      `지금 편집 중인 화면 ${working.length}곳(${working.map((slot) => slot.label).join(" · ")})`
+    );
+  }
+
+  if (usage.published) {
+    lines.push(`공개 중인 스킨 ${usage.published}곳`);
+  }
+
+  if (usage.draft) {
+    lines.push(`저장된 편집본 ${usage.draft}곳`);
+  }
+
+  if (usage.past) {
+    lines.push(`지난 저장본 ${usage.past}곳`);
+  }
+
+  return lines;
+
+}
+
+
+/* 새 RPC 가 아직 없는 배포인가(migration 미적용) */
+function imagesPanelMissingRpc(err) {
+
+  const code =
+    err && err.code ? String(err.code) : "";
+
+  const message =
+    err && err.message ? String(err.message) : "";
+
+  return code === "PGRST202" ||
+    code === "404" ||
+    message.includes("delete_skin_image_everywhere");
+
+}
+
+
+async function runImagesPanelDelete(image, everywhere, working) {
 
   setImagesPanelBusy(true);
   setImagesPanelMessage("삭제 중...");
 
   try {
 
-    await window.skinImageLibrary.remove(image.id);
+    let storageFailed =
+      null;
+
+    if (everywhere) {
+
+      const result =
+        await window.skinImageLibrary.removeEverywhere(image.id);
+
+      if (!result.storageRemoved) {
+        storageFailed = result.storagePath;
+      }
+
+      /*
+        참조를 뗀 것은 저장된 버전들이다. 지금 편집 중인 화면의 그
+        자리도 함께 비운다 — 파일이 없는 URL 을 Preview 가 계속
+        가리키지 않게(그리고 다음 Save 가 없는 이미지를 다시 적지
+        않게). 이것은 평소의 "비우기"와 같은 경로라 ↶ 한 칸이다.
+      */
+      working.forEach((slot) => {
+        window.setStudioImageSlot(slot.name, null);
+      });
+
+    } else {
+
+      await window.skinImageLibrary.remove(image.id);
+
+    }
 
     imagesPanelImages =
       imagesPanelImages.filter((item) => item.id !== image.id);
 
-    setImagesPanelMessage("삭제했어요.");
+    imagesPanelPendingObject =
+      storageFailed || null;
 
+    syncImagesPanelRetry();
+
+    if (storageFailed) {
+
+      setImagesPanelMessage(
+        "사용처에서는 뺐지만 파일을 지우지 못했어요. 아래 \"파일 다시 지우기\"를 눌러 주세요.",
+        true
+      );
+
+    } else {
+
+      setImagesPanelMessage(
+        everywhere
+          ? "사용처에서 빼고 삭제했어요. 되돌릴 수 없어요."
+          : "삭제했어요. 되돌릴 수 없어요."
+      );
+
+    }
+
+    renderImagesPanelSlots();
     renderImagesPanelGrid();
 
   } catch (err) {
 
     console.error("[images-panel] delete failed", err);
 
-    setImagesPanelMessage(
-      err && err.message
-        ? `삭제하지 못했어요: ${err.message}`
-        : "삭제하지 못했어요.",
-      true
-    );
+    if (everywhere && imagesPanelMissingRpc(err)) {
+
+      /* fail closed — 지울 수 없다는 사실을 분명히 말한다 */
+      setImagesPanelMessage(
+        "이 배포에서는 사용 중인 사진을 지울 수 없어요. " +
+        "Supabase migration(20260923100000_delete_skin_image_everywhere.sql)이 " +
+        "적용되면 사용할 수 있어요.",
+        true
+      );
+
+    } else {
+
+      setImagesPanelMessage(
+        err && err.message
+          ? `삭제하지 못했어요: ${err.message}`
+          : "삭제하지 못했어요.",
+        true
+      );
+
+    }
 
   } finally {
 
@@ -1047,6 +1479,122 @@ async function handleImagesPanelDelete(image) {
 
 }
 
+
+async function handleImagesPanelDelete(image) {
+
+  const working =
+    imagesPanelWorkingUses(image.id);
+
+  let usage =
+    { total: 0, published: 0, draft: 0, past: 0, versions: [] };
+
+  setImagesPanelBusy(true);
+  setImagesPanelMessage("사용처를 확인하는 중...");
+
+  try {
+
+    usage =
+      await window.skinImageLibrary.usage(image.id);
+
+  } catch (err) {
+
+    console.error("[images-panel] usage lookup failed", err);
+
+    setImagesPanelBusy(false);
+
+    setImagesPanelMessage(
+      "어디에서 쓰는지 확인하지 못해 삭제를 멈췄어요. 잠시 뒤 다시 시도해 주세요.",
+      true
+    );
+
+    return;
+
+  }
+
+  setImagesPanelBusy(false);
+  setImagesPanelMessage("");
+
+  const count =
+    working.length + usage.total;
+
+  if (typeof window.openStudioConfirmDialog !== "function") {
+    /* dialog 를 못 여는 문서 — 확인 없이 지우지 않는다 */
+    setImagesPanelMessage("삭제 확인 창을 열 수 없어요.", true);
+    return;
+  }
+
+  if (!count) {
+
+    window.openStudioConfirmDialog({
+      message:
+        "이 사진을 삭제할까요? 파일이 완전히 지워지고 되돌릴 수 없어요.",
+      confirmLabel: "삭제",
+      cancelLabel: "취소",
+      onConfirm: () => runImagesPanelDelete(image, false, working)
+    });
+
+    return;
+
+  }
+
+  const lines =
+    describeImagesPanelUsage(working, usage);
+
+  window.openStudioConfirmDialog({
+    message:
+      `이 이미지는 스킨의 ${count}곳에서 사용 중입니다.\n` +
+      `${lines.join("\n")}\n\n` +
+      "사용처에서 이미지를 비우고 파일을 삭제할까요?\n" +
+      "공개 중인 화면의 그 자리는 비어 보이게 되고, 되돌릴 수 없어요.",
+    confirmLabel: "사용처에서 제거하고 삭제",
+    cancelLabel: "취소",
+    onConfirm: () => runImagesPanelDelete(image, true, working)
+  });
+
+}
+
+
+/* 파일만 남았을 때의 재시도 대상(storage_path) — 화면 상태다 */
+async function retryImagesPanelObjectDelete() {
+
+  const path =
+    imagesPanelPendingObject;
+
+  if (!path) {
+    return;
+  }
+
+  setImagesPanelBusy(true);
+  setImagesPanelMessage("파일을 지우는 중...");
+
+  try {
+
+    await window.skinImageLibrary.removeObject(path);
+
+    imagesPanelPendingObject = null;
+
+    setImagesPanelMessage("파일까지 지웠어요.");
+
+  } catch (err) {
+
+    console.error("[images-panel] storage retry failed", err);
+
+    setImagesPanelMessage(
+      err && err.message
+        ? `파일을 지우지 못했어요: ${err.message}`
+        : "파일을 지우지 못했어요.",
+      true
+    );
+
+  } finally {
+
+    setImagesPanelBusy(false);
+
+    syncImagesPanelRetry();
+
+  }
+
+}
 
 /* =========================================================
    열기 / 닫기
@@ -1063,6 +1611,10 @@ async function openSkinImagesPanel() {
 
   setImagesPanelMessage("");
 
+  /* STUDIO-LAYERS-MEDIA-1 — 안내만 보여 주는 두 경우에도 ← 는
+     보여야 한다(돌아갈 길이 없는 화면에 갇히지 않게). */
+  syncImagesPanelHead();
+
   const state =
     window.getStudioImageSlotState();
 
@@ -1072,6 +1624,7 @@ async function openSkinImagesPanel() {
     imagesPanelNotice.textContent =
       "Skin을 먼저 불러온 뒤에 사용할 수 있어요.";
     imagesPanelBody.hidden = true;
+    imagesPanelFocusHead.hidden = true;
 
     return;
 
@@ -1085,6 +1638,7 @@ async function openSkinImagesPanel() {
       "Supabase migration(20260907100000_create_skin_image_library.sql)이 " +
       "적용되면 사용할 수 있어요.";
     imagesPanelBody.hidden = true;
+    imagesPanelFocusHead.hidden = true;
 
     return;
 
@@ -1134,6 +1688,16 @@ function closeSkinImagesPanel() {
 
   imagesPanelIsOpen = false;
 
+  /* STUDIO-LAYERS-MEDIA-1 — "자리 하나" 는 **이번 방문에만** 산다.
+     다음에 이름 없이 열리면 목록 폴백이어야지, 지난번에 보던 남의
+     자리를 머리에 크게 달고 뜨면 안 된다. 어느 자리인지 아는
+     입구들은 열기 직전에 다시 알려 준다(setSkinImagesPanelSlot). */
+  imagesPanelFocusMode = false;
+
+  imagesPanelPendingObject = null;
+
+  syncImagesPanelRetry();
+
   if (imagesPanelOverlay) {
     imagesPanelOverlay.hidden = true;
   }
@@ -1152,13 +1716,23 @@ function closeSkinImagesPanel() {
    고를지만 적어 두고, 실제로 여는 것은 셸이다(showStudioLeftPanelMode).
    이미 열려 있으면 목록을 다시 그린다. 연결은 지금처럼 사용자가
    "이 슬롯에 연결"을 눌러야 일어난다(setStudioImageSlot = ↶ 한 칸).
+
+   ★ STUDIO-LAYERS-MEDIA-1 — 이름이 오면 **자리 하나 화면**이다.
+
+   이 창구를 부르는 곳은 전부 "어느 자리인가"를 알고 있다(Layers 의
+   사진 행 · Select 의 "이미지 변경" · Layout 의 제목 로고 · Layers
+   아래의 스킨 이미지 구역). 그래서 이름이 오면 focus 로 켠다.
+   목록 화면으로 돌아가고 싶으면 `{ focus: false }` 다.
 ========================================================== */
 
-function setSkinImagesPanelSlot(slotName) {
+function setSkinImagesPanelSlot(slotName, options) {
 
   if (typeof slotName !== "string" || !slotName) {
     return;
   }
+
+  imagesPanelFocusMode =
+    !(options && options.focus === false);
 
   imagesPanelSelectedSlot =
     slotName;

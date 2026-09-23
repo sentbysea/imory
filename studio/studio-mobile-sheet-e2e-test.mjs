@@ -823,8 +823,9 @@ async function runPanels(browser) {
   await page.keyboard.press("Escape");
   await sleep(150);
 
-  /* Images */
-  await page.click("#studioImagesButton");
+  /* Images — STUDIO-LAYERS-MEDIA-1: 상단 버튼 대신 셸 창구로 연다
+     (여는 길은 Layers 의 사진 행 · Select 의 "이미지 변경"이다) */
+  await page.evaluate(() => window.showStudioLeftPanelMode("images", { returnTo: "layers" }));
   await page.waitForFunction(() => {
     const grid = document.querySelector("#studioLeftPanelImages .images-panel-grid");
     return grid && grid.children.length >= 2;

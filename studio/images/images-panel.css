@@ -67,12 +67,174 @@
 
 
 .images-panel-title {
+  flex: 1 1 auto;
+
   margin: 0;
+
+  overflow: hidden;
 
   font-size: 12px;
   font-weight: 600;
 
   letter-spacing: 0.14em;
+
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — ← 로 온 자리로 돌아간다
+
+   머리의 맨 왼쪽이다. 제목이 그 자리의 이름(사람이 읽는 말)이라
+   길 수 있으므로 ← 는 줄지 않고 제목만 줄인다.
+========================================================== */
+
+.images-panel-back {
+  flex: 0 0 auto;
+
+  padding: 4px 8px;
+
+  border: 1px solid var(--system-border);
+  border-radius: var(--imory-radius-200);
+
+  background: transparent;
+
+  color: var(--system-text-muted);
+
+  font: inherit;
+  font-size: 11px;
+
+  white-space: nowrap;
+
+  cursor: pointer;
+}
+
+
+.images-panel-back:hover,
+.images-panel-back:focus-visible {
+  border-color: var(--system-border-strong);
+
+  color: var(--system-text);
+}
+
+
+.images-panel-back[hidden] {
+  display: none;
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 자리 하나 화면의 머리
+
+   지금 그 자리에 들어 있는 사진과 "비우기". 목록 열은 이때 접히고
+   (images-panel.js syncImagesPanelHead) 본문에는 내 이미지만 남는다.
+========================================================== */
+
+.images-panel-focus {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+
+  padding: 12px 16px;
+
+  border-bottom: 1px solid var(--system-border);
+}
+
+
+.images-panel-focus[hidden] {
+  display: none;
+}
+
+
+.images-panel-focus-thumb {
+  flex: 0 0 auto;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 64px;
+  height: 64px;
+
+  overflow: hidden;
+
+  border: 1px solid var(--system-border);
+  border-radius: var(--imory-radius-200);
+
+  background: var(--system-surface);
+
+  color: var(--system-text-muted);
+
+  font-size: 9px;
+
+  text-align: center;
+}
+
+
+.images-panel-focus-thumb img {
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+
+.images-panel-focus-meta {
+  flex: 1 1 auto;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  gap: 6px;
+
+  min-width: 0;
+}
+
+
+.images-panel-focus-label {
+  margin: 0;
+
+  color: var(--system-text-muted);
+
+  font-size: 11px;
+  line-height: 1.5;
+
+  word-break: keep-all;
+}
+
+
+.images-panel-focus-clear {
+  padding: 4px 10px;
+
+  border: 1px solid var(--system-border);
+  border-radius: var(--imory-radius-200);
+
+  background: transparent;
+
+  color: var(--system-text-muted);
+
+  font: inherit;
+  font-size: 11px;
+
+  cursor: pointer;
+}
+
+
+.images-panel-focus-clear:hover:not(:disabled),
+.images-panel-focus-clear:focus-visible:not(:disabled) {
+  border-color: var(--system-border-strong);
+
+  color: var(--system-text);
+}
+
+
+.images-panel-focus-clear:disabled {
+  opacity: 0.45;
+
+  cursor: default;
 }
 
 
@@ -604,6 +766,38 @@
   line-height: 1.6;
 
   word-break: keep-all;
+}
+
+
+/* STUDIO-LAYERS-MEDIA-1 — 파일만 남았을 때의 재시도. 평소에는 없다. */
+.images-panel-retry-button {
+  flex: 0 0 auto;
+
+  padding: 6px 14px;
+
+  border: 1px solid var(--system-danger, #b3261e);
+  border-radius: 999px;
+
+  background: transparent;
+
+  color: var(--system-danger, #b3261e);
+
+  font: inherit;
+  font-size: 10px;
+
+  cursor: pointer;
+}
+
+
+.images-panel-retry-button[hidden] {
+  display: none;
+}
+
+
+/* 지금 스킨이 쓰는 사진 — 막지는 않고 표식만 남긴다 */
+.images-panel-card--in-use .images-panel-card-image {
+  outline: 2px solid var(--system-border-strong);
+  outline-offset: -2px;
 }
 
 

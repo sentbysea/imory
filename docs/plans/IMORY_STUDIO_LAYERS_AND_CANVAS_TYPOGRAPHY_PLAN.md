@@ -53,6 +53,14 @@
 
 ## 1. 최종 정보 구조
 
+> **변경됨(STUDIO-LAYERS-MEDIA-1 · 2026-09-23)** — 상단 진입점은 이제
+> **셋**이다. `Images` 가 상단에서 빠지고, 이미지 연결 · 교체 · 비우기는
+> **Layers 안**으로 들어갔다(사진 행을 한 번 누르면 그 자리의 이미지
+> 화면). 현행 계약은 이 문서가 아니라
+> [IMORY_HOME_CANVAS_CONTRACT.md §34](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> 와 [IMORY_STUDIO_SHELL_DESIGN.md §2-3](../features/studio/IMORY_STUDIO_SHELL_DESIGN.md)
+> 이다. 아래 표의 **Images** 줄은 그 라운드 이전의 기록이다.
+
 Studio 상단 왼쪽 진입점은 다음 넷이다.
 
 ```text
@@ -62,7 +70,7 @@ Select · Images · Layers · Layout
 | 진입점 | 책임 | 하지 않는 것 |
 | --- | --- | --- |
 | **Select** | 현재 고른 요소 하나의 내용 · geometry · 시각 속성 · 타이포그래피 | 재료 추가 · 전체 순서 관리 · 소속 변경 |
-| **Images** | 이미지 슬롯에 실제 이미지 연결 · 교체 · 비우기 | 레이어 순서 · 요소 geometry |
+| **Images** | 이미지 슬롯에 실제 이미지 연결 · 교체 · 비우기 (**STUDIO-LAYERS-MEDIA-1 에서 상단 진입점이 없어지고 Layers · Select · Layout 안에서 열리는 하위 화면이 되었다**) | 레이어 순서 · 요소 geometry |
 | **Layers** | 재료 추가 · 전체 트리 · 선택 · 순서 · 소속 · primary · 숨김 · 잠금 · 삭제 · 다중 작업 | 글꼴·색·개별 geometry 입력 |
 | **Layout** | HOME 전체의 1·2·3단 · 전역 HOME 설정 | 개별 요소 편집 |
 | **Settings > Bottom Dock** | 사이트 하단 Dock의 표시 여부 · 열기 버튼 · 항목 · 이동/기능 | Canvas 레이어 편집 |

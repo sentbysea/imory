@@ -5501,3 +5501,92 @@ responsive override · v1 Layers 의 구조 편집 · 일반 HTML Inspector 변�
 
 `HOME-CANVAS-V2-GROUP-1A` 의 그룹 조작 · Moveable resize 방향 변경 ·
 새 숫자 입력 컴포넌트 · Canvas JSON 의 새 칸 · `APP_BUILD_VERSION` 변경.
+
+---
+
+## 34. Layers 에서 사진 바꾸기 · 고른 것이 보이는 규칙 (`STUDIO-LAYERS-MEDIA-1`)
+
+라운드: 2026-09-23. 관련 코드 — `studio/inspector/studio-canvas-layers.js` ·
+`studio/images/images-panel.js` · `studio/images/skin-image-library.js` ·
+`studio/studio-shell.js` · `studio/inspector/studio-canvas-selection.js` ·
+`studio/preview/preview-bridge.js`. 화면 구조 쪽 계약은
+[IMORY_STUDIO_SHELL_DESIGN.md §2-3](../features/studio/IMORY_STUDIO_SHELL_DESIGN.md),
+이미지 삭제 쪽은
+[SKIN_IMAGE_LIBRARY_PLAN.md](../features/images/SKIN_IMAGE_LIBRARY_PLAN.md) 에 있다.
+
+### 34-1. 사진 행은 **한 번 누르면** 고르면서 그 자리의 이미지 화면이 된다
+
+그림이 들어가는 재료는 셋이다 — `photo` · `sticker` · `logo`(§14-4 의 표).
+이 셋만 `props.slot` 을 갖고, Layers 의 그 행에는 작은 미리보기가 붙는다.
+
+- 행 본문(이름 단추)을 **수식키 없이** 한 번 누르면
+  ① 기존 선택 관문으로 그 요소가 골라지고(§25-2 — 새 선택 배열을 만들지
+  않는다) ② 같은 왼쪽 패널이 그 자리의 이미지 화면으로 바뀐다. 별도의
+  "교체" 단추를 한 번 더 누르게 하지 않는다.
+- 다음 경우에는 **고르기만** 한다: `Ctrl`/`⌘`(더하기/빼기) · `Shift` ·
+  끄는 중 · 그림 자리가 없는 종류(글자 · 도형 · 카테고리 · 구분선 ·
+  메인 비주얼 자신).
+- 행 오른쪽 단추(손잡이 · 눈 · 자물쇠 · 삭제)는 이 핸들러에 오지 않는다
+  (§32-2 의 그 규칙 그대로).
+- 지금 선언에 없는 슬롯 이름이면 열지 않는다 — 패널이 보여 줄 수 없고
+  `setStudioImageSlot()` 도 거절한다(§27-2).
+- `← Layers` 로 돌아오면 트리와 **선택이 그대로**다. 선택을 들고 있는
+  곳이 캔버스 선택 하나이기 때문이다.
+
+트리의 행 이름은 지금까지처럼 **종류**(사진 · 로고 · 스티커)다. 그 자리의
+사람이 읽는 이름(`imageSlots[].label`)은 넘어간 화면의 제목이 된다.
+
+### 34-2. 트리에 없는 그림 자리는 "스킨 이미지" 구역에 남는다
+
+Layers 트리는 **HOME 캔버스(v2)** 의 구조다. 그런데 `imageSlots` 는
+SkinPackage 한 벌이고 CATEGORY · POST · BANNER 템플릿도 같은 선언을
+나눠 쓴다(`data-imory-src="images.<슬롯>"`). 그래서 트리의 행으로
+표현되지 않는 자리가 남는다.
+
+- 트리 아래의 **스킨 이미지** 구역이 그 자리들을 보여 준다(선언된 슬롯
+  − 트리가 이미 보여 주는 슬롯). 캔버스가 아닌 스킨(legacy · v1)에서는
+  **모든** 자리가 여기 있다.
+- 이 구역이 상단 Images 버튼을 대신한다 — 트리가 비었다는 이유로 함께
+  사라지지 않는다. 그렇지 않으면 그 스킨의 그림에 손이 닿지 않는다.
+- 여기서도 기술 이름을 적지 않는다(사람이 읽는 `label` 만).
+
+### 34-3. 고른 것은 **언제나** 실제 렌더 DOM 의 좌표로 표시된다
+
+부모가 고르는 입구(Layers 의 행 · `proposeStudioCanvasSelection`)로 고른
+요소는 좌표를 받지 못했다 — 프레임의 Inspector 가 "부모가 시킨 선택"에는
+좌표를 한 번도 올리지 않았기 때문이다(`setInspectorSelection(el,
+{ silent: true })`). 축 평행 테두리와 이름표는 그 좌표가 있어야 그려지므로
+화면에 **아무 표시도 나지 않았다**.
+
+- 프레임은 부모가 시킨 선택에도 **좌표를 한 번 올린다**
+  (`postInspectorRects()`). `silent` 는 "선택했다는 말을 되돌려 보내지
+  않는다"는 뜻이지 "좌표를 숨긴다"가 아니다. 고른 것이 없을 때
+  (`editId: null`)는 보내지 않는다 — 그 보고는 "프레임이 놓았다"로 읽히는
+  자리가 있다.
+- 좌표는 **지어내지 않는다**. `getBoundingClientRect()` 로 잰 실제 렌더
+  DOM 의 값이고, 스크롤 · 창 크기 변화는 기존 보고 경로가 따라간다.
+- 크기를 조절할 수 없는 자리(예: `align:"stretch"` 인 흐름 블록 — 폭
+  손잡이의 자를 만들 수 없다, §29-4)는 **외곽선과 이름표만** 나온다.
+  손잡이 틀(Moveable)은 붙지 않는다.
+- 다른 행을 누르면 그 요소로 곧바로 옮겨 간다.
+- 숨김 · 잠김 규칙은 §32-5 그대로다.
+
+### 34-4. native 와 sandbox 가 같은 표시다
+
+| | 테두리 | 이름표 |
+| --- | --- | --- |
+| native | Studio 문서의 축 평행 상자 | Studio 문서 |
+| sandbox | **프레임**이 자기 realm 에서 그린다 | Studio 문서 |
+| Moveable 틀이 붙은 동안 | 그 틀 하나 | Studio 문서 |
+
+부모는 상자를 **두 경우에** 내린다 — 프레임이 회전 틀을 붙였을 때
+(`frameActive`)와 sandbox 일 때(`studioInspectorRemoteOverlay`). **이름표는
+두 경우 모두 부모가 그린다** — 상자가 아니라 겹쳐 보이지 않고, 좌표는 같은
+`preview:inspect-rects` 메시지로 이미 와 있다. 기존 Inspector 의 이름표가
+sandbox 에서도 부모 몫인 것과 같은 규칙이다.
+
+### 34-5. 이 라운드가 만들지 않은 것
+
+`HOME-CANVAS-V2-GROUP-1A~1C` 의 그룹 조작 · 재료 프리셋 갤러리 ·
+Crop/필터/효과 · 내부 `imageSlots` 저장 계약의 변경 · `APP_BUILD_VERSION`
+변경.

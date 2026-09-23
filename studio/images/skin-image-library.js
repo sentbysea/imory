@@ -339,6 +339,206 @@ async function deleteSkinImage(imageId) {
 
 
 /* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 이 이미지를 **어디서** 쓰고 있나
+
+   loadSkinImageUsage(imageId)
+     -> { total, published, draft, past, versions: [...] }
+
+   연결은 버전 단위다. 그래서 같은 이미지가 여러 버전에 동시에
+   걸려 있고, 그중 하나가 지금 공개 중인 버전일 수 있다. 사용자에게
+   "몇 곳에서 쓰는가"를 말하려면 그 셋을 갈라야 한다.
+
+     published  지금 공개 중인 버전(= 지우면 공개 화면이 비워진다)
+     draft      마지막으로 **저장한** 편집본
+     past       그 밖의 지난 저장본
+
+   ★ 지금 화면에서 편집 중인(아직 저장하지 않은) 연결은 여기 없다 —
+     그것은 DB 가 아니라 메모리의 working draft 라
+     getStudioImageSlotState() 가 안다. 세는 곳이 둘인 이유이고,
+     둘을 합치는 곳은 패널이다(images-panel.js).
+
+   ★ 읽기만 한다. 이 함수는 아무것도 지우지 않는다.
+
+   권한: skin_version_image_slots 와 skins 는 소유자에게 select 가
+   열려 있다(migration 20260907100000 · 20260904110000). 그래서 새
+   RPC 없이 그대로 읽는다.
+========================================================== */
+
+async function loadSkinImageUsage(imageId) {
+
+  const empty =
+    { total: 0, published: 0, draft: 0, past: 0, versions: [] };
+
+  if (!imageId) {
+    return empty;
+  }
+
+  const { data: rows, error } =
+    await supabaseClient
+      .from("skin_version_image_slots")
+      .select("version_id, slot_name")
+      .eq("image_id", imageId);
+
+  if (error) {
+    throw error;
+  }
+
+  if (!rows || !rows.length) {
+    return empty;
+  }
+
+  const versionIds =
+    Array.from(new Set(rows.map((row) => row.version_id)));
+
+  const { data: versions, error: versionError } =
+    await supabaseClient
+      .from("skin_versions")
+      .select("id, skin_id")
+      .in("id", versionIds);
+
+  if (versionError) {
+    throw versionError;
+  }
+
+  const skinIdOf = {};
+
+  (versions || []).forEach((version) => {
+    skinIdOf[version.id] = version.skin_id;
+  });
+
+  const skinIds =
+    Array.from(new Set(Object.values(skinIdOf)));
+
+  const { data: skins, error: skinError } =
+    skinIds.length
+      ? await supabaseClient
+          .from("skins")
+          .select("id, current_draft_version_id, current_published_version_id")
+          .in("id", skinIds)
+      : { data: [], error: null };
+
+  if (skinError) {
+    throw skinError;
+  }
+
+  const pointerOf = {};
+
+  (skins || []).forEach((skin) => {
+    pointerOf[skin.id] = skin;
+  });
+
+  const usage =
+    { total: rows.length, published: 0, draft: 0, past: 0, versions: [] };
+
+  rows.forEach((row) => {
+
+    const skin =
+      pointerOf[skinIdOf[row.version_id]] || null;
+
+    const where =
+      (skin && skin.current_published_version_id === row.version_id)
+        ? "published"
+        : (
+            (skin && skin.current_draft_version_id === row.version_id)
+              ? "draft"
+              : "past"
+          );
+
+    usage[where] += 1;
+
+    usage.versions.push({
+      versionId: row.version_id,
+      slotName: row.slot_name,
+      where: where
+    });
+
+  });
+
+  return usage;
+
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 사용처에서 제거하고 삭제
+
+   deleteSkinImageEverywhere(imageId)
+
+   위 삭제(deleteSkinImage)와 **순서가 같다**: 참조 제거 → DB row
+   삭제 → Storage object 삭제. 앞 둘은 새 RPC 하나가 한 트랜잭션에서
+   하고(migration 20260923100000), 파일은 그 RPC 가 돌려준 경로로
+   여기서 지운다.
+
+   ★ 참조 제거에 실패하면 파일을 지우지 않는다 — RPC 가 예외를 내면
+     이 함수는 거기서 끝난다(깨진 URL 을 남기지 않는다).
+   ★ 파일 삭제만 실패하면 그 사실을 **호출자에게 알린다**(여기서
+     삼키지 않는다). 지금까지의 delete 와 다른 점이다 — 그쪽은
+     "지워졌다"로 끝냈지만, 이 경로는 사용자가 용량을 되찾으려고
+     누른 것이라 재시도할 기회를 줘야 한다.
+
+   -> { storagePath, storageRemoved: boolean, storageError }
+
+   ★ migration 이 아직 적용되지 않은 배포에서는 RPC 가 없어 예외가
+     난다(PostgREST 404 / PGRST202). 그 경우 지금까지처럼 "사용 중이라
+     지울 수 없다"로 남는 것이 옳다 — 호출자가 그 메시지를 만든다.
+========================================================== */
+
+async function deleteSkinImageEverywhere(imageId) {
+
+  const { data: storagePath, error } =
+    await supabaseClient
+      .rpc("delete_skin_image_everywhere", { p_image_id: imageId });
+
+  if (error) {
+    throw error;
+  }
+
+  if (!storagePath) {
+    return { storagePath: null, storageRemoved: true, storageError: null };
+  }
+
+  const { error: removeError } =
+    await supabaseClient
+      .storage
+      .from(SKIN_IMAGE_BUCKET)
+      .remove([storagePath]);
+
+  return {
+    storagePath: storagePath,
+    storageRemoved: !removeError,
+    storageError: removeError || null
+  };
+
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 남은 파일만 다시 지우기
+
+   위에서 DB row 는 지워졌는데 Storage 삭제만 실패했을 때의 재시도다.
+   DB 를 다시 만지지 않는다(이미 지워졌다).
+========================================================== */
+
+async function removeSkinImageObject(storagePath) {
+
+  if (!storagePath) {
+    return;
+  }
+
+  const { error } =
+    await supabaseClient
+      .storage
+      .from(SKIN_IMAGE_BUCKET)
+      .remove([storagePath]);
+
+  if (error) {
+    throw error;
+  }
+
+}
+
+
+/* =========================================================
    버전별 슬롯 연결 읽기
 
    { slotName: { imageId, imageUrl } } 형태로 돌려준다 — Preview는
@@ -439,6 +639,12 @@ if (typeof window !== "undefined") {
     validateFile: validateSkinImageFile,
     upload: uploadSkinImage,
     remove: deleteSkinImage,
+
+    /* STUDIO-LAYERS-MEDIA-1 */
+    usage: loadSkinImageUsage,
+    removeEverywhere: deleteSkinImageEverywhere,
+    removeObject: removeSkinImageObject,
+
     loadVersionSlots: loadVersionImageSlots,
     versionUsesLibrary: versionUsesImageLibrary
   };

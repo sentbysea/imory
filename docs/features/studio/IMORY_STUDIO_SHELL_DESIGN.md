@@ -22,11 +22,16 @@ Bottom Dock 데이터 · AI 요청 · SkinPackage · Save/Publish · 선택 복�
 ## 1. 화면 구조 (현재 구현)
 
 ```
-[ ← · Select · Images · Layers · Layout | 현재 페이지 · Desktop|Mobile · ↶ ↷ | Code · Import|Export · Save · Publish · AI ]
+[ ← · Select · Layers · Layout | 현재 페이지 · Desktop|Mobile · ↶ ↷ | Code · Import|Export · Save · Publish · AI ]
 [ 왼쪽 패널 ][                 Preview stage                 ][ AI 패널 ]
 ```
 
-- **왼쪽 그룹** — 나가기(← back)와 왼쪽 패널을 여는 넷.
+- **왼쪽 그룹** — 나가기(← back)와 왼쪽 패널을 여는 **셋**.
+  STUDIO-LAYERS-MEDIA-1 에서 **Images 버튼이 없어졌다** — 사진을
+  바꾸는 일은 "어느 사진인가"가 정해진 뒤에야 뜻이 있어서, 여는 길을
+  Layers 의 사진 행 · Select 의 "이미지 변경" · Layout 의 제목 로고
+  셋으로 옮겼다(§2 의 표 · §2-3). 패널 자리도 데이터도 저장 경로도
+  그대로다.
   STUDIO-LAYERS-SHELL-1 에서 셋째 자리가 **Dock → Layers** 로 바뀌었다
   (계획 문서 [IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md](../../plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md) §1).
   Bottom Dock 은 사이트 전체의 이동 설정이라 Canvas 편집 진입점과 같은
@@ -53,14 +58,14 @@ Bottom Dock 데이터 · AI 요청 · SkinPackage · Save/Publish · 선택 복�
 
 ## 2. 왼쪽 패널 (현재 구현)
 
-Select · Images · Layers · Layout 이 같은 자리(`#studioLeftPanel`)를 나눠
-쓴다. Dock 도 같은 자리의 한 내용이지만 **상단 버튼이 없다**. 각 section
-안의 DOM 은 그 기능 파일이 처음 열 때 만들어 넣는다.
+Select · Layers · Layout 이 같은 자리(`#studioLeftPanel`)를 나눠 쓴다.
+**Images 와 Dock 도 같은 자리의 한 내용이지만 상단 버튼이 없다.** 각
+section 안의 DOM 은 그 기능 파일이 처음 열 때 만들어 넣는다.
 
 | 내용 | section | 들어가는 것 | 예전 모양 |
 | --- | --- | --- | --- |
 | Select | `#studioLeftPanelSelect` | Inspector 팝오버(`#studioInspectorPopover`) 그대로 | Preview 위에 뜨는 카드 |
-| Images | `#studioLeftPanelImages` | `.images-panel-overlay` 그대로 | 화면 전체 modal |
+| Images | `#studioLeftPanelImages` | `.images-panel-overlay` 그대로 | 화면 전체 modal → 상단 버튼도 없어졌다(§2-3) |
 | Layers | `#studioLeftPanelLayers` | 트리 + 재료 추가(`studio/inspector/studio-canvas-layers.js`) | Select 패널 맨 위의 추가 자리 |
 | Dock | `#studioLeftPanelDock` | `.dock-panel-overlay` 그대로 | 화면 전체 modal |
 
@@ -109,7 +114,7 @@ Layers 는 들고 있는 사본이 없다 — 열 때마다 working draft 에서
 | 내용 | 다른 내용으로 옮기거나 접을 때 | 다시 올 때 |
 | --- | --- | --- |
 | Select | 아무 일도 없다 | 그대로 |
-| Images | 닫는다(상태가 없다) | 목록을 새로 읽는다(예전 modal 과 같다) |
+| Images | 닫는다(상태가 없다 — "자리 하나" 표시도 이때 풀린다) | 목록을 새로 읽는다(예전 modal 과 같다) |
 | Dock | **숨기기만** 한다 — 적용하지 않은 사본을 지킨다 | 그 사이 working draft revision 이 그대로면 사본 그대로, 바뀌었으면 새 사본 |
 
 내용이 스스로 닫히면(Images 닫기 · Dock 적용/취소/지우기 · Escape) 그
@@ -123,8 +128,34 @@ Images/Dock 의 Escape 는 패널이 **지금 그 내용을 보여 줄 때만** 
 
 Images · Layers · Dock 을 여는 입구는 전부 셸을 거친다
 (`showStudioLeftPanelMode`): 상단 버튼, 직접 수정의 "이미지 변경",
-Preview 안 dock 누르기, 그리고 바깥(admin)에서 온 `admin:open-studio-panel`.
-기능 파일의 open 함수를 직접 부르면 숨은 section 에 그려진다.
+Layers 의 사진 행, Preview 안 dock 누르기, 그리고 바깥(admin)에서 온
+`admin:open-studio-panel`. 기능 파일의 open 함수를 직접 부르면 숨은
+section 에 그려진다.
+
+### 2-3. Images 는 "돌아갈 곳"을 들고 여는 하위 화면이다 (STUDIO-LAYERS-MEDIA-1)
+
+여는 곳이 셋이고 셋 다 **어느 자리인지 알고** 연다.
+
+| 여는 곳 | 무엇을 넘기나 | ← 가 돌아가는 곳 |
+| --- | --- | --- |
+| Layers 의 사진 행(사진 · 스티커 · 로고) | 그 행의 `props.slot` | Layers |
+| Select 의 Quick Bar "이미지 변경" | 고른 요소의 슬롯 | Select(꺼져 있으면 Layers) |
+| Layout 의 "로고 고르기" | 제목 로고 슬롯 | Layout |
+
+- 셸이 `showStudioLeftPanelMode("images", { returnTo })` 로 그 값을
+  들고 있고(`studioLeftPanelImagesReturnTo`), 패널 머리의 ← 는
+  `getStudioImagesPanelReturn()` 이 알려 준 이름을 적는다. 닫기 ·
+  Escape 도 같은 곳으로 간다(`returnFromStudioImagesPanel`).
+- 모르는 이름이거나 값이 없으면 **Layers** 다 — Images 는 스스로 서는
+  자리가 아니므로 어떤 옛 경로가 이름만으로 열어도 돌아갈 곳이 있는
+  화면에 선다.
+- 슬롯 이름과 함께 열리면 **그 자리 하나** 화면이다: 머리에 지금 사진의
+  작은 미리보기와 "비우기", 본문에는 내 이미지 그리드만(슬롯 목록 열은
+  접힌다). 슬롯 없이 열리면 예전 목록 화면이 폴백으로 남는다.
+- 어느 화면에도 **기술적인 슬롯 이름(`canvas_photo_2` 등)을 적지
+  않는다** — 사람이 읽는 `label` 만 쓴다.
+- 넣기 · 비우기는 지금까지와 같은 `setStudioImageSlot()` 하나이고
+  **Undo 한 칸**이다. DB 기록은 여전히 Save 뿐이다.
 
 바깥에서 오는 메시지는 **부모가 보낸 것 · 같은 origin · 아는 모드 이름**
 일 때만 받는다. 열 수 있는 자리는 목록(`STUDIO_OPENABLE_FROM_PARENT`)으로
@@ -237,7 +268,7 @@ STUDIO-SHELL-1 까지는 Inspector 팝오버 아래 "되돌리기"(직전 직접
 ## 5. 좁은 화면 — 720px 이하 (현재 구현)
 
 ```
-1줄: Select · Images · Layers ………… Save · Publish · ···
+1줄: Select · Layers ………………… Save · Publish · ···
 2줄: ← · 현재 페이지 · Desktop|Mobile · ↶ ↷ …………… AI
 ```
 
@@ -309,7 +340,7 @@ Quick Bar 자리)은 그대로다. 단계는 `studio/studio-sheet.js` 가 들고
 | 상단 Select(고른 것 없음) | 접힘(이름 자리에 "Preview에서 고칠 요소를 누르세요") |
 | Preview 안 더블클릭 글자 편집 | 잠시 접힘 → 확정 · 취소하면 원래 단계 |
 | Preview 에서 요소 옮기기 시작(본체 끌기 · 이동 손잡이) | 접힘. 놓은 뒤 다시 펼치지 않는다 |
-| 상단 Images · Quick Bar 이미지 변경 | 내용 보기. Quick Bar 에서 왔으면 사진을 붙인 뒤 고른 요소(Select · 접힘)로 돌아간다 |
+| Images(Layers 의 사진 행 · Quick Bar 이미지 변경 · Layout 의 로고) | 내용 보기. 사진을 붙이면 **온 자리로 돌아간다**(Layers · Select · Layout — 그 자리 · 접힘). 넓은 화면에서는 그대로 머문다 |
 | 상단 Layers | 내용 보기. 들고 있는 사본이 없어서 다시 열 때마다 지금 draft 그대로다 |
 | Dock(Preview 의 dock · SETTINGS) | 내용 보기. **적용해도 닫지 않는다** — 적용한 값으로 사본을 새로 만들어 같은 자리 · 같은 스크롤에 다시 보여 준다(넓은 화면은 예전처럼 닫힌다) |
 | AI 를 열었다 닫음 | AI 가 열린 동안 숨고, 닫으면 같은 내용 · 같은 단계 · 같은 선택 |

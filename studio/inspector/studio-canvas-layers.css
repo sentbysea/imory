@@ -220,6 +220,123 @@
 }
 
 
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 사진 행의 작은 미리보기
+
+   그림이 들어가는 자리를 가진 행(사진 · 스티커 · 로고)과 아래
+   "스킨 이미지" 구역이 같은 네모를 쓴다. 빈 자리는 빈 네모로 남는다
+   — 플랫폼이 가짜 그림을 넣지 않는다.
+========================================================== */
+
+.studio-canvas-layers-thumb {
+  flex: 0 0 auto;
+
+  display: block;
+
+  width: 20px;
+  height: 20px;
+
+  overflow: hidden;
+
+  border: 1px solid var(--system-border);
+  border-radius: 3px;
+
+  background: var(--system-surface);
+}
+
+
+.studio-canvas-layers-thumb img {
+  display: block;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 — 스킨 이미지 구역
+
+   트리의 행으로 표현되지 않는 그림 자리들. 상단 Images 버튼이
+   없어진 자리를 메운다(studio/inspector/studio-canvas-layers.js
+   renderStudioCanvasLayersMedia 머리말).
+========================================================== */
+
+.studio-canvas-layers-media {
+  margin: 4px 0 0;
+
+  padding: 10px 14px 16px;
+
+  border-top: 1px solid var(--system-border);
+}
+
+
+.studio-canvas-layers-media[hidden] {
+  display: none;
+}
+
+
+.studio-canvas-layers-media-heading {
+  margin: 0 0 6px;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  font-weight: 600;
+
+  letter-spacing: 0.12em;
+}
+
+
+.studio-canvas-layers-media-list {
+  display: flex;
+  flex-direction: column;
+
+  gap: 2px;
+}
+
+
+.studio-canvas-layers-media-item {
+  display: flex;
+  align-items: center;
+
+  gap: 6px;
+
+  width: 100%;
+
+  padding: 5px 6px;
+
+  border: 0;
+  border-radius: 5px;
+
+  background: transparent;
+  color: inherit;
+
+  font: inherit;
+  font-size: var(--imory-font-size-300);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.studio-canvas-layers-media-item:hover,
+.studio-canvas-layers-media-item:focus-visible {
+  background: var(--system-bg-subtle, rgba(0, 0, 0, 0.06));
+}
+
+
+.studio-canvas-layers-media-name {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
 /* ★ 대표 사진 — 이번 단계에서는 **표식만**이다(계획 문서 §2-5) */
 .studio-canvas-layers-star {
   flex: 0 0 auto;

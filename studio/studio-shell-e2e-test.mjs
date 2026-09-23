@@ -238,6 +238,17 @@ function workingHomeHtml(page) {
   });
 }
 
+/* STUDIO-LAYERS-MEDIA-1 — 상단 버튼 대신 셸 창구로 연다 */
+async function openImagesPanel(page, returnTo) {
+  await page.evaluate((to) => {
+    window.showStudioLeftPanelMode("images", to ? { returnTo: to } : undefined);
+  }, returnTo || null);
+  await page.waitForFunction(() => {
+    const o = document.querySelector("#studioLeftPanelImages .images-panel-overlay");
+    return !!o && !o.hidden;
+  });
+}
+
 function isDirty(page) {
   return page.evaluate(() => window.getStudioAiWorkingState().isDirty);
 }
@@ -247,8 +258,10 @@ function overlaps(a, b) {
     a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
 }
 
+/* STUDIO-LAYERS-MEDIA-1 — Images 버튼은 없어졌다(여는 길은 Layers 의
+   사진 행 · Select 의 "이미지 변경" · Layout 의 제목 로고). */
 const TOOLBAR_IDS = [
-  "studioBackButton", "studioInspectorButton", "studioImagesButton", "studioLayersButton",
+  "studioBackButton", "studioInspectorButton", "studioLayersButton",
   "studioPageIndicator", "studioViewportToggle", "studioUndoButton", "studioRedoButton",
   "studioCodeButton", "studioImportButton", "studioExportButton", "studioMoreButton",
   "studioSaveButton", "studioPublishButton", "studioAiToggleButton"
@@ -278,8 +291,8 @@ async function runToolbar(context) {
   }, TOOLBAR_IDS);
 
   record(
-    "A1. 왼쪽 = Select · Images · Layers(+나가기), 가운데 = 현재 페이지 · Desktop/Mobile · Undo/Redo, 오른쪽 = Code · Import · Export · Save · Publish",
-    ["studioBackButton", "studioInspectorButton", "studioImagesButton", "studioLayersButton"].every(id => groups[id] === "lead") &&
+    "A1. 왼쪽 = Select · Layers(+나가기), 가운데 = 현재 페이지 · Desktop/Mobile · Undo/Redo, 오른쪽 = Code · Import · Export · Save · Publish",
+    ["studioBackButton", "studioInspectorButton", "studioLayersButton"].every(id => groups[id] === "lead") &&
       ["studioPageIndicator", "studioViewportToggle", "studioUndoButton", "studioRedoButton"].every(id => groups[id] === "center") &&
       ["studioCodeButton", "studioImportButton", "studioExportButton", "studioSaveButton", "studioPublishButton"].every(id => groups[id] === "actions"),
     JSON.stringify(groups)
@@ -444,25 +457,28 @@ async function runPanels(context) {
   await selectInPreview(page, ".y-heading");
   const firstId = await page.evaluate(() => window.getStudioInspectorSelection().editId);
 
-  await page.click("#studioImagesButton");
-  await page.waitForFunction(() => {
-    const o = document.querySelector("#studioLeftPanelImages .images-panel-overlay");
-    return !!o && !o.hidden;
-  });
+  await openImagesPanel(page, "select");
   const b2 = await page.evaluate(() => ({
     mode: window.getStudioShellState().leftPanelMode,
     selectHidden: document.getElementById("studioLeftPanelSelect").hidden,
     inspectorOn: window.getStudioInspectorState().enabled,
     selection: window.getStudioInspectorSelection() && window.getStudioInspectorSelection().editId,
     selectExpanded: document.getElementById("studioInspectorButton").getAttribute("aria-expanded"),
-    imagesExpanded: document.getElementById("studioImagesButton").getAttribute("aria-expanded"),
+    imagesButton: !!document.getElementById("studioImagesButton"),
+    back: (document.getElementById("skinImagesPanelBack") || {}).textContent,
     bodyOverlay: !!document.querySelector("body > .images-panel-overlay")
   }));
   record(
     "B2. Images 는 같은 왼쪽 패널에 열리고(modal 아님) Select 모드와 고른 요소는 그대로다",
     b2.mode === "images" && b2.selectHidden && b2.inspectorOn && b2.selection === firstId &&
-      b2.selectExpanded === "false" && b2.imagesExpanded === "true" && !b2.bodyOverlay,
+      b2.selectExpanded === "false" && !b2.bodyOverlay,
     JSON.stringify(b2)
+  );
+
+  record(
+    "B2-b. STUDIO-LAYERS-MEDIA-1 — 상단 Images 버튼은 없고, 그 화면의 ← 가 온 자리를 가리킨다",
+    b2.imagesButton === false && b2.back === "← Select",
+    JSON.stringify({ imagesButton: b2.imagesButton, back: b2.back })
   );
 
   /* Dock — 사본에 항목 하나를 더한 채 떠났다 돌아온다 */
@@ -635,15 +651,15 @@ async function runPanels(context) {
     JSON.stringify({ reopen, off, offCollapsed })
   );
 
-  /* Images 닫기 버튼 → 패널이 접힌다 */
-  await page.click("#studioImagesButton");
-  await page.waitForFunction(() => !document.querySelector("#studioLeftPanelImages .images-panel-overlay").hidden);
+  /* Images 닫기 버튼 → 온 자리로 돌아간다(STUDIO-LAYERS-MEDIA-1) */
+  await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
+  await openImagesPanel(page, "layers");
   await page.click("#studioLeftPanelImages .images-panel-done-button");
   await settle(page);
   const imagesClosed = await shell(page);
   record(
-    "B10. Images 의 닫기는 왼쪽 패널을 접는다",
-    !imagesClosed.leftPanelOpen,
+    "B10. Images 의 닫기는 온 자리(Layers)로 돌아간다 — 갇히는 화면이 아니다",
+    imagesClosed.leftPanelOpen && imagesClosed.leftPanelMode === "layers",
     JSON.stringify(imagesClosed)
   );
 
@@ -1061,8 +1077,7 @@ async function runUnits(context) {
 
   /* ---------- U3. 이미지 교체(Images 패널 — 슬롯에 다른 사진) ---------- */
 
-  await page.click("#studioImagesButton");
-  await page.waitForFunction(() => !document.querySelector("#studioLeftPanelImages .images-panel-overlay").hidden);
+  await openImagesPanel(page);
   await page.waitForSelector("#studioLeftPanelImages .images-panel-card-attach", { timeout: 6000 });
   await page.click("#studioLeftPanelImages .images-panel-slot-pick");
   await checkOneUnit(
@@ -1387,7 +1402,7 @@ async function runNarrow(context) {
     return out;
   }, TOOLBAR_IDS);
 
-  const row1 = ["studioInspectorButton", "studioImagesButton", "studioLayersButton", "studioSaveButton", "studioPublishButton", "studioMoreButton"];
+  const row1 = ["studioInspectorButton", "studioLayersButton", "studioSaveButton", "studioPublishButton", "studioMoreButton"];
   const row2 = ["studioBackButton", "studioPageIndicator", "studioViewportToggle", "studioUndoButton", "studioRedoButton", "studioAiToggleButton"];
   const row1Top = m.studioInspectorButton && m.studioInspectorButton.top;
 
@@ -1507,7 +1522,7 @@ async function runNarrow(context) {
   await page.click("#studioAiToggleButton");
   await settle(page);
   const aiOpen = await page.evaluate(() => ({ ai: window.getStudioAiPanelLayoutState().open, left: window.getStudioShellState().leftPanelOpen, sel: !!window.getStudioInspectorSelection() }));
-  await page.click("#studioImagesButton");
+  await openImagesPanel(page, "layers");
   await settle(page);
   const leftAgain = await page.evaluate(() => ({ ai: window.getStudioAiPanelLayoutState().open, left: window.getStudioShellState().leftPanelOpen, mode: window.getStudioShellState().leftPanelMode }));
   record(

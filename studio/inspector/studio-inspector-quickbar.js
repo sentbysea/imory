@@ -1201,7 +1201,7 @@ function openStudioInspectorImageChange() {
   }
 
   if (typeof window.showStudioLeftPanelMode === "function") {
-    window.showStudioLeftPanelMode("images", { returnToSelect: true });
+    window.showStudioLeftPanelMode("images", { returnTo: "select" });
   } else if (typeof window.openSkinImagesPanel === "function") {
     window.openSkinImagesPanel();
   } else {
