@@ -730,12 +730,33 @@
         const host =
           await window.skinSandboxHostReady;
 
+
+        /* ─ mount 예산 (?mountTimeout=<ms>) ───────────────────
+
+           기본값은 **운영 그대로**다(skin/sandbox/skin-sandbox-host.js
+           의 READY 4s · RENDERED 예산). 손으로 여는 하네스는 운영과
+           같은 조건을 보여 줘야 하고, skin/sandbox/skin-sandbox-e2e-test.mjs
+           도 그 조건을 그대로 잰다 — 주지 않으면 한 줄도 달라지지 않는다.
+
+           주는 쪽은 자동 e2e 다. 그쪽은 재는 화면마다 **빈 context** 를
+           새로 열어 프레임 문서와 스크립트를 디스크에서 다시 받는다.
+           그 왕복은 한가한 기계에서 0.6~0.9s 지만(2026-09-23 실측)
+           기계가 바쁘면 4s 를 넘을 수 있고, 그때 제품은 계약대로
+           native 로 되돌아간다(재시도 없다). 프레임이 아예 사라지니
+           테스트는 "프레임을 못 찾았다"로 끝난다 — 제품이 아니라
+           **하네스가 만든 조건**이라 e2e 가 자기 예산을 적어 준다. */
+
+        const mountTimeoutMs =
+          Number(params.get("mountTimeout")) || 0;
+
         const result =
           await host.mountSandboxSkin({
             container: document.getElementById("sandboxMount"),
             pageType: pageType,
             template,
             context,
+            timeoutMs: mountTimeoutMs || undefined,
+            renderTimeoutMs: mountTimeoutMs || undefined,
             onError: (reason) => {
               window.__sandboxHarnessErrors.push(reason);
             }

@@ -890,6 +890,24 @@ const findEl = (reading, id) => reading.elements.find((e) => e.editId === id);
 const SANDBOX_FLAGS =
   `sandboxSkin=1&sandboxSkinOrigin=${encodeURIComponent(SANDBOX_ORIGIN)}`;
 
+/*
+  mount 예산 — 하네스가 mountSandboxSkin() 에 그대로 넘긴다
+  (skin/skin-sandbox-test.html ?mountTimeout).
+
+  운영 기본값은 READY 4s 다. 이 파일은 재는 화면마다 빈 context 를
+  새로 열어 프레임 문서와 스크립트를 매번 다시 받으므로, 기계가
+  바쁘면 그 예산을 넘겨 제품이 계약대로 native 로 되돌아간다 —
+  프레임이 없어져 절이 통째로 "못 찾았다"가 된다. 늘리는 것은
+  기다림이 아니라 **판정 기한**이다: 프레임이 빨리 오면 그만큼
+  빨리 지나가고, 끝내 안 오면 여전히 실패한다.
+
+  ★ 아래 하네스 결과 대기(30s)보다 **짧게** 둔다. 그래야 예산을
+    넘긴 경우가 Playwright 의 TimeoutError 가 아니라 제품이 적은
+    reason("timeout")으로 올라온다 — 무엇이 늦었는지 로그만 보고
+    안다.
+*/
+const MOUNT_TIMEOUT_MS = 12000;
+
 async function openPublic(browser, options) {
 
   const o = options || {};
@@ -935,6 +953,7 @@ async function openPublic(browser, options) {
 
   const query =
     "?" + SANDBOX_FLAGS +
+    "&mountTimeout=" + MOUNT_TIMEOUT_MS +
     (o.native === false ? "" : "&native=1") +
     (o.linkNav ? "&linkNav=1" : "") +
     (o.pageType ? "&pageType=" + o.pageType : "");
@@ -942,22 +961,91 @@ async function openPublic(browser, options) {
   await page.goto(PARENT_ORIGIN + SANDBOX_HARNESS + query, { waitUntil: "load" });
 
   await page.waitForFunction(
-    () => window.__sandboxHarnessResult !== undefined, null, { timeout: 20000 }
+    () => window.__sandboxHarnessResult !== undefined, null, { timeout: 30000 }
   );
 
-  const frame = page.frames().find((f) => f.url().startsWith(SANDBOX_ORIGIN)) || null;
+  /* =====================================================
+     프레임은 **준비될 때까지** 찾는다
 
-  if (frame) {
-    await frame.waitForFunction(
-      () => document.getElementById("sandboxFrameRoot")
-        .getAttribute("data-imory-sandbox-state") === "rendered",
-      null, { timeout: 15000 }
-    ).catch(() => {});
+     지금까지는 위 한 줄 바로 뒤에서 page.frames() 를 한 번 찍었다.
+     그 값이 비면 pub.frame 이 null 이 되고, 절들은 이유 없는
+     {"found":false} 하나만 찍었다(pages 절의 간헐 실패가 그것이다).
+
+     비는 길이 둘이다. 어느 쪽인지는 **하네스가 이미 적어 둔**
+     mount 결과가 가른다 — 테스트용 상태를 새로 만들지 않는다.
+
+       1. 제품이 되돌아갔다 — __sandboxHarnessResult.ok === false.
+          프레임이 destroy 됐으니 기다릴 것이 없다. reason 을 그대로
+          들고 나가 절이 그것을 찍는다.
+       2. 아직 안 붙었다 — ok 인데 Playwright 의 frame 목록에 없다.
+          cross-origin 프레임은 Chromium 에서 다른 프로세스의
+          target 이라, 문서 안의 사실이 Node 쪽에 늦게 닿을 수 있다.
+          그 두 사실이 만나는 지점까지 기다린다.
+
+     기다리는 조건은 **제품이 쓰는 그 표식**이다 —
+     #sandboxFrameRoot 의 data-imory-sandbox-state 가 "rendered"
+     (skin/sandbox/skin-sandbox-frame.js 가 렌더 끝에 쓴다).
+  ====================================================== */
+
+  const mount =
+    await page.evaluate(() => ({
+      result: window.__sandboxHarnessResult || null,
+      errors: (window.__sandboxHarnessErrors || []).slice(0, 3)
+    }));
+
+  let frame = null;
+
+  if (mount.result && mount.result.ok === true) {
+
+    const limit = Date.now() + 15000;
+
+    for (;;) {
+
+      const candidate =
+        page.frames().find(
+          (f) => f.url().startsWith(SANDBOX_ORIGIN) && !f.isDetached()
+        ) || null;
+
+      if (candidate) {
+
+        const rendered =
+          await candidate.evaluate(() => {
+            const root = document.getElementById("sandboxFrameRoot");
+            return Boolean(root) &&
+              root.getAttribute("data-imory-sandbox-state") === "rendered";
+          }).catch(() => false);
+
+        if (rendered) {
+          frame = candidate;
+          break;
+        }
+
+        /* 붙기는 했는데 아직 안 그렸다 — 그 자체가 답일 수 있으니
+           기한이 지나면 있는 것을 그대로 돌려준다(지금까지처럼
+           절이 읽고 판정한다). */
+        if (Date.now() >= limit) {
+          frame = candidate;
+          break;
+        }
+
+      }
+
+      else if (Date.now() >= limit) {
+        break;
+      }
+
+      await page.waitForTimeout(25);
+
+    }
+
   }
 
+  /* 렌더 직후의 가라앉기 — 이 절 이전부터 있던 대기다. 준비 판정은
+     위 표식이 하고, 이것은 높이 적용처럼 RENDERED 뒤에 이어지는
+     일을 위한 것이라 그대로 둔다(늘리지 않는다). */
   await page.waitForTimeout(200);
 
-  return { ctx, page, frame, consoleErrors, pageErrors };
+  return { ctx, page, frame, mount, consoleErrors, pageErrors };
 
 }
 
@@ -1821,7 +1909,11 @@ async function run() {
         check(`★ ${pageType.toUpperCase()} — 표식이 있어도 프레임이 캔버스를 그리지 않는다`,
           f.found && f.markers === 1 && f.active === null &&
           f.ownedCount === 0 && !f.styleLink,
-          JSON.stringify({ found: f.found, markers: f.markers, active: f.active, n: f.ownedCount }));
+          JSON.stringify({
+            found: f.found, markers: f.markers, active: f.active, n: f.ownedCount,
+            /* 프레임이 없으면 하네스가 적어 둔 mount 결과가 이유다 */
+            mount: pub.frame ? undefined : pub.mount
+          }));
 
         check(`${pageType.toUpperCase()} — 스크립트 오류 0`,
           pub.pageErrors.length === 0, pub.pageErrors.slice(0, 2).join(" | "));

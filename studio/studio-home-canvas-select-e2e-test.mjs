@@ -588,6 +588,179 @@ async function clickIn(page, selector, fx, fy) {
 const byId = (id) => `[data-imory-edit-id="${id}"]`;
 
 
+/* =========================================================
+   재기 — 편집 chrome 이 **표시할** bounds (계약 §21-4 · §29-2)
+
+   ★ 왜 제품이 그린 테두리를 그대로 베끼지 않는가
+
+   이 절이 재려는 것은 "프레임 좌표 → 부모 좌표 변환과 scale 적용이
+   정확한가" 하나다. 그리는 쪽이 낸 값을 기대값으로 삼으면 변환이
+   틀려도 언제나 통과한다. 그래서 기대값은 **여기서 다시 만든다** —
+   프레임 안의 날 것 사각형(요소 · 자식)만 읽고, 기준 문서에 적힌
+   규칙을 그대로 적용한다.
+
+   규칙(§29-2): 글자를 **직접 보여 주는** 캔버스 요소에서만 자식이
+   실제로 차지한 자리까지 합치고 바깥에 5px 여유를 둔다. 사진 ·
+   스티커 · 도형은 상자가 곧 경계라 그대로다.
+
+   ★ 자르는 조상이 있으면 성립하지 않는다
+   visibleRect 는 overflow 가 visible 이 아닌 조상과의 교집합을 먼저
+   낸다(preview-bridge.js inspectorVisibleRectOf). 이 fixture 의
+   CSS 는 overflow 를 한 줄도 쓰지 않으므로 그 단계가 항등이고,
+   아래 measureIn() 이 그 사실을 함께 돌려준다 — 언젠가 fixture 가
+   바뀌면 단언이 아니라 이 전제가 먼저 깨지는 것이 보인다.
+========================================================== */
+
+/* 여유(px) — skin/skin-inspect-target.js 의 INSPECTOR_CANVAS_CONTENT_GAP ·
+   skin/skin-home-canvas-editor-runtime.js 의 CANVAS_EDIT_CHROME_GAP 과
+   같은 값이다(계약이 "같은 뜻 · 같은 여유"라고 적은 그 값). */
+const CHROME_GAP = 5;
+
+/* 글자를 직접 보여 주는 표식 — 종류 이름이 아니라 렌더러가 붙인
+   이름으로 가른다(프레임은 JSON type 을 모른다 · §21-4) */
+const TEXT_CONTENT_SELECTOR =
+  "[data-imory-canvas-text],[data-imory-canvas-nav],[data-imory-canvas-logo-text]";
+
+
+async function measureIn(page, selector) {
+
+  return page.evaluate(([sel, textSel, gap]) => {
+
+    const frame = document.getElementById("studioPreviewFrame");
+    const doc = frame.contentDocument;
+    const view = doc.defaultView;
+    const el = doc.querySelector(sel);
+
+    if (!el) return null;
+
+    /* 재기만 한다 — 스크롤하지 않는다. 누를 자리를 잡을 때
+       (pointIn) 이미 옮겨 놓았고, 그 뒤로 움직인 것이 없어야
+       테두리와 같은 순간을 재는 것이 된다. */
+    const r = el.getBoundingClientRect();
+    const box = frame.getBoundingClientRect();
+    const scale = box.width / (frame.offsetWidth || box.width);
+    const cs = getComputedStyle(frame);
+    const bl = parseFloat(cs.borderLeftWidth) || 0;
+    const bt = parseFloat(cs.borderTopWidth) || 0;
+
+    const elRect = { x: r.left, y: r.top, w: r.width, h: r.height };
+
+    const isText = Boolean(el.querySelector(textSel));
+
+    let contentRect = { x: elRect.x, y: elRect.y, w: elRect.w, h: elRect.h };
+
+    if (isText) {
+
+      let left = r.left;
+      let top = r.top;
+      let right = r.right;
+      let bottom = r.bottom;
+
+      Array.prototype.forEach.call(el.children, (child) => {
+
+        if (!child || child.nodeType !== 1) return;
+
+        const b = child.getBoundingClientRect();
+
+        /* 자리를 차지하지 않는 자식은 상자를 넓히지 않는다 */
+        if (!(b.width > 0) && !(b.height > 0)) return;
+
+        left = Math.min(left, b.left);
+        top = Math.min(top, b.top);
+        right = Math.max(right, b.right);
+        bottom = Math.max(bottom, b.bottom);
+
+      });
+
+      contentRect = {
+        x: left - gap,
+        y: top - gap,
+        w: (right - left) + gap * 2,
+        h: (bottom - top) + gap * 2
+      };
+
+    }
+
+    /* 자르는 조상이 하나라도 있으면 위 전제가 깨진다 */
+    let clipped = false;
+
+    for (let n = el.parentElement; n && n.nodeType === 1; n = n.parentElement) {
+      const s = view.getComputedStyle(n);
+      if (s.overflowX !== "visible" || s.overflowY !== "visible") {
+        clipped = true;
+        break;
+      }
+    }
+
+    /* 회전 각 — 행렬에서 되읽는다(저장값을 믿지 않는다) */
+    const m = view.getComputedStyle(el).transform;
+    let rotation = 0;
+
+    if (m && m !== "none") {
+      const n = m.slice(m.indexOf("(") + 1, m.lastIndexOf(")"))
+        .split(",").map((v) => parseFloat(v));
+      if (n.length >= 4 && Number.isFinite(n[0]) && Number.isFinite(n[1])) {
+        rotation = Math.round(Math.atan2(n[1], n[0]) * 180 / Math.PI);
+      }
+    }
+
+    return {
+      scale,
+      origin: { x: box.left + bl * scale, y: box.top + bt * scale },
+      elRect,
+      contentRect,
+      isText,
+      clipped,
+      rotation
+    };
+
+  }, [selector, TEXT_CONTENT_SELECTOR, CHROME_GAP]);
+
+}
+
+
+/* 저장된 Canvas geometry — 테두리가 넓어져도 이 값은 움직이지
+   않아야 한다(§29-2 "한 픽셀도 바뀌지 않는다"). */
+function canvasGeometryOf(regionsJson, ids) {
+
+  let regions = [];
+
+  try {
+    regions = JSON.parse(regionsJson || "[]");
+  }
+  catch (err) {
+    return "(regions 를 읽지 못했다)";
+  }
+
+  const home =
+    regions.find((region) => region && region.name === "home_canvas");
+
+  const elements =
+    (home && home.canvas && home.canvas.elements) || [];
+
+  return JSON.stringify(
+    ids.map((id) => {
+      const el = elements.find((item) => item && item.id === id);
+      return el
+        ? [el.id, el.x, el.y, el.width, el.height, el.rotation]
+        : [id, null];
+    })
+  );
+
+}
+
+/* fixture 가 적은 그대로 — 실행 결과에서 뽑지 않는다 */
+const SCALE_TEXT_IDS = ["cvText", "cvTextRot"];
+
+const SCALE_TEXT_GEOMETRY =
+  JSON.stringify(
+    SCALE_TEXT_IDS.map((id) => {
+      const el = CANVAS_ELEMENTS.find((item) => item.id === id);
+      return [el.id, el.x, el.y, el.width, el.height, el.rotation];
+    })
+  );
+
+
 /* sandbox 프레임은 cross-origin 이라 부모 문서에서 좌표를 계산할 수
    없다 — Playwright 가 중첩 프레임의 좌표를 풀어 준다. */
 async function clickInSandbox(page, frame, selector, fx, fy) {
@@ -1386,26 +1559,41 @@ async function main() {
 
       const measured = [];
 
-      for (const id of ["cvPhoto", "cvShapeBare", "cvTextRot"]) {
+      const geometryBefore =
+        canvasGeometryOf(await readRegions(page), SCALE_TEXT_IDS);
+
+      /* 사진 · 도형은 상자가 곧 경계이고, 글자는 chrome 여유를
+         받는다(§29-2). 글자를 **둘** 넣는 이유는 회전 때문이다 —
+         cvText 는 0° · cvTextRot 는 20° 라, 변환이 회전한 경우에만
+         우연히 맞는 일이 없다. */
+      for (const id of ["cvPhoto", "cvShapeBare", "cvText", "cvTextRot"]) {
 
         const p = await clickIn(page, byId(id));
+        const m = await measureIn(page, byId(id));
         const s = await readState(page);
 
-        if (!p || !s.canvasBox) {
+        if (!p || !m || !s.canvasBox) {
           measured.push({ id, error: "선택되지 않았거나 테두리가 없다" });
           continue;
         }
 
-        /* 요소의 실제 자리(프레임 좌표) → 부모 좌표 */
+        /* 편집 chrome 이 표시할 자리(프레임 좌표) → 부모 좌표 */
         const expected = {
-          x: p.origin.x + p.elRect.x * p.scale,
-          y: p.origin.y + p.elRect.y * p.scale,
-          w: p.elRect.w * p.scale,
-          h: p.elRect.h * p.scale
+          x: m.origin.x + m.contentRect.x * m.scale,
+          y: m.origin.y + m.contentRect.y * m.scale,
+          w: m.contentRect.w * m.scale,
+          h: m.contentRect.h * m.scale
         };
 
         measured.push({
           id,
+          text: m.isText,
+          rot: m.rotation,
+          clipped: m.clipped,
+          /* 기대값이 원본 rect 에서 얼마나 넓어졌는가(프레임 px).
+             글자에서 이 값이 0 이 되면 이 절은 아무 것도 재지
+             않는 것이 되므로 아래에서 따로 본다. */
+          grew: +(m.contentRect.w - m.elRect.w).toFixed(2),
           dx: +(s.canvasBox.x - expected.x).toFixed(2),
           dy: +(s.canvasBox.y - expected.y).toFixed(2),
           dw: +(s.canvasBox.w - expected.w).toFixed(2),
@@ -1414,14 +1602,50 @@ async function main() {
 
       }
 
+      const byIdMeasured =
+        (id) => measured.find((m) => m.id === id) || {};
+
+      /* ── 전제 셋 — 이것들이 깨지면 아래 1px 단언은 뜻이 없다 ── */
+
+      check("이 fixture 에는 자르는 조상이 없다(visibleRect 의 교집합 단계가 항등)",
+        measured.every((m) => m.error || m.clipped === false),
+        JSON.stringify(measured.map((m) => [m.id, m.clipped])));
+
+      check("사진 · 도형은 상자가 곧 경계다 — 여유가 붙지 않는다",
+        ["cvPhoto", "cvShapeBare"].every((id) => {
+          const m = byIdMeasured(id);
+          return m.text === false && m.grew === 0;
+        }),
+        JSON.stringify(["cvPhoto", "cvShapeBare"].map((id) =>
+          [id, byIdMeasured(id).text, byIdMeasured(id).grew])));
+
+      check("글자에는 chrome 여유가 실제로 붙었다(회전 0° · 20° 둘 다)",
+        SCALE_TEXT_IDS.every((id) => {
+          const m = byIdMeasured(id);
+          return m.text === true && m.grew >= CHROME_GAP * 2 - 0.01;
+        }) &&
+        byIdMeasured("cvText").rot === 0 &&
+        byIdMeasured("cvTextRot").rot === 20,
+        JSON.stringify(SCALE_TEXT_IDS.map((id) =>
+          [id, byIdMeasured(id).rot, byIdMeasured(id).grew])));
+
       const worst =
         measured.reduce((max, m) =>
           m.error ? Infinity :
             Math.max(max, Math.abs(m.dx), Math.abs(m.dy), Math.abs(m.dw), Math.abs(m.dh)), 0);
 
-      check("★ 부모 scale 에서도 native overlay 가 실제 사각형과 1px 안으로 맞는다",
+      check("★ 부모 scale 에서도 native overlay 가 편집 chrome bounds 와 1px 안으로 맞는다",
         worst <= 1, `최대 오차 ${worst === Infinity ? "측정 실패" : worst.toFixed(2) + "px"} · ` +
         JSON.stringify(measured));
+
+      /* 테두리가 넓어져도 저장값은 움직이지 않는다(§29-2) */
+      const geometryAfter =
+        canvasGeometryOf(await readRegions(page), SCALE_TEXT_IDS);
+
+      check("글자의 저장 geometry 는 고르기 전후로 fixture 그대로다",
+        geometryBefore === SCALE_TEXT_GEOMETRY &&
+        geometryAfter === SCALE_TEXT_GEOMETRY,
+        `before=${geometryBefore} after=${geometryAfter}`);
 
       await page.__ctx.close();
 
