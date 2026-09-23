@@ -190,7 +190,17 @@ function applyQuoteSettings(
 
       /* BODY */
 
-      [quoteBodyFont, resolved.bodyFont],
+      /*
+        ★ HOME-CANVAS-TYPOGRAPHY-1 — bodyFont 는 이 표를 지나지
+          않는다. 아래에서 fillImoryFontSelect() 로 따로 넣는다.
+
+          여기 두면 `select.value = "<모르는 키>"` 가 되는데,
+          <option> 이 없는 값은 브라우저가 조용히 빈 문자열로
+          만든다. 그러면 옛 프리셋을 **열었다 저장하기만 해도**
+          그 키가 기본값으로 덮인다. fill 은 그런 값에 임시
+          <option> 을 만들어 고른 채로 둔다.
+      */
+
       [quoteTextColor, resolved.bodyColor],
       [quoteHighlightColor, resolved.highlightColor],
       [quotePointColor, resolved.pointColor],
@@ -318,6 +328,22 @@ function applyQuoteSettings(
 
     }
   );
+
+
+  /* HOME-CANVAS-TYPOGRAPHY-1 — BODY > FONT (위 표의 주석 참고) */
+  if (quoteBodyFont && typeof window.fillImoryFontSelect === "function") {
+
+    window.fillImoryFontSelect(
+      quoteBodyFont,
+      { includeDefault: false, value: String(resolved.bodyFont || "") }
+    );
+
+  } else if (quoteBodyFont) {
+
+    quoteBodyFont.value =
+      String(resolved.bodyFont || "");
+
+  }
 
 
   const checkedValues =

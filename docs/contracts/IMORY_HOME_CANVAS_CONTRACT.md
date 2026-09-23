@@ -4911,3 +4911,209 @@ responsive override(화면별 저장값) · 프레임의 최대 폭을 스킨이
 그룹 이동 · 블록 이동 · 레이어 목록 · v1 변경 · 기본 스킨 변경 · DB 변경.
 
 `APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).
+
+---
+
+## 31. Canvas 글자의 타이포그래피 (`HOME-CANVAS-TYPOGRAPHY-1`)
+
+Canvas 의 `text` 요소를 단독 선택했을 때 Select 패널에 나오는 한 블록이다.
+계획: [IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §4](../plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md).
+
+### 31-1. 어디에 저장되나 — §8 을 바꾸지 않는다
+
+**Canvas JSON 에 스타일 칸을 만들지 않았다.** `props.fontSize` 도
+`props.color` 도 없다. 값은 전부 그 요소의 **스킨 CSS 규칙 한 줄**에
+들어간다 — 일반 Element Inspector 가 쓰는 그 규칙이다.
+
+```
+[data-imory-edit-id="cvText"][data-imory-edit-id="cvText"] { … }
+```
+
+읽기 · 쓰기 · 값 규칙이 전부 `studio/inspector/studio-inspector-model.js`
+한 벌이다(`readInspectorEditDeclarations` · `writeInspectorEditDeclarations` ·
+`buildInspectorStylePatch` · `readInspectorControlValue`). Canvas 용 CSS
+writer 를 복제하지 않았다.
+
+- 한 칸을 고칠 때 **그 속성 하나만** 바뀐다. 같은 규칙의 다른 선언과
+  사용자가 적은 스킨 CSS 는 한 글자도 다시 쓰이지 않는다.
+- "스킨 기본값으로" 는 그 선언 **하나를 지우는 것**이다. 값을 0 이나
+  `initial` 로 적지 않는다.
+- **계산값을 기본값인 척 적지 않는다.** 고르지 않은 칸은 선언이 없고,
+  폼도 빈 칸이다 — `getComputedStyle` 은 이 경로에 한 번도 들어오지 않는다.
+
+### 31-2. 확정 경로
+
+`commitStudioCanvasTypography(field, value)`
+(`studio/inspector/studio-canvas-typography.js`) 하나다.
+
+직접 조작 · 글자 내용이 쓰는 관문(`commitStudioCanvasElementChange`)이
+보는 것 중 넷을 그대로 본다: 편집 중인가 · 단일 선택인가 · 그 id 인가 ·
+지금 draft 에 그 요소가 있는가. 그리고 하나가 더 있다.
+
+- **이 화면이 그려진 그 요소인가.** 숫자 칸은 blur 에서 확정하므로,
+  값을 친 채 Preview 의 다른 글자를 누르면 **선택이 먼저 옮겨간 뒤에**
+  확정이 도착할 수 있다. 그대로 쓰면 A 를 보며 친 값이 B 에 박힌다.
+  그래서 블록을 그릴 때의 id 를 붙들어 두고 확정 시점에 대조한다
+  (`studioCanvasTypoEditId`).
+
+다른 점은 둘이다.
+
+- **`expected` 가 없다.** Canvas JSON 을 고치지 않으므로 물을 대상이
+  다르다. 대신 확정 **직전에 지금 CSS 를 다시 읽어** 병합한다 — 늦게 온
+  값이 그 사이에 들어온 다른 변경(AI · Code · 다른 칸)을 덮지 않는다.
+- **`generation` 을 보지 않는다.** 프레임의 좌표 메시지는 건너편 realm
+  에서 비동기로 오므로 순번이 갈릴 수 있지만(§17-8), 이 패널은 같은
+  문서 안에서 지금 선택을 그 자리에서 읽는다 — 그 값을 자기 자신과
+  비교하는 관문은 **빈 껍데기**다. 실제로 어긋날 수 있는 것은 위의
+  id 이고, 그것을 본다.
+- **종착점이 `applyStudioDirectEdit("home", html 그대로, nextCss)`** 다.
+  HTML 은 한 글자도 바뀌지 않는다. `applyStudioInspectorPatch()` 를 쓰지
+  않는 이유는 그 함수가 template HTML 안에서 요소를 찾기 때문이다 —
+  Canvas 요소는 template HTML 에 없고 렌더러가 만든다(id 는 이미
+  영구적이라 승격도 필요 없다).
+
+한 조작 = Undo 한 칸이다. 기록은 `applyWorkingSkinChanges()` 가 이미
+한 칸 만든다 — 이 경로가 따로 만들지 않는다. 같은 값이면 `unchanged` 로
+답하고 기록도 dirty 도 만들지 않는다(§17-6 과 같은 규칙).
+
+확정 시점: select 는 `change`, 색은 `change`(`input` 이 아니다 — 끌고 있는
+동안 확정하면 한 조작이 수십 칸이 된다), 숫자는 Enter · blur.
+
+### 31-3. 대상
+
+`type === "text"` 하나로 갈린다 — v1 text · v2 흐름 text 블록 ·
+`main_visual` 내부 text · v2 overlay text **넷**.
+
+범위 밖: `category_nav` 의 글자 · `logo` 의 대체 표시 · 일반 HTML
+Inspector(그쪽은 자기 값 규칙이 따로 있다) · 글자 **일부**의 색
+(`HOME-CANVAS-RICH-TEXT-1`). 다중 선택에서도 블록이 나오지 않는다.
+
+### 31-4. 값
+
+| 칸 | CSS 속성 | 범위 | 눈금 |
+| --- | --- | --- | --- |
+| 글꼴 | `font-family` | 카탈로그 여섯 | — |
+| 크기 | `font-size` | 8 ~ 72 px | 1 |
+| 굵기 | `font-weight` | 기본 · 400 · 500 · 700 | — |
+| 글자색 | `color` | `#rrggbb` | — |
+| 자간 | `letter-spacing` | −5 ~ 20 px | 0.1 |
+| 행간 | `line-height` | 0.8 ~ 3 (**단위 없음**) | 0.05 |
+
+- 범위 밖은 **잘라서 받지 않고 거부한다**. 72 를 넘겨 친 사람이 아무
+  말 없이 72 를 얻으면 "왜 안 커지나" 가 된다.
+- 범위 안이면 눈금에 붙인다(0.07 → 0.1, 16.7 → 17). 붙은 값이 칸에도
+  되돌아 적혀 화면과 저장값이 어긋난 채 남지 않는다.
+- 굵기 · 색의 값 규칙은 일반 Inspector 의 `fontWeight` · `color` 를
+  **그대로** 쓴다. 나머지 넷만 `canvas…` 이름으로 따로 있다(같은 이름에
+  두 규칙을 넣으면 "어느 화면에서 온 값인가" 조건문이 생긴다).
+
+### 31-5. 글꼴 — 카탈로그 한 벌
+
+목록의 유일한 출처는 `core/imory-font-catalog.js` 다. Canvas Select 와
+Quote Preset `BODY > FONT` 가 **같은 배열을 같은 순서로** 훑어
+`<option>` 을 만든다. 여섯과 그 stack 은 계획 문서
+[§4-3-1](../plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md) 이
+정한 그대로다.
+
+| 순서 | key | 표시 | stack | 출처 |
+| ---: | --- | --- | --- | --- |
+| 1 | `pretendard` | Pretendard | `"Pretendard", sans-serif` | jsDelivr(버전 고정) |
+| 2 | `nanumgothic` | 나눔고딕 | `"Nanum Gothic", sans-serif` | Google Fonts |
+| 3 | `nanumsquareneo` | 나눔스퀘어네오 | `"NanumSquareNeo", "Nanum Square Neo", sans-serif` | 저장소 self-host |
+| 4 | `nanummyeongjo` | 나눔명조 | `"Nanum Myeongjo", serif` | Google Fonts |
+| 5 | `gowundodum` | 고운돋움 | `"Gowun Dodum", sans-serif` | Google Fonts |
+| 6 | `gowunbatang` | 고운바탕 | `"Gowun Batang", serif` | Google Fonts |
+
+- `pretendard` · `nanummyeongjo` 는 **이미 DB 에 있는 저장 키**다
+  (`quote_presets.settings.bodyFont`). 철자를 고치지 않는다. 기본값도
+  `pretendard` 그대로다. migration 은 하지 않았다.
+- share card 의 `font` 설정은 **다른 키 체계**(`nanum-myeongjo`, 하이픈)
+  이고 이 카탈로그와 무관하다(`core/lib/share-card.js`).
+- 모르는 키를 **지우지 않는다.** stack 이 없으면 화면에서만 기본 stack 으로
+  그리고, 저장값은 그대로 남는다. Quote 의 `<select>` 는 그런 값에 임시
+  `<option>` 을 만들어 고른 채로 두므로 "열었다 저장하기만 해도 값이
+  사라지는" 일이 없다.
+- Canvas 는 key 를 저장하지 않는다(CSS 에 stack 을 쓴다). 폼이 지금 값을
+  되읽을 때 `imoryFontKeyOfStack()` 으로 되짚고, 우리 목록에 없는 stack 은
+  빈 칸이 된다 — 남이 쓴 값을 폼이 자기 값인 척 보여 주지 않는다.
+
+### 31-6. 파일은 한 경로에서만 온다
+
+`core/imory-fonts.css` 한 장이다. 이 파일을 읽는 문서가 곧 "여섯을 그릴 수
+있는 문서"이고, 화면별로 CDN 을 더 적지 않는다.
+
+| 문서 | 무엇을 그리나 |
+| --- | --- |
+| `index.html` | 공개 블로그 · 글쓰기 Preview · 발췌 export · 공개 글 |
+| `admin/index.html` | Quote Preset 편집 · 관리 Preview · admin UI |
+| `studio/preview/preview-frame.html` | Canvas native Preview |
+| `skin/sandbox/frame.html` | Canvas sandbox Preview |
+
+- 이 라운드 **전에는** `index.html` · `admin/index.html` 에 Nanum Myeongjo
+  `<link>` 한 줄(과 admin 은 버전 없는 Pretendard 한 줄)뿐이었고, Preview
+  문서와 sandbox 프레임에는 아무것도 없었다. Pretendard 는 선언만 되고
+  어느 화면에서도 파일이 없었다 — 전부 fallback 이었다.
+- `@font-face` 는 그 글꼴을 **쓰는 규칙이 생겼을 때만** 파일을 받는다.
+  여섯을 선언해도 안 쓰는 글꼴의 파일은 내려오지 않는다.
+- 전부 `font-display: swap` 이다.
+
+**lazy 의 함정** — `document.fonts.ready` 는 "지금 진행 중인 로딩"만
+기다린다. 아직 아무도 그 글꼴을 쓰지 않았으면 **즉시** resolve 하고,
+페이지 나누기와 발췌 export 가 대체 글꼴로 잰 줄바꿈을 그대로 굳힌다.
+그래서 두 자리에서 `document.fonts.load()` 로 **먼저 받으라고 시킨다**
+(`whenPostStyleFontReady()` — `posts/style/posts-body-layout.js`).
+export 는 clone 문서에서 한 번 더 시킨다(clone 은 자기 FontFaceSet 을
+갖는다).
+
+### 31-7. sandbox CSP
+
+별도 origin 프레임은 출처를 정확히 제한한다. 이 라운드에서 넓어진 것은
+**네 호스트뿐**이고, `'unsafe-inline'` 도 `https:` 전체도 열지 않았다.
+
+| 조항 | 더한 것 | 왜 |
+| --- | --- | --- |
+| `style-src` | `fonts.googleapis.com` · `cdn.jsdelivr.net` | `imory-fonts.css` 가 `@import` 로 부르는 **스타일시트** |
+| `font-src` | `fonts.gstatic.com` · `cdn.jsdelivr.net` | 그 스타일시트가 가리키는 **폰트 파일** |
+
+- 나눔스퀘어네오는 여기 없다 — 저장소가 갖고 있어 `font-src 'self'` 로
+  나간다. `/core/imory-fonts.css` 와 `/core/fonts/NanumSquareNeo-Variable.woff2`
+  는 `SANDBOX_ALLOWED_PATHS` 에 있어야 나온다.
+- css-tree 처럼 URL 하나로 못박지 않는다. Google Fonts 의 `css2` 응답은
+  브라우저마다 다른 woff2 주소를 주고(unicode-range 조각 수십 개),
+  Pretendard dynamic subset 은 828 개 조각을 가리킨다 — 경로를 적을 수
+  있는 대상이 아니다.
+- **남은 차이는 그대로다**: 스킨 CSS 가 부르는 임의의 웹폰트는 여전히
+  프레임에서 빠진 채 나온다. 여기서 연 것은 플랫폼이 제공하는 여섯의
+  출처뿐이다.
+
+### 31-8. 남은 차이
+
+- **나눔스퀘어네오에는 굵기 500 이 없다.** 공식 배포의 variable woff2 는
+  200 으로 내려오지만 **브라우저가 열지 못한다**(2026-09-23 Chromium 실측:
+  `OTS parsing error: Unable to instantiate font face from font data` —
+  `format` 네 조합 모두 같다). 같은 배포의 정적 woff2 는 정상이라 그중
+  400 · 700 둘을 저장소에 두었고, 정적 배포에 500 이 없어서 "500 중간" 을
+  골라도 이 글꼴만 400 으로 그려진다. 다른 다섯은 영향이 없다.
+  근거와 해시: `core/fonts/NanumSquareNeo-LICENSE.txt`.
+- **글꼴 · 색은 카탈로그와 `#rrggbb` 로 좁다.** 임의의 글꼴 이름이나
+  `rgb()` · `var()` 를 쓰려면 Code Editor 나 AI 수정으로 스킨 CSS 를
+  직접 고친다 — 그 값은 폼에서 **빈 칸**으로 보인다(우리 규칙의 모양이
+  아니면 폼이 자기 값인 척하지 않는다). 지우지는 않는다.
+- **글자 정렬 칸이 없다.** 자동 배치 블록의 `align` 과 다른 개념이라
+  (계획 문서 §4-3) 그 값을 재사용하거나 덮지 않기로 했고, 이 라운드에서는
+  열지 않았다.
+- **Quote 와 Canvas 가 같은 여섯을 쓰지만 저장 모양은 다르다.** Quote 는
+  `settings.bodyFont` 에 key 를, Canvas 는 스킨 CSS 에 stack 을 쓴다.
+  둘을 한 저장소로 합치지 않았다 — Canvas 의 시각 스타일이 CSS 의
+  몫이라는 §8 이 그대로다.
+- **스킨 CSS 가 부르는 임의의 웹폰트는 sandbox 에서 여전히 빠진다**
+  (§31-7 의 그 남은 차이).
+
+### 31-9. 이 라운드가 만들지 않은 것
+
+레이어 순서 drag · 묶기/빼기 · primary 변경 · 숨김/잠금/삭제 버튼 ·
+그룹 조작 · **rich text**(글자 일부의 색 — `HOME-CANVAS-RICH-TEXT-1`) ·
+글자 정렬 칸 · Canvas JSON 의 스타일 칸 · `bodyFont` migration ·
+기본 스킨 변경 · DB 변경.
+
+`APP_BUILD_VERSION` 은 올리지 않았다(배포하지 않았다).

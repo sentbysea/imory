@@ -44,6 +44,12 @@
                 라벨)과 패널 정리(중복 제목·닫기 × 없음 · 세로
                 정렬과 상세 비율이 custom에서만 보임 · 접은 채로
                 export).
+     font       BODY > FONT의 여섯 글꼴(HOME-CANVAS-TYPOGRAPHY-1) —
+                선택지가 공용 카탈로그 그대로인가(순서 포함),
+                기존 두 키와 기본값이 그대로인가, 모르는 옛 key가
+                열었다 저장하기만 해도 사라지지 않는가, 네 화면이
+                같은 stack을 쓰는가, 그리고 **파일이 실제로
+                내려오는가**(FontFaceSet).
 
    ★ 실행
      node admin/quote/quote-render-parity-e2e-test.mjs
@@ -51,9 +57,15 @@
      node admin/quote/quote-render-parity-e2e-test.mjs --only=uniform
      node admin/quote/quote-render-parity-e2e-test.mjs --browser=webkit
 
-   ★ 웹폰트(Pretendard / Nanum Myeongjo)는 다른 e2e와 마찬가지로
-   막는다. 두 화면이 **같은 대체 폰트**를 쓰므로 일치 판정에는
-   영향이 없다(절대 글자 폭은 production과 다를 수 있다).
+   ★ 웹폰트는 다른 e2e와 마찬가지로 막는다. 두 화면이 **같은 대체
+   폰트**를 쓰므로 일치 판정에는 영향이 없다(절대 글자 폭은
+   production과 다를 수 있다).
+
+   ★ 예외는 `--only=font` 하나다(HOME-CANVAS-TYPOGRAPHY-1). 그 절이
+   재려는 것이 바로 "여섯이 정말 내려오는가"라서, 막아 두면 답이
+   늘 fallback이 된다 — 그래서 그 절만 실제로 받아 온다
+   (openQuotePanel/openPostEditor의 `webfonts: true`). 네트워크가
+   없는 환경에서는 그 절만 실패한다.
 ========================================================== */
 
 import fs from "node:fs";
@@ -395,10 +407,27 @@ async function installSupabaseMock(page, opts = {}) {
     return route.fulfill({ status: 404, headers, body: "{}" });
   });
 
+  /*
+    웹폰트는 기본적으로 막는다 — 두 화면이 같은 대체 폰트를 쓰면
+    일치 판정이 흔들리지 않고, 네트워크에 기대지 않는다(머리말).
+
+    ★ HOME-CANVAS-TYPOGRAPHY-1 — `--only=font` 절만 예외다. 그 절이
+      재려는 것이 바로 "**정말 내려오는가**" 라서, 막아 두면 답이
+      늘 fallback 이 된다. opts.webfonts 로 그 절에서만 연다.
+
+    ★ jsDelivr 는 `/gh/**` 가 아니라 전체를 막는다 — Pretendard 가
+      `/npm/pretendard@1.3.9/...` 로 옮겨졌다(core/imory-fonts.css).
+  */
+
+  if (opts.webfonts === true) {
+    return;
+  }
+
   for (const pattern of [
     "https://fonts.googleapis.com/**",
     "https://fonts.gstatic.com/**",
-    "https://cdn.jsdelivr.net/gh/**"
+    "https://cdn.jsdelivr.net/gh/**",
+    "https://cdn.jsdelivr.net/npm/pretendard*/**"
   ]) {
     await page.route(pattern, r => r.abort());
   }
@@ -1776,7 +1805,7 @@ const UNIFORM_READ = (hostSelector) => {
     const content = node.querySelector(".post-editor-preview-content");
     const title = node.querySelector(".post-editor-preview-title");
     const source = node.querySelector(".post-editor-preview-source");
-    const bodyArea = node.querySelector(".post-editor-preview-body-area");
+    const bodyArea = node.querySelector(".post-editor-preview-content-area");
     const contentRect = content.getBoundingClientRect();
     const bodyAreaRect = bodyArea ? bodyArea.getBoundingClientRect() : null;
 
@@ -3471,6 +3500,475 @@ async function runLabels(browser) {
 
 
 /* =========================================================
+   11. font — BODY > FONT 의 여섯 글꼴 (HOME-CANVAS-TYPOGRAPHY-1)
+
+   계약: IMORY_HOME_CANVAS_CONTRACT.md §31-5 · §31-6
+
+   ★ 이 절만 웹폰트를 **연다**(openQuotePanel 의 webfonts 옵션).
+     재려는 것이 "정말 내려오는가" 라서, 막아 두면 답이 늘
+     fallback 이 된다.
+
+   보는 것 넷:
+     1  선택지가 카탈로그 여섯이고 순서가 같은가 (화면이 목록을
+        다시 적지 않는다)
+     2  기존 두 키와 기본값이 그대로인가 · 모르는 옛 키가 열었다
+        저장하기만 해도 사라지지 않는가
+     3  네 화면이 같은 resolver 를 지나는가 (관리 Preview ·
+        글쓰기 Preview · export · 발행 본문)
+     4  파일이 실제로 내려오는가 (FontFaceSet)
+========================================================== */
+
+const FONT_KEYS = [
+  "pretendard", "nanumgothic", "nanumsquareneo",
+  "nanummyeongjo", "gowundodum", "gowunbatang"
+];
+
+const FONT_STACKS = {
+  pretendard: '"Pretendard", sans-serif',
+  nanumgothic: '"Nanum Gothic", sans-serif',
+  nanumsquareneo: '"NanumSquareNeo", "Nanum Square Neo", sans-serif',
+  nanummyeongjo: '"Nanum Myeongjo", serif',
+  gowundodum: '"Gowun Dodum", sans-serif',
+  gowunbatang: '"Gowun Batang", serif'
+};
+
+const FONT_FAMILIES = [
+  "Pretendard", "Nanum Gothic", "NanumSquareNeo",
+  "Nanum Myeongjo", "Gowun Dodum", "Gowun Batang"
+];
+
+/* 브라우저가 돌려준 font-family 문자열과 우리가 적은 stack 을
+   같은 모양으로 맞춘다.
+
+   ★ getComputedStyle 은 **한 낱말 이름의 따옴표를 뗀다**
+     (`"Pretendard", sans-serif` → `Pretendard, sans-serif`).
+     따옴표 유무와 공백만 다른 것을 다른 값으로 읽으면 이 절이
+     그 정규화를 버그로 신고한다. */
+const sameStack = (a, b) => {
+
+  const normal = (value) =>
+    String(value).replace(/["']/g, "").replace(/\s*,\s*/g, ",").trim();
+
+  return normal(a) === normal(b);
+
+};
+
+
+async function runFont(browser) {
+  console.log("\n[font] BODY > FONT 의 여섯 글꼴");
+
+  /* -------------------------------------------------------
+     (1) 선택지 — 목록의 출처는 카탈로그 하나다
+  -------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openQuotePanel(browser, { webfonts: true });
+
+    const options = await page.evaluate(() => ({
+      values: Array.from(document.getElementById("quoteBodyFont").options)
+        .map(o => o.value),
+      labels: Array.from(document.getElementById("quoteBodyFont").options)
+        .map(o => o.textContent.trim()),
+      value: document.getElementById("quoteBodyFont").value,
+      catalog: (window.IMORY_FONT_CATALOG || []).map(e => e.key)
+    }));
+
+    check(
+      "[font] ★ 선택지가 카탈로그 여섯이고 순서가 같다",
+      options.values.join(",") === FONT_KEYS.join(",") &&
+      options.catalog.join(",") === FONT_KEYS.join(","),
+      options.values.join(",")
+    );
+
+    check(
+      "[font] ★ 빈 칸이 없다 (bodyFont 는 늘 값이 있는 설정이다)",
+      options.values.every(v => v !== ""),
+      options.values.join(",")
+    );
+
+    check(
+      "[font] ★ 기본값은 pretendard 다 (기존 그대로)",
+      options.value === "pretendard",
+      options.value
+    );
+
+    check(
+      "[font] 표시명이 제품명/한국어다",
+      options.labels[0] === "Pretendard" &&
+      options.labels.indexOf("나눔명조") !== -1 &&
+      options.labels.indexOf("나눔스퀘어네오") !== -1,
+      options.labels.join(" · ")
+    );
+
+    /* ---- 폼 왕복에서 key 가 변하지 않는다 ---- */
+    const roundTrip = await page.evaluate((keys) => {
+      const out = {};
+      keys.forEach((key) => {
+        document.getElementById("quoteBodyFont").value = key;
+        out[key] = collectQuoteSettings().bodyFont;
+      });
+      return out;
+    }, FONT_KEYS);
+
+    check(
+      "[font] ★ 여섯을 골라 저장하면 그 key 가 그대로 실린다",
+      FONT_KEYS.every(key => roundTrip[key] === key),
+      JSON.stringify(roundTrip)
+    );
+
+    /* ---- 파일이 실제로 내려온다 ---- */
+    const loaded = await page.evaluate(async (families) => {
+      const out = {};
+      for (const name of families) {
+        try {
+          await document.fonts.load('400 16px "' + name + '"');
+          const faces = Array.from(document.fonts).filter(
+            f => String(f.family).replace(/^"|"$/g, "") === name);
+          out[name] = {
+            n: faces.length,
+            loaded: faces.filter(f => f.status === "loaded").length
+          };
+        } catch (e) {
+          out[name] = { error: String(e && e.message) };
+        }
+      }
+      return out;
+    }, FONT_FAMILIES);
+
+    FONT_FAMILIES.forEach((name) => {
+      check(
+        "[font] ★ " + name + " 가 관리 화면에서 실제로 로드된다",
+        loaded[name] && loaded[name].loaded > 0,
+        JSON.stringify(loaded[name])
+      );
+    });
+
+    check("[font] 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* -------------------------------------------------------
+     (2) 모르는 옛 key — 열었다 저장하기만 해도 사라지면 안 된다
+  -------------------------------------------------------- */
+  {
+    const db = makeDb({
+      quote_presets: [{
+        id: 11, user_id: OWNER_ID, name: "옛 글꼴", is_active: true,
+        settings: { ...BASE_SETTINGS, bodyFont: "아주-옛날-글꼴" }
+      }]
+    });
+
+    const { ctx, page, errors } = await openQuotePanel(browser, { db });
+    await page.waitForTimeout(500);
+
+    const kept = await page.evaluate(() => ({
+      value: document.getElementById("quoteBodyFont").value,
+      options: Array.from(document.getElementById("quoteBodyFont").options)
+        .map(o => o.value),
+      collected: collectQuoteSettings().bodyFont,
+      /* 화면은 기본 stack 으로 그린다 — 저장값을 덮는 것이 아니다 */
+      rendered: getComputedStyle(
+        document.querySelector("#quotePreviewCanvas .post-editor-preview-content")
+      ).fontFamily
+    }));
+
+    check(
+      "[font] ★ 모르는 옛 key 가 저장값에 그대로 남는다",
+      kept.value === "아주-옛날-글꼴" && kept.collected === "아주-옛날-글꼴",
+      JSON.stringify({ value: kept.value, collected: kept.collected })
+    );
+
+    check(
+      "[font] ★ 그 값이 <option> 하나로 골라진 채 보인다 (빈 칸이 아니다)",
+      kept.options.indexOf("아주-옛날-글꼴") !== -1,
+      kept.options.join(",")
+    );
+
+    check(
+      "[font] ★ 화면만 기본 stack 으로 그린다",
+      kept.rendered.indexOf("Pretendard") !== -1,
+      kept.rendered
+    );
+
+    check("[font] 옛 key 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* -------------------------------------------------------
+     (3) 관리 Preview · 발행 본문 — 같은 key 가 같은 stack 을 만든다
+  -------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openQuotePanel(browser, { webfonts: true });
+
+    const quoteFonts = {};
+
+    for (const key of FONT_KEYS) {
+      await renderQuotePreview(page, {
+        sample: SAMPLE_TEXT,
+        settings: { ...BASE_SETTINGS, bodyFont: key },
+        title: ""
+      });
+      quoteFonts[key] = await page.evaluate(() => getComputedStyle(
+        document.querySelector("#quotePreviewCanvas .post-editor-preview-content")
+      ).fontFamily);
+    }
+
+    check(
+      "[font] ★ 관리 Preview 가 카탈로그의 stack 을 그대로 쓴다",
+      FONT_KEYS.every(key => sameStack(quoteFonts[key], FONT_STACKS[key])),
+      JSON.stringify(quoteFonts)
+    );
+
+    check("[font] parity 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* -------------------------------------------------------
+     (4) 글쓰기 Preview 와 export — 제목 · 출처까지 같은 stack
+  -------------------------------------------------------- */
+  {
+    const { ctx, page, errors } = await openPostEditor(browser, { webfonts: true });
+
+    const editorFonts = {};
+
+    for (const key of FONT_KEYS) {
+      await renderEditorPreview(page, {
+        html: "한 줄",
+        settings: { ...BASE_SETTINGS, bodyFont: key, titleEnabled: true },
+        title: "제목"
+      });
+      editorFonts[key] = await page.evaluate(() => {
+        const first = document.querySelector(".post-editor-preview-page");
+        const pick = (sel) => {
+          const node = first.querySelector(sel);
+          return node ? getComputedStyle(node).fontFamily : null;
+        };
+        return {
+          body: pick(".post-editor-preview-content"),
+          title: pick(".post-editor-preview-title"),
+          source: pick(".post-editor-preview-source")
+        };
+      });
+    }
+
+    check(
+      "[font] ★ 글쓰기 Preview 의 본문 · 제목 · 출처가 한 stack 이다",
+      FONT_KEYS.every((key) => {
+        const f = editorFonts[key];
+        return [f.body, f.title, f.source]
+          .filter(Boolean)
+          .every(v => sameStack(v, FONT_STACKS[key]));
+      }),
+      JSON.stringify(editorFonts)
+    );
+
+    /* 발행 본문 — 같은 공용 함수(renderStyledPostContentInto).
+       이 함수는 글쓰기 화면(index.html)이 로드하므로 관리 화면이
+       아니라 여기서 잰다. */
+    const published = await page.evaluate((keys) => {
+      const host = document.createElement("div");
+      host.style.cssText = "position:absolute;left:-10000px;top:0;width:520px";
+      document.body.appendChild(host);
+      const out = {};
+      keys.forEach((key) => {
+        renderStyledPostContentInto(host, "한 줄", { bodyFont: key });
+        out[key] = host.style.fontFamily;
+      });
+      host.remove();
+      return out;
+    }, FONT_KEYS);
+
+    check(
+      "[font] ★ 발행 본문도 같은 stack 이다",
+      FONT_KEYS.every(key => sameStack(published[key], FONT_STACKS[key])),
+      JSON.stringify(published)
+    );
+
+    /*
+      export 는 같은 DOM 을 html2canvas 로 찍고, clone 쪽에서
+      whenPostStyleFontReady() 로 **먼저 받으라고 시킨 뒤** 캡처한다
+      (posts/export/posts-preview-export-capture.js). 여기서는 그
+      대기가 여섯 모두에서 실제로 끝나는지 본다 — 끝나지 않으면
+      export 가 멈추고, 없으면 fallback 으로 찍힌다.
+    */
+    const ready = await page.evaluate(async (keys) => {
+      const out = {};
+      for (const key of keys) {
+        const started = Date.now();
+        await whenPostStyleFontReady(key);
+        out[key] = { ms: Date.now() - started, ok: true };
+      }
+      return out;
+    }, FONT_KEYS);
+
+    check(
+      "[font] ★ export 전 대기(whenPostStyleFontReady)가 여섯 모두에서 끝난다",
+      FONT_KEYS.every(key => ready[key] && ready[key].ok === true),
+      JSON.stringify(ready)
+    );
+
+    const afterReady = await page.evaluate(async (families) => {
+      const out = {};
+      for (const name of families) {
+        const faces = Array.from(document.fonts).filter(
+          f => String(f.family).replace(/^"|"$/g, "") === name);
+        out[name] = faces.filter(f => f.status === "loaded").length;
+      }
+      return out;
+    }, FONT_FAMILIES);
+
+    check(
+      "[font] ★ 그 대기가 끝난 뒤 여섯이 전부 loaded 다 (fallback 이 아니다)",
+      FONT_FAMILIES.every(name => afterReady[name] > 0),
+      JSON.stringify(afterReady)
+    );
+
+    check("[font] 글쓰기 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+
+  /* -------------------------------------------------------
+     (5) 새로 만들기 → 덮어쓰기 → 불러오기 → 활성화
+
+     ★ 글꼴만 바꾼 채 **기존 프리셋 경로 네 개를 그대로** 지난다.
+       이 라운드가 `quote_presets` 의 저장 모양도, 그 네 버튼도
+       건드리지 않았다는 것을 고정한다(계약 §31-5).
+  -------------------------------------------------------- */
+  {
+    const db = makeDb({
+      quote_presets: [{
+        id: 21, user_id: OWNER_ID, name: "기존", is_active: true,
+        settings: { ...BASE_SETTINGS, bodyFont: "pretendard" }
+      }]
+    });
+
+    const { ctx, page, errors } = await openQuotePanel(browser, { db });
+    await page.waitForTimeout(500);
+
+    /* --- 새로 만들기 : 글꼴만 바꿔 새 프리셋으로 --- */
+    await page.evaluate(() => {
+      document.getElementById("quoteBodyFont").value = "gowunbatang";
+      document.getElementById("quotePresetName").value = "고운바탕 프리셋";
+    });
+
+    await page.click("#quoteNewButton");
+    await page.waitForTimeout(700);
+
+    const afterNew = await page.evaluate(() => ({
+      list: Array.from(document.querySelectorAll(".quote-preset-load"))
+        .map(b => b.textContent.trim()),
+      font: document.getElementById("quoteBodyFont").value
+    }));
+
+    check(
+      "[font] ★ 새로 만들기 — 목록에 새 프리셋이 생기고 글꼴이 유지된다",
+      afterNew.list.indexOf("고운바탕 프리셋") !== -1 &&
+      afterNew.font === "gowunbatang",
+      JSON.stringify(afterNew)
+    );
+
+    check(
+      "[font] ★ 저장된 settings.bodyFont 가 그 key 다",
+      db.quote_presets.some(p =>
+        p.name === "고운바탕 프리셋" && p.settings.bodyFont === "gowunbatang"),
+      JSON.stringify(db.quote_presets.map(p => [p.name, p.settings.bodyFont]))
+    );
+
+    /* --- 덮어쓰기 : 그 프리셋의 글꼴만 다시 바꾼다 --- */
+    await page.evaluate(() => {
+      document.getElementById("quoteBodyFont").value = "nanumsquareneo";
+    });
+
+    await page.click("#quoteSaveButton");
+    await page.waitForTimeout(700);
+
+    check(
+      "[font] ★ 덮어쓰기 — 같은 프리셋의 bodyFont 만 바뀐다",
+      db.quote_presets.some(p =>
+        p.name === "고운바탕 프리셋" &&
+        p.settings.bodyFont === "nanumsquareneo" &&
+        p.settings.bodySize === BASE_SETTINGS.bodySize),
+      JSON.stringify(db.quote_presets.map(p => [p.name, p.settings.bodyFont]))
+    );
+
+    /* --- 불러오기 : 다른 프리셋을 눌렀다가 돌아온다 --- */
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll(".quote-preset-load"))
+        .find(b => b.textContent.trim() === "기존").click();
+    });
+    await page.waitForTimeout(700);
+
+    const loadedOld = await page.evaluate(() =>
+      document.getElementById("quoteBodyFont").value);
+
+    check(
+      "[font] ★ 불러오기 — 그 프리셋의 글꼴이 폼에 온다 (기존 키)",
+      loadedOld === "pretendard", loadedOld
+    );
+
+    await page.evaluate(() => {
+      Array.from(document.querySelectorAll(".quote-preset-load"))
+        .find(b => b.textContent.trim() === "고운바탕 프리셋").click();
+    });
+    await page.waitForTimeout(700);
+
+    const loadedNew = await page.evaluate(() => ({
+      font: document.getElementById("quoteBodyFont").value,
+      rendered: getComputedStyle(
+        document.querySelector("#quotePreviewCanvas .post-editor-preview-content")
+      ).fontFamily
+    }));
+
+    check(
+      "[font] ★ 불러오기 — 새 키도 폼과 미리보기에 함께 온다",
+      loadedNew.font === "nanumsquareneo" &&
+      sameStack(loadedNew.rendered, FONT_STACKS.nanumsquareneo),
+      JSON.stringify(loadedNew)
+    );
+
+    /* --- 활성화 --- */
+    await page.evaluate(() => {
+      const item = Array.from(document.querySelectorAll(".quote-preset-item"))
+        .find(node => {
+          const load = node.querySelector(".quote-preset-load");
+          return load && load.textContent.trim() === "고운바탕 프리셋";
+        });
+      item.querySelector(".quote-preset-activate").click();
+    });
+    await page.waitForTimeout(800);
+
+    /* ★ mock 의 PATCH 는 필터를 다 풀지 못해 settings 없는 행을
+       하나 더 만들 수 있다. 이 절이 보는 것은 **글꼴 key** 뿐이라
+       settings 를 가진 행에서만 읽는다. */
+    const presetsWithSettings =
+      db.quote_presets.filter(p => p && p.settings);
+
+    const fontOf = (name) => {
+      const row = presetsWithSettings.find(p => p.name === name);
+      return row ? row.settings.bodyFont : null;
+    };
+
+    check(
+      "[font] ★ 활성화 — 그 프리셋이 사용 중이 되고 글꼴 키가 그대로다",
+      db.quote_presets.some(p =>
+        p.name === "고운바탕 프리셋" && p.is_active === true) &&
+      fontOf("고운바탕 프리셋") === "nanumsquareneo",
+      JSON.stringify(db.quote_presets.map(p =>
+        [p.name, p.is_active, p.settings && p.settings.bodyFont]))
+    );
+
+    check(
+      "[font] ★ 기존 두 키를 쓰는 프리셋은 한 칸도 바뀌지 않았다",
+      fontOf("기존") === "pretendard",
+      JSON.stringify(presetsWithSettings.map(p => [p.name, p.settings.bodyFont]))
+    );
+
+    check("[font] CRUD 오류 없음", errors.length === 0, errors.join(" | "));
+    await ctx.close();
+  }
+}
+
+
+/* =========================================================
    RUN
 ========================================================== */
 
@@ -3492,6 +3990,7 @@ async function runLabels(browser) {
     if (shouldRun("cache")) await runCache(browser);
     if (shouldRun("panel")) await runPanel(browser);
     if (shouldRun("labels")) await runLabels(browser);
+    if (shouldRun("font")) await runFont(browser);
   } finally {
     await browser.close();
     server.close();

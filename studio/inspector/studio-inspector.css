@@ -1853,3 +1853,151 @@
 .studio-canvas-structure-button {
   align-self: flex-start;
 }
+
+
+/* =========================================================
+   HOME-CANVAS-TYPOGRAPHY-1 — Canvas 글자의 타이포그래피
+
+   그리는 쪽: studio/inspector/studio-canvas-typography.js
+   계획:      docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §4-1
+
+   ★ 새 색도 새 입력 모양도 만들지 않는다. 위 Inspector 의
+     .studio-inspector-input · .studio-inspector-color ·
+     .studio-inspector-clear 를 그대로 쓰고, 여기서 정하는 것은
+     **세 칸이 한 줄에 어떻게 앉는가** 하나다.
+
+   ★ 390px — 세 칸을 자르지 않고 감는다. flex-wrap 과 각 칸의
+     min-width 가 그 일을 한다. 넓으면 한 줄에 셋, 좁아지면 둘,
+     더 좁아지면 하나다(고정 breakpoint 를 두지 않는다 — 패널 폭은
+     모바일 시트 · 데스크톱 패널 · 좁은 창에서 제각각이다).
+========================================================== */
+
+.studio-canvas-inspector-typo {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  padding-top: 10px;
+
+  border-top: 1px solid var(--system-border);
+}
+
+
+.studio-canvas-typo-grid {
+  display: flex;
+
+  flex-wrap: wrap;
+
+  gap: 8px;
+}
+
+
+.studio-canvas-typo-cell {
+  flex: 1 1 96px;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 4px;
+
+  /* 감기는 기준. 이보다 좁아지면 다음 줄로 내려간다 —
+     글자가 잘리거나 입력칸이 뭉개지지 않는다. */
+  min-width: 96px;
+}
+
+
+.studio-canvas-typo-label {
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+}
+
+
+.studio-canvas-typo-line {
+  display: flex;
+
+  align-items: center;
+
+  gap: 4px;
+
+  min-width: 0;
+}
+
+
+/* 숫자 칸은 한 줄 안에서 남는 폭을 쓴다(위 --number 의 고정 62px
+   대신) — "기본" 되돌리기 버튼과 나란히 앉아야 하기 때문이다. */
+.studio-canvas-typo-number {
+  flex: 1;
+
+  width: auto;
+  min-width: 0;
+}
+
+
+.studio-canvas-typo-select {
+  flex: 1;
+
+  min-width: 0;
+}
+
+
+.studio-canvas-typo-color {
+  flex: 1;
+
+  display: flex;
+
+  min-width: 0;
+}
+
+
+/* 값이 없다 = 스킨 기본값. 색 칸은 무엇이든 보여야 하므로 검정을
+   표시만 하고, 그것이 "고른 값"이 아니라는 것을 흐리게 알린다. */
+.studio-canvas-typo-color.is-unset .studio-canvas-typo-color-input {
+  opacity: 0.45;
+}
+
+
+.studio-canvas-typo-reset {
+  flex: none;
+}
+
+
+.studio-canvas-typo-advanced {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+}
+
+
+.studio-canvas-typo-summary {
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+
+  list-style: none;
+}
+
+
+.studio-canvas-typo-summary::-webkit-details-marker {
+  display: none;
+}
+
+
+.studio-canvas-typo-summary::before {
+  content: "▸ ";
+}
+
+
+.studio-canvas-typo-advanced[open] .studio-canvas-typo-summary::before {
+  content: "▾ ";
+}
+
+
+/* 칸 바로 아래 한 줄. 비어 있으면 자리도 차지하지 않는다. */
+.studio-canvas-typo-error {
+  margin-left: 0;
+}

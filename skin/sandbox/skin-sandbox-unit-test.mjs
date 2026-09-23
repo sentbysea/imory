@@ -1478,8 +1478,15 @@ check("[csp] ★ 그 CSS 파서 항목은 호스트가 아니라 파일 하나�
   server.SANDBOX_CSS_PARSER_URL.indexOf("@eslint/css-tree@") !== -1,
   server.SANDBOX_CSS_PARSER_URL);
 
-check("[csp] style-src 는 'self' + nonce (renderSkin 의 동적 style 용)",
-  hasDirective("style-src 'self' 'nonce-N0NCE'"));
+check("[csp] style-src 는 'self' + nonce + 글꼴 스타일시트 두 호스트",
+  hasDirective(
+    "style-src 'self' 'nonce-N0NCE' " +
+    server.SANDBOX_FONT_STYLE_ORIGINS.join(" ")
+  ));
+
+/* HOME-CANVAS-TYPOGRAPHY-1 — 넓어진 것은 **그 두 호스트뿐**이다 */
+check("[csp] ★ style-src 에 'unsafe-inline' 이 여전히 없다",
+  csp.indexOf("unsafe-inline") === -1, csp);
 
 check("[csp] ★ img-src 가 https: 전체가 아니다",
   csp.indexOf("img-src https:") === -1 &&
@@ -1487,7 +1494,27 @@ check("[csp] ★ img-src 가 https: 전체가 아니다",
   csp.split("; ").find(d => d.indexOf("img-src") === 0));
 
 check("[csp] ★ font-src 도 https: 전체가 아니다",
-  hasDirective("font-src 'self' data:"));
+  csp.indexOf("font-src https:") === -1 &&
+  hasDirective(
+    "font-src 'self' data: " + server.SANDBOX_FONT_FILE_ORIGINS.join(" ")
+  ),
+  csp.split("; ").find(d => d.indexOf("font-src") === 0));
+
+/* HOME-CANVAS-TYPOGRAPHY-1 — 글꼴 출처는 **플랫폼이 제공하는 여섯**의
+   것뿐이다. 스킨 CSS 가 부르는 임의의 웹폰트는 여전히 막힌다. */
+check("[csp] ★ 글꼴 출처가 스타일시트/파일로 나뉘어 있다",
+  server.SANDBOX_FONT_STYLE_ORIGINS.indexOf("https://fonts.googleapis.com") !== -1 &&
+  server.SANDBOX_FONT_FILE_ORIGINS.indexOf("https://fonts.gstatic.com") !== -1,
+  server.SANDBOX_FONT_STYLE_ORIGINS.join(",") + " / " +
+  server.SANDBOX_FONT_FILE_ORIGINS.join(","));
+
+check("[csp] ★ 나눔스퀘어네오는 바깥 출처가 아니라 'self' 다",
+  server.SANDBOX_ALLOWED_PATHS.indexOf("/core/fonts/NanumSquareNeo-Regular.woff2") !== -1 &&
+  server.SANDBOX_ALLOWED_PATHS.indexOf("/core/fonts/NanumSquareNeo-Bold.woff2") !== -1 &&
+  server.SANDBOX_FONT_FILE_ORIGINS.every((o) => o.indexOf("naver") === -1));
+
+check("[csp] ★ 글꼴 CSS 한 장이 allowlist 에 있다 (없으면 프레임에서 404)",
+  server.SANDBOX_ALLOWED_PATHS.indexOf("/core/imory-fonts.css") !== -1);
 
 check("[csp] ★ connect-src 는 계속 'none' 이다 (SANDBOX-1 에서도)",
   hasDirective("connect-src 'none'"));

@@ -392,6 +392,89 @@ const POST_STYLE_BOOLEAN_KEYS =
   ];
 
 
+/* =========================================================
+   postStyleFontFamily(bodyFont) -> font-family stack
+   (HOME-CANVAS-TYPOGRAPHY-1)
+
+   프리셋의 `bodyFont` 키 하나를 실제 font-family 문자열로 바꾼다.
+   **네 화면이 이 한 함수를 지난다** — Quote Preset 미리보기 ·
+   글쓰기 PREVIEW · 발췌 export · 발행 본문.
+
+   목록과 변환표는 여기 없다. core/imory-font-catalog.js 하나다.
+
+   ★ 모르는 키를 **저장값에서 지우지 않는다.** 여기서 하는 일은
+     "화면에 무엇으로 그릴까" 뿐이고, 답이 없으면 기본 stack 으로
+     그린다. settings 의 그 값은 정규화(위 POST_STYLE_TEXT_KEYS)가
+     그대로 들고 다닌다.
+
+   ★ 카탈로그가 없는 문서에서도 도는 fallback 은 **예전 삼항식
+     그대로**다. 두 기존 키의 결과가 한 글자도 달라지지 않는다.
+========================================================== */
+
+function postStyleFontFamily(bodyFont) {
+
+  if (typeof resolveImoryFontFamily === "function") {
+    return resolveImoryFontFamily(bodyFont);
+  }
+
+  return bodyFont === "nanummyeongjo"
+    ? '"Nanum Myeongjo", serif'
+    : '"Pretendard", sans-serif';
+
+}
+
+
+/* =========================================================
+   whenPostStyleFontReady(bodyFont, doc) -> Promise
+   (HOME-CANVAS-TYPOGRAPHY-1)
+
+   그 글꼴이 **실제로 내려온 뒤에** resolve 한다.
+
+   ★ 왜 document.fonts.ready 만으로는 모자란가.
+
+   여섯 글꼴은 전부 lazy 다 — @font-face 가 선언돼 있어도 그
+   글꼴을 **쓰는 규칙이 생기는 순간**에야 파일을 받는다. 그런데
+   페이지 나누기와 발췌 export 는 "그리기 전에" fonts.ready 를
+   기다린다. 그 시점에는 아직 아무도 그 글꼴을 쓰지 않았으므로
+   ready 가 **즉시** resolve 하고, 줄바꿈은 대체 글꼴 기준으로
+   잰 값이 된다. 그 뒤 진짜 글꼴이 도착하면 화면만 다시 그려져
+   페이지 분량이 어긋난다(font-display: swap).
+
+   document.fonts.load() 는 그 반대다 — "이 글꼴을 지금 받아라"고
+   시키고 끝날 때까지 기다린다. 이미 있으면 바로 끝난다.
+
+   ★ 실패해도 resolve 한다. 글꼴을 못 받는 것이 화면을 못 그리는
+     이유가 되면 안 된다 — 대체 글꼴로 그려진다.
+========================================================== */
+
+function whenPostStyleFontReady(bodyFont, doc) {
+
+  const target =
+    doc || (typeof document !== "undefined" ? document : null);
+
+  if (!target || !target.fonts || typeof target.fonts.load !== "function") {
+    return Promise.resolve();
+  }
+
+  /* stack 의 **첫 이름** 하나가 웹폰트다(나머지는 generic fallback) */
+  const family =
+    String(postStyleFontFamily(bodyFont)).split(",")[0].trim();
+
+  if (!family) {
+    return Promise.resolve();
+  }
+
+  /* 굵기마다 다른 파일일 수 있다 — 본문이 실제로 쓰는 둘을 함께
+     받는다(프리셋의 bodyWeight 는 400 · 700 둘 중 하나로 수렴한다). */
+  return Promise.all(
+    ["400", "700"].map((weight) =>
+      target.fonts.load(`${weight} 16px ${family}`).catch(() => null)
+    )
+  ).then(() => undefined);
+
+}
+
+
 function normalizePostStyleSettings(
   raw
 ) {
@@ -528,13 +611,17 @@ function applyPostBodyStyles(
     인라인으로 직접 지정 — html2canvas 캡처(발췌 export)
     때 상속만 되어 있으면 못 읽고 시스템 명조체로 깨지는
     문제가 있었음.
+
+    ★ HOME-CANVAS-TYPOGRAPHY-1 — key -> font-family 변환은
+      공용 resolver 하나다(아래 postStyleFontFamily ->
+      core/imory-font-catalog.js). 예전에는 이 삼항식이 이
+      파일과 posts/preview/posts-page-layout.js 두 곳, 모두
+      세 자리에 복붙돼 있어서 글꼴을 늘리려면 셋을 함께
+      고쳐야 했다.
   */
 
   container.style.fontFamily =
-    resolved.bodyFont ===
-    "nanummyeongjo"
-      ? '"Nanum Myeongjo", serif'
-      : '"Pretendard", sans-serif';
+    postStyleFontFamily(resolved.bodyFont);
 
 
   container.style.color =

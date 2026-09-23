@@ -6,13 +6,22 @@
 >
 > 기준 시점: `main@e5a517e` (2026-09-22).
 >
-> **2026-09-23 갱신** — §6 의 1단계 `STUDIO-LAYERS-SHELL-1` 이 구현됐다
-> (§7 의 "반드시 한다" 전부). 2단계 `HOME-CANVAS-TYPOGRAPHY-1` 부터는
-> 아직 계획이고, §7 의 "이번에 하지 않는다" 목록은 여전히 구현되지
-> 않았다 — 이 문서를 근거로 그것들이 있다고 읽지 않는다.
+> **2026-09-23 갱신 ①** — §6 의 1단계 `STUDIO-LAYERS-SHELL-1` 이 구현됐다
+> (§7 의 "반드시 한다" 전부).
 >
-> 다음 구현 작업은 **`HOME-CANVAS-TYPOGRAPHY-1` 하나**다. 뒤 작업을 함께
-> 선행 구현하지 않는다.
+> **2026-09-23 갱신 ②** — §6 의 2단계 `HOME-CANVAS-TYPOGRAPHY-1` 도
+> 구현됐다. 현행 계약은 이 문서가 아니라
+> [IMORY_HOME_CANVAS_CONTRACT.md §31](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> 이다 — 아래 §4 는 그때의 **계획**이고, 실제로 정해진 값 · 글꼴 목록 ·
+> 저장 경로 · sandbox CSP 는 §31 에 있다. 글꼴 카탈로그는
+> `core/imory-font-catalog.js`, 파일 로딩은 `core/imory-fonts.css` 하나다.
+>
+> 3단계 `STUDIO-LAYERS-STRUCTURE-1` 부터는 아직 계획이다 — 이 문서를
+> 근거로 그것들이 있다고 읽지 않는다.
+>
+> 다음 구현 작업은 **`STUDIO-LAYERS-STRUCTURE-1` 하나**이고, 그 뒤가
+> `HOME-CANVAS-V2-GROUP-1A` ~ `1C` 다. 뒤 작업을 함께 선행 구현하지
+> 않는다.
 
 ## 0. 왜 이 재편이 필요한가
 
@@ -216,6 +225,14 @@ Select에서는 재료 추가 절을 완전히 제거한다. 같은 UI를 두 �
 
 ## 4. Canvas 글자 타이포그래피
 
+> **구현됨(2026-09-23 · `HOME-CANVAS-TYPOGRAPHY-1`).** 아래는 그때의
+> 계획이다. 실제로 확정된 값 · 글꼴 여섯 · 저장 경로 · sandbox CSP 는
+> [IMORY_HOME_CANVAS_CONTRACT.md §31](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> 에 있고, 그쪽이 현행 계약이다. 아래 §4-3 의 "일반 Inspector 의 원천을
+> 재사용" 은 **바뀌었다** — 글꼴은 일반 Inspector 의 셋(sans/serif/mono)이
+> 아니라 Canvas 와 Quote 가 함께 쓰는 새 카탈로그 여섯이다
+> (`core/imory-font-catalog.js`). §4-4(rich text)만 아직 계획이다.
+
 ### 4-1. 기본 UI
 
 Canvas의 `text` 요소를 단독 선택했을 때 Select 패널에 다음을 둔다.
@@ -351,8 +368,8 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 | ---: | --- | --- | --- |
 | 0 | `STUDIO-LAYERS-PLAN-1` | 이 문서. 책임 · UX · 작업 경계 확정 | **완료 — 문서만** |
 | 1 | `STUDIO-LAYERS-SHELL-1` | 상단 Dock 자리를 Layers로 교체 · 읽기 전용 트리 · Select의 재료 추가를 Layers로 이동 · Dock Settings 진입 경로 조사/이동 | **완료** — [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) · [admin/settings/admin-bottom-dock-entry.js](../../admin/settings/admin-bottom-dock-entry.js) · `studio/studio-home-canvas-inspector-e2e-test.mjs --only=layers` · `admin/admin-settings-e2e-test.mjs --only=dock` |
-| 2 | `HOME-CANVAS-TYPOGRAPHY-1` | Canvas 타이포그래피 + Quote Preset `bodyFont` 여섯 글꼴 | **다음 작업** |
-| 3 | `STUDIO-LAYERS-STRUCTURE-1` | 순서 drag · 단일 attach/detach · primary · 숨김 · 잠금 · 삭제 | 미착수 |
+| 2 | `HOME-CANVAS-TYPOGRAPHY-1` | Canvas 타이포그래피 + Quote Preset `bodyFont` 여섯 글꼴 | **완료** — [studio/inspector/studio-canvas-typography.js](../../studio/inspector/studio-canvas-typography.js) · [core/imory-font-catalog.js](../../core/imory-font-catalog.js) · [core/imory-fonts.css](../../core/imory-fonts.css) · 계약 [§31](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-typography-e2e-test.mjs` · `admin/quote/quote-render-parity-e2e-test.mjs --only=font` · `node core/imory-font-catalog-test.mjs` |
+| 3 | `STUDIO-LAYERS-STRUCTURE-1` | 순서 drag · 단일 attach/detach · primary · 숨김 · 잠금 · 삭제 | **다음 작업** |
 | 4 | `HOME-CANVAS-V2-GROUP-1A` | 여러 요소 묶기 · primary 지정 | 미착수 |
 | 5 | `HOME-CANVAS-V2-GROUP-1B` | 그룹 이동 | 미착수 |
 | 6 | `HOME-CANVAS-V2-GROUP-1C` | 그룹 리사이즈 · 회전 | 미착수 |

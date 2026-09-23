@@ -1,0 +1,4 @@
+# 글꼴 파일은 binary 다 — core.autocrlf=true 가 줄끝을 건드리지
+# 않도록 명시한다(core/fonts/NanumSquareNeo-Variable.woff2).
+*.woff2 binary
+*.woff  binary

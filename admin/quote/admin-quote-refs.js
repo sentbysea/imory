@@ -161,6 +161,42 @@ const quoteBodyFont =
     "quoteBodyFont"
   );
 
+
+/* =========================================================
+   HOME-CANVAS-TYPOGRAPHY-1 — BODY > FONT 의 선택지는 공용 카탈로그다
+
+   패널 HTML(admin-quote-panel.html)에는 이제 <option> 이 한 줄도
+   없다. 목록을 두 곳(여기와 Canvas Select)에 적으면 둘이 갈라지기
+   때문이다 — 하나뿐인 출처는 core/imory-font-catalog.js 다.
+
+   ★ 기존 두 키(pretendard · nanummyeongjo)는 카탈로그 안에 그대로
+     있고 기본값도 그대로다. 저장 모양은 한 글자도 바뀌지 않는다.
+
+   ★ 모르는 키를 지우지 않는다. 옛 프리셋의 bodyFont 가 카탈로그에
+     없으면 fillImoryFontSelect() 가 그 값짜리 <option> 을 임시로
+     만들어 고른 채로 둔다 — 열었다 저장하기만 해도 값이 사라지는
+     일이 생기지 않는다(그 판단도 카탈로그 파일 안에 있다).
+
+   ★ "스킨 기본값" 빈 칸은 두지 않는다. Quote 의 bodyFont 는 늘
+     값이 있는 설정이고(빈 문자열이면 정규화가 기본값으로 읽는다),
+     빈 칸은 Canvas 쪽에서만 뜻이 있다(= 선언 없음).
+========================================================== */
+
+if (quoteBodyFont && typeof window.fillImoryFontSelect === "function") {
+
+  window.fillImoryFontSelect(
+    quoteBodyFont,
+    {
+      includeDefault: false,
+      value:
+        typeof window.IMORY_FONT_DEFAULT_KEY === "string"
+          ? window.IMORY_FONT_DEFAULT_KEY
+          : "pretendard"
+    }
+  );
+
+}
+
 const quoteTextColor =
   document.getElementById(
     "quoteTextColor"

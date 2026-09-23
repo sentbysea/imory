@@ -210,6 +210,21 @@
 
     loadVersionedStyles(
       [
+        /*
+          HOME-CANVAS-TYPOGRAPHY-1 — 글꼴 여섯을 실제로 가져오는
+          한 장. 공개 화면 · native Preview 와 **같은 파일**이다.
+
+          ★ 이 문서는 별도 origin 이고 CSP 가 출처를 정확히
+            제한한다. 이 파일이 @import 로 부르는 두 호스트
+            (fonts.googleapis.com · cdn.jsdelivr.net)가 style-src 에,
+            폰트 파일의 두 호스트(fonts.gstatic.com ·
+            cdn.jsdelivr.net)가 font-src 에 있어야 하고,
+            나눔스퀘어네오의 woff2 는 'self' 로 나간다. 그 목록과
+            이 파일의 경로는 core/lib/skin-sandbox-server.js 한
+            곳이다 — allowlist 에 없으면 404 다.
+        */
+        "/core/imory-fonts.css",
+
         "/posts/posts-body-shared.css",
         "/posts/posts-body-blocks.css",
 

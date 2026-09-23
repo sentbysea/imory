@@ -215,6 +215,26 @@ async function updateEditorPreview(
     editorPreviewRenderVersion;
 
 
+  /*
+    ★ HOME-CANVAS-TYPOGRAPHY-1 — 먼저 **그 글꼴을 받으라고 시킨다.**
+
+    여섯 글꼴은 전부 lazy 라(core/imory-fonts.css), 아직 아무도
+    쓰지 않은 글꼴은 fonts.ready 가 기다려 주지 않는다 — 즉시
+    resolve 하고 대체 글꼴로 잰 줄바꿈이 그대로 굳는다. 근거와
+    규칙은 whenPostStyleFontReady()(posts/style/posts-body-layout.js).
+  */
+
+  if (
+    typeof whenPostStyleFontReady === "function"
+  ) {
+
+    await whenPostStyleFontReady(
+      (postStyleSettings || {}).bodyFont
+    );
+
+  }
+
+
   if (
     document.fonts?.ready
   ) {

@@ -1093,6 +1093,123 @@ function inspectorLengthPx(value, max) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-TYPOGRAPHY-1 — Canvas 글자의 값 규칙
+
+   왜 `fontSize` 를 그냥 쓰지 않는가: 일반 Inspector 의 `fontSize` 는
+   0~200px 이고 `fontFamily` 는 생성 글꼴 셋(sans/serif/mono)이다.
+   Canvas 는 8~72px 과 카탈로그 여섯이라 **받는 값이 다르다**. 같은
+   이름에 두 규칙을 넣으면 어느 화면에서 온 값인지로 갈리는 조건문이
+   생기므로 이름을 따로 둔다 — writer(위 write/readInspectorEdit…)는
+   한 벌 그대로 쓴다(계획 문서 §4-2 "Canvas 용 CSS writer 를 별도로
+   복제하지 않는다").
+
+   ★ 범위 밖 · 숫자가 아닌 값은 null 이고, 그것은 "설정 안 함"
+     (= 그 선언 제거)이다. 폼도 **같은 함수**로 먼저 판정해
+     그 경우엔 아예 확정하지 않는다(studio-canvas-typography.js) —
+     규칙을 두 곳에 적지 않기 위해서다.
+
+   ★ 계산값을 기본값처럼 적지 않는다. 화면에서 잰 값(getComputedStyle)
+     은 이 경로에 한 번도 들어오지 않는다 — 사용자가 고른 값만
+     선언이 되고, 고르지 않았으면 선언 자체가 없다.
+========================================================== */
+
+const INSPECTOR_CANVAS_TYPO_RANGES = {
+  canvasFontSize: { min: 8, max: 72, step: 1, decimals: 0 },
+  canvasLetterSpacing: { min: -5, max: 20, step: 0.1, decimals: 1 },
+  canvasLineHeight: { min: 0.8, max: 3, step: 0.05, decimals: 2 }
+};
+
+
+/* 숫자 -> CSS 에 적을 문자열. 자리수를 줄이고 꼬리 0 을 뗀다
+   (1.50 -> 1.5, 16.0 -> 16) — 저장 → 다시 읽기에서 문자열이
+   미묘하게 달라지지 않게 한다(inspectorAspectRatio 와 같은 사정). */
+function inspectorCanvasTypoText(number, decimals) {
+
+  const fixed =
+    Number(number).toFixed(decimals);
+
+  return decimals ? fixed.replace(/\.?0+$/, "") : fixed;
+
+}
+
+
+/* =========================================================
+   inspectorCanvasTypoNumber(control, value) -> string | null
+
+   폼이 친 글자를 그 칸의 숫자로 읽는다. 빈 값 · 숫자가 아님 ·
+   범위 밖이면 null 이다. **범위 밖을 잘라서 받아 주지 않는다** —
+   72 를 넘겨 친 사용자가 아무 말 없이 72 를 얻으면 "왜 안 커지나"가
+   되고, 패널은 이 null 을 보고 이유를 보여 준다.
+========================================================== */
+
+function inspectorCanvasTypoNumber(control, value) {
+
+  const range =
+    INSPECTOR_CANVAS_TYPO_RANGES[control];
+
+  if (!range) {
+    return null;
+  }
+
+  if (value === null || value === undefined || String(value).trim() === "") {
+    return null;
+  }
+
+  const number =
+    Number(String(value).trim());
+
+  if (!Number.isFinite(number)) {
+    return null;
+  }
+
+  if (number < range.min || number > range.max) {
+    return null;
+  }
+
+  /* step 위의 값으로 맞춘다 — 0.07 을 친 자간은 0.1 이 된다.
+     범위 안이므로 자르는 것이 아니라 눈금에 붙이는 것이다. */
+  const snapped =
+    Math.round(number / range.step) * range.step;
+
+  return inspectorCanvasTypoText(snapped, range.decimals);
+
+}
+
+
+/* =========================================================
+   inspectorCanvasTypoRead(control, declaration, hasPx) -> string
+
+   규칙에 적혀 있는 값을 폼이 보여 줄 숫자 문자열로. 우리가 쓴
+   모양이 아니거나(다른 단위 · em · %) 범위 밖이면 빈 문자열이다 —
+   사람이 쓴 스킨 CSS 나 AI 가 만든 CSS 의 값을 폼이 자기 값인 척
+   보여 주지 않는다.
+========================================================== */
+
+function inspectorCanvasTypoRead(control, declaration, hasPx) {
+
+  const raw =
+    String(declaration || "").trim();
+
+  if (!raw) {
+    return "";
+  }
+
+  const pattern =
+    hasPx ? /^(-?\d+(?:\.\d+)?)px$/ : /^(-?\d+(?:\.\d+)?)$/;
+
+  const parsed =
+    pattern.exec(raw);
+
+  if (!parsed) {
+    return "";
+  }
+
+  return inspectorCanvasTypoNumber(control, parsed[1]) || "";
+
+}
+
+
 function buildInspectorStylePatch(control, value) {
 
   /* COMMON-SELECT-BOX-1 — 크기 · 자리 · 여백 · 정렬 · 테두리의 값
@@ -1132,6 +1249,37 @@ function buildInspectorStylePatch(control, value) {
       return INSPECTOR_WEIGHT_VALUES.includes(String(value))
         ? { "font-weight": String(value) }
         : clear(["font-weight"]);
+
+    /* HOME-CANVAS-TYPOGRAPHY-1 — Canvas 글자의 여섯 칸.
+       색 · 굵기는 위 `color` · `fontWeight` 를 그대로 쓴다(값 규칙이
+       같다). 나머지 넷만 여기 있다. */
+
+    case "canvasFontFamily": {
+
+      const stack =
+        (typeof window !== "undefined" &&
+          typeof window.resolveImoryFontStack === "function")
+          ? window.resolveImoryFontStack(String(value))
+          : null;
+
+      return stack ? { "font-family": stack } : clear(["font-family"]);
+
+    }
+
+    case "canvasFontSize": {
+      const size = inspectorCanvasTypoNumber("canvasFontSize", value);
+      return size ? { "font-size": `${size}px` } : clear(["font-size"]);
+    }
+
+    case "canvasLetterSpacing": {
+      const spacing = inspectorCanvasTypoNumber("canvasLetterSpacing", value);
+      return spacing ? { "letter-spacing": `${spacing}px` } : clear(["letter-spacing"]);
+    }
+
+    case "canvasLineHeight": {
+      const height = inspectorCanvasTypoNumber("canvasLineHeight", value);
+      return height ? { "line-height": height } : clear(["line-height"]);
+    }
 
     case "color":
       return INSPECTOR_COLOR_PATTERN.test(String(value))
@@ -1358,6 +1506,29 @@ function readInspectorControlValue(control, declarations) {
         ? decl["font-weight"]
         : "";
 
+    /* HOME-CANVAS-TYPOGRAPHY-1 — 위 patch 와 짝이 되는 되읽기.
+
+       ★ 빈 문자열은 "이 요소에는 그 선언이 없다" = 스킨 기본값이다.
+         화면에서 잰 값으로 채우지 않는다 — 채우는 순간 사용자가
+         고른 적 없는 값이 다음 확정에서 CSS 에 박힌다. */
+
+    case "canvasFontFamily":
+      return (
+        (typeof window !== "undefined" &&
+          typeof window.imoryFontKeyOfStack === "function")
+          ? (window.imoryFontKeyOfStack(decl["font-family"]) || "")
+          : ""
+      );
+
+    case "canvasFontSize":
+      return inspectorCanvasTypoRead("canvasFontSize", decl["font-size"], true);
+
+    case "canvasLetterSpacing":
+      return inspectorCanvasTypoRead("canvasLetterSpacing", decl["letter-spacing"], true);
+
+    case "canvasLineHeight":
+      return inspectorCanvasTypoRead("canvasLineHeight", decl["line-height"], false);
+
     case "color":
       return INSPECTOR_COLOR_PATTERN.test(String(decl.color || "")) ? decl.color : "";
 
@@ -1492,5 +1663,10 @@ if (typeof window !== "undefined") {
   window.buildInspectorStylePatch = buildInspectorStylePatch;
   window.readInspectorControlValue = readInspectorControlValue;
   window.inspectorAspectRatio = inspectorAspectRatio;
+
+  /* HOME-CANVAS-TYPOGRAPHY-1 — 폼이 확정 전에 **같은 규칙으로**
+     판정할 수 있게 값 규칙 두 개를 함께 낸다. */
+  window.INSPECTOR_CANVAS_TYPO_RANGES = INSPECTOR_CANVAS_TYPO_RANGES;
+  window.inspectorCanvasTypoNumber = inspectorCanvasTypoNumber;
 
 }

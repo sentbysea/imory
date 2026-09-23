@@ -748,6 +748,33 @@ async function waitForClonedDocumentFontsBeforeCapture(
 
   try {
 
+    /*
+      ★ HOME-CANVAS-TYPOGRAPHY-1 — clone 에서도 **먼저 받으라고
+      시킨다.**
+
+      위 주석이 말하는 레이스에는 한 걸음이 더 있다. clone 의
+      fonts.ready 는 "지금 진행 중인 로딩"이 끝나기를 기다리는데,
+      여섯 글꼴은 전부 lazy 라 clone 이 막 만들어진 시점에는
+      아직 시작조차 안 했을 수 있다 — 그러면 ready 가 즉시
+      resolve 하고 fallback 으로 줄바꿈이 잡힌다. load() 는
+      "이 글꼴을 지금 받아라"라서 그 구멍이 없다.
+    */
+
+    if (
+      typeof whenPostStyleFontReady === "function"
+    ) {
+
+      await whenPostStyleFontReady(
+        (
+          typeof postStyleSettings !== "undefined" && postStyleSettings
+            ? postStyleSettings
+            : {}
+        ).bodyFont,
+        clonedDocument
+      );
+
+    }
+
     if (
       clonedDocument &&
       clonedDocument.fonts &&

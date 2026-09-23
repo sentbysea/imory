@@ -149,6 +149,21 @@
   >
 
 
+  <!--
+    HOME-CANVAS-TYPOGRAPHY-1 — 폰트 **파일**을 가져오는 자리는
+    core/imory-fonts.css 한 장이다(아래 CSS 섹션 맨 앞).
+
+    예전에는 이 자리에 Nanum Myeongjo <link> 한 줄이 있었다. 그래서
+    Quote 프리셋이 고를 수 있는 다른 글꼴(Pretendard)은 어느 화면
+    에서도 파일이 없어 시스템 고딕으로 떨어졌고, Preview 문서 ·
+    sandbox 프레임에는 그 한 줄조차 없어 같은 본문이 화면마다 다른
+    글꼴로 그려졌다. 지금은 여섯이 한 파일에 있고, 그 파일을 읽는
+    문서 넷이 같은 결과를 낸다.
+
+    아래 preconnect 는 그 CSS 가 @import 로 부르는 세 호스트다 —
+    연결을 미리 열어 두는 것뿐이고 파일을 받지는 않는다.
+  -->
+
   <link
     rel="preconnect"
     href="https://fonts.googleapis.com"
@@ -160,14 +175,10 @@
     crossorigin
   >
 
-  <!--
-    본문 폰트 선택지 중 "나눔명조"용(quote 프리셋의 bodyFont
-    설정 — posts/style/posts-style-render.js 참고).
-  -->
-
   <link
-    href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap"
-    rel="stylesheet"
+    rel="preconnect"
+    href="https://cdn.jsdelivr.net"
+    crossorigin
   >
 
 
@@ -255,6 +266,15 @@
 
     loadVersionedScripts(
       [
+        /*
+          HOME-CANVAS-TYPOGRAPHY-1: 글꼴 여섯의 유일한 목록과
+          key -> font-family 변환(core/imory-font-catalog.js).
+          posts/style/posts-body-layout.js 와 posts/preview/
+          posts-page-layout.js 가 본문 글꼴을 정할 때 **호출 시점에**
+          쓰므로 그 둘보다 앞이면 되고, 의존이 없으므로 맨 앞이다.
+        */
+        "./core/imory-font-catalog.js",
+
         "./core/lib/supabase-client.js",
         "./core/lib/reserved-slugs.js",
         "./core/lib/site-path.js",
@@ -673,16 +693,15 @@
 
   <!-- =========================================================
        PRETENDARD
+
+       HOME-CANVAS-TYPOGRAPHY-1 — 여기 있던 <link> 는
+       core/imory-fonts.css 로 옮겼다(아래 CSS 섹션 맨 앞).
+
+       그 줄은 **버전이 없는 주소**였고(@gh/…/pretendard/…, 고정
+       URL 이라 ?v= 도 없다) static 전체 벌이었다. 지금은 버전을
+       고정한 dynamic subset 을 다른 다섯과 함께 한 파일에서
+       받는다 — 같은 이름 "Pretendard" 라 화면은 그대로다.
   ========================================================== -->
-
-  <link
-    rel="stylesheet"
-    as="style"
-    crossorigin
-    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
-  >
-
-
 
   <!-- =========================================================
        CSS
@@ -709,6 +728,15 @@
 
     loadVersionedStyles(
       [
+        /*
+          HOME-CANVAS-TYPOGRAPHY-1 — 사용자가 고를 수 있는 글꼴
+          여섯을 실제로 가져오는 **한 장**(core/imory-fonts.css).
+          design-tokens.css 가 --theme-font-family 로 그 이름들을
+          쓰므로 그보다 앞이다. 목록과 key 는 CSS 가 아니라
+          core/imory-font-catalog.js 가 갖는다.
+        */
+        "./core/imory-fonts.css",
+
         "./core/design-tokens.css",
 
         /*

@@ -644,6 +644,22 @@ async function runCsp() {
   check("[csp] ★ style-src 는 self + nonce (unsafe-inline 아님)",
     /style-src 'self' 'nonce-[A-Za-z0-9_-]+'/.test(csp), csp);
 
+  /* HOME-CANVAS-TYPOGRAPHY-1 — 글꼴 출처 둘씩. 넓힌 것이 정확히
+     이것뿐인지 본다(https: 전체를 여는 것과 다르다 — 위 두 줄). */
+  check("[csp] ★ 글꼴 스타일시트 호스트 둘이 style-src 에 있다",
+    csp.indexOf("https://fonts.googleapis.com") !== -1 &&
+    csp.indexOf("https://cdn.jsdelivr.net") !== -1,
+    csp.split("; ").find(d => d.indexOf("style-src ") === 0));
+
+  check("[csp] ★ 글꼴 파일 호스트 둘이 font-src 에 있다",
+    fontSrc.indexOf("https://fonts.gstatic.com") !== -1 &&
+    fontSrc.indexOf("https://cdn.jsdelivr.net") !== -1 &&
+    fontSrc.indexOf("'self'") !== -1,
+    fontSrc);
+
+  check("[csp] ★ unsafe-inline / unsafe-eval 이 한 칸도 없다",
+    csp.indexOf("unsafe-") === -1, csp);
+
   const nonceMatch =
     csp.match(/'nonce-([A-Za-z0-9_-]+)'/);
 

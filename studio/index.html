@@ -60,6 +60,20 @@
 
     loadVersionedStyles(
       [
+        /*
+          HOME-CANVAS-TYPOGRAPHY-1 — 글꼴 여섯을 가져오는 한 장.
+
+          Studio 는 admin/index.html 안에 **iframe** 으로 들어오는데
+          iframe 은 부모의 <link> 를 물려받지 않는다. 이것이 없으면
+          같은 관리 UI 인데 admin 은 Pretendard, Studio 는 시스템
+          고딕으로 그려진다(아래 design-tokens.css 의
+          --system-font-family 가 그 이름을 쓴다).
+
+          ★ Preview iframe 은 이 문서와 또 다른 browsing context 라
+            자기 몫을 따로 읽는다(studio/preview/preview-frame.html).
+        */
+        "../core/imory-fonts.css",
+
         "../core/design-tokens.css",
         "../skin-questionnaire/questionnaire.css",
         "./studio.css",
@@ -995,6 +1009,18 @@
 
     loadVersionedScripts(
       [
+        /*
+          HOME-CANVAS-TYPOGRAPHY-1: 사용자가 고를 수 있는 글꼴 여섯의
+          **유일한 목록**(core/imory-font-catalog.js). Canvas Select 의
+          글꼴 칸과 Quote Preset 의 BODY > FONT 가 같은 배열을 읽어
+          <option> 을 만든다. 의존이 없으므로 맨 앞이다.
+
+          폰트 **파일**은 이 목록이 아니라 core/imory-fonts.css 가
+          가져온다 — Studio 문서는 자기 UI 로 그 글꼴을 쓰지 않고
+          (Preview 문서가 쓴다) 목록만 필요해서 CSS 는 읽지 않는다.
+        */
+        "../core/imory-font-catalog.js",
+
         "../core/lib/site-path.js",
         /*
           PUBLIC-NUMBER-1: 공개 주소의 번호(categories.public_no /
@@ -1407,6 +1433,13 @@
            (studio-history.js)도 호출 시점에만 읽는다. */
         "./inspector/studio-canvas-inspector.js",
         "./inspector/studio-canvas-inspector-v2.js",
+
+        /* HOME-CANVAS-TYPOGRAPHY-1 — Canvas 글자의 글꼴 · 크기 ·
+           굵기 · 색 · 자간 · 행간. 위 두 화면이 **이 파일의 블록
+           하나**를 자기 안에 붙이므로 그 뒤다(호출 시점 의존).
+           값 규칙은 studio-inspector-model.js, 글꼴 목록은
+           core/imory-font-catalog.js 가 갖는다. */
+        "./inspector/studio-canvas-typography.js",
 
         /* HOME-CANVAS-V2-ADD-1 — v2 재료 추가. 위 두 파일의 최상위
            함수(안내 문구 · 입력 목록)를 호출 시점에 쓰므로 그

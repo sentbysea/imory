@@ -23,29 +23,28 @@
     crossorigin
   >
 
-  <!--
-    본문 폰트 선택지 중 "나눔명조"용(posts/style/posts-style-render.js
-    참고 — quote 미리보기 텍스트에서만 쓰임).
-  -->
-
   <link
-    href="https://fonts.googleapis.com/css2?family=Nanum+Myeongjo:wght@400;700;800&display=swap"
-    rel="stylesheet"
-  >
-
-  <!--
-    PRETENDARD — admin 전체 공통 UI 폰트. (루트 index.html과 달리
-    admin은 canvas capture/export를 하지 않으므로 posts-preview-
-    export-capture.js의 clone 폰트 로딩 레이스 문제가 없다 — 그냥
-    불러와서 바로 써도 안전함.)
-  -->
-
-  <link
-    rel="stylesheet"
-    as="style"
+    rel="preconnect"
+    href="https://cdn.jsdelivr.net"
     crossorigin
-    href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css"
   >
+
+  <!--
+    HOME-CANVAS-TYPOGRAPHY-1 — 폰트 **파일**을 가져오는 자리는
+    core/imory-fonts.css 한 장으로 옮겼다(아래 CSS 섹션 맨 앞).
+
+    여기에는 두 줄이 있었다.
+
+      Nanum Myeongjo  Google Fonts — Quote 미리보기 본문용
+      Pretendard      jsDelivr — admin 공통 UI 폰트.
+                      **버전이 없는 주소**였고(@gh/…/pretendard/…),
+                      static 전체 벌이라 받을 것이 많았다.
+
+    둘 다 공용 파일로 옮기면서 Pretendard 는 버전을 고정한 dynamic
+    subset 으로 바뀌었다(v1.3.9 — 필요한 글자 조각만 받는다).
+    admin 의 UI 는 지금까지처럼 --system-font-family 로 같은
+    "Pretendard" 를 쓴다.
+  -->
 
   <!-- =========================================================
        배포 버전 (core/lib/build-version.js)
@@ -95,6 +94,14 @@
 
     loadVersionedStyles(
       [
+        /*
+          HOME-CANVAS-TYPOGRAPHY-1 — 글꼴 여섯을 실제로 가져오는
+          한 장(core/imory-fonts.css). admin 의 UI 폰트(Pretendard)와
+          Quote 미리보기의 본문 글꼴이 **같은 파일**에서 온다.
+          아래 design-tokens.css 가 그 이름을 쓰므로 그보다 앞이다.
+        */
+        "../core/imory-fonts.css",
+
         /*
           Imory Design Tokens — :root 변수 선언만 있고 어떤
           셀렉터도 스타일링하지 않으므로, 다른 CSS가 이 변수를
@@ -2509,6 +2516,17 @@
 
         const adminDependencyScripts =
           [
+            /*
+              HOME-CANVAS-TYPOGRAPHY-1: 글꼴 여섯의 유일한 목록
+              (core/imory-font-catalog.js). Quote Preset 의
+              BODY > FONT <select> 를 이 배열로 채우고
+              (admin-quote-refs.js), 미리보기 본문의 font-family 도
+              이 파일의 resolver 하나를 지난다
+              (posts/style/posts-body-layout.js). 둘 다 이 목록보다
+              뒤에 있어야 한다 — 의존이 없으므로 맨 앞이다.
+            */
+            "../core/imory-font-catalog.js",
+
             /*
               HIGHLIGHT-2: 카테고리 타입(post/gallery/banner/highlight)과
               페이지네이션 공용 상수. 타입 드롭다운·ADVANCED SETTINGS·

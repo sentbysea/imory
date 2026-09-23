@@ -236,6 +236,25 @@ export const SANDBOX_ALLOWED_PATHS = [
   "/posts/posts-body-blocks.css",
 
   /* =====================================================
+     HOME-CANVAS-TYPOGRAPHY-1 — 글꼴 여섯.
+
+     core/imory-fonts.css 는 공개 화면 · native Preview 와 **같은
+     파일**이다(posts 의 본문 CSS 둘과 정확히 같은 사정). 이것이
+     없으면 같은 스킨의 같은 글자가 프레임에서만 시스템 글꼴로
+     떨어진다.
+
+     woff2 둘은 나눔스퀘어네오다 — Google Fonts 에도 공식 CDN
+     에도 없어 저장소가 직접 갖고 있고, 그래서 font-src 'self' 로
+     나간다(출처 · 라이선스 · variable 파일을 쓰지 않는 이유:
+     core/fonts/NanumSquareNeo-LICENSE.txt).
+     나머지 다섯의 파일은 아래 CSP 의 바깥 출처에서 온다.
+  ====================================================== */
+
+  "/core/imory-fonts.css",
+  "/core/fonts/NanumSquareNeo-Regular.woff2",
+  "/core/fonts/NanumSquareNeo-Bold.woff2",
+
+  /* =====================================================
      HOME-CANVAS-VENDOR-1 — 캔버스 편집기가 쓸 Moveable · Selecto.
 
      ★ 이 둘은 지금 **아무도 로드하지 않는다.** 프레임 문서에
@@ -321,6 +340,40 @@ export const SANDBOX_ALLOWED_PATHS = [
 
 export const SANDBOX_CSS_PARSER_URL =
   "https://cdn.jsdelivr.net/npm/@eslint/css-tree@4.1.0/dist/csstree.esm.js";
+
+
+/* =========================================================
+   HOME-CANVAS-TYPOGRAPHY-1 — 글꼴 파일의 바깥 출처
+
+   core/imory-fonts.css 가 @import 로 부르는 **스타일시트**의 호스트와,
+   그 스타일시트가 가리키는 **폰트 파일**의 호스트다. 둘이 다르다:
+   Google Fonts 는 css 를 fonts.googleapis.com 이, 실제 woff2 를
+   fonts.gstatic.com 이 준다. jsDelivr 는 둘 다 한 호스트다.
+
+   ★ 호스트 단위로 연다. css-tree 처럼 URL 하나로 못박지 않는 이유는
+     Google Fonts 의 css2 응답이 브라우저마다 **다른 woff2 주소**를
+     주고(unicode-range 조각이 수십 개), Pretendard 의 dynamic subset
+     도 828 개 조각을 가리키기 때문이다. 경로를 적을 수 있는 대상이
+     아니다.
+
+   ★ 여전히 https: 전체가 아니다. 스킨 CSS 가 임의의 웹폰트를 쓰면
+     프레임에서는 그 글꼴만 빠진 채 나온다 — 그 차이는 그대로다
+     (위 ③의 "남은 차이"). 여기서 여는 것은 **플랫폼이 제공하는
+     여섯**의 출처뿐이다.
+
+   ★ 나눔스퀘어네오는 여기 없다. 저장소가 직접 갖고 있어
+     font-src 'self' 로 나간다(core/fonts/).
+========================================================== */
+
+export const SANDBOX_FONT_STYLE_ORIGINS = [
+  "https://fonts.googleapis.com",
+  "https://cdn.jsdelivr.net"
+];
+
+export const SANDBOX_FONT_FILE_ORIGINS = [
+  "https://fonts.gstatic.com",
+  "https://cdn.jsdelivr.net"
+];
 
 
 /*
@@ -764,14 +817,22 @@ export function buildSandboxCsp(nonce, config) {
     "script-src 'self' 'nonce-" + nonce + "' " + SANDBOX_CSS_PARSER_URL,
 
     /* frame.html의 인라인 <style> + renderSkin()의 동적 <style>(둘 다
-       nonce) + core/content-width.css(<link>, 그래서 'self') */
-    "style-src 'self' 'nonce-" + nonce + "'",
+       nonce) + core/content-width.css(<link>, 그래서 'self')
+
+       ★ HOME-CANVAS-TYPOGRAPHY-1 — core/imory-fonts.css('self')가
+         @import 로 부르는 두 스타일시트 호스트가 더해졌다.
+         'unsafe-inline' 은 여전히 없다. */
+    "style-src 'self' 'nonce-" + nonce + "' " +
+      SANDBOX_FONT_STYLE_ORIGINS.join(" "),
 
     /* 프로필·배너·imageSlot·대표 이미지. https: 전체가 아니다(위 ③) */
     "img-src data: blob: " + media,
 
-    /* 웹폰트 — 지금은 self/data: 뿐이다(위 ③의 남은 차이) */
-    "font-src 'self' data:",
+    /* 웹폰트 — 'self'(저장소가 가진 나눔스퀘어네오 woff2) + 플랫폼이
+       제공하는 나머지 다섯의 파일 호스트 둘. https: 전체가 아니다 —
+       스킨 CSS 가 부르는 임의의 웹폰트는 여전히 막힌다
+       (위 ③의 남은 차이 · HOME-CANVAS-TYPOGRAPHY-1). */
+    "font-src 'self' data: " + SANDBOX_FONT_FILE_ORIGINS.join(" "),
 
     "media-src 'none'",
 

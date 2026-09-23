@@ -308,10 +308,7 @@ function applyPostPageTitleStyle(
   */
 
   title.style.fontFamily =
-    resolved.bodyFont ===
-    "nanummyeongjo"
-      ? '"Nanum Myeongjo", serif'
-      : '"Pretendard", sans-serif';
+    postStyleFontFamily(resolved.bodyFont);
 
 
   title.style.color =
@@ -377,10 +374,7 @@ function createPostPageSource(
 
 
   source.style.fontFamily =
-    resolved.bodyFont ===
-    "nanummyeongjo"
-      ? '"Nanum Myeongjo", serif'
-      : '"Pretendard", sans-serif';
+    postStyleFontFamily(resolved.bodyFont);
 
 
   source.style.color =

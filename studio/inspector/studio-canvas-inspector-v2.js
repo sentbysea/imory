@@ -1706,7 +1706,18 @@ function buildStudioCanvasV2Inspector(view) {
   );
 
   if (view.type === "text") {
+
     studioCanvasInspectorBody.appendChild(studioCanvasV2TextBlock(view));
+
+    /* HOME-CANVAS-TYPOGRAPHY-1 — 글꼴 · 크기 · 굵기 · 색 · 자간 ·
+       행간. **v1 화면과 같은 함수**가 만든다(블록을 두 벌 만들지
+       않는다 — studio/inspector/studio-canvas-typography.js).
+
+       ★ 여기 한 자리면 v2 의 셋이 전부 덮인다 — 흐름 text 블록 ·
+         main_visual 내부 text · overlay text 가 모두 이 줄을
+         지난다(아래 kind 분기보다 앞이다). */
+    appendStudioCanvasTypographyBlock(studioCanvasInspectorBody, view);
+
   }
 
   if (view.kind !== "block") {

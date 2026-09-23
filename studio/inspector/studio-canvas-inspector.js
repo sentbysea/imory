@@ -1504,6 +1504,10 @@ function buildStudioCanvasInspector(view) {
 
   studioCanvasInspectorBody.appendChild(studioCanvasInspectorTypeBlock(view));
 
+  /* HOME-CANVAS-TYPOGRAPHY-1 — 글자 요소면 타이포그래피 한 블록.
+     v2 화면도 **같은 함수**를 부른다(블록을 두 벌 만들지 않는다). */
+  appendStudioCanvasTypographyBlock(studioCanvasInspectorBody, view);
+
   const geometry =
     document.createElement("div");
 
@@ -1550,6 +1554,11 @@ function syncStudioCanvasInspectorValues(view) {
   if (view.mode !== "single" || !studioCanvasInspectorInputs) {
     return;
   }
+
+  /* HOME-CANVAS-TYPOGRAPHY-1 — 타이포그래피 블록은 v1 · v2 어느
+     화면에도 같은 모양으로 붙으므로 갈라지기 **전에** 맞춘다.
+     값의 출처는 draft 의 CSS 라 아래 geometry 칸과 다르다. */
+  syncStudioCanvasTypography(view);
 
   /* HOME-CANVAS-V2-EDITOR-1A — v2 화면의 칸은 v2 파일이 맞춘다 */
   if (view.version === 2) {
