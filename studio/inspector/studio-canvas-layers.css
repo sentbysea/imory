@@ -1,0 +1,264 @@
+/* =========================================================
+   STUDIO — LAYERS 패널 (STUDIO-LAYERS-SHELL-1)
+
+   계획 문서: docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §2 · §3
+
+   왼쪽 패널의 한 내용이다 — 바깥 자리(폭 · 여닫기 · 시트 단계)는
+   studio/studio-shell.css 가 정하고, 여기서는 안쪽만 그린다.
+
+   ★ 스크롤하는 상자는 **section 자신**이다(studio-shell.css 의
+     `[data-left-panel-mode="layers"]`). 여기서 두 번째 스크롤
+     상자를 만들지 않는다 — 390px 시트에서 이중 스크롤이 생긴다.
+
+   ★ 재료 추가 줄만 sticky 다. 트리가 길어도 같은 자리에 있다.
+========================================================== */
+
+.studio-canvas-layers {
+  display: flex;
+  flex-direction: column;
+
+  gap: 8px;
+
+  padding: 0 0 8px;
+}
+
+
+/* ── 맨 위: ＋ 재료 추가 ───────────────────────────────── */
+
+.studio-canvas-layers-top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+
+  /* 아래로 지나가는 행이 비쳐 보이지 않게 */
+  background: var(--system-bg);
+
+  padding: 12px 14px 8px;
+}
+
+
+.studio-canvas-layers-add-toggle {
+  width: 100%;
+
+  display: block;
+
+  padding: 8px 10px;
+
+  border: 1px solid var(--system-border, rgba(0, 0, 0, 0.16));
+  border-radius: 6px;
+
+  background: transparent;
+  color: inherit;
+
+  font: inherit;
+  font-size: var(--imory-font-size-300);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.studio-canvas-layers-add-toggle:hover:not(:disabled),
+.studio-canvas-layers-add-toggle:focus-visible {
+  border-color: var(--system-text-muted, rgba(0, 0, 0, 0.4));
+}
+
+
+.studio-canvas-layers-add-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+
+.studio-canvas-layers-add-toggle[aria-expanded="true"] {
+  border-color: var(--system-text, currentColor);
+}
+
+
+.studio-canvas-layers-add {
+  padding: 0 14px;
+}
+
+
+.studio-canvas-layers-add[hidden] {
+  display: none;
+}
+
+
+/* ── 트리 ──────────────────────────────────────────────── */
+
+.studio-canvas-layers-tree {
+  display: flex;
+  flex-direction: column;
+
+  gap: 1px;
+
+  padding: 0 14px 16px;
+}
+
+
+.studio-canvas-layers-group {
+  margin: 10px 0 2px;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+
+.studio-canvas-layers-group:first-child {
+  margin-top: 0;
+}
+
+
+.studio-canvas-layers-row {
+  display: flex;
+  align-items: center;
+
+  gap: 2px;
+
+  border-radius: 5px;
+}
+
+
+/* 프레임 안의 요소는 한 단 들어간다 — 첫 단계의 "폴더"는
+   main_visual 한 단계뿐이다(계획 문서 §2-7). */
+.studio-canvas-layers-row[data-layer-depth="1"] {
+  padding-left: 16px;
+}
+
+
+.studio-canvas-layers-row.is-selected {
+  background: var(--system-bg-subtle, rgba(0, 0, 0, 0.06));
+}
+
+
+.studio-canvas-layers-row.is-primary-selected {
+  box-shadow: inset 0 0 0 1px var(--system-text, currentColor);
+}
+
+
+/* 접기 손잡이 — 폴더 행에만 있고, 그 자리는 모든 행이 비워 둔다
+   (없는 행에서 이름이 왼쪽으로 튀지 않게) */
+.studio-canvas-layers-twisty,
+.studio-canvas-layers-twisty-gap {
+  flex: 0 0 auto;
+
+  width: 20px;
+  height: 26px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+
+.studio-canvas-layers-twisty {
+  padding: 0;
+
+  border: 0;
+  border-radius: 4px;
+
+  background: transparent;
+  color: var(--system-text-muted);
+
+  font: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-canvas-layers-twisty:hover,
+.studio-canvas-layers-twisty:focus-visible {
+  color: inherit;
+
+  background: var(--system-bg-subtle, rgba(0, 0, 0, 0.06));
+}
+
+
+.studio-canvas-layers-pick {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  display: flex;
+  align-items: center;
+
+  gap: 5px;
+
+  padding: 5px 8px;
+
+  border: 0;
+  border-radius: 5px;
+
+  background: transparent;
+  color: inherit;
+
+  font: inherit;
+  font-size: var(--imory-font-size-300);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.studio-canvas-layers-pick:hover,
+.studio-canvas-layers-pick:focus-visible {
+  background: var(--system-bg-subtle, rgba(0, 0, 0, 0.06));
+}
+
+
+.studio-canvas-layers-name {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ★ 대표 사진 — 이번 단계에서는 **표식만**이다(계획 문서 §2-5) */
+.studio-canvas-layers-star {
+  flex: 0 0 auto;
+
+  font-size: var(--imory-font-size-200);
+  line-height: 1;
+}
+
+
+.studio-canvas-layers-empty {
+  margin: 0;
+
+  padding: 4px 14px 16px;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-300);
+  line-height: var(--imory-line-height-relaxed);
+}
+
+
+.studio-canvas-layers-empty[hidden] {
+  display: none;
+}
+
+
+/* ── 390px 시트 ────────────────────────────────────────
+   행을 손가락이 닿을 크기로 키운다. 트리 자체에는 스크롤을 두지
+   않는다 — 스크롤하는 것은 바깥 section 하나다(파일 머리말). */
+
+@media (max-width: 720px) {
+
+  .studio-canvas-layers-pick {
+    padding: 8px;
+  }
+
+  .studio-canvas-layers-twisty,
+  .studio-canvas-layers-twisty-gap {
+    height: 32px;
+  }
+
+}

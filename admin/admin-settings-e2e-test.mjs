@@ -12,6 +12,8 @@
              site_settings에 반영되고 그때 예전 파일이 지워진다.
              remove도 같은 규칙.
      etc     Settings > HOME > ETC 보호 설정 3개 — 불러오기/저장
+     dock    HOME > BOTTOM DOCK — Skin Studio 안의 같은 편집기를 여는
+             문 하나(설정 폼을 복제하지 않았다, STUDIO-LAYERS-SHELL-1)
      tab     설정 안쪽 탭이 화면 복귀(restoreAdminView) 뒤에도
              그대로인가 — 예전에는 무조건 PROFILE로 튀었다.
 
@@ -1089,6 +1091,121 @@ async function touchDrag(page, fromIndex, toIndex, opts = {}) {
   await page.waitForTimeout(300);
 }
 
+/* =========================================================
+   [dock] SETTINGS > HOME > BOTTOM DOCK (STUDIO-LAYERS-SHELL-1)
+
+   계획 문서: docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §1-1
+
+   ★ 여기서 재는 것은 "설정 화면이 생겼는가"가 아니다.
+
+   Dock 데이터도 저장 경로도 Skin Studio 에 그대로 있고, SETTINGS 는
+   그 편집기를 **열기만** 한다는 것이 이 라운드의 조건이다. 그래서
+   재는 것은 셋이다.
+
+     1  SETTINGS 안에 Dock **설정 폼이 없다**(복제하지 않았다)
+     2  버튼을 누르면 Skin Studio 화면으로 옮겨 간다
+     3  그 iframe 안의 **진짜 Studio 문서**에서 Dock 편집기가 열린다
+
+   3 을 위해 iframe 을 studio/studio-lifecycle-scenario.html 로
+   돌린다 — production 과 같은 스크립트 구성에 in-memory supabase
+   mock 을 쓰는 그 문서다(docs/TESTS.md). admin 의 supabase mock 으로
+   Studio 전체를 다시 세우지 않고도 양쪽 절반이 실제로 맞물리는지
+   볼 수 있다.
+========================================================== */
+
+async function runDock(browser) {
+  console.log("\n[dock] HOME > BOTTOM DOCK — Skin Studio 로 여는 문");
+
+  const { ctx, page } = await openSettings(browser, { db: makeDb({}) });
+
+  await openTab(page, "HOME");
+
+  const entry = await page.evaluate(() => {
+    const group = document.getElementById("bottomDockSettingsPanel");
+    const button = document.getElementById("bottomDockOpenButton");
+    return {
+      inHomeTab: !!group && !!group.closest("#homeSettingsPanel"),
+      visible: !!button && button.offsetParent !== null,
+      label: button ? button.textContent.trim() : null,
+      /* Dock 설정 폼을 이 문서에 복제하지 않았다 */
+      dockForm: document.querySelectorAll(".dock-panel-item, #adminDockItems").length,
+      dockOverlay: document.querySelectorAll(".dock-panel-overlay").length
+    };
+  });
+
+  check(
+    "[dock] ★ HOME 탭에 문 하나만 있고 Dock 설정 폼은 복제되지 않았다",
+    entry.inHomeTab && entry.visible &&
+      entry.dockForm === 0 && entry.dockOverlay === 0,
+    JSON.stringify(entry)
+  );
+
+  /* iframe 을 실제 Studio 문서(scenario)로 돌린다 */
+  await page.evaluate((port) => {
+    const frame = document.getElementById("skinStudioFrame");
+    frame.src =
+      `http://localhost:${port}/studio/studio-lifecycle-scenario.html?scenario=y`;
+  }, PORT);
+
+  await page.waitForTimeout(2500);
+
+  await page.click("#bottomDockOpenButton");
+
+  const moved = await page.evaluate(() => ({
+    studioShown: !document.getElementById("skinStudioPanel").hidden,
+    settingsHidden: document.getElementById("settingsPanel").hidden
+  }));
+
+  check(
+    "[dock] 버튼을 누르면 Skin Studio 화면으로 옮겨 간다",
+    moved.studioShown && moved.settingsHidden,
+    JSON.stringify(moved)
+  );
+
+  /* Studio 가 실제로 Dock 편집기를 열 때까지 기다린다 —
+     admin 쪽이 되풀이해 보내고 Studio 가 한 번 답하면 멈춘다 */
+  const studio = page.frameLocator("#skinStudioFrame");
+
+  await studio.locator("#studioLeftPanelDock .dock-panel-overlay--open")
+    .waitFor({ state: "attached", timeout: 20000 });
+
+  const opened = await page.frames()
+    .find((f) => f.url().indexOf("studio-lifecycle-scenario") !== -1)
+    .evaluate(() => ({
+      mode: window.getStudioShellState().leftPanelMode,
+      open: window.getStudioShellState().leftPanelOpen,
+      title: document.getElementById("studioLeftPanelTitle").textContent.trim(),
+      items: document.querySelectorAll("#studioLeftPanelDock .dock-panel-item").length,
+      /* 상단 버튼은 여전히 없다 — 이 문이 유일한 바깥 진입점이다 */
+      dockButton: !!document.getElementById("studioDockButton"),
+      layersButton: !!document.getElementById("studioLayersButton")
+    }));
+
+  check(
+    "[dock] ★ iframe 안의 진짜 Studio 에서 Dock 편집기가 열린다",
+    opened.mode === "dock" && opened.open === true &&
+      opened.title === "BOTTOM DOCK" && opened.items > 0,
+    JSON.stringify(opened)
+  );
+
+  check(
+    "[dock] Studio 상단에는 Dock 버튼이 없고 Layers 가 그 자리다",
+    opened.dockButton === false && opened.layersButton === true,
+    JSON.stringify(opened)
+  );
+
+  const stopped = await page.evaluate(() =>
+    window.getAdminBottomDockEntryState());
+
+  check(
+    "[dock] Studio 가 답하면 admin 은 다시 보내기를 멈추고 안내도 남기지 않는다",
+    stopped.pending === false && stopped.message === "",
+    JSON.stringify(stopped)
+  );
+
+  await ctx.close();
+}
+
 async function runMemoFolder(browser) {
   console.log("\n[memofolder] 하이라이트 폴더 차례");
 
@@ -1246,6 +1363,7 @@ async function runMemoFolder(browser) {
     if (shouldRun("singleton")) await runSingleton(browser);
     if (shouldRun("advanced")) await runAdvanced(browser);
     if (shouldRun("memofolder")) await runMemoFolder(browser);
+    if (shouldRun("dock")) await runDock(browser);
 
   } catch (err) {
 

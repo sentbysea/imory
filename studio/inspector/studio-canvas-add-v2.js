@@ -12,6 +12,16 @@
    같은 자리에 같은 모양으로 있어야 한다. 그래서 이 파일은
    "선택"이 아니라 "지금 캔버스가 v2 인가" 하나만 보고 그린다.
 
+   ── 어느 패널에 붙는가 (STUDIO-LAYERS-SHELL-1) ─────────
+   **Layers 패널**이다(studio/inspector/studio-canvas-layers.js).
+   예전에는 Select 패널 맨 위였다 — 선택과 무관한 화면이 "고른 것
+   하나"의 자리에 얹혀 있었기 때문에, 계획 문서가 그 둘을 가른다
+   (docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §3).
+
+   이 파일이 만드는 것 · 종류 표 · 관문 · 기본값은 **한 글자도
+   바뀌지 않았다**. 바뀐 것은 만들어진 DOM 을 누가 어디에 붙이는가
+   뿐이고, 같은 UI 를 두 패널에 복제해 두지 않는다.
+
    ★ classic script 다. 앞 두 파일의 최상위 함수(studioCanvasInspectorNote
      등)를 그대로 쓴다 — window 에 올려 다리를 놓지 않는다.
 
@@ -123,6 +133,19 @@ const STUDIO_CANVAS_V2_ADD_REJECT = {
 let studioCanvasV2AddSlotChoice = null;
 
 
+/*
+  STUDIO-LAYERS-SHELL-1 — 슬롯 칸의 DOM 참조.
+
+  예전에는 Inspector 의 입력 장부(studioCanvasInspectorInputs.addSlot)
+  에 넣어 두었다. 그 장부는 **고른 요소가 바뀔 때마다 비워지는**
+  것이라, 추가 자리가 Select 를 떠나 Layers 로 옮겨 온 지금은 그
+  장부에 매달아 둘 수 없다(Select 를 한 번 다시 그리면 Layers 안에
+  살아 있는 칸의 참조가 사라진다). 그래서 이 파일이 직접 들고 있고,
+  Layers 가 화면을 다시 만들면 새 칸이 이 자리를 대신한다.
+*/
+let studioCanvasV2AddSlotSelect = null;
+
+
 /* 지금 이 패널을 그릴 자리인가 — 선택과 무관하다 */
 function studioCanvasV2AddIsOn() {
 
@@ -207,7 +230,7 @@ function studioCanvasV2AddSlotRow() {
   row.appendChild(label);
   row.appendChild(select);
 
-  studioCanvasInspectorInputs.addSlot = select;
+  studioCanvasV2AddSlotSelect = select;
 
   return row;
 
@@ -217,8 +240,12 @@ function studioCanvasV2AddSlotRow() {
 /* 옵션만 갈아 끼운다 — 슬롯은 Images 패널 · Import · Undo 로 바뀐다 */
 function syncStudioCanvasV2AddSlotOptions() {
 
+  /* ★ "아직 문서에 붙었는가"를 보지 않는다. buildStudioCanvasV2AddSection()
+     이 상자를 **붙이기 전에** 이 함수를 부르므로(그래야 처음 그려질 때
+     이미 옵션과 기본값이 들어 있다), isConnected 로 거르면 첫 화면의
+     슬롯 칸이 통째로 비어 버린다. 낡은 참조는 다음 build 가 덮는다. */
   const select =
-    studioCanvasInspectorInputs && studioCanvasInspectorInputs.addSlot;
+    studioCanvasV2AddSlotSelect;
 
   if (!select || select === document.activeElement) {
     return;
@@ -292,7 +319,7 @@ function setStudioCanvasV2AddMessage(text, isError) {
 function addStudioCanvasV2Material(target, type) {
 
   const select =
-    studioCanvasInspectorInputs && studioCanvasInspectorInputs.addSlot;
+    studioCanvasV2AddSlotSelect;
 
   const result =
     window.commitStudioCanvasAddNode({
@@ -443,6 +470,13 @@ function syncStudioCanvasV2AddSection() {
 if (typeof window !== "undefined") {
 
   window.studioCanvasV2AddIsOn = studioCanvasV2AddIsOn;
+
+  /* STUDIO-LAYERS-SHELL-1 — Layers 패널이 이 둘로 추가 자리를
+     붙이고 갱신한다. 두 파일 다 classic script 라 최상위 함수를
+     그냥 부를 수도 있지만, 로드 순서가 반대여도(Layers 가 먼저)
+     깨지지 않도록 창구를 둔다. */
+  window.buildStudioCanvasV2AddSection = buildStudioCanvasV2AddSection;
+  window.syncStudioCanvasV2AddSection = syncStudioCanvasV2AddSection;
 
   /* 진단 · 테스트가 보는 한 줄 */
   window.getStudioCanvasAddState =

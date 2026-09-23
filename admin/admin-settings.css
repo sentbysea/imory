@@ -1899,3 +1899,31 @@
 
   gap: 6px;
 }
+
+
+/* =========================================================
+   BOTTOM DOCK 진입 (STUDIO-LAYERS-SHELL-1)
+
+   admin/settings/admin-bottom-dock-entry.js
+
+   설정 화면이 아니라 **문 하나**다 — 안내 한 줄과 버튼 하나뿐이고,
+   실제 편집기는 Skin Studio 안의 그 패널이다(계획 문서 §1-1).
+========================================================== */
+
+.bottom-dock-hint {
+  margin: 10px 0 0;
+
+  font-size: 11px;
+  line-height: 1.6;
+
+  letter-spacing: 0.02em;
+
+  color: var(--imory-gray-650, #888888);
+}
+
+
+.bottom-dock-hint strong {
+  color: var(--system-text, #333333);
+
+  font-weight: 600;
+}

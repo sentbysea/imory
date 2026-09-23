@@ -16,6 +16,7 @@
 <link rel="stylesheet" href="./sides/sides-panel.css">
 <link rel="stylesheet" href="../skin/skin-dock-icons.css">
 <link rel="stylesheet" href="./inspector/studio-inspector.css">
+<link rel="stylesheet" href="./inspector/studio-canvas-layers.css">
 <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 자리(맨 뒤) -->
 <link rel="stylesheet" href="./studio-shell.css">
 </head>
@@ -77,6 +78,9 @@
           <p class="studio-left-panel-empty" id="studioLeftPanelSelectEmpty">Preview에서 고칠 요소를 누르세요.</p>
         </section>
         <section class="studio-left-panel-section" id="studioLeftPanelImages" data-left-panel-mode="images" hidden></section>
+        <!-- STUDIO-LAYERS-SHELL-1 — studio/index.html 과 같은 Layers 자리 -->
+        <section class="studio-left-panel-section" id="studioLeftPanelLayers" data-left-panel-mode="layers" hidden></section>
+        <!-- Dock 은 상단 버튼이 없는 내용이다 — 자리는 그대로 -->
         <section class="studio-left-panel-section" id="studioLeftPanelDock" data-left-panel-mode="dock" hidden></section>
         <section class="studio-left-panel-section" id="studioLeftPanelLayout" data-left-panel-mode="layout" hidden></section>
       </div>
@@ -93,7 +97,7 @@
           <div class="studio-top-dock-modes" role="group" aria-label="편집 패널">
             <button type="button" class="studio-corner-button studio-mode-button" id="studioInspectorButton" aria-pressed="false" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Select</button>
             <button type="button" class="studio-corner-button studio-mode-button" id="studioImagesButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Images</button>
-            <button type="button" class="studio-corner-button studio-mode-button" id="studioDockButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Dock</button>
+            <button type="button" class="studio-corner-button studio-mode-button" id="studioLayersButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Layers</button>
             <button type="button" class="studio-corner-button studio-mode-button" id="studioLayoutButton" aria-expanded="false" aria-controls="studioLeftPanel" disabled>Layout</button>
           </div>
         </div>
@@ -2889,6 +2893,7 @@
   <script src="./inspector/studio-canvas-inspector-v2.js"></script>
   <!-- HOME-CANVAS-V2-ADD-1 — studio/index.html 과 같은 자리 -->
   <script src="./inspector/studio-canvas-add-v2.js"></script>
+  <script src="./inspector/studio-canvas-layers.js"></script>
   <!-- STUDIO-SHELL-1 — studio/index.html 과 같은 순서 -->
   <script src="./studio-history.js"></script>
   <script src="./studio-shell.js"></script>

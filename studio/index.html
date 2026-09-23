@@ -78,6 +78,11 @@
         "../skin/skin-dock-icons.css",
         "./inspector/studio-inspector.css",
 
+        /* STUDIO-LAYERS-SHELL-1 — Layers 패널 안쪽. Inspector 의
+           작은 버튼 · 행 스타일을 재료 추가 자리가 그대로 쓰므로
+           그 뒤다. */
+        "./inspector/studio-canvas-layers.css",
+
         /* STUDIO-SHELL-1 — 상단 세 그룹 · 왼쪽 패널. Images/Dock/
            Inspector 의 내용을 패널 안에 앉히는 규칙이 있어서 그
            셋보다 뒤다(IMORY_STUDIO_SHELL_DESIGN.md). */
@@ -214,7 +219,7 @@
 
 
     <!-- =====================================================
-         LEFT PANEL — Select · Images · Dock 이 함께 쓰는 자리
+         LEFT PANEL — Select · Images · Layers · Layout 이 함께 쓰는 자리
          (STUDIO-SHELL-1, IMORY_STUDIO_SHELL_DESIGN.md)
 
          예전에는 셋이 서로 다른 모양이었다 — Select 는 Preview 위에
@@ -338,6 +343,20 @@
           hidden
         ></section>
 
+        <!-- HOME 캔버스의 구조와 재료 추가(STUDIO-LAYERS-SHELL-1) —
+             studio/inspector/studio-canvas-layers.js 가 채운다. -->
+        <section
+          class="studio-left-panel-section"
+          id="studioLeftPanelLayers"
+          data-left-panel-mode="layers"
+          hidden
+        ></section>
+
+        <!-- 화면 아래 Dock 설정(BOTTOM-DOCK-1) — 자리도 저장 경로도
+             그대로이고, **상단 버튼만** 없어졌다. 여는 길은 Preview
+             안의 dock 을 누르는 것과 admin SETTINGS > HOME 의 "화면
+             아래 Dock" 둘이다(studio/studio-shell.js
+             STUDIO_LEFT_PANEL_MODES.dock 머리말). -->
         <section
           class="studio-left-panel-section"
           id="studioLeftPanelDock"
@@ -361,7 +380,7 @@
     <!-- =====================================================
          TOP DOCK — 세 그룹 (STUDIO-SHELL-1)
 
-           왼쪽   ← back · Select · Images · Dock   (왼쪽 패널을 여는 셋)
+           왼쪽   ← back · Select · Images · Layers · Layout   (왼쪽 패널을 여는 넷)
            가운데 현재 페이지 · Desktop|Mobile · Undo/Redo
            오른쪽 Code · Import|Export · Save · Publish · AI Assistant
 
@@ -389,7 +408,7 @@
       >
 
         <!-- =================================================
-             LEAD — 나가기 + 왼쪽 패널을 여는 넷(Select · Images · Dock · Layout)
+             LEAD — 나가기 + 왼쪽 패널을 여는 넷(Select · Images · Layers · Layout)
 
              Select 의 aria-pressed 는 "Inspector 모드가 켜져 있는가"
              다(studio/inspector/studio-inspector.js). 세 버튼의
@@ -444,19 +463,23 @@
             </button>
 
             <!--
-                 BOTTOM-DOCK-1 — 화면 아래 dock의 설정(IMORY_BOTTOM_DOCK_DESIGN.md
-                 §9). 생김새는 templates.dock과 스킨 CSS의 몫이다.
+                 STUDIO-LAYERS-SHELL-1 — HOME 캔버스의 전체 구조와
+                 재료 추가(계획 문서 §1 · §2 · §3). 예전에 이 자리에
+                 있던 Dock 버튼은 **없어졌다** — Bottom Dock 은 사이트
+                 전체의 이동 설정이라 Canvas 편집 진입점과 같은 급이
+                 아니다. 설정 자체와 저장 경로는 그대로이고, admin
+                 SETTINGS > HOME 과 Preview 안의 dock 으로 연다.
             -->
             <button
               type="button"
               class="studio-corner-button studio-mode-button"
-              id="studioDockButton"
+              id="studioLayersButton"
               aria-expanded="false"
               aria-controls="studioLeftPanel"
-              title="화면 아래 dock의 항목과 동작을 고칩니다"
+              title="HOME 캔버스의 재료를 추가하고 전체 구조를 봅니다"
               disabled
             >
-              Dock
+              Layers
             </button>
 
             <!--
@@ -1389,6 +1412,13 @@
            함수(안내 문구 · 입력 목록)를 호출 시점에 쓰므로 그
            **뒤**여야 한다. */
         "./inspector/studio-canvas-add-v2.js",
+
+        /* STUDIO-LAYERS-SHELL-1 — Layers 패널(구조 읽기 + 재료 추가
+           자리). 위 파일이 만든 추가 화면을 자기 안에 붙이고,
+           캔버스 선택 관문으로 행을 고른다. 둘 다 **호출 시점**에
+           window 창구로 쓰므로 순서가 강제되지는 않지만, 읽는
+           순서를 의존 방향과 맞춰 바로 뒤에 둔다. */
+        "./inspector/studio-canvas-layers.js",
 
         /* STUDIO-SHELL-1 — Undo/Redo 기록과 셸(왼쪽 패널 · ··· 메뉴 ·
            현재 페이지 표시). 둘 다 studio-preview.js 의 상태와

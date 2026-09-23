@@ -171,8 +171,12 @@ const studioImagesButton =
 
 /* BOTTOM-DOCK-1 — Bottom Dock 설정 패널 진입점. IMPORT/IMAGES 와
    같은 기준("working draft 가 있는가")으로만 활성화된다. */
-const studioDockButton =
-  document.getElementById("studioDockButton");
+/* STUDIO-LAYERS-SHELL-1 — 상단 셋째 자리는 Dock 이 아니라 Layers 다
+   (studio/inspector/studio-canvas-layers.js). Dock 설정은 상단
+   버튼이 없어졌고 Preview 의 dock · admin SETTINGS 로 연다
+   (studio/studio-shell.js STUDIO_LEFT_PANEL_MODES.dock 머리말). */
+const studioLayersButton =
+  document.getElementById("studioLayersButton");
 
 /* PHASE AI-6A — Element Inspector(Select) 진입점. 여닫기 리스너는
    studio/inspector/studio-inspector.js가 달고, 이 파일은 활성화
@@ -1559,12 +1563,17 @@ function updateStudioDockButtonState() {
       !currentWorkingSkin;
   }
 
-  if (!studioDockButton) {
-    return;
-  }
+  /* STUDIO-LAYERS-SHELL-1 — Layers 도 같은 조건이다. 캔버스가 아닌
+     HOME 이어도 버튼은 살아 있고, 패널이 그 사실을 알려 준다
+     (Images 와 같은 규칙 — 버튼을 숨기면 "왜 없지?" 가 된다).
 
-  studioDockButton.disabled =
-    !currentWorkingSkin;
+     ★ 이 버튼의 disabled 는 "working draft 가 있는가"의 유일한
+       화면 표시이기도 하다 — studio-shell.js 가 바깥(admin)에서 온
+       Dock 열기 요청을 받을 때 그 값을 읽는다. */
+  if (studioLayersButton) {
+    studioLayersButton.disabled =
+      !currentWorkingSkin;
+  }
 
 }
 

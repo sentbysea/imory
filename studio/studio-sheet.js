@@ -57,6 +57,7 @@ const STUDIO_SHEET_STATE_NAMES = {
 
 const STUDIO_SHEET_PANEL_NAMES = {
   images: "이미지 바꾸기",
+  layers: "레이어와 재료 추가",
   dock: "화면 아래 Dock",
   layout: "HOME 단 구성"
 };

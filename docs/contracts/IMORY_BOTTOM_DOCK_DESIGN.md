@@ -421,8 +421,25 @@ HIGHLIGHTS)이 렌더 직후 `syncSkinBottomDockForScreen()` 을 부른다. 그
 
 ## 9. Studio (§12 직접 수정 모드)
 
-Top Dock 의 **Dock** 버튼, 또는 **Preview 안의 dock 을 클릭**하면
-설정 패널이 열린다(`preview:dock-select`).
+**변경됨(STUDIO-LAYERS-SHELL-1, 2026-09-23).** Top Dock 의 **Dock 버튼은
+없어졌다** — 그 셋째 자리는 이제 Layers 다(계획 문서
+[IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md](../plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md) §1).
+Bottom Dock 은 사이트 전체의 이동 설정이라 Canvas 편집 진입점과 같은 급이
+아니기 때문이다.
+
+설정 패널을 여는 길은 둘이다.
+
+- **Preview 안의 dock 을 클릭**(`preview:dock-select`) — 예전 그대로.
+- **admin SETTINGS > HOME 의 "화면 아래 Dock"**
+  ([admin/settings/admin-bottom-dock-entry.js](../../admin/settings/admin-bottom-dock-entry.js)).
+  Skin Studio 화면으로 옮긴 뒤 같은 origin iframe 에 `admin:open-studio-panel`
+  을 보내면 Studio 셸이 이 패널을 연다.
+
+★ **데이터도 저장 경로도 바뀌지 않았다.** `bottomDock` 은 여전히
+SkinPackage 의 칸이고, 고치는 곳은 여전히 이 패널 하나이며,
+`setStudioBottomDock()` → working draft → Undo → Save 축도 그대로다.
+admin 문서에는 Dock 설정 폼이 **없다** — 두 번째 저장 주인을 만들지
+않는 것이 이 이동의 조건이었다.
 
 **변경됨(Dock 패널 단순화 라운드, 2026-09-19).** 사용자가 이해해야 하는
 것은 넷뿐이다 — ① Dock 켜기/끄기 ② 작은 열기 버튼의 모양 ③ 어떤 항목을

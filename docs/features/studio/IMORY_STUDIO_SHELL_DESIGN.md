@@ -22,11 +22,16 @@ Bottom Dock 데이터 · AI 요청 · SkinPackage · Save/Publish · 선택 복�
 ## 1. 화면 구조 (현재 구현)
 
 ```
-[ ← · Select · Images · Dock | 현재 페이지 · Desktop|Mobile · ↶ ↷ | Code · Import|Export · Save · Publish · AI ]
+[ ← · Select · Images · Layers · Layout | 현재 페이지 · Desktop|Mobile · ↶ ↷ | Code · Import|Export · Save · Publish · AI ]
 [ 왼쪽 패널 ][                 Preview stage                 ][ AI 패널 ]
 ```
 
-- **왼쪽 그룹** — 나가기(← back)와 왼쪽 패널을 여는 셋.
+- **왼쪽 그룹** — 나가기(← back)와 왼쪽 패널을 여는 넷.
+  STUDIO-LAYERS-SHELL-1 에서 셋째 자리가 **Dock → Layers** 로 바뀌었다
+  (계획 문서 [IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md](../../plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md) §1).
+  Bottom Dock 은 사이트 전체의 이동 설정이라 Canvas 편집 진입점과 같은
+  급이 아니다 — 설정 자체와 저장 경로는 그대로이고 **여는 길만** 옮겼다
+  (§2 의 표).
 - **가운데 그룹** — 지금 보고 있는 것(현재 페이지 · Desktop/Mobile)과
   되돌리기. 가운데 그룹이 바의 정중앙에 온다(studio.css "세 그룹의
   배치 규칙" 그대로).
@@ -48,14 +53,27 @@ Bottom Dock 데이터 · AI 요청 · SkinPackage · Save/Publish · 선택 복�
 
 ## 2. 왼쪽 패널 (현재 구현)
 
-Select · Images · Dock 이 같은 자리(`#studioLeftPanel`)를 나눠 쓴다. 각
-section 안의 DOM 은 그 기능 파일이 처음 열 때 만들어 넣는다.
+Select · Images · Layers · Layout 이 같은 자리(`#studioLeftPanel`)를 나눠
+쓴다. Dock 도 같은 자리의 한 내용이지만 **상단 버튼이 없다**. 각 section
+안의 DOM 은 그 기능 파일이 처음 열 때 만들어 넣는다.
 
 | 내용 | section | 들어가는 것 | 예전 모양 |
 | --- | --- | --- | --- |
 | Select | `#studioLeftPanelSelect` | Inspector 팝오버(`#studioInspectorPopover`) 그대로 | Preview 위에 뜨는 카드 |
 | Images | `#studioLeftPanelImages` | `.images-panel-overlay` 그대로 | 화면 전체 modal |
+| Layers | `#studioLeftPanelLayers` | 트리 + 재료 추가(`studio/inspector/studio-canvas-layers.js`) | Select 패널 맨 위의 추가 자리 |
 | Dock | `#studioLeftPanelDock` | `.dock-panel-overlay` 그대로 | 화면 전체 modal |
+
+**Layers 에는 상단 버튼이 있고 Dock 에는 없다.** `STUDIO_LEFT_PANEL_MODES.dock.button`
+이 `null` 이고, 그 자리를 여는 길은 둘이다 — Preview 안의 dock 을 누르는 것
+(`PREVIEW_MSG_DOCK_SELECT`)과 admin SETTINGS > HOME 의 "화면 아래 Dock"
+(`admin/settings/admin-bottom-dock-entry.js` → 같은 origin iframe 으로
+`admin:open-studio-panel`). 뒤쪽은 **UI 진입점만** 옮긴 것이다 — `bottomDock`
+데이터도 `setStudioBottomDock()` 도 Undo/Save 도 Studio 에 그대로 있고,
+admin 문서에는 Dock 설정 폼이 없다.
+
+Layers 는 들고 있는 사본이 없다 — 열 때마다 working draft 에서 트리를 다시
+만들므로 떠날 때 할 일도 없다(§2-2 의 표에 줄이 필요하지 않다).
 
 - 패널이 열려 있으면 shell 에 `.has-left-panel` 이 붙고
   `#studioPreviewStage` 의 left 가 `--studio-left-panel-width`(320px,
@@ -103,9 +121,17 @@ Images/Dock 의 Escape 는 패널이 **지금 그 내용을 보여 줄 때만** 
 — Select 를 보는 동안의 Escape(선택 해제)가 숨은 Dock 사본을 버리지
 않게.
 
-Images · Dock 을 여는 입구는 전부 셸을 거친다(`showStudioLeftPanelMode`):
-상단 버튼, 직접 수정의 "이미지 변경", Preview 안 dock 누르기. 기능
-파일의 open 함수를 직접 부르면 숨은 section 에 그려진다.
+Images · Layers · Dock 을 여는 입구는 전부 셸을 거친다
+(`showStudioLeftPanelMode`): 상단 버튼, 직접 수정의 "이미지 변경",
+Preview 안 dock 누르기, 그리고 바깥(admin)에서 온 `admin:open-studio-panel`.
+기능 파일의 open 함수를 직접 부르면 숨은 section 에 그려진다.
+
+바깥에서 오는 메시지는 **부모가 보낸 것 · 같은 origin · 아는 모드 이름**
+일 때만 받는다. 열 수 있는 자리는 목록(`STUDIO_OPENABLE_FROM_PARENT`)으로
+묶어 두어 "아무 모드나 여는 창구"가 되지 않게 한다. Studio 가 막 떠서
+working draft 가 아직 없으면 조용히 무시하고, admin 쪽이 짧은 간격으로
+다시 보낸다 — Studio 가 실제로 연 뒤 `studio:panel-opened` 로 한 번
+답하면 멈춘다(새 "준비됐다" 신호를 만들지 않는 가장 작은 방법).
 
 ### 2-3. Preview 위에 남는 것
 
@@ -211,7 +237,7 @@ STUDIO-SHELL-1 까지는 Inspector 팝오버 아래 "되돌리기"(직전 직접
 ## 5. 좁은 화면 — 720px 이하 (현재 구현)
 
 ```
-1줄: Select · Images · Dock ………… Save · Publish · ···
+1줄: Select · Images · Layers ………… Save · Publish · ···
 2줄: ← · 현재 페이지 · Desktop|Mobile · ↶ ↷ …………… AI
 ```
 
@@ -284,7 +310,8 @@ Quick Bar 자리)은 그대로다. 단계는 `studio/studio-sheet.js` 가 들고
 | Preview 안 더블클릭 글자 편집 | 잠시 접힘 → 확정 · 취소하면 원래 단계 |
 | Preview 에서 요소 옮기기 시작(본체 끌기 · 이동 손잡이) | 접힘. 놓은 뒤 다시 펼치지 않는다 |
 | 상단 Images · Quick Bar 이미지 변경 | 내용 보기. Quick Bar 에서 왔으면 사진을 붙인 뒤 고른 요소(Select · 접힘)로 돌아간다 |
-| 상단 Dock | 내용 보기. **적용해도 닫지 않는다** — 적용한 값으로 사본을 새로 만들어 같은 자리 · 같은 스크롤에 다시 보여 준다(넓은 화면은 예전처럼 닫힌다) |
+| 상단 Layers | 내용 보기. 들고 있는 사본이 없어서 다시 열 때마다 지금 draft 그대로다 |
+| Dock(Preview 의 dock · SETTINGS) | 내용 보기. **적용해도 닫지 않는다** — 적용한 값으로 사본을 새로 만들어 같은 자리 · 같은 스크롤에 다시 보여 준다(넓은 화면은 예전처럼 닫힌다) |
 | AI 를 열었다 닫음 | AI 가 열린 동안 숨고, 닫으면 같은 내용 · 같은 단계 · 같은 선택 |
 
 ### Quick Bar — 시트 머리 한 줄

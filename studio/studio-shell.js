@@ -6,8 +6,11 @@
    Studio 화면의 **정보 구조**만 담당한다. 기능은 전부 원래 파일에
    있고, 이 파일은 "어느 것을 어디에 보여 줄까"를 정한다.
 
-     1) 왼쪽 패널 — Select · Images · Dock 이 같은 자리를 나눠 쓴다.
-        어느 내용을 보여 줄지 · 여닫기 · 버튼 상태.
+     1) 왼쪽 패널 — Select · Images · Layers · Layout 이 같은 자리를
+        나눠 쓴다(STUDIO-LAYERS-SHELL-1). 어느 내용을 보여 줄지 ·
+        여닫기 · 버튼 상태.
+        ★ Dock 도 같은 자리의 한 내용이지만 **상단 버튼이 없다** —
+          아래 STUDIO_LEFT_PANEL_MODES.dock 머리말.
      2) ··· 메뉴 — 좁은 화면에서 Code · Import · Export 를 담는다.
         같은 버튼을 드롭다운 모양으로 보여 줄 뿐이다(복제하지 않는다).
      3) 현재 페이지 표시 — HOME / CATEGORY / POST …
@@ -29,6 +32,8 @@
      dock    적용하지 않은 사본을 들고 있으므로 **숨기기만** 한다.
              다시 오면 그 사본 그대로다(그 사이 working draft 가
              바뀌었으면 dock-panel.js 가 새로 만든다).
+     layers  아무 상태도 들고 있지 않다 — 트리는 열 때마다 working
+             draft 에서 다시 만든다. 그래서 떠날 때 할 일이 없다.
      select  아무 일도 하지 않는다.
 
    ★ 내용이 스스로 닫히면(Images 닫기 · Dock 적용/취소/지우기 ·
@@ -44,8 +49,8 @@
 
    ★ 좁은 화면의 시트는 세 단계다(MOBILE-SHEET-1, studio/studio-sheet.js)
      — 접힘(peek) · 내용 보기(content) · 전체 화면(full). 어느 단계로
-     열지는 이 파일이 정한다: Select 는 접힘, Images · Dock 은 내용
-     보기. 단계는 기록(Undo)에도 저장에도 들어가지 않는다.
+     열지는 이 파일이 정한다: Select 는 접힘, 나머지(Images · Layers ·
+     Dock · Layout)는 내용 보기. 단계는 기록(Undo)에도 저장에도 들어가지 않는다.
 
    의존(호출 시점): studio-inspector.js(setStudioInspectorEnabled /
    getStudioInspectorState) · images-panel.js · dock-panel.js ·
@@ -91,13 +96,43 @@ const STUDIO_LEFT_PANEL_MODES = {
     section: document.getElementById("studioLeftPanelImages"),
     button: document.getElementById("studioImagesButton")
   },
+  /* =====================================================
+     STUDIO-LAYERS-SHELL-1 — HOME 캔버스의 구조 한눈에 보기 +
+     재료 추가. Dock 이 있던 셋째 자리다
+     (studio/inspector/studio-canvas-layers.js).
+
+     들고 있는 사본이 없다 — 열 때마다 working draft 에서 트리를
+     다시 만들므로 떠날 때 할 일도 없다.
+  ====================================================== */
+  layers: {
+    title: "LAYERS",
+    section: document.getElementById("studioLeftPanelLayers"),
+    button: document.getElementById("studioLayersButton")
+  },
+
+  /* =====================================================
+     STUDIO-LAYERS-SHELL-1 — Dock 은 **상단 버튼이 없는 내용**이다.
+
+     Bottom Dock 은 사이트 전체의 이동 설정이라 Canvas 편집 진입점과
+     같은 급에 둘 것이 아니다(계획 문서 §1). 그래서 상단에서 빠졌다.
+
+     하지만 **데이터도 저장 경로도 그대로**다 — dock-panel.js 도
+     setStudioBottomDock() 도 한 글자 바뀌지 않았고, 이 자리도 그대로
+     있다. 바뀐 것은 여는 길뿐이다.
+
+       · Preview 안의 dock 을 누른다(studio-preview.js PREVIEW_MSG_DOCK_SELECT)
+       · admin SETTINGS > HOME 의 "화면 아래 Dock" (아래 부모 메시지)
+
+     button 이 null 인 모드가 처음이므로, 아래 코드가 전부
+     `entry.button &&` 로 감싸져 있다.
+  ====================================================== */
   dock: {
     title: "BOTTOM DOCK",
     section: document.getElementById("studioLeftPanelDock"),
-    button: document.getElementById("studioDockButton")
+    button: null
   },
 
-  /* HOME 단 구성(IMORY_SIDES_DESIGN.md §6). 버튼은 Dock 옆(좁은
+  /* HOME 단 구성(IMORY_SIDES_DESIGN.md §6). 버튼은 Layers 옆(좁은
      화면에서는 둘째 줄)이다. 들고 있는 상태가 없다 — 고르는 순간
      적용되므로 떠날 때 할 일이 없다. */
   layout: {
@@ -125,6 +160,7 @@ let studioLeftPanelOpen = false;
 const studioLeftPanelContentAlive = {
   select: true,
   images: false,
+  layers: false,
   dock: false,
   layout: false
 };
@@ -294,6 +330,10 @@ function enterStudioLeftPanelContent(mode) {
     window.openSkinImagesPanel();
   }
 
+  if (mode === "layers" && typeof window.openStudioCanvasLayersPanel === "function") {
+    window.openStudioCanvasLayersPanel();
+  }
+
   if (mode === "dock" && typeof window.openSkinDockPanel === "function") {
     window.openSkinDockPanel();
   }
@@ -390,8 +430,11 @@ function moveStudioLeftPanelFocusOut() {
     return;
   }
 
+  /* dock 은 상단 버튼이 없으므로 Select 버튼으로 보낸다 — 사라지는
+     시트 안에 포커스를 남기지 않는 것이 이 함수의 목적이다. */
   const button =
-    STUDIO_LEFT_PANEL_MODES[studioLeftPanelMode].button;
+    STUDIO_LEFT_PANEL_MODES[studioLeftPanelMode].button ||
+    STUDIO_LEFT_PANEL_MODES.select.button;
 
   if (button && typeof button.focus === "function") {
     button.focus();
@@ -495,6 +538,7 @@ function handleStudioSelectButton() {
 
   const showingOther =
     isStudioLeftPanelShowing("images") ||
+    isStudioLeftPanelShowing("layers") ||
     isStudioLeftPanelShowing("dock") ||
     isStudioLeftPanelShowing("layout");
 
@@ -541,10 +585,13 @@ STUDIO_LEFT_PANEL_MODES.images.button?.addEventListener(
   () => handleStudioPanelModeButton("images")
 );
 
-STUDIO_LEFT_PANEL_MODES.dock.button?.addEventListener(
+STUDIO_LEFT_PANEL_MODES.layers.button?.addEventListener(
   "click",
-  () => handleStudioPanelModeButton("dock")
+  () => handleStudioPanelModeButton("layers")
 );
+
+/* dock 은 상단 버튼이 없다(위 표) — 여는 길은 Preview 의 dock 과
+   admin SETTINGS 다. */
 
 STUDIO_LEFT_PANEL_MODES.layout.button?.addEventListener(
   "click",
@@ -613,6 +660,108 @@ window.addEventListener(
   }
 );
 
+
+
+/* =========================================================
+   STUDIO-LAYERS-SHELL-1 — 바깥(admin)이 이 패널의 한 내용을 연다
+
+   계획 문서 §1-1: Dock 은 **UI 진입점만** Settings 쪽으로 옮긴다.
+   데이터도 저장 경로도 여기 그대로다.
+
+   ★ 왜 메시지인가
+
+   admin/index.html 은 이미 studio/index.html 을 **같은 origin
+   iframe**(#skinStudioFrame)으로 싣는다. Dock 편집기는 Studio 의
+   working draft(currentWorkingSkin) · Undo 기록 · Save 에 묶여
+   있으므로, 그 편집기를 admin 문서 안에 다시 만들면 skin 데이터의
+   **두 번째 저장 주인**이 생긴다. 그래서 만들지 않는다 — admin 은
+   "그 자리를 열어라"만 말하고, 여는 것도 저장하는 것도 이 문서다.
+
+   ★ 왜 admin 이 되풀이해 보내는가
+
+   Studio 가 막 뜬 직후에는 working draft 가 아직 없다
+   (getStudioBottomDock() 이 null 이고 openSkinDockPanel() 은 조용히
+   돌아간다). 그래서 admin 이 짧은 간격으로 다시 보내고, 이 문서가
+   실제로 연 뒤 한 번 답한다(studio:panel-opened). 새 상태나 준비
+   신호를 만들지 않아도 되는 가장 작은 방법이다
+   (admin/settings/admin-bottom-dock-entry.js).
+
+   ★ 무엇을 믿는가
+
+   부모가 보낸 것이고 · 같은 origin 이고 · 아는 모드 이름일 때만
+   연다. 그 밖의 무엇도 메시지에서 읽지 않는다.
+========================================================== */
+
+const STUDIO_MSG_OPEN_PANEL = "admin:open-studio-panel";
+
+const STUDIO_MSG_PANEL_OPENED = "studio:panel-opened";
+
+/* 바깥이 열 수 있는 자리 — 지금은 Dock 하나다. 목록으로 두는 이유는
+   "아무 모드나 열 수 있는 창구"가 되지 않게 하기 위해서다. */
+const STUDIO_OPENABLE_FROM_PARENT = ["dock"];
+
+
+function studioShellCanShowMode(mode) {
+
+  if (mode !== "dock") {
+    return true;
+  }
+
+  /*
+    working draft 가 있어야 Dock 편집기가 사본을 만든다.
+
+    ★ getStudioBottomDock() 이 null 인지로는 가를 수 없다 — dock 이
+      아직 없는 스킨에서도 null 이고, 그것은 정상이다(패널이 기본
+      구성을 채워 준다). "draft 가 있는가"를 이미 들고 있는 자리는
+      상단 모드 버튼의 disabled 다(studio-preview.js
+      updateStudioDockButtonState — currentWorkingSkin 하나만 본다).
+      같은 사실을 두 곳에서 세지 않으려고 그 값을 읽는다.
+  */
+  const gate =
+    STUDIO_LEFT_PANEL_MODES.layers.button;
+
+  return !!gate && !gate.disabled;
+
+}
+
+
+window.addEventListener(
+  "message",
+  (event) => {
+
+    if (event.origin !== window.location.origin) {
+      return;
+    }
+
+    if (window.parent === window || event.source !== window.parent) {
+      return;
+    }
+
+    const data =
+      event.data;
+
+    if (
+      !data ||
+      typeof data !== "object" ||
+      data.type !== STUDIO_MSG_OPEN_PANEL ||
+      STUDIO_OPENABLE_FROM_PARENT.indexOf(data.mode) === -1
+    ) {
+      return;
+    }
+
+    if (!studioShellCanShowMode(data.mode)) {
+      return;
+    }
+
+    showStudioLeftPanelMode(data.mode);
+
+    window.parent.postMessage(
+      { type: STUDIO_MSG_PANEL_OPENED, mode: data.mode },
+      window.location.origin
+    );
+
+  }
+);
 
 
 /* =========================================================

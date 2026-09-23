@@ -280,21 +280,16 @@ function studioCanvasInspectorAutoAllowed(type) {
 
 
 /* =========================================================
-   HOME-CANVAS-V2-ADD-1 — 추가 자리를 그릴 때인가
+   STUDIO-LAYERS-SHELL-1 — 재료 추가는 이 패널을 떠났다
 
-   ★ 선택을 보지 않는다. 지금 캔버스가 v2 이고 편집 중이면 그린다
-     (studio/inspector/studio-canvas-add-v2.js studioCanvasV2AddIsOn).
-     그 파일이 없는 문서에서도 이 패널은 그대로 돈다.
+   HOME-CANVAS-V2-ADD-1 이 만든 추가 자리는 **선택을 보지 않는
+   화면**이라, "고른 것 하나"를 그리는 이 패널의 맨 위에 얹혀
+   있었다. 이제 Layers 패널이 그 자리의 주인이다
+   (studio/inspector/studio-canvas-layers.js · 계획 문서 §3).
+
+   그래서 이 파일은 추가에 대해 아무것도 알지 않는다 — 고른 것이
+   없으면 예전처럼 화면을 통째로 숨긴다.
 ========================================================== */
-function studioCanvasInspectorAddIsOn() {
-
-  return (
-    typeof studioCanvasV2AddIsOn === "function" &&
-    typeof buildStudioCanvasV2AddSection === "function" &&
-    studioCanvasV2AddIsOn()
-  );
-
-}
 
 
 /* 지금 화면이 그려야 할 **모양**의 지문. 값은 들어가지 않는다 —
@@ -1481,19 +1476,7 @@ function buildStudioCanvasInspector(view) {
   studioCanvasInspectorBody.textContent =
     "";
 
-  /* =====================================================
-     HOME-CANVAS-V2-ADD-1 — 재료 추가는 **선택과 무관하다**
-
-     고른 것이 있든 없든 같은 자리에 같은 모양으로 있어야 하므로
-     맨 위에 한 번 그린다. 무엇을 만들 수 있는지 · 슬롯은 어떤
-     것이 있는지는 그 파일이 정한다
-     (studio/inspector/studio-canvas-add-v2.js).
-  ====================================================== */
-  if (studioCanvasInspectorAddIsOn()) {
-    studioCanvasInspectorBody.appendChild(buildStudioCanvasV2AddSection());
-  }
-
-  /* 고른 것이 없다 — 추가 자리만 그리고 끝이다 */
+  /* 고른 것이 없다 — 이 패널은 비어 있다(재료 추가는 Layers 다) */
   if (view.mode === "none") {
     return;
   }
@@ -1639,15 +1622,10 @@ function renderStudioCanvasInspector() {
   const view =
     studioCanvasInspectorView();
 
-  /* HOME-CANVAS-V2-ADD-1 — 지문에 함께 넣는다. 추가 자리가 생기고
-     사라지는 것도 **화면의 모양**이 바뀌는 일이다. */
-  const canAdd =
-    studioCanvasInspectorAddIsOn();
-
   const shape =
-    studioCanvasInspectorShapeOf(view) + (canAdd ? "|add" : "");
+    studioCanvasInspectorShapeOf(view);
 
-  if (view.mode === "none" && !canAdd) {
+  if (view.mode === "none") {
 
     /* 고른 것이 사라졌다 — 열려 있던 세션도 함께 닫는다(기록은
        그때까지의 변화만큼 한 칸이다) */
@@ -1696,10 +1674,6 @@ function renderStudioCanvasInspector() {
 
   }
 
-  if (canAdd) {
-    syncStudioCanvasV2AddSection();
-  }
-
   syncStudioCanvasInspectorValues(view);
 
 }
@@ -1730,7 +1704,14 @@ if (typeof window !== "undefined") {
         type: view.mode === "single" ? view.type : null,
         count: view.mode === "multi" ? view.count : (view.mode === "single" ? 1 : 0),
         visible: !!(studioCanvasInspectorRoot && !studioCanvasInspectorRoot.hidden),
-        add: studioCanvasInspectorAddIsOn(),
+
+        /* STUDIO-LAYERS-SHELL-1 — 추가 자리는 Layers 로 갔다.
+           이 칸은 **언제나 false** 이고, 추가를 보는 창구는
+           getStudioCanvasLayersState().add 다. 칸을 지우지 않고
+           남기는 이유는 "이 패널에 추가가 있는가"를 묻는 기존
+           단언이 조용히 사라지지 않고 false 로 답하게 하기 위해서다. */
+        add: false,
+
         textSession: !!studioCanvasInspectorTextSession,
         numberSession:
           studioCanvasInspectorNumberSession

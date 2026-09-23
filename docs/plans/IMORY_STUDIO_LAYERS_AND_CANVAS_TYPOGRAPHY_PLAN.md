@@ -1,17 +1,24 @@
 # IMORY STUDIO — Layers · Canvas Typography 재편 계획
 
-> 상태: **PLAN**. 이 문서는 아직 구현되지 않은 Studio 정보 구조와 작업 순서를
-> 정한다. 읽었다는 사실이 전체 구현을 허가하지 않는다.
+> 상태: **PLAN(1단계만 구현됨)**. 이 문서는 Studio 정보 구조와 작업 순서를
+> 정한다. 읽었다는 사실이 전체 구현을 허가하지 않는다 — 아래 §6 의 상태
+> 칸에 "완료" 라고 적힌 줄만 지금 코드가 하는 일이다.
 >
 > 기준 시점: `main@e5a517e` (2026-09-22).
 >
-> 다음 구현 작업은 **`STUDIO-LAYERS-SHELL-1` 하나**다. 뒤 작업을 함께
+> **2026-09-23 갱신** — §6 의 1단계 `STUDIO-LAYERS-SHELL-1` 이 구현됐다
+> (§7 의 "반드시 한다" 전부). 2단계 `HOME-CANVAS-TYPOGRAPHY-1` 부터는
+> 아직 계획이고, §7 의 "이번에 하지 않는다" 목록은 여전히 구현되지
+> 않았다 — 이 문서를 근거로 그것들이 있다고 읽지 않는다.
+>
+> 다음 구현 작업은 **`HOME-CANVAS-TYPOGRAPHY-1` 하나**다. 뒤 작업을 함께
 > 선행 구현하지 않는다.
 
 ## 0. 왜 이 재편이 필요한가
 
-현재 Studio 상단의 왼쪽 패널 진입점은
-`Select · Images · Dock · Layout` 네 개다. 그런데 HOME Canvas v2가
+이 문서를 쓰던 시점(`main@e5a517e`)의 Studio 상단 왼쪽 패널 진입점은
+`Select · Images · Dock · Layout` 네 개였다(지금은 §1 의 넷이다 —
+`STUDIO-LAYERS-SHELL-1`). 그런데 HOME Canvas v2가
 재료 추가 · 삭제 · 소속 변경 · 다중 선택까지 지원하면서 Select 안에 서로 다른
 책임이 겹쳤다.
 
@@ -59,6 +66,24 @@ Dock은 UI 진입점만 Settings 쪽으로 옮긴다.
 Settings 쪽에서 같은 저장 경계를 안전하게 열 수 없는 것으로 조사되면
 `STUDIO-LAYERS-SHELL-1`에서는 상단 Dock 버튼만 빼지 않는다. 임시 복제 UI를
 만들지 말고 조사 결과와 다음 분리 작업을 보고한다.
+
+**조사 결과(2026-09-23 · 구현됨)** — 열 수 있었다.
+
+`admin/index.html`은 이미 `studio/index.html`을 **같은 origin iframe**
+(`#skinStudioFrame`)으로 싣고, `admin/admin-session.js`에 origin과 source를
+모두 검사하는 메시지 통로가 있다. Dock 편집기는 Studio의 working draft ·
+Undo · Save에 묶여 있으므로(`studio/dock/dock-panel.js` →
+`setStudioBottomDock()`), 그 편집기를 admin 문서에 다시 만들면 skin 데이터의
+두 번째 저장 주인이 생긴다. 그래서 만들지 않았다 — SETTINGS > HOME의
+"화면 아래 Dock"은 Skin Studio 화면으로 옮긴 뒤 그 iframe에
+`admin:open-studio-panel` 한 마디를 보낼 뿐이고, 여는 것도 저장하는 것도
+지금까지처럼 Studio가 한다.
+
+- 새 테이블 · 새 RPC · 새 정규화 · 두 번째 저장 API: **없다.**
+- `bottomDock` 데이터 모양 · Export/Import · Publish: **바뀌지 않았다.**
+- Studio가 아직 스킨을 못 읽었으면 조용히 무시하고, admin이 짧은 간격으로
+  다시 보낸다. Studio가 `studio:panel-opened`로 한 번 답하면 멈춘다.
+- Preview 안의 dock을 누르는 기존 길도 그대로 남아 있다.
 
 ## 2. Layers 패널
 
@@ -303,8 +328,8 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 | 순서 | 작업 ID | 범위 | 상태 |
 | ---: | --- | --- | --- |
 | 0 | `STUDIO-LAYERS-PLAN-1` | 이 문서. 책임 · UX · 작업 경계 확정 | **완료 — 문서만** |
-| 1 | `STUDIO-LAYERS-SHELL-1` | 상단 Dock 자리를 Layers로 교체 · 읽기 전용 트리 · Select의 재료 추가를 Layers로 이동 · Dock Settings 진입 경로 조사/이동 | **다음 작업** |
-| 2 | `HOME-CANVAS-TYPOGRAPHY-1` | 요소 전체 글꼴 · 크기 · 굵기 · 색 · 자간 · 행간 | 미착수 |
+| 1 | `STUDIO-LAYERS-SHELL-1` | 상단 Dock 자리를 Layers로 교체 · 읽기 전용 트리 · Select의 재료 추가를 Layers로 이동 · Dock Settings 진입 경로 조사/이동 | **완료** — [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) · [admin/settings/admin-bottom-dock-entry.js](../../admin/settings/admin-bottom-dock-entry.js) · `studio/studio-home-canvas-inspector-e2e-test.mjs --only=layers` · `admin/admin-settings-e2e-test.mjs --only=dock` |
+| 2 | `HOME-CANVAS-TYPOGRAPHY-1` | 요소 전체 글꼴 · 크기 · 굵기 · 색 · 자간 · 행간 | **다음 작업** |
 | 3 | `STUDIO-LAYERS-STRUCTURE-1` | 순서 drag · 단일 attach/detach · primary · 숨김 · 잠금 · 삭제 | 미착수 |
 | 4 | `HOME-CANVAS-V2-GROUP-1A` | 여러 요소 묶기 · primary 지정 | 미착수 |
 | 5 | `HOME-CANVAS-V2-GROUP-1B` | 그룹 이동 | 미착수 |

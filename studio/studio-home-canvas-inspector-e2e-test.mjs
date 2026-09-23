@@ -643,6 +643,59 @@ async function enableCanvasEditing(page) {
 
 
 /* =========================================================
+   STUDIO-LAYERS-SHELL-1 — 재료 추가는 **Layers 패널 안**이다
+
+   예전에는 Select 패널 맨 위였다. 이제 왼쪽 패널의 셋째 자리이고,
+   그 안에서도 "＋ 재료 추가"를 눌러 펼쳐야 버튼들이 보인다
+   (계획 문서 §3).
+
+   ★ Preview 에서 요소를 누르면 왼쪽 패널이 Select 로 돌아간다
+     (studio-shell.js revealStudioLeftPanelForSelection). 그래서
+     추가 버튼을 만지기 직전마다 이 함수를 부른다 — 한 번 열어 두고
+     계속 쓸 수 있다고 가정하지 않는다.
+========================================================== */
+async function openAddPanel(page) {
+
+  await page.evaluate(() => {
+
+    window.showStudioLeftPanelMode("layers");
+
+    const toggle =
+      document.getElementById("studioCanvasLayersAddToggle");
+
+    if (toggle && toggle.getAttribute("aria-expanded") !== "true") {
+      toggle.click();
+    }
+
+  });
+
+  await page.waitForSelector("#studioCanvasAdd", { state: "visible", timeout: 8000 });
+
+}
+
+
+/*
+  addMaterial(page, target, type)
+
+  Layers 를 열고 · 만들고 · **Select 로 돌아온다**.
+
+  ★ production 은 만든 뒤에도 Layers 에 머문다(계획 문서 §3 — 속성을
+    고치러 Select 로 옮기는 것은 사람이 하는 일이다). 이 파일의 기존
+    단언들은 곧바로 Canvas Inspector 의 칸을 재므로, 그 전환을 여기서
+    한 번에 해 둔다.
+*/
+async function addMaterial(page, target, type) {
+
+  await openAddPanel(page);
+
+  await page.click(`#studioCanvasAdd-${target}-${type}`);
+
+  await page.evaluate(() => window.showStudioLeftPanelMode("select"));
+
+}
+
+
+/* =========================================================
    좌표 — native 는 부모에서, sandbox 는 중첩 프레임 좌표로
 ========================================================== */
 
@@ -3618,7 +3671,7 @@ async function main() {
 
       /* 한 번 누르고 draft 가 조용해질 때까지 기다린다 */
       async function clickAdd(p, target, type) {
-        await p.click(`#studioCanvasAdd-${target}-${type}`);
+        await addMaterial(p, target, type);
         await sleep(900);
       }
 
@@ -3626,18 +3679,43 @@ async function main() {
         p.evaluate(() => window.getStudioCanvasSelection().primaryId);
 
 
-      /* ---- 1. 고른 것이 없어도 추가 자리가 있다 ---- */
+      /* ---- 1. 재료 추가의 새 자리 — Layers (STUDIO-LAYERS-SHELL-1) ----
+
+         계획 문서 §3: 추가는 Select 를 떠나 Layers 로 옮겼다. 고른 것과
+         무관한 화면이 "고른 것 하나"의 자리에 얹혀 있지 않게 하는 것이
+         이 이동의 목적이므로, 여기서 재는 것은 그 **분리**다.       */
 
       await clickSelector(page, frame, false, ".hc-gap");
 
-      const idle = await addState(page);
+      const beforeOpen = await addState(page);
       const idlePanel = await panelState(page);
 
-      check("★ 고른 것이 없어도 재료 추가 자리가 열려 있다",
-        idle && idle.on === true && idle.visible === true &&
-        idlePanel.mode === "none" && idlePanel.visible === true &&
-        idlePanel.add === true,
-        JSON.stringify({ a: idle, p: idlePanel }));
+      check("★ Select 패널에는 재료 추가가 없다(고른 것이 없으면 비어 있다)",
+        beforeOpen && beforeOpen.on === true && beforeOpen.visible === false &&
+        idlePanel.mode === "none" && idlePanel.visible === false &&
+        idlePanel.add === false,
+        JSON.stringify({ a: beforeOpen, p: idlePanel }));
+
+      await openAddPanel(page);
+
+      const layers = await page.evaluate(() => window.getStudioCanvasLayersState());
+
+      check("★ 고른 것이 없어도 Layers 의 재료 추가 자리가 열린다",
+        layers.open === true && layers.add.on === true &&
+        layers.add.open === true && layers.add.visible === true,
+        JSON.stringify(layers.add));
+
+      check("★ 추가 자리는 Layers 안에 있고 Select 안에는 없다(복제하지 않았다)",
+        await page.evaluate(() => {
+          const box = document.getElementById("studioCanvasAdd");
+          return !!box &&
+            !!box.closest("#studioLeftPanelLayers") &&
+            document.querySelectorAll("#studioCanvasAdd").length === 1 &&
+            !document.querySelector("#studioLeftPanelSelect #studioCanvasAdd");
+        }),
+        "");
+
+      const idle = await addState(page);
 
       check("★ 사진 슬롯 칸이 선언된 슬롯 + 새 슬롯을 준다",
         Array.isArray(idle.slotOptions) &&
@@ -3653,7 +3731,7 @@ async function main() {
          요소의 그림이 함께 바뀐다 */
       await page.evaluate((url) => {
         window.setStudioImageSlot("photo_1", { id: "img-fixture", public_url: url });
-        window.renderStudioCanvasInspector();
+        window.renderStudioCanvasLayers(false);
       }, FIXTURE_IMAGE_URL);
 
       await sleep(500);
@@ -3788,6 +3866,7 @@ async function main() {
 
       /* ---- 5. 사진 — 이미 선언된 슬롯을 그대로 쓴다 ---- */
 
+      await openAddPanel(page);
       await page.selectOption("#studioCanvasAddSlot", "title_logo");
       await clickAdd(page, "overlay", "photo");
 
@@ -3805,6 +3884,7 @@ async function main() {
 
       /* ---- 6. main_visual — primary 사진과 빈 슬롯을 함께 ---- */
 
+      await openAddPanel(page);
       await page.selectOption("#studioCanvasAddSlot", "");
       await clickAdd(page, "flow", "main_visual");
 
@@ -3980,7 +4060,7 @@ async function main() {
 
       await enableCanvasEditing(sbPage);
 
-      await sbPage.click("#studioCanvasAdd-overlay-text");
+      await addMaterial(sbPage, "overlay", "text");
       await sleep(1200);
 
       const sbId =
@@ -4183,6 +4263,8 @@ async function main() {
         await pickBlock(page, frame, false, "v2Main"),
         await selectedId(page));
 
+      await openAddPanel(page);
+
       const onFrame = await addState(page);
 
       check("★ 프레임을 골라야 '메인 비주얼 안' 자리가 생긴다",
@@ -4190,7 +4272,7 @@ async function main() {
         await page.locator("#studioCanvasAdd-frame-shape").count() === 1,
         JSON.stringify({ f: onFrame.frameId }));
 
-      await page.click("#studioCanvasAdd-frame-shape");
+      await addMaterial(page, "frame", "shape");
       await sleep(1000);
 
       const innerId = await selectedId(page);
@@ -4556,10 +4638,12 @@ async function main() {
 
       await pickBlock(sbPage, sbFrame, true, "v2Main");
 
+      await openAddPanel(sbPage);
+
       check("★ sandbox 에서도 프레임 안 추가 자리가 열린다",
         (await addState(sbPage)).frameId === "v2Main");
 
-      await sbPage.click("#studioCanvasAdd-frame-sticker");
+      await addMaterial(sbPage, "frame", "sticker");
       await sleep(1200);
 
       const sbInnerId = await selectedId(sbPage);
@@ -4788,7 +4872,7 @@ async function main() {
 
       const cssBefore = await workingCss(page);
 
-      await page.click("#studioCanvasAdd-overlay-shape");
+      await addMaterial(page, "overlay", "shape");
       await sleep(900);
 
       const shapeId = await page.evaluate(() =>
@@ -4827,7 +4911,7 @@ async function main() {
 
       /* ---- 4. 묶어도 모양이 그대로다(§29-6) ---- */
 
-      await page.click("#studioCanvasAdd-overlay-text");
+      await addMaterial(page, "overlay", "text");
       await sleep(900);
 
       const movedId = await page.evaluate(() =>
@@ -5225,6 +5309,387 @@ async function main() {
 
     }
 
+
+    /* ======================================================
+       [layers] — 왼쪽 Layers 패널 (STUDIO-LAYERS-SHELL-1)
+
+       계획 문서: docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §7
+
+       이번 단계의 Layers 는 **읽기 전용 트리 + 선택**이다. 그래서
+       재는 것도 그 둘이다.
+
+         1  트리 순서가 **실제 draft 배열 순서**와 같은가
+            (화면만의 정렬을 만들지 않았는가)
+         2  Preview 선택과 Layers 선택이 **같은 상태 하나**인가
+            (Layers 전용 두 번째 선택 배열이 생기지 않았는가)
+
+       ★ 순서 drag · attach/detach drop · primary 변경 · 숨김 ·
+         잠금 · 삭제는 이번 범위가 **아니다**. 그 버튼들이 아직
+         없다는 것도 함께 재서, 다음 라운드를 선행 구현하지 않았음을
+         고정한다.
+    ====================================================== */
+    if (wants("layers")) {
+
+      section("layers");
+
+      const page = await openStudio(browser, { package: v2Package({}) });
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      const layersState = (p) =>
+        p.evaluate(() => window.getStudioCanvasLayersState());
+
+      const openLayers = async (p) => {
+        await p.evaluate(() => window.showStudioLeftPanelMode("layers"));
+        await sleep(300);
+      };
+
+      const pickedId = (p) =>
+        p.evaluate(() => window.getStudioCanvasSelection().primaryId);
+
+
+      /* ---- 1. 상단 진입점 넷 ---- */
+
+      const lead = await page.evaluate(() => {
+        const ids = ["studioInspectorButton", "studioImagesButton",
+                     "studioLayersButton", "studioLayoutButton"];
+        return {
+          labels: ids.map((id) => {
+            const el = document.getElementById(id);
+            return el ? el.textContent.trim() : null;
+          }),
+          inLead: ids.every((id) => {
+            const el = document.getElementById(id);
+            return !!el && !!el.closest(".studio-top-dock-lead");
+          }),
+          dockButton: !!document.getElementById("studioDockButton"),
+          dockSection: !!document.getElementById("studioLeftPanelDock")
+        };
+      });
+
+      check("★ 상단 진입점이 Select · Images · Layers · Layout 이다",
+        lead.inLead &&
+        lead.labels.join("·") === "Select·Images·Layers·Layout" &&
+        lead.dockButton === false,
+        JSON.stringify(lead));
+
+      check("★ Dock 은 자리도 저장 경로도 그대로다(상단 버튼만 없어졌다)",
+        lead.dockSection === true &&
+        await page.evaluate(() => typeof window.openSkinDockPanel === "function"),
+        "");
+
+
+      /* ---- 2. 트리가 draft 순서 그대로다 ---- */
+
+      await openLayers(page);
+
+      const tree = await layersState(page);
+
+      const draftOrder = await page.evaluate(() =>
+        window.studioCanvasNodeList().map((n) => n.id));
+
+      check("★ Layers 트리 순서 = draft 배열 순서(흐름 → 프레임 내부 → 장식)",
+        tree.rows.map((r) => r.id).join(",") === draftOrder.join(",") &&
+        draftOrder.join(",") ===
+          "v2Logo,v2Text,v2Rule,v2Wide,v2Main,v2Paper,v2Photo,v2Tag,v2Over",
+        JSON.stringify({ tree: tree.rows.map((r) => r.id), draft: draftOrder }));
+
+      check("★ 자동 배치와 페이지 장식이 갈라져 있다(flow / overlay)",
+        tree.rows.filter((r) => r.kind === "overlay").map((r) => r.id).join(",") === "v2Over" &&
+        tree.rows.filter((r) => r.kind === "frame-element").map((r) => r.parentId)
+          .every((p) => p === "v2Main"),
+        JSON.stringify(tree.rows.map((r) => [r.id, r.kind])));
+
+      const groups = await page.evaluate(() => ({
+        flow: !!document.getElementById("studioCanvasLayersGroup-flow"),
+        overlay: !!document.getElementById("studioCanvasLayersGroup-overlay"),
+        flowText: (document.getElementById("studioCanvasLayersGroup-flow") || {}).textContent,
+        overlayText: (document.getElementById("studioCanvasLayersGroup-overlay") || {}).textContent
+      }));
+
+      check("두 묶음의 이름이 사람이 읽는 말이다",
+        groups.flow && groups.overlay &&
+        groups.flowText === "자동 배치" && groups.overlayText === "페이지 장식",
+        JSON.stringify(groups));
+
+      check("★ 대표 사진에만 ★ 표식이 붙는다(읽기 전용)",
+        tree.rows.filter((r) => r.primary).map((r) => r.id).join(",") === "v2Photo" &&
+        await page.evaluate(() =>
+          document.querySelectorAll(".studio-canvas-layers-star").length === 1 &&
+          !!document.querySelector("#studioCanvasLayer-v2Photo .studio-canvas-layers-star")),
+        JSON.stringify(tree.rows.filter((r) => r.primary)));
+
+
+      /* ---- 3. 메인 비주얼 접기 / 펼치기 ---- */
+
+      check("처음에는 펼쳐져 있다(자식 셋이 그려진다)",
+        tree.drawn.join(",") === draftOrder.join(","),
+        JSON.stringify(tree.drawn));
+
+      await page.click("#studioCanvasLayerTwisty-v2Main");
+      await sleep(300);
+
+      const collapsed = await layersState(page);
+
+      check("★ 접으면 자식만 화면에서 빠지고 저장 구조는 그대로다",
+        collapsed.drawn.join(",") === "v2Logo,v2Text,v2Rule,v2Wide,v2Main,v2Over" &&
+        collapsed.rows.map((r) => r.id).join(",") === draftOrder.join(",") &&
+        JSON.stringify(await readCanvas(page)) === JSON.stringify(await readCanvas(page)),
+        JSON.stringify(collapsed.drawn));
+
+      check("접기는 저장에 들어가지 않는다(draft 불변)",
+        (await page.evaluate(() => window.getStudioAiWorkingState().isDirty)) === false,
+        "");
+
+      await page.click("#studioCanvasLayerTwisty-v2Main");
+      await sleep(300);
+
+      check("다시 펼치면 자식이 돌아온다",
+        (await layersState(page)).drawn.join(",") === draftOrder.join(","),
+        "");
+
+
+      /* ---- 4. Layers 행 → Preview 선택 ---- */
+
+      await page.click("#studioCanvasLayer-v2Rule");
+      await sleep(600);
+
+      const fromRow = await layersState(page);
+
+      check("★ Layers 행을 누르면 그 요소가 캔버스 선택이 된다",
+        (await pickedId(page)) === "v2Rule" &&
+        fromRow.selectedIds.join(",") === "v2Rule" &&
+        fromRow.primaryId === "v2Rule",
+        JSON.stringify({ sel: fromRow.selectedIds, p: fromRow.primaryId }));
+
+      check("★ 그 선택이 Preview 문서에도 닿는다(프레임이 같은 요소를 그린다)",
+        await page.evaluate(() => {
+          const doc = document.getElementById("studioPreviewFrame").contentDocument;
+          return !!doc.querySelector('[data-imory-edit-id="v2Rule"]');
+        }) &&
+        (await page.evaluate(() =>
+          window.getStudioCanvasSelection().items.length === 1)),
+        "");
+
+      check("고른 행이 화면에서도 골라진 것으로 보인다",
+        await page.evaluate(() =>
+          document.querySelector('[data-layer-id="v2Rule"]')
+            .getAttribute("aria-selected") === "true" &&
+          document.querySelectorAll(".studio-canvas-layers-row.is-selected").length === 1),
+        "");
+
+
+      /* ---- 5. Preview 선택 → Layers 행 ---- */
+
+      await clickElement(page, frame, false, "v2Over");
+      await sleep(600);
+
+      await openLayers(page);
+
+      const fromPreview = await layersState(page);
+
+      check("★ Preview 에서 고르면 Layers 의 같은 행이 골라진다",
+        (await pickedId(page)) === "v2Over" &&
+        fromPreview.selectedIds.join(",") === "v2Over" &&
+        await page.evaluate(() =>
+          document.querySelector('[data-layer-id="v2Over"]')
+            .getAttribute("aria-selected") === "true"),
+        JSON.stringify(fromPreview.selectedIds));
+
+      check("★ 선택 상태는 하나다(Layers 전용 두 번째 배열이 없다)",
+        await page.evaluate(() => {
+          const sel = window.getStudioCanvasSelection();
+          const layers = window.getStudioCanvasLayersState();
+          return sel.ids.join(",") === layers.selectedIds.join(",") &&
+            sel.primaryId === layers.primaryId;
+        }),
+        "");
+
+
+      /* ---- 6. 접힌 프레임 안을 고르면 펼쳐 보여 준다 ---- */
+
+      await page.click("#studioCanvasLayerTwisty-v2Main");
+      await sleep(300);
+
+      check("접은 채로는 v2Photo 행이 없다",
+        (await layersState(page)).drawn.indexOf("v2Photo") === -1,
+        JSON.stringify((await layersState(page)).drawn));
+
+      await page.evaluate(() => window.proposeStudioCanvasSelection({
+        ids: ["v2Photo"], primaryId: "v2Photo", mode: "replace"
+      }));
+      await sleep(500);
+
+      const revealed = await layersState(page);
+
+      check("★ 접힌 프레임 안의 요소를 고르면 그 폴더가 펼쳐진다",
+        revealed.drawn.indexOf("v2Photo") !== -1 &&
+        revealed.selectedIds.join(",") === "v2Photo",
+        JSON.stringify({ d: revealed.drawn, s: revealed.selectedIds }));
+
+
+      /* ---- 7. 새로 만든 재료가 곧바로 골라지고 트리에 보인다 ---- */
+
+      await openAddPanel(page);
+      await page.click("#studioCanvasAdd-overlay-sticker");
+      await sleep(900);
+
+      const madeId = await pickedId(page);
+      const afterAdd = await layersState(page);
+
+      check("★ 만든 재료가 곧바로 선택이고 Layers 의 마지막 장식 행이다",
+        !!madeId &&
+        afterAdd.selectedIds.join(",") === madeId &&
+        afterAdd.rows[afterAdd.rows.length - 1].id === madeId &&
+        afterAdd.rows[afterAdd.rows.length - 1].kind === "overlay" &&
+        afterAdd.drawn.indexOf(madeId) !== -1,
+        JSON.stringify({ madeId, last: afterAdd.rows[afterAdd.rows.length - 1] }));
+
+      check("Select 로 옮기면 그 요소의 속성을 곧바로 고칠 수 있다",
+        await page.evaluate(() => {
+          window.showStudioLeftPanelMode("select");
+          const state = window.getStudioCanvasInspectorState();
+          return state.mode === "single" && state.visible === true;
+        }),
+        "");
+
+      await page.evaluate(() => window.undoStudioHistory());
+      await sleep(700);
+
+      await openLayers(page);
+
+      check("Undo 하면 그 행도 함께 사라진다",
+        (await layersState(page)).rows.every((r) => r.id !== madeId),
+        "");
+
+
+      /* ---- 8. 이번에 만들지 않은 것들 (계획 문서 §7) ---- */
+
+      const notYet = await page.evaluate(() => {
+        const root = document.getElementById("studioCanvasLayers");
+        return {
+          draggable: root.querySelectorAll("[draggable=\"true\"]").length,
+          eye: root.querySelectorAll("[data-layer-hidden], .studio-canvas-layers-eye").length,
+          lock: root.querySelectorAll("[data-layer-locked], .studio-canvas-layers-lock").length,
+          remove: root.querySelectorAll(".studio-canvas-layers-remove").length,
+          star: root.querySelectorAll("button.studio-canvas-layers-star").length
+        };
+      });
+
+      check("★ 순서 drag · 숨김 · 잠금 · 삭제 · primary 바꾸기를 선행 구현하지 않았다",
+        notYet.draggable === 0 && notYet.eye === 0 && notYet.lock === 0 &&
+        notYet.remove === 0 && notYet.star === 0,
+        JSON.stringify(notYet));
+
+
+      /* ---- 9. 캔버스가 아닌 HOME 에서는 왜 비었는지 말해 준다 ---- */
+
+      const plain = await openStudio(browser, { package: skinPackage({}) });
+
+      await canvasFrame(plain, false).catch(() => null);
+
+      await enableSelect(plain);
+      await sleep(600);
+
+      await plain.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      const empty = await plain.evaluate(() => ({
+        rows: window.getStudioCanvasLayersState().rows.length,
+        message: (document.getElementById("studioCanvasLayersEmpty") || {}).textContent || "",
+        addDisabled: document.getElementById("studioCanvasLayersAddToggle").disabled
+      }));
+
+      check("★ 캔버스(v2)가 아닌 HOME 에서는 목록 대신 이유를 보여 준다",
+        empty.rows === 0 && empty.message.length > 0 && empty.addDisabled === true,
+        JSON.stringify(empty));
+
+      await close(plain);
+
+
+      /* ---- 10. 390px 시트 ---- */
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await sleep(400);
+
+      await page.evaluate(() => window.showStudioLeftPanelMode("layers", { sheet: "full" }));
+      await sleep(500);
+
+      const narrow = await page.evaluate(() => {
+        const section = document.getElementById("studioLeftPanelLayers");
+        const tree = document.getElementById("studioCanvasLayersTree");
+        const top = document.querySelector(".studio-canvas-layers-top");
+        const rows = Array.from(document.querySelectorAll(".studio-canvas-layers-row"));
+        const sb = section.getBoundingClientRect();
+        return {
+          scrollWidth: document.documentElement.scrollWidth,
+          innerWidth: window.innerWidth,
+          /* 스크롤하는 상자는 section 하나다 — 안쪽에 두 번째가 없다 */
+          sectionScrolls: getComputedStyle(section).overflowY === "auto",
+          treeScrolls: getComputedStyle(tree).overflowY,
+          sticky: getComputedStyle(top).position,
+          rowsInside: rows.every((r) => {
+            const b = r.getBoundingClientRect();
+            return b.left >= sb.left - 0.5 && b.right <= sb.right + 0.5;
+          }),
+          rowCount: rows.length
+        };
+      });
+
+      check("★ 390px 에서 트리가 잘리지 않고 가로 넘침이 없다",
+        narrow.scrollWidth <= narrow.innerWidth &&
+        narrow.rowsInside && narrow.rowCount > 0,
+        JSON.stringify(narrow));
+
+      check("★ 스크롤 담당은 하나다(section 만 스크롤 · 추가 줄은 sticky)",
+        narrow.sectionScrolls === true &&
+        narrow.treeScrolls !== "auto" && narrow.treeScrolls !== "scroll" &&
+        narrow.sticky === "sticky",
+        JSON.stringify(narrow));
+
+      await page.setViewportSize({ width: 1280, height: 800 });
+
+      await close(page);
+
+
+      /* ---- 11. sandbox 에서도 같은 결과 ---- */
+
+      const sbPage = await openStudio(browser, { package: v2Package({ sandbox: true }), sandbox: true });
+      const sbFrame = await canvasFrame(sbPage, true);
+
+      await enableCanvasEditing(sbPage);
+
+      await sbPage.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      check("★ sandbox 에서도 트리가 같은 순서다",
+        (await layersState(sbPage)).rows.map((r) => r.id).join(",") ===
+          "v2Logo,v2Text,v2Rule,v2Wide,v2Main,v2Paper,v2Photo,v2Tag,v2Over",
+        JSON.stringify((await layersState(sbPage)).rows.map((r) => r.id)));
+
+      await sbPage.click("#studioCanvasLayer-v2Wide");
+      await sleep(800);
+
+      check("★ sandbox 에서도 Layers 행 선택이 프레임에 닿는다",
+        (await pickedId(sbPage)) === "v2Wide" &&
+        await sbFrame.evaluate(() =>
+          !!document.querySelector('[data-imory-edit-id="v2Wide"]')),
+        String(await pickedId(sbPage)));
+
+      await clickElement(sbPage, sbFrame, true, "v2Logo");
+      await sleep(700);
+
+      await sbPage.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      check("★ sandbox 의 Preview 선택도 같은 행으로 돌아온다",
+        (await layersState(sbPage)).selectedIds.join(",") === "v2Logo",
+        JSON.stringify((await layersState(sbPage)).selectedIds));
+
+      await close(sbPage);
+
+    }
 
     /* ======================================================
        [sandbox] — 별도 origin 프레임

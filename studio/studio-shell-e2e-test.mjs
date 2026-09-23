@@ -14,8 +14,8 @@
      toolbar  세 그룹의 구성 · Publish 만 primary · Import|Export 한
               덩어리 · id 가 한 벌 · 현재 페이지 표시가 이동을 따라감 ·
               Code/Import/Export/Save 가 새 자리에서 동작
-     panels   Select/Images/Dock 이 같은 왼쪽 패널을 쓴다 · 패널만큼
-              stage 가 비킨다 · Images/Dock 을 다녀와도 고른 요소가
+     panels   Select/Images/Layers/Dock 이 같은 왼쪽 패널을 쓴다 · 패널만큼
+              stage 가 비킨다 · Images/Layers/Dock 을 다녀와도 고른 요소가
               그대로 · Dock 의 적용 안 한 사본이 살아남는다 · AI 패널과
               동시에 열림 · 좌우 패널 개폐마다 Preview 가 stage 가운데
      inspect  팝오버가 Preview 위가 아니라 패널 안 · Preview 위에는
@@ -30,7 +30,7 @@
               textarea 안의 단축키 · Save/Publish 뒤 ↶ 는 RPC 0 + dirty
      fit      1600→320px 폭마다 컨트롤끼리 겹침 0 · 화면 밖 0 (AI 열림/닫힘) ·
               1280+AI 에서 한 줄(가장 긴 페이지 이름으로도)
-     narrow   390px — 가로 넘침 0 · 첫 줄 Select/Images/Dock/Save/
+     narrow   390px — 가로 넘침 0 · 첫 줄 Select/Images/Layers/Save/
               Publish/··· · ··· 메뉴의 Code/Import/Export · 왼쪽 패널은
               아래 시트 · AI 와 번갈아 열림 · 버튼끼리 겹치지 않음
 
@@ -248,7 +248,7 @@ function overlaps(a, b) {
 }
 
 const TOOLBAR_IDS = [
-  "studioBackButton", "studioInspectorButton", "studioImagesButton", "studioDockButton",
+  "studioBackButton", "studioInspectorButton", "studioImagesButton", "studioLayersButton",
   "studioPageIndicator", "studioViewportToggle", "studioUndoButton", "studioRedoButton",
   "studioCodeButton", "studioImportButton", "studioExportButton", "studioMoreButton",
   "studioSaveButton", "studioPublishButton", "studioAiToggleButton"
@@ -278,8 +278,8 @@ async function runToolbar(context) {
   }, TOOLBAR_IDS);
 
   record(
-    "A1. 왼쪽 = Select · Images · Dock(+나가기), 가운데 = 현재 페이지 · Desktop/Mobile · Undo/Redo, 오른쪽 = Code · Import · Export · Save · Publish",
-    ["studioBackButton", "studioInspectorButton", "studioImagesButton", "studioDockButton"].every(id => groups[id] === "lead") &&
+    "A1. 왼쪽 = Select · Images · Layers(+나가기), 가운데 = 현재 페이지 · Desktop/Mobile · Undo/Redo, 오른쪽 = Code · Import · Export · Save · Publish",
+    ["studioBackButton", "studioInspectorButton", "studioImagesButton", "studioLayersButton"].every(id => groups[id] === "lead") &&
       ["studioPageIndicator", "studioViewportToggle", "studioUndoButton", "studioRedoButton"].every(id => groups[id] === "center") &&
       ["studioCodeButton", "studioImportButton", "studioExportButton", "studioSaveButton", "studioPublishButton"].every(id => groups[id] === "actions"),
     JSON.stringify(groups)
@@ -466,7 +466,7 @@ async function runPanels(context) {
   );
 
   /* Dock — 사본에 항목 하나를 더한 채 떠났다 돌아온다 */
-  await page.click("#studioDockButton");
+  await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
   await page.waitForSelector("#studioLeftPanelDock .dock-panel-overlay--open");
   const itemsBefore = await page.$$eval("#studioLeftPanelDock .dock-panel-item", els => els.length);
   await page.click("#studioLeftPanelDock .dock-panel-button--add");
@@ -482,6 +482,36 @@ async function runPanels(context) {
     JSON.stringify({ b3, itemsBefore, itemsAdded })
   );
 
+  /* Layers — STUDIO-LAYERS-SHELL-1. 상단 셋째 버튼이고, 들고 있는
+     사본이 없다(열 때마다 draft 에서 트리를 다시 만든다). */
+  await page.click("#studioLayersButton");
+  await settle(page);
+  const b3b = await page.evaluate(() => ({
+    mode: window.getStudioShellState().leftPanelMode,
+    open: window.getStudioShellState().leftPanelOpen,
+    title: document.getElementById("studioLeftPanelTitle").textContent.trim(),
+    sectionShown: !document.getElementById("studioLeftPanelLayers").hidden,
+    dockHidden: document.getElementById("studioLeftPanelDock").hidden,
+    expanded: document.getElementById("studioLayersButton").getAttribute("aria-expanded"),
+    /* Select 모드와 고른 요소는 건드리지 않는다 */
+    inspectorOn: window.getStudioInspectorState().enabled,
+    selection: window.getStudioInspectorSelection() && window.getStudioInspectorSelection().editId,
+    bodyOverlay: !!document.querySelector("body > .studio-canvas-layers")
+  }));
+  record(
+    "B3b. Layers 도 같은 왼쪽 패널에 열리고(modal 아님) Select 모드와 고른 요소는 그대로다",
+    b3b.mode === "layers" && b3b.open && b3b.title === "LAYERS" &&
+      b3b.sectionShown && b3b.dockHidden && b3b.expanded === "true" &&
+      b3b.inspectorOn && b3b.selection === firstId && !b3b.bodyOverlay,
+    JSON.stringify(b3b)
+  );
+
+  record(
+    "B3c. 상단에 Dock 버튼이 없다(설정은 admin SETTINGS 와 Preview 의 dock 으로 연다)",
+    await page.evaluate(() => document.getElementById("studioDockButton") === null),
+    ""
+  );
+
   await page.click("#studioInspectorButton");
   await settle(page);
   const b4 = await page.evaluate(() => ({
@@ -491,14 +521,14 @@ async function runPanels(context) {
     popoverVisible: !document.getElementById("studioInspectorPopover").hidden
   }));
   record(
-    "B4. Images · Dock 을 다녀와 Select 로 돌아와도 고른 요소가 그대로다",
+    "B4. Images · Layers · Dock 을 다녀와 Select 로 돌아와도 고른 요소가 그대로다",
     b4.mode === "select" && b4.inspectorOn && b4.selection === firstId && b4.popoverVisible,
     JSON.stringify({ b4, firstId })
   );
 
   /* Select 를 보는 동안 Escape 는 선택만 푼다 — 숨은 Dock 사본은 남는다 */
   await page.keyboard.press("Escape");
-  await page.click("#studioDockButton");
+  await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
   await page.waitForSelector("#studioLeftPanelDock .dock-panel-overlay--open");
   const itemsKept = await page.$$eval("#studioLeftPanelDock .dock-panel-item", els => els.length);
   record(
@@ -816,7 +846,7 @@ async function runHistory(context) {
   );
 
   /* Dock 적용 → Undo */
-  await page.click("#studioDockButton");
+  await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
   await page.waitForSelector("#studioLeftPanelDock .dock-panel-overlay--open");
   await page.click("#studioLeftPanelDock .dock-panel-button--primary");
   await page.waitForFunction(() => !!window.getStudioAiWorkingState({ includePackage: true }).skinPackage.bottomDock);
@@ -1054,7 +1084,7 @@ async function runUnits(context) {
 
   /* ---------- U4. Dock 설정 Apply ---------- */
 
-  await page.click("#studioDockButton");
+  await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
   await page.waitForSelector("#studioLeftPanelDock .dock-panel-overlay--open");
   await checkOneUnit(
     page,
@@ -1357,7 +1387,7 @@ async function runNarrow(context) {
     return out;
   }, TOOLBAR_IDS);
 
-  const row1 = ["studioInspectorButton", "studioImagesButton", "studioDockButton", "studioSaveButton", "studioPublishButton", "studioMoreButton"];
+  const row1 = ["studioInspectorButton", "studioImagesButton", "studioLayersButton", "studioSaveButton", "studioPublishButton", "studioMoreButton"];
   const row2 = ["studioBackButton", "studioPageIndicator", "studioViewportToggle", "studioUndoButton", "studioRedoButton", "studioAiToggleButton"];
   const row1Top = m.studioInspectorButton && m.studioInspectorButton.top;
 
@@ -1369,7 +1399,7 @@ async function runNarrow(context) {
   );
 
   record(
-    "E2. 첫 줄 = Select · Images · Dock · Save · Publish · ··· (한 줄), 둘째 줄 = 나머지",
+    "E2. 첫 줄 = Select · Images · Layers · Save · Publish · ··· (한 줄), 둘째 줄 = 나머지",
     row1.every(id => m[id] && Math.abs(m[id].top - row1Top) <= 3) &&
       row2.every(id => m[id] && m[id].top > row1Top + 10),
     JSON.stringify(Object.fromEntries([...row1, ...row2].map(id => [id, m[id] && Math.round(m[id].top)])))

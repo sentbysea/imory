@@ -294,6 +294,7 @@
    않고, 스크롤바를 숨기지도 않는다. 좁은 화면(시트)에서는 단계별
    높이가 이 상자를 줄이고 안쪽이 그대로 스크롤한다. */
 .studio-left-panel-section[data-left-panel-mode="select"],
+.studio-left-panel-section[data-left-panel-mode="layers"],
 .studio-left-panel-section[data-left-panel-mode="layout"] {
   overflow-y: auto;
 
@@ -306,6 +307,18 @@
 
 /* Layout 안쪽(studio/sides/sides-panel.css)은 자기 여백을 갖고 있다 */
 .studio-left-panel-section[data-left-panel-mode="layout"] {
+  padding: 0;
+}
+
+
+/* STUDIO-LAYERS-SHELL-1 — Layers 는 맨 위 "＋ 재료 추가" 줄이
+   sticky 다. 그 줄이 section 의 위 여백까지 자기 배경으로 덮어야
+   아래로 지나가는 행이 비쳐 보이지 않으므로, 여백을 통째로
+   안쪽(studio/inspector/studio-canvas-layers.css)에 맡긴다.
+
+   ★ 스크롤은 여전히 **이 상자 하나**다 — 안쪽에 두 번째 스크롤
+     상자를 두지 않는다(390px 시트에서 이중 스크롤이 된다). */
+.studio-left-panel-section[data-left-panel-mode="layers"] {
   padding: 0;
 }
 

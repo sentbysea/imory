@@ -879,7 +879,7 @@ async function runPanels(browser) {
   );
 
   /* Dock */
-  await page.click("#studioDockButton");
+  await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
   await page.waitForSelector("#studioLeftPanelDock .dock-panel-overlay--open", { timeout: 5000 });
   await sleep(250);
   const k0 = await sheet(page);
@@ -891,7 +891,7 @@ async function runPanels(browser) {
   await stepDown(page);
   await page.click("#studioInspectorButton");
   await sleep(200);
-  await page.click("#studioDockButton");
+  await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
   await sleep(300);
   const k1 = await sheet(page);
   const dockValue = await page.evaluate(() =>
@@ -1090,7 +1090,7 @@ async function runKeyboard(browser) {
   const { page, context } = await openStudio(browser, { keyboard: true });
   await enableSelect(page);
 
-  await page.click("#studioDockButton");
+  await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
   await page.waitForSelector("#studioLeftPanelDock .dock-panel-overlay--open", { timeout: 5000 });
   await sleep(250);
   const input = await page.evaluateHandle(() =>

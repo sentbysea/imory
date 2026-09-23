@@ -484,7 +484,7 @@ async function run() {
         if (window.getStudioInspectorState().enabled) document.getElementById("studioInspectorButton").click();
       });
 
-      await page.click("#studioDockButton");
+      await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
       await page.waitForSelector(".dock-panel-overlay--open", { timeout: 5000 });
 
       /*
@@ -531,7 +531,7 @@ async function run() {
       }, custom);
       await sleep(400);
 
-      await page.click("#studioDockButton");
+      await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
       await page.waitForSelector(".dock-panel-overlay--open", { timeout: 5000 });
       await page.click(".dock-panel-button--primary");
       await sleep(700);

@@ -201,7 +201,7 @@ const workingPackage = (page) =>
   page.evaluate(() => window.getStudioAiWorkingState({ includePackage: true }).skinPackage);
 
 async function openDockPanel(page) {
-  await page.click("#studioDockButton");
+  await page.evaluate(() => window.showStudioLeftPanelMode("dock"));
   await page.waitForSelector(".dock-panel-overlay--open", { timeout: 5000 });
 }
 
@@ -394,7 +394,7 @@ async function run() {
 
       check(
         "working draft 가 있으면 Dock 버튼이 눌린다",
-        await page.evaluate(() => !document.getElementById("studioDockButton").disabled)
+        await page.evaluate(() => !document.getElementById("studioLayersButton").disabled)
       );
 
       check(

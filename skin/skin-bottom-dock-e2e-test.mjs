@@ -1474,7 +1474,7 @@ async function run() {
       );
       await studio.waitForTimeout(700);
 
-      await studio.click("#studioDockButton");
+      await studio.evaluate(() => window.showStudioLeftPanelMode("dock"));
       await studio.waitForSelector(".dock-panel-overlay--open");
 
       const cardRow = (index, label) =>
