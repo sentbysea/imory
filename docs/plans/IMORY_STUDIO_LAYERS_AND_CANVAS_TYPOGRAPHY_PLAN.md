@@ -252,7 +252,7 @@ Canvas JSON은 geometry · 구조 · 텍스트 내용을 갖고, 시각 스타�
 
 | 설정 | 1차 범위 |
 | --- | --- |
-| 글꼴 | 일반 Inspector가 지원하는 글꼴 선택 원천을 재사용 |
+| 글꼴 | §4-3-1의 여섯 글꼴. Pretendard가 기본 |
 | 글자 크기 | px 숫자 + 기존 number/range 패턴 |
 | 굵기 | 일반 Inspector의 weight 원천을 재사용 |
 | 글자색 | 요소 전체 `color` |
@@ -261,6 +261,28 @@ Canvas JSON은 geometry · 구조 · 텍스트 내용을 갖고, 시각 스타�
 
 글자 정렬은 자동 배치 블록의 align과 다른 개념이다. 필요하면 typography 고급
 설정에 넣되, v2 블록 정렬 값을 재사용하거나 덮지 않는다.
+
+### 4-3-1. 확정 글꼴과 Quote Preset
+
+Canvas Typography와 Quote Preset의 BODY > FONT는 다음 공용 카탈로그를 쓴다.
+
+| 키 | 표시 | CSS family |
+| --- | --- | --- |
+| `pretendard` | Pretendard (기본) | `"Pretendard", sans-serif` |
+| `nanumgothic` | 나눔고딕 | `"Nanum Gothic", sans-serif` |
+| `nanumsquareneo` | 나눔스퀘어네오 | `"NanumSquareNeo", "Nanum Square Neo", sans-serif` |
+| `nanummyeongjo` | 나눔명조 | `"Nanum Myeongjo", serif` |
+| `gowundodum` | 고운돋움 | `"Gowun Dodum", sans-serif` |
+| `gowunbatang` | 고운바탕 | `"Gowun Batang", serif` |
+
+- 키·표시명·CSS stack을 Canvas와 Quote에 따로 하드코딩하지 않는다.
+- 기존 Quote의 `settings.bodyFont`, `pretendard`,
+  `nanummyeongjo`, Pretendard 기본값과 unknown-field 보존을 유지한다.
+- DB migration 없이 기존 `quote_presets` 저장 경로를 쓴다.
+- 관리 Preview·글쓰기 Preview·export·공개 글과 Canvas 네 realm에서 실제
+  글꼴을 로드한다. export는 font load 뒤 캡처하고 fallback을 성공으로 세지 않는다.
+- 외부 font source를 더하면 CSP/sandbox allowlist와 위반 0을 검증한다.
+- Quote 제목 글꼴과 일반 HTML Inspector 확대는 이 작업 범위가 아니다.
 
 ### 4-4. 일부 글자만 다른 색
 
@@ -329,7 +351,7 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 | ---: | --- | --- | --- |
 | 0 | `STUDIO-LAYERS-PLAN-1` | 이 문서. 책임 · UX · 작업 경계 확정 | **완료 — 문서만** |
 | 1 | `STUDIO-LAYERS-SHELL-1` | 상단 Dock 자리를 Layers로 교체 · 읽기 전용 트리 · Select의 재료 추가를 Layers로 이동 · Dock Settings 진입 경로 조사/이동 | **완료** — [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) · [admin/settings/admin-bottom-dock-entry.js](../../admin/settings/admin-bottom-dock-entry.js) · `studio/studio-home-canvas-inspector-e2e-test.mjs --only=layers` · `admin/admin-settings-e2e-test.mjs --only=dock` |
-| 2 | `HOME-CANVAS-TYPOGRAPHY-1` | 요소 전체 글꼴 · 크기 · 굵기 · 색 · 자간 · 행간 | **다음 작업** |
+| 2 | `HOME-CANVAS-TYPOGRAPHY-1` | Canvas 타이포그래피 + Quote Preset `bodyFont` 여섯 글꼴 | **다음 작업** |
 | 3 | `STUDIO-LAYERS-STRUCTURE-1` | 순서 drag · 단일 attach/detach · primary · 숨김 · 잠금 · 삭제 | 미착수 |
 | 4 | `HOME-CANVAS-V2-GROUP-1A` | 여러 요소 묶기 · primary 지정 | 미착수 |
 | 5 | `HOME-CANVAS-V2-GROUP-1B` | 그룹 이동 | 미착수 |
@@ -384,28 +406,44 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 ## 8. 다음 작업용 지시문
 
 ```text
-작업 ID: STUDIO-LAYERS-SHELL-1
+작업 ID: HOME-CANVAS-TYPOGRAPHY-1
 
-sentbysea/imory의 현재 main과
-docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md를 읽고,
-그 문서 §7의 범위만 구현해 줘.
+현재 main과 이 문서 §4·§6, HOME Canvas 계약을 읽고 이 작업만 구현해 줘.
+먼저 generic Inspector의 CSS patch, Canvas 선택/working draft/Undo/Save,
+native/sandbox, Quote bodyFont 입력/정규화/미리보기/저장/공개/export 경로를
+조사해 짧게 보고해라.
 
-핵심:
-- 상단 Select · Images · Dock · Layout을
-  Select · Images · Layers · Layout으로 재편한다.
-- v2 Canvas의 실제 draft 구조를 읽는 read-only Layers 트리를 만든다.
-- Preview 선택과 Layers 선택은 기존 Canvas 선택 상태 하나를 공유한다.
-- Select 안의 재료 추가 UI를 Layers로 완전히 옮기고 기존 추가 관문을 재사용한다.
-- Dock 데이터는 SkinPackage와 기존 저장 경로에 그대로 둔다.
-  Settings에서 같은 편집기를 안전하게 여는 경로를 먼저 조사하고,
-  저장 소유권 복제 없이 가능한 범위만 구현한다.
+Canvas text 단독 선택에 1열 글꼴·크기·굵기와, 기본 접힘 고급 설정
+글자색·자간·행간을 둔다. 390px에서는 자연스럽게 감긴다. 각 속성 reset,
+live preview, 조작 한 번=Undo 한 칸을 지킨다. Canvas JSON에 style 칸을
+만들지 말고 기존 data-imory-edit-id CSS 규칙에 저장한다.
 
-이번에 순서 drag, 묶기/빼기 drop, primary 변경, 숨김/잠금/삭제,
-그룹 조작, 타이포그래피, rich text를 선행 구현하지 마라.
+대상은 v1 text, v2 flow text, main_visual 내부 text, v2 overlay text다.
+category_nav, logo fallback, 일반 HTML Inspector, rich text는 범위 밖이다.
 
-구현 전 현재 DOM·패널 lifecycle·working draft·Undo/Save 경로를 조사해
-짧게 보고하고, 영향 테스트를 추가한 뒤 실행해라.
+글꼴은 §4-3-1의 여섯만 같은 순서로 제공하고 Canvas와 Quote가 공용
+카탈로그/resolver 한 벌을 쓴다. Quote Preset BODY > FONT도 같은 여섯으로
+넓히되 기존 settings.bodyFont·quote_presets 경로, 기존 두 키와 Pretendard
+기본값, unknown settings 보존을 유지한다. migration하지 않는다.
+관리 Preview·글쓰기 Preview·export·공개 글이 같은 resolver를 써야 한다.
+
+폰트 파일은 Quote 네 화면과 Canvas 공개/Studio × native/sandbox에서 실제로
+로드한다. fallback을 성공으로 세지 말고 export는 로드 뒤 캡처한다.
+외부 source를 추가하면 CSP/sandbox allowlist와 위반 0을 검증한다.
+
+값은 크기 8~72px step 1, 굵기 기본/400/500/700, 자간 기본 또는
+-5~20px step 0.1, 행간 기본 또는 0.8~3 step 0.05 unitless다.
+계산값을 기본값인 것처럼 CSS에 저장하지 마라.
+
+Canvas 네 text 위치·여섯 글꼴·reset/live/Undo/Redo/Save/Export/Publish,
+native/sandbox parity·stale/forged 선택 거부를 테스트한다.
+Quote 여섯 선택지·새로 만들기/덮어쓰기/불러오기/활성화, 기존 두 키 무변경,
+관리/글쓰기/export/공개 parity와 실제 font load도 테스트한다.
+390px, CSP 위반 0, 기존 Inspector/Quote 회귀를 포함한다.
+
+문서/TESTS를 갱신하고 오래된 roadmap/INDEX의 다음 순서를
+Typography → Layers Structure → Group 1A~1C로 맞춘다.
+Layers Structure, Group, rich text를 선행 구현하지 마라.
 APP_BUILD_VERSION은 올리지 말고 배포하지 마라.
-완료하면 변경 파일, 실제 동작, 테스트 결과, 남은 다음 작업을 보고하고
-한 커밋으로 main에 push해라.
+완료하면 한 커밋으로 main에 push하고 결과를 보고해라.
 ```
