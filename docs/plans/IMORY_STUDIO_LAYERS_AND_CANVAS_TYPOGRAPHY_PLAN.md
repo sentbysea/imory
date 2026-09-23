@@ -227,6 +227,13 @@ v1/v2 호환을 먼저 확정한다.
 > 이고, 아래 줄들 중 **쓰기 경로 · 슬롯 · 즉시 선택 · 행 드러내기**는
 > 그대로다.
 
+> **그리고 한 번 더 깊어졌다(2026-09-23 · `STUDIO-LAYERS-MATERIALS-1B`).**
+> 카드는 이제 **분류**이고 그 아래에 재료 목록이 있다. 재료를 **Preview로
+> 끌어다 놓으면 그 자리에** 생긴다. 현행 계약은
+> [IMORY_HOME_CANVAS_CONTRACT.md §36](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> 이고, 재료 정의 한 벌은 `skin/skin-home-canvas-materials.js` 다 —
+> 화면이 쓰기 경로에 보내는 것은 그 표의 **id 한 줄**이다.
+
 재료 추가는 Select에서 Layers로 옮긴다.
 
 - Layers 상단에 sticky `＋ 재료 추가` 버튼을 둔다.

@@ -1974,6 +1974,12 @@ async function renderSandboxPageIntoHandle(handle, opts) {
            Studio 가 정한다(묶기 · 빼기의 자). */
         handle.handlers[TYPES.CANVAS_LAYOUT] = inspectRelay("canvas-layout");
 
+        /* STUDIO-LAYERS-MATERIALS-1B — 재료를 끌어다 놓을 자리
+           (계약 §36-5). 여기서도 해석하지 않는다 — 픽셀 상자를
+           그대로 올리고, 안쪽 iframe 의 자리를 더하는 것도 그
+           좌표로 무엇을 할지도 preview 문서와 Studio 가 한다. */
+        handle.handlers[TYPES.CANVAS_BOX] = inspectRelay("canvas-box");
+
         handle.handlers[TYPES.INSPECT_CANDIDATES] = inspectRelay("candidates");
         handle.handlers[TYPES.INSPECT_TEXT] = inspectRelay("text");
         handle.handlers[TYPES.INSPECT_DRAG] = inspectRelay("drag");
@@ -2716,6 +2722,30 @@ export function sendSandboxInspectPreview(handle, value) {
   }
 
   return sendInspectDirective(handle, "INSPECT_PREVIEW", payload);
+
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — "지금 도화지 상자를 재서 올려라"
+
+   sendSandboxCanvasProbe(handle) -> boolean
+
+   실을 것이 없다. 어느 화면인가는 renderSeq 가 정하고, 그 답은
+   CANVAS_BOX 로 올라온다(프로토콜 주석 · 계약 §36-5).
+========================================================== */
+
+export function sendSandboxCanvasProbe(handle) {
+
+  if (!handle || handle.destroyed || !handle.TYPES || !handle.renderSeq) {
+    return false;
+  }
+
+  return sendToSandboxFrame(
+    handle,
+    handle.TYPES.CANVAS_PROBE,
+    { contract: 1, renderSeq: handle.renderSeq }
+  );
 
 }
 

@@ -957,6 +957,12 @@
            Inspector 가 writer 를 부르므로 **반드시 그 다음**이다. */
         "../skin/skin-home-canvas-v2.js",
         "../skin/skin-home-canvas-write.js",
+        /* STUDIO-LAYERS-MATERIALS-1B — HOME 캔버스 **재료 카탈로그**
+           (계약 §36). 분류 · 재료 · 기본값 · 썸네일 데이터 한 벌이고
+           의존이 없다. 위 write-v2.js 가 `materialId` 를 이 표에
+           물어 기본값을 만들므로 그 **앞**에 온다 — 없으면 그 요청이
+           fail closed 로 거절된다(sandbox 프레임이 그 상태다). */
+        "../skin/skin-home-canvas-materials.js",
         "../skin/skin-home-canvas-write-v2.js",
         /* HOME-CANVAS-V2-EDITOR-1B — Studio 는 캔버스를 **그리지
            않는다**(그것은 Preview 문서와 sandbox 프레임의 일이다).
@@ -1460,6 +1466,11 @@
            순서가 강제되지는 않지만 읽는 순서를 의존 방향과 맞춘다. */
         "./inspector/studio-canvas-layers-ops.js",
         "./inspector/studio-canvas-layers-drag.js",
+
+        /* STUDIO-LAYERS-MATERIALS-1B — 재료를 Preview 로 끌어다
+           놓기(계약 §36-5 · §36-6). 길게 누르기 시간을 위
+           layers-drag.js 의 최상위 상수에서 읽으므로 그 **뒤**다. */
+        "./inspector/studio-canvas-materials-drag.js",
 
         /* STUDIO-SHELL-1 — Undo/Redo 기록과 셸(왼쪽 패널 · ··· 메뉴 ·
            현재 페이지 표시). 둘 다 studio-preview.js 의 상태와

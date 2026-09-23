@@ -2217,6 +2217,11 @@ if (typeof window !== "undefined") {
   window.postCanvasGeometryToFrame =
     postCanvasGeometryToFrame;
 
+  /* STUDIO-LAYERS-MATERIALS-1B — 끌기를 시작할 때 한 번 묻는다
+     (계약 §36-5). 답은 `preview:canvas-box` 로 온다. */
+  window.postCanvasProbeToFrame =
+    () => postToPreviewFrameIfReady({ type: "preview:canvas-probe" });
+
   window.setStudioCanvasElementPosition =
     setStudioCanvasElementPosition;
 
@@ -3406,12 +3411,25 @@ const STUDIO_CANVAS_V2_STARTER_STYLE = {
 };
 
 
-function studioCanvasV2StarterCss(css, type, id) {
+/*
+  STUDIO-LAYERS-MATERIALS-1B — 프리셋이 가진 선언이 있으면 그것이
+  우선이다(계약 §36-2).
+
+  ★ 프리셋의 선언은 **재료 카탈로그**에서 나오고 그 파일이 속성과
+    값을 이미 걸렀다(skin/skin-home-canvas-materials.js). 여기서
+    한 벌 더 거르지 않는다 — 두 벌이 되면 한쪽만 느슨해진다.
+
+  ★ 프리셋이 선언을 적지 않았으면 지금까지의 **종류 기본값**이다.
+    그래서 `shape_rect`(선언 없음)도 예전처럼 색이 깔린 채 태어난다.
+*/
+function studioCanvasV2StarterCss(css, type, id, style) {
 
   const starter =
-    Object.prototype.hasOwnProperty.call(STUDIO_CANVAS_V2_STARTER_STYLE, type)
-      ? STUDIO_CANVAS_V2_STARTER_STYLE[type]
-      : null;
+    (style && typeof style === "object" && Object.keys(style).length)
+      ? style
+      : (Object.prototype.hasOwnProperty.call(STUDIO_CANVAS_V2_STARTER_STYLE, type)
+          ? STUDIO_CANVAS_V2_STARTER_STYLE[type]
+          : null);
 
   if (
     !starter ||
@@ -3503,7 +3521,13 @@ function addStudioCanvasV2Node(request) {
         type: value.type,
         slot: slotName,
         /* HOME-CANVAS-V2-ELEMENTS-1 — `main_visual` 안에 넣을 때 */
-        frameId: (typeof value.frameId === "string") ? value.frameId : ""
+        frameId: (typeof value.frameId === "string") ? value.frameId : "",
+
+        /* STUDIO-LAYERS-MATERIALS-1B — 재료 id · 끌어다 놓은 자리 ·
+           흐름의 삽입선(계약 §36). 셋 다 순수 함수가 다시 본다. */
+        materialId: (typeof value.materialId === "string") ? value.materialId : "",
+        at: (value.at && typeof value.at === "object") ? value.at : null,
+        index: Number.isInteger(value.index) ? value.index : null
       }
     );
 
@@ -3519,9 +3543,15 @@ function addStudioCanvasV2Node(request) {
     regions: result.regions
   };
 
-  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 빈 상자 재료의 시작 규칙(위 ★) */
+  /* HOME-CANVAS-V2-MANUAL-FIX-1 — 빈 상자 재료의 시작 규칙(위 ★).
+     STUDIO-LAYERS-MATERIALS-1B — 프리셋이 가진 선언이 있으면 그것. */
   const starterCss =
-    studioCanvasV2StarterCss(currentWorkingSkin.css, value.type, result.id);
+    studioCanvasV2StarterCss(
+      currentWorkingSkin.css,
+      value.type,
+      result.id,
+      result.style
+    );
 
   if (typeof starterCss === "string") {
     nextSkin.css = starterCss;
@@ -3563,7 +3593,10 @@ function addStudioCanvasV2Node(request) {
     ok: true,
     id: result.id,
     slot: slotName || null,
-    declaredSlot: declare ? declare.name : null
+    declaredSlot: declare ? declare.name : null,
+
+    /* STUDIO-LAYERS-MATERIALS-1B — 어느 재료였나(화면의 안내 한 줄) */
+    materialId: result.materialId || null
   };
 
 }
@@ -4473,6 +4506,29 @@ window.addEventListener(
              있는 모양(계약 §29-6) */
           (data.look && typeof data.look === "object") ? data.look : null
         );
+
+      }
+
+      return;
+
+    }
+
+    /*
+      STUDIO-LAYERS-MATERIALS-1B — 재료를 끌어다 놓을 자리(계약 §36-5).
+
+      끌기를 시작할 때 물은 그 답이다. 픽셀 상자이고(이 문서 좌표),
+      저장되는 숫자는 하나도 없다 — 놓은 자리를 Canvas 좌표로 바꾸는
+      데만 쓴다. 여기서도 해석하지 않고 알려진 칸만 옮긴다.
+    */
+    if (data.type === "preview:canvas-box") {
+
+      if (typeof window.setStudioCanvasBoxes === "function") {
+
+        window.setStudioCanvasBoxes({
+          root: (data.root && typeof data.root === "object") ? data.root : null,
+          blocks: Array.isArray(data.blocks) ? data.blocks : [],
+          frames: Array.isArray(data.frames) ? data.frames : []
+        });
 
       }
 

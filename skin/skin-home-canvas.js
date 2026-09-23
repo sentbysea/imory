@@ -1179,7 +1179,133 @@ function coerceSkinHomeCanvasRenderPayload(value) {
 }
 
 
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — 도화지가 **화면에서 차지한 상자**
+   (계약 §36-5)
+
+   재료를 Preview 로 끌어다 놓으려면 "지금 손가락이 도화지의 어디를
+   가리키는가"를 알아야 하고, 그 계산에는 픽셀 상자가 필요하다.
+   저장값에도 `canvas-layout` 의 분수에도 그 값이 없다.
+
+   ★ **세 realm 이 같은 이 함수**를 쓴다(공개 화면은 부르지 않는다 —
+     Studio Preview 문서와 sandbox 프레임 둘이다). 규칙을 복붙하면
+     native 와 sandbox 의 좌표가 서서히 달라지고, 달라지는 쪽은 늘
+     모르는 사이에 어긋난 쪽이다. skin/skin-inspect-target.js 를
+     세 문서가 각각 로드하는 것과 같은 방식이다.
+
+   ★ 재는 것은 **자기 뷰포트 기준**이다. sandbox 에서는 preview
+     문서가 안쪽 iframe 의 자리를 더해 올린다.
+
+   ★ 흐름 블록의 순서는 **DOM 순서**다 — 렌더러가 draft 순서로만
+     그리므로(계약 §23) 그대로 흐름 순서다. 그래도 부모는 id 로
+     다시 찾는다: 숨긴 블록은 그려지지 않아 DOM 순서와 draft 인덱스가
+     어긋날 수 있기 때문이다.
+
+   ★ 편집기가 만든 control box 는 제외한다 — 그것은 블록이 아니라
+     손잡이 틀이다(editor-runtime 의 그 값 "1").
+========================================================== */
+
+const SKIN_HOME_CANVAS_BLOCK_ATTR = "data-imory-canvas-block";
+const SKIN_HOME_CANVAS_FRAME_ATTR = "data-imory-canvas-frame";
+const SKIN_HOME_CANVAS_EDIT_ID_ATTR = "data-imory-edit-id";
+const SKIN_HOME_CANVAS_CONTROL_BOX_VALUE = "1";
+
+const SKIN_HOME_CANVAS_MEASURE_ID_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
+
+
+function skinHomeCanvasMeasureRect(el) {
+
+  const box =
+    el.getBoundingClientRect();
+
+  return {
+    left: box.left,
+    top: box.top,
+    width: box.width,
+    height: box.height
+  };
+
+}
+
+
+function measureSkinHomeCanvasBoxes(doc) {
+
+  const document_ =
+    doc || (typeof document !== "undefined" ? document : null);
+
+  if (!document_ || typeof document_.querySelector !== "function") {
+    return { root: null, blocks: [], frames: [] };
+  }
+
+  const root =
+    document_.querySelector(`[${SKIN_HOME_CANVAS_ROOT_ATTR}]`);
+
+  if (!root) {
+    return { root: null, blocks: [], frames: [] };
+  }
+
+  const box =
+    root.getBoundingClientRect();
+
+  if (!(box.width > 0) || !(root.offsetWidth > 0)) {
+    return { root: null, blocks: [], frames: [] };
+  }
+
+  /* 레이아웃 px → 화면 px. 테두리 안쪽이 좌표의 원점이다
+     (editor-runtime 의 reportLayout 과 같은 세 줄). */
+  const px =
+    box.width / root.offsetWidth;
+
+  const blocks = [];
+  const frames = [];
+
+  Array.prototype.forEach.call(
+    root.querySelectorAll(`[${SKIN_HOME_CANVAS_BLOCK_ATTR}]`),
+    (el) => {
+
+      if (
+        el.getAttribute(SKIN_HOME_CANVAS_FRAME_ATTR) ===
+        SKIN_HOME_CANVAS_CONTROL_BOX_VALUE
+      ) {
+        return;
+      }
+
+      const id =
+        el.getAttribute(SKIN_HOME_CANVAS_EDIT_ID_ATTR) || "";
+
+      if (!SKIN_HOME_CANVAS_MEASURE_ID_PATTERN.test(id)) {
+        return;
+      }
+
+      const rect =
+        skinHomeCanvasMeasureRect(el);
+
+      blocks.push({ id: id, rect: rect });
+
+      if (el.hasAttribute(SKIN_HOME_CANVAS_FRAME_ATTR)) {
+        frames.push({ id: id, rect: rect });
+      }
+
+    }
+  );
+
+  return {
+    root: {
+      left: box.left + root.clientLeft * px,
+      top: box.top + root.clientTop * px,
+      width: root.clientWidth * px,
+      height: root.clientHeight * px
+    },
+    blocks: blocks,
+    frames: frames
+  };
+
+}
+
+
 if (typeof window !== "undefined") {
+
+  window.measureSkinHomeCanvasBoxes = measureSkinHomeCanvasBoxes;
 
   window.SKIN_HOME_CANVAS_REGION_NAME = SKIN_HOME_CANVAS_REGION_NAME;
   window.SKIN_HOME_CANVAS_VERSION = SKIN_HOME_CANVAS_VERSION;

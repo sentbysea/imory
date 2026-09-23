@@ -1313,6 +1313,245 @@ function planStudioCanvasV2Pin(elementId, next, expected) {
 }
 
 
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — 놓은 자리를 Canvas 좌표로
+   (계약 §36-5)
+
+   ── 왜 여기인가 ────────────────────────────────────────
+
+   이 파일이 이미 "자"를 맡고 있다. 묶기 · 빼기가 "화면의 그 자리를
+   다른 자 위의 숫자로 다시 적는" 일인 것처럼, 끌어다 놓기는 "손가락
+   자리를 그 자 위의 숫자로 적는" 일이다. 자를 두 벌 만들지 않는다.
+
+   ── 무엇이 들어오나 ────────────────────────────────────
+
+   `preview:canvas-box` 의 답이다 — **픽셀**이고 Preview 문서의
+   뷰포트 기준이다(sandbox 는 안쪽 iframe 자리를 이미 더했다).
+
+     root    도화지의 안쪽 상자
+     blocks  흐름 블록마다 하나(id 로 찾는다)
+     frames  `main_visual` 마다 하나
+
+   ★ **저장되는 숫자가 아니다.** 끌기를 시작할 때 한 번 재고, 놓을
+     때 한 번 쓰고 버린다. 그 사이에 화면이 바뀌지 않는 이유는
+     포인터가 부모에 붙들려 있기 때문이다(계약 §36-5).
+========================================================== */
+
+let studioCanvasBoxes =
+  { root: null, blocks: {}, frames: {} };
+
+
+/* 사각형 한 칸 — 숫자 넷이 아니면 **없는 것**이다 */
+function studioCanvasBoxRect(rect) {
+
+  if (
+    !rect ||
+    typeof rect !== "object" ||
+    typeof rect.left !== "number" || !Number.isFinite(rect.left) ||
+    typeof rect.top !== "number" || !Number.isFinite(rect.top) ||
+    typeof rect.width !== "number" || !Number.isFinite(rect.width) ||
+    typeof rect.height !== "number" || !Number.isFinite(rect.height) ||
+    !(rect.width > 0)
+  ) {
+    return null;
+  }
+
+  return {
+    left: rect.left,
+    top: rect.top,
+    width: rect.width,
+    height: rect.height
+  };
+
+}
+
+
+function setStudioCanvasBoxes(value) {
+
+  const next =
+    { root: null, blocks: {}, frames: {} };
+
+  if (value && typeof value === "object") {
+
+    next.root =
+      studioCanvasBoxRect(value.root);
+
+    ["blocks", "frames"].forEach((key) => {
+
+      (Array.isArray(value[key]) ? value[key] : []).forEach((item) => {
+
+        if (!item || typeof item !== "object" || typeof item.id !== "string") {
+          return;
+        }
+
+        const rect =
+          studioCanvasBoxRect(item.rect);
+
+        if (rect) {
+          next[key][item.id] = rect;
+        }
+
+      });
+
+    });
+
+  }
+
+  studioCanvasBoxes = next;
+
+}
+
+
+function studioCanvasBoxesSnapshot() {
+
+  return studioCanvasBoxes;
+
+}
+
+
+/*
+  Preview 문서 좌표 → 도화지 좌표.
+
+  ★ 상자 밖도 그대로 돌려준다. "밖이다"를 판정하는 것은 부르는
+    쪽이고(금지 표시를 그려야 한다), 여기서 잘라 버리면 가장자리
+    바깥이 전부 가장자리로 보인다.
+*/
+function studioCanvasPointToCanvas(previewX, previewY) {
+
+  const root =
+    studioCanvasBoxes.root;
+
+  const payload =
+    (typeof window.studioCanvasDraftPayload === "function")
+      ? window.studioCanvasDraftPayload()
+      : null;
+
+  if (!root || !payload || !(payload.baseWidth > 0)) {
+    return null;
+  }
+
+  const k =
+    payload.baseWidth / root.width;
+
+  return {
+    x: (previewX - root.left) * k,
+    y: (previewY - root.top) * k,
+
+    /* 도화지 안인가 — 밖이면 자유 층에 놓을 수 없다 */
+    inside:
+      previewX >= root.left &&
+      previewX <= root.left + root.width &&
+      previewY >= root.top &&
+      previewY <= root.top + root.height
+  };
+
+}
+
+
+/*
+  Preview 문서 좌표 → 그 프레임의 **내부** 좌표(계약 §24-3).
+
+  프레임의 자는 `props.baseWidth` 이고, 화면에서 그 프레임이 차지한
+  폭이 그 자의 배율이다. 저장값으로 계산하지 않는 이유는 §30-3 이다 —
+  데스크톱 최대 폭에서 프레임은 저장값보다 좁게 그려진다.
+*/
+function studioCanvasPointToFrame(frameId, previewX, previewY) {
+
+  const rect =
+    studioCanvasBoxes.frames[frameId];
+
+  if (!rect) {
+    return null;
+  }
+
+  const node =
+    (typeof window.studioCanvasNodeInfo === "function")
+      ? window.studioCanvasNodeInfo(frameId)
+      : null;
+
+  const props =
+    (node && node.node && node.node.props && typeof node.node.props === "object")
+      ? node.node.props
+      : null;
+
+  const base =
+    (props && typeof props.baseWidth === "number" && props.baseWidth > 0)
+      ? props.baseWidth
+      : null;
+
+  if (!base) {
+    return null;
+  }
+
+  const k =
+    base / rect.width;
+
+  return {
+    x: (previewX - rect.left) * k,
+    y: (previewY - rect.top) * k,
+    inside:
+      previewX >= rect.left &&
+      previewX <= rect.left + rect.width &&
+      previewY >= rect.top &&
+      previewY <= rect.top + rect.height
+  };
+
+}
+
+
+/*
+  흐름의 **삽입선** — 이 세로 자리는 몇 번째 사이인가.
+
+  ★ 순서는 **draft 가 정한다.** 화면에 그려진 순서를 그대로 쓰지
+    않는 이유는 숨긴 블록이다 — 그려지지 않은 블록이 draft 배열에는
+    있고, DOM 몇 번째를 그대로 쓰면 그만큼 어긋난다.
+
+  ★ 블록이 하나도 없으면 0 이다(맨 앞 = 맨 뒤).
+*/
+function studioCanvasFlowInsertIndex(previewY) {
+
+  const payload =
+    (typeof window.studioCanvasDraftPayload === "function")
+      ? window.studioCanvasDraftPayload()
+      : null;
+
+  const blocks =
+    (payload && payload.flow && Array.isArray(payload.flow.blocks))
+      ? payload.flow.blocks
+      : [];
+
+  if (!blocks.length) {
+    return { index: 0, line: null };
+  }
+
+  for (let i = 0; i < blocks.length; i += 1) {
+
+    const rect =
+      studioCanvasBoxes.blocks[blocks[i].id];
+
+    if (!rect) {
+      continue;
+    }
+
+    /* 그 블록의 **위 절반**이면 그 앞, 아래 절반이면 다음 자리를
+       계속 본다 */
+    if (previewY < rect.top + rect.height / 2) {
+      return { index: i, line: rect.top };
+    }
+
+  }
+
+  const last =
+    studioCanvasBoxes.blocks[blocks[blocks.length - 1].id] || null;
+
+  return {
+    index: blocks.length,
+    line: last ? (last.top + last.height) : null
+  };
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.STUDIO_CANVAS_V2_SPACE_KINDS = STUDIO_CANVAS_V2_SPACE_KINDS;
@@ -1338,5 +1577,15 @@ if (typeof window !== "undefined") {
 
   window.getStudioCanvasBlockLayout =
     () => JSON.parse(JSON.stringify(studioCanvasV2BlockLayout));
+
+  /* STUDIO-LAYERS-MATERIALS-1B — 끌어다 놓을 자리(계약 §36-5) */
+  window.setStudioCanvasBoxes = setStudioCanvasBoxes;
+  window.studioCanvasBoxesSnapshot = studioCanvasBoxesSnapshot;
+  window.studioCanvasPointToCanvas = studioCanvasPointToCanvas;
+  window.studioCanvasPointToFrame = studioCanvasPointToFrame;
+  window.studioCanvasFlowInsertIndex = studioCanvasFlowInsertIndex;
+
+  window.getStudioCanvasBoxes =
+    () => JSON.parse(JSON.stringify(studioCanvasBoxes));
 
 }

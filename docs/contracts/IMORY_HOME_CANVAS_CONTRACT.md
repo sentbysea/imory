@@ -5717,12 +5717,20 @@ draft 를 고치는 곳이 관문 하나이기 때문이다.
 프리셋 목록 · drag/drop 은 `STUDIO-LAYERS-MATERIALS-1B` 다. **이번
 라운드에서 그 화면을 미리 만들지 않았다.**
 
+> **✅ `MATERIALS-1B` 가 그 화면을 냈다 — §36 을 본다.** 카드는 이제
+> **분류**이고 그 아래에 재료가 여럿 선다. `shape` 의 세 `kind` 도
+> 거기서 고른다.
+
 ### 35-6. 디자인 요소의 경계
 
 `디자인 요소` 카드는 앞으로 테이프 · 스티커 · 종이 조각 · 작은 장식선 ·
 배지 같은 장식 프리셋이 들어갈 자리다. 지금 계약으로 표현되는 장식은
 `sticker` 하나이고, 카드를 누르면 그 하나를 만든다. **새 이미지 파일도
 프리셋 데이터도 이번 라운드에 들여오지 않았다.**
+
+> **✅ `MATERIALS-1B` 가 프리셋 셋을 넣었다(§36-2).** 종류는 여전히
+> `sticker` 하나이고 달라지는 것은 **크기와 모서리**다 — 새 이미지
+> 파일은 지금도 하나도 들이지 않았다.
 
 ### 35-7. 이 라운드가 만들지 않은 것
 
@@ -5737,5 +5745,309 @@ draft 를 고치는 곳이 관문 하나이기 때문이다.
   의 하위 목록이 드러낼 자리이고, 그때까지 쓰기 경로가 살아 있는지는
   `window.addStudioCanvasV2Material(target, type)` 로 e2e 가 잰다(제품
   화면에는 그 창구를 쓰는 곳이 없다).
+
+  > **`MATERIALS-1B` 이후에도 이 차이는 남아 있다.** 카탈로그가 덮는
+  > 조합이 늘었을 뿐 여전히 계약의 두 표보다 좁다 — §36-9 를 본다.
 - `준비 중` 카드는 지금 화면에 없다 — 여덟 장 모두 계약이 받는 종류다.
   그 상태는 배포의 종류 표가 달라질 때 나오고, e2e 가 그 표를 줄여 잰다.
+
+---
+
+## 36. 재료 목록과 끌어다 놓기 (`STUDIO-LAYERS-MATERIALS-1B`)
+
+라운드: 2026-09-23. 관련 코드 — `skin/skin-home-canvas-materials.js`(**새 파일**) ·
+`skin/skin-home-canvas-write-v2.js` · `skin/skin-home-canvas.js` ·
+`studio/inspector/studio-canvas-add-v2.js` ·
+`studio/inspector/studio-canvas-materials-drag.js`(**새 파일**) ·
+`studio/inspector/studio-canvas-layers.js` ·
+`studio/inspector/studio-canvas-layers.css` ·
+`studio/inspector/studio-canvas-selection.js` ·
+`studio/inspector/studio-canvas-v2-space.js` · `studio/studio-preview.js` ·
+`studio/preview/preview-bridge.js` · `studio/preview/preview-sandbox.js` ·
+`skin/sandbox/skin-sandbox-protocol.js` · `-frame.js` · `-host.js` ·
+`studio/index.html` · `studio/studio-lifecycle-scenario.html`.
+테스트 — `studio/studio-home-canvas-materials-e2e-test.mjs` ·
+`skin/sandbox/skin-sandbox-unit-test.mjs`.
+
+§35 에서 카드 하나는 재료 **하나**였다. 여기서 카드는 **분류**가 되고 그
+아래에 재료가 여럿 선다. 그리고 처음으로 **놓는 자리를 사용자가 정한다** —
+Preview 로 끌어다 놓으면 그 자리에 생긴다.
+
+**저장 계약은 한 칸도 바뀌지 않았다.** 새 필드도 새 재료 종류도 없고,
+렌더러는 한 줄도 바뀌지 않았다.
+
+### 36-1. 조사 — 프리셋이 바꿀 수 있는 것은 넷뿐이다
+
+계약이 지금 받는 `props` 는 이것이 전부다(`validateSkinCanvasElementProps` —
+`skin/skin-home-canvas.js`).
+
+| 종류 | `props` | 렌더러가 **모양으로** 바꿔 그리는 것 |
+| --- | --- | --- |
+| `photo` · `sticker` | `slot` | 없음 |
+| `logo` | `slot` · `fallback`(`"site_title"` 하나) | 없음 |
+| `text` | `text` · `role`(title·subtitle·body·caption·label) | `data-imory-canvas-role` **속성만** |
+| `category_nav` | `mode`(all·selected) · `categoryIds[]` | 없음 |
+| `shape` | `kind`(rect·ellipse·line) | `ellipse` 만 `border-radius:50%` |
+| `divider` | 없음 | 없음(빈 상자) |
+
+그래서 프리셋이 **`props` 로** 만들 수 있는 차이는 글자의 역할과 도형의
+종류 둘뿐이다. 모서리 · 두께 · 점선 · 투명도는 `props` 에 칸이 없고,
+플랫폼이 칠하지 않는 것이 §8 이다.
+
+프리셋이 실제로 바꾸는 것은 넷이다.
+
+```text
+  target   어느 자리에(flow · overlay · frame)
+  size     새 노드의 width · height     (계약 §5 의 그 두 칸)
+  props    위 표의 칸만                  (계약 §8)
+  style    그 요소 하나의 스킨 CSS 선언   (§29 의 "빈 상자 재료의 시작 규칙")
+```
+
+★ **`style` 은 새 저장 칸이 아니다.** `addStudioCanvasV2Node()` 가 이미
+`shape` · `divider` 에 `background: currentColor; opacity: …` 를 쓰고 있던
+그 자리이고(§29), 타이포그래피가 값을 넣는 그 규칙과 같은 한 줄이다(§31-1).
+
+```
+  [data-imory-edit-id="canvas_…"][data-imory-edit-id="canvas_…"] { … }
+```
+
+Inspector 가 그대로 읽고 고치고 지울 수 있고, 새 재료와 **같은 Undo 한 칸**
+에 들어간다.
+
+★ **빠진 예시와 그 이유.** 처음 제안에 있던 것 중 `props` 로도 `style` 로도
+만들 수 없는 것은 없었지만, 만드는 **방법**이 갈렸다.
+
+| 예시 | 어떻게 되었나 |
+| --- | --- |
+| 둥근 사진 · 원형 사진 | `props` 에 모서리 칸이 없다 → `style` 의 `border-radius`(+`overflow`) |
+| 둥근 사각형 | `kind` 에 없다 → `kind:"rect"` + `style` 의 `border-radius` |
+| 점선 구분선 | `divider` 에는 `props` 가 없다 → `style` 의 `border-top: … dashed` |
+| 얇은 선 · 굵은 선 | `style` 이 아니라 **`height`** 다(노드의 칸) |
+
+### 36-2. 카탈로그는 한 파일이다
+
+`skin/skin-home-canvas-materials.js` — 의존이 없는 classic script 한 벌이고,
+분류 여덟과 재료 열아홉이 거기 있다.
+
+```js
+{ id, category, label, desc, preview, type, props?, size?, style?, targets? }
+```
+
+- **DOM 은 `id` 만 들고 있다**(`data-material-id`). 카드가 임의 JSON 을
+  들고 있으면 화면에서 고친 값이 그대로 저장 경로로 들어간다. 쓰기 경로에
+  가는 것은 그 한 줄이고, **무엇을 만들지는 표와 순수 함수가 정한다**
+  (§27-3 의 그 원칙 그대로다).
+- `resolveSkinHomeCanvasMaterialPreset(id)` 하나를 **패널과 writer 가 함께**
+  지난다. 화면에 보이는 카드와 실제로 만들어지는 것이 갈라지지 않는다.
+- 그 resolve 가 **표 자신이 성한가**를 본다 — id 모양 · 알려진 분류 ·
+  크기가 양수이거나 `"auto"` · `style` 의 속성이 표에 있고 값에 `;` `{` `}`
+  `<` `>` `@` `\` `"` 가 하나도 없는가. 하나라도 어긋나면 그 재료를 **내주지
+  않는다**(조용히 기본값으로 떨어지면 화면의 "원형 사진"이 세로 사진으로
+  태어난다).
+- `preview` 는 썸네일을 그리는 **데이터**다(DOM 도 HTML 도 아니다).
+  `{ kind, ratio?, radius?, thickness?, dash?, size?, weight? }` 뿐이고,
+  패널이 그것을 작은 상자 하나로 옮긴다(CSSOM 으로 — `style` 속성이 아니다).
+- **sandbox 프레임에는 싣지 않는다.** 프레임은 추가 관문을 쓸 수 없고
+  (§27-5) allowlist 에도 없다. 그쪽 `write-v2.js` 에서는 resolve 가 없으므로
+  `materialId` 요청이 **fail closed** 로 거절된다(`reason:"material"`).
+
+**재료 열아홉**
+
+| 분류 | 재료 | 무엇이 다른가 |
+| --- | --- | --- |
+| 로고 | 로고 | — |
+| 카테고리 메뉴 | 카테고리 메뉴 | — |
+| 메인 비주얼 | 메인 비주얼 | — |
+| 사진 | 기본 사진 · 둥근 사진 · 원형 사진 | `border-radius` · `overflow` · 비율 |
+| 글자 | 제목 · 본문 · 작은 캡션 | `role` + 크기 · 두께 · 행간 |
+| 구분선 | 얇은 선 · 굵은 선 · 점선 | `height` + 선 모양 |
+| 도형 | 사각형 · 둥근 사각형 · 원 · 선 | `kind` + 모서리 · 크기 |
+| 디자인 요소 | 테이프 · 라벨 · 스티커 | 크기 · 비율 · 모서리 |
+
+★ **사진과 디자인 요소에는 배경을 깔지 않는다.** 그 자리는 곧 그림이
+들어오는 곳이고, 반투명 배경을 깔아 두면 사진을 넣은 뒤에도 사진이 흐려
+보인다(빈 사진 자리에 플랫폼이 placeholder 를 넣지 않는 것과 같은 계약 —
+§6). 반대로 `shape` · `divider` 는 그림이 들어올 자리가 아니라 빈 상자라
+지금까지처럼 색을 깐다.
+
+### 36-3. 화면 — 한 단계 더 깊다
+
+```text
+  Layers   ←   요소 추가   ←   재료 목록
+```
+
+- 분류 카드를 누르면 **같은 패널에서** 그 분류의 재료 목록이 열린다
+  (`#studioCanvasAdd[data-material-screen="items"]`).
+- 머리의 글자가 바뀐다 — `← Layers` / `← 요소 추가`, 제목은 `요소 추가` /
+  그 분류 이름. 머리를 그리는 곳은 여전히 Layers 이고(§35-1), 지금 몇 번째
+  화면인지는 추가 화면이 창구 둘로 알려 준다(`studioCanvasV2AddTitle()` ·
+  `studioCanvasV2AddBack()`).
+- **`←` 와 `Escape` 가 같은 한 곳을 지난다**(`studioCanvasLayersAddBack()`)
+  — 단계가 두 곳에 적히면 한쪽만 고쳐지는 날 Escape 만 한 단계를 건너뛴다.
+- 하위 화면을 닫으면 단계가 **처음으로 돌아간다**. 닫아 둔 화면의 단계를
+  기억하면 `＋ 재료 추가` 가 사람마다 다른 화면을 연다.
+- 재료마다 **실제 결과를 알아볼 수 있는 썸네일**과 이름 · 한 줄 설명이
+  있다. 2열 격자이고 390px 에서도 2열이다.
+- **`추가됨` 분류 카드는 하위 화면을 열지 않는다** — 만들 것이 없고,
+  누르면 이미 있는 그 요소를 고른다(§35-4 그대로).
+
+### 36-4. 누르면 만든다
+
+§35-3 의 그 여섯 단계 그대로다(만들기 → Undo 한 칸 → 선택 → Layers 복귀 →
+Preview 외곽선 → 그 행으로 스크롤). 달라진 것은 둘이다.
+
+- 만드는 것은 **분류가 아니라 재료**다. 요청에 `materialId` 가 실린다.
+- 안내 한 줄이 **그 재료 이름**으로 적힌다("원을(를) 만들었습니다").
+
+재료 하나의 상태(`add` · `added` · `soon`)는 분류의 것과 같은 판정이되
+**그 재료의 자리 표**(`preset.targets`)를 본다. 받는 자리가 없으면 그
+재료가 `준비 중` 이고 눌리지 않는다 — 그때도 draft 에 닿지 않는다.
+
+### 36-5. 끌어다 놓기 — 놓은 자리에 생긴다
+
+#### 왜 pointer capture 인가
+
+Preview 는 iframe 이다(sandbox 에서는 iframe 안의 iframe). 그 위를 지나는
+포인터 이벤트는 보통 그 문서로 가고 부모는 아무것도 받지 못한다.
+`setPointerCapture()` 를 걸면 손을 뗄 때까지 모든 `pointermove`/`up` 이
+**부모의 그 단추**로 온다 — 그래서 프레임 안에 끌기 코드를 넣지 않아도
+되고, sandbox 경계를 넘는 새 제스처 메시지도 필요 없다.
+
+capture 를 걸지 못하면 **끌기를 포기한다**. 반쯤 붙잡힌 채로 Preview 위를
+지나면 이벤트가 프레임으로 새어 나간다.
+
+#### 재는 값 하나 — 도화지가 화면에서 차지한 상자
+
+"지금 손가락이 도화지의 어디인가"는 저장값에서 나오지 않고,
+`CANVAS_LAYOUT` 의 **분수**로도 풀리지 않는다(그 계산에는 픽셀 상자가
+있어야 한다 — §28-3 과 같은 사정이되 단위가 다르다).
+
+```text
+  parent -> frame   preview:canvas-probe   { }
+  frame -> parent   preview:canvas-box     { root, blocks[], frames[] }
+```
+
+- **끌기를 시작할 때 한 번** 묻는다. 픽셀 상자는 스크롤 · 배율마다 달라져
+  주기적으로 올릴 값이 아니고, 끌고 있는 동안에는 포인터가 부모에 붙들려
+  있어 프레임이 스크롤되지도 다시 그려지지도 않는다.
+- 재는 함수는 **세 realm 공용**이다(`measureSkinHomeCanvasBoxes()` —
+  `skin/skin-home-canvas.js`). 규칙을 복붙하면 native 와 sandbox 의 좌표가
+  서서히 달라진다.
+- 프레임이 재는 것은 **자기 뷰포트 기준**이고, sandbox 에서는 preview
+  문서가 안쪽 iframe 의 자리를 더해 올린다(inspect rects 와 **같은 한 줄** —
+  `sandboxInspectRectToPreview()`).
+- 도화지가 없으면 `root` 없이 답한다. 답을 아예 보내지 않으면 부르는 쪽이
+  "아직 안 왔다"와 "여기에는 놓을 수 없다"를 가를 수 없다.
+- 이것도 **보고**다. 저장되는 숫자는 하나도 없다.
+
+#### 자를 다시 만들지 않는다
+
+```text
+  Studio 화면 ↔ Preview 문서   studio/inspector/studio-inspector-overlay.js
+                               (studioInspectorFrameGeometry · …MapRectRaw)
+  Preview 문서 ↔ Canvas 좌표   studio/inspector/studio-canvas-v2-space.js
+                               (studioCanvasPointToCanvas · …ToFrame ·
+                                …FlowInsertIndex)
+```
+
+끌기 파일은 그 둘을 이어 붙이기만 한다. 배율 · 스크롤 · iframe · sandbox
+가 전부 그 두 경로에 이미 들어 있다.
+
+#### 어느 자리에 놓이는가
+
+| 재료 | 포인터가 있는 곳 | 결과 |
+| --- | --- | --- |
+| `frame` 을 받는 재료 | `main_visual` 위 | **그 프레임 안**(프레임 내부 자) |
+| `overlay` 를 받는 재료 | 도화지 안 | 자유 층 · 놓은 그 자리 |
+| `flow` 전용 재료 | 도화지 안 | 흐름의 **삽입선** |
+| 무엇이든 | 도화지 밖 | 금지 |
+
+- **가까운 프레임이나 자리를 임의로 고르지 않는다.** 프레임 안은 실제로 그
+  프레임 위에 놓았을 때만이고(§28-2 의 "소속은 언제나 명시적이다"), 그때
+  `frameId` 는 **놓은 그 프레임**이다 — 선택을 보지 않는다.
+- 포인터가 새 요소의 **가운데**가 된다. 왼쪽 위 모서리로 잡으면 끌고 있는
+  썸네일과 놓인 자리가 어긋나 보인다.
+- 도화지 · 프레임 **밖으로 나가지 않게** 자른다. `height:"auto"` 는 실제
+  높이를 모르므로 세로 자르기에서 0 으로 본다.
+- 흐름의 삽입선은 **블록의 위 절반**을 기준으로 정하고, 순서는 draft 배열이
+  정한다 — 숨긴 블록은 그려지지 않아 DOM 순서와 draft 인덱스가 어긋난다.
+- 범위를 벗어난 `index` 는 맨 뒤로 떨어뜨리지 않고 **자른다**(한 칸 밖은
+  사람이 겨눈 자리에 가장 가깝다).
+
+#### 기록
+
+- **놓기 전에는 저장 데이터가 한 줄도 바뀌지 않는다.** 끄는 동안 바뀌는
+  것은 화면의 표시뿐이고, 확정은 손을 놓을 때 한 번이다.
+- 성공한 drop = **Undo 한 칸**. 취소 · 금지 자리 = **0 칸**.
+- 끌기가 끝난 뒤 **그 단추의, 곧바로 오는 click 하나를 먹는다.** pointer
+  capture 를 걸어 둔 단추는 손을 어디에서 놓든 그 뒤에 click 을 받고, 그
+  click 은 "그냥 눌렀다"와 구별되지 않아 기본 자리에 하나를 더 만든다
+  (2026-09-23 실측: 금지 자리에 놓았는데 도화지 한가운데에 도형이 생겼다).
+  **그 단추의 · 600ms 안의** click 하나만 먹는다 — 조건 없이 세워 두면
+  브라우저가 click 을 보내지 않는 경우에 그 표식이 살아남아 **다음에 누르는
+  엉뚱한 단추**를 먹는다(같은 날 실측: `＋ 재료 추가` 가 한 번 안 열렸다).
+
+### 36-6. 끄는 동안 보이는 것
+
+| 자리 | 표시 |
+| --- | --- |
+| 자유 층 | 놓일 상자의 윤곽(점선) |
+| 흐름 | 삽입선 한 줄 |
+| `main_visual` 안 | **대상 프레임 강조**(실선) + 그 안에 놓일 상자의 윤곽 |
+| 금지 | 그림자가 빨갛게 바뀌고 짧은 이유가 붙는다 |
+
+- 셋 다 화면 위에 떠 있는 표시이고 전부 `pointer-events: none` 이다 —
+  끌고 있는 손이 자기 그림자나 윤곽을 잡으면 그 순간 포인터가 다른 요소로
+  넘어간다.
+- **실제 요소를 drop 전에 임시로 저장하거나 렌더 데이터에 넣지 않는다.**
+- 그림자는 재료 목록이 쓰는 그 썸네일 함수 하나로 그린다.
+- 프레임 강조와 요소 윤곽은 **따로** 그린다. 한 상자로 합치면 "어느 프레임
+  안인가"와 "그 안 어디인가"를 한꺼번에 보여 줄 수 없다.
+
+**시작하는 방법**
+
+```text
+  데스크톱(mouse · pen)  슬롭 4px 을 넘으면 시작
+  좁은 화면(touch)       350ms 길게 누르면 시작
+```
+
+350ms 는 Layers 의 끌기가 실측으로 정한 그 값이다(§32-8) — 여기서 다시
+재지 않고 그 상수를 그대로 쓴다. 두 끌기가 다른 시간을 쓰면 같은 패널
+안에서 손가락이 다르게 반응한다. 길게 누르기 **전에** 움직이면 목록을
+넘기려는 손으로 읽고 취소한다.
+
+### 36-7. 홈 구성은 끌어도 중복으로 만들지 않는다
+
+§35-4 의 그 판정을 끌기도 지난다. 이미 있으면 계획이 `금지`이고 이유는
+`이미 있습니다` 다 — **고르는 것은 누르기의 몫**이고, 끌기는 만드는
+동작이므로 만들 것이 없으면 아무 일도 하지 않는다.
+
+기존 요소의 디자인을 프리셋으로 통째로 바꾸는 기능은 **없다**. 그것은
+"이 요소의 크기 · props · 스킨 CSS 를 한꺼번에 덮어쓴다"는 뜻이고, 사용자가
+그 요소에 이미 적어 둔 값을 무엇까지 지울지가 새 계약이다.
+
+### 36-8. 이 라운드가 만들지 않은 것
+
+새 Canvas 저장 필드 · 영구 `group` 노드 · `HOME-CANVAS-V2-GROUP-1A~1C` 의
+선행 구현 · 외부 이미지 CDN · 스티커 이미지 파일 · 기존 홈 구성요소의
+통째 교체 · rich text · Crop · 필터 · `APP_BUILD_VERSION` 변경(배포하지
+않았다).
+
+### 36-9. 남은 차이
+
+- **카탈로그가 계약의 두 표보다 여전히 좁다.** 흐름의 `text`, 자유 층의
+  `logo` · `category_nav` 는 계약이 받지만 재료가 없다. 쓰기 경로가 살아
+  있는지는 `window.addStudioCanvasV2Material(target, type)` 로 e2e 가
+  잰다(제품 화면에는 그 창구를 쓰는 곳이 없다).
+- **재료 단추는 `touch-action: none` 이다.** Layers 가 손잡이 하나에만 둔
+  그 규칙과 달리 단추 전체에 있다 — 끌기 시작점이 단추 자체라 브라우저가
+  먼저 스크롤을 가져가면 350ms 길게 누르기가 영영 오지 않는다. 재료는
+  분류마다 넷 이하라 목록이 짧고, 패널은 카드 사이 여백과 아래 슬롯 칸에서
+  넘긴다. 손잡이를 따로 두는 것은 다음 라운드의 자리다.
+- **놓을 자리는 끌기를 시작할 때 한 번 잰다.** 끄는 동안 Preview 가 다시
+  그려지면(다른 창이 draft 를 바꾸는 경우) 그 상자가 낡는다. 지금은 그럴
+  경로가 없다 — 포인터가 부모에 붙들려 있고 그 사이에 draft 를 고치는 입구가
+  없기 때문이다.
+- **썸네일은 재료의 `preview` 로만 그린다.** 실제 스킨 CSS 를 끌어오지
+  않으므로, 사용자가 그 요소를 고친 뒤의 모습과는 다르다(`currentColor`
+  처럼 놓인 자리에서 풀리는 값이 섞여 있어 작은 칸에서는 뜻이 달라진다).

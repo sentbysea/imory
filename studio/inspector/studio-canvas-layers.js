@@ -642,9 +642,17 @@ function ensureStudioCanvasLayers() {
   back.type = "button";
   back.id = "studioCanvasAddBack";
 
+  /* STUDIO-LAYERS-MATERIALS-1B — 뒤로가기는 **한 단계씩**이다
+     (계약 §36-3).
+
+       재료 목록  →  요소 추가  →  Layers
+
+     그 첫 단계를 아는 곳은 추가 화면 자신이다(어느 분류를 열고
+     있는지 그쪽만 안다). 그래서 먼저 물어보고, 그쪽이 처리하지
+     않았을 때만 이 패널이 하위 화면을 닫는다. */
   back.addEventListener(
     "click",
-    () => setStudioCanvasLayersAddOpen(false)
+    () => studioCanvasLayersAddBack()
   );
 
   studioCanvasLayersAddHead.appendChild(back);
@@ -672,7 +680,10 @@ function ensureStudioCanvasLayers() {
 
     if (event.key === "Escape" && studioCanvasLayersAddOpen) {
       event.stopPropagation();
-      setStudioCanvasLayersAddOpen(false);
+
+      /* `←` 와 **같은 곳**을 지난다 — 단계가 두 곳에 적히면 한쪽만
+         고쳐지는 날 Escape 만 한 단계를 건너뛴다 */
+      studioCanvasLayersAddBack();
     }
 
   });
@@ -784,6 +795,67 @@ function ensureStudioCanvasLayers() {
      종류 표도 기본값 표도 한 벌 더 적지 않는다(계획 문서 §3).
 ========================================================== */
 
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — 뒤로가기 한 단계 (계약 §36-3)
+
+   `←` 와 Escape 가 함께 지나는 한 곳이다.
+
+     재료 목록  →  요소 추가   추가 화면이 처리한다
+     요소 추가  →  Layers      이 패널이 하위 화면을 닫는다
+
+   ★ 단계를 **이 함수 하나**로 모은다. 두 곳에 적으면 한쪽만
+     고쳐지는 날 Escape 만 한 단계를 건너뛴다.
+========================================================== */
+function studioCanvasLayersAddBack() {
+
+  if (
+    typeof window.studioCanvasV2AddBack === "function" &&
+    window.studioCanvasV2AddBack()
+  ) {
+    return;
+  }
+
+  setStudioCanvasLayersAddOpen(false);
+
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — 하위 화면의 머리
+
+   제목이 화면마다 다르다("요소 추가" · 그 분류 이름). 무엇을
+   적을지 아는 곳은 추가 화면이고, 어디에 적을지 아는 곳은 여기다.
+   그래서 그쪽이 화면을 바꾸면 이 함수를 부른다.
+========================================================== */
+function syncStudioCanvasLayersAddHead() {
+
+  const title =
+    document.getElementById("studioCanvasAddTitle");
+
+  const back =
+    document.getElementById("studioCanvasAddBack");
+
+  if (!title || !back) {
+    return;
+  }
+
+  const deep =
+    typeof window.getStudioCanvasAddState === "function" &&
+    window.getStudioCanvasAddState().screen === "items";
+
+  title.textContent =
+    (typeof window.studioCanvasV2AddTitle === "function")
+      ? window.studioCanvasV2AddTitle()
+      : "요소 추가";
+
+  /* 어디로 돌아가는지 글자로 적는다 — 두 단계가 같은 모양이면
+     "한 번 더 눌러야 트리로 간다"를 알 수 없다 */
+  back.textContent =
+    deep ? "← 요소 추가" : "← Layers";
+
+}
+
+
 function setStudioCanvasLayersAddOpen(open) {
 
   const was =
@@ -792,7 +864,19 @@ function setStudioCanvasLayersAddOpen(open) {
   studioCanvasLayersAddOpen =
     !!open;
 
+  /* STUDIO-LAYERS-MATERIALS-1B — 하위 화면을 닫으면 다음에 열 때
+     분류 격자부터다. 닫아 둔 화면의 단계를 기억하면 `＋ 재료 추가`
+     가 사람마다 다른 화면을 연다. */
+  if (
+    !studioCanvasLayersAddOpen &&
+    typeof window.resetStudioCanvasV2AddScreen === "function"
+  ) {
+    window.resetStudioCanvasV2AddScreen();
+  }
+
   syncStudioCanvasLayersAdd();
+
+  syncStudioCanvasLayersAddHead();
 
   if (was === studioCanvasLayersAddOpen) {
     return;
@@ -927,6 +1011,9 @@ function syncStudioCanvasLayersAdd() {
 
     studioCanvasLayersAddHost.dataset.frameId =
       frameId;
+
+    /* 새로 그린 본문이 몇 번째 화면인지 머리도 따라간다 */
+    syncStudioCanvasLayersAddHead();
 
     return;
 
@@ -1659,6 +1746,10 @@ if (typeof window !== "undefined") {
   /* STUDIO-LAYERS-MATERIALS-1A — 재료 화면이 트리로 돌아오는 창구 */
   window.revealStudioCanvasLayersRow = revealStudioCanvasLayersRow;
   window.setStudioCanvasLayersAddOpen = setStudioCanvasLayersAddOpen;
+
+  /* STUDIO-LAYERS-MATERIALS-1B — 하위 화면의 머리와 뒤로가기 한 단계 */
+  window.syncStudioCanvasLayersAddHead = syncStudioCanvasLayersAddHead;
+  window.studioCanvasLayersAddBack = studioCanvasLayersAddBack;
 
   /* 진단 · 테스트가 보는 한 줄 — production 코드는 읽지 않는다 */
   window.getStudioCanvasLayersState =

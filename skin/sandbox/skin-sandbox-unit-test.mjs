@@ -381,14 +381,22 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
     하고, 그때만 `answering` 번호가 붙는다.
     CANVAS_TRANSFORM — 이동의 확정 **요청**. 확정이 아니라 부모가
     지금 draft 로 선택 · 순번 · expected · 범위를 다시 본다),
-   HOME-CANVAS-V2-ELEMENTS-1 에서 하나 더 늘어 서른하나다
+   HOME-CANVAS-V2-ELEMENTS-1 에서 하나 더 늘어 서른하나였고
    (CANVAS_LAYOUT — v2 `main_visual` 이 흐름 안에서 **어디에
     놓였는가**. 프레임의 폭 · 높이 · 배율은 부모가 저장값에서
     계산하지만 그 자리만은 앞 블록들의 실제 높이가 정해 데이터로는
     알 수 없다. 묶기 · 빼기가 화면 자리를 지키는 데 쓰는 **보고**
-    이고, 단위는 도화지 폭의 분수다 — 계약 §28-3). */
-check("[msg] 이번 라운드가 아는 type 은 정확히 서른하나다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 31,
+    이고, 단위는 도화지 폭의 분수다 — 계약 §28-3),
+   STUDIO-LAYERS-MATERIALS-1B 에서 둘이 늘어 서른셋이다
+   (CANVAS_PROBE — "지금 도화지가 화면에서 차지한 상자를 재서
+    올려라". 재료를 Preview 로 끌어다 놓을 때 **시작할 때 한 번**
+    간다.
+    CANVAS_BOX — 그 답. 도화지 · 흐름 블록 · 프레임의 **픽셀**
+    상자다. CANVAS_LAYOUT 의 분수로는 "손가락이 도화지의 어디인가"
+    를 풀 수 없기 때문이고, 그 값은 스크롤 · 배율마다 달라져서
+    주기적으로 올릴 값이 아니다 — 계약 §36-5). */
+check("[msg] 이번 라운드가 아는 type 은 정확히 서른셋이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 33,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 

@@ -1021,18 +1021,34 @@ function writeSkinHomeCanvasV2BlockOrder(regions, id, next, expected) {
 
    writeSkinHomeCanvasV2AddNode(regions, request)
 
-     request { target, type, slot, frameId }
+     request { target, type, slot, frameId, materialId, at, index }
 
        target  "flow"    → canvas.flow.blocks 의 **맨 뒤**
                "overlay" → canvas.overlays 의 **맨 뒤**
                "frame"   → 그 `main_visual` 의 `props.elements` 맨 뒤
                            (HOME-CANVAS-V2-ELEMENTS-1)
-       type    그 자리가 허용하는 종류(아래 표들)
+       type    그 자리가 허용하는 종류(아래 표들).
+               `materialId` 가 있으면 생략할 수 있고, 함께 보내면
+               프리셋의 종류와 같아야 한다.
        slot    사진이 들어가는 종류에만 — 이미지 슬롯 이름
        frameId `target:"frame"` 일 때 그 프레임 블록의 id
 
-     -> { ok:true, regions, id, target, type }
+       ── STUDIO-LAYERS-MATERIALS-1B (계약 §36) ──
+       materialId 재료 카탈로그의 id 하나
+                  (skin/skin-home-canvas-materials.js). 크기 · props ·
+                  스킨 CSS 선언이 **그 표**에서 나온다. 값 자체가
+                  요청으로 들어오는 길은 없다.
+       at         `{ x, y }` — Preview 에 **끌어다 놓은** 자리.
+                  자유 층은 도화지 좌표, 프레임 안은 프레임 내부
+                  좌표다. 포인터가 새 요소의 가운데가 되고, 상자
+                  밖으로 나가지 않게 잘린다. 없으면 지금까지의
+                  24px 계단이다.
+       index      흐름의 **삽입선**. 없으면 지금까지처럼 맨 뒤다.
+
+     -> { ok:true, regions, id, target, type, materialId, style }
      -> { ok:false, reason }
+
+        reason "material"  모르는 재료 id(또는 카탈로그가 없는 문서)
 
    ★ **기본값을 여기서 정한다.** 패널이 값을 만들어 보내면 같은
      "새 요소"가 입구마다 다른 모양으로 태어난다 — 지금은 왼쪽
@@ -1353,6 +1369,137 @@ function buildSkinHomeCanvasV2NewFrameElement(frame, type, slot, id) {
 }
 
 
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — 프리셋 · 놓은 자리 (계약 §36)
+
+   위 표들은 **종류마다 하나**의 기본값이다. 프리셋은 그 위에
+   세 칸을 덮어쓴다(크기 · props · 스킨 CSS 선언) — 그 표는
+   skin/skin-home-canvas-materials.js 한 곳이고, 여기서는 **id 를
+   그 표에 물어**서 쓴다. 값 자체가 요청으로 들어오는 길은 만들지
+   않는다(화면에서 고친 JSON 이 저장 경로로 들어오지 않게).
+
+   ★ 표가 없으면(그 파일을 싣지 않은 문서 — 이를테면 sandbox
+     프레임) `materialId` 요청은 **거절**된다. 없는 것을 기본값으로
+     조용히 바꾸지 않는다.
+========================================================== */
+function skinHomeCanvasV2Preset(id) {
+
+  const resolve =
+    (typeof resolveSkinHomeCanvasMaterialPreset === "function")
+      ? resolveSkinHomeCanvasMaterialPreset
+      : ((typeof globalThis !== "undefined" &&
+          typeof globalThis.resolveSkinHomeCanvasMaterialPreset === "function")
+          ? globalThis.resolveSkinHomeCanvasMaterialPreset
+          : null);
+
+  if (!resolve) {
+    return null;
+  }
+
+  return resolve(id);
+
+}
+
+
+/*
+  프리셋의 크기 · props 를 방금 만든 노드에 얹는다.
+
+    scale  프레임 안에 넣을 때의 자(k = baseWidth ÷ 390). 자유 층과
+           흐름에서는 1 이다.
+    limit  폭의 상한(흐름의 가용 폭). 없으면 상한이 없다.
+
+  ★ `main_visual` 의 props 는 덮어쓰지 않는다. 그 칸은 값이 아니라
+    **구조**다(baseWidth · primaryId · elements) — 프리셋이 손대면
+    프레임이 통째로 무너진다. 지금 표에 그런 항목은 없지만, 표가
+    늘어나는 날을 여기서 막는다.
+*/
+function applySkinHomeCanvasV2Preset(node, preset, scale, limit) {
+
+  /* 만들지 못한 노드(id 가 바닥났다)는 부르는 쪽이 곧바로 거절한다 */
+  if (!node || !preset) {
+    return node;
+  }
+
+  if (preset.props && node.type !== "main_visual") {
+    node.props = { ...(isSkinHomeCanvasPlainObject(node.props) ? node.props : {}), ...preset.props };
+  }
+
+  if (!preset.size) {
+    return node;
+  }
+
+  if (preset.size.width !== undefined) {
+
+    const width =
+      Math.max(1, Math.round(preset.size.width * scale));
+
+    node.width =
+      (typeof limit === "number" && limit > 0) ? Math.min(width, limit) : width;
+
+  }
+
+  if (preset.size.height !== undefined) {
+
+    node.height =
+      (preset.size.height === SKIN_HOME_CANVAS_AUTO_HEIGHT)
+        ? SKIN_HOME_CANVAS_AUTO_HEIGHT
+        : Math.max(1, Math.round(preset.size.height * scale));
+
+  }
+
+  return node;
+
+}
+
+
+/*
+  놓은 자리 — Preview 로 끌어다 놓았을 때만 들어온다(§36-5).
+
+  단위는 **그 자리의 자**다(자유 층은 도화지 좌표 · 프레임 안은
+  프레임 내부 좌표). 부르는 쪽이 그 자로 바꿔서 보낸다 — 자를 두 벌
+  만들지 않는 §26-4 의 경계 그대로다.
+
+  ★ 포인터가 새 요소의 **가운데**가 된다. 왼쪽 위 모서리로 잡으면
+    끌고 있는 썸네일과 놓인 자리가 어긋나 보인다.
+
+  ★ 도화지 · 프레임 **밖으로 나가지 않게** 자른다. 밖에 놓인 요소는
+    화면에 없고 고를 수도 없다. `height:"auto"` 는 실제 높이를 모르
+    므로 세로 자르기에서 0 으로 본다(위로만 자른다).
+*/
+function placeSkinHomeCanvasV2Node(node, at, boxWidth, boxHeight) {
+
+  if (
+    !node ||
+    !isSkinHomeCanvasPlainObject(at) ||
+    !isSkinHomeCanvasFiniteNumber(at.x) ||
+    !isSkinHomeCanvasFiniteNumber(at.y)
+  ) {
+    return node;
+  }
+
+  const width =
+    isSkinHomeCanvasFiniteNumber(node.width) ? node.width : 0;
+
+  const height =
+    isSkinHomeCanvasFiniteNumber(node.height) ? node.height : 0;
+
+  const maxX =
+    Math.max(0, boxWidth - width);
+
+  const maxY =
+    Math.max(0, boxHeight - height);
+
+  node.x =
+    Math.round(Math.min(Math.max(at.x - width / 2, 0), maxX));
+
+  node.y =
+    Math.round(Math.min(Math.max(at.y - height / 2, 0), maxY));
+
+  return node;
+
+}
+
+
 function writeSkinHomeCanvasV2AddNode(regions, request) {
 
   const value =
@@ -1369,6 +1516,28 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
   const target =
     value.target;
 
+  /* STUDIO-LAYERS-MATERIALS-1B — id 하나로 정해지는 프리셋(§36-2) */
+  const preset =
+    (value.materialId === undefined || value.materialId === null || value.materialId === "")
+      ? null
+      : skinHomeCanvasV2Preset(value.materialId);
+
+  if (value.materialId && !preset) {
+    return { ok: false, reason: "material" };
+  }
+
+  /* 그 재료가 이 자리에 놓일 수 있는가 — 표가 정한다. 카드가 화면
+     에서 고른 자리를 여기서 한 번 더 본다(§36-4). */
+  if (preset && preset.targets.indexOf(target) === -1) {
+    return { ok: false, reason: "target" };
+  }
+
+  /* 종류는 프리셋이 정한다. 부르는 쪽이 함께 보냈으면 어긋날 수
+     없다 — 어긋나면 둘 중 무엇이 참인지 모르므로 거절한다. */
+  if (preset && value.type !== undefined && value.type !== preset.type) {
+    return { ok: false, reason: "type" };
+  }
+
   /* 어느 자리가 어떤 종류를 받는가 — 두 표는 v1 · v2 의 그것
      그대로다(자동 배치는 블록 다섯, 자유 층과 프레임 안은 v1 여섯) */
   const allowed =
@@ -1376,12 +1545,12 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
       ? SKIN_HOME_CANVAS_BLOCK_TYPES
       : SKIN_HOME_CANVAS_ELEMENT_TYPES;
 
-  if (allowed.indexOf(value.type) === -1) {
+  const type =
+    preset ? preset.type : value.type;
+
+  if (allowed.indexOf(type) === -1) {
     return { ok: false, reason: "type" };
   }
-
-  const type =
-    value.type;
 
   const found =
     findSkinHomeCanvasRegion(regions);
@@ -1460,13 +1629,60 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
   let node;
 
   if (target === "flow") {
+
     node = buildSkinHomeCanvasV2NewBlock(flow, type, slot, id, used);
+
+    /* 흐름에서는 가용 폭이 상한이다(§27-3) — 프리셋도 그 자를
+       넘지 않는다 */
+    applySkinHomeCanvasV2Preset(node, preset, 1, skinHomeCanvasV2FlowWidth(flow));
+
   }
   else if (target === "frame") {
+
     node = buildSkinHomeCanvasV2NewFrameElement(frameHit.node, type, slot, id);
+
+    /* 프레임 안은 자가 다르다(§28-2 의 `k`) — 기본 크기를 줄이는
+       그 자로 프리셋의 크기도 줄인다. 두 벌을 만들지 않는다. */
+    const frameProps =
+      isSkinHomeCanvasPlainObject(frameHit.node.props) ? frameHit.node.props : {};
+
+    const frameBase =
+      isSkinHomeCanvasFiniteNumber(frameProps.baseWidth) && frameProps.baseWidth > 0
+        ? frameProps.baseWidth
+        : SKIN_HOME_CANVAS_BASE_WIDTH;
+
+    const frameHeight =
+      isSkinHomeCanvasFiniteNumber(frameProps.baseHeight) && frameProps.baseHeight > 0
+        ? frameProps.baseHeight
+        : SKIN_HOME_CANVAS_BASE_WIDTH;
+
+    applySkinHomeCanvasV2Preset(
+      node,
+      preset,
+      Math.min(1, frameBase / SKIN_HOME_CANVAS_BASE_WIDTH),
+      frameBase
+    );
+
+    placeSkinHomeCanvasV2Node(node, value.at, frameBase, frameHeight);
+
   }
   else {
+
     node = buildSkinHomeCanvasV2NewOverlay(type, slot, id, overlays.length);
+
+    applySkinHomeCanvasV2Preset(node, preset, 1, canvas.baseWidth);
+
+    placeSkinHomeCanvasV2Node(
+      node,
+      value.at,
+      isSkinHomeCanvasFiniteNumber(canvas.baseWidth)
+        ? canvas.baseWidth
+        : SKIN_HOME_CANVAS_BASE_WIDTH,
+      isSkinHomeCanvasFiniteNumber(canvas.baseHeight)
+        ? canvas.baseHeight
+        : SKIN_HOME_CANVAS_BASE_WIDTH
+    );
+
   }
 
   if (!node) {
@@ -1481,7 +1697,24 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
     const nextFlow =
       copySkinHomeCanvasObject(flow);
 
-    nextFlow.blocks = flow.blocks.concat([node]);
+    /* =====================================================
+       STUDIO-LAYERS-MATERIALS-1B — 흐름의 **삽입선**(§36-5)
+
+       기본은 지금까지와 같은 **맨 뒤**다(§27-2 의 그 이유 — "고른
+       것 옆"은 흐름에서 뜻이 둘이다). `index` 는 Preview 의 블록
+       사이에 실제로 떨어뜨렸을 때만 들어오고, 그때는 그 사이가
+       사용자가 **본** 자리다.
+
+       ★ 범위를 벗어난 숫자는 맨 뒤로 떨어뜨리지 않고 **자른다** —
+         한 칸 밖은 사람이 겨눈 자리에 가장 가까운 자리다.
+    ====================================================== */
+    const at =
+      Number.isInteger(value.index)
+        ? Math.min(Math.max(value.index, 0), flow.blocks.length)
+        : flow.blocks.length;
+
+    nextFlow.blocks =
+      flow.blocks.slice(0, at).concat([node], flow.blocks.slice(at));
 
     nextCanvas.flow = nextFlow;
 
@@ -1533,7 +1766,13 @@ function writeSkinHomeCanvasV2AddNode(regions, request) {
     regions: nextRegions,
     id: id,
     target: target,
-    type: type
+    type: type,
+
+    /* STUDIO-LAYERS-MATERIALS-1B — 어느 프리셋이었나. 부르는 쪽이
+       그 재료의 스킨 CSS 선언을 **같은 Undo 한 칸**에 적는다
+       (studio/studio-preview.js addStudioCanvasV2Node). */
+    materialId: preset ? preset.id : null,
+    style: (preset && preset.style) ? { ...preset.style } : null
   };
 
 }
@@ -2820,6 +3059,10 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_HOME_CANVAS_V2_NEW_FRAME,
     SKIN_HOME_CANVAS_V2_NEW_TEXT,
     writeSkinHomeCanvasV2AddNode,
+
+    /* STUDIO-LAYERS-MATERIALS-1B — 프리셋 · 놓은 자리 */
+    applySkinHomeCanvasV2Preset,
+    placeSkinHomeCanvasV2Node,
 
     /* HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기 */
     SKIN_HOME_CANVAS_V2_PIN_DEFAULT_POINT,

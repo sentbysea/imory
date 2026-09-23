@@ -127,6 +127,7 @@ import {
   sendSandboxInspectPreview,
   sendSandboxCanvasSelect,
   sendSandboxCanvasGeometry,
+  sendSandboxCanvasProbe,
   destroySandboxSkinFrame,
   copySandboxSidesSetting,
   copySandboxSkinSettings
@@ -1090,6 +1091,46 @@ function handleSandboxInspect(kind, payload) {
     단위는 도화지 폭의 분수이고(프로토콜의 CANVAS_LAYOUT 주석),
     그것을 Canvas 좌표로 읽는 것도 무엇에 쓰는지도 Studio 가 한다.
   */
+  /*
+    STUDIO-LAYERS-MATERIALS-1B — 끌어다 놓을 자리(계약 §36-5).
+
+    여기가 **좌표를 옮기는 유일한 자리**다. 프레임이 잰 것은 자기
+    뷰포트 기준이고, Studio 가 필요한 것은 이 문서 기준이다 —
+    inspect rects 와 **같은 한 줄**을 지난다(위
+    sandbox InspectRectToPreview). 상자 하나라도 옮기지 못하면
+    그 칸을 비워 올린다: 자리를 지어내지 않는다.
+  */
+  if (kind === "canvas-box") {
+
+    const move =
+      (list) =>
+        (Array.isArray(list) ? list : [])
+          .map(
+            (item) => {
+
+              const rect =
+                (item && typeof item === "object")
+                  ? sandboxInspectRectToPreview(item.rect)
+                  : null;
+
+              return rect ? { id: item.id, rect: rect } : null;
+
+            }
+          )
+          .filter((item) => !!item);
+
+    sandboxInspectRelay({
+      type: "preview:canvas-box",
+      remote: true,
+      root: (payload && payload.root) ? sandboxInspectRectToPreview(payload.root) : null,
+      blocks: move(payload && payload.blocks),
+      frames: move(payload && payload.frames)
+    });
+
+    return;
+
+  }
+
   if (kind === "canvas-layout") {
 
     sandboxInspectRelay({
@@ -1428,6 +1469,29 @@ export function setSandboxPreviewCanvasSelection(selection) {
      다시 보내야 할 이유가 "켜져 있을 때"로 한정되지 않는다 — 프레임
      쪽이 옛 좌표를 들고 있으면 안 되기 때문이다.
 ========================================================== */
+
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — 끌기를 시작할 때 한 번 묻는다
+
+   requestSandboxPreviewCanvasBox() -> boolean
+
+   답은 CANVAS_BOX 로 올라오고, 위 relay 가 이 문서 좌표로 옮겨
+   `preview:canvas-box` 로 Studio 에 올린다(계약 §36-5).
+
+   ★ 프레임이 없으면 거짓이다. 그때는 native 문서가 스스로 답한다
+     (studio/preview/preview-bridge.js postCanvasBoxToParent).
+========================================================== */
+
+export function requestSandboxPreviewCanvasBox() {
+
+  if (!hasSandboxPreviewFrame()) {
+    return false;
+  }
+
+  return sendSandboxCanvasProbe(sandboxHandle);
+
+}
+
 
 export function setSandboxPreviewCanvasGeometry(geometry) {
 

@@ -1,8 +1,8 @@
 /* =========================================================
    STUDIO — v2 HOME 캔버스에 **재료를 추가하는 자리**
-   (HOME-CANVAS-V2-ADD-1 · STUDIO-LAYERS-MATERIALS-1A)
+   (HOME-CANVAS-V2-ADD-1 · STUDIO-LAYERS-MATERIALS-1A · 1B)
 
-   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §27 · §35
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §27 · §35 · §36
    로드맵:    docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §3
 
    ── 왜 파일이 갈라져 있나 ──────────────────────────────
@@ -14,49 +14,42 @@
 
    ── 어느 패널에 붙는가 (STUDIO-LAYERS-SHELL-1) ─────────
    **Layers 패널**이다(studio/inspector/studio-canvas-layers.js).
-   STUDIO-LAYERS-MATERIALS-1A 부터는 그 패널의 **하위 화면**이다 —
    `＋ 재료 추가`를 누르면 트리가 물러나고 이 화면이 그 자리에 선다.
-   머리(`← Layers` · 제목)는 Layers 가 그린다(그 패널이 어디로
-   돌아갈지를 아는 유일한 곳이라), 이 파일은 **본문**만 만든다.
+   머리(`←` · 제목)는 Layers 가 그린다 — 그 패널이 어디로 돌아갈지를
+   아는 유일한 곳이라. 이 파일은 **본문**만 만들고, 지금 몇 번째
+   화면인지는 아래 두 창구로 알려 준다.
 
-   ── 이 라운드가 바꾼 것 (STUDIO-LAYERS-MATERIALS-1A) ────
-   화면의 **생김새와 고르는 방법**뿐이다. 세로로 늘어선 글자 단추
-   대신 분류 둘과 카드 격자를 그린다.
+     studioCanvasV2AddTitle()   머리에 적을 제목
+     studioCanvasV2AddBack()    한 단계 뒤로 — 더 갈 데가 없으면 false
 
-     · 쓰기 경로는 한 글자도 바뀌지 않았다 —
-       commitStudioCanvasAddNode() → addStudioCanvasV2Node() →
-       writeSkinHomeCanvasV2AddNode() 그대로다.
-     · 새 저장 모양도 새 재료 종류도 만들지 않았다. 카드가 가리키는
-       것은 전부 계약이 이미 받는 종류다(§27-2 · §28-2).
-     · 종류 표를 한 벌 더 적지 않는다 — 어느 자리가 무엇을 받는지는
-       여전히 관문(studioCanvasV2AddTypes)에 묻는다.
+   ── 이 라운드가 바꾼 것 (STUDIO-LAYERS-MATERIALS-1B) ────
 
-   ── 화면 (§35-2) ───────────────────────────────────────
+   1A 에서 카드 하나는 재료 **하나**였다. 이제 카드는 **분류**이고,
+   누르면 같은 패널에서 그 분류의 **재료 목록**이 열린다.
 
-     홈 구성   로고 · 카테고리 메뉴 · 메인 비주얼
-     꾸미기    사진 · 글자 · 구분선 · 도형 · 디자인 요소
+     Layers  ←  요소 추가  ←  재료 목록
 
-   "필수 요소"라고 부르지 않는다. 지우거나 숨길 수 있는 것들이라
-   사용자 화면의 이름은 **홈 구성** 하나로 통일한다.
+   · 목록도 표도 이 파일에 없다. 분류 · 재료 · 기본값 · 썸네일
+     데이터는 전부 skin/skin-home-canvas-materials.js 한 곳이다.
+   · 카드가 쓰기 경로에 보내는 것은 **재료 id 한 줄**이다. DOM 이
+     임의 JSON 을 들고 있지 않다(계약 §36-2).
+   · 쓰기 경로는 그대로다 — commitStudioCanvasAddNode() →
+     addStudioCanvasV2Node() → writeSkinHomeCanvasV2AddNode().
+   · 새 저장 모양도 새 재료 종류도 만들지 않았다.
 
-   ── 카드 하나가 아는 것 ────────────────────────────────
+   ── 카드(분류) 하나가 아는 것 ──────────────────────────
 
      type      계약의 재료 종류 하나
      targets   넣을 자리의 **우선순위**. 앞에서부터 "지금 그 자리가
                이 종류를 받는가"를 관문에 물어 첫 번째로 되는 곳을
                쓴다. 되는 곳이 없으면 그 카드는 **준비 중**이다.
      unique    이미 있으면 새로 만들지 않고 **그것을 고른다**(§35-4)
-     items     하위 재료 목록. 지금은 카드마다 하나뿐이라 누르면
-               곧바로 그 하나를 만든다. 둘 이상이 되는 날
-               (STUDIO-LAYERS-MATERIALS-1B) 그때 하위 화면이 열린다 —
-               이번 라운드에서 그 화면을 미리 만들지 않는다.
 
    ── 사진이 들어가는 종류 ───────────────────────────────
    `photo` · `sticker` · `logo` 와 `main_visual` 의 primary 사진은
    **이미지 슬롯 이름**이 필요하다(계약 §7). 그래서 이 화면 아래에
    슬롯 고르기 한 칸이 그대로 있고, 고르지 않으면 **빈 슬롯 하나를
-   함께 선언한다** — 그림이 아직 없어도 저장되고 그려지며(빈 wrapper),
-   나중에 Layers 의 그 행에서 사진을 넣을 수 있다.
+   함께 선언한다**.
 
    ── 쓰기 ────────────────────────────────────────────────
    commitStudioCanvasAddNode() 하나를 지난다(관문 · draft · 기록 ·
@@ -80,7 +73,7 @@ const STUDIO_CANVAS_V2_ADD_LABELS = {
 };
 
 
-/* 화면의 두 분류 (§35-2) */
+/* 화면의 두 분류 묶음 (§35-2) */
 const STUDIO_CANVAS_MATERIAL_GROUPS = [
   {
     key: "home",
@@ -95,128 +88,38 @@ const STUDIO_CANVAS_MATERIAL_GROUPS = [
 ];
 
 
-/* =========================================================
-   카드 표
+/*
+  분류 카드 표 · 재료 표 — **여기 없다**(§36-2).
 
-   ★ 여기 적힌 것은 **이름 · 설명 · 어느 자리를 먼저 보는가** 뿐이다.
-     받는 종류의 표도, 새 요소의 기본값도 여기 없다(각각 계약의 두
-     배열과 순수 함수가 정한다).
+  skin/skin-home-canvas-materials.js 가 그 둘을 갖고, 이 파일은
+  호출 시점에 읽는다. 로드 순서가 어긋나도(그럴 일은 없지만) 화면이
+  비는 것으로 끝나고, 사본을 만들어 두 벌이 되지 않는다.
+*/
+function studioCanvasMaterialCategories() {
 
-   ★ `targets` 의 `frame` 은 지금 `main_visual` 을 고르고 있을 때만
-     쓸 수 있다(§28-2 — 소속은 언제나 명시적이다). 고르고 있지 않으면
-     자동으로 다음 자리(`overlay`)로 내려간다.
-========================================================== */
-const STUDIO_CANVAS_MATERIAL_CARDS = [
+  return Array.isArray(window.SKIN_HOME_CANVAS_MATERIAL_CATEGORIES)
+    ? window.SKIN_HOME_CANVAS_MATERIAL_CATEGORIES
+    : [];
 
-  {
-    key: "logo",
-    group: "home",
-    type: "logo",
-    targets: ["flow"],
-    unique: true,
-    label: "로고",
-    desc: "사이트 이름이나 로고 이미지",
-    icon: "logo",
-    items: [{ key: "logo", label: "로고", type: "logo" }]
-  },
+}
 
-  {
-    key: "category_nav",
-    group: "home",
-    type: "category_nav",
-    targets: ["flow"],
-    unique: true,
-    label: "카테고리 메뉴",
-    desc: "글 목록으로 이동하는 메뉴",
-    icon: "nav",
-    items: [{ key: "category_nav", label: "카테고리 메뉴", type: "category_nav" }]
-  },
 
-  {
-    key: "main_visual",
-    group: "home",
-    type: "main_visual",
-    targets: ["flow"],
-    unique: true,
-    label: "메인 비주얼",
-    desc: "홈의 중심이 되는 사진 영역",
-    icon: "main",
-    items: [{ key: "main_visual", label: "메인 비주얼", type: "main_visual" }]
-  },
+function studioCanvasMaterialCategoryOf(key) {
 
-  {
-    key: "photo",
-    group: "decor",
-    type: "photo",
-    targets: ["frame", "overlay"],
-    unique: false,
-    label: "사진",
-    desc: "원하는 이미지를 배치",
-    icon: "photo",
-    items: [{ key: "photo", label: "사진", type: "photo" }]
-  },
+  return (typeof window.skinHomeCanvasMaterialCategory === "function")
+    ? window.skinHomeCanvasMaterialCategory(key)
+    : null;
 
-  {
-    key: "text",
-    group: "decor",
-    type: "text",
-    targets: ["frame", "overlay"],
-    unique: false,
-    label: "글자",
-    desc: "제목이나 설명 추가",
-    icon: "text",
-    items: [{ key: "text", label: "글자", type: "text" }]
-  },
+}
 
-  {
-    key: "divider",
-    group: "decor",
-    type: "divider",
 
-    /* 흐름만 받는다(§27-2) — 자유 층에는 `divider` 가 없다 */
-    targets: ["flow"],
-    unique: false,
-    label: "구분선",
-    desc: "영역 사이를 구분",
-    icon: "divider",
-    items: [{ key: "divider", label: "구분선", type: "divider" }]
-  },
+function studioCanvasMaterialItems(categoryKey) {
 
-  {
-    key: "shape",
-    group: "decor",
-    type: "shape",
-    targets: ["frame", "overlay"],
-    unique: false,
-    label: "도형",
-    desc: "사각형·원 등 기본 도형",
-    icon: "shape",
+  return (typeof window.skinHomeCanvasMaterialsOf === "function")
+    ? window.skinHomeCanvasMaterialsOf(categoryKey)
+    : [];
 
-    /* ★ 계약에는 `rect` · `ellipse` · `line` 셋이 있지만(§8) 지금
-       쓰기 경로가 만드는 것은 기본값 하나(`rect`)다. 나머지 둘을
-       고르는 하위 화면이 STUDIO-LAYERS-MATERIALS-1B 다 — 여기서
-       임시 데이터로 만들지 않는다. */
-    items: [{ key: "shape_rect", label: "사각형", type: "shape" }]
-  },
-
-  {
-    key: "sticker",
-    group: "decor",
-    type: "sticker",
-    targets: ["frame", "overlay"],
-    unique: false,
-    label: "디자인 요소",
-    desc: "테이프·스티커 같은 장식",
-    icon: "sticker",
-
-    /* ★ 테이프 · 종이 조각 · 배지 같은 **프리셋**은 아직 없다.
-       지금 계약으로 표현되는 장식은 `sticker` 하나이고, 그 하나를
-       곧바로 만든다(§35-6). 프리셋 데이터와 이미지를 이번 라운드에
-       대량으로 들여오지 않는다. */
-    items: [{ key: "sticker", label: "스티커", type: "sticker" }]
-  }
-
-];
+}
 
 
 /* =========================================================
@@ -313,6 +216,145 @@ function studioCanvasMaterialIcon(kind) {
 
 
 /* =========================================================
+   재료 썸네일 (STUDIO-LAYERS-MATERIALS-1B · §36-3)
+
+   "실제 결과를 알아볼 수 있는" 그림이다. 그리는 재료는 카탈로그의
+   `preview` 한 칸뿐이고 — DOM 도 HTML 도 아닌 **데이터**다 — 여기서
+   그것을 작은 상자 하나로 옮긴다.
+
+   ★ 값은 **CSSOM 으로** 쓴다(`style` 속성이 아니다). 렌더 CSS 가
+     스킨마다 다른 값을 갖는 자리가 아니고, CSP 검사 대상도 아니다
+     (skin/skin-home-canvas-editor-runtime.js 의 그 방법과 같다).
+
+   ★ 썸네일은 **자기 데이터**로만 그린다. 재료가 실제로 쓰는
+     스킨 CSS 선언(`style`)을 그대로 끌어오지 않는다 — 그 값은
+     `currentColor` 처럼 놓인 자리에서 풀리는 것이 섞여 있어서,
+     작은 칸에서는 뜻이 달라진다.
+========================================================== */
+
+/* 썸네일 상자의 기준 — 칸이 이만큼이고 그 안에 재료를 앉힌다 */
+const STUDIO_MATERIAL_THUMB = { width: 44, height: 34 };
+
+
+function studioCanvasMaterialThumb(item) {
+
+  const wrap =
+    document.createElement("span");
+
+  wrap.className = "studio-material-item-thumb";
+  wrap.setAttribute("aria-hidden", "true");
+
+  const preview =
+    (item && item.preview && typeof item.preview === "object") ? item.preview : {};
+
+  const kind =
+    typeof preview.kind === "string" ? preview.kind : "shape";
+
+  /* 분류 아이콘을 쓰는 것들 — 홈 구성 셋은 "어떻게 생겼는가"가 아니라
+     "무엇인가"로 알아본다(로고 · 메뉴 · 메인 비주얼) */
+  if (kind === "logo" || kind === "nav" || kind === "main") {
+
+    wrap.dataset.thumbKind = kind;
+    wrap.appendChild(studioCanvasMaterialIcon(kind));
+
+    return wrap;
+
+  }
+
+  const box =
+    document.createElement("span");
+
+  box.className = "studio-material-thumb-box";
+
+  wrap.dataset.thumbKind = kind;
+
+  if (kind === "divider") {
+
+    const thickness =
+      (typeof preview.thickness === "number" && preview.thickness > 0)
+        ? preview.thickness
+        : 2;
+
+    box.style.setProperty("width", `${STUDIO_MATERIAL_THUMB.width}px`);
+
+    if (preview.dash) {
+      box.style.setProperty("height", "0px");
+      box.style.setProperty("border-top", `${thickness}px dashed currentColor`);
+      box.style.setProperty("background", "none");
+    }
+    else {
+      box.style.setProperty("height", `${thickness}px`);
+    }
+
+    wrap.appendChild(box);
+
+    return wrap;
+
+  }
+
+  if (kind === "text") {
+
+    const size =
+      (typeof preview.size === "number" && preview.size > 0) ? preview.size : 10;
+
+    box.classList.add("studio-material-thumb-box--text");
+
+    box.style.setProperty("font-size", `${size}px`);
+    box.style.setProperty(
+      "font-weight",
+      preview.weight === "700" ? "700" : "400"
+    );
+
+    box.textContent = "Aa";
+
+    wrap.appendChild(box);
+
+    return wrap;
+
+  }
+
+  /* photo · sticker · shape — 상자 하나. 비율과 모서리가 차이다 */
+
+  const ratio =
+    (typeof preview.ratio === "number" && preview.ratio > 0) ? preview.ratio : 1;
+
+  const thickness =
+    (typeof preview.thickness === "number" && preview.thickness > 0)
+      ? preview.thickness
+      : 0;
+
+  let width =
+    STUDIO_MATERIAL_THUMB.width;
+
+  let height =
+    thickness ? thickness : Math.round(width / ratio);
+
+  if (height > STUDIO_MATERIAL_THUMB.height) {
+    height = STUDIO_MATERIAL_THUMB.height;
+    width = Math.round(height * ratio);
+  }
+
+  box.style.setProperty("width", `${width}px`);
+  box.style.setProperty("height", `${height}px`);
+
+  if (typeof preview.radius === "string" && preview.radius !== "0") {
+    box.style.setProperty("border-radius", preview.radius);
+  }
+
+  /* 사진과 장식은 **그림이 들어올 자리**다 — 칠하지 않고 테두리로
+     자리를 보여 준다(§36-2 의 그 이유와 같다) */
+  if (kind === "photo" || kind === "sticker") {
+    box.classList.add("studio-material-thumb-box--slot");
+  }
+
+  wrap.appendChild(box);
+
+  return wrap;
+
+}
+
+
+/* =========================================================
    HOME-CANVAS-V2-ELEMENTS-1 — `main_visual` **안**에 넣는 자리
 
    ★ 이 한 줄만 선택을 본다. 다른 두 자리는 "어디에 넣을지"가
@@ -363,7 +405,11 @@ const STUDIO_CANVAS_V2_ADD_REJECT = {
   "no-skin": "스킨을 아직 불러오지 못했습니다.",
 
   /* HOME-CANVAS-V2-ELEMENTS-1 — 프레임 안에 넣는 자리 */
-  frame: "어느 메인 비주얼 안인지 알 수 없습니다 — 그 프레임을 다시 골라 주세요."
+  frame: "어느 메인 비주얼 안인지 알 수 없습니다 — 그 프레임을 다시 골라 주세요.",
+
+  /* STUDIO-LAYERS-MATERIALS-1B — 카탈로그에 없는 재료 */
+  material: "그 재료를 찾지 못했습니다 — 목록을 다시 열어 주세요.",
+  target: "이 재료는 그 자리에 넣을 수 없습니다."
 };
 
 
@@ -384,16 +430,106 @@ let studioCanvasV2AddSlotChoice = null;
   예전에는 Inspector 의 입력 장부(studioCanvasInspectorInputs.addSlot)
   에 넣어 두었다. 그 장부는 **고른 요소가 바뀔 때마다 비워지는**
   것이라, 추가 자리가 Select 를 떠나 Layers 로 옮겨 온 지금은 그
-  장부에 매달아 둘 수 없다(Select 를 한 번 다시 그리면 Layers 안에
-  살아 있는 칸의 참조가 사라진다). 그래서 이 파일이 직접 들고 있고,
+  장부에 매달아 둘 수 없다. 그래서 이 파일이 직접 들고 있고,
   Layers 가 화면을 다시 만들면 새 칸이 이 자리를 대신한다.
 */
 let studioCanvasV2AddSlotSelect = null;
 
 
-/* 지금 그려져 있는 카드 단추들 — key → button. 같은 이유로 이
-   파일이 직접 들고 있고, 화면을 다시 만들면 통째로 갈린다. */
+/* 지금 그려져 있는 분류 카드들 — key → button */
 let studioCanvasMaterialCardNodes = {};
+
+/* 지금 그려져 있는 재료 단추들 — id → button */
+let studioCanvasMaterialItemNodes = {};
+
+
+/* =========================================================
+   지금 몇 번째 화면인가 (STUDIO-LAYERS-MATERIALS-1B · §36-3)
+
+     null        분류 카드 격자 ("요소 추가")
+     <카테고리>  그 분류의 재료 목록
+
+   ★ **화면 상태**다. 저장되지 않고 Undo 에도 들어가지 않는다.
+     Layers 가 하위 화면을 닫으면 여기도 처음으로 돌아간다.
+========================================================== */
+let studioCanvasMaterialScreen = null;
+
+
+function studioCanvasV2AddTitle() {
+
+  const category =
+    studioCanvasMaterialScreen
+      ? studioCanvasMaterialCategoryOf(studioCanvasMaterialScreen)
+      : null;
+
+  return category ? category.label : "요소 추가";
+
+}
+
+
+/*
+  한 단계 뒤로.
+
+    true   이 파일이 처리했다(재료 목록 → 요소 추가)
+    false  더 갈 데가 없다 → Layers 가 하위 화면을 닫는다
+
+  ★ `← ` 와 Escape 가 **같은 이 함수**를 지난다. 뒤로가기 단계가
+    두 곳에 적히면 한쪽만 고쳐지는 날 Escape 만 한 단계를 건너뛴다.
+*/
+function studioCanvasV2AddBack() {
+
+  if (!studioCanvasMaterialScreen) {
+    return false;
+  }
+
+  setStudioCanvasMaterialScreen(null);
+
+  return true;
+
+}
+
+
+/* Layers 가 하위 화면을 닫을 때 — 다음에 열면 분류 격자부터다 */
+function resetStudioCanvasV2AddScreen() {
+
+  studioCanvasMaterialScreen = null;
+
+}
+
+
+function setStudioCanvasMaterialScreen(key) {
+
+  studioCanvasMaterialScreen =
+    (typeof key === "string" && key) ? key : null;
+
+  const host =
+    document.getElementById("studioCanvasAdd");
+
+  if (host && host.parentNode) {
+
+    const parent =
+      host.parentNode;
+
+    parent.replaceChild(buildStudioCanvasV2AddSection(), host);
+
+  }
+
+  /* 머리(제목 · `←`)를 아는 곳은 Layers 다 — 그쪽에 다시 그리라고
+     알린다. 창구가 없으면(이 파일만 실린 문서) 본문만 바뀐다. */
+  if (typeof window.syncStudioCanvasLayersAddHead === "function") {
+    window.syncStudioCanvasLayersAddHead();
+  }
+
+  /* 화면이 바뀌었으면 초점을 첫 재료로 옮긴다 — 키보드만 쓰는
+     사람이 사라진 단추에 초점을 둔 채 남지 않게 */
+  const first =
+    document.querySelector(".studio-material-item, .studio-material-card");
+
+  if (first && typeof first.focus === "function") {
+    first.focus();
+  }
+
+}
 
 
 /* 지금 이 패널을 그릴 자리인가 — 선택과 무관하다 */
@@ -561,7 +697,7 @@ function setStudioCanvasV2AddMessage(text, isError) {
 
 
 /* =========================================================
-   카드 하나의 지금 상태 (§35-3 · §35-4)
+   카드 · 재료 하나의 지금 상태 (§35-3 · §35-4 · §36-4)
 
      add    누르면 만든다
      added  이미 있다 → 누르면 **그것을 고른다**(중복으로 만들지 않는다)
@@ -570,10 +706,10 @@ function setStudioCanvasV2AddMessage(text, isError) {
    ★ 셋 다 **읽기**다. 여기서 draft 를 만지지 않는다.
 ========================================================== */
 
-/* `unique` 카드가 가리키는, 이미 있는 그 요소 — 없으면 null */
-function studioCanvasMaterialExistingId(card) {
+/* `unique` 분류가 가리키는, 이미 있는 그 요소 — 없으면 null */
+function studioCanvasMaterialExistingId(category) {
 
-  if (!card.unique || typeof window.studioCanvasNodeList !== "function") {
+  if (!category.unique || typeof window.studioCanvasNodeList !== "function") {
     return null;
   }
 
@@ -581,15 +717,15 @@ function studioCanvasMaterialExistingId(card) {
      있으면 "이미 있는" 것이다 — 사용자가 보는 화면에는 로고가 하나
      있기 때문이다. */
   const hit =
-    window.studioCanvasNodeList().find((node) => node && node.type === card.type);
+    window.studioCanvasNodeList().find((node) => node && node.type === category.type);
 
   return hit ? hit.id : null;
 
 }
 
 
-/* 이 카드를 지금 넣을 수 있는 자리 — 없으면 null(준비 중) */
-function studioCanvasMaterialTarget(card) {
+/* 이 종류를 지금 넣을 수 있는 자리 — 없으면 null(준비 중) */
+function studioCanvasMaterialTarget(targets, type) {
 
   if (typeof window.studioCanvasV2AddTypes !== "function") {
     return null;
@@ -598,10 +734,13 @@ function studioCanvasMaterialTarget(card) {
   const frameId =
     studioCanvasV2AddFrameId();
 
-  for (let i = 0; i < card.targets.length; i += 1) {
+  const list =
+    Array.isArray(targets) ? targets : [];
+
+  for (let i = 0; i < list.length; i += 1) {
 
     const target =
-      card.targets[i];
+      list[i];
 
     /* 프레임 안은 **어느 프레임인가**를 알 때만 쓴다(§28-2) */
     if (target === "frame" && !frameId) {
@@ -611,7 +750,7 @@ function studioCanvasMaterialTarget(card) {
     const types =
       window.studioCanvasV2AddTypes(target);
 
-    if (Array.isArray(types) && types.indexOf(card.type) !== -1) {
+    if (Array.isArray(types) && types.indexOf(type) !== -1) {
       return target;
     }
 
@@ -622,22 +761,65 @@ function studioCanvasMaterialTarget(card) {
 }
 
 
-function studioCanvasMaterialState(card) {
+function studioCanvasMaterialState(category) {
 
   const existingId =
-    studioCanvasMaterialExistingId(card);
+    studioCanvasMaterialExistingId(category);
 
   if (existingId) {
     return { state: "added", target: null, existingId: existingId };
   }
 
   const target =
-    studioCanvasMaterialTarget(card);
+    studioCanvasMaterialTarget(category.targets, category.type);
 
   return {
     state: target ? "add" : "soon",
     target: target,
     existingId: null
+  };
+
+}
+
+
+/*
+  재료 하나의 상태 — 분류의 것과 같은 판정이되 **그 재료의 자리
+  표**를 본다(계약 §36-4). 표를 여기서 다시 적지 않고 카탈로그의
+  resolve 를 지난다.
+*/
+function studioCanvasMaterialItemState(item) {
+
+  const category =
+    studioCanvasMaterialCategoryOf(item.category);
+
+  if (!category) {
+    return { state: "soon", target: null, existingId: null, preset: null };
+  }
+
+  const preset =
+    (typeof window.resolveSkinHomeCanvasMaterialPreset === "function")
+      ? window.resolveSkinHomeCanvasMaterialPreset(item.id)
+      : null;
+
+  if (!preset) {
+    return { state: "soon", target: null, existingId: null, preset: null };
+  }
+
+  const existingId =
+    studioCanvasMaterialExistingId(category);
+
+  if (existingId) {
+    return { state: "added", target: null, existingId: existingId, preset: preset };
+  }
+
+  const target =
+    studioCanvasMaterialTarget(preset.targets, preset.type);
+
+  return {
+    state: target ? "add" : "soon",
+    target: target,
+    existingId: null,
+    preset: preset
   };
 
 }
@@ -653,10 +835,13 @@ function studioCanvasMaterialState(card) {
      하나이고 거기서 막히면 아무것도 바뀌지 않는다. 그때는 이 화면에
      머문 채 왜 안 됐는지만 적는다.
 ========================================================== */
-function addStudioCanvasV2Material(target, type) {
+function addStudioCanvasV2Material(target, type, options) {
 
   const select =
     studioCanvasV2AddSlotSelect;
+
+  const extra =
+    (options && typeof options === "object") ? options : {};
 
   const result =
     window.commitStudioCanvasAddNode({
@@ -666,9 +851,23 @@ function addStudioCanvasV2Material(target, type) {
 
       /* HOME-CANVAS-V2-ELEMENTS-1 — 프레임 안은 **어느 프레임인가**를
          함께 보낸다. 누르는 그 순간의 선택에서 읽으므로, 그리고 나서
-         선택이 바뀌었으면 관문이 다시 본다. */
+         선택이 바뀌었으면 관문이 다시 본다.
+
+         ★ STUDIO-LAYERS-MATERIALS-1B — 끌어다 놓았을 때는 **놓은
+           그 프레임**이다(§36-5). 그때는 선택을 보지 않는다 —
+           손가락이 올라가 있던 프레임이 곧 사용자가 고른 것이다. */
       frameId:
-        (target === "frame") ? (studioCanvasV2AddFrameId() || "") : ""
+        (target !== "frame")
+          ? ""
+          : ((typeof extra.frameId === "string" && extra.frameId)
+              ? extra.frameId
+              : (studioCanvasV2AddFrameId() || "")),
+
+      /* STUDIO-LAYERS-MATERIALS-1B — 재료 id 한 줄 · 끌어다 놓은
+         자리 · 흐름의 삽입선(계약 §36) */
+      materialId: (typeof extra.materialId === "string") ? extra.materialId : "",
+      at: extra.at || null,
+      index: Number.isInteger(extra.index) ? extra.index : null
     });
 
   if (!result || !result.accepted) {
@@ -688,7 +887,9 @@ function addStudioCanvasV2Material(target, type) {
   }
 
   const name =
-    STUDIO_CANVAS_V2_ADD_LABELS[type] || type;
+    (typeof extra.label === "string" && extra.label)
+      ? extra.label
+      : (STUDIO_CANVAS_V2_ADD_LABELS[result.type || type] || type);
 
   setStudioCanvasV2AddMessage("", false);
 
@@ -739,10 +940,18 @@ function selectStudioCanvasMaterial(elementId) {
 }
 
 
-function studioCanvasMaterialClick(card) {
+/*
+  분류 카드를 눌렀을 때.
+
+    added  이미 있는 그 요소를 고른다(하위 화면을 열지 않는다 —
+           새로 만들 것이 없으므로 §35-4 · §36-6)
+    soon   왜 안 되는지만 적는다
+    add    그 분류의 **재료 목록**을 연다(§36-3)
+*/
+function studioCanvasMaterialClick(category) {
 
   const now =
-    studioCanvasMaterialState(card);
+    studioCanvasMaterialState(category);
 
   if (now.state === "added") {
     selectStudioCanvasMaterial(now.existingId);
@@ -755,7 +964,7 @@ function studioCanvasMaterialClick(card) {
        (합성 클릭 · 낡은 화면에서 새어 들어올 수 있으므로) 같은
        판정을 한 번 더 한다. */
     setStudioCanvasV2AddMessage(
-      `${card.label}은(는) 아직 준비 중입니다.`,
+      `${category.label}은(는) 아직 준비 중입니다.`,
       false
     );
 
@@ -763,33 +972,65 @@ function studioCanvasMaterialClick(card) {
 
   }
 
-  /* 지금은 카드마다 재료가 하나다 — 누르면 곧바로 그 하나를 만든다.
-     둘 이상이 되는 날 여기서 하위 화면이 열린다(MATERIALS-1B). */
-  addStudioCanvasV2Material(now.target, card.items[0].type);
+  setStudioCanvasV2AddMessage("", false);
+
+  setStudioCanvasMaterialScreen(category.key);
+
+}
+
+
+/* 재료 하나를 눌렀을 때 — 여기서 실제로 만들어진다 */
+function studioCanvasMaterialItemClick(item) {
+
+  const now =
+    studioCanvasMaterialItemState(item);
+
+  if (now.state === "added") {
+    selectStudioCanvasMaterial(now.existingId);
+    return;
+  }
+
+  if (now.state === "soon") {
+
+    setStudioCanvasV2AddMessage(
+      `${item.label}은(는) 지금 넣을 자리가 없습니다.`,
+      false
+    );
+
+    return;
+
+  }
+
+  addStudioCanvasV2Material(
+    now.target,
+    now.preset.type,
+    { materialId: item.id, label: item.label }
+  );
 
 }
 
 
 /* =========================================================
-   카드 격자
+   분류 카드 격자
 ========================================================== */
 
-function studioCanvasMaterialCard(card) {
+function studioCanvasMaterialCard(category) {
 
   const button =
     document.createElement("button");
 
   button.type = "button";
   button.className = "studio-material-card";
-  button.id = `studioCanvasAddCard-${card.key}`;
+  button.id = `studioCanvasAddCard-${category.key}`;
 
-  button.dataset.materialKey = card.key;
-  button.dataset.materialType = card.type;
+  button.dataset.materialKey = category.key;
+  button.dataset.materialType = category.type;
 
-  /* 하위 재료가 몇인가 — 지금은 전부 1 이다(MATERIALS-1B 가 늘린다) */
-  button.dataset.materialItems = String(card.items.length);
+  /* 하위 재료가 몇인가 — 목록 화면이 그만큼 그린다 */
+  button.dataset.materialItems =
+    String(studioCanvasMaterialItems(category.key).length);
 
-  button.appendChild(studioCanvasMaterialIcon(card.icon));
+  button.appendChild(studioCanvasMaterialIcon(category.icon));
 
   const body =
     document.createElement("span");
@@ -800,13 +1041,13 @@ function studioCanvasMaterialCard(card) {
     document.createElement("span");
 
   name.className = "studio-material-card-name";
-  name.textContent = card.label;
+  name.textContent = category.label;
 
   const desc =
     document.createElement("span");
 
   desc.className = "studio-material-card-desc";
-  desc.textContent = card.desc;
+  desc.textContent = category.desc;
 
   body.appendChild(name);
   body.appendChild(desc);
@@ -823,9 +1064,9 @@ function studioCanvasMaterialCard(card) {
 
   button.appendChild(badge);
 
-  button.addEventListener("click", () => studioCanvasMaterialClick(card));
+  button.addEventListener("click", () => studioCanvasMaterialClick(category));
 
-  studioCanvasMaterialCardNodes[card.key] = button;
+  studioCanvasMaterialCardNodes[category.key] = button;
 
   return button;
 
@@ -838,17 +1079,17 @@ const STUDIO_MATERIAL_BADGE_TEXT = {
 };
 
 
-function syncStudioCanvasMaterialCard(card) {
+function syncStudioCanvasMaterialCard(category) {
 
   const button =
-    studioCanvasMaterialCardNodes[card.key];
+    studioCanvasMaterialCardNodes[category.key];
 
   if (!button) {
     return;
   }
 
   const now =
-    studioCanvasMaterialState(card);
+    studioCanvasMaterialState(category);
 
   button.dataset.materialState = now.state;
 
@@ -876,50 +1117,193 @@ function syncStudioCanvasMaterialCard(card) {
   button.setAttribute(
     "aria-label",
     now.state === "added"
-      ? `${card.label} — 이미 있습니다. 누르면 그 요소를 고릅니다`
+      ? `${category.label} — 이미 있습니다. 누르면 그 요소를 고릅니다`
       : (now.state === "soon"
-          ? `${card.label} — 준비 중`
-          : `${card.label} 추가 — ${card.desc}`)
+          ? `${category.label} — 준비 중`
+          : `${category.label} — 누르면 재료를 고릅니다`)
   );
 
 }
 
 
-/* 꾸미기 묶음의 안내 한 줄 — 지금 어디에 들어가는가 */
-function syncStudioCanvasMaterialGroupNote() {
+/* =========================================================
+   재료 목록 (STUDIO-LAYERS-MATERIALS-1B · §36-3)
+========================================================== */
 
-  const node =
-    document.getElementById("studioCanvasAddGroupNote-decor");
+function studioCanvasMaterialItemButton(item) {
 
-  if (!node) {
-    return;
-  }
+  const button =
+    document.createElement("button");
 
-  const frameId =
-    studioCanvasV2AddFrameId();
+  button.type = "button";
+  button.className = "studio-material-item";
+  button.id = `studioCanvasAddItem-${item.id}`;
 
-  node.textContent =
-    frameId
-      ? "고른 메인 비주얼 안에 들어갑니다."
-      : "원하는 만큼 더할 수 있습니다.";
+  /* ★ 끌기가 보는 그 한 줄이다(studio-canvas-materials-drag.js).
+     DOM 이 들고 있는 것은 **id 뿐**이고, 무엇을 만들지는 카탈로그와
+     순수 함수가 정한다(계약 §36-2). */
+  button.dataset.materialId = item.id;
+  button.dataset.materialCategory = item.category;
+
+  button.appendChild(studioCanvasMaterialThumb(item));
+
+  const body =
+    document.createElement("span");
+
+  body.className = "studio-material-item-body";
+
+  const name =
+    document.createElement("span");
+
+  name.className = "studio-material-item-name";
+  name.textContent = item.label;
+
+  const desc =
+    document.createElement("span");
+
+  desc.className = "studio-material-item-desc";
+  desc.textContent = item.desc || "";
+
+  body.appendChild(name);
+  body.appendChild(desc);
+
+  button.appendChild(body);
+
+  const badge =
+    document.createElement("span");
+
+  badge.className = "studio-material-card-badge";
+  badge.hidden = true;
+
+  button.appendChild(badge);
+
+  button.addEventListener("click", () => studioCanvasMaterialItemClick(item));
+
+  studioCanvasMaterialItemNodes[item.id] = button;
+
+  return button;
 
 }
 
 
-function buildStudioCanvasV2AddSection() {
+function syncStudioCanvasMaterialItem(item) {
 
-  studioCanvasMaterialCardNodes = {};
+  const button =
+    studioCanvasMaterialItemNodes[item.id];
 
-  const box =
+  if (!button) {
+    return;
+  }
+
+  const now =
+    studioCanvasMaterialItemState(item);
+
+  button.dataset.materialState = now.state;
+  button.dataset.addTarget = now.target || "";
+
+  button.disabled = (now.state === "soon");
+
+  const badge =
+    button.querySelector(".studio-material-card-badge");
+
+  const text =
+    Object.prototype.hasOwnProperty.call(STUDIO_MATERIAL_BADGE_TEXT, now.state)
+      ? STUDIO_MATERIAL_BADGE_TEXT[now.state]
+      : "";
+
+  if (badge) {
+    badge.textContent = text;
+    badge.hidden = !text;
+  }
+
+  button.setAttribute(
+    "aria-label",
+    now.state === "added"
+      ? `${item.label} — 이미 있습니다. 누르면 그 요소를 고릅니다`
+      : (now.state === "soon"
+          ? `${item.label} — 지금 넣을 자리가 없습니다`
+          : `${item.label} 추가 — ${item.desc || ""}`)
+  );
+
+}
+
+
+/* 지금 어디에 들어가는가 — 한 줄 안내(분류 격자 · 재료 목록 공통) */
+function studioCanvasMaterialTargetNote() {
+
+  return studioCanvasV2AddFrameId()
+    ? "고른 메인 비주얼 안에 들어갑니다."
+    : "끌어다 놓으면 그 자리에, 누르면 기본 자리에 들어갑니다.";
+
+}
+
+
+function syncStudioCanvasMaterialGroupNote() {
+
+  const decor =
+    document.getElementById("studioCanvasAddGroupNote-decor");
+
+  if (decor) {
+
+    decor.textContent =
+      studioCanvasV2AddFrameId()
+        ? "고른 메인 비주얼 안에 들어갑니다."
+        : "원하는 만큼 더할 수 있습니다.";
+
+  }
+
+  const items =
+    document.getElementById("studioCanvasAddItemsNote");
+
+  if (items) {
+    items.textContent = studioCanvasMaterialTargetNote();
+  }
+
+}
+
+
+/* =========================================================
+   화면 만들기
+========================================================== */
+
+function studioCanvasMaterialGrid() {
+
+  const grid =
     document.createElement("div");
 
-  box.className = "studio-material-screen";
-  box.id = "studioCanvasAdd";
+  grid.className = "studio-material-grid";
+
+  /* 격자지만 목록이다 — 스크린리더가 "몇 개 중 몇 번째"를 읽는다 */
+  grid.setAttribute("role", "list");
+
+  return grid;
+
+}
+
+
+function studioCanvasMaterialCell(node) {
+
+  const cell =
+    document.createElement("div");
+
+  cell.className = "studio-material-cell";
+  cell.setAttribute("role", "listitem");
+
+  cell.appendChild(node);
+
+  return cell;
+
+}
+
+
+function buildStudioCanvasV2AddCategories(box) {
 
   STUDIO_CANVAS_MATERIAL_GROUPS.forEach((group) => {
 
     const mine =
-      STUDIO_CANVAS_MATERIAL_CARDS.filter((card) => card.group === group.key);
+      studioCanvasMaterialCategories().filter(
+        (category) => category.group === group.key
+      );
 
     if (!mine.length) {
       return;
@@ -950,25 +1334,10 @@ function buildStudioCanvasV2AddSection() {
     section.appendChild(note);
 
     const grid =
-      document.createElement("div");
+      studioCanvasMaterialGrid();
 
-    grid.className = "studio-material-grid";
-
-    /* 격자지만 목록이다 — 스크린리더가 "몇 개 중 몇 번째"를 읽는다 */
-    grid.setAttribute("role", "list");
-
-    mine.forEach((card) => {
-
-      const cell =
-        document.createElement("div");
-
-      cell.className = "studio-material-cell";
-      cell.setAttribute("role", "listitem");
-
-      cell.appendChild(studioCanvasMaterialCard(card));
-
-      grid.appendChild(cell);
-
+    mine.forEach((category) => {
+      grid.appendChild(studioCanvasMaterialCell(studioCanvasMaterialCard(category)));
     });
 
     section.appendChild(grid);
@@ -976,6 +1345,80 @@ function buildStudioCanvasV2AddSection() {
     box.appendChild(section);
 
   });
+
+}
+
+
+function buildStudioCanvasV2AddItems(box, categoryKey) {
+
+  const category =
+    studioCanvasMaterialCategoryOf(categoryKey);
+
+  const items =
+    studioCanvasMaterialItems(categoryKey);
+
+  box.dataset.materialCategory =
+    categoryKey;
+
+  const note =
+    document.createElement("p");
+
+  note.className = "studio-material-group-note";
+  note.id = "studioCanvasAddItemsNote";
+  note.textContent = studioCanvasMaterialTargetNote();
+
+  box.appendChild(note);
+
+  if (!category || !items.length) {
+
+    const empty =
+      document.createElement("p");
+
+    empty.className = "studio-material-empty";
+    empty.id = "studioCanvasAddItemsEmpty";
+    empty.textContent = "이 분류에는 아직 재료가 없습니다.";
+
+    box.appendChild(empty);
+
+    return;
+
+  }
+
+  const grid =
+    studioCanvasMaterialGrid();
+
+  grid.classList.add("studio-material-grid--items");
+
+  items.forEach((item) => {
+    grid.appendChild(studioCanvasMaterialCell(studioCanvasMaterialItemButton(item)));
+  });
+
+  box.appendChild(grid);
+
+}
+
+
+function buildStudioCanvasV2AddSection() {
+
+  studioCanvasMaterialCardNodes = {};
+  studioCanvasMaterialItemNodes = {};
+
+  const box =
+    document.createElement("div");
+
+  box.className = "studio-material-screen";
+  box.id = "studioCanvasAdd";
+
+  /* 테스트와 CSS 가 보는 한 줄 — 지금 몇 번째 화면인가 */
+  box.dataset.materialScreen =
+    studioCanvasMaterialScreen ? "items" : "categories";
+
+  if (studioCanvasMaterialScreen) {
+    buildStudioCanvasV2AddItems(box, studioCanvasMaterialScreen);
+  }
+  else {
+    buildStudioCanvasV2AddCategories(box);
+  }
 
   box.appendChild(studioCanvasV2AddSlotRow());
 
@@ -1002,7 +1445,16 @@ function syncStudioCanvasV2AddSection() {
 
   syncStudioCanvasMaterialGroupNote();
 
-  STUDIO_CANVAS_MATERIAL_CARDS.forEach(syncStudioCanvasMaterialCard);
+  if (studioCanvasMaterialScreen) {
+
+    studioCanvasMaterialItems(studioCanvasMaterialScreen)
+      .forEach(syncStudioCanvasMaterialItem);
+
+    return;
+
+  }
+
+  studioCanvasMaterialCategories().forEach(syncStudioCanvasMaterialCard);
 
 }
 
@@ -1018,16 +1470,18 @@ if (typeof window !== "undefined") {
   window.buildStudioCanvasV2AddSection = buildStudioCanvasV2AddSection;
   window.syncStudioCanvasV2AddSection = syncStudioCanvasV2AddSection;
 
-  /*
-    카드가 덮지 않는 자리·종류 조합으로 한 번 만드는 길.
+  /* STUDIO-LAYERS-MATERIALS-1B — 하위 화면의 단계(§36-3).
+     머리를 그리는 Layers 가 이 셋을 본다. */
+  window.studioCanvasV2AddTitle = studioCanvasV2AddTitle;
+  window.studioCanvasV2AddBack = studioCanvasV2AddBack;
+  window.resetStudioCanvasV2AddScreen = resetStudioCanvasV2AddScreen;
 
-    ★ 제품 화면에는 이 창구를 쓰는 곳이 없다 — 카드가 전부 지난다.
-      계약의 두 표는 카드보다 넓고(흐름의 `text`, 자유 층의 `logo` ·
-      `category_nav` 등) 그 조합들은 MATERIALS-1B 의 하위 목록이
-      드러낼 자리다. 그때까지 **쓰기 경로가 살아 있는지**는
-      e2e 가 이 창구로 재고, 여기서 새 UI 를 만들지 않는다.
-  */
+  /* 끌어다 놓기가 쓰는 둘(studio-canvas-materials-drag.js).
+     그쪽은 **id 만** 들고 오고, 상태와 만들기는 이 파일이 한다. */
+  window.studioCanvasMaterialItemState = studioCanvasMaterialItemState;
+  window.studioCanvasMaterialThumb = studioCanvasMaterialThumb;
   window.addStudioCanvasV2Material = addStudioCanvasV2Material;
+  window.setStudioCanvasV2AddMessage = setStudioCanvasV2AddMessage;
 
   /* 진단 · 테스트가 보는 한 줄 */
   window.getStudioCanvasAddState =
@@ -1047,20 +1501,48 @@ if (typeof window !== "undefined") {
         slotOptions:
           select ? Array.from(select.options).map((option) => option.value) : [],
 
-        /* STUDIO-LAYERS-MATERIALS-1A — 화면에 그려진 카드들 */
+        /* STUDIO-LAYERS-MATERIALS-1B — 지금 몇 번째 화면인가 */
+        screen: studioCanvasMaterialScreen ? "items" : "categories",
+        category: studioCanvasMaterialScreen || "",
+        title: studioCanvasV2AddTitle(),
+
+        /* STUDIO-LAYERS-MATERIALS-1A — 화면에 그려진 분류 카드들 */
         cards:
-          STUDIO_CANVAS_MATERIAL_CARDS.map((card) => {
+          studioCanvasMaterialCategories().map((category) => {
 
             const node =
-              studioCanvasMaterialCardNodes[card.key];
+              studioCanvasMaterialCardNodes[category.key];
 
             return {
-              key: card.key,
-              group: card.group,
-              type: card.type,
-              label: card.label,
-              desc: card.desc,
-              items: card.items.length,
+              key: category.key,
+              group: category.group,
+              type: category.type,
+              label: category.label,
+              desc: category.desc,
+              items: studioCanvasMaterialItems(category.key).length,
+              drawn: !!(node && node.isConnected),
+              state: node ? (node.dataset.materialState || "") : "",
+              target: node ? (node.dataset.addTarget || "") : "",
+              disabled: node ? !!node.disabled : null
+            };
+
+          }),
+
+        /* STUDIO-LAYERS-MATERIALS-1B — 그려진 재료들(목록 화면에서만) */
+        items:
+          (studioCanvasMaterialScreen
+            ? studioCanvasMaterialItems(studioCanvasMaterialScreen)
+            : []
+          ).map((item) => {
+
+            const node =
+              studioCanvasMaterialItemNodes[item.id];
+
+            return {
+              id: item.id,
+              category: item.category,
+              label: item.label,
+              type: item.type,
               drawn: !!(node && node.isConnected),
               state: node ? (node.dataset.materialState || "") : "",
               target: node ? (node.dataset.addTarget || "") : "",

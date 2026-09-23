@@ -103,7 +103,10 @@ import {
   forwardSandboxPreviewInspectDirective,
   refreshSandboxPreviewInspectRects,
   setSandboxPreviewCanvasSelection,
-  setSandboxPreviewCanvasGeometry
+  setSandboxPreviewCanvasGeometry,
+
+  /* STUDIO-LAYERS-MATERIALS-1B — 끌어다 놓을 자리를 프레임에 묻는다 */
+  requestSandboxPreviewCanvasBox
 } from "./preview-sandbox.js";
 
 const PREVIEW_MSG_RENDER = "preview:render";
@@ -220,6 +223,32 @@ const PREVIEW_MSG_CANVAS_LAYOUT = "preview:canvas-layout";
 ========================================================== */
 const PREVIEW_MSG_CANVAS_GEOMETRY = "preview:canvas-geometry";
 const PREVIEW_MSG_CANVAS_TRANSFORM = "preview:canvas-transform";
+
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — 재료를 끌어다 놓을 자리 (계약 §36-5)
+
+   canvas-probe  Studio -> 이 문서
+                 { }
+                 "지금 도화지가 화면에서 차지한 상자를 재서 올려라".
+                 끌기를 **시작할 때 한 번**만 온다.
+
+   canvas-box    이 문서 -> Studio
+                 { root, blocks:[{id,rect}], frames:[{id,rect}] }
+                 픽셀이다(이 문서의 뷰포트 기준). 분수를 쓰는
+                 canvas-layout 과 다른 이유는 프로토콜 주석에 있다 —
+                 "손가락이 도화지의 어디인가"는 화면 상자를 알아야
+                 풀린다.
+
+   ★ 재는 함수는 **세 realm 공용**이다(skin/skin-home-canvas.js
+     measureSkinHomeCanvasBoxes) — native 와 sandbox 의 좌표가
+     갈라지지 않게.
+
+   ★ sandbox 가 화면을 맡고 있으면 이 문서에는 도화지가 없다.
+     그때는 프레임에 묻고, 답에 안쪽 iframe 의 자리를 더해 올린다
+     (studio/preview/preview-sandbox.js — inspect rects 와 같은 길).
+========================================================== */
+const PREVIEW_MSG_CANVAS_PROBE = "preview:canvas-probe";
+const PREVIEW_MSG_CANVAS_BOX = "preview:canvas-box";
 
 const POST_BODY_REGION_NAME = "post-body";
 
@@ -2666,6 +2695,31 @@ function previewCanvasOriginOk(value) {
 }
 
 
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1B — 이 문서의 도화지 상자를 올린다
+   (위 canvas-probe 주석 · 계약 §36-5)
+
+   ★ 도화지가 없으면 `root:null` 로 답한다. 답을 아예 보내지 않으면
+     끌기를 시작한 쪽이 "아직 안 왔다"와 "여기에는 놓을 수 없다"를
+     가를 수 없다.
+========================================================== */
+function postCanvasBoxToParent() {
+
+  const measured =
+    (typeof window.measureSkinHomeCanvasBoxes === "function")
+      ? window.measureSkinHomeCanvasBoxes(document)
+      : null;
+
+  postToParent({
+    type: PREVIEW_MSG_CANVAS_BOX,
+    root: (measured && measured.root) ? measured.root : null,
+    blocks: (measured && Array.isArray(measured.blocks)) ? measured.blocks : [],
+    frames: (measured && Array.isArray(measured.frames)) ? measured.frames : []
+  });
+
+}
+
+
 function routeCanvasGeometryMessage(data) {
 
   const active =
@@ -3246,6 +3300,22 @@ window.addEventListener("message", (event) => {
   if (data.type === PREVIEW_MSG_CANVAS_GEOMETRY) {
 
     routeCanvasGeometryMessage(data);
+
+    return;
+
+  }
+
+  /* STUDIO-LAYERS-MATERIALS-1B — 재료를 끌어다 놓을 자리를 묻는다
+     (계약 §36-5). sandbox 가 화면을 맡고 있으면 그 프레임이
+     답한다 — 이 문서에는 도화지가 없다. */
+  if (data.type === PREVIEW_MSG_CANVAS_PROBE) {
+
+    if (hasSandboxPreviewFrame()) {
+      requestSandboxPreviewCanvasBox();
+      return;
+    }
+
+    postCanvasBoxToParent();
 
     return;
 

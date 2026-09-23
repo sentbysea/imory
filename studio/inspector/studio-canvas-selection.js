@@ -1946,10 +1946,16 @@ function commitStudioCanvasInspectorEdit(request) {
 /* =========================================================
    HOME-CANVAS-V2-ADD-1 — 새 재료 하나를 만드는 입구
 
-   commitStudioCanvasAddNode({ target, type, slot })
+   commitStudioCanvasAddNode({ target, type, slot, frameId,
+                               materialId, at, index })
 
-     -> { accepted:true, id, slot, declaredSlot }
+     -> { accepted:true, id, slot, declaredSlot, materialId, type }
      -> { accepted:false, reason }
+
+   ★ STUDIO-LAYERS-MATERIALS-1B — `materialId` 가 있으면 **종류도
+     기본값도 그 표**가 정한다(계약 §36). `at` 은 Preview 에 끌어다
+     놓은 자리이고(그 자리의 자로 이미 바뀐 값), `index` 는 흐름의
+     삽입선이다. 셋 다 순수 함수가 다시 본다.
 
    ★ **고치는 관문과 같은 문이 아니다.** 위
      commitStudioCanvasElementChange() 는 "지금 고른 그 요소의 이
@@ -2007,6 +2013,45 @@ function studioCanvasV2AddTypes(target) {
 }
 
 
+/*
+  STUDIO-LAYERS-MATERIALS-1B — 재료 id 하나로 종류를 안다(계약 §36-2).
+
+  ★ 화면이 보내는 것은 **id 한 줄**이다. 그 id 로 무엇을 만들지는
+    카탈로그와 순수 함수가 정한다 — 카드가 JSON 을 들고 있지 않다.
+*/
+/* 놓은 자리 한 칸 — 숫자 둘이 아니면 **없는 것**이다(자리를 지어
+   내지 않는다. 그때는 지금까지의 24px 계단으로 태어난다) */
+function studioCanvasAddPoint(at) {
+
+  if (
+    !at ||
+    typeof at !== "object" ||
+    typeof at.x !== "number" || !Number.isFinite(at.x) ||
+    typeof at.y !== "number" || !Number.isFinite(at.y)
+  ) {
+    return null;
+  }
+
+  return { x: at.x, y: at.y };
+
+}
+
+
+function studioCanvasMaterialPreset(materialId) {
+
+  if (
+    typeof materialId !== "string" ||
+    !materialId ||
+    typeof window.resolveSkinHomeCanvasMaterialPreset !== "function"
+  ) {
+    return null;
+  }
+
+  return window.resolveSkinHomeCanvasMaterialPreset(materialId);
+
+}
+
+
 function commitStudioCanvasAddNode(request) {
 
   const value =
@@ -2024,6 +2069,24 @@ function commitStudioCanvasAddNode(request) {
     return { accepted: false, reason: "canvas" };
   }
 
+  /* 재료 id 가 있으면 종류는 **표**가 정한다. 모르는 id 는 여기서
+     끝난다 — draft 에 닿지 않는다. */
+  const preset =
+    studioCanvasMaterialPreset(value.materialId);
+
+  if (value.materialId && !preset) {
+    return { accepted: false, reason: "material" };
+  }
+
+  const type =
+    preset ? preset.type : value.type;
+
+  /* 그 재료가 이 자리에 놓일 수 있는가 — 카드가 고른 자리를 여기서
+     한 번 더 본다(순수 함수도 같은 판정을 한 번 더 한다) */
+  if (preset && preset.targets.indexOf(value.target) === -1) {
+    return { accepted: false, reason: "target" };
+  }
+
   const types =
     studioCanvasV2AddTypes(value.target);
 
@@ -2031,7 +2094,7 @@ function commitStudioCanvasAddNode(request) {
     return { accepted: false, reason: "target" };
   }
 
-  if (types.indexOf(value.type) === -1) {
+  if (types.indexOf(type) === -1) {
     return { accepted: false, reason: "type" };
   }
 
@@ -2053,16 +2116,28 @@ function commitStudioCanvasAddNode(request) {
   const result =
     window.addStudioCanvasV2Node({
       target: value.target,
-      type: value.type,
+      type: type,
       slot: (typeof value.slot === "string") ? value.slot : "",
-      frameId: (typeof value.frameId === "string") ? value.frameId : ""
+      frameId: (typeof value.frameId === "string") ? value.frameId : "",
+
+      /* STUDIO-LAYERS-MATERIALS-1B — 재료 id · 놓은 자리 · 삽입선.
+         자리는 **그 자리의 자**로 이미 바뀐 값이다(계약 §36-5) —
+         자를 아는 곳은 부모 realm 하나다(§26-4 의 경계). */
+      materialId: preset ? preset.id : "",
+      at: studioCanvasAddPoint(value.at),
+      index: Number.isInteger(value.index) ? value.index : null
     });
 
   if (!result || !result.ok) {
 
     console.info(
       "[studio-canvas] 새 재료를 만들지 않았습니다",
-      { target: value.target, type: value.type, reason: result && result.reason }
+      {
+        target: value.target,
+        type: type,
+        materialId: preset ? preset.id : null,
+        reason: result && result.reason
+      }
     );
 
     return { accepted: false, reason: (result && result.reason) || "rejected" };
@@ -2079,7 +2154,12 @@ function commitStudioCanvasAddNode(request) {
     accepted: true,
     id: result.id,
     slot: result.slot || null,
-    declaredSlot: result.declaredSlot || null
+    declaredSlot: result.declaredSlot || null,
+
+    /* STUDIO-LAYERS-MATERIALS-1B — 어느 재료였나 · 무슨 종류였나.
+       화면의 안내 한 줄이 그 이름을 쓴다. */
+    materialId: result.materialId || null,
+    type: type
   };
 
 }

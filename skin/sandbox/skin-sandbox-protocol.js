@@ -403,7 +403,47 @@ var SANDBOX_MESSAGE_TYPES = {
        저장되는 숫자는 부모가 자기 draft 로 계산한다.
   ======================================================= */
 
-  CANVAS_LAYOUT: "IMORY_CANVAS_LAYOUT"
+  CANVAS_LAYOUT: "IMORY_CANVAS_LAYOUT",
+
+
+  /* =======================================================
+     STUDIO-LAYERS-MATERIALS-1B — 재료를 **끌어다 놓을 자리**
+     (계약 §36-5)
+
+       CANVAS_PROBE  parent -> frame   { renderSeq }
+       CANVAS_BOX    frame -> parent   { renderSeq, root, blocks, frames }
+
+     ★ 왜 CANVAS_LAYOUT 으로는 안 되는가
+
+     그 메시지는 **분수**를 나른다(도화지 폭으로 나눈 값). 분수는
+     "저장값의 어느 자리인가"에는 맞지만, "지금 손가락이 도화지의
+     어디를 가리키는가"에는 쓸 수 없다 — 그 계산에는 도화지가
+     **화면에서 차지한 상자**가 있어야 하고 그것은 픽셀이다.
+
+     ★ 왜 물어봐야 하는가
+
+     픽셀 상자는 스크롤 · 배율마다 달라진다. CANVAS_LAYOUT 에 실어
+     주기적으로 올리면 값이 늘 바뀌어 보고가 끊이지 않는다(그
+     메시지는 모양이 같으면 보내지 않는 것으로 값싸게 지낸다).
+     그래서 **끌기를 시작할 때 한 번** 묻는다. 끌고 있는 동안에는
+     포인터가 부모에 붙들려 있어(pointer capture) 프레임이 스크롤
+     되지도, 다시 그려지지도 않는다.
+
+     ★ 좌표계
+
+     프레임이 재는 것은 **자기 뷰포트** 기준이다. sandbox 에서는
+     preview 문서가 안쪽 iframe 의 자리를 더해 올린다
+     (studio/preview/preview-sandbox.js — inspect rects 와 같은 그
+     한 줄). 거기서 Studio 화면 좌표로 옮기는 것은 부모의 기존
+     변환 하나다(studio/inspector/studio-inspector-overlay.js).
+
+     ★ 이것도 **보고**다. 저장되는 숫자는 하나도 없다 — 놓은 자리를
+       Canvas 좌표로 바꾸는 데만 쓰이고, 실제로 쓸 값은 부모가 자기
+       draft 와 순수 함수로 정한다.
+  ======================================================= */
+
+  CANVAS_PROBE: "IMORY_CANVAS_PROBE",
+  CANVAS_BOX: "IMORY_CANVAS_BOX"
 };
 
 
@@ -2659,6 +2699,94 @@ var SANDBOX_MESSAGE_SPEC = {
 
         }
       );
+
+    }
+  },
+
+
+  /* =======================================================
+     STUDIO-LAYERS-MATERIALS-1B — 끌어다 놓을 자리를 묻는다
+     (위 CANVAS_PROBE · CANVAS_BOX 주석)
+
+     ★ 요청에는 실을 것이 없다. "지금 화면의 상자를 재서 올려라"가
+       전부이고, 어느 화면인가는 renderSeq 가 정한다.
+  ======================================================= */
+
+  IMORY_CANVAS_PROBE: {
+    direction: "to-frame",
+    keys: ["contract", "renderSeq"],
+    check: function (payload) {
+
+      return isSandboxRenderSeq(payload.renderSeq);
+
+    }
+  },
+
+
+  /* =======================================================
+     그 답 — 픽셀 상자 셋(프레임 뷰포트 기준)
+
+       root    도화지의 안쪽 상자
+       blocks  흐름 블록마다 하나(순서는 화면 순서 = draft 순서)
+       frames  `main_visual` 마다 하나
+
+     ★ 상자 모양은 Inspector 의 그 자다(isSandboxInspectRect) —
+       사각형을 나르는 자를 두 벌 만들지 않는다.
+
+     ★ 도화지가 없는 화면에서는 `root` 가 없다. "캔버스가 아니다"는
+       뜻이 하나뿐이므로 거부하지 않는다 — 부모가 그때 놓을 자리를
+       찾지 못했다고 읽는다.
+  ======================================================= */
+
+  IMORY_CANVAS_BOX: {
+    direction: "to-parent",
+    keys: ["contract", "renderSeq", "root", "blocks", "frames"],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (payload.root !== undefined && !isSandboxInspectRect(payload.root)) {
+        return false;
+      }
+
+      const listOk =
+        (list) => {
+
+          if (list === undefined) {
+            return true;
+          }
+
+          if (!Array.isArray(list) || list.length > SANDBOX_CANVAS_MAX_ELEMENTS) {
+            return false;
+          }
+
+          const seen = [];
+
+          return list.every(
+            (item) => {
+
+              if (
+                !isPlainSandboxObject(item) ||
+                !hasOnlyKnownSandboxKeys(item, ["id", "rect"]) ||
+                !isSandboxInspectEditId(item.id) ||
+                seen.indexOf(item.id) !== -1 ||
+                !isSandboxInspectRect(item.rect)
+              ) {
+                return false;
+              }
+
+              seen.push(item.id);
+
+              return true;
+
+            }
+          );
+
+        };
+
+      return listOk(payload.blocks) && listOk(payload.frames);
 
     }
   }

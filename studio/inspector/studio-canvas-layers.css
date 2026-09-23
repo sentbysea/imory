@@ -872,3 +872,267 @@
 .studio-canvas-add-message[hidden] {
   display: none;
 }
+
+
+/* =========================================================
+   재료 목록 (STUDIO-LAYERS-MATERIALS-1B · 계약 §36-3)
+
+   분류 카드와 같은 격자를 쓰되, 칸 안이 다르다 — 아이콘 대신
+   **실제 결과를 알아볼 수 있는 썸네일**이 위에 오고 이름이 그
+   아래다. 카드는 "무엇인가"를 읽게 하고, 재료는 "어떻게 생겼는가"를
+   보게 한다.
+========================================================== */
+
+.studio-material-grid--items {
+  gap: 10px;
+}
+
+
+.studio-material-item {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+
+  gap: 6px;
+
+  padding: 10px;
+
+  border: 1px solid var(--system-border, rgba(0, 0, 0, 0.16));
+  border-radius: 8px;
+
+  background: var(--system-surface, transparent);
+  color: inherit;
+
+  font: inherit;
+  text-align: left;
+
+  cursor: pointer;
+
+  /*
+    ★ 끌기가 이 단추에서 시작한다(studio-canvas-materials-drag.js).
+      터치에서 브라우저가 먼저 스크롤을 가져가면 350ms 길게 누르기가
+      영영 오지 않으므로 여기서만 끈다 — Layers 가 손잡이 하나에만
+      둔 그 규칙과 같은 이유다(패널 전체에 주면 세로 스크롤이 죽는다).
+      재료는 분류마다 넷 이하라 목록이 짧고, 패널은 카드 사이 여백과
+      아래 슬롯 칸에서 넘긴다(계약 §36-9 의 남은 차이).
+  */
+  touch-action: none;
+}
+
+
+.studio-material-item:hover:not(:disabled),
+.studio-material-item:focus-visible {
+  border-color: var(--system-text-muted, rgba(0, 0, 0, 0.4));
+}
+
+
+.studio-material-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+
+.studio-material-item[data-material-state="added"] {
+  border-color: var(--system-accent, currentColor);
+}
+
+
+/* ── 썸네일 ────────────────────────────────────────────── */
+
+.studio-material-item-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  min-height: 44px;
+
+  padding: 4px;
+
+  border-radius: 6px;
+
+  background: var(--system-surface-sunken, rgba(0, 0, 0, 0.04));
+
+  color: var(--system-text-muted);
+
+  overflow: hidden;
+}
+
+
+/* 상자 하나 — 실제 재료의 비율과 모서리를 그대로 보여 준다.
+   크기 · 모서리 · 두께는 카탈로그의 `preview` 가 CSSOM 으로 준다
+   (studio/inspector/studio-canvas-add-v2.js). */
+.studio-material-thumb-box {
+  flex: 0 0 auto;
+
+  background: currentColor;
+
+  opacity: 0.35;
+}
+
+
+/* 사진 · 장식은 **그림이 들어올 자리**다 — 칠하지 않고 테두리로만
+   자리를 보여 준다(계약 §36-2 의 그 이유와 같다) */
+.studio-material-thumb-box--slot {
+  background: none;
+
+  border: 1px dashed currentColor;
+
+  opacity: 0.55;
+}
+
+
+.studio-material-thumb-box--text {
+  background: none;
+
+  opacity: 0.8;
+
+  line-height: 1;
+}
+
+
+.studio-material-item-body {
+  display: flex;
+  flex-direction: column;
+
+  gap: 2px;
+
+  min-width: 0;
+}
+
+
+.studio-material-item-name {
+  font-size: var(--imory-font-size-300);
+  font-weight: 600;
+
+  word-break: keep-all;
+}
+
+
+.studio-material-item-desc {
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  line-height: var(--imory-line-height-relaxed);
+
+  word-break: keep-all;
+}
+
+
+.studio-material-empty {
+  margin: 0;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+}
+
+
+/* =========================================================
+   Preview 로 끌어다 놓기 (계약 §36-6)
+
+   셋 다 화면 위에 떠 있는 **표시**다. 저장 데이터에도 렌더 데이터
+   에도 들어가지 않고, 손을 놓으면 통째로 사라진다.
+
+   ★ 전부 `pointer-events: none` 이다 — 끌고 있는 손이 자기 그림자나
+     윤곽을 잡으면 그 순간 포인터가 다른 요소로 넘어간다.
+========================================================== */
+
+.studio-material-ghost {
+  position: fixed;
+  z-index: 2147483000;
+
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  margin: 0;
+  padding: 6px 10px;
+
+  border: 1px solid var(--system-border, rgba(0, 0, 0, 0.16));
+  border-radius: 8px;
+
+  background: var(--system-surface, #fff);
+
+  font-size: var(--imory-font-size-200);
+
+  opacity: 0.85;
+
+  /* 손가락 바로 아래가 아니라 조금 옆에 — 가리지 않게 */
+  transform: translate(12px, 12px);
+
+  pointer-events: none;
+}
+
+
+.studio-material-ghost[data-drop-ok="0"] {
+  border-color: var(--system-text-danger, #b3261e);
+  color: var(--system-text-danger, #b3261e);
+}
+
+
+.studio-material-ghost-name {
+  font-weight: 600;
+
+  white-space: nowrap;
+}
+
+
+.studio-material-ghost-note {
+  white-space: nowrap;
+}
+
+
+.studio-material-ghost-note[hidden] {
+  display: none;
+}
+
+
+/* 금지 자리에서는 커서도 바뀐다 — 그림자 밖에서도 읽히게 */
+body.studio-material-dragging {
+  cursor: grabbing;
+}
+
+
+/* 놓일 자리의 윤곽 — overlay · 프레임 안은 상자, 흐름은 선 하나 */
+.studio-material-hint {
+  position: fixed;
+  z-index: 2147482999;
+
+  border: 2px dashed var(--system-accent, #3b6cff);
+  border-radius: 4px;
+
+  pointer-events: none;
+}
+
+
+.studio-material-hint[data-hint-kind="flow"] {
+  border: 0;
+  border-top: 3px solid var(--system-accent, #3b6cff);
+  border-radius: 0;
+}
+
+
+.studio-material-hint[hidden] {
+  display: none;
+}
+
+
+/* 대상 프레임 강조 — "이 메인 비주얼 안에 들어간다" */
+.studio-material-scope {
+  position: fixed;
+  z-index: 2147482998;
+
+  border: 2px solid var(--system-accent, #3b6cff);
+  border-radius: 6px;
+
+  pointer-events: none;
+}
+
+
+.studio-material-scope[hidden] {
+  display: none;
+}

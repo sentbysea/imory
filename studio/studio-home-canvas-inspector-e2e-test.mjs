@@ -5803,7 +5803,19 @@ async function main() {
       await sleep(300);
 
       await openAddPanel(page);
+
+      /* STUDIO-LAYERS-MATERIALS-1B — 카드는 **분류**다. 누르면 그
+         분류의 재료 목록이 열리고, 만드는 것은 그 안의 재료다
+         (계약 §36-3). 여기서 재는 것은 "만든 뒤의 Layers"이므로
+         재료 하나를 고르는 한 걸음만 더 간다. */
       await page.click("#studioCanvasAddCard-sticker");
+
+      await page.waitForFunction(
+        () => window.getStudioCanvasAddState().screen === "items",
+        null, { timeout: 8000 }
+      );
+
+      await page.click("#studioCanvasAddItem-sticker_badge");
       await sleep(900);
 
       const madeId = await pickedId(page);

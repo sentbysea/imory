@@ -1607,6 +1607,64 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
        으로 한 번 더 거른다.
     ====================================================== */
 
+    /* =====================================================
+       STUDIO-LAYERS-MATERIALS-1B — 재료를 끌어다 놓을 자리
+       (계약 §36-5)
+
+       ★ **편집기 runtime 을 켜지 않는다.** 이 답은 DOM 을 재는
+         것뿐이고, runtime 은 선택이 있을 때만 들어온다(§16-2 의
+         그 관문 하나). 재료 목록은 아무것도 고르지 않은 채로도
+         열리므로 여기서 runtime 을 끌어오면 그 관문이 둘이 된다.
+
+       ★ 재는 함수는 **세 realm 공용**이다
+         (skin/skin-home-canvas.js measureSkinHomeCanvasBoxes).
+    ====================================================== */
+
+    if (verdict.type === SANDBOX_MESSAGE_TYPES.CANVAS_PROBE) {
+
+      if (verdict.payload.renderSeq !== FRAME_STATE.renderSeq) {
+        return;
+      }
+
+      const measured =
+        (typeof measureSkinHomeCanvasBoxes === "function")
+          ? measureSkinHomeCanvasBoxes(document)
+          : null;
+
+      const payload = {
+        contract: 1,
+        renderSeq: FRAME_STATE.renderSeq,
+        blocks:
+          (measured && Array.isArray(measured.blocks))
+            ? measured.blocks.map(
+                function (item) {
+                  return { id: item.id, rect: item.rect };
+                }
+              )
+            : [],
+        frames:
+          (measured && Array.isArray(measured.frames))
+            ? measured.frames.map(
+                function (item) {
+                  return { id: item.id, rect: item.rect };
+                }
+              )
+            : []
+      };
+
+      /* 도화지가 없으면 그 칸 자체를 만들지 않는다 — 프로토콜이
+         `root` 를 선택 키로 받는다(있으면 사각형이어야 한다) */
+      if (measured && measured.root) {
+        payload.root = measured.root;
+      }
+
+      send(SANDBOX_MESSAGE_TYPES.CANVAS_BOX, payload);
+
+      return;
+
+    }
+
+
     if (verdict.type === SANDBOX_MESSAGE_TYPES.CANVAS_SELECT) {
 
       if (verdict.payload.renderSeq !== FRAME_STATE.renderSeq) {
