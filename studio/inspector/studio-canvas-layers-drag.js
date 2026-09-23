@@ -109,12 +109,17 @@ function studioCanvasLayersDrawnRows() {
 
   return Array.from(
     tree.querySelectorAll(".studio-canvas-layers-row")
+  ).filter(
+    /* HOME-CANVAS-GROUP-1A — 폴더 행은 배열의 한 칸이 아니다.
+       형제 세기에 끼면 순서 자리가 한 칸씩 밀린다(계약 §38-4). */
+    (node) => node.dataset.layerKind !== "group"
   ).map((node) => ({
     node: node,
     id: node.dataset.layerId,
     kind: node.dataset.layerKind,
     type: node.dataset.layerType,
     parentId: node.dataset.layerParent || "",
+    groupId: node.dataset.layerGroupId || "",
     index: Number(node.dataset.layerIndex)
   }));
 
@@ -180,6 +185,78 @@ function studioCanvasLayersDropPlan(row, x, y) {
   }
 
 
+  /* ── (1-2) 그룹에 넣기 — **폴더 행의 가운데 띠** ──
+     (HOME-CANVAS-GROUP-1A · 계약 §38-5)
+
+     위/아래 끝은 그대로 순서 자리다. 그룹 행의 위·아래 drop 을
+     "그룹 순서 변경"으로 읽지 않는다 — 그 기능은 1A 에 없다.
+
+     ★ 좌표 공간이 다르면 아무것도 돌려주지 않는다(금지). 손을
+       놓아도 아무 일이 없고, 표시도 붙지 않는다. */
+
+  if (row.kind === "overlay" || row.kind === "frame-element") {
+
+    const folders =
+      Array.from(
+        tree.querySelectorAll(
+          '.studio-canvas-layers-row[data-layer-kind="group"]'
+        )
+      );
+
+    for (let i = 0; i < folders.length; i += 1) {
+
+      const rect =
+        folders[i].getBoundingClientRect();
+
+      if (
+        x < rect.left || x > rect.right ||
+        y < rect.top + rect.height * 0.25 ||
+        y > rect.bottom - rect.height * 0.25
+      ) {
+        continue;
+      }
+
+      const groupId =
+        folders[i].dataset.layerId;
+
+      /* 이미 그 그룹이다 — 아무 일도 아니다(기록 0칸) */
+      if (row.groupId === groupId) {
+        return null;
+      }
+
+      /* 좌표 공간 대조 — 판정은 선택을 들고 있는 곳 하나가 한다 */
+      const info =
+        (typeof window.studioCanvasGroupInfo === "function")
+          ? window.studioCanvasGroupInfo(groupId)
+          : null;
+
+      const mine =
+        (typeof window.studioCanvasGroupSpaceOf === "function")
+          ? window.studioCanvasGroupSpaceOf(row.id)
+          : null;
+
+      if (!info || !mine || info.space !== mine) {
+        return {
+          op: "group-join",
+          groupId: groupId,
+          at: folders[i],
+          side: "into",
+          forbidden: "space"
+        };
+      }
+
+      return {
+        op: "group-join",
+        groupId: groupId,
+        at: folders[i],
+        side: "into"
+      };
+
+    }
+
+  }
+
+
   /* ── (2) 빼기 — `페이지 장식` 묶음 제목 ── */
 
   if (row.kind === "frame-element") {
@@ -234,7 +311,7 @@ function studioCanvasLayersDropPlan(row, x, y) {
   const others =
     siblings.filter((item) => item.id !== row.id);
 
-  let index = 0;
+  let drawnAt = 0;
 
   others.forEach((item) => {
 
@@ -242,19 +319,74 @@ function studioCanvasLayersDropPlan(row, x, y) {
       item.node.getBoundingClientRect();
 
     if (y > rect.top + rect.height / 2) {
-      index += 1;
+      drawnAt += 1;
     }
 
   });
 
+  /* pointer 가 **어느 형제 앞**인가(끝이면 null) */
+  const before =
+    drawnAt < others.length ? others[drawnAt] : null;
+
   const anchor =
-    index < others.length ? others[index] : others[others.length - 1];
+    before || others[others.length - 1];
+
+
+  /* =====================================================
+     HOME-CANVAS-GROUP-1A — 폴더 밖으로 끌어내면 **그룹에서 빼기**
+
+     같은 폴더의 형제 앞으로 놓으면 그냥 순서다. 폴더 밖(그룹이
+     없는 형제 앞 · 다른 폴더의 형제 앞 · 목록 끝)으로 놓으면
+     소속이 바뀐다.
+
+     ★ 빼기는 **배열 자리를 건드리지 않는다.** 소속만 바뀌므로
+       화면 위치 · geometry · 겹침 순서가 한 칸도 안 변한다
+       (계약 §38-5). 순서까지 함께 바꾸면 한 제스처가 두 가지를
+       하게 되고, 그중 하나는 사용자가 보지 못한 변화다.
+  ====================================================== */
+
+  if (row.groupId) {
+
+    const stillInside =
+      anchor && anchor.groupId === row.groupId;
+
+    if (!stillInside) {
+      return { op: "group-leave", at: anchor ? anchor.node : null, side: "after" };
+    }
+
+  }
+
+  /* 그룹이 아닌 행을 **다른 그룹의 형제 사이**로 놓는 것은 넣기가
+     아니다 — 넣기는 폴더 행의 가운데 띠 하나뿐이다(계약 §38-5).
+     여기서는 순서만 바꾼다. */
+
+
+  /* =====================================================
+     자리는 **배열 index** 로 정한다 — 화면 순서로 세지 않는다.
+
+     폴더가 멤버를 모아 그리므로 화면 순서와 배열 순서가 다를 수
+     있다(계약 §38-4). 겨눈 형제가 누구인지만 화면에서 읽고, 그
+     형제의 **배열 자리**로 삽입 자리를 낸다. 폴더가 하나도 없으면
+     지금까지와 똑같은 숫자가 나온다.
+  ====================================================== */
+
+  const ordered =
+    others.slice().sort((a, b) => a.index - b.index);
+
+  const index =
+    before
+      ? ordered.findIndex((item) => item.id === before.id)
+      : ordered.length;
+
+  if (index === -1) {
+    return null;
+  }
 
   return {
     op: "reorder",
     index: index,
     at: anchor ? anchor.node : null,
-    side: index < others.length ? "before" : "after"
+    side: before ? "before" : "after"
   };
 
 }
@@ -274,16 +406,27 @@ function paintStudioCanvasLayersDrop(plan) {
   }
 
   Array.from(
-    tree.querySelectorAll(".is-drop-before, .is-drop-after, .is-drop-into")
+    tree.querySelectorAll(
+      ".is-drop-before, .is-drop-after, .is-drop-into, .is-drop-forbidden"
+    )
   ).forEach((node) => {
-    node.classList.remove("is-drop-before", "is-drop-after", "is-drop-into");
+    node.classList.remove(
+      "is-drop-before", "is-drop-after", "is-drop-into", "is-drop-forbidden"
+    );
   });
 
+  /* HOME-CANVAS-GROUP-1A — 금지된 자리는 **금지로 보인다**.
+     아무 표시도 없으면 "아직 아무 데도 안 닿았다"와 구별되지
+     않는다(계약 §38-5). */
   tree.dataset.drop =
-    plan ? plan.op : "none";
+    plan ? (plan.forbidden ? "forbidden" : plan.op) : "none";
 
-  if (plan && plan.at) {
+  if (plan && plan.at && !plan.forbidden) {
     plan.at.classList.add(`is-drop-${plan.side}`);
+  }
+
+  if (plan && plan.at && plan.forbidden) {
+    plan.at.classList.add("is-drop-forbidden");
   }
 
 }
@@ -469,6 +612,9 @@ function studioCanvasLayersDragStart(event, handle) {
     kind: node.dataset.layerKind,
     type: node.dataset.layerType,
     parentId: node.dataset.layerParent || "",
+
+    /* HOME-CANVAS-GROUP-1A — 지금 어느 폴더 안인가(빼기 판정) */
+    groupId: node.dataset.layerGroupId || "",
     index: Number(node.dataset.layerIndex)
   };
 
@@ -581,6 +727,22 @@ function studioCanvasLayersDragDrop(event) {
     return;
   }
 
+  /* HOME-CANVAS-GROUP-1A — 금지된 자리는 **아무 일도 하지 않고**
+     이유만 적는다(계약 §38-5) */
+  if (plan.forbidden) {
+
+    if (typeof window.setStudioCanvasLayersMessage === "function") {
+      window.setStudioCanvasLayersMessage(
+        (typeof window.studioCanvasLayersRejectText === "function")
+          ? window.studioCanvasLayersRejectText("group-join", plan.forbidden)
+          : "그 자리에는 놓을 수 없습니다."
+      );
+    }
+
+    return;
+
+  }
+
   /* 창구는 **호출 시점에** 찾는다(studio-canvas-layers-ops.js 가 이
      파일보다 나중에 로드돼도 된다). 없으면 아무것도 하지 않는다. */
   const call = (name, args) =>
@@ -608,6 +770,21 @@ function studioCanvasLayersDragDrop(event) {
       call("studioCanvasLayersDetach", [row.id]);
 
   }
+  /* HOME-CANVAS-GROUP-1A — 넣기 · 빼기(계약 §38-5).
+     다른 그룹에서 옮기는 것도 `group-join` 요청 **하나**다 —
+     뗀 상태와 붙인 상태 사이의 반쪽 저장이 생기지 않는다. */
+  else if (plan.op === "group-join") {
+
+    result =
+      call("studioCanvasLayersGroupJoin", [row.id, plan.groupId]);
+
+  }
+  else if (plan.op === "group-leave") {
+
+    result =
+      call("studioCanvasLayersGroupLeave", [row.id]);
+
+  }
 
   if (typeof window.setStudioCanvasLayersMessage === "function") {
     window.setStudioCanvasLayersMessage(
@@ -622,6 +799,14 @@ function studioCanvasLayersDragDrop(event) {
     typeof window.expandStudioCanvasLayersFolder === "function"
   ) {
     window.expandStudioCanvasLayersFolder(plan.frameId);
+  }
+
+  /* 그룹에 넣은 것도 그 폴더 안에 있다 — 접혀 있으면 펼쳐 보인다 */
+  if (
+    result && result.accepted && plan.op === "group-join" &&
+    typeof window.expandStudioCanvasLayersFolder === "function"
+  ) {
+    window.expandStudioCanvasLayersFolder(plan.groupId);
   }
 
 }

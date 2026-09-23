@@ -32,11 +32,20 @@
 > [IMORY_HOME_CANVAS_GROUP_DESIGN.md](./IMORY_HOME_CANVAS_GROUP_DESIGN.md)
 > 가 갖는다. 아래 §5 가 그 교체 표다.
 >
-> 4단계 `HOME-CANVAS-GROUP-1A` 부터는 아직 계획이다 — 이 문서를
-> 근거로 그것들이 있다고 읽지 않는다.
+> **2026-09-23 갱신 ⑤** — §6 의 4단계 `HOME-CANVAS-GROUP-1A` 도
+> 구현됐다(영구 그룹의 저장 · Layers 폴더 · 만들기/해제/넣기/빼기/
+> 이름 변경/삭제 · Import 수선 · 그룹 선택). 현행 계약은 이 문서가
+> 아니라
+> [IMORY_HOME_CANVAS_CONTRACT.md §38](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> 이다 — 아래 §5 는 그때의 **계획**이고, 사용자가 확정해 달라진 것
+> 넷(이름 변경 UI 가 1A 에 들어감 · Preview 클릭에 그룹 단계 없음 ·
+> 멤버 최소 2 · Import 가 수선하고 알림)은 설계 문서 §0-0 에 있다.
 >
-> 다음 구현 작업은 **`HOME-CANVAS-GROUP-1A` 하나**이고, 그 뒤가
-> `1B` · `1C` 다. 뒤 작업을 함께 선행 구현하지 않는다.
+> 5단계 `HOME-CANVAS-GROUP-1B`(그룹 전체 이동) 부터는 아직 계획이다 —
+> 이 문서를 근거로 그것들이 있다고 읽지 않는다.
+>
+> 다음 구현 작업은 **`HOME-CANVAS-GROUP-1B` 하나**이고, 그 뒤가
+> `1C` 다. 뒤 작업을 함께 선행 구현하지 않는다.
 
 ## 0. 왜 이 재편이 필요한가
 
@@ -409,6 +418,20 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 
 ### `HOME-CANVAS-GROUP-1A` — 저장 구조 · 만들기/해제 · 폴더 · 넣기/빼기 · 선택
 
+> **완료(2026-09-23).** 실제로 강제되는 계약은
+> [계약 문서 §38](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 이다. 아래는
+> 착수 전의 요약이고, **구현에서 두 곳이 달라졌다**(사용자 결정 —
+> 설계 문서 §0-0).
+>
+> - **이름 변경 UI 가 `1A` 에 들어갔다**(더블클릭 · `✎` · 패널의 단추가
+>   같은 인라인 입력을 연다).
+> - **Preview 직접 클릭에 그룹 단계를 넣지 않았다** — 지금처럼 개별 요소
+>   선택이 먼저이고, 그룹 전체 선택은 Layers 의 폴더 행에서만 들어간다.
+> - `members` 는 **2개 이상**이고, 하나만 남으면 같은 커밋에서 자동
+>   해제된다(설계 §4-11 의 "하나짜리 그룹 허용"이 뒤집혔다).
+> - Import 는 낡은 명단을 **봐주는 데서 더 나아가 고치고** 무엇을 얼마나
+>   고쳤는지 알린다.
+
 - 저장은 **`canvas.groups` 새 배열 하나**다 — 그룹은 `{ id, name, members }`
   뿐이고 **좌표를 갖지 않는다.** 요소는 지금 있는 배열에 그대로 남는다.
   그래서 만들기 · 해제 · 넣기 · 빼기가 **좌표를 한 칸도 쓰지 않고**, 화면
@@ -416,7 +439,6 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 - Layers 에 폴더 행(아이콘 · 펼침 화살표 · 기본 이름 `그룹 N`)이 생긴다.
   접힘 상태는 지금처럼 **Studio UI 상태**이고 저장 데이터가 아니다.
 - 폴더 행을 누르면 멤버 전부가 선택되고, 자식 행을 누르면 그 요소 단독이다.
-  Preview 에서는 `main_visual` 과 같은 **두 단계**(그룹 → 요소)다.
 - 폴더 가운데 띠로 drop 하면 넣기, 폴더 밖으로 drop 하면 빼기다.
 - **그룹 해제**(폴더만 없앰)와 **그룹 삭제**(자식까지)는 다른 단추이고,
   삭제는 확인을 받는다. 대표 사진이 멤버면 전체를 거부한다.
@@ -460,7 +482,7 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 | 3-3 | `STUDIO-LAYERS-MATERIALS-1B` | **재료별 프리셋 목록과 drag/drop** — 카드 하나를 누르면 하위 재료 목록이 열리고, 재료를 Preview 로 끌어다 놓아 자리를 정한다 | **완료** — [skin/skin-home-canvas-materials.js](../../skin/skin-home-canvas-materials.js) · [studio/inspector/studio-canvas-materials-drag.js](../../studio/inspector/studio-canvas-materials-drag.js) · 계약 [§36](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-materials-e2e-test.mjs --only=items,drop` |
 | 3-4 | `STUDIO-LAYERS-MATERIALS-1C` | **끌기 손잡이와 카탈로그 도달 범위** — 카드 본문(누르기 · 세로 스크롤)과 손잡이(끌기)를 가르고, 계약의 두 종류 표가 허용하는데 카탈로그가 막고 있던 자리(흐름의 `text` · 자유 층과 프레임 안의 `logo`·`category_nav`)를 연다. 새 재료 종류도 새 저장 필드도 없다 | **완료** — [studio/inspector/studio-canvas-materials-drag.js](../../studio/inspector/studio-canvas-materials-drag.js) · [studio/inspector/studio-canvas-add-v2.js](../../studio/inspector/studio-canvas-add-v2.js) · 계약 [§37](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-materials-e2e-test.mjs --only=handle,reach` |
 | 3-5 | `HOME-CANVAS-GROUP-CONTRACT-1` | **영구 그룹의 저장 구조 · 좌표 · Layers UX · 호환 확정. 문서만** | **완료**(2026-09-23) — [IMORY_HOME_CANVAS_GROUP_DESIGN.md](./IMORY_HOME_CANVAS_GROUP_DESIGN.md) |
-| 4 | `HOME-CANVAS-GROUP-1A` | `canvas.groups` 저장 구조 · 그룹 만들기/해제/삭제 · Layers 폴더 · 자식 넣기/빼기 · 그룹/자식 선택. **전체 transform 없음** | 미착수 |
+| 4 | `HOME-CANVAS-GROUP-1A` | `canvas.groups` 저장 구조 · 그룹 만들기/해제/삭제 · **이름 변경** · Layers 폴더 · 자식 넣기/빼기 · 그룹/자식 선택 · Import 수선. **전체 transform 없음** | **완료**(2026-09-23) — [skin/skin-home-canvas-group-v2.js](../../skin/skin-home-canvas-group-v2.js) · [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) · 계약 [§38](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-group-e2e-test.mjs` · `node skin/skin-home-canvas-test.mjs`(`[v2-group]`) |
 | 5 | `HOME-CANVAS-GROUP-1B` | 그룹 전체 이동 | 미착수 |
 | 6 | `HOME-CANVAS-GROUP-1C` | 그룹 전체 크기 조절 · 회전 | 미착수 |
 | — | ~~`HOME-CANVAS-V2-GROUP-1A`~~ | ~~여러 요소를 한 번에 main_visual 에 묶기 · primary 지정~~ | **폐기**(§5) — primary 지정은 `STUDIO-LAYERS-STRUCTURE-1` 이 이미 했고, 여러 요소 attach 가 필요해지면 `HOME-CANVAS-V2-MULTI-ATTACH-1` 로 다시 낸다 |
@@ -514,56 +536,71 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 ## 8. 다음 작업용 지시문
 
 ```text
-작업 ID: HOME-CANVAS-GROUP-1A
+작업 ID: HOME-CANVAS-GROUP-1B
 
-현재 main 과 docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md 전체,
-이 문서 §2-3 · §2-4 · §2-7 · §5 · §6, HOME Canvas 계약 §28 · §32 를
-읽고 이 작업만 구현해 줘.
+현재 main 과 docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md 의
+§0-0 · §1-2 · §4-1 · §4-4 · §4-5 · §4-8 · §4-10 · §8-1 · §9,
+이 문서 §5, HOME Canvas 계약 §26 · §28 · §30 · §38 을 읽고 이
+작업만 구현해 줘.
 
-이번 범위는 **영구 그룹의 저장 구조와 Layers 폴더**다. 설계 문서가
-이미 확정한 것을 다시 설계하지 말고 그대로 구현해라 —
-`canvas.groups` 는 `{ id, name, members }` 뿐이고 **좌표를 갖지 않는다.**
-만들기 · 해제 · 삭제 · 넣기 · 빼기가 좌표를 한 칸도 쓰지 않아야 하고,
-그래서 화면이 한 픽셀도 바뀌지 않아야 한다.
+이번 범위는 **영구 그룹 전체의 이동 하나**다. 크기 조절과 회전은
+1C 이고 이번에 열지 않는다.
 
-먼저 조사해 짧게 보고해라 — listSkinHomeCanvasV2Nodes() 가 주는 행에
-그룹 단계를 얹는 가장 얇은 길, studioCanvasLayersDropPlan() 의 띠
-규칙에 폴더 띠를 더하는 자리, commitStudioCanvasStructureNode() 의
-op 목록과 via 두 갈래가 새 다섯 op 를 그대로 받을 수 있는가,
-studioCanvasSelectTargetId() 의 프레임 두 단계 뒤에 그룹 단계를
-붙일 때 세 단계가 되는 경로(프레임 안의 그룹된 장식).
+`GROUP-1A` 는 끝났다(계약 §38) — `canvas.groups` 저장 · 검증 ·
+순수 writer 여섯 · Layers 폴더 · 만들기/해제/넣기/빼기/이름 변경/
+삭제 · Import 수선 · 그룹 선택이 이미 있다. 그 계약을 다시 설계하지
+말고 **그 위에 이동만 얹어라**.
 
-검증은 skin/skin-home-canvas-v2.js 에 넣고, 설계 §3-2 의 "거부/봐줌"
-표를 글자 그대로 따라라 — 없는 멤버 id 와 공간이 어긋난 멤버는
-**Import 에서 봐주고**, 그룹 동작을 실행할 때 같은 커밋에서 고친다
-(설계 §7-3 advisory).
+먼저 조사해 짧게 보고해라 —
+  1 skin/skin-home-canvas-editor-runtime.js setMoveableTarget() 이
+    다중 선택에서 끄고 있는 세 줄(dragTarget · renderDirections ·
+    rotationPosition)에서 **dragTarget 만** 켜는 가장 얇은 길과,
+    그때 Moveable 0.53.0 이 실제로 주는 group drag payload(실측 —
+    단일 요소 수식을 복제해 추측하지 마라).
+  2 skin/sandbox/skin-sandbox-protocol.js 에 새 kind 하나
+    (`v2-group-move`)를 더하는 자리와, 그것이 -frame.js · -host.js ·
+    studio/preview/preview-bridge.js · preview-sandbox.js 넷을
+    어떻게 지나는가.
+  3 studio/inspector/studio-canvas-v2-space.js 의
+    studioCanvasV2Space(id) 와 planStudioCanvasV2Transform(
+    "v2-move", …) 을 멤버마다 한 번씩 부르고 **마지막 결과만**
+    draft 에 넣는 자리(studio/studio-preview.js).
 
-이번에 하지 말 것: 그룹 전체 이동 · 크기 · 회전(1B · 1C) · 그룹 단위
-순서 이동 · 이름 변경 UI · 그룹 hidden/locked · 중첩 · 좌표 공간을
-넘는 이동 · v1 캔버스의 그룹 · 여러 요소 동시 attach ·
-렌더러 변경 · 실행 payload 변경 · sandbox 프로토콜 변경 ·
-APP_BUILD_VERSION · 배포.
+프레임은 **도화지 자의 delta 하나**만 올린다(설계 §4-5). 부모가
+멤버 m 마다 r(m) 로 환산한다 — overlay 는 1, 프레임 내부
+transform 은 1/(S_frame × pageScale), 프레임 내부 pin 은
+1/pageScale. **새 좌표 수식을 만들지 마라** — 위 두 함수가 이미
+overlay · transform · pin 셋을 전부 안다.
 
-★ 설계 §11-2 의 결정 넷 중 이 단계에 걸리는 것은 2(이름 변경 UI)와
-3(Import 의 관대함)이다. 사용자가 다르게 답했으면 그 답을 따르고,
-답이 없으면 설계의 권장안(각각 "나중" · "봐준다")대로 간다.
+원자성: 멤버 N개의 쓰기가 **한 커밋**이고 한 제스처 = Undo 한
+칸이다. 하나라도 실패하면 regions 는 한 글자도 바뀌지 않는다
+(중간 결과를 버린다 — 설계 §7-1 의 ★).
 
-테스트: 만들기/해제/넣기/빼기 전후 **모든 요소의 JSON 이 글자 단위로
-같다** · 그룹 선택이 멤버 전부를 고른다 · 자식 행이 단독 선택 ·
-Preview 두 단계 진입 · 금지 조합(다른 공간 · 블록 · 이미 다른 그룹)
-거부 · 빈 그룹 자동 삭제 · 대표 사진이 든 그룹 삭제의 원자적 거부 ·
-Undo 한 칸과 변화 없는 drop 의 0칸 · Save → 다시 열기 · Export →
-Import · Publish resolve · **봉투가 바이트 단위로 그대로**(groups 가
-payload 에 안 실린다) · native/sandbox parity · 390px · CSP 위반 0 ·
-기존 회귀(--only=layers,layerstruct,v2).
+이번에 하지 말 것: 그룹 크기 조절 · 회전(1C) · 그룹 단위 순서
+이동 · 그룹 hidden/locked · 중첩 · 좌표 공간을 넘는 이동 ·
+v1 캔버스의 그룹 · 렌더러 변경 · 실행 payload 에 groups 싣기 ·
+migration · APP_BUILD_VERSION · 배포.
 
-새 e2e 는 studio/studio-home-canvas-group-e2e-test.mjs (포트 9010 ·
-9011), 단위는 skin/skin-home-canvas-test.mjs 의 [v2-group] 절이다.
+테스트: 그룹을 끌면 **모든 멤버가 화면에서 정확히 같은 거리**를
+움직인다(픽셀로 재라 — 저장값이 아니다) · 자가 다른 멤버
+(overlay · frame transform · frame pin)가 섞인 그룹에서도 그렇다 ·
+저장된 숫자는 자마다 다르다 · 한 제스처 = Undo 한 칸이고 Undo 가
+전부를 되돌린다 · 왕복(+d 뒤 −d)이 1px 안이다 · 그룹이 아닌 다중
+선택은 **여전히 못 움직인다** · 자식 단독 선택은 지금처럼 혼자
+움직인다 · Save → 다시 열기 · Export → Import · Publish resolve ·
+native/sandbox parity · 390px · CSP 위반 0 · 기존 회귀
+(studio/studio-home-canvas-group-e2e-test.mjs 전체 ·
+--only=layers,layerstruct,v2free).
 
-문서는 계약 문서에 새 절로 적고, 설계 문서의 §9 에 완료 표시를 하고,
-이 문서 §6 의 4단계를 완료로 바꾸고 §8 을 HOME-CANVAS-GROUP-1B
-지시문으로 갈아 끼우고, docs/TESTS.md §13 에 새 e2e 행을 넣어라.
-완료하면 한 커밋으로 main 에 push 하고 결과를 보고해라.
+새 절은 studio/studio-home-canvas-group-e2e-test.mjs 의
+--only=move 이고, 봉투는 skin/sandbox/skin-sandbox-unit-test.mjs 의
+[canvas-group] 절이다(1B 에서 처음으로 봉투가 바뀐다).
+
+문서는 계약 문서 §38 에 이동 절을 더하고(§38-13 의 "만들지 않은
+것"에서 이동을 빼라), 설계 문서 §9 의 1B 에 완료 표시를 하고,
+이 문서 §6 의 5단계를 완료로 바꾸고 §8 을 HOME-CANVAS-GROUP-1C
+지시문으로 갈아 끼우고, docs/TESTS.md §13 의 그 행에 새 절을
+적어라. 완료하면 한 커밋으로 main 에 push 하고 결과를 보고해라.
 ```
 
 ### 배포 전 정리 항목

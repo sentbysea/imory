@@ -413,6 +413,221 @@ function studioCanvasNodeInfo(elementId) {
 
 
 /* =========================================================
+   HOME-CANVAS-GROUP-1A — 지금 draft 의 **그룹 명단**
+
+   ★ payload 가 아니라 regions 의 원본을 읽는다. 그룹은 실행
+     payload 에 실리지 않기 때문이다(계약 §38-1) — 그것이 렌더러와
+     sandbox 봉투를 무변경으로 두는 대가이고, 그래서 그룹을 아는
+     화면(Layers · 패널)만 이 창구를 쓴다.
+
+   ★ 그래도 **payload 가 성립할 때만** 답한다. 깨진 캔버스 · v1 ·
+     HOME 이 아닌 화면에서 폴더가 보이면 안 된다 — 다른 읽기와
+     같은 관문 하나(studioCanvasDraftPayload)를 지난다.
+========================================================== */
+
+function studioCanvasDraftGroups() {
+
+  if (studioCanvasPayloadVersion(studioCanvasDraftPayload()) !== 2) {
+    return [];
+  }
+
+  if (typeof window.readSkinHomeCanvasV2Groups !== "function") {
+    return [];
+  }
+
+  return window.readSkinHomeCanvasV2Groups(
+    currentWorkingSkin ? currentWorkingSkin.regions : null
+  );
+
+}
+
+
+/*
+  studioCanvasGroupInfo(groupId)
+    -> { id, name, members, live, space } | null
+
+    members  저장된 명단 그대로
+    live     그중 **지금 draft 에서 풀리는** id 만(화면 순서)
+    space    그 그룹이 놓인 좌표 공간("overlay" · "frame:<id>")
+
+  ★ `members` 와 `live` 를 가른다. 낡은 명단이 있을 수 있고(설계
+    §7-3), Layers 는 **없는 것을 있는 것처럼 그리지 않는다.**
+*/
+function studioCanvasGroupInfo(groupId) {
+
+  if (typeof groupId !== "string" || !groupId) {
+    return null;
+  }
+
+  const group =
+    studioCanvasDraftGroups().find((item) => item.id === groupId);
+
+  if (!group) {
+    return null;
+  }
+
+  const order =
+    studioCanvasNodeList().map((node) => node.id);
+
+  const live =
+    group.members
+      .filter((id) => order.indexOf(id) !== -1)
+      .sort((a, b) => order.indexOf(a) - order.indexOf(b));
+
+  return {
+    id: group.id,
+    name: group.name,
+    members: group.members.slice(),
+    live: live,
+    space: studioCanvasGroupSpaceOf(live[0] || null)
+  };
+
+}
+
+
+/* 그 요소의 좌표 공간 열쇠 — 그룹이 성립하는 조건 하나(계약 §38-2) */
+function studioCanvasGroupSpaceOf(elementId) {
+
+  const info =
+    elementId ? studioCanvasNodeInfo(elementId) : null;
+
+  if (!info) {
+    return null;
+  }
+
+  if (info.kind === "overlay") {
+    return "overlay";
+  }
+
+  if (info.kind === "frame-element" && info.parentId) {
+    return `frame:${info.parentId}`;
+  }
+
+  /* 블록 · `main_visual` 프레임 자체는 좌표가 없다 */
+  return null;
+
+}
+
+
+/* 그 요소를 갖고 있는 그룹의 id(없으면 null) */
+function studioCanvasGroupOfMember(elementId) {
+
+  if (typeof elementId !== "string" || !elementId) {
+    return null;
+  }
+
+  const hit =
+    studioCanvasDraftGroups().find(
+      (group) => group.members.indexOf(elementId) !== -1
+    );
+
+  return hit ? hit.id : null;
+
+}
+
+
+/*
+  studioCanvasSelectedGroup() -> { id, name, members, live, space } | null
+
+  ★ **"그룹 선택"이라는 별도 상태를 만들지 않는다.** 지금 고른 id
+    집합이 어떤 그룹의 **살아 있는 멤버**와 정확히 같으면 그것이
+    그룹 선택이다(설계 §6-3). 파생이라 Undo · reconcile · lasso 가
+    그대로 맞는다 — 되살아난 그룹의 선택을 따로 복원하지 않는다.
+*/
+function studioCanvasSelectedGroup() {
+
+  if (!studioCanvasSelection || studioCanvasSelection.ids.length < 2) {
+    return null;
+  }
+
+  const ids =
+    studioCanvasSelection.ids.slice().sort();
+
+  const groups =
+    studioCanvasDraftGroups();
+
+  for (let i = 0; i < groups.length; i += 1) {
+
+    const info =
+      studioCanvasGroupInfo(groups[i].id);
+
+    if (!info || info.live.length !== ids.length) {
+      continue;
+    }
+
+    const live =
+      info.live.slice().sort();
+
+    if (live.every((id, at) => id === ids[at])) {
+      return info;
+    }
+
+  }
+
+  return null;
+
+}
+
+
+/*
+  studioCanvasGroupCreateReason() -> "" | 이유
+
+  지금 고른 것으로 그룹을 만들 수 있는가. 빈 문자열이면 만들 수
+  있다. **거절 이유를 이름으로 돌려준다** — 화면이 그 한 줄을
+  문장으로 바꾼다(studio-canvas-layers-ops.js 의 표 하나).
+*/
+function studioCanvasGroupCreateReason() {
+
+  if (!studioCanvasSelection) {
+    return "selection";
+  }
+
+  const ids =
+    studioCanvasSelection.ids;
+
+  const min =
+    (typeof window.SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS === "number")
+      ? window.SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS
+      : 2;
+
+  if (ids.length < min) {
+    return "count";
+  }
+
+  if (ids.length > STUDIO_CANVAS_MAX_SELECTED) {
+    return "limit";
+  }
+
+  let space = null;
+
+  for (let i = 0; i < ids.length; i += 1) {
+
+    if (studioCanvasGroupOfMember(ids[i])) {
+      return "member";
+    }
+
+    const mine =
+      studioCanvasGroupSpaceOf(ids[i]);
+
+    if (!mine) {
+      return "kind";
+    }
+
+    if (space === null) {
+      space = mine;
+    }
+    else if (space !== mine) {
+      return "space";
+    }
+
+  }
+
+  return "";
+
+}
+
+
+/* =========================================================
    HOME-CANVAS-V2-EDITOR-1A — `main_visual` 에 들어가는 최소 동작
 
    studioCanvasSelectTargetId(hitId) -> id | null
@@ -2193,8 +2408,39 @@ function commitStudioCanvasAddNode(request) {
 const STUDIO_CANVAS_STRUCTURE_OPS = [
   "attach", "detach", "remove",
   /* STUDIO-LAYERS-STRUCTURE-1 — Layers 트리가 여는 셋 */
-  "reorder", "primary", "flag"
+  "reorder", "primary", "flag",
+  /* HOME-CANVAS-GROUP-1A — 영구 그룹 여섯(계약 §38-3 ~ §38-7) */
+  "group-create", "group-dissolve", "group-join",
+  "group-leave", "group-rename", "group-remove"
 ];
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1A — 그룹 op 이 가리키는 것은 **요소가 아니다**
+
+   위 여섯 중 넷(`group-create` 는 여러 요소, 나머지 셋은 그룹)은
+   `value.id` 가 `studioCanvasNodeInfo()` 로 풀리지 않는다 — 그룹은
+   노드가 아니기 때문이다(계약 §38-1). 그래서 대상 검사가 갈린다.
+
+     group-create             `ids` 여럿이 대상이다
+     group-dissolve · rename
+     group-remove             `id` 가 **그룹 id** 다
+     group-join               `id` 는 요소 · `groupId` 가 그룹
+     group-leave              `id` 는 요소
+
+   ★ 느슨해지지 않는다. 어느 쪽이든 확정 직전에 **지금 draft** 로
+     다시 찾고, 순수 함수가 옮긴 뒤 캔버스 전체를 다시 검증한다.
+========================================================== */
+
+/* `id` 가 요소가 아니라 그룹인 셋 */
+const STUDIO_CANVAS_GROUP_TARGET_OPS =
+  ["group-dissolve", "group-rename", "group-remove"];
+
+/* 그룹을 건드리는 여섯 전부 */
+const STUDIO_CANVAS_GROUP_OPS =
+  STUDIO_CANVAS_GROUP_TARGET_OPS.concat(
+    ["group-create", "group-join", "group-leave"]
+  );
 
 
 /* =========================================================
@@ -2271,6 +2517,75 @@ function studioCanvasStructureShapeReason(value) {
     return "flag";
   }
 
+  /* ── HOME-CANVAS-GROUP-1A ── */
+
+  if (value.op === "group-create") {
+
+    if (!Array.isArray(value.ids)) {
+      return "shape";
+    }
+
+    const min =
+      (typeof window.SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS === "number")
+        ? window.SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS
+        : 2;
+
+    if (value.ids.length < min) {
+      return "count";
+    }
+
+    /* 최대 선택 수 64 를 그대로 쓴다 — 고를 수 없는 것을 묶을
+       길을 따로 열지 않는다(계약 §38-3) */
+    if (value.ids.length > STUDIO_CANVAS_MAX_SELECTED) {
+      return "limit";
+    }
+
+    const seen = [];
+
+    for (let i = 0; i < value.ids.length; i += 1) {
+
+      const id = value.ids[i];
+
+      if (
+        typeof id !== "string" ||
+        !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(id) ||
+        seen.indexOf(id) !== -1
+      ) {
+        return "shape";
+      }
+
+      seen.push(id);
+
+    }
+
+  }
+
+  if (
+    value.op === "group-join" &&
+    (typeof value.groupId !== "string" ||
+      !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.groupId))
+  ) {
+    return "group";
+  }
+
+  if (value.op === "group-rename") {
+
+    const name =
+      (typeof window.normalizeSkinHomeCanvasGroupName === "function")
+        ? window.normalizeSkinHomeCanvasGroupName(value.name)
+        : (typeof value.name === "string" ? value.name.trim() : null);
+
+    const max =
+      (typeof window.SKIN_HOME_CANVAS_GROUP_NAME_MAX === "number")
+        ? window.SKIN_HOME_CANVAS_GROUP_NAME_MAX
+        : 40;
+
+    if (!name || name.length > max) {
+      return "name";
+    }
+
+  }
+
   return "";
 
 }
@@ -2285,9 +2600,11 @@ function commitStudioCanvasStructureNode(request) {
     return { accepted: false, reason: "op" };
   }
 
+  /* `group-create` 만 대상이 `ids` 다 — `id` 를 요구하지 않는다 */
   if (
-    typeof value.id !== "string" ||
-    !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.id)
+    value.op !== "group-create" &&
+    (typeof value.id !== "string" ||
+      !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.id))
   ) {
     return { accepted: false, reason: "id" };
   }
@@ -2307,7 +2624,42 @@ function commitStudioCanvasStructureNode(request) {
     return { accepted: false, reason: "canvas" };
   }
 
-  if (via === "layers") {
+  /* =====================================================
+     대상이 지금 draft 에 있는가 — op 마다 가리키는 것이 다르다
+  ====================================================== */
+
+  if (value.op === "group-create") {
+
+    /* Inspector 의 단추라면 **화면에 보이는 그 선택**이 곧 대상이다.
+       Layers 의 단추라면 그 행들이 지금 draft 에 있으면 된다. */
+    if (via === "selection") {
+
+      const ids =
+        studioCanvasSelection ? studioCanvasSelection.ids : [];
+
+      const same =
+        ids.length === value.ids.length &&
+        value.ids.every((id) => ids.indexOf(id) !== -1);
+
+      if (!same) {
+        return { accepted: false, reason: "selection" };
+      }
+
+    }
+    else if (!value.ids.every((id) => !!studioCanvasNodeInfo(id))) {
+      return { accepted: false, reason: "element" };
+    }
+
+  }
+  else if (STUDIO_CANVAS_GROUP_TARGET_OPS.indexOf(value.op) !== -1) {
+
+    /* `id` 가 그룹이다 — 노드로 찾지 않는다 */
+    if (!studioCanvasGroupInfo(value.id)) {
+      return { accepted: false, reason: "group" };
+    }
+
+  }
+  else if (via === "layers") {
 
     /* 행이 낡았을 수 있다 — 지금 draft 에 그 id 가 있는가 */
     if (!studioCanvasNodeInfo(value.id)) {
@@ -2344,7 +2696,12 @@ function commitStudioCanvasStructureNode(request) {
       index: value.index,
       expected: value.expected,
       flag: value.flag,
-      on: value.on
+      on: value.on,
+
+      /* HOME-CANVAS-GROUP-1A */
+      ids: Array.isArray(value.ids) ? value.ids.slice() : undefined,
+      groupId: (typeof value.groupId === "string") ? value.groupId : "",
+      name: value.name
     });
 
   if (!result || !result.ok) {
@@ -2370,10 +2727,44 @@ function commitStudioCanvasStructureNode(request) {
     clearStudioCanvasSelection();
   }
 
+  /* =====================================================
+     HOME-CANVAS-GROUP-1A — 그룹 동작 뒤의 선택
+
+       만들기   방금 만든 그룹을 고른다(= 멤버 전부)
+       삭제     자식까지 없어졌다 — 선택을 푼다
+       나머지   건드리지 않는다. reconcile 이 이미 본다.
+
+     ★ 고르는 일도 **기존 관문 하나**를 지난다
+       (proposeStudioCanvasSelection) — 여기서 판정을 한 벌 더
+       적지 않는다.
+  ====================================================== */
+  if (value.op === "group-remove") {
+    clearStudioCanvasSelection();
+  }
+  else if (value.op === "group-create" && !result.unchanged) {
+
+    const info =
+      studioCanvasGroupInfo(result.id);
+
+    if (info && info.live.length) {
+      proposeStudioCanvasSelection({
+        ids: info.live.slice(),
+        primaryId: info.live[info.live.length - 1],
+        mode: "replace"
+      });
+    }
+
+  }
+
   return {
     accepted: true,
-    id: value.id,
+    id: (typeof result.id === "string") ? result.id : value.id,
     op: value.op,
+
+    /* HOME-CANVAS-GROUP-1A — 부르는 쪽이 화면에 적는 것들 */
+    groupId: result.groupId || null,
+    name: result.name || null,
+    dissolved: result.dissolved || null,
 
     /* 변화 없는 drop · 이미 그 대표 · 이미 그 상태 — 기록 0 칸이다.
        부르는 쪽이 "됐다"와 "아무 일도 없었다"를 가를 수 있어야
@@ -2682,5 +3073,13 @@ if (typeof window !== "undefined") {
 
   /* HOME-CANVAS-V2-EDITOR-1B */
   window.studioCanvasEffectiveKind = studioCanvasEffectiveKind;
+
+  /* HOME-CANVAS-GROUP-1A — 그룹을 읽는 창구(Layers · 패널이 쓴다) */
+  window.studioCanvasDraftGroups = studioCanvasDraftGroups;
+  window.studioCanvasGroupInfo = studioCanvasGroupInfo;
+  window.studioCanvasGroupSpaceOf = studioCanvasGroupSpaceOf;
+  window.studioCanvasGroupOfMember = studioCanvasGroupOfMember;
+  window.studioCanvasSelectedGroup = studioCanvasSelectedGroup;
+  window.studioCanvasGroupCreateReason = studioCanvasGroupCreateReason;
 
 }

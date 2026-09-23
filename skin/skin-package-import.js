@@ -566,10 +566,42 @@ async function validateSkinPackageImport(rawJsonText, options) {
     정리한다(이름 규칙 · 중복 병합 · HTML 이 쓰는데 선언이 빠진 슬롯).
   */
 
-  const regions =
+  const regionsInput =
     Array.isArray(parsed.regions)
       ? parsed.regions
       : [];
+
+  /*
+    HOME-CANVAS-GROUP-1A — 낡은 그룹 명단은 **거부하지 않고 고친다**
+    (계약 §38-8 · 설계 §7-3).
+
+    없는 요소 id · 두 그룹에 걸친 요소 · 좌표 공간이 어긋난 요소 ·
+    블록은 명단에서 빠지고, 남은 멤버가 둘 미만이 된 그룹은 사라진다.
+    **요소 자체는 하나도 지우지 않는다** — 그룹은 그려지지 않으므로
+    낡은 명단이 잘못된 그림을 만들 수 없고, 편집용 메타데이터 하나
+    때문에 파일 전체를 못 열게 만드는 쪽이 더 나쁜 실패다.
+
+    ★ 검증보다 **먼저** 돈다. 그래야 "고칠 수 있는 낡음"과 "고칠 수
+      없는 모양 오류"(객체가 아니다 · id 규칙 위반 · 이름 길이)가
+      갈리고, 뒤엣것만 경로와 함께 거부된다.
+
+    ★ `canvasSource === "draft"`(AI 경로)에서는 돌지 않는다. 거기
+      regions 는 사용자가 쓴 것이 아니라 **서버가 되돌려 준 지금
+      draft** 이고, 캔버스와 아무 상관 없는 AI 수정이 draft 의 그룹
+      명단을 말없이 고쳐서는 안 된다(§9 조용히 고치지 않는다).
+  */
+
+  const canvasSourceEarly =
+    (options && options.canvasSource === "draft") ? "draft" : "file";
+
+  const groupRepair =
+    (canvasSourceEarly === "file" &&
+      typeof repairSkinHomeCanvasRegionGroups === "function")
+      ? repairSkinHomeCanvasRegionGroups(regionsInput)
+      : { regions: regionsInput, changed: false };
+
+  const regions =
+    groupRepair.regions;
 
   /*
     HOME-CANVAS-CONTRACT-1B — regions 의 `home_canvas` 항목
@@ -609,7 +641,7 @@ async function validateSkinPackageImport(rawJsonText, options) {
   */
 
   const canvasSource =
-    (options && options.canvasSource === "draft") ? "draft" : "file";
+    canvasSourceEarly;
 
   if (
     canvasSource === "file" &&
@@ -732,6 +764,13 @@ async function validateSkinPackageImport(rawJsonText, options) {
     IMPORT-CSS-IMAGE-1 — warnings 옆에 두 가지가 더 온다:
       cssReport  잘라낸 CSS 선언 목록(Import 창이 목록으로 보여 준다)
       notices    이미지 슬롯 정리 안내(빈 슬롯 포함)
+
+    HOME-CANVAS-GROUP-1A — 그리고 하나 더:
+      canvasNotices  HOME 캔버스의 그룹 명단을 **무엇을 얼마나**
+                     정리했는가. `notices` 와 따로 두는 이유는 Import
+                     창이 그 묶음에 `이미지 슬롯` 이라는 제목을 달고
+                     있어서다(studio/editor/import-editor.js) — 다른
+                     이야기를 같은 제목 아래 섞지 않는다.
   */
 
   const warnings =
@@ -739,10 +778,16 @@ async function validateSkinPackageImport(rawJsonText, options) {
       ? auditSkinPackageMaterials(skinPackage)
       : [];
 
+  const canvasNotices =
+    (groupRepair.changed && typeof describeSkinHomeCanvasGroupRepair === "function")
+      ? describeSkinHomeCanvasGroupRepair(groupRepair)
+      : [];
+
   return {
     ok: true,
     warnings,
     notices: pipeline.notices,
+    canvasNotices,
     cssReport: pipeline.cssReport,
     slotReport: pipeline.slotReport,
     skinPackage

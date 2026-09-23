@@ -1246,6 +1246,9 @@ async function applyCodeEditorChanges(pageType, rawHtml, rawCss, meta) {
 
   (result.notices || []).forEach((notice) => messages.push(notice));
 
+  /* HOME-CANVAS-GROUP-1A — 그룹 명단을 정리했으면 그 사실도 알린다 */
+  (result.canvasNotices || []).forEach((notice) => messages.push(notice));
+
   if (messages.length) {
     showStudioToast(messages.join(" "));
   }
@@ -3652,6 +3655,23 @@ function addStudioCanvasV2Node(request) {
        CSS 만 자란다.
 ========================================================== */
 
+/*
+  HOME-CANVAS-GROUP-1A — op 이름 → 순수 함수 이름.
+
+  ★ 표를 여기 하나만 둔다. 관문(studio-canvas-selection.js)은 op
+    **이름**만 알고, 어느 함수가 그 일을 하는지는 draft 에 쓰는 이
+    한 곳이 안다.
+*/
+const STUDIO_CANVAS_GROUP_WRITERS = {
+  "group-create": "writeSkinHomeCanvasV2GroupCreate",
+  "group-dissolve": "writeSkinHomeCanvasV2GroupDissolve",
+  "group-join": "writeSkinHomeCanvasV2GroupJoin",
+  "group-leave": "writeSkinHomeCanvasV2GroupLeave",
+  "group-rename": "writeSkinHomeCanvasV2GroupRename",
+  "group-remove": "writeSkinHomeCanvasV2GroupRemove"
+};
+
+
 function studioCanvasV2PinnedLookCss(css, id) {
 
   if (
@@ -3815,6 +3835,39 @@ function moveStudioCanvasV2Node(request) {
       );
 
   }
+  /* =====================================================
+     HOME-CANVAS-GROUP-1A — 영구 그룹 여섯
+
+     ★ 여섯 다 **자리 계산이 없다.** 그룹은 좌표를 갖지 않고
+       멤버의 좌표도 한 칸 건드리지 않으므로(계약 §38-1), 묶기 ·
+       빼기와 달리 plan 을 부르지 않고 순수 함수로 곧장 간다.
+       프레임의 자 보고가 아직 없어도 이 여섯은 할 수 있다.
+
+     ★ 순수 함수가 없는 문서(sandbox 프레임)에서는 위 `unsupported`
+       검사에 걸리지 않으므로 여기서 한 번 더 본다 — 그룹 파일은
+       Studio 문서에만 실린다(계약 §38-10).
+  ====================================================== */
+  else if (STUDIO_CANVAS_GROUP_WRITERS[value.op]) {
+
+    const writer =
+      window[STUDIO_CANVAS_GROUP_WRITERS[value.op]];
+
+    if (typeof writer !== "function") {
+      return { ok: false, reason: "unsupported" };
+    }
+
+    result =
+      writer(
+        currentWorkingSkin.regions,
+        {
+          id: value.id,
+          ids: Array.isArray(value.ids) ? value.ids.slice() : undefined,
+          groupId: (typeof value.groupId === "string") ? value.groupId : "",
+          name: value.name
+        }
+      );
+
+  }
   else {
     return { ok: false, reason: "op" };
   }
@@ -3867,7 +3920,21 @@ function moveStudioCanvasV2Node(request) {
 
   renderPreviewAfterSkinPackageChange();
 
-  return { ok: true, id: value.id, op: value.op, kind: result.kind || null };
+  return {
+    ok: true,
+
+    /* 만들기는 **새 그룹 id** 를 돌려준다 — 부르는 쪽이 그것을 곧바로
+       고르고 펼친다(계약 §38-3). 나머지는 요청의 그 id 다. */
+    id: (typeof result.id === "string") ? result.id : value.id,
+    op: value.op,
+    kind: result.kind || null,
+
+    /* HOME-CANVAS-GROUP-1A — 그룹 동작이 화면에 알려야 하는 것들 */
+    groupId: (typeof result.groupId === "string") ? result.groupId : null,
+    name: (typeof result.name === "string") ? result.name : null,
+    members: Array.isArray(result.members) ? result.members.slice() : null,
+    dissolved: (typeof result.dissolved === "string") ? result.dissolved : null
+  };
 
 }
 

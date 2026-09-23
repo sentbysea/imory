@@ -40,8 +40,13 @@
 > `HOME-CANVAS-V2-MAIN-VISUAL-1`(2026-09-21, **`main_visual` 내부** — §24) ·
 > `HOME-CANVAS-V2-EDITOR-1A`(2026-09-22, **v2 선택과 기본 배치 조정** — §25) ·
 > `HOME-CANVAS-V2-EDITOR-1B`(2026-09-22, **프레임 내부 요소 · overlay 의
-> 자리 · 크기 · 각도 — 패널과 직접 조작** — §26. v1 계약 무변경).
+> 자리 · 크기 · 각도 — 패널과 직접 조작** — §26. v1 계약 무변경) ·
+> `HOME-CANVAS-GROUP-1A`(2026-09-23, **영구 그룹의 저장 · Layers 폴더 ·
+> 만들기/해제/넣기/빼기/이름 변경/삭제** — §38. `canvas.groups` 새 칸
+> 하나이고 **렌더러 · sandbox 봉투 · v1 계약 무변경**이다 — 그룹은 실행
+> payload 에 실리지 않는다).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
+> 그룹 설계: [IMORY_HOME_CANVAS_GROUP_DESIGN.md](../plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md) — **PLAN**(1B · 1C 가 남았다).
 
 관련 코드
 
@@ -68,6 +73,7 @@
 | **v1 의 불변 writer** | [skin/skin-home-canvas-write.js](../../skin/skin-home-canvas-write.js) |
 | **v2 의 값 표 · 검증 · 실행 payload** | [skin/skin-home-canvas-v2.js](../../skin/skin-home-canvas-v2.js) |
 | **v2 의 트리 탐색과 불변 writer** | [skin/skin-home-canvas-write-v2.js](../../skin/skin-home-canvas-write-v2.js) |
+| **v2 영구 그룹의 순수 writer · Import 수선**(§38) | [skin/skin-home-canvas-group-v2.js](../../skin/skin-home-canvas-group-v2.js) |
 | **v2 선택 하나의 좌표 자와 storage 번역**(§26-2 · §26-4) | [studio/inspector/studio-canvas-v2-space.js](../../studio/inspector/studio-canvas-v2-space.js) `studioCanvasV2Space` · `planStudioCanvasV2Transform` |
 | **왼쪽 Canvas 패널**(v1 · v2 두 화면) | [studio/inspector/studio-canvas-inspector.js](../../studio/inspector/studio-canvas-inspector.js) · [studio/inspector/studio-canvas-inspector-v2.js](../../studio/inspector/studio-canvas-inspector-v2.js) |
 
@@ -84,6 +90,8 @@
 `node studio/studio-home-canvas-rotate-e2e-test.mjs` ·
 `node studio/studio-home-canvas-inspector-e2e-test.mjs`
 (`--only=panel|text|geometry|round|v2|v2free|sandbox`) ·
+`node studio/studio-home-canvas-group-e2e-test.mjs`
+(`--only=save|tree|name|ops|drag|import|round|mobile|sandbox` — §38) ·
 `node skin/sandbox/skin-sandbox-unit-test.mjs` — [TESTS.md](../TESTS.md) §13.
 
 ---
@@ -6217,3 +6225,312 @@ Layers 행의 그 규칙 하나다(§32-7) — 350ms · 슬롭 · `touch-action`
   만큼 넓어진다.
 - §36-9 의 나머지 둘(**놓을 자리는 끌기를 시작할 때 한 번 잰다** ·
   **썸네일은 재료의 `preview` 로만 그린다**)은 그대로다.
+
+---
+
+## 38. 영구 그룹 — 저장 · 폴더 · 만들기/해제/넣기/빼기 (`HOME-CANVAS-GROUP-1A`)
+
+> 상태: **CURRENT CONTRACT**. 2026-09-23 에 구현되고 이 문서에 적혔다.
+> 설계 전체는 [IMORY_HOME_CANVAS_GROUP_DESIGN.md](../plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md)
+> 이고, 이 절은 **그중 1A 가 실제로 강제하는 범위**다.
+>
+> ★ **그룹 전체의 이동 · 크기 조절 · 회전은 1A 에 없다**(`GROUP-1B` ·
+> `1C`). 그룹을 골라도 틀만 그려지고 손잡이가 하나도 없다 — §38-9.
+
+관련 코드
+
+| 무엇 | 파일 |
+| --- | --- |
+| 그룹의 값 표 · 이름 정규화 · **검증** | [skin/skin-home-canvas-v2.js](../../skin/skin-home-canvas-v2.js) `validateSkinCanvasV2Groups` · `normalizeSkinHomeCanvasGroupName` |
+| **순수 writer 여섯 · 수선 · 떼기** | [skin/skin-home-canvas-group-v2.js](../../skin/skin-home-canvas-group-v2.js) |
+| 요소가 사라지거나 공간이 바뀔 때 떼는 자리 | [skin/skin-home-canvas-write-v2.js](../../skin/skin-home-canvas-write-v2.js) `skinHomeCanvasV2ApplyGroupPrune` |
+| Import 수선 입구 | [skin/skin-package-import.js](../../skin/skin-package-import.js) `repairSkinHomeCanvasRegionGroups` |
+| 관문(op 여섯) · 그룹 읽기 · 그룹 선택 판정 | [studio/inspector/studio-canvas-selection.js](../../studio/inspector/studio-canvas-selection.js) |
+| draft 에 쓰는 자리 | [studio/studio-preview.js](../../studio/studio-preview.js) `moveStudioCanvasV2Node` · `STUDIO_CANVAS_GROUP_WRITERS` |
+| Layers 폴더 행 · 인라인 이름 | [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) |
+| 넣기 · 빼기 drop 판정 | [studio/inspector/studio-canvas-layers-drag.js](../../studio/inspector/studio-canvas-layers-drag.js) |
+| 창구 여섯과 거절 문장 | [studio/inspector/studio-canvas-layers-ops.js](../../studio/inspector/studio-canvas-layers-ops.js) |
+| Canvas 패널의 그룹 블록 | [studio/inspector/studio-canvas-inspector.js](../../studio/inspector/studio-canvas-inspector.js) |
+
+관련 테스트: `node skin/skin-home-canvas-test.mjs`(`[v2-group]`) ·
+`node studio/studio-home-canvas-group-e2e-test.mjs`
+(`--only=save|tree|name|ops|drag|import|round|mobile|sandbox`).
+
+### 38-1. 저장 모양 — `canvas.groups` 는 **id 명단**이다
+
+```json
+{
+  "name": "home_canvas",
+  "enabled": true,
+  "canvas": {
+    "version": 2,
+    "baseWidth": 390,
+    "baseHeight": 900,
+    "flow": { "…": "…" },
+    "overlays": [ "…" ],
+
+    "groups": [
+      { "id": "canvas_g1", "name": "그룹 1", "members": ["canvas_o1", "canvas_o2"] }
+    ]
+  }
+}
+```
+
+| 칸 | 필수 | 규칙 |
+| --- | --- | --- |
+| `groups` | | `canvas` 의 배열. 빠지면 그룹이 없다는 뜻이고 `[]` 와 **같은 뜻**이다. 200개 이하. **`version:2` 에서만 뜻이 있다** |
+| `id` | ✔ | 요소 id 와 같은 규칙(영문자로 시작하는 1~64자 · 영문 · 숫자 · `_` · `-`). **블록 · 프레임 내부 요소 · overlay 와 한 이름 공간**이다(§14-5) |
+| `name` | | 정규화 뒤 1~40자. 정규화는 제어문자 → 공백 · 공백 연속 → 공백 하나 · 앞뒤 공백 제거다. 공백만이면 거부한다(이름을 지우려면 칸 자체를 뺀다). Studio 는 언제나 적는다 |
+| `members` | ✔ | 요소 id 문자열 배열. **2개 이상** · 200개 이하 · 그룹 안 중복 금지 · **그룹끼리 겹침 금지** · 그룹 id 금지(중첩 금지) |
+
+- **그룹은 좌표를 갖지 않는다.** `x` · `y` · `width` · `height` ·
+  `rotation` · `hidden` · `locked` 칸이 **없다**.
+- **좌표 공간은 저장하지 않고 파생한다** — 멤버가 전부 `overlay` 면 도화지
+  자, 전부 같은 프레임의 `frame-element` 면 그 프레임이다(§38-2).
+- **실행 payload 에 실리지 않는다.** `buildSkinCanvasV2RenderPayload()` 는
+  아는 칸만 새 리터럴로 만들고 `groups` 는 그 목록에 없다. 그래서
+  **렌더러 · sandbox 봉투(`skin/sandbox/skin-sandbox-protocol.js`) · 프레임
+  문서가 이 라운드에서 한 줄도 바뀌지 않았고**, native/sandbox parity 가
+  "맞춰야 할 것"이 아니라 **처음부터 같은 것**이다.
+- **`version` 은 2 그대로다.** 새 `type` 도 새 중첩도 없으므로 옛 배포는
+  `groups` 를 **모르는 칸으로 보존**한다(§9). migration · schema version ·
+  새 최상위 필드 0.
+- 저장할 때 `groups` 가 비면 **칸 자체를 뺀다** — "빠진 것"과 "빈 배열"을
+  두 모양으로 두지 않는다.
+
+### 38-2. 좌표 공간 — 그룹이 성립하는 조건
+
+| 멤버 구성 | 공간 열쇠 | 허용 |
+| --- | --- | --- |
+| 전부 `overlay` | `"overlay"` | ✔ |
+| 전부 같은 프레임의 `frame-element`(`transform` · `pin` 혼합 포함) | `"frame:<frameId>"` | ✔ |
+| 서로 다른 프레임 | — | ✘ `space` |
+| overlay + frame-element | — | ✘ `space` |
+| `flow.blocks` 의 블록 · `main_visual` 프레임 자체 | — | ✘ `kind`(좌표가 없다) |
+| 다른 그룹 | — | ✘ `nest` |
+
+한 프레임 안에서 `transform` 은 프레임 내부 자, `pin` 은 프레임 상자 자지만
+**둘 다 그 프레임의 자**다. 조작 단계(`1B` · `1C`)가 멤버마다 자기 자로
+환산한다.
+
+### 38-3. 만들기
+
+- 같은 공간의 요소를 **2개 이상** 고른 상태에서 `그룹 만들기` 가 보인다 —
+  Layers 맨 위 단추와 Canvas 패널의 단추 **둘 다** 같은 문을 지난다.
+- 최대 선택 수 **64** 를 그대로 쓴다(`STUDIO_CANVAS_MAX_SELECTED`).
+- 묶을 수 없는 조합이면 단추가 **보이되 눌리지 않고** 이유가 한 줄로 붙는다
+  (`space` · `kind` · `member` · `count` · `limit`). 조용히 사라지지 않는다.
+- 기본 이름은 `그룹 N` 이고 `N = 1 + (지금 이름 중 "그룹 N" 꼴의 최대 N)`
+  다. **자리로 계산하지 않는다** — `그룹 1` 을 지웠을 때 `그룹 2` 가
+  `그룹 1` 로 바뀌면 주인이 다른 폴더를 보게 된다.
+- `members` 는 **캔버스 배열 순서**로 적는다(고른 순서가 아니다).
+- **요소는 한 칸도 바뀌지 않는다** — 좌표 · geometry · 배열 순서 · 렌더
+  결과가 전부 그대로다. 그것이 계산 결과가 아니라 **구조적 사실**이다
+  (실측: 묶기 전후 `getBoundingClientRect()` 가 소수점까지 같다).
+- 만든 직후 그 그룹이 선택이고 폴더는 펼쳐져 있다.
+
+### 38-4. Layers 폴더
+
+```text
+페이지 장식
+  ▾ 📁 그룹 1  (2)          [✎] [⤺] [🗑]
+      ⠿ 도형
+      ⠿ 도형
+  ⠿ 도형
+```
+
+- 폴더 행은 그 그룹의 **첫 멤버 자리**(배열에서 가장 앞선 멤버)에 선다.
+- **폴더의 자식 순서는 원본 배열의 상대 순서**다.
+- ★ **멤버가 배열에서 연속일 필요가 없다.** 폴더를 만들려고 배열을
+  재정렬하지 않는다 — 그것은 곧 앞뒤 겹침 순서가 바뀐다는 뜻이고, "그룹을
+  만들어도 화면이 안 바뀐다"에 정면으로 어긋난다. 멤버 사이에 끼어 있던
+  그룹 밖 요소는 **화면에서만** 폴더 뒤로 밀려 그려진다.
+- ★ 그래서 **순서 끌기는 화면 순서를 세지 않는다.** 겨눈 형제가 누구인지만
+  화면에서 읽고, 그 형제의 **배열 index** 로 삽입 자리를 낸다. 폴더가
+  하나도 없으면 지금까지와 똑같은 숫자가 나온다.
+- 프레임 안의 그룹은 그 프레임의 자식 자리에 한 단 더 들어간다(깊이 2).
+- 접힘 · 펼침은 **Studio UI 상태**다(`studioCanvasLayersCollapsed`). 저장
+  데이터가 아니고 Undo 대상도 Export/Import 대상도 아니다.
+- 고른 **자식 하나**가 접힌 폴더 안이면 그 폴더를 자동으로 펼친다.
+  ★ **그룹 전체를 고른 경우는 펼치지 않는다** — 폴더 행을 누르면 멤버
+  전부가 선택인데 그것을 "안을 골랐다"로 읽으면 접은 폴더가 곧바로 다시
+  열려 접을 수가 없다.
+- 그룹 안의 자식은 원래 레이어 기능(눈 · 자물쇠 · 삭제 · 순서 끌기)을
+  그대로 쓴다.
+
+### 38-5. 넣기 · 빼기 (drag)
+
+| drop 자리 | 결과 |
+| --- | --- |
+| 폴더 행의 **가운데 띠**(위아래 25% 제외) | 그 그룹에 **넣기**(`group-join`) |
+| 폴더 행의 위/아래 끝 | 지금처럼 그 자리 **순서**. 그룹 순서 변경으로 읽지 않는다 |
+| 멤버를 **자기 폴더 밖**의 자리로 | 그 그룹에서 **빼기**(`group-leave`) |
+| 좌표 공간이 다른 폴더 | **금지** — `data-drop="forbidden"` 으로 보이고 손을 놓아도 데이터가 안 바뀌며 이유가 뜬다 |
+
+- **다른 그룹으로 옮기는 것도 요청 하나**(`group-join`)다 — 뗀 상태와 붙인
+  상태 사이의 반쪽 저장이 생기지 않는다.
+- 넣기 · 빼기 모두 **배열 자리를 건드리지 않는다.** 소속만 바뀌므로 화면
+  위치 · geometry · 겹침 순서가 한 칸도 안 변한다.
+- 멤버가 **하나만 남으면 그 그룹을 같은 커밋에서 해제**하고 마지막 요소는
+  일반 레이어로 돌아온다. 빈 그룹도 하나짜리 그룹도 저장되지 않는다.
+- 넣은 뒤 그 폴더가 접혀 있으면 펼친다.
+- 그룹 행 자체에는 **순서 끌기 손잡이가 없다** — 그룹을 한 덩어리로 위아래
+  옮기는 것은 1A 에 없다(§38-13).
+- 다중 선택 상태에서는 구조 drag 를 시작하지 않는다(§32-8 그대로). 멤버
+  하나를 폴더 밖으로 끌려면 먼저 그 행을 단독으로 고른다.
+
+### 38-6. 이름 변경
+
+- 평상시에는 일반 행 이름이다. **더블클릭** 또는 행의 `✎` 가 인라인 입력으로
+  바꾼다. Canvas 패널의 `이름 변경` 도 **같은 칸**을 연다(입력을 두 벌
+  만들지 않는다).
+- **Enter · blur 는 확정**, **Escape 는 취소**다.
+- 빈 이름(정규화 뒤 빈 문자열)은 확정되지 않고 이유가 뜬다.
+- 같은 이름은 **기록 0칸**이다(정규화한 뒤에 비교한다).
+- **이름만 바뀐다** — 요소 id 도 `members` 참조도 그대로다.
+- 고치는 동안에는 멤버 수와 단추 셋이 물러난다(390px 에서 입력 칸에 60px 도
+  안 남는다 — 실측 58px → 242px).
+
+### 38-7. 해제와 삭제는 **다른 동작**이다
+
+| | 그룹 해제(`⤺`) | 그룹 삭제(`🗑`) |
+| --- | --- | --- |
+| 무엇이 없어지나 | `canvas.groups` 의 그 항목 하나 | 그 항목 **과 모든 자식 요소** |
+| 화면 | **한 픽셀도 안 바뀐다** | 그 요소들이 사라진다 |
+| 확인 | 묻지 않는다 | **묻는다** |
+| Undo | 1칸 | 1칸(그룹 · 자식 · 선택이 함께 돌아온다) |
+
+확인 문구가 둘을 글자로 가른다.
+
+```text
+  "그룹 1" 과 그 안의 요소 2개를 함께 지웁니다.
+  폴더만 없애고 요소는 남기려면 [그룹 해제] 를 쓰세요.
+  되돌리려면 Undo(↶) 를 누르면 됩니다.
+```
+
+- **취소는 변경 0 · Undo 0칸**이다 — 확인은 문 앞에서 한다.
+- 멤버 중 하나가 그 프레임의 **대표 사진**이면 삭제 전체를 거부한다
+  (`primary`). 일부만 지운 상태를 만들지 않는다.
+- 삭제 뒤 선택이 풀린다.
+
+### 38-8. Import 는 낡은 명단을 **거부하지 않고 고친다**
+
+낡은 명단은 **화면에 영향을 줄 수 없다** — 그룹은 그려지지 않기 때문이다.
+편집용 메타데이터 하나 때문에 파일 전체를 못 열게 만드는 쪽이 더 나쁜
+실패다. 그래서 Import 는 **검증보다 먼저** 수선한다.
+
+| 무엇 | 어떻게 |
+| --- | --- |
+| 없는 member id(지워진 요소 · 그룹 id · 오타) | **뺀다** |
+| 좌표가 없는 것(블록 · `main_visual` 프레임 자체) | **뺀다** |
+| 같은 그룹 안의 중복 | **뺀다** |
+| 두 그룹에 걸친 요소 | **먼저 나온 유효 그룹**만 인정한다 |
+| 좌표 공간이 섞인 그룹 | **첫 멤버의 공간**만 남긴다 |
+| 정리 뒤 멤버가 2개 미만 | 그 **그룹을 뺀다** |
+| **요소 자체** | **하나도 지우지 않는다** |
+
+정리했으면 완료 안내에 **정리된 그룹 수**와 **제거된 잘못된 멤버 수**를
+사람이 읽는 한 줄로 적는다(`result.canvasNotices` → Import 창의
+`HOME 캔버스 그룹` 묶음 · Code 적용의 toast).
+
+★ **모양 오류는 여전히 거부한다** — 객체가 아니다 · `id` 규칙 위반 ·
+`members` 가 배열이 아니다 · 이름이 문자열이 아니거나 40자 초과. 그것은
+수선이 아니라 오류이고, 검증기가 **정확한 JSON 경로**와 함께 말한다.
+
+★ **AI 경로(`canvasSource:"draft"`)에서는 수선하지 않는다.** 거기 regions 는
+사용자가 쓴 것이 아니라 서버가 되돌려 준 **지금 draft** 이고, 캔버스와 아무
+상관 없는 AI 수정이 draft 의 명단을 말없이 고쳐서는 안 된다(§9).
+
+★ **Import 밖의 writer 는 조용히 봐주지 않는다.** 위 여섯 writer 는 전부
+거절하고 이름 있는 이유를 준다.
+
+### 38-9. 선택 표시 — 1A 는 그룹 transform 을 열지 않는다
+
+★ **"그룹 선택"이라는 별도 상태를 만들지 않는다.** 지금 고른 id 집합이 어떤
+그룹의 **살아 있는 멤버**와 정확히 같으면 그것이 그룹 선택이다. 파생이라
+Undo · reconcile · lasso 가 그대로 맞는다 — 되살아난 그룹의 선택을 따로
+복원하는 코드가 없다.
+
+**폴더 행을 누르면**
+
+- 멤버 전부가 선택된다(기존 다중 선택 상태 하나 그대로).
+- 기존 다중 선택 외곽선은 그려진다.
+- **이동 · 크기 조절 · 회전 손잡이는 하나도 없다** — 다중 선택에서
+  `setMoveableTarget()` 이 이미 `dragTarget: null` · `renderDirections: []` ·
+  `rotationPosition: "none"` 이다(§16). 새로 끄는 줄이 없다.
+- Canvas 패널이 `그룹 · 요소 N개` 와 이름을 적고 `그룹 해제` · `이름 변경` ·
+  `그룹 삭제` 를 준다.
+- 패널이 **"그룹 전체의 이동 · 크기 조절 · 회전은 다음 단계에서
+  지원합니다"** 를 적는다 — "왜 안 움직이지"를 추측으로 남기지 않는다.
+
+**자식 행을 누르면** 기존 단일 요소 선택과 **완전히 같다** — 그 자식만
+이동 · 크기 조절 · 회전되고 그룹의 다른 요소는 움직이지 않는다.
+
+**Preview 직접 클릭은 지금처럼 개별 요소 선택이 먼저다.** 그룹 전체 선택은
+Layers 의 폴더 행에서 들어간다.
+
+### 38-10. 명단이 낡을 수 있는 자리와 **쓰는 쪽이 고치는** 규칙
+
+`canvas.groups` 가 id 명단이라 짊어지는 유일한 비용이다. 읽을 때는 아무것도
+고치지 않고(§9), **그 요소를 실제로 건드리는 그 커밋에서** 고친다.
+
+| 언제 | 무엇을 하나 |
+| --- | --- |
+| 요소 삭제(`remove`) | 그 id 를 모든 명단에서 뗀다. 블록을 지우면 **그 안의 요소 id 까지** 뗀다 |
+| 묶기 · 빼기(`attach`/`detach`) | 좌표 공간이 바뀌므로 그 id 를 명단에서 뗀다 |
+| 위 둘로 멤버가 2개 미만이 됨 | 그 그룹을 **같은 커밋에서** 해제한다(별도 Undo 칸 없음) |
+| Layers 가 그릴 때 | 없는 id 는 **그리지 않는다** — 있는 것처럼 보이지 않게 |
+| 화면 | 영향 없음. `groups` 는 렌더 payload 에 실리지 않는다 |
+
+★ 그룹 파일(`skin/skin-home-canvas-group-v2.js`)은 **Studio 문서 둘에만**
+실린다(`studio/index.html` · `studio/studio-lifecycle-scenario.html`).
+sandbox 프레임과 그 allowlist, 공개 `index.html`, Preview 프레임에는
+**일부러 넣지 않았다** — 그룹은 실행 payload 에 실리지 않아 그릴 것이 없고,
+떼는 단계는 그 파일이 없으면 그냥 없다(화면에 영향이 없다).
+
+### 38-11. `hidden` · `locked` — **합성하지 않는다**
+
+**폴더 행에 눈 · 자물쇠를 그리지 않는다.** 저장 구조에 그룹의
+`hidden`/`locked` 칸이 **없고**(§38-1), 렌더러는 `groups` 를 보지 않는다.
+그래서 그룹 단위 숨김을 구현할 방법은 "멤버 전부의 `hidden` 을 한꺼번에
+켜기"뿐인데, 그러면 **끌 때 되돌릴 수 없다** — 원래 혼자 숨어 있던 멤버까지
+함께 드러난다. 되돌릴 수 없는 토글을 만들지 않는다(§22-7 이 레이어 목록이
+없을 때 `hidden` 토글을 일부러 뺀 것과 **같은 판단**이다).
+
+폴더 행은 **파생 표시만** 한다 — 멤버가 전부 숨김이면 흐리게, 전부 잠김이면
+기울임이다. 누를 수 없다.
+
+### 38-12. Undo 칸 수
+
+| 동작 | Undo |
+| --- | --- |
+| 그룹 만들기 · 해제 · 넣기 · 빼기 · 이름 변경 | **각 1** |
+| 그룹과 자식 삭제 | **1**(그룹 · 자식 · 선택이 함께 돌아온다) |
+| 멤버가 하나 남아 그룹이 사라짐 | 그 빼기/옮기기와 **같은 1칸** |
+| 삭제 확인 취소 · 같은 이름 · 변화 없는 drop · 금지된 drop · 빈 이름 | **0** |
+
+Undo 는 working skin 전체 스냅샷 한 칸이므로(§17-6) **커밋 하나가 곧 한
+칸**이고 노드 수와 무관하다.
+
+### 38-13. 이 라운드가 만들지 않은 것
+
+**그룹 전체의 이동 · 크기 조절 · 회전**(`GROUP-1B` · `1C`) · **그룹 단위
+순서 이동** · 그룹의 `hidden`/`locked` 칸 · **중첩 그룹** · 좌표 공간을
+넘는 그룹 이동 · v1 캔버스의 그룹 · 새 sandbox 메시지 · 렌더러 변경 ·
+migration · `APP_BUILD_VERSION` 변경(배포하지 않았다).
+
+### 38-14. 남은 차이
+
+- **그룹을 한 덩어리로 위아래 옮길 수 없다.** 멤버를 배열에서 연속으로
+  모아야 하는데 그 사이에 낀 요소와의 겹침 순서가 바뀐다. 넣으려면 "겹침이
+  바뀔 수 있음"을 사용자가 받아들여야 하므로 결정 사항으로 남긴다.
+- **다중 선택에서는 구조 drag 를 시작하지 않는다**(§32-8). 그룹을 고른 채로
+  멤버 하나를 폴더 밖으로 끌 수 없고, 먼저 그 행을 단독으로 골라야 한다.
+- **옛 Studio · Code · AI 를 지난 파일의 명단이 낡을 수 있다.** 화면에는
+  영향이 없지만 Layers 의 폴더가 멤버를 잃은 채로 보일 수 있고, 그 수선은
+  Import 를 지날 때(§38-8) 또는 그 요소를 건드리는 커밋(§38-10)에서 일어난다.
+- **이력(history)의 낡은 명단은 고치지 않는다.** 과거 content 는
+  append-only 라 고쳐 쓸 수 없다. 지난 버전을 Restore 하면 그 명단이 낡은
+  채로 오고, 그다음 그룹 동작이 그것을 고친다.
+- **v1 캔버스에는 그룹이 없다.** v1 에서 `groups` 는 모르는 칸이고 Layers 도
+  v2 에서만 트리를 그린다.

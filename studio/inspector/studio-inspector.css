@@ -1902,6 +1902,30 @@
 
 
 /* =========================================================
+   HOME-CANVAS-GROUP-1A — Canvas 패널의 그룹 블록 (계약 §38-9)
+
+   ★ 새 색도 새 단추 모양도 만들지 않는다. 위
+     .studio-inspector-mini-button 을 그대로 쓰고, 여기서 정하는
+     것은 **단추 셋이 한 줄에 어떻게 앉는가** 하나다.
+
+   ★ 390px — 감는다(고정 breakpoint 를 두지 않는다). 왼쪽 패널의
+     폭은 모바일 시트 · 데스크톱 패널에서 제각각이다.
+========================================================== */
+
+.studio-canvas-inspector-structure-row {
+  display: flex;
+  flex-wrap: wrap;
+
+  gap: 6px;
+}
+
+
+.studio-canvas-group-button {
+  flex: 0 0 auto;
+}
+
+
+/* =========================================================
    HOME-CANVAS-TYPOGRAPHY-1 — Canvas 글자의 타이포그래피
 
    그리는 쪽: studio/inspector/studio-canvas-typography.js

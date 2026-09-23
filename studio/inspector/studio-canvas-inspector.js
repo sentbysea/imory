@@ -165,7 +165,40 @@ function studioCanvasInspectorView() {
   }
 
   if (selection.ids.length > 1) {
-    return { mode: "multi", count: selection.ids.length };
+
+    /* =====================================================
+       HOME-CANVAS-GROUP-1A — 지금 고른 것이 **한 그룹 전체**인가
+       (계약 §38-9)
+
+       별도 "그룹 선택" 상태를 만들지 않는다. 고른 id 집합이 어떤
+       그룹의 살아 있는 멤버와 정확히 같으면 그것이 그룹 선택이고,
+       파생이라 Undo · reconcile · lasso 가 그대로 맞는다.
+    ====================================================== */
+    const group =
+      (typeof window.studioCanvasSelectedGroup === "function")
+        ? window.studioCanvasSelectedGroup()
+        : null;
+
+    if (group) {
+      return {
+        mode: "group",
+        count: group.live.length,
+        groupId: group.id,
+        groupName: group.name || ""
+      };
+    }
+
+    return {
+      mode: "multi",
+      count: selection.ids.length,
+
+      /* 묶을 수 있는가 — 단추의 상태를 view 가 들고 있는다 */
+      groupReason:
+        (typeof window.studioCanvasGroupCreateReason === "function")
+          ? window.studioCanvasGroupCreateReason()
+          : ""
+    };
+
   }
 
   /* 값은 선택 상태가 아니라 **draft** 에서 읽는다 — 드래그 · Undo 로
@@ -316,7 +349,12 @@ function studioCanvasInspectorShapeOf(view) {
   }
 
   if (view.mode === "multi") {
-    return `multi:${view.count}`;
+    return `multi:${view.count}:${view.groupReason || ""}`;
+  }
+
+  /* HOME-CANVAS-GROUP-1A — 이름과 멤버 수가 바뀌면 다시 그린다 */
+  if (view.mode === "group") {
+    return `group:${view.groupId}:${view.count}:${view.groupName}`;
   }
 
   return "none";
@@ -405,13 +443,15 @@ function studioCanvasInspectorHead(view) {
   /* ★ 주 제목은 **사람이 읽는 종류 이름**이다. 요소 id 는 아래
      보조 줄로 간다(계약 §22 — id 를 제목으로 쓰지 않는다). */
   title.textContent =
-    (view.mode === "multi")
-      ? `Canvas 요소 ${view.count}개 선택됨`
-      : (
-          (typeof window.studioCanvasElementLabel === "function")
-            ? window.studioCanvasElementLabel(view.type)
-            : "Canvas 요소"
-        );
+    (view.mode === "group")
+      ? `그룹 · 요소 ${view.count}개`
+      : (view.mode === "multi")
+        ? `Canvas 요소 ${view.count}개 선택됨`
+        : (
+            (typeof window.studioCanvasElementLabel === "function")
+              ? window.studioCanvasElementLabel(view.type)
+              : "Canvas 요소"
+          );
 
   head.appendChild(title);
 
@@ -425,7 +465,9 @@ function studioCanvasInspectorHead(view) {
     "studioCanvasInspectorMeta";
 
   meta.textContent =
-    (view.mode === "multi") ? "Canvas · HOME" : `Canvas · ${view.id}`;
+    (view.mode === "group")
+      ? `Canvas · ${view.groupName || "그룹"}`
+      : (view.mode === "multi") ? "Canvas · HOME" : `Canvas · ${view.id}`;
 
   head.appendChild(meta);
 
@@ -1468,6 +1510,175 @@ function studioCanvasInspectorTypeBlock(view) {
    8. 그리기
 ========================================================== */
 
+/* =========================================================
+   HOME-CANVAS-GROUP-1A — Canvas 패널의 그룹 블록 두 개
+   (계약 §38-3 · §38-7 · §38-9)
+
+   ★ 여기에는 draft 에 닿는 줄이 없다. 전부
+     studio-canvas-layers-ops.js 의 창구를 지나고, 그 창구는
+     commitStudioCanvasStructureNode() 하나를 지난다 — Layers 의
+     단추와 **같은 문 · 같은 Undo 한 칸**이다.
+========================================================== */
+
+function studioCanvasGroupActionButton(id, label, title, onClick) {
+
+  const button =
+    document.createElement("button");
+
+  /* ★ 새 단추 모양을 만들지 않는다 — 소속 블록이 쓰는 그 두 클래스
+     하나다(`disabled` 표시까지 이미 있다) */
+  button.type = "button";
+  button.className = "studio-inspector-mini-button studio-canvas-group-button";
+  button.id = id;
+  button.textContent = label;
+  button.title = title;
+
+  button.addEventListener("click", onClick);
+
+  return button;
+
+}
+
+
+/* 거절 이유 한 줄을 패널의 안내 줄에 적는다 */
+function studioCanvasGroupSay(result) {
+
+  if (typeof window.setStudioCanvasLayersMessage === "function") {
+    window.setStudioCanvasLayersMessage(
+      (result && result.accepted) ? "" : ((result && result.message) || "")
+    );
+  }
+
+}
+
+
+function studioCanvasCanvasGroupBlock(view) {
+
+  const block =
+    document.createElement("div");
+
+  block.className = "studio-canvas-inspector-structure";
+  block.id = "studioCanvasInspectorGroup";
+
+  const caption =
+    document.createElement("p");
+
+  caption.className = "studio-inspector-block-label";
+  caption.textContent = "그룹";
+
+  block.appendChild(caption);
+
+  block.appendChild(
+    studioCanvasInspectorNote(
+      `"${view.groupName || "그룹"}" · 요소 ${view.count}개를 함께 고르고 있습니다.`,
+      "studioCanvasInspectorGroupCount"
+    )
+  );
+
+  const row =
+    document.createElement("div");
+
+  row.className = "studio-canvas-inspector-structure-row";
+
+  row.appendChild(
+    studioCanvasGroupActionButton(
+      "studioCanvasInspectorGroupDissolve",
+      "그룹 해제",
+      "폴더만 없애고 요소는 모두 남깁니다",
+      () => studioCanvasGroupSay(
+        (typeof window.studioCanvasLayersGroupDissolve === "function")
+          ? window.studioCanvasLayersGroupDissolve(view.groupId)
+          : null
+      )
+    )
+  );
+
+  row.appendChild(
+    studioCanvasGroupActionButton(
+      "studioCanvasInspectorGroupRename",
+      "이름 변경",
+      "Layers 목록에서 이름을 고칩니다",
+      () => {
+        if (typeof window.startStudioCanvasLayersRename === "function") {
+          window.startStudioCanvasLayersRename(view.groupId);
+        }
+      }
+    )
+  );
+
+  row.appendChild(
+    studioCanvasGroupActionButton(
+      "studioCanvasInspectorGroupRemove",
+      "그룹 삭제",
+      "그룹과 그 안의 요소를 함께 지웁니다",
+      () => studioCanvasGroupSay(
+        (typeof window.studioCanvasLayersGroupRemove === "function")
+          ? window.studioCanvasLayersGroupRemove(view.groupId)
+          : null
+      )
+    )
+  );
+
+  block.appendChild(row);
+
+  block.appendChild(
+    studioCanvasInspectorNote(
+      "그룹 전체의 이동 · 크기 조절 · 회전은 다음 단계에서 지원합니다 — 지금은 요소를 하나씩 고쳐 주세요.",
+      "studioCanvasInspectorGroupSoon"
+    )
+  );
+
+  return block;
+
+}
+
+
+function studioCanvasCanvasGroupCreateBlock(view) {
+
+  const block =
+    document.createElement("div");
+
+  block.className = "studio-canvas-inspector-structure";
+  block.id = "studioCanvasInspectorGroupCreateBlock";
+
+  const button =
+    studioCanvasGroupActionButton(
+      "studioCanvasInspectorGroupCreate",
+      "▣ 그룹 만들기",
+      `고른 요소 ${view.count}개를 한 그룹으로 묶습니다`,
+      () => studioCanvasGroupSay(
+        (typeof window.studioCanvasLayersGroupCreate === "function")
+          ? window.studioCanvasLayersGroupCreate()
+          : null
+      )
+    );
+
+  button.disabled = !!view.groupReason;
+
+  button.dataset.reason = view.groupReason || "";
+
+  block.appendChild(button);
+
+  /* ★ 왜 안 되는지 **한 줄로** 보여 준다 — 눌리지 않는 단추만
+     두면 이유를 추측하게 된다(계약 §38-3) */
+  if (view.groupReason) {
+
+    block.appendChild(
+      studioCanvasInspectorNote(
+        (typeof window.studioCanvasLayersRejectText === "function")
+          ? window.studioCanvasLayersRejectText("group-create", view.groupReason)
+          : "지금 고른 것으로는 그룹을 만들 수 없습니다.",
+        "studioCanvasInspectorGroupWhy"
+      )
+    );
+
+  }
+
+  return block;
+
+}
+
+
 function buildStudioCanvasInspector(view) {
 
   studioCanvasInspectorInputs = {};
@@ -1483,6 +1694,23 @@ function buildStudioCanvasInspector(view) {
 
   studioCanvasInspectorBody.appendChild(studioCanvasInspectorHead(view));
 
+  /* =====================================================
+     HOME-CANVAS-GROUP-1A — 그룹 선택 (계약 §38-9)
+
+     1A 에서는 그룹 transform 을 열지 않는다. 틀은 그려지지만
+     이동 · 크기 · 회전 손잡이가 하나도 없고, 그 사실을 화면이
+     말한다 — "왜 안 움직이지"를 추측으로 남기지 않는다.
+  ====================================================== */
+  if (view.mode === "group") {
+
+    studioCanvasInspectorBody.appendChild(
+      studioCanvasCanvasGroupBlock(view)
+    );
+
+    return;
+
+  }
+
   if (view.mode === "multi") {
 
     studioCanvasInspectorBody.appendChild(
@@ -1490,6 +1718,11 @@ function buildStudioCanvasInspector(view) {
         "여러 요소 편집은 아직 지원하지 않습니다.",
         "studioCanvasInspectorMultiNote"
       )
+    );
+
+    /* HOME-CANVAS-GROUP-1A — 여기서 바로 묶을 수 있다(계약 §38-3) */
+    studioCanvasInspectorBody.appendChild(
+      studioCanvasCanvasGroupCreateBlock(view)
     );
 
     return;

@@ -91,6 +91,238 @@ const SKIN_HOME_CANVAS_PIN_POINTS = [
   "left", "center", "right",
   "bottom-left", "bottom", "bottom-right"
 ];
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1A — 영구 그룹(`canvas.groups`)의 값 표
+
+   설계: docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md §3
+   계약: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §38
+
+   ★ 그룹은 **좌표도 렌더 DOM 도 갖지 않는다.** 실행 payload 에
+     실리지 않으므로(아래 buildSkinCanvasV2RenderPayload 는 아는
+     칸만 싣는다) 렌더러와 sandbox 봉투가 이 라운드에서 무변경이다.
+     여기서 보는 것은 "파일이 올바른 모양인가" 하나다.
+
+   ★ **멤버가 실제로 있는지 · 같은 좌표 공간인지는 보지 않는다.**
+     그 둘은 봐주고(설계 §3-2 · §7-3) Import 가 고친다
+     (skin/skin-home-canvas-group-v2.js repairSkinHomeCanvasV2Groups).
+     그룹은 화면에 영향을 주지 않으므로 낡은 명단이 잘못된 그림을
+     만들 수 없다 — 편집용 메타데이터 하나 때문에 파일 전체를 못
+     열게 만드는 쪽이 더 나쁜 실패다.
+========================================================== */
+
+/*
+  한 그룹의 최소 멤버 수.
+
+  멤버가 하나인 그룹은 폴더가 아니라 그냥 그 요소다. 그래서 저장
+  자체를 허용하지 않고, 빼기로 하나만 남으면 writer 가 **같은
+  커밋에서** 그 그룹을 해제한다(계약 §38-5).
+*/
+const SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS = 2;
+
+/* 이름의 글자 수 상한(정규화 뒤) */
+const SKIN_HOME_CANVAS_GROUP_NAME_MAX = 40;
+
+/* 기본 이름의 앞머리 — `그룹 1` · `그룹 2` … */
+const SKIN_HOME_CANVAS_GROUP_NAME_PREFIX = "그룹";
+
+
+/*
+  이름 정규화 — 저장 · 비교 · 표시가 **한 모양**을 쓴다.
+
+    · 제어문자를 공백으로 바꾼다
+    · 공백 연속(줄바꿈 · 탭 포함)을 공백 하나로 줄인다
+    · 앞뒤 공백을 버린다
+
+  결과가 빈 문자열이면 null 이다 — "이름 없음"과 "빈 이름"을 두
+  모양으로 두지 않는다(빈 이름은 확정되지 않는다 — 계약 §38-6).
+*/
+function normalizeSkinHomeCanvasGroupName(value) {
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const text =
+    value
+      .replace(/[\u0000-\u001F\u007F]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+  return text ? text : null;
+
+}
+
+
+/*
+  validateSkinCanvasV2Groups(groups, path, seen)
+
+  `canvas.groups` 배열 하나. `seen` 은 블록 · 프레임 내부 요소 ·
+  overlay 가 이미 들어간 **한 이름 공간**이다(§14-5) — 그룹 id 도
+  거기 들어간다. 그래야 그룹 id 를 멤버로 적은 파일(중첩)을 아래
+  두 번째 패스가 이름만으로 가려낼 수 있다.
+*/
+function validateSkinCanvasV2Groups(groups, path, seen) {
+
+  if (!Array.isArray(groups)) {
+    return skinHomeCanvasFail(path, "canvas.groups는 배열이어야 합니다.");
+  }
+
+  if (groups.length > SKIN_HOME_CANVAS_MAX_ELEMENTS) {
+    return skinHomeCanvasFail(
+      path,
+      `그룹은 ${SKIN_HOME_CANVAS_MAX_ELEMENTS}개를 넘을 수 없습니다.`
+    );
+  }
+
+  /* 그룹 id 들 — 두 번째 패스가 "멤버가 그룹을 가리키는가"를 본다 */
+  const groupIds = new Set();
+
+  /* 멤버 → 그 멤버를 가진 그룹의 자리. 단일 소유권이 이 한 장에
+     달려 있다(설계 §2-2 의 그 검사). */
+  const ownerOf = new Map();
+
+  for (let i = 0; i < groups.length; i++) {
+
+    const group = groups[i];
+
+    const groupPath = `${path}[${i}]`;
+
+    if (!isSkinHomeCanvasPlainObject(group)) {
+      return skinHomeCanvasFail(groupPath, "그룹은 객체({...})여야 합니다.");
+    }
+
+    if (
+      typeof group.id !== "string" ||
+      !SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(group.id)
+    ) {
+      return skinHomeCanvasFail(
+        `${groupPath}.id`,
+        "그룹 id는 영문자로 시작하는 1~64자(영문·숫자·_·-)여야 합니다."
+      );
+    }
+
+    if (seen.has(group.id)) {
+      return skinHomeCanvasFail(
+        `${groupPath}.id`,
+        `id "${group.id}"가 두 번 쓰였습니다. 그룹 id는 블록·요소·장식과 **같은 이름 공간**에서 유일해야 합니다.`
+      );
+    }
+
+    seen.add(group.id);
+
+    groupIds.add(group.id);
+
+    if (group.name !== undefined) {
+
+      if (typeof group.name !== "string") {
+        return skinHomeCanvasFail(`${groupPath}.name`, "그룹 name은 문자열이어야 합니다.");
+      }
+
+      const name =
+        normalizeSkinHomeCanvasGroupName(group.name);
+
+      if (!name) {
+        return skinHomeCanvasFail(
+          `${groupPath}.name`,
+          "그룹 name은 공백만으로 이루어질 수 없습니다(이름을 지우려면 칸 자체를 빼세요)."
+        );
+      }
+
+      if (name.length > SKIN_HOME_CANVAS_GROUP_NAME_MAX) {
+        return skinHomeCanvasFail(
+          `${groupPath}.name`,
+          `그룹 name은 ${SKIN_HOME_CANVAS_GROUP_NAME_MAX}자를 넘을 수 없습니다.`
+        );
+      }
+
+    }
+
+    if (!Array.isArray(group.members)) {
+      return skinHomeCanvasFail(`${groupPath}.members`, "그룹 members는 배열이어야 합니다.");
+    }
+
+    if (group.members.length < SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS) {
+      return skinHomeCanvasFail(
+        `${groupPath}.members`,
+        `그룹 members는 ${SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS}개 이상이어야 합니다(하나짜리 그룹은 폴더가 아닙니다).`
+      );
+    }
+
+    if (group.members.length > SKIN_HOME_CANVAS_MAX_ELEMENTS) {
+      return skinHomeCanvasFail(
+        `${groupPath}.members`,
+        `그룹 members는 ${SKIN_HOME_CANVAS_MAX_ELEMENTS}개를 넘을 수 없습니다.`
+      );
+    }
+
+    const mine = new Set();
+
+    for (let m = 0; m < group.members.length; m++) {
+
+      const memberId = group.members[m];
+
+      const memberPath = `${groupPath}.members[${m}]`;
+
+      if (
+        typeof memberId !== "string" ||
+        !SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(memberId)
+      ) {
+        return skinHomeCanvasFail(
+          memberPath,
+          "그룹 members의 항목은 요소 id 문자열이어야 합니다."
+        );
+      }
+
+      if (mine.has(memberId)) {
+        return skinHomeCanvasFail(
+          memberPath,
+          `"${memberId}"가 이 그룹 안에서 두 번 쓰였습니다.`
+        );
+      }
+
+      mine.add(memberId);
+
+      if (ownerOf.has(memberId)) {
+        return skinHomeCanvasFail(
+          memberPath,
+          `"${memberId}"가 이미 다른 그룹(${ownerOf.get(memberId)})에 들어 있습니다. 한 요소는 한 그룹에만 속할 수 있습니다.`
+        );
+      }
+
+      ownerOf.set(memberId, group.id);
+
+    }
+
+  }
+
+  /* ── 두 번째 패스 — 중첩 금지 ──
+     멤버가 그룹 id 를 가리키면 그것이 곧 중첩이다. 그룹은 뒤에
+     선언될 수도 있으므로 **전부 모은 뒤에** 본다. */
+
+  for (let i = 0; i < groups.length; i++) {
+
+    const group = groups[i];
+
+    for (let m = 0; m < group.members.length; m++) {
+
+      if (groupIds.has(group.members[m])) {
+        return skinHomeCanvasFail(
+          `${path}[${i}].members[${m}]`,
+          `"${group.members[m]}"는 그룹입니다. 그룹 안에 그룹을 넣을 수 없습니다.`
+        );
+      }
+
+    }
+
+  }
+
+  return { ok: true };
+
+}
+
+
 /* =========================================================
    2-1. v2 검증 — 조합형 Canvas (HOME-CANVAS-V2-DATA-1)
 
@@ -649,6 +881,27 @@ function validateSkinCanvasV2Data(canvas, path) {
 
   }
 
+  /*
+    HOME-CANVAS-GROUP-1A — 영구 그룹(설계 §3 · 계약 §38).
+
+    ★ **맨 뒤다.** 그룹 id 는 블록 · 프레임 내부 요소 · overlay 와
+      한 이름 공간이므로(§14-5) 그 셋이 `seen` 에 다 들어간 뒤에
+      본다.
+
+    ★ 칸이 없으면 그룹이 없다는 뜻이다 — `[]` 와 같다. 옛 파일에
+      이 칸이 없다는 이유로 거부하지 않는다.
+  */
+  if (canvas.groups !== undefined) {
+
+    const groups =
+      validateSkinCanvasV2Groups(canvas.groups, `${path}.groups`, seen);
+
+    if (!groups.ok) {
+      return groups;
+    }
+
+  }
+
   return { ok: true, version: SKIN_HOME_CANVAS_V2_VERSION, renderable: true };
 
 }
@@ -902,6 +1155,14 @@ if (typeof window !== "undefined") {
   window.SKIN_HOME_CANVAS_PIN_TARGETS = SKIN_HOME_CANVAS_PIN_TARGETS;
   window.SKIN_HOME_CANVAS_PIN_POINTS = SKIN_HOME_CANVAS_PIN_POINTS;
 
+  /* HOME-CANVAS-GROUP-1A — 그룹의 값 표와 이름 정규화.
+     Studio 의 Layers · 패널 · 순수 writer 가 **이 한 벌**을 본다. */
+  window.SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS = SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS;
+  window.SKIN_HOME_CANVAS_GROUP_NAME_MAX = SKIN_HOME_CANVAS_GROUP_NAME_MAX;
+  window.SKIN_HOME_CANVAS_GROUP_NAME_PREFIX = SKIN_HOME_CANVAS_GROUP_NAME_PREFIX;
+  window.normalizeSkinHomeCanvasGroupName = normalizeSkinHomeCanvasGroupName;
+  window.validateSkinCanvasV2Groups = validateSkinCanvasV2Groups;
+
 }
 
 
@@ -922,6 +1183,13 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_HOME_CANVAS_PIN_POINTS,
 
     validateSkinCanvasV2Data,
+
+    /* HOME-CANVAS-GROUP-1A — 영구 그룹의 값 표 · 이름 정규화 · 검증 */
+    SKIN_HOME_CANVAS_GROUP_MIN_MEMBERS,
+    SKIN_HOME_CANVAS_GROUP_NAME_MAX,
+    SKIN_HOME_CANVAS_GROUP_NAME_PREFIX,
+    normalizeSkinHomeCanvasGroupName,
+    validateSkinCanvasV2Groups,
 
     /* HOME-CANVAS-V2-FLOW-RENDER-1 — 실행용 payload */
     buildSkinCanvasEdgesPayload,

@@ -3396,6 +3396,491 @@ console.log("\n[v2-structure] Layers 의 구조 동작 (STUDIO-LAYERS-STRUCTURE-
 
 }
 
+/* =========================================================
+  [v2-group] 영구 그룹 (HOME-CANVAS-GROUP-1A)
+
+  기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §38
+  설계:      docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md
+
+  브라우저가 필요 없는 것만 본다.
+
+    1  **저장 모양과 검증** — 무엇을 거부하고 무엇을 봐주는가
+    2  **화면이 안 바뀐다** — 만들기 · 해제 · 넣기 · 빼기 전후로
+       overlays · flow 가 **글자 단위로** 같다(좌표를 안 쓰므로
+       구조적 사실이다)
+    3  **Import 수선** — 낡은 명단을 거부하지 않고 고친다
+    4  **낡을 수 있는 자리를 쓰는 쪽이 고친다** — 요소 삭제 ·
+       묶기 · 빼기가 명단을 함께 떼어 낸다
+    5  **실행 payload 에 실리지 않는다** — 렌더러 · sandbox 봉투가
+       무변경인 근거
+
+  폴더 행 · 끌기 · 패널 · Undo 는 브라우저가 필요하다
+  (studio/studio-home-canvas-group-e2e-test.mjs).
+========================================================== */
+console.log("\n[v2-group] 영구 그룹 (HOME-CANVAS-GROUP-1A)");
+
+{
+  const gRegions = () => [
+    { name: "some_other", enabled: true, payload: { keep: true } },
+    {
+      name: "home_canvas",
+      enabled: true,
+      canvas: {
+        version: 2,
+        baseWidth: 390,
+        baseHeight: 900,
+        mystery: { keep: true },
+        flow: {
+          direction: "column",
+          gap: 10,
+          blocks: [
+            { id: "gText", type: "text", width: 300, height: "auto", align: "center",
+              props: { text: "t", role: "title" } },
+
+            { id: "gMain", type: "main_visual", width: 300, height: 200, align: "center",
+              props: {
+                baseWidth: 150, baseHeight: 100, primaryId: "gPhoto",
+                elements: [
+                  { id: "gPhoto", type: "photo", follow: "transform",
+                    x: 10, y: 5, width: 120, height: 80, props: { slot: "photo_1" } },
+                  { id: "gCap", type: "text", follow: "transform",
+                    x: 5, y: 90, width: 60, height: 12, props: { text: "c", role: "body" } },
+                  { id: "gPin", type: "sticker", follow: "pin", width: 20, height: 20,
+                    pin: { target: "frame", anchor: "top-left", origin: "top-left",
+                      offset: { x: 2, y: 2 } },
+                    props: { slot: "sticker_1" } }
+                ]
+              } }
+          ]
+        },
+        overlays: [
+          { id: "gO1", type: "text", x: 10, y: 400, width: 100, height: 20,
+            props: { text: "o1", role: "body" } },
+          { id: "gO2", type: "shape", x: 20, y: 500, width: 40, height: 40,
+            props: { kind: "rect" } },
+          { id: "gO3", type: "shape", x: 30, y: 600, width: 40, height: 40,
+            props: { kind: "rect" } }
+        ]
+      }
+    }
+  ];
+
+  const gCanvas = (regions) => regions[1].canvas;
+
+  const base = gRegions();
+
+  const frozen = JSON.stringify(base);
+
+
+  /* ---- 만들기 ---- */
+
+  const made =
+    canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gO2", "gO1"] });
+
+  check("★ [v2-group] 그룹 만들기는 `canvas.groups` 한 항목만 늘린다",
+    made.ok && gCanvas(made.regions).groups.length === 1,
+    JSON.stringify(made.reason || gCanvas(made.regions).groups));
+
+  check("★ [v2-group] 입력은 한 칸도 mutate 하지 않는다",
+    JSON.stringify(base) === frozen);
+
+  check("★ [v2-group] 멤버는 **캔버스 배열 순서**다 — 고른 순서가 아니다",
+    same(gCanvas(made.regions).groups[0].members, ["gO1", "gO2"]),
+    JSON.stringify(gCanvas(made.regions).groups[0].members));
+
+  check("[v2-group] 기본 이름은 `그룹 1` 이다",
+    gCanvas(made.regions).groups[0].name === "그룹 1");
+
+  check("★ [v2-group] 요소와 배열이 **글자 단위로** 그대로다 — 좌표를 한 칸도 안 쓴다",
+    JSON.stringify(gCanvas(made.regions).overlays) ===
+      JSON.stringify(gCanvas(base).overlays) &&
+    JSON.stringify(gCanvas(made.regions).flow) ===
+      JSON.stringify(gCanvas(base).flow),
+    "화면 보존이 계산 결과가 아니라 구조적 사실이다");
+
+  check("[v2-group] canvas 의 모르는 칸도 그대로다",
+    same(gCanvas(made.regions).mystery, { keep: true }));
+
+  const gid = gCanvas(made.regions).groups[0].id;
+
+  check("[v2-group] 새 그룹 id 는 edit-id 규칙을 지난다",
+    canvas.SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(gid), gid);
+
+  check("★ [v2-group] 좌표 공간이 섞이면 거부한다 — overlay + 프레임 내부",
+    canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gO1", "gPhoto"] }).reason === "space");
+
+  check("★ [v2-group] 블록과 `main_visual` 프레임 자체는 멤버가 될 수 없다 — 좌표가 없다",
+    canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gText", "gMain"] }).reason === "kind" &&
+    canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gMain", "gO1"] }).reason === "kind");
+
+  check("[v2-group] 2개 미만은 거부한다",
+    canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gO1"] }).reason === "count");
+
+  check("[v2-group] 같은 id 를 두 번 주면 거부한다",
+    canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gO1", "gO1"] }).reason === "dupe");
+
+  check("★ [v2-group] 같은 프레임 안이면 `transform` 과 `pin` 이 섞여도 한 공간이다",
+    canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gCap", "gPin"] }).ok);
+
+  check("[v2-group] 이미 다른 그룹에 있는 요소는 거부한다",
+    canvas.writeSkinHomeCanvasV2GroupCreate(made.regions, { ids: ["gO1", "gO3"] }).reason === "member");
+
+  check("★ [v2-group] 기본 이름은 **자리가 아니라 최대 N + 1** 이다",
+    canvas.writeSkinHomeCanvasV2GroupCreate(made.regions, { ids: ["gCap", "gPin"] }).name === "그룹 2");
+
+
+  /* ---- 넣기 · 빼기 ---- */
+
+  const joined =
+    canvas.writeSkinHomeCanvasV2GroupJoin(made.regions, { id: "gO3", groupId: gid });
+
+  check("[v2-group] 넣기는 명단 한 칸만 늘린다",
+    joined.ok && same(gCanvas(joined.regions).groups[0].members, ["gO1", "gO2", "gO3"]));
+
+  check("★ [v2-group] 넣기 뒤에도 요소 배열이 그대로다 — 겹침 순서가 안 바뀐다",
+    JSON.stringify(gCanvas(joined.regions).overlays) ===
+      JSON.stringify(gCanvas(base).overlays));
+
+  check("[v2-group] 이미 그 그룹이면 변화 없음(기록 0칸)",
+    canvas.writeSkinHomeCanvasV2GroupJoin(joined.regions, { id: "gO3", groupId: gid })
+      .unchanged === true);
+
+  check("★ [v2-group] 좌표 공간이 다르면 넣지 않는다",
+    canvas.writeSkinHomeCanvasV2GroupJoin(made.regions, { id: "gCap", groupId: gid })
+      .reason === "space");
+
+  const left =
+    canvas.writeSkinHomeCanvasV2GroupLeave(joined.regions, { id: "gO3" });
+
+  check("[v2-group] 빼기는 명단 한 칸만 줄인다",
+    left.ok && !left.dissolved &&
+    same(gCanvas(left.regions).groups[0].members, ["gO1", "gO2"]));
+
+  check("★ [v2-group] 빼기 뒤에도 요소 배열이 그대로다 — 자리를 건드리지 않는다",
+    JSON.stringify(gCanvas(left.regions).overlays) ===
+      JSON.stringify(gCanvas(base).overlays));
+
+  const lastOut =
+    canvas.writeSkinHomeCanvasV2GroupLeave(made.regions, { id: "gO2" });
+
+  check("★ [v2-group] 멤버가 하나 남으면 **같은 커밋에서** 그룹을 해제한다",
+    lastOut.ok && lastOut.dissolved === gid &&
+    gCanvas(lastOut.regions).groups === undefined,
+    "빈 그룹도 하나짜리 그룹도 남기지 않는다");
+
+  check("[v2-group] 자동 해제가 요소를 지우지는 않는다",
+    gCanvas(lastOut.regions).overlays.length === 3);
+
+  check("[v2-group] 어느 그룹에도 없으면 빼기는 변화 없음이다",
+    canvas.writeSkinHomeCanvasV2GroupLeave(base, { id: "gO1" }).unchanged === true);
+
+
+  /* 다른 그룹으로 옮기기 — 한 요청이 뗌 + 붙임을 **함께** 한다 */
+  {
+    /* 그룹 둘: {gO1,gO2} 와 {gCap,gPin} */
+    const first =
+      canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gO1", "gO2"] });
+
+    const both =
+      canvas.writeSkinHomeCanvasV2GroupCreate(first.regions, { ids: ["gCap", "gPin"] });
+
+    check("[v2-group] 그룹 둘이 나란히 선다",
+      gCanvas(both.regions).groups.length === 2);
+
+    /* 셋짜리 그룹에서 하나를 빼면 그룹은 남는다 */
+    const three =
+      canvas.writeSkinHomeCanvasV2GroupJoin(first.regions, { id: "gO3", groupId: first.id });
+
+    const moved =
+      canvas.writeSkinHomeCanvasV2GroupLeave(three.regions, { id: "gO1" });
+
+    check("★ [v2-group] 셋 중 하나를 빼도 그룹은 남는다(둘 이상)",
+      moved.ok && !moved.dissolved &&
+      same(gCanvas(moved.regions).groups[0].members, ["gO2", "gO3"]),
+      JSON.stringify(gCanvas(moved.regions).groups));
+
+    /* 같은 공간의 두 그룹 사이 이동 — 요청 하나로 뗌 + 붙임 */
+    const g1 =
+      canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gO1", "gO2"] });
+
+    const g2 =
+      canvas.writeSkinHomeCanvasV2GroupCreate(
+        canvas.writeSkinHomeCanvasV2GroupCreate(g1.regions, { ids: ["gCap", "gPin"] }).regions,
+        { ids: [] }
+      );
+
+    check("★ [v2-group] 그룹 사이 이동은 요청 하나다 — 옛 그룹이 둘 미만이 되면 같은 커밋에서 해제된다",
+      (() => {
+        /* {gO1,gO2,gO3} 와 {gCap,gPin} 을 만든 뒤 gO3 를 프레임
+           그룹으로 옮기려 하면 공간이 달라 거절된다 — 옮기기가
+           **같은 공간 안**의 일이라는 것을 여기서 못박는다. */
+        const three2 =
+          canvas.writeSkinHomeCanvasV2GroupJoin(g1.regions, { id: "gO3", groupId: g1.id });
+
+        const frame =
+          canvas.writeSkinHomeCanvasV2GroupCreate(three2.regions, { ids: ["gCap", "gPin"] });
+
+        const cross =
+          canvas.writeSkinHomeCanvasV2GroupJoin(
+            frame.regions, { id: "gO3", groupId: frame.id }
+          );
+
+        return cross.reason === "space" && !g2.ok;
+      })());
+  }
+
+
+  /* ---- 이름 ---- */
+
+  const renamed =
+    canvas.writeSkinHomeCanvasV2GroupRename(made.regions, { id: gid, name: "  나의   폴더 \n" });
+
+  check("★ [v2-group] 이름은 정규화해서 저장한다(앞뒤 공백 · 공백 연속 · 제어문자)",
+    renamed.ok && renamed.name === "나의 폴더", renamed.name);
+
+  check("★ [v2-group] 이름만 바뀐다 — members 도 요소 id 도 그대로다",
+    same(gCanvas(renamed.regions).groups[0].members,
+      gCanvas(made.regions).groups[0].members));
+
+  check("[v2-group] 같은 이름이면 변화 없음(기록 0칸)",
+    canvas.writeSkinHomeCanvasV2GroupRename(renamed.regions, { id: gid, name: "나의 폴더" })
+      .unchanged === true);
+
+  check("[v2-group] 빈 이름 · 40자 초과는 거부한다",
+    canvas.writeSkinHomeCanvasV2GroupRename(made.regions, { id: gid, name: "   " })
+      .reason === "name" &&
+    canvas.writeSkinHomeCanvasV2GroupRename(made.regions, { id: gid, name: "가".repeat(41) })
+      .reason === "name");
+
+
+  /* ---- 해제와 삭제는 다른 동작이다 ---- */
+
+  const dissolved =
+    canvas.writeSkinHomeCanvasV2GroupDissolve(made.regions, { id: gid });
+
+  check("★ [v2-group] 해제는 폴더만 없애고 캔버스를 **만들기 전 그대로** 돌려 놓는다",
+    dissolved.ok &&
+    JSON.stringify(gCanvas(dissolved.regions)) === JSON.stringify(gCanvas(base)),
+    "왕복 오차 0");
+
+  const wiped =
+    canvas.writeSkinHomeCanvasV2GroupRemove(made.regions, { id: gid });
+
+  check("★ [v2-group] 삭제는 그룹과 **자식 요소까지** 지운다",
+    wiped.ok &&
+    gCanvas(wiped.regions).overlays.length === 1 &&
+    gCanvas(wiped.regions).overlays[0].id === "gO3" &&
+    gCanvas(wiped.regions).groups === undefined);
+
+  {
+    const framed =
+      canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gPhoto", "gCap"] });
+
+    check("★ [v2-group] 대표 사진이 든 그룹은 통째로 지울 수 없다 — 반쪽 상태를 만들지 않는다",
+      canvas.writeSkinHomeCanvasV2GroupRemove(framed.regions, { id: framed.id })
+        .reason === "primary");
+  }
+
+
+  /* ---- 쓰는 쪽이 명단을 고친다 ---- */
+
+  check("★ [v2-group] 요소를 지우면 명단에서도 빠지고, 둘 미만이 되면 해제된다",
+    (() => {
+      const gone =
+        canvas.writeSkinHomeCanvasV2RemoveNode(made.regions, { id: "gO2" });
+
+      return gone.ok && gCanvas(gone.regions).groups === undefined;
+    })(),
+    "별도 Undo 칸을 만들지 않는다 — 같은 커밋이다");
+
+  check("★ [v2-group] 프레임을 지우면 그 안의 멤버도 함께 명단에서 빠진다",
+    (() => {
+      const inner =
+        canvas.writeSkinHomeCanvasV2GroupCreate(base, { ids: ["gCap", "gPin"] });
+
+      const gone =
+        canvas.writeSkinHomeCanvasV2RemoveNode(inner.regions, { id: "gMain" });
+
+      return gone.ok && gCanvas(gone.regions).groups === undefined;
+    })());
+
+  check("★ [v2-group] 묶기 · 빼기는 좌표 공간을 바꾸므로 명단에서 뗀다",
+    (() => {
+      const att =
+        canvas.writeSkinHomeCanvasV2AttachNode(
+          made.regions,
+          { id: "gO1", frameId: "gMain", next: { x: 3, y: 4, width: 20, height: 10 } }
+        );
+
+      return att.ok && gCanvas(att.regions).groups === undefined;
+    })(),
+    "한 그룹은 한 좌표 공간이다");
+
+
+  /* ---- 검증 — 무엇을 거부하고 무엇을 봐주나 ---- */
+
+  const withGroups = (groups) =>
+    canvas.validateSkinCanvasData(
+      Object.assign(clone(gCanvas(base)), { groups }), "canvas");
+
+  check("[v2-group] 올바른 그룹은 통과한다",
+    withGroups([{ id: "canvas_g1", name: "그룹 1", members: ["gO1", "gO2"] }]).ok);
+
+  check("[v2-group] `groups` 칸이 아예 없어도 통과한다 — 옛 v2 데이터 그대로",
+    canvas.validateSkinCanvasData(gCanvas(base), "canvas").ok);
+
+  check("[v2-group] 배열이 아니면 거부한다",
+    !canvas.validateSkinCanvasData(
+      Object.assign(clone(gCanvas(base)), { groups: {} }), "canvas").ok);
+
+  check("★ [v2-group] 멤버 1개 · 한 그룹 안 중복 · 두 그룹에 걸친 요소를 거부한다",
+    !withGroups([{ id: "canvas_g1", members: ["gO1"] }]).ok &&
+    !withGroups([{ id: "canvas_g1", members: ["gO1", "gO1"] }]).ok &&
+    !withGroups([
+      { id: "canvas_g1", members: ["gO1", "gO2"] },
+      { id: "canvas_g2", members: ["gO2", "gO3"] }
+    ]).ok);
+
+  check("★ [v2-group] 그룹 id 는 블록 · 요소 · 장식과 **한 이름 공간**이다",
+    !withGroups([{ id: "gO1", members: ["gO2", "gO3"] }]).ok);
+
+  check("★ [v2-group] 중첩 금지 — 멤버가 그룹을 가리키면 거부한다(뒤에 선언돼도)",
+    !withGroups([
+      { id: "canvas_g1", members: ["canvas_g2", "gO3"] },
+      { id: "canvas_g2", members: ["gO1", "gO2"] }
+    ]).ok);
+
+  check("[v2-group] 이름이 문자열이 아니거나 40자를 넘으면 거부한다",
+    !withGroups([{ id: "canvas_g1", name: 1, members: ["gO1", "gO2"] }]).ok &&
+    !withGroups([{ id: "canvas_g1", name: "가".repeat(41), members: ["gO1", "gO2"] }]).ok);
+
+  check("★ [v2-group] 없는 멤버 · 섞인 좌표 공간은 **봐준다** — 그룹은 그려지지 않으므로 낡은 명단이 잘못된 그림을 만들 수 없다",
+    withGroups([{ id: "canvas_g1", members: ["gone1", "gone2"] }]).ok &&
+    withGroups([{ id: "canvas_g1", members: ["gO1", "gPhoto"] }]).ok);
+
+  check("★ [v2-group] v1 캔버스에서 `groups` 는 **모르는 칸**이라 그대로 통과한다",
+    canvas.validateSkinCanvasData(
+      { version: 1, baseWidth: 390, baseHeight: 800, elements: [], groups: "junk" },
+      "canvas"
+    ).ok);
+
+
+  /* ---- 실행 payload 에 실리지 않는다 ---- */
+
+  check("★ [v2-group] 실행 payload 에 `groups` 가 없다 — 렌더러 · sandbox 봉투가 무변경인 근거",
+    (() => {
+      const payload =
+        canvas.buildSkinCanvasV2RenderPayload(
+          Object.assign(clone(gCanvas(base)), {
+            groups: [{ id: "canvas_g1", members: ["gO1", "gO2"] }]
+          })
+        );
+
+      return !!payload && payload.groups === undefined;
+    })());
+
+  check("★ [v2-group] sandbox 프로토콜 파일이 그룹을 몰라도 된다 — 봉투에 새 칸이 없다",
+    read("skin/sandbox/skin-sandbox-protocol.js").indexOf("groups") === -1);
+
+
+  /* ---- Import 수선 ---- */
+
+  const repaired = (groups) => {
+    const regions = gRegions();
+    regions[1].canvas.groups = groups;
+    return canvas.repairSkinHomeCanvasRegionGroups(regions);
+  };
+
+  check("★ [v2-group] Import 는 없는 member id 를 **거부하지 않고 뺀다**",
+    (() => {
+      const p = repaired([{ id: "canvas_g1", name: "g", members: ["gO1", "gone", "gO2"] }]);
+      return p.changed && p.removedMembers === 1 && p.repairedGroups === 1 &&
+        same(gCanvas(p.regions).groups[0].members, ["gO1", "gO2"]);
+    })());
+
+  check("[v2-group] Import 는 한 그룹 안의 중복을 뺀다",
+    (() => {
+      const p = repaired([{ id: "canvas_g1", members: ["gO1", "gO1", "gO2"] }]);
+      return p.changed && p.removedMembers === 1;
+    })());
+
+  check("★ [v2-group] 두 그룹이 같은 요소를 가지면 **먼저 나온 유효 그룹만** 인정한다",
+    (() => {
+      const p = repaired([
+        { id: "canvas_g1", members: ["gO1", "gO2"] },
+        { id: "canvas_g2", members: ["gO2", "gO3"] }
+      ]);
+
+      return p.changed &&
+        gCanvas(p.regions).groups.length === 1 &&
+        same(gCanvas(p.regions).groups[0].members, ["gO1", "gO2"]);
+    })(),
+    "정리 뒤 멤버가 둘 미만이 된 그룹은 사라진다");
+
+  check("★ [v2-group] 좌표 공간이 섞인 그룹은 **첫 멤버의 공간**만 남긴다",
+    (() => {
+      const p = repaired([{ id: "canvas_g1", members: ["gO1", "gPhoto", "gO2"] }]);
+      return p.changed && p.removedMembers === 1 &&
+        same(gCanvas(p.regions).groups[0].members, ["gO1", "gO2"]);
+    })());
+
+  check("[v2-group] 블록 멤버도 뺀다 — 좌표가 없다",
+    (() => {
+      const p = repaired([{ id: "canvas_g1", members: ["gText", "gO1", "gO2"] }]);
+      return p.changed && same(gCanvas(p.regions).groups[0].members, ["gO1", "gO2"]);
+    })());
+
+  check("[v2-group] 정리 뒤 멤버가 둘 미만이면 그룹을 뺀다",
+    (() => {
+      const p = repaired([{ id: "canvas_g1", members: ["gone1", "gone2", "gO1"] }]);
+      return p.changed && gCanvas(p.regions).groups === undefined;
+    })());
+
+  check("★ [v2-group] 성한 명단은 한 글자도 안 고친다(기록 0칸)",
+    !repaired([{ id: "canvas_g1", members: ["gO1", "gO2"] }]).changed);
+
+  check("★ [v2-group] 수선한 결과는 검증을 지난다 — Import 가 거부로 끝나지 않는다",
+    canvas.validateSkinHomeCanvasRegions(
+      repaired([{ id: "canvas_g1", members: ["gO1", "gone", "gO2"] }]).regions
+    ).ok);
+
+  check("★ [v2-group] 수선해도 **요소는 하나도 지우지 않는다**",
+    (() => {
+      const p = repaired([{ id: "canvas_g1", members: ["gone1", "gone2", "gO1"] }]);
+      return gCanvas(p.regions).overlays.length === 3 &&
+        gCanvas(p.regions).flow.blocks.length === 2;
+    })());
+
+  check("[v2-group] 정리한 내용을 사람이 읽는 한 줄로 알린다",
+    canvas.describeSkinHomeCanvasGroupRepair(
+      repaired([{ id: "canvas_g1", members: ["gO1", "gone", "gO2"] }])
+    ).length === 1);
+
+  check("[v2-group] 고친 것이 없으면 안내도 없다",
+    canvas.describeSkinHomeCanvasGroupRepair({ changed: false }).length === 0);
+
+
+  /* ---- 새 파일의 로드 자리 ---- */
+
+  check("★ [v2-group] 두 Studio 문서가 그룹 파일을 write-v2 **뒤에** 싣는다",
+    ["studio/index.html", "studio/studio-lifecycle-scenario.html"].every(
+      (file) => {
+        const text = read(file);
+        const write = text.indexOf("skin-home-canvas-write-v2.js");
+        const group = text.indexOf("skin-home-canvas-group-v2.js");
+        return write !== -1 && group > write;
+      }
+    ),
+    "값 표 · 트리 탐색 · 불변 이동을 call time 에 찾는다");
+
+  check("★ [v2-group] sandbox 프레임과 그 allowlist 에는 그룹 파일이 **없다**",
+    read("skin/sandbox/frame.html").indexOf("skin-home-canvas-group-v2.js") === -1 &&
+    read("core/lib/skin-sandbox-server.js").indexOf("skin-home-canvas-group-v2.js") === -1,
+    "그룹은 실행 payload 에 실리지 않아 프레임이 그릴 것이 없다");
+
+}
+
+
 console.log(`\n${passed} passed, ${failed} failed`);
 
 if (failed) {

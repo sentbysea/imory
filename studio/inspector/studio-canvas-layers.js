@@ -140,6 +140,9 @@ let studioCanvasLayersAddHost = null;
 
 let studioCanvasLayersNote = null;
 
+/* HOME-CANVAS-GROUP-1A — 맨 위의 `그룹 만들기` 단추 */
+let studioCanvasLayersGroupButton = null;
+
 /* STUDIO-LAYERS-MEDIA-1 — 트리 아래의 "스킨 이미지" 구역 */
 let studioCanvasLayersMedia = null;
 
@@ -323,37 +326,186 @@ function studioCanvasLayersRows() {
 
   ((payload && Array.isArray(payload.overlays)) ? payload.overlays : []).forEach(mark);
 
-  return nodes.map((node) => ({
-    id: node.id,
-    kind: node.kind,
-    type: node.type,
-    parentId: node.parentId || null,
+  const base =
+    nodes.map((node) => ({
+      id: node.id,
+      kind: node.kind,
+      type: node.type,
+      parentId: node.parentId || null,
 
-    /* ★ 자기 배열 안의 **진짜 자리**다 — 끌어 옮길 때 `expected` 로
-       그대로 쓴다(계약 §32-4). 화면 순서를 다시 세지 않는다. */
-    index: Number.isInteger(node.index) ? node.index : -1,
+      /* ★ 자기 배열 안의 **진짜 자리**다 — 끌어 옮길 때 `expected` 로
+         그대로 쓴다(계약 §32-4). 화면 순서를 다시 세지 않는다. */
+      index: Number.isInteger(node.index) ? node.index : -1,
 
-    depth: node.kind === "frame-element" ? 1 : 0,
-    group: node.kind === "overlay" ? "overlay" : "flow",
+      depth: node.kind === "frame-element" ? 1 : 0,
+      group: node.kind === "overlay" ? "overlay" : "flow",
 
-    hidden: stateOf[node.id] ? stateOf[node.id].hidden : false,
-    locked: stateOf[node.id] ? stateOf[node.id].locked : false,
+      /* HOME-CANVAS-GROUP-1A — 이 행이 들어 있는 그룹(없으면 null) */
+      groupId: null,
 
-    /* 그림 자리 이름(없으면 "") — STUDIO-LAYERS-MEDIA-1 */
-    slot: stateOf[node.id] ? stateOf[node.id].slot : "",
+      hidden: stateOf[node.id] ? stateOf[node.id].hidden : false,
+      locked: stateOf[node.id] ? stateOf[node.id].locked : false,
 
-    primary:
-      node.kind === "frame-element" &&
-      !!node.parentId &&
-      primaryOf[node.parentId] === node.id,
+      /* 그림 자리 이름(없으면 "") — STUDIO-LAYERS-MEDIA-1 */
+      slot: stateOf[node.id] ? stateOf[node.id].slot : "",
 
-    /* 대표가 될 수 있는 자리인가 — 메인 비주얼 안의 사진 하나다
-       (계획 문서 §2-5). 그 밖에는 단추 자체를 그리지 않는다. */
-    canBePrimary:
-      node.kind === "frame-element" &&
-      !!node.parentId &&
-      node.type === "photo"
-  }));
+      primary:
+        node.kind === "frame-element" &&
+        !!node.parentId &&
+        primaryOf[node.parentId] === node.id,
+
+      /* 대표가 될 수 있는 자리인가 — 메인 비주얼 안의 사진 하나다
+         (계획 문서 §2-5). 그 밖에는 단추 자체를 그리지 않는다. */
+      canBePrimary:
+        node.kind === "frame-element" &&
+        !!node.parentId &&
+        node.type === "photo"
+    }));
+
+  return studioCanvasLayersWithGroups(base);
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1A — 폴더 행 끼우기 (계약 §38-4)
+
+   그룹 멤버는 배열에서 **연속일 필요가 없다.** 폴더를 만들려고
+   배열을 재정렬하지 않는다 — 그것은 곧 앞뒤 겹침 순서가 바뀐다는
+   뜻이고, "그룹을 만들어도 화면이 안 바뀐다"에 정면으로 어긋난다.
+
+   그래서 화면에서만 모은다.
+
+     · 폴더 행은 그 그룹의 **첫 멤버 자리**(배열에서 가장 앞선
+       멤버)에 선다.
+     · 폴더 안의 자식 순서는 **원본 배열의 상대 순서** 그대로다.
+     · 멤버 사이에 끼어 있던 그룹 밖 요소는 폴더 **뒤로** 밀려
+       그려진다. 데이터는 한 칸도 안 움직인다.
+
+   ★ 순서 끌기는 이 화면 순서를 세지 않고 **배열 index** 로 자리를
+     정한다(studio-canvas-layers-drag.js) — 그래서 폴더가 모아
+     놓아도 끌어 옮긴 결과가 맞는다.
+========================================================== */
+
+function studioCanvasLayersWithGroups(rows) {
+
+  const groups =
+    (typeof window.studioCanvasDraftGroups === "function")
+      ? window.studioCanvasDraftGroups()
+      : [];
+
+  if (!groups.length) {
+    return rows;
+  }
+
+  /* 요소 id → 그 요소를 가진 그룹. 낡은 명단(없는 id)은 저절로
+     빠진다 — 없는 것을 있는 것처럼 그리지 않는다(설계 §7-3). */
+  const ownerOf = {};
+
+  const groupById = {};
+
+  groups.forEach(
+    (group) => {
+
+      groupById[group.id] = group;
+
+      group.members.forEach(
+        (id) => {
+          if (!Object.prototype.hasOwnProperty.call(ownerOf, id)) {
+            ownerOf[id] = group.id;
+          }
+        }
+      );
+
+    }
+  );
+
+  const membersOf = {};
+
+  rows.forEach(
+    (row) => {
+
+      const groupId =
+        ownerOf[row.id];
+
+      if (!groupId) {
+        return;
+      }
+
+      row.groupId = groupId;
+
+      (membersOf[groupId] = membersOf[groupId] || []).push(row);
+
+    }
+  );
+
+  const emitted = {};
+
+  const out = [];
+
+  rows.forEach(
+    (row) => {
+
+      if (!row.groupId) {
+        out.push(row);
+        return;
+      }
+
+      if (emitted[row.groupId]) {
+        return;
+      }
+
+      emitted[row.groupId] = true;
+
+      const mine =
+        membersOf[row.groupId];
+
+      /* 그룹이 성립하려면 **화면에 실제로 보이는 멤버**가 둘 이상
+         이어야 한다. 하나뿐이면 폴더를 그리지 않고 그냥 그 요소다. */
+      if (!mine || mine.length < 2) {
+        mine.forEach((item) => { item.groupId = null; });
+        out.push(row);
+        return;
+      }
+
+      const group =
+        groupById[row.groupId];
+
+      out.push({
+        id: group.id,
+        kind: "group",
+        type: "group",
+
+        /* 프레임 안의 그룹은 그 프레임의 자식 자리에 선다 */
+        parentId: row.parentId,
+        index: -1,
+        depth: row.depth,
+        group: row.group,
+        groupId: null,
+
+        name: group.name || "",
+        count: mine.length,
+
+        /* 파생 표시 — 멤버가 전부 숨김/잠김이면 폴더도 그렇게 보인다.
+           **누를 수 없다**(계약 §38-11). */
+        hidden: mine.every((item) => item.hidden),
+        locked: mine.every((item) => item.locked),
+
+        slot: "",
+        primary: false,
+        canBePrimary: false
+      });
+
+      mine.forEach(
+        (item) => {
+          out.push(Object.assign({}, item, { depth: item.depth + 1 }));
+        }
+      );
+
+    }
+  );
+
+  return out;
 
 }
 
@@ -377,6 +529,20 @@ function studioCanvasLayersSelection() {
 function studioCanvasLayersExpanded(blockId) {
 
   return !studioCanvasLayersCollapsed.has(blockId);
+
+}
+
+
+/*
+  접었다 펼 수 있는 행인가 — `main_visual` 프레임과 **그룹 폴더**
+  둘이다(HOME-CANVAS-GROUP-1A).
+*/
+function studioCanvasLayersIsFolder(row) {
+
+  return (
+    row.kind === "group" ||
+    (row.kind === "block" && row.type === "main_visual")
+  );
 
 }
 
@@ -446,6 +612,44 @@ function selectStudioCanvasLayer(id, additive) {
     ids: [id],
     primaryId: id,
     mode: additive ? "toggle" : "replace"
+  });
+
+}
+
+
+/*
+  HOME-CANVAS-GROUP-1A — 폴더 행을 누르면 **멤버 전부**를 고른다
+  (계약 §38-9).
+
+  ★ 새 선택 상태를 만들지 않는다. 지금 있는 다중 선택 하나(ids
+    배열)를 그대로 쓰고, 그 집합이 어떤 그룹의 멤버와 같아지는
+    순간 패널이 "그룹 선택"으로 읽는다 — 파생이라 Undo ·
+    reconcile · lasso 가 그대로 맞는다.
+
+  ★ 1A 에서는 그 선택에 **이동 · 크기 · 회전 손잡이가 붙지
+    않는다.** 다중 선택이면 Moveable 이 이미 손잡이를 끄고 틀만
+    그린다(계약 §16 · §38-9) — 새로 끄는 줄이 없다.
+*/
+function selectStudioCanvasLayerGroup(groupId) {
+
+  if (
+    typeof window.studioCanvasGroupInfo !== "function" ||
+    typeof window.proposeStudioCanvasSelection !== "function"
+  ) {
+    return false;
+  }
+
+  const info =
+    window.studioCanvasGroupInfo(groupId);
+
+  if (!info || !info.live.length) {
+    return false;
+  }
+
+  return window.proposeStudioCanvasSelection({
+    ids: info.live.slice(),
+    primaryId: info.live[info.live.length - 1],
+    mode: "replace"
   });
 
 }
@@ -611,6 +815,31 @@ function ensureStudioCanvasLayers() {
   );
 
   top.appendChild(studioCanvasLayersAddToggle);
+
+
+  /* ── 그룹 만들기 (HOME-CANVAS-GROUP-1A · 계약 §38-3) ──
+
+     여럿을 고른 상태에서만 보인다. **고를 수 없는 조합이면
+     보이되 눌리지 않고**, 왜 안 되는지 한 줄을 적는다 — 조용히
+     사라지면 주인은 이 기능이 있는지조차 모른다. */
+
+  studioCanvasLayersGroupButton =
+    studioCanvasLayersEl(
+      "button",
+      "studio-canvas-layers-group-create",
+      "▣ 그룹 만들기"
+    );
+
+  studioCanvasLayersGroupButton.type = "button";
+  studioCanvasLayersGroupButton.id = "studioCanvasLayersGroupCreate";
+  studioCanvasLayersGroupButton.hidden = true;
+
+  studioCanvasLayersGroupButton.addEventListener(
+    "click",
+    () => runStudioCanvasLayersAction("studioCanvasLayersGroupCreate", [])
+  );
+
+  top.appendChild(studioCanvasLayersGroupButton);
 
 
   /* ── 하위 화면의 머리 (STUDIO-LAYERS-MATERIALS-1A) ──
@@ -1092,7 +1321,297 @@ function runStudioCanvasLayersAction(name, args) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-GROUP-1A — 폴더 행 (계약 §38-4 · §38-6 · §38-7)
+
+   ★ 손잡이가 없다. 그룹을 한 덩어리로 위아래 옮기는 것은 1A 에
+     없다 — 멤버를 배열에서 연속으로 모으면 사이에 낀 요소와의
+     겹침 순서가 바뀌기 때문이다(설계 §5 의 ★).
+
+   ★ 눈 · 자물쇠도 없다. 저장 구조에 그룹의 `hidden`/`locked` 칸이
+     **없고**(계약 §38-1), 멤버 전부에 일괄로 쓰면 **끌 때 되돌릴
+     수 없다** — 원래 혼자 숨어 있던 멤버까지 함께 드러난다.
+     되돌릴 수 없는 토글을 만들지 않는다.
+========================================================== */
+
+/* 이름을 고치고 있는 그룹 — { id, start } | null */
+let studioCanvasLayersRenaming = null;
+
+
+function studioCanvasLayersGroupRowNode(row, expanded) {
+
+  const wrap =
+    studioCanvasLayersEl("div", "studio-canvas-layers-row studio-canvas-layers-group-row");
+
+  wrap.dataset.layerId = row.id;
+  wrap.dataset.layerKind = "group";
+  wrap.dataset.layerType = "group";
+  wrap.dataset.layerParent = row.parentId || "";
+  wrap.dataset.layerIndex = "-1";
+  wrap.dataset.layerCount = String(row.count);
+
+  if (row.hidden) {
+    wrap.dataset.layerHidden = "true";
+  }
+
+  if (row.locked) {
+    wrap.dataset.layerLocked = "true";
+  }
+
+  if (row.depth) {
+    wrap.dataset.layerDepth = String(row.depth);
+  }
+
+  wrap.setAttribute("role", "treeitem");
+
+  /* 손잡이 자리는 비워 둔다 — 들여쓰기가 멤버 행과 어긋나지 않게 */
+  wrap.appendChild(
+    studioCanvasLayersEl("span", "studio-canvas-layers-handle-gap")
+  );
+
+  const twisty =
+    studioCanvasLayersEl(
+      "button",
+      "studio-canvas-layers-twisty",
+      expanded ? "▾" : "▸"
+    );
+
+  twisty.type = "button";
+  twisty.id = `studioCanvasLayerTwisty-${row.id}`;
+  twisty.setAttribute("aria-expanded", String(expanded));
+  twisty.setAttribute("aria-label", expanded ? "그룹 접기" : "그룹 펼치기");
+
+  twisty.addEventListener("click", (event) => {
+
+    event.stopPropagation();
+
+    if (studioCanvasLayersCollapsed.has(row.id)) {
+      studioCanvasLayersCollapsed.delete(row.id);
+    } else {
+      studioCanvasLayersCollapsed.add(row.id);
+    }
+
+    renderStudioCanvasLayers(true);
+
+  });
+
+  wrap.appendChild(twisty);
+
+  /* ★ 자리는 비우지 않는다 — 멤버 행의 ★ 칸과 폭을 맞춘다 */
+  wrap.appendChild(
+    studioCanvasLayersEl("span", "studio-canvas-layers-star-gap")
+  );
+
+
+  const pick =
+    studioCanvasLayersEl("button", "studio-canvas-layers-pick");
+
+  pick.type = "button";
+  pick.id = `studioCanvasLayer-${row.id}`;
+
+  pick.appendChild(
+    studioCanvasLayersEl("span", "studio-canvas-layers-folder", "📁")
+  );
+
+  const renaming =
+    !!(studioCanvasLayersRenaming && studioCanvasLayersRenaming.id === row.id);
+
+  if (renaming) {
+
+    /* ★ 고치는 동안에는 멤버 수와 단추 셋이 물러난다(CSS). 390px
+       에서 그 칸들이 그대로 서 있으면 입력 칸이 60px 도 안 남는다
+       — 실측 58px. 어차피 고치는 중에는 누를 수 없는 것들이다. */
+    wrap.dataset.layerRenaming = "true";
+
+    /* 인라인 입력 — 확정은 Enter · blur, 취소는 Escape(계약 §38-6) */
+    const input =
+      document.createElement("input");
+
+    input.type = "text";
+    input.className = "studio-canvas-layers-rename";
+    input.id = `studioCanvasLayerRenameInput-${row.id}`;
+    input.value = row.name || "";
+    input.maxLength =
+      (typeof window.SKIN_HOME_CANVAS_GROUP_NAME_MAX === "number")
+        ? window.SKIN_HOME_CANVAS_GROUP_NAME_MAX
+        : 40;
+    input.setAttribute("aria-label", "그룹 이름");
+
+    input.addEventListener("pointerdown", (event) => event.stopPropagation());
+    input.addEventListener("click", (event) => event.stopPropagation());
+
+    let done = false;
+
+    const finish = (commit) => {
+
+      if (done) {
+        return;
+      }
+
+      done = true;
+
+      const value = input.value;
+
+      studioCanvasLayersRenaming = null;
+
+      if (commit) {
+        runStudioCanvasLayersAction(
+          "studioCanvasLayersGroupRename", [row.id, value]
+        );
+      }
+
+      renderStudioCanvasLayers(true);
+
+    };
+
+    input.addEventListener("keydown", (event) => {
+
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.stopPropagation();
+        finish(true);
+      }
+      else if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        finish(false);
+      }
+
+    });
+
+    input.addEventListener("blur", () => finish(true));
+
+    pick.appendChild(input);
+
+    /* 그리고 나서 초점을 준다 — 다시 그린 직후다 */
+    window.setTimeout(() => {
+      if (input.isConnected) {
+        input.focus();
+        input.select();
+      }
+    }, 0);
+
+  }
+  else {
+
+    pick.appendChild(
+      studioCanvasLayersEl(
+        "span",
+        "studio-canvas-layers-name",
+        row.name || "그룹"
+      )
+    );
+
+  }
+
+  pick.appendChild(
+    studioCanvasLayersEl(
+      "span",
+      "studio-canvas-layers-count",
+      `(${row.count})`
+    )
+  );
+
+  pick.title =
+    `${row.name || "그룹"} · 요소 ${row.count}개 — 누르면 전체를 고릅니다`;
+
+  pick.addEventListener("click", (event) => {
+
+    if (renaming) {
+      return;
+    }
+
+    event.stopPropagation();
+
+    selectStudioCanvasLayerGroup(row.id);
+
+  });
+
+  /* 더블클릭은 이름 고치기다(계약 §38-6) */
+  pick.addEventListener("dblclick", (event) => {
+
+    event.stopPropagation();
+    event.preventDefault();
+
+    studioCanvasLayersRenaming = { id: row.id };
+
+    renderStudioCanvasLayers(true);
+
+  });
+
+  wrap.appendChild(pick);
+
+
+  /* 눈 · 자물쇠 자리는 비운다 — 폭을 멤버 행과 맞추되 누를 수 없다 */
+  wrap.appendChild(
+    studioCanvasLayersEl("span", "studio-canvas-layers-flag-gap")
+  );
+  wrap.appendChild(
+    studioCanvasLayersEl("span", "studio-canvas-layers-flag-gap")
+  );
+
+
+  /* ── ✎ 이름 변경 ── */
+
+  const rename =
+    studioCanvasLayersActionButton(
+      "studio-canvas-layers-rename-button",
+      "✎",
+      "그룹 이름 변경",
+      () => {
+        studioCanvasLayersRenaming = { id: row.id };
+        renderStudioCanvasLayers(true);
+      }
+    );
+
+  rename.id = `studioCanvasLayerRename-${row.id}`;
+
+  wrap.appendChild(rename);
+
+
+  /* ── ⤺ 그룹 해제 — 폴더만 없앤다 ── */
+
+  const dissolve =
+    studioCanvasLayersActionButton(
+      "studio-canvas-layers-dissolve",
+      "⤺",
+      "그룹 해제 — 폴더만 없애고 요소는 남깁니다",
+      () => runStudioCanvasLayersAction(
+        "studioCanvasLayersGroupDissolve", [row.id]
+      )
+    );
+
+  dissolve.id = `studioCanvasLayerDissolve-${row.id}`;
+
+  wrap.appendChild(dissolve);
+
+
+  /* ── 🗑 그룹 삭제 — 자식까지 ── */
+
+  const remove =
+    studioCanvasLayersActionButton(
+      "studio-canvas-layers-remove",
+      "🗑",
+      "그룹 삭제 — 안의 요소까지 함께 지웁니다",
+      () => runStudioCanvasLayersAction(
+        "studioCanvasLayersGroupRemove", [row.id]
+      )
+    );
+
+  remove.id = `studioCanvasLayerRemove-${row.id}`;
+
+  wrap.appendChild(remove);
+
+  return wrap;
+
+}
+
+
 function studioCanvasLayersRowNode(row, expanded) {
+
+  if (row.kind === "group") {
+    return studioCanvasLayersGroupRowNode(row, expanded);
+  }
 
   const wrap =
     studioCanvasLayersEl("div", "studio-canvas-layers-row");
@@ -1102,6 +1621,10 @@ function studioCanvasLayersRowNode(row, expanded) {
   wrap.dataset.layerType = row.type;
   wrap.dataset.layerParent = row.parentId || "";
   wrap.dataset.layerIndex = String(row.index);
+
+  /* HOME-CANVAS-GROUP-1A — 이 행이 어느 폴더 안인가(없으면 빈 값).
+     끌기가 "그룹에서 빼기"를 이 한 칸으로 판정한다. */
+  wrap.dataset.layerGroupId = row.groupId || "";
 
   if (row.hidden) {
     wrap.dataset.layerHidden = "true";
@@ -1370,7 +1893,14 @@ function studioCanvasLayersShapeOf(rows, version) {
       `${row.id}:${row.kind}:${row.type}:${row.parentId || ""}:${row.index}` +
       `:${row.primary ? "p" : ""}${row.canBePrimary ? "P" : ""}` +
       `:${row.hidden ? "h" : ""}${row.locked ? "l" : ""}` +
-      `:${(row.kind === "block" && row.type === "main_visual" && !studioCanvasLayersExpanded(row.id)) ? "c" : ""}` +
+      `:${studioCanvasLayersIsFolder(row) && !studioCanvasLayersExpanded(row.id) ? "c" : ""}` +
+
+      /* HOME-CANVAS-GROUP-1A — 소속 · 이름 · 멤버 수 · 이름 고치는 중.
+         넷 다 **모양**이다: 소속이 바뀌면 행이 폴더 안팎으로 옮겨
+         가고, 이름 칸은 입력으로 바뀐다. 빠지면 옛 DOM 이 남는다. */
+      `:${row.groupId || ""}` +
+      `:${row.kind === "group" ? `${row.name}/${row.count}` : ""}` +
+      `:${(studioCanvasLayersRenaming && studioCanvasLayersRenaming.id === row.id) ? "r" : ""}` +
 
       /* STUDIO-LAYERS-MEDIA-1 — 행의 작은 미리보기도 **모양**이다.
          사진을 바꾸면 draft 의 구조는 그대로라 이 한 조각이 없으면
@@ -1419,6 +1949,41 @@ function paintStudioCanvasLayersSelection() {
        손댄다 — 그렇지 않으면 그릴 때마다 서로를 부른다. */
   if (!selection.primaryId) {
     return;
+  }
+
+  /* =====================================================
+     HOME-CANVAS-GROUP-1A — 고른 것이 접힌 **그룹** 안일 수도 있다
+     (계약 §38-4). 프레임과 같은 규칙이고, 그룹 선택 자체(멤버
+     전부)에서도 그 폴더가 열린다.
+  ====================================================== */
+  const groupId =
+    (typeof window.studioCanvasGroupOfMember === "function")
+      ? window.studioCanvasGroupOfMember(selection.primaryId)
+      : null;
+
+  /*
+    ★ **그룹 전체를 고른 경우는 펼치지 않는다.** 폴더 행을 누르면
+      멤버 전부가 선택인데(§38-9), 그것을 "안에 있는 것을 골랐다"로
+      읽으면 접은 폴더가 곧바로 다시 열려 접을 수가 없다. 자동
+      펼침은 **자식 하나를 따로 골랐을 때**의 규칙이다(계약 §38-4).
+  */
+  const whole =
+    (typeof window.studioCanvasSelectedGroup === "function")
+      ? window.studioCanvasSelectedGroup()
+      : null;
+
+  if (groupId && whole && whole.id === groupId) {
+    return;
+  }
+
+  if (groupId && studioCanvasLayersCollapsed.has(groupId)) {
+
+    studioCanvasLayersCollapsed.delete(groupId);
+
+    renderStudioCanvasLayers(true);
+
+    return;
+
   }
 
   const info =
@@ -1553,6 +2118,72 @@ function renderStudioCanvasLayersMedia(rows) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-GROUP-1A — `그룹 만들기` 단추의 상태 (계약 §38-3)
+
+   ★ 판정을 여기서 하지 않는다. "지금 고른 것으로 묶을 수 있는가"는
+     선택을 들고 있는 곳이 안다(studioCanvasGroupCreateReason) —
+     같은 규칙을 두 벌 적으면 단추와 관문이 갈라진다.
+========================================================== */
+
+function syncStudioCanvasLayersGroupButton() {
+
+  if (!studioCanvasLayersGroupButton) {
+    return;
+  }
+
+  /* 하위 화면(재료 추가)에서는 트리가 물러나 있다 — 함께 숨는다 */
+  if (
+    studioCanvasLayersAddOpen ||
+    studioCanvasLayersVersion() !== 2 ||
+    !studioCanvasLayersEditing()
+  ) {
+    studioCanvasLayersGroupButton.hidden = true;
+    return;
+  }
+
+  const selection =
+    studioCanvasLayersSelection();
+
+  if (selection.ids.length < 2) {
+    studioCanvasLayersGroupButton.hidden = true;
+    return;
+  }
+
+  /* 이미 그 자체가 한 그룹이면 만들 것이 없다 */
+  const already =
+    (typeof window.studioCanvasSelectedGroup === "function")
+      ? window.studioCanvasSelectedGroup()
+      : null;
+
+  if (already) {
+    studioCanvasLayersGroupButton.hidden = true;
+    return;
+  }
+
+  const reason =
+    (typeof window.studioCanvasGroupCreateReason === "function")
+      ? window.studioCanvasGroupCreateReason()
+      : "";
+
+  studioCanvasLayersGroupButton.hidden = false;
+
+  studioCanvasLayersGroupButton.disabled = !!reason;
+
+  studioCanvasLayersGroupButton.dataset.reason = reason || "";
+
+  studioCanvasLayersGroupButton.title =
+    reason
+      ? (
+          (typeof window.studioCanvasLayersRejectText === "function")
+            ? window.studioCanvasLayersRejectText("group-create", reason)
+            : "지금은 묶을 수 없습니다."
+        )
+      : `고른 요소 ${selection.ids.length}개를 한 그룹으로 묶습니다`;
+
+}
+
+
 function renderStudioCanvasLayers(force) {
 
   const root =
@@ -1563,6 +2194,8 @@ function renderStudioCanvasLayers(force) {
   }
 
   syncStudioCanvasLayersAdd();
+
+  syncStudioCanvasLayersGroupButton();
 
   const version =
     studioCanvasLayersVersion();
@@ -1679,17 +2312,22 @@ function renderStudioCanvasLayers(force) {
 
     mine.forEach((row) => {
 
-      /* 접힌 프레임의 자식은 그리지 않는다 */
+      /* 접힌 프레임의 자식은 그리지 않는다 — 폴더 행 자신도 그렇다 */
       if (
-        row.kind === "frame-element" &&
+        (row.kind === "frame-element" || row.kind === "group") &&
         row.parentId &&
         !studioCanvasLayersExpanded(row.parentId)
       ) {
         return;
       }
 
+      /* HOME-CANVAS-GROUP-1A — 접힌 그룹의 멤버도 그리지 않는다 */
+      if (row.groupId && !studioCanvasLayersExpanded(row.groupId)) {
+        return;
+      }
+
       const expanded =
-        row.kind === "block" && row.type === "main_visual"
+        studioCanvasLayersIsFolder(row)
           ? studioCanvasLayersExpanded(row.id)
           : false;
 
@@ -1743,6 +2381,38 @@ if (typeof window !== "undefined") {
   window.setStudioCanvasLayersMessage = setStudioCanvasLayersMessage;
   window.expandStudioCanvasLayersFolder = expandStudioCanvasLayersFolder;
 
+  /* HOME-CANVAS-GROUP-1A — 폴더 고르기와 이름 고치기.
+     ★ 이름 입력 칸은 **트리의 그 행 하나**다. Canvas 패널의
+       `이름 변경` 도 이 창구로 와서 같은 칸을 연다 — 입력을 두 벌
+       만들지 않는다(계약 §38-6). */
+  window.selectStudioCanvasLayerGroup = selectStudioCanvasLayerGroup;
+
+  window.startStudioCanvasLayersRename =
+    (groupId) => {
+
+      if (
+        typeof window.studioCanvasGroupInfo !== "function" ||
+        !window.studioCanvasGroupInfo(groupId)
+      ) {
+        return false;
+      }
+
+      studioCanvasLayersRenaming = { id: groupId };
+
+      studioCanvasLayersCollapsed.delete(groupId);
+
+      if (typeof window.showStudioLeftPanelMode === "function") {
+        window.showStudioLeftPanelMode("layers");
+      }
+
+      ensureStudioCanvasLayers();
+
+      renderStudioCanvasLayers(true);
+
+      return true;
+
+    };
+
   /* STUDIO-LAYERS-MATERIALS-1A — 재료 화면이 트리로 돌아오는 창구 */
   window.revealStudioCanvasLayersRow = revealStudioCanvasLayersRow;
   window.setStudioCanvasLayersAddOpen = setStudioCanvasLayersAddOpen;
@@ -1783,8 +2453,15 @@ if (typeof window !== "undefined") {
 
           /* STUDIO-LAYERS-MEDIA-1 — 그림 자리 이름(없으면 "") */
           slot: row.slot || "",
+
+          /* HOME-CANVAS-GROUP-1A — 소속 폴더 · 폴더 행의 이름과 수 */
+          groupId: row.groupId || "",
+          name: row.kind === "group" ? (row.name || "") : "",
+          count: row.kind === "group" ? row.count : 0,
+          depth: row.depth,
+
           expanded:
-            (row.kind === "block" && row.type === "main_visual")
+            studioCanvasLayersIsFolder(row)
               ? studioCanvasLayersExpanded(row.id)
               : null
         })),
@@ -1821,6 +2498,27 @@ if (typeof window !== "undefined") {
           studioCanvasLayersRoot
             ? (studioCanvasLayersRoot.dataset.layersScreen || "tree")
             : "",
+
+        /* HOME-CANVAS-GROUP-1A — 그룹 명단 · 만들기 단추 · 이름 입력 */
+        groups:
+          (typeof window.studioCanvasDraftGroups === "function")
+            ? window.studioCanvasDraftGroups()
+            : [],
+
+        selectedGroup:
+          (typeof window.studioCanvasSelectedGroup === "function" &&
+            window.studioCanvasSelectedGroup())
+            ? window.studioCanvasSelectedGroup().id
+            : null,
+
+        groupCreate: {
+          visible: !!(studioCanvasLayersGroupButton && !studioCanvasLayersGroupButton.hidden),
+          disabled: !!(studioCanvasLayersGroupButton && studioCanvasLayersGroupButton.disabled),
+          reason:
+            (studioCanvasLayersGroupButton && studioCanvasLayersGroupButton.dataset.reason) || ""
+        },
+
+        renaming: studioCanvasLayersRenaming ? studioCanvasLayersRenaming.id : null,
 
         add: {
           on:

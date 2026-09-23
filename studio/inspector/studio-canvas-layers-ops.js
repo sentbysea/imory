@@ -65,6 +65,40 @@ const STUDIO_CANVAS_LAYERS_REJECT = {
   "detach:layout":
     "메인 비주얼이 지금 화면의 어디에 있는지 아직 모릅니다 — 잠시 뒤에 다시 끌어 주세요.",
 
+  /* ── HOME-CANVAS-GROUP-1A — 그룹 ── */
+  "group-create:count":
+    "그룹으로 묶으려면 요소를 2개 이상 골라 주세요.",
+  "group-create:limit":
+    "한 번에 묶을 수 있는 요소는 64개까지입니다.",
+  "group-create:space":
+    "좌표 공간이 다른 요소는 함께 묶을 수 없습니다 — 페이지 장식끼리, 또는 같은 메인 비주얼 안의 요소끼리 골라 주세요.",
+  "group-create:kind":
+    "자동 배치 블록과 메인 비주얼 자체는 그룹으로 묶을 수 없습니다 — 그것들에는 좌표가 없습니다.",
+  "group-create:member":
+    "이미 다른 그룹에 들어 있는 요소가 있습니다 — 먼저 그 그룹에서 빼 주세요.",
+  "group-create:dupe":
+    "같은 요소를 두 번 묶을 수 없습니다.",
+  "group-create:selection":
+    "고른 것이 그 사이 바뀌었습니다 — 다시 골라 주세요.",
+
+  "group-join:space":
+    "좌표 공간이 달라 이 그룹에 넣을 수 없습니다 — 같은 공간의 요소끼리만 한 그룹이 됩니다.",
+  "group-join:kind":
+    "자동 배치 블록과 메인 비주얼 자체는 그룹에 넣을 수 없습니다.",
+  "group-join:nest":
+    "그룹을 다른 그룹 안에 넣을 수 없습니다.",
+  "group-join:group":
+    "그 그룹이 목록에서 사라졌습니다 — 목록을 다시 보고 해 주세요.",
+
+  "group-rename:name":
+    "그룹 이름은 1~40자여야 합니다.",
+
+  "group-remove:primary":
+    "이 그룹에는 대표 사진이 들어 있어 통째로 지울 수 없습니다 — 먼저 다른 사진을 대표로 지정하거나 그 사진을 그룹에서 빼 주세요.",
+
+  "group":
+    "그 그룹이 목록에서 사라졌습니다 — 목록을 다시 보고 해 주세요.",
+
   /* ── 공통 ── */
   "element":
     "그 요소가 목록에서 사라졌습니다 — 목록을 다시 보고 해 주세요.",
@@ -227,6 +261,152 @@ function studioCanvasLayersFlag(id, flag, on) {
      순수 함수가 이름 있는 이유(`primary`)로 먼저 막는다(§28-5).
 ========================================================== */
 
+/* =========================================================
+   4. 그룹 (HOME-CANVAS-GROUP-1A)
+
+   계약: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §38
+
+   ★ 위 여섯과 **같은 문 하나**를 지난다. 그룹이라고 다른 길을
+     내지 않는다 — 대상이 요소가 아니라 그룹일 뿐이고, 그 판정은
+     관문이 op 별로 한다(studio-canvas-selection.js).
+
+   ★ 좌표를 한 칸도 쓰지 않는다. 만들기 · 해제 · 넣기 · 빼기 ·
+     이름 변경은 `canvas.groups` 만 건드리므로 화면이 바이트 단위로
+     그대로다(계약 §38-1).
+========================================================== */
+
+/*
+  studioCanvasLayersGroupCreate(ids)
+
+  ids 를 주지 않으면 **지금 고른 것**을 묶는다. 그때는
+  `via:"selection"` 이라 관문이 "화면에 보이는 그 선택인가"를
+  대조한다 — Layers 의 단추도 Inspector 의 단추도 같은 문이다.
+*/
+function studioCanvasLayersGroupCreate(ids) {
+
+  const wanted =
+    Array.isArray(ids) && ids.length
+      ? ids.slice()
+      : (
+          (typeof window.getStudioCanvasSelection === "function")
+            ? window.getStudioCanvasSelection().ids.slice()
+            : []
+        );
+
+  if (typeof window.commitStudioCanvasStructureNode !== "function") {
+    return { accepted: false, reason: "unsupported", message: "" };
+  }
+
+  /* ★ 여기만 `via:"selection"` 이다. 묶을 대상이 곧 **지금 고른
+     것**이므로, 화면에 보이는 것과 바뀌는 것을 어긋나게 두지
+     않는다(계약 §38-3). */
+  const result =
+    window.commitStudioCanvasStructureNode({
+      op: "group-create",
+      ids: wanted,
+      via: "selection"
+    });
+
+  if (result && result.accepted) {
+    return { accepted: true, id: result.id, name: result.name, message: "" };
+  }
+
+  return {
+    accepted: false,
+    reason: (result && result.reason) || "rejected",
+    message: studioCanvasLayersRejectText(
+      "group-create", (result && result.reason) || "rejected"
+    )
+  };
+
+}
+
+
+/* 폴더만 없앤다 — 자식은 모두 그대로 남는다(계약 §38-7) */
+function studioCanvasLayersGroupDissolve(groupId) {
+
+  return runStudioCanvasLayersOp({ op: "group-dissolve", id: groupId });
+
+}
+
+
+/* 기존 레이어 하나를 그 그룹에 넣는다(다른 그룹에서 옮기는 것도
+   이 요청 하나다 — 계약 §38-5) */
+function studioCanvasLayersGroupJoin(id, groupId) {
+
+  return runStudioCanvasLayersOp({
+    op: "group-join",
+    id: id,
+    groupId: groupId
+  });
+
+}
+
+
+/* 그룹에서 뺀다 — 배열 자리는 그대로라 화면이 안 바뀐다 */
+function studioCanvasLayersGroupLeave(id) {
+
+  return runStudioCanvasLayersOp({ op: "group-leave", id: id });
+
+}
+
+
+/* 이름만 바꾼다 — 요소 id 도 member 참조도 그대로다 */
+function studioCanvasLayersGroupRename(groupId, name) {
+
+  return runStudioCanvasLayersOp({
+    op: "group-rename",
+    id: groupId,
+    name: name
+  });
+
+}
+
+
+/*
+  studioCanvasLayersGroupRemove(groupId, options)
+
+  **그룹과 그 안의 요소를 모두** 지운다. 해제와 다른 동작이므로
+  글자로 그 둘을 가르고(계약 §38-7) 한 번 묻는다.
+
+  ★ 묻고 취소하면 기록 0 칸이다 — 확인은 문 앞에서 한다.
+*/
+function studioCanvasLayersGroupRemove(groupId, options) {
+
+  const ask =
+    !(options && options.confirm === false);
+
+  if (ask) {
+
+    const info =
+      (typeof window.studioCanvasGroupInfo === "function")
+        ? window.studioCanvasGroupInfo(groupId)
+        : null;
+
+    const label =
+      (info && info.name) ? `"${info.name}"` : "이 그룹";
+
+    const count =
+      info ? info.live.length : 0;
+
+    const ok =
+      window.confirm(
+        `${label} 과 그 안의 요소 ${count}개를 함께 지웁니다.\n` +
+        "폴더만 없애고 요소는 남기려면 [그룹 해제] 를 쓰세요.\n" +
+        "되돌리려면 Undo(↶) 를 누르면 됩니다."
+      );
+
+    if (!ok) {
+      return { accepted: false, reason: "cancelled", message: "" };
+    }
+
+  }
+
+  return runStudioCanvasLayersOp({ op: "group-remove", id: groupId });
+
+}
+
+
 function studioCanvasLayersRemove(row, options) {
 
   const ask =
@@ -273,5 +453,13 @@ if (typeof window !== "undefined") {
   window.studioCanvasLayersPrimary = studioCanvasLayersPrimary;
   window.studioCanvasLayersFlag = studioCanvasLayersFlag;
   window.studioCanvasLayersRemove = studioCanvasLayersRemove;
+
+  /* HOME-CANVAS-GROUP-1A — 영구 그룹 여섯 */
+  window.studioCanvasLayersGroupCreate = studioCanvasLayersGroupCreate;
+  window.studioCanvasLayersGroupDissolve = studioCanvasLayersGroupDissolve;
+  window.studioCanvasLayersGroupJoin = studioCanvasLayersGroupJoin;
+  window.studioCanvasLayersGroupLeave = studioCanvasLayersGroupLeave;
+  window.studioCanvasLayersGroupRename = studioCanvasLayersGroupRename;
+  window.studioCanvasLayersGroupRemove = studioCanvasLayersGroupRemove;
 
 }

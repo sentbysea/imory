@@ -841,6 +841,16 @@ function renderImportEditorReport(result) {
     groups.push({ kind: "notice", title: "이미지 슬롯", texts: notices });
   }
 
+  /* HOME-CANVAS-GROUP-1A — 캔버스 그룹 명단을 정리한 안내(계약 §38-8).
+     이미지 슬롯과 **다른 묶음**이다 — 제목이 다른 이야기를 덮지
+     않게 자기 제목으로 선다. */
+  const canvasNotices =
+    result && Array.isArray(result.canvasNotices) ? result.canvasNotices : [];
+
+  if (canvasNotices.length) {
+    groups.push({ kind: "notice", title: "HOME 캔버스 그룹", texts: canvasNotices });
+  }
+
   if (!groups.length) {
     importEditorReport.hidden = true;
     return;

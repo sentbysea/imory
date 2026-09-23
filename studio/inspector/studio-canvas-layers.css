@@ -123,10 +123,15 @@
 }
 
 
-/* 프레임 안의 요소는 한 단 들어간다 — 첫 단계의 "폴더"는
-   main_visual 한 단계뿐이다(계획 문서 §2-7). */
+/* 프레임 안의 요소는 한 단 들어간다. HOME-CANVAS-GROUP-1A 로
+   단계가 하나 더 생겼다 — 프레임 안의 **그룹** 안(깊이 2). */
 .studio-canvas-layers-row[data-layer-depth="1"] {
   padding-left: 16px;
+}
+
+
+.studio-canvas-layers-row[data-layer-depth="2"] {
+  padding-left: 32px;
 }
 
 
@@ -534,6 +539,156 @@
   outline-offset: -1px;
 
   border-radius: 5px;
+}
+
+
+/* 금지된 자리 — 손을 놓아도 아무 일도 없다(HOME-CANVAS-GROUP-1A).
+   아무 표시도 없으면 "아직 아무 데도 안 닿았다"와 구별되지 않는다. */
+.studio-canvas-layers-row.is-drop-forbidden {
+  outline: 2px dashed var(--system-danger, #c0392b);
+  outline-offset: -1px;
+
+  border-radius: 5px;
+}
+
+
+.studio-canvas-layers-tree.is-dragging[data-drop="forbidden"] {
+  cursor: not-allowed;
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1A — 폴더 행 (계약 §38-4)
+
+   ★ 손잡이도 눈 · 자물쇠도 없다. 그 자리는 **비워 둔다** — 멤버
+     행과 칸이 어긋나면 폴더 안팎이 한눈에 안 읽힌다.
+========================================================== */
+
+.studio-canvas-layers-handle-gap {
+  flex: 0 0 auto;
+
+  width: 18px;
+  height: 26px;
+}
+
+
+.studio-canvas-layers-flag-gap {
+  flex: 0 0 auto;
+
+  width: 24px;
+  height: 24px;
+}
+
+
+.studio-canvas-layers-group-row {
+  font-weight: 600;
+}
+
+
+.studio-canvas-layers-folder {
+  flex: 0 0 auto;
+
+  margin-right: 4px;
+}
+
+
+.studio-canvas-layers-count {
+  flex: 0 0 auto;
+
+  margin-left: 4px;
+
+  opacity: 0.6;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* 멤버가 전부 숨김/잠김이면 폴더도 그렇게 보인다 — **파생 표시**라
+   누를 수 없다(계약 §38-11) */
+.studio-canvas-layers-group-row[data-layer-hidden="true"] .studio-canvas-layers-name {
+  opacity: 0.45;
+}
+
+
+.studio-canvas-layers-group-row[data-layer-locked="true"] .studio-canvas-layers-name {
+  font-style: italic;
+}
+
+
+/* 고치는 동안에는 멤버 수와 단추 셋이 물러난다 — 390px 에서 그
+   칸들이 그대로 서 있으면 입력 칸에 60px 도 안 남는다(실측 58px).
+   어차피 고치는 중에는 누를 수 없는 것들이다. */
+.studio-canvas-layers-group-row[data-layer-renaming="true"] .studio-canvas-layers-count,
+.studio-canvas-layers-group-row[data-layer-renaming="true"] .studio-canvas-layers-flag-gap,
+.studio-canvas-layers-group-row[data-layer-renaming="true"] .studio-canvas-layers-action {
+  display: none;
+}
+
+
+/* 인라인 이름 입력 — 행 안에서 이름 자리를 그대로 차지한다 */
+.studio-canvas-layers-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  padding: 1px 4px;
+
+  font: inherit;
+  color: inherit;
+
+  background: var(--system-bg, #fff);
+  border: 1px solid var(--system-accent, currentColor);
+  border-radius: 4px;
+}
+
+
+/* 맨 위의 `그룹 만들기` — `＋ 재료 추가` **아래** 한 줄.
+   여럿을 고른 상태에서만 보이므로(studio-canvas-layers.js) 평소
+   sticky 줄의 높이는 지금과 같다. */
+.studio-canvas-layers-group-create {
+  width: 100%;
+
+  display: block;
+
+  margin-top: 6px;
+  padding: 8px 10px;
+
+  border: 1px solid var(--system-border, rgba(0, 0, 0, 0.16));
+  border-radius: 6px;
+
+  background: transparent;
+  color: inherit;
+
+  font: inherit;
+  font-size: var(--imory-font-size-300);
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.studio-canvas-layers-group-create:hover:not(:disabled),
+.studio-canvas-layers-group-create:focus-visible {
+  border-color: var(--system-text-muted, rgba(0, 0, 0, 0.4));
+}
+
+
+.studio-canvas-layers-group-create:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+
+@media (max-width: 720px) {
+
+  .studio-canvas-layers-handle-gap {
+    width: 24px;
+    height: 32px;
+  }
+
+  .studio-canvas-layers-flag-gap {
+    width: 30px;
+    height: 30px;
+  }
+
 }
 
 

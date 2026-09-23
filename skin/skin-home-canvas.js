@@ -1396,6 +1396,11 @@ if (typeof module !== "undefined" && module.exports) {
      call time 에 찾으므로 그 **다음에** 싣는다. */
   const writeV2 = require("./skin-home-canvas-write-v2.js");
 
+  /* HOME-CANVAS-GROUP-1A — 영구 그룹의 순수 writer 와 수선. 위
+     세 파일의 값 표 · 트리 탐색 · 불변 이동을 call time 에 찾으므로
+     그 **다음에** 싣는다(브라우저의 로드 순서와 같다). */
+  const groupV2 = require("./skin-home-canvas-group-v2.js");
+
   module.exports = Object.assign({
     SKIN_HOME_CANVAS_REGION_NAME,
     SKIN_HOME_CANVAS_VERSION,
@@ -1437,6 +1442,6 @@ if (typeof module !== "undefined" && module.exports) {
     resolveSkinHomeCanvas,
     buildSkinCanvasRenderPayload,
     coerceSkinHomeCanvasRenderPayload
-  }, v2, write, writeV2);
+  }, v2, write, writeV2, groupV2);
 
 }

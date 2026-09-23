@@ -964,6 +964,12 @@
            fail closed 로 거절된다(sandbox 프레임이 그 상태다). */
         "../skin/skin-home-canvas-materials.js",
         "../skin/skin-home-canvas-write-v2.js",
+        /* HOME-CANVAS-GROUP-1A — 영구 그룹의 순수 writer 와 Import
+           수선(계약 §38). 위 write-v2.js 의 트리 탐색 · 불변 이동과
+           v2.js 의 값 표를 call time 에 찾으므로 **그 다음**이다.
+           sandbox 프레임에는 일부러 넣지 않는다 — 그룹은 실행
+           payload 에 실리지 않아 그릴 것이 없다(§38-10). */
+        "../skin/skin-home-canvas-group-v2.js",
         /* HOME-CANVAS-V2-EDITOR-1B — Studio 는 캔버스를 **그리지
            않는다**(그것은 Preview 문서와 sandbox 프레임의 일이다).
            그래도 이 파일이 필요한 이유는 v2 `main_visual` 의 자를

@@ -1897,17 +1897,52 @@ function skinHomeCanvasV2ReplaceCanvas(regions, found, nextCanvas) {
 
 
 /*
-  소속을 옮기는 요청이 공통으로 지나는 자리 — 이 캔버스가 v2 인가 ·
-  그 id 가 무엇인가.
-*/
-function skinHomeCanvasV2Locate(regions, id) {
+  HOME-CANVAS-GROUP-1A — 사라지거나 좌표 공간이 바뀐 요소를 그룹
+  명단에서 뗀다.
 
-  if (
-    typeof id !== "string" ||
-    !SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(id)
-  ) {
-    return { ok: false, reason: "id" };
+  `nextCanvas` 를 **제자리에서** 고친다(아직 아무도 못 본 새 객체다).
+  남은 멤버가 둘 미만이 된 그룹은 사라지고, 그 해제는 이 커밋과
+  **같은 Undo 한 칸**이다(계약 §38-5).
+
+  ★ 그룹 파일(skin/skin-home-canvas-group-v2.js)이 없는 문서에서는
+    이 단계가 그냥 없다 — 그룹은 그려지지 않으므로 화면에 영향이
+    없다. sandbox 프레임이 그 경우다.
+*/
+function skinHomeCanvasV2ApplyGroupPrune(nextCanvas, canvas, ids) {
+
+  if (typeof pruneSkinHomeCanvasV2Groups !== "function") {
+    return false;
   }
+
+  const pruned =
+    pruneSkinHomeCanvasV2Groups(canvas, Array.isArray(ids) ? ids : [ids]);
+
+  if (!pruned.changed) {
+    return false;
+  }
+
+  if (pruned.groups.length) {
+    nextCanvas.groups = pruned.groups;
+  }
+  else {
+    delete nextCanvas.groups;
+  }
+
+  return true;
+
+}
+
+
+/*
+  regions 에서 **v2 캔버스 하나**를 찾는다 — id 를 보지 않는 앞부분.
+
+  ★ HOME-CANVAS-GROUP-1A 에서 갈라 냈다. 그룹 writer 가 받는 id 는
+    요소가 아니라 **그룹**이라 `findSkinHomeCanvasV2Node` 로 찾을 수
+    없는데(그룹은 노드가 아니다 — 계약 §38-1), "이 regions 에 v2
+    캔버스가 있는가"라는 판정은 정확히 같은 한 벌이다. 두 벌로
+    갈라지면 한쪽만 느슨해진다.
+*/
+function skinHomeCanvasV2LocateCanvas(regions) {
 
   const found =
     findSkinHomeCanvasRegion(regions);
@@ -1928,14 +1963,39 @@ function skinHomeCanvasV2Locate(regions, id) {
     return { ok: false, reason: "canvas" };
   }
 
+  return { ok: true, found: found, canvas: canvas };
+
+}
+
+
+/*
+  소속을 옮기는 요청이 공통으로 지나는 자리 — 이 캔버스가 v2 인가 ·
+  그 id 가 무엇인가.
+*/
+function skinHomeCanvasV2Locate(regions, id) {
+
+  if (
+    typeof id !== "string" ||
+    !SKIN_HOME_CANVAS_ELEMENT_ID_PATTERN.test(id)
+  ) {
+    return { ok: false, reason: "id" };
+  }
+
+  const located =
+    skinHomeCanvasV2LocateCanvas(regions);
+
+  if (!located.ok) {
+    return located;
+  }
+
   const hit =
-    findSkinHomeCanvasV2Node(canvas, id);
+    findSkinHomeCanvasV2Node(located.canvas, id);
 
   if (!hit) {
     return { ok: false, reason: "missing" };
   }
 
-  return { ok: true, found: found, canvas: canvas, hit: hit };
+  return { ok: true, found: located.found, canvas: located.canvas, hit: hit };
 
 }
 
@@ -2060,6 +2120,10 @@ function writeSkinHomeCanvasV2AttachNode(regions, request) {
       frameHit.node.props.elements.concat([nextNode])
     );
 
+  /* HOME-CANVAS-GROUP-1A — 좌표 공간이 바뀌었다(도화지 → 프레임).
+     한 그룹은 한 공간이므로 명단에서 뗀다(계약 §38-2 · §38-9). */
+  skinHomeCanvasV2ApplyGroupPrune(nextCanvas, located.canvas, value.id);
+
   const verdict =
     (typeof validateSkinCanvasV2Data === "function")
       ? validateSkinCanvasV2Data(nextCanvas, "canvas")
@@ -2164,6 +2228,9 @@ function writeSkinHomeCanvasV2DetachNode(regions, request) {
   nextCanvas.overlays =
     overlays.concat([nextNode]);
 
+  /* HOME-CANVAS-GROUP-1A — 좌표 공간이 바뀌었다(프레임 → 도화지) */
+  skinHomeCanvasV2ApplyGroupPrune(nextCanvas, located.canvas, value.id);
+
   const verdict =
     (typeof validateSkinCanvasV2Data === "function")
       ? validateSkinCanvasV2Data(nextCanvas, "canvas")
@@ -2262,6 +2329,31 @@ function writeSkinHomeCanvasV2RemoveNode(regions, request) {
       );
 
   }
+
+  /* =====================================================
+     HOME-CANVAS-GROUP-1A — 사라진 것은 명단에서도 뗀다
+
+     블록을 지우면 **그 안의 요소까지** 없어지므로(§28-5) 떼야 할
+     id 가 하나가 아니다. 남은 수가 둘 미만이 된 그룹은 같은
+     커밋에서 해제된다 — 별도 Undo 칸을 만들지 않는다(계약 §38-5).
+
+     ★ 그룹 파일이 없는 문서(sandbox 프레임)에서는 이 단계가
+       그냥 없다. 그룹은 그려지지 않으므로 화면에 영향이 없다.
+  ====================================================== */
+  const doomed = [value.id];
+
+  if (hit.kind === "block" && isSkinHomeCanvasPlainObject(hit.node.props)) {
+
+    (Array.isArray(hit.node.props.elements) ? hit.node.props.elements : [])
+      .forEach((item) => {
+        if (isSkinHomeCanvasPlainObject(item) && typeof item.id === "string") {
+          doomed.push(item.id);
+        }
+      });
+
+  }
+
+  skinHomeCanvasV2ApplyGroupPrune(nextCanvas, canvas, doomed);
 
   const verdict =
     (typeof validateSkinCanvasV2Data === "function")
@@ -3017,6 +3109,14 @@ if (typeof window !== "undefined") {
   window.SKIN_HOME_CANVAS_V2_PIN_START_POINT =
     SKIN_HOME_CANVAS_V2_PIN_START_POINT;
 
+  /* HOME-CANVAS-GROUP-1A — 그룹 writer 가 같은 판정 · 같은 불변
+     이동을 쓴다(skin/skin-home-canvas-group-v2.js) */
+  window.skinHomeCanvasV2LocateCanvas = skinHomeCanvasV2LocateCanvas;
+  window.skinHomeCanvasV2FrameHit = skinHomeCanvasV2FrameHit;
+  window.skinHomeCanvasV2FlowWithFrameElements =
+    skinHomeCanvasV2FlowWithFrameElements;
+  window.skinHomeCanvasV2ReplaceCanvas = skinHomeCanvasV2ReplaceCanvas;
+
   /* STUDIO-LAYERS-STRUCTURE-1 — 순서 · 대표 사진 · 숨김/잠금 */
   window.writeSkinHomeCanvasV2ReorderNode = writeSkinHomeCanvasV2ReorderNode;
   window.writeSkinHomeCanvasV2PrimaryPhoto = writeSkinHomeCanvasV2PrimaryPhoto;
@@ -3058,6 +3158,7 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_HOME_CANVAS_V2_OVERLAY_DEFAULTS,
     SKIN_HOME_CANVAS_V2_NEW_FRAME,
     SKIN_HOME_CANVAS_V2_NEW_TEXT,
+    skinHomeCanvasV2NewId,
     writeSkinHomeCanvasV2AddNode,
 
     /* STUDIO-LAYERS-MATERIALS-1B — 프리셋 · 놓은 자리 */
@@ -3068,6 +3169,13 @@ if (typeof module !== "undefined" && module.exports) {
     SKIN_HOME_CANVAS_V2_PIN_DEFAULT_POINT,
     SKIN_HOME_CANVAS_V2_PIN_START_POINT,
     skinHomeCanvasV2FrameHit,
+    skinHomeCanvasV2FlowWithFrameElements,
+    skinHomeCanvasV2ReplaceCanvas,
+
+    /* HOME-CANVAS-GROUP-1A — 그룹 writer 가 같은 판정을 쓴다 */
+    skinHomeCanvasV2LocateCanvas,
+    skinHomeCanvasV2ApplyGroupPrune,
+
     writeSkinHomeCanvasV2AttachNode,
     writeSkinHomeCanvasV2DetachNode,
     writeSkinHomeCanvasV2RemoveNode,
