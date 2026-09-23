@@ -13,8 +13,13 @@
      3) 행마다 대표 사진 · 눈 · 자물쇠 · 삭제 단추를 붙인다
         (STUDIO-LAYERS-STRUCTURE-1)
 
-   그리고 맨 위에 재료 추가 자리를 붙인다 — 그 화면을 만드는 곳은
-   여전히 studio/inspector/studio-canvas-add-v2.js 한 곳이다.
+   그리고 맨 위에 `＋ 재료 추가`를 둔다. 누르면 트리가 물러나고
+   **요소 추가 하위 화면**이 같은 자리에 선다
+   (STUDIO-LAYERS-MATERIALS-1A · 계약 §35) — 그 화면의 본문(분류 둘 ·
+   카드 여덟)을 만드는 곳은 여전히
+   studio/inspector/studio-canvas-add-v2.js 한 곳이고, 이 파일은
+   **머리(`← Layers` · 제목)와 돌아가는 길**만 갖는다. 어디로
+   돌아갈지 아는 곳이 여기뿐이기 때문이다.
 
    ── 이 파일이 **하지 않는** 일 ─────────────────────────
      · draft 를 직접 고치지 않는다. 구조 동작은 전부
@@ -127,6 +132,9 @@ let studioCanvasLayersTree = null;
 let studioCanvasLayersEmpty = null;
 
 let studioCanvasLayersAddToggle = null;
+
+/* STUDIO-LAYERS-MATERIALS-1A — 하위 화면의 머리(`← Layers` · 제목) */
+let studioCanvasLayersAddHead = null;
 
 let studioCanvasLayersAddHost = null;
 
@@ -604,7 +612,70 @@ function ensureStudioCanvasLayers() {
 
   top.appendChild(studioCanvasLayersAddToggle);
 
+
+  /* ── 하위 화면의 머리 (STUDIO-LAYERS-MATERIALS-1A) ──
+
+     `＋ 재료 추가`를 누르면 트리가 물러나고 **요소 추가** 화면이
+     그 자리에 선다. 돌아가는 길이 하나(`← Layers`)뿐이어야 하므로
+     그 단추는 같은 sticky 줄에 있고, 본문(카드 격자)을 만드는 곳은
+     여전히 studio/inspector/studio-canvas-add-v2.js 하나다.
+
+     ★ Images 의 자리 하나 화면과 같은 규칙이다 — 어디로 돌아갈지
+       아는 곳이 화면을 연 쪽이다(studio-shell.js 의 그 사고방식). */
+
+  studioCanvasLayersAddHead =
+    studioCanvasLayersEl("div", "studio-canvas-layers-subhead");
+
+  studioCanvasLayersAddHead.id =
+    "studioCanvasAddHead";
+
+  studioCanvasLayersAddHead.hidden =
+    true;
+
+  const back =
+    studioCanvasLayersEl(
+      "button",
+      "studio-canvas-layers-back",
+      "← Layers"
+    );
+
+  back.type = "button";
+  back.id = "studioCanvasAddBack";
+
+  back.addEventListener(
+    "click",
+    () => setStudioCanvasLayersAddOpen(false)
+  );
+
+  studioCanvasLayersAddHead.appendChild(back);
+
+  const subtitle =
+    studioCanvasLayersEl(
+      "p",
+      "studio-canvas-layers-subtitle",
+      "요소 추가"
+    );
+
+  subtitle.id =
+    "studioCanvasAddTitle";
+
+  studioCanvasLayersAddHead.appendChild(subtitle);
+
+  top.appendChild(studioCanvasLayersAddHead);
+
   studioCanvasLayersRoot.appendChild(top);
+
+
+  /* Escape 도 `← Layers` 와 같은 곳으로 간다 — 하위 화면에 갇히지
+     않게. 패널 안에서만 듣는다(문서 전역에 또 하나 달지 않는다). */
+  studioCanvasLayersRoot.addEventListener("keydown", (event) => {
+
+    if (event.key === "Escape" && studioCanvasLayersAddOpen) {
+      event.stopPropagation();
+      setStudioCanvasLayersAddOpen(false);
+    }
+
+  });
 
 
   studioCanvasLayersAddHost =
@@ -715,10 +786,75 @@ function ensureStudioCanvasLayers() {
 
 function setStudioCanvasLayersAddOpen(open) {
 
+  const was =
+    studioCanvasLayersAddOpen;
+
   studioCanvasLayersAddOpen =
     !!open;
 
   syncStudioCanvasLayersAdd();
+
+  if (was === studioCanvasLayersAddOpen) {
+    return;
+  }
+
+  /* 화면이 바뀌었으면 초점도 따라간다 — 하위 화면에서는 `← Layers`,
+     돌아오면 그 화면을 연 `＋ 재료 추가`. 키보드만 쓰는 사람이
+     사라진 단추에 초점을 둔 채 남지 않게. */
+  const focus =
+    studioCanvasLayersAddOpen
+      ? document.getElementById("studioCanvasAddBack")
+      : studioCanvasLayersAddToggle;
+
+  if (focus && !focus.hidden && typeof focus.focus === "function") {
+    focus.focus();
+  }
+
+}
+
+
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1A — 트리로 돌아가 그 행을 드러낸다
+
+   재료를 만든 직후(그리고 "이미 있는 것"을 고른 직후) 부른다.
+   하위 화면을 닫고 · 접힌 프레임을 펼치고 · 그 행이 보이는 자리로
+   스크롤한다. 선택 자체는 이미 기존 관문이 했다.
+
+   ★ 창구를 두는 이유는 **돌아갈 곳을 아는 곳이 여기뿐**이기
+     때문이다. studio-canvas-add-v2.js 는 자기가 어느 패널의 어느
+     화면에 붙어 있는지 몰라도 된다.
+========================================================== */
+function revealStudioCanvasLayersRow(elementId, note) {
+
+  setStudioCanvasLayersAddOpen(false);
+
+  setStudioCanvasLayersMessage(
+    (typeof note === "string") ? note : ""
+  );
+
+  const info =
+    (typeof window.studioCanvasNodeInfo === "function")
+      ? window.studioCanvasNodeInfo(elementId)
+      : null;
+
+  if (info && info.kind === "frame-element" && info.parentId) {
+    expandStudioCanvasLayersFolder(info.parentId);
+  }
+
+  renderStudioCanvasLayers(true);
+
+  if (!studioCanvasLayersTree) {
+    return;
+  }
+
+  const row =
+    Array.from(
+      studioCanvasLayersTree.querySelectorAll(".studio-canvas-layers-row")
+    ).find((node) => node.dataset.layerId === elementId);
+
+  if (row && typeof row.scrollIntoView === "function") {
+    row.scrollIntoView({ block: "nearest" });
+  }
 
 }
 
@@ -744,6 +880,19 @@ function syncStudioCanvasLayersAdd() {
 
   studioCanvasLayersAddHost.hidden =
     !open;
+
+  /* STUDIO-LAYERS-MATERIALS-1A — 트리인가 하위 화면인가.
+     트리 · 빈 안내 · 스킨 이미지 · 상태 줄을 한꺼번에 물리는 것은
+     CSS 다(아래 세 줄이 각자 hidden 을 다투지 않게). */
+  studioCanvasLayersRoot.dataset.layersScreen =
+    open ? "add" : "tree";
+
+  studioCanvasLayersAddToggle.hidden =
+    open;
+
+  if (studioCanvasLayersAddHead) {
+    studioCanvasLayersAddHead.hidden = !open;
+  }
 
   if (!open) {
 
@@ -1507,6 +1656,10 @@ if (typeof window !== "undefined") {
   window.setStudioCanvasLayersMessage = setStudioCanvasLayersMessage;
   window.expandStudioCanvasLayersFolder = expandStudioCanvasLayersFolder;
 
+  /* STUDIO-LAYERS-MATERIALS-1A — 재료 화면이 트리로 돌아오는 창구 */
+  window.revealStudioCanvasLayersRow = revealStudioCanvasLayersRow;
+  window.setStudioCanvasLayersAddOpen = setStudioCanvasLayersAddOpen;
+
   /* 진단 · 테스트가 보는 한 줄 — production 코드는 읽지 않는다 */
   window.getStudioCanvasLayersState =
     () => {
@@ -1572,12 +1725,23 @@ if (typeof window !== "undefined") {
               : []
         },
 
+        /* STUDIO-LAYERS-MATERIALS-1A — 지금 서 있는 화면 */
+        screen:
+          studioCanvasLayersRoot
+            ? (studioCanvasLayersRoot.dataset.layersScreen || "tree")
+            : "",
+
         add: {
           on:
             typeof window.studioCanvasV2AddIsOn === "function" &&
             window.studioCanvasV2AddIsOn(),
           open: studioCanvasLayersAddOpen,
-          visible: !!document.getElementById("studioCanvasAdd")
+          visible: !!document.getElementById("studioCanvasAdd"),
+
+          /* 하위 화면의 머리 — `← Layers` 와 제목 */
+          back: !!(studioCanvasLayersAddHead && !studioCanvasLayersAddHead.hidden),
+          title:
+            (document.getElementById("studioCanvasAddTitle") || {}).textContent || ""
         }
       };
 

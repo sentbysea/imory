@@ -588,3 +588,287 @@
   }
 
 }
+
+
+/* =========================================================
+   STUDIO-LAYERS-MATERIALS-1A — 요소 추가 하위 화면
+
+   그리는 쪽: studio/inspector/studio-canvas-add-v2.js (본문) ·
+             studio/inspector/studio-canvas-layers.js (머리)
+   계약:     docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §35
+
+   ★ 새 디자인 체계를 만들지 않는다. 색 · 테두리 · 글자 크기는 전부
+     위 Layers 규칙과 같은 토큰이다.
+
+   ★ 스크롤 상자는 여전히 section 하나다(studio-shell.css) — 여기서
+     두 번째 스크롤 상자를 만들지 않는다.
+========================================================== */
+
+/* 하위 화면에서는 트리 쪽이 통째로 물러난다. 각자 `hidden` 을
+   다투게 하지 않으려고 화면 상태 하나로 물린다. */
+.studio-canvas-layers[data-layers-screen="add"] .studio-canvas-layers-tree,
+.studio-canvas-layers[data-layers-screen="add"] .studio-canvas-layers-empty,
+.studio-canvas-layers[data-layers-screen="add"] .studio-canvas-layers-media,
+.studio-canvas-layers[data-layers-screen="add"] .studio-canvas-layers-note {
+  display: none;
+}
+
+
+.studio-canvas-layers-subhead {
+  display: flex;
+  align-items: center;
+
+  gap: 8px;
+
+  min-width: 0;
+}
+
+
+.studio-canvas-layers-subhead[hidden] {
+  display: none;
+}
+
+
+.studio-canvas-layers-back {
+  flex: 0 0 auto;
+
+  padding: 6px 8px;
+
+  border: 1px solid var(--system-border, rgba(0, 0, 0, 0.16));
+  border-radius: 6px;
+
+  background: transparent;
+  color: inherit;
+
+  font: inherit;
+  font-size: var(--imory-font-size-200);
+
+  cursor: pointer;
+}
+
+
+.studio-canvas-layers-back:hover,
+.studio-canvas-layers-back:focus-visible {
+  border-color: var(--system-text-muted, rgba(0, 0, 0, 0.4));
+}
+
+
+.studio-canvas-layers-subtitle {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  margin: 0;
+
+  font-size: var(--imory-font-size-300);
+  font-weight: 600;
+
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+
+/* ── 본문 ──────────────────────────────────────────────── */
+
+.studio-material-screen {
+  display: flex;
+  flex-direction: column;
+
+  gap: 16px;
+
+  padding: 0 14px 16px;
+}
+
+
+.studio-material-group {
+  display: flex;
+  flex-direction: column;
+
+  gap: 6px;
+}
+
+
+.studio-material-group-heading {
+  margin: 0;
+
+  font-size: var(--imory-font-size-300);
+  font-weight: 600;
+}
+
+
+.studio-material-group-note {
+  margin: 0;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  line-height: var(--imory-line-height-relaxed);
+
+  word-break: keep-all;
+}
+
+
+/* 두 칸 격자 — 390px 에서도 두 칸이다. `minmax(0, 1fr)` 이라
+   긴 이름이 칸을 넓히지 않고 줄바꿈된다(가로 스크롤 0). */
+.studio-material-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+
+  gap: 8px;
+
+  margin-top: 2px;
+}
+
+
+.studio-material-cell {
+  min-width: 0;
+
+  display: flex;
+}
+
+
+.studio-material-card {
+  flex: 1 1 auto;
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  gap: 6px;
+
+  padding: 10px;
+
+  border: 1px solid var(--system-border, rgba(0, 0, 0, 0.16));
+  border-radius: 8px;
+
+  background: var(--system-surface, transparent);
+  color: inherit;
+
+  font: inherit;
+  text-align: left;
+
+  cursor: pointer;
+}
+
+
+.studio-material-card:hover:not(:disabled),
+.studio-material-card:focus-visible {
+  border-color: var(--system-text-muted, rgba(0, 0, 0, 0.4));
+}
+
+
+.studio-material-card:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+
+/* 선 몇 개짜리 그림 — 색은 글자색을 따른다 */
+.studio-material-card-icon {
+  flex: 0 0 auto;
+
+  display: block;
+
+  width: 26px;
+  height: 26px;
+
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+
+  opacity: 0.75;
+}
+
+
+.studio-material-card-body {
+  min-width: 0;
+
+  display: flex;
+  flex-direction: column;
+
+  gap: 2px;
+}
+
+
+.studio-material-card-name {
+  font-size: var(--imory-font-size-300);
+
+  /* 이름이 길어도 잘리지 않는다 — 줄로 내린다 */
+  word-break: keep-all;
+}
+
+
+.studio-material-card-desc {
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  line-height: var(--imory-line-height-relaxed);
+
+  word-break: keep-all;
+}
+
+
+.studio-material-card-badge {
+  align-self: flex-start;
+
+  padding: 1px 6px;
+
+  border: 1px solid var(--system-border, rgba(0, 0, 0, 0.16));
+  border-radius: 999px;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+}
+
+
+.studio-material-card-badge[hidden] {
+  display: none;
+}
+
+
+.studio-material-card[data-material-state="added"] {
+  border-color: var(--system-accent, currentColor);
+}
+
+
+/* ── 사진 슬롯 · 상태 줄 ──────────────────────────────── */
+
+.studio-canvas-add-slot {
+  display: flex;
+  flex-direction: column;
+
+  gap: 4px;
+}
+
+
+.studio-canvas-add-slot-label {
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+}
+
+
+.studio-canvas-add-message {
+  margin: 0;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  line-height: var(--imory-line-height-relaxed);
+
+  word-break: keep-all;
+}
+
+
+.studio-canvas-add-message--error {
+  color: var(--system-text-danger, #b3261e);
+}
+
+
+.studio-canvas-add-message[hidden] {
+  display: none;
+}

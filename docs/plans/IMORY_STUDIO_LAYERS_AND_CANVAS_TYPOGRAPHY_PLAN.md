@@ -220,11 +220,19 @@ v1/v2 호환을 먼저 확정한다.
 
 ## 3. 재료 추가의 새 자리
 
+> **화면은 그 뒤 한 번 더 바뀌었다(2026-09-23 · `STUDIO-LAYERS-MATERIALS-1A`).**
+> `＋ 재료 추가`는 이제 **Layers의 하위 화면**을 열고, 그 안은
+> 자리별 글자 단추가 아니라 **홈 구성 · 꾸미기 두 분류의 카드 격자**다.
+> 현행 계약은 [IMORY_HOME_CANVAS_CONTRACT.md §35](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> 이고, 아래 줄들 중 **쓰기 경로 · 슬롯 · 즉시 선택 · 행 드러내기**는
+> 그대로다.
+
 재료 추가는 Select에서 Layers로 옮긴다.
 
 - Layers 상단에 sticky `＋ 재료 추가` 버튼을 둔다.
 - 누르면 자동 배치 · 페이지 자유 장식 · 현재 선택한 main_visual 안의 재료를
-  구분해 보여 준다.
+  구분해 보여 준다. — **변경됨 → 계약 §35-2**(분류는 홈 구성 · 꾸미기이고,
+  어느 자리에 들어갈지는 카드가 계약에 물어 정한다).
 - 기존 종류 표와 기본값 표를 복제하지 않는다.
 - 기존 `commitStudioCanvasAddNode()` →
   `addStudioCanvasV2Node()` →
@@ -384,7 +392,10 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 | 1 | `STUDIO-LAYERS-SHELL-1` | 상단 Dock 자리를 Layers로 교체 · 읽기 전용 트리 · Select의 재료 추가를 Layers로 이동 · Dock Settings 진입 경로 조사/이동 | **완료** — [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) · [admin/settings/admin-bottom-dock-entry.js](../../admin/settings/admin-bottom-dock-entry.js) · `studio/studio-home-canvas-inspector-e2e-test.mjs --only=layers` · `admin/admin-settings-e2e-test.mjs --only=dock` |
 | 2 | `HOME-CANVAS-TYPOGRAPHY-1` | Canvas 타이포그래피 + Quote Preset `bodyFont` 여섯 글꼴 | **완료** — [studio/inspector/studio-canvas-typography.js](../../studio/inspector/studio-canvas-typography.js) · [core/imory-font-catalog.js](../../core/imory-font-catalog.js) · [core/imory-fonts.css](../../core/imory-fonts.css) · 계약 [§31](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-typography-e2e-test.mjs` · `admin/quote/quote-render-parity-e2e-test.mjs --only=font` · `node core/imory-font-catalog-test.mjs` |
 | 3 | `STUDIO-LAYERS-STRUCTURE-1` | 순서 drag · 단일 attach/detach · primary · 숨김 · 잠금 · 삭제 | **완료** — [studio/inspector/studio-canvas-layers-ops.js](../../studio/inspector/studio-canvas-layers-ops.js) · [studio/inspector/studio-canvas-layers-drag.js](../../studio/inspector/studio-canvas-layers-drag.js) · [skin/skin-home-canvas-write-v2.js](../../skin/skin-home-canvas-write-v2.js) §6 · 계약 [§32](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-inspector-e2e-test.mjs --only=layerstruct` · `node skin/skin-home-canvas-test.mjs`([v2-structure]) |
-| 4 | `HOME-CANVAS-V2-GROUP-1A` | 여러 요소 묶기 · primary 지정 | **다음 작업** |
+| 3-1 | `STUDIO-LAYERS-MEDIA-1` | 상단 Images 제거 · Layers 행에서 사진 바꾸기 · 사용 중 이미지 삭제 | **완료** — [studio/images/images-panel.js](../../studio/images/images-panel.js) · 계약 [§34](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/images/skin-image-library-e2e-test.mjs` |
+| 3-2 | `STUDIO-LAYERS-MATERIALS-1A` | `＋ 재료 추가`를 재료 탐색 하위 화면으로(분류 둘 · 카드 여덟 · 클릭 추가 · 중복 방지) | **완료** — [studio/inspector/studio-canvas-add-v2.js](../../studio/inspector/studio-canvas-add-v2.js) · [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) · 계약 [§35](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-materials-e2e-test.mjs` |
+| 3-3 | `STUDIO-LAYERS-MATERIALS-1B` | **재료별 프리셋 목록과 drag/drop** — 카드 하나를 누르면 하위 재료 목록(도형의 `rect`/`ellipse`/`line`, 디자인 요소의 테이프·스티커·종이 조각·배지)이 열리고, 카드를 Preview 로 끌어다 놓아 자리를 정한다. 카드가 덮지 않는 자리·종류 조합(흐름의 `text`, 자유 층의 `logo`·`category_nav`)도 여기서 드러난다 — 계약 [§35-5 · §35-8](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) | **다음 작업** |
+| 4 | `HOME-CANVAS-V2-GROUP-1A` | 여러 요소 묶기 · primary 지정 | 미착수 |
 | 5 | `HOME-CANVAS-V2-GROUP-1B` | 그룹 이동 | 미착수 |
 | 6 | `HOME-CANVAS-V2-GROUP-1C` | 그룹 리사이즈 · 회전 | 미착수 |
 | 7 | `HOME-CANVAS-RICH-TEXT-1` | 선택한 일부 글자 색상 등 구조형 텍스트 | 미착수 |

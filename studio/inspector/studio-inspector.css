@@ -1870,69 +1870,16 @@
 
 
 /* =========================================================
-   HOME-CANVAS-V2-ADD-1 — 재료 추가
-
-   그리는 쪽: studio/inspector/studio-canvas-add-v2.js
-   계약: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §27
-
-   고른 것이 없을 때도 이 블록 하나만 보인다 — 그래서 위 블록들과
-   달리 윗줄(border-top)을 갖지 않고 아래로 경계를 긋는다.
-========================================================== */
-
-.studio-canvas-inspector-add {
-  display: flex;
-  flex-direction: column;
-
-  gap: 8px;
-
-  padding-bottom: 10px;
-
-  border-bottom: 1px solid var(--system-border);
-}
-
-
-.studio-canvas-add-group {
-  margin: 2px 0 0;
-
-  color: var(--system-text-muted);
-
-  font-size: var(--imory-font-size-200);
-}
-
-
-.studio-canvas-add-row {
-  display: flex;
-
-  flex-wrap: wrap;
-
-  gap: 6px;
-}
-
-
-.studio-canvas-add-message {
-  margin: 0;
-
-  color: var(--system-text-muted);
-
-  font-size: var(--imory-font-size-200);
-  line-height: var(--imory-line-height-snug);
-
-  word-break: keep-all;
-}
-
-
-.studio-canvas-add-message--error {
-  color: var(--system-danger, #b3261e);
-}
-
-
-/* =========================================================
    HOME-CANVAS-V2-ELEMENTS-1 — 기준점과 소속
 
    기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §28
 
-   ★ 새 색도 새 크기도 만들지 않는다. 위 재료 추가 자리와 같은
-     간격 · 같은 버튼 · 같은 구분선을 쓴다.
+   ★ 새 색도 새 크기도 만들지 않는다. 이 파일의 다른 Canvas 묶음과
+     같은 간격 · 같은 버튼 · 같은 구분선을 쓴다.
+
+   ★ 재료 추가 화면의 규칙은 여기 없다 — 그 화면은 Layers 의 하위
+     화면이 되었고(STUDIO-LAYERS-MATERIALS-1A) 규칙도 함께
+     studio/inspector/studio-canvas-layers.css 로 옮겼다.
 ========================================================== */
 
 .studio-canvas-inspector-pin,

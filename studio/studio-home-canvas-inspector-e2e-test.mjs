@@ -691,16 +691,29 @@ async function openAddPanel(page) {
 
   Layers 를 열고 · 만들고 · **Select 로 돌아온다**.
 
-  ★ production 은 만든 뒤에도 Layers 에 머문다(계획 문서 §3 — 속성을
-    고치러 Select 로 옮기는 것은 사람이 하는 일이다). 이 파일의 기존
-    단언들은 곧바로 Canvas Inspector 의 칸을 재므로, 그 전환을 여기서
-    한 번에 해 둔다.
+  ★ production 은 만든 뒤 Layers 트리로 돌아가 그 행을 드러낸다
+    (STUDIO-LAYERS-MATERIALS-1A §35-3). 이 파일의 기존 단언들은
+    곧바로 Canvas Inspector 의 칸을 재므로, 그 전환을 여기서 한 번에
+    해 둔다.
+
+  ★ **카드를 누르지 않는다.** MATERIALS-1A 부터 화면은 재료 카드
+    여덟이고, 카드 하나가 가리키는 자리·종류는 **한 조합**이다.
+    계약의 두 표는 그보다 넓어서(흐름의 `text`, 자유 층의 `logo` 등)
+    이 파일이 재는 조합 전부를 카드로 부를 수 없다. 그래서 여기서는
+    카드가 부르는 **바로 그 함수**를 부른다 — 슬롯 칸을 읽고 관문을
+    지나 트리로 돌아가는 길까지 production 과 같은 한 줄이다.
+
+    카드 화면 자체(분류 · 순서 · 추가됨 · 준비 중 · ← Layers)는
+    studio/studio-home-canvas-materials-e2e-test.mjs 가 잰다.
 */
 async function addMaterial(page, target, type) {
 
   await openAddPanel(page);
 
-  await page.click(`#studioCanvasAdd-${target}-${type}`);
+  await page.evaluate(
+    (arg) => window.addStudioCanvasV2Material(arg.target, arg.type),
+    { target: target, type: type }
+  );
 
   await page.evaluate(() => window.showStudioLeftPanelMode("select"));
 
@@ -4362,10 +4375,13 @@ async function main() {
 
       const onFrame = await addState(page);
 
+      /* STUDIO-LAYERS-MATERIALS-1A — 자리는 이제 **카드가 가리키는
+         값**이다. 프레임을 고르고 있으면 꾸미기 카드들이 그 안을
+         가리킨다(`data-add-target="frame"`). */
       check("★ 프레임을 골라야 '메인 비주얼 안' 자리가 생긴다",
         onFrame.frameId === "v2Main" &&
-        await page.locator("#studioCanvasAdd-frame-shape").count() === 1,
-        JSON.stringify({ f: onFrame.frameId }));
+        (onFrame.cards.find((card) => card.key === "shape") || {}).target === "frame",
+        JSON.stringify({ f: onFrame.frameId, c: onFrame.cards.map((x) => x.target) }));
 
       await addMaterial(page, "frame", "shape");
       await sleep(1000);
@@ -5780,8 +5796,14 @@ async function main() {
 
       /* ---- 7. 새로 만든 재료가 곧바로 골라지고 트리에 보인다 ---- */
 
+      /* ★ 먼저 선택을 푼다. 프레임 안의 요소를 고른 채로 누르면
+         꾸미기 카드는 **그 프레임 안**을 가리키므로(§35-3 · §28-2)
+         여기서 재려는 "자유 장식의 맨 뒤"가 되지 않는다. */
+      await page.evaluate(() => window.clearStudioCanvasSelection());
+      await sleep(300);
+
       await openAddPanel(page);
-      await page.click("#studioCanvasAdd-overlay-sticker");
+      await page.click("#studioCanvasAddCard-sticker");
       await sleep(900);
 
       const madeId = await pickedId(page);
