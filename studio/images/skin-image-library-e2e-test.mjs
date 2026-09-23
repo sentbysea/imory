@@ -234,6 +234,19 @@ function createMockBackend(options = {}) {
     }
 
     if (name === "delete_skin_image") {
+
+      /* STUDIO-LAYERS-MEDIA-1 follow-up 2 — 슬롯에 안 걸려 있어도
+         살아 있는 스킨 코드가 주소로 쓰면 이쪽도 거절한다. */
+      if (options.directReference) {
+        return {
+          status: 400,
+          body: {
+            code: "IM001",
+            message: "this image is referenced directly by skin code (url in css/html) in 1 live skin version(s) — replace it in Code/AI and save/publish first"
+          }
+        };
+      }
+
       const refs = Object.values(state.versionSlots)
         .reduce((n, slots) => n + Object.values(slots).filter(id => id === body.p_image_id).length, 0);
       if (refs > 0) {
@@ -1218,8 +1231,10 @@ async function testDeleteEverywhere(playwright) {
 
       const message = await page.textContent(".images-panel-message");
 
-      check("[delete] 스킨 코드가 주소로 직접 쓰면 사람이 읽는 말로 알린다",
-        /스킨 코드/.test(message || "") && /고치고/.test(message || ""),
+      check("[delete] 스킨 코드가 주소로 직접 쓰면 Code · AI 를 지목해 안내한다",
+        /스킨 코드/.test(message || "") &&
+        /Code 나 AI/.test(message || "") &&
+        /저장 · 발행/.test(message || ""),
         String(message));
 
       check("[delete] 그때 DB row 도 파일도 그대로다(깨진 참조 0)",
@@ -1231,6 +1246,51 @@ async function testDeleteEverywhere(playwright) {
           const button = document.getElementById("skinImagesPanelRetry");
           return !button || button.hidden === true;
         }), "");
+
+      check("[delete] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+    } finally {
+      await browser.close();
+    }
+  }
+
+  /* ---- 3-c. 슬롯에 없는데 CSS 가 쓰는 이미지 — 0곳 경로도 막힌다 ----
+
+     이것이 실제로 파일을 지워 공개 화면을 깨뜨린 그 구멍이다:
+     사용처를 슬롯으로만 세면 "0곳"이라 확인 한 번에 기존
+     delete_skin_image() 로 곧바로 지워졌다.
+  */
+  {
+    const backend = createMockBackend({ directReference: true });
+    const { browser, page, errors } = await openStudio(playwright, backend);
+
+    try {
+      await openTopDock(page);
+      await openImagesList(page);
+      await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+      await attachFile(page, "onlycss.png", PNG_BYTES, "image/png");
+      await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+
+      /* 슬롯에는 붙이지 않는다 — 사용처 0곳 경로로 간다 */
+      await page.click(".images-panel-card-delete");
+      await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 });
+
+      const ask = await page.textContent(".studio-confirm-message");
+
+      check("[delete] 슬롯에 없으면 확인 문구는 여전히 '사용 중' 없이 한 번만 묻는다",
+        !/사용 중/.test(ask || ""), String(ask));
+
+      await page.click(".studio-confirm-button--primary");
+      await page.waitForTimeout(900);
+
+      check("[delete] 그래도 DB 가 막고, 화면은 Code · AI 로 안내한다",
+        /Code 나 AI/.test(await page.textContent(".images-panel-message") || ""),
+        String(await page.textContent(".images-panel-message")));
+
+      check("[delete] 그 경로에서도 row · 파일이 그대로다(깨진 참조 0)",
+        backend.state.images.length === 1 && backend.state.removed.length === 0,
+        JSON.stringify({ images: backend.state.images.length, removed: backend.state.removed }));
 
       check("[delete] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
 

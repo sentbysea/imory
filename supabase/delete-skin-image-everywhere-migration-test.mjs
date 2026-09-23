@@ -4,8 +4,10 @@
 
    대상: supabase/migrations/20260923100000_delete_skin_image_everywhere.sql
          supabase/migrations/20260923120000_guard_skin_image_css_references.sql
-         (follow-up — 같은 함수를 create or replace 로 교체한다. 둘을 순서대로
-          적용한 **최종 상태**를 재므로, 앞 파일의 동작도 여기서 함께 본다.)
+         supabase/migrations/20260923130000_guard_skin_image_delete_paths.sql
+         (follow-up 둘 — 같은 함수를 create or replace 로 교체한다. 셋을
+          순서대로 적용한 **최종 상태**를 재므로, 앞 파일들의 동작도 여기서
+          함께 본다.)
 
    무엇을 확인하는가
    ----------------
@@ -21,6 +23,10 @@
                  — 연결만 지워진 반쪽 상태가 남지 않는다.
    6) [rest]     같은 사용자의 **다른** 이미지 연결은 건드리지 않는다.
    7) [grant]    anon 에는 execute 가 없고 authenticated 에만 있다.
+   9) [both]     삭제하는 **두 길 모두** 그 문을 지난다 — 슬롯에 안 걸린
+                 이미지를 지우는 기존 delete_skin_image() 도 CSS 직접 참조가
+                 있으면 거절한다(그 구멍으로 실제 파일이 지워졌었다).
+                 공용 판정 함수는 바깥(anon · authenticated)에 열리지 않는다.
    8) [css]      follow-up 의 **직접 참조 guard** — 공개 중 · 편집 중 버전의
                  content(css/html)나 옛 skin_image_slot_values.image_url 이
                  그 파일의 storage_path 를 가리키면 **아무것도 지우지 않고**
@@ -67,6 +73,11 @@ const MIGRATION = readFileSync(
 
 const GUARD_MIGRATION = readFileSync(
   join(HERE, "migrations", "20260923120000_guard_skin_image_css_references.sql"),
+  "utf8"
+);
+
+const GUARD_PATHS_MIGRATION = readFileSync(
+  join(HERE, "migrations", "20260923130000_guard_skin_image_delete_paths.sql"),
   "utf8"
 );
 
@@ -233,7 +244,21 @@ async function freshDb() {
   /* 프로덕션과 같은 순서 — 앞 파일이 이미 적용된 DB 에 follow-up 을 얹는다 */
   await db.exec(MIGRATION);
   await db.exec(GUARD_MIGRATION);
+  await db.exec(GUARD_PATHS_MIGRATION);
 
+  return db;
+}
+
+/*
+  ★ 20260923130000 은 **혼자서도 최종 상태를 만든다**(그 파일 머리말).
+    1차 guard 를 건너뛴 DB 에 그것만 얹어도 같은지 따로 본다.
+*/
+async function freshDbWithoutFirstGuard() {
+  const db = new PGlite();
+  await db.exec(BASELINE);
+  await db.exec(SEED);
+  await db.exec(MIGRATION);
+  await db.exec(GUARD_PATHS_MIGRATION);
   return db;
 }
 
@@ -621,6 +646,138 @@ console.log("\n[css]");
     check("[css] 거절은 SQLSTATE IM001 이다(프런트가 다른 실패와 가른다)",
       String(err.code || "") === "IM001", `code=${err.code}`);
   }
+
+  await db.close();
+}
+
+
+/* =========================================================
+   9) 삭제하는 두 길 모두 (follow-up 2)
+========================================================== */
+
+console.log("\n[both]");
+
+{
+  const db = await freshDb();
+  await setUid(db, USER_A);
+
+  /*
+    IMG2 는 슬롯에 걸려 있지 않다(= 프런트가 "사용처 0곳"으로 읽고
+    기존 delete_skin_image() 로 가는 그 이미지다). 그런데 공개 중인
+    버전의 CSS 가 그 주소를 직접 쓰고 있다.
+  */
+  await db.query(
+    `update public.skin_versions
+        set content = jsonb_build_object(
+              'css', '.hero { background-image: url("https://x/storage/v1/object/public/skin-images/' || $2 || '"); }'
+            )
+      where id = $1`,
+    ["aaaaaaaa-0000-4000-8000-00000000000b", `${USER_A}/img2.png`]
+  );
+
+  await expectError(
+    "[both] 슬롯에 없더라도 CSS 가 쓰면 delete_skin_image() 가 거절한다",
+    () => db.query("select public.delete_skin_image($1)", [IMG2]),
+    "referenced directly by skin code"
+  );
+
+  const kept =
+    await db.query("select count(*)::int as n from public.skin_images where id = $1", [IMG2]);
+
+  check("[both] 그때 라이브러리 row 도 그대로다(파일을 지울 경로 자체가 없다)",
+    kept.rows[0].n === 1, JSON.stringify(kept.rows[0]));
+
+  try {
+    await db.query("select public.delete_skin_image($1)", [IMG2]);
+    check("[both] 그 거절도 SQLSTATE IM001 이다", false, "예외가 나지 않았다");
+  } catch (err) {
+    check("[both] 그 거절도 SQLSTATE IM001 이다",
+      String(err.code || "") === "IM001", `code=${err.code}`);
+  }
+
+  check("[both] 안내가 Code/AI 를 지목한다",
+    await db.query("select public.delete_skin_image($1)", [IMG2])
+      .then(() => false)
+      .catch((err) => String(err.message || "").includes("Code/AI")),
+    "");
+
+  /* 참조를 고치면 기존 경로 그대로 지워진다 */
+  await db.query(
+    "update public.skin_versions set content = '{}'::jsonb where id = $1",
+    ["aaaaaaaa-0000-4000-8000-00000000000b"]
+  );
+
+  const gone =
+    await db.query("select public.delete_skin_image($1) as path", [IMG2]);
+
+  check("[both] 참조를 고치면 기존 delete_skin_image() 가 그대로 지운다",
+    gone.rows[0].path === `${USER_A}/img2.png`,
+    JSON.stringify(gone.rows[0]));
+
+  await db.close();
+}
+
+{
+  const db = await freshDb();
+  await setUid(db, USER_A);
+
+  /* 슬롯 참조 거절은 그대로다(문구도 예전 그대로) */
+  await expectError(
+    "[both] 슬롯 참조가 있으면 예전 문구로 거절한다(회귀 없음)",
+    () => db.query("select public.delete_skin_image($1)", [IMG1]),
+    "still used by"
+  );
+
+  await db.close();
+}
+
+{
+  const db = await freshDbWithoutFirstGuard();
+  await setUid(db, USER_A);
+
+  await db.query(
+    `update public.skin_versions
+        set content = jsonb_build_object(
+              'css', 'body { background: url("https://x/storage/v1/object/public/skin-images/' || $2 || '"); }'
+            )
+      where id = $1`,
+    ["aaaaaaaa-0000-4000-8000-00000000000c", `${USER_A}/img2.png`]
+  );
+
+  await expectError(
+    "[both] 1차 guard 를 건너뛰고 이 파일만 적용해도 같은 결과다(everywhere)",
+    () => db.query("select public.delete_skin_image_everywhere($1)", [IMG2]),
+    "referenced directly by skin code"
+  );
+
+  await expectError(
+    "[both] 1차 guard 를 건너뛰고 이 파일만 적용해도 같은 결과다(delete_skin_image)",
+    () => db.query("select public.delete_skin_image($1)", [IMG2]),
+    "referenced directly by skin code"
+  );
+
+  await db.close();
+}
+
+{
+  const db = await freshDb();
+
+  const grants =
+    await db.query(`
+      select
+        has_function_privilege('anon', 'public.skin_image_direct_reference_count(text, uuid)', 'execute') as anon,
+        has_function_privilege('authenticated', 'public.skin_image_direct_reference_count(text, uuid)', 'execute') as auth,
+        has_function_privilege('anon', 'public.delete_skin_image(uuid)', 'execute') as del_anon,
+        has_function_privilege('authenticated', 'public.delete_skin_image(uuid)', 'execute') as del_auth
+    `);
+
+  check("[both] 공용 판정 함수는 바깥에 열리지 않는다",
+    grants.rows[0].anon === false && grants.rows[0].auth === false,
+    JSON.stringify(grants.rows[0]));
+
+  check("[both] delete_skin_image 의 권한은 예전 그대로다",
+    grants.rows[0].del_anon === false && grants.rows[0].del_auth === true,
+    JSON.stringify(grants.rows[0]));
 
   await db.close();
 }

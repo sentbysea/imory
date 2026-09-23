@@ -5,8 +5,11 @@
 > [supabase/migrations/20260923100000_delete_skin_image_everywhere.sql](../../../supabase/migrations/20260923100000_delete_skin_image_everywhere.sql)
 > — **2026-09-23 프로덕션 적용 완료**, 그 파일은 이후 고치지 않는다.
 > 뒤이은 **직접 참조 guard** 는 같은 함수를 `create or replace` 로 바꾸는
-> follow-up 한 장이다:
-> [20260923120000_guard_skin_image_css_references.sql](../../../supabase/migrations/20260923120000_guard_skin_image_css_references.sql) — **미적용**).
+> follow-up 이다. 지금 실행해야 하는 것은 **두 번째 follow-up 하나**다:
+> [20260923130000_guard_skin_image_delete_paths.sql](../../../supabase/migrations/20260923130000_guard_skin_image_delete_paths.sql)
+> — 삭제하는 **두 함수 모두**를 덮으므로 1차
+> [20260923120000](../../../supabase/migrations/20260923120000_guard_skin_image_css_references.sql)
+> 을 실행했든 안 했든 최종 상태가 같다. **둘 다 미적용**).
 > 화면 쪽 변화(상단 Images 버튼 제거 · "자리 하나" 화면)는
 > [IMORY_STUDIO_SHELL_DESIGN.md §2-3](../studio/IMORY_STUDIO_SHELL_DESIGN.md) 에 있다.
 > 자세한 내용은 이 문서 맨 끝의 **"사용 중인 이미지 삭제(STUDIO-LAYERS-MEDIA-1)"**.
@@ -448,7 +451,7 @@ where o.bucket_id = 'skin-images'
 | 어디서 실패 | 결과 |
 | --- | --- |
 | 사용처 세기 | 삭제를 **멈춘다**(무엇을 지우는지 모른 채 지우지 않는다) |
-| **직접 참조 guard**(follow-up) | 살아 있는 스킨 코드가 그 주소를 직접 쓰면 **아무것도 지우지 않고** SQLSTATE `IM001` 로 거절한다. 프런트는 "스킨 코드(CSS · HTML)에서 주소로 직접 쓰고 있어요 — 그 자리를 먼저 고치고 저장 · 발행한 뒤에 삭제할 수 있어요"로 바꿔 보여 준다 |
+| **직접 참조 guard**(follow-up) | 살아 있는 스킨 코드가 그 주소를 직접 쓰면 **아무것도 지우지 않고** SQLSTATE `IM001` 로 거절한다. 프런트는 "스킨 코드(CSS · HTML)에서 주소로 직접 쓰고 있어요 — **Code 나 AI 로** 그 자리를 다른 사진으로 먼저 바꾸고 저장 · 발행한 뒤에 삭제할 수 있어요"로 바꿔 보여 준다 |
 | 참조 제거(RPC) | 파일을 지우지 않는다 — 깨진 URL 이 남지 않는다 |
 | Storage 만 실패 | DB 는 이미 지워졌다. 그 사실을 분명히 말하고 **"파일 다시 지우기"** 줄을 띄운다(재시도는 DB 를 다시 만지지 않는다) |
 | migration 미적용 배포 | RPC 가 없으므로 **fail closed** — "이 배포에서는 사용 중인 사진을 지울 수 없어요"로 남는다(예전 동작 그대로) |
@@ -466,6 +469,42 @@ Studio 의 ↶ 는 메모리 안의 working draft 기록이라 **지워진 파�
 "공개 중인 화면의 그 자리는 비어 보이게 된다"를 먼저 말한다. 그 확인 없이
 공개 버전의 연결을 지우는 경로는 없다(RPC 는 프런트의 그 흐름에서만 불린다).
 
+### 막지 못했던 길 — 사용처 0곳 경로 (follow-up 2)
+
+1차 guard 는 `delete_skin_image_everywhere()` 에만 있었다. 그런데 프런트는
+사용처가 **0곳이면 기존 `delete_skin_image()`** 로 간다. 그 "사용처"는
+슬롯 연결만 세므로,
+
+> 슬롯에는 안 걸려 있고 **CSS 에만 주소가 박힌** 이미지 = "0곳" → 확인 한
+> 번에 곧바로 삭제 → 그 스킨의 그 자리가 404
+
+가 성립했다. 실제로 그렇게 파일이 지워진 적이 있다. 그래서
+[20260923130000](../../../supabase/migrations/20260923130000_guard_skin_image_delete_paths.sql)
+이 판정을 공용 함수 `skin_image_direct_reference_count(storage_path, user_id)`
+하나로 옮기고 **두 삭제 함수가 모두** 그 문을 지나게 했다. 그 함수는
+바깥(anon · authenticated)에 열지 않는다 — 두 삭제 함수가
+`security definer` 라 소유자 권한으로 부른다.
+
+### 무엇이 깨졌는지 먼저 본다 — 읽기 전용 감사
+
+[supabase/tests/20260923_skin_image_css_reference_audit.sql](../../../supabase/tests/20260923_skin_image_css_reference_audit.sql)
+은 **SELECT 만** 있는 감사다(SQL Editor 에서 실행). 네 갈래를 본다.
+
+1. 모든 버전(published · draft · history)의 스킨 코드 안 `skin-images/`
+   직접 참조 + **그 파일이 Storage 에 실제로 있는가** + 영향 받는 페이지
+2. 라이브러리 row 는 있는데 Storage 파일이 없는 이미지
+3. 슬롯 연결이 가리키는데 파일이 없는 것
+4. 옛 `skin_image_slot_values` URL 중 파일이 없는 것
+
+`object_exists = false` 인 줄이 지금 깨진 자리다. 이 질의는 PGlite 로
+검증한다(`node supabase/skin-image-css-audit-test.mjs`) — 일부러 깨뜨린
+DB 에서 그 줄을 정확히 집어내는지, 그리고 SELECT 밖에 없는지까지 본다.
+
+애플리케이션 키(anon)로는 `skin_versions` · `skin_images` 를 읽을 수 없다
+(GRANT 없음, 실측 `42501`). 공개된 층만 보는 감사는
+`get_published_skin(user_id)` 로 되지만, draft · history 는 SQL Editor 에서만
+볼 수 있다.
+
 ### 남은 차이
 
 - **CSS/HTML 안에 직접 박은 URL**(`url("https://…/skin-images/…")`)은
@@ -475,10 +514,11 @@ Studio 의 ↶ 는 메모리 안의 working draft 기록이라 **지워진 파�
   `skin_image_slot_values.image_url` 에서 그 이미지의 `storage_path` 를
   부분 문자열로 찾는다(주소 형태를 열거하지 않으려고 경로 한 조각만 본다).
   그래서 "세어 보여 주기"는 못 해도 **조용히 깨뜨리지는 않는다**.
-- 그 guard 는 **지난 저장본은 보지 않는다.** 과거 `content` 는 고쳐 쓸 수
-  없으므로(append-only) 막으면 "영영 못 지우는 이미지"가 되살아난다 —
-  이 라운드가 없앤 바로 그 막다른 길이다. 지난 버전을 Restore 하면 그
-  자리는 깨진 주소로 남고, 사용자가 그 draft 에서 고친다.
+- 그 guard 는 **지난 저장본은 보지 않는다**(사용자 결정 · 2026-09-23).
+  과거 `content` 는 고쳐 쓸 수 없으므로(append-only) 막으면 "영영 못
+  지우는 이미지"가 되살아난다 — 이 라운드가 없앤 바로 그 막다른 길이다.
+  지난 버전을 Restore 하면 그 자리는 깨진 주소로 남고, 사용자가 그
+  draft 에서 고친다.
 - 주소를 퍼센트 인코딩하거나 문자열을 잘라 이어 붙인 CSS 는 부분 문자열
   검색에 걸리지 않는다.
 - 아직 저장하지 않은 **working draft** 의 CSS 도 DB 에 없으므로 guard 가
@@ -487,13 +527,21 @@ Studio 의 ↶ 는 메모리 안의 working draft 기록이라 **지워진 파�
 
 ### 검증
 
+- `node supabase/skin-image-css-audit-test.mjs` — 위 감사 SQL 을 PGlite 에서
+  돌린다(깨뜨려 둔 DB 를 만들어 놓고 그 줄을 집어내는지 · 주소 형태
+  셋(public · render · 따옴표 없는 url + 쿼리스트링)을 가리지 않는지 ·
+  버전 구분과 영향 페이지가 맞는지 · **SELECT 밖에 없는지**).
 - `node supabase/delete-skin-image-everywhere-migration-test.mjs` — PGlite(실제
-  Postgres)에서 **두 migration 을 순서대로 적용한 최종 상태**를 돌린다:
+  Postgres)에서 **세 migration 을 순서대로 적용한 최종 상태**를 돌린다:
   미사용 삭제 · 참조 있으면 기존 함수 거절 · 모든 버전의 연결 제거 ·
   남의 이미지 거절 · 남의 버전이 참조하면 **전체 롤백** · grant, 그리고
   `[css]` 절 — 공개 중/편집 중 버전의 `url()` · `<img src>` 와 옛 슬롯 값
   URL 은 거절(`IM001`)하고 아무것도 지우지 않으며, 그 참조를 고치면 지워지고,
-  지난 저장본만 가리키거나 남의 스킨이 쓰는 주소는 막지 않는다.
-  **20260923100000 은 프로덕션 적용 완료 · 20260923120000 은 미적용.**
+  지난 저장본만 가리키거나 남의 스킨이 쓰는 주소는 막지 않는다. 그리고
+  `[both]` 절 — **슬롯에 안 걸린 이미지를 지우는 기존 `delete_skin_image()`
+  도 같은 문을 지나고**, 1차 guard 를 건너뛰고 `20260923130000` 만 적용해도
+  결과가 같으며, 공용 판정 함수는 바깥에 열리지 않는다.
+  **20260923100000 은 프로덕션 적용 완료 · 20260923120000 · 20260923130000 은
+  미적용**(130000 하나만 실행하면 된다).
 - `node studio/images/skin-image-library-e2e-test.mjs` — 프런트 흐름
   (`[guard]` · `[delete]` · `[focus]`).

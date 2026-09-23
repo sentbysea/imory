@@ -1480,7 +1480,8 @@ async function runImagesPanelDelete(image, everywhere, working) {
       /* 아무것도 지워지지 않았다 — 무엇을 고쳐야 하는지까지 말한다 */
       setImagesPanelMessage(
         "이 사진은 스킨 코드(CSS · HTML)에서 주소로 직접 쓰고 있어요. " +
-        "그 자리를 먼저 고치고 저장 · 발행한 뒤에 삭제할 수 있어요.",
+        "Code 나 AI 로 그 자리를 다른 사진으로 먼저 바꾸고 " +
+        "저장 · 발행한 뒤에 삭제할 수 있어요.",
         true
       );
 
