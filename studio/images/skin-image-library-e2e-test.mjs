@@ -253,6 +253,18 @@ function createMockBackend(options = {}) {
        row 를 지운 뒤 storage_path 를 돌려준다. */
     if (name === "delete_skin_image_everywhere") {
 
+      /* STUDIO-LAYERS-MEDIA-1 follow-up — 스킨 코드가 주소로 직접 쓰면
+         아무것도 지우지 않고 거절한다(migration 20260923120000). */
+      if (options.directReference) {
+        return {
+          status: 400,
+          body: {
+            code: "IM001",
+            message: "this image is referenced directly by skin code (url in css/html) in 1 live skin version(s) — remove that reference and save/publish first"
+          }
+        };
+      }
+
       if (!options.everywhereReady) {
         return {
           status: 404,
@@ -1176,6 +1188,49 @@ async function testDeleteEverywhere(playwright) {
           message: await page.textContent(".images-panel-message"),
           removed: backend.state.removed
         }));
+
+      check("[delete] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
+
+    } finally {
+      await browser.close();
+    }
+  }
+
+  /* ---- 3-b. 스킨 코드가 주소로 직접 쓰는 중 — DB 가 거절한다 ---- */
+  {
+    const backend = createMockBackend({ directReference: true });
+    const { browser, page, errors } = await openStudio(playwright, backend);
+
+    try {
+      await openTopDock(page);
+      await openImagesList(page);
+      await page.waitForSelector(".images-panel-slot", { timeout: 10000 });
+
+      await attachFile(page, "incss.png", PNG_BYTES, "image/png");
+      await page.waitForSelector(".images-panel-card", { timeout: 10000 });
+      await page.click(".images-panel-card-attach");
+      await page.waitForTimeout(300);
+
+      await page.click(".images-panel-card-delete");
+      await page.waitForSelector(".studio-confirm-overlay:not([hidden])", { timeout: 10000 });
+      await page.click(".studio-confirm-button--primary");
+      await page.waitForTimeout(900);
+
+      const message = await page.textContent(".images-panel-message");
+
+      check("[delete] 스킨 코드가 주소로 직접 쓰면 사람이 읽는 말로 알린다",
+        /스킨 코드/.test(message || "") && /고치고/.test(message || ""),
+        String(message));
+
+      check("[delete] 그때 DB row 도 파일도 그대로다(깨진 참조 0)",
+        backend.state.images.length === 1 && backend.state.removed.length === 0,
+        JSON.stringify({ images: backend.state.images.length, removed: backend.state.removed }));
+
+      check("[delete] 재시도 줄은 뜨지 않는다(지울 파일이 없다)",
+        await page.evaluate(() => {
+          const button = document.getElementById("skinImagesPanelRetry");
+          return !button || button.hidden === true;
+        }), "");
 
       check("[delete] 콘솔 에러 없음", errors.length === 0, errors.join(" | "));
 

@@ -1383,6 +1383,31 @@ function imagesPanelMissingRpc(err) {
 }
 
 
+/* =========================================================
+   STUDIO-LAYERS-MEDIA-1 (follow-up) — 스킨 코드가 주소로 직접 쓰는 중
+
+   슬롯을 거치지 않고 CSS/HTML 에 주소가 박혀 있으면 어떤 표에도 참조가
+   없어서 위의 사용처 세기에 잡히지 않는다. 그 자리를 지우면 공개 화면이
+   깨지므로 **DB 가 거절한다**(migration 20260923120000, SQLSTATE IM001).
+
+   여기서는 그 거절을 다른 실패와 갈라 사람이 읽는 말로 바꾼다 — 무엇을
+   해야 지울 수 있는지까지 적는다. 아무것도 지워지지 않은 상태다.
+========================================================== */
+
+function imagesPanelDirectReference(err) {
+
+  const code =
+    err && err.code ? String(err.code) : "";
+
+  const message =
+    err && err.message ? String(err.message) : "";
+
+  return code === "IM001" ||
+    message.includes("referenced directly by skin code");
+
+}
+
+
 async function runImagesPanelDelete(image, everywhere, working) {
 
   setImagesPanelBusy(true);
@@ -1450,7 +1475,16 @@ async function runImagesPanelDelete(image, everywhere, working) {
 
     console.error("[images-panel] delete failed", err);
 
-    if (everywhere && imagesPanelMissingRpc(err)) {
+    if (imagesPanelDirectReference(err)) {
+
+      /* 아무것도 지워지지 않았다 — 무엇을 고쳐야 하는지까지 말한다 */
+      setImagesPanelMessage(
+        "이 사진은 스킨 코드(CSS · HTML)에서 주소로 직접 쓰고 있어요. " +
+        "그 자리를 먼저 고치고 저장 · 발행한 뒤에 삭제할 수 있어요.",
+        true
+      );
+
+    } else if (everywhere && imagesPanelMissingRpc(err)) {
 
       /* fail closed — 지울 수 없다는 사실을 분명히 말한다 */
       setImagesPanelMessage(

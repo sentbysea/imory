@@ -3,6 +3,9 @@
    (PGlite — 실제 Postgres)
 
    대상: supabase/migrations/20260923100000_delete_skin_image_everywhere.sql
+         supabase/migrations/20260923120000_guard_skin_image_css_references.sql
+         (follow-up — 같은 함수를 create or replace 로 교체한다. 둘을 순서대로
+          적용한 **최종 상태**를 재므로, 앞 파일의 동작도 여기서 함께 본다.)
 
    무엇을 확인하는가
    ----------------
@@ -18,6 +21,11 @@
                  — 연결만 지워진 반쪽 상태가 남지 않는다.
    6) [rest]     같은 사용자의 **다른** 이미지 연결은 건드리지 않는다.
    7) [grant]    anon 에는 execute 가 없고 authenticated 에만 있다.
+   8) [css]      follow-up 의 **직접 참조 guard** — 공개 중 · 편집 중 버전의
+                 content(css/html)나 옛 skin_image_slot_values.image_url 이
+                 그 파일의 storage_path 를 가리키면 **아무것도 지우지 않고**
+                 SQLSTATE IM001 로 거절한다. 그 참조를 고친 뒤에는 지워진다.
+                 과거 이력만 가리키는 경우는 막지 않는다(고칠 방법이 없다).
 
    실행:
      node supabase/delete-skin-image-everywhere-migration-test.mjs
@@ -54,6 +62,11 @@ const LIBRARY_MIGRATION = readFileSync(
 
 const MIGRATION = readFileSync(
   join(HERE, "migrations", "20260923100000_delete_skin_image_everywhere.sql"),
+  "utf8"
+);
+
+const GUARD_MIGRATION = readFileSync(
+  join(HERE, "migrations", "20260923120000_guard_skin_image_css_references.sql"),
   "utf8"
 );
 
@@ -131,7 +144,20 @@ create table public.skin_versions (
   id uuid primary key,
   skin_id uuid not null references public.skins(id) on delete cascade,
   created_at timestamptz not null default now(),
-  uses_image_library boolean not null default false
+  uses_image_library boolean not null default false,
+
+  /* 실제 스키마와 같은 칸 — follow-up 의 guard 가 이것을 훑는다
+     (20260904100000: content jsonb not null) */
+  content jsonb not null default '{}'::jsonb
+);
+
+/* 도입 이전 모델 — get_published_skin 이 legacy 버전에서 폴백으로 읽는다.
+   guard 가 여기 URL 도 함께 본다(20260904100000 의 그 표). */
+create table public.skin_image_slot_values (
+  skin_id uuid not null references public.skins(id) on delete cascade,
+  slot_name text not null,
+  image_url text not null,
+  primary key (skin_id, slot_name)
 );
 
 create table public.skin_images (
@@ -203,7 +229,11 @@ async function freshDb() {
   const db = new PGlite();
   await db.exec(BASELINE);
   await db.exec(SEED);
+
+  /* 프로덕션과 같은 순서 — 앞 파일이 이미 적용된 DB 에 follow-up 을 얹는다 */
   await db.exec(MIGRATION);
+  await db.exec(GUARD_MIGRATION);
+
   return db;
 }
 
@@ -386,6 +416,211 @@ console.log("\n[other]");
     await db.query("select count(*)::int as n from public.skin_images where id = $1", [IMG1]);
 
   check("[other] 이미지 row 도 그대로다", row.rows[0].n === 1);
+
+  await db.close();
+}
+
+
+/* =========================================================
+   8) 직접 참조 guard (follow-up)
+========================================================== */
+
+console.log("\n[css]");
+
+{
+  const db = await freshDb();
+  await setUid(db, USER_A);
+
+  /* 공개 중인 버전의 CSS 가 그 파일을 직접 가리킨다 */
+  await db.query(
+    `update public.skin_versions
+        set content = jsonb_build_object(
+              'css', '.hero { background-image: url("https://x/storage/v1/object/public/skin-images/' || $2 || '"); }'
+            )
+      where id = $1`,
+    ["aaaaaaaa-0000-4000-8000-00000000000b", `${USER_A}/img3.png`]
+  );
+
+  await expectError(
+    "[css] 공개 중인 버전의 css url 이 가리키면 거절한다",
+    () => db.query("select public.delete_skin_image_everywhere($1)", [IMG3]),
+    "referenced directly by skin code"
+  );
+
+  const kept =
+    await db.query(`
+      select
+        (select count(*)::int from public.skin_images where id = '${IMG3}') as image,
+        (select count(*)::int from public.skin_version_image_slots where image_id = '${IMG3}') as slots
+    `);
+
+  check("[css] 거절되면 이미지도 슬롯 연결도 그대로다(아무것도 지우지 않는다)",
+    kept.rows[0].image === 1 && kept.rows[0].slots === 1,
+    JSON.stringify(kept.rows[0]));
+
+  /* 그 참조를 고치면(= 새로 저장·발행한 content 에 없으면) 지워진다 */
+  await db.query(
+    "update public.skin_versions set content = '{}'::jsonb where id = $1",
+    ["aaaaaaaa-0000-4000-8000-00000000000b"]
+  );
+
+  const gone =
+    await db.query("select public.delete_skin_image_everywhere($1) as path", [IMG3]);
+
+  check("[css] 참조를 고친 뒤에는 지워진다",
+    gone.rows[0].path === `${USER_A}/img3.png`,
+    JSON.stringify(gone.rows[0]));
+
+  await db.close();
+}
+
+{
+  const db = await freshDb();
+  await setUid(db, USER_A);
+
+  /* 지금 편집 중인 버전의 HTML 이 가리킨다 */
+  await db.query(
+    `update public.skin_versions
+        set content = jsonb_build_object(
+              'templates',
+              jsonb_build_object('home', jsonb_build_object(
+                'html', '<img src="https://x/storage/v1/object/public/skin-images/' || $2 || '">'
+              ))
+            )
+      where id = $1`,
+    ["aaaaaaaa-0000-4000-8000-00000000000c", `${USER_A}/img2.png`]
+  );
+
+  await expectError(
+    "[css] 편집 중인 버전의 html src 가 가리켜도 거절한다",
+    () => db.query("select public.delete_skin_image_everywhere($1)", [IMG2]),
+    "referenced directly by skin code"
+  );
+
+  await db.close();
+}
+
+{
+  const db = await freshDb();
+  await setUid(db, USER_A);
+
+  /* 옛 모델의 슬롯 값(URL 문자열)이 가리킨다 */
+  await db.query(
+    `insert into public.skin_image_slot_values(skin_id, slot_name, image_url)
+       values ('aaaaaaaa-0000-4000-8000-000000000001', 'legacy',
+               'https://x/storage/v1/object/public/skin-images/' || $1)`,
+    [`${USER_A}/img2.png`]
+  );
+
+  await expectError(
+    "[css] 옛 skin_image_slot_values 의 URL 도 함께 본다",
+    () => db.query("select public.delete_skin_image_everywhere($1)", [IMG2]),
+    "referenced directly by skin code"
+  );
+
+  await db.close();
+}
+
+{
+  const db = await freshDb();
+  await setUid(db, USER_A);
+
+  /* 과거 이력만 가리키는 경우 — 막지 않는다(고칠 방법이 없다) */
+  await db.query(
+    `update public.skin_versions
+        set content = jsonb_build_object(
+              'css', 'body { background: url("https://x/storage/v1/object/public/skin-images/' || $2 || '"); }'
+            )
+      where id = $1`,
+    ["aaaaaaaa-0000-4000-8000-00000000000a", `${USER_A}/img2.png`]
+  );
+
+  const gone =
+    await db.query("select public.delete_skin_image_everywhere($1) as path", [IMG2]);
+
+  check("[css] 지난 저장본만 가리키면 막지 않는다(막다른 길을 만들지 않는다)",
+    gone.rows[0].path === `${USER_A}/img2.png`,
+    JSON.stringify(gone.rows[0]));
+
+  await db.close();
+}
+
+{
+  const db = await freshDb();
+
+  /* 남의 스킨이 그 주소를 쓰고 있어도 내 삭제를 막지 않는다 —
+     guard 는 호출자 소유 스킨만 본다(내가 고칠 수 있는 자리만). */
+  await db.query(
+    `update public.skin_versions
+        set content = jsonb_build_object(
+              'css', 'body { background: url("https://x/storage/v1/object/public/skin-images/' || $2 || '"); }'
+            )
+      where id = $1`,
+    ["bbbbbbbb-0000-4000-8000-00000000000a", `${USER_A}/img2.png`]
+  );
+
+  await db.query(
+    `update public.skins
+        set current_published_version_id = 'bbbbbbbb-0000-4000-8000-00000000000a'
+      where id = 'bbbbbbbb-0000-4000-8000-000000000001'`
+  );
+
+  await setUid(db, USER_A);
+
+  const gone =
+    await db.query("select public.delete_skin_image_everywhere($1) as path", [IMG2]);
+
+  check("[css] guard 는 호출자 소유 스킨만 본다",
+    gone.rows[0].path === `${USER_A}/img2.png`,
+    JSON.stringify(gone.rows[0]));
+
+  await db.close();
+}
+
+{
+  const db = await freshDb();
+  await setUid(db, USER_A);
+
+  /* 다른 이미지의 경로가 들어 있어도 이 이미지 삭제를 막지 않는다 */
+  await db.query(
+    `update public.skin_versions
+        set content = jsonb_build_object(
+              'css', 'body { background: url("https://x/storage/v1/object/public/skin-images/' || $2 || '"); }'
+            )
+      where id = $1`,
+    ["aaaaaaaa-0000-4000-8000-00000000000b", `${USER_A}/img3.png`]
+  );
+
+  const gone =
+    await db.query("select public.delete_skin_image_everywhere($1) as path", [IMG2]);
+
+  check("[css] 다른 이미지의 경로는 이 삭제를 막지 않는다",
+    gone.rows[0].path === `${USER_A}/img2.png`,
+    JSON.stringify(gone.rows[0]));
+
+  await db.close();
+}
+
+{
+  const db = await freshDb();
+  await setUid(db, USER_A);
+
+  await db.query(
+    `update public.skin_versions
+        set content = jsonb_build_object(
+              'css', 'body { background: url("https://x/storage/v1/object/public/skin-images/' || $2 || '"); }'
+            )
+      where id = $1`,
+    ["aaaaaaaa-0000-4000-8000-00000000000b", `${USER_A}/img3.png`]
+  );
+
+  try {
+    await db.query("select public.delete_skin_image_everywhere($1)", [IMG3]);
+    check("[css] 거절은 SQLSTATE IM001 이다", false, "예외가 나지 않았다");
+  } catch (err) {
+    check("[css] 거절은 SQLSTATE IM001 이다(프런트가 다른 실패와 가른다)",
+      String(err.code || "") === "IM001", `code=${err.code}`);
+  }
 
   await db.close();
 }

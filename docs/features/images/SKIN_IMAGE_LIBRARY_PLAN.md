@@ -2,7 +2,11 @@
 > 중인 이미지는 지울 수 없다"는 더 이상 현행이 아니다. 사용처를 보여 주고
 > 확인받은 뒤 **사용처에서 떼고 지운다**(새 RPC
 > `delete_skin_image_everywhere` ·
-> [supabase/migrations/20260923100000_delete_skin_image_everywhere.sql](../../../supabase/migrations/20260923100000_delete_skin_image_everywhere.sql)).
+> [supabase/migrations/20260923100000_delete_skin_image_everywhere.sql](../../../supabase/migrations/20260923100000_delete_skin_image_everywhere.sql)
+> — **2026-09-23 프로덕션 적용 완료**, 그 파일은 이후 고치지 않는다.
+> 뒤이은 **직접 참조 guard** 는 같은 함수를 `create or replace` 로 바꾸는
+> follow-up 한 장이다:
+> [20260923120000_guard_skin_image_css_references.sql](../../../supabase/migrations/20260923120000_guard_skin_image_css_references.sql) — **미적용**).
 > 화면 쪽 변화(상단 Images 버튼 제거 · "자리 하나" 화면)는
 > [IMORY_STUDIO_SHELL_DESIGN.md §2-3](../studio/IMORY_STUDIO_SHELL_DESIGN.md) 에 있다.
 > 자세한 내용은 이 문서 맨 끝의 **"사용 중인 이미지 삭제(STUDIO-LAYERS-MEDIA-1)"**.
@@ -444,6 +448,7 @@ where o.bucket_id = 'skin-images'
 | 어디서 실패 | 결과 |
 | --- | --- |
 | 사용처 세기 | 삭제를 **멈춘다**(무엇을 지우는지 모른 채 지우지 않는다) |
+| **직접 참조 guard**(follow-up) | 살아 있는 스킨 코드가 그 주소를 직접 쓰면 **아무것도 지우지 않고** SQLSTATE `IM001` 로 거절한다. 프런트는 "스킨 코드(CSS · HTML)에서 주소로 직접 쓰고 있어요 — 그 자리를 먼저 고치고 저장 · 발행한 뒤에 삭제할 수 있어요"로 바꿔 보여 준다 |
 | 참조 제거(RPC) | 파일을 지우지 않는다 — 깨진 URL 이 남지 않는다 |
 | Storage 만 실패 | DB 는 이미 지워졌다. 그 사실을 분명히 말하고 **"파일 다시 지우기"** 줄을 띄운다(재시도는 DB 를 다시 만지지 않는다) |
 | migration 미적용 배포 | RPC 가 없으므로 **fail closed** — "이 배포에서는 사용 중인 사진을 지울 수 없어요"로 남는다(예전 동작 그대로) |
@@ -463,18 +468,32 @@ Studio 의 ↶ 는 메모리 안의 working draft 기록이라 **지워진 파�
 
 ### 남은 차이
 
-- **CSS 안에 직접 박은 URL**(`url("https://…/skin-images/…")`)은 어느
-  표에도 참조가 없어 셀 수 없다. 그런 자리는 사용처 수에 잡히지 않고,
-  파일을 지우면 그 자리는 깨진다. (슬롯을 거치는 모든 경로는 잡힌다.)
-- 옛 `skin_image_slot_values`(URL 문자열)도 마찬가지다 — 애플리케이션이
-  쓰는 경로가 없어 지금은 문제가 되지 않지만, 참조를 세는 대상은 아니다.
+- **CSS/HTML 안에 직접 박은 URL**(`url("https://…/skin-images/…")`)은
+  어느 표에도 참조 row 가 없어 **"N곳" 에는 여전히 잡히지 않는다**. 대신
+  follow-up migration 의 guard 가 삭제를 **거절한다** — 살아 있는 버전
+  둘(지금 공개 중 · 지금 편집 중)의 `content` 전체와 옛
+  `skin_image_slot_values.image_url` 에서 그 이미지의 `storage_path` 를
+  부분 문자열로 찾는다(주소 형태를 열거하지 않으려고 경로 한 조각만 본다).
+  그래서 "세어 보여 주기"는 못 해도 **조용히 깨뜨리지는 않는다**.
+- 그 guard 는 **지난 저장본은 보지 않는다.** 과거 `content` 는 고쳐 쓸 수
+  없으므로(append-only) 막으면 "영영 못 지우는 이미지"가 되살아난다 —
+  이 라운드가 없앤 바로 그 막다른 길이다. 지난 버전을 Restore 하면 그
+  자리는 깨진 주소로 남고, 사용자가 그 draft 에서 고친다.
+- 주소를 퍼센트 인코딩하거나 문자열을 잘라 이어 붙인 CSS 는 부분 문자열
+  검색에 걸리지 않는다.
+- 아직 저장하지 않은 **working draft** 의 CSS 도 DB 에 없으므로 guard 가
+  보지 못한다(저장 뒤에는 편집 중 버전으로 잡힌다).
 - 고아 파일(등록 실패로 남은 object) 자동 정리는 여전히 없다(7절).
 
 ### 검증
 
 - `node supabase/delete-skin-image-everywhere-migration-test.mjs` — PGlite(실제
-  Postgres)에서 새 RPC 를 돌린다: 미사용 삭제 · 참조 있으면 기존 함수 거절 ·
-  모든 버전의 연결 제거 · 남의 이미지 거절 · 남의 버전이 참조하면 **전체 롤백** ·
-  grant. **운영 Supabase 에는 아직 적용하지 않았다.**
+  Postgres)에서 **두 migration 을 순서대로 적용한 최종 상태**를 돌린다:
+  미사용 삭제 · 참조 있으면 기존 함수 거절 · 모든 버전의 연결 제거 ·
+  남의 이미지 거절 · 남의 버전이 참조하면 **전체 롤백** · grant, 그리고
+  `[css]` 절 — 공개 중/편집 중 버전의 `url()` · `<img src>` 와 옛 슬롯 값
+  URL 은 거절(`IM001`)하고 아무것도 지우지 않으며, 그 참조를 고치면 지워지고,
+  지난 저장본만 가리키거나 남의 스킨이 쓰는 주소는 막지 않는다.
+  **20260923100000 은 프로덕션 적용 완료 · 20260923120000 은 미적용.**
 - `node studio/images/skin-image-library-e2e-test.mjs` — 프런트 흐름
   (`[guard]` · `[delete]` · `[focus]`).
