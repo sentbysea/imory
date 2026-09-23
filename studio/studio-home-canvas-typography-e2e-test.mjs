@@ -23,7 +23,10 @@
    [fonts]    여섯이 실제로 로드된다(FontFace.status) · 고른 글꼴이
               실제로 그려진다(글자 폭이 대체 글꼴과 다르다)
    [stale]    지나간 선택 · 없는 요소 · 편집 꺼짐에서 거부
-   [mobile]   390px — 세 칸이 감기고 잘리지 않는다
+   [mobile]   390px — 두 칸씩 감기고 잘리지 않는다
+   [compact]  HOME-CANVAS-INSPECTOR-COMPACT-1 — 요청한 줄 배치
+              (글꼴·글자색 / 크기·굵기 / 자간·행간) · −/+ 의 눈금 ·
+              빈 칸과 눈금 끝의 잠금 · 연속 클릭 한 묶음 = Undo 한 칸
    [sandbox]  별도 origin 에서 같은 결과 + 글꼴 로드 + CSP 위반 0
 
    Chromium 만 쓴다.
@@ -1743,10 +1746,16 @@ async function main() {
           }),
           /* 칸 안의 내용이 잘려 스크롤이 생겼나 */
           clipped: cells.some((c) => c.scrollWidth > c.clientWidth + 1),
-          /* 위 세 칸(글꼴 · 크기 · 굵기)이 몇 줄에 놓였나 */
-          rows: new Set(
-            cells.slice(0, 3).map((c) => Math.round(c.getBoundingClientRect().top))
-          ).size,
+
+          /* HOME-CANVAS-INSPECTOR-COMPACT-1 — 줄은 grid 마다 센다.
+             위 둘이 요청한 그 배치다: [글꼴 · 글자색] / [크기 · 굵기].
+             예전처럼 "앞 세 칸"으로 세면 줄이 갈린 자리를 못 본다. */
+          rows: Array.from(box.querySelectorAll(".studio-canvas-typo-grid"))
+            .slice(0, 2)
+            .map((grid) => new Set(
+              Array.from(grid.querySelectorAll(".studio-canvas-typo-cell"))
+                .map((c) => Math.round(c.getBoundingClientRect().top))
+            ).size),
           visible: cells.every((c) => {
             const r = c.getBoundingClientRect();
             return r.width > 0 && r.height > 0;
@@ -1765,6 +1774,13 @@ async function main() {
 
       check("칸이 전부 보인다", layout && layout.visible === true);
 
+      /* HOME-CANVAS-INSPECTOR-COMPACT-1 — 390px 시트에서도 요청한
+         배치 그대로다: 글꼴·글자색 한 줄, 크기·굵기 한 줄. */
+      check("★ 390px 에서도 두 칸씩 한 줄이다",
+        layout && layout.rows.length === 2 &&
+        layout.rows[0] === 1 && layout.rows[1] === 1,
+        JSON.stringify(layout));
+
       /* 좁은 화면에서도 고칠 수 있다 */
       await typeNumber(page, "size", "20");
 
@@ -1775,11 +1791,15 @@ async function main() {
       /* =====================================================
          ★ **감기는지**를 본다 — 자르지 않는다는 것의 실체
 
-         390px 의 시트 폭에서는 세 칸이 한 줄에 들어간다. 그것이
-         정답이고, 계약이 말하는 "자연스럽게 감긴다"는 **더 좁아지면
-         잘리는 대신 줄이 늘어난다**는 뜻이다. 그래서 패널을 억지로
-         좁혀 그 경계를 직접 넘겨 본다(고정 breakpoint 가 없다는
-         것도 이 방법으로만 확인된다).
+         패널 폭에서는 한 줄에 두 칸이 들어간다. 그것이 정답이고,
+         계약이 말하는 "자연스럽게 감긴다"는 **더 좁아지면 잘리는
+         대신 줄이 늘어난다**는 뜻이다. 그래서 패널을 억지로 좁혀 그
+         경계를 직접 넘겨 본다(고정 breakpoint 가 없다는 것도 이
+         방법으로만 확인된다).
+
+         HOME-CANVAS-INSPECTOR-COMPACT-1 — 칸이 셋에서 **둘**로 줄고
+         min-width 가 112 가 되면서 경계도 옮겨갔다(2 × 112 + 8 = 232).
+         250 은 한 줄, 200 은 두 줄이다.
       ====================================================== */
 
       const narrow = await page.evaluate(() => {
@@ -1792,7 +1812,7 @@ async function main() {
 
         const out = {};
 
-        [220, 150].forEach((width) => {
+        [250, 200].forEach((width) => {
 
           box.style.width = `${width}px`;
 
@@ -1803,9 +1823,12 @@ async function main() {
             box.getBoundingClientRect();
 
           out[width] = {
-            rows: new Set(
-              cells.slice(0, 3).map((c) => Math.round(c.getBoundingClientRect().top))
-            ).size,
+            rows: Array.from(box.querySelectorAll(".studio-canvas-typo-grid"))
+              .slice(0, 2)
+              .map((grid) => new Set(
+                Array.from(grid.querySelectorAll(".studio-canvas-typo-cell"))
+                  .map((c) => Math.round(c.getBoundingClientRect().top))
+              ).size),
             overflow: cells.some((c) =>
               c.getBoundingClientRect().right > parent.right + 1),
             clipped: cells.some((c) => c.scrollWidth > c.clientWidth + 1)
@@ -1819,14 +1842,280 @@ async function main() {
 
       });
 
-      check("★ 좁아지면 세 칸이 잘리지 않고 줄이 늘어난다",
-        narrow["220"].rows === 2 && narrow["150"].rows === 3,
+      check("★ 좁아지면 칸이 잘리지 않고 줄이 늘어난다",
+        narrow["250"].rows.join() === "1,1" &&
+        narrow["200"].rows.join() === "2,2",
         JSON.stringify(narrow));
 
       check("★ 감긴 뒤에도 넘치거나 잘리지 않는다",
-        narrow["220"].overflow === false && narrow["220"].clipped === false &&
-        narrow["150"].overflow === false && narrow["150"].clipped === false,
+        narrow["250"].overflow === false && narrow["250"].clipped === false &&
+        narrow["200"].overflow === false && narrow["200"].clipped === false,
         JSON.stringify(narrow));
+
+      await page.__ctx.close();
+
+    }
+
+
+    /* =====================================================
+       [compact] — 조밀해진 배치와 −/+ (HOME-CANVAS-INSPECTOR-COMPACT-1)
+
+       재는 것은 둘이다.
+
+         ① 어느 칸이 **어느 줄**에 있는가(요청한 배치 그대로인가)
+         ② −/+ 가 **무엇을 쓰는가**(눈금 · 범위 · 잠금 · Undo 한 칸)
+
+       ★ 값은 언제나 스킨 CSS 의 그 규칙 한 줄로 되읽는다 — 화면의
+         입력칸 글자만 보면 "칸은 21인데 저장은 20" 을 못 잡는다.
+    ====================================================== */
+
+    if (wants("compact")) {
+
+      section("compact");
+
+      const page = await openStudio(browser, {});
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      await clickElement(page, frame, false, "tyText");
+
+      await page.evaluate(() => {
+        document.getElementById("studioCanvasTypoAdvanced").open = true;
+      });
+
+      await sleep(300);
+
+      /* ① 줄 배치 — 라벨과 **실제 y 좌표**로 본다 */
+      const grids = await page.evaluate(() => {
+
+        const box =
+          document.getElementById("studioCanvasInspectorTypography");
+
+        return Array.from(box.querySelectorAll(".studio-canvas-typo-grid"))
+          .map((grid) => {
+
+            const cells =
+              Array.from(grid.querySelectorAll(".studio-canvas-typo-cell"));
+
+            return {
+              labels: cells.map((c) =>
+                c.querySelector(".studio-canvas-typo-label").textContent.trim()),
+              rows: new Set(
+                cells.map((c) => Math.round(c.getBoundingClientRect().top))
+              ).size
+            };
+
+          });
+
+      });
+
+      check("★ 1줄 — 글꼴 · 글자색이 한 줄에 있다",
+        grids[0] && grids[0].labels.join(",") === "글꼴,글자색" &&
+        grids[0].rows === 1,
+        JSON.stringify(grids[0]));
+
+      check("★ 2줄 — 크기 · 굵기가 한 줄에 있다",
+        grids[1] && grids[1].labels.join(",") === "크기,굵기" &&
+        grids[1].rows === 1,
+        JSON.stringify(grids[1]));
+
+      check("★ 고급 설정 1줄 — 자간 · 행간이 한 줄에 있다",
+        grids[2] && grids[2].labels.join(",") === "자간,행간" &&
+        grids[2].rows === 1,
+        JSON.stringify(grids[2]));
+
+      const stepNodes = await page.evaluate(() =>
+        ["font", "size", "weight", "color", "letter", "line"].reduce(
+          (out, field) => {
+            out[field] =
+              !!document.getElementById(`studioCanvasTypoDown-${field}`) &&
+              !!document.getElementById(`studioCanvasTypoUp-${field}`);
+            return out;
+          },
+          {}
+        ));
+
+      check("★ −/+ 는 크기 · 자간 · 행간 세 칸에만 있다",
+        stepNodes.size === true && stepNodes.letter === true &&
+        stepNodes.line === true &&
+        stepNodes.font === false && stepNodes.weight === false &&
+        stepNodes.color === false,
+        JSON.stringify(stepNodes));
+
+      /* ② 빈 칸(= 스킨 기본값)에서는 잠겨 있다 — 숫자를 지어내지
+         않는다는 그 규칙(계약 §31)의 화면 쪽 모습이다 */
+      let typo = await readTypo(page);
+
+      check("★ 아직 고르지 않은 칸에서는 −/+ 가 잠긴다",
+        typo.steps.size.downDisabled === true &&
+        typo.steps.size.upDisabled === true &&
+        typo.steps.letter.downDisabled === true &&
+        typo.steps.line.upDisabled === true,
+        JSON.stringify(typo.steps));
+
+      /* 직접 입력은 그대로다 */
+      await typeNumber(page, "size", "20");
+
+      let rule = await readRule(page, "tyText");
+
+      check("직접 친 숫자가 그대로 확정된다", rule["font-size"] === "20px",
+        rule["font-size"]);
+
+      typo = await readTypo(page);
+
+      check("숫자가 들어가면 −/+ 가 풀린다",
+        typo.steps.size.downDisabled === false &&
+        typo.steps.size.upDisabled === false,
+        JSON.stringify(typo.steps.size));
+
+      const step = async (field, dir, times) => {
+
+        for (let i = 0; i < (times || 1); i += 1) {
+          await page.click(`#studioCanvasTypo${dir < 0 ? "Down" : "Up"}-${field}`);
+          await sleep(350);
+        }
+
+      };
+
+      await step("size", 1);
+
+      rule = await readRule(page, "tyText");
+
+      check("★ + 가 눈금 한 칸(1)만큼 올린다", rule["font-size"] === "21px",
+        rule["font-size"]);
+
+      await step("size", -1, 2);
+
+      rule = await readRule(page, "tyText");
+
+      check("★ − 가 두 번이면 두 칸 내려간다", rule["font-size"] === "19px",
+        rule["font-size"]);
+
+      check("칸에도 저장값이 보인다",
+        (await readTypo(page)).inputs.size === "19");
+
+      /* 자간 0.1 · 행간 0.05 — 칸마다 눈금이 다르다 */
+      await typeNumber(page, "letter", "0.5");
+      await step("letter", 1);
+
+      rule = await readRule(page, "tyText");
+
+      check("★ 자간의 눈금은 0.1 이다", rule["letter-spacing"] === "0.6px",
+        rule["letter-spacing"]);
+
+      await typeNumber(page, "line", "1.5");
+      await step("line", 1);
+
+      rule = await readRule(page, "tyText");
+
+      check("★ 행간의 눈금은 0.05 이다", rule["line-height"] === "1.55",
+        rule["line-height"]);
+
+      /* 눈금의 끝 */
+      await typeNumber(page, "size", "72");
+
+      typo = await readTypo(page);
+
+      check("★ 위 끝에서는 + 만 잠긴다",
+        typo.steps.size.upDisabled === true &&
+        typo.steps.size.downDisabled === false,
+        JSON.stringify(typo.steps.size));
+
+      await typeNumber(page, "size", "8");
+
+      typo = await readTypo(page);
+
+      check("★ 아래 끝에서는 − 만 잠긴다",
+        typo.steps.size.downDisabled === true &&
+        typo.steps.size.upDisabled === false,
+        JSON.stringify(typo.steps.size));
+
+      /* =====================================================
+         연속으로 누른 한 묶음 = Undo **한 칸**
+
+         ★ 기록은 묶음이 **끝날 때** 쌓인다(포커스가 그 묶음을
+           떠날 때). 그래서 누르는 동안의 깊이를 재고, 떠난 뒤에
+           다시 잰다 — 그 차이가 정확히 1 이어야 한다.
+      ====================================================== */
+
+      const depth = () =>
+        page.evaluate(() => window.getStudioHistoryState().undo);
+
+      /* 묶음 밖으로 나가기 — 사람이 하는 그 조작(딴 데 누르기) */
+      const leaveStepGroup = async () => {
+        await page.click(
+          "#studioCanvasInspectorTypography .studio-inspector-block-label");
+        await sleep(500);
+      };
+
+      await typeNumber(page, "size", "20");
+      await leaveStepGroup();
+
+      const before = await depth();
+
+      await step("size", 1, 4);
+
+      rule = await readRule(page, "tyText");
+
+      check("네 번 눌러 네 칸 올라갔다", rule["font-size"] === "24px",
+        rule["font-size"]);
+
+      check("★ 누르는 동안에는 기록이 늘지 않는다",
+        (await depth()) === before, `${before} -> ${await depth()}`);
+
+      check("묶음이 열려 있다", (await readTypo(page)).stepSession === "size");
+
+      await leaveStepGroup();
+
+      check("★ 묶음이 끝나면 기록이 정확히 한 칸 늘어난다",
+        (await depth()) === before + 1, `${before} -> ${await depth()}`);
+
+      check("묶음이 닫혔다", (await readTypo(page)).stepSession === null);
+
+      await page.click("#studioUndoButton");
+      await sleep(700);
+
+      rule = await readRule(page, "tyText");
+
+      check("★ ↶ 한 번이면 네 번 누르기 **전체**가 돌아간다",
+        rule["font-size"] === "20px", rule["font-size"]);
+
+      await page.click("#studioRedoButton");
+      await sleep(700);
+
+      rule = await readRule(page, "tyText");
+
+      check("↷ 가 그 묶음을 되살린다", rule["font-size"] === "24px",
+        rule["font-size"]);
+
+      /* 눌렀다가 제자리로 돌아오면 기록 0 칸 */
+      const beforeRound = await depth();
+
+      await step("size", 1, 2);
+      await step("size", -1, 2);
+
+      rule = await readRule(page, "tyText");
+
+      check("제자리로 돌아왔다", rule["font-size"] === "24px", rule["font-size"]);
+
+      await leaveStepGroup();
+
+      check("★ 눌렀다가 제자리면 기록 0 칸",
+        (await depth()) === beforeRound,
+        `${beforeRound} -> ${await depth()}`);
+
+      /* Canvas JSON 은 이 라운드에서도 한 글자도 바뀌지 않는다 */
+      const jsonNow = await readCanvasJson(page);
+
+      await step("size", -1, 1);
+      await leaveStepGroup();
+
+      check("★ −/+ 도 Canvas JSON 을 건드리지 않는다 (계약 §8)",
+        (await readCanvasJson(page)) === jsonNow);
+
+      check("페이지 오류 0", page.__errors.length === 0,
+        page.__errors.slice(0, 3).join(" | "));
 
       await page.__ctx.close();
 

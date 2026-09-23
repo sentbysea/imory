@@ -5387,3 +5387,117 @@ responsive override · v1 Layers 의 구조 편집 · 일반 HTML Inspector 변�
   끌면 된다. 자리를 고르며 빼는 것은 계약이 정하지 않았다.
 - **`auth/index.html` · `invite/index.html` 이 Pretendard 파일을 싣지
   않는다.** 이 라운드의 코드와는 무관하고, 배포 전 정리 항목으로만 적는다.
+
+## 33. Canvas 패널을 조밀하게 · `frameActive` 보고 (`HOME-CANVAS-INSPECTOR-COMPACT-1`)
+
+왼쪽 Select 패널의 **배치만** 바꾼 라운드다. 저장 데이터 · 편집 계약 ·
+확정 관문 · Moveable 의 resize 방향은 한 글자도 바뀌지 않았다 —
+§22(Canvas Inspector) · §25(v2 기본 배치) · §31(타이포그래피)이 그대로다.
+
+같은 라운드에서 `frameActive` 보고의 실제 버그 하나를 고쳤다(§33-4).
+
+### 33-1. 관련 파일
+
+| 파일 | 무엇 |
+| --- | --- |
+| `studio/inspector/studio-canvas-typography.js` | 두 줄 × 두 칸 배치 · 라벨 줄로 올라간 `기본` · −/+ 세 칸 · −/+ 묶음 세션 |
+| `studio/inspector/studio-canvas-inspector-v2.js` | `studioCanvasV2Group()` · `studioCanvasV2NumberCell()` · `studioCanvasV2Line()` — 한 줄에 여러 칸 |
+| `studio/inspector/studio-inspector.css` | `.studio-canvas-typo-head` · `.studio-canvas-typo-step` · `.studio-canvas-inspector-line` / `-cell` / `-group` |
+| `studio/studio-preview.js` | `applyWorkingSkinChanges()` · `applyStudioDirectEdit()` 의 `options.coalesceHistory` |
+| `skin/skin-home-canvas-editor-runtime.js` | 따라가기 루프가 `report(canvasFrameShouldShow())` 를 다시 본다(§33-4) |
+
+### 33-2. 타이포그래피 — 두 줄 × 두 칸
+
+```
+[글꼴          기본]  [글자색        기본]
+[크기          기본]  [굵기          기본]
+고급 설정 ▾
+[자간          기본]  [행간          기본]
+```
+
+- 줄은 **그리는 쪽**이 나눈다 — `.studio-canvas-typo-grid` 를 셋 두고
+  각 grid 안에 칸 둘을 넣는다. CSS 에 고정 breakpoint 를 두지 않는다.
+- `기본`(스킨 기본값으로)은 컨트롤과 같은 줄이 아니라 **라벨 줄의 오른쪽
+  끝**이다. 한 줄에 칸이 둘이면 컨트롤 줄에 −/+ · 입력칸 · `기본` 넷이
+  들어가 어느 것도 제 폭을 갖지 못한다.
+- 칸의 `min-width` 는 112px 다(예전 96px). 320px 패널의 안쪽 폭(292)과
+  390px 시트에서는 한 줄에 둘이고, 그보다 좁아지면 **잘리는 대신 감긴다**.
+
+### 33-3. 크기 · 자간 · 행간의 −/+
+
+```
+[−] [  16  ] [+]
+```
+
+- **직접 치는 길은 그대로다.** Enter · blur 확정 · Escape 취소 · 빈 값 =
+  스킨 기본값 · 범위 밖 거부 · 눈금에 붙이기가 §31 그대로다.
+- −/+ 는 그 칸의 값에서 **눈금 한 칸**만큼 움직인다. 눈금 · 범위 ·
+  자리수는 `INSPECTOR_CANVAS_TYPO_RANGES` 하나가 갖는다(크기 1 ·
+  자간 0.1 · 행간 0.05). 새 숫자 컨트롤을 칸마다 복제하지 않았다 —
+  `studioCanvasTypoNumber()` 하나가 셋을 만든다.
+- **빈 칸에서는 −/+ 가 잠긴다.** 이 패널은 잰 값을 기본값인 척 채우지
+  않는 것이 §31-1 이고, 그러면 −/+ 가 출발할 숫자가 없다. 숫자를
+  지어내는 대신 잠그고 이유를 `title` 에 적는다. 눈금의 양 끝에서도
+  그쪽 버튼만 잠근다.
+- **연속으로 누른 한 묶음 = Undo 한 칸.** 누를 때마다 확정하지만
+  (Preview 가 곧바로 따라오고 그 사이 Save 에 최신 값이 실린다) 기록은
+  묶음이 **끝날 때** 한 칸이다. 포커스가 그 묶음(`[−][칸][+]`)을 떠나면
+  끝난다 — 다른 칸을 만지거나 화면을 다시 그려도 끝난다. 눌렀다가
+  제자리로 돌아왔으면 **0 칸**이다.
+- 그 손잡이는 `applyWorkingSkinChanges(…, { coalesceHistory: true })` 다.
+  Canvas JSON 쪽에 이미 있던 같은 이름 · 같은 규칙이고
+  (`writeStudioCanvasElementChange` · §22), 새 Undo stack 을 만들지 않는다.
+- WebKit 은 버튼을 눌러도 포커스를 주지 않는다 — 그러면 묶음이 끝나는
+  것을 알 수 있는 `focusout` 이 오지 않는다. 클릭 핸들러가 직접
+  `button.focus()` 한다.
+
+### 33-4. 흐름 안의 자리 — 한 줄에 여러 칸
+
+```
+순서   [↑ 위로] [↓ 아래로] 2 / 5
+정렬   [가운데 ▾]
+[Width ] [Height] [높이 Auto]
+여백 (음수도 됩니다)
+[위] [오른쪽] [아래] [왼쪽]
+```
+
+- 숫자 칸은 라벨을 **칸 위로** 올리고 같은 성격끼리 한 줄에 묶는다
+  (`studioCanvasV2Group`). 오류 한 줄은 칸 안이 아니라 **묶음 아래**다 —
+  56px 칸 안에서는 한 문장이 네 줄이 된다.
+- 칸의 `min-width` 는 56px 다. 네 칸이면 `56 × 4 + 6 × 3 = 242` 라
+  320px · 280px 패널 안에 들고, 넘치는 대신 다음 줄로 감긴다. **패널에
+  가로 스크롤이 생기지 않는다.**
+- 높이 Auto 는 Width · Height 와 **같은 줄의 칸 하나**다(체크박스라
+  줄어들지 않는다). Auto 가 켜졌을 때 Height 칸이 잠기는 것 · 저장
+  의미 · `main_visual` 의 좌우 점만 보이는 것은 §25 · §29-3 그대로다.
+- 그 줄은 `align-items: flex-end` 로 **입력칸의 밑변**을 맞춘다. 칸의
+  높이가 다르므로(체크박스 칸이 낮다) "한 줄인가"는 윗변이 아니라
+  **밑변**으로 센다 — 테스트도 그렇게 잰다.
+
+### 33-5. 프레임의 "틀을 잡았다" 보고 — 실제 버그 하나
+
+`preview:canvas-frame`(프레임 → Studio)은 **한 번만** 나갔다.
+`attach()` 안에서 `report(canvasFrameShouldShow())` 를 부르는데, 그
+자리는 Moveable 에 `target` 을 **대입한 직후**다.
+
+0.53.0 의 vanilla 래퍼는 prop 대입을 미뤘다가 처리하므로 그 순간
+`getTargets()` 는 아직 비어 있다(§29-4 가 손잡이 목록에서 이미 겪은 그
+함정). 그래서 `canvasFrameShouldShow()` 가 `false` 로 읽히고, 그 값은
+초기값과 같아 **메시지가 나가지 않으며**, 다음 프레임에 값이 참이 되어도
+`report()` 를 다시 부르는 곳이 없어 부모는 영영 모른다.
+
+- 인스턴스를 **그 자리에서 만든** 경우에는 생성자가 첫 `target` 을 동기로
+  받으므로 우연히 맞았다 — "빈 곳에서 곧바로 캔버스 요소를 고르는" 길이
+  그것이다. **일반 template 요소를 거쳐** 캔버스 요소를 고르면 인스턴스가
+  이미 있으므로 틀렸다.
+- 증상: 프레임은 파란 Moveable 틀을 제대로 그리는데 부모가 자기 축 평행
+  상자를 내리지 않는다 — **테두리가 둘**이고, 회전한 요소에서는 어긋난
+  상자가 하나 더 그려진다.
+- 고친 자리: 따라가기 루프(`tick`)가 손잡이 목록을 맞추는 그 자리에서
+  `report(canvasFrameShouldShow())` 를 **다시 본다**. 값이 그대로면
+  메시지는 나가지 않는다(`report` 의 지문).
+
+### 33-6. 이 라운드가 만들지 않은 것
+
+`HOME-CANVAS-V2-GROUP-1A` 의 그룹 조작 · Moveable resize 방향 변경 ·
+새 숫자 입력 컴포넌트 · Canvas JSON 의 새 칸 · `APP_BUILD_VERSION` 변경.

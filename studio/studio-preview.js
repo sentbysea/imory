@@ -960,14 +960,34 @@ function resolveCodeEditorSource(skin, pageType) {
    postPostBodyToFrame()로 다시 채워진다 — regression 테스트 G).
 ========================================================== */
 
-function applyWorkingSkinChanges(pageType, html, css, meta) {
+/*
+  HOME-CANVAS-INSPECTOR-COMPACT-1 — `options.coalesceHistory`
+
+  ★ 한 번의 조작이 Undo 한 칸이다.
+
+  Canvas 글자 패널의 −/+ 는 **누를 때마다** 확정한다(그래야 Preview 가
+  즉시 따라오고 그 사이 Save 를 눌러도 최신 값이 실린다). 그러나 기록
+  까지 한 번에 한 칸씩 쌓이면 다섯 번 누른 크기를 되돌리는 데 ↶ 를
+  다섯 번 눌러야 한다.
+
+  그래서 그 경로만 이 함수의 기록을 끈다 — 세션을 여는 쪽이 첫 클릭에서
+  captureStudioHistoryState() 를 잡고, 손을 뗄 때(포커스가 그 묶음을
+  떠날 때) recordStudioHistory() 로 **한 칸**을 남긴다
+  (studio/inspector/studio-canvas-typography.js).
+
+  Canvas JSON 쪽에 이미 있는 그 손잡이와 같은 이름 · 같은 규칙이다
+  (writeStudioCanvasElementChange). 새 Undo stack 을 만들지 않는다.
+*/
+function applyWorkingSkinChanges(pageType, html, css, meta, options) {
 
   if (!currentWorkingSkin) {
     return;
   }
 
   const historyBefore =
-    captureStudioWorkingChange();
+    (options && options.coalesceHistory === true)
+      ? null
+      : captureStudioWorkingChange();
 
   assertStudioPageEditRegions(pageType, html);
 
@@ -2145,13 +2165,16 @@ function applyAiSkinPackage(skinPackage, options) {
    않는다.
 ========================================================== */
 
-function applyStudioDirectEdit(pageType, html, css) {
+function applyStudioDirectEdit(pageType, html, css, options) {
 
   if (!currentWorkingSkin) {
     return false;
   }
 
-  applyWorkingSkinChanges(pageType, html, css);
+  /* HOME-CANVAS-INSPECTOR-COMPACT-1 — `options.coalesceHistory` 는
+     그대로 넘긴다(위 applyWorkingSkinChanges 머리말). 넘기지 않으면
+     지금까지와 똑같이 이 확정 하나가 기록 한 칸이다. */
+  applyWorkingSkinChanges(pageType, html, css, undefined, options);
 
   return true;
 

@@ -2656,6 +2656,89 @@ async function main() {
 
       await clickElement(page, frame, false, "v2Text");
 
+      /* =====================================================
+         HOME-CANVAS-INSPECTOR-COMPACT-1 — 흐름 안의 자리가 조밀해졌다
+
+           한 줄   Width · Height · 높이 Auto
+           한 줄   위 · 오른쪽 · 아래 · 왼쪽
+
+         ★ 재는 것은 "몇 줄인가"와 "패널 밖으로 넘치는가"다. 값이
+           어떻게 저장되는가는 바로 아래 절이 그대로 본다 — 배치만
+           바뀌고 계약은 한 글자도 바뀌지 않았다는 것이 이 라운드다.
+      ====================================================== */
+
+      const compactLines = await page.evaluate(() => {
+
+        const layout =
+          document.getElementById("studioCanvasInspectorV2Layout");
+
+        if (!layout) return null;
+
+        const lineOf = (id) => {
+
+          const line =
+            document.getElementById(id);
+
+          if (!line) return null;
+
+          const cells =
+            Array.from(line.querySelectorAll(".studio-canvas-inspector-cell"));
+
+          const parent =
+            layout.getBoundingClientRect();
+
+          return {
+            count: cells.length,
+            width: Math.round(parent.width),
+            cellWidths: cells.map((c) => Math.round(c.getBoundingClientRect().width)),
+            /* ★ 줄은 **아래 변**으로 센다. 이 줄은 `align-items:
+               flex-end` 라(입력칸의 밑변을 맞춘다) 칸의 높이가 다르면
+               같은 줄에서도 윗변이 갈린다 — 높이 Auto 칸은 체크박스
+               하나라 숫자 칸보다 낮다. 밑변은 같은 줄이면 같다. */
+            rows: new Set(
+              cells.map((c) => Math.round(c.getBoundingClientRect().bottom))
+            ).size,
+            overflow: cells.some((c) => {
+              const r = c.getBoundingClientRect();
+              return r.right > parent.right + 1 || r.left < parent.left - 1;
+            }),
+            clipped: cells.some((c) => c.scrollWidth > c.clientWidth + 1)
+          };
+
+        };
+
+        return {
+          size: lineOf("studioCanvasInspectorV2SizeLine"),
+          margin: lineOf("studioCanvasInspectorV2MarginLine"),
+
+          /* 패널이 가로로 스크롤되면 안 된다(왼쪽 패널 전체) */
+          panelScroll: (() => {
+            const panel = layout.closest(".studio-left-panel") || layout.parentElement;
+            return panel ? panel.scrollWidth > panel.clientWidth + 1 : null;
+          })()
+        };
+
+      });
+
+      check("★ Width · Height · 높이 Auto 가 한 줄이다",
+        compactLines && compactLines.size &&
+        compactLines.size.count === 3 && compactLines.size.rows === 1,
+        JSON.stringify(compactLines && compactLines.size));
+
+      check("★ 여백 네 방향이 한 줄이다",
+        compactLines && compactLines.margin &&
+        compactLines.margin.count === 4 && compactLines.margin.rows === 1,
+        JSON.stringify(compactLines && compactLines.margin));
+
+      check("★ 칸이 패널 밖으로 넘치거나 잘리지 않는다 · 가로 스크롤 0",
+        compactLines &&
+        compactLines.size.overflow === false &&
+        compactLines.size.clipped === false &&
+        compactLines.margin.overflow === false &&
+        compactLines.margin.clipped === false &&
+        compactLines.panelScroll === false,
+        JSON.stringify(compactLines));
+
       /* align */
 
       let h0 = await historyState(page);

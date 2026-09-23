@@ -459,18 +459,92 @@ function studioCanvasV2Display(view, field) {
 }
 
 
-function studioCanvasV2NumberRow(field, label, view) {
+/* =========================================================
+   HOME-CANVAS-INSPECTOR-COMPACT-1 — 숫자 칸은 **한 줄에 여럿**
 
-  const row =
+   예전에는 Width · Height · 높이 Auto · 여백 넷이 각각 한 줄을
+   차지했다(왼쪽 84px 라벨 + 오른쪽 62px 입력칸). 일곱 줄이 화면의
+   대부분을 먹는데 실제로 쓰는 폭은 절반도 안 됐다.
+
+   이제 라벨을 칸 **위로** 올리고 같은 성격의 칸을 한 줄에 묶는다.
+
+     [Width  ] [Height ] [높이 Auto]
+     [위] [오른쪽] [아래] [왼쪽]
+
+   ★ 오류 한 줄은 칸 안이 아니라 **묶음 아래**에 둔다 — 60px 칸
+     안에서는 "숫자를 넣어 주세요." 가 네 줄이 된다.
+   ★ 칸은 `flex: 1 1` 이고 min-width 가 감기는 기준이다. 버튼 ·
+     체크박스처럼 줄어들 수 없는 것만 `flex: none` 이라, 좁아지면
+     칸이 다음 줄로 내려갈 뿐 가로 스크롤이 생기지 않는다.
+========================================================== */
+
+function studioCanvasV2Line(id) {
+
+  const line =
     document.createElement("div");
 
-  row.className =
-    "studio-inspector-row studio-canvas-inspector-number";
+  line.className =
+    "studio-canvas-inspector-line";
+
+  if (id) {
+    line.id = id;
+  }
+
+  return line;
+
+}
+
+
+/* 묶음 하나 = 한 줄 + 그 줄의 칸들이 쓰는 오류 줄들 */
+function studioCanvasV2Group(id, cells, fields) {
+
+  const box =
+    document.createElement("div");
+
+  box.className =
+    "studio-canvas-inspector-group";
+
+  const line =
+    studioCanvasV2Line(id);
+
+  cells.forEach((cell) => {
+
+    if (cell) {
+      line.appendChild(cell);
+    }
+
+  });
+
+  box.appendChild(line);
+
+  fields.forEach((field) => {
+
+    const error =
+      studioCanvasInspectorErrorNode(field);
+
+    studioCanvasInspectorErrors[field] = error;
+
+    box.appendChild(error);
+
+  });
+
+  return box;
+
+}
+
+
+function studioCanvasV2NumberCell(field, label, view) {
+
+  const cell =
+    document.createElement("div");
+
+  cell.className =
+    "studio-canvas-inspector-cell studio-canvas-inspector-number";
 
   const name =
     document.createElement("label");
 
-  name.className = "studio-inspector-row-label";
+  name.className = "studio-canvas-inspector-cell-label";
   name.htmlFor = `studioCanvasInspectorV2-${field}`;
   name.textContent = label;
 
@@ -479,7 +553,12 @@ function studioCanvasV2NumberRow(field, label, view) {
 
   input.type = "text";
   input.inputMode = "numeric";
-  input.className = "studio-inspector-input studio-inspector-input--number";
+  /* 폭은 칸이 정한다(고정 62px 을 쓰지 않는다) — 한 줄에 둘에서
+     넷까지 들어가므로 남는 폭을 나눠 가져야 한다. */
+  input.className =
+    "studio-inspector-input studio-inspector-input--number " +
+    "studio-canvas-inspector-cell-input";
+
   input.id = `studioCanvasInspectorV2-${field}`;
   input.dataset.canvasField = field;
 
@@ -515,22 +594,12 @@ function studioCanvasV2NumberRow(field, label, view) {
     studioCanvasV2CommitNumber(field);
   });
 
-  row.appendChild(name);
-  row.appendChild(input);
-
-  const error =
-    studioCanvasInspectorErrorNode(field);
-
-  const box =
-    document.createElement("div");
-
-  box.appendChild(row);
-  box.appendChild(error);
+  cell.appendChild(name);
+  cell.appendChild(input);
 
   studioCanvasInspectorInputs[field] = input;
-  studioCanvasInspectorErrors[field] = error;
 
-  return box;
+  return cell;
 
 }
 
@@ -542,7 +611,7 @@ function studioCanvasV2NumberRow(field, label, view) {
      계약 §29-3).
 
    처음에는 "Height 칸에 적혀 있는 숫자"를 썼다. 그런데 Auto 인
-   동안 그 칸은 **잠겨 있어서**(아래 studioCanvasV2NumberRow) 숫자를
+   동안 그 칸은 **잠겨 있어서**(아래 studioCanvasV2NumberCell) 숫자를
    넣을 수 없고, 스위치를 끄면 "숫자를 먼저 넣어 주세요"만 나왔다 —
    클릭 한 번으로는 Auto 를 끌 수 없었다.
 
@@ -562,16 +631,21 @@ function studioCanvasV2NumberRow(field, label, view) {
 
 function studioCanvasV2AutoToggle(view) {
 
+  /* HOME-CANVAS-INSPECTOR-COMPACT-1 — Width · Height 와 **같은 줄**의
+     칸 하나다(위 studioCanvasV2NumberCell 머리말). 라벨을 칸 위로
+     올리는 것도 같고, 다른 것은 칸이 줄어들지 않는다는 것뿐이다
+     (체크박스는 고정 폭이다). */
   const row =
     document.createElement("div");
 
   row.className =
-    "studio-inspector-row studio-canvas-inspector-auto";
+    "studio-canvas-inspector-cell studio-canvas-inspector-cell--switch " +
+    "studio-canvas-inspector-auto";
 
   const label =
     document.createElement("label");
 
-  label.className = "studio-inspector-row-label";
+  label.className = "studio-canvas-inspector-cell-label";
   label.htmlFor = "studioCanvasInspectorV2Auto";
   label.textContent = "높이 Auto";
 
@@ -1807,12 +1881,24 @@ function buildStudioCanvasV2Inspector(view) {
 
   layout.appendChild(studioCanvasV2OrderRow(view));
   layout.appendChild(studioCanvasV2AlignRow(view));
-  layout.appendChild(studioCanvasV2NumberRow("width", "Width", view));
-  layout.appendChild(studioCanvasV2NumberRow("height", "Height", view));
 
-  if (studioCanvasV2AutoAllowed(view.type)) {
-    layout.appendChild(studioCanvasV2AutoToggle(view));
-  }
+  /* HOME-CANVAS-INSPECTOR-COMPACT-1 — 크기는 한 줄이다.
+     Width · Height · 높이 Auto 는 서로를 보며 고치는 값이라
+     같은 줄에 있어야 읽힌다(Auto 를 켜면 Height 가 잠기는 것도
+     한눈에 보인다). */
+  layout.appendChild(
+    studioCanvasV2Group(
+      "studioCanvasInspectorV2SizeLine",
+      [
+        studioCanvasV2NumberCell("width", "Width", view),
+        studioCanvasV2NumberCell("height", "Height", view),
+        studioCanvasV2AutoAllowed(view.type)
+          ? studioCanvasV2AutoToggle(view)
+          : null
+      ],
+      ["width", "height"]
+    )
+  );
 
   const marginCaption =
     document.createElement("p");
@@ -1822,11 +1908,20 @@ function buildStudioCanvasV2Inspector(view) {
 
   layout.appendChild(marginCaption);
 
-  studioCanvasV2Edges().forEach((edge) => {
-    layout.appendChild(
-      studioCanvasV2NumberRow(edge, STUDIO_CANVAS_V2_EDGE_LABELS[edge], view)
-    );
-  });
+  /* 네 방향도 한 줄이다. 라벨이 짧고(위 · 오른쪽 · 아래 · 왼쪽)
+     칸이 좁아도 되는 값이라 320px 패널 안에서 가로 스크롤 없이
+     들어간다(studio-inspector.css 의 min-width). */
+  const edges =
+    studioCanvasV2Edges();
+
+  layout.appendChild(
+    studioCanvasV2Group(
+      "studioCanvasInspectorV2MarginLine",
+      edges.map((edge) =>
+        studioCanvasV2NumberCell(edge, STUDIO_CANVAS_V2_EDGE_LABELS[edge], view)),
+      edges
+    )
+  );
 
   studioCanvasInspectorBody.appendChild(layout);
 

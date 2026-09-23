@@ -649,6 +649,151 @@ const byId = (id) => `[data-imory-edit-id="${id}"]`;
 
 
 /* =========================================================
+   고르기 → 틀 활성까지를 **단계로** 기다린다
+   (HOME-CANVAS-INSPECTOR-COMPACT-1)
+
+   예전에는 `frameActive` 하나만 15초 기다렸다. 실패하면 남는 것이
+   "Timeout" 한 줄이라 어디서 어긋났는지 알 수 없었다 — 클릭이
+   빗나갔는가 · 일반 Inspector 가 자리를 안 비켰는가 · 부모가 캔버스
+   선택을 안 받았는가 · vendor 를 못 받았는가 · 프레임이 틀을 못
+   잡았는가가 전부 같은 한 줄이 된다.
+
+   그래서 같은 순서를 칸으로 나눠 기다리고, **멈춘 칸과 그때의
+   실제 상태**를 함께 남긴다.
+
+   ★ 총 대기 시간은 늘리지 않는다 — 칸들이 같은 예산을 나눠 쓴다.
+   ★ 재시도 · 고정 sleep 을 넣지 않는다. 각 칸은 조건이 참이 되는
+     즉시 다음 칸으로 넘어간다.
+========================================================== */
+
+/* 그 클릭 좌표가 **정말 그 캔버스 요소에 닿았는가**. 프레임 안의
+   문서에 직접 물어본다 — 부모에서 보면 언제나 iframe 하나다. */
+async function canvasClickHit(page, id, point) {
+
+  if (!point) {
+    return null;
+  }
+
+  return page.evaluate(([px, py, wanted]) => {
+
+    const frame = document.getElementById("studioPreviewFrame");
+    const doc = frame ? frame.contentDocument : null;
+
+    if (!doc) {
+      return { ok: false, why: "preview 문서를 못 찾음" };
+    }
+
+    const box = frame.getBoundingClientRect();
+    const cs = getComputedStyle(frame);
+    const bl = parseFloat(cs.borderLeftWidth) || 0;
+    const bt = parseFloat(cs.borderTopWidth) || 0;
+
+    const el = doc.elementFromPoint(px - box.left - bl, py - box.top - bt);
+
+    if (!el) {
+      return { ok: false, why: "그 자리에 요소가 없음" };
+    }
+
+    const owner = el.closest("[data-imory-canvas-element]");
+
+    return {
+      ok: !!owner && owner.getAttribute("data-imory-edit-id") === wanted,
+      why:
+        owner
+          ? `그 자리의 캔버스 요소는 ${owner.getAttribute("data-imory-edit-id")}`
+          : `그 자리는 캔버스 요소가 아님(${el.tagName})`
+    };
+
+  }, [point.x, point.y, id]);
+
+}
+
+
+async function waitCanvasFrameActive(page, id, options) {
+
+  const o = options || {};
+
+  const budget = o.budget || 15000;
+
+  const dump = async () => {
+
+    const state = await readCanvasState(page).catch(() => null);
+
+    return (
+      `state=${JSON.stringify(state)} ` +
+      `moveable=${countRequests(page, MOVEABLE_URL_PART)} ` +
+      `selecto=${countRequests(page, SELECTO_URL_PART)} ` +
+      `runtime=${countRequests(page, RUNTIME_URL_PART)}`
+    );
+
+  };
+
+  const hit =
+    await canvasClickHit(page, id, o.point);
+
+  if (hit && !hit.ok) {
+    throw new Error(
+      `[${id}] 클릭이 그 캔버스 요소에 닿지 않았습니다 — ${hit.why} · ${await dump()}`
+    );
+  }
+
+  /* 칸마다 무엇을 기다리는가. 앞의 둘은 부모가 같은 tick 에서 정하는
+     값이라 짧게, 마지막 칸(프레임의 보고)이 남는 예산을 전부 쓴다. */
+  const stages = [
+    [
+      "일반 Inspector 가 자리를 비웠다",
+      () => window.getStudioInspectorSelection() === null,
+      Math.round(budget * 0.2)
+    ],
+    [
+      "부모가 그 캔버스 요소를 골랐다",
+      (wanted) => {
+        const s = window.getStudioCanvasSelection();
+        return s.primaryId === wanted && s.ids.length === 1;
+      },
+      Math.round(budget * 0.2)
+    ],
+    [
+      "프레임이 틀을 잡았다(frameActive)",
+      () => window.getStudioCanvasSelection().frameActive === true,
+      budget - Math.round(budget * 0.4)
+    ]
+  ];
+
+  for (const [label, fn, ms] of stages) {
+
+    try {
+      await page.waitForFunction(fn, id, { timeout: ms });
+    }
+    catch (err) {
+      throw new Error(`[${id}] 단계 실패 — ${label} · ${await dump()}`);
+    }
+
+  }
+
+  return true;
+
+}
+
+
+/* 누르고 · 닿았는지 보고 · 단계로 기다린다(위 둘의 한 줄) */
+async function pickCanvas(page, id, options) {
+
+  const point =
+    await clickIn(page, byId(id));
+
+  await waitCanvasFrameActive(
+    page,
+    id,
+    Object.assign({}, options, { point: point })
+  );
+
+  return point;
+
+}
+
+
+/* =========================================================
    재기 — 프레임 안에서 Moveable 이 실제로 그린 네 줄
 
    ★ union(외곽) 만으로는 회전을 가릴 수 없다. 줄 하나하나의
@@ -1017,12 +1162,7 @@ async function main() {
         countRequests(page, RUNTIME_URL_PART) === 1);
 
       /* 6 — 첫 Canvas 선택 */
-      await clickIn(page, byId("cvPlain"));
-
-      await page.waitForFunction(
-        () => window.getStudioCanvasSelection().frameActive === true,
-        null, { timeout: 15000 }
-      );
+      await pickCanvas(page, "cvPlain");
 
       check("★ 첫 Canvas 선택 뒤에도 Moveable UMD 요청은 정확히 1",
         countRequests(page, MOVEABLE_URL_PART) === 1,
@@ -1125,11 +1265,7 @@ async function main() {
       await enableSelect(page);
 
       /* 12 — 회전 0° */
-      await clickIn(page, byId("cvPlain"));
-      await page.waitForFunction(
-        () => window.getStudioCanvasSelection().frameActive === true,
-        null, { timeout: 15000 }
-      );
+      await pickCanvas(page, "cvPlain");
 
       const plain = await measure(frame, "cvPlain");
 
@@ -1258,12 +1394,7 @@ async function main() {
       const scaledFrame = await canvasFrame(scaled, false);
 
       await enableSelect(scaled);
-      await clickIn(scaled, byId("cvRot20"));
-
-      await scaled.waitForFunction(
-        () => window.getStudioCanvasSelection().frameActive === true,
-        null, { timeout: 15000 }
-      );
+      await pickCanvas(scaled, "cvRot20");
 
       const scaledMeasure = await measure(scaledFrame, "cvRot20");
 
@@ -1737,12 +1868,7 @@ async function main() {
       const frame = await canvasFrame(page, false);
 
       await enableSelect(page);
-      await clickIn(page, byId("cvPlain"));
-
-      await page.waitForFunction(
-        () => window.getStudioCanvasSelection().frameActive === true,
-        null, { timeout: 15000 }
-      );
+      await pickCanvas(page, "cvPlain");
 
       /* 18 — 해제(Escape) */
       await page.keyboard.press("Escape");
@@ -1848,11 +1974,7 @@ async function main() {
         `display=${deleted.display} primary=${deletedState.primaryId}`);
 
       /* 20 — 캔버스 제거(enabled:false) */
-      await clickIn(page, byId("cvPlain"));
-
-      await page.waitForFunction(
-        () => window.getStudioCanvasSelection().frameActive === true,
-        null, { timeout: 10000 });
+      await pickCanvas(page, "cvPlain", { budget: 10000 });
 
       await page.evaluate(() => {
 
@@ -1887,11 +2009,7 @@ async function main() {
       const awayFrame = await canvasFrame(away, false);
 
       await enableSelect(away);
-      await clickIn(away, byId("cvPlain"));
-
-      await away.waitForFunction(
-        () => window.getStudioCanvasSelection().frameActive === true,
-        null, { timeout: 15000 });
+      await pickCanvas(away, "cvPlain");
 
       /* Studio 에는 페이지 선택기가 없다 — 사용자는 Preview 안의
          링크로 옮기고, Select 모드에서는 그 클릭이 선택으로 바뀐다.
@@ -2000,9 +2118,7 @@ async function main() {
         await sleep(250);
       }
 
-      await page.waitForFunction(
-        () => window.getStudioCanvasSelection().frameActive === true,
-        null, { timeout: 15000 });
+      await waitCanvasFrameActive(page, "cvPhoto");
 
       /* 틀이 붙은 채로 스크롤 · 포인터 이동까지 해 본다 */
       await frame.evaluate(() => window.scrollBy(0, 120));
