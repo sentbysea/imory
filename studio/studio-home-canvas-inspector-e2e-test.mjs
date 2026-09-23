@@ -45,6 +45,18 @@
               변경 → 빼기 → Undo/Redo 한 길 · 프레임의 페이지 자리
               보고 · pin 의 기준 셋 · primary 거부 · 삭제 ·
               native ↔ sandbox (HOME-CANVAS-V2-ELEMENTS-1)
+   [v2fix]    수동 테스트에서 나온 표시 · 편집 문제 다섯
+              (HOME-CANVAS-V2-MANUAL-FIX-1)
+   [v2resp]   선택 틀 · 겹침 · 화면별 크기
+              (HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1)
+   [layers]   왼쪽 Layers 패널 — 트리 순서 = draft 배열 순서 · 선택
+              하나 · 접기/펼치기 · 행의 단추 (STUDIO-LAYERS-SHELL-1 ·
+              STUDIO-LAYERS-STRUCTURE-1)
+   [layerstruct] Layers 의 구조 관리 — 세 배열의 순서 drag · 금지된
+              drop · 묶기/빼기 drop(자리 유지) · 대표 사진 · 숨김 ·
+              잠금(Preview hit-test) · 삭제 · Undo/Redo ·
+              Save → 다시 열기 · 390px 길게 누르기 · 다중 선택 거부 ·
+              native ↔ sandbox (STUDIO-LAYERS-STRUCTURE-1)
    [sandbox]  별도 origin 프레임에서 같은 결과 + CSP 위반 0
 
    Chromium 만 쓴다.
@@ -5315,18 +5327,17 @@ async function main() {
 
        계획 문서: docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md §7
 
-       이번 단계의 Layers 는 **읽기 전용 트리 + 선택**이다. 그래서
-       재는 것도 그 둘이다.
+       이 절이 재는 것은 **트리와 선택**이다.
 
          1  트리 순서가 **실제 draft 배열 순서**와 같은가
             (화면만의 정렬을 만들지 않았는가)
          2  Preview 선택과 Layers 선택이 **같은 상태 하나**인가
             (Layers 전용 두 번째 선택 배열이 생기지 않았는가)
+         3  행에 있어야 할 단추가 다 있는가(STRUCTURE-1)
 
-       ★ 순서 drag · attach/detach drop · primary 변경 · 숨김 ·
-         잠금 · 삭제는 이번 범위가 **아니다**. 그 버튼들이 아직
-         없다는 것도 함께 재서, 다음 라운드를 선행 구현하지 않았음을
-         고정한다.
+       ★ 구조 동작 자체(순서 drag · 묶기/빼기 drop · primary ·
+         숨김 · 잠금 · 삭제 · Undo · 원자적 거부)는 다음 절이다 —
+         `--only=layerstruct`.
     ====================================================== */
     if (wants("layers")) {
 
@@ -5413,11 +5424,17 @@ async function main() {
         groups.flowText === "자동 배치" && groups.overlayText === "페이지 장식",
         JSON.stringify(groups));
 
-      check("★ 대표 사진에만 ★ 표식이 붙는다(읽기 전용)",
+      /* ★ 표식은 대표 사진 하나에만 켜지고, 그 단추 자체는
+         **메인 비주얼 안의 사진**에만 있다(STUDIO-LAYERS-STRUCTURE-1).
+         이 스킨의 프레임에는 사진이 하나라 단추도 하나다. */
+      check("★ 대표 사진에만 ★ 표식이 붙는다",
         tree.rows.filter((r) => r.primary).map((r) => r.id).join(",") === "v2Photo" &&
-        await page.evaluate(() =>
-          document.querySelectorAll(".studio-canvas-layers-star").length === 1 &&
-          !!document.querySelector("#studioCanvasLayer-v2Photo .studio-canvas-layers-star")),
+        await page.evaluate(() => {
+          const star = document.getElementById("studioCanvasLayerPrimary-v2Photo");
+          return document.querySelectorAll(".studio-canvas-layers-star").length === 1 &&
+            !!star && star.textContent === "★" &&
+            star.getAttribute("aria-pressed") === "true" && star.disabled === true;
+        }),
         JSON.stringify(tree.rows.filter((r) => r.primary)));
 
 
@@ -5564,22 +5581,59 @@ async function main() {
         "");
 
 
-      /* ---- 8. 이번에 만들지 않은 것들 (계획 문서 §7) ---- */
+      /* ---- 8. 행마다 있는 것 / 아직 없는 것 ----
+
+         STUDIO-LAYERS-STRUCTURE-1 이 손잡이 · 눈 · 자물쇠 · 삭제를
+         모든 행에 두고, ★ 는 메인 비주얼 안의 사진에만 둔다. 그
+         다음(그룹 조작 · 영구 group 노드 · rich text)은 여전히 없다.
+      */
+
+      const rowParts = await page.evaluate(() => {
+        const root = document.getElementById("studioCanvasLayers");
+        return {
+          rows: root.querySelectorAll(".studio-canvas-layers-row").length,
+          handle: root.querySelectorAll(".studio-canvas-layers-handle").length,
+          eye: root.querySelectorAll(".studio-canvas-layers-eye").length,
+          lock: root.querySelectorAll(".studio-canvas-layers-lock").length,
+          remove: root.querySelectorAll(".studio-canvas-layers-remove").length,
+          star: root.querySelectorAll("button.studio-canvas-layers-star").length,
+
+          /* HTML5 drag&drop 은 쓰지 않는다 — pointer 제스처 하나다 */
+          html5: root.querySelectorAll("[draggable=\"true\"]").length,
+
+          /* 손잡이에만 touch-action:none 이다(패널 스크롤을 죽이지 않는다) */
+          handleTouch: getComputedStyle(
+            root.querySelector(".studio-canvas-layers-handle")
+          ).touchAction,
+          panelTouch: getComputedStyle(root).touchAction
+        };
+      });
+
+      check("★ 모든 행에 손잡이 · 눈 · 자물쇠 · 삭제가 있다",
+        rowParts.handle === rowParts.rows &&
+        rowParts.eye === rowParts.rows &&
+        rowParts.lock === rowParts.rows &&
+        rowParts.remove === rowParts.rows &&
+        rowParts.star === 1,
+        JSON.stringify(rowParts));
+
+      check("★ touch-action:none 은 손잡이 하나에만 있다(패널 스크롤이 산다)",
+        rowParts.handleTouch === "none" && rowParts.panelTouch !== "none" &&
+        rowParts.html5 === 0,
+        JSON.stringify(rowParts));
 
       const notYet = await page.evaluate(() => {
         const root = document.getElementById("studioCanvasLayers");
         return {
-          draggable: root.querySelectorAll("[draggable=\"true\"]").length,
-          eye: root.querySelectorAll("[data-layer-hidden], .studio-canvas-layers-eye").length,
-          lock: root.querySelectorAll("[data-layer-locked], .studio-canvas-layers-lock").length,
-          remove: root.querySelectorAll(".studio-canvas-layers-remove").length,
-          star: root.querySelectorAll("button.studio-canvas-layers-star").length
+          group: root.querySelectorAll("[data-layer-type=\"group\"]").length,
+          groupButton: root.querySelectorAll(".studio-canvas-layers-group-make").length,
+          multiDrag: typeof window.studioCanvasLayersMultiDrag
         };
       });
 
-      check("★ 순서 drag · 숨김 · 잠금 · 삭제 · primary 바꾸기를 선행 구현하지 않았다",
-        notYet.draggable === 0 && notYet.eye === 0 && notYet.lock === 0 &&
-        notYet.remove === 0 && notYet.star === 0,
+      check("★ 그룹 조작 · 영구 group 노드 · 여러 요소 끌기를 선행 구현하지 않았다",
+        notYet.group === 0 && notYet.groupButton === 0 &&
+        notYet.multiDrag === "undefined",
         JSON.stringify(notYet));
 
 
@@ -5688,6 +5742,1014 @@ async function main() {
         JSON.stringify((await layersState(sbPage)).selectedIds));
 
       await close(sbPage);
+
+    }
+
+
+    /* ======================================================
+       [layerstruct] — Layers 의 구조 관리 (STUDIO-LAYERS-STRUCTURE-1)
+
+       계약: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §32
+
+       배열이 어떻게 바뀌는가는 브라우저 없이도 잰다
+       (`node skin/skin-home-canvas-test.mjs` 의 [v2-structure]).
+       여기서 재는 것은 **브라우저에서만 참이 되는 것**이다.
+
+         1  손잡이를 끌면 그 자리로 간다(세 배열 · 첫째/가운데/마지막)
+         2  변화 없는 drop 과 금지된 drop 은 기록 0 칸이다
+         3  폴더 · 묶음 제목에 떨구면 기존 묶기 · 빼기 경로를 지나고
+            **화면 자리 · 크기 · 각도가 그대로**다
+         4  대표 사진 · 눈 · 자물쇠 · 삭제가 행에서 된다
+         5  잠근 것은 Preview 클릭에서 빠지고 Layers 에서 풀린다
+         6  한 동작 = Undo 한 칸 · Save → 다시 열기가 같다
+         7  좁은 화면에서는 **길게 눌러야** 끌리고 스크롤은 산다
+         8  여러 개를 골라 둔 채로는 거부하고 선택을 지키지 않는다
+    ====================================================== */
+    if (wants("layerstruct")) {
+
+      section("layerstruct");
+
+
+      /* 프레임에 **사진 둘**을 둔 스킨 — 대표를 바꿔 볼 수 있어야
+         한다. 나머지는 v2Package 그대로다. */
+      const structPackage = (o) => {
+
+        const pkg = v2Package(o || {});
+
+        const entry = pkg.regions.find((r) => r.name === "home_canvas");
+
+        const frame =
+          entry.canvas.flow.blocks.find((b) => b.id === "v2Main");
+
+        frame.props.elements.push({
+          id: "v2Photo2", type: "photo", follow: "transform",
+          x: 60, y: 40, width: 50, height: 40, props: { slot: "photo_2" }
+        });
+
+        return pkg;
+
+      };
+
+      const page = await openStudio(browser, { package: structPackage({}) });
+      const frame = await canvasFrame(page, false);
+
+      await enableCanvasEditing(page);
+
+      await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      const state = (p) => p.evaluate(() => window.getStudioCanvasLayersState());
+
+      const order = async (p, filter) =>
+        (await state(p)).rows.filter(filter).map((r) => r.id).join(",");
+
+      const blocksOrder = (p) => order(p, (r) => r.kind === "block");
+      const innerOrder = (p) => order(p, (r) => r.kind === "frame-element");
+      const overlaysOrder = (p) => order(p, (r) => r.kind === "overlay");
+
+      const rowBox = (p, id) =>
+        p.evaluate((rowId) => {
+          const el = document.querySelector(
+            `.studio-canvas-layers-row[data-layer-id="${rowId}"]`);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { left: r.left, top: r.top, right: r.right, bottom: r.bottom,
+                   cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+        }, id);
+
+      const handleBox = (p, id) =>
+        p.evaluate((rowId) => {
+          const el = document.querySelector(`[data-layer-handle="${rowId}"]`);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+        }, id);
+
+      /*
+        묶음 제목의 자리.
+
+        ★ 먼저 **가운데로 스크롤해 둔다.** 목록 맨 끝의 자리는 끄는
+          동안의 자동 넘김 띠에 걸릴 수 있고, 그러면 겨누던 자리가
+          손가락 밑에서 빠져나간다(사람도 그래서 먼저 스크롤한다).
+      */
+      /* 그 행의 위 끝 · 아래 끝 · 가운데 — **부를 때** 잰다 */
+      const rowEdge = async (p, id, where) => {
+
+        const box = await rowBox(p, id);
+
+        if (!box) return null;
+
+        return {
+          x: box.cx,
+          y: where === "top" ? box.top + 2
+            : where === "bottom" ? box.bottom - 2
+            : box.cy
+        };
+
+      };
+
+
+      const groupBox = (p, key) =>
+        p.evaluate((k) => {
+          const el = document.querySelector(
+            `.studio-canvas-layers-group[data-layer-group="${k}"]`);
+          if (!el) return null;
+          el.scrollIntoView({ block: "center" });
+          const r = el.getBoundingClientRect();
+          return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+        }, key);
+
+      /*
+        손잡이에서 어떤 점까지 끈다 — 실제 mouse pointer 다.
+
+        ★ **누른 뒤에 목표를 다시 잰다.** 끌기가 시작되면 그 행이
+          골라지고 패널이 다시 그려질 수 있어서, 누르기 전에 잰 좌표는
+          이미 낡아 있을 수 있다(2026-09-23 실측: 묶음 제목이 74px
+          내려가 있었다). 사람도 누른 뒤에 목표를 보고 옮긴다.
+
+        `point` 가 함수면 그 함수를 **끌기가 시작된 뒤에** 부른다.
+      */
+      const dragRowTo = async (p, id, point) => {
+
+        const from = await handleBox(p, id);
+
+        if (!from) throw new Error("끌 자리를 찾지 못했습니다: " + id);
+
+        await p.mouse.move(from.x, from.y);
+        await p.mouse.down();
+        await p.mouse.move(from.x + 4, from.y + 4);
+
+        await sleep(150);
+
+        const to =
+          (typeof point === "function") ? await point() : point;
+
+        if (!to) {
+          await p.mouse.up();
+          throw new Error("놓을 자리를 찾지 못했습니다: " + id);
+        }
+
+        const tx = (to.x === undefined) ? to.cx : to.x;
+        const ty = (to.y === undefined) ? to.cy : to.y;
+
+        for (let i = 1; i <= 8; i += 1) {
+          await p.mouse.move(
+            from.x + (tx - from.x) * (i / 8),
+            from.y + (ty - from.y) * (i / 8)
+          );
+        }
+
+        await p.mouse.up();
+
+        await sleep(700);
+
+      };
+
+      const undoCount = async (p) => (await historyState(p)).undo;
+
+
+      /* ---- 1. flow.blocks 안의 순서 ---- */
+
+      const blocksBefore = await blocksOrder(page);
+
+      check("시작 순서가 스킨 그대로다",
+        blocksBefore === "v2Logo,v2Text,v2Rule,v2Wide,v2Main",
+        blocksBefore);
+
+      /* 마지막 블록을 **첫째 자리**로 */
+      await dragRowTo(page, "v2Main", () => rowEdge(page, "v2Logo", "top"));
+
+      check("★ 블록을 첫째 자리로 옮긴다",
+        (await blocksOrder(page)) === "v2Main,v2Logo,v2Text,v2Rule,v2Wide",
+        await blocksOrder(page));
+
+      check("★ 옮겨도 트리 순서 = draft 배열 순서다",
+        (await page.evaluate(() =>
+          window.studioCanvasNodeList()
+            .filter((n) => n.kind === "block").map((n) => n.id).join(","))) ===
+          (await blocksOrder(page)),
+        "화면만의 정렬을 만들지 않는다");
+
+      /* 가운데 자리로 */
+      await dragRowTo(page, "v2Main", () => rowEdge(page, "v2Rule", "bottom"));
+
+      check("★ 가운데 자리로도 옮긴다",
+        (await blocksOrder(page)) === "v2Logo,v2Text,v2Rule,v2Main,v2Wide",
+        await blocksOrder(page));
+
+      /* 마지막 자리로 되돌린다 */
+      await dragRowTo(page, "v2Main", () => rowEdge(page, "v2Wide", "bottom"));
+
+      check("★ 마지막 자리로 옮긴다",
+        (await blocksOrder(page)) === "v2Logo,v2Text,v2Rule,v2Wide,v2Main",
+        await blocksOrder(page));
+
+
+      /* ---- 2. 변화 없는 drop 은 기록 0 칸 ---- */
+
+      const beforeNoop = await undoCount(page);
+      const jsonNoop = JSON.stringify(await readCanvas(page));
+
+      await dragRowTo(page, "v2Rule", () => rowEdge(page, "v2Rule", "middle"));
+
+      check("★ 변화 없는 drop 은 Undo 칸을 먹지 않는다",
+        (await undoCount(page)) === beforeNoop &&
+        JSON.stringify(await readCanvas(page)) === jsonNoop,
+        JSON.stringify({ before: beforeNoop, after: await undoCount(page) }));
+
+
+      /* ---- 3. 금지된 drop — 다른 부모의 자리 ---- */
+
+      const jsonForbidden = JSON.stringify(await readCanvas(page));
+      const beforeForbidden = await undoCount(page);
+
+      /* 블록을 `페이지 장식` 묶음 제목 위로 — 흐름 블록은 거기로 갈 수 없다 */
+      const overlayHeader = await groupBox(page, "overlay");
+
+      const forbidden = await (async () => {
+
+        const from = await handleBox(page, "v2Rule");
+
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(overlayHeader.cx, overlayHeader.cy, { steps: 8 });
+
+        const seen = await page.evaluate(() =>
+          window.getStudioCanvasLayersDragState());
+
+        await page.mouse.up();
+        await sleep(500);
+
+        return seen;
+
+      })();
+
+      check("★ 금지된 자리는 끌고 있는 동안에도 금지로 보인다",
+        forbidden.dragging === true && forbidden.drop === "none",
+        JSON.stringify(forbidden));
+
+      check("★ 금지된 자리에 놓아도 아무 일도 없다(기록 0 칸)",
+        JSON.stringify(await readCanvas(page)) === jsonForbidden &&
+        (await undoCount(page)) === beforeForbidden,
+        "flow block 은 overlay 로도 main_visual 안으로도 가지 않는다");
+
+      /* ★ 폴더 행 위라고 해서 "안으로 들어간다"가 아니다.
+
+         블록에게 `메인 비주얼` 행은 **같은 부모의 형제 한 줄**이다 —
+         거기에 놓으면 그 앞/뒤 자리로 가는 것이 맞고, 프레임 **안**으로
+         들어가는 길은 블록에게 아예 없다. 재는 것은 그 둘이다. */
+
+      const ontoFolder = await (async () => {
+
+        const from = await handleBox(page, "v2Rule");
+        const folder = await rowBox(page, "v2Main");
+
+        await page.mouse.move(from.x, from.y);
+        await page.mouse.down();
+        await page.mouse.move(folder.cx, folder.cy, { steps: 6 });
+
+        const seen = await page.evaluate(() =>
+          window.getStudioCanvasLayersDragState());
+
+        await page.mouse.up();
+        await sleep(600);
+
+        return seen;
+
+      })();
+
+      check("★ 블록을 메인 비주얼 폴더 위에 놓아도 **안으로 들어가지 않는다**",
+        ontoFolder.drop === "reorder" &&
+        (await state(page)).rows.some(
+          (r) => r.id === "v2Rule" && r.kind === "block" && !r.parentId),
+        JSON.stringify(ontoFolder));
+
+      check("★ 프레임 안에는 블록 종류가 한 개도 없다(폴더는 한 단계다)",
+        (await state(page)).rows
+          .filter((r) => r.kind === "frame-element")
+          .every((r) => r.type !== "main_visual" && r.type !== "divider"),
+        JSON.stringify((await state(page)).rows
+          .filter((r) => r.kind === "frame-element").map((r) => r.type)));
+
+
+      /* ---- 4. 프레임 내부 요소의 순서 ---- */
+
+      const innerBefore = await innerOrder(page);
+
+      /* 앞 절이 블록 순서를 한 번 더 바꿨다 — 지금 값을 기준으로 잰다 */
+      const blocksAtInner = await blocksOrder(page);
+
+      check("프레임 내부 시작 순서",
+        innerBefore === "v2Paper,v2Photo,v2Tag,v2Photo2", innerBefore);
+
+      await dragRowTo(page, "v2Paper", () => rowEdge(page, "v2Photo2", "bottom"));
+
+      check("★ main_visual 내부 요소의 순서를 바꾼다(맨 뒤로)",
+        (await innerOrder(page)) === "v2Photo,v2Tag,v2Photo2,v2Paper",
+        await innerOrder(page));
+
+      check("★ 내부 순서를 바꿔도 블록 순서 · 장식은 그대로다",
+        (await blocksOrder(page)) === blocksAtInner &&
+        (await overlaysOrder(page)) === "v2Over",
+        JSON.stringify({ before: blocksAtInner, after: await blocksOrder(page) }));
+
+
+      /* ---- 5. overlays 의 순서 ---- */
+
+      await addMaterial(page, "overlay", "shape");
+      await sleep(500);
+
+      await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      const madeId = await page.evaluate(() =>
+        window.getStudioCanvasSelection().primaryId);
+
+      check("새 장식이 맨 뒤에 생겼다",
+        (await overlaysOrder(page)) === `v2Over,${madeId}`,
+        await overlaysOrder(page));
+
+      await dragRowTo(page, madeId, () => rowEdge(page, "v2Over", "top"));
+
+      check("★ overlays 의 순서를 바꾼다",
+        (await overlaysOrder(page)) === `${madeId},v2Over`,
+        await overlaysOrder(page));
+
+      check("★ 순서를 바꿔도 같은 id 가 골라진 채로 남는다",
+        (await page.evaluate(() =>
+          window.getStudioCanvasSelection().primaryId)) === madeId,
+        "소속도 좌표도 안 바뀌었으므로 선택이 살아 있다");
+
+
+      /* ---- 6. 묶기 — 폴더에 떨군다 ---- */
+
+      const screenBox = async (id) =>
+        (await rectsFor(page, frame, false, [id]))[byId(id)];
+
+      const beforeAttach = await screenBox("v2Over");
+
+      const attachedRotation = await page.evaluate(() => {
+        const c = currentWorkingSkin.regions.find((r) => r.name === "home_canvas");
+        return (c.canvas.overlays.find((o) => o.id === "v2Over") || {}).rotation;
+      });
+
+      await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(300);
+
+      await dragRowTo(page, "v2Over", () => rowEdge(page, "v2Main", "middle"));
+
+      const afterAttach = await state(page);
+
+      check("★ overlay 를 **떨군 그 폴더**의 자식으로 옮긴다",
+        afterAttach.rows.some(
+          (r) => r.id === "v2Over" && r.kind === "frame-element" &&
+                 r.parentId === "v2Main"),
+        JSON.stringify(afterAttach.rows.find((r) => r.id === "v2Over")));
+
+      check("★ 묶은 뒤 그 폴더가 펼쳐져 보인다",
+        afterAttach.drawn.indexOf("v2Over") !== -1,
+        JSON.stringify(afterAttach.drawn));
+
+      const afterAttachBox = await screenBox("v2Over");
+
+      check("★ 묶어도 화면 자리 · 크기가 그대로다(±2px)",
+        Math.abs(afterAttachBox.left - beforeAttach.left) <= 2 &&
+        Math.abs(afterAttachBox.top - beforeAttach.top) <= 2 &&
+        Math.abs((afterAttachBox.right - afterAttachBox.left) -
+                 (beforeAttach.right - beforeAttach.left)) <= 2,
+        JSON.stringify({ before: beforeAttach, after: afterAttachBox }));
+
+      check("★ id · 각도는 바뀌지 않는다",
+        (await page.evaluate(() => {
+          const c = currentWorkingSkin.regions.find((r) => r.name === "home_canvas");
+          const f = c.canvas.flow.blocks.find((b) => b.id === "v2Main");
+          const n = f.props.elements.find((e) => e.id === "v2Over");
+          return n ? n.rotation : null;
+        })) === attachedRotation,
+        String(attachedRotation));
+
+
+      /* ---- 7. 빼기 — `페이지 장식` 제목에 떨군다 ---- */
+
+      const beforeDetach = await screenBox("v2Tag");
+
+      await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(300);
+
+      /* v2Tag 는 pin 을 쓰는 요소다 — 빼기의 두 계산 중 나머지 하나 */
+      await dragRowTo(page, "v2Tag", () => groupBox(page, "overlay"));
+
+      check("★ pin 을 쓰는 프레임 내부 요소를 페이지 장식으로 뺀다",
+        (await state(page)).rows.some(
+          (r) => r.id === "v2Tag" && r.kind === "overlay"),
+        JSON.stringify((await state(page)).rows.find((r) => r.id === "v2Tag")));
+
+      const afterDetachBox = await screenBox("v2Tag");
+
+      check("★ 빼도 화면 자리 · 크기가 그대로다(±2px)",
+        Math.abs(afterDetachBox.left - beforeDetach.left) <= 2 &&
+        Math.abs(afterDetachBox.top - beforeDetach.top) <= 2,
+        JSON.stringify({ before: beforeDetach, after: afterDetachBox }));
+
+      /* transform 을 쓰는 요소도 */
+      const beforeDetach2 = await screenBox("v2Paper");
+
+      await dragRowTo(page, "v2Paper", () => groupBox(page, "overlay"));
+
+      const afterDetach2 = await screenBox("v2Paper");
+
+      check("★ transform 을 쓰는 요소도 뺀다",
+        (await state(page)).rows.some(
+          (r) => r.id === "v2Paper" && r.kind === "overlay"),
+        JSON.stringify({
+          row: (await state(page)).rows.find((r) => r.id === "v2Paper"),
+          note: (await state(page)).note
+        }));
+
+      check("★ transform 요소도 화면 자리 · 크기가 그대로다(±2px)",
+        Math.abs(afterDetach2.left - beforeDetach2.left) <= 2 &&
+        Math.abs(afterDetach2.top - beforeDetach2.top) <= 2 &&
+        Math.abs((afterDetach2.right - afterDetach2.left) -
+                 (beforeDetach2.right - beforeDetach2.left)) <= 2,
+        JSON.stringify({ before: beforeDetach2, after: afterDetach2 }));
+
+      check("★ 대표 사진은 뺄 수 없고 이유를 말한다",
+        await (async () => {
+          await dragRowTo(page, "v2Photo", () => groupBox(page, "overlay"));
+          const now = await state(page);
+          return now.rows.some(
+            (r) => r.id === "v2Photo" && r.kind === "frame-element") &&
+            now.note.indexOf("대표 사진") !== -1;
+        })(),
+        (await state(page)).note);
+
+
+      /* ---- 8. 대표 사진 ---- */
+
+      const primaryBefore = JSON.stringify(await readCanvas(page));
+
+      await page.click("#studioCanvasLayerPrimary-v2Photo2");
+      await sleep(500);
+
+      const afterPrimary = await state(page);
+
+      check("★ 다른 사진을 대표로 지정한다",
+        afterPrimary.rows.some((r) => r.id === "v2Photo2" && r.primary === true) &&
+        afterPrimary.rows.some((r) => r.id === "v2Photo" && r.primary === false),
+        JSON.stringify(afterPrimary.rows.filter((r) => r.canBePrimary)));
+
+      check("★ 옛 대표는 지워지지 않고 보통 사진으로 남는다",
+        afterPrimary.rows.some(
+          (r) => r.id === "v2Photo" && r.kind === "frame-element" &&
+                 r.parentId === "v2Main"),
+        "");
+
+      check("★ 대표 지정 한 번 = Undo 한 칸",
+        await (async () => {
+          await page.click("#studioUndoButton");
+          await sleep(600);
+          return JSON.stringify(await readCanvas(page)) === primaryBefore;
+        })(),
+        "↶ 한 번이면 옛 대표로 돌아온다");
+
+      await page.click("#studioRedoButton");
+      await sleep(600);
+
+      check("Redo 하면 새 대표가 돌아온다",
+        (await state(page)).rows.some(
+          (r) => r.id === "v2Photo2" && r.primary === true));
+
+      check("★ 대표 사진의 ★ 단추는 눌러도 아무 일이 없다(이미 대표다)",
+        await page.evaluate(() =>
+          document.getElementById("studioCanvasLayerPrimary-v2Photo2").disabled === true));
+
+
+      /* ---- 9. 숨김 ---- */
+
+      const beforeHide = await undoCount(page);
+
+      await page.click("#studioCanvasLayerEye-v2Text");
+      await sleep(500);
+
+      /* ★ Preview 는 **프레임 안**이다(native 도 iframe 하나다). 위
+         문서에서 찾으면 언제나 null 이라 "사라졌다"가 거저 참이 된다. */
+      check("★ 눈을 누르면 hidden 이 켜지고 Preview 에서 사라진다",
+        (await state(page)).rows.some((r) => r.id === "v2Text" && r.hidden === true) &&
+        await frame.evaluate(() => {
+          const el = document.querySelector('[data-imory-edit-id="v2Text"]');
+          return !!el && el.hidden === true;
+        }),
+        JSON.stringify(await frame.evaluate(() => {
+          const el = document.querySelector('[data-imory-edit-id="v2Text"]');
+          return { found: !!el, hidden: el ? el.hidden : null };
+        })));
+
+      check("★ 숨겨도 Layers 행은 남는다(다시 켜는 유일한 길)",
+        (await state(page)).drawn.indexOf("v2Text") !== -1,
+        JSON.stringify((await state(page)).drawn));
+
+      check("★ 숨기기 한 번 = Undo 한 칸",
+        (await undoCount(page)) === beforeHide + 1,
+        JSON.stringify({ before: beforeHide, after: await undoCount(page) }));
+
+      await page.click("#studioCanvasLayerEye-v2Text");
+      await sleep(500);
+
+      /* Preview 는 다시 그려진 뒤에 잰다 — 그리기가 끝나기 전의
+         null 을 "안 돌아왔다"로 읽지 않는다 */
+      await frame.waitForFunction(
+        () => {
+          const el = document.querySelector('[data-imory-edit-id="v2Text"]');
+          return !!el && el.hidden === false;
+        },
+        null, { timeout: 10000 }
+      ).catch(() => null);
+
+      check("★ 다시 켜면 Preview 에 돌아온다",
+        (await state(page)).rows.some((r) => r.id === "v2Text" && r.hidden === false) &&
+        await frame.evaluate(() => {
+          const el = document.querySelector('[data-imory-edit-id="v2Text"]');
+          return !!el && el.hidden === false;
+        }),
+        JSON.stringify(await frame.evaluate(() => {
+          const el = document.querySelector('[data-imory-edit-id="v2Text"]');
+          return { found: !!el, hidden: el ? el.hidden : null };
+        })));
+
+      check("★ 켰다 끄면 JSON 이 처음 모양으로 정확히 돌아온다",
+        await page.evaluate(() => {
+          const c = currentWorkingSkin.regions.find((r) => r.name === "home_canvas");
+          const b = c.canvas.flow.blocks.find((x) => x.id === "v2Text");
+          return !("hidden" in b);
+        }),
+        "끄면 칸을 지운다 — 계산값을 기본값인 척 적지 않는다");
+
+      check("★ 대표 사진은 숨길 수 없고 이유를 말한다",
+        await (async () => {
+          await page.click("#studioCanvasLayerEye-v2Photo2");
+          await sleep(400);
+          const now = await state(page);
+          return now.rows.some((r) => r.id === "v2Photo2" && r.hidden === false) &&
+            now.note.indexOf("대표 사진") !== -1;
+        })(),
+        (await state(page)).note);
+
+
+      /* ---- 10. 잠금 ---- */
+
+      await page.click("#studioCanvasLayerLock-v2Rule");
+      await sleep(500);
+
+      check("★ 자물쇠를 누르면 locked 가 켜진다",
+        (await state(page)).rows.some((r) => r.id === "v2Rule" && r.locked === true),
+        "");
+
+      const lockedClick = await (async () => {
+
+        await clickElement(page, frame, false, "v2Logo").catch(() => null);
+        await sleep(600);
+
+        const before = await page.evaluate(() =>
+          window.getStudioCanvasSelection().primaryId);
+
+        await clickElement(page, frame, false, "v2Rule").catch(() => null);
+        await sleep(600);
+
+        const after = await page.evaluate(() =>
+          window.getStudioCanvasSelection().primaryId);
+
+        return { before, after };
+
+      })();
+
+      check("★ 잠근 요소는 Preview 클릭에서 빠진다",
+        lockedClick.after !== "v2Rule",
+        JSON.stringify(lockedClick));
+
+      await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      check("★ 잠근 것도 Layers 에서 풀 수 있다",
+        await (async () => {
+          await page.click("#studioCanvasLayerLock-v2Rule");
+          await sleep(500);
+          return (await state(page)).rows.some(
+            (r) => r.id === "v2Rule" && r.locked === false);
+        })(),
+        "");
+
+
+      /* ---- 11. 삭제 ---- */
+
+      const beforeRemove = JSON.stringify(await readCanvas(page));
+
+      await page.click("#studioCanvasLayerRemove-v2Rule");
+      await sleep(600);
+
+      check("★ 단순 요소를 지운다",
+        (await state(page)).rows.every((r) => r.id !== "v2Rule"),
+        JSON.stringify((await state(page)).rows.map((r) => r.id)));
+
+      check("★ 지운 뒤 없는 id 가 선택에 남지 않는다",
+        (await page.evaluate(() =>
+          window.getStudioCanvasSelection().ids.indexOf("v2Rule"))) === -1,
+        "");
+
+      check("★ 삭제는 Undo 로 되살아난다",
+        await (async () => {
+          await page.click("#studioUndoButton");
+          await sleep(700);
+          return JSON.stringify(await readCanvas(page)) === beforeRemove;
+        })(),
+        "지운 것을 어딘가에 담아 두지 않는다 — 되살리는 길은 Undo 하나다");
+
+      await page.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      check("★ 대표 사진은 지울 수 없고 이유를 말한다",
+        await (async () => {
+          const before = JSON.stringify(await readCanvas(page));
+          await page.click("#studioCanvasLayerRemove-v2Photo2");
+          await sleep(500);
+          const now = await state(page);
+          return JSON.stringify(await readCanvas(page)) === before &&
+            now.note.indexOf("대표 사진") !== -1;
+        })(),
+        (await state(page)).note);
+
+      /* main_visual 은 자식 수를 보여 주고 한 번 묻는다 */
+      let asked = "";
+
+      page.on("dialog", async (dialog) => {
+        asked = dialog.message();
+        await dialog.dismiss();
+      });
+
+      const beforeCancel = JSON.stringify(await readCanvas(page));
+      const undoBeforeCancel = await undoCount(page);
+
+      await page.click("#studioCanvasLayerRemove-v2Main");
+      await sleep(600);
+
+      check("★ 메인 비주얼 삭제는 자식 수를 보여 주고 묻는다",
+        /요소\s*\d+개/.test(asked), asked);
+
+      check("★ 취소하면 기록 0 칸이다",
+        JSON.stringify(await readCanvas(page)) === beforeCancel &&
+        (await undoCount(page)) === undoBeforeCancel,
+        "묻는 자리는 문 앞이다 — draft 에 닿은 뒤 되돌리지 않는다");
+
+
+      /* ---- 12. Save → 다시 열기 ---- */
+
+      const beforeSave = JSON.stringify(await readCanvas(page));
+
+      await page.click("#studioSaveButton");
+
+      await page.waitForFunction(
+        () => Array.isArray(window.__savedDraftCallsLay) &&
+          window.__savedDraftCallsLay.length > 0,
+        null, { timeout: 15000 }
+      );
+
+      const savedContent = await page.evaluate(() => {
+        const calls = window.__savedDraftCallsLay;
+        return calls[calls.length - 1].p_content;
+      });
+
+      check("pageerror 0", page.__errors.length === 0,
+        page.__errors.slice(0, 2).join(" | "));
+
+      await close(page);
+
+      const again = await openStudio(browser, { package: savedContent });
+
+      await canvasFrame(again, false);
+
+      check("★ Save → 다시 열기에서 순서 · 소속 · 상태가 글자 단위로 같다",
+        JSON.stringify(await readCanvas(again)) === beforeSave);
+
+      await enableCanvasEditing(again);
+
+      await again.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      check("★ 다시 연 Studio 의 트리가 저장된 배열 순서 그대로다",
+        (await state(again)).rows.map((r) => r.id).join(",") ===
+          (await again.evaluate(() =>
+            window.studioCanvasNodeList().map((n) => n.id).join(","))),
+        JSON.stringify((await state(again)).rows.map((r) => r.id)));
+
+      check("다시 열기 pageerror 0", again.__errors.length === 0,
+        again.__errors.slice(0, 2).join(" | "));
+
+      await close(again);
+
+
+      /* ---- 13. 390px — 길게 눌러야 끌린다 ----
+
+         손가락은 합성 PointerEvent 로 만든다. Playwright 의
+         touchscreen 에는 끌기가 없고, 여기서 재려는 것은 **타이머와
+         슬롭의 판정**이라 합성으로 충분하다(제스처를 받는 코드가
+         pointerType 하나로 갈린다).
+      */
+
+      const touchPage = await openStudio(browser, {
+        package: structPackage({}),
+        viewport: { width: 390, height: 844 }
+      });
+
+      await canvasFrame(touchPage, false);
+
+      await enableCanvasEditing(touchPage);
+
+      await touchPage.evaluate(() =>
+        window.showStudioLeftPanelMode("layers", { sheet: "full" }));
+
+      await sleep(600);
+
+      /* 합성 touch pointer 한 벌 */
+      await touchPage.evaluate(() => {
+
+        window.__touch = {
+
+          down(id, dx, dy) {
+            const el = document.querySelector(`[data-layer-handle="${id}"]`);
+            const r = el.getBoundingClientRect();
+            window.__touchAt = {
+              x: r.left + r.width / 2 + (dx || 0),
+              y: r.top + r.height / 2 + (dy || 0)
+            };
+            el.dispatchEvent(new PointerEvent("pointerdown", {
+              bubbles: true, cancelable: true, pointerId: 7,
+              pointerType: "touch", button: 0, isPrimary: true,
+              clientX: window.__touchAt.x, clientY: window.__touchAt.y
+            }));
+          },
+
+          move(x, y) {
+            window.__touchAt = { x: x, y: y };
+            document.dispatchEvent(new PointerEvent("pointermove", {
+              bubbles: true, cancelable: true, pointerId: 7,
+              pointerType: "touch", isPrimary: true, clientX: x, clientY: y
+            }));
+          },
+
+          moveTo(id, edge) {
+            const el = document.querySelector(
+              `.studio-canvas-layers-row[data-layer-id="${id}"]`);
+            const r = el.getBoundingClientRect();
+            window.__touch.move(
+              r.left + r.width / 2,
+              edge === "top" ? r.top + 2 : r.bottom - 2
+            );
+          },
+
+          up() {
+            document.dispatchEvent(new PointerEvent("pointerup", {
+              bubbles: true, cancelable: true, pointerId: 7,
+              pointerType: "touch", isPrimary: true,
+              clientX: window.__touchAt.x, clientY: window.__touchAt.y
+            }));
+          }
+
+        };
+
+      });
+
+      const dragState = (p) =>
+        p.evaluate(() => window.getStudioCanvasLayersDragState());
+
+      const longPressMs = await touchPage.evaluate(() =>
+        window.STUDIO_CANVAS_LAYERS_LONG_PRESS_MS);
+
+      check("★ 길게 누르기 시간이 실측값 하나다",
+        longPressMs === 350, String(longPressMs));
+
+      /* (a) 짧게 누르면 시작되지 않는다 */
+      await touchPage.evaluate(() => window.__touch.down("v2Logo"));
+      await sleep(120);
+
+      const early = await dragState(touchPage);
+
+      await touchPage.evaluate(() => window.__touch.up());
+      await sleep(300);
+
+      check("★ 짧게 누르면 끌기가 시작되지 않는다",
+        early.armed === true && early.dragging === false,
+        JSON.stringify(early));
+
+      /* (b) 타이머 전에 움직이면 스크롤 의도다 — 취소 */
+      const beforeScrollIntent = JSON.stringify(await readCanvas(touchPage));
+
+      await touchPage.evaluate(() => window.__touch.down("v2Logo"));
+      await sleep(120);
+      await touchPage.evaluate(() =>
+        window.__touch.move(window.__touchAt.x, window.__touchAt.y + 40));
+      await sleep(400);
+
+      const cancelled = await dragState(touchPage);
+
+      await touchPage.evaluate(() => window.__touch.up());
+      await sleep(400);
+
+      check("★ 길게 누르기 전에 움직이면 스크롤 의도로 읽고 취소한다",
+        cancelled.armed === false && cancelled.dragging === false &&
+        JSON.stringify(await readCanvas(touchPage)) === beforeScrollIntent,
+        JSON.stringify(cancelled));
+
+      /* (c) 길게 누르면 시작된다 */
+      await touchPage.evaluate(() => window.__touch.down("v2Main"));
+      await sleep(longPressMs + 150);
+
+      const held = await dragState(touchPage);
+
+      check("★ 길게 누르면 끌기가 시작된다",
+        held.dragging === true && held.id === "v2Main",
+        JSON.stringify(held));
+
+      await touchPage.evaluate(() => window.__touch.moveTo("v2Logo", "top"));
+      await sleep(120);
+      await touchPage.evaluate(() => window.__touch.up());
+      await sleep(700);
+
+      check("★ 좁은 화면에서도 순서가 바뀐다",
+        (await state(touchPage)).rows
+          .filter((r) => r.kind === "block").map((r) => r.id)
+          .join(",") === "v2Main,v2Logo,v2Text,v2Rule,v2Wide",
+        JSON.stringify((await state(touchPage)).rows
+          .filter((r) => r.kind === "block").map((r) => r.id)));
+
+      /* (d) Escape 로 취소 */
+      const beforeEsc = JSON.stringify(await readCanvas(touchPage));
+
+      await touchPage.evaluate(() => window.__touch.down("v2Logo"));
+      await sleep(longPressMs + 150);
+      await touchPage.evaluate(() => window.__touch.moveTo("v2Wide", "bottom"));
+      await sleep(100);
+
+      const focusAt = await touchPage.evaluate(() =>
+        (document.activeElement && document.activeElement.tagName) || "none");
+
+      await touchPage.keyboard.press("Escape");
+      await sleep(300);
+
+      const escaped = { ...(await dragState(touchPage)), focusAt };
+
+      await touchPage.evaluate(() => window.__touch.up());
+      await sleep(500);
+
+      check("★ Escape 는 끌기를 취소한다(기록 0 칸)",
+        escaped.dragging === false &&
+        JSON.stringify(await readCanvas(touchPage)) === beforeEsc,
+        JSON.stringify(escaped));
+
+      /* (e) pointercancel 도 취소다 */
+      await touchPage.evaluate(() => window.__touch.down("v2Logo"));
+      await sleep(longPressMs + 150);
+      await touchPage.evaluate(() =>
+        document.dispatchEvent(new PointerEvent("pointercancel", {
+          bubbles: true, pointerId: 7, pointerType: "touch"
+        })));
+      await sleep(200);
+
+      check("★ pointercancel 도 끌기를 취소한다",
+        (await dragState(touchPage)).armed === false &&
+        JSON.stringify(await readCanvas(touchPage)) === beforeEsc,
+        "");
+
+      /* (f) 패널 세로 스크롤이 산다 */
+      const scrolls = await touchPage.evaluate(() => {
+        const section = document.getElementById("studioLeftPanelLayers");
+        const root = document.getElementById("studioCanvasLayers");
+        const handle = document.querySelector(".studio-canvas-layers-handle");
+        const row = document.querySelector(".studio-canvas-layers-row");
+        const before = section.scrollTop;
+        section.scrollTop = before + 40;
+        const moved = section.scrollTop !== before;
+        section.scrollTop = before;
+        return {
+          moved: moved || section.scrollHeight <= section.clientHeight,
+          rootTouch: getComputedStyle(root).touchAction,
+          rowTouch: getComputedStyle(row).touchAction,
+          handleTouch: getComputedStyle(handle).touchAction
+        };
+      });
+
+      check("★ 손잡이만 touch-action:none 이고 행 · 패널은 그대로다",
+        scrolls.handleTouch === "none" &&
+        scrolls.rootTouch !== "none" && scrolls.rowTouch !== "none" &&
+        scrolls.moved === true,
+        JSON.stringify(scrolls));
+
+      check("390px pageerror 0", touchPage.__errors.length === 0,
+        touchPage.__errors.slice(0, 2).join(" | "));
+
+      await close(touchPage);
+
+
+      /* ---- 14. 다중 선택 상태에서는 거부한다 ---- */
+
+      const multi = await openStudio(browser, { package: structPackage({}) });
+
+      await canvasFrame(multi, false);
+
+      await enableCanvasEditing(multi);
+
+      await multi.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(400);
+
+      await multi.click("#studioCanvasLayer-v2Logo");
+      await sleep(400);
+
+      await multi.click("#studioCanvasLayer-v2Text", { modifiers: ["Control"] });
+      await sleep(500);
+
+      const picked = await multi.evaluate(() =>
+        window.getStudioCanvasSelection().ids.slice());
+
+      check("둘을 골랐다", picked.length === 2, JSON.stringify(picked));
+
+      const multiJson = JSON.stringify(await readCanvas(multi));
+
+      const from = await handleBox(multi, "v2Text");
+
+      await multi.mouse.move(from.x, from.y);
+      await multi.mouse.down();
+      await multi.mouse.move(from.x, from.y - 60, { steps: 6 });
+
+      const refused = await dragState(multi);
+
+      await multi.mouse.up();
+      await sleep(500);
+
+      check("★ 다중 선택에서는 구조 drag 를 시작하지 않는다",
+        refused.armed === false && refused.dragging === false &&
+        JSON.stringify(await readCanvas(multi)) === multiJson,
+        JSON.stringify(refused));
+
+      const kept = await multi.evaluate(() =>
+        window.getStudioCanvasSelection().ids.slice());
+
+      check("★ 선택을 조용히 해제하지 않고 이유를 적는다",
+        kept.join(",") === picked.join(",") &&
+        (await state(multi)).note.indexOf("여러 요소") !== -1,
+        JSON.stringify({ kept, note: (await state(multi)).note }));
+
+      check("다중 선택 pageerror 0", multi.__errors.length === 0,
+        multi.__errors.slice(0, 2).join(" | "));
+
+      await close(multi);
+
+
+      /* ---- 15. sandbox 에서도 같은 한 길 ---- */
+
+      const sbStruct = await openStudio(browser, {
+        package: structPackage({ sandbox: true }),
+        sandbox: true
+      });
+
+      const sbStructFrame = await canvasFrame(sbStruct, true);
+
+      await enableCanvasEditing(sbStruct);
+
+      await sbStruct.evaluate(() => window.showStudioLeftPanelMode("layers"));
+      await sleep(500);
+
+      await dragRowTo(sbStruct, "v2Main", () => rowEdge(sbStruct, "v2Logo", "top"));
+
+      check("★ sandbox 에서도 순서가 같은 결과다",
+        (await state(sbStruct)).rows.filter((r) => r.kind === "block")
+          .map((r) => r.id).join(",") === "v2Main,v2Logo,v2Text,v2Rule,v2Wide",
+        JSON.stringify((await state(sbStruct)).rows
+          .filter((r) => r.kind === "block").map((r) => r.id)));
+
+      await sbStruct.click("#studioCanvasLayerEye-v2Text");
+      await sleep(600);
+
+      check("★ sandbox 프레임도 숨김을 그대로 그린다",
+        await sbStructFrame.evaluate(() => {
+          const el = document.querySelector('[data-imory-edit-id="v2Text"]');
+          return !el || el.hidden === true;
+        }),
+        "네 화면이 같은 렌더러 한 벌이다");
+
+      await dragRowTo(sbStruct, "v2Over", () => rowEdge(sbStruct, "v2Main", "middle"));
+
+      check("★ sandbox 에서도 묶기가 기존 경로를 지난다",
+        (await state(sbStruct)).rows.some(
+          (r) => r.id === "v2Over" && r.kind === "frame-element" &&
+                 r.parentId === "v2Main"),
+        JSON.stringify((await state(sbStruct)).rows.find((r) => r.id === "v2Over")));
+
+      check("★ sandbox CSP 위반 0",
+        (await cspViolations(sbStructFrame)).length === 0,
+        JSON.stringify(await cspViolations(sbStructFrame)));
+
+      check("sandbox pageerror 0", sbStruct.__errors.length === 0,
+        sbStruct.__errors.slice(0, 2).join(" | "));
+
+      await close(sbStruct);
 
     }
 

@@ -262,3 +262,212 @@
   }
 
 }
+
+
+/* =========================================================
+   STUDIO-LAYERS-STRUCTURE-1 — 손잡이 · 단추 셋 · drop 표시
+
+   계약: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §32-7 · §32-8
+
+   ★ `touch-action: none` 은 **손잡이 하나**에만 있다. 패널이나 행에
+     주면 좁은 화면에서 목록을 세로로 넘길 수 없다(계획 문서 §2-3).
+========================================================== */
+
+.studio-canvas-layers-handle {
+  flex: 0 0 auto;
+
+  width: 18px;
+  height: 26px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  line-height: 1;
+
+  cursor: grab;
+
+  /* 이 요소 위의 손가락만 브라우저에서 가져오지 않는다 */
+  touch-action: none;
+
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+
+.studio-canvas-layers-handle:hover {
+  color: inherit;
+}
+
+
+.studio-canvas-layers-tree.is-dragging .studio-canvas-layers-handle {
+  cursor: grabbing;
+}
+
+
+/* ── 오른쪽 단추 셋(눈 · 자물쇠 · 삭제)과 ★ ───────────── */
+
+.studio-canvas-layers-action {
+  flex: 0 0 auto;
+
+  width: 24px;
+  height: 24px;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 0;
+
+  border: 0;
+  border-radius: 4px;
+
+  background: transparent;
+  color: inherit;
+
+  font: inherit;
+  font-size: var(--imory-font-size-200);
+  line-height: 1;
+
+  opacity: 0.55;
+
+  cursor: pointer;
+}
+
+
+.studio-canvas-layers-action:hover:not(:disabled),
+.studio-canvas-layers-action:focus-visible {
+  opacity: 1;
+
+  background: var(--system-bg-subtle, rgba(0, 0, 0, 0.06));
+}
+
+
+.studio-canvas-layers-action[aria-pressed="true"] {
+  opacity: 1;
+}
+
+
+.studio-canvas-layers-action:disabled {
+  cursor: default;
+}
+
+
+/* ★ 자리는 모든 행이 비워 둔다 — 이름이 좌우로 튀지 않게 */
+.studio-canvas-layers-star-gap {
+  flex: 0 0 auto;
+
+  width: 24px;
+  height: 24px;
+}
+
+
+/* ── 숨김 · 잠금된 행 ──────────────────────────────────
+   행은 **남는다**. 그것이 다시 켜는 유일한 길이다(계획 문서 §2-6). */
+
+.studio-canvas-layers-row[data-layer-hidden="true"] .studio-canvas-layers-name {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+
+.studio-canvas-layers-row[data-layer-locked="true"] .studio-canvas-layers-name {
+  font-style: italic;
+}
+
+
+/* ── 끌기 중 ───────────────────────────────────────────── */
+
+.studio-canvas-layers-row.is-dragged {
+  opacity: 0.5;
+}
+
+
+.studio-canvas-layers-tree.is-dragging {
+  /* 끌고 있는 동안에는 글자가 선택되지 않는다 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+
+/* 금지된 자리 — 손을 놓아도 아무 일도 없다 */
+.studio-canvas-layers-tree.is-dragging[data-drop="none"] {
+  cursor: not-allowed;
+}
+
+
+/* 순서: 들어갈 자리에 선 하나 */
+.studio-canvas-layers-row.is-drop-before {
+  box-shadow: inset 0 2px 0 var(--system-accent, currentColor);
+}
+
+
+.studio-canvas-layers-row.is-drop-after {
+  box-shadow: inset 0 -2px 0 var(--system-accent, currentColor);
+}
+
+
+/* 소속: 폴더 · 묶음 제목이 통째로 밝아진다 */
+.studio-canvas-layers-row.is-drop-into,
+.studio-canvas-layers-group.is-drop-into {
+  outline: 2px solid var(--system-accent, currentColor);
+  outline-offset: -1px;
+
+  border-radius: 5px;
+}
+
+
+/* ── 거절 이유 한 줄 ───────────────────────────────────── */
+
+.studio-canvas-layers-note {
+  margin: 0;
+
+  padding: 6px 14px 0;
+
+  color: var(--system-text-danger, #b3261e);
+
+  font-size: var(--imory-font-size-200);
+  line-height: var(--imory-line-height-relaxed);
+}
+
+
+.studio-canvas-layers-note[hidden] {
+  display: none;
+}
+
+
+/* ── 비어 있는 묶음 ────────────────────────────────────── */
+
+.studio-canvas-layers-none {
+  margin: 0 0 4px;
+
+  padding: 2px 0 2px 20px;
+
+  color: var(--system-text-muted);
+
+  font-size: var(--imory-font-size-200);
+  line-height: var(--imory-line-height-relaxed);
+}
+
+
+/* ── 390px 시트 ────────────────────────────────────────
+   손가락이 닿을 크기로 키운다. 손잡이는 길게 눌러야 끌리므로
+   (studio-canvas-layers-drag.js) 세로 스크롤은 그대로다. */
+
+@media (max-width: 720px) {
+
+  .studio-canvas-layers-handle {
+    width: 24px;
+    height: 32px;
+  }
+
+  .studio-canvas-layers-action,
+  .studio-canvas-layers-star-gap {
+    width: 30px;
+    height: 30px;
+  }
+
+}

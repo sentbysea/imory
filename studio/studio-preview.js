@@ -3551,10 +3551,13 @@ function addStudioCanvasV2Node(request) {
 
    moveStudioCanvasV2Node(request) -> { ok, id } | { ok:false, reason }
 
-     request { op, id, frameId }
-       op  "attach"  overlay → 그 프레임 안
-           "detach"  프레임 안 → overlay
-           "remove"  지운다
+     request { op, id, frameId, kind, parentId, index, expected, flag, on }
+       op  "attach"   overlay → 그 프레임 안
+           "detach"   프레임 안 → overlay
+           "remove"   지운다
+           "reorder"  같은 부모 안에서 자리 옮기기 (STUDIO-LAYERS-STRUCTURE-1)
+           "primary"  그 프레임의 대표 사진        (〃)
+           "flag"     hidden · locked 한 칸        (〃)
 
    ★ 추가(addStudioCanvasV2Node)와 **같은 자리**다. 고치는 writer 들과
      달리 `expected` 가 없고(바뀌는 것이 한 칸이 아니라 소속이다),
@@ -3655,12 +3658,15 @@ function moveStudioCanvasV2Node(request) {
     return { ok: false, reason: "shape" };
   }
 
-  /* 순수 함수 세 벌이 이 문서에 있는가 — 없으면 아무것도 하지 않는다
+  /* 순수 함수들이 이 문서에 있는가 — 없으면 아무것도 하지 않는다
      (다른 writer 들과 같은 `unsupported`) */
   if (
     typeof window.writeSkinHomeCanvasV2AttachNode !== "function" ||
     typeof window.writeSkinHomeCanvasV2DetachNode !== "function" ||
-    typeof window.writeSkinHomeCanvasV2RemoveNode !== "function"
+    typeof window.writeSkinHomeCanvasV2RemoveNode !== "function" ||
+    typeof window.writeSkinHomeCanvasV2ReorderNode !== "function" ||
+    typeof window.writeSkinHomeCanvasV2PrimaryPhoto !== "function" ||
+    typeof window.writeSkinHomeCanvasV2NodeFlag !== "function"
   ) {
     return { ok: false, reason: "unsupported" };
   }
@@ -3712,12 +3718,60 @@ function moveStudioCanvasV2Node(request) {
       );
 
   }
+  /* =====================================================
+     STUDIO-LAYERS-STRUCTURE-1 — 순서 · 대표 사진 · 숨김/잠금
+
+     ★ 셋 다 **자리 계산이 없다**. 순서는 배열 한 칸이고, 대표는
+       가리키는 이름 한 칸이며, 숨김/잠금은 상태 한 칸이다. 그래서
+       plan 을 부르지 않고 순수 함수로 곧장 간다 — 프레임의 자
+       보고가 아직 없어도 이 셋은 할 수 있다(계약 §32-4).
+  ====================================================== */
+  else if (value.op === "reorder") {
+
+    result =
+      window.writeSkinHomeCanvasV2ReorderNode(
+        currentWorkingSkin.regions,
+        {
+          id: value.id,
+          kind: value.kind,
+          parentId: (typeof value.parentId === "string") ? value.parentId : "",
+          index: value.index,
+          expected: value.expected
+        }
+      );
+
+  }
+  else if (value.op === "primary") {
+
+    result =
+      window.writeSkinHomeCanvasV2PrimaryPhoto(
+        currentWorkingSkin.regions,
+        { id: value.id, frameId: value.frameId }
+      );
+
+  }
+  else if (value.op === "flag") {
+
+    result =
+      window.writeSkinHomeCanvasV2NodeFlag(
+        currentWorkingSkin.regions,
+        { id: value.id, flag: value.flag, on: value.on }
+      );
+
+  }
   else {
     return { ok: false, reason: "op" };
   }
 
   if (!result || !result.ok) {
     return { ok: false, reason: (result && result.reason) || "rejected" };
+  }
+
+  /* 같은 값이다 — 기록도 dirty 도 만들지 않는다(§17-6, 고치는
+     writer 들과 같은 규칙). 변화 없는 drop 이 Undo 한 칸을 먹지
+     않게 하는 곳이 여기다. */
+  if (result.unchanged) {
+    return { ok: true, id: value.id, op: value.op, unchanged: true };
   }
 
   const historyBefore =

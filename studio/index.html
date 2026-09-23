@@ -1453,6 +1453,14 @@
            순서를 의존 방향과 맞춰 바로 뒤에 둔다. */
         "./inspector/studio-canvas-layers.js",
 
+        /* STUDIO-LAYERS-STRUCTURE-1 — Layers 의 구조 동작(문 하나)과
+           끌어 옮기기. 트리가 행을 만들 때 끌기 쪽 창구
+           (bindStudioCanvasLayersHandle)를 **호출 시점에** 쓰고,
+           끌기 쪽은 구조 동작의 창구를 같은 방식으로 쓴다. 그래서
+           순서가 강제되지는 않지만 읽는 순서를 의존 방향과 맞춘다. */
+        "./inspector/studio-canvas-layers-ops.js",
+        "./inspector/studio-canvas-layers-drag.js",
+
         /* STUDIO-SHELL-1 — Undo/Redo 기록과 셸(왼쪽 패널 · ··· 메뉴 ·
            현재 페이지 표시). 둘 다 studio-preview.js 의 상태와
            Inspector/Images/Dock 의 창구를 **호출 시점에** 쓰므로 그

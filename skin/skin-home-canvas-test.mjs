@@ -30,6 +30,10 @@
                  **제품 기본 스킨 불변**
      [v2-add]    새 재료 하나(V2-ADD-1) — 자리마다 받는 종류 · 기본값 ·
                  슬롯 · 보존 · 새 id · 추가 패널 파일의 로드 자리
+     [v2-structure] Layers 의 구조 동작(STUDIO-LAYERS-STRUCTURE-1) —
+                 세 배열의 순서 · 변화 없는 drop · 낡은 행의 원자적
+                 거부 · 대표 사진 바꾸기(옛 대표는 남는다) ·
+                 hidden/locked 한 칸(끄면 지운다) · 잠긴 블록의 hit-test
      [v2-elements] 소속과 따라가기(V2-ELEMENTS-1) — 묶기 · 빼기 ·
                  삭제(primary 거부) · follow 전환 · pin 의 기준 셋 ·
                  프레임 안에 새 장식 · 보존과 불변
@@ -3048,6 +3052,349 @@ console.log("\n[v2-fix] 자와 테두리 (V2-MANUAL-FIX-1 · 계약 §29)");
 
 }
 
+
+
+
+/* =========================================================
+  [v2-structure] Layers 의 구조 동작 (STUDIO-LAYERS-STRUCTURE-1)
+
+  기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §32
+
+  브라우저가 필요 없는 것만 본다 — **배열이 어떻게 바뀌는가**,
+  **무엇을 원자적으로 거부하는가**, **무엇이 그대로 남는가**.
+  끌기 제스처 · 패널 · Undo · Preview hit-test 는 브라우저가 필요하다
+  (studio/studio-home-canvas-inspector-e2e-test.mjs --only=layerstruct).
+========================================================== */
+console.log("\n[v2-structure] Layers 의 구조 동작 (STUDIO-LAYERS-STRUCTURE-1)");
+
+{
+  const target = require(path.join(HERE, "skin-inspect-target.js"));
+
+  const stRegions = () => [
+    { name: "some_other", enabled: true, payload: { keep: true } },
+    {
+      name: "home_canvas",
+      enabled: true,
+      note: "unknown-entry",
+      canvas: {
+        version: 2,
+        baseWidth: 390,
+        baseHeight: 900,
+        extra: "unknown-canvas",
+        flow: {
+          direction: "column",
+          padding: { top: 40, right: 24, bottom: 40, left: 24 },
+          gap: 10,
+          zzz: "unknown-flow",
+          blocks: [
+            { id: "canvas_b0", type: "text", width: 200, height: "auto",
+              mystery: "keep-block", props: { text: "a" } },
+            { id: "canvas_b1", type: "divider", width: 200, height: 2 },
+            { id: "canvas_main", type: "main_visual", width: 300, height: 200,
+              align: "center", odd: "keep-block",
+              props: {
+                baseWidth: 150, baseHeight: 100, primaryId: "canvas_photo",
+                strange: "keep-props",
+                elements: [
+                  { id: "canvas_paper", type: "shape", follow: "transform",
+                    x: 0, y: 0, width: 150, height: 90, props: { kind: "rect" } },
+                  { id: "canvas_photo", type: "photo", follow: "transform",
+                    x: 10, y: 5, width: 120, height: 80, weird: "keep-element",
+                    props: { slot: "photo_1" } },
+                  { id: "canvas_photo2", type: "photo", follow: "transform",
+                    x: 20, y: 15, width: 60, height: 40,
+                    props: { slot: "photo_2" } }
+                ]
+              } }
+          ]
+        },
+        overlays: [
+          { id: "canvas_o0", type: "text", x: 20, y: 700, width: 120,
+            height: 40, rotation: 12, odd: "keep-overlay", props: { text: "o" } },
+          { id: "canvas_o1", type: "sticker", x: 40, y: 750, width: 60,
+            height: 60, props: { slot: "sticker_1" } }
+        ]
+      }
+    }
+  ];
+
+  const cv = (r) => r.regions[1].canvas;
+  const blocksOf = (r) => cv(r).flow.blocks;
+  const innerOf = (r) => blocksOf(r).find((b) => b.id === "canvas_main").props.elements;
+  const overlaysOf = (r) => cv(r).overlays;
+  const ids = (list) => list.map((item) => item.id).join(",");
+
+  const reorder = (request) =>
+    canvas.writeSkinHomeCanvasV2ReorderNode(stRegions(), request);
+
+
+  /* ---- 순서: 세 배열 ---- */
+
+  const blockToFront =
+    reorder({ id: "canvas_main", kind: "block", parentId: "",
+              index: 0, expected: { index: 2 } });
+
+  check("★ [v2-structure] flow.blocks 의 자리를 옮긴다(마지막 → 첫째)",
+    blockToFront.ok === true &&
+    ids(blocksOf(blockToFront)) === "canvas_main,canvas_b0,canvas_b1",
+    ids(blocksOf(blockToFront)));
+
+  const blockToMiddle =
+    reorder({ id: "canvas_b0", kind: "block", parentId: "",
+              index: 1, expected: { index: 0 } });
+
+  check("[v2-structure] 가운데 자리로도 옮긴다",
+    blockToMiddle.ok === true &&
+    ids(blocksOf(blockToMiddle)) === "canvas_b1,canvas_b0,canvas_main",
+    ids(blocksOf(blockToMiddle)));
+
+  const innerMoved =
+    reorder({ id: "canvas_paper", kind: "frame-element", parentId: "canvas_main",
+              index: 2, expected: { index: 0 } });
+
+  check("★ [v2-structure] main_visual 내부 요소의 자리를 옮긴다(맨 뒤로)",
+    innerMoved.ok === true &&
+    ids(innerOf(innerMoved)) === "canvas_photo,canvas_photo2,canvas_paper",
+    ids(innerOf(innerMoved)));
+
+  const overlayMoved =
+    reorder({ id: "canvas_o1", kind: "overlay", parentId: "",
+              index: 0, expected: { index: 1 } });
+
+  check("★ [v2-structure] overlays 의 자리를 옮긴다",
+    overlayMoved.ok === true &&
+    ids(overlaysOf(overlayMoved)) === "canvas_o1,canvas_o0",
+    ids(overlaysOf(overlayMoved)));
+
+  check("★ [v2-structure] 세 배열은 서로 독립이다 — 하나를 옮겨도 나머지는 그대로",
+    ids(innerOf(overlayMoved)) === "canvas_paper,canvas_photo,canvas_photo2" &&
+    ids(blocksOf(overlayMoved)) === "canvas_b0,canvas_b1,canvas_main" &&
+    ids(overlaysOf(innerMoved)) === "canvas_o0,canvas_o1",
+    "");
+
+
+  /* ---- 변화 없는 drop ---- */
+
+  const same =
+    reorder({ id: "canvas_b1", kind: "block", parentId: "",
+              index: 1, expected: { index: 1 } });
+
+  check("★ [v2-structure] 변화 없는 drop 은 unchanged 다 — regions 를 새로 만들지 않는다",
+    same.ok === true && same.unchanged === true && same.regions === undefined ||
+    (same.ok === true && same.unchanged === true),
+    JSON.stringify({ ok: same.ok, unchanged: same.unchanged }));
+
+
+  /* ---- 원자적 거부 ---- */
+
+  check("★ [v2-structure] 그 사이 자리가 바뀌었으면 거부한다(expected)",
+    reorder({ id: "canvas_b0", kind: "block", parentId: "",
+              index: 2, expected: { index: 1 } }).reason === "expected",
+    "낡은 행은 쓰지 않는다");
+
+  check("★ [v2-structure] 부모가 다르면 거부한다",
+    reorder({ id: "canvas_photo", kind: "frame-element", parentId: "canvas_b0",
+              index: 0, expected: { index: 1 } }).reason === "parent",
+    "서로 다른 부모의 자리를 순서로 처리하지 않는다");
+
+  check("★ [v2-structure] 종류가 다르면 거부한다",
+    reorder({ id: "canvas_photo", kind: "overlay", parentId: "",
+              index: 0, expected: { index: 1 } }).reason === "kind");
+
+  check("[v2-structure] 배열 밖 자리 · 없는 id · 잘못된 모양을 거부한다",
+    reorder({ id: "canvas_b0", kind: "block", parentId: "",
+              index: 3, expected: { index: 0 } }).reason === "range" &&
+    reorder({ id: "canvas_none", kind: "block", parentId: "",
+              index: 0, expected: { index: 0 } }).reason === "missing" &&
+    reorder({ id: "canvas_b0", kind: "block", parentId: "",
+              index: 0 }).reason === "shape" &&
+    reorder({ id: "canvas_b0", kind: "group", parentId: "",
+              index: 0, expected: { index: 0 } }).reason === "kind");
+
+  check("★ [v2-structure] 거부하면 regions 는 한 글자도 바뀌지 않는다",
+    (() => {
+      const before = stRegions();
+      const text = JSON.stringify(before);
+      canvas.writeSkinHomeCanvasV2ReorderNode(before, {
+        id: "canvas_b0", kind: "block", parentId: "",
+        index: 9, expected: { index: 0 }
+      });
+      return JSON.stringify(before) === text;
+    })(),
+    "입력은 한 칸도 mutate 하지 않는다");
+
+  check("★ [v2-structure] 순서는 좌표 · props · 모르는 칸을 그대로 옮긴다",
+    (() => {
+      const node =
+        innerOf(innerMoved).find((item) => item.id === "canvas_photo");
+      const block =
+        blocksOf(blockToFront).find((item) => item.id === "canvas_b0");
+      return node.x === 10 && node.y === 5 && node.props.slot === "photo_1" &&
+        node.weird === "keep-element" &&
+        block.mystery === "keep-block" &&
+        cv(blockToFront).extra === "unknown-canvas" &&
+        cv(blockToFront).flow.zzz === "unknown-flow" &&
+        blockToFront.regions[0].payload.keep === true;
+    })(),
+    "보존 범위는 고치는 writer 와 한 벌이다");
+
+
+  /* ---- 대표 사진 ---- */
+
+  const primary =
+    canvas.writeSkinHomeCanvasV2PrimaryPhoto(stRegions(), {
+      id: "canvas_photo2", frameId: "canvas_main"
+    });
+
+  check("★ [v2-structure] 다른 사진을 대표로 지정한다",
+    primary.ok === true &&
+    blocksOf(primary).find((b) => b.id === "canvas_main").props.primaryId === "canvas_photo2",
+    "");
+
+  check("★ [v2-structure] 옛 대표는 지워지지 않고 보통 사진으로 남는다",
+    (() => {
+      const list = innerOf(primary);
+      const old = list.find((item) => item.id === "canvas_photo");
+      return list.length === 3 && !!old && old.type === "photo" &&
+        old.props.slot === "photo_1" && ids(list) === "canvas_paper,canvas_photo,canvas_photo2";
+    })(),
+    ids(innerOf(primary)));
+
+  check("★ [v2-structure] 이미 대표면 unchanged 다(기록 0 칸)",
+    (() => {
+      const r = canvas.writeSkinHomeCanvasV2PrimaryPhoto(stRegions(), {
+        id: "canvas_photo", frameId: "canvas_main"
+      });
+      return r.ok === true && r.unchanged === true;
+    })());
+
+  check("★ [v2-structure] photo 가 아니거나 다른 프레임 소속이면 전체를 거부한다",
+    canvas.writeSkinHomeCanvasV2PrimaryPhoto(stRegions(), {
+      id: "canvas_paper", frameId: "canvas_main" }).reason === "type" &&
+    canvas.writeSkinHomeCanvasV2PrimaryPhoto(stRegions(), {
+      id: "canvas_photo2", frameId: "canvas_b0" }).reason === "parent" &&
+    canvas.writeSkinHomeCanvasV2PrimaryPhoto(stRegions(), {
+      id: "canvas_o0", frameId: "canvas_main" }).reason === "kind",
+    "데이터가 유효하지 않은 중간 상태를 만들지 않는다");
+
+
+  /* ---- 숨김 · 잠금 ---- */
+
+  const flag = (request) =>
+    canvas.writeSkinHomeCanvasV2NodeFlag(stRegions(), request);
+
+  check("★ [v2-structure] 블록 · 프레임 내부 요소 · overlay 셋 다 숨길 수 있다",
+    (() => {
+      const a = flag({ id: "canvas_b0", flag: "hidden", on: true });
+      const b = flag({ id: "canvas_paper", flag: "hidden", on: true });
+      const c = flag({ id: "canvas_o0", flag: "locked", on: true });
+      return a.ok === true &&
+        blocksOf(a).find((x) => x.id === "canvas_b0").hidden === true &&
+        b.ok === true &&
+        innerOf(b).find((x) => x.id === "canvas_paper").hidden === true &&
+        c.ok === true &&
+        overlaysOf(c).find((x) => x.id === "canvas_o0").locked === true;
+    })(),
+    "검증도 렌더러도 셋 모두에 그 두 칸을 갖고 있다");
+
+  check("★ [v2-structure] 끄면 칸을 **지운다** — 켰다 끄면 처음 JSON 으로 돌아온다",
+    (() => {
+      const start = stRegions();
+      const text = JSON.stringify(start[1].canvas);
+      const on = canvas.writeSkinHomeCanvasV2NodeFlag(start,
+        { id: "canvas_b1", flag: "locked", on: true });
+      const off = canvas.writeSkinHomeCanvasV2NodeFlag(on.regions,
+        { id: "canvas_b1", flag: "locked", on: false });
+      return on.ok === true && off.ok === true &&
+        JSON.stringify(cv(off)) === text;
+    })(),
+    "계산값을 기본값인 척 적지 않는다(§31-1 의 그 규칙)");
+
+  check("★ [v2-structure] 이미 그 상태면 unchanged 다(기록 0 칸)",
+    flag({ id: "canvas_b0", flag: "hidden", on: false }).unchanged === true &&
+    flag({ id: "canvas_b0", flag: "locked", on: false }).unchanged === true);
+
+  check("★ [v2-structure] 대표 사진은 숨길 수 없다 — 이름 있는 이유로 먼저 막는다",
+    flag({ id: "canvas_photo", flag: "hidden", on: true }).reason === "primary",
+    "검증에서 걸리게 두지 않는다");
+
+  check("[v2-structure] 대표 사진도 **잠글 수는** 있다",
+    flag({ id: "canvas_photo", flag: "locked", on: true }).ok === true,
+    "잠금은 계약을 깨지 않는다");
+
+  check("[v2-structure] 모르는 칸 · 아닌 값을 거부한다",
+    flag({ id: "canvas_b0", flag: "primary", on: true }).reason === "flag" &&
+    flag({ id: "canvas_b0", flag: "hidden", on: "yes" }).reason === "shape" &&
+    flag({ id: "canvas_none", flag: "hidden", on: true }).reason === "missing");
+
+  check("★ [v2-structure] 숨김 · 잠금은 좌표 · props · 모르는 칸을 그대로 둔다",
+    (() => {
+      const r = flag({ id: "canvas_o0", flag: "hidden", on: true });
+      const node = overlaysOf(r).find((x) => x.id === "canvas_o0");
+      return node.x === 20 && node.y === 700 && node.rotation === 12 &&
+        node.odd === "keep-overlay" && node.props.text === "o" &&
+        ids(overlaysOf(r)) === "canvas_o0,canvas_o1";
+    })(),
+    "");
+
+
+  /* ---- 목록의 index 가 진짜 배열 자리인가 ---- */
+
+  check("★ [v2-structure] listSkinHomeCanvasV2Nodes 의 index 가 **자기 배열 안의 자리**다",
+    (() => {
+      const nodes =
+        canvas.listSkinHomeCanvasV2Nodes(stRegions()[1].canvas);
+
+      const find = (id) => nodes.find((n) => n.id === id);
+
+      return find("canvas_b0").index === 0 &&
+        find("canvas_main").index === 2 &&
+        find("canvas_paper").index === 0 &&
+        find("canvas_photo2").index === 2 &&
+        find("canvas_o1").index === 1;
+    })(),
+    "끌기가 이 값을 expected 로 그대로 쓴다");
+
+
+  /* ---- 잠긴 블록도 화면 클릭에서 빠지는가(판정 함수 하나) ---- */
+
+  check("★ [v2-structure] 잠긴 **블록**도 hit-test 에서 빠진다",
+    (() => {
+      const el = (attrs) => ({
+        nodeType: 1,
+        hasAttribute: (name) => Object.prototype.hasOwnProperty.call(attrs, name),
+        getAttribute: (name) => (name in attrs ? attrs[name] : null),
+        parentElement: null
+      });
+
+      const lockedBlock = el({
+        "data-imory-canvas-block": "",
+        "data-imory-canvas-locked": "true"
+      });
+
+      const openBlock = el({ "data-imory-canvas-block": "" });
+
+      return target.inspectorLockedCanvasAncestor(lockedBlock, null) === lockedBlock &&
+        target.inspectorLockedCanvasAncestor(openBlock, null) === null;
+    })(),
+    "Layers 가 자물쇠를 화면에 내놓으므로 블록에서도 참이어야 한다");
+
+
+  /* ---- 새 파일들의 로드 자리 ---- */
+
+  check("★ [v2-structure] 두 진입 문서가 구조 · 끌기 파일을 Layers **뒤에** 싣는다",
+    ["studio/index.html", "studio/studio-lifecycle-scenario.html"].every(
+      (file) => {
+        const text = read(file);
+        const layers = text.indexOf("studio-canvas-layers.js");
+        const ops = text.indexOf("studio-canvas-layers-ops.js");
+        const drag = text.indexOf("studio-canvas-layers-drag.js");
+        return layers !== -1 && ops > layers && drag > ops;
+      }
+    ),
+    "읽는 순서를 의존 방향과 맞춘다");
+
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 

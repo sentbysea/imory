@@ -1,23 +1,37 @@
 /* =========================================================
-   STUDIO — LAYERS (STUDIO-LAYERS-SHELL-1)
+   STUDIO — LAYERS (STUDIO-LAYERS-SHELL-1 · STUDIO-LAYERS-STRUCTURE-1)
 
    계획 문서: docs/plans/IMORY_STUDIO_LAYERS_AND_CANVAS_TYPOGRAPHY_PLAN.md
-              §1 · §2 · §3 · §7
-   계약:      docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §23 · §25 · §28
+              §1 · §2 · §3
+   계약:      docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §23 · §25 · §28 · §32
 
    왼쪽 패널의 넷째 자리다 — `Select · Images · Layers · Layout`.
 
-   ── 이 파일이 하는 일은 둘뿐이다 ───────────────────────
+   ── 이 파일이 하는 일 ──────────────────────────────────
      1) 지금 working draft 의 v2 캔버스 구조를 **읽어서** 보여 준다
      2) 행을 누르면 기존 캔버스 선택 관문으로 그 요소를 고른다
+     3) 행마다 대표 사진 · 눈 · 자물쇠 · 삭제 단추를 붙인다
+        (STUDIO-LAYERS-STRUCTURE-1)
 
    그리고 맨 위에 재료 추가 자리를 붙인다 — 그 화면을 만드는 곳은
    여전히 studio/inspector/studio-canvas-add-v2.js 한 곳이다.
 
-   ── 이 파일이 **하지 않는** 일 (계획 문서 §7 "이번에 하지 않는다")
-     순서 drag · 묶기/빼기 drop · primary 변경 · 숨김 · 잠금 ·
-     삭제 · 그룹 조작 · 타이포그래피 · rich text.
-     ★ 그래서 이 파일에는 draft 를 쓰는 코드가 한 줄도 없다.
+   ── 이 파일이 **하지 않는** 일 ─────────────────────────
+     · draft 를 직접 고치지 않는다. 구조 동작은 전부
+       studio-canvas-layers-ops.js 의 문 하나를 지난다.
+     · 끄는 제스처도 여기 없다 — studio-canvas-layers-drag.js 다.
+     · 그룹 조작 · 영구 group 노드 · 타이포그래피 · rich text 는
+       이번 범위가 아니다(계획 문서 §6 의 다음 줄들).
+
+   ── 행의 생김새 ────────────────────────────────────────
+
+     [⠿ 손잡이] [★ 대표] [이름(고르기)] [👁 눈] [🔒 자물쇠] [🗑 삭제]
+
+     · 대표 단추는 **메인 비주얼 안의 사진**에만 있다.
+     · 오른쪽 세 단추는 pointerdown 을 멈춘다 — 누르면 행이 골라지지도
+       끌리지도 않는다(계약 §32-2).
+     · 숨김 · 잠금된 행도 **목록에는 남는다**. 그것이 다시 켜는
+       유일한 길이다.
 
    ── 왜 상태를 들고 있지 않은가 ─────────────────────────
    트리는 **별도 상태 저장소가 아니다**(계획 문서 §2-1). 그릴 때마다
@@ -70,6 +84,32 @@ const STUDIO_CANVAS_LAYER_GROUPS = [
 ];
 
 
+/*
+  행 오른쪽의 단추 셋 (STUDIO-LAYERS-STRUCTURE-1)
+
+  ★ 글자로 그린다 — 아이콘 폰트도 SVG 도 새로 들이지 않는다. 상태에
+    따라 글자가 바뀌므로 `aria-pressed` 와 함께 읽으면 뜻이 분명하다.
+*/
+const STUDIO_CANVAS_LAYER_FLAG_BUTTONS = [
+  {
+    flag: "hidden",
+    className: "studio-canvas-layers-eye",
+    on: "🙈",
+    off: "👁",
+    labelOn: "다시 보이기",
+    labelOff: "숨기기"
+  },
+  {
+    flag: "locked",
+    className: "studio-canvas-layers-lock",
+    on: "🔒",
+    off: "🔓",
+    labelOn: "잠금 풀기",
+    labelOff: "잠그기"
+  }
+];
+
+
 let studioCanvasLayersRoot = null;
 
 let studioCanvasLayersTree = null;
@@ -79,6 +119,8 @@ let studioCanvasLayersEmpty = null;
 let studioCanvasLayersAddToggle = null;
 
 let studioCanvasLayersAddHost = null;
+
+let studioCanvasLayersNote = null;
 
 
 /* 재료 추가 자리가 펼쳐져 있는가 — 화면 상태다(저장되지 않는다) */
@@ -186,43 +228,89 @@ function studioCanvasLayersRows() {
     return [];
   }
 
-  /* 각 main_visual 의 대표 사진 — 블록 노드에서 읽는다(계약 §28-1).
-     ★ 읽기만 한다. 바꾸는 것은 이번 단계가 아니다(계획 문서 §2-5). */
+  /*
+    각 main_visual 의 대표 사진(계약 §28-1)과 각 행의 눈 · 자물쇠.
+
+    ★ **payload 를 한 번만 읽고 한 번만 훑는다.** 노드마다
+      studioCanvasNodeInfo() 를 부르면 그 함수가 그때마다
+      resolveSkinHomeCanvas() 로 캔버스 전체를 다시 풀고 다시
+      검증한다 — 요소가 200개면 그 일을 200번 한다. 트리는 선택이
+      바뀔 때마다 만들어지므로 그 값이 그대로 화면 지연이 된다.
+  */
   const primaryOf =
     {};
 
-  nodes.forEach((node) => {
+  const stateOf =
+    {};
 
-    if (node.kind !== "block" || node.type !== "main_visual") {
+  const mark = (node) => {
+
+    if (!node || typeof node !== "object" || typeof node.id !== "string") {
       return;
     }
 
-    const info =
-      (typeof window.studioCanvasNodeInfo === "function")
-        ? window.studioCanvasNodeInfo(node.id)
-        : null;
+    stateOf[node.id] = {
+      hidden: node.hidden === true,
+      locked: node.locked === true
+    };
+
+  };
+
+  const payload =
+    studioCanvasLayersPayload();
+
+  const blocks =
+    (payload && payload.flow && Array.isArray(payload.flow.blocks))
+      ? payload.flow.blocks
+      : [];
+
+  blocks.forEach((block) => {
+
+    mark(block);
+
+    if (!block || block.type !== "main_visual") {
+      return;
+    }
 
     const props =
-      (info && info.node && typeof info.node.props === "object" && info.node.props)
-        ? info.node.props
-        : null;
+      (block.props && typeof block.props === "object") ? block.props : null;
 
-    primaryOf[node.id] =
+    primaryOf[block.id] =
       (props && typeof props.primaryId === "string") ? props.primaryId : "";
 
+    ((props && Array.isArray(props.elements)) ? props.elements : []).forEach(mark);
+
   });
+
+  ((payload && Array.isArray(payload.overlays)) ? payload.overlays : []).forEach(mark);
 
   return nodes.map((node) => ({
     id: node.id,
     kind: node.kind,
     type: node.type,
     parentId: node.parentId || null,
+
+    /* ★ 자기 배열 안의 **진짜 자리**다 — 끌어 옮길 때 `expected` 로
+       그대로 쓴다(계약 §32-4). 화면 순서를 다시 세지 않는다. */
+    index: Number.isInteger(node.index) ? node.index : -1,
+
     depth: node.kind === "frame-element" ? 1 : 0,
     group: node.kind === "overlay" ? "overlay" : "flow",
+
+    hidden: stateOf[node.id] ? stateOf[node.id].hidden : false,
+    locked: stateOf[node.id] ? stateOf[node.id].locked : false,
+
     primary:
       node.kind === "frame-element" &&
       !!node.parentId &&
-      primaryOf[node.parentId] === node.id
+      primaryOf[node.parentId] === node.id,
+
+    /* 대표가 될 수 있는 자리인가 — 메인 비주얼 안의 사진 하나다
+       (계획 문서 §2-5). 그 밖에는 단추 자체를 그리지 않는다. */
+    canBePrimary:
+      node.kind === "frame-element" &&
+      !!node.parentId &&
+      node.type === "photo"
   }));
 
 }
@@ -247,6 +335,52 @@ function studioCanvasLayersSelection() {
 function studioCanvasLayersExpanded(blockId) {
 
   return !studioCanvasLayersCollapsed.has(blockId);
+
+}
+
+
+/*
+  그 폴더를 펼쳐 보여 준다 (STUDIO-LAYERS-STRUCTURE-1)
+
+  묶기가 끝난 뒤 부른다 — 방금 넣은 것이 접힌 폴더 안으로 사라지면
+  주인은 아무 일도 안 일어났다고 읽는다(이번 범위의 "attach 된
+  요소의 대상 폴더는 펼쳐 보인다").
+
+  ★ 접혀 있을 때만 손댄다. 그러지 않으면 그릴 때마다 서로를 부른다.
+*/
+function expandStudioCanvasLayersFolder(blockId) {
+
+  if (!blockId || !studioCanvasLayersCollapsed.has(blockId)) {
+    return;
+  }
+
+  studioCanvasLayersCollapsed.delete(blockId);
+
+  renderStudioCanvasLayers(true);
+
+}
+
+
+/*
+  거절 이유 한 줄 (STUDIO-LAYERS-STRUCTURE-1)
+
+  ★ 다시 그려도 지워지지 않는다 — 트리 DOM 과 별개의 요소다. 다음
+    동작이 성공하거나 끌기를 새로 시작하면 비운다.
+*/
+function setStudioCanvasLayersMessage(text) {
+
+  if (!studioCanvasLayersNote) {
+    return;
+  }
+
+  const value =
+    (typeof text === "string") ? text : "";
+
+  studioCanvasLayersNote.textContent =
+    value;
+
+  studioCanvasLayersNote.hidden =
+    !value;
 
 }
 
@@ -355,6 +489,24 @@ function ensureStudioCanvasLayers() {
     true;
 
   studioCanvasLayersRoot.appendChild(studioCanvasLayersAddHost);
+
+
+  /* ── 왜 안 됐는가 (STUDIO-LAYERS-STRUCTURE-1) ──
+     거절된 구조 동작의 이유가 여기 한 줄로 뜬다. 성공하면 비운다.
+     ★ 이 줄은 화면 상태다 — draft 에도 Undo 에도 들어가지 않는다. */
+
+  studioCanvasLayersNote =
+    studioCanvasLayersEl("p", "studio-canvas-layers-note");
+
+  studioCanvasLayersNote.id =
+    "studioCanvasLayersNote";
+
+  studioCanvasLayersNote.setAttribute("role", "status");
+
+  studioCanvasLayersNote.hidden =
+    true;
+
+  studioCanvasLayersRoot.appendChild(studioCanvasLayersNote);
 
 
   studioCanvasLayersTree =
@@ -473,6 +625,68 @@ function syncStudioCanvasLayersAdd() {
    5. 트리 그리기
 ========================================================== */
 
+/*
+  행 오른쪽의 작은 단추 하나.
+
+  ★ **pointerdown 을 멈춘다.** 그래야 이 단추를 누른 입력이 행
+    고르기로도, 끌기로도 이어지지 않는다(계약 §32-2). click 만
+    멈추면 끌기가 pointerdown 에서 이미 시작돼 버린다.
+*/
+function studioCanvasLayersActionButton(className, text, label, onClick) {
+
+  const button =
+    studioCanvasLayersEl("button", `studio-canvas-layers-action ${className}`, text);
+
+  button.type = "button";
+
+  button.setAttribute("aria-label", label);
+
+  button.title = label;
+
+  button.addEventListener("pointerdown", (event) => event.stopPropagation());
+
+  button.addEventListener("click", (event) => {
+
+    event.stopPropagation();
+
+    onClick();
+
+  });
+
+  return button;
+
+}
+
+
+/*
+  구조 동작 하나 — 부르고 결과를 화면에 적는다.
+
+  ★ 창구는 **호출 시점에** 찾는다(studio-canvas-layers-ops.js 가 이
+    파일보다 나중에 로드돼도 된다 — 다른 classic script 들과 같은
+    규칙). 없으면 조용히 실패하지 않고 그 사실을 적는다.
+*/
+function runStudioCanvasLayersAction(name, args) {
+
+  if (typeof window[name] !== "function") {
+
+    setStudioCanvasLayersMessage(
+      "이 동작을 아직 쓸 수 없습니다 — 화면을 새로 고쳐 주세요."
+    );
+
+    return;
+
+  }
+
+  const result =
+    window[name].apply(null, args);
+
+  setStudioCanvasLayersMessage(
+    (result && result.accepted) ? "" : ((result && result.message) || "")
+  );
+
+}
+
+
 function studioCanvasLayersRowNode(row, expanded) {
 
   const wrap =
@@ -481,12 +695,40 @@ function studioCanvasLayersRowNode(row, expanded) {
   wrap.dataset.layerId = row.id;
   wrap.dataset.layerKind = row.kind;
   wrap.dataset.layerType = row.type;
+  wrap.dataset.layerParent = row.parentId || "";
+  wrap.dataset.layerIndex = String(row.index);
+
+  if (row.hidden) {
+    wrap.dataset.layerHidden = "true";
+  }
+
+  if (row.locked) {
+    wrap.dataset.layerLocked = "true";
+  }
 
   if (row.depth) {
     wrap.dataset.layerDepth = String(row.depth);
   }
 
   wrap.setAttribute("role", "treeitem");
+
+
+  /* ── 끌기 손잡이 (STUDIO-LAYERS-STRUCTURE-1) ──
+     `touch-action: none` 은 이 요소 하나에만 있다(CSS) — 패널의
+     세로 스크롤을 죽이지 않기 위해서다. */
+
+  const handle =
+    studioCanvasLayersEl("span", "studio-canvas-layers-handle", "⠿");
+
+  handle.setAttribute("aria-hidden", "true");
+
+  handle.dataset.layerHandle = row.id;
+
+  if (typeof window.bindStudioCanvasLayersHandle === "function") {
+    window.bindStudioCanvasLayersHandle(handle);
+  }
+
+  wrap.appendChild(handle);
 
 
   /* 폴더(= main_visual)만 접기 손잡이를 갖는다. 계획 문서 §2-7 —
@@ -538,20 +780,52 @@ function studioCanvasLayersRowNode(row, expanded) {
   }
 
 
+  /* ── ★ 대표 사진 ──
+     메인 비주얼 안의 **사진**에만 있다. 누르면 그 프레임의 대표가
+     되고, 옛 대표는 보통 사진으로 남는다(계획 문서 §2-5). */
+
+  if (row.canBePrimary) {
+
+    const star =
+      studioCanvasLayersActionButton(
+        "studio-canvas-layers-star",
+        row.primary ? "★" : "☆",
+        row.primary ? "지금 대표 사진입니다" : "대표 사진으로 지정",
+        () => {
+
+          if (row.primary) {
+            return;
+          }
+
+          runStudioCanvasLayersAction(
+            "studioCanvasLayersPrimary", [row.id, row.parentId]
+          );
+
+        }
+      );
+
+    star.setAttribute("aria-pressed", String(!!row.primary));
+
+    star.disabled = !!row.primary;
+
+    star.id = `studioCanvasLayerPrimary-${row.id}`;
+
+    wrap.appendChild(star);
+
+  } else {
+
+    wrap.appendChild(
+      studioCanvasLayersEl("span", "studio-canvas-layers-star-gap")
+    );
+
+  }
+
+
   const pick =
     studioCanvasLayersEl("button", "studio-canvas-layers-pick");
 
   pick.type = "button";
   pick.id = `studioCanvasLayer-${row.id}`;
-
-  /* ★ 대표 사진 표식은 **읽기 전용**이다(계획 문서 §2-5) */
-  if (row.primary) {
-
-    pick.appendChild(
-      studioCanvasLayersEl("span", "studio-canvas-layers-star", "★")
-    );
-
-  }
 
   pick.appendChild(
     studioCanvasLayersEl(
@@ -574,6 +848,51 @@ function studioCanvasLayersRowNode(row, expanded) {
 
   wrap.appendChild(pick);
 
+
+  /* ── 👁 눈 · 🔒 자물쇠 ──
+     검증도 렌더러도 블록 · 프레임 내부 요소 · overlay 셋 모두에 이 두
+     칸을 갖고 있다(계약 §32-5). 그래서 모든 행에 그린다. */
+
+  STUDIO_CANVAS_LAYER_FLAG_BUTTONS.forEach((spec) => {
+
+    const on =
+      row[spec.flag] === true;
+
+    const button =
+      studioCanvasLayersActionButton(
+        spec.className,
+        on ? spec.on : spec.off,
+        on ? spec.labelOn : spec.labelOff,
+        () => runStudioCanvasLayersAction(
+          "studioCanvasLayersFlag", [row.id, spec.flag, !on]
+        )
+      );
+
+    button.setAttribute("aria-pressed", String(on));
+
+    button.id = `studioCanvasLayer${spec.flag === "hidden" ? "Eye" : "Lock"}-${row.id}`;
+
+    wrap.appendChild(button);
+
+  });
+
+
+  /* ── 🗑 삭제 ──
+     메인 비주얼이면 자식 수를 보여 주고 한 번 묻는다. 대표 사진처럼
+     지울 수 없는 것은 이유를 보여 주고 거부한다(계약 §32-9). */
+
+  const remove =
+    studioCanvasLayersActionButton(
+      "studio-canvas-layers-remove",
+      "🗑",
+      "삭제",
+      () => runStudioCanvasLayersAction("studioCanvasLayersRemove", [row])
+    );
+
+  remove.id = `studioCanvasLayerRemove-${row.id}`;
+
+  wrap.appendChild(remove);
+
   return wrap;
 
 }
@@ -590,8 +909,9 @@ function studioCanvasLayersShapeOf(rows, version) {
 
   return `v${version || 0}|` + rows.map(
     (row) =>
-      `${row.id}:${row.kind}:${row.type}:${row.parentId || ""}` +
-      `:${row.primary ? "p" : ""}` +
+      `${row.id}:${row.kind}:${row.type}:${row.parentId || ""}:${row.index}` +
+      `:${row.primary ? "p" : ""}${row.canBePrimary ? "P" : ""}` +
+      `:${row.hidden ? "h" : ""}${row.locked ? "l" : ""}` +
       `:${(row.kind === "block" && row.type === "main_visual" && !studioCanvasLayersExpanded(row.id)) ? "c" : ""}`
   ).join(",");
 
@@ -749,9 +1069,10 @@ function renderStudioCanvasLayers(force) {
     const mine =
       rows.filter((row) => row.group === group.key);
 
-    if (!mine.length) {
-      return;
-    }
+    /* ★ 비어 있어도 제목은 그린다(STUDIO-LAYERS-STRUCTURE-1).
+       `페이지 장식` 제목이 곧 "메인 비주얼에서 빼기"의 drop 자리라,
+       장식이 하나도 없을 때 그 자리가 사라지면 프레임 안의 요소를
+       꺼낼 길이 없어진다. */
 
     const title =
       studioCanvasLayersEl("p", "studio-canvas-layers-group", group.label);
@@ -759,7 +1080,30 @@ function renderStudioCanvasLayers(force) {
     title.id =
       `studioCanvasLayersGroup-${group.key}`;
 
+    /* 끄는 쪽이 이 제목을 찾는다 — `페이지 장식` 이 곧 "빼기" 의
+       drop 자리다(studio-canvas-layers-drag.js) */
+    title.dataset.layerGroup =
+      group.key;
+
     studioCanvasLayersTree.appendChild(title);
+
+    if (!mine.length) {
+
+      const none =
+        studioCanvasLayersEl(
+          "p",
+          "studio-canvas-layers-none",
+          group.key === "overlay"
+            ? "아직 페이지 장식이 없습니다 — 여기로 끌어 오면 메인 비주얼에서 빠집니다."
+            : "아직 자동 배치 블록이 없습니다."
+        );
+
+      none.id =
+        `studioCanvasLayersNone-${group.key}`;
+
+      studioCanvasLayersTree.appendChild(none);
+
+    }
 
     mine.forEach((row) => {
 
@@ -823,6 +1167,10 @@ if (typeof window !== "undefined") {
   window.openStudioCanvasLayersPanel = openStudioCanvasLayersPanel;
   window.renderStudioCanvasLayers = renderStudioCanvasLayers;
 
+  /* STUDIO-LAYERS-STRUCTURE-1 — 끄는 쪽과 구조 동작이 부르는 둘 */
+  window.setStudioCanvasLayersMessage = setStudioCanvasLayersMessage;
+  window.expandStudioCanvasLayersFolder = expandStudioCanvasLayersFolder;
+
   /* 진단 · 테스트가 보는 한 줄 — production 코드는 읽지 않는다 */
   window.getStudioCanvasLayersState =
     () => {
@@ -847,12 +1195,21 @@ if (typeof window !== "undefined") {
           kind: row.kind,
           type: row.type,
           parentId: row.parentId,
+          index: row.index,
           primary: row.primary,
+          canBePrimary: row.canBePrimary,
+          hidden: row.hidden,
+          locked: row.locked,
           expanded:
             (row.kind === "block" && row.type === "main_visual")
               ? studioCanvasLayersExpanded(row.id)
               : null
         })),
+
+        note:
+          (studioCanvasLayersNote && !studioCanvasLayersNote.hidden)
+            ? studioCanvasLayersNote.textContent
+            : "",
 
         /* 실제로 화면에 그려진 행들(접힌 프레임의 자식은 빠진다) */
         drawn:

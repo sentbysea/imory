@@ -1,6 +1,6 @@
 # IMORY STUDIO — Layers · Canvas Typography 재편 계획
 
-> 상태: **PLAN(1단계만 구현됨)**. 이 문서는 Studio 정보 구조와 작업 순서를
+> 상태: **PLAN(1~3단계 구현됨)**. 이 문서는 Studio 정보 구조와 작업 순서를
 > 정한다. 읽었다는 사실이 전체 구현을 허가하지 않는다 — 아래 §6 의 상태
 > 칸에 "완료" 라고 적힌 줄만 지금 코드가 하는 일이다.
 >
@@ -16,12 +16,18 @@
 > 저장 경로 · sandbox CSP 는 §31 에 있다. 글꼴 카탈로그는
 > `core/imory-font-catalog.js`, 파일 로딩은 `core/imory-fonts.css` 하나다.
 >
-> 3단계 `STUDIO-LAYERS-STRUCTURE-1` 부터는 아직 계획이다 — 이 문서를
+> **2026-09-23 갱신 ③** — §6 의 3단계 `STUDIO-LAYERS-STRUCTURE-1` 도
+> 구현됐다(§2-3 · §2-4 · §2-5 · §2-6 의 일곱 동작). 현행 계약은 이
+> 문서가 아니라
+> [IMORY_HOME_CANVAS_CONTRACT.md §32](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> 이다 — 아래 §2 는 그때의 **계획**이고, 실제로 정해진 drop 규칙 ·
+> 길게 누르기 시간(350ms) · `via` · Undo 단위 · 거절 이유는 §32 에 있다.
+>
+> 4단계 `HOME-CANVAS-V2-GROUP-1A` 부터는 아직 계획이다 — 이 문서를
 > 근거로 그것들이 있다고 읽지 않는다.
 >
-> 다음 구현 작업은 **`STUDIO-LAYERS-STRUCTURE-1` 하나**이고, 그 뒤가
-> `HOME-CANVAS-V2-GROUP-1A` ~ `1C` 다. 뒤 작업을 함께 선행 구현하지
-> 않는다.
+> 다음 구현 작업은 **`HOME-CANVAS-V2-GROUP-1A` 하나**이고, 그 뒤가
+> `1B` · `1C` 다. 뒤 작업을 함께 선행 구현하지 않는다.
 
 ## 0. 왜 이 재편이 필요한가
 
@@ -369,8 +375,8 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 | 0 | `STUDIO-LAYERS-PLAN-1` | 이 문서. 책임 · UX · 작업 경계 확정 | **완료 — 문서만** |
 | 1 | `STUDIO-LAYERS-SHELL-1` | 상단 Dock 자리를 Layers로 교체 · 읽기 전용 트리 · Select의 재료 추가를 Layers로 이동 · Dock Settings 진입 경로 조사/이동 | **완료** — [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) · [admin/settings/admin-bottom-dock-entry.js](../../admin/settings/admin-bottom-dock-entry.js) · `studio/studio-home-canvas-inspector-e2e-test.mjs --only=layers` · `admin/admin-settings-e2e-test.mjs --only=dock` |
 | 2 | `HOME-CANVAS-TYPOGRAPHY-1` | Canvas 타이포그래피 + Quote Preset `bodyFont` 여섯 글꼴 | **완료** — [studio/inspector/studio-canvas-typography.js](../../studio/inspector/studio-canvas-typography.js) · [core/imory-font-catalog.js](../../core/imory-font-catalog.js) · [core/imory-fonts.css](../../core/imory-fonts.css) · 계약 [§31](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-typography-e2e-test.mjs` · `admin/quote/quote-render-parity-e2e-test.mjs --only=font` · `node core/imory-font-catalog-test.mjs` |
-| 3 | `STUDIO-LAYERS-STRUCTURE-1` | 순서 drag · 단일 attach/detach · primary · 숨김 · 잠금 · 삭제 | **다음 작업** |
-| 4 | `HOME-CANVAS-V2-GROUP-1A` | 여러 요소 묶기 · primary 지정 | 미착수 |
+| 3 | `STUDIO-LAYERS-STRUCTURE-1` | 순서 drag · 단일 attach/detach · primary · 숨김 · 잠금 · 삭제 | **완료** — [studio/inspector/studio-canvas-layers-ops.js](../../studio/inspector/studio-canvas-layers-ops.js) · [studio/inspector/studio-canvas-layers-drag.js](../../studio/inspector/studio-canvas-layers-drag.js) · [skin/skin-home-canvas-write-v2.js](../../skin/skin-home-canvas-write-v2.js) §6 · 계약 [§32](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-inspector-e2e-test.mjs --only=layerstruct` · `node skin/skin-home-canvas-test.mjs`([v2-structure]) |
+| 4 | `HOME-CANVAS-V2-GROUP-1A` | 여러 요소 묶기 · primary 지정 | **다음 작업** |
 | 5 | `HOME-CANVAS-V2-GROUP-1B` | 그룹 이동 | 미착수 |
 | 6 | `HOME-CANVAS-V2-GROUP-1C` | 그룹 리사이즈 · 회전 | 미착수 |
 | 7 | `HOME-CANVAS-RICH-TEXT-1` | 선택한 일부 글자 색상 등 구조형 텍스트 | 미착수 |
@@ -423,44 +429,52 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 ## 8. 다음 작업용 지시문
 
 ```text
-작업 ID: HOME-CANVAS-TYPOGRAPHY-1
+작업 ID: HOME-CANVAS-V2-GROUP-1A
 
-현재 main과 이 문서 §4·§6, HOME Canvas 계약을 읽고 이 작업만 구현해 줘.
-먼저 generic Inspector의 CSS patch, Canvas 선택/working draft/Undo/Save,
-native/sandbox, Quote bodyFont 입력/정규화/미리보기/저장/공개/export 경로를
-조사해 짧게 보고해라.
+현재 main 과 이 문서 §2-4 · §2-7 · §6, HOME Canvas 계약 §28 · §32 를
+읽고 이 작업만 구현해 줘.
 
-Canvas text 단독 선택에 1열 글꼴·크기·굵기와, 기본 접힘 고급 설정
-글자색·자간·행간을 둔다. 390px에서는 자연스럽게 감긴다. 각 속성 reset,
-live preview, 조작 한 번=Undo 한 칸을 지킨다. Canvas JSON에 style 칸을
-만들지 말고 기존 data-imory-edit-id CSS 규칙에 저장한다.
+먼저 조사해 짧게 보고해라 — 지금의 다중 선택(Selecto lasso · Shift ·
+Ctrl/⌘ · Layers 행)이 무엇을 들고 있는가, 단일 묶기/빼기가 쓰는
+planStudioCanvasV2Attach()/Detach() 와 CANVAS_LAYOUT 보고가 여러
+요소에 그대로 쓰일 수 있는가, 구조 입구(commitStudioCanvasStructureNode)
+의 via 두 갈래와 원자성 규칙이 어디까지 버티는가.
 
-대상은 v1 text, v2 flow text, main_visual 내부 text, v2 overlay text다.
-category_nav, logo fallback, 일반 HTML Inspector, rich text는 범위 밖이다.
+이번 범위는 **여러 요소를 한 번에 묶고 빼는 것**과, 그 선택 안에서
+대표 사진을 지정하는 것이다. 여러 요소의 소속 변경 하나가 Undo 한
+칸이어야 하고, 하나라도 실패하면 **아무것도 바뀌지 않아야** 한다
+(부분 적용 금지 — 계약 §32-10 의 그 규칙을 여러 요소로 넓힌다).
+드롭한 폴더가 대상이고 가까운 프레임을 자동으로 고르지 않는다.
+화면 위치 · 크기 · 회전 · id · props · 모르는 필드를 보존한다.
 
-글꼴은 §4-3-1의 여섯만 같은 순서로 제공하고 Canvas와 Quote가 공용
-카탈로그/resolver 한 벌을 쓴다. Quote Preset BODY > FONT도 같은 여섯으로
-넓히되 기존 settings.bodyFont·quote_presets 경로, 기존 두 키와 Pretendard
-기본값, unknown settings 보존을 유지한다. migration하지 않는다.
-관리 Preview·글쓰기 Preview·export·공개 글이 같은 resolver를 써야 한다.
+Layers 에서 여러 행을 골라 함께 끄는 길을 연다 —
+지금은 "여러 요소 이동은 다음 단계에서 지원합니다"로 거부한다
+(studio/inspector/studio-canvas-layers-drag.js). 그 문장을 지우고
+실제 동작으로 바꾸되, 순서 바꾸기를 여러 요소로 넓힐지는 먼저
+계약으로 정하고 보고해라.
 
-폰트 파일은 Quote 네 화면과 Canvas 공개/Studio × native/sandbox에서 실제로
-로드한다. fallback을 성공으로 세지 말고 export는 로드 뒤 캡처한다.
-외부 source를 추가하면 CSP/sandbox allowlist와 위반 0을 검증한다.
+이번에 하지 말 것: 그룹 이동 · 그룹 리사이즈 · 그룹 회전(1B · 1C) ·
+영구 group 노드(별도 HOME-CANVAS-GROUP-CONTRACT-1 이 저장 모양 ·
+해제 · 중첩 금지 · v1/v2 호환을 먼저 확정한다) · rich text ·
+Crop · 효과 · responsive override · v1 Layers 의 구조 편집 ·
+일반 HTML Inspector 변경 · APP_BUILD_VERSION · 배포.
 
-값은 크기 8~72px step 1, 굵기 기본/400/500/700, 자간 기본 또는
--5~20px step 0.1, 행간 기본 또는 0.8~3 step 0.05 unitless다.
-계산값을 기본값인 것처럼 CSS에 저장하지 마라.
+테스트: 여러 overlay 를 한 프레임에 묶기 · 여러 프레임 내부 요소를
+빼기 · 섞인 선택의 거부 · 하나가 실패할 때의 원자적 거부 · 전후
+화면 좌표 유지 · Undo 한 칸 · Save → 다시 열기 · Export → Import ·
+Publish resolve · native/sandbox parity · 390px · CSP 위반 0 ·
+단일 묶기/빼기와 Layers 구조 회귀(--only=layers,layerstruct).
 
-Canvas 네 text 위치·여섯 글꼴·reset/live/Undo/Redo/Save/Export/Publish,
-native/sandbox parity·stale/forged 선택 거부를 테스트한다.
-Quote 여섯 선택지·새로 만들기/덮어쓰기/불러오기/활성화, 기존 두 키 무변경,
-관리/글쓰기/export/공개 parity와 실제 font load도 테스트한다.
-390px, CSP 위반 0, 기존 Inspector/Quote 회귀를 포함한다.
-
-문서/TESTS를 갱신하고 오래된 roadmap/INDEX의 다음 순서를
-Typography → Layers Structure → Group 1A~1C로 맞춘다.
-Layers Structure, Group, rich text를 선행 구현하지 마라.
-APP_BUILD_VERSION은 올리지 말고 배포하지 마라.
-완료하면 한 커밋으로 main에 push하고 결과를 보고해라.
+문서는 계약에 새 절로 적고, 이 문서 §6 의 4단계를 완료로 바꾸고
+§8 을 HOME-CANVAS-V2-GROUP-1B 지시문으로 갈아 끼워라.
+완료하면 한 커밋으로 main 에 push 하고 결과를 보고해라.
 ```
+
+### 배포 전 정리 항목
+
+이 줄들은 기능 작업에 섞지 않는다. 배포를 준비할 때 따로 처리한다.
+
+- `auth/index.html` · `invite/index.html` 이 Pretendard 파일을 싣지 않는다
+  (`core/imory-fonts.css` 를 링크하지 않는다). 글꼴이 fallback 으로 떨어진다.
+  `HOME-CANVAS-TYPOGRAPHY-1` 에서 발견했고 `STUDIO-LAYERS-STRUCTURE-1`
+  에서도 손대지 않았다.

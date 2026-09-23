@@ -28,6 +28,15 @@
      writeSkinHomeCanvasV2NodeText       props.text
      writeSkinHomeCanvasV2BlockOrder     flow.blocks 안의 자리
 
+   그리고 구조를 바꾸는 것들(§5 · §6)
+
+     writeSkinHomeCanvasV2AttachNode     overlay → 프레임 안
+     writeSkinHomeCanvasV2DetachNode     프레임 안 → overlay
+     writeSkinHomeCanvasV2RemoveNode     지운다
+     writeSkinHomeCanvasV2ReorderNode    같은 부모 안에서 자리 옮기기
+     writeSkinHomeCanvasV2PrimaryPhoto   그 프레임의 대표 사진
+     writeSkinHomeCanvasV2NodeFlag       hidden · locked 한 칸
+
    ── 한 이름 공간 ───────────────────────────────────────
    블록 id · `main_visual` 내부 요소 id · overlay id 가 **전부
    유일**하다(§14-5). 그래서 이 파일의 모든 함수는 id 하나만 받고
@@ -136,7 +145,13 @@ function findSkinHomeCanvasV2Node(canvas, id) {
 
 
 /*
-  listSkinHomeCanvasV2Nodes(canvas) -> [{ id, kind, type, parentId }]
+  listSkinHomeCanvasV2Nodes(canvas) -> [{ id, kind, type, parentId, index }]
+
+  ★ `index` 는 **자기 배열 안의 진짜 자리**다(STUDIO-LAYERS-STRUCTURE-1).
+    화면 순서가 아니라 저장 배열의 자리라야 순서 바꾸기가 그 값을
+    `expected` 로 그대로 쓸 수 있다 — 여기서 세는 것과 순수 함수가
+    찾는 것이 다르면 엉뚱한 자리를 대조하게 된다. forEach 의 색인은
+    걸러 낸 항목이 있어도 배열의 자리 그대로다.
 
   고를 수 있는 것 전부를 **화면 순서**로 늘어놓는다.
 
@@ -160,7 +175,7 @@ function listSkinHomeCanvasV2Nodes(canvas) {
   const blocks =
     (flow && Array.isArray(flow.blocks)) ? flow.blocks : [];
 
-  blocks.forEach((block) => {
+  blocks.forEach((block, blockIndex) => {
 
     if (!isSkinHomeCanvasPlainObject(block) || typeof block.id !== "string") {
       return;
@@ -170,7 +185,8 @@ function listSkinHomeCanvasV2Nodes(canvas) {
       id: block.id,
       kind: "block",
       type: block.type,
-      parentId: null
+      parentId: null,
+      index: blockIndex
     });
 
     const props =
@@ -179,7 +195,7 @@ function listSkinHomeCanvasV2Nodes(canvas) {
     const inner =
       (props && Array.isArray(props.elements)) ? props.elements : [];
 
-    inner.forEach((element) => {
+    inner.forEach((element, innerIndex) => {
 
       if (!isSkinHomeCanvasPlainObject(element) || typeof element.id !== "string") {
         return;
@@ -189,14 +205,15 @@ function listSkinHomeCanvasV2Nodes(canvas) {
         id: element.id,
         kind: "frame-element",
         type: element.type,
-        parentId: block.id
+        parentId: block.id,
+        index: innerIndex
       });
 
     });
 
   });
 
-  (Array.isArray(canvas.overlays) ? canvas.overlays : []).forEach((element) => {
+  (Array.isArray(canvas.overlays) ? canvas.overlays : []).forEach((element, index) => {
 
     if (!isSkinHomeCanvasPlainObject(element) || typeof element.id !== "string") {
       return;
@@ -206,7 +223,8 @@ function listSkinHomeCanvasV2Nodes(canvas) {
       id: element.id,
       kind: "overlay",
       type: element.type,
-      parentId: null
+      parentId: null,
+      index: index
     });
 
   });
@@ -2249,6 +2267,485 @@ function writeSkinHomeCanvasV2NodePin(regions, id, next, expected) {
 }
 
 
+
+
+/* =========================================================
+   6. 구조 — 순서 · 대표 사진 · 숨김/잠금 (STUDIO-LAYERS-STRUCTURE-1)
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §32
+
+   Layers 트리가 부르는 셋이다. 위 §5(묶기 · 빼기 · 삭제)와 **같은
+   규약**을 쓴다 — 요청 하나, 불변 이동, 넣어 본 캔버스를 통째로
+   `validateSkinCanvasV2Data()` 에 태우고, 막히면 regions 는 한 글자도
+   바뀌지 않는다.
+
+   ★ **`expected` 를 쓰는 자리가 하나 있다** — 순서다. 다른 구조
+     동작과 달리 순서는 "지금 몇 번째인가"라는 대조할 값이 있고,
+     Layers 의 행은 **그려 둔 뒤 시간이 지난 화면**이다. 그 사이
+     Undo · AI · Code 가 배열을 바꿨으면 그 행이 가리키던 자리는
+     이미 다른 것의 자리다. 그래서 끌기 시작할 때 본 자리를 함께
+     보내고, 다르면 거부한다.
+
+   ★ **부모도 함께 보낸다**(`kind` · `parentId`). 세 배열은 서로
+     독립이므로(§14-3) "3번째로 옮겨라"만으로는 어느 배열인지 알 수
+     없고, 그 사이 요소의 소속이 바뀌었을 수도 있다. 찾은 것과 다르면
+     거부한다 — 한 배열만 반쯤 바뀐 상태를 만들지 않는다.
+========================================================== */
+
+/* 순서를 바꿀 수 있는 세 배열 — 그 이름은 findSkinHomeCanvasV2Node 의
+   `kind` 그대로다(새 이름을 만들지 않는다) */
+const SKIN_HOME_CANVAS_V2_ORDER_KINDS = ["block", "frame-element", "overlay"];
+
+/* Layers 의 눈 · 자물쇠가 쓰는 두 칸. 값 표는 계약이고(§5 · §14-4)
+   여기서는 "이 둘만 받는다"는 것만 정한다. */
+const SKIN_HOME_CANVAS_V2_FLAGS = ["hidden", "locked"];
+
+
+/*
+  writeSkinHomeCanvasV2ReorderNode(regions, request)
+
+    request { id, kind, parentId, index, expected: { index } }
+
+      kind      "block" | "frame-element" | "overlay"
+      parentId  frame-element 일 때 그 프레임 블록의 id, 아니면 ""
+      index     옮겨 갈 자리(0 부터)
+      expected  끌기를 시작할 때의 자리
+
+    -> { ok:true, regions, previous: { index } }
+    -> { ok:true, regions, previous, unchanged: true }
+    -> { ok:false, reason }
+
+  ★ **같은 부모 안에서만** 옮긴다. 소속이 바뀌는 것은 묶기 · 빼기이고
+    (§5), 그 둘은 좌표를 다시 적어야 한다. 순서만 바꾸는 이 함수는
+    좌표를 한 칸도 건드리지 않는다.
+
+  ★ `hidden` 인 것도 한 칸을 차지한다 — 화면에서는 건너뛰지만(§23-5)
+    배열에서는 한 칸이다(writeSkinHomeCanvasV2BlockOrder 와 같은 규칙).
+*/
+function writeSkinHomeCanvasV2ReorderNode(regions, request) {
+
+  const value =
+    isSkinHomeCanvasPlainObject(request) ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  if (SKIN_HOME_CANVAS_V2_ORDER_KINDS.indexOf(value.kind) === -1) {
+    return { ok: false, reason: "kind" };
+  }
+
+  if (!Number.isInteger(value.index)) {
+    return { ok: false, reason: "shape" };
+  }
+
+  if (
+    !isSkinHomeCanvasPlainObject(value.expected) ||
+    Object.keys(value.expected).length !== 1 ||
+    !Number.isInteger(value.expected.index)
+  ) {
+    return { ok: false, reason: "shape" };
+  }
+
+  const located =
+    skinHomeCanvasV2Locate(regions, value.id);
+
+  if (!located.ok) {
+    return located;
+  }
+
+  const hit =
+    located.hit;
+
+  /* 그 사이 종류나 소속이 바뀌었다 — 끌던 행은 이미 낡았다 */
+  if (hit.kind !== value.kind) {
+    return { ok: false, reason: "kind" };
+  }
+
+  const wantParent =
+    (typeof value.parentId === "string") ? value.parentId : "";
+
+  if (wantParent !== (hit.parentId || "")) {
+    return { ok: false, reason: "parent" };
+  }
+
+  if (hit.index !== value.expected.index) {
+    return { ok: false, reason: "expected" };
+  }
+
+
+  /* ── 어느 배열인가 ── */
+
+  const canvas =
+    located.canvas;
+
+  let list = null;
+
+  let frameHit = null;
+
+  if (hit.kind === "block") {
+
+    list = canvas.flow.blocks;
+
+  }
+  else if (hit.kind === "overlay") {
+
+    list = Array.isArray(canvas.overlays) ? canvas.overlays : null;
+
+  }
+  else {
+
+    frameHit =
+      skinHomeCanvasV2FrameHit(canvas, hit.parentId);
+
+    list =
+      frameHit ? frameHit.node.props.elements : null;
+
+  }
+
+  if (!Array.isArray(list)) {
+    return { ok: false, reason: "frame" };
+  }
+
+  if (value.index < 0 || value.index > list.length - 1) {
+    return { ok: false, reason: "range" };
+  }
+
+  const previous =
+    { index: hit.index };
+
+  if (value.index === hit.index) {
+    return { ok: true, regions: regions, previous: previous, unchanged: true };
+  }
+
+
+  /* ── 옮긴 배열 하나 ── */
+
+  const nextList =
+    list.slice();
+
+  nextList.splice(hit.index, 1);
+
+  nextList.splice(value.index, 0, hit.node);
+
+  const nextCanvas =
+    copySkinHomeCanvasObject(canvas);
+
+  if (hit.kind === "block") {
+
+    const nextFlow =
+      copySkinHomeCanvasObject(canvas.flow);
+
+    nextFlow.blocks = nextList;
+
+    nextCanvas.flow = nextFlow;
+
+  }
+  else if (hit.kind === "overlay") {
+
+    nextCanvas.overlays = nextList;
+
+  }
+  else {
+
+    nextCanvas.flow =
+      skinHomeCanvasV2FlowWithFrameElements(canvas.flow, frameHit, nextList);
+
+  }
+
+  const verdict =
+    (typeof validateSkinCanvasV2Data === "function")
+      ? validateSkinCanvasV2Data(nextCanvas, "canvas")
+      : { ok: true };
+
+  if (!verdict.ok) {
+    return { ok: false, reason: "invalid", path: verdict.path, message: verdict.message };
+  }
+
+  return {
+    ok: true,
+    regions: skinHomeCanvasV2ReplaceCanvas(regions, located.found, nextCanvas),
+    id: value.id,
+    kind: hit.kind,
+    parentId: hit.parentId,
+    previous: previous
+  };
+
+}
+
+
+/*
+  writeSkinHomeCanvasV2PrimaryPhoto(regions, request)
+
+    request { id, frameId }
+
+    -> { ok:true, regions, previous: { primaryId } }
+    -> { ok:true, regions, previous, unchanged: true }
+    -> { ok:false, reason }
+
+  그 프레임의 **대표 사진**을 바꾼다 — `props.primaryId` 한 칸이다.
+
+  ★ **옛 대표는 지우지 않는다.** 그냥 프레임 안의 보통 사진으로
+    남는다(계획 문서 §2-5). 대표는 자리가 아니라 가리키는 이름이므로
+    (§14-5) 배열도 좌표도 한 칸 바뀌지 않는다.
+
+  ★ 받을 수 있는 것은 **그 프레임 안의 photo** 하나다. 다른 프레임
+    소속이거나 photo 가 아니면 전체를 거부한다 — 검증에서 걸리게
+    두지 않고 이름 있는 이유로 먼저 막는다(§5 의 `primary` 와 같은
+    사정).
+
+  ★ `hidden` 인 사진은 대표가 될 수 없다(검증이 그렇게 말한다 —
+    skin/skin-home-canvas-v2.js). 그것도 먼저 이름으로 막는다.
+*/
+function writeSkinHomeCanvasV2PrimaryPhoto(regions, request) {
+
+  const value =
+    isSkinHomeCanvasPlainObject(request) ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  const located =
+    skinHomeCanvasV2Locate(regions, value.id);
+
+  if (!located.ok) {
+    return located;
+  }
+
+  const hit =
+    located.hit;
+
+  if (hit.kind !== "frame-element") {
+    return { ok: false, reason: "kind" };
+  }
+
+  if (hit.parentId !== value.frameId) {
+    return { ok: false, reason: "parent" };
+  }
+
+  const frameHit =
+    skinHomeCanvasV2FrameHit(located.canvas, hit.parentId);
+
+  if (!frameHit) {
+    return { ok: false, reason: "frame" };
+  }
+
+  if (hit.node.type !== "photo") {
+    return { ok: false, reason: "type" };
+  }
+
+  if (hit.node.hidden === true) {
+    return { ok: false, reason: "hidden" };
+  }
+
+  const previous =
+    { primaryId: frameHit.node.props.primaryId };
+
+  if (frameHit.node.props.primaryId === value.id) {
+    return { ok: true, regions: regions, previous: previous, unchanged: true };
+  }
+
+  const nextFlow =
+    copySkinHomeCanvasObject(located.canvas.flow);
+
+  nextFlow.blocks =
+    located.canvas.flow.blocks.map(
+      (block, index) => {
+
+        if (index !== frameHit.index) {
+          return block;
+        }
+
+        const blockCopy =
+          copySkinHomeCanvasObject(block);
+
+        const propsCopy =
+          copySkinHomeCanvasObject(block.props);
+
+        propsCopy.primaryId = value.id;
+
+        blockCopy.props = propsCopy;
+
+        return blockCopy;
+
+      }
+    );
+
+  const nextCanvas =
+    copySkinHomeCanvasObject(located.canvas);
+
+  nextCanvas.flow = nextFlow;
+
+  const verdict =
+    (typeof validateSkinCanvasV2Data === "function")
+      ? validateSkinCanvasV2Data(nextCanvas, "canvas")
+      : { ok: true };
+
+  if (!verdict.ok) {
+    return { ok: false, reason: "invalid", path: verdict.path, message: verdict.message };
+  }
+
+  return {
+    ok: true,
+    regions: skinHomeCanvasV2ReplaceCanvas(regions, located.found, nextCanvas),
+    id: value.id,
+    frameId: value.frameId,
+    previous: previous
+  };
+
+}
+
+
+/*
+  writeSkinHomeCanvasV2NodeFlag(regions, request)
+
+    request { id, flag: "hidden" | "locked", on: boolean }
+
+    -> { ok:true, regions, previous: { [flag]: boolean } }
+    -> { ok:true, regions, previous, unchanged: true }
+    -> { ok:false, reason }
+
+  블록 · 프레임 내부 요소 · overlay **셋 다** 받는다. 검증도 렌더러도
+  셋 모두에 이 두 칸을 갖고 있다(skin/skin-home-canvas-v2.js
+  validateSkinCanvasBlock · skin/skin-home-canvas.js 의 요소 검증,
+  skin/skin-home-canvas-render.js 의 두 자리).
+
+  ★ **끄면 칸을 지운다.** `hidden: false` 는 빠진 것과 같은 뜻이고
+    (§14-4 의 빠진 칸 읽는 법), 계산값을 기본값인 척 적지 않는 것이
+    §31-1 의 그 규칙이다. 그래서 켰다 끄면 JSON 이 처음 모양으로
+    정확히 돌아간다 — Export → Import 가 글자 단위로 같다.
+
+  ★ 대표 사진은 숨길 수 없다. 검증이 "primaryId 가 가리키는 요소는
+    hidden 일 수 없습니다"라고 말하므로, 그 전에 이름 있는 이유로
+    막는다(`primary`).
+*/
+function writeSkinHomeCanvasV2NodeFlag(regions, request) {
+
+  const value =
+    isSkinHomeCanvasPlainObject(request) ? request : null;
+
+  if (!value) {
+    return { ok: false, reason: "shape" };
+  }
+
+  if (SKIN_HOME_CANVAS_V2_FLAGS.indexOf(value.flag) === -1) {
+    return { ok: false, reason: "flag" };
+  }
+
+  if (typeof value.on !== "boolean") {
+    return { ok: false, reason: "shape" };
+  }
+
+  const located =
+    skinHomeCanvasV2Locate(regions, value.id);
+
+  if (!located.ok) {
+    return located;
+  }
+
+  const hit =
+    located.hit;
+
+  const now =
+    hit.node[value.flag] === true;
+
+  const previous =
+    { [value.flag]: now };
+
+  if (
+    value.flag === "hidden" &&
+    value.on === true &&
+    hit.kind === "frame-element"
+  ) {
+
+    const frameHit =
+      skinHomeCanvasV2FrameHit(located.canvas, hit.parentId);
+
+    if (frameHit && frameHit.node.props.primaryId === value.id) {
+      return { ok: false, reason: "primary" };
+    }
+
+  }
+
+  if (now === value.on) {
+    return { ok: true, regions: regions, previous: previous, unchanged: true };
+  }
+
+  const nextNode =
+    copySkinHomeCanvasObject(hit.node);
+
+  if (value.on) {
+    nextNode[value.flag] = true;
+  } else {
+    delete nextNode[value.flag];
+  }
+
+  const nextCanvas =
+    copySkinHomeCanvasObject(located.canvas);
+
+  if (hit.kind === "overlay") {
+
+    nextCanvas.overlays =
+      located.canvas.overlays.map(
+        (item, index) => (index === hit.index ? nextNode : item)
+      );
+
+  }
+  else if (hit.kind === "block") {
+
+    const nextFlow =
+      copySkinHomeCanvasObject(located.canvas.flow);
+
+    nextFlow.blocks =
+      located.canvas.flow.blocks.map(
+        (item, index) => (index === hit.index ? nextNode : item)
+      );
+
+    nextCanvas.flow = nextFlow;
+
+  }
+  else {
+
+    const frameHit =
+      skinHomeCanvasV2FrameHit(located.canvas, hit.parentId);
+
+    if (!frameHit) {
+      return { ok: false, reason: "frame" };
+    }
+
+    nextCanvas.flow =
+      skinHomeCanvasV2FlowWithFrameElements(
+        located.canvas.flow,
+        frameHit,
+        frameHit.node.props.elements.map(
+          (item, index) => (index === hit.index ? nextNode : item)
+        )
+      );
+
+  }
+
+  const verdict =
+    (typeof validateSkinCanvasV2Data === "function")
+      ? validateSkinCanvasV2Data(nextCanvas, "canvas")
+      : { ok: true };
+
+  if (!verdict.ok) {
+    return { ok: false, reason: "invalid", path: verdict.path, message: verdict.message };
+  }
+
+  return {
+    ok: true,
+    regions: skinHomeCanvasV2ReplaceCanvas(regions, located.found, nextCanvas),
+    id: value.id,
+    kind: hit.kind,
+    flag: value.flag,
+    on: value.on,
+    previous: previous
+  };
+
+}
+
 if (typeof window !== "undefined") {
 
   window.findSkinHomeCanvasV2Node = findSkinHomeCanvasV2Node;
@@ -2280,6 +2777,14 @@ if (typeof window !== "undefined") {
 
   window.SKIN_HOME_CANVAS_V2_PIN_START_POINT =
     SKIN_HOME_CANVAS_V2_PIN_START_POINT;
+
+  /* STUDIO-LAYERS-STRUCTURE-1 — 순서 · 대표 사진 · 숨김/잠금 */
+  window.writeSkinHomeCanvasV2ReorderNode = writeSkinHomeCanvasV2ReorderNode;
+  window.writeSkinHomeCanvasV2PrimaryPhoto = writeSkinHomeCanvasV2PrimaryPhoto;
+  window.writeSkinHomeCanvasV2NodeFlag = writeSkinHomeCanvasV2NodeFlag;
+
+  window.SKIN_HOME_CANVAS_V2_ORDER_KINDS = SKIN_HOME_CANVAS_V2_ORDER_KINDS;
+  window.SKIN_HOME_CANVAS_V2_FLAGS = SKIN_HOME_CANVAS_V2_FLAGS;
 
 }
 
@@ -2324,7 +2829,14 @@ if (typeof module !== "undefined" && module.exports) {
     writeSkinHomeCanvasV2DetachNode,
     writeSkinHomeCanvasV2RemoveNode,
     writeSkinHomeCanvasV2NodeFollow,
-    writeSkinHomeCanvasV2NodePin
+    writeSkinHomeCanvasV2NodePin,
+
+    /* STUDIO-LAYERS-STRUCTURE-1 — 순서 · 대표 사진 · 숨김/잠금 */
+    SKIN_HOME_CANVAS_V2_ORDER_KINDS,
+    SKIN_HOME_CANVAS_V2_FLAGS,
+    writeSkinHomeCanvasV2ReorderNode,
+    writeSkinHomeCanvasV2PrimaryPhoto,
+    writeSkinHomeCanvasV2NodeFlag
   };
 
   module.exports = api;

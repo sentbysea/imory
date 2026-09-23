@@ -335,11 +335,12 @@ function studioCanvasNodeList() {
   }
 
   return payload.elements.map(
-    (element) => ({
+    (element, index) => ({
       id: element.id,
       kind: "element",
       type: element.type,
-      parentId: null
+      parentId: null,
+      index: index
     })
   );
 
@@ -2099,7 +2100,90 @@ function commitStudioCanvasAddNode(request) {
      (추가 · 글자 내용과 같은 사정).
 ========================================================== */
 
-const STUDIO_CANVAS_STRUCTURE_OPS = ["attach", "detach", "remove"];
+const STUDIO_CANVAS_STRUCTURE_OPS = [
+  "attach", "detach", "remove",
+  /* STUDIO-LAYERS-STRUCTURE-1 — Layers 트리가 여는 셋 */
+  "reorder", "primary", "flag"
+];
+
+
+/* =========================================================
+   STUDIO-LAYERS-STRUCTURE-1 — 대상을 **누가 가리키는가** (계약 §32-3)
+
+   `V2-ELEMENTS-1` 까지 이 문의 셋은 전부 Canvas Inspector 의
+   버튼이었다. 그 패널은 "지금 고른 것 하나"를 그리므로, 화면과
+   저장값이 어긋나지 않게 하는 관문이 곧 **단독 선택 대조**였다.
+
+   Layers 트리의 행은 다르다 — 행 하나하나가 **자기 id 를 적고 있고**
+   그 행은 지금 draft 에서 만들어졌다(studio-canvas-layers.js). 고르지
+   않은 행의 눈 · 자물쇠 · 삭제를 누를 수 있어야 하고(숨긴 것을 다시
+   켜는 길이 그것뿐이다), 끌고 있는 행이 곧 대상이다.
+
+   그래서 **가리키는 주체를 요청이 밝힌다**.
+
+     via 없음(기본)  Inspector 패널 — 단독 선택이 그 id 여야 한다
+     via:"layers"    Layers 행    — 그 id 가 지금 draft 에 있어야 한다
+
+   ★ 약해지지 않는다. 어느 쪽이든 확정 직전에 **지금 draft** 로 다시
+     찾고, 순수 함수가 옮긴 뒤 캔버스 전체를 다시 검증한다. 순서는
+     그 위에 `expected` 까지 대조한다(계약 §32-4).
+========================================================== */
+
+const STUDIO_CANVAS_STRUCTURE_SOURCES = ["selection", "layers"];
+
+
+/* 그 요청의 모양이 그 op 에 맞는가 — 값 검사는 순수 함수가 한 번 더
+   한다. 여기서 보는 것은 "이 문을 열 모양인가" 하나다. */
+function studioCanvasStructureShapeReason(value) {
+
+  if (
+    value.op === "attach" &&
+    (typeof value.frameId !== "string" ||
+      !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.frameId))
+  ) {
+    return "frame";
+  }
+
+  if (value.op === "primary") {
+
+    if (
+      typeof value.frameId !== "string" ||
+      !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.frameId)
+    ) {
+      return "frame";
+    }
+
+  }
+
+  if (value.op === "reorder") {
+
+    if (
+      !Number.isInteger(value.index) ||
+      value.index < 0 ||
+      !value.expected ||
+      typeof value.expected !== "object" ||
+      !Number.isInteger(value.expected.index)
+    ) {
+      return "order";
+    }
+
+    if (["block", "frame-element", "overlay"].indexOf(value.kind) === -1) {
+      return "order";
+    }
+
+  }
+
+  if (
+    value.op === "flag" &&
+    (["hidden", "locked"].indexOf(value.flag) === -1 ||
+      typeof value.on !== "boolean")
+  ) {
+    return "flag";
+  }
+
+  return "";
+
+}
 
 
 function commitStudioCanvasStructureNode(request) {
@@ -2118,6 +2202,13 @@ function commitStudioCanvasStructureNode(request) {
     return { accepted: false, reason: "id" };
   }
 
+  const via =
+    (typeof value.via === "string" && value.via) ? value.via : "selection";
+
+  if (STUDIO_CANVAS_STRUCTURE_SOURCES.indexOf(via) === -1) {
+    return { accepted: false, reason: "via" };
+  }
+
   if (!studioCanvasEditingIsOn()) {
     return { accepted: false, reason: "not-editing" };
   }
@@ -2126,7 +2217,15 @@ function commitStudioCanvasStructureNode(request) {
     return { accepted: false, reason: "canvas" };
   }
 
-  if (
+  if (via === "layers") {
+
+    /* 행이 낡았을 수 있다 — 지금 draft 에 그 id 가 있는가 */
+    if (!studioCanvasNodeInfo(value.id)) {
+      return { accepted: false, reason: "element" };
+    }
+
+  }
+  else if (
     !studioCanvasSelection ||
     studioCanvasSelection.ids.length !== 1 ||
     studioCanvasSelection.primaryId !== value.id
@@ -2134,12 +2233,11 @@ function commitStudioCanvasStructureNode(request) {
     return { accepted: false, reason: "selection" };
   }
 
-  if (
-    value.op === "attach" &&
-    (typeof value.frameId !== "string" ||
-      !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.frameId))
-  ) {
-    return { accepted: false, reason: "frame" };
+  const shapeReason =
+    studioCanvasStructureShapeReason(value);
+
+  if (shapeReason) {
+    return { accepted: false, reason: shapeReason };
   }
 
   if (typeof window.moveStudioCanvasV2Node !== "function") {
@@ -2150,14 +2248,20 @@ function commitStudioCanvasStructureNode(request) {
     window.moveStudioCanvasV2Node({
       op: value.op,
       id: value.id,
-      frameId: (typeof value.frameId === "string") ? value.frameId : ""
+      frameId: (typeof value.frameId === "string") ? value.frameId : "",
+      kind: value.kind,
+      parentId: (typeof value.parentId === "string") ? value.parentId : "",
+      index: value.index,
+      expected: value.expected,
+      flag: value.flag,
+      on: value.on
     });
 
   if (!result || !result.ok) {
 
     console.info(
-      "[studio-canvas] 소속을 옮기지 않았습니다",
-      { op: value.op, id: value.id, reason: result && result.reason }
+      "[studio-canvas] 구조를 바꾸지 않았습니다",
+      { op: value.op, id: value.id, via: via, reason: result && result.reason }
     );
 
     return { accepted: false, reason: (result && result.reason) || "rejected" };
@@ -2176,7 +2280,16 @@ function commitStudioCanvasStructureNode(request) {
     clearStudioCanvasSelection();
   }
 
-  return { accepted: true, id: value.id, op: value.op };
+  return {
+    accepted: true,
+    id: value.id,
+    op: value.op,
+
+    /* 변화 없는 drop · 이미 그 대표 · 이미 그 상태 — 기록 0 칸이다.
+       부르는 쪽이 "됐다"와 "아무 일도 없었다"를 가를 수 있어야
+       한다(계약 §32-6). */
+    unchanged: result.unchanged === true
+  };
 
 }
 

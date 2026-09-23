@@ -342,6 +342,17 @@ function inspectorEditChromeAncestor(node) {
   그 자리는 "잠긴 요소가 없는 것과 같은 자리"가 된다 — 밑에 다른
   요소가 있으면 그것이 잡히고, 없으면 표식(= 캔버스 바탕)을 누른
   것과 같아진다.
+
+  ★ **v2 자동 배치 블록도 같은 규칙이다**(STUDIO-LAYERS-STRUCTURE-1 ·
+    계약 §32-5). 검증도 렌더러도 블록에 `locked` 를 갖고 있었지만
+    (`data-imory-canvas-locked`), 이 함수가 자유 배치 요소의 표식만
+    봤기 때문에 잠긴 블록은 그대로 골라졌다 — Layers 가 그 자물쇠를
+    화면에 내놓는 순간 거짓말이 되는 자리라 여기서 닫는다.
+
+  ★ **먼저 만나는 표식 하나로 끝난다.** 잠긴 `main_visual` 안의 잠기지
+    않은 장식은 그 장식의 표식에서 먼저 답이 나므로 그대로 골라진다 —
+    폴더를 잠갔다고 안의 것까지 잠기지는 않는다(계획 문서 §2-7 의
+    "폴더는 한 단계").
 */
 function inspectorLockedCanvasAncestor(node, root) {
 
@@ -354,7 +365,8 @@ function inspectorLockedCanvasAncestor(node, root) {
 
     if (
       current.hasAttribute &&
-      current.hasAttribute(INSPECTOR_CANVAS_ELEMENT_ATTR)
+      (current.hasAttribute(INSPECTOR_CANVAS_ELEMENT_ATTR) ||
+        current.hasAttribute(INSPECTOR_CANVAS_BLOCK_ATTR))
     ) {
 
       return current.getAttribute(INSPECTOR_CANVAS_LOCKED_ATTR) === "true"
