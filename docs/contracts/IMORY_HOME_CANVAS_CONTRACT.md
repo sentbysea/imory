@@ -721,7 +721,8 @@ Moveable · Selecto 는 **저장소에 들어왔지만 아직 아무것도 조�
 | ~~이동을 Canvas JSON 에 쓰는 경로~~ — **`TRANSFORM-1A` 에서 끝났다**(§17). 기존 `applyStudioInspectorPatch` 는 HTML/CSS 전용이라 쓰지 않는다(§14-6) | 완료 |
 | ~~크기를 Canvas JSON 에 쓰는 경로~~ — **`TRANSFORM-1B` 에서 끝났다**(§18) | 완료 |
 | ~~회전을 Canvas JSON 에 쓰는 경로~~ — **`TRANSFORM-1C` 에서 끝났다**(§19) | 완료 |
-| **그룹 조작**(지금은 여럿을 고르면 틀만 남고 이동 · 손잡이가 전부 꺼진다 — §17-1 · §18-1 · §19-1) | `HOME-CANVAS-TRANSFORM-1D` |
+| **그룹 조작**(지금은 여럿을 고르면 틀만 남고 이동 · 손잡이가 전부 꺼진다 — §17-1 · §18-1 · §19-1) | **`HOME-CANVAS-GROUP-1B` · `1C`** — 저장 구조 · 좌표 · Layers UX 는 [IMORY_HOME_CANVAS_GROUP_DESIGN.md](../plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md) 가 확정했다(v2 유지 · 새 칸 `canvas.groups` 하나 · 렌더러 무변경) |
+| **영구 그룹 자체가 없다**(여럿을 고른 것은 잠깐의 편집 상태이고, 다시 고르면 사라진다 — §16) | **`HOME-CANVAS-GROUP-1A`** — 같은 설계 문서 |
 | **스냅 · 가이드 · 키보드 조작 · Shift 각도 스냅 · 사용자 지정 회전 중심**(§19-12) | `HOME-CANVAS-TRANSFORM-1D` |
 | **손가락 조작**(의도적 미지원 — 그 자리는 Preview 스크롤이 지킨다 — §17-2 · §18-12 · §19-10) | `HOME-CANVAS-LAYERS-1` 의 모바일 다중 선택과 함께 |
 | ~~캔버스 요소의 Inspector 입력 필드(글자 내용 · geometry)~~ — **`INSPECTOR-1A` 에서 끝났다**(§22) | 완료 |
@@ -4405,7 +4406,14 @@ Crop 연결 · v1 캔버스의 요소 추가 · v1→v2 변환 · 기본 스킨 
   없다.** primary 지정은 묶기의 다음 걸음이다(`V2-GROUP-1`).
   > **✅ `STUDIO-LAYERS-STRUCTURE-1` 이 Layers 행의 ★ 로 채웠다 — §32-6.**
 - **여러 개를 한 번에 묶을 수 없다.** 세 동작 모두 단독 선택 하나에만
-  붙는다(§28-2) — 그룹 조작은 `TRANSFORM-1D` · `V2-GROUP-1` 이다.
+  붙는다(§28-2) — 그룹 조작은 ~~`TRANSFORM-1D` · `V2-GROUP-1`~~ 이다.
+  > **변경됨(2026-09-23 · `HOME-CANVAS-GROUP-CONTRACT-1`).** 둘은 다른
+  > 기능으로 갈렸다. **여럿을 한 번에 `main_visual` 에 묶는 것**은
+  > `HOME-CANVAS-V2-MULTI-ATTACH-1`(미착수 · 요청 없음)이고,
+  > **`HOME-CANVAS-GROUP-1A~1C` 는 `main_visual` 과 무관한 영구 폴더**다 —
+  > 좌표계를 바꾸지 않고 자식 좌표를 한 칸도 쓰지 않는다. 저장 모양 ·
+  > 좌표 · Layers UX · v2 호환은
+  > [IMORY_HOME_CANVAS_GROUP_DESIGN.md](../plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md).
 - `hidden`/`locked` 토글 · 레이어 목록 · 효과 설정 · Crop 연결 ·
   v1 캔버스의 요소 추가/삭제 · v1→v2 변환은 그대로 없다.
   > **✅ 레이어 목록과 `hidden`/`locked` 토글은 생겼다 —
@@ -5385,7 +5393,12 @@ UI 가 임의로 넓히지 않았다. 먼저 잰 것이 이 둘이다.
 responsive override · v1 Layers 의 구조 편집 · 일반 HTML Inspector 변경 ·
 글꼴/Quote Preset 변경 · `row`/`grid` 블록 · CATEGORY/POST/BANNER 캔버스.
 
-다음은 `HOME-CANVAS-V2-GROUP-1A` 다(계획 문서 §6).
+다음은 ~~`HOME-CANVAS-V2-GROUP-1A`~~ 다(계획 문서 §6).
+
+> **변경됨(2026-09-23 · `HOME-CANVAS-GROUP-CONTRACT-1`).** 그 작업은
+> 폐기됐고 다음은 **`HOME-CANVAS-GROUP-1A`**(영구 그룹의 저장 구조와
+> Layers 폴더)다 —
+> [IMORY_HOME_CANVAS_GROUP_DESIGN.md](../plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md).
 
 ### 32-12. 남은 차이
 

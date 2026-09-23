@@ -1306,7 +1306,20 @@ bottom-left  bottom  bottom-right
 > [계약 문서 §28](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) 이다.**
 > 묶을 프레임은 패널의 select 로 고르고, 화면 자리 · 크기 · 각도가
 > 유지되며, 한 번이 Undo 한 칸이다. **아래 1~3(lasso 로 여럿을 고른 뒤
-> 한꺼번에 묶기 · primary 지정)은 아직 없다** — `V2-GROUP-1`.
+> 한꺼번에 묶기 · primary 지정)은 아직 없다** — ~~`V2-GROUP-1`~~.
+>
+> **★ 그 뒤 계획이 갈렸다(2026-09-23 · `HOME-CANVAS-GROUP-CONTRACT-1`).**
+> primary 지정은 `STUDIO-LAYERS-STRUCTURE-1` 이 Layers 행의 ★ 로
+> **이미 끝냈고**(계약 §32-6), **여럿을 한꺼번에 `main_visual` 에 묶는
+> 것**은 별도 작업으로 떼어 놓았다(`HOME-CANVAS-V2-MULTI-ATTACH-1`,
+> 미착수 · 요청 없음). 그 자리에 들어온 `HOME-CANVAS-GROUP-1A~1C` 는
+> **다른 기능**이다 — `main_visual` 과 무관하게 Layers 에 **영구 폴더**를
+> 만들고, 좌표계를 바꾸지 않으며(자식 좌표를 한 칸도 안 쓴다), 저장은
+> `canvas.groups` 라는 새 칸 하나다. 상세는
+> [IMORY_HOME_CANVAS_GROUP_DESIGN.md](./IMORY_HOME_CANVAS_GROUP_DESIGN.md).
+> 아래 1~6 은 그때의 기록이고, **1~3 을 새 그룹 기능의 근거로 읽지
+> 않는다**(4~6 의 좌표 변환은 `main_visual` 넣기/빼기로 실제 구현됐다 —
+> 계약 §28).
 
 **lasso 는 소속이 아니라 선택 수단이다.** 끌어서 여러 개를 고른 것이 영구
 그룹이 되지 않는다.
@@ -1471,7 +1484,11 @@ bottom-left  bottom  bottom-right
 | 7-1 | `HOME-CANVAS-V2-EDITOR-1B` | v2 **직접 조작**(드래그 · 리사이즈 · 회전)과 프레임 내부 · overlay 의 좌표 편집 | **완료**(2026-09-22) — 결과는 [계약 문서 §26](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). 선택 하나마다 **자를 하나** 정하고(프레임 내부 좌표 / 프레임 상자 / 도화지) 프레임에는 그 자 위의 숫자만 내려간다 — 프레임의 메시지와 kind 는 **한 글자도 바뀌지 않았다**. `pin` 은 `pin.offset` 두 칸을 쓰고 크기를 바꿀 때 `origin` 몫을 좌표에 되돌린다. **블록 추가/삭제와 새 요소 추가는 이 작업에 넣지 않았다** — 아래 7-2 |
 | 7-2 | `HOME-CANVAS-V2-ADD-1` | v2 **재료 추가** — 흐름에 블록 다섯 · 페이지 자유 장식 여섯 · `main_visual` 은 primary 사진과 빈 이미지 슬롯을 함께 만든다 | **완료**(2026-09-22) — 결과는 [계약 문서 §27](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). 기본값과 새 id 는 **순수 함수**가 정하고, 넣은 뒤 **캔버스 전체를 다시 검증**한다. 한 번 = Undo 한 칸이고 만든 것이 곧바로 골라진다. 블록을 고를 때 남아 있던 **쓸 수 없는 Moveable 손잡이**도 여기서 감췄다(§26-8 의 남은 차이) |
 | 7-3 | `HOME-CANVAS-V2-ELEMENTS-1` | `main_visual` **안**에 장식 추가 · 기존 장식을 `메인 비주얼로 묶기`/`빼기` · `follow` 와 `pin` 의 기준 셋 · v2 **삭제** | **완료**(2026-09-22) — 결과는 [계약 문서 §28](../contracts/IMORY_HOME_CANVAS_CONTRACT.md). 소속은 **언제나 명시적**이고(lasso 가 묶지 않는다), 묶기 · 빼기 · follow 전환은 **화면 자리를 유지**한다. 그 계산에 필요한 값 중 저장값이 줄 수 없는 하나(프레임이 흐름 안에서 어디에 놓였는가)만 프레임이 **분수로 보고**한다 — 새 메시지 `CANVAS_LAYOUT` 하나(§28-3). `pin.target`/`anchor`/`origin` 을 고르는 UI 도 여기서 났다(§26-8 의 남은 차이) |
-| 8 | `HOME-CANVAS-V2-GROUP-1` | lasso/Shift 로 고른 **여럿을 한 번에** 묶기 · **primary 지정** · 그룹 조작 | 미착수 — 단독 선택 하나짜리 묶기 · 빼기는 7-3 이 이미 한다(계약 §28-2) |
+| 8 | ~~`HOME-CANVAS-V2-GROUP-1`~~ | ~~lasso/Shift 로 고른 **여럿을 한 번에** 묶기 · **primary 지정** · 그룹 조작~~ | **셋으로 갈라졌다**(2026-09-23 · `HOME-CANVAS-GROUP-CONTRACT-1` — 아래 8-1 · 8-2 · 8-3) |
+| 8-1 | `HOME-CANVAS-GROUP-1A` | **영구 그룹** — `canvas.groups` 저장 구조 · 만들기/해제/삭제 · Layers 폴더 · 자식 넣기/빼기 · 그룹/자식 선택. **좌표를 한 칸도 쓰지 않는다**(그래서 화면이 안 바뀐다) | 미착수 — 계약은 [IMORY_HOME_CANVAS_GROUP_DESIGN.md](./IMORY_HOME_CANVAS_GROUP_DESIGN.md) 가 확정했다(문서만) |
+| 8-2 | `HOME-CANVAS-GROUP-1B` | 그룹 **전체 이동** — 프레임은 도화지 자의 delta 하나만 올리고 부모가 멤버마다 자기 자로 환산한다 | 미착수 |
+| 8-3 | `HOME-CANVAS-GROUP-1C` | 그룹 **전체 크기 조절 · 회전** — 균등 배율(모서리 넷) · 피벗과 멤버별 중심 | 미착수 |
+| — | `HOME-CANVAS-V2-MULTI-ATTACH-1` | 여럿을 **한 번에 `main_visual` 에** 묶기. 옛 8번에서 떼어낸 조각이다 — 그룹과 다른 기능이고 좌표 변환이 필요하다(계약 §28-4) | 미착수 · **요청 없음**. primary 지정은 `STUDIO-LAYERS-STRUCTURE-1` 이 이미 했다(계약 §32-6) |
 | 9 | `HOME-CANVAS-EFFECT-HOOK-1` | 안정된 선택자 · 수명주기 · 정리. `main_visual` 과 sandbox 저자 JS 의 공존 | 미착수(§8 에 완료 기준) |
 
 > **★ `INSPECTOR-1A` 와 `V2-EDITOR-1A` 는 다른 작업이다.**
@@ -1482,8 +1499,11 @@ bottom-left  bottom  bottom-right
 > 같은 작업으로 합치거나 하나로 대체하지 않는다 — 책임 구분은 §14-10
 > 의 마지막 표다.
 
-그룹 전체 transform(`TRANSFORM-1D`) · row/grid · responsive override
-(`RESPONSIVE-1`) · layer panel(`LAYERS-1`) 은 각각 그대로 후속이다.
+그룹 전체 transform(~~`TRANSFORM-1D`~~ → **`HOME-CANVAS-GROUP-1B` · `1C`**,
+[설계](./IMORY_HOME_CANVAS_GROUP_DESIGN.md)) · row/grid · responsive override
+(`RESPONSIVE-1`) · layer panel(~~`LAYERS-1`~~ → **`STUDIO-LAYERS-SHELL-1` ·
+`STUDIO-LAYERS-STRUCTURE-1` 에서 구현됐다** — 계약 §32) 은 각각 그대로
+후속이다.
 
 ### 14-14. 수동 테스트에서 나온 v1 편집기 수정 (`HOME-CANVAS-MANUAL-UX-FIX-1`)
 
