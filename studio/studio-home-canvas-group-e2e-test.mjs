@@ -33,6 +33,14 @@
    [import]   Import 의 낡은 명단 수선과 완료 안내
    [group-move] 그룹 전체 이동 — 공통 delta · 좌표 공간 넷 · hidden/locked ·
               원자성 · stale · Undo 한 칸 · 390px 터치 · sandbox parity
+   [group-resize] 그룹 전체 크기 조절 — 모서리 넷 · 비율 고정 · 반대쪽
+              고정점 · 회전한 멤버 · height:"auto" · 프레임 안 · 공통
+              배율의 바닥 · 취소 · stale · 원자성 · Undo · 390px · sandbox
+   [group-rotate] 그룹 전체 회전 — 공통 각도 · 30° 자석 · 0/360 경계 ·
+              서로 다른 초기 각도 · 중심의 공전 · hidden/locked · 취소 ·
+              stale · 원자성 · Undo · 390px · sandbox
+   [sequence] 이동 → 크기 → 회전 → 이동 · Undo/Redo 네 번 ·
+              Export/Import · Publish resolve · Save → 다시 열기
    [round]    Save → 다시 열기 · Export → Import · Publish resolve
    [mobile]   390px — 가로 스크롤 0 · 잘림 0
    [sandbox]  별도 origin 에서 같은 결과 + CSP 위반 0
@@ -42,6 +50,7 @@
    실행:
      node studio/studio-home-canvas-group-e2e-test.mjs
      node studio/studio-home-canvas-group-e2e-test.mjs --only=drag
+     node studio/studio-home-canvas-group-e2e-test.mjs --only=group-resize,group-rotate
 ========================================================== */
 
 import fs from "node:fs";
@@ -943,6 +952,8 @@ if (wants("tree")) {
   const panel = await page.evaluate(() => ({
     title: (document.getElementById("studioCanvasInspectorTitle") || {}).textContent || "",
     soon: !!document.getElementById("studioCanvasInspectorGroupSoon"),
+    soonText:
+      (document.getElementById("studioCanvasInspectorGroupSoon") || {}).textContent || "",
     dissolve: !!document.getElementById("studioCanvasInspectorGroupDissolve"),
     remove: !!document.getElementById("studioCanvasInspectorGroupRemove"),
     rename: !!document.getElementById("studioCanvasInspectorGroupRename")
@@ -955,8 +966,13 @@ if (wants("tree")) {
   check("패널에 해제 · 이름 변경 · 삭제가 있다",
     panel.dissolve && panel.rename && panel.remove);
 
-  check("★ 무엇이 되고 무엇이 아직인지 한 줄로 말한다(이동은 되고 크기·회전은 아직)",
-    panel.soon === true);
+  /* HOME-CANVAS-GROUP-1C — 이제 셋이 전부 열렸다(계약 §40-1) */
+  check("★ 무엇을 할 수 있는지 한 줄로 말한다(이동 · 크기 · 회전)",
+    panel.soon === true &&
+      panel.soonText.indexOf("옮기고") !== -1 &&
+      panel.soonText.indexOf("크기") !== -1 &&
+      panel.soonText.indexOf("돌립니다") !== -1,
+    panel.soonText);
 
   const handles = await page.evaluate(() => {
 
@@ -1501,6 +1517,7 @@ if (wants("import")) {
 }
 
 
+
 /* ---------------------------------------------------------- [round] */
 
 if (wants("round")) {
@@ -1845,6 +1862,14 @@ function movePackage(options) {
       { id: "mvLockB", type: "shape", x: 160, y: 680, width: 40, height: 20,
         locked: true, props: { kind: "rect" } },
       { id: "mvLockC", type: "shape", x: 260, y: 680, width: 40, height: 20,
+        props: { kind: "rect" } },
+
+      /* HOME-CANVAS-GROUP-1C — 서로 다른 type 이 섞이고 높이가
+         `"auto"` 인 그룹. 크기 조절이 그 멤버의 **가로만** 배율을
+         받고 세로는 계속 내용이 정한다는 것을 여기서 잰다. */
+      { id: "mvAutoT", type: "text", x: 40, y: 780, width: 120,
+        height: "auto", props: { text: "자동 높이 글자", role: "body" } },
+      { id: "mvAutoS", type: "shape", x: 220, y: 780, width: 60, height: 36,
         props: { kind: "rect" } }
     ],
     groups: [
@@ -1853,7 +1878,8 @@ function movePackage(options) {
         members: ["mvLockA", "mvLockB", "mvLockC"] },
       { id: "gTrans", name: "프레임 안", members: ["mvT1", "mvT2"] },
       { id: "gPin", name: "핀 둘", members: ["mvP1", "mvP2"] },
-      { id: "gMix", name: "섞임", members: ["mvM1", "mvM2"] }
+      { id: "gMix", name: "섞임", members: ["mvM1", "mvM2"] },
+      { id: "gAuto", name: "자동 높이", members: ["mvAutoT", "mvAutoS"] }
     ]
   };
 
@@ -2204,6 +2230,439 @@ async function openMove(browser, options) {
   await openLayers(page);
 
   return { page, frame };
+
+}
+
+
+
+/* ---------------------------------------------------- [group-resize · rotate] */
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1C — 그룹 전체 크기 조절 · 회전
+
+   ★ 여기서도 숫자는 **화면에서 잰다**. 저장값만 보면 "모든 멤버가
+     같은 배율을 받았다"가 증명되지 않는다 — 멤버마다 자가 달라서
+     저장값은 원래 다르게 변하는 것이 맞다.
+
+   ★ 편집 외곽선을 expected 로 쓰지 않는다(계약 §40-3). 재는 것은
+     언제나 실제 요소의 getBoundingClientRect() 이고, 손잡이는
+     **잡을 자리**로만 쓴다.
+========================================================== */
+
+/* 선택자로 잰 상자 — 멤버가 아닌 것(손잡이 · 외곽선)도 잰다 */
+async function mvNativeSel(page, selectors) {
+
+  return page.evaluate((list) => {
+
+    const frame = document.getElementById("studioPreviewFrame");
+    const doc = frame.contentDocument;
+    const box = frame.getBoundingClientRect();
+    const scale = box.width / (frame.offsetWidth || box.width);
+    const cs = getComputedStyle(frame);
+    const bl = parseFloat(cs.borderLeftWidth) || 0;
+    const bt = parseFloat(cs.borderTopWidth) || 0;
+
+    const out = {};
+
+    list.forEach((selector) => {
+
+      const el = doc.querySelector(selector);
+
+      if (!el) {
+        out[selector] = null;
+        return;
+      }
+
+      const r = el.getBoundingClientRect();
+
+      /* ★ 감춰진 손잡이도 요소는 있다 — 상자가 0 이면 **없는 것**으로
+         읽는다(sandbox 갈래의 boundingBox() 가 그렇게 답한다). */
+      if (!r.width && !r.height) {
+        out[selector] = null;
+        return;
+      }
+
+      out[selector] = {
+        left: box.left + (bl + r.left) * scale,
+        top: box.top + (bt + r.top) * scale,
+        width: r.width * scale,
+        height: r.height * scale
+      };
+
+    });
+
+    return out;
+
+  }, selectors);
+
+}
+
+
+async function mvSandboxSel(frame, selectors) {
+
+  const out = {};
+
+  for (const selector of selectors) {
+
+    const box =
+      await frame.locator(selector).first().boundingBox().catch(() => null);
+
+    out[selector] =
+      box ? { left: box.x, top: box.y, width: box.width, height: box.height } : null;
+
+  }
+
+  return out;
+
+}
+
+
+const mvSel = (page, frame, sandbox, selectors) =>
+  sandbox ? mvSandboxSel(frame, selectors) : mvNativeSel(page, selectors);
+
+
+const mvHandleSelector = (name) => `[data-imory-canvas-group-handle="${name}"]`;
+
+
+/* 손잡이 하나의 지금 자리(화면 좌표) */
+async function mvHandle(page, frame, sandbox, name) {
+
+  const hit =
+    await mvSel(page, frame, sandbox, [mvHandleSelector(name)]);
+
+  return hit[mvHandleSelector(name)];
+
+}
+
+
+/* 손잡이 다섯이 지금 몇 개 보이는가 */
+async function mvHandleCount(page, frame, sandbox) {
+
+  const names = ["nw", "ne", "sw", "se", "rotate"];
+
+  const hit =
+    await mvSel(page, frame, sandbox, names.map(mvHandleSelector));
+
+  const out = {};
+
+  names.forEach((name) => {
+    out[name] = !!hit[mvHandleSelector(name)];
+  });
+
+  out.corners = ["nw", "ne", "sw", "se"].filter((name) => out[name]).length;
+
+  return out;
+
+}
+
+
+/* 상자 여럿의 합집합 — 그룹의 바깥 상자다 */
+function mvUnion(rects, ids) {
+
+  const list =
+    (ids || Object.keys(rects)).map((id) => rects[id]).filter(Boolean);
+
+  if (!list.length) {
+    return null;
+  }
+
+  return {
+    left: Math.min(...list.map((r) => r.left)),
+    top: Math.min(...list.map((r) => r.top)),
+    right: Math.max(...list.map((r) => r.left + r.width)),
+    bottom: Math.max(...list.map((r) => r.top + r.height))
+  };
+
+}
+
+
+const mvCenter = (rect) =>
+  rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null;
+
+
+/* 그 손잡이를 (dx, dy) 만큼 실제로 끈다 */
+async function mvDragHandle(page, frame, sandbox, name, dx, dy, options) {
+
+  const o = options || {};
+
+  const box =
+    await mvHandle(page, frame, sandbox, name);
+
+  if (!box) {
+    throw new Error("손잡이를 찾지 못했습니다: " + name);
+  }
+
+  const from = {
+    x: box.left + box.width / 2,
+    y: box.top + box.height / 2
+  };
+
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+
+  const steps = o.steps || 8;
+
+  for (let i = 1; i <= steps; i += 1) {
+    await page.mouse.move(from.x + (dx * i) / steps, from.y + (dy * i) / steps);
+    if (o.pause) await sleep(o.pause);
+  }
+
+  if (o.beforeUp) {
+    await o.beforeUp();
+  }
+
+  if (o.noUp) {
+    return from;
+  }
+
+  await page.mouse.up();
+
+  await sleep(o.settle === undefined ? 700 : o.settle);
+
+  return from;
+
+}
+
+
+/*
+  그룹을 모서리 하나로 크기 조절하고, 전후의 상자를 돌려준다.
+
+  `expect` 는 **관계**다 — 배율 하나 · 고정점 한 점. 배율을 미리
+  계산해 비교하지 않는다(그 계산을 테스트가 복제하면 제품 코드의
+  같은 실수를 함께 하게 된다).
+*/
+async function mvResizeGroup(page, frame, sandbox, grabId, name, dx, dy, ids, options) {
+
+  await mvBringIntoView(page, frame, sandbox, grabId);
+
+  const before =
+    await mvRects(page, frame, sandbox, ids);
+
+  await mvDragHandle(page, frame, sandbox, name, dx, dy, options);
+
+  const after =
+    await mvRects(page, frame, sandbox, ids);
+
+  return { before, after };
+
+}
+
+
+/*
+  크기 조절의 세 가지를 한 번에 본다(계약 §40-4).
+
+    1  멤버마다의 배율이 **하나**인가          (≤ 0.01)
+    2  잡지 않은 반대쪽 모서리가 제자리인가   (≤ 1px)
+    3  멤버 중심이 A + s(C − A) 인가          (≤ 1px)
+
+  `autoIds` 는 높이가 `"auto"` 인 멤버다 — 그 멤버의 **세로**는
+  배율을 받지 않으므로 1·3 의 세로 항에서 뺀다.
+*/
+function mvScaleReport(before, after, ids, direction, autoIds) {
+
+  const auto =
+    autoIds || [];
+
+  const b =
+    mvUnion(before, ids);
+
+  const a =
+    mvUnion(after, ids);
+
+  if (!b || !a) {
+    return { ok: false, why: "missing" };
+  }
+
+  const anchor = {
+    x: direction.indexOf("w") !== -1 ? b.right : b.left,
+    y: direction.indexOf("n") !== -1 ? b.bottom : b.top
+  };
+
+  const anchorAfter = {
+    x: direction.indexOf("w") !== -1 ? a.right : a.left,
+    y: direction.indexOf("n") !== -1 ? a.bottom : a.top
+  };
+
+  const scales = [];
+  const centers = [];
+
+  ids.forEach((id) => {
+
+    if (!before[id] || !after[id]) {
+      return;
+    }
+
+    scales.push(after[id].width / before[id].width);
+
+    if (auto.indexOf(id) === -1) {
+      scales.push(after[id].height / before[id].height);
+    }
+
+  });
+
+  const s =
+    scales.length ? scales.reduce((x, y) => x + y, 0) / scales.length : 0;
+
+  ids.forEach((id) => {
+
+    if (!before[id] || !after[id]) {
+      return;
+    }
+
+    const c0 = mvCenter(before[id]);
+    const c1 = mvCenter(after[id]);
+
+    /* `"auto"` 멤버의 세로 중심은 높이가 배율을 받지 않아 다르게
+       움직인다 — 가로만 본다 */
+    centers.push(Math.abs(c1.x - (anchor.x + (c0.x - anchor.x) * s)));
+
+    if (auto.indexOf(id) === -1) {
+      centers.push(Math.abs(c1.y - (anchor.y + (c0.y - anchor.y) * s)));
+    }
+
+  });
+
+  return {
+    ok: true,
+    scale: Math.round(s * 10000) / 10000,
+    spread: Math.round((Math.max(...scales) - Math.min(...scales)) * 10000) / 10000,
+    anchorMove:
+      Math.round(
+        Math.max(
+          Math.abs(anchorAfter.x - anchor.x),
+          Math.abs(anchorAfter.y - anchor.y)
+        ) * 100) / 100,
+    centerMiss: Math.round(Math.max(...centers) * 100) / 100
+  };
+
+}
+
+
+/* 그 요소가 지금 화면에서 몇 도인가 — transform 행렬에서 읽는다 */
+async function mvAngles(page, frame, sandbox, ids) {
+
+  const read = (doc, list) => {
+
+    const out = {};
+
+    list.forEach((id) => {
+
+      const el = doc.querySelector(`[data-imory-edit-id="${id}"]`);
+
+      if (!el) {
+        out[id] = null;
+        return;
+      }
+
+      const m = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+
+      let deg = Math.atan2(m.b, m.a) * 180 / Math.PI;
+
+      if (deg < 0) {
+        deg += 360;
+      }
+
+      out[id] = Math.round(deg * 100) / 100;
+
+    });
+
+    return out;
+
+  };
+
+  if (sandbox) {
+    return frame.evaluate(
+      ([list, src]) => new Function("doc", "list", "return (" + src + ")(doc, list)")(document, list),
+      [ids, read.toString()]);
+  }
+
+  return page.evaluate(
+    ([list, src]) => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      return new Function("doc", "list", "return (" + src + ")(doc, list)")(doc, list);
+    },
+    [ids, read.toString()]);
+
+}
+
+
+/* 각도 차이 — 0/360 경계를 접어서 본다 */
+function mvAngleDelta(before, after, id) {
+
+  if (before[id] === null || after[id] === null) {
+    return null;
+  }
+
+  let d = after[id] - before[id];
+
+  while (d > 180) d -= 360;
+  while (d <= -180) d += 360;
+
+  return Math.round(d * 100) / 100;
+
+}
+
+
+/* 회전의 두 가지를 본다(계약 §40-5).
+
+     1  멤버마다의 각도 delta 가 **하나**인가      (≤ 0.1°)
+     2  멤버 중심이 P + R(θ)(C − P) 인가           (≤ 1px)
+*/
+function mvRotateReport(before, after, beforeAngles, afterAngles, ids) {
+
+  const b = mvUnion(before, ids);
+
+  if (!b) {
+    return { ok: false, why: "missing" };
+  }
+
+  const pivot = {
+    x: (b.left + b.right) / 2,
+    y: (b.top + b.bottom) / 2
+  };
+
+  const deltas =
+    ids.map((id) => mvAngleDelta(beforeAngles, afterAngles, id)).filter((v) => v !== null);
+
+  const theta =
+    deltas.length ? deltas.reduce((x, y) => x + y, 0) / deltas.length : 0;
+
+  const rad = theta * Math.PI / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+
+  const misses = [];
+
+  ids.forEach((id) => {
+
+    if (!before[id] || !after[id]) {
+      return;
+    }
+
+    const c0 = mvCenter(before[id]);
+    const c1 = mvCenter(after[id]);
+
+    const vx = c0.x - pivot.x;
+    const vy = c0.y - pivot.y;
+
+    misses.push(
+      Math.max(
+        Math.abs(c1.x - (pivot.x + vx * cos - vy * sin)),
+        Math.abs(c1.y - (pivot.y + vx * sin + vy * cos))
+      )
+    );
+
+  });
+
+  return {
+    ok: true,
+    angle: Math.round(theta * 100) / 100,
+    spread:
+      deltas.length
+        ? Math.round((Math.max(...deltas) - Math.min(...deltas)) * 100) / 100
+        : 0,
+    centerMiss: Math.round(Math.max(...misses) * 100) / 100
+  };
 
 }
 
@@ -2964,6 +3423,1774 @@ if (wants("group-move")) {
     box.page.__errors.slice(0, 2).join(" | "));
 
   await close(box.page);
+
+}
+
+
+/* ---------------------------------------------------------- [group-resize] */
+
+if (wants("group-resize")) {
+
+  section("group-resize");
+
+  const { page, frame } = await openMove(browser, {});
+
+  /* ── 손잡이 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  await mvBringIntoView(page, frame, false, "mvA");
+
+  const shown =
+    await mvHandleCount(page, frame, false);
+
+  check("★ 그룹을 고르면 모서리 손잡이 넷이 보인다",
+    shown.corners === 4, JSON.stringify(shown));
+
+  check("★ 변 중앙 손잡이는 없다(Moveable 의 여덟도 그대로 0)",
+    (await mvFrameState(frame)).resizeHandles === 0);
+
+  check("★ 위쪽 중앙에 회전 손잡이가 있다", shown.rotate === true);
+
+  const gripGap = await (async () => {
+
+    const nw = await mvHandle(page, frame, false, "nw");
+    const grip =
+      (await mvSel(page, frame, false, ["[data-imory-canvas-move-grip]"]))[
+        "[data-imory-canvas-move-grip]"];
+
+    if (!nw || !grip) {
+      return null;
+    }
+
+    return Math.round(
+      Math.max(nw.left - (grip.left + grip.width), grip.top + grip.height - nw.top) * 10) / 10;
+
+  })();
+
+  check("★ 이동 손잡이와 `nw` 모서리가 겹치지 않는다",
+    gripGap !== null && gripGap >= 0, String(gripGap));
+
+  const rotateGap = await (async () => {
+
+    const ne = await mvHandle(page, frame, false, "ne");
+    const rot = await mvHandle(page, frame, false, "rotate");
+
+    return (ne && rot)
+      ? Math.round((ne.top - (rot.top + rot.height)) * 10) / 10
+      : null;
+
+  })();
+
+  check("★ 회전 손잡이가 위쪽 모서리 손잡이와 겹치지 않는다",
+    rotateGap !== null && rotateGap >= 0, String(rotateGap));
+
+  const range =
+    await mvFrameState(frame);
+
+  check("★ 프레임이 공통 배율 범위와 회전 가능 여부를 받았다",
+    range.groupScaleMin > 0 && range.groupScaleMax > range.groupScaleMin &&
+      range.groupCanRotate === true,
+    JSON.stringify({
+      min: Math.round(range.groupScaleMin * 1000) / 1000,
+      max: Math.round(range.groupScaleMax),
+      rotate: range.groupCanRotate
+    }));
+
+  /* ── overlay 그룹 확대 ── */
+
+  const growUndo = await mvUndoDepth(page);
+
+  const growCanvas = await mvCanvas(page);
+
+  const grow =
+    await mvResizeGroup(page, frame, false, "mvA", "se", 60, 60,
+      ["mvA", "mvB", "mvMid"]);
+
+  const growReport =
+    mvScaleReport(grow.before, grow.after, ["mvA", "mvB"], "se");
+
+  check("★ overlay 그룹 확대 — 멤버 전부가 **같은 배율**을 받았다",
+    growReport.scale > 1.05 && growReport.spread <= 0.01,
+    JSON.stringify(growReport));
+
+  check("★ 잡은 모서리의 반대편이 고정점이다(≤ 1px)",
+    growReport.anchorMove <= 1, String(growReport.anchorMove));
+
+  check("★ 멤버 중심이 A + s(C − A) 다(≤ 1px)",
+    growReport.centerMiss <= 1, String(growReport.centerMiss));
+
+  check("★ 그룹 밖 요소는 한 픽셀도 바뀌지 않았다",
+    Math.abs(grow.after.mvMid.left - grow.before.mvMid.left) <= 0.5 &&
+      Math.abs(grow.after.mvMid.width - grow.before.mvMid.width) <= 0.5,
+    JSON.stringify(grow.after.mvMid));
+
+  check("★ 크기 조절 한 번 = Undo 한 칸",
+    (await mvUndoDepth(page)) === growUndo + 1,
+    `${growUndo} → ${await mvUndoDepth(page)}`);
+
+  const grownCanvas = await mvCanvas(page);
+
+  check("★ `groups` · 배열 순서 · 모르는 칸은 그대로다",
+    JSON.stringify(growCanvas.groups) === JSON.stringify(grownCanvas.groups) &&
+      growCanvas.mvMystery.keep === grownCanvas.mvMystery.keep &&
+      growCanvas.overlays.map((el) => el.id).join(",") ===
+        grownCanvas.overlays.map((el) => el.id).join(","));
+
+  check("★ 숨은 멤버도 같은 배율로 저장값이 바뀌었다",
+    (() => {
+      const b = growCanvas.overlays.find((el) => el.id === "mvHid");
+      const a = grownCanvas.overlays.find((el) => el.id === "mvHid");
+      const bA = growCanvas.overlays.find((el) => el.id === "mvA");
+      const aA = grownCanvas.overlays.find((el) => el.id === "mvA");
+      return Math.abs((a.width / b.width) - (aA.width / bA.width)) <= 0.01;
+    })(),
+    JSON.stringify(grownCanvas.overlays.find((el) => el.id === "mvHid")));
+
+  check("★ type · props · hidden 은 그대로다",
+    (() => {
+      const a = grownCanvas.overlays.find((el) => el.id === "mvHid");
+      return a.type === "shape" && a.hidden === true && a.props.kind === "rect";
+    })());
+
+  /* ── Undo / Redo ── */
+
+  const grownRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  const undoneRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Undo 한 번에 그룹 전체가 시작 크기 · 자리로 돌아온다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(undoneRects[id].left - grow.before[id].left) <= 1 &&
+      Math.abs(undoneRects[id].top - grow.before[id].top) <= 1 &&
+      Math.abs(undoneRects[id].width - grow.before[id].width) <= 1 &&
+      Math.abs(undoneRects[id].height - grow.before[id].height) <= 1),
+    JSON.stringify(undoneRects));
+
+  await page.evaluate(() => window.redoStudioHistory());
+  await sleep(900);
+
+  const redoneRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Redo 한 번에 그룹 전체가 다시 적용된다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(redoneRects[id].left - grownRects[id].left) <= 1 &&
+      Math.abs(redoneRects[id].width - grownRects[id].width) <= 1),
+    JSON.stringify(redoneRects));
+
+  /* 다시 처음 크기로 — 아래 검사들이 같은 자에서 돌게 */
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  /* ── 축소 · 네 모서리 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const shrink =
+    await mvResizeGroup(page, frame, false, "mvA", "se", -30, -30,
+      ["mvA", "mvB"]);
+
+  const shrinkReport =
+    mvScaleReport(shrink.before, shrink.after, ["mvA", "mvB"], "se");
+
+  check("★ overlay 그룹 축소 — 같은 배율 · 같은 고정점",
+    shrinkReport.scale < 0.95 && shrinkReport.spread <= 0.01 &&
+      shrinkReport.anchorMove <= 1,
+    JSON.stringify(shrinkReport));
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  const corners = {};
+
+  for (const name of ["nw", "ne", "sw"]) {
+
+    await selectGroupFolder(page, "gOver");
+
+    const pull =
+      name === "nw" ? { x: -40, y: -40 }
+        : name === "ne" ? { x: 40, y: -40 }
+          : { x: -40, y: 40 };
+
+    const hit =
+      await mvResizeGroup(page, frame, false, "mvA", name, pull.x, pull.y,
+        ["mvA", "mvB"]);
+
+    corners[name] =
+      mvScaleReport(hit.before, hit.after, ["mvA", "mvB"], name);
+
+    await page.evaluate(() => window.undoStudioHistory());
+    await sleep(900);
+
+  }
+
+  check("★ 모서리 넷이 전부 같은 규칙이다 — 비율 고정 · 반대쪽 고정점",
+    ["nw", "ne", "sw"].every(
+      (name) =>
+        corners[name].scale > 1.05 &&
+        corners[name].spread <= 0.01 &&
+        corners[name].anchorMove <= 1 &&
+        corners[name].centerMiss <= 1),
+    JSON.stringify(corners));
+
+  /* ── 비율 고정 — 한 축으로만 끌어도 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const oneAxis =
+    await mvResizeGroup(page, frame, false, "mvA", "se", 60, 0,
+      ["mvA", "mvB"]);
+
+  const ratio = (rects, id) => rects[id].width / rects[id].height;
+
+  check("★ 가로로만 끌어도 종횡비가 유지된다(Shift 없이)",
+    ["mvA", "mvB"].every(
+      (id) => Math.abs(ratio(oneAxis.after, id) - ratio(oneAxis.before, id)) <= 0.02),
+    JSON.stringify(["mvA", "mvB"].map((id) => ({
+      id: id,
+      before: Math.round(ratio(oneAxis.before, id) * 100) / 100,
+      after: Math.round(ratio(oneAxis.after, id) * 100) / 100
+    }))));
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  /* ── 서로 다른 type · height:"auto" ── */
+
+  await selectGroupFolder(page, "gAuto");
+
+  const autoBeforeCanvas = await mvCanvas(page);
+
+  const autoRun =
+    await mvResizeGroup(page, frame, false, "mvAutoT", "se", 50, 50,
+      ["mvAutoT", "mvAutoS"]);
+
+  const autoReport =
+    mvScaleReport(autoRun.before, autoRun.after, ["mvAutoT", "mvAutoS"],
+      "se", ["mvAutoT"]);
+
+  check("★ 글자 · 도형이 섞여도 가로 배율은 하나다",
+    autoReport.scale > 1.05 && autoReport.spread <= 0.01,
+    JSON.stringify(autoReport));
+
+  const autoCanvas = await mvCanvas(page);
+
+  const autoNode =
+    autoCanvas.overlays.find((el) => el.id === "mvAutoT");
+
+  check("★ `height:\"auto\"` 는 조용히 숫자가 되지 않는다",
+    autoNode.height === "auto", JSON.stringify(autoNode));
+
+  check("★ 그 멤버의 **가로만** 배율을 받았다",
+    Math.abs(
+      (autoNode.width /
+        autoBeforeCanvas.overlays.find((el) => el.id === "mvAutoT").width) -
+      (autoCanvas.overlays.find((el) => el.id === "mvAutoS").width /
+        autoBeforeCanvas.overlays.find((el) => el.id === "mvAutoS").width)
+    ) <= 0.01,
+    JSON.stringify({ t: autoNode.width, s: autoCanvas.overlays.find((el) => el.id === "mvAutoS").width }));
+
+  const autoFont = await page.evaluate(() => {
+    const doc = document.getElementById("studioPreviewFrame").contentDocument;
+    const el = doc.querySelector('[data-imory-edit-id="mvAutoT"]');
+    return el ? getComputedStyle(el).fontSize : null;
+  });
+
+  check("★ 글자 크기 자체는 바뀌지 않는다(상자만 바뀐다 — 계약 §40-4)",
+    autoFont === "12px", String(autoFont));
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  /* ── 프레임 안 — transform 둘 · pin 둘 · 섞임 ── */
+
+  const frameCases = {};
+
+  for (const one of [
+    { group: "gTrans", grab: "mvT1", ids: ["mvT1", "mvT2"] },
+    { group: "gPin", grab: "mvP1", ids: ["mvP1", "mvP2"] },
+    { group: "gMix", grab: "mvM1", ids: ["mvM1", "mvM2"] }
+  ]) {
+
+    await selectGroupFolder(page, one.group);
+
+    const run =
+      await mvResizeGroup(page, frame, false, one.grab, "se", 30, 30, one.ids);
+
+    frameCases[one.group] =
+      mvScaleReport(run.before, run.after, one.ids, "se");
+
+    await page.evaluate(() => window.undoStudioHistory());
+    await sleep(900);
+
+  }
+
+  check("★ 프레임 안 `transform` 둘 — 회전한 멤버가 섞여도 배율 하나",
+    frameCases.gTrans.scale > 1.02 && frameCases.gTrans.spread <= 0.02 &&
+      frameCases.gTrans.anchorMove <= 1,
+    JSON.stringify(frameCases.gTrans));
+
+  check("★ 프레임 안 `pin` 둘도 같은 규칙이다",
+    frameCases.gPin.scale > 1.02 && frameCases.gPin.spread <= 0.02 &&
+      frameCases.gPin.anchorMove <= 1,
+    JSON.stringify(frameCases.gPin));
+
+  check("★ `transform` + `pin` 이 섞인 그룹도 **같은 배율 하나**다",
+    frameCases.gMix.scale > 1.02 && frameCases.gMix.spread <= 0.02 &&
+      frameCases.gMix.anchorMove <= 1 && frameCases.gMix.centerMiss <= 1,
+    JSON.stringify(frameCases.gMix));
+
+  /* ── 잠긴 멤버 ── */
+
+  const lockUndo = await mvUndoDepth(page);
+
+  const lockPick =
+    await selectGroupFolder(page, "gLock");
+
+  const lockState =
+    await mvFrameState(frame);
+
+  check("★ 잠긴 멤버가 있는 그룹에는 손잡이가 아예 없다",
+    (await mvHandleCount(page, frame, false)).corners === 0 &&
+      lockState.groupShapeGate !== "ok",
+    lockState.groupShapeGate);
+
+  const lockReason = await page.evaluate(() =>
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gLock", gestureId: 951, phase: "start", kind: "resize",
+      scale: 1, angle: 0,
+      members: [{ id: "mvLockA", vx: 0, vy: 0, h: 20 }],
+      generation: window.getStudioCanvasSelection()
+        ? window.getStudioCanvasSelection().generation : 0,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0,
+      requestId: 0
+    }).reason);
+
+  check("★ 잠긴 그룹은 시작 자체가 막힌다",
+    lockReason === "locked" || lockReason === "selection", String(lockReason));
+
+  check("★ 잠금 거절은 Undo 0칸",
+    (await mvUndoDepth(page)) === lockUndo,
+    `${lockUndo} → ${await mvUndoDepth(page)}`);
+
+  /* ── 최소 크기 · 공통 배율의 바닥 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const clampCanvas = await mvCanvas(page);
+
+  const clamp =
+    await mvResizeGroup(page, frame, false, "mvA", "se", -4000, -4000,
+      ["mvA", "mvB"]);
+
+  const clampReport =
+    mvScaleReport(clamp.before, clamp.after, ["mvA", "mvB"], "se");
+
+  const clampAfter = await mvCanvas(page);
+
+  const smallest =
+    ["mvA", "mvB"].map(
+      (id) => clampAfter.overlays.find((el) => el.id === id))
+      .reduce((m, el) => Math.min(m, el.width, el.height), Infinity);
+
+  check("★ 최소 크기 아래로는 줄지 않는다",
+    smallest >= 1 - 0.001, String(smallest));
+
+  check("★ 바닥에 닿아도 **공통 배율 하나**다(멤버마다 따로 자르지 않는다)",
+    clampReport.spread <= 0.02 && clampReport.anchorMove <= 1,
+    JSON.stringify(clampReport));
+
+  check("★ 그때도 뒤집히지 않는다(음수 크기 없음)",
+    ["mvA", "mvB"].every((id) =>
+      clamp.after[id].width > 0 && clamp.after[id].height > 0) &&
+      ["mvA", "mvB"].every((id) => {
+        const el = clampAfter.overlays.find((n) => n.id === id);
+        return el.width > 0 && el.height > 0;
+      }));
+
+  void clampCanvas;
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  /* ── 취소 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const cancelUndo = await mvUndoDepth(page);
+
+  const cancelBefore =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  await mvDragHandle(page, frame, false, "se", 50, 50, {
+    noUp: true,
+    pause: 30
+  });
+
+  const duringCancel =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ 끄는 동안 멤버가 즉시 따라온다",
+    duringCancel.mvA.width > cancelBefore.mvA.width + 2,
+    JSON.stringify({ before: cancelBefore.mvA.width, during: duringCancel.mvA.width }));
+
+  await page.keyboard.press("Escape");
+  await sleep(400);
+  await page.mouse.up();
+  await sleep(500);
+
+  const afterCancel =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Escape 는 시작 크기로 완전히 돌린다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(afterCancel[id].left - cancelBefore[id].left) <= 1 &&
+      Math.abs(afterCancel[id].width - cancelBefore[id].width) <= 1 &&
+      Math.abs(afterCancel[id].height - cancelBefore[id].height) <= 1),
+    JSON.stringify(afterCancel));
+
+  check("★ 취소는 Undo 0칸",
+    (await mvUndoDepth(page)) === cancelUndo,
+    `${cancelUndo} → ${await mvUndoDepth(page)}`);
+
+  /* ── stale · 원자성 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const gateUndo = await mvUndoDepth(page);
+
+  const gates = await page.evaluate(() => {
+
+    const open = () => ({
+      generation: window.getStudioCanvasSelection()
+        ? window.getStudioCanvasSelection().generation : 0,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0
+    });
+
+    const members = [
+      { id: "mvA", vx: 0, vy: 0, h: 40 },
+      { id: "mvB", vx: 40, vy: 40, h: 35 }
+    ];
+
+    const out = {};
+
+    out.noStart =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 981, phase: "end", kind: "resize",
+        scale: 1.2, angle: 0, members: members, ...open(), requestId: 1
+      }).reason;
+
+    const one = open();
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 982, phase: "start", kind: "resize",
+      scale: 1, angle: 0, members: members, ...one, requestId: 0
+    });
+
+    out.staleRevision =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 982, phase: "end", kind: "resize",
+        scale: 1.2, angle: 0, members: members,
+        generation: one.generation, revision: one.revision + 7, requestId: 2
+      }).reason;
+
+    /* 종류가 갈린 end — 크기로 시작해 회전으로 끝낼 수 없다 */
+    const two = open();
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 983, phase: "start", kind: "resize",
+      scale: 1, angle: 0, members: members, ...two, requestId: 0
+    });
+
+    out.otherKind =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 983, phase: "end", kind: "rotate",
+        scale: 1, angle: 20, members: members, ...two, requestId: 3
+      }).reason;
+
+    /* 보고된 명단이 시작 때와 다른 end */
+    const three = open();
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 984, phase: "start", kind: "resize",
+      scale: 1, angle: 0, members: members, ...three, requestId: 0
+    });
+
+    out.otherMembers =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 984, phase: "end", kind: "resize",
+        scale: 1.2, angle: 0,
+        members: [{ id: "mvA", vx: 0, vy: 0, h: 40 }],
+        ...three, requestId: 4
+      }).reason;
+
+    /* 범위 밖 배율 */
+    const four = open();
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 985, phase: "start", kind: "resize",
+      scale: 1, angle: 0, members: members, ...four, requestId: 0
+    });
+
+    out.tooSmall =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 985, phase: "end", kind: "resize",
+        scale: 0.0002, angle: 0, members: members, ...four, requestId: 5
+      }).reason;
+
+    /* 모르는 멤버가 섞인 보고 */
+    const five = open();
+
+    const alien = [
+      { id: "mvA", vx: 0, vy: 0, h: 40 },
+      { id: "mvMid", vx: 40, vy: 40, h: 30 }
+    ];
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 986, phase: "start", kind: "resize",
+      scale: 1, angle: 0, members: alien, ...five, requestId: 0
+    });
+
+    out.alien =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 986, phase: "end", kind: "resize",
+        scale: 1.2, angle: 0, members: alien, ...five, requestId: 6
+      }).reason;
+
+    /* 배율이 1 이면 한 칸도 쓰지 않는다 */
+    const six = open();
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 987, phase: "start", kind: "resize",
+      scale: 1, angle: 0, members: members, ...six, requestId: 0
+    });
+
+    out.same =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 987, phase: "end", kind: "resize",
+        scale: 1, angle: 0, members: members, ...six, requestId: 7
+      }).reason;
+
+    return out;
+
+  });
+
+  check("★ 시작을 알리지 않은 end 는 쓰지 않는다",
+    gates.noStart === "stale", JSON.stringify(gates));
+
+  check("★ 낡은 revision 의 end 는 쓰지 않는다",
+    gates.staleRevision === "stale", gates.staleRevision);
+
+  check("★ 종류가 갈린 end 는 쓰지 않는다",
+    gates.otherKind === "stale", gates.otherKind);
+
+  check("★ 보고된 명단이 갈리면 쓰지 않는다",
+    gates.otherMembers === "members", gates.otherMembers);
+
+  check("★ 공통 배율 범위 밖은 쓰지 않는다",
+    gates.tooSmall === "range", gates.tooSmall);
+
+  check("★ 그룹 밖 요소가 섞인 보고는 쓰지 않는다",
+    gates.alien === "members", gates.alien);
+
+  check("★ 배율이 1 이면 한 칸도 쓰지 않는다",
+    gates.same === "unchanged", gates.same);
+
+  check("★ 거절과 무변경은 전부 Undo 0칸",
+    (await mvUndoDepth(page)) === gateUndo,
+    `${gateUndo} → ${await mvUndoDepth(page)}`);
+
+  /* 한 멤버라도 계획이 서지 않으면 **전부 무변경**이다 */
+
+  await selectGroupFolder(page, "gOver");
+
+  const atomicUndo = await mvUndoDepth(page);
+
+  const atomicBefore = await mvCanvas(page);
+
+  const atomic = await page.evaluate(() => {
+
+    const real = window.planStudioCanvasV2Transform;
+
+    let seen = 0;
+
+    /* 두 번째 멤버에서 실패하게 만든다 — 첫 멤버는 계획이 섰다 */
+    window.planStudioCanvasV2Transform = function (kind, id, next, expected) {
+      seen += 1;
+      return seen === 2 ? { ok: false, reason: "test" } : real(kind, id, next, expected);
+    };
+
+    const open = {
+      generation: window.getStudioCanvasSelection().generation,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0
+    };
+
+    const members = [
+      { id: "mvA", vx: 0, vy: 0, h: 40 },
+      { id: "mvB", vx: 40, vy: 40, h: 35 }
+    ];
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 971, phase: "start", kind: "resize",
+      scale: 1, angle: 0, members: members, ...open, requestId: 0
+    });
+
+    const reason =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 971, phase: "end", kind: "resize",
+        scale: 1.4, angle: 0, members: members, ...open, requestId: 8
+      }).reason;
+
+    window.planStudioCanvasV2Transform = real;
+
+    return reason;
+
+  });
+
+  check("★ 한 멤버라도 계획이 서지 않으면 전부 무변경",
+    atomic === "test" &&
+      JSON.stringify(atomicBefore) === JSON.stringify(await mvCanvas(page)),
+    String(atomic));
+
+  check("★ 원자적 실패는 Undo 0칸",
+    (await mvUndoDepth(page)) === atomicUndo,
+    `${atomicUndo} → ${await mvUndoDepth(page)}`);
+
+  /* ── native 의 저장값 — 아래 sandbox 와 견준다 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const nativeRun =
+    await mvResizeGroup(page, frame, false, "mvA", "se", 60, 60,
+      ["mvA", "mvB"]);
+
+  const nativeReport =
+    mvScaleReport(nativeRun.before, nativeRun.after, ["mvA", "mvB"], "se");
+
+  const nativeStored =
+    JSON.stringify((await mvCanvas(page)).overlays.find((el) => el.id === "mvA"));
+
+  check("pageerror 0", page.__errors.length === 0,
+    page.__errors.join(" | "));
+
+  await page.close();
+
+
+  /* ── 390px 실제 터치 ── */
+
+  const mobile =
+    await openMove(browser, {
+      viewport: { width: 390, height: 780 }, hasTouch: true
+    });
+
+  await selectGroupFolder(mobile.page, "gOver");
+
+  /* 390px 에서 왼쪽 패널은 화면을 통째로 덮는다(그룹 이동과 같다) */
+  await mobile.page.evaluate(() => window.collapseStudioLeftPanel());
+
+  await sleep(500);
+
+  await mvBringIntoView(mobile.page, mobile.frame, false, "mvA");
+
+  const touchHandles =
+    await mvHandleCount(mobile.page, mobile.frame, false);
+
+  check("★ 390px 에서도 모서리 손잡이 넷을 누를 수 있다",
+    touchHandles.corners === 4, JSON.stringify(touchHandles));
+
+  const touchSize =
+    await mvHandle(mobile.page, mobile.frame, false, "se");
+
+  check("★ 손잡이가 손가락이 닿을 만큼 크다(보이는 크기 = 잡는 크기)",
+    !!touchSize && touchSize.width >= 18 && touchSize.height >= 18,
+    JSON.stringify(touchSize));
+
+  const touchBefore =
+    await mvRects(mobile.page, mobile.frame, false, ["mvA", "mvB"]);
+
+  const touchScroll =
+    await mobile.page.evaluate(() => window.scrollX);
+
+  if (touchSize) {
+
+    const cdp =
+      await mobile.page.context().newCDPSession(mobile.page);
+
+    const touch = async (type, x, y) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type: type,
+        touchPoints: type === "touchEnd" ? [] : [{ x: x, y: y, id: 1 }]
+      });
+
+    const from = {
+      x: touchSize.left + touchSize.width / 2,
+      y: touchSize.top + touchSize.height / 2
+    };
+
+    await touch("touchStart", from.x, from.y);
+
+    for (let i = 1; i <= 6; i += 1) {
+      await touch("touchMove", from.x + (24 * i) / 6, from.y + (24 * i) / 6);
+      await sleep(40);
+    }
+
+    await touch("touchEnd", 0, 0);
+
+    await sleep(900);
+
+    const touchAfter =
+      await mvRects(mobile.page, mobile.frame, false, ["mvA", "mvB"]);
+
+    const touchReport =
+      mvScaleReport(touchBefore, touchAfter, ["mvA", "mvB"], "se");
+
+    const touchState =
+      await mvFrameState(mobile.frame);
+
+    check("★ 390px 실제 터치로 그룹 크기가 바뀐다",
+      touchState.groupShapeCount >= 1 && touchReport.scale > 1.02 &&
+        touchReport.spread <= 0.02,
+      JSON.stringify(touchReport));
+
+    check("★ 그 제스처가 이동으로 새지 않았다(그룹 이동 0회)",
+      touchState.groupMoveCount === 0, String(touchState.groupMoveCount));
+
+    check("★ 끄는 동안 페이지가 가로로 밀리지 않는다",
+      (await mobile.page.evaluate(() => window.scrollX)) === touchScroll,
+      String(touchScroll));
+
+  }
+
+  check("pageerror 0 (390px)", mobile.page.__errors.length === 0,
+    mobile.page.__errors.slice(0, 2).join(" | "));
+
+  await mobile.page.close();
+
+
+  /* ── sandbox — 같은 제스처 · 같은 결과 ── */
+
+  const box =
+    await openMove(browser, { sandbox: true });
+
+  await selectGroupFolder(box.page, "gOver");
+
+  await mvBringIntoView(box.page, box.frame, true, "mvA");
+
+  const boxHandles =
+    await mvHandleCount(box.page, box.frame, true);
+
+  check("★ sandbox 에서도 모서리 손잡이 넷이 보인다",
+    boxHandles.corners === 4, JSON.stringify(boxHandles));
+
+  const boxRun =
+    await mvResizeGroup(box.page, box.frame, true, "mvA", "se", 60, 60,
+      ["mvA", "mvB"]);
+
+  const boxReport =
+    mvScaleReport(boxRun.before, boxRun.after, ["mvA", "mvB"], "se");
+
+  check("★ sandbox 에서도 멤버 전부가 같은 배율을 받았다",
+    boxReport.scale > 1.05 && boxReport.spread <= 0.02 &&
+      boxReport.anchorMove <= 1,
+    JSON.stringify(boxReport));
+
+  check("★ native ↔ sandbox 가 같은 배율을 만든다",
+    Math.abs(boxReport.scale - nativeReport.scale) <= 0.01,
+    JSON.stringify({ native: nativeReport.scale, sandbox: boxReport.scale }));
+
+  check("★ native ↔ sandbox 가 같은 저장값을 만든다",
+    JSON.stringify(
+      (await mvCanvas(box.page)).overlays.find((el) => el.id === "mvA")) ===
+      nativeStored,
+    nativeStored);
+
+  const boxCsp =
+    await box.page.evaluate(() => window.__cspViolations || []);
+
+  check("★ CSP 위반 0 (부모)", boxCsp.length === 0, JSON.stringify(boxCsp));
+
+  const frameCsp =
+    await box.frame.evaluate(() => window.__cspViolations || []);
+
+  check("★ CSP 위반 0 (프레임)", frameCsp.length === 0, JSON.stringify(frameCsp));
+
+  check("pageerror 0 (sandbox)", box.page.__errors.length === 0,
+    box.page.__errors.slice(0, 2).join(" | "));
+
+  await box.page.close();
+
+}
+
+
+/* ---------------------------------------------------------- [group-rotate] */
+
+/*
+  회전 손잡이를 **호를 따라** 끈다 — 직선으로 끌면 도중에 피벗
+  가까이를 지나며 각도가 튄다.
+
+  `deg` 는 이 제스처가 **날것으로** 도는 각도다. 30° 자석이 그 값을
+  가장 가까운 30° 배수로 당길 수 있고(계약 §40-5), 그것을 재는 것이
+  이 절의 일이다.
+*/
+async function mvTurnHandle(page, frame, sandbox, pivot, deg, options) {
+
+  const o = options || {};
+
+  const box =
+    await mvHandle(page, frame, sandbox, "rotate");
+
+  if (!box) {
+    throw new Error("회전 손잡이를 찾지 못했습니다");
+  }
+
+  const from = {
+    x: box.left + box.width / 2,
+    y: box.top + box.height / 2
+  };
+
+  const vx = from.x - pivot.x;
+  const vy = from.y - pivot.y;
+
+  const radius = Math.sqrt(vx * vx + vy * vy);
+  const base = Math.atan2(vy, vx);
+
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+
+  const steps = o.steps || 10;
+
+  for (let i = 1; i <= steps; i += 1) {
+
+    const a = base + (deg * i / steps) * Math.PI / 180;
+
+    await page.mouse.move(
+      pivot.x + radius * Math.cos(a),
+      pivot.y + radius * Math.sin(a));
+
+    if (o.pause) await sleep(o.pause);
+
+  }
+
+  if (o.beforeUp) {
+    await o.beforeUp();
+  }
+
+  if (o.noUp) {
+    return from;
+  }
+
+  await page.mouse.up();
+
+  await sleep(o.settle === undefined ? 700 : o.settle);
+
+  return from;
+
+}
+
+
+async function mvRotateGroup(page, frame, sandbox, grabId, deg, ids, options) {
+
+  await mvBringIntoView(page, frame, sandbox, grabId);
+
+  const before =
+    await mvRects(page, frame, sandbox, ids);
+
+  const beforeAngles =
+    await mvAngles(page, frame, sandbox, ids);
+
+  const bounds =
+    mvUnion(before, ids);
+
+  const pivot = {
+    x: (bounds.left + bounds.right) / 2,
+    y: (bounds.top + bounds.bottom) / 2
+  };
+
+  await mvTurnHandle(page, frame, sandbox, pivot, deg, options);
+
+  const after =
+    await mvRects(page, frame, sandbox, ids);
+
+  const afterAngles =
+    await mvAngles(page, frame, sandbox, ids);
+
+  return {
+    before: before,
+    after: after,
+    beforeAngles: beforeAngles,
+    afterAngles: afterAngles,
+    pivot: pivot,
+    report: mvRotateReport(before, after, beforeAngles, afterAngles, ids)
+  };
+
+}
+
+
+if (wants("group-rotate")) {
+
+  section("group-rotate");
+
+  const { page, frame } = await openMove(browser, {});
+
+  /* ── overlay 그룹 — 양수 회전 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const turnUndo = await mvUndoDepth(page);
+
+  const turnCanvas = await mvCanvas(page);
+
+  const turn =
+    await mvRotateGroup(page, frame, false, "mvA", 45, ["mvA", "mvB"]);
+
+  check("★ overlay 그룹 회전 — 멤버 전부가 **같은 각도**만큼 돌았다",
+    turn.report.angle > 40 && turn.report.spread <= 0.1,
+    JSON.stringify(turn.report));
+
+  check("★ 멤버 중심이 P + R(θ)(C − P) 다(≤ 1px)",
+    turn.report.centerMiss <= 1, String(turn.report.centerMiss));
+
+  /* ★ 회전한 요소의 **바깥** 상자는 커지는 것이 맞다(축에 정렬된
+     그림자다). 화면에서 "유지된다"를 재는 값은 멤버 **사이의
+     거리**이고, 상자 네 칸은 바로 아래에서 저장값으로 본다. */
+  const spanOf = (rects) => {
+    const a = mvCenter(rects.mvA);
+    const b = mvCenter(rects.mvB);
+    return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+  };
+
+  check("★ 내부 상대 배치는 유지된다(멤버 사이의 거리 ≤ 1px)",
+    Math.abs(spanOf(turn.after) - spanOf(turn.before)) <= 1,
+    JSON.stringify({
+      before: Math.round(spanOf(turn.before) * 10) / 10,
+      after: Math.round(spanOf(turn.after) * 10) / 10
+    }));
+
+  const turnedCanvas = await mvCanvas(page);
+
+  check("★ 저장된 상자 네 칸은 크기가 그대로다(각도와 자리만 바뀐다)",
+    ["mvA", "mvB"].every((id) => {
+      const b = turnCanvas.overlays.find((el) => el.id === id);
+      const a = turnedCanvas.overlays.find((el) => el.id === id);
+      return a.width === b.width && a.height === b.height;
+    }),
+    JSON.stringify(turnedCanvas.overlays.find((el) => el.id === "mvA")));
+
+  check("★ 회전 한 번 = Undo 한 칸",
+    (await mvUndoDepth(page)) === turnUndo + 1,
+    `${turnUndo} → ${await mvUndoDepth(page)}`);
+
+  check("★ 숨은 멤버도 같은 각도 · 같은 규칙으로 돌았다",
+    (() => {
+      const a = turnedCanvas.overlays.find((el) => el.id === "mvHid");
+      const b = turnedCanvas.overlays.find((el) => el.id === "mvA");
+      return Math.abs((a.rotation || 0) - (b.rotation || 0)) <= 0.1 &&
+        a.hidden === true;
+    })(),
+    JSON.stringify(turnedCanvas.overlays.find((el) => el.id === "mvHid")));
+
+  check("★ `groups` · 배열 순서 · 모르는 칸은 그대로다",
+    JSON.stringify(turnCanvas.groups) === JSON.stringify(turnedCanvas.groups) &&
+      turnCanvas.mvMystery.keep === turnedCanvas.mvMystery.keep);
+
+  /* ── Undo / Redo ── */
+
+  const turnedRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  const undoneRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  const undoneAngles =
+    await mvAngles(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Undo 한 번에 각도와 자리가 전부 돌아온다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(undoneRects[id].left - turn.before[id].left) <= 1 &&
+      Math.abs(undoneRects[id].top - turn.before[id].top) <= 1 &&
+      Math.abs(mvAngleDelta(turn.beforeAngles, undoneAngles, id)) <= 0.1),
+    JSON.stringify(undoneAngles));
+
+  await page.evaluate(() => window.redoStudioHistory());
+  await sleep(900);
+
+  const redoneRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Redo 한 번에 그룹 전체가 다시 돈다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(redoneRects[id].left - turnedRects[id].left) <= 1),
+    JSON.stringify(redoneRects));
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  /* ── 음수 회전 · 30° 자석 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const back =
+    await mvRotateGroup(page, frame, false, "mvA", -50, ["mvA", "mvB"]);
+
+  check("★ 음수 회전도 같은 규칙이다",
+    back.report.angle < -45 && back.report.spread <= 0.1 &&
+      back.report.centerMiss <= 1,
+    JSON.stringify(back.report));
+
+  const backCanvas = await mvCanvas(page);
+
+  check("★ 각도는 0~360 으로 접혀 저장된다(0°/360° 경계)",
+    ["mvA", "mvB"].every((id) => {
+      const el = backCanvas.overlays.find((n) => n.id === id);
+      return el.rotation >= 0 && el.rotation < 360 && el.rotation > 300;
+    }),
+    JSON.stringify(backCanvas.overlays.filter(
+      (el) => el.id === "mvA" || el.id === "mvB").map((el) => el.rotation)));
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  await selectGroupFolder(page, "gOver");
+
+  const snap =
+    await mvRotateGroup(page, frame, false, "mvA", 28, ["mvA", "mvB"]);
+
+  check("★ 30° 자석이 **공통 delta 에** 걸린다(단일 회전과 같은 규칙)",
+    Math.abs(snap.report.angle - 30) <= 0.2,
+    String(snap.report.angle));
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  /* ── 서로 다른 초기 각도 · 이미 회전된 멤버 ── */
+
+  await selectGroupFolder(page, "gTrans");
+
+  const mixedBefore = await mvCanvas(page);
+
+  const mixed =
+    await mvRotateGroup(page, frame, false, "mvT1", -45, ["mvT1", "mvT2"]);
+
+  check("★ 초기 각도가 서로 달라도 delta 는 하나다(0° 와 20°)",
+    mixed.report.spread <= 0.2 && mixed.report.centerMiss <= 1,
+    JSON.stringify(mixed.report));
+
+  const mixedAfter = await mvCanvas(page);
+
+  const framed =
+    (canvas, id) =>
+      canvas.flow.blocks[0].props.elements.find((el) => el.id === id);
+
+  check("★ 멤버 자신의 각도에 같은 delta 가 더해진다 — 음수는 접힌다",
+    (() => {
+      const a = framed(mixedAfter, "mvT1").rotation || 0;
+      const b = framed(mixedAfter, "mvT2").rotation || 0;
+      const before2 = framed(mixedBefore, "mvT2").rotation || 0;
+      return a >= 0 && a < 360 && b >= 0 && b < 360 &&
+        Math.abs(((b - a) + 360) % 360 - before2) <= 0.2;
+    })(),
+    JSON.stringify({
+      t1: framed(mixedAfter, "mvT1").rotation,
+      t2: framed(mixedAfter, "mvT2").rotation
+    }));
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  /* ── 프레임 안 · pin · 섞임 ── */
+
+  const frameTurns = {};
+
+  for (const one of [
+    { group: "gPin", grab: "mvP1", ids: ["mvP1", "mvP2"] },
+    { group: "gMix", grab: "mvM1", ids: ["mvM1", "mvM2"] }
+  ]) {
+
+    await selectGroupFolder(page, one.group);
+
+    frameTurns[one.group] =
+      (await mvRotateGroup(page, frame, false, one.grab, 40, one.ids)).report;
+
+    await page.evaluate(() => window.undoStudioHistory());
+    await sleep(900);
+
+  }
+
+  check("★ 프레임 안 `pin` 둘이 같은 각도로 돈다",
+    frameTurns.gPin.spread <= 0.2 && frameTurns.gPin.centerMiss <= 1,
+    JSON.stringify(frameTurns.gPin));
+
+  check("★ `transform` + `pin` 이 섞여도 화면의 각도와 중심이 일치한다",
+    frameTurns.gMix.spread <= 0.2 && frameTurns.gMix.centerMiss <= 1,
+    JSON.stringify(frameTurns.gMix));
+
+  /* ── `height:"auto"` 가 숨어 있으면 회전을 열지 않는다 ── */
+
+  const autoRotate = await page.evaluate(() => ({
+    visible: window.studioCanvasV2GroupCanRotate(["mvAutoT", "mvAutoS"], []),
+    hidden: window.studioCanvasV2GroupCanRotate(["mvAutoT", "mvAutoS"], ["mvAutoT"])
+  }));
+
+  check("★ 보이는 `\"auto\"` 멤버는 회전할 수 있다(잰 높이로)",
+    autoRotate.visible === true, JSON.stringify(autoRotate));
+
+  check("★ 숨은 `\"auto\"` 멤버가 있으면 회전을 아예 열지 않는다",
+    autoRotate.hidden === false, JSON.stringify(autoRotate));
+
+  await selectGroupFolder(page, "gAuto");
+
+  const autoTurn =
+    await mvRotateGroup(page, frame, false, "mvAutoT", 40,
+      ["mvAutoT", "mvAutoS"]);
+
+  check("★ 글자 · 도형이 섞인 그룹도 같은 각도로 돈다",
+    autoTurn.report.spread <= 0.2 && autoTurn.report.centerMiss <= 1.5,
+    JSON.stringify(autoTurn.report));
+
+  check("★ 회전은 `\"auto\"` 를 숫자로 바꾸지 않는다",
+    (await mvCanvas(page)).overlays.find(
+      (el) => el.id === "mvAutoT").height === "auto");
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  /* ── 잠긴 그룹 ── */
+
+  const lockUndo = await mvUndoDepth(page);
+
+  await selectGroupFolder(page, "gLock");
+
+  const lockHandles =
+    await mvHandleCount(page, frame, false);
+
+  check("★ 잠긴 그룹에는 회전 손잡이도 없다",
+    lockHandles.rotate === false, JSON.stringify(lockHandles));
+
+  const lockReason = await page.evaluate(() =>
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gLock", gestureId: 941, phase: "start", kind: "rotate",
+      scale: 1, angle: 30,
+      members: [{ id: "mvLockA", vx: 0, vy: 0, h: 20 }],
+      generation: window.getStudioCanvasSelection()
+        ? window.getStudioCanvasSelection().generation : 0,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0,
+      requestId: 0
+    }).reason);
+
+  check("★ 잠긴 그룹은 회전도 시작 자체가 막힌다",
+    lockReason === "locked" || lockReason === "selection", String(lockReason));
+
+  check("★ 잠금 거절은 Undo 0칸",
+    (await mvUndoDepth(page)) === lockUndo);
+
+  /* ── 취소 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  await mvBringIntoView(page, frame, false, "mvA");
+
+  const cancelUndo = await mvUndoDepth(page);
+
+  const cancelBefore =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  const cancelAngles =
+    await mvAngles(page, frame, false, ["mvA", "mvB"]);
+
+  const cancelBounds = mvUnion(cancelBefore, ["mvA", "mvB"]);
+
+  await mvTurnHandle(
+    page, frame, false,
+    {
+      x: (cancelBounds.left + cancelBounds.right) / 2,
+      y: (cancelBounds.top + cancelBounds.bottom) / 2
+    },
+    50,
+    { noUp: true, pause: 30 });
+
+  const duringAngles =
+    await mvAngles(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ 끄는 동안 멤버가 즉시 따라 돈다",
+    Math.abs(mvAngleDelta(cancelAngles, duringAngles, "mvA")) > 10,
+    JSON.stringify(duringAngles));
+
+  await page.keyboard.press("Escape");
+  await sleep(400);
+  await page.mouse.up();
+  await sleep(500);
+
+  const afterCancel =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  const afterCancelAngles =
+    await mvAngles(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Escape 는 각도와 자리를 시작 상태로 완전히 되돌린다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(afterCancel[id].left - cancelBefore[id].left) <= 1 &&
+      Math.abs(afterCancel[id].top - cancelBefore[id].top) <= 1 &&
+      Math.abs(mvAngleDelta(cancelAngles, afterCancelAngles, id)) <= 0.1),
+    JSON.stringify(afterCancelAngles));
+
+  check("★ 취소는 Undo 0칸",
+    (await mvUndoDepth(page)) === cancelUndo,
+    `${cancelUndo} → ${await mvUndoDepth(page)}`);
+
+  /* ── stale · 원자성 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const gateUndo = await mvUndoDepth(page);
+
+  const gates = await page.evaluate(() => {
+
+    const open = () => ({
+      generation: window.getStudioCanvasSelection()
+        ? window.getStudioCanvasSelection().generation : 0,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0
+    });
+
+    const members = [
+      { id: "mvA", vx: -40, vy: -30, h: 40 },
+      { id: "mvB", vx: 40, vy: 30, h: 35 }
+    ];
+
+    const out = {};
+
+    out.noStart =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 931, phase: "end", kind: "rotate",
+        scale: 1, angle: 30, members: members, ...open(), requestId: 1
+      }).reason;
+
+    const one = open();
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 932, phase: "start", kind: "rotate",
+      scale: 1, angle: 0, members: members, ...one, requestId: 0
+    });
+
+    out.staleRevision =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 932, phase: "end", kind: "rotate",
+        scale: 1, angle: 30, members: members,
+        generation: one.generation, revision: one.revision + 3, requestId: 2
+      }).reason;
+
+    const two = open();
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 933, phase: "start", kind: "rotate",
+      scale: 1, angle: 0, members: members, ...two, requestId: 0
+    });
+
+    out.same =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 933, phase: "end", kind: "rotate",
+        scale: 1, angle: 0, members: members, ...two, requestId: 3
+      }).reason;
+
+    /* 각도가 한 바퀴를 넘는 요청 — 프로토콜과 같은 자로 거절한다 */
+    const three = open();
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 934, phase: "start", kind: "rotate",
+      scale: 1, angle: 0, members: members, ...three, requestId: 0
+    });
+
+    out.wild =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 934, phase: "end", kind: "rotate",
+        scale: 1, angle: 4000, members: members, ...three, requestId: 4
+      }).reason;
+
+    return out;
+
+  });
+
+  check("★ 시작을 알리지 않은 end 는 쓰지 않는다(회전)",
+    gates.noStart === "stale", JSON.stringify(gates));
+
+  check("★ 낡은 revision 의 end 는 쓰지 않는다(회전)",
+    gates.staleRevision === "stale", gates.staleRevision);
+
+  check("★ 각도가 0 이면 한 칸도 쓰지 않는다",
+    gates.same === "unchanged", gates.same);
+
+  check("★ 한 바퀴를 넘는 각도는 거절한다",
+    gates.wild === "angle", gates.wild);
+
+  check("★ 거절과 무변경은 전부 Undo 0칸",
+    (await mvUndoDepth(page)) === gateUndo,
+    `${gateUndo} → ${await mvUndoDepth(page)}`);
+
+  await selectGroupFolder(page, "gOver");
+
+  const atomicUndo = await mvUndoDepth(page);
+
+  const atomicBefore = await mvCanvas(page);
+
+  const atomic = await page.evaluate(() => {
+
+    const real = window.planStudioCanvasV2Transform;
+
+    let seen = 0;
+
+    /* 세 번째 계획에서 실패하게 만든다 — 회전은 멤버마다 두 칸
+       (자리 · 각도)이므로 두 번째 멤버의 첫 칸이다 */
+    window.planStudioCanvasV2Transform = function (kind, id, next, expected) {
+      seen += 1;
+      return seen === 3 ? { ok: false, reason: "test" } : real(kind, id, next, expected);
+    };
+
+    const open = {
+      generation: window.getStudioCanvasSelection().generation,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0
+    };
+
+    const members = [
+      { id: "mvA", vx: -40, vy: -30, h: 40 },
+      { id: "mvB", vx: 40, vy: 30, h: 35 }
+    ];
+
+    window.commitStudioCanvasGroupTransform({
+      groupId: "gOver", gestureId: 921, phase: "start", kind: "rotate",
+      scale: 1, angle: 0, members: members, ...open, requestId: 0
+    });
+
+    const reason =
+      window.commitStudioCanvasGroupTransform({
+        groupId: "gOver", gestureId: 921, phase: "end", kind: "rotate",
+        scale: 1, angle: 25, members: members, ...open, requestId: 5
+      }).reason;
+
+    window.planStudioCanvasV2Transform = real;
+
+    return reason;
+
+  });
+
+  check("★ 회전도 한 멤버라도 계획이 서지 않으면 전부 무변경",
+    atomic === "test" &&
+      JSON.stringify(atomicBefore) === JSON.stringify(await mvCanvas(page)),
+    String(atomic));
+
+  check("★ 원자적 실패는 Undo 0칸",
+    (await mvUndoDepth(page)) === atomicUndo);
+
+  /* ── native 의 저장값 — 아래 sandbox 와 견준다 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  await mvBringIntoView(page, frame, false, "mvA");
+
+  const nativeTurn =
+    await mvRotateGroup(page, frame, false, "mvA", 45, ["mvA", "mvB"]);
+
+  const nativeStored =
+    JSON.stringify((await mvCanvas(page)).overlays.find((el) => el.id === "mvA"));
+
+  check("pageerror 0", page.__errors.length === 0,
+    page.__errors.slice(0, 2).join(" | "));
+
+  await page.close();
+
+
+  /* ── 390px 실제 터치 ── */
+
+  const mobile =
+    await openMove(browser, {
+      viewport: { width: 390, height: 780 }, hasTouch: true
+    });
+
+  await selectGroupFolder(mobile.page, "gOver");
+
+  await mobile.page.evaluate(() => window.collapseStudioLeftPanel());
+
+  await sleep(500);
+
+  await mvBringIntoView(mobile.page, mobile.frame, false, "mvA");
+
+  const touchRotate =
+    await mvHandle(mobile.page, mobile.frame, false, "rotate");
+
+  check("★ 390px 에서도 회전 손잡이를 누를 수 있다",
+    !!touchRotate && touchRotate.width >= 18,
+    JSON.stringify(touchRotate));
+
+  const touchBefore =
+    await mvRects(mobile.page, mobile.frame, false, ["mvA", "mvB"]);
+
+  const touchAngles =
+    await mvAngles(mobile.page, mobile.frame, false, ["mvA", "mvB"]);
+
+  if (touchRotate) {
+
+    const bounds = mvUnion(touchBefore, ["mvA", "mvB"]);
+
+    const pivot = {
+      x: (bounds.left + bounds.right) / 2,
+      y: (bounds.top + bounds.bottom) / 2
+    };
+
+    const from = {
+      x: touchRotate.left + touchRotate.width / 2,
+      y: touchRotate.top + touchRotate.height / 2
+    };
+
+    const vx = from.x - pivot.x;
+    const vy = from.y - pivot.y;
+    const radius = Math.sqrt(vx * vx + vy * vy);
+    const base = Math.atan2(vy, vx);
+
+    const cdp =
+      await mobile.page.context().newCDPSession(mobile.page);
+
+    const touch = async (type, x, y) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type: type,
+        touchPoints: type === "touchEnd" ? [] : [{ x: x, y: y, id: 1 }]
+      });
+
+    await touch("touchStart", from.x, from.y);
+
+    for (let i = 1; i <= 6; i += 1) {
+      const a = base + (45 * i / 6) * Math.PI / 180;
+      await touch("touchMove",
+        pivot.x + radius * Math.cos(a), pivot.y + radius * Math.sin(a));
+      await sleep(40);
+    }
+
+    await touch("touchEnd", 0, 0);
+
+    await sleep(900);
+
+    const touchAfter =
+      await mvRects(mobile.page, mobile.frame, false, ["mvA", "mvB"]);
+
+    const touchAfterAngles =
+      await mvAngles(mobile.page, mobile.frame, false, ["mvA", "mvB"]);
+
+    const touchReport =
+      mvRotateReport(touchBefore, touchAfter, touchAngles, touchAfterAngles,
+        ["mvA", "mvB"]);
+
+    const touchState = await mvFrameState(mobile.frame);
+
+    check("★ 390px 실제 터치로 그룹이 돈다",
+      touchState.groupShapeCount >= 1 && Math.abs(touchReport.angle) > 20 &&
+        touchReport.spread <= 0.2,
+      JSON.stringify(touchReport));
+
+    check("★ 그 제스처가 이동으로 새지 않았다(그룹 이동 0회)",
+      touchState.groupMoveCount === 0, String(touchState.groupMoveCount));
+
+  }
+
+  check("pageerror 0 (390px)", mobile.page.__errors.length === 0,
+    mobile.page.__errors.slice(0, 2).join(" | "));
+
+  await mobile.page.close();
+
+
+  /* ── sandbox — 같은 제스처 · 같은 결과 ── */
+
+  const box =
+    await openMove(browser, { sandbox: true });
+
+  await selectGroupFolder(box.page, "gOver");
+
+  await mvBringIntoView(box.page, box.frame, true, "mvA");
+
+  check("★ sandbox 에서도 회전 손잡이가 보인다",
+    (await mvHandleCount(box.page, box.frame, true)).rotate === true);
+
+  const boxTurn =
+    await mvRotateGroup(box.page, box.frame, true, "mvA", 45, ["mvA", "mvB"]);
+
+  check("★ sandbox 에서도 멤버 전부가 같은 각도로 돈다",
+    Math.abs(boxTurn.report.angle) > 40 && boxTurn.report.spread <= 0.2 &&
+      boxTurn.report.centerMiss <= 1,
+    JSON.stringify(boxTurn.report));
+
+  check("★ native ↔ sandbox 가 같은 각도를 만든다",
+    Math.abs(boxTurn.report.angle - nativeTurn.report.angle) <= 0.2,
+    JSON.stringify({
+      native: nativeTurn.report.angle,
+      sandbox: boxTurn.report.angle
+    }));
+
+  check("★ native ↔ sandbox 가 같은 저장값을 만든다",
+    JSON.stringify(
+      (await mvCanvas(box.page)).overlays.find((el) => el.id === "mvA")) ===
+      nativeStored,
+    nativeStored);
+
+  const boxCsp =
+    await box.page.evaluate(() => window.__cspViolations || []);
+
+  check("★ CSP 위반 0 (부모)", boxCsp.length === 0, JSON.stringify(boxCsp));
+
+  const frameCsp =
+    await box.frame.evaluate(() => window.__cspViolations || []);
+
+  check("★ CSP 위반 0 (프레임)", frameCsp.length === 0, JSON.stringify(frameCsp));
+
+  check("pageerror 0 (sandbox)", box.page.__errors.length === 0,
+    box.page.__errors.slice(0, 2).join(" | "));
+
+  await box.page.close();
+
+}
+
+
+
+/* ---------------------------------------------------------- [sequence] */
+
+/*
+  HOME-CANVAS-GROUP-1C — 셋을 **이어서** 한다.
+
+  ★ 한 제스처만 보면 "다음 제스처가 앞 제스처의 결과를 시작값으로
+    읽는가"를 알 수 없다. 이 절은 이동 → 크기 → 회전을 섞어 돌린
+    뒤, 그 전부가 Undo 세 칸으로 접히고 Redo 세 칸으로 펴지는지와
+    Save · Export/Import · Publish 를 지나도 남는지를 본다.
+*/
+
+if (wants("sequence")) {
+
+  section("sequence");
+
+  const { page, frame } = await openMove(browser, {});
+
+  /* ── 이동 → 크기 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const startUndo = await mvUndoDepth(page);
+
+  /* ★ 시작 상태는 **저장값**으로 잡는다. 화면 좌표로 비교하면 그
+     사이의 스크롤까지 함께 재게 된다 — 제스처마다 창이 움직인다
+     (mvBringIntoView). 자리 · 크기 · 각도가 전부 그 JSON 안에 있다. */
+  const startCanvas =
+    JSON.stringify(await mvCanvas(page));
+
+  const startRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  await mvMoveGroup(page, frame, false, "gOver", "mvA", 30, 20,
+    ["mvA", "mvB"]);
+
+  const movedRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  const afterMove =
+    await mvResizeGroup(page, frame, false, "mvA", "se", 40, 40,
+      ["mvA", "mvB"]);
+
+  const moveThenResize =
+    mvScaleReport(afterMove.before, afterMove.after, ["mvA", "mvB"], "se");
+
+  check("★ 이동 뒤의 크기 조절이 **옮겨진 자리**를 시작값으로 읽는다",
+    moveThenResize.scale > 1.02 && moveThenResize.anchorMove <= 1 &&
+      moveThenResize.centerMiss <= 1,
+    JSON.stringify(moveThenResize));
+
+  /* ── 크기 → 회전 ── */
+
+  const resizedRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  const afterResize =
+    await mvRotateGroup(page, frame, false, "mvA", 45, ["mvA", "mvB"]);
+
+  check("★ 크기 조절 뒤의 회전이 **바뀐 크기**를 기준으로 돈다",
+    Math.abs(afterResize.report.angle) > 40 &&
+      afterResize.report.spread <= 0.2 &&
+      afterResize.report.centerMiss <= 1,
+    JSON.stringify(afterResize.report));
+
+  const rotatedRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  const rotatedCanvas = await mvCanvas(page);
+
+  check("★ 세 제스처 = Undo 세 칸",
+    (await mvUndoDepth(page)) === startUndo + 3,
+    `${startUndo} → ${await mvUndoDepth(page)}`);
+
+  /* ── 회전 → 이동 ── */
+
+  const afterRotate =
+    await mvMoveGroup(page, frame, false, "gOver", "mvA", -20, 15,
+      ["mvA", "mvB"]);
+
+  check("★ 회전한 그룹도 화면에서 **같은 거리**를 움직인다",
+    mvSame(afterRotate.deltas, ["mvA", "mvB"], -20, 15).ok,
+    JSON.stringify(afterRotate.deltas));
+
+  /* ── Undo 네 번 → Redo 네 번 ── */
+
+  for (let i = 0; i < 4; i += 1) {
+    await page.evaluate(() => window.undoStudioHistory());
+    await sleep(700);
+  }
+
+  const backRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  const backAngles =
+    await mvAngles(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Undo 네 번이면 네 제스처 전부가 시작 상태로 돌아온다",
+    JSON.stringify(await mvCanvas(page)) === startCanvas &&
+      ["mvA", "mvB"].every((id) =>
+        Math.abs(backRects[id].width - startRects[id].width) <= 1 &&
+        backAngles[id] === 0),
+    JSON.stringify({ angles: backAngles, width: backRects.mvA.width }));
+
+  for (let i = 0; i < 4; i += 1) {
+    await page.evaluate(() => window.redoStudioHistory());
+    await sleep(700);
+  }
+
+  const forwardRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Redo 네 번이면 다시 최종 상태다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(forwardRects[id].left - (rotatedRects[id].left - 20)) <= 1.5 &&
+      Math.abs(forwardRects[id].width - rotatedRects[id].width) <= 1),
+    JSON.stringify(forwardRects));
+
+  void movedRects;
+  void resizedRects;
+  void rotatedCanvas;
+
+  /* ── Export → Import · Publish resolve ── */
+
+  const finalCanvas =
+    JSON.stringify(await mvCanvas(page));
+
+  const roundTrip = await page.evaluate(async () => {
+
+    const exported = window.buildSkinPackageExport(currentWorkingSkin);
+
+    if (!exported.ok) return { ok: false, message: exported.message };
+
+    const result =
+      await window.validateSkinPackageImport(
+        window.serializeSkinPackageExport(exported.skinPackage));
+
+    if (!result.ok) return { ok: false, message: result.message };
+
+    const entry =
+      result.skinPackage.regions.find((r) => r && r.name === "home_canvas");
+
+    return {
+      ok: true,
+      canvas: JSON.stringify(entry.canvas),
+      notices: result.canvasNotices || []
+    };
+
+  });
+
+  check("★ Export → Import 왕복에서 크기 · 각도가 글자 단위로 살아남는다",
+    roundTrip.ok && roundTrip.canvas === finalCanvas,
+    roundTrip.message || "");
+
+  check("왕복에 수선 안내가 없다", roundTrip.ok && roundTrip.notices.length === 0);
+
+  const resolved = await page.evaluate(() => {
+
+    const payload =
+      window.resolveSkinHomeCanvas(
+        currentWorkingSkin, currentWorkingSkin.templates.home.html);
+
+    if (!payload) return null;
+
+    const one = payload.overlays.find((el) => el.id === "mvA");
+
+    return {
+      groups: payload.groups !== undefined,
+      rotation: one ? one.rotation : null,
+      width: one ? one.width : null
+    };
+
+  });
+
+  const storedA =
+    JSON.parse(finalCanvas).overlays.find((el) => el.id === "mvA");
+
+  check("★ Publish resolve 가 그 크기 · 각도를 그대로 싣는다(`groups` 는 빼고)",
+    resolved && resolved.groups === false &&
+      Math.abs(resolved.rotation - storedA.rotation) < 0.001 &&
+      Math.abs(resolved.width - storedA.width) < 0.001,
+    JSON.stringify(resolved));
+
+  /* ── Save → 다시 열기 ── */
+
+  await page.click("#studioSaveButton");
+
+  await page.waitForFunction(
+    () => Array.isArray(window.__savedDraftCallsLay) &&
+      window.__savedDraftCallsLay.length > 0,
+    null, { timeout: 15000 });
+
+  const savedContent = await page.evaluate(() => {
+    const calls = window.__savedDraftCallsLay;
+    return calls[calls.length - 1].p_content;
+  });
+
+  check("pageerror 0", page.__errors.length === 0,
+    page.__errors.slice(0, 2).join(" | "));
+
+  await page.close();
+
+  const again = await openStudio(browser, { package: savedContent });
+
+  const againFrame = await canvasFrame(again, false);
+
+  check("★ Save → 다시 열기에서 크기 · 각도가 글자 단위로 같다",
+    JSON.stringify(await mvCanvas(again)) === finalCanvas);
+
+  const againRects =
+    await mvRects(again, againFrame, false, ["mvA", "mvB"]);
+
+  /* ★ 다시 연 창은 도화지 폭 자체가 다르다 — 왼쪽 패널이 접혀
+     있으면 Preview 가 넓어진다(2026-09-24 실측: 4/3 배). 그래서
+     절대 px 이 아니라 **배율에 흔들리지 않는 비**를 본다: 멤버
+     사이의 거리 ÷ 멤버의 폭. 저장값이 글자 단위로 같다는 것은
+     바로 위에서 이미 보았다. */
+  const shapeOf = (rects) => {
+    const a = mvCenter(rects.mvA);
+    const b = mvCenter(rects.mvB);
+    return Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2) / rects.mvA.width;
+  };
+
+  check("★ 다시 연 화면의 모양(거리 ÷ 폭)도 같다",
+    Math.abs(shapeOf(againRects) - shapeOf(forwardRects)) <= 0.02 &&
+      Math.abs(
+        (againRects.mvA.width / againRects.mvB.width) -
+        (forwardRects.mvA.width / forwardRects.mvB.width)) <= 0.02,
+    JSON.stringify({
+      again: Math.round(shapeOf(againRects) * 1000) / 1000,
+      before: Math.round(shapeOf(forwardRects) * 1000) / 1000
+    }));
+
+  check("다시 열기 pageerror 0", again.__errors.length === 0,
+    again.__errors.slice(0, 2).join(" | "));
+
+  await close(again);
 
 }
 

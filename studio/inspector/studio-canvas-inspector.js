@@ -1623,10 +1623,12 @@ function studioCanvasCanvasGroupBlock(view) {
 
   block.appendChild(
     studioCanvasInspectorNote(
-      /* HOME-CANVAS-GROUP-1B — 이동이 열렸다. 크기 조절 · 회전은
-         아직이므로 그 둘만 남긴다(계약 §39-1). */
-      "그룹은 Preview 에서 멤버를 끌어 통째로 옮깁니다. " +
-        "크기 조절 · 회전은 다음 단계에서 지원합니다.",
+      /* HOME-CANVAS-GROUP-1C — 셋이 전부 열렸다(계약 §40-1).
+         변 중앙 손잡이 · 가로세로 따로 늘이기 · 뒤집기 · 중첩
+         그룹 · 그룹 단위 순서 이동은 여전히 없다. */
+      "그룹은 Preview 에서 멤버를 끌어 통째로 옮기고, 모서리 " +
+        "손잡이로 비율을 지킨 채 크기를 바꾸고, 위쪽 손잡이로 " +
+        "통째로 돌립니다.",
       "studioCanvasInspectorGroupSoon"
     )
   );

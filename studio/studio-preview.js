@@ -3044,6 +3044,20 @@ function postCanvasGroupToFrame(group) {
     groupId: active ? value.groupId : null,
     baseWidth: active ? value.baseWidth : 0,
     locked: !!(value && value.locked === true),
+
+    /* HOME-CANVAS-GROUP-1C — 멤버 전부가 가능한 **공통 배율**의
+       교집합과 회전 가능 여부(계약 §40-7). 둘 다 부모 realm 이
+       draft 에서 정한다 — 이 함수도 옮기기만 한다. */
+    scaleMin:
+      (value && Number.isFinite(value.scaleMin) && value.scaleMin > 0)
+        ? value.scaleMin
+        : 0,
+    scaleMax:
+      (value && Number.isFinite(value.scaleMax) && value.scaleMax > 0)
+        ? value.scaleMax
+        : 0,
+    canRotate: !!(value && value.canRotate === true),
+
     generation:
       (value && Number.isInteger(value.generation) && value.generation >= 0)
         ? value.generation
@@ -4736,6 +4750,35 @@ window.addEventListener(
           phase: data.phase,
           dx: data.dx,
           dy: data.dy,
+          generation: Number.isInteger(data.generation) ? data.generation : -1,
+          revision: Number.isInteger(data.revision) ? data.revision : -1,
+          requestId: Number.isInteger(data.requestId) ? data.requestId : 0
+        });
+
+      }
+
+      return;
+
+    }
+
+    /*
+      HOME-CANVAS-GROUP-1C — 프레임의 **그룹 크기 조절 · 회전 확정
+      요청**. 위 이동과 같은 결이다 — 배율 · 각도 · 멤버 벡터를
+      여기서 해석하지 않는다. 그 값이 무슨 자인지와 멤버마다 얼마가
+      되는지는 확정 함수 한 곳이 안다(계약 §40-4 · §40-5).
+    */
+    if (data.type === "preview:canvas-group-transform") {
+
+      if (typeof window.commitStudioCanvasGroupTransform === "function") {
+
+        window.commitStudioCanvasGroupTransform({
+          groupId: data.groupId,
+          gestureId: Number.isInteger(data.gestureId) ? data.gestureId : 0,
+          phase: data.phase,
+          kind: data.kind,
+          scale: data.scale,
+          angle: data.angle,
+          members: Array.isArray(data.members) ? data.members : [],
           generation: Number.isInteger(data.generation) ? data.generation : -1,
           revision: Number.isInteger(data.revision) ? data.revision : -1,
           requestId: Number.isInteger(data.requestId) ? data.requestId : 0

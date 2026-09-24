@@ -1184,11 +1184,37 @@ function postStudioCanvasGroupToFrame(answering) {
       studioCanvasEditingIsOn()
     );
 
+  /* =====================================================
+     HOME-CANVAS-GROUP-1C — 크기 조절의 **공통 배율 범위**와 회전
+     가능 여부(계약 §40-7).
+
+     ★ 둘 다 여기서 정한다. 멤버마다의 최소 크기 · 상한 ·
+       `height:"auto"` 사정을 아는 곳은 draft 를 든 이 realm 뿐이고,
+       프레임은 그 범위 안에서만 배율을 만든다. 범위가 없으면
+       모서리 손잡이가, 회전이 불가능하면 회전 손잡이가 아예 그려
+       지지 않는다.
+  ====================================================== */
+  const range =
+    (usable && typeof window.studioCanvasV2GroupScaleRange === "function")
+      ? window.studioCanvasV2GroupScaleRange(group.live)
+      : null;
+
+  const canRotate =
+    !!(
+      usable &&
+      typeof window.studioCanvasV2GroupCanRotate === "function" &&
+      window.studioCanvasV2GroupCanRotate(group.live, group.hidden)
+    );
+
   const message = {
     active: usable,
     groupId: usable ? group.id : null,
     baseWidth: usable ? payload.baseWidth : 0,
     locked: !!(group && group.locked),
+
+    scaleMin: range ? range.min : 0,
+    scaleMax: range ? range.max : 0,
+    canRotate: canRotate,
 
     /* ★ 선택 메시지와 **같은 순번**이어야 한다. 프레임은 둘이 짝을
        이룰 때만 그룹 이동을 켠다(좌표 메시지와 같은 규칙). */
@@ -2360,14 +2386,14 @@ function commitStudioCanvasInspectorEdit(request) {
 let studioCanvasGroupGesture = null;
 
 
-function studioCanvasGroupMoveAnswer(requestId, accepted, reason) {
+function studioCanvasGroupMoveAnswer(requestId, accepted, reason, what) {
 
   postStudioCanvasGroupToFrame(requestId);
 
   if (!accepted) {
 
     console.info(
-      "[studio-canvas] 그룹 이동을 받아들이지 않았습니다",
+      "[studio-canvas] " + (what || "그룹 이동") + "을 받아들이지 않았습니다",
       { reason: reason }
     );
 
@@ -2486,6 +2512,12 @@ function commitStudioCanvasGroupMove(request) {
 
     studioCanvasGroupGesture = {
       gestureId: value.gestureId,
+
+      /* HOME-CANVAS-GROUP-1C — 열린 칸은 **하나**다. 이동과 손잡이
+         제스처가 같은 자리를 쓰므로 종류를 함께 적어 둔다 — 다른
+         종류의 `end` 가 이 칸을 쓸 수 없다. */
+      kind: "move",
+
       groupId: value.groupId,
       members: target.group.live.slice(),
       space: target.space,
@@ -2512,7 +2544,7 @@ function commitStudioCanvasGroupMove(request) {
     studioCanvasGroupGesture = null;
   }
 
-  if (!open || open.gestureId !== value.gestureId) {
+  if (!open || open.gestureId !== value.gestureId || open.kind !== "move") {
     return answer(false, "stale");
   }
 
@@ -2599,6 +2631,335 @@ function commitStudioCanvasGroupMove(request) {
   }
 
   return answer(true, "ok");
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1C — 그룹 크기 조절 · 회전의 **확정 관문**
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §40
+
+   commitStudioCanvasGroupTransform(request)
+
+     request = { groupId, gestureId, phase, kind, scale, angle,
+                 members:[{ id, vx, vy, h }],
+                 generation, revision, requestId }
+
+   ── 이동과 무엇이 같고 무엇이 다른가 ───────────────────
+
+   **같다.** 제스처 하나에 열린 칸 하나(start · end · cancel) ·
+   선택 · 그룹 · 멤버 명단 · 좌표 공간 · 잠금 · 순번 · revision 을
+   `end` 에서 전부 다시 보는 것 · 계획을 **전부 만든 뒤** 한 번에
+   적용하는 것 · Undo 한 칸.
+
+   **다르다.** 올라오는 숫자가 delta 가 아니라 **배율 하나 또는
+   각도 하나**이고, 멤버마다의 차이 벡터가 함께 온다. 그리고 배율은
+   멤버 전부가 가능한 범위(§40-7) 안이어야 한다 — 그 범위는 프레임이
+   손잡이를 그릴 때 이미 받아 갔지만, 여기서 **다시** 본다.
+
+   ── 숨은 멤버 ─────────────────────────────────────────
+
+   화면에 없는 멤버는 벡터를 보낼 수 없다. 기준점은 보고된 멤버
+   하나에서 되짚으므로, 숨은 멤버도 같은 배율 · 같은 각도로 함께
+   옮겨진다(계약 §40-6). 숨김 상태도 그룹 소속도 바뀌지 않는다.
+========================================================== */
+
+/* 프레임이 보낼 수 있는 손잡이 제스처의 종류 — 둘뿐이다 */
+const STUDIO_CANVAS_GROUP_TRANSFORM_KINDS = ["resize", "rotate"];
+
+/* 배율 비교의 여유. 프레임은 화면 px 로 재고 이 문서는 저장값으로
+   재므로 마지막 자리가 갈릴 수 있다 — 그 한 칸 때문에 정상 제스처를
+   거절하지 않는다. */
+const STUDIO_CANVAS_GROUP_SCALE_EPSILON = 0.0001;
+
+
+function commitStudioCanvasGroupTransform(request) {
+
+  const value =
+    (request && typeof request === "object") ? request : null;
+
+  const requestId =
+    (value && Number.isInteger(value.requestId) && value.requestId >= 1)
+      ? value.requestId
+      : 0;
+
+  const answer =
+    (accepted, reason) =>
+      studioCanvasGroupMoveAnswer(requestId, accepted, reason, "그룹 크기 · 회전");
+
+  if (
+    !value ||
+    typeof value.groupId !== "string" ||
+    !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.groupId) ||
+    !Number.isInteger(value.gestureId) || value.gestureId < 1 ||
+    !Number.isInteger(value.generation) || value.generation < 0 ||
+    !Number.isInteger(value.revision) || value.revision < 0 ||
+    STUDIO_CANVAS_GROUP_TRANSFORM_KINDS.indexOf(value.kind) === -1
+  ) {
+    return answer(false, "shape");
+  }
+
+  const phase =
+    value.phase;
+
+  /* 보고된 멤버 줄 — 모양이 하나라도 어긋나면 메시지 전체를 버린다 */
+
+  const members =
+    Array.isArray(value.members) ? value.members : null;
+
+  if (
+    !members ||
+    !members.length ||
+    members.length > STUDIO_CANVAS_MAX_SELECTED ||
+    members.some(
+      (item) =>
+        !item ||
+        typeof item !== "object" ||
+        typeof item.id !== "string" ||
+        !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(item.id) ||
+        !Number.isFinite(item.vx) ||
+        !Number.isFinite(item.vy) ||
+        !Number.isFinite(item.h)
+    )
+  ) {
+    return answer(false, "members");
+  }
+
+  const reported =
+    members.map((item) => item.id);
+
+  /* ── cancel — 열린 칸만 비운다 ── */
+
+  if (phase === "cancel") {
+
+    if (
+      studioCanvasGroupGesture &&
+      studioCanvasGroupGesture.gestureId === value.gestureId
+    ) {
+      studioCanvasGroupGesture = null;
+    }
+
+    return { accepted: true, reason: "cancelled" };
+
+  }
+
+  /* ── start — 지금 상태를 한 칸에 적는다 ── */
+
+  if (phase === "start") {
+
+    studioCanvasGroupGesture = null;
+
+    const target =
+      studioCanvasGroupMoveTarget(value.groupId);
+
+    if (!target.ok) {
+      return { accepted: false, reason: target.reason };
+    }
+
+    if (value.generation !== studioCanvasSelectionGeneration) {
+      return { accepted: false, reason: "generation" };
+    }
+
+    if (value.revision !== studioCanvasWorkingRevision()) {
+      return { accepted: false, reason: "revision" };
+    }
+
+    studioCanvasGroupGesture = {
+      gestureId: value.gestureId,
+      kind: value.kind,
+      groupId: value.groupId,
+      members: target.group.live.slice(),
+
+      /* 화면에 있던 멤버 명단. `end` 가 **글자 단위로** 같은지 본다 —
+         제스처 도중에 하나가 숨겨지거나 빠지면 여기서 걸린다. */
+      reported: reported.slice(),
+
+      space: target.space,
+      generation: value.generation,
+      revision: value.revision
+    };
+
+    return { accepted: true, reason: "started" };
+
+  }
+
+  if (phase !== "end") {
+    return answer(false, "phase");
+  }
+
+  /* ── end — 열린 칸과 정확히 맞을 때만 쓴다 ── */
+
+  const open =
+    studioCanvasGroupGesture;
+
+  /* ★ 쓰든 못 쓰든 이 번호의 제스처는 여기서 끝이다(이동과 같다) */
+  if (open && open.gestureId === value.gestureId) {
+    studioCanvasGroupGesture = null;
+  }
+
+  if (
+    !open ||
+    open.gestureId !== value.gestureId ||
+    open.kind !== value.kind
+  ) {
+    return answer(false, "stale");
+  }
+
+  if (open.groupId !== value.groupId) {
+    return answer(false, "group");
+  }
+
+  if (
+    open.generation !== value.generation ||
+    open.revision !== value.revision
+  ) {
+    return answer(false, "stale");
+  }
+
+  /* 렌더된 Preview 와 지금 draft 가 같은 판인가 */
+  if (
+    value.generation !== studioCanvasSelectionGeneration ||
+    value.revision !== studioCanvasWorkingRevision()
+  ) {
+    return answer(false, "stale");
+  }
+
+  const target =
+    studioCanvasGroupMoveTarget(value.groupId);
+
+  if (!target.ok) {
+    return answer(false, target.reason);
+  }
+
+  /* 멤버 명단이 시작 때와 **글자 단위로** 같은가 — 옮길 명단도,
+     화면에 있던 명단도 */
+  if (
+    target.group.live.length !== open.members.length ||
+    target.group.live.some((id, at) => id !== open.members[at]) ||
+    target.space !== open.space ||
+    reported.length !== open.reported.length ||
+    reported.some((id, at) => id !== open.reported[at])
+  ) {
+    return answer(false, "members");
+  }
+
+  /* 보고된 멤버가 전부 이 그룹의 것인가 */
+  if (reported.some((id) => target.group.live.indexOf(id) === -1)) {
+    return answer(false, "members");
+  }
+
+  if (typeof window.writeStudioCanvasElementChanges !== "function") {
+    return answer(false, "unsupported");
+  }
+
+  /* ── 크기 조절 ── */
+
+  if (value.kind === "resize") {
+
+    const scale =
+      Number.isFinite(value.scale) ? value.scale : NaN;
+
+    if (!Number.isFinite(scale) || !(scale > 0)) {
+      return answer(false, "scale");
+    }
+
+    /* 한 칸도 바뀌지 않았다 — 기록도 dirty 도 없다(§17-6) */
+    if (scale === 1) {
+      return answer(true, "unchanged");
+    }
+
+    if (typeof window.studioCanvasV2GroupScaleRange !== "function") {
+      return answer(false, "unsupported");
+    }
+
+    /* =====================================================
+       ★ 범위를 **여기서 다시 본다**(계약 §40-7).
+
+       프레임이 이미 그 범위 안에서 잘라 보냈지만, 확정하는 곳은
+       여기이고 이 문서는 프레임이 보낸 숫자를 근거로 삼지 않는다.
+       멤버마다 따로 자르지 않는 이유도 같다 — 자르면 상대 배치와
+       비율이 그 순간 깨진다.
+    ====================================================== */
+    const range =
+      window.studioCanvasV2GroupScaleRange(target.group.live);
+
+    if (!range) {
+      return answer(false, "range");
+    }
+
+    if (
+      scale < range.min - STUDIO_CANVAS_GROUP_SCALE_EPSILON ||
+      scale > range.max + STUDIO_CANVAS_GROUP_SCALE_EPSILON
+    ) {
+      return answer(false, "range");
+    }
+
+    if (typeof window.planStudioCanvasV2GroupResize !== "function") {
+      return answer(false, "unsupported");
+    }
+
+    const plan =
+      window.planStudioCanvasV2GroupResize(
+        target.group.live, scale, members);
+
+    if (!plan || !plan.ok) {
+      return answer(false, (plan && plan.reason) || "plan");
+    }
+
+    const result =
+      window.writeStudioCanvasElementChanges(plan.steps);
+
+    if (!result || !result.ok) {
+      return answer(false, (result && result.reason) || "rejected");
+    }
+
+    return answer(true, result.unchanged ? "unchanged" : "ok");
+
+  }
+
+  /* ── 회전 ── */
+
+  const angle =
+    Number.isFinite(value.angle) ? value.angle : NaN;
+
+  if (!Number.isFinite(angle) || Math.abs(angle) > 360) {
+    return answer(false, "angle");
+  }
+
+  if (angle === 0) {
+    return answer(true, "unchanged");
+  }
+
+  if (
+    typeof window.studioCanvasV2GroupCanRotate !== "function" ||
+    typeof window.planStudioCanvasV2GroupRotate !== "function"
+  ) {
+    return answer(false, "unsupported");
+  }
+
+  if (
+    !window.studioCanvasV2GroupCanRotate(
+      target.group.live, target.group.hidden)
+  ) {
+    return answer(false, "auto-height");
+  }
+
+  const turn =
+    window.planStudioCanvasV2GroupRotate(target.group.live, angle, members);
+
+  if (!turn || !turn.ok) {
+    return answer(false, (turn && turn.reason) || "plan");
+  }
+
+  const spun =
+    window.writeStudioCanvasElementChanges(turn.steps);
+
+  if (!spun || !spun.ok) {
+    return answer(false, (spun && spun.reason) || "rejected");
+  }
+
+  return answer(true, spun.unchanged ? "unchanged" : "ok");
 
 }
 
@@ -3486,6 +3847,9 @@ if (typeof window !== "undefined") {
 
   /* HOME-CANVAS-GROUP-1B — 그룹 전체 이동의 확정 관문 */
   window.commitStudioCanvasGroupMove = commitStudioCanvasGroupMove;
+
+  /* HOME-CANVAS-GROUP-1C */
+  window.commitStudioCanvasGroupTransform = commitStudioCanvasGroupTransform;
 
   /* 진단 · 테스트가 보는 한 줄(읽기 전용) */
   window.getStudioCanvasGroupGesture =

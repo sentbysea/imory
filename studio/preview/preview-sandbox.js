@@ -1257,6 +1257,36 @@ function handleSandboxInspect(kind, payload) {
   }
 
 
+  /*
+    HOME-CANVAS-GROUP-1C — 프레임의 그룹 크기 조절 · 회전 **확정
+    요청**. 위 이동과 같은 규칙이다 — 프로토콜이 이미 모양을 본
+    칸들을 새 리터럴로 옮겨 올리기만 한다.
+  */
+  if (kind === "canvas-group-transform") {
+
+    sandboxInspectRelay({
+      type: "preview:canvas-group-transform",
+      remote: true,
+      groupId: payload.groupId,
+      gestureId: Number.isInteger(payload.gestureId) ? payload.gestureId : 0,
+      phase: payload.phase,
+      kind: payload.kind,
+      scale: payload.scale,
+      angle: payload.angle,
+      members:
+        (Array.isArray(payload.members) ? payload.members : []).map(
+          (m) => ({ id: m.id, vx: m.vx, vy: m.vy, h: m.h })
+        ),
+      generation: Number.isInteger(payload.generation) ? payload.generation : 0,
+      revision: Number.isInteger(payload.revision) ? payload.revision : 0,
+      requestId: Number.isInteger(payload.requestId) ? payload.requestId : 0
+    });
+
+    return;
+
+  }
+
+
   if (kind === "select") {
 
     const selected =

@@ -208,7 +208,33 @@ const SKIN_CANVAS_RENDER_VARS = {
       만든다). 취소도 이 두 칸을 지우는 것 하나다.
   */
   dragX: "--imory-canvas-drag-x",
-  dragY: "--imory-canvas-drag-y"
+  dragY: "--imory-canvas-drag-y",
+
+  /*
+    HOME-CANVAS-GROUP-1C — **끄는 동안만** 쓰는 배율 한 칸과 각도 한 칸.
+
+    ★ 왜 CSS 의 `scale()` 이 아닌가.
+
+    그룹 크기 조절이 확정하는 것은 멤버마다의 **상자 네 칸**이다
+    (계약 §40-4). 글자 크기 · 선 굵기는 한 글자도 바뀌지 않는다.
+    끄는 동안 `transform: scale()` 로 보여 주면 글자까지 함께 커졌다가
+    손을 놓는 순간 원래 크기로 돌아간다 — 미리보기가 결과와 다른
+    그림을 말하게 된다.
+
+    그래서 배율은 transform 이 아니라 **폭 · 높이 값 자체**에 곱한다.
+    곱셈은 CSS 가 요소 자기 자(백분율 · cqw) 위에서 하므로, 프레임은
+    멤버마다 다른 그 자를 알 필요가 없다 — 지금까지 그룹 이동이 화면
+    px 한 자로 지냈던 것과 같은 사정이다(§39-8).
+
+    ★ `"auto"` 높이는 곱해질 칸이 아예 없다. 그래서 가로만 배율을 받고
+      세로는 계속 내용이 정한다 — 확정 결과와 정확히 같다(§40-4).
+
+    ★ 각도는 저장된 각도에 **더해진다**. 회전 중심은 지금까지처럼
+      요소 상자의 정중앙이고, 그룹 피벗 둘레의 이동은 위 dragX · dragY
+      두 칸이 맡는다(계약 §40-5).
+  */
+  dragScale: "--imory-canvas-drag-scale",
+  dragRotate: "--imory-canvas-drag-rotate"
 };
 
 /*
@@ -703,6 +729,53 @@ function setSkinCanvasElementDragOffset(el, dx, dy) {
 }
 
 
+/*
+  HOME-CANVAS-GROUP-1C — 끄는 동안의 임시 **배율**과 임시 **각도**.
+
+  setSkinCanvasElementDragScale(el, scale)     scale 은 양수(배수)
+  setSkinCanvasElementDragRotation(el, deg)    deg 는 더해질 각도
+
+  ★ 저장값도 x · y · width · height · rotation 도 한 칸 건드리지
+    않는다. 취소는 아래 clear 하나이고, 확정 뒤의 재렌더는 이 칸이
+    없는 새 요소를 만든다(§0-4 의 그 규칙 그대로다).
+*/
+function setSkinCanvasElementDragScale(el, scale) {
+
+  if (!el || !el.style || !isSkinCanvasRenderNumber(scale) || !(scale > 0)) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(
+    el, SKIN_CANVAS_RENDER_VARS.dragScale,
+    skinCanvasRenderTrimNumber(scale));
+
+  return true;
+
+}
+
+
+function setSkinCanvasElementDragRotation(el, deg) {
+
+  if (!el || !el.style || !isSkinCanvasRenderNumber(deg)) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(
+    el, SKIN_CANVAS_RENDER_VARS.dragRotate,
+    skinCanvasRenderTrimNumber(deg) + "deg");
+
+  return true;
+
+}
+
+
+/*
+  ★ 네 칸을 **한 번에** 걷는다.
+
+  제스처마다 되돌리는 범위가 갈라지면 "돌리다 취소했는데 크기만
+  돌아왔다"가 생긴다(readSkinCanvasElementBoxVars 의 그 이유 그대로).
+  임시 표시는 언제나 한 벌이고, 그 한 벌을 지우는 곳도 하나다.
+*/
 function clearSkinCanvasElementDragOffset(el) {
 
   if (!el || !el.style) {
@@ -711,6 +784,8 @@ function clearSkinCanvasElementDragOffset(el) {
 
   setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.dragX, null);
   setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.dragY, null);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.dragScale, null);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.dragRotate, null);
 
   return true;
 

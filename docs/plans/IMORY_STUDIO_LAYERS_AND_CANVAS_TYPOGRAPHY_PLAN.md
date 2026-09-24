@@ -459,12 +459,22 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 
 ### `HOME-CANVAS-GROUP-1C` — 그룹 전체 크기 조절 · 회전
 
+> **✅ 완료(2026-09-24).** 현행 계약은 이 문서가 아니라
+> [IMORY_HOME_CANVAS_CONTRACT.md §40](../contracts/IMORY_HOME_CANVAS_CONTRACT.md)
+> 이다. 아래 네 줄 중 **셋은 그대로 지켜졌고 하나가 뒤집혔다.**
+
 - 크기는 **균등 배율 하나**이고 모서리 손잡이 넷만 쓴다 — 회전된 자식을
-  비균등으로 줄이면 계약에 없는 전단이 생긴다.
-- 회전은 **피벗과 멤버별 중심**만 쓴다. 중심은 회전해도 AABB 중심과 같으므로
-  `height:"auto"` 멤버도 높이를 몰라도 된다.
-- Moveable이 주는 group event를 실측하고, 단일 요소 수식을 복제해 추측하지 않는다.
-- 한 제스처는 Undo 한 칸이다.
+  비균등으로 줄이면 계약에 없는 전단이 생긴다. → 그대로.
+- 회전은 **피벗과 멤버별 중심**만 쓴다. → 그대로. 다만 중심에는 세로
+  길이가 필요해서, **보이는 멤버의 그 길이를 프레임이 재서 보고한다**
+  (계약 §40-8 의 `h`). 화면에 없는 `height:"auto"` 멤버가 있으면 그
+  그룹은 회전하지 않는다(§40-6).
+- ~~Moveable 이 주는 group event 를 실측하고~~ → **실측했고 쓰지
+  않았다.** `resizeGroup` · `rotateGroup` 은 있지만 그 제스처가 재는
+  상자가 우리가 끄는 동안 고치는 자식 DOM 과 물려 돌고, 손잡이 hit
+  area 가 손가락에 작다. `GROUP-1B` 처럼 **입력도 표시도 편집 runtime
+  이 갖는다**(계약 §40-2).
+- 한 제스처는 Undo 한 칸이다. → 그대로.
 
 상세(JSON 예시 · 숫자 예시 · 허용/금지 표 · 왕복 오차 · 남은 결정)는
 [IMORY_HOME_CANVAS_GROUP_DESIGN.md](./IMORY_HOME_CANVAS_GROUP_DESIGN.md) 다.
@@ -484,7 +494,7 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 | 3-5 | `HOME-CANVAS-GROUP-CONTRACT-1` | **영구 그룹의 저장 구조 · 좌표 · Layers UX · 호환 확정. 문서만** | **완료**(2026-09-23) — [IMORY_HOME_CANVAS_GROUP_DESIGN.md](./IMORY_HOME_CANVAS_GROUP_DESIGN.md) |
 | 4 | `HOME-CANVAS-GROUP-1A` | `canvas.groups` 저장 구조 · 그룹 만들기/해제/삭제 · **이름 변경** · Layers 폴더 · 자식 넣기/빼기 · 그룹/자식 선택 · Import 수선. **전체 transform 없음** | **완료**(2026-09-23) — [skin/skin-home-canvas-group-v2.js](../../skin/skin-home-canvas-group-v2.js) · [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) · 계약 [§38](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-group-e2e-test.mjs` · `node skin/skin-home-canvas-test.mjs`(`[v2-group]`) |
 | 5 | `HOME-CANVAS-GROUP-1B` | **그룹 전체 이동** — 폴더를 고른 뒤 Preview 에서 멤버를 끌면 모든 멤버가 같은 화면 거리만큼 함께 움직인다. 공통 delta 하나 · 원자적 저장 · Undo 한 칸 · 크기/회전 없음 | **완료**(2026-09-24) — [skin/skin-home-canvas-editor-runtime.js](../../skin/skin-home-canvas-editor-runtime.js) · [studio/inspector/studio-canvas-v2-space.js](../../studio/inspector/studio-canvas-v2-space.js) · 계약 [§39](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-group-e2e-test.mjs --only=group-move` · `node skin/sandbox/skin-sandbox-unit-test.mjs`(`[canvas-group]`) |
-| 6 | `HOME-CANVAS-GROUP-1C` | 그룹 전체 크기 조절 · 회전 | 미착수 |
+| 6 | `HOME-CANVAS-GROUP-1C` | **그룹 전체 크기 조절 · 회전** — 폴더를 고르면 모서리 손잡이 넷(균등 배율 · 반대쪽 고정점)과 위쪽 회전 손잡이 하나가 나온다. 공통 배율/각도 하나 · 원자적 저장 · Undo 한 칸 | **완료**(2026-09-24) — [skin/skin-home-canvas-editor-runtime.js](../../skin/skin-home-canvas-editor-runtime.js) · [studio/inspector/studio-canvas-v2-space.js](../../studio/inspector/studio-canvas-v2-space.js) · [skin/skin-home-canvas-render.js](../../skin/skin-home-canvas-render.js) §0-4 · 계약 [§40](../contracts/IMORY_HOME_CANVAS_CONTRACT.md) · `studio/studio-home-canvas-group-e2e-test.mjs --only=group-resize,group-rotate,sequence` · `node skin/sandbox/skin-sandbox-unit-test.mjs`(`[canvas-group]`) |
 | — | ~~`HOME-CANVAS-V2-GROUP-1A`~~ | ~~여러 요소를 한 번에 main_visual 에 묶기 · primary 지정~~ | **폐기**(§5) — primary 지정은 `STUDIO-LAYERS-STRUCTURE-1` 이 이미 했고, 여러 요소 attach 가 필요해지면 `HOME-CANVAS-V2-MULTI-ATTACH-1` 로 다시 낸다 |
 | 7 | `HOME-CANVAS-RICH-TEXT-1` | 선택한 일부 글자 색상 등 구조형 텍스트 | 미착수 |
 
@@ -535,74 +545,38 @@ raw HTML을 `props.text`에 허용하는 방식으로 우회하지 않는다.
 
 ## 8. 다음 작업용 지시문
 
+> **`HOME-CANVAS-GROUP-1A`~`1C` 는 2026-09-24 로 전부 끝났다.** 그룹의
+> 저장 · 폴더 · 만들기/해제/넣기/빼기(§38) · 전체 이동(§39) · 전체 크기
+> 조절과 회전(§40)이 계약 문서에 있다. 아래 지시문은 **그 다음 미완료
+> 단계**(§6 의 7단계)다.
+
 ```text
-작업 ID: HOME-CANVAS-GROUP-1C
+작업 ID: HOME-CANVAS-RICH-TEXT-1
 
-현재 main 과 docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md 의
-§0-0 · §1-2 · §4-1 · §4-2 · §4-4 · §4-6 · §4-7 · §4-8 · §4-9 ·
-§4-10 · §9, 이 문서 §6, HOME Canvas 계약 §18 · §19 · §26 · §30 ·
-§38 · §39 를 읽고 이 작업만 구현해 줘.
+현재 main 과 HOME Canvas 계약 §7(요소 종류) · §8(내용과 스타일의
+소유권) · §22(왼쪽 Canvas Inspector) · §31(타이포그래피), 그리고
+이 문서 §4 를 읽고 이 작업만 구현해 줘.
 
-이번 범위는 **영구 그룹 전체의 크기 조절과 회전**이다. 이동은
-GROUP-1B 에서 끝났고(계약 §39) 그 계약을 다시 설계하지 마라 —
-그 위에 손잡이 둘만 얹어라.
-
-GROUP-1B 가 남긴 것 중 이번에 그대로 쓸 것:
-  · 그룹 drag 의 입력은 편집 runtime 이 갖는다(window capture 의
-    pointerdown/move/up). Moveable 은 표시 전용이고, 그 이유는
-    계약 §39-2 에 실측과 함께 적혀 있다 — 다시 조사하지 마라.
-  · 끄는 동안의 임시 화면은 --imory-canvas-drag-x/y 두 칸이다.
-    **크기와 회전은 그 두 칸으로 표현되지 않는다** — 무엇을 임시로
-    쓸지 먼저 정하고 보고해라(새 변수를 더할지, 기존 box/rotation
-    쓰기 함수를 멤버마다 부를지).
-  · 부모의 확정 관문 한 곳(commitStudioCanvasGroupMove)과 그 열린
-    칸 · revision 축 · 원자적 배치 쓰기
-    (writeStudioCanvasElementChanges)를 **그대로 넓혀라**. 새 커밋
-    경로를 만들지 마라.
-  · studioCanvasV2Space(id).unitScale 이 "그 자의 한 칸이 도화지
-    좌표로 몇인가"를 이미 돌려준다.
+이번 범위는 **한 `text` 요소 안에서 일부 글자만 다르게 보이게
+하는 것**이다. 지금 계약에서 `text` 의 내용은 `props.text` 문자열
+한 칸이고(계약 §8), 색 · 크기 · 굵기는 요소 **전체**에만 걸린다.
 
 먼저 조사해 짧게 보고해라 —
-  1 Moveable 0.53.0 이 그룹에서 실제로 주는 resize/rotate 관련
-    값(우리는 그 입력을 쓰지 않으므로, 무엇을 직접 계산해야 하는지)
-  2 설계 §4-6 · §4-7 의 균등 배율 · 피벗 수식을 지금
-    planStudioCanvasV2Transform("v2-resize"/"v2-rotate") 로 그대로
-    내려보낼 수 있는지, 아니면 새 plan 이 필요한지
-  3 height:"auto" 멤버와 pin 멤버(origin 이 위가 아닐 때)가
-    거절되는 기존 자리(auto-origin)가 그룹에서 어떻게 번지는지
-  4 그룹 손잡이를 무엇으로 그릴 것인지 — 지금 그룹에는
-    renderDirections 가 비어 있고 rotationPosition 이 "none" 이다
+  1 저장 모양의 후보 — 문자열 안의 마크업인가, 구간 배열인가,
+    자식 노드 배열인가. 각 후보가 옛 배포(모르는 칸 보존 · 모르는
+    type 거부 — 계약 §9)에서 어떻게 읽히는가
+  2 renderer 가 그 값을 어떻게 DOM 으로 만들 것인가. sandbox 의
+    strict allowlist(skin/sandbox/skin-sandbox-protocol.js)와
+    skin-sanitize 의 규칙을 어디까지 넓혀야 하는가
+  3 선택 · 편집 UI — Studio 의 어느 화면에서 그 구간을 고르는가
+    (Preview 안의 caret 인가, 패널의 목록인가)
+  4 AI 경로(functions/api/skin-ai.js)가 그 값을 만들 수 있는가,
+    만들면 안 되는가
 
-그 뒤에 구현해라.
+그 뒤에 범위를 사용자와 확정하고 구현해라.
 
-포함: 그룹 전체 크기 조절(균등 배율 · 모서리 넷) · 그룹 전체 회전
-(피벗 하나 · 멤버마다 중심과 각도) · 실시간 Preview · 원자적 저장 ·
-Undo 한 칸 · native/sandbox parity · 마우스 · 터치.
-
-제외: 비균등 배율 · 그룹 단위 순서 이동 · 그룹 안팎 구조 drag ·
-그룹 hidden/locked 필드 · 중첩 그룹 · 좌표 공간을 넘는 조작 ·
-v1 캔버스의 그룹 · 렌더러의 실행 payload 변경 · migration ·
-APP_BUILD_VERSION 변경 · 배포.
-
-원자성 · stale 차단 · locked/hidden 규칙은 계약 §39-6 · §39-7 과
-**같은 규칙**이어야 한다. 잠긴 멤버가 있는 그룹은 크기 · 회전도
-시작 자체가 막힌다.
-
-테스트: studio/studio-home-canvas-group-e2e-test.mjs 에
-[group-resize] · [group-rotate] 절을 더해라. 오차는 fixture 숫자가
-아니라 frame 의 getBoundingClientRect() 로 재고, 왕복(+s 뒤 ÷s,
-+θ 뒤 −θ)이 1px · 0.1° 안인지 본다. 기존 회귀는
-studio-home-canvas-group-e2e 전체 · studio-home-canvas-select-e2e ·
-studio-home-canvas-moveable-e2e · studio-sandbox-select-parity-e2e ·
-studio-home-canvas-inspector-e2e --only=layers,layerstruct ·
-skin/skin-home-canvas-test.mjs · skin/sandbox/skin-sandbox-unit-test.mjs.
-
-문서는 계약 문서에 §40 을 더하고(§39-1 의 "아직" 표에서 크기 ·
-회전을 빼라), 설계 문서 §9 의 1C 에 완료 표시를 하고, 이 문서 §6 의
-6단계를 완료로 바꾸고 §8 을 다음 지시문으로 갈아 끼우고,
-docs/TESTS.md §13 의 그 행에 새 절을 적어라. 완료하면 한 커밋으로
-main 에 push 하고 결과를 보고해라. 배포와 APP_BUILD_VERSION 변경은
-하지 마라.
+제외(이번에도): 표 · 링크 · 이미지 인라인 · 리스트 · 맞춤법 ·
+migration · APP_BUILD_VERSION 변경 · 배포.
 ```
 
 ### 배포 전 정리 항목

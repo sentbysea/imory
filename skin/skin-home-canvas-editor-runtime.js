@@ -129,6 +129,24 @@ const CANVAS_UNIT_ATTR = "data-imory-canvas-unit";
 
 const CANVAS_UNIT_CQW = "cqw";
 
+/* =========================================================
+   HOME-CANVAS-GROUP-1C — 그룹 전체 크기 조절 · 회전
+
+   ★ 이름 둘을 여기 한 번 더 적는다. 렌더러가 `pin` 장식의
+     `origin` 몫을 빼 두는 그 백분율 칸이고(계약 §24-4), 그룹
+     손잡이는 "저장 좌표가 가리키는 점"을 알아야 한다 — 그 점이
+     곧 부모가 자기 draft 에서 옮기는 값이기 때문이다(§40-4).
+
+     이 파일이 렌더러 없이도 로드될 수 있어야 하므로 이름을
+     복사한다(위 CANVAS_UNIT_ATTR 의 그 규칙과 같다).
+========================================================== */
+const CANVAS_RENDER_TRANSLATE_X = "--imory-canvas-translate-x";
+const CANVAS_RENDER_TRANSLATE_Y = "--imory-canvas-translate-y";
+
+/* 그룹 제스처의 종류 — 메시지의 `kind` 가 이 둘이다 */
+const CANVAS_GROUP_RESIZE_KIND = "resize";
+const CANVAS_GROUP_ROTATE_KIND = "rotate";
+
 /* 창 폭이 바뀐 뒤 프레임의 자리 · 폭을 몇 프레임이나 다시 재는가
    (HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 후속 · 계약 §30-3-1).
    전환이 한 프레임에 끝나지 않을 수 있어 넉넉히 두되, 값이 그대로면
@@ -996,6 +1014,24 @@ export function createHomeCanvasSelectionFrame(options) {
     groupPendingTimer: 0,
     groupSeq: 0,
     groupMoveCount: 0,
+
+    /* =====================================================
+       HOME-CANVAS-GROUP-1C — 그룹 전체 크기 조절 · 회전
+
+       groupShape    지금 진행 중인 손잡이 제스처. 시작 때 잰
+                     멤버 한 벌 · 고정점 · 피벗을 들고 있고, 끄는
+                     동안에는 **다시 재지 않는다**(시작값 + 누적
+                     변화 — §17-3).
+
+       groupHandles  control box 안에 우리가 만들어 넣는 손잡이
+                     다섯(모서리 넷 + 회전 하나). Moveable 의
+                     손잡이를 쓰지 않는 이유는 위 ensureGroupHandles
+                     머리말에 있다.
+    ====================================================== */
+
+    groupShape: null,
+    groupShapeCount: 0,
+    groupHandles: null,
     lastGroupGate: "",
     lastGroupCommit: null,
     lastGroupSettle: "",
@@ -1572,6 +1608,7 @@ export function createHomeCanvasSelectionFrame(options) {
         state.moveable.updateRect();
         markResizeHandles(controlBoxElement());
         syncMoveGrip(controlBoxElement());
+        syncGroupHandles(controlBoxElement());
       }
       catch (err) {
         /* 재는 데 실패해도 제스처는 그대로다 — 멤버는 이미 움직였다 */
@@ -1626,6 +1663,11 @@ export function createHomeCanvasSelectionFrame(options) {
        에서 자리를 잰다(계약 §30-2). 그 손잡이가 방금 새로 만들어
        졌을 수 있으므로 같은 프레임에서 함께 맞춘다. */
     syncMoveGrip(controlBoxElement());
+
+    /* HOME-CANVAS-GROUP-1C — 그룹 손잡이 다섯도 매 프레임 맞춘다.
+       끄는 동안에도 멤버가 움직이므로 외곽선과 함께 따라온다
+       (계약 §40-8). */
+    syncGroupHandles(controlBoxElement());
 
     /* =====================================================
        HOME-CANVAS-V2-RESPONSIVE-UX-FIX-1 — 프레임의 자리 · **폭**도
@@ -1895,6 +1937,9 @@ export function createHomeCanvasSelectionFrame(options) {
 
     syncMoveGrip(box);
 
+    /* HOME-CANVAS-GROUP-1C — 그룹 손잡이도 같은 자리에서 맞춘다 */
+    syncGroupHandles(box);
+
   }
 
 
@@ -2096,6 +2141,493 @@ export function createHomeCanvasSelectionFrame(options) {
     grip.style.setProperty("display", "block");
 
   }
+  /* =========================================================
+     HOME-CANVAS-GROUP-1C — 그룹의 **모서리 손잡이 넷과 회전 손잡이**
+     (계약 §40-2)
+
+     ── 왜 Moveable 의 손잡이가 아닌가 ─────────────────────
+
+     `renderDirections` 를 그룹에도 주면 0.53.0 이 손잡이를 그려
+     주지만, 그 손잡이를 누르는 순간 **MoveableGroup 의 제스처**가
+     함께 시작된다. 그 제스처가 재는 상자는 자식들의 `pos1~pos4`
+     합집합이고, 우리가 끄는 동안 그 자식들의 DOM 을 직접 고치므로
+     (임시 배율 · 임시 이동) 두 계산이 같은 값을 물고 돈다.
+
+     그리고 그 라이브러리는 손잡이를 잡을 수 있는 자리를 **보이는
+     크기 그대로** 둔다(14px). 손가락으로는 잡기 어렵다.
+
+     그래서 `GROUP-1B` 가 그룹 drag 에서 한 그대로다 — **입력도
+     표시도 이 파일이 갖고**, Moveable 은 외곽선만 그린다(§39-2).
+     손잡이는 control box 안에 우리가 만들어 넣는다(이동 손잡이와
+     같은 자리 · 같은 방법 — 위 ensureMoveGrip).
+
+     ★ 자리는 **멤버들의 실제 상자 합집합**이다. Moveable 의 여유
+       (글자 5px — §21-4)는 그룹에서 아예 주지 않으므로
+       (applyEditChromePadding 의 `length === 1`), 그 합집합이 곧
+       외곽선이고 곧 조작의 기준이다. 편집용 여유가 geometry 에
+       섞일 길이 없다(계약 §40-3).
+  ========================================================== */
+
+  const CANVAS_GROUP_HANDLE_ATTR = "data-imory-canvas-group-handle";
+
+  /* 보이는 크기 = 잡을 수 있는 크기. 모바일에서 손가락이 닿아야
+     하므로 단일 손잡이(14px)보다 크다(계약 §40-9). */
+  const CANVAS_GROUP_HANDLE_SIZE = 20;
+
+  /* 회전 손잡이가 위쪽 변에서 얼마나 떨어져 있나 — 위 두 모서리
+     손잡이와 겹치지 않는 거리다(각각 반지름 10px) */
+  const CANVAS_GROUP_ROTATE_GAP = 36;
+
+  const CANVAS_GROUP_CORNERS = ["nw", "ne", "sw", "se"];
+
+  /* 이보다 납작한 그룹에서는 배율을 잴 수 없다(0 으로 나눈다) */
+  const CANVAS_GROUP_MIN_SPAN = 4;
+
+
+  /*
+    그 요소가 지금 화면에서 차지한 것 한 벌.
+
+      rect        회전을 **포함한** 바깥 상자(합집합의 재료)
+      w · h       회전 **전** 상자의 화면 크기(레이아웃 px × 배율)
+      cx · cy     회전 중심 = 상자 정중앙(회전은 중심을 옮기지
+                  않으므로 바깥 상자의 중심이 곧 이 값이다)
+      lx · ly     **저장 좌표가 가리키는 점**의 화면 자리.
+
+    ★ 마지막 줄이 `pin` 장식 때문에 필요하다. 그 요소의 `x` · `y`
+      는 자기 상자의 왼쪽 위가 아니라 `origin` 이 놓일 자리이고
+      (계약 §24-4), 그 몫은 CSS 의 백분율 translate 가 뺀다. 그
+      백분율은 렌더러가 쓴 그 칸에 그대로 적혀 있으므로 되읽어
+      더한다 — 숫자를 지어내지 않고, 자를 한 벌 더 만들지도 않는다.
+
+        렌더된 왼쪽 위 = 좌표점 − origin × 크기
+        translate      = −origin × 100%
+  */
+  function groupMemberMetric(el, px) {
+
+    if (!el || typeof el.getBoundingClientRect !== "function") {
+      return null;
+    }
+
+    const rect =
+      el.getBoundingClientRect();
+
+    const w =
+      (Number(el.offsetWidth) || 0) * px;
+
+    const h =
+      (Number(el.offsetHeight) || 0) * px;
+
+    let style;
+
+    try {
+      style = win.getComputedStyle(el);
+    }
+    catch (err) {
+      style = null;
+    }
+
+    const pct =
+      (name) => {
+
+        const value =
+          style ? parseFloat(style.getPropertyValue(name)) : 0;
+
+        return Number.isFinite(value) ? value : 0;
+
+      };
+
+    const cx =
+      rect.left + rect.width / 2;
+
+    const cy =
+      rect.top + rect.height / 2;
+
+    return {
+      el: el,
+      id: el.getAttribute(CANVAS_EDIT_ID_ATTR) || "",
+      rect: rect,
+      w: w,
+      h: h,
+      cx: cx,
+      cy: cy,
+      lx: cx - w / 2 - (pct(CANVAS_RENDER_TRANSLATE_X) / 100) * w,
+      ly: cy - h / 2 - (pct(CANVAS_RENDER_TRANSLATE_Y) / 100) * h
+    };
+
+  }
+
+
+  /*
+    멤버들의 바깥 상자 합집합만 — 손잡이 자리를 맞추는 **매 프레임**의
+    값이다.
+
+    ★ 여기서는 computed style 을 읽지 않는다. 따라가기 루프가 이미
+      멤버마다 rect 를 재고 있고(tick), 거기에 멤버 수만큼의
+      getComputedStyle 을 더하면 64개짜리 그룹에서 프레임마다 그만큼
+      더 돈다. 자기 좌표점 · 크기가 필요한 것은 **제스처 시작 한
+      번**뿐이다(아래 groupMetrics).
+  */
+  function groupBoundsNow() {
+
+    const elements =
+      targetElements();
+
+    if (!elements.length || elements.some((el) => !el || !el.isConnected)) {
+      return null;
+    }
+
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+
+    elements.forEach(
+      (el) => {
+
+        const rect =
+          el.getBoundingClientRect();
+
+        left = Math.min(left, rect.left);
+        top = Math.min(top, rect.top);
+        right = Math.max(right, rect.right);
+        bottom = Math.max(bottom, rect.bottom);
+
+      }
+    );
+
+    if (
+      !Number.isFinite(left) || !Number.isFinite(top) ||
+      !Number.isFinite(right) || !Number.isFinite(bottom)
+    ) {
+      return null;
+    }
+
+    return { left: left, top: top, right: right, bottom: bottom };
+
+  }
+
+
+  /* 멤버 전부의 지금 한 벌 — **제스처 시작 한 번**이 부르는 값이다 */
+  function groupMetrics() {
+
+    const root =
+      canvasRoot();
+
+    if (!root) {
+      return null;
+    }
+
+    const rootRect =
+      root.getBoundingClientRect();
+
+    if (!(rootRect.width > 0) || !(root.offsetWidth > 0)) {
+      return null;
+    }
+
+    /* 레이아웃 px → 화면 px(바깥 문서의 Preview 배율 하나) */
+    const px =
+      rootRect.width / root.offsetWidth;
+
+    const elements =
+      targetElements();
+
+    if (!elements.length || elements.some((el) => !el || !el.isConnected)) {
+      return null;
+    }
+
+    const list =
+      elements.map((el) => groupMemberMetric(el, px));
+
+    if (list.some((item) => !item)) {
+      return null;
+    }
+
+    let left = Infinity;
+    let top = Infinity;
+    let right = -Infinity;
+    let bottom = -Infinity;
+
+    list.forEach(
+      (item) => {
+
+        left = Math.min(left, item.rect.left);
+        top = Math.min(top, item.rect.top);
+        right = Math.max(right, item.rect.right);
+        bottom = Math.max(bottom, item.rect.bottom);
+
+      }
+    );
+
+    if (
+      !Number.isFinite(left) || !Number.isFinite(top) ||
+      !Number.isFinite(right) || !Number.isFinite(bottom)
+    ) {
+      return null;
+    }
+
+    return {
+      px: px,
+      members: list,
+      bounds: { left: left, top: top, right: right, bottom: bottom }
+    };
+
+  }
+
+
+  /* 그 모서리의 **반대편** 한 점 — 크기 조절의 고정점이다 */
+  function groupAnchorPoint(bounds, direction) {
+
+    return {
+      x: direction.indexOf("w") !== -1 ? bounds.right : bounds.left,
+      y: direction.indexOf("n") !== -1 ? bounds.bottom : bounds.top
+    };
+
+  }
+
+
+  /* 그 모서리 자신 */
+  function groupCornerPoint(bounds, direction) {
+
+    return {
+      x: direction.indexOf("w") !== -1 ? bounds.left : bounds.right,
+      y: direction.indexOf("n") !== -1 ? bounds.top : bounds.bottom
+    };
+
+  }
+
+
+  function ensureGroupHandles() {
+
+    if (state.groupHandles || state.disposed) {
+      return state.groupHandles;
+    }
+
+    const px = (n) => `${n}px`;
+
+    const make =
+      (name, round, cursor, title) => {
+
+        const node =
+          doc.createElement("div");
+
+        node.setAttribute(CANVAS_GROUP_HANDLE_ATTR, name);
+        node.setAttribute("aria-hidden", "true");
+        node.title = title;
+
+        node.style.setProperty("position", "absolute");
+        node.style.setProperty("left", "0");
+        node.style.setProperty("top", "0");
+        node.style.setProperty("width", px(CANVAS_GROUP_HANDLE_SIZE));
+        node.style.setProperty("height", px(CANVAS_GROUP_HANDLE_SIZE));
+        node.style.setProperty("box-sizing", "border-box");
+        node.style.setProperty("border-radius", round ? "50%" : "4px");
+        node.style.setProperty("background", "#fff");
+        node.style.setProperty("border", "2px solid var(--moveable-color, #4af)");
+        node.style.setProperty("box-shadow", "0 1px 3px rgba(0,0,0,0.35)");
+        node.style.setProperty("cursor", cursor);
+        node.style.setProperty("touch-action", "none");
+        node.style.setProperty("display", "none");
+
+        /* control box 는 `pointer-events: none` 이고 그 값은
+           상속된다 — 손잡이만 되돌려 받는다(markResizeHandles 와
+           같다) */
+        node.style.setProperty("pointer-events", "auto");
+
+        return node;
+
+      };
+
+    const handles =
+      { corners: {}, rotate: make("rotate", true, "alias", "회전") };
+
+    CANVAS_GROUP_CORNERS.forEach(
+      (name) => {
+
+        handles.corners[name] =
+          make(
+            name,
+            false,
+            (name === "nw" || name === "se") ? "nwse-resize" : "nesw-resize",
+            "크기 조절"
+          );
+
+      }
+    );
+
+    state.groupHandles = handles;
+
+    return handles;
+
+  }
+
+
+  function groupHandleList() {
+
+    const handles =
+      state.groupHandles;
+
+    if (!handles) {
+      return [];
+    }
+
+    return CANVAS_GROUP_CORNERS
+      .map((name) => handles.corners[name])
+      .concat([handles.rotate]);
+
+  }
+
+
+  function hideGroupHandles() {
+
+    groupHandleList().forEach(
+      (node) => {
+
+        if (node) {
+          node.style.setProperty("display", "none");
+        }
+
+      }
+    );
+
+  }
+
+
+  /* 이 노드가 그룹 손잡이인가 — 무엇인지까지 돌려준다 */
+  function groupHandleFrom(node) {
+
+    const handles =
+      state.groupHandles;
+
+    if (!handles || !node) {
+      return null;
+    }
+
+    let el =
+      (node.nodeType === 1) ? node : node.parentElement;
+
+    while (el && el.nodeType === 1) {
+
+      if (el === handles.rotate) {
+        return { kind: CANVAS_GROUP_ROTATE_KIND, direction: "" };
+      }
+
+      for (let i = 0; i < CANVAS_GROUP_CORNERS.length; i += 1) {
+
+        if (el === handles.corners[CANVAS_GROUP_CORNERS[i]]) {
+          return {
+            kind: CANVAS_GROUP_RESIZE_KIND,
+            direction: CANVAS_GROUP_CORNERS[i]
+          };
+        }
+
+      }
+
+      el = el.parentElement;
+
+    }
+
+    return null;
+
+  }
+
+
+  /*
+    syncGroupHandles(box)
+
+    ★ 자리는 매 프레임 다시 잰다 — 따라가기 루프가 이미 멤버마다
+      상자를 재고 있고(tick), 끄는 동안에도 그 상자가 움직인다.
+
+    ★ 크기 조절이 **불가능한 그룹**에서는 모서리 넷을 아예 그리지
+      않는다. 지금 그런 그룹은 부모가 `scaleMax` 를 0 으로 내려
+      주는 경우뿐이다(계약 §40-7).
+  */
+  function syncGroupHandles(box) {
+
+    /* ★ 끄는 중에는 관문이 "pending" 이라 그대로 두면 손잡이가
+       사라진다. 제스처 중에도 자리를 맞춘다. */
+    const dragging =
+      !!state.groupShape;
+
+    if (
+      !box ||
+      !canvasFrameShouldShow() ||
+      (!dragging && groupShapeGate() !== "ok")
+    ) {
+      hideGroupHandles();
+      return;
+    }
+
+    const handles =
+      ensureGroupHandles();
+
+    if (!handles) {
+      return;
+    }
+
+    const bounds =
+      groupBoundsNow();
+
+    if (!bounds) {
+      hideGroupHandles();
+      return;
+    }
+
+    const boxRect =
+      box.getBoundingClientRect();
+
+    const place =
+      (node, x, y, show) => {
+
+        if (!node) {
+          return;
+        }
+
+        if (!show || !Number.isFinite(x) || !Number.isFinite(y)) {
+          node.style.setProperty("display", "none");
+          return;
+        }
+
+        if (node.parentElement !== box) {
+          box.appendChild(node);
+        }
+
+        node.style.setProperty(
+          "transform",
+          `translate(-50%, -50%) translate(${Math.round(x)}px, ${Math.round(y)}px)`
+        );
+
+        node.style.setProperty("display", "block");
+
+      };
+
+    const canResize =
+      groupScaleRange() !== null;
+
+    CANVAS_GROUP_CORNERS.forEach(
+      (name) => {
+
+        const point =
+          groupCornerPoint(bounds, name);
+
+        place(
+          handles.corners[name],
+          point.x - boxRect.left,
+          point.y - boxRect.top,
+          canResize
+        );
+
+      }
+    );
+
+    place(
+      handles.rotate,
+      (bounds.left + bounds.right) / 2 - boxRect.left,
+      bounds.top - boxRect.top - CANVAS_GROUP_ROTATE_GAP,
+      state.group && state.group.canRotate === true
+    );
+
+  }
+
 
 
   /* =========================================================
@@ -4689,8 +5221,9 @@ export function createHomeCanvasSelectionFrame(options) {
       return "not-editing";
     }
 
-    /* 단일 제스처와 섞이지 않는다 — 한 번에 하나다 */
-    if (state.drag || state.pending || state.groupPending) {
+    /* 단일 제스처와 섞이지 않는다 — 한 번에 하나다.
+       HOME-CANVAS-GROUP-1C 의 손잡이 제스처도 같은 자리를 쓴다. */
+    if (state.drag || state.pending || state.groupPending || state.groupShape) {
       return "pending";
     }
 
@@ -5021,6 +5554,39 @@ export function createHomeCanvasSelectionFrame(options) {
   }
 
 
+  /* =========================================================
+     HOME-CANVAS-GROUP-1B — 손가락이 화면 밖으로 나가도 제스처를
+     놓지 않는다(§39-2 의 모바일 규칙).
+
+     window 에서 듣고 있으므로 대개는 필요 없지만, 터치에서 엔진이
+     이벤트를 다른 대상으로 옮기는 경우가 있다. 실패해도 지금까지와
+     같다 — 잡지 못하면 그냥 window 리스너로 간다.
+
+     ★ HOME-CANVAS-GROUP-1C 에서 손잡이 제스처도 같은 줄을 쓴다.
+       스크롤러나 iframe 경계를 지나도 한 손가락이 끝까지 같은
+       제스처에 머문다(계약 §40-9).
+  ========================================================== */
+
+  function capturePointer(event) {
+
+    if (event.pointerId === undefined) {
+      return;
+    }
+
+    try {
+
+      if (event.target && typeof event.target.setPointerCapture === "function") {
+        event.target.setPointerCapture(event.pointerId);
+      }
+
+    }
+    catch (err) {
+      /* 브라우저가 모르는 pointerId 다 — window 리스너가 맡는다 */
+    }
+
+  }
+
+
   function onGroupPointerDown(event) {
 
     state.groupPress = null;
@@ -5031,6 +5597,43 @@ export function createHomeCanvasSelectionFrame(options) {
 
     if (typeof event.button === "number" && event.button !== 0) {
       return;
+    }
+
+    /* =====================================================
+       HOME-CANVAS-GROUP-1C — 그룹 손잡이가 **먼저**다.
+
+       손잡이는 control box 안에 있어 멤버가 아니다(아래
+       groupMemberFrom 은 null 을 돌려준다). 그래서 이 한 줄이
+       없으면 모서리를 눌러도 아무 제스처도 시작되지 않는다.
+
+       ★ 손가락도 받는다. 본체 끌기를 손가락에서 막는 이유는
+         "세로 스크롤인지 이동인지 가를 수 없다"였는데(§17-2),
+         손잡이에는 가를 것이 없고 그 자리에는
+         `touch-action: none` 이 걸려 있다.
+    ====================================================== */
+    const handle =
+      groupHandleFrom(event.target);
+
+    if (handle) {
+
+      if (!startGroupShape(event, handle)) {
+        return;
+      }
+
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      if (typeof event.preventDefault === "function") {
+        event.preventDefault();
+      }
+
+      capturePointer(event);
+
+      return;
+
     }
 
     const onGrip =
@@ -5124,28 +5727,7 @@ export function createHomeCanvasSelectionFrame(options) {
             pointerId: event.pointerId
           };
 
-    /* =====================================================
-       HOME-CANVAS-GROUP-1B — 손가락이 화면 밖으로 나가도 이 제스처를
-       놓지 않는다(§39-2 의 모바일 규칙).
-
-       window 에서 듣고 있으므로 대개는 필요 없지만, 터치에서 엔진이
-       이벤트를 다른 대상으로 옮기는 경우가 있다. 실패해도 지금까지와
-       같다 — 잡지 못하면 그냥 window 리스너로 간다.
-    ====================================================== */
-    if (event.pointerId !== undefined) {
-
-      try {
-
-        if (event.target && typeof event.target.setPointerCapture === "function") {
-          event.target.setPointerCapture(event.pointerId);
-        }
-
-      }
-      catch (err) {
-        /* 브라우저가 모르는 pointerId 다 — window 리스너가 맡는다 */
-      }
-
-    }
+    capturePointer(event);
 
     state.lastGroupGate = "ok";
 
@@ -5153,6 +5735,12 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   function onGroupPointerMove(event) {
+
+    /* HOME-CANVAS-GROUP-1C — 손잡이 제스처가 열려 있으면 그쪽이다.
+       둘은 동시에 열리지 않는다(양쪽 관문이 서로를 본다). */
+    if (state.groupShape) {
+      return onGroupShapeMove(event);
+    }
 
     const gesture =
       state.groupDrag;
@@ -5207,6 +5795,11 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   function onGroupPointerUp(event) {
+
+    /* HOME-CANVAS-GROUP-1C — 위 move 와 같은 분기 */
+    if (state.groupShape) {
+      return onGroupShapeUp(event);
+    }
 
     const press =
       state.groupPress;
@@ -5322,6 +5915,629 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   /* =========================================================
+     HOME-CANVAS-GROUP-1C — 그룹 전체 크기 조절 · 회전
+
+     기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §40
+     설계:      docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md §4-6 · §4-7
+
+     ── 무엇이 올라가고 무엇이 여기 남는가 ─────────────────
+
+     올라가는 것은 **배율 하나 또는 각도 하나**, 그리고 멤버마다
+     "기준점에서 이만큼 떨어져 있다"는 **벡터 하나**다(도화지 자).
+     그 벡터가 있으면 부모는 자기 draft 의 저장값만으로 모든 멤버의
+     새 값을 낼 수 있다 — 기준점(anchor · pivot)이 저장 좌표계의
+     어디인지를 그 한 줄이 알려 주기 때문이다.
+
+       resize   v = (저장 좌표가 가리키는 점) − anchor
+       rotate   v = (상자 정중앙) − pivot
+
+     ★ 왜 기준점 자체를 보내지 않는가. 이 문서는 도화지의 원점이
+       저장 좌표의 어디인지를 모른다(프레임 안 요소는 프레임의
+       원점을 쓴다 — 계약 §26-2). 차이 벡터에는 그 원점이 지워져
+       있어 부모가 자기 자로 그대로 읽을 수 있다.
+
+     ★ 숨은 멤버는 화면에 없어 벡터를 보낼 수 없다. 부모가 보이는
+       멤버 하나에서 기준점을 되짚어 같은 배율 · 같은 각도를 적용
+       한다(계약 §40-6). **숨긴 멤버를 위해 DOM 을 만들지 않는다.**
+
+     ── 화면 ──────────────────────────────────────────────
+
+     끄는 동안 바뀌는 것은 멤버마다 **네 칸**이다(§0-4 의 그 칸들).
+     배율은 폭 · 높이 값에 곱해지고 각도는 저장 각도에 더해진다 —
+     글자 크기도 선 굵기도 바뀌지 않으므로 확정 결과와 같은 그림
+     이다(계약 §40-4).
+  ========================================================== */
+
+  function groupShapeApi() {
+
+    if (
+      typeof win.setSkinCanvasElementDragOffset !== "function" ||
+      typeof win.clearSkinCanvasElementDragOffset !== "function" ||
+      typeof win.setSkinCanvasElementDragScale !== "function" ||
+      typeof win.setSkinCanvasElementDragRotation !== "function"
+    ) {
+      return null;
+    }
+
+    return {
+      offset: win.setSkinCanvasElementDragOffset,
+      scale: win.setSkinCanvasElementDragScale,
+      rotate: win.setSkinCanvasElementDragRotation,
+      clear: win.clearSkinCanvasElementDragOffset
+    };
+
+  }
+
+
+  /*
+    부모가 내려 준 **공통 배율의 허용 범위**(계약 §40-7).
+
+    멤버마다 따로 자르면 상대 배치와 비율이 깨지므로, 부모가 멤버
+    전부가 가능한 구간의 **교집합**을 하나로 내려 준다. 없으면
+    크기 조절 손잡이를 아예 그리지 않는다.
+  */
+  function groupScaleRange() {
+
+    const group =
+      state.group;
+
+    if (!group || !group.active) {
+      return null;
+    }
+
+    const min =
+      group.scaleMin;
+
+    const max =
+      group.scaleMax;
+
+    if (
+      !Number.isFinite(min) || !Number.isFinite(max) ||
+      !(min > 0) || !(max >= min)
+    ) {
+      return null;
+    }
+
+    return { min: min, max: max };
+
+  }
+
+
+  /* 크기 조절 · 회전을 켜도 되는가 — 이동과 같은 관문 한 벌이고,
+     다른 것은 렌더러에게 더 요구하는 두 함수뿐이다 */
+  function groupShapeGate() {
+
+    if (state.disposed || !state.editing) {
+      return "not-editing";
+    }
+
+    if (state.drag || state.pending || state.groupPending || state.groupDrag) {
+      return "pending";
+    }
+
+    const group =
+      state.group;
+
+    if (!group || !group.active) {
+      return "no-group";
+    }
+
+    if (group.locked) {
+      return "locked";
+    }
+
+    if (group.generation !== state.generation) {
+      return "stale-group";
+    }
+
+    if (state.targetIds.length < 2) {
+      return "not-group";
+    }
+
+    if (!groupShapeApi()) {
+      return "no-renderer";
+    }
+
+    if (!(canvasScale(group.baseWidth, null) > 0)) {
+      return "no-scale";
+    }
+
+    return "ok";
+
+  }
+
+
+  /* 각도 하나를 (−180, 180] 로 접는다 — 한 바퀴를 넘는 제스처에서
+     "이번 판에 얼마나 더 돌았는가"를 이 값으로 누적한다 */
+  function groupWrapDegrees(value) {
+
+    let deg =
+      value;
+
+    while (deg > 180) {
+      deg -= 360;
+    }
+
+    while (deg <= -180) {
+      deg += 360;
+    }
+
+    return deg;
+
+  }
+
+
+  function groupPointAngle(point, pivot) {
+
+    return Math.atan2(point.y - pivot.y, point.x - pivot.x) * 180 / Math.PI;
+
+  }
+
+
+  /* 멤버 전부에 지금 배율 · 각도를 그린다(화면 px + 배수 + 도) */
+  function paintGroupShape(gesture) {
+
+    const api =
+      groupShapeApi();
+
+    if (!api) {
+      return false;
+    }
+
+    const rad =
+      gesture.angle * Math.PI / 180;
+
+    const cos =
+      Math.cos(rad);
+
+    const sin =
+      Math.sin(rad);
+
+    return gesture.members.every(
+      (m) => {
+
+        if (!m.el || !m.el.isConnected) {
+          return false;
+        }
+
+        let dx;
+        let dy;
+
+        if (gesture.kind === CANVAS_GROUP_RESIZE_KIND) {
+
+          dx = (gesture.scale - 1) * (m.lx - gesture.anchor.x);
+          dy = (gesture.scale - 1) * (m.ly - gesture.anchor.y);
+
+        }
+        else {
+
+          const vx =
+            m.cx - gesture.pivot.x;
+
+          const vy =
+            m.cy - gesture.pivot.y;
+
+          dx = (vx * cos - vy * sin) - vx;
+          dy = (vx * sin + vy * cos) - vy;
+
+        }
+
+        if (!api.offset(m.el, dx, dy)) {
+          return false;
+        }
+
+        return (gesture.kind === CANVAS_GROUP_RESIZE_KIND)
+          ? api.scale(m.el, gesture.scale)
+          : api.rotate(m.el, gesture.angle);
+
+      }
+    );
+
+  }
+
+
+  function sendGroupShape(gesture, phase, requestId) {
+
+    if (typeof opts.onGroupTransform !== "function") {
+      return false;
+    }
+
+    try {
+
+      opts.onGroupTransform({
+        groupId: gesture.groupId,
+        gestureId: gesture.gestureId,
+        phase: phase,
+        kind: gesture.kind,
+        scale: phase === "end" ? gesture.reportScale : 1,
+        angle: phase === "end" ? gesture.reportAngle : 0,
+        members: gesture.report,
+        generation: gesture.generation,
+        revision: gesture.revision,
+        requestId: requestId
+      });
+
+    }
+    catch (err) {
+      return false;
+    }
+
+    return true;
+
+  }
+
+
+  /*
+    cancelGroupShape(reason)
+
+    끄는 중인 제스처만 접는다 — 화면을 시작 모양으로 돌리고, 시작을
+    이미 알렸으면 취소도 알린다(그룹 이동의 cancelGroupDrag 와 같은
+    규칙이고 같은 이유다).
+  */
+  function cancelGroupShape(reason) {
+
+    const gesture =
+      state.groupShape;
+
+    if (!gesture) {
+      return;
+    }
+
+    state.groupShape = null;
+
+    gesture.cancelled = true;
+
+    clearGroupDrag(gesture);
+
+    if (gesture.announced) {
+      sendGroupShape(gesture, "cancel", 0);
+    }
+
+    state.lastGroupGate = "cancel:" + (reason || "");
+
+  }
+
+
+  /* =========================================================
+     손잡이를 눌렀다 — 제스처 하나를 연다
+
+     ★ 여기서 재는 것이 이 제스처의 **전부**다. 끄는 동안에는 다시
+       재지 않는다(시작값 + 누적 변화 — §17-3 의 그 규칙). 다시
+       재면 우리가 방금 그린 임시 화면이 다음 판의 기준이 되어
+       배율이 스스로 곱해진다.
+  ========================================================== */
+
+  function startGroupShape(event, handle) {
+
+    const gate =
+      groupShapeGate();
+
+    if (gate !== "ok") {
+      state.lastGroupGate = gate;
+      return false;
+    }
+
+    const metrics =
+      groupMetrics();
+
+    if (!metrics) {
+      state.lastGroupGate = "no-metrics";
+      return false;
+    }
+
+    const scale =
+      canvasScale(state.group.baseWidth, null);
+
+    if (!(scale > 0)) {
+      state.lastGroupGate = "no-scale";
+      return false;
+    }
+
+    const bounds =
+      metrics.bounds;
+
+    const resize =
+      handle.kind === CANVAS_GROUP_RESIZE_KIND;
+
+    const range =
+      groupScaleRange();
+
+    if (resize && !range) {
+      state.lastGroupGate = "no-range";
+      return false;
+    }
+
+    if (!resize && !(state.group.canRotate === true)) {
+      state.lastGroupGate = "no-rotate";
+      return false;
+    }
+
+    const anchor =
+      groupAnchorPoint(bounds, handle.direction);
+
+    const corner =
+      groupCornerPoint(bounds, handle.direction);
+
+    const pivot = {
+      x: (bounds.left + bounds.right) / 2,
+      y: (bounds.top + bounds.bottom) / 2
+    };
+
+    const armX =
+      corner.x - anchor.x;
+
+    const armY =
+      corner.y - anchor.y;
+
+    if (resize && !(Math.abs(armX) + Math.abs(armY) >= CANVAS_GROUP_MIN_SPAN)) {
+      state.lastGroupGate = "flat";
+      return false;
+    }
+
+    state.groupSeq += 1;
+
+    state.groupShape = {
+      gestureId: state.groupSeq,
+      groupId: state.group.groupId,
+      kind: handle.kind,
+      direction: handle.direction,
+      generation: state.generation,
+      revision: state.group.revision,
+
+      startX: event.clientX,
+      startY: event.clientY,
+      pointerId: event.pointerId,
+
+      canvasScale: scale,
+      range: range,
+
+      anchor: anchor,
+      corner: corner,
+      pivot: pivot,
+      armX: armX,
+      armY: armY,
+      armLen: armX * armX + armY * armY,
+
+      /* 시작 각도와 지금까지 누적한 회전량(한 바퀴를 넘을 수 있다) */
+      baseAngle: groupPointAngle({ x: event.clientX, y: event.clientY }, pivot),
+      rawAngle: 0,
+
+      members: metrics.members,
+
+      /* 임시 표시를 걷는 한 줄이 이동과 같은 목록을 본다
+         (clearGroupDrag · settleGroupPending) */
+      els: metrics.members.map((m) => m.el),
+
+      /* 부모가 받을 한 줄 — 도화지 자다 */
+      report: metrics.members.map(
+        (m) => ({
+          id: m.id,
+          vx: roundCanvasCoord(
+            ((resize ? m.lx : m.cx) - (resize ? anchor.x : pivot.x)) / scale),
+          vy: roundCanvasCoord(
+            ((resize ? m.ly : m.cy) - (resize ? anchor.y : pivot.y)) / scale),
+
+          /* 지금 화면에 그려진 세로 길이. `height:"auto"` 인 멤버의
+             중심은 저장값만으로 낼 수 없어서 이 한 값이 필요하다
+             (계약 §28-3 의 그 원칙 그대로 — 잴 수밖에 없는 값
+             하나만 보고한다). */
+          h: roundCanvasCoord(m.h / scale)
+        })
+      ),
+
+      scale: 1,
+      angle: 0,
+      reportScale: 1,
+      reportAngle: 0,
+      moved: false,
+      announced: false,
+      cancelled: false
+    };
+
+    state.lastGroupGate = "ok";
+
+    return true;
+
+  }
+
+
+  function onGroupShapeMove(event) {
+
+    const gesture =
+      state.groupShape;
+
+    if (!gesture || gesture.cancelled) {
+      return;
+    }
+
+    if (gesture.pointerId !== undefined && event.pointerId !== gesture.pointerId) {
+      return;
+    }
+
+    if (gesture.members.some((m) => !m.el || !m.el.isConnected)) {
+      cancelGroupShape("detached");
+      return;
+    }
+
+    if (gesture.kind === CANVAS_GROUP_RESIZE_KIND) {
+
+      /* ★ 손가락이 손잡이의 정중앙을 짚지 않아도 첫 판의 배율이
+         정확히 1 이어야 한다. 그래서 포인터의 **절대 자리**가
+         아니라 시작점에서의 **누적 이동**을 모서리에 더한다. */
+      const px =
+        gesture.corner.x + (event.clientX - gesture.startX) - gesture.anchor.x;
+
+      const py =
+        gesture.corner.y + (event.clientY - gesture.startY) - gesture.anchor.y;
+
+      /* 잡은 모서리와 고정점을 잇는 대각선 위로 **투영**한다 —
+         어느 방향으로 끌어도 비율이 고정된 배율 하나가 나오고,
+         대각선에서 벗어난 손떨림이 배율을 튀게 하지 않는다. */
+      const raw =
+        (px * gesture.armX + py * gesture.armY) / gesture.armLen;
+
+      const next =
+        Math.min(
+          Math.max(raw, gesture.range.min),
+          gesture.range.max
+        );
+
+      /* 뒤집기 금지 — 음수도 0 도 배율이 아니다(계약 §40-4).
+         range.min 이 이미 양수라 이 한 줄은 안전망이다. */
+      if (!Number.isFinite(next) || !(next > 0)) {
+        return;
+      }
+
+      gesture.scale = next;
+
+    }
+    else {
+
+      const now =
+        groupPointAngle({ x: event.clientX, y: event.clientY }, gesture.pivot);
+
+      /* 한 바퀴를 넘겨도 이어지게 — 직전 각도와의 차이를 접어서
+         누적한다(직전 값에 delta 를 더하는 것이 아니라 **연속
+         각도**를 만드는 것이다) */
+      gesture.rawAngle +=
+        groupWrapDegrees(now - gesture.baseAngle - gesture.rawAngle);
+
+      /* HOME-CANVAS-MANUAL-UX-FIX-1 의 30° 자석을 **공통 delta 에**
+         건다(계약 §40-5). 멤버마다 시작 각도가 다르므로 각자의
+         절대 각도를 30° 에 붙일 수는 없다 — 그룹이 돌린 양이 30°
+         근처면 정확히 30° 로 돈다. */
+      gesture.angle =
+        roundCanvasCoord(
+          gesture.rawAngle === 0
+            ? 0
+            : snapCanvasRotation(gesture.rawAngle)
+        );
+
+    }
+
+    if (!gesture.moved) {
+
+      const changed =
+        gesture.kind === CANVAS_GROUP_RESIZE_KIND
+          ? gesture.scale !== 1
+          : gesture.angle !== 0;
+
+      if (!changed) {
+        return;
+      }
+
+      gesture.moved = true;
+
+      gesture.announced =
+        sendGroupShape(gesture, "start", 0);
+
+      swallowNextClick();
+
+    }
+
+    if (!paintGroupShape(gesture)) {
+      cancelGroupShape("write-failed");
+    }
+
+  }
+
+
+  function onGroupShapeUp(event) {
+
+    const gesture =
+      state.groupShape;
+
+    if (!gesture) {
+      return;
+    }
+
+    if (gesture.pointerId !== undefined && event.pointerId !== gesture.pointerId) {
+      return;
+    }
+
+    state.groupShape = null;
+
+    if (gesture.cancelled) {
+      return;
+    }
+
+    const changed =
+      gesture.kind === CANVAS_GROUP_RESIZE_KIND
+        ? gesture.scale !== 1
+        : gesture.angle !== 0;
+
+    /* 바뀐 것이 없다 — 확정도, 기록도 없다(§17-6) */
+    if (!gesture.moved || !changed) {
+
+      clearGroupDrag(gesture);
+
+      if (gesture.announced) {
+        sendGroupShape(gesture, "cancel", 0);
+      }
+
+      state.lastGroupGate = "no-shape";
+
+      return;
+
+    }
+
+    /* 배율은 좌표보다 한 자리 더 들고 간다 — 소수 셋째 자리에서
+       자르면 큰 요소에서 그 반올림이 픽셀로 보인다 */
+    gesture.reportScale =
+      Math.round(gesture.scale * 1000000) / 1000000;
+
+    gesture.reportAngle =
+      gesture.angle;
+
+    state.requestSeq += 1;
+
+    const requestId =
+      state.requestSeq;
+
+    state.groupShapeCount += 1;
+
+    state.lastGroupCommit = {
+      groupId: gesture.groupId,
+      gestureId: gesture.gestureId,
+      kind: gesture.kind,
+      scale: gesture.reportScale,
+      angle: gesture.reportAngle,
+      generation: gesture.generation,
+      revision: gesture.revision,
+      requestId: requestId
+    };
+
+    if (!sendGroupShape(gesture, "end", requestId)) {
+      clearGroupDrag(gesture);
+      state.lastGroupSettle = "cancel:send-failed";
+      return;
+    }
+
+    /* 임시 값을 **그대로 둔 채** 답을 기다린다(이동과 같다) */
+    state.groupPending = gesture;
+
+    state.lastGroupSettle = "pending";
+
+    clearGroupPendingTimer();
+
+    state.groupPendingTimer =
+      win.setTimeout(
+        () => {
+
+          state.groupPendingTimer = 0;
+
+          if (state.groupPending === gesture) {
+            settleGroupPending("timeout");
+          }
+
+        },
+        CANVAS_COMMIT_TIMEOUT_MS
+      );
+
+  }
+
+
+  /* =========================================================
      setGroup(payload) — 부모가 내려 준 **그룹 선택** 한 벌
 
      payload = { active, groupId, baseWidth, locked,
@@ -5363,9 +6579,45 @@ export function createHomeCanvasSelectionFrame(options) {
       groupId: active ? value.groupId : null,
       baseWidth: active ? value.baseWidth : 0,
       locked: !!(value && value.locked === true),
+
+      /* =====================================================
+         HOME-CANVAS-GROUP-1C — 크기 조절의 **공통 배율 범위**와
+         회전 가능 여부(계약 §40-7).
+
+         둘 다 부모가 자기 draft 로 정한다 — 멤버마다의 최소 크기 ·
+         상한 · `height:"auto"` 사정을 아는 곳이 거기뿐이다. 이
+         문서는 그 범위 안에서만 배율을 만들고, 범위가 없으면
+         손잡이를 아예 그리지 않는다.
+      ====================================================== */
+      scaleMin:
+        (active && Number.isFinite(value.scaleMin) && value.scaleMin > 0)
+          ? value.scaleMin
+          : 0,
+      scaleMax:
+        (active && Number.isFinite(value.scaleMax) && value.scaleMax > 0)
+          ? value.scaleMax
+          : 0,
+      canRotate: !!(active && value.canRotate === true),
+
       generation: generation,
       revision: revision
     };
+
+    /* HOME-CANVAS-GROUP-1C — 손잡이 제스처도 같은 값으로 접는다 */
+    const shape =
+      state.groupShape;
+
+    if (
+      shape &&
+      (
+        !next.active ||
+        next.groupId !== shape.groupId ||
+        next.generation !== shape.generation ||
+        next.revision !== shape.revision
+      )
+    ) {
+      cancelGroupShape("group-changed");
+    }
 
     const gesture =
       state.groupDrag;
@@ -6376,6 +7628,11 @@ export function createHomeCanvasSelectionFrame(options) {
 
       cancelGroupDrag("not-editing");
 
+      /* HOME-CANVAS-GROUP-1C — 손잡이 제스처와 손잡이 자체도 */
+      cancelGroupShape("not-editing");
+
+      hideGroupHandles();
+
       settleGroupPending("not-editing");
 
       state.group = null;
@@ -6555,6 +7812,11 @@ export function createHomeCanvasSelectionFrame(options) {
 
     cancelGroupDrag("dispose");
 
+    /* HOME-CANVAS-GROUP-1C */
+    cancelGroupShape("dispose");
+
+    hideGroupHandles();
+
     settleGroupPending("dispose");
 
     state.group = null;
@@ -6639,6 +7901,9 @@ export function createHomeCanvasSelectionFrame(options) {
 
     cancelGroupDrag("pointercancel");
 
+    /* HOME-CANVAS-GROUP-1C — 손잡이 제스처도 같다 */
+    cancelGroupShape("pointercancel");
+
   });
 
 
@@ -6718,6 +7983,23 @@ export function createHomeCanvasSelectionFrame(options) {
 
     if (event.key !== "Escape") {
       return;
+    }
+
+    /* HOME-CANVAS-GROUP-1C — 크기 조절 · 회전도 이 키로 접는다 */
+    if (state.groupShape) {
+
+      cancelGroupShape("escape");
+
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      event.preventDefault();
+
+      return;
+
     }
 
     /* HOME-CANVAS-GROUP-1B — 그룹 이동도 이 키로 접는다(§39-8) */
@@ -6920,6 +8202,22 @@ export function createHomeCanvasSelectionFrame(options) {
         groupMoved: !!(state.groupDrag && state.groupDrag.moved),
         groupPending: !!state.groupPending,
         groupMoveCount: state.groupMoveCount,
+
+        /* HOME-CANVAS-GROUP-1C — 크기 조절 · 회전의 진단 한 묶음 */
+        groupScaleMin: (state.group && state.group.scaleMin) || 0,
+        groupScaleMax: (state.group && state.group.scaleMax) || 0,
+        groupCanRotate: !!(state.group && state.group.canRotate),
+        groupShapeGate: groupShapeGate(),
+        groupShaping: !!state.groupShape,
+        groupShapeKind: (state.groupShape && state.groupShape.kind) || "",
+        groupShapeScale: (state.groupShape && state.groupShape.scale) || 0,
+        groupShapeAngle: (state.groupShape && state.groupShape.angle) || 0,
+        groupShapeCount: state.groupShapeCount,
+        groupHandlesVisible:
+          groupHandleList().filter(
+            (node) => !!node && node.style.display === "block"
+          ).length,
+
         lastGroupGate: state.lastGroupGate,
         lastGroupCommit: state.lastGroupCommit,
         lastGroupSettle: state.lastGroupSettle,

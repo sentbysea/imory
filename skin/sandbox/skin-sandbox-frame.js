@@ -1420,6 +1420,56 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
                       : 0
                 });
 
+              },
+
+              /*
+                HOME-CANVAS-GROUP-1C — 그룹 크기 조절 · 회전의
+                **확정 요청**. 위 이동과 같은 결이다 — 여기서 값을
+                만들지 않고, runtime 이 준 것을 알려진 칸만 새
+                리터럴로 옮긴다. 프로토콜이 한 번 더 거른다(종류 ·
+                배율 범위 · 각도 · 멤버 줄의 모양).
+              */
+              onGroupTransform: function (request) {
+
+                if (!request || typeof request !== "object") {
+                  return;
+                }
+
+                send(SANDBOX_MESSAGE_TYPES.CANVAS_GROUP_TRANSFORM, {
+                  contract: 1,
+                  renderSeq: FRAME_STATE.renderSeq,
+                  groupId: request.groupId,
+                  gestureId:
+                    Number.isInteger(request.gestureId) && request.gestureId >= 1
+                      ? request.gestureId
+                      : 0,
+                  phase: request.phase,
+                  kind: request.kind,
+                  scale: request.scale,
+                  angle: request.angle,
+                  members:
+                    (Array.isArray(request.members) ? request.members : []).map(
+                      (m) => ({
+                        id: (m && m.id) || "",
+                        vx: m ? m.vx : 0,
+                        vy: m ? m.vy : 0,
+                        h: m ? m.h : 0
+                      })
+                    ),
+                  generation:
+                    Number.isInteger(request.generation) && request.generation >= 0
+                      ? request.generation
+                      : 0,
+                  revision:
+                    Number.isInteger(request.revision) && request.revision >= 0
+                      ? request.revision
+                      : 0,
+                  requestId:
+                    Number.isInteger(request.requestId) && request.requestId >= 1
+                      ? request.requestId
+                      : 0
+                });
+
               }
 
             });
@@ -1813,6 +1863,13 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
         groupId: verdict.payload.groupId,
         baseWidth: verdict.payload.baseWidth,
         locked: verdict.payload.locked === true,
+
+        /* HOME-CANVAS-GROUP-1C — 크기 조절의 공통 배율 범위와 회전
+           가능 여부(계약 §40-7). 없으면 그 손잡이를 그리지 않는다. */
+        scaleMin: verdict.payload.scaleMin,
+        scaleMax: verdict.payload.scaleMax,
+        canRotate: verdict.payload.canRotate === true,
+
         generation: verdict.payload.generation,
         revision: verdict.payload.revision,
         answering: verdict.payload.answering

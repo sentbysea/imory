@@ -1672,6 +1672,538 @@ function planStudioCanvasV2GroupMove(ids, dx, dy) {
 }
 
 
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1C — 그룹 전체 크기 조절 · 회전의 **계획 한 벌**
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §40
+   설계:      docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md §4-6 · §4-7
+
+   ── 기준점은 어떻게 저장 좌표가 되는가 ─────────────────
+
+   프레임은 저장 좌표계의 원점을 모른다(프레임 안 요소는 프레임의
+   원점을 쓴다 — §26-2). 그래서 기준점 자체를 보내지 않고, 멤버마다
+   **차이 벡터**를 보낸다. 그 벡터에는 원점이 지워져 있다.
+
+     v(m) = (그 멤버의 기준 점 − anchor)        도화지 자
+
+   한 그룹의 멤버는 전부 **같은 좌표 공간**이므로(계약 §38-2) 자기
+   자 위의 값에 `unitScale` 을 곱하면 원점이 같은 한 자 위로 모인다.
+   그래서 보고된 멤버 하나로 기준점을 되짚을 수 있다.
+
+     A = space.x × unitScale − v.x            (y 도 같다)
+
+   되짚은 A 를 멤버마다 자기 자로 나누면 그 멤버의 고정점이다. 이
+   한 점을 **모든 멤버가 공유**하므로 상대 배치와 비율이 흔들리지
+   않고, 화면에 없는 **숨은 멤버**도 같은 식으로 옮겨진다(계약
+   §40-6).
+
+   ── 크기 조절 ─────────────────────────────────────────
+
+     x' = A + s(x − A)        w' = w × s        h' = h × s
+     rotation 그대로          "auto" 는 "auto" 그대로
+
+   ★ `pin` 멤버도 **같은 한 줄**이다. 그 요소의 `x` 는 상자의 왼쪽
+     위가 아니라 `origin` 이 놓일 자리이지만(§24-4), 균등 배율은
+     아핀 변환이라 상자 위의 어느 점이든 같은 식을 따른다 —
+     `origin` 항이 양변에서 지워진다.
+
+   ── 회전 ──────────────────────────────────────────────
+
+     c' = P + R(θ)(c − P)     Δ = c' − c
+     x' = x + Δ               rotation' = normalize(rotation + θ)
+     크기는 한 칸도 바뀌지 않는다
+
+   ★ 여기서만 **중심**이 필요하고, 중심에는 세로 길이가 필요하다.
+     `height:"auto"` 인 멤버의 그 길이는 저장값이 줄 수 없어 프레임이
+     잰 값을 쓴다(보고의 `h`). 화면에 없는 숨은 멤버가 `"auto"` 면
+     잰 값도 없으므로 **그 그룹은 회전하지 않는다**(§40-6).
+========================================================== */
+
+/* 단일 리사이즈의 바닥과 같은 값이다(editor-runtime 의
+   CANVAS_MIN_SIZE). 그보다 작게 줄지 않는다. */
+const STUDIO_CANVAS_GROUP_MIN_SIZE = 1;
+
+
+function studioCanvasGroupMaxCoord() {
+
+  return (typeof window.SKIN_HOME_CANVAS_MAX_COORD === "number" &&
+    window.SKIN_HOME_CANVAS_MAX_COORD > 0)
+    ? window.SKIN_HOME_CANVAS_MAX_COORD
+    : 100000;
+
+}
+
+
+/*
+  studioCanvasV2GroupScaleRange(ids) -> { min, max } | null
+
+  멤버 **전부가 가능한** 공통 배율의 교집합이다(계약 §40-7).
+
+  ★ 멤버마다 따로 자르지 않는 이유가 여기 있다. 하나가 바닥에
+    닿았다고 그 멤버만 멈추면 그룹의 상대 배치와 비율이 그 순간
+    깨진다. 그래서 **구간을 먼저 겹쳐** 하나로 만들고, 화면이 그
+    범위 안에서만 배율을 만든다.
+
+  ★ `"auto"` 높이는 배율을 받지 않으므로(가로만 받는다 — §4-6)
+    세로 쪽 제한도 만들지 않는다.
+*/
+function studioCanvasV2GroupScaleRange(ids) {
+
+  if (!Array.isArray(ids) || !ids.length) {
+    return null;
+  }
+
+  const max =
+    studioCanvasGroupMaxCoord();
+
+  let lo = 0;
+  let hi = Infinity;
+
+  for (let i = 0; i < ids.length; i += 1) {
+
+    const space =
+      studioCanvasV2Space(ids[i]);
+
+    if (!space) {
+      return null;
+    }
+
+    const sides =
+      [space.width].concat(
+        (typeof space.height === "number" && Number.isFinite(space.height))
+          ? [space.height]
+          : []
+      );
+
+    for (let k = 0; k < sides.length; k += 1) {
+
+      const side =
+        sides[k];
+
+      if (!Number.isFinite(side) || !(side > 0)) {
+        return null;
+      }
+
+      lo = Math.max(lo, STUDIO_CANVAS_GROUP_MIN_SIZE / side);
+      hi = Math.min(hi, max / side);
+
+    }
+
+  }
+
+  if (!(lo > 0) || !Number.isFinite(hi) || !(hi >= lo)) {
+    return null;
+  }
+
+  return { min: lo, max: hi };
+
+}
+
+
+/*
+  studioCanvasV2GroupCanRotate(ids) -> boolean
+
+  회전은 멤버마다 **중심**이 필요하고, 화면에 없는 멤버의 중심은
+  저장값만으로 낼 수 없다(`height:"auto"`). 그런 멤버가 하나라도
+  있으면 회전 손잡이를 아예 그리지 않는다 — 시작을 막고 이유를
+  남기는 편이, 끝에서 통째로 되돌리는 것보다 낫다.
+*/
+function studioCanvasV2GroupCanRotate(ids, hiddenIds) {
+
+  if (!Array.isArray(ids) || !ids.length) {
+    return false;
+  }
+
+  const hidden =
+    Array.isArray(hiddenIds) ? hiddenIds : [];
+
+  for (let i = 0; i < ids.length; i += 1) {
+
+    const space =
+      studioCanvasV2Space(ids[i]);
+
+    if (!space) {
+      return false;
+    }
+
+    if (
+      hidden.indexOf(ids[i]) !== -1 &&
+      !(typeof space.height === "number" && Number.isFinite(space.height))
+    ) {
+      return false;
+    }
+
+  }
+
+  return true;
+
+}
+
+
+/* 보고된 멤버 한 줄을 id 로 찾는 표 — 모양은 이미 두 관문이 봤다 */
+function studioCanvasGroupReportMap(members) {
+
+  const map =
+    {};
+
+  if (!Array.isArray(members)) {
+    return map;
+  }
+
+  members.forEach(
+    (item) => {
+
+      if (
+        !item || typeof item !== "object" ||
+        typeof item.id !== "string" || !item.id ||
+        !Number.isFinite(item.vx) || !Number.isFinite(item.vy) ||
+        !Number.isFinite(item.h)
+      ) {
+        return;
+      }
+
+      map[item.id] = { vx: item.vx, vy: item.vy, h: item.h };
+
+    }
+  );
+
+  return map;
+
+}
+
+
+/* 그 멤버의 지금 세로 길이(자기 자). 숫자면 저장값, `"auto"` 면
+   프레임이 잰 값이다. 둘 다 없으면 null 이다. */
+function studioCanvasGroupHeightOf(space, report) {
+
+  if (typeof space.height === "number" && Number.isFinite(space.height)) {
+    return space.height;
+  }
+
+  if (report && Number.isFinite(report.h) && space.unitScale > 0) {
+    return report.h / space.unitScale;
+  }
+
+  return null;
+
+}
+
+
+/*
+  그 멤버의 상자 정중앙(자기 자).
+
+  ★ `pin` 은 `x` 가 `origin` 이 놓일 자리다 — 중심은 그 점에서
+    `(0.5 − origin) × 크기` 만큼 떨어져 있다(§24-4). overlay 와
+    `transform` 은 origin 이 0 이라 이 식이 `x + w/2` 로 줄어든다.
+*/
+function studioCanvasGroupCenterOf(space, height) {
+
+  return {
+    x: space.x + (0.5 - space.originX) * space.width,
+    y: space.y + (0.5 - space.originY) * height
+  };
+
+}
+
+
+/*
+  planStudioCanvasV2GroupResize(ids, scale, members)
+
+    -> { ok:true, steps:[…] } | { ok:false, reason, id? }
+
+  `ids` 는 옮길 멤버 전부(숨은 멤버 포함 — 부모의 `live`),
+  `members` 는 프레임이 보고한 줄(보이는 멤버만)이다.
+*/
+function planStudioCanvasV2GroupResize(ids, scale, members) {
+
+  if (!Array.isArray(ids) || !ids.length) {
+    return { ok: false, reason: "members" };
+  }
+
+  if (!Number.isFinite(scale) || !(scale > 0)) {
+    return { ok: false, reason: "scale" };
+  }
+
+  const report =
+    studioCanvasGroupReportMap(members);
+
+  /* ── 기준점을 되짚는다 — 보고된 **첫 멤버** 하나로 ── */
+
+  const anchor =
+    studioCanvasGroupAnchorFrom(
+      ids, report, (space) => ({ x: space.x, y: space.y }));
+
+  if (!anchor) {
+    return { ok: false, reason: "anchor" };
+  }
+
+  const steps =
+    [];
+
+  for (let i = 0; i < ids.length; i += 1) {
+
+    const id =
+      ids[i];
+
+    const space =
+      studioCanvasV2Space(id);
+
+    if (!space) {
+      return { ok: false, reason: "space", id: id };
+    }
+
+    if (!Number.isFinite(space.unitScale) || !(space.unitScale > 0)) {
+      return { ok: false, reason: "scale", id: id };
+    }
+
+    if (
+      !Number.isFinite(space.x) || !Number.isFinite(space.y) ||
+      !Number.isFinite(space.width) || !(space.width > 0)
+    ) {
+      return { ok: false, reason: "space", id: id };
+    }
+
+    /* 그 멤버의 자 위의 고정점 */
+    const ax =
+      anchor.x / space.unitScale;
+
+    const ay =
+      anchor.y / space.unitScale;
+
+    const auto =
+      !(typeof space.height === "number" && Number.isFinite(space.height));
+
+    const next = {
+      x: studioCanvasV2Round(ax + (space.x - ax) * scale),
+      y: studioCanvasV2Round(ay + (space.y - ay) * scale),
+      width: studioCanvasV2Round(space.width * scale),
+
+      /* ★ `"auto"` 는 `"auto"` 로 남는다 — 가로만 배율을 받고
+         세로는 계속 내용이 정한다(계약 §40-4). 조용히 숫자로
+         굳히지 않는다. */
+      height: auto ? space.height : studioCanvasV2Round(space.height * scale)
+    };
+
+    const plan =
+      planStudioCanvasV2Transform(
+        "v2-resize", id, next,
+        {
+          x: space.x,
+          y: space.y,
+          width: space.width,
+          height: space.height
+        });
+
+    if (!plan || !plan.ok) {
+      return { ok: false, reason: (plan && plan.reason) || "plan", id: id };
+    }
+
+    steps.push({
+      writer: plan.writer,
+      id: id,
+      next: plan.next,
+      expected: plan.expected
+    });
+
+  }
+
+  return { ok: true, steps: steps };
+
+}
+
+
+/*
+  기준점 되짚기 — 보고된 멤버 중 **명단에서 가장 앞선 하나**를 쓴다.
+
+  ★ 어느 멤버로 되짚어도 같은 점이 나온다(위 머리말의 그 식). 순서를
+    못박는 이유는 답이 달라져서가 아니라, 같은 입력이 언제나 같은
+    결과를 내야 하기 때문이다.
+*/
+function studioCanvasGroupAnchorFrom(ids, report, pointOf) {
+
+  for (let i = 0; i < ids.length; i += 1) {
+
+    const hit =
+      Object.prototype.hasOwnProperty.call(report, ids[i])
+        ? report[ids[i]]
+        : null;
+
+    if (!hit) {
+      continue;
+    }
+
+    const space =
+      studioCanvasV2Space(ids[i]);
+
+    if (!space || !Number.isFinite(space.unitScale) || !(space.unitScale > 0)) {
+      continue;
+    }
+
+    const point =
+      pointOf(space, hit);
+
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      continue;
+    }
+
+    return {
+      x: point.x * space.unitScale - hit.vx,
+      y: point.y * space.unitScale - hit.vy
+    };
+
+  }
+
+  return null;
+
+}
+
+
+/*
+  planStudioCanvasV2GroupRotate(ids, angle, members)
+
+    -> { ok:true, steps:[…] } | { ok:false, reason, id? }
+
+  한 멤버가 **두 칸**을 바꾼다 — 자리와 각도. 둘은 서로 다른 칸이라
+  같은 묶음에 나란히 넣어도 서로의 `expected` 를 깨지 않는다.
+*/
+function planStudioCanvasV2GroupRotate(ids, angle, members) {
+
+  if (!Array.isArray(ids) || !ids.length) {
+    return { ok: false, reason: "members" };
+  }
+
+  if (!Number.isFinite(angle)) {
+    return { ok: false, reason: "angle" };
+  }
+
+  const report =
+    studioCanvasGroupReportMap(members);
+
+  const pivot =
+    studioCanvasGroupAnchorFrom(
+      ids, report,
+      (space, hit) => {
+
+        const height =
+          studioCanvasGroupHeightOf(space, hit);
+
+        return (height === null)
+          ? null
+          : studioCanvasGroupCenterOf(space, height);
+
+      }
+    );
+
+  if (!pivot) {
+    return { ok: false, reason: "pivot" };
+  }
+
+  const rad =
+    angle * Math.PI / 180;
+
+  const cos =
+    Math.cos(rad);
+
+  const sin =
+    Math.sin(rad);
+
+  const steps =
+    [];
+
+  for (let i = 0; i < ids.length; i += 1) {
+
+    const id =
+      ids[i];
+
+    const space =
+      studioCanvasV2Space(id);
+
+    if (!space) {
+      return { ok: false, reason: "space", id: id };
+    }
+
+    if (!Number.isFinite(space.unitScale) || !(space.unitScale > 0)) {
+      return { ok: false, reason: "scale", id: id };
+    }
+
+    const height =
+      studioCanvasGroupHeightOf(
+        space,
+        Object.prototype.hasOwnProperty.call(report, id) ? report[id] : null
+      );
+
+    /* 화면에 없는 `"auto"` 멤버다 — 중심을 지어내지 않는다(§40-6) */
+    if (height === null) {
+      return { ok: false, reason: "auto-height", id: id };
+    }
+
+    const center =
+      studioCanvasGroupCenterOf(space, height);
+
+    /* 도화지 자 위에서 피벗 둘레로 돈다 */
+    const vx =
+      center.x * space.unitScale - pivot.x;
+
+    const vy =
+      center.y * space.unitScale - pivot.y;
+
+    const dx =
+      (vx * cos - vy * sin) - vx;
+
+    const dy =
+      (vx * sin + vy * cos) - vy;
+
+    const next = {
+      x: studioCanvasV2Round(space.x + dx / space.unitScale),
+      y: studioCanvasV2Round(space.y + dy / space.unitScale)
+    };
+
+    const move =
+      planStudioCanvasV2Transform(
+        "v2-move", id, next, { x: space.x, y: space.y });
+
+    if (!move || !move.ok) {
+      return { ok: false, reason: (move && move.reason) || "plan", id: id };
+    }
+
+    steps.push({
+      writer: move.writer,
+      id: id,
+      next: move.next,
+      expected: move.expected
+    });
+
+    /* 각도는 지금까지의 그 규칙 그대로 접는다(0 ≤ deg < 360) */
+    const rotation =
+      studioCanvasV2Round(
+        (typeof window.normalizeSkinHomeCanvasRotation === "function")
+          ? window.normalizeSkinHomeCanvasRotation(space.rotation + angle)
+          : ((space.rotation + angle) % 360 + 360) % 360
+      );
+
+    const turn =
+      planStudioCanvasV2Transform(
+        "v2-rotate", id, { rotation: rotation }, { rotation: space.rotation });
+
+    if (!turn || !turn.ok) {
+      return { ok: false, reason: (turn && turn.reason) || "plan", id: id };
+    }
+
+    steps.push({
+      writer: turn.writer,
+      id: id,
+      next: turn.next,
+      expected: turn.expected
+    });
+
+  }
+
+  return { ok: true, steps: steps };
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.STUDIO_CANVAS_V2_SPACE_KINDS = STUDIO_CANVAS_V2_SPACE_KINDS;
@@ -1680,6 +2212,12 @@ if (typeof window !== "undefined") {
 
   /* HOME-CANVAS-GROUP-1B */
   window.planStudioCanvasV2GroupMove = planStudioCanvasV2GroupMove;
+
+  /* HOME-CANVAS-GROUP-1C */
+  window.planStudioCanvasV2GroupResize = planStudioCanvasV2GroupResize;
+  window.planStudioCanvasV2GroupRotate = planStudioCanvasV2GroupRotate;
+  window.studioCanvasV2GroupScaleRange = studioCanvasV2GroupScaleRange;
+  window.studioCanvasV2GroupCanRotate = studioCanvasV2GroupCanRotate;
 
   /* HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기 */
   window.setStudioCanvasFrameLayout = setStudioCanvasFrameLayout;

@@ -81,20 +81,39 @@
   그대로 성립한다. v1 요소와 overlay 는 두 변수를 쓰지 않으므로
   `translate(0%, 0%)` 이고 결과 행렬이 지금까지와 같다.
 */
+/*
+  ★ 배율 · 각도 두 칸도 **끄는 동안만** 있다(HOME-CANVAS-GROUP-1C —
+    그룹 크기 조절 · 회전의 임시 표시).
+
+  값이 없으면 배율 `1` · 각도 `0deg` 라 지금까지의 계산과 한 글자도
+  같다. 배율이 `transform` 이 아니라 **폭 · 높이 값에** 곱해지는
+  이유는 render.js 의 그 변수 주석에 있다 — 확정이 바꾸는 것은
+  상자뿐이고 글자 크기가 아니다(계약 §40-4). 곱셈을 CSS 가 하므로
+  프레임은 멤버마다 다른 자(백분율 · cqw · 프레임 내부 자)를 알
+  필요가 없다.
+
+  `"auto"` 높이에는 곱할 칸이 아예 없다 — 가로만 배율을 받고 세로는
+  계속 내용이 정한다. 그것이 확정 결과와 같은 그림이다.
+*/
 [data-imory-canvas-element] {
   position: absolute;
   left: var(--imory-canvas-x, 0%);
   top: var(--imory-canvas-y, 0%);
-  width: var(--imory-canvas-width, 0%);
+  width: calc(var(--imory-canvas-width, 0%) * var(--imory-canvas-drag-scale, 1));
   transform:
     translate(var(--imory-canvas-drag-x, 0px), var(--imory-canvas-drag-y, 0px))
     translate(var(--imory-canvas-translate-x, 0%), var(--imory-canvas-translate-y, 0%))
-    rotate(var(--imory-canvas-rotation, 0deg));
+    rotate(
+      calc(
+        var(--imory-canvas-rotation, 0deg) +
+        var(--imory-canvas-drag-rotate, 0deg)
+      )
+    );
 }
 
 /* 숫자 height — 저장된 비율대로 */
 [data-imory-canvas-element][data-imory-canvas-height="fixed"] {
-  height: var(--imory-canvas-height, auto);
+  height: calc(var(--imory-canvas-height, 0px) * var(--imory-canvas-drag-scale, 1));
 }
 
 /*
@@ -551,8 +570,15 @@
   /* 이 화면에서 놓을 수 있는 왼쪽 끝 · 오른쪽 끝 */
   --imory-canvas-page-min: calc(0px - var(--imory-canvas-page-room));
 
+  /* ★ 여기서도 임시 배율을 곱한다(HOME-CANVAS-GROUP-1C). 그러지
+     않으면 그룹 크기를 끄는 동안의 오른쪽 끝이 **옛 폭**으로
+     잡혀, 가장자리에 붙은 장식이 끄는 중과 확정 뒤에 다른 자리에
+     선다. 값이 없으면 1 이라 지금까지와 한 글자도 같다. */
   --imory-canvas-page-max:
-    calc(100cqw + var(--imory-canvas-page-room) - var(--imory-canvas-width, 0px));
+    calc(
+      100cqw + var(--imory-canvas-page-room) -
+      var(--imory-canvas-width, 0px) * var(--imory-canvas-drag-scale, 1)
+    );
 
   left:
     clamp(

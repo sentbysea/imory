@@ -445,6 +445,40 @@ var SANDBOX_MESSAGE_TYPES = {
 
 
   /* =======================================================
+     HOME-CANVAS-GROUP-1C — 그룹 전체 크기 조절 · 회전
+
+       CANVAS_GROUP_TRANSFORM  frame -> parent
+         { renderSeq, groupId, gestureId, phase, kind,
+           scale, angle, members, generation, revision, requestId }
+
+     ★ 여기도 그룹 JSON 은 내려가지 않는다(위 CANVAS_GROUP 주석).
+       올라오는 것은 **배율 하나 또는 각도 하나**, 그리고 멤버마다
+       "기준점에서 이만큼 떨어져 있다"는 벡터 하나다.
+
+         kind:"resize"   scale 이 뜻을 갖는다(양수 · 균등 배율)
+         kind:"rotate"   angle 이 뜻을 갖는다(도 · 공통 delta)
+
+       벡터의 뜻도 그 이름이 정한다 — resize 는 **저장 좌표가
+       가리키는 점**에서 고정점까지, rotate 는 **상자 정중앙**에서
+       피벗까지다(계약 §40-4 · §40-5). 단위는 도화지 자이고 부모가
+       멤버마다 자기 자로 환산한다.
+
+     ★ 'h' 는 그 멤버가 **지금 화면에서 갖는 세로 길이**다.
+       height:"auto" 인 멤버의 중심은 저장값만으로 낼 수 없어서
+       잰다(CANVAS_LAYOUT 의 그 원칙과 같다 — 잴 수밖에 없는 값
+       하나만 보고한다).
+
+     ★ 기준점 자체는 올라오지 않는다. 프레임은 저장 좌표계의
+       원점을 모르고, 차이 벡터에는 그 원점이 지워져 있다.
+
+     ★ 'phase' 는 CANVAS_GROUP_MOVE 와 같은 셋이고, 답도 같은
+       CANVAS_GROUP 의 'answering' 으로 돌아온다.
+  ======================================================= */
+
+  CANVAS_GROUP_TRANSFORM: "IMORY_CANVAS_GROUP_TRANSFORM",
+
+
+  /* =======================================================
      STUDIO-LAYERS-MATERIALS-1B — 재료를 **끌어다 놓을 자리**
      (계약 §36-5)
 
@@ -747,6 +781,48 @@ var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move", "resize", "rotate", "width"];
    끄는 동안의 중간 보고는 없다(위 CANVAS_GROUP_MOVE 주석). */
 
 var SANDBOX_CANVAS_GROUP_PHASES = ["start", "end", "cancel"];
+
+
+/* HOME-CANVAS-GROUP-1C — 그룹 손잡이 제스처의 종류는 둘뿐이다 */
+
+var SANDBOX_CANVAS_GROUP_KINDS = ["resize", "rotate"];
+
+
+/* 배율의 상한 · 하한. 저장 크기의 자(±100000)를 그대로 빌려 쓰지
+   않는다 — 배율은 길이가 아니라 **배수**이고, 여기서 막는 것은
+   "숫자가 아니다 · 0 이하다 · 터무니없다" 셋이다. 실제 허용 범위는
+   멤버 전부의 교집합으로 부모가 다시 정한다(계약 §40-7). */
+
+var SANDBOX_CANVAS_GROUP_MIN_SCALE = 0.0001;
+var SANDBOX_CANVAS_GROUP_MAX_SCALE = 10000;
+
+
+/*
+  그룹 제스처가 보고하는 멤버 한 줄 — id 와 벡터 둘, 그리고 지금
+  화면의 세로 길이 하나. **모르는 키가 하나라도 있으면 거짓**이다.
+*/
+
+function isSandboxCanvasGroupMember(value) {
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+
+  var keys =
+    Object.keys(value);
+
+  if (keys.length !== 4) {
+    return false;
+  }
+
+  return (
+    isSandboxInspectEditId(value.id) &&
+    isSandboxCanvasCoord(value.vx) &&
+    isSandboxCanvasCoord(value.vy) &&
+    isSandboxCanvasCoord(value.h)
+  );
+
+}
 
 
 /*
@@ -1278,6 +1354,20 @@ function isSandboxCanvasOrigin(value) {
       Number.isFinite(value) &&
       value >= 0 &&
       value <= 1)
+  );
+
+}
+
+
+/* HOME-CANVAS-GROUP-1C — 배율 한 칸(배수). 길이가 아니다 */
+
+function isSandboxCanvasGroupScale(value) {
+
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= SANDBOX_CANVAS_GROUP_MIN_SCALE &&
+    value <= SANDBOX_CANVAS_GROUP_MAX_SCALE
   );
 
 }
@@ -2635,7 +2725,8 @@ var SANDBOX_MESSAGE_SPEC = {
     direction: "to-frame",
     keys: [
       "contract", "renderSeq", "active", "groupId", "baseWidth",
-      "locked", "generation", "revision", "answering"
+      "locked", "scaleMin", "scaleMax", "canRotate",
+      "generation", "revision", "answering"
     ],
     check: function (payload) {
 
@@ -2672,9 +2763,35 @@ var SANDBOX_MESSAGE_SPEC = {
 
         return (
           payload.groupId === undefined &&
-          payload.baseWidth === undefined
+          payload.baseWidth === undefined &&
+          payload.scaleMin === undefined &&
+          payload.scaleMax === undefined &&
+          payload.canRotate === undefined
         );
 
+      }
+
+      /* =====================================================
+         HOME-CANVAS-GROUP-1C — 크기 조절의 공통 배율 범위와 회전
+         가능 여부(계약 §40-7).
+
+         ★ 범위가 **없을 수도** 있다. 그때는 두 칸 자체를 만들지
+           않고, 프레임은 크기 조절 손잡이를 그리지 않는다.
+      ====================================================== */
+      if (payload.scaleMin !== undefined || payload.scaleMax !== undefined) {
+
+        if (
+          !isSandboxCanvasGroupScale(payload.scaleMin) ||
+          !isSandboxCanvasGroupScale(payload.scaleMax) ||
+          payload.scaleMax < payload.scaleMin
+        ) {
+          return false;
+        }
+
+      }
+
+      if (payload.canRotate !== undefined && typeof payload.canRotate !== "boolean") {
+        return false;
       }
 
       return (
@@ -2734,6 +2851,95 @@ var SANDBOX_MESSAGE_SPEC = {
 
       /* 답을 이 번호로 돌려받는다 — **확정을 구하는 `end` 에만**
          있고, 나머지 자리에서는 0 이다. */
+      if (!Number.isInteger(payload.requestId) || payload.requestId < 0) {
+        return false;
+      }
+
+      return (payload.phase === "end") === (payload.requestId >= 1);
+
+    }
+  },
+
+
+  /* =======================================================
+     HOME-CANVAS-GROUP-1C — 그룹 크기 조절 · 회전의 **확정 요청**
+
+     ★ 확정이 아니다. 부모가 지금 draft 로 그룹 · 멤버 · 선택 ·
+       순번 · revision 을 전부 다시 보고, 배율이 멤버 전부가
+       가능한 범위 안인지도 거기서 다시 본다(계약 §40-7).
+
+     ★ 쓰이지 않는 칸도 모양은 지킨다 — kind:"rotate" 의 scale 은
+       1, kind:"resize" 의 angle 은 0 이다. "안 쓰니 아무 값이나"를
+       허용하면 뒤에 그 칸의 뜻이 바뀌는 날 옛 프레임이 조용히
+       통과한다.
+  ======================================================= */
+
+  IMORY_CANVAS_GROUP_TRANSFORM: {
+    direction: "to-parent",
+    keys: [
+      "contract", "renderSeq", "groupId", "gestureId", "phase", "kind",
+      "scale", "angle", "members", "generation", "revision", "requestId"
+    ],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (!isSandboxInspectEditId(payload.groupId)) {
+        return false;
+      }
+
+      if (SANDBOX_CANVAS_GROUP_PHASES.indexOf(payload.phase) === -1) {
+        return false;
+      }
+
+      if (SANDBOX_CANVAS_GROUP_KINDS.indexOf(payload.kind) === -1) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.gestureId) || payload.gestureId < 1) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.generation) || payload.generation < 0) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.revision) || payload.revision < 0) {
+        return false;
+      }
+
+      if (!isSandboxCanvasGroupScale(payload.scale)) {
+        return false;
+      }
+
+      /* 각도는 정규화된 delta 다 — 한 바퀴 안이다 */
+      if (
+        typeof payload.angle !== "number" ||
+        !Number.isFinite(payload.angle) ||
+        Math.abs(payload.angle) > 360
+      ) {
+        return false;
+      }
+
+      if (payload.kind === "resize" && payload.angle !== 0) {
+        return false;
+      }
+
+      if (payload.kind === "rotate" && payload.scale !== 1) {
+        return false;
+      }
+
+      if (
+        !Array.isArray(payload.members) ||
+        !payload.members.length ||
+        payload.members.length > SANDBOX_CANVAS_MAX_ELEMENTS ||
+        !payload.members.every(isSandboxCanvasGroupMember)
+      ) {
+        return false;
+      }
+
       if (!Number.isInteger(payload.requestId) || payload.requestId < 0) {
         return false;
       }

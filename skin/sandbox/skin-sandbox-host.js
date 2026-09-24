@@ -1974,6 +1974,13 @@ async function renderSandboxPageIntoHandle(handle, opts) {
            revision)는 부모 realm 의 Studio 가 자기 draft 로 판단한다. */
         handle.handlers[TYPES.CANVAS_GROUP_MOVE] = inspectRelay("canvas-group-move");
 
+        /* HOME-CANVAS-GROUP-1C — 그룹 크기 조절 · 회전의 확정
+           **요청**. 여기서도 해석하지 않는다 — 배율 · 각도 · 멤버
+           벡터를 실제로 써도 되는지는 부모 realm 의 Studio 가 자기
+           draft 로 판단한다. */
+        handle.handlers[TYPES.CANVAS_GROUP_TRANSFORM] =
+          inspectRelay("canvas-group-transform");
+
         /* HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 페이지 자리.
            여기서도 해석하지 않는다 — "지금 화면의 것인가" 하나만
            보고 그대로 올린다. 그 숫자를 무엇에 쓸지는 부모 realm 의
@@ -3013,8 +3020,28 @@ export function sendSandboxCanvasGroup(handle, group) {
   /* 해제에는 나머지 칸 자체를 만들지 않는다 — 프로토콜이 그 모양을
      요구한다(CANVAS_GEOMETRY 와 같은 결). */
   if (active) {
+
     payload.groupId = value.groupId;
     payload.baseWidth = value.baseWidth;
+
+    /* =====================================================
+       HOME-CANVAS-GROUP-1C — 크기 조절의 **공통 배율 범위**와 회전
+       가능 여부(계약 §40-7).
+
+       ★ 범위가 없으면 두 칸 자체를 만들지 않는다. "0" 을 보내지
+         않는 이유는 프로토콜이 배율을 양수로 못박기 때문이고,
+         칸이 없다는 것이 곧 "이 그룹은 크기를 바꿀 수 없다"다.
+    ====================================================== */
+    if (
+      Number.isFinite(value.scaleMin) && value.scaleMin > 0 &&
+      Number.isFinite(value.scaleMax) && value.scaleMax >= value.scaleMin
+    ) {
+      payload.scaleMin = value.scaleMin;
+      payload.scaleMax = value.scaleMax;
+    }
+
+    payload.canRotate = value.canRotate === true;
+
   }
 
   return sendToSandboxFrame(

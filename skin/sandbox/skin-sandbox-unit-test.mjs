@@ -402,9 +402,15 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
     CANVAS_GROUP_MOVE — 그룹 이동의 확정 **요청**. 자리는 셋뿐이고
     (`start` · `end` · `cancel`) 끄는 동안의 중간 보고가 없다.
     올라오는 숫자는 도화지 자의 **공통 delta 하나**이며, 멤버마다의
-    환산은 부모가 한다 — 계약 §39). */
-check("[msg] 이번 라운드가 아는 type 은 정확히 서른다섯이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 35,
+    환산은 부모가 한다 — 계약 §39),
+   HOME-CANVAS-GROUP-1C 에서 하나가 늘어 서른여섯이다
+   (CANVAS_GROUP_TRANSFORM — 그룹 크기 조절 · 회전의 확정 **요청**.
+    자리는 이동과 같은 셋이고, 올라오는 숫자는 **배율 하나 또는
+    각도 하나**와 멤버마다의 벡터 하나다. 기준점(anchor · pivot)
+    자체는 올라오지 않는다 — 프레임은 저장 좌표계의 원점을 모르고,
+    차이 벡터에는 그 원점이 지워져 있다 — 계약 §40). */
+check("[msg] 이번 라운드가 아는 type 은 정확히 서른여섯이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 36,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -1322,6 +1328,158 @@ check("[canvas-group] ★ 멤버별 값은 이 봉투로 올라오지 않는다"
 
 check("[canvas-group] ★ 제스처 식별값이 없으면 거부된다",
   canvasGroupMoveFrom({ ...GROUP_MOVE_OK, gestureId: 0 }).ok === false);
+
+
+/* =========================================================
+   [canvas-group] HOME-CANVAS-GROUP-1C — 그룹 크기 조절 · 회전
+   (계약 §40)
+
+   ★ 봉투가 더 나르는 것은 **배율 하나 또는 각도 하나**, 그리고
+     멤버마다의 차이 벡터다. 기준점(anchor · pivot) 자체는 올라오지
+     않는다 — 프레임은 저장 좌표계의 원점을 모르고, 차이 벡터에는
+     그 원점이 지워져 있다.
+
+   ★ 내려가는 쪽에는 공통 배율의 범위(scaleMin · scaleMax)와 회전
+     가능 여부가 늘었다. 그 셋을 정하는 곳은 언제나 부모다.
+========================================================== */
+
+console.log("\n[canvas-group] 그룹 크기 조절 · 회전 (HOME-CANVAS-GROUP-1C)");
+
+const canvasGroupTransformFrom = (payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://skin.imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_GROUP_TRANSFORM, payload, 1
+      )
+    },
+    {
+      originAllowList: ["https://skin.imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-parent"
+    }
+  );
+
+const GROUP_RANGE = {
+  ...GROUP_OK, scaleMin: 0.05, scaleMax: 1600, canRotate: true
+};
+
+check("[canvas-group] 공통 배율 범위와 회전 가능 여부를 프레임이 받는다",
+  canvasGroupTo(GROUP_RANGE).ok === true);
+
+check("[canvas-group] ★ 범위는 둘이 짝이고 min ≤ max 여야 한다",
+  canvasGroupTo({ ...GROUP_RANGE, scaleMax: 0.01 }).ok === false &&
+  canvasGroupTo({ ...GROUP_OK, scaleMin: 0.5 }).ok === false);
+
+check("[canvas-group] ★ 배율은 0 도 음수도 아니다",
+  canvasGroupTo({ ...GROUP_RANGE, scaleMin: 0 }).ok === false &&
+  canvasGroupTo({ ...GROUP_RANGE, scaleMin: -1 }).ok === false);
+
+check("[canvas-group] ★ 범위가 없는 그룹은 두 칸 자체가 없다(크기 조절 불가)",
+  canvasGroupTo({ ...GROUP_OK, canRotate: false }).ok === true);
+
+check("[canvas-group] ★ 해제에는 그 셋도 칸 자체가 없다",
+  canvasGroupTo({
+    contract: 1, renderSeq: 3, active: false, locked: false,
+    generation: 5, revision: 12, canRotate: true
+  }).ok === false);
+
+const GROUP_RESIZE_OK = {
+  contract: 1, renderSeq: 3, groupId: "gOver", gestureId: 2,
+  phase: "end", kind: "resize", scale: 1.25, angle: 0,
+  members: [
+    { id: "mvA", vx: 0, vy: 0, h: 40 },
+    { id: "mvB", vx: 120, vy: 80, h: 35 }
+  ],
+  generation: 5, revision: 12, requestId: 3
+};
+
+const GROUP_ROTATE_OK = {
+  ...GROUP_RESIZE_OK, kind: "rotate", scale: 1, angle: -45
+};
+
+check("[canvas-group] 정상 크기 조절 · 회전 요청을 부모가 받는다",
+  canvasGroupTransformFrom(GROUP_RESIZE_OK).ok === true &&
+  canvasGroupTransformFrom(GROUP_ROTATE_OK).ok === true);
+
+check("[canvas-group] ★ 종류는 둘뿐이다",
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, kind: "skew" }).ok === false &&
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, kind: "" }).ok === false);
+
+check("[canvas-group] ★ 쓰이지 않는 칸도 모양을 지킨다",
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, angle: 5 }).ok === false &&
+  canvasGroupTransformFrom({ ...GROUP_ROTATE_OK, scale: 1.2 }).ok === false);
+
+check("[canvas-group] ★ 배율은 양수와 허용 범위 안이다",
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, scale: 0 }).ok === false &&
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, scale: -2 }).ok === false &&
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, scale: 1e9 }).ok === false &&
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, scale: NaN }).ok === false);
+
+check("[canvas-group] ★ 각도는 한 바퀴 안의 유한한 숫자다",
+  canvasGroupTransformFrom({ ...GROUP_ROTATE_OK, angle: 400 }).ok === false &&
+  canvasGroupTransformFrom({ ...GROUP_ROTATE_OK, angle: Infinity }).ok === false &&
+  canvasGroupTransformFrom({ ...GROUP_ROTATE_OK, angle: "45" }).ok === false);
+
+check("[canvas-group] ★ 멤버 줄은 네 칸이고 모르는 칸이 섞이면 거부된다",
+  canvasGroupTransformFrom({
+    ...GROUP_RESIZE_OK,
+    members: [{ id: "mvA", vx: 0, vy: 0, h: 40, style: "x" }]
+  }).ok === false &&
+  canvasGroupTransformFrom({
+    ...GROUP_RESIZE_OK, members: [{ id: "mvA", vx: 0, vy: 0 }]
+  }).ok === false);
+
+check("[canvas-group] ★ 멤버 벡터는 좌표와 같은 자를 쓴다",
+  canvasGroupTransformFrom({
+    ...GROUP_RESIZE_OK, members: [{ id: "mvA", vx: 1e9, vy: 0, h: 40 }]
+  }).ok === false &&
+  canvasGroupTransformFrom({
+    ...GROUP_RESIZE_OK, members: [{ id: "mvA", vx: 0, vy: 0, h: "40" }]
+  }).ok === false);
+
+check("[canvas-group] ★ 빈 명단은 거부된다",
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, members: [] }).ok === false);
+
+check("[canvas-group] ★ 자리는 셋뿐이고 요청 번호는 `end` 에만 있다",
+  canvasGroupTransformFrom({
+    ...GROUP_RESIZE_OK, phase: "start", scale: 1, requestId: 0
+  }).ok === true &&
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, phase: "move" }).ok === false &&
+  canvasGroupTransformFrom({ ...GROUP_RESIZE_OK, requestId: 0 }).ok === false);
+
+check("[canvas-group] ★ 이 봉투에도 `groups` 나 style 객체가 실리지 않는다",
+  (() => {
+    const verdict =
+      canvasGroupTransformFrom({
+        ...GROUP_RESIZE_OK, groups: [], style: { color: "red" }
+      });
+    return verdict.ok === true &&
+      verdict.payload.groups === undefined &&
+      verdict.payload.style === undefined;
+  })());
+
+check("[canvas-group] ★ 부모는 이 메시지를 프레임에 보낼 수 없다 (방향)",
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_GROUP_TRANSFORM,
+        GROUP_RESIZE_OK, 1),
+    },
+    {
+      originAllowList: ["https://imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-frame"
+    }
+  ).ok === false);
+
+check("[canvas-group] ★ 봉투는 여전히 `groups` 라는 **칸**을 모른다",
+  JSON.stringify(protocol.SANDBOX_MESSAGE_SPEC)
+    .indexOf("\"groups\"") === -1,
+  "명단은 프레임에 내려가지 않는다");
 
 
 /* =========================================================

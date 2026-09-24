@@ -263,6 +263,28 @@ const PREVIEW_MSG_CANVAS_GROUP = "preview:canvas-group";
 const PREVIEW_MSG_CANVAS_GROUP_MOVE = "preview:canvas-group-move";
 
 /* =========================================================
+   HOME-CANVAS-GROUP-1C — 그룹 전체 크기 조절 · 회전
+
+   canvas-group-transform  이 문서 -> Studio
+                           { groupId, gestureId, phase, kind,
+                             scale, angle, members,
+                             generation, revision, requestId }
+
+                           위 이동과 같은 자리 셋(start · end ·
+                           cancel)을 쓰고, 올라오는 숫자는 **배율
+                           하나 또는 각도 하나**와 멤버마다의 벡터
+                           하나다(도화지 자). 기준점 자체는 올라오지
+                           않는다 — 프레임은 저장 좌표계의 원점을
+                           모르고, 차이 벡터에는 그 원점이 지워져
+                           있다(계약 §40-4).
+
+   그리고 canvas-group 에 칸 셋이 늘었다 — scaleMin · scaleMax
+   (멤버 전부가 가능한 공통 배율의 교집합) · canRotate. 그 셋을
+   정하는 곳도 Studio 다.
+========================================================== */
+const PREVIEW_MSG_CANVAS_GROUP_TRANSFORM = "preview:canvas-group-transform";
+
+/* =========================================================
    STUDIO-LAYERS-MATERIALS-1B — 재료를 끌어다 놓을 자리 (계약 §36-5)
 
    canvas-probe  Studio -> 이 문서
@@ -2589,6 +2611,51 @@ function ensureCanvasFrameController() {
 
                ★ 여기서 값을 만들지 않는다. runtime 이 준 것을
                  알려진 칸만 새 리터럴로 옮긴다. */
+            /* HOME-CANVAS-GROUP-1C — 그룹 크기 조절 · 회전의 확정
+               **요청**. 위 이동과 같은 규칙이고, 여기서도 값을
+               만들지 않는다. */
+            onGroupTransform: (request) => {
+
+              if (!request || typeof request !== "object") {
+                return;
+              }
+
+              postToParent({
+                type: PREVIEW_MSG_CANVAS_GROUP_TRANSFORM,
+                groupId: typeof request.groupId === "string" ? request.groupId : null,
+                gestureId:
+                  Number.isInteger(request.gestureId) && request.gestureId >= 1
+                    ? request.gestureId
+                    : 0,
+                phase: typeof request.phase === "string" ? request.phase : "",
+                kind: typeof request.kind === "string" ? request.kind : "",
+                scale: Number.isFinite(request.scale) ? request.scale : 0,
+                angle: Number.isFinite(request.angle) ? request.angle : 0,
+                members:
+                  (Array.isArray(request.members) ? request.members : []).map(
+                    (m) => ({
+                      id: (m && typeof m.id === "string") ? m.id : "",
+                      vx: (m && Number.isFinite(m.vx)) ? m.vx : 0,
+                      vy: (m && Number.isFinite(m.vy)) ? m.vy : 0,
+                      h: (m && Number.isFinite(m.h)) ? m.h : 0
+                    })
+                  ),
+                generation:
+                  Number.isInteger(request.generation) && request.generation >= 0
+                    ? request.generation
+                    : 0,
+                revision:
+                  Number.isInteger(request.revision) && request.revision >= 0
+                    ? request.revision
+                    : 0,
+                requestId:
+                  Number.isInteger(request.requestId) && request.requestId >= 1
+                    ? request.requestId
+                    : 0
+              });
+
+            },
+
             onGroupMove: (request) => {
 
               if (!request || typeof request !== "object") {
@@ -2905,6 +2972,20 @@ function routeCanvasGroupMessage(data) {
     groupId: active ? data.groupId : null,
     baseWidth: active ? data.baseWidth : 0,
     locked: data.locked === true,
+
+    /* HOME-CANVAS-GROUP-1C — 크기 조절의 공통 배율 범위 · 회전
+       가능 여부(위 머리말). 값이 없으면 0 이고, 그때 프레임은 그
+       손잡이를 그리지 않는다. */
+    scaleMin:
+      (active && Number.isFinite(data.scaleMin) && data.scaleMin > 0)
+        ? data.scaleMin
+        : 0,
+    scaleMax:
+      (active && Number.isFinite(data.scaleMax) && data.scaleMax > 0)
+        ? data.scaleMax
+        : 0,
+    canRotate: !!(active && data.canRotate === true),
+
     generation:
       Number.isInteger(data.generation) && data.generation >= 0
         ? data.generation
