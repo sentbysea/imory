@@ -1462,7 +1462,17 @@
            자리). 위 파일이 만든 추가 화면을 자기 안에 붙이고,
            캔버스 선택 관문으로 행을 고른다. 둘 다 **호출 시점**에
            window 창구로 쓰므로 순서가 강제되지는 않지만, 읽는
-           순서를 의존 방향과 맞춰 바로 뒤에 둔다. */
+           순서를 의존 방향과 맞춰 바로 뒤에 둔다.
+
+           STUDIO-CANVAS-LAYERS-SPLIT-1 — 그 패널이 네 파일이다.
+           앞의 셋(트리 조립 · 행 DOM · 패널 뼈대와 하위 화면)은
+           함수만 선언하고, 마지막 studio-canvas-layers.js 가 화면
+           상태를 선언하고 맨 아래에서 창구를 등록한다. 그 등록이
+           앞 셋의 함수를 **최상위에서** 읽으므로 이 순서는
+           강제된다(반대 방향은 전부 함수 안이다). */
+        "./inspector/studio-canvas-layers-tree.js",
+        "./inspector/studio-canvas-layers-row.js",
+        "./inspector/studio-canvas-layers-screen.js",
         "./inspector/studio-canvas-layers.js",
 
         /* STUDIO-LAYERS-STRUCTURE-1 — Layers 의 구조 동작(문 하나)과

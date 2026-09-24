@@ -118,8 +118,8 @@ overlay · 프레임 transform · 프레임 pin 셋을 이미 전부 안다** �
 | --- | --- |
 | 트리의 행 목록 | `skin/skin-home-canvas-write-v2.js` `listSkinHomeCanvasV2Nodes(canvas)` → `[{ id, kind, type, parentId, index }]`, **화면 순서** |
 | id 하나로 찾기 | 같은 파일 `findSkinHomeCanvasV2Node(canvas, id)` → `{ kind, node, index, parentId }`, `kind` 는 `block`·`frame-element`·`overlay` **셋** |
-| 트리 그리기 | `studio/inspector/studio-canvas-layers.js` `studioCanvasLayersRows()` · `studioCanvasLayersRowNode()` |
-| 접힘 상태 | 같은 파일 `const studioCanvasLayersCollapsed = new Set()` — **이미 저장 데이터가 아니다**(Studio UI 상태) |
+| 트리 그리기 | `studio/inspector/studio-canvas-layers-tree.js` `studioCanvasLayersRows()` · `studio-canvas-layers-row.js` `studioCanvasLayersRowNode()` (`STUDIO-CANVAS-LAYERS-SPLIT-1` 이전에는 둘 다 `studio-canvas-layers.js`) |
+| 접힘 상태 | `studio/inspector/studio-canvas-layers.js` `const studioCanvasLayersCollapsed = new Set()` — **이미 저장 데이터가 아니다**(Studio UI 상태) |
 | drop 판정 | `studio/inspector/studio-canvas-layers-drag.js` `studioCanvasLayersDropPlan(row, x, y)` — 폴더 행의 **가운데 띠**(위아래 25% 제외)가 attach, `페이지 장식` 제목이 detach, 나머지는 같은 부모 안 순서 |
 | 여러 행 끌기 | 같은 파일: 지금은 `"여러 요소 이동은 다음 단계에서 지원합니다 — 하나만 골라 주세요."` 로 **거부** |
 | 구조 입구 | `studio/inspector/studio-canvas-selection.js` `commitStudioCanvasStructureNode({op,id,…,via})`, `op` 여섯(`attach`·`detach`·`remove`·`reorder`·`primary`·`flag`), `via` 둘(`selection`·`layers`) |

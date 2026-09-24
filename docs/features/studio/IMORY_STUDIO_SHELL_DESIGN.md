@@ -66,7 +66,7 @@ section 안의 DOM 은 그 기능 파일이 처음 열 때 만들어 넣는다.
 | --- | --- | --- | --- |
 | Select | `#studioLeftPanelSelect` | Inspector 팝오버(`#studioInspectorPopover`) 그대로 | Preview 위에 뜨는 카드 |
 | Images | `#studioLeftPanelImages` | `.images-panel-overlay` 그대로 | 화면 전체 modal → 상단 버튼도 없어졌다(§2-3) |
-| Layers | `#studioLeftPanelLayers` | 트리와 **요소 추가 하위 화면**(`studio/inspector/studio-canvas-layers.js` · `studio-canvas-add-v2.js`) — 한 자리를 `data-layers-screen` 으로 번갈아 쓴다(계약 §35-1) | Select 패널 맨 위의 추가 자리 |
+| Layers | `#studioLeftPanelLayers` | 트리와 **요소 추가 하위 화면**(`studio/inspector/studio-canvas-layers.js` 와 그 형제 셋 `-tree` · `-row` · `-screen` · `studio-canvas-add-v2.js`) — 한 자리를 `data-layers-screen` 으로 번갈아 쓴다(계약 §35-1) | Select 패널 맨 위의 추가 자리 |
 | Dock | `#studioLeftPanelDock` | `.dock-panel-overlay` 그대로 | 화면 전체 modal |
 
 **Layers 에는 상단 버튼이 있고 Dock 에는 없다.** `STUDIO_LEFT_PANEL_MODES.dock.button`

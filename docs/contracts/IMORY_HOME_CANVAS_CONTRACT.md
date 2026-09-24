@@ -5175,7 +5175,8 @@ Preview 의 직접 조작에 흩어져 있었다. 여기서 그 트리가 **구�
 | `studio/studio-preview.js` | `moveStudioCanvasV2Node()` 가 새 op 셋을 draft 에 · `unchanged` 를 그대로 돌려준다 |
 | `studio/inspector/studio-canvas-layers-ops.js` | **새 파일** — Layers 의 구조 동작 일곱과 거절 문장 |
 | `studio/inspector/studio-canvas-layers-drag.js` | **새 파일** — 손잡이 제스처 · drop 판정 · 표시 |
-| `studio/inspector/studio-canvas-layers.js` | 행의 생김새(손잡이 · ★ · 눈 · 자물쇠 · 삭제) · 거절 이유 한 줄 |
+| `studio/inspector/studio-canvas-layers-row.js` | 행의 생김새(손잡이 · ★ · 눈 · 자물쇠 · 삭제) — `STUDIO-CANVAS-LAYERS-SPLIT-1` 에서 `studio-canvas-layers.js` 에서 갈라졌다 |
+| `studio/inspector/studio-canvas-layers.js` | 화면 상태 · 그리는 순서 · 거절 이유 한 줄 |
 | `studio/inspector/studio-canvas-layers.css` | 손잡이 · 단추 · drop 표시 · 390px |
 | `studio/index.html` · `studio/studio-lifecycle-scenario.html` | 로드 자리 둘 |
 
@@ -6247,7 +6248,8 @@ Layers 행의 그 규칙 하나다(§32-7) — 350ms · 슬롭 · `touch-action`
 | Import 수선 입구 | [skin/skin-package-import.js](../../skin/skin-package-import.js) `repairSkinHomeCanvasRegionGroups` |
 | 관문(op 여섯) · 그룹 읽기 · 그룹 선택 판정 | [studio/inspector/studio-canvas-selection.js](../../studio/inspector/studio-canvas-selection.js) |
 | draft 에 쓰는 자리 | [studio/studio-preview.js](../../studio/studio-preview.js) `moveStudioCanvasV2Node` · `STUDIO_CANVAS_GROUP_WRITERS` |
-| Layers 폴더 행 · 인라인 이름 | [studio/inspector/studio-canvas-layers.js](../../studio/inspector/studio-canvas-layers.js) |
+| Layers 폴더 행 · 인라인 이름 | [studio/inspector/studio-canvas-layers-row.js](../../studio/inspector/studio-canvas-layers-row.js) |
+| 폴더 행을 트리에 끼우는 자리 | [studio/inspector/studio-canvas-layers-tree.js](../../studio/inspector/studio-canvas-layers-tree.js) `studioCanvasLayersWithGroups` |
 | 넣기 · 빼기 drop 판정 | [studio/inspector/studio-canvas-layers-drag.js](../../studio/inspector/studio-canvas-layers-drag.js) |
 | 창구 여섯과 거절 문장 | [studio/inspector/studio-canvas-layers-ops.js](../../studio/inspector/studio-canvas-layers-ops.js) |
 | Canvas 패널의 그룹 블록 | [studio/inspector/studio-canvas-inspector.js](../../studio/inspector/studio-canvas-inspector.js) |
