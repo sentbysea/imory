@@ -186,7 +186,29 @@ const SKIN_CANVAS_RENDER_VARS = {
     v1 요소와 overlay 는 이 칸을 쓰지 않는다(CSS 기본값 `0%`).
   */
   translateX: "--imory-canvas-translate-x",
-  translateY: "--imory-canvas-translate-y"
+  translateY: "--imory-canvas-translate-y",
+
+  /*
+    HOME-CANVAS-GROUP-1B — **끄는 동안만** 쓰는 화면 px 두 칸.
+
+    ★ 왜 x · y 를 쓰지 않는가.
+
+    그룹 이동은 멤버들을 **같은 화면 거리**만큼 옮긴다. 그런데
+    멤버마다 자가 다르다 — overlay 는 도화지 자, 프레임 내부
+    `transform` 은 프레임 내부 자, `pin` 은 프레임 상자 자다(§26-2).
+    끄는 동안 그 환산을 프레임 안에서 멤버마다 하면 자를 한 벌 더
+    갖게 되고, 그 한 벌은 부모의 것과 언젠가 갈린다.
+
+    화면 px 는 **자가 하나**다. translate 는 요소 부모 좌표계에서
+    풀리므로 값이 그대로 화면 거리이고, 회전한 멤버도 같은 거리를
+    움직인다(아래 CSS 에서 회전보다 앞에 온다).
+
+    ★ 저장되지 않는다. 확정은 부모가 자기 draft 에 쓰고, 다시
+      그려진 화면에는 이 칸이 아예 없다(재렌더가 요소를 새로
+      만든다). 취소도 이 두 칸을 지우는 것 하나다.
+  */
+  dragX: "--imory-canvas-drag-x",
+  dragY: "--imory-canvas-drag-y"
 };
 
 /*
@@ -639,6 +661,58 @@ function applySkinCanvasElementRotation(el, rotation) {
 function setSkinCanvasElementRotation(el, rotation) {
 
   return applySkinCanvasElementRotation(el, rotation);
+
+}
+
+
+/* =========================================================
+   0-4. **끄는 동안의 임시 화면 이동**을 쓰는 한 곳
+   (HOME-CANVAS-GROUP-1B)
+
+   setSkinCanvasElementDragOffset(el, dx, dy)   dx · dy 는 화면 px
+   clearSkinCanvasElementDragOffset(el)
+
+   ★ 그룹 이동이 쓰는 유일한 표시 경로다. 저장값도 x · y 도 한 칸
+     건드리지 않으므로 취소가 "지운다" 하나로 끝나고, 확정 뒤의
+     재렌더는 이 칸이 없는 새 요소를 만든다.
+
+   ★ 단일 이동은 지금까지처럼 §0-1 의 좌표 두 칸을 쓴다. 자가 하나
+     뿐인 그 경로에서는 화면 px 로 바꿔 놓을 이유가 없다.
+========================================================== */
+
+function setSkinCanvasElementDragOffset(el, dx, dy) {
+
+  if (
+    !el || !el.style ||
+    !isSkinCanvasRenderNumber(dx) ||
+    !isSkinCanvasRenderNumber(dy)
+  ) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(
+    el, SKIN_CANVAS_RENDER_VARS.dragX,
+    skinCanvasRenderTrimNumber(dx) + "px");
+
+  setSkinCanvasRenderVar(
+    el, SKIN_CANVAS_RENDER_VARS.dragY,
+    skinCanvasRenderTrimNumber(dy) + "px");
+
+  return true;
+
+}
+
+
+function clearSkinCanvasElementDragOffset(el) {
+
+  if (!el || !el.style) {
+    return false;
+  }
+
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.dragX, null);
+  setSkinCanvasRenderVar(el, SKIN_CANVAS_RENDER_VARS.dragY, null);
+
+  return true;
 
 }
 
@@ -2116,6 +2190,10 @@ if (typeof window !== "undefined") {
   /* HOME-CANVAS-TRANSFORM-1C — 편집 runtime 이 **각도**를 쓰는 한 곳 */
   window.setSkinCanvasElementRotation = setSkinCanvasElementRotation;
 
+  /* HOME-CANVAS-GROUP-1B — 그룹 이동의 **임시 화면 이동** 한 곳 */
+  window.setSkinCanvasElementDragOffset = setSkinCanvasElementDragOffset;
+  window.clearSkinCanvasElementDragOffset = clearSkinCanvasElementDragOffset;
+
   window.compileSkinHomeCanvas = compileSkinHomeCanvas;
   window.clearSkinHomeCanvas = clearSkinHomeCanvas;
 
@@ -2173,6 +2251,10 @@ if (typeof module !== "undefined" && module.exports) {
     restoreSkinCanvasElementBoxVars,
     applySkinCanvasElementRotation,
     setSkinCanvasElementRotation,
+
+    /* HOME-CANVAS-GROUP-1B */
+    setSkinCanvasElementDragOffset,
+    clearSkinCanvasElementDragOffset,
     readSkinCanvasImageUrl,
     readSkinCanvasCategories,
 

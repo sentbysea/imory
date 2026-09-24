@@ -1968,6 +1968,12 @@ async function renderSandboxPageIntoHandle(handle, opts) {
            Studio 가 자기 draft 로 판단한다. */
         handle.handlers[TYPES.CANVAS_TRANSFORM] = inspectRelay("canvas-transform");
 
+        /* HOME-CANVAS-GROUP-1B — 그룹 이동의 확정 **요청**. 여기서도
+           해석하지 않는다 — "지금 화면의 것인가" 하나만 보고 그대로
+           올린다. 그 delta 를 실제로 써도 되는지(그룹 · 멤버 · 순번 ·
+           revision)는 부모 realm 의 Studio 가 자기 draft 로 판단한다. */
+        handle.handlers[TYPES.CANVAS_GROUP_MOVE] = inspectRelay("canvas-group-move");
+
         /* HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 페이지 자리.
            여기서도 해석하지 않는다 — "지금 화면의 것인가" 하나만
            보고 그대로 올린다. 그 숫자를 무엇에 쓸지는 부모 realm 의
@@ -2950,6 +2956,70 @@ export function sendSandboxCanvasGeometry(handle, geometry) {
   return sendToSandboxFrame(
     handle,
     handle.TYPES.CANVAS_GEOMETRY,
+    payload
+  );
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 그룹 선택 한 벌을 프레임으로
+
+   sendSandboxCanvasGroup(handle, group) -> boolean
+
+   ★ 좌표와 같은 규칙이다 — 호출자의 객체를 그대로 넘기지 않고,
+     알려진 칸만 새 리터럴로 옮긴다. 옮길 수 없는 값이 하나라도
+     있으면 `active:false`(= 지금은 끌 수 있는 그룹이 없다)로
+     내려간다. 여기서 "고쳐서" 보내지 않는다.
+========================================================== */
+
+export function sendSandboxCanvasGroup(handle, group) {
+
+  if (!handle || handle.destroyed || !handle.TYPES || !handle.renderSeq) {
+    return false;
+  }
+
+  const value =
+    (group && typeof group === "object") ? group : null;
+
+  const active =
+    !!(
+      value &&
+      value.active === true &&
+      typeof value.groupId === "string" && value.groupId &&
+      Number.isFinite(value.baseWidth) && value.baseWidth > 0
+    );
+
+  const payload = {
+    contract: 1,
+    renderSeq: handle.renderSeq,
+    active: active,
+    locked: !!(value && value.locked === true),
+    generation:
+      (value && Number.isInteger(value.generation) && value.generation >= 0)
+        ? value.generation
+        : 0,
+    revision:
+      (value && Number.isInteger(value.revision) && value.revision >= 0)
+        ? value.revision
+        : 0
+  };
+
+  /* 확정의 **답**에만 붙는 번호다(프로토콜의 CANVAS_GROUP 주석) */
+  if (value && Number.isInteger(value.answering) && value.answering >= 1) {
+    payload.answering = value.answering;
+  }
+
+  /* 해제에는 나머지 칸 자체를 만들지 않는다 — 프로토콜이 그 모양을
+     요구한다(CANVAS_GEOMETRY 와 같은 결). */
+  if (active) {
+    payload.groupId = value.groupId;
+    payload.baseWidth = value.baseWidth;
+  }
+
+  return sendToSandboxFrame(
+    handle,
+    handle.TYPES.CANVAS_GROUP,
     payload
   );
 

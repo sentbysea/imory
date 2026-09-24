@@ -170,6 +170,10 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
        좌표. runtime 이 아직 없을 때를 위해 여기에도 남긴다. */
     canvasGeometry: null,
 
+    /* HOME-CANVAS-GROUP-1B — 부모가 내려 준 그룹 선택 한 벌. 좌표와
+       같은 사정으로 여기에도 남긴다. */
+    canvasGroup: null,
+
     sentReady: false,
     acked: false,
     seq: 0,
@@ -1104,6 +1108,9 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
        이 렌더 뒤에 지금 값을 다시 내려 준다(flushSandboxInspectState). */
     FRAME_STATE.canvasGeometry = null;
 
+    /* HOME-CANVAS-GROUP-1B — 그룹 선택도 같다 */
+    FRAME_STATE.canvasGroup = null;
+
     if (FRAME_STATE.canvasFrame) {
       FRAME_STATE.canvasFrame.onRender();
     }
@@ -1370,6 +1377,49 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
                       : 0
                 });
 
+              },
+
+              /*
+                HOME-CANVAS-GROUP-1B — 그룹 이동의 **확정 요청**이다.
+                확정이 아니다: 부모가 지금 draft 로 그룹 · 멤버 ·
+                선택 · 순번 · revision 을 전부 다시 본 뒤에만 쓴다.
+
+                ★ 여기서 값을 만들지 않는다. runtime 이 준 것을
+                  알려진 칸만 새 리터럴로 옮겨 보내고, 프로토콜이
+                  한 번 더 거른다(phase · 식별자 · delta 범위 ·
+                  `end` 에만 있는 요청 번호).
+              */
+              onGroupMove: function (request) {
+
+                if (!request || typeof request !== "object") {
+                  return;
+                }
+
+                send(SANDBOX_MESSAGE_TYPES.CANVAS_GROUP_MOVE, {
+                  contract: 1,
+                  renderSeq: FRAME_STATE.renderSeq,
+                  groupId: request.groupId,
+                  gestureId:
+                    Number.isInteger(request.gestureId) && request.gestureId >= 1
+                      ? request.gestureId
+                      : 0,
+                  phase: request.phase,
+                  dx: request.dx,
+                  dy: request.dy,
+                  generation:
+                    Number.isInteger(request.generation) && request.generation >= 0
+                      ? request.generation
+                      : 0,
+                  revision:
+                    Number.isInteger(request.revision) && request.revision >= 0
+                      ? request.revision
+                      : 0,
+                  requestId:
+                    Number.isInteger(request.requestId) && request.requestId >= 1
+                      ? request.requestId
+                      : 0
+                });
+
               }
 
             });
@@ -1428,6 +1478,11 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
              한 번 더 태운다(같은 값이면 아무 일도 하지 않는다). */
           if (FRAME_STATE.canvasGeometry) {
             frame.setGeometry(FRAME_STATE.canvasGeometry);
+          }
+
+          /* HOME-CANVAS-GROUP-1B — 그룹도 같은 사정이다 */
+          if (FRAME_STATE.canvasGroup) {
+            frame.setGroup(FRAME_STATE.canvasGroup);
           }
 
         }
@@ -1733,6 +1788,42 @@ const SANDBOX_HEIGHT_REPORT_LIMIT = 120;
          없었을 때를 위해 다시 태우는 자리가 있는데, 거기서 옛 답이
          한 번 더 답으로 읽히면 안 된다(계약 §17-8). */
       FRAME_STATE.canvasGeometry.answering = undefined;
+
+      return;
+
+    }
+
+
+    /* =====================================================
+       HOME-CANVAS-GROUP-1B — 그룹 선택 한 벌
+
+       ★ 좌표와 같은 사정이다 — 이 메시지만으로는 runtime 을 받아
+         오지 않는다. 켜는 관문은 여전히 CANVAS_SELECT 의 `editing`
+         하나다(계약 §16-2).
+    ====================================================== */
+
+    if (verdict.type === SANDBOX_MESSAGE_TYPES.CANVAS_GROUP) {
+
+      if (verdict.payload.renderSeq !== FRAME_STATE.renderSeq) {
+        return;
+      }
+
+      FRAME_STATE.canvasGroup = {
+        active: verdict.payload.active === true,
+        groupId: verdict.payload.groupId,
+        baseWidth: verdict.payload.baseWidth,
+        locked: verdict.payload.locked === true,
+        generation: verdict.payload.generation,
+        revision: verdict.payload.revision,
+        answering: verdict.payload.answering
+      };
+
+      if (FRAME_STATE.canvasFrame) {
+        FRAME_STATE.canvasFrame.setGroup(FRAME_STATE.canvasGroup);
+      }
+
+      /* ★ 답은 한 번만 쓴다(위 geometry 의 그 사정) */
+      FRAME_STATE.canvasGroup.answering = undefined;
 
       return;
 

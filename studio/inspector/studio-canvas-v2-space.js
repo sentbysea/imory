@@ -191,6 +191,11 @@ function studioCanvasV2Space(elementId) {
       scopeId: null,
       baseWidth: payload.baseWidth,
       baseHeight: payload.baseHeight,
+
+      /* HOME-CANVAS-GROUP-1B — 이 자의 한 칸이 **도화지 좌표로 몇인가**
+         (계약 §39-5). overlay 는 도화지 자 그 자체라 1 이다. */
+      unitScale: 1,
+
       originX: 0,
       originY: 0,
       anchorX: 0,
@@ -240,6 +245,14 @@ function studioCanvasV2Space(elementId) {
   const follow =
     node.follow === "pin" ? "pin" : "transform";
 
+  /* =====================================================
+     HOME-CANVAS-GROUP-1B — 프레임 상자 자 ↔ 도화지 자의 배율
+     (계약 §30-3). 데스크톱 최대 폭이 켜진 화면에서만 1 이 아니고,
+     보고가 없으면 1 이다 — 숫자를 지어내지 않는다.
+  ====================================================== */
+  const pageScale =
+    studioCanvasV2FramePageScale(payload, frame, hit.parentId);
+
   if (follow === "transform") {
 
     /* =====================================================
@@ -272,6 +285,12 @@ function studioCanvasV2Space(elementId) {
       scopeId: hit.parentId,
       baseWidth: frame.baseWidth,
       baseHeight: frame.height / frame.scale,
+
+      /* HOME-CANVAS-GROUP-1B — 내부 자의 한 칸은 프레임 배율만큼
+         도화지 자다. 그려진 폭이 저장값보다 좁으면 그만큼 더
+         작다(계약 §39-5). */
+      unitScale: frame.scale * pageScale,
+
       originX: 0,
       originY: 0,
       anchorX: 0,
@@ -335,6 +354,11 @@ function studioCanvasV2Space(elementId) {
     scopeId: hit.parentId,
     baseWidth: frame.width,
     baseHeight: frame.height,
+
+    /* HOME-CANVAS-GROUP-1B — pin 의 자는 **프레임 상자**다. 저장값
+       그대로가 도화지 자이고, 그려진 폭이 좁아진 만큼만 갈린다. */
+    unitScale: pageScale,
+
     originX: origin.x,
     originY: origin.y,
     anchorX: anchor.x,
@@ -1552,11 +1576,110 @@ function studioCanvasFlowInsertIndex(previewY) {
 }
 
 
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 그룹 전체 이동의 **계획 한 벌**
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §39-5
+   설계:      docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md §4-5
+
+   planStudioCanvasV2GroupMove(ids, dx, dy)
+
+     -> { ok: true, steps: [{ writer, id, next, expected }, …] }
+     -> { ok: false, reason, id? }
+
+   `dx` · `dy` 는 **도화지 자**의 공통 delta 하나다(프레임이 보고한
+   그 값). 멤버마다 하는 일은 넷이다.
+
+     1  그 멤버의 자와 지금 값을 읽는다(studioCanvasV2Space)
+     2  공통 delta 를 그 자의 delta 로 바꾼다  d / unitScale
+     3  자 위의 새 값을 계획으로 바꾼다(planStudioCanvasV2Transform)
+     4  전부 성공한 **뒤에** 부르는 쪽이 한 번에 적용한다
+
+   ★ 좌표 수식을 새로 만들지 않는다. 자를 만드는 곳도(§26-3),
+     자 위의 값을 storage 칸으로 옮기는 곳도(§26-4) 이미 하나씩
+     있고, 여기서는 그 둘을 멤버 수만큼 부를 뿐이다. `pin` 멤버가
+     `pin.offset` 을 쓰는 것도 그 번역이 이미 안다.
+
+   ★ **하나라도 실패하면 전부 실패다.** 계획을 다 만든 뒤에야
+     돌려주므로, 부르는 쪽은 "절반만 옮겨진 그룹"을 볼 수 없다
+     (계약 §39-6).
+
+   ★ 반올림은 **저장 직전 한 번**이다. 나누고 더하는 동안에는 배정도
+     그대로 두고, 자 위의 최종 값에만 좌표의 자릿수 규칙을 쓴다
+     (studioCanvasV2Round — 소수 셋째 자리). 멤버끼리의 상대 자리가
+     그 반올림으로 흔들리는 폭은 도화지 자로 0.001 미만이다.
+========================================================== */
+
+function planStudioCanvasV2GroupMove(ids, dx, dy) {
+
+  if (!Array.isArray(ids) || !ids.length) {
+    return { ok: false, reason: "members" };
+  }
+
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    return { ok: false, reason: "delta" };
+  }
+
+  const steps =
+    [];
+
+  for (let i = 0; i < ids.length; i += 1) {
+
+    const id =
+      ids[i];
+
+    const space =
+      studioCanvasV2Space(id);
+
+    if (!space) {
+      return { ok: false, reason: "space", id: id };
+    }
+
+    /* 블록 · 좌표가 없는 노드는 애초에 그룹이 될 수 없다(§38-2).
+       그래도 여기서 한 번 더 본다 — 0 으로 나누지 않기 위해서다. */
+    if (!Number.isFinite(space.unitScale) || !(space.unitScale > 0)) {
+      return { ok: false, reason: "scale", id: id };
+    }
+
+    if (!Number.isFinite(space.x) || !Number.isFinite(space.y)) {
+      return { ok: false, reason: "space", id: id };
+    }
+
+    const next = {
+      x: studioCanvasV2Round(space.x + (dx / space.unitScale)),
+      y: studioCanvasV2Round(space.y + (dy / space.unitScale))
+    };
+
+    const plan =
+      planStudioCanvasV2Transform(
+        "v2-move", id, next, { x: space.x, y: space.y });
+
+    if (!plan || !plan.ok) {
+      return { ok: false, reason: (plan && plan.reason) || "plan", id: id };
+    }
+
+    steps.push({
+      writer: plan.writer,
+      id: id,
+      next: plan.next,
+      expected: plan.expected
+    });
+
+  }
+
+  return { ok: true, steps: steps };
+
+}
+
+
 if (typeof window !== "undefined") {
 
   window.STUDIO_CANVAS_V2_SPACE_KINDS = STUDIO_CANVAS_V2_SPACE_KINDS;
   window.studioCanvasV2Space = studioCanvasV2Space;
   window.planStudioCanvasV2Transform = planStudioCanvasV2Transform;
+
+  /* HOME-CANVAS-GROUP-1B */
+  window.planStudioCanvasV2GroupMove = planStudioCanvasV2GroupMove;
 
   /* HOME-CANVAS-V2-ELEMENTS-1 — 소속과 따라가기 */
   window.setStudioCanvasFrameLayout = setStudioCanvasFrameLayout;

@@ -3779,8 +3779,15 @@ console.log("\n[v2-group] 영구 그룹 (HOME-CANVAS-GROUP-1A)");
       return !!payload && payload.groups === undefined;
     })());
 
-  check("★ [v2-group] sandbox 프로토콜 파일이 그룹을 몰라도 된다 — 봉투에 새 칸이 없다",
-    read("skin/sandbox/skin-sandbox-protocol.js").indexOf("groups") === -1);
+  /* ★ HOME-CANVAS-GROUP-1B 에서 문장이 한 칸 좁아졌다.
+
+     그룹 **이동**이 생기면서 프로토콜 파일이 `IMORY_CANVAS_GROUP` 두
+     종류를 알게 됐다(그 메시지는 "지금 고른 것이 한 그룹이다"와
+     도화지 자의 공통 delta 하나를 나른다). 그래도 **명단은 여전히
+     내려가지 않는다** — 봉투에 `groups` 라는 칸이 없다는 것이 이
+     줄의 뜻이고, 그래서 주석의 설명 문장이 아니라 **키**를 본다. */
+  check("★ [v2-group] sandbox 봉투에 `groups` 칸이 없다 — 명단은 프레임에 내려가지 않는다",
+    read("skin/sandbox/skin-sandbox-protocol.js").indexOf('"groups"') === -1);
 
 
   /* ---- Import 수선 ---- */

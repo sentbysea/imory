@@ -1623,7 +1623,10 @@ function studioCanvasCanvasGroupBlock(view) {
 
   block.appendChild(
     studioCanvasInspectorNote(
-      "그룹 전체의 이동 · 크기 조절 · 회전은 다음 단계에서 지원합니다 — 지금은 요소를 하나씩 고쳐 주세요.",
+      /* HOME-CANVAS-GROUP-1B — 이동이 열렸다. 크기 조절 · 회전은
+         아직이므로 그 둘만 남긴다(계약 §39-1). */
+      "그룹은 Preview 에서 멤버를 끌어 통째로 옮깁니다. " +
+        "크기 조절 · 회전은 다음 단계에서 지원합니다.",
       "studioCanvasInspectorGroupSoon"
     )
   );

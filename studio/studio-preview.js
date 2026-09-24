@@ -2220,6 +2220,13 @@ if (typeof window !== "undefined") {
   window.postCanvasGeometryToFrame =
     postCanvasGeometryToFrame;
 
+  /* HOME-CANVAS-GROUP-1B */
+  window.postCanvasGroupToFrame =
+    postCanvasGroupToFrame;
+
+  window.writeStudioCanvasElementChanges =
+    writeStudioCanvasElementChanges;
+
   /* STUDIO-LAYERS-MATERIALS-1B — 끌기를 시작할 때 한 번 묻는다
      (계약 §36-5). 답은 `preview:canvas-box` 로 온다. */
   window.postCanvasProbeToFrame =
@@ -3002,6 +3009,61 @@ function postCanvasGeometryToFrame(geometry) {
 
 
 /* =========================================================
+   HOME-CANVAS-GROUP-1B — 그룹 선택 한 벌을 Preview 문서로
+
+   postCanvasGroupToFrame(group)
+
+   group = { active, groupId, baseWidth, locked, generation,
+             revision, answering }
+
+   ★ 이 함수도 **옮기기만** 한다. 무엇이 그룹이고 지금 고른 것이 그
+     그룹인지, 잠긴 멤버가 있는지는
+     studio/inspector/studio-canvas-selection.js 가 draft 에서 정했다.
+
+   ★ 멤버 명단도 좌표도 싣지 않는다. 프레임이 옮길 것은 이미 선택
+     메시지로 확정된 그 id 들이고, 저장되는 숫자는 전부 이 문서가
+     계산한다(계약 §39-3).
+========================================================== */
+
+function postCanvasGroupToFrame(group) {
+
+  const value =
+    (group && typeof group === "object") ? group : null;
+
+  const active =
+    !!(
+      value &&
+      value.active === true &&
+      typeof value.groupId === "string" && value.groupId &&
+      Number.isFinite(value.baseWidth) && value.baseWidth > 0
+    );
+
+  postToPreviewFrameIfReady({
+    type: "preview:canvas-group",
+    active: active,
+    groupId: active ? value.groupId : null,
+    baseWidth: active ? value.baseWidth : 0,
+    locked: !!(value && value.locked === true),
+    generation:
+      (value && Number.isInteger(value.generation) && value.generation >= 0)
+        ? value.generation
+        : 0,
+    revision:
+      (value && Number.isInteger(value.revision) && value.revision >= 0)
+        ? value.revision
+        : 0,
+
+    /* 확정의 답일 때만 있는 번호다(계약 §17-8) */
+    answering:
+      (value && Number.isInteger(value.answering) && value.answering >= 1)
+        ? value.answering
+        : 0
+  });
+
+}
+
+
+/* =========================================================
    HOME-CANVAS-TRANSFORM-1A — 캔버스 요소 하나의 x · y 를 draft 에
 
    setStudioCanvasElementPosition(elementId, next, expected) -> result
@@ -3069,12 +3131,32 @@ function writeStudioCanvasElementChange(writerName, elementId, next, expected, o
   const coalesce =
     !!(options && options.coalesceHistory === true);
 
+  commitStudioCanvasRegions(result.regions, coalesce);
+
+  return { ok: true, previous: result.previous };
+
+}
+
+
+/* =========================================================
+   확정 한 번 — **다섯 줄**이 사는 곳
+
+   commitStudioCanvasRegions(regions, coalesce)
+
+   기록 한 칸 · dirty · revision · 단추 상태 · Preview 다시 그리기.
+   단일 요소 하나를 고치든(위) 그룹 멤버 여럿을 한꺼번에 고치든
+   (아래) 이 다섯 줄은 **한 벌**이어야 한다 — 두 벌이 되면 한쪽만
+   고쳐지는 날 "저장은 됐는데 Save 단추가 그대로"가 생긴다.
+========================================================== */
+
+function commitStudioCanvasRegions(regions, coalesce) {
+
   const historyBefore =
     coalesce ? null : captureStudioWorkingChange();
 
   currentWorkingSkin = {
     ...currentWorkingSkin,
-    regions: result.regions
+    regions: regions
   };
 
   recordStudioWorkingChange(historyBefore);
@@ -3090,7 +3172,90 @@ function writeStudioCanvasElementChange(writerName, elementId, next, expected, o
 
   renderPreviewAfterSkinPackageChange();
 
-  return { ok: true, previous: result.previous };
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 여러 요소를 **한 칸**으로 고친다
+
+   writeStudioCanvasElementChanges(steps) -> result
+
+   steps = [{ writer, id, next, expected }, …]
+
+   ★ 왜 위 함수를 여러 번 부르지 않는가.
+
+   그것을 N 번 부르면 Undo 가 N 칸이 되고(기록은 매번 남는다),
+   중간에 하나가 거절되면 **절반만 옮겨진 그룹**이 draft 에 남는다.
+   그룹 이동은 "전부 아니면 전무"다(계약 §39-6).
+
+   ★ 순수 writer 는 regions 를 받아 **새 regions 를 돌려주는** 함수라
+     (skin/skin-home-canvas-write-v2.js) 그대로 이어 붙일 수 있다.
+     현재 draft 는 전부 성공한 뒤에 한 번만 바뀐다 — 하나라도
+     거절되면 이 함수는 draft 를 한 글자도 건드리지 않고 돌아간다.
+
+   ★ 계획을 만드는 곳은 따로다(planStudioCanvasV2GroupMove) — 여기서는
+     받은 계획을 순서대로 적용하기만 한다.
+========================================================== */
+
+function writeStudioCanvasElementChanges(steps) {
+
+  if (!currentWorkingSkin) {
+    return { ok: false, reason: "no-skin" };
+  }
+
+  if (!Array.isArray(steps) || !steps.length) {
+    return { ok: false, reason: "shape" };
+  }
+
+  let regions =
+    currentWorkingSkin.regions;
+
+  let changed =
+    false;
+
+  for (let i = 0; i < steps.length; i += 1) {
+
+    const step =
+      steps[i];
+
+    if (!step || typeof step.writer !== "string") {
+      return { ok: false, reason: "shape" };
+    }
+
+    const writer =
+      window[step.writer];
+
+    if (typeof writer !== "function") {
+      return { ok: false, reason: "unsupported" };
+    }
+
+    const result =
+      writer(regions, step.id, step.next, step.expected);
+
+    if (!result || !result.ok) {
+      return {
+        ok: false,
+        reason: (result && result.reason) || "rejected",
+        id: step.id
+      };
+    }
+
+    if (!result.unchanged) {
+      changed = true;
+    }
+
+    regions = result.regions;
+
+  }
+
+  /* 한 칸도 바뀌지 않았다 — 기록도 dirty 도 만들지 않는다(§17-6) */
+  if (!changed) {
+    return { ok: true, unchanged: true };
+  }
+
+  commitStudioCanvasRegions(regions, false);
+
+  return { ok: true };
 
 }
 
@@ -4541,6 +4706,38 @@ window.addEventListener(
           expected: data.expected,
           next: data.next,
           generation: Number.isInteger(data.generation) ? data.generation : -1,
+          requestId: Number.isInteger(data.requestId) ? data.requestId : 0
+        });
+
+      }
+
+      return;
+
+    }
+
+    /*
+      HOME-CANVAS-GROUP-1B — 프레임의 **그룹 이동 확정 요청**.
+
+      확정이 아니다 — 아래 함수가 지금 draft 로 그룹 · 멤버 · 선택 ·
+      순번 · revision · 잠금을 전부 다시 보고, 하나라도 어긋나면
+      한 칸도 쓰지 않는다(studio/inspector/studio-canvas-selection.js).
+      승인이든 거부든 그 함수가 프레임에 답을 내려 준다.
+
+      ★ `dx` · `dy` 를 여기서 해석하지 않는다. 그 값이 무슨 자인지와
+        멤버마다 얼마가 되는지는 확정 함수 한 곳이 안다(계약 §39-5).
+    */
+    if (data.type === "preview:canvas-group-move") {
+
+      if (typeof window.commitStudioCanvasGroupMove === "function") {
+
+        window.commitStudioCanvasGroupMove({
+          groupId: data.groupId,
+          gestureId: Number.isInteger(data.gestureId) ? data.gestureId : 0,
+          phase: data.phase,
+          dx: data.dx,
+          dy: data.dy,
+          generation: Number.isInteger(data.generation) ? data.generation : -1,
+          revision: Number.isInteger(data.revision) ? data.revision : -1,
           requestId: Number.isInteger(data.requestId) ? data.requestId : 0
         });
 

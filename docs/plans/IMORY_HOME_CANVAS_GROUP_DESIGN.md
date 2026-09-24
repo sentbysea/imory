@@ -1,12 +1,15 @@
 # HOME Canvas 그룹 — 저장 구조 · 좌표 · Layers 계약 (`HOME-CANVAS-GROUP-CONTRACT-1`)
 
-> **PLAN 이다. 다만 `GROUP-1A` 는 2026-09-23 에 구현됐다.**
+> **PLAN 이다. 다만 `GROUP-1A`(2026-09-23)와 `GROUP-1B`(2026-09-24)는
+> 구현됐다.**
 >
-> **구현된 범위는 이 문서가 아니라
-> [계약 문서 §38](../contracts/IMORY_HOME_CANVAS_CONTRACT.md#38-영구-그룹--저장--폴더--만들기해제넣기빼기-home-canvas-group-1a)
-> 에 있다.** 이 문서에서 **아직 계획인 것은 §4-5 ~ §4-7(그룹 이동 · 크기 ·
-> 회전) · §8-1 · §9 의 `1B` · `1C`** 뿐이다. 나머지 절은 그 구현의
-> **근거 기록**으로 읽는다.
+> **구현된 범위는 이 문서가 아니라 계약 문서에 있다** —
+> [§38](../contracts/IMORY_HOME_CANVAS_CONTRACT.md#38-영구-그룹--저장--폴더--만들기해제넣기빼기-home-canvas-group-1a)(저장 ·
+> 폴더 · 만들기/해제/넣기/빼기)과
+> [§39](../contracts/IMORY_HOME_CANVAS_CONTRACT.md#39-그룹-전체-이동-home-canvas-group-1b)(그룹
+> 전체 이동). 이 문서에서 **아직 계획인 것은 §4-6 · §4-7(그룹 크기 ·
+> 회전) · §9 의 `1C`** 뿐이다. 나머지 절은 그 구현의 **근거 기록**으로
+> 읽는다.
 >
 > 원래 라운드(`HOME-CANVAS-GROUP-CONTRACT-1`, 2026-09-23)는 **문서만**
 > 바꿨다 — 제품 코드 · 렌더러 · Studio UI · validator · 순수 writer ·
@@ -17,7 +20,8 @@
 > 별도 `HOME-CANVAS-GROUP-CONTRACT-1` 에서 저장 모양 · 해제 · 중첩 금지 ·
 > v1/v2 호환을 먼저 확정한다."
 
-기준: `main@79dbc32`(설계) · `main@923840e`(`GROUP-1A` 구현).
+기준: `main@79dbc32`(설계) · `main@923840e`(`GROUP-1A` 구현) ·
+`main@63006d7`(`GROUP-1B` 구현).
 
 ---
 
@@ -805,8 +809,31 @@ Import 거부 + 실행 payload 없음이라 **HOME 이 통째로 fallback 된다
 
 ### `HOME-CANVAS-GROUP-1B` — 그룹 전체 이동
 
-- `v2-group-move` 메시지 하나(도화지 자 delta) — §4-5
-- `setMoveableTarget()` 에서 그룹의 `dragTarget` 켜기
+> **✅ 완료(2026-09-24).** 실제로 강제되는 계약은
+> [계약 문서 §39](../contracts/IMORY_HOME_CANVAS_CONTRACT.md#39-그룹-전체-이동-home-canvas-group-1b)
+> 이다. 이 목록에서 **한 줄이 뒤집혔다.**
+>
+> - **`setMoveableTarget()` 에서 그룹의 `dragTarget` 을 켜지 않았다.**
+>   0.53.0 의 `MoveableGroup` 은 `dragArea && !dragTarget` 일 때 드래그
+>   요소를 gesto 목록에 **더하지 않고**(번들 실측 — `Rs()`), 우리 control
+>   box 는 `pointer-events: none` 이라 그 목록에 입력이 닿지 않는다.
+>   `dragTarget` 을 주면 `dragArea` 가 필요한 MoveableGroup 의 mount 가
+>   깨지고, 그 값은 요소 **하나**라 멤버 아무 곳에서나 끄는 것도 되지
+>   않는다. 그래서 그룹 drag 의 **입력을 편집 runtime 이 갖고**
+>   (window capture 의 pointerdown/move/up) Moveable 은 지금까지처럼
+>   표시 전용으로 남겼다(계약 §39-2).
+>
+> - 메시지 이름은 `preview:canvas-group-move` ·
+>   `IMORY_CANVAS_GROUP_MOVE` 이고, 짝이 되는 부모→프레임 메시지
+>   (`canvas-group`)가 하나 더 필요했다 — 프레임은 지금 고른 것이 한
+>   그룹인지도, 도화지 자도 스스로 알 수 없다.
+>
+> - **더 들어간 것**: 끄는 동안의 임시 화면 이동 두 칸
+>   (`--imory-canvas-drag-x/y`) · 잠긴 그룹의 안내 한 줄 ·
+>   `studioCanvasGroupInfo().pickable`(숨은 · 잠긴 멤버가 있는 그룹도
+>   폴더 행으로 고를 수 있게) · 그룹용 이동 손잡이(모바일).
+
+- `canvas-group-move` 메시지 하나(도화지 자 delta) — §4-5
 - 멤버별 `studioCanvasV2Space` → `planStudioCanvasV2Transform("v2-move")`
   fan-out + **배치 쓰기 한 커밋**
 - 한 제스처 = Undo 한 칸 · 하나라도 실패하면 아무것도 안 바뀐다
@@ -839,7 +866,16 @@ Import 거부 + 실행 payload 없음이라 **HOME 이 통째로 fallback 된다
 > `skin/skin-home-canvas-test.mjs` 에 `[v2-group]` 절이 생겼다.
 > 봉투(`[canvas-group]`)는 예정대로 **1B 부터**다 — 1A 는
 > `skin/sandbox/skin-sandbox-protocol.js` 가 한 줄도 안 바뀌었고,
-> 단위 테스트가 "그 파일에 `groups` 라는 글자가 없다"로 그것을 못박는다.
+> 단위 테스트가 그 파일에 `groups` 라는 글자가 없다는 것으로 그것을
+> 못박았다.
+>
+> **✅ `GROUP-1B`(2026-09-24)가 그 절을 채웠다.**
+> `studio/studio-home-canvas-group-e2e-test.mjs` 에 `[group-move]` 절이
+> 늘었고(같은 포트 9010 · 9011),
+> `skin/sandbox/skin-sandbox-unit-test.mjs` 에 `[canvas-group]` 절이
+> 생겼다. 1A 의 그 단언은 **키**를 보는 문장으로 좁아졌다 — 봉투가
+> `IMORY_CANVAS_GROUP` 둘을 알게 됐지만 `"groups"` 라는 **칸**은
+> 여전히 없다(명단은 프레임에 내려가지 않는다).
 
 ---
 

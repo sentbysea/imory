@@ -233,13 +233,24 @@ function selectStudioCanvasLayerGroup(groupId) {
   const info =
     window.studioCanvasGroupInfo(groupId);
 
-  if (!info || !info.live.length) {
+  /* =====================================================
+     HOME-CANVAS-GROUP-1B — 제안하는 것은 **고를 수 있는 멤버**다.
+
+     선택 관문은 hidden · locked 를 만나면 제안 전체를 버리므로
+     (proposeStudioCanvasSelection), `live` 를 그대로 내면 숨은 멤버가
+     하나만 있어도 폴더 행이 **아무것도 고르지 못한다**. 옮길 때는
+     여전히 `live` 전부가 함께 움직인다(계약 §39-7).
+  ====================================================== */
+  const pickable =
+    (info && Array.isArray(info.pickable)) ? info.pickable : [];
+
+  if (!info || !pickable.length) {
     return false;
   }
 
   return window.proposeStudioCanvasSelection({
-    ids: info.live.slice(),
-    primaryId: info.live[info.live.length - 1],
+    ids: pickable.slice(),
+    primaryId: pickable[pickable.length - 1],
     mode: "replace"
   });
 

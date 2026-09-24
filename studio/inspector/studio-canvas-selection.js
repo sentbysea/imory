@@ -444,14 +444,24 @@ function studioCanvasDraftGroups() {
 
 /*
   studioCanvasGroupInfo(groupId)
-    -> { id, name, members, live, space } | null
+    -> { id, name, members, live, pickable, hidden, locked, space } | null
 
-    members  저장된 명단 그대로
-    live     그중 **지금 draft 에서 풀리는** id 만(화면 순서)
-    space    그 그룹이 놓인 좌표 공간("overlay" · "frame:<id>")
+    members   저장된 명단 그대로
+    live      그중 **지금 draft 에서 풀리는** id 만(화면 순서)
+    pickable  그중 화면에서 **고를 수 있는** id 만(hidden · locked 제외)
+    hidden    live 중 `hidden` 인 id
+    locked    live 에 잠긴 멤버가 하나라도 있는가
 
   ★ `members` 와 `live` 를 가른다. 낡은 명단이 있을 수 있고(설계
     §7-3), Layers 는 **없는 것을 있는 것처럼 그리지 않는다.**
+
+  ★ HOME-CANVAS-GROUP-1B — `live` 와 `pickable` 도 가른다.
+
+    선택 제안 관문은 hidden · locked 요소를 만나면 **제안 전체를
+    버린다**(proposeStudioCanvasSelection). 그래서 `live` 를 그대로
+    제안하면 숨은 멤버가 하나만 있어도 폴더 행이 아무것도 고르지
+    못한다. 고르는 것은 `pickable` 이고, **옮기는 것은 `live`** 다 —
+    숨은 멤버도 그룹과 함께 움직인다(계약 §39-7).
 */
 function studioCanvasGroupInfo(groupId) {
 
@@ -474,11 +484,21 @@ function studioCanvasGroupInfo(groupId) {
       .filter((id) => order.indexOf(id) !== -1)
       .sort((a, b) => order.indexOf(a) - order.indexOf(b));
 
+  const nodes =
+    live.map((id) => studioCanvasNodeInfo(id));
+
   return {
     id: group.id,
     name: group.name,
     members: group.members.slice(),
     live: live,
+    pickable: live.filter((id) => !!studioCanvasSelectableElement(id)),
+    hidden:
+      live.filter(
+        (id, at) => !!(nodes[at] && nodes[at].node && nodes[at].node.hidden === true)
+      ),
+    locked:
+      nodes.some((info) => !!(info && info.node && info.node.locked === true)),
     space: studioCanvasGroupSpaceOf(live[0] || null)
   };
 
@@ -527,12 +547,23 @@ function studioCanvasGroupOfMember(elementId) {
 
 
 /*
-  studioCanvasSelectedGroup() -> { id, name, members, live, space } | null
+  studioCanvasSelectedGroup() -> info | null
 
   ★ **"그룹 선택"이라는 별도 상태를 만들지 않는다.** 지금 고른 id
-    집합이 어떤 그룹의 **살아 있는 멤버**와 정확히 같으면 그것이
+    집합이 어떤 그룹의 **고를 수 있는 멤버**와 정확히 같으면 그것이
     그룹 선택이다(설계 §6-3). 파생이라 Undo · reconcile · lasso 가
     그대로 맞는다 — 되살아난 그룹의 선택을 따로 복원하지 않는다.
+
+  ★ HOME-CANVAS-GROUP-1B — 기준이 `live` 에서 `pickable` 로 옮겨졌다.
+
+    hidden · locked 멤버는 선택 관문이 애초에 받지 않으므로
+    (proposeStudioCanvasSelection) `live` 로 대조하면 그런 그룹은
+    **영영 그룹 선택이 되지 않는다**. 둘이 하나도 없는 그룹에서는
+    두 값이 같아 지금까지와 한 글자도 다르지 않다.
+
+  ★ `ids.length < 2` 는 그대로다. 고를 수 있는 멤버가 하나뿐인
+    그룹은 자식 하나를 고른 것과 구분할 수 없으므로 그룹 선택으로
+    읽지 않는다(남은 차이 — 계약 §39-11).
 */
 function studioCanvasSelectedGroup() {
 
@@ -551,14 +582,14 @@ function studioCanvasSelectedGroup() {
     const info =
       studioCanvasGroupInfo(groups[i].id);
 
-    if (!info || info.live.length !== ids.length) {
+    if (!info || info.pickable.length !== ids.length) {
       continue;
     }
 
-    const live =
-      info.live.slice().sort();
+    const pickable =
+      info.pickable.slice().sort();
 
-    if (live.every((id, at) => id === ids[at])) {
+    if (pickable.every((id, at) => id === ids[at])) {
       return info;
     }
 
@@ -1094,7 +1125,126 @@ function syncStudioCanvasFrameMode() {
 
   postStudioCanvasGeometryToFrame();
 
+  /* HOME-CANVAS-GROUP-1B — 그룹 선택도 좌표와 같은 자리에서 나간다 */
+  postStudioCanvasGroupToFrame();
+
+  studioCanvasGroupLockNotice();
+
   notifyStudioCanvasPanel();
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 지금 고른 것이 **그룹인가**를 프레임으로
+
+   ★ 좌표 메시지와 같은 결이다. 프레임은 그룹 JSON 도 멤버 명단도
+     갖지 않는다 — 필요한 것은 "이것이 그 그룹이다 · 도화지 자는
+     이것이다 · 잠긴 멤버가 있는가" 셋뿐이고, 옮길 대상은 이미 선택
+     메시지로 확정된 그 id 들이다.
+
+   ★ `revision` 은 **지금 draft 의 판 번호**다. 제스처가 도는 동안
+     draft 가 바뀌면(Undo · 구조 변경 · Import) 이 값이 오르고,
+     프레임은 그 순간 제스처를 접는다. 선택 순번(generation)만으로는
+     잡히지 않는 변화가 그것이다 — 멤버가 전부 살아남은 재조정은
+     순번을 올리지 않는다(reconcileStudioCanvasSelection).
+
+   ★ 잠긴 멤버가 하나라도 있으면 `active:false` 다. 시작 자체를
+     막는 것이 계약이고(§39-7), 왜 막혔는지는 Layers 의 상태 줄이
+     말한다(아래 studioCanvasGroupLockNotice).
+========================================================== */
+
+function studioCanvasWorkingRevision() {
+
+  return (typeof studioWorkingRevision === "number" && studioWorkingRevision >= 0)
+    ? studioWorkingRevision
+    : 0;
+
+}
+
+
+function postStudioCanvasGroupToFrame(answering) {
+
+  if (typeof window.postCanvasGroupToFrame !== "function") {
+    return;
+  }
+
+  const group =
+    studioCanvasSelectedGroup();
+
+  const payload =
+    studioCanvasDraftPayload();
+
+  const usable =
+    !!(
+      group &&
+      !group.locked &&
+      payload &&
+      payload.baseWidth > 0 &&
+      studioCanvasEditingIsOn()
+    );
+
+  const message = {
+    active: usable,
+    groupId: usable ? group.id : null,
+    baseWidth: usable ? payload.baseWidth : 0,
+    locked: !!(group && group.locked),
+
+    /* ★ 선택 메시지와 **같은 순번**이어야 한다. 프레임은 둘이 짝을
+       이룰 때만 그룹 이동을 켠다(좌표 메시지와 같은 규칙). */
+    generation:
+      studioCanvasSelection
+        ? studioCanvasSelection.generation
+        : studioCanvasSelectionGeneration,
+
+    revision: studioCanvasWorkingRevision()
+  };
+
+  if (Number.isInteger(answering) && answering >= 1) {
+    message.answering = answering;
+  }
+
+  window.postCanvasGroupToFrame(message);
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 잠긴 그룹의 안내 한 줄(계약 §39-7)
+
+   ★ 토스트를 새로 만들지 않는다. 구조 동작의 거절 이유가 이미
+     Layers 의 상태 줄 하나에 뜨고(setStudioCanvasLayersMessage),
+     그 줄은 화면 상태일 뿐 draft 에도 Undo 에도 들어가지 않는다.
+
+   ★ 같은 문장을 되풀이해 쓰지 않는다 — 그룹이 바뀌었을 때만 쓴다.
+========================================================== */
+
+let studioCanvasGroupLockNoticeFor = "";
+
+function studioCanvasGroupLockNotice() {
+
+  if (typeof window.setStudioCanvasLayersMessage !== "function") {
+    return;
+  }
+
+  const group =
+    studioCanvasSelectedGroup();
+
+  const key =
+    (group && group.locked) ? group.id : "";
+
+  if (key === studioCanvasGroupLockNoticeFor) {
+    return;
+  }
+
+  studioCanvasGroupLockNoticeFor = key;
+
+  if (!key) {
+    return;
+  }
+
+  window.setStudioCanvasLayersMessage(
+    "잠긴 레이어를 먼저 풀어야 그룹을 움직일 수 있습니다.");
 
 }
 
@@ -1463,6 +1613,11 @@ function applyStudioCanvasSelection(entries, options) {
   /* HOME-CANVAS-TRANSFORM-1A — 좌표는 언제나 선택 **뒤에** 나간다.
      프레임은 둘이 짝을 이룰 때만 이동을 켠다(같은 generation). */
   postStudioCanvasGeometryToFrame();
+
+  /* HOME-CANVAS-GROUP-1B — 그룹도 같은 자리 · 같은 순번이다 */
+  postStudioCanvasGroupToFrame();
+
+  studioCanvasGroupLockNotice();
 
   /* =====================================================
      프레임에도 해제를 알린다 — 단, 소유권이 넘어가는 경우는 뺀다
@@ -2154,6 +2309,296 @@ function commitStudioCanvasInspectorEdit(request) {
     request,
     { kinds: STUDIO_CANVAS_PANEL_KINDS, allowCoalesce: true }
   );
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 그룹 전체 이동의 **확정 관문**
+
+   기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §39
+
+   commitStudioCanvasGroupMove(request)
+
+     request = { groupId, gestureId, phase, dx, dy,
+                 generation, revision, requestId }
+
+   ── 제스처 하나에 세 자리 ──────────────────────────────
+
+     start   이 문서가 **열린 제스처 한 칸**을 기억한다(그때의
+             그룹 · 멤버 명단 · 순번 · revision). draft 는 한 글자도
+             바뀌지 않는다.
+     end     그 한 칸과 정확히 맞을 때만 쓴다. 쓰고 나면 칸을 비운다 —
+             같은 번호의 `end` 가 한 번 더 와도 열린 제스처가 없어
+             아무 일도 하지 않는다(늦게 온 확정, 계약 §39-4).
+     cancel  칸을 비운다.
+
+   ── 왜 `revision` 인가 ─────────────────────────────────
+
+   선택 순번(generation)은 **고른 것이 바뀔 때** 오른다. 그런데
+   멤버가 전부 살아남은 재조정은 순번을 올리지 않으므로
+   (reconcileStudioCanvasSelection), 그것만으로는 "제스처 도중에
+   draft 가 바뀌었다"를 잡을 수 없다. Undo · Redo · 구조 변경 ·
+   Import · AI 적용은 전부 `studioWorkingRevision` 을 올린다.
+
+   ── 무엇을 다시 보는가 ────────────────────────────────
+
+     · Studio 가 편집 중인가            studioCanvasEditingIsOn
+     · HOME Canvas v2 인가              studioCanvasPayloadVersion
+     · 지금 선택이 **정확히 그 그룹**인가  studioCanvasSelectedGroup
+     · 그 그룹이 지금 draft 에 있는가
+     · 멤버 명단이 시작 때와 같은가
+     · 멤버가 전부 같은 좌표 공간인가
+     · 잠긴 멤버가 없는가
+     · 순번 · revision 이 시작 때와 같은가
+     · 지금 revision 도 그 값 그대로인가(렌더된 Preview = 지금 draft)
+
+   하나라도 어긋나면 **한 칸도 쓰지 않는다**.
+========================================================== */
+
+/* 열린 제스처 한 칸. 한 번에 하나다 — 둘을 동시에 열 수 없다. */
+let studioCanvasGroupGesture = null;
+
+
+function studioCanvasGroupMoveAnswer(requestId, accepted, reason) {
+
+  postStudioCanvasGroupToFrame(requestId);
+
+  if (!accepted) {
+
+    console.info(
+      "[studio-canvas] 그룹 이동을 받아들이지 않았습니다",
+      { reason: reason }
+    );
+
+  }
+
+  return { accepted: accepted, reason: reason };
+
+}
+
+
+/* 지금 draft 에서 그 그룹이 **끌 수 있는 상태인가** */
+function studioCanvasGroupMoveTarget(groupId) {
+
+  if (!studioCanvasEditingIsOn()) {
+    return { ok: false, reason: "not-editing" };
+  }
+
+  if (studioCanvasPayloadVersion(studioCanvasDraftPayload()) !== 2) {
+    return { ok: false, reason: "version" };
+  }
+
+  const selected =
+    studioCanvasSelectedGroup();
+
+  if (!selected || selected.id !== groupId) {
+    return { ok: false, reason: "selection" };
+  }
+
+  if (selected.locked) {
+    return { ok: false, reason: "locked" };
+  }
+
+  if (!selected.live.length) {
+    return { ok: false, reason: "members" };
+  }
+
+  /* 같은 좌표 공간 하나 — 그룹이 성립하는 조건이다(계약 §38-2).
+     만들 때 이미 보았지만 Import · AI 가 데이터를 바꿀 수 있다. */
+  const space =
+    studioCanvasGroupSpaceOf(selected.live[0]);
+
+  if (
+    !space ||
+    selected.live.some((id) => studioCanvasGroupSpaceOf(id) !== space)
+  ) {
+    return { ok: false, reason: "space" };
+  }
+
+  return { ok: true, group: selected, space: space };
+
+}
+
+
+function commitStudioCanvasGroupMove(request) {
+
+  const value =
+    (request && typeof request === "object") ? request : null;
+
+  const requestId =
+    (value && Number.isInteger(value.requestId) && value.requestId >= 1)
+      ? value.requestId
+      : 0;
+
+  const answer =
+    (accepted, reason) => studioCanvasGroupMoveAnswer(requestId, accepted, reason);
+
+  if (
+    !value ||
+    typeof value.groupId !== "string" ||
+    !STUDIO_CANVAS_ELEMENT_ID_PATTERN.test(value.groupId) ||
+    !Number.isInteger(value.gestureId) || value.gestureId < 1 ||
+    !Number.isInteger(value.generation) || value.generation < 0 ||
+    !Number.isInteger(value.revision) || value.revision < 0
+  ) {
+    return answer(false, "shape");
+  }
+
+  const phase =
+    value.phase;
+
+  /* ── cancel — 열린 칸만 비운다 ── */
+
+  if (phase === "cancel") {
+
+    if (
+      studioCanvasGroupGesture &&
+      studioCanvasGroupGesture.gestureId === value.gestureId
+    ) {
+      studioCanvasGroupGesture = null;
+    }
+
+    return { accepted: true, reason: "cancelled" };
+
+  }
+
+  /* ── start — 지금 상태를 한 칸에 적는다 ── */
+
+  if (phase === "start") {
+
+    studioCanvasGroupGesture = null;
+
+    const target =
+      studioCanvasGroupMoveTarget(value.groupId);
+
+    if (!target.ok) {
+      return { accepted: false, reason: target.reason };
+    }
+
+    if (value.generation !== studioCanvasSelectionGeneration) {
+      return { accepted: false, reason: "generation" };
+    }
+
+    if (value.revision !== studioCanvasWorkingRevision()) {
+      return { accepted: false, reason: "revision" };
+    }
+
+    studioCanvasGroupGesture = {
+      gestureId: value.gestureId,
+      groupId: value.groupId,
+      members: target.group.live.slice(),
+      space: target.space,
+      generation: value.generation,
+      revision: value.revision
+    };
+
+    return { accepted: true, reason: "started" };
+
+  }
+
+  if (phase !== "end") {
+    return answer(false, "phase");
+  }
+
+  /* ── end — 열린 칸과 정확히 맞을 때만 쓴다 ── */
+
+  const open =
+    studioCanvasGroupGesture;
+
+  /* ★ 쓰든 못 쓰든 이 번호의 제스처는 여기서 끝이다. 늦게 온 같은
+     번호의 `end` 가 데이터를 두 번 바꿀 길을 남기지 않는다. */
+  if (open && open.gestureId === value.gestureId) {
+    studioCanvasGroupGesture = null;
+  }
+
+  if (!open || open.gestureId !== value.gestureId) {
+    return answer(false, "stale");
+  }
+
+  if (open.groupId !== value.groupId) {
+    return answer(false, "group");
+  }
+
+  if (
+    open.generation !== value.generation ||
+    open.revision !== value.revision
+  ) {
+    return answer(false, "stale");
+  }
+
+  /* 렌더된 Preview 와 지금 draft 가 같은 판인가 */
+  if (
+    value.generation !== studioCanvasSelectionGeneration ||
+    value.revision !== studioCanvasWorkingRevision()
+  ) {
+    return answer(false, "stale");
+  }
+
+  const target =
+    studioCanvasGroupMoveTarget(value.groupId);
+
+  if (!target.ok) {
+    return answer(false, target.reason);
+  }
+
+  /* 멤버 명단이 시작 때와 **글자 단위로** 같은가 */
+  if (
+    target.group.live.length !== open.members.length ||
+    target.group.live.some((id, at) => id !== open.members[at]) ||
+    target.space !== open.space
+  ) {
+    return answer(false, "members");
+  }
+
+  const dx =
+    Number.isFinite(value.dx) ? value.dx : NaN;
+
+  const dy =
+    Number.isFinite(value.dy) ? value.dy : NaN;
+
+  if (!Number.isFinite(dx) || !Number.isFinite(dy)) {
+    return answer(false, "delta");
+  }
+
+  /* 한 칸도 움직이지 않았다 — 기록도 dirty 도 없다(§17-6) */
+  if (dx === 0 && dy === 0) {
+    return answer(true, "unchanged");
+  }
+
+  if (typeof window.planStudioCanvasV2GroupMove !== "function") {
+    return answer(false, "unsupported");
+  }
+
+  /* =====================================================
+     ★ 계획을 **전부 만든 뒤에** 한 번에 적용한다(계약 §39-6).
+
+     하나라도 계획이 서지 않으면 여기서 끝이고 draft 는 한 글자도
+     바뀌지 않는다 — 절반만 옮겨진 그룹이 남을 길이 없다.
+  ====================================================== */
+  const plan =
+    window.planStudioCanvasV2GroupMove(open.members, dx, dy);
+
+  if (!plan || !plan.ok) {
+    return answer(false, (plan && plan.reason) || "plan");
+  }
+
+  if (typeof window.writeStudioCanvasElementChanges !== "function") {
+    return answer(false, "unsupported");
+  }
+
+  const result =
+    window.writeStudioCanvasElementChanges(plan.steps);
+
+  if (!result || !result.ok) {
+    return answer(false, (result && result.reason) || "rejected");
+  }
+
+  if (result.unchanged) {
+    return answer(true, "unchanged");
+  }
+
+  return answer(true, "ok");
 
 }
 
@@ -3038,6 +3483,23 @@ if (typeof window !== "undefined") {
 
   /* HOME-CANVAS-TRANSFORM-1A */
   window.commitStudioCanvasElementTransform = commitStudioCanvasElementTransform;
+
+  /* HOME-CANVAS-GROUP-1B — 그룹 전체 이동의 확정 관문 */
+  window.commitStudioCanvasGroupMove = commitStudioCanvasGroupMove;
+
+  /* 진단 · 테스트가 보는 한 줄(읽기 전용) */
+  window.getStudioCanvasGroupGesture =
+    () =>
+      studioCanvasGroupGesture
+        ? {
+            gestureId: studioCanvasGroupGesture.gestureId,
+            groupId: studioCanvasGroupGesture.groupId,
+            members: studioCanvasGroupGesture.members.slice(),
+            space: studioCanvasGroupGesture.space,
+            generation: studioCanvasGroupGesture.generation,
+            revision: studioCanvasGroupGesture.revision
+          }
+        : null;
 
   /* HOME-CANVAS-INSPECTOR-1A */
   window.commitStudioCanvasInspectorEdit = commitStudioCanvasInspectorEdit;

@@ -31,6 +31,8 @@
    [drag]     넣기 · 빼기 · 그룹 사이 이동 · 공간 혼합 거절 ·
               마지막 멤버 자동 해제
    [import]   Import 의 낡은 명단 수선과 완료 안내
+   [group-move] 그룹 전체 이동 — 공통 delta · 좌표 공간 넷 · hidden/locked ·
+              원자성 · stale · Undo 한 칸 · 390px 터치 · sandbox parity
    [round]    Save → 다시 열기 · Export → Import · Publish resolve
    [mobile]   390px — 가로 스크롤 0 · 잘림 0
    [sandbox]  별도 origin 에서 같은 결과 + CSP 위반 0
@@ -357,7 +359,12 @@ async function openStudio(browser, options) {
   const errors = [];
 
   const ctx = await browser.newContext({
-    viewport: o.viewport || { width: 1280, height: 900 }
+    viewport: o.viewport || { width: 1280, height: 900 },
+
+    /* HOME-CANVAS-GROUP-1B — 진짜 터치로 재는 절이 있다. 합성
+       PointerEvent 로는 이 경로를 지날 수 없다(materials e2e 의
+       그 함정과 같다). */
+    hasTouch: !!o.hasTouch
   });
 
   await ctx.addInitScript(() => {
@@ -948,7 +955,7 @@ if (wants("tree")) {
   check("패널에 해제 · 이름 변경 · 삭제가 있다",
     panel.dissolve && panel.rename && panel.remove);
 
-  check("★ `다음 단계에서 지원` 안내가 있다 — 왜 안 움직이는지를 말한다",
+  check("★ 무엇이 되고 무엇이 아직인지 한 줄로 말한다(이동은 되고 크기·회전은 아직)",
     panel.soon === true);
 
   const handles = await page.evaluate(() => {
@@ -1727,6 +1734,1236 @@ if (wants("mobile")) {
     page.__errors.slice(0, 2).join(" | "));
 
   await close(page);
+
+}
+
+
+/* ---------------------------------------------------------- [group-move] */
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 그룹 전체 이동
+
+   ★ 숫자는 **화면에서 잰다**. fixture 의 저장값을 비교하는 것으로는
+     "세 멤버가 정확히 같은 거리를 움직였다"가 증명되지 않는다 —
+     멤버마다 자가 달라서 저장값은 원래 다르게 움직이는 것이 맞다.
+     그래서 프레임 안에서 getBoundingClientRect() 를 직접 읽는다.
+========================================================== */
+
+const MOVE_HTML =
+  '<div class="gp-home">' +
+  '<div class="gp-canvas" data-imory-canvas-root></div>' +
+  "</div>";
+
+const MOVE_CSS =
+  ".gp-home { padding: 0; margin: 0; }" +
+  ".gp-canvas { width: 100%; }" +
+  '[data-imory-canvas-type="text"] { font: 12px/1.2 Arial, sans-serif; ' +
+  "background: #e8dcc6; }" +
+  '[data-imory-canvas-type="shape"] { background: #d9c7a8; }' +
+  '[data-imory-canvas-type="photo"] { background: #efe3d2; }';
+
+
+/*
+  ★ 그룹 넷을 한 캔버스에 둔다 — 멤버는 겹치지 않고, 그룹끼리도
+    멤버를 나눠 갖지 않는다(중첩 금지 · 한 요소는 한 그룹).
+
+    gOver    overlay 둘 + **숨은 멤버 하나**
+    gLock    overlay 둘 — 하나가 **잠겨 있다**
+    gTrans   같은 프레임의 `transform` 둘(하나는 **회전**)
+    gPin     같은 프레임의 `pin` 둘
+    gMix     같은 프레임의 `transform` + `pin` 섞임
+*/
+function movePackage(options) {
+
+  const o = options || {};
+
+  const frameElement = (id, x, y, w, h, extra) =>
+    Object.assign(
+      {
+        id: id, type: "text", follow: "transform",
+        x: x, y: y, width: w, height: h,
+        props: { text: id, role: "body" }
+      },
+      extra || {}
+    );
+
+  const pinElement = (id, anchor, ox, oy) => ({
+    id: id, type: "text", follow: "pin", width: 26, height: 12,
+    pin: { target: "frame", anchor: anchor, origin: "top-left",
+      offset: { x: ox, y: oy } },
+    props: { text: id, role: "body" }
+  });
+
+  const canvas = {
+    version: 2,
+    baseWidth: 390,
+    baseHeight: 900,
+    mvMystery: { keep: true },
+    flow: {
+      direction: "column",
+      padding: { top: 30, right: 20, bottom: 30, left: 20 },
+      gap: 10,
+      blocks: [
+        { id: "mvFrame", type: "main_visual", width: 320, height: 240,
+          align: "center",
+          props: {
+            baseWidth: 160, baseHeight: 120, primaryId: "mvPhoto",
+            elements: [
+              { id: "mvPhoto", type: "photo", follow: "transform",
+                x: 4, y: 4, width: 150, height: 110,
+                props: { slot: "photo_1" } },
+
+              /* gTrans — 회전한 멤버가 섞여 있다 */
+              frameElement("mvT1", 8, 8, 40, 12),
+              frameElement("mvT2", 8, 30, 40, 12, { rotation: 20 }),
+
+              /* gMix — transform 하나 */
+              frameElement("mvM1", 8, 52, 40, 12),
+
+              /* gPin — pin 둘 */
+              pinElement("mvP1", "top-right", -30, 6),
+              pinElement("mvP2", "top-right", -30, 24),
+
+              /* gMix — pin 하나 */
+              pinElement("mvM2", "top-right", -30, 42)
+            ]
+          } }
+      ]
+    },
+    overlays: [
+      { id: "mvA", type: "shape", x: 60, y: 420, width: 60, height: 40,
+        props: { kind: "rect" } },
+      { id: "mvMid", type: "shape", x: 150, y: 470, width: 40, height: 30,
+        props: { kind: "rect" } },
+      { id: "mvB", type: "shape", x: 200, y: 520, width: 55, height: 35,
+        props: { kind: "rect" } },
+      { id: "mvHid", type: "shape", x: 60, y: 600, width: 40, height: 20,
+        hidden: true, props: { kind: "rect" } },
+
+      { id: "mvLockA", type: "shape", x: 60, y: 680, width: 40, height: 20,
+        props: { kind: "rect" } },
+      { id: "mvLockB", type: "shape", x: 160, y: 680, width: 40, height: 20,
+        locked: true, props: { kind: "rect" } },
+      { id: "mvLockC", type: "shape", x: 260, y: 680, width: 40, height: 20,
+        props: { kind: "rect" } }
+    ],
+    groups: [
+      { id: "gOver", name: "겹 그룹", members: ["mvA", "mvB", "mvHid"] },
+      { id: "gLock", name: "잠긴 그룹",
+        members: ["mvLockA", "mvLockB", "mvLockC"] },
+      { id: "gTrans", name: "프레임 안", members: ["mvT1", "mvT2"] },
+      { id: "gPin", name: "핀 둘", members: ["mvP1", "mvP2"] },
+      { id: "gMix", name: "섞임", members: ["mvM1", "mvM2"] }
+    ]
+  };
+
+  const pkg = {
+    schemaVersion: 1,
+    templates: {
+      home: { html: MOVE_HTML },
+      category: { html: '<div class="gp-category"></div>' },
+      post: { html: '<div class="gp-post"><div data-imory-region="post-body"></div></div>' },
+      banner: { html: '<div class="gp-banner"></div>' }
+    },
+    css: MOVE_CSS,
+    imageSlots: IMAGE_SLOTS,
+    regions: [
+      { name: "gp_unknown", enabled: true, payload: { keep: true } },
+      { name: "home_canvas", enabled: true, canvas: canvas }
+    ],
+    metadata: {}
+  };
+
+  if (o.sandbox) {
+    pkg.renderMode = "sandbox";
+  }
+
+  return pkg;
+
+}
+
+
+const mvById = (id) => `[data-imory-edit-id="${id}"]`;
+
+
+/* 프레임 안에서 잰 상자를 **부모 화면 좌표**로. native 와 sandbox
+   두 갈래는 transform e2e 의 그것과 같은 규칙이다. */
+async function mvNativeRects(page, ids) {
+
+  return page.evaluate((list) => {
+
+    const frame = document.getElementById("studioPreviewFrame");
+    const doc = frame.contentDocument;
+    const box = frame.getBoundingClientRect();
+    const scale = box.width / (frame.offsetWidth || box.width);
+    const cs = getComputedStyle(frame);
+    const bl = parseFloat(cs.borderLeftWidth) || 0;
+    const bt = parseFloat(cs.borderTopWidth) || 0;
+
+    const out = {};
+
+    list.forEach((id) => {
+
+      const el = doc.querySelector(`[data-imory-edit-id="${id}"]`);
+
+      if (!el) {
+        out[id] = null;
+        return;
+      }
+
+      const r = el.getBoundingClientRect();
+
+      out[id] = {
+        left: box.left + (bl + r.left) * scale,
+        top: box.top + (bt + r.top) * scale,
+        width: r.width * scale,
+        height: r.height * scale
+      };
+
+    });
+
+    return out;
+
+  }, ids);
+
+}
+
+
+async function mvSandboxRects(page, frame, ids) {
+
+  const out = {};
+
+  for (const id of ids) {
+
+    const box =
+      await frame.locator(mvById(id)).first().boundingBox().catch(() => null);
+
+    out[id] = box ? { left: box.x, top: box.y, width: box.width, height: box.height } : null;
+
+  }
+
+  return out;
+
+}
+
+
+const mvRects = (page, frame, sandbox, ids) =>
+  sandbox ? mvSandboxRects(page, frame, ids) : mvNativeRects(page, ids);
+
+
+/* 두 측정의 화면 이동량 */
+function mvDelta(before, after, id) {
+
+  if (!before[id] || !after[id]) {
+    return null;
+  }
+
+  return {
+    x: Math.round((after[id].left - before[id].left) * 100) / 100,
+    y: Math.round((after[id].top - before[id].top) * 100) / 100
+  };
+
+}
+
+
+/* 그 그룹 폴더 행을 누른다 — 화면의 그 줄을 실제로 누른다 */
+async function selectGroupFolder(page, groupId) {
+
+  await page.click(`#studioCanvasLayer-${groupId}`);
+
+  await sleep(450);
+
+  return page.evaluate(() => {
+    const group = window.studioCanvasSelectedGroup();
+    return group ? { id: group.id, live: group.live, pickable: group.pickable } : null;
+  });
+
+}
+
+
+/* 프레임이 그룹을 받았는가(runtime 의 진단 한 줄) */
+const mvFrameState = (frame) =>
+  frame.evaluate(() =>
+    (typeof window.__imoryCanvasFrameState === "function")
+      ? window.__imoryCanvasFrameState()
+      : null);
+
+
+/* 그 요소를 화면 가운데로 끌어온다 — 프레임은 도화지만큼 길고 창은
+   그보다 짧다. transform e2e 의 bringIntoView 와 같은 두 갈래다. */
+async function mvBringIntoView(page, frame, sandbox, id) {
+
+  if (sandbox) {
+
+    /* ★ sandbox 프레임 자신은 스크롤하지 않는다. 2026-09-24 실측:
+       그 iframe 은 내용만큼 높고(innerHeight === scrollHeight) 실제
+       스크롤러는 **preview 문서**다. 그 안에서 스크롤해야 요소가
+       창 안으로 들어온다. */
+    const box =
+      await frame.locator(mvById(id)).first().boundingBox().catch(() => null);
+
+    const host =
+      await page.evaluate(() => {
+        const el = document.getElementById("studioPreviewFrame");
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { top: r.top, height: r.height };
+      });
+
+    const preview =
+      page.frames().find((f) => f.url().indexOf("preview-frame") !== -1);
+
+    if (box && host && preview) {
+      await preview.evaluate(
+        (dy) => window.scrollBy(0, dy),
+        (box.y + box.height / 2) - (host.top + host.height * 0.55)
+      );
+    }
+
+  }
+  else {
+
+    await page.evaluate((sel) => {
+      const doc = document.getElementById("studioPreviewFrame").contentDocument;
+      const el = doc.querySelector(sel);
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      doc.defaultView.scrollBy(
+        0, r.top + r.height / 2 - doc.defaultView.innerHeight * 0.55
+      );
+    }, mvById(id));
+
+  }
+
+  await sleep(400);
+
+}
+
+
+/* 멤버 하나의 가운데에서 (dx, dy) 만큼 실제로 끈다 */
+async function mvDragMember(page, frame, sandbox, id, dx, dy, options) {
+
+  const o = options || {};
+
+  await mvBringIntoView(page, frame, sandbox, id);
+
+  const before =
+    await mvRects(page, frame, sandbox, [id]);
+
+  const box =
+    before[id];
+
+  if (!box) {
+    throw new Error("멤버를 찾지 못했습니다: " + id);
+  }
+
+  const from = {
+    x: box.left + box.width / 2,
+    y: box.top + box.height / 2
+  };
+
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+
+  const steps = o.steps || 8;
+
+  for (let i = 1; i <= steps; i += 1) {
+    await page.mouse.move(from.x + (dx * i) / steps, from.y + (dy * i) / steps);
+    if (o.pause) await sleep(o.pause);
+  }
+
+  if (o.beforeUp) {
+    await o.beforeUp();
+  }
+
+  if (o.noUp) {
+    return from;
+  }
+
+  await page.mouse.up();
+
+  await sleep(o.settle === undefined ? 700 : o.settle);
+
+  return from;
+
+}
+
+
+/* 그 그룹을 끌고, 멤버들의 화면 이동량을 돌려준다 */
+async function mvMoveGroup(page, frame, sandbox, groupId, grabId, dx, dy, ids, options) {
+
+  await mvBringIntoView(page, frame, sandbox, grabId);
+
+  const before =
+    await mvRects(page, frame, sandbox, ids);
+
+  await mvDragMember(page, frame, sandbox, grabId, dx, dy, options);
+
+  const after =
+    await mvRects(page, frame, sandbox, ids);
+
+  const deltas = {};
+
+  ids.forEach((id) => {
+    deltas[id] = mvDelta(before, after, id);
+  });
+
+  return { before, after, deltas };
+
+}
+
+
+/* 요청한 만큼 움직였는가 · 멤버끼리 같은가 (둘 다 1px 안) */
+function mvSame(deltas, ids, dx, dy) {
+
+  const list =
+    ids.map((id) => deltas[id]).filter(Boolean);
+
+  if (list.length !== ids.length) {
+    return { ok: false, why: "missing" };
+  }
+
+  const wanted =
+    list.every((d) => Math.abs(d.x - dx) <= 1 && Math.abs(d.y - dy) <= 1);
+
+  const together =
+    list.every(
+      (d) =>
+        Math.abs(d.x - list[0].x) <= 1 &&
+        Math.abs(d.y - list[0].y) <= 1
+    );
+
+  return { ok: wanted && together, wanted, together };
+
+}
+
+
+const mvCanvas = (page) => page.evaluate(() => {
+
+  if (typeof currentWorkingSkin === "undefined" || !currentWorkingSkin) {
+    return null;
+  }
+
+  const entry =
+    (currentWorkingSkin.regions || []).find((r) => r && r.name === "home_canvas");
+
+  return entry ? JSON.parse(JSON.stringify(entry.canvas)) : null;
+
+});
+
+
+/* 좌표(`x` · `y` · `pin.offset`)를 뺀 나머지 전부 — 그 밖에 무엇이
+   바뀌었는가의 지문이다 */
+function mvFingerprint(canvas) {
+
+  const copy =
+    JSON.parse(JSON.stringify(canvas));
+
+  const strip = (node) => {
+    delete node.x;
+    delete node.y;
+    if (node.pin && node.pin.offset) delete node.pin.offset;
+  };
+
+  copy.overlays.forEach(strip);
+
+  copy.flow.blocks.forEach((block) => {
+    if (block.props && Array.isArray(block.props.elements)) {
+      block.props.elements.forEach(strip);
+    }
+  });
+
+  return JSON.stringify(copy);
+
+}
+
+
+const mvUndoDepth = async (page) => {
+  const state = await historyState(page);
+  return state ? state.undo : -1;
+};
+
+
+async function openMove(browser, options) {
+
+  const o = options || {};
+
+  const page =
+    await openStudio(browser, {
+      package: movePackage(o),
+      sandbox: o.sandbox,
+      viewport: o.viewport,
+      hasTouch: o.hasTouch
+    });
+
+  const frame =
+    await canvasFrame(page, !!o.sandbox);
+
+  await enableCanvasEditing(page);
+
+  await openLayers(page);
+
+  return { page, frame };
+
+}
+
+
+if (wants("group-move")) {
+
+  section("group-move");
+
+  const { page, frame } = await openMove(browser, {});
+
+  /* ── overlay 그룹 — 공통 delta ── */
+
+  const picked =
+    await selectGroupFolder(page, "gOver");
+
+  check("★ 숨은 멤버가 있어도 폴더 행이 그룹을 고른다",
+    !!picked && picked.pickable.join(",") === "mvA,mvB" &&
+      picked.live.join(",") === "mvA,mvB,mvHid",
+    JSON.stringify(picked));
+
+  const frameState =
+    await mvFrameState(frame);
+
+  check("★ 프레임이 그룹을 받았고 끌 수 있다",
+    !!frameState && frameState.groupActive === true &&
+      frameState.groupId === "gOver" && frameState.groupDraggable === true,
+    frameState ? `${frameState.groupId}/${frameState.groupGate}` : "null");
+
+  check("★ 그룹 선택에도 이동 손잡이가 보인다(모바일의 그 자리)",
+    !!frameState && frameState.moveGripVisible === true);
+
+  check("★ 그룹 선택에는 리사이즈 · 회전 손잡이가 없다",
+    !!frameState && frameState.resizeHandles === 0 &&
+      frameState.rotationHandles === 0,
+    frameState ? `${frameState.resizeHandles}/${frameState.rotationHandles}` : "");
+
+  const beforeUndo = await mvUndoDepth(page);
+
+  const beforeCanvas = await mvCanvas(page);
+
+  const overlayMove =
+    await mvMoveGroup(page, frame, false, "gOver", "mvA", 40, 26,
+      ["mvA", "mvB", "mvMid"]);
+
+  const overlaySame =
+    mvSame(overlayMove.deltas, ["mvA", "mvB"], 40, 26);
+
+  check("★ overlay 그룹 — 멤버 둘이 요청한 만큼 **같이** 움직였다",
+    overlaySame.ok, JSON.stringify(overlayMove.deltas));
+
+  check("★ 그룹 밖 요소는 한 픽셀도 움직이지 않았다",
+    overlayMove.deltas.mvMid &&
+      Math.abs(overlayMove.deltas.mvMid.x) <= 0.5 &&
+      Math.abs(overlayMove.deltas.mvMid.y) <= 0.5,
+    JSON.stringify(overlayMove.deltas.mvMid));
+
+  const afterCanvas = await mvCanvas(page);
+
+  /* sandbox 와 견줄 값 — 같은 fixture · 같은 제스처의 결과다 */
+  const nativeOverlayDeltas = overlayMove.deltas;
+
+  const nativeOverlayStored =
+    JSON.parse(JSON.stringify(
+      afterCanvas.overlays.find((el) => el.id === "mvA")));
+
+  check("★ 숨은 멤버도 같은 delta 로 저장값이 옮겨졌다",
+    (() => {
+      const before = beforeCanvas.overlays.find((el) => el.id === "mvHid");
+      const after = afterCanvas.overlays.find((el) => el.id === "mvHid");
+      const a = beforeCanvas.overlays.find((el) => el.id === "mvA");
+      const b = afterCanvas.overlays.find((el) => el.id === "mvA");
+      return Math.abs((after.x - before.x) - (b.x - a.x)) < 0.002 &&
+        Math.abs((after.y - before.y) - (b.y - a.y)) < 0.002;
+    })(),
+    JSON.stringify({
+      hid: afterCanvas.overlays.find((el) => el.id === "mvHid"),
+      a: afterCanvas.overlays.find((el) => el.id === "mvA")
+    }));
+
+  check("★ 그룹 이동 한 번 = Undo 한 칸",
+    (await mvUndoDepth(page)) === beforeUndo + 1,
+    `${beforeUndo} → ${await mvUndoDepth(page)}`);
+
+  check("★ 좌표 말고는 글자 단위로 같다 — groups · 배열 순서 · 모르는 칸",
+    mvFingerprint(beforeCanvas) === mvFingerprint(afterCanvas));
+
+  check("★ `groups` 는 한 글자도 바뀌지 않았다",
+    JSON.stringify(beforeCanvas.groups) === JSON.stringify(afterCanvas.groups));
+
+  check("★ 이동 뒤에도 그룹 선택이 그대로다",
+    (await page.evaluate(() => {
+      const g = window.studioCanvasSelectedGroup();
+      return g ? g.id : null;
+    })) === "gOver");
+
+  /* ── Undo / Redo ── */
+
+  const movedRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  await page.evaluate(() => window.undoStudioHistory());
+  await sleep(900);
+
+  const undoneRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Undo 한 번에 멤버 전부가 시작 자리로 돌아온다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(undoneRects[id].left - overlayMove.before[id].left) <= 1 &&
+      Math.abs(undoneRects[id].top - overlayMove.before[id].top) <= 1),
+    JSON.stringify(undoneRects));
+
+  await page.evaluate(() => window.redoStudioHistory());
+  await sleep(900);
+
+  const redoneRects =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ Redo 한 번에 멤버 전부가 최종 자리로 간다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(redoneRects[id].left - movedRects[id].left) <= 1 &&
+      Math.abs(redoneRects[id].top - movedRects[id].top) <= 1),
+    JSON.stringify(redoneRects));
+
+  /* ── delta 0 — 끌었다가 시작 자리로 돌아와 끝냄 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  await mvBringIntoView(page, frame, false, "mvA");
+
+  const backUndo = await mvUndoDepth(page);
+
+  const backBefore =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  const backFrom = {
+    x: backBefore.mvA.left + backBefore.mvA.width / 2,
+    y: backBefore.mvA.top + backBefore.mvA.height / 2
+  };
+
+  await page.mouse.move(backFrom.x, backFrom.y);
+  await page.mouse.down();
+
+  for (let i = 1; i <= 6; i += 1) {
+    await page.mouse.move(backFrom.x + (42 * i) / 6, backFrom.y + i);
+  }
+
+  for (let i = 6; i >= 0; i -= 1) {
+    await page.mouse.move(backFrom.x + (42 * i) / 6, backFrom.y + i);
+  }
+
+  await page.mouse.up();
+  await sleep(700);
+
+  check("★ 끌었다가 시작 자리로 돌아와 끝내면 Undo 0칸",
+    (await mvUndoDepth(page)) === backUndo,
+    backUndo + " → " + (await mvUndoDepth(page)));
+
+  const backAfter =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ 그때 화면도 시작 자리 그대로다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(backAfter[id].left - backBefore[id].left) <= 1 &&
+      Math.abs(backAfter[id].top - backBefore[id].top) <= 1),
+    JSON.stringify(backAfter));
+
+
+  /* ── delta 0 — 끌지 않은 클릭 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const clickUndo = await mvUndoDepth(page);
+
+  await mvDragMember(page, frame, false, "mvA", 0, 0, { steps: 1 });
+
+  check("★ 움직이지 않은 클릭은 Undo 0칸",
+    (await mvUndoDepth(page)) === clickUndo);
+
+  check("★ 움직이지 않은 클릭은 그 멤버 하나를 고른다(기존 규칙)",
+    (await selectionOf(page)).ids.join(",") === "mvA",
+    (await selectionOf(page)).ids.join(","));
+
+  /* ── 자식 단독 선택은 그 자식만 움직인다 ── */
+
+  const childUndo = await mvUndoDepth(page);
+
+  const childMove =
+    await mvMoveGroup(page, frame, false, "gOver", "mvA", 24, 0, ["mvA", "mvB"]);
+
+  check("★ 자식만 고른 상태에서는 그 자식만 움직인다",
+    Math.abs(childMove.deltas.mvA.x - 24) <= 1 &&
+      Math.abs(childMove.deltas.mvB.x) <= 0.5,
+    JSON.stringify(childMove.deltas));
+
+  check("자식 단독 이동도 Undo 한 칸",
+    (await mvUndoDepth(page)) === childUndo + 1);
+
+  /* ── 취소(Escape) ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const cancelUndo = await mvUndoDepth(page);
+
+  await mvBringIntoView(page, frame, false, "mvA");
+
+  const cancelBefore =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  let liveDelta = null;
+
+  await mvDragMember(page, frame, false, "mvA", 50, 0, {
+    noUp: true,
+    beforeUp: async () => {
+
+      const mid =
+        await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+      liveDelta = {
+        a: mid.mvA.left - cancelBefore.mvA.left,
+        b: mid.mvB.left - cancelBefore.mvB.left
+      };
+
+    }
+  });
+
+  check("★ 끄는 동안 멤버가 **즉시 함께** 움직인다(실시간 Preview)",
+    !!liveDelta && Math.abs(liveDelta.a - 50) <= 1 &&
+      Math.abs(liveDelta.b - 50) <= 1,
+    JSON.stringify(liveDelta));
+
+  await page.keyboard.press("Escape");
+  await sleep(300);
+  await page.mouse.up();
+  await sleep(600);
+
+  const cancelled =
+    await mvRects(page, frame, false, ["mvA", "mvB"]);
+
+  check("★ 취소하면 시작 자리로 완전히 돌아온다",
+    ["mvA", "mvB"].every((id) =>
+      Math.abs(cancelled[id].left - cancelBefore[id].left) <= 1 &&
+      Math.abs(cancelled[id].top - cancelBefore[id].top) <= 1),
+    JSON.stringify(cancelled));
+
+  check("★ 취소는 Undo 0칸", (await mvUndoDepth(page)) === cancelUndo);
+
+  /* ── 관문 — 낡은 end · 선택 변경 · 멤버 구조 변경 ── */
+
+  await selectGroupFolder(page, "gOver");
+
+  const gateUndo = await mvUndoDepth(page);
+
+  const gates = await page.evaluate(() => {
+
+    const open =
+      () => ({
+        generation: window.getStudioCanvasSelection().generation,
+        revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0
+      });
+
+    const out = {};
+
+    /* 시작을 알리지 않은 end */
+    out.noStart =
+      window.commitStudioCanvasGroupMove({
+        groupId: "gOver", gestureId: 991, phase: "end",
+        dx: 10, dy: 0, ...open(), requestId: 1
+      }).reason;
+
+    /* 시작 뒤 revision 이 갈린 end */
+    const one = open();
+
+    window.commitStudioCanvasGroupMove({
+      groupId: "gOver", gestureId: 992, phase: "start",
+      dx: 0, dy: 0, ...one, requestId: 0
+    });
+
+    out.staleRevision =
+      window.commitStudioCanvasGroupMove({
+        groupId: "gOver", gestureId: 992, phase: "end",
+        dx: 10, dy: 0, generation: one.generation,
+        revision: one.revision + 7, requestId: 2
+      }).reason;
+
+    /* 선택이 갈린 뒤의 end */
+    const two = open();
+
+    window.commitStudioCanvasGroupMove({
+      groupId: "gOver", gestureId: 993, phase: "start",
+      dx: 0, dy: 0, ...two, requestId: 0
+    });
+
+    window.proposeStudioCanvasSelection({
+      ids: ["mvMid"], primaryId: "mvMid", mode: "replace"
+    });
+
+    out.selectionChanged =
+      window.commitStudioCanvasGroupMove({
+        groupId: "gOver", gestureId: 993, phase: "end",
+        dx: 10, dy: 0, ...two, requestId: 3
+      }).reason;
+
+    /* 없는 그룹 */
+    out.noGroup =
+      window.commitStudioCanvasGroupMove({
+        groupId: "gNope", gestureId: 994, phase: "end",
+        dx: 10, dy: 0, ...open(), requestId: 4
+      }).reason;
+
+    return out;
+
+  });
+
+  check("★ 시작을 알리지 않은 end 는 쓰지 않는다",
+    gates.noStart === "stale", JSON.stringify(gates));
+
+  check("★ 낡은 revision 의 end 는 쓰지 않는다",
+    gates.staleRevision === "stale");
+
+  check("★ 제스처 도중 선택이 갈리면 쓰지 않는다",
+    gates.selectionChanged === "stale" || gates.selectionChanged === "selection",
+    gates.selectionChanged);
+
+  check("★ 없는 그룹은 쓰지 않는다",
+    gates.noGroup === "stale" || gates.noGroup === "selection",
+    gates.noGroup);
+
+  check("★ 거절된 확정은 Undo 0칸",
+    (await mvUndoDepth(page)) === gateUndo,
+    `${gateUndo} → ${await mvUndoDepth(page)}`);
+
+  /* 멤버 구조가 바뀌면 시작 칸이 무효다 */
+
+  await selectGroupFolder(page, "gOver");
+
+  const structUndo = await mvUndoDepth(page);
+
+  const structReason = await page.evaluate(async () => {
+
+    const open = {
+      generation: window.getStudioCanvasSelection().generation,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0
+    };
+
+    window.commitStudioCanvasGroupMove({
+      groupId: "gOver", gestureId: 995, phase: "start",
+      dx: 0, dy: 0, ...open, requestId: 0
+    });
+
+    /* 멤버 하나를 그룹에서 뺀다 — 기존 구조 관문 하나를 지난다 */
+    window.studioCanvasLayersGroupLeave("mvB");
+
+    return window.commitStudioCanvasGroupMove({
+      groupId: "gOver", gestureId: 995, phase: "end",
+      dx: 10, dy: 0, ...open, requestId: 5
+    }).reason;
+
+  });
+
+  check("★ 제스처 도중 멤버가 바뀌면 쓰지 않는다",
+    structReason === "stale" || structReason === "members" ||
+      structReason === "selection",
+    String(structReason));
+
+  check("★ 그 거절도 Undo 를 더 쌓지 않는다 — 구조 변경 한 칸뿐이다",
+    (await mvUndoDepth(page)) === structUndo + 1,
+    `${structUndo} → ${await mvUndoDepth(page)}`);
+
+  /* ── 잠긴 멤버 ── */
+
+  const lockPick = await selectGroupFolder(page, "gLock");
+
+  const lockState = await mvFrameState(frame);
+
+  check("★ 잠긴 멤버가 있는 그룹은 프레임이 끌지 않는다",
+    !!lockState && lockState.groupActive === false &&
+      lockState.groupLocked === true,
+    lockState ? `${lockState.groupActive}/${lockState.groupLocked}` : "null");
+
+  check("★ 잠긴 멤버는 애초에 선택에 들어가지 않는다",
+    !!lockPick && lockPick.pickable.join(",") === "mvLockA,mvLockC" &&
+      lockPick.live.join(",") === "mvLockA,mvLockB,mvLockC",
+    JSON.stringify(lockPick));
+
+  const lockNote = await page.evaluate(() =>
+    window.getStudioCanvasLayersState().note);
+
+  check("★ 왜 안 움직이는지 한 줄로 말한다",
+    typeof lockNote === "string" && lockNote.indexOf("잠긴") !== -1,
+    lockNote);
+
+  const lockUndo = await mvUndoDepth(page);
+
+  const lockReason = await page.evaluate(() =>
+    window.commitStudioCanvasGroupMove({
+      groupId: "gLock", gestureId: 996, phase: "start",
+      dx: 0, dy: 0,
+      generation: window.getStudioCanvasSelection().generation,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0,
+      requestId: 0
+    }).reason);
+
+  check("★ 잠긴 그룹은 시작 자체가 막힌다",
+    lockReason === "locked", String(lockReason));
+
+  check("★ 잠긴 그룹 거절은 Undo 0칸",
+    (await mvUndoDepth(page)) === lockUndo);
+
+  /* ── 프레임 안 — transform 둘(하나는 회전) ── */
+
+  await selectGroupFolder(page, "gTrans");
+
+  const transMove =
+    await mvMoveGroup(page, frame, false, "gTrans", "mvT1", 30, 18,
+      ["mvT1", "mvT2"]);
+
+  check("★ 같은 프레임의 transform 멤버 둘이 같이 움직인다(회전 포함)",
+    mvSame(transMove.deltas, ["mvT1", "mvT2"], 30, 18).ok,
+    JSON.stringify(transMove.deltas));
+
+  /* ── 프레임 안 — pin 둘 ── */
+
+  await selectGroupFolder(page, "gPin");
+
+  const pinMove =
+    await mvMoveGroup(page, frame, false, "gPin", "mvP1", -26, 20,
+      ["mvP1", "mvP2"]);
+
+  check("★ 같은 프레임의 pin 멤버 둘이 같이 움직인다",
+    mvSame(pinMove.deltas, ["mvP1", "mvP2"], -26, 20).ok,
+    JSON.stringify(pinMove.deltas));
+
+  const pinCanvas = await mvCanvas(page);
+
+  check("★ pin 멤버는 `pin.offset` 으로 저장된다 — 좌표 칸이 생기지 않는다",
+    (() => {
+      const node = pinCanvas.flow.blocks[0].props.elements
+        .find((el) => el.id === "mvP1");
+      return node && node.x === undefined && node.y === undefined &&
+        node.pin && node.pin.offset && node.pin.anchor === "top-right";
+    })());
+
+  /* ── 프레임 안 — pin + transform 섞임 ── */
+
+  await selectGroupFolder(page, "gMix");
+
+  const mixMove =
+    await mvMoveGroup(page, frame, false, "gMix", "mvM1", 22, -14,
+      ["mvM1", "mvM2"]);
+
+  check("★ 한 프레임 안의 transform + pin 이 **같은 거리**로 움직인다",
+    mvSame(mixMove.deltas, ["mvM1", "mvM2"], 22, -14).ok,
+    JSON.stringify(mixMove.deltas));
+
+  /* ── 원자적 실패 ── */
+
+  await selectGroupFolder(page, "gMix");
+
+  const atomicUndo = await mvUndoDepth(page);
+
+  const atomicBefore = await mvCanvas(page);
+
+  const atomicReason = await page.evaluate(() => {
+
+    /* 계획을 만드는 함수 하나를 잠시 실패시키면, 이미 만들어진
+       다른 멤버의 계획도 **적용되지 않아야** 한다 */
+    const real = window.writeSkinHomeCanvasV2NodePinOffset;
+
+    window.writeSkinHomeCanvasV2NodePinOffset =
+      () => ({ ok: false, reason: "test-fail" });
+
+    const open = {
+      generation: window.getStudioCanvasSelection().generation,
+      revision: (typeof studioWorkingRevision === "number") ? studioWorkingRevision : 0
+    };
+
+    window.commitStudioCanvasGroupMove({
+      groupId: "gMix", gestureId: 997, phase: "start",
+      dx: 0, dy: 0, ...open, requestId: 0
+    });
+
+    const out =
+      window.commitStudioCanvasGroupMove({
+        groupId: "gMix", gestureId: 997, phase: "end",
+        dx: 12, dy: 8, ...open, requestId: 6
+      }).reason;
+
+    window.writeSkinHomeCanvasV2NodePinOffset = real;
+
+    return out;
+
+  });
+
+  check("★ 하나라도 실패하면 전부 무변경이다",
+    atomicReason === "test-fail" &&
+      JSON.stringify(await mvCanvas(page)) === JSON.stringify(atomicBefore),
+    String(atomicReason));
+
+  check("★ 원자적 실패는 Undo 0칸",
+    (await mvUndoDepth(page)) === atomicUndo);
+
+  check("pageerror 0", page.__errors.length === 0,
+    page.__errors.slice(0, 2).join(" | "));
+
+  await close(page);
+
+
+  /* ── Save · Export/Import · Publish resolve ── */
+
+  const round = await openMove(browser, {});
+
+  await selectGroupFolder(round.page, "gOver");
+
+  await mvDragMember(round.page, round.frame, false, "mvA", 36, 20);
+
+  const roundCanvas = await mvCanvas(round.page);
+
+  const roundTrip = await round.page.evaluate(async () => {
+
+    const exported = window.buildSkinPackageExport(currentWorkingSkin);
+
+    if (!exported.ok) return { ok: false, message: exported.message };
+
+    const result =
+      await window.validateSkinPackageImport(
+        window.serializeSkinPackageExport(exported.skinPackage));
+
+    if (!result.ok) return { ok: false, message: result.message };
+
+    const entry =
+      result.skinPackage.regions.find((r) => r && r.name === "home_canvas");
+
+    return { ok: true, canvas: JSON.stringify(entry.canvas) };
+
+  });
+
+  check("★ Export → Import 왕복에서 옮긴 자리가 그대로다",
+    roundTrip.ok && roundTrip.canvas === JSON.stringify(roundCanvas),
+    roundTrip.message || "");
+
+  const resolved = await round.page.evaluate(() => {
+
+    const payload =
+      window.resolveSkinHomeCanvas(
+        currentWorkingSkin, currentWorkingSkin.templates.home.html);
+
+    if (!payload) return null;
+
+    const a = payload.overlays.find((el) => el.id === "mvA");
+
+    return { hasGroups: payload.groups !== undefined, x: a ? a.x : null };
+
+  });
+
+  check("★ Publish resolve 에도 옮긴 자리가 실리고 `groups` 는 없다",
+    !!resolved && resolved.hasGroups === false &&
+      Math.abs(resolved.x - roundCanvas.overlays.find((el) => el.id === "mvA").x) < 0.001,
+    JSON.stringify(resolved));
+
+  await round.page.click("#studioSaveButton");
+
+  await round.page.waitForFunction(
+    () => Array.isArray(window.__savedDraftCallsLay) &&
+      window.__savedDraftCallsLay.length > 0,
+    null, { timeout: 15000 }
+  );
+
+  const saved = await round.page.evaluate(() => {
+    const calls = window.__savedDraftCallsLay;
+    return calls[calls.length - 1].p_content;
+  });
+
+  await close(round.page);
+
+  const again = await openStudio(browser, { package: saved });
+
+  await canvasFrame(again, false);
+
+  check("★ Save → 다시 열기에서 옮긴 자리가 글자 단위로 같다",
+    JSON.stringify(await mvCanvas(again)) === JSON.stringify(roundCanvas));
+
+  await close(again);
+
+
+  /* ── 390px 실제 터치 ── */
+
+  const mobile =
+    await openMove(browser, {
+      viewport: { width: 390, height: 780 }, hasTouch: true
+    });
+
+  await selectGroupFolder(mobile.page, "gOver");
+
+  /* ★ 390px 에서 왼쪽 패널은 화면을 통째로 덮는다 — 접어야 Preview
+     의 손잡이를 짚을 수 있다(그 접기는 선택을 바꾸지 않는다). */
+  await mobile.page.evaluate(() => window.collapseStudioLeftPanel());
+
+  await sleep(500);
+
+  await mvBringIntoView(mobile.page, mobile.frame, false, "mvA");
+
+  const touchBefore =
+    await mvRects(mobile.page, mobile.frame, false, ["mvA", "mvB"]);
+
+  const gripBox = await mobile.page.evaluate(() => {
+
+    const host = document.getElementById("studioPreviewFrame");
+    const doc = host.contentDocument;
+    const grip = doc.querySelector("[data-imory-canvas-move-grip]");
+
+    if (!grip || grip.style.display === "none") return null;
+
+    const box = host.getBoundingClientRect();
+    const scale = box.width / (host.offsetWidth || box.width);
+    const r = grip.getBoundingClientRect();
+
+    return {
+      x: box.left + (r.left + r.width / 2) * scale,
+      y: box.top + (r.top + r.height / 2) * scale
+    };
+
+  });
+
+  check("★ 390px 에서도 그룹 이동 손잡이가 보인다",
+    !!gripBox, JSON.stringify(gripBox));
+
+  if (gripBox) {
+
+    const cdp =
+      await mobile.page.context().newCDPSession(mobile.page);
+
+    const touch = async (type, x, y) =>
+      cdp.send("Input.dispatchTouchEvent", {
+        type: type,
+        touchPoints:
+          type === "touchEnd" ? [] : [{ x: x, y: y, id: 1 }]
+      });
+
+    await touch("touchStart", gripBox.x, gripBox.y);
+
+    for (let i = 1; i <= 6; i += 1) {
+      await touch("touchMove", gripBox.x + (30 * i) / 6, gripBox.y + (18 * i) / 6);
+      await sleep(40);
+    }
+
+    await touch("touchEnd", 0, 0);
+
+    await sleep(900);
+
+    const touchAfter =
+      await mvRects(mobile.page, mobile.frame, false, ["mvA", "mvB"]);
+
+    const touchDelta = {
+      a: mvDelta(touchBefore, touchAfter, "mvA"),
+      b: mvDelta(touchBefore, touchAfter, "mvB")
+    };
+
+    const touchState = await mvFrameState(mobile.frame);
+
+    check("★ 390px 에서도 터치가 그룹 제스처를 시작했다",
+      !!touchState && touchState.groupMoveCount >= 1,
+      touchState
+        ? JSON.stringify({
+            gate: touchState.lastGroupGate,
+            count: touchState.groupMoveCount
+          })
+        : "null");
+
+    check("★ 390px 실제 터치로 그룹이 함께 움직인다",
+      !!touchDelta.a && !!touchDelta.b &&
+        Math.abs(touchDelta.a.x - 30) <= 2 && Math.abs(touchDelta.a.y - 18) <= 2 &&
+        Math.abs(touchDelta.a.x - touchDelta.b.x) <= 1 &&
+        Math.abs(touchDelta.a.y - touchDelta.b.y) <= 1,
+      JSON.stringify(touchDelta));
+
+    const scrolled = await mobile.page.evaluate(() =>
+      ({ x: window.scrollX, page: document.documentElement.scrollWidth }));
+
+    check("★ 끄는 동안 페이지가 가로로 밀리지 않는다",
+      scrolled.x <= 0, JSON.stringify(scrolled));
+
+  }
+
+  check("pageerror 0 (390px)", mobile.page.__errors.length === 0,
+    mobile.page.__errors.slice(0, 2).join(" | "));
+
+  await close(mobile.page);
+
+
+  /* ── sandbox parity ── */
+
+  const box = await openMove(browser, { sandbox: true });
+
+  await selectGroupFolder(box.page, "gOver");
+
+  const boxState = await mvFrameState(box.frame);
+
+  check("★ sandbox 프레임도 그룹을 받았다",
+    !!boxState && boxState.groupActive === true && boxState.groupId === "gOver",
+    boxState ? String(boxState.groupGate) : "null");
+
+  const boxMove =
+    await mvMoveGroup(box.page, box.frame, true, "gOver", "mvA", 40, 26,
+      ["mvA", "mvB", "mvMid"]);
+
+  const boxAfterState = await mvFrameState(box.frame);
+
+  check("★ sandbox 에서도 그룹 제스처가 실제로 돌았다",
+    !!boxAfterState && boxAfterState.groupMoveCount >= 1,
+    boxAfterState
+      ? JSON.stringify({
+          gate: boxAfterState.lastGroupGate,
+          count: boxAfterState.groupMoveCount,
+          settle: boxAfterState.lastGroupSettle
+        })
+      : "null");
+
+  check("★ sandbox 에서도 멤버 둘이 같이 움직인다",
+    mvSame(boxMove.deltas, ["mvA", "mvB"], 40, 26).ok,
+    JSON.stringify(boxMove.deltas));
+
+  check("★ sandbox 에서도 그룹 밖 요소는 그대로다",
+    boxMove.deltas.mvMid &&
+      Math.abs(boxMove.deltas.mvMid.x) <= 0.5 &&
+      Math.abs(boxMove.deltas.mvMid.y) <= 0.5,
+    JSON.stringify(boxMove.deltas.mvMid));
+
+  const boxCanvas = await mvCanvas(box.page);
+
+  check("★ native ↔ sandbox 가 같은 화면 거리를 그린다",
+    ["mvA", "mvB"].every(
+      (id) =>
+        Math.abs(boxMove.deltas[id].x - nativeOverlayDeltas[id].x) <= 1 &&
+        Math.abs(boxMove.deltas[id].y - nativeOverlayDeltas[id].y) <= 1),
+    JSON.stringify({ sandbox: boxMove.deltas.mvA, native: nativeOverlayDeltas.mvA }));
+
+  check("★ native ↔ sandbox 가 같은 저장값을 만든다",
+    JSON.stringify(boxCanvas.overlays.find((el) => el.id === "mvA")) ===
+      JSON.stringify(nativeOverlayStored),
+    JSON.stringify(boxCanvas.overlays.find((el) => el.id === "mvA")));
+
+  check("★ sandbox 이동도 Undo 한 칸이다",
+    (await mvUndoDepth(box.page)) >= 1);
+
+  const parentCsp =
+    await box.page.evaluate(() => (window.__cspViolations || []).slice());
+
+  const frameCsp = await cspViolations(box.frame);
+
+  check("★ CSP 위반 0 (부모)", parentCsp.length === 0,
+    JSON.stringify(parentCsp.slice(0, 2)));
+
+  check("★ CSP 위반 0 (프레임)", frameCsp.length === 0,
+    JSON.stringify(frameCsp.slice(0, 2)));
+
+  check("pageerror 0 (sandbox)", box.page.__errors.length === 0,
+    box.page.__errors.slice(0, 2).join(" | "));
+
+  await close(box.page);
 
 }
 

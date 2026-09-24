@@ -127,6 +127,9 @@ import {
   sendSandboxInspectPreview,
   sendSandboxCanvasSelect,
   sendSandboxCanvasGeometry,
+
+  /* HOME-CANVAS-GROUP-1B */
+  sendSandboxCanvasGroup,
   sendSandboxCanvasProbe,
   destroySandboxSkinFrame,
   copySandboxSidesSetting,
@@ -203,6 +206,13 @@ let sandboxCanvasSelection =
    사정이라 같은 자리에서 기억하고 같은 자리에서 다시 보낸다. */
 
 let sandboxCanvasGeometry =
+  null;
+
+
+/* HOME-CANVAS-GROUP-1B — 그룹 선택 한 벌. 좌표와 같은 사정이라 같은
+   자리에서 기억하고 같은 자리에서 다시 보낸다. */
+
+let sandboxCanvasGroup =
   null;
 
 
@@ -1217,6 +1227,36 @@ function handleSandboxInspect(kind, payload) {
   }
 
 
+  /*
+    HOME-CANVAS-GROUP-1B — 프레임의 그룹 이동 **확정 요청**.
+
+    여기서도 해석하지 않는다 — 프로토콜이 이미 모양을 본 그 칸들을
+    그대로 새 리터럴로 옮겨 Studio 로 올린다. 그 delta 를 실제로
+    써도 되는지(그룹 · 멤버 · 선택 · 순번 · revision)는 Studio 가
+    자기 draft 로 정한다
+    (studio/inspector/studio-canvas-selection.js
+     commitStudioCanvasGroupMove).
+  */
+  if (kind === "canvas-group-move") {
+
+    sandboxInspectRelay({
+      type: "preview:canvas-group-move",
+      remote: true,
+      groupId: payload.groupId,
+      gestureId: Number.isInteger(payload.gestureId) ? payload.gestureId : 0,
+      phase: payload.phase,
+      dx: payload.dx,
+      dy: payload.dy,
+      generation: Number.isInteger(payload.generation) ? payload.generation : 0,
+      revision: Number.isInteger(payload.revision) ? payload.revision : 0,
+      requestId: Number.isInteger(payload.requestId) ? payload.requestId : 0
+    });
+
+    return;
+
+  }
+
+
   if (kind === "select") {
 
     const selected =
@@ -1381,6 +1421,9 @@ export function setSandboxPreviewInspectMode(enabled) {
 
     /* HOME-CANVAS-TRANSFORM-1A — 좌표도 같이 버린다 */
     sandboxCanvasGeometry = null;
+
+    /* HOME-CANVAS-GROUP-1B — 그룹도 같이 버린다 */
+    sandboxCanvasGroup = null;
   }
 
   if (!hasSandboxPreviewFrame()) {
@@ -1511,6 +1554,37 @@ export function setSandboxPreviewCanvasGeometry(geometry) {
   }
 
   return sendSandboxCanvasGeometry(sandboxHandle, value);
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 그룹 선택 한 벌을 프레임으로
+
+   setSandboxPreviewCanvasGroup(group) -> boolean
+
+   ★ 여기서 판단하지 않는다. "지금 고른 것이 그 그룹인가 · 잠긴
+     멤버가 있는가"는 Studio 가 자기 draft 에서 이미 정했다
+     (studio/inspector/studio-canvas-selection.js). 이 함수는 좌표
+     메시지와 똑같이 **옮기기만** 한다.
+========================================================== */
+
+export function setSandboxPreviewCanvasGroup(group) {
+
+  const value =
+    (group && typeof group === "object")
+      ? group
+      : { active: false, locked: false, generation: 0, revision: 0 };
+
+  /* ★ 기억해 두는 값에는 답 번호를 남기지 않는다(위 geometry 의 ★) */
+  sandboxCanvasGroup =
+    { ...value, answering: 0 };
+
+  if (!hasSandboxPreviewFrame()) {
+    return false;
+  }
+
+  return sendSandboxCanvasGroup(sandboxHandle, value);
 
 }
 
@@ -1659,6 +1733,11 @@ function flushSandboxInspectState() {
        여기서 다시 주지 않으면 이동이 켜지지 않는다. */
     if (sandboxCanvasGeometry) {
       sendSandboxCanvasGeometry(sandboxHandle, sandboxCanvasGeometry);
+    }
+
+    /* HOME-CANVAS-GROUP-1B — 그룹 선택도 같은 사정이다 */
+    if (sandboxCanvasGroup) {
+      sendSandboxCanvasGroup(sandboxHandle, sandboxCanvasGroup);
     }
 
   }

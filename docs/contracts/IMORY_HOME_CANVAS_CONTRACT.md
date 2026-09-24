@@ -44,9 +44,13 @@
 > `HOME-CANVAS-GROUP-1A`(2026-09-23, **영구 그룹의 저장 · Layers 폴더 ·
 > 만들기/해제/넣기/빼기/이름 변경/삭제** — §38. `canvas.groups` 새 칸
 > 하나이고 **렌더러 · sandbox 봉투 · v1 계약 무변경**이다 — 그룹은 실행
-> payload 에 실리지 않는다).
+> payload 에 실리지 않는다) ·
+> `HOME-CANVAS-GROUP-1B`(2026-09-24, **그룹 전체 이동** — §39. 새 sandbox
+> 메시지 둘(`IMORY_CANVAS_GROUP` · `IMORY_CANVAS_GROUP_MOVE`)과 끄는 동안만
+> 쓰는 화면 px 두 칸이 늘었고, **저장 구조 · 렌더 payload · v1 계약은
+> 무변경**이다).
 > 로드맵: [IMORY_HOME_CANVAS_ROADMAP.md](../plans/IMORY_HOME_CANVAS_ROADMAP.md) — **PLAN**.
-> 그룹 설계: [IMORY_HOME_CANVAS_GROUP_DESIGN.md](../plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md) — **PLAN**(1B · 1C 가 남았다).
+> 그룹 설계: [IMORY_HOME_CANVAS_GROUP_DESIGN.md](../plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md) — **PLAN**(1C 가 남았다).
 
 관련 코드
 
@@ -6516,7 +6520,9 @@ Undo 는 working skin 전체 스냅샷 한 칸이므로(§17-6) **커밋 하나�
 
 ### 38-13. 이 라운드가 만들지 않은 것
 
-**그룹 전체의 이동 · 크기 조절 · 회전**(`GROUP-1B` · `1C`) · **그룹 단위
+★ **이동은 `GROUP-1B` 에서 열렸다(§39).** 아래 목록의 나머지는 그대로다.
+
+**그룹 전체의 이동(→ §39) · 크기 조절 · 회전**(`GROUP-1C`) · **그룹 단위
 순서 이동** · 그룹의 `hidden`/`locked` 칸 · **중첩 그룹** · 좌표 공간을
 넘는 그룹 이동 · v1 캔버스의 그룹 · 새 sandbox 메시지 · 렌더러 변경 ·
 migration · `APP_BUILD_VERSION` 변경(배포하지 않았다).
@@ -6536,3 +6542,244 @@ migration · `APP_BUILD_VERSION` 변경(배포하지 않았다).
   채로 오고, 그다음 그룹 동작이 그것을 고친다.
 - **v1 캔버스에는 그룹이 없다.** v1 에서 `groups` 는 모르는 칸이고 Layers 도
   v2 에서만 트리를 그린다.
+
+
+---
+
+## 39. 그룹 전체 이동 (`HOME-CANVAS-GROUP-1B`)
+
+Layers 의 폴더를 고른 뒤 Preview 에서 멤버를 끌면 **그 그룹의 모든 멤버가
+같은 화면 거리만큼** 함께 움직인다. 크기 조절 · 회전 · 순서 이동 · 중첩은
+이 라운드에 없다(`GROUP-1C`).
+
+설계: [docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md](../plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md) §4-5
+
+### 39-1. 무엇이 열렸고 무엇이 아직인가
+
+| | 상태 |
+| --- | --- |
+| 그룹 전체 이동(마우스 · 터치 · native · sandbox) | **열렸다** |
+| 그룹 크기 조절 · 회전 | 아직(`GROUP-1C`) |
+| 그룹 단위 순서 이동 · 그룹 안팎 구조 drag · 중첩 그룹 | 아직 |
+| 그룹의 `hidden` · `locked` 칸 | 만들지 않는다(§38-11) |
+
+### 39-2. 입력의 주인 — 왜 Moveable 의 그룹 drag 가 아닌가
+
+0.53.0 의 `MoveableGroup` 은 드래그를 받을 요소를 이렇게 고른다(번들 실측 —
+`Rs()` · `MoveableGroup._updateTargets`).
+
+```text
+  _originalDragTarget = props.dragTarget || areaElement
+  gesto 를 붙이는 목록 = [ controlBox ]
+  그리고 `dragArea && !dragTarget` 이면 그 드래그 요소를 목록에 더하지 않는다
+```
+
+이 저장소의 control box 는 `pointer-events: none` 이라(§15) 그 목록에 실제
+입력이 닿지 않는다. `dragTarget` 을 주면 그 줄이 되살아나지만 두 가지가
+막는다 — `dragArea` 를 끄면 MoveableGroup 이 mount 중에 죽고(§18-13),
+`dragTarget` 은 요소 **하나**라 "고른 멤버 아무 곳에서나 끈다"가 되지 않는다.
+
+그래서 **그룹 drag 의 입력은 편집 runtime 이 갖는다**
+(`skin/skin-home-canvas-editor-runtime.js` — window capture 의 pointerdown ·
+pointermove · pointerup). Moveable 은 지금까지처럼 **표시 전용**이다:
+`renderDirections: []` · `rotationPosition: "none"` · 그룹 외곽선 유지.
+그 외곽선은 따라가기 루프가 `updateRect()` 로 멤버를 다시 재어 함께 움직인다.
+
+**pointerdown 의 소유권을 가져오는 이유**는 sandbox 다. 그쪽 Inspector 는
+pointerdown 에서 고르므로(`skin/sandbox/skin-sandbox-inspect.js`), 그대로 두면
+멤버를 누르는 순간 그 자식 하나가 선택이 되어 그룹 선택이 풀린다. 그래서
+멤버 위의 pointerdown 은 전파를 끊고, **끌지 않은 클릭의 뜻은 runtime 이
+되돌려 준다** — 그대로 뗐으면 그 멤버 하나를 기존 제안 관문으로 제안한다
+(지금까지의 클릭 규칙과 같은 결과다).
+
+손가락은 §17-2 · §30-2 그대로다 — **본체를 끌지 않고 이동 손잡이만** 끈다.
+그래서 그룹 선택에도 이동 손잡이가 나오고(멤버 바깥 상자의 왼쪽 위 기준),
+그 자리에는 `touch-action: none` 이 걸려 있다.
+
+### 39-3. 메시지 — 새 종류 둘
+
+```text
+  canvas-group       parent -> frame
+    { active, groupId, baseWidth, locked, generation, revision, answering }
+
+  canvas-group-move  frame  -> parent
+    { groupId, gestureId, phase, dx, dy, generation, revision, requestId }
+```
+
+sandbox 봉투의 이름은 `IMORY_CANVAS_GROUP` · `IMORY_CANVAS_GROUP_MOVE` 이고,
+기존 origin · source · frame · renderSeq 관문을 그대로 지난다.
+
+- **멤버 명단은 내려가지 않는다.** `canvas.groups` 는 실행 payload 에 실리지
+  않고(§38-1) 이 봉투에도 `groups` 칸이 없다. 프레임이 옮길 대상은 이미
+  `canvas-select` 가 확정한 그 id 들이다.
+- **올라오는 숫자는 공통 delta 하나**다(`dx` · `dy`). 단위는 **도화지 자**이고,
+  그 자를 만드는 `baseWidth` 는 부모가 내려 준다 — 프레임은 DOM 에서 그
+  숫자를 되풀지 않는다(§14 의 소유권).
+- **`phase` 는 셋뿐이다** — `start` · `end` · `cancel`. 끄는 동안의 중간
+  보고가 없는 이유는 단일 이동과 같다: 화면은 프레임이 그리고, 저장은 끝에
+  한 번이다.
+- **`requestId` 는 `end` 에만** 있고, 그 답이 `canvas-group` 의 `answering`
+  으로 돌아온다(§17-8 과 같은 규칙).
+- **`locked` 가 참이면 `active` 는 거짓**이다. 잠긴 멤버가 있는 그룹은 시작
+  자체가 막힌다(§39-7).
+
+### 39-4. 부모의 확정 관문
+
+`commitStudioCanvasGroupMove(request)`
+(`studio/inspector/studio-canvas-selection.js`)
+
+제스처 하나에 **열린 칸 한 개**를 둔다.
+
+| phase | 하는 일 |
+| --- | --- |
+| `start` | 지금의 그룹 · 멤버 명단 · 좌표 공간 · 순번 · revision 을 한 칸에 적는다. draft 는 한 글자도 바뀌지 않는다. |
+| `end` | 그 칸과 **정확히** 맞을 때만 쓴다. 쓰든 못 쓰든 칸을 비운다 — 같은 번호의 `end` 가 한 번 더 와도 열린 칸이 없어 아무 일도 하지 않는다. |
+| `cancel` | 칸을 비운다. |
+
+`end` 가 통과하려면 전부 참이어야 한다.
+
+- Studio 가 편집 중이고 HOME Canvas **v2** 다
+- 지금 선택이 **정확히 그 group** 이다(`studioCanvasSelectedGroup`)
+- 그 group 이 지금 draft 에 있고 멤버가 전부 **같은 좌표 공간**이다(§38-2)
+- 잠긴 멤버가 없다
+- 멤버 명단이 **시작 때와 글자 단위로 같다**
+- `generation` 과 `revision` 이 시작 때와 같고, **지금 값과도** 같다
+
+**왜 `revision` 인가.** 선택 순번(`generation`)은 고른 것이 바뀔 때만 오른다.
+멤버가 전부 살아남은 재조정은 순번을 올리지 않으므로
+(`reconcileStudioCanvasSelection`), 그것만으로는 "제스처 도중에 draft 가
+바뀌었다"를 잡을 수 없다. Undo · Redo · 구조 변경 · Import · AI 적용은 전부
+`studioWorkingRevision` 을 올린다.
+
+프레임 쪽도 같은 값을 본다 — `canvas-group` 이 다른 `groupId` · `generation` ·
+`revision` 을 들고 오거나 `active:false` 가 되면 그 자리에서 제스처를 접는다
+(선택 변경 · 그룹 해제 · 멤버 넣기/빼기 · Undo/Redo · 재렌더 · 화면 전환 ·
+native ↔ sandbox 전환이 전부 이 길로 온다).
+
+### 39-5. 좌표 — 공통 delta 를 멤버의 자로
+
+프레임은 **도화지 자의 delta 하나**만 보고한다. 부모가 멤버 m 마다:
+
+```text
+  space = studioCanvasV2Space(m)          그 멤버의 자와 지금 값
+
+  unitScale(m) = 1                        m 이 overlay
+               = S_frame × pageScale      m 이 프레임 내부 `transform`
+               = pageScale                m 이 프레임 내부 `pin`
+
+  next  = { x: round(space.x + dx / unitScale),
+            y: round(space.y + dy / unitScale) }
+
+  plan  = planStudioCanvasV2Transform("v2-move", m, next,
+                                      { x: space.x, y: space.y })
+```
+
+`unitScale` 은 "이 자의 한 칸이 도화지 좌표로 몇인가"이고
+`studioCanvasV2Space()` 가 자와 함께 돌려준다 — 자를 만드는 곳은 여전히 한
+곳이다(§26-3). `plan` 이 `x`·`y` 를 쓸지 `pin.offset` 두 칸을 쓸지는 그
+번역이 이미 안다(§26-4) — **새 좌표 수식을 하나도 만들지 않는다.**
+
+`pageScale` 은 §30-3 의 그 값이다(데스크톱 최대 폭이 켜져 프레임이 저장값보다
+좁게 그려질 때만 1 이 아니다).
+
+같은 프레임 안에서 `transform` 과 `pin` 이 섞여 있어도 **화면에서는 정확히
+같은 거리**를 움직인다(2026-09-24 실측: 요청 22px·−14px 에 두 멤버 모두
+22px·−14px).
+
+**반올림은 저장 직전 한 번**이다. 나누고 더하는 동안에는 배정도를 유지하고,
+자 위의 최종 값에만 좌표의 자릿수 규칙(소수 셋째 자리)을 쓴다.
+
+### 39-6. 원자성과 경계
+
+계획을 **전부 만든 뒤에** 한 번에 적용한다.
+
+- 멤버를 하나라도 찾을 수 없음 → 전부 무변경
+- 좌표 공간 불일치 → 전부 무변경
+- transform 계획 실패 · 순수 writer 의 거절 → 전부 무변경
+- `dx === 0 && dy === 0` → 무변경 · Undo 0칸
+
+적용은 `writeStudioCanvasElementChanges(steps)` 하나다
+(`studio/studio-preview.js`). 순수 writer 는 regions 를 받아 **새 regions 를
+돌려주는** 함수라(`skin/skin-home-canvas-write-v2.js`) 그대로 이어 붙일 수
+있고, 현재 draft 는 전부 성공한 뒤에 한 번만 바뀐다. 멤버마다 단일 확정
+함수를 여러 번 부르는 길은 **금지**다 — Undo 가 여러 칸이 되고 절반만
+옮겨진 그룹이 남는다.
+
+**경계 제한은 멤버마다 자르지 않는다.** §30-4-1 의 페이지 가장자리 clamp 는
+`unit="cqw"` 인 페이지 자유 장식에만 있는데, 그룹에서 멤버마다 자르면 모양이
+찌그러진다. 그래서 각 멤버가 허용하는 delta 구간을 **교집합**으로 모아 제스처
+전체에 **공통 delta 하나**로 적용한다(`groupPageDeltaBounds` — 자는 화면 px
+하나이고, 식은 `render.css` §7 의 `clamp()` 두 끝 그대로다). 교집합은 언제나
+0 을 품는다 — 각 멤버의 지금 자리가 이미 자기 범위 안이기 때문이다. 프레임
+내부 멤버만 있는 그룹에는 이 규칙이 없다(그쪽의 넘침 기준은 화면이 아니라
+프레임이다).
+
+### 39-7. `locked` · `hidden` 멤버
+
+| | 규칙 |
+| --- | --- |
+| 잠긴 멤버가 **하나라도** 있다 | 그룹 이동 **금지**. 시작 자체가 막히고 draft · Undo 0칸 |
+| 안내 | Layers 의 상태 줄 한 줄 — "잠긴 레이어를 먼저 풀어야 그룹을 움직일 수 있습니다." |
+| 숨은 멤버 | 그룹 소속 그대로이고 **같은 delta 로 함께 이동**한다(DOM target 이 없어도 저장 geometry 를 기준으로 옮긴다) |
+| 숨은 멤버 때문에 그룹에서 빠지거나 자동 해제 | **없다** |
+| 고를 수 있는 멤버가 하나도 없다 | 그룹 선택이 성립하지 않아 drag 진입이 없다 |
+
+이 규칙을 성립시키려고 `studioCanvasGroupInfo()` 가 `live` 와 **`pickable`**
+을 가른다. 선택 제안 관문은 hidden · locked 요소를 만나면 제안 전체를
+버리므로(`proposeStudioCanvasSelection`), 폴더 행은 `pickable` 을 제안하고
+`studioCanvasSelectedGroup()` 도 `pickable` 로 대조한다. **옮기는 것은 여전히
+`live` 전부**다. 둘 다 없는 그룹에서는 두 값이 같아 §38 과 한 글자도 다르지
+않다.
+
+### 39-8. 끄는 동안의 화면과 확정
+
+끄는 동안 바뀌는 것은 멤버마다 **화면 px 두 칸**이다
+(`--imory-canvas-drag-x` · `--imory-canvas-drag-y` —
+`skin/skin-home-canvas-render.js` §0-4). 그 두 칸은 `transform` 사슬의 **맨
+앞**에 있어 요소 부모의 좌표계에서 풀리므로, 회전한 멤버도 회전하지 않은
+멤버와 정확히 같은 화면 거리를 움직인다.
+
+- 자가 **하나**라 overlay · 프레임 내부 `transform` · `pin` 이 섞인 그룹에서도
+  멤버마다 환산할 것이 없다(프레임이 자를 한 벌 더 갖지 않는다).
+- 저장값 · Canvas JSON · Undo 는 끄는 동안 한 글자도 바뀌지 않는다.
+- `move` 마다 기록하지 않는다. `end` 에서 한 번 확정하고, 성공하면 dirty ·
+  revision · 재렌더 · Undo 가 **정확히 한 번**이다.
+- 취소(Escape · pointercancel · 선택 변경 · 재렌더)는 그 두 칸을 지우는 것
+  하나다 — 시작 자리로 완전히 돌아온다.
+- 확정을 보낸 뒤에는 임시 값을 **그대로 둔 채** 답을 기다린다. 승인이면 곧
+  오는 재렌더가 새 DOM 을 만들어 그 칸이 아예 없어지고, 거부면 답
+  (`answering`)이 그 칸을 걷는다. 답이 오지 않으면 상한 시간(4초)이 걷는다.
+
+### 39-9. 선택 · 외곽선
+
+이동 중과 이동 후에 그대로다 — 선택 group id · Layers 폴더 선택 · 폴더 접힘 ·
+그룹 이름 · 자식 배열 순서 · `canvas.groups.members` 순서. 그룹 외곽선은
+Moveable 이 멤버를 다시 재어 최종 자리에 맞고, 부모의 축 평행 상자는
+`frameActive` 보고로 내려간 채다(§33).
+
+이동은 **좌표만** 바꾼다. 다음은 글자 단위로 같다 — `groups` · 멤버의
+`type`/`props` · `flow` · `overlay` 배열 순서 · `main_visual` 의 element 배열
+순서 · 모르는 미래 필드.
+
+### 39-10. Undo 칸 수
+
+| 상황 | Undo |
+| --- | --- |
+| 그룹 drag 한 번 성공(move 이벤트가 몇 번이든) | **1** |
+| 시작 자리로 돌아와 끝냄 · 끌지 않은 클릭 | **0** |
+| 잠금으로 시작 거절 · stale · cancel · 저장 검증 실패 | **0** |
+
+Undo 한 번이면 모든 멤버가 시작 자리로, Redo 한 번이면 모든 멤버가 최종
+자리로 돌아간다(working skin 스냅샷 한 칸 — §17-6).
+
+### 39-11. 남은 차이
+
+- **고를 수 있는 멤버가 둘 미만인 그룹은 그룹 선택이 되지 않는다.** 하나만
+  고를 수 있으면 "자식 하나를 고른 것"과 구분할 수 없어서다(§39-7 의 그
+  판정). 그런 그룹은 이동도 되지 않는다.
+- **그룹 크기 조절 · 회전이 없다**(`GROUP-1C`). Canvas 패널의 안내가 그 둘만
+  남겨 말한다.
+- **페이지 경계 clamp 는 overlay 그룹에만** 있다. 프레임 내부 그룹은 프레임
+  밖으로 나가도 잘리지 않는다(§24-6 의 그 기준 그대로다).
+- **이 라운드는 migration 도 `APP_BUILD_VERSION` 변경도 하지 않았고 배포하지
+  않았다.**

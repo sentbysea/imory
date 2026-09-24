@@ -394,9 +394,17 @@ check("[msg] buildSandboxMessage 는 모르는 type 에 null 을 준다",
     CANVAS_BOX — 그 답. 도화지 · 흐름 블록 · 프레임의 **픽셀**
     상자다. CANVAS_LAYOUT 의 분수로는 "손가락이 도화지의 어디인가"
     를 풀 수 없기 때문이고, 그 값은 스크롤 · 배율마다 달라져서
-    주기적으로 올릴 값이 아니다 — 계약 §36-5). */
-check("[msg] 이번 라운드가 아는 type 은 정확히 서른셋이다",
-  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 33,
+    주기적으로 올릴 값이 아니다 — 계약 §36-5),
+   HOME-CANVAS-GROUP-1B 에서 둘이 늘어 서른다섯이다
+   (CANVAS_GROUP — "지금 고른 그 요소들이 **한 그룹**이다"와 그
+    그룹을 끌 때 쓸 도화지 자(`baseWidth`). 멤버 명단은 내려가지
+    않는다 — 옮길 대상은 이미 CANVAS_SELECT 가 확정한 id 들이다.
+    CANVAS_GROUP_MOVE — 그룹 이동의 확정 **요청**. 자리는 셋뿐이고
+    (`start` · `end` · `cancel`) 끄는 동안의 중간 보고가 없다.
+    올라오는 숫자는 도화지 자의 **공통 delta 하나**이며, 멤버마다의
+    환산은 부모가 한다 — 계약 §39). */
+check("[msg] 이번 라운드가 아는 type 은 정확히 서른다섯이다",
+  Object.keys(protocol.SANDBOX_MESSAGE_SPEC).length === 35,
   Object.keys(protocol.SANDBOX_MESSAGE_SPEC).join(", "));
 
 
@@ -1190,6 +1198,130 @@ check("[canvas-layout] ★ look 은 **한 요소**의 것이고 id 형태를 지
   canvasLayoutFrom({
     ...LAYOUT_OK, look: { id: "v2Over", props: { color: "red" }, extra: 1 }
   }).ok === false);
+
+
+/* =========================================================
+   [canvas-group] HOME-CANVAS-GROUP-1B — 그룹 전체 이동 (계약 §39)
+
+   ★ 봉투가 나르는 것은 **셋**뿐이다.
+
+     "지금 고른 그 요소들이 한 그룹이다"(groupId)
+     그 그룹을 끌 때 쓸 도화지 자(baseWidth)
+     제스처 하나의 공통 delta(dx · dy)
+
+   멤버 명단도, 멤버별 저장값도, `canvas.groups` 도 내려가지 않는다.
+========================================================== */
+
+console.log("\n[canvas-group] 그룹 전체 이동 (HOME-CANVAS-GROUP-1B)");
+
+const canvasGroupTo = (payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_GROUP, payload, 1
+      )
+    },
+    {
+      originAllowList: ["https://imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-frame"
+    }
+  );
+
+const canvasGroupMoveFrom = (payload) =>
+  protocol.validateSandboxMessage(
+    {
+      origin: "https://skin.imory.me",
+      source: CANVAS_PARENT_WIN,
+      data: protocol.buildSandboxMessage(
+        protocol.SANDBOX_MESSAGE_TYPES.CANVAS_GROUP_MOVE, payload, 1
+      )
+    },
+    {
+      originAllowList: ["https://skin.imory.me"],
+      source: CANVAS_PARENT_WIN,
+      direction: "to-parent"
+    }
+  );
+
+const GROUP_OK = {
+  contract: 1, renderSeq: 3, active: true, groupId: "gOver",
+  baseWidth: 390, locked: false, generation: 5, revision: 12
+};
+
+check("[canvas-group] 정상 그룹 선택을 프레임이 받는다",
+  canvasGroupTo(GROUP_OK).ok === true);
+
+check("[canvas-group] ★ 해제에는 groupId · baseWidth 칸 자체가 없다",
+  canvasGroupTo({
+    contract: 1, renderSeq: 3, active: false, locked: false,
+    generation: 5, revision: 12
+  }).ok === true &&
+  canvasGroupTo({
+    contract: 1, renderSeq: 3, active: false, locked: false,
+    generation: 5, revision: 12, groupId: "gOver"
+  }).ok === false);
+
+check("[canvas-group] ★ 잠금 표시는 boolean 한 칸이다",
+  canvasGroupTo({ ...GROUP_OK, locked: "yes" }).ok === false);
+
+check("[canvas-group] ★ revision 이 없거나 음수면 거부된다",
+  canvasGroupTo({ ...GROUP_OK, revision: undefined }).ok === false &&
+  canvasGroupTo({ ...GROUP_OK, revision: -1 }).ok === false);
+
+check("[canvas-group] ★ 멤버 명단은 이 봉투로 내려가지 않는다",
+  (() => {
+    const verdict =
+      canvasGroupTo({ ...GROUP_OK, members: ["mvA", "mvB"], groups: [] });
+    return verdict.ok === true &&
+      verdict.payload.members === undefined &&
+      verdict.payload.groups === undefined;
+  })(),
+  "옮길 대상은 이미 CANVAS_SELECT 가 확정한 id 들이다");
+
+check("[canvas-group] ★ 답 번호는 있으면 양의 정수다",
+  canvasGroupTo({ ...GROUP_OK, answering: 4 }).ok === true &&
+  canvasGroupTo({ ...GROUP_OK, answering: 0 }).ok === false);
+
+check("[canvas-group] ★ 프레임은 이 메시지를 부모에게 보낼 수 없다 (방향)",
+  canvasGroupMoveFrom({ ...GROUP_OK }).ok === false);
+
+const GROUP_MOVE_OK = {
+  contract: 1, renderSeq: 3, groupId: "gOver", gestureId: 2,
+  phase: "end", dx: 12.5, dy: -7.25, generation: 5, revision: 12,
+  requestId: 3
+};
+
+check("[canvas-group] 정상 이동 요청을 부모가 받는다",
+  canvasGroupMoveFrom(GROUP_MOVE_OK).ok === true);
+
+check("[canvas-group] ★ 자리는 셋뿐이다 — 끄는 동안의 중간 보고가 없다",
+  canvasGroupMoveFrom({ ...GROUP_MOVE_OK, phase: "start", requestId: 0 }).ok === true &&
+  canvasGroupMoveFrom({ ...GROUP_MOVE_OK, phase: "cancel", requestId: 0 }).ok === true &&
+  canvasGroupMoveFrom({ ...GROUP_MOVE_OK, phase: "move" }).ok === false);
+
+check("[canvas-group] ★ 요청 번호는 `end` 에만 있다",
+  canvasGroupMoveFrom({ ...GROUP_MOVE_OK, requestId: 0 }).ok === false &&
+  canvasGroupMoveFrom({ ...GROUP_MOVE_OK, phase: "start", requestId: 1 }).ok === false);
+
+check("[canvas-group] ★ delta 는 좌표와 같은 자를 쓴다",
+  canvasGroupMoveFrom({ ...GROUP_MOVE_OK, dx: 1e9 }).ok === false &&
+  canvasGroupMoveFrom({ ...GROUP_MOVE_OK, dy: "12" }).ok === false);
+
+check("[canvas-group] ★ 멤버별 값은 이 봉투로 올라오지 않는다",
+  (() => {
+    const verdict =
+      canvasGroupMoveFrom({
+        ...GROUP_MOVE_OK, members: [{ id: "mvA", x: 1, y: 2 }]
+      });
+    return verdict.ok === true && verdict.payload.members === undefined;
+  })(),
+  "올라오는 숫자는 공통 delta 하나뿐이다");
+
+check("[canvas-group] ★ 제스처 식별값이 없으면 거부된다",
+  canvasGroupMoveFrom({ ...GROUP_MOVE_OK, gestureId: 0 }).ok === false);
 
 
 /* =========================================================

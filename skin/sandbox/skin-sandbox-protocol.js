@@ -407,6 +407,44 @@ var SANDBOX_MESSAGE_TYPES = {
 
 
   /* =======================================================
+     HOME-CANVAS-GROUP-1B — 그룹 전체 이동
+
+       CANVAS_GROUP       parent -> frame
+         { renderSeq, active, groupId, baseWidth, locked,
+           generation, revision, answering }
+
+       CANVAS_GROUP_MOVE  frame -> parent
+         { renderSeq, groupId, gestureId, phase, dx, dy,
+           generation, revision, requestId }
+
+     ★ 그룹 JSON 은 프레임에 내려가지 않는다.
+
+     `canvas.groups` 는 실행 payload 에 실리지 않고(계약 §38-1),
+     이 메시지도 멤버 명단을 나르지 않는다. 프레임이 알아야 하는
+     것은 둘뿐이다 — "지금 고른 그 요소들이 한 그룹이다"와 "그
+     그룹을 끌 때 쓸 도화지 자는 이것이다"(`baseWidth`). 옮길
+     대상은 이미 CANVAS_SELECT 로 확정된 그 id 들이다.
+
+     ★ 올라오는 것은 **공통 delta 하나**다.
+
+     멤버마다 자가 다르므로(overlay · 프레임 내부 transform · pin)
+     프레임이 멤버별 저장값을 계산하면 자를 한 벌 더 갖게 된다.
+     그래서 프레임은 도화지 자의 delta 하나만 보고하고, 멤버마다의
+     환산은 부모가 한다(계약 §39-5).
+
+     ★ `phase` 는 셋뿐이다. 끄는 동안의 중간 보고는 없다 — 화면은
+       프레임이 그리고(임시 화면 이동 두 칸), 저장은 `end` 한 번
+       이다. `cancel` 은 부모가 열어 둔 제스처를 닫는다.
+
+     ★ `answering` 은 확정 요청의 **답**일 때만 붙는다
+       (CANVAS_GEOMETRY 와 같은 규칙 · 계약 §17-8).
+  ======================================================= */
+
+  CANVAS_GROUP: "IMORY_CANVAS_GROUP",
+  CANVAS_GROUP_MOVE: "IMORY_CANVAS_GROUP_MOVE",
+
+
+  /* =======================================================
      STUDIO-LAYERS-MATERIALS-1B — 재료를 **끌어다 놓을 자리**
      (계약 §36-5)
 
@@ -703,6 +741,12 @@ var SANDBOX_CANVAS_SELECT_MODES = ["replace", "toggle"];
    (계약 §29-4). 프레임이 보낼 수 있는 확정 요청의 이름은 이 넷뿐이고,
    그 이름이 어느 writer 를 고르는가는 언제나 부모가 정한다. */
 var SANDBOX_CANVAS_TRANSFORM_KINDS = ["move", "resize", "rotate", "width"];
+
+
+/* HOME-CANVAS-GROUP-1B — 그룹 제스처가 알릴 수 있는 자리는 셋뿐이다.
+   끄는 동안의 중간 보고는 없다(위 CANVAS_GROUP_MOVE 주석). */
+
+var SANDBOX_CANVAS_GROUP_PHASES = ["start", "end", "cancel"];
 
 
 /*
@@ -2580,6 +2624,127 @@ var SANDBOX_MESSAGE_SPEC = {
 
 
   /* =======================================================
+     HOME-CANVAS-GROUP-1B — 그룹 선택 한 벌(위 CANVAS_GROUP 주석)
+
+     active:false 면 `groupId` · `baseWidth` 칸 자체가 없다. 그것이
+     "지금은 끌 수 있는 그룹이 없다"이고, CANVAS_SELECT ·
+     CANVAS_GEOMETRY 의 해제와 같은 모양이다.
+  ======================================================= */
+
+  IMORY_CANVAS_GROUP: {
+    direction: "to-frame",
+    keys: [
+      "contract", "renderSeq", "active", "groupId", "baseWidth",
+      "locked", "generation", "revision", "answering"
+    ],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (typeof payload.active !== "boolean") {
+        return false;
+      }
+
+      /* 잠긴 멤버가 하나라도 있는가(계약 §39-7). 있으면 active 는
+         거짓이고, 프레임은 그때 제스처를 시작하지 않는다. */
+      if (typeof payload.locked !== "boolean") {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.generation) || payload.generation < 0) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.revision) || payload.revision < 0) {
+        return false;
+      }
+
+      if (
+        payload.answering !== undefined &&
+        (!Number.isInteger(payload.answering) || payload.answering < 1)
+      ) {
+        return false;
+      }
+
+      if (!payload.active) {
+
+        return (
+          payload.groupId === undefined &&
+          payload.baseWidth === undefined
+        );
+
+      }
+
+      return (
+        isSandboxInspectEditId(payload.groupId) &&
+        isSandboxCanvasSize(payload.baseWidth)
+      );
+
+    }
+  },
+
+
+  /* =======================================================
+     HOME-CANVAS-GROUP-1B — 그룹 이동의 **확정 요청**
+
+     ★ 확정이 아니다. 부모가 지금 draft 로 그룹 · 멤버 · 선택 ·
+       순번 · revision 을 전부 다시 본다(위 CANVAS_GROUP_MOVE 주석).
+
+     ★ `dx` · `dy` 는 **도화지 자**의 공통 delta 하나다. 좌표와 같은
+       자를 쓰므로 범위도 같다(±100000) — 새 숫자 표를 만들지 않는다.
+  ======================================================= */
+
+  IMORY_CANVAS_GROUP_MOVE: {
+    direction: "to-parent",
+    keys: [
+      "contract", "renderSeq", "groupId", "gestureId", "phase",
+      "dx", "dy", "generation", "revision", "requestId"
+    ],
+    check: function (payload) {
+
+      if (!isSandboxRenderSeq(payload.renderSeq)) {
+        return false;
+      }
+
+      if (!isSandboxInspectEditId(payload.groupId)) {
+        return false;
+      }
+
+      if (SANDBOX_CANVAS_GROUP_PHASES.indexOf(payload.phase) === -1) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.gestureId) || payload.gestureId < 1) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.generation) || payload.generation < 0) {
+        return false;
+      }
+
+      if (!Number.isInteger(payload.revision) || payload.revision < 0) {
+        return false;
+      }
+
+      if (!isSandboxCanvasCoord(payload.dx) || !isSandboxCanvasCoord(payload.dy)) {
+        return false;
+      }
+
+      /* 답을 이 번호로 돌려받는다 — **확정을 구하는 `end` 에만**
+         있고, 나머지 자리에서는 0 이다. */
+      if (!Number.isInteger(payload.requestId) || payload.requestId < 0) {
+        return false;
+      }
+
+      return (payload.phase === "end") === (payload.requestId >= 1);
+
+    }
+  },
+
+
+  /* =======================================================
      HOME-CANVAS-V2-ELEMENTS-1 — v2 프레임의 페이지 자리
      (위 CANVAS_LAYOUT 주석)
 
@@ -3089,6 +3254,10 @@ if (typeof module !== "undefined" && module.exports) {
     SANDBOX_CANVAS_MAX_SELECTED,
     SANDBOX_CANVAS_SELECT_MODES,
     SANDBOX_CANVAS_TRANSFORM_KINDS,
+
+    /* HOME-CANVAS-GROUP-1B */
+    SANDBOX_CANVAS_GROUP_PHASES,
+
     isSandboxCanvasIdList,
     isSandboxCanvasPoint,
     isSandboxCanvasHeight,

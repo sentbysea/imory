@@ -59,6 +59,15 @@
 ========================================================== */
 
 /*
+  ★ 맨 앞의 translate 는 **끄는 동안만** 있는 화면 px 다
+    (HOME-CANVAS-GROUP-1B — 그룹 이동의 임시 표시).
+
+  값이 없으면 `0px` 이라 지금까지의 행렬과 한 글자도 같다. 맨 앞에
+  두는 이유는 그 자리의 translate 가 **요소 부모의 좌표계**에서
+  풀리기 때문이다 — 회전한 멤버도 회전하지 않은 멤버와 정확히 같은
+  화면 거리를 움직인다. 뒤의 백분율 translate 는 요소 **자기 상자**
+  기준이라 이 항이 앞에 와도 그 몫이 달라지지 않는다.
+
   ★ translate 가 rotate **앞**에 있다(HOME-CANVAS-V2-MAIN-VISUAL-1).
 
   `main_visual` 의 `pin` 요소는 "장식 자신의 어느 점을 그 자리에
@@ -78,6 +87,7 @@
   top: var(--imory-canvas-y, 0%);
   width: var(--imory-canvas-width, 0%);
   transform:
+    translate(var(--imory-canvas-drag-x, 0px), var(--imory-canvas-drag-y, 0px))
     translate(var(--imory-canvas-translate-x, 0%), var(--imory-canvas-translate-y, 0%))
     rotate(var(--imory-canvas-rotation, 0deg));
 }

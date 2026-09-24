@@ -971,6 +971,35 @@ export function createHomeCanvasSelectionFrame(options) {
     pending: null,
     pendingTimer: 0,
 
+    /* =====================================================
+       HOME-CANVAS-GROUP-1B — 그룹 전체 이동
+
+       group        부모가 내려 준 그룹 선택 한 벌(setGroup).
+                    프레임은 그룹 JSON 도 멤버 명단도 갖고 있지
+                    않다 — 필요한 것은 "지금 고른 것이 이 그룹이다 ·
+                    도화지 자는 이것이다" 둘뿐이다.
+
+       groupDrag    지금 진행 중인 그룹 제스처. 시작 clientX/Y 와
+                    멤버 노드 목록을 들고 있고, 매 프레임 그
+                    시작값과의 차이를 **화면 px** 로 쓴다.
+
+       groupPress   아직 끌지 않은 누름. 그대로 떼면 그것은 클릭
+                    이고, 그때의 선택 규칙을 우리가 되돌려 준다.
+
+       groupPending 확정을 올려보내고 답을 기다리는 중.
+    ====================================================== */
+
+    group: null,
+    groupDrag: null,
+    groupPress: null,
+    groupPending: null,
+    groupPendingTimer: 0,
+    groupSeq: 0,
+    groupMoveCount: 0,
+    lastGroupGate: "",
+    lastGroupCommit: null,
+    lastGroupSettle: "",
+
     /* 확정 요청마다 하나씩 오른다. 부모는 답에 이 번호를 달아
        돌려주고, 프레임은 **자기 번호와 같은 답**에만 반응한다 —
        좌표 메시지는 이 답 말고도 나오기 때문이다(계약 §17-8). */
@@ -1526,6 +1555,35 @@ export function createHomeCanvasSelectionFrame(options) {
     }
 
     /* =====================================================
+       HOME-CANVAS-GROUP-1B — 그룹을 끄는 동안에는 **재기만** 한다.
+
+       단일 제스처와 사정이 다르다. 거기서는 Moveable 이 자기
+       계산으로 테두리를 옮기지만, 그룹 이동의 입력은 Moveable 이
+       모른다(위 그룹 절의 머리말) — 그래서 그 외곽선을 우리가
+       `updateRect()` 로 따라오게 한다.
+
+       target 을 다시 대입하지는 않는다(setMoveableTarget). 멤버는
+       그대로이고, 매 프레임 새 배열을 넣으면 그룹이 통째로 다시
+       mount 될 수 있다.
+    ====================================================== */
+    if (state.groupDrag && state.groupDrag.moved) {
+
+      try {
+        state.moveable.updateRect();
+        markResizeHandles(controlBoxElement());
+        syncMoveGrip(controlBoxElement());
+      }
+      catch (err) {
+        /* 재는 데 실패해도 제스처는 그대로다 — 멤버는 이미 움직였다 */
+      }
+
+      state.rafId = win.requestAnimationFrame(tick);
+
+      return;
+
+    }
+
+    /* =====================================================
        HOME-CANVAS-V2-MANUAL-FIX-1 — 손잡이 **목록**도 여기서 맞춘다
        (계약 §29-4)
 
@@ -1909,6 +1967,52 @@ export function createHomeCanvasSelectionFrame(options) {
   }
 
 
+  /*
+    HOME-CANVAS-GROUP-1B — 그룹 손잡이의 기준점.
+
+    멤버 전부의 바깥 상자를 합친 **왼쪽 위** 한 점이다. 회전한
+    멤버가 섞여도 그 상자는 이미 회전을 포함하므로 손잡이가 글자
+    위로 올라가지 않는다. 돌려주는 모양은 `getBoundingClientRect()`
+    와 같게 둔다 — 부르는 쪽이 둘을 가르지 않는다.
+  */
+  function groupGripAnchor() {
+
+    const elements =
+      targetElements().filter(Boolean);
+
+    if (!elements.length) {
+      return null;
+    }
+
+    let left = Infinity;
+    let top = Infinity;
+
+    elements.forEach(
+      (el) => {
+
+        const rect =
+          el.getBoundingClientRect();
+
+        if (rect.left < left) {
+          left = rect.left;
+        }
+
+        if (rect.top < top) {
+          top = rect.top;
+        }
+
+      }
+    );
+
+    if (!Number.isFinite(left) || !Number.isFinite(top)) {
+      return null;
+    }
+
+    return { left: left, top: top, width: 0, height: 0 };
+
+  }
+
+
   function syncMoveGrip(box) {
 
     const grip =
@@ -1918,24 +2022,38 @@ export function createHomeCanvasSelectionFrame(options) {
       return;
     }
 
-    /* 끌 수 없는 상태 · 흐름 블록 · 여럿 선택에는 손잡이가 없다.
-       블록은 순서와 정렬이 자리를 정하므로 애초에 끌지 않는다
-       (§29-4), 그룹 조작은 아직 없다(§21-5). */
+    /* =====================================================
+       HOME-CANVAS-GROUP-1B — **그룹에도 손잡이가 있다**.
+
+       손가락으로는 본체를 끌지 않는다는 규칙이 단일과 같으므로
+       (§17-2), 손잡이가 없으면 모바일에서 그룹을 옮길 방법이
+       없어진다. 그룹에서는 리사이즈 손잡이가 없어 `nw` 를 기준으로
+       삼을 수 없으니, **멤버들의 바깥 상자 왼쪽 위**를 기준으로
+       둔다(아래 groupGripAnchor).
+
+       블록은 여전히 없다 — 순서와 정렬이 자리를 정하므로 애초에
+       끌지 않는다(§29-4).
+    ====================================================== */
+
+    const forGroup =
+      groupDragGate() === "ok";
+
     if (
       !box ||
-      state.targetIds.length !== 1 ||
       geometryIsBlock() ||
       !canvasFrameShouldShow() ||
-      dragGate() !== "ok"
+      (forGroup
+        ? false
+        : (state.targetIds.length !== 1 || dragGate() !== "ok"))
     ) {
       hideMoveGrip();
       return;
     }
 
     const anchor =
-      box.querySelector('.moveable-control[data-direction="nw"]');
+      forGroup ? null : box.querySelector('.moveable-control[data-direction="nw"]');
 
-    if (!anchor) {
+    if (!forGroup && !anchor) {
       hideMoveGrip();
       return;
     }
@@ -1948,9 +2066,11 @@ export function createHomeCanvasSelectionFrame(options) {
       box.getBoundingClientRect();
 
     const anchorRect =
-      anchor.getBoundingClientRect();
+      forGroup ? groupGripAnchor() : anchor.getBoundingClientRect();
 
-    if (!anchorRect.width && !anchorRect.height) {
+    /* 단일에서는 손잡이가 실제로 그려졌는지를 상자 크기로 본다.
+       그룹의 기준점은 크기가 없는 한 점이라 그 판정을 하지 않는다. */
+    if (!anchorRect || (!forGroup && !anchorRect.width && !anchorRect.height)) {
       hideMoveGrip();
       return;
     }
@@ -4491,6 +4611,797 @@ export function createHomeCanvasSelectionFrame(options) {
 
 
   /* =========================================================
+     HOME-CANVAS-GROUP-1B — 그룹 전체 이동
+
+     기준 문서: docs/contracts/IMORY_HOME_CANVAS_CONTRACT.md §39
+     설계:      docs/plans/IMORY_HOME_CANVAS_GROUP_DESIGN.md §4-5
+
+     ── 왜 Moveable 의 그룹 drag 를 쓰지 않는가 ────────────
+
+     0.53.0 의 MoveableGroup 은 드래그를 받을 요소를 이렇게 고른다
+     (번들 실측 — `Rs()` · `MoveableGroup._updateTargets`).
+
+       _originalDragTarget = props.dragTarget || areaElement
+       gesto 를 붙이는 목록 = [ controlBox ] 이고,
+       `dragArea && !dragTarget` 이면 그 dragTarget 요소를
+       **목록에 더하지 않는다**
+
+     우리 control box 는 `pointer-events: none` 이라(markControlBox)
+     그 목록에 실제 입력이 닿지 않는다. `dragTarget` 을 주면 그 줄이
+     되살아나지만, MoveableGroup 은 `dragArea` 가 꺼지면 mount 중에
+     죽고(위 displayOnlyMoveableOptions 의 ★) `dragTarget` 은 요소
+     **하나**라 "선택된 멤버 아무 곳에서나 끈다"가 되지 않는다.
+
+     그래서 그룹 drag 의 입력은 이 파일이 갖는다 — 단일 이동이
+     이미 그러는 것처럼 **clientX/clientY 만** 쓰고(§17-3), Moveable
+     은 지금까지처럼 **표시 전용**으로 둔다(손잡이 0 · 회전 0 ·
+     그룹 외곽선 유지). 그 외곽선은 따라가기 루프가 `updateRect()`
+     로 멤버를 다시 재어 함께 움직인다.
+
+     ── 끄는 동안 무엇이 바뀌는가 ──────────────────────────
+
+     멤버마다 **화면 px 두 칸**이다(`--imory-canvas-drag-x/y` —
+     skin/skin-home-canvas-render.js §0-4). 자가 하나뿐이라 overlay ·
+     프레임 내부 `transform` · `pin` 이 섞인 그룹에서도 세 멤버가
+     정확히 같은 거리를 움직인다. 저장값 · Canvas JSON · Undo 는
+     한 글자도 바뀌지 않는다.
+
+     ── 부모에게 올라가는 것 ────────────────────────────────
+
+     제스처 하나에 **세 자리**뿐이다(start · end · cancel). 끄는
+     동안의 move 는 올리지 않는다 — 화면은 이 문서가 그리고, 부모가
+     move 로 할 일이 없기 때문이다(단일 이동도 끝에 한 번만 올린다).
+
+     delta 는 **도화지 자**다. 자를 만드는 값(`baseWidth`)은 부모가
+     그룹 메시지에 실어 준다 — 프레임은 DOM 에서 그 숫자를 되풀지
+     않는다(§14 의 소유권).
+  ========================================================== */
+
+  /* 누른 뒤 이만큼 안에서 떼면 "끌지 않은 클릭"이다 */
+  const CANVAS_GROUP_CLICK_SLOP = 4;
+
+
+  /*
+    임시 화면 이동을 쓰는 함수 — 렌더러의 것 하나다(§0-4).
+    없는 문서에서는 그룹 이동을 **켜지 않는다**(단일 이동의
+    positionApi 와 같은 규칙).
+  */
+  function groupDragApi() {
+
+    if (
+      typeof win.setSkinCanvasElementDragOffset !== "function" ||
+      typeof win.clearSkinCanvasElementDragOffset !== "function"
+    ) {
+      return null;
+    }
+
+    return {
+      set: win.setSkinCanvasElementDragOffset,
+      clear: win.clearSkinCanvasElementDragOffset
+    };
+
+  }
+
+
+  function groupDragGate() {
+
+    if (state.disposed || !state.editing) {
+      return "not-editing";
+    }
+
+    /* 단일 제스처와 섞이지 않는다 — 한 번에 하나다 */
+    if (state.drag || state.pending || state.groupPending) {
+      return "pending";
+    }
+
+    const group =
+      state.group;
+
+    if (!group || !group.active) {
+      return "no-group";
+    }
+
+    /* 잠긴 멤버가 있으면 부모가 이미 `active:false` 로 내려 준다.
+       그래도 이유를 남겨 둔다 — 진단에서 "왜 안 끌리나"의 답이다. */
+    if (group.locked) {
+      return "locked";
+    }
+
+    if (group.generation !== state.generation) {
+      return "stale-group";
+    }
+
+    if (state.targetIds.length < 2) {
+      return "not-group";
+    }
+
+    if (!groupDragApi()) {
+      return "no-renderer";
+    }
+
+    const elements =
+      targetElements();
+
+    if (!elements.length || elements.some((el) => !el)) {
+      return "no-element";
+    }
+
+    if (!(canvasScale(group.baseWidth, null) > 0)) {
+      return "no-scale";
+    }
+
+    return "ok";
+
+  }
+
+
+  /* 이 노드가 **지금 고른 멤버**인가(또는 그 안인가) */
+  function groupMemberFrom(node) {
+
+    let el =
+      (node && node.nodeType === 1) ? node : (node ? node.parentElement : null);
+
+    const root =
+      canvasRoot();
+
+    while (el && el.nodeType === 1) {
+
+      if (
+        typeof el.hasAttribute === "function" &&
+        el.hasAttribute(CANVAS_ELEMENT_ATTR) &&
+        root && root.contains(el)
+      ) {
+
+        const id =
+          el.getAttribute(CANVAS_EDIT_ID_ATTR) || "";
+
+        return state.targetIds.indexOf(id) !== -1 ? el : null;
+
+      }
+
+      el = el.parentElement;
+
+    }
+
+    return null;
+
+  }
+
+
+  /* =========================================================
+     groupPageDeltaBounds(elements) -> { min, max } | null   (화면 px)
+
+     **공통 delta 하나**로 줄이는 그 범위다(계약 §39-6).
+
+     단일 이동은 멤버 하나의 x 를 잘랐다(canvasPageDragBounds ·
+     §30-4-1). 그룹에서 멤버마다 따로 자르면 가장자리에서 모양이
+     찌그러지므로, 각 멤버가 허용하는 delta 구간을 **교집합**으로
+     모아 제스처 전체에 하나만 적용한다.
+
+     ★ 식은 render.css §7 의 `clamp()` 두 끝 그대로다. 다만 자를
+       **화면 px** 로 둔다 — 그룹에는 멤버마다 다른 자가 섞여 있고,
+       화면 px 는 그 하나로 전부를 덮는다.
+
+     ★ 범위가 있는 멤버는 `unit="cqw"` 인 **페이지 자유 장식**뿐이다
+       (CSS 의 그 선택자 그대로). 프레임 내부 멤버만 있는 그룹에서는
+       null 이고, 그때 아래 clamp 는 한 글자도 하지 않는다.
+
+     ★ 교집합은 언제나 0 을 품는다 — 각 멤버의 지금 자리가 이미
+       자기 범위 안이기 때문이다(CSS 가 그렇게 그렸다).
+  ========================================================== */
+
+  function groupPageDeltaBounds(elements) {
+
+    const root =
+      canvasRoot();
+
+    if (!root) {
+      return null;
+    }
+
+    const style =
+      win.getComputedStyle(root);
+
+    const basis =
+      root.clientWidth -
+      (parseFloat(style.paddingLeft) || 0) -
+      (parseFloat(style.paddingRight) || 0);
+
+    if (!(basis > 0)) {
+      return null;
+    }
+
+    const room =
+      Math.max(0, (win.innerWidth - basis) / 2);
+
+    let min = -Infinity;
+    let max = Infinity;
+    let seen = 0;
+
+    elements.forEach(
+      (el) => {
+
+        if (
+          !el ||
+          typeof el.getAttribute !== "function" ||
+          el.getAttribute(CANVAS_UNIT_ATTR) !== CANVAS_UNIT_CQW
+        ) {
+          return;
+        }
+
+        const width =
+          parseFloat(win.getComputedStyle(el).width) || 0;
+
+        const left =
+          el.offsetLeft;
+
+        if (!Number.isFinite(left)) {
+          return;
+        }
+
+        const lo = -room;
+        const hi = basis + room - width;
+
+        const low = Math.min(lo, hi) - left;
+        const high = Math.max(lo, hi) - left;
+
+        seen += 1;
+
+        if (low > min) {
+          min = low;
+        }
+
+        if (high < max) {
+          max = high;
+        }
+
+      }
+    );
+
+    if (!seen || min > max) {
+      return null;
+    }
+
+    return { min: min, max: max };
+
+  }
+
+
+  function clampGroupDeltaX(value, bounds) {
+
+    if (!bounds || !Number.isFinite(value)) {
+      return value;
+    }
+
+    return Math.min(Math.max(value, bounds.min), bounds.max);
+
+  }
+
+
+  /* 멤버 전부에 지금 delta 를 쓴다(화면 px) */
+  function paintGroupDrag(gesture) {
+
+    const api =
+      groupDragApi();
+
+    if (!api) {
+      return false;
+    }
+
+    return gesture.els.every(
+      (el) => (el && el.isConnected) ? api.set(el, gesture.dx, gesture.dy) : false
+    );
+
+  }
+
+
+  /* 임시 화면 이동을 걷는다 — 취소 · 답 · 재렌더가 쓰는 한 줄 */
+  function clearGroupDrag(gesture) {
+
+    const api =
+      groupDragApi();
+
+    if (!api || !gesture) {
+      return;
+    }
+
+    gesture.els.forEach(
+      (el) => {
+
+        if (el) {
+
+          try {
+            api.clear(el);
+          }
+          catch (err) {
+            /* 이미 사라진 노드다 — 재렌더가 제자리를 그린다 */
+          }
+
+        }
+
+      }
+    );
+
+  }
+
+
+  function sendGroupMove(gesture, phase, requestId) {
+
+    if (typeof opts.onGroupMove !== "function") {
+      return false;
+    }
+
+    try {
+
+      opts.onGroupMove({
+        groupId: gesture.groupId,
+        gestureId: gesture.gestureId,
+        phase: phase,
+        dx: gesture.reportX,
+        dy: gesture.reportY,
+        generation: gesture.generation,
+        revision: gesture.revision,
+        requestId: requestId
+      });
+
+    }
+    catch (err) {
+      return false;
+    }
+
+    return true;
+
+  }
+
+
+  /*
+    cancelGroupDrag(reason)
+
+    **끄는 중인 제스처만** 접는다 — 화면을 시작 자리로 돌리고,
+    시작을 이미 알렸으면 취소도 알린다(부모가 열어 둔 제스처를
+    닫을 수 있게).
+
+    ★ 답을 기다리는 중인 것(state.groupPending)은 건드리지 않는다 —
+      단일 이동의 cancelDrag 와 같은 사정이다(§17-8).
+  */
+  function cancelGroupDrag(reason) {
+
+    const gesture =
+      state.groupDrag;
+
+    if (!gesture) {
+      return;
+    }
+
+    state.groupDrag = null;
+
+    gesture.cancelled = true;
+
+    clearGroupDrag(gesture);
+
+    if (gesture.announced) {
+      gesture.reportX = 0;
+      gesture.reportY = 0;
+      sendGroupMove(gesture, "cancel", 0);
+    }
+
+    state.lastGroupGate = "cancel:" + (reason || "");
+
+  }
+
+
+  function clearGroupPendingTimer() {
+
+    if (state.groupPendingTimer) {
+      win.clearTimeout(state.groupPendingTimer);
+      state.groupPendingTimer = 0;
+    }
+
+  }
+
+
+  /* 확정의 답이 왔거나 상한 시간이 됐다 — 임시 화면 이동을 걷는다 */
+  function settleGroupPending(reason) {
+
+    const pending =
+      state.groupPending;
+
+    if (!pending) {
+      return;
+    }
+
+    state.groupPending = null;
+
+    clearGroupPendingTimer();
+
+    clearGroupDrag(pending);
+
+    state.lastGroupSettle = reason || "";
+
+  }
+
+
+  function onGroupPointerDown(event) {
+
+    state.groupPress = null;
+
+    if (state.disposed || !state.editing || event.shiftKey) {
+      return;
+    }
+
+    if (typeof event.button === "number" && event.button !== 0) {
+      return;
+    }
+
+    const onGrip =
+      nodeIsMoveGrip(event.target);
+
+    /*
+      손가락으로는 **본체를 끌지 않는다**(§17-2 · 계약 §30-2).
+
+      단일 이동이 쓰는 그 규칙 그대로다 — 한 손가락 드래그가 세로
+      스크롤인지 이동인지 가를 수 없어서다. 손잡이를 짚은 손가락은
+      가를 것이 없으므로 예외이고, 그 자리에는 `touch-action: none`
+      이 걸려 있다.
+    */
+    if (!onGrip && isCoarsePointerEvent(event)) {
+      return;
+    }
+
+    const member =
+      onGrip ? (targetElements().filter(Boolean)[0] || null)
+             : groupMemberFrom(event.target);
+
+    if (!member) {
+      return;
+    }
+
+    const gate =
+      groupDragGate();
+
+    if (gate !== "ok") {
+      state.lastGroupGate = gate;
+      return;
+    }
+
+    /* =====================================================
+       ★ 여기부터 이 입력의 주인이 우리다.
+
+       sandbox 의 Inspector 는 **pointerdown** 에서 고른다
+       (skin/sandbox/skin-sandbox-inspect.js). 그대로 두면 멤버를
+       누르는 순간 그 자식 하나가 선택이 되어 그룹 선택이 풀리고,
+       그 뒤의 끌기는 그룹 이동이 될 수 없다(계약 §39-2).
+
+       대신 **끌지 않은 클릭의 뜻은 우리가 되돌려 준다** — 아래
+       pointerup 에서 그 멤버 하나를 제안한다. 그것이 지금까지의
+       클릭 규칙과 같은 결과다.
+    ====================================================== */
+    event.stopPropagation();
+
+    if (typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
+    }
+
+    const elements =
+      targetElements().filter(Boolean);
+
+    state.groupSeq += 1;
+
+    state.groupDrag = {
+      gestureId: state.groupSeq,
+      groupId: state.group.groupId,
+      generation: state.generation,
+      revision: state.group.revision,
+      startX: event.clientX,
+      startY: event.clientY,
+      pointerId: event.pointerId,
+      scale: canvasScale(state.group.baseWidth, null),
+      els: elements,
+      bounds: groupPageDeltaBounds(elements),
+      dx: 0,
+      dy: 0,
+      reportX: 0,
+      reportY: 0,
+      moved: false,
+      announced: false,
+      cancelled: false
+    };
+
+    /* =====================================================
+       ★ 클릭의 뜻을 되돌려 줄 대상은 **본체를 누른 경우뿐**이다.
+
+       손잡이를 톡 누르고 떼는 것은 "이 멤버 하나를 고른다"가 아니다
+       — 그 자리는 그룹을 옮기려고 있는 것이고, 거기서 선택을 바꾸면
+       손이 미끄러질 때마다 그룹이 풀린다.
+    ====================================================== */
+    state.groupPress =
+      onGrip
+        ? null
+        : {
+            id: member.getAttribute(CANVAS_EDIT_ID_ATTR) || "",
+            x: event.clientX,
+            y: event.clientY,
+            pointerId: event.pointerId
+          };
+
+    /* =====================================================
+       HOME-CANVAS-GROUP-1B — 손가락이 화면 밖으로 나가도 이 제스처를
+       놓지 않는다(§39-2 의 모바일 규칙).
+
+       window 에서 듣고 있으므로 대개는 필요 없지만, 터치에서 엔진이
+       이벤트를 다른 대상으로 옮기는 경우가 있다. 실패해도 지금까지와
+       같다 — 잡지 못하면 그냥 window 리스너로 간다.
+    ====================================================== */
+    if (event.pointerId !== undefined) {
+
+      try {
+
+        if (event.target && typeof event.target.setPointerCapture === "function") {
+          event.target.setPointerCapture(event.pointerId);
+        }
+
+      }
+      catch (err) {
+        /* 브라우저가 모르는 pointerId 다 — window 리스너가 맡는다 */
+      }
+
+    }
+
+    state.lastGroupGate = "ok";
+
+  }
+
+
+  function onGroupPointerMove(event) {
+
+    const gesture =
+      state.groupDrag;
+
+    if (!gesture || gesture.cancelled) {
+      return;
+    }
+
+    if (gesture.pointerId !== undefined && event.pointerId !== gesture.pointerId) {
+      return;
+    }
+
+    const rawX =
+      event.clientX - gesture.startX;
+
+    const rawY =
+      event.clientY - gesture.startY;
+
+    if (!gesture.moved) {
+
+      if (Math.abs(rawX) + Math.abs(rawY) <= CANVAS_GROUP_CLICK_SLOP) {
+        return;
+      }
+
+      gesture.moved = true;
+
+      /* 끌기가 시작됐다 — 이제 클릭의 뜻은 없다(아래 pointerup) */
+      state.groupPress = null;
+
+      gesture.announced =
+        sendGroupMove(gesture, "start", 0);
+
+      swallowNextClick();
+
+    }
+
+    if (gesture.els.some((el) => !el || !el.isConnected)) {
+      cancelGroupDrag("detached");
+      return;
+    }
+
+    /* ★ 시작값과의 **누적** 차이다 — 프레임마다의 delta 를 더하지
+       않는다(§17-3 의 그 이유 그대로). */
+    gesture.dx = clampGroupDeltaX(rawX, gesture.bounds);
+    gesture.dy = rawY;
+
+    if (!paintGroupDrag(gesture)) {
+      cancelGroupDrag("write-failed");
+    }
+
+  }
+
+
+  function onGroupPointerUp(event) {
+
+    const press =
+      state.groupPress;
+
+    const gesture =
+      state.groupDrag;
+
+    state.groupPress = null;
+
+    if (!gesture) {
+      return;
+    }
+
+    if (gesture.pointerId !== undefined && event.pointerId !== gesture.pointerId) {
+      return;
+    }
+
+    state.groupDrag = null;
+
+    if (gesture.cancelled) {
+      return;
+    }
+
+    /* =====================================================
+       끌지 않은 클릭이다 — 지금까지의 선택 규칙을 되돌려 준다.
+
+       pointerdown 에서 전파를 끊었으므로 두 realm 의 Inspector 가
+       모두 지나갔다. 그 클릭의 뜻은 "이 멤버 하나를 고른다"이고,
+       그것을 기존 제안 관문으로 그대로 낸다(§39-2).
+    ====================================================== */
+    if (!gesture.moved) {
+
+      clearGroupDrag(gesture);
+
+      state.lastGroupGate = "click-not-drag";
+
+      if (press && press.id && elementFor(press.id)) {
+        swallowNextClick();
+        propose([press.id], press.id, "replace");
+      }
+
+      return;
+
+    }
+
+    if (!(gesture.scale > 0)) {
+      clearGroupDrag(gesture);
+      state.lastGroupGate = "no-scale";
+      return;
+    }
+
+    /* 움직이지 않았다 — 확정도, 기록도 없다(§17-6) */
+    if (!gesture.dx && !gesture.dy) {
+      clearGroupDrag(gesture);
+      gesture.reportX = 0;
+      gesture.reportY = 0;
+      sendGroupMove(gesture, "cancel", 0);
+      state.lastGroupGate = "no-move";
+      return;
+    }
+
+    /* 화면 px → **도화지 자**(부모가 멤버마다 자기 자로 환산한다) */
+    gesture.reportX = roundCanvasCoord(gesture.dx / gesture.scale);
+    gesture.reportY = roundCanvasCoord(gesture.dy / gesture.scale);
+
+    state.requestSeq += 1;
+
+    const requestId =
+      state.requestSeq;
+
+    state.groupMoveCount += 1;
+
+    state.lastGroupCommit = {
+      groupId: gesture.groupId,
+      gestureId: gesture.gestureId,
+      dx: gesture.reportX,
+      dy: gesture.reportY,
+      generation: gesture.generation,
+      revision: gesture.revision,
+      requestId: requestId
+    };
+
+    if (!sendGroupMove(gesture, "end", requestId)) {
+      clearGroupDrag(gesture);
+      state.lastGroupSettle = "cancel:send-failed";
+      return;
+    }
+
+    /* ★ 임시 값을 **그대로 둔 채** 답을 기다린다(단일 이동과 같다) —
+       승인이면 곧 재렌더가 그 자리를 그리고, 거부면 답이 이 값을
+       걷어 시작 자리로 돌아간다. */
+    state.groupPending = gesture;
+
+    state.lastGroupSettle = "pending";
+
+    clearGroupPendingTimer();
+
+    state.groupPendingTimer =
+      win.setTimeout(
+        () => {
+
+          state.groupPendingTimer = 0;
+
+          if (state.groupPending === gesture) {
+            settleGroupPending("timeout");
+          }
+
+        },
+        CANVAS_COMMIT_TIMEOUT_MS
+      );
+
+  }
+
+
+  /* =========================================================
+     setGroup(payload) — 부모가 내려 준 **그룹 선택** 한 벌
+
+     payload = { active, groupId, baseWidth, locked,
+                 generation, revision, answering }
+
+     ★ 선택 메시지와 짝이다. 무엇이 그룹인지 · 지금 고른 것이 그
+       그룹인지 · 잠긴 멤버가 있는지는 전부 부모가 자기 draft 로
+       정한다(§14 의 소유권).
+
+     ★ 제스처 도중 이 값이 갈리면 그 자리에서 접는다 — 선택 변경 ·
+       구조 변경 · Undo/Redo · 다른 화면이 전부 여기로 온다.
+  ========================================================== */
+
+  function setGroup(payload) {
+
+    if (state.disposed) {
+      return false;
+    }
+
+    const value =
+      (payload && typeof payload === "object") ? payload : null;
+
+    const generation =
+      (value && Number.isInteger(value.generation)) ? value.generation : 0;
+
+    const revision =
+      (value && Number.isInteger(value.revision)) ? value.revision : 0;
+
+    const active =
+      !!(
+        value &&
+        value.active === true &&
+        typeof value.groupId === "string" && value.groupId &&
+        Number.isFinite(value.baseWidth) && value.baseWidth > 0
+      );
+
+    const next = {
+      active: active,
+      groupId: active ? value.groupId : null,
+      baseWidth: active ? value.baseWidth : 0,
+      locked: !!(value && value.locked === true),
+      generation: generation,
+      revision: revision
+    };
+
+    const gesture =
+      state.groupDrag;
+
+    if (
+      gesture &&
+      (
+        !next.active ||
+        next.groupId !== gesture.groupId ||
+        next.generation !== gesture.generation ||
+        next.revision !== gesture.revision
+      )
+    ) {
+      cancelGroupDrag("group-changed");
+    }
+
+    state.group = next;
+
+    /* 확정의 **답**이다(§17-8 과 같은 규칙 — 번호가 붙은 것만) */
+    if (
+      state.groupPending &&
+      value &&
+      Number.isInteger(value.answering) &&
+      value.answering >= 1 &&
+      !!state.lastGroupCommit &&
+      value.answering === state.lastGroupCommit.requestId
+    ) {
+      settleGroupPending("answered");
+    }
+
+    return true;
+
+  }
+
+
+  /* =========================================================
      setGeometry(payload) — 부모가 내려 준 단일 선택의 Canvas geometry
 
      payload = { active, id, x, y, width, height,
@@ -5408,6 +6319,28 @@ export function createHomeCanvasSelectionFrame(options) {
       cancelDrag("generation");
     }
 
+    /* =====================================================
+       HOME-CANVAS-GROUP-1B — 그룹 제스처에는 그 예외가 없다(§39-4).
+
+       "같은 것을 다시 확정한 것"은 순번이 올라도 이어 가지만,
+       그룹은 멤버 집합 자체가 판정이므로 그 비교를 여기서 하지
+       않고 **부모가 내려 주는 그룹 메시지**에 맡긴다(setGroup).
+       여기서는 고른 것이 실제로 달라졌을 때만 접는다.
+    ====================================================== */
+    if (
+      state.groupDrag &&
+      generation !== state.generation &&
+      !(
+        value &&
+        value.active === true &&
+        Array.isArray(value.ids) &&
+        value.ids.length === state.groupDrag.els.length &&
+        state.targetIds.every((id) => value.ids.indexOf(id) !== -1)
+      )
+    ) {
+      cancelGroupDrag("selection");
+    }
+
     state.generation = generation;
 
     state.lastPayload = value;
@@ -5437,6 +6370,15 @@ export function createHomeCanvasSelectionFrame(options) {
     if (!editing) {
 
       state.geometry = null;
+
+      /* HOME-CANVAS-GROUP-1B — 편집이 꺼지면 그룹 제스처도 끝이다 */
+      state.groupPress = null;
+
+      cancelGroupDrag("not-editing");
+
+      settleGroupPending("not-editing");
+
+      state.group = null;
 
       state.layoutShape = "";
 
@@ -5577,6 +6519,21 @@ export function createHomeCanvasSelectionFrame(options) {
        확정을 기다리는 중이었다면 그 답은 곧 새 좌표로 온다. */
     cancelDrag("render");
 
+    /* =====================================================
+       HOME-CANVAS-GROUP-1B — 그룹도 같다.
+
+       ★ 기다림은 **여기서 끝낸다**. 승인된 그룹 이동의 재렌더가
+         곧 이 자리이고, 새 DOM 에는 임시 화면 이동 칸이 아예
+         없다(옛 노드에 걸어 둔 것을 걷어야 할 이유도 그래서
+         사라진다). 거부는 재렌더를 만들지 않으므로 그 길은
+         setGroup 의 답이 맡는다.
+    ====================================================== */
+    state.groupPress = null;
+
+    cancelGroupDrag("render");
+
+    settleGroupPending("render");
+
     if (!state.lastPayload) {
       detach();
       return;
@@ -5592,6 +6549,15 @@ export function createHomeCanvasSelectionFrame(options) {
     cancelDrag("dispose");
 
     abandonPendingCommit("dispose");
+
+    /* HOME-CANVAS-GROUP-1B — 그룹 제스처와 그 기다림도 함께 접는다 */
+    state.groupPress = null;
+
+    cancelGroupDrag("dispose");
+
+    settleGroupPending("dispose");
+
+    state.group = null;
 
     state.disposed = true;
 
@@ -5654,6 +6620,12 @@ export function createHomeCanvasSelectionFrame(options) {
   on(win, "pointerdown", onShiftPointerDown);
   on(win, "pointerup", onShiftPointerUp);
 
+  /* HOME-CANVAS-GROUP-1B — 그룹 이동도 같은 자리에 붙는다(window
+     capture). Shift 누름은 위 핸들러의 몫이라 첫 줄에서 비켜난다. */
+  on(win, "pointerdown", onGroupPointerDown);
+  on(win, "pointermove", onGroupPointerMove);
+  on(win, "pointerup", onGroupPointerUp);
+
   on(win, "pointercancel", function () {
 
     state.shiftPress = null;
@@ -5661,6 +6633,11 @@ export function createHomeCanvasSelectionFrame(options) {
     /* HOME-CANVAS-TRANSFORM-1A — 손을 놓은 것이 아니라 입력이
        끊긴 것이다(§9). 확정하지 않고 시작 자리로 돌린다. */
     cancelDrag("pointercancel");
+
+    /* HOME-CANVAS-GROUP-1B — 그룹도 같다 */
+    state.groupPress = null;
+
+    cancelGroupDrag("pointercancel");
 
   });
 
@@ -5739,7 +6716,30 @@ export function createHomeCanvasSelectionFrame(options) {
 
   on(win, "keydown", function (event) {
 
-    if (!state.drag || event.key !== "Escape") {
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    /* HOME-CANVAS-GROUP-1B — 그룹 이동도 이 키로 접는다(§39-8) */
+    if (state.groupDrag) {
+
+      state.groupPress = null;
+
+      cancelGroupDrag("escape");
+
+      event.stopPropagation();
+
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      event.preventDefault();
+
+      return;
+
+    }
+
+    if (!state.drag) {
       return;
     }
 
@@ -5761,6 +6761,10 @@ export function createHomeCanvasSelectionFrame(options) {
     apply: apply,
     onRender: onRender,
     setGeometry: setGeometry,
+
+    /* HOME-CANVAS-GROUP-1B — 부모가 내려 주는 그룹 선택 한 벌 */
+    setGroup: setGroup,
+
     dispose: dispose,
 
     isActive: function () {
@@ -5903,6 +6907,24 @@ export function createHomeCanvasSelectionFrame(options) {
         lastCommit: state.lastCommit,
         lastSettle: state.lastSettle,
         geometryLog: state.geometryLog.slice(),
+
+        /* HOME-CANVAS-GROUP-1B — 그룹 이동의 진단 한 묶음 */
+        groupActive: !!(state.group && state.group.active),
+        groupId: (state.group && state.group.groupId) || null,
+        groupLocked: !!(state.group && state.group.locked),
+        groupBaseWidth: (state.group && state.group.baseWidth) || 0,
+        groupRevision: (state.group && state.group.revision) || 0,
+        groupDraggable: groupDragGate() === "ok",
+        groupGate: groupDragGate(),
+        groupDragging: !!state.groupDrag,
+        groupMoved: !!(state.groupDrag && state.groupDrag.moved),
+        groupPending: !!state.groupPending,
+        groupMoveCount: state.groupMoveCount,
+        lastGroupGate: state.lastGroupGate,
+        lastGroupCommit: state.lastGroupCommit,
+        lastGroupSettle: state.lastGroupSettle,
+        moveGripVisible:
+          !!(state.moveGrip && state.moveGrip.style.display === "block"),
 
         hasSelecto: !!state.selecto,
         selectoInstances: doc.querySelectorAll(".selecto-selection").length,

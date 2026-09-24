@@ -105,6 +105,9 @@ import {
   setSandboxPreviewCanvasSelection,
   setSandboxPreviewCanvasGeometry,
 
+  /* HOME-CANVAS-GROUP-1B — 그룹 선택 한 벌 */
+  setSandboxPreviewCanvasGroup,
+
   /* STUDIO-LAYERS-MATERIALS-1B — 끌어다 놓을 자리를 프레임에 묻는다 */
   requestSandboxPreviewCanvasBox
 } from "./preview-sandbox.js";
@@ -223,6 +226,41 @@ const PREVIEW_MSG_CANVAS_LAYOUT = "preview:canvas-layout";
 ========================================================== */
 const PREVIEW_MSG_CANVAS_GEOMETRY = "preview:canvas-geometry";
 const PREVIEW_MSG_CANVAS_TRANSFORM = "preview:canvas-transform";
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 그룹 전체 이동
+
+   canvas-group       Studio -> 이 문서
+                      { active, groupId, baseWidth, locked,
+                        generation, revision, answering }
+                      "지금 고른 것이 이 그룹이다"와 그 그룹을 끌
+                      때 쓸 **도화지 자**(`baseWidth`)다. 멤버 명단도
+                      좌표도 싣지 않는다 — 프레임이 옮길 것은 이미
+                      고른 그 요소들이고, 무엇을 얼마나 저장할지는
+                      언제나 Studio 가 정한다.
+
+                      `answering` 은 확정 요청의 **답**일 때만 있는
+                      번호다(canvas-geometry 와 같은 규칙 · 계약
+                      §17-8). 거부된 이동의 임시 화면을 그 답이
+                      걷는다.
+
+   canvas-group-move  이 문서 -> Studio
+                      { groupId, gestureId, phase, dx, dy,
+                        generation, revision, requestId }
+                      그룹 이동의 **확정 요청**이다. 확정이 아니다 —
+                      Studio 가 지금 draft 로 선택 · 그룹 · 멤버 ·
+                      순번 · revision 을 전부 다시 본다.
+
+                      `phase` 는 셋뿐이다(`start` · `end` · `cancel`).
+                      끄는 동안의 중간 보고는 없다 — 화면은 프레임이
+                      그리고, 저장은 `end` 한 번이다.
+
+                      `dx` · `dy` 는 **도화지 자**의 공통 delta 하나다.
+                      멤버마다 자기 자로 바꾸는 환산은 Studio 가 한다
+                      (계약 §39-5).
+========================================================== */
+const PREVIEW_MSG_CANVAS_GROUP = "preview:canvas-group";
+const PREVIEW_MSG_CANVAS_GROUP_MOVE = "preview:canvas-group-move";
 
 /* =========================================================
    STUDIO-LAYERS-MATERIALS-1B — 재료를 끌어다 놓을 자리 (계약 §36-5)
@@ -2371,6 +2409,10 @@ let canvasFrameSelection = null;
    없을 때(좌표가 선택보다 먼저 온 경우) 한 번 더 태우기 위해 둔다. */
 let canvasFrameGeometry = null;
 
+/* HOME-CANVAS-GROUP-1B — 마지막으로 받은 그룹 선택. runtime 이 아직
+   없을 때(그룹이 선택보다 먼저 온 경우) 한 번 더 태우기 위해 둔다. */
+let canvasFrameGroup = null;
+
 
 function canvasEditorRuntimeUrl() {
 
@@ -2539,6 +2581,44 @@ function ensureCanvasFrameController() {
                     : 0
               });
 
+            },
+
+            /* HOME-CANVAS-GROUP-1B — 그룹 이동의 확정 **요청**.
+               확정이 아니다(위 머리말) — Studio 가 자기 draft 로
+               그룹 · 멤버 · 순번 · revision 을 다시 본다.
+
+               ★ 여기서 값을 만들지 않는다. runtime 이 준 것을
+                 알려진 칸만 새 리터럴로 옮긴다. */
+            onGroupMove: (request) => {
+
+              if (!request || typeof request !== "object") {
+                return;
+              }
+
+              postToParent({
+                type: PREVIEW_MSG_CANVAS_GROUP_MOVE,
+                groupId: typeof request.groupId === "string" ? request.groupId : null,
+                gestureId:
+                  Number.isInteger(request.gestureId) && request.gestureId >= 1
+                    ? request.gestureId
+                    : 0,
+                phase: typeof request.phase === "string" ? request.phase : "",
+                dx: Number.isFinite(request.dx) ? request.dx : 0,
+                dy: Number.isFinite(request.dy) ? request.dy : 0,
+                generation:
+                  Number.isInteger(request.generation) && request.generation >= 0
+                    ? request.generation
+                    : 0,
+                revision:
+                  Number.isInteger(request.revision) && request.revision >= 0
+                    ? request.revision
+                    : 0,
+                requestId:
+                  Number.isInteger(request.requestId) && request.requestId >= 1
+                    ? request.requestId
+                    : 0
+              });
+
             }
 
           });
@@ -2595,6 +2675,11 @@ function applyNativeCanvasSelection(selection) {
            하지 않는다). */
         if (canvasFrameGeometry) {
           controller.setGeometry(canvasFrameGeometry);
+        }
+
+        /* HOME-CANVAS-GROUP-1B — 그룹도 같은 사정이다(위 ★) */
+        if (canvasFrameGroup) {
+          controller.setGroup(canvasFrameGroup);
         }
 
       }
@@ -2794,6 +2879,60 @@ function routeCanvasGeometryMessage(data) {
   }
 
   canvasFrameController.setGeometry(geometry);
+
+}
+
+
+/* =========================================================
+   HOME-CANVAS-GROUP-1B — 그룹 선택을 화면 쪽으로
+
+   ★ 여기서도 판단하지 않는다. 무엇이 그룹이고 지금 고른 것이 그
+     그룹인지는 Studio 가 자기 draft 로 정했다
+     (studio/inspector/studio-canvas-selection.js). 이 함수는 어느
+     문서가 화면을 맡고 있는가만 본다.
+========================================================== */
+
+function routeCanvasGroupMessage(data) {
+
+  const active =
+    data.active === true &&
+    typeof data.groupId === "string" &&
+    window.isValidInspectorEditId(data.groupId) &&
+    Number.isFinite(data.baseWidth) && data.baseWidth > 0;
+
+  const group = {
+    active: active,
+    groupId: active ? data.groupId : null,
+    baseWidth: active ? data.baseWidth : 0,
+    locked: data.locked === true,
+    generation:
+      Number.isInteger(data.generation) && data.generation >= 0
+        ? data.generation
+        : 0,
+    revision:
+      Number.isInteger(data.revision) && data.revision >= 0
+        ? data.revision
+        : 0,
+    answering:
+      Number.isInteger(data.answering) && data.answering >= 1
+        ? data.answering
+        : 0
+  };
+
+  if (hasSandboxPreviewFrame()) {
+    setSandboxPreviewCanvasGroup(group);
+    return;
+  }
+
+  /* ★ 기억해 두는 값에는 답 번호를 남기지 않는다(위 geometry 의 ★) */
+  canvasFrameGroup =
+    { ...group, answering: 0 };
+
+  if (!canvasFrameController) {
+    return;
+  }
+
+  canvasFrameController.setGroup(group);
 
 }
 
@@ -3300,6 +3439,15 @@ window.addEventListener("message", (event) => {
   if (data.type === PREVIEW_MSG_CANVAS_GEOMETRY) {
 
     routeCanvasGeometryMessage(data);
+
+    return;
+
+  }
+
+  /* HOME-CANVAS-GROUP-1B — 그룹 선택(위 머리말) */
+  if (data.type === PREVIEW_MSG_CANVAS_GROUP) {
+
+    routeCanvasGroupMessage(data);
 
     return;
 
